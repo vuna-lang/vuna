@@ -38,6 +38,8 @@ module Vuna.Compiler.Elab.Meta
   , hasOutOfScopeVarArgs
   , inferCtorRef
   , instantiateNullaryCtor
+  , isBlanketInst
+  , isBlanketInstHead
   , isBoolGlobal
   , isBoolType
   , isDataHead
@@ -592,6 +594,21 @@ findClassByShortName : String -> List DtClass -> Maybe DtClass
 findClassByShortName short [] = Nothing
 findClassByShortName short (c :: rest) =
   if baseNameOf (dtClassName c) == short then Just c else findClassByShortName short rest
+
+-- M35：blanket 实例（fallback 实例）判定——头是 `Dict_C x`，且 `x` 是本实例自己的
+-- **裸 tele 变量**（例如 `instance Show a => Interp a`）。`n` 是 tele 长度，head 在该
+-- n 个 binder 之下，所以合法索引是 0..n-1。
+--
+-- 用途分两处消费：`Elab/InstCoherence`（coherence：blanket 与具体实例可共存）与
+-- `Elab/Dict`（实例搜索：具体实例优先、blanket 兜底）。
+isBlanketInstHead : Int -> Term -> Bool
+isBlanketInstHead n head = if n <= 0 then False
+else case head of
+  TApp (TGlobal dictName) (TVar vname i) rig => i >= 0 && i < n
+  _ => False
+
+isBlanketInst : DtInst -> Bool
+isBlanketInst (DtInst name tele ctx head) = isBlanketInstHead (length tele) head
 
 -- 把方法类型里对类参数的引用（de Bruijn 0）替换成实例头实参。
 -- 字段类型是在 `{a : Type}` 之下检查的闭合项，所以类参数恒为 index 0；

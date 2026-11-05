@@ -1,0 +1,110 @@
+module Vuna.Compiler.Elab.InstCoherence
+  ( InstClash(..)
+  , anyInstanceExact
+  , findInstanceClash
+  , headsAlphaEqual
+  , headsOverlap
+  , instanceExactQuiet
+  , teleAlphaEnv
+  ) where
+
+-- Vuna.Compiler.Elab.InstCoherence：实例的一致性（coherence）判定。
+--
+-- 从 `Elab/Trait.vuna` 抽出：实例头判重（duplicate / overlap）与重叠判定所需的
+-- α-等价 / 头合一工具。抽取动机有两条：
+--   1. `Elab/Trait.vuna` 已顶到 `nix/context.budget` 的 max_module_lines，新规则
+--      （blanket fallback）需要独立落点；
+--   2. coherence 规则本身是一个完整主题，独立模块便于与 `Elab/Dict` 的实例搜索对照阅读。
+--
+-- **blanket 实例**（M35）：头实参是裸类参数的实例，例如
+--
+--   instance Show a => Interp a where interp x = show x
+--
+-- 它是 **fallback**：允许与更具体的实例（`instance Interp String`）共存，后者优先；
+-- 但具体实例之间仍按原规则禁止重叠（`TC_OverlappingInstances`），同一类出现两个
+-- blanket（头 α-等价）仍按 `TC_DuplicateInstance` 拒绝。搜索侧的“具体优先”在
+-- `Elab/Dict.vuna` 的 `searchInstFuel` 里实现。
+import Vuna.Compiler.Common
+import Vuna.Compiler.Core
+import Vuna.Compiler.Elab.Dict
+import Vuna.Compiler.Elab.Meta
+import Vuna.Compiler.Elab.Types
+
+-- 实例冲突：精确重复（同 head，modulo tele 改名）优先，其次“可合一但不同”= 重叠。
+-- M30（B22）：名字 = 单类前缀 + **完整 head 名**，所以不同 head（含不同模块的同名 data）
+-- 必然得到不同名字；名字判重只可能命中「同类同 head」或「不同类恰好同短名 + 同 head」
+-- （后者本就无法生成两个不同的 dict 符号，显式报 duplicate 比静默丢一个更好）。
+-- coherence 的语义真源仍是下面的 head 判定（`anyInstanceExact`/`anyInstanceOverlap`）。
+data InstClash : Type where
+  ClashDuplicate : InstClash
+  ClashOverlap : InstClash
+
+findInstanceClash : Ec -> String -> List (Pair String Term) -> Term -> List DtInst -> Pair (Maybe InstClash) Ec
+findInstanceClash ec name tele head seen =
+  if hasInstName name seen then Pair (Just ClashDuplicate) ec
+  else if anyInstanceExact ec (length tele) head seen then Pair (Just ClashDuplicate) ec
+  else anyInstanceOverlap ec (isBlanketInstHead (length tele) head) tele head seen
+
+anyInstanceExact : Ec -> Int -> Term -> List DtInst -> Bool
+anyInstanceExact ec n head [] = False
+anyInstanceExact ec n head (i :: rest) =
+  if length i.dtInstTele == n then if headsAlphaEqual ec n head i.dtInstHead then True else anyInstanceExact ec n head rest
+  else anyInstanceExact ec n head rest
+
+-- 重叠扫描：blanket 与具体实例共存是**允许**的（blanket 是 fallback），所以任一侧是
+-- blanket 就跳过这一对；两侧都是具体头时才判重叠。
+anyInstanceOverlap : Ec -> Bool -> List (Pair String Term) -> Term -> List DtInst -> Pair (Maybe InstClash) Ec
+anyInstanceOverlap ec newBlanket [] head [] = Pair Nothing ec
+anyInstanceOverlap ec newBlanket (t :: ts) head [] = Pair Nothing ec
+anyInstanceOverlap ec newBlanket tele head (i :: rest) =
+  if instanceExactQuiet ec (length tele) head i then anyInstanceOverlap ec newBlanket tele head rest
+  else if newBlanket || isBlanketInstHead (length i.dtInstTele) i.dtInstHead then anyInstanceOverlap ec newBlanket tele head rest
+  else case headsOverlap ec tele head i.dtInstTele i.dtInstHead of
+    Pair True ec1 => Pair (Just ClashOverlap) ec1
+    Pair False ec1 => anyInstanceOverlap ec newBlanket tele head rest
+
+instanceExactQuiet : Ec -> Int -> Term -> DtInst -> Bool
+instanceExactQuiet ec n head inst =
+  length inst.dtInstTele == n && headsAlphaEqual ec n head inst.dtInstHead
+
+-- 同一 tele 长度下按 index 对齐的 α-等价（两个 head 的 tele 变量都映射到同一组占位 level）。
+headsAlphaEqual : Ec -> Int -> Term -> Term -> Bool
+headsAlphaEqual ec n a b = case conv (ecDefTbl ec) (ecSolsP ec) 0 (eval (teleAlphaEnv n) a) (eval (teleAlphaEnv n) b) of
+  Ok _ => True
+  Err e => False
+
+teleAlphaEnv : Int -> List Value
+teleAlphaEnv n = teleAlphaEnvGo n 0
+
+teleAlphaEnvGo : Int -> Int -> List Value
+teleAlphaEnvGo remaining i =
+  if remaining <= 0 then []
+  else VNeutral (NVar "#tele" i []) :: teleAlphaEnvGo (remaining - 1) (i + 1)
+
+-- 重叠判定：把一侧 tele 变量实例化成 meta、另一侧实例化成互不相同的刚性占位（global），
+-- conv 成功即「可合一」。两侧都有 tele 时只需一个方向（另一方向由对称性覆盖）。
+headsOverlap : Ec -> List (Pair String Term) -> Term -> List (Pair String Term) -> Term -> Pair Bool Ec
+headsOverlap ec tele1 h1 tele2 h2 = case tele1 of
+  [] => case tele2 of
+    [] => Pair (headsAlphaEqual ec 0 h1 h2) ec
+    -- 一侧无 tele：把**有 tele 的一侧**实例化成 meta（否则无法与具体头合一）。
+    _ => headsOverlapOne ec tele2 h2 tele1 h1
+  _ => headsOverlapOne ec tele1 h1 tele2 h2
+
+headsOverlapOne : Ec -> List (Pair String Term) -> Term -> List (Pair String Term) -> Term -> Pair Bool Ec
+headsOverlapOne ec teleA hA teleB hB = case allocTeleMetas emptyCtx ec teleA of
+  Pair ids ec1 =>
+    let
+      envA = map (\m => VMeta m []) ids
+      envB = teleGlobalEnv (length teleB)
+    in case conv (ecDefTbl ec1) (ecSolsP ec1) 0 (eval envA hA) (eval envB hB) of
+      Ok sols2 => Pair True (ecPutSols ec1 (solsList sols2))
+      Err e => Pair False ec1
+
+teleGlobalEnv : Int -> List Value
+teleGlobalEnv n = teleGlobalEnvGo n 0
+
+teleGlobalEnvGo : Int -> Int -> List Value
+teleGlobalEnvGo remaining i =
+  if remaining <= 0 then []
+  else VNeutral (NGlobal ("#ov" ++ strFromInt i) []) :: teleGlobalEnvGo (remaining - 1) (i + 1)

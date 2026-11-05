@@ -12,6 +12,7 @@ modules = [
   "Base.Eq",
   "Base.Ord",
   "Base.Int",
+  "Base.Interp",
   "Base.List",
   "Base.Nat",
   "Base.Vec",

@@ -42,6 +42,7 @@ modules = [
   "Vuna.Compiler.Elab.Meta",
   "Vuna.Compiler.Elab.Case",
   "Vuna.Compiler.Elab.Dict",
+  "Vuna.Compiler.Elab.InstCoherence",
   "Vuna.Compiler.Elab.Term",
   "Vuna.Compiler.Elab.Term.Impl",
   "Vuna.Compiler.Elab.Term.Support",
