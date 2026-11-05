@@ -117,7 +117,7 @@ foldPiFieldTys fieldTys ty = foldPiFieldTysGo fieldTys 0 ty
 foldPiFieldTysGo : List Term -> Int -> Term -> Term
 foldPiFieldTysGo [] n ty = ty
 foldPiFieldTysGo (f :: rest) n ty =
-  TPi "_" False Rig1 (shift 0 n f) (foldPiFieldTysGo rest (n + 1) ty)
+  TPi "_" False RigOmega (shift 0 n f) (foldPiFieldTysGo rest (n + 1) ty)
 
 -- 精化一个 trait：字典 DtData + 方法投影（签名 + 定义体）+ 类表项。
 -- M29（A14）：额外返回「投影名 → 来源 span」表，供 `extraDefsOf` 给生成定义标来源；
@@ -196,7 +196,7 @@ projectionBody ctor fieldIdx rigs nFields =
     alt = CaseAlt ctor binders applied
     caseTerm = TCase (TVar "_d" dictIdx) [alt]
     lamArgs = methodArgLams rigs 0 caseTerm
-  in TLam "_p" Rig0 (TLam "_d" Rig1 lamArgs)
+  in TLam "_p" Rig0 (TLam "_d" RigOmega lamArgs)
 
 explicitPiArity : Term -> Int
 explicitPiArity (TPi n implicit rig dom cod) =
@@ -437,7 +437,8 @@ ctxDictName k = "_ctx" ++ strFromInt k
 -- 字典值的 λ 链：tele(Rig0) 之外再 λ ctx(Rig1)。
 instValueOf : InstSigInfo -> String -> List Term -> Term
 instValueOf info ctor fields =
-  instTeleLam (instCtxLam (TCon ctor (map (\t => Pair t Rig1) fields)) (length (instSigCtx info)) 0)
+  instTeleLam
+    (instCtxLam (TCon ctor (map (\t => Pair t RigOmega) fields)) (length (instSigCtx info)) 0)
     (instSigTele info)
 
 instTeleLam : Term -> List (Pair String Term) -> Term
@@ -450,7 +451,7 @@ instCtxLam body nCtx k = instCtxLamGo body (nCtx - k) k
 instCtxLamGo : Term -> Int -> Int -> Term
 instCtxLamGo body remaining k =
   if remaining <= 0 then body
-  else TLam (ctxDictName k) Rig1 (instCtxLamGo body (remaining - 1) (k + 1))
+  else TLam (ctxDictName k) RigOmega (instCtxLamGo body (remaining - 1) (k + 1))
 
 -- 字典类型：`Π tele(Rig0). Π ctx(Rig1). head`（head/ctx 域里的 tele 引用按嵌在 ctx 之下移位）。
 instTypeOf : InstSigInfo -> Term
@@ -464,7 +465,7 @@ instTypeOf info =
 instTypeCtx : Term -> List Term -> Int -> Term
 instTypeCtx body [] j = body
 instTypeCtx body (t :: rest) j =
-  instTypeCtx (TPi (ctxDictName j) True Rig1 (shift 0 j t) body) rest (j - 1)
+  instTypeCtx (TPi (ctxDictName j) True RigOmega (shift 0 j t) body) rest (j - 1)
 
 instTypeTele : Term -> List (Pair String Term) -> Term
 instTypeTele body [] = body
@@ -588,7 +589,7 @@ elabInstanceMethodsGo globals ctx nCtx ec ((Pair mname fty) :: rest) pname headA
     _ => andThen (elabInstanceMethodIn globals ctx ec instTy clauses) (\p => case p of
       Pair term ec1 =>
         elabInstanceMethodsGo globals ctx nCtx ec1 rest pname headArg decls (term :: terms)
-          (Pair term Rig1 :: args) sp
+          (Pair term RigOmega :: args) sp
     )
 
 -- 实例体里某个方法的**全部**子句（多 clause 方法：`fmp g (MkBox2 x) = ...` 后紧跟
@@ -868,7 +869,8 @@ else
       map
         (\p => Pair (injectDictGoFuel (fuel - 1) defName dName appPos depth (firstOf p)) (secondOf p))
         args
-  in if g == defName && length args2 > appPos && depth > appPos then foldAppTerms (TGlobal g) (insertArgAt appPos (Pair (TVar dName (depth - appPos - 1)) Rig1) args2)
+  in if g == defName && length args2 > appPos && depth > appPos then foldAppTerms (TGlobal g)
+    (insertArgAt appPos (Pair (TVar dName (depth - appPos - 1)) RigOmega) args2)
   else foldAppTerms (TGlobal g) args2
 
 insertArgAt : Int -> a -> List a -> List a
@@ -1009,15 +1011,15 @@ else
     forced = forceVal ec expected
   in case forced of
     VPi name implicit rig dom clo =>
-      if implicit then if isDictDomain ec dom then bindDictBinderFuel (fuel - 1) globals ctx ec name dom clo [] body sp
-      else if isImplicitDomain ctx ec dom then bindIndexBinderFuel (fuel - 1) globals ctx ec name dom clo [] body sp
+      if implicit then if isDictDomain ec dom then bindDictBinderFuel (fuel - 1) globals ctx ec rig name dom clo [] body sp
+      else if isImplicitDomain ctx ec dom then bindIndexBinderFuel (fuel - 1) globals ctx ec rig name dom clo [] body sp
       else tcErr0 sp ImplicitParamKind
       else checkBodyAtEndFuel (fuel - 1) globals ctx ec body expected sp
     _ => checkE globals ctx ec body expected
 
 -- M32：显式约束的隐式字典 binder：自动绑定（不消耗 pattern）、绑成 `TLam Rig1`，body 经 `localDictLookup` 命中声明假设。
-bindDictBinderFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> String -> Value -> Closure -> List Pat -> Expr -> Span -> Result (Pair Term Ec)
-bindDictBinderFuel fuel globals ctx ec name dom clo pats body sp = if fuel <= 0 then Err "DT: internal: binder check fuel exhausted"
+bindDictBinderFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Rig -> String -> Value -> Closure -> List Pat -> Expr -> Span -> Result (Pair Term Ec)
+bindDictBinderFuel fuel globals ctx ec rig name dom clo pats body sp = if fuel <= 0 then Err "DT: internal: binder check fuel exhausted"
 else
   let
     lvl = ctxDepth ctx
@@ -1025,12 +1027,12 @@ else
     ctx2 = ctxBindValue name dom ctx
     expected2 = applyClosure clo v
   in andThen (checkBindersFuel (fuel - 1) globals ctx2 ec pats body expected2 sp) (\p => case p of
-    Pair inner ec1 => Ok (Pair (TLam name Rig1 inner) ec1)
+    Pair inner ec1 => Ok (Pair (TLam name rig inner) ec1)
   )
 
 -- 隐式索引 binder（`{n : Nat}`）：绑成擦除的 lambda（Rig0），体在扩展上下文里继续。
-bindIndexBinderFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> String -> Value -> Closure -> List Pat -> Expr -> Span -> Result (Pair Term Ec)
-bindIndexBinderFuel fuel globals ctx ec name dom clo pats body sp = if fuel <= 0 then Err "DT: internal: binder check fuel exhausted"
+bindIndexBinderFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Rig -> String -> Value -> Closure -> List Pat -> Expr -> Span -> Result (Pair Term Ec)
+bindIndexBinderFuel fuel globals ctx ec rig name dom clo pats body sp = if fuel <= 0 then Err "DT: internal: binder check fuel exhausted"
 else
   let
     lvl = ctxDepth ctx
@@ -1038,7 +1040,7 @@ else
     ctx2 = ctxBindValue name dom ctx
     expected2 = applyClosure clo v
   in andThen (checkBindersFuel (fuel - 1) globals ctx2 ec pats body expected2 sp) (\p => case p of
-    Pair inner ec1 => Ok (Pair (TLam name Rig0 inner) ec1)
+    Pair inner ec1 => Ok (Pair (TLam name rig inner) ec1)
   )
 
 -- 模式用完后仍剩 Pi（M28 η 展开，决策 5 / D10）：body 是 lambda 时按 check 处理；
@@ -1051,8 +1053,8 @@ checkBodyAtEndFuel fuel globals ctx ec body expected sp = if fuel <= 0 then Err 
 else case body of
   ELam names lambdaBody lambdaSp => checkE globals ctx ec body expected
   _ => case forceVal ec expected of
-    VPi name implicit rig dom clo => if implicit then if isDictDomain ec dom then bindDictBinderFuel (fuel - 1) globals ctx ec name dom clo [] body sp
-    else if isImplicitDomain ctx ec dom then bindIndexBinderFuel (fuel - 1) globals ctx ec name dom clo [] body sp
+    VPi name implicit rig dom clo => if implicit then if isDictDomain ec dom then bindDictBinderFuel (fuel - 1) globals ctx ec rig name dom clo [] body sp
+    else if isImplicitDomain ctx ec dom then bindIndexBinderFuel (fuel - 1) globals ctx ec rig name dom clo [] body sp
     else tcErr0 sp ImplicitParamKind
     else
       let
@@ -1062,7 +1064,7 @@ else case body of
         ctx2 = ctxBindValue etaName dom ctx
         body2 = EApp body [EVar etaName sp] sp
       in andThen (checkBodyAtEndFuel (fuel - 1) globals ctx2 ec body2 (applyClosure clo v) sp) (\p => case p of
-        Pair inner ec1 => Ok (Pair (TLam etaName (binderRig False dom) inner) ec1)
+        Pair inner ec1 => Ok (Pair (TLam etaName rig inner) ec1)
       )
     _ => checkE globals ctx ec body expected
 
@@ -1071,23 +1073,23 @@ else
   let
     forced = forceVal ec expected
   in case forced of
-    VPi name implicit rig dom clo => if implicit then if isDictDomain ec dom then bindDictBinderFuel (fuel - 1) globals ctx ec name dom clo (pat :: rest) body sp
-    else if isImplicitDomain ctx ec dom then bindIndexBinderFuel (fuel - 1) globals ctx ec name dom clo (pat :: rest) body sp
+    VPi name implicit rig dom clo => if implicit then if isDictDomain ec dom then bindDictBinderFuel (fuel - 1) globals ctx ec rig name dom clo (pat :: rest) body sp
+    else if isImplicitDomain ctx ec dom then bindIndexBinderFuel (fuel - 1) globals ctx ec rig name dom clo (pat :: rest) body sp
     else tcErr0 sp ImplicitParamKind
     else case pat of
-      PVar pname psp => bindOnePatternFuel (fuel - 1) globals ctx ec pname rest body dom clo sp
-      PWild psp => bindOnePatternFuel (fuel - 1) globals ctx ec "_" rest body dom clo sp
+      PVar pname psp => bindOnePatternFuel (fuel - 1) globals ctx ec rig pname rest body dom clo sp
+      PWild psp => bindOnePatternFuel (fuel - 1) globals ctx ec rig "_" rest body dom clo sp
       _ => tcErr0 (patSpan pat) DefParamsMustBeVars
     _ => tcErr0 sp DefMoreParams
 
-bindOnePatternFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> String -> List Pat -> Expr -> Value -> Closure -> Span -> Result (Pair Term Ec)
-bindOnePatternFuel fuel globals ctx ec pname pats body dom clo sp = if fuel <= 0 then Err "DT: internal: binder check fuel exhausted"
+bindOnePatternFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Rig -> String -> List Pat -> Expr -> Value -> Closure -> Span -> Result (Pair Term Ec)
+bindOnePatternFuel fuel globals ctx ec rig pname pats body dom clo sp = if fuel <= 0 then Err "DT: internal: binder check fuel exhausted"
 else
   let
     lvl = ctxDepth ctx
     v = freshVarValue pname lvl
     ctx2 = ctxBindValue pname dom ctx
-    erasure = binderRig False dom
+    erasure = rig
   in andThen (checkBindersFuel (fuel - 1) globals ctx2 ec pats body (applyClosure clo v) sp) (\p => case p of
     Pair inner ec1 => Ok (Pair (TLam pname erasure inner) ec1)
   )
@@ -1127,8 +1129,10 @@ elabFunDef globals ec clauses expected sp = elabFunDefIn globals emptyCtx ec cla
 checkBinders : List (Pair String Term) -> Ctx -> Ec -> List Pat -> Expr -> Value -> Span -> Result (Pair Term Ec)
 checkBinders a1 a2 a3 a4 a5 a6 a7 = checkBindersFuel 512 a1 a2 a3 a4 a5 a6 a7
 
-bindIndexBinder : List (Pair String Term) -> Ctx -> Ec -> String -> Value -> Closure -> List Pat -> Expr -> Span -> Result (Pair Term Ec)
-bindIndexBinder a1 a2 a3 a4 a5 a6 a7 a8 a9 = bindIndexBinderFuel 512 a1 a2 a3 a4 a5 a6 a7 a8 a9
+bindIndexBinder : List (Pair String Term) -> Ctx -> Ec -> Rig -> String -> Value -> Closure -> List Pat -> Expr -> Span -> Result (Pair Term Ec)
+bindIndexBinder a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 =
+  bindIndexBinderFuel 512 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10
 
-bindOnePattern : List (Pair String Term) -> Ctx -> Ec -> String -> List Pat -> Expr -> Value -> Closure -> Span -> Result (Pair Term Ec)
-bindOnePattern a1 a2 a3 a4 a5 a6 a7 a8 a9 = bindOnePatternFuel 512 a1 a2 a3 a4 a5 a6 a7 a8 a9
+bindOnePattern : List (Pair String Term) -> Ctx -> Ec -> Rig -> String -> List Pat -> Expr -> Value -> Closure -> Span -> Result (Pair Term Ec)
+bindOnePattern a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 =
+  bindOnePatternFuel 512 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10

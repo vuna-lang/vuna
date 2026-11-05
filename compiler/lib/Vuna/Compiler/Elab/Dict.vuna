@@ -267,7 +267,7 @@ solveDictCtxs : List (Pair String Term) -> Ctx -> Int -> Ec -> Span -> List Valu
 solveDictCtxs globals ctx fuel ec sp [] acc = Just (Pair (reverse acc) ec)
 solveDictCtxs globals ctx fuel ec sp (cv :: rest) acc = case searchInstFuel globals ctx fuel ec cv sp of
   Err e => Nothing
-  Ok (Pair t ec1) => solveDictCtxs globals ctx fuel ec1 sp rest (Pair t Rig1 :: acc)
+  Ok (Pair t ec1) => solveDictCtxs globals ctx fuel ec1 sp rest (Pair t RigOmega :: acc)
 
 -- M22：回填延迟的字典元变量。每个 `DtDictGoal m dom`：类参数已解（非元变量）且能搜到
 -- 唯一实例时解 `?m = <实例>`；仍未解或仍歧义则留到下一轮（幂等，可反复调用）。
@@ -345,7 +345,7 @@ foldSpineWithTyRigsAt : Int -> Term -> List Value -> List Rig -> Term
 foldSpineWithTyRigsAt depth fn [] rigs = fn
 foldSpineWithTyRigsAt depth fn (v :: rest) rigs = case rigs of
   r :: rs => foldSpineWithTyRigsAt depth (TApp fn (quote depth v) r) rest rs
-  [] => foldSpineWithTyRigsAt depth (TApp fn (quote depth v) Rig1) rest []
+  [] => foldSpineWithTyRigsAt depth (TApp fn (quote depth v) RigOmega) rest []
 
 piRigsOfGlobal : Ec -> String -> List Rig
 piRigsOfGlobal ec g = case Base.HashMap.lookup g (ecGlobalsTbl ec) of
@@ -514,7 +514,7 @@ specializeEqTy globals ctx name aTerm bTerm sp aTy ec = case builtinEqTyName (fo
       else case searchInstanceIn globals ctx ec dictTy sp of
         Ok (Pair dictTerm ec1) =>
           Ok
-            (Just (Pair (TApp (TApp (TApp (TApp (TGlobal mname) tyTerm Rig0) dictTerm Rig1) aTerm Rig1) bTerm Rig1) (Pair (VNeutral (NGlobal boolTypeName [])) ec1)))
+            (Just (Pair (TApp (TApp (TApp (TApp (TGlobal mname) tyTerm Rig0) dictTerm RigOmega) aTerm Rig1) bTerm Rig1) (Pair (VNeutral (NGlobal boolTypeName [])) ec1)))
         Err e =>
           if isRigidDictArg ec dictTy then deferEqDict globals ctx mname tyTerm aTerm bTerm sp dictTy ec
           else Err e
@@ -528,7 +528,7 @@ deferEqDict globals ctx mname tyTerm aTerm bTerm sp dictTy ec =
   in case newMeta ctx ec of
     Pair metaTerm ec1 =>
       Ok
-        (Just (Pair (TApp (TApp (TApp (TApp (TGlobal mname) tyTerm Rig0) metaTerm Rig1) aTerm Rig1) bTerm Rig1) (Pair (VNeutral (NGlobal boolTypeName [])) (ecAddDictGoal ec1 (DtDictGoal m dictTy)))))
+        (Just (Pair (TApp (TApp (TApp (TApp (TGlobal mname) tyTerm Rig0) metaTerm RigOmega) aTerm Rig1) bTerm Rig1) (Pair (VNeutral (NGlobal boolTypeName [])) (ecAddDictGoal ec1 (DtDictGoal m dictTy)))))
 
 -- ---------------------------------------------------------------
 -- M22.2 / M31.1：`lt` / `le` / `gt` / `ge` 的饱和应用按实参类型特化
@@ -591,7 +591,7 @@ specializeCmpTy globals ctx name aTerm bTerm sp aTy ec = case cmpBuiltinTyName (
       else case searchInstanceIn globals ctx ec dictTy sp of
         Ok (Pair dictTerm ec1) =>
           Ok
-            (Just (Pair (TApp (TApp (TApp (TApp (TGlobal mname) tyTerm Rig0) dictTerm Rig1) aTerm Rig1) bTerm Rig1) (Pair (VNeutral (NGlobal boolTypeName [])) ec1)))
+            (Just (Pair (TApp (TApp (TApp (TApp (TGlobal mname) tyTerm Rig0) dictTerm RigOmega) aTerm Rig1) bTerm Rig1) (Pair (VNeutral (NGlobal boolTypeName [])) ec1)))
         Err e =>
           if isRigidDictArg ec dictTy then deferEqDict globals ctx mname tyTerm aTerm bTerm sp dictTy ec
           else Err e

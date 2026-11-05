@@ -144,7 +144,7 @@ insertSigDicts ty doms nImp =
 prependSigDicts : Term -> List Term -> Int -> Term
 prependSigDicts ty [] k = ty
 prependSigDicts ty (dom :: rest) k =
-  TPi (sigDictName k) True Rig1 dom (prependSigDicts ty rest (k + 1))
+  TPi (sigDictName k) True RigOmega dom (prependSigDicts ty rest (k + 1))
 
 insertSigDictsRev : Term -> List Term -> Int -> Int -> Term
 insertSigDictsRev ty [] k baseIdx = ty

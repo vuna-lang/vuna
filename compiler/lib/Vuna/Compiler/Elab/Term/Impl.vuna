@@ -362,7 +362,7 @@ else andThen (checkTypeFuel (fuel - 1) globals ctx ec dom) (\pd => case pd of
     in andThen (checkTypeFuel (fuel - 1) globals ctx2 ec1 cod) (\pc => case pc of
       Pair codTerm (Pair codSort ec2) =>
         Ok
-          (Pair (TPi name implicit (binderRig implicit (eval [] domTerm)) domTerm codTerm) (Pair (VType (levelMax domSort codSort)) ec2))
+          (Pair (TPi name implicit (rigOfQty implicit (isTypeDomain (evalCtx ctx domTerm)) qty) domTerm codTerm) (Pair (VType (levelMax domSort codSort)) ec2))
     )
 )
 
@@ -446,7 +446,7 @@ else
           ty2 = applyClosure clo (evalCtx ctx instTerm)
         in andThen (inferArgsGo (fuel - 1) globals ctx ec1 ty2 args sp) (\q => case q of
           Pair argTerms (Pair resTy ec2) =>
-            Ok (Pair (Pair instTerm Rig1 :: argTerms) (Pair resTy ec2))
+            Ok (Pair (Pair instTerm RigOmega :: argTerms) (Pair resTy ec2))
         )
       Err e =>
         if hasUnsolvedMetaValue (ecSolsP ec0) (forceVal ec0 dom) then deferDictBinderFuel (fuel - 1) globals ctx ec0 dom clo args sp
@@ -463,8 +463,7 @@ else
       [] => Ok (Pair [] (Pair forced ec))
       a :: rest => andThen (checkEFuel (fuel - 1) globals ctx ec a dom) (\p => case p of
         Pair aTerm ec1 => andThen (inferArgsGo (fuel - 1) globals ctx ec1 (applyClosure clo (evalCtx ctx aTerm)) rest sp) (\q => case q of
-          Pair argTerms (Pair resTy ec2) =>
-            Ok (Pair (Pair aTerm (binderRig False dom) :: argTerms) (Pair resTy ec2))
+          Pair argTerms (Pair resTy ec2) => Ok (Pair (Pair aTerm rig :: argTerms) (Pair resTy ec2))
         )
       )
     _ => case args of
@@ -481,7 +480,8 @@ else
     m = ecNext ec
   in case newMeta ctx ec of
     Pair metaTerm ec1 => andThen (inferArgsGo (fuel - 1) globals ctx (ecAddDictGoal ec1 (DtDictGoal m (forceVal ec1 dom))) (applyClosure clo (eval (ctxEnv ctx) metaTerm)) args sp) (\p => case p of
-      Pair argTerms (Pair resTy ec2) => Ok (Pair (Pair metaTerm Rig1 :: argTerms) (Pair resTy ec2))
+      Pair argTerms (Pair resTy ec2) =>
+        Ok (Pair (Pair metaTerm RigOmega :: argTerms) (Pair resTy ec2))
     )
 
 -- 用后续显式实参约束 `Dict_C ?a` 里的类参数。M22：先取字典族的**类参数 kind**，
@@ -846,7 +846,7 @@ else
         -- 精化器插入，运行时不传），显式 binder 只有域是宇宙才擦除。
         -- 之前无条件写 True：形参在运行时被使用时硬报错，未被使用时静默少生成一层
         -- `fun`（能 check 不能 compile）。见 docs/reference/limits.md 的擦除边界。
-        lamRig = binderRig implicit dom
+        lamRig = rig
       in andThen (checkLamFuel (fuel - 1) globals ctx2 ec rest body expected2 sp) (\p => case p of
         Pair inner ec1 => Ok (Pair (TLam name lamRig inner) ec1)
       )

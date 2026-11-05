@@ -40,7 +40,7 @@ boolTy = TGlobal boolTypeName
 
 -- `a -> b -> c` 的签名拼接（b/c 按外层 binder 深度移位）。
 fun2 : Term -> Term -> Term -> Term
-fun2 a b c = TPi "_" False Rig1 a (TPi "_" False Rig1 (shift 0 1 b) (shift 0 2 c))
+fun2 a b c = TPi "_" False RigOmega a (TPi "_" False RigOmega (shift 0 1 b) (shift 0 2 c))
 
 -- ---------------------------------------------------------------
 -- `eq` / `neq` 的跨类型特化
@@ -84,17 +84,18 @@ ityToTermEnv env IInt = intTy
 ityToTermEnv env IStr = strTy
 ityToTermEnv env IBool = boolTy
 ityToTermEnv env INat = TGlobal natTypeName
-ityToTermEnv env (IList elem) = TApp (TGlobal listFamilyName) (ityToTermEnv env elem) Rig1
+ityToTermEnv env (IList elem) = TApp (TGlobal listFamilyName) (ityToTermEnv env elem) Rig0
 -- M37：效果原语的返回类型是内建 `IO a`（与 main 钩子同一族身份）。
-ityToTermEnv env (IIO elem) = TApp (TGlobal ioFamilyName) (ityToTermEnv env elem) Rig1
+ityToTermEnv env (IIO elem) = TApp (TGlobal ioFamilyName) (ityToTermEnv env elem) Rig0
 -- cod 在 binder 下：env 加匿名占位，保证外层 IVar 的 de Bruijn 索引随 Pi 深度 shift。
-ityToTermEnv env (IFun a b) = TPi "_" False Rig1 (ityToTermEnv env a) (ityToTermEnv ("_" :: env) b)
+ityToTermEnv env (IFun a b) =
+  TPi "_" False RigOmega (ityToTermEnv env a) (ityToTermEnv ("_" :: env) b)
 ityToTermEnv env (IVar name) = case indexOfName name env of
   Just i => TVar name i
   Nothing => TGlobal name
-ityToTermEnv env (IArray elem) = TApp (TGlobal "Array") (ityToTermEnv env elem) Rig1
-ityToTermEnv env (IRef elem) = TApp (TGlobal "IORef") (ityToTermEnv env elem) Rig1
-ityToTermEnv env (IMArray elem) = TApp (TGlobal "MArray") (ityToTermEnv env elem) Rig1
+ityToTermEnv env (IArray elem) = TApp (TGlobal "Array") (ityToTermEnv env elem) Rig0
+ityToTermEnv env (IRef elem) = TApp (TGlobal "IORef") (ityToTermEnv env elem) Rig0
+ityToTermEnv env (IMArray elem) = TApp (TGlobal "MArray") (ityToTermEnv env elem) Rig0
 ityToTermEnv env IBuf = TGlobal "Buffer"
 ityToTermEnv env (IPi name body) =
   TPi name True Rig0 (TType levelZero) (ityToTermEnv (name :: env) body)
@@ -111,7 +112,7 @@ typeCtorKindTerm arity =
 -- IO 的 kind：`Type -> Type`，binder 是 **Rig1**（参数在运行时表示 `int -> a` 里被用到；
 -- `IIO` 的应用也显式写 Rig1）。
 ioKindTerm : Term
-ioKindTerm = TPi "a" False Rig1 (TType levelZero) (TType levelZero)
+ioKindTerm = TPi "a" False Rig0 (TType levelZero) (TType levelZero)
 
 -- IO 是内建效应类型（不是 base 的 data），类型位置必须始终可用；
 -- prelude 全局提供它的 kind（与其它内建类型同一机制）。
@@ -156,7 +157,7 @@ cmpBuiltinTyName v = case builtinTyName v of
 prependParams : List String -> Term -> Term
 prependParams [] kindTerm = kindTerm
 prependParams (p :: rest) kindTerm =
-  TPi p False Rig1 (TType levelZero) (prependParams rest kindTerm)
+  TPi p False Rig0 (TType levelZero) (prependParams rest kindTerm)
 
 -- ---------------------------------------------------------------
 -- trait 库化后的类/方法查找辅助（放在本模块是为了压 Elab 的行数预算）

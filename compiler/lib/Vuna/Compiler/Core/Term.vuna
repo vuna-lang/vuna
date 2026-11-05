@@ -19,6 +19,7 @@ module Vuna.Compiler.Core.Term
   , countPis
   , cutoffOf
   , defLookup
+  , defaultExplicitRig
   , defaultFuel
   , hasFreeTermVar
   , hasFreeVar
@@ -49,10 +50,14 @@ module Vuna.Compiler.Core.Term
   , metaLookup
   , metaLookupList
   , not
+  , rigAdd
+  , rigExact
   , rigIsErased
   , rigIsLinear
   , rigIsOmega
+  , rigJoin
   , rigOfBinder
+  , rigScale
   , shift
   , shiftAlt
   , shiftAlts
@@ -62,6 +67,7 @@ module Vuna.Compiler.Core.Term
   , showCoreAlts
   , showCoreChars
   , showCoreString
+  , showRig
   , showTerm
   , solsCons
   , solsDepth
@@ -123,10 +129,49 @@ rigIsOmega : Rig -> Bool
 rigIsOmega RigOmega = True
 rigIsOmega _ = False
 
--- 精化器的判据：隐式 binder 恒 Rig0；显式 binder 只有域是宇宙才 Rig0。
--- 注意这是**构造** Rig 的唯一入口，Elab 不自己写 `if ... then Rig0 else Rig1`。
+-- 精化器的判据：隐式 binder 恒 Rig0；显式 binder 只有域是宇宙才 Rig0；
+-- 其余显式值 binder 默认 ω（M38：不再默认 Rig1；1 是显式线性标注）。
+-- 注意这是**默认构造**入口；带源码 quantity 的路径走 Elab 的 `rigForPi`。
 rigOfBinder : Bool -> Bool -> Rig
-rigOfBinder implicit isTypeDom = if implicit then Rig0 else if isTypeDom then Rig0 else Rig1
+rigOfBinder implicit isTypeDom = if implicit then Rig0 else if isTypeDom then Rig0 else RigOmega
+
+defaultExplicitRig : Rig
+defaultExplicitRig = RigOmega
+
+-- M38：Rig 三值半环。唯一实现；Elab/Usage 不自己写三值分支。
+--   add   ：同一变量多次出现 / 顺序组合
+--   scale ：把一段 usage 按 binder quantity 放大
+--   join  ：分支合并（0∨1 = ω：线性值必须在每条路径上都被消费）
+rigAdd : Rig -> Rig -> Rig
+rigAdd Rig0 b = b
+rigAdd a Rig0 = a
+rigAdd Rig1 Rig1 = RigOmega
+rigAdd _ _ = RigOmega
+
+rigScale : Rig -> Rig -> Rig
+rigScale Rig0 _ = Rig0
+rigScale _ Rig0 = Rig0
+rigScale Rig1 u = u
+rigScale RigOmega u = RigOmega
+
+rigJoin : Rig -> Rig -> Rig
+rigJoin Rig0 b = b
+rigJoin a Rig0 = a
+rigJoin Rig1 Rig1 = Rig1
+rigJoin _ _ = RigOmega
+
+-- 声明的 quantity 与实测 usage 是否兼容（0/1 精确；ω 任意）。
+rigExact : Rig -> Rig -> Bool
+rigExact Rig0 Rig0 = True
+rigExact Rig0 _ = False
+rigExact Rig1 Rig1 = True
+rigExact Rig1 _ = False
+rigExact RigOmega _ = True
+
+showRig : Rig -> String
+showRig Rig0 = "0"
+showRig Rig1 = "1"
+showRig RigOmega = "ω"
 
 -- 宇宙层级：不透明。`Level` 的表示（现在就是一个非负 Int）只有本模块可见；
 -- 其它模块只能经 levelZero / levelSucc / levelMax / levelToInt / levelEq / levelLt
@@ -465,7 +510,7 @@ insertDictBinder name idx dictDom t = insertDictBinderGo name idx dictDom 0 t
 -- 内会把 cutoff 自动抬高 1，正好让「插入点之后才绑定的变量」保持不变。
 insertDictBinderGo : String -> Int -> Term -> Int -> Term -> Term
 insertDictBinderGo name idx dictDom depth (TPi n i r d c) =
-  if depth == idx then TPi n i r d (TPi name True Rig1 dictDom (shift 0 1 c))
+  if depth == idx then TPi n i r d (TPi name True RigOmega dictDom (shift 0 1 c))
   else TPi n i r d (insertDictBinderGo name idx dictDom (depth + 1) c)
 insertDictBinderGo name idx dictDom depth t = t
 
@@ -487,7 +532,7 @@ insertLamBinder name idx t = insertLamBinderGo name idx 0 t
 
 insertLamBinderGo : String -> Int -> Int -> Term -> Term
 insertLamBinderGo name idx depth (TLam n r b) =
-  if depth == idx then TLam n r (TLam name Rig1 (shift 0 1 b))
+  if depth == idx then TLam n r (TLam name RigOmega (shift 0 1 b))
   else TLam n r (insertLamBinderGo name idx (depth + 1) b)
 insertLamBinderGo name idx depth t = t
 

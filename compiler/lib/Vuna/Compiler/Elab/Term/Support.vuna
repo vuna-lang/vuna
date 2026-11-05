@@ -55,7 +55,7 @@ else case forceVal ec ty of
     in case newMeta ctx ec of
       Pair mt ec1 =>
         instantiateAllImplicitFuel (fuel - 1) ctx ec1 head (applyClosure clo (VMeta m []))
-          (Pair mt (binderRig True dom) :: acc)
+          (Pair mt rig :: acc)
   else Pair (foldAppTerms head (reverse acc)) (Pair ty ec)
   _ => Pair (foldAppTerms head (reverse acc)) (Pair ty ec)
 

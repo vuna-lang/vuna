@@ -29,7 +29,7 @@ classParamKind : String -> List (Pair String Expr) -> Term
 classParamKind pname methods = arityFun (methodMaxAppArity pname methods) (TType levelZero)
 
 arityFun : Int -> Term -> Term
-arityFun n res = if n <= 0 then res else TPi "_" False Rig1 (TType levelZero) (arityFun (n - 1) res)
+arityFun n res = if n <= 0 then res else TPi "_" False Rig0 (TType levelZero) (arityFun (n - 1) res)
 
 methodMaxAppArity : String -> List (Pair String Expr) -> Int
 methodMaxAppArity pname methods =
@@ -70,7 +70,7 @@ methodArgRigsOfGo rigOf (TPi name implicit rigB dom cod) env =
   let
     domVal = eval env dom
     v = VNeutral (NVar name (length env) [])
-  in rigOf implicit domVal :: methodArgRigsOfGo rigOf cod (v :: env)
+  in rigB :: methodArgRigsOfGo rigOf cod (v :: env)
 methodArgRigsOfGo rigOf _ env = []
 
 -- ---------------------------------------------------------------------------

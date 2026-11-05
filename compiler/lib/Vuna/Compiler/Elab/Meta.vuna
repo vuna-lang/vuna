@@ -66,6 +66,7 @@ module Vuna.Compiler.Elab.Meta
   , prependFamParams
   , relevantMetas
   , resultSpine
+  , rigOfQty
   , spineOfType
   , splitKind
   , substClassParam
@@ -335,10 +336,9 @@ kindDomainWellFormed (TType l) = levelToInt l >= 0
 kindDomainWellFormed (TPi _ _ _ d c) = kindDomainWellFormed d && kindDomainWellFormed c
 kindDomainWellFormed _ = True
 
--- 族的参数/索引 telescope：binder 名 + 是否擦除（域是宇宙）。
+-- 族的参数/索引 telescope：binder 名 + 声明的 Rig（M38：直接用 TPi 携带的量，不重算）。
 splitKind : Term -> List (Pair String Rig)
-splitKind (TPi name implicit _ dom cod) =
-  Pair name (binderRig implicit (eval [] dom)) :: splitKind cod
+splitKind (TPi name implicit rig dom cod) = Pair name rig :: splitKind cod
 splitKind _ = []
 
 dtDataLookup : String -> List DtData -> Maybe DtData
@@ -416,9 +416,7 @@ teleOfType ty = teleOf ty []
 teleOf : Term -> List Value -> List (Pair String Rig)
 teleOf (TPi name implicit rig dom cod) env =
   let
-    domVal = eval env dom
     v = VNeutral (NVar name (length env) [])
-    rig = binderRig implicit domVal
   in Pair name rig :: teleOf cod (v :: env)
 teleOf _ env = []
 
@@ -587,7 +585,7 @@ fieldBinderGo n i acc = fieldBinderGoGo (n - i) n acc
 fieldBinderGoGo : Int -> Int -> List (Pair String Rig) -> List (Pair String Rig)
 fieldBinderGoGo remaining n acc =
   if remaining <= 0 then reverse acc
-  else fieldBinderGoGo (remaining - 1) n (Pair (fieldVarName (n - remaining)) Rig1 :: acc)
+  else fieldBinderGoGo (remaining - 1) n (Pair (fieldVarName (n - remaining)) RigOmega :: acc)
 
 -- M24.7：按**短名**查类（库里的类名带模块前缀，如 `Base.Eq.Eq`；`==` / `<` 的字典
 -- 查找从 `ecClasses` 按最后一段反查，找不到时调用方退回泛型运行时兜底）。
@@ -732,6 +730,14 @@ isTypeDomain v = isTypeLayerValue v
 
 binderRig : Bool -> Value -> Rig
 binderRig implicit dom = rigOfBinder implicit (isTypeDomain dom)
+
+-- M38：源码 quantity → Rig（唯一映射；隐式/类型层域强制 0，标注由上层校验）。
+rigOfQty : Bool -> Bool -> Maybe Qty -> Rig
+rigOfQty implicit isTypeDom qty = if implicit || isTypeDom then Rig0
+else case qty of
+  Nothing => RigOmega
+  Just Q0 => Rig0
+  Just Q1 => Rig1
 
 isTypeLayerValue : Value -> Bool
 isTypeLayerValue v = isTypeLayerValueFuel 128 v

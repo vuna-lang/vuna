@@ -266,16 +266,16 @@ bindCtorGo ctx ty subpats acc = case ty of
     else case subpats of
       [] => Err (tcMsg CaseBranchTooFewArgs VNil)
       p :: rest => case p of
-        PVar pname psp => bindCtorField ctx domVal cod pname rest acc
-        PWild psp => bindCtorField ctx domVal cod "_" rest acc
+        PVar pname psp => bindCtorField ctx rig domVal cod pname rest acc
+        PWild psp => bindCtorField ctx rig domVal cod "_" rest acc
         _ => tcErr0 (patSpan p) NestedPatterns
   _ => Ok (Pair ctx (Pair (reverse acc) subpats))
 
-bindCtorField : Ctx -> Value -> Term -> String -> List Pat -> List (Pair String Rig) -> Result (Pair Ctx (Pair (List (Pair String Rig)) (List Pat)))
-bindCtorField ctx domVal cod binderName rest acc =
+bindCtorField : Ctx -> Rig -> Value -> Term -> String -> List Pat -> List (Pair String Rig) -> Result (Pair Ctx (Pair (List (Pair String Rig)) (List Pat)))
+bindCtorField ctx rig domVal cod binderName rest acc =
   let
     ctx2 = ctxBindValue binderName domVal ctx
-  in bindCtorGo ctx2 cod rest (Pair binderName (binderRig False domVal) :: acc)
+  in bindCtorGo ctx2 cod rest (Pair binderName rig :: acc)
 
 -- 构造子结果索引的新鲜实例（可达性分析 / 分支合一用）。
 freshTeleVals : List (Pair String Rig) -> Int -> Int -> List Value
