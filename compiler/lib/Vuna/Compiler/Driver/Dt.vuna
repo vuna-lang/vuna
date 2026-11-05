@@ -252,6 +252,8 @@ dtCheckPackageWithDeps ctx entry deps = andThen (dtLoadParts ctx entry) (\parts 
   decls = append (concatMap moduleDeclsOf ours) (firstOf parts)
   start = depStartOf deps
   _ = note ("summ-List=" ++ globalTextOf "List" (secondOf start))
+  _ = note
+  _ = note
   _ = note ("summ-Pair=" ++ globalTextOf "Pair" (secondOf start))
   _ = note ("summ-getenv=" ++ globalTextOf "prim_getenv" (secondOf start))
   _ = note ("summ-runIO=" ++ globalTextOf "Base.IO.runIO" (secondOf start))
