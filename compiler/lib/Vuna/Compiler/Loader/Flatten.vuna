@@ -29,10 +29,44 @@ import Vuna.Compiler.Packages.Pkg
 -- M31.2：imports 模块的**可见 fixity 表**（Module 里已含各自的 import 闭包）。
 -- 本模块声明由调用方放在返回列表最前，查找时第一处匹配生效。
 -- M31.2：parse 错误带文件名（前端诊断无位置，加载器知道路径）。
+-- M34.5 第 4 步：AST 缓存。parse 结果按「路径 + 源内容」哈希复用——LSP 反复检查同一
+-- 文件、workspace 多次 check 时省掉重复 parse。缓存目录随 `$TMPDIR` 清理；编译器版本
+-- 变化时由 hash 前缀（`vuna-ast-cache 1`）与源码哈希自然失效。
+astCacheDir : String
+astCacheDir =
+  let
+    base = runIO (prim_getenv "TMPDIR")
+  in (if base == "" then "/tmp" else base) ++ "/vuna-cache/ast"
+
+astKeyOf : String -> String -> String
+astKeyOf path src =
+  strFromInt
+    (strHash (path ++ "__" ++ src) * 1000003 + strHash ("m30:" ++ path ++ src) + strLength src)
+
+ensureDirPath : String -> Int
+ensureDirPath path = ensureDirPathFuel 256 path
+
+ensureDirPathFuel : Int -> String -> Int
+ensureDirPathFuel fuel path = if fuel <= 0 then 0
+else if path == "" || path == "." || path == "/" then 0
+else if runIO (prim_fileExists path) then 0
+else
+  let
+    _ = ensureDirPathFuel (fuel - 1) (parentOfPath path)
+  in runIO (prim_makeDir path)
+
 parseFileWithPath : String -> String -> Result SourceFile
-parseFileWithPath path src = case parseSource path src of
-  Err e => Err (path ++ ": " ++ e)
-  Ok src2 => Ok src2
+parseFileWithPath path src =
+  let
+    cpath = astCacheDir ++ "/" ++ astKeyOf path src
+  in if runIO (prim_fileExists cpath) then Ok (prim_unmarshal (runIO (prim_readFile cpath)))
+  else case parseSource path src of
+    Err e => Err (path ++ ": " ++ e)
+    Ok src2 =>
+      let
+        _ = ensureDirPath astCacheDir
+        _ = runIO (prim_writeFile cpath (prim_marshal src2))
+      in Ok src2
 
 visibleFixitiesOf : List Module -> List Import -> List FixityDecl
 visibleFixitiesOf modules imports = concatMap (\imp => case findModule modules (importName imp) of
@@ -571,3 +605,20 @@ resolveModulesKeep [] = Ok []
 resolveModulesKeep ((Module name pkg imports implicit decls exports mcaps fixities) :: rest) =
   andThen (reorderProgram (tableOf fixities) decls)
     (\decls2 => andThen (andThen (resolveProgram (Module name pkg imports implicit decls2 exports mcaps fixities :: rest) name name (namespacesOf decls2) (append imports implicit) decls2) (\d => checkEffectsBuiltins name pkg mcaps d)) (\d1 => andThen (resolveModulesKeep rest) (\d2 => Ok (Module name pkg imports implicit d1 exports mcaps fixities :: d2))))
+
+dropPastSlash : List Int -> List Int
+dropPastSlash [] = []
+dropPastSlash (c :: rest) = if c == 47 then rest else dropPastSlash rest
+
+parentOfPath : String -> String
+parentOfPath path =
+  let
+    chars = strUnpack path
+    rev = reverse chars
+    after = dropPastSlash rev
+  in if length after == length rev then "."
+  else
+    let
+      parent = strPack (reverse after)
+    in if parent == "" then if startsWith "/" path then "/" else "."
+    else if startsWith "/" path && not (startsWith "/" parent) then "/" ++ parent else parent
