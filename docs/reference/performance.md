@@ -249,9 +249,10 @@ top_heap ≈ 1.9e5 / 5.8e6 / 7.3e6 words。`--alloc` 只报告、不设门槛（
 
 | benchmark | 冷（首次） | 热（缓存命中） |
 | --- | --- | --- |
-| check .（workspace 并行） | ~3.6 s | ~23 ms |
-| check compiler | ~2.8 s | ~11 ms |
-| build --no-compile compiler | ~2.9 s | ~18 ms |
+| check .（workspace 并行；根包 + 成员） | ~3.6 s | ~23 ms |
+| check compiler（仅该包） | ~2.3 s | ~11 ms |
+| build --no-compile（workspace 全部，串行） | ~6.3 s | ~19 ms |
+| build --no-compile compiler（仅该包） | ~2.5 s | ~19 ms |
 | build compiler（完整链接） | ~6.7 s | ~16 ms |
 
 缓存 key = 包闭包源哈希 + 依赖包哈希 + manifest 哈希 + 编译器二进制指纹 + schema 版本；

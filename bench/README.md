@@ -66,8 +66,10 @@ array 基准；W4 的 `strSubstring` + `repeat` 批拼把 string_ops 拉到 1.0x
 `bench/run.sh` 采集进 JSON 的 `vuna.gc` 字段。
 ## 编译器基准（M34）
 
-`bench/compiler.sh` 测编译器 / 工具链自身墙钟：`check .`、`check compiler`、
-`build --no-compile compiler`、`vuna map` 冷 / 热、`fmt --check`。基线
-`bench/compiler-baseline.txt`（机器相关，仅同机回归对比）；`--check` 超 20% 打 WARN（软门槛），
-`--save-baseline` 重写基线。用法与读数见
-[performance.md §9](../docs/reference/performance.md)。
+`bench/compiler.sh` 测编译器 / 工具链自身墙钟：`check .`、`check compiler`、`build --no-compile`
+（workspace 全部 / 仅 compiler 包）、`vuna map` 冷 / 热、`fmt --check`，并内置冷 / 热两种
+口径（清缓存后测 vs 预热后测）。**范围不同不可直接互比**：`check-all` 是 workspace 根包 +
+成员并行，`build-all` 是 workspace 全部串行（≈ check 全部 + codegen），`*-compiler` 只覆盖
+compiler 包。基线 `bench/compiler-baseline.txt`（机器相关，仅同机回归对比）；`--check` 超 20%
+打 WARN（软门槛），`--save-baseline` 重写基线，`--alloc` 额外打印冷 `check .` 的 GC 分配统计
+（`VN_PERF_STATS=1`）。用法与读数见 [performance.md §9](../docs/reference/performance.md)。

@@ -1,8 +1,9 @@
-check-all 3618
-check-compiler 2248
-check-warm 23
-build-compiler 2481
+check-all 3617
+check-compiler 2288
+check-warm 22
+build-all 6315
+build-compiler 2505
 build-warm 19
-map-cold 541
-map-hot 292
-fmt-check 465
+map-cold 546
+map-hot 295
+fmt-check 463

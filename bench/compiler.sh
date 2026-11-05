@@ -8,14 +8,24 @@
 # 上做回归对比）。`--check` 与 `bench/compiler-baseline.txt` 比，超过 --threshold% 打 WARN
 # （软门槛，退出 0）；`--save-baseline` 重写基线（复核读数后手动执行）。
 #
+# **范围（不可直接互比）**：
+#   check-all            workspace 根包（`lib/Vuna/*` + compiler/base 闭包）+ 成员子进程并行
+#   check-compiler       仅 compiler 包（base 只是依赖）
+#   check-warm           同 check-all，但缓存已预热
+#   build-all            workspace 全部（根包 + compiler 成员，串行；= check 全部 + codegen）
+#   build-compiler       仅 compiler 包（= check-compiler + codegen）
+#   build-warm           同 build-compiler，但 split 缓存已预热
+#   map-cold / map-hot   `vuna map` 索引冷 / 热
+#   fmt-check            `vuna fmt --check`
 # 冷/热语义（M34.5 缓存落地后）：
-#   check-all / check-compiler / build-compiler  先清对应缓存（冷，代表首次构建）
-#   check-warm / build-warm                      先预热一次再计时（热，代表缓存命中）
+#   check-all / check-compiler / build-all / build-compiler 先清对应缓存（冷，代表首次构建）
+#   check-warm / build-warm 先预热一次再计时（热，代表缓存命中）
 #
 # 用法（仓库根目录）：
 #   sh bench/compiler.sh                    # 测量全部并打印表格
 #   sh bench/compiler.sh --runs 5 --check   # 与基线对比
 #   sh bench/compiler.sh --save-baseline    # 重写 bench/compiler-baseline.txt
+#   sh bench/compiler.sh --alloc            # 额外打印冷 check . 的 GC 分配统计
 set -euo pipefail
 
 RUNS=3
@@ -50,7 +60,7 @@ options:
   --threshold N          回退阈值，百分比（默认 20）
   -h, --help             显示帮助
 
-benchmark 名: check-all check-compiler check-warm build-compiler build-warm map-cold map-hot fmt-check
+benchmark 名: check-all check-compiler check-warm build-all build-compiler build-warm map-cold map-hot fmt-check
 EOF
 }
 
@@ -80,7 +90,7 @@ done
 
 case $RUNS in ''|*[!0-9]*|0) die "--runs must be a positive integer" ;; esac
 
-NAMES="check-all check-compiler check-warm build-compiler build-warm map-cold map-hot fmt-check"
+NAMES="check-all check-compiler check-warm build-all build-compiler build-warm map-cold map-hot fmt-check"
 if [ -n "$ONLY" ]; then
   for n in $ONLY; do
     case " $NAMES " in *" $n "*) ;; *) die "unknown benchmark: $n" ;; esac
@@ -109,6 +119,9 @@ run_once() {
     check-warm)
       (cd "$ROOT" && "$VUNA_BIN" check . >/dev/null 2>&1)
       t0=$(date +%s%3N); (cd "$ROOT" && "$VUNA_BIN" check . >/dev/null 2>&1); rc=$?; t1=$(date +%s%3N) ;;
+    build-all)
+      clear_split_cache
+      t0=$(date +%s%3N); (cd "$ROOT" && "$VUNA_BIN" build --no-compile --out "$WORK/ball" >/dev/null 2>&1); rc=$?; t1=$(date +%s%3N) ;;
     build-compiler)
       clear_split_cache
       t0=$(date +%s%3N); (cd "$ROOT" && "$VUNA_BIN" build --no-compile --out "$WORK/build" compiler >/dev/null 2>&1); rc=$?; t1=$(date +%s%3N) ;;
@@ -181,6 +194,7 @@ if [ "$CHECK" -eq 1 ]; then
   done < "$BASELINE"
   if [ "$bad" -eq 1 ]; then echo "COMPILER-PERF-WARN"; else echo "COMPILER-PERF-OK"; fi
 fi
+
 if [ "$ALLOC" -eq 1 ]; then
   clear_check_cache
   echo ""
