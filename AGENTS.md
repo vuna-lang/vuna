@@ -70,7 +70,7 @@ vuna check .                         # 包级类型检查（自检）；vuna bui
 vuna fmt --check <PATH>...           # 格式化检查（省略 PATH = workspace 各包 lib/app/test）；vuna lint <file>...
 vuna doc [--check] [--package NAME] [DIR [OUT]]  # 生成单文件交互 HTML API 文档（默认 DIR/docs/api.html）
 vuna gen-errors [ROOT]               # 从枚举真源生成错误码文档（默认 ROOT/docs/.generated/errors.md）
-vuna interp <file.vuna>              # DT 精化 + 核心求值（纯；只展示 Int/String/Bool）
+vuna interp <file.vuna>              # DT 精化 + 核心求值（纯；只展示 Int/Nat/String/Bool）
 vuna test [DIR] [--list|--filter PAT|--verbose|--fail-fast]  # 包内测试；默认输出不变
 vuna run [DIR] [--package NAME] [--no-build] [-- ARGS...]    # 增量 build + 执行入口（透传参数/退出码）
 vuna repl [FILE|DIR|MODULE]          # 自动签名 / 行编辑（方向键/Ctrl-R）/ 颜色 / :type/:info/:search/:load/:reload/:browse
@@ -107,7 +107,7 @@ build，`dist/` 提交）；`nix/` = 构建图 + rotate/metrics/bench；`docs/` 
   调试与运行时错误：[debugging.md](docs/reference/debugging.md)（片段/运行时报告/`Base.Debug`/`vuna run`/REPL）
 - 仓库探索（按场景选工具、探索后落盘）：技能 `.agents/skills/repo-navigation/SKILL.md`
 - 自举与种子：[bootstrap.md](docs/reference/bootstrap.md)；测试与 CI：[testing.md](docs/reference/testing.md)；
-  已知边界：[limits.md](docs/reference/limits.md)；性能：[performance.md](docs/reference/performance.md)
+  性能：[performance.md](docs/reference/performance.md)
 - 债务 / 能力缺口与路线图：[debt.md](docs/reference/debt.md)（只含开放项）、[docs/roadmap.md](docs/roadmap.md)（基线、终态、下一阶段、F1–F4）
 
 > 文档分层规则：`README.md` 只保留定位/上手/目录/硬约束/导航；细节在 `docs/reference/`；

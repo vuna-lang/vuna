@@ -27,7 +27,8 @@
   目录的 diamond 依赖合法；同名不同目录在加载期报 `duplicate package name ...`。
 - 编译器 CLI（`compiler/lib/Vuna/Compiler/Driver/CompilerCli.vuna`）：`vuna-compiler` 提供
   `compile/check/build`，入口 `compiler/app/Main.vuna`；**seed 只由这个入口的闭包生成**。
-  产品 CLI（`lib/Vuna/Cli.vuna`）通过 in-process 调库实现同样的命令，并追加工具命令：
+  产品 CLI（`lib/Vuna/Cli.vuna`）通过 in-process 调库实现同样的命令（单一二进制，不 fork
+  `vuna-compiler`），并追加工具命令：
 
   - `vuna compile [--no-print] (<entry.vuna> | <package-dir>) OUTDIR`：DT 精化 → 擦除型
     OCaml，**逐模块**写到 OUTDIR（`Vuna_runtime.ml` + 各模块 + `Main.ml` + `build.sh`），
@@ -38,7 +39,8 @@
     `<PKG-DIR>/.output`（PKG-DIR 缺省 `.`，`--out` 覆盖）；目录是 workspace 根时构建所有
     **可执行**成员（库成员只检查并打印 `skipped (library)`），`--out DIR` 时按
     `DIR/<包名>` 分目录；`--package NAME` 只构建指定包（Nix 构建根包用）；`--no-compile`
-    只生成源码目录、不调 `ocamlopt`；
+    只生成源码目录、不调 `ocamlopt`（非 `--no-compile` 时生成的 `build.sh` 需要 PATH 里有
+    `ocamlopt`）；
   - `vuna test [DIR]`：纯测试（`main : String` 空串 / `Int` 0 / `Bool` True 通过）走
     DT 核心求值；`main : IO ...` 走 compile + 运行，退出码 0 通过（可测效果）。DIR 是
     workspace 根时对每个包的 `test/` 聚合；
@@ -106,7 +108,7 @@ effects = ["console", "fs", "process", "env", "clock"]
 ```
 
 ```toml
-# 成员包（库包）：用 [export] 限定跨包可见的模块
+# 成员包（库包）：用 [export] 限定跨包可见的模块（下为节选，完整列表见 base/vuna.toml）
 [package]
 name = "vuna-base"
 
@@ -148,11 +150,14 @@ modules = [
   一致，产物不含绝对路径或时间戳（测试对两次 `build --out` 做逐字节 diff）。
 - **build meta**：`build` 链接成功后写 `<out>/build-meta.json`（`compile` 与
   `build --no-compile` 不写，避免污染 seed rotation 与快照）。字段：`schema`、`compiler`、
-  `package`、`entry`、`linked`、`closure`、`sources`（模块名 → 内容哈希）、`dependencies`
-  （依赖包名 → 闭包哈希）。同哈希 + 二进制存在时 `build` 直接打印 `up to date:` 跳过。
-- **按模块内容哈希增量**：生成的 `build.sh` 为每个模块计算 `.ml`/`.mli` + 依赖 `.cmi` 的
-  内容哈希并写 `<module>.stamp`，命中则跳过重编；不再用 mtime，所以 checkout / 复制不会
-  造成全量重编。需要 POSIX sh + `sha256sum`（Nix stdenv 与常规 coreutils 环境都有）。
+  `package`、`entry`、`linked`、`closure`、`manifest`、`sources`（模块名 → 内容哈希）、
+  `dependencies`（依赖包名 → 闭包哈希）。同哈希 + 二进制存在时 `build` 直接打印
+  `up to date:` 跳过。
+- **按模块内容哈希增量**：生成的 `build.sh` 按**直接依赖**分层（`depth(u) = 1 + max(depth(dep))`，
+  层内单元互不依赖、层间串行），每个模块写 `<module>.stamp`——内容 = 自身 `.ml`/`.mli` 与
+  **直接依赖的 `.stamp`** 的哈希（Merkle 式，不读 `.cmi`），命中则跳过重编。判据不用
+  mtime，所以 checkout / 复制不会造成全量重编；改一个单元只重编它的直接 / 传递依赖者。
+  脚本只需 POSIX sh + `sha256sum` + `ocamlopt`（Nix stdenv 与常规 coreutils 环境都有）。
 - **hermetic 边界**：确定性 / 哈希 / 增量由 vuna 保证；**完全 hermetic 的固定工具链由 Nix
   构建承担**。本地 `vuna build` 仍调用宿主 `ocamlopt`；`--no-compile` 只产源码。
 - **workspace 单元**：`check` 是所有成员的检查单元；`build` 是全部可执行成员的构建单元

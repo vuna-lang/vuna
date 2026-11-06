@@ -15,7 +15,6 @@
 - **不覆盖**：原语/能力的逐条语义（[primitives.md](primitives.md) §7）；纯效应 monad
   （`Base.State` / `Reader` / `Error`，它们不碰 IO，见 [stdlib.md](stdlib.md)）；
   并发/async（M35.2）；完整 QTT（研究储备）。
-- 当前用户可见边界另见 [limits.md](limits.md)。
 
 ## 2. IO 是内建效应类型
 
@@ -24,7 +23,7 @@
 | 项 | 值 |
 | --- | --- |
 | 类型名 | `IO`（与 `Int` / `String` 同级的语言内建类型，恒可见） |
-| kind | `Type -> Type`（参数 binder `Rig1`，运行时用到） |
+| kind | `Type -> Type`；参数是**类型层 binder**，`Rig0` 擦除——`a` 只出现在 OCaml 类型位置 `int -> 'a`，不产生运行时字段 |
 | 运行时表示 | 裸 thunk `int -> 'a`（`int` 是世界令牌，`main` 用 `0`） |
 | 构造器 | **没有**；`MkIO` 已删除 |
 
@@ -48,6 +47,13 @@
   `Functor` / `Monad IO` 实例经 `prim_pureIO` / `prim_bindIO`。
 - **执行边界不变**：动作只在 `main` 由运行时执行；`main : IO a` 的产物钩子是
   `v_main 0`（不再 match 构造子）。`runIO` 与直接引用 `prim_runIO` 都受 `unsafe` 门控。
+- `vuna interp` 是纯核心求值器：遇到 `main : IO a` 一律报
+  `[CG_InterpCannotExecuteEffects]`，既不执行也不丢弃效果（逐条归约边界见
+  [primitives.md](primitives.md) §9）；效果程序只走 `compile` + 运行产物。
+- 没有异常 / handler 层：语言没有 `try` / `catch`、没有 effect handler；未捕获的宿主异常
+  由生成的 main 钩子统一报告为 `vuna: runtime error: ...` + 位置帧 + exit 2（见
+  [debugging.md](debugging.md)）。`Base.Debug.trace` / `traceShow` 是调试专用逃逸（base 的
+  `unsafe` `runIO`），不构成效应系统的一部分。
 - **能力边界不变**：效果原语只有 `prim_*` 名，是否可直调由 manifest
   `[capabilities].effects` 决定；`Base.IO` 的别名不需要调用方有额外能力。IO 升格**没有**
   把能力搬进类型（类型级能力行仍归 F3）。
@@ -169,7 +175,7 @@ interp` 能直接归约；它们是「不需要 IO 的状态/环境/错误」。
 
 ## 相关阅读
 
-- 当前边界（用户可见）：[limits.md](limits.md)；标准库模块：[stdlib.md](stdlib.md)；量化/线性规则：[qtt.md](qtt.md)
+- 标准库模块：[stdlib.md](stdlib.md)；量化/线性规则：[qtt.md](qtt.md)
 - 原语与能力（`prim_*`、`runIO`、效果原语）：[primitives.md](primitives.md) §7
 - 记录 / trait / `do` 与 `Monad`：[records-traits.md](records-traits.md)
 - 类型系统（擦除判据、宇宙）：[type-system.md](type-system.md)；Core 实现：[core.md](core.md)

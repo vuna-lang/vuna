@@ -1,7 +1,8 @@
 # 性能工程（vuna 命令耗时）
 
 本文覆盖：**怎么量**（探针设施与测量规程）、**当前读数**、**热点在哪**。规模不变量与安全
-边界见 [limits.md](limits.md)，测试 / CI 口径见 [testing.md](testing.md)，方法论规程见技能
+边界见 [type-system.md](type-system.md)（fuel / measure 站点）与 [primitives.md](primitives.md)
+（原语与运行时语义），测试 / CI 口径见 [testing.md](testing.md)，方法论规程见技能
 `.agents/skills/perf-debug/SKILL.md`。
 
 ## 1. 现状读数
@@ -205,7 +206,7 @@ W4（可变数据边界 / 字符串补齐）：
    `OpStrSubstring`），`Base.String.substring` 不再走 List 桥接；
 2. **`Base.String.repeat`** 改一次 `strConcatMany`，消除逐级 `++` 的 O(n²) 拷贝；
 3. **线性 / ST 裁剪**：可变数据（`IORef` / `MArray` / `Buffer`）保持 IO 隔离，不引入线性
-   类型与 ST/region（见 [limits.md](limits.md) 的「容器与可变数据」与 debt D22）。
+   类型与 ST/region（见 [qtt.md](qtt.md) / [effects.md](effects.md) 与 debt D22）。
    string_ops 3.4x → 1.0x；全部基准进入 2× 手写 OCaml（M33 退出标准）。
 
 W2 落地的 codegen / 运行时改进（都在 `Codegen/Term.vuna` 与 `base/`）：
@@ -308,7 +309,7 @@ M34.6 的改动（按波次；历史细节在 git）：
   （1–2%）：均低于门槛，记录不做。
 ## 相关阅读
 
-- 规模不变量与边界：[limits.md](limits.md)
+- 规模不变量与边界：[type-system.md](type-system.md)、[primitives.md](primitives.md)
 - 测试 / CI / bench：[testing.md](testing.md)
 - 编译器结构：[compiler.md](compiler.md)、[core.md](core.md)
 - 方法论技能：`.agents/skills/perf-debug/SKILL.md`

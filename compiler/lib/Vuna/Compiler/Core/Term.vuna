@@ -105,8 +105,8 @@ import Base.IntMap
 -- M18.6：表示层定型（QTT 预留）
 -- ---------------------------------------------------------------
 --
--- Rig 是「这个 binder 在运行时用几次」的三值格子。当前只产生 Rig0 / Rig1；
--- RigOmega 在类型里存在但不产生——QTT 落地时精化器只需产出它，codegen 的下游
+-- Rig 是「这个 binder 在运行时用几次」的三值格子。M38 起精化器三值都产生（Rig0 / Rig1 / RigOmega）；
+-- 擦除与用量判据只读 Rig（`rigIsErased`），codegen 的下游
 -- 逻辑（判「是否擦除」）不变。
 data Rig : Type where
   -- 运行时零次：类型级 binder、隐式实参。擦除 = 不进运行时表示。

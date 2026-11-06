@@ -85,7 +85,7 @@
   - section 不要求运算符有 fixity 声明（`(+)` 是无歧义的前缀使用）。
   - 展开产物是 **lambda**，因此「直接应用」section（`(+ 3) 4`）会命中既有的 lambda 推断边界
     `TC_LambdaNoSignature`（普通 `(\x => x) 5` 同样报错）；把 section 传给带签名的参数
-    （`inc : Int -> Int`、`inc = (+ 3)`）正常。见 [limits.md](limits.md)。
+    （`inc : Int -> Int`、`inc = (+ 3)`）正常。
 - **用户符号名**：`<+> a b = ...` 与 `<+> : Int -> Int -> Int` 允许符号名 def / signature，
   可出现在中缀（需 `infix*` 声明）、反引号、section、导出列表；`->`、反引号与语法符号是保留
   集合，不能当可定义名。codegen 把非 `[A-Za-z0-9]` 字符转义成 `_x<code>_`

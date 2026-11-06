@@ -158,13 +158,12 @@ manifest，不向上找。命令语义与包格式
 | [docs/reference/bootstrap.md](docs/reference/bootstrap.md) | 种子策略、rotation 流程、fixed point、TCB 边界 |
 | [docs/reference/testing.md](docs/reference/testing.md) | 测试体系、corpus 分类、nix checks 清单、性能基准 |
 | [docs/reference/lint.md](docs/reference/lint.md) | lint 规则（AST 驱动、`--fix` 与门禁） |
-| [docs/reference/limits.md](docs/reference/limits.md) | 当前限制与已知边界（编译模型 / 类型系统 / IO / 工具链细节） |
 | [docs/reference/debt.md](docs/reference/debt.md) | 仍未关闭的债务、缺陷与未实现能力（按语言 / 工具分组，带证据与归属） |
 | [docs/roadmap.md](docs/roadmap.md) | 当前基线、终态方向、下一阶段与不排期轨道（F1–F4） |
 
 文档分层规则：README 只保留定位/上手/目录/硬约束/导航；细节在 `docs/reference/`；
-roadmap 只保留当前基线与未来方向，里程碑历史在 git 历史；已知边界与开放债务分别归
-`limits.md` 与 `debt.md`。
+roadmap 只保留当前基线与未来方向，里程碑历史在 git 历史；已知边界并入各主题参考页
+（见上表），未关闭的缺陷与缺口归 `debt.md`。
 
 ## 许可
 

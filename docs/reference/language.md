@@ -22,10 +22,10 @@
   可见闭包去重与 fmt 程序级 fixity 见 [operators.md](operators.md)；
 - layout：offside 规则；顶层声明、`data` 构造器块、`case` 分支、`let` 绑定按块列对齐，
   表达式跨行必须缩进超过所在块列；
-- `main` 必须是零参数定义；展示由编译器钩子完成（`Int` → 十进制、`String` → `strShow`、
-  `Bool` → `True` / `False`）。`show` 是 `Base.Show` 的 trait 方法，不是 `main` 的展示
-  钩子。`vuna interp` 只展示 `Int` / `String` / `Bool` 的 `main` 值（interp 是精化后的
-  纯核心求值，见 [limits.md](limits.md)）；
+- `main` 必须是零参数定义；展示由编译器钩子完成（`Int` / `Nat` → 十进制、`String` →
+  `strShow`、`Bool` → `True` / `False`）。`show` 是 `Base.Show` 的 trait 方法，不是 `main`
+  的展示钩子。`vuna interp` 只展示 `Int` / `Nat` / `String` / `Bool` 的 `main` 值（interp
+  是精化后的纯核心求值，归约边界见 [primitives.md](primitives.md)）；
 - 内建值（`Vuna.Compiler.Intrinsics.allIntrinsics` 里用户可见的项）：`+ - * /`、
   `&& ||`、`++`、`strFromInt` / `strUnpack` / `strPack` /
   `strLength` / `strConcatMany` / `strSubstTemplate` / `strHash` / `strAt` / `strShow`、
@@ -77,7 +77,10 @@ g =
 ```
 
 - 两种记法只差一条约束：**`where` 块每个绑定必须写签名行**（缺签名报
-  `[TC_WhereNeedsSig] where binding ... needs a type signature`）；`let` 块的签名行可选；
+  `[TC_WhereNeedsSig] where binding ... needs a type signature`）；`let` 块的签名行可选，
+  但**只有值 / 通配 / 模式绑定（`pat = expr`）可以省**——函数子句（含多子句模式匹配）
+  没有签名时落成待推断的 lambda，没有可检查的期望类型，精化期报
+  `[TC_LambdaNoSignature]`，因此函数子句要写完整签名；
 - 两种子句形态都支持：`pat = expr` 与函数子句 `name pats = expr`；
 - **局部多 clause 函数**：同一名字的**相邻**多条子句合并成一个局部函数（`where` 与
   `let` 都支持），参数是任意模式（构造子 / 字面量 / 记录 / 变量），匹配语义与顶层函数
@@ -186,8 +189,8 @@ vuna/base/compiler 三包源码统一按当前语言能力书写，新增/修改
   `advance (PState file toks@(t :: rest) last count) = ...`；带参数的内层模式需括号
   （`x@(t :: rest)`），变量 / 字面量 / 0 元构造子不需要（`x@True`、`x@42`）。
   编译期由模式矩阵注入绑定（`Elab.Match`）；STR 把 as 绑定视为整个值（不改变结构下降）。
-  `case` 分支左端也支持 as-pattern（`case xs of y@(t :: rest) => ...`，desugar 为
-  `case` 分支左端也支持 as-pattern（desugar 为 `let` 绑定；scrutinee 纯表达式重复求值语义等价）。
+  `case` 分支左端也支持 as-pattern（`case xs of y@(t :: rest) => ...`），desugar 为
+  `let` 绑定；scrutinee 是纯表达式，重复求值语义等价。
 - 变量 / 通配兜底只能放**最后一个**分支，否则报 `TC_CatchAllNotLast`；
 - `Bool` 的 `case` 只认 `True` / `False` / 变量 / 通配（`TC_BoolCaseRestriction`）；
 - `Int` / `String` 的 `case` 必须有一个变量 / 通配兜底（`TC_IntStringCaseNeedsFallback`），
@@ -309,6 +312,8 @@ vuna/base/compiler 三包源码统一按当前语言能力书写，新增/修改
 - 导出侧仍按名字各自的命名空间解析（裸 `T` 导出类型、`T(..)` 导出构造子）；解析层的三张表
   与导出 kind 的 `val` / `ctor` / `type` 一一对应，解析器不再把三者拍平，精化器也不需要靠
   「kind 是不是宇宙」猜名字属于哪个命名空间。
-- 已知边界：类型层 def 退化路径只看**本模块**同名值定义；跨模块类型层定义（含
-  `axiom t : Type`）在类型位置写**限定名** `M.t`（回退到导入值命名空间），裸小写名仍是
-  类型变量。其它边界见 [limits.md](limits.md)。
+- **跨模块类型层引用**：类型层 def 退化路径只看**本模块**同名值定义；跨模块类型层定义
+  （含 `axiom t : Type`）在类型位置写**限定名** `M.t`（回退到导入值命名空间），裸小写名
+  仍是类型变量。
+- **同名声明**：三套命名空间互不遮蔽；但同模块 `data T` 与值 `T` 同名仍不可靠
+  （globals 单表），避免这种写法，见 [debt.md](debt.md) B18。

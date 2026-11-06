@@ -45,7 +45,7 @@ vuna 尚未发布任何版本：没有外部用户、下游生态与历史包袱
   无分配）；期望类型处的字面量编译期展开、codegen 折回整数；`Zero`/`Succ` 与 `case` 降成
   整数与 `if`；`+ - * /` 在 Nat 上下文特化到 `bi_nat*`（饱和/截断），`Nat → Int` 隐式提升，
   反向显式 `fromInt`。Base 公开度量（List/Array/MArray/Buffer/String/IO/Map/Vec）迁到 Nat；
-  低层原语、位置/fuel/level/meta/哈希等仍 Int（见 [limits.md](reference/limits.md)）。
+  低层原语、位置/fuel/level/meta/哈希等仍 Int（见 [primitives.md](reference/primitives.md) §3.1）。
 - **系统编程能力（M33）**：生成程序基准 `nix run .#vuna-perf`（vuna vs 手写 OCaml，典型
   负载 ≤2×）；codegen 内建内联 / 多参数 lambda 链 / 字符串批拼；`Array` / `IORef` / `MArray` /
   `Buffer` 与 IO 隔离的可变数据；受限 FFI（`extern` + 包根 `ffi/*.c`）；库级 `State` /
@@ -211,5 +211,5 @@ registry（没有外部用户时 registry 没有意义）。
 - 债务与缺陷逐条登记：[debt.md](reference/debt.md)
 - 子系统地图：[architecture.md](architecture.md)
 - 类型系统 / Core 实现：[type-system.md](reference/type-system.md)、[core.md](reference/core.md)；QTT/线性：[qtt.md](reference/qtt.md)
-- 自举链：[bootstrap.md](reference/bootstrap.md)；测试与 CI：[testing.md](reference/testing.md)；
-  已知边界：[limits.md](reference/limits.md)
+- 自举链：[bootstrap.md](reference/bootstrap.md)；测试与 CI：[testing.md](reference/testing.md)
+- 已知边界：各主题参考页（类型 / 原语 / 效应 / 工具链，见 `AGENTS.md` 的「文档导航」）

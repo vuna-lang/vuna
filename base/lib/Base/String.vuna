@@ -20,7 +20,7 @@ module Base.String
 -- split 用显式 fuel 计步（M25.2b，M30/C26 收紧为证明界）：`splitAcc` 每次只吃一个字符，
 -- 匹配到分隔符后交给 `skipSep` 逐个跳过；两段都带同一个 fuel 参数并每步 `fuel - 1`
 -- （`fuel <= 0` 守卫），终止性由 R2「守卫 Int」判据证明（跨函数互调用已纳入 SCC 检查，
--- 见 docs/reference/limits.md 的终止性一节）。
+-- 见 docs/reference/type-system.md 的「定义与终止性」一节）。
 --
 -- **上界证明**（`fuel = 2*len(text) + len(sep) + 2` 永不耗尽）：
 --   * 一次 splitAcc 调用恰好消费 1 个字符（`c :: rest`），最后一次（`chars = []`）不消费；

@@ -3,7 +3,7 @@
 本文是编译器内部实现参考：Core 类型论的表示、NbE / 定义性相等、双向精化器的规则、
 擦除与 case 可达性的实现，以及 codegen 侧的护栏。**用户可见的类型规则**见
 [type-system.md](type-system.md)（quantity/线性见 [qtt.md](qtt.md)）；模块职责与输出模型见
-[compiler.md](compiler.md)；当前边界见 [limits.md](limits.md)。
+[compiler.md](compiler.md)。
 
 ## 1. Core 表示
 
@@ -27,8 +27,11 @@ data Term where
 - 值：`VType` / `VPi` / `VLam`（闭包）/ `VNeutral` / `VMeta` / `VCon` / `VCase` /
   `VApp`（卡住的应用，禁止静默丢实参）/ 字面量 / `VIf`；neutral 头是
   `NVar name level spine` 或 `NGlobal name spine`。
-- `Rig` 是三值格子（`Rig0` / `Rig1` / `RigOmega`），当前只产生前两个；**读取判据只有
-  `rigIsErased`**，构造入口只有 `rigOfBinder`，`Core` 之外不得模式匹配 `Rig`。
+- `Rig` 是三值格子（`Rig0` / `Rig1` / `RigOmega`），三值都由精化器产生（M38：显式未标注
+  binder 默认 ω）；组合走 `Core.Term` 的 `rigAdd` / `rigScale` / `rigJoin`（唯一实现，
+  规则见 [qtt.md](qtt.md) §2）。**读取判据只有 `rigIsErased`**，默认构造入口是
+  `rigOfBinder`（带源码 quantity 的路径走精化器的 `rigForPi`），`Core` 之外不得模式匹配
+  `Rig`。
 - `Level` 不透明：内部是 `Level Int`（字段 `levelToInt`），外部只能经 `levelZero` / `levelSucc` /
   `levelMax` / `levelToInt` / `levelEq` / `levelLt` 访问，不得自行做 Int 算术。
 - `Sols` 携带解表（list 权威 + 哈希索引）、元变量创建深度索引与定义值缓存
@@ -62,8 +65,10 @@ data Term where
 1. **空 spine**：解 = rhs；就地检查 rhs 的自由变量都早于元变量创建深度（不会逃逸作用域）。
 2. **Miller pattern**：spine 全是互不相同的局部中性变量 ⇒ 解 = `λx1..xn. body`，spine
    变量抽象成对应 λ 绑定，其余自由变量必须早于创建深度。
-3. **其它形状**（真正的高阶 / 非 pattern）直接报 `TC_CannotSolveHigherOrder`，不再做
-   「头一致」的临时提取。
+3. **非 pattern 形状的兜底**：先走 M13 遗留的「头一致」提取（`solveMetaHoLegacyFuel`，
+   有 fuel 上限）——rhs 是 `VMeta`，或 `NVar` / `NGlobal` 中性头且实参数不少于 spine 时，
+   先解元变量 / 把多出的实参拆给头部求解，再比较剩余 spine；这是保守近似，不是合一理论的
+   一部分。提取不到才报 `TC_CannotSolveHigherOrder`。
 
 元变量创建深度随 `Sols` 携带（`solsDepth`），求解点就地检查；已解元变量进项只有两个入口：
 精化期 `Elab.Meta.zonkTerm`（深度感知）与序列化/摘要 `Core.Eval.substSolvedMetasAtTbl`

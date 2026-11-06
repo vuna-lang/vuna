@@ -1,10 +1,9 @@
 # QTT：量词化类型论与线性数据
 
-本文定义 vuna 的 quantity 体系（QTT 核心）与线性数据类型子集。它取代旧文档中
-「擦除只按域判、不做整程序使用分析」的口径；旧的 `Rig` 三值预留在这里成为真正的
-语义，而不是 codegen 的表示层标记。
+本文定义 vuna 的 quantity 体系（QTT 核心）与线性数据类型子集。`Rig` 三值
+（0 / 1 / ω）由 binder 的 quantity 在精化期决定，同时是擦除表示与用量检查的依据。
 
-实现入口：`Core/Term.vuna`（Rig 代数）、`Elab/Meta.vuna`（binder 用量判定）、
+实现入口：`Core/Term.vuna`（Rig 代数）、`Elab/Meta.vuna`（binder quantity → Rig 判定）、
 `Elab/Usage.vuna`（用量检查）、`Elab/Driver.vuna`（在 `DtProgram` 组装前调用）、
 `Codegen/Erase.vuna`（擦除防御）。语法与工具链入口见 `Frontend/{Ast,Lexer,Parser}`。
 
@@ -45,8 +44,10 @@ linear data Token : Type where
 
 ## 3. binder quantity 判定
 
-在 `Elab/Meta` 集中实现，所有 binder 构造点（`inferPi`、`checkLam`、`checkBinders`、
-`inferArgsGo`、`TCon` 构造、case 分支、记录投影、eta、`let`）都走同一入口：
+在 `Elab/Meta` 集中实现：`rigOfQty` 是「源码 quantity → `Rig`」的唯一映射，`binderRig`
+是未带标注时的默认入口（隐式 / 类型层域 ⇒ 0，显式未标注 ⇒ ω）。所有 binder 构造点
+（`inferPi`、`checkLam`、`checkBinders`、`inferArgsGo`、`TCon` 构造、case 分支、
+记录投影、eta、`let`）都走同一入口：
 
 1. 隐式或类型层域 ⇒ 0；显式非 0 标注报 `TC_MultiplicityImplicit` /
    `TC_MultiplicityTypeDomain`。
@@ -59,7 +60,8 @@ linear data Token : Type where
 
 ## 4. 用量判断
 
-对每个**运行时** `DtDef` 的 body 做一次结构遍历（类型层定义跳过）：
+精化完成后、组装 `DtProgram` 之前，对每个**运行时** `DtDef` 的 body 做一次结构遍历
+（类型层定义跳过；入口在 `Elab/Driver`，实现在 `Elab/Usage`）：
 
 - 变量出现 1 次；`TPi`/类型位置不产生运行时用量；`TApp`/`TCon` 的实参用量按该实参的
   Rig `rigScale`；case 的 scrutinee 一次，分支外层用量 `rigJoin`，分支 binder 各自精确检查。
@@ -123,4 +125,4 @@ linear data Token : Type where
 - 类型系统与擦除：[type-system.md](type-system.md)
 - Core 表示/NbE：[core.md](core.md)
 - 效应与 ST：[effects.md](effects.md)
-- 已知边界：[limits.md](limits.md)、[debt.md](debt.md)
+- 未关闭的债务：[debt.md](debt.md)

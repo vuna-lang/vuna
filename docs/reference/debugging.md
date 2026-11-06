@@ -2,8 +2,8 @@
 
 本文覆盖**开发/调试回路**的三层支持：编译期诊断的源码片段、运行期未捕获异常的报告、
 纯代码里的 `Base.Debug` 工具，以及配套命令（`vuna run` / `vuna test --verbose` /
-REPL `:type`）。语言语义见 [language.md](language.md)，诊断错误码见
-[tooling.md](tooling.md)，工具边界见 [limits.md](limits.md)。
+REPL `:type`）。语言语义见 [language.md](language.md)，诊断错误码与 CLI 退出码见
+[tooling.md](tooling.md)，lint 规则边界见 [lint.md](lint.md)。
 
 ## 1. 编译期诊断：源码片段
 

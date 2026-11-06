@@ -7,12 +7,13 @@
 ## 模块地图
 
 `compiler/` 是编译器包（seed 的唯一来源）。入口 `compiler/app/Main.vuna` 的 import 闭包
-就是 `seed/` 的内容（当前 **75 个 `.ml` / 76 个文件**，以 `seed/` 与
-`nix/seed-count.txt` 为准）；工具链（fmt/lint/repl/doc/test/lsp）在根包 `lib/`，不在闭包里。
+就是 `seed/` 的内容（规模以 `seed/` 与 `nix/seed-count.txt` 为准）；工具链
+（fmt/lint/repl/doc/test/lsp）在根包 `lib/`，不在闭包里。
 代码按**目录即层**组织：Frontend → Packages → Loader → Core → Elab → Codegen → Driver，
 同层模块可互相 import，上层只能依赖下层。每层 `X.vuna` 是**门面**：只 import 子模块并选择性
-重导出，实现与数据定义都在 `X/` 的叶子模块。全包 **55 个模块**（54 个导出 + 内部 `Debug`）；
-目标每模块 ≤~800 行（当前超过目标的最大模块是 `Elab/Trait.vuna`，约 1.2k 行）。
+重导出，实现与数据定义都在 `X/` 的叶子模块。全包 **64 个模块**（60 个导出 + 内部
+`Debug` / `CacheFormat` / `Driver.Iface` / `Driver.Owner`）；目标每模块 ≤~800 行
+（`Codegen.Term` / `Driver.Dt` / `Elab.Trait` 等已超目标，约 1.1–1.2k 行）。
 
 | 模块 | 职责 | 关键入口 |
 | --- | --- | --- |
@@ -42,7 +43,7 @@
 | `Elab.Dict` | 字典编码的表示与实例搜索：字典类型/实例头识别、`conv` 头匹配、实例搜索（递归解 ctx / 约束实例）、`==`/比较运算符特化（Int/String 内建或 Eq/Ord 字典；无泛型结构比较兜底） | `searchInstance`、`dictFamilyNameOf`、`cmpRuntimeName`、`deferEqDict` |
 | `Elab.Term` | 项的双向检查（与 case 规则互递归的核心）：`inferE`/`checkE`/应用/隐式插入/类型检查 | `inferE`、`checkE`、`checkApp`、`checkType` |
 | `Elab.Data` | `data` 声明与构造子/索引擦除：`elabCtor`、`elabDataHead(s)`、`elabDataBodies`、擦除候选；校验 kind 结果层级与构造子字段 sort | `elabDatas`、`ctorFieldTerms`、`checkCtorFieldSorts` |
-| `Elab.Trait` | trait/instance 声明与实例体：类参数 kind、方法投影、实例头检查（重复/相干性；无命名实例、支持约束实例 ctx）、方法体精化；M32 起实例 ctx 与顶层签名 ctx 共用 `elabConstraintDomains`（含类参数 kind 校验），隐式字典 binder 按 Rig1 绑定；方法签名带 span，实例名=单类前缀+完整 head 名 | `checkInstanceHeads`、`elabInstanceBodies`、`elabConstraintDomains`、`instanceName` |
+| `Elab.Trait` | trait/instance 声明与实例体：类参数 kind、方法投影、实例头检查（重复/相干性；无命名实例、支持约束实例 ctx）、方法体精化；M32 起实例 ctx 与顶层签名 ctx 共用 `elabConstraintDomains`（含类参数 kind 校验），隐式字典 binder 按 RigΩ 绑定（运行时保留、可多次使用）；方法签名带 span，实例名=单类前缀+完整 head 名 | `checkInstanceHeads`、`elabInstanceBodies`、`elabConstraintDomains`、`instanceName` |
 | `Elab.InstName` | 实例名生成规则（单类前缀 + 完整 head 名）的唯一实现 | `instanceName` |
 | `Elab.Driver` | 精化入口与程序组装：签名（M32：约束 ctx → 隐式字典 binder）→ data/trait/instance → 定义体（声明的字典目标先解到 ctx binder，剩余才提升）→ zonk/终止性检查 → `DtProgram`；洞目标。接口摘要路径用 `elabProgramFullWithAux`（起始 Ec 由依赖摘要注入；termAux 只喂终止性分析） | `Elab.Driver.elabProgramFull`、`elabProgramFullWithAux`、`goalsOfProgram`、`dtEvalExprIn` |
 | `Elab.Termination` | 终止性检查：调用图 + SCC，结构下降/守卫 Int 判据（无包级豁免）。`checkTerminationDeclsWith` 允许把依赖包声明只作为 SCT 上下文、只报告本包函数的失败 | `checkTerminationDecls`、`checkTerminationDeclsWith` |
@@ -65,8 +66,9 @@
 | `Driver.CompilerCli` | 编译器自己的 CLI（`vuna-compiler`）；含受限进程执行入口 `runIn`；workspace check/build 单元、`build --package`、`version` | `runCompilerCli`、`compilerUsageLines`、`runIn` |
 | `Version` | 版本号唯一真源；产品 CLI / `vuna-compiler` / build meta / VSCode 探测共用 | `vunaVersion` |
 
-`compiler/vuna.toml` 的 `[export]` 列出全部 54 个导出模块（内部 `Debug` 不在内）；
-`[capabilities] effects` 声明五个能力（编译器直接使用 `prim_*`）。工具链模块不在此包。
+`compiler/vuna.toml` 的 `[export]` 列出全部 60 个导出模块（内部 `Debug` / `CacheFormat` /
+`Driver.Iface` / `Driver.Owner` 不在内）；`[capabilities] effects` 声明六个能力（编译器直接
+使用 `prim_*`）。工具链模块不在此包。
 
 ## 根包工具链模块（`lib/`，不进 seed）
 
@@ -110,6 +112,9 @@
 
 `check` 只做精化 + 擦除检查并返回警告，不生成代码；包级检查：有 `app/Main.vuna` 的可执行包
 检查该入口，库包以 `[export].modules` 为根。
+
+单文件夹具没有单独的加载路径：它按最近 `vuna.toml` 取包上下文（无 manifest 为 base-only），
+之后与包内模块走同一 flatten / 精化 / codegen——只有包上下文不同，没有第二套加载语义。
 
 ## 接口摘要（TTC 式模块化精化）
 
@@ -242,6 +247,14 @@ fixities / imports / capabilities、`miSource`、`miIfaceHash`、`miDepHashes`�
 的 `.stamp` 内容哈希——改一个单元只重编它的（直接/传递）依赖者。链接顺序 = 拓扑序
 （依赖在前）。依赖图是精确 DAG，旧的「全序 open 链 / 文件顺序即依赖顺序」模型已不存在。
 
+命令边界：`compile` 成功静默（不写 `build-meta.json`、不调 `ocamlopt`）；`build` 默认输出到
+`<PKG-DIR>/.output`（`--out DIR` 覆盖），codegen 后执行 `build.sh` 链接，`build --no-compile`
+只产源码。workspace 根是多包时 `--out DIR` 落在 `DIR/<包名>`，最终二进制是
+`DIR/<包名>/bin/<包名>`（无 `--out` 时各成员仍写自己的 `<包目录>/.output`）。包根有
+`ffi/*.c` 时 `compileToDir` 会把 C 源复制到 `<OUTDIR>/ffi/` 并写进 `build.sh` 参与编译链接；
+没有 `ffi/` 的包产物不变。确定性、build meta 与增量语义见 [packages.md](packages.md) 的
+「构建确定性与增量」。
+
 文件划分只由源码顺序与名字决定，不依赖时间 / 环境（确定性）；无法归属的 `DtDef` /
 `DtData` 报清晰错误，不静默丢弃。生成链的护栏（构造子字段形状单一真源、
 `checkResolvedModules`、entryDecls 与归属校验、`ensureUniqueOcamlNames`）见
@@ -270,5 +283,6 @@ diff。盲区：base/runtime 自身的 codegen 不在这条门禁里；尺寸也
 - 子系统数据流与改动定位：[architecture.md](../architecture.md)
 - Core / NbE / 精化器内部规则：[core.md](core.md)
 - 内建声明面、原语语义与效应能力：[primitives.md](primitives.md)
+- 包格式、build meta 与增量构建：[packages.md](packages.md)
 - 种子策略与 rotation：[bootstrap.md](bootstrap.md)
 - 工具链（goal / LSP / 错误码）：[tooling.md](tooling.md)

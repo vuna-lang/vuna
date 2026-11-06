@@ -9,7 +9,7 @@
 ## 仓库分层
 
 ```text
-compiler/lib/Vuna/Compiler/   （60 个模块：59 个导出 + 内部 Debug；目录即层：
+compiler/lib/Vuna/Compiler/   （64 个模块：60 个导出 + 4 个内部模块；目录即层：
                                 Frontend → Packages → Loader → Core → Elab → Codegen → Driver）
 ├─ Common.vuna                公共门面（Base 类型 + Pos/Span/诊断）
 ├─ Intrinsics.vuna            内建声明唯一真源（名字/签名/arity/能力/runtime/可见性）
@@ -50,6 +50,10 @@ import 子模块并选择性重导出（对外名字面不变），实现只在�
  → Codegen.Split.generateDtSplitProgram  （唯一生成器：runtime + 各模块 + Main，带直接依赖）
  → sh build.sh                   （Driver.Split：层内并行；ocamlopt 链接）
 ```
+
+**唯一装配**：`check` / `compile` / `build` 与语言夹具共用这条链；ad-hoc 单文件只是换包
+上下文（最近 manifest，无则 base-only），flatten / 精化 / 逐模块 codegen 与包内模块完全
+相同——没有第二套加载语义。
 
 **运行时错误报告（M38）**：`Vuna_runtime.ml` 由 `Codegen.Term.dtRuntimeWith` 生成 =
 运行时常量 + `dt_def_locs`（定义位置表：mangled 值名 → `定义名 (相对路径:行)`，路径按

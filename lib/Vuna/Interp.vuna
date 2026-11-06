@@ -20,7 +20,7 @@ module Vuna.Interp
 -- test runner）负责从文件、cwd 或包构造上下文。
 --
 -- 求值是**纯**的：不执行效果。`main : IO a` 只对纯动作（例如 `pure n`）能求出值；
--- 真正带 `prim_print` / 文件效果的 `main` 请用 `compile` + 运行产物（见 docs/reference/limits.md）。
+-- 真正带 `prim_print` / 文件效果的 `main` 请用 `compile` + 运行产物（见 docs/reference/primitives.md 的 interp 归约边界）。
 -- 该模块只被 CLI / REPL / test runner 使用，不属于编译器 seed 闭包。
 --
 -- M30：新增两条工具链能力（仍然不属于编译器 seed 闭包）：

@@ -113,7 +113,8 @@ E06）。
 
 1. **当前 seed 必须能编译当前源码**——`checks.seed-selfhost` 守；不要求与源码逐字节同步；
 2. **stage1 == stage2**（文件集逐字节），即 fixed point；每次 CI 与 rotation 后都检查；
-3. **`seed/` 只含 compiler 包入口闭包**：工具链（fmt/lint/repl/doc/test/lsp/index）不进 TCB；
+3. **`seed/` 只含 compiler 包入口闭包**：工具链（fmt/lint/repl/doc/test/lsp/index）与未来的
+   package manager 都不进 TCB；
 4. 编译器自检：当前编译器必须能类型检查自己的源码（`checks.vuna-typecheck`，`vuna check .`
    走 DT）；
 5. **唯一路径**：语言夹具、`vuna interp`、包构建与 seed 全部走 DT（精化 + 擦除 codegen），

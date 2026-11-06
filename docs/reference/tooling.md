@@ -1,6 +1,7 @@
-# 工具链：goal、LSP、doc 与错误码
+# 工具链：goal、LSP、doc、fmt 与错误码
 
-本文覆盖 DT 路径的**工具链**：洞目标显示、LSP server、`vuna doc`，以及诊断错误码体系。
+本文覆盖 DT 路径的**工具链**：洞目标显示、LSP server、`vuna doc`、`vuna fmt`，以及
+`vuna run` / `vuna interp` / REPL 的命令语义、诊断错误码与 CLI 退出码。
 语言语义见 [language.md](language.md) / [type-system.md](type-system.md)，实现边界见
 [core.md](core.md)，模块与 TCB 边界见 [architecture.md](../architecture.md)。
 
@@ -142,6 +143,21 @@ $ vuna search --type "a -> a"
 **完整清单**由 `vuna gen-errors [ROOT]` 遍历上述枚举表生成到
 `ROOT/docs/.generated/errors.md`（默认 ROOT=`.`）。生成物 gitignored、**勿手改**；重跑幂等。
 
+### 退出码
+
+CLI 统一使用 0 / 1 / 2 三档：
+
+| 退出码 | 含义 | 典型来源 |
+| --- | --- | --- |
+| 0 | 成功 | 命令完成；`--check` 无差异；lint 无 finding；测试全过 |
+| 1 | 源码 / 诊断错误 | `check` / `compile` / `build` 的一切失败（解析、精化、覆盖性、终止性、codegen，以及入口路径不存在；**解析错误也是 1**）；`lint` 有 finding；`fmt --check` 有需重排文件；`doc --check` 缺 docstring；`test` 有失败 |
+| 2 | 用法 / 工具错误 | 未知命令或 flag、缺值、参数个数不对；工具命令的 IO / 上下文错误（`lint` / `fmt` / `interp` / `test` / `goal` / `doc` 的路径不存在、非 workspace、包或依赖加载失败、取不到程序级 fixity 上下文） |
+
+约定之外：`vuna interp` 把任何检查 / 求值失败报成 2（输出以 `error:` 开头）；`vuna
+search` 无命中为 1（用法 / 查询解析 / 非 workspace 仍为 2）；`vuna run` 透传子进程退出
+码；`vuna repl` 的启动目标既不存在也不是模块名时为 1、加载失败为 2。产物运行期未捕获
+异常由运行时报告器以 2 退出（见 [debugging.md](debugging.md) §2）。
+
 ### 代表性诊断
 
 下表只列常用码；完整清单见生成物。
@@ -168,6 +184,7 @@ $ vuna search --type "a -> a"
 | `CG_TypeLevelBindingRuntime` | codegen | 运行时用到被擦除绑定 |
 | `CG_TypeUsedAtRuntime` | codegen | 运行时出现类型项 |
 | `CG_AxiomAtRuntime` | codegen | 运行时使用 axiom |
+| `CG_InterpCannotExecuteEffects` | codegen | `vuna interp` 遇到 `main : IO a` |
 | `CG_MainReturnType` | codegen | `main` 返回类型不支持 |
 
 ## 5. `vuna run` 与 REPL 调试命令
@@ -177,6 +194,12 @@ $ vuna search --type "a -> a"
 退出码原样返回。目标包选择：`--package` → workspace 根包（可执行时）→ 唯一可执行成员 →
 否则列出候选并 exit 2；库包 / 缺产物 / 构建失败都给出可操作错误。实现入口
 `Vuna.Run.runRun`。
+
+`vuna interp <file.vuna>` 走同一条 DT 精化后再做**纯核心求值**，不执行效果：任何
+`main : IO a` 一律报 `[CG_InterpCannotExecuteEffects]`，消息是
+`interp cannot execute effects (main : IO a); compile and run the program instead`
+（exit 2）；纯 `main` 只展示 `Int` / `Nat` / `String` / `Bool`，需要效果或其它展示时用
+`compile` + 运行产物。
 
 REPL（`vuna repl [FILE|DIR|MODULE]`，实现入口 `Vuna.Repl.runRepl`；行编辑在
 `Vuna.Repl.Edit` / 终端层在 `Vuna.Repl.Term`，都不进 seed 闭包）：
@@ -199,11 +222,20 @@ REPL（`vuna repl [FILE|DIR|MODULE]`，实现入口 `Vuna.Repl.runRepl`；行编
 | `:{` … `:}` | 多行块输入：原样收集、块内空行保留、提交前去掉公共缩进 |
 | `:reset` / `:quit` / `:help` | `:reset` 清缓冲与加载目标（保留设置/历史）；`:quit` 同 Ctrl-D |
 
+**输入单元**：一次提交是一条完整表达式或一条定义。括号 / 字符串 / 块注释未闭合，或行尾
+停在 `=` / `->` / `where` / `do` / `then` / `else` / `of` / `in` / `case` / `let` / `|`
+/ `,` / `<-` / `=>` 时自动进入续行（`... ` 提示）；`:{` … `:}` 走显式多行块。
+
 **定义体验**：`x = 1 + 1` / `f y = x + y` 可直接输入，缺签名时 REPL 调
 `Interp.inferDefTypes` 自动推断（编译器元变量 telescope + 定义边界泛化），写回后
 `checkProgram` 复查，失败回滚并提示手写签名。带模式匹配（`f 0 = …`）、trait 约束
-（`x == x`）、高阶参数的定义需要显式签名（消息里给提示）。同名 `DFun` 再次输入即重定义
+（`x == x`）、高阶参数的定义需要显式签名（消息里给提示）；宇宙级定义同样不需要先写
+签名，`u = Type 1` 自动推断为 `u : Type 2`。同名 `DFun` 再次输入即重定义
 （文本替换语义：后续定义重新绑定到新定义，不是 shadowing）。
+
+**效果表达式**：`IO` 表达式放进临时包走 `compile` + 运行，效果输出直接到终端、按进程
+退出码判定，因此需要 PATH 里有 `ocamlopt`。包上下文取最近 `vuna.toml` 的本地依赖闭包
+（不在包内时 base-only）。
 
 **加载矩阵**（`:load` 与 CLI 位置参数同一套解析）：
 
@@ -213,13 +245,14 @@ REPL（`vuna repl [FILE|DIR|MODULE]`，实现入口 `Vuna.Repl.runRepl`；行编
 | `path/to/module.vuna`（含 `module` 头） | 拒绝，提示用模块名 | `是模块文件` |
 | `Base.Nat`（模块名） | 立即校验后追加 `import` | `已导入模块 Base.Nat` |
 | `path/to/pkg`（目录） | 切换包上下文并重置缓冲/索引（保留设置/历史） | `已切换包 …` |
-| `vuna repl FILE` / `vuna repl DIR` / `vuna repl MODULE` | 启动即加载 / 切换上下文 / 导入；失败 exit 2 | 同上 |
+| `vuna repl FILE` / `vuna repl DIR` / `vuna repl MODULE` | 启动即加载 / 切换上下文 / 导入；加载失败报错退出（exit 2） | 同上 |
 
 **行编辑（tty）**：←/→ 码点移动、Home/End、Backspace/Delete、↑/↓ 历史、Ctrl-R 反向
 增量历史搜索（再按 Ctrl-R 找更早、Enter 接受、Esc/Ctrl-C 取消）、Ctrl-A/E/K/U/W、
 Ctrl-L 清屏、Ctrl-P/N/B/F、Ctrl-C 取消当前输入、Ctrl-D 空行退出、Tab 补全（命令名与
 当前缓冲绑定名；唯一匹配补全、多个补最长公共前缀）。超宽行按水平窗口只显示尾部，
-宽度来自 `stty size`。历史持久化到 `VUNA_REPL_HISTORY` > `$XDG_STATE_HOME/vuna/repl_history`
+宽度来自 `stty size`（取不到时按 80）。若进程在编辑中被硬杀（SIGKILL），终端可能停在
+raw，执行 `stty sane` 恢复。历史持久化到 `VUNA_REPL_HISTORY` > `$XDG_STATE_HOME/vuna/repl_history`
 > `$HOME/.vuna_repl_history`（只存单行单元；目录不可写时静默跳过）。
 
 **非 tty / 无 stty 回退**：非交互管道、`:set editing off`、或无 POSIX `stty` 时退回
@@ -228,7 +261,40 @@ Ctrl-L 清屏、Ctrl-P/N/B/F、Ctrl-C 取消当前输入、Ctrl-D 空行退出�
 未知 `:命令` 给 `未知命令 ...（输入 :help 查看可用命令）` + 最近命令建议，不落到 parse
 error。调试与运行时错误的整体工作流见 [debugging.md](debugging.md)。
 
-## 6. 尚未实现（工具链自身缺口）
+## 6. `vuna fmt`
+
+`vuna fmt [--check] [PATH]...` 把源码按规范形重排：PATH 可为文件或目录；省略 PATH 时
+格式化 workspace 内各成员包的 `lib` / `app` / `test`。目录扫描跳过隐藏项、生成物与
+`corpus` 夹具。`--check` 只报告差异（`would reformat: <path>`，exit 1）；不带 `--check`
+时原地改写并打印 `formatted <path>`。非 workspace 且省略 PATH、路径不存在、取不到
+程序级 fixity 上下文都是工具错误（exit 2）。
+
+**基础排版**：2 空格缩进、顶层声明之间一个空行、文件末尾一个换行、无行尾空白；
+`format(parse(x))` 可重新 parse，且格式化幂等（`format(format(x)) == format(x)`）。
+行宽 100（按码点计）；行内放不下时在表达式内部折行，但**类型签名与字段类型不折行**
+（避免 `->` 链被打断），超长字符串字面量也保持单行。
+
+**模块头与导出列表**：导出项按字面文本 ASCII 字典序排序，`module B` 整模块重导出排
+最后；空表写作 `module M () where`。整行（`module M (a, b) where`）不超过 100 且项上
+无注释时保持单行；否则逐项一行（逗号前置）：`module M` 后接 `  ( a` / `  , b` /
+`  ) where`。项级注释随项移动。
+
+**注释**：单独成行的注释成为下一条目的前置注释，写在同一行末尾的注释成为该条目的行尾
+注释；多行块注释只作前置注释。表达式内部的注释前移到最内层包含它的条目（没有则前移到
+下一条目；文件末尾的注释保留在文件末尾）。
+
+**`where` 与 `infix*`**：`where` 块的绑定按源码顺序输出，带签名的绑定先输出签名行；
+`infix*` 声明打印在 imports 之后、第一个声明之前，保持源码顺序、每条一行
+（`infixl 6 +` / `infixr 5 :: = Cons`）。fixity 是**程序级**属性：调用方传入程序可见
+的 fixity 闭包（`Loader.Flatten.fixitiesForSource`：本文件声明 + import 闭包的去重
+表）；取不到上下文（依赖加载失败）或遇到未知**符号**运算符时 fmt 报错并停止，不静默按
+默认优先级重排；未知反引号名字按 9 左结合（Haskell 默认）。
+
+**模板字面量**按 [templates.md](templates.md) 的规范形重写：`"""` 内容逐字（不
+dedent，开引号后的首个换行由 lexer 丢弃、渲染时按需补回），文本里的 `$` 紧跟 `{` 写成
+`\$`，`${...}` 内的注释丢弃（词法不进 AST）。
+
+## 7. 尚未实现（工具链自身缺口）
 
 - **case splitting**：按洞的目标类型自动展开 `case` 分支（需要与编辑器协议配合）。
 - `rewrite` / `with` 等证明工程 ergonomics：研究储备，未排期。
