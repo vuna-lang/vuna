@@ -225,7 +225,7 @@ applyNormalKey cfg key st = case key of
   KCtrW => EContinue (killWord st)
   KCtrL =>
     let
-      _ = writeOut (escCode ++ "[2J" ++ escCode ++ "[H")
+      _ = writeOut "${escCode}[2J${escCode}[H"
     in EContinue st
   KCtrR => EContinue (startSearch st)
   KCtrC => ECancel
@@ -487,8 +487,8 @@ redrawNormal cfg st =
     avail = imax 8 (cfg.editWidth - cfg.editPromptWidth)
     win = tailWindow avail st.esBuf
     left = immin (bytesWidth (drop st.esCursor st.esBuf)) (bytesWidth win)
-    text = cfg.editPrompt ++ strOf win ++ escCode ++ "[K" ++ moveLeftText left
-  in writeOut ("\r" ++ text)
+    text = "${cfg.editPrompt}${strOf win}${escCode}[K${moveLeftText left}"
+  in writeOut "\r${text}"
 
 redrawSearch : EditConfig -> EditState -> Int
 redrawSearch cfg st =
@@ -497,9 +497,9 @@ redrawSearch cfg st =
     matchText = case st.esMatch of
       Just (Pair idx entry) => entry
       Nothing => ""
-    promptText = "(reverse-i-search)`" ++ queryText ++ "': "
+    promptText = "(reverse-i-search)`${queryText}': "
     styled = if cfg.editColorOn then ansi "36" promptText ++ matchText else promptText ++ matchText
-  in writeOut ("\r" ++ styled ++ escCode ++ "[K")
+  in writeOut "\r${styled}${escCode}[K"
 
 -- 超宽时只显示尾部 avail 列（按 UTF-8 码点边界裁）。
 tailWindow : Int -> List Int -> List Int
@@ -529,4 +529,4 @@ contCount : Int -> Int
 contCount b = if b >= 240 then 3 else if b >= 224 then 2 else if b >= 192 then 1 else 0
 
 moveLeftText : Int -> String
-moveLeftText n = if n > 0 then escCode ++ "[" ++ strFromInt n ++ "D" else ""
+moveLeftText n = if n > 0 then "${escCode}[${n}D" else ""

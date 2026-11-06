@@ -30,23 +30,23 @@ escCode : String
 escCode = strPack [27]
 
 ansi : String -> String -> String
-ansi code s = escCode ++ "[" ++ code ++ "m" ++ s ++ escCode ++ "[0m"
+ansi code s = "${escCode}[${code}m${s}${escCode}[0m"
 
 -- 单引号 shell 转义（路径可能来自 TMPDIR）。
 shellQuote : String -> String
-shellQuote s = "'" ++ shellEscaped (strUnpack s) ++ "'"
+shellQuote s = "'${shellEscaped (strUnpack s)}'"
 
 shellEscaped : List Int -> String
 shellEscaped [] = ""
 shellEscaped (c :: rest) =
-  if c == 39 then "'\\''" ++ shellEscaped rest else strPack [c] ++ shellEscaped rest
+  if c == 39 then "'\\''${shellEscaped rest}" else strPack [c] ++ shellEscaped rest
 
 -- 会话级临时路径（stty 状态 / 尺寸文件）；同一进程内 timeUs 保证不撞名。
 termTmpPath : Int -> String
 termTmpPath _ =
   let
     base = termTempBase 0
-  in base ++ "/vuna-repl-term-" ++ strFromInt (runIO timeUs)
+  in "${base}/vuna-repl-term-${runIO timeUs}"
 
 termTempBase : Int -> String
 termTempBase _ =
@@ -62,7 +62,7 @@ rmFile path = runIO (prim_runIn "/" ["rm", "-f", path])
 termSaveState : String -> Int
 termSaveState path =
   let
-    code = runIO (prim_runIn "." ["sh", "-c", "stty -g > " ++ shellQuote path])
+    code = runIO (prim_runIn "." ["sh", "-c", "stty -g > ${shellQuote path}"])
   in if code == 0 && runIO (prim_fileExists path) then 0 else 1
 
 -- `stty <saved>`：恢复终端；失败再试 `stty sane`。
@@ -101,8 +101,8 @@ termReadByte _ =
 termWidth : Int -> Int
 termWidth _ =
   let
-    path = termTmpPath 0 ++ ".size"
-    _ = runIO (prim_runIn "." ["sh", "-c", "stty size > " ++ shellQuote path])
+    path = "${termTmpPath 0}.size"
+    _ = runIO (prim_runIn "." ["sh", "-c", "stty size > ${shellQuote path}"])
     text = case readText path of
       Err e => ""
       Ok s => trim s
