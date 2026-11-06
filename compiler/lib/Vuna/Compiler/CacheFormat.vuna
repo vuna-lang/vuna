@@ -35,8 +35,7 @@ frameChecksum payload = strHash payload
 
 -- 头行（含换行）；payload 从下一字节开始。
 frameHeader : String -> Int -> Int -> String
-frameHeader tag len sum =
-  frameMagic ++ "|" ++ tag ++ "|" ++ strFromInt len ++ "|" ++ strFromInt sum ++ "\n"
+frameHeader tag len sum = "${frameMagic}|${tag}|${len}|${sum}\n"
 
 frameEncode : String -> String -> String
 frameEncode tag payload = frameHeader tag (strLength payload) (frameChecksum payload) ++ payload

@@ -59,7 +59,7 @@ checkPackage pkg = if runIO (prim_fileExists (packageEntry pkg)) then checkCache
 else case packageExports pkg of
   Nothing =>
     Err
-      ("check: library package " ++ packageName pkg ++ " has no app/Main.vuna (executable) and no [export].modules (library)")
+      "check: library package ${packageName pkg} has no app/Main.vuna (executable) and no [export].modules (library)"
   Just names => checkCachedLib (packageContext pkg) names
 
 -- 逐级创建目录（prim_makeDir 只建一层；`--out a/b` 的父目录可能不存在）。
@@ -93,7 +93,7 @@ parentOfPath path =
     let
       parent = strPack (reverse after)
     in if parent == "" then if startsWith "/" path then "/" else "."
-    else if startsWith "/" path && not (startsWith "/" parent) then "/" ++ parent else parent
+    else if startsWith "/" path && not (startsWith "/" parent) then "/${parent}" else parent
 
 -- 逐模块 split 输出到 outDir：各模块 .ml + Main.ml + build.sh；Ok 写出的文件数。
 -- outDir 在 codegen 成功后才创建（精化失败不留产物）。
@@ -113,7 +113,7 @@ compileToDir ctx entry printResult outDir =
       Just ifaces => case ownCleanModules ctx (depIfaceHashTable ctx) of
         Just clean =>
           let
-            _ = note ("cache-own-clean=" ++ strFromInt (length clean))
+            _ = note "cache-own-clean=${length clean}"
           in andThen (dtSplitProjectIncremental ctx entry printResult ifaces clean)
             (\p => finishBuild ctx outDir path (firstOf p) (secondOf p))
         Nothing =>
@@ -142,7 +142,7 @@ writeCompiled ctx outDir files =
     graph = splitGraph (canonicalTopo files)
     _ = stamp "split-graph-done"
     cFiles = copyFfiFiles (contextDir ctx) outDir
-    _ = runIO (prim_writeFile (outDir ++ "/build.sh") (buildScript graph cFiles))
+    _ = runIO (prim_writeFile "${outDir}/build.sh" (buildScript graph cFiles))
     _ = stamp "build-script-done"
   in Ok n
   )
@@ -152,17 +152,17 @@ writeCompiled ctx outDir files =
 copyFfiFiles : String -> String -> List String
 copyFfiFiles ctxDir outDir =
   let
-    ffiDir = ctxDir ++ "/ffi"
+    ffiDir = "${ctxDir}/ffi"
     exists = runIO (prim_fileExists ffiDir) && runIO (prim_isDirectory ffiDir)
   in if exists then
     let
       cs = filter (\n => endsWith ".c" n) (runIO (prim_readDir ffiDir))
-      _ = ensureDirPath (outDir ++ "/ffi")
+      _ = ensureDirPath "${outDir}/ffi"
       _ =
         map
-          (\n => runIO (prim_writeFile (outDir ++ "/ffi/" ++ n) (runIO (prim_readFile (ffiDir ++ "/" ++ n)))))
+          (\n => runIO (prim_writeFile "${outDir}/ffi/${n}" (runIO (prim_readFile "${ffiDir}/${n}"))))
           cs
-    in map (\n => "ffi/" ++ n) cs
+    in map (\n => "ffi/${n}") cs
   else []
 
 -- loadPackage + compileToDir：给定包目录的代码生成（seed rotation / 测试用）。
@@ -187,7 +187,7 @@ metaFileName = "build-meta.json"
 
 -- 内容哈希：两个 30-bit 值 + 长度组合（与 Index 缓存同一思路；避免单哈希冲突）。
 textHash : String -> Int
-textHash s = strHash s * 1000003 + strHash ("m30:" ++ s) + strLength s
+textHash s = strHash s * 1000003 + strHash "m30:${s}" + strLength s
 
 -- M34.5：编译器二进制指纹（缓存 key 必须含它：check/codegen 语义随编译器变化）。
 -- M38：用**可执行文件自身**的路径 + 大小 + mtime，而不是 `prim_getArgs` 的第一个用户参数。
@@ -200,8 +200,7 @@ compilerFingerprint =
     exe = runIO prim_execPath
     size = runIO (prim_fileSize exe)
     mtime = runIO (prim_fileMtime exe)
-  in if size > 0 then textHash (exe ++ ":" ++ strFromInt size ++ ":" ++ strFromInt mtime)
-  else textHash vunaVersion
+  in if size > 0 then textHash "${exe}:${size}:${mtime}" else textHash vunaVersion
 
 -- M34.5：缓存根（TMPDIR 可写；Nix 构建的源树只读，缓存放临时目录 ⇒ 构建内不命中，
 -- 无害；本地开发同机 TMPDIR 持久 ⇒ 命中）。按包路径哈希隔离项目。
@@ -209,7 +208,7 @@ cacheBase : String
 cacheBase =
   let
     tmp = runIO (prim_getenv "TMPDIR")
-  in (if tmp == "" then "/tmp" else tmp) ++ "/vuna-cache"
+  in "${if tmp == "" then "/tmp" else tmp}/vuna-cache"
 
 -- 目录遍历（模块根内的 .vuna；与 Vuna.Files 的跳过规则一致，但 compiler 包不能
 -- import 根包工具链）。fuel 守卫目录图（符号链接环）。
@@ -239,7 +238,7 @@ else case name of
   _ => if skipMetaDir name then []
   else
     let
-      path = dir ++ "/" ++ name
+      path = "${dir}/${name}"
     in if runIO (prim_fileExists path) && runIO (prim_isDirectory path) then collectVunaMeta (fuel - 1) path
     else if endsWith ".vuna" name then [path] else []
 
@@ -257,7 +256,7 @@ slashToDot c = if c == 47 then 46 else c
 moduleNameOfPath : String -> String -> String
 moduleNameOfPath rootPath path =
   let
-    rel0 = dropPrefixMeta (rootPath ++ "/") path
+    rel0 = dropPrefixMeta "${rootPath}/" path
     rel = if endsWith ".vuna" rel0 then substring 0 (byteLength rel0 - 5) rel0 else rel0
   in slashesToDots rel
 
@@ -287,12 +286,12 @@ dependencyHashes ctx = case contextRoots ctx of
   _ :: deps => map (\r => Pair (rootName r) (rootHash r)) deps
 
 metaPairText : Pair String Int -> String
-metaPairText (Pair name hash) = "{\"name\":\"" ++ name ++ "\",\"hash\":" ++ strFromInt hash ++ "}"
+metaPairText (Pair name hash) = "{\"name\":\"${name}\",\"hash\":${hash}}"
 
 joinJsonList : List String -> String
 joinJsonList [] = ""
 joinJsonList ([x]) = x
-joinJsonList (x :: rest) = x ++ "," ++ joinJsonList rest
+joinJsonList (x :: rest) = "${x},${joinJsonList rest}"
 
 -- 路径最后一段（`splitPath` 按第一个 `/` 切，不适合取 basename）。
 -- 输入是反向字符流；acc 里已是原顺序的最后一段字符，直接 strPack。
@@ -308,31 +307,13 @@ buildMetaText ctx entry linked =
   let
     sources = contextSources ctx entry
     deps = dependencyHashes ctx
-    manifestHash = textHash (runIO (prim_readFile (contextDir ctx ++ "/vuna.toml")))
+    manifestHash = textHash (runIO (prim_readFile "${contextDir ctx}/vuna.toml"))
     entryName = lastSegment entry
     linkedText = if linked then "true" else "false"
-  in "{\"schema\":"
-    ++ strFromInt metaSchema
-    ++ ",\"compiler\":\""
-    ++ vunaVersion
-    ++ "\",\"package\":\""
-    ++ contextPackageName ctx
-    ++ "\",\"entry\":\""
-    ++ entryName
-    ++ "\",\"linked\":"
-    ++ linkedText
-    ++ ",\"closure\":"
-    ++ strFromInt (closureHashOf sources 0)
-    ++ ",\"manifest\":"
-    ++ strFromInt manifestHash
-    ++ ",\"sources\":["
-    ++ joinJsonList (map metaPairText sources)
-    ++ "],\"dependencies\":["
-    ++ joinJsonList (map metaPairText deps)
-    ++ "]}\n"
+  in "{\"schema\":${metaSchema},\"compiler\":\"${vunaVersion}\",\"package\":\"${contextPackageName ctx}\",\"entry\":\"${entryName}\",\"linked\":${linkedText},\"closure\":${closureHashOf sources 0},\"manifest\":${manifestHash},\"sources\":[${joinJsonList (map metaPairText sources)}],\"dependencies\":[${joinJsonList (map metaPairText deps)}]}\n"
 
 metaPathOf : String -> String
-metaPathOf outDir = outDir ++ "/" ++ metaFileName
+metaPathOf outDir = "${outDir}/${metaFileName}"
 
 writeBuildMeta : String -> PackageContext -> String -> Bool -> Int
 writeBuildMeta outDir ctx entry linked =
@@ -353,8 +334,7 @@ runBuildScript dir out name =
   let
     code = runIO (prim_runIn dir ["sh", "build.sh", out])
   in if code == 0 then Ok 0
-  else Err
-    ("build: " ++ name ++ ": `sh build.sh " ++ out ++ "` failed in " ++ dir ++ " (exit " ++ strFromInt code ++ ")")
+  else Err "build: ${name}: `sh build.sh ${out}` failed in ${dir} (exit ${code})"
 
 -- ---------------------------------------------------------------
 -- M34.5：check 结果磁盘缓存（elab 级缓存的 check 结果版）
@@ -370,13 +350,13 @@ checkCacheSchema = "vuna-check-cache 7"
 -- 载荷 framing 的 tag（C32）：schema + 编译器版本。路径 key 已含编译器指纹，这里再校验
 -- 一次，保证「文件与 tag 错配」也不会被当成有效缓存（统一 framing 见 `CacheFormat`）。
 checkCacheTag : String
-checkCacheTag = checkCacheSchema ++ "/" ++ vunaVersion
+checkCacheTag = "${checkCacheSchema}/${vunaVersion}"
 
 checkCacheDir : PackageContext -> String
-checkCacheDir ctx = cacheBase ++ "/" ++ hashText (textHash (contextPackageName ctx)) ++ "/check"
+checkCacheDir ctx = "${cacheBase}/${hashText (textHash (contextPackageName ctx))}/check"
 
 checkCachePath : PackageContext -> String -> String
-checkCachePath ctx key = checkCacheDir ctx ++ "/" ++ key
+checkCachePath ctx key = "${checkCacheDir ctx}/${key}"
 
 hashText : Int -> String
 hashText n = strFromInt (n - n / 1000000007 * 1000000007)
@@ -386,27 +366,19 @@ checkCacheKeyExe ctx entry =
   let
     srcHash = closureHashOf (contextSources ctx entry) 0
     depsHash = closureHashOf (dependencyHashes ctx) 0
-    manHash = textHash (runIO (prim_readFile (contextDir ctx ++ "/vuna.toml")))
+    manHash = textHash (runIO (prim_readFile "${contextDir ctx}/vuna.toml"))
     verHash = textHash (checkCacheSchema ++ vunaVersion) + compilerFingerprint
-  in hashText srcHash ++ "-" ++ hashText depsHash ++ "-" ++ hashText manHash ++ "-" ++ hashText verHash
+  in "${hashText srcHash}-${hashText depsHash}-${hashText manHash}-${hashText verHash}"
 
 checkCacheKeyLib : PackageContext -> List String -> String
 checkCacheKeyLib ctx names =
   let
     srcHash = closureHashOf (concatMap rootSources (contextRoots ctx)) 0
     depsHash = closureHashOf (dependencyHashes ctx) 0
-    manHash = textHash (runIO (prim_readFile (contextDir ctx ++ "/vuna.toml")))
+    manHash = textHash (runIO (prim_readFile "${contextDir ctx}/vuna.toml"))
     namesHash = textHash (join "\t" names)
     verHash = textHash (checkCacheSchema ++ vunaVersion) + compilerFingerprint
-  in hashText srcHash
-    ++ "-"
-    ++ hashText depsHash
-    ++ "-"
-    ++ hashText manHash
-    ++ "-"
-    ++ hashText namesHash
-    ++ "-"
-    ++ hashText verHash
+  in "${hashText srcHash}-${hashText depsHash}-${hashText manHash}-${hashText namesHash}-${hashText verHash}"
 
 -- 依赖优先的 DFS 后序 + 按包名去重（与 Packages.Pkg.dependencyRoots 同规则）。
 -- 记录字段访问（`p.packageDependencies`）不再被终止性判据识别为「结构投影」，
@@ -427,7 +399,7 @@ else case collectDepPackagesFuel (fuel - 1) (packageName p :: seen) p.packageDep
 -- check 依赖包」与「作为依赖被根包读取」找不到同一份接口；跨项目同名包的陈旧接口由读侧
 -- 源哈希 / 哈希链校验拒绝（回退全量），不会误用。
 depIfaceDirOf : Package -> String
-depIfaceDirOf dep = cacheBase ++ "/iface-" ++ hashText (textHash (packageName dep))
+depIfaceDirOf dep = "${cacheBase}/iface-${hashText (textHash (packageName dep))}"
 
 depIfaceOf : Package -> Maybe PackageIface
 depIfaceOf dep = case readPackageIface (depIfaceDirOf dep) ifaceCompilerTag of
@@ -472,15 +444,15 @@ depIfacesGo roots [] acc =
 depIfacesGo roots (p :: rest) acc = case depIfaceOf p of
   Nothing =>
     let
-      _ = note ("cache-dep-miss " ++ packageName p)
+      _ = note "cache-dep-miss ${packageName p}"
     in Nothing
   Just pi => if depIfaceSourcesValid roots p pi then
     let
-      _ = note ("cache-dep-ok " ++ packageName p)
+      _ = note "cache-dep-ok ${packageName p}"
     in depIfacesGo roots rest (pi.piModules :: acc)
   else
     let
-      _ = note ("cache-dep-invalid " ++ packageName p)
+      _ = note "cache-dep-invalid ${packageName p}"
     in Nothing
 
 -- 来源校验：接口记录的每个模块源信息 = 当前文件（默认内容哈希；`VUNA_CACHE_MTIME=1` 时
@@ -572,12 +544,12 @@ toolManifestsGo roots (p :: rest) acc =
   in case readManifest dir ifaceCompilerTag of
     Nothing =>
       let
-        _ = note ("iface-tool-manifest-miss " ++ packageName p)
+        _ = note "iface-tool-manifest-miss ${packageName p}"
       in Nothing
     Just mf => if pmSchemaOf mf == ifaceSchema && pmCompilerOf mf == ifaceCompilerTag && pmPackageOf mf == packageName p && manifestSourcesValid roots p mf then toolManifestsGo roots rest (Pair dir mf :: acc)
     else
       let
-        _ = note ("iface-tool-manifest-invalid " ++ packageName p)
+        _ = note "iface-tool-manifest-invalid ${packageName p}"
       in Nothing
 
 -- manifest 级来源校验：与 `depIfaceSourcesValid` 同判据，但只吃 manifest（不必读模块文件）。
@@ -693,7 +665,7 @@ depIfacesForToolSource ctx label source = if toolEnabled then case toolDepManife
         Nothing => Nothing
         Just ifaces => if toolChainValid ifaces then
           let
-            _ = note ("iface-tool-lazy modules=" ++ strFromInt (length ifaces))
+            _ = note "iface-tool-lazy modules=${length ifaces}"
           in Just ifaces
         else Nothing
 else Nothing
@@ -805,7 +777,7 @@ depIfacesForToolSourceDetailed ctx label source = if toolEnabled then case toolD
         Nothing => Nothing
         Just ifaces => if toolChainValid ifaces then
           let
-            _ = note ("iface-tool-lazy modules=" ++ strFromInt (length ifaces))
+            _ = note "iface-tool-lazy modules=${length ifaces}"
           in Just
             (ToolContext ifaces (manifestHashTable mans) (Just ownMf) needed stats (toolEntryTable mans))
         else Nothing
@@ -912,12 +884,12 @@ else case depIfacesOf ctx of
   Just ifaces => case ownCleanModules ctx (depIfaceHashTable ctx) of
     Just clean =>
       let
-        _ = note ("cache-path=summary deps=" ++ strFromInt (depPackageCount ctx))
-        _ = note ("cache-own-clean=" ++ strFromInt (length clean))
+        _ = note "cache-path=summary deps=${depPackageCount ctx}"
+        _ = note "cache-own-clean=${length clean}"
       in checkAndCache ctx path (dtCheckPackageIncrementalParts ctx entry ifaces clean)
     Nothing =>
       let
-        _ = note ("cache-path=summary deps=" ++ strFromInt (depPackageCount ctx))
+        _ = note "cache-path=summary deps=${depPackageCount ctx}"
       in checkAndCache ctx path (dtCheckPackageWithIfacesParts ctx entry ifaces)
 
 fullCheckExe : PackageContext -> String -> String -> Result (List String)
@@ -993,10 +965,10 @@ ifaceSchemaTag : String
 ifaceSchemaTag = ifaceSchema
 
 ifaceCompilerTag : String
-ifaceCompilerTag = vunaVersion ++ "/" ++ strFromInt compilerFingerprint
+ifaceCompilerTag = "${vunaVersion}/${compilerFingerprint}"
 
 ifaceDirOf : PackageContext -> String
-ifaceDirOf ctx = cacheBase ++ "/iface-" ++ hashText (textHash (contextPackageName ctx))
+ifaceDirOf ctx = "${cacheBase}/iface-${hashText (textHash (contextPackageName ctx))}"
 
 ownSourceInfos : PackageContext -> List (Pair String SourceInfo)
 ownSourceInfos ctx =
@@ -1020,7 +992,7 @@ else
     Err e => if ifaceSelfTestRequested then Err e
     else
       let
-        _ = note ("iface-skip " ++ e)
+        _ = note "iface-skip ${e}"
       in Ok 0
     Ok modules =>
       let
@@ -1039,9 +1011,9 @@ else
     dir = ifaceDirOf ctx
     _ = ensureDirPath dir
     -- 旧布局（单文件 iface.pkg）清掉，避免与 per-module 布局混淆。
-    _ = runIO (prim_removeFile (dir ++ "/iface.pkg"))
+    _ = runIO (prim_removeFile "${dir}/iface.pkg")
     n = writePackageIface dir ifaceCompilerTag (contextPackageName ctx) modules
-    _ = note ("iface-write=" ++ strFromInt n ++ "/" ++ strFromInt (length modules))
+    _ = note "iface-write=${n}/${length modules}"
     _ = stamp "iface-write-done"
   in if ifaceSelfTestRequested then ifaceSelfTest dir modules else Ok n
 
@@ -1066,7 +1038,7 @@ ifaceSelfTest dir modules = case readPackageIface dir ifaceCompilerTag of
   else if not (sameIfaceHashes pi2.piModules modules) then Err "iface selftest: iface hash mismatch"
   else
     let
-      _ = note ("iface-selftest=ok modules=" ++ strFromInt (length modules))
+      _ = note "iface-selftest=ok modules=${length modules}"
     in Ok 0
 
 sameIfaceHashes : List ModuleIface -> List ModuleIface -> Bool
@@ -1100,12 +1072,12 @@ else case depIfacesOf ctx of
   Just ifaces => case ownCleanModules ctx (depIfaceHashTable ctx) of
     Just clean =>
       let
-        _ = note ("cache-path=summary deps=" ++ strFromInt (depPackageCount ctx))
-        _ = note ("cache-own-clean=" ++ strFromInt (length clean))
+        _ = note "cache-path=summary deps=${depPackageCount ctx}"
+        _ = note "cache-own-clean=${length clean}"
       in checkAndCache ctx path (dtCheckLibraryPackageIncrementalParts ctx names ifaces clean)
     Nothing =>
       let
-        _ = note ("cache-path=summary deps=" ++ strFromInt (depPackageCount ctx))
+        _ = note "cache-path=summary deps=${depPackageCount ctx}"
       in checkAndCache ctx path (dtCheckLibraryPackageWithIfacesParts ctx names ifaces)
 
 fullCheckLib : PackageContext -> List String -> String -> Result (List String)
@@ -1125,13 +1097,13 @@ splitCacheSchema : String
 splitCacheSchema = "vuna-split-cache 3"
 
 splitCacheTag : String
-splitCacheTag = splitCacheSchema ++ "/" ++ vunaVersion
+splitCacheTag = "${splitCacheSchema}/${vunaVersion}"
 
 splitCacheDir : PackageContext -> String
-splitCacheDir ctx = cacheBase ++ "/" ++ hashText (textHash (contextPackageName ctx)) ++ "/split"
+splitCacheDir ctx = "${cacheBase}/${hashText (textHash (contextPackageName ctx))}/split"
 
 splitCachePath : PackageContext -> String -> String
-splitCachePath ctx key = splitCacheDir ctx ++ "/" ++ key
+splitCachePath ctx key = "${splitCacheDir ctx}/${key}"
 
 splitCacheKey : PackageContext -> String -> Bool -> String
 splitCacheKey ctx entry printResult =
@@ -1140,7 +1112,7 @@ splitCacheKey ctx entry printResult =
     depsHash = closureHashOf (dependencyHashes ctx) 0
     verHash = textHash (splitCacheSchema ++ vunaVersion) + compilerFingerprint
     prHash = if printResult then 1 else 0
-  in hashText srcHash ++ "-" ++ hashText depsHash ++ "-" ++ hashText (verHash + prHash)
+  in "${hashText srcHash}-${hashText depsHash}-${hashText (verHash + prHash)}"
 
 -- 读侧先过 framing（magic/tag/长度/校验和）；校验失败（截断/篡改/旧格式）⇒ Nothing
 -- ⇒ 调用方重算并覆盖。只有校验通过的载荷才交给 unmarshal（坏字节不喂给 Marshal）。

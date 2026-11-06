@@ -104,7 +104,7 @@ diagIfOwn label severity message =
     file = firstOf loc
     line = firstOf (secondOf loc)
   in if line <= 0 then Just (diagOfMessage severity "" message)
-  else if file == "" || file == label || fileNameOf label /= "" && endsWith ("/" ++ fileNameOf label) file then Just (diagOfMessage severity "" message)
+  else if file == "" || file == label || fileNameOf label /= "" && endsWith "/${fileNameOf label}" file then Just (diagOfMessage severity "" message)
   else Nothing
 
 -- 包上下文：file:// URI → 路径 → `contextForFile`；非 file URI（或磁盘上不存在的
@@ -135,7 +135,7 @@ record DiagCache where
 
 -- 缓存 key：编译器二进制指纹 + 包名（包上下文/依赖图变化由 stats 面兜住）。
 ctxKeyOf : PackageContext -> Int
-ctxKeyOf ctx = toolCompilerFingerprint * 1000003 + hashTextStrong ("lsp|" ++ contextPackageName ctx)
+ctxKeyOf ctx = toolCompilerFingerprint * 1000003 + hashTextStrong "lsp|${contextPackageName ctx}"
 
 -- 本包模块名集合（来自 manifest）。
 ownNamesOfTool : ToolContext -> List String
@@ -171,7 +171,7 @@ buildSession ctx label text modName = case depIfacesForToolSourceDetailed ctx la
       builtSec = toolNowSec
       ownNeeded = ownNeededOf tool tool.tcNeeded
       clean = toolCleanOwnModules ctx tool builtSec modName ownNeeded
-      stats = append tool.tcStats [sourceInfoForPath (contextDir ctx ++ "/vuna.toml")]
+      stats = append tool.tcStats [sourceInfoForPath "${contextDir ctx}/vuna.toml"]
     in Just
       (DiagCache label (ctxKeyOf ctx) ctx (Just tool) clean builtSec stats Nothing emptyFixityEnv)
 

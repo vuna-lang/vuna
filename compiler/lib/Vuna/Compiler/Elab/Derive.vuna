@@ -32,7 +32,7 @@ traitMethodGlobal : String -> String -> String
 traitMethodGlobal tname methodName = case splitLastDot (splitOnDot tname) of
   Pair rev base => case rev of
     [] => methodName
-    _ => joinDots rev ++ "." ++ methodName
+    _ => "${joinDots rev}.${methodName}"
 
 -- ---------------------------------------------------------------
 -- 展开 `deriving (T1, T2)` ⇒ 等价 instance 声明
@@ -120,7 +120,7 @@ deriveInstance dname params ctors tn sp =
             DFun "ge" [PVar "sx" sp, PVar "sy" sp] (geBody leProj sp) sp
           ]
       in Ok (DInstance ctxExprs hd ms sp)
-    kind => Err (showSpanLoc sp ++ ": cannot derive `" ++ kind ++ "` (supported: Show, Eq, Ord)")
+    kind => Err "${showSpanLoc sp}: cannot derive `${kind}` (supported: Show, Eq, Ord)"
 
 -- `T <Data> a1 .. an` 形态的实例头（`T` 是解析后的完整类名）。
 instHead : String -> String -> List String -> Span -> Expr
@@ -148,7 +148,7 @@ showAlts proj ((Ctor cn ty ar cnsp) :: rest) sp =
 -- 零参 ⇒ `"C"`；否则 `"(C " ++ show f0 ++ " " ++ .. ++ ")"`。
 showCtor : String -> String -> List String -> Span -> Expr
 showCtor proj cn [] sp = EStr cn sp
-showCtor proj cn vs sp = EApp (EVar "++" sp) [EStr ("(" ++ cn ++ " ") sp, showFields proj vs sp] sp
+showCtor proj cn vs sp = EApp (EVar "++" sp) [EStr "(${cn} " sp, showFields proj vs sp] sp
 
 showFields : String -> List String -> Span -> Expr
 showFields proj [] sp = EStr ")" sp

@@ -62,10 +62,10 @@ lintRuleCode code =
 -- 消息模板（`<0>` 为插值；每个规则恰好一个插值：被检查的主体描述）
 lintMsg : LintRule -> String -> String
 lintMsg LiteralIfChain scrutinee =
-  "if/else-if chain on `" ++ scrutinee ++ "` can be a case with literal patterns"
+  "if/else-if chain on `${scrutinee}` can be a case with literal patterns"
 lintMsg LiftDestructure var =
-  "single-alternative case on `" ++ var ++ "` can be folded into the enclosing pattern"
-lintMsg CaseToClauses var = "top-level case on `" ++ var ++ "` can be converted to multiple clauses"
+  "single-alternative case on `${var}` can be folded into the enclosing pattern"
+lintMsg CaseToClauses var = "top-level case on `${var}` can be converted to multiple clauses"
 
 -- 修复动作描述（给 `vuna lint --explain` / 文档用）
 lintEdit : LintRule -> String

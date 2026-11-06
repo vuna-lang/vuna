@@ -205,7 +205,7 @@ sendFrame : Json -> Int
 sendFrame payload =
   let
     body = renderJson payload
-  in runIO (prim_print ("Content-Length: " ++ strFromInt (strLength body) ++ "\r\n\r\n" ++ body))
+  in runIO (prim_print "Content-Length: ${strLength body}\r\n\r\n${body}")
 
 responseOk : Json -> Json -> Json
 responseOk id body = JObj [Pair "jsonrpc" (JStr "2.0"), Pair "id" id, Pair "result" body]
@@ -262,7 +262,7 @@ tokenAtCursor text line col =
 -- 日志行前缀；退出时一次写出（`prim_writeFile "/dev/stderr"` 每次打开都会截断，
 -- 逐行写会把前面的行冲掉，所以内存累积、退出时 join 一次）。
 logLine : String -> String
-logLine s = "[vuna-lsp] " ++ s ++ "\n"
+logLine s = "[vuna-lsp] ${s}\n"
 
 flushLogLines : List String -> Int
 flushLogLines [] = 0

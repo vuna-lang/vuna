@@ -15,36 +15,27 @@ renderOverview index =
   let
     ms = indexModules index
     pkgs = distinct (map modPackage ms)
-  in join "\n" (map (overviewSection ms) pkgs) ++ "\n"
+  in "${join "\n" (map (overviewSection ms) pkgs)}\n"
 
 overviewSection : List ModuleInfo -> String -> String
 overviewSection ms pkg =
   let
     mine = filter (\m => modPackage m == pkg) ms
     title = if pkg == "" then "(no package)" else pkg
-  in "\n## "
-    ++ title
-    ++ "\n\n"
-    ++ join "\n" (map (\m => "  " ++ modName m ++ "  " ++ strFromInt (modBytes m) ++ "B" ++ "  " ++ strFromInt (modDecls m) ++ " decls") mine)
+  in "\n## ${title}\n\n${join "\n" (map (\m => "  ${modName m}  ${modBytes m}B  ${modDecls m} decls") mine)}"
 
 renderModules : Index -> String
 renderModules index =
-  join "\n" (map (\m => modName m ++ "  " ++ modPath m) (indexModules index)) ++ "\n"
+  "${join "\n" (map (\m => "${modName m}  ${modPath m}") (indexModules index))}\n"
 
 -- 某模块的 API 面（签名 + 行号 + 注释）。
 renderApi : Index -> String -> Result String
 renderApi index modQuery =
   let
     syms = filter (\s => symModule s == modQuery) index.indexSymbols
-  in if length syms == 0 then Err ("no such module: " ++ modQuery)
-  else Ok ("## " ++ modQuery ++ "\n\n" ++ join "\n" (map apiRow syms))
+  in if length syms == 0 then Err "no such module: ${modQuery}"
+  else Ok "## ${modQuery}\n\n${join "\n" (map apiRow syms)}"
 
 apiRow : Sym -> String
 apiRow s =
-  "  "
-    ++ symName s
-    ++ " : "
-    ++ symSig s
-    ++ "  -- line "
-    ++ strFromInt (symLine s)
-    ++ (if s.symDoc == "" then "" else "\n" ++ join "\n" (map (\l => "      " ++ l) (lines s.symDoc)))
+  "  ${symName s} : ${symSig s}  -- line ${symLine s}${if s.symDoc == "" then "" else "\n${join "\n" (map (\l => "      ${l}") (lines s.symDoc))}"}"

@@ -58,13 +58,12 @@ selectTarget parsed dir rootPkg = case rootPkg.packageManifest.manifestMembers o
     Nothing => Ok rootPkg
     Just name =>
       if packageName rootPkg == name then Ok rootPkg
-      else Err
-        ("no such package: " ++ name ++ " (only package at " ++ dir ++ " is " ++ packageLabel rootPkg ++ ")")
+      else Err "no such package: ${name} (only package at ${dir} is ${packageLabel rootPkg})"
   _ => case workspacePackages dir of
     Err e => Err e
     Ok pkgs => case flagValue parsed "package" of
       Just name => case findPackageByName name pkgs of
-        Nothing => Err ("no such package in workspace: " ++ name)
+        Nothing => Err "no such package in workspace: ${name}"
         Just target => Ok target
       Nothing => case rootExecutable rootPkg of
         Just target => Ok target
@@ -72,10 +71,10 @@ selectTarget parsed dir rootPkg = case rootPkg.packageManifest.manifestMembers o
           [only] => Ok only
           [] =>
             Err
-              ("no executable package in workspace " ++ dir ++ " (packages need app/Main.vuna): " ++ packageLabels pkgs)
+              "no executable package in workspace ${dir} (packages need app/Main.vuna): ${packageLabels pkgs}"
           many =>
             Err
-              ("multiple executable packages in workspace " ++ dir ++ ": " ++ packageLabels many ++ "; choose one with --package")
+              "multiple executable packages in workspace ${dir}: ${packageLabels many}; choose one with --package"
 
 rootExecutable : Package -> Maybe Package
 rootExecutable pkg = if isExecutable pkg then Just pkg else Nothing
@@ -104,7 +103,7 @@ runTarget parsed passthrough dir target =
     pkgFlag = case flagValue parsed "package" of
       Nothing => []
       Just name => ["--package", name]
-  in if not (isExecutable target) then runError ("package " ++ packageLabel target ++ " has no executable entry (app/Main.vuna)")
+  in if not (isExecutable target) then runError "package ${packageLabel target} has no executable entry (app/Main.vuna)"
   else
     let
       buildCode =
@@ -118,10 +117,9 @@ execTarget : List String -> Package -> Int
 execTarget passthrough target =
   let
     pkgDir = packageDir target
-    relBin = ".output/bin/" ++ packageName target
-  in if pathExistsFile (pkgDir ++ "/" ++ relBin) then runIO (prim_runIn pkgDir (relBin :: passthrough))
-  else runError
-    ("binary not found: " ++ pkgDir ++ "/" ++ relBin ++ " (build the package first, or drop --no-build)")
+    relBin = ".output/bin/${packageName target}"
+  in if pathExistsFile "${pkgDir}/${relBin}" then runIO (prim_runIn pkgDir (relBin :: passthrough))
+  else runError "binary not found: ${pkgDir}/${relBin} (build the package first, or drop --no-build)"
 
 -- ---------------------------------------------------------------
 -- 统一错误出口（2 = 用法/输入，1 = 被检查代码的语义失败）
@@ -129,11 +127,11 @@ execTarget passthrough target =
 runError : String -> Int
 runError e =
   let
-    _ = runIO (prim_print ("error: " ++ e ++ "\n"))
+    _ = runIO (prim_print "error: ${e}\n")
   in 2
 
 runFailure : String -> Int
 runFailure e =
   let
-    _ = runIO (prim_print ("error: " ++ e ++ "\n"))
+    _ = runIO (prim_print "error: ${e}\n")
   in 1

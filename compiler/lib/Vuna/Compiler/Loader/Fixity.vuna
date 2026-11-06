@@ -89,8 +89,7 @@ record ChainOp where
 
 -- 未知运算符的诊断（严格表）：不静默默认优先级。
 unknownFixityMsg : String -> String
-unknownFixityMsg op =
-  "unknown fixity for operator " ++ op ++ " (declare it with infixl/infixr/infix)"
+unknownFixityMsg op = "unknown fixity for operator ${op} (declare it with infixl/infixr/infix)"
 
 -- 运算符优先级：查表；反引号名字没声明时按 9 左结合（Haskell 默认）；未知**符号**运算符
 -- 一律报错（严格表与宽松表同判据）——fmt 宁可拒绝格式化也不按错优先级重排改变语义

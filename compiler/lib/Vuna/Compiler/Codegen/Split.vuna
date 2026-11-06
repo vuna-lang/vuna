@@ -71,9 +71,9 @@ checkDepsOrder ordered self (d :: rest) =
   let
     selfPos = posOfName self ordered
     depPos = posOfName d ordered
-  in if depPos == 0 then Err ("DT: internal: " ++ self ++ " references unknown unit `" ++ d ++ "`")
-  else if selfPos == 0 then Err ("DT: internal: split unit `" ++ self ++ "` is not in the module order")
-  else if depPos >= selfPos then Err ("DT: internal: split dependency is not in topological order: " ++ self ++ " -> " ++ d)
+  in if depPos == 0 then Err "DT: internal: ${self} references unknown unit `${d}`"
+  else if selfPos == 0 then Err "DT: internal: split unit `${self}` is not in the module order"
+  else if depPos >= selfPos then Err "DT: internal: split dependency is not in topological order: ${self} -> ${d}"
   else checkDepsOrder ordered self rest
 
 depsInOrder : List String -> String -> List String -> List String
@@ -104,9 +104,9 @@ checkModuleDeclName : List String -> String -> String -> Result Int
 checkModuleDeclName knownModules mname name =
   if containsDot name then if memName (modulePrefixOfName name) knownModules then Ok 0
   else Err
-    ("DT: internal: module " ++ mname ++ " declares `" ++ name ++ "` whose module prefix `" ++ modulePrefixOfName name ++ "` is not a known module (codegen requires Loader-resolved decls)")
+    "DT: internal: module ${mname} declares `${name}` whose module prefix `${modulePrefixOfName name}` is not a known module (codegen requires Loader-resolved decls)"
   else Err
-    ("DT: internal: module " ++ mname ++ " has an unresolved declaration name `" ++ name ++ "` (codegen requires Loader-resolved decls)")
+    "DT: internal: module ${mname} has an unresolved declaration name `${name}` (codegen requires Loader-resolved decls)"
 
 checkModuleDeclNames : List String -> String -> List String -> Result Int
 checkModuleDeclNames knownModules mname [] = Ok 0
@@ -136,9 +136,8 @@ checkEntryDeclName : List String -> String -> Result Int
 checkEntryDeclName seen name =
   if name == "" then Err "DT: internal: entry declaration has an empty name"
   else if containsDot name then Err
-    ("DT: internal: entry declaration `" ++ name ++ "` must not contain a module prefix (codegen requires Loader-resolved decls)")
-  else if memName name seen then Err ("DT: internal: duplicate entry declaration `" ++ name ++ "`")
-  else Ok 0
+    "DT: internal: entry declaration `${name}` must not contain a module prefix (codegen requires Loader-resolved decls)"
+  else if memName name seen then Err "DT: internal: duplicate entry declaration `${name}`" else Ok 0
 
 checkEntryDeclsGo : List String -> List String -> Result Int
 checkEntryDeclsGo seen [] = Ok 0
@@ -174,13 +173,13 @@ checkResolvedModules meta modules entryDecls runtime datas =
 splitStripPrefix : String -> String -> String
 splitStripPrefix prefix path =
   if prefix == "" then path
-  else if startsWith (prefix ++ "/") path then strSubstring (strLength (prefix ++ "/")) (strLength path - strLength (prefix ++ "/")) path
+  else if startsWith "${prefix}/" path then strSubstring (strLength "${prefix}/") (strLength path - strLength "${prefix}/") path
   else path
 
 splitStripRoots : List String -> String -> String
 splitStripRoots [] path = path
 splitStripRoots (root :: rest) path =
-  if startsWith (root ++ "/") path then splitStripPrefix root path else splitStripRoots rest path
+  if startsWith "${root}/" path then splitStripPrefix root path else splitStripRoots rest path
 
 splitStripDotSlash : String -> String
 splitStripDotSlash path =
@@ -265,7 +264,7 @@ splitModuleFilesWith lookup store ctx ((Pair mname decls) :: rest) =
         unitDefs = defsInUnit ctx.sgcDefOwnerT mname ctx.sgcAllDefs
         qc = QualCtx unit ctx.sgcDefUnitT ctx.sgcDataUnitT
       in andThen (groupRuntimeDefs unitDefs)
-        (\groups => andThen (genUnitParts ctx.sgcUsedTbl qc ctx.sgcAllDatas unitDatas groups) (\parts => andThen (splitModuleFilesWith lookup store ctx rest) (\tail => andThen (unitDepsOf ctx.sgcOrdered unit (unitPartsDeps parts)) (\deps => Ok (storeModuleFile store mname (SplitFile (unit ++ ".ml") (genUnitText parts ++ "\n") deps) :: tail)))))
+        (\groups => andThen (genUnitParts ctx.sgcUsedTbl qc ctx.sgcAllDatas unitDatas groups) (\parts => andThen (splitModuleFilesWith lookup store ctx rest) (\tail => andThen (unitDepsOf ctx.sgcOrdered unit (unitPartsDeps parts)) (\deps => Ok (storeModuleFile store mname (SplitFile "${unit}.ml" "${genUnitText parts}\n" deps) :: tail)))))
 
 splitMainFileWith : (String -> Maybe SplitFile) -> (String -> SplitFile -> Int) -> SplitGenCtx -> Bool -> Result SplitFile
 splitMainFileWith lookup store ctx printResult = case lookup "__entry__" of

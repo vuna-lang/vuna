@@ -91,7 +91,7 @@ symCol : Sym -> Int
 symCol (Sym sMod sName sKind sSig sType sDoc sLine sCol) = sCol
 
 symFullName : Sym -> String
-symFullName (Sym sMod sName sKind sSig sType sDoc sLine sCol) = sMod ++ "." ++ sName
+symFullName (Sym sMod sName sKind sSig sType sDoc sLine sCol) = "${sMod}.${sName}"
 
 -- 引用：引用方模块、被引用的名字、引用出现处（行、列）。M30：refs 不只记录
 -- 「模块引用了哪些名字」，还记录出现位置，供 `referencesAt` 与影响面分析使用。

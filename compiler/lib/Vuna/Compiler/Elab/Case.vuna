@@ -260,7 +260,7 @@ bindCtorGo ctx ty subpats acc = case ty of
     in if implicit then
       let
         -- 隐式族参数只服务类型层，用带前缀的新名字绑定，避免和用户模式变量同名造成遮蔽。
-        famName = name ++ "#fam"
+        famName = "${name}#fam"
         ctx2 = ctxBindValue famName domVal ctx
       in bindCtorGo ctx2 cod subpats (Pair famName Rig0 :: acc)
     else case subpats of
@@ -367,7 +367,7 @@ litPatEq _ p = False
 
 litLabel : Pat -> String
 litLabel (PInt n sp) = strFromInt n
-litLabel (PStr s sp) = "\"" ++ s ++ "\""
+litLabel (PStr s sp) = "\"${s}\""
 litLabel _ = ""
 
 -- 源级校验：唯一入口。返回 `Ok 0`（成功）或第一条稳定诊断。

@@ -13,7 +13,7 @@ import Base.Vec
 -- 拼 `[CODE] 消息`：code 与 template 由调用方从各自域枚举派生，
 -- args 的长度由 `Vec String n` 在编译期与 arity 锁定。
 diagMsg : {n : Nat} -> String -> String -> Vec String n -> String
-diagMsg code template args = "[" ++ code ++ "] " ++ substTemplate template args
+diagMsg code template args = "[${code}] ${substTemplate template args}"
 
 -- 纯消息诊断（CG：无位置）。
 diagErr : String -> Result a
@@ -21,13 +21,13 @@ diagErr msg = Err msg
 
 -- 带 span 前缀的诊断（TC：`文件:行:列: <消息>`，格式与 `Elab/Types.errAt` 一致）。
 diagErrAt : Span -> String -> Result a
-diagErrAt sp msg = Err (showSpanLoc sp ++ ": " ++ msg)
+diagErrAt sp msg = Err "${showSpanLoc sp}: ${msg}"
 
 -- 定义级诊断位置前缀（M29 A14）：`文件:行:列: in `name`: `；没有 span 时退回
 -- `in `name`: `（不改变既有夹具断言的子串）。
 diagDefLoc : Maybe Span -> String -> String
-diagDefLoc (Just sp) name = showSpanLoc sp ++ ": in `" ++ name ++ "`: "
-diagDefLoc Nothing name = "in `" ++ name ++ "`: "
+diagDefLoc (Just sp) name = "${showSpanLoc sp}: in `${name}`: "
+diagDefLoc Nothing name = "in `${name}`: "
 
 -- 分块拼接：`tcAll` / `cgAll` 按 ≤8 项分块后按顺序还原成一张表。
 -- split codegen 把单个列表字面量打成一行，整表字面量会产生超长行（M30 B19）；

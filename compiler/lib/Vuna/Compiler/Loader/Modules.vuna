@@ -141,7 +141,7 @@ validModuleName name = case splitOnDot name of
   segs => allSegmentsValid segs
 
 mangle : String -> String -> String
-mangle prefix name = if prefix == "" then name else prefix ++ "." ++ name
+mangle prefix name = if prefix == "" then name else "${prefix}.${name}"
 
 importName : Import -> String
 importName (Import name isQualified alias sp) = name
@@ -162,15 +162,15 @@ importAliases (imp :: rest) = case imp.importAlias of
 checkImportAliases : String -> List String -> List (Pair String String) -> Result (List a)
 checkImportAliases label moduleNames [] = Ok []
 checkImportAliases label moduleNames ((Pair alias m) :: rest) =
-  if validSegment alias then if memName alias (map firstOf rest) then Err (label ++ ": duplicate module alias " ++ alias)
+  if validSegment alias then if memName alias (map firstOf rest) then Err "${label}: duplicate module alias ${alias}"
   else if memName alias moduleNames then if alias == m then checkImportAliases label moduleNames rest
-  else Err (label ++ ": module alias " ++ alias ++ " conflicts with an imported module")
+  else Err "${label}: module alias ${alias} conflicts with an imported module"
   else checkImportAliases label moduleNames rest
-  else Err (label ++ ": invalid module alias " ++ alias)
+  else Err "${label}: invalid module alias ${alias}"
 
 validateImports : String -> List Import -> Result (List a)
 validateImports label imports =
-  if hasDuplicateName (importModuleNames imports) then Err (label ++ ": duplicate import")
+  if hasDuplicateName (importModuleNames imports) then Err "${label}: duplicate import"
   else checkImportAliases label (importModuleNames imports) (importAliases imports)
 
 openModuleNames : List Import -> List String
@@ -188,7 +188,7 @@ else case imp.importAlias of
 _joinNames : List String -> String
 _joinNames [] = ""
 _joinNames ([x]) = x
-_joinNames (x :: rest) = x ++ ", " ++ _joinNames rest
+_joinNames (x :: rest) = "${x}, ${_joinNames rest}"
 
 -- M24.7：查一个**必须已加载**的模块。旧实现把「模块未加载」当成「空表」
 -- （`moduleDecls` / `exportsOf` 的 `Nothing => []`）：调用方只看到「没有这个导出」，
@@ -196,8 +196,7 @@ _joinNames (x :: rest) = x ++ ", " ++ _joinNames rest
 -- 现在缺模块直接返回清晰的 Err（这是内部不变量，不是用户源码错误）。
 missingModule : String -> Result a
 missingModule name =
-  Err
-    ("loader: internal: module " ++ name ++ " is not loaded (import list and module table disagree)")
+  Err "loader: internal: module ${name} is not loaded (import list and module table disagree)"
 
 moduleDecls : List Module -> String -> Result (List Decl)
 moduleDecls modules name = case findModule modules name of
@@ -266,14 +265,14 @@ sameTargetRest e [] = True
 sameTargetRest e ((Pair m e2) :: rest) = e.target == e2.target && sameTargetRest e rest
 
 unifyEntryPairs : String -> String -> String -> List (Pair String ExportEntry) -> Result (Pair String ExportEntry)
-unifyEntryPairs label kindLabel name [] = Err (label ++ ": unknown " ++ kindLabel ++ " " ++ name)
+unifyEntryPairs label kindLabel name [] = Err "${label}: unknown ${kindLabel} ${name}"
 unifyEntryPairs label kindLabel name (p :: rest) =
   if sameTargetRest (secondOf p) rest then Ok p
   else Err
-    (label ++ ": ambiguous " ++ kindLabel ++ " " ++ name ++ " (imported from " ++ _joinNames (map firstOf (p :: rest)) ++ "); qualify it")
+    "${label}: ambiguous ${kindLabel} ${name} (imported from ${_joinNames (map firstOf (p :: rest))}); qualify it"
 
 modulePath : Root -> String -> String
-modulePath root name = rootDir root ++ "/" ++ joinSlashes (splitOnDot name) ++ ".vuna"
+modulePath root name = "${rootDir root}/${joinSlashes (splitOnDot name)}.vuna"
 
 -- 当前导入方所在包能否看到该 root 中的模块：同包永远可见；跨包只认 [export] 列表。
 rootAllows : String -> Root -> String -> Bool
@@ -304,8 +303,7 @@ findModuleFile roots name importerPkg = case collectModuleFiles roots name impor
       pkgs => ldErr2 (ModuleNotExported name (_joinNames hidden)) name (_joinNames hidden)
     [only] => Ok only
     candidates =>
-      Err
-        ("ambiguous module " ++ name ++ " (found in: " ++ _joinNames (map candidateDir allowed) ++ ")")
+      Err "ambiguous module ${name} (found in: ${_joinNames (map candidateDir allowed)})"
 
 findModule : List Module -> String -> Maybe Module
 findModule [] name = Nothing

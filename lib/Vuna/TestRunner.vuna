@@ -53,16 +53,14 @@ runTests opts pkg =
   let
     start = runIO timeUs
     code = runTestsGo opts pkg
-    _ =
-      if opts.testVerbose then runIO (prim_print ("total: " ++ strFromInt (elapsedMs start) ++ "ms\n"))
-      else 0
+    _ = if opts.testVerbose then runIO (prim_print "total: ${elapsedMs start}ms\n") else 0
   in code
 
 runTestsGo : TestOpts -> Package -> Int
 runTestsGo opts pkg = case workspacePackages (packageDir pkg) of
   Err e =>
     let
-      _ = runIO (prim_print ("error: " ++ e ++ "\n"))
+      _ = runIO (prim_print "error: ${e}\n")
     in 2
   Ok pkgs => if length pkgs <= 1 then runPackageTests opts pkg else runWorkspaceTests opts pkgs
 
@@ -72,19 +70,19 @@ runTestsGo opts pkg = case workspacePackages (packageDir pkg) of
 runPackageTests : TestOpts -> Package -> Int
 runPackageTests opts pkg =
   let
-    testDir = packageDir pkg ++ "/test"
+    testDir = "${packageDir pkg}/test"
   in if pathExistsDir testDir then
     let
       files = filteredTestFiles opts (packageName pkg) testDir
     in if opts.testListOnly then
       let
-        _ = map (\file => runIO (prim_print (file ++ "\n"))) files
+        _ = map (\file => runIO (prim_print "${file}\n")) files
       in 0
     else case runTestFiles opts (packageContext pkg) testDir files 0 0 of
       Tally _ fail _ => if fail == 0 then 0 else 1
   else
     let
-      _ = runIO (prim_print ("error: test directory not found: " ++ testDir ++ "\n"))
+      _ = runIO (prim_print "error: test directory not found: ${testDir}\n")
     in 2
 
 -- ---------------------------------------------------------------
@@ -95,7 +93,7 @@ runWorkspaceTests : TestOpts -> List Package -> Int
 runWorkspaceTests opts pkgs = if opts.testListOnly then runWorkspaceList opts pkgs
 else
   let
-    _ = runIO (prim_print ("workspace: " ++ strFromInt (length pkgs) ++ " package(s)\n"))
+    _ = runIO (prim_print "workspace: ${length pkgs} package(s)\n")
   in runWorkspaceGo opts pkgs 0 0
 
 runWorkspaceList : TestOpts -> List Package -> Int
@@ -103,7 +101,7 @@ runWorkspaceList opts [] = 0
 runWorkspaceList opts (pkg :: rest) =
   let
     label = workspacePackageLabel pkg
-    testDir = packageDir pkg ++ "/test"
+    testDir = "${packageDir pkg}/test"
   in if not (pathExistsDir testDir) then runWorkspaceList opts rest
   else
     let
@@ -111,8 +109,8 @@ runWorkspaceList opts (pkg :: rest) =
     in if filterActive opts && length files == 0 then runWorkspaceList opts rest
     else
       let
-        _ = runIO (prim_print ("-- " ++ label ++ " --\n"))
-        _ = map (\file => runIO (prim_print (file ++ "\n"))) files
+        _ = runIO (prim_print "-- ${label} --\n")
+        _ = map (\file => runIO (prim_print "${file}\n")) files
       in runWorkspaceList opts rest
 
 runWorkspaceGo : TestOpts -> List Package -> Int -> Int -> Int
@@ -120,30 +118,28 @@ runWorkspaceGo opts [] pass fail = workspaceFinish pass fail
 runWorkspaceGo opts (pkg :: rest) pass fail =
   let
     label = workspacePackageLabel pkg
-    testDir = packageDir pkg ++ "/test"
+    testDir = "${packageDir pkg}/test"
   in if pathExistsDir testDir then
     let
       files = filteredTestFiles opts (packageName pkg) testDir
     in if filterActive opts && length files == 0 then runWorkspaceGo opts rest pass fail
     else
       let
-        _ = runIO (prim_print ("-- " ++ label ++ " --\n"))
+        _ = runIO (prim_print "-- ${label} --\n")
       in case runTestFiles opts (packageContext pkg) testDir files 0 0 of
         Tally p f stopped =>
           if stopped then workspaceFinish (pass + p) (fail + f)
           else runWorkspaceGo opts rest (pass + p) (fail + f)
   else
     let
-      _ = runIO (prim_print ("-- " ++ label ++ " -- (no test directory)\n"))
+      _ = runIO (prim_print "-- ${label} -- (no test directory)\n")
     in runWorkspaceGo opts rest pass fail
 
 -- workspace 总汇总 + 退出码（0 全通过 / 1 有失败）。
 workspaceFinish : Int -> Int -> Int
 workspaceFinish pass fail =
   let
-    _ =
-      runIO
-        (prim_print ("\nworkspace: " ++ strFromInt pass ++ " passed, " ++ strFromInt fail ++ " failed\n"))
+    _ = runIO (prim_print "\nworkspace: ${pass} passed, ${fail} failed\n")
   in if fail == 0 then 0 else 1
 
 -- 包名可能为空（只用于展示，不参与语义）。
@@ -176,12 +172,12 @@ filteredTestFiles opts pkgName dir =
 matchesFilter : List String -> String -> String -> Bool
 matchesFilter [] pkgName file = True
 matchesFilter (pat :: rest) pkgName file =
-  contains pat (pkgName ++ "/" ++ file) || contains pat file || matchesAnyFilter rest pkgName file
+  contains pat "${pkgName}/${file}" || contains pat file || matchesAnyFilter rest pkgName file
 
 matchesAnyFilter : List String -> String -> String -> Bool
 matchesAnyFilter [] pkgName file = False
 matchesAnyFilter (pat :: rest) pkgName file =
-  contains pat (pkgName ++ "/" ++ file) || contains pat file || matchesAnyFilter rest pkgName file
+  contains pat "${pkgName}/${file}" || contains pat file || matchesAnyFilter rest pkgName file
 
 -- ---------------------------------------------------------------
 -- 逐文件执行；返回 Tally
@@ -189,12 +185,11 @@ matchesAnyFilter (pat :: rest) pkgName file =
 runTestFiles : TestOpts -> PackageContext -> String -> List String -> Int -> Int -> Tally
 runTestFiles opts ctx dir [] pass fail =
   let
-    _ =
-      runIO (prim_print ("\n" ++ strFromInt pass ++ " passed, " ++ strFromInt fail ++ " failed\n"))
+    _ = runIO (prim_print "\n${pass} passed, ${fail} failed\n")
   in Tally pass fail False
 runTestFiles opts ctx dir (name :: rest) pass fail =
   let
-    path = dir ++ "/" ++ name
+    path = "${dir}/${name}"
     t0 = runIO timeUs
     outcome = runOneTest ctx path name
     us = runIO timeUs - t0
@@ -203,21 +198,18 @@ runTestFiles opts ctx dir (name :: rest) pass fail =
     TestPassed => runTestFiles opts ctx dir rest (pass + 1) fail
     TestFailed _ => if opts.testFailFast then
       let
-        _ =
-          runIO
-            (prim_print ("\n" ++ strFromInt pass ++ " passed, " ++ strFromInt (fail + 1) ++ " failed\n"))
+        _ = runIO (prim_print "\n${pass} passed, ${fail + 1} failed\n")
       in Tally pass (fail + 1) True
     else runTestFiles opts ctx dir rest pass (fail + 1)
 
 -- 单测结果行：默认与 M30 逐字一致；--verbose 时行尾追加耗时。
 printOutcome : TestOpts -> String -> TestOutcome -> Int -> Int
-printOutcome opts name TestPassed us =
-  runIO (prim_print ("ok   " ++ name ++ timingText opts us ++ "\n"))
+printOutcome opts name TestPassed us = runIO (prim_print "ok   ${name}${timingText opts us}\n")
 printOutcome opts name (TestFailed message) us =
-  runIO (prim_print ("FAIL " ++ name ++ ": " ++ message ++ timingText opts us ++ "\n"))
+  runIO (prim_print "FAIL ${name}: ${message}${timingText opts us}\n")
 
 timingText : TestOpts -> Int -> String
-timingText opts us = if opts.testVerbose then " (" ++ strFromInt (us / 1000) ++ "ms)" else ""
+timingText opts us = if opts.testVerbose then " (${us / 1000}ms)" else ""
 
 elapsedMs : Int -> Int
 elapsedMs start = (runIO timeUs - start) / 1000
@@ -234,13 +226,12 @@ runOneTest ctx path name = case dtMainKind ctx path of
     "Bool" => pureTest name (interpretFile ctx path) "True"
     _ =>
       TestFailed
-        ("unsupported test main type: " ++ kind ++ " (expected `main : String` (empty = pass), `main : Int`/`Nat` (0 = pass), `main : Bool` (True = pass) or `main : IO a` (exit code 0 = pass))")
+        "unsupported test main type: ${kind} (expected `main : String` (empty = pass), `main : Int`/`Nat` (0 = pass), `main : Bool` (True = pass) or `main : IO a` (exit code 0 = pass))"
 
 -- 纯测试：`interpretFile` 的核心求值结果与期望值逐字比较。
 pureTest : String -> String -> String -> TestOutcome
 pureTest name output expected =
-  if output == expected then TestPassed
-  else TestFailed ("expected " ++ expected ++ ", got " ++ output)
+  if output == expected then TestPassed else TestFailed "expected ${expected}, got ${output}"
 
 -- 效果测试：临时包编译 + 运行，退出码 0 通过；编译/链接失败按 FAIL 记录诊断。
 runIOTest : PackageContext -> String -> String -> TestOutcome
@@ -250,4 +241,4 @@ runIOTest ctx path name =
   in case runEffectProgram ctx source False of
     Err e => TestFailed e
     Ok 0 => TestPassed
-    Ok code => TestFailed ("effect program exited with code " ++ strFromInt code)
+    Ok code => TestFailed "effect program exited with code ${code}"

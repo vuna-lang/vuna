@@ -47,8 +47,8 @@ isSingleLineComment c = not (containsNewline c.commentText)
 
 inlineCommentText : Comment -> String
 inlineCommentText c = case c.commentKind of
-  CLine => "--" ++ c.commentText
-  CBlock => "{-" ++ c.commentText ++ "-}"
+  CLine => "--${c.commentText}"
+  CBlock => "{-${c.commentText}-}"
 
 trimRightSpaces : String -> String
 trimRightSpaces s = strPack (reverse (dropReverseSpaces (reverse (strUnpack s))))
@@ -84,7 +84,7 @@ commentContinuation indent stripN line =
 -- 最后一行保留原行尾空白（`-}` 前通常有一个空格），只去除起始列缩进。
 commentTailLines : Int -> Int -> List String -> List String
 commentTailLines indent stripN [] = []
-commentTailLines indent stripN ([line]) = [spaces indent ++ dropSpacesUpTo stripN line ++ "-}"]
+commentTailLines indent stripN ([line]) = ["${spaces indent}${dropSpacesUpTo stripN line}-}"]
 commentTailLines indent stripN (line :: rest) =
   commentContinuation indent stripN line :: commentTailLines indent stripN rest
 
@@ -94,16 +94,16 @@ blockCommentLines indent c =
     textLines = splitOnNewline c.commentText
     stripN = spanStartCol (commentSpan c) - 1
   in case textLines of
-    [] => [spaces indent ++ "{- -}"]
+    [] => ["${spaces indent}{- -}"]
     first :: rest =>
-      (spaces indent ++ "{-" ++ trimRightSpaces first) :: commentTailLines indent stripN rest
+      "${spaces indent}{-${trimRightSpaces first}" :: commentTailLines indent stripN rest
 
 commentLeadLines : Int -> Comment -> List String
 commentLeadLines indent c = case c.commentKind of
-  CLine => [spaces indent ++ "--" ++ c.commentText]
+  CLine => ["${spaces indent}--${c.commentText}"]
   CBlock =>
     if containsNewline c.commentText then blockCommentLines indent c
-    else [spaces indent ++ "{-" ++ c.commentText ++ "-}"]
+    else ["${spaces indent}{-${c.commentText}-}"]
 
 -- 位置比较与附件表 ------------------------------------------------
 posBefore : Int -> Int -> Int -> Int -> Bool
@@ -333,7 +333,7 @@ leadingLines at sp indent =
 trailingOn : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Span -> List String -> List String
 trailingOn at sp lines = case trailOf at (spanStartLine sp) (spanStartCol sp) of
   [] => lines
-  cs => foldl (\acc, c => appendLast (" " ++ inlineCommentText c) acc) lines cs
+  cs => foldl (\acc, c => appendLast " ${inlineCommentText c}" acc) lines cs
 
 attachAt : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Span -> Int -> List String -> List String
 attachAt at sp indent lines = append (leadingLines at sp indent) (trailingOn at sp lines)

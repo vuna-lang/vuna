@@ -52,13 +52,13 @@ sanitizeChar 46 = [95, 100]
 sanitizeChar 95 = [95, 117]
 sanitizeChar 39 = [95, 112]
 sanitizeChar 35 = [95, 104]
-sanitizeChar c = if isAsciiAlphaNum c then [c] else strUnpack ("_x" ++ strFromInt c ++ "_")
+sanitizeChar c = if isAsciiAlphaNum c then [c] else strUnpack "_x${c}_"
 
 sanitizeName : String -> String
 sanitizeName name = strPack (concatMap sanitizeChar (strUnpack name))
 
 ocamlPad3 : String -> String
-ocamlPad3 s = if strLength s == 1 then "00" ++ s else if strLength s == 2 then "0" ++ s else s
+ocamlPad3 s = if strLength s == 1 then "00${s}" else if strLength s == 2 then "0${s}" else s
 
 ocamlEscapeChar : Int -> List Int
 ocamlEscapeChar 34 = [92, 34]
@@ -66,14 +66,13 @@ ocamlEscapeChar 92 = [92, 92]
 ocamlEscapeChar 10 = [92, 110]
 ocamlEscapeChar 9 = [92, 116]
 ocamlEscapeChar 13 = [92, 114]
-ocamlEscapeChar c =
-  if c >= 32 && c <= 126 then [c] else strUnpack ("\\" ++ ocamlPad3 (strFromInt c))
+ocamlEscapeChar c = if c >= 32 && c <= 126 then [c] else strUnpack "\\${ocamlPad3 (strFromInt c)}"
 
 ocamlString : String -> String
-ocamlString s = "\"" ++ strPack (concatMap ocamlEscapeChar (strUnpack s)) ++ "\""
+ocamlString s = "\"${strPack (concatMap ocamlEscapeChar (strUnpack s))}\""
 
 valueName : String -> String
-valueName name = "v_" ++ sanitizeName name
+valueName name = "v_${sanitizeName name}"
 
 -- 单独提出来：OCaml `if` 直接作构造子实参时 早期 codegen 的括号处理不可靠，
 -- 这里把它包成一个命名函数，保证自举编译本文件时生成的 OCaml 合法。
@@ -82,10 +81,10 @@ boolText b = if b then "true" else "false"
 
 -- M14：族 → OCaml 变体类型名；构造子 → 带族前缀的变体构造子名（避免跨族重名）。
 typeName : String -> String
-typeName name = "t_" ++ sanitizeName name
+typeName name = "t_${sanitizeName name}"
 
 ctorOcamlName : String -> String -> String
-ctorOcamlName family ctor = "C_" ++ sanitizeName family ++ "_" ++ sanitizeName ctor
+ctorOcamlName family ctor = "C_${sanitizeName family}_${sanitizeName ctor}"
 
 -- ---------------------------------------------------------------
 -- 跨单元引用限定（C35）
@@ -122,7 +121,7 @@ qualOf unit defs datas = QualCtx unit (unitTblOf defs) (unitTblOf datas)
 -- 跨单元引用前缀：同单元 / 未知归属（内建名由调用方先处理）→ 裸名 + 无依赖。
 qualPrefix : QualCtx -> String -> String -> Pair String String
 qualPrefix qc owner text =
-  if owner == "" || owner == qc.qcUnit then Pair text "" else Pair (owner ++ "." ++ text) owner
+  if owner == "" || owner == qc.qcUnit then Pair text "" else Pair "${owner}.${text}" owner
 
 -- (OCaml 文本, 依赖单元或 "")
 qualValueText : QualCtx -> String -> Pair String String
@@ -252,7 +251,7 @@ ocamlBinderName : String -> String
 ocamlBinderName name =
   let
     oc = sanitizeName name
-  in if memName oc ocamlReservedWords then oc ++ "_" else oc
+  in if memName oc ocamlReservedWords then "${oc}_" else oc
 
 -- 一次性线性拼接：先插分隔符成列表，再用运行时 `String.concat` 单遍拼出。
 -- 旧的 `x ++ sep ++ joinWith sep rest` 在千级片段上是 O(n²) 字节拷贝（build 路径曾占 ~20s）。
@@ -284,7 +283,7 @@ interpose sep (x :: rest) = x :: sep :: interpose sep rest
 -- 「用到」的判定与字段渲染必须用同一张表，否则声明与实参位置会漂移。表用不动点计算
 -- （族之间可互相引用）：初始全空，按渲染位置收集引用，单调增长到稳定。
 typeParamName : Int -> String
-typeParamName i = "'a" ++ strFromInt i
+typeParamName i = "'a${i}"
 
 typeParamNames : Int -> List String
 typeParamNames n = map typeParamName (range 0 n)
@@ -292,8 +291,8 @@ typeParamNames n = map typeParamName (range 0 n)
 typeParamDecl : Int -> String
 typeParamDecl 0 = ""
 typeParamDecl n = case typeParamNames n of
-  [only] => only ++ " "
-  names => "(" ++ joinWith ", " names ++ ") "
+  [only] => "${only} "
+  names => "(${joinWith ", " names}) "
 
 -- kind 里的候选类型参数位置（域是宇宙的族参数）。
 typeParamLevels : DtData -> List Int
@@ -419,8 +418,8 @@ else
 -- 字段/类型实参渲染（族名走 `qualTypeText`：跨单元时带 `Unit.` 前缀）。
 familyTyText : QualCtx -> String -> List String -> String
 familyTyText qc name [] = firstOf (qualTypeText qc name)
-familyTyText qc name ([a]) = a ++ " " ++ firstOf (qualTypeText qc name)
-familyTyText qc name args = "(" ++ joinWith ", " args ++ ") " ++ firstOf (qualTypeText qc name)
+familyTyText qc name ([a]) = "${a} ${firstOf (qualTypeText qc name)}"
+familyTyText qc name args = "(${joinWith ", " args}) ${firstOf (qualTypeText qc name)}"
 
 renderFamilyArgs : QualCtx -> List Int -> List (Pair String (List Int)) -> List DtData -> List Int -> List Value -> List String
 renderFamilyArgs qc levels table datas usedPats args =
@@ -466,12 +465,12 @@ renderTypeArgGlobal qc fuel levels table datas g sp = case renderTypeIntrinsic g
 -- M33 W3：内建类型构造子的 OCaml 类型渲染。参数文本已由调用方递归渲染。
 -- 名字表与 arity 的唯一真源在 Intrinsics；这里只放「名字 → OCaml 类型模板」。
 renderTypeIntrinsic : String -> List String -> Maybe String
-renderTypeIntrinsic "Array" ([a]) = Just ("(" ++ a ++ " array)")
-renderTypeIntrinsic "IORef" ([a]) = Just ("(" ++ a ++ " ref)")
-renderTypeIntrinsic "MArray" ([a]) = Just ("(" ++ a ++ " array)")
+renderTypeIntrinsic "Array" ([a]) = Just "(${a} array)"
+renderTypeIntrinsic "IORef" ([a]) = Just "(${a} ref)"
+renderTypeIntrinsic "MArray" ([a]) = Just "(${a} array)"
 renderTypeIntrinsic "Buffer" [] = Just "Buffer.t"
 -- IO 是内建效应类型（M37）：运行时表示是裸 thunk `int -> .a`。
-renderTypeIntrinsic "IO" ([a]) = Just ("(int -> " ++ a ++ ")")
+renderTypeIntrinsic "IO" ([a]) = Just "(int -> ${a})"
 renderTypeIntrinsic _ _ = Nothing
 
 -- 单个字段的 OCaml 类型 + 下一个不透明参数槽。
@@ -488,10 +487,7 @@ else case v of
     let
       next = applyClosure clo (VNeutral (NVar name lvl []))
     in if rigIsErased rig then renderPiTyFuel qc (fuel - 1) levels table datas (lvl + 1) next
-    else "("
-      ++ renderPiTyFuel qc (fuel - 1) levels table datas lvl dom
-      ++ ") -> "
-      ++ renderPiTyFuel qc (fuel - 1) levels table datas (lvl + 1) next
+    else "(${renderPiTyFuel qc (fuel - 1) levels table datas lvl dom}) -> ${renderPiTyFuel qc (fuel - 1) levels table datas (lvl + 1) next}"
   _ => renderTypeArg qc levels table datas v
 
 -- 单个字段的 OCaml 类型 + 下一个不透明参数槽。
@@ -564,15 +560,15 @@ maxIntList (x :: rest) = if x >= maxIntList rest then x else maxIntList rest
 
 ctorDeclText : String -> List String -> String
 ctorDeclText name [] = name
-ctorDeclText name ([t]) = name ++ " of " ++ parenOne t
-ctorDeclText name ts = name ++ " of " ++ joinWith " * " (parenList ts)
+ctorDeclText name ([t]) = "${name} of ${parenOne t}"
+ctorDeclText name ts = "${name} of ${joinWith " * " (parenList ts)}"
 
 parenList : List String -> List String
 parenList [] = []
 parenList (t :: rest) = append [parenOne t] (parenList rest)
 
 parenOne : String -> String
-parenOne t = "(" ++ t ++ ")"
+parenOne t = "(${t})"
 
 genCtorDecl : QualCtx -> List Int -> List (Pair String (List Int)) -> List DtData -> DtCtor -> Result String
 genCtorDecl qc levels table datas c =
@@ -585,7 +581,7 @@ genDataDecl qc table datas d =
   let
     levels = lookupUsed table (dtDataName d)
   in andThen (dataArityNeed qc levels table datas (dtDataCtors d))
-    (\arity => andThen (traverse (genCtorDecl qc levels table datas) (dtDataCtors d)) (\cs => Ok (typeParamDecl arity ++ typeName (dtDataName d) ++ " = " ++ ctorBodyText cs)))
+    (\arity => andThen (traverse (genCtorDecl qc levels table datas) (dtDataCtors d)) (\cs => Ok "${typeParamDecl arity}${typeName (dtDataName d)} = ${ctorBodyText cs}"))
 
 ctorBodyText : List String -> String
 ctorBodyText [] = "|"
@@ -618,7 +614,7 @@ genTypeDeclsWith : QualCtx -> List (Pair String (List Int)) -> List DtData -> Li
 genTypeDeclsWith qc table allDatas [] = Ok ""
 genTypeDeclsWith qc table allDatas subset =
   andThen (traverse (genDataDecl qc table allDatas) subset)
-    (\parts => Ok ("type " ++ joinWith "\nand " parts ++ "\n\n"))
+    (\parts => Ok "type ${joinWith "\nand " parts}\n\n")
 
 collectUsedSpine : List Int -> List (Pair String (List Int)) -> List DtData -> Int -> List Value -> List Int
 collectUsedSpine a1 a2 a3 a4 a5 = collectUsedSpineFuel 512 a1 a2 a3 a4 a5

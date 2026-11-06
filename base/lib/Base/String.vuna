@@ -40,6 +40,8 @@ import Base.Ord
 -- 本模块的算术运算符需要它的声明进入 import 闭包。
 import Base.Int
 import Base.Nat
+-- M36 跟进：模板字符串降级引用 Base.Interp.interp（split 依赖需要显式 import）。
+import Base.Interp
 
 -- `++` 的 fixity 声明（字符串拼接是内建值）。
 infixr 5 ++
@@ -82,7 +84,7 @@ lines s = split "\n" s
 
 unlines : List String -> String
 unlines [] = ""
-unlines xs = strConcatMany (map (\x => x ++ "\n") xs)
+unlines xs = strConcatMany (map (\x => "${x}\n") xs)
 
 trimLeft : String -> String
 trimLeft s = strPack (_dropSpace (strUnpack s))

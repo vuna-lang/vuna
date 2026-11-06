@@ -28,17 +28,17 @@ debugOn = memName "--debug-perf" args || runIO (prim_getenv "VUNA_DEBUG_PERF") =
 note : String -> Int
 note msg = if debugOn then
   let
-    _ = runIO (prim_print ("DEBUG " ++ msg ++ "\n"))
+    _ = runIO (prim_print "DEBUG ${msg}\n")
   in 0
 else 0
 
 noteInt : String -> Int -> Int
-noteInt label n = note (label ++ "=" ++ strFromInt n)
+noteInt label n = note "${label}=${n}"
 
 stampNow : String -> Int
 stampNow label =
   let
-    _ = runIO (prim_print ("PERF " ++ label ++ " " ++ strFromInt (runIO timeUs) ++ "\n"))
+    _ = runIO (prim_print "PERF ${label} ${runIO timeUs}\n")
   in 0
 
 stamp : String -> Int

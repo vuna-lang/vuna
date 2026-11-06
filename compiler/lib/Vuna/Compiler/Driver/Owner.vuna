@@ -96,7 +96,7 @@ splitTraitDefOwnerOf owner (DTrait tname params methods sp) =
 splitTraitDefOwnerOf owner _ = []
 
 splitTraitDataOwnerOf : String -> Decl -> List (Pair String String)
-splitTraitDataOwnerOf owner (DTrait tname params methods sp) = [Pair ("Dict_" ++ tname) owner]
+splitTraitDataOwnerOf owner (DTrait tname params methods sp) = [Pair "Dict_${tname}" owner]
 splitTraitDataOwnerOf owner _ = []
 
 splitInstanceOwnersGo : String -> List Decl -> List (Pair String String)
@@ -154,22 +154,21 @@ knownModuleOrErr knownModules what name =
   let
     prefix = modulePrefixOfName name
   in if memName prefix knownModules then Ok prefix
-  else Err
-    ("DT split: `" ++ what ++ "` " ++ name ++ " has module prefix `" ++ prefix ++ "` but no such module")
+  else Err "DT split: `${what}` ${name} has module prefix `${prefix}` but no such module"
 
 splitDataOwnerOf : SplitMeta -> DtData -> Result String
 splitDataOwnerOf meta d = case Base.HashMap.lookup (dtDataName d) meta.smDataOwnerT of
   Just o => Ok o
   Nothing =>
     if containsDot (dtDataName d) then knownModuleOrErr meta.smKnownModules "data" (dtDataName d)
-    else Err ("DT split: cannot determine module for data `" ++ dtDataName d ++ "`")
+    else Err "DT split: cannot determine module for data `${dtDataName d}`"
 
 splitDefOwnerOf : SplitMeta -> String -> Result String
 splitDefOwnerOf meta name = case Base.HashMap.lookup name meta.smDefOwnerT of
   Just o => Ok o
   Nothing =>
     if containsDot name then knownModuleOrErr meta.smKnownModules "definition" name
-    else Err ("DT split: cannot determine module for definition `" ++ name ++ "`")
+    else Err "DT split: cannot determine module for definition `${name}`"
 
 nameOwnerPairsOfDefs : SplitMeta -> List DtDef -> Result (List (Pair String String))
 nameOwnerPairsOfDefs meta [] = Ok []

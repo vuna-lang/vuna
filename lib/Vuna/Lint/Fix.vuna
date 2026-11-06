@@ -54,7 +54,7 @@ applyFixes source findings =
       let
         newSource = joinLines newLines
       in case parseSource "<lint>" newSource of
-        Err e => Err ("parse failed after fix: " ++ e)
+        Err e => Err "parse failed after fix: ${e}"
         Ok ignored => Ok (Pair count newSource)
 
 -- `programFixities` 与首轮 lint 用的是同一份程序级 fixity（--fix 只做格式/结构改写，

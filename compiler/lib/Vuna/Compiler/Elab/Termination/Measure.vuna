@@ -119,7 +119,7 @@ dedup (x :: rest) = if memName x rest then dedup rest else x :: dedup rest
 joinComma : List String -> String
 joinComma [] = ""
 joinComma ([x]) = x
-joinComma (x :: rest) = x ++ ", " ++ joinComma rest
+joinComma (x :: rest) = "${x}, ${joinComma rest}"
 
 -- 正数事实表：函数名 + 形参下标。
 posHas : String -> Int -> List (Pair String Int) -> Bool

@@ -124,12 +124,7 @@ ctorFieldSortsBinder globals ctx ec pos arity famLevel cname csp name dom cod = 
       let
         field = pos - arity
         msg =
-          "field #"
-            ++ strFromInt field
-            ++ ": its type sorts into Type "
-            ++ strFromInt (levelToInt sort)
-            ++ ", above the family level Type "
-            ++ strFromInt (levelToInt famLevel)
+          "field #${field}: its type sorts into Type ${levelToInt sort}, above the family level Type ${levelToInt famLevel}"
       in tcErr2 csp (CtorError cname msg) cname msg
 )
 
@@ -191,7 +186,7 @@ elabDataBodies decls heads globals ec acc = case decls of
   ds :: rest => case ds of
     Pair d dsp => case d of
       DData dname writtenParams kindExpr ctors derivings lin dsp2 => case lookupDataHead dname heads of
-        Nothing => errAt dsp2 ("DT: internal: missing data head for " ++ dname)
+        Nothing => errAt dsp2 "DT: internal: missing data head for ${dname}"
         Just (Pair fullKind arity) =>
           let
             tele = splitKind fullKind

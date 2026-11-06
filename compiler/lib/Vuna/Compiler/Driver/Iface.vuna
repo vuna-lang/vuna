@@ -206,7 +206,7 @@ sortByKey : (a -> Int) -> List a -> List a
 sortByKey key xs = map secondOf (sortPairs (map (\x => Pair (key x) x) xs))
 
 nameKey : String -> Int
-nameKey n = hashTextStrong ("name:" ++ n)
+nameKey n = hashTextStrong "name:${n}"
 
 -- C32 方向：接口哈希里的项要**规范化**。增量路径与全量路径的擦除位残 meta 编号不同
 -- （增量从干净模块 meta 之上开始编号），直接 Marshal 会让同一模块的哈希随路径漂移；
@@ -299,15 +299,14 @@ hashGlobals : List (Pair String Term) -> Int
 hashGlobals gs = hashTextStrong (prim_marshal (sortByKey (\p => nameKey (firstOf p)) gs))
 
 exportKeyOf : ExportEntry -> String
-exportKeyOf e = e.public ++ "|" ++ e.kind ++ "|" ++ e.target
+exportKeyOf e = "${e.public}|${e.kind}|${e.target}"
 
 hashExports : List ExportEntry -> Int
 hashExports es = hashTextStrong (prim_marshal (sortByKey (\e => nameKey (exportKeyOf e)) es))
 
 -- fixity 带 span：只哈希语义字段（不因换行/路径变化失效）。
 fixityText : FixityDecl -> Int
-fixityText f =
-  hashTextStrong (f.fixityOp ++ "|" ++ strFromInt f.fixityLevel ++ "|" ++ strFromInt f.fixityAssoc)
+fixityText f = hashTextStrong "${f.fixityOp}|${f.fixityLevel}|${f.fixityAssoc}"
 
 hashFixities : List FixityDecl -> Int
 hashFixities fs = foldl (\acc, f => combineHash acc (fixityText f)) 0 fs
@@ -318,7 +317,7 @@ hashFixities fs = foldl (\acc, f => combineHash acc (fixityText f)) 0 fs
 recordHash : RecordInfo -> Int
 recordHash (RecordInfo rname params fields derivings ctor) =
   hashTextStrong
-    (rname ++ "|" ++ joinStrings params ++ "|" ++ joinStrings (map firstOf fields) ++ "|" ++ joinStrings derivings ++ "|" ++ ctor)
+    "${rname}|${joinStrings params}|${joinStrings (map firstOf fields)}|${joinStrings derivings}|${ctor}"
 
 hashRecords : List Decl -> Int
 hashRecords decls = case recordsOfDecls (\n => n) decls of
@@ -327,7 +326,7 @@ hashRecords decls = case recordsOfDecls (\n => n) decls of
 joinStrings : List String -> String
 joinStrings [] = ""
 joinStrings ([x]) = x
-joinStrings (x :: rest) = x ++ "," ++ joinStrings rest
+joinStrings (x :: rest) = "${x},${joinStrings rest}"
 
 -- 模块图数据（import 名 / alias / 限定标志；span 不参与）。
 importAliasText : Import -> String
@@ -339,7 +338,7 @@ importQualifiedText : Import -> String
 importQualifiedText i = if i.importIsQualified then "q" else "u"
 
 importNameText : Import -> String
-importNameText i = i.importName ++ "|" ++ importAliasText i ++ "|" ++ importQualifiedText i
+importNameText i = "${i.importName}|${importAliasText i}|${importQualifiedText i}"
 
 hashImports : List Import -> Int
 hashImports is = foldl (\acc, i => combineHash acc (hashTextStrong (importNameText i))) 0 is
@@ -347,7 +346,7 @@ hashImports is = foldl (\acc, i => combineHash acc (hashTextStrong (importNameTe
 hashOfParts : String -> String -> List Import -> List Import -> List FixityDecl -> List Decl -> CachedProgram -> Int
 hashOfParts name pkg imports implicitImports fixities decls cp =
   let
-    h0 = hashTextStrong (name ++ "|" ++ pkg)
+    h0 = hashTextStrong "${name}|${pkg}"
     h1 = combineHash h0 (hashImports imports)
     h2 = combineHash h1 (hashImports implicitImports)
     h3 = combineHash h2 (hashFixities fixities)
@@ -547,9 +546,9 @@ else if Base.HashMap.member name inherited then ""
 else case ownerOfAny oi name of
   Just o =>
     if o == entryOwner then ""
-    else if Base.HashMap.member o ourNames then if Base.HashMap.member name merged then "" else "missing-from-iface " ++ name ++ " -> " ++ o
+    else if Base.HashMap.member o ourNames then if Base.HashMap.member name merged then "" else "missing-from-iface ${name} -> ${o}"
     else ""
-  Nothing => "unowned " ++ name
+  Nothing => "unowned ${name}"
 
 coverageIssueGo : OwnerIndex -> HashMap Bool -> HashMap Bool -> HashMap Bool -> HashMap Bool -> List String -> String
 coverageIssueGo oi ourNames inherited merged prelude [] = ""
@@ -599,7 +598,7 @@ firstCoverageIssue oi ourNames inherited ifaces prog =
 -- 增量（S4）需要时再补。
 coverageResult : OwnerIndex -> List String -> List String -> List ModuleIface -> DtProgram -> Result (List ModuleIface)
 coverageResult oi ourNames inherited ifaces prog = case firstCoverageIssue oi ourNames inherited ifaces prog of
-  Just issue => Err ("iface: " ++ issue)
+  Just issue => Err "iface: ${issue}"
   Nothing => Ok ifaces
 
 ifaceOfPackage : String -> List (Pair String SourceInfo) -> List (Pair String Int) -> List String -> List ModuleIface -> List Module -> List Decl -> DtProgram -> Result (List ModuleIface)
@@ -661,7 +660,7 @@ ifaceOfModule pkg si knownDeps inherited clean modules entryDecls prog name =
     parts = progPartsOf oi prog
     ourNames = map moduleNameOf ourModules
   in case findNamedModule ourModules name of
-    Nothing => Err ("iface: module " ++ name ++ " is not part of the checked package")
+    Nothing => Err "iface: module ${name} is not part of the checked package"
     Just m =>
       let
         mi0 = mkIfaceBase pkg parts prog [Pair name si] [] m
@@ -669,7 +668,7 @@ ifaceOfModule pkg si knownDeps inherited clean modules entryDecls prog name =
           append knownDeps (map (\x => Pair (miNameOf x) (miIfaceHashOf x)) (append clean [mi0]))
         mi = finishIface tbl [] m mi0
       in if moduleCoverageOk oi inherited name prog mi then Ok mi
-      else Err ("iface: module " ++ name ++ " has uncovered artifacts")
+      else Err "iface: module ${name} has uncovered artifacts"
 
 -- 包接口自检：schema/编译器指纹由读侧校验；这里只检查模块集合非空 + 摘要闭合。
 packageIfaceValid : PackageIface -> Bool
@@ -698,7 +697,7 @@ manifestFileName : String
 manifestFileName = "manifest"
 
 ifaceFileNameOf : String -> String
-ifaceFileNameOf name = name ++ ".iface"
+ifaceFileNameOf name = "${name}.iface"
 
 record ManifestEntry where
   meName : String
@@ -749,10 +748,10 @@ pmModulesOf : PackageManifest -> List ManifestEntry
 pmModulesOf (PackageManifest s c p ms) = ms
 
 manifestPathOf : String -> String
-manifestPathOf dir = dir ++ "/" ++ manifestFileName
+manifestPathOf dir = "${dir}/${manifestFileName}"
 
 modulePathOf : String -> String -> String
-modulePathOf dir file = dir ++ "/" ++ file
+modulePathOf dir file = "${dir}/${file}"
 
 -- 文件自描述头（C32 方向）：`<magic>|<schema>|<compiler>|` + Marshal 载荷。
 -- 读侧先校验头再 unmarshal：错版本/错编译器/损坏文件一律 `Nothing`（回退全量），
@@ -761,7 +760,7 @@ ifaceFileMagic : String
 ifaceFileMagic = "vuna-iface-file 1"
 
 ifaceFilePrefix : String -> String
-ifaceFilePrefix compiler = ifaceFileMagic ++ "|" ++ ifaceSchema ++ "|" ++ compiler ++ "|\n"
+ifaceFilePrefix compiler = "${ifaceFileMagic}|${ifaceSchema}|${compiler}|\n"
 
 encodeIfaceFile : String -> String -> String
 encodeIfaceFile compiler payload = ifaceFilePrefix compiler ++ payload
@@ -775,7 +774,7 @@ breakAtNewline (c :: rest) acc =
 decodeIfaceFile : String -> String -> Maybe String
 decodeIfaceFile compiler raw = case breakAtNewline (strUnpack raw) [] of
   Just p =>
-    if firstOf p == ifaceFileMagic ++ "|" ++ ifaceSchema ++ "|" ++ compiler ++ "|" then Just (secondOf p)
+    if firstOf p == "${ifaceFileMagic}|${ifaceSchema}|${compiler}|" then Just (secondOf p)
     else Nothing
   Nothing => Nothing
 

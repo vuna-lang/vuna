@@ -69,7 +69,7 @@ limitOf parsed = case flagValue parsed "limit" of
   Nothing => Ok 20
   Just text => case parseInt text of
     Just n => if n > 0 then Ok n else Err "--limit must be a positive integer"
-    Nothing => Err ("--limit is not an integer: " ++ text)
+    Nothing => Err "--limit is not an integer: ${text}"
 
 parseInt : String -> Maybe Int
 parseInt s = parseIntChars (strUnpack s) 0
@@ -89,11 +89,11 @@ takeHits n (h :: rest) = if n <= 0 then [] else h :: takeHits (n - 1) rest
 finish : Parsed -> SearchMode -> String -> List SearchHit -> Int
 finish parsed mode query hits = if length hits == 0 then
   let
-    _ = runIO (prim_print ("no results for `" ++ query ++ "`\n"))
+    _ = runIO (prim_print "no results for `${query}`\n")
   in 1
 else if flagSet parsed "json" then
   let
-    _ = runIO (prim_print (renderJson (hitsJson mode query hits) ++ "\n"))
+    _ = runIO (prim_print "${renderJson (hitsJson mode query hits)}\n")
   in 0
 else printHits hits
 
@@ -101,19 +101,12 @@ printHits : List SearchHit -> Int
 printHits [] = 0
 printHits (h :: rest) =
   let
-    _ = runIO (prim_print (hitText h ++ "\n"))
+    _ = runIO (prim_print "${hitText h}\n")
   in printHits rest
 
 hitText : SearchHit -> String
 hitText h =
-  hitModule h
-    ++ "."
-    ++ hitName h
-    ++ (if hitSignature h == "" then "" else " : " ++ hitSignature h)
-    ++ "  ["
-    ++ hitMatch h
-    ++ "]"
-    ++ (if firstDocLine (hitDoc h) == "" then "" else "\n    " ++ firstDocLine (hitDoc h))
+  "${hitModule h}.${hitName h}${if hitSignature h == "" then "" else " : ${hitSignature h}"}  [${hitMatch h}]${if firstDocLine (hitDoc h) == "" then "" else "\n    ${firstDocLine (hitDoc h)}"}"
 
 firstDocLine : String -> String
 firstDocLine doc = case lines doc of
@@ -138,5 +131,5 @@ hitJson h =
 toolError : String -> Int
 toolError e =
   let
-    _ = runIO (prim_print ("error: " ++ e ++ "\n"))
+    _ = runIO (prim_print "error: ${e}\n")
   in 2

@@ -155,7 +155,7 @@ parseFlag specs raw rest flags values items =
 -- 工具命令侧已删的 flag（编译器 flag 的真源仍是 CompilerCli.removedFlagHint；
 -- 只放「只属于工具命令」的已删 flag）。
 dashFlag : String -> String
-dashFlag name = "-" ++ "-" ++ name
+dashFlag name = "--${name}"
 
 toolRemovedFlagHint : String -> Maybe String
 toolRemovedFlagHint flag =
@@ -170,10 +170,10 @@ removedHintFor flag = case toolRemovedFlagHint flag of
 -- 渲染参数错误；`cmd` 是完整命令名（如 "vuna fmt"），只用在不涉及已删 flag 的文案里。
 argErrText : String -> ArgErr -> String
 argErrText cmd (UnknownFlag flag) = case removedHintFor flag of
-  Just hint => flag ++ " has been removed; " ++ hint
-  Nothing => "unknown flag for `" ++ cmd ++ "`: " ++ flag
-argErrText cmd (DuplicateFlag flag) = "duplicate flag: " ++ flag
-argErrText cmd (MissingValue flag) = "flag requires a value: " ++ flag
+  Just hint => "${flag} has been removed; ${hint}"
+  Nothing => "unknown flag for `${cmd}`: ${flag}"
+argErrText cmd (DuplicateFlag flag) = "duplicate flag: ${flag}"
+argErrText cmd (MissingValue flag) = "flag requires a value: ${flag}"
 
 -- ---------------------------------------------------------------
 -- 读盘守卫（禁止在不存在路径上调 prim_isDirectory）
@@ -181,19 +181,19 @@ argErrText cmd (MissingValue flag) = "flag requires a value: " ++ flag
 -- 读一个文本文件：先判存在、再判目录，最后才读。
 readText : String -> Result String
 readText path =
-  if runIO (prim_fileExists path) then if runIO (prim_isDirectory path) then Err ("is a directory: " ++ path)
+  if runIO (prim_fileExists path) then if runIO (prim_isDirectory path) then Err "is a directory: ${path}"
   else Ok (runIO (prim_readFile path))
-  else Err ("no such file: " ++ path)
+  else Err "no such file: ${path}"
 
 -- 要求路径存在（文件或目录均可）。
 requireExists : String -> Result Int
-requireExists path = if runIO (prim_fileExists path) then Ok 0 else Err ("no such file: " ++ path)
+requireExists path = if runIO (prim_fileExists path) then Ok 0 else Err "no such file: ${path}"
 
 -- 要求路径存在且是目录。
 requireDirectory : String -> Result Int
 requireDirectory path =
-  if runIO (prim_fileExists path) then if runIO (prim_isDirectory path) then Ok 0 else Err ("not a directory: " ++ path)
-  else Err ("no such directory: " ++ path)
+  if runIO (prim_fileExists path) then if runIO (prim_isDirectory path) then Ok 0 else Err "not a directory: ${path}"
+  else Err "no such directory: ${path}"
 
 -- ---------------------------------------------------------------
 -- 目录创建（prim_makeDir 只建一层）
@@ -221,7 +221,7 @@ joinSlashParts parts = joinSlashPartsGo (reverse parts)
 joinSlashPartsGo : List String -> String
 joinSlashPartsGo [] = ""
 joinSlashPartsGo ([part]) = part
-joinSlashPartsGo (part :: rest) = part ++ "/" ++ joinSlashPartsGo rest
+joinSlashPartsGo (part :: rest) = "${part}/${joinSlashPartsGo rest}"
 
 -- 递归创建所有缺失的父目录；已存在返回 0。`prim_makeDir` 对已存在路径返回 0。
 -- 递归不沿输入结构下降（parentOf 返回 String），用显式 fuel（字节长度上界）守卫。

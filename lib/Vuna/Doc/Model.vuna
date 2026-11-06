@@ -112,11 +112,11 @@ buildModule env pkg path = case readText path of
       looked = fixitiesForFile env path source
       env2 = firstOf looked
     in case secondOf looked of
-      Err e => Pair env2 (Err (path ++ ": cannot load package fixity context: " ++ e))
+      Err e => Pair env2 (Err "${path}: cannot load package fixity context: ${e}")
       Ok programFixities => case parseSource path source of
-        Err e => Pair env2 (Err (path ++ ": " ++ e))
+        Err e => Pair env2 (Err "${path}: ${e}")
         Ok (SourceFile hdr imports fx decls0) => case reorderProgram (tableOfKeepOps (append programFixities fx)) decls0 of
-          Err e => Pair env2 (Err (path ++ ": " ++ e))
+          Err e => Pair env2 (Err "${path}: ${e}")
           Ok decls =>
             let
               comments = case lexComments source of
@@ -143,11 +143,11 @@ itemsOfDecls table decls = dedupeItems (concatMap (itemsOfDecl table decls) decl
 itemsOfDecl : DocTable -> List Decl -> Decl -> List DocItem
 itemsOfDecl table decls (DSig name ctx ty sp) =
   if isPrivate name then []
-  else [ DocItem name "fun" (name ++ " : " ++ renderTypeInCtx ctx ty) (docForDecl table name) (spanStartLine sp) []
+  else [ DocItem name "fun" "${name} : ${renderTypeInCtx ctx ty}" (docForDecl table name) (spanStartLine sp) []
   ]
 itemsOfDecl table decls (DFun name pats body sp) =
   if isPrivate name || hasSig name decls then []
-  else [ DocItem name "fun" (name ++ " : " ++ renderType (EVar name sp)) (docForDecl table name) (spanStartLine sp) []
+  else [ DocItem name "fun" "${name} : ${renderType (EVar name sp)}" (docForDecl table name) (spanStartLine sp) []
   ]
 itemsOfDecl table decls (DData name params kind ctors derivings lin sp) =
   if isPrivate name then []
@@ -163,11 +163,11 @@ itemsOfDecl table decls (DTrait name params methods sp) =
   ]
 itemsOfDecl table decls (DAxiom name ty sp) =
   if isPrivate name then []
-  else [ DocItem name "axiom" ("axiom " ++ name ++ " : " ++ renderType ty) (docForDecl table name) (spanStartLine sp) []
+  else [ DocItem name "axiom" "axiom ${name} : ${renderType ty}" (docForDecl table name) (spanStartLine sp) []
   ]
 itemsOfDecl table decls (DExtern name cName ty sp) =
   if isPrivate name then []
-  else [ DocItem name "extern" ("extern " ++ name ++ " : " ++ renderType ty) (docForDecl table name) (spanStartLine sp) []
+  else [ DocItem name "extern" "extern ${name} : ${renderType ty}" (docForDecl table name) (spanStartLine sp) []
   ]
 itemsOfDecl table decls (DInstance ctxE head methods sp) = []
 
@@ -198,34 +198,34 @@ isPrivate name = case strUnpack name of
 -- ---------------------------------------------------------------
 paramSuffix : List String -> String
 paramSuffix [] = ""
-paramSuffix params = " " ++ join " " params
+paramSuffix params = " ${join " " params}"
 
 derivingLines : List String -> List String
 derivingLines [] = []
-derivingLines derivings = ["deriving (" ++ join ", " derivings ++ ")"]
+derivingLines derivings = ["deriving (${join ", " derivings})"]
 
 dataSignature : String -> List String -> Expr -> List Ctor -> List String -> String
 dataSignature name params kind ctors derivings =
   join "\n"
-    (("data " ++ name ++ paramSuffix params ++ " : " ++ renderType kind ++ " where") :: append (map ctorLine ctors) (derivingLines derivings))
+    ("data ${name}${paramSuffix params} : ${renderType kind} where" :: append (map ctorLine ctors) (derivingLines derivings))
 
 recordSignature : String -> List String -> List Field -> List String -> String
 recordSignature name params fields derivings =
   join "\n"
-    (("record " ++ name ++ paramSuffix params ++ " where") :: append (map fieldLine fields) (derivingLines derivings))
+    ("record ${name}${paramSuffix params} where" :: append (map fieldLine fields) (derivingLines derivings))
 
 traitSignature : String -> List String -> List TraitMethod -> String
 traitSignature name params methods =
-  join "\n" (("trait " ++ name ++ paramSuffix params ++ " where") :: map methodLine methods)
+  join "\n" ("trait ${name}${paramSuffix params} where" :: map methodLine methods)
 
 ctorLine : Ctor -> String
-ctorLine (Ctor name ty arity sp) = "  " ++ name ++ " : " ++ renderType ty
+ctorLine (Ctor name ty arity sp) = "  ${name} : ${renderType ty}"
 
 fieldLine : Field -> String
-fieldLine (Field name ty sp) = "  " ++ name ++ " : " ++ renderType ty
+fieldLine (Field name ty sp) = "  ${name} : ${renderType ty}"
 
 methodLine : TraitMethod -> String
-methodLine m = "  " ++ traitMethodName m ++ " : " ++ renderType m.traitMethodType
+methodLine m = "  ${traitMethodName m} : ${renderType m.traitMethodType}"
 
 -- ---------------------------------------------------------------
 -- 成员条目
@@ -233,17 +233,17 @@ methodLine m = "  " ++ traitMethodName m ++ " : " ++ renderType m.traitMethodTyp
 ctorItems : DocTable -> String -> List Ctor -> List DocItem
 ctorItems table parent ctors =
   map
-    (\c => DocItem (ctorName c) "ctor" (ctorName c ++ " : " ++ renderType (ctorType c)) (docForMember table parent (ctorName c)) (spanStartLine (ctorSpan c)) [])
+    (\c => DocItem (ctorName c) "ctor" "${ctorName c} : ${renderType (ctorType c)}" (docForMember table parent (ctorName c)) (spanStartLine (ctorSpan c)) [])
     ctors
 
 fieldItems : DocTable -> String -> List Field -> List DocItem
 fieldItems table parent fields =
   map
-    (\f => DocItem (fieldName f) "field" (fieldName f ++ " : " ++ renderType (fieldType f)) (docForMember table parent (fieldName f)) (spanStartLine (fieldSpan f)) [])
+    (\f => DocItem (fieldName f) "field" "${fieldName f} : ${renderType (fieldType f)}" (docForMember table parent (fieldName f)) (spanStartLine (fieldSpan f)) [])
     fields
 
 methodItems : DocTable -> String -> List TraitMethod -> List DocItem
 methodItems table parent methods =
   map
-    (\m => DocItem (traitMethodName m) "method" (traitMethodName m ++ " : " ++ renderType m.traitMethodType) (docForMember table parent (traitMethodName m)) (spanStartLine (traitMethodSpan m)) [])
+    (\m => DocItem (traitMethodName m) "method" "${traitMethodName m} : ${renderType m.traitMethodType}" (docForMember table parent (traitMethodName m)) (spanStartLine (traitMethodSpan m)) [])
     methods

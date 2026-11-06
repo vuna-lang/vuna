@@ -667,49 +667,44 @@ levelEscapesClo limit (Closure env body) = levelEscapesList limit env
 
 showTerm : Term -> String
 showTerm (TVar name i) = name
-showTerm (TMeta m) = "?" ++ strFromInt m
+showTerm (TMeta m) = "?${m}"
 showTerm (TGlobal g) = g
-showTerm (TType l) = if levelToInt l == 0 then "Type" else "Type " ++ strFromInt (levelToInt l)
+showTerm (TType l) = if levelToInt l == 0 then "Type" else "Type ${levelToInt l}"
 showTerm (TPi name implicit rig dom cod) =
-  if name == "_" then showTerm dom ++ " -> " ++ showTerm cod
-  else if implicit then "{" ++ name ++ " : " ++ showTerm dom ++ "} -> " ++ showTerm cod
-  else "(" ++ name ++ " : " ++ showTerm dom ++ ") -> " ++ showTerm cod
-showTerm (TLam name rig body) = "\\" ++ name ++ " => " ++ showTerm body
-showTerm (TApp f a rig) = "(" ++ showTerm f ++ " " ++ showTerm a ++ ")"
-showTerm (TCon c args) = "(" ++ c ++ showArgTerms args ++ ")"
-showTerm (TCase scrut alts) = "case " ++ showTerm scrut ++ " of " ++ showCoreAlts alts
+  if name == "_" then "${showTerm dom} -> ${showTerm cod}"
+  else if implicit then "{${name} : ${showTerm dom}} -> ${showTerm cod}"
+  else "(${name} : ${showTerm dom}) -> ${showTerm cod}"
+showTerm (TLam name rig body) = "\\${name} => ${showTerm body}"
+showTerm (TApp f a rig) = "(${showTerm f} ${showTerm a})"
+showTerm (TCon c args) = "(${c}${showArgTerms args})"
+showTerm (TCase scrut alts) = "case ${showTerm scrut} of ${showCoreAlts alts}"
 showTerm (TInt n) = strFromInt n
 showTerm (TStr s) = showCoreString s
 showTerm (TBool b) = if b then "True" else "False"
-showTerm (TIf c th el) = "if " ++ showTerm c ++ " then " ++ showTerm th ++ " else " ++ showTerm el
+showTerm (TIf c th el) = "if ${showTerm c} then ${showTerm th} else ${showTerm el}"
 
 showArgTerms : List (Pair Term Rig) -> String
 showArgTerms [] = ""
-showArgTerms ((Pair a rig) :: rest) = " " ++ showTerm a ++ showArgTerms rest
+showArgTerms ((Pair a rig) :: rest) = " ${showTerm a}${showArgTerms rest}"
 
 showCoreAlts : List CaseAlt -> String
 showCoreAlts [] = ""
 showCoreAlts (alt :: rest) =
-  caseAltName alt
-    ++ showBinders (caseAltBinders alt)
-    ++ " => "
-    ++ showTerm (caseAltBody alt)
-    ++ " | "
-    ++ showCoreAlts rest
+  "${caseAltName alt}${showBinders (caseAltBinders alt)} => ${showTerm (caseAltBody alt)} | ${showCoreAlts rest}"
 
 showBinders : List (Pair String Rig) -> String
 showBinders [] = ""
-showBinders ((Pair n rig) :: rest) = " " ++ n ++ showBinders rest
+showBinders ((Pair n rig) :: rest) = " ${n}${showBinders rest}"
 
 showCoreString : String -> String
-showCoreString s = "\"" ++ showCoreChars (strUnpack s) ++ "\""
+showCoreString s = "\"${showCoreChars (strUnpack s)}\""
 
 showCoreChars : List Int -> String
 showCoreChars [] = ""
 showCoreChars (c :: rest) = case c of
-  34 => "\\\"" ++ showCoreChars rest
-  92 => "\\\\" ++ showCoreChars rest
-  10 => "\\n" ++ showCoreChars rest
-  9 => "\\t" ++ showCoreChars rest
-  13 => "\\r" ++ showCoreChars rest
+  34 => "\\\"${showCoreChars rest}"
+  92 => "\\\\${showCoreChars rest}"
+  10 => "\\n${showCoreChars rest}"
+  9 => "\\t${showCoreChars rest}"
+  13 => "\\r${showCoreChars rest}"
   _ => strPack [c] ++ showCoreChars rest

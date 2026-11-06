@@ -120,12 +120,12 @@ resolveQualified modules label imports name = case splitLastDot (splitOnDot name
     let
       prefix = joinDots revPrefix
     in case findImportPrefix imports prefix of
-      Nothing => Err (label ++ ": module " ++ prefix ++ " is not imported")
+      Nothing => Err "${label}: module ${prefix} is not imported"
       Just m => andThen (exportsOf modules m) (\es => case findExportValue es base of
         Just e => Ok e.target
         Nothing => case findExportCtor es base of
           Just e => Ok e.target
-          Nothing => Err (label ++ ": " ++ base ++ " is not exported by " ++ m)
+          Nothing => Err "${label}: ${base} is not exported by ${m}"
       )
 
 -- 模式里的限定名只认构造器：`M.foo`（foo 是函数）必须报错，不能按值解析成构造器。
@@ -135,24 +135,24 @@ resolveQualifiedCtor modules label imports name = case splitLastDot (splitOnDot 
     let
       prefix = joinDots revPrefix
     in case findImportPrefix imports prefix of
-      Nothing => Err (label ++ ": module " ++ prefix ++ " is not imported")
+      Nothing => Err "${label}: module ${prefix} is not imported"
       Just m => andThen (exportsOf modules m) (\es => case findExportCtor es base of
         Just e => Ok e.target
-        Nothing => Err (label ++ ": constructor " ++ base ++ " is not exported by " ++ m)
+        Nothing => Err "${label}: constructor ${base} is not exported by ${m}"
       )
 
 -- 带点表达式的解析（M10.5）：先按「最长可解析模块前缀」尝试限定名/限定值+字段链，
 -- 否则按「变量/顶层名 + 字段链」处理。`p.x`、`M.point.x`、`Vuna.Compiler.Frontend.Parser.parseSource` 都走这里。
 resolveDottedExpr : List Module -> String -> String -> Namespaces -> List Import -> List String -> String -> Span -> Result Expr
 resolveDottedExpr modules label prefix ns imports scope name sp = case splitOnDot name of
-  [] => Err (label ++ ": invalid dotted name " ++ name)
+  [] => Err "${label}: invalid dotted name ${name}"
   head :: rest => if memName head scope then Ok (foldFieldChain (EVar head sp) rest sp)
   else andThen (resolveQualifiedPath modules label imports (splitOnDot name) (length (splitOnDot name)) sp) (\q => case q of
     Just e => Ok e
     Nothing =>
       if Base.HashMap.member head ns.nsValueSet then Ok (foldFieldChain (EVar (mangle prefix head) sp) rest sp)
       else if isBuiltinName head then Ok (foldFieldChain (EVar head sp) rest sp)
-      else if startsUpperName head then Err (label ++ ": module " ++ head ++ " is not imported")
+      else if startsUpperName head then Err "${label}: module ${head} is not imported"
       else andThen (resolveGlobal modules label prefix ns imports scope head)
         (\n => Ok (foldFieldChain (EVar n sp) rest sp))
   )
@@ -177,10 +177,10 @@ else case findImportPrefix imports (joinDots (takeSegs (n - 1) segs)) of
       Just e => Ok (Just (EVar e.target sp))
       Nothing => case findExportCtor es member of
         Just e => Ok (Just (EVar e.target sp))
-        Nothing => Err (label ++ ": " ++ member ++ " is not exported by " ++ m)
+        Nothing => Err "${label}: ${member} is not exported by ${m}"
     member :: rest => case findExportValue es member of
       Just e => Ok (Just (foldFieldChain (EVar e.target sp) rest sp))
-      Nothing => Err (label ++ ": " ++ member ++ " is not exported by " ++ m)
+      Nothing => Err "${label}: ${member} is not exported by ${m}"
     [] => Ok Nothing
   )
   Nothing => resolveQualifiedPath modules label imports segs (n - 1) sp
@@ -201,7 +201,7 @@ else andThen (modulesExportingValue modules imports name) (\pairs => case pairs 
     [] =>
       if Base.HashMap.member name ns.nsTypeSet then Ok (mangle prefix name)
       else Err
-        (label ++ ": unbound variable " ++ name ++ suggest name (append ns.nsValues (append ns.nsCtors (append ns.nsTypes scope))) ++ traitImportHint name)
+        "${label}: unbound variable ${name}${suggest name (append ns.nsValues (append ns.nsCtors (append ns.nsTypes scope)))}${traitImportHint name}"
     _ => andThen (unifyEntryPairs label "name" name cpairs) (\p => Ok (secondOf p).target)
   )
   _ => andThen (unifyEntryPairs label "name" name pairs) (\p => Ok (secondOf p).target)
@@ -213,18 +213,18 @@ resolveCtor modules label prefix ns imports name = if containsDot name then reso
 else if Base.HashMap.member name ns.nsCtorSet then Ok (mangle prefix name)
 else if isIntrinsicName name then Ok name
 else andThen (modulesExportingCtor modules imports name) (\pairs => case pairs of
-  [] => Err (label ++ ": unknown constructor " ++ name ++ suggest name ns.nsCtors)
+  [] => Err "${label}: unknown constructor ${name}${suggest name ns.nsCtors}"
   _ => andThen (unifyEntryPairs label "constructor" name pairs) (\p => Ok (secondOf p).target)
 )
 
 checkBinder : String -> String -> Result String
 checkBinder label name =
-  if containsDot name then Err (label ++ ": invalid variable name " ++ name) else Ok name
+  if containsDot name then Err "${label}: invalid variable name ${name}" else Ok name
 
 checkTopName : String -> String -> Result String
 checkTopName label name =
-  if name == "_" then Err (label ++ ": invalid top-level name _ (bare _ is reserved)")
-  else if containsDot name then Err (label ++ ": invalid top-level name " ++ name) else Ok name
+  if name == "_" then Err "${label}: invalid top-level name _ (bare _ is reserved)"
+  else if containsDot name then Err "${label}: invalid top-level name ${name}" else Ok name
 
 resolveTopName : String -> String -> String -> Result String
 resolveTopName label prefix name = andThen (checkTopName label name) (\_ => Ok (mangle prefix name))
@@ -361,16 +361,14 @@ else case expr of
     else andThen (resolveGlobal modules label prefix ns imports scope name) (\n => Ok (EVar n sp))
   -- M31.2：`EInfix` / `EParen` 是 parser 的中间产物，正常路径在 Loader 重排里已消除；
   -- 走到这里说明重排漏了（internal error，不静默透传）。
-  EInfix op lhs rhs sp => Err (label ++ ": DT: internal: unreordered infix operator " ++ op)
+  EInfix op lhs rhs sp => Err "${label}: DT: internal: unreordered infix operator ${op}"
   -- M31.3：同上——反引号中缀与 section 也必须在 Loader.Fixity 重排里消除（严格执行
   -- 契约「rename 后不存在」），走到这里说明重排漏了，显式 internal error 不静默透传。
   EBacktick name lhs rhs sp =>
-    Err (label ++ ": DT: internal: unreordered backtick infix operator " ++ name)
-  ESectOp op sp => Err (label ++ ": DT: internal: unreordered operator section (" ++ op ++ ")")
-  ESectL op rhs sp =>
-    Err (label ++ ": DT: internal: unreordered left operator section (" ++ op ++ ")")
-  ESectR lhs op sp =>
-    Err (label ++ ": DT: internal: unreordered right operator section (" ++ op ++ ")")
+    Err "${label}: DT: internal: unreordered backtick infix operator ${name}"
+  ESectOp op sp => Err "${label}: DT: internal: unreordered operator section (${op})"
+  ESectL op rhs sp => Err "${label}: DT: internal: unreordered left operator section (${op})"
+  ESectR lhs op sp => Err "${label}: DT: internal: unreordered right operator section (${op})"
   EParen inner sp => resolveExpr (fuel - 1) modules label prefix ns imports scope inner
   EInt n sp => Ok (EInt n sp)
   EStr s sp => Ok (EStr s sp)
@@ -492,13 +490,13 @@ else if containsDot name then case splitLastDot (splitOnDot name) of
     let
       typePrefix = joinDots revPrefix
     in case findImportPrefix imports typePrefix of
-      Nothing => Err (label ++ ": module " ++ typePrefix ++ " is not imported")
+      Nothing => Err "${label}: module ${typePrefix} is not imported"
       Just m => andThen (exportsOf modules m) (\es => case findExportType es base of
         Just e => Ok e.target
         -- M28：类型位置的值（axiom / 类型层 def）在限定名下也可用；是否为合法类型由 Elab 判定。
         Nothing => case findExportValue es base of
           Just e => Ok e.target
-          Nothing => Err (label ++ ": type " ++ base ++ " is not exported by " ++ m)
+          Nothing => Err "${label}: type ${base} is not exported by ${m}"
       )
 else andThen (modulesExportingType modules imports name) (\pairs => case pairs of
   -- M30：类型位置也可能出现**跨模块 import 的构造子**（依赖类型索引，如 `import Base.Nat`
@@ -516,7 +514,7 @@ else andThen (modulesExportingType modules imports name) (\pairs => case pairs o
 resolveConstraintExpr : List Module -> String -> String -> Namespaces -> List Import -> Expr -> Result Expr
 resolveConstraintExpr modules label prefix ns imports cx = case constraintHeadOf cx of
   Just n => case resolveTypeName modules label prefix ns imports n of
-    Err _ => Err (label ++ ": unknown interface " ++ n)
+    Err _ => Err "${label}: unknown interface ${n}"
     Ok _ => resolveTypeExpr resolveFuelBound modules label prefix ns imports cx
   Nothing => resolveTypeExpr resolveFuelBound modules label prefix ns imports cx
 
@@ -540,7 +538,7 @@ else case ty of
   EPi name implicit qty dom cod sp =>
     andThen (resolveTypeExpr (fuel - 1) modules label prefix ns imports dom)
       (\dom2 => andThen (resolveTypeExpr (fuel - 1) modules label prefix ns imports cod) (\cod2 => Ok (EPi name implicit qty dom2 cod2 sp)))
-  _ => Err (label ++ ": invalid type expression (" ++ tyShape ty ++ ")")
+  _ => Err "${label}: invalid type expression (${tyShape ty})"
 
 resolveTypeTopName : String -> String -> String -> Result String
 resolveTypeTopName label prefix name =
@@ -597,7 +595,7 @@ resolveInstanceMethod modules label prefix ns imports (DFun name pats body sp) =
   andThen (checkTopName label name)
     (\_ => andThen (traverse (resolvePattern resolveFuelBound modules label prefix ns imports) pats) (\parts => andThen (resolveExpr resolveFuelBound modules label prefix ns imports (concatMap secondOf parts) body) (\b => Ok (DFun name (map firstOf parts) b sp))))
 resolveInstanceMethod modules label prefix ns imports _ =
-  Err (label ++ ": instance body may only contain method signatures/definitions")
+  Err "${label}: instance body may only contain method signatures/definitions"
 
 resolveProgram : List Module -> String -> String -> Namespaces -> List Import -> List Decl -> Result (List Decl)
 resolveProgram modules label prefix ns imports decls =
@@ -618,8 +616,7 @@ firstDupName (x :: rest) = if memName x rest then Just x else firstDupName rest
 checkEntryCtors : String -> List Decl -> Result Int
 checkEntryCtors label decls = case firstDupName (entryCtorNames decls) of
   Just n =>
-    Err
-      (label ++ ": duplicate constructor " ++ n ++ " (entry-file constructors share one global namespace)")
+    Err "${label}: duplicate constructor ${n} (entry-file constructors share one global namespace)"
   Nothing => Ok 0
 
 resolveEntry : List Module -> String -> List String -> List Import -> List Decl -> Result (List Decl)
@@ -641,8 +638,7 @@ resolveModules (modules@((Module name mpkg imports imps decls exports mcaps fx) 
 -- ---------------------------------------------------------------
 capabilityError : String -> String -> Result a
 capabilityError label name =
-  Err
-    (label ++ ": unknown capability \"" ++ name ++ "\" (known: " ++ join ", " capabilityNames ++ ")")
+  Err "${label}: unknown capability \"${name}\" (known: ${join ", " capabilityNames})"
 
 checkCapabilities : String -> List String -> Result Int
 checkCapabilities label [] = Ok 0
@@ -760,26 +756,26 @@ effDecls (d :: rest) = firstEffect [effDecl d, effDecls rest]
 
 -- 效果被拒的上下文描述：ad-hoc 文件（无 manifest、base-only 上下文）没有包名。
 packageLabelForEffects : String -> String
-packageLabelForEffects pkg = if pkg == "" then "ad-hoc file (no package)" else "package " ++ pkg
+packageLabelForEffects pkg = if pkg == "" then "ad-hoc file (no package)" else "package ${pkg}"
 
 checkEffectsBuiltins : String -> String -> List String -> List Decl -> Result (List Decl)
 checkEffectsBuiltins label pkg caps decls = andThen (checkCapabilities label caps) (\_ => case effDecls decls of
   Nothing => Ok decls
   Just name => if isUnsafeExecutor name then if memName "unsafe" caps then Ok decls
   else Err
-    (label ++ ": `runIO` executes IO outside main; requires capability `unsafe` in " ++ packageLabelForEffects pkg ++ " (declare [capabilities] effects = [\"unsafe\"])")
+    "${label}: `runIO` executes IO outside main; requires capability `unsafe` in ${packageLabelForEffects pkg} (declare [capabilities] effects = [\"unsafe\"])"
   else if allowsEffect caps name then Ok decls
   else case findIntrinsic name of
     Just i => case intrinsicCapability i of
       Just c =>
         Err
-          (label ++ ": effectful builtin `" ++ name ++ "` requires capability `" ++ capabilityName c ++ "` in " ++ packageLabelForEffects pkg ++ " (declare [capabilities] effects = [\"" ++ capabilityName c ++ "\"] or use Base.IO)")
+          "${label}: effectful builtin `${name}` requires capability `${capabilityName c}` in ${packageLabelForEffects pkg} (declare [capabilities] effects = [\"${capabilityName c}\"] or use Base.IO)"
       Nothing => Ok decls
     Nothing => Ok decls
 )
 
 tyShape : Expr -> String
-tyShape (EVar n _) = "var " ++ n
+tyShape (EVar n _) = "var ${n}"
 tyShape (EApp f a _) = "app"
 tyShape (EInt n _) = "int"
 tyShape (EStr s _) = "str"

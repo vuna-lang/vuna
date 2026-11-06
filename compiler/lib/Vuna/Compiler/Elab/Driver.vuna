@@ -153,7 +153,7 @@ insertSigDictsRev ty (dom :: rest) k baseIdx =
   insertSigDictsRev (insertDictBinder (sigDictName k) baseIdx dom ty) rest (k - 1) baseIdx
 
 sigDictName : Int -> String
-sigDictName k = "_ctx" ++ strFromInt k
+sigDictName k = "_ctx${k}"
 
 -- ---------------------------------------------------------------
 -- M32：显式签名约束下的字典目标消解
@@ -279,9 +279,9 @@ elabBodies (d :: rest) globals doneDefs acc ec = case d of
     Just tyTerm => if defAlreadyDone name ec then elabBodies rest globals doneDefs acc ec
     else
       let
-        _ = stampSample (strFromInt (spanStartLine sp)) ("DEF " ++ name)
+        _ = stampSample (strFromInt (spanStartLine sp)) "DEF ${name}"
       in andThen (elabFunDef globals ec (clausesOfTbl ec (d :: rest) name) (eval [] tyTerm) sp) (\p => let
-        _ = stampSample (strFromInt (spanStartLine sp)) ("FUN " ++ name)
+        _ = stampSample (strFromInt (spanStartLine sp)) "FUN ${name}"
       in case p of
         Pair bodyTerm ec1 =>
           let
@@ -395,7 +395,7 @@ checkExternDomain sp _ = tcErr1 sp (FfiTypeUnsupported "non-basic type") "non-ba
 checkExternArrayElem : Span -> Value -> Result Int
 checkExternArrayElem sp (VNeutral (NGlobal g args)) =
   if g == intTypeName || g == strTypeName || g == boolTypeName then Ok 0
-  else tcErr1 sp (FfiTypeUnsupported ("Array " ++ g)) g
+  else tcErr1 sp (FfiTypeUnsupported "Array ${g}") g
 checkExternArrayElem sp _ =
   tcErr1 sp (FfiTypeUnsupported "Array element is not a basic type") "array-element"
 
@@ -508,7 +508,7 @@ in andThen (elabDatas (collectDataDecls decls []) startGlobals startEc) (\pd => 
                       defs = rezonkDefs ec3 defs0
                       _ =
                         stamp
-                          ("bodies-done g=" ++ strFromInt (length globals) ++ " sols=" ++ strFromInt (length (ecSols ec3a)) ++ " defs=" ++ strFromInt (length (ecDefs ec3a)) ++ " metas=" ++ strFromInt (ecNext ec3a) ++ " dgoals=" ++ strFromInt (length (ecDictGoals ec3a)) ++ " datas=" ++ strFromInt (length (ecDatas ec3a)) ++ " insts=" ++ strFromInt (length (ecInsts ec3a)) ++ " classes=" ++ strFromInt (length (ecClasses ec3a)))
+                          "bodies-done g=${length globals} sols=${length (ecSols ec3a)} defs=${length (ecDefs ec3a)} metas=${ecNext ec3a} dgoals=${length (ecDictGoals ec3a)} datas=${length (ecDatas ec3a)} insts=${length (ecInsts ec3a)} classes=${length (ecClasses ec3a)}"
                     in andThen (elabInstanceBodies decls classesAll datas1 globals ec3) (\pi => case pi of
                       Pair instDefs0 ec4a =>
                         let
@@ -578,7 +578,7 @@ unsolvedMessage : Ec -> Int -> String
 unsolvedMessage ec m = case findGoal m (ecGoals ec) of
   Just g =>
     let
-      detail = showSpanLoc g.dtGoalSpan ++ " with goal " ++ showValueAt (ctxDepthOf g) g.dtGoalType
+      detail = "${showSpanLoc g.dtGoalSpan} with goal ${showValueAt (ctxDepthOf g) g.dtGoalType}"
     in tcMsg (UnsolvedHole detail) (VCons detail VNil)
   Nothing =>
     let
@@ -590,13 +590,13 @@ unsolvedMessage ec m = case findGoal m (ecGoals ec) of
 -- 在一个上万行的程序里无从定位）。
 metaOwnerHint : Ec -> Int -> String
 metaOwnerHint ec m = case findDefWithMeta (ecDefs ec) m of
-  Just name => " (in `" ++ name ++ "`)"
+  Just name => " (in `${name}`)"
   Nothing => ""
 
 findDefWithMeta : List (Pair String Term) -> Int -> Maybe String
 findDefWithMeta [] m = Nothing
 findDefWithMeta ((Pair name body) :: rest) m =
-  if termHasMeta m body then Just (name ++ " body=" ++ showTerm body) else findDefWithMeta rest m
+  if termHasMeta m body then Just "${name} body=${showTerm body}" else findDefWithMeta rest m
 
 termHasMeta : Int -> Term -> Bool
 termHasMeta m (TMeta k) = k == m

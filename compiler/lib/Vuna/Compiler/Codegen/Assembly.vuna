@@ -143,7 +143,7 @@ in case p of
 -- open 链，因此文件顺序不再决定可见性，只看 `unitPartsDeps`）。check 路径（`noQual`，
 -- qcUnit="") 不写 open。
 openHeader : QualCtx -> String
-openHeader qc = if qc.qcUnit == "" then "" else "open " ++ runtimeUnit ++ "\n"
+openHeader qc = if qc.qcUnit == "" then "" else "open ${runtimeUnit}\n"
 
 concatGroups : List (List DtDef) -> List DtDef
 concatGroups [] = []

@@ -42,61 +42,31 @@ import qualified Vuna.Lint
 import Base.IO
 
 toolUsageLines : String -> String
-toolUsageLines prog =
-  "  "
-    ++ prog
-    ++ " lint [--fix] <file.vuna>...\n"
-    ++ "  "
-    ++ prog
-    ++ " interp <file.vuna>                   精化后核心求值（纯；不执行效果）\n"
-    ++ "  "
-    ++ prog
-    ++ " test [--list] [--filter PAT]... [--verbose] [--fail-fast] [DIR]\n      运行包内 test/*.vuna（纯 String/Int/Bool 走核心求值；main : IO ... 走 compile+运行）\n"
-    ++ "  "
-    ++ prog
-    ++ " run [--no-build] [--package NAME] [DIR] [-- ARG]...\n      构建并运行包的可执行入口（`--` 之后的参数原样透传）\n"
-    ++ "  "
-    ++ prog
-    ++ " fmt [--check] [PATH]...              格式化（PATH 可为文件或目录；省略 = workspace 内各包的 lib/app/test）\n"
-    ++ "  "
-    ++ prog
-    ++ " repl                                 交互式 REPL\n"
-    ++ "  "
-    ++ prog
-    ++ " doc [--check] [--package NAME] [DIR [OUT]]\n      生成单文件交互 HTML API 文档（默认 OUT=DIR/docs/api.html）\n"
-    ++ "  "
-    ++ prog
-    ++ " search [--type|--name|--doc] [--module PFX] [--limit N] [--json] <query...>\n      名称 / docstring / 类型检索（类型检索为 parse 级）\n"
-    ++ "  "
-    ++ prog
-    ++ " gen-errors [ROOT]  从枚举真源生成错误码文档（ROOT 必须是已存在目录；输出 ROOT/docs/.generated/errors.md）\n"
-    ++ "  "
-    ++ prog
-    ++ " map [--modules]                      模块总览（索引缓存在 .local/index/，自动新鲜度判定）\n"
-    ++ "  "
-    ++ prog
-    ++ " map --find <Module.name>             定位符号：定义位置 + 引用者 + 建议测试\n"
-    ++ "  "
-    ++ prog
-    ++ " map --impact <Module.name>           改动影响面：受影响模块 + 测试标签\n"
-    ++ "  "
-    ++ prog
-    ++ " api <Module.name>                    某模块的签名面（含注释与行号）\n"
-    ++ "  "
-    ++ prog
-    ++ " goal <file.vuna>                     列出 DT 洞的目标与上下文（M17）\n"
-    ++ "  "
-    ++ prog
-    ++ " lsp                                  启动 LSP server（JSON-RPC over stdio）\n"
-    ++ "  "
-    ++ prog
-    ++ " version, --version                   显示版本\n"
-    ++ "  "
-    ++ prog
-    ++ " help, -h                             显示本帮助\n"
+toolUsageLines prog = """  ${prog} lint [--fix] <file.vuna>...
+  ${prog} interp <file.vuna>                   精化后核心求值（纯；不执行效果）
+  ${prog} test [--list] [--filter PAT]... [--verbose] [--fail-fast] [DIR]
+      运行包内 test/*.vuna（纯 String/Int/Bool 走核心求值；main : IO ... 走 compile+运行）
+  ${prog} run [--no-build] [--package NAME] [DIR] [-- ARG]...
+      构建并运行包的可执行入口（`--` 之后的参数原样透传）
+  ${prog} fmt [--check] [PATH]...              格式化（PATH 可为文件或目录；省略 = workspace 内各包的 lib/app/test）
+  ${prog} repl                                 交互式 REPL
+  ${prog} doc [--check] [--package NAME] [DIR [OUT]]
+      生成单文件交互 HTML API 文档（默认 OUT=DIR/docs/api.html）
+  ${prog} search [--type|--name|--doc] [--module PFX] [--limit N] [--json] <query...>
+      名称 / docstring / 类型检索（类型检索为 parse 级）
+  ${prog} gen-errors [ROOT]  从枚举真源生成错误码文档（ROOT 必须是已存在目录；输出 ROOT/docs/.generated/errors.md）
+  ${prog} map [--modules]                      模块总览（索引缓存在 .local/index/，自动新鲜度判定）
+  ${prog} map --find <Module.name>             定位符号：定义位置 + 引用者 + 建议测试
+  ${prog} map --impact <Module.name>           改动影响面：受影响模块 + 测试标签
+  ${prog} api <Module.name>                    某模块的签名面（含注释与行号）
+  ${prog} goal <file.vuna>                     列出 DT 洞的目标与上下文（M17）
+  ${prog} lsp                                  启动 LSP server（JSON-RPC over stdio）
+  ${prog} version, --version                   显示版本
+  ${prog} help, -h                             显示本帮助
+"""
 
 usageFor : String -> String
-usageFor prog = "usage:\n" ++ compilerUsageLines prog ++ toolUsageLines prog
+usageFor prog = "usage:\n${compilerUsageLines prog}${toolUsageLines prog}"
 
 -- `--debug-perf` 是全局调试开关（见 Vuna.Compiler.Debug）：不参与子命令分发。
 stripDebugFlags : List String -> List String
@@ -147,7 +117,7 @@ runCli1 args = case args of
 printVersion : Int -> Int
 printVersion _ =
   let
-    _ = runIO (prim_print ("vuna " ++ vunaVersion ++ "\n"))
+    _ = runIO (prim_print "vuna ${vunaVersion}\n")
   in 0
 
 anyHelp : List String -> Bool
@@ -169,9 +139,7 @@ usageError _ =
 unknownCommand : String -> String -> Int
 unknownCommand prog arg =
   let
-    _ =
-      runIO
-        (prim_print ("error: unknown command `" ++ arg ++ "`\n" ++ "run `" ++ prog ++ " help`\n"))
+    _ = runIO (prim_print "error: unknown command `${arg}`\nrun `${prog} help`\n")
   in 2
 
 -- ---------------------------------------------------------------
@@ -180,13 +148,13 @@ unknownCommand prog arg =
 toolError : String -> Int
 toolError e =
   let
-    _ = runIO (prim_print ("error: " ++ e ++ "\n"))
+    _ = runIO (prim_print "error: ${e}\n")
   in 2
 
 toolFailure : String -> Int
 toolFailure e =
   let
-    _ = runIO (prim_print ("error: " ++ e ++ "\n"))
+    _ = runIO (prim_print "error: ${e}\n")
   in 1
 
 -- 显式路径的批量存在性检查：一次给出第一个缺失的路径（不静默跳过）。
@@ -212,7 +180,7 @@ interpFile path = case requireExists path of
   Ok _ => if runIO (prim_isDirectory path) then interpDirErr path else interpEmit path
 
 interpDirErr : String -> Int
-interpDirErr path = toolError ("interp takes a single file, not a package directory: " ++ path)
+interpDirErr path = toolError "interp takes a single file, not a package directory: ${path}"
 
 interpEmit : String -> Int
 interpEmit path = case contextForFile path of
@@ -221,7 +189,7 @@ interpEmit path = case contextForFile path of
     let
       output = interpretFile ctx path
     in let
-      _ = runIO (prim_print (output ++ "\n"))
+      _ = runIO (prim_print "${output}\n")
     in if startsWith "error:" output then 2 else 0
 
 -- ---------------------------------------------------------------
@@ -260,7 +228,7 @@ fmtRun check [] = case fmtDefaultTargets 0 of
   Err e => toolError e
   Ok targets => fmtFiles check emptyFixityEnv (concatMap expandPath targets) 0
 fmtRun check paths = case firstMissingPath paths of
-  Just missing => toolError ("no such file: " ++ missing)
+  Just missing => toolError "no such file: ${missing}"
   Nothing => fmtFiles check emptyFixityEnv (concatMap expandPath paths) 0
 
 -- 省略 PATH 时格式化 workspace 内所有包的 lib/app/test（拆包后 compiler/ 也在内）。
@@ -271,18 +239,18 @@ fmtDefaultTargets : Int -> Result (List String)
 fmtDefaultTargets _ = case findManifestDirMaybe "." of
   Nothing =>
     Err
-      ("not inside a vuna workspace (no vuna.toml found from " ++ runIO prim_getcwd ++ "); pass PATH explicitly")
+      "not inside a vuna workspace (no vuna.toml found from ${runIO prim_getcwd}); pass PATH explicitly"
   Just dir => case workspacePackages dir of
     Err e => Err e
     Ok pkgs =>
       let
         targets = existingTargets (concatMap packageTargets pkgs) []
       in if length targets == 0 then Err
-        ("no vuna sources found in workspace at " ++ dir ++ " (looked for lib/, app/, test/ under each package); pass PATH explicitly")
+        "no vuna sources found in workspace at ${dir} (looked for lib/, app/, test/ under each package); pass PATH explicitly"
       else Ok targets
 
 packageTargets : Package -> List String
-packageTargets pkg = [packageDir pkg ++ "/lib", packageDir pkg ++ "/app", packageDir pkg ++ "/test"]
+packageTargets pkg = ["${packageDir pkg}/lib", "${packageDir pkg}/app", "${packageDir pkg}/test"]
 
 existingTargets : List String -> List String -> List String
 existingTargets [] acc = reverse acc
@@ -299,7 +267,7 @@ expandPath path = if pathExistsDir path then collectVunaFiles path else [path]
 fmtFiles : Bool -> FixityEnv -> List String -> Int -> Int
 fmtFiles check env [] changed = if check && changed > 0 then
   let
-    _ = runIO (prim_print (strFromInt changed ++ " file(s) need formatting\n"))
+    _ = runIO (prim_print "${changed} file(s) need formatting\n")
   in 1
 else 0
 fmtFiles check env (path :: rest) changed = case readText path of
@@ -309,19 +277,19 @@ fmtFiles check env (path :: rest) changed = case readText path of
       looked = fixitiesForFile env path original
       env2 = firstOf looked
     in case secondOf looked of
-      Err e => toolError (path ++ ": cannot determine fixity context: " ++ e)
+      Err e => toolError "${path}: cannot determine fixity context: ${e}"
       Ok fixities => case formatSourceWith fixities original of
-        Err e => toolError (path ++ ": " ++ e)
+        Err e => toolError "${path}: ${e}"
         Ok formatted => if formatted == original then fmtFiles check env2 rest changed
         else if check then
           let
-            _ = runIO (prim_print ("would reformat: " ++ path ++ "\n"))
+            _ = runIO (prim_print "would reformat: ${path}\n")
           in fmtFiles check env2 rest (changed + 1)
         else
           let
             _ = runIO (prim_writeFile path formatted)
           in let
-            _ = runIO (prim_print ("formatted " ++ path ++ "\n"))
+            _ = runIO (prim_print "formatted ${path}\n")
           in fmtFiles check env2 rest (changed + 1)
 
 -- ---------------------------------------------------------------
@@ -380,7 +348,7 @@ withIndex : (Index -> Int) -> Int
 withIndex f = case findManifestDirMaybe "." of
   Nothing =>
     toolError
-      ("not inside a vuna workspace (no vuna.toml found from " ++ runIO prim_getcwd ++ "); run `vuna map` from a package or workspace root")
+      "not inside a vuna workspace (no vuna.toml found from ${runIO prim_getcwd}); run `vuna map` from a package or workspace root"
   Just _ => case loadOrBuild "." of
     Err e => toolError e
     Ok index => f index
@@ -389,7 +357,7 @@ printOverview : Bool -> Int
 printOverview modulesOnly = withIndex (\index => let
   text = if modulesOnly then renderModules index else renderOverview index
 in let
-  _ = runIO (prim_print (text ++ "\n"))
+  _ = runIO (prim_print "${text}\n")
 in 0
 )
 
@@ -397,42 +365,34 @@ runFind : String -> Int
 runFind query = withIndex (\index => case findSymbol index query of
   Err e =>
     let
-      _ = runIO (prim_print ("error: " ++ e ++ "\n"))
+      _ = runIO (prim_print "error: ${e}\n")
     in 1
   Ok hits =>
     let
-      _ = map (\s => runIO (prim_print (symLineText s ++ "\n"))) hits
+      _ = map (\s => runIO (prim_print "${symLineText s}\n")) hits
     in case hits of
       [] => 1
       [_] => 0
       _ =>
         let
-          _ =
-            runIO
-              (prim_print ("ambiguous: " ++ strFromInt (length hits) ++ " candidates, use a full Module.name\n"))
+          _ = runIO (prim_print "ambiguous: ${length hits} candidates, use a full Module.name\n")
         in 2
 )
 
 -- 一行：全名 + 文件:行 + 签名。
 symLineText : Sym -> String
 symLineText s =
-  symFullName s
-    ++ "  ("
-    ++ strFromInt (symLine s)
-    ++ ":"
-    ++ strFromInt (symCol s)
-    ++ ")"
-    ++ (if symSig s == "" then "" else "  " ++ symSig s)
+  "${symFullName s}  (${symLine s}:${symCol s})${if symSig s == "" then "" else "  ${symSig s}"}"
 
 runImpact : String -> Int
 runImpact query = withIndex (\index => case impactOf index query of
   Err e =>
     let
-      _ = runIO (prim_print ("error: " ++ e ++ "\n"))
+      _ = runIO (prim_print "error: ${e}\n")
     in 1
   Ok text =>
     let
-      _ = runIO (prim_print (text ++ "\n"))
+      _ = runIO (prim_print "${text}\n")
     in 0
 )
 
@@ -447,11 +407,11 @@ runApi : String -> Int
 runApi modName = withIndex (\index => case renderApi index modName of
   Err e =>
     let
-      _ = runIO (prim_print ("error: " ++ e ++ "\n"))
+      _ = runIO (prim_print "error: ${e}\n")
     in 1
   Ok text =>
     let
-      _ = runIO (prim_print (text ++ "\n"))
+      _ = runIO (prim_print "${text}\n")
     in 0
 )
 
@@ -485,16 +445,11 @@ goalRun file = case readText file of
 renderGoals : String -> List DtGoalInfo -> String
 renderGoals file [] = ""
 renderGoals file (i :: rest) =
-  showSpanLoc i.dtGoalInfoSpan
-    ++ ": goal "
-    ++ i.dtGoalInfoGoal
-    ++ "\n"
-    ++ renderGoalCtx i.dtGoalInfoCtx
-    ++ renderGoals file rest
+  "${showSpanLoc i.dtGoalInfoSpan}: goal ${i.dtGoalInfoGoal}\n${renderGoalCtx i.dtGoalInfoCtx}${renderGoals file rest}"
 
 renderGoalCtx : List (Pair String String) -> String
 renderGoalCtx [] = ""
-renderGoalCtx ((Pair n ty) :: rest) = "  " ++ n ++ " : " ++ ty ++ "\n" ++ renderGoalCtx rest
+renderGoalCtx ((Pair n ty) :: rest) = "  ${n} : ${ty}\n${renderGoalCtx rest}"
 
 goalHeader : String -> Int -> String
-goalHeader file n = if n == 0 then file ++ ": no holes\n" else ""
+goalHeader file n = if n == 0 then "${file}: no holes\n" else ""

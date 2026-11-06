@@ -41,16 +41,7 @@ targetParent : DocTarget -> String
 targetParent (DocTarget line col kind name parent) = parent
 
 targetKey : DocTarget -> String
-targetKey t =
-  targetKind t
-    ++ "\t"
-    ++ targetParent t
-    ++ "\t"
-    ++ targetName t
-    ++ "\t"
-    ++ strFromInt (targetLine t)
-    ++ "\t"
-    ++ strFromInt (targetCol t)
+targetKey t = "${targetKind t}\t${targetParent t}\t${targetName t}\t${targetLine t}\t${targetCol t}"
 
 moduleTargets : Maybe ModDecl -> List DocTarget
 moduleTargets Nothing = []
@@ -259,7 +250,7 @@ assignBlocksGo comments targets (b :: rest) acc = case pickTarget comments targe
           else acc
         "member" =>
           Assign acc.assignUsed acc.assignDecls
-            (insertDoc (targetParent t ++ "\t" ++ targetName t) b.docBlockText acc.assignMembers)
+            (insertDoc "${targetParent t}\t${targetName t}" b.docBlockText acc.assignMembers)
             acc.assignModuleDoc
         _ =>
           Assign acc.assignUsed (insertDoc (targetName t) b.docBlockText acc.assignDecls)

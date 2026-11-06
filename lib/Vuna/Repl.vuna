@@ -62,20 +62,20 @@ replMaxPendingLines : Int
 replMaxPendingLines = 64
 
 replHelp : String
-replHelp =
-  "命令：\n"
-    ++ "  :help           显示帮助\n"
-    ++ "  :type EXPR      显示表达式类型（不求值，也不执行效果）\n"
-    ++ "  :load FILE      加载定义文件（整段源码进缓冲；不支持 `module ... where` 模块文件）\n"
-    ++ "  :reload         重新读取上次 :load 的文件\n"
-    ++ "  :browse MODULE  显示模块接口（复用 `vuna api`；首次会构建源码索引）\n"
-    ++ "  :reset          清空已输入的定义、import 与 :load 的文件\n"
-    ++ "  :quit           退出（同 Ctrl-D）\n"
-    ++ "其他输入按 vuna 源码处理：`import ...` 与定义会被累积，表达式会立即求值。\n"
-    ++ "DT 顶层签名必填，定义请先输入签名行（如 `x : Int`）再输入定义行。\n"
-    ++ "多行输入：未闭合的括号/字符串/块注释或行尾是 `=` `->` `|` `,` `where` `do` 等\n"
-    ++ "时显示 `... ` 继续读；缩进块（do/case/where）用空行提交，空行时输入不完整则丢弃。\n"
-    ++ "效果表达式（顶层类型是 IO a）会临时编译并运行；效果的输出直接到终端。\n"
+replHelp = """命令：
+  :help           显示帮助
+  :type EXPR      显示表达式类型（不求值，也不执行效果）
+  :load FILE      加载定义文件（整段源码进缓冲；不支持 `module ... where` 模块文件）
+  :reload         重新读取上次 :load 的文件
+  :browse MODULE  显示模块接口（复用 `vuna api`；首次会构建源码索引）
+  :reset          清空已输入的定义、import 与 :load 的文件
+  :quit           退出（同 Ctrl-D）
+其他输入按 vuna 源码处理：`import ...` 与定义会被累积，表达式会立即求值。
+DT 顶层签名必填，定义请先输入签名行（如 `x : Int`）再输入定义行。
+多行输入：未闭合的括号/字符串/块注释或行尾是 `=` `->` `|` `,` `where` `do` 等
+时显示 `... ` 继续读；缩进块（do/case/where）用空行提交，空行时输入不完整则丢弃。
+效果表达式（顶层类型是 IO a）会临时编译并运行；效果的输出直接到终端。
+"""
 
 -- REPL 是「读一行→处理→再读一行」的无限状态机，递归不沿输入结构下降；
 -- 用显式 fuel 守卫（1G 行，实际不可达）。
@@ -122,7 +122,7 @@ resetBuffers : ReplState -> ReplState
 resetBuffers st = ReplState "" "" "" "" st.stateBrowseIndex Nothing
 
 ensureTrailingNewline : String -> String
-ensureTrailingNewline s = if s == "" || endsWith "\n" s then s else s ++ "\n"
+ensureTrailingNewline s = if s == "" || endsWith "\n" s then s else "${s}\n"
 
 -- 一步的结果：继续（带新状态）或退出（退出码）。
 data ReplOutcome : Type where
@@ -134,7 +134,7 @@ data ReplOutcome : Type where
 runRepl : PackageContext -> Int
 runRepl ctx =
   let
-    _ = runIO (prim_print ("vuna repl\n" ++ replHelp))
+    _ = runIO (prim_print "vuna repl\n${replHelp}")
   in replLoop replFuelBound ctx (replState "" "" "")
 
 replLoop : Int -> PackageContext -> ReplState -> Int
@@ -200,7 +200,7 @@ lineStep ctx st ":help" =
   in ReplContinue st
 lineStep ctx st line =
   if startsWith ":" line then commandStep ctx st line
-  else if needsMore line then ReplContinue (withPending st (line ++ "\n"))
+  else if needsMore line then ReplContinue (withPending st "${line}\n")
   else if startsWith "import " line then addImport ctx st line else submitText ctx st line
 
 -- 冒号命令分发（`:help` / `:q` / `:reset` 等无参命令已在上面的子句处理）。
@@ -218,7 +218,7 @@ commandStep ctx st cmd = case commandArg cmd ":type" of
           let
             _ =
               runIO
-                (prim_print ("错误: 未知命令 `" ++ cmd ++ "`（输入 :help 查看可用命令）\n"))
+                (prim_print "错误: 未知命令 `${cmd}`（输入 :help 查看可用命令）\n")
           in ReplContinue st
 
 -- 命令参数：`cmd == name` → Just ""（缺参数）；`name` 后跟空格 → Just（trim 后的剩余）；
@@ -226,18 +226,18 @@ commandStep ctx st cmd = case commandArg cmd ":type" of
 commandArg : String -> String -> Maybe String
 commandArg cmd name =
   if cmd == name then Just ""
-  else if startsWith (name ++ " ") cmd then Just (trim (substring (byteLength (name ++ " ")) (byteLength cmd - byteLength (name ++ " ")) cmd))
+  else if startsWith "${name} " cmd then Just (trim (substring (byteLength "${name} ") (byteLength cmd - byteLength "${name} ") cmd))
   else Nothing
 
 commandUsage : ReplState -> String -> ReplOutcome
 commandUsage st usage =
   let
-    _ = runIO (prim_print ("用法: " ++ usage ++ "\n"))
+    _ = runIO (prim_print "用法: ${usage}\n")
   in ReplContinue st
 
 -- 当前缓冲拼成的程序（imports 在前、定义在后）。
 bufferProgram : ReplState -> String
-bufferProgram st = st.stateImports ++ "\n" ++ st.stateDefs
+bufferProgram st = "${st.stateImports}\n${st.stateDefs}"
 
 -- `:type EXPR`：只打印 zonk 后的类型文本（不求值、不执行效果）。先 parseExpressionSource
 -- 拿到与 evalText 一致的干净解析错误；精化错误走既有 `错误:` 出口。
@@ -246,16 +246,16 @@ typeStep ctx st exprText = if exprText == "" then commandUsage st ":type <表达
 else case parseExpressionSource exprText of
   Err e =>
     let
-      _ = runIO (prim_print ("错误: " ++ e ++ "\n"))
+      _ = runIO (prim_print "错误: ${e}\n")
     in ReplContinue st
   Ok _ => case evalExprInfoWithAux ctx (bufferProgram st) exprText st.stateAuxCache of
     Err e =>
       let
-        _ = runIO (prim_print ("错误: " ++ e ++ "\n"))
+        _ = runIO (prim_print "错误: ${e}\n")
       in ReplContinue st
     Ok (Pair info aux2) =>
       let
-        _ = runIO (prim_print (exprText ++ " : " ++ trim (secondOf info) ++ "\n"))
+        _ = runIO (prim_print "${exprText} : ${trim (secondOf info)}\n")
       in ReplContinue (withAuxCache st aux2)
 
 -- `:load FILE`：用文件源码整体替换 imports/defs 缓冲（成功才替换，失败状态不变）。
@@ -278,25 +278,23 @@ loadFileStep st verb path = if path == "" then commandUsage st ":load <FILE>"
 else case readText path of
   Err e =>
     let
-      _ = runIO (prim_print ("错误: " ++ e ++ "\n"))
+      _ = runIO (prim_print "错误: ${e}\n")
     in ReplContinue st
   Ok source => case parseSource path source of
     Err e =>
       let
-        _ = runIO (prim_print ("错误: " ++ e ++ "\n"))
+        _ = runIO (prim_print "错误: ${e}\n")
       in ReplContinue st
     Ok (SourceFile hdr imp fx decls) => case hdr of
       Just md =>
         let
           _ =
             runIO
-              (prim_print ("错误: " ++ path ++ " 是模块文件（含 `module ... where` 头），REPL 不能加载模块；请去掉 module 头后用 :load，或用 :browse <模块名> 查看模块接口\n"))
+              (prim_print "错误: ${path} 是模块文件（含 `module ... where` 头），REPL 不能加载模块；请去掉 module 头后用 :load，或用 :browse <模块名> 查看模块接口\n")
         in ReplContinue st
       Nothing =>
         let
-          _ =
-            runIO
-              (prim_print (verb ++ " " ++ path ++ "（" ++ strFromInt (length decls) ++ " 个定义）\n"))
+          _ = runIO (prim_print "${verb} ${path}（${length decls} 个定义）\n")
         in ReplContinue (withLoadedSource st path source)
 
 -- `:browse MODULE`：复用 vuna api 的 Index + renderApi。索引只在首次 :browse 时构建
@@ -315,7 +313,7 @@ else case st.stateBrowseIndex of
     Just _ => case loadOrBuild "." of
       Err e =>
         let
-          _ = runIO (prim_print ("错误: " ++ e ++ "\n"))
+          _ = runIO (prim_print "错误: ${e}\n")
         in ReplContinue st
       Ok index => browseRender (withIndexCache st index) index modName
 
@@ -328,11 +326,11 @@ browseRender : ReplState -> Index -> String -> ReplOutcome
 browseRender st index modName = case renderApi index modName of
   Err e =>
     let
-      _ = runIO (prim_print ("错误: " ++ e ++ "\n"))
+      _ = runIO (prim_print "错误: ${e}\n")
     in ReplContinue st
   Ok text =>
     let
-      _ = runIO (prim_print (text ++ "\n"))
+      _ = runIO (prim_print "${text}\n")
     in ReplContinue st
 
 -- 续行状态：把新行（保留缩进）追加到 pending；`:q`/`:quit` 仍可直接退出。
@@ -342,12 +340,12 @@ pendingStep : PackageContext -> ReplState -> String -> ReplOutcome
 pendingStep ctx st raw = if raw == ":q" || raw == ":quit" then ReplExit 0
 else
   let
-    pending2 = st.statePending ++ raw ++ "\n"
+    pending2 = "${st.statePending}${raw}\n"
   in if countChar 10 pending2 > replMaxPendingLines then
     let
       _ =
         runIO
-          (prim_print ("错误: 续行超过 " ++ strFromInt replMaxPendingLines ++ " 行，已丢弃当前输入\n"))
+          (prim_print "错误: 续行超过 ${replMaxPendingLines} 行，已丢弃当前输入\n")
     in ReplContinue (withPending st "")
   else if needsMore pending2 then ReplContinue (withPending st pending2)
   else if startsIndented raw then ReplContinue (withPending st pending2)
@@ -360,20 +358,20 @@ startsIndented line = startsWith " " line || startsWith "\t" line
 addImport : PackageContext -> ReplState -> String -> ReplOutcome
 addImport ctx st line =
   let
-    imports2 = st.stateImports ++ line ++ "\n"
+    imports2 = "${st.stateImports}${line}\n"
   in case parseSource replTempFile (imports2 ++ st.stateDefs) of
     Err e =>
       let
-        _ = runIO (prim_print ("parse error: " ++ e ++ "\n"))
+        _ = runIO (prim_print "parse error: ${e}\n")
       in ReplContinue st
     Ok _ => ReplContinue (withBuffers st imports2 st.stateDefs)
 
 -- 定义还是表达式：整段能解析成顶层声明就追加到定义缓冲，否则按表达式求值。
 submitText : PackageContext -> ReplState -> String -> ReplOutcome
-submitText ctx st text = case parseSource replTempFile (st.stateImports ++ st.stateDefs ++ text ++ "\n") of
+submitText ctx st text = case parseSource replTempFile "${st.stateImports}${st.stateDefs}${text}\n" of
   Ok (SourceFile hdr imp fx decls) => case hdr of
     Just md => evalText ctx st text
-    Nothing => ReplContinue (withBuffers st st.stateImports (st.stateDefs ++ text ++ "\n"))
+    Nothing => ReplContinue (withBuffers st st.stateImports "${st.stateDefs}${text}\n")
   Err e => evalText ctx st text
 
 -- 表达式求值：类型是 IO a 时走临时包编译+运行，否则核心求值后打印值。
@@ -381,12 +379,12 @@ evalText : PackageContext -> ReplState -> String -> ReplOutcome
 evalText ctx st text = case parseExpressionSource text of
   Err e =>
     let
-      _ = runIO (prim_print ("错误: " ++ e ++ "\n"))
+      _ = runIO (prim_print "错误: ${e}\n")
     in ReplContinue (withPending st "")
   Ok _ => case evalExprInfoWithAux ctx (bufferProgram st) text st.stateAuxCache of
     Err e =>
       let
-        _ = runIO (prim_print ("错误: " ++ e ++ "\n"))
+        _ = runIO (prim_print "错误: ${e}\n")
       in ReplContinue (withPending st "")
     Ok (Pair info aux2) =>
       let
@@ -397,7 +395,7 @@ evalText ctx st text = case parseExpressionSource text of
         in ReplContinue (withPending (withAuxCache st aux2) "")
       else
         let
-          _ = runIO (prim_print (firstOf info ++ "\n"))
+          _ = runIO (prim_print "${firstOf info}\n")
         in ReplContinue (withPending (withAuxCache st aux2) "")
 
 -- IO 表达式：合成 `main : <类型>` + `main = <表达式>`，临时编译并运行。
@@ -415,20 +413,23 @@ else if hasUnsolvedMeta tyText then
   let
     _ =
       runIO
-        (prim_print ("错误: 无法确定 IO 表达式的完整类型（" ++ tyText ++ "）；先定义成带签名的值再求值（如 `prog : Base.IO.IO Int` + `prog = ...`）\n"))
+        (prim_print "错误: 无法确定 IO 表达式的完整类型（${tyText}）；先定义成带签名的值再求值（如 `prog : Base.IO.IO Int` + `prog = ...`）\n")
   in 0
 else
   let
-    source = st.stateImports ++ st.stateDefs ++ "\nmain : " ++ tyText ++ "\nmain = " ++ text ++ "\n"
+    source = """${st.stateImports}${st.stateDefs}
+main : ${tyText}
+main = ${text}
+"""
   in case runEffectProgram ctx source (ioPrintResult tyText) of
     Err e =>
       let
-        _ = runIO (prim_print ("错误: " ++ e ++ "\n"))
+        _ = runIO (prim_print "错误: ${e}\n")
       in 0
     Ok code => if code == 0 then 0
     else
       let
-        _ = runIO (prim_print ("[进程退出码 " ++ strFromInt code ++ "]\n"))
+        _ = runIO (prim_print "[进程退出码 ${code}]\n")
       in code
 
 -- 类型文本里是否有未解元变量（`showTerm` 渲染成 `?N`）。
@@ -437,7 +438,7 @@ hasUnsolvedMeta tyText = contains "?" tyText
 
 -- 程序源码里是否已经有 `main`（顶层签名或定义）；有则拒绝合成效果入口。
 hasMainDef : String -> String -> Bool
-hasMainDef imports defs = case parseSource replTempFile (imports ++ "\n" ++ defs) of
+hasMainDef imports defs = case parseSource replTempFile "${imports}\n${defs}" of
   Err e => False
   Ok (SourceFile hdr imp fx decls) => memName "main" (topNames decls)
 

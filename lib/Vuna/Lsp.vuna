@@ -144,11 +144,11 @@ ensureIndex uri st = case st.stateIndex of
     in case loadOrBuild root of
       Ok idx =>
         let
-          st1 = logTo ("index ready: " ++ root) (setIndexTried True (setIndex (Just idx) st))
+          st1 = logTo "index ready: ${root}" (setIndexTried True (setIndex (Just idx) st))
         in Pair st1 (Just idx)
       Err e =>
         let
-          st1 = logTo ("index unavailable: " ++ e) (setIndexTried True st)
+          st1 = logTo "index unavailable: ${e}" (setIndexTried True st)
         in Pair st1 Nothing
 
 -- 打开的文档文本（未打开 → ""）。
@@ -415,7 +415,7 @@ dispatch "$/cancelRequest" msg state = Pair False (Pair state [])
 dispatch methodName msg state =
   if startsWith "$/" methodName then Pair False (Pair state [])
   else Pair False
-    (Pair state [responseErr (idOf msg) errMethodNotFound ("method not found: " ++ methodName)])
+    (Pair state [responseErr (idOf msg) errMethodNotFound "method not found: ${methodName}"])
 
 -- ---------------------------------------------------------------
 -- 主循环
@@ -448,7 +448,7 @@ decodeFrame fuel len afterHeaders state =
     body = substring 0 (natFromInt len) afterHeaders
     rest = substring (natFromInt len) (natFromInt (strLength afterHeaders - len)) afterHeaders
   in case parseJson body of
-    Err e => lspLoop (fuel - 1) rest (logTo ("malformed frame: " ++ e) state)
+    Err e => lspLoop (fuel - 1) rest (logTo "malformed frame: ${e}" state)
     Ok msg =>
       let
         result = handleFrame msg state

@@ -42,10 +42,10 @@ binaryFingerprint =
       else textHashOf vunaVersion
 
 textHashOf : String -> Int
-textHashOf s = strHash s * 1000003 + strHash ("unit:" ++ s) + strLength s
+textHashOf s = strHash s * 1000003 + strHash "unit:${s}" + strLength s
 
 unitCacheTag : String
-unitCacheTag = unitCacheSchema ++ "/" ++ vunaVersion ++ "/" ++ strFromInt binaryFingerprint
+unitCacheTag = "${unitCacheSchema}/${vunaVersion}/${binaryFingerprint}"
 
 cacheBaseOf : String
 cacheBaseOf = case runIO (prim_getenv "TMPDIR") of
@@ -53,29 +53,22 @@ cacheBaseOf = case runIO (prim_getenv "TMPDIR") of
   t => t
 
 unitCacheDir : String -> String
-unitCacheDir pkg = cacheBaseOf ++ "/vuna-cache/" ++ hashTextOf pkg ++ "/split-units"
+unitCacheDir pkg = "${cacheBaseOf}/vuna-cache/${hashTextOf pkg}/split-units"
 
 hashTextOf : String -> String
 hashTextOf s = strFromInt (textHashOf s)
 
 unitCachePath : String -> String -> String -> String
-unitCachePath dir name key = dir ++ "/" ++ unitCacheFileName name key
+unitCachePath dir name key = "${dir}/${unitCacheFileName name key}"
 
 -- 单元文件名（桶内 GC 用同一函数算「本次仍被引用」的集合，不能另写一套命名）。
 unitCacheFileName : String -> String -> String
 unitCacheFileName name key =
   let
-    h1 = textHashOf ("k1:" ++ key)
-    h2 = textHashOf ("k2:" ++ key)
-    h3 = textHashOf ("k3:" ++ key)
-  in unitNameSafe name
-    ++ "-"
-    ++ strFromInt h1
-    ++ "-"
-    ++ strFromInt h2
-    ++ "-"
-    ++ strFromInt h3
-    ++ ".unit"
+    h1 = textHashOf "k1:${key}"
+    h2 = textHashOf "k2:${key}"
+    h3 = textHashOf "k3:${key}"
+  in "${unitNameSafe name}-${h1}-${h2}-${h3}.unit"
 
 unitNameSafe : String -> String
 unitNameSafe s = strPack (map charSafe (strUnpack s))
@@ -88,11 +81,7 @@ charSafe c = if c == 46 then 95 else c
 -- 目录名带 entry key 的两个哈希；GC 只保留当前 entry 桶（旧 layout 的散落文件一并清）。
 unitCacheEntryDir : String -> String -> String
 unitCacheEntryDir base entryKey =
-  base
-    ++ "/e-"
-    ++ strFromInt (textHashOf ("entry:" ++ entryKey))
-    ++ "-"
-    ++ strFromInt (textHashOf ("entry2:" ++ entryKey))
+  "${base}/e-${textHashOf "entry:${entryKey}"}-${textHashOf "entry2:${entryKey}"}"
 
 unitCacheEntryKeyOf : List (Pair String String) -> String
 unitCacheEntryKeyOf keys = case lookupPair "__entry__" keys of
@@ -109,7 +98,7 @@ gcEntries : String -> String -> List String -> Int
 gcEntries base keepDir [] = 0
 gcEntries base keepDir (n :: rest) =
   let
-    path = base ++ "/" ++ n
+    path = "${base}/${n}"
   in if path == keepDir then gcEntries base keepDir rest
   else if runIO (prim_isDirectory path) then
     let
@@ -127,7 +116,7 @@ dropFiles : String -> List String -> Int
 dropFiles dir [] = 0
 dropFiles dir (f :: rest) =
   let
-    _ = runIO (prim_removeFile (dir ++ "/" ++ f))
+    _ = runIO (prim_removeFile "${dir}/${f}")
   in dropFiles dir rest
 
 -- M34.6（S7 补完）：**桶内 GC**。同一 entry 桶只清「本次构建仍会引用」的 unit 文件之外
@@ -145,7 +134,7 @@ bucketGcGo : String -> List String -> List String -> Int
 bucketGcGo dir keepNames [] = 0
 bucketGcGo dir keepNames (f :: rest) =
   let
-    path = dir ++ "/" ++ f
+    path = "${dir}/${f}"
   in if memName f keepNames then bucketGcGo dir keepNames rest
   else if runIO (prim_fileExists path) && runIO (prim_isDirectory path) then bucketGcGo dir keepNames rest
   else
@@ -189,7 +178,7 @@ parentOf path =
     let
       p = strPack (reverse after)
     in if p == "" then if startsWith "/" path then "/" else "."
-    else if startsWith "/" path && not (startsWith "/" p) then "/" ++ p else p
+    else if startsWith "/" path && not (startsWith "/" p) then "/${p}" else p
 
 dropPastSlash : List Int -> List Int
 dropPastSlash [] = []

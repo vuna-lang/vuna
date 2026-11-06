@@ -172,7 +172,7 @@ psTemplate ExpectedLetBinding = "expected a let binding"
 psTemplate ExpectedPattern = "expected pattern"
 psTemplate ExpectedRecordFieldPattern = "expected a record field pattern"
 psTemplate ExpectedTopLevelDecl = "expected a top-level declaration"
-psTemplate TemplateHoleEmpty = "string interpolation $" ++ "{...} needs an expression"
+psTemplate TemplateHoleEmpty = "string interpolation \${...} needs an expression"
 psTemplate TemplateInPattern = "string interpolation is not supported in patterns"
 psTemplate ExprNotIndented = "expression is not indented enough"
 psTemplate LetBindingNotIndented = "let binding is not indented enough"
@@ -270,10 +270,10 @@ psAll =
 -- throw：拼 `[CODE] 消息`（前端诊断无位置）
 -- ---------------------------------------------------------------
 lexMsg : {n : Nat} -> LexDiag n -> Vec String n -> String
-lexMsg e args = "[" ++ lexCode e ++ "] " ++ substTemplate (lexTemplate e) args
+lexMsg e args = "[${lexCode e}] ${substTemplate (lexTemplate e) args}"
 
 psMsg : {n : Nat} -> PsDiag n -> Vec String n -> String
-psMsg e args = "[" ++ psCode e ++ "] " ++ substTemplate (psTemplate e) args
+psMsg e args = "[${psCode e}] ${substTemplate (psTemplate e) args}"
 
 lexErr : {n : Nat} -> LexDiag n -> Vec String n -> Result a
 lexErr e args = Err (lexMsg e args)

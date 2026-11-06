@@ -148,7 +148,7 @@ normalizeAcc absolute (seg :: rest) acc = case seg of
 normalizeDir : String -> String
 normalizeDir path = if startsWith "/" path then case normalizeAcc True (splitOnSlash path) [] of
   [] => "/"
-  segments => "/" ++ joinSlashes (reverse segments)
+  segments => "/${joinSlashes (reverse segments)}"
 else case normalizeAcc False (splitOnSlash path) [] of
   [] => "."
   segments => joinSlashes (reverse segments)
@@ -157,27 +157,26 @@ else case normalizeAcc False (splitOnSlash path) [] of
 -- 否则 "." 这类相对路径的父目录仍是 "."，搜索在起点就停住）。
 absolutePath : String -> String
 absolutePath path =
-  if startsWith "/" path then normalizeDir path else normalizeDir (runIO prim_getcwd ++ "/" ++ path)
+  if startsWith "/" path then normalizeDir path else normalizeDir "${runIO prim_getcwd}/${path}"
 
 -- 依赖路径拼接：绝对路径直接用，相对路径相对 base 目录规范化。
 joinPath : String -> String -> String
-joinPath base rel =
-  if startsWith "/" rel then normalizeDir rel else normalizeDir (base ++ "/" ++ rel)
+joinPath base rel = if startsWith "/" rel then normalizeDir rel else normalizeDir "${base}/${rel}"
 
 joinPathsText : List String -> String
 joinPathsText [] = ""
 joinPathsText ([path]) = path
-joinPathsText (path :: rest) = path ++ ", " ++ joinPathsText rest
+joinPathsText (path :: rest) = "${path}, ${joinPathsText rest}"
 
 -- ---------------------------------------------------------------- manifest
 -- path 是 vuna.toml 的路径；缺失时报 `pkg: missing vuna.toml in <目录>`。
 loadManifestAt : String -> Result Manifest
 loadManifestAt path = if runIO (prim_fileExists path) then case parseManifest path (runIO (prim_readFile path)) of
-  Err e => Err ("pkg: " ++ e)
+  Err e => Err "pkg: ${e}"
   Ok manifest => case validateManifest manifest of
-    Err e => Err ("pkg: " ++ e)
+    Err e => Err "pkg: ${e}"
     Ok validated => Ok validated
-else Err ("pkg: missing vuna.toml in " ++ normalizeDir (manifestDir path))
+else Err "pkg: missing vuna.toml in ${normalizeDir (manifestDir path)}"
 
 manifestNameString : Manifest -> String
 manifestNameString manifest = case manifest.manifestName of
@@ -198,11 +197,11 @@ else case cyclePrefix dir rest of
   Just prefix => Just (pair :: prefix)
 
 cycleMessage : String -> Maybe String -> List (Pair String String) -> String
-cycleMessage dir Nothing stack = "pkg: dependency cycle at " ++ dir
+cycleMessage dir Nothing stack = "pkg: dependency cycle at ${dir}"
 cycleMessage dir (Just dep) stack = case cyclePrefix dir stack of
-  Nothing => "pkg: dependency cycle at " ++ dir
+  Nothing => "pkg: dependency cycle at ${dir}"
   Just prefix =>
-    "pkg: dependency cycle: " ++ joinArrows (append (map secondOf (reverse prefix)) [dep])
+    "pkg: dependency cycle: ${joinArrows (append (map secondOf (reverse prefix)) [dep])}"
 
 dependencyNameOk : Eq a => Maybe a -> a -> Bool
 dependencyNameOk Nothing actual = True
@@ -211,7 +210,7 @@ dependencyNameOk (Just expected) actual = expected == actual
 mismatchMessage : Maybe String -> String -> String
 mismatchMessage Nothing actual = "pkg: package name mismatch"
 mismatchMessage (Just expected) actual =
-  "pkg: dependency " ++ expected ++ " expects package name " ++ expected ++ " but found " ++ actual
+  "pkg: dependency ${expected} expects package name ${expected} but found ${actual}"
 
 loadDependencyList : Int -> List (Pair String String) -> String -> List (Pair String String) -> Result (List Package)
 loadDependencyList fuel stack baseDir deps = if fuel <= 0 then Err "DT: pkg fuel exhausted (internal: dependency graph too deep)"
@@ -229,7 +228,7 @@ else
   let
     normalized = normalizeDir dir
   in if memStackDir normalized stack then Err (cycleMessage normalized depName stack)
-  else case loadManifestAt (normalized ++ "/vuna.toml") of
+  else case loadManifestAt "${normalized}/vuna.toml" of
     Err e => Err e
     Ok manifest =>
       let
@@ -269,7 +268,7 @@ checkUniqueNamesGo seen ((Pair name dir) :: rest) = case lookupPackageDir name s
   Just prevDir =>
     if prevDir == dir then checkUniqueNamesGo seen rest
     else Err
-      ("pkg: duplicate package name \"" ++ name ++ "\" in " ++ prevDir ++ " and " ++ dir ++ " (package names must be unique within a dependency graph)")
+      "pkg: duplicate package name \"${name}\" in ${prevDir} and ${dir} (package names must be unique within a dependency graph)"
 
 checkUniquePackageNames : List Package -> Result Int
 checkUniquePackageNames packages = checkUniqueNamesGo [] (collectDependencyIds packages)
@@ -318,7 +317,7 @@ workspacePackages rootBaseDir =
 -- ---------------------------------------------------------------- 模块根
 dependencyRootOf : Package -> Root
 dependencyRootOf package =
-  Root (packageDir package ++ "/lib") (packageName package) (packageExports package)
+  Root "${packageDir package}/lib" (packageName package) (packageExports package)
     package.packageManifest.manifestCapabilities
 
 -- DFS 后序：先深依赖、再直接依赖本体；按包名去重（首次出现保留）。
@@ -339,14 +338,13 @@ packageRoots package =
   let
     selfName = packageName package
     selfRoot =
-      Root (packageDir package ++ "/lib") selfName Nothing
-        package.packageManifest.manifestCapabilities
+      Root "${packageDir package}/lib" selfName Nothing package.packageManifest.manifestCapabilities
   in case dependencyRoots [selfName] package.packageDependencies of
     Pair seen roots => selfRoot :: roots
 
 -- 包入口固定为 <dir>/app/Main.vuna。
 packageEntry : Package -> String
-packageEntry package = packageDir package ++ "/app/Main.vuna"
+packageEntry package = "${packageDir package}/app/Main.vuna"
 
 -- 已知 Package 的上下文（调用方已有包对象时不必重新读盘）。
 packageContext : Package -> PackageContext
@@ -358,7 +356,7 @@ packageContext package =
 findManifestUpMaybe : Int -> String -> Maybe String
 findManifestUpMaybe fuel dir =
   if fuel <= 0 then Nothing
-  else if runIO (prim_fileExists (dir ++ "/vuna.toml")) then Just dir
+  else if runIO (prim_fileExists "${dir}/vuna.toml") then Just dir
   else findManifestUpMaybeStep (fuel - 1) dir (manifestDir dir)
 
 findManifestUpMaybeStep : Int -> String -> String -> Maybe String
@@ -382,14 +380,14 @@ findManifestDirMaybe startDir =
 findManifestDir : String -> Result String
 findManifestDir startDir = case findManifestDirMaybe startDir of
   Just dir => Ok dir
-  Nothing => Err ("pkg: no vuna.toml found from " ++ normalizeDir startDir ++ " (searched upward)")
+  Nothing => Err "pkg: no vuna.toml found from ${normalizeDir startDir} (searched upward)"
 
 -- ---------------------------------------------------------------- base 定位（M26）
 -- base 只由两处决定：`VUNA_BASE`（显式覆盖，相对路径按 cwd 归一），或可执行文件
 -- 相对布局（<exeDir>/base、../base、../../base、../../../base）。候选目录必须含
 -- vuna.toml；都不成立时报错并列出尝试路径 + `VUNA_BASE` 提示。
 hasManifest : String -> Bool
-hasManifest dir = runIO (prim_fileExists (dir ++ "/vuna.toml"))
+hasManifest dir = runIO (prim_fileExists "${dir}/vuna.toml")
 
 baseCandidates : String -> List String
 baseCandidates exeDir =
@@ -402,7 +400,7 @@ baseCandidates exeDir =
 baseNotFound : List String -> Result a
 baseNotFound tried =
   Err
-    ("pkg: cannot locate vuna-base (tried: " ++ joinPathsText tried ++ "); set VUNA_BASE to a directory containing vuna.toml")
+    "pkg: cannot locate vuna-base (tried: ${joinPathsText tried}); set VUNA_BASE to a directory containing vuna.toml"
 
 firstExistingBase : List String -> List String -> Result String
 firstExistingBase original [] = baseNotFound original

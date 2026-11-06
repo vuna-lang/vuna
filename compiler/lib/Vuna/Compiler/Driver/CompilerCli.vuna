@@ -21,26 +21,16 @@ import Vuna.Compiler.Version
 import Base.IO
 
 compilerUsageLines : String -> String
-compilerUsageLines prog =
-  "  "
-    ++ prog
-    ++ " compile [--no-print] (<entry.vuna> | <package-dir>) <out-dir>\n"
-    ++ "  "
-    ++ prog
-    ++ " check (<entry.vuna> | <package-dir>)\n"
-    ++ "  "
-    ++ prog
-    ++ " build [--no-compile] [--out DIR] [--package NAME] [DIR]\n"
-    ++ "  --no-print                    compile 生成的程序不打印 main 结果（默认打印）\n"
-    ++ "  "
-    ++ prog
-    ++ " version, --version          显示版本\n"
-    ++ "  "
-    ++ prog
-    ++ " help, -h\n"
+compilerUsageLines prog = """  ${prog} compile [--no-print] (<entry.vuna> | <package-dir>) <out-dir>
+  ${prog} check (<entry.vuna> | <package-dir>)
+  ${prog} build [--no-compile] [--out DIR] [--package NAME] [DIR]
+  --no-print                    compile 生成的程序不打印 main 结果（默认打印）
+  ${prog} version, --version          显示版本
+  ${prog} help, -h
+"""
 
 compilerUsage : String -> String
-compilerUsage prog = "usage:\n" ++ compilerUsageLines prog
+compilerUsage prog = "usage:\n${compilerUsageLines prog}"
 
 runCompilerCli : List String -> Int
 runCompilerCli args = runCompilerCliFor "vuna-compiler" args
@@ -64,7 +54,7 @@ runCompilerCliFor1 prog args = case args of
 printVersion : Int -> Int
 printVersion _ =
   let
-    _ = runIO (prim_print ("vuna-compiler " ++ vunaVersion ++ "\n"))
+    _ = runIO (prim_print "vuna-compiler ${vunaVersion}\n")
   in 0
 
 anyHelp : List String -> Bool
@@ -88,20 +78,20 @@ unknownCommand prog arg =
   let
     _ =
       runIO
-        (prim_print ("error: unknown command `" ++ arg ++ "`\n" ++ "run `" ++ prog ++ " help` for the command list\n"))
+        (prim_print "error: unknown command `${arg}`\nrun `${prog} help` for the command list\n")
   in 2
 
 removedCommand : String -> String -> String -> Int
 removedCommand prog cmd hint =
   let
-    _ = runIO (prim_print ("error: `" ++ cmd ++ "` has been removed; " ++ hint ++ "\n"))
+    _ = runIO (prim_print "error: `${cmd}` has been removed; ${hint}\n")
   in 2
 
 -- 被删除 flag 的可操作提示（Vuna.Cli 的工具命令复用同一张表）。
 -- flag 名用「两条横线 + 名字」拼接：M26 验收要求源码中不再出现已删除 flag 的字面量
 -- （尤其环境根 flag），同时保留可操作提示。
 dashFlag : String -> String
-dashFlag name = "-" ++ "-" ++ name
+dashFlag name = "--${name}"
 
 removedFlagHint : String -> Maybe String
 removedFlagHint flag =
@@ -119,7 +109,7 @@ removedFlag prog flag = case removedFlagHint flag of
   Nothing => usageErr prog
   Just hint =>
     let
-      _ = runIO (prim_print ("error: " ++ flag ++ " has been removed; " ++ hint ++ "\n"))
+      _ = runIO (prim_print "error: ${flag} has been removed; ${hint}\n")
     in 2
 
 -- 诊断打印统一走 DiagRender：能定位到源码时追加「位置 + 源码行 + 插入符」片段，
@@ -131,13 +121,13 @@ printErrText e =
   in 1
 
 printErr : String -> Int
-printErr e = printErrText ("error: " ++ e ++ "\n")
+printErr e = printErrText "error: ${e}\n"
 
 printWarnings : List String -> Int
 printWarnings [] = 0
 printWarnings (w :: rest) =
   let
-    _ = runIO (prim_print (renderCliDiagnostic (w ++ "\n")))
+    _ = runIO (prim_print (renderCliDiagnostic "${w}\n"))
   in printWarnings rest
 
 defaultDir : Maybe String -> String
@@ -147,19 +137,19 @@ defaultDir Nothing = "."
 -- 路径既不是文件也不是目录时的统一错误（先 prim_fileExists 再 prim_isDirectory：
 -- 内建 prim_isDirectory 对不存在的路径会抛异常）。
 dtPathErr : String -> Int
-dtPathErr path = printErr ("no such file or package directory: " ++ path)
+dtPathErr path = printErr "no such file or package directory: ${path}"
 
 -- 可执行包解析：必须是目录、能读 vuna.toml、且有 app/Main.vuna。
 executablePackage : String -> String -> Result Package
 executablePackage label dir =
   if runIO (prim_fileExists dir) then if runIO (prim_isDirectory dir) then executablePackageAt label dir
-  else Err (label ++ ": expects a package directory, not a file: " ++ dir)
-  else Err ("no such file or package directory: " ++ dir)
+  else Err "${label}: expects a package directory, not a file: ${dir}"
+  else Err "no such file or package directory: ${dir}"
 
 executablePackageAt : String -> String -> Result Package
 executablePackageAt label dir =
   andThen (loadPackage dir)
-    (\pkg => if runIO (prim_fileExists (packageEntry pkg)) then Ok pkg else Err (label ++ ": library package " ++ packageName pkg ++ " has no app/Main.vuna (executable package required)"))
+    (\pkg => if runIO (prim_fileExists (packageEntry pkg)) then Ok pkg else Err "${label}: library package ${packageName pkg} has no app/Main.vuna (executable package required)")
 
 -- ---------------------------------------------------------------
 -- compile：文件入口（最近的 vuna.toml 包上下文 / 无 manifest 的 base-only）
@@ -258,8 +248,7 @@ checkPackageSeq pkg code =
     c = case checkPackage pkg of
       Err e =>
         let
-          _ =
-            runIO (prim_print (renderWithPrefix ("error: [" ++ packageName pkg ++ "] ") e ++ "\n"))
+          _ = runIO (prim_print "${renderWithPrefix "error: [${packageName pkg}] " e}\n")
         in 1
       Ok warnings => printWarnings warnings
   in if c > code then c else code
@@ -322,15 +311,13 @@ isSingleLibraryPackage _ = False
 
 libraryOnlyMessage : List Package -> String
 libraryOnlyMessage (pkg :: _) =
-  "library package "
-    ++ packageName pkg
-    ++ " has no app/Main.vuna (executable package required; use `check` for libraries)"
+  "library package ${packageName pkg} has no app/Main.vuna (executable package required; use `check` for libraries)"
 libraryOnlyMessage [] = "no package to build"
 
 selectBuildTargets : Maybe String -> List Package -> Result (List Package)
 selectBuildTargets Nothing pkgs = Ok pkgs
 selectBuildTargets (Just name) pkgs = case findPackageByName name pkgs of
-  Nothing => Err ("no such package in workspace: " ++ name)
+  Nothing => Err "no such package in workspace: ${name}"
   Just pkg => Ok [pkg]
 
 findPackageByName : String -> List Package -> Maybe Package
@@ -352,17 +339,17 @@ buildOne noCompile multiOut outM pkg =
   let
     name = packageName pkg
     outDir = case outM of
-      Just out => if multiOut then out ++ "/" ++ name else out
-      Nothing => packageDir pkg ++ "/.output"
+      Just out => if multiOut then "${out}/${name}" else out
+      Nothing => "${packageDir pkg}/.output"
     entry = packageEntry pkg
   in if runIO (prim_fileExists entry) then
     let
       ctx = packageContext pkg
-      binPath = outDir ++ "/bin/" ++ name
+      binPath = "${outDir}/bin/${name}"
     in if noCompile then compileCodegen ctx entry outDir
     else if metaUpToDate outDir ctx entry binPath then
       let
-        _ = runIO (prim_print ("up to date: " ++ binPath ++ "\n"))
+        _ = runIO (prim_print "up to date: ${binPath}\n")
       in 0
     else case compileToDir ctx entry True outDir of
       Err e => printErr e
@@ -372,7 +359,7 @@ buildOne noCompile multiOut outM pkg =
     Ok warnings =>
       let
         _ = printWarnings warnings
-        _ = runIO (prim_print ("skipped (library): " ++ name ++ " -> " ++ outDir ++ "\n"))
+        _ = runIO (prim_print "skipped (library): ${name} -> ${outDir}\n")
       in 0
 
 compileCodegen : PackageContext -> String -> String -> Int
@@ -385,11 +372,11 @@ compileCodegen ctx entry outDir = case compileToDir ctx entry True outDir of
 buildLinked : PackageContext -> String -> String -> String -> Int
 buildLinked ctx entry outDir name =
   let
-    _ = ensureDirPath (outDir ++ "/bin")
-  in case runBuildScript outDir ("bin/" ++ name) name of
+    _ = ensureDirPath "${outDir}/bin"
+  in case runBuildScript outDir "bin/${name}" name of
     Err e => printErr e
     Ok _ =>
       let
         _ = writeBuildMeta outDir ctx entry True
-        _ = runIO (prim_print ("built " ++ outDir ++ "/bin/" ++ name ++ "\n"))
+        _ = runIO (prim_print "built ${outDir}/bin/${name}\n")
       in 0

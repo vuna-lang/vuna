@@ -183,14 +183,14 @@ dataIssue : DtData -> String
 dataIssue d =
   let
     kindIssue = termIssueAt 0 (dtDataKind d)
-  in if kindIssue == "" then ctorIssues (dtDataCtors d) else dtDataName d ++ " kind:" ++ kindIssue
+  in if kindIssue == "" then ctorIssues (dtDataCtors d) else "${dtDataName d} kind:${kindIssue}"
 
 ctorIssues : List DtCtor -> String
 ctorIssues [] = ""
 ctorIssues (c :: rest) =
   let
     issue = termIssueAt 0 (dtCtorType c)
-  in if issue == "" then ctorIssues rest else dtCtorName c ++ " ctor:" ++ issue
+  in if issue == "" then ctorIssues rest else "${dtCtorName c} ctor:${issue}"
 
 datasIssue : List DtData -> String
 datasIssue [] = ""
@@ -212,9 +212,9 @@ defIssue d =
     Just body =>
       let
         bodyIssue = bodyIssueAt body
-      in if bodyIssue == "" then "" else dtDefName d ++ " body:" ++ bodyIssue
+      in if bodyIssue == "" then "" else "${dtDefName d} body:${bodyIssue}"
     Nothing => ""
-  else dtDefName d ++ " type:" ++ typeIssue
+  else "${dtDefName d} type:${typeIssue}"
 
 defsIssue : List DtDef -> String
 defsIssue [] = ""
@@ -228,29 +228,29 @@ globalsIssue [] = ""
 globalsIssue ((Pair n t) :: rest) =
   let
     issue = termIssueAt 0 t
-  in if issue == "" then globalsIssue rest else n ++ ":" ++ issue
+  in if issue == "" then globalsIssue rest else "${n}:${issue}"
 
 instIssue : DtInst -> String
 instIssue i =
   let
     nTele = length i.dtInstTele
     teleIssue = teleIssueGo 0 i.dtInstTele
-  in if teleIssue /= "" then dtInstName i ++ " tele:" ++ teleIssue
+  in if teleIssue /= "" then "${dtInstName i} tele:${teleIssue}"
   else
     let
       ctxIssue = ctxIssues nTele i.dtInstCtx
-    in if ctxIssue /= "" then dtInstName i ++ " ctx:" ++ ctxIssue
+    in if ctxIssue /= "" then "${dtInstName i} ctx:${ctxIssue}"
     else
       let
         headIssue = termIssueAt nTele i.dtInstHead
-      in if headIssue == "" then "" else dtInstName i ++ " head:" ++ headIssue
+      in if headIssue == "" then "" else "${dtInstName i} head:${headIssue}"
 
 teleIssueGo : Int -> List (Pair String Term) -> String
 teleIssueGo depth [] = ""
 teleIssueGo depth ((Pair n t) :: rest) =
   let
     issue = termIssueAt depth t
-  in if issue == "" then teleIssueGo (depth + 1) rest else n ++ ":" ++ issue
+  in if issue == "" then teleIssueGo (depth + 1) rest else "${n}:${issue}"
 
 ctxIssues : Int -> List Term -> String
 ctxIssues depth [] = ""
@@ -270,11 +270,11 @@ classIssue : DtClass -> String
 classIssue c =
   let
     projIssue = ctxIssues 0 (map (\p => secondOf p) c.dtClassMethods)
-  in if projIssue /= "" then dtClassName c ++ " proj:" ++ projIssue
+  in if projIssue /= "" then "${dtClassName c} proj:${projIssue}"
   else
     let
       fieldIssue = ctxIssues 1 c.dtClassFieldTys
-    in if fieldIssue == "" then "" else dtClassName c ++ " field:" ++ fieldIssue
+    in if fieldIssue == "" then "" else "${dtClassName c} field:${fieldIssue}"
 
 classesIssue : List DtClass -> String
 classesIssue [] = ""
@@ -291,10 +291,10 @@ cachedProgramIssue (CachedProgram datas defs globals insts classes) =
     globalsI = globalsIssue globals
     instsI = instsIssue insts
     classesI = classesIssue classes
-  in if datasI /= "" then "datas " ++ datasI
-  else if defsI /= "" then "defs " ++ defsI
-  else if globalsI /= "" then "globals " ++ globalsI
-  else if instsI /= "" then "insts " ++ instsI else if classesI /= "" then "classes " ++ classesI else ""
+  in if datasI /= "" then "datas ${datasI}"
+  else if defsI /= "" then "defs ${defsI}"
+  else if globalsI /= "" then "globals ${globalsI}"
+  else if instsI /= "" then "insts ${instsI}" else if classesI /= "" then "classes ${classesI}" else ""
 
 -- ---------------------------------------------------------------
 -- 包段重编号：摘要里允许残留的「擦除位置未解 meta」

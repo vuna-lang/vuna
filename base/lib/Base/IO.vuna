@@ -33,6 +33,8 @@ module Base.IO
 import Base.List
 import Base.Bool
 import Base.Monad
+-- M36 跟进：模板字符串降级引用 Base.Interp.interp（split 依赖需要显式 import）。
+import Base.Interp
 -- `++` 的 fixity 声明在 Base.String；base 模块不自动注入 Prelude，println 需要它。
 import Base.String
 import Base.Nat
@@ -46,7 +48,7 @@ print : String -> IO Int
 print = prim_print
 
 println : String -> IO Int
-println s = print (s ++ "\n")
+println s = print "${s}\n"
 
 readFile : String -> IO String
 readFile = prim_readFile

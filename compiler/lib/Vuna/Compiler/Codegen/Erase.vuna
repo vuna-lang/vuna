@@ -123,7 +123,7 @@ checkOneErasure typeNames d = case dtDefExtern d of
 
 -- binders：最近绑定在前（名字 + 是否擦除）。
 showMetaHint : Int -> String
-showMetaHint m = " ?" ++ strFromInt m
+showMetaHint m = " ?${m}"
 
 checkErasureFuel : Int -> List String -> List (Pair String Rig) -> Term -> Result Int
 checkErasureFuel fuel typeNames binders t = if fuel <= 0 then Err "DT: internal: erasure fuel exhausted"
@@ -132,8 +132,7 @@ else case t of
     Just (Pair n rig) =>
       if rigIsErased rig then cgErr1 (TypeLevelBindingRuntime name) name else Ok 0
     Nothing =>
-      Err
-        ("DT: internal: unbound runtime variable " ++ name ++ " (index " ++ strFromInt i ++ ", binders " ++ strFromInt (length binders) ++ ")")
+      Err "DT: internal: unbound runtime variable ${name} (index ${i}, binders ${length binders})"
   TGlobal name => if memName name typeNames then cgErr1 (TypeLevelNameRuntime name) name else Ok 0
   TType l => cgErr0 TypeUsedAtRuntime
   TPi name implicit rig dom cod => cgErr0 TypeUsedAtRuntime
@@ -442,7 +441,7 @@ checkNoDupOcamlNames kind names = checkNoDupOcamlNamesGo kind names (Base.HashMa
 checkNoDupOcamlNamesGo : String -> List String -> HashMap Bool -> Result Int
 checkNoDupOcamlNamesGo kind [] seen = Ok 0
 checkNoDupOcamlNamesGo kind (n :: rest) seen =
-  if Base.HashMap.member n seen then Err ("DT: internal: OCaml name collision among " ++ kind ++ "s: `" ++ n ++ "`")
+  if Base.HashMap.member n seen then Err "DT: internal: OCaml name collision among ${kind}s: `${n}`"
   else checkNoDupOcamlNamesGo kind rest (Base.HashMap.insert n True seen)
 
 ensureUniqueOcamlNames : List DtData -> List DtDef -> Result Int
@@ -463,10 +462,8 @@ ensureUniqueOcamlNames datas defs =
 -- 越界/负 index 都在 check 期报内部错误，而不是在 codegen/OCaml 阶段才炸。
 checkTermScopes : Int -> Term -> Result Int
 checkTermScopes depth (TVar name i) =
-  if i >= 0 then if i < depth then Ok 0
-  else Err
-    ("DT: internal: out-of-scope de Bruijn index " ++ strFromInt i ++ " (depth " ++ strFromInt depth ++ ")")
-  else Err ("DT: internal: negative de Bruijn index " ++ strFromInt i)
+  if i >= 0 then if i < depth then Ok 0 else Err "DT: internal: out-of-scope de Bruijn index ${i} (depth ${depth})"
+  else Err "DT: internal: negative de Bruijn index ${i}"
 checkTermScopes depth (TGlobal name) = Ok 0
 checkTermScopes depth (TInt n) = Ok 0
 checkTermScopes depth (TStr s) = Ok 0

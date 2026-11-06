@@ -33,7 +33,7 @@ import Base.IO
 
 interpretFile : PackageContext -> String -> String
 interpretFile ctx entry = case dtEvalFile ctx entry of
-  Err e => "error: " ++ e
+  Err e => "error: ${e}"
   Ok output => output
 
 -- REPL 用：program（imports + 定义，定义必须已写签名）与表达式都在内存里求值，
@@ -41,10 +41,10 @@ interpretFile ctx entry = case dtEvalFile ctx entry of
 interpretExpr : PackageContext -> String -> String -> String
 interpretExpr ctx program expr = case depIfacesForToolProgram ctx program of
   Just ifaces => case dtEvalExprWithIfaces ctx program expr ifaces of
-    Err e => "error: " ++ e
+    Err e => "error: ${e}"
     Ok output => output
   Nothing => case dtEvalExpr ctx program expr of
-    Err e => "error: " ++ e
+    Err e => "error: ${e}"
     Ok output => output
 
 -- M30 · REPL：值文本 + zonk 后的类型文本（`showTerm` 渲染，可直接写回合成签名）。
@@ -99,7 +99,7 @@ pickTempDir : String -> List Int -> String
 pickTempDir base [] = base
 pickTempDir base (n :: rest) =
   let
-    candidate = if n == 0 then base else base ++ "-" ++ strFromInt n
+    candidate = if n == 0 then base else "${base}-${n}"
   in if runIO (prim_fileExists candidate) then pickTempDir base rest else candidate
 
 -- 上下文依赖根 → 临时包的 [dependencies] 条目（包名 → 包目录）。
@@ -120,10 +120,10 @@ rootPackageDir dir = if endsWith "/lib" dir then substring 0 (byteLength dir - 4
 
 -- 依赖路径必须是绝对路径（临时包不在调用方的工作目录下，相对路径会解析错）。
 absoluteDir : String -> String
-absoluteDir dir = if startsWith "/" dir then dir else runIO prim_getcwd ++ "/" ++ dir
+absoluteDir dir = if startsWith "/" dir then dir else "${runIO prim_getcwd}/${dir}"
 
 tomlQuote : String -> String
-tomlQuote s = "\"" ++ tomlEscaped (strUnpack s) ++ "\""
+tomlQuote s = "\"${tomlEscaped (strUnpack s)}\""
 
 tomlEscaped : List Int -> String
 tomlEscaped [] = ""
@@ -137,23 +137,27 @@ tomlChar c = strPack [c]
 -- 依赖 key 用裸名（TOML 的 quoted key 在 vuna 的 TOML 解析器里不支持；包名已被
 -- manifest 校验限制为 a-z/0-9/'-'，是合法 bare key）；路径值用双引号字符串。
 depLine : Pair String String -> String
-depLine dep = firstOf dep ++ " = " ++ tomlQuote (secondOf dep) ++ "\n"
+depLine dep = "${firstOf dep} = ${tomlQuote (secondOf dep)}\n"
 
 depsSection : List (Pair String String) -> String
 depsSection [] = ""
-depsSection deps = "\n[dependencies]\n" ++ join "" (map depLine deps)
+depsSection deps = """
+
+[dependencies]
+${join "" (map depLine deps)}"""
 
 capsSection : List String -> String
 capsSection [] = ""
-capsSection caps = "\n[capabilities]\neffects = [" ++ join ", " (map tomlQuote caps) ++ "]\n"
+capsSection caps = """
+
+[capabilities]
+effects = [${join ", " (map tomlQuote caps)}]
+"""
 
 effectManifest : PackageContext -> String
-effectManifest ctx =
-  "[package]\nname = "
-    ++ tomlQuote effectPackageName
-    ++ "\n"
-    ++ depsSection (effectDeps ctx)
-    ++ capsSection (contextCapabilities ctx)
+effectManifest ctx = """[package]
+name = ${tomlQuote effectPackageName}
+${depsSection (effectDeps ctx)}${capsSection (contextCapabilities ctx)}"""
 
 -- `ocamlopt` 是否在 PATH 里（链接阶段需要）。探针的 stdout/stderr 全部丢弃。
 hasOcamlopt : Int -> Bool
@@ -181,12 +185,12 @@ cleanupErr dir e =
 runEffectProgram : PackageContext -> String -> Bool -> Result Int
 runEffectProgram ctx source printResult =
   let
-    dir = freshTempDir (tempBase 0 ++ "/vuna-effect-" ++ strFromInt (runIO timeUs))
-    entry = dir ++ "/app/Main.vuna"
-    outDir = dir ++ "/.output"
+    dir = freshTempDir "${tempBase 0}/vuna-effect-${runIO timeUs}"
+    entry = "${dir}/app/Main.vuna"
+    outDir = "${dir}/.output"
     _ = runIO (prim_makeDir dir)
-    _ = runIO (prim_makeDir (dir ++ "/app"))
-    _ = runIO (prim_writeFile (dir ++ "/vuna.toml") (effectManifest ctx))
+    _ = runIO (prim_makeDir "${dir}/app")
+    _ = runIO (prim_writeFile "${dir}/vuna.toml" (effectManifest ctx))
     _ = runIO (prim_writeFile entry source)
   in case contextForDir dir of
     Err e => cleanupErr dir e
@@ -194,8 +198,8 @@ runEffectProgram ctx source printResult =
       Err e => cleanupErr dir e
       Ok _ =>
         let
-          _ = runIO (prim_makeDir (outDir ++ "/bin"))
-        in if hasOcamlopt 0 then case runBuildScript outDir ("bin/" ++ effectBinaryName) effectBinaryName of
+          _ = runIO (prim_makeDir "${outDir}/bin")
+        in if hasOcamlopt 0 then case runBuildScript outDir "bin/${effectBinaryName}" effectBinaryName of
           Err e => cleanupErr dir e
-          Ok _ => Ok (cleanupTemp dir (runIO (prim_runIn outDir ["bin/" ++ effectBinaryName])))
+          Ok _ => Ok (cleanupTemp dir (runIO (prim_runIn outDir ["bin/${effectBinaryName}"])))
         else cleanupErr dir noOcamloptMessage

@@ -151,7 +151,7 @@ checkCaseMatrixFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Expr -> Lis
 checkCaseMatrixFuel fuel globals ctx ec scrut alts expected sp = if fuel <= 0 then Err "DT: internal: inference fuel exhausted"
 else
   let
-    name = "nd_scrut" ++ strFromInt (ctxDepth ctx)
+    name = "nd_scrut${ctxDepth ctx}"
     clauses = map (\alt => Pair [firstOf alt] (secondOf alt)) alts
   in andThen (multiToCaseExpr (ctorFamilyTable ec) clauses name)
     (\bodyExpr => checkEFuel (fuel - 1) globals ctx ec (ELet [Pair (PVar name sp) scrut] bodyExpr False sp) expected)
@@ -293,8 +293,7 @@ else case checkEFuel (fuel - 1) globals ctx ec c (VNeutral (NGlobal boolTypeName
   Err _ => andThen (inferEFuel (fuel - 1) globals ctx ec c) (\pc => case pc of
     Pair cTerm (Pair cTy ec1) =>
       if isBoolType cTy then Ok (Pair cTerm ec1)
-      else errAt sp
-        ("if condition must be " ++ boolTypeName ++ " (got " ++ showValueAt (ctxDepth ctx) cTy ++ ")")
+      else errAt sp "if condition must be ${boolTypeName} (got ${showValueAt (ctxDepth ctx) cTy})"
   )
 
 -- 变量解析顺序：局部上下文 → 本程序的数据构造子 → 全局签名。构造子必须排在全局之前：
@@ -834,7 +833,7 @@ else case inferEFuel (fuel - 1) globals ctx ec expr of
   Ok (Pair term (Pair actual ec1)) => case coerceTerm ec1 expected actual term of
     Just coerced => Ok (Pair coerced (resolveDictGoals globals ec1))
     Nothing => case convEc ec1 (ctxDepth ctx) expected actual of
-      Err e => Err (showSpanLoc (exprSpan expr) ++ ": " ++ e)
+      Err e => Err "${showSpanLoc (exprSpan expr)}: ${e}"
       Ok ec2 => Ok (Pair term (resolveDictGoals globals ec2))
 
 checkLamFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> List String -> Expr -> Value -> Span -> Result (Pair Term Ec)
@@ -1010,9 +1009,11 @@ else if isCmpMethod ec name then case args of
   _ => Ok Nothing
 else Ok Nothing
 
--- 统一入口：先试 `==` / `/=`，再试比较运算符，最后试 `&&` / `||` 的短路降级。
+-- 统一入口：先试模板插值的原始类型快捷路径，再试 `==` / `/=`，再试比较运算符，
+-- 最后试 `&&` / `||` 的短路降级。
 specializeOpAppFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> String -> List Expr -> Span -> Result (Maybe (Pair Term (Pair Value Ec)))
 specializeOpAppFuel fuel globals ctx ec name args sp = if fuel <= 0 then Err "DT: internal: inference fuel exhausted"
+else if name == interpMethodName then specializeInterpPrimApp (fuel - 1) globals ctx ec name args sp
 else andThen (specializeEqAppFuel (fuel - 1) globals ctx ec name args sp) (\r => case r of
   Just pair => Ok (Just pair)
   Nothing => andThen (specializeCmpAppFuel (fuel - 1) globals ctx ec name args sp) (\r2 => case r2 of
@@ -1023,6 +1024,38 @@ else andThen (specializeEqAppFuel (fuel - 1) globals ctx ec name args sp) (\r =>
     )
   )
 )
+
+-- M36 跟进：模板洞 `${e}` 由 Loader 降级成 `Base.Interp.interp e`。对**原始类型**可以按
+-- base 里的实例定义直接降级，省掉每个洞的字典目标与实例搜索（模板密集的源码自检曾因此
+-- 退化到分钟级）：
+--   * String：具体实例 `interp s = s`（恒等）；
+--   * Int：blanket + `Show Int` ⇒ `strFromInt e`；
+--   * Nat：blanket + `Show Nat` ⇒ `strFromInt (toInt e)`。
+-- 其它类型（用户 ADT 等）仍走正常字典路径，语义不变。
+specializeInterpPrimApp : Int -> List (Pair String Term) -> Ctx -> Ec -> String -> List Expr -> Span -> Result (Maybe (Pair Term (Pair Value Ec)))
+specializeInterpPrimApp fuel globals ctx ec name args sp = if fuel <= 0 then Err "DT: internal: inference fuel exhausted"
+else case args of
+  [e] => andThen (inferEFuel (fuel - 1) globals ctx ec e) (\pa => case pa of
+    Pair eTerm (Pair eTy ec1) =>
+      let
+        tyv = forceVal ec1 eTy
+      in if isStringTyValue tyv then Ok (Just (Pair eTerm (Pair tyv ec1)))
+      else if isIntTy ec1 tyv && not (hasSpecificInterpInstance ec1 intTypeName) then Ok (Just (Pair (strFromIntTerm eTerm) (Pair strTyValue ec1)))
+      else if isNatTy ec1 tyv && not (hasSpecificInterpInstance ec1 natTypeName) then Ok (Just (Pair (strFromIntTerm (natToIntTerm eTerm)) (Pair strTyValue ec1)))
+      else Ok Nothing
+  )
+  _ => Ok Nothing
+
+-- 原始类型的 `interp` 降级产物：`strFromInt e`（String 恒等直接返回 e）。
+strFromIntTerm : Term -> Term
+strFromIntTerm t = TApp (TGlobal "strFromInt") t Rig1
+
+strTyValue : Value
+strTyValue = VNeutral (NGlobal strTypeName [])
+
+isStringTyValue : Value -> Bool
+isStringTyValue (VNeutral (NGlobal g [])) = g == strTypeName
+isStringTyValue _ = False
 
 -- ---------------------------------------------------------------
 -- M23：`&&` / `||` 的**短路**降级

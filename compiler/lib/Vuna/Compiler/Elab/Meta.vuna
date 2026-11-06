@@ -539,10 +539,10 @@ lookupDataHead name (h :: rest) =
 -- 实例搜索发生在隐式 binder 的域是接口字典时：在已注册实例里找头能统一到 `Dict_C args`
 -- 的那一个并插入；找不到 ⇒ 明确缺失诊断。设计见 `docs/reference/core.md`。
 dictTypeName : String -> String
-dictTypeName cname = "Dict_" ++ cname
+dictTypeName cname = "Dict_${cname}"
 
 dictCtorName : String -> String
-dictCtorName cname = "MkDict_" ++ cname
+dictCtorName cname = "MkDict_${cname}"
 
 -- 收集 trait / instance 声明（按源顺序）。
 collectTraitDecls : List Decl -> List (Pair Decl Span) -> List (Pair Decl Span)
@@ -569,18 +569,16 @@ methodArgTerms rigs nFields = methodArgTermsGo rigs nFields 0 (length rigs)
 methodArgTermsGo : List Rig -> Int -> Int -> Int -> List (Pair Term Rig)
 methodArgTermsGo [] nFields i arity = []
 methodArgTermsGo (rig :: rest) nFields i arity =
-  Pair (TVar ("x" ++ strFromInt i) (nFields + (arity - 1 - i))) rig
-    :: methodArgTermsGo rest nFields (i + 1) arity
+  Pair (TVar "x${i}" (nFields + (arity - 1 - i))) rig :: methodArgTermsGo rest nFields (i + 1) arity
 
 -- 逐层 lambda 绑定方法参数（x_0 最外），每层用各自 rig。
 methodArgLams : List Rig -> Int -> Term -> Term
 methodArgLams [] i body = body
-methodArgLams (rig :: rest) i body =
-  TLam ("x" ++ strFromInt i) rig (methodArgLams rest (i + 1) body)
+methodArgLams (rig :: rest) i body = TLam "x${i}" rig (methodArgLams rest (i + 1) body)
 
 -- 方法显式参数的 multiplicity 表：逐 binder 按域判断（域是宇宙 ⇒ Rig0 擦除）。
 fieldVarName : Int -> String
-fieldVarName i = "f" ++ strFromInt i
+fieldVarName i = "f${i}"
 
 fieldBinderNames : Int -> List (Pair String Rig)
 fieldBinderNames n = fieldBinderGo n 0 []
@@ -926,7 +924,7 @@ etaCtorLa : String -> Int -> List (Pair String Rig) -> List (Pair Term Rig) -> T
 etaCtorLa name i [] args = TCon name args
 etaCtorLa name i ((Pair _ rig) :: rest) args =
   let
-    binder = "#eta" ++ strFromInt i
+    binder = "#eta${i}"
   in TLam binder rig (etaCtorLa name (i + 1) rest (append args [Pair (TVar binder (length rest)) rig]))
 
 -- 丢掉列表前 n 个元素（构造子已收到的实参前缀）。

@@ -36,10 +36,10 @@ findByBare syms query =
 findBySuffix : List Sym -> String -> Result (List Sym)
 findBySuffix syms query =
   let
-    suffix = "." ++ query
+    suffix = ".${query}"
     hits = filter (\s => endsWith suffix (symFullName s)) syms
   in case hits of
-    [] => Err ("no such symbol: " ++ query)
+    [] => Err "no such symbol: ${query}"
     _ => Ok hits
 
 -- 某模块里给定行/列上的符号：先按行收窄；多候选时优先列完全一致的，否则取该行
@@ -49,16 +49,13 @@ symbolAt index modQuery queryLine queryCol =
   let
     onLine = filter (\s => symModule s == modQuery && symLine s == queryLine) index.indexSymbols
   in case onLine of
-    [] =>
-      Err ("no symbol at " ++ modQuery ++ ":" ++ strFromInt queryLine ++ ":" ++ strFromInt queryCol)
+    [] => Err "no symbol at ${modQuery}:${queryLine}:${queryCol}"
     [s] => Ok s
     _ => case filter (\s => symCol s == queryCol) onLine of
       s :: _ => Ok s
       [] => case onLine of
         s :: _ => Ok s
-        [] =>
-          Err
-            ("no symbol at " ++ modQuery ++ ":" ++ strFromInt queryLine ++ ":" ++ strFromInt queryCol)
+        [] => Err "no symbol at ${modQuery}:${queryLine}:${queryCol}"
 
 -- 位置上的符号被哪些地方引用（refs 的 line/col 是引用出现处）。
 referencesAt : Index -> String -> Int -> Int -> Result (List Ref)
@@ -91,7 +88,7 @@ impactOf index query = case findSymbol index query of
       refs = filter (\r => memName (refName r) names) index.indexRefs
       readers = distinct (map refModule refs)
     in Ok
-      ("symbol: " ++ join ", " (map symFullName syms) ++ "\n" ++ "readers: " ++ join ", " readers ++ "\n" ++ "tests: " ++ testTagsFor syms ++ "\n")
+      "symbol: ${join ", " (map symFullName syms)}\nreaders: ${join ", " readers}\ntests: ${testTagsFor syms}\n"
 
 testTagsFor : List Sym -> String
 testTagsFor syms = tagsOfKinds (map symKind syms)

@@ -48,4 +48,4 @@ hitMatch : SearchHit -> String
 hitMatch (SearchHit name mod kind sig doc line score match) = match
 
 hitFullName : SearchHit -> String
-hitFullName h = hitModule h ++ "." ++ hitName h
+hitFullName h = "${hitModule h}.${hitName h}"

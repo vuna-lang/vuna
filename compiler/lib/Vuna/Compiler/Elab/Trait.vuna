@@ -432,7 +432,7 @@ instBodyCtxGo ctx (t :: rest) k =
   instBodyCtxGo (ctxBindValue (ctxDictName k) (eval (ctxEnv ctx) (shift 0 k t)) ctx) rest (k + 1)
 
 ctxDictName : Int -> String
-ctxDictName k = "_ctx" ++ strFromInt k
+ctxDictName k = "_ctx${k}"
 
 -- 字典值的 λ 链：tele(Rig0) 之外再 λ ctx(Rig1)。
 instValueOf : InstSigInfo -> String -> List Term -> Term
@@ -786,7 +786,7 @@ liftFreeDictGoalsGo defName ec ty body baseIdx nGroups k groups = case groups of
   [] => Pair ty (Pair body ec)
   (DictGoalGroup m dom extras) :: rest =>
     let
-      dName = "d" ++ strFromInt m
+      dName = "d${m}"
       -- 第 k 组（0-based）的**最终** binder 位置：之后每插入一只更新的字典都把它推深 1
       -- （同位置反复插入 ⇒ 新字典在旧字典外侧）。
       finalPos = baseIdx + 1 + (nGroups - 1 - k)
@@ -1062,7 +1062,7 @@ else case body of
     else
       let
         lvl = ctxDepth ctx
-        etaName = "_arity" ++ strFromInt lvl
+        etaName = "_arity${lvl}"
         v = freshVarValue etaName lvl
         ctx2 = ctxBindValue etaName dom ctx
         body2 = EApp body [EVar etaName sp] sp

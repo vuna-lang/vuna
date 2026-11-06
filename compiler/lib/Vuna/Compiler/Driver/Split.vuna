@@ -42,7 +42,7 @@ splitDeps (SplitFile name text deps) = deps
 writeSplitFiles : String -> List SplitFile -> Result Int
 writeSplitFiles dir [] = Ok 0
 writeSplitFiles dir (f :: rest) = andThen (writeSplitFiles dir rest) (\n => let
-  _ = runIO (prim_writeFile (dir ++ "/" ++ splitName f) (splitText f))
+  _ = runIO (prim_writeFile "${dir}/${splitName f}" (splitText f))
 in Ok (n + 1)
 )
 
@@ -50,7 +50,7 @@ in Ok (n + 1)
 writeSplitFilesIfChanged : String -> List SplitFile -> Result Int
 writeSplitFilesIfChanged dir [] = Ok 0
 writeSplitFilesIfChanged dir (f :: rest) = andThen (writeSplitFilesIfChanged dir rest) (\n => let
-  path = dir ++ "/" ++ splitName f
+  path = "${dir}/${splitName f}"
   text = splitText f
   same = runIO (prim_fileExists path) && runIO (prim_readFile path) == text
   _ = if same then 0 else runIO (prim_writeFile path text)
@@ -112,71 +112,60 @@ maxInt a b = if a > b then a else b
 -- 避免几十次进程启动；已有 .cmx 时按**内容哈希**（.ml/.mli + 直接依赖 .stamp）
 -- 逐层增量编译：单单元层前台调用，多单元层 `&` 并行 + 逐个 `wait` 收尾。
 buildScript : List (Pair String (List String)) -> List String -> String
-buildScript graph cFiles =
-  "#!/bin/sh\n"
-    ++ "# 由 vuna 生成：分离编译构建脚本（C35：按直接依赖分层并行 + 内容哈希增量）。用法: ./build.sh [OUT]\n"
-    ++ "# 干净构建：一次 ocamlopt 编译全部 .mli/.ml 并链接；\n"
-    ++ "# 增量构建：每单元 .ml/.mli 与直接依赖 .stamp 的内容哈希写 $base.stamp，命中即跳过；\n"
-    ++ "# 同层单元互不依赖：多单元层用后台任务并行编译，层间用 wait 串行。\n"
-    ++ "set -eu\n"
-    ++ "cd \"$(dirname \"$0\")\"\n"
-    ++ "OUT=$"
-    ++ "{1:-program}\n"
-    ++ "FLAGS=\"-g -w -a+39 -warn-error +39\"\n"
-    ++ "MODULES=\""
-    ++ spaceJoin (graphUnits graph)
-    ++ "\"\n"
-    ++ "C_MODULES=\""
-    ++ spaceJoin cFiles
-    ++ "\"\n"
-    ++ "C_OBJS=\"\"\n"
-    ++ "if [ -n \"$C_MODULES\" ]; then\n"
-    ++ "  for c in $C_MODULES; do ocamlopt -I +unix -c \"$c\"; b=$"
-    ++ "{c##*/}; C_OBJS=\"$C_OBJS $"
-    ++ "{b%.c}.o\"; done\n"
-    ++ "fi\n"
-    ++ "hash_of() {\n"
-    ++ "  for f in \"$@\"; do\n"
-    ++ "    if [ -f \"$f\" ]; then cat \"$f\"; else printf '%s' '-'; fi\n"
-    ++ "  done | sha256sum | awk '{print $1}'\n"
-    ++ "}\n"
-    ++ "stamp_want() {\n"
-    ++ "  base=$1\n"
-    ++ "  shift\n"
-    ++ "  deps=\"\"\n"
-    ++ "  for d in \"$@\"; do deps=\"$deps $d.stamp\"; done\n"
-    ++ "  hash_of \"$base.ml\" \"$base.mli\" $deps\n"
-    ++ "}\n"
-    ++ "clean=1\n"
-    ++ "for m in $MODULES; do\n"
-    ++ "  if [ -f \"$m.cmx\" ]; then clean=0; fi\n"
-    ++ "done\n"
-    ++ "if [ \"$clean\" -eq 1 ]; then\n"
-    ++ "  SOURCES=\"\"\n"
-    ++ "  for m in $MODULES; do\n"
-    ++ "    if [ -f \"$m.mli\" ]; then SOURCES=\"$SOURCES $m.mli\"; fi\n"
-    ++ "    SOURCES=\"$SOURCES $m.ml\"\n"
-    ++ "  done\n"
-    ++ "  ocamlopt $FLAGS -I +unix -o \"$OUT\" unix.cmxa $SOURCES $C_OBJS\n"
-    ++ stampWrites graph
-    ++ "  echo \"built $OUT\"\n"
-    ++ "  exit 0\n"
-    ++ "fi\n"
-    ++ "compile_mod() {\n"
-    ++ "  base=$1\n"
-    ++ "  shift\n"
-    ++ "  want=$(stamp_want \"$base\" \"$@\")\n"
-    ++ "  if [ -f \"$base.cmx\" ] && [ -f \"$base.stamp\" ] && [ \"$(cat \"$base.stamp\")\" = \"$want\" ]; then return 0; fi\n"
-    ++ "  echo \"compile $base\"\n"
-    ++ "  if [ -f \"$base.mli\" ]; then ocamlopt $FLAGS -I +unix -c \"$base.mli\"; fi\n"
-    ++ "  ocamlopt $FLAGS -I +unix -c \"$base.ml\"\n"
-    ++ "  printf '%s' \"$want\" > \"$base.stamp\"\n"
-    ++ "}\n"
-    ++ layerScripts (splitLayers graph)
-    ++ "ocamlopt $FLAGS -I +unix -o \"$OUT\" unix.cmxa "
-    ++ joinCmxs (graphUnits graph)
-    ++ " $C_OBJS\n"
-    ++ "echo \"built $OUT\"\n"
+buildScript graph cFiles = """#!/bin/sh
+# 由 vuna 生成：分离编译构建脚本（C35：按直接依赖分层并行 + 内容哈希增量）。用法: ./build.sh [OUT]
+# 干净构建：一次 ocamlopt 编译全部 .mli/.ml 并链接；
+# 增量构建：每单元 .ml/.mli 与直接依赖 .stamp 的内容哈希写 $base.stamp，命中即跳过；
+# 同层单元互不依赖：多单元层用后台任务并行编译，层间用 wait 串行。
+set -eu
+cd \"$(dirname \"$0\")\"
+OUT=\${1:-program}
+FLAGS=\"-g -w -a+39 -warn-error +39\"
+MODULES=\"${spaceJoin (graphUnits graph)}\"
+C_MODULES=\"${spaceJoin cFiles}\"
+C_OBJS=\"\"
+if [ -n \"$C_MODULES\" ]; then
+  for c in $C_MODULES; do ocamlopt -I +unix -c \"$c\"; b=\${c##*/}; C_OBJS=\"$C_OBJS \${b%.c}.o\"; done
+fi
+hash_of() {
+  for f in \"$@\"; do
+    if [ -f \"$f\" ]; then cat \"$f\"; else printf '%s' '-'; fi
+  done | sha256sum | awk '{print $1}'
+}
+stamp_want() {
+  base=$1
+  shift
+  deps=\"\"
+  for d in \"$@\"; do deps=\"$deps $d.stamp\"; done
+  hash_of \"$base.ml\" \"$base.mli\" $deps
+}
+clean=1
+for m in $MODULES; do
+  if [ -f \"$m.cmx\" ]; then clean=0; fi
+done
+if [ \"$clean\" -eq 1 ]; then
+  SOURCES=\"\"
+  for m in $MODULES; do
+    if [ -f \"$m.mli\" ]; then SOURCES=\"$SOURCES $m.mli\"; fi
+    SOURCES=\"$SOURCES $m.ml\"
+  done
+  ocamlopt $FLAGS -I +unix -o \"$OUT\" unix.cmxa $SOURCES $C_OBJS
+${stampWrites graph}  echo \"built $OUT\"
+  exit 0
+fi
+compile_mod() {
+  base=$1
+  shift
+  want=$(stamp_want \"$base\" \"$@\")
+  if [ -f \"$base.cmx\" ] && [ -f \"$base.stamp\" ] && [ \"$(cat \"$base.stamp\")\" = \"$want\" ]; then return 0; fi
+  echo \"compile $base\"
+  if [ -f \"$base.mli\" ]; then ocamlopt $FLAGS -I +unix -c \"$base.mli\"; fi
+  ocamlopt $FLAGS -I +unix -c \"$base.ml\"
+  printf '%s' \"$want\" > \"$base.stamp\"
+}
+${layerScripts (splitLayers graph)}ocamlopt $FLAGS -I +unix -o \"$OUT\" unix.cmxa ${joinCmxs (graphUnits graph)} $C_OBJS
+echo \"built $OUT\"
+"""
 
 -- 干净构建成功后按 graph 顺序写每单元 stamp（只含直接依赖的 .stamp，与增量公式一致；
 -- 依赖在前，因此依赖的 stamp 先写好）。用 `printf '%s' "$(...)"` 而不是直接重定向，
@@ -185,13 +174,7 @@ buildScript graph cFiles =
 stampWrites : List (Pair String (List String)) -> String
 stampWrites [] = ""
 stampWrites (m :: rest) =
-  "  printf '%s' \"$(stamp_want "
-    ++ firstOf m
-    ++ depsSuffix (secondOf m)
-    ++ ")\" > \""
-    ++ firstOf m
-    ++ ".stamp\"\n"
-    ++ stampWrites rest
+  "  printf '%s' \"$(stamp_want ${firstOf m}${depsSuffix (secondOf m)})\" > \"${firstOf m}.stamp\"\n${stampWrites rest}"
 
 graphUnits : List (Pair String (List String)) -> List String
 graphUnits [] = []
@@ -204,42 +187,40 @@ layerScripts (layer :: rest) = layerCalls layer ++ layerScripts rest
 
 layerCalls : List (Pair String (List String)) -> String
 layerCalls [] = ""
-layerCalls ([m]) = "compile_mod " ++ firstOf m ++ depsSuffix (secondOf m) ++ "\n"
-layerCalls layer =
-  "pids=\"\"\n" ++ bgCalls layer ++ "for p in $pids; do wait \"$p\" || exit 1; done\n"
+layerCalls ([m]) = "compile_mod ${firstOf m}${depsSuffix (secondOf m)}\n"
+layerCalls layer = """pids=\"\"
+${bgCalls layer}for p in $pids; do wait \"$p\" || exit 1; done
+"""
 
 bgCalls : List (Pair String (List String)) -> String
 bgCalls [] = ""
-bgCalls (m :: rest) =
-  "compile_mod "
-    ++ firstOf m
-    ++ depsSuffix (secondOf m)
-    ++ " &\npids=\"$pids $!\"\n"
-    ++ bgCalls rest
+bgCalls (m :: rest) = """compile_mod ${firstOf m}${depsSuffix (secondOf m)} &
+pids=\"$pids $!\"
+${bgCalls rest}"""
 
 spaceJoin : List String -> String
 spaceJoin [] = ""
-spaceJoin (name :: rest) = name ++ " " ++ spaceJoin rest
+spaceJoin (name :: rest) = "${name} ${spaceJoin rest}"
 
 depsSuffix : List String -> String
 depsSuffix [] = ""
-depsSuffix (dep :: rest) = " " ++ dep ++ depsSuffix rest
+depsSuffix (dep :: rest) = " ${dep}${depsSuffix rest}"
 
 joinCmxs : List String -> String
 joinCmxs [] = ""
-joinCmxs ([name]) = name ++ ".cmx"
-joinCmxs (name :: rest) = name ++ ".cmx " ++ joinCmxs rest
+joinCmxs ([name]) = "${name}.cmx"
+joinCmxs (name :: rest) = "${name}.cmx ${joinCmxs rest}"
 
 -- M34.5（S5）：把 split 文件列表规范化为**确定性拓扑序**（依赖在前；同层按名字哈希
 -- 排序）。单元缓存复用旧 `SplitFile` 后列表顺序会随命中集合变化，build.sh 的层/顺序
 -- 不能因此漂移（否则增量/全量产物不一致）。深度用迭代松弛算（与列表顺序无关）。
 unitTieKey : String -> Int
-unitTieKey name = strHash name * 1000003 + strHash ("t:" ++ name)
+unitTieKey name = strHash name * 1000003 + strHash "t:${name}"
 
 findFileNamed : List SplitFile -> String -> Maybe SplitFile
 findFileNamed [] _ = Nothing
 findFileNamed (f :: rest) name =
-  if splitName f == name ++ ".ml" then Just f else findFileNamed rest name
+  if splitName f == "${name}.ml" then Just f else findFileNamed rest name
 
 unitDepthLookup : List (Pair String Int) -> String -> Int
 unitDepthLookup [] _ = 0

@@ -114,16 +114,19 @@ nameSelRange lines sp name = case findNamePos lines sp name of
 -- hover：DT 洞目标 + 标识符签名
 -- ---------------------------------------------------------------
 ctxLine : Pair String String -> String
-ctxLine kv = "- `" ++ firstOf kv ++ "` : " ++ secondOf kv ++ "\n"
+ctxLine kv = "- `${firstOf kv}` : ${secondOf kv}\n"
 
 contextBlock : List (Pair String String) -> String
 contextBlock [] = ""
-contextBlock ctx = "\nContext:\n" ++ join "" (map ctxLine ctx)
+contextBlock ctx = """
+
+Context:
+${join "" (map ctxLine ctx)}"""
 
 goalContents : DtGoalInfo -> Json
 goalContents g =
   JObj
-    [Pair "kind" (JStr "markdown"), Pair "value" (JStr ("```vuna\n" ++ g.dtGoalInfoGoal ++ "\n```\n" ++ contextBlock g.dtGoalInfoCtx))]
+    [Pair "kind" (JStr "markdown"), Pair "value" (JStr "```vuna\n${g.dtGoalInfoGoal}\n```\n${contextBlock g.dtGoalInfoCtx}")]
 
 holeContains : Int -> Int -> DtGoalInfo -> Bool
 holeContains line col g =
@@ -150,10 +153,12 @@ symbolHoverBody : Sym -> String
 symbolHoverBody s =
   let
     body =
-      if symKind s == "fun" then symFullName s ++ " : " ++ symSig s
+      if symKind s == "fun" then "${symFullName s} : ${symSig s}"
       else if symSig s == "" then symFullName s else symSig s
-    doc = if s.symDoc == "" then "" else "\n\n" ++ s.symDoc
-  in "```vuna\n" ++ body ++ "\n```" ++ doc
+    doc = if s.symDoc == "" then "" else "\n\n${s.symDoc}"
+  in """```vuna
+${body}
+```${doc}"""
 
 -- hover 的 range 必须是**光标下的 token**，不是符号定义位置：客户端（VS Code）用
 -- hover.range 判断 hover 何时失效，鼠标一动到 range 外就收起。返回定义位置会让使用点
@@ -303,7 +308,7 @@ findingQuickFix uri f = case f.findingEdit of
   Nothing => Nothing
   Just e =>
     Just
-      (JObj [Pair "title" (JStr ("fix: " ++ f.findingRule)), Pair "kind" (JStr "quickfix"), Pair "diagnostics" (JArr [JObj [Pair "code" (JStr f.findingCode)]]), Pair "edit" (JObj [Pair "changes" (JObj [Pair uri (JArr [textEditJson (editLspRange e) (joinLines e.editLines)])])])])
+      (JObj [Pair "title" (JStr "fix: ${f.findingRule}"), Pair "kind" (JStr "quickfix"), Pair "diagnostics" (JArr [JObj [Pair "code" (JStr f.findingCode)]]), Pair "edit" (JObj [Pair "changes" (JObj [Pair uri (JArr [textEditJson (editLspRange e) (joinLines e.editLines)])])])])
 
 -- 全文档 fix：fixLoop 把全部可修复 finding 迭代应用（8 轮，与 CLI `--fix` 一致）；
 -- 有改动才发整文档替换编辑，否则不产生动作。
@@ -600,7 +605,7 @@ qualifiedCompletions ln chars prefixStart prefix (Just idx) =
     modLen = qualPrefixLen (reverse beforeDotChars)
     modStart = length beforeDotChars - modLen
     modPrefix = substring (natFromInt modStart) (natFromInt modLen) ln
-    fullPrefix = modPrefix ++ "."
+    fullPrefix = "${modPrefix}."
     hits =
       filter (\s => startsWith fullPrefix (symFullName s) && startsWith prefix (symName s))
         idx.indexSymbols

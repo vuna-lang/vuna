@@ -691,11 +691,11 @@ showValueAt : Int -> Value -> String
 showValueAt depth v = case v of
   -- M28：宇宙层级参与诊断（严格分层下 `Type 0` 与 `Type 1` 不相等，只说 "Type"
   -- 会让反例无法定位）；0 层仍显示 "Type" 以保持既有文案稳定。
-  VType l => if levelToInt l == 0 then "Type" else "Type " ++ strFromInt (levelToInt l)
+  VType l => if levelToInt l == 0 then "Type" else "Type ${levelToInt l}"
   VNeutral n1 => case n1 of
     NGlobal g sp => if isNilList sp then g else showTerm (quote depth v)
     NVar name lvl sp => if isNilList sp then name else showTerm (quote depth v)
-  VMeta m sp => if isNilList sp then "?" ++ strFromInt m else showTerm (quote depth v)
+  VMeta m sp => if isNilList sp then "?${m}" else showTerm (quote depth v)
   -- canonical Nat 链显示成十进制（诊断/REPL 与产物 `main : Nat` 一致）。
   VCon c args => case natCtorInt c args of
     Just n => strFromInt n

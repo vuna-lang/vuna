@@ -6,6 +6,7 @@ module Vuna.Compiler.Elab.Dict
   , dictArgUnsolvedMeta
   , dictClassArg
   , firstUnsolvedInterpGoal
+  , hasSpecificInterpInstance
   , isCmpMethod
   , isDictDomain
   , isEqMethod
@@ -80,7 +81,7 @@ else
   let
     _ =
       if debugOn then note
-        ("search: dom=" ++ showValue dom ++ " rigid=" ++ (if rigidSearchFast ec dom then "T" else "F") ++ " insts=" ++ strFromInt (length (ecInsts ec)))
+        "search: dom=${showValue dom} rigid=${if rigidSearchFast ec dom then "T" else "F"} insts=${length (ecInsts ec)}"
       else 0
   in case localDictLookup ctx 0 dom ec of
     Just pair => Ok pair
@@ -107,7 +108,7 @@ finishInstanceSearch dom sp matches ec =
   let
     _ =
       if debugOn then note
-        ("search-ambig: dom=" ++ showValue dom ++ " cands=" ++ join "," (map (\x => dtInstName (instMatchInst x)) matches))
+        "search-ambig: dom=${showValue dom} cands=${join "," (map (\x => dtInstName (instMatchInst x)) matches)}"
       else 0
     sd = showValue dom
     names = joinInstNames (map instMatchInst matches)
@@ -184,6 +185,27 @@ instFamilyNameOf i = case i.dtInstHead of
   TApp (TGlobal g) arg rig => g
   _ => ""
 
+-- M36 跟进：primitive `interp` 快捷路径的语义护栏——若程序里存在**具体** `Interp <ty>`
+-- 实例（如用户自定义 `instance Interp Int`），洞与显式 `interp` 都必须走字典路径，
+-- 不能被编译器的 String/Int/Nat 快捷降级静默覆盖。
+hasSpecificInterpInstance : Ec -> String -> Bool
+hasSpecificInterpInstance ec tyName = hasSpecificInterpInstanceGo tyName (ecInsts ec)
+
+hasSpecificInterpInstanceGo : String -> List DtInst -> Bool
+hasSpecificInterpInstanceGo tyName [] = False
+hasSpecificInterpInstanceGo tyName (i :: rest) =
+  if instFamilyNameOf i == dictTypeName interpTypeName && not (isBlanketInst i) && instHeadArgTypeName i == tyName then True
+  else hasSpecificInterpInstanceGo tyName rest
+
+instHeadArgTypeName : DtInst -> String
+instHeadArgTypeName i = case i.dtInstHead of
+  TApp (TGlobal g) arg rig => termTypeNameOf arg
+  _ => ""
+
+termTypeNameOf : Term -> String
+termTypeNameOf (TGlobal g) = g
+termTypeNameOf _ = ""
+
 allInstancesMonoFor : String -> List DtInst -> Bool
 allInstancesMonoFor family [] = True
 allInstancesMonoFor family (i :: rest) =
@@ -217,15 +239,14 @@ else case allocTeleMetas ctx ec inst.dtInstTele of
     let
       _ =
         if debugOn then note
-          ("inst-try: " ++ dtInstName inst ++ " head=" ++ showTerm inst.dtInstHead ++ " tele=" ++ strFromInt (length inst.dtInstTele))
+          "inst-try: ${dtInstName inst} head=${showTerm inst.dtInstHead} tele=${length inst.dtInstTele}"
         else 0
       hd = eval (map (\m => VMeta m []) metas) inst.dtInstHead
     in case conv (ecDefTbl ec1) (ecSolsP ec1) 0 dom hd of
       Err e =>
         let
           _ =
-            if debugOn then note
-              ("inst-conv-err: " ++ dtInstName inst ++ " dom=" ++ showValue dom ++ " hd=" ++ showValue hd)
+            if debugOn then note "inst-conv-err: ${dtInstName inst} dom=${showValue dom} hd=${showValue hd}"
             else 0
         in Nothing
       Ok sols2 =>
@@ -362,7 +383,7 @@ joinInstNames (i :: rest) = dtInstName i ++ joinRestInstNames rest
 
 joinRestInstNames : List DtInst -> String
 joinRestInstNames [] = ""
-joinRestInstNames (i :: rest) = ", " ++ dtInstName i ++ joinRestInstNames rest
+joinRestInstNames (i :: rest) = ", ${dtInstName i}${joinRestInstNames rest}"
 
 -- 字典族的类参数 kind：字典 data `Dict_C` 的构造子类型第一个 binder 的域
 -- （`MkDict_C : {p : K} -> <字段>` 里的 `K`）。

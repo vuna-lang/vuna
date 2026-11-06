@@ -152,8 +152,7 @@ dtEvalFile ctx entry =
 -- 接口路径不可用/闭包不完整时的回退目标（与 dtEvalExpr* 共用，避免两套加载语义）。
 replProgramFull : PackageContext -> String -> String -> Result (Pair DtProgram Expr)
 replProgramFull ctx program exprSource =
-  andThen
-    (loadProjectSource ctx "<repl>" (program ++ "\n" ++ replExprName ++ " = " ++ exprSource ++ "\n"))
+  andThen (loadProjectSource ctx "<repl>" "${program}\n${replExprName} = ${exprSource}\n")
     (\project => andThen (resolveProject project) (\parts => andThen (splitReplExpr (dtProjectDecls parts)) (\p => andThen (elabProgramFull (firstOf p)) (\prog => Ok (Pair prog (secondOf p))))))
 
 dtEvalExpr : PackageContext -> String -> String -> Result String
@@ -188,14 +187,13 @@ missingDepModules pkg (m :: rest) ifaceNames =
 dtCheckSourceWithIfaces : PackageContext -> String -> String -> List ModuleIface -> Result (List String)
 dtCheckSourceWithIfaces ctx label source ifaces =
   let
-    _ = note ("iface-source=check modules=" ++ strFromInt (length ifaces))
+    _ = note "iface-source=check modules=${length ifaces}"
   in andThen (loadModuleSourceWithPreloaded ctx label source (modulesOfIfaces ifaces)) (\project => case filterProjectToImports (contextPackageName ctx) project of
     Pair filtered mods =>
       let
         missing = missingDepModules (contextPackageName ctx) mods (map miNameOf ifaces)
         _ =
-          if length missing == 0 then 0
-          else note ("iface-fallback=check missing=" ++ join "," missing)
+          if length missing == 0 then 0 else note "iface-fallback=check missing=${join "," missing}"
       in if length missing == 0 then andThen (resolveProjectKeeping (preloadKeepOf ifaces mods) filtered)
         (\parts => andThen (dtCheckOursParts ctx parts (shiftedDepPrograms (materializedDeps (contextPackageName ctx) parts ifaces))) (\_ => Ok []))
       else dtCheckSource ctx label source
@@ -253,16 +251,15 @@ replProgramWithIfaces ctx program exprSource ifaces =
 replProgramWithIfacesAux : PackageContext -> String -> String -> List ModuleIface -> Maybe AuxCache -> Result (Pair (Pair DtProgram Expr) (Maybe AuxCache))
 replProgramWithIfacesAux ctx program exprSource ifaces cache =
   let
-    _ = note ("iface-source=repl modules=" ++ strFromInt (length ifaces))
-    src = program ++ "\n" ++ replExprName ++ " = " ++ exprSource ++ "\n"
+    _ = note "iface-source=repl modules=${length ifaces}"
+    src = "${program}\n${replExprName} = ${exprSource}\n"
     loaded = loadProjectSourceWithPreloaded ctx "<repl>" src (modulesOfIfaces ifaces)
   in andThen loaded (\project => case filterProjectToImports (contextPackageName ctx) project of
     Pair filtered mods =>
       let
         missing = missingDepModules (contextPackageName ctx) mods (map miNameOf ifaces)
         _ =
-          if length missing == 0 then 0
-          else note ("iface-fallback=repl missing=" ++ join "," missing)
+          if length missing == 0 then 0 else note "iface-fallback=repl missing=${join "," missing}"
       in if length missing == 0 then andThen (resolveProjectKeeping (preloadKeepOf ifaces mods) filtered) (\parts => let
         deps = shiftedDepPrograms (materializedDeps (contextPackageName ctx) parts ifaces)
       in replCheckPartsAux (depStartOf deps) (contextPackageName ctx) deps parts ifaces cache
@@ -580,12 +577,12 @@ record AuxCache where
   auxCacheCleanCps : List CachedProgram
 
 auxKeyOne : ModuleIface -> String
-auxKeyOne m = miNameOf m ++ ":" ++ strFromInt (miIfaceHashOf m)
+auxKeyOne m = "${miNameOf m}:${miIfaceHashOf m}"
 
 dtAuxKey : String -> List ModuleIface -> List ModuleIface -> String
 dtAuxKey pkg deps clean =
   strFromInt
-    (hashTextStrong ("aux|" ++ pkg ++ "|" ++ join ";" (map auxKeyOne deps) ++ "|" ++ join ";" (map auxKeyOne clean)))
+    (hashTextStrong "aux|${pkg}|${join ";" (map auxKeyOne deps)}|${join ";" (map auxKeyOne clean)}")
 
 dtAuxOfCache : String -> Maybe AuxCache -> Maybe AuxCache
 dtAuxOfCache key Nothing = Nothing
@@ -694,7 +691,7 @@ dtCheckSourceIncremental ctx label source depIfaces cleanIfaces cache needPackag
         missing = missingDepModules pkgName mods (map miNameOf allIfaces)
         _ =
           if length missing == 0 then 0
-          else note ("iface-fallback=check-incremental missing=" ++ join "," missing)
+          else note "iface-fallback=check-incremental missing=${join "," missing}"
       in if length missing > 0 then Ok (Pair False (Pair Nothing cache))
       else andThen (resolveProjectKeeping (preloadKeepOf allIfaces mods) filtered)
         (\parts => andThen (dtIncrementalCheckedCore ctx parts (materializedDeps pkgName parts depIfaces) (materializedOwn pkgName parts cleanIfaces) cache needPackage) (\r => Ok (Pair True r)))
@@ -764,7 +761,7 @@ unitImportsOf m = map findModuleNameField (append m.moduleImportsOf m.moduleImpl
 
 concatKeys : List String -> String
 concatKeys [] = ""
-concatKeys (k :: rest) = k ++ ";" ++ concatKeys rest
+concatKeys (k :: rest) = "${k};${concatKeys rest}"
 
 unitImportKey : List (Pair String String) -> String -> String
 unitImportKey acc n = case lookupPair n acc of
@@ -775,8 +772,7 @@ unitKeyOne : List (Pair String String) -> Module -> String
 unitKeyOne acc m =
   let
     deps = map (unitImportKey acc) (unitImportsOf m)
-  in strFromInt
-    (hashTextStrong ("u|" ++ moduleNameOf m ++ "|" ++ strFromInt (unitDeclsHash m) ++ "|" ++ concatKeys deps))
+  in strFromInt (hashTextStrong "u|${moduleNameOf m}|${unitDeclsHash m}|${concatKeys deps}")
 
 unitKeysGo : List Module -> List (Pair String String) -> List (Pair String String)
 unitKeysGo [] acc = reverse acc
@@ -789,7 +785,7 @@ unitKeysOf modules entryDecls printResult =
     entryHash = hashTextStrong (prim_marshal entryDecls)
     entryKey =
       strFromInt
-        (hashTextStrong ("e|" ++ strFromInt entryHash ++ "|" ++ (if printResult then "print" else "noprint") ++ "|" ++ concatKeys (map pairKeyValue modKeys)))
+        (hashTextStrong "e|${entryHash}|${if printResult then "print" else "noprint"}|${concatKeys (map pairKeyValue modKeys)}")
   in Pair "__entry__" entryKey :: modKeys
 
 unitCacheLookup : String -> List (Pair String String) -> String -> Maybe SplitFile
@@ -797,7 +793,7 @@ unitCacheLookup dir keys name = case lookupPair name keys of
   Just k => case unitCacheRead dir name k of
     Just sf =>
       let
-        _ = note ("unit-cache-hit " ++ name)
+        _ = note "unit-cache-hit ${name}"
       in Just sf
     Nothing => Nothing
   Nothing => Nothing
@@ -821,7 +817,7 @@ splitGenerateCached ctx entry modules moduleParts entryDecls prog printResult =
     pkg = contextPackageName ctx
     keys = unitKeysOf modules entryDecls printResult
     base = unitCacheDir pkg
-    bucketKey = pkg ++ "|" ++ entry
+    bucketKey = "${pkg}|${entry}"
     dir = unitCacheEntryDir base bucketKey
     -- 桶内 GC 的保留集合 = 本次构建全部单元 key 算出的文件名（入口也在 keys 里）：即将
     -- 命中的单元一定在集合内，同一入口反复编辑累积的旧 key 文件才被清掉。

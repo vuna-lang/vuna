@@ -56,7 +56,7 @@ docForDecl : DocTable -> String -> String
 docForDecl table name = lookupPair name (docTableDecls table)
 
 docForMember : DocTable -> String -> String -> String
-docForMember table parent name = lookupPair (parent ++ "\t" ++ name) (docTableMembers table)
+docForMember table parent name = lookupPair "${parent}\t${name}" (docTableMembers table)
 
 lookupPair : String -> List (Pair String String) -> String
 lookupPair key [] = ""

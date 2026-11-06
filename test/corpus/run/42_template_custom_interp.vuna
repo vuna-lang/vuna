@@ -1,0 +1,11 @@
+-- M36 跟进：primitive `interp` 快捷路径必须尊重用户的具体实例（不能静默覆盖）；
+-- 同时覆盖 String / Int / Nat 洞与 derived-Show ADT 洞。
+instance Interp Int where
+  interp n = "custom"
+
+data Box : Type where
+  MkBox : Int -> Box
+deriving (Show)
+
+main : String
+main = "${42}/${interp 42}/${length [1, 2]}/b=${MkBox 7}"

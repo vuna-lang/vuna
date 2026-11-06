@@ -191,7 +191,7 @@ qualifiedBannedTbl defined =
     (Base.HashMap.fromList [])
 
 qualifiedKey : String -> String -> String
-qualifiedKey prefix name = prefix ++ "\t" ++ name
+qualifiedKey prefix name = "${prefix}\t${name}"
 
 -- 与 `quantifyTopSig` 同义，但 banned 用共享的 qualified 表 + 全局 prelude 表。
 quantifyTopSigCached : String -> HashMap Bool -> HashMap Bool -> Expr -> Span -> Expr
