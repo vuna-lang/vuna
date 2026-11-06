@@ -124,12 +124,7 @@ ctorFieldSortsBinder globals ctx ec pos arity famLevel cname csp name dom cod = 
       let
         field = pos - arity
         msg =
-          "field #"
-            ++ strFromInt field
-            ++ ": its type sorts into Type "
-            ++ strFromInt (levelToInt sort)
-            ++ ", above the family level Type "
-            ++ strFromInt (levelToInt famLevel)
+          "field #${field}: its type sorts into Type ${levelToInt sort}, above the family level Type ${levelToInt famLevel}"
       in tcErr2 csp (CtorError cname msg) cname msg
 )
 
@@ -191,7 +186,7 @@ elabDataBodies decls heads globals ec acc = case decls of
   ds :: rest => case ds of
     Pair d dsp => case d of
       DData dname writtenParams kindExpr ctors derivings lin dsp2 => case lookupDataHead dname heads of
-        Nothing => errAt dsp2 ("DT: internal: missing data head for " ++ dname)
+        Nothing => errAt dsp2 "DT: internal: missing data head for ${dname}"
         Just (Pair fullKind arity) =>
           let
             tele = splitKind fullKind
@@ -239,7 +234,7 @@ elabDatas decls globals ec = andThen (elabDataHeads decls globals ec []) (\p => 
 -- 索引**不能无条件擦**：`vlen a n xs = case xs of Cons b m y ys => 1 + vlen b m ys` 把索引 `m`
 -- 当递归参数传下去，运行时**真的被读取**；无条件擦除会让这类定义无法生成代码。
 -- 正确擦除需要整程序使用分析，M16 落地的是**分析 + 诊断**：`eraseIndexMask` 给出保守可擦判定，
--- `indexNeedsRuntime` 给出是否真的被用到。详见 `docs/reference/limits.md` 的索引边界。
+-- `indexNeedsRuntime` 给出是否真的被用到。详见 `docs/reference/type-system.md` 的索引与擦除规则。
 eraseIndexMask : DtData -> List Bool
 eraseIndexMask dd = eraseMaskGo dd dd.dtDataParams 0 []
 

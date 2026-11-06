@@ -5,9 +5,14 @@ module Vuna.Lsp.Protocol
   , decodeUri
   , digitsToInt
   , dirOfPath
+  , errMethodNotFound
   , fileNameOf
+  , findNamePos
+  , findSubstring
   , flushLogLines
+  , idOf
   , isEmptyList
+  , isPrefixChars
   , lastElem
   , lastSegment
   , lineText
@@ -15,6 +20,7 @@ module Vuna.Lsp.Protocol
   , lspRange
   , notify
   , nthCode
+  , paramsOf
   , parentDir
   , pathToUri
   , qualPrefixLen
@@ -22,6 +28,7 @@ module Vuna.Lsp.Protocol
   , responseErr
   , responseOk
   , sendFrame
+  , spanContainsPos
   , spanRange
   , splitHeaderBlock
   , stripTrailingDots
@@ -32,21 +39,21 @@ module Vuna.Lsp.Protocol
 -- Vuna.Lsp.Protocol：LSP 的传输与通用工具层（工具链模块，**永不进 seed 闭包**）。
 --
 -- 只放与「LSP 请求语义」无关的机械层：
---   - JSON-RPC 2.0 帧读写：`Content-Length` 解析/切帧（`splitHeaderBlock` /
---     `contentLengthOf` / `readChunk`）、`sendFrame` 与响应/通知构造（stdout 只写协议帧）；
+--   - JSON-RPC 2.0 帧与信封：**唯一实现**在 `Vuna.Json.Frame`（字节级切帧 / 发帧）与
+--     `Vuna.Json.Rpc`（`id`/`method`/`params` 读取、`result`/`error`/通知构造、错误码），
+--     本模块只**重导出**它们（调用点保持 `sendFrame` / `responseOk` / `idOf` 等老名字）；
 --   - URI 编解码：`file://` + %XX（`decodeUri`/`pathToUri`），路径工具按最后一个 `/`
 --     切分（**不要用 Common.splitPath**：它按第一个 `/` 切，取不了目录/basename）；
 --   - LSP 0-based 位置/范围与 vuna 1-based Span 的换算（`lspRange`/`spanRange`）；
 --   - 日志行前缀与退出时一次写出（`logLine`/`flushLogLines`——避免 /dev/stderr 被反复截断）；
 --   - 字符串/字符/光标小工具（`lineText`/`tokenAtCursor` 等），供 Query/Diagnostics 复用。
 --
--- 读取层是**字节级**的（`prim_readBytes`，见 Intrinsics）：标准 LSP 帧的 body
--- **没有尾随换行**（`Content-Length: N\r\n\r\n{body}` 之后直接是下一帧），所以绝不能
--- 用行级读（`prim_readLine`）切 body——客户端等响应的交互式场景会直接死锁。
--- 帧循环（`Vuna.Lsp.lspLoop`）维护字节缓冲：header 到 `\r\n\r\n`/`\n\n` 为止，
--- body 按 `Content-Length` 精确读够 `N` 字节（`strLength` 即 UTF-8 字节数）。
+-- 连接循环（读帧 → 分发 → 发帧）在 `Vuna.Json.Server.serveConnection`；LSP 与
+-- REPL server 共用同一份机械实现，各自的请求语义/错误策略留在各自模块。
 import Vuna.Compiler.Common
 import Vuna.Json
+import Vuna.Json.Frame
+import Vuna.Json.Rpc
 import Base.IO
 
 -- 小工具
@@ -57,34 +64,10 @@ maxInt a b = if a >= b then a else b
 clampInt : Int -> Int -> Int -> Int
 clampInt lo hi v = if v < lo then lo else if v > hi then hi else v
 
-isDigitCode : Int -> Bool
-isDigitCode c = c >= 48 && c <= 57
-
-allDigitCodes : List Int -> Bool
-allDigitCodes [] = True
-allDigitCodes (c :: rest) = isDigitCode c && allDigitCodes rest
-
-allDigits : String -> Bool
-allDigits s = s /= "" && allDigitCodes (strUnpack s)
-
-parseIntFull : String -> Maybe Int
-parseIntFull s = if allDigits s then Just (digitsToInt (strUnpack s) 0) else Nothing
-
-digitsToInt : List Int -> Int -> Int
-digitsToInt [] acc = acc
-digitsToInt (c :: rest) acc = digitsToInt rest (acc * 10 + (c - 48))
-
-asciiLower : String -> String
-asciiLower s = strPack (map lowerCode (strUnpack s))
-
-lowerCode : Int -> Int
-lowerCode c = if c >= 65 && c <= 90 then c + 32 else c
-
 isEmptyList : List a -> Bool
 isEmptyList [] = True
 isEmptyList _ = False
 
--- 标识符字符（ASCII 字母 / 数字 / 下划线）。`.` 单独处理（限定名）。
 isWordCode : Int -> Bool
 isWordCode c = c >= 48 && c <= 57 || c >= 65 && c <= 90 || c >= 97 && c <= 122 || c == 95
 
@@ -197,29 +180,6 @@ parentDir path =
   in if d == path then path else d
 
 -- ---------------------------------------------------------------
--- JSON-RPC 帧／响应构造
--- ---------------------------------------------------------------
--- 发送一帧。Content-Length 是**字节**数：vuna 的 String 底层是 OCaml string，
--- `strLength` 即字节数（UTF-8 多字节字符也按字节计），与协议一致。
-sendFrame : Json -> Int
-sendFrame payload =
-  let
-    body = renderJson payload
-  in runIO (prim_print ("Content-Length: " ++ strFromInt (strLength body) ++ "\r\n\r\n" ++ body))
-
-responseOk : Json -> Json -> Json
-responseOk id body = JObj [Pair "jsonrpc" (JStr "2.0"), Pair "id" id, Pair "result" body]
-
-responseErr : Json -> Int -> String -> Json
-responseErr id code message =
-  JObj
-    [Pair "jsonrpc" (JStr "2.0"), Pair "id" id, Pair "error" (JObj [Pair "code" (JNum code), Pair "message" (JStr message)])]
-
-notify : String -> Json -> Json
-notify methodName params =
-  JObj [Pair "jsonrpc" (JStr "2.0"), Pair "method" (JStr methodName), Pair "params" params]
-
--- ---------------------------------------------------------------
 -- 位置换算：vuna 的 Span 从 1 开始，LSP 从 0 开始
 -- ---------------------------------------------------------------
 lspPosition : Int -> Int -> Json
@@ -259,82 +219,56 @@ tokenAtCursor text line col =
       token = stripTrailingDots (substring (natFromInt startP) (natFromInt (endP - startP)) ln)
     in if token == "" then Nothing else Just (Pair (startP + 1) token)
 
+-- ---------------------------------------------------------------
+-- span / 文本定位小工具（Bindings / Query 共用；M40 从 Query 上移）
+-- ---------------------------------------------------------------
+posBeforeOrEq : Int -> Int -> Int -> Int -> Bool
+posBeforeOrEq l1 c1 l2 c2 = l1 < l2 || l1 == l2 && c1 <= c2
+
+-- 1-based 位置是否落在 span 内（含端点；与 `Fmt.Comment.containsPos` 同口径）。
+spanContainsPos : Span -> Int -> Int -> Bool
+spanContainsPos sp line col =
+  posBeforeOrEq (spanStartLine sp) (spanStartCol sp) line col
+    && posBeforeOrEq line col (spanEndLine sp) sp.spanEndCol
+
+-- 子串首次出现的字节偏移；找不到返回 -1（字节偏移）。
+findSubstring : String -> String -> Int
+findSubstring needle hay = findSubGo (strUnpack needle) (strUnpack hay) 0
+
+findSubGo : List Int -> List Int -> Int -> Int
+findSubGo needle [] idx = 0 - 1
+findSubGo needle (c :: rest) idx =
+  if isPrefixChars needle (c :: rest) then idx else findSubGo needle rest (idx + 1)
+
+isPrefixChars : List Int -> List Int -> Bool
+isPrefixChars [] _ = True
+isPrefixChars _ [] = False
+isPrefixChars (x :: xs) (y :: ys) = x == y && isPrefixChars xs ys
+
+-- 在 span 覆盖的行范围里找名字的起始位置（1-based line/col）。
+findNamePos : List String -> Span -> String -> Maybe (Pair Int Int)
+findNamePos lines sp name =
+  scanNameLines (spanStartLine sp) True (spanStartCol sp) (spanEndLine sp)
+    (drop (spanStartLine sp - 1) lines) name
+
+scanNameLines : Int -> Bool -> Int -> Int -> List String -> String -> Maybe (Pair Int Int)
+scanNameLines lineNo isFirst firstCol lastLine remaining name = if lineNo > lastLine then Nothing
+else case remaining of
+  [] => Nothing
+  ln :: rest =>
+    let
+      from0 = clampInt 0 (if isFirst then firstCol - 1 else 0) (strLength ln)
+      tailPart = substring (natFromInt from0) (natFromInt (strLength ln - from0)) ln
+    in case findSubstring name tailPart of
+      hit =>
+        if hit >= 0 then Just (Pair lineNo (hit + from0 + 1))
+        else scanNameLines (lineNo + 1) False firstCol lastLine rest name
+
 -- 日志行前缀；退出时一次写出（`prim_writeFile "/dev/stderr"` 每次打开都会截断，
 -- 逐行写会把前面的行冲掉，所以内存累积、退出时 join 一次）。
 logLine : String -> String
-logLine s = "[vuna-lsp] " ++ s ++ "\n"
+logLine s = "[vuna-lsp] ${s}\n"
 
 flushLogLines : List String -> Int
 flushLogLines [] = 0
 flushLogLines logs = runIO (prim_writeFile "/dev/stderr" (join "" (map logLine (reverse logs))))
-
--- 帧读取：字节缓冲 + 按 Content-Length 切帧
--- ---------------------------------------------------------------
--- 从 stdin 读最多 n 字节并入缓冲（`prim_readBytes`）。
---
--- **不能按行读**：标准 LSP 帧是 `Content-Length: N\r\n\r\n{body}`，body 后面没有
--- 换行；客户端在拿到响应前也不会写下一帧。用 `prim_readLine` 切 body 会让「客户端等
--- 响应、服务器等换行」互相死锁（`initialize` 就卡住），所以读取层必须是字节级的。
---
--- 语义：有数据就立即返回已到达的字节（**可能少于 n**），EOF 返回 ""。
--- 调用方（`Vuna.Lsp.lspLoop`）负责拼接缓冲并重试切帧。
-readChunk : Int -> String
-readChunk n = runIO (prim_readBytes n)
-
--- 找子串 needle 从 start 起的字节偏移；找不到返回 -1。
-findFrom : String -> Int -> String -> Int
-findFrom needle start hay = findFromGo needle hay (range start (strLength hay))
-
--- 计数器循环改为对候选起点列表的结构递归（range 用倒计数实现）。
-findFromGo : String -> String -> List Int -> Int
-findFromGo needle hay [] = 0 - 1
-findFromGo needle hay (k :: rest) =
-  if k + strLength needle > strLength hay then 0 - 1
-  else if substring (natFromInt k) (byteLength needle) hay == needle then k
-  else findFromGo needle hay rest
-
-crlfCrlf : String
-crlfCrlf = strPack [13, 10, 13, 10]
-
-lfLf : String
-lfLf = strPack [10, 10]
-
-cutHeaders : Int -> String -> Int -> Pair String String
-cutHeaders at buf gap =
-  Pair (substring 0 (natFromInt at) buf)
-    (substring (natFromInt (at + gap)) (natFromInt (strLength buf - at - gap)) buf)
-
--- 切出 header 块（到第一个 `\r\n\r\n` 或 `\n\n`），返回 (header 块, 之后的缓冲)。
--- 同时容忍规范要求的 CRLF 与部分客户端用的裸 LF（`\n\n`），取**最靠前**的结束符。
--- 不能「先找 CRLF，找不到再退回 LF」：混合流里前一个 LF 帧的 body 会把后一个 CRLF
--- 结束符圈进同一个 header 块，于是按错误的 Content-Length 切 body。
--- Nothing = 缓冲里还没有完整 header（需要再 readChunk）。
-splitHeaderBlock : String -> Maybe (Pair String String)
-splitHeaderBlock buf = chooseHeaderHit (findFrom crlfCrlf 0 buf) (findFrom lfLf 0 buf) buf
-
-chooseHeaderHit : Int -> Int -> String -> Maybe (Pair String String)
-chooseHeaderHit crlfHit lfHit buf =
-  if lfHit >= 0 && (crlfHit < 0 || lfHit < crlfHit) then Just (cutHeaders lfHit buf 2)
-  else if crlfHit >= 0 then Just (cutHeaders crlfHit buf 4) else Nothing
-
--- `Content-Length: 123`（大小写不敏感，容忍前后空白与行尾 \r）。
-parseContentLength : String -> Maybe Int
-parseContentLength line =
-  let
-    trimmed = trim line
-  in if startsWith "content-length:" (asciiLower trimmed) then parseIntFull (trim (substring 15 (byteLength trimmed - 15) trimmed))
-  else Nothing
-
-findLengthLine : List String -> Maybe Int
-findLengthLine [] = Nothing
-findLengthLine (line :: rest) = case parseContentLength line of
-  Just n => Just n
-  Nothing => findLengthLine rest
-
--- header 块里的 Content-Length（必须 > 0；0 长度或缺失都算 header 无效）。
-contentLengthOf : String -> Maybe Int
-contentLengthOf block = case findLengthLine (split "\n" block) of
-  Nothing => Nothing
-  Just n => if n > 0 then Just n else Nothing
-
--- ---------------------------------------------------------------

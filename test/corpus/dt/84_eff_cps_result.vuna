@@ -1,0 +1,18 @@
+-- D27：**分支结果类型**本身不可命名（`resOp op` 卡住）时，每个 case 分支体要独立
+-- cast，否则 OCaml 的 `match` 各分支类型不同（Int vs String）会报错。
+-- 这里也覆盖「全局类型族作为值的类型」：`pick : (op : Op) -> resOp op`。
+data Op : Type where
+  Bump : Int -> Op
+  Read : Op
+
+resOp : Op -> Type
+resOp (Bump n) = Int
+resOp Read = String
+
+pick : (op : Op) -> resOp op
+pick op = case op of
+  Bump n => n
+  Read => "read"
+
+main : Int
+main = pick (Bump 3)

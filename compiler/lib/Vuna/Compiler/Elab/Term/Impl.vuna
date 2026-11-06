@@ -54,7 +54,6 @@ module Vuna.Compiler.Elab.Term.Impl
 import Vuna.Compiler.Common
 import Vuna.Compiler.Core
 import Vuna.Compiler.Diagnostics
-import Vuna.Compiler.Debug
 import Vuna.Compiler.Elab.Case
 import Vuna.Compiler.Elab.Dict
 import Vuna.Compiler.Elab.Match
@@ -68,6 +67,30 @@ import Vuna.Compiler.Frontend.Ast
 -- M28：规范形分支的单一精化入口。分支可达性统一问 `branchAfterUnify`（与覆盖率的
 -- `branchVerdict` 用同一个判据）：不可达分支在精化分支体**之前**就报稳定诊断；可达分支
 -- 里的错误就是真错误（不再有「体检查失败就改报 impossible branch」的兜底特判）。
+-- 构造子分支 binder 的类型不可命名时（类型族参数出现在运行时位置），分支体里对它的
+-- 每个使用包 `prim_erase`：OCaml 里同一个变量可能被不同分支/嵌套 case 推断成不同类型。
+-- 返回 body 的 de Bruijn 索引（telescope 表面顺序 → 逆序）。
+opaqueBranchIndices : Ec -> Ctx -> Int -> List (Pair String Rig) -> List Int
+opaqueBranchIndices ec ctx n tele = opaqueBranchIndicesGo ec ctx n tele 0
+
+opaqueBranchIndicesGo : Ec -> Ctx -> Int -> List (Pair String Rig) -> Int -> List Int
+opaqueBranchIndicesGo ec ctx n [] j = []
+opaqueBranchIndicesGo ec ctx n (binder :: rest) j =
+  if branchBinderOpaque ec ctx (n - 1 - j) then n - 1 - j :: opaqueBranchIndicesGo ec ctx n rest (j + 1)
+  else opaqueBranchIndicesGo ec ctx n rest (j + 1)
+
+branchBinderOpaque : Ec -> Ctx -> Int -> Bool
+branchBinderOpaque ec ctx i = case ctxItemAt i ctx.ctxItems of
+  Just (Pair name ty) =>
+    let
+      -- 分支 binder 的运行时表示由**构造子 telescope 的字段类型**决定（声明侧），
+      -- 而不是 case 精化后的类型：`res x` 在具体索引下可能归约成 Int，但声明仍是
+      -- 不透明值。所以这里用未代入 case 精化的类型求值。
+      v = eval (ctxEnv ctx) (shift 0 (i + 1) ty)
+      r = isOpaqueRuntimeTyIn ec ctx v
+    in r
+  Nothing => False
+
 elabConAltFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> DtData -> List Value -> Value -> Value -> String -> List Pat -> Span -> Expr -> Result (Pair CaseAlt Ec)
 elabConAltFuel fuel globals ctx ec dd idxs scrutVal expected cname args psp body = if fuel <= 0 then Err "DT: internal: inference fuel exhausted"
 else case findCtorIn cname (dtDataCtors dd) of
@@ -81,7 +104,14 @@ else case findCtorIn cname (dtDataCtors dd) of
         refinedExpected = refineValue refs2 defaultFuel expected
         branchCtx2 = ctxRefine branchCtx refs2
       in andThen (checkEFuel (fuel - 1) globals branchCtx2 ec body refinedExpected) (\pb => case pb of
-        Pair bodyTerm ec2 => Ok (Pair (CaseAlt cname binders bodyTerm) ec2)
+        Pair bodyTerm ec2 =>
+          let
+            n = length binders
+            opaqueIdxs = opaqueBranchIndices ec2 branchCtx2 n binders
+            bodyTerm1 = wrapOpaqueUses opaqueIdxs bodyTerm
+            bodyTerm2 =
+              if isOpaqueRuntimeTyIn ec2 ctx expected then castErased bodyTerm1 else bodyTerm1
+          in Ok (Pair (CaseAlt cname binders bodyTerm2) ec2)
       )
       )
     )
@@ -120,7 +150,12 @@ else
         -- 变量兜底要把变量作为分支 binder 记下来：Core 求值器与 codegen 都按 binder
         -- 绑定 scrutinee（旧实现丢 binder，体里引用变量会变成自由变量）。
         binds = if pname == "_" then [] else [Pair pname (rigOfLinearValue ec scrutTy)]
-      in Ok (Pair (reverse (CaseAlt "" binds bodyTerm :: acc)) ec2)
+        -- 兜底 binder 是 scrutinee 类型；不可命名时同分支 binder 一样逐使用 cast。
+        bodyTerm1 =
+          if pname == "_" then bodyTerm
+          else if isOpaqueRuntimeTyIn ec2 ctx scrutTy then wrapOpaqueUses [0] bodyTerm else bodyTerm
+        bodyTerm2 = if isOpaqueRuntimeTyIn ec2 ctx expected then castErased bodyTerm1 else bodyTerm1
+      in Ok (Pair (reverse (CaseAlt "" binds bodyTerm2 :: acc)) ec2)
   )
 
 -- M28：case 的**唯一入口**，流程固定为三步：
@@ -152,7 +187,7 @@ checkCaseMatrixFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Expr -> Lis
 checkCaseMatrixFuel fuel globals ctx ec scrut alts expected sp = if fuel <= 0 then Err "DT: internal: inference fuel exhausted"
 else
   let
-    name = "nd_scrut" ++ strFromInt (ctxDepth ctx)
+    name = "nd_scrut${ctxDepth ctx}"
     clauses = map (\alt => Pair [firstOf alt] (secondOf alt)) alts
   in andThen (multiToCaseExpr (ctorFamilyTable ec) clauses name)
     (\bodyExpr => checkEFuel (fuel - 1) globals ctx ec (ELet [Pair (PVar name sp) scrut] bodyExpr False sp) expected)
@@ -165,10 +200,7 @@ else case forceVal ec scrutTy of
     "Int" => checkLitCaseFuel (fuel - 1) globals ctx ec scrutTerm "Int" alts expected sp
     "String" => checkLitCaseFuel (fuel - 1) globals ctx ec scrutTerm "String" alts expected sp
     _ => checkCaseOfFuel (fuel - 1) globals ctx ec scrutTerm scrutTy fam idxs alts expected sp
-  _ =>
-    let
-      _ = note ("caseFam: " ++ showValue (forceVal ec scrutTy))
-    in tcErr0 sp NotInductiveFamily
+  _ => tcErr0 sp NotInductiveFamily
 
 -- M19：Bool 上的 case 降级成 if（`True` / `False` 是零参构造子形态的模式）。
 checkBoolCaseFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Term -> List (Pair Pat Expr) -> Value -> Span -> Result (Pair Term Ec)
@@ -297,8 +329,7 @@ else case checkEFuel (fuel - 1) globals ctx ec c (VNeutral (NGlobal boolTypeName
   Err _ => andThen (inferEFuel (fuel - 1) globals ctx ec c) (\pc => case pc of
     Pair cTerm (Pair cTy ec1) =>
       if isBoolType cTy then Ok (Pair cTerm ec1)
-      else errAt sp
-        ("if condition must be " ++ boolTypeName ++ " (got " ++ showValueAt (ctxDepth ctx) cTy ++ ")")
+      else errAt sp "if condition must be ${boolTypeName} (got ${showValueAt (ctxDepth ctx) cTy})"
   )
 
 -- 变量解析顺序：局部上下文 → 本程序的数据构造子 → 全局签名。构造子必须排在全局之前：
@@ -308,8 +339,9 @@ inferEFuel fuel globals ctx ec expr = if fuel <= 0 then Err "DT: internal: infer
 else case expr of
   EVar name sp => case name of
     "Type" => Ok (Pair (TType levelZero) (Pair (VType (levelSucc levelZero)) ec))
-    "_" => tcErr0 sp HoleNoExpectedType
-    _ => inferVarRef globals ctx ec name sp
+    -- M40：`_` 与 `?name` 都必须有期望类型（inference 位无法给洞定类型）。
+    _ =>
+      if isHoleName name then tcErr0 sp HoleNoExpectedType else inferVarRef globals ctx ec name sp
   EInt n sp => Ok (Pair (TInt n) (Pair (VNeutral (NGlobal "Int" [])) ec))
   EStr s sp => Ok (Pair (TStr s) (Pair (VNeutral (NGlobal "String" [])) ec))
   EPi name implicit qty dom cod sp =>
@@ -319,11 +351,14 @@ else case expr of
   EIf c t e sp => andThen (checkCondBoolFuel (fuel - 1) globals ctx ec c sp) (\pc => case pc of
     Pair cTerm ec1 => andThen (inferEFuel (fuel - 1) globals ctx ec1 t) (\pt => case pt of
       Pair tTerm (Pair tTy ec2) => andThen (inferEFuel (fuel - 1) globals ctx ec2 e) (\pe => case pe of
-        Pair eTerm (Pair eTy ec3) =>
-          if isIntTy ec3 tTy && isNatTy ec3 eTy then Ok (Pair (TIf cTerm tTerm (natToIntTerm eTerm)) (Pair tTy ec3))
-          else if isNatTy ec3 tTy && isIntTy ec3 eTy then Ok (Pair (TIf cTerm (natToIntTerm tTerm) eTerm) (Pair intTyValue ec3))
-          else andThen (convEc ec3 (ctxDepth ctx) tTy eTy)
-            (\ec4 => Ok (Pair (TIf cTerm tTerm eTerm) (Pair tTy ec4)))
+        Pair eTerm (Pair eTy ec3) => if isIntTy ec3 tTy && isNatTy ec3 eTy then Ok (Pair (TIf cTerm tTerm (natToIntTerm eTerm)) (Pair tTy ec3))
+        else if isNatTy ec3 tTy && isIntTy ec3 eTy then Ok (Pair (TIf cTerm (natToIntTerm tTerm) eTerm) (Pair intTyValue ec3))
+        else andThen (convEc ec3 (ctxDepth ctx) tTy eTy) (\ec4 => let
+          branchOpaque = isOpaqueRuntimeTyIn ec4 ctx tTy
+          tTerm2 = if branchOpaque then castErased tTerm else tTerm
+          eTerm2 = if branchOpaque then castErased eTerm else eTerm
+        in Ok (Pair (TIf cTerm tTerm2 eTerm2) (Pair tTy ec4))
+        )
       )
     )
   )
@@ -645,9 +680,9 @@ else Ok Nothing
 checkEFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Expr -> Value -> Result (Pair Term Ec)
 checkEFuel fuel globals ctx ec expr expected = if fuel <= 0 then Err "DT: internal: inference fuel exhausted"
 else case expr of
-  EVar name sp => if name == "_" then
+  EVar name sp => if isHoleName name then
     let
-      pmeta = newHoleMeta ctx ec sp expected
+      pmeta = newHoleMeta ctx ec sp expected (holeNameOf name)
     in case pmeta of
       Pair metaTerm ec1 => Ok (Pair metaTerm ec1)
   else checkAppFuel (fuel - 1) globals ctx ec (EVar name sp) [] expected sp
@@ -768,7 +803,12 @@ else case firstOf bind of
           rig = rigOfLinearValue ec valueTy
           ctx2 = ctxBindValue name valueTy ctx
         in andThen (checkLetGoFuel (fuel - 1) globals ctx2 ec1 rest body rec_ expected sp) (\pb => case pb of
-          Pair bodyTerm ec2 => Ok (Pair (TApp (TLam name rig bodyTerm) valueTerm rig) ec2)
+          Pair bodyTerm ec2 =>
+            let
+              bodyTerm2 =
+                if isOpaqueRuntimeTyIn ec2 ctx valueTy then wrapOpaqueUses [0] bodyTerm
+                else bodyTerm
+            in Ok (Pair (TApp (TLam name rig bodyTerm2) valueTerm rig) ec2)
         )
     )
   PWild psp =>
@@ -815,7 +855,10 @@ else andThen (inferEFuel (fuel - 1) globals ctx ec value) (\pv => case pv of
       ctx2 = ctxBindValue name valueTy ctx
     in andThen (inferLetFuel (fuel - 1) globals ctx2 ec1 rest body rec_ sp) (\pb => case pb of
       Pair bodyTerm (Pair bodyTy ec2) =>
-        Ok (Pair (TApp (TLam name rig bodyTerm) valueTerm rig) (Pair bodyTy ec2))
+        let
+          bodyTerm2 =
+            if isOpaqueRuntimeTyIn ec2 ctx valueTy then wrapOpaqueUses [0] bodyTerm else bodyTerm
+        in Ok (Pair (TApp (TLam name rig bodyTerm2) valueTerm rig) (Pair bodyTy ec2))
     )
 )
 
@@ -838,7 +881,7 @@ else case inferEFuel (fuel - 1) globals ctx ec expr of
   Ok (Pair term (Pair actual ec1)) => case coerceTerm ec1 expected actual term of
     Just coerced => Ok (Pair coerced (resolveDictGoals globals ec1))
     Nothing => case convEc ec1 (ctxDepth ctx) expected actual of
-      Err e => Err (showSpanLoc (exprSpan expr) ++ ": " ++ e)
+      Err e => Err "${showSpanLoc (exprSpan expr)}: ${e}"
       Ok ec2 => Ok (Pair term (resolveDictGoals globals ec2))
 
 checkLamFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> List String -> Expr -> Value -> Span -> Result (Pair Term Ec)
@@ -861,9 +904,11 @@ else
         -- 精化器插入，运行时不传），显式 binder 只有域是宇宙才擦除。
         -- M38：线性域的 binder 必须是 1；捕获外层线性值的 λ 不能逃逸。
         Pair inner ec1 =>
-          if ctxHasLinear ec ctx then if termHasOuterLinear ec ctx2 inner then tcErr1 sp (LinearCaptureEscapes name) name
-          else Ok (Pair (TLam name lamRig inner) ec1)
-          else Ok (Pair (TLam name lamRig inner) ec1)
+          let
+            inner2 = if isOpaqueRuntimeTyIn ec1 ctx dom then wrapOpaqueUses [0] inner else inner
+          in if ctxHasLinear ec ctx then if termHasOuterLinear ec ctx2 inner then tcErr1 sp (LinearCaptureEscapes name) name
+          else Ok (Pair (TLam name lamRig inner2) ec1)
+          else Ok (Pair (TLam name lamRig inner2) ec1)
       )
       )
     _ => tcErr0 sp LambdaTooManyParams
@@ -1014,9 +1059,11 @@ else if isCmpMethod ec name then case args of
   _ => Ok Nothing
 else Ok Nothing
 
--- 统一入口：先试 `==` / `/=`，再试比较运算符，最后试 `&&` / `||` 的短路降级。
+-- 统一入口：先试模板插值的原始类型快捷路径，再试 `==` / `/=`，再试比较运算符，
+-- 最后试 `&&` / `||` 的短路降级。
 specializeOpAppFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> String -> List Expr -> Span -> Result (Maybe (Pair Term (Pair Value Ec)))
 specializeOpAppFuel fuel globals ctx ec name args sp = if fuel <= 0 then Err "DT: internal: inference fuel exhausted"
+else if name == interpMethodName then specializeInterpPrimApp (fuel - 1) globals ctx ec name args sp
 else andThen (specializeEqAppFuel (fuel - 1) globals ctx ec name args sp) (\r => case r of
   Just pair => Ok (Just pair)
   Nothing => andThen (specializeCmpAppFuel (fuel - 1) globals ctx ec name args sp) (\r2 => case r2 of
@@ -1027,6 +1074,38 @@ else andThen (specializeEqAppFuel (fuel - 1) globals ctx ec name args sp) (\r =>
     )
   )
 )
+
+-- M36 跟进：模板洞 `${e}` 由 Loader 降级成 `Base.Interp.interp e`。对**原始类型**可以按
+-- base 里的实例定义直接降级，省掉每个洞的字典目标与实例搜索（模板密集的源码自检曾因此
+-- 退化到分钟级）：
+--   * String：具体实例 `interp s = s`（恒等）；
+--   * Int：blanket + `Show Int` ⇒ `strFromInt e`；
+--   * Nat：blanket + `Show Nat` ⇒ `strFromInt (toInt e)`。
+-- 其它类型（用户 ADT 等）仍走正常字典路径，语义不变。
+specializeInterpPrimApp : Int -> List (Pair String Term) -> Ctx -> Ec -> String -> List Expr -> Span -> Result (Maybe (Pair Term (Pair Value Ec)))
+specializeInterpPrimApp fuel globals ctx ec name args sp = if fuel <= 0 then Err "DT: internal: inference fuel exhausted"
+else case args of
+  [e] => andThen (inferEFuel (fuel - 1) globals ctx ec e) (\pa => case pa of
+    Pair eTerm (Pair eTy ec1) =>
+      let
+        tyv = forceVal ec1 eTy
+      in if isStringTyValue tyv then Ok (Just (Pair eTerm (Pair tyv ec1)))
+      else if isIntTy ec1 tyv && not (hasSpecificInterpInstance ec1 intTypeName) then Ok (Just (Pair (strFromIntTerm eTerm) (Pair strTyValue ec1)))
+      else if isNatTy ec1 tyv && not (hasSpecificInterpInstance ec1 natTypeName) then Ok (Just (Pair (strFromIntTerm (natToIntTerm eTerm)) (Pair strTyValue ec1)))
+      else Ok Nothing
+  )
+  _ => Ok Nothing
+
+-- 原始类型的 `interp` 降级产物：`strFromInt e`（String 恒等直接返回 e）。
+strFromIntTerm : Term -> Term
+strFromIntTerm t = TApp (TGlobal "strFromInt") t Rig1
+
+strTyValue : Value
+strTyValue = VNeutral (NGlobal strTypeName [])
+
+isStringTyValue : Value -> Bool
+isStringTyValue (VNeutral (NGlobal g [])) = g == strTypeName
+isStringTyValue _ = False
 
 -- ---------------------------------------------------------------
 -- M23：`&&` / `||` 的**短路**降级

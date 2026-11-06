@@ -310,9 +310,9 @@ tcTemplate (InterpNoInstance _) =
   "template interpolation needs an `Interp` or `Show` instance for <0> (add `deriving (Show)`, define `instance Interp <0>`, or convert explicitly with `show`/`strFromInt`)"
 tcTemplate (NotExhaustive _) = "case is not exhaustive: missing <0>"
 tcTemplate (RedundantCtorBranch cname) =
-  "redundant constructor branch: `" ++ cname ++ "` is already covered by an earlier branch"
+  "redundant constructor branch: `${cname}` is already covered by an earlier branch"
 tcTemplate (RedundantLiteralBranch lit) =
-  "redundant literal branch: " ++ lit ++ " is already covered by an earlier branch"
+  "redundant literal branch: ${lit} is already covered by an earlier branch"
 tcTemplate (SignatureNoDef _) = "signature for <0> has no definition"
 tcTemplate (UnknownInterface _) = "unknown interface <0> in instance head or constraint"
 tcTemplate (UnknownName _) = "unknown name <0>"

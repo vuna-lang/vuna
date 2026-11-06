@@ -1,33 +1,48 @@
-# 工具链：goal、LSP、doc 与错误码
+# 工具链：goal、LSP、doc、fmt 与错误码
 
-本文覆盖 DT 路径的**工具链**：洞目标显示、LSP server、`vuna doc`，以及诊断错误码体系。
+本文覆盖 DT 路径的**工具链**：洞目标显示、LSP server、`vuna doc`、`vuna fmt`，以及
+`vuna run` / `vuna interp` / REPL 的命令语义、诊断错误码与 CLI 退出码。
 语言语义见 [language.md](language.md) / [type-system.md](type-system.md)，实现边界见
 [core.md](core.md)，模块与 TCB 边界见 [architecture.md](../architecture.md)。
 
 ## 1. `vuna goal`：洞目标与上下文
 
-DT 里 `_` 是一个洞（hole）。`vuna goal` 列出文件里每个洞的位置、目标类型与上下文：
+DT 里 `_` 是匿名洞，`?name` 是命名洞（M40；`?` 与标识符紧邻）。`vuna goal` 列出文件里
+每个洞的位置、目标类型与上下文：
 
 ```console
 $ vuna goal test/corpus/dt/15_goal.vuna
 test/corpus/dt/15_goal.vuna:7:11: goal Type
+
+$ vuna goal Holes.vuna        # 未解洞同样列出（M40 起容错查询）
+Holes.vuna:6:6: goal Int
+  m : Int
+  n : Int
+
+$ vuna goal Named.vuna        # 命名洞带名字
+Named.vuna:6:6: goal ?goal : Int
+  m : Int
+  n : Int
 ```
 
 - 位置是 `文件:行:列`，与所有其他诊断一致（**1-based**）。
 - 目标类型是精化后 zonk（代入已解元变量）再打印的。
+- 上下文是洞建立时精化上下文快照里的**全部可见绑定**（名字 : 类型，最内层在前）。
 - 若文件里没有洞，输出 `<file>: no holes`。
-- 被**解出**的洞不会出现在列表里（`main = id _ 7` 里那个 `_` 由实参 `7` 定成 `Int`，
-  因此 `goal` 只报真正未解的洞）。未解的洞在 `check` / `compile` 时由 `TC_UnsolvedHole`
-  报出（带位置与目标类型）。
+- M40：所有记录的洞都会列出（已解 / 未解都算 goal）。**未解洞不再让 `goal` 直接失败**：
+  查询走容错入口 `goalsOfProgramTolerant`；`check` / `compile` / `build` 仍在严格收尾处报
+  `TC_UnsolvedHole`（命名洞的诊断带洞名）。精化中途有硬错误（未绑定名 / 类型不匹配等）时
+  仍返回错误。
+- 旧描述「被解出的洞不会出现在列表里」是错的（已解的类型实参洞仍会列出），已纠正。
 
-实现入口：`Vuna.Compiler.Elab.Driver.goalsOfProgram`（返回 `List DtGoalInfo`，含 span、
-目标类型文本与上下文条目），CLI 侧在 `Vuna.Cli.goalArgs`。
+实现入口：`Vuna.Compiler.Elab.Driver.goalsOfProgramTolerant`（返回 `List DtGoalInfo`，含
+span、目标类型文本、上下文条目与洞名），CLI 侧在 `Vuna.Cli.goalArgs`。
 
 ## 2. LSP server（`vuna lsp`）
 
 `vuna lsp` 是一个 **JSON-RPC 2.0 over stdio** 的语言服务：从 stdin 读帧、向 stdout 写帧，
 日志一律走 stderr。它是根包工具链模块（`lib/Vuna/Lsp.vuna` + `Lsp.Protocol` /
-`Lsp.Diagnostics` / `Lsp.Query`），**永不进入 seed 闭包**。
+`Lsp.Diagnostics` / `Lsp.Query` / `Lsp.Bindings`），**永不进入 seed 闭包**。
 
 ### 帧格式
 
@@ -54,14 +69,33 @@ Content-Length: <字节数>\r\n
 | `initialized` | 通知，无响应 |
 | `textDocument/didOpen` / `didChange` / `didClose` | 内存维护打开文档表（Full 同步） |
 | `textDocument/publishDiagnostics` | 包上下文解析 / DT 精化 / 覆盖性诊断 + lint 诊断 |
-| `textDocument/hover` | DT 洞 `_` 的目标类型与上下文（文本里没有独立 `_` 时跳过精化）；否则标识符签名 + `-- |` docstring（多行保留）。普通注释不进入 hover。`range` 落在**光标 token** 上（不是符号定义位置）——客户端用它判断 hover 何时失效 |
+| `textDocument/hover` | 洞（`_` / `?name`）的目标类型与上下文（容错查询；文本里没有洞 token 时跳过精化）→ 模块引用（`import` / 导出项 `module B` / 模块头 / 限定名前缀；带模块 docstring）→ 局部绑定（参数 / λ / `let` / `where` / `case` / `do` / `as` / 模式；语法级类型与值）→ 标识符签名 + `-- |` docstring（多行保留）。普通注释不进入 hover。`range` 落在**光标 token** 上（不是符号定义位置）——客户端用它判断 hover 何时失效 |
 | `textDocument/formatting` | `Vuna.Fmt.formatSourceWith` 全文替换 TextEdit（fixity 取程序级可见闭包）（解析失败返回空） |
 | `textDocument/documentSymbol` | AST 声明树（data/record/trait 带子节点） |
-| `textDocument/definition` / `references` | Index：token → 符号 → 定义位置；references 用 `Ref` 的精确行 / 列 |
+| `textDocument/definition` | 模块引用 → 目标模块文件的 `module` 头名字；局部绑定 → 当前缓冲 binder 名字；否则 Index 符号 → 同文件兜底 |
+| `textDocument/references` | Index：token → 符号；references 用 `Ref` 的精确行 / 列 |
 | `textDocument/completion` | 关键字 + 当前缓冲顶层符号 + Index 符号；`.` 后按模块过滤 |
 | `textDocument/codeAction` | lint finding 的 **quick fix**（M38）：只对可自动修复（`findingEdit`）且行范围与请求 range 相交的 finding 生成 `{title:"fix: <rule>", kind:"quickfix", diagnostics:[{code}], edit:{changes}}`；另给 `fix all lint findings`（`Lint.Fix.fixLoop` 的整文档替换）；cap 20；`context.only` 不含 `quickfix` → 空数组 |
 | `workspace/symbol` | Index 符号过滤（有上限） |
 | `shutdown` / `exit` | 正常退出语义：收到 shutdown 后 exit 退 0，否则退 1 |
+
+### 模块名与局部绑定的解析（M40）
+
+`hover` / `definition` 在洞与 Index 之间插了一步 `Vuna.Lsp.Bindings`（**parse 级**、不触发
+`.local/index/` 构建；解析失败或未命中就退回原路径）：
+
+- **模块引用**：`import` 的模块名 / alias、导出项 `module B`（全名或 alias）、模块头自身、
+  限定名的模块前缀（`Base.List.map` 光标落在 `List` ⇒ 模块 `Base.List`；落在 `map` ⇒ 不命中）。
+  模块名 → 文件按**包上下文模块根**探测（`Pkg.contextForFile` 的 roots：本包 `lib/` 在前、
+  依赖闭包在后，workspace 外的依赖包也能定位）；模块 docstring 走 `Doc.Comments.docTableOf`
+  （当前文件用缓冲，其他模块读盘）。找不到路径时 hover 只给 `module <全名>`，definition 为空。
+- **局部绑定**：顶层函数参数（类型按同名签名的箭头链）、λ 参数、`let` / `where`（签名行
+  `EAnn` 给出类型；值能单行打印时同时显示 `= 值`）、`case` 分支模式、`do` 绑定、`as` 模式、
+  记录模式字段。作用域是**顺序**的（后续绑定可见前面、不互递归，与精化器一致），最内层优先；
+  局部名优先于同名顶层符号。
+- **语言层边界**：局部绑定**没有推断类型**（`Ctx` 不记录位置，精化器没有「位置 → 局部类型」
+  入口；类型只取语法可得来源）；λ 参数位置由 λ 头部文本按序推导、`as` 名按 `@` 定位、记录 pun
+  用字段名起点；Pi / 类型级 binder 不解析；`references` 对局部名仍按名字全局匹配。
 
 ### 诊断的来源与边界
 
@@ -77,6 +111,9 @@ Content-Length: <字节数>\r\n
   `.local/index/` 全量重建（仓库级秒级，期间请求排队）；没有洞的文件 hover 不跑精化，
   含洞的文件每次 hover 会重跑一次整模块精化；多根 workspace 取首个文档；一次只发首个编译
   错误；`codeAction` 每次重算 fixity + lint（无进程内缓存），只产出 `quickfix`。
+- M40 新增边界：模块 hover 每次读目标文件（未保存改动不反映，与依赖诊断一致，无进程内缓存）；
+  局部绑定没有推断类型、Pi 名字不解析、`references` 不识别局部名；洞查询用容错入口，
+  跳过用量/终止性校验（只影响 hover / `goal`，不影响 `check`）；同名 `?name` 不共享求解。
 - URI：`file://` + `%XX` 解码；非 file / 不存在的路径用 cwd 包上下文，不崩溃。
 
 ### 编辑器冒烟
@@ -95,6 +132,13 @@ shutdown/exit 退出码，以及**交互式帧读取**（第 18 项：body 后�
 立刻响应）、**符号 hover 的 range 落点**（第 19 项）与 **codeAction quick fix**（第 21 项：
 `kind`/`title`/`newText`/0-based range、fix all、`context.only` 过滤）。`test/run-tests.sh`
 的 LSP 段调用它。
+
+M40 起还覆盖（第 26–28 项）：模块名 hover/definition（import 名字、导出项 `module B`、
+模块头、模块 docstring）、局部绑定 hover/definition（参数类型、λ、`let` 值、遮蔽：
+body 指向 `let` binder / 值指向函数参数）、未解 `_` 洞的目标+上下文（容错查询）、
+命名洞 `?goal` 的名字/目标/上下文与 range 覆盖；传输层边界（坏 JSON 帧 / 无
+`Content-Length` / 超大帧声明 / 半帧 EOF）在第 22–25 项。CLI 侧的目标查询与 `?name` 的
+fmt/lint/check 行为在 `test/run-tests.sh` 第 35b 段。
 
 ## 3. `vuna doc`
 
@@ -142,6 +186,21 @@ $ vuna search --type "a -> a"
 **完整清单**由 `vuna gen-errors [ROOT]` 遍历上述枚举表生成到
 `ROOT/docs/.generated/errors.md`（默认 ROOT=`.`）。生成物 gitignored、**勿手改**；重跑幂等。
 
+### 退出码
+
+CLI 统一使用 0 / 1 / 2 三档：
+
+| 退出码 | 含义 | 典型来源 |
+| --- | --- | --- |
+| 0 | 成功 | 命令完成；`--check` 无差异；lint 无 finding；测试全过 |
+| 1 | 源码 / 诊断错误 | `check` / `compile` / `build` 的一切失败（解析、精化、覆盖性、终止性、codegen，以及入口路径不存在；**解析错误也是 1**）；`lint` 有 finding；`fmt --check` 有需重排文件；`doc --check` 缺 docstring；`test` 有失败 |
+| 2 | 用法 / 工具错误 | 未知命令或 flag、缺值、参数个数不对；工具命令的 IO / 上下文错误（`lint` / `fmt` / `interp` / `test` / `goal` / `doc` 的路径不存在、非 workspace、包或依赖加载失败、取不到程序级 fixity 上下文） |
+
+约定之外：`vuna interp` 把任何检查 / 求值失败报成 2（输出以 `error:` 开头）；`vuna
+search` 无命中为 1（用法 / 查询解析 / 非 workspace 仍为 2）；`vuna run` 透传子进程退出
+码；`vuna repl` 的启动目标既不存在也不是模块名时为 1、加载失败为 2。产物运行期未捕获
+异常由运行时报告器以 2 退出（见 [debugging.md](debugging.md) §2）。
+
 ### 代表性诊断
 
 下表只列常用码；完整清单见生成物。
@@ -168,6 +227,7 @@ $ vuna search --type "a -> a"
 | `CG_TypeLevelBindingRuntime` | codegen | 运行时用到被擦除绑定 |
 | `CG_TypeUsedAtRuntime` | codegen | 运行时出现类型项 |
 | `CG_AxiomAtRuntime` | codegen | 运行时使用 axiom |
+| `CG_InterpCannotExecuteEffects` | codegen | `vuna interp` 遇到 `main : IO a` |
 | `CG_MainReturnType` | codegen | `main` 返回类型不支持 |
 
 ## 5. `vuna run` 与 REPL 调试命令
@@ -178,26 +238,185 @@ $ vuna search --type "a -> a"
 否则列出候选并 exit 2；库包 / 缺产物 / 构建失败都给出可操作错误。实现入口
 `Vuna.Run.runRun`。
 
-REPL 的调试命令（`vuna repl`，实现入口 `Vuna.Repl.runRepl`）：
+`vuna interp <file.vuna>` 走同一条 DT 精化后再做**纯核心求值**，不执行效果：任何
+`main : IO a` 一律报 `[CG_InterpCannotExecuteEffects]`，消息是
+`interp cannot execute effects (main : IO a); compile and run the program instead`
+（exit 2）；纯 `main` 只展示 `Int` / `Nat` / `String` / `Bool`，需要效果或其它展示时用
+`compile` + 运行产物。
+
+REPL（`vuna repl [FILE|DIR|MODULE]`，实现入口 `Vuna.Repl.runRepl`；行编辑在
+`Vuna.Repl.Edit` / 终端层在 `Vuna.Repl.Term`；server / 客户端在 `Vuna.Repl.Server` /
+`Vuna.Repl.Client`。工具链模块都不进 seed 闭包）：
 
 | 命令 | 行为 |
 | --- | --- |
-| `:type EXPR` | 精化表达式并只打印 zonk 后的类型（不求值、不执行效果） |
-| `:load FILE` | 重置缓冲后加载入口式源码（文件不能带 `module ... where` 头）；失败时状态不变 |
-| `:reload` | 重读上次 `:load` 的文件（未 load 过给可操作提示） |
-| `:browse MODULE` | 惰性构建 `Vuna.Index` 后按 `vuna api` 打印模块接口（首次可能触发索引重建） |
-| `:reset` / `:quit` / `:help` | 原有语义（`:reset` 同时清 `:load` 记录与定义缓冲） |
+| `:type EXPR` | 精化表达式或类型表达式并打印 zonk 后的类型（类型构造子打印 kind；不求值、不执行效果；类型文本按 token 着色） |
+| `:typeinfo EXPR` | 主行只显示显式类型，隐式 binder 单独列出；工作区内附 docstring（别名 `:ti`） |
+| `:info NAME` | 先查 REPL 缓冲（精化后的类型），再查 `Vuna.Index`：全名 / kind / 签名 / 文档 / 位置 |
+| `:search [--type\|--name\|--doc] QUERY` | 复用 `vuna search` 的检索；含 `->` / `=>` 自动类型检索；最多 20 条 |
+| `:load TARGET` | 见下方加载矩阵；成功才改变状态，失败保持缓冲 |
+| `:reload` | 上次是文件则重读；是模块则重新校验导入；都没有给可操作提示 |
+| `:browse [MODULE]` | 惰性构建 `Vuna.Index`（首次可能触发索引重建）后打印模块接口；无参列出模块 |
+| `:defs` | 缓冲区定义的名字 + zonk 后类型；`:load` 文件来源标 `(文件)` |
+| `:imports` | 当前显式 import 行 + 隐式自动导入的 Prelude（标「隐式自动导入」） |
+| `:delete NAME` | 删除 REPL 内定义（含同名签名块）；文件来源报错，提示改文件后 `:reload` |
+| `:set …` | `+t/-t`（求值后打印类型）、`+s/-s`（耗时）、`editing auto\|on\|off`、`color auto\|on\|off`、`prompt TEXT`（保留尾随空格）；无参列出 |
+| `:history` / `:again N` | 编号列出历史 / 把第 N 条完整输入重新提交（命令与定义都可以） |
+| `:! CMD` | `sh -c` 执行；非 0 打印退出码 |
+| `:abandon` | 放弃当前待续输入 / `:{ ... :}` 块 |
+| `:{` … `:}` | 多行块输入：原样收集、块内空行保留、提交前去掉公共缩进 |
+| `:reset` / `:quit` / `:help` | `:reset` 清缓冲与加载目标（保留设置/历史）；`:quit` 同 Ctrl-D |
 
-未知 `:命令` 给 `未知命令 ...（输入 :help）`，不落到 parse error。调试与运行时错误的整体
-工作流见 [debugging.md](debugging.md)。
+**名字作用域**：REPL 与普通源文件共用同一套 Loader 语义——Prelude **隐式自动导入**
+（`:imports` 会标为隐式，显式 `import Prelude` 时不再重复）；`:type` 直接走表达式精化，
+而导入模块的类型名与本地 `data` 名一样可以作为项，所以 `:type Maybe` 打印 kind
+（`Maybe : (a : Type) -> Type`）、`:type Maybe Int` 打印 `Type`；限定名需先 import
+（`:load Base.Maybe` 后 `:type Base.Maybe.Maybe`）。裸运算符会按值形式自动补括号
+（`:type +` ≡ `:type (+)`）；`>>` 是 do 派生语法、不是值，`:type >>` / `:type (>>)`
+会给出提示。
 
-## 6. 尚未实现（工具链自身缺口）
+**输入单元**：一次提交是一条完整表达式或一条定义。括号 / 字符串 / 块注释未闭合，或行尾
+停在 `=` / `->` / `where` / `do` / `then` / `else` / `of` / `in` / `case` / `let` / `|`
+/ `,` / `<-` / `=>` 时自动进入续行（`... ` 提示）；`:{` … `:}` 走显式多行块。
+
+**定义体验**：`x = 1 + 1` / `f y = x + y` 可直接输入，缺签名时 REPL 调
+`Interp.inferDefTypes` 自动推断（编译器元变量 telescope + 定义边界泛化），写回后
+`checkProgram` 复查，失败回滚并提示手写签名。带模式匹配（`f 0 = …`）、trait 约束
+（`x == x`）、高阶参数的定义需要显式签名（消息里给提示）；宇宙级定义同样不需要先写
+签名，`u = Type 1` 自动推断为 `u : Type 2`。同名 `DFun` 再次输入即重定义
+（文本替换语义：后续定义重新绑定到新定义，不是 shadowing）。
+
+**效果表达式**：`IO` 表达式放进临时包走 `compile` + 运行，效果输出直接到终端、按进程
+退出码判定，因此需要 PATH 里有 `ocamlopt`。包上下文取最近 `vuna.toml` 的本地依赖闭包
+（不在包内时 base-only）。
+
+**加载矩阵**（`:load` 与 CLI 位置参数同一套解析）：
+
+| 目标 | 行为 | 输出片段 |
+| --- | --- | --- |
+| `path/to/entry.vuna` | 整段源码替换 imports/defs（旧语义） | `已加载 …（N 个定义）` |
+| `path/to/module.vuna`（含 `module` 头） | 拒绝，提示用模块名 | `是模块文件` |
+| `Base.Nat`（模块名） | 立即校验后追加 `import` | `已导入模块 Base.Nat` |
+| `path/to/pkg`（目录） | 切换包上下文并重置缓冲/索引（保留设置/历史） | `已切换包 …` |
+| `vuna repl FILE` / `vuna repl DIR` / `vuna repl MODULE` | 启动即加载 / 切换上下文 / 导入；加载失败报错退出（exit 2） | 同上 |
+
+**行编辑（tty）**：←/→ 码点移动、Home/End、Backspace/Delete、↑/↓ 历史、Ctrl-R 反向
+增量历史搜索（再按 Ctrl-R 找更早、Enter 接受、Esc/Ctrl-C 取消）、Ctrl-A/E/K/U/W、
+Ctrl-L 清屏、Ctrl-P/N/B/F、Ctrl-C 取消当前输入、Ctrl-D 空行退出、Tab 补全（命令名与
+当前缓冲绑定名；唯一匹配补全、多个补最长公共前缀）。超宽行按水平窗口只显示尾部，
+宽度来自 `stty size`（取不到时按 80）。若进程在编辑中被硬杀（SIGKILL），终端可能停在
+raw，执行 `stty sane` 恢复。历史持久化到 `VUNA_REPL_HISTORY` > `$XDG_STATE_HOME/vuna/repl_history`
+> `$HOME/.vuna_repl_history`（只存单行单元；目录不可写时静默跳过）。
+
+**非 tty / 无 stty 回退**：非交互管道、`:set editing off`、或无 POSIX `stty` 时退回
+`prim_readLine`（没有方向键/Ctrl-R，其它命令语义一致；测试全部走这条路径）。
+
+未知 `:命令` 给 `未知命令 ...（输入 :help 查看可用命令）` + 最近命令建议，不落到 parse
+error。调试与运行时错误的整体工作流见 [debugging.md](debugging.md)。
+
+### REPL server 与客户端（`--listen` / `--client`）
+
+**为什么不是 stdio**：agent / 脚本的每次 bash 调用都是新 shell，进程结束时子进程会被清理，
+所以「常驻 REPL」必须挂在 **OS 级端点**上。`vuna repl --listen ADDR` 起常驻 server
+（会话状态跨连接保留），`vuna repl --client ADDR` 是每次调用的一发一收客户端。
+
+**端点**（只允许本机，能连上 = 能在你的进程里执行任意 vuna 代码）：
+
+| 形式 | 说明 |
+| --- | --- |
+| `unix:PATH` | Unix domain socket；进程退出时清理该路径（bind 前也会删除残留路径） |
+| `tcp:127.0.0.1:PORT` | loopback TCP；`PORT=0` 用临时端口，就绪行给出实际地址 |
+
+它**不是 stdio server**：协议帧走 socket，stdout 只输出一行就绪信息
+`listening <ADDR>`（agent 用它/后台作业日志判断可用），诊断走 stderr（`[vuna-repl-server]`）。
+
+**协议**：JSON-RPC 2.0 信封 + 与 LSP 相同的字节级帧
+（`Content-Length: <body UTF-8 字节数>\r\n\r\n<body>`，body 后无换行；单帧/缓冲 16 MiB）。
+
+请求：`{"jsonrpc":"2.0","id":N,"method":"eval","params":{"code":"…","close":true}}`
+（`code` 必填，可多行；`close` 默认 true —— 末尾按「输入结束」收尾，等价交互式空行/Ctrl-D）。
+响应载荷固定四个字段：
+
+```json
+{"jsonrpc":"2.0","id":1,"result":{"status":"ok","ok":true,"output":"42\n","error":""}}
+```
+
+| 字段 | 含义 |
+| --- | --- |
+| `status` | `ok` / `incomplete`（输入未闭合，可继续发 `eval`）/ `exit`（`:quit`，响应后进程退出） |
+| `ok` | 本次输入是否成功（等价于 `error` 为空） |
+| `output` / `error` | 普通输出 / 错误输出两个独立通道（REPL 内唯一输出汇分出） |
+
+方法：`eval`（源码 / `:命令` / 多行单元）、`ping`（版本 + 包名，探活）、`shutdown`（回帧后 exit 0）。
+协议错误用标准码：坏 JSON `-32700`（`id:null`，**连接与会话继续**）、缺 `code` `-32602`、
+未知方法 `-32601`。求值失败**不是**传输错误：仍在 `result.ok=false` 里，会话继续。
+
+**agent 驱动（跨进程、跨工具调用）**：
+
+```console
+# 1) 启动（DSH：bash 工具的 run_in_background；其它环境用 setsid/nohup/systemd/tmux）。
+#    不要用普通 `&`：调用结束会被清理；/tmp 也可能每次调用隔离，socket 路径请放持久目录。
+vuna repl --listen tcp:127.0.0.1:7878      # 就绪行：listening tcp:127.0.0.1:7878
+
+# 2) 每次独立 bash 调用（客户端补 Content-Length，只输出响应 body）
+printf '%s' '{"jsonrpc":"2.0","id":1,"method":"eval","params":{"code":"1 + 1"}}' \
+  | vuna repl --client tcp:127.0.0.1:7878
+
+# 3) 收尾
+printf '%s' '{"jsonrpc":"2.0","id":2,"method":"shutdown"}' | vuna repl --client tcp:127.0.0.1:7878
+```
+
+零依赖备选：bash 内建 `exec 3<>/dev/tcp/127.0.0.1/7878` 直接收发帧（HTTP 式 `nc -U` 亦可
+连 Unix socket）。会话是**单客户端串行**的：一个连接处理完（或对端关闭）才 accept 下一个；
+`--client` 一发一收后立即断开，因此多次调用天然串行。阻塞的 `accept`/`recv` **无超时**，
+客户端崩溃会随连接关闭自动恢复，但**不要**在同一会话上并发发请求。
+
+**阶段 1 限制**：server 模式下 `:!` 与效果表达式（`main : IO a` 临时编译运行）**拒绝执行**
+（子进程会写真实 stdout，污染协议通道）；需要跑程序时用 `vuna run` / `vuna build` 后直接
+执行产物。`vuna test` 的 IO 测试路径不受影响。
+
+## 6. `vuna fmt`
+
+`vuna fmt [--check] [PATH]...` 把源码按规范形重排：PATH 可为文件或目录；省略 PATH 时
+格式化 workspace 内各成员包的 `lib` / `app` / `test`。目录扫描跳过隐藏项、生成物与
+`corpus` 夹具。`--check` 只报告差异（`would reformat: <path>`，exit 1）；不带 `--check`
+时原地改写并打印 `formatted <path>`。非 workspace 且省略 PATH、路径不存在、取不到
+程序级 fixity 上下文都是工具错误（exit 2）。
+
+**基础排版**：2 空格缩进、顶层声明之间一个空行、文件末尾一个换行、无行尾空白；
+`format(parse(x))` 可重新 parse，且格式化幂等（`format(format(x)) == format(x)`）。
+行宽 100（按码点计）；行内放不下时在表达式内部折行，但**类型签名与字段类型不折行**
+（避免 `->` 链被打断），超长字符串字面量也保持单行。
+
+**模块头与导出列表**：导出项按字面文本 ASCII 字典序排序，`module B` 整模块重导出排
+最后；空表写作 `module M () where`。整行（`module M (a, b) where`）不超过 100 且项上
+无注释时保持单行；否则逐项一行（逗号前置）：`module M` 后接 `  ( a` / `  , b` /
+`  ) where`。项级注释随项移动。
+
+**注释**：单独成行的注释成为下一条目的前置注释，写在同一行末尾的注释成为该条目的行尾
+注释；多行块注释只作前置注释。表达式内部的注释前移到最内层包含它的条目（没有则前移到
+下一条目；文件末尾的注释保留在文件末尾）。
+
+**`where` 与 `infix*`**：`where` 块的绑定按源码顺序输出，带签名的绑定先输出签名行；
+`infix*` 声明打印在 imports 之后、第一个声明之前，保持源码顺序、每条一行
+（`infixl 6 +` / `infixr 5 :: = Cons`）。fixity 是**程序级**属性：调用方传入程序可见
+的 fixity 闭包（`Loader.Flatten.fixitiesForSource`：本文件声明 + import 闭包的去重
+表）；取不到上下文（依赖加载失败）或遇到未知**符号**运算符时 fmt 报错并停止，不静默按
+默认优先级重排；未知反引号名字按 9 左结合（Haskell 默认）。
+
+**模板字面量**按 [templates.md](templates.md) 的规范形重写：`"""` 内容逐字（不
+dedent，开引号后的首个换行由 lexer 丢弃、渲染时按需补回），文本里的 `$` 紧跟 `{` 写成
+`\$`，`${...}` 内的注释丢弃（词法不进 AST）。
+
+## 7. 尚未实现（工具链自身缺口）
 
 - **case splitting**：按洞的目标类型自动展开 `case` 分支（需要与编辑器协议配合）。
 - `rewrite` / `with` 等证明工程 ergonomics：研究储备，未排期。
 - **语义索引**：Index 仍是 parse 级（签名必填 ⇒ 语法索引即语义面，不另建语义索引）。
 - LSP 只有 lint quick fix：无 rename、无 case split、codeAction 不提供 command 形式
   （见 [debt.md](debt.md) C38）。
+- **REPL server**：无请求取消/超时、无并发连接、无断线重连；阶段 1 不执行 `:!` 与效果
+  表达式；没有 HTTP/TLS（端点只有 loopback TCP / Unix socket；见 debt D36）。
 
 阶段与债务归属见 [roadmap.md](../roadmap.md) / [debt.md](debt.md)；测试入口见
 [testing.md](testing.md)。

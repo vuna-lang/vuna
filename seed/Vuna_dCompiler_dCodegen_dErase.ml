@@ -247,9 +247,9 @@ let rec v_Vuna_dCompiler_dCodegen_dErase_dfilterNames = (fun mc0 mc1 -> (match m
 let v_Vuna_dCompiler_dCodegen_dErase_dgroupOf = (fun mc0 mc1 -> (match mc1 with
   | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__128, dtb__129) -> (match dtb__129 with
   | Base_dList.C_Base_dList_dList_Base_dList_dNil -> (Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__128, Base_dList.C_Base_dList_dList_Base_dList_dNil))
-  | _ -> ((v_Vuna_dCompiler_dCodegen_dErase_dfilterNames (fun m -> ((Base_dHashMap.v_Base_dHashMap_dmember m) (Base_dHashMap.v_Base_dHashMap_dofNames mc1)))) mc0)
+  | _ -> ((fun memberTbl -> ((v_Vuna_dCompiler_dCodegen_dErase_dfilterNames (fun m -> ((Base_dHashMap.v_Base_dHashMap_dmember m) memberTbl))) mc0)) (Base_dHashMap.v_Base_dHashMap_dofNames mc1))
 )
-  | _ -> ((v_Vuna_dCompiler_dCodegen_dErase_dfilterNames (fun m -> ((Base_dHashMap.v_Base_dHashMap_dmember m) (Base_dHashMap.v_Base_dHashMap_dofNames mc1)))) mc0)
+  | _ -> ((fun memberTbl -> ((v_Vuna_dCompiler_dCodegen_dErase_dfilterNames (fun m -> ((Base_dHashMap.v_Base_dHashMap_dmember m) memberTbl))) mc0)) (Base_dHashMap.v_Base_dHashMap_dofNames mc1))
 ))
 
 let rec v_Vuna_dCompiler_dCodegen_dErase_dgroupsFromCompsGo = (fun mc0 mc1 mc2 mc3 -> (match mc2 with

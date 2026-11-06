@@ -110,8 +110,8 @@ typeCtorKindTerm arity =
   if arity <= 0 then TType levelZero
   else TPi "_" False Rig0 (TType levelZero) (typeCtorKindTerm (arity - 1))
 
--- IO 的 kind：`Type -> Type`，binder 是 **Rig1**（参数在运行时表示 `int -> a` 里被用到；
--- `IIO` 的应用也显式写 Rig1）。
+-- IO 的 kind：`Type -> Type`，参数 binder 是 **Rig0**（类型层域，恒擦除，只出现在 OCaml 类型位置；
+-- `IIO` 的应用也显式写 Rig0）。
 ioKindTerm : Term
 ioKindTerm = TPi "a" False Rig0 (TType levelZero) (TType levelZero)
 

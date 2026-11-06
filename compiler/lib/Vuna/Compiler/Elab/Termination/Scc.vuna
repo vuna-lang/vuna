@@ -377,20 +377,20 @@ edgeText : ScEdge -> String
 edgeText e = if e.scStrictEdge then strictEdgeText e else weakEdgeText e
 
 strictEdgeText : ScEdge -> String
-strictEdgeText e = strFromInt e.edgeFrom ++ "->>" ++ strFromInt e.edgeTo
+strictEdgeText e = "${e.edgeFrom}->>${e.edgeTo}"
 
 weakEdgeText : ScEdge -> String
-weakEdgeText e = strFromInt e.edgeFrom ++ "->" ++ strFromInt e.edgeTo
+weakEdgeText e = "${e.edgeFrom}->${e.edgeTo}"
 
 edgesText : List ScEdge -> String
 edgesText [] = ""
 edgesText ([e]) = edgeText e
-edgesText (e :: rest) = edgeText e ++ "," ++ edgesText rest
+edgesText (e :: rest) = "${edgeText e},${edgesText rest}"
 
 badGraphText : String -> List (List ScEdge) -> List String
 badGraphText f [] = []
 badGraphText f (g :: rest) =
-  if graphOK g then badGraphText f rest else (f ++ "{" ++ edgesText g ++ "}") :: badGraphText f rest
+  if graphOK g then badGraphText f rest else "${f}{${edgesText g}}" :: badGraphText f rest
 
 sctBadText : List (Pair (Pair String String) (List (List ScEdge))) -> List String
 sctBadText [] = []
@@ -407,8 +407,7 @@ sctCheck comp defTbl ctors projs facts msg =
     table0 = initialTable sites ctors projs facts
   in case closureLoop table0 240 of
     Pair table1 ok1 =>
-      if ok1 then if sctCheckTable table1 then Ok 0
-      else Err (msg ++ " [SCT 无下降环: " ++ sctDiag table1 ++ "]")
+      if ok1 then if sctCheckTable table1 then Ok 0 else Err "${msg} [SCT 无下降环: ${sctDiag table1}]"
       else Err msg
 
 -- ===============================================================

@@ -1,0 +1,6 @@
+[package]
+name = "vis-root"
+
+[dependencies]
+vis-dep = "../dep"
+vuna-base = "../../../../../base"

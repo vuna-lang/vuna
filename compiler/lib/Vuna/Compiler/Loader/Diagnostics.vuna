@@ -68,7 +68,7 @@ ldAll =
   ]
 
 ldMsg : {n : Nat} -> LdDiag n -> Vec String n -> String
-ldMsg e args = "[" ++ ldCode e ++ "] " ++ substTemplate (ldTemplate e) args
+ldMsg e args = "[${ldCode e}] ${substTemplate (ldTemplate e) args}"
 
 ldErr : {n : Nat} -> LdDiag n -> Vec String n -> Result a
 ldErr e args = Err (ldMsg e args)

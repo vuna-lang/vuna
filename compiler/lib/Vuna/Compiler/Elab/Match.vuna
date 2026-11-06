@@ -54,7 +54,7 @@ paramNames n = paramNamesGo (n - 0) n []
 paramNamesGo : Int -> Int -> List String -> List String
 paramNamesGo remaining n acc =
   if remaining <= 0 then reverse acc
-  else paramNamesGo (remaining - 1) n (("mc" ++ strFromInt (n - remaining)) :: acc)
+  else paramNamesGo (remaining - 1) n ("mc${n - remaining}" :: acc)
 
 wrapLambdas : List String -> Expr -> Expr
 wrapLambdas [] body = body
@@ -381,8 +381,7 @@ subNamesForGo pos i n acc = subNamesForGoGo pos (n - i) n acc
 subNamesForGoGo : String -> Int -> Int -> List String -> List String
 subNamesForGoGo pos remaining n acc =
   if remaining <= 0 then reverse acc
-  else subNamesForGoGo pos (remaining - 1) n
-    (("_sc_" ++ pos ++ "_" ++ strFromInt (n - remaining)) :: acc)
+  else subNamesForGoGo pos (remaining - 1) n ("_sc_${pos}_${n - remaining}" :: acc)
 
 ctorHeads : List (Pair (List Pat) Expr) -> List String
 ctorHeads [] = []

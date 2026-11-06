@@ -64,6 +64,8 @@ fi
 export TMPDIR="$tmpbase"
 tmp=$(mktemp -d "$tmpbase/vuna-tests.XXXXXX") || exit 1
 trap 'rm -rf "$tmp"' EXIT INT TERM
+# REPL 历史默认写 $HOME（测试不能污染用户目录）；统一指到临时目录。
+export VUNA_REPL_HISTORY="$tmp/repl-history"
 
 pass=0
 fail=0
@@ -867,6 +869,28 @@ else
   bad "nat runtime representation compile" "exit 0" "$nat_repr_out"
 fi
 
+# 34b) D27 表现层：含类型族（不可命名的擦除依赖）的程序必须生成不透明运行时值
+#      （Obj.t 字段）+ 表现层 cast（Obj.magic）；不含类型族的程序两者都不得出现。
+opaque_dir="$tmp/d27-opaque"
+rm -rf "$opaque_dir"
+if "$VUNA" compile corpus/dt/82_eff_cps.vuna "$opaque_dir" >/dev/null 2>&1; then
+  ok
+  if grep -q 'Obj.t' "$opaque_dir/Main.ml" && grep -q 'Obj.magic' "$opaque_dir/Main.ml"; then ok
+  else bad "D27 opaque representation (eff)" "Obj.t + Obj.magic" "$(head -3 "$opaque_dir/Main.ml")"; fi
+else
+  bad "D27 opaque representation compile (eff)" "exit 0" "failed"
+fi
+plain_dir="$tmp/d27-plain"
+rm -rf "$plain_dir"
+if "$VUNA" compile corpus/dt/01_id.vuna "$plain_dir" >/dev/null 2>&1; then
+  ok
+  if grep -qE 'Obj\.magic|Obj\.t' "$plain_dir/Main.ml"; then
+    bad "D27 opaque representation (plain)" "no Obj.t/Obj.magic" "$(grep -hE 'Obj\.magic|Obj\.t' "$plain_dir/Main.ml" | head -2)"
+  else ok; fi
+else
+  bad "D27 opaque representation compile (plain)" "exit 0" "failed"
+fi
+
 # DT 错误：check 与 compile 都失败、含片段、不写输出目录
 for file in corpus/dt_err/*.vuna; do
   fragment=$(cat "${file%.vuna}.err")
@@ -1058,6 +1082,67 @@ check_contains "goal none" "$no_hole_out" "no holes"
 check_eq "goal no args exit" "2" "$?"
 sh corpus/lsp/smoke.sh "$VUNA" >/dev/null 2>&1
 check_eq "lsp smoke" "0" "$?"
+
+# 35b) M40 洞：容错目标查询（未解洞也列出）+ 命名洞 `?goal` + fmt/lint/check
+holepkg="$tmp/hole-pkg"
+namedpkg="$tmp/named-hole-pkg"
+mkdir -p "$holepkg/lib" "$namedpkg/lib"
+cat >"$holepkg/vuna.toml" <<TOML
+[package]
+name = "hole-pkg"
+
+[dependencies]
+vuna-base = "$VUNA_BASE"
+
+[export]
+modules = ["Holes"]
+TOML
+cat >"$namedpkg/vuna.toml" <<TOML
+[package]
+name = "named-hole-pkg"
+
+[dependencies]
+vuna-base = "$VUNA_BASE"
+
+[export]
+modules = ["Named"]
+TOML
+cat >"$holepkg/lib/Holes.vuna" <<'VEOF'
+module Holes where
+
+g : Int -> Int
+g n =
+  let m = n + 1
+  in _
+VEOF
+cat >"$namedpkg/lib/Named.vuna" <<'VEOF'
+module Named where
+
+g : Int -> Int
+g n =
+  let m = n + 1
+  in ?goal
+VEOF
+hole_goal=$("$VUNA" goal "$holepkg/lib/Holes.vuna" 2>&1)
+check_eq "goal 未解洞 exit" "0" "$?"
+check_contains "goal 未解洞目标类型" "$hole_goal" ": goal Int"
+check_contains "goal 未解洞上下文（let 绑定）" "$hole_goal" "m : Int"
+check_contains "goal 未解洞上下文（参数）" "$hole_goal" "n : Int"
+named_goal=$("$VUNA" goal "$namedpkg/lib/Named.vuna" 2>&1)
+check_eq "goal 命名洞 exit" "0" "$?"
+check_contains "goal 命名洞名字+目标" "$named_goal" ": goal ?goal : Int"
+check_contains "goal 命名洞上下文" "$named_goal" "m : Int"
+"$VUNA" check "$namedpkg" >"$tmp/named-check.log" 2>&1
+check_eq "check 命名洞仍报错" "1" "$?"
+named_err=$(cat "$tmp/named-check.log")
+check_contains "check 命名洞错误码" "$named_err" "TC_UnsolvedHole"
+check_contains "check 命名洞诊断带洞名" "$named_err" "?goal"
+"$VUNA" fmt "$namedpkg/lib/Named.vuna" >/dev/null 2>&1
+check_contains "fmt 保留命名洞" "$(cat "$namedpkg/lib/Named.vuna")" "?goal"
+"$VUNA" fmt --check "$namedpkg/lib/Named.vuna" >/dev/null 2>&1
+check_eq "fmt 命名洞幂等" "0" "$?"
+"$VUNA" lint "$namedpkg/lib/Named.vuna" >/dev/null 2>&1
+check_eq "lint 命名洞" "0" "$?"
 
 # 36) 错误码文档：`vuna gen-errors` 从 docstring 生成（M3），分区 + 幂等（M4）
 # 沙箱里源码树只读，gen-errors 写 ROOT/docs/.generated/——用 tmp 根：软链 compiler +
@@ -1333,23 +1418,70 @@ mkdir -p "$summ_cache"
 summ_vuna=$(command -v "$VUNA" 2>/dev/null || true)
 [ -n "$summ_vuna" ] || summ_vuna="$VUNA"
 
-# 44a) 依赖闭包自底向上预热：base（无依赖）→ dep（库包，消费 base 摘要）→ root。
-if TMPDIR="$summ_cache" "$summ_vuna" check "$VUNA_BASE" >/dev/null 2>&1; then
+# 44a) 依赖闭包自底向上预热：base（无依赖）→ dep（库包，消费 base 接口）→ root。
+#      `VUNA_IFACE_SELFTEST=1` 让写侧读回校验（Marshal 稳定性 / 包接口 / 模块名集合）。
+if TMPDIR="$summ_cache" VUNA_IFACE_SELFTEST=1 "$summ_vuna" check "$VUNA_BASE" --debug-perf >"$tmp/summ-base.log" 2>&1; then
   ok
 else
-  bad "summary base check exit" "0" "failed"
+  bad "summary base check exit" "0" "$(tail -3 "$tmp/summ-base.log")"
 fi
-if TMPDIR="$summ_cache" "$summ_vuna" check "$summ_pkg/dep" >"$tmp/summ-dep.log" 2>&1; then
+check_contains "summary base iface selftest" "$(cat "$tmp/summ-base.log")" "iface-selftest=ok"
+if TMPDIR="$summ_cache" VUNA_IFACE_SELFTEST=1 "$summ_vuna" check "$summ_pkg/dep" --debug-perf >"$tmp/summ-dep.log" 2>&1; then
   ok
 else
   bad "summary dep check exit" "0" "$(tail -3 "$tmp/summ-dep.log")"
 fi
+check_contains "summary dep iface selftest" "$(cat "$tmp/summ-dep.log")" "iface-selftest=ok"
 
-# 44b) 根包：依赖摘要命中 ⇒ 摘要路径；check 通过。
-summ_root=$(TMPDIR="$summ_cache" "$summ_vuna" check "$summ_pkg/root" --debug-perf 2>&1)
+# 44a-2) per-module 布局：manifest + 每模块一个 iface 文件；删掉 check 缓存后重算但接口
+#        未变 ⇒ 写侧只重写 manifest（`iface-write=0/`）。
+summ_iface_dir=$(ls -d "$summ_cache"/vuna-cache/iface-* 2>/dev/null | head -1)
+if [ -n "$summ_iface_dir" ] && [ -f "$summ_iface_dir/manifest" ] && ls "$summ_iface_dir"/*.iface >/dev/null 2>&1; then
+  ok
+else
+  bad "summary per-module iface files" "manifest + *.iface" "missing under $summ_iface_dir"
+fi
+find "$summ_cache"/vuna-cache -type d -name check -prune -exec rm -rf {} + 2>/dev/null || true
+if TMPDIR="$summ_cache" VUNA_IFACE_SELFTEST=1 "$summ_vuna" check "$VUNA_BASE" --debug-perf >"$tmp/summ-base2.log" 2>&1; then
+  check_contains "summary per-module rewrite skip" "$(cat "$tmp/summ-base2.log")" "iface-write=0/"
+else
+  bad "summary per-module rewrite recheck" "0" "$(tail -3 "$tmp/summ-base2.log")"
+fi
+
+# 44a-3) 损坏的模块接口文件：读侧按自描述头拒绝 ⇒ 回退全量；写侧强制全量重写并修复
+#        （不会因为「manifest 说哈希没变」而永久跳过损坏文件）。
+corrupt_file=$(ls "$summ_iface_dir"/*.iface 2>/dev/null | head -1)
+printf 'not-a-valid-iface' > "$corrupt_file"
+rm -rf "$summ_cache"/vuna-cache/*/check
+if TMPDIR="$summ_cache" VUNA_IFACE_SELFTEST=1 "$summ_vuna" check "$VUNA_BASE" --debug-perf >"$tmp/summ-corrupt.log" 2>&1; then
+  check_contains "summary corrupt iface falls back" "$(cat "$tmp/summ-corrupt.log")" "cache-path=summary deps=0"
+  check_contains "summary corrupt iface repaired" "$(cat "$tmp/summ-corrupt.log")" "iface-selftest=ok"
+  check_contains "summary corrupt iface rewritten" "$(head -c 40 "$corrupt_file")" "vuna-iface-file 1"
+else
+  bad "summary corrupt iface check" "0" "$(tail -3 "$tmp/summ-corrupt.log")"
+fi
+
+# 44b) 根包（入口-only 包，没有 lib 模块接口可写）：依赖接口命中 ⇒ 摘要路径；依赖模块
+#     **不再 parse 源码**；check 通过。
+summ_root=$(TMPDIR="$summ_cache" VUNA_IFACE_SELFTEST=1 "$summ_vuna" check "$summ_pkg/root" --debug-perf 2>&1)
 summ_root_code=$?
 check_eq "summary root check exit" "0" "$summ_root_code"
 check_contains "summary path used" "$summ_root" "cache-path=summary deps=2"
+if printf '%s' "$summ_root" | grep -q "parse-module=Dep"; then
+  bad "summary dep module not parsed" "absent" "found parse-module=Dep"
+else
+  ok
+fi
+
+
+# 44b-2) mtime 快路径：独立缓存里以 `VUNA_CACHE_MTIME=1` 预热 base/dep 后，根包仍命中摘要
+#        路径（读侧用 mtime+size 快判；写侧仍存内容哈希）。
+summ_mt_cache="$tmp/summary-mtime-cache"
+mkdir -p "$summ_mt_cache"
+TMPDIR="$summ_mt_cache" VUNA_CACHE_MTIME=1 "$summ_vuna" check "$VUNA_BASE" >/dev/null 2>&1
+TMPDIR="$summ_mt_cache" VUNA_CACHE_MTIME=1 "$summ_vuna" check "$summ_pkg/dep" >/dev/null 2>&1
+summ_root_mt=$(TMPDIR="$summ_mt_cache" VUNA_CACHE_MTIME=1 "$summ_vuna" check "$summ_pkg/root" --debug-perf 2>&1)
+check_contains "summary mtime fast path" "$summ_root_mt" "cache-path=summary deps=2"
 
 # 44c) 同一份源码全量路径也通过；构建产物正确（摘要只服务 check，codegen 仍全量）。
 if TMPDIR="$tmp/summary-full-cache" VUNA_ELAB_FULL=1 "$summ_vuna" check "$summ_pkg/root" >/dev/null 2>&1; then ok; else bad "summary full-path check exit" "0" "$?"; fi
@@ -1370,6 +1502,21 @@ summ_bad_out=$(TMPDIR="$summ_cache" "$summ_vuna" check "$summ_bad" 2>&1)
 summ_bad_code=$?
 if [ "$summ_bad_code" -ne 0 ]; then ok; else bad "summary negative check exit" "non-zero" "$summ_bad_code"; fi
 check_contains "summary negative diagnostic" "$summ_bad_out" "TC_TypeMismatch"
+
+# 44c-2) 模块接口构建路径与全量构建路径的 codegen 产物逐字节一致（只 codegen、不链接）。
+rm -rf "$tmp/summary-gen-iface" "$tmp/summary-gen-full"
+mkdir -p "$tmp/summary-gen-cache-iface" "$tmp/summary-gen-cache-full"
+if TMPDIR="$tmp/summary-gen-cache-iface" "$summ_vuna" compile "$summ_pkg/root" "$tmp/summary-gen-iface" >/dev/null 2>&1 \
+  && TMPDIR="$tmp/summary-gen-cache-full" VUNA_ELAB_FULL=1 "$summ_vuna" compile "$summ_pkg/root" "$tmp/summary-gen-full" >/dev/null 2>&1; then
+  if diff -r "$tmp/summary-gen-iface" "$tmp/summary-gen-full" >"$tmp/summary-gen.diff" 2>&1; then
+    ok
+  else
+    bad "summary codegen iface/full identical" "identical" "$(head -10 "$tmp/summary-gen.diff")"
+  fi
+else
+  bad "summary codegen iface/full build" "exit 0" "failed"
+fi
+
 summ_bad_full=$(TMPDIR="$tmp/summary-bad-full" VUNA_ELAB_FULL=1 "$summ_vuna" check "$summ_bad" 2>&1)
 summ_bad_full_code=$?
 if [ "$summ_bad_full_code" -ne 0 ]; then ok; else bad "summary negative full-path exit" "non-zero" "$summ_bad_full_code"; fi
@@ -1581,6 +1728,724 @@ case "$m38_noloc" in
   *"-->"*) bad "m38 diag no-location single line" "no snippet" "$m38_noloc" ;;
   *) ok ;;
 esac
+# 44f) 包内逐模块增量（S4）：复制 base，改一个叶子模块后重算——其余模块复用、只 parse
+#      改动模块、第二次运行收敛（全部干净、零重写）、manifest 与全量路径逐字节一致，
+#      注入类型错误后增量与全量诊断逐字节一致。
+incr_base="$tmp/incr-base"
+incr_cache="$tmp/incr-cache"
+cp -r "$VUNA_BASE" "$incr_base"
+if ! TMPDIR="$incr_cache" "$summ_vuna" check "$incr_base" >/dev/null 2>&1; then
+  bad "summary incremental cold check" "0" "cold base copy failed"
+else
+  printf '\nincrProbe : Int\nincrProbe = 1\n' >> "$incr_base/lib/Base/Error.vuna"
+  incr_log=$(TMPDIR="$incr_cache" "$summ_vuna" check "$incr_base" --debug-perf 2>&1)
+  incr_code=$?
+  check_eq "summary incremental check exit" "0" "$incr_code"
+  incr_total=$(find "$incr_cache"/vuna-cache/iface-* -name "*.iface" 2>/dev/null | wc -l)
+  incr_clean=$(printf %s "$incr_log" | sed -n "s/.*cache-own-clean=\([0-9][0-9]*\).*/\1/p")
+  if [ -n "$incr_clean" ] && [ "$incr_total" -gt 0 ] && [ "$incr_clean" -lt "$incr_total" ]; then ok; else bad "summary incremental reuses clean modules" "0 < clean < $incr_total" "clean=$incr_clean total=$incr_total"; fi
+  incr_parse=$(printf %s "$incr_log" | grep -c "parse-module=Base\." || true)
+  check_eq "summary incremental parses only dirty modules" "$((incr_total - incr_clean))" "$incr_parse"
+  incr_writes=$(printf %s "$incr_log" | grep -o "iface-write=[0-9]*" | head -1 | cut -d= -f2)
+  if [ -n "$incr_writes" ] && [ "$incr_writes" -ge 1 ]; then ok; else bad "summary incremental writes changed module" ">=1" "writes=$incr_writes"; fi
+  rm -rf "$incr_cache"/vuna-cache/*/check
+  incr_log2=$(TMPDIR="$incr_cache" "$summ_vuna" check "$incr_base" --debug-perf 2>&1)
+  check_contains "summary incremental converged clean" "$incr_log2" "cache-own-clean=$incr_total"
+  check_contains "summary incremental converged writes" "$incr_log2" "iface-write=0/"
+  printf '\nbadProbe : Int\nbadProbe = "x"\n' >> "$incr_base/lib/Base/Error.vuna"
+  TMPDIR="$incr_cache" "$summ_vuna" check "$incr_base" >"$tmp/incr-bad.log" 2>&1
+  incr_bad=$(grep -vE "^(DEBUG|PERF) " "$tmp/incr-bad.log")
+  TMPDIR="$tmp/incr-bad-full" VUNA_ELAB_FULL=1 "$summ_vuna" check "$incr_base" >"$tmp/incr-bad-full.log" 2>&1
+  full_bad=$(grep -vE "^(DEBUG|PERF) " "$tmp/incr-bad-full.log")
+  check_contains "summary incremental negative diagnostic" "$incr_bad" "TC_TypeMismatch"
+  check_eq "summary incremental/full diagnostics identical" "$full_bad" "$incr_bad"
+fi
+
+# 44g) LSP/REPL 消费依赖接口（`VUNA_IFACE_TOOL=1`，默认关闭）：预热依赖接口后，
+#      REPL 求值走接口路径（`iface-source=repl`），LSP 诊断链仍全部通过；默认路径不变。
+repo_iface_repl=$( cd .. && TMPDIR="$repo_cache" VUNA_IFACE_TOOL=1 VUNA_DEBUG_PERF=1 sh -c 'printf "x : Int\nx = 1 + 1\nx + 40\n:q\n" | "$0" repl' "$summ_vuna" 2>&1 )
+check_contains "summary repl consumes dep ifaces" "$repo_iface_repl" "iface-source=repl modules="
+check_contains "summary repl iface eval" "$repo_iface_repl" "42"
+repo_iface_mods=$(printf %s "$repo_iface_repl" | grep -o "iface-tool-lazy modules=[0-9]*" | head -1 | sed "s/.*=//")
+if [ -n "$repo_iface_mods" ] && [ "$repo_iface_mods" -lt 60 ]; then ok; else bad "summary repl lazy iface closure" "<60 modules" "modules=$repo_iface_mods"; fi
+if ( cd .. && TMPDIR="$repo_cache" VUNA_IFACE_TOOL=1 sh test/corpus/lsp/smoke.sh "$summ_vuna" >/dev/null 2>&1 ); then
+  ok
+else
+  bad "summary lsp consumes dep ifaces" "0" "smoke failed"
+fi
+
+# 44h) codegen 单元级缓存（S5）：改入口后重建——依赖单元命中缓存，产物与干净重建逐字节一致。
+unit_pkg="$tmp/unit-pkg"
+cp -r "$summ_pkg" "$unit_pkg"
+sed -i "s|\.\./\.\./\.\./\.\./\.\./base|$VUNA_BASE|" "$unit_pkg/root/vuna.toml"
+sed -i "s|\.\./\.\./\.\./\.\./\.\./base|$VUNA_BASE|" "$unit_pkg/dep/vuna.toml" 2>/dev/null || true
+unit_cache="$tmp/unit-cache"
+rm -rf "$tmp/unit-gen1" "$tmp/unit-gen2"
+if TMPDIR="$unit_cache" VUNA_UNIT_CACHE=1 "$summ_vuna" build --no-compile --out "$tmp/unit-gen1" "$unit_pkg/root" >/dev/null 2>&1; then
+  printf '\nunitProbe : Int\nunitProbe = 1\n' >> "$unit_pkg/root/app/Main.vuna"
+  unit_log=$(TMPDIR="$unit_cache" VUNA_UNIT_CACHE=1 VUNA_DEBUG_PERF=1 "$summ_vuna" build --no-compile --out "$tmp/unit-gen1" "$unit_pkg/root" 2>&1)
+  check_contains "summary unit cache hit" "$unit_log" "unit-cache-hit "
+  TMPDIR="$tmp/unit-fresh-cache" VUNA_UNIT_CACHE=1 "$summ_vuna" build --no-compile --out "$tmp/unit-gen2" "$unit_pkg/root" >/dev/null 2>&1
+  if diff -r "$tmp/unit-gen1" "$tmp/unit-gen2" >"$tmp/unit-gen.diff" 2>&1; then
+    ok
+  else
+    bad "summary unit cache output identical" "identical" "$(head -5 "$tmp/unit-gen.diff")"
+  fi
+else
+  bad "summary unit cache cold build" "0" "failed"
+fi
+
+# 44i) 依赖可见性收敛（S6）：dep 的实例在**未被 import** 的模块里时，摘要路径与全量路径
+#      必须一致地拒绝（不能把整包实例并入视图）；import 后两条路径都必须接受。
+vis_base="$tmp/vis-base"
+cp -r "$VUNA_BASE" "$vis_base"
+vis_pkgdir="$tmp/vis-pkg"
+rm -rf "$vis_pkgdir"
+cp -r corpus/packages/vis_scope/. "$vis_pkgdir/"
+sed -i "s|\.\./\.\./\.\./\.\./\.\./base|$vis_base|" "$vis_pkgdir/dep/vuna.toml" "$vis_pkgdir/root/vuna.toml" "$vis_pkgdir/root2/vuna.toml"
+vis_cache="$tmp/vis-cache"
+if TMPDIR="$vis_cache" "$VUNA" check "$vis_base" >/dev/null 2>&1 && TMPDIR="$vis_cache" "$VUNA" check "$vis_pkgdir/dep" >/dev/null 2>&1; then
+  vis_root_sum=$(TMPDIR="$vis_cache" "$VUNA" build --no-compile --out "$tmp/vis-root-out" "$vis_pkgdir/root" 2>&1); vis_root_sum_exit=$?
+  vis_root_full=$(TMPDIR="$vis_cache" VUNA_ELAB_FULL=1 "$VUNA" build --no-compile --out "$tmp/vis-root-out-full" "$vis_pkgdir/root" 2>&1); vis_root_full_exit=$?
+  if [ "$vis_root_sum_exit" -ne 0 ] && [ "$vis_root_full_exit" -ne 0 ]; then ok; else bad "summary vis root rejected" "nonzero/nonzero" "summary=$vis_root_sum_exit full=$vis_root_full_exit"; fi
+  check_contains "summary vis root error code" "$vis_root_sum" "TC_"
+  vis_root2_sum=$(TMPDIR="$vis_cache" "$VUNA" build --no-compile --out "$tmp/vis-root2-out" "$vis_pkgdir/root2" 2>&1); vis_root2_sum_exit=$?
+  vis_root2_full=$(TMPDIR="$vis_cache" VUNA_ELAB_FULL=1 "$VUNA" build --no-compile --out "$tmp/vis-root2-out-full" "$vis_pkgdir/root2" 2>&1); vis_root2_full_exit=$?
+  check_eq "summary vis root2 accepted (summary)" "0" "$vis_root2_sum_exit"
+  check_eq "summary vis root2 accepted (full)" "0" "$vis_root2_full_exit"
+else
+  bad "summary vis fixture warmup" "0" "base/dep check failed"
+fi
+
+# 44j) 单元缓存按 entry 分桶 + GC（S7）：同一包上下文里不同入口文件各占一个桶；切换入口
+#      时旧桶被 GC 清掉，同一入口（路径不变、内容变了）重建仍能命中单元缓存。
+uj_pkg="$tmp/unit-entry-pkg"
+mkdir -p "$uj_pkg"
+printf '[package]\nname = "unit-entry-pkg"\n\n[dependencies]\nvuna-base = "%s"\n' "$VUNA_BASE" >"$uj_pkg/vuna.toml"
+printf 'main : Int\nmain = 1\n' >"$uj_pkg/A.vuna"
+printf 'main : Int\nmain = 2\n' >"$uj_pkg/B.vuna"
+uj_cache="$tmp/unit-cache-j"
+rm -rf "$uj_cache" "$tmp/unit-j1" "$tmp/unit-j2"
+if TMPDIR="$uj_cache" VUNA_UNIT_CACHE=1 "$summ_vuna" compile "$uj_pkg/A.vuna" "$tmp/unit-j1" >/dev/null 2>&1; then
+  printf '\n-- probe\n' >>"$uj_pkg/A.vuna"
+  uj_log=$(TMPDIR="$uj_cache" VUNA_UNIT_CACHE=1 VUNA_DEBUG_PERF=1 "$summ_vuna" compile "$uj_pkg/A.vuna" "$tmp/unit-j1" 2>&1)
+  uj_hits=$(printf %s "$uj_log" | grep -c "unit-cache-hit" || true)
+  if [ "$uj_hits" -ge 1 ]; then ok; else bad "summary unit cache same-entry hits" ">=1" "hits=$uj_hits"; fi
+  if TMPDIR="$uj_cache" VUNA_UNIT_CACHE=1 "$summ_vuna" compile "$uj_pkg/B.vuna" "$tmp/unit-j2" >/dev/null 2>&1; then
+    uj_buckets=$(find "$uj_cache"/vuna-cache -path "*split-units/e-*" -name "*.unit" 2>/dev/null | xargs -r -n1 dirname | sort -u | wc -l)
+    check_eq "summary unit cache one entry bucket" "1" "$uj_buckets"
+  else
+    bad "summary unit cache entry B compile" "0" "failed"
+  fi
+else
+  bad "summary unit cache entry A compile" "0" "failed"
+fi
+
+# 44k) M34.6 工具链惰性闭包完整性（默认开启）：同包模块自己 import 的依赖包模块必须
+#      进闭包（否则 Loader 从源码加载它们却没有 artifact，假报 TC_UnknownName）；本包
+#      manifest 缺失/新增模块时安全阀回退全量，诊断仍正确。
+kk_root="$tmp/iface-k-root"
+kk_dep="$tmp/iface-k-dep"
+kk_cache="$tmp/iface-k-cache"
+mkdir -p "$kk_dep/lib" "$kk_root/lib" "$kk_root/app"
+printf '[package]\nname = "iface-k-dep"\n\n[export]\nmodules = ["KDep"]\n\n[dependencies]\nvuna-base = "%s"\n' "$VUNA_BASE" >"$kk_dep/vuna.toml"
+printf 'module KDep (kdepVal, KBox(..), unKBox) where\n\ndata KBox : Type where\n  MkKBox : Int -> KBox\n\nunKBox : KBox -> Int\nunKBox (MkKBox n) = n\n\nkdepVal : Int\nkdepVal = 42\n' >"$kk_dep/lib/KDep.vuna"
+printf '[package]\nname = "iface-k-root"\n\n[dependencies]\niface-k-dep = "%s"\nvuna-base = "%s"\n' "$kk_dep" "$VUNA_BASE" >"$kk_root/vuna.toml"
+printf 'module KInner (innerVal) where\n\nimport KDep\n\ninnerVal : Int\ninnerVal = kdepVal\n' >"$kk_root/lib/KInner.vuna"
+printf 'module KOuter (outerVal) where\n\nimport KInner\n\nouterVal : Int\nouterVal = innerVal + 1\n' >"$kk_root/lib/KOuter.vuna"
+printf 'import KOuter\n\nmain : Int\nmain = outerVal\n' >"$kk_root/app/Main.vuna"
+if TMPDIR="$kk_cache" "$summ_vuna" check "$VUNA_BASE" >/dev/null 2>&1 && TMPDIR="$kk_cache" "$summ_vuna" check "$kk_dep" >/dev/null 2>&1 && TMPDIR="$kk_cache" "$summ_vuna" check "$kk_root" >/dev/null 2>&1; then
+  kk_repl_default=$( cd "$kk_root" && TMPDIR="$kk_cache" VUNA_DEBUG_PERF=1 sh -c 'printf "import KOuter\nouterVal\n:q\n" | "$0" repl' "$summ_vuna" 2>&1 )
+  check_contains "tool iface default lazy closure" "$kk_repl_default" "iface-tool-lazy modules="
+  check_contains "tool iface default eval" "$kk_repl_default" "43"
+  case "$kk_repl_default" in
+    *TC_UnknownName*) bad "tool iface closure has no false unknown-name" "no TC_UnknownName" "$kk_repl_default" ;;
+    *) ok ;;
+  esac
+  kk_repl_full=$( cd "$kk_root" && TMPDIR="$kk_cache" VUNA_IFACE_TOOL=0 sh -c 'printf "import KOuter\nouterVal\n:q\n" | "$0" repl' "$summ_vuna" 2>&1 )
+  check_contains "tool iface full path eval" "$kk_repl_full" "43"
+  # 依赖包的 data/ctor 在接口路径下必须能被 REPL 表达式求值看到（S7 组装 DtProgram 时
+  # 漏补依赖 datas ⇒ `[1,2,3]`/构造子报假 TC_UnknownName）。
+  kk_repl_ctor=$( cd "$kk_root" && TMPDIR="$kk_cache" sh -c 'printf "import KDep\nunKBox (MkKBox 7)\n:q\n" | "$0" repl' "$summ_vuna" 2>&1 )
+  check_contains "tool iface repl dep ctor eval" "$kk_repl_ctor" "7"
+  case "$kk_repl_ctor" in
+    *TC_UnknownName*) bad "tool iface repl dep ctor no false unknown-name" "no TC_UnknownName" "$kk_repl_ctor" ;;
+    *) ok ;;
+  esac
+  # 安全阀：新增一个不在本包 manifest 里的模块，它的依赖无法从 manifest 闭包推出；
+  # 加载后必须回退全量（iface-fallback=repl）且结果仍正确。
+  printf 'module KNew (newVal) where\n\nimport KDep\n\nnewVal : Int\nnewVal = kdepVal + 1\n' >"$kk_root/lib/KNew.vuna"
+  kk_repl_new=$( cd "$kk_root" && TMPDIR="$kk_cache" VUNA_DEBUG_PERF=1 sh -c 'printf "import KNew\nnewVal\n:q\n" | "$0" repl' "$summ_vuna" 2>&1 )
+  check_contains "tool iface safety valve fallback" "$kk_repl_new" "iface-fallback=repl missing="
+  check_contains "tool iface safety valve eval" "$kk_repl_new" "43"
+else
+  bad "tool iface closure fixture warmup" "0" "dep/root check failed"
+fi
+
+# 44l) M34.6（5a/5c）LSP 单文件增量精化 + 会话缓存：
+#      - LSP-only 会话（依赖已 check、本包未 check）didOpen 成功后写回当前模块接口；
+#      - 接口路径与全量路径（VUNA_IFACE_TOOL=0）对同一 buffer 的诊断逐字节一致；
+#      - 外部修改同包依赖模块后，**同一 LSP 进程**的下一次请求必须失效并重报；
+#      - 大闭包文件（仓库根包 lib/）的 LSP 诊断在接口路径与全量路径一致；
+#      - REPL 同进程多次求值复用 termAux 缓存，结果不变。
+#
+# LSP 帧驱动：Content-Length 精确字节（body 后没有换行）；didOpen/didChange 都是 Full 同步。
+lsp_inc_json_escape() { # file -> 单行 JSON 字符串内容（只处理换行；夹具源码不含引号/反斜杠）
+  sed -e 's/$/\\n/' "$1" | tr -d '\n'
+}
+
+lsp_inc_frame() { # body -> 完整帧
+  printf 'Content-Length: %s\r\n\r\n%s' "$(printf '%s' "$1" | wc -c)" "$1"
+}
+
+lsp_inc_last_diags() { # 日志 -> 最后一条 publishDiagnostics 的 diagnostics 数组
+  grep -o '"diagnostics":\[[^]]*\]' "$1" | tail -1 | sed 's/^"diagnostics"://'
+}
+
+lsp_inc_single() { # $1=iface(1|0) $2=cache $3=cwd $4=uri $5=textfile $6=log
+  _init=$(printf '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"processId":null,"rootUri":"file://%s","capabilities":{}}}' "$3")
+  _open=$(printf '{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"%s","languageId":"vuna","version":1,"text":"%s"}}}' "$4" "$(lsp_inc_json_escape "$5")")
+  _shut='{"jsonrpc":"2.0","id":9,"method":"shutdown","params":null}'
+  _exit='{"jsonrpc":"2.0","method":"exit","params":null}'
+  {
+    lsp_inc_frame "$_init"
+    lsp_inc_frame '{"jsonrpc":"2.0","method":"initialized","params":{}}'
+    lsp_inc_frame "$_open"
+    sleep 0.3
+    lsp_inc_frame "$_shut"
+    lsp_inc_frame "$_exit"
+  } | ( cd "$3" && TMPDIR="$2" VUNA_IFACE_TOOL="$1" "$summ_vuna" lsp >"$6" 2>/dev/null )
+  lsp_inc_last_diags "$6"
+}
+
+# A) LSP-only 写回：依赖接口预热、本包不 check；didOpen 后 manifest 里出现当前模块接口。
+lsp_wb="$tmp/lsp-inc-wb"
+lsp_wb_cache="$tmp/lsp-inc-wb-cache"
+mkdir -p "$lsp_wb/app" "$lsp_wb/lib"
+printf '[package]\nname = "lsp-inc-wb"\n\n[dependencies]\nvuna-base = "%s"\n' "$VUNA_BASE" >"$lsp_wb/vuna.toml"
+printf 'module WInner (innerVal) where\n\ninnerVal : Int\ninnerVal = 41\n' >"$lsp_wb/lib/WInner.vuna"
+printf 'module WOuter (outerVal) where\n\nimport WInner\n\nouterVal : Int\nouterVal = innerVal + 1\n' >"$lsp_wb/lib/WOuter.vuna"
+printf 'import WOuter\n\nmain : Int\nmain = outerVal\n' >"$lsp_wb/app/Main.vuna"
+if TMPDIR="$lsp_wb_cache" "$summ_vuna" check "$VUNA_BASE" >/dev/null 2>&1; then
+  lsp_wb_uri="file://$lsp_wb/lib/WOuter.vuna"
+  lsp_wb_diags=$(lsp_inc_single 1 "$lsp_wb_cache" "$lsp_wb" "$lsp_wb_uri" "$lsp_wb/lib/WOuter.vuna" "$tmp/lsp-inc-wb.log")
+  check_eq "lsp incremental cold clean diagnostics" "[]" "$lsp_wb_diags"
+  if find "$lsp_wb_cache"/vuna-cache/iface-* -name 'WOuter.iface' 2>/dev/null | grep -q .; then ok; else bad "lsp incremental writes back module iface" "WOuter.iface" "missing"; fi
+else
+  bad "lsp incremental writeback warmup base" "0" "base check failed"
+fi
+
+# B) 会话失效：warm 包（Inner/Outer 都有接口）里，外部把 Inner 改成 Bool——
+#    同一 LSP 进程的下一次请求必须重读并报出 Outer 的类型错误（不能复用陈旧接口）。
+lsp_s="$tmp/lsp-inc-sess"
+lsp_s_cache="$tmp/lsp-inc-sess-cache"
+mkdir -p "$lsp_s/app" "$lsp_s/lib"
+printf '[package]\nname = "lsp-inc-sess"\n\n[dependencies]\nvuna-base = "%s"\n' "$VUNA_BASE" >"$lsp_s/vuna.toml"
+printf 'module SInner (innerVal) where\n\ninnerVal : Int\ninnerVal = 41\n' >"$lsp_s/lib/SInner.vuna"
+printf 'module SOuter (outerVal) where\n\nimport SInner\n\nouterVal : Int\nouterVal = innerVal + 1\n' >"$lsp_s/lib/SOuter.vuna"
+printf 'import SOuter\n\nmain : Int\nmain = outerVal\n' >"$lsp_s/app/Main.vuna"
+if TMPDIR="$lsp_s_cache" "$summ_vuna" check "$VUNA_BASE" >/dev/null 2>&1 && TMPDIR="$lsp_s_cache" "$summ_vuna" check "$lsp_s" >/dev/null 2>&1; then
+  # 诊断一致性：错误 buffer 下接口路径与全量路径逐字节一致。
+  printf 'module SOuter (outerVal) where\n\nimport SInner\n\nouterVal : Int\nouterVal = innerVal + True\n' >"$tmp/lsp-inc-err.vuna"
+  lsp_s_uri="file://$lsp_s/lib/SOuter.vuna"
+  lsp_s_iface=$(lsp_inc_single 1 "$lsp_s_cache" "$lsp_s" "$lsp_s_uri" "$tmp/lsp-inc-err.vuna" "$tmp/lsp-inc-iface.log")
+  lsp_s_full=$(lsp_inc_single 0 "$tmp/lsp-inc-full-cache" "$lsp_s" "$lsp_s_uri" "$tmp/lsp-inc-err.vuna" "$tmp/lsp-inc-full.log")
+  check_contains "lsp incremental error diagnostic" "$lsp_s_iface" "TC_"
+  check_eq "lsp incremental/full diagnostics identical" "$lsp_s_full" "$lsp_s_iface"
+
+  # 同一进程：先 didOpen（无错），外部改 SInner 后 didChange（无错文本 + 注释）⇒ 报错。
+  lsp_s_out="$tmp/lsp-inc-sess.out"
+  lsp_s_in="$tmp/lsp-inc-sess.in"
+  rm -f "$lsp_s_in" "$lsp_s_out"
+  mkfifo "$lsp_s_in"
+  ( cd "$lsp_s" && TMPDIR="$lsp_s_cache" "$summ_vuna" lsp <"$lsp_s_in" >"$lsp_s_out" 2>"$tmp/lsp-inc-sess.err" ) &
+  lsp_s_pid=$!
+  exec 8>"$lsp_s_in"
+  lsp_s_send() { lsp_inc_frame "$1" >&8; }
+  lsp_s_init=$(printf '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"processId":null,"rootUri":"file://%s","capabilities":{}}}' "$lsp_s")
+  lsp_s_open=$(printf '{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"%s","languageId":"vuna","version":1,"text":"%s"}}}' "$lsp_s_uri" "$(lsp_inc_json_escape "$lsp_s/lib/SOuter.vuna")")
+  lsp_s_send "$lsp_s_init"
+  lsp_s_send '{"jsonrpc":"2.0","method":"initialized","params":{}}'
+  lsp_s_send "$lsp_s_open"
+  lsp_s_wait() { # $1=expected diag count
+    _i=0
+    while [ "$_i" -lt 400 ]; do
+      _c=$(grep -o '"method":"textDocument/publishDiagnostics"' "$lsp_s_out" 2>/dev/null | wc -l)
+      [ "$_c" -ge "$1" ] && return 0
+      sleep 0.05
+      _i=$((_i + 1))
+    done
+    return 1
+  }
+  if lsp_s_wait 1; then ok; else bad "lsp session first diagnostics" "1" "timeout"; fi
+  check_eq "lsp session first diagnostics empty" "[]" "$(grep -o '"diagnostics":\[[^]]*\]' "$lsp_s_out" | sed -n '1p' | sed 's/^"diagnostics"://')"
+  # 外部修改依赖模块（类型从 Int 变 Bool）。
+  printf 'module SInner (innerVal) where\n\ninnerVal : Bool\ninnerVal = True\n' >"$lsp_s/lib/SInner.vuna"
+  # didChange 的 buffer 文本必须变化（否则命中进程内诊断帧缓存）：在磁盘文本后加一行注释。
+  cp "$lsp_s/lib/SOuter.vuna" "$tmp/lsp-inc-sess-change.vuna"
+  printf '\n-- lsp session touch\n' >>"$tmp/lsp-inc-sess-change.vuna"
+  lsp_s_change=$(printf '{"jsonrpc":"2.0","method":"textDocument/didChange","params":{"textDocument":{"uri":"%s","version":2},"contentChanges":[{"text":"%s"}]}}' "$lsp_s_uri" "$(lsp_inc_json_escape "$tmp/lsp-inc-sess-change.vuna")")
+  lsp_s_send "$lsp_s_change"
+  if lsp_s_wait 2; then ok; else bad "lsp session external-change diagnostics" "2" "timeout"; fi
+  lsp_s_second=$(grep -o '"diagnostics":\[[^]]*\]' "$lsp_s_out" | sed -n '2p' | sed 's/^"diagnostics"://')
+  case "$lsp_s_second" in
+    *TC_*) ok ;;
+    *) bad "lsp session invalidates on external change" "TC_ diagnostic" "$lsp_s_second" ;;
+  esac
+  lsp_s_send '{"jsonrpc":"2.0","id":9,"method":"shutdown","params":null}'
+  lsp_s_send '{"jsonrpc":"2.0","method":"exit","params":null}'
+  exec 8>&-
+  wait "$lsp_s_pid" 2>/dev/null || true
+  rm -f "$lsp_s_in"
+else
+  bad "lsp session fixture warmup" "0" "base/pkg check failed"
+fi
+
+# C) 大闭包文件：仓库根包 lib/ 文件的 LSP 诊断在接口路径与全量路径一致（用 44e 的 repo 缓存）。
+if TMPDIR="$repo_cache" "$summ_vuna" check "$VUNA_BASE" >/dev/null 2>&1; then
+  lsp_big_uri="file://$(cd .. && pwd)/lib/Vuna/Interp.vuna"
+  lsp_big_iface=$(lsp_inc_single 1 "$repo_cache" ".." "$lsp_big_uri" "../lib/Vuna/Interp.vuna" "$tmp/lsp-big-iface.log")
+  lsp_big_full=$(lsp_inc_single 0 "$tmp/lsp-big-full-cache" ".." "$lsp_big_uri" "../lib/Vuna/Interp.vuna" "$tmp/lsp-big-full.log")
+  check_eq "lsp big-closure incremental/full diagnostics identical" "$lsp_big_full" "$lsp_big_iface"
+else
+  bad "lsp big-closure warmup" "0" "base check failed"
+fi
+
+# D) REPL：同进程多次求值复用 termAux 缓存（依赖接口路径），结果不变。
+repl_inc=$( cd .. && printf 'import Vuna.Compiler.Driver.Dt\n1 + 1\n2 + 2\n3 + 3\n:q\n' | TMPDIR="$repo_cache" "$summ_vuna" repl 2>&1 )
+check_contains "repl aux cache first eval" "$repl_inc" "vuna> 2"
+check_contains "repl aux cache second eval" "$repl_inc" "vuna> 4"
+check_contains "repl aux cache third eval" "$repl_inc" "vuna> 6"
+case "$repl_inc" in
+  *TC_*) bad "repl aux cache no diagnostics" "no TC_" "$repl_inc" ;;
+  *) ok ;;
+esac
+repl_inc_reset=$( cd .. && printf 'import Vuna.Compiler.Driver.Dt\n1 + 1\n:reset\n2 + 2\n:q\n' | TMPDIR="$repo_cache" "$summ_vuna" repl 2>&1 )
+check_contains "repl reset clears cache state" "$repl_inc_reset" "vuna> 4"
+
+# 51) mtime 快路径安全窗（`VUNA_CACHE_MTIME=1`）：`prim_fileMtime` 只有秒精度，
+#     「同秒 + 同大小」的编辑不能靠 mtime+size 判未变。安全窗（5s）内一律回落内容哈希，
+#     所以刚写出的接口即使 mtime/size 都没变也必须被判定失效（回退全量、报出真实错误）。
+#     确定性做法：编辑后把 mtime 显式 touch 回记录的秒值（模拟同一秒内两次写）。
+mt_cache="$tmp/mtime-window-cache"
+mt_dep="$tmp/mtime-window-dep"
+mt_root="$tmp/mtime-window-root"
+rm -rf "$mt_cache" "$mt_dep" "$mt_root"
+mkdir -p "$mt_dep/lib" "$mt_root/app"
+printf '[package]\nname = "mtime-window-dep"\n\n[export]\nmodules = ["MDep"]\n\n[dependencies]\nvuna-base = "%s"\n' "$VUNA_BASE" >"$mt_dep/vuna.toml"
+printf 'module MDep (mVal) where\n\nmVal : Int\nmVal = 1\n' >"$mt_dep/lib/MDep.vuna"
+printf '[package]\nname = "mtime-window-root"\n\n[dependencies]\nmtime-window-dep = "%s"\nvuna-base = "%s"\n' "$mt_dep" "$VUNA_BASE" >"$mt_root/vuna.toml"
+printf 'import MDep\n\nmain : Int\nmain = mVal\n' >"$mt_root/app/Main.vuna"
+if TMPDIR="$mt_cache" VUNA_CACHE_MTIME=1 "$VUNA" check "$VUNA_BASE" >/dev/null 2>&1 \
+  && TMPDIR="$mt_cache" VUNA_CACHE_MTIME=1 "$VUNA" check "$mt_dep" >/dev/null 2>&1 \
+  && TMPDIR="$mt_cache" VUNA_CACHE_MTIME=1 "$VUNA" check "$mt_root" >/dev/null 2>&1; then
+  mt_file="$mt_dep/lib/MDep.vuna"
+  mt_sec=$(stat -c %Y "$mt_file")
+  mt_size=$(stat -c %s "$mt_file")
+  # 同字节长度改内容：Int → Bnt（未知类型名；mtime 秒值与大小都不变）。
+  sed -i 's/mVal : Int/mVal : Bnt/' "$mt_file"
+  touch -d "@$mt_sec" "$mt_file"
+  mt_now=$(date +%s)
+  if [ "$(stat -c %Y "$mt_file")" = "$mt_sec" ] && [ "$(stat -c %s "$mt_file")" = "$mt_size" ] && [ $((mt_now - mt_sec)) -lt 5 ]; then
+    mt_out=$(TMPDIR="$mt_cache" VUNA_CACHE_MTIME=1 "$VUNA" check "$mt_root" 2>&1)
+    mt_code=$?
+    if [ "$mt_code" -ne 0 ]; then ok; else bad "mtime window same-second edit invalidated" "non-zero" "check passed with stale iface"; fi
+    check_contains "mtime window diagnostic" "$mt_out" "Bnt"
+  else
+    bad "mtime window fixture" "same mtime/size within 5s" "sec=$mt_sec size=$mt_size now=$mt_now"
+  fi
+else
+  bad "mtime window warmup" "0" "base/dep/root check failed"
+fi
+
+# 52) C32 最小硬化：check / split / ast 缓存载荷统一 framing（magic|tag|长度|校验和）。
+#     截断（长度不符）、篡改（校验和不符）都必须被读侧拒绝 ⇒ 回退重算、不崩，且缓存文件
+#     被重写成合法 framing。单字节篡改用 dd 打在载荷中部（不是头部，避免只靠 magic 就过）。
+c32_pkg="$tmp/c32-pkg"
+c32_cache="$tmp/c32-cache"
+c32_clean="$tmp/c32-clean"
+c32_out2="$tmp/c32-out2"
+rm -rf "$c32_pkg" "$c32_cache" "$c32_clean" "$c32_out2"
+cp -r corpus/packages/m34_summary "$c32_pkg"
+sed -i "s|\.\./\.\./\.\./\.\./\.\./base|$VUNA_BASE|" "$c32_pkg/root/vuna.toml"
+sed -i "s|\.\./\.\./\.\./\.\./\.\./base|$VUNA_BASE|" "$c32_pkg/dep/vuna.toml" 2>/dev/null || true
+if TMPDIR="$c32_cache" "$VUNA" build --no-compile --out "$c32_clean" "$c32_pkg/root" >/dev/null 2>&1; then
+  c32_split=$(find "$c32_cache"/vuna-cache -path '*split*' -type f 2>/dev/null | head -1)
+  if [ -n "$c32_split" ]; then
+    # 52a) 截断：头行完整、载荷少一截（长度校验必须拒绝）。
+    head -c 4096 "$c32_split" > "$c32_split.part"
+    mv "$c32_split.part" "$c32_split"
+    c32_rc=0
+    TMPDIR="$c32_cache" "$VUNA" build --no-compile --out "$c32_out2" "$c32_pkg/root" >/dev/null 2>&1 || c32_rc=$?
+    check_eq "c32 truncated split cache rebuild exit" "0" "$c32_rc"
+    if diff -r "$c32_clean" "$c32_out2" >/dev/null 2>&1; then ok; else bad "c32 truncated split cache output" "identical" "diff"; fi
+    check_eq "c32 truncated split cache rewritten" "vuna-cache-frame 1" "$(head -c 18 "$c32_split")"
+    # 52b) 篡改：在载荷中部改一个字节（长度不变，校验和必须拒绝）。
+    c32_off=$(( $(stat -c %s "$c32_split") / 2 ))
+    printf 'X' | dd of="$c32_split" bs=1 seek="$c32_off" conv=notrunc 2>/dev/null
+    c32_rc=0
+    TMPDIR="$c32_cache" "$VUNA" build --no-compile --out "$c32_out2" "$c32_pkg/root" >/dev/null 2>&1 || c32_rc=$?
+    check_eq "c32 tampered split cache rebuild exit" "0" "$c32_rc"
+    if diff -r "$c32_clean" "$c32_out2" >/dev/null 2>&1; then ok; else bad "c32 tampered split cache output" "identical" "diff"; fi
+  else
+    bad "c32 split cache fixture" "split cache file" "none"
+  fi
+else
+  bad "c32 clean build" "0" "failed"
+fi
+
+# 52c) check 缓存：截断后必须视为未命中（重算并覆盖），不能静默当成功。
+c32_cc="$tmp/c32-check-cache"
+rm -rf "$c32_cc"
+TMPDIR="$c32_cc" "$VUNA" check "$c32_pkg/dep" >/dev/null 2>&1
+TMPDIR="$c32_cc" "$VUNA" check "$c32_pkg/root" >/dev/null 2>&1
+c32_check=$(find "$c32_cc"/vuna-cache -path '*/check/*' -type f 2>/dev/null | head -1)
+if [ -n "$c32_check" ]; then
+  # 把**全部** check 缓存文件截断：只挑一个可能挑到 dep 的缓存，root check 仍命中自己的
+  # 合法缓存 ⇒ 没有 cache-path 日志（Nix 沙箱与本地目录顺序不同，曾因此假失败）。
+  for c32_f in $(find "$c32_cc"/vuna-cache -path '*/check/*' -type f 2>/dev/null); do
+    head -c 200 "$c32_f" > "$c32_f.part"
+    mv "$c32_f.part" "$c32_f"
+  done
+  c32_log=$(TMPDIR="$c32_cc" VUNA_DEBUG_PERF=1 "$VUNA" check "$c32_pkg/root" 2>&1)
+  c32_code=$?
+  check_eq "c32 corrupt check cache exit" "0" "$c32_code"
+  check_contains "c32 corrupt check cache recomputed" "$c32_log" "cache-path="
+  c32_reframed=1
+  for c32_f in $(find "$c32_cc"/vuna-cache -path '*/check/*' -type f 2>/dev/null); do
+    [ "$(head -c 18 "$c32_f")" = "vuna-cache-frame 1" ] || c32_reframed=0
+  done
+  check_eq "c32 corrupt check cache rewritten" "1" "$c32_reframed"
+else
+  bad "c32 check cache fixture" "check cache file" "none"
+fi
+
+# 52d) AST 缓存：全部截断后照常 parse 并重写（原实现会 Marshal.from_string 崩溃）。
+c32_ac="$tmp/c32-ast-cache"
+rm -rf "$c32_ac"
+TMPDIR="$c32_ac" "$VUNA" check "$c32_pkg/root" >/dev/null 2>&1
+TMPDIR="$c32_ac" "$VUNA" check "$c32_pkg/root" >/dev/null 2>&1
+c32_ast_list=$(find "$c32_ac/vuna-cache/ast" -type f 2>/dev/null)
+if [ -n "$c32_ast_list" ]; then
+  c32_ast_count=$(printf '%s\n' "$c32_ast_list" | wc -l | tr -d ' ')
+  for f in $c32_ast_list; do
+    head -c 8 "$f" > "$f.part"
+    mv "$f.part" "$f"
+  done
+  # 删掉 check 缓存强制重算（否则 check 命中根本不会 parse，也就不会读 AST 缓存）。
+  rm -rf "$c32_ac"/vuna-cache/*/check
+  c32_rc=0
+  TMPDIR="$c32_ac" "$VUNA" check "$c32_pkg/root" >/dev/null 2>&1 || c32_rc=$?
+  check_eq "c32 truncated ast cache recheck exit" "0" "$c32_rc"
+  c32_framed=0
+  for f in $(find "$c32_ac/vuna-cache/ast" -type f 2>/dev/null); do
+    [ "$(head -c 18 "$f")" = "vuna-cache-frame 1" ] && c32_framed=$((c32_framed + 1))
+  done
+  check_eq "c32 truncated ast cache rewritten" "$c32_ast_count" "$c32_framed"
+else
+  bad "c32 ast cache fixture" "ast cache files" "none"
+fi
+
+# 53) codegen 单元缓存**默认开启**（`VUNA_UNIT_CACHE=0` opt-out）+ 桶内 GC：
+#     - 多模块包改叶子后默认路径必须命中未受影响单元（`unit-cache-hit`），产物与干净重建
+#       逐字节一致；`VUNA_UNIT_CACHE=0` 必须完全不写/不用单元缓存。
+#     - 同一入口反复编辑（entry key 每轮都变）后，桶内 `.unit` 文件数必须收敛到「本次单元
+#       数」（= 产物 .ml 数），不能随编辑次数累积。
+u53="$tmp/unit-default-pkg"
+u53_cache="$tmp/unit-default-cache"
+u53_out="$tmp/unit-default-out"
+rm -rf "$u53" "$u53_cache" "$u53_out"
+mkdir -p "$u53/lib" "$u53/app"
+printf '[package]\nname = "unit-default-pkg"\n\n[dependencies]\nvuna-base = "%s"\n' "$VUNA_BASE" >"$u53/vuna.toml"
+printf 'module Leaf (leafVal) where\n\nleafVal : Int\nleafVal = 1\n' >"$u53/lib/Leaf.vuna"
+printf 'module Mid (midVal) where\n\nimport Leaf\n\nmidVal : Int\nmidVal = leafVal + 1\n' >"$u53/lib/Mid.vuna"
+printf 'module Top (topVal) where\n\nimport Mid\n\ntopVal : Int\ntopVal = midVal + 1\n' >"$u53/lib/Top.vuna"
+n=1
+while [ "$n" -le 4 ]; do
+  printf 'module Other%d (other%d) where\n\nother%d : Int\nother%d = %d\n' "$n" "$n" "$n" "$n" "$n" >"$u53/lib/Other$n.vuna"
+  n=$((n + 1))
+done
+printf 'import Top\nimport Other1\nimport Other2\nimport Other3\nimport Other4\n\nmain : Int\nmain = topVal + other1 + other2 + other3 + other4\n' >"$u53/app/Main.vuna"
+if TMPDIR="$u53_cache" "$VUNA" build --no-compile --out "$u53_out" "$u53" >/dev/null 2>&1; then
+  u53_units=$(find "$u53_out" -maxdepth 1 -name '*.ml' | wc -l | tr -d ' ')
+  u53_bucket0=$(find "$u53_cache"/vuna-cache/*/split-units -name '*.unit' 2>/dev/null | wc -l | tr -d ' ')
+  # 改叶子（Leaf/Mid/Top 三个单元失效；Other1..4 与 runtime/entry 中 runtime 仍可命中）。
+  printf 'module Leaf (leafVal) where\n\nleafVal : Int\nleafVal = 2\n' >"$u53/lib/Leaf.vuna"
+  u53_log=$(TMPDIR="$u53_cache" VUNA_DEBUG_PERF=1 "$VUNA" build --no-compile --out "$u53_out" "$u53" 2>&1)
+  u53_code=$?
+  check_eq "unit cache default build exit" "0" "$u53_code"
+  if printf '%s' "$u53_log" | grep -q "unit-cache-hit "; then ok; else bad "unit cache default hits unaffected units" "unit-cache-hit" "none"; fi
+  # 干净重建（独立缓存 + 显式关闭）→ 产物逐字节一致。
+  rm -rf "$tmp/unit-default-fresh"
+  if TMPDIR="$tmp/unit-default-fresh" VUNA_UNIT_CACHE=0 "$VUNA" build --no-compile --out "$tmp/unit-default-fresh-out" "$u53" >/dev/null 2>&1; then
+    if diff -r "$u53_out" "$tmp/unit-default-fresh-out" >/dev/null 2>&1; then ok; else bad "unit cache default output identical" "identical" "diff"; fi
+  else
+    bad "unit cache fresh rebuild" "0" "failed"
+  fi
+  # opt-out：完全不使用单元缓存（无 hit 记录，也不产生 split-units 文件）。
+  rm -rf "$tmp/unit-optout-cache"
+  u53_off=$(TMPDIR="$tmp/unit-optout-cache" VUNA_UNIT_CACHE=0 VUNA_DEBUG_PERF=1 "$VUNA" build --no-compile --out "$tmp/unit-optout-out" "$u53" 2>&1)
+  if printf '%s' "$u53_off" | grep -q "unit-cache-hit "; then bad "unit cache opt-out no hits" "no unit-cache-hit" "found hit"; else ok; fi
+  if find "$tmp/unit-optout-cache" -name '*.unit' 2>/dev/null | grep -q .; then bad "unit cache opt-out writes nothing" "no .unit" "found .unit"; else ok; fi
+  # 桶内 GC：连续编辑入口 6 轮，桶内文件数收敛到单元数。
+  u53_i=1
+  while [ "$u53_i" -le 6 ]; do
+    printf 'import Top\nimport Other1\nimport Other2\nimport Other3\nimport Other4\n\nmain : Int\nmain = topVal + other1 + other2 + other3 + other4 + %d\n' "$u53_i" >"$u53/app/Main.vuna"
+    TMPDIR="$u53_cache" "$VUNA" build --no-compile --out "$u53_out" "$u53" >/dev/null 2>&1 || bad "unit cache bucket edit $u53_i" "0" "build failed"
+    u53_i=$((u53_i + 1))
+  done
+  u53_bucket_files=$(find "$u53_cache"/vuna-cache/*/split-units -name '*.unit' 2>/dev/null | wc -l | tr -d ' ')
+  check_eq "unit cache bucket bounded" "$u53_bucket0" "$u53_bucket_files"
+  if [ "$u53_units" -gt 0 ] && [ "$u53_bucket0" -gt 0 ] && [ "$u53_bucket0" -le "$u53_units" ]; then
+    ok
+  else
+    bad "unit cache bucket unit count" "0 < bucket0 <= $u53_units" "bucket0=$u53_bucket0"
+  fi
+else
+  bad "unit cache default warmup" "0" "build failed"
+fi
+
+# 54) REPL v2：自动签名 / 泛化 / 重定义 / 块输入 / 加载矩阵 / 命令面 / 颜色 / 历史 /
+#     pty 行编辑（方向键、Ctrl-R、Ctrl-C、Ctrl-D、Tab）。
+check_absent() { # 名字 片段 文本
+  case "$3" in
+    *"$2"*) bad "$1" "absent" "found: $2" ;;
+    *) ok ;;
+  esac
+}
+
+repl_v2_defs=$(printf 'x = 1 + 1\nx + 40\nf y = x + y\nf 40\nid z = z\nid 41\n:q\n' | "$VUNA" repl 2>&1)
+check_contains "repl v2 auto sig value" "$repl_v2_defs" "42"
+check_contains "repl v2 auto sig function" "$repl_v2_defs" "41"
+
+repl_v2_poly=$(printf 'id z = z\n:type id\n:q\n' | "$VUNA" repl 2>&1)
+check_contains "repl v2 generalization" "$repl_v2_poly" "id : {t0 : Type} -> t0 -> t0"
+
+repl_v2_bad=$(printf 'f 0 = 1\n1 + 1\n:q\n' | "$VUNA" repl 2>&1)
+check_contains "repl v2 infer failure hint" "$repl_v2_bad" "请先写类型签名"
+check_contains "repl v2 infer failure rollback" "$repl_v2_bad" "2"
+
+repl_v2_redef=$(printf 'x = 1\nx = 2\nx\n:delete x\nx\n:q\n' | "$VUNA" repl 2>&1)
+check_contains "repl v2 redefinition" "$repl_v2_redef" "已删除 x"
+check_contains "repl v2 delete then unbound" "$repl_v2_redef" "unbound variable x"
+
+repl_v2_block=$(printf ':{\n  x = 1 + 1\n  f y = x + y\n:}\nf 40\n:q\n' | "$VUNA" repl 2>&1)
+check_contains "repl v2 block def" "$repl_v2_block" "42"
+
+repl_v2_defs_cmd=$(printf 'x = 1\nf y = x + y\n:defs\n:imports\nimport Base.IO\n:imports\n:q\n' | "$VUNA" repl 2>&1)
+check_contains "repl v2 :defs type" "$repl_v2_defs_cmd" "x : Int"
+check_contains "repl v2 :defs fn type" "$repl_v2_defs_cmd" "f : Int -> Int"
+check_contains "repl v2 :imports" "$repl_v2_defs_cmd" "import Base.IO"
+
+# B1 回归：显式隐式 binder 不再被重复量化；B3 回归：类型文本 zonk。
+repl_v2_ty=$(printf 'm : {a : Type} -> a -> a\nm x = x\n:type m\n:type [1, 2, 3]\nid z = z\n:type id 1\n:q\n' | "$VUNA" repl 2>&1)
+check_contains "repl v2 no duplicate implicit binder" "$repl_v2_ty" "m : {a : Type} -> a -> a"
+check_absent "repl v2 duplicate implicit binder absent" "{a : Type} -> {a : Type}" "$repl_v2_ty"
+check_contains "repl v2 type zonk list" "$repl_v2_ty" "List Int"
+check_contains "repl v2 type infer app" "$repl_v2_ty" "id 1 : Int"
+
+# v2.1：隐式 Prelude 可见；导入模块的类型名可作为项（`:type` 给 kind）。
+repl_v2_kind=$(printf ':type Maybe\n:type Maybe Int\n:type Bool\n:type List\n:imports\n:q\n' | "$VUNA" repl 2>&1)
+check_contains "repl v2 :type data kind" "$repl_v2_kind" "Maybe : (a : Type) -> Type"
+check_contains "repl v2 :type data kind applied" "$repl_v2_kind" "Maybe Int : Type"
+check_contains "repl v2 :type Bool" "$repl_v2_kind" "Bool : Type"
+check_contains "repl v2 :type List via prelude" "$repl_v2_kind" "List : (a : Type) -> Type"
+check_contains "repl v2 :imports implicit prelude" "$repl_v2_kind" "import Prelude"
+check_contains "repl v2 :imports implicit marker" "$repl_v2_kind" "隐式自动导入"
+
+repl_v2_kind_qual=$(printf ':load Base.Maybe\n:type Base.Maybe.Maybe\n:q\n' | "$VUNA" repl 2>&1)
+check_contains "repl v2 :type qualified type name" "$repl_v2_kind_qual" "Base.Maybe.Maybe : (a : Type) -> Type"
+
+repl_v2_kind_load=$(printf ':load Base\n:type Maybe\n:q\n' | "$VUNA" repl 2>&1)
+check_contains "repl v2 :type after :load" "$repl_v2_kind_load" "Maybe : (a : Type) -> Type"
+
+# v2.2：`:typeinfo`（`:ti`）单独列隐式参数 + 文档；裸运算符自动补括号；`>>` 给 do 派生提示。
+repl_v2_typeinfo=$(printf 'id z = z\n:typeinfo id\n:ti id\n:type +\n:type >>\n:type (>>)\n:typeinfo Maybe\n:q\n' | "$VUNA" repl 2>&1)
+check_contains "repl v2 :typeinfo implicit header" "$repl_v2_typeinfo" "隐式参数"
+check_contains "repl v2 :typeinfo implicit binder" "$repl_v2_typeinfo" "{t0 : Type}"
+check_contains "repl v2 :typeinfo explicit line" "$repl_v2_typeinfo" "id : t0 -> t0"
+check_contains "repl v2 :ti alias" "$repl_v2_typeinfo" "id : t0 -> t0"
+check_contains "repl v2 :type bare operator" "$repl_v2_typeinfo" "+ : Int -> Int -> Int"
+check_contains "repl v2 :type do-derived hint" "$repl_v2_typeinfo" "do 派生"
+check_contains "repl v2 :typeinfo docstring" "$repl_v2_typeinfo" "可选值"
+repl_v2_typeinfo_usage=$(printf ':typeinfo\n:q\n' | "$VUNA" repl 2>&1)
+check_contains "repl v2 :typeinfo usage" "$repl_v2_typeinfo_usage" "用法: :typeinfo"
+
+# v2.3：`:type` 的类型文本按 token 类别着色（universe / 箭头 / 全局名）。
+repl_v2_type_color=$(printf ':set color on\n:type Just\n:q\n' | "$VUNA" repl 2>&1)
+check_contains "repl v2 type universe color" "$repl_v2_type_color" "$(printf '\033')[1;35mType"
+check_contains "repl v2 type arrow color" "$repl_v2_type_color" "$(printf '\033')[34m->"
+check_contains "repl v2 type global color" "$repl_v2_type_color" "$(printf '\033')[36mBase.Maybe.Maybe"
+
+# 值显示：列表 / 元组 / Maybe / 函数 / 构造子短名。
+repl_v2_show=$(printf ':load Base.Nat\nSucc Zero\nimport Base.List\nimport Base.Maybe\nimport Base.Pair\n[1, 2, 3]\nJust 1\nPair 1 2\nfun x = x\nfun\n:q\n' | "$VUNA" repl 2>&1)
+check_contains "repl v2 show list" "$repl_v2_show" "[1, 2, 3]"
+check_contains "repl v2 show maybe" "$repl_v2_show" "Just 1"
+check_contains "repl v2 show pair" "$repl_v2_show" "(1, 2)"
+check_contains "repl v2 show function" "$repl_v2_show" "<函数>"
+check_contains "repl v2 show short ctor" "$repl_v2_show" "Succ Zero"
+
+# :set / 历史 / :again / :abandon / 未知命令建议。
+repl_v2_set=$(printf ':set +t\n1 + 1\n:set +s\n1 + 1\n:set prompt X> \n:q\n' | "$VUNA" repl 2>&1)
+check_contains "repl v2 :set +t" "$repl_v2_set" ":: Int"
+check_contains "repl v2 :set +s" "$repl_v2_set" " ms]"
+check_contains "repl v2 :set prompt" "$repl_v2_set" "prompt = X> "
+
+rm -f "$tmp/repl-v2-again-hist"
+repl_v2_again=$(printf ':set +t\n:set -t\n:again 1\n:q\n' | VUNA_REPL_HISTORY="$tmp/repl-v2-again-hist" "$VUNA" repl 2>&1)
+again_hits=$(printf '%s\n' "$repl_v2_again" | grep -c "+t on" || true)
+check_eq "repl v2 :again" "2" "$again_hits"
+
+repl_v2_abandon=$(printf 'x =\n:abandon\n1 + 1\n:q\n' | "$VUNA" repl 2>&1)
+check_contains "repl v2 :abandon" "$repl_v2_abandon" "已放弃当前输入"
+check_contains "repl v2 :abandon continues" "$repl_v2_abandon" "2"
+
+repl_v2_unknown=$(printf ':typ\n:q\n' | "$VUNA" repl 2>&1)
+check_contains "repl v2 unknown suggestion" "$repl_v2_unknown" ":type"
+
+# 模块加载 / 模块名错误 / 目录加载 / 模块文件拒绝。
+repl_v2_mod=$(printf ':load Base.Nat\nZero\n:q\n' | "$VUNA" repl 2>&1)
+check_contains "repl v2 :load module" "$repl_v2_mod" "已导入模块 Base.Nat"
+check_contains "repl v2 :load module usable" "$repl_v2_mod" "Zero"
+
+repl_v2_nomod=$(printf ':load Does.Not.Exist\n:q\n' | "$VUNA" repl 2>&1)
+check_contains "repl v2 :load missing module" "$repl_v2_nomod" "找不到模块"
+
+repl_ws="$tmp/repl-v2-ws"
+mkdir -p "$repl_ws/lib"
+printf '[package]\nname = "replws"\n\n[dependencies]\nvuna-base = "%s"\n' "$VUNA_BASE" >"$repl_ws/vuna.toml"
+printf 'module Foo (greeting) where\n\ngreeting : String\ngreeting = "hi"\n' >"$repl_ws/lib/Foo.vuna"
+repl_v2_dir=$(printf ':q\n' | "$VUNA" repl "$repl_ws" 2>&1)
+check_contains "repl v2 cli DIR context" "$repl_v2_dir" "replws"
+repl_v2_dirload=$(printf ':load %s\n:q\n' "$repl_ws" | "$VUNA" repl 2>&1)
+check_contains "repl v2 :load DIR" "$repl_v2_dirload" "已切换包 replws"
+
+repl_v2_ws=$( ( cd "$repl_ws" && printf ':browse Foo\n:info greeting\n:search greeting\n:browse\n:q\n' | "$VUNA" repl 2>&1 ) )
+check_contains "repl v2 :browse module" "$repl_v2_ws" "## Foo"
+check_contains "repl v2 :info symbol" "$repl_v2_ws" "Foo.greeting"
+check_contains "repl v2 :search hit" "$repl_v2_ws" "greeting : String"
+check_contains "repl v2 :browse list" "$repl_v2_ws" "Foo.vuna"
+
+repl_entry="$tmp/repl-v2-entry.vuna"
+printf 'answer : Int\nanswer = 42\n' >"$repl_entry"
+repl_v2_file=$(printf 'answer\n:q\n' | "$VUNA" repl "$repl_entry" 2>&1)
+check_contains "repl v2 cli FILE load" "$repl_v2_file" "已加载"
+check_contains "repl v2 cli FILE usable" "$repl_v2_file" "42"
+repl_v2_cli_mod=$(printf 'Zero\n:q\n' | "$VUNA" repl Base.Nat 2>&1)
+check_contains "repl v2 cli MODULE" "$repl_v2_cli_mod" "已导入模块 Base.Nat"
+printf ':q\n' | "$VUNA" repl Does.Not.Exist >/dev/null 2>&1
+repl_v2_cli_bad_code=$?
+check_eq "repl v2 cli bad module exit" "2" "$repl_v2_cli_bad_code"
+
+# 颜色：管道默认关闭；`:set color on` 强制开启。
+repl_v2_plain=$(printf '1 + 1\n:q\n' | "$VUNA" repl 2>&1)
+check_absent "repl v2 no ansi in pipe" "$(printf '\033')" "$repl_v2_plain"
+repl_v2_color=$(printf ':set color on\n1 + 1\n:q\n' | "$VUNA" repl 2>&1)
+check_contains "repl v2 color on ansi" "$repl_v2_color" "$(printf '\033')["
+
+# 历史持久化：单行单元写入文件，下一次会话恢复。
+printf '7 + 1\n:q\n' | VUNA_REPL_HISTORY="$tmp/repl-v2-hist" "$VUNA" repl >/dev/null 2>&1
+check_contains "repl v2 history file" "$(cat "$tmp/repl-v2-hist" 2>/dev/null)" "7 + 1"
+repl_v2_hist2=$(printf ':history\n:q\n' | VUNA_REPL_HISTORY="$tmp/repl-v2-hist" "$VUNA" repl 2>&1)
+check_contains "repl v2 history restored" "$repl_v2_hist2" "7 + 1"
+
+# pty 行编辑：方向键 / Ctrl-R / 退格 / Ctrl-C / Ctrl-D / Tab。
+if command -v script >/dev/null 2>&1; then
+  repl_pty_arrow=$( ( sleep 0.5; printf '1 + 1\n'; sleep 0.3; printf '\033[A\n'; sleep 0.3; printf ':q\n' ) \
+    | NO_COLOR=1 VUNA_REPL_HISTORY="$tmp/repl-pty-a" script -qec "$VUNA repl" /dev/null 2>&1 | tr -d '\r' )
+  repl_pty_arrow_n=$(printf '%s\n' "$repl_pty_arrow" | grep -c '^2$' || true)
+  check_eq "repl v2 pty arrow-up" "2" "$repl_pty_arrow_n"
+
+  repl_pty_cr=$( ( sleep 0.5; printf '1 + 1\n'; sleep 0.3; printf '\0221 + 1\r\r'; sleep 0.3; printf ':q\n' ) \
+    | NO_COLOR=1 VUNA_REPL_HISTORY="$tmp/repl-pty-r" script -qec "$VUNA repl" /dev/null 2>&1 | tr -d '\r' )
+  repl_pty_cr_n=$(printf '%s\n' "$repl_pty_cr" | grep -c '^2$' || true)
+  check_eq "repl v2 pty ctrl-r" "2" "$repl_pty_cr_n"
+
+  repl_pty_bs=$( ( sleep 0.5; printf '12\033[D\177\n'; sleep 0.3; printf ':q\n' ) \
+    | NO_COLOR=1 VUNA_REPL_HISTORY="$tmp/repl-pty-b" script -qec "$VUNA repl" /dev/null 2>&1 | tr -d '\r' )
+  repl_pty_bs_n=$(printf '%s\n' "$repl_pty_bs" | grep -c '^2$' || true)
+  check_eq "repl v2 pty left+backspace" "1" "$repl_pty_bs_n"
+
+  repl_pty_cc=$( ( sleep 0.5; printf '1 + 1\003'; sleep 0.3; printf '2 + 2\n'; sleep 0.3; printf ':q\n' ) \
+    | NO_COLOR=1 VUNA_REPL_HISTORY="$tmp/repl-pty-c" script -qec "$VUNA repl" /dev/null 2>&1 | tr -d '\r' )
+  repl_pty_cc_4=$(printf '%s\n' "$repl_pty_cc" | grep -c '^4$' || true)
+  repl_pty_cc_2=$(printf '%s\n' "$repl_pty_cc" | grep -c '^2$' || true)
+  check_eq "repl v2 pty ctrl-c cancels line" "0" "$repl_pty_cc_2"
+  check_eq "repl v2 pty ctrl-c continues" "1" "$repl_pty_cc_4"
+
+  ( sleep 0.5; printf '\004' ) | NO_COLOR=1 VUNA_REPL_HISTORY="$tmp/repl-pty-d" script -qec "$VUNA repl" /dev/null >/dev/null 2>&1
+  check_eq "repl v2 pty ctrl-d exit" "0" "$?"
+
+  repl_pty_tab=$( ( sleep 0.5; printf ':he\t\n'; sleep 0.3; printf ':q\n' ) \
+    | NO_COLOR=1 VUNA_REPL_HISTORY="$tmp/repl-pty-t" script -qec "$VUNA repl" /dev/null 2>&1 | tr -d '\r' )
+  check_contains "repl v2 pty tab completion" "$repl_pty_tab" "命令："
+else
+  bad "repl v2 pty tests" "script (util-linux) in PATH" "missing"
+fi
+
+# 55) M35.3 net 原语：Unix domain socket echo / TCP 临时端口 / stale socket 重绑 / 错误路径。
+#     说明：TCP loopback 在部分 Nix 沙箱不可用（用 unix socket 覆盖协议面），此时打印 SKIP。
+net_pkg=corpus/net/01_echo
+rm -rf "$net_pkg/.output"
+if "$VUNA" build "$net_pkg" >/dev/null 2>&1; then ok; else bad "net fixture build" "exit 0" "build failed"; fi
+net_bin=$net_pkg/.output/bin/net-echo
+net_sock=$tmp/net-echo.sock
+rm -f "$net_sock"
+: >"$tmp/net-serve.log"
+"$net_bin" serve "unix:$net_sock" >"$tmp/net-serve.log" 2>&1 &
+net_srv=$!
+net_i=0
+while ! grep -q '^ready' "$tmp/net-serve.log" 2>/dev/null && [ "$net_i" -lt 100 ]; do
+  net_i=$((net_i + 1))
+  sleep 0.1
+done
+net_out=$("$net_bin" client "unix:$net_sock" 2>&1)
+check_contains "net unix echo" "$net_out" "echo:ping"
+wait "$net_srv"
+check_eq "net unix server exit" "0" "$?"
+
+: >"$tmp/net-tcp.log"
+"$net_bin" serve-tcp >"$tmp/net-tcp.log" 2>&1 &
+net_tcp_srv=$!
+net_i=0
+while ! grep -q '^port:' "$tmp/net-tcp.log" 2>/dev/null && [ "$net_i" -lt 100 ]; do
+  net_i=$((net_i + 1))
+  sleep 0.1
+done
+net_port=$(sed -n 's/^port://p' "$tmp/net-tcp.log" | head -1)
+if [ -z "$net_port" ]; then
+  kill "$net_tcp_srv" 2>/dev/null
+  printf 'SKIP: net tcp loopback unavailable in this sandbox\n' >&2
+else
+  net_out=$("$net_bin" client "tcp:127.0.0.1:$net_port" 2>&1)
+  check_contains "net tcp echo" "$net_out" "echo:ping"
+  wait "$net_tcp_srv"
+  check_eq "net tcp server exit" "0" "$?"
+fi
+
+# stale socket：上一个 server 退出后路径仍在 → listen 前 unlink 并重绑。
+: >"$tmp/net-stale.log"
+"$net_bin" serve "unix:$net_sock" >"$tmp/net-stale.log" 2>&1 &
+net_srv2=$!
+net_i=0
+while ! grep -q '^ready' "$tmp/net-stale.log" 2>/dev/null && [ "$net_i" -lt 100 ]; do
+  net_i=$((net_i + 1))
+  sleep 0.1
+done
+net_out=$("$net_bin" client "unix:$net_sock" 2>&1)
+check_contains "net stale socket rebind" "$net_out" "echo:ping"
+wait "$net_srv2"
+check_eq "net stale server exit" "0" "$?"
+
+"$net_bin" client "bogus:" >"$tmp/net-bad.log" 2>&1
+check_eq "net invalid address exit" "2" "$?"
+check_contains "net invalid address message" "$(cat "$tmp/net-bad.log")" "net: invalid address"
+rm -rf "$net_pkg/.output"
+
+# 56) M35.3 REPL server / client：JSON-RPC over Content-Length（Unix socket 为主；TCP 临时端口
+#     沙箱不可用时 smoke 打印 SKIP）。覆盖跨进程会话状态、错误码、阶段 1 限制、shutdown 清理。
+sh corpus/repl-server/smoke.sh "$VUNA" >/dev/null 2>&1
+check_eq "repl server smoke" "0" "$?"
 
 if [ "$fail" -ne 0 ]; then
   printf '%s passed, %s failed\n' "$pass" "$fail"

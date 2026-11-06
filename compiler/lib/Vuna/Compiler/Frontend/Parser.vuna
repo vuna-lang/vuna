@@ -279,19 +279,18 @@ bindingItemsToBinds items = bindingBindsGo items [] [] []
 bindingBindsGo : List BindingItem -> List (Pair String (Pair Expr Span)) -> List String -> List (Pair Pat Expr) -> Result (List (Pair Pat Expr))
 bindingBindsGo [] sigs bound acc = case firstDanglingSig (reverse sigs) bound of
   Nothing => Ok (reverse acc)
-  Just (Pair name sp) =>
-    Err (showSpanLoc sp ++ ": " ++ psMsg (WhereSigNoDef name) (VCons name VNil))
+  Just (Pair name sp) => Err "${showSpanLoc sp}: ${psMsg (WhereSigNoDef name) (VCons name VNil)}"
 bindingBindsGo (item :: rest) sigs bound acc = case item of
   BISig name ty sp =>
-    if memName name bound then Err (showSpanLoc sp ++ ": " ++ psMsg (WhereSigBeforeClause name) (VCons name VNil))
-    else if hasBindingSig name sigs then Err (showSpanLoc sp ++ ": " ++ psMsg (WhereSigDuplicate name) (VCons name VNil))
+    if memName name bound then Err "${showSpanLoc sp}: ${psMsg (WhereSigBeforeClause name) (VCons name VNil)}"
+    else if hasBindingSig name sigs then Err "${showSpanLoc sp}: ${psMsg (WhereSigDuplicate name) (VCons name VNil)}"
     else bindingBindsGo rest (Pair name (Pair ty sp) :: sigs) bound acc
   BIBind (Pair pat value) => case localFunMerge (patBoundName pat) value acc of
     Just merged => bindingBindsGo rest sigs bound merged
     Nothing => case bindingSigOf (patBoundName pat) sigs of
       Just (Pair ty sp) =>
         if memName (patBoundName pat) bound then Err
-          (showSpanLoc sp ++ ": " ++ psMsg (WhereSigMultiClause (patBoundName pat)) (VCons (patBoundName pat) VNil))
+          "${showSpanLoc sp}: ${psMsg (WhereSigMultiClause (patBoundName pat)) (VCons (patBoundName pat) VNil)}"
         else bindingBindsGo rest sigs (patBoundName pat :: bound) (Pair pat (EAnn value ty sp) :: acc)
       Nothing => bindingBindsGo rest sigs (patBoundName pat :: bound) (Pair pat value :: acc)
 
@@ -574,6 +573,11 @@ else case peekTok st of
         step (parseExpr (fuel - 1) (advance st) blockCol 0)
           (\inner, st1 => step (expectSym st1 ")") (\_, st2 => Ok (Pair (EParen inner (spanOf st st2)) st2)))
   PTok (TSym "[") p => parseListExpr (fuel - 1) st blockCol
+  -- M40：命名洞 `?name`（`?` 与标识符紧邻）。编码成 `EVar "?name"`（不新增 AST 构造子），
+  -- span 覆盖整个 `?name`；精化器据 `isHoleName` 把它当洞。
+  PTok (TSym "?") p => case holeAtomAt st of
+    Just h => Ok (Pair (EVar (firstOf h) (secondOf h)) (advance (advance st)))
+    Nothing => psErr0 ExpectedExpression
   PTok (TSym "{") p => case binderHead (advance st) of
     Just qn => parsePiBinder (fuel - 1) st blockCol (firstOf qn) (secondOf qn) True "{" "}"
     Nothing =>
@@ -616,10 +620,10 @@ else case toks of
       Err e => Err (holePosPrefix pos ++ e)
       Ok (Pair e st2) =>
         if isEof st2 then Ok e
-        else Err (holePosPrefix pos ++ "[PS_ExpectedEndOfExpr] expected end of expression")
+        else Err "${holePosPrefix pos}[PS_ExpectedEndOfExpr] expected end of expression"
 
 holePosPrefix : Pos -> String
-holePosPrefix (Pos line col) = strFromInt line ++ ":" ++ strFromInt col ++ ": "
+holePosPrefix (Pos line col) = "${line}:${col}: "
 
 -- 洞内 token 的 parser fuel 种子（与 `stateFuel` 同形，按 token 数线性放大）。
 toksFuel : List PTok -> Int

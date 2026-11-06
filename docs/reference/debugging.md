@@ -2,8 +2,8 @@
 
 本文覆盖**开发/调试回路**的三层支持：编译期诊断的源码片段、运行期未捕获异常的报告、
 纯代码里的 `Base.Debug` 工具，以及配套命令（`vuna run` / `vuna test --verbose` /
-REPL `:type`）。语言语义见 [language.md](language.md)，诊断错误码见
-[tooling.md](tooling.md)，工具边界见 [limits.md](limits.md)。
+REPL `:type`）。语言语义见 [language.md](language.md)，诊断错误码与 CLI 退出码见
+[tooling.md](tooling.md)，lint 规则边界见 [lint.md](lint.md)。
 
 ## 1. 编译期诊断：源码片段
 
@@ -108,8 +108,12 @@ vuna: runtime error: assertion failed: broken invariant
 | --- | --- |
 | `vuna run [DIR] [-- ARGS...]` | 增量 build + 执行 `.output/bin/<包名>`，透传参数与退出码（`--no-build` 跳过构建，`--package NAME` 选 workspace 成员） |
 | `vuna test --filter PAT --verbose` | 只跑匹配的测试文件；`--verbose` 给每个文件的毫秒耗时与总耗时；`--fail-fast` 首个失败即停 |
-| `vuna repl` 的 `:type EXPR` | 只看表达式类型（不求值、不执行效果） |
-| `vuna repl` 的 `:load FILE` / `:reload` | 加载/重载入口式源码（无 `module` 头）；`:browse MODULE` 看模块接口 |
+| `vuna repl` 的 `:type EXPR` | 只看表达式或类型名的类型（类型构造子给 kind；按 token 着色；不求值、不执行效果） |
+| `vuna repl` 的 `:typeinfo EXPR`（`:ti`） | 显式类型 + 单独列出的隐式参数；工作区内附 docstring |
+| `vuna repl` 的 `:info NAME` / `:search QUERY` | 查符号类型/文档/位置；按名称或类型检索 |
+| `vuna repl` 的 `:load FILE\|DIR\|MODULE` / `:reload` | 加载入口式源码 / 切换包上下文 / 导入模块；`:browse [MODULE]` 看模块接口 |
+| `vuna repl` 的 `:defs` / `:history` / `:set +s` | 看已定义名字与类型 / 输入历史与重放 / 每条输入的耗时 |
+| `vuna repl --listen ADDR` + `--client ADDR` | 常驻 REPL server（Unix socket / loopback TCP）+ 每次调用一发一收；agent/脚本跨进程驱动，JSON-RPC 帧协议（见 [tooling.md](tooling.md) §5） |
 | LSP `textDocument/codeAction` | lint finding 的 quick fix（含 fix all） |
 
 REPL 与 LSP 的命令面见 [tooling.md](tooling.md)，测试选项见 [testing.md](testing.md)。

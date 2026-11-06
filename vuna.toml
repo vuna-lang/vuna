@@ -14,4 +14,4 @@ vuna-base = "base"
 
 # M27：效应能力声明（产品 CLI / 工具链直接使用 effectful 内建 prim_*）。
 [capabilities]
-effects = ["console", "fs", "process", "env", "clock", "unsafe"]
+effects = ["console", "fs", "process", "env", "clock", "unsafe", "net"]

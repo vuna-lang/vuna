@@ -18,20 +18,7 @@ printFinding path fixMode f =
   let
     suffix = if fixMode then " (not auto-fixable)" else ""
     text =
-      path
-        ++ ":"
-        ++ strFromInt f.findingLine
-        ++ ":"
-        ++ strFromInt f.findingCol
-        ++ ": "
-        ++ "["
-        ++ f.findingCode
-        ++ "] "
-        ++ f.findingRule
-        ++ ": "
-        ++ f.findingMessage
-        ++ suffix
-        ++ "\n"
+      "${path}:${f.findingLine}:${f.findingCol}: [${f.findingCode}] ${f.findingRule}: ${f.findingMessage}${suffix}\n"
   in let
     _ = runIO (prim_print text)
   in 0
@@ -63,7 +50,7 @@ fixReport : String -> String -> List Finding -> List FixityDecl -> Int
 fixReport path source findings programFixities = case fixLoop programFixities source findings 8 0 of
   Err e =>
     let
-      _ = runIO (prim_print (path ++ ": error: " ++ e ++ "\n"))
+      _ = runIO (prim_print "${path}: error: ${e}\n")
     in 2
   Ok (Pair count newSource) => if count == 0 then reportFindings path True findings
   else
@@ -72,18 +59,18 @@ fixReport path source findings programFixities = case fixLoop programFixities so
     in case lintSourceWith programFixities newSource of
       Err e =>
         let
-          _ = runIO (prim_print (path ++ ": error: " ++ e ++ "\n"))
+          _ = runIO (prim_print "${path}: error: ${e}\n")
         in 2
       Ok remaining =>
         let
-          _ = runIO (prim_print (path ++ ": fixed " ++ strFromInt count ++ " finding(s)\n"))
+          _ = runIO (prim_print "${path}: fixed ${count} finding(s)\n")
         in reportFindings path True remaining
 
 lintExisting : Bool -> String -> String -> List FixityDecl -> Int
 lintExisting doFix path source programFixities = case lintSourceWith programFixities source of
   Err e =>
     let
-      _ = runIO (prim_print (path ++ ": error: " ++ e ++ "\n"))
+      _ = runIO (prim_print "${path}: error: ${e}\n")
     in 2
   Ok findings =>
     if doFix then fixReport path source findings programFixities
@@ -95,7 +82,7 @@ lintOne : Bool -> FixityEnv -> String -> Pair FixityEnv Int
 lintOne doFix env path = case readText path of
   Err e =>
     let
-      _ = runIO (prim_print ("error: " ++ e ++ "\n"))
+      _ = runIO (prim_print "error: ${e}\n")
     in Pair env 2
   Ok source =>
     let
@@ -104,7 +91,7 @@ lintOne doFix env path = case readText path of
     in case secondOf looked of
       Err e =>
         let
-          _ = runIO (prim_print (path ++ ": cannot load package fixity context: " ++ e ++ "\n"))
+          _ = runIO (prim_print "${path}: cannot load package fixity context: ${e}\n")
         in Pair env2 2
       Ok programFixities => Pair env2 (lintExisting doFix path source programFixities)
 
@@ -122,7 +109,7 @@ runLint : List String -> Int
 runLint args = case parseToolArgs "vuna lint" [BoolFlag "fix"] args of
   Err e =>
     let
-      _ = runIO (prim_print ("error: " ++ e ++ "\n"))
+      _ = runIO (prim_print "error: ${e}\n")
     in 2
   Ok parsed => case parsed.positionals of
     [] => lintUsageError 0

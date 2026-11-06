@@ -37,7 +37,7 @@ nameScore : String -> Sym -> Int
 nameScore query s =
   let
     q = lowerAscii query
-    full = lowerAscii (symModule s ++ "." ++ symName s)
+    full = lowerAscii "${symModule s}.${symName s}"
     bare = lowerAscii (symName s)
     mod = lowerAscii (symModule s)
   in if q == full then 1000
@@ -120,7 +120,7 @@ typeNameMap : Index -> List (Pair String String)
 typeNameMap index =
   let
     types = filter isTypeSym index.indexSymbols
-    entries = map (\s => Pair (symName s) (symModule s ++ "." ++ symName s)) types
+    entries = map (\s => Pair (symName s) "${symModule s}.${symName s}") types
   in filter (\p => countShort (firstOf p) entries == 1) entries
 
 isTypeSym : Sym -> Bool
@@ -271,22 +271,21 @@ alphaKey ty = firstOf (alphaGo ty (AlphaState [] 0))
 
 alphaGo : Ty -> AlphaState -> Pair String AlphaState
 alphaGo (TVar id) st = case lookupInt id (alphaEnv st) of
-  Just idx => Pair ("$" ++ strFromInt idx) st
+  Just idx => Pair "$${idx}" st
   Nothing =>
-    Pair ("$" ++ strFromInt (alphaNext st))
-      (AlphaState (Pair id (alphaNext st) :: alphaEnv st) (alphaNext st + 1))
+    Pair "$${alphaNext st}" (AlphaState (Pair id (alphaNext st) :: alphaEnv st) (alphaNext st + 1))
 alphaGo TWild st = Pair "_" st
 alphaGo (TCon name) st = Pair name st
 alphaGo (TApp f args) st =
   let
     pf = alphaGo f st
     pArgs = alphaArgs args (secondOf pf)
-  in Pair ("(" ++ firstOf pf ++ " " ++ firstOf pArgs ++ ")") (secondOf pArgs)
+  in Pair "(${firstOf pf} ${firstOf pArgs})" (secondOf pArgs)
 alphaGo (TArr a b) st =
   let
     pa = alphaGo a st
     pb = alphaGo b (secondOf pa)
-  in Pair ("(" ++ firstOf pa ++ "->" ++ firstOf pb ++ ")") (secondOf pb)
+  in Pair "(${firstOf pa}->${firstOf pb})" (secondOf pb)
 
 alphaArgs : List Ty -> AlphaState -> Pair String AlphaState
 alphaArgs [] st = Pair "" st
@@ -294,7 +293,7 @@ alphaArgs (x :: rest) st =
   let
     px = alphaGo x st
     pr = alphaArgs rest (secondOf px)
-  in Pair (" " ++ firstOf px ++ firstOf pr) (secondOf pr)
+  in Pair " ${firstOf px}${firstOf pr}" (secondOf pr)
 
 alphaEqual : Ty -> Ty -> Bool
 alphaEqual a b = alphaKey a == alphaKey b
@@ -332,7 +331,7 @@ else case unifyFlex 100 (Subst []) query sig of
 -- 类型检索
 -- ---------------------------------------------------------------
 parseQuery : String -> Result Expr
-parseQuery query = case parseSource "<type-query>" ("q : " ++ query) of
+parseQuery query = case parseSource "<type-query>" "q : ${query}" of
   Err e => Err e
   Ok (SourceFile hdr imports fx decls) => case decls of
     (DSig name ctx ty sp) :: rest => Ok ty
@@ -345,7 +344,7 @@ parseSymType names s = case parseExpressionSource (symType s) of
 
 searchType : Index -> String -> Result (List SearchHit)
 searchType index query = case parseQuery query of
-  Err e => Err ("cannot parse type query: " ++ e)
+  Err e => Err "cannot parse type query: ${e}"
   Ok queryExpr =>
     let
       names = typeNameMap index

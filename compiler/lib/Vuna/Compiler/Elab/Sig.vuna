@@ -191,7 +191,7 @@ qualifiedBannedTbl defined =
     (Base.HashMap.fromList [])
 
 qualifiedKey : String -> String -> String
-qualifiedKey prefix name = prefix ++ "\t" ++ name
+qualifiedKey prefix name = "${prefix}\t${name}"
 
 -- 与 `quantifyTopSig` 同义，但 banned 用共享的 qualified 表 + 全局 prelude 表。
 quantifyTopSigCached : String -> HashMap Bool -> HashMap Bool -> Expr -> Span -> Expr
@@ -206,7 +206,12 @@ quantifyTopSigCtxCached : String -> HashMap Bool -> HashMap Bool -> List Expr ->
 quantifyTopSigCtxCached prefix banned preludeBanned ctx ty sp =
   let
     combined = EApp (EVar "#sig" sp) (append ctx [ty]) sp
-    names = keepOutQualified prefix banned preludeBanned (freeNames (\n => False) combined)
+    -- 约束实参与返回类型一起参与自由名扫描；但 `#sig` 把 ty 包进了 EApp，
+    -- `piBoundNames`（只看顶层 EPi 链）看不到 ty 的 binder，必须手动扣除，
+    -- 否则显式 `{a : Type} -> a -> a` 里的 a 会被当成自由名再量化一次
+    -- （签名变成 `{a : Type} -> {a : Type} -> a -> a`，推断位置留下无主元变量）。
+    lower = dedupNames (append (concatMap exprLowerVars ctx) (exprLowerVars ty))
+    names = keepOutQualified prefix banned preludeBanned (dropPiBound lower (piBoundNames ty))
   in quantifyTopKinds names combined ty sp
 
 keepOutQualified : String -> HashMap Bool -> HashMap Bool -> List String -> List String

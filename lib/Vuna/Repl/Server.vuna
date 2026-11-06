@@ -1,0 +1,181 @@
+module Vuna.Repl.Server (checkReplAddr, runReplServer) where
+
+-- Vuna.Repl.Server：REPL server（JSON-RPC over Content-Length，socket 传输）。
+--
+-- 传输：`--listen unix:PATH`（Unix domain socket）或 `--listen tcp:127.0.0.1:PORT`
+-- （loopback TCP；`PORT=0` 用临时端口）。**只允许本机 loopback / Unix socket**：
+-- 能连上这个端点 = 能在你的进程里执行任意 vuna 代码，地址校验在 `checkReplAddr`。
+--
+-- 生命周期：常驻进程；**会话状态跨连接保留**（定义 / import / `:load` 目标都在内存里）。
+-- 每个连接用 `Vuna.Json.Server.serveConnection` 逐帧服务：
+--   `eval`   —— 一次提交可含多行；`close:true`（默认）按「输入结束」收尾；
+--   `ping`   —— 版本 + 包名（探活）；
+--   `shutdown` / `:quit` —— 回响应后进程 exit 0（并清理 unix socket 路径）。
+-- 对端关闭 = 只关连接、继续 accept；传输层致命错误（超大帧 / fuel）只影响该连接。
+--
+-- stdout 只用于启动时的一行 `listening <地址>`（agent 用它/后台作业日志判断就绪）；
+-- 协议帧全部走 socket；诊断走 stderr（`[vuna-repl-server]` 前缀）。
+--
+-- 阶段 1 限制（见 docs/reference/tooling.md）：server 模式下 `:!` 与效果表达式
+-- （`main : IO a` 临时编译运行）**拒绝执行**——子进程会写真实 stdout，污染协议通道。
+import Vuna.Compiler.Common
+import Vuna.Compiler.Packages.Pkg
+import Vuna.Compiler.Version
+import Vuna.Json
+import Vuna.Json.Frame
+import Vuna.Json.Rpc
+import Vuna.Json.Server
+import Vuna.Repl
+import Base.IO
+import Base.IORef
+
+-- 地址校验（CLI 层）：只接受本机端点。
+checkReplAddr : String -> Result String
+checkReplAddr addr =
+  if startsWith "unix:" addr && strLength addr > 5 then Ok addr
+  else if startsWith "tcp:127.0.0.1:" addr && strLength addr > 14 then Ok addr
+  else Err
+    "地址必须是 unix:PATH 或 tcp:127.0.0.1:PORT（只允许本机 loopback / Unix socket；任意地址 = 任意代码执行）"
+
+-- server 诊断（stderr；stdout 只留给 `listening` 行）。
+serverLog : String -> ReplState -> ReplState
+serverLog m st =
+  let
+    _ = runIO (prim_eprint "[vuna-repl-server] ${m}\n")
+  in st
+
+-- 传输告警：写 stderr 日志，并回 `-32700` 让客户端不会空等（LSP 的策略是丢帧不回）。
+replWarn : String -> ReplState -> Pair ReplState (List Json)
+replWarn m st =
+  let
+    _ = serverLog m st
+  in Pair st [responseErr JNull errParse "parse error / bad frame: ${m}"]
+
+-- JSON-RPC result 载荷（status / ok / output / error；前后端共同契约）。
+replResult : String -> Bool -> String -> String -> Json
+replResult status ok output err =
+  JObj
+    [Pair "status" (JStr status), Pair "ok" (JBool ok), Pair "output" (JStr output), Pair "error" (JStr err)]
+
+-- 把多行 code 切成行：**末尾 `\n` 不额外产生空行**（`"x\n"` ≡ `"x"`）；
+-- 其余空行保留（交给 `blankStep` 的交互语义：提交待续输入 / 块内空行）。
+codeLines : String -> List String
+codeLines code = case reverse (split "\n" code) of
+  "" :: rest => reverse rest
+  parts => reverse parts
+
+-- 逐行喂给 `inputStep`；`:q`/`:quit` 直接返回退出。
+data FeedResult : Type where
+  FeedContinue : ReplState -> FeedResult
+  FeedExit : FeedResult
+
+feedLines : ReplState -> List String -> FeedResult
+feedLines st [] = FeedContinue st
+feedLines st (line :: rest) = case inputStep st line of
+  ReplExit _ => FeedExit
+  ReplContinue st2 => feedLines st2 rest
+
+-- `eval`：code（必需）+ close（可选，默认 true）。
+evalRequest : Json -> ReplState -> Pair Bool (Pair ReplState (List Json))
+evalRequest msg st = case jsonGetIn ["params", "code"] msg >>= jsonAsStr of
+  Nothing =>
+    Pair False (Pair st [responseErr (idOf msg) errInvalidParams "missing params.code (string)"])
+  Just code =>
+    let
+      close = fromMaybe True (jsonGetIn ["params", "close"] msg >>= jsonAsBool)
+    in case feedLines st (codeLines code) of
+      FeedExit =>
+        let
+          Pair out err = replOutputDrain st
+        in Pair True (Pair st [responseOk (idOf msg) (replResult "exit" True out err)])
+      FeedContinue st2 =>
+        let
+          finished = if close then finishInput st2 else ReplContinue st2
+        in case finished of
+          ReplExit _ =>
+            let
+              Pair out err = replOutputDrain st2
+            in Pair True (Pair st2 [responseOk (idOf msg) (replResult "exit" True out err)])
+          ReplContinue st3 =>
+            let
+              Pair out err = replOutputDrain st3
+              status = if replPendingOpen st3 then "incomplete" else "ok"
+            in Pair False (Pair st3 [responseOk (idOf msg) (replResult status (err == "") out err)])
+
+-- `ping`：版本 + 包名（探活/自述，不改状态）。
+pingRequest : Json -> ReplState -> Pair Bool (Pair ReplState (List Json))
+pingRequest msg st =
+  let
+    pkg = contextPackageName st.stateCtx
+    label = if pkg == "" then "base-only" else pkg
+    text = "vuna ${vunaVersion}\n包: ${label}\n"
+  in Pair False (Pair st [responseOk (idOf msg) (replResult "ok" True text "")])
+
+-- 请求分发；未知方法回 `-32601`（不结束进程）。
+handleRequest : Json -> ReplState -> Pair Bool (Pair ReplState (List Json))
+handleRequest msg st = case methodOf msg of
+  Nothing => Pair False (Pair st [responseErr (idOf msg) errInvalidRequest "missing method"])
+  Just m => case m of
+    "eval" => evalRequest msg st
+    "ping" => pingRequest msg st
+    "shutdown" => Pair True (Pair st [responseOk (idOf msg) (replResult "ok" True "" "")])
+    _ => Pair False (Pair st [responseErr (idOf msg) errMethodNotFound "method not found: ${m}"])
+
+-- 就绪行里显示的地址：`tcp:...:0` 换成实际绑定的临时端口。
+listeningText : String -> Int -> String
+listeningText addr h =
+  let
+    port = runIO (prim_netPort h)
+  in if endsWith ":0" addr then "${substring 0 (natFromInt (strLength addr - 1)) addr}${strFromInt port}"
+  else addr
+
+unixPathOf : String -> String
+unixPathOf addr = substring (natFromInt 5) (natFromInt (strLength addr - 5)) addr
+
+cleanupAddr : String -> Int
+cleanupAddr addr = if startsWith "unix:" addr then runIO (prim_removeFile (unixPathOf addr)) else 0
+
+-- CLI 入口：起 session → listen → 打印就绪行 → accept 循环（每个连接一个会话切片）。
+runReplServer : PackageContext -> ReplStart -> String -> Int
+runReplServer ctx start addr =
+  let
+    outRef = runIO (newRef "")
+    errRef = runIO (newRef "")
+    sink = SinkCapture outRef errRef
+  in case startReplSession ctx start sink of
+    Err e =>
+      let
+        _ = runIO (prim_eprint "[vuna-repl-server] ${e}\n")
+      in 2
+    Ok (Pair st0 _) =>
+      let
+        h = runIO (prim_netListen addr)
+        _ = runIO (prim_print "listening ${listeningText addr h}\n")
+      in acceptLoop serverFuelBound addr h st0
+
+-- 连接循环是无限状态机：显式 fuel 守卫（1G 个连接）。
+serverFuelBound : Int
+serverFuelBound = 1073741824
+
+acceptLoop : Int -> String -> Int -> ReplState -> Int
+acceptLoop fuel addr h st = if fuel <= 0 then 0
+else
+  let
+    conn = runIO (prim_netAccept h)
+    outcome =
+      serveConnection (\n => prim_netRecv conn n) (\s => prim_netSend conn s) replWarn handleRequest
+        st
+    exit = firstOf outcome
+    st2 = secondOf outcome
+    _ = runIO (prim_netClose conn)
+  in case exit of
+    ExitRequested =>
+      let
+        _ = runIO (prim_netClose h)
+        _ = cleanupAddr addr
+      in 0
+    ExitClosed => acceptLoop (fuel - 1) addr h st2
+    ExitFatal msg =>
+      let
+        _ = serverLog msg st2
+      in acceptLoop (fuel - 1) addr h st2

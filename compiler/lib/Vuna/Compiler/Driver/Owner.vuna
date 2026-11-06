@@ -1,0 +1,183 @@
+module Vuna.Compiler.Driver.Owner
+  ( SplitMeta(..)
+  , entryOwner
+  , knownModuleOrErr
+  , lookupModuleOf
+  , modulePrefixOfName
+  , nameOwnerPairsOfDatas
+  , nameOwnerPairsOfDefs
+  , splitDataOwnerEntriesOf
+  , splitDataOwnerEntriesOfModules
+  , splitDataOwnerOf
+  , splitDeclNames
+  , splitDefOwnerOf
+  , splitMetaOf
+  , splitOwnerEntriesOf
+  , splitOwnerEntriesOfModules
+  ) where
+
+-- Vuna.Compiler.Driver.Owner：**声明归属表**——声明名 / 实例名 / 方法投影名 / 派生实例名
+-- → 所属模块（入口声明归合成模块 `Main`）。
+--
+-- M34（C35）从 `Codegen.Split` 抽出：归属不只服务 codegen 的逐单元切分，也服务
+-- 模块级接口摘要（Driver.Iface 把 DtProgram 按模块切开）与后续的模块级缓存。两侧共用
+-- 同一份推导，避免「Elab 生成的名字」与「归属表」各写一套、互相漂移。
+--
+-- 归属来源只有 Loader-resolved 的声明结构：声明名、`DInstance` 头（与 Elab 同一
+-- `instanceName` 实现）、`DData`/`DRecord` 的 deriving 实例名、`DTrait` 的方法投影名与
+-- `Dict_<trait>`。推导不到的带点名字回落到「模块前缀必须是已知模块」，否则报错。
+import Vuna.Compiler.Common
+import Vuna.Compiler.Elab
+import Vuna.Compiler.Frontend.Ast
+import Base.HashMap
+
+splitNoSpan : Span
+splitNoSpan = Span "" 0 0 0 0
+
+-- 入口单元的固定名（入口声明不带模块前缀，统一归到 `Main`）。
+entryOwner : String
+entryOwner = "Main"
+
+modulePrefixOfName : String -> String
+modulePrefixOfName name = case splitLastDot (splitOnDot name) of
+  Pair rev base => joinDots rev
+
+-- ---------------------------------------------------------------
+-- 归属表：声明名 / 实例名 / 方法投影名 → 模块；data / 字典 data → 模块
+-- ---------------------------------------------------------------
+splitDeclNames : List Decl -> List String
+splitDeclNames [] = []
+splitDeclNames (d :: rest) = case d of
+  DSig name ctx ty sp => name :: splitDeclNames rest
+  DExtern name cName ty sp => name :: splitDeclNames rest
+  DFun name pats body sp => name :: splitDeclNames rest
+  DData name params kind ctors derivings lin sp => name :: splitDeclNames rest
+  DRecord name params fields derivings lin sp => name :: splitDeclNames rest
+  DTrait name params methods sp => name :: splitDeclNames rest
+  _ => splitDeclNames rest
+
+splitDataNames : List Decl -> List String
+splitDataNames [] = []
+splitDataNames (d :: rest) = case d of
+  DData name params kind ctors derivings lin sp => name :: splitDataNames rest
+  DRecord name params fields derivings lin sp => name :: splitDataNames rest
+  _ => splitDataNames rest
+
+headClassName : Expr -> Maybe String
+headClassName (EApp fn args sp) = case fn of
+  EVar n fsp => Just n
+  _ => Nothing
+headClassName (EVar n sp) = Just n
+headClassName _ = Nothing
+
+-- 实例名与派生实例名用 Elab 的同一实现（`Elab.instanceName` / `Elab.instHead`），
+-- 不再复制命名逻辑：Elab 生成的 `DtDef` 名字与本表逐字一致。
+splitInstanceOwnerOf : String -> Decl -> List (Pair String String)
+splitInstanceOwnerOf owner (DInstance ctxE headExpr methods sp) = case headClassName headExpr of
+  Just c => [Pair (instanceName c headExpr) owner]
+  Nothing => []
+splitInstanceOwnerOf owner (DData dname params kind ctors derivings lin sp) =
+  splitDerivedOwners owner dname params derivings
+splitInstanceOwnerOf owner (DRecord dname params fields derivings lin sp) =
+  splitDerivedOwners owner dname params derivings
+splitInstanceOwnerOf owner _ = []
+
+splitDerivedOwners : String -> String -> List String -> List String -> List (Pair String String)
+splitDerivedOwners owner dname params [] = []
+splitDerivedOwners owner dname params (t :: rest) =
+  Pair (instanceName t (instHead t dname params splitNoSpan)) owner
+    :: splitDerivedOwners owner dname params rest
+
+-- trait 的运行时产物不在顶层声明名里：方法投影定义与字典类型都由 Elab 生成，
+-- 因此按 `DTrait` 结构显式补上（入口 trait 没有模块前缀，这一步是唯一归属来源）。
+splitTraitDefOwnerOf : String -> Decl -> List (Pair String String)
+splitTraitDefOwnerOf owner (DTrait tname params methods sp) =
+  map (\m => Pair (traitMethodName m) owner) methods
+splitTraitDefOwnerOf owner _ = []
+
+splitTraitDataOwnerOf : String -> Decl -> List (Pair String String)
+splitTraitDataOwnerOf owner (DTrait tname params methods sp) = [Pair "Dict_${tname}" owner]
+splitTraitDataOwnerOf owner _ = []
+
+splitInstanceOwnersGo : String -> List Decl -> List (Pair String String)
+splitInstanceOwnersGo owner [] = []
+splitInstanceOwnersGo owner (d :: rest) =
+  append (splitInstanceOwnerOf owner d) (splitInstanceOwnersGo owner rest)
+
+splitOwnerEntriesOf : String -> List Decl -> List (Pair String String)
+splitOwnerEntriesOf owner decls =
+  append (map (\n => Pair n owner) (splitDeclNames decls))
+    (append (splitInstanceOwnersGo owner decls) (concatMap (splitTraitDefOwnerOf owner) decls))
+
+splitDataOwnerEntriesOf : String -> List Decl -> List (Pair String String)
+splitDataOwnerEntriesOf owner decls =
+  append (map (\n => Pair n owner) (splitDataNames decls))
+    (concatMap (splitTraitDataOwnerOf owner) decls)
+
+splitOwnerEntriesOfModules : List (Pair String (List Decl)) -> List (Pair String String)
+splitOwnerEntriesOfModules [] = []
+splitOwnerEntriesOfModules ((Pair mname decls) :: rest) =
+  append (splitOwnerEntriesOf mname decls) (splitOwnerEntriesOfModules rest)
+
+splitDataOwnerEntriesOfModules : List (Pair String (List Decl)) -> List (Pair String String)
+splitDataOwnerEntriesOfModules [] = []
+splitDataOwnerEntriesOfModules ((Pair mname decls) :: rest) =
+  append (splitDataOwnerEntriesOf mname decls) (splitDataOwnerEntriesOfModules rest)
+
+record SplitMeta where
+  smDefOwners : List (Pair String String)
+  smDataOwners : List (Pair String String)
+  smKnownModules : List String
+  -- M34.6：同一份归属表的哈希索引。清单保留给 `Driver.Iface.ownerIndexOf`（它按
+  -- `Base.HashMap.fromList` 建自己的表），但 codegen 侧逐 def/data 查归属不再线性扫清单
+  -- （旧实现 O(#def × #owner-pairs)：compiler 包一次 build 约 0.3s）。
+  smDefOwnerT : HashMap String
+  smDataOwnerT : HashMap String
+
+splitMetaOf : List (Pair String (List Decl)) -> List Decl -> SplitMeta
+splitMetaOf modules entryDecls =
+  let
+    knownModules = map (\p => firstOf p) modules
+    defOwners =
+      append (splitOwnerEntriesOfModules modules) (splitOwnerEntriesOf entryOwner entryDecls)
+    dataOwners =
+      append (splitDataOwnerEntriesOfModules modules)
+        (splitDataOwnerEntriesOf entryOwner entryDecls)
+  in SplitMeta defOwners dataOwners knownModules (Base.HashMap.fromList defOwners)
+    (Base.HashMap.fromList dataOwners)
+
+lookupModuleOf : List (Pair String String) -> String -> Maybe String
+lookupModuleOf pairs name = lookupPair name pairs
+
+knownModuleOrErr : List String -> String -> String -> Result String
+knownModuleOrErr knownModules what name =
+  let
+    prefix = modulePrefixOfName name
+  in if memName prefix knownModules then Ok prefix
+  else Err "DT split: `${what}` ${name} has module prefix `${prefix}` but no such module"
+
+splitDataOwnerOf : SplitMeta -> DtData -> Result String
+splitDataOwnerOf meta d = case Base.HashMap.lookup (dtDataName d) meta.smDataOwnerT of
+  Just o => Ok o
+  Nothing =>
+    if containsDot (dtDataName d) then knownModuleOrErr meta.smKnownModules "data" (dtDataName d)
+    else Err "DT split: cannot determine module for data `${dtDataName d}`"
+
+splitDefOwnerOf : SplitMeta -> String -> Result String
+splitDefOwnerOf meta name = case Base.HashMap.lookup name meta.smDefOwnerT of
+  Just o => Ok o
+  Nothing =>
+    if containsDot name then knownModuleOrErr meta.smKnownModules "definition" name
+    else Err "DT split: cannot determine module for definition `${name}`"
+
+nameOwnerPairsOfDefs : SplitMeta -> List DtDef -> Result (List (Pair String String))
+nameOwnerPairsOfDefs meta [] = Ok []
+nameOwnerPairsOfDefs meta (d :: rest) =
+  andThen (splitDefOwnerOf meta (dtDefName d))
+    (\o => andThen (nameOwnerPairsOfDefs meta rest) (\ps => Ok (Pair (dtDefName d) o :: ps)))
+
+nameOwnerPairsOfDatas : SplitMeta -> List DtData -> Result (List (Pair String String))
+nameOwnerPairsOfDatas meta [] = Ok []
+nameOwnerPairsOfDatas meta (d :: rest) =
+  andThen (splitDataOwnerOf meta d)
+    (\o => andThen (nameOwnerPairsOfDatas meta rest) (\ps => Ok (Pair (dtDataName d) o :: ps)))

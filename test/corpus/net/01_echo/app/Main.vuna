@@ -1,0 +1,52 @@
+-- M35.3：`net` 原语的端到端夹具。
+--
+-- 一个程序三种模式（测试驱动直接以 argv 调二进制）：
+--   serve PATH  —— 绑 Unix socket，accept 一个连接，回 "echo:<收到>"，退出；
+--   serve-tcp   —— 绑 127.0.0.1:0（临时端口），打印 `port:<N>`，accept 一个连接后同样 echo；
+--   client ADDR —— 连接、发 "ping\n"、打印回包、退出。
+import Base.IO
+import Base.Monad
+
+serve : String -> IO Int
+serve path = do
+  h <- prim_netListen path
+  _ <- println "ready"
+  c <- prim_netAccept h
+  msg <- prim_netRecv c 4096
+  _ <- prim_netSend c ("echo:" ++ msg)
+  _ <- prim_netClose c
+  _ <- prim_netClose h
+  println "server done"
+  exit 0
+
+serveTcp : IO Int
+serveTcp = do
+  h <- prim_netListen "tcp:127.0.0.1:0"
+  p <- prim_netPort h
+  println ("port:" ++ strFromInt p)
+  c <- prim_netAccept h
+  msg <- prim_netRecv c 4096
+  _ <- prim_netSend c ("echo:" ++ msg)
+  _ <- prim_netClose c
+  _ <- prim_netClose h
+  exit 0
+
+client : String -> IO Int
+client addr = do
+  c <- prim_netConnect addr
+  _ <- prim_netSend c "ping\n"
+  reply <- prim_netRecv c 4096
+  _ <- prim_netClose c
+  _ <- prim_print reply
+  exit 0
+
+dispatch : List String -> IO Int
+dispatch (["serve", path]) = serve path
+dispatch (["serve-tcp"]) = serveTcp
+dispatch (["client", addr]) = client addr
+dispatch _ = prim_bindIO (prim_print "usage\n") (\_ => exit 2)
+
+main : IO Int
+main = do
+  args <- getArgs
+  dispatch args

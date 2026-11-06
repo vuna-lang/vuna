@@ -162,6 +162,13 @@ applyValueFuel : Int -> Value -> Value -> Value
 applyValueFuel fuel f a = if fuel <= 0 then VType levelZero
 else case f of
   VLam name rig (Closure env body) => evalFuel (fuel - 1) (a :: env) body
+  -- 表现层 cast 在求值期是恒等：直接消去，不能留成中性应用——否则
+  -- `(prim_erase h) k` 会累积成两个实参的中性项，OpIdentity 再也归约不到。
+  VNeutral (NGlobal g []) =>
+    if g == primEraseName then a else VNeutral (spineAppend (NGlobal g []) a)
+  VNeutral (NGlobal g ([x])) =>
+    if g == primEraseName then applyValueFuel (fuel - 1) x a
+    else VNeutral (spineAppend (NGlobal g [x]) a)
   VNeutral n => VNeutral (spineAppend n a)
   VMeta m sp => VMeta m (append sp [a])
   _ => VApp f a
@@ -428,6 +435,10 @@ else case findIntrinsic g of
     OpStrPack => Nothing
     OpStrConcatMany => Nothing
     OpStrSubstTemplate => Nothing
+    -- 表现层 cast：`prim_erase x` 的定义性相等就是 `x`（单实参 identity）。
+    OpIdentity => case sp of
+      [v] => Just v
+      _ => Nothing
     OpNone => Nothing
   Nothing => Nothing
 
@@ -691,11 +702,11 @@ showValueAt : Int -> Value -> String
 showValueAt depth v = case v of
   -- M28：宇宙层级参与诊断（严格分层下 `Type 0` 与 `Type 1` 不相等，只说 "Type"
   -- 会让反例无法定位）；0 层仍显示 "Type" 以保持既有文案稳定。
-  VType l => if levelToInt l == 0 then "Type" else "Type " ++ strFromInt (levelToInt l)
+  VType l => if levelToInt l == 0 then "Type" else "Type ${levelToInt l}"
   VNeutral n1 => case n1 of
     NGlobal g sp => if isNilList sp then g else showTerm (quote depth v)
     NVar name lvl sp => if isNilList sp then name else showTerm (quote depth v)
-  VMeta m sp => if isNilList sp then "?" ++ strFromInt m else showTerm (quote depth v)
+  VMeta m sp => if isNilList sp then "?${m}" else showTerm (quote depth v)
   -- canonical Nat 链显示成十进制（诊断/REPL 与产物 `main : Nat` 一致）。
   VCon c args => case natCtorInt c args of
     Just n => strFromInt n

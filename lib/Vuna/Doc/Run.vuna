@@ -26,7 +26,7 @@ runDoc args = case parseToolArgs "vuna doc" [BoolFlag "check", ValueFlag "packag
     _ => docError "usage: vuna doc [--check] [--package NAME] [DIR [OUT]]"
 
 docDefaultOut : String -> String
-docDefaultOut dir = if dir == "." then "docs/api.html" else dir ++ "/docs/api.html"
+docDefaultOut dir = if dir == "." then "docs/api.html" else "${dir}/docs/api.html"
 
 record DocScope where
   scopeDir : String
@@ -47,10 +47,10 @@ docRun dir out check pkgFilter = case requireDirectory dir of
   Err e => docError e
   Ok _ => case scopesFor dir pkgFilter of
     Err e => docError e
-    Ok [] => docError ("no such package: " ++ maybeText pkgFilter)
+    Ok [] => docError "no such package: ${maybeText pkgFilter}"
     Ok scopes => case filesForScopes scopes of
       Err e => docError e
-      Ok files => if length (filesOf files) == 0 then docError ("no vuna sources found under " ++ dir ++ "; pass a package or source directory")
+      Ok files => if length (filesOf files) == 0 then docError "no vuna sources found under ${dir}; pass a package or source directory"
       else case buildBook scopes files of
         Err e => docError e
         Ok book => if check then runCheck book else writeHtml out book
@@ -66,7 +66,7 @@ traverseScopes (s :: rest) acc = traverseScopes rest (Pair s (scopeSourceFiles s
 scopeSourceFiles : DocScope -> List String
 scopeSourceFiles s =
   let
-    root = scopeDir s ++ "/lib"
+    root = "${scopeDir s}/lib"
   in if pathExistsDir root then collectVunaFiles root
   else if pathExistsDir (scopeDir s) then collectVunaFiles (scopeDir s) else []
 
@@ -101,7 +101,7 @@ selectModules (Just names) modules0 = selectModulesGo names modules0 []
 selectModulesGo : List String -> List DocModule -> List DocModule -> Result (List DocModule)
 selectModulesGo [] modules0 acc = Ok (reverse acc)
 selectModulesGo (name :: rest) modules0 acc = case findDocModule name modules0 of
-  Nothing => Err ("exported module not found in sources: " ++ name ++ " (from [export].modules)")
+  Nothing => Err "exported module not found in sources: ${name} (from [export].modules)"
   Just m => selectModulesGo rest modules0 (m :: acc)
 
 findDocModule : String -> List DocModule -> Maybe DocModule
@@ -112,7 +112,7 @@ findDocModule name (m :: rest) = if moduleName m == name then Just m else findDo
 -- 包发现
 -- ---------------------------------------------------------------
 scopesFor : String -> Maybe String -> Result (List DocScope)
-scopesFor dir pkgFilter = if runIO (prim_fileExists (dir ++ "/vuna.toml")) then case workspacePackages dir of
+scopesFor dir pkgFilter = if runIO (prim_fileExists "${dir}/vuna.toml") then case workspacePackages dir of
   Err e => Err e
   Ok packages =>
     let
@@ -138,21 +138,19 @@ runCheck book =
     missing = missingDocs book
   in if length missing == 0 then
     let
-      _ =
-        runIO
-          (prim_print ("docstrings ok (" ++ strFromInt (length (bookModules book)) ++ " modules)\n"))
+      _ = runIO (prim_print "docstrings ok (${length (bookModules book)} modules)\n")
     in 0
   else
     let
       _ = printMissing missing
-      _ = runIO (prim_print (strFromInt (length missing) ++ " missing docstring(s)\n"))
+      _ = runIO (prim_print "${length missing} missing docstring(s)\n")
     in 1
 
 printMissing : List String -> Int
 printMissing [] = 0
 printMissing (line :: rest) =
   let
-    _ = runIO (prim_print (line ++ "\n"))
+    _ = runIO (prim_print "${line}\n")
   in printMissing rest
 
 missingDocs : DocBook -> List String
@@ -163,8 +161,7 @@ missingInModule m = concatMap (missingInItem m) (moduleItems m)
 
 missingInItem : DocModule -> DocItem -> List String
 missingInItem m item =
-  if itemDoc item == "" then [ "missing docstring: " ++ moduleName m ++ "." ++ itemName item ++ " (" ++ modulePath m ++ ":" ++ strFromInt (itemLine item) ++ ")"
-  ]
+  if itemDoc item == "" then ["missing docstring: ${moduleName m}.${itemName item} (${modulePath m}:${itemLine item})"]
   else []
 
 -- ---------------------------------------------------------------
@@ -176,15 +173,13 @@ writeHtml out book =
     content = renderPage book
     _ = ensureDirPath (parentOf out)
     _ = runIO (prim_writeFile out content)
-    _ =
-      runIO
-        (prim_print ("wrote " ++ out ++ " (" ++ strFromInt (length (bookModules book)) ++ " modules)\n"))
+    _ = runIO (prim_print "wrote ${out} (${length (bookModules book)} modules)\n")
   in 0
 
 docError : String -> Int
 docError e =
   let
-    _ = runIO (prim_print ("error: " ++ e ++ "\n"))
+    _ = runIO (prim_print "error: ${e}\n")
   in 2
 
 maybeText : Maybe String -> String

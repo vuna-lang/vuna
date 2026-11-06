@@ -185,11 +185,13 @@ dtDataLinear : DtData -> Bool
 dtDataLinear (DtData name params ctors kind lin) = lin
 
 -- M15：一个洞的目标。编号、位置、目标类型（level 形态）、绑定时上下文快照。
+-- M40：`dtGoalName` 是洞的显示名（`_` = 匿名 → `""`；`?name` → `"?name"`）。
 record DtGoal where
   dtGoalMeta : Int
   dtGoalSpan : Span
   dtGoalType : Value
   dtGoalCtx : List (Pair String Term)
+  dtGoalName : String
 
 -- M15：接口（trait）声明。参数名表、方法（名字 + 完整投影类型项）。
 record DtClass where
@@ -516,7 +518,7 @@ emptyCtx = Ctx [] []
 -- 错误 / 状态 helper
 -- ---------------------------------------------------------------
 errAt : Span -> String -> Result a
-errAt sp msg = Err (showSpanLoc sp ++ ": " ++ msg)
+errAt sp msg = Err "${showSpanLoc sp}: ${msg}"
 
 -- M15：新建元变量并记录创建深度（求解时的作用域检查用）。
 newMeta : Ctx -> Ec -> Pair Term Ec
@@ -525,10 +527,11 @@ newMeta ctx (Ec next sols defs datas depths goals insts classes dgoals deftbl gt
     (Ec (next + 1) sols defs datas (Pair next (ctxDepth ctx) :: depths) goals insts classes dgoals deftbl gtbl soltbl (Base.IntMap.insert next (ctxDepth ctx) dptbl) gcomp ctbl ctortbl defvals haslin)
 
 -- M15：新建一个「洞」元变量：除创建深度外还记下目标类型与上下文快照（供 goal 显示）。
-newHoleMeta : Ctx -> Ec -> Span -> Value -> Pair Term Ec
-newHoleMeta ctx (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals haslin) sp ty =
+-- M40：`name` 是洞的显示名（`_` 传 `""`，`?name` 传 `"?name"`）。
+newHoleMeta : Ctx -> Ec -> Span -> Value -> String -> Pair Term Ec
+newHoleMeta ctx (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals haslin) sp ty name =
   let
-    goal = DtGoal next sp ty ctx.ctxItems
+    goal = DtGoal next sp ty ctx.ctxItems name
   in Pair (TMeta next)
     (Ec (next + 1) sols defs datas (Pair next (ctxDepth ctx) :: depths) (append goals [goal]) insts classes dgoals deftbl gtbl soltbl (Base.IntMap.insert next (ctxDepth ctx) dptbl) gcomp ctbl ctortbl defvals haslin)
 

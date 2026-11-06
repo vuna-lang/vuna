@@ -33,7 +33,7 @@ escapeChar 13 = strPack [92, 114]
 escapeChar c = strPack [c]
 
 renderStr : String -> String
-renderStr s = "\"" ++ renderTemplateText False s ++ "\""
+renderStr s = "\"${renderTemplateText False s}\""
 
 -- ---------------------------------------------------------------
 -- 模板 / 多行字面量（M36）
@@ -86,7 +86,7 @@ interpClose multi = if multi then "\"\"\"" else "\""
 joinHoleLines : Int -> List String -> String
 joinHoleLines lineInd [] = ""
 joinHoleLines lineInd (first :: rest) =
-  first ++ concatStrings (map (\l => "\n" ++ spaces (lineInd + 2) ++ l) rest)
+  first ++ concatStrings (map (\l => "\n${spaces (lineInd + 2)}${l}") rest)
 
 -- 单个模板片段的字符串（M36）：文本块转义；洞单行可渲则 `${...}`，否则：
 --   * 单行渲染用哨兵 `interpBlockMarker` 表示「这个字面量必须走块布局」；
@@ -98,7 +98,7 @@ else case parts of
   [] => []
   (IPText s) :: rest => renderTemplateText multi s :: interpPiecesInline (fuel - 1) env multi rest
   (IPHole e) :: rest => case inlinePrecGo (fuel - 1) env 0 e of
-    Just s => ("$" ++ "{" ++ s ++ "}") :: interpPiecesInline (fuel - 1) env multi rest
+    Just s => "\${${s}}" :: interpPiecesInline (fuel - 1) env multi rest
     Nothing => interpBlockMarker :: interpPiecesInline (fuel - 1) env multi rest
 
 interpPiecesBlock : Int -> List FixityDecl -> Int -> Bool -> List InterpPart -> List String
@@ -108,9 +108,9 @@ else case parts of
   (IPText s) :: rest =>
     renderTemplateText multi s :: interpPiecesBlock (fuel - 1) env lineInd multi rest
   (IPHole e) :: rest => case inlinePrecGo (fuel - 1) env 0 e of
-    Just s => ("$" ++ "{" ++ s ++ "}") :: interpPiecesBlock (fuel - 1) env lineInd multi rest
+    Just s => "\${${s}}" :: interpPiecesBlock (fuel - 1) env lineInd multi rest
     Nothing =>
-      ("$" ++ "{" ++ joinHoleLines lineInd (renderExprGo (fuel - 1) env [] lineInd e) ++ "}")
+      "\${${joinHoleLines lineInd (renderExprGo (fuel - 1) env [] lineInd e)}}"
         :: interpPiecesBlock (fuel - 1) env lineInd multi rest
 
 -- 按换行切行（内容换行是字面量内容，不参与外层布局）。
@@ -154,26 +154,26 @@ renderPatElemsGo fuel pats = if fuel <= 0 then ""
 else case pats of
   [] => ""
   [p] => renderPatGo (fuel - 1) p
-  p :: rest => renderPatGo (fuel - 1) p ++ ", " ++ renderPatElemsGo (fuel - 1) rest
+  p :: rest => "${renderPatGo (fuel - 1) p}, ${renderPatElemsGo (fuel - 1) rest}"
 
 renderPatAtomsSpacedGo : Int -> List Pat -> String
 renderPatAtomsSpacedGo fuel pats = if fuel <= 0 then ""
 else case pats of
   [] => ""
-  p :: rest => " " ++ renderPatAtomGo (fuel - 1) p ++ renderPatAtomsSpacedGo (fuel - 1) rest
+  p :: rest => " ${renderPatAtomGo (fuel - 1) p}${renderPatAtomsSpacedGo (fuel - 1) rest}"
 
 renderRecPatFieldsGo : Int -> List (Pair String Pat) -> String
 renderRecPatFieldsGo fuel fields = if fuel <= 0 then ""
 else case fields of
   [] => ""
   [f] => renderRecPatFieldGo (fuel - 1) f
-  f :: rest => renderRecPatFieldGo (fuel - 1) f ++ ", " ++ renderRecPatFieldsGo (fuel - 1) rest
+  f :: rest => "${renderRecPatFieldGo (fuel - 1) f}, ${renderRecPatFieldsGo (fuel - 1) rest}"
 
 renderPatGo : Int -> Pat -> String
 renderPatGo fuel pat = if fuel <= 0 then ""
 else case pat of
   PVar name sp => name
-  PAs name inner sp => name ++ "@" ++ renderPatAtomGo (fuel - 1) inner
+  PAs name inner sp => "${name}@${renderPatAtomGo (fuel - 1) inner}"
   PWild sp => "_"
   PInt n sp => strFromInt n
   PStr s sp => renderStr s
@@ -183,7 +183,7 @@ else case pat of
 renderConPatGo : Int -> String -> List Pat -> String
 renderConPatGo fuel name pats = if fuel <= 0 then ""
 else case patListElemsOf name pats of
-  Just elems => "[" ++ renderPatElemsGo (fuel - 1) elems ++ "]"
+  Just elems => "[${renderPatElemsGo (fuel - 1) elems}]"
   Nothing =>
     if consPatName name then renderConsPatGo (fuel - 1) pats
     else if name == "Nil" && isNilList pats then "[]"
@@ -192,14 +192,14 @@ else case patListElemsOf name pats of
 renderConsPatGo : Int -> List Pat -> String
 renderConsPatGo fuel pats = if fuel <= 0 then ""
 else case pats of
-  [a, b] => renderPatAtomGo (fuel - 1) a ++ " :: " ++ renderPatConsTailGo (fuel - 1) b
-  _ => "Cons" ++ renderPatAtomsSpacedGo (fuel - 1) pats
+  [a, b] => "${renderPatAtomGo (fuel - 1) a} :: ${renderPatConsTailGo (fuel - 1) b}"
+  _ => "Cons${renderPatAtomsSpacedGo (fuel - 1) pats}"
 
 renderPatConsTailGo : Int -> Pat -> String
 renderPatConsTailGo fuel pat = if fuel <= 0 then ""
 else case pat of
   PCon name pats sp => if consPatName name then case pats of
-    [a, b] => renderPatAtomGo (fuel - 1) a ++ " :: " ++ renderPatConsTailGo (fuel - 1) b
+    [a, b] => "${renderPatAtomGo (fuel - 1) a} :: ${renderPatConsTailGo (fuel - 1) b}"
     _ => renderPatAtomGo (fuel - 1) pat
   else renderPatAtomGo (fuel - 1) pat
   _ => renderPatAtomGo (fuel - 1) pat
@@ -208,25 +208,25 @@ renderPatAtomGo : Int -> Pat -> String
 renderPatAtomGo fuel pat = if fuel <= 0 then ""
 else case pat of
   PVar name sp => name
-  PAs name inner sp => "(" ++ name ++ "@" ++ renderPatAtomGo (fuel - 1) inner ++ ")"
+  PAs name inner sp => "(${name}@${renderPatAtomGo (fuel - 1) inner})"
   PWild sp => "_"
   PInt n sp => strFromInt n
   PStr s sp => renderStr s
   PCon name [] sp => if name == "Nil" then "[]" else name
-  PCon name pats sp => "(" ++ renderConPatGo (fuel - 1) name pats ++ ")"
-  PRecord name fields sp => "(" ++ renderRecPatGo (fuel - 1) name fields ++ ")"
+  PCon name pats sp => "(${renderConPatGo (fuel - 1) name pats})"
+  PRecord name fields sp => "(${renderRecPatGo (fuel - 1) name fields})"
 
 renderRecPatGo : Int -> String -> List (Pair String Pat) -> String
 renderRecPatGo fuel name fields =
   if fuel <= 0 then ""
-  else if isNilList fields then name ++ " { }"
-  else name ++ " { " ++ renderRecPatFieldsGo (fuel - 1) fields ++ " }"
+  else if isNilList fields then "${name} { }"
+  else "${name} { ${renderRecPatFieldsGo (fuel - 1) fields} }"
 
 renderRecPatFieldGo : Int -> Pair String Pat -> String
 renderRecPatFieldGo fuel (Pair fname pat) = if fuel <= 0 then ""
 else case pat of
-  PVar n sp => if n == fname then fname else fname ++ " = " ++ renderPatGo (fuel - 1) pat
-  _ => fname ++ " = " ++ renderPatGo (fuel - 1) pat
+  PVar n sp => if n == fname then fname else "${fname} = ${renderPatGo (fuel - 1) pat}"
+  _ => "${fname} = ${renderPatGo (fuel - 1) pat}"
 
 -- ---------------------------------------------------------------
 -- 单行表达式：inlineExprGo / inlinePrecGo / inlineAtomGo
@@ -309,7 +309,7 @@ opText env op = case symbolOfTargetIn env op of
   Nothing => op
 
 backtickLabel : String -> String
-backtickLabel name = "`" ++ name ++ "`"
+backtickLabel name = "`${name}`"
 
 listExprElems : Expr -> Maybe (List Expr)
 listExprElems (EVar "Nil" sp) = Just []
@@ -325,8 +325,7 @@ inlinePrecGo : Int -> List FixityDecl -> Int -> Expr -> Maybe String
 inlinePrecGo fuel env minPrec e = if fuel <= 0 then Nothing
 else case e of
   EVar name sp =>
-    if name == "Nil" then Just "[]"
-    else if isSymbolName name then Just ("(" ++ name ++ ")") else Just name
+    if name == "Nil" then Just "[]" else if isSymbolName name then Just "(${name})" else Just name
   EInt n sp => Just (strFromInt n)
   EStr s sp => Just (renderStr s)
   -- M36：模板字面量。文本块转义；洞优先单行内联，洞需要块布局时放弃（交给块渲染）。
@@ -338,11 +337,11 @@ else case e of
     else if contains "\n" text then Nothing else Just text
   ELam ps body sp => case inlinePrecGo (fuel - 1) env 0 body of
     Nothing => Nothing
-    Just b => Just (wrapPrec (minPrec > 0) ("\\" ++ joinComma ps ++ " => " ++ b))
+    Just b => Just (wrapPrec (minPrec > 0) "\\${joinComma ps} => ${b}")
   EApp fn args sp => case listExprElems (EApp fn args sp) of
     Just elems => case mapMaybeStrings (\x => inlineExprGo (fuel - 1) env x) elems of
       Nothing => Nothing
-      Just ss => Just ("[" ++ joinComma ss ++ "]")
+      Just ss => Just "[${joinComma ss}]"
     Nothing => inlineAppGo (fuel - 1) env minPrec fn args
   EPi name implicit qty dom cod sp => inlinePiGo (fuel - 1) env minPrec qty name implicit dom cod
   ELet binds body rec_ sp => Nothing
@@ -353,22 +352,22 @@ else case e of
       Nothing => Nothing
       Just ts => case inlinePrecGo (fuel - 1) env 0 el of
         Nothing => Nothing
-        Just es => Just (wrapPrec (minPrec > 0) ("if " ++ cs ++ " then " ++ ts ++ " else " ++ es))
+        Just es => Just (wrapPrec (minPrec > 0) "if ${cs} then ${ts} else ${es}")
   EField base f sp => case inlineAtomGo (fuel - 1) env base of
     Nothing => Nothing
-    Just b => Just (b ++ "." ++ f)
+    Just b => Just "${b}.${f}"
   ERecord name fields sp => case inlineFieldsGo (fuel - 1) env fields of
     Nothing => Nothing
     Just ss => case fields of
-      [] => Just (name ++ " { }")
-      _ => Just (name ++ " { " ++ joinComma ss ++ " }")
+      [] => Just "${name} { }"
+      _ => Just "${name} { ${joinComma ss} }"
   ERecUpdate base fields sp => case inlinePrecGo (fuel - 1) env 0 base of
     Nothing => Nothing
     Just b => case inlineFieldsGo (fuel - 1) env fields of
       Nothing => Nothing
       Just ss => case fields of
-        [] => Just ("{ " ++ b ++ " }")
-        _ => Just ("{ " ++ b ++ " | " ++ joinComma ss ++ " }")
+        [] => Just "{ ${b} }"
+        _ => Just "{ ${b} | ${joinComma ss} }"
   EDo stmts sp => Nothing
   -- A2：局部函数组只作为 let/where 绑定值出现，由 `renderLetBindingGo` 展开成多子句。
   ELocalFun clauses sp => Nothing
@@ -377,19 +376,19 @@ else case e of
   EAnn value ty sp => inlinePrecGo (fuel - 1) env minPrec value
   -- M31.3：反引号中缀 / section 是 parse 后中间产物；keep 模式保留原形按此打印。
   EBacktick name l r sp => inlineBacktickGo (fuel - 1) env minPrec name l r
-  ESectOp op sp => Just ("(" ++ op ++ ")")
+  ESectOp op sp => Just "(${op})"
   ESectL op inner sp => case inlinePrecGo (fuel - 1) env 0 inner of
     Nothing => Nothing
-    Just s => Just ("(" ++ op ++ " " ++ s ++ ")")
+    Just s => Just "(${op} ${s})"
   -- 右 section 的 inner 必须按**原子**打印：`((a + b) +)` 才能重新 parse 成
   -- `ESectR (a + b) +`（否则最后一个 `+` 会被解析成更内层的右 section）。
   ESectR inner op sp => case inlineAtomGo (fuel - 1) env inner of
     Nothing => Nothing
-    Just s => Just ("(" ++ s ++ " " ++ op ++ ")")
+    Just s => Just "(${s} ${op})"
   _ => Nothing
 
 wrapPrec : Bool -> String -> String
-wrapPrec need s = if need then "(" ++ s ++ ")" else s
+wrapPrec need s = if need then "(${s})" else s
 
 inlineFieldsGo : Int -> List FixityDecl -> List (Pair String Expr) -> Maybe (List String)
 inlineFieldsGo fuel env fields = if fuel <= 0 then Nothing
@@ -399,7 +398,7 @@ else case fields of
     Nothing => Nothing
     Just v => case inlineFieldsGo (fuel - 1) env rest of
       Nothing => Nothing
-      Just ss => Just ((fname ++ " = " ++ v) :: ss)
+      Just ss => Just ("${fname} = ${v}" :: ss)
 
 -- DT（M13）命名 Pi：`(x : A) -> B` 与隐式 `{x : A} -> B`；`->` 右结合。
 inlinePiGo : Int -> List FixityDecl -> Int -> Maybe Qty -> String -> Bool -> Expr -> Expr -> Maybe String
@@ -411,9 +410,9 @@ else case inlinePrecGo (fuel - 1) env 0 dom of
     Just c =>
       let
         binder =
-          if implicit then "{" ++ qtyPrefix qty ++ name ++ " : " ++ d ++ "}"
-          else "(" ++ qtyPrefix qty ++ name ++ " : " ++ d ++ ")"
-      in Just (wrapPrec (minPrec > 1) (binder ++ " -> " ++ c))
+          if implicit then "{${qtyPrefix qty}${name} : ${d}}"
+          else "(${qtyPrefix qty}${name} : ${d})"
+      in Just (wrapPrec (minPrec > 1) "${binder} -> ${c}")
 
 -- M38：quantity 前缀（`0 ` / `1 `）；缺省不打印。
 qtyPrefix : Maybe Qty -> String
@@ -426,12 +425,10 @@ renderPiBlockGo : Int -> List FixityDecl -> List (Pair (Pair Int Int) (Pair (Lis
 renderPiBlockGo fuel env at lineInd qty implicit name dom cod = if fuel <= 0 then []
 else
   let
-    openTxt =
-      if implicit then "{" ++ qtyPrefix qty ++ name ++ " : "
-      else "(" ++ qtyPrefix qty ++ name ++ " : "
+    openTxt = if implicit then "{${qtyPrefix qty}${name} : " else "(${qtyPrefix qty}${name} : "
     closeTxt = if implicit then "}" else ")"
     domLines =
-      appendLast (" " ++ closeTxt ++ " ->")
+      appendLast " ${closeTxt} ->"
         (prefixFirst openTxt (renderExprGo (fuel - 1) env at lineInd dom))
   in append domLines
     (prefixFirst (spaces (lineInd + 2)) (renderExprGo (fuel - 1) env at (lineInd + 2) cod))
@@ -460,7 +457,7 @@ else
     Nothing => Nothing
     Just lhsText => case inlinePrecGo (fuel - 1) env rightMin b of
       Nothing => Nothing
-      Just rhsText => Just (wrapPrec (p < minPrec) (lhsText ++ " " ++ label ++ " " ++ rhsText))
+      Just rhsText => Just (wrapPrec (p < minPrec) "${lhsText} ${label} ${rhsText}")
 
 -- 反引号中缀：`` l `name` r ``（优先级查 name，未知按 9 左）。
 inlineBacktickGo : Int -> List FixityDecl -> Int -> String -> Expr -> Expr -> Maybe String
@@ -477,7 +474,7 @@ else case inlineApplyHeadGo (fuel - 1) env fn of
   Just headText => case mapMaybeStrings (\a => inlineAtomGo (fuel - 1) env a) args of
     Nothing => Nothing
     Just argTexts =>
-      Just (wrapPrec (9 < minPrec) (headText ++ concatStrings (map (\a => " " ++ a) argTexts)))
+      Just (wrapPrec (9 < minPrec) (headText ++ concatStrings (map (\a => " ${a}") argTexts)))
 
 inlineApplyHeadGo : Int -> List FixityDecl -> Expr -> Maybe String
 inlineApplyHeadGo fuel env fn = if fuel <= 0 then Nothing
@@ -488,7 +485,7 @@ inlineAtomGo : Int -> List FixityDecl -> Expr -> Maybe String
 inlineAtomGo fuel env e = if fuel <= 0 then Nothing
 else case inlinePrecGo (fuel - 1) env 0 e of
   Nothing => Nothing
-  Just s => if atomForm e then Just s else Just ("(" ++ s ++ ")")
+  Just s => if atomForm e then Just s else Just "(${s})"
 
 atomForm : Expr -> Bool
 atomForm (EVar name sp) = True
@@ -550,14 +547,13 @@ renderExprInline env e = case inlinePrecGo formatFuelBound env 0 e of
 renderListBlock : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> List String -> List String
 renderListBlock at lineInd [] = ["[]"]
 renderListBlock at lineInd (first :: rest) =
-  append ["[ " ++ first ++ (if isNilList rest then "" else ",")]
-    (renderListBlockRest at lineInd rest)
+  append ["[ ${first}${if isNilList rest then "" else ","}"] (renderListBlockRest at lineInd rest)
 
 renderListBlockRest : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> List String -> List String
-renderListBlockRest at lineInd [] = [spaces lineInd ++ "]"]
-renderListBlockRest at lineInd ([s]) = [spaces (lineInd + 2) ++ s, spaces lineInd ++ "]"]
+renderListBlockRest at lineInd [] = ["${spaces lineInd}]"]
+renderListBlockRest at lineInd ([s]) = [spaces (lineInd + 2) ++ s, "${spaces lineInd}]"]
 renderListBlockRest at lineInd (s :: rest) =
-  (spaces (lineInd + 2) ++ s ++ ",") :: renderListBlockRest at lineInd rest
+  "${spaces (lineInd + 2)}${s}," :: renderListBlockRest at lineInd rest
 
 renderAtomExprGo : Int -> List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Expr -> List String
 renderAtomExprGo fuel env at lineInd e = if fuel <= 0 then []
@@ -568,7 +564,7 @@ else case inlineAtomGo formatFuelBound env e of
 parenWrapIndGo : Int -> List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Expr -> List String
 parenWrapIndGo fuel env at lineInd e =
   if fuel <= 0 then []
-  else append (prefixFirst "(" (renderBlockGo (fuel - 1) env at lineInd e)) [spaces lineInd ++ ")"]
+  else append (prefixFirst "(" (renderBlockGo (fuel - 1) env at lineInd e)) ["${spaces lineInd})"]
 
 renderBlockGo : Int -> List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Expr -> List String
 renderBlockGo fuel env at lineInd e = if fuel <= 0 then []
@@ -580,15 +576,15 @@ else case e of
   EPi name implicit qty dom cod sp =>
     renderPiBlockGo (fuel - 1) env at lineInd qty implicit name dom cod
   ELam ps body sp =>
-    prefixFirst ("\\" ++ joinComma ps ++ " => ") (renderExprGo (fuel - 1) env at lineInd body)
-  EField base f sp => appendLast ("." ++ f) (renderAtomExprGo (fuel - 1) env at lineInd base)
+    prefixFirst "\\${joinComma ps} => " (renderExprGo (fuel - 1) env at lineInd body)
+  EField base f sp => appendLast ".${f}" (renderAtomExprGo (fuel - 1) env at lineInd base)
   ERecord name fields sp => renderRecordBlockGo (fuel - 1) env at lineInd name fields
   ERecUpdate base fields sp => renderRecUpdateBlockGo (fuel - 1) env at lineInd base fields
   EDo stmts sp => renderDoGo (fuel - 1) env at lineInd stmts
   -- A2：局部函数组只作为 let/where 绑定值出现，由 `renderLetBindingGo` 展开成多子句。
   ELocalFun clauses sp => []
   EAnn value ty sp => renderExprGo (fuel - 1) env at lineInd value
-  EVar name sp => if isSymbolName name then ["(" ++ name ++ ")"] else [name]
+  EVar name sp => if isSymbolName name then ["(${name})"] else [name]
   EInt n sp => [strFromInt n]
   EStr s sp => [renderStr s]
   -- M36：模板字面量（块布局）。文本块转义；洞可单行则单行，否则块渲染 + 缩进。
@@ -601,12 +597,12 @@ else case e of
     let
       fx = backtickPrec env name
     in renderInfixBlockGo (fuel - 1) env at lineInd (firstOf fx) (secondOf fx) (backtickLabel name) l r
-  ESectOp op sp => ["(" ++ op ++ ")"]
+  ESectOp op sp => ["(${op})"]
   ESectL op inner sp =>
-    append (prefixFirst ("(" ++ op ++ " ") (renderExprGo (fuel - 1) env at lineInd inner))
-      [spaces lineInd ++ ")"]
+    append (prefixFirst "(${op} " (renderExprGo (fuel - 1) env at lineInd inner))
+      ["${spaces lineInd})"]
   ESectR inner op sp =>
-    appendLast (" " ++ op ++ ")") (prefixFirst "(" (renderExprGo (fuel - 1) env at lineInd inner))
+    appendLast " ${op})" (prefixFirst "(" (renderExprGo (fuel - 1) env at lineInd inner))
   _ => []
 
 renderScrutGo : Int -> List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Expr -> List String
@@ -634,15 +630,15 @@ renderAltBodyGo : Int -> List FixityDecl -> List (Pair (Pair Int Int) (Pair (Lis
 renderAltBodyGo fuel env at altInd pat body = if fuel <= 0 then []
 else case body of
   ELet binds inner recFlag sp =>
-    (spaces altInd ++ renderPatGo formatFuelBound pat ++ " =>")
+    "${spaces altInd}${renderPatGo formatFuelBound pat} =>"
       :: prefixFirst (spaces (altInd + 2)) (renderExprGo (fuel - 1) env at (altInd + 2) body)
   _ =>
     let
-      prefix = spaces altInd ++ renderPatGo formatFuelBound pat ++ " => "
+      prefix = "${spaces altInd}${renderPatGo formatFuelBound pat} => "
     in case inlinePrecGo formatFuelBound env 0 body of
       Just s =>
         if strWidth (prefix ++ s) <= maxWidth then [prefix ++ s]
-        else (spaces altInd ++ renderPatGo formatFuelBound pat ++ " =>")
+        else "${spaces altInd}${renderPatGo formatFuelBound pat} =>"
           :: prefixFirst (spaces (altInd + 2)) (renderExprGo (fuel - 1) env at (altInd + 2) body)
       Nothing => prefixFirst prefix (renderExprGo (fuel - 1) env at altInd body)
 
@@ -652,7 +648,7 @@ else case e of
   ELet binds inner recFlag sp =>
     (spaces lineInd ++ keyword)
       :: prefixFirst (spaces (lineInd + 2)) (renderExprGo (fuel - 1) env at (lineInd + 2) e)
-  _ => prefixFirst (spaces lineInd ++ keyword ++ " ") (renderExprGo (fuel - 1) env at lineInd e)
+  _ => prefixFirst "${spaces lineInd}${keyword} " (renderExprGo (fuel - 1) env at lineInd e)
 
 renderIfGo : Int -> List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Expr -> Expr -> Expr -> List String
 renderIfGo fuel env at lineInd c t el = if fuel <= 0 then []
@@ -666,14 +662,14 @@ else
       _ =>
         let
           tLines = renderExprGo (fuel - 1) env at lineInd t
-        in append (appendLast (" then " ++ firstLine tLines) condLines) (restLines tLines)
+        in append (appendLast " then ${firstLine tLines}" condLines) (restLines tLines)
     elseLines = renderWhenBodyGo (fuel - 1) env at lineInd "else" el
   in append thenLines elseLines
 
 renderLetGo : Int -> List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> List (Pair Pat Expr) -> Expr -> List String
 renderLetGo fuel env at lineInd binds body = if fuel <= 0 then []
 else case binds of
-  [] => "let" :: prefixFirst (spaces lineInd ++ "in ") (renderExprGo (fuel - 1) env at lineInd body)
+  [] => "let" :: prefixFirst "${spaces lineInd}in " (renderExprGo (fuel - 1) env at lineInd body)
   first :: rest =>
     let
       bindInd = lineInd + 2
@@ -681,7 +677,7 @@ else case binds of
         append (renderLetBindingGo (fuel - 1) env at bindInd first)
           (concatMap (\b => renderLetBindingGo (fuel - 1) env at bindInd b) rest)
     in append ("let" :: bindingLines)
-      (prefixFirst (spaces lineInd ++ "in ") (renderExprGo (fuel - 1) env at lineInd body))
+      (prefixFirst "${spaces lineInd}in " (renderExprGo (fuel - 1) env at lineInd body))
 
 -- M28：`let` 绑定也支持可选签名行（与 where 共用绑定块模型）；解析器把签名降级成
 -- `EAnn value ty`，这里按「签名行 + 绑定」还原，否则 fmt 产物会丢掉类型标注。
@@ -691,27 +687,27 @@ else case value of
   EAnn inner ty annSp => case inner of
     ELocalFun clauses lsp =>
       append
-        (attachAt at annSp bindInd (prefixFirst (spaces bindInd ++ renderPatGo formatFuelBound pat ++ " : ") (renderTypeExprFuel (fuel - 1) env at bindInd ty)))
+        (attachAt at annSp bindInd (prefixFirst "${spaces bindInd}${renderPatGo formatFuelBound pat} : " (renderTypeExprFuel (fuel - 1) env at bindInd ty)))
         (renderLocalFunGo (fuel - 1) env at bindInd pat clauses)
     _ => case pat of
       PVar name psp =>
         let
           sigLines =
-            prefixFirst (spaces bindInd ++ name ++ " : ")
+            prefixFirst "${spaces bindInd}${name} : "
               (renderTypeExprFuel (fuel - 1) env at bindInd ty)
         in append (attachAt at annSp bindInd sigLines)
-          (attachAt at (patSpan pat) bindInd (renderBindingValueGo (fuel - 1) env at bindInd (renderPatGo formatFuelBound pat ++ " =") inner))
+          (attachAt at (patSpan pat) bindInd (renderBindingValueGo (fuel - 1) env at bindInd "${renderPatGo formatFuelBound pat} =" inner))
       _ =>
         let
           sigLines =
-            prefixFirst (spaces bindInd ++ renderPatGo formatFuelBound pat ++ " : ")
+            prefixFirst "${spaces bindInd}${renderPatGo formatFuelBound pat} : "
               (renderTypeExprFuel (fuel - 1) env at bindInd ty)
         in append (attachAt at annSp bindInd sigLines)
-          (attachAt at (patSpan pat) bindInd (renderBindingValueGo (fuel - 1) env at bindInd (renderPatGo formatFuelBound pat ++ " =") inner))
+          (attachAt at (patSpan pat) bindInd (renderBindingValueGo (fuel - 1) env at bindInd "${renderPatGo formatFuelBound pat} =" inner))
   ELocalFun clauses lsp => renderLocalFunGo (fuel - 1) env at bindInd pat clauses
   _ =>
     attachAt at (patSpan pat) bindInd
-      (renderBindingValueGo (fuel - 1) env at bindInd (renderPatGo formatFuelBound pat ++ " =") value)
+      (renderBindingValueGo (fuel - 1) env at bindInd "${renderPatGo formatFuelBound pat} =" value)
 
 -- A2：where/let 多 clause 局部函数：`name p1 p2 = body` 逐 clause 渲染。
 renderLocalFunGo : Int -> List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Pat -> List (Pair (List Pat) Expr) -> List String
@@ -720,7 +716,7 @@ else case clauses of
   [] => []
   (Pair pats body) :: rest =>
     let
-      headText = renderPatGo formatFuelBound pat ++ joinSpace (map renderPatAtom pats) ++ " ="
+      headText = "${renderPatGo formatFuelBound pat}${joinSpace (map renderPatAtom pats)} ="
       lines = renderBindingValueGo (fuel - 1) env at bindInd headText body
     in append (attachAt at (patSpan pat) bindInd lines)
       (renderLocalFunGo (fuel - 1) env at bindInd pat rest)
@@ -733,12 +729,11 @@ else case value of
       :: prefixFirst (spaces (lineInd + 2)) (renderExprGo (fuel - 1) env at (lineInd + 2) value)
   _ => case inlinePrecGo formatFuelBound env 0 value of
     Just s =>
-      if strWidth (spaces lineInd ++ prefixText ++ " " ++ s) <= maxWidth then [spaces lineInd ++ prefixText ++ " " ++ s]
+      if strWidth "${spaces lineInd}${prefixText} ${s}" <= maxWidth then ["${spaces lineInd}${prefixText} ${s}"]
       else (spaces lineInd ++ prefixText)
         :: prefixFirst (spaces (lineInd + 2)) (renderExprGo (fuel - 1) env at (lineInd + 2) value)
     Nothing =>
-      prefixFirst (spaces lineInd ++ prefixText ++ " ")
-        (renderExprGo (fuel - 1) env at lineInd value)
+      prefixFirst "${spaces lineInd}${prefixText} " (renderExprGo (fuel - 1) env at lineInd value)
 
 renderDoGo : Int -> List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> List DoStmt -> List String
 renderDoGo fuel env at lineInd stmts =
@@ -755,11 +750,11 @@ renderDoStmtBodyGo fuel env at stmtInd stmt = if fuel <= 0 then []
 else case stmt of
   DBind pat value sp =>
     let
-      prefix = spaces stmtInd ++ renderPatGo formatFuelBound pat ++ " <- "
+      prefix = "${spaces stmtInd}${renderPatGo formatFuelBound pat} <- "
     in case inlinePrecGo formatFuelBound env 0 value of
       Just s =>
         if strWidth (prefix ++ s) <= maxWidth then [prefix ++ s]
-        else (spaces stmtInd ++ renderPatGo formatFuelBound pat ++ " <-")
+        else "${spaces stmtInd}${renderPatGo formatFuelBound pat} <-"
           :: prefixFirst (spaces (stmtInd + 2)) (renderExprGo (fuel - 1) env at (stmtInd + 2) value)
       Nothing => prefixFirst prefix (renderExprGo (fuel - 1) env at stmtInd value)
   DExpr value sp => prefixFirst (spaces stmtInd) (renderExprGo (fuel - 1) env at stmtInd value)
@@ -791,7 +786,7 @@ else case inlineInfixGo formatFuelBound env 0 p assoc label a b of
       rhsLines = renderOperandGo (fuel - 1) env at lineInd rightMin b
     in case rhsLines of
       [] => lhsLines
-      r :: rest => append (appendLast (" " ++ label ++ " " ++ r) lhsLines) rest
+      r :: rest => append (appendLast " ${label} ${r}" lhsLines) rest
 
 -- 中缀链：运算符放续行行首（续行缩进 lineInd+2，满足 parser 的 offside 约束）。
 infixChainOperands : List FixityDecl -> Int -> Int -> String -> Expr -> Expr -> List Expr
@@ -845,9 +840,9 @@ renderExprInlineOperand env minPrec e = case inlinePrecGo formatFuelBound env mi
 renderChainRestGo : Int -> List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Int -> String -> Expr -> List String
 renderChainRestGo fuel env at lineInd minPrec label e = if fuel <= 0 then []
 else case inlinePrecGo formatFuelBound env minPrec e of
-  Just s => [spaces (lineInd + 2) ++ label ++ " " ++ s]
+  Just s => ["${spaces (lineInd + 2)}${label} ${s}"]
   Nothing =>
-    prefixFirst (spaces (lineInd + 2) ++ label ++ " ")
+    prefixFirst "${spaces (lineInd + 2)}${label} "
       (parenWrapIndGo (fuel - 1) env at (lineInd + 2) e)
 
 renderOperandGo : Int -> List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Int -> Expr -> List String
@@ -865,7 +860,7 @@ else
     Nothing => appendApplyArgsGo (fuel - 1) env at lineInd headLines args
     Just texts => case headLines of
       [h] =>
-        if fitsLine lineInd (h ++ concatStrings (map (\t => " " ++ t) texts)) then appendApplyArgsGo (fuel - 1) env at lineInd headLines args
+        if fitsLine lineInd (h ++ concatStrings (map (\t => " ${t}") texts)) then appendApplyArgsGo (fuel - 1) env at lineInd headLines args
         else packApplyArgs lineInd [h] texts
       _ => appendApplyArgsGo (fuel - 1) env at lineInd headLines args
 
@@ -873,7 +868,7 @@ else
 packApplyArgs : Int -> List String -> List String -> List String
 packApplyArgs lineInd lines [] = lines
 packApplyArgs lineInd lines (t :: rest) =
-  if fitsLineWidth (lastLineWidth lineInd lines) t then packApplyArgs lineInd (appendLast (" " ++ t) lines) rest
+  if fitsLineWidth (lastLineWidth lineInd lines) t then packApplyArgs lineInd (appendLast " ${t}" lines) rest
   else packApplyArgs lineInd (append lines [spaces (lineInd + 2) ++ t]) rest
 
 lastLineWidth : Int -> List String -> Int
@@ -900,10 +895,10 @@ else case args of
 renderRecordBlockGo : Int -> List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> String -> List (Pair String Expr) -> List String
 renderRecordBlockGo fuel env at lineInd name fields = if fuel <= 0 then []
 else case fields of
-  [] => [name ++ " { }"]
+  [] => ["${name} { }"]
   first :: rest =>
     let
-      start = appendBefore " " [name ++ " {"] (renderFieldBlockGo (fuel - 1) env at lineInd first)
+      start = appendBefore " " ["${name} {"] (renderFieldBlockGo (fuel - 1) env at lineInd first)
       withRest = appendFieldBlocksGo (fuel - 1) env at lineInd start rest
     in appendLast " }" withRest
 
@@ -918,7 +913,7 @@ else case fields of
 renderFieldBlockGo : Int -> List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Pair String Expr -> List String
 renderFieldBlockGo fuel env at lineInd (Pair fname value) =
   if fuel <= 0 then []
-  else prefixFirst (fname ++ " = ") (renderAtomExprGo (fuel - 1) env at lineInd value)
+  else prefixFirst "${fname} = " (renderAtomExprGo (fuel - 1) env at lineInd value)
 
 renderRecUpdateBlockGo : Int -> List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Expr -> List (Pair String Expr) -> List String
 renderRecUpdateBlockGo fuel env at lineInd base fields = if fuel <= 0 then []

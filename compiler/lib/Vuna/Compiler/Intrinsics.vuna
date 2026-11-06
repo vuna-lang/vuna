@@ -28,6 +28,7 @@ module Vuna.Compiler.Intrinsics
   , isIOAlgebraName
   , isIntrinsicName
   , isIntrinsicTypeName
+  , isTypeConstructorName
   , listConsCtor
   , listFamilyName
   , listNilCtor
@@ -40,6 +41,7 @@ module Vuna.Compiler.Intrinsics
   , preludeValueNames
   , primBindIO1Name
   , primBindIOName
+  , primEraseName
   , primPureIOName
   , primRunIOName
   , strTypeName
@@ -82,6 +84,8 @@ data Capability : Type where
   CapClock : Capability
   -- 允许在 main 之外执行 IO 动作（`Base.IO.runIO`；工具链特权，M31）。
   CapUnsafe : Capability
+  -- 网络（loopback TCP / Unix domain socket；工具链 server 模式用）。
+  CapNetwork : Capability
 
 capabilityName : Capability -> String
 capabilityName CapConsole = "console"
@@ -90,12 +94,13 @@ capabilityName CapProcess = "process"
 capabilityName CapEnv = "env"
 capabilityName CapClock = "clock"
 capabilityName CapUnsafe = "unsafe"
+capabilityName CapNetwork = "net"
 
 capabilityNames : List String
 capabilityNames = map capabilityName allCapabilities
 
 allCapabilities : List Capability
-allCapabilities = [CapConsole, CapFs, CapProcess, CapEnv, CapClock, CapUnsafe]
+allCapabilities = [CapConsole, CapFs, CapProcess, CapEnv, CapClock, CapUnsafe, CapNetwork]
 
 parseCapability : String -> Maybe Capability
 parseCapability "console" = Just CapConsole
@@ -104,6 +109,7 @@ parseCapability "process" = Just CapProcess
 parseCapability "env" = Just CapEnv
 parseCapability "clock" = Just CapClock
 parseCapability "unsafe" = Just CapUnsafe
+parseCapability "net" = Just CapNetwork
 parseCapability _ = Nothing
 
 -- ---------------------------------------------------------------
@@ -182,6 +188,13 @@ typeIntrinsicCtorNames = map typeIntrinsicCtorName typeIntrinsicArities
 ioTypeName : String
 ioTypeName = "IO"
 
+-- 运行时「可命名类型头」的唯一真源：primitive 类型 + 内建类型构造子 + 内建效应类型。
+-- 其它类型头（类型族 / axiom / 未知全局）在运行时不可命名，按擦除依赖类型处理。
+-- 数据族的身份不在本表里（按各程序自己的 DtData 表判定）。
+isTypeConstructorName : String -> Bool
+isTypeConstructorName name =
+  name == intTypeName || name == strTypeName || name == ioTypeName || typeIntrinsicArityOf name >= 0
+
 -- IO 代数（构造/绑定/执行）的内建名；codegen 需要按名字生成 thunk 组合子。
 primPureIOName : String
 primPureIOName = "prim_pureIO"
@@ -194,6 +207,13 @@ primBindIO1Name = "prim_bindIO1"
 
 primRunIOName : String
 primRunIOName = "prim_runIO"
+
+-- 表现层 cast：精化器在「运行时位置出现不可命名的擦除依赖类型」时插入
+-- （见 docs/reference/effects.md §5/§6）。隐藏 intrinsic：只供精化器引用，
+-- 不对用户源码可见；运行时是 OCaml 的 `%identity`（`Obj.magic`），求值期由
+-- `IntrinsicOp.OpIdentity` 归约成参数本身，因此对定义性相等/正规化透明。
+primEraseName : String
+primEraseName = "prim_erase"
 
 isIOAlgebraName : String -> Bool
 isIOAlgebraName name =
@@ -248,6 +268,9 @@ data IntrinsicOp : Type where
   OpNatDiv : IntrinsicOp
   OpNatToInt : IntrinsicOp
   OpNatFromInt : IntrinsicOp
+  -- 表现层 cast（`prim_erase`）：运行时不产生任何操作，归约成唯一实参本身。
+  -- interp / 定义性相等都必须看穿它（否则 cast 会改变归约结果）。
+  OpIdentity : IntrinsicOp
 
 -- ---------------------------------------------------------------
 -- 内建声明
@@ -397,6 +420,8 @@ allIntrinsics : List Intrinsic
 -- M38：运行时诊断原语。`prim_eprint` 写 stderr 并 flush（报告器/调试输出用）；
 -- `prim_fail` 抛 Failure（报告器把它渲染成 "vuna: runtime error: ..."）。两者先只
 -- 进 Intrinsics 表（base 源码在 seed rotation 之后才会使用它们）。
+-- 内部 cast（`visible = False`）：只由精化器插入，runtime 是 OCaml 的 `%identity`；
+-- 运行时位置的不透明擦除依赖值靠它进出（见 docs/reference/effects.md §5/§6）。
 allIntrinsics =
   [ Intrinsic "+" (IFun IInt (IFun IInt IInt)) OpAdd Nothing "bi_add" True,
     Intrinsic "-" (IFun IInt (IFun IInt IInt)) OpSub Nothing "bi_sub" True,
@@ -418,6 +443,7 @@ allIntrinsics =
     Intrinsic "prim_marshal" (IPi "a" (IFun (IVar "a") IStr)) OpNone Nothing "dtp_marshal" True,
     Intrinsic "prim_unmarshal" (IPi "a" (IFun IStr (IVar "a"))) OpNone Nothing "dtp_unmarshal" True,
     Intrinsic "strShow" (IFun IStr IStr) OpStrShow Nothing "dt_show_string" True,
+    Intrinsic primEraseName (IPi "a" (IFun (IVar "a") (IVar "a"))) OpIdentity Nothing "Obj.magic" False,
     Intrinsic "natAdd" (IFun INat (IFun INat INat)) OpNatAdd Nothing "bi_natAdd" True,
     Intrinsic "natSub" (IFun INat (IFun INat INat)) OpNatSub Nothing "bi_natSub" True,
     Intrinsic "natMul" (IFun INat (IFun INat INat)) OpNatMul Nothing "bi_natMul" True,
@@ -466,6 +492,13 @@ allIntrinsics =
     Intrinsic "prim_runIn" (IFun IStr (IFun (IList IStr) (IIO IInt))) OpNone (Just CapProcess) "(fun dir args -> dtp_runIn dir (dtp_ocamlOf args))" True,
     Intrinsic "prim_spawn" (IFun (IList IStr) (IIO IInt)) OpNone (Just CapProcess) "(fun args -> dtp_spawn (dtp_ocamlOf args))" True,
     Intrinsic "prim_wait" (IFun IInt (IIO IInt)) OpNone (Just CapProcess) "dtp_wait" True,
+    Intrinsic "prim_netListen" (IFun IStr (IIO IInt)) OpNone (Just CapNetwork) "dtp_net_listen" True,
+    Intrinsic "prim_netPort" (IFun IInt (IIO IInt)) OpNone (Just CapNetwork) "dtp_net_port" True,
+    Intrinsic "prim_netAccept" (IFun IInt (IIO IInt)) OpNone (Just CapNetwork) "dtp_net_accept" True,
+    Intrinsic "prim_netRecv" (IFun IInt (IFun IInt (IIO IStr))) OpNone (Just CapNetwork) "dtp_net_recv" True,
+    Intrinsic "prim_netSend" (IFun IInt (IFun IStr (IIO IInt))) OpNone (Just CapNetwork) "dtp_net_send" True,
+    Intrinsic "prim_netClose" (IFun IInt (IIO IInt)) OpNone (Just CapNetwork) "dtp_net_close" True,
+    Intrinsic "prim_netConnect" (IFun IStr (IIO IInt)) OpNone (Just CapNetwork) "dtp_net_connect" True,
     Intrinsic "prim_getenv" (IFun IStr (IIO IStr)) OpNone (Just CapEnv) "dtp_getenv" True,
     Intrinsic "prim_getcwd" (IIO IStr) OpNone (Just CapEnv) "(dtp_getcwd ())" True,
     Intrinsic "prim_execPath" (IIO IStr) OpNone (Just CapEnv) "(dtp_execPath ())" True,

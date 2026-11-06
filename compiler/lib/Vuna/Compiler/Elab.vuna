@@ -16,10 +16,13 @@ module Vuna.Compiler.Elab
   , Driver.elabProgramGoWith
   , Driver.elabProgramGoWithAux
   , Driver.goalsOfProgram
+  , Driver.goalsOfProgramTolerant
   , InstName.derivedInstName
   , InstName.instanceName
   , Meta.dictCtorName
   , Meta.dictTypeName
+  , Meta.isFamilyKindValue
+  , Meta.valueOpaqueScoped
   , Trait.checkInstanceHeads
   , Trait.elabInstanceBodies
   , Types.DtClass

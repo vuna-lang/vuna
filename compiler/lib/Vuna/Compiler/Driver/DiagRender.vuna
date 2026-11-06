@@ -181,17 +181,14 @@ else case c of
   _ => litWidth rest (n + 1) False
 
 gutter : Int -> String
-gutter width = repeat (natFromInt (width + 1)) " " ++ "|"
+gutter width = "${repeat (natFromInt (width + 1)) " "}|"
 
 numberRow : Int -> Int -> String -> String
-numberRow width line display = padLeft width (strFromInt line) ++ " | " ++ display
+numberRow width line display = "${padLeft width (strFromInt line)} | ${display}"
 
 caretRow : Int -> Int -> Int -> String
 caretRow width start carets =
-  repeat (natFromInt (width + 1)) " "
-    ++ "|"
-    ++ repeat (natFromInt (start + 1)) " "
-    ++ repeat (natFromInt carets) "^"
+  "${repeat (natFromInt (width + 1)) " "}|${repeat (natFromInt (start + 1)) " "}${repeat (natFromInt carets) "^"}"
 
 snippetBlock : String -> Int -> Int -> String -> String
 snippetBlock file line col srcLine =
@@ -201,7 +198,7 @@ snippetBlock file line col srcLine =
     start = caretStart display col
     carets = caretWidth (strUnpack display) start
   in join "\n"
-    ["  --> " ++ file ++ ":" ++ strFromInt line ++ ":" ++ strFromInt col, gutter width, numberRow width line display, caretRow width start carets]
+    ["  --> ${file}:${line}:${col}", gutter width, numberRow width line display, caretRow width start carets]
 
 -- ---------------------------------------------------------------
 -- 对外入口
@@ -210,8 +207,7 @@ snippetBlock file line col srcLine =
 renderBody : String -> String
 renderBody msg = case firstReadableLoc (locCandidates msg) of
   Nothing => msg
-  Just (Pair file (Pair line (Pair col srcLine))) =>
-    msg ++ "\n" ++ snippetBlock file line col srcLine
+  Just (Pair file (Pair line (Pair col srcLine))) => "${msg}\n${snippetBlock file line col srcLine}"
 
 -- 保留一个尾随换行（调用方常按 `message ++ "\n"` 传入）；消息内部含换行则退回原样。
 renderBodyWithNewline : String -> String
@@ -223,7 +219,7 @@ renderBodyWithNewline body =
   else
     let
       rendered = renderBody core
-    in if trailing then rendered ++ "\n" else rendered
+    in if trailing then "${rendered}\n" else rendered
 
 -- 完整 CLI 诊断行：保留前缀与可选 `[pkg] `，消息体追加源码片段。
 renderCliDiagnostic : String -> String

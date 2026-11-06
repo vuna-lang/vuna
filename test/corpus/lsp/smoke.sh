@@ -552,6 +552,187 @@ check_contains "codeAction 含全文档 fix all" "$ca_out" '"title":"fix all lin
 check_contains "context.only 不含 quickfix → 空数组" "$ca_out" '"id":3,"result":[]'
 check_contains "range 无相交可修复 finding → 空数组" "$ca_out" '"id":4,"result":[]'
 
+# ---- 22) 传输层边界：坏 JSON 帧丢弃后会话继续（`Vuna.Json.Server` 的 warn 路径）----
+{
+  printf 'Content-Length: 3\r\n\r\n{xx'
+  frame_line '{"jsonrpc":"2.0","id":1,"method":"shutdown","params":null}'
+  frame_line '{"jsonrpc":"2.0","method":"exit","params":null}'
+} | "$VUNA" lsp >"$tmp/badjson.out" 2>"$tmp/badjson.err"
+check_eq "坏 JSON 帧后 shutdown/exit 退出码 0" "0" "$?"
+check_contains "坏 JSON 帧后仍回 shutdown 响应" "$(tr -d '\r' <"$tmp/badjson.out")" '"id":1,"result":null'
+check_contains "坏 JSON 帧写 stderr 日志" "$(cat "$tmp/badjson.err")" "malformed frame"
+
+# ---- 23) 传输层边界：无 Content-Length 的 header 丢弃后继续 ----
+{
+  printf 'X-Ignored: 1\r\n\r\n'
+  frame_line '{"jsonrpc":"2.0","id":1,"method":"shutdown","params":null}'
+  frame_line '{"jsonrpc":"2.0","method":"exit","params":null}'
+} | "$VUNA" lsp >/dev/null 2>"$tmp/nolen.err"
+check_eq "无 Content-Length 帧后退出码 0" "0" "$?"
+check_contains "无 Content-Length 写 stderr 日志" "$(cat "$tmp/nolen.err")" "without Content-Length"
+
+# ---- 24) 传输层边界：声明长度超过 16 MiB → 立即退 1（不尝试分配/等待 body）----
+printf 'Content-Length: 20000000\r\n\r\n' | "$VUNA" lsp >/dev/null 2>"$tmp/big.err"
+check_eq "超大帧声明退出码 1" "1" "$?"
+check_contains "超大帧声明写 stderr 日志" "$(cat "$tmp/big.err")" "frame too large"
+
+# ---- 25) 传输层边界：body 不足就 EOF → 非正常断开退 1 ----
+printf 'Content-Length: 100\r\n\r\nshort' | "$VUNA" lsp >/dev/null 2>/dev/null
+check_eq "半帧 EOF 退出码 1" "1" "$?"
+
+# ---- 26) M40 模块名 hover：import / 导出项 `module B` / 模块头 + 模块 docstring ----
+# 模块 docstring 写在 `module` 头之前（`-- | ...`），docstring 任一行都应出现在 hover 里。
+mkdir -p "$tmp/modws/lib"
+printf '[package]\nname = "modws"\n\n[dependencies]\nvuna-base = "%s/base"\n' "$repo" >"$tmp/modws/vuna.toml"
+cat >"$tmp/modws/lib/ModDoc.vuna" <<'VEOF'
+-- | ModDoc module docs.
+-- | second line.
+module ModDoc (helper2) where
+
+helper2 : Int -> Int
+helper2 n = n
+VEOF
+cat >"$tmp/modws/lib/Reexp.vuna" <<'VEOF'
+module Reexp
+  ( module ModDoc
+  , useIt
+  ) where
+
+import ModDoc
+
+useIt : Int
+useIt = helper2 7
+VEOF
+moddoc_uri="file://$tmp/modws/lib/ModDoc.vuna"
+reexp_uri="file://$tmp/modws/lib/Reexp.vuna"
+reexp_text='module Reexp\n  ( module ModDoc\n  , useIt\n  ) where\n\nimport ModDoc\n\nuseIt : Int\nuseIt = helper2 7\n'
+{
+  frame_line '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{}}}'
+  frame_line '{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"'"$reexp_uri"'","languageId":"vuna","version":1,"text":"'"$reexp_text"'"}}}'
+  frame_line '{"jsonrpc":"2.0","id":2,"method":"textDocument/hover","params":{"textDocument":{"uri":"'"$reexp_uri"'"},"position":{"line":5,"character":9}}}'
+  frame_line '{"jsonrpc":"2.0","id":3,"method":"textDocument/hover","params":{"textDocument":{"uri":"'"$reexp_uri"'"},"position":{"line":1,"character":13}}}'
+  frame_line '{"jsonrpc":"2.0","id":4,"method":"textDocument/hover","params":{"textDocument":{"uri":"'"$reexp_uri"'"},"position":{"line":0,"character":8}}}'
+  frame_line '{"jsonrpc":"2.0","id":5,"method":"textDocument/definition","params":{"textDocument":{"uri":"'"$reexp_uri"'"},"position":{"line":5,"character":9}}}'
+  frame_line '{"jsonrpc":"2.0","id":6,"method":"shutdown","params":null}'
+  frame_line '{"jsonrpc":"2.0","method":"exit","params":null}'
+} | "$VUNA" lsp >"$tmp/modhover.out" 2>/dev/null
+mod_out=$(tr -d '\r' <"$tmp/modhover.out")
+check_contains "import 模块名 hover 回 id 2" "$mod_out" '"id":2'
+check_contains "import 模块名 hover 出模块全名" "$mod_out" 'module ModDoc'
+check_contains "模块 hover 带模块 docstring" "$mod_out" 'ModDoc module docs'
+check_contains "模块 hover 保留多行 docstring" "$mod_out" 'second line'
+check_contains "导出项 module B hover 回 id 3" "$mod_out" '"id":3'
+check_contains "导出项 module B hover 出模块全名" "$mod_out" 'module ModDoc'
+check_contains "模块头自身 hover 回 id 4" "$mod_out" '"id":4'
+check_contains "模块头自身 hover 出模块名" "$mod_out" 'module Reexp'
+check_contains "模块 definition 回 id 5" "$mod_out" '"id":5'
+check_contains "模块 definition 跳到 ModDoc.vuna" "$mod_out" '/ModDoc.vuna'
+check_contains "模块 definition 指向 module 头名字" "$mod_out" \
+  '"range":{"start":{"line":2,"character":7},"end":{"line":2,"character":13}}'
+
+# ---- 27) M40 局部绑定：hover（语法级类型/值）与 definition（binder 位置）----
+mkdir -p "$tmp/localws/lib"
+printf '[package]\nname = "localws"\n\n[dependencies]\nvuna-base = "%s/base"\n' "$repo" >"$tmp/localws/vuna.toml"
+cat >"$tmp/localws/lib/Local.vuna" <<'VEOF'
+module Local where
+
+twice : Int -> Int
+twice n = n + n
+
+addBoth : Int -> Int -> Int
+addBoth = \x, y => x + y
+
+shadowing : Int -> Int
+shadowing n =
+  let n = n + 1
+  in n
+
+compute : Int
+compute =
+  let base = 10
+  in twice (base + 1)
+VEOF
+local_uri="file://$tmp/localws/lib/Local.vuna"
+local_text='module Local where\n\ntwice : Int -> Int\ntwice n = n + n\n\naddBoth : Int -> Int -> Int\naddBoth = \\x, y => x + y\n\nshadowing : Int -> Int\nshadowing n =\n  let n = n + 1\n  in n\n\ncompute : Int\ncompute =\n  let base = 10\n  in twice (base + 1)\n'
+{
+  frame_line '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{}}}'
+  frame_line '{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"'"$local_uri"'","languageId":"vuna","version":1,"text":"'"$local_text"'"}}}'
+  frame_line '{"jsonrpc":"2.0","id":2,"method":"textDocument/hover","params":{"textDocument":{"uri":"'"$local_uri"'"},"position":{"line":3,"character":10}}}'
+  frame_line '{"jsonrpc":"2.0","id":3,"method":"textDocument/hover","params":{"textDocument":{"uri":"'"$local_uri"'"},"position":{"line":6,"character":19}}}'
+  frame_line '{"jsonrpc":"2.0","id":4,"method":"textDocument/hover","params":{"textDocument":{"uri":"'"$local_uri"'"},"position":{"line":16,"character":12}}}'
+  frame_line '{"jsonrpc":"2.0","id":5,"method":"textDocument/hover","params":{"textDocument":{"uri":"'"$local_uri"'"},"position":{"line":16,"character":7}}}'
+  frame_line '{"jsonrpc":"2.0","id":6,"method":"textDocument/definition","params":{"textDocument":{"uri":"'"$local_uri"'"},"position":{"line":3,"character":10}}}'
+  frame_line '{"jsonrpc":"2.0","id":7,"method":"textDocument/definition","params":{"textDocument":{"uri":"'"$local_uri"'"},"position":{"line":16,"character":12}}}'
+  frame_line '{"jsonrpc":"2.0","id":8,"method":"textDocument/definition","params":{"textDocument":{"uri":"'"$local_uri"'"},"position":{"line":6,"character":19}}}'
+  frame_line '{"jsonrpc":"2.0","id":9,"method":"textDocument/definition","params":{"textDocument":{"uri":"'"$local_uri"'"},"position":{"line":11,"character":5}}}'
+  frame_line '{"jsonrpc":"2.0","id":10,"method":"textDocument/definition","params":{"textDocument":{"uri":"'"$local_uri"'"},"position":{"line":10,"character":10}}}'
+  frame_line '{"jsonrpc":"2.0","id":11,"method":"shutdown","params":null}'
+  frame_line '{"jsonrpc":"2.0","method":"exit","params":null}'
+} | "$VUNA" lsp >"$tmp/localhover.out" 2>/dev/null
+local_out=$(tr -d '\r' <"$tmp/localhover.out")
+check_contains "局部 hover 回 id 2" "$local_out" '"id":2'
+check_contains "参数 hover 给语法类型" "$local_out" 'n : Int'
+check_contains "参数 hover 标种类" "$local_out" 'local binding (parameter)'
+check_contains "λ 参数 hover 标种类" "$local_out" 'local binding (lambda)'
+check_contains "let 绑定 hover 给值" "$local_out" 'base = 10'
+check_contains "let 绑定 hover 标种类" "$local_out" 'local binding (let)'
+check_contains "顶层符号 hover 仍走 Index" "$local_out" 'Int -> Int'
+check_contains "参数 definition 回 id 6" "$local_out" '"id":6'
+check_contains "参数 definition 指向参数 n" "$local_out" \
+  '"range":{"start":{"line":3,"character":6},"end":{"line":3,"character":7}}'
+check_contains "let definition 指向 let binder" "$local_out" \
+  '"range":{"start":{"line":15,"character":6},"end":{"line":15,"character":10}}'
+check_contains "λ definition 指向 λ 参数" "$local_out" \
+  '"range":{"start":{"line":6,"character":11},"end":{"line":6,"character":12}}'
+check_contains "遮蔽：body n 指向 let binder" "$local_out" \
+  '"id":9,"result":[{"uri":"file://'"$tmp"'/localws/lib/Local.vuna","range":{"start":{"line":10,"character":6}'
+check_contains "遮蔽：值 n 指向函数参数" "$local_out" \
+  '"id":10,"result":[{"uri":"file://'"$tmp"'/localws/lib/Local.vuna","range":{"start":{"line":9,"character":10}'
+
+# ---- 28) M40 洞：未解 `_` 的目标+上下文；命名洞 `?name` 的名字/目标/上下文 ----
+mkdir -p "$tmp/holews/lib"
+printf '[package]\nname = "holews"\n\n[dependencies]\nvuna-base = "%s/base"\n' "$repo" >"$tmp/holews/vuna.toml"
+cat >"$tmp/holews/lib/Holes.vuna" <<'VEOF'
+module Holes where
+
+g : Int -> Int
+g n =
+  let m = n + 1
+  in _
+VEOF
+cat >"$tmp/holews/lib/Named.vuna" <<'VEOF'
+module Named where
+
+g : Int -> Int
+g n =
+  let m = n + 1
+  in ?goal
+VEOF
+holes_uri="file://$tmp/holews/lib/Holes.vuna"
+named_uri="file://$tmp/holews/lib/Named.vuna"
+holes_text='module Holes where\n\ng : Int -> Int\ng n =\n  let m = n + 1\n  in _\n'
+named_text='module Named where\n\ng : Int -> Int\ng n =\n  let m = n + 1\n  in ?goal\n'
+{
+  frame_line '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{}}}'
+  frame_line '{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"'"$holes_uri"'","languageId":"vuna","version":1,"text":"'"$holes_text"'"}}}'
+  frame_line '{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"'"$named_uri"'","languageId":"vuna","version":1,"text":"'"$named_text"'"}}}'
+  frame_line '{"jsonrpc":"2.0","id":2,"method":"textDocument/hover","params":{"textDocument":{"uri":"'"$holes_uri"'"},"position":{"line":5,"character":5}}}'
+  frame_line '{"jsonrpc":"2.0","id":3,"method":"textDocument/hover","params":{"textDocument":{"uri":"'"$named_uri"'"},"position":{"line":5,"character":8}}}'
+  frame_line '{"jsonrpc":"2.0","id":4,"method":"shutdown","params":null}'
+  frame_line '{"jsonrpc":"2.0","method":"exit","params":null}'
+} | "$VUNA" lsp >"$tmp/holehover.out" 2>/dev/null
+hole_out=$(tr -d '\r' <"$tmp/holehover.out")
+check_contains "未解 _ 洞 hover 回 id 2" "$hole_out" '"id":2'
+check_contains "未解 _ 洞 hover 给目标类型" "$hole_out" 'Int'
+check_contains "未解 _ 洞 hover 给上下文标题" "$hole_out" 'Context:'
+check_contains "未解 _ 洞 hover 列出 let 绑定 m" "$hole_out" '`m` : Int'
+check_contains "未解 _ 洞 hover 列出参数 n" "$hole_out" '`n` : Int'
+check_contains "命名洞 hover 回 id 3" "$hole_out" '"id":3'
+check_contains "命名洞 hover 显示 ?goal : 目标" "$hole_out" '?goal : Int'
+check_contains "命名洞 hover 给上下文" "$hole_out" '`m` : Int'
+check_contains "命名洞 range 覆盖整个 ?goal" "$hole_out" \
+  '"range":{"start":{"line":5,"character":5},"end":{"line":5,"character":10}}'
+
 printf 'lsp: %d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ] && echo "lsp smoke passed"
 [ "$fail" -eq 0 ]

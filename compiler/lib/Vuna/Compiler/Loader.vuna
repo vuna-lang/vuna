@@ -2,16 +2,23 @@ module Vuna.Compiler.Loader
   ( ExportEntry(..)
   , Module(..)
   , Project(..)
+  , implicitPrelude
   , loadModuleSource
+  , loadModuleSourceWithPreloaded
   , loadProject
   , loadProjectModules
+  , loadProjectModulesWithPreloaded
   , loadProjectSource
+  , loadProjectSourceWithPreloaded
+  , loadProjectWithPreloaded
   , moduleAllImportsOf
   , moduleDeclsOf
   , moduleNameOf
   , modulePackageOf
+  , parseFileWithPath
   , projectEntryAllImports
   , resolveProject
+  , resolveProjectKeeping
   ) where
 
 -- Vuna.Compiler.Loader：模块加载、名字解析与 flatten 的**门面**（M24 后维护（源码重组）按层拆分）。

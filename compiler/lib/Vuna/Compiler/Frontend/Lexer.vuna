@@ -30,7 +30,7 @@ module Vuna.Compiler.Frontend.Lexer
 --   * `TPHole`：插值洞，存**洞内 token 列表**（由 `lexHoleTokens` 原位词法得到，
 --     位置仍是绝对源码位置）——parser 直接拿这段 token 解析成表达式，无需二次词法。
 -- 洞内注释（`--` / `{- -}`）随洞 token 一起被 `skipTrivia` 跳过：插值洞里的注释
--- **不进入 AST**（fmt 会丢失它们），这是已知边界，见 docs/reference/limits.md。
+-- **不进入 AST**（fmt 会丢失它们），这是已知边界，见 docs/reference/templates.md。
 import Vuna.Compiler.Common
 import Vuna.Compiler.Frontend.Diagnostics
 

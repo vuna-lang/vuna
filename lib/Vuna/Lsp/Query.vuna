@@ -17,8 +17,10 @@ module Vuna.Lsp.Query
 -- Vuna.Lsp 门面）。依赖方向：Query → Diagnostics → Protocol，单向无环。
 --
 -- 方法：
---   hover             先 DT 洞目标（包上下文；无独立 `_` 时跳过精化），未命中再
---                     Index 标识符签名/注释；range 落在光标 token 上（不是定义位置）；
+--   hover             先 DT 洞目标（`_` / `?name`；文本里无洞 token 时跳过精化；M40 起走
+--                     容错查询，未解洞也给目标+上下文），未命中再看 Bindings（模块名/局部
+--                     绑定，见 Vuna.Lsp），最后 Index 标识符签名/注释；
+--                     range 落在光标 token 上（不是定义位置）；
 --   formatting        `Vuna.Fmt.formatSourceWith`（程序级 fixity）成功且内容变化 ⇒ 全文 TextEdit；
 --   codeAction        lint finding（可自动修复）→ quick fix TextEdit；另加全文档 fix all；
 --   documentSymbol    AST 声明树（data/record/trait 带子节点）；selectionRange 精确落名字；
@@ -69,40 +71,7 @@ fullRange text =
   in lspRange 1 1 (endLine + 1) (strLength endText + 1)
 
 -- ---------------------------------------------------------------
--- 子串定位；找不到返回 -1（字节偏移）。
-findSubstring : String -> String -> Int
-findSubstring needle hay = findSubGo (strUnpack needle) (strUnpack hay) 0
-
-findSubGo : List Int -> List Int -> Int -> Int
-findSubGo needle [] idx = 0 - 1
-findSubGo needle (c :: rest) idx =
-  if isPrefixChars needle (c :: rest) then idx else findSubGo needle rest (idx + 1)
-
-isPrefixChars : List Int -> List Int -> Bool
-isPrefixChars [] _ = True
-isPrefixChars _ [] = False
-isPrefixChars (x :: xs) (y :: ys) = x == y && isPrefixChars xs ys
-
--- 在 span 覆盖的行范围里找名字的起始位置（1-based line/col）。
-findNamePos : List String -> Span -> String -> Maybe (Pair Int Int)
-findNamePos lines sp name =
-  scanNameLines (spanStartLine sp) True (spanStartCol sp) (spanEndLine sp)
-    (drop (spanStartLine sp - 1) lines) name
-
-scanNameLines : Int -> Bool -> Int -> Int -> List String -> String -> Maybe (Pair Int Int)
-scanNameLines lineNo isFirst firstCol lastLine remaining name = if lineNo > lastLine then Nothing
-else case remaining of
-  [] => Nothing
-  ln :: rest =>
-    let
-      from0 = clampInt 0 (if isFirst then firstCol - 1 else 0) (strLength ln)
-      tailPart = substring (natFromInt from0) (natFromInt (strLength ln - from0)) ln
-    in case findSubstring name tailPart of
-      hit =>
-        if hit >= 0 then Just (Pair lineNo (hit + from0 + 1))
-        else scanNameLines (lineNo + 1) False firstCol lastLine rest name
-
--- 选择范围：尽量指向名字本身，找不到就退回声明起点。
+-- 选择范围：尽量指向名字本身，找不到就退回声明起点（`findNamePos` 在 Protocol）。
 nameSelRange : List String -> Span -> String -> Json
 nameSelRange lines sp name = case findNamePos lines sp name of
   Nothing =>
@@ -114,16 +83,24 @@ nameSelRange lines sp name = case findNamePos lines sp name of
 -- hover：DT 洞目标 + 标识符签名
 -- ---------------------------------------------------------------
 ctxLine : Pair String String -> String
-ctxLine kv = "- `" ++ firstOf kv ++ "` : " ++ secondOf kv ++ "\n"
+ctxLine kv = "- `${firstOf kv}` : ${secondOf kv}\n"
 
 contextBlock : List (Pair String String) -> String
 contextBlock [] = ""
-contextBlock ctx = "\nContext:\n" ++ join "" (map ctxLine ctx)
+contextBlock ctx = """
+
+Context:
+${join "" (map ctxLine ctx)}"""
 
 goalContents : DtGoalInfo -> Json
 goalContents g =
-  JObj
-    [Pair "kind" (JStr "markdown"), Pair "value" (JStr ("```vuna\n" ++ g.dtGoalInfoGoal ++ "\n```\n" ++ contextBlock g.dtGoalInfoCtx))]
+  let
+    -- M40：命名洞显示 `?name : <目标类型>`；匿名洞保持只显示目标类型（与旧输出一致）。
+    label =
+      if g.dtGoalInfoName == "" then g.dtGoalInfoGoal
+      else "${g.dtGoalInfoName} : ${g.dtGoalInfoGoal}"
+  in JObj
+    [Pair "kind" (JStr "markdown"), Pair "value" (JStr "```vuna\n${label}\n```\n${contextBlock g.dtGoalInfoCtx}")]
 
 holeContains : Int -> Int -> DtGoalInfo -> Bool
 holeContains line col g =
@@ -150,10 +127,12 @@ symbolHoverBody : Sym -> String
 symbolHoverBody s =
   let
     body =
-      if symKind s == "fun" then symFullName s ++ " : " ++ symSig s
+      if symKind s == "fun" then "${symFullName s} : ${symSig s}"
       else if symSig s == "" then symFullName s else symSig s
-    doc = if s.symDoc == "" then "" else "\n\n" ++ s.symDoc
-  in "```vuna\n" ++ body ++ "\n```" ++ doc
+    doc = if s.symDoc == "" then "" else "\n\n${s.symDoc}"
+  in """```vuna
+${body}
+```${doc}"""
 
 -- hover 的 range 必须是**光标下的 token**，不是符号定义位置：客户端（VS Code）用
 -- hover.range 判断 hover 何时失效，鼠标一动到 range 外就收起。返回定义位置会让使用点
@@ -170,29 +149,41 @@ currentModuleNameOf text = case parseSource "<lsp>" text of
   Ok (SourceFile hdr imports fx decls) => currentModuleName decls hdr
 
 -- hover 的第一段：DT 洞目标（包上下文；与 `vuna goal` 同源）。
--- 快速判据：文本里没有独立的 `_` token 时直接跳过——否则每次 hover 都要跑一遍
+-- 快速判据：文本里没有洞（`_` / `?name`）时直接跳过——否则每次 hover 都要跑一遍
 -- 整模块（含 import 闭包）的 DT 精化，大文件上是秒级开销。
+-- M40：用 tolerant 查询，**未解洞**也能拿到目标类型与上下文快照。
 holeHoverAt : String -> Int -> Int -> String -> Maybe Json
 holeHoverAt uri line col text = if hasHole text then holeHoverChecked uri line col text else Nothing
 
 holeHoverChecked : String -> Int -> Int -> String -> Maybe Json
 holeHoverChecked uri line col text = case contextForDoc uri of
   Err e => Nothing
-  Ok (Pair label ctx) => case dtGoalsSource ctx label text of
+  Ok (Pair label ctx) => case dtGoalsSourceTolerant ctx label text of
     Err e => Nothing
     Ok gs => case holeAt line col gs of
       Nothing => Nothing
       Just g => Just (holeHoverJson g)
 
--- 洞判定：`_` 是独立 token（左右都不是标识符/限定名的连接字符）。
--- 行首/行尾用哨兵 -1；字符串或注释里的 `_` 会误判成「有洞」，只多跑一次精化，不影响正确性。
+-- 洞判定：`_` 是独立 token（左右都不是标识符/限定名的连接字符）；`?name` 是 `?` 紧邻标识符
+-- 起始字符（M40）。行首/行尾用哨兵 -1；字符串或注释里的洞字符会误判成「有洞」，只多跑一次
+-- 精化，不影响正确性。
 holeJoinCode : Int -> Bool
 holeJoinCode c =
   c >= 48 && c <= 57 || c >= 65 && c <= 90 || c >= 97 && c <= 122 || c == 95 || c == 46
 
+holeIdentStart : Int -> Bool
+holeIdentStart c = c >= 65 && c <= 90 || c >= 97 && c <= 122 || c == 95
+
 holeScan : List Int -> Int -> Bool
 holeScan [] prev = False
-holeScan (c :: rest) prev = if c == 95 then holeAtUnderscore rest prev else holeScan rest c
+holeScan (c :: rest) prev =
+  if c == 95 then holeAtUnderscore rest prev
+  else if c == 63 then holeNamedAhead rest else holeScan rest c
+
+-- `?` 后面紧跟标识符起始字符（同行，无空格）⇒ 命名洞；否则按普通运算符字符继续扫。
+holeNamedAhead : List Int -> Bool
+holeNamedAhead [] = False
+holeNamedAhead (c :: rest) = holeIdentStart c || holeScan rest 63
 
 holeAtUnderscore : List Int -> Int -> Bool
 holeAtUnderscore rest prev =
@@ -303,7 +294,7 @@ findingQuickFix uri f = case f.findingEdit of
   Nothing => Nothing
   Just e =>
     Just
-      (JObj [Pair "title" (JStr ("fix: " ++ f.findingRule)), Pair "kind" (JStr "quickfix"), Pair "diagnostics" (JArr [JObj [Pair "code" (JStr f.findingCode)]]), Pair "edit" (JObj [Pair "changes" (JObj [Pair uri (JArr [textEditJson (editLspRange e) (joinLines e.editLines)])])])])
+      (JObj [Pair "title" (JStr "fix: ${f.findingRule}"), Pair "kind" (JStr "quickfix"), Pair "diagnostics" (JArr [JObj [Pair "code" (JStr f.findingCode)]]), Pair "edit" (JObj [Pair "changes" (JObj [Pair uri (JArr [textEditJson (editLspRange e) (joinLines e.editLines)])])])])
 
 -- 全文档 fix：fixLoop 把全部可修复 finding 迭代应用（8 轮，与 CLI `--fix` 一致）；
 -- 有改动才发整文档替换编辑，否则不产生动作。
@@ -600,7 +591,7 @@ qualifiedCompletions ln chars prefixStart prefix (Just idx) =
     modLen = qualPrefixLen (reverse beforeDotChars)
     modStart = length beforeDotChars - modLen
     modPrefix = substring (natFromInt modStart) (natFromInt modLen) ln
-    fullPrefix = modPrefix ++ "."
+    fullPrefix = "${modPrefix}."
     hits =
       filter (\s => startsWith fullPrefix (symFullName s) && startsWith prefix (symName s))
         idx.indexSymbols

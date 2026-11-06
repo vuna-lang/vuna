@@ -16,6 +16,11 @@ vuna lint --fix <file.vuna>...    # 逐轮应用可修复 finding，最多 8 轮
 finding 追加 ` (not auto-fixable)`。LSP 把同一批 finding 合并为 warning（severity 2），见
 `lib/Vuna/Lsp/Diagnostics.vuna`。
 
+`vuna lint` **必须显式给路径**：没有位置参数是用法错误（exit 2）；有 finding 时 exit 1；
+文件读不到 / 解析失败 / 取不到程序级 fixity 上下文也是工具错误（exit 2），不静默跳过。
+`--fix` 只应用可安全修复的 finding（被替换行含注释 / tab / CR 时跳过），每轮复验后余下
+的 finding 照常报告。
+
 ## 2. 实现模型
 
 规则判定全部走 AST：`lintSource` 先 `parseSource`，再按声明遍历 `Expr`（覆盖全部构造子，
@@ -142,12 +147,14 @@ genTypeDeclsOf allDatas subset = <多行 body 重排>
   实测会把 `VCons` 错配到 `n : Nat`）；`literal-if-chain` 与函数参数无关，不受影响。
 - **穷尽性依赖类型检查**：`case-to-clauses` 不做语法穷尽性证明；非穷尽 `case`（本来就编译
   不过）也会被拆出不完整 clause——lint 的前提输入是通过 `vuna check` 的程序。
-- **递归 / 互递归函数与 STR 的冲突**：拆成多 clause 后 SCT 可能失去下降环
-  （`Doc.renderTy*`、`Index.Scan.renderTy*`、`Fmt.Expr` 的若干函数、
-  `Loader.Resolve.resolveModules`）。这些函数保持 `case` 形态；`nix/checks/vuna-lint.sh`
-  按 finding 过滤（见脚本注释）。后续把 STR 对多 clause 的下降分析补齐后可移除豁免。
+- **递归 / 互递归函数与 STR 的历史冲突**：把 `case` 拆成多 clause 会改变 SCT 的分析
+  形态，早期确有递归函数拆分后失去下降环。`case-to-clauses` 现在对「分支体引用
+  scrutinee」的形态生成 as-pattern（§6）以保住绑定，常见结构递归拆分后仍能通过终止性
+  检查；但拆分的**合法性仍由 `vuna check` 判定**——若某个递归函数拆分后 SCT 找不到下降
+  环，就应保持 `case` 形态（或改进 SCT 分析），不能靠 lint 层豁免。
 - **CI 门禁**：`nix/checks/vuna-lint.sh` 扫全部包源码
-  （`find compiler/lib base/lib lib app -name '*.vuna'`），要求零 finding。
+  （`find compiler/lib base/lib lib app -name '*.vuna'`），要求零 finding；脚本没有按规则
+  或按文件的过滤豁免。
 - `--fix` 产物保证可重新 parse；不保证 `vuna fmt` 幂等（既有语料 01–03 的期望产物保留旧的
   「行首 `case`」形态）。新增 fix 语料按 fmt 规范形态设计并验证幂等。
 - `lift-destructure` 只处理顶层 DFun 的 clause 与 case alt 的直接体；instance 方法、
@@ -168,5 +175,6 @@ advance (PState file toks@(t :: rest) last count) = ...
 advance (PState file toks@[]) last count = ...
 ```
 
-STR 把 as 绑定视作整个值（`patNames` / `pathInPat` / `patSizeStrict` 已支持），
-递归/互递归函数拆分后仍能通过终止性检查；`case` 分支左端也支持 as-pattern。
+STR 把 as 绑定视作整个值（`patNames` / `pathInPat` / `patSizeStrict` 已支持），因此
+递归调用落在 as 模式的严格子项时仍能证明下降；但拆分本身不豁免终止性检查（见 §5）。
+`case` 分支左端也支持 as-pattern。

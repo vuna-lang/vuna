@@ -74,7 +74,9 @@ vuna interp <file.vuna>                   # 精化后核心求值（纯；不执
 vuna test [DIR] [--list|--filter PAT|--verbose|--fail-fast]  # 运行 test/*.vuna（main : String 空串通过）
 vuna run [DIR] [--package NAME] [--no-build] [-- ARGS...]    # 增量 build + 执行 .output/bin/<包名>
 vuna fmt [--check] [PATH]...
-vuna repl
+vuna repl [FILE|DIR|MODULE]               # 自动签名 / 行编辑（方向键/Ctrl-R）/ 颜色 / :load 文件|目录|模块
+vuna repl --listen ADDR [FILE|DIR|MODULE] # 常驻 REPL server（tcp:127.0.0.1:PORT | unix:PATH；stdout 就绪行）
+vuna repl --client ADDR                   # 每次调用一发一收（stdin 的 JSON-RPC body → 响应 body）
 vuna doc [--check] [--package NAME] [DIR [OUT]]  # 默认 DIR/docs/api.html
 vuna search [--type|--name|--doc] [--module PFX] [--limit N] [--json] <query...>
 vuna map [...] | vuna api <Module.name>  # 模块总览 / 定位符号 / 改动影响面 / 签名面
@@ -151,19 +153,19 @@ manifest，不向上找。命令语义与包格式
 | [docs/reference/packages.md](docs/reference/packages.md) | `vuna.toml` 包格式、workspace / 依赖 DAG、工具链命令一览 |
 | [docs/reference/core.md](docs/reference/core.md) | Core TT / NbE / 合一 / 精化器 / 擦除 / codegen 护栏的实现参考 |
 | [docs/reference/api-docs.md](docs/reference/api-docs.md) | API 文档：docstring、单文件 HTML、`vuna search` / 类型检索 |
-| [docs/reference/tooling.md](docs/reference/tooling.md) | 工具链：`vuna goal`、LSP（含 codeAction quick fix）、`vuna doc`（单文件 HTML）、`vuna run` / REPL 调试命令、错误码体系与代表性错误索引 |
+| [docs/reference/tooling.md](docs/reference/tooling.md) | 工具链：`vuna goal`、LSP（含 codeAction quick fix）、`vuna doc`（单文件 HTML）、`vuna run` / REPL 调试命令、**REPL server / client（`--listen`/`--client`，JSON-RPC over socket）**、错误码体系与代表性错误索引 |
 | [docs/reference/debugging.md](docs/reference/debugging.md) | 调试：诊断源码片段、运行时错误报告（`vuna: runtime error` + 定义级帧 + exit 2）、`Base.Debug`（trace/assert）、`vuna run` / `test --verbose` / REPL `:type` |
 | [docs/reference/compiler.md](docs/reference/compiler.md) | 编译器模块职责、codegen 表示与输出模型、接口摘要（TTC 式模块化精化）、夹具指标 |
+| [docs/reference/cache.md](docs/reference/cache.md) | 模块级接口摘要：TTC 对照、写/读数据流、失效与校验、已知边界 |
 | [docs/reference/bootstrap.md](docs/reference/bootstrap.md) | 种子策略、rotation 流程、fixed point、TCB 边界 |
 | [docs/reference/testing.md](docs/reference/testing.md) | 测试体系、corpus 分类、nix checks 清单、性能基准 |
 | [docs/reference/lint.md](docs/reference/lint.md) | lint 规则（AST 驱动、`--fix` 与门禁） |
-| [docs/reference/limits.md](docs/reference/limits.md) | 当前限制与已知边界（编译模型 / 类型系统 / IO / 工具链细节） |
-| [docs/reference/debt.md](docs/reference/debt.md) | 仍未关闭的债务、缺陷与未实现能力（按语言 / 工具 / F1–F4 分组） |
+| [docs/reference/debt.md](docs/reference/debt.md) | 仍未关闭的债务、缺陷与未实现能力（按语言 / 工具分组，带证据与归属） |
 | [docs/roadmap.md](docs/roadmap.md) | 当前基线、终态方向、下一阶段与不排期轨道（F1–F4） |
 
 文档分层规则：README 只保留定位/上手/目录/硬约束/导航；细节在 `docs/reference/`；
-roadmap 只保留当前基线与未来方向，里程碑历史在 git 历史；已知边界与开放债务分别归
-`limits.md` 与 `debt.md`。
+roadmap 只保留当前基线与未来方向，里程碑历史在 git 历史；已知边界并入各主题参考页
+（见上表），未关闭的缺陷与缺口归 `debt.md`。
 
 ## 许可
 

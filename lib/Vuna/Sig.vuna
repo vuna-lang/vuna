@@ -14,14 +14,14 @@ import Vuna.Compiler.Frontend.Ast
 renderType : Expr -> String
 renderType (EVar name sp) = name
 renderType (ty@(EApp (EVar arrow _) ([a, b]) _)) =
-  if arrow == "->" then renderTypeArg a ++ " -> " ++ renderType b else renderTypePlain ty
-renderType (EInfix "->" a b sp) = renderTypeArg a ++ " -> " ++ renderType b
+  if arrow == "->" then "${renderTypeArg a} -> ${renderType b}" else renderTypePlain ty
+renderType (EInfix "->" a b sp) = "${renderTypeArg a} -> ${renderType b}"
 renderType (EPi name implicit qty dom cod sp) =
   let
     binder =
-      if implicit then "{" ++ renderQty qty ++ name ++ " : " ++ renderType dom ++ "}"
-      else "(" ++ renderQty qty ++ name ++ " : " ++ renderType dom ++ ")"
-  in binder ++ " -> " ++ renderType cod
+      if implicit then "{${renderQty qty}${name} : ${renderType dom}}"
+      else "(${renderQty qty}${name} : ${renderType dom})"
+  in "${binder} -> ${renderType cod}"
 renderType ty = renderTypePlain ty
 
 -- M38：quantity 前缀（与 Fmt 同形，保证输出可回读）。
@@ -33,28 +33,28 @@ renderQty (Just Q1) = "1 "
 -- 签名约束前缀（`C a, D b => τ`）；空 ctx 与旧输出逐字一致。
 renderTypeInCtx : List Expr -> Expr -> String
 renderTypeInCtx [] ty = renderType ty
-renderTypeInCtx ctx ty = join ", " (map renderType ctx) ++ " => " ++ renderType ty
+renderTypeInCtx ctx ty = "${join ", " (map renderType ctx)} => ${renderType ty}"
 
 renderTypePlain : Expr -> String
-renderTypePlain (EApp f args sp) = renderTypeAtom f ++ " " ++ join " " (map renderTypeArg args)
+renderTypePlain (EApp f args sp) = "${renderTypeAtom f} ${join " " (map renderTypeArg args)}"
 renderTypePlain (EInt n sp) = strFromInt n
-renderTypePlain (EStr s sp) = "\"" ++ s ++ "\""
-renderTypePlain (EInfix op l r sp) = renderTypeArg l ++ " " ++ op ++ " " ++ renderTypeArg r
+renderTypePlain (EStr s sp) = "\"${s}\""
+renderTypePlain (EInfix op l r sp) = "${renderTypeArg l} ${op} ${renderTypeArg r}"
 -- 类型位置也可能出现反引号中缀 / section（keep 模式下保留原形）；显式渲染，
 -- 不落到 `_` 静默丢表达式。
-renderTypePlain (EBacktick nm l r sp) = renderTypeArg l ++ " `" ++ nm ++ "` " ++ renderTypeArg r
-renderTypePlain (ESectOp op sp) = "(" ++ op ++ ")"
-renderTypePlain (ESectL op e sp) = "(" ++ op ++ " " ++ renderType e ++ ")"
-renderTypePlain (ESectR e op sp) = "(" ++ renderType e ++ " " ++ op ++ ")"
+renderTypePlain (EBacktick nm l r sp) = "${renderTypeArg l} `${nm}` ${renderTypeArg r}"
+renderTypePlain (ESectOp op sp) = "(${op})"
+renderTypePlain (ESectL op e sp) = "(${op} ${renderType e})"
+renderTypePlain (ESectR e op sp) = "(${renderType e} ${op})"
 renderTypePlain _ = "_"
 
 renderTypeArg : Expr -> String
 renderTypeArg (EVar name sp) = name
 renderTypeArg (ty@(EApp (EVar arrow _) ([a, b]) _)) =
-  if arrow == "->" then "(" ++ renderType ty ++ ")" else "(" ++ renderType ty ++ ")"
-renderTypeArg (ty@(EInfix "->" a b sp)) = "(" ++ renderType ty ++ ")"
-renderTypeArg ty = "(" ++ renderType ty ++ ")"
+  if arrow == "->" then "(${renderType ty})" else "(${renderType ty})"
+renderTypeArg (ty@(EInfix "->" a b sp)) = "(${renderType ty})"
+renderTypeArg ty = "(${renderType ty})"
 
 renderTypeAtom : Expr -> String
 renderTypeAtom (EVar name sp) = name
-renderTypeAtom ty = "(" ++ renderType ty ++ ")"
+renderTypeAtom ty = "(${renderType ty})"

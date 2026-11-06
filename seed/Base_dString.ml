@@ -18,7 +18,7 @@ let v_Base_dString_djoin = (fun sep xs -> (Base_dList.dtp_concatMany ((v_Base_dS
 
 let v_Base_dString_dunlines = (fun mc0 -> (match mc0 with
   | Base_dList.C_Base_dList_dList_Base_dList_dNil -> ""
-  | _ -> (Base_dList.dtp_concatMany ((Base_dList.v_Base_dList_dmap (fun x -> (x ^ "\n"))) mc0))
+  | _ -> (Base_dList.dtp_concatMany ((Base_dList.v_Base_dList_dmap (fun x -> (((Base_dInterp.v_Base_dInterp_dinterp Base_dInterp.v_Interp_uString) x) ^ "\n"))) mc0))
 ))
 
 let v_Base_dString_drepeat = (fun n s -> (Base_dList.dtp_concatMany ((Base_dList.v_Base_dList_dmap (fun _u -> s)) ((Base_dList.v_Base_dList_drange 0) n))))

@@ -3,6 +3,7 @@ module Vuna.Compiler.Elab.Meta
   , ValueEntry(..)
   , baseNameOf
   , binderRig
+  , castErased
   , collectDataDecls
   , collectInstDecls
   , collectSigs
@@ -14,6 +15,7 @@ module Vuna.Compiler.Elab.Meta
   , ctorGlobals
   , ctorRefTerm
   , ctxHasLinear
+  , ctxItemAt
   , dataNamesOf
   , dictCtorName
   , dictTypeName
@@ -44,9 +46,11 @@ module Vuna.Compiler.Elab.Meta
   , isBoolGlobal
   , isBoolType
   , isDataHead
+  , isFamilyKindValue
   , isImplicitDomain
   , isIndexDomain
   , isLinearType
+  , isOpaqueRuntimeTyIn
   , isSortVal
   , isTypeDomain
   , isTypeLayerValue
@@ -83,6 +87,8 @@ module Vuna.Compiler.Elab.Meta
   , typeLookup
   , unsolvedFrom
   , valueLookup
+  , valueOpaqueScoped
+  , wrapOpaqueUses
   , zipTeleRigs
   , zonkTerm
   ) where
@@ -539,10 +545,10 @@ lookupDataHead name (h :: rest) =
 -- 实例搜索发生在隐式 binder 的域是接口字典时：在已注册实例里找头能统一到 `Dict_C args`
 -- 的那一个并插入；找不到 ⇒ 明确缺失诊断。设计见 `docs/reference/core.md`。
 dictTypeName : String -> String
-dictTypeName cname = "Dict_" ++ cname
+dictTypeName cname = "Dict_${cname}"
 
 dictCtorName : String -> String
-dictCtorName cname = "MkDict_" ++ cname
+dictCtorName cname = "MkDict_${cname}"
 
 -- 收集 trait / instance 声明（按源顺序）。
 collectTraitDecls : List Decl -> List (Pair Decl Span) -> List (Pair Decl Span)
@@ -569,18 +575,16 @@ methodArgTerms rigs nFields = methodArgTermsGo rigs nFields 0 (length rigs)
 methodArgTermsGo : List Rig -> Int -> Int -> Int -> List (Pair Term Rig)
 methodArgTermsGo [] nFields i arity = []
 methodArgTermsGo (rig :: rest) nFields i arity =
-  Pair (TVar ("x" ++ strFromInt i) (nFields + (arity - 1 - i))) rig
-    :: methodArgTermsGo rest nFields (i + 1) arity
+  Pair (TVar "x${i}" (nFields + (arity - 1 - i))) rig :: methodArgTermsGo rest nFields (i + 1) arity
 
 -- 逐层 lambda 绑定方法参数（x_0 最外），每层用各自 rig。
 methodArgLams : List Rig -> Int -> Term -> Term
 methodArgLams [] i body = body
-methodArgLams (rig :: rest) i body =
-  TLam ("x" ++ strFromInt i) rig (methodArgLams rest (i + 1) body)
+methodArgLams (rig :: rest) i body = TLam "x${i}" rig (methodArgLams rest (i + 1) body)
 
 -- 方法显式参数的 multiplicity 表：逐 binder 按域判断（域是宇宙 ⇒ Rig0 擦除）。
 fieldVarName : Int -> String
-fieldVarName i = "f" ++ strFromInt i
+fieldVarName i = "f${i}"
 
 fieldBinderNames : Int -> List (Pair String Rig)
 fieldBinderNames n = fieldBinderGo n 0 []
@@ -745,6 +749,153 @@ else case qty of
   Nothing => RigOmega
   Just Q0 => Rig0
   Just Q1 => Rig1
+
+-- ---------------------------------------------------------------
+-- 类型族 kind 与表现层 cast：不可命名的擦除依赖类型（D27 / effects.md §5–§6）
+-- ---------------------------------------------------------------
+--
+-- 运行时类型里出现「卡住的类型族应用」（如 `res op`）时，OCaml 侧无法命名它：
+--   * 声明位置（data 字段）→ `Codegen.Decl` 渲染成不透明运行时值（`Obj.t`）；
+--   * 表达式位置（binder）→ 每个使用点包 `prim_erase`（运行时 `%identity`，求值期
+--     归约成实参本身，对定义性相等透明）。
+-- 判据与 `Codegen.Decl` 同源：`valueOpaqueScoped` + 同一「可表示类型头」表。
+-- 类型族有两种来源：全局类型头不可表示（类型族定义 / axiom），或**类型族参数**
+-- （kind 的 Pi 链里出现非宇宙域，如 `res : f -> Type`）。普通类型构造子参数
+-- （`m : Type -> Type`）仍然可表示，字典方法字段 / base 泛型代码不受影响。
+-- 运行时不可命名的全局类型头：不是该程序的数据族，也不是 primitive / 内建类型构造子。
+isTypeHeadOpaqueEc : Ec -> String -> Bool
+isTypeHeadOpaqueEc ec name = not (isDataFamilyName ec name) && not (isTypeConstructorName name)
+
+-- kind 判定：Pi 链里出现非宇宙域 ⇒ 类型族参数（由值决定类型，运行时不可命名）。
+isFamilyKindValue : Value -> Bool
+isFamilyKindValue v = isFamilyKindFuel 64 v
+
+isFamilyKindFuel : Int -> Value -> Bool
+isFamilyKindFuel fuel v = if fuel <= 0 then False
+else case v of
+  VPi name implicit rig dom clo =>
+    not (isUniverseValue dom)
+      || isFamilyKindFuel (fuel - 1) (applyClosure clo (VNeutral (NVar name 0 [])))
+  _ => False
+
+isUniverseValue : Value -> Bool
+isUniverseValue (VType _) = True
+isUniverseValue _ = False
+
+-- 通用结构遍历：
+--   * `depth` 是已进入的 Pi binder 数；`lvl < depth` 的 NVar 由 `outerNVar` 判定
+--     （表达式位置查 ctx；声明位置查已判定的 telescope 类型族参数集）；
+--   * 类型内部的 Pi binder 若其 kind 是类型族参数，把它的 level 记进 `famLevels`。
+valueOpaqueScoped : (Int -> Bool) -> (String -> Bool) -> Int -> List Int -> Value -> Bool
+valueOpaqueScoped outerNVar headOpaque depth famLevels v =
+  valueOpaqueGo 128 outerNVar headOpaque depth famLevels v
+
+valueOpaqueGo : Int -> (Int -> Bool) -> (String -> Bool) -> Int -> List Int -> Value -> Bool
+valueOpaqueGo fuel outerNVar headOpaque depth famLevels v = if fuel <= 0 then True
+else case v of
+  VType _ => False
+  -- 已知边界：精化期未解 meta 视为可表示（否则隐式实参实例化会触发大量 cast）；
+  -- 最终解成类型族时可能漏 cast，见 docs/reference/debt.md（D27 残留）。
+  VMeta _ _ => False
+  VNeutral n => case n of
+    NVar name lvl sp =>
+      if lvl < depth then outerNVar lvl else if memLevel lvl famLevels then True else False
+    NGlobal g sp =>
+      headOpaque g || valueOpaqueTypeSpine fuel outerNVar headOpaque depth famLevels sp
+  VPi name implicit rig dom clo =>
+    let
+      fam2 = if isFamilyKindValue dom then depth :: famLevels else famLevels
+    in valueOpaqueGo (fuel - 1) outerNVar headOpaque depth famLevels dom
+      || valueOpaqueGo (fuel - 1) outerNVar headOpaque (depth + 1) fam2 (applyClosure clo (VNeutral (NVar name depth [])))
+  -- 类型族展开后卡住的形态（VCase/VIf 悬挂在中性值上）、以及不可能出现在类型位置
+  -- 的构造子/字面量：都不可命名。
+  _ => True
+
+valueOpaqueTypeSpine : Int -> (Int -> Bool) -> (String -> Bool) -> Int -> List Int -> List Value -> Bool
+valueOpaqueTypeSpine fuel outerNVar headOpaque depth famLevels sp = if fuel <= 0 then True
+else case sp of
+  [] => False
+  v :: rest =>
+    isTypeishValue v && valueOpaqueGo (fuel - 1) outerNVar headOpaque depth famLevels v
+      || valueOpaqueTypeSpine (fuel - 1) outerNVar headOpaque depth famLevels rest
+
+-- 类型实参 vs 索引值实参：数据族 / 内建类型构造子的值实参（`Vec a (Succ n)` 的
+-- `Succ n`）是擦除后的索引，不进 OCaml 类型，不参与「不可命名」判定。
+isTypeishValue : Value -> Bool
+isTypeishValue (VType _) = True
+isTypeishValue (VPi _ _ _ _ _) = True
+isTypeishValue (VNeutral _) = True
+isTypeishValue (VMeta _ _) = True
+isTypeishValue _ = False
+
+memLevel : Int -> List Int -> Bool
+memLevel i [] = False
+memLevel i (x :: rest) = if x == i then True else memLevel i rest
+
+-- 表达式位置：外层 ctx binder 的类型族参数判定（kind 从 ctx 取）。
+nvarOpaqueCtx : Ctx -> Int -> Bool
+nvarOpaqueCtx ctx lvl =
+  let
+    idx = ctxDepth ctx - 1 - lvl
+  in if idx < 0 then False
+  else case ctxItemAt idx ctx.ctxItems of
+    Just (Pair name ty) => isFamilyKindValue (varTypeValue ctx idx ty)
+    Nothing => False
+
+-- 只解元变量、不做 delta：判据必须与 codegen（看不到定义展开）保持同一视角，
+-- 否则「声明成 Obj.t、使用处却因 delta 归约没 cast」会错配。
+zonkValueOnly : Ec -> Value -> Value
+zonkValueOnly ec v = force (Base.HashMap.fromList []) (ecSolsP ec) defaultFuel v
+
+isOpaqueRuntimeTyIn : Ec -> Ctx -> Value -> Bool
+isOpaqueRuntimeTyIn ec ctx v =
+  valueOpaqueScoped (nvarOpaqueCtx ctx) (isTypeHeadOpaqueEc ec) (ctxDepth ctx) []
+    (zonkValueOnly ec v)
+
+castErased : Term -> Term
+castErased t = TApp (TGlobal primEraseName) t Rig1
+
+-- 把 root-relative 索引集合对应的 binder 的自由使用逐个包 cast。
+-- de Bruijn：目标 binder 在深度 d 下的出现是 `idx + d`；嵌套 binder 只增加深度、
+-- 不改变 cast 后的索引（cast 只包住原有 TVar，不移动作用域）。
+wrapOpaqueUses : List Int -> Term -> Term
+wrapOpaqueUses idxs t = wrapOpaqueUsesFuel 512 0 idxs t
+
+wrapOpaqueUsesFuel : Int -> Int -> List Int -> Term -> Term
+wrapOpaqueUsesFuel fuel depth idxs t = if fuel <= 0 then t
+else case t of
+  TVar name i => wrapOpaqueVar depth idxs name i
+  TGlobal name => TGlobal name
+  TMeta m => TMeta m
+  TType l => TType l
+  TInt n => TInt n
+  TStr s => TStr s
+  TBool b => TBool b
+  TPi name implicit rig dom cod =>
+    TPi name implicit rig (wrapOpaqueUsesFuel (fuel - 1) depth idxs dom)
+      (wrapOpaqueUsesFuel (fuel - 1) (depth + 1) idxs cod)
+  TLam name rig body => TLam name rig (wrapOpaqueUsesFuel (fuel - 1) (depth + 1) idxs body)
+  TApp f a rig =>
+    TApp (wrapOpaqueUsesFuel (fuel - 1) depth idxs f) (wrapOpaqueUsesFuel (fuel - 1) depth idxs a)
+      rig
+  TCon c args =>
+    TCon c
+      (map (\p => Pair (wrapOpaqueUsesFuel (fuel - 1) depth idxs (firstOf p)) (secondOf p)) args)
+  TCase scrut alts =>
+    TCase (wrapOpaqueUsesFuel (fuel - 1) depth idxs scrut)
+      (map (\alt => wrapOpaqueAltFuel (fuel - 1) depth idxs alt) alts)
+  TIf c th el =>
+    TIf (wrapOpaqueUsesFuel (fuel - 1) depth idxs c) (wrapOpaqueUsesFuel (fuel - 1) depth idxs th)
+      (wrapOpaqueUsesFuel (fuel - 1) depth idxs el)
+
+wrapOpaqueVar : Int -> List Int -> String -> Int -> Term
+wrapOpaqueVar depth idxs name i =
+  if i < depth then TVar name i
+  else if memLevel (i - depth) idxs then castErased (TVar name i) else TVar name i
+
+wrapOpaqueAltFuel : Int -> Int -> List Int -> CaseAlt -> CaseAlt
+wrapOpaqueAltFuel fuel depth idxs (CaseAlt name binders body) =
+  CaseAlt name binders (wrapOpaqueUsesFuel (fuel - 1) (depth + length binders) idxs body)
 
 -- M38：线性类型判定（结构保守）：线性族头，或非线性的类型应用带线性实参。
 isLinearType : Ec -> Value -> Bool
@@ -926,7 +1077,7 @@ etaCtorLa : String -> Int -> List (Pair String Rig) -> List (Pair Term Rig) -> T
 etaCtorLa name i [] args = TCon name args
 etaCtorLa name i ((Pair _ rig) :: rest) args =
   let
-    binder = "#eta" ++ strFromInt i
+    binder = "#eta${i}"
   in TLam binder rig (etaCtorLa name (i + 1) rest (append args [Pair (TVar binder (length rest)) rig]))
 
 -- 丢掉列表前 n 个元素（构造子已收到的实参前缀）。

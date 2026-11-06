@@ -13,12 +13,14 @@ module Base.Debug (assert, todo, trace, traceShow) where
 import Base.Bool
 import Base.IO
 import Base.Show
+-- M36 跟进：模板字符串降级引用 Base.Interp.interp。
+import Base.Interp
 
 -- 写一行到 stderr 后返回原值（自动补换行；多段内容先自己拼好）。
 trace : String -> a -> a
 trace msg x =
   let
-    _ = runIO (prim_eprint (msg ++ "\n"))
+    _ = runIO (prim_eprint "${msg}\n")
   in x
 
 -- `trace` 的展示版：先 `show` 再写 stderr，返回原值（需要 Show 实例）。
@@ -27,8 +29,8 @@ traceShow x = trace (show x) x
 
 -- 断言：失败时以 `assertion failed: <msg>` 终止（main 钩子报告；exit 2）。
 assert : Bool -> String -> a -> a
-assert ok msg x = if ok then x else prim_fail ("assertion failed: " ++ msg)
+assert ok msg x = if ok then x else prim_fail "assertion failed: ${msg}"
 
 -- 未实现占位：以 `TODO: <msg>` 终止（同 assert 的报告路径）。
 todo : String -> a
-todo msg = prim_fail ("TODO: " ++ msg)
+todo msg = prim_fail "TODO: ${msg}"

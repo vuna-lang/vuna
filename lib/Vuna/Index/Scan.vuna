@@ -138,7 +138,7 @@ walkVunaGo fuel dir name = if fuel <= 0 then []
 else if skipDir name then []
 else
   let
-    path = dir ++ "/" ++ name
+    path = "${dir}/${name}"
   in if dirExists path then collectVunaGo (fuel - 1) path
   else if endsWith ".vuna" name then [path] else []
 
@@ -150,8 +150,8 @@ dirExists path = runIO (prim_fileExists path) && runIO (prim_isDirectory path)
 -- （夹具含故意不合法的语法，不是模块源码）。
 packageSources : String -> List String
 packageSources dir =
-  append (if dirExists (dir ++ "/lib") then collectVuna (dir ++ "/lib") else [])
-    (if dirExists (dir ++ "/app") then collectVuna (dir ++ "/app") else [])
+  append (if dirExists "${dir}/lib" then collectVuna "${dir}/lib" else [])
+    (if dirExists "${dir}/app" then collectVuna "${dir}/app" else [])
 
 packageDirs : String -> List (Pair String String)
 packageDirs repo = case findManifestDir repo of
@@ -171,7 +171,7 @@ declCol d = spanStartCol (declSpan d)
 
 paramSuffix : List String -> String
 paramSuffix [] = ""
-paramSuffix params = " " ++ join " " params
+paramSuffix params = " ${join " " params}"
 
 signatureOf : String -> List Decl -> String
 signatureOf name [] = ""
@@ -195,20 +195,20 @@ symbolsOfDecl sMod decls table d =
     col = declCol d
   in case d of
     DData name params kind ctors derivings lin sp =>
-      Sym sMod name "data" ("data " ++ name ++ paramSuffix params) "" (docForDecl table name) line col
+      Sym sMod name "data" "data ${name}${paramSuffix params}" "" (docForDecl table name) line col
         :: ctorSymbols sMod name ctors table
     DRecord name params fields derivings lin sp =>
-      Sym sMod name "record" ("record " ++ name ++ paramSuffix params) "" (docForDecl table name) line col
+      Sym sMod name "record" "record ${name}${paramSuffix params}" "" (docForDecl table name) line col
         :: fieldSymbols sMod name fields table
     DTrait name params methods sp =>
-      Sym sMod name "trait" ("trait " ++ name ++ paramSuffix params) "" (docForDecl table name) line col
+      Sym sMod name "trait" "trait ${name}${paramSuffix params}" "" (docForDecl table name) line col
         :: methodSymbols sMod name methods table
     DSig name ctx ty sp => []
     DAxiom name ty sp =>
-      [ Sym sMod name "axiom" ("axiom " ++ name ++ " : " ++ renderType ty) (renderType ty) (docForDecl table name) line col
+      [ Sym sMod name "axiom" "axiom ${name} : ${renderType ty}" (renderType ty) (docForDecl table name) line col
       ]
     DExtern name cName ty sp =>
-      [ Sym sMod name "extern" ("extern " ++ name ++ " : " ++ renderType ty) (renderType ty) (docForDecl table name) line col
+      [ Sym sMod name "extern" "extern ${name} : ${renderType ty}" (renderType ty) (docForDecl table name) line col
       ]
     DFun name pats body sp =>
       [ Sym sMod name "fun" (signatureOf name decls) (typeOf name decls) (docForDecl table name) line col
@@ -219,19 +219,19 @@ symbolsOfDecl sMod decls table d =
 ctorSymbols : String -> String -> List Ctor -> DocTable -> List Sym
 ctorSymbols sMod parent ctors table =
   map
-    (\c => Sym sMod (ctorName c) "ctor" (ctorName c ++ " : " ++ renderType (ctorType c)) (renderType (ctorType c)) (docForMember table parent (ctorName c)) (spanStartLine (ctorSpan c)) (spanStartCol (ctorSpan c)))
+    (\c => Sym sMod (ctorName c) "ctor" "${ctorName c} : ${renderType (ctorType c)}" (renderType (ctorType c)) (docForMember table parent (ctorName c)) (spanStartLine (ctorSpan c)) (spanStartCol (ctorSpan c)))
     ctors
 
 fieldSymbols : String -> String -> List Field -> DocTable -> List Sym
 fieldSymbols sMod parent fields table =
   map
-    (\f => Sym sMod (fieldName f) "field" (fieldName f ++ " : " ++ renderType (fieldType f)) (renderType (fieldType f)) (docForMember table parent (fieldName f)) (spanStartLine (fieldSpan f)) (spanStartCol (fieldSpan f)))
+    (\f => Sym sMod (fieldName f) "field" "${fieldName f} : ${renderType (fieldType f)}" (renderType (fieldType f)) (docForMember table parent (fieldName f)) (spanStartLine (fieldSpan f)) (spanStartCol (fieldSpan f)))
     fields
 
 -- M30（B20）：trait 方法签名带 span，方法符号的行/列直接取方法签名位置。
 methodSymbol : String -> String -> TraitMethod -> DocTable -> Sym
 methodSymbol sMod parent m table =
-  Sym sMod (traitMethodName m) "method" (traitMethodName m ++ " : " ++ renderType m.traitMethodType)
+  Sym sMod (traitMethodName m) "method" "${traitMethodName m} : ${renderType m.traitMethodType}"
     (renderType m.traitMethodType) (docForMember table parent (traitMethodName m))
     (spanStartLine (traitMethodSpan m)) (spanStartCol (traitMethodSpan m))
 
@@ -259,8 +259,8 @@ moduleNameOf dir path Nothing = segmentModule dir path
 segmentModule : String -> String -> String
 segmentModule dir path =
   let
-    rel = dropPrefix (dir ++ "/lib/") path
-    rel2 = if rel == path then dropPrefix (dir ++ "/") path else rel
+    rel = dropPrefix "${dir}/lib/" path
+    rel2 = if rel == path then dropPrefix "${dir}/" path else rel
     stripped = if endsWith ".vuna" rel2 then substring 0 (byteLength rel2 - 5) rel2 else rel2
   in joinDots (splitChars 47 (strUnpack stripped) [] [])
 
@@ -330,7 +330,8 @@ refsInExpr sMod e = reverse (refsInExprGo sMod e [])
 
 refsInExprGo : String -> Expr -> List Ref -> List Ref
 refsInExprGo sMod e acc = case e of
-  EVar n sp => Ref sMod n (spanStartLine sp) (spanStartCol sp) :: acc
+  -- M40：洞（`_` / `?name`）不是引用，不进索引（否则 `map --impact` / references 有噪音）。
+  EVar n sp => if isHoleName n then acc else Ref sMod n (spanStartLine sp) (spanStartCol sp) :: acc
   EInt n sp => acc
   EStr s sp => acc
   -- M36：模板字面量：洞内表达式的引用照常收集（find-references 需要）。
@@ -381,7 +382,7 @@ record Built where
 indexOne : FixityEnv -> String -> String -> String -> Pair FixityEnv (Result Built)
 indexOne env dir pkgName path =
   if runIO (prim_fileExists path) then indexOneExisting env dir pkgName path
-  else Pair env (Err (path ++ ": no such file"))
+  else Pair env (Err "${path}: no such file")
 
 indexOneExisting : FixityEnv -> String -> String -> String -> Pair FixityEnv (Result Built)
 indexOneExisting env dir pkgName path =
@@ -391,14 +392,14 @@ indexOneExisting env dir pkgName path =
     looked = fixitiesForFile env path source
     env2 = firstOf looked
   in case secondOf looked of
-    Err e => Pair env2 (Err (path ++ ": cannot load package fixity context: " ++ e))
+    Err e => Pair env2 (Err "${path}: cannot load package fixity context: ${e}")
     Ok programFixities => case parseSource path source of
-      Err e => Pair env2 (Err (path ++ ": " ++ e))
+      Err e => Pair env2 (Err "${path}: ${e}")
       -- M31.3（B26/B27）：必须按**程序级** fixity 重排（本文件声明 ++ import 闭包，
       -- 本地优先）。只用本地声明会让用到 `+`/`==`/`::` 的文件报 unknown fixity，
       -- 然后被当错误跳过 → `vuna map` 静默漏模块。
       Ok (SourceFile srcHdr imports fx decls0) => case reorderProgram (tableOfKeepOps (append programFixities fx)) decls0 of
-        Err e => Pair env2 (Err (path ++ ": " ++ e))
+        Err e => Pair env2 (Err "${path}: ${e}")
         Ok decls =>
           let
             sMod = moduleNameOf dir path srcHdr
@@ -465,28 +466,25 @@ cacheVersion : String
 cacheVersion = "vuna-index 3"
 
 cacheDir : String -> String
-cacheDir repo = repo ++ "/.local/index"
+cacheDir repo = "${repo}/.local/index"
 
 modulesPath : String -> String
-modulesPath repo = cacheDir repo ++ "/modules.txt"
+modulesPath repo = "${cacheDir repo}/modules.txt"
 
 symbolsPath : String -> String
-symbolsPath repo = cacheDir repo ++ "/symbols.txt"
+symbolsPath repo = "${cacheDir repo}/symbols.txt"
 
 refsPath : String -> String
-refsPath repo = cacheDir repo ++ "/refs.txt"
+refsPath repo = "${cacheDir repo}/refs.txt"
 
 lockPath : String -> String
-lockPath repo = cacheDir repo ++ "/cache.lock"
+lockPath repo = "${cacheDir repo}/cache.lock"
 
 -- 缓存条目：path、bytes、内容哈希。
 -- 哈希 = strHash(content) 与 strHash("v2:" ++ content) 的组合（同一内容必须得到同一
 -- 字符串；两个 10 位哈希组合降低「同 size 同 mtime 内容变更」漏判的概率）。
 contentHash : String -> String
-contentHash content =
-  strFromInt (Base.HashMap.hashStr content)
-    ++ "-"
-    ++ strFromInt (Base.HashMap.hashStr ("v2:" ++ content))
+contentHash content = "${Base.HashMap.hashStr content}-${Base.HashMap.hashStr "v2:${content}"}"
 
 entryPath : Pair String (Pair Int String) -> String
 entryPath entry = firstOf entry
@@ -515,11 +513,12 @@ scanSources : String -> List (Pair String (Pair Int String))
 scanSources repo = concatMap scanRoot (packageDirs repo)
 
 manifestLine : Pair String (Pair Int String) -> String
-manifestLine entry =
-  entryPath entry ++ "\t" ++ strFromInt (entryBytes entry) ++ "\t" ++ entryHash entry
+manifestLine entry = "${entryPath entry}\t${entryBytes entry}\t${entryHash entry}"
 
 manifestText : List (Pair String (Pair Int String)) -> String
-manifestText entries = cacheVersion ++ "\n" ++ join "\n" (map manifestLine entries) ++ "\n"
+manifestText entries = """${cacheVersion}
+${join "\n" (map manifestLine entries)}
+"""
 
 -- 逐字段显式比较（与 M29 的判等口径一致：String / Int 的 `==` 都走特化路径）。
 manifestEntrySame : Pair String (Pair Int String) -> Pair String (Pair Int String) -> Bool
@@ -548,7 +547,7 @@ parseManifestLine line = case splitOnTab line of
   _ => []
 
 manifestPath : String -> String
-manifestPath repo = cacheDir repo ++ "/manifest.txt"
+manifestPath repo = "${cacheDir repo}/manifest.txt"
 
 readManifestEntries : String -> Maybe (List (Pair String (Pair Int String)))
 readManifestEntries repo =
@@ -572,7 +571,7 @@ manifestMatches repo entries = case readManifestEntries repo of
 ensureCacheDir : String -> Int
 ensureCacheDir repo =
   let
-    local = repo ++ "/.local"
+    local = "${repo}/.local"
   in let
     _ = if dirExists local then 0 else primRunMkdir repo ".local"
   in if dirExists (cacheDir repo) then 0 else primRunMkdir repo ".local/index"
@@ -628,8 +627,8 @@ writeAtomic : String -> String -> String -> Int
 writeAtomic repo name content =
   let
     dir = cacheDir repo
-    tmpName = name ++ ".tmp"
-    _ = runIO (prim_writeFile (dir ++ "/" ++ tmpName) content)
+    tmpName = "${name}.tmp"
+    _ = runIO (prim_writeFile "${dir}/${tmpName}" content)
   in runIO (prim_runIn dir ["mv", tmpName, name])
 
 -- 数据文件先写、manifest 最后：manifest 存在即表示其余文件都已提交。
@@ -714,7 +713,7 @@ parseRefs (line :: rest) = case splitOnTab line of
 -- 非 workspace（向上找不到 vuna.toml）是**输入错误**，不再静默建空索引。
 loadOrBuild : String -> Result Index
 loadOrBuild repo = case findManifestDirMaybe repo of
-  Nothing => Err ("index: no vuna.toml found from " ++ runIO prim_getcwd ++ " (searched upward)")
+  Nothing => Err "index: no vuna.toml found from ${runIO prim_getcwd} (searched upward)"
   Just manifestDir =>
     let
       entries = scanSources repo
@@ -736,44 +735,20 @@ saveAndReturn repo entries = case buildIndex repo of
 -- 序列化（写缓存用）
 -- ---------------------------------------------------------------
 modulesText : Index -> String
-modulesText index = join "\n" (map moduleLine (indexModules index)) ++ "\n"
+modulesText index = "${join "\n" (map moduleLine (indexModules index))}\n"
 
 moduleLine : ModuleInfo -> String
-moduleLine m =
-  modName m
-    ++ "\t"
-    ++ modPackage m
-    ++ "\t"
-    ++ modPath m
-    ++ "\t"
-    ++ strFromInt (modBytes m)
-    ++ "\t"
-    ++ strFromInt (modDecls m)
+moduleLine m = "${modName m}\t${modPackage m}\t${modPath m}\t${modBytes m}\t${modDecls m}"
 
 symbolsText : Index -> String
-symbolsText index = join "\n" (map symLine0 index.indexSymbols) ++ "\n"
+symbolsText index = "${join "\n" (map symLine0 index.indexSymbols)}\n"
 
 symLine0 : Sym -> String
 symLine0 s =
-  symModule s
-    ++ "\t"
-    ++ symName s
-    ++ "\t"
-    ++ symKind s
-    ++ "\t"
-    ++ strFromInt (symLine s)
-    ++ "\t"
-    ++ strFromInt (symCol s)
-    ++ "\t"
-    ++ escapeField (symSig s)
-    ++ "\t"
-    ++ escapeField s.symDoc
-    ++ "\t"
-    ++ escapeField s.symType
+  "${symModule s}\t${symName s}\t${symKind s}\t${symLine s}\t${symCol s}\t${escapeField (symSig s)}\t${escapeField s.symDoc}\t${escapeField s.symType}"
 
 refsText : Index -> String
-refsText index = join "\n" (map refLineText index.indexRefs) ++ "\n"
+refsText index = "${join "\n" (map refLineText index.indexRefs)}\n"
 
 refLineText : Ref -> String
-refLineText r =
-  refModule r ++ "\t" ++ refName r ++ "\t" ++ strFromInt r.refLine ++ "\t" ++ strFromInt r.refCol
+refLineText r = "${refModule r}\t${refName r}\t${r.refLine}\t${r.refCol}"

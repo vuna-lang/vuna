@@ -41,12 +41,10 @@ isLowerAlphaChar c = c >= 97 && c <= 122
 
 -- 错误定位：解析期的错误带 `path:line: `，纯结构校验错误带 `path: `。
 atLine : String -> Int -> String -> String
-atLine path line msg =
-  if path == "" then "line " ++ strFromInt line ++ ": " ++ msg
-  else path ++ ":" ++ strFromInt line ++ ": " ++ msg
+atLine path line msg = if path == "" then "line ${line}: ${msg}" else "${path}:${line}: ${msg}"
 
 manifestErr : String -> String -> String
-manifestErr path msg = if path == "" then msg else path ++ ": " ++ msg
+manifestErr path msg = if path == "" then msg else "${path}: ${msg}"
 
 sameSection : Eq a => List a -> List a -> Bool
 sameSection [] [] = True
@@ -55,23 +53,21 @@ sameSection _ _ = False
 
 fieldLoc : String -> List String -> String -> List TomlEntry -> String
 fieldLoc path section key entries = case lookupEntryLine section key entries of
-  Just line =>
-    if path == "" then "line " ++ strFromInt line ++ ": "
-    else path ++ ":" ++ strFromInt line ++ ": "
-  Nothing => if path == "" then "" else path ++ ": "
+  Just line => if path == "" then "line ${line}: " else "${path}:${line}: "
+  Nothing => if path == "" then "" else "${path}: "
 
 stringField : String -> List String -> String -> List TomlEntry -> Result (Maybe String)
 stringField path section key entries = case lookupEntry section key entries of
   Nothing => Ok Nothing
   Just (TStr s) => Ok (Just s)
-  Just value => Err (fieldLoc path section key entries ++ "expected a string for \"" ++ key ++ "\"")
+  Just value => Err "${fieldLoc path section key entries}expected a string for \"${key}\""
 
 stringListField : String -> List String -> String -> List TomlEntry -> Result (Maybe (List String))
 stringListField path section key entries = case lookupEntry section key entries of
   Nothing => Ok Nothing
   Just (TList xs) => Ok (Just xs)
   Just value =>
-    Err (fieldLoc path section key entries ++ "expected an array of strings for \"" ++ key ++ "\"")
+    Err "${fieldLoc path section key entries}expected an array of strings for \"${key}\""
 
 orEmptyList : Maybe (List a) -> List a
 orEmptyList Nothing = []
@@ -80,17 +76,14 @@ orEmptyList (Just xs) = xs
 -- 只接受约定表；未知表 / 未知 key 报带行号的错误（防止字段拼写错误被静默忽略）。
 checkOneEntry : String -> TomlEntry -> Result Int
 checkOneEntry path (TomlEntry section key value line) =
-  if sameSection section [] then Err (atLine path line ("unexpected top-level key \"" ++ key ++ "\""))
-  else if sameSection section ["package"] then if key == "name" then Ok 0
-  else Err (atLine path line ("unknown key \"" ++ key ++ "\" in [package]"))
-  else if sameSection section ["workspace"] then if key == "members" then Ok 0
-  else Err (atLine path line ("unknown key \"" ++ key ++ "\" in [workspace]"))
-  else if sameSection section ["export"] then if key == "modules" then Ok 0
-  else Err (atLine path line ("unknown key \"" ++ key ++ "\" in [export]"))
+  if sameSection section [] then Err (atLine path line "unexpected top-level key \"${key}\"")
+  else if sameSection section ["package"] then if key == "name" then Ok 0 else Err (atLine path line "unknown key \"${key}\" in [package]")
+  else if sameSection section ["workspace"] then if key == "members" then Ok 0 else Err (atLine path line "unknown key \"${key}\" in [workspace]")
+  else if sameSection section ["export"] then if key == "modules" then Ok 0 else Err (atLine path line "unknown key \"${key}\" in [export]")
   else if sameSection section ["capabilities"] then if key == "effects" then Ok 0
-  else Err (atLine path line ("unknown key \"" ++ key ++ "\" in [capabilities]"))
+  else Err (atLine path line "unknown key \"${key}\" in [capabilities]")
   else if sameSection section ["dependencies"] then Ok 0
-  else Err (atLine path line ("unknown section [" ++ joinDots section ++ "]"))
+  else Err (atLine path line "unknown section [${joinDots section}]")
 
 checkEntries : String -> List TomlEntry -> Result Int
 checkEntries path [] = Ok 0
@@ -105,7 +98,7 @@ collectDependenciesAcc : String -> List TomlEntry -> List (Pair String String) -
 collectDependenciesAcc path [] acc = Ok (reverse acc)
 collectDependenciesAcc path ((TomlEntry section key value line) :: rest) acc = if sameSection section ["dependencies"] then case value of
   TStr rel => collectDependenciesAcc path rest (Pair key rel :: acc)
-  _ => Err (atLine path line ("dependency \"" ++ key ++ "\" must have a string relative path"))
+  _ => Err (atLine path line "dependency \"${key}\" must have a string relative path")
 else collectDependenciesAcc path rest acc
 
 buildManifest : String -> List TomlEntry -> Result Manifest
@@ -151,8 +144,7 @@ validateName path Nothing = Err (manifestErr path "missing [package] name")
 validateName path (Just n) =
   if n == "" then Err (manifestErr path "package name must not be empty")
   else if validPackageName n then Ok 0
-  else Err
-    (manifestErr path ("invalid package name \"" ++ n ++ "\" (allowed characters: a-z, 0-9, '-')"))
+  else Err (manifestErr path "invalid package name \"${n}\" (allowed characters: a-z, 0-9, '-')")
 
 validateMembers : String -> List String -> Result Int
 validateMembers path [] = Ok 0
@@ -164,8 +156,7 @@ validateModules : String -> List String -> Result Int
 validateModules path [] = Ok 0
 validateModules path (m :: rest) =
   if validModuleName m then validateModules path rest
-  else Err
-    (manifestErr path ("invalid export module \"" ++ m ++ "\" (segments must match [A-Z][A-Za-z0-9_]*)"))
+  else Err (manifestErr path "invalid export module \"${m}\" (segments must match [A-Z][A-Za-z0-9_]*)")
 
 validateExports : String -> Maybe (List String) -> Result Int
 validateExports path Nothing = Ok 0
@@ -178,8 +169,8 @@ validateDepsSeen : String -> List String -> List (Pair String String) -> Result 
 validateDepsSeen path seen [] = Ok 0
 validateDepsSeen path seen ((Pair name rel) :: rest) =
   if name == "" then Err (manifestErr path "dependency name must not be empty")
-  else if rel == "" then Err (manifestErr path ("dependency \"" ++ name ++ "\" path must not be empty"))
-  else if memName name seen then Err (manifestErr path ("duplicate dependency \"" ++ name ++ "\""))
+  else if rel == "" then Err (manifestErr path "dependency \"${name}\" path must not be empty")
+  else if memName name seen then Err (manifestErr path "duplicate dependency \"${name}\"")
   else validateDepsSeen path (name :: seen) rest
 
 -- M27：能力声明只做结构校验（非空、无重复）；合法能力名的语义表在 Loader 侧，
@@ -191,7 +182,7 @@ validateCapsSeen : String -> List String -> List String -> Result Int
 validateCapsSeen path seen [] = Ok 0
 validateCapsSeen path seen (c :: rest) =
   if c == "" then Err (manifestErr path "capability name must not be empty")
-  else if memName c seen then Err (manifestErr path ("duplicate capability \"" ++ c ++ "\""))
+  else if memName c seen then Err (manifestErr path "duplicate capability \"${c}\"")
   else validateCapsSeen path (c :: seen) rest
 
 validateManifest : Manifest -> Result Manifest
@@ -215,4 +206,4 @@ resolveManifestPath : Manifest -> String -> String
 resolveManifestPath manifest rel =
   let
     dir = manifestDir manifest.manifestPath
-  in if startsWith "/" rel then rel else if dir == "." then rel else dir ++ "/" ++ rel
+  in if startsWith "/" rel then rel else if dir == "." then rel else "${dir}/${rel}"

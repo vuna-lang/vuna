@@ -1,0 +1,126 @@
+module Vuna.Repl.Term
+  ( ansi
+  , escCode
+  , rmFile
+  , shellQuote
+  , termEnterRaw
+  , termReadBlock
+  , termReadByte
+  , termReadTimeout
+  , termRestoreState
+  , termSaveState
+  , termTmpPath
+  , termWidth
+  , writeOut
+  ) where
+
+-- Vuna.Repl.Term：REPL 行编辑的终端层（工具链；不进 seed 闭包）。
+--
+-- 只用现有原语：`prim_runIn` 调 POSIX `stty` 做终端模式/尺寸，`prim_readBytes 1` 逐字节
+-- 读入。没有给编译器加终端原语，TCB 不变；非 POSIX 或 stty 不可用时调用方回退到
+-- `prim_readLine`。
+--
+-- 约定：所有函数返回 Int/Bool，失败返回非 0，不抛异常（读字节返回 -1 = EOF/超时，
+-- 具体含义由调用方按当前读模式解释）。
+import Vuna.Cli.Args
+import Vuna.Compiler.Common
+import Base.IO
+
+escCode : String
+escCode = strPack [27]
+
+ansi : String -> String -> String
+ansi code s = "${escCode}[${code}m${s}${escCode}[0m"
+
+-- 单引号 shell 转义（路径可能来自 TMPDIR）。
+shellQuote : String -> String
+shellQuote s = "'${shellEscaped (strUnpack s)}'"
+
+shellEscaped : List Int -> String
+shellEscaped [] = ""
+shellEscaped (c :: rest) =
+  if c == 39 then "'\\''${shellEscaped rest}" else strPack [c] ++ shellEscaped rest
+
+-- 会话级临时路径（stty 状态 / 尺寸文件）；同一进程内 timeUs 保证不撞名。
+termTmpPath : Int -> String
+termTmpPath _ =
+  let
+    base = termTempBase 0
+  in "${base}/vuna-repl-term-${runIO timeUs}"
+
+termTempBase : Int -> String
+termTempBase _ =
+  let
+    env = runIO (prim_getenv "TMPDIR")
+  in if env == "" then "/tmp"
+  else if endsWith "/" env then substring 0 (byteLength env - 1) env else env
+
+rmFile : String -> Int
+rmFile path = runIO (prim_runIn "/" ["rm", "-f", path])
+
+-- `stty -g > path`：保存终端状态。
+termSaveState : String -> Int
+termSaveState path =
+  let
+    code = runIO (prim_runIn "." ["sh", "-c", "stty -g > ${shellQuote path}"])
+  in if code == 0 && runIO (prim_fileExists path) then 0 else 1
+
+-- `stty <saved>`：恢复终端；失败再试 `stty sane`。
+termRestoreState : String -> Int
+termRestoreState path =
+  let
+    saved = case readText path of
+      Err e => ""
+      Ok s => trim s
+    code = if saved == "" then 1 else runIO (prim_runIn "." ["stty", saved])
+    _ = rmFile path
+  in if code == 0 then 0 else runIO (prim_runIn "." ["stty", "sane"])
+
+-- `stty raw -echo min 1 time 0`：原始模式，逐字节阻塞读。
+termEnterRaw : Int -> Int
+termEnterRaw _ = runIO (prim_runIn "." ["stty", "raw", "-echo", "min", "1", "time", "0"])
+
+-- Esc 序列探测用：0.1s 超时读（readByte 返回 -1 = 无后续字节）。
+termReadTimeout : Int -> Int
+termReadTimeout _ = runIO (prim_runIn "." ["stty", "min", "0", "time", "1"])
+
+-- 恢复阻塞读。
+termReadBlock : Int -> Int
+termReadBlock _ = runIO (prim_runIn "." ["stty", "min", "1", "time", "0"])
+
+-- 读 1 字节；EOF 或超时返回 -1。
+termReadByte : Int -> Int
+termReadByte _ =
+  let
+    s = runIO (prim_readBytes 1)
+  in case strUnpack s of
+    [] => 0 - 1
+    b :: rest => b
+
+-- 终端列数；失败默认 80。
+termWidth : Int -> Int
+termWidth _ =
+  let
+    path = "${termTmpPath 0}.size"
+    _ = runIO (prim_runIn "." ["sh", "-c", "stty size > ${shellQuote path}"])
+    text = case readText path of
+      Err e => ""
+      Ok s => trim s
+    _ = rmFile path
+    parts = filter (\p => p /= "") (split " " text)
+  in case parts of
+    _ :: cols :: rest => case parseDigitsInt cols of
+      Just n => if n > 0 then n else 80
+      Nothing => 80
+    _ => 80
+
+parseDigitsInt : String -> Maybe Int
+parseDigitsInt s = if s == "" then Nothing else parseDigits (strUnpack s) 0
+
+parseDigits : List Int -> Int -> Maybe Int
+parseDigits [] acc = Just acc
+parseDigits (c :: rest) acc =
+  if c >= 48 && c <= 57 then parseDigits rest (acc * 10 + (c - 48)) else Nothing
+
+writeOut : String -> Int
+writeOut s = runIO (prim_print s)

@@ -3,7 +3,7 @@
 本文是编译器内部实现参考：Core 类型论的表示、NbE / 定义性相等、双向精化器的规则、
 擦除与 case 可达性的实现，以及 codegen 侧的护栏。**用户可见的类型规则**见
 [type-system.md](type-system.md)（quantity/线性见 [qtt.md](qtt.md)）；模块职责与输出模型见
-[compiler.md](compiler.md)；当前边界见 [limits.md](limits.md)。
+[compiler.md](compiler.md)。
 
 ## 1. Core 表示
 
@@ -27,8 +27,11 @@ data Term where
 - 值：`VType` / `VPi` / `VLam`（闭包）/ `VNeutral` / `VMeta` / `VCon` / `VCase` /
   `VApp`（卡住的应用，禁止静默丢实参）/ 字面量 / `VIf`；neutral 头是
   `NVar name level spine` 或 `NGlobal name spine`。
-- `Rig` 是三值格子（`Rig0` / `Rig1` / `RigOmega`），当前只产生前两个；**读取判据只有
-  `rigIsErased`**，构造入口只有 `rigOfBinder`，`Core` 之外不得模式匹配 `Rig`。
+- `Rig` 是三值格子（`Rig0` / `Rig1` / `RigOmega`），三值都由精化器产生（M38：显式未标注
+  binder 默认 ω）；组合走 `Core.Term` 的 `rigAdd` / `rigScale` / `rigJoin`（唯一实现，
+  规则见 [qtt.md](qtt.md) §2）。**读取判据只有 `rigIsErased`**，默认构造入口是
+  `rigOfBinder`（带源码 quantity 的路径走精化器的 `rigForPi`），`Core` 之外不得模式匹配
+  `Rig`。
 - `Level` 不透明：内部是 `Level Int`（字段 `levelToInt`），外部只能经 `levelZero` / `levelSucc` /
   `levelMax` / `levelToInt` / `levelEq` / `levelLt` 访问，不得自行做 Int 算术。
 - `Sols` 携带解表（list 权威 + 哈希索引）、元变量创建深度索引与定义值缓存
@@ -62,8 +65,10 @@ data Term where
 1. **空 spine**：解 = rhs；就地检查 rhs 的自由变量都早于元变量创建深度（不会逃逸作用域）。
 2. **Miller pattern**：spine 全是互不相同的局部中性变量 ⇒ 解 = `λx1..xn. body`，spine
    变量抽象成对应 λ 绑定，其余自由变量必须早于创建深度。
-3. **其它形状**（真正的高阶 / 非 pattern）直接报 `TC_CannotSolveHigherOrder`，不再做
-   「头一致」的临时提取。
+3. **非 pattern 形状的兜底**：先走 M13 遗留的「头一致」提取（`solveMetaHoLegacyFuel`，
+   有 fuel 上限）——rhs 是 `VMeta`，或 `NVar` / `NGlobal` 中性头且实参数不少于 spine 时，
+   先解元变量 / 把多出的实参拆给头部求解，再比较剩余 spine；这是保守近似，不是合一理论的
+   一部分。提取不到才报 `TC_CannotSolveHigherOrder`。
 
 元变量创建深度随 `Sols` 携带（`solsDepth`），求解点就地检查；已解元变量进项只有两个入口：
 精化期 `Elab.Meta.zonkTerm`（深度感知）与序列化/摘要 `Core.Eval.substSolvedMetasAtTbl`
@@ -101,6 +106,10 @@ data Term where
 - 擦除检查在 `check` 与 `compile` 都跑：运行时位置引用被擦除绑定 / 类型级定义 / `TPi`
   报错。类型族（结果以 `Type` 收尾的 Pi 链）整体擦除；`axiom` 强制进类型级分区，运行时
   使用报 `CG_AxiomAtRuntime`。
+- **表现层 cast（M39 / D27）**：`prim_erase` 是隐藏 intrinsic，`IntrinsicOp.OpIdentity`
+  让求值期把它归约为唯一实参；`Core.Eval.applyValueFuel` 另外在**函数位置**直接消去，
+  避免 `(prim_erase h) k` 累积成多实参中性项。因此 cast 对定义性相等 / 正规化 / interp
+  完全透明，不改变 0/1/ω 判据（应用记 `Rig1`，不放大线性用量）。
 
 ## 6. case 规范形与可达性
 
@@ -122,6 +131,10 @@ data Term where
 
 - **构造子字段形状单一真源**：`Codegen.Decl.ctorKeepFlags` 从构造子 telescope 的 rig 算出
   keep flags；类型声明、构造子应用、case 分支绑定三处消费同一份并校验 rig。
+- **不透明字段单一真源（M39）**：`Codegen.Decl.ctorOpaqueFlagsOf` 与 keep flags 逐位对齐，
+  由「运行时类型是否不可命名」判据算出；类型声明的 `Obj.t`、arity/used-levels 计算、
+  构造子实参 `Obj.magic` 三处共用。精化器侧的 binder cast 必须用同一判据
+  （`Elab.Meta.valueOpaqueScoped`），两侧不一致就会在 `ocamlopt` 处报字段类型错配。
 - **de Bruijn 作用域护栏**：`Core.varIndex` 越界返回 `-1`（不是静默 0）；
   `Codegen.Erase.checkAllDefScopes` 对运行时会生成的定义体做作用域校验，越界报内部错误。
 - **名字护栏**：`ensureUniqueOcamlNames` 对实际生成的 `v_*` / `t_*` / `C_*` 做族内去重。

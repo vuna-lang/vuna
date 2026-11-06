@@ -1,0 +1,9 @@
+import Kind
+
+-- 导入模块的类型名在值位置作为显式类型实参（与本地 `data` 名同一规则）；
+-- `Maybe` 来自隐式自动导入的 Prelude，同样走「导入类型名作为项」路径。
+arityK : (f : Type -> Type) -> Int
+arityK f = 1
+
+main : Int
+main = Kind.arity Kind.Payload + arityK Maybe

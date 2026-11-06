@@ -106,4 +106,4 @@ teleGlobalEnv n = teleGlobalEnvGo n 0
 teleGlobalEnvGo : Int -> Int -> List Value
 teleGlobalEnvGo remaining i =
   if remaining <= 0 then []
-  else VNeutral (NGlobal ("#ov" ++ strFromInt i) []) :: teleGlobalEnvGo (remaining - 1) (i + 1)
+  else VNeutral (NGlobal "#ov${i}" []) :: teleGlobalEnvGo (remaining - 1) (i + 1)

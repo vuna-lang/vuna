@@ -104,17 +104,17 @@ renderJson JNull = "null"
 renderJson (JBool b) = if b then "true" else "false"
 renderJson (JNum n) = strFromInt n
 renderJson (JStr s) = renderJsonString s
-renderJson (JArr xs) = "[" ++ join "," (map renderJson xs) ++ "]"
-renderJson (JObj kvs) = "{" ++ join "," (map renderMember kvs) ++ "}"
+renderJson (JArr xs) = "[${join "," (map renderJson xs)}]"
+renderJson (JObj kvs) = "{${join "," (map renderMember kvs)}}"
 
 renderMember : Pair String Json -> String
-renderMember kv = renderJsonString (firstOf kv) ++ ":" ++ renderJson (secondOf kv)
+renderMember kv = "${renderJsonString (firstOf kv)}:${renderJson (secondOf kv)}"
 
 renderJsonString : String -> String
 renderJsonString s =
   let
     body = join "" (map escapeChunk (strUnpack s))
-  in "\"" ++ body ++ "\""
+  in "\"${body}\""
 
 -- 每字符一块（无需转义时退化为单字符），拼起来等价于逐字符转义。
 escapeChunk : Int -> String
@@ -125,7 +125,7 @@ escapeChunk 9 = "\\t"
 escapeChunk 13 = "\\r"
 escapeChunk 8 = "\\b"
 escapeChunk 12 = "\\f"
-escapeChunk c = if c < 32 then "\\u" ++ pad4 (hexLower c) else strPack [c]
+escapeChunk c = if c < 32 then "\\u${pad4 (hexLower c)}" else strPack [c]
 
 pad4 : String -> String
 pad4 s = repeat (4 - byteLength s) "0" ++ s
@@ -149,7 +149,7 @@ parseJson source =
   let
     chars = skipJsonWs (strUnpack source)
   in case parseValue (jsonFuel chars) chars of
-    Err e => Err ("json: " ++ e)
+    Err e => Err "json: ${e}"
     Ok (Pair v rest) =>
       if length (skipJsonWs rest) == 0 then Ok v else Err "json: trailing characters"
 
@@ -162,24 +162,23 @@ parseValue : Int -> List Int -> Result (Pair Json (List Int))
 parseValue fuel chars = if fuel <= 0 then Err "json: parser fuel exhausted (internal)"
 else case chars of
   [] => Err "unexpected end of input"
-  c :: rest =>
-    if c == 123 then parseObject (fuel - 1) rest
-    else if c == 91 then parseArray (fuel - 1) rest
-    else if c == 34 then parseStringBody (fuel - 1) rest []
-    else if c == 116 then parseLiteral "true" (JBool True) chars
-    else if c == 102 then parseLiteral "false" (JBool False) chars
-    else if c == 110 then parseLiteral "null" JNull chars
-    else if isDigitChar c || c == 45 then parseNumber chars
-    else Err ("unexpected character " ++ strFromInt c)
+  c :: rest => case c of
+    123 => parseObject (fuel - 1) rest
+    91 => parseArray (fuel - 1) rest
+    34 => parseStringBody (fuel - 1) rest []
+    116 => parseLiteral "true" (JBool True) chars
+    102 => parseLiteral "false" (JBool False) chars
+    110 => parseLiteral "null" JNull chars
+    _ => if isDigitChar c || c == 45 then parseNumber chars else Err "unexpected character ${c}"
 
 isDigitChar : Int -> Bool
 isDigitChar c = c >= 48 && c <= 57
 
 parseLiteral : String -> Json -> List Int -> Result (Pair Json (List Int))
 parseLiteral want value chars = case splitAtCharCount (strLength want) chars of
-  Nothing => Err ("expected " ++ want)
+  Nothing => Err "expected ${want}"
   Just (Pair got rest) =>
-    if strPack got == want then Ok (Pair value rest) else Err ("expected " ++ want)
+    if strPack got == want then Ok (Pair value rest) else Err "expected ${want}"
 
 parseObject : Int -> List Int -> Result (Pair Json (List Int))
 parseObject fuel chars = if fuel <= 0 then Err "json: parser fuel exhausted (internal)"
@@ -265,7 +264,7 @@ else case chars of
     114 => parseStringBody (fuel - 1) rest (13 :: acc)
     116 => parseStringBody (fuel - 1) rest (9 :: acc)
     117 => parseUnicodeEscape (fuel - 1) rest acc
-    _ => Err ("invalid escape \\" ++ strPack [c])
+    _ => Err "invalid escape \\${strPack [c]}"
 
 parseUnicodeEscape : Int -> List Int -> List Int -> Result (Pair Json (List Int))
 parseUnicodeEscape fuel chars acc = if fuel <= 0 then Err "json: parser fuel exhausted (internal)"

@@ -1,0 +1,64 @@
+module Vuna.Repl.Client (runReplClient) where
+
+-- Vuna.Repl.Client：`vuna repl --client ADDR` —— 一次调用发一个请求、收一个响应。
+--
+-- 用途：agent / 脚本在**独立进程**里驱动常驻 REPL server（每次 bash 调用都是新 shell，
+-- 不能指望同一个进程的 stdin 会话）。stdin 内容是一个 JSON-RPC 请求 **body**（不带帧头），
+-- 客户端补 `Content-Length` 帧、连接 ADDR、读回一帧并把响应 body 打到 stdout。
+--
+-- 不加载包上下文（CLI 在解析位置参数之前分流）：客户端只做传输，与仓库/包无关。
+-- 退出码：收到响应 0；连接失败（宿主异常，运行时报 `net: connect: ...`）或响应不完整 2。
+import Vuna.Compiler.Common
+import Vuna.Json.Frame
+import Base.IO
+
+clientChunkSize : Int
+clientChunkSize = 65536
+
+-- 窗口大小上限（读 stdin / 读一帧的循环守卫）。
+clientFuelBound : Int
+clientFuelBound = 1073741824
+
+-- 读 stdin 全部字节（一次调用的请求 body）。
+readStdinAll : String -> Int -> String
+readStdinAll acc fuel = if fuel <= 0 then acc
+else
+  let
+    chunk = runIO (prim_readBytes clientChunkSize)
+  in if chunk == "" then acc else readStdinAll (acc ++ chunk) (fuel - 1)
+
+-- 从连接读一帧的 body（只处理一个响应；多余字节丢弃）。
+readOneFrame : Int -> String -> Int -> Maybe String
+readOneFrame conn buf fuel = if fuel <= 0 then Nothing
+else case splitHeaderBlock buf of
+  Just (Pair header rest) => case contentLengthOf header of
+    Just len => if strLength rest >= len then Just (substring 0 (natFromInt len) rest)
+    else
+      let
+        chunk = runIO (prim_netRecv conn clientChunkSize)
+      in if chunk == "" then Nothing else readOneFrame conn (rest ++ chunk) (fuel - 1)
+    Nothing => Nothing
+  Nothing =>
+    let
+      chunk = runIO (prim_netRecv conn clientChunkSize)
+    in if chunk == "" then Nothing else readOneFrame conn (buf ++ chunk) (fuel - 1)
+
+runReplClient : String -> Int
+runReplClient addr =
+  let
+    body = readStdinAll "" clientFuelBound
+    conn = runIO (prim_netConnect addr)
+    _ = runIO (prim_netSend conn (renderFrameBody body))
+    resp = readOneFrame conn "" clientFuelBound
+    _ = runIO (prim_netClose conn)
+  in case resp of
+    Nothing =>
+      let
+        _ =
+          runIO
+            (prim_eprint "[vuna-repl-client] ${addr}: 响应不完整（连接中断或协议错误）\n")
+      in 2
+    Just body2 =>
+      let
+        _ = runIO (prim_print "${body2}\n")
+      in 0

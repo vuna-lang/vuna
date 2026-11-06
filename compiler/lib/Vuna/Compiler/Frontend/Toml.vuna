@@ -91,8 +91,7 @@ stripCR [] = []
 stripCR (c :: rest) = if c == 13 then stripCR rest else c :: stripCR rest
 
 locPrefix : String -> Int -> String
-locPrefix path line =
-  if path == "" then "line " ++ strFromInt line ++ ": " else path ++ ":" ++ strFromInt line ++ ": "
+locPrefix path line = if path == "" then "line ${line}: " else "${path}:${line}: "
 
 failAt : String -> Int -> String -> Result a
 failAt path line msg = Err (locPrefix path line ++ msg)
@@ -171,7 +170,7 @@ else case cs.cursorChars of
     102 => parseStringChars (fuel - 1) path startCs (advanceCursor cs) (12 :: acc)
     34 => parseStringChars (fuel - 1) path startCs (advanceCursor cs) (34 :: acc)
     92 => parseStringChars (fuel - 1) path startCs (advanceCursor cs) (92 :: acc)
-    _ => failAt path cs.cursorLine ("unknown escape sequence \\" ++ strPack [c])
+    _ => failAt path cs.cursorLine "unknown escape sequence \\${strPack [c]}"
 
 -- 整数：可选前导 '-'，至少一位十进制数字；小数点/尾随字母报错。
 parseInteger : String -> TomlCursor -> Result (Pair Int TomlCursor)
@@ -312,7 +311,7 @@ memSectionPath section (s :: rest) = samePath section s || memSectionPath sectio
 
 sectionSuffix : List String -> String
 sectionSuffix [] = ""
-sectionSuffix (section@(first :: rest)) = " in [" ++ joinDots section ++ "]"
+sectionSuffix (section@(first :: rest)) = " in [${joinDots section}]"
 
 hasEntry : List String -> String -> List TomlEntry -> Bool
 hasEntry section key [] = False
@@ -326,7 +325,7 @@ else case parseValue path (skipBlank cs) of
   Ok (Pair value afterValue) => case expectEol path afterValue of
     Err e => Err e
     Ok afterLine =>
-      if hasEntry section key entries then failAt path keyLine ("duplicate key \"" ++ key ++ "\"" ++ sectionSuffix section)
+      if hasEntry section key entries then failAt path keyLine "duplicate key \"${key}\"${sectionSuffix section}"
       else parseTomlLoop (fuel - 1) path afterLine section seen
         (TomlEntry section key value keyLine :: entries)
 
@@ -340,13 +339,13 @@ else case parseBareKey path cs of
       c :: rest =>
         if c == 61 then parseEntryValue (fuel - 1) path (TomlCursor rest line (col + 1)) cs.cursorLine key section
           seen entries
-        else failAt path cs.cursorLine ("expected '=' after key \"" ++ key ++ "\"")
+        else failAt path cs.cursorLine "expected '=' after key \"${key}\""
 
 parseSectionLine : Int -> String -> TomlCursor -> a -> List (List String) -> List TomlEntry -> Result (List TomlEntry)
 parseSectionLine fuel path cs section seen entries = if fuel <= 0 then Err "DT: toml fuel exhausted (internal: toml parser made no progress)"
 else case parseSectionPath path (advanceCursor cs) of
   Err e => Err e
-  Ok (Pair newSection afterHeader) => if memSectionPath newSection seen then failAt path cs.cursorLine ("duplicate section [" ++ joinDots newSection ++ "]")
+  Ok (Pair newSection afterHeader) => if memSectionPath newSection seen then failAt path cs.cursorLine "duplicate section [${joinDots newSection}]"
   else case expectEol path afterHeader of
     Err e => Err e
     Ok afterLine => parseTomlLoop (fuel - 1) path afterLine newSection (newSection :: seen) entries

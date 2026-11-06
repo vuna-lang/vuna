@@ -7,12 +7,13 @@
 ## 模块地图
 
 `compiler/` 是编译器包（seed 的唯一来源）。入口 `compiler/app/Main.vuna` 的 import 闭包
-就是 `seed/` 的内容（当前 **75 个 `.ml` / 76 个文件**，以 `seed/` 与
-`nix/seed-count.txt` 为准）；工具链（fmt/lint/repl/doc/test/lsp）在根包 `lib/`，不在闭包里。
+就是 `seed/` 的内容（规模以 `seed/` 与 `nix/seed-count.txt` 为准）；工具链
+（fmt/lint/repl/doc/test/lsp）在根包 `lib/`，不在闭包里。
 代码按**目录即层**组织：Frontend → Packages → Loader → Core → Elab → Codegen → Driver，
 同层模块可互相 import，上层只能依赖下层。每层 `X.vuna` 是**门面**：只 import 子模块并选择性
-重导出，实现与数据定义都在 `X/` 的叶子模块。全包 **55 个模块**（54 个导出 + 内部 `Debug`）；
-目标每模块 ≤~800 行（当前超过目标的最大模块是 `Elab/Trait.vuna`，约 1.2k 行）。
+重导出，实现与数据定义都在 `X/` 的叶子模块。全包 **64 个模块**（60 个导出 + 内部
+`Debug` / `CacheFormat` / `Driver.Iface` / `Driver.Owner`）；目标每模块 ≤~800 行
+（`Codegen.Term` / `Driver.Dt` / `Elab.Trait` 等已超目标，约 1.1–1.2k 行）。
 
 | 模块 | 职责 | 关键入口 |
 | --- | --- | --- |
@@ -42,29 +43,32 @@
 | `Elab.Dict` | 字典编码的表示与实例搜索：字典类型/实例头识别、`conv` 头匹配、实例搜索（递归解 ctx / 约束实例）、`==`/比较运算符特化（Int/String 内建或 Eq/Ord 字典；无泛型结构比较兜底） | `searchInstance`、`dictFamilyNameOf`、`cmpRuntimeName`、`deferEqDict` |
 | `Elab.Term` | 项的双向检查（与 case 规则互递归的核心）：`inferE`/`checkE`/应用/隐式插入/类型检查 | `inferE`、`checkE`、`checkApp`、`checkType` |
 | `Elab.Data` | `data` 声明与构造子/索引擦除：`elabCtor`、`elabDataHead(s)`、`elabDataBodies`、擦除候选；校验 kind 结果层级与构造子字段 sort | `elabDatas`、`ctorFieldTerms`、`checkCtorFieldSorts` |
-| `Elab.Trait` | trait/instance 声明与实例体：类参数 kind、方法投影、实例头检查（重复/相干性；无命名实例、支持约束实例 ctx）、方法体精化；M32 起实例 ctx 与顶层签名 ctx 共用 `elabConstraintDomains`（含类参数 kind 校验），隐式字典 binder 按 Rig1 绑定；方法签名带 span，实例名=单类前缀+完整 head 名 | `checkInstanceHeads`、`elabInstanceBodies`、`elabConstraintDomains`、`instanceName` |
+| `Elab.Trait` | trait/instance 声明与实例体：类参数 kind、方法投影、实例头检查（重复/相干性；无命名实例、支持约束实例 ctx）、方法体精化；M32 起实例 ctx 与顶层签名 ctx 共用 `elabConstraintDomains`（含类参数 kind 校验），隐式字典 binder 按 RigΩ 绑定（运行时保留、可多次使用）；方法签名带 span，实例名=单类前缀+完整 head 名 | `checkInstanceHeads`、`elabInstanceBodies`、`elabConstraintDomains`、`instanceName` |
 | `Elab.InstName` | 实例名生成规则（单类前缀 + 完整 head 名）的唯一实现 | `instanceName` |
-| `Elab.Driver` | 精化入口与程序组装：签名（M32：约束 ctx → 隐式字典 binder）→ data/trait/instance → 定义体（声明的字典目标先解到 ctx binder，剩余才提升）→ zonk/终止性检查 → `DtProgram`；洞目标。接口摘要路径用 `elabProgramFullWithAux`（起始 Ec 由依赖摘要注入；termAux 只喂终止性分析） | `Elab.Driver.elabProgramFull`、`elabProgramFullWithAux`、`goalsOfProgram`、`dtEvalExprIn` |
+| `Elab.Driver` | 精化入口与程序组装：签名（M32：约束 ctx → 隐式字典 binder）→ data/trait/instance → 定义体（声明的字典目标先解到 ctx binder，剩余才提升）→ zonk/终止性检查 → `DtProgram`；洞目标（含洞名）。M40 把「到定义体/实例体完成」的 `ElabCore` 与严格收尾拆开：`goalsOfProgramTolerant` 只读 core 的 goals，未解洞也能给目标+上下文（供 `vuna goal` / LSP）。接口摘要路径用 `elabProgramFullWithAux`（起始 Ec 由依赖摘要注入；termAux 只喂终止性分析） | `Elab.Driver.elabProgramFull`、`elabProgramFullWithAux`、`goalsOfProgram`、`goalsOfProgramTolerant`、`dtEvalExprIn` |
 | `Elab.Termination` | 终止性检查：调用图 + SCC，结构下降/守卫 Int 判据（无包级豁免）。`checkTerminationDeclsWith` 允许把依赖包声明只作为 SCT 上下文、只报告本包函数的失败 | `checkTerminationDecls`、`checkTerminationDeclsWith` |
 | `Elab.Prelude` | 把 `Intrinsics` 表翻译成 DT prelude globals（签名）；没有第二份名字/签名表 | `preludeGlobals`、`builtinTyName`、`cmpBuiltinTyName` |
 | `Elab.Match` | 多 clause 模式矩阵降级：构造子列 → `case`、字面量列 → `if` 链（纯 Ast→Ast） | `multiToExpr`、`buildColumnExpr` |
 | `Elab.Records` | `record` 的语法降级：记录 → 单构造器 `data`、字段访问/更新（纯 Ast→Ast） | `desugarRecords`、`RecordInfo` |
 | `Elab.Derive` | `deriving` 的实例生成（展开成等价 `instance`，交给既有实例精化） | `expandDerivings` |
 | `Codegen`（门面） | DT 擦除 codegen 的稳定入口；重导出 `Codegen.Assembly` 与 `Codegen.Split` | `checkDtProgram`、`generateDtSplitProgram` |
-| `Codegen.Decl` | OCaml 名字编码（sanitize/前缀/保留字）+ 跨单元引用限定（`Unit.name`）+ 变体类型声明；构造子字段形状 keep flags 的实际消费点；内置身份按完整符号（canonical Bool 族不进运行时变体） | `ctorOcamlName`、`qualValueText`、`qualCtorText`、`qualTypeText`、`genTypeDecls`、`ctorKeepFlags` |
+| `Codegen.Decl` | OCaml 名字编码（sanitize/前缀/保留字）+ 跨单元引用限定（`Unit.name`）+ 变体类型声明；构造子字段形状 keep flags 与不透明字段 flags（`ctorOpaqueFlagsOf`）的实际消费点；内置身份按完整符号（canonical Bool 族不进运行时变体） | `ctorOcamlName`、`qualValueText`、`qualCtorText`、`qualTypeText`、`genTypeDecls`、`ctorKeepFlags`、`ctorOpaqueFlagsOf` |
 | `Codegen.Erase` | 擦除检查、de Bruijn 作用域/名字护栏、依赖分析与 SCC 分组；axiom 强制进类型级分区，运行时使用报 `CG_AxiomAtRuntime` | `checkAllErasure`、`checkAllDefScopes`、`ensureUniqueOcamlNames`、`checkNoAxiomRuntime` |
 | `Codegen.Term` | 项 → OCaml（擦除驱动）+ DT 运行时前缀（`bi_*`、`dtp_*`、IO 桥接）+ M38 定义位置表/异常报告器；全局名 → runtime 映射消费 `Intrinsics` | `dtRuntime`、`dtRuntimeWith`、`dtDefLocTable`、`genDtHook`、`genGroups` |
 | `Codegen.Assembly` | 同一份 `DtProgram` 的装配与检查入口 | `prepareDtProgram`、`genUnitText`、`mainHook`、`checkDtProgram` |
 | `Codegen.Split` | **唯一** codegen 生成器：逐模块 split 的声明归属表与分文件装配 | `generateDtSplitProgram` |
 | `Driver.Split` | 输出文件模型与构建脚本生成：`SplitFile`、依赖序、按内容哈希增量的 `build.sh` | `SplitFile`、`buildScript`、`writeSplitFiles`、`writeSplitFilesIfChanged` |
+| `Driver.Owner` | **声明归属表**（从 `Codegen.Split` 抽出）：声明名 / 实例名 / 派生实例名 / trait 投影名 / `Dict_` → 模块；codegen 与接口切分共用 | `splitMetaOf`、`splitOwnerEntriesOfModules`、`splitDefOwnerOf` |
 | `Driver.Cache` | 接口摘要载体（TTC 思路）：`CachedProgram` = 闭合 datas / defs（含 body）/ globals / insts / classes（**不含 sols/next**）；写侧按出现点深度 zonk，读侧 `cachedProgramValid` 校验（无 meta/负索引/自由变量；body 擦除位置的未解 meta 允许并按包段重编号） | `cachedOfProgram`、`cachedProgramValid`、`shiftCachedProgram`、`summaryMetaSegment` |
-| `Driver.Dt` | DT 路径 facade（供 `Compile` / `CompilerCli` / `Interp` / LSP 使用）：单一 `PackageContext` 加载形状；内存源码检查/洞目标、`dtMainKind`、`dtEvalExprInfo`；接口摘要路径的起始 Ec 组装（`depStartOf`） | `dtCheck`、`dtCheckLibrary`、`dtCheckPackageWithDeps`、`dtCheckLibraryPackageWithDeps`、`dtCheckSource`、`dtGoalsSource`、`dtSplitProject`、`dtEvalFile`、`dtMainKind` |
-| `Driver.Compile` | 编译入口：`PackageContext` 检查/编译、目录式 codegen、构建脚本执行；build meta（确定性/依赖闭包哈希/同哈希跳过）与递归建目录；check 缓存 + 接口摘要路径（`VUNA_ELAB_FULL=1` 强制全量） | `checkPackage`、`compileToDir`、`buildMetaText`、`metaUpToDate`、`writeBuildMeta` |
+| `Driver.Iface` | **模块级接口**（TTC 思路）：`ModuleIface`（闭合产物 + 已解析 decls + exports/fixities/imports + `miIfaceHash`/`miDepHashes`/`miSource`）、per-module 文件 + `PackageManifest`（模块名→文件/源信息/接口哈希）；按归属把 `DtProgram` 切成每模块摘要、强哈希、原子读写 | `ifaceOfPackage`、`readPackageIface`、`writePackageIface`、`packageIfaceValid` |
+| `Driver.Dt` | DT 路径 facade（供 `Compile` / `CompilerCli` / `Interp` / LSP 使用）：单一 `PackageContext` 加载形状；内存源码检查/洞目标、`dtMainKind`、`dtEvalExprInfo`；接口摘要路径的起始 Ec 组装（`depStartOf`）与接口/预置模块入口 | `dtCheck`、`dtCheckWithProgramParts`、`dtCheckPackageWithIfacesParts`、`dtSplitProjectParts`、`dtSplitProjectWithIfaces`、`CheckedPackage` |
+| `Driver.Compile` | 编译入口：`PackageContext` 检查/编译、目录式 codegen、构建脚本执行；build meta 与递归建目录；check 缓存 + 依赖接口校验（`depIfacesOf`）+ 接口影子写（`writeIfaceShadow`）；`VUNA_ELAB_FULL=1` 强制全量 | `checkPackage`、`compileToDir`、`depIfacesOf`、`buildMetaText`、`metaUpToDate`、`writeBuildMeta` |
 | `Driver.CompilerCli` | 编译器自己的 CLI（`vuna-compiler`）；含受限进程执行入口 `runIn`；workspace check/build 单元、`build --package`、`version` | `runCompilerCli`、`compilerUsageLines`、`runIn` |
 | `Version` | 版本号唯一真源；产品 CLI / `vuna-compiler` / build meta / VSCode 探测共用 | `vunaVersion` |
 
-`compiler/vuna.toml` 的 `[export]` 列出全部 54 个导出模块（内部 `Debug` 不在内）；
-`[capabilities] effects` 声明五个能力（编译器直接使用 `prim_*`）。工具链模块不在此包。
+`compiler/vuna.toml` 的 `[export]` 列出全部 60 个导出模块（内部 `Debug` / `CacheFormat` /
+`Driver.Iface` / `Driver.Owner` 不在内）；`[capabilities] effects` 声明六个能力（编译器直接
+使用 `prim_*`）。工具链模块不在此包。
 
 ## 根包工具链模块（`lib/`，不进 seed）
 
@@ -75,7 +79,7 @@
 | `Vuna.Files` | 目录遍历小工具（fmt/doc/test/Index 共用，`collectVunaFiles`） |
 | `Vuna.Fmt`（+ `Fmt.Comment`/`Decl`/`Expr`/`Util`） | 源码格式化器（`vuna fmt`，parse → 规范打印；门面只导出 `formatSourceWith`） |
 | `Vuna.Lint`（+ `Lint.Rules`/`Fix`/`Diagnostics`） | 风格检查与自动修复（`vuna lint`）；规则见 [lint.md](lint.md) |
-| `Vuna.Repl` | 交互式 REPL（`vuna repl`；表达式经 DT 求值，顶层定义需先写签名） |
+| `Vuna.Repl` | 交互式 REPL（`vuna repl`；定义自动签名、行编辑/Ctrl-R、`:load` 文件/目录/模块；表达式经 DT 求值） |
 | `Vuna.Doc`（+ `Doc.Types`/`Comments`/`Model`/`Prose`/`Html`/`Run`） | docstring 提取 + 单文件交互 HTML（`vuna doc`）；见 [api-docs.md](api-docs.md) |
 | `Vuna.Sig` | 语法级类型打印单一真源（api / doc / search 共用） |
 | `Vuna.Search`（+ `Search.Types`/`Query`/`Run`） | 名称 / docstring / 类型检索（`vuna search`） |
@@ -109,32 +113,47 @@
 `check` 只做精化 + 擦除检查并返回警告，不生成代码；包级检查：有 `app/Main.vuna` 的可执行包
 检查该入口，库包以 `[export].modules` 为根。
 
-## 接口摘要（check 期的 TTC 式模块化精化）
+单文件夹具没有单独的加载路径：它按最近 `vuna.toml` 取包上下文（无 manifest 为 base-only），
+之后与包内模块走同一 flatten / 精化 / codegen——只有包上下文不同，没有第二套加载语义。
 
-`vuna check` 的包级检查可以**只精化本包声明**：依赖包的 `DtProgram` 被压缩成闭合的接口
-摘要（`Driver.Cache.CachedProgram`），根包从这份摘要重建精化起始状态。模型参考 Idris2 的
-TTC：**摘要只含闭合结果，不携带 elab 状态**（没有跨包 `sols` / `next` / dict goals）。这一步
-只服务 `check`；`build` / `compile`（codegen）仍是整闭包全量精化（模块级 codegen 缓存见 C35）。
+## 接口摘要（TTC 式模块化精化）
+
+`vuna check` / `build` / `compile` 可以**只精化本包声明**：依赖包的模块产物被压缩成闭合的
+接口摘要，根包从接口重建精化起始状态。模型参考 Idris2 的 TTC：**摘要只含闭合结果，不携带
+elab 状态**（没有跨包 `sols` / `next` / dict goals）。
+
+粒度分两层：
+
+- **包级摘要**（M34.5 起）：`Driver.Cache.CachedProgram`，一个包一份 datas / defs / globals /
+  insts / classes；
+- **模块级接口**（M34.5 S1/S2/S3）：`Driver.Iface.ModuleIface`，每模块一个
+  `<Module.Name>.iface` + 包级 `manifest`（S3；写侧只重写接口哈希变化的模块），依赖侧
+  按模块装载、逐项校验。设计、字段、失效判定见
+  [cache.md](cache.md)。
 
 ### 数据流
 
 ```text
-check pkg
-  ├─ 缓存命中（key = 源哈希 + 依赖哈希 + manifest + 编译器指纹 + schema）→ Ok
+check / build pkg
+  ├─ 包级 check 缓存命中（key = 源哈希 + 依赖哈希 + manifest + 编译器指纹 + schema）→ Ok
   └─ 未命中
-      ├─ VUNA_ELAB_FULL=1 → 全量：elabProgramFull（整闭包）→ 写缓存
-      └─ depProgramsOf：按**传递依赖闭包**读每个依赖的 CachedProgram
-            ├─ 任一缺失 / cachedProgramValid = False → 全量回退
-            └─ 全部可用 → 摘要路径：
-                  depStartOf（起始 Ec + globals）
-                    → elabProgramFullWithAux（只喂本包 decls；依赖 decls 只作终止性 SCT 上下文）
+      ├─ VUNA_ELAB_FULL=1 → 全量：loadProject + elabProgramFull（整闭包）
+      └─ depIfacesOf：逐依赖包读 iface.pkg（S4：本包有干净模块时走增量）
+            ├─ schema/编译器/包名、模块源哈希、miDepHashes 链、源码模块集合 任一失败
+            │     → 全量回退（并重写本包接口）
+            └─ 全部可用 → 接口路径（无干净模块 = 包内全量；S4 有干净模块 = 只精化脏模块）：
+                  modulesOfIfaces + cleanModules → Loader.loadProjectWithPreloaded（依赖 + 干净模块零 parse）
+                    → resolveProjectKeeping（种子模块已解析，跳过）
+                    → depStartOf（起始 Ec + globals；依赖 artifacts 来自模块摘要）
+                    → elabProgramFullWithAux（只喂脏模块 decls + 入口；干净/依赖 decls 只作终止性/record 上下文）
                     → checkDtProgram（擦除/名字护栏；datas = 依赖 datas + 本包 datas）
-                    → 写本包摘要（cachedOfProgram，按出现点深度 zonk）
+                    → 写本包 per-module 接口（ifaceOfPackage：按归属切分 + zonk + 接口哈希）
 ```
 
 摘要字段（每包只存**自己的声明**，依赖闭包由读方逐包合并）：`datas`（kind + 构造子类型）、
 `defs`（type + body）、`globals`（签名面）、`insts`（tele / 约束 / 头）、`classes`（投影 /
-字段类型）。
+字段类型）、`miDecls`（已解析源码声明，供 record 降级与终止性 SCT 使用）、exports /
+fixities / imports / capabilities、`miSource`、`miIfaceHash`、`miDepHashes`。
 
 ### 硬不变量
 
@@ -145,21 +164,28 @@ check pkg
 2. 摘要项必须**闭合、无 `TMeta`、无负 de Bruijn 索引**；已解元变量按出现点深度 quote
    （`Core.Eval.substSolvedMetasAtTbl`，`quote 0` 会把 binder 下的解拍成负/错位索引，而
    `lookupEnv` 对 `i <= 0` 取最内层变量 ⇒ 静默取错 binder）。
-3. 失败语义：摘要缺失/不闭合 ⇒ 回退全量；**摘要路径的 `Err` 必须上报**（绝不回退，否则吞掉
-   本包真实错误）。安全阀宁可慢，不静默漏检。
+3. 失败语义：摘要缺失/不闭合/校验失败 ⇒ 回退全量；**摘要路径的 `Err` 必须上报**（绝不回退，
+   否则吞掉本包真实错误）。安全阀宁可慢，不静默漏检。
 4. 精化器允许**擦除位置**的未解元变量：摘要里这类 meta 按包段 `(idx+1) << 30` 重编号，消费方
    当作新的未解元变量（只出现在不生成代码、不参与运行时比较的位置）。
 5. **record 降级需要依赖包的 record 头**：字段访问 / record 更新 / record 模式是语法降级
-   （`Elab.Records`），候选 record 来自**源码 decls**。摘要路径把依赖模块的 decls 作为
+   （`Elab.Records`），候选 record 来自**源码 decls**。接口路径把依赖模块的 `miDecls` 作为
    `termAux` 传入 `prepareDeclsWith`，只取 record 头参与降级、不精化它们——缺了它，依赖包
    类型上的字段访问会报 `unknown field`（如 `c.commentKind`）。
+6. **接口哈希链必须闭合**：`miIfaceHash` 覆盖导出面 + 导出定义体（不含 span / 源路径）；
+   `miDepHashes` 记录直接 import 的接口哈希，读侧逐项比对（包内模块也参与）。
 
 ### 已知边界
 
-- 接口粒度是**包**而非模块：依赖摘要包含该包被检查时的全部声明，因此依赖包里根包没有
-  import 的实例/类也会进入视图（过近似）。模块级接口与模块级精化见 roadmap 第 2 步。
-- 依赖 `defVals` 未序列化：摘要路径的 delta 只能现算 body（只影响速度，不影响正确性）。
-- 残留擦除位 meta 依赖包段重编号；彻底方案是精化收尾时消除残 meta。
+- 接口物理单位是**模块**（per-module 文件 + manifest）；包内精化已按模块增量（S4：干净模块复用、脏性沿 import 保守传播）。
+- 依赖包的实例/类仍全部并入视图（过近似，与包级摘要一致）；模块签名隔离另立项。
+- codegen 已按单元缓存（S5/S7，默认开）；纯代码生成仍整包跑（生成占冷 build ~10–20%，
+  逐单元可并部分仅 7–8%，并行收益 <7%；见 [performance.md](performance.md) §9）。
+- LSP / REPL 消费接口默认开启（`VUNA_IFACE_TOOL=0` 关闭）：惰性闭包 + 会话缓存 + 单文件
+  增量 + 单模块写回已落地；残留擦除位 meta 依赖包段重编号、LSP-only 写回哈希由首次整包
+  check 自愈。
+- 快判默认内容哈希，`VUNA_CACHE_MTIME=1` 可开 mtime+size 快路径（5s 安全窗）；缓存载荷已有
+  framing + 损坏回退，但仍是 OCaml Marshal（显式自描述格式归后续，见 debt C32）。
 
 ## codegen 的表示
 
@@ -169,8 +195,12 @@ check pkg
 （`TBool`），`List`/`IO` 按完整符号生成普通变体；`case` 编译成 OCaml `match`、构造器直接
 构造变体。`Base.Nat.Nat` 同样不进运行时变体：零/后继、字面量与 `case` 降成 OCaml `int`
 与 `if`/`let`（`Codegen.Decl.runtimeDatas` 过滤族；`Codegen.Term` 折叠 Succ 链、降级 Nat case），
-算术走 `bi_nat*`。运行时表示只由 `Core.rigIsErased` 判定（0 擦除，1/ω 保留）；
-`Elab.Usage` 另做整程序用量检查（QTT 0/1/ω，见 [qtt.md](qtt.md)），不依赖 multiplicity。运行时前导代码（`bi_*`、`dtp_*`、IO 桥接等）在
+算术走 `bi_nat*`。运行时表示由 `Core.rigIsErased` 判定（0 擦除，1/ω 保留）；
+**例外（M39 / D27）**：运行时类型在 OCaml 里不可命名时（卡住的类型族应用，如 `res op`）
+整个字段用不透明值 `Obj.t`、构造子实参插 `Obj.magic`（判据 `ctorOpaqueFlagsOf`）；表达式
+位置的 binder 使用由精化器插隐藏 cast `prim_erase`（求值期恒等消去）。见
+[effects.md](effects.md) §5。`Elab.Usage` 另做整程序用量检查（QTT 0/1/ω，见
+[qtt.md](qtt.md)），不依赖 multiplicity。运行时前导代码（`bi_*`、`dtp_*`、IO 桥接等）在
 `Codegen.Term.dtRuntime`，无条件依赖 Unix（`Unix.stat` / `gettimeofday` / `readlink`）——
 原语语义见 [primitives.md](primitives.md)。
 
@@ -195,7 +225,7 @@ check pkg
 
 ### 输出模型（唯一：逐模块 split）
 
-`Codegen.Split.generateDtSplitProgram`（包级入口 `Driver.Dt.dtSplitProject`）接收 loader 的
+`Codegen.Split.generateDtSplitProgram`（入口 `Driver.Dt.dtSplitProjectParts`（接口路径 `dtSplitProjectWithIfaces`））接收 loader 的
 模块序（依赖在前）、entry decls 与完整 `DtProgram`，产出 `List SplitFile`；每个 `SplitFile`
 = 文件名 + 文本 + **直接依赖单元列表**（含 `Vuna_runtime`、不含自身；runtime 单元依赖为空，
 其余依赖只记实际引用到的单元，不是「所有前序单元」）：
@@ -220,6 +250,14 @@ check pkg
 单单元层前台、多单元层 `&` + `wait` 并行，每单元 stamp 只含自身 `.ml/.mli` 与**直接依赖**
 的 `.stamp` 内容哈希——改一个单元只重编它的（直接/传递）依赖者。链接顺序 = 拓扑序
 （依赖在前）。依赖图是精确 DAG，旧的「全序 open 链 / 文件顺序即依赖顺序」模型已不存在。
+
+命令边界：`compile` 成功静默（不写 `build-meta.json`、不调 `ocamlopt`）；`build` 默认输出到
+`<PKG-DIR>/.output`（`--out DIR` 覆盖），codegen 后执行 `build.sh` 链接，`build --no-compile`
+只产源码。workspace 根是多包时 `--out DIR` 落在 `DIR/<包名>`，最终二进制是
+`DIR/<包名>/bin/<包名>`（无 `--out` 时各成员仍写自己的 `<包目录>/.output`）。包根有
+`ffi/*.c` 时 `compileToDir` 会把 C 源复制到 `<OUTDIR>/ffi/` 并写进 `build.sh` 参与编译链接；
+没有 `ffi/` 的包产物不变。确定性、build meta 与增量语义见 [packages.md](packages.md) 的
+「构建确定性与增量」。
 
 文件划分只由源码顺序与名字决定，不依赖时间 / 环境（确定性）；无法归属的 `DtDef` /
 `DtData` 报清晰错误，不静默丢弃。生成链的护栏（构造子字段形状单一真源、
@@ -249,5 +287,6 @@ diff。盲区：base/runtime 自身的 codegen 不在这条门禁里；尺寸也
 - 子系统数据流与改动定位：[architecture.md](../architecture.md)
 - Core / NbE / 精化器内部规则：[core.md](core.md)
 - 内建声明面、原语语义与效应能力：[primitives.md](primitives.md)
+- 包格式、build meta 与增量构建：[packages.md](packages.md)
 - 种子策略与 rotation：[bootstrap.md](bootstrap.md)
 - 工具链（goal / LSP / 错误码）：[tooling.md](tooling.md)

@@ -20,7 +20,7 @@ module Base.String
 -- split 用显式 fuel 计步（M25.2b，M30/C26 收紧为证明界）：`splitAcc` 每次只吃一个字符，
 -- 匹配到分隔符后交给 `skipSep` 逐个跳过；两段都带同一个 fuel 参数并每步 `fuel - 1`
 -- （`fuel <= 0` 守卫），终止性由 R2「守卫 Int」判据证明（跨函数互调用已纳入 SCC 检查，
--- 见 docs/reference/limits.md 的终止性一节）。
+-- 见 docs/reference/type-system.md 的「定义与终止性」一节）。
 --
 -- **上界证明**（`fuel = 2*len(text) + len(sep) + 2` 永不耗尽）：
 --   * 一次 splitAcc 调用恰好消费 1 个字符（`c :: rest`），最后一次（`chars = []`）不消费；
@@ -40,6 +40,8 @@ import Base.Ord
 -- 本模块的算术运算符需要它的声明进入 import 闭包。
 import Base.Int
 import Base.Nat
+-- M36 跟进：模板字符串降级引用 Base.Interp.interp（split 依赖需要显式 import）。
+import Base.Interp
 
 -- `++` 的 fixity 声明（字符串拼接是内建值）。
 infixr 5 ++
@@ -82,7 +84,7 @@ lines s = split "\n" s
 
 unlines : List String -> String
 unlines [] = ""
-unlines xs = strConcatMany (map (\x => x ++ "\n") xs)
+unlines xs = strConcatMany (map (\x => "${x}\n") xs)
 
 trimLeft : String -> String
 trimLeft s = strPack (_dropSpace (strUnpack s))

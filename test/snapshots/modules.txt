@@ -24,15 +24,23 @@ Vuna.Index.Scan  ./lib/Vuna/Index/Scan.vuna
 Vuna.Index.Types  ./lib/Vuna/Index/Types.vuna
 Vuna.Index  ./lib/Vuna/Index.vuna
 Vuna.Interp  ./lib/Vuna/Interp.vuna
+Vuna.Json.Frame  ./lib/Vuna/Json/Frame.vuna
+Vuna.Json.Rpc  ./lib/Vuna/Json/Rpc.vuna
+Vuna.Json.Server  ./lib/Vuna/Json/Server.vuna
 Vuna.Json  ./lib/Vuna/Json.vuna
 Vuna.Lint.Diagnostics  ./lib/Vuna/Lint/Diagnostics.vuna
 Vuna.Lint.Fix  ./lib/Vuna/Lint/Fix.vuna
 Vuna.Lint.Rules  ./lib/Vuna/Lint/Rules.vuna
 Vuna.Lint  ./lib/Vuna/Lint.vuna
+Vuna.Lsp.Bindings  ./lib/Vuna/Lsp/Bindings.vuna
 Vuna.Lsp.Diagnostics  ./lib/Vuna/Lsp/Diagnostics.vuna
 Vuna.Lsp.Protocol  ./lib/Vuna/Lsp/Protocol.vuna
 Vuna.Lsp.Query  ./lib/Vuna/Lsp/Query.vuna
 Vuna.Lsp  ./lib/Vuna/Lsp.vuna
+Vuna.Repl.Client  ./lib/Vuna/Repl/Client.vuna
+Vuna.Repl.Edit  ./lib/Vuna/Repl/Edit.vuna
+Vuna.Repl.Server  ./lib/Vuna/Repl/Server.vuna
+Vuna.Repl.Term  ./lib/Vuna/Repl/Term.vuna
 Vuna.Repl  ./lib/Vuna/Repl.vuna
 Vuna.Run  ./lib/Vuna/Run.vuna
 Vuna.Search.Query  ./lib/Vuna/Search/Query.vuna
@@ -42,6 +50,7 @@ Vuna.Search  ./lib/Vuna/Search.vuna
 Vuna.Sig  ./lib/Vuna/Sig.vuna
 Vuna.TestRunner  ./lib/Vuna/TestRunner.vuna
 app.Main  ./app/Main.vuna
+Vuna.Compiler.CacheFormat  compiler/lib/Vuna/Compiler/CacheFormat.vuna
 Vuna.Compiler.Codegen.Assembly  compiler/lib/Vuna/Compiler/Codegen/Assembly.vuna
 Vuna.Compiler.Codegen.Decl  compiler/lib/Vuna/Compiler/Codegen/Decl.vuna
 Vuna.Compiler.Codegen.Erase  compiler/lib/Vuna/Compiler/Codegen/Erase.vuna
@@ -63,6 +72,9 @@ Vuna.Compiler.Driver.Compile  compiler/lib/Vuna/Compiler/Driver/Compile.vuna
 Vuna.Compiler.Driver.CompilerCli  compiler/lib/Vuna/Compiler/Driver/CompilerCli.vuna
 Vuna.Compiler.Driver.DiagRender  compiler/lib/Vuna/Compiler/Driver/DiagRender.vuna
 Vuna.Compiler.Driver.Dt  compiler/lib/Vuna/Compiler/Driver/Dt.vuna
+Vuna.Compiler.Driver.Iface  compiler/lib/Vuna/Compiler/Driver/Iface.vuna
+Vuna.Compiler.Driver.Owner  compiler/lib/Vuna/Compiler/Driver/Owner.vuna
+Vuna.Compiler.Driver.PerfCache  compiler/lib/Vuna/Compiler/Driver/PerfCache.vuna
 Vuna.Compiler.Driver.Split  compiler/lib/Vuna/Compiler/Driver/Split.vuna
 Vuna.Compiler.Elab.Case  compiler/lib/Vuna/Compiler/Elab/Case.vuna
 Vuna.Compiler.Elab.Data  compiler/lib/Vuna/Compiler/Elab/Data.vuna
@@ -141,6 +153,7 @@ Prelude  base/lib/Prelude.vuna
 
 
 ## compiler（vuna-compiler）
+Vuna.Compiler.CacheFormat  ./lib/Vuna/Compiler/CacheFormat.vuna
 Vuna.Compiler.Codegen.Assembly  ./lib/Vuna/Compiler/Codegen/Assembly.vuna
 Vuna.Compiler.Codegen.Decl  ./lib/Vuna/Compiler/Codegen/Decl.vuna
 Vuna.Compiler.Codegen.Erase  ./lib/Vuna/Compiler/Codegen/Erase.vuna
@@ -162,6 +175,9 @@ Vuna.Compiler.Driver.Compile  ./lib/Vuna/Compiler/Driver/Compile.vuna
 Vuna.Compiler.Driver.CompilerCli  ./lib/Vuna/Compiler/Driver/CompilerCli.vuna
 Vuna.Compiler.Driver.DiagRender  ./lib/Vuna/Compiler/Driver/DiagRender.vuna
 Vuna.Compiler.Driver.Dt  ./lib/Vuna/Compiler/Driver/Dt.vuna
+Vuna.Compiler.Driver.Iface  ./lib/Vuna/Compiler/Driver/Iface.vuna
+Vuna.Compiler.Driver.Owner  ./lib/Vuna/Compiler/Driver/Owner.vuna
+Vuna.Compiler.Driver.PerfCache  ./lib/Vuna/Compiler/Driver/PerfCache.vuna
 Vuna.Compiler.Driver.Split  ./lib/Vuna/Compiler/Driver/Split.vuna
 Vuna.Compiler.Elab.Case  ./lib/Vuna/Compiler/Elab/Case.vuna
 Vuna.Compiler.Elab.Data  ./lib/Vuna/Compiler/Elab/Data.vuna

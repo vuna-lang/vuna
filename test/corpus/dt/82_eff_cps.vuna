@@ -1,0 +1,37 @@
+-- D27 / effects.md §5–§6：签名索引效应（CPS 编码）的异构结果类型。
+--
+-- `resOp` 按运行时 op 决定结果类型（Bump ↦ Int，Read ↦ String）。处理器的续延
+-- `resOp op -> Int` 在运行时位置上是不可命名的擦除依赖类型：
+--   * 构造子字段 `MkEff` 的字段声明成不透明运行时值（Obj.t）；
+--   * 字段的构造/消去由精化器插入表现层 cast（prim_erase），
+--   * 分支 binder 的每次使用独立 cast，才能让同一个 OCaml 变量在不同 op 分支下
+--     分别按 Int / String 使用（依赖消去）。
+data Op : Type where
+  Bump : Int -> Op
+  Read : Op
+
+resOp : Op -> Type
+resOp (Bump n) = Int
+resOp Read = String
+
+data Eff : (f : Type) -> (f -> Type) -> (ans : Type) -> (a : Type) -> Type where
+  MkEff : {f : Type} -> {res : f -> Type} -> {ans : Type} -> {a : Type} -> ((a -> ans) -> ((op : f) -> (res op -> ans) -> ans) -> ans) -> Eff f res ans a
+
+send : {f : Type} -> {res : f -> Type} -> {ans : Type} -> (op : f) -> Eff f res ans (res op)
+send op = MkEff (\k => \alg => alg op k)
+
+run : {f : Type} -> {res : f -> Type} -> {ans : Type} -> {a : Type} -> Eff f res ans a -> (a -> ans) -> ((op : f) -> (res op -> ans) -> ans) -> ans
+run e k alg = case e of
+  MkEff h => h k alg
+
+counterAlg : (op : Op) -> (resOp op -> Int) -> Int
+counterAlg op k = case op of
+  Bump n => k n
+  Read => k "read"
+
+main : Int
+main =
+  let
+    e : Eff Op resOp Int Int
+    e = send (Bump 41)
+  in run e (\x => x) counterAlg

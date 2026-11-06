@@ -1,0 +1,534 @@
+module Vuna.Repl.Edit (EditConfig(..), EditOutcome(..), editLine, terminalWidth) where
+
+-- Vuna.Repl.Edit：REPL 行编辑器（工具链；不进 seed 闭包）。
+--
+-- 终端能力全部来自 `Vuna.Repl.Term`（stty + prim_readBytes），因此不需要给编译器加
+-- 终端原语。支持：
+--   * 左/右移动、Home/End、Backspace/Delete（按 UTF-8 码点边界）；
+--   * ↑/↓ 历史；Ctrl-R 反向增量历史搜索（Enter 接受、Esc/Ctrl-C 取消）；
+--   * Ctrl-A/E/K/U/W/L、Ctrl-P/N、Ctrl-B/F；
+--   * Ctrl-C 取消当前输入、Ctrl-D 空行退出；
+--   * Tab 补全（命令名 / 当前缓冲绑定名，唯一匹配补全、多个补最长公共前缀）。
+-- 渲染用 `\r` + 水平窗口（超宽时只显示尾部）+ `\x1b[K`，光标用 `\x1b[nD` 回移。
+-- 所有出口（提交/EOF/取消/不可用）都恢复终端状态。
+import Vuna.Compiler.Common
+import Vuna.Repl.Term
+import Base.IO
+
+record EditConfig where
+  editPrompt : String
+  editPromptWidth : Int
+  editHistory : List String
+  editCompletions : List String
+  editWidth : Int
+  editColorOn : Bool
+
+data EditOutcome : Type where
+  EditLine : String -> EditOutcome
+  EditEof : EditOutcome
+  EditCancel : EditOutcome
+  EditUnavailable : EditOutcome
+
+terminalWidth : Int -> Int
+terminalWidth n = termWidth n
+
+record EditState where
+  esBuf : List Int
+  esCursor : Int
+  esHistIdx : Int
+  esDraft : List Int
+  esSearching : Bool
+  esQuery : List Int
+  esMatch : Maybe (Pair Int String)
+
+data EditResult : Type where
+  EContinue : EditState -> EditResult
+  ESubmit : String -> EditResult
+  EExit : EditResult
+  ECancel : EditResult
+
+data Key : Type where
+  KChar : Int -> Key
+  KEnter : Key
+  KBackspace : Key
+  KDelete : Key
+  KLeft : Key
+  KRight : Key
+  KUp : Key
+  KDown : Key
+  KHome : Key
+  KEnd : Key
+  KTab : Key
+  KCtrK : Key
+  KCtrU : Key
+  KCtrW : Key
+  KCtrL : Key
+  KCtrR : Key
+  KCtrC : Key
+  KCtrD : Key
+  KEsc : Key
+  KEof : Key
+  KIgnore : Key
+
+editLine : EditConfig -> EditOutcome
+editLine cfg =
+  let
+    path = termTmpPath 0
+  in if termSaveState path /= 0 then EditUnavailable
+  else if termEnterRaw 0 /= 0 then
+    let
+      _ = termRestoreState path
+    in EditUnavailable
+  else
+    let
+      st0 = EditState [] 0 0 [] False [] Nothing
+      _ = redraw cfg st0
+      result = editLoop 1000000 cfg st0
+      -- 先恢复终端（raw 模式下 `\n` 只下移不回车，输出会从输入结束列开始；
+      -- 恢复后再换行让 ONLCR 把它展开成 CRLF）。
+      _ = termRestoreState path
+      _ = writeOut "\n"
+    in outcomeOf result
+
+outcomeOf : EditResult -> EditOutcome
+outcomeOf r = case r of
+  ESubmit text => EditLine text
+  EExit => EditEof
+  ECancel => EditCancel
+  EContinue st => EditLine (strOf st.esBuf)
+
+editLoop : Int -> EditConfig -> EditState -> EditResult
+editLoop fuel cfg st = if fuel <= 0 then ECancel
+else
+  let
+    key = readKey 0
+  in case applyKey cfg key st of
+    EContinue st2 =>
+      let
+        _ = redraw cfg st2
+      in editLoop (fuel - 1) cfg st2
+    other => other
+
+-- ---------------------------------------------------------------
+-- 按键解码
+-- ---------------------------------------------------------------
+readKey : Int -> Key
+readKey _ =
+  let
+    b = termReadByte 0
+  in if b < 0 then KEof
+  else if b == 13 || b == 10 then KEnter
+  else if b == 127 || b == 8 then KBackspace
+  else if b == 3 then KCtrC
+  else if b == 4 then KCtrD
+  else if b == 1 then KHome
+  else if b == 5 then KEnd
+  else if b == 11 then KCtrK
+  else if b == 21 then KCtrU
+  else if b == 23 then KCtrW
+  else if b == 12 then KCtrL
+  else if b == 18 then KCtrR
+  else if b == 16 then KUp
+  else if b == 14 then KDown
+  else if b == 2 then KLeft
+  else if b == 6 then KRight else if b == 9 then KTab else if b == 27 then readEscape 0 else KChar b
+
+readEscape : Int -> Key
+readEscape _ =
+  let
+    _ = termReadTimeout 0
+    b2 = termReadByte 0
+  in if b2 < 0 then
+    let
+      _ = termReadBlock 0
+    in KEsc
+  else if b2 == 91 || b2 == 79 then csiKey 0
+  else
+    let
+      _ = termReadBlock 0
+    in KIgnore
+
+csiKey : Int -> Key
+csiKey _ =
+  let
+    b3 = termReadByte 0
+  in if b3 < 0 then
+    let
+      _ = termReadBlock 0
+    in KIgnore
+  else if b3 == 65 then
+    let
+      _ = termReadBlock 0
+    in KUp
+  else if b3 == 66 then
+    let
+      _ = termReadBlock 0
+    in KDown
+  else if b3 == 67 then
+    let
+      _ = termReadBlock 0
+    in KRight
+  else if b3 == 68 then
+    let
+      _ = termReadBlock 0
+    in KLeft
+  else if b3 == 72 then
+    let
+      _ = termReadBlock 0
+    in KHome
+  else if b3 == 70 then
+    let
+      _ = termReadBlock 0
+    in KEnd
+  else if b3 >= 48 && b3 <= 57 then
+    let
+      b4 = termReadByte 0
+    in if b4 == 126 then
+      let
+        _ = termReadBlock 0
+      in tildeKey b3
+    else
+      let
+        _ = termReadBlock 0
+      in KIgnore
+  else
+    let
+      _ = termReadBlock 0
+    in KIgnore
+
+tildeKey : Int -> Key
+tildeKey n =
+  if n == 49 then KHome
+  else if n == 51 then KDelete
+  else if n == 52 then KEnd else if n == 55 then KHome else if n == 56 then KEnd else KIgnore
+
+-- ---------------------------------------------------------------
+-- 按键处理
+-- ---------------------------------------------------------------
+applyKey : EditConfig -> Key -> EditState -> EditResult
+applyKey cfg key st =
+  if st.esSearching then applySearchKey cfg key st else applyNormalKey cfg key st
+
+applyNormalKey : EditConfig -> Key -> EditState -> EditResult
+applyNormalKey cfg key st = case key of
+  KChar b => if b >= 32 then EContinue (insertByte b st) else EContinue st
+  KEnter => ESubmit (strOf st.esBuf)
+  KBackspace => EContinue (deleteBack st)
+  KDelete => EContinue (deleteAt st)
+  KLeft => EContinue (withCursor st (prevCharStart st.esBuf st.esCursor))
+  KRight => EContinue (withCursor st (nextCharStart st.esBuf st.esCursor))
+  KHome => EContinue (withCursor st 0)
+  KEnd => EContinue (withCursor st (lenInt st.esBuf))
+  KUp => EContinue (historyUp cfg st)
+  KDown => EContinue (historyDown cfg st)
+  KTab => EContinue (complete cfg st)
+  KCtrK => EContinue (killToEnd st)
+  KCtrU => EContinue (killToStart st)
+  KCtrW => EContinue (killWord st)
+  KCtrL =>
+    let
+      _ = writeOut "${escCode}[2J${escCode}[H"
+    in EContinue st
+  KCtrR => EContinue (startSearch st)
+  KCtrC => ECancel
+  KCtrD => if lenInt st.esBuf == 0 then EExit else EContinue (deleteAt st)
+  KEsc => EContinue st
+  KEof => if lenInt st.esBuf == 0 then EExit else EContinue st
+  KIgnore => EContinue st
+
+applySearchKey : EditConfig -> Key -> EditState -> EditResult
+applySearchKey cfg key st = case key of
+  KChar b => if b >= 32 then EContinue (searchQueryAppend cfg st b) else EContinue st
+  KBackspace => EContinue (searchQueryBackspace cfg st)
+  KCtrR => EContinue (searchContinue cfg st)
+  KEnter => case st.esMatch of
+    Just (Pair idx entry) => EContinue (acceptSearch st idx entry)
+    Nothing => EContinue (acceptSearchText st (strOf st.esQuery))
+  KEsc => EContinue (exitSearch st)
+  KCtrC => EContinue (exitSearch st)
+  KLeft => EContinue (exitSearch st)
+  KRight => EContinue (exitSearch st)
+  _ => EContinue st
+
+-- ---------------------------------------------------------------
+-- 编辑原语
+-- ---------------------------------------------------------------
+lenInt : List a -> Int
+lenInt [] = 0
+lenInt (_ :: rest) = 1 + lenInt rest
+
+imax : Int -> Int -> Int
+imax a b = if a >= b then a else b
+
+immin : Int -> Int -> Int
+immin a b = if a <= b then a else b
+
+strOf : List Int -> String
+strOf = strPack
+
+isContinuation : Int -> Bool
+isContinuation b = b >= 128 && b < 192
+
+isSpaceByte : Int -> Bool
+isSpaceByte b = b == 32 || b == 9
+
+prevCharStart : List Int -> Int -> Int
+prevCharStart buf cur = prevCharGo (reverse (take cur buf)) cur
+
+prevCharGo : List Int -> Int -> Int
+prevCharGo [] cur = 0
+prevCharGo (b :: rest) cur = if isContinuation b then prevCharGo rest (cur - 1) else cur - 1
+
+nextCharStart : List Int -> Int -> Int
+nextCharStart buf cur =
+  let
+    total = lenInt buf
+  in if cur >= total then total else immin total (cur + 1 + contCount (nthByte buf cur))
+
+nthByte : List Int -> Int -> Int
+nthByte buf i = case drop i buf of
+  b :: rest => b
+  [] => 0
+
+insertByte : Int -> EditState -> EditState
+insertByte b st =
+  let
+    buf2 = append (append (take st.esCursor st.esBuf) [b]) (drop st.esCursor st.esBuf)
+  in EditState buf2 (st.esCursor + 1) 0 st.esDraft st.esSearching st.esQuery st.esMatch
+
+withCursor : EditState -> Int -> EditState
+withCursor st cur =
+  EditState st.esBuf cur st.esHistIdx st.esDraft st.esSearching st.esQuery st.esMatch
+
+withBuf : EditState -> List Int -> Int -> EditState
+withBuf st buf cur = EditState buf cur 0 st.esDraft st.esSearching st.esQuery st.esMatch
+
+deleteBack : EditState -> EditState
+deleteBack st =
+  let
+    start = prevCharStart st.esBuf st.esCursor
+  in withBuf st (removeRange start st.esCursor st.esBuf) start
+
+deleteAt : EditState -> EditState
+deleteAt st = if st.esCursor >= lenInt st.esBuf then st
+else
+  let
+    end = nextCharStart st.esBuf st.esCursor
+  in withBuf st (removeRange st.esCursor end st.esBuf) st.esCursor
+
+removeRange : Int -> Int -> List Int -> List Int
+removeRange start end buf = append (take start buf) (drop end buf)
+
+killToEnd : EditState -> EditState
+killToEnd st = withBuf st (take st.esCursor st.esBuf) st.esCursor
+
+killToStart : EditState -> EditState
+killToStart st = withBuf st (drop st.esCursor st.esBuf) 0
+
+killWord : EditState -> EditState
+killWord st =
+  let
+    start = wordStart st.esBuf st.esCursor
+  in withBuf st (removeRange start st.esCursor st.esBuf) start
+
+wordStart : List Int -> Int -> Int
+wordStart buf cur = wsSpace (reverse (take cur buf)) cur
+
+wsSpace : List Int -> Int -> Int
+wsSpace [] cur = cur
+wsSpace (b :: rest) cur = if isSpaceByte b then wsSpace rest (cur - 1) else wsWord rest cur
+
+wsWord : List Int -> Int -> Int
+wsWord [] cur = cur
+wsWord (b :: rest) cur = if isSpaceByte b then cur else wsWord rest (cur - 1)
+
+-- ---------------------------------------------------------------
+-- 历史
+-- ---------------------------------------------------------------
+fromNewest : Int -> List String -> Maybe String
+fromNewest n xs = if n <= 0 then Nothing else elemAt (lenInt xs - n) xs
+
+elemAt : Int -> List a -> Maybe a
+elemAt i xs = case drop i xs of
+  x :: rest => Just x
+  [] => Nothing
+
+historyUp : EditConfig -> EditState -> EditState
+historyUp cfg st =
+  let
+    hi = st.esHistIdx
+    draft = if hi == 0 then st.esBuf else st.esDraft
+    total = lenInt cfg.editHistory
+  in if hi >= total then st
+  else case fromNewest (hi + 1) cfg.editHistory of
+    Nothing => st
+    Just entry => EditState (strUnpack entry) (byteLength entry) (hi + 1) draft False [] Nothing
+
+historyDown : EditConfig -> EditState -> EditState
+historyDown cfg st =
+  let
+    hi = st.esHistIdx
+  in if hi <= 0 then st
+  else if hi == 1 then EditState st.esDraft (lenInt st.esDraft) 0 st.esDraft False [] Nothing
+  else case fromNewest (hi - 1) cfg.editHistory of
+    Nothing => st
+    Just entry =>
+      EditState (strUnpack entry) (byteLength entry) (hi - 1) st.esDraft False [] Nothing
+
+-- ---------------------------------------------------------------
+-- 补全
+-- ---------------------------------------------------------------
+complete : EditConfig -> EditState -> EditState
+complete cfg st =
+  let
+    start = tokenStart st.esBuf st.esCursor
+    prefix = strOf (take (st.esCursor - start) (drop start st.esBuf))
+    cands =
+      filter (\c => startsWith prefix c && byteLength c > byteLength prefix) cfg.editCompletions
+  in if prefix == "" then st
+  else case cands of
+    [] => bell st
+    [c] =>
+      withBuf st (append (append (take start st.esBuf) (strUnpack c)) (drop st.esCursor st.esBuf))
+        (start + byteLength c)
+    _ =>
+      let
+        common = commonPrefixStrs cands
+      in if byteLength common > byteLength prefix then withBuf st
+        (append (append (take start st.esBuf) (strUnpack common)) (drop st.esCursor st.esBuf))
+        (start + byteLength common)
+      else bell st
+
+bell : EditState -> EditState
+bell st =
+  let
+    _ = writeOut (strPack [7])
+  in st
+
+tokenStart : List Int -> Int -> Int
+tokenStart buf cur = tokenGo (reverse (take cur buf)) cur
+
+tokenGo : List Int -> Int -> Int
+tokenGo [] cur = 0
+tokenGo (b :: rest) cur = if isSpaceByte b then cur else tokenGo rest (cur - 1)
+
+commonPrefixStrs : List String -> String
+commonPrefixStrs [] = ""
+commonPrefixStrs (x :: rest) = prefixFold x rest
+
+prefixFold : String -> List String -> String
+prefixFold acc [] = acc
+prefixFold acc (y :: rest) = prefixFold (commonPrefix2 acc y) rest
+
+commonPrefix2 : String -> String -> String
+commonPrefix2 a b = strOf (commonPrefixBytes (strUnpack a) (strUnpack b))
+
+commonPrefixBytes : List Int -> List Int -> List Int
+commonPrefixBytes [] ys = []
+commonPrefixBytes xs [] = []
+commonPrefixBytes (x :: xs) (y :: ys) = if x == y then x :: commonPrefixBytes xs ys else []
+
+-- ---------------------------------------------------------------
+-- Ctrl-R 反向搜索
+-- ---------------------------------------------------------------
+startSearch : EditState -> EditState
+startSearch st = EditState st.esBuf st.esCursor 0 st.esDraft True [] Nothing
+
+searchQueryAppend : EditConfig -> EditState -> Int -> EditState
+searchQueryAppend cfg st b =
+  let
+    query = append st.esQuery [b]
+  in EditState st.esBuf st.esCursor 0 st.esDraft True query (searchFrom cfg.editHistory 1 query)
+
+searchQueryBackspace : EditConfig -> EditState -> EditState
+searchQueryBackspace cfg st =
+  let
+    query =
+      if lenInt st.esQuery == 0 then []
+      else take (prevCharStart st.esQuery (lenInt st.esQuery)) st.esQuery
+  in EditState st.esBuf st.esCursor 0 st.esDraft True query (searchFrom cfg.editHistory 1 query)
+
+searchContinue : EditConfig -> EditState -> EditState
+searchContinue cfg st =
+  let
+    start = case st.esMatch of
+      Just (Pair idx entry) => idx + 1
+      Nothing => 1
+  in EditState st.esBuf st.esCursor 0 st.esDraft True st.esQuery
+    (searchFrom cfg.editHistory start st.esQuery)
+
+searchFrom : List String -> Int -> List Int -> Maybe (Pair Int String)
+searchFrom history start query = searchFromGo (drop (imax 0 (start - 1)) history) start query
+
+searchFromGo : List String -> Int -> List Int -> Maybe (Pair Int String)
+searchFromGo [] idx query = Nothing
+searchFromGo (entry :: rest) idx query =
+  if lenInt query == 0 || contains (strOf query) entry then Just (Pair idx entry)
+  else searchFromGo rest (idx + 1) query
+
+acceptSearch : EditState -> Int -> String -> EditState
+acceptSearch st idx entry =
+  EditState (strUnpack entry) (byteLength entry) idx st.esDraft False [] Nothing
+
+acceptSearchText : EditState -> String -> EditState
+acceptSearchText st text =
+  EditState (strUnpack text) (byteLength text) 0 st.esDraft False [] Nothing
+
+exitSearch : EditState -> EditState
+exitSearch st = EditState st.esBuf st.esCursor st.esHistIdx st.esDraft False [] Nothing
+
+-- ---------------------------------------------------------------
+-- 渲染
+-- ---------------------------------------------------------------
+redraw : EditConfig -> EditState -> Int
+redraw cfg st = if st.esSearching then redrawSearch cfg st else redrawNormal cfg st
+
+redrawNormal : EditConfig -> EditState -> Int
+redrawNormal cfg st =
+  let
+    avail = imax 8 (cfg.editWidth - cfg.editPromptWidth)
+    win = tailWindow avail st.esBuf
+    left = immin (bytesWidth (drop st.esCursor st.esBuf)) (bytesWidth win)
+    text = "${cfg.editPrompt}${strOf win}${escCode}[K${moveLeftText left}"
+  in writeOut "\r${text}"
+
+redrawSearch : EditConfig -> EditState -> Int
+redrawSearch cfg st =
+  let
+    queryText = strOf st.esQuery
+    matchText = case st.esMatch of
+      Just (Pair idx entry) => entry
+      Nothing => ""
+    promptText = "(reverse-i-search)`${queryText}': "
+    styled = if cfg.editColorOn then ansi "36" promptText ++ matchText else promptText ++ matchText
+  in writeOut "\r${styled}${escCode}[K"
+
+-- 超宽时只显示尾部 avail 列（按 UTF-8 码点边界裁）。
+tailWindow : Int -> List Int -> List Int
+tailWindow avail buf =
+  if bytesWidth buf <= avail then buf else dropToWidth (bytesWidth buf - avail) buf
+
+dropToWidth : Int -> List Int -> List Int
+dropToWidth k buf = dropToWidthGo k 0 buf
+
+dropToWidthGo : Int -> Int -> List Int -> List Int
+dropToWidthGo k skip [] = []
+dropToWidthGo k skip (b :: rest) =
+  if skip > 0 then dropToWidthGo k (skip - 1) rest
+  else if k <= 0 then b :: rest
+  else if isContinuation b then dropToWidthGo k 0 rest
+  else dropToWidthGo (k - cpWidth b) (contCount b) rest
+
+-- 显示宽度近似：续字节 0；CJK 常见区段 2；其余 1（组合字符/emoji 可能偏 1 格）。
+bytesWidth : List Int -> Int
+bytesWidth [] = 0
+bytesWidth (b :: rest) = if isContinuation b then bytesWidth rest else cpWidth b + bytesWidth rest
+
+cpWidth : Int -> Int
+cpWidth b = if b >= 240 then 2 else if b >= 228 && b <= 233 then 2 else 1
+
+contCount : Int -> Int
+contCount b = if b >= 240 then 3 else if b >= 224 then 2 else if b >= 192 then 1 else 0
+
+moveLeftText : Int -> String
+moveLeftText n = if n > 0 then "${escCode}[${n}D" else ""

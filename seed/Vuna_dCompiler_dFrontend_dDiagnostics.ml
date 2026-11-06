@@ -91,7 +91,7 @@ let v_Vuna_dCompiler_dFrontend_dDiagnostics_dpsTemplate = (fun mc0 -> (match mc0
   | C_Vuna_dCompiler_dFrontend_dDiagnostics_dPsDiag_Vuna_dCompiler_dFrontend_dDiagnostics_dLetBindingNotIndented -> "let binding is not indented enough"
   | C_Vuna_dCompiler_dFrontend_dDiagnostics_dPsDiag_Vuna_dCompiler_dFrontend_dDiagnostics_dExprNotIndented -> "expression is not indented enough"
   | C_Vuna_dCompiler_dFrontend_dDiagnostics_dPsDiag_Vuna_dCompiler_dFrontend_dDiagnostics_dTemplateInPattern -> "string interpolation is not supported in patterns"
-  | C_Vuna_dCompiler_dFrontend_dDiagnostics_dPsDiag_Vuna_dCompiler_dFrontend_dDiagnostics_dTemplateHoleEmpty -> ("string interpolation $" ^ "{...} needs an expression")
+  | C_Vuna_dCompiler_dFrontend_dDiagnostics_dPsDiag_Vuna_dCompiler_dFrontend_dDiagnostics_dTemplateHoleEmpty -> "string interpolation ${...} needs an expression"
   | C_Vuna_dCompiler_dFrontend_dDiagnostics_dPsDiag_Vuna_dCompiler_dFrontend_dDiagnostics_dExpectedTopLevelDecl -> "expected a top-level declaration"
   | C_Vuna_dCompiler_dFrontend_dDiagnostics_dPsDiag_Vuna_dCompiler_dFrontend_dDiagnostics_dExpectedRecordFieldPattern -> "expected a record field pattern"
   | C_Vuna_dCompiler_dFrontend_dDiagnostics_dPsDiag_Vuna_dCompiler_dFrontend_dDiagnostics_dExpectedPattern -> "expected pattern"

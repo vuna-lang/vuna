@@ -1,4 +1,4 @@
-module Vuna.Compiler.Codegen.Split (generateDtSplitProgram) where
+module Vuna.Compiler.Codegen.Split (generateDtSplitProgram, generateDtSplitProgramWith) where
 
 -- Vuna.Compiler.Codegen.Split：逐模块 split 生成（`compile` / `build` / `seed` 的唯一输出模型）。
 --
@@ -15,7 +15,9 @@ module Vuna.Compiler.Codegen.Split (generateDtSplitProgram) where
 -- 推导不到的带点名字回落到「模块前缀必须是已知模块」，否则报错。
 import Vuna.Compiler.Common
 import Base.HashMap
+import Vuna.Compiler.Debug
 import Vuna.Compiler.Frontend.Ast
+import Vuna.Compiler.Driver.Owner
 import Vuna.Compiler.Driver.Split
 import Vuna.Compiler.Elab
 import Vuna.Compiler.Codegen.Assembly
@@ -23,160 +25,13 @@ import Vuna.Compiler.Codegen.Decl
 import Vuna.Compiler.Codegen.Erase
 import Vuna.Compiler.Codegen.Term
 
-splitNoSpan : Span
-splitNoSpan = Span "" 0 0 0 0
-
--- 入口单元的固定名（入口声明不带模块前缀，统一归到 `Main`）。
-entryOwner : String
-entryOwner = "Main"
-
--- M38：入口单元在定义求值**之前**就开启回栈记录。零参 `main` 是普通值绑定，
--- 它在模块初始化期求值（早于 main 钩子的 try）；初始化异常被 `mainInitWrap`
--- 捕获后，报告器要靠当时已开启的回栈才能打印 vuna 位置帧。
-mainInitPrologue : String
-mainInitPrologue = "let () = Printexc.record_backtrace true\n"
-
 splitUnitOfModule : String -> String
 splitUnitOfModule modName = sanitizeName modName
 
-modulePrefixOfName : String -> String
-modulePrefixOfName name = case splitLastDot (splitOnDot name) of
-  Pair rev base => joinDots rev
-
--- ---------------------------------------------------------------
--- 归属表：声明名 / 实例名 / 方法投影名 → 模块；data / 字典 data → 模块
--- ---------------------------------------------------------------
-splitDeclNames : List Decl -> List String
-splitDeclNames [] = []
-splitDeclNames (d :: rest) = case d of
-  DSig name ctx ty sp => name :: splitDeclNames rest
-  DExtern name cName ty sp => name :: splitDeclNames rest
-  DFun name pats body sp => name :: splitDeclNames rest
-  DData name params kind ctors derivings lin sp => name :: splitDeclNames rest
-  DRecord name params fields derivings lin sp => name :: splitDeclNames rest
-  DTrait name params methods sp => name :: splitDeclNames rest
-  _ => splitDeclNames rest
-
-splitDataNames : List Decl -> List String
-splitDataNames [] = []
-splitDataNames (d :: rest) = case d of
-  DData name params kind ctors derivings lin sp => name :: splitDataNames rest
-  DRecord name params fields derivings lin sp => name :: splitDataNames rest
-  _ => splitDataNames rest
-
-headClassName : Expr -> Maybe String
-headClassName (EApp fn args sp) = case fn of
-  EVar n fsp => Just n
-  _ => Nothing
-headClassName (EVar n sp) = Just n
-headClassName _ = Nothing
-
--- 实例名与派生实例名用 Elab 的同一实现（`Elab.instanceName` / `Elab.instHead`），
--- 不再复制命名逻辑：Elab 生成的 `DtDef` 名字与本表逐字一致。
-splitInstanceOwnerOf : String -> Decl -> List (Pair String String)
-splitInstanceOwnerOf owner (DInstance ctxE headExpr methods sp) = case headClassName headExpr of
-  Just c => [Pair (instanceName c headExpr) owner]
-  Nothing => []
-splitInstanceOwnerOf owner (DData dname params kind ctors derivings lin sp) =
-  splitDerivedOwners owner dname params derivings
-splitInstanceOwnerOf owner (DRecord dname params fields derivings lin sp) =
-  splitDerivedOwners owner dname params derivings
-splitInstanceOwnerOf owner _ = []
-
-splitDerivedOwners : String -> String -> List String -> List String -> List (Pair String String)
-splitDerivedOwners owner dname params [] = []
-splitDerivedOwners owner dname params (t :: rest) =
-  Pair (instanceName t (instHead t dname params splitNoSpan)) owner
-    :: splitDerivedOwners owner dname params rest
-
--- trait 的运行时产物不在顶层声明名里：方法投影定义与字典类型都由 Elab 生成，
--- 因此按 `DTrait` 结构显式补上（入口 trait 没有模块前缀，这一步是唯一归属来源）。
-splitTraitDefOwnerOf : String -> Decl -> List (Pair String String)
-splitTraitDefOwnerOf owner (DTrait tname params methods sp) =
-  map (\m => Pair (traitMethodName m) owner) methods
-splitTraitDefOwnerOf owner _ = []
-
-splitTraitDataOwnerOf : String -> Decl -> List (Pair String String)
-splitTraitDataOwnerOf owner (DTrait tname params methods sp) = [Pair ("Dict_" ++ tname) owner]
-splitTraitDataOwnerOf owner _ = []
-
-splitInstanceOwnersGo : String -> List Decl -> List (Pair String String)
-splitInstanceOwnersGo owner [] = []
-splitInstanceOwnersGo owner (d :: rest) =
-  append (splitInstanceOwnerOf owner d) (splitInstanceOwnersGo owner rest)
-
-splitOwnerEntriesOf : String -> List Decl -> List (Pair String String)
-splitOwnerEntriesOf owner decls =
-  append (map (\n => Pair n owner) (splitDeclNames decls))
-    (append (splitInstanceOwnersGo owner decls) (concatMap (splitTraitDefOwnerOf owner) decls))
-
-splitDataOwnerEntriesOf : String -> List Decl -> List (Pair String String)
-splitDataOwnerEntriesOf owner decls =
-  append (map (\n => Pair n owner) (splitDataNames decls))
-    (concatMap (splitTraitDataOwnerOf owner) decls)
-
-splitOwnerEntriesOfModules : List (Pair String (List Decl)) -> List (Pair String String)
-splitOwnerEntriesOfModules [] = []
-splitOwnerEntriesOfModules ((Pair mname decls) :: rest) =
-  append (splitOwnerEntriesOf mname decls) (splitOwnerEntriesOfModules rest)
-
-splitDataOwnerEntriesOfModules : List (Pair String (List Decl)) -> List (Pair String String)
-splitDataOwnerEntriesOfModules [] = []
-splitDataOwnerEntriesOfModules ((Pair mname decls) :: rest) =
-  append (splitDataOwnerEntriesOf mname decls) (splitDataOwnerEntriesOfModules rest)
-
-record SplitMeta where
-  smDefOwners : List (Pair String String)
-  smDataOwners : List (Pair String String)
-  smKnownModules : List String
-
-splitMetaOf : List (Pair String (List Decl)) -> List Decl -> SplitMeta
-splitMetaOf modules entryDecls =
-  let
-    knownModules = map (\p => firstOf p) modules
-    defOwners =
-      append (splitOwnerEntriesOfModules modules) (splitOwnerEntriesOf entryOwner entryDecls)
-    dataOwners =
-      append (splitDataOwnerEntriesOfModules modules)
-        (splitDataOwnerEntriesOf entryOwner entryDecls)
-  in SplitMeta defOwners dataOwners knownModules
-
-lookupModuleOf : List (Pair String String) -> String -> Maybe String
-lookupModuleOf pairs name = lookupPair name pairs
-
-knownModuleOrErr : List String -> String -> String -> Result String
-knownModuleOrErr knownModules what name =
-  let
-    prefix = modulePrefixOfName name
-  in if memName prefix knownModules then Ok prefix
-  else Err
-    ("DT split: `" ++ what ++ "` " ++ name ++ " has module prefix `" ++ prefix ++ "` but no such module")
-
-splitDataOwnerOf : SplitMeta -> DtData -> Result String
-splitDataOwnerOf meta d = case lookupModuleOf meta.smDataOwners (dtDataName d) of
-  Just o => Ok o
-  Nothing =>
-    if containsDot (dtDataName d) then knownModuleOrErr meta.smKnownModules "data" (dtDataName d)
-    else Err ("DT split: cannot determine module for data `" ++ dtDataName d ++ "`")
-
-splitDefOwnerOf : SplitMeta -> String -> Result String
-splitDefOwnerOf meta name = case lookupModuleOf meta.smDefOwners name of
-  Just o => Ok o
-  Nothing =>
-    if containsDot name then knownModuleOrErr meta.smKnownModules "definition" name
-    else Err ("DT split: cannot determine module for definition `" ++ name ++ "`")
-
-nameOwnerPairsOfDefs : SplitMeta -> List DtDef -> Result (List (Pair String String))
-nameOwnerPairsOfDefs meta [] = Ok []
-nameOwnerPairsOfDefs meta (d :: rest) =
-  andThen (splitDefOwnerOf meta (dtDefName d))
-    (\o => andThen (nameOwnerPairsOfDefs meta rest) (\ps => Ok (Pair (dtDefName d) o :: ps)))
-
-nameOwnerPairsOfDatas : SplitMeta -> List DtData -> Result (List (Pair String String))
-nameOwnerPairsOfDatas meta [] = Ok []
-nameOwnerPairsOfDatas meta (d :: rest) =
-  andThen (splitDataOwnerOf meta d)
-    (\o => andThen (nameOwnerPairsOfDatas meta rest) (\ps => Ok (Pair (dtDataName d) o :: ps)))
+-- M38：入口单元在定义求值**之前**就开启回栈记录（零参 `main` 在模块初始化期求值，
+-- 早于 main 钩子的 try；初始化异常靠当时已开启的回栈打印 vuna 位置帧）。
+mainInitPrologue : String
+mainInitPrologue = "let () = Printexc.record_backtrace true\n"
 
 -- ---------------------------------------------------------------
 -- 按归属过滤 + 生成
@@ -216,9 +71,9 @@ checkDepsOrder ordered self (d :: rest) =
   let
     selfPos = posOfName self ordered
     depPos = posOfName d ordered
-  in if depPos == 0 then Err ("DT: internal: " ++ self ++ " references unknown unit `" ++ d ++ "`")
-  else if selfPos == 0 then Err ("DT: internal: split unit `" ++ self ++ "` is not in the module order")
-  else if depPos >= selfPos then Err ("DT: internal: split dependency is not in topological order: " ++ self ++ " -> " ++ d)
+  in if depPos == 0 then Err "DT: internal: ${self} references unknown unit `${d}`"
+  else if selfPos == 0 then Err "DT: internal: split unit `${self}` is not in the module order"
+  else if depPos >= selfPos then Err "DT: internal: split dependency is not in topological order: ${self} -> ${d}"
   else checkDepsOrder ordered self rest
 
 depsInOrder : List String -> String -> List String -> List String
@@ -242,27 +97,6 @@ record SplitGenCtx where
 mapToUnit : List (Pair String String) -> List (Pair String String)
 mapToUnit pairs = map (\q => Pair (firstOf q) (splitUnitOfModule (secondOf q))) pairs
 
-splitModuleFiles : SplitGenCtx -> List (Pair String (List Decl)) -> Result (List SplitFile)
-splitModuleFiles ctx [] = Ok []
-splitModuleFiles ctx ((Pair mname decls) :: rest) =
-  let
-    unit = splitUnitOfModule mname
-    unitDatas = datasInUnit ctx.sgcDataOwnerT mname ctx.sgcAllDatas
-    unitDefs = defsInUnit ctx.sgcDefOwnerT mname ctx.sgcAllDefs
-    qc = QualCtx unit ctx.sgcDefUnitT ctx.sgcDataUnitT
-  in andThen (groupRuntimeDefs unitDefs)
-    (\groups => andThen (genUnitParts ctx.sgcUsedTbl qc ctx.sgcAllDatas unitDatas groups) (\parts => andThen (splitModuleFiles ctx rest) (\tail => andThen (unitDepsOf ctx.sgcOrdered unit (unitPartsDeps parts)) (\deps => Ok (SplitFile (unit ++ ".ml") (genUnitText parts ++ "\n") deps :: tail)))))
-
-splitMainFile : SplitGenCtx -> Bool -> Result SplitFile
-splitMainFile ctx printResult =
-  let
-    entryUnit = splitUnitOfModule entryOwner
-    entryDefs = defsInUnit ctx.sgcDefOwnerT entryOwner ctx.sgcAllDefs
-    entryDatas = datasInUnit ctx.sgcDataOwnerT entryOwner ctx.sgcAllDatas
-    qc = QualCtx entryUnit ctx.sgcDefUnitT ctx.sgcDataUnitT
-  in andThen (groupRuntimeDefs entryDefs)
-    (\groups => andThen (genUnitParts ctx.sgcUsedTbl qc ctx.sgcAllDatas entryDatas groups) (\parts => andThen (mainHook qc (Pair ctx.sgcAllDatas ctx.sgcAllDefs) ctx.sgcAllDefs printResult) (\hook => andThen (unitDepsOf ctx.sgcOrdered entryUnit (append (unitPartsDeps parts) (secondOf hook))) (\deps => Ok (SplitFile "Main.ml" (mainInitPrologue ++ genUnitText parts ++ firstOf hook) deps)))))
-
 -- ---------------------------------------------------------------
 -- 生成前护栏（C08）：模块声明必须已 resolved、入口声明必须是裸名、归属必须全覆盖
 -- ---------------------------------------------------------------
@@ -270,9 +104,9 @@ checkModuleDeclName : List String -> String -> String -> Result Int
 checkModuleDeclName knownModules mname name =
   if containsDot name then if memName (modulePrefixOfName name) knownModules then Ok 0
   else Err
-    ("DT: internal: module " ++ mname ++ " declares `" ++ name ++ "` whose module prefix `" ++ modulePrefixOfName name ++ "` is not a known module (codegen requires Loader-resolved decls)")
+    "DT: internal: module ${mname} declares `${name}` whose module prefix `${modulePrefixOfName name}` is not a known module (codegen requires Loader-resolved decls)"
   else Err
-    ("DT: internal: module " ++ mname ++ " has an unresolved declaration name `" ++ name ++ "` (codegen requires Loader-resolved decls)")
+    "DT: internal: module ${mname} has an unresolved declaration name `${name}` (codegen requires Loader-resolved decls)"
 
 checkModuleDeclNames : List String -> String -> List String -> Result Int
 checkModuleDeclNames knownModules mname [] = Ok 0
@@ -302,9 +136,8 @@ checkEntryDeclName : List String -> String -> Result Int
 checkEntryDeclName seen name =
   if name == "" then Err "DT: internal: entry declaration has an empty name"
   else if containsDot name then Err
-    ("DT: internal: entry declaration `" ++ name ++ "` must not contain a module prefix (codegen requires Loader-resolved decls)")
-  else if memName name seen then Err ("DT: internal: duplicate entry declaration `" ++ name ++ "`")
-  else Ok 0
+    "DT: internal: entry declaration `${name}` must not contain a module prefix (codegen requires Loader-resolved decls)"
+  else if memName name seen then Err "DT: internal: duplicate entry declaration `${name}`" else Ok 0
 
 checkEntryDeclsGo : List String -> List String -> Result Int
 checkEntryDeclsGo seen [] = Ok 0
@@ -334,20 +167,19 @@ checkResolvedModules meta modules entryDecls runtime datas =
 -- ---------------------------------------------------------------
 -- M38：定义位置表（Vuna_runtime.ml 的 dt_def_locs）的路径归一
 -- ---------------------------------------------------------------
--- 定义 span 里的文件路径是解析时的原样：模块文件是 `<rootDir>/<模块路径>.vuna`
--- 的绝对路径（rootDir 来自 PackageContext.contextRoots），入口可能是绝对
--- `<contextDir>/app/Main.vuna`，也可能是调用方给的相对路径。位置表按
--- 「模块根 → 包目录 → 前导 ./」的顺序尽量剥成短路径；都不匹配则保留原样。
+-- 定义 span 里的路径是解析时的原样：模块文件是 `<rootDir>/<模块路径>.vuna` 的绝对
+-- 路径，入口可能是绝对 `<contextDir>/app/Main.vuna` 或调用方给的相对路径。位置表按
+-- 「模块根 → 包目录 → 前导 ./」顺序尽量剥成短路径；都不匹配则保留原样。
 splitStripPrefix : String -> String -> String
 splitStripPrefix prefix path =
   if prefix == "" then path
-  else if startsWith (prefix ++ "/") path then strSubstring (strLength (prefix ++ "/")) (strLength path - strLength (prefix ++ "/")) path
+  else if startsWith "${prefix}/" path then strSubstring (strLength "${prefix}/") (strLength path - strLength "${prefix}/") path
   else path
 
 splitStripRoots : List String -> String -> String
 splitStripRoots [] path = path
 splitStripRoots (root :: rest) path =
-  if startsWith (root ++ "/") path then splitStripPrefix root path else splitStripRoots rest path
+  if startsWith "${root}/" path then splitStripPrefix root path else splitStripRoots rest path
 
 splitStripDotSlash : String -> String
 splitStripDotSlash path =
@@ -359,25 +191,53 @@ splitLocPath roots contextDir path =
 
 -- roots 是模块根目录（`PackageContext.contextRoots` 的 rootDir），contextDir 是包目录
 -- （`PackageContext.contextDir`）；生成位置表用它把 span 路径归一。
+noUnitLookup : String -> Maybe SplitFile
+noUnitLookup _ = Nothing
+
+noUnitStore : String -> SplitFile -> Int
+noUnitStore _ _ = 0
+
 generateDtSplitProgram : List (Pair String (List Decl)) -> List Decl -> DtProgram -> Bool -> List String -> String -> Result (List SplitFile)
 generateDtSplitProgram modules entryDecls prog printResult roots contextDir =
+  generateDtSplitProgramWith noUnitLookup noUnitStore modules entryDecls prog printResult roots
+    contextDir
+
+-- M34.5（S5）：带**单元级缓存**的生成入口。`lookup` 按模块名（入口用 `__entry__`）
+-- 返回上次生成的 `SplitFile`（key 已由调用方算好，含依赖哈希链）；命中即跳过该单元的
+-- codegen，`store` 只对重新生成的单元调用。缓存读写留在 Driver 层（本模块不碰 IO）。
+storeModuleFile : (String -> SplitFile -> Int) -> String -> SplitFile -> SplitFile
+storeModuleFile store key sf =
   let
+    _ = store key sf
+  in sf
+
+generateDtSplitProgramWith : (String -> Maybe SplitFile) -> (String -> SplitFile -> Int) -> List (Pair String (List Decl)) -> List Decl -> DtProgram -> Bool -> List String -> String -> Result (List SplitFile)
+generateDtSplitProgramWith lookup store modules entryDecls prog printResult roots contextDir =
+  let
+    -- M34.6：把「精化完成 → prepare 开始」之间的构建独有开销分段（compiler 包约 0.4s，
+    -- 旧实现无 stamp 不可归因）；stamp 关闭时只花一次分支。
+    _ = stamp "cg-splitstart"
     allDatas = runtimeDatas (dtProgDatas prog)
     allDefs = dtProgDefs prog
     meta = splitMetaOf modules entryDecls
-    runtimeText = dtRuntimeWith (dtDefLocTable (splitLocPath roots contextDir) allDefs)
+    _ = stamp "cg-splitmeta-done"
+    locTbl = dtDefLocTable (splitLocPath roots contextDir) allDefs
+    _ = stamp "cg-deflocs-done"
+    runtimeText = dtRuntimeWith locTbl
+    _ = stamp "cg-runtimeText-done"
   in andThen (prepareDtProgram (Pair (dtProgDatas prog) allDefs)) (\p => case p of
     Pair runtime groups =>
-      splitProgramFiles modules entryDecls printResult runtime allDatas allDefs meta runtimeText
+      splitProgramFilesWith lookup store modules entryDecls printResult runtime allDatas allDefs
+        meta runtimeText
   )
 
-splitProgramFiles : List (Pair String (List Decl)) -> List Decl -> Bool -> List DtDef -> List DtData -> List DtDef -> SplitMeta -> String -> Result (List SplitFile)
-splitProgramFiles modules entryDecls printResult runtime allDatas allDefs meta runtimeText =
+splitProgramFilesWith : (String -> Maybe SplitFile) -> (String -> SplitFile -> Int) -> List (Pair String (List Decl)) -> List Decl -> Bool -> List DtDef -> List DtData -> List DtDef -> SplitMeta -> String -> Result (List SplitFile)
+splitProgramFilesWith lookup store modules entryDecls printResult runtime allDatas allDefs meta runtimeText =
   andThen (checkResolvedModules meta modules entryDecls runtime allDatas)
-    (\_ => andThen (nameOwnerPairsOfDefs meta runtime) (\defPairs => andThen (nameOwnerPairsOfDatas meta allDatas) (\dataPairs => splitWithOwners modules printResult runtime allDatas allDefs defPairs dataPairs runtimeText)))
+    (\_ => andThen (nameOwnerPairsOfDefs meta runtime) (\defPairs => andThen (nameOwnerPairsOfDatas meta allDatas) (\dataPairs => splitWithOwnersWith lookup store modules printResult runtime allDatas allDefs defPairs dataPairs runtimeText)))
 
-splitWithOwners : List (Pair String (List Decl)) -> Bool -> List DtDef -> List DtData -> List DtDef -> List (Pair String String) -> List (Pair String String) -> String -> Result (List SplitFile)
-splitWithOwners modules printResult runtime allDatas allDefs defPairs dataPairs runtimeText =
+splitWithOwnersWith : (String -> Maybe SplitFile) -> (String -> SplitFile -> Int) -> List (Pair String (List Decl)) -> Bool -> List DtDef -> List DtData -> List DtDef -> List (Pair String String) -> List (Pair String String) -> String -> Result (List SplitFile)
+splitWithOwnersWith lookup store modules printResult runtime allDatas allDefs defPairs dataPairs runtimeText =
   let
     defUnitT = unitTblOf (mapToUnit defPairs)
     dataUnitT = unitTblOf (mapToUnit dataPairs)
@@ -387,5 +247,33 @@ splitWithOwners modules printResult runtime allDatas allDefs defPairs dataPairs 
     ctx =
       SplitGenCtx (usedTableOf allDatas) allDatas runtime (ownerTblOf defPairs)
         (ownerTblOf dataPairs) defUnitT dataUnitT ordered
-  in andThen (splitModuleFiles ctx modules)
-    (\moduleFiles => andThen (splitMainFile ctx printResult) (\mainFile => Ok (SplitFile "Vuna_runtime.ml" runtimeText [] :: append moduleFiles [mainFile])))
+  in andThen (splitModuleFilesWith lookup store ctx modules)
+    (\moduleFiles => andThen (splitMainFileWith lookup store ctx printResult) (\mainFile => Ok (SplitFile "Vuna_runtime.ml" runtimeText [] :: append moduleFiles [mainFile])))
+
+splitModuleFilesWith : (String -> Maybe SplitFile) -> (String -> SplitFile -> Int) -> SplitGenCtx -> List (Pair String (List Decl)) -> Result (List SplitFile)
+splitModuleFilesWith lookup store ctx [] = Ok []
+splitModuleFilesWith lookup store ctx ((Pair mname decls) :: rest) =
+  let
+    unit = splitUnitOfModule mname
+  in case lookup mname of
+    Just cached =>
+      andThen (splitModuleFilesWith lookup store ctx rest) (\tail => Ok (cached :: tail))
+    Nothing =>
+      let
+        unitDatas = datasInUnit ctx.sgcDataOwnerT mname ctx.sgcAllDatas
+        unitDefs = defsInUnit ctx.sgcDefOwnerT mname ctx.sgcAllDefs
+        qc = QualCtx unit ctx.sgcDefUnitT ctx.sgcDataUnitT
+      in andThen (groupRuntimeDefs unitDefs)
+        (\groups => andThen (genUnitParts ctx.sgcUsedTbl qc ctx.sgcAllDatas unitDatas groups) (\parts => andThen (splitModuleFilesWith lookup store ctx rest) (\tail => andThen (unitDepsOf ctx.sgcOrdered unit (unitPartsDeps parts)) (\deps => Ok (storeModuleFile store mname (SplitFile "${unit}.ml" "${genUnitText parts}\n" deps) :: tail)))))
+
+splitMainFileWith : (String -> Maybe SplitFile) -> (String -> SplitFile -> Int) -> SplitGenCtx -> Bool -> Result SplitFile
+splitMainFileWith lookup store ctx printResult = case lookup "__entry__" of
+  Just cached => Ok cached
+  Nothing =>
+    let
+      entryUnit = splitUnitOfModule entryOwner
+      entryDefs = defsInUnit ctx.sgcDefOwnerT entryOwner ctx.sgcAllDefs
+      entryDatas = datasInUnit ctx.sgcDataOwnerT entryOwner ctx.sgcAllDatas
+      qc = QualCtx entryUnit ctx.sgcDefUnitT ctx.sgcDataUnitT
+    in andThen (groupRuntimeDefs entryDefs)
+      (\groups => andThen (genUnitParts ctx.sgcUsedTbl qc ctx.sgcAllDatas entryDatas groups) (\parts => andThen (mainHook qc (Pair ctx.sgcAllDatas ctx.sgcAllDefs) ctx.sgcAllDefs printResult) (\hook => andThen (unitDepsOf ctx.sgcOrdered entryUnit (append (unitPartsDeps parts) (secondOf hook))) (\deps => Ok (storeModuleFile store "__entry__" (SplitFile "Main.ml" (mainInitPrologue ++ genUnitText parts ++ firstOf hook) deps))))))

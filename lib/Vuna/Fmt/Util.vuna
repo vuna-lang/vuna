@@ -27,7 +27,7 @@ import Vuna.Compiler.Frontend.Ast
 -- 行 / 字符串小工具
 -- ---------------------------------------------------------------
 spaces : Int -> String
-spaces n = if n <= 0 then "" else " " ++ spaces (n - 1)
+spaces n = if n <= 0 then "" else " ${spaces (n - 1)}"
 
 concatStrings : List String -> String
 concatStrings [] = ""
@@ -36,16 +36,16 @@ concatStrings (s :: rest) = s ++ concatStrings rest
 joinComma : List String -> String
 joinComma [] = ""
 joinComma ([x]) = x
-joinComma (x :: rest) = x ++ ", " ++ joinComma rest
+joinComma (x :: rest) = "${x}, ${joinComma rest}"
 
 joinSpace : List String -> String
 joinSpace [] = ""
-joinSpace (x :: rest) = " " ++ x ++ joinSpace rest
+joinSpace (x :: rest) = " ${x}${joinSpace rest}"
 
 joinLines : List String -> String
 joinLines [] = ""
 joinLines ([l]) = l
-joinLines (l :: rest) = l ++ "\n" ++ joinLines rest
+joinLines (l :: rest) = "${l}\n${joinLines rest}"
 
 firstLine : List String -> String
 firstLine [] = ""

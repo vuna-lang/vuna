@@ -114,7 +114,7 @@ joinLines [] = ""
 -- 单元素列表不加换行：splitLines 对以换行结尾的源码会补一个空行，旧实现
 -- （`line ++ "\n" ++ joinLines rest`）会让 --fix 每次多写一个行尾换行。
 joinLines ([line]) = line
-joinLines (line :: rest) = line ++ "\n" ++ joinLines rest
+joinLines (line :: rest) = "${line}\n${joinLines rest}"
 
 nthLine : List String -> Int -> String
 nthLine [] n = ""
@@ -668,8 +668,7 @@ else case expr of
   _ => ChainRes name (reverse acc) (exprText lines toks expr) expr
 
 renderChainItem : Int -> ChainItem -> String
-renderChainItem indent (ChainItem lit thenText expr) =
-  spaces (indent + 2) ++ lit ++ " => " ++ thenText
+renderChainItem indent (ChainItem lit thenText expr) = "${spaces (indent + 2)}${lit} => ${thenText}"
 
 itemsSegmentsOk : List String -> List PTok -> List ChainItem -> Bool
 itemsSegmentsOk lines toks [] = True
@@ -693,8 +692,8 @@ else
     indent = indentOf line
     prefix = prefixBeforeCol line (spanStartCol sp)
     newLines =
-      append [prefix ++ "case " ++ name ++ " of"]
-        (append (map (\item => renderChainItem indent item) items) [spaces (indent + 2) ++ "_ => " ++ defaultText])
+      append ["${prefix}case ${name} of"]
+        (append (map (\item => renderChainItem indent item) items) ["${spaces (indent + 2)}_ => ${defaultText}"])
     edit = Just (Edit startLine endLine newLines)
   in [ Finding startLine (spanStartCol sp) (lintCode LiteralIfChain) (lintRule LiteralIfChain) (lintMsg LiteralIfChain name) edit
   ]
@@ -780,13 +779,13 @@ liftEdit lines toks lane pat body name sp =
     ownLine = startsOwnLine lines (spanStartLine sp) (spanStartCol sp)
     patTextValue =
       if exprMentions name body then asPatText lines toks name pat
-      else "(" ++ patText lines toks pat ++ ")"
+      else "(${patText lines toks pat})"
     newHead = laneReplace lines toks lane name patTextValue (spanStartLine sp) (spanStartCol sp)
     target = if ownLine then spanStartCol sp - 1 else indentOf (lineAt lines headLine) + 2
     newLines =
       if ownLine then if exprSingleLine body then [newHead, spaces target ++ exprText lines toks body]
       else newHead :: blockBodyLines lines body target
-      else if exprSingleLine body then [newHead ++ " " ++ exprText lines toks body]
+      else if exprSingleLine body then ["${newHead} ${exprText lines toks body}"]
       else newHead :: blockBodyLines lines body target
   in Edit headLine (spanEndLine sp) newLines
 
@@ -802,8 +801,8 @@ laneIsClause (LAlt line pat last) = False
 
 asPatText : List String -> List PTok -> String -> Pat -> String
 asPatText lines toks name pat =
-  if patNeedsParen pat then name ++ "@" ++ "(" ++ patText lines toks pat ++ ")"
-  else name ++ "@" ++ patText lines toks pat
+  if patNeedsParen pat then "${name}@(${patText lines toks pat})"
+  else "${name}@${patText lines toks pat}"
 
 liftCase : List String -> List PTok -> Lane -> Expr -> Expr -> List (Pair Pat Expr) -> Span -> List Finding
 liftCase lines toks lane caseExpr scrut ([Pair pat body]) sp = case scrut of
@@ -836,12 +835,12 @@ liftLetEdit lines toks lane pat body name sp =
     headLine = laneHeadLine lane
     patTextValue =
       if exprMentions name body then asPatText lines toks name pat
-      else "(" ++ patText lines toks pat ++ ")"
+      else "(${patText lines toks pat})"
     newHead = laneReplace lines toks lane name patTextValue (spanStartLine sp) (spanStartCol sp)
     target = indentOf (lineAt lines headLine) + 2
     -- let 解构没有既有语料约束，单行 body 直接按 fmt 规范形态与 clause/alt 头同行。
     newLines =
-      if exprSingleLine body then [newHead ++ " " ++ exprText lines toks body]
+      if exprSingleLine body then ["${newHead} ${exprText lines toks body}"]
       else newHead :: blockBodyLines lines body target
   in Edit headLine (spanEndLine sp) newLines
 
@@ -882,9 +881,9 @@ caseAltClauseLines lines toks headPrefix varTok x headIndent pat body =
   let
     replacement =
       if exprMentions x body then if isWildPat pat then x else asPatText lines toks x pat
-      else if patNeedsParen pat then "(" ++ patText lines toks pat ++ ")" else patText lines toks pat
+      else if patNeedsParen pat then "(${patText lines toks pat})" else patText lines toks pat
     newHead = replaceIdentInLine headPrefix varTok replacement
-  in if exprSingleLine body then [newHead ++ " " ++ exprText lines toks body]
+  in if exprSingleLine body then ["${newHead} ${exprText lines toks body}"]
   else newHead :: blockBodyLines lines body (headIndent + 2)
 
 clausesForAlts : List String -> List PTok -> String -> PTok -> String -> Int -> List (Pair Pat Expr) -> List String

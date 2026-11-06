@@ -1,0 +1,8 @@
+module Kind (Payload(..), arity) where
+
+-- 一个公开的空构造 data：供入口在**值位置**把类型名当显式类型实参使用。
+data Payload : Type where
+  MkPayload : Payload
+
+arity : (a : Type) -> Int
+arity a = 1

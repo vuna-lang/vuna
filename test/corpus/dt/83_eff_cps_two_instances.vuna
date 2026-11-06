@@ -1,0 +1,48 @@
+-- D27 / effects.md §5–§6：同一 CPS 效应类型在两个不同的 (f, res) 实例上用两次。
+--
+-- 覆盖：不透明字段跨实例复用、每个 op 分支对续延的独立 cast（Int / String），
+-- 以及 interp（OpIdentity 透明归约）与产物运行结果逐字节一致。
+data Op : Type where
+  Bump : Int -> Op
+  Read : Op
+
+resOp : Op -> Type
+resOp (Bump n) = Int
+resOp Read = String
+
+data Op2 : Type where
+  Inc : Int -> Op2
+  Name : Op2
+
+resOp2 : Op2 -> Type
+resOp2 (Inc n) = Int
+resOp2 Name = String
+
+data Eff : (f : Type) -> (f -> Type) -> (ans : Type) -> (a : Type) -> Type where
+  MkEff : {f : Type} -> {res : f -> Type} -> {ans : Type} -> {a : Type} -> ((a -> ans) -> ((op : f) -> (res op -> ans) -> ans) -> ans) -> Eff f res ans a
+
+send : {f : Type} -> {res : f -> Type} -> {ans : Type} -> (op : f) -> Eff f res ans (res op)
+send op = MkEff (\k => \alg => alg op k)
+
+run : {f : Type} -> {res : f -> Type} -> {ans : Type} -> {a : Type} -> Eff f res ans a -> (a -> ans) -> ((op : f) -> (res op -> ans) -> ans) -> ans
+run e k alg = case e of
+  MkEff h => h k alg
+
+alg1 : (op : Op) -> (resOp op -> Int) -> Int
+alg1 op k = case op of
+  Bump n => k n
+  Read => k "read"
+
+alg2 : (op : Op2) -> (resOp2 op -> Int) -> Int
+alg2 op k = case op of
+  Inc n => k n
+  Name => k "name"
+
+main : Int
+main =
+  let
+    e1 : Eff Op resOp Int Int
+    e1 = send (Bump 40)
+    e2 : Eff Op2 resOp2 Int Int
+    e2 = send (Inc 2)
+  in run e1 (\x => x) alg1 + run e2 (\x => x) alg2

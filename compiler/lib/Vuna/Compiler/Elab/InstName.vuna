@@ -35,7 +35,7 @@ instanceHeadName _ = Nothing
 -- duplicate（monad/01 等夹具的回归）。同一类内的 head 唯一性仍由 coherence 保证
 -- （`anyInstanceExact` / `anyInstanceOverlap` 按 head 判定）。
 instanceName : String -> Expr -> String
-instanceName cname headExpr = baseNameOf cname ++ "_" ++ derivedInstName headExpr
+instanceName cname headExpr = "${baseNameOf cname}_${derivedInstName headExpr}"
 
 -- 实例头的名字后缀（类名本身不计入，类短名已由 `instanceName` 加过一次）：
 -- `Eq Int` → `Int`、`Eq Base.Bool.Bool` → `Base.Bool.Bool`、`Eq (Box a)` → `Box_a`。
@@ -50,7 +50,7 @@ argSuffixTail (a :: rest) = exprNameFor a ++ argSuffix rest
 
 argSuffix : List Expr -> String
 argSuffix [] = ""
-argSuffix (a :: rest) = "_" ++ exprNameFor a ++ argSuffix rest
+argSuffix (a :: rest) = "_${exprNameFor a}${argSuffix rest}"
 
 -- 类型表达式的完整名：`EVar` 直接用解析后的全名（库模块 = `<模块>.<名字>`，入口 = 裸名；
 -- 不能再取最后一段，否则不同模块的同名 data 会撞名）。

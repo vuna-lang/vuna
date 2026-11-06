@@ -432,7 +432,7 @@ instBodyCtxGo ctx (t :: rest) k =
   instBodyCtxGo (ctxBindValue (ctxDictName k) (eval (ctxEnv ctx) (shift 0 k t)) ctx) rest (k + 1)
 
 ctxDictName : Int -> String
-ctxDictName k = "_ctx" ++ strFromInt k
+ctxDictName k = "_ctx${k}"
 
 -- 字典值的 λ 链：tele(Rig0) 之外再 λ ctx(Rig1)。
 instValueOf : InstSigInfo -> String -> List Term -> Term
@@ -765,17 +765,20 @@ solveLiftedMeta ec name level m = case solveMeta (ecDefTbl ec) (ecSolsP ec) 0 m 
   Err e => ec
 
 liftFreeDictGoals : String -> Ec -> Term -> Term -> Pair Term (Pair Term Ec)
-liftFreeDictGoals defName ec ty body =
-  let
-    groups = freeDictGoals ec
-    nGroups = length groups
-    -- M23/M29：字典 binder 插在**原始签名**的最后一个隐式 binder 之后。
-    -- `insertDictBinder`/`insertLamBinder` 的 idx 语义是「插在第 idx 个 binder 之后」，
-    -- 所以基准是 `隐式前缀长 - 1`，且**只在循环外算一次**：插入后 ty 的隐式前缀会变长，
-    -- 再读 `leadingImplicitCount ty` 会把已插入的字典重复计入（C05：第 2、3 只字典被推到
-    -- 显式参数之后，`ma` 的引用因此错位）。
-    baseIdx = maxInt 0 (leadingImplicitCount ty - 1)
-  in liftFreeDictGoalsGo defName ec ty body baseIdx nGroups 0 groups
+-- M34 冷路径：没有延迟字典目标时整段是恒等（旧实现每次都扫一遍目标表 + 求隐式前缀长）。
+liftFreeDictGoals defName ec ty body = case ecDictGoals ec of
+  [] => Pair ty (Pair body ec)
+  _ =>
+    let
+      groups = freeDictGoals ec
+      nGroups = length groups
+      -- M23/M29：字典 binder 插在**原始签名**的最后一个隐式 binder 之后。
+      -- `insertDictBinder`/`insertLamBinder` 的 idx 语义是「插在第 idx 个 binder 之后」，
+      -- 所以基准是 `隐式前缀长 - 1`，且**只在循环外算一次**：插入后 ty 的隐式前缀会变长，
+      -- 再读 `leadingImplicitCount ty` 会把已插入的字典重复计入（C05：第 2、3 只字典被推到
+      -- 显式参数之后，`ma` 的引用因此错位）。
+      baseIdx = maxInt 0 (leadingImplicitCount ty - 1)
+    in liftFreeDictGoalsGo defName ec ty body baseIdx nGroups 0 groups
 
 liftFreeDictGoalsGo : String -> Ec -> Term -> Term -> Int -> Int -> Int -> List DictGoalGroup -> Pair Term (Pair Term Ec)
 liftFreeDictGoalsGo defName ec ty body baseIdx nGroups k groups = case groups of
@@ -783,7 +786,7 @@ liftFreeDictGoalsGo defName ec ty body baseIdx nGroups k groups = case groups of
   [] => Pair ty (Pair body ec)
   (DictGoalGroup m dom extras) :: rest =>
     let
-      dName = "d" ++ strFromInt m
+      dName = "d${m}"
       -- 第 k 组（0-based）的**最终** binder 位置：之后每插入一只更新的字典都把它推深 1
       -- （同位置反复插入 ⇒ 新字典在旧字典外侧）。
       finalPos = baseIdx + 1 + (nGroups - 1 - k)
@@ -1059,12 +1062,15 @@ else case body of
     else
       let
         lvl = ctxDepth ctx
-        etaName = "_arity" ++ strFromInt lvl
+        etaName = "_arity${lvl}"
         v = freshVarValue etaName lvl
         ctx2 = ctxBindValue etaName dom ctx
         body2 = EApp body [EVar etaName sp] sp
       in andThen (rigForLinearDomain ec sp etaName rig dom) (\etaRig => andThen (checkBodyAtEndFuel (fuel - 1) globals ctx2 ec body2 (applyClosure clo v) sp) (\p => case p of
-        Pair inner ec1 => Ok (Pair (TLam etaName etaRig inner) ec1)
+        Pair inner ec1 =>
+          let
+            inner2 = if isOpaqueRuntimeTyIn ec1 ctx dom then wrapOpaqueUses [0] inner else inner
+          in Ok (Pair (TLam etaName etaRig inner2) ec1)
       )
       )
     _ => checkE globals ctx ec body expected
@@ -1091,7 +1097,10 @@ else
     v = freshVarValue pname lvl
     ctx2 = ctxBindValue pname dom ctx
   in andThen (rigForLinearDomain ec sp pname rig dom) (\erasure => andThen (checkBindersFuel (fuel - 1) globals ctx2 ec pats body (applyClosure clo v) sp) (\p => case p of
-    Pair inner ec1 => Ok (Pair (TLam pname erasure inner) ec1)
+    Pair inner ec1 =>
+      let
+        inner2 = if isOpaqueRuntimeTyIn ec1 ctx dom then wrapOpaqueUses [0] inner else inner
+      in Ok (Pair (TLam pname erasure inner2) ec1)
   )
   )
 

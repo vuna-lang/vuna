@@ -562,3 +562,25 @@ and v_Vuna_dCompiler_dCore_dTerm_dshowCoreAlts = (fun mc0 -> (match mc0 with
   | Base_dList.C_Base_dList_dList_Base_dList_dNil -> ""
   | _ -> failwith "DT: impossible branch"
 ))
+
+let rec v_Vuna_dCompiler_dCore_dTerm_dshowTypeSig = (fun mc0 -> (match mc0 with
+  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTCon (dtb__398, dtb__399) -> (match dtb__399 with
+  | Base_dList.C_Base_dList_dList_Base_dList_dNil -> dtb__398
+  | _ -> (String.concat "" ["("; dtb__398; (v_Vuna_dCompiler_dCore_dTerm_dshowSigArgs dtb__399); ")"])
+)
+  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTApp (dtb__400, dtb__401, dtb__402) -> (String.concat "" ["("; (v_Vuna_dCompiler_dCore_dTerm_dshowSigParenIfPi dtb__400); " "; (v_Vuna_dCompiler_dCore_dTerm_dshowSigParenIfPi dtb__401); ")"])
+  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTPi (dtb__403, dtb__404, dtb__405, dtb__406, dtb__407) -> (if (dtb__403 = "_") then (String.concat "" [(v_Vuna_dCompiler_dCore_dTerm_dshowSigParenIfPi dtb__406); " -> "; (v_Vuna_dCompiler_dCore_dTerm_dshowTypeSig dtb__407)]) else (if dtb__404 then (String.concat "" ["{"; dtb__403; " : "; (v_Vuna_dCompiler_dCore_dTerm_dshowTypeSig dtb__406); "} -> "; (v_Vuna_dCompiler_dCore_dTerm_dshowTypeSig dtb__407)]) else (String.concat "" ["("; dtb__403; " : "; (v_Vuna_dCompiler_dCore_dTerm_dshowTypeSig dtb__406); ") -> "; (v_Vuna_dCompiler_dCore_dTerm_dshowTypeSig dtb__407)])))
+  | _ -> (v_Vuna_dCompiler_dCore_dTerm_dshowTerm mc0)
+))
+and v_Vuna_dCompiler_dCore_dTerm_dshowSigParenIfPi = (fun t -> (match t with
+  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTPi (dtb__408, dtb__409, dtb__410, dtb__411, dtb__412) -> (String.concat "" ["("; (v_Vuna_dCompiler_dCore_dTerm_dshowTypeSig (C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTPi (dtb__408, dtb__409, dtb__410, dtb__411, dtb__412))); ")"])
+  | _ -> (v_Vuna_dCompiler_dCore_dTerm_dshowTypeSig t)
+))
+and v_Vuna_dCompiler_dCore_dTerm_dshowSigArgs = (fun mc0 -> (match mc0 with
+  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__413, dtb__414) -> (match dtb__413 with
+  | Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair (dtb__415, dtb__416) -> (String.concat "" [" "; (v_Vuna_dCompiler_dCore_dTerm_dshowSigParenIfPi dtb__415); (v_Vuna_dCompiler_dCore_dTerm_dshowSigArgs dtb__414)])
+  | _ -> failwith "DT: impossible branch"
+)
+  | Base_dList.C_Base_dList_dList_Base_dList_dNil -> ""
+  | _ -> failwith "DT: impossible branch"
+))

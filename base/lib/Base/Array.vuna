@@ -4,7 +4,7 @@ module Base.Array (fromList, get, length, make, set, toList) where
 --
 -- 构造器不可见：只能经 `fromList` / `make` 构造；`set` 返回**新数组**（copy-on-write），
 -- 原数组不变。`get` / `set` 越界是宿主 `Invalid_argument`（与 `strAt` 的 -1 哨兵语义
--- 不同，见 docs/reference/limits.md）。
+-- 不同，见 docs/reference/primitives.md）。
 --
 -- 尺寸/下标是 **Nat**；底层原语仍是 Int（低层 runtime 接口），这里的转换是恒等/单分支。
 import Base.List

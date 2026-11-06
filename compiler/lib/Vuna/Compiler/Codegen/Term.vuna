@@ -29,61 +29,63 @@ import Vuna.Compiler.Codegen.Erase
 
 -- DT runtime：只包含 prelude 里出现的运算与 show（名字/语义与运行时 helper 一致）。
 dtRuntime : String
-dtRuntime =
-  "let () =\n"
-    ++ "  let c = Gc.get () in\n"
-    ++ "  Gc.set { c with minor_heap_size = 16 * 1024 * 1024; space_overhead = 200 }\n"
-    ++ "let () =\n"
-    ++ "  if (try Sys.getenv \"VN_PERF_STATS\" with Not_found -> \"\") <> \"\" then\n"
-    ++ "    at_exit (fun () ->\n"
-    ++ "      let s = Gc.quick_stat () in\n"
-    ++ "      Printf.eprintf \"VN_PERF minor_words=%.0f major_words=%.0f minor_collections=%d major_collections=%d top_heap_words=%d\\n\"\n"
-    ++ "        s.Gc.minor_words s.Gc.major_words s.Gc.minor_collections s.Gc.major_collections s.Gc.top_heap_words)\n"
-    ++ "let bi_add a b = a + b\n"
-    ++ "let bi_sub a b = a - b\n"
-    ++ "let bi_mul a b = a * b\n"
-    ++ "let bi_div a b = if b = 0 then failwith \"division by zero\" else a / b\n"
-    ++ "let bi_eq_int (a : int) (b : int) = a = b\n"
-    ++ "let bi_neq_int (a : int) (b : int) = a <> b\n"
-    ++ "let bi_eq_str (a : string) (b : string) = a = b\n"
-    ++ "let bi_neq_str (a : string) (b : string) = a <> b\n"
-    ++ "let bi_strFromInt (n : int) = string_of_int n\n"
-    ++ "let bi_strLength (s : string) = String.length s\n"
-    ++ "let bi_strUnpack (s : string) = List.init (String.length s) (fun i -> Char.code s.[i])\n"
-    ++ "let bi_strPack (cs : int list) =\n  let a = Array.of_list cs in\n  String.init (Array.length a) (fun i -> Char.chr a.(i))\n"
-    ++ "let bi_lt_int (a : int) (b : int) = a < b\n"
-    ++ "let bi_le_int (a : int) (b : int) = a <= b\n"
-    ++ "let bi_gt_int (a : int) (b : int) = a > b\n"
-    ++ "let bi_ge_int (a : int) (b : int) = a >= b\n"
-    ++ "let bi_lt_generic (a : 'a) (b : 'a) = compare a b < 0\n"
-    ++ "let bi_le_generic (a : 'a) (b : 'a) = compare a b <= 0\n"
-    ++ "let bi_gt_generic (a : 'a) (b : 'a) = compare a b > 0\n"
-    ++ "let bi_ge_generic (a : 'a) (b : 'a) = compare a b >= 0\n"
-    ++ "let bi_concat a b = a ^ b\n"
-    ++ "let bi_and a b = a && b\n"
-    ++ "let bi_or a b = a || b\n"
-    ++ "let bi_natSucc (n : int) = if n >= max_int then max_int else n + 1\n"
-    ++ "let bi_natAdd (a : int) (b : int) = if a > max_int - b then max_int else a + b\n"
-    ++ "let bi_natSub (a : int) (b : int) = if a <= b then 0 else a - b\n"
-    ++ "let bi_natMul (a : int) (b : int) =\n  if a <= 0 || b <= 0 then 0 else if a > max_int / b then max_int else a * b\n"
-    ++ "let bi_natDiv (a : int) (b : int) = if b = 0 then failwith \"division by zero\" else a / b\n"
-    ++ "let bi_natToInt (n : int) = n\n"
-    ++ "let bi_natFromInt (n : int) = if n <= 0 then 0 else n\n"
-    ++ "let dt_show_bool b = if b then \"True\" else \"False\"\n"
-    ++ "let dt_show_string s =\n"
-    ++ "  let buf = Buffer.create 16 in\n"
-    ++ "  Buffer.add_char buf (Char.chr 34);\n"
-    ++ "  String.iter (fun c ->\n"
-    ++ "    let n = Char.code c in\n"
-    ++ "    if n = 34 then Buffer.add_string buf (String.make 1 (Char.chr 92) ^ String.make 1 (Char.chr 34))\n"
-    ++ "    else if n = 92 then Buffer.add_string buf (String.make 1 (Char.chr 92) ^ String.make 1 (Char.chr 92))\n"
-    ++ "    else if n = 10 then Buffer.add_string buf (String.make 1 (Char.chr 92) ^ \"n\")\n"
-    ++ "    else if n = 9 then Buffer.add_string buf (String.make 1 (Char.chr 92) ^ \"t\")\n"
-    ++ "    else if n = 13 then Buffer.add_string buf (String.make 1 (Char.chr 92) ^ \"r\")\n"
-    ++ "    else Buffer.add_char buf c) s;\n"
-    ++ "  Buffer.add_char buf (Char.chr 34);\n"
-    ++ "  Buffer.contents buf\n"
-    ++ dtPrimRuntime
+dtRuntime = """let () =
+  let c = Gc.get () in
+  Gc.set { c with minor_heap_size = 16 * 1024 * 1024; space_overhead = 200 }
+let () =
+  if (try Sys.getenv \"VN_PERF_STATS\" with Not_found -> \"\") <> \"\" then
+    at_exit (fun () ->
+      let s = Gc.quick_stat () in
+      Printf.eprintf \"VN_PERF minor_words=%.0f major_words=%.0f minor_collections=%d major_collections=%d top_heap_words=%d\\n\"
+        s.Gc.minor_words s.Gc.major_words s.Gc.minor_collections s.Gc.major_collections s.Gc.top_heap_words)
+let bi_add a b = a + b
+let bi_sub a b = a - b
+let bi_mul a b = a * b
+let bi_div a b = if b = 0 then failwith \"division by zero\" else a / b
+let bi_eq_int (a : int) (b : int) = a = b
+let bi_neq_int (a : int) (b : int) = a <> b
+let bi_eq_str (a : string) (b : string) = a = b
+let bi_neq_str (a : string) (b : string) = a <> b
+let bi_strFromInt (n : int) = string_of_int n
+let bi_strLength (s : string) = String.length s
+let bi_strUnpack (s : string) = List.init (String.length s) (fun i -> Char.code s.[i])
+let bi_strPack (cs : int list) =
+  let a = Array.of_list cs in
+  String.init (Array.length a) (fun i -> Char.chr a.(i))
+let bi_lt_int (a : int) (b : int) = a < b
+let bi_le_int (a : int) (b : int) = a <= b
+let bi_gt_int (a : int) (b : int) = a > b
+let bi_ge_int (a : int) (b : int) = a >= b
+let bi_lt_generic (a : 'a) (b : 'a) = compare a b < 0
+let bi_le_generic (a : 'a) (b : 'a) = compare a b <= 0
+let bi_gt_generic (a : 'a) (b : 'a) = compare a b > 0
+let bi_ge_generic (a : 'a) (b : 'a) = compare a b >= 0
+let bi_concat a b = a ^ b
+let bi_and a b = a && b
+let bi_or a b = a || b
+let bi_natSucc (n : int) = if n >= max_int then max_int else n + 1
+let bi_natAdd (a : int) (b : int) = if a > max_int - b then max_int else a + b
+let bi_natSub (a : int) (b : int) = if a <= b then 0 else a - b
+let bi_natMul (a : int) (b : int) =
+  if a <= 0 || b <= 0 then 0 else if a > max_int / b then max_int else a * b
+let bi_natDiv (a : int) (b : int) = if b = 0 then failwith \"division by zero\" else a / b
+let bi_natToInt (n : int) = n
+let bi_natFromInt (n : int) = if n <= 0 then 0 else n
+let dt_show_bool b = if b then \"True\" else \"False\"
+let dt_show_string s =
+  let buf = Buffer.create 16 in
+  Buffer.add_char buf (Char.chr 34);
+  String.iter (fun c ->
+    let n = Char.code c in
+    if n = 34 then Buffer.add_string buf (String.make 1 (Char.chr 92) ^ String.make 1 (Char.chr 34))
+    else if n = 92 then Buffer.add_string buf (String.make 1 (Char.chr 92) ^ String.make 1 (Char.chr 92))
+    else if n = 10 then Buffer.add_string buf (String.make 1 (Char.chr 92) ^ \"n\")
+    else if n = 9 then Buffer.add_string buf (String.make 1 (Char.chr 92) ^ \"t\")
+    else if n = 13 then Buffer.add_string buf (String.make 1 (Char.chr 92) ^ \"r\")
+    else Buffer.add_char buf c) s;
+  Buffer.add_char buf (Char.chr 34);
+  Buffer.contents buf
+${dtPrimRuntime}"""
 
 -- M21：effectful 内建（`prim_*`）的 DT 运行时实现。
 -- 签名在 `Vuna.Compiler.Intrinsics`（唯一真源），这里补 OCaml 侧实现（对应
@@ -92,97 +94,227 @@ dtRuntime =
 -- `prim_readBytes` 是**函数**（`Int -> String`）：最多读 n 字节、有数据就立即返回
 -- （可能少于 n），EOF 返回 `""`——LSP 的帧循环靠它精确读 Content-Length 字节。
 dtPrimRuntime : String
-dtPrimRuntime =
-  "let dtp_print s = print_string s; flush stdout; String.length s\n"
-    ++ "let dtp_readFile path =\n  try\n    let ch = open_in_bin path in\n    Fun.protect ~finally:(fun () -> close_in_noerr ch)\n      (fun () -> really_input_string ch (in_channel_length ch))\n  with Sys_error msg -> failwith (\"readFile: \" ^ msg)\n"
-    ++ "let dtp_writeFile path contents =\n  try\n    let ch = open_out_bin path in\n    Fun.protect ~finally:(fun () -> close_out_noerr ch)\n      (fun () -> output_string ch contents);\n    String.length contents\n  with Sys_error msg -> failwith (\"writeFile: \" ^ msg)\n"
-    ++ "let dtp_writeFileAtomic path contents =\n  let tmp = path ^ \".\" ^ string_of_int (Unix.getpid ()) ^ \".tmp\" in\n  let write () =\n    let ch = open_out_bin tmp in\n    Fun.protect ~finally:(fun () -> close_out_noerr ch) (fun () -> output_string ch contents) in\n  (try write (); Sys.rename tmp path; String.length contents\n   with e -> (try Sys.remove tmp with _ -> ()); raise e)\n"
-    ++ "let dtp_getArgs () =\n  let argv = Sys.argv in\n  let n = Array.length argv in\n  if n <= 1 then [] else Array.to_list (Array.sub argv 1 (n - 1))\n"
-    ++ "let dtp_readLine () = try input_line stdin with End_of_file -> \"\"\n"
-    ++ "let dtp_readBytes n =\n  if n <= 0 then \"\"\n  else\n    let b = Bytes.create n in\n    let k = try input stdin b 0 n with _ -> 0 in\n    if k <= 0 then \"\" else Bytes.sub_string b 0 k\n"
-    ++ "let dtp_readDir path =\n  try List.sort compare (Array.to_list (Sys.readdir path))\n  with Sys_error msg -> failwith (\"readDir: \" ^ msg)\n"
-    ++ "let dtp_isDirectory path =\n  try Sys.is_directory path with Sys_error msg -> failwith (\"isDirectory: \" ^ msg)\n"
-    ++ "let dtp_makeDir path =\n  try (if Sys.file_exists path then 0 else (Sys.mkdir path 0o755; 0))\n  with Sys_error msg -> failwith (\"makeDir: \" ^ msg)\n"
-    ++ "let dtp_removeFile path =\n  try (if Sys.file_exists path then (Sys.remove path; 0) else 0)\n  with Sys_error msg -> failwith (\"removeFile: \" ^ msg)\n"
-    ++ "let dtp_fileExists path = Sys.file_exists path\n"
-    ++ "let dtp_fileMtime path =\n  try int_of_float (Unix.stat path).Unix.st_mtime with _ -> 0\n"
-    ++ "let dtp_fileSize path =\n  try (Unix.stat path).Unix.st_size with _ -> 0\n"
-    ++ "let dtp_timeUs () = int_of_float (Unix.gettimeofday () *. 1000000.0)\n"
-    ++ "let dtp_getenv k = try Sys.getenv k with Not_found -> \"\"\n"
-    ++ "let dtp_getcwd () = try Sys.getcwd () with _ -> \".\"\n"
-    ++ "let dtp_execPath () = try Unix.readlink \"/proc/self/exe\" with _ -> Sys.executable_name\n"
-    ++ "let dtp_arraySet (a : 'a array) (i : int) (v : 'a) =\n  let b = Array.copy a in\n  Array.set b i v; b\n"
-    ++ "let dtp_strHash (s : string) =\n  let h = ref 0 in\n  String.iter (fun c -> h := ((!h * 33) + Char.code c) land 1023) s;\n  !h\n"
-    ++ "let dtp_strAt (s : string) (i : int) = if i < 0 || i >= String.length s then -1 else Char.code s.[i]\n"
-    ++ "let dtp_substring start len s =\n  let n = String.length s in\n  let st = if start < 0 then 0 else if start > n then n else start in\n  let ln = if len < 0 then 0 else if st + len > n then n - st else len in\n  String.sub s st ln\n"
-    ++ "let dtp_marshal (v : 'a) : string = Marshal.to_string v []\n"
-    ++ "let dtp_unmarshal (s : string) : 'a = Marshal.from_string s 0\n"
-    ++ "let dtp_exit n = exit n\n"
-    ++ "let dtp_runIn dir args =\n  let quote s = Filename.quote s in\n  let cmd = String.concat \" \" (List.map quote args) in\n  let old = Sys.getcwd () in\n  Fun.protect ~finally:(fun () -> Sys.chdir old) (fun () -> Sys.chdir dir; Sys.command cmd)\n"
-    ++ "let dtp_spawn (args : string list) : int =\n  let prog = Sys.executable_name in\n  Unix.create_process prog (Array.of_list (prog :: args)) Unix.stdin Unix.stdout Unix.stderr\n"
-    ++ "let dtp_wait (pid : int) : int =\n  let (_, st) = Unix.waitpid [] pid in\n  match st with Unix.WEXITED c -> c | _ -> 1\n"
+dtPrimRuntime = """let dtp_print s = print_string s; flush stdout; String.length s
+let dtp_readFile path =
+  try
+    let ch = open_in_bin path in
+    Fun.protect ~finally:(fun () -> close_in_noerr ch)
+      (fun () -> really_input_string ch (in_channel_length ch))
+  with Sys_error msg -> failwith (\"readFile: \" ^ msg)
+let dtp_writeFile path contents =
+  try
+    let ch = open_out_bin path in
+    Fun.protect ~finally:(fun () -> close_out_noerr ch)
+      (fun () -> output_string ch contents);
+    String.length contents
+  with Sys_error msg -> failwith (\"writeFile: \" ^ msg)
+let dtp_writeFileAtomic path contents =
+  let tmp = path ^ \".\" ^ string_of_int (Unix.getpid ()) ^ \".tmp\" in
+  let write () =
+    let ch = open_out_bin tmp in
+    Fun.protect ~finally:(fun () -> close_out_noerr ch) (fun () -> output_string ch contents) in
+  (try write (); Sys.rename tmp path; String.length contents
+   with e -> (try Sys.remove tmp with _ -> ()); raise e)
+let dtp_getArgs () =
+  let argv = Sys.argv in
+  let n = Array.length argv in
+  if n <= 1 then [] else Array.to_list (Array.sub argv 1 (n - 1))
+let dtp_readLine () = try input_line stdin with End_of_file -> \"\"
+let dtp_readBytes n =
+  if n <= 0 then \"\"
+  else
+    let b = Bytes.create n in
+    let k = try input stdin b 0 n with _ -> 0 in
+    if k <= 0 then \"\" else Bytes.sub_string b 0 k
+let dtp_readDir path =
+  try List.sort compare (Array.to_list (Sys.readdir path))
+  with Sys_error msg -> failwith (\"readDir: \" ^ msg)
+let dtp_isDirectory path =
+  try Sys.is_directory path with Sys_error msg -> failwith (\"isDirectory: \" ^ msg)
+let dtp_makeDir path =
+  try (if Sys.file_exists path then 0 else (Sys.mkdir path 0o755; 0))
+  with Sys_error msg -> failwith (\"makeDir: \" ^ msg)
+let dtp_removeFile path =
+  try (if Sys.file_exists path then (Sys.remove path; 0) else 0)
+  with Sys_error msg -> failwith (\"removeFile: \" ^ msg)
+let dtp_fileExists path = Sys.file_exists path
+let dtp_fileMtime path =
+  try int_of_float (Unix.stat path).Unix.st_mtime with _ -> 0
+let dtp_fileSize path =
+  try (Unix.stat path).Unix.st_size with _ -> 0
+let dtp_timeUs () = int_of_float (Unix.gettimeofday () *. 1000000.0)
+let dtp_getenv k = try Sys.getenv k with Not_found -> \"\"
+let dtp_getcwd () = try Sys.getcwd () with _ -> \".\"
+let dtp_execPath () = try Unix.readlink \"/proc/self/exe\" with _ -> Sys.executable_name
+let dtp_arraySet (a : 'a array) (i : int) (v : 'a) =
+  let b = Array.copy a in
+  Array.set b i v; b
+let dtp_strHash (s : string) =
+  let h = ref 0 in
+  String.iter (fun c -> h := ((!h * 33) + Char.code c) land 1023) s;
+  !h
+let dtp_strAt (s : string) (i : int) = if i < 0 || i >= String.length s then -1 else Char.code s.[i]
+let dtp_substring start len s =
+  let n = String.length s in
+  let st = if start < 0 then 0 else if start > n then n else start in
+  let ln = if len < 0 then 0 else if st + len > n then n - st else len in
+  String.sub s st ln
+let dtp_marshal (v : 'a) : string = Marshal.to_string v []
+let dtp_unmarshal (s : string) : 'a = Marshal.from_string s 0
+let dtp_exit n = exit n
+let dtp_runIn dir args =
+  let quote s = Filename.quote s in
+  let cmd = String.concat \" \" (List.map quote args) in
+  let old = Sys.getcwd () in
+  Fun.protect ~finally:(fun () -> Sys.chdir old) (fun () -> Sys.chdir dir; Sys.command cmd)
+let dtp_spawn (args : string list) : int =
+  let prog = Sys.executable_name in
+  Unix.create_process prog (Array.of_list (prog :: args)) Unix.stdin Unix.stdout Unix.stderr
+let dtp_wait (pid : int) : int =
+  let (_, st) = Unix.waitpid [] pid in
+  match st with Unix.WEXITED c -> c | _ -> 1
+let dtp_net_tbl : (int, Unix.file_descr) Hashtbl.t = Hashtbl.create 16
+let dtp_net_next = ref 1
+let dtp_net_put (fd : Unix.file_descr) : int =
+  let k = !dtp_net_next in
+  dtp_net_next := k + 1;
+  Hashtbl.replace dtp_net_tbl k fd;
+  k
+let dtp_net_get (h : int) : Unix.file_descr =
+  match Hashtbl.find_opt dtp_net_tbl h with
+  | Some fd -> fd
+  | None -> failwith \"net: invalid handle\"
+let dtp_net_drop (h : int) = (try Hashtbl.remove dtp_net_tbl h with _ -> ())
+let dtp_net_error (what : string) (e : exn) : 'a =
+  match e with
+  | Unix.Unix_error (ue, fn, arg) ->
+    failwith (\"net: \" ^ what ^ \": \" ^ Unix.error_message ue ^ (if arg = \"\" then \"\" else \" (\" ^ arg ^ \")\"))
+  | _ -> failwith (\"net: \" ^ what ^ \": \" ^ Printexc.to_string e)
+let dtp_net_parse (addr : string) =
+  let n = String.length addr in
+  if n > 5 && String.sub addr 0 5 = \"unix:\" then `Unix (String.sub addr 5 (n - 5))
+  else if n > 4 && String.sub addr 0 4 = \"tcp:\" then
+    let rest = String.sub addr 4 (n - 4) in
+    (match (try Some (String.rindex rest ':') with Not_found -> None) with
+     | None -> failwith (\"net: invalid address (want tcp:HOST:PORT or unix:PATH): \" ^ addr)
+     | Some i ->
+       let host = String.sub rest 0 i in
+       let portstr = String.sub rest (i + 1) (String.length rest - i - 1) in
+       let port = try int_of_string portstr with _ -> failwith (\"net: invalid port: \" ^ portstr) in
+       `Tcp (host, port))
+  else failwith (\"net: invalid address (want tcp:HOST:PORT or unix:PATH): \" ^ addr)
+let dtp_net_listen (addr : string) : int =
+  match dtp_net_parse addr with
+  | `Unix path ->
+    (try if Sys.file_exists path then Sys.remove path with _ -> ());
+    let s = Unix.socket Unix.PF_UNIX Unix.SOCK_STREAM 0 in
+    (try Unix.bind s (Unix.ADDR_UNIX path); Unix.listen s 8; dtp_net_put s
+     with e -> (try Unix.close s with _ -> ()); dtp_net_error \"listen\" e)
+  | `Tcp (host, port) ->
+    let s = Unix.socket Unix.PF_INET Unix.SOCK_STREAM 0 in
+    (try
+       Unix.setsockopt s Unix.SO_REUSEADDR true;
+       Unix.bind s (Unix.ADDR_INET (Unix.inet_addr_of_string host, port));
+       Unix.listen s 8;
+       dtp_net_put s
+     with e -> (try Unix.close s with _ -> ()); dtp_net_error \"listen\" e)
+let dtp_net_port (h : int) : int =
+  match Unix.getsockname (dtp_net_get h) with
+  | Unix.ADDR_INET (_, p) -> p
+  | Unix.ADDR_UNIX _ -> 0
+let dtp_net_accept (h : int) : int =
+  (try let (fd, _) = Unix.accept (dtp_net_get h) in dtp_net_put fd
+   with e -> dtp_net_error \"accept\" e)
+let dtp_net_recv (h : int) (n : int) : string =
+  if n <= 0 then \"\"
+  else
+    let b = Bytes.create n in
+    (try
+       let k = Unix.read (dtp_net_get h) b 0 n in
+       if k <= 0 then \"\" else Bytes.sub_string b 0 k
+     with e -> dtp_net_error \"recv\" e)
+let dtp_net_send (h : int) (s : string) : int =
+  let fd = dtp_net_get h in
+  let n = String.length s in
+  let rec go off =
+    if off >= n then ()
+    else
+      let k = (try Unix.write_substring fd s off (n - off) with e -> dtp_net_error \"send\" e) in
+      if k <= 0 then failwith \"net: send: connection closed\" else go (off + k)
+  in
+  go 0; n
+let dtp_net_close (h : int) : int =
+  (try Unix.close (dtp_net_get h) with _ -> ());
+  dtp_net_drop h; 0
+let dtp_net_connect (addr : string) : int =
+  match dtp_net_parse addr with
+  | `Unix path ->
+    let s = Unix.socket Unix.PF_UNIX Unix.SOCK_STREAM 0 in
+    (try Unix.connect s (Unix.ADDR_UNIX path); dtp_net_put s
+     with e -> (try Unix.close s with _ -> ()); dtp_net_error \"connect\" e)
+  | `Tcp (host, port) ->
+    let s = Unix.socket Unix.PF_INET Unix.SOCK_STREAM 0 in
+    (try Unix.connect s (Unix.ADDR_INET (Unix.inet_addr_of_string host, port)); dtp_net_put s
+     with e -> (try Unix.close s with _ -> ()); dtp_net_error \"connect\" e)
+"""
 
 -- M38：运行时错误报告器。位置表的键是 OCaml 值名（如 `v_main`）；回栈帧名形如
 -- `Main.v_main`（跨单元调用）或 `Main.v_main.(fun)`（lambda 内联后）。报告器取帧名
 -- 最后一个**非 `(fun)`** 的 '.' 分量查表，渲染成 `main (app/Main.vuna:12)`。
 -- 命中帧最多打印 12 条，未命中帧（如 `Stdlib.failwith`）跳过。
 dtReporterRuntime : String
-dtReporterRuntime =
-  "let rec dt_frame_key parts =\n"
-    ++ "  match parts with\n"
-    ++ "  | [] -> None\n"
-    ++ "  | part :: rest -> if part = \"(fun)\" then dt_frame_key rest else Some part\n"
-    ++ "let dt_frame_label slot =\n"
-    ++ "  match Printexc.Slot.name slot with\n"
-    ++ "  | None -> None\n"
-    ++ "  | Some nm ->\n"
-    ++ "    match dt_frame_key (List.rev (String.split_on_char '.' nm)) with\n"
-    ++ "    | None -> None\n"
-    ++ "    | Some key ->\n"
-    ++ "      (match List.assoc_opt key dt_def_locs with\n"
-    ++ "       | Some (display, loc) -> Some (display ^ \" (\" ^ loc ^ \")\")\n"
-    ++ "       | None -> None)\n"
-    ++ "let dt_report_exn e bt =\n"
-    ++ "  let msg = match e with Failure m -> m | _ -> Printexc.to_string e in\n"
-    ++ "  Printf.eprintf \"vuna: runtime error: %s\\n%!\" msg;\n"
-    ++ "  match Printexc.backtrace_slots bt with\n"
-    ++ "  | None -> ()\n"
-    ++ "  | Some slots ->\n"
-    ++ "    let rec go rest shown =\n"
-    ++ "      if shown >= 12 then ()\n"
-    ++ "      else match rest with\n"
-    ++ "      | [] -> ()\n"
-    ++ "      | slot :: tl ->\n"
-    ++ "        (match dt_frame_label slot with\n"
-    ++ "         | Some s -> Printf.eprintf \"  at %s\\n%!\" s; go tl (shown + 1)\n"
-    ++ "         | None -> go tl shown)\n"
-    ++ "    in go (Array.to_list slots) 0\n"
+dtReporterRuntime = """let rec dt_frame_key parts =
+  match parts with
+  | [] -> None
+  | part :: rest -> if part = \"(fun)\" then dt_frame_key rest else Some part
+let dt_frame_label slot =
+  match Printexc.Slot.name slot with
+  | None -> None
+  | Some nm ->
+    match dt_frame_key (List.rev (String.split_on_char '.' nm)) with
+    | None -> None
+    | Some key ->
+      (match List.assoc_opt key dt_def_locs with
+       | Some (display, loc) -> Some (display ^ \" (\" ^ loc ^ \")\")
+       | None -> None)
+let dt_report_exn e bt =
+  let msg = match e with Failure m -> m | _ -> Printexc.to_string e in
+  Printf.eprintf \"vuna: runtime error: %s\\n%!\" msg;
+  match Printexc.backtrace_slots bt with
+  | None -> ()
+  | Some slots ->
+    let rec go rest shown =
+      if shown >= 12 then ()
+      else match rest with
+      | [] -> ()
+      | slot :: tl ->
+        (match dt_frame_label slot with
+         | Some s -> Printf.eprintf \"  at %s\\n%!\" s; go tl (shown + 1)
+         | None -> go tl shown)
+    in go (Array.to_list slots) 0
+"""
 
 -- 定义位置表：OCaml 值名 → (vuna 定义名, 文件:行)。无 span 的定义跳过（axiom/生成项
 -- 里没有来源的那些）；顺序严格按传入列表，生成是确定性的。`norm` 负责把 span 里的
 -- 文件路径归一到模块根 / 包目录下（见 Codegen.Split）。
+-- M34.6：旧实现 `row ++ dtDefLocTable norm rest` 是右嵌套 `++`，每层都重拷整段已累积
+-- 文本（compiler 包 3086 行 ⇒ 约 430MB 拷贝、~365ms）；改为先 map 出行再一次性
+-- `strConcatMany`（runtime `String.concat ""`，单遍分配），输出逐字节不变。
 dtDefLocTable : (String -> String) -> List DtDef -> String
-dtDefLocTable norm [] = ""
-dtDefLocTable norm (d :: rest) = case dtDefSpan d of
-  Nothing => dtDefLocTable norm rest
+dtDefLocTable norm defs = strConcatMany (map (dtDefLocRow norm) defs)
+
+dtDefLocRow : (String -> String) -> DtDef -> String
+dtDefLocRow norm d = case dtDefSpan d of
+  Nothing => ""
   Just sp =>
-    let
-      row =
-        "  ("
-          ++ ocamlString (valueName (dtDefName d))
-          ++ ", ("
-          ++ ocamlString (dtDefName d)
-          ++ ", "
-          ++ ocamlString (norm sp.spanFile ++ ":" ++ strFromInt (spanStartLine sp))
-          ++ "));\n"
-    in row ++ dtDefLocTable norm rest
+    "  (${ocamlString (valueName (dtDefName d))}, (${ocamlString (dtDefName d)}, ${ocamlString "${norm sp.spanFile}:${spanStartLine sp}"}));\n"
 
 -- 运行时文本 = 既有常量部分（`dtRuntime`） + 注入的定义位置表 + 报告器。
 -- `dt_def_locs` 必须定义在报告器之前（报告器读它）；空表写成 `[]`。
 dtRuntimeWith : String -> String
 dtRuntimeWith locs =
   dtRuntime
-    ++ (if locs == "" then "let dt_def_locs = []\n" else "let dt_def_locs = [\n" ++ locs ++ "]\n")
+    ++ (if locs == "" then "let dt_def_locs = []\n" else "let dt_def_locs = [\n${locs}]\n")
     ++ dtReporterRuntime
 
 -- M19：`==` / `/=` 的跨类型特化（精化期已按实参类型重写成 `bi_eq_int` / `bi_eq_str`
@@ -204,52 +336,42 @@ dtListBridge datas = case findListFamilyData datas of
           famName = dtDataName dd
           nilMl = ctorOcamlName famName (dtCtorName nilC)
           consMl = ctorOcamlName famName (dtCtorName consC)
-        in "\nlet dtp_unpack (s : string) =\n"
-          ++ "  let cs = List.init (String.length s) (fun i -> Char.code s.[i]) in\n"
-          ++ "  List.fold_right (fun x acc -> "
-          ++ consMl
-          ++ " (x, acc)) cs "
-          ++ nilMl
-          ++ "\n"
-          ++ "let dtp_pack xs =\n"
-          ++ "  let rec to_list xs = match xs with "
-          ++ nilMl
-          ++ " -> [] | "
-          ++ consMl
-          ++ " (x, rest) -> x :: to_list rest in\n"
-          ++ "  let cs = Array.of_list (to_list xs) in\n"
-          ++ "  String.init (Array.length cs) (fun i -> Char.chr cs.(i))\n"
-          ++ "\nlet dtp_listOf xs = List.fold_right (fun x acc -> "
-          ++ consMl
-          ++ " (x, acc)) xs "
-          ++ nilMl
-          ++ "\n"
-          ++ "let dtp_ocamlOf xs =\n"
-          ++ "  let rec go l = match l with "
-          ++ nilMl
-          ++ " -> [] | "
-          ++ consMl
-          ++ " (x, rest) -> x :: go rest in\n"
-          ++ "  go xs\n"
-          ++ "\nlet dtp_concatMany xs = String.concat \"\" (dtp_ocamlOf xs)\n"
-          ++ "\nlet dtp_substTemplate tmpl xs =\n"
-          ++ "  let args = Array.of_list (dtp_ocamlOf xs) in\n"
-          ++ "  let n = String.length tmpl and na = Array.length args in\n"
-          ++ "  let buf = Buffer.create (n + 32) in\n"
-          ++ "  let rec go i =\n"
-          ++ "    if i >= n then ()\n"
-          ++ "    else if tmpl.[i] = '<' then begin\n"
-          ++ "      let j = ref (i + 1) and k = ref 0 in\n"
-          ++ "      while !j < n && tmpl.[!j] >= '0' && tmpl.[!j] <= '9' do\n"
-          ++ "        k := !k * 10 + (Char.code tmpl.[!j] - 48); incr j\n"
-          ++ "      done;\n"
-          ++ "      if !j < n && tmpl.[!j] = '>' && !j > i + 1 then begin\n"
-          ++ "        (if !k < na then Buffer.add_string buf args.(!k)\n"
-          ++ "         else Buffer.add_string buf (String.sub tmpl i (!j - i + 1)));\n"
-          ++ "        go (!j + 1)\n"
-          ++ "      end else (Buffer.add_char buf '<'; go (i + 1))\n"
-          ++ "    end else (Buffer.add_char buf tmpl.[i]; go (i + 1))\n"
-          ++ "  in go 0; Buffer.contents buf\n"
+        in """
+
+let dtp_unpack (s : string) =
+  let cs = List.init (String.length s) (fun i -> Char.code s.[i]) in
+  List.fold_right (fun x acc -> ${consMl} (x, acc)) cs ${nilMl}
+let dtp_pack xs =
+  let rec to_list xs = match xs with ${nilMl} -> [] | ${consMl} (x, rest) -> x :: to_list rest in
+  let cs = Array.of_list (to_list xs) in
+  String.init (Array.length cs) (fun i -> Char.chr cs.(i))
+
+let dtp_listOf xs = List.fold_right (fun x acc -> ${consMl} (x, acc)) xs ${nilMl}
+let dtp_ocamlOf xs =
+  let rec go l = match l with ${nilMl} -> [] | ${consMl} (x, rest) -> x :: go rest in
+  go xs
+
+let dtp_concatMany xs = String.concat \"\" (dtp_ocamlOf xs)
+
+let dtp_substTemplate tmpl xs =
+  let args = Array.of_list (dtp_ocamlOf xs) in
+  let n = String.length tmpl and na = Array.length args in
+  let buf = Buffer.create (n + 32) in
+  let rec go i =
+    if i >= n then ()
+    else if tmpl.[i] = '<' then begin
+      let j = ref (i + 1) and k = ref 0 in
+      while !j < n && tmpl.[!j] >= '0' && tmpl.[!j] <= '9' do
+        k := !k * 10 + (Char.code tmpl.[!j] - 48); incr j
+      done;
+      if !j < n && tmpl.[!j] = '>' && !j > i + 1 then begin
+        (if !k < na then Buffer.add_string buf args.(!k)
+         else Buffer.add_string buf (String.sub tmpl i (!j - i + 1)));
+        go (!j + 1)
+      end else (Buffer.add_char buf '<'; go (i + 1))
+    end else (Buffer.add_char buf tmpl.[i]; go (i + 1))
+  in go 0; Buffer.contents buf
+"""
 
 findFamilyCtor : List DtCtor -> String -> Maybe DtCtor
 findFamilyCtor [] name = Nothing
@@ -303,8 +425,8 @@ ioPrimThunkText : String -> Int -> String
 ioPrimThunkText rt arity =
   let
     argText = joinWith " " (takeNames arity ioParamNames)
-  in if arity == 0 then "(fun (_ : int) -> " ++ rt ++ ")"
-  else "(fun " ++ argText ++ " -> fun (_ : int) -> " ++ rt ++ " " ++ argText ++ ")"
+  in if arity == 0 then "(fun (_ : int) -> ${rt})"
+  else "(fun ${argText} -> fun (_ : int) -> ${rt} ${argText})"
 
 -- IO 代数原语（`prim_pureIO` / `prim_bindIO` / `prim_runIO`）的 runtime：它们**本身**
 -- 产生 IO 动作（thunk 值），不能套通用的 eager 包装，因此单独生成。
@@ -335,21 +457,24 @@ else case names of
 -- 跨单元限定上下文（`gsQual`）与已引用的依赖单元（`gsDeps`，生成期单调累积）。
 -- binder 环境是「最近绑定在前」的 (OCaml 变量名, 是否擦除)，TVar 靠 index 解析。
 -- M24.6：`gsCtorShapes` 是构造子字段形状的唯一真源，构造子应用与 case 分支都按它
--- 校验/生成（见 `ctorKeepFlags`）。
+-- 校验/生成（见 `ctorKeepFlags`）。D27 起再加一张 `gsCtorOpaques`：运行时不可命名的
+-- 擦除依赖字段（`Obj.t`），构造子应用处要对该实参生成 `Obj.magic`。
 record GenSt where
   gsFamilies : List String
   gsCtors : List (Pair String String)
   gsCtorShapes : List (Pair String (List Bool))
+  gsCtorOpaques : List (Pair String (List Bool))
   gsNext : Int
   gsQual : QualCtx
   gsDeps : List String
 
 -- 程序声明的族名表（`strUnpack` / `strPack` 的映射要看有没有 List 族）。
 gsNext : GenSt -> Int
-gsNext (GenSt families ctors shapes next qual deps) = next
+gsNext (GenSt families ctors shapes opaques next qual deps) = next
 
 gsPutNext : GenSt -> Int -> GenSt
-gsPutNext (GenSt families ctors shapes next qual deps) n = GenSt families ctors shapes n qual deps
+gsPutNext (GenSt families ctors shapes opaques next qual deps) n =
+  GenSt families ctors shapes opaques n qual deps
 
 ctorTableOfData : DtData -> List (Pair String String)
 ctorTableOfData d = map (\c => Pair (dtCtorName c) (dtCtorFamily c)) (dtDataCtors d)
@@ -359,7 +484,9 @@ ctorTableOf [] = []
 ctorTableOf (d :: rest) = append (ctorTableOfData d) (ctorTableOf rest)
 
 mkGenSt : QualCtx -> List DtData -> GenSt
-mkGenSt qc datas = GenSt (map dtDataName datas) (ctorTableOf datas) (ctorShapeOf datas) 0 qc []
+mkGenSt qc datas =
+  GenSt (map dtDataName datas) (ctorTableOf datas) (ctorShapeOf datas) (ctorOpaqueTableOf datas) 0
+    qc []
 
 -- ---------------------------------------------------------------
 -- C35：跨单元引用限定与依赖累积
@@ -371,7 +498,8 @@ mkGenSt qc datas = GenSt (map dtDataName datas) (ctorTableOf datas) (ctorShapeOf
 gsAddDep : GenSt -> String -> GenSt
 gsAddDep st unit =
   if unit == "" || memName unit st.gsDeps then st
-  else GenSt st.gsFamilies st.gsCtors st.gsCtorShapes st.gsNext st.gsQual (unit :: st.gsDeps)
+  else GenSt st.gsFamilies st.gsCtors st.gsCtorShapes st.gsCtorOpaques st.gsNext st.gsQual
+    (unit :: st.gsDeps)
 
 genValueRef : GenSt -> String -> Pair String GenSt
 genValueRef st name =
@@ -403,7 +531,7 @@ replaceAll old new text = join new (split old text)
 qualifyBridgeNames : String -> List String -> String -> String
 qualifyBridgeNames unit [] text = text
 qualifyBridgeNames unit (n :: rest) text =
-  qualifyBridgeNames unit rest (replaceAll n (unit ++ "." ++ n) text)
+  qualifyBridgeNames unit rest (replaceAll n "${unit}.${n}" text)
 
 qualifyBridgeText : String -> String -> String
 qualifyBridgeText unit text =
@@ -444,7 +572,7 @@ altEnvGo st env ((Pair name rig) :: rest) pats = if rigIsErased rig then altEnvG
 else
   let
     fresh = gsNext st
-    nm = "dtb__" ++ strFromInt fresh
+    nm = "dtb__${fresh}"
   in altEnvGo (gsPutNext st (fresh + 1)) (Pair nm Rig1 :: env) rest (nm :: pats)
 
 altEnv : GenSt -> List (Pair String Rig) -> List (Pair String Rig) -> AltEnv
@@ -461,7 +589,7 @@ altEnvChecked st label outer binders flags =
   if length binders == length flags then altEnvFull st label outer binders flags []
   else if length binders == countKept flags then altEnvKept st label outer binders []
   else Err
-    ("DT: internal: constructor " ++ label ++ ": case branch binder count matches neither full telescope nor kept fields")
+    "DT: internal: constructor ${label}: case branch binder count matches neither full telescope nor kept fields"
 
 countKept : List Bool -> Int
 countKept [] = 0
@@ -470,26 +598,24 @@ countKept (k :: rest) = if k then 1 + countKept rest else countKept rest
 altEnvFull : GenSt -> String -> List (Pair String Rig) -> List (Pair String Rig) -> List Bool -> List String -> Result AltEnv
 altEnvFull st label outer [] flags pats = case flags of
   [] => Ok (AltEnv outer (reverse pats) st)
-  _ :: _ =>
-    Err ("DT: internal: constructor " ++ label ++ ": case branch has fewer binders than its shape")
+  _ :: _ => Err "DT: internal: constructor ${label}: case branch has fewer binders than its shape"
 altEnvFull st label outer ((Pair name rig) :: rest) flags pats = case flags of
-  [] =>
-    Err ("DT: internal: constructor " ++ label ++ ": case branch has more binders than its shape")
+  [] => Err "DT: internal: constructor ${label}: case branch has more binders than its shape"
   keep :: flags2 => if flagMatchesRig keep rig then if keep then
     let
       fresh = gsNext st
-      nm = "dtb__" ++ strFromInt fresh
+      nm = "dtb__${fresh}"
     in altEnvFull (gsPutNext st (fresh + 1)) label (Pair nm Rig1 :: outer) rest flags2 (nm :: pats)
   else altEnvFull st label (Pair "" Rig0 :: outer) rest flags2 pats
-  else Err ("DT: internal: constructor " ++ label ++ ": case branch binder rig disagrees with its shape")
+  else Err "DT: internal: constructor ${label}: case branch binder rig disagrees with its shape"
 
 altEnvKept : GenSt -> String -> List (Pair String Rig) -> List (Pair String Rig) -> List String -> Result AltEnv
 altEnvKept st label outer [] pats = Ok (AltEnv outer (reverse pats) st)
-altEnvKept st label outer ((Pair name rig) :: rest) pats = if rigIsErased rig then Err ("DT: internal: constructor " ++ label ++ ": kept-field branch has an erased binder")
+altEnvKept st label outer ((Pair name rig) :: rest) pats = if rigIsErased rig then Err "DT: internal: constructor ${label}: kept-field branch has an erased binder"
 else
   let
     fresh = gsNext st
-    nm = "dtb__" ++ strFromInt fresh
+    nm = "dtb__${fresh}"
   in altEnvKept (gsPutNext st (fresh + 1)) label (Pair nm Rig1 :: outer) rest (nm :: pats)
 
 genTermFuel : Int -> GenSt -> List (Pair String Rig) -> Term -> Result (Pair String GenSt)
@@ -506,7 +632,7 @@ else case t of
   TIf c th el => andThen (genTermFuel (fuel - 1) st binders c) (\pc => case pc of
     Pair gc st1 => andThen (genTermFuel (fuel - 1) st1 binders th) (\pt => case pt of
       Pair gt st2 => andThen (genTermFuel (fuel - 1) st2 binders el) (\pe => case pe of
-        Pair ge st3 => Ok (Pair ("(if " ++ gc ++ " then " ++ gt ++ " else " ++ ge ++ ")") st3)
+        Pair ge st3 => Ok (Pair "(if ${gc} then ${gt} else ${ge})" st3)
       )
     )
   )
@@ -549,7 +675,7 @@ else case collectLamChain (TLam name rig body) of
     in andThen (genTermFuel (fuel - 1) st env inner) (\p => case p of
       Pair b st2 => case names of
         [] => Ok (Pair b st2)
-        _ => Ok (Pair ("(fun " ++ joinWith " " names ++ " -> " ++ b ++ ")") st2)
+        _ => Ok (Pair "(fun ${joinWith " " names} -> ${b})" st2)
     )
 
 -- 应用：精化器可能把饱和的构造子应用表示成嵌套 `TApp (TApp (TCon c []) a) b`。
@@ -601,33 +727,32 @@ inlineOpArity "natDiv" = 2
 inlineOpArity _ = 0
 
 inlineText : String -> List String -> Maybe String
-inlineText "+" ([a, b]) = Just ("(" ++ a ++ " + " ++ b ++ ")")
-inlineText "-" ([a, b]) = Just ("(" ++ a ++ " - " ++ b ++ ")")
-inlineText "*" ([a, b]) = Just ("(" ++ a ++ " * " ++ b ++ ")")
-inlineText "/" ([a, b]) =
-  Just ("(if " ++ b ++ " = 0 then failwith \"division by zero\" else " ++ a ++ " / " ++ b ++ ")")
-inlineText "&&" ([a, b]) = Just ("(" ++ a ++ " && " ++ b ++ ")")
-inlineText "||" ([a, b]) = Just ("(" ++ a ++ " || " ++ b ++ ")")
-inlineText "++" ([a, b]) = Just ("(" ++ a ++ " ^ " ++ b ++ ")")
-inlineText "bi_eq_int" ([a, b]) = Just ("(" ++ a ++ " = " ++ b ++ ")")
-inlineText "bi_neq_int" ([a, b]) = Just ("(" ++ a ++ " <> " ++ b ++ ")")
-inlineText "bi_eq_str" ([a, b]) = Just ("(" ++ a ++ " = " ++ b ++ ")")
-inlineText "bi_neq_str" ([a, b]) = Just ("(" ++ a ++ " <> " ++ b ++ ")")
-inlineText "bi_lt_int" ([a, b]) = Just ("(" ++ a ++ " < " ++ b ++ ")")
-inlineText "bi_le_int" ([a, b]) = Just ("(" ++ a ++ " <= " ++ b ++ ")")
-inlineText "bi_gt_int" ([a, b]) = Just ("(" ++ a ++ " > " ++ b ++ ")")
-inlineText "bi_ge_int" ([a, b]) = Just ("(" ++ a ++ " >= " ++ b ++ ")")
-inlineText "bi_lt_generic" ([a, b]) = Just ("(" ++ a ++ " < " ++ b ++ ")")
-inlineText "bi_le_generic" ([a, b]) = Just ("(" ++ a ++ " <= " ++ b ++ ")")
-inlineText "bi_gt_generic" ([a, b]) = Just ("(" ++ a ++ " > " ++ b ++ ")")
-inlineText "bi_ge_generic" ([a, b]) = Just ("(" ++ a ++ " >= " ++ b ++ ")")
+inlineText "+" ([a, b]) = Just "(${a} + ${b})"
+inlineText "-" ([a, b]) = Just "(${a} - ${b})"
+inlineText "*" ([a, b]) = Just "(${a} * ${b})"
+inlineText "/" ([a, b]) = Just "(if ${b} = 0 then failwith \"division by zero\" else ${a} / ${b})"
+inlineText "&&" ([a, b]) = Just "(${a} && ${b})"
+inlineText "||" ([a, b]) = Just "(${a} || ${b})"
+inlineText "++" ([a, b]) = Just "(${a} ^ ${b})"
+inlineText "bi_eq_int" ([a, b]) = Just "(${a} = ${b})"
+inlineText "bi_neq_int" ([a, b]) = Just "(${a} <> ${b})"
+inlineText "bi_eq_str" ([a, b]) = Just "(${a} = ${b})"
+inlineText "bi_neq_str" ([a, b]) = Just "(${a} <> ${b})"
+inlineText "bi_lt_int" ([a, b]) = Just "(${a} < ${b})"
+inlineText "bi_le_int" ([a, b]) = Just "(${a} <= ${b})"
+inlineText "bi_gt_int" ([a, b]) = Just "(${a} > ${b})"
+inlineText "bi_ge_int" ([a, b]) = Just "(${a} >= ${b})"
+inlineText "bi_lt_generic" ([a, b]) = Just "(${a} < ${b})"
+inlineText "bi_le_generic" ([a, b]) = Just "(${a} <= ${b})"
+inlineText "bi_gt_generic" ([a, b]) = Just "(${a} > ${b})"
+inlineText "bi_ge_generic" ([a, b]) = Just "(${a} >= ${b})"
 -- Nat 转换恒等/单分支，直接内联；算术用 runtime helper（饱和/截断逻辑只写一份）。
 inlineText "natToInt" ([a]) = Just a
-inlineText "natFromInt" ([a]) = Just ("(bi_natFromInt " ++ a ++ ")")
-inlineText "natAdd" ([a, b]) = Just ("(bi_natAdd " ++ a ++ " " ++ b ++ ")")
-inlineText "natSub" ([a, b]) = Just ("(bi_natSub " ++ a ++ " " ++ b ++ ")")
-inlineText "natMul" ([a, b]) = Just ("(bi_natMul " ++ a ++ " " ++ b ++ ")")
-inlineText "natDiv" ([a, b]) = Just ("(bi_natDiv " ++ a ++ " " ++ b ++ ")")
+inlineText "natFromInt" ([a]) = Just "(bi_natFromInt ${a})"
+inlineText "natAdd" ([a, b]) = Just "(bi_natAdd ${a} ${b})"
+inlineText "natSub" ([a, b]) = Just "(bi_natSub ${a} ${b})"
+inlineText "natMul" ([a, b]) = Just "(bi_natMul ${a} ${b})"
+inlineText "natDiv" ([a, b]) = Just "(bi_natDiv ${a} ${b})"
 inlineText _ _ = Nothing
 
 inlineArityMatches : String -> List (Pair Term Rig) -> Bool
@@ -682,7 +807,7 @@ genPlainAppFallback : Int -> GenSt -> List (Pair String Rig) -> Term -> Term -> 
 genPlainAppFallback fuel st binders f a rig = if fuel <= 0 then Err "DT: internal: codegen fuel exhausted"
 else andThen (genTermFuel (fuel - 1) st binders f) (\pf => case pf of
   Pair fs st1 => andThen (genTermFuel (fuel - 1) st1 binders a) (\pa => case pa of
-    Pair at st2 => Ok (Pair ("(" ++ fs ++ " " ++ at ++ ")") st2)
+    Pair at st2 => Ok (Pair "(${fs} ${at})" st2)
   )
 )
 
@@ -691,7 +816,7 @@ genInlineAppFuel fuel st binders name args = if fuel <= 0 then Err "DT: internal
 else andThen (genInlineArgsFuel (fuel - 1) st binders args) (\p => case p of
   Pair texts st2 => case inlineText name texts of
     Just text => Ok (Pair text st2)
-    Nothing => Err ("DT: internal: no inline text for builtin `" ++ name ++ "`")
+    Nothing => Err "DT: internal: no inline text for builtin `${name}`"
 )
 
 genInlineArgsFuel : Int -> GenSt -> List (Pair String Rig) -> List (Pair Term Rig) -> Result (Pair (List String) GenSt)
@@ -708,7 +833,7 @@ else andThen (genTermFuel (fuel - 1) st binders arg) (\p => case p of
 genConcatPartsFuel : Int -> GenSt -> List (Pair String Rig) -> List Term -> Result (Pair String GenSt)
 genConcatPartsFuel fuel st binders parts = if fuel <= 0 then Err "DT: internal: codegen fuel exhausted"
 else andThen (genConcatPartTexts (fuel - 1) st binders parts) (\p => case p of
-  Pair texts st2 => Ok (Pair ("(String.concat \"\" [" ++ joinWith "; " texts ++ "])") st2)
+  Pair texts st2 => Ok (Pair "(String.concat \"\" [${joinWith "; " texts}])" st2)
 )
 
 genConcatPartTexts : Int -> GenSt -> List (Pair String Rig) -> List Term -> Result (Pair (List String) GenSt)
@@ -725,8 +850,8 @@ else andThen (genTermFuel (fuel - 1) st binders t) (\p => case p of
 -- 不是 curried，所以多实参必须用逗号包成一个元组。
 conAppText : String -> List String -> String
 conAppText name [] = name
-conAppText name ([a]) = "(" ++ name ++ " (" ++ a ++ "))"
-conAppText name args = "(" ++ name ++ " (" ++ joinWith ", " args ++ "))"
+conAppText name ([a]) = "(${name} (${a}))"
+conAppText name args = "(${name} (${joinWith ", " args}))"
 
 -- 构造子实参对齐（M24.6 第一级）：TCon 的实参有两种合法约定：
 --   1. **全 telescope**（含擦除位，普通构造子经 `inferArgs` 插入隐式后如此）；
@@ -735,25 +860,31 @@ conAppText name args = "(" ++ name ++ " (" ++ joinWith ", " args ++ "))"
 alignCtorArgs : String -> List Bool -> List (Pair Term Rig) -> Result (List (Pair Term Rig))
 alignCtorArgs label [] [] = Ok []
 alignCtorArgs label [] (_ :: _) =
-  Err ("DT: internal: constructor " ++ label ++ ": application has more arguments than its shape")
+  Err "DT: internal: constructor ${label}: application has more arguments than its shape"
 alignCtorArgs label (keep :: flags) [] =
-  if keep then Err ("DT: internal: constructor " ++ label ++ ": application has fewer arguments than its shape")
+  if keep then Err "DT: internal: constructor ${label}: application has fewer arguments than its shape"
   else alignCtorArgs label flags []
 alignCtorArgs label (keep :: flags) ((Pair arg rig) :: rest) =
-  if keep then if rigIsErased rig then Err ("DT: internal: constructor " ++ label ++ ": runtime field marked erased")
+  if keep then if rigIsErased rig then Err "DT: internal: constructor ${label}: runtime field marked erased"
   else andThen (alignCtorArgs label flags rest) (\ts => Ok (Pair arg rig :: ts))
   else if rigIsErased rig then alignCtorArgs label flags rest
   else alignCtorArgs label flags (Pair arg rig :: rest)
 
-genConArgsFuel : Int -> GenSt -> List (Pair String Rig) -> List (Pair Term Rig) -> Result (Pair (List String) GenSt)
-genConArgsFuel fuel st binders [] =
+genConArgsFuel : Int -> GenSt -> List (Pair String Rig) -> List Bool -> List (Pair Term Rig) -> Result (Pair (List String) GenSt)
+genConArgsFuel fuel st binders opqs [] =
   if fuel <= 0 then Err "DT: internal: codegen fuel exhausted" else Ok (Pair [] st)
-genConArgsFuel fuel st binders ((Pair arg rig) :: rest) = if fuel <= 0 then Err "DT: internal: codegen fuel exhausted"
+genConArgsFuel fuel st binders [] (_ :: _) =
+  Err "DT: internal: constructor opaque flags shorter than runtime arguments"
+genConArgsFuel fuel st binders (opq :: opqs) ((Pair arg rig) :: rest) = if fuel <= 0 then Err "DT: internal: codegen fuel exhausted"
 else andThen (genTermFuel (fuel - 1) st binders arg) (\p => case p of
-  Pair text st2 => andThen (genConArgsFuel (fuel - 1) st2 binders rest) (\q => case q of
-    Pair texts st3 => Ok (Pair (text :: texts) st3)
+  Pair text st2 => andThen (genConArgsFuel (fuel - 1) st2 binders opqs rest) (\q => case q of
+    Pair texts st3 => Ok (Pair (ctorArgText opq text :: texts) st3)
   )
 )
+
+-- 运行时不可命名的擦除依赖字段：声明侧是 `Obj.t`，实参在这里做表现层转换。
+ctorArgText : Bool -> String -> String
+ctorArgText opq text = if opq then "(Obj.magic ${text})" else text
 
 -- Nat 构造子链的常量折叠：字面量在 Elab 里展开成 Zero/Succ 链，codegen 折回整数。
 natChainNext : Int -> Int
@@ -786,24 +917,26 @@ else if c == natZeroCtor then case alignCtorArgs c [] args of
     _ => Err "DT: internal: Nat Zero applied to arguments"
 else if c == natSuccCtor then case alignCtorArgs c [True] args of
   Err e => Err e
-  Ok runtimeArgs => andThen (genConArgsFuel (fuel - 1) st binders runtimeArgs) (\p => case p of
+  Ok runtimeArgs => andThen (genConArgsFuel (fuel - 1) st binders [False] runtimeArgs) (\p => case p of
     Pair texts st2 => case texts of
       argText :: rest => case rest of
-        [] => Ok (Pair ("(bi_natSucc " ++ argText ++ ")") st2)
+        [] => Ok (Pair "(bi_natSucc ${argText})" st2)
         _ => Err "DT: internal: Nat Succ must have exactly one runtime argument"
       [] => Err "DT: internal: Nat Succ must have exactly one runtime argument"
   )
 else case lookupPair c st.gsCtors of
-  Nothing => Err ("DT: internal: unknown constructor " ++ c)
+  Nothing => Err "DT: internal: unknown constructor ${c}"
   Just family => case lookupPair c st.gsCtorShapes of
-    Nothing => Err ("DT: internal: no shape for constructor " ++ c)
-    Just flags => andThen (alignCtorArgs c flags args) (\runtimeArgs => andThen (genConArgsFuel (fuel - 1) st binders runtimeArgs) (\p => case p of
-      Pair argTexts st2 =>
-        let
-          r = genCtorRef st2 family c
-        in Ok (Pair (conAppText (firstOf r) argTexts) (secondOf r))
-    )
-    )
+    Nothing => Err "DT: internal: no shape for constructor ${c}"
+    Just flags => case lookupPair c st.gsCtorOpaques of
+      Nothing => Err "DT: internal: no opaque shape for constructor ${c}"
+      Just opqs => andThen (alignCtorArgs c flags args) (\runtimeArgs => andThen (genConArgsFuel (fuel - 1) st binders (ctorOpaqueKeptFlags flags opqs) runtimeArgs) (\p => case p of
+        Pair argTexts st2 =>
+          let
+            r = genCtorRef st2 family c
+          in Ok (Pair (conAppText (firstOf r) argTexts) (secondOf r))
+      )
+      )
 
 hasFallbackAlt : List CaseAlt -> Bool
 hasFallbackAlt [] = False
@@ -811,7 +944,7 @@ hasFallbackAlt (alt :: rest) = caseAltName alt == "" || hasFallbackAlt rest
 
 armPatternText : String -> List String -> String
 armPatternText cname [] = cname
-armPatternText cname pats = cname ++ " (" ++ joinWith ", " pats ++ ")"
+armPatternText cname pats = "${cname} (${joinWith ", " pats})"
 
 genArmFuel : Int -> GenSt -> List (Pair String Rig) -> CaseAlt -> Result (Pair String GenSt)
 genArmFuel fuel st outer alt = if fuel <= 0 then Err "DT: internal: codegen fuel exhausted"
@@ -822,18 +955,18 @@ else if caseAltName alt == "" then
       [] => "_"
       p :: rest => p
   in andThen (genTermFuel (fuel - 1) (aeSt bound) (aeEnv bound) (caseAltBody alt)) (\p => case p of
-    Pair b st2 => Ok (Pair ("  | " ++ patText ++ " -> " ++ b ++ "\n") st2)
+    Pair b st2 => Ok (Pair "  | ${patText} -> ${b}\n" st2)
   )
 else case lookupPair (caseAltName alt) st.gsCtors of
-  Nothing => Err ("DT: internal: unknown constructor " ++ caseAltName alt)
+  Nothing => Err "DT: internal: unknown constructor ${caseAltName alt}"
   Just family => case lookupPair (caseAltName alt) st.gsCtorShapes of
-    Nothing => Err ("DT: internal: no shape for constructor " ++ caseAltName alt)
+    Nothing => Err "DT: internal: no shape for constructor ${caseAltName alt}"
     Just flags => andThen (altEnvChecked st (caseAltName alt) outer (caseAltBinders alt) flags) (\bound => andThen (genTermFuel (fuel - 1) (aeSt bound) (aeEnv bound) (caseAltBody alt)) (\p => case p of
       Pair b st2 =>
         let
           r = genCtorRef st2 family (caseAltName alt)
           patText = armPatternText (firstOf r) (aePats bound)
-        in Ok (Pair ("  | " ++ patText ++ " -> " ++ b ++ "\n") (secondOf r))
+        in Ok (Pair "  | ${patText} -> ${b}\n" (secondOf r))
     )
     )
 
@@ -890,7 +1023,7 @@ else
       [] => Ok (Pair body st2)
       nm :: rest => case rest of
         [] => case bindExpr of
-          Just expr => Ok (Pair ("(let " ++ nm ++ " = " ++ expr ++ " in " ++ body ++ ")") st2)
+          Just expr => Ok (Pair "(let ${nm} = ${expr} in ${body})" st2)
           Nothing => Err "DT: internal: Nat case arm has a binder but no runtime binding"
         _ => Err "DT: internal: Nat case arm has more than one runtime binder"
   )
@@ -901,12 +1034,12 @@ else andThen (genTermFuel (fuel - 1) st binders scrut) (\p => case p of
   Pair scrutText st1 =>
     let
       fresh = gsNext st1
-      sc = "dtnat__" ++ strFromInt fresh
+      sc = "dtnat__${fresh}"
       st2 = gsPutNext st1 (fresh + 1)
       zeroAlt = findAltBy natZeroCtor alts
       succAlt = findAltBy natSuccCtor alts
       catchAlt = findCatchAllAlt alts
-      predExpr = "(" ++ sc ++ " - 1)"
+      predExpr = "(${sc} - 1)"
     in natCaseBranchesFuel (fuel - 1) st2 binders zeroAlt succAlt catchAlt sc scrutText predExpr
 )
 
@@ -932,7 +1065,7 @@ else
                 Just _ => catchText
                 Nothing => impossible
           in Ok
-            (Pair ("(let " ++ sc ++ " = " ++ scrutText ++ " in (if " ++ sc ++ " = 0 then " ++ trueText ++ " else " ++ falseText ++ "))") st3)
+            (Pair "(let ${sc} = ${scrutText} in (if ${sc} = 0 then ${trueText} else ${falseText}))" st3)
       )
     )
   )
@@ -950,7 +1083,7 @@ else andThen (genTermFuel (fuel - 1) st binders scrut) (\p => case p of
       let
         fallback =
           if hasFallbackAlt alts then "" else "  | _ -> failwith \"DT: impossible branch\"\n"
-      in Ok (Pair ("(match " ++ scrutText ++ " with\n" ++ arms ++ fallback ++ ")") st2)
+      in Ok (Pair "(match ${scrutText} with\n${arms}${fallback})" st2)
   )
 )
 
@@ -982,22 +1115,19 @@ genGroupDef st isRec d = case dtDefExtern d of
   Just cName => case genExternTy (dtDefType d) of
     Err e => Err (cgDefLoc (dtDefSpan d) (dtDefName d) ++ e)
     Ok tyText =>
-      Ok
-        (Pair ("external " ++ valueName (dtDefName d) ++ " : " ++ tyText ++ " = " ++ ocamlString cName) st)
+      Ok (Pair "external ${valueName (dtDefName d)} : ${tyText} = ${ocamlString cName}" st)
   Nothing => case dtDefBody d of
     Just body => case genTerm st [] body of
       Err e => Err (cgDefLoc (dtDefSpan d) (dtDefName d) ++ e)
       Ok (Pair bodyText st2) =>
         let
           finalText =
-            if mainInitWrap st isRec (dtDefName d) body then "(try "
-              ++ bodyText
-              ++ " with e -> dt_report_exn e (Printexc.get_raw_backtrace ()); exit 2)"
+            if mainInitWrap st isRec (dtDefName d) body then "(try ${bodyText} with e -> dt_report_exn e (Printexc.get_raw_backtrace ()); exit 2)"
             else bodyText
-        in Ok (Pair (valueName (dtDefName d) ++ " = " ++ finalText) st2)
+        in Ok (Pair "${valueName (dtDefName d)} = ${finalText}" st2)
     Nothing =>
       Err
-        (cgDefLoc (dtDefSpan d) (dtDefName d) ++ "DT: internal: axiom reached runtime code generation (partition must erase it)")
+        "${cgDefLoc (dtDefSpan d) (dtDefName d)}DT: internal: axiom reached runtime code generation (partition must erase it)"
 
 -- extern 的类型 → OCaml 类型文本（Int/String/Bool/Array 基本类型；Elab 已限制形状，
 -- 这里再护栏一次，fuel 递减保证终止）。
@@ -1009,13 +1139,13 @@ externTyText fuel lvl (VPi name implicit _ dom clo) =
   if fuel <= 0 then Err "DT: internal: extern type is too deep"
   else if implicit then Err "DT: internal: extern has an implicit parameter"
   else andThen (externDomText dom)
-    (\domText => andThen (externTyText (fuel - 1) (lvl + 1) (applyClosure clo (VNeutral (NVar name lvl [])))) (\resText => Ok ("(" ++ domText ++ ") -> " ++ resText)))
+    (\domText => andThen (externTyText (fuel - 1) (lvl + 1) (applyClosure clo (VNeutral (NVar name lvl [])))) (\resText => Ok "(${domText}) -> ${resText}"))
 externTyText fuel lvl v =
   if fuel <= 0 then Err "DT: internal: extern type is too deep" else externDomText v
 
 externDomText : Value -> Result String
 externDomText (VNeutral (NGlobal "Array" ([elem]))) =
-  andThen (externBasicText elem) (\e => Ok ("(" ++ e ++ " array)"))
+  andThen (externBasicText elem) (\e => Ok "(${e} array)")
 externDomText (VNeutral (NGlobal "Array" _)) =
   Err "DT: internal: extern Array needs one type argument"
 externDomText v = externBasicText v
@@ -1024,7 +1154,7 @@ externBasicText : Value -> Result String
 externBasicText (VNeutral (NGlobal g args)) =
   if g == intTypeName then Ok "int"
   else if g == strTypeName then Ok "string"
-  else if g == boolTypeName then Ok "bool" else Err ("DT: internal: extern type is not basic: " ++ g)
+  else if g == boolTypeName then Ok "bool" else Err "DT: internal: extern type is not basic: ${g}"
 externBasicText (VNeutral _) = Err "DT: internal: extern type is not a global type"
 externBasicText _ = Err "DT: internal: extern type is not basic"
 
@@ -1123,21 +1253,18 @@ genDtHook bodyText table tyTerm mainExpr printResult = andThen (mainShow table t
   Pair showFn kind =>
     let
       action =
-        if printResult then "print_endline (" ++ showFn ++ " (" ++ mainExpr ++ "))"
-        else "ignore (" ++ mainExpr ++ ")"
-      hook =
-        "let () =\n"
-          ++ "  Printexc.record_backtrace true;\n"
-          ++ "  try "
-          ++ action
-          ++ "\n"
-          ++ "  with e -> dt_report_exn e (Printexc.get_raw_backtrace ()); exit 2\n"
-    in Ok (bodyText ++ "\n" ++ hook)
+        if printResult then "print_endline (${showFn} (${mainExpr}))" else "ignore (${mainExpr})"
+      hook = """let () =
+  Printexc.record_backtrace true;
+  try ${action}
+  with e -> dt_report_exn e (Printexc.get_raw_backtrace ()); exit 2
+"""
+    in Ok "${bodyText}\n${hook}"
 )
 
 -- `main : IO a` 的执行：IO = 裸 thunk，直接对世界令牌 0 应用（无构造子 / 无跨单元依赖）。
 ioRunText : QualCtx -> Pair (List DtData) (List DtDef) -> String -> Pair String String
-ioRunText qc program mainRef = Pair (mainRef ++ " 0") ""
+ioRunText qc program mainRef = Pair "${mainRef} 0" ""
 
 genTerm : GenSt -> List (Pair String Rig) -> Term -> Result (Pair String GenSt)
 genTerm a1 a2 a3 = genTermFuel 512 a1 a2 a3
@@ -1151,8 +1278,8 @@ genApp a1 a2 a3 a4 a5 = genAppFuel 512 a1 a2 a3 a4 a5
 genConApp : GenSt -> List (Pair String Rig) -> String -> List (Pair Term Rig) -> Result (Pair String GenSt)
 genConApp a1 a2 a3 a4 = genConAppFuel 512 a1 a2 a3 a4
 
-genConArgs : GenSt -> List (Pair String Rig) -> List (Pair Term Rig) -> Result (Pair (List String) GenSt)
-genConArgs a1 a2 a3 = genConArgsFuel 512 a1 a2 a3
+genConArgs : GenSt -> List (Pair String Rig) -> List Bool -> List (Pair Term Rig) -> Result (Pair (List String) GenSt)
+genConArgs a1 a2 a3 a4 = genConArgsFuel 512 a1 a2 a3 a4
 
 genArm : GenSt -> List (Pair String Rig) -> CaseAlt -> Result (Pair String GenSt)
 genArm a1 a2 a3 = genArmFuel 512 a1 a2 a3

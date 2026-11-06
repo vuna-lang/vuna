@@ -1,0 +1,8 @@
+[package]
+name = "vis-dep"
+
+[export]
+modules = ["VisData", "VisTrait", "VisInst"]
+
+[dependencies]
+vuna-base = "../../../../../base"

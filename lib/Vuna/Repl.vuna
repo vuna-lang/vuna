@@ -1,438 +1,880 @@
-module Vuna.Repl (runRepl) where
+module Vuna.Repl
+  ( ReplOutcome(..)
+  , ReplSink(..)
+  , ReplStart(..)
+  , ReplState(..)
+  , finishInput
+  , inputStep
+  , isModuleNameStr
+  , replOutputDrain
+  , replPendingOpen
+  , runRepl
+  , startReplSession
+  ) where
 
--- Vuna.Repl：交互式 REPL（M11.5；M23 起底层是 DT 精化 + 核心求值）。
+-- Vuna.Repl：交互式 REPL（M11.5；M23 起底层是 DT 精化 + 核心求值；REPL v2 重写）。
 --
--- 设计：REPL 维护 imports / 定义 / 待续输入（pending）三段状态。每输入一行：
---   - `import ...` 行追加到 imports 缓冲（解析通过才接受）；
---   - 能整行解析为顶层定义时追加到定义缓冲（累积，供后续表达式使用）；
---   - 否则按表达式求值：`imports + 定义` 作为 program、当前输入作为表达式交给
---     `Vuna.Interp.evalExprInfo`（DT 精化后核心求值）。
---   - `:q`/`:quit` 退出，`:help` 帮助，`:reset` 清空缓冲。
--- DT 顶层签名必填，所以定义要先输入 `x : Int` 再输入 `x = 1 + 1`，之后表达式才能
--- 引用 `x`。
+-- 状态：包上下文 + import 缓冲 + 定义块列表 + 待续输入（pending）+ `:{ ... :}` 块 +
+-- 上次加载目标 + Index 缓存 + 设置 + 历史 + termAux 缓存。定义按「块」记录，块内
+-- DFun/DSig 名字用于重定义与 `:delete`。
 --
--- M30（D14）：多行输入 + 效果表达式。
---   - 输入不完整时进入 `... ` 续行：判据是未闭合的 `(`/`[`/`{`、未闭合字符串 / 块注释，
---     或行尾是一个「显然还要继续」的 token（`=` `->` `|` `,` `where` `do` `then`
---     `else` `of` `in` `case` `let`）。连续 64 行仍未闭合就报错丢弃。缩进续行
---     （offside 块：do / case / where 分支）按「去缩进的行或空行收尾」处理：空行提交
---     完整输入、不完整时报错丢弃；在续行状态里 `:q`/`:quit` 仍然可用。续行保留原始
---     缩进（offside 布局），只对第一行做 trim。
---   - IO 表达式：`evalExprInfo` 同时返回类型文本，顶层类型是 `(Base.IO.IO a)` 时不走
---     核心求值，而是把「imports + 定义 + `main : <类型>` + `main = <表达式>`」写进
---     临时包，`compileToDir` → `runBuildScript` → 运行（见 `Vuna.Interp.runEffectProgram`）。
---     效果输出直接到终端；`a` 是 Int/String/Bool 时运行完再打印结果值。编译失败打印
---     可读诊断并保持已有缓冲；缺 `ocamlopt` 时给「进 nix develop」的提示。
---   - 限制：程序里已经有 `main` 时拒绝效果执行（避免与合成入口重复定义）；临时包只能
---     依赖上下文的依赖包，当前包自己的 lib 模块在 IO 表达式里不可 import。
+-- 定义路径：
+--   * 块内直接写 `x = 1 + 1` / `f y = x + y`；缺签名时调用
+--     `Vuna.Interp.inferDefTypes`（编译器元变量 telescope + 边界泛化）推断签名，
+--     写回后 `checkProgram` 复查，失败回滚并提示手写签名。
+--   * 重定义（同名 DFun）移除旧块后重新推断；`:delete NAME` 删除 REPL 内定义；
+--     `:load` 文件来源的块拒绝重定义/删除（改文件后 `:reload`）。
 --
--- M38（P1b）：调试命令。
---   - `:type EXPR` 只打印 zonk 后的类型文本（不求值、不执行效果）；
---   - `:load FILE` 用文件源码整体替换 imports/defs 缓冲；文件含 `module ... where`
---     头时拒绝（模块文件由 Loader 按模块加载，不能灌进 REPL 缓冲）并提示改用 :browse；
---     `:reload` 重读上次 :load 的文件。失败时状态不变；
---   - `:browse MODULE` 惰性构建 `Vuna.Index`（首次 :browse 才 `loadOrBuild`，之后复用
---     `stateBrowseIndex` 缓存）后按 `vuna api` 的 `renderApi` 打印模块接口面；非 workspace 明确报错。
+-- 输入：非 tty 走 `prim_readLine`（与旧版语义一致，管道测试不感知行编辑）；tty 且
+-- `:set editing` 未关闭时走 `Vuna.Repl.Edit`（原始模式行编辑、方向键、Ctrl-R）。
 --
--- 实现结构：**只有 `replLoop` 递归**（显式 fuel：C28 记录的交互主循环不是全函数，
--- 用 1G 行守卫防不可达死循环），其余步骤函数都返回新状态（`ReplState` / `ReplOutcome`），
--- 不自我递归——这样「空行提交 pending 后再处理下一行」不会把后续输入吞进嵌套循环。
+-- 名字作用域与普通源文件同一套 Loader 语义：Prelude 隐式自动导入（`:imports` 会标为
+-- 隐式）；`:type` 直接走表达式精化，因此导入模块的类型名（`Maybe` 等）与本地 `data`
+-- 名一样可以作为项，打印出来的是它的 kind。
+--
+-- 显示：`:type` 只给类型并按 token 着色（universe / 全局名 / 类型变量 / 符号）；
+-- `:typeinfo`（别名 `:ti`）把隐式 binder 单独列出，工作区内再附 docstring。
+--
+-- `:load` 接受三种形式（存在性优先）：
+--   1. 目录 → 切换包上下文（重置缓冲/索引，保留设置与历史）；
+--   2. 文件 → 旧语义：整段源码替换 imports/defs；带 `module ... where` 头拒绝；
+--   3. 模块名（如 `Base.Nat`）→ 立即校验后追加 `import`。
+--
+-- 实现结构：只有 `replLoop` 与 `editLoop`（在 Edit 模块）递归；其余步骤函数返回新
+-- 状态（`ReplState` / `ReplOutcome`）。REPL 主循环用显式 fuel（1G 行守卫）。
 import Vuna.Cli.Args
 import Vuna.Compiler.Common
+import Vuna.Compiler.Driver.Dt
 import Vuna.Compiler.Frontend.Ast
-import Vuna.Compiler.Packages.Pkg
 import Vuna.Compiler.Frontend.Parser
+import Vuna.Compiler.Loader
+import Vuna.Compiler.Packages.Pkg
+import Vuna.Compiler.Version
 import Vuna.Index
 import Vuna.Interp
+import Vuna.Repl.Edit
+import Vuna.Repl.Term
+import Vuna.Search.Query
+import Vuna.Search.Run
+import Vuna.Search.Types
 import Base.IO
+import Base.IORef
 
 replTempFile : String
 replTempFile = "/tmp/vuna-repl.vuna"
 
-replPrompt : String
-replPrompt = "vuna> "
+-- 默认提示符（可在 `:set prompt` 覆盖）。
+defaultPrompt : String
+defaultPrompt = "vuna> "
 
 -- 续行提示（GHCi 风格）：提醒当前输入还没结束。
 replContinuePrompt : String
 replContinuePrompt = "... "
 
+-- `:{ ... :}` 块内的提示符。
+replBlockPrompt : String
+replBlockPrompt = "| "
+
 -- 待续输入的行数上限：既防粘贴事故，也保证 needsMore 的误判不会无限续行。
 replMaxPendingLines : Int
 replMaxPendingLines = 64
 
-replHelp : String
-replHelp =
-  "命令：\n"
-    ++ "  :help           显示帮助\n"
-    ++ "  :type EXPR      显示表达式类型（不求值，也不执行效果）\n"
-    ++ "  :load FILE      加载定义文件（整段源码进缓冲；不支持 `module ... where` 模块文件）\n"
-    ++ "  :reload         重新读取上次 :load 的文件\n"
-    ++ "  :browse MODULE  显示模块接口（复用 `vuna api`；首次会构建源码索引）\n"
-    ++ "  :reset          清空已输入的定义、import 与 :load 的文件\n"
-    ++ "  :quit           退出（同 Ctrl-D）\n"
-    ++ "其他输入按 vuna 源码处理：`import ...` 与定义会被累积，表达式会立即求值。\n"
-    ++ "DT 顶层签名必填，定义请先输入签名行（如 `x : Int`）再输入定义行。\n"
-    ++ "多行输入：未闭合的括号/字符串/块注释或行尾是 `=` `->` `|` `,` `where` `do` 等\n"
-    ++ "时显示 `... ` 继续读；缩进块（do/case/where）用空行提交，空行时输入不完整则丢弃。\n"
-    ++ "效果表达式（顶层类型是 IO a）会临时编译并运行；效果的输出直接到终端。\n"
+-- 历史条数上限（内存与会话文件一致）。
+replMaxHistory : Int
+replMaxHistory = 500
 
--- REPL 是「读一行→处理→再读一行」的无限状态机，递归不沿输入结构下降；
--- 用显式 fuel 守卫（1G 行，实际不可达）。
 replFuelBound : Int
 replFuelBound = 1073741824
 
--- REPL 的累积状态：imports 缓冲、定义缓冲、待续输入（空串 = 没有待续输入）、
--- :load 的文件路径（空串 = 未加载）与 :browse 的索引缓存（首次 :browse 才构建）。
+-- 启动目标：由 CLI 解析；`:load` 复用同一套 doLoad* 函数。
+data ReplStart : Type where
+  StartNone : ReplStart
+  StartFile : String -> ReplStart
+  StartDir : String -> ReplStart
+  StartModule : String -> ReplStart
+
+record ReplBlock where
+  blockText : String
+  blockDefines : List String
+  blockSigns : List String
+  blockFromFile : Bool
+
+record ReplSettings where
+  settingPrintTypes : Bool
+  settingTiming : Bool
+  settingEditing : Int
+  settingColor : Int
+  settingPrompt : String
+  settingTty : Bool
+  settingColorOn : Bool
+
+-- 输出汇（server 模式的核心）：交互式 REPL 写 stdout；`vuna repl --listen` / `--server`
+-- 把同一份 step 函数的输出收集进 IORef，再作为一帧 JSON-RPC 响应回给客户端。
+-- 约束：`Vuna.Repl` 内除 `replEmit` / `replEmitErr` 外**不得直接 `prim_print`**。
+data ReplSink : Type where
+  SinkStdout : ReplSink
+  -- 普通输出 / 错误输出（两个独立通道，服务端分别映射到 result.output / result.error）。
+  SinkCapture : IORef String -> IORef String -> ReplSink
+
 record ReplState where
+  stateCtx : PackageContext
   stateImports : String
-  stateDefs : String
+  stateDefs : List ReplBlock
   statePending : String
-  stateLoadedFile : String
+  stateBlock : Maybe String
+  stateLoadKind : Int
+  stateLoadTarget : String
   stateBrowseIndex : Maybe Index
+  stateSettings : ReplSettings
+  stateHistory : List String
+  stateHistoryFile : String
+  stateAuxCache : Maybe AuxCache
+  stateSink : ReplSink
 
-replState : String -> String -> String -> ReplState
-replState imports defs pending = ReplState imports defs pending "" Nothing
-
--- 只替换 pending：imports / defs / :load 文件 / 索引缓存都保持（求值、追定义后清续行）。
-withPending : ReplState -> String -> ReplState
-withPending st pending =
-  ReplState st.stateImports st.stateDefs pending st.stateLoadedFile st.stateBrowseIndex
-
--- 替换 imports / defs 并清 pending（import 接受、定义追加）；:load 文件与索引缓存保持。
-withBuffers : ReplState -> String -> String -> ReplState
-withBuffers st imports defs = ReplState imports defs "" st.stateLoadedFile st.stateBrowseIndex
-
--- :load 成功后的状态：imports 缓冲清空（文件自带的 import 已在源码里）、整段源码进 defs、
--- 记录路径；pending 清空、索引缓存保留。
-withLoadedSource : ReplState -> String -> String -> ReplState
-withLoadedSource st path source =
-  ReplState "" (ensureTrailingNewline source) "" path st.stateBrowseIndex
-
--- :reset：清空定义 / import / 待续输入与 :load 的文件；索引缓存保留（它只是源码快照缓存）。
-resetBuffers : ReplState -> ReplState
-resetBuffers st = ReplState "" "" "" "" st.stateBrowseIndex
-
-ensureTrailingNewline : String -> String
-ensureTrailingNewline s = if s == "" || endsWith "\n" s then s else s ++ "\n"
-
--- 一步的结果：继续（带新状态）或退出（退出码）。
 data ReplOutcome : Type where
   ReplContinue : ReplState -> ReplOutcome
   ReplExit : Int -> ReplOutcome
 
--- M26：REPL 的模块解析来自**包上下文**（CLI 用 `contextForDir "."`：cwd 在包内
--- 就用最近 vuna.toml 的依赖闭包，cwd 不是包时退化成 base-only；不再有环境根 flag）。
-runRepl : PackageContext -> Int
-runRepl ctx =
-  let
-    _ = runIO (prim_print ("vuna repl\n" ++ replHelp))
-  in replLoop replFuelBound ctx (replState "" "" "")
+-- 读一行（非 tty 路径；tty 路径在 readInput 里走行编辑器）。
+data ReadResult : Type where
+  ReadLine : String -> ReadResult
+  ReadBlankLine : String -> ReadResult
+  ReadEof : ReadResult
+  ReadCancel : ReadResult
 
-replLoop : Int -> PackageContext -> ReplState -> Int
-replLoop fuel ctx st = if fuel <= 0 then 0
-else
-  let
-    _ = runIO (prim_print (if st.statePending == "" then replPrompt else replContinuePrompt))
-  in let
-    raw = runIO prim_readLine
-  in if trim raw == "" then case blankStep ctx st of
-    ReplExit code => code
-    ReplContinue st2 => replLoop (fuel - 1) ctx st2
-  else case inputStep ctx st raw of
-    ReplExit code => code
-    ReplContinue st2 => replLoop (fuel - 1) ctx st2
+-- ---------------------------------------------------------------
+-- 状态复制 helper（记录字段较多，统一在这里维护）
+-- ---------------------------------------------------------------
+initialState : PackageContext -> ReplSettings -> List String -> String -> ReplSink -> ReplState
+initialState ctx settings history histFile sink =
+  ReplState ctx "" [] "" Nothing 0 "" Nothing settings history histFile Nothing sink
 
--- 新读到的一行：没有待续输入时按完整输入处理；否则先追加到 pending。
-inputStep : PackageContext -> ReplState -> String -> ReplOutcome
-inputStep ctx st raw =
-  if st.statePending == "" then lineStep ctx st (trim raw) else pendingStep ctx st raw
+withCtx : ReplState -> PackageContext -> ReplState
+withCtx st ctx =
+  ReplState ctx st.stateImports st.stateDefs st.statePending st.stateBlock st.stateLoadKind
+    st.stateLoadTarget st.stateBrowseIndex st.stateSettings st.stateHistory st.stateHistoryFile
+    st.stateAuxCache st.stateSink
 
--- 空行 / Ctrl-D：`prim_readLine` 在 EOF 与空行上都返回 ""，再读一行区分：
--- 两行都空 = EOF（pending 完整则执行后退出，不完整则报错丢弃）；
--- 否则是「用户用空行收尾当前输入」：先提交 pending，再把读到的这行当新输入处理。
-blankStep : PackageContext -> ReplState -> ReplOutcome
-blankStep ctx st =
-  let
-    next = trim (runIO prim_readLine)
-  in if next == "" then ReplExit (finishAtEof ctx st)
-  else if st.statePending == "" then lineStep ctx st next
-  else case submitPending ctx st of
-    ReplExit code => ReplExit code
-    ReplContinue st2 => lineStep ctx st2 next
+withPending : ReplState -> String -> ReplState
+withPending st p =
+  ReplState st.stateCtx st.stateImports st.stateDefs p st.stateBlock st.stateLoadKind
+    st.stateLoadTarget st.stateBrowseIndex st.stateSettings st.stateHistory st.stateHistoryFile
+    st.stateAuxCache st.stateSink
 
--- EOF：pending 是完整输入就执行（结果不影响退出码），不完整则报错；都返回 0。
-finishAtEof : PackageContext -> ReplState -> Int
-finishAtEof ctx st = if st.statePending == "" then 0
-else case submitPending ctx st of
-  ReplExit code => code
-  ReplContinue _ => 0
+withBlock : ReplState -> Maybe String -> ReplState
+withBlock st b =
+  ReplState st.stateCtx st.stateImports st.stateDefs st.statePending b st.stateLoadKind
+    st.stateLoadTarget st.stateBrowseIndex st.stateSettings st.stateHistory st.stateHistoryFile
+    st.stateAuxCache st.stateSink
 
--- 提交 pending：结构上仍是未闭合状态（括号/字符串/块注释/行尾继续符）就报错丢弃，
--- 否则按完整输入处理（缩进块只有靠空行才能收尾）。
-submitPending : PackageContext -> ReplState -> ReplOutcome
-submitPending ctx st = if needsMore st.statePending then
-  let
-    _ = runIO (prim_print "错误: 输入不完整，已丢弃当前输入\n")
-  in ReplContinue (withPending st "")
-else submitText ctx st (trim st.statePending)
+withDefs : ReplState -> List ReplBlock -> ReplState
+withDefs st blocks =
+  ReplState st.stateCtx st.stateImports blocks st.statePending st.stateBlock st.stateLoadKind
+    st.stateLoadTarget st.stateBrowseIndex st.stateSettings st.stateHistory st.stateHistoryFile
+    Nothing st.stateSink
 
--- 完整的一行输入：冒号命令优先（在续行判定之前，否则 `:type f (` 会被当成未闭合源码），
--- 否则按「还需要续行 / import / 定义或表达式」处理。
-lineStep : PackageContext -> ReplState -> String -> ReplOutcome
-lineStep ctx st ":q" = ReplExit 0
-lineStep ctx st ":quit" = ReplExit 0
-lineStep ctx st ":reset" =
-  let
-    _ = runIO (prim_print "已清空\n")
-  in ReplContinue (resetBuffers st)
-lineStep ctx st ":help" =
-  let
-    _ = runIO (prim_print replHelp)
-  in ReplContinue st
-lineStep ctx st line =
-  if startsWith ":" line then commandStep ctx st line
-  else if needsMore line then ReplContinue (withPending st (line ++ "\n"))
-  else if startsWith "import " line then addImport ctx st line else submitText ctx st line
+withImports : ReplState -> String -> ReplState
+withImports st imports =
+  ReplState st.stateCtx imports st.stateDefs st.statePending st.stateBlock st.stateLoadKind
+    st.stateLoadTarget st.stateBrowseIndex st.stateSettings st.stateHistory st.stateHistoryFile
+    Nothing st.stateSink
 
--- 冒号命令分发（`:help` / `:q` / `:reset` 等无参命令已在上面的子句处理）。
--- 未知命令给可操作提示，而不是落到 parse error。
-commandStep : PackageContext -> ReplState -> String -> ReplOutcome
-commandStep ctx st cmd = case commandArg cmd ":type" of
-  Just expr => typeStep ctx st expr
-  Nothing => case commandArg cmd ":load" of
-    Just path => loadStep st path
-    Nothing => case commandArg cmd ":reload" of
-      Just arg => reloadStep st arg
-      Nothing => case commandArg cmd ":browse" of
-        Just modName => browseStep st modName
-        Nothing =>
-          let
-            _ =
-              runIO
-                (prim_print ("错误: 未知命令 `" ++ cmd ++ "`（输入 :help 查看可用命令）\n"))
-          in ReplContinue st
-
--- 命令参数：`cmd == name` → Just ""（缺参数）；`name` 后跟空格 → Just（trim 后的剩余）；
--- 其它 → Nothing（不是该命令）。按字节长度切前缀，不做 token 化。
-commandArg : String -> String -> Maybe String
-commandArg cmd name =
-  if cmd == name then Just ""
-  else if startsWith (name ++ " ") cmd then Just (trim (substring (byteLength (name ++ " ")) (byteLength cmd - byteLength (name ++ " ")) cmd))
-  else Nothing
-
-commandUsage : ReplState -> String -> ReplOutcome
-commandUsage st usage =
-  let
-    _ = runIO (prim_print ("用法: " ++ usage ++ "\n"))
-  in ReplContinue st
-
--- 当前缓冲拼成的程序（imports 在前、定义在后）。
-bufferProgram : ReplState -> String
-bufferProgram st = st.stateImports ++ "\n" ++ st.stateDefs
-
--- `:type EXPR`：只打印 zonk 后的类型文本（不求值、不执行效果）。先 parseExpressionSource
--- 拿到与 evalText 一致的干净解析错误；精化错误走既有 `错误:` 出口。
-typeStep : PackageContext -> ReplState -> String -> ReplOutcome
-typeStep ctx st exprText = if exprText == "" then commandUsage st ":type <表达式>"
-else case parseExpressionSource exprText of
-  Err e =>
-    let
-      _ = runIO (prim_print ("错误: " ++ e ++ "\n"))
-    in ReplContinue st
-  Ok _ => case evalExprInfo ctx (bufferProgram st) exprText of
-    Err e =>
-      let
-        _ = runIO (prim_print ("错误: " ++ e ++ "\n"))
-      in ReplContinue st
-    Ok info =>
-      let
-        _ = runIO (prim_print (exprText ++ " : " ++ trim (secondOf info) ++ "\n"))
-      in ReplContinue st
-
--- `:load FILE`：用文件源码整体替换 imports/defs 缓冲（成功才替换，失败状态不变）。
--- 只接受无 `module ... where` 头的入口式源码：模块文件由 Loader 按模块加载，不能直接
--- 灌进 REPL 缓冲，因此拒绝并提示改用 `:browse`。
-loadStep : ReplState -> String -> ReplOutcome
-loadStep st path = loadFileStep st "已加载" path
-
--- `:reload`：重读上次 :load 的文件；没有加载过就提示先 :load。
-reloadStep : ReplState -> String -> ReplOutcome
-reloadStep st arg = if arg /= "" then commandUsage st ":reload"
-else if st.stateLoadedFile == "" then
-  let
-    _ = runIO (prim_print "错误: 还没有 :load 任何文件（先 :load <FILE>）\n")
-  in ReplContinue st
-else loadFileStep st "已重新加载" st.stateLoadedFile
-
-loadFileStep : ReplState -> String -> String -> ReplOutcome
-loadFileStep st verb path = if path == "" then commandUsage st ":load <FILE>"
-else case readText path of
-  Err e =>
-    let
-      _ = runIO (prim_print ("错误: " ++ e ++ "\n"))
-    in ReplContinue st
-  Ok source => case parseSource path source of
-    Err e =>
-      let
-        _ = runIO (prim_print ("错误: " ++ e ++ "\n"))
-      in ReplContinue st
-    Ok (SourceFile hdr imp fx decls) => case hdr of
-      Just md =>
-        let
-          _ =
-            runIO
-              (prim_print ("错误: " ++ path ++ " 是模块文件（含 `module ... where` 头），REPL 不能加载模块；请去掉 module 头后用 :load，或用 :browse <模块名> 查看模块接口\n"))
-        in ReplContinue st
-      Nothing =>
-        let
-          _ =
-            runIO
-              (prim_print (verb ++ " " ++ path ++ "（" ++ strFromInt (length decls) ++ " 个定义）\n"))
-        in ReplContinue (withLoadedSource st path source)
-
--- `:browse MODULE`：复用 vuna api 的 Index + renderApi。索引只在首次 :browse 时构建
--- （`loadOrBuild "."`，结果缓存进 stateBrowseIndex）；非 workspace 明确报错且状态不变。
-browseStep : ReplState -> String -> ReplOutcome
-browseStep st modName = if modName == "" then commandUsage st ":browse <Module.name>"
-else case st.stateBrowseIndex of
-  Just index => browseRender st index modName
-  Nothing => case findManifestDirMaybe "." of
-    Nothing =>
-      let
-        _ =
-          runIO
-            (prim_print "错误: 当前目录不在 vuna workspace 内（向上找不到 vuna.toml）；:browse 需要在包或 workspace 根运行\n")
-      in ReplContinue st
-    Just _ => case loadOrBuild "." of
-      Err e =>
-        let
-          _ = runIO (prim_print ("错误: " ++ e ++ "\n"))
-        in ReplContinue st
-      Ok index => browseRender (withIndexCache st index) index modName
+withLoad : ReplState -> Int -> String -> ReplState
+withLoad st kind target =
+  ReplState st.stateCtx st.stateImports st.stateDefs st.statePending st.stateBlock kind target
+    st.stateBrowseIndex st.stateSettings st.stateHistory st.stateHistoryFile st.stateAuxCache
+    st.stateSink
 
 withIndexCache : ReplState -> Index -> ReplState
-withIndexCache st index =
-  ReplState st.stateImports st.stateDefs st.statePending st.stateLoadedFile (Just index)
+withIndexCache st idx =
+  ReplState st.stateCtx st.stateImports st.stateDefs st.statePending st.stateBlock st.stateLoadKind
+    st.stateLoadTarget (Just idx) st.stateSettings st.stateHistory st.stateHistoryFile
+    st.stateAuxCache st.stateSink
 
-browseRender : ReplState -> Index -> String -> ReplOutcome
-browseRender st index modName = case renderApi index modName of
-  Err e =>
-    let
-      _ = runIO (prim_print ("错误: " ++ e ++ "\n"))
-    in ReplContinue st
-  Ok text =>
-    let
-      _ = runIO (prim_print (text ++ "\n"))
-    in ReplContinue st
+withSettings : ReplState -> ReplSettings -> ReplState
+withSettings st s =
+  ReplState st.stateCtx st.stateImports st.stateDefs st.statePending st.stateBlock st.stateLoadKind
+    st.stateLoadTarget st.stateBrowseIndex s st.stateHistory st.stateHistoryFile st.stateAuxCache
+    st.stateSink
 
--- 续行状态：把新行（保留缩进）追加到 pending；`:q`/`:quit` 仍可直接退出。
--- 缩进行（offside 块的成员）即使结构上「完整」也继续等，直到出现去缩进行或空行，
--- 否则 `do` / `case` / `where` 的第一条分支就会被误当成完整输入提前求值。
-pendingStep : PackageContext -> ReplState -> String -> ReplOutcome
-pendingStep ctx st raw = if raw == ":q" || raw == ":quit" then ReplExit 0
+withAuxCache : ReplState -> Maybe AuxCache -> ReplState
+withAuxCache st a =
+  ReplState st.stateCtx st.stateImports st.stateDefs st.statePending st.stateBlock st.stateLoadKind
+    st.stateLoadTarget st.stateBrowseIndex st.stateSettings st.stateHistory st.stateHistoryFile a
+    st.stateSink
+
+-- `:load DIR`：换上下文并清空缓冲/加载目标/索引/aux；设置与历史保留。
+switchedContext : ReplState -> PackageContext -> ReplState
+switchedContext st ctx =
+  ReplState ctx "" [] "" Nothing 0 "" Nothing st.stateSettings st.stateHistory st.stateHistoryFile
+    Nothing st.stateSink
+
+-- `:load FILE`：整段源码进缓冲；加载目标按文件记录。
+loadedFileState : ReplState -> String -> String -> ReplState
+loadedFileState st path source =
+  ReplState st.stateCtx "" [mkBlock (ensureTrailingNewline source) True] "" Nothing 1 path
+    st.stateBrowseIndex st.stateSettings st.stateHistory st.stateHistoryFile Nothing st.stateSink
+
+-- 只替换 settings（其它字段由调用方保持）。
+settingsSetPrintTypes : ReplSettings -> Bool -> ReplSettings
+settingsSetPrintTypes s v =
+  ReplSettings v s.settingTiming s.settingEditing s.settingColor s.settingPrompt s.settingTty
+    s.settingColorOn
+
+settingsSetTiming : ReplSettings -> Bool -> ReplSettings
+settingsSetTiming s v =
+  ReplSettings s.settingPrintTypes v s.settingEditing s.settingColor s.settingPrompt s.settingTty
+    s.settingColorOn
+
+settingsSetEditing : ReplSettings -> Int -> ReplSettings
+settingsSetEditing s v =
+  ReplSettings s.settingPrintTypes s.settingTiming v s.settingColor s.settingPrompt s.settingTty
+    s.settingColorOn
+
+settingsSetColor : ReplSettings -> Int -> Bool -> ReplSettings
+settingsSetColor s mode on =
+  ReplSettings s.settingPrintTypes s.settingTiming s.settingEditing mode s.settingPrompt
+    s.settingTty on
+
+settingsSetPrompt : ReplSettings -> String -> ReplSettings
+settingsSetPrompt s v =
+  ReplSettings s.settingPrintTypes s.settingTiming s.settingEditing s.settingColor v s.settingTty
+    s.settingColorOn
+
+-- ---------------------------------------------------------------
+-- 颜色 / 终端
+-- ---------------------------------------------------------------
+escCode : String
+escCode = strPack [27]
+
+ansi : String -> String -> String
+ansi code s = "${escCode}[${code}m${s}${escCode}[0m"
+
+-- 角色着色：31 红 / 32 绿 / 33 黄 / 36 青 / 2 暗 / 1 粗。
+c : ReplState -> String -> String -> String
+c st code s = if st.stateSettings.settingColorOn then ansi code s else s
+
+isTTY : Int -> Bool
+isTTY _ = runIO (prim_runIn "." ["sh", "-c", "test -t 0 && test -t 1"]) == 0
+
+autoColorOk : Int -> Bool
+autoColorOk _ =
+  let
+    noColor = runIO (prim_getenv "NO_COLOR")
+    term = runIO (prim_getenv "TERM")
+  in noColor == "" && term /= "dumb"
+
+-- mode：0 auto / 1 on / 2 off。
+resolveColorOn : Int -> Bool -> Bool
+resolveColorOn mode tty =
+  if mode == 1 then True else if mode == 2 then False else tty && autoColorOk 0
+
+-- editing：0 auto / 1 on / 2 off；非 tty 永远不可用。
+editingEnabled : ReplState -> Bool
+editingEnabled st = st.stateSettings.settingTty && st.stateSettings.settingEditing /= 2
+
+defaultSettings : Bool -> ReplSettings
+defaultSettings tty = ReplSettings False False 0 0 defaultPrompt tty (resolveColorOn 0 tty)
+
+-- ---------------------------------------------------------------
+-- 打印 helper
+-- ---------------------------------------------------------------
+-- 唯一输出出口：交互式写 stdout；server 模式追加到 capture 缓冲。
+-- 返回写入的字节数（与 `prim_print` 一致，供 `printImplicitParts` 这类累加用法）。
+replEmit : ReplState -> String -> Int
+replEmit st s = case st.stateSink of
+  SinkStdout => runIO (prim_print s)
+  SinkCapture outRef _ =>
+    let
+      cur = runIO (readRef outRef)
+      _ = runIO (writeRef outRef (cur ++ s))
+    in strLength s
+
+-- 错误通道（server 模式单独收集；`ok` = 该通道为空）。
+replEmitErr : ReplState -> String -> Int
+replEmitErr st s = case st.stateSink of
+  SinkStdout => runIO (prim_print s)
+  SinkCapture _ errRef =>
+    let
+      cur = runIO (readRef errRef)
+      _ = runIO (writeRef errRef (cur ++ s))
+    in strLength s
+
+-- capture 汇（server 模式）：子进程类效果（`:!` / 效果表达式）在阶段 1 拒绝执行。
+captureMode : ReplState -> Bool
+captureMode st = case st.stateSink of
+  SinkStdout => False
+  SinkCapture _ _ => True
+
+printError : ReplState -> String -> Int
+printError st msg = replEmitErr st "${c st "31" "错误: "}${msg}\n"
+
+printHint : ReplState -> String -> Int
+printHint st msg = replEmit st "${c st "33" msg}\n"
+
+printOk : ReplState -> String -> ReplOutcome
+printOk st msg =
+  let
+    _ = replEmit st "${msg}\n"
+  in ReplContinue st
+
+-- ---------------------------------------------------------------
+-- server 模式会话 API（Vuna.Repl.Server / Vuna.Repl.Client 使用）
+-- ---------------------------------------------------------------
+-- 起一个 session：非 tty 设置（无颜色 / 无行编辑）、历史文件为空（不读不写盘；
+-- 内存历史与 `:history` / `:again` 仍可用）、不打印 banner；`applyStart` 的提示消息
+-- 随 Ok 返回，由调用方决定是否放进协议响应。
+startReplSession : PackageContext -> ReplStart -> ReplSink -> Result (Pair ReplState String)
+startReplSession ctx start sink =
+  let
+    settings = defaultSettings False
+    st0 = initialState ctx settings [] "" sink
+  in applyStart st0 start
+
+-- 读出并清空两个 capture 通道（普通输出, 错误输出）；stdout 汇返回两个空串。
+replOutputDrain : ReplState -> Pair String String
+replOutputDrain st = case st.stateSink of
+  SinkStdout => Pair "" ""
+  SinkCapture outRef errRef =>
+    let
+      out = runIO (readRef outRef)
+      err = runIO (readRef errRef)
+      _ = runIO (writeRef outRef "")
+      _ = runIO (writeRef errRef "")
+    in Pair out err
+
+-- 还有未完成的输入（续行 pending 或 `:{` 块未闭合）？
+replPendingOpen : ReplState -> Bool
+replPendingOpen st = case st.stateBlock of
+  Just _ => True
+  Nothing => st.statePending /= ""
+
+-- 「输入结束」收尾：pending 完整则提交（等价交互式空行 / Ctrl-D 的补交），
+-- `:{` 块未闭合或仍 needsMore 则保持 pending。
+finishInput : ReplState -> ReplOutcome
+finishInput st = if st.statePending == "" then ReplContinue st
+else if needsMore st.statePending then ReplContinue st
 else
   let
-    pending2 = st.statePending ++ raw ++ "\n"
+    unit = trim st.statePending
+    st1 = remember (withPending st "") unit
+  in submitText st1 unit
+
+-- ---------------------------------------------------------------
+-- 名称 / 列表 / 块 helper
+-- ---------------------------------------------------------------
+lenInt : List a -> Int
+lenInt [] = 0
+lenInt (_ :: rest) = 1 + lenInt rest
+
+imax : Int -> Int -> Int
+imax a b = if a >= b then a else b
+
+immin : Int -> Int -> Int
+immin a b = if a <= b then a else b
+
+takeLast : Int -> List a -> List a
+takeLast n xs = drop (imax 0 (lenInt xs - n)) xs
+
+appendLast : List a -> a -> List a
+appendLast xs x = append xs [x]
+
+trimHistory : List String -> List String
+trimHistory = takeLast replMaxHistory
+
+dedupStrs : List String -> List String
+dedupStrs [] = []
+dedupStrs (x :: rest) = if memName x rest then dedupStrs rest else x :: dedupStrs rest
+
+intersects : List String -> List String -> Bool
+intersects [] ys = False
+intersects (x :: rest) ys = memName x ys || intersects rest ys
+
+funNamesOf : List Decl -> List String
+funNamesOf [] = []
+funNamesOf (d :: rest) = case d of
+  DFun n pats body sp => n :: funNamesOf rest
+  _ => funNamesOf rest
+
+sigNamesOf : List Decl -> List String
+sigNamesOf [] = []
+sigNamesOf (d :: rest) = case d of
+  DSig n ctx ty sp => n :: sigNamesOf rest
+  _ => sigNamesOf rest
+
+blockNames : ReplBlock -> List String
+blockNames b = append (blockDefinesOf b) (blockSignsOf b)
+
+blockTextOf : ReplBlock -> String
+blockTextOf (ReplBlock text defines signs fromFile) = text
+
+blockDefinesOf : ReplBlock -> List String
+blockDefinesOf (ReplBlock text defines signs fromFile) = defines
+
+blockSignsOf : ReplBlock -> List String
+blockSignsOf (ReplBlock text defines signs fromFile) = signs
+
+blockFromFileOf : ReplBlock -> Bool
+blockFromFileOf (ReplBlock text defines signs fromFile) = fromFile
+
+mkBlock : String -> Bool -> ReplBlock
+mkBlock text0 fromFile =
+  let
+    text = ensureTrailingNewline text0
+  in case parseSource replTempFile text of
+    Ok (SourceFile _ _ _ decls) =>
+      ReplBlock text (dedupStrs (funNamesOf decls)) (dedupStrs (sigNamesOf decls)) fromFile
+    Err e => ReplBlock text [] [] fromFile
+
+ensureTrailingNewline : String -> String
+ensureTrailingNewline s = if s == "" || endsWith "\n" s then s else "${s}\n"
+
+bufferDefs : ReplState -> String
+bufferDefs st = join "" (map blockTextOf st.stateDefs)
+
+bufferProgram : ReplState -> String
+bufferProgram st = "${st.stateImports}\n${bufferDefs st}"
+
+bufferSigNames : ReplState -> List String
+bufferSigNames st = dedupStrs (concatMap blockSignsOf st.stateDefs)
+
+-- ---------------------------------------------------------------
+-- 历史（内存 + 持久化；只持久化单行单元）
+-- ---------------------------------------------------------------
+historyFilePath : Int -> String
+historyFilePath _ =
+  let
+    env = runIO (prim_getenv "VUNA_REPL_HISTORY")
+  in if env /= "" then env
+  else
+    let
+      xdg = runIO (prim_getenv "XDG_STATE_HOME")
+    in if xdg /= "" then "${xdg}/vuna/repl_history"
+    else
+      let
+        home = runIO (prim_getenv "HOME")
+      in if home == "" then "" else "${home}/.vuna_repl_history"
+
+historyLinesOf : String -> List String
+historyLinesOf path = case readText path of
+  Err e => []
+  Ok s => filter (\l => l /= "") (lines s)
+
+loadHistoryFrom : String -> List String
+loadHistoryFrom path = if path == "" then [] else takeLast replMaxHistory (historyLinesOf path)
+
+-- 持久化：单行才写；目录不存在时用 mkdir -p，父目录不可写（沙箱 / 只读 HOME）时静默
+-- 跳过。写失败不能把 REPL 拖崩，历史只是便利功能。
+persistHistory : ReplState -> String -> Int
+persistHistory st unit = if st.stateHistoryFile == "" || contains "\n" unit then 0
+else
+  let
+    dir = parentOf st.stateHistoryFile
+    _ = runIO (prim_runIn "." ["mkdir", "-p", dir])
+    writable = runIO (prim_runIn "." ["sh", "-c", "test -w ${shellQuote dir}"]) == 0
+  in if not writable then 0
+  else
+    let
+      old = historyLinesOf st.stateHistoryFile
+      lines2 = trimHistory (appendLast old unit)
+    in runIO (prim_writeFileAtomic st.stateHistoryFile "${join "\n" lines2}\n")
+
+-- 提交一个完整输入单元：记入内存历史（连续重复去重）并持久化单行单元。
+remember : ReplState -> String -> ReplState
+remember st unit = if trim unit == "" then st
+else
+  let
+    u = trim unit
+  in if lastHistoryIs st.stateHistory u then st
+  else
+    let
+      _ = persistHistory st u
+    in ReplState st.stateCtx st.stateImports st.stateDefs st.statePending st.stateBlock
+      st.stateLoadKind st.stateLoadTarget st.stateBrowseIndex st.stateSettings
+      (trimHistory (appendLast st.stateHistory u)) st.stateHistoryFile st.stateAuxCache st.stateSink
+
+lastHistoryIs : List String -> String -> Bool
+lastHistoryIs [] u = False
+lastHistoryIs (x :: rest) u = case rest of
+  [] => x == u
+  _ => lastHistoryIs rest u
+
+-- ---------------------------------------------------------------
+-- 提示符 / 输入
+-- ---------------------------------------------------------------
+promptPlain : ReplState -> String
+promptPlain st = case st.stateBlock of
+  Just block => replBlockPrompt
+  Nothing => if st.statePending == "" then st.stateSettings.settingPrompt else replContinuePrompt
+
+promptRendered : ReplState -> String
+promptRendered st = case st.stateBlock of
+  Just block => c st "36" (promptPlain st)
+  Nothing => if st.statePending == "" then c st "36" (promptPlain st) else c st "2" (promptPlain st)
+
+readInputPlain : ReplState -> ReadResult
+readInputPlain st =
+  let
+    _ = replEmit st (promptRendered st)
+  in let
+    raw = runIO prim_readLine
+  in if trim raw == "" then
+    let
+      next = runIO prim_readLine
+    in if next == "" then ReadEof else ReadBlankLine next
+  else ReadLine raw
+
+readInput : ReplState -> ReadResult
+readInput st = if editingEnabled st then
+  let
+    outcome = editLine (editConfig st)
+  in case outcome of
+    EditLine text => ReadLine text
+    EditEof => ReadEof
+    EditCancel => ReadCancel
+    EditUnavailable => readInputPlain st
+else readInputPlain st
+
+editConfig : ReplState -> EditConfig
+editConfig st =
+  EditConfig (promptRendered st) (byteLength (promptPlain st)) (singleLineHistory st.stateHistory)
+    (completionCandidates st) (terminalWidth 0) st.stateSettings.settingColorOn
+
+singleLineHistory : List String -> List String
+singleLineHistory [] = []
+singleLineHistory (x :: rest) =
+  if contains "\n" x then singleLineHistory rest else x :: singleLineHistory rest
+
+completionCandidates : ReplState -> List String
+completionCandidates st =
+  append commandNames (append (bufferSigNames st) (concatMap blockDefinesOf st.stateDefs))
+
+-- ---------------------------------------------------------------
+-- 主循环
+-- ---------------------------------------------------------------
+runRepl : PackageContext -> ReplStart -> Int
+runRepl ctx start =
+  let
+    tty = isTTY 0
+    settings = defaultSettings tty
+    histFile = historyFilePath 0
+    history = loadHistoryFrom histFile
+    st0 = initialState ctx settings history histFile SinkStdout
+    _ = replEmit st0 (bannerText st0)
+  in case applyStart st0 start of
+    Err e =>
+      let
+        _ = printError st0 e
+      in 2
+    Ok (Pair st1 msg) =>
+      let
+        _ = replEmit st1 "${msg}\n"
+      in replLoop replFuelBound st1
+
+bannerText : ReplState -> String
+bannerText st = """vuna repl ${vunaVersion} · ${packageLabel st}
+${c st "2" ":help 查看命令；定义可直接输入（自动推断签名）；Ctrl-D 退出"}
+"""
+
+packageLabel : ReplState -> String
+packageLabel st = "包: ${packageNameLabel st}"
+
+packageNameLabel : ReplState -> String
+packageNameLabel st =
+  let
+    name = contextPackageName st.stateCtx
+  in if name == "" then "base-only" else name
+
+applyStart : ReplState -> ReplStart -> Result (Pair ReplState String)
+applyStart st start = case start of
+  StartNone => Ok (Pair st "")
+  StartDir dir => Ok (Pair st "包上下文: ${packageNameLabel st}")
+  StartFile path =>
+    andThen (doLoadFile st path)
+      (\p => Ok (Pair (secondOf p) "已加载 ${path}（${firstOf p} 个定义）"))
+  StartModule m => andThen (doLoadModule st m) (\s => Ok (Pair s "已导入模块 ${m}"))
+
+replLoop : Int -> ReplState -> Int
+replLoop fuel st = if fuel <= 0 then 0
+else case readInput st of
+  ReadEof => finishAtEof st
+  ReadCancel =>
+    let
+      _ = printHint st "^C"
+    in replLoop (fuel - 1) (withBlock (withPending st "") Nothing)
+  ReadLine raw => case inputStep st raw of
+    ReplExit code => code
+    ReplContinue st2 => replLoop (fuel - 1) st2
+  ReadBlankLine next => case blankStep st next of
+    ReplExit code => code
+    ReplContinue st2 => replLoop (fuel - 1) st2
+
+-- 一行输入：块模式 / 续行 / 普通行。
+inputStep : ReplState -> String -> ReplOutcome
+inputStep st raw = case st.stateBlock of
+  Just block => blockStep st block raw
+  Nothing => if st.statePending == "" then lineStep st raw else pendingStep st raw
+
+-- 普通行：`:{}` → 块；冒号命令；续行；import；定义/表达式。
+lineStep : ReplState -> String -> ReplOutcome
+-- 命令保留行尾空白（`:set prompt X> ` 的尾空格有意义）；历史里存 trim 后的文本。
+lineStep st raw =
+  let
+    line = trim raw
+  in if line == ":{" then ReplContinue (withBlock st (Just ""))
+  else if startsWith ":" line then commandStep (remember st line) (trimLeftSpaces raw)
+  else if needsMore line then ReplContinue (withPending st "${line}\n")
+  else if startsWith "import " line then addImport (remember st line) line
+  else submitText (remember st line) line
+
+-- `:{ ... :}`：原样收集；`:}` 提交（去公共缩进），块内支持 :abandon/:q。
+blockStep : ReplState -> String -> String -> ReplOutcome
+blockStep st block raw = if trim raw == ":}" then
+  let
+    unit = dedentBlock block
+  in if trim unit == "" then ReplContinue (withBlock st Nothing)
+  else submitText (withBlock (remember st unit) Nothing) unit
+else if trim raw == ":abandon" then
+  let
+    _ = printHint st "已放弃当前输入"
+  in ReplContinue (withBlock st Nothing)
+else if trim raw == ":q" || trim raw == ":quit" then ReplExit 0
+else ReplContinue (withBlock st (Just "${block}${raw}\n"))
+
+-- 续行：保留缩进；去缩进行/空行收尾；`:q` 可退出。
+pendingStep : ReplState -> String -> ReplOutcome
+pendingStep st raw = if trim raw == ":q" || trim raw == ":quit" then ReplExit 0
+else if trim raw == ":abandon" then
+  let
+    _ = printHint st "已放弃当前输入"
+  in ReplContinue (withPending st "")
+else
+  let
+    pending2 = "${st.statePending}${raw}\n"
   in if countChar 10 pending2 > replMaxPendingLines then
     let
-      _ =
-        runIO
-          (prim_print ("错误: 续行超过 " ++ strFromInt replMaxPendingLines ++ " 行，已丢弃当前输入\n"))
+      _ = printError st "续行超过 ${replMaxPendingLines} 行，已丢弃当前输入"
     in ReplContinue (withPending st "")
   else if needsMore pending2 then ReplContinue (withPending st pending2)
   else if startsIndented raw then ReplContinue (withPending st pending2)
-  else submitText ctx st (trim pending2)
+  else
+    let
+      unit = trim pending2
+      st1 = remember (withPending st "") unit
+    in submitText st1 unit
 
-startsIndented : String -> Bool
-startsIndented line = startsWith " " line || startsWith "\t" line
+-- 空行：块内保留空行；pending 完整则提交，不完整则保留并提示；无 pending 直接处理下一行。
+blankStep : ReplState -> String -> ReplOutcome
+blankStep st next = case st.stateBlock of
+  Just block => inputStep (withBlock st (Just "${block}\n")) next
+  Nothing => if st.statePending == "" then inputStep st next
+  else if needsMore st.statePending then
+    let
+      _ = printError st "输入不完整（已保留；继续输入或 :abandon 放弃）"
+    in inputStep st next
+  else
+    let
+      unit = trim st.statePending
+      st1 = remember (withPending st "") unit
+    in case submitText st1 unit of
+      ReplExit code => ReplExit code
+      ReplContinue st2 => inputStep st2 next
 
--- import：先和已有定义一起 parse，通过才接受（否则保持原状态并打印解析错误）。
-addImport : PackageContext -> ReplState -> String -> ReplOutcome
-addImport ctx st line =
+finishAtEof : ReplState -> Int
+finishAtEof st = case finishInput st of
+  ReplExit code => code
+  ReplContinue st2 => if st2.statePending == "" then 0
+  else
+    let
+      _ = printError st2 "输入不完整，已丢弃当前输入"
+    in 0
+
+-- ---------------------------------------------------------------
+-- import / 定义
+-- ---------------------------------------------------------------
+addImport : ReplState -> String -> ReplOutcome
+addImport st line =
   let
-    imports2 = st.stateImports ++ line ++ "\n"
-  in case parseSource replTempFile (imports2 ++ st.stateDefs) of
+    imports2 = "${st.stateImports}${line}\n"
+  in case parseSource replTempFile (imports2 ++ bufferDefs st) of
     Err e =>
       let
-        _ = runIO (prim_print ("parse error: " ++ e ++ "\n"))
+        _ = printError st "parse error: ${e}"
       in ReplContinue st
-    Ok _ => ReplContinue (withBuffers st imports2 st.stateDefs)
+    Ok _ => ReplContinue (withImports st imports2)
 
 -- 定义还是表达式：整段能解析成顶层声明就追加到定义缓冲，否则按表达式求值。
-submitText : PackageContext -> ReplState -> String -> ReplOutcome
-submitText ctx st text = case parseSource replTempFile (st.stateImports ++ st.stateDefs ++ text ++ "\n") of
+-- 缺签名的 DFun 先走自动签名（写回后复查，失败回滚）。
+submitText : ReplState -> String -> ReplOutcome
+submitText st text = case parseSource replTempFile "${bufferProgram st}${text}\n" of
   Ok (SourceFile hdr imp fx decls) => case hdr of
-    Just md => evalText ctx st text
-    Nothing => ReplContinue (withBuffers st st.stateImports (st.stateDefs ++ text ++ "\n"))
-  Err e => evalText ctx st text
+    Just md => evalText st text
+    Nothing => appendDecls st text
+  Err e => evalText st text
 
--- 表达式求值：类型是 IO a 时走临时包编译+运行，否则核心求值后打印值。
-evalText : PackageContext -> ReplState -> String -> ReplOutcome
-evalText ctx st text = case parseExpressionSource text of
-  Err e =>
-    let
-      _ = runIO (prim_print ("错误: " ++ e ++ "\n"))
-    in ReplContinue (withPending st "")
-  Ok _ => case evalExprInfo ctx (bufferProgram st) text of
+appendDecls : ReplState -> String -> ReplOutcome
+appendDecls st text = case parseSource replTempFile text of
+  Ok (SourceFile Nothing _ _ newDecls) => case prepareRedefinition st newDecls of
     Err e =>
       let
-        _ = runIO (prim_print ("错误: " ++ e ++ "\n"))
-      in ReplContinue (withPending st "")
-    Ok info =>
+        _ = printError st e
+      in ReplContinue st
+    Ok stRemoved =>
       let
-        tyText = secondOf info
-      in if isIOTypeText tyText then
+        targets = missingTargets newDecls (bufferSigNames stRemoved)
+      in if lenInt targets == 0 then ReplContinue (withDefs stRemoved (appendLast stRemoved.stateDefs (mkBlock text False)))
+      else inferAndAppend st stRemoved text targets
+  _ => evalText st text
+
+-- 重定义：移除同名旧定义块（以及新块自带签名时同名的旧签名块）；文件块冲突直接报错。
+prepareRedefinition : ReplState -> List Decl -> Result ReplState
+prepareRedefinition st newDecls =
+  let
+    newDefines = dedupStrs (funNamesOf newDecls)
+    newSigs = dedupStrs (sigNamesOf newDecls)
+  in if hasFileConflict st.stateDefs newDefines then Err
+    "定义来自已加载的文件（${fileBlockOrigin st.stateDefs}）；请修改文件后 :reload（或 :reset 清空）"
+  else
+    let
+      kept = filter (\b => keepBlock newDefines newSigs b) st.stateDefs
+    in Ok (withDefs st kept)
+
+hasFileConflict : List ReplBlock -> List String -> Bool
+hasFileConflict [] newDefines = False
+hasFileConflict (b :: rest) newDefines =
+  b.blockFromFile && intersects newDefines (blockNames b) || hasFileConflict rest newDefines
+
+fileBlockOrigin : List ReplBlock -> String
+fileBlockOrigin [] = "?"
+fileBlockOrigin (b :: rest) = if b.blockFromFile then "已加载文件" else fileBlockOrigin rest
+
+keepBlock : List String -> List String -> ReplBlock -> Bool
+keepBlock newDefines newSigs b =
+  if intersects newDefines b.blockDefines then False
+  else if intersects newDefines b.blockSigns && intersects newDefines newSigs then False else True
+
+missingTargets : List Decl -> List String -> List String
+missingTargets decls existing =
+  filter (\n => not (memName n (sigNamesOf decls)) && not (memName n existing))
+    (dedupStrs (funNamesOf decls))
+
+inferAndAppend : ReplState -> ReplState -> String -> List String -> ReplOutcome
+inferAndAppend stOrig stRemoved text targets =
+  let
+    ctx = stRemoved.stateCtx
+  in case inferDefTypes ctx (bufferProgram stRemoved) targets text of
+    Err e =>
+      let
+        _ = printError stOrig "无法自动推断签名：${e}"
+        _ =
+          printHint stOrig
+            "提示: 带模式匹配 / trait 约束 / 高阶参数的定义请先写类型签名（如 `f : Int -> Int`）"
+      in ReplContinue stOrig
+    Ok sigs =>
+      let
+        text2 = join "" (map sigLine sigs) ++ text
+      in case checkProgram ctx "${bufferProgram stRemoved}\n${text2}\n" of
+        Err e =>
+          let
+            _ = printError stOrig "自动推断的签名未通过复查（请手写签名）：${e}"
+          in ReplContinue stOrig
+        Ok _ =>
+          ReplContinue (withDefs stRemoved (appendLast stRemoved.stateDefs (mkBlock text2 False)))
+
+sigLine : Pair String String -> String
+sigLine p = "${firstOf p} : ${secondOf p}\n"
+
+-- ---------------------------------------------------------------
+-- 表达式求值
+-- ---------------------------------------------------------------
+evalText : ReplState -> String -> ReplOutcome
+evalText st text =
+  let
+    start = runIO timeUs
+  in case parseExpressionSource text of
+    Err e =>
+      let
+        _ = printError st e
+      in ReplContinue (withPending st "")
+    Ok _ => case evalExprInfoWithAux st.stateCtx (bufferProgram st) text st.stateAuxCache of
+      Err e =>
         let
-          _ = evalIO ctx st text tyText
+          _ = printError st e
         in ReplContinue (withPending st "")
-      else
+      Ok (Pair info aux2) =>
         let
-          _ = runIO (prim_print (firstOf info ++ "\n"))
-        in ReplContinue (withPending st "")
+          tyText = secondOf info
+          st2 = withAuxCache st aux2
+        in if isIOTypeText tyText then
+          let
+            _ = evalIO st2 text tyText
+            _ = printTypeLine st2 tyText
+            _ = printTiming st2 start
+          in ReplContinue (withPending st2 "")
+        else
+          let
+            _ = replEmit st2 "${c st2 "32" (firstOf info)}\n"
+            _ = printTypeLine st2 tyText
+            _ = printTiming st2 start
+          in ReplContinue (withPending st2 "")
+
+printTypeLine : ReplState -> String -> Int
+printTypeLine st ty =
+  if st.stateSettings.settingPrintTypes then replEmit st "${c st "2" "  :: ${ty}"}\n" else 0
+
+printTiming : ReplState -> Int -> Int
+printTiming st start = if st.stateSettings.settingTiming then
+  let
+    us = runIO timeUs
+    delta = imax 0 (us - start)
+    ms = delta / 1000
+    text = if ms <= 0 then "<1 ms" else "${ms} ms"
+  in replEmit st "${c st "2" "  [${text}]"}\n"
+else 0
 
 -- IO 表达式：合成 `main : <类型>` + `main = <表达式>`，临时编译并运行。
--- 返回进程退出码（0 成功；非 0 只打印退出码，不改变 REPL 状态）；错误已打印。
--- 类型里若有未解元变量（`?N`，常见于没有上下文可推断的裸 `pure ...`），不能写回
--- 签名，给出「加类型标注」的可操作提示。
-evalIO : PackageContext -> ReplState -> String -> String -> Int
-evalIO ctx st text tyText = if hasMainDef st.stateImports st.stateDefs then
+evalIO : ReplState -> String -> String -> Int
+evalIO st text tyText = if captureMode st then
   let
     _ =
-      runIO
-        (prim_print "错误: 程序已经定义了 main，无法把表达式当作效果入口（先 :reset 或改名）\n")
+      printError st
+        "server 模式暂不执行效果表达式（子进程会写真实 stdout，污染协议通道）；请用 `vuna run` 或 `vuna build` 后直接运行"
+  in 0
+else if hasMainDef (bufferProgram st) then
+  let
+    _ =
+      printError st
+        "程序已经定义了 main，无法把表达式当作效果入口（先 :reset 或改名）"
   in 0
 else if hasUnsolvedMeta tyText then
   let
     _ =
-      runIO
-        (prim_print ("错误: 无法确定 IO 表达式的完整类型（" ++ tyText ++ "）；先定义成带签名的值再求值（如 `prog : Base.IO.IO Int` + `prog = ...`）\n"))
+      printError st
+        "无法确定 IO 表达式的完整类型（${tyText}）；先定义成带签名的值再求值（如 `prog : Base.IO.IO Int` + `prog = ...`）"
   in 0
 else
   let
-    source = st.stateImports ++ st.stateDefs ++ "\nmain : " ++ tyText ++ "\nmain = " ++ text ++ "\n"
-  in case runEffectProgram ctx source (ioPrintResult tyText) of
+    source = "${bufferProgram st}\nmain : ${tyText}\nmain = ${text}\n"
+  in case runEffectProgram st.stateCtx source (ioPrintResult tyText) of
     Err e =>
       let
-        _ = runIO (prim_print ("错误: " ++ e ++ "\n"))
+        _ = printError st e
       in 0
     Ok code => if code == 0 then 0
     else
       let
-        _ = runIO (prim_print ("[进程退出码 " ++ strFromInt code ++ "]\n"))
+        _ = replEmit st "${c st "33" "[进程退出码 ${code}]"}\n"
       in code
 
--- 类型文本里是否有未解元变量（`showTerm` 渲染成 `?N`）。
 hasUnsolvedMeta : String -> Bool
 hasUnsolvedMeta tyText = contains "?" tyText
 
--- 程序源码里是否已经有 `main`（顶层签名或定义）；有则拒绝合成效果入口。
-hasMainDef : String -> String -> Bool
-hasMainDef imports defs = case parseSource replTempFile (imports ++ "\n" ++ defs) of
+hasMainDef : String -> Bool
+hasMainDef program = case parseSource replTempFile program of
   Err e => False
-  Ok (SourceFile hdr imp fx decls) => memName "main" (topNames decls)
+  Ok (SourceFile _ _ _ decls) => memName "main" (topNames decls)
 
--- 顶层类型文本是 canonical `IO a` 吗？`dtEvalExprInfo` 的 showTerm 把 TApp 渲染成
--- `(Base.IO.IO Int)`（canonical 全名），函数类型则是 `(...) -> ...`，前缀不会命中。
+-- 顶层类型文本是 canonical `IO a` 吗？`showTypeSig` 把 TApp 渲染成 `(Base.IO.IO Int)`。
 isIOTypeText : String -> Bool
 isIOTypeText tyText =
   let
@@ -443,14 +885,11 @@ isIOTypeText tyText =
     || t == "Base.IO.IO"
     || t == "IO"
 
--- 效果运行结束后是否让 codegen 的 main 钩子打印结果值：只有 a 是 Int/String/Bool
--- 时才能打印（其它返回类型 codegen 会报 MainReturnType，所以保持 ignore）。
 ioPrintResult : String -> Bool
 ioPrintResult tyText = case ioInnerType (trim tyText) of
   Nothing => False
   Just inner => inner == "Int" || inner == "String" || inner == "Bool"
 
--- `(Base.IO.IO Int)` → "Int"；`(Base.IO.IO (Base.Pair Int Int))` → "(Base.Pair Int Int)"。
 ioInnerType : String -> Maybe String
 ioInnerType t =
   if startsWith "(Base.IO.IO " t then Just
@@ -460,19 +899,954 @@ ioInnerType t =
   else if startsWith "(IO " t then Just (stripTrailingParen (trim (substring 4 (byteLength t - 4) t)))
   else Nothing
 
--- 只保留实参本身：外层 TApp 的渲染是 `(IO a)`，去掉结尾的 `)` 即可
--- （实参本身是 TApp 时会剩下 `(Base.Pair Int Int)`，保留原样）。
 stripTrailingParen : String -> String
 stripTrailingParen s = if endsWith ")" s then trim (substring 0 (byteLength s - 1) s) else s
 
 -- ---------------------------------------------------------------
--- 续行判定
---
--- needsMore 只看「结构」不看语义：本行结束时若还在字符串/块注释里、括号没配平，
--- 或最后一个 token 是继续符，就等下一行。空的 `(` 等结构在 64 行后强制报错。
+-- 类型文本：token 着色 + 隐式参数提取（`:type` / `:typeinfo`）
 -- ---------------------------------------------------------------
--- 扫描状态：grammar 状态（0 普通 / 1 字符串 / 2 块注释 / 3 行注释）+ 块注释嵌套深度
--- + 括号配平数（只统计普通状态下的括号）。
+typeIdentChar : Int -> Bool
+typeIdentChar char =
+  char >= 48 && char <= 57
+    || char >= 65 && char <= 90
+    || char >= 97 && char <= 122
+    || char == 95
+    || char == 46
+    || char == 39
+
+takeTypeIdent : List Int -> List Int -> Pair String (List Int)
+takeTypeIdent [] acc = Pair (strPack (reverse acc)) []
+takeTypeIdent (char :: rest) acc =
+  if typeIdentChar char then takeTypeIdent rest (char :: acc)
+  else Pair (strPack (reverse acc)) (char :: rest)
+
+-- Type 用洋红；大写 / 带点的全局名（`Base.List.List`、`Int`）用青色；
+-- 小写类型变量用黄色；箭头用蓝色；括号 / 冒号等符号压暗。
+classifyTypeIdent : ReplState -> String -> String
+classifyTypeIdent st tok = if tok == "Type" then c st "1;35" tok
+else case strUnpack tok of
+  [] => tok
+  first :: _ =>
+    if first >= 65 && first <= 90 || contains "." tok then c st "36" tok else c st "33" tok
+
+-- 逐字符扫（显式 fuel：token 边界要跳过 takeTypeIdent 消耗掉的后缀，SCT 看不到下降）。
+colorTypeTokens : Int -> ReplState -> List Int -> List String
+colorTypeTokens fuel st chars = if fuel <= 0 then [strPack chars]
+else case chars of
+  [] => []
+  char :: rest => if typeIdentChar char then
+    let
+      Pair tok rest2 = takeTypeIdent (char :: rest) []
+    in classifyTypeIdent st tok :: colorTypeTokens (fuel - 1) st rest2
+  else if char == 45 then case rest of
+    next :: rest2 =>
+      if next == 62 then c st "34" "->" :: colorTypeTokens (fuel - 1) st rest2
+      else c st "2" "-" :: colorTypeTokens (fuel - 1) st rest
+    [] => [c st "2" "-"]
+  else if char == 61 then case rest of
+    next :: rest2 =>
+      if next == 62 then c st "34" "=>" :: colorTypeTokens (fuel - 1) st rest2 else [c st "2" "="]
+    [] => [c st "2" "="]
+  else if char == 32 then " " :: colorTypeTokens (fuel - 1) st rest
+  else if char == 40 || char == 41 || char == 91 || char == 93 then c st "2" (strPack [char]) :: colorTypeTokens (fuel - 1) st rest
+  else if char == 123 || char == 125 || char == 44 || char == 58 then c st "2" (strPack [char]) :: colorTypeTokens (fuel - 1) st rest
+  else strPack [char] :: colorTypeTokens (fuel - 1) st rest
+
+colorTypeText : ReplState -> String -> String
+colorTypeText st text = join "" (colorTypeTokens (byteLength text + 1) st (strUnpack text))
+
+-- 顶层 ` -> ` 切分（只在括号深度 0；渲染后的类型文本箭头两侧恒有空格）。
+splitTopArrows : String -> List String
+splitTopArrows text = splitTopArrowsGo (strUnpack text) 0 [] []
+
+splitTopArrowsGo : List Int -> Int -> List Int -> List String -> List String
+splitTopArrowsGo [] depth seg acc = reverse (trim (strPack (reverse seg)) :: acc)
+splitTopArrowsGo (char :: rest) depth seg acc = if char == 40 || char == 91 || char == 123 then splitTopArrowsGo rest (depth + 1) (char :: seg) acc
+else if char == 41 || char == 93 || char == 125 then splitTopArrowsGo rest (imax 0 (depth - 1)) (char :: seg) acc
+else if depth == 0 && char == 45 then case rest of
+  next :: rest2 =>
+    if next == 62 then splitTopArrowsGo rest2 0 [] (trim (strPack (reverse seg)) :: acc)
+    else splitTopArrowsGo rest depth (char :: seg) acc
+  [] => splitTopArrowsGo rest depth (char :: seg) acc
+else splitTopArrowsGo rest depth (char :: seg) acc
+
+isImplicitSegment : String -> Bool
+isImplicitSegment seg = startsWith "{" seg && endsWith "}" seg
+
+-- `:typeinfo`：把隐式 binder 从类型文本里单独提取出来（主行只留显式部分）。
+splitImplicitParts : String -> Pair (List String) String
+splitImplicitParts ty =
+  let
+    segs = filter (\s => s /= "") (splitTopArrows ty)
+    implicits = filter isImplicitSegment segs
+    explicit = filter (\s => not (isImplicitSegment s)) segs
+    explicitTy = if lenInt explicit == 0 then ty else join " -> " explicit
+  in Pair implicits explicitTy
+
+-- 裸运算符不能直接作前缀表达式：能当值的自动补括号（`:type +` ≡ `:type (+)`）；
+-- 语法符号与 `>>` 保持原样，交给错误路径给提示。
+isOpChar : Int -> Bool
+isOpChar char =
+  char >= 33
+    && char <= 126
+    && not (typeIdentChar char)
+    && char /= 40
+    && char /= 41
+    && char /= 44
+    && char /= 59
+    && char /= 91
+    && char /= 93
+    && char /= 123
+    && char /= 125
+    && char /= 34
+
+isAllOpChars : List Int -> Bool
+isAllOpChars [] = True
+isAllOpChars (char :: rest) = isOpChar char && isAllOpChars rest
+
+opTokenOf : String -> Maybe String
+opTokenOf text =
+  let
+    t = trim text
+  in if t == "" then Nothing
+  else if startsWith "(" t && endsWith ")" t then
+    let
+      inner = trim (substring 1 (byteLength t - 2) t)
+    in if inner /= "" && isAllOpChars (strUnpack inner) then Just inner else Nothing
+  else if isAllOpChars (strUnpack t) then Just t else Nothing
+
+syntaxOps : List String
+syntaxOps = ["->", "=>", "=", "|", "\\", "<-"]
+
+normalizeTypeArg : String -> String
+normalizeTypeArg text = case opTokenOf text of
+  Nothing => text
+  Just op => if op == ">>" || memName op syntaxOps then text else "(${op})"
+
+typeOpHint : String -> String
+typeOpHint text = case opTokenOf text of
+  Nothing => ""
+  Just op =>
+    if op == ">>" then "`>>` 是 do 派生语法（`a >> b` 展开为 `bind a (\\_ => b)`），不是独立值；可查 `:type (>>=)` 或 `:type bind`"
+    else if memName op syntaxOps then "`${op}` 是语法符号，不能作为表达式"
+    else "运算符不能直接作前缀表达式；加括号当值用：`:type (${op})`"
+
+printTypeOpHint : ReplState -> String -> Int
+printTypeOpHint st text =
+  let
+    hint = typeOpHint text
+  in if hint == "" then 0 else printHint st "提示: ${hint}"
+
+-- `:typeinfo` 的文档部分：工作区内按需构建 Index（与 `:info` 同一路径）；
+-- base-only 上下文、REPL 缓冲内的名字、或非简单标识符时静默跳过。
+isAlphaChar : Int -> Bool
+isAlphaChar char = char >= 65 && char <= 90 || char >= 97 && char <= 122 || char == 95
+
+allTypeIdentChars : List Int -> Bool
+allTypeIdentChars [] = True
+allTypeIdentChars (char :: rest) = typeIdentChar char && allTypeIdentChars rest
+
+isSimpleNameText : String -> Bool
+isSimpleNameText text = case strUnpack (trim text) of
+  [] => False
+  first :: rest => isAlphaChar first && allTypeIdentChars rest
+
+inReplBuffer : ReplState -> String -> Bool
+inReplBuffer st name =
+  memName name (append (bufferSigNames st) (concatMap blockDefinesOf st.stateDefs))
+
+printTypeDoc : ReplState -> String -> ReplState
+printTypeDoc st text =
+  let
+    name = trim text
+  in if not (isSimpleNameText name) then st
+  else if inReplBuffer st name then st
+  else case findManifestDirMaybe (contextDir st.stateCtx) of
+    Nothing => st
+    Just _ => case ensureIndex st of
+      Err _ => st
+      Ok (Pair idx st2) => case findSymbol idx name of
+        Err _ => st2
+        Ok syms =>
+          let
+            _ = printFirstDoc st2 syms
+          in st2
+
+printFirstDoc : ReplState -> List Sym -> Int
+printFirstDoc st [] = 0
+printFirstDoc st (sym :: rest) =
+  if symDoc sym == "" then printFirstDoc st rest else printDocText st (symDoc sym)
+
+printDocText : ReplState -> String -> Int
+printDocText st doc = case lines doc of
+  [] => 0
+  first :: rest =>
+    let
+      _ = replEmit st "  ${c st "2" ("-- | " ++ first)}\n"
+    in printDocRest st rest
+
+printDocRest : ReplState -> List String -> Int
+printDocRest st [] = 0
+printDocRest st (line :: rest) =
+  let
+    _ = replEmit st "  ${c st "2" ("     " ++ line)}\n"
+  in printDocRest st rest
+
+printImplicitParts : ReplState -> List String -> Int
+printImplicitParts st [] = replEmit st "${c st "2" "  （无隐式参数）"}\n"
+printImplicitParts st segs =
+  let
+    header = replEmit st "  ${c st "1" "隐式参数："}\n"
+  in header + printImplicitSegs st segs
+
+printImplicitSegs : ReplState -> List String -> Int
+printImplicitSegs st [] = 0
+printImplicitSegs st (seg :: rest) =
+  let
+    _ = replEmit st "    ${colorTypeText st seg}\n"
+  in printImplicitSegs st rest
+
+-- `:type EXPR`：只打印 zonk 后的类型（不求值、不执行效果）。类型构造子（`Maybe`）
+-- 作为项参与表达式精化，因此输出的是它的 kind；限定名同样适用（需先 import）。
+typeStep : ReplState -> String -> ReplOutcome
+typeStep st exprText = if exprText == "" then commandUsage st ":type"
+else
+  let
+    expr = normalizeTypeArg exprText
+  in case parseExpressionSource expr of
+    Err e =>
+      let
+        _ = printError st e
+        _ = printTypeOpHint st exprText
+      in ReplContinue st
+    Ok _ => case evalExprInfoWithAux st.stateCtx (bufferProgram st) expr st.stateAuxCache of
+      Err e =>
+        let
+          _ = printError st e
+          _ = printTypeOpHint st exprText
+        in ReplContinue st
+      Ok (Pair info aux2) =>
+        let
+          _ = replEmit st "${exprText} : ${colorTypeText st (trim (secondOf info))}\n"
+        in ReplContinue (withAuxCache st aux2)
+
+-- `:typeinfo`（别名 `:ti`）：主行只显示显式部分，隐式 binder 单独列出；
+-- 简单名字在工作区内再给出 docstring（Index 不可用时静默跳过）。
+typeInfoStep : ReplState -> String -> ReplOutcome
+typeInfoStep st exprText = if exprText == "" then commandUsage st ":typeinfo"
+else
+  let
+    expr = normalizeTypeArg exprText
+  in case parseExpressionSource expr of
+    Err e =>
+      let
+        _ = printError st e
+        _ = printTypeOpHint st exprText
+      in ReplContinue st
+    Ok _ => case evalExprInfoWithAux st.stateCtx (bufferProgram st) expr st.stateAuxCache of
+      Err e =>
+        let
+          _ = printError st e
+          _ = printTypeOpHint st exprText
+        in ReplContinue st
+      Ok (Pair info aux2) =>
+        let
+          st2 = withAuxCache st aux2
+          Pair implicits explicitTy = splitImplicitParts (trim (secondOf info))
+          _ = replEmit st2 "${exprText} : ${colorTypeText st2 explicitTy}\n"
+          _ = printImplicitParts st2 implicits
+          st3 = printTypeDoc st2 exprText
+        in ReplContinue st3
+
+-- ---------------------------------------------------------------
+-- 命令分发
+-- ---------------------------------------------------------------
+commandStep : ReplState -> String -> ReplOutcome
+commandStep st cmd = commandStepFuel 16 st cmd
+
+commandStepFuel : Int -> ReplState -> String -> ReplOutcome
+commandStepFuel fuel st cmd = if fuel <= 0 then ReplContinue st
+else
+  let
+    cmd2 = expandAlias cmd
+  in if startsWith ":!" cmd2 then shellStep st (trim (substring 2 (byteLength cmd2 - 2) cmd2))
+  else
+    let
+      Pair name restRaw = splitFirst cmd2
+    in if name == ":help" then helpStep st (trim restRaw)
+    else if name == ":quit" then ReplExit 0
+    else if name == ":reset" then resetStep st
+    else if name == ":typeinfo" then typeInfoStep st (trim restRaw)
+    else if name == ":type" then typeStep st (trim restRaw)
+    else if name == ":info" then infoStep st (trim restRaw)
+    else if name == ":search" then searchStep st (trim restRaw)
+    else if name == ":browse" then browseStep st (trim restRaw)
+    else if name == ":load" then loadStep st (trim restRaw)
+    else if name == ":reload" then reloadStep st (trim restRaw)
+    else if name == ":defs" then defsStep st
+    else if name == ":imports" then importsStep st
+    else if name == ":delete" then deleteStep st (trim restRaw)
+    else if name == ":set" then setStep st restRaw
+    else if name == ":history" then historyStep st
+    else if name == ":again" then againStep fuel st (trim restRaw)
+    else if name == ":abandon" then abandonStep st
+    else if name == ":}" then
+      let
+        _ = printError st "没有处于块输入模式"
+      in ReplContinue st
+    else unknownCommand st cmd
+
+unknownCommand : ReplState -> String -> ReplOutcome
+unknownCommand st cmd =
+  let
+    Pair name rest = splitFirst cmd
+    hint = suggestCommand name
+    _ = printError st "未知命令 `${cmd}`（输入 :help 查看可用命令）${hint}"
+  in ReplContinue st
+
+suggestCommand : String -> String
+suggestCommand name =
+  let
+    forward = filter (\n => startsWith name n) commandNames
+    backward = filter (\n => startsWith n name) commandNames
+  in case forward of
+    [] => case backward of
+      [x] => "；是否想输入 `${x}`？"
+      _ => ""
+    -- 前缀命中多个（`:typ` → `:type` / `:typeinfo`）时取列表里第一个（短名在前）。
+    x :: _ => "；是否想输入 `${x}`？"
+
+-- ---------------------------------------------------------------
+-- 帮助 / 用法
+-- ---------------------------------------------------------------
+commandNames : List String
+commandNames =
+  [ ":help",
+    ":quit",
+    ":reset",
+    ":type",
+    ":typeinfo",
+    ":info",
+    ":search",
+    ":browse",
+    ":load",
+    ":reload",
+    ":defs",
+    ":imports",
+    ":delete",
+    ":set",
+    ":history",
+    ":again",
+    ":abandon"
+  ]
+
+usageTable : List (Pair String String)
+usageTable =
+  [ Pair ":help" ":help [命令]",
+    Pair ":type" ":type <表达式|类型>",
+    Pair ":typeinfo" ":typeinfo <表达式|类型>（= :ti）",
+    Pair ":info" ":info <名字>",
+    Pair ":search" ":search [--type|--name|--doc] <查询>",
+    Pair ":browse" ":browse [模块名]",
+    Pair ":load" ":load <文件> | <目录> | <模块名>",
+    Pair ":reload" ":reload",
+    Pair ":delete" ":delete <名字>",
+    Pair ":set" ":set [+t|-t|+s|-s|editing auto|on|off|color auto|on|off|prompt 文本]",
+    Pair ":again" ":again <历史编号>"
+  ]
+
+usageOf : String -> String
+usageOf name = case lookupPair name usageTable of
+  Just u => u
+  Nothing => "${name} …"
+
+commandUsage : ReplState -> String -> ReplOutcome
+commandUsage st name = printOk st "用法: ${usageOf name}"
+
+helpStep : ReplState -> String -> ReplOutcome
+helpStep st arg = if arg == "" then printOk st replHelp
+else
+  let
+    name = if startsWith ":" arg then arg else ":${arg}"
+  in printOk st "用法: ${usageOf name}"
+
+replHelp : String
+replHelp = """命令：
+  :help [命令]      显示帮助 / 单条命令用法
+  :type EXPR        显示表达式或类型名的类型（类型构造子给 kind；不求值）
+  :typeinfo EXPR    类型 + 单独列出隐式参数与 docstring（别名 :ti；工作区内给文档）
+  :info NAME        查看名字的类型/文档/定义位置（先查 REPL 缓冲，再查源码索引）
+  :search QUERY     名称/文档检索（含 -> 或 => 时自动走类型检索；最多 20 条）
+  :load TARGET      加载 文件 / 目录（切换包上下文）/ 模块名（import）
+  :reload           重新读取上次 :load 的文件或重新校验模块
+  :browse [MODULE]  显示模块接口；不带参数时列出模块
+  :defs             列出当前缓冲的定义与类型
+  :imports          列出当前 import（含隐式自动导入的 Prelude）
+  :delete NAME      删除 REPL 内定义（:load 文件来源的定义请改文件后 :reload）
+  :set …            +t 打印类型 / +s 打印耗时 / editing / color / prompt
+  :history          列出输入历史；:again N 重新执行第 N 条
+  :abandon          放弃当前待续输入 / 块输入
+  :! CMD            执行 shell 命令
+  :reset            清空定义、import 与加载目标（设置与历史保留）
+  :quit             退出（同 Ctrl-D）
+输入：直接写 vuna 源码；`x = 1 + 1` / `f y = x + y` 会自动推断签名。
+      `:{` 开始多行块、`:}` 结束；续行提示 `... `，块内提示 `| `。
+作用域：Prelude 隐式自动导入；导入模块的类型名可作类型层实参（`:type Maybe` 给 kind）。
+快捷键：←/→ 移动、↑/↓ 历史、Ctrl-R 反向搜索历史、Ctrl-A/E 行首行尾、
+        Ctrl-U/K/W 删到行首/行尾/前一单词、Ctrl-L 清屏、Ctrl-C 取消输入、Ctrl-D 退出。
+效果表达式（顶层类型是 IO a）会临时编译并运行；效果的输出直接到终端。
+"""
+
+-- ---------------------------------------------------------------
+-- :reset / :abandon
+-- ---------------------------------------------------------------
+resetStep : ReplState -> ReplOutcome
+resetStep st =
+  let
+    st2 =
+      ReplState st.stateCtx "" [] "" Nothing 0 "" st.stateBrowseIndex st.stateSettings
+        st.stateHistory st.stateHistoryFile Nothing st.stateSink
+    _ = printOk st2 "已清空"
+  in ReplContinue st2
+
+abandonStep : ReplState -> ReplOutcome
+abandonStep st = case st.stateBlock of
+  Nothing => if st.statePending == "" then
+    let
+      _ = printHint st "没有待续输入"
+    in ReplContinue st
+  else abandonNow st
+  Just block => abandonNow st
+
+abandonNow : ReplState -> ReplOutcome
+abandonNow st =
+  let
+    _ = printHint st "已放弃当前输入"
+  in ReplContinue (withBlock (withPending st "") Nothing)
+
+-- ---------------------------------------------------------------
+-- :load / :reload
+-- ---------------------------------------------------------------
+loadStep : ReplState -> String -> ReplOutcome
+loadStep st arg = if arg == "" then commandUsage st ":load"
+else if runIO (prim_fileExists arg) then if runIO (prim_isDirectory arg) then loadDirStep st arg else loadFileStep st "已加载" arg
+else if isModuleNameStr arg then loadModuleStep st arg "已导入模块"
+else
+  let
+    _ =
+      printError st
+        "找不到文件或模块: ${arg}（:load 接受 <文件> | <目录> | <Module.Name>）"
+  in ReplContinue st
+
+loadFileStep : ReplState -> String -> String -> ReplOutcome
+loadFileStep st verb path = case doLoadFile st path of
+  Err e =>
+    let
+      _ = printError st e
+    in ReplContinue st
+  Ok (Pair n st2) =>
+    let
+      _ = replEmit st2 "${verb} ${path}（${n} 个定义）\n"
+    in ReplContinue st2
+
+doLoadFile : ReplState -> String -> Result (Pair Int ReplState)
+doLoadFile st path = case readText path of
+  Err e => Err e
+  Ok source => case parseSource path source of
+    Err e => Err e
+    Ok (SourceFile (Just _) _ _ _) =>
+      Err
+        "${path} 是模块文件（含 `module ... where` 头）；用 :load <模块名> 导入，或用 :browse <模块名> 查看接口"
+    Ok (SourceFile Nothing _ _ decls) => Ok (Pair (lenInt decls) (loadedFileState st path source))
+
+loadModuleStep : ReplState -> String -> String -> ReplOutcome
+loadModuleStep st m verb = case doLoadModule st m of
+  Err e =>
+    let
+      _ = printError st e
+    in ReplContinue st
+  Ok st2 => printOk st2 "${verb} ${m}"
+
+doLoadModule : ReplState -> String -> Result ReplState
+doLoadModule st m =
+  let
+    probe = "import ${m}\n\nvuna_repl_probe : Int\nvuna_repl_probe = 0\n"
+  in case checkProgram st.stateCtx probe of
+    Err e => Err "找不到模块 ${m}（${packageLabel st}）：${e}"
+    Ok _ =>
+      let
+        imports2 =
+          if importAlready st.stateImports m then st.stateImports
+          else "${st.stateImports}\nimport ${m}\n"
+        st2 =
+          ReplState st.stateCtx imports2 st.stateDefs st.statePending st.stateBlock 2 m
+            st.stateBrowseIndex st.stateSettings st.stateHistory st.stateHistoryFile Nothing
+            st.stateSink
+      in Ok st2
+
+importAlready : String -> String -> Bool
+importAlready imports m = memName "import ${m}" (map (\l => trim l) (lines imports))
+
+loadDirStep : ReplState -> String -> ReplOutcome
+loadDirStep st dir = case doLoadDir st dir of
+  Err e =>
+    let
+      _ = printError st e
+    in ReplContinue st
+  Ok st2 => printOk st2 "已切换包 ${packageNameLabel st2}（缓冲与索引已重置）"
+
+doLoadDir : ReplState -> String -> Result ReplState
+doLoadDir st dir = andThen (contextForDir dir) (\ctx2 => Ok (switchedContext st ctx2))
+
+reloadStep : ReplState -> String -> ReplOutcome
+reloadStep st arg = if trim arg /= "" then commandUsage st ":reload"
+else if st.stateLoadKind == 0 then
+  let
+    _ = printError st "还没有 :load 任何文件或模块（先 :load <FILE|DIR|MODULE>）"
+  in ReplContinue st
+else if st.stateLoadKind == 1 then loadFileStep st "已重新加载" st.stateLoadTarget
+else loadModuleStep st st.stateLoadTarget "已重新加载模块"
+
+isModuleNameStr : String -> Bool
+isModuleNameStr s = if endsWith ".vuna" s then False
+else case strUnpack s of
+  [] => False
+  c :: rest => c >= 65 && c <= 90 && moduleCharsOk (c :: rest)
+
+moduleCharsOk : List Int -> Bool
+moduleCharsOk [] = True
+moduleCharsOk (c :: rest) = isWordChar c && moduleCharsOk rest
+
+isWordChar : Int -> Bool
+isWordChar c = c >= 48 && c <= 57 || c >= 65 && c <= 90 || c >= 97 && c <= 122 || c == 95 || c == 46
+
+-- ---------------------------------------------------------------
+-- 索引 / :browse / :info / :search
+-- ---------------------------------------------------------------
+ensureIndex : ReplState -> Result (Pair Index ReplState)
+ensureIndex st = case st.stateBrowseIndex of
+  Just idx => Ok (Pair idx st)
+  Nothing =>
+    let
+      dir = contextDir st.stateCtx
+    in case findManifestDirMaybe dir of
+      Nothing =>
+        Err
+          "当前目录不在 vuna workspace 内（向上找不到 vuna.toml）；:browse/:info/:search 需要在包或 workspace 根运行"
+      Just _ =>
+        let
+          _ = replEmit st (c st "2" "正在构建源码索引…\n")
+        in case loadOrBuild dir of
+          Err e => Err e
+          Ok idx => Ok (Pair idx (withIndexCache st idx))
+
+browseStep : ReplState -> String -> ReplOutcome
+browseStep st arg = case ensureIndex st of
+  Err e =>
+    let
+      _ = printError st e
+    in ReplContinue st
+  Ok (Pair idx st2) => if arg == "" then printOk st2 (renderModules idx)
+  else case renderApi idx arg of
+    Err e =>
+      let
+        _ = printError st2 e
+      in ReplContinue st2
+    Ok text => printOk st2 text
+
+infoStep : ReplState -> String -> ReplOutcome
+infoStep st name = if name == "" then commandUsage st ":info"
+else case bindingTypes st.stateCtx (bufferProgram st) of
+  Ok types => case lookupPair name types of
+    Just ty =>
+      let
+        _ = replEmit st "${c st "1" name} : ${c st "36" ty}${c st "2" "   -- REPL"}\n"
+      in ReplContinue st
+    Nothing => infoFromIndex st name
+  Err e => infoFromIndex st name
+
+infoFromIndex : ReplState -> String -> ReplOutcome
+infoFromIndex st name = case ensureIndex st of
+  Err e =>
+    let
+      _ = printError st e
+    in ReplContinue st
+  Ok (Pair idx st2) => case findSymbol idx name of
+    Err e =>
+      let
+        _ = printError st2 e
+      in ReplContinue st2
+    Ok syms =>
+      let
+        _ = printSymInfos st2 idx syms
+      in ReplContinue st2
+
+printSymInfos : ReplState -> Index -> List Sym -> Int
+printSymInfos st idx [] = 0
+printSymInfos st idx (s :: rest) =
+  let
+    _ = replEmit st "${infoText st idx s}\n"
+  in printSymInfos st idx rest
+
+infoText : ReplState -> Index -> Sym -> String
+infoText st idx s = """${c st "1" (symFullName s)}
+  ${c st "2" (symKind s)} : ${c st "36" (symSig s)}
+  -- ${modulePathOf idx (symModule s)}:${symLine s}${docBlock s}"""
+
+docBlock : Sym -> String
+docBlock s =
+  if symDoc s == "" then "" else "\n${join "\n" (map (\l => "     ${l}") (lines (symDoc s)))}"
+
+modulePathOf : Index -> String -> String
+modulePathOf idx m = case filter (\mi => modName mi == m) (indexModules idx) of
+  mi :: rest => modPath mi
+  [] => "?"
+
+searchStep : ReplState -> String -> ReplOutcome
+searchStep st arg = if arg == "" then commandUsage st ":search"
+else case ensureIndex st of
+  Err e =>
+    let
+      _ = printError st e
+    in ReplContinue st
+  Ok (Pair idx st2) =>
+    let
+      Pair mode query = searchModeOf arg
+    in case runSearchHits idx mode query of
+      Err e =>
+        let
+          _ = printError st2 e
+        in ReplContinue st2
+      Ok hits => case take 20 hits of
+        [] => printOk st2 "没有匹配结果: ${query}"
+        limited =>
+          let
+            _ = printHits st2 limited
+          in ReplContinue st2
+
+searchModeOf : String -> Pair Int String
+searchModeOf arg =
+  if startsWith "--type " arg then Pair 1 (trim (substring 7 (byteLength arg - 7) arg))
+  else if startsWith "--name " arg then Pair 2 (trim (substring 7 (byteLength arg - 7) arg))
+  else if startsWith "--doc " arg then Pair 3 (trim (substring 6 (byteLength arg - 6) arg))
+  else Pair 0 (trim arg)
+
+runSearchHits : Index -> Int -> String -> Result (List SearchHit)
+runSearchHits idx mode query =
+  if mode == 1 then searchType idx query
+  else if mode == 2 then Ok (searchNameDoc idx query True False)
+  else if mode == 3 then Ok (searchNameDoc idx query False True)
+  else if contains "->" query || contains "=>" query then searchType idx query
+  else Ok (searchNameDoc idx query False False)
+
+printHits : ReplState -> List SearchHit -> Int
+printHits st [] = 0
+printHits st (h :: rest) =
+  let
+    _ = replEmit st "${renderHit h}\n"
+  in printHits st rest
+
+-- ---------------------------------------------------------------
+-- :defs / :imports / :delete
+-- ---------------------------------------------------------------
+defsStep : ReplState -> ReplOutcome
+defsStep st = case bindingTypes st.stateCtx (bufferProgram st) of
+  Err e =>
+    let
+      _ = printError st e
+      _ = replEmit st "定义（仅名字）：\n"
+      _ = printBlockNames st [] st.stateDefs
+    in ReplContinue st
+  Ok types =>
+    let
+      _ = replEmit st "${c st "1" "定义："}\n"
+      n = printBlockNames st types st.stateDefs
+    in if n == 0 then
+      let
+        _ = replEmit st "${c st "2" "  （无；直接输入定义或 :load）"}\n"
+      in ReplContinue st
+    else ReplContinue st
+
+printBlockNames : ReplState -> List (Pair String String) -> List ReplBlock -> Int
+printBlockNames st types [] = 0
+printBlockNames st types (b :: rest) =
+  let
+    names = dedupStrs (append (blockDefinesOf b) (blockSignsOf b))
+    n1 = printNames st types b names
+  in n1 + printBlockNames st types rest
+
+printNames : ReplState -> List (Pair String String) -> ReplBlock -> List String -> Int
+printNames st types b [] = 0
+printNames st types b (name :: rest) =
+  let
+    ty = case lookupPair name types of
+      Just t => t
+      Nothing => "?"
+    origin = if b.blockFromFile then c st "2" "   (文件)" else ""
+    _ = replEmit st "  ${c st "1" name} : ${c st "36" ty}${origin}\n"
+  in 1 + printNames st types b rest
+
+-- 隐式自动导入（Prelude）：判定与 Loader 对 REPL 入口的处理完全一致，只用于展示。
+importNameOf : Import -> String
+importNameOf (Import n _ _ _) = n
+
+implicitImportNames : ReplState -> List String
+implicitImportNames st = case parseSource replTempFile st.stateImports of
+  Err _ => []
+  Ok (SourceFile _ imports _ _) =>
+    let
+      verdict =
+        implicitPrelude (contextRoots st.stateCtx) (contextPackageName st.stateCtx) "" imports
+    in case verdict of
+      Err _ => []
+      Ok implicit => map importNameOf implicit
+
+importsStep : ReplState -> ReplOutcome
+importsStep st =
+  let
+    ls = filter (\l => trim l /= "") (lines st.stateImports)
+    imps = implicitImportNames st
+  in if lenInt ls == 0 && lenInt imps == 0 then printOk st (c st "2" "（无 import）")
+  else
+    let
+      explicitLines = map (\l => "  ${trim l}") ls
+      implicitLines = map (\n => "  import ${n}  ${c st "2" "（隐式自动导入）"}") imps
+      body = join "\n" (append explicitLines implicitLines)
+      _ = replEmit st "import：\n${body}\n"
+    in ReplContinue st
+
+deleteStep : ReplState -> String -> ReplOutcome
+deleteStep st name = if name == "" then commandUsage st ":delete"
+else if hasFileConflict st.stateDefs [name] then
+  let
+    _ =
+      printError st
+        "定义 ${name} 来自已加载的文件；请修改文件后 :reload（或 :reset 清空）"
+  in ReplContinue st
+else
+  let
+    kept = filter (\b => not (memName name (blockNames b))) st.stateDefs
+  in if lenInt kept == lenInt st.stateDefs then
+    let
+      _ = printError st "未找到定义 ${name}"
+    in ReplContinue st
+  else
+    let
+      _ = printOk st "已删除 ${name}"
+    in ReplContinue (withDefs st kept)
+
+-- ---------------------------------------------------------------
+-- :set
+-- ---------------------------------------------------------------
+setStep : ReplState -> String -> ReplOutcome
+setStep st argRaw =
+  let
+    arg = trimLeftSpaces argRaw
+  in if arg == "" then printSettings st
+  else if arg == "+t" then setPrintTypes st True
+  else if arg == "-t" then setPrintTypes st False
+  else if arg == "+s" then setTiming st True
+  else if arg == "-s" then setTiming st False
+  else
+    let
+      Pair opt restRaw = splitFirst arg
+    in if opt == "color" then setColorOpt st (trim restRaw)
+    else if opt == "editing" then setEditingOpt st (trim restRaw)
+    else if opt == "prompt" then
+      let
+        p = if restRaw == "" then defaultPrompt else restRaw
+        _ = printOk st "prompt = ${p}"
+      in ReplContinue (withSettings st (settingsSetPrompt st.stateSettings p))
+    else
+      let
+        _ = printError st "未知设置 `${opt}`（可用：+t -t +s -s color editing prompt）"
+      in ReplContinue st
+
+setPrintTypes : ReplState -> Bool -> ReplOutcome
+setPrintTypes st v =
+  let
+    _ = printOk st "+t ${onOff v}"
+  in ReplContinue (withSettings st (settingsSetPrintTypes st.stateSettings v))
+
+setTiming : ReplState -> Bool -> ReplOutcome
+setTiming st v =
+  let
+    _ = printOk st "+s ${onOff v}"
+  in ReplContinue (withSettings st (settingsSetTiming st.stateSettings v))
+
+setColorOpt : ReplState -> String -> ReplOutcome
+setColorOpt st modeText = case parseMode modeText of
+  Nothing =>
+    let
+      _ = printError st "color 取值: auto | on | off"
+    in ReplContinue st
+  Just mode =>
+    let
+      on = resolveColorOn mode st.stateSettings.settingTty
+      _ = printOk st "color = ${modeName mode}"
+    in ReplContinue (withSettings st (settingsSetColor st.stateSettings mode on))
+
+setEditingOpt : ReplState -> String -> ReplOutcome
+setEditingOpt st modeText = case parseMode modeText of
+  Nothing =>
+    let
+      _ = printError st "editing 取值: auto | on | off"
+    in ReplContinue st
+  Just mode =>
+    let
+      _ =
+        if mode == 1 && not st.stateSettings.settingTty then printHint st "当前不是交互终端，行编辑不会生效"
+        else 0
+      _ = printOk st "editing = ${modeName mode}"
+    in ReplContinue (withSettings st (settingsSetEditing st.stateSettings mode))
+
+parseMode : String -> Maybe Int
+parseMode s =
+  if s == "auto" then Just 0
+  else if s == "on" then Just 1 else if s == "off" then Just 2 else Nothing
+
+modeName : Int -> String
+modeName m = if m == 1 then "on" else if m == 2 then "off" else "auto"
+
+onOff : Bool -> String
+onOff b = if b then "on" else "off"
+
+printSettings : ReplState -> ReplOutcome
+printSettings st =
+  let
+    s = st.stateSettings
+    _ = replEmit st "${c st "1" "设置："}\n"
+    _ = replEmit st "  +t      ${onOff s.settingPrintTypes}\n"
+    _ = replEmit st "  +s      ${onOff s.settingTiming}\n"
+    _ = replEmit st "  editing ${modeName s.settingEditing}\n"
+    _ =
+      replEmit st
+        "  color   ${if s.settingColorOn then "on" else "off"} (${modeName s.settingColor})\n"
+    _ = replEmit st "  prompt  ${s.settingPrompt}\n"
+  in ReplContinue st
+
+-- ---------------------------------------------------------------
+-- :history / :again / :!
+-- ---------------------------------------------------------------
+historyStep : ReplState -> ReplOutcome
+historyStep st = if lenInt st.stateHistory == 0 then printOk st (c st "2" "（历史为空）")
+else
+  let
+    _ = printHistory st 1 st.stateHistory
+  in ReplContinue st
+
+printHistory : ReplState -> Int -> List String -> Int
+printHistory st i [] = 0
+printHistory st i (unit :: rest) =
+  let
+    _ = replEmit st "  ${i}  ${historyLine unit}\n"
+  in printHistory st (i + 1) rest
+
+historyLine : String -> String
+historyLine unit = case lines unit of
+  [] => ""
+  first :: rest => if lenInt rest == 0 then first else "${first} …"
+
+againStep : Int -> ReplState -> String -> ReplOutcome
+againStep fuel st arg = if arg == "" then commandUsage st ":again"
+else case parsePositiveInt arg of
+  Nothing =>
+    let
+      _ = printError st "历史编号不是正整数: ${arg}"
+    in ReplContinue st
+  Just n => case nthHistory n st.stateHistory of
+    Nothing =>
+      let
+        _ = printError st "没有第 ${arg} 条历史"
+      in ReplContinue st
+    Just unit => processUnit (fuel - 1) (withBlock (withPending st "") Nothing) unit
+
+nthHistory : Int -> List String -> Maybe String
+nthHistory n xs = nthHistoryGo 1 n xs
+
+nthHistoryGo : Int -> Int -> List String -> Maybe String
+nthHistoryGo i n [] = Nothing
+nthHistoryGo i n (x :: rest) = if i == n then Just x else nthHistoryGo (i + 1) n rest
+
+processUnit : Int -> ReplState -> String -> ReplOutcome
+processUnit fuel st unit =
+  if fuel <= 0 then ReplContinue st
+  else if startsWith ":" (trim unit) then commandStepFuel fuel st (trim unit)
+  else submitText st (trim unit)
+
+parsePositiveInt : String -> Maybe Int
+parsePositiveInt s = if s == "" then Nothing else parseDigits (strUnpack s) 0
+
+parseDigits : List Int -> Int -> Maybe Int
+parseDigits [] acc = Just acc
+parseDigits (c :: rest) acc =
+  if c >= 48 && c <= 57 then parseDigits rest (acc * 10 + (c - 48)) else Nothing
+
+shellStep : ReplState -> String -> ReplOutcome
+shellStep st cmd = if cmd == "" then commandUsage st ":!"
+else if captureMode st then
+  let
+    _ =
+      printError st
+        "server 模式不支持 `:!`（子进程会写真实 stdout，污染协议通道）；请用外部 shell"
+  in ReplContinue st
+else
+  let
+    code = runIO (prim_runIn "." ["sh", "-c", cmd])
+  in if code == 0 then ReplContinue st
+  else
+    let
+      _ = replEmit st "${c st "33" "[进程退出码 ${code}]"}\n"
+    in ReplContinue st
+
+-- ---------------------------------------------------------------
+-- 小工具
+-- ---------------------------------------------------------------
+lookupPair : String -> List (Pair String String) -> Maybe String
+lookupPair key [] = Nothing
+lookupPair key (p :: rest) = if firstOf p == key then Just (secondOf p) else lookupPair key rest
+
+splitFirst : String -> Pair String String
+splitFirst s = splitFirstGo (strUnpack s) []
+
+splitFirstGo : List Int -> List Int -> Pair String String
+splitFirstGo [] acc = Pair (strPack (reverse acc)) ""
+splitFirstGo (c :: rest) acc =
+  if c == 32 || c == 9 then Pair (strPack (reverse acc)) (strPack rest)
+  else splitFirstGo rest (c :: acc)
+
+trimLeftSpaces : String -> String
+trimLeftSpaces s = strPack (dropLeadingSpace (strUnpack s))
+
+dropLeadingSpace : List Int -> List Int
+dropLeadingSpace [] = []
+dropLeadingSpace (c :: rest) = if c == 32 || c == 9 then dropLeadingSpace rest else c :: rest
+
+aliasTable : List (Pair String String)
+aliasTable =
+  [ Pair ":h" ":help",
+    Pair ":t" ":type",
+    Pair ":ti" ":typeinfo",
+    Pair ":i" ":info",
+    Pair ":s" ":search",
+    Pair ":b" ":browse",
+    Pair ":r" ":reload",
+    Pair ":d" ":delete",
+    Pair ":q" ":quit",
+    Pair ":se" ":set"
+  ]
+
+expandAlias : String -> String
+expandAlias cmd =
+  let
+    Pair name rest = splitFirst cmd
+  in case lookupPair name aliasTable of
+    Nothing => cmd
+    Just full => if trim rest == "" then full else "${full} ${rest}"
+
+-- ---------------------------------------------------------------
+-- 续行判定（与旧版一致，尾部 token 增加 `<-` / `=>`）
+-- ---------------------------------------------------------------
 record ScanState where
   scanStateOf : Int
   scanStateDepth : Int
@@ -486,7 +1860,6 @@ needsMore text =
     || st.scanBracketsOf > 0
     || (if st.scanStateOf == 3 then False else tailTokenOpen text)
 
--- 字符串/块注释里的括号不算结构；行注释一直吃到行尾。
 scanText : List Int -> Int -> Int -> Int -> ScanState
 scanText [] state depth brackets = ScanState state depth brackets
 scanText (c :: rest) state depth brackets = case state of
@@ -495,7 +1868,6 @@ scanText (c :: rest) state depth brackets = case state of
   2 => scanInBlock c rest depth brackets
   _ => scanInLine c rest depth brackets
 
--- 普通状态：`"` 进字符串、`{-` 进块注释、`--` 进行注释、其余是括号配平。
 scanNormal : Int -> List Int -> Int -> Int -> ScanState
 scanNormal c rest depth brackets = if c == 34 then scanText rest 1 depth brackets
 else if c == 123 then case rest of
@@ -510,14 +1882,12 @@ else if c == 40 || c == 91 then scanText rest 0 depth (brackets + 1)
 else if c == 41 || c == 93 || c == 125 then scanText rest 0 depth (if brackets > 0 then brackets - 1 else 0)
 else scanText rest 0 depth brackets
 
--- 字符串：`\` 转义下一个字符（lexer 的规则），`"` 收尾。
 scanInString : Int -> List Int -> Int -> Int -> ScanState
 scanInString c rest depth brackets = if c == 92 then case rest of
   _ :: rest2 => scanText rest2 1 depth brackets
   [] => ScanState 1 depth brackets
 else if c == 34 then scanText rest 0 depth brackets else scanText rest 1 depth brackets
 
--- 块注释可嵌套（与 lexer 一致）：`{-` 深度 +1，`-}` 深度 -1，深度 0 回普通状态。
 scanInBlock : Int -> List Int -> Int -> Int -> ScanState
 scanInBlock c rest depth brackets = if c == 123 then case rest of
   c2 :: rest2 =>
@@ -530,27 +1900,20 @@ else if c == 45 then case rest of
   [] => ScanState 2 depth brackets
 else scanText rest 2 depth brackets
 
--- 行注释：吃到换行（pending 的每行都以 `\n` 结尾，所以不会跨行）。
 scanInLine : Int -> List Int -> Int -> Int -> ScanState
 scanInLine c rest depth brackets =
   if c == 10 then scanText rest 0 depth brackets else scanText rest 3 depth brackets
 
--- 描到结尾：字符串/块注释里，或括号没配平 → 还需要更多行。
--- 行注释（state 3）到行尾就结束（pending 的扫描文本以 `\n` 收尾时不会走到这里）。
 unclosedScan : ScanState -> Bool
-unclosedScan st =
-  let
-    state = st.scanStateOf
-  in state == 1 || state == 2
+unclosedScan st = st.scanStateOf == 1 || st.scanStateOf == 2
 
--- 行尾 token 是继续符吗？只在扫描状态是普通状态时用（行注释/字符串里不算）。
 tailTokenOpen : String -> Bool
 tailTokenOpen text = memName (lastToken text) tailTokens
 
 tailTokens : List String
-tailTokens = ["=", "->", "|", ",", "where", "do", "then", "else", "of", "in", "case", "let"]
+tailTokens =
+  ["=", "->", "|", ",", "where", "do", "then", "else", "of", "in", "case", "let", "<-", "=>"]
 
--- 最后一个空白分隔 token（text 已 trimRight）。
 lastToken : String -> String
 lastToken text = lastTokenGo (strUnpack (trimRight text)) []
 
@@ -559,9 +1922,42 @@ lastTokenGo [] acc = strPack (reverse acc)
 lastTokenGo (c :: rest) acc =
   if c == 32 || c == 9 then lastTokenGo rest [] else lastTokenGo rest (c :: acc)
 
+startsIndented : String -> Bool
+startsIndented line = startsWith " " line || startsWith "\t" line
+
 countChar : Int -> String -> Int
 countChar c text = countCharGo c (strUnpack text)
 
 countCharGo : Int -> List Int -> Int
 countCharGo c [] = 0
 countCharGo c (x :: rest) = if x == c then 1 + countCharGo c rest else countCharGo c rest
+
+-- ---------------------------------------------------------------
+-- `:{ ... :}` 提交前去掉公共缩进
+-- ---------------------------------------------------------------
+dedentBlock : String -> String
+dedentBlock block = if trim block == "" then ""
+else
+  let
+    ls = lines (trimRight block)
+    ind = case minIndentOf ls of
+      Just k => k
+      Nothing => 0
+  in join "\n" (map (\l => dropIndent ind l) ls)
+
+minIndentOf : List String -> Maybe Int
+minIndentOf [] = Nothing
+minIndentOf (l :: rest) = if trim l == "" then minIndentOf rest
+else case minIndentOf rest of
+  Nothing => Just (leadingSpaces l)
+  Just k => Just (immin k (leadingSpaces l))
+
+leadingSpaces : String -> Int
+leadingSpaces s = leadingSpacesGo (strUnpack s) 0
+
+leadingSpacesGo : List Int -> Int -> Int
+leadingSpacesGo [] acc = acc
+leadingSpacesGo (c :: rest) acc = if c == 32 || c == 9 then leadingSpacesGo rest (acc + 1) else acc
+
+dropIndent : Int -> String -> String
+dropIndent k l = if k <= 0 then l else strPack (drop k (strUnpack l))

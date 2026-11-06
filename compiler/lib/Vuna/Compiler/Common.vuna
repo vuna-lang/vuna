@@ -66,7 +66,7 @@ spanEndLine (Span f sl sc el ec) = el
 
 -- 把 span 渲染成 `文件:行:列`（错误信息前缀）。
 showSpanLoc : Span -> String
-showSpanLoc (Span f sl sc el ec) = f ++ ":" ++ strFromInt sl ++ ":" ++ strFromInt sc
+showSpanLoc (Span f sl sc el ec) = "${f}:${sl}:${sc}"
 
 memChar : Int -> List Int -> Bool
 memChar c [] = False
@@ -93,17 +93,17 @@ splitLastDot parts = case reverse parts of
 joinDots : List String -> String
 joinDots [] = ""
 joinDots ([x]) = x
-joinDots (x :: rest) = x ++ "." ++ joinDots rest
+joinDots (x :: rest) = "${x}.${joinDots rest}"
 
 joinSlashes : List String -> String
 joinSlashes [] = ""
 joinSlashes ([x]) = x
-joinSlashes (x :: rest) = x ++ "/" ++ joinSlashes rest
+joinSlashes (x :: rest) = "${x}/${joinSlashes rest}"
 
 joinArrows : List String -> String
 joinArrows [] = ""
 joinArrows ([x]) = x
-joinArrows (x :: rest) = x ++ " -> " ++ joinArrows rest
+joinArrows (x :: rest) = "${x} -> ${joinArrows rest}"
 
 -- 路径拆分：返回去掉最后一段的目录与最后一段（无 "/" 时目录为 ""）。
 -- 编译器驱动（创建输出文件父目录）与 doc 共用，因此放在 Base 而不是工具模块。
@@ -125,7 +125,7 @@ baseName path = secondOf (splitPath path)
 suggest : String -> List String -> String
 suggest name [] = ""
 suggest name (c :: rest) =
-  if _similarName name c then " (did you mean " ++ c ++ "?)" else suggest name rest
+  if _similarName name c then " (did you mean ${c}?)" else suggest name rest
 
 _similarName : String -> String -> Bool
 _similarName a b = if a == b then False

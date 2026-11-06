@@ -3,10 +3,14 @@ module Vuna.Lsp (runLsp, runLspTool) where
 -- Vuna.Lsp：LSP 服务器门面（工具链模块，**永不进 seed 闭包**）。
 --
 -- 传输/URI/帧在 `Vuna.Lsp.Protocol`，诊断链在 `Vuna.Lsp.Diagnostics`，各查询方法在
--- `Vuna.Lsp.Query`；本模块只保留**服务器状态机**：
+-- `Vuna.Lsp.Query`，模块名/局部绑定在 `Vuna.Lsp.Bindings`；本模块只保留**服务器状态机**：
 --   initialize / initialized / shutdown / exit、textDocument/didOpen|didChange|didClose
 --   （Full 同步，kind = 1）、capabilities、请求分发与 stdin 字节帧循环。
 -- `runLsp` / `runLspTool` 是 CLI 入口（由 Vuna.Cli 插入分发）。
+--
+-- M40 查询管线（hover）：洞目标 → Bindings（模块引用 / 局部绑定）→ Index 符号；
+-- definition：Bindings → Index 符号 → 同文件缓冲兜底。Bindings 是 parse 级的，不触发
+-- `.local/index/` 构建；模块引用命中时 docstring 来自目标文件（当前文件用缓冲）。
 --
 -- 协议约束：**stdout 只写协议帧**；日志走 stderr（内存累积、退出时一次写出）。
 -- 读取按 `Content-Length` 精确切字节（`readChunk`），**不能按行读**：标准 LSP 帧的
@@ -23,6 +27,8 @@ module Vuna.Lsp (runLsp, runLspTool) where
 import Vuna.Compiler.Common
 import Vuna.Index
 import Vuna.Json
+import Vuna.Json.Server
+import Vuna.Lsp.Bindings
 import Vuna.Lsp.Diagnostics
 import Vuna.Lsp.Protocol
 import Vuna.Lsp.Query
@@ -34,23 +40,11 @@ lspServerName : String
 lspServerName = "vuna-lsp"
 
 lspServerVersion : String
-lspServerVersion = "0.2.1"
+lspServerVersion = "0.3.0"
 
 -- LSP 的 TextDocumentSyncKind.Full = 1
 syncKindFull : Int
 syncKindFull = 1
-
--- 每次 readChunk 的字节数（帧 body 可能跨多块；缓冲里拼够 Content-Length 再切帧）。
-readChunkSize : Int
-readChunkSize = 65536
-
--- 单帧 / 缓冲上界：坏客户端不能把内存撑爆（正常源文件帧远小于此）。
-maxFrameBytes : Int
-maxFrameBytes = 16777216
-
--- JSON-RPC 2.0 错误码
-errMethodNotFound : Int
-errMethodNotFound = 0 - 32601
 
 -- 打开的文档表
 -- ---------------------------------------------------------------
@@ -84,40 +78,50 @@ record LspState where
   stateRootHint : Maybe String
   stateLogs : List String
   stateDiagCache : List (Pair Int Json)
+  stateDiagSession : Maybe DiagCache
 
 setDocs : List Doc -> LspState -> LspState
-setDocs docs (LspState _ s idx tried hint logs dc) = LspState docs s idx tried hint logs dc
+setDocs docs (LspState _ s idx tried hint logs dc dsess) =
+  LspState docs s idx tried hint logs dc dsess
 
 setShutdown : Bool -> LspState -> LspState
-setShutdown s (LspState docs _ idx tried hint logs dc) = LspState docs s idx tried hint logs dc
+setShutdown s (LspState docs _ idx tried hint logs dc dsess) =
+  LspState docs s idx tried hint logs dc dsess
 
 setIndex : Maybe Index -> LspState -> LspState
-setIndex idx (LspState docs s _ tried hint logs dc) = LspState docs s idx tried hint logs dc
+setIndex idx (LspState docs s _ tried hint logs dc dsess) =
+  LspState docs s idx tried hint logs dc dsess
 
 setIndexTried : Bool -> LspState -> LspState
-setIndexTried tried (LspState docs s idx _ hint logs dc) = LspState docs s idx tried hint logs dc
+setIndexTried tried (LspState docs s idx _ hint logs dc dsess) =
+  LspState docs s idx tried hint logs dc dsess
 
 setRootHintIfEmpty : String -> LspState -> LspState
-setRootHintIfEmpty hint (LspState docs s idx tried (existing@(Just prev)) logs dc) =
-  LspState docs s idx tried existing logs dc
-setRootHintIfEmpty hint (LspState docs s idx tried Nothing logs dc) =
-  LspState docs s idx tried (Just hint) logs dc
+setRootHintIfEmpty hint (LspState docs s idx tried (existing@(Just prev)) logs dc dsess) =
+  LspState docs s idx tried existing logs dc dsess
+setRootHintIfEmpty hint (LspState docs s idx tried Nothing logs dc dsess) =
+  LspState docs s idx tried (Just hint) logs dc dsess
 
 setDiagCache : List (Pair Int Json) -> LspState -> LspState
-setDiagCache dc (LspState docs s idx tried hint logs _) = LspState docs s idx tried hint logs dc
+setDiagCache dc (LspState docs s idx tried hint logs _ dsess) =
+  LspState docs s idx tried hint logs dc dsess
+
+setDiagSession : Maybe DiagCache -> LspState -> LspState
+setDiagSession dsess (LspState docs s idx tried hint logs dc _) =
+  LspState docs s idx tried hint logs dc dsess
 
 -- M34.4：LSP 进程内诊断帧缓存（上限 32 条，前插）。
 pushDiag : Int -> Json -> LspState -> LspState
-pushDiag key frame (LspState docs s idx tried hint logs dc) =
-  LspState docs s idx tried hint logs (truncateCache 32 (Pair key frame :: dc))
+pushDiag key frame (LspState docs s idx tried hint logs dc dsess) =
+  LspState docs s idx tried hint logs (truncateCache 32 (Pair key frame :: dc)) dsess
 
 truncateCache : Int -> List a -> List a
 truncateCache n [] = []
 truncateCache n (x :: rest) = if n <= 0 then [] else x :: truncateCache (n - 1) rest
 
 logTo : String -> LspState -> LspState
-logTo line (LspState docs s idx tried hint logs dc) =
-  LspState docs s idx tried hint (line :: logs) dc
+logTo line (LspState docs s idx tried hint logs dc dsess) =
+  LspState docs s idx tried hint (line :: logs) dc dsess
 
 -- 退出时一次写出（内存累积的日志，见 Protocol.flushLogLines）。
 flushLogs : LspState -> Int
@@ -134,11 +138,11 @@ ensureIndex uri st = case st.stateIndex of
     in case loadOrBuild root of
       Ok idx =>
         let
-          st1 = logTo ("index ready: " ++ root) (setIndexTried True (setIndex (Just idx) st))
+          st1 = logTo "index ready: ${root}" (setIndexTried True (setIndex (Just idx) st))
         in Pair st1 (Just idx)
       Err e =>
         let
-          st1 = logTo ("index unavailable: " ++ e) (setIndexTried True st)
+          st1 = logTo "index unavailable: ${e}" (setIndexTried True st)
         in Pair st1 Nothing
 
 -- 打开的文档文本（未打开 → ""）。
@@ -158,12 +162,6 @@ serverCapabilities =
 -- ---------------------------------------------------------------
 -- 请求分发
 -- ---------------------------------------------------------------
-paramsOf : Json -> Json
-paramsOf msg = fromMaybe (JObj []) (jsonGet "params" msg)
-
-idOf : Json -> Json
-idOf msg = fromMaybe JNull (jsonGet "id" msg)
-
 uriOfParams : Json -> String
 uriOfParams params = fromMaybe "" (jsonGetIn ["textDocument", "uri"] params >>= jsonAsStr)
 
@@ -237,8 +235,9 @@ diagnoseCached uri version text state =
     Just frame => Pair state frame
     Nothing =>
       let
-        frame = publishDiagnosticsFor uri version text
-        state1 = pushDiag key frame state
+        result = publishDiagnosticsCached state.stateDiagSession uri version text
+        frame = secondOf result
+        state1 = pushDiag key frame (setDiagSession (firstOf result) state)
       in Pair state1 frame
 
 lookupDiag : Int -> List (Pair Int Json) -> Maybe Json
@@ -252,9 +251,9 @@ handleDidClose msg state =
     params = paramsOf msg
     uri = uriOfParams params
     docs = docRemove uri state.stateDocs
-  in Pair False (Pair (setDocs docs state) [publishDiagnosticsFor uri 0 ""])
+  in Pair False (Pair (setDocs docs state) [publishDiagnosticsEmpty uri 0])
 
--- hover：先查洞目标（包上下文），未命中再查标识符签名/注释。
+-- hover：洞目标（包上下文）→ 模块引用/局部绑定（parse 级）→ 标识符签名/注释。
 handleHover : Json -> LspState -> Pair Bool (Pair LspState (List Json))
 handleHover msg state =
   let
@@ -265,12 +264,14 @@ handleHover msg state =
     text = textForUri uri state
   in case holeHoverAt uri line col text of
     Just hover => Pair False (Pair state [responseOk (idOf msg) hover])
-    Nothing =>
-      let
-        indexPair = ensureIndex uri state
-        state1 = firstOf indexPair
-        midx = secondOf indexPair
-      in Pair False (Pair state1 [responseOk (idOf msg) (symbolHoverResult uri line col text midx)])
+    Nothing => case bindingHoverAt uri line col text of
+      Just hover => Pair False (Pair state [responseOk (idOf msg) hover])
+      Nothing =>
+        let
+          indexPair = ensureIndex uri state
+          state1 = firstOf indexPair
+          midx = secondOf indexPair
+        in Pair False (Pair state1 [responseOk (idOf msg) (symbolHoverResult uri line col text midx)])
 
 -- formatting：formatSourceWith 成功且内容变化 ⇒ 全文 TextEdit；否则 []（M31.3：程序级 fixity）。
 handleFormatting : Json -> LspState -> Pair Bool (Pair LspState (List Json))
@@ -315,7 +316,7 @@ handleDocumentSymbol msg state =
     text = textForUri uri state
   in Pair False (Pair state [responseOk (idOf msg) (JArr (documentSymbols uri text))])
 
--- definition：光标 token → Index 符号 → Location；Index 不可用时同文件兜底。
+-- definition：模块引用/局部绑定（parse 级）→ Index 符号 → 同文件兜底。
 handleDefinition : Json -> LspState -> Pair Bool (Pair LspState (List Json))
 handleDefinition msg state =
   let
@@ -324,10 +325,14 @@ handleDefinition msg state =
     line = lineOfParams params + 1
     col = colOfParams params + 1
     text = textForUri uri state
-    indexPair = ensureIndex uri state
-    state1 = firstOf indexPair
-    midx = secondOf indexPair
-  in Pair False (Pair state1 [responseOk (idOf msg) (definitionResult uri line col text midx)])
+  in case bindingDefinitionAt uri line col text of
+    Just loc => Pair False (Pair state [responseOk (idOf msg) loc])
+    Nothing =>
+      let
+        indexPair = ensureIndex uri state
+        state1 = firstOf indexPair
+        midx = secondOf indexPair
+      in Pair False (Pair state1 [responseOk (idOf msg) (definitionResult uri line col text midx)])
 
 -- references：定义位置 + Index refs 的出现位置。
 handleReferences : Json -> LspState -> Pair Bool (Pair LspState (List Json))
@@ -404,59 +409,21 @@ dispatch "$/cancelRequest" msg state = Pair False (Pair state [])
 dispatch methodName msg state =
   if startsWith "$/" methodName then Pair False (Pair state [])
   else Pair False
-    (Pair state [responseErr (idOf msg) errMethodNotFound ("method not found: " ++ methodName)])
+    (Pair state [responseErr (idOf msg) errMethodNotFound "method not found: ${methodName}"])
 
 -- ---------------------------------------------------------------
 -- 主循环
 -- ---------------------------------------------------------------
--- 逐帧循环：缓冲里先切 header（`splitHeaderBlock`），拿到 `Content-Length` 后按字节数
--- 判断 body 是否读够；不够就 `feedMore` 再读一块。返回值即进程退出码。
-lspLoop : Int -> String -> LspState -> Int
-lspLoop fuel pending state = if fuel <= 0 then abnormalExit (logTo "frame fuel exhausted (internal)" state)
-else if strLength pending > maxFrameBytes then abnormalExit (logTo "frame buffer exceeded limit" state)
-else case splitHeaderBlock pending of
-  -- 还没有完整 header：继续读。
-  Nothing => feedMore fuel pending state
-  Just (Pair headerBlock afterHeaders) => case contentLengthOf headerBlock of
-    -- header 里没有可用的 Content-Length：丢掉这段 header，避免无限等待。
-    Nothing =>
-      lspLoop (fuel - 1) afterHeaders (logTo "frame header without Content-Length dropped" state)
-    Just len => frameBody fuel pending afterHeaders len state
+-- 连接循环（字节级切帧、坏帧丢弃、16 MiB / fuel 上界）由
+-- `Vuna.Json.Server.serveConnection` 提供；LSP 只保留**退出策略**：
+-- stdin EOF / 传输层致命错误算异常断开（flush 日志后退 1），
+-- 收到 shutdown 之后的 exit 退 0。
+writeStdout : String -> IO Int
+writeStdout s = prim_print s
 
--- header 有效：body 不够就再读；够了就解码一帧。
-frameBody : Int -> String -> String -> Int -> LspState -> Int
-frameBody fuel pending afterHeaders len state =
-  if len > maxFrameBytes then abnormalExit (logTo "frame too large" state)
-  else if strLength afterHeaders < len then feedMore fuel pending state
-  else decodeFrame fuel len afterHeaders state
-
--- 切出 body（`Content-Length` 字节，body 后没有换行）、解析并分发，然后继续下一帧。
-decodeFrame : Int -> Int -> String -> LspState -> Int
-decodeFrame fuel len afterHeaders state =
-  let
-    body = substring 0 (natFromInt len) afterHeaders
-    rest = substring (natFromInt len) (natFromInt (strLength afterHeaders - len)) afterHeaders
-  in case parseJson body of
-    Err e => lspLoop (fuel - 1) rest (logTo ("malformed frame: " ++ e) state)
-    Ok msg =>
-      let
-        result = handleFrame msg state
-        shouldExit = firstOf result
-        after = secondOf result
-        state2 = firstOf after
-        frames = secondOf after
-        _ = map sendFrame frames
-      in if shouldExit then exitCodeOf state2 else lspLoop (fuel - 1) rest state2
-
--- 缓冲里还没有完整的一帧：再读一块（可能只到几个字节）。
--- EOF（readChunk 返回 ""）且从未 shutdown ⇒ 非正常断开，退 1。
--- 注意 flushLogs 返回的是写入字节数，不能直接当退出码。
-feedMore : Int -> String -> LspState -> Int
-feedMore fuel pending state =
-  let
-    chunk = readChunk readChunkSize
-  in if chunk == "" then abnormalExit (logTo "input closed" state)
-  else lspLoop (fuel - 1) (pending ++ chunk) state
+-- 传输告警：LSP 的既有策略是丢帧 + 写日志（不回错误帧）。
+lspWarn : String -> LspState -> Pair LspState (List Json)
+lspWarn m st = Pair (logTo m st) []
 
 -- exit 之前是否收到过 shutdown。
 exitCodeOf : LspState -> Int
@@ -465,7 +432,7 @@ exitCodeOf state =
     _ = flushLogs state
   in if state.stateShutdown then 0 else 1
 
--- 非正常结束（stdin EOF / 空输入）：flush 日志后一律退 1，
+-- 非正常结束（stdin EOF / 传输层致命错误）：flush 日志后一律退 1，
 -- 不能把 flushLogs 的「写入字节数」当退出码。
 abnormalExit : LspState -> Int
 abnormalExit state =
@@ -473,15 +440,20 @@ abnormalExit state =
     _ = flushLogs state
   in 1
 
--- stdin 帧循环是「读帧→处理→再读」的无限状态机；用显式 fuel 守卫（1G 次读/帧操作）。
-lspFuelBound : Int
-lspFuelBound = 1073741824
-
 -- A05：零参顶层定义在模块初始化时求值，所以「动作」必须函数化。
 -- runLsp 是读 stdin 的 LSP 帧循环：若留成零参值，任何子命令启动都会跑它。
 runLsp : Int -> Int
 runLsp _ =
-  lspLoop lspFuelBound "" (logTo "starting" (LspState [] False Nothing False Nothing [] []))
+  let
+    outcome =
+      serveConnection readChunk writeStdout lspWarn handleFrame
+        (logTo "starting" (LspState [] False Nothing False Nothing [] [] Nothing))
+    exit = firstOf outcome
+    state = secondOf outcome
+  in case exit of
+    ExitRequested => exitCodeOf state
+    ExitClosed => abnormalExit state
+    ExitFatal msg => abnormalExit (logTo msg state)
 
 -- CLI 入口：与其它工具命令一致，返回退出码（由 Vuna.Cli 插入分发）。
 runLspTool : List String -> Int

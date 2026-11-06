@@ -62,8 +62,8 @@ main : String
 main = pretty Red ++ "/" ++ show Red
 ```
 
-- **trait 只支持单参数**；多参数 trait、默认方法、父类、关联类型未实现（F4，见
-  [limits.md](limits.md)）。
+- **trait 只支持单参数**；多参数 trait、默认方法、父类、关联类型归 F4
+  （[roadmap.md](../roadmap.md)）。
 - **实例按 head 全局唯一**：同一 head 的重复 / 重叠实例报 `duplicate instance` /
   `overlapping instance`（含 `deriving` 生成的实例）。**没有命名实例**：不存在
   `instance C T as name` 或 `@name` 选择，相干性只靠「同一 head 唯一」。
@@ -91,7 +91,8 @@ main = pretty Red ++ "/" ++ show Red
   实例 `instance Eq a => Eq (F a)`）；`Show` 要求字段可 show。`mem (Box 1) [...]`
   这类需要 `Dict_Eq (Box Int)` 的用法因此可用。
 - **顶层函数签名也可以写约束（M32）**：`f : Eq a, Show a => a -> String`。约束是定义体的
-  字典假设（隐式 Rig1 参数），body 的方法调用优先命中它；调用点仍按实例搜索补字典。
+  字典假设（隐式字典参数，`Rig` 是 `RigOmega`，运行时保留），body 的方法调用优先命中
+  它；调用点仍按实例搜索补字典。
   不写约束的形态仍按推断提升（`{a} -> {d : Dict_Eq a} -> ...`）；三包源码自本轮起
   统一写显式约束，不再依赖该旧形态。语法与边界见 [language.md](language.md) §签名的 trait 约束。
 - **`Show` / `Eq` / `Ord` 是库里的普通 trait（M31.1 起声明与实例分离）**：声明在
@@ -125,7 +126,7 @@ describe x y = if x == y then show x else show x ++ "/" ++ show y
 
 - `C a` 里的 `a` 不是新参数：它是签名自由小写名的隐式类型参数（见
   [type-system.md](type-system.md)）；约束另外生成隐式**字典参数**
-  `{_ctx0 : Dict_C a}`（Rig1 运行时保留），插在类型参数之后、显式参数之前。
+  `{_ctx0 : Dict_C a}`（`Rig` 为 `RigOmega`，运行时保留），插在类型参数之后、显式参数之前。
 - body 的方法调用优先命中声明的假设；签名没覆盖的刚性需求仍按旧规则提升成额外隐式
   参数（与不写约束的签名同一条推断路径，`mem : a -> L a -> Bool` 因此不变）。
 - 调用点没有新语法：类型实参由统一解出，字典实参按实例搜索填充。

@@ -5,6 +5,9 @@
 # $1 是输出目录，$VUNA_SEED 是 packages.vuna-seed 的二进制（由 Nix 注入）。
 #
 # 覆盖：seed TCB 断言、stage1 == stage2（文件集逐字节）、增量构建、两个行为抽查。
+#
+# rotation 是按需事件（触发条件见 docs/reference/bootstrap.md）：seed 落后于当前源码
+# 不是失败，只输出滞后报告；唯一硬要求是旧 seed 能编译当前源码。
 set -eu
 
 OUT=${1:?usage: seed-selfhost.sh OUT}
@@ -29,13 +32,27 @@ fi
 "$VUNA_SEED" build --no-compile --out s1 compiler
 sh nix/tcb-check.sh nix/tcb-forbidden.txt s1
 
-# 源码/seed 同步：fixed point 只证明生成器自洽，不证明 seed 与当前源码同步。
-# seed/ 必须等于「当前源码由 seed 生成的 s1」；否则 flake 绿也可能带着过期信任锚点。
-if ! diff -r seed s1 >/dev/null 2>&1; then
-  echo "seed-selfhost: seed/ 与当前源码生成结果不同步（先 sh nix/seed-rotate.sh ./result/bin/vuna）" >&2
-  diff -r seed s1 | head -20 >&2
-  exit 1
+# rotation 按需：seed 与当前源码的生成结果可以不同（信任锚点允许滞后）。
+# 这里只报告差异规模，供判断何时 rotation；不同步不阻塞。
+# fixed point（下面的 s1 == s2）仍然证明当前源码被旧 seed 编译后自洽。
+total_seed_files=$(find seed -maxdepth 1 -type f | wc -l | tr -d ' ')
+lag_lines=$(LC_ALL=C diff -rq seed s1 2>/dev/null | wc -l | tr -d ' ')
+if [ "$lag_lines" = "0" ]; then
+  printf 'seed-selfhost: seed 与当前源码生成结果一致\n'
+else
+  printf 'seed-selfhost: seed 滞后：%s/%s 个文件与当前源码生成结果不同（rotation 按需，不阻塞；见 docs/reference/bootstrap.md）\n' \
+    "$lag_lines" "$total_seed_files"
 fi
+{
+  printf 'seed_total_files=%s\n' "$total_seed_files"
+  printf 'seed_lag_lines=%s\n' "$lag_lines"
+  if [ -f nix/seed-rotation.txt ]; then
+    printf 'rotation_meta=present\n'
+    sed -n -e 's/^rotated_at=/rotated_at=/p' -e 's/^source_digest=/source_digest=/p' -e 's/^git_commit=/git_commit=/p' nix/seed-rotation.txt
+  else
+    printf 'rotation_meta=missing\n'
+  fi
+} >"$OUT/seed-lag.txt"
 
 # 在副本里构建 stage1，避免构建产物污染文件集比较。
 cp -r s1 b1

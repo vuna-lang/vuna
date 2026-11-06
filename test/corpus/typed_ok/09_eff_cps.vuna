@@ -1,0 +1,30 @@
+-- D27：CPS 签名索引效应（异构结果类型）走 typed codegen 夹具。
+data Op : Type where
+  Bump : Int -> Op
+  Read : Op
+
+resOp : Op -> Type
+resOp (Bump n) = Int
+resOp Read = String
+
+data Eff : (f : Type) -> (f -> Type) -> (ans : Type) -> (a : Type) -> Type where
+  MkEff : {f : Type} -> {res : f -> Type} -> {ans : Type} -> {a : Type} -> ((a -> ans) -> ((op : f) -> (res op -> ans) -> ans) -> ans) -> Eff f res ans a
+
+send : {f : Type} -> {res : f -> Type} -> {ans : Type} -> (op : f) -> Eff f res ans (res op)
+send op = MkEff (\k => \alg => alg op k)
+
+run : {f : Type} -> {res : f -> Type} -> {ans : Type} -> {a : Type} -> Eff f res ans a -> (a -> ans) -> ((op : f) -> (res op -> ans) -> ans) -> ans
+run e k alg = case e of
+  MkEff h => h k alg
+
+counterAlg : (op : Op) -> (resOp op -> Int) -> Int
+counterAlg op k = case op of
+  Bump n => k n
+  Read => k "read"
+
+main : Int
+main =
+  let
+    e : Eff Op resOp Int Int
+    e = send (Bump 41)
+  in run e (\x => x) counterAlg

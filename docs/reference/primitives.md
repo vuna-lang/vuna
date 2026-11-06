@@ -5,8 +5,8 @@
 `Vuna.Compiler.Intrinsics`（`allIntrinsics` / `Capability` / `IntrinsicOp`），消费方是
 `Loader.Resolve`（解析 + 能力检查）、`Elab.Prelude`（签名）、`Codegen.Term`（runtime
 映射）、`Core.Eval`（interp 归约）。语法见 [language.md](language.md)，类型规则见
-[type-system.md](type-system.md)，库的边界见 [stdlib.md](stdlib.md)，边界清单见
-[limits.md](limits.md)。
+[type-system.md](type-system.md)，库的边界见 [stdlib.md](stdlib.md)，开放债务见
+[debt.md](debt.md)。
 
 ## 1. 术语
 
@@ -61,8 +61,9 @@
   `min_int = -4611686018427387904`。类型层没有宽度 / 区间信息，`Int` 就是 `Type`。
 - 算术：`+` `-` `*` 在溢出时按**二进制补码回绕**（`max_int + 1 = min_int`），不报错、
   不饱和、不提升为大整数。**无大整数计划**。
-- `/`：整数除法向零截断；`a / 0` 在产物运行期抛 `Failure "division by zero"`
-  （runtime `bi_div` 显式检查）；`min_int / -1` 回绕成 `min_int`，不报错。
+- `/`：整数除法向零截断；`a / 0` 在产物运行期抛宿主 `Failure "division by zero"`
+  （runtime `bi_div` 显式检查），未捕获时由运行时报告器输出 `vuna: runtime error: ...` 并以 2
+  退出；`min_int / -1` 回绕成 `min_int`，不报错。
 - 字面量：十进制数字序列，按 `acc * 10 + digit` 累加，**越界同样回绕**（`Lexer.collectInt`）；
   没有一元负号，负数写成 `0 - n`。
 - 比较：`==` `/=` `<` `<=` `>` `>=` 返回 canonical `Bool`。
@@ -70,16 +71,22 @@
 ## 3.1 Nat（M34.7）
 
 - **身份**：`Base.Nat.Nat` 是 canonical data（固定 `Zero` / `Succ`），类型层仍是普通归纳族；
-  运行时表示是 OCaml `int`：`Zero = 0`、`Succ n = min(n+1, max_int)`，**不生成变体类型**。
+  运行时表示是 OCaml `int`，值域 `0..max_int`（4611686018427387903）：`Zero = 0`、
+  `Succ n = min(n + 1, max_int)`，**不生成变体类型**。
 - **字面量**：期望类型为 Nat 时 `3` 展开成 `Succ (Succ (Succ Zero))`（类型层可合一），
-  codegen 折回整数字面量；推断位置仍默认 `Int`。超出 63 位（词法回绕成负数）报
-  `TC_NatLiteralOutOfRange`。
+  codegen 折回整数字面量；推断位置仍默认 `Int`。越界检查发生在词法累加（63 位回绕）之后：
+  回绕成负数才报 `TC_NatLiteralOutOfRange`（≥ 2^63 的回绕见 [debt.md](debt.md) C40）。
+  Nat 字面量只用于表达式：`case n of 0 =>` 这类字面量模式不支持（报
+  `TC_OnlyCtorPatterns`），模式侧用 `Zero` / `Succ` 或 `isZero`（见 [debt.md](debt.md) D24）。
 - **纯 intrinsic**：`natAdd` / `natSub` / `natMul` / `natDiv`（饱和、减截断到 0、除零与 Int
   同文案）、`natToInt`（恒等）、`natFromInt`（负数 clamp 0）。interp 与产物同语义；
   `+ - * /` 在 Nat 上下文由精化器特化到这些名字（见 [operators.md](operators.md)）。
 - **提升**：只允许 `Nat → Int`（精化期插入 `natToInt`，零成本）；`Int → Nat` 必须显式
-  `Base.Nat.fromInt` / `fromIntMaybe`。低层原语（`strLength` / `arrayLength` 等）仍是 Int，
-  Base 负责暴露 Nat 度量。
+  `Base.Nat.fromInt`（负数 clamp 0，有损）/ `fromIntMaybe`。混合算术的结果由操作数决定：
+  两侧 Nat（或 Nat 与字面量）→ Nat；出现真正的 `Int` → `Int`（Nat 侧经 `natToInt` 提升）。
+  低层原语（`strLength` / `arrayLength` 等）仍是 Int，Base 负责暴露 Nat 度量。
+- **算术特化不是通用重载**：`+ - * /` 仍是内建运算符，只在 `Int` / `Nat` 上按期望类型或
+  实参类型特化；不向用户自定义数值类型开放重载。
 - **展示**：`main : Nat` 与 interp 都输出十进制。
 
 ## 4. String
@@ -109,6 +116,10 @@
   `main : String` 的展示一致。
 - `main` 展示钩子（`Codegen.Term.mainShowForName`）：`Int` / `Nat` → `string_of_int`、
   `String` → `strShow`、`Bool` → `dt_show_bool`（输出 `True` / `False`）。
+- **展示类型固定为这四类**：`interp`（`Driver.Dt.evalDtMain`）与编译产物
+  （`Codegen.Term.mainShowForName`）都支持 `Int` / `Nat` / `String` / `Bool`；其它类型
+  （data / record / 函数等）在 `interp` 报 `[CG_MainNotValue] main does not reduce to a
+  value`，在产物侧报 `[CG_MainReturnType]`。
 - interp 展示（`Core.Eval.showValue`，字符串走 `Core.Term.showCoreString`）与 `strShow`
   同规则、逐字节一致，因此 `main : String` 在 interp 与产物中输出相同。
 - `Show Bool` 库实例用 `if` 输出 `True` / `False`，与 `dt_show_bool` 同语义。
@@ -165,8 +176,8 @@
 - 效果原语的 runtime 表达仍是「立即算完的 OCaml 表达式」，由 `ioPrimThunkText` 按 arity
   包成 thunk（`fun args -> fun (_ : int) -> rt args`；零参 `fun (_ : int) -> rt`）。
   零参 `prim_newBuffer` 是动作**值**。
-- `arrayFromList` / `arrayToList` 依赖 canonical `Base.List.List` 桥接（`needsListBridge`），
-  没有 List 族的程序使用时报 `ListBridgeRequired`。
+- `arrayFromList` / `arrayToList` 依赖 canonical `Base.List.List` 桥接（`needsListBridge`）；
+  完整的桥接清单与缺失时的诊断见 §9。
 - **interp 不归约**全部容器原语（`OpNone`）：夹具带 `.nointerp`，只 compile + 运行。
 - 越界行为：`arrayGet` / `MArray.read` 越界是宿主 `Invalid_argument`（不是 `strAt` 的
   -1 哨兵，也没有语言层诊断）；`Array.set` 先 `Array.copy`，原数组不变。
@@ -188,7 +199,8 @@
 | `prim_runIO` | `{a : Type} -> IO a -> a` | main 外唯一执行入口；能力 `unsafe` |
 
 `Base.IO` 把 `runIO` / `print` / … 暴露为别名，并提供 `Functor` / `Monad IO` 实例；
-`IO` 类型本身恒可见（不需要 import）。
+`IO` 类型本身恒可见（不需要 import）。它不导出 `bindIO` / `pureIO` / `fmapIO` 这样的名字：
+动作组合统一走 `Functor` / `Monad` 实例（`fmap` / `bind` / `pure`、`>>=`、`do`）。
 
 **效果原语类型**：全部效果原语返回 `IO` 动作，而不是「立刻算完的值」：`prim_print : String -> IO Int`、
 `prim_readFile : String -> IO String`、`prim_readLine : IO String`、
@@ -200,6 +212,8 @@
 `prim_wait : Int -> IO Int`、`prim_readBytes : Int -> IO String`、
 `timeUs : IO Int`。零参原语因此是**真正的值**（动作值）：引用不执行、也不重新求值。
 
+纯 `main` 直接调用效果原语是类型错误（`TC_TypeMismatch`）：效果只能出现在 `IO` 动作里。
+
 M38 新增两条调试/诊断原语（`Base.Debug` 的实现基础，见
 [debugging.md](debugging.md)）：
 
@@ -207,6 +221,22 @@ M38 新增两条调试/诊断原语（`Base.Debug` 的实现基础，见
 - `prim_fail : String -> a`（**无能力**、不在 `IO` 里）：抛 `Failure <msg>` 的底值，
   由生成的运行时报告器渲染成 `vuna: runtime error: ...` 并 exit 2。用户代码经
   `Base.Debug.assert` / `todo` 使用。
+
+M35.3 新增 `net` 能力与 7 条 socket 原语（工具链 server 与测试用；用户代码同样按能力直调）：
+
+- `prim_netListen : String -> IO Int`：绑定并监听，返回 listener 句柄。地址是
+  `tcp:HOST:PORT`（HOST 只接受数字 IPv4；`PORT=0` 取临时端口）或 `unix:PATH`；
+- `prim_netPort : Int -> IO Int`：listener 的端口（TCP；unix 返回 0），配合 `PORT=0`；
+- `prim_netAccept : Int -> IO Int`：阻塞接受一个连接，返回连接句柄；
+- `prim_netRecv : Int -> Int -> IO String`：最多读 n 字节、**有数据就立即返回**（可能更少）；
+  `""` 表示对端关闭；
+- `prim_netSend : Int -> String -> IO Int`：写完整串（内部循环处理部分写），返回字节数；
+- `prim_netClose : Int -> IO Int`：关闭句柄（幂等）；
+- `prim_netConnect : String -> IO Int`：客户端连接（`vuna repl --client` 与测试夹具用）。
+
+`net` 是**权限**不是豁免：未声明时报 `` effectful builtin `prim_netListen` requires capability
+`net` ``。句柄是小整数，运行时映射到 `Unix.file_descr` 表，**不引入新的语言类型**；
+无 DNS / TLS / 异步 / 超时（`accept`/`recv` 阻塞，见 §8）。
 
 **名字面**：效果原语只保留 `prim_*` 名。用户有两条合法用法：
 
@@ -220,6 +250,11 @@ M38 新增两条调试/诊断原语（`Base.Debug` 的实现基础，见
 `` `runIO` executes IO outside main; requires capability `unsafe` ... ``；`runIO` 每次调用
 都重新执行动作（动作值可复用、效果不缓存）。
 
+**内部 cast（不可见）**：`prim_erase` 是隐藏 intrinsic（`visible = False`），只由精化器在
+「运行时类型不可命名」的 binder 使用点插入；签名 `{a} -> a -> a`、runtime `Obj.magic`、
+`IntrinsicOp.OpIdentity` 让它对求值/定义性相等透明。用户源码不可引用它（不在 prelude，
+也不吃能力位）。设计见 [effects.md](effects.md) §5。
+
 | 能力 | 原语 / 入口 |
 | --- | --- |
 | `console` | `prim_print`、`prim_readLine`、`prim_readBytes` |
@@ -227,11 +262,14 @@ M38 新增两条调试/诊断原语（`Base.Debug` 的实现基础，见
 | `process` | `prim_getArgs`、`prim_exit`、`prim_runIn`、`prim_spawn`、`prim_wait` |
 | `env` | `prim_getenv`、`prim_getcwd`、`prim_execPath` |
 | `clock` | `timeUs` |
+| `net` | `prim_netListen`、`prim_netPort`、`prim_netAccept`、`prim_netRecv`、`prim_netSend`、`prim_netClose`、`prim_netConnect` |
 | `unsafe` | `prim_runIO`（= `Base.IO.runIO`：在 main 之外执行 IO 动作） |
 
 - 声明面：manifest `[capabilities] effects = ["console", "fs", ...]`，按**包**声明
   （`Frontend.Manifest.manifestCapabilities`）；无 manifest 的 ad-hoc 文件没有能力。
-- 未知能力名报 `unknown capability "<name>" (known: console, fs, process, env, clock, unsafe)`
+  `vuna interp` 与 `vuna test` 的入口文件同样受这条约束：ad-hoc 文件没有能力，测试文件
+  属于所在包、用该包声明的能力。
+- 未知能力名报 `unknown capability "<name>" (known: console, fs, process, env, clock, unsafe, net)`
   （`Loader.Resolve.checkCapabilities`）。
 - 用到但未声明报
   `` effectful builtin `<name>` requires capability `<cap>` in <package> (declare [capabilities] effects = ["<cap>"] or use Base.IO) ``
@@ -240,7 +278,7 @@ M38 新增两条调试/诊断原语（`Base.Debug` 的实现基础，见
   源码里直接引用效果原语 / `runIO`；没有按包名字符串判定的 allowlist。
 - `Base.IO` 自身声明 `["console", "fs", "process"]`（只做别名，不调用 `runIO`）；`base` 另声明
   `unsafe`（`Base.IO.runIO` 的别名定义与 `Base.ST.runST` 的 `runIO` 使用点，见
-  [effects.md](effects.md)）；编译器与产品 CLI 声明全部六个能力（含 `unsafe`）。
+  [effects.md](effects.md)）；产品 CLI（根包）声明全部七个能力（含 `unsafe` 与 `net`），编译器包声明六个（不含 `net`）——编译器自身不使用网络。
 
 ## 8. 生成 runtime 的契约
 
@@ -272,6 +310,13 @@ M38 新增两条调试/诊断原语（`Base.Debug` 的实现基础，见
 | `prim_runIn` | 在给定目录执行 `sh` 命令并返回退出码，执行后恢复原 cwd |
 | `prim_spawn` | 异步启动子进程（argv 列表，继承 stdin/stdout/stderr），返回 pid |
 | `prim_wait` | 等待子进程并返回退出码（signal/stopped 归 1） |
+| `prim_netListen` | 绑定并监听：`tcp:HOST:PORT`（`SO_REUSEADDR`，backlog 8）或 `unix:PATH`（bind 前删除已存在的路径，开发工具惯例）；返回句柄表下标；失败 `failwith "net: ..."` |
+| `prim_netPort` | `getsockname` 的端口（TCP）；unix socket 返回 0 |
+| `prim_netAccept` | 阻塞接受一个连接，返回新句柄 |
+| `prim_netRecv` | 阻塞 `Unix.read`：有数据即返回（可能少于 n），对端关闭返回 `""` |
+| `prim_netSend` | 循环写完整串（处理部分写）；对端关闭时报 `net: send: connection closed` |
+| `prim_netClose` | 关闭 fd 并从句柄表移除（幂等） |
+| `prim_netConnect` | 客户端 `Unix.connect`（`tcp:`/`unix:` 同一套地址语法） |
 
 效果原语的 runtime 表（`dtp_*`）仍是**立即执行**的 OCaml 函数；生成器
 （`Codegen.Term.ioPrimText`）按 `Intrinsic` 的 arity 把它们包成 **thunk 动作值**，例如
@@ -293,14 +338,21 @@ M38 新增两条调试/诊断原语（`Base.Debug` 的实现基础，见
 | --- | --- | --- |
 | 上述运算符 | 是 | `/` 在除数为 0 时**不归约**（见下） |
 | `strFromInt` / `strLength` / `strHash` / `strAt` / `strSubstring` / `strShow` | 是 | 与 runtime **同语义同公式** |
+| `natAdd` / `natSub` / `natMul` / `natDiv` / `natToInt` / `natFromInt` | 是 | 与 runtime 同饱和 / 截断语义 |
 | `strUnpack` / `strPack` / `strConcatMany` / `strSubstTemplate` | **否** | 结果依赖 `Base.List.List` 的构造子表示（List 桥接），核心求值器不构造该表示 |
-| 全部效果原语（`prim_*` / `timeUs`） | **否** | 纯求值器不执行效果 |
+| 全部 `OpNone` 原语：效果原语（`prim_*` / `timeUs`）、IO 代数、容器原语、`prim_marshal` / `prim_unmarshal`、`prim_fail` | **否** | 纯求值器不执行效果 / 不构造内建容器表示 |
 | `a / 0` | **否** | 核心求值器表达不了运行期异常；显式分类，不返回 0 |
 
-- 不可归约时 `main` 报 `main does not reduce to a value`（`CG_MainNotValue`）。
+- 不可归约时 `main` 报 `[CG_MainNotValue] main does not reduce to a value`。
 - `main : IO a` 一律报
-  `interp cannot execute effects (main : IO a); compile and run the program instead`
-  （`CG_InterpCannotExecuteEffects`），不做「纯动作求值、效果丢弃」。
+  `error: [CG_InterpCannotExecuteEffects] interp cannot execute effects (main : IO a); compile and run the program instead`
+  （退出码 2；无 `DT:` 前缀），不做「纯动作求值、效果丢弃」。
+- **List 桥接**：codegen 把返回或接收 `List` 的 10 个原语映射到桥接 helper（`dtp_unpack` /
+  `dtp_pack` / `dtp_concatMany` / `dtp_substTemplate` / `dtp_listOf` / `dtp_ocamlOf`）：
+  `strUnpack` / `strPack` / `strConcatMany` / `strSubstTemplate`、`prim_getArgs` /
+  `prim_readDir` / `prim_runIn` / `prim_spawn`、`arrayFromList` / `arrayToList`。桥接只为
+  canonical `Base.List.List` 声明生成；包内没有该族时（例如没有 base 依赖）codegen 报
+  ``[CG_ListBridgeRequired] builtin `<name>` requires the canonical `Base.List.List` declaration ...``。
 - 相关夹具带 `.nointerp` 标记，只做 `compile` + 运行产物。
 
 ## 10. 受限 FFI（M33 W5）
@@ -314,8 +366,8 @@ extern c_add "vuna_add" : Int -> Int -> Int
 - `extern` 后是 vuna 值名，字符串是 C 符号名；无 `=` 体。运行时由包根 `ffi/*.c`
   提供的 C 函数实现。
 - **允许的类型**（`Elab.Driver.checkExternTy`）：`Int` / `String` / `Bool`，以及
-  `Array Int` / `Array String` / `Array Bool`；只允许显式参数（不允许隐式、依赖类型、
-  泛型、函数参数 / 回调）。超出子集报 `TC_FfiTypeUnsupported`。
+  `Array Int` / `Array String` / `Array Bool`（**不含 `Nat`**）；只允许显式参数（不允许
+  隐式、依赖类型、泛型、函数参数 / 回调）。超出子集报 `TC_FfiTypeUnsupported`。
 - **codegen**：`DtExtern` 在运行时分组生成 OCaml
   `external v_<name> : <ocaml ty> = "<c_symbol>"`；`compileToDir` 把包根 `ffi/*.c`
   复制到 `OUTDIR/ffi/`，生成的 `build.sh` 用 `ocamlopt -c` 编译并按 `.o` 链接
@@ -336,6 +388,9 @@ extern c_add "vuna_add" : Int -> Int -> Int
 - `prim_execPath` 依赖 `/proc/self/exe`（Linux），其它平台走 `Sys.executable_name`。
 - `strPack` / `strUnpack` 的 List 桥接、`strSubstTemplate` 的模板扫描均在 runtime 里实现，
   interp 不覆盖（§9）。
-- 效果原语的失败（IO 错误、`strPack` 越界、`exit`）都是**宿主异常 / 进程退出**，不是语言
-  的可捕获错误。
-- 完整边界清单见 [limits.md](limits.md)。
+- 原语的失败（IO 错误、`strPack` 越界、`/0`、`exit`）都是**宿主异常 / 进程退出**，
+  由生成的运行时报告器统一报告（见 [debugging.md](debugging.md)），不是语言的可捕获错误。
+- `net` 只有 TCP（数字 IPv4）与 Unix domain socket：无 DNS、TLS、异步/超时、并发；
+  `accept`/`recv` 是阻塞语义。原语本身不限制绑定地址，`vuna repl --listen` 在 CLI 层只接受
+  loopback 与 Unix socket（见 [tooling.md](tooling.md)）。
+- 以上是原语与 runtime 侧的现状边界；开放债务见 [debt.md](debt.md)。

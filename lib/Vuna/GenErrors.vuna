@@ -63,18 +63,16 @@ runGenErrors root = case requireDirectory root of
   Err e => genErrorsError e
   Ok _ =>
     let
-      outPath = root ++ "/docs/.generated/errors.md"
+      outPath = "${root}/docs/.generated/errors.md"
       _ = ensureDirPath (parentOf outPath)
       _ = runIO (prim_writeFile outPath (renderDoc allEntries))
-      _ =
-        runIO
-          (prim_print ("wrote " ++ outPath ++ " (" ++ strFromInt (length allEntries) ++ " codes)\n"))
+      _ = runIO (prim_print "wrote ${outPath} (${length allEntries} codes)\n")
     in 0
 
 genErrorsError : String -> Int
 genErrorsError e =
   let
-    _ = runIO (prim_print ("error: " ++ e ++ "\n"))
+    _ = runIO (prim_print "error: ${e}\n")
   in 2
 
 -- ---------------------------------------------------------------
@@ -90,64 +88,61 @@ renderDoc entries =
     lds = filter (isDomain "LD_") entries
     lns = filter (isDomain "LN_") entries
     fxs = fixEntries entries
-  in "# vuna 错误码\n\n"
-    ++ "由 `vuna gen-errors` 从枚举真源（`Vuna.Compiler.Diagnostics` 的 `tcAll`/`cgAll`、\n"
-    ++ "`Vuna.Compiler.Frontend.Diagnostics` 的 `lexAll`/`psAll`、`Vuna.Compiler.Loader.Diagnostics` 的 `ldAll`、\n"
-    ++ "`Vuna.Lint.Diagnostics` 的 `lintAll`）生成；**勿手改**（生成物，不纳入 git）。\n\n"
-    ++ "约定：运行诊断输出 `[CODE] 消息`；符号语义稳定、只增不删；\n"
-    ++ "域前缀 TC_/CG_/LX_/PS_/LD_/LN_/FX_。\n"
-    ++ "模板中 `<0>`/`<1>` 是插值占位符，arity 由枚举构造子的类型索引在编译期锁定。\n\n"
-    ++ "## 类型检查 / 精化（TC_）\n\n"
-    ++ renderTable tcs
-    ++ "\n"
-    ++ "## 代码生成（CG_）\n\n"
-    ++ renderTable cgs
-    ++ "\n"
-    ++ "## 词法（LX_）\n\n"
-    ++ renderTable lxs
-    ++ "\n"
-    ++ "## 语法（PS_）\n\n"
-    ++ renderTable pss
-    ++ "\n"
-    ++ "## 模块加载（LD_）\n\n"
-    ++ renderTable lds
-    ++ "\n"
-    ++ "## Lint 规则（LN_）\n\n"
-    ++ renderLintTable lns
-    ++ "\n"
-    ++ "## 修复规则（FX_）\n\n"
-    ++ renderLintTable fxs
-    ++ "\n"
+  in """# vuna 错误码
+
+由 `vuna gen-errors` 从枚举真源（`Vuna.Compiler.Diagnostics` 的 `tcAll`/`cgAll`、
+`Vuna.Compiler.Frontend.Diagnostics` 的 `lexAll`/`psAll`、`Vuna.Compiler.Loader.Diagnostics` 的 `ldAll`、
+`Vuna.Lint.Diagnostics` 的 `lintAll`）生成；**勿手改**（生成物，不纳入 git）。
+
+约定：运行诊断输出 `[CODE] 消息`；符号语义稳定、只增不删；
+域前缀 TC_/CG_/LX_/PS_/LD_/LN_/FX_。
+模板中 `<0>`/`<1>` 是插值占位符，arity 由枚举构造子的类型索引在编译期锁定。
+
+## 类型检查 / 精化（TC_）
+
+${renderTable tcs}
+## 代码生成（CG_）
+
+${renderTable cgs}
+## 词法（LX_）
+
+${renderTable lxs}
+## 语法（PS_）
+
+${renderTable pss}
+## 模块加载（LD_）
+
+${renderTable lds}
+## Lint 规则（LN_）
+
+${renderLintTable lns}
+## 修复规则（FX_）
+
+${renderLintTable fxs}
+"""
 
 isDomain : String -> Entry -> Bool
 isDomain dom e = startsWith dom e.entryCode
 
 renderTable : List Entry -> String
 renderTable [] = "（无）\n"
-renderTable entries =
-  "| code | 消息 | 说明 |\n| --- | --- | --- |\n" ++ join "\n" (map renderRow entries) ++ "\n"
+renderTable entries = """| code | 消息 | 说明 |
+| --- | --- | --- |
+${join "\n" (map renderRow entries)}
+"""
 
 renderRow : Entry -> String
-renderRow e = "| " ++ e.entryCode ++ " | `" ++ escapeMsg e.entryMsg ++ "` | " ++ e.entryDesc ++ " |"
+renderRow e = "| ${e.entryCode} | `${escapeMsg e.entryMsg}` | ${e.entryDesc} |"
 
 renderLintTable : List Entry -> String
 renderLintTable [] = "（无）\n"
-renderLintTable entries =
-  "| code | 规则 | 说明 | 自动修复 |\n| --- | --- | --- | --- |\n"
-    ++ join "\n" (map renderLintRow entries)
-    ++ "\n"
+renderLintTable entries = """| code | 规则 | 说明 | 自动修复 |
+| --- | --- | --- | --- |
+${join "\n" (map renderLintRow entries)}
+"""
 
 renderLintRow : Entry -> String
-renderLintRow e =
-  "| "
-    ++ e.entryCode
-    ++ " | `"
-    ++ e.entryRule
-    ++ "` | "
-    ++ e.entryDesc
-    ++ " | "
-    ++ fixCell e
-    ++ " |"
+renderLintRow e = "| ${e.entryCode} | `${e.entryRule}` | ${e.entryDesc} | ${fixCell e} |"
 
 fixCell : Entry -> String
 fixCell e = if entryFixable e then "是" else "否"
@@ -162,5 +157,4 @@ fixEntries entries = map fxOf (filter entryFixable (filter (isDomain "LN_") entr
 
 fxOf : Entry -> Entry
 fxOf e =
-  Entry ("FX_" ++ join "" (split "-" e.entryRule)) e.entryMsg e.entryEdit e.entryRule e.entryEdit
-    True
+  Entry "FX_${join "" (split "-" e.entryRule)}" e.entryMsg e.entryEdit e.entryRule e.entryEdit True

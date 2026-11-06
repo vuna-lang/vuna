@@ -1,0 +1,137 @@
+module Vuna.Json.Frame
+  ( allDigits
+  , contentLengthOf
+  , digitsToInt
+  , frameChunkSize
+  , maxFrameBytes
+  , readChunk
+  , renderFrame
+  , renderFrameBody
+  , sendFrame
+  , splitHeaderBlock
+  ) where
+
+-- Vuna.Json.Frame：stdio server 的字节级帧层（工具链；**永不进 seed 闭包**）。
+--
+-- 帧格式（LSP 与 REPL server 共用）：`Content-Length: <body 字节数>\r\n\r\n<body>`；
+-- body 后面**没有**尾随换行，长度是 **UTF-8 字节数**（vuna 的 String 底层是 OCaml string，
+-- `strLength` 即字节数）。读取层是字节级的（`prim_readBytes`）：**不能按行读**——body
+-- 不带换行，客户端在拿到响应前也不会写下一帧，行级读会让「客户端等响应、服务器等换行」
+-- 互等死锁（LSP 的 `initialize` 就卡在这里，见 test/corpus/lsp/smoke.sh 用例 18）。
+--
+-- 本模块只做「切帧 / 发帧」的机械层，不碰请求语义、不决定错误策略；
+-- 连接循环与退出策略在 `Vuna.Json.Server`（`serveConnection`）。
+--
+-- 上界：单帧与缓冲都限制在 `maxFrameBytes` 内（坏客户端不能把内存撑爆；
+-- 正常源文件帧远小于此）。`splitHeaderBlock` 同时容忍 `\r\n\r\n` 与裸 `\n\n`。
+import Vuna.Compiler.Common
+import Vuna.Json
+import Base.IO
+
+-- 每次 readChunk 的字节数（帧 body 可能跨多块；缓冲里拼够 Content-Length 再切帧）。
+frameChunkSize : Int
+frameChunkSize = 65536
+
+-- 单帧 / 缓冲上界（16 MiB）。
+maxFrameBytes : Int
+maxFrameBytes = 16777216
+
+-- 从 stdin 读最多 n 字节（`prim_readBytes` 的动作值；由 `serveConnection` 执行）。
+--
+-- 语义：有数据就立即返回已到达的字节（**可能少于 n**），EOF 返回 ""。
+-- 调用方（`Vuna.Json.Server.serveConnection`）负责拼接缓冲并重试切帧。
+readChunk : Int -> IO String
+readChunk n = prim_readBytes n
+
+-- 把一帧编码成字节串（纯函数；sendFrame 与 socket 传输共用）。
+renderFrame : Json -> String
+renderFrame payload = renderFrameBody (renderJson payload)
+
+-- 同上，但 body 已经是编码好的 JSON 文本（`vuna repl --client` 直接透传 stdin 的 body）。
+renderFrameBody : String -> String
+renderFrameBody body = "Content-Length: ${strLength body}\r\n\r\n${body}"
+
+-- 发送一帧到 stdout（LSP / stdio server）。
+sendFrame : Json -> Int
+sendFrame payload = runIO (prim_print (renderFrame payload))
+
+-- 数字 / ASCII 小写工具（`Content-Length` 解析用；`allDigits` / `digitsToInt`
+-- 由 `Vuna.Lsp.Protocol` 重导出，保持既有调用点）。
+isDigitCode : Int -> Bool
+isDigitCode c = c >= 48 && c <= 57
+
+allDigitCodes : List Int -> Bool
+allDigitCodes [] = True
+allDigitCodes (c :: rest) = isDigitCode c && allDigitCodes rest
+
+allDigits : String -> Bool
+allDigits s = s /= "" && allDigitCodes (strUnpack s)
+
+parseIntFull : String -> Maybe Int
+parseIntFull s = if allDigits s then Just (digitsToInt (strUnpack s) 0) else Nothing
+
+digitsToInt : List Int -> Int -> Int
+digitsToInt [] acc = acc
+digitsToInt (c :: rest) acc = digitsToInt rest (acc * 10 + (c - 48))
+
+asciiLower : String -> String
+asciiLower s = strPack (map lowerCode (strUnpack s))
+
+lowerCode : Int -> Int
+lowerCode c = if c >= 65 && c <= 90 then c + 32 else c
+
+-- 找子串 needle 从 start 起的字节偏移；找不到返回 -1。
+findFrom : String -> Int -> String -> Int
+findFrom needle start hay = findFromGo needle hay (range start (strLength hay))
+
+-- 计数器循环改为对候选起点列表的结构递归（range 用倒计数实现）。
+findFromGo : String -> String -> List Int -> Int
+findFromGo needle hay [] = 0 - 1
+findFromGo needle hay (k :: rest) =
+  if k + strLength needle > strLength hay then 0 - 1
+  else if substring (natFromInt k) (byteLength needle) hay == needle then k
+  else findFromGo needle hay rest
+
+crlfCrlf : String
+crlfCrlf = strPack [13, 10, 13, 10]
+
+lfLf : String
+lfLf = strPack [10, 10]
+
+cutHeaders : Int -> String -> Int -> Pair String String
+cutHeaders at buf gap =
+  Pair (substring 0 (natFromInt at) buf)
+    (substring (natFromInt (at + gap)) (natFromInt (strLength buf - at - gap)) buf)
+
+-- 切出 header 块（到第一个 `\r\n\r\n` 或 `\n\n`），返回 (header 块, 之后的缓冲)。
+-- 同时容忍规范要求的 CRLF 与部分客户端用的裸 LF（`\n\n`），取**最靠前**的结束符。
+-- 不能「先找 CRLF，找不到再退回 LF」：混合流里前一个 LF 帧的 body 会把后一个 CRLF
+-- 结束符圈进同一个 header 块，于是按错误的 Content-Length 切 body。
+-- Nothing = 缓冲里还没有完整 header（需要再读一块）。
+splitHeaderBlock : String -> Maybe (Pair String String)
+splitHeaderBlock buf = chooseHeaderHit (findFrom crlfCrlf 0 buf) (findFrom lfLf 0 buf) buf
+
+chooseHeaderHit : Int -> Int -> String -> Maybe (Pair String String)
+chooseHeaderHit crlfHit lfHit buf =
+  if lfHit >= 0 && (crlfHit < 0 || lfHit < crlfHit) then Just (cutHeaders lfHit buf 2)
+  else if crlfHit >= 0 then Just (cutHeaders crlfHit buf 4) else Nothing
+
+-- `Content-Length: 123`（大小写不敏感，容忍前后空白与行尾 \r）。
+parseContentLength : String -> Maybe Int
+parseContentLength line =
+  let
+    trimmed = trim line
+  in if startsWith "content-length:" (asciiLower trimmed) then parseIntFull (trim (substring 15 (byteLength trimmed - 15) trimmed))
+  else Nothing
+
+findLengthLine : List String -> Maybe Int
+findLengthLine [] = Nothing
+findLengthLine (line :: rest) = case parseContentLength line of
+  Just n => Just n
+  Nothing => findLengthLine rest
+
+-- header 块里的 Content-Length（必须 > 0；0 长度或缺失都算 header 无效）。
+contentLengthOf : String -> Maybe Int
+contentLengthOf block = case findLengthLine (split "\n" block) of
+  Nothing => Nothing
+  Just n => if n > 0 then Just n else Nothing

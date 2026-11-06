@@ -1,17 +1,34 @@
 module Vuna.Compiler.Driver.Dt
-  ( dtCheck
-  , dtCheckLibrary
-  , dtCheckLibraryPackageWithDeps
-  , dtCheckLibraryWithProgram
-  , dtCheckPackageWithDeps
+  ( AuxCache
+  , CheckedPackage(..)
+  , dtAuxKey
+  , dtBindingTypes
+  , dtCheck
+  , dtCheckLibraryPackageIncrementalParts
+  , dtCheckLibraryPackageWithIfacesParts
+  , dtCheckLibraryWithProgramParts
+  , dtCheckPackageIncrementalParts
+  , dtCheckPackageWithIfacesParts
   , dtCheckSource
-  , dtCheckWithProgram
+  , dtCheckSourceChecked
+  , dtCheckSourceIncremental
+  , dtCheckSourceWithIfaces
+  , dtCheckWithProgramParts
   , dtEvalExpr
   , dtEvalExprInfo
+  , dtEvalExprInfoWithAuxCache
+  , dtEvalExprInfoWithIfaces
+  , dtEvalExprWithAuxCache
+  , dtEvalExprWithIfaces
   , dtEvalFile
   , dtGoalsSource
+  , dtGoalsSourceTolerant
+  , dtInferDefTypes
   , dtMainKind
-  , dtSplitProject
+  , dtPrepareTermAux
+  , dtSplitProjectIncremental
+  , dtSplitProjectParts
+  , dtSplitProjectWithIfaces
   ) where
 
 -- Vuna.Compiler.Driver.Dt：DT 路径的 facade（供 Compile / CompilerCli / Interp 使用）。
@@ -33,12 +50,31 @@ import Vuna.Compiler.Packages.Pkg
 import Vuna.Compiler.Loader
 import Vuna.Compiler.Core
 import Vuna.Compiler.Elab
+import Vuna.Compiler.Elab.Derive
+import Vuna.Compiler.Elab.Meta
+import Vuna.Compiler.Elab.Records
+import Vuna.Compiler.Elab.Termination.Measure
 import Vuna.Compiler.Elab.Types
 import Vuna.Compiler.Elab.Prelude
 import Vuna.Compiler.Intrinsics
 import Vuna.Compiler.Codegen
+import Vuna.Compiler.Codegen.Decl
 import Vuna.Compiler.Driver.Cache
+import Vuna.Compiler.Driver.Iface
+import Vuna.Compiler.Driver.PerfCache
+import Base.IO
 import Vuna.Compiler.Driver.Split
+
+-- M34.5 模块级接口（S1）：一次成功 check 的**完整输入面**。接口摘要要按模块归属切
+-- `DtProgram`，所以 check 的出口需要保留加载/解析后的模块表与入口声明（此前只返回
+-- `DtProgram`，归属信息在中途被丢掉）。Loader 顺序是依赖者在前的反序。
+record CheckedPackage where
+  checkedProgram : DtProgram
+  checkedModules : List Module
+  checkedEntryDecls : List Decl
+  -- 摘要路径下由依赖包摘要注入、因而不属于本包的 artifact 名字（写本包接口时跳过覆盖检查）。
+  -- 全量路径为空（依赖模块的 decls 都在，归属可从声明推导）。
+  checkedInherited : List String
 
 -- 项目声明的拼接顺序：Loader 的 modules 列表是「依赖在前」的**反序**（依赖者先
 -- 出现，被依赖者靠后），DT 精化要求定义先于使用，因此先 reverse modules 再逐模块
@@ -59,18 +95,12 @@ dtLoad ctx entry =
   )
   )
 
--- 库包：以 [export].modules 为入口集合（没有 app/Main.vuna）。
-dtLoadModules : PackageContext -> List String -> Result (List Decl)
-dtLoadModules ctx names =
-  let
-    _ = stamp "load-start"
-  in andThen (loadProjectModules ctx names) (\project => let
-    _ = stamp "load-modules-done"
-  in andThen (resolveProject project) (\parts => let
-    _ = stamp "resolve-done"
-  in Ok (dtProjectDecls parts)
-  )
-  )
+-- M34.5 接口摘要（S1）：加载 + resolve 并保留模块归属（入口 / 库包两条入口）。
+dtLoadPartsForCheck : PackageContext -> String -> Result (Pair (List Decl) (List Module))
+dtLoadPartsForCheck ctx entry = andThen (loadProject ctx entry) resolveProject
+
+dtLoadModulesParts : PackageContext -> List String -> Result (Pair (List Decl) (List Module))
+dtLoadModulesParts ctx names = andThen (loadProjectModules ctx names) resolveProject
 
 -- 声明序列的 check 尾部（入口与库包同一条精化路径）。
 dtCheckDecls : Result (List Decl) -> Result (List String)
@@ -85,28 +115,28 @@ in Ok []
 )
 )
 
--- M34.5：与 dtCheck 同一条精化路径，但把 DtProgram 一并返回（检查缓存写 ElabSummary 用）。
-dtCheckWithProgram : PackageContext -> String -> Result (Pair (List String) DtProgram)
-dtCheckWithProgram ctx entry = dtCheckDeclsWithProgram (dtLoad ctx entry)
+-- M34.5：与 dtCheck 同一条精化路径，但把 DtProgram / 模块表 / 入口声明一并返回
+-- （检查缓存写接口摘要用）。
+dtCheckWithProgramParts : PackageContext -> String -> Result (Pair (List String) CheckedPackage)
+dtCheckWithProgramParts ctx entry = dtCheckPartsWithProgram (dtLoadPartsForCheck ctx entry)
 
-dtCheckLibraryWithProgram : PackageContext -> List String -> Result (Pair (List String) DtProgram)
-dtCheckLibraryWithProgram ctx names = dtCheckDeclsWithProgram (dtLoadModules ctx names)
+dtCheckLibraryWithProgramParts : PackageContext -> List String -> Result (Pair (List String) CheckedPackage)
+dtCheckLibraryWithProgramParts ctx names = dtCheckPartsWithProgram (dtLoadModulesParts ctx names)
 
-dtCheckDeclsWithProgram : Result (List Decl) -> Result (Pair (List String) DtProgram)
-dtCheckDeclsWithProgram loaded = andThen loaded (\decls => andThen (elabProgramFull decls) (\program => let
+dtCheckPartsWithProgram : Result (Pair (List Decl) (List Module)) -> Result (Pair (List String) CheckedPackage)
+dtCheckPartsWithProgram loaded = andThen loaded (\parts => let
+  decls = dtProjectDecls parts
+in andThen (elabProgramFull decls) (\program => let
   _ = stamp "elab-done"
 in andThen (checkDtProgram (Pair (dtProgDatas program) (dtProgDefs program))) (\_ => let
   _ = stamp "codegen-check-done"
-in Ok (Pair [] program)
+in Ok (Pair [] (CheckedPackage program (secondOf parts) (firstOf parts) []))
 )
 )
 )
 
 dtCheck : PackageContext -> String -> Result (List String)
 dtCheck ctx entry = dtCheckDecls (dtLoad ctx entry)
-
-dtCheckLibrary : PackageContext -> List String -> Result (List String)
-dtCheckLibrary ctx names = dtCheckDecls (dtLoadModules ctx names)
 
 -- 核心求值器：精化后用 NbE + delta 求 main 的值并 show（与 codegen 结果对照）。
 dtEvalFile : PackageContext -> String -> Result String
@@ -121,20 +151,23 @@ dtEvalFile ctx entry =
 -- 表达式的名字解析**必须**经过 Loader（`import Base.List` 后写 `length xs` 得到的是
 -- `Base.List.length`）：因此把表达式拼成一条合成定义 `vuna_repl_expr = <expr>` 一起
 -- 加载，取回解析/限定后的体，再把这条合成定义从声明表里摘掉、交给 DT 精化。
+-- 全量加载 REPL program + 合成表达式定义，并取出 (DtProgram, Expr)。
+-- 接口路径不可用/闭包不完整时的回退目标（与 dtEvalExpr* 共用，避免两套加载语义）。
+replProgramFull : PackageContext -> String -> String -> Result (Pair DtProgram Expr)
+replProgramFull ctx program exprSource =
+  andThen (loadProjectSource ctx "<repl>" "${program}\n${replExprName} = ${exprSource}\n")
+    (\project => andThen (resolveProject project) (\parts => andThen (splitReplExpr (dtProjectDecls parts)) (\p => andThen (elabProgramFull (firstOf p)) (\prog => Ok (Pair prog (secondOf p))))))
+
 dtEvalExpr : PackageContext -> String -> String -> Result String
 dtEvalExpr ctx program exprSource =
-  andThen
-    (loadProjectSource ctx "<repl>" (program ++ "\n" ++ replExprName ++ " = " ++ exprSource ++ "\n"))
-    (\project => andThen (resolveProject project) (\parts => andThen (splitReplExpr (dtProjectDecls parts)) (\p => andThen (elabProgramFull (firstOf p)) (\prog => dtEvalExprIn prog (secondOf p)))))
+  andThen (replProgramFull ctx program exprSource) (\p => dtEvalExprIn (firstOf p) (secondOf p))
 
 -- M30 · REPL：表达式求值 + 类型文本。REPL 用类型判断是否为 `IO a`（决定是否走
 -- compile+run）；类型文本经 `showTerm` 渲染 zonk 后的类型，可直接写回合成签名的
 -- `main : <type>`。
 dtEvalExprInfo : PackageContext -> String -> String -> Result (Pair String String)
 dtEvalExprInfo ctx program exprSource =
-  andThen
-    (loadProjectSource ctx "<repl>" (program ++ "\n" ++ replExprName ++ " = " ++ exprSource ++ "\n"))
-    (\project => andThen (resolveProject project) (\parts => andThen (splitReplExpr (dtProjectDecls parts)) (\p => andThen (elabProgramFull (firstOf p)) (\prog => dtEvalExprInInfo prog (secondOf p)))))
+  andThen (replProgramFull ctx program exprSource) (\p => dtEvalExprInInfo (firstOf p) (secondOf p))
 
 -- M30 · LSP：把内存里的源码当入口（无模块头）或库模块（有模块头）加载并精化。
 -- 返回空 warning 列表；错误串仍是带 `<label>:line:col` 的稳定诊断，LSP 自行解析。
@@ -143,11 +176,347 @@ dtCheckSource ctx label source =
   andThen (loadModuleSource ctx label source)
     (\project => andThen (resolveProject project) (\parts => andThen (elabProgramFull (dtProjectDecls parts)) (\_ => Ok [])))
 
+-- M34.5（LSP 消费接口）：依赖包模块从接口预置（零 parse/resolve/elab），只精化当前
+-- 源码文件与同包源码。接口不可用时调用方退回不带 ifaces 的版本。
+-- M34.6 安全阀：同包模块自己的 import 可能带出闭包外的依赖模块（它们会被 Loader 从源码
+-- 加载、却没有 artifact 注入 ⇒ 假 TC_UnknownName）。发现任何依赖模块缺 artifact 就整体
+-- 回退全量路径：宁可慢，不能静默给出错误诊断。
+missingDepModules : String -> List Module -> List String -> List String
+missingDepModules pkg [] _ = []
+missingDepModules pkg (m :: rest) ifaceNames =
+  if modulePackageOf m /= pkg && memName (moduleNameOf m) ifaceNames == False then moduleNameOf m :: missingDepModules pkg rest ifaceNames
+  else missingDepModules pkg rest ifaceNames
+
+dtCheckSourceWithIfaces : PackageContext -> String -> String -> List ModuleIface -> Result (List String)
+dtCheckSourceWithIfaces ctx label source ifaces =
+  let
+    _ = note "iface-source=check modules=${length ifaces}"
+  in andThen (loadModuleSourceWithPreloaded ctx label source (modulesOfIfaces ifaces)) (\project => case filterProjectToImports (contextPackageName ctx) project of
+    Pair filtered mods =>
+      let
+        missing = missingDepModules (contextPackageName ctx) mods (map miNameOf ifaces)
+        _ =
+          if length missing == 0 then 0 else note "iface-fallback=check missing=${join "," missing}"
+      in if length missing == 0 then andThen (resolveProjectKeeping (preloadKeepOf ifaces mods) filtered)
+        (\parts => andThen (dtCheckOursParts ctx parts (shiftedDepPrograms (materializedDeps (contextPackageName ctx) parts ifaces))) (\_ => Ok []))
+      else dtCheckSource ctx label source
+  )
+
+-- M34.5（REPL 消费接口）：REPL 程序（入口声明）在依赖接口之上精化，不再重精化依赖。
+-- M34.6：
+--   ① **同包**源码模块（REPL 所在包里被 program import 的模块）不是依赖接口，必须与入口
+--     声明一起精化，否则表达式引用同包定义会报假 `TC_UnknownName <模块>.<定义>`；
+--   ② 组装结果必须补回依赖接口的 datas / defs（`elabProgramFullWithAux` 只返回本次新精化
+--     的 datas，表达式求值 `dtEvalExprIn` 会从 DtProgram 重建 Ec；缺依赖 datas ⇒ 依赖包
+--     构造子查不到，`[1, 2, 3]` 这类字面量在 REPL 里报 `TC_UnknownName Base.List.Cons`）；
+--   ③ M34.6（5b）：termAux（依赖包 decls）跨表达式不变，record/deriving 预处理可复用。
+replCheckParts : Pair Ec (List (Pair String Term)) -> String -> List CachedProgram -> Pair (List Decl) (List Module) -> Result (Pair DtProgram Expr)
+replCheckParts start pkgName deps parts =
+  andThen (replCheckPartsAux start pkgName deps parts [] Nothing) (\r => Ok (firstOf r))
+
+-- `ifaces` 只用于缓存 key（与 termAux 的模块集合一一对应；为空时不共享缓存）。
+replCheckPartsAux : Pair Ec (List (Pair String Term)) -> String -> List CachedProgram -> Pair (List Decl) (List Module) -> List ModuleIface -> Maybe AuxCache -> Result (Pair (Pair DtProgram Expr) (Maybe AuxCache))
+replCheckPartsAux start pkgName deps parts ifaces cache =
+  let
+    modules = reverse (secondOf parts)
+    depsOnly = filter (\m => modulePackageOf m /= pkgName) modules
+    oursOnly = filter (\m => modulePackageOf m == pkgName) modules
+    termAux = concatMap moduleDeclsOf depsOnly
+    ownDecls = concatMap moduleDeclsOf oursOnly
+    -- 依赖模块由 iface start 注入（termAux 只服务 record/终止性上下文）；
+    -- 同包模块按 dtProjectDecls 的顺序（依赖在前）与入口声明一起精化。
+    sourceDecls = append ownDecls (firstOf parts)
+    key = dtAuxKey pkgName ifaces []
+    cacheable = length ifaces > 0
+    cachedDecls = if cacheable then dtAuxOfCache key cache else Nothing
+    prepared = case cachedDecls of
+      Just c => Ok c.auxCacheDecls
+      Nothing => dtPrepareTermAux termAux
+  in andThen prepared (\preparedAux => andThen (splitReplExpr sourceDecls) (\p => andThen (dtElabFullWithPrepared (firstOf start) (secondOf start) termAux preparedAux (firstOf p)) (\prog => let
+    depDatas = concatMap cachedDatas deps
+    depDefs = concatMap cachedDefs deps
+    depGlobals = concatMap cachedGlobals deps
+    assembled =
+      DtProgram (append depDatas (dtProgDatas prog)) (append depDefs (dtProgDefs prog))
+        (dtProgGoals prog) (dtProgSols prog) (dedupGlobals (append depGlobals (dtProgGlobals prog)))
+        (dtProgInsts prog) (dtProgClasses prog) prog.dtProgNext prog.dtProgDefVals prog.dtProgDepths
+  in Ok
+    (Pair (Pair assembled (secondOf p)) (if cacheable then Just (AuxCache key preparedAux (Pair ecEmpty []) [] []) else Nothing))
+  )
+  )
+  )
+
+replProgramWithIfaces : PackageContext -> String -> String -> List ModuleIface -> Result (Pair DtProgram Expr)
+replProgramWithIfaces ctx program exprSource ifaces =
+  andThen (replProgramWithIfacesAux ctx program exprSource ifaces Nothing) (\r => Ok (firstOf r))
+
+-- M34.6（5b）：会话入口带 termAux 预处理缓存（同一条加载/精化路径，缓存只是省的固定开销）。
+replProgramWithIfacesAux : PackageContext -> String -> String -> List ModuleIface -> Maybe AuxCache -> Result (Pair (Pair DtProgram Expr) (Maybe AuxCache))
+replProgramWithIfacesAux ctx program exprSource ifaces cache =
+  let
+    _ = note "iface-source=repl modules=${length ifaces}"
+    src = "${program}\n${replExprName} = ${exprSource}\n"
+    loaded = loadProjectSourceWithPreloaded ctx "<repl>" src (modulesOfIfaces ifaces)
+  in andThen loaded (\project => case filterProjectToImports (contextPackageName ctx) project of
+    Pair filtered mods =>
+      let
+        missing = missingDepModules (contextPackageName ctx) mods (map miNameOf ifaces)
+        _ =
+          if length missing == 0 then 0 else note "iface-fallback=repl missing=${join "," missing}"
+      in if length missing == 0 then andThen (resolveProjectKeeping (preloadKeepOf ifaces mods) filtered) (\parts => let
+        deps = shiftedDepPrograms (materializedDeps (contextPackageName ctx) parts ifaces)
+      in replCheckPartsAux (depStartOf deps) (contextPackageName ctx) deps parts ifaces cache
+      )
+      else andThen (replProgramFull ctx program exprSource) (\p => Ok (Pair p cache))
+  )
+
+-- REPL 会话入口：复用 termAux 预处理缓存（5b），返回更新后的缓存。
+dtEvalExprInfoWithAuxCache : PackageContext -> String -> String -> List ModuleIface -> Maybe AuxCache -> Result (Pair (Pair String String) (Maybe AuxCache))
+dtEvalExprInfoWithAuxCache ctx program exprSource ifaces cache =
+  andThen (replProgramWithIfacesAux ctx program exprSource ifaces cache)
+    (\p => andThen (dtEvalExprInInfo (firstOf (firstOf p)) (secondOf (firstOf p))) (\info => Ok (Pair info (secondOf p))))
+
+dtEvalExprWithAuxCache : PackageContext -> String -> String -> List ModuleIface -> Maybe AuxCache -> Result (Pair String (Maybe AuxCache))
+dtEvalExprWithAuxCache ctx program exprSource ifaces cache =
+  andThen (replProgramWithIfacesAux ctx program exprSource ifaces cache)
+    (\p => andThen (dtEvalExprIn (firstOf (firstOf p)) (secondOf (firstOf p))) (\out => Ok (Pair out (secondOf p))))
+
+dtEvalExprInfoWithIfaces : PackageContext -> String -> String -> List ModuleIface -> Result (Pair String String)
+dtEvalExprInfoWithIfaces ctx program exprSource ifaces =
+  andThen (replProgramWithIfaces ctx program exprSource ifaces)
+    (\p => dtEvalExprInInfo (firstOf p) (secondOf p))
+
+dtEvalExprWithIfaces : PackageContext -> String -> String -> List ModuleIface -> Result String
+dtEvalExprWithIfaces ctx program exprSource ifaces =
+  andThen (replProgramWithIfaces ctx program exprSource ifaces)
+    (\p => dtEvalExprIn (firstOf p) (secondOf p))
+
+-- ---------------------------------------------------------------
+-- REPL v2：自动签名与缓冲绑定类型
+--
+-- `dtInferDefTypes` 为缺签名的顶层 DFun 推断可回读的类型签名：
+--   1. 解析 defSource 得到每个 target 的参数元数（多 clause 取首子句）；
+--   2. 用 `newMeta` 为每个 target 造「域元变量 + 结果元变量」的匿名 Pi telescope，
+--      作为 `elabProgramFullWith` 的起始 globals；
+--   3. 复用整程序精化路径检查定义体（模式 / trait / 终止性规则与普通定义一致）；
+--   4. 类型里残余的未解元变量是定义边界上的自由类型变量，泛化成隐式 `{tN : Type}`
+--      （按最大应用元数给 `Type -> … -> Type`），再用 `showTypeSig` 渲染。
+-- 推断结果由 REPL 写回源码后**再检查一遍**；失败回滚，不污染会话。
+-- 走全量加载路径（不复用依赖接口缓存）：自动签名只在定义时发生一次，正确性优先。
+record GenMeta where
+  genMetaId : Int
+  genMetaName : String
+  genMetaKind : Term
+
+dtInferDefTypes : PackageContext -> String -> List String -> String -> Result (List (Pair String String))
+dtInferDefTypes ctx program targets defSource = if length targets == 0 then Ok []
+else case parseSource "<repl>" defSource of
+  Err e => Err e
+  Ok (SourceFile hdr _ _ defDecls) => case hdr of
+    Just _ => Err "自动签名不支持模块文件"
+    Nothing => case aritiesOf targets defDecls of
+      Err e => Err e
+      Ok arities =>
+        let
+          Pair entries ecStart = allocTelescopes emptyCtx ecEmpty arities
+          startGlobals = append entries preludeGlobals
+        in andThen (loadReplDecls ctx (program ++ "\n" ++ defSource ++ "\n")) (\allDecls => andThen (elabProgramFullWith ecStart startGlobals allDecls) (\prog => let
+          taken = topNames allDecls
+          Pair ecOut _ = ecOfProgram prog
+        in inferEachType targets prog ecOut taken
+        )
+        )
+
+-- target 名 → 参数元数（找不到 DFun 就报错：自动签名只处理函数/值定义）。
+aritiesOf : List String -> List Decl -> Result (List (Pair String Int))
+aritiesOf [] decls = Ok []
+aritiesOf (t :: rest) decls = case findArity t decls of
+  Nothing => Err ("自动签名: 找不到定义 " ++ t ++ "（需要 DFun）")
+  Just n => andThen (aritiesOf rest decls) (\more => Ok (Pair t n :: more))
+
+findArity : String -> List Decl -> Maybe Int
+findArity name [] = Nothing
+findArity name (d :: rest) = case d of
+  DFun n pats _ _ => if n == name then Just (listLen pats) else findArity name rest
+  _ => findArity name rest
+
+-- 每个 target 一条 `?d1 -> ... -> ?dn -> ?r`（域匿名 binder，结果元变量）。
+allocTelescopes : Ctx -> Ec -> List (Pair String Int) -> Pair (List (Pair String Term)) Ec
+allocTelescopes ctx ec [] = Pair [] ec
+allocTelescopes ctx ec ((Pair name arity) :: rest) =
+  let
+    Pair doms ec1 = allocMetas ctx ec (range 0 arity)
+    Pair results ec2 = allocMetas ctx ec1 (range 0 1)
+  in case results of
+    [r] =>
+      let
+        Pair more ec3 = allocTelescopes ctx ec2 rest
+      in Pair (Pair name (buildPi doms r) :: more) ec3
+    _ => Pair [] ec2
+
+allocMetas : Ctx -> Ec -> List Int -> Pair (List Term) Ec
+allocMetas ctx ec [] = Pair [] ec
+allocMetas ctx ec (_ :: rest) =
+  let
+    Pair meta ec1 = newMeta ctx ec
+    Pair metas ec2 = allocMetas ctx ec1 rest
+  in Pair (meta :: metas) ec2
+
+buildPi : List Term -> Term -> Term
+buildPi [] result = result
+buildPi (dom :: rest) result = TPi "_" False RigOmega dom (buildPi rest result)
+
+inferEachType : List String -> DtProgram -> Ec -> List String -> Result (List (Pair String String))
+inferEachType [] prog ec taken = Ok []
+inferEachType (t :: rest) prog ec taken = case findDtDef t (dtProgDefs prog) of
+  Nothing => Err ("自动签名: 精化结果里找不到定义 " ++ t)
+  Just def =>
+    andThen (generalizeSignature (zonkTerm ec 0 (dtDefType def)) taken)
+      (\sigText => andThen (inferEachType rest prog ec taken) (\more => Ok (Pair t sigText :: more)))
+
+findDtDef : String -> List DtDef -> Maybe DtDef
+findDtDef name [] = Nothing
+findDtDef name (d :: rest) = if dtDefName d == name then Just d else findDtDef name rest
+
+-- 全量读取内存 program 的声明（Loader flatten → 入口+模块声明）。
+loadReplDecls : PackageContext -> String -> Result (List Decl)
+loadReplDecls ctx source =
+  andThen (loadProjectSource ctx "<repl>" source)
+    (\project => andThen (resolveProject project) (\parts => Ok (dtProjectDecls parts)))
+
+-- `:defs` / `:info`：program 里每个定义的 zonk 后类型文本。
+dtBindingTypes : PackageContext -> String -> Result (List (Pair String String))
+dtBindingTypes ctx program = andThen (loadReplDecls ctx program) (\decls => andThen (elabProgramFull decls) (\prog => let
+  Pair ec _ = ecOfProgram prog
+in Ok (map (\d => Pair (dtDefName d) (showTypeSig (zonkTerm ec 0 (dtDefType d)))) (dtProgDefs prog))
+)
+)
+
+-- 残余未解元变量 → 隐式类型参数；元变量按类型项中出现顺序（去重）编号。
+generalizeSignature : Term -> List String -> Result String
+generalizeSignature ty taken =
+  let
+    metas = dedupInts (metaIdsOf ty)
+  in if length metas == 0 then Ok (showTypeSig ty)
+  else if length metas > 8 then Err "自动推断出的类型参数超过 8 个，请先写类型签名"
+  else
+    let
+      entries = buildGenMetas metas taken 0 ty
+      total = listLen entries
+      body = substGenMetas ty entries 0 total
+      sigText = showTypeSig (wrapGenMetas entries body)
+    in if contains "?" sigText then Err "自动推断的签名仍含未解元变量，请先写类型签名"
+    else Ok sigText
+
+buildGenMetas : List Int -> List String -> Int -> Term -> List GenMeta
+buildGenMetas [] taken i ty = []
+buildGenMetas (m :: rest) taken i ty =
+  let
+    name = freshMetaName ("t" ++ strFromInt i) taken
+    kind = kindOfArity (maxMetaArity m ty)
+  in GenMeta m name kind :: buildGenMetas rest (name :: taken) (i + 1) ty
+
+freshMetaName : String -> List String -> String
+freshMetaName base taken = pickFreshName base taken (0 :: range 1 64)
+
+pickFreshName : String -> List String -> List Int -> String
+pickFreshName base taken [] = base
+pickFreshName base taken (n :: rest) =
+  let
+    cand = if n == 0 then base else base ++ "_" ++ strFromInt n
+  in if memName cand taken then pickFreshName base taken rest else cand
+
+-- 第 i 个泛化元变量在 n 个新 binder 中从外到内排：出现点局部深度 d 处的引用索引
+-- 应为 d + (n - 1 - i)，即 `substMetaVar m name (i + 1 - n)`（q 可为负）。
+substGenMetas : Term -> List GenMeta -> Int -> Int -> Term
+substGenMetas ty [] i total = ty
+substGenMetas ty (g :: rest) i total =
+  substGenMetas (substMetaVar g.genMetaId g.genMetaName (i + 1 - total) ty) rest (i + 1) total
+
+wrapGenMetas : List GenMeta -> Term -> Term
+wrapGenMetas [] t = t
+wrapGenMetas (g :: rest) t = TPi g.genMetaName True RigOmega g.genMetaKind (wrapGenMetas rest t)
+
+kindOfArity : Int -> Term
+kindOfArity k = kindArrows (range 0 k)
+
+kindArrows : List Int -> Term
+kindArrows [] = TType levelZero
+kindArrows (_ :: rest) = TPi "_" False RigOmega (TType levelZero) (kindArrows rest)
+
+-- 类型项里的未解元变量（zonk 已替换已解者，剩下的都是未解）。
+metaIdsOf : Term -> List Int
+metaIdsOf (TMeta m) = [m]
+metaIdsOf (TPi _ _ _ dom cod) = append (metaIdsOf dom) (metaIdsOf cod)
+metaIdsOf (TLam _ _ body) = metaIdsOf body
+metaIdsOf (TApp f a _) = append (metaIdsOf f) (metaIdsOf a)
+metaIdsOf (TCon _ args) = metaIdsOfArgs args
+metaIdsOf (TCase scrut alts) = append (metaIdsOf scrut) (concatMap metaIdsOfAlt alts)
+metaIdsOf (TIf c th el) = append (metaIdsOf c) (append (metaIdsOf th) (metaIdsOf el))
+metaIdsOf _ = []
+
+metaIdsOfArgs : List (Pair Term Rig) -> List Int
+metaIdsOfArgs [] = []
+metaIdsOfArgs ((Pair a _) :: rest) = append (metaIdsOf a) (metaIdsOfArgs rest)
+
+metaIdsOfAlt : CaseAlt -> List Int
+metaIdsOfAlt (CaseAlt _ _ body) = metaIdsOf body
+
+dedupInts : List Int -> List Int
+dedupInts [] = []
+dedupInts (x :: rest) = if memMetaId x rest then dedupInts rest else x :: dedupInts rest
+
+-- 某个元变量在类型项里被应用的最大元数（决定泛化后的 kind）。
+maxMetaArity : Int -> Term -> Int
+maxMetaArity m t = case t of
+  TApp f a r => imax (applyArity m (TApp f a r)) (imax (maxMetaArity m f) (maxMetaArity m a))
+  TPi _ _ _ dom cod => imax (maxMetaArity m dom) (maxMetaArity m cod)
+  TLam _ _ body => maxMetaArity m body
+  TCon _ args => maxMetaArityArgs m args
+  TCase scrut alts => imax (maxMetaArity m scrut) (maxMetaArityAlts m alts)
+  TIf c th el => imax (maxMetaArity m c) (imax (maxMetaArity m th) (maxMetaArity m el))
+  _ => 0
+
+maxMetaArityArgs : Int -> List (Pair Term Rig) -> Int
+maxMetaArityArgs m [] = 0
+maxMetaArityArgs m ((Pair a _) :: rest) = imax (maxMetaArity m a) (maxMetaArityArgs m rest)
+
+maxMetaArityAlts : Int -> List CaseAlt -> Int
+maxMetaArityAlts m [] = 0
+maxMetaArityAlts m (alt :: rest) = imax (maxMetaArity m (caseAltBody alt)) (maxMetaArityAlts m rest)
+
+applyArity : Int -> Term -> Int
+applyArity m t = if headIsMeta m t then spineLen t else 0
+
+headIsMeta : Int -> Term -> Bool
+headIsMeta m t = case t of
+  TApp f _ _ => headIsMeta m f
+  TMeta n => m == n
+  _ => False
+
+spineLen : Term -> Int
+spineLen t = case t of
+  TApp f _ _ => 1 + spineLen f
+  _ => 0
+
+imax : Int -> Int -> Int
+imax a b = if a >= b then a else b
+
+listLen : List a -> Int
+listLen [] = 0
+listLen (_ :: rest) = 1 + listLen rest
+
 -- M30 · LSP hover：内存源码的洞目标（与 `vuna goal` 同源）。
 dtGoalsSource : PackageContext -> String -> String -> Result (List DtGoalInfo)
 dtGoalsSource ctx label source =
   andThen (loadModuleSource ctx label source)
     (\project => andThen (resolveProject project) (\parts => goalsOfProgram (dtProjectDecls parts)))
+
+-- M40 · 容错版：未解洞也会让严格收尾失败，但 hover 仍要显示目标与上下文（M40 起改用这个）。
+dtGoalsSourceTolerant : PackageContext -> String -> String -> Result (List DtGoalInfo)
+dtGoalsSourceTolerant ctx label source =
+  andThen (loadModuleSource ctx label source)
+    (\project => andThen (resolveProject project) (\parts => goalsOfProgramTolerant (dtProjectDecls parts)))
 
 -- M30 · `vuna test`：main 的返回类别，决定执行路径。
 --   "IO"     —— 效果程序，走 compile + 运行（退出码判定）；
@@ -232,36 +601,23 @@ defTableOf (d :: rest) = case dtDefBody d of
 -- M26：唯一 codegen 入口 = 逐模块 split（`compile` / `build` / seed rotation 共用）。
 -- 与单文件路径共用同一次精化，生成器把 datas/defs 按声明归属切到各模块文件；
 -- 模块列表按依赖序（Loader 的 modules 是依赖者在前的反序，这里 reverse）。
--- M38：把模块根目录与包目录交给生成器，用于 dt_def_locs 的 span 路径归一。
-dtSplitProject : PackageContext -> String -> Bool -> Result (List SplitFile)
-dtSplitProject ctx entry printResult = andThen (loadProject ctx entry) (\project => andThen (resolveProject project) (\parts => let
-  entryDecls = firstOf parts
-  modules = reverse (secondOf parts)
-  allDecls = append (concatMap moduleDeclsOf modules) entryDecls
-in andThen (elabProgramFull allDecls)
-  (\program => generateDtSplitProgram (map (\m => Pair (moduleNameOf m) (moduleDeclsOf m)) modules) entryDecls program printResult (map rootDir (contextRoots ctx)) (contextDir ctx))
-)
-)
-
 -- M34.5 接口摘要：加载 + resolve 项目并保留模块归属（本包 decls 过滤用）。
 dtLoadParts : PackageContext -> String -> Result (Pair (List Decl) (List Module))
-dtLoadParts ctx entry = andThen (loadProject ctx entry) (\project => resolveProject project)
+dtLoadParts ctx entry = dtLoadPartsForCheck ctx entry
 
--- 只精化本包模块：依赖包的 CachedProgram（闭合接口摘要）重建起始 Ec / globals，
--- 跳过依赖包 body。摘要可用性校验在调用方（`cachedProgramValid`）：任一依赖摘要缺失或
--- 不闭合 ⇒ 回退全量路径。
-dtCheckPackageWithDeps : PackageContext -> String -> List CachedProgram -> Result (Pair (List String) DtProgram)
-dtCheckPackageWithDeps ctx entry deps =
-  andThen (dtLoadParts ctx entry) (\parts => dtCheckOurs ctx parts deps)
+-- 只精化本包 decls（依赖 artifact 从接口合并）；调用方保证接口已校验。
+-- 依赖摘要携带的全部 artifact 名字：摘要路径下这些名字由依赖包提供，不属于本包接口，
+-- 写本包 iface 时不能要求「归属可推导 / 出现在本包模块里」。
+cachedNamesOf : List CachedProgram -> List String
+cachedNamesOf progs = concatMap cachedNamesOne progs
 
--- 库包版本：入口是 [export].modules（没有 app/Main.vuna）。
-dtCheckLibraryPackageWithDeps : PackageContext -> List String -> List CachedProgram -> Result (Pair (List String) DtProgram)
-dtCheckLibraryPackageWithDeps ctx names deps =
-  andThen (loadProjectModules ctx names)
-    (\project => andThen (resolveProject project) (\parts => dtCheckOurs ctx parts deps))
+cachedNamesOne : CachedProgram -> List String
+cachedNamesOne cp =
+  append (map dtDataName (cachedDatas cp))
+    (append (concatMap (\d => map dtCtorName (dtDataCtors d)) (cachedDatas cp)) (append (map dtDefName (cachedDefs cp)) (append (map firstOf (cachedGlobals cp)) (append (map dtInstName (cachedInsts cp)) (map dtClassName (cachedClasses cp))))))
 
-dtCheckOurs : PackageContext -> Pair (List Decl) (List Module) -> List CachedProgram -> Result (Pair (List String) DtProgram)
-dtCheckOurs ctx parts deps =
+dtCheckOursParts : PackageContext -> Pair (List Decl) (List Module) -> List CachedProgram -> Result (Pair (List String) CheckedPackage)
+dtCheckOursParts ctx parts deps =
   let
     pkgName = contextPackageName ctx
     modules = reverse (secondOf parts)
@@ -275,7 +631,8 @@ dtCheckOurs ctx parts deps =
     -- codegen 的 check（擦除/名字/构造子护栏）需要依赖包的 datas（构造子与标签信息）；
     -- 只生成本包 defs（依赖包 body 不重精化、不重新生成）。
     allDatas = append (concatMap cachedDatas deps) (dtProgDatas prog)
-  in andThen (checkDtProgram (Pair allDatas (dtProgDefs prog))) (\_ => Ok (Pair [] prog))
+  in andThen (checkDtProgram (Pair allDatas (dtProgDefs prog)))
+    (\_ => Ok (Pair [] (CheckedPackage prog (secondOf parts) (firstOf parts) (cachedNamesOf deps))))
   )
 
 -- 依赖接口 → 精化起始状态。
@@ -283,8 +640,8 @@ dtCheckOurs ctx parts deps =
 -- global）一旦进 deftbl，`force` 的 delta 展开就会把 primitive 类型归约成 `Type`
 -- （`Eq String` 的类参数变成 `Type`，所有实例头同归约 ⇒ 假歧义，C37 的
 -- `TC_AmbiguousInstance (Eq Type)` 即此）。
-depStartOf : List CachedProgram -> Pair Ec (List (Pair String Term))
-depStartOf progs =
+depStartOfAt : Int -> List CachedProgram -> Pair Ec (List (Pair String Term))
+depStartOfAt next progs =
   let
     datas = dedupDatas (concatMap cachedDatas progs)
     dataKeys =
@@ -298,10 +655,35 @@ depStartOf progs =
     ec1 = addDatasEc ec0 datas
     ec2 = addInstsEc ec1 (dedupInsts (concatMap cachedInsts progs))
     ec3 = addClassesEc ec2 (dedupClasses (concatMap cachedClasses progs))
-    ec4 = ecPutNext ec3 0
+    ec4 = ecPutNext ec3 next
     ec5 = ecPutGlobalsTbl ec4 (Base.HashMap.fromList globals)
     ec6 = ecPutDefTbl ec5 (Base.HashMap.fromList bodies)
   in Pair ec6 globals
+
+depStartOf : List CachedProgram -> Pair Ec (List (Pair String Term))
+depStartOf progs = depStartOfAt 0 progs
+
+-- M34.5（S4）：干净模块的残 meta 不重编号（保持接口哈希稳定），新精化从它们之上编号。
+maxMetaList : Int -> List Int -> Int
+maxMetaList m [] = m
+maxMetaList m (x :: rest) = maxMetaList (if x > m then x else m) rest
+
+maxMetaDef : Int -> DtDef -> Int
+maxMetaDef m d = case dtDefBody d of
+  Just body => maxMetaList m (termMetasAll body)
+  Nothing => m
+
+maxMetaCached : Int -> CachedProgram -> Int
+maxMetaCached m cp = foldl maxMetaDef m (cachedDefs cp)
+
+maxMetaCps : List CachedProgram -> Int
+maxMetaCps cps = foldl maxMetaCached (0 - 1) cps
+
+cleanStartNext : List CachedProgram -> Int
+cleanStartNext cps =
+  let
+    m = maxMetaCps cps
+  in if m < 0 then 0 else m + 1
 
 -- 定义体表（delta 展开的唯一来源）：只取有体的 `DtDef`（axiom / extern 跳过）；
 -- 依赖包之间的共享声明按名字去重（后出现者胜，与 datas/insts/classes 一致）。
@@ -339,3 +721,470 @@ dedupGlobals : List (Pair String Term) -> List (Pair String Term)
 dedupGlobals [] = []
 dedupGlobals (g :: rest) =
   if memName (firstOf g) (map firstOf rest) then dedupGlobals rest else g :: dedupGlobals rest
+
+-- ---------------------------------------------------------------
+-- M34.5（S2）：依赖接口加载（TTC 的 module 复用）
+-- ---------------------------------------------------------------
+-- 依赖模块来自接口文件：`Module` 用接口里存的已解析 decls 构造，Loader 直接命中、不读
+-- 源码；起始 Ec 由模块摘要合并（`depStartOf`）。模块表顺序 = reverse(topo)，与 `loadAll`
+-- 的「新加载者前插」约定一致，这样 `dtProjectDecls` 的 reverse 之后仍是依赖在前。
+-- 依赖模块摘要合并：每个模块分配独立元变量段（`(idx+1) << 30`）。摘要允许保留**擦除
+-- 位置**的未解 meta（精化器不要求有解），而根包精化从 0 开始编号；不分配段会让依赖 meta
+-- 与根包 meta 编号相撞（同号被当成同一个元变量）。段宽远大于单模块元变量数。
+shiftedDepPrograms : List ModuleIface -> List CachedProgram
+shiftedDepPrograms ifaces = shiftedDepProgramsGo 0 ifaces
+
+shiftedDepProgramsGo : Int -> List ModuleIface -> List CachedProgram
+shiftedDepProgramsGo _ [] = []
+shiftedDepProgramsGo idx (m :: rest) =
+  shiftCachedProgram ((idx + 1) * summaryMetaSegment) (miCachedOf m)
+    :: shiftedDepProgramsGo (idx + 1) rest
+
+modulesOfIfaces : List ModuleIface -> List Module
+modulesOfIfaces ifaces = reverse (map moduleOfIface ifaces)
+
+-- ---------------------------------------------------------------
+-- M34.5（S4）：包内逐模块增量的加载/精化
+--
+-- 干净模块以「预置模块」进入 Loader（零 parse/resolve），闭合产物并入起始 Ec；只精化
+-- 脏模块 + 入口声明；然后按同样顺序把干净产物合并回 DtProgram（codegen / 接口写仍看
+-- 整包）。干净模块判定在 Compile（依赖源哈希 + miDepHashes 链，保守传播）。
+-- ---------------------------------------------------------------
+dtLoadPartsIncremental : PackageContext -> String -> List ModuleIface -> List ModuleIface -> Result (Pair (List Decl) (List Module))
+dtLoadPartsIncremental ctx entry depIfaces cleanIfaces =
+  let
+    preloaded = append (modulesOfIfaces depIfaces) (reverse (map moduleOfIface cleanIfaces))
+    allIfaces = append depIfaces cleanIfaces
+  in andThen (loadProjectWithPreloaded ctx entry preloaded) (\project => case filterProjectToImports (contextPackageName ctx) project of
+    Pair filtered mods => resolveProjectKeeping (preloadKeepOf allIfaces mods) filtered
+  )
+
+-- M34.6（5b）：termAux 的 record 降级 / deriving 展开结果可跨请求复用。
+--
+-- `elabProgramFullWithAux` 每次都会对 termAux（依赖包 + 干净同包模块的**原始 decls**）
+-- 重跑 `prepareDecls` + `expandDerivings`：工具链连续请求里 termAux 常常完全不变（只有
+-- 当前模块在变），这一步在根包 / REPL 重场景里是固定开销。这里把预处理结果做成显式的
+-- 可复用参数（语义与 `elabProgramFullWithAux` 逐项相同：startEc/startGlobals 不变，
+-- termAux 原始 decls 仍传给 `prepareDeclsWith`，prepared 版本只服务 record 头解消与
+-- 终止性 SCT 上下文）。
+dtPrepareTermAux : List Decl -> Result (List Decl)
+dtPrepareTermAux aux = andThen (prepareDecls aux) expandDerivings
+
+-- 终止性 SCT 的 termAux 裁剪（5b 的关键）：依赖包 / 干净模块的终止性已在写它们自己的
+-- 接口时验过，本路径只报告当前模块函数的失败。import 图无环 ⇒ 调用图无跨模块环 ⇒
+-- 「含本模块函数的 SCC」只含本模块声明；因此 aux 的函数体对当前 SCC 的 size-change
+-- 判定没有贡献，SCT 只需要 aux 的**构造子**（data / record 头）与**投影**（单子句选择子）。
+-- 裁掉其余 aux 函数后 call-graph / 正事实不动点从 O(整包函数) 降到 O(投影)，判据等价。
+dtAuxForTermination : List Decl -> List Decl
+dtAuxForTermination [] = []
+dtAuxForTermination (d :: rest) = case d of
+  DFun n pats body sp => case projectionOfDef (Pair n [Pair pats body]) of
+    Just _ => d :: dtAuxForTermination rest
+    Nothing => dtAuxForTermination rest
+  _ => d :: dtAuxForTermination rest
+
+dtElabFullWithPrepared : Ec -> List (Pair String Term) -> List Decl -> List Decl -> List Decl -> Result DtProgram
+dtElabFullWithPrepared startEc startGlobals termAux preparedAux decls =
+  andThen (prepareDeclsWith termAux decls)
+    (\ds => andThen (expandDerivings ds) (\ds2 => elabProgramGoWithAux startEc startGlobals (dtAuxForTermination preparedAux) ds2))
+
+-- 工具链增量会话缓存（M34.6 5a/5b）：一次请求的**固定开销**按 iface 集合缓存。
+--   - decls：termAux（依赖包 + 干净同包模块 decls）的 record / deriving 预处理结果；
+--   - start：依赖 / 干净模块产物构造的起始 Ec + globals（`depStartOfAt` + shift 很贵）；
+--   - depCps / cleanCps：shift 后的闭合产物（组装与收窄范围检查复用）。
+-- key = 包名 + 参与模块名 + 接口哈希；iface 集合一变即失配（保守但正确）。
+record AuxCache where
+  auxCacheKey : String
+  auxCacheDecls : List Decl
+  auxCacheStart : Pair Ec (List (Pair String Term))
+  auxCacheDepCps : List CachedProgram
+  auxCacheCleanCps : List CachedProgram
+
+auxKeyOne : ModuleIface -> String
+auxKeyOne m = "${miNameOf m}:${miIfaceHashOf m}"
+
+dtAuxKey : String -> List ModuleIface -> List ModuleIface -> String
+dtAuxKey pkg deps clean =
+  strFromInt
+    (hashTextStrong "aux|${pkg}|${join ";" (map auxKeyOne deps)}|${join ";" (map auxKeyOne clean)}")
+
+dtAuxOfCache : String -> Maybe AuxCache -> Maybe AuxCache
+dtAuxOfCache key Nothing = Nothing
+dtAuxOfCache key (Just c) = if c.auxCacheKey == key then Just c else Nothing
+
+dtIncrementalChecked : PackageContext -> Pair (List Decl) (List Module) -> List ModuleIface -> List ModuleIface -> Result CheckedPackage
+dtIncrementalChecked ctx parts depIfaces cleanIfaces = andThen (dtIncrementalCheckedCore ctx parts depIfaces cleanIfaces Nothing True) (\r => case firstOf r of
+  Just checked => Ok checked
+  Nothing => Err "DT: internal: incremental check produced no package"
+)
+
+-- 增量精化核心：`needPackage` = 是否需要组装整包 DtProgram（写接口 / codegen 用）。
+-- 工具链诊断只要「当前文件能不能过检查」，此时跳过整包组装与全量 codegen 检查
+-- （依赖 / 干净模块的产物在写各自接口时已经验过），只对本次新精化的 datas/defs 跑同一条
+-- 检查链 —— 诊断语义与全量路径一致（错误都落在本次精化的文件上）。
+dtIncrementalCheckedCore : PackageContext -> Pair (List Decl) (List Module) -> List ModuleIface -> List ModuleIface -> Maybe AuxCache -> Bool -> Result (Pair (Maybe CheckedPackage) (Maybe AuxCache))
+dtIncrementalCheckedCore ctx parts depIfaces cleanIfaces cache needPackage =
+  let
+    pkgName = contextPackageName ctx
+    modules = reverse (secondOf parts)
+    ours = filter (\m => modulePackageOf m == pkgName) modules
+    depsOnly = filter (\m => modulePackageOf m /= pkgName) modules
+    cleanNames = moduleNamesOf cleanIfaces
+    dirtyOurs = filter (\m => memName (moduleNameOf m) cleanNames == False) ours
+    decls = append (concatMap moduleDeclsOf dirtyOurs) (firstOf parts)
+    termAux = append (concatMap moduleDeclsOf depsOnly) (concatMap miDeclsOf cleanIfaces)
+    key = dtAuxKey pkgName depIfaces cleanIfaces
+    cacheable = length depIfaces + length cleanIfaces > 0
+    hit = if cacheable then dtAuxOfCache key cache else Nothing
+    depCps = case hit of
+      Just c => c.auxCacheDepCps
+      Nothing => shiftedDepPrograms depIfaces
+    cleanCps = case hit of
+      Just c => c.auxCacheCleanCps
+      Nothing => map miCachedOf cleanIfaces
+    start = case hit of
+      Just c => c.auxCacheStart
+      Nothing => depStartOfAt (cleanStartNext cleanCps) (append depCps cleanCps)
+    prepared = case hit of
+      Just c => Ok c.auxCacheDecls
+      Nothing => dtPrepareTermAux termAux
+    startGlobals = secondOf start
+    startEc = firstOf start
+  in andThen prepared (\preparedAux => let
+    next = if cacheable then Just (AuxCache key preparedAux start depCps cleanCps) else Nothing
+  in andThen (dtElabFullWithPrepared startEc startGlobals termAux preparedAux decls)
+    (\prog => if needPackage then dtFinishPackage depCps cleanCps prog parts next else dtFinishScoped depCps cleanCps prog next)
+  )
+
+-- 需要整包产物（写接口 / build）：组装 DtProgram + 整包 codegen 检查（与旧行为一致）。
+dtFinishPackage : List CachedProgram -> List CachedProgram -> DtProgram -> Pair (List Decl) (List Module) -> Maybe AuxCache -> Result (Pair (Maybe CheckedPackage) (Maybe AuxCache))
+dtFinishPackage depCps cleanCps prog parts next =
+  let
+    assembled =
+      DtProgram
+        (append (concatMap cachedDatas depCps) (append (concatMap cachedDatas cleanCps) (dtProgDatas prog)))
+        (append (concatMap cachedDefs depCps) (append (concatMap cachedDefs cleanCps) (dtProgDefs prog)))
+        (dtProgGoals prog) (dtProgSols prog)
+        (dedupGlobals (append (concatMap cachedGlobals cleanCps) (dtProgGlobals prog)))
+        (dtProgInsts prog) (dtProgClasses prog) prog.dtProgNext prog.dtProgDefVals prog.dtProgDepths
+    checked = CheckedPackage assembled (secondOf parts) (firstOf parts) (cachedNamesOf depCps)
+  in andThen (checkDtProgram (Pair (dtProgDatas assembled) (dtProgDefs assembled)))
+    (\_ => Ok (Pair (Just checked) next))
+
+-- 工具链诊断：只对本次新精化的 datas/defs 跑检查链（组装省掉），返回无 CheckedPackage。
+dtFinishScoped : List CachedProgram -> List CachedProgram -> DtProgram -> Maybe AuxCache -> Result (Pair (Maybe CheckedPackage) (Maybe AuxCache))
+dtFinishScoped depCps cleanCps prog cache =
+  let
+    allDatas =
+      append (concatMap cachedDatas depCps)
+        (append (concatMap cachedDatas cleanCps) (dtProgDatas prog))
+    newDatas = dtProgDatas prog
+    newDefs = dtProgDefs prog
+  in andThen (dtCheckScoped allDatas newDatas newDefs) (\_ => Ok (Pair Nothing cache))
+
+-- `checkDtProgram` 的收窄版：`allDatas` 是渲染/构造子表的完整视图（依赖 + 干净 + 本次），
+-- `unitDatas` 只生成本次精化模块的类型声明；检查链（名字护栏 / 擦除 / SCC / 生成）只跑
+-- `defs`。每个 def 的检查只看自身项与全部数据族，因此对本文件的诊断语义与整包检查一致。
+dtCheckScoped : List DtData -> List DtData -> List DtDef -> Result Int
+dtCheckScoped allDatas unitDatas defs =
+  let
+    program = Pair allDatas defs
+  in andThen (prepareDtProgram program) (\p => case p of
+    Pair runtime groups =>
+      andThen
+        (genUnitParts (usedTableOf (runtimeDatas allDatas)) noQual (runtimeDatas allDatas) (runtimeDatas unitDatas) groups)
+        (\_ => Ok 0)
+  )
+
+-- M34.6（5a）：单文件（LSP buffer / REPL 所在模块）的增量精化。
+--   1. 依赖包模块与**干净的同包模块**以「预置模块」进 Loader（零 parse/resolve）；
+--   2. 由它们的 iface 产物构造起始 Ec（依赖包按段 shift 元变量、干净模块保持编号），
+--      只精化当前模块（+ 安全阀兜底：闭包外依赖缺 artifact 就返回 Nothing 让调用方全量）；
+--   3. termAux 预处理 / 起始 Ec / 已 shift 产物都可经 `cache` 复用（5b）；`needPackage` =
+--      调用方是否需要整包 CheckedPackage（只做诊断时跳过整包组装 + 整包 codegen 检查）。
+-- 返回 `Nothing` 表示「本路径不适用」（调用方回退全量，诊断必须仍正确）。
+dtCheckSourceIncremental : PackageContext -> String -> String -> List ModuleIface -> List ModuleIface -> Maybe AuxCache -> Bool -> Result (Pair Bool (Pair (Maybe CheckedPackage) (Maybe AuxCache)))
+dtCheckSourceIncremental ctx label source depIfaces cleanIfaces cache needPackage =
+  let
+    pkgName = contextPackageName ctx
+    preloaded = append (modulesOfIfaces depIfaces) (reverse (map moduleOfIface cleanIfaces))
+    allIfaces = append depIfaces cleanIfaces
+  in andThen (loadModuleSourceWithPreloaded ctx label source preloaded) (\project => case filterProjectToImports pkgName project of
+    Pair filtered mods =>
+      let
+        missing = missingDepModules pkgName mods (map miNameOf allIfaces)
+        _ =
+          if length missing == 0 then 0
+          else note "iface-fallback=check-incremental missing=${join "," missing}"
+      in if length missing > 0 then Ok (Pair False (Pair Nothing cache))
+      else andThen (resolveProjectKeeping (preloadKeepOf allIfaces mods) filtered)
+        (\parts => andThen (dtIncrementalCheckedCore ctx parts (materializedDeps pkgName parts depIfaces) (materializedOwn pkgName parts cleanIfaces) cache needPackage) (\r => Ok (Pair True r)))
+  )
+
+-- 全量 checked（无 iface / 安全阀回退时用）：与 `dtCheckSource` 同一条加载/精化路径，
+-- 但保留 CheckedPackage（LSP 冷启动写回单模块接口用）。
+dtCheckSourceChecked : PackageContext -> String -> String -> Result (Pair (List String) CheckedPackage)
+dtCheckSourceChecked ctx label source =
+  dtCheckPartsWithProgram (andThen (loadModuleSource ctx label source) resolveProject)
+
+dtCheckPackageIncrementalParts : PackageContext -> String -> List ModuleIface -> List ModuleIface -> Result (Pair (List String) CheckedPackage)
+dtCheckPackageIncrementalParts ctx entry depIfaces cleanIfaces =
+  andThen (dtLoadPartsIncremental ctx entry depIfaces cleanIfaces)
+    (\parts => andThen (dtIncrementalChecked ctx parts (materializedDeps (contextPackageName ctx) parts depIfaces) (materializedOwn (contextPackageName ctx) parts cleanIfaces)) (\checked => Ok (Pair [] checked)))
+
+-- codegen 的 split 层要求模块列表按依赖序（外部依赖在前）。增量路径的 loader 列表是
+-- 「新加载者前插 + 预置模块在尾」，直接 reverse 会把干净模块排在它们依赖的外部模块
+-- 之前；这里显式做一次 DFS 拓扑排序（只依赖 import 名，跨包/同包一视同仁）。
+findModuleNameField : Import -> String
+findModuleNameField i = i.importName
+
+findModuleNamed : List Module -> String -> Maybe Module
+findModuleNamed [] _ = Nothing
+findModuleNamed (m :: rest) name =
+  if moduleNameOf m == name then Just m else findModuleNamed rest name
+
+topoDepsOf : List Module -> Module -> List String
+topoDepsOf mods m = filter (\n => case findModuleNamed mods n of
+  Just _ => True
+  Nothing => False
+) (map findModuleNameField (append m.moduleImportsOf m.moduleImplicitImportsOf))
+
+-- fuel 守卫：模块图是有向无环的，但 SCT 不能从「visited 集合」证明互递归下降。
+topoVisit : Int -> List Module -> String -> List String -> List Module -> Pair (List String) (List Module)
+topoVisit fuel mods name visited acc = if fuel <= 0 then Pair visited acc
+else if memName name visited then Pair visited acc
+else case findModuleNamed mods name of
+  Nothing => Pair (name :: visited) acc
+  Just m =>
+    let
+      step = topoVisitAll (fuel - 1) mods (topoDepsOf mods m) (name :: visited) acc
+    in Pair (firstOf step) (append (secondOf step) [m])
+
+topoVisitAll : Int -> List Module -> List String -> List String -> List Module -> Pair (List String) (List Module)
+topoVisitAll fuel mods [] visited acc = Pair visited acc
+topoVisitAll fuel mods (n :: rest) visited acc =
+  let
+    step = topoVisit fuel mods n visited acc
+  in topoVisitAll fuel mods rest (firstOf step) (secondOf step)
+
+topoModules : List Module -> List Module
+topoModules mods = secondOf (topoVisitAll 8192 mods (map moduleNameOf mods) [] [])
+
+-- M34.5（S5）：codegen 单元级缓存。单元 key = 单元名 + 模块声明内容哈希 + 传递依赖
+-- 单元 key 的哈希链（与 build 系统同思路）：依赖接口变化沿链使依赖者失效，无关模块
+-- 变化不影响。生成命中缓存时直接复用 `SplitFile`，不再重跑该单元 codegen。
+-- M34.6：默认开启（见 `unitCacheEnabled`），桶内 GC 只保留本次 key 集合对应的文件。
+unitDeclsHash : Module -> Int
+unitDeclsHash m = hashTextStrong (prim_marshal (moduleDeclsOf m))
+
+pairKeyValue : Pair String String -> String
+pairKeyValue p = secondOf p
+
+unitImportsOf : Module -> List String
+unitImportsOf m = map findModuleNameField (append m.moduleImportsOf m.moduleImplicitImportsOf)
+
+concatKeys : List String -> String
+concatKeys [] = ""
+concatKeys (k :: rest) = "${k};${concatKeys rest}"
+
+unitImportKey : List (Pair String String) -> String -> String
+unitImportKey acc n = case lookupPair n acc of
+  Just k => k
+  Nothing => "?"
+
+unitKeyOne : List (Pair String String) -> Module -> String
+unitKeyOne acc m =
+  let
+    deps = map (unitImportKey acc) (unitImportsOf m)
+  in strFromInt (hashTextStrong "u|${moduleNameOf m}|${unitDeclsHash m}|${concatKeys deps}")
+
+unitKeysGo : List Module -> List (Pair String String) -> List (Pair String String)
+unitKeysGo [] acc = reverse acc
+unitKeysGo (m :: rest) acc = unitKeysGo rest (Pair (moduleNameOf m) (unitKeyOne acc m) :: acc)
+
+unitKeysOf : List Module -> List Decl -> Bool -> List (Pair String String)
+unitKeysOf modules entryDecls printResult =
+  let
+    modKeys = unitKeysGo modules []
+    entryHash = hashTextStrong (prim_marshal entryDecls)
+    entryKey =
+      strFromInt
+        (hashTextStrong "e|${entryHash}|${if printResult then "print" else "noprint"}|${concatKeys (map pairKeyValue modKeys)}")
+  in Pair "__entry__" entryKey :: modKeys
+
+unitCacheLookup : String -> List (Pair String String) -> String -> Maybe SplitFile
+unitCacheLookup dir keys name = case lookupPair name keys of
+  Just k => case unitCacheRead dir name k of
+    Just sf =>
+      let
+        _ = note "unit-cache-hit ${name}"
+      in Just sf
+    Nothing => Nothing
+  Nothing => Nothing
+
+unitCacheStore : String -> List (Pair String String) -> String -> SplitFile -> Int
+unitCacheStore dir keys name sf = case lookupPair name keys of
+  Just k => unitCacheWrite dir name k sf
+  Nothing => 0
+
+-- M34.6：**默认开启**（`VUNA_UNIT_CACHE=0` opt-out）。同机 A/B（预热后改入口再
+-- `build --no-compile .`，workspace 双入口大包，7 轮中位数）：单元缓存 4045ms vs 关闭
+-- 4430ms（-8.7%，≥ 默认开启门槛 5%）；单包 root 场景同法 -10%。缓存语义安全：单元 key
+-- 含模块声明 Marshal 哈希（span 里的源路径也在内）+ 传递依赖单元 key + printResult，
+-- 文件头 tag 含 schema/版本/编译器二进制指纹；坏文件由 framing 拒绝重算。
+unitCacheEnabled : Bool
+unitCacheEnabled = runIO (prim_getenv "VUNA_UNIT_CACHE") /= "0"
+
+splitGenerateCached : PackageContext -> String -> List Module -> List (Pair String (List Decl)) -> List Decl -> DtProgram -> Bool -> Result (List SplitFile)
+splitGenerateCached ctx entry modules moduleParts entryDecls prog printResult =
+  let
+    pkg = contextPackageName ctx
+    keys = unitKeysOf modules entryDecls printResult
+    base = unitCacheDir pkg
+    bucketKey = "${pkg}|${entry}"
+    dir = unitCacheEntryDir base bucketKey
+    -- 桶内 GC 的保留集合 = 本次构建全部单元 key 算出的文件名（入口也在 keys 里）：即将
+    -- 命中的单元一定在集合内，同一入口反复编辑累积的旧 key 文件才被清掉。
+    keepNames = map (\p => unitCacheFileName (firstOf p) (secondOf p)) keys
+    _ = if unitCacheEnabled && pkg /= "" then unitCacheGc base dir else 0
+    _ = if unitCacheEnabled && pkg /= "" then unitCacheBucketGc dir keepNames else 0
+    roots = map rootDir (contextRoots ctx)
+    cdir = contextDir ctx
+  in if pkg == "" || not unitCacheEnabled then generateDtSplitProgram moduleParts entryDecls prog printResult roots cdir
+  else generateDtSplitProgramWith (unitCacheLookup dir keys) (unitCacheStore dir keys) moduleParts
+    entryDecls prog printResult roots cdir
+
+dtGenerateIncremental : PackageContext -> String -> Pair (List Decl) (List Module) -> CheckedPackage -> Bool -> Result (Pair (List SplitFile) CheckedPackage)
+dtGenerateIncremental ctx entry parts checked printResult =
+  let
+    modules = topoModules (secondOf parts)
+    moduleParts = map (\m => Pair (moduleNameOf m) (moduleDeclsOf m)) modules
+  in andThen
+    (splitGenerateCached ctx entry modules moduleParts (firstOf parts) checked.checkedProgram printResult)
+    (\files => Ok (Pair files checked))
+
+dtSplitProjectIncremental : PackageContext -> String -> Bool -> List ModuleIface -> List ModuleIface -> Result (Pair (List SplitFile) CheckedPackage)
+dtSplitProjectIncremental ctx entry printResult depIfaces cleanIfaces =
+  andThen (dtLoadPartsIncremental ctx entry depIfaces cleanIfaces)
+    (\parts => andThen (dtIncrementalChecked ctx parts (materializedDeps (contextPackageName ctx) parts depIfaces) (materializedOwn (contextPackageName ctx) parts cleanIfaces)) (\checked => dtGenerateIncremental ctx entry parts checked printResult))
+
+moduleOfIface : ModuleIface -> Module
+moduleOfIface mi =
+  Module (miNameOf mi) (miPackageOf mi) (miImportsOf mi) (miImplicitImportsOf mi) (miDeclsOf mi)
+    (miExportsOf mi) (miCapabilitiesOf mi) (miFixitiesOf mi)
+
+-- ---------------------------------------------------------------
+-- M34.5（S6）：依赖可见性收敛。全量路径只加载 entry/本包模块的 **import 闭包**；
+-- 接口路径一次性预置整包模块，因此这里在 load 之后按闭包过滤模块表（entry imports +
+-- 传递 import），让摘要路径与全量路径看到同一组模块/实例/类，消除过近似差异。
+-- ---------------------------------------------------------------
+importsOfModuleNames : Module -> List String
+importsOfModuleNames m =
+  map findModuleNameField (append m.moduleImportsOf m.moduleImplicitImportsOf)
+
+closureGo : Int -> List Module -> List String -> List String -> List String
+closureGo fuel mods visited [] = visited
+closureGo fuel mods visited (n :: rest) = if fuel <= 0 then visited
+else if memName n visited then closureGo fuel mods visited rest
+else case findModuleNamed mods n of
+  Nothing => closureGo (fuel - 1) mods (n :: visited) rest
+  Just m => closureGo (fuel - 1) mods (n :: visited) (append rest (importsOfModuleNames m))
+
+filterProjectToImports : String -> Project -> Pair Project (List Module)
+filterProjectToImports pkg (Project ds imports implicit mods epkg caps fixes) =
+  let
+    entryStarts = map findModuleNameField (append imports implicit)
+    ownNames = map moduleNameOf (filter (\m => modulePackageOf m == pkg) mods)
+    starts = append entryStarts ownNames
+    closed = closureGo 8192 mods [] starts
+    kept = filter (\m => memName (moduleNameOf m) closed) mods
+  in Pair (Project ds imports implicit kept epkg caps fixes) kept
+
+preloadKeepOf : List ModuleIface -> List Module -> List String
+preloadKeepOf ifaces mods =
+  map miNameOf (filter (\mi => memName (miNameOf mi) (map moduleNameOf mods)) ifaces)
+
+materializedDeps : String -> Pair (List Decl) (List Module) -> List ModuleIface -> List ModuleIface
+materializedDeps pkg parts ifaces =
+  let
+    depNames = map moduleNameOf (filter (\m => modulePackageOf m /= pkg) (secondOf parts))
+  in filter (\mi => memName (miNameOf mi) depNames) ifaces
+
+materializedOwn : String -> Pair (List Decl) (List Module) -> List ModuleIface -> List ModuleIface
+materializedOwn pkg parts ifaces =
+  let
+    ourNames = map moduleNameOf (filter (\m => modulePackageOf m == pkg) (secondOf parts))
+  in filter (\mi => memName (miNameOf mi) ourNames) ifaces
+
+dtLoadPartsWithIfaces : PackageContext -> String -> List ModuleIface -> Result (Pair (List Decl) (List Module))
+dtLoadPartsWithIfaces ctx entry ifaces = andThen (loadProjectWithPreloaded ctx entry (modulesOfIfaces ifaces)) (\project => case filterProjectToImports (contextPackageName ctx) project of
+  Pair filtered mods => resolveProjectKeeping (preloadKeepOf ifaces mods) filtered
+)
+
+dtLoadModulesPartsWithIfaces : PackageContext -> List String -> List ModuleIface -> Result (Pair (List Decl) (List Module))
+dtLoadModulesPartsWithIfaces ctx names ifaces = andThen (loadProjectModulesWithPreloaded ctx names (modulesOfIfaces ifaces)) (\project => case filterProjectToImports (contextPackageName ctx) project of
+  Pair filtered mods => resolveProjectKeeping (preloadKeepOf ifaces mods) filtered
+)
+
+dtCheckPackageWithIfacesParts : PackageContext -> String -> List ModuleIface -> Result (Pair (List String) CheckedPackage)
+dtCheckPackageWithIfacesParts ctx entry ifaces =
+  andThen (dtLoadPartsWithIfaces ctx entry ifaces)
+    (\parts => dtCheckOursParts ctx parts (shiftedDepPrograms (materializedDeps (contextPackageName ctx) parts ifaces)))
+
+dtLoadModulesPartsIncremental : PackageContext -> List String -> List ModuleIface -> List ModuleIface -> Result (Pair (List Decl) (List Module))
+dtLoadModulesPartsIncremental ctx names depIfaces cleanIfaces =
+  let
+    preloaded = append (modulesOfIfaces depIfaces) (reverse (map moduleOfIface cleanIfaces))
+    allIfaces = append depIfaces cleanIfaces
+  in andThen (loadProjectModulesWithPreloaded ctx names preloaded) (\project => case filterProjectToImports (contextPackageName ctx) project of
+    Pair filtered mods => resolveProjectKeeping (preloadKeepOf allIfaces mods) filtered
+  )
+
+dtCheckLibraryPackageIncrementalParts : PackageContext -> List String -> List ModuleIface -> List ModuleIface -> Result (Pair (List String) CheckedPackage)
+dtCheckLibraryPackageIncrementalParts ctx names depIfaces cleanIfaces =
+  andThen (dtLoadModulesPartsIncremental ctx names depIfaces cleanIfaces)
+    (\parts => andThen (dtIncrementalChecked ctx parts (materializedDeps (contextPackageName ctx) parts depIfaces) (materializedOwn (contextPackageName ctx) parts cleanIfaces)) (\checked => Ok (Pair [] checked)))
+
+dtCheckLibraryPackageWithIfacesParts : PackageContext -> List String -> List ModuleIface -> Result (Pair (List String) CheckedPackage)
+dtCheckLibraryPackageWithIfacesParts ctx names ifaces =
+  andThen (dtLoadModulesPartsWithIfaces ctx names ifaces)
+    (\parts => dtCheckOursParts ctx parts (shiftedDepPrograms (materializedDeps (contextPackageName ctx) parts ifaces)))
+
+-- 只精化本包声明、从接口合并依赖产物，再走同一条逐模块 split；返回 codegen 文件 +
+-- CheckedPackage（构建路径也写接口摘要）。
+dtSplitProjectWithIfaces : PackageContext -> String -> Bool -> List ModuleIface -> Result (Pair (List SplitFile) CheckedPackage)
+dtSplitProjectWithIfaces ctx entry printResult ifaces =
+  andThen (dtLoadPartsWithIfaces ctx entry ifaces)
+    (\parts => dtSplitPartsOurs ctx entry parts (shiftedDepPrograms (materializedDeps (contextPackageName ctx) parts ifaces)) printResult)
+
+dtSplitPartsOurs : PackageContext -> String -> Pair (List Decl) (List Module) -> List CachedProgram -> Bool -> Result (Pair (List SplitFile) CheckedPackage)
+dtSplitPartsOurs ctx entry parts deps printResult =
+  let
+    pkgName = contextPackageName ctx
+    modules = reverse (secondOf parts)
+    ours = filter (\m => modulePackageOf m == pkgName) modules
+    depsOnly = filter (\m => modulePackageOf m /= pkgName) modules
+    allDecls = append (concatMap moduleDeclsOf ours) (firstOf parts)
+    termAux = concatMap moduleDeclsOf depsOnly
+    start = depStartOf deps
+  in andThen (elabProgramFullWithAux (firstOf start) (secondOf start) termAux allDecls) (\prog => let
+    assembled =
+      DtProgram (append (concatMap cachedDatas deps) (dtProgDatas prog))
+        (append (concatMap cachedDefs deps) (dtProgDefs prog)) (dtProgGoals prog) (dtProgSols prog)
+        (dtProgGlobals prog) (dtProgInsts prog) (dtProgClasses prog) prog.dtProgNext
+        prog.dtProgDefVals prog.dtProgDepths
+    moduleParts = map (\m => Pair (moduleNameOf m) (moduleDeclsOf m)) modules
+    checked = CheckedPackage prog (secondOf parts) (firstOf parts) (cachedNamesOf deps)
+  in andThen (splitGenerateCached ctx entry modules moduleParts (firstOf parts) assembled printResult)
+    (\files => Ok (Pair files checked))
+  )
+
+-- 全量路径的 parts 版本（构建缓存未命中且依赖接口不可用）：同一份 CheckedPackage 供
+-- 接口影子写使用，避免 build 后还要再 check 一次才写接口。
+dtSplitProjectParts : PackageContext -> String -> Bool -> Result (Pair (List SplitFile) CheckedPackage)
+dtSplitProjectParts ctx entry printResult = andThen (dtLoadParts ctx entry) (\parts => let
+  modules = reverse (secondOf parts)
+  allDecls = append (concatMap moduleDeclsOf modules) (firstOf parts)
+in andThen (elabProgramFull allDecls)
+  (\prog => andThen (splitGenerateCached ctx entry modules (map (\m => Pair (moduleNameOf m) (moduleDeclsOf m)) modules) (firstOf parts) prog printResult) (\files => Ok (Pair files (CheckedPackage prog (secondOf parts) (firstOf parts) []))))
+)

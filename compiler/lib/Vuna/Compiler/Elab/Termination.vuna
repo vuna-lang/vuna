@@ -314,11 +314,9 @@ strClause comp ctors projs p caller facts clause =
 -- 终止性失败的描述（<0>）：两种措辞（单函数 / 递归组）统一到 arity 1 的
 -- `CannotProveTermination`，描述里保留原来的区分信息。
 groupMessage : List String -> String
-groupMessage ([f]) = f ++ " (recursive call does not structurally decrease)"
+groupMessage ([f]) = "${f} (recursive call does not structurally decrease)"
 groupMessage comp =
-  "recursive group {"
-    ++ joinComma comp
-    ++ "} (mutual recursion: no parameter position decreases on every recursive call)"
+  "recursive group {${joinComma comp}} (mutual recursion: no parameter position decreases on every recursive call)"
 
 cannotProveMsg : List String -> String
 cannotProveMsg comp =
@@ -384,7 +382,8 @@ computePosFactsWork : List String -> HashMap (List (Pair (List Pat) Expr)) -> Ha
 computePosFactsWork names defTbl rgT fuel facts work = if fuel <= 0 then facts
 else
   let
-    scan = posScanNames names defTbl (posTblOf facts) work (Pair [] [])
+    namesTbl = Base.HashMap.ofNames names
+    scan = posScanNames namesTbl defTbl (posTblOf facts) work (Pair [] [])
     fresh = posFilterTbl (firstOf scan) (posTblOf (secondOf scan))
     newFacts = posFilterTbl fresh (posTblOf facts)
     merged = posUnionTbl facts fresh

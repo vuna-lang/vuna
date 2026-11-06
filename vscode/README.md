@@ -111,7 +111,13 @@ Nix store 拷出的脚本 + `vscode/` 工作树运行都适用；接 Nix 时把 
   references / completion / workspace symbol），扩展只转发服务器在 `initialize` 里声明的能力。
   某个能力没落地时表现为「命令存在但没有输出」，不是扩展错误。
 - hover 的 `range` 落在光标下的 token；definition / references / completion 依赖
-  `.local/index/`（首次查询可能触发全量重建，仓库级秒级）。
+  `.local/index/`（首次查询可能触发全量重建，仓库级秒级）。M40 起 hover / definition 还覆盖
+  **模块名**（`import` / 导出项 `module B` / 模块头 / 限定名前缀；带模块 docstring，跳目标文件
+  的 `module` 头）与**局部绑定**（参数 / λ / `let` / `where` / `case` / `do` / 模式；语法级类型与
+  值，跳缓冲内 binder）——这两步是 parse 级、不建索引。洞（`_` / `?name`）的 hover 在洞未解时
+  也会显示目标类型与可见绑定上下文。
+- 局部绑定没有推断类型（只显示语法可得类型：`where`/`let` 签名、函数参数按签名箭头链）；
+  Pi / 类型级 binder 不解析；`references` 不识别局部名。
 - vscode-languageclient v9 把文件监听移到了 `synchronize.fileEvents`；服务器会接受客户端的
   能力注册（回 `null`）但不消费 `workspace/didChangeWatchedFiles`，打开/编辑/保存的文档
   同步走 `textDocument/didOpen|didChange`，不受影响。

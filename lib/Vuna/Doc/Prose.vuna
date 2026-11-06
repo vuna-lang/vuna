@@ -37,7 +37,7 @@ renderFenceParts links [] isCode = []
 renderFenceParts links (part :: rest) isCode = if isCode then
   let
     code = stripLanguageTag part
-    html = "<pre><code>" ++ htmlEscape code ++ "</code></pre>"
+    html = "<pre><code>${htmlEscape code}</code></pre>"
   in html :: renderFenceParts links rest False
 else append (renderParagraphs links part) (renderFenceParts links rest True)
 
@@ -53,8 +53,7 @@ isLanguageTag s = not (contains " " s) && strLength s <= 16
 
 renderParagraphs : List (Pair String String) -> String -> List String
 renderParagraphs links text =
-  map (\para => "<p>" ++ join "<br>" (map (renderInline links) para) ++ "</p>")
-    (paragraphs (lines text))
+  map (\para => "<p>${join "<br>" (map (renderInline links) para)}</p>") (paragraphs (lines text))
 
 paragraphs : List String -> List (List String)
 paragraphs [] = []
@@ -82,27 +81,26 @@ renderInlineGo : Int -> List (Pair String String) -> List Int -> String -> Strin
 renderInlineGo fuel links [] acc = acc
 renderInlineGo fuel links (c :: rest) acc = if fuel <= 0 then acc
 else if c == 96 then case takeUntil 96 rest [] of
-  Nothing => renderInlineGo (fuel - 1) links rest (acc ++ "&#96;")
+  Nothing => renderInlineGo (fuel - 1) links rest "${acc}&#96;"
   Just (Pair code rest2) =>
-    renderInlineGo (fuel - 1) links rest2
-      (acc ++ "<code>" ++ htmlEscape (strPack code) ++ "</code>")
+    renderInlineGo (fuel - 1) links rest2 "${acc}<code>${htmlEscape (strPack code)}</code>"
 else if c == 91 then case takeUntil 93 rest [] of
-  Nothing => renderInlineGo (fuel - 1) links rest (acc ++ "&#91;")
+  Nothing => renderInlineGo (fuel - 1) links rest "${acc}&#91;"
   Just (Pair label rest2) => case rest2 of
     40 :: rest3 => case takeUntil 41 rest3 [] of
-      Nothing => renderInlineGo (fuel - 1) links rest (acc ++ "&#91;")
+      Nothing => renderInlineGo (fuel - 1) links rest "${acc}&#91;"
       Just (Pair url rest4) =>
         let
           labelText = strPack label
           urlText = strPack url
         in if safeUrl urlText then renderInlineGo (fuel - 1) links rest4
-          (acc ++ "<a href=\"" ++ htmlEscape urlText ++ "\">" ++ htmlEscape labelText ++ "</a>")
-        else renderInlineGo (fuel - 1) links rest (acc ++ "&#91;")
+          "${acc}<a href=\"${htmlEscape urlText}\">${htmlEscape labelText}</a>"
+        else renderInlineGo (fuel - 1) links rest "${acc}&#91;"
     _ => case lookupLink links (strPack label) of
-      Nothing => renderInlineGo (fuel - 1) links rest (acc ++ "&#91;")
+      Nothing => renderInlineGo (fuel - 1) links rest "${acc}&#91;"
       Just anchor =>
         renderInlineGo (fuel - 1) links rest2
-          (acc ++ "<a href=\"#" ++ htmlEscape anchor ++ "\">" ++ htmlEscape (strPack label) ++ "</a>")
+          "${acc}<a href=\"#${htmlEscape anchor}\">${htmlEscape (strPack label)}</a>"
 else renderInlineGo (fuel - 1) links rest (acc ++ htmlEscapeChar c)
 
 takeUntil : Int -> List Int -> List Int -> Maybe (Pair (List Int) (List Int))

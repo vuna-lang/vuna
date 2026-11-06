@@ -46,7 +46,7 @@ else case name of
   _ => if skipGenerated name then []
   else
     let
-      path = dir ++ "/" ++ name
+      path = "${dir}/${name}"
     in if pathExistsDir path then collectVunaFilesGo (fuel - 1) path
     else if endsWith ".vuna" name then [path] else []
 
@@ -67,7 +67,7 @@ else case name of
   _ => if skipGenerated name then []
   else
     let
-      path = dir ++ "/" ++ name
+      path = "${dir}/${name}"
     in if pathExistsDir path then collectSourceFilesGo (fuel - 1) path else [path]
 
 -- 安全的目录判定：不存在返回 False，而不是抛异常。

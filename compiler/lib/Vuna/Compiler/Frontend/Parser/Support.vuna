@@ -14,6 +14,7 @@ module Vuna.Compiler.Frontend.Parser.Support
   , expectSym
   , expectValueName
   , fileOf
+  , holeAtomAt
   , isEof
   , isReservedValueName
   , isSyntaxSym
@@ -206,7 +207,23 @@ startsAtom st = case peekTok st of
   PTok (TKw "Type") p => True
   PTok (TSym "(") p => True
   PTok (TSym "[") p => True
+  PTok (TSym "?") p => case holeAtomAt st of
+    Just _ => True
+    Nothing => False
   _ => False
+
+-- M40：命名洞 `?name` 的原子：`?` 与紧随的标识符**同行且列号相邻**（`?h`）。
+-- 空格分隔的 `?` 仍是普通运算符（`a ? b`、`(? b)`），不受影响。
+-- 返回值 = 洞名（带 `?`）+ 覆盖 `?name` 的 span（end 到名字末字节，便于 hover 高亮整个洞）。
+holeAtomAt : PState -> Maybe (Pair String Span)
+holeAtomAt st = case peekTok st of
+  PTok (TSym "?") p => case peekTokAt st 1 of
+    Just (PTok (TIdent n) p2) =>
+      if posLine p2 == posLine p && posCol p2 == posCol p + 1 then Just
+        (Pair ("?" ++ n) (Span (fileOf st) (posLine p) (posCol p) (posLine p2) (posCol p2 + strLength n)))
+      else Nothing
+    _ => Nothing
+  _ => Nothing
 
 startsPatternAtom : PState -> Bool
 startsPatternAtom st = case peekTok st of
@@ -258,9 +275,14 @@ closeParenNext st = case peekTokAt st 1 of
 
 -- M31.3：`(` 之后的下一个 token 若是非保留符号名，则该括号是 section
 -- （`(+)` 或 `(+ e)`），返回该符号名；否则不是 section。
+-- M40：`(?h)` 里 `?` 紧邻标识符 ⇒ 是命名洞而不是 `(? h)` section。
 sectionOpAt : PState -> Maybe String
 sectionOpAt st = case peekTokAt st 1 of
-  Just (PTok (TSym op) p) => if isReservedValueName op then Nothing else Just op
+  Just (PTok (TSym op) p) => if isReservedValueName op then Nothing
+  else if op == "?" then case holeAtomAt (advance st) of
+    Just _ => Nothing
+    Nothing => Just op
+  else Just op
   _ => Nothing
 
 countArrows : Expr -> Int

@@ -62,3 +62,6 @@ examples/**/main
 .output/
 /seed/program
 .local-tmp/
+
+# seed 构建缓存（rotation 生成，不入库）
+/seed/*.stamp

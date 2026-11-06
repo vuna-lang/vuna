@@ -1,0 +1,8 @@
+module VisInst where
+
+import VisData
+import VisTrait
+
+instance Pretty Color where
+  pretty Red = "red"
+  pretty Blue = "blue"

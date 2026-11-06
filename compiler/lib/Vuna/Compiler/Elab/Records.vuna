@@ -1,5 +1,5 @@
 module Vuna.Compiler.Elab.Records
-  ( RecordInfo
+  ( RecordInfo(..)
   , checkProvidedFields
   , desugarRecords
   , duplicateFieldMsg
@@ -68,13 +68,13 @@ hasDuplicateFieldNames ((Pair n e) :: rest) = case lookupProvided n rest of
   Nothing => hasDuplicateFieldNames rest
 
 missingFieldMsg : Span -> String -> String
-missingFieldMsg sp fname = showSpanLoc sp ++ ": missing field " ++ fname
+missingFieldMsg sp fname = "${showSpanLoc sp}: missing field ${fname}"
 
 unknownFieldMsg : Span -> String -> String
-unknownFieldMsg sp fname = showSpanLoc sp ++ ": unknown field " ++ fname
+unknownFieldMsg sp fname = "${showSpanLoc sp}: unknown field ${fname}"
 
 duplicateFieldMsg : Span -> String
-duplicateFieldMsg sp = showSpanLoc sp ++ ": duplicate field"
+duplicateFieldMsg sp = "${showSpanLoc sp}: duplicate field"
 
 hasUnknownFields : List String -> List (Pair String a) -> Bool
 hasUnknownFields fieldNames [] = False
@@ -164,7 +164,7 @@ else case pat of
     andThen (traverse (\x => desugarPatternFuel (fuel - 1) records x) pats)
       (\ps => Ok (PCon name ps sp))
   PRecord name fields sp => case lookupRecord name records of
-    Nothing => Err (showSpanLoc sp ++ ": unknown record: " ++ name)
+    Nothing => Err "${showSpanLoc sp}: unknown record: ${name}"
     Just (RecordInfo rname params fdefs derivings ctor) =>
       if hasDuplicateFieldNames fields then Err (duplicateFieldMsg sp)
       else if hasUnknownFields (fieldNamesOf fdefs) fields then Err (firstUnknownFieldMsg sp (fieldNamesOf fdefs) fields)
@@ -211,12 +211,12 @@ else case e of
     andThen (desugarExprFuel (fuel - 1) records c)
       (\c2 => andThen (desugarExprFuel (fuel - 1) records t) (\t2 => andThen (desugarExprFuel (fuel - 1) records el) (\e2 => Ok (EIf c2 t2 e2 sp))))
   EField base fname sp => andThen (desugarExprFuel (fuel - 1) records base) (\b => case recordsWithField fname records of
-    [] => Err (showSpanLoc sp ++ ": unknown field " ++ fname)
+    [] => Err "${showSpanLoc sp}: unknown field ${fname}"
     [one] => Ok (fieldAccessExpr one fname b sp)
-    _ => Err (showSpanLoc sp ++ ": ambiguous field " ++ fname ++ " (declared by multiple records)")
+    _ => Err "${showSpanLoc sp}: ambiguous field ${fname} (declared by multiple records)"
   )
   ERecord name fields sp => case lookupRecord name records of
-    Nothing => Err (showSpanLoc sp ++ ": unknown record: " ++ name)
+    Nothing => Err "${showSpanLoc sp}: unknown record: ${name}"
     Just (RecordInfo rname params fdefs derivings ctor) =>
       if hasDuplicateFieldNames fields then Err (duplicateFieldMsg sp)
       else if hasUnknownFields (fieldNamesOf fdefs) fields then Err (firstUnknownFieldMsg sp (fieldNamesOf fdefs) fields)
@@ -272,12 +272,12 @@ desugarFieldValueFuel fuel records (Pair fname v) =
 -- （记录更新右侧表达式按外层作用域求值）。
 desugarRecUpdate : List RecordInfo -> Expr -> List (Pair String Expr) -> Span -> Result Expr
 desugarRecUpdate records base [] sp =
-  Err (showSpanLoc sp ++ ": record update needs at least one field")
+  Err "${showSpanLoc sp}: record update needs at least one field"
 desugarRecUpdate records base (fields@((Pair fname fv) :: rest)) sp = if hasDuplicateFieldNames fields then Err (duplicateFieldMsg sp)
 else case recordsWithField fname records of
   [] => Err (unknownFieldMsg sp fname)
   [one] => desugarRecUpdateWith one base fields sp
-  _ => Err (showSpanLoc sp ++ ": ambiguous field " ++ fname ++ " (declared by multiple records)")
+  _ => Err "${showSpanLoc sp}: ambiguous field ${fname} (declared by multiple records)"
 
 desugarRecUpdateWith : RecordInfo -> Expr -> List (Pair String Expr) -> Span -> Result Expr
 desugarRecUpdateWith (RecordInfo rname params fdefs derivings ctor) base fields sp = if hasUnknownFields (fieldNamesOf fdefs) fields then Err (firstUnknownFieldMsg sp (fieldNamesOf fdefs) fields)
@@ -297,8 +297,7 @@ recUpdateVarsAt i n = recUpdateVarsAtGo (n - i) n
 
 recUpdateVarsAtGo : Int -> Int -> List String
 recUpdateVarsAtGo remaining n =
-  if remaining <= 0 then []
-  else ("vuna_ru" ++ strFromInt (n - remaining)) :: recUpdateVarsAtGo (remaining - 1) n
+  if remaining <= 0 then [] else "vuna_ru${n - remaining}" :: recUpdateVarsAtGo (remaining - 1) n
 
 recUpdateArgs : List (Pair String Expr) -> List (Pair String Expr) -> List String -> Int -> Span -> List Expr
 recUpdateArgs [] provided vars i sp = []

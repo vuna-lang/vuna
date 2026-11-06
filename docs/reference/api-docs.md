@@ -36,6 +36,8 @@ data Box a : Type where
 - 关联规则：doc block 归到第一个「行号更大、列相同、行距 ≤ 2 行、中间没有其他注释」的
   目标（模块头 / 顶层声明 / data 构造子 / record 字段 / trait 方法）。
 - 模块文档写在 `module` 头之前；无模块头的文件没有模块文档。
+- M40：模块文档也用于 LSP hover——模块名（`import` / 导出项 `module B` / 模块头 / 限定名前缀）
+  hover 时在 `module <全名>` 之后显示该模块的 docstring；被 import 的模块读盘取 docstring。
 - 孤儿 doc、缩进错误、普通注释都忽略（不报错）。
 - 私有名（`_` 前缀）不进入文档与 `--check`，但仍在 `vuna map` / `vuna api` 索引里。
 
@@ -119,8 +121,7 @@ vuna search [--type|--name|--doc] [--module PFX] [--limit N] [--json] <query...>
 
 - 类型名解析是**语法级近似**：短名歧义时回退源码短名比较；不按 import 闭包解析。
 - 无实例/隐式参数/依赖相等/类型别名展开的语义匹配；`Eq a =>` 约束在检索中忽略。
-- 语义级检索（精化后比较）只保留内部 `TypeMode.Semantic` 接口，不暴露 CLI flag；
-  见 [debt.md](debt.md)。
+- 没有语义级检索（精化后比较），CLI 也没有 `--semantic`；见 [debt.md](debt.md)。
 - 文档输出是单页 HTML；没有多页站点 / 搜索服务 / 托管。
 
 ## 4. 索引 v3

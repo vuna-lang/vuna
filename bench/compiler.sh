@@ -5,8 +5,10 @@
 # 本脚本测**编译器/工具链自己的墙钟**（check / build --no-compile / map / fmt）。
 #
 # 口径：每项先 warmup 再跑 --runs 次取中位数；只有绝对 ms（跨机器不可比，**同一台机器**
-# 上做回归对比）。`--check` 与 `bench/compiler-baseline.txt` 比，超过 --threshold% 打 WARN
-# （软门槛，退出 0）；`--save-baseline` 重写基线（复核读数后手动执行）。
+# 上做回归对比）。`--check` 与 `bench/compiler-baseline.txt` 比，超过 --threshold% 打 WARN、
+# 超过 --fail-threshold%（默认 50%）直接 exit 1（M34.6 起硬门槛）；`--save-baseline` 重写
+# 基线（复核读数后手动执行）。跨机器/跨输入规模的可比口径是 `nix/checks/compiler-growth.sh`
+# 的增长率门槛。
 #
 # **范围（不可直接互比）**：
 #   check-all            workspace 根包（`lib/Vuna/*` + compiler/base 闭包）+ 成员子进程并行
@@ -31,6 +33,7 @@ set -euo pipefail
 RUNS=3
 WARMUP=1
 THRESHOLD=20
+FAIL_THRESHOLD=50
 CHECK=0
 ALLOC=0
 SAVE=0
@@ -57,7 +60,8 @@ options:
   --check                与 bench/compiler-baseline.txt 对比，超过 --threshold% 打 WARN
   --alloc                结束后跑一次冷 check . 并打印分配的 GC 统计（VN_PERF_STATS=1）
   --save-baseline        把本次中位数写回 bench/compiler-baseline.txt
-  --threshold N          回退阈值，百分比（默认 20）
+  --threshold N          回退阈值，百分比（默认 20，超过打 WARN）
+  --fail-threshold N     硬失败阈值，百分比（默认 50，超过 exit 1；配合 --check）
   -h, --help             显示帮助
 
 benchmark 名: check-all check-compiler check-warm build-all build-compiler build-warm map-cold map-hot fmt-check
@@ -83,6 +87,8 @@ while [ $# -gt 0 ]; do
     --save-baseline) SAVE=1; shift ;;
     --threshold) [ $# -ge 2 ] || die "--threshold needs a value"; THRESHOLD=$2; shift 2 ;;
     --threshold=*) THRESHOLD=${1#*=}; shift ;;
+    --fail-threshold) [ $# -ge 2 ] || die "--fail-threshold needs a value"; FAIL_THRESHOLD=$2; shift 2 ;;
+    --fail-threshold=*) FAIL_THRESHOLD=${1#*=}; shift ;;
     -h|--help) usage; exit 0 ;;
     *) die "unknown argument: $1 (try --help)" ;;
   esac
@@ -181,18 +187,34 @@ if [ "$CHECK" -eq 1 ]; then
   echo ""
   echo "== 对比基线 =="
   echo "baseline: $BASELINE"
-  echo "threshold: ${THRESHOLD}%"
+  echo "threshold: ${THRESHOLD}% (fail > ${FAIL_THRESHOLD}%)"
   printf '%-18s %10s %10s %8s  %s\n' benchmark cur_ms base_ms delta result
   bad=0
+  fatal=0
   while read -r bname bms; do
     [ -n "$bname" ] || continue
     cur=${MED[$bname]:-}
     [ -n "$cur" ] || continue
     if [ "$bms" -eq 0 ]; then delta=0; else delta=$(( (cur - bms) * 100 / bms )); fi
-    if [ "$delta" -gt "$THRESHOLD" ]; then result=WARN; bad=1; else result=ok; fi
+    if [ "$delta" -gt "$FAIL_THRESHOLD" ]; then
+      result=FAIL
+      fatal=1
+    elif [ "$delta" -gt "$THRESHOLD" ]; then
+      result=WARN
+      bad=1
+    else
+      result=ok
+    fi
     printf '%-18s %10s %10s %7s%%  %s\n' "$bname" "$cur" "$bms" "$delta" "$result"
   done < "$BASELINE"
-  if [ "$bad" -eq 1 ]; then echo "COMPILER-PERF-WARN"; else echo "COMPILER-PERF-OK"; fi
+  if [ "$fatal" -eq 1 ]; then
+    echo "COMPILER-PERF-FAIL"
+    exit 1
+  elif [ "$bad" -eq 1 ]; then
+    echo "COMPILER-PERF-WARN"
+  else
+    echo "COMPILER-PERF-OK"
+  fi
 fi
 
 if [ "$ALLOC" -eq 1 ]; then
