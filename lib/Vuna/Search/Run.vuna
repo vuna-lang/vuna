@@ -1,4 +1,4 @@
-module Vuna.Search.Run (runSearch) where
+module Vuna.Search.Run (renderHit, runSearch) where
 
 -- Vuna.Search.Run：`vuna search` 的参数、索引、模式选择、文本/JSON 输出。
 --
@@ -103,6 +103,10 @@ printHits (h :: rest) =
   let
     _ = runIO (prim_print "${hitText h}\n")
   in printHits rest
+
+-- REPL `:search` 复用同一份单条命中渲染。
+renderHit : SearchHit -> String
+renderHit h = hitText h
 
 hitText : SearchHit -> String
 hitText h =

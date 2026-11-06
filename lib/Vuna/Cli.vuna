@@ -49,7 +49,7 @@ toolUsageLines prog = """  ${prog} lint [--fix] <file.vuna>...
   ${prog} run [--no-build] [--package NAME] [DIR] [-- ARG]...
       构建并运行包的可执行入口（`--` 之后的参数原样透传）
   ${prog} fmt [--check] [PATH]...              格式化（PATH 可为文件或目录；省略 = workspace 内各包的 lib/app/test）
-  ${prog} repl                                 交互式 REPL
+  ${prog} repl [FILE|DIR|MODULE]               交互式 REPL（可直接加载文件/目录/模块）
   ${prog} doc [--check] [--package NAME] [DIR [OUT]]
       生成单文件交互 HTML API 文档（默认 OUT=DIR/docs/api.html）
   ${prog} search [--type|--name|--doc] [--module PFX] [--limit N] [--json] <query...>
@@ -300,6 +300,7 @@ replArgs args = case parseToolArgs "vuna repl" [] args of
   Err e => toolError e
   Ok parsed => case parsed.positionals of
     [] => replRun 0
+    [target] => replRunTarget 0 target
     _ => usageError 0
 
 -- 上下文从 cwd 取（最近 vuna.toml；cwd 不是包时 base-only）。
@@ -307,7 +308,22 @@ replArgs args = case parseToolArgs "vuna repl" [] args of
 replRun : Int -> Int
 replRun _ = case contextForDir "." of
   Err e => toolFailure e
-  Ok ctx => runRepl ctx
+  Ok ctx => runRepl ctx StartNone
+
+-- 启动目标：存在目录 → 该包上下文；存在文件 → 文件所在包上下文 + 启动加载；
+-- 不存在且像模块名 → cwd 上下文 + 启动导入；其它报可操作错误（exit 2）。
+replRunTarget : Int -> String -> Int
+replRunTarget _ target = if runIO (prim_fileExists target) then if runIO (prim_isDirectory target) then case contextForDir target of
+  Err e => toolFailure e
+  Ok ctx => runRepl ctx (StartDir target)
+else case contextForFile target of
+  Err e => toolFailure e
+  Ok ctx => runRepl ctx (StartFile target)
+else if isModuleNameStr target then case contextForDir "." of
+  Err e => toolFailure e
+  Ok ctx => runRepl ctx (StartModule target)
+else toolFailure
+  ("找不到文件或目录: " ++ target ++ "（vuna repl 接受 <FILE> | <DIR> | <Module.Name>）")
 
 -- ---------------------------------------------------------------
 -- gen-errors（错误码文档生成）

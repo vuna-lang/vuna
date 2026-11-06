@@ -2,6 +2,7 @@ module Vuna.Compiler.Driver.Dt
   ( AuxCache
   , CheckedPackage(..)
   , dtAuxKey
+  , dtBindingTypes
   , dtCheck
   , dtCheckLibraryPackageIncrementalParts
   , dtCheckLibraryPackageWithIfacesParts
@@ -21,6 +22,7 @@ module Vuna.Compiler.Driver.Dt
   , dtEvalExprWithIfaces
   , dtEvalFile
   , dtGoalsSource
+  , dtInferDefTypes
   , dtMainKind
   , dtPrepareTermAux
   , dtSplitProjectIncremental
@@ -287,6 +289,221 @@ dtEvalExprWithIfaces : PackageContext -> String -> String -> List ModuleIface ->
 dtEvalExprWithIfaces ctx program exprSource ifaces =
   andThen (replProgramWithIfaces ctx program exprSource ifaces)
     (\p => dtEvalExprIn (firstOf p) (secondOf p))
+
+-- ---------------------------------------------------------------
+-- REPL v2：自动签名与缓冲绑定类型
+--
+-- `dtInferDefTypes` 为缺签名的顶层 DFun 推断可回读的类型签名：
+--   1. 解析 defSource 得到每个 target 的参数元数（多 clause 取首子句）；
+--   2. 用 `newMeta` 为每个 target 造「域元变量 + 结果元变量」的匿名 Pi telescope，
+--      作为 `elabProgramFullWith` 的起始 globals；
+--   3. 复用整程序精化路径检查定义体（模式 / trait / 终止性规则与普通定义一致）；
+--   4. 类型里残余的未解元变量是定义边界上的自由类型变量，泛化成隐式 `{tN : Type}`
+--      （按最大应用元数给 `Type -> … -> Type`），再用 `showTypeSig` 渲染。
+-- 推断结果由 REPL 写回源码后**再检查一遍**；失败回滚，不污染会话。
+-- 走全量加载路径（不复用依赖接口缓存）：自动签名只在定义时发生一次，正确性优先。
+record GenMeta where
+  genMetaId : Int
+  genMetaName : String
+  genMetaKind : Term
+
+dtInferDefTypes : PackageContext -> String -> List String -> String -> Result (List (Pair String String))
+dtInferDefTypes ctx program targets defSource = if length targets == 0 then Ok []
+else case parseSource "<repl>" defSource of
+  Err e => Err e
+  Ok (SourceFile hdr _ _ defDecls) => case hdr of
+    Just _ => Err "自动签名不支持模块文件"
+    Nothing => case aritiesOf targets defDecls of
+      Err e => Err e
+      Ok arities =>
+        let
+          Pair entries ecStart = allocTelescopes emptyCtx ecEmpty arities
+          startGlobals = append entries preludeGlobals
+        in andThen (loadReplDecls ctx (program ++ "\n" ++ defSource ++ "\n")) (\allDecls => andThen (elabProgramFullWith ecStart startGlobals allDecls) (\prog => let
+          taken = topNames allDecls
+          Pair ecOut _ = ecOfProgram prog
+        in inferEachType targets prog ecOut taken
+        )
+        )
+
+-- target 名 → 参数元数（找不到 DFun 就报错：自动签名只处理函数/值定义）。
+aritiesOf : List String -> List Decl -> Result (List (Pair String Int))
+aritiesOf [] decls = Ok []
+aritiesOf (t :: rest) decls = case findArity t decls of
+  Nothing => Err ("自动签名: 找不到定义 " ++ t ++ "（需要 DFun）")
+  Just n => andThen (aritiesOf rest decls) (\more => Ok (Pair t n :: more))
+
+findArity : String -> List Decl -> Maybe Int
+findArity name [] = Nothing
+findArity name (d :: rest) = case d of
+  DFun n pats _ _ => if n == name then Just (listLen pats) else findArity name rest
+  _ => findArity name rest
+
+-- 每个 target 一条 `?d1 -> ... -> ?dn -> ?r`（域匿名 binder，结果元变量）。
+allocTelescopes : Ctx -> Ec -> List (Pair String Int) -> Pair (List (Pair String Term)) Ec
+allocTelescopes ctx ec [] = Pair [] ec
+allocTelescopes ctx ec ((Pair name arity) :: rest) =
+  let
+    Pair doms ec1 = allocMetas ctx ec (range 0 arity)
+    Pair results ec2 = allocMetas ctx ec1 (range 0 1)
+  in case results of
+    [r] =>
+      let
+        Pair more ec3 = allocTelescopes ctx ec2 rest
+      in Pair (Pair name (buildPi doms r) :: more) ec3
+    _ => Pair [] ec2
+
+allocMetas : Ctx -> Ec -> List Int -> Pair (List Term) Ec
+allocMetas ctx ec [] = Pair [] ec
+allocMetas ctx ec (_ :: rest) =
+  let
+    Pair meta ec1 = newMeta ctx ec
+    Pair metas ec2 = allocMetas ctx ec1 rest
+  in Pair (meta :: metas) ec2
+
+buildPi : List Term -> Term -> Term
+buildPi [] result = result
+buildPi (dom :: rest) result = TPi "_" False RigOmega dom (buildPi rest result)
+
+inferEachType : List String -> DtProgram -> Ec -> List String -> Result (List (Pair String String))
+inferEachType [] prog ec taken = Ok []
+inferEachType (t :: rest) prog ec taken = case findDtDef t (dtProgDefs prog) of
+  Nothing => Err ("自动签名: 精化结果里找不到定义 " ++ t)
+  Just def =>
+    andThen (generalizeSignature (zonkTerm ec 0 (dtDefType def)) taken)
+      (\sigText => andThen (inferEachType rest prog ec taken) (\more => Ok (Pair t sigText :: more)))
+
+findDtDef : String -> List DtDef -> Maybe DtDef
+findDtDef name [] = Nothing
+findDtDef name (d :: rest) = if dtDefName d == name then Just d else findDtDef name rest
+
+-- 全量读取内存 program 的声明（Loader flatten → 入口+模块声明）。
+loadReplDecls : PackageContext -> String -> Result (List Decl)
+loadReplDecls ctx source =
+  andThen (loadProjectSource ctx "<repl>" source)
+    (\project => andThen (resolveProject project) (\parts => Ok (dtProjectDecls parts)))
+
+-- `:defs` / `:info`：program 里每个定义的 zonk 后类型文本。
+dtBindingTypes : PackageContext -> String -> Result (List (Pair String String))
+dtBindingTypes ctx program = andThen (loadReplDecls ctx program) (\decls => andThen (elabProgramFull decls) (\prog => let
+  Pair ec _ = ecOfProgram prog
+in Ok (map (\d => Pair (dtDefName d) (showTypeSig (zonkTerm ec 0 (dtDefType d)))) (dtProgDefs prog))
+)
+)
+
+-- 残余未解元变量 → 隐式类型参数；元变量按类型项中出现顺序（去重）编号。
+generalizeSignature : Term -> List String -> Result String
+generalizeSignature ty taken =
+  let
+    metas = dedupInts (metaIdsOf ty)
+  in if length metas == 0 then Ok (showTypeSig ty)
+  else if length metas > 8 then Err "自动推断出的类型参数超过 8 个，请先写类型签名"
+  else
+    let
+      entries = buildGenMetas metas taken 0 ty
+      total = listLen entries
+      body = substGenMetas ty entries 0 total
+      sigText = showTypeSig (wrapGenMetas entries body)
+    in if contains "?" sigText then Err "自动推断的签名仍含未解元变量，请先写类型签名"
+    else Ok sigText
+
+buildGenMetas : List Int -> List String -> Int -> Term -> List GenMeta
+buildGenMetas [] taken i ty = []
+buildGenMetas (m :: rest) taken i ty =
+  let
+    name = freshMetaName ("t" ++ strFromInt i) taken
+    kind = kindOfArity (maxMetaArity m ty)
+  in GenMeta m name kind :: buildGenMetas rest (name :: taken) (i + 1) ty
+
+freshMetaName : String -> List String -> String
+freshMetaName base taken = pickFreshName base taken (0 :: range 1 64)
+
+pickFreshName : String -> List String -> List Int -> String
+pickFreshName base taken [] = base
+pickFreshName base taken (n :: rest) =
+  let
+    cand = if n == 0 then base else base ++ "_" ++ strFromInt n
+  in if memName cand taken then pickFreshName base taken rest else cand
+
+-- 第 i 个泛化元变量在 n 个新 binder 中从外到内排：出现点局部深度 d 处的引用索引
+-- 应为 d + (n - 1 - i)，即 `substMetaVar m name (i + 1 - n)`（q 可为负）。
+substGenMetas : Term -> List GenMeta -> Int -> Int -> Term
+substGenMetas ty [] i total = ty
+substGenMetas ty (g :: rest) i total =
+  substGenMetas (substMetaVar g.genMetaId g.genMetaName (i + 1 - total) ty) rest (i + 1) total
+
+wrapGenMetas : List GenMeta -> Term -> Term
+wrapGenMetas [] t = t
+wrapGenMetas (g :: rest) t = TPi g.genMetaName True RigOmega g.genMetaKind (wrapGenMetas rest t)
+
+kindOfArity : Int -> Term
+kindOfArity k = kindArrows (range 0 k)
+
+kindArrows : List Int -> Term
+kindArrows [] = TType levelZero
+kindArrows (_ :: rest) = TPi "_" False RigOmega (TType levelZero) (kindArrows rest)
+
+-- 类型项里的未解元变量（zonk 已替换已解者，剩下的都是未解）。
+metaIdsOf : Term -> List Int
+metaIdsOf (TMeta m) = [m]
+metaIdsOf (TPi _ _ _ dom cod) = append (metaIdsOf dom) (metaIdsOf cod)
+metaIdsOf (TLam _ _ body) = metaIdsOf body
+metaIdsOf (TApp f a _) = append (metaIdsOf f) (metaIdsOf a)
+metaIdsOf (TCon _ args) = metaIdsOfArgs args
+metaIdsOf (TCase scrut alts) = append (metaIdsOf scrut) (concatMap metaIdsOfAlt alts)
+metaIdsOf (TIf c th el) = append (metaIdsOf c) (append (metaIdsOf th) (metaIdsOf el))
+metaIdsOf _ = []
+
+metaIdsOfArgs : List (Pair Term Rig) -> List Int
+metaIdsOfArgs [] = []
+metaIdsOfArgs ((Pair a _) :: rest) = append (metaIdsOf a) (metaIdsOfArgs rest)
+
+metaIdsOfAlt : CaseAlt -> List Int
+metaIdsOfAlt (CaseAlt _ _ body) = metaIdsOf body
+
+dedupInts : List Int -> List Int
+dedupInts [] = []
+dedupInts (x :: rest) = if memMetaId x rest then dedupInts rest else x :: dedupInts rest
+
+-- 某个元变量在类型项里被应用的最大元数（决定泛化后的 kind）。
+maxMetaArity : Int -> Term -> Int
+maxMetaArity m t = case t of
+  TApp f a r => imax (applyArity m (TApp f a r)) (imax (maxMetaArity m f) (maxMetaArity m a))
+  TPi _ _ _ dom cod => imax (maxMetaArity m dom) (maxMetaArity m cod)
+  TLam _ _ body => maxMetaArity m body
+  TCon _ args => maxMetaArityArgs m args
+  TCase scrut alts => imax (maxMetaArity m scrut) (maxMetaArityAlts m alts)
+  TIf c th el => imax (maxMetaArity m c) (imax (maxMetaArity m th) (maxMetaArity m el))
+  _ => 0
+
+maxMetaArityArgs : Int -> List (Pair Term Rig) -> Int
+maxMetaArityArgs m [] = 0
+maxMetaArityArgs m ((Pair a _) :: rest) = imax (maxMetaArity m a) (maxMetaArityArgs m rest)
+
+maxMetaArityAlts : Int -> List CaseAlt -> Int
+maxMetaArityAlts m [] = 0
+maxMetaArityAlts m (alt :: rest) = imax (maxMetaArity m (caseAltBody alt)) (maxMetaArityAlts m rest)
+
+applyArity : Int -> Term -> Int
+applyArity m t = if headIsMeta m t then spineLen t else 0
+
+headIsMeta : Int -> Term -> Bool
+headIsMeta m t = case t of
+  TApp f _ _ => headIsMeta m f
+  TMeta n => m == n
+  _ => False
+
+spineLen : Term -> Int
+spineLen t = case t of
+  TApp f _ _ => 1 + spineLen f
+  _ => 0
+
+imax : Int -> Int -> Int
+imax a b = if a >= b then a else b
+
+listLen : List a -> Int
+listLen [] = 0
+listLen (_ :: rest) = 1 + listLen rest
 
 -- M30 · LSP hover：内存源码的洞目标（与 `vuna goal` 同源）。
 dtGoalsSource : PackageContext -> String -> String -> Result (List DtGoalInfo)

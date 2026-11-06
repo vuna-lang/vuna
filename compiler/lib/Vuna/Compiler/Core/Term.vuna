@@ -69,6 +69,7 @@ module Vuna.Compiler.Core.Term
   , showCoreString
   , showRig
   , showTerm
+  , showTypeSig
   , solsCons
   , solsDepth
   , solsEmpty
@@ -682,6 +683,29 @@ showTerm (TInt n) = strFromInt n
 showTerm (TStr s) = showCoreString s
 showTerm (TBool b) = if b then "True" else "False"
 showTerm (TIf c th el) = "if ${showTerm c} then ${showTerm th} else ${showTerm el}"
+
+-- 可回读的类型渲染（REPL 自动签名 / `:type` / 合成 IO 入口签名写回用）。
+-- `showTerm` 不为匿名 Pi 的域补括号：`(Int -> Int) -> Int` 会渲染成
+-- `Int -> Int -> Int`（右结合），写回源码会静默改变类型；TApp/TCon 的实参也有
+-- 同样问题。这里只在需要时补括号，其余形态委托 `showTerm`（诊断文案不受影响）。
+showTypeSig : Term -> String
+showTypeSig (TPi name implicit rig dom cod) =
+  if name == "_" then showSigParenIfPi dom ++ " -> " ++ showTypeSig cod
+  else if implicit then "{" ++ name ++ " : " ++ showTypeSig dom ++ "} -> " ++ showTypeSig cod
+  else "(" ++ name ++ " : " ++ showTypeSig dom ++ ") -> " ++ showTypeSig cod
+showTypeSig (TCon c []) = c
+showTypeSig (TApp f a rig) = "(" ++ showSigParenIfPi f ++ " " ++ showSigParenIfPi a ++ ")"
+showTypeSig (TCon c args) = "(" ++ c ++ showSigArgs args ++ ")"
+showTypeSig t = showTerm t
+
+showSigParenIfPi : Term -> String
+showSigParenIfPi t = case t of
+  TPi n i r d c => "(" ++ showTypeSig (TPi n i r d c) ++ ")"
+  _ => showTypeSig t
+
+showSigArgs : List (Pair Term Rig) -> String
+showSigArgs [] = ""
+showSigArgs ((Pair a rig) :: rest) = " " ++ showSigParenIfPi a ++ showSigArgs rest
 
 showArgTerms : List (Pair Term Rig) -> String
 showArgTerms [] = ""

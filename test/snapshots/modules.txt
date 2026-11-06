@@ -33,6 +33,8 @@ Vuna.Lsp.Diagnostics  ./lib/Vuna/Lsp/Diagnostics.vuna
 Vuna.Lsp.Protocol  ./lib/Vuna/Lsp/Protocol.vuna
 Vuna.Lsp.Query  ./lib/Vuna/Lsp/Query.vuna
 Vuna.Lsp  ./lib/Vuna/Lsp.vuna
+Vuna.Repl.Edit  ./lib/Vuna/Repl/Edit.vuna
+Vuna.Repl.Term  ./lib/Vuna/Repl/Term.vuna
 Vuna.Repl  ./lib/Vuna/Repl.vuna
 Vuna.Run  ./lib/Vuna/Run.vuna
 Vuna.Search.Query  ./lib/Vuna/Search/Query.vuna

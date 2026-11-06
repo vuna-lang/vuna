@@ -70,9 +70,19 @@
   （退出码 2），不做「纯动作求值、效果丢弃」的区分；需要效果时用 `compile` + 运行产物。
   `vuna test` 的 `main : IO ...` 与 REPL 的 `IO` 表达式都走 compile + 运行（退出码 0 通过 /
   输出直接到终端），纯 `String` / `Int` / `Bool` 测试仍走核心求值（快）。
-- **REPL 定义必须先写签名**：交互式定义也要先输入 `x : Int` 再输入 `x = 1 + 1`；表达式走
-  DT 表达式接口（推断表达式类型后求值）。支持多行续行（未闭合括号 / 尾随 `=` / `where` /
-  `do` 等），空行强制结束；`IO` 表达式编译到临时包运行，每次约 1–2s，需要 `ocamlopt`。
+- **REPL 定义自动签名有边界**：`x = 1 + 1` / `f y = x + y` 等常见定义由
+  `Interp.inferDefTypes` 自动推断签名（未解类型变量在定义边界泛化成隐式参数），写回后
+  会再检查一遍，失败回滚。带模式匹配（`f 0 = …`）、trait 约束（`x == x`）、高阶参数
+  （`twice g z = g (g z)`）或需要 `Type 1` 以上宇宙的定义仍要先写显式签名，消息里会给提示。
+  表达式走 DT 表达式接口（推断表达式类型后求值）。支持多行续行（未闭合括号 / 尾随
+  `=` / `where` / `do` 等）与 `:{ ... :}` 块；`IO` 表达式编译到临时包运行，每次约
+  1–2s，需要 `ocamlopt`。
+- **REPL 行编辑依赖 POSIX 终端**：方向键 / Ctrl-R / Ctrl-C 取消当前输入 / Tab 补全走
+  `stty raw` + `prim_readBytes`（工具层实现，不进 TCB）；非 tty、`:set editing off` 或
+  无 `stty` 时回退 `prim_readLine`（无行编辑）。终端宽度来自 `stty size`（失败按 80）；
+  CJK 宽度是近似值（组合字符/emoji 光标可能偏 1 格），超宽行只显示尾部窗口；没有窗口
+  resize 重绘与括号粘贴。若进程在编辑中被硬杀（SIGKILL），终端可能停在 raw，执行
+  `stty sane` 恢复。
 - **除零语义**：核心求值器对 `a / 0` **不归约**（`interp` 报 `main does not reduce to a
   value`），`compile` 产物运行时 `failwith "division by zero"`（未捕获异常，退出码 2）；
   测试用 `compile` + 运行断言（`run_err/03_div_zero`）。这是显式分类而非静默 0，完整边界见

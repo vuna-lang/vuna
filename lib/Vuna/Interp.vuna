@@ -1,6 +1,9 @@
 module Vuna.Interp
-  ( evalExprInfo
+  ( bindingTypes
+  , checkProgram
+  , evalExprInfo
   , evalExprInfoWithAux
+  , inferDefTypes
   , interpretExpr
   , interpretFile
   , runEffectProgram
@@ -60,6 +63,22 @@ evalExprInfo : PackageContext -> String -> String -> Result (Pair String String)
 evalExprInfo ctx program expr = case depIfacesForToolProgram ctx program of
   Just ifaces => dtEvalExprInfoWithIfaces ctx program expr ifaces
   Nothing => dtEvalExprInfo ctx program expr
+
+-- ---------------------------------------------------------------
+-- REPL v2：定义工具（自动签名 / 绑定类型 / 回写签名复查）
+-- ---------------------------------------------------------------
+-- 为缺签名的顶层 DFun 推断可回读的签名；targets 由 REPL 选出（块内无签名、且缓冲里
+-- 也没有只含签名的块）。失败返回可读错误，由 REPL 加提示后保持会话状态不变。
+inferDefTypes : PackageContext -> String -> List String -> String -> Result (List (Pair String String))
+inferDefTypes ctx program targets defSource = dtInferDefTypes ctx program targets defSource
+
+-- program 里每个顶层定义的名字 + zonk 后类型文本（`:defs` / `:info` 用）。
+bindingTypes : PackageContext -> String -> Result (List (Pair String String))
+bindingTypes ctx program = dtBindingTypes ctx program
+
+-- 内存 program 的整程序检查（自动签名写回后的复查；也用于 :load 模块的立即校验）。
+checkProgram : PackageContext -> String -> Result (List String)
+checkProgram ctx program = dtCheckSource ctx "<repl>" program
 
 -- ---------------------------------------------------------------
 -- 效果程序执行（REPL 的 IO 表达式 + `vuna test` 的 IO 测试）

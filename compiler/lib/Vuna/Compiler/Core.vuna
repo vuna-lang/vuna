@@ -80,6 +80,7 @@ module Vuna.Compiler.Core
   , shift
   , showRig
   , showTerm
+  , showTypeSig
   , showValue
   , showValueAt
   , solsCons

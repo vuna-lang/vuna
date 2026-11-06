@@ -405,6 +405,157 @@ checkExternArrayElem sp _ =
 -- 新元变量从程序的元变量游标之后分配，因此程序阶段遗留的 meta 只可能已解
 -- （`elabProgramGo` 已校验过）；表达式自己留下的未解 meta 单独报清晰错误。
 -- 字典约束（`==` 等）用与定义体相同的收敛回填，最后在 defs + 解表上归一化并 show。
+-- ---------------------------------------------------------------
+-- REPL v2：交互式值显示（只用于 REPL；诊断仍用 showValueAt，文案不变）
+--
+-- 与 `showValue` 的差别：
+--   * 按构造子 telescope 的 rig 过滤擦除实参（`Cons Int 1 Nil` → `Cons 1 Nil`）；
+--   * 列表 / 元组 / Maybe 语法糖（`[1, 2]`、`(1, 2)`、`Just 1`）；
+--   * 函数值显示 `<函数>`，未解元变量显示 `_`。
+-- 值先 quote 再 zonk：`showValue` 不会递归替换 spine 里已解的元变量。
+-- 渲染组走显式 fuel（互递归不在项结构上严格下降，与 `evalFuel` 同一手法）。
+showValueRepl : List DtData -> Ec -> Value -> String
+showValueRepl datas ec v = renderReplTerm 512 (allReplCtors datas) (zonkTerm ec 0 (quote 0 v))
+
+allReplCtors : List DtData -> List DtCtor
+allReplCtors [] = []
+allReplCtors (d :: rest) = append (dtDataCtors d) (allReplCtors rest)
+
+renderReplTerm : Int -> List DtCtor -> Term -> String
+renderReplTerm fuel ctors t = if fuel <= 0 then showTerm t
+else case t of
+  TCon c args => renderReplCtor (fuel - 1) ctors c args
+  TLam name rig body => "<函数>"
+  TMeta m => "_"
+  TGlobal g => replShortName g
+  TApp f a r => renderReplApp (fuel - 1) ctors (TApp f a r)
+  _ => showTerm t
+
+-- 中性应用：头是全局定义时显示短名 + 实参（`Zero`、`f 1`）；其它回退 showTerm。
+renderReplApp : Int -> List DtCtor -> Term -> String
+renderReplApp fuel ctors t = if fuel <= 0 then showTerm t
+else case spineOf t of
+  Pair head args => case head of
+    TGlobal g => replShortName g ++ renderReplArgs (fuel - 1) ctors args
+    _ => showTerm t
+
+replShortName : String -> String
+replShortName g = secondOf (splitLastDot (splitOnDot g))
+
+spineOf : Term -> Pair Term (List Term)
+spineOf (TApp f a r) = case spineOf f of
+  Pair head args => Pair head (appendLastTerm args a)
+  _ => Pair (TApp f a r) []
+spineOf t = Pair t []
+
+appendLastTerm : List Term -> Term -> List Term
+appendLastTerm xs x = append xs [x]
+
+renderReplCtor : Int -> List DtCtor -> String -> List (Pair Term Rig) -> String
+renderReplCtor fuel ctors c args = if fuel <= 0 then "<值>"
+else
+  let
+    kept = keptCtorArgs ctors c args
+  in if c == replListNilName then "[]"
+  else if c == replListConsName then renderReplList (fuel - 1) ctors kept
+  else if c == replPairName then renderReplPair (fuel - 1) ctors kept
+  else if c == replJustName then renderReplUnary (fuel - 1) ctors "Just" kept
+  else if c == replNothingName then "Nothing"
+  else renderReplGeneric (fuel - 1) ctors (replShortName c) kept
+
+renderReplList : Int -> List DtCtor -> List Term -> String
+renderReplList fuel ctors [] = "[]"
+renderReplList fuel ctors (h :: rest) = if fuel <= 0 then "[]"
+else case rest of
+  [t] => case renderReplListTail (fuel - 1) ctors t of
+    Just tailText => "[" ++ renderReplArg (fuel - 1) ctors h ++ tailText
+    Nothing => renderReplGeneric (fuel - 1) ctors "Cons" (h :: t :: [])
+  _ => renderReplGeneric (fuel - 1) ctors "Cons" (h :: rest)
+
+renderReplListTail : Int -> List DtCtor -> Term -> Maybe String
+renderReplListTail fuel ctors t = if fuel <= 0 then Nothing
+else case t of
+  TCon c args => if c == replListNilName then Just "]"
+  else if c == replListConsName then case keptCtorArgs ctors c args of
+    [h, t2] => case renderReplListTail (fuel - 1) ctors t2 of
+      Just tailText => Just (", " ++ renderReplArg (fuel - 1) ctors h ++ tailText)
+      Nothing => Nothing
+    _ => Nothing
+  else Nothing
+  _ => Nothing
+
+renderReplPair : Int -> List DtCtor -> List Term -> String
+renderReplPair fuel ctors args = if fuel <= 0 then "<值>"
+else case args of
+  [a, b] =>
+    "(" ++ renderReplArg (fuel - 1) ctors a ++ ", " ++ renderReplArg (fuel - 1) ctors b ++ ")"
+  _ => renderReplGeneric (fuel - 1) ctors "Pair" args
+
+renderReplUnary : Int -> List DtCtor -> String -> List Term -> String
+renderReplUnary fuel ctors label args = if fuel <= 0 then "<值>"
+else case args of
+  [a] => label ++ " " ++ renderReplArg (fuel - 1) ctors a
+  _ => renderReplGeneric (fuel - 1) ctors label args
+
+renderReplGeneric : Int -> List DtCtor -> String -> List Term -> String
+renderReplGeneric fuel ctors label args =
+  if fuel <= 0 then "<值>" else label ++ renderReplArgs (fuel - 1) ctors args
+
+renderReplArgs : Int -> List DtCtor -> List Term -> String
+renderReplArgs fuel ctors [] = ""
+renderReplArgs fuel ctors (a :: rest) =
+  if fuel <= 0 then ""
+  else " " ++ renderReplArg (fuel - 1) ctors a ++ renderReplArgs (fuel - 1) ctors rest
+
+renderReplArg : Int -> List DtCtor -> Term -> String
+renderReplArg fuel ctors t =
+  if fuel <= 0 then "<值>"
+  else if isReplAtom ctors t then renderReplTerm (fuel - 1) ctors t
+  else "(" ++ renderReplTerm (fuel - 1) ctors t ++ ")"
+
+isReplAtom : List DtCtor -> Term -> Bool
+isReplAtom ctors t = case t of
+  TInt n => True
+  TStr s => True
+  TBool b => True
+  TVar name i => True
+  TGlobal g => True
+  TType l => True
+  TMeta m => True
+  TCon c args =>
+    c == replListNilName
+      || c == replPairName
+      || c == replNothingName
+      || natToInt (length (keptCtorArgs ctors c args)) == 0
+  _ => False
+
+-- 按构造子 telescope 的 rig 过滤擦除实参；找不到构造子时保留全部。
+keptCtorArgs : List DtCtor -> String -> List (Pair Term Rig) -> List Term
+keptCtorArgs ctors c args = case findCtorIn c ctors of
+  Nothing => map (\p => firstOf p) args
+  Just ctor => zipKeptArgs (dtCtorTelescope ctor) args
+
+zipKeptArgs : List (Pair String Rig) -> List (Pair Term Rig) -> List Term
+zipKeptArgs [] args = map (\p => firstOf p) args
+zipKeptArgs (b :: bs) [] = []
+zipKeptArgs (b :: bs) ((Pair a rig) :: rest) =
+  if rigIsErased (secondOf b) then zipKeptArgs bs rest else a :: zipKeptArgs bs rest
+
+replListNilName : String
+replListNilName = "Base.List.Nil"
+
+replListConsName : String
+replListConsName = "Base.List.Cons"
+
+replPairName : String
+replPairName = "Base.Pair.Pair"
+
+replJustName : String
+replJustName = "Base.Maybe.Just"
+
+replNothingName : String
+replNothingName = "Base.Maybe.Nothing"
+
 dtEvalExprIn : DtProgram -> Expr -> Result String
 dtEvalExprIn prog expr = andThen (dtEvalExprInInfo prog expr) (\p => Ok (firstOf p))
 
@@ -425,15 +576,19 @@ dtEvalExprInInfo prog expr = case prog of
         let
           ec2 = resolveDictGoalsFix globals ec1 8
           sols2 = ecSols ec2
+          -- 顶层 `force` 只解开类型头部的元变量，spine 里已解的元变量（如
+          -- `List ?97` 的元素类型）不会被递归替换；先 quote 再 zonk 才能把类型
+          -- 文本渲染成具体类型（REPL `:type` 与自动签名写回都依赖这一点）。
           tyText =
-            showTerm (quote 0 (force (Base.HashMap.fromList bodies) (ecSolsP ec2) defaultFuel ty))
+            showTypeSig
+              (zonkTerm ec2 0 (quote 0 (force (Base.HashMap.fromList bodies) (ecSolsP ec2) defaultFuel ty)))
         in case firstUnsolvedInterpGoal ec2 of
           Just td => tcErr1NoLoc (InterpNoInstance td) td
           Nothing => case unsolvedFrom next (ecNext ec2) (ecSolTbl ec2) of
             Just m => tcErr1 (exprSpan expr) (UnsolvedMetavarInfer (strFromInt m)) (strFromInt m)
             Nothing => case normalize (Base.HashMap.fromList bodies) (ecSolsP ec2) defaultFuel (eval [] term) of
               VInt n => Ok (Pair (strFromInt n) tyText)
-              v => Ok (Pair (showValue v) tyText)
+              v => Ok (Pair (showValueRepl datas ec2 v) tyText)
     )
 
 -- 精化入口。M19：先做 record 降级（`Elab.Records.prepareDecls`）——record 是纯记法。

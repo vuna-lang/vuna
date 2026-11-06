@@ -73,7 +73,7 @@ vuna gen-errors [ROOT]               # 从枚举真源生成错误码文档（�
 vuna interp <file.vuna>              # DT 精化 + 核心求值（纯；只展示 Int/String/Bool）
 vuna test [DIR] [--list|--filter PAT|--verbose|--fail-fast]  # 包内测试；默认输出不变
 vuna run [DIR] [--package NAME] [--no-build] [-- ARGS...]    # 增量 build + 执行入口（透传参数/退出码）
-vuna repl                            # :type / :load / :reload / :browse
+vuna repl [FILE|DIR|MODULE]          # 自动签名 / 行编辑（方向键/Ctrl-R）/ 颜色 / :type/:info/:search/:load/:reload/:browse
 vuna build --no-compile --out <OUT> compiler   # 逐模块 DT codegen 到目录（= vuna compile compiler <OUT>；rotation 用 nix/seed-rotate.sh）
 vuna search [--type|--name|--doc] [--module PFX] [--limit N] [--json] <query...>  # 名称/docstring/类型检索
 vuna map [...] | vuna api <Module.name>  # 模块总览 / 定位符号 / 改动影响面 / 签名面

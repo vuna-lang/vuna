@@ -74,7 +74,7 @@ vuna interp <file.vuna>                   # 精化后核心求值（纯；不执
 vuna test [DIR] [--list|--filter PAT|--verbose|--fail-fast]  # 运行 test/*.vuna（main : String 空串通过）
 vuna run [DIR] [--package NAME] [--no-build] [-- ARGS...]    # 增量 build + 执行 .output/bin/<包名>
 vuna fmt [--check] [PATH]...
-vuna repl
+vuna repl [FILE|DIR|MODULE]               # 自动签名 / 行编辑（方向键/Ctrl-R）/ 颜色 / :load 文件|目录|模块
 vuna doc [--check] [--package NAME] [DIR [OUT]]  # 默认 DIR/docs/api.html
 vuna search [--type|--name|--doc] [--module PFX] [--limit N] [--json] <query...>
 vuna map [...] | vuna api <Module.name>  # 模块总览 / 定位符号 / 改动影响面 / 签名面

@@ -53,7 +53,7 @@
 
 | D33 | 运行时错误只有**定义级**位置：无表达式级 span、无局部变量值、无断点（无 DAP）；`ocamlopt` 内联会把抛错点归到调用者帧；非入口单元顶层初始化的异常不在捕获范围 | `Codegen/Term.dtDefLocTable`/`dtRuntimeWith`；[debugging.md](debugging.md) §2 | 后续（真正调试器另立项） |
 | D34 | `Base.Debug.trace/traceShow` 以 `unsafe` 的 `runIO`（`prim_eprint`）实现：纯代码里引入调试副作用，无类型/能力层约束 | `base/lib/Base/Debug.vuna`；[effects.md](effects.md) D28 | 后续（QTT / 正式 trace 效应） |
-| D35 | `vuna run` 只执行默认 `.output/bin/<包名>`（无 `--out`；workspace 多可执行包须显式 `--package`）；REPL 无行编辑历史 / 补全；`:browse` 首次可能触发索引重建 | `lib/Vuna/{Run,Repl}.vuna` | 后续 |
+| D35 | `vuna run` 只执行默认 `.output/bin/<包名>`（无 `--out`；workspace 多可执行包须显式 `--package`）；REPL 行编辑已落地（方向键/Ctrl-R/Ctrl-C/Tab 命令与绑定名补全），剩余缺口：文件/模块名补全、括号粘贴、窗口 resize 重绘、多行单元持久化历史、`:browse` 首次仍可能触发索引重建 | `lib/Vuna/{Run,Repl.vuna,Repl/*}.vuna` | 后续 |
 | C38 | LSP codeAction 只有 lint quick fix：无 rename、无 case split、无 command 形式；`diagnostics` 只带 `code`（严格 LSP 还需 range/message） | `lib/Vuna/Lsp/Query.codeActionsFor`；[tooling.md](tooling.md) §2 | 后续 |
 | C39 | `vuna test` 仍串行（`nix/run-tests.sh` 的 `--jobs` 只并行章节）、无单测超时（沿 C23） | `lib/Vuna/TestRunner.vuna`；[testing.md](testing.md) | 后续 |
 

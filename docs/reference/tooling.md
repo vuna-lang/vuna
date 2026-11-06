@@ -178,18 +178,55 @@ $ vuna search --type "a -> a"
 否则列出候选并 exit 2；库包 / 缺产物 / 构建失败都给出可操作错误。实现入口
 `Vuna.Run.runRun`。
 
-REPL 的调试命令（`vuna repl`，实现入口 `Vuna.Repl.runRepl`）：
+REPL（`vuna repl [FILE|DIR|MODULE]`，实现入口 `Vuna.Repl.runRepl`；行编辑在
+`Vuna.Repl.Edit` / 终端层在 `Vuna.Repl.Term`，都不进 seed 闭包）：
 
 | 命令 | 行为 |
 | --- | --- |
 | `:type EXPR` | 精化表达式并只打印 zonk 后的类型（不求值、不执行效果） |
-| `:load FILE` | 重置缓冲后加载入口式源码（文件不能带 `module ... where` 头）；失败时状态不变 |
-| `:reload` | 重读上次 `:load` 的文件（未 load 过给可操作提示） |
-| `:browse MODULE` | 惰性构建 `Vuna.Index` 后按 `vuna api` 打印模块接口（首次可能触发索引重建） |
-| `:reset` / `:quit` / `:help` | 原有语义（`:reset` 同时清 `:load` 记录与定义缓冲） |
+| `:info NAME` | 先查 REPL 缓冲（精化后的类型），再查 `Vuna.Index`：全名 / kind / 签名 / 文档 / 位置 |
+| `:search [--type\|--name\|--doc] QUERY` | 复用 `vuna search` 的检索；含 `->` / `=>` 自动类型检索；最多 20 条 |
+| `:load TARGET` | 见下方加载矩阵；成功才改变状态，失败保持缓冲 |
+| `:reload` | 上次是文件则重读；是模块则重新校验导入；都没有给可操作提示 |
+| `:browse [MODULE]` | 惰性构建 `Vuna.Index`（首次可能触发索引重建）后打印模块接口；无参列出模块 |
+| `:defs` | 缓冲区定义的名字 + zonk 后类型；`:load` 文件来源标 `(文件)` |
+| `:imports` | 当前 import 行 |
+| `:delete NAME` | 删除 REPL 内定义（含同名签名块）；文件来源报错，提示改文件后 `:reload` |
+| `:set …` | `+t/-t`（求值后打印类型）、`+s/-s`（耗时）、`editing auto\|on\|off`、`color auto\|on\|off`、`prompt TEXT`（保留尾随空格）；无参列出 |
+| `:history` / `:again N` | 编号列出历史 / 把第 N 条完整输入重新提交（命令与定义都可以） |
+| `:! CMD` | `sh -c` 执行；非 0 打印退出码 |
+| `:abandon` | 放弃当前待续输入 / `:{ ... :}` 块 |
+| `:{` … `:}` | 多行块输入：原样收集、块内空行保留、提交前去掉公共缩进 |
+| `:reset` / `:quit` / `:help` | `:reset` 清缓冲与加载目标（保留设置/历史）；`:quit` 同 Ctrl-D |
 
-未知 `:命令` 给 `未知命令 ...（输入 :help）`，不落到 parse error。调试与运行时错误的整体
-工作流见 [debugging.md](debugging.md)。
+**定义体验**：`x = 1 + 1` / `f y = x + y` 可直接输入，缺签名时 REPL 调
+`Interp.inferDefTypes` 自动推断（编译器元变量 telescope + 定义边界泛化），写回后
+`checkProgram` 复查，失败回滚并提示手写签名。带模式匹配（`f 0 = …`）、trait 约束
+（`x == x`）、高阶参数的定义需要显式签名（消息里给提示）。同名 `DFun` 再次输入即重定义
+（文本替换语义：后续定义重新绑定到新定义，不是 shadowing）。
+
+**加载矩阵**（`:load` 与 CLI 位置参数同一套解析）：
+
+| 目标 | 行为 | 输出片段 |
+| --- | --- | --- |
+| `path/to/entry.vuna` | 整段源码替换 imports/defs（旧语义） | `已加载 …（N 个定义）` |
+| `path/to/module.vuna`（含 `module` 头） | 拒绝，提示用模块名 | `是模块文件` |
+| `Base.Nat`（模块名） | 立即校验后追加 `import` | `已导入模块 Base.Nat` |
+| `path/to/pkg`（目录） | 切换包上下文并重置缓冲/索引（保留设置/历史） | `已切换包 …` |
+| `vuna repl FILE` / `vuna repl DIR` / `vuna repl MODULE` | 启动即加载 / 切换上下文 / 导入；失败 exit 2 | 同上 |
+
+**行编辑（tty）**：←/→ 码点移动、Home/End、Backspace/Delete、↑/↓ 历史、Ctrl-R 反向
+增量历史搜索（再按 Ctrl-R 找更早、Enter 接受、Esc/Ctrl-C 取消）、Ctrl-A/E/K/U/W、
+Ctrl-L 清屏、Ctrl-P/N/B/F、Ctrl-C 取消当前输入、Ctrl-D 空行退出、Tab 补全（命令名与
+当前缓冲绑定名；唯一匹配补全、多个补最长公共前缀）。超宽行按水平窗口只显示尾部，
+宽度来自 `stty size`。历史持久化到 `VUNA_REPL_HISTORY` > `$XDG_STATE_HOME/vuna/repl_history`
+> `$HOME/.vuna_repl_history`（只存单行单元；目录不可写时静默跳过）。
+
+**非 tty / 无 stty 回退**：非交互管道、`:set editing off`、或无 POSIX `stty` 时退回
+`prim_readLine`（没有方向键/Ctrl-R，其它命令语义一致；测试全部走这条路径）。
+
+未知 `:命令` 给 `未知命令 ...（输入 :help 查看可用命令）` + 最近命令建议，不落到 parse
+error。调试与运行时错误的整体工作流见 [debugging.md](debugging.md)。
 
 ## 6. 尚未实现（工具链自身缺口）
 

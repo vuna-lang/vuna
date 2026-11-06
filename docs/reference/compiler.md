@@ -77,7 +77,7 @@
 | `Vuna.Files` | 目录遍历小工具（fmt/doc/test/Index 共用，`collectVunaFiles`） |
 | `Vuna.Fmt`（+ `Fmt.Comment`/`Decl`/`Expr`/`Util`） | 源码格式化器（`vuna fmt`，parse → 规范打印；门面只导出 `formatSourceWith`） |
 | `Vuna.Lint`（+ `Lint.Rules`/`Fix`/`Diagnostics`） | 风格检查与自动修复（`vuna lint`）；规则见 [lint.md](lint.md) |
-| `Vuna.Repl` | 交互式 REPL（`vuna repl`；表达式经 DT 求值，顶层定义需先写签名） |
+| `Vuna.Repl` | 交互式 REPL（`vuna repl`；定义自动签名、行编辑/Ctrl-R、`:load` 文件/目录/模块；表达式经 DT 求值） |
 | `Vuna.Doc`（+ `Doc.Types`/`Comments`/`Model`/`Prose`/`Html`/`Run`） | docstring 提取 + 单文件交互 HTML（`vuna doc`）；见 [api-docs.md](api-docs.md) |
 | `Vuna.Sig` | 语法级类型打印单一真源（api / doc / search 共用） |
 | `Vuna.Search`（+ `Search.Types`/`Query`/`Run`） | 名称 / docstring / 类型检索（`vuna search`） |

@@ -49,9 +49,11 @@
     时格式化 workspace 内所有包的 `lib/app/test`；
   - `vuna interp <file.vuna>`：DT 精化 + 核心求值（纯；不执行效果；入口文件按最近 manifest
     获得包上下文，无则 base-only）；
-  - `vuna repl`：REPL，定义累积、表达式经 DT 求值（支持 import/记录/trait/do；顶层定义必须
-    先写签名；与 CLI 同一包上下文）；未闭合括号 / 尾随 `=` / `where` / `do` 等自动续行；
-    `IO` 表达式经临时包 compile + 运行执行（每次约 1–2s，需要 `ocamlopt`）；
+  - `vuna repl [FILE|DIR|MODULE]`：REPL，定义累积、表达式经 DT 求值（支持 import/记录/
+    trait/do；缺签名的 `DFun` 自动推断并回写，失败回滚；与 CLI 同一包上下文）；未闭合
+    括号 / 尾随 `=` / `where` / `do` 等自动续行，`:{ ... :}` 块输入；`IO` 表达式经临时包
+    compile + 运行执行（每次约 1–2s，需要 `ocamlopt`）；tty 下有行编辑（方向键、Ctrl-R、
+    Tab 补全）与颜色，`:load` 接受文件/目录/模块名；
   - `vuna doc [--check] [--package NAME] [DIR [OUT]]`：扫描 `lib/` 生成**单文件交互 HTML**
     API 文档（默认 `DIR/docs/api.html`，gitignored；workspace 根含所有成员包）；`--check`
     报告缺失 docstring 的顶层导出项；docstring / 搜索框 / 类型检索见 [api-docs.md](api-docs.md)；
@@ -167,7 +169,7 @@ modules = [
 | `vuna interp <file.vuna>` | DT 精化 + 核心求值（纯；只展示 `Int`/`String`/`Bool`） |
 | `vuna test [DIR]` | 纯测试走核心求值；`main : IO ...` 走 compile+运行（退出码 0 通过） |
 | `vuna fmt [--check] [PATH]...` | 格式化 |
-| `vuna repl` | 交互式 REPL（多行；IO 表达式经 compile+运行） |
+| `vuna repl [FILE\|DIR\|MODULE]` | 交互式 REPL（自动签名、行编辑/Ctrl-R、颜色；IO 表达式经 compile+运行） |
 | `vuna doc [--check] [--package NAME] [DIR [OUT]]` | 单文件交互 HTML API 文档（docstring；尊重 `[export]`） |
 | `vuna search [--type|--name|--doc] ... <query...>` | 名称 / docstring / 类型检索（Hoogle 式打分；`--json`） |
 | `vuna map [--modules]` / `--find` / `--impact` | 源码符号索引（内容哈希缓存；定义、引用位置、建议测试） |
