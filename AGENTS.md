@@ -32,7 +32,7 @@
 
 ## 硬不变量（改坏了必须自己发现）
 
-1. **当前 seed 必须能编译当前源码，且与源码同步**（compiler/base 改动必须 rotation）——`seed/` 是提交入库的信任锚点；
+1. **当前 seed 必须能编译当前源码**（rotation 按需，触发条件见 bootstrap.md）——`seed/` 是提交入库的信任锚点；
 2. **seed rotation 后 stage1 == stage2**（文件集逐字节一致，fixed point）；
 3. **`seed/` 只含 compiler 包入口闭包**（`compiler/app/Main.vuna` 的 import 闭包）；
 4. **工具链不进 TCB**：`fmt`/`lint`/`repl`/`doc`/`test`/`Index`/`LSP`（以及未来的

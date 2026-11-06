@@ -23,7 +23,8 @@ vuna 尚未发布任何版本：没有外部用户、下游生态与历史包袱
   fmt 感知程序级 fixity 并打印 `infix*` 声明（M31.1–M31.3，见
   [operators.md](reference/operators.md)）。
 - **自举**：`seed/` 是 compiler 包入口闭包的多文件 OCaml 信任锚点；旧 seed 能编译当前
-  源码，rotation 后 stage1 == stage2。工具链（fmt/lint/repl/doc/test/LSP/Index）不进 TCB。
+  源码，rotation 按需（见 [bootstrap.md](reference/bootstrap.md)），之后 stage1 == stage2。
+  工具链（fmt/lint/repl/doc/test/LSP/Index）不进 TCB。
 - **包与构建**：workspace 根即包；每文件唯一包上下文；声明式效应能力；逐模块 split 输出；
   确定性产物 + 依赖闭包哈希 + 按模块内容哈希增量。
 - **工具链**：CLI 统一参数 / 错误出口；LSP 走包上下文（诊断 / hover / 补全 / 定位 /

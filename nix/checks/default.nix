@@ -55,6 +55,7 @@ let
       '';
 
   # seed → stage0 → stage1 → stage2，逐字节 fixed point（alias 已并入 seed-selfhost）。
+  # rotation 按需：seed 落后于源码只报告滞后，不失败；元数据在 nix/seed-rotation.txt。
   seed-selfhost = mkCheck {
     name = "vuna-seed-selfhost";
     srcs = [
@@ -69,6 +70,7 @@ let
       ../../nix/tcb-check.sh
       ../../nix/tcb-forbidden.txt
       ../../nix/seed-count.txt
+      ../../nix/seed-rotation.txt
     ];
     env = {
       VUNA_SEED = "${vuna-seed}/bin/vuna-seed";

@@ -32,8 +32,8 @@ compiler/lib/Vuna/Compiler/   （60 个模块：59 个导出 + 内部 Debug；�
 **目录即层**：目录 = 依赖层次，上层可 import 下层、反向禁止。**门面模式**：`X.vuna` 只
 import 子模块并选择性重导出（对外名字面不变），实现只在叶子；**数据定义只在叶子**
 （`Core.Term`、`Elab.Types` 等）。目标每模块 ≤~800 行（当前最大 `Elab/Trait.vuna`，约 1.2k）。
-`compiler/` 是 seed 唯一来源（`compiler/app/Main.vuna` 的 import 闭包，当前 80 `.ml` / 81
-文件，以 `seed/` 与 `nix/seed-count.txt` 为准）；`lib/` 工具链与 `app/` 在 TCB 之外；`base/` 模块名即 API。
+`compiler/` 是 seed 唯一来源（`compiler/app/Main.vuna` 的 import 闭包，数量以 `seed/` 与
+`nix/seed-count.txt` 为准）；`lib/` 工具链与 `app/` 在 TCB 之外；`base/` 模块名即 API。
 
 ## 1. 编译链：Frontend → Loader → Elab → Codegen
 
@@ -173,7 +173,8 @@ sh s1/build.sh）→ stage1 →（build --no-compile --out s2 compiler）→ dif
 
 命令 / 入口：`build --no-compile --out`（`compileToDir` → `dtSplitProjectParts` / `dtSplitProjectWithIfaces` →
 `generateDtSplitProgram`）、`nix/seed-rotate.sh`、`checks.seed-selfhost`。**硬不变量**：
-旧 seed 能编译新源码；rotation 后 stage1 == stage2；seed 只含 compiler 包入口闭包。
+旧 seed 能编译新源码；rotation 按需（见 [bootstrap.md](reference/bootstrap.md)）；之后
+stage1 == stage2；seed 只含 compiler 包入口闭包。
 测试：第 13/38 段 + `checks.seed-selfhost`，详见 [bootstrap.md](reference/bootstrap.md)。
 
 ## 改一处 → 跑什么

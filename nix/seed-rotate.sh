@@ -9,7 +9,9 @@
 # 工具链（fmt/lint/repl/doc/test）不在种子里。
 #
 # 生成与校验全部在临时目录完成：只有 TCB 断言与 fixed point 都通过后才替换 seed/，
-# 因此失败不会破坏工作树里的信任锚点。
+# 因此失败不会破坏工作树里的信任锚点。替换后写入 nix/seed-rotation.txt（审计元数据）。
+#
+# rotation 按需触发（见 docs/reference/bootstrap.md），不是每次 compiler/base 改动都做。
 set -eu
 cd "$(dirname "$0")/.."
 VUNA=${1:-./result/bin/vuna}
@@ -41,9 +43,39 @@ if ! diff -r "$tmp/seed" "$tmp/regen" >/dev/null 2>&1; then
   exit 1
 fi
 
+# 计算 rotation 元数据（审计用；CI 不因 seed 落后于源码而失败）。
+# 在替换 seed/ 之前完成：任何计算失败都不会动信任锚点。
+# 源码指纹 = compiler/ + base/ 下全部 .vuna 按路径排序后的内容哈希链。
+source_files=$(find compiler base -type f -name '*.vuna' | wc -l | tr -d ' ')
+source_digest=$(
+  find compiler base -type f -name '*.vuna' -print |
+    LC_ALL=C sort |
+    while IFS= read -r f; do sha256sum "$f"; done |
+    sha256sum | cut -d' ' -f1
+)
+seed_ml=$(find "$tmp/seed" -maxdepth 1 -type f -name '*.ml' | wc -l | tr -d ' ')
+seed_files=$(find "$tmp/seed" -maxdepth 1 -type f | wc -l | tr -d ' ')
+git_commit=$(git rev-parse HEAD 2>/dev/null || printf 'unknown')
+rotated_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+
 # 全部校验通过后再替换仓库里的 seed/。
 rm -rf seed
 cp -r "$tmp/seed" seed
 # 闭包数量断言由 checks.seed-selfhost 读取；rotation 时自动同步，避免清单腐化。
 find seed -maxdepth 1 -type f -name '*.ml' | wc -l | tr -d ' ' >nix/seed-count.txt
-echo "seed-rotate: 已生成 seed/（$(ls seed | wc -l | tr -d ' ') 个文件），fixed point 通过"
+
+# 写元数据（同目录临时文件 + mv，尽量原子；元数据只用于审计）。
+meta_tmp="nix/seed-rotation.txt.tmp"
+{
+  printf '# 由 nix/seed-rotate.sh 生成。记录 seed/ 对应（rotation 时）的源码状态。\n'
+  printf '# 仅供审计与滞后报告；CI 不因 seed 落后于源码而失败。\n'
+  printf 'rotated_at=%s\n' "$rotated_at"
+  printf 'source_digest=sha256:%s\n' "$source_digest"
+  printf 'source_files=%s\n' "$source_files"
+  printf 'seed_ml=%s\n' "$seed_ml"
+  printf 'seed_files=%s\n' "$seed_files"
+  printf 'git_commit=%s\n' "$git_commit"
+} >"$meta_tmp"
+mv "$meta_tmp" nix/seed-rotation.txt
+
+echo "seed-rotate: 已生成 seed/（$(ls seed | wc -l | tr -d ' ') 个文件），fixed point 通过，元数据已写入 nix/seed-rotation.txt"

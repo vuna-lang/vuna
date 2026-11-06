@@ -208,8 +208,8 @@ nix run .#vuna-run-tests [-- --list | --only 34 | --only dt | --vuna stable]
 `vuna-index`、`vuna-lint`、`vuna-metrics`、`vuna-package`、`vuna-tests`、`vuna-typecheck`、
 `vscode-ext`；主体是 `nix/checks/<name>.sh`）。语义项：
 
-- `seed-selfhost`：seed→stage0→stage1→stage2 逐字节一致、TCB 黑名单、闭包数量、增量构建与
-  行为抽查；
+- `seed-selfhost`：seed→stage0→stage1→stage2 逐字节一致、TCB 黑名单、闭包数量、增量构建、
+  行为抽查与 seed 滞后报告（不阻塞）；
 - `vuna-tests`：沙箱跑上述原生测试；
 - `vuna-typecheck` / `vuna-lint`：`vuna check .` 自检、lint 零 finding；
 - `vuna-fmt`：workspace 全包与 `examples/`；
