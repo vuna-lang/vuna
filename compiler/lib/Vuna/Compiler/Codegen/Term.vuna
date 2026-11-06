@@ -161,21 +161,23 @@ dtReporterRuntime =
 -- 定义位置表：OCaml 值名 → (vuna 定义名, 文件:行)。无 span 的定义跳过（axiom/生成项
 -- 里没有来源的那些）；顺序严格按传入列表，生成是确定性的。`norm` 负责把 span 里的
 -- 文件路径归一到模块根 / 包目录下（见 Codegen.Split）。
+-- M34.6：旧实现 `row ++ dtDefLocTable norm rest` 是右嵌套 `++`，每层都重拷整段已累积
+-- 文本（compiler 包 3086 行 ⇒ 约 430MB 拷贝、~365ms）；改为先 map 出行再一次性
+-- `strConcatMany`（runtime `String.concat ""`，单遍分配），输出逐字节不变。
 dtDefLocTable : (String -> String) -> List DtDef -> String
-dtDefLocTable norm [] = ""
-dtDefLocTable norm (d :: rest) = case dtDefSpan d of
-  Nothing => dtDefLocTable norm rest
+dtDefLocTable norm defs = strConcatMany (map (dtDefLocRow norm) defs)
+
+dtDefLocRow : (String -> String) -> DtDef -> String
+dtDefLocRow norm d = case dtDefSpan d of
+  Nothing => ""
   Just sp =>
-    let
-      row =
-        "  ("
-          ++ ocamlString (valueName (dtDefName d))
-          ++ ", ("
-          ++ ocamlString (dtDefName d)
-          ++ ", "
-          ++ ocamlString (norm sp.spanFile ++ ":" ++ strFromInt (spanStartLine sp))
-          ++ "));\n"
-    in row ++ dtDefLocTable norm rest
+    "  ("
+      ++ ocamlString (valueName (dtDefName d))
+      ++ ", ("
+      ++ ocamlString (dtDefName d)
+      ++ ", "
+      ++ ocamlString (norm sp.spanFile ++ ":" ++ strFromInt (spanStartLine sp))
+      ++ "));\n"
 
 -- 运行时文本 = 既有常量部分（`dtRuntime`） + 注入的定义位置表 + 报告器。
 -- `dt_def_locs` 必须定义在报告器之前（报告器读它）；空表写成 `[]`。

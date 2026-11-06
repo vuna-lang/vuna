@@ -64,7 +64,7 @@
 
 ```console
 nix build .#vuna --out-link result   # 产品 CLI；.#vuna-compiler / .#vuna-seed 同理
-nix flake check                      # 13 项：3 packages + 10 checks（含 vscode-ext）
+nix flake check                      # 15 项：3 packages + 12 checks（含 vscode-ext）
 nix run .#vuna-run-tests [-- --list | --only dt]   # 原生测试；bench：.#vuna-bench --quick / .#vuna-perf --check
 vuna check .                         # 包级类型检查（自检）；vuna build . → .output/bin/<包名>
 vuna fmt --check <PATH>...           # 格式化检查（省略 PATH = workspace 各包 lib/app/test）；vuna lint <file>...

@@ -23,6 +23,7 @@ module Vuna.Compiler.Loader.Flatten
 -- 旧的历史顺序拼接/flatten 死路径已删除，DT 精化由 `Driver.Dt` 按
 -- 「依赖序列 + 入口声明」拼接。
 import Base.IO
+import Vuna.Compiler.CacheFormat
 import Vuna.Compiler.Loader.Diagnostics
 import Vuna.Compiler.Common
 import Base.HashMap
@@ -46,8 +47,11 @@ import Vuna.Compiler.Packages.Pkg
 -- 这里用 5 条独立 lane 拼成 ~50 bit，并把 schema 版本拌进 key；payload 还带源文本做
 -- 回读校验（见下）：**改 `Frontend.Ast` 的 Marshal 布局时必须 bump `astCacheSchema`**
 -- （否则旧缓存会被按新布局 `prim_unmarshal`）。模板字面量（M36）新增 AST 构造子，schema 4 → 5。
+-- M34.6：载荷套上统一 framing（CacheFormat）；**同时 bump schema 6 → 7**——AST key 不含
+-- 编译器指纹，若不 bump，旧二进制（seed / 旧 stage1）会按裸 Marshal 读新格式条目而崩溃。
+-- bump 后新旧二进制各用各的 key 空间，互不读取。
 astCacheSchema : String
-astCacheSchema = "vuna-ast-cache 6"
+astCacheSchema = "vuna-ast-cache 7"
 
 astCacheDir : String
 astCacheDir =
@@ -63,22 +67,23 @@ astKeyOf path src = strFromInt (astStrongHash (astCacheSchema ++ "\t" ++ path ++
 -- `h := (h*33 + c) land 1023` 的仿射迭代，换初值只会得到 h_k = A*k + const (mod 1024)，
 -- 五条 lane 彼此完全相关（有效熵仍只有 ~10 bit + 长度，实测测试套件里 7x 夹具读到了
 -- 15_private_implicit 的 AST，报出本不存在的 `module Priv not found`）。
+-- M34.6：五条 lane **同时**推进（一次 strUnpack 遍历）。旧实现每条 lane 各走一遍
+-- 字符表，冷路径 parse 前多花 ~21ms（83 文件实测 75 → 54ms）；取值与旧实现逐位相同
+-- （缓存 key 不变）。
 astStrongHash : String -> Int
-astStrongHash s =
-  let
-    cs = strUnpack s
-  in astLane cs 33 1021 0
-    + astLane cs 131 1019 7 * 1024
-    + astLane cs 257 1013 13 * 1048576
-    + astLane cs 65599 1009 29 * 1073741824
-    + astLane cs 16777619 997 61 * 1099511627776
+astStrongHash s = astStrongHashGo (strUnpack s) 0 7 13 29 61
 
-astLane : List Int -> Int -> Int -> Int -> Int
-astLane [] mult modulus acc = acc
-astLane (c :: rest) mult modulus acc =
+astStrongHashGo : List Int -> Int -> Int -> Int -> Int -> Int -> Int
+astStrongHashGo [] a b c d e = a + b * 1024 + c * 1048576 + d * 1073741824 + e * 1099511627776
+astStrongHashGo (ch :: rest) a b c d e =
+  astStrongHashGo rest (astLaneStep a 33 1021 ch) (astLaneStep b 131 1019 ch)
+    (astLaneStep c 257 1013 ch) (astLaneStep d 65599 1009 ch) (astLaneStep e 16777619 997 ch)
+
+astLaneStep : Int -> Int -> Int -> Int -> Int
+astLaneStep acc mult modulus ch =
   let
-    v = acc * mult + c
-  in astLane rest mult modulus (v - v / modulus * modulus)
+    v = acc * mult + ch
+  in v - v / modulus * modulus
 
 -- 缓存**回读校验**：payload 带原始源文本，命中时逐字节比较——key 即使碰撞也不会把
 -- 别的文件的 AST 当成本文件；不匹配就重新 parse 并覆盖该条目（只损失这一条缓存）。
@@ -91,14 +96,22 @@ astCacheSource (AstCacheEntry src file) = src
 astCacheFile : AstCacheEntry -> SourceFile
 astCacheFile (AstCacheEntry src file) = file
 
-readAstCache : String -> AstCacheEntry
-readAstCache cpath = prim_unmarshal (runIO (prim_readFile cpath))
+-- 缓存条目读写（C32 最小硬化）：载荷统一 framing（magic/schema/长度/校验和）。读侧
+-- 截断/篡改/旧格式 ⇒ Nothing ⇒ 重新 parse 并覆盖条目；只有通过 framing 校验的字节才
+-- 交给 `prim_unmarshal`（坏文件不再让 Marshal 抛异常/解出错类型）。命中仍逐字节比较
+-- 源文本（key 碰撞保护）。
+readAstCache : String -> Maybe AstCacheEntry
+readAstCache cpath = case readFramed astCacheSchema cpath of
+  Just payload => Just (prim_unmarshal payload)
+  Nothing => Nothing
 
 storeAstCache : String -> String -> SourceFile -> SourceFile
 storeAstCache cpath src parsed =
   let
     _ = ensureDirPath astCacheDir
-    _ = runIO (prim_writeFileAtomic cpath (prim_marshal (AstCacheEntry src parsed)))
+    _ =
+      runIO
+        (prim_writeFileAtomic cpath (frameEncode astCacheSchema (prim_marshal (AstCacheEntry src parsed))))
   in parsed
 
 ensureDirPath : String -> Int
@@ -117,16 +130,16 @@ parseFileWithPath : String -> String -> Result SourceFile
 parseFileWithPath path src =
   let
     cpath = astCacheDir ++ "/" ++ astKeyOf path src
-  in if runIO (prim_fileExists cpath) then
-    let
-      entry = readAstCache cpath
-    in if astCacheSource entry == src then Ok (astCacheFile entry)
-    else case parseSource path src of
-      Err e => Err (path ++ ": " ++ e)
-      Ok parsed => Ok (storeAstCache cpath src parsed)
-  else case parseSource path src of
-    Err e => Err (path ++ ": " ++ e)
-    Ok parsed => Ok (storeAstCache cpath src parsed)
+  in case readAstCache cpath of
+    Just entry =>
+      if astCacheSource entry == src then Ok (astCacheFile entry)
+      else parseAndStoreAt cpath path src
+    Nothing => parseAndStoreAt cpath path src
+
+parseAndStoreAt : String -> String -> String -> Result SourceFile
+parseAndStoreAt cpath path src = case parseSource path src of
+  Err e => Err (path ++ ": " ++ e)
+  Ok parsed => Ok (storeAstCache cpath src parsed)
 
 visibleFixitiesOf : List Module -> List Import -> List FixityDecl
 visibleFixitiesOf modules imports = concatMap (\imp => case findModule modules (importName imp) of

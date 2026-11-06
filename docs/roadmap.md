@@ -80,9 +80,10 @@ fixity 唯一来源、反引号中缀 / section / 用户符号名、fmt 程序�
 测量地基 `nix run .#vuna-perf`、codegen / 运行时优化、容器与表示（`Array`/`IORef`/`MArray`/
 `Buffer` + `HashMap`/`IntMap` 的 `Array` 桶）、可变数据边界与字符串补齐、受限 FFI
 （`extern` + `ffi/*.c`）、库级最小效应接口（`State`/`Reader`/`Error`）；生成程序基准全部进入
-2× 手写 OCaml；线性类型 / ST 按计划裁剪，见 debt D22）。下一步是已排期的 **M34（编译器快）**，
-再往后 **M35（并发 / 服务端）**。新阶段必须映射到 debt 条目，并在「范围」里列明关闭哪些项；
-B / C / E 系列残留按需插入。
+2× 手写 OCaml；线性类型 / ST 按计划裁剪，见 debt D22）。**M34（编译器快）已收尾**
+（2026-11，见「性能轨道」；`check .` 冷 3.3 s / LSP 编辑 20–120 ms / 增长率与硬门槛落地，
+收尾时清掉了 M34.5 的 5–6× 冷路径回退）。下一步是 **M35（并发 / 服务端）**。新阶段必须
+映射到 debt 条目，并在「范围」里列明关闭哪些项；B / C / E 系列残留按需插入。
 
 **M38（开发与调试体验）已收尾**：`vuna test` 筛选/耗时、`vuna run`、REPL 调试命令、LSP
 lint quick fix、CLI 诊断源码片段、运行时错误报告（定义级帧）与 `Base.Debug`。新阶段仍须
@@ -90,49 +91,40 @@ lint quick fix、CLI 诊断源码片段、运行时错误报告（定义级帧�
 
 ## 性能轨道（M34–M35）
 
-M33（语言能写高性能系统程序）已收尾，历史在 git；剩下两个小阶段。顺序依据：**编译器本身
-是 vuna 程序（编译为 OCaml 运行）**，M33 的 codegen / 运行时 / 容器改进已直接反哺编译器。
+M33（语言能写高性能系统程序）已收尾，历史在 git；M34（编译器快）已收尾，M35 待做。顺序
+依据：**编译器本身是 vuna 程序（编译为 OCaml 运行）**，M33 的 codegen / 运行时 / 容器改进
+已直接反哺编译器。
 
-### M34：编译器快
+### M34：编译器快（已收尾，2026-11）
 
-1. **基准与门槛**：复用 M33 的测量，设 `check` / `build` / LSP 的软 / 硬门槛；
-2. **数据与算法（剩余）**：`append` O(n²)、SCC / 终止性 / loader 的 list→表、
-   `Sort` 的 O(n²)、字符串 Buffer（容器 / 索引、`metaLookup` 索引化、去 `strFromInt`
-   已落地）；**`vuna map` 冷启动全量重建 ~31 s**：索引缓存内容哈希失效后整仓重扫，且
-   `Vuna.Index.Scan.refsInExpr` 用左结合 `append` 拼接子树引用列表，嵌套表达式 / 应用
-   spine 上呈 O(n²)（热缓存读数 ~0.46 s；见 [debt.md](reference/debt.md) C34）；
-3. **分配削减**：`Ec` / `Sols` 复制、Term / Value 表示、`normalize` / `force` 复用、
-   hash-consing / interning；
-4. **并行 / 增量**：workspace 并行 `check`（纯核心 + 确定性合并）、模块级并行 codegen、
-   LSP 增量；
-5. **单文件 / 模块级编译缓存**：依赖图 + 接口摘要 → 进程内缓存（LSP / REPL / workspace）→
-   AST 磁盘缓存 → **elab 级磁盘缓存**。缓存 key 含源内容哈希、依赖接口摘要、base / prelude
-   版本、编译器版本、manifest 能力；接口不变时复用 elab 结果，实现变化只失效 codegen。
-   前置是序列化格式（Core Term / DtProgram，见 [debt.md](reference/debt.md) C32）；
-6. **吃 M33 红利**：编译器重编译后验证 codegen / 运行时的收益并设门槛。
+**最终退出标准状态**（读数与前后对比见 [performance.md](reference/performance.md) §1/§9）：
 
-**依赖**：M33 已落地（测量 / 容器 / codegen 基础）；5 依赖序列化与接口摘要。
-**退出标准**：`check .` 从当前 ~8 s 降至目标；`vuna map` 冷启动从 ~31 s 降至秒级；单文件
-增量进入秒级以下；LSP 编辑反馈明显下降；性能 CI 门槛可用（[debt.md](reference/debt.md) C33）。
-**映射 debt**：C30、C31、C32、C33、E01、E04、E06。
+- `check .` 冷 ~3.3 s（M34.6 起点回退到 ~23.6 s，收尾低于旧基线 3.6 s）、`check compiler`
+  ~2.2 s、热缓存 36 ms；
+- `vuna map` 冷 ~0.7–0.9 s、热 ~0.5 s（C34 的 O(n²) 已修）；
+- 单文件增量：改一个叶子模块只精化脏模块（compiler 首轮 ~6 s 已到此前的全量水平以下，
+  §44f/§44l 有 clean/parse 语义断言）；
+- LSP 编辑反馈：会话热 20–120 ms（M34.6 起点 3–8 s），首次请求 1.1–1.5 s；
+- 性能 CI 门槛：`bench/compiler.sh --check` 硬失败阈值 + `vuna-compiler-growth` 增长率
+  门槛 + `vuna-compiler-perf` 的增量/工具路径断言（C33 关闭）。
 
-M34.1 基准/软门槛/分配统计（C34 关闭、C33 部分）；M34.2 热点（termination worklist、
-`groupDefs`/`extraDefsOf`/`Namespaces` 表化、`vuna map` 索引 O(n²)→O(n)、
-`unsolvedFrom` 的 list→IntMap（全解表扫描 O(n²)→O(n)）、C30）；M34.3 部分
-（`termHasAnyMeta` 快速路径；`Ec`/`Sols` 已是 O(1) cons 与增量 delta）；M34.5 的 check/build 级
-elab 缓存（`$TMPDIR/vuna-cache`，冷/热：check . 6.5s→25ms、build --no-compile 2.8s→21ms）；M34.6 读数
-随基准。M34.4 workspace 并行 check 完成（`prim_spawn`/`prim_wait`；check . 冷 6.5s→4.1s；根包串行 + 成员并行）；
-LSP 诊断帧进程内缓存（同 uri+内容重复请求命中，编辑后仍全量精化）。剩余（M34 收尾状态）：M34.5 接口摘要（C37）已修复 3 层真实缺陷——`quote 0` 的负索引
-（`NVar "b" (-1)`）、深度感知序列化（`DtProgram.depths` + `quote d` + 占位环境恢复）、
-自由变量过滤（`freeVarTerm` + dropped 安全阀）；剩 1 层（`runIO` 隐式 `a` 的求解路径，
-`Interp.vuna:70` 的 `b <> String`）未定位，作为独立后续阶段（跨包 elab 状态复用需要完整
-的作用域/实例化语义恢复）。其余剩余：M34.3 的 hash-consing（需全局 intern 表，与纯精化
-路径冲突）；M34.4 模块级并行 codegen（C35 已关闭：分层直接依赖 + 全限定跨单元引用已落地，
-构建侧分层并行已在 `build.sh` 层内 `&` + `wait`；codegen 进程内仍串行，作为后续项保留）；
-规范序列化格式（C32）。
+**落地主线**（M34.1–M34.6；历史细节在 git 与 [performance.md](reference/performance.md)）：
+测量设施与软/硬门槛 → 热点表化（termination worklist、`groupDefs`/`extraDefsOf`、
+`vuna map` 索引 O(n²)→O(n)、`unsolvedFrom` IntMap）→ AST/包级/模块级接口缓存（TTC 式，
+依赖零 parse、包内逐模块增量 S4）→ codegen 单元缓存（S5/S7，默认开）→ workspace 并行
+check + LSP 诊断帧缓存（M34.4）→ 工具链惰性闭包/会话缓存/单文件增量（M34.6）。
 
-**TTC 模块化精化收尾（2026-11）**：AST 缓存已落地（`Loader/Flatten.parseFileWithPath`，key = schema + 路径 + 源内容，5 条独立 lane + 回读校验，`$TMPDIR/vuna-cache/ast`，原子写）。接口摘要分两步：**包级**（M34.5，已完成：`CachedProgram` 闭合模型 + `deftbl` 只装定义体 + 深度感知 zonk + 读侧安全阀 + 传递依赖）；**模块级**（S1/S2，已完成依赖侧）：`Driver.Iface.ModuleIface`（闭合产物 + 已解析 decls + exports/fixities/imports + `miIfaceHash`/`miDepHashes`）、每模块 iface 文件 + 包级 manifest（写侧只重写变化模块，mtime 快判可选）、依赖模块由 Loader 预置（零 parse/resolve）、接口哈希链校验与回退、`check`/`build` 共用接口路径（[cache.md](reference/cache.md)）。第 2 步已完成：**包内逐模块增量**（S4：干净模块预置、只精化脏模块、依赖脏则依赖者脏）；剩余模块签名隔离；第 3 步 codegen 单元级缓存已落地（S5：`VUNA_UNIT_CACHE=1` opt-in，按单元 key 复用 SplitFile + 规范化顺序）；第 4 步 LSP/REPL 已接接口（`VUNA_IFACE_TOOL=1` opt-in；惰性闭包 + 会话缓存待做）。开放项见 debt C37/C32。
+**M34.6 收尾波**（2026-11）：清理 M34.5 遗留的急切诊断探针（冷路径回退主因，-5~6×）、
+工具闭包正确性与默认开启、LSP 单文件增量 + 会话缓存 + 单模块写回、终止性 facts/
+`checkAllDefined`/`dtDefLocTable`/owner 表的 O(n²)、iface 影子写单遍分桶、`defVals`
+记忆化删除、缓存 framing（C32 最小硬化）、单元缓存默认化、性能门槛硬化。**M34 收尾后
+仍有明确优化空间，但已有数据证明性价比低**（全部记录在 performance.md §9「已量化否决的
+候选」）：codegen 并发生成（可并部分 7–8%）、hash-consing（2–4%，与三处不变量冲突）、
+LSP 文件内按 def 增量（上限 1.5–1.8×）、mtime 默认开（<5%）、`Elab.Usage`/实例体等小项。
 
+**映射 debt**：C30、C31、C34、C35 关闭；C33 关闭（M34.6）；C32 剩余「显式自描述序列化
+格式 + elab 级磁盘缓存」归后续；C37 的工具链消费项已落地，剩余擦除位残 meta 与
+LSP-only 写回自愈归后续。
 ### M35：并发 / 服务端
 
 1. **效应系统 / 代数效应（M35.1，设计/参考页 [effects.md](reference/effects.md)）**：

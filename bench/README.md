@@ -71,6 +71,9 @@ array 基准；W4 的 `strSubstring` + `repeat` 批拼把 string_ops 拉到 1.0x
 （workspace 全部 / 仅 compiler 包）、`vuna map` 冷 / 热、`fmt --check`，并内置冷 / 热两种
 口径（清缓存后测 vs 预热后测）。**范围不同不可直接互比**：`check-all` 是 workspace 根包 +
 成员并行，`build-all` 是 workspace 全部串行（≈ check 全部 + codegen），`*-compiler` 只覆盖
-compiler 包。基线 `bench/compiler-baseline.txt`（机器相关，仅同机回归对比）；`--check` 超 20%
-打 WARN（软门槛），`--save-baseline` 重写基线，`--alloc` 额外打印冷 `check .` 的 GC 分配统计
-（`VN_PERF_STATS=1`）。用法与读数见 [performance.md §9](../docs/reference/performance.md)。
+compiler 包。基线 `bench/compiler-baseline.txt`（机器相关，仅同机回归对比）；`--check` 超
+`--threshold`%（默认 20）打 WARN、超 `--fail-threshold`%（默认 50）exit 1（M34.6 起硬门槛），
+`--save-baseline` 重写基线，`--alloc` 额外打印冷 `check .` 的 GC 分配统计（`VN_PERF_STATS=1`）。
+跨机器/跨输入规模的可比口径是 `nix/checks/compiler-growth.sh`（合成 500/1000/2000/4000 同形
+定义，相邻档墙钟比 ≤2.3；进 `nix flake check`）。用法与读数见
+[performance.md §9](../docs/reference/performance.md)。

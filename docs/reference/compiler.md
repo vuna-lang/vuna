@@ -174,10 +174,13 @@ fixities / imports / capabilities、`miSource`、`miIfaceHash`、`miDepHashes`�
 
 - 接口物理单位是**模块**（per-module 文件 + manifest）；包内精化已按模块增量（S4：干净模块复用、脏性沿 import 保守传播）。
 - 依赖包的实例/类仍全部并入视图（过近似，与包级摘要一致）；模块签名隔离另立项。
-- codegen 已按单元缓存（S5）；纯代码生成仍整包跑（elab 主导，收益有限）。
-- LSP / REPL 已能消费接口（`VUNA_IFACE_TOOL=1`，默认关；惰性闭包 + 会话缓存未做）；
-  依赖 `defVals` 未序列化；残留擦除位 meta 依赖包段重编号。
-- 快判默认内容哈希，`VUNA_CACHE_MTIME=1` 可开 mtime+size 快路径；接口格式仍是 Marshal。
+- codegen 已按单元缓存（S5/S7，默认开）；纯代码生成仍整包跑（生成占冷 build ~10–20%，
+  逐单元可并部分仅 7–8%，并行收益 <7%；见 [performance.md](performance.md) §9）。
+- LSP / REPL 消费接口默认开启（`VUNA_IFACE_TOOL=0` 关闭）：惰性闭包 + 会话缓存 + 单文件
+  增量 + 单模块写回已落地；残留擦除位 meta 依赖包段重编号、LSP-only 写回哈希由首次整包
+  check 自愈。
+- 快判默认内容哈希，`VUNA_CACHE_MTIME=1` 可开 mtime+size 快路径（5s 安全窗）；缓存载荷已有
+  framing + 损坏回退，但仍是 OCaml Marshal（显式自描述格式归后续，见 debt C32）。
 
 ## codegen 的表示
 

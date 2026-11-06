@@ -1,0 +1,97 @@
+module Vuna.Compiler.CacheFormat (frameDecode, frameEncode, frameMagic, readFramed) where
+
+-- Vuna.Compiler.CacheFormat：磁盘缓存的**统一 framing**（C32 最小硬化）。
+--
+-- 背景：`check` / `split` / `ast` / codegen 单元缓存过去都是裸 `prim_marshal` 落盘，
+-- 读侧直接 `prim_unmarshal`。文件被截断/篡改（并发写、磁盘损坏、人工编辑）时
+-- `Marshal.from_string` 会抛 `Failure` 或返回错类型的值——语言里没有 try/catch，
+-- 进程只能崩。这里在载荷外层加自描述头，读侧先校验再 unmarshal：
+--
+--   <magic>|<tag>|<payload 字节数>|<payload 校验和>\n<payload>
+--
+--   - magic  : 格式版本（本模块变更即 bump；旧文件自然拒绝）
+--   - tag    : 各缓存自己的 schema/编译器指纹（schema 变化即拒绝旧缓存，无兼容义务）
+--   - 长度   : 精确字节数（截断 / 追加都拒绝）
+--   - 校验和 : 内容哈希（单字节篡改必然改变，见下）
+--
+-- 校验和用内建 `strHash`：它是 `h := (h*33 + c) land 1023` 的线性迭代，单字节差异
+-- `delta * 33^k` 在模 1024 下不可能为 0（33^k 是奇数、可逆；|delta| < 256），因此
+-- **任意单字节篡改都会改变校验和**；截断由长度字段拒绝；整段覆写为垃圾由两者共同拒绝。
+-- 不做密码学强度（本仓库无兼容义务、也没有对手模型）；通过校验后的字节仍是 OCaml
+-- Marshal，若有能力构造「同长度 + 同 strHash」的载荷仍可能让 unmarshal 出错——这是
+-- 本阶段「最小硬化」的已知边界（完整格式替换属于后续 C32 项）。
+--
+-- 代价：读侧多一遍 `strHash`（本机实测 ~1.2ms/MB）。分裂/检查缓存 1–4MB ⇒ +1–5ms，
+-- 相比省掉的 load/resolve/elab/codegen 可忽略；换来的是坏缓存不再崩溃、自动重算。
+import Vuna.Compiler.Common
+import Base.IO
+
+frameMagic : String
+frameMagic = "vuna-cache-frame 1"
+
+-- 载荷校验和（见模块头：单字节篡改必然改变它）。
+frameChecksum : String -> Int
+frameChecksum payload = strHash payload
+
+-- 头行（含换行）；payload 从下一字节开始。
+frameHeader : String -> Int -> Int -> String
+frameHeader tag len sum =
+  frameMagic ++ "|" ++ tag ++ "|" ++ strFromInt len ++ "|" ++ strFromInt sum ++ "\n"
+
+frameEncode : String -> String -> String
+frameEncode tag payload = frameHeader tag (strLength payload) (frameChecksum payload) ++ payload
+
+-- 头行字段拆分：恰好 4 段（magic/tag/len/checksum）。多一段/少一段都拒绝。
+headerFields : String -> Maybe (Pair String (Pair String (Pair String String)))
+headerFields line = case split "|" line of
+  [m, t, l, h] => Just (Pair m (Pair t (Pair l h)))
+  _ => Nothing
+
+breakFirstNewline : List Int -> List Int -> Maybe (Pair String String)
+breakFirstNewline [] _ = Nothing
+breakFirstNewline (c :: rest) acc =
+  if c == 10 then Just (Pair (strPack (reverse acc)) (strPack rest))
+  else breakFirstNewline rest (c :: acc)
+
+-- 头行 + 载荷切分：只在**前 512 字节**里找换行（头行 ~60 字节，远小于上限）。不能对整段
+-- 载荷做 `strUnpack`：4MB 载荷会建 400 万个 cons cell 再把列表拼回字符串，实测让缓存命中
+-- 路径从 ~19ms 涨到数百 ms。这里只 unpack 头行前缀，载荷用 `strSubstring` 切一次（一次
+-- 内存拷贝）。
+frameSplit : String -> Maybe (Pair String String)
+frameSplit raw =
+  let
+    n = strLength raw
+    headLen = if n < 512 then n else 512
+  in case breakFirstNewline (strUnpack (strSubstring 0 headLen raw)) [] of
+    Nothing => Nothing
+    Just p =>
+      let
+        header = firstOf p
+        start = strLength header + 1
+      in Just (Pair header (strSubstring start (n - start) raw))
+
+-- 读侧：magic/tag/长度/校验和任一不符 ⇒ Nothing（调用方回退重算）。绝不把未校验的
+-- 字节交给 unmarshal。
+frameDecode : String -> String -> Maybe String
+frameDecode tag raw = case frameSplit raw of
+  Nothing => Nothing
+  Just p => case headerFields (firstOf p) of
+    Nothing => Nothing
+    Just fields =>
+      let
+        magic = firstOf fields
+        rest1 = secondOf fields
+        gotTag = firstOf rest1
+        rest2 = secondOf rest1
+        gotLen = firstOf rest2
+        gotSum = secondOf rest2
+        payload = secondOf p
+      in if magic == frameMagic && gotTag == tag then if gotLen == strFromInt (strLength payload) && gotSum == strFromInt (frameChecksum payload) then Just payload
+      else Nothing
+      else Nothing
+
+-- 读 + 校验一步（文件不存在/读失败之外的损坏都由 framing 拒绝）。调用方拿到 Just 的
+-- 字节后才可以 unmarshal（或仅确认存在）。
+readFramed : String -> String -> Maybe String
+readFramed tag path =
+  if runIO (prim_fileExists path) then frameDecode tag (runIO (prim_readFile path)) else Nothing

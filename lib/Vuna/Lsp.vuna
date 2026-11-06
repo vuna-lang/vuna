@@ -84,40 +84,50 @@ record LspState where
   stateRootHint : Maybe String
   stateLogs : List String
   stateDiagCache : List (Pair Int Json)
+  stateDiagSession : Maybe DiagCache
 
 setDocs : List Doc -> LspState -> LspState
-setDocs docs (LspState _ s idx tried hint logs dc) = LspState docs s idx tried hint logs dc
+setDocs docs (LspState _ s idx tried hint logs dc dsess) =
+  LspState docs s idx tried hint logs dc dsess
 
 setShutdown : Bool -> LspState -> LspState
-setShutdown s (LspState docs _ idx tried hint logs dc) = LspState docs s idx tried hint logs dc
+setShutdown s (LspState docs _ idx tried hint logs dc dsess) =
+  LspState docs s idx tried hint logs dc dsess
 
 setIndex : Maybe Index -> LspState -> LspState
-setIndex idx (LspState docs s _ tried hint logs dc) = LspState docs s idx tried hint logs dc
+setIndex idx (LspState docs s _ tried hint logs dc dsess) =
+  LspState docs s idx tried hint logs dc dsess
 
 setIndexTried : Bool -> LspState -> LspState
-setIndexTried tried (LspState docs s idx _ hint logs dc) = LspState docs s idx tried hint logs dc
+setIndexTried tried (LspState docs s idx _ hint logs dc dsess) =
+  LspState docs s idx tried hint logs dc dsess
 
 setRootHintIfEmpty : String -> LspState -> LspState
-setRootHintIfEmpty hint (LspState docs s idx tried (existing@(Just prev)) logs dc) =
-  LspState docs s idx tried existing logs dc
-setRootHintIfEmpty hint (LspState docs s idx tried Nothing logs dc) =
-  LspState docs s idx tried (Just hint) logs dc
+setRootHintIfEmpty hint (LspState docs s idx tried (existing@(Just prev)) logs dc dsess) =
+  LspState docs s idx tried existing logs dc dsess
+setRootHintIfEmpty hint (LspState docs s idx tried Nothing logs dc dsess) =
+  LspState docs s idx tried (Just hint) logs dc dsess
 
 setDiagCache : List (Pair Int Json) -> LspState -> LspState
-setDiagCache dc (LspState docs s idx tried hint logs _) = LspState docs s idx tried hint logs dc
+setDiagCache dc (LspState docs s idx tried hint logs _ dsess) =
+  LspState docs s idx tried hint logs dc dsess
+
+setDiagSession : Maybe DiagCache -> LspState -> LspState
+setDiagSession dsess (LspState docs s idx tried hint logs dc _) =
+  LspState docs s idx tried hint logs dc dsess
 
 -- M34.4：LSP 进程内诊断帧缓存（上限 32 条，前插）。
 pushDiag : Int -> Json -> LspState -> LspState
-pushDiag key frame (LspState docs s idx tried hint logs dc) =
-  LspState docs s idx tried hint logs (truncateCache 32 (Pair key frame :: dc))
+pushDiag key frame (LspState docs s idx tried hint logs dc dsess) =
+  LspState docs s idx tried hint logs (truncateCache 32 (Pair key frame :: dc)) dsess
 
 truncateCache : Int -> List a -> List a
 truncateCache n [] = []
 truncateCache n (x :: rest) = if n <= 0 then [] else x :: truncateCache (n - 1) rest
 
 logTo : String -> LspState -> LspState
-logTo line (LspState docs s idx tried hint logs dc) =
-  LspState docs s idx tried hint (line :: logs) dc
+logTo line (LspState docs s idx tried hint logs dc dsess) =
+  LspState docs s idx tried hint (line :: logs) dc dsess
 
 -- 退出时一次写出（内存累积的日志，见 Protocol.flushLogLines）。
 flushLogs : LspState -> Int
@@ -237,8 +247,9 @@ diagnoseCached uri version text state =
     Just frame => Pair state frame
     Nothing =>
       let
-        frame = publishDiagnosticsFor uri version text
-        state1 = pushDiag key frame state
+        result = publishDiagnosticsCached state.stateDiagSession uri version text
+        frame = secondOf result
+        state1 = pushDiag key frame (setDiagSession (firstOf result) state)
       in Pair state1 frame
 
 lookupDiag : Int -> List (Pair Int Json) -> Maybe Json
@@ -252,7 +263,7 @@ handleDidClose msg state =
     params = paramsOf msg
     uri = uriOfParams params
     docs = docRemove uri state.stateDocs
-  in Pair False (Pair (setDocs docs state) [publishDiagnosticsFor uri 0 ""])
+  in Pair False (Pair (setDocs docs state) [publishDiagnosticsEmpty uri 0])
 
 -- hover：先查洞目标（包上下文），未命中再查标识符签名/注释。
 handleHover : Json -> LspState -> Pair Bool (Pair LspState (List Json))
@@ -481,7 +492,7 @@ lspFuelBound = 1073741824
 -- runLsp 是读 stdin 的 LSP 帧循环：若留成零参值，任何子命令启动都会跑它。
 runLsp : Int -> Int
 runLsp _ =
-  lspLoop lspFuelBound "" (logTo "starting" (LspState [] False Nothing False Nothing [] []))
+  lspLoop lspFuelBound "" (logTo "starting" (LspState [] False Nothing False Nothing [] [] Nothing))
 
 -- CLI 入口：与其它工具命令一致，返回退出码（由 Vuna.Cli 插入分发）。
 runLspTool : List String -> Int

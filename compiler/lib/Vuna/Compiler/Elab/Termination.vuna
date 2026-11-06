@@ -384,7 +384,8 @@ computePosFactsWork : List String -> HashMap (List (Pair (List Pat) Expr)) -> Ha
 computePosFactsWork names defTbl rgT fuel facts work = if fuel <= 0 then facts
 else
   let
-    scan = posScanNames names defTbl (posTblOf facts) work (Pair [] [])
+    namesTbl = Base.HashMap.ofNames names
+    scan = posScanNames namesTbl defTbl (posTblOf facts) work (Pair [] [])
     fresh = posFilterTbl (firstOf scan) (posTblOf (secondOf scan))
     newFacts = posFilterTbl fresh (posTblOf facts)
     merged = posUnionTbl facts fresh

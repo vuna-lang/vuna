@@ -134,3 +134,7 @@ max_module_lines 1208
 #     arch 188 / readme 171 / max_ref 345 已超旧预算，属漏标定（非本轮引入）。按用户指示
 #     把超标项上限提升 20%：coldstart 40787 / agents 136 / arch 222 / readme 204 /
 #     max_ref 410；max_module_lines 不变（实测 1171 < 1208）。
+#   - M34.6（编译器性能收尾）：入口文档只有 AGENTS 的 flake check 数量 13→15 项（等长替换，
+#     字节/行数不变）；其余改动都在 docs/reference/*。2026-11-06 的 20% 上限调整已覆盖当前
+#     实测值（coldstart 34553 / agents 114 / arch 188 / readme 171 / max_ref ≤345），
+#     max_module_lines 实测 1171 < 1208，未放宽。

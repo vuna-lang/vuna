@@ -1,5 +1,6 @@
 module Vuna.Compiler.Driver.Compile
-  ( buildMetaText
+  ( ToolContext
+  , buildMetaText
   , buildSplit
   , checkPackage
   , compileToDir
@@ -7,9 +8,21 @@ module Vuna.Compiler.Driver.Compile
   , depIfacesForTool
   , depIfacesForToolProgram
   , depIfacesForToolSource
+  , depIfacesForToolSourceDetailed
   , ensureDirPath
   , metaUpToDate
   , runBuildScript
+  , sourceInfoForPath
+  , toolCleanOwnModules
+  , toolCompilerFingerprint
+  , toolHasOwnManifest
+  , toolNeededOfImports
+  , toolNowSec
+  , toolOwnEntrySourceHash
+  , toolSessionFresh
+  , toolTextHash
+  , toolWriteModuleIface
+  , toolWriteModuleIfaceCold
   , writeBuildMeta
   ) where
 
@@ -26,6 +39,7 @@ module Vuna.Compiler.Driver.Compile
 -- 预先算好的层**分层并行**编译 + 精确增量（每单元 stamp 只含直接依赖），依赖图不再
 -- 退化为全序链。
 import Vuna.Compiler.Common
+import Vuna.Compiler.CacheFormat
 import Vuna.Compiler.Packages.Pkg
 import Vuna.Compiler.Driver.Dt
 import Vuna.Compiler.Debug
@@ -89,8 +103,12 @@ compileToDir ctx entry printResult outDir =
   let
     key = splitCacheKey ctx entry printResult
     path = splitCachePath ctx key
+    _ = stamp "split-cache-key-done"
   in case readSplitCache path of
-    Just files => writeCompiled ctx outDir files
+    Just files =>
+      let
+        _ = stamp "split-cache-hit"
+      in writeCompiled ctx outDir files
     Nothing => case depIfacesOf ctx of
       Just ifaces => case ownCleanModules ctx (depIfaceHashTable ctx) of
         Just clean =>
@@ -118,10 +136,14 @@ writeCompiled : PackageContext -> String -> List SplitFile -> Result Int
 writeCompiled ctx outDir files =
   let
     _ = ensureDirPath outDir
+    _ = stamp "write-compiled-start"
   in andThen (writeSplitFilesIfChanged outDir files) (\n => let
+    _ = stamp "write-split-files-done"
     graph = splitGraph (canonicalTopo files)
+    _ = stamp "split-graph-done"
     cFiles = copyFfiFiles (contextDir ctx) outDir
     _ = runIO (prim_writeFile (outDir ++ "/build.sh") (buildScript graph cFiles))
+    _ = stamp "build-script-done"
   in Ok n
   )
 
@@ -345,6 +367,11 @@ runBuildScript dir out name =
 checkCacheSchema : String
 checkCacheSchema = "vuna-check-cache 7"
 
+-- 载荷 framing 的 tag（C32）：schema + 编译器版本。路径 key 已含编译器指纹，这里再校验
+-- 一次，保证「文件与 tag 错配」也不会被当成有效缓存（统一 framing 见 `CacheFormat`）。
+checkCacheTag : String
+checkCacheTag = checkCacheSchema ++ "/" ++ vunaVersion
+
 checkCacheDir : PackageContext -> String
 checkCacheDir ctx = cacheBase ++ "/" ++ hashText (textHash (contextPackageName ctx)) ++ "/check"
 
@@ -457,8 +484,8 @@ depIfacesGo roots (p :: rest) acc = case depIfaceOf p of
     in Nothing
 
 -- 来源校验：接口记录的每个模块源信息 = 当前文件（默认内容哈希；`VUNA_CACHE_MTIME=1` 时
--- mtime+size 相同即视为未变，否则回落内容哈希）。反过来当前目录里的模块集合必须与接口
--- 模块集合一致（新增/删除模块都要回退，否则接口会缺件/带陈旧模块）。
+-- mtime+size 相同且落在安全窗外即视为未变，否则回落内容哈希）。反过来当前目录里的模块
+-- 集合必须与接口模块集合一致（新增/删除模块都要回退，否则接口会缺件/带陈旧模块）。
 depIfaceSourcesValid : List Root -> Package -> PackageIface -> Bool
 depIfaceSourcesValid roots p pi =
   let
@@ -479,14 +506,26 @@ allModuleSourcesValid (m :: rest) paths = case lookupPair (miNameOf m) paths of
   Just path => sourceInfoUnchanged path (miSourceOf m) && allModuleSourcesValid rest paths
   Nothing => False
 
-sourceInfoUnchanged : String -> SourceInfo -> Bool
-sourceInfoUnchanged path si =
-  if mtimeFastPath then if runIO (prim_fileMtime path) == siMtimeOf si && runIO (prim_fileSize path) == siSizeOf si then True
-  else textHash (runIO (prim_readFile path)) == siHashOf si
-  else textHash (runIO (prim_readFile path)) == siHashOf si
+-- mtime 秒精度的安全窗：`prim_fileMtime` 只有秒级分辨率，同秒内改内容且大小不变的编辑
+-- 用 mtime+size 不可分辨。mtime 距当前不足该窗口的文件一律回落内容哈希（近期编辑不走
+-- 快路径）；窗口外可安全信任 mtime+size（写侧记录的是当时的内容哈希，记录后至少过了
+-- 窗口才可能被信任）。窗口同样用于工具链会话的 `sourceFresh`。
+mtimeSafetyWindowSec : Int
+mtimeSafetyWindowSec = 5
 
--- 可选快路径（默认关闭）：mtime + size 相同即跳过读文件算哈希。同秒内改内容且大小不变的
--- 编辑可能漏判；测试/A-B 用默认内容哈希。
+sourceInfoUnchanged : String -> SourceInfo -> Bool
+sourceInfoUnchanged path si = if mtimeFastPath then
+  let
+    m = runIO (prim_fileMtime path)
+    sz = runIO (prim_fileSize path)
+  in if m == siMtimeOf si && sz == siSizeOf si && m + mtimeSafetyWindowSec < toolNowSec then True
+  else textHash (runIO (prim_readFile path)) == siHashOf si
+else textHash (runIO (prim_readFile path)) == siHashOf si
+
+-- 可选快路径（默认关闭；`VUNA_CACHE_MTIME=1` 打开）：mtime + size 相同且 mtime 落在安全窗
+-- 外即跳过读文件算哈希。实测缓存命中路径收益 <1%（check/build 的缓存 key 本来就要读全部
+-- 源文件算哈希），未达默认开启门槛（5%），见 docs/reference/cache.md。
+-- 快路径默认关闭 ⇒ 正确性默认由内容哈希保证；打开后靠 mtimeSafetyWindowSec 兜住同秒编辑。
 mtimeFastPath : Bool
 mtimeFastPath = runIO (prim_getenv "VUNA_CACHE_MTIME") == "1"
 
@@ -513,9 +552,8 @@ depHashListOk tbl ((Pair name h) :: rest) = case lookupPair name tbl of
 depIfacesForCheck : PackageContext -> Maybe (List ModuleIface)
 depIfacesForCheck ctx = depIfacesOf ctx
 
--- 工具链默认**不**读整个依赖闭包接口：一次性读+校验 94 个模块比按需 load 慢（小项目
--- 会把单次 REPL 求值从 0.08s 拖到 2s）。用 `VUNA_IFACE_TOOL=1` 显式开启；后续做
--- 「只读 import 闭包需要的那几个模块 + 会话内缓存」后再默认打开。
+-- 工具链消费默认走接口：M34.6 起默认开启（`VUNA_IFACE_TOOL=0` 关闭做 A/B/排障）。
+-- 一次性读全依赖闭包接口只用于旧调试入口；LSP/REPL 走下面的惰性闭包。
 -- M34.5（S7）：工具链**按需**读依赖接口。
 -- manifest 已携带每模块的直接 import 名与依赖哈希：先只读 manifest（小）并按 entry 的
 -- import 闭包算出需要哪些模块，再只 unmarshal 这些模块文件（不再一次读整包 N 个模块）。
@@ -619,21 +657,45 @@ toolImportNamesOf ctx current imports = case implicitPrelude (contextRoots ctx) 
   Err _ => map importNameStr imports
   Ok implicit => map importNameStr (append imports implicit)
 
--- 工具链消费：`VUNA_IFACE_TOOL=1` 时按源码 import 闭包按需读接口；否则 Nothing。
-depIfacesForToolSource : PackageContext -> String -> String -> Maybe (List ModuleIface)
-depIfacesForToolSource ctx label source = if runIO (prim_getenv "VUNA_IFACE_TOOL") == "1" then case toolDepManifests ctx of
+-- 工具链消费：默认按源码 import 闭包按需读依赖接口；`VUNA_IFACE_TOOL=0` 关闭（排障/A-B）。
+-- M34.6：闭包必须含**同包模块的 import**——entry 直接 import 的模块可能再由同包模块
+-- import 别的依赖包模块；只沿 entry imports 展开会漏掉这些依赖模块（Loader 从源码加载
+-- 它们却没有 artifact 注入 ⇒ 假 `TC_UnknownName`）。同包模块名/import 从本包 manifest 取
+-- （`check`/`build` 会写）；没有本包 manifest 或闭包仍不完整时，`Dt` 侧安全阀回退全量。
+toolEnabled : Bool
+toolEnabled = runIO (prim_getenv "VUNA_IFACE_TOOL") /= "0"
+
+toolOwnManifest : PackageContext -> Maybe PackageManifest
+toolOwnManifest ctx = if contextPackageName ctx == "" then Nothing
+else case readManifest (ifaceDirOf ctx) ifaceCompilerTag of
+  Just mf =>
+    if pmSchemaOf mf == ifaceSchema && pmCompilerOf mf == ifaceCompilerTag && pmPackageOf mf == contextPackageName ctx then Just mf
+    else Nothing
   Nothing => Nothing
-  Just mans =>
-    let
-      table = toolEntryTable mans
-      needed = toolClosure table (toolImportsOfSource ctx label source)
-    in case toolReadIfaces table needed of
-      Nothing => Nothing
-      Just ifaces => if toolChainValid ifaces then
-        let
-          _ = note ("iface-tool-lazy modules=" ++ strFromInt (length ifaces))
-        in Just ifaces
-      else Nothing
+
+toolOwnEntries : PackageContext -> PackageManifest -> List (Pair String (Pair String ManifestEntry))
+toolOwnEntries ctx mf =
+  map (\e => Pair (meNameOfEntry e) (Pair (ifaceDirOf ctx) e)) (pmModulesOf mf)
+
+depIfacesForToolSource : PackageContext -> String -> String -> Maybe (List ModuleIface)
+depIfacesForToolSource ctx label source = if toolEnabled then case toolDepManifests ctx of
+  Nothing => Nothing
+  Just mans => case toolOwnManifest ctx of
+    Nothing => Nothing
+    Just ownMf =>
+      let
+        ownNames = map meNameOfEntry (pmModulesOf ownMf)
+        table = append (toolEntryTable mans) (toolOwnEntries ctx ownMf)
+        needed = toolClosure table (toolImportsOfSource ctx label source)
+        -- 同包模块从源码加载（不是接口），只有依赖包模块需要读接口。
+        depNeeded = filter (\n => memName n ownNames == False) needed
+      in case toolReadIfaces (toolEntryTable mans) depNeeded of
+        Nothing => Nothing
+        Just ifaces => if toolChainValid ifaces then
+          let
+            _ = note ("iface-tool-lazy modules=" ++ strFromInt (length ifaces))
+          in Just ifaces
+        else Nothing
 else Nothing
 
 -- REPL：program 是「imports + 定义」的源码，闭包同样从它的 import 算。
@@ -641,15 +703,204 @@ depIfacesForToolProgram : PackageContext -> String -> Maybe (List ModuleIface)
 depIfacesForToolProgram ctx program = depIfacesForToolSource ctx "<repl>" program
 
 depIfacesForTool : PackageContext -> Maybe (List ModuleIface)
-depIfacesForTool ctx =
-  if runIO (prim_getenv "VUNA_IFACE_TOOL") == "1" then depIfacesOf ctx else Nothing
+depIfacesForTool ctx = if toolEnabled then depIfacesOf ctx else Nothing
+
+-- ---------------------------------------------------------------
+-- M34.6（5a/5c）：工具链（LSP / REPL）会话上下文
+--
+-- 一次工具请求需要的「依赖包接口 + 依赖接口哈希表 + 本包 manifest + 本次 buffer 的 import
+-- 闭包 + 校验面」。全部由 manifest（小文件）算出来，模块接口按闭包惰性读；会话层把它按
+-- 「编译器指纹 + 包名 + manifest 内容 + 闭包源文件 stat」缓存，失效时重建。
+-- ---------------------------------------------------------------
+-- `tcDepIfaces`：import 闭包里需要的依赖包模块接口（惰性读取的子集）；
+-- `tcDepHashes`：依赖闭包**全部**模块的接口哈希（来自 manifest，不读模块文件；写本包接口
+-- 时填 `miDepHashes` 用）；
+-- `tcOwnManifest`：本包 manifest（干净同包模块 / 单模块写回的合并基）；
+-- `tcNeeded`：本次 buffer 的 import 闭包（含本包模块名）——buffer 引入新依赖时据此失效；
+-- `tcStats`：校验面（依赖/本包模块源文件 + manifest 文件的 (路径, 内容哈希, mtime, size)）；
+-- `tcDepTable`：依赖模块名 → (接口目录, manifest 条目)，buffer 改 import 时重算闭包用。
+record ToolContext where
+  tcDepIfaces : List ModuleIface
+  tcDepHashes : List (Pair String Int)
+  tcOwnManifest : Maybe PackageManifest
+  tcNeeded : List String
+  tcStats : List SourceInfo
+  tcDepTable : List (Pair String (Pair String ManifestEntry))
+
+-- 依赖 manifest 的条目 → 接口哈希表（不读模块文件）。
+manifestHashTable : List (Pair String PackageManifest) -> List (Pair String Int)
+manifestHashTable mans = concatMap tableOfManifest mans
+
+tableOfManifest : Pair String PackageManifest -> List (Pair String Int)
+tableOfManifest (Pair dir mf) =
+  map (\e => Pair (meNameOfEntry e) (meIfaceHashOfEntry e)) (pmModulesOf mf)
+
+-- 会话校验面：每个模块条目的 SourceInfo + manifest 文件本身。
+statsOfManifest : Pair String PackageManifest -> List SourceInfo
+statsOfManifest (Pair dir mf) =
+  append (map meSourceOfEntry (pmModulesOf mf)) [sourceInfoForPath (manifestPathOf dir)]
+
+-- 内容哈希（与缓存 key / 接口源信息同一函数）：工具链侧比较 buffer 与磁盘内容用。
+toolTextHash : String -> Int
+toolTextHash = textHash
+
+sourceInfoForPath : String -> SourceInfo
+sourceInfoForPath path =
+  let
+    raw = runIO (prim_readFile path)
+  in SourceInfo path (textHash raw) (runIO (prim_fileMtime path)) (runIO (prim_fileSize path))
+
+toolNowSec : Int
+toolNowSec = runIO timeUs / 1000000
+
+-- 校验：文件还在，且（mtime+size 快路径）或（内容哈希）与记录一致。
+-- 安全窗与 `sourceInfoUnchanged` 同一个（`mtimeSafetyWindowSec`）：记录的 mtime 距会话建立
+-- 不足窗口时，同秒内同大小编辑不可分辨 ⇒ 回读哈希。
+sourceFresh : Int -> SourceInfo -> Bool
+sourceFresh builtSec si =
+  let
+    path = siPathOf si
+  in if runIO (prim_fileExists path) == False then False
+  else
+    let
+      m = runIO (prim_fileMtime path)
+      sz = runIO (prim_fileSize path)
+    in if m == siMtimeOf si && sz == siSizeOf si && siMtimeOf si + mtimeSafetyWindowSec <= builtSec then True
+    else textHash (runIO (prim_readFile path)) == siHashOf si
+
+toolSessionFresh : Int -> List SourceInfo -> Bool
+toolSessionFresh builtSec [] = True
+toolSessionFresh builtSec (si :: rest) = sourceFresh builtSec si && toolSessionFresh builtSec rest
+
+-- 本包 manifest 条目 + 依赖 manifest 条目 → 闭包计算用的表。
+toolContextTable : PackageContext -> ToolContext -> List (Pair String (Pair String ManifestEntry))
+toolContextTable ctx tool =
+  let
+    ownTable = case tool.tcOwnManifest of
+      Just mf => toolOwnEntries ctx mf
+      Nothing => []
+  in append tool.tcDepTable ownTable
+
+-- import 名 → 闭包（含同包 manifest 里的模块）；buffer 每次变化都按当前 imports 重算。
+toolNeededOfImports : PackageContext -> ToolContext -> String -> List Import -> List String
+toolNeededOfImports ctx tool currentName imports =
+  toolClosure (toolContextTable ctx tool) (toolImportNamesOf ctx currentName imports)
+
+-- 惰性工具接口 + 会话上下文（M34.6 5a）：与 `depIfacesForToolSource` 同一套校验，
+-- 额外返回依赖哈希表 / 本包 manifest / 闭包 / 校验面。
+depIfacesForToolSourceDetailed : PackageContext -> String -> String -> Maybe ToolContext
+depIfacesForToolSourceDetailed ctx label source = if toolEnabled then case toolDepManifests ctx of
+  Nothing => Nothing
+  Just mans => case toolOwnManifest ctx of
+    Nothing => Nothing
+    Just ownMf =>
+      let
+        ownNames = map meNameOfEntry (pmModulesOf ownMf)
+        table = append (toolEntryTable mans) (toolOwnEntries ctx ownMf)
+        needed = toolClosure table (toolImportsOfSource ctx label source)
+        depNeeded = filter (\n => memName n ownNames == False) needed
+        stats =
+          append (concatMap statsOfManifest mans) (statsOfManifest (Pair (ifaceDirOf ctx) ownMf))
+      in case toolReadIfaces (toolEntryTable mans) depNeeded of
+        Nothing => Nothing
+        Just ifaces => if toolChainValid ifaces then
+          let
+            _ = note ("iface-tool-lazy modules=" ++ strFromInt (length ifaces))
+          in Just
+            (ToolContext ifaces (manifestHashTable mans) (Just ownMf) needed stats (toolEntryTable mans))
+        else Nothing
+else Nothing
+
+-- 本包干净模块（M34.6 5a/5c）：manifest 条目里「源内容未变 + 依赖哈希链仍成立」的模块。
+-- 只读 `needed` 里的模块接口文件（闭包子集）；`exclude` 是当前正在编辑的模块名（buffer
+-- 可能与磁盘不同，不能复用它的 iface）。
+toolCleanOwnModules : PackageContext -> ToolContext -> Int -> Maybe String -> List String -> List ModuleIface
+toolCleanOwnModules ctx tool builtSec exclude needed = case tool.tcOwnManifest of
+  Nothing => []
+  Just mf =>
+    let
+      entries = filterOwnEntries needed exclude (pmModulesOf mf)
+      cands = mapMaybe (readModuleFile (ifaceDirOf ctx) ifaceCompilerTag) entries
+    in toolCleanGo builtSec tool.tcDepHashes cands []
+
+filterOwnEntries : List String -> Maybe String -> List ManifestEntry -> List ManifestEntry
+filterOwnEntries needed exclude [] = []
+filterOwnEntries needed exclude (e :: rest) =
+  let
+    keep = memName (meNameOfEntry e) needed && (case exclude of
+      Just x => meNameOfEntry e /= x
+      Nothing => True
+    )
+  in if keep then e :: filterOwnEntries needed exclude rest else filterOwnEntries needed exclude rest
+
+toolCleanGo : Int -> List (Pair String Int) -> List ModuleIface -> List ModuleIface -> List ModuleIface
+toolCleanGo builtSec depTbl [] cleanRev = reverse cleanRev
+toolCleanGo builtSec depTbl (m :: rest) cleanRev =
+  if sourceFresh builtSec (miSourceOf m) && cachedProgramValid (miCachedOf m) && moduleDepsOk depTbl cleanRev (miDepHashesOf m) then toolCleanGo builtSec depTbl rest (m :: cleanRev)
+  else toolCleanGo builtSec depTbl rest cleanRev
+
+-- 单模块接口写回（M34.6 5a）：LSP 每次成功请求后只写「当前模块」的接口（合并进本包
+-- manifest，保留其他条目）。语义与整包 ifaceOfPackage 一致（见 `Iface.ifaceOfModule`）；
+-- 有缺口/其他脏模块时返回 Err，调用方静默跳过（不影响诊断）。
+toolWriteModuleIface : PackageContext -> ToolContext -> List ModuleIface -> CheckedPackage -> String -> SourceInfo -> Result ModuleIface
+toolWriteModuleIface ctx tool clean checked name si =
+  let
+    dir = ifaceDirOf ctx
+    _ = ensureDirPath dir
+  in andThen (ifaceOfModule (contextPackageName ctx) si tool.tcDepHashes checked.checkedInherited clean checked.checkedModules checked.checkedEntryDecls checked.checkedProgram name) (\mi => let
+    _ = writeModuleIfaceMerge dir ifaceCompilerTag (contextPackageName ctx) mi
+  in Ok mi
+  )
+
+-- 冷启动（没有工具会话 / 本包还没有 manifest）：依赖哈希从磁盘接口汇总，干净模块按
+-- 现有判定重算；能写就写（LSP-only 会话逐步变热），失败不影响诊断。
+toolWriteModuleIfaceCold : PackageContext -> CheckedPackage -> String -> SourceInfo -> Result ModuleIface
+toolWriteModuleIfaceCold ctx checked name si =
+  let
+    dir = ifaceDirOf ctx
+    _ = ensureDirPath dir
+    clean = cleanIfacesOrEmpty ctx
+  in andThen (ifaceOfModule (contextPackageName ctx) si (depIfaceHashTable ctx) checked.checkedInherited clean checked.checkedModules checked.checkedEntryDecls checked.checkedProgram name) (\mi => let
+    _ = writeModuleIfaceMerge dir ifaceCompilerTag (contextPackageName ctx) mi
+  in Ok mi
+  )
+
+-- LSP 写回守卫：本包 manifest 是否已存在（冷启动写回只在没有 manifest 时做，
+-- 避免把「工具接口暂时不可用」的会话写进去污染依赖哈希链）。
+toolHasOwnManifest : PackageContext -> Bool
+toolHasOwnManifest ctx = case toolOwnManifest ctx of
+  Just _ => True
+  Nothing => False
+
+-- 本包 manifest 里某模块记录的源内容哈希（判断「磁盘内容已检查过」⇒ 不必重写接口）。
+toolOwnEntrySourceHash : ToolContext -> String -> Maybe Int
+toolOwnEntrySourceHash tool name = case tool.tcOwnManifest of
+  Just mf => entryHashOfEntries (pmModulesOf mf) name
+  Nothing => Nothing
+
+entryHashOfEntries : List ManifestEntry -> String -> Maybe Int
+entryHashOfEntries [] name = Nothing
+entryHashOfEntries (e :: rest) name =
+  if meNameOfEntry e == name then Just (siHashOf (meSourceOfEntry e))
+  else entryHashOfEntries rest name
+
+toolCompilerFingerprint : Int
+toolCompilerFingerprint = compilerFingerprint
+
+-- 命中判定不只看文件存在：framing（magic/tag/长度/校验和）校验失败（截断/篡改/旧格式）
+-- 即视为未命中 ⇒ 重算并覆盖。check 缓存载荷在命中路径上**不 unmarshal**（只需要确认
+-- 「同输入下曾经成功」），所以损坏不会崩；但必须回退重算，而不是静默当成功。
+checkCacheHit : String -> Bool
+checkCacheHit path = case readFramed checkCacheTag path of
+  Just _ => True
+  Nothing => False
 
 checkCachedExe : PackageContext -> String -> Result (List String)
 checkCachedExe ctx entry =
   let
     key = checkCacheKeyExe ctx entry
     path = checkCachePath ctx key
-  in if runIO (prim_fileExists path) then Ok [] else checkUncachedExe ctx entry path
+  in if checkCacheHit path then Ok [] else checkUncachedExe ctx entry path
 
 -- 缓存未命中时的精化入口：默认「依赖接口摘要齐全 ⇒ 摘要路径，否则全量」。
 -- 摘要路径返回 `Err` 时**直接上报**（不回退——回退会吞掉本包真实错误）。
@@ -762,13 +1013,19 @@ cleanIfacesOrEmpty ctx = case ownCleanModules ctx (depIfaceHashTable ctx) of
 
 writeIfaceShadow : PackageContext -> CheckedPackage -> Result Int
 writeIfaceShadow ctx checked = if contextPackageName ctx == "" then Ok 0
-else case ifaceOfPackage (contextPackageName ctx) (ownSourceInfos ctx) (depIfaceHashTable ctx) checked.checkedInherited (cleanIfacesOrEmpty ctx) checked.checkedModules checked.checkedEntryDecls checked.checkedProgram of
-  Err e => if ifaceSelfTestRequested then Err e
-  else
-    let
-      _ = note ("iface-skip " ++ e)
-    in Ok 0
-  Ok modules => writeIfaceNow ctx modules
+else
+  let
+    _ = stamp "iface-shadow-start"
+  in case ifaceOfPackage (contextPackageName ctx) (ownSourceInfos ctx) (depIfaceHashTable ctx) checked.checkedInherited (cleanIfacesOrEmpty ctx) checked.checkedModules checked.checkedEntryDecls checked.checkedProgram of
+    Err e => if ifaceSelfTestRequested then Err e
+    else
+      let
+        _ = note ("iface-skip " ++ e)
+      in Ok 0
+    Ok modules =>
+      let
+        _ = stamp "iface-compute-done"
+      in writeIfaceNow ctx modules
 
 -- 真正写接口：入口-only 包（没有 lib 模块）不写（没有可复用的模块接口；写空包只会让
 -- 消费者读到 invalid 接口）。per-module 文件只重写接口哈希变化的模块，manifest 最后写。
@@ -785,6 +1042,7 @@ else
     _ = runIO (prim_removeFile (dir ++ "/iface.pkg"))
     n = writePackageIface dir ifaceCompilerTag (contextPackageName ctx) modules
     _ = note ("iface-write=" ++ strFromInt n ++ "/" ++ strFromInt (length modules))
+    _ = stamp "iface-write-done"
   in if ifaceSelfTestRequested then ifaceSelfTest dir modules else Ok n
 
 -- 影子写的自检（`VUNA_IFACE_SELFTEST=1`）：读回 + 包接口校验 + 模块名集合/接口哈希一致。
@@ -822,7 +1080,9 @@ sameIfaceHashes (m :: rest) ys = case ifaceHashOfName ys (miNameOf m) of
 checkAndCache : PackageContext -> String -> Result (Pair (List String) CheckedPackage) -> Result (List String)
 checkAndCache ctx path checked = andThen checked (\r => let
   _ = ensureDirPath (checkCacheDir ctx)
-  _ = runIO (prim_writeFileAtomic path (prim_marshal (cachedOfProgram (secondOf r).checkedProgram)))
+  _ =
+    runIO
+      (prim_writeFileAtomic path (frameEncode checkCacheTag (prim_marshal (cachedOfProgram (secondOf r).checkedProgram))))
 in andThen (writeIfaceShadow ctx (secondOf r)) (\_ => Ok (firstOf r))
 )
 
@@ -831,7 +1091,7 @@ checkCachedLib ctx names =
   let
     key = checkCacheKeyLib ctx names
     path = checkCachePath ctx key
-  in if runIO (prim_fileExists path) then Ok [] else checkUncachedLib ctx names path
+  in if checkCacheHit path then Ok [] else checkUncachedLib ctx names path
 
 checkUncachedLib : PackageContext -> List String -> String -> Result (List String)
 checkUncachedLib ctx names path = if elabFullRequested then fullCheckLib ctx names path
@@ -864,6 +1124,9 @@ fullCheckLib ctx names path =
 splitCacheSchema : String
 splitCacheSchema = "vuna-split-cache 3"
 
+splitCacheTag : String
+splitCacheTag = splitCacheSchema ++ "/" ++ vunaVersion
+
 splitCacheDir : PackageContext -> String
 splitCacheDir ctx = cacheBase ++ "/" ++ hashText (textHash (contextPackageName ctx)) ++ "/split"
 
@@ -879,13 +1142,15 @@ splitCacheKey ctx entry printResult =
     prHash = if printResult then 1 else 0
   in hashText srcHash ++ "-" ++ hashText depsHash ++ "-" ++ hashText (verHash + prHash)
 
+-- 读侧先过 framing（magic/tag/长度/校验和）；校验失败（截断/篡改/旧格式）⇒ Nothing
+-- ⇒ 调用方重算并覆盖。只有校验通过的载荷才交给 unmarshal（坏字节不喂给 Marshal）。
 readSplitCache : String -> Maybe (List SplitFile)
-readSplitCache path =
-  if runIO (prim_fileExists path) then Just (prim_unmarshal (runIO (prim_readFile path)))
-  else Nothing
+readSplitCache path = case readFramed splitCacheTag path of
+  Just payload => Just (prim_unmarshal payload)
+  Nothing => Nothing
 
 writeSplitCache : PackageContext -> String -> List SplitFile -> Int
 writeSplitCache ctx path files =
   let
     _ = ensureDirPath (splitCacheDir ctx)
-  in runIO (prim_writeFileAtomic path (prim_marshal files))
+  in runIO (prim_writeFileAtomic path (frameEncode splitCacheTag (prim_marshal files)))

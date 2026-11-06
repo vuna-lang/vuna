@@ -1,11 +1,17 @@
-module Vuna.Lsp.Diagnostics (contextForDoc, publishDiagnosticsFor) where
+module Vuna.Lsp.Diagnostics
+  ( DiagCache
+  , contextForDoc
+  , publishDiagnosticsCached
+  , publishDiagnosticsEmpty
+  , publishDiagnosticsFor
+  ) where
 
 -- Vuna.Lsp.Diagnostics：LSP 诊断链（工具链模块，**永不进 seed 闭包**）。
 --
 -- 策略（M30 起走包上下文，不再「含 import 就跳过」）：
 --   1. 解析失败 ⇒ 一条带位置的 parse 诊断；
---   2. 有 `module` 头 ⇒ `Loader.loadModuleSource`（经 `Dt.dtCheckSource`），无头 ⇒
---      `loadProjectSource` 入口语义；DT 精化错误按 `<file>:<line>:<col>` 转 LSP 0-based；
+--   2. 有 `module` 头 ⇒ 模块源码路径，无头 ⇒ 入口语义；DT 精化错误按
+--      `<file>:<line>:<col>` 转 LSP 0-based；
 --   3. 依赖文件（spanFile 不是当前文件）的错误**过滤掉**——每个打开的文件只发布自己的
 --      诊断；没有位置的错误归到当前文件 0:0；
 --   4. 合并 `Vuna.Lint.Rules.lintSourceWith` 的语法级 finding（severity 2，code = LN_ 规则码）；
@@ -13,8 +19,20 @@ module Vuna.Lsp.Diagnostics (contextForDoc, publishDiagnosticsFor) where
 --
 -- 包上下文：file:// URI → 路径 → `contextForFile`；非 file URI（或磁盘上不存在的
 -- 路径）退化到 cwd 的 `contextForDir "."`。失败由调用方转成 0:0 的 `pkg: ...` 诊断。
+--
+-- M34.6（5a/5c）：**会话缓存** + 单文件增量精化。
+--   - `DiagCache` 保存一次请求建立的包上下文 / 依赖模块接口 / 本包干净模块 / termAux 预处理
+--     / fixity 环境；每个请求先做**惰性校验**（编译器指纹 + 包名 + 闭包源文件与 manifest 的
+--     mtime+size，安全窗内回读内容哈希），任一变化就重建（无文件 watcher）；
+--   - 校验通过时只精化当前 buffer（同包干净模块 / 依赖包 artifact 从接口预置），并把当前
+--     模块的接口写回本包 manifest（buffer == 磁盘时；只写当前模块、保留其他条目、原子写）。
+--     这让 LSP-only 会话逐步变热；
+--   - 无接口（依赖包还没 check / 本包没有 manifest）时回退全量精化，诊断语义不变。
 import Vuna.Compiler.Common
+import Vuna.Compiler.Driver.Compile
 import Vuna.Compiler.Driver.Dt
+import Vuna.Compiler.Driver.Iface
+import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Frontend.Parser
 import Vuna.Compiler.Packages.Pkg
 import Vuna.Files
@@ -22,7 +40,7 @@ import Vuna.FixityEnv
 import Vuna.Json
 import Vuna.Lint.Rules
 import Vuna.Lsp.Protocol
-import Vuna.Compiler.Driver.Compile
+import Base.IO
 
 -- DiagnosticSeverity：1 = Error、2 = Warning、3 = Information、4 = Hint
 severityError : Int
@@ -99,47 +117,253 @@ contextForDoc uri =
   else if pathExistsFile path then mapResult (\ctx => Pair path ctx) (contextForFile path)
   else mapResult (\ctx => Pair path ctx) (contextForDir ".")
 
--- DT 精化（经包上下文；模块头走 loadModuleSource，无头走入口语义）。
-checkDiagnostics : String -> PackageContext -> String -> List Diag
-checkDiagnostics label ctx text =
-  let
-    checked = case depIfacesForToolSource ctx label text of
-      Just ifaces => dtCheckSourceWithIfaces ctx label text ifaces
-      Nothing => dtCheckSource ctx label text
-  in case checked of
-    Ok _ => []
-    Err e => case diagIfOwn label severityError e of
-      Nothing => []
-      Just d => [d]
+-- ---------------------------------------------------------------
+-- 会话缓存（M34.6 5c）
+-- ---------------------------------------------------------------
+-- 缓存项只在「编译器指纹 / 包名 / 闭包源文件与 manifest 的 stat 全部未变」时复用；
+-- 外部改任意依赖文件后下一次请求必然失败校验并重建（无 watcher）。
+record DiagCache where
+  dcLabel : String
+  dcKey : Int
+  dcCtx : PackageContext
+  dcTool : Maybe ToolContext
+  dcClean : List ModuleIface
+  dcBuiltSec : Int
+  dcStats : List SourceInfo
+  dcAux : Maybe AuxCache
+  dcFix : FixityEnv
 
--- lint finding 合并为 warning（code = LN_ 规则码）。lint 重排的 fixity 取程序级闭包
--- （`Vuna.FixityEnv`，与 fmt/CLI 同源）；取不到时只丢 lint finding，不影响 DT 诊断。
-lintDiagnostics : String -> String -> List Diag
-lintDiagnostics label text = case fixitiesForFile emptyFixityEnv label text of
-  Pair _ (Err _) => []
-  Pair _ (Ok env) => case lintSourceWith env text of
+-- 缓存 key：编译器二进制指纹 + 包名（包上下文/依赖图变化由 stats 面兜住）。
+ctxKeyOf : PackageContext -> Int
+ctxKeyOf ctx = toolCompilerFingerprint * 1000003 + hashTextStrong ("lsp|" ++ contextPackageName ctx)
+
+-- 本包模块名集合（来自 manifest）。
+ownNamesOfTool : ToolContext -> List String
+ownNamesOfTool tool = case tool.tcOwnManifest of
+  Just mf => map meNameOfEntry (pmModulesOf mf)
+  Nothing => []
+
+-- buffer 当前 import 闭包里的「本包模块名」子集（增量路径只预置这些干净模块）。
+ownNeededOf : ToolContext -> List String -> List String
+ownNeededOf tool needed =
+  let
+    ownNames = ownNamesOfTool tool
+  in filter (\n => memName n ownNames) needed
+
+-- needed ⊆ 会话建立时的闭包吗？buffer 引入新 import 时闭包会变大，必须重建会话。
+neededInClosure : List String -> List String -> Bool
+neededInClosure closure [] = True
+neededInClosure closure (n :: rest) = memName n closure && neededInClosure closure rest
+
+-- 缓存校验：key / label / 全部源文件与 manifest 的 stat 面。
+cacheFresh : Maybe DiagCache -> String -> PackageContext -> Bool
+cacheFresh Nothing label ctx = False
+cacheFresh (Just c) label ctx =
+  c.dcLabel == label && c.dcKey == ctxKeyOf ctx && toolSessionFresh c.dcBuiltSec c.dcStats
+
+-- 建立会话：工具接口（依赖闭包 / 依赖哈希 / 本包 manifest）+ 本包干净模块 + 校验面。
+-- 返回 Nothing = 当前没有可校验的工具接口（每请求走全量）。
+buildSession : PackageContext -> String -> String -> Maybe String -> Maybe DiagCache
+buildSession ctx label text modName = case depIfacesForToolSourceDetailed ctx label text of
+  Nothing => Nothing
+  Just tool =>
+    let
+      builtSec = toolNowSec
+      ownNeeded = ownNeededOf tool tool.tcNeeded
+      clean = toolCleanOwnModules ctx tool builtSec modName ownNeeded
+      stats = append tool.tcStats [sourceInfoForPath (contextDir ctx ++ "/vuna.toml")]
+    in Just
+      (DiagCache label (ctxKeyOf ctx) ctx (Just tool) clean builtSec stats Nothing emptyFixityEnv)
+
+-- 会话里的工具接口可用且闭包未扩大 ⇒ 直接复用；否则（一次）重建。
+usableSession : Maybe DiagCache -> PackageContext -> String -> String -> Maybe String -> List Import -> Maybe DiagCache
+usableSession cache ctx label text modName imports =
+  let
+    health = case cache of
+      Just c =>
+        if cacheFresh (Just c) label ctx then sessionClosureOk c ctx modName imports else Nothing
+      Nothing => Nothing
+  in case health of
+    Just c => Just c
+    Nothing => buildSession ctx label text modName
+
+sessionClosureOk : DiagCache -> PackageContext -> Maybe String -> List Import -> Maybe DiagCache
+sessionClosureOk c ctx modName imports = case c.dcTool of
+  Nothing => Just c
+  Just tool =>
+    let
+      needed = toolNeededOfImports ctx tool (currentNameOf modName) imports
+    in if neededInClosure tool.tcNeeded needed then Just c else Nothing
+
+currentNameOf : Maybe String -> String
+currentNameOf Nothing = ""
+currentNameOf (Just n) = n
+
+-- ---------------------------------------------------------------
+-- 精化 + 写回
+-- ---------------------------------------------------------------
+diagsOfCheck : String -> Result (List String) -> List Diag
+diagsOfCheck label (Ok _) = []
+diagsOfCheck label (Err e) = case diagIfOwn label severityError e of
+  Nothing => []
+  Just d => [d]
+
+-- buffer == 磁盘吗？单模块写回的前置条件（否则写下的 SourceInfo 与磁盘不符，读侧会判脏）。
+diskMatches : String -> String -> Bool
+diskMatches label text =
+  if runIO (prim_fileExists label) == False then False
+  else toolTextHash (runIO (prim_readFile label)) == toolTextHash text
+
+isCleanModule : DiagCache -> String -> Bool
+isCleanModule session name = memName name (map miNameOf session.dcClean)
+
+-- Maybe Int 与「当前磁盘内容哈希」相等吗（无条目 = 需要写）。
+entryHashMatches : Maybe Int -> Int -> Bool
+entryHashMatches Nothing _ = False
+entryHashMatches (Just h) x = h == x
+
+-- 单文件增量精化（会话可用）：依赖接口 + 本包干净模块预置，只精化当前 buffer。
+-- 安全阀说「不适用」（Nothing）时回退全量。
+checkIncremental : DiagCache -> String -> String -> Maybe String -> List Import -> Pair (Maybe DiagCache) (List Diag)
+checkIncremental session label text modName imports = case session.dcTool of
+  Nothing => Pair Nothing []
+  Just tool =>
+    let
+      needed = toolNeededOfImports session.dcCtx tool (currentNameOf modName) imports
+      cleanNeeded = filter (\mi => memName (miNameOf mi) (ownNeededOf tool needed)) session.dcClean
+      needPkg = case modName of
+        Just n => if isCleanModule session n then False else diskMatches label text
+        Nothing => False
+      checked =
+        dtCheckSourceIncremental session.dcCtx label text tool.tcDepIfaces cleanNeeded session.dcAux
+          needPkg
+    in case checked of
+      Err e => Pair (Just session) (diagsOfCheck label (Err e))
+      Ok (Pair applied (Pair maybePkg maybeAux)) => if applied then
+        let
+          session2 =
+            DiagCache session.dcLabel session.dcKey session.dcCtx session.dcTool session.dcClean
+              session.dcBuiltSec session.dcStats maybeAux session.dcFix
+        in case maybePkg of
+          Nothing => Pair (Just session2) []
+          Just checkedPkg => Pair (Just (writeBackModule session2 label text checkedPkg modName)) []
+      else Pair Nothing []
+
+-- 上下文的精简入口（`dtCheckSourceChecked` 需要 ctx）。
+checkFullWith : Maybe DiagCache -> PackageContext -> String -> String -> Maybe String -> Pair (Maybe DiagCache) (List Diag)
+checkFullWith cache ctx label text modName = case dtCheckSourceChecked ctx label text of
+  Err e => Pair cache (diagsOfCheck label (Err e))
+  Ok (Pair _ checkedPkg) =>
+    let
+      session = case cache of
+        Just c => c
+        Nothing =>
+          DiagCache label (ctxKeyOf ctx) ctx Nothing [] toolNowSec [] Nothing emptyFixityEnv
+      session2 = writeBackModule session label text checkedPkg modName
+      keep = case cache of
+        Just _ => Just session2
+        Nothing => Nothing
+    in Pair keep []
+
+-- ---------------------------------------------------------------
+-- lint（会话复用 fixity 模块图；外部文件变化会随会话重建清空）
+-- ---------------------------------------------------------------
+lintWithEnv : FixityEnv -> String -> String -> Pair FixityEnv (List Diag)
+lintWithEnv env label text = case fixitiesForFile env label text of
+  Pair env2 (Err _) => Pair env2 []
+  Pair env2 (Ok fx) => Pair env2 (case lintSourceWith fx text of
     Err _ => []
     Ok findings => map lintDiag findings
+  )
 
 lintDiag : Finding -> Diag
 lintDiag f =
   Diag f.findingLine f.findingCol f.findingLine (f.findingCol + 1) severityWarning f.findingCode
     f.findingMessage
 
-diagnosticsFor : String -> String -> List Diag
-diagnosticsFor uri text = case contextForDoc uri of
-  Err e => [Diag 0 0 0 0 severityError "" e]
+-- ---------------------------------------------------------------
+-- 一次请求的完整诊断链
+-- ---------------------------------------------------------------
+-- DT 诊断：会话可用时走单文件增量精化，否则回退全量（诊断语义不变）。
+checkDiagnostics : Maybe DiagCache -> String -> PackageContext -> String -> Maybe String -> List Import -> Pair (Maybe DiagCache) (List Diag)
+checkDiagnostics cache label ctx text modName imports =
+  let
+    session = usableSession cache ctx label text modName imports
+  in case session of
+    Nothing => checkFullWith cache ctx label text modName
+    Just s =>
+      let
+        inc = checkIncremental s label text modName imports
+      in case firstOf inc of
+        Just s2 => Pair (Just s2) (secondOf inc)
+        Nothing => checkFullWith (Just s) ctx label text modName
+
+diagnosticsForCached : Maybe DiagCache -> String -> String -> Pair (Maybe DiagCache) (List Diag)
+diagnosticsForCached cache uri text = case contextForDoc uri of
+  Err e => Pair cache [Diag 0 0 0 0 severityError "" e]
   Ok (Pair label ctx) => case parseSource label text of
-    Err e => [diagOfMessage severityError "" e]
-    Ok _ => append (checkDiagnostics label ctx text) (lintDiagnostics label text)
+    Err e => Pair cache [diagOfMessage severityError "" e]
+    Ok (SourceFile hdr imports fixities decls) =>
+      let
+        modName = case hdr of
+          Just (ModDecl n hasList items sp) => Just n
+          Nothing => Nothing
+        checked = checkDiagnostics cache label ctx text modName imports
+        cache2 = firstOf checked
+        linted = case cache2 of
+          Just c => lintWithEnv c.dcFix label text
+          Nothing => lintWithEnv emptyFixityEnv label text
+        cache3 = case cache2 of
+          Just c =>
+            Just
+              (DiagCache c.dcLabel c.dcKey c.dcCtx c.dcTool c.dcClean c.dcBuiltSec c.dcStats c.dcAux (firstOf linted))
+          Nothing => Nothing
+      in Pair cache3 (append (secondOf checked) (secondOf linted))
 
 publishDiagnostics : String -> Int -> List Diag -> Json
 publishDiagnostics uri version diags =
   notify "textDocument/publishDiagnostics"
     (JObj [Pair "uri" (JStr uri), Pair "version" (JNum version), Pair "diagnostics" (JArr (map diagJson diags))])
 
--- ---------------------------------------------------------------
--- 一次请求的完整发布帧：诊断链 + publishDiagnostics 通知（门面只需要这一个入口，
--- 不必把 Diag 类型暴露出去）。
+-- 一次请求的完整发布帧 + 更新后的会话缓存（LSP 门面持有缓存，跨请求复用）。
+publishDiagnosticsCached : Maybe DiagCache -> String -> Int -> String -> Pair (Maybe DiagCache) Json
+publishDiagnosticsCached cache uri version text =
+  let
+    result = diagnosticsForCached cache uri text
+  in Pair (firstOf result) (publishDiagnostics uri version (secondOf result))
+
+-- didClose：直接发空诊断（不跑检查链）。
+publishDiagnosticsEmpty : String -> Int -> Json
+publishDiagnosticsEmpty uri version = publishDiagnostics uri version []
+
+-- 无会话的便捷入口（测试 / 一次性请求）。
 publishDiagnosticsFor : String -> Int -> String -> Json
-publishDiagnosticsFor uri version text = publishDiagnostics uri version (diagnosticsFor uri text)
+publishDiagnosticsFor uri version text =
+  secondOf (publishDiagnosticsCached Nothing uri version text)
+
+-- 写回当前模块接口（buffer == 磁盘时才写；只写当前模块、合并进本包 manifest）。
+-- 守卫：本包 manifest 里已有「同源内容」的接口时不重写（LSP 增量上下文算出的接口哈希
+-- 可能与整包 check 的略有差异——擦除位残 meta 不同；重写会让依赖者的 miDepHashes 失配）。
+-- 冷启动（还没有本包 manifest）才用整包接口兜底写。失败静默跳过（不影响诊断）。
+writeBackModule : DiagCache -> String -> String -> CheckedPackage -> Maybe String -> DiagCache
+writeBackModule session label text checked Nothing = session
+writeBackModule session label text checked (Just name) = if diskMatches label text then
+  let
+    si = sourceInfoForPath label
+    cleanForWrite = filter (\mi => miNameOf mi /= name) session.dcClean
+    attempt = case session.dcTool of
+      Just tool =>
+        if entryHashMatches (toolOwnEntrySourceHash tool name) (siHashOf si) then Nothing
+        else Just (toolWriteModuleIface session.dcCtx tool cleanForWrite checked name si)
+      Nothing =>
+        if toolHasOwnManifest session.dcCtx then Nothing
+        else Just (toolWriteModuleIfaceCold session.dcCtx checked name si)
+  in case attempt of
+    Nothing => session
+    Just (Err _) => session
+    Just (Ok mi) =>
+      DiagCache session.dcLabel session.dcKey session.dcCtx session.dcTool (mi :: session.dcClean)
+        session.dcBuiltSec session.dcStats session.dcAux session.dcFix
+else session
+
+-- 单文件增量精化（会话可用）：依赖接口 + 本包干净模块预置，只精化当前 buffer。

@@ -337,9 +337,14 @@ else case Base.HashMap.lookup n compTbl of
 
 -- 单成员分量（大程序里占绝对多数）直接返回，免掉对全程序名字的一次 filter；
 -- 旧实现对每个分量都 filter 一遍 allNames ⇒ O(#分量 × #定义)。
+-- M34.6：成员表只建一次（旧实现把 `ofNames g` 写在谓词里 ⇒ 每个名字都重建整张
+-- 表，3064 名字 × 3064 ⇒ 分组阶段 ~189ms）。
 groupOf : List String -> List String -> List String
 groupOf allNames ([x]) = [x]
-groupOf allNames g = filterNames (\m => Base.HashMap.member m (Base.HashMap.ofNames g)) allNames
+groupOf allNames g =
+  let
+    memberTbl = Base.HashMap.ofNames g
+  in filterNames (\m => Base.HashMap.member m memberTbl) allNames
 
 filterNames : (String -> Bool) -> List String -> List String
 filterNames pred [] = []

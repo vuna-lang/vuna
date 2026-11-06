@@ -10,6 +10,11 @@ module Vuna.Compiler.Debug (debugOn, note, noteInt, sampleKey, stamp, stampSampl
 --                         （旧实现 shell `date` 要 5ms，只能 1/64 采样）；
 --   `DEBUG <text>`        任意诊断文本（表规模等）。
 -- 关闭时每次调用只花一次 `prim_getArgs`（微秒级），可长期留在生产代码里。
+--
+-- 纪律：vuna 的参数是**严格求值**的，`note ("x=" ++ showTerm t)` 在 debug 关闭时也会先
+-- 拼好字符串（`showTerm` 可能极贵，甚至扫全表）。诊断构造必须写成
+-- `if debugOn then note (...) else 0`；只有字符串本身是常数/常量的 `note` 可以直接写。
+-- `stamp` / `stampSample` 内部已处理，调用点不需要再判 `debugOn`。
 import Vuna.Compiler.Common
 import Base.HashMap
 import Base.IO

@@ -43,6 +43,7 @@ import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Packages.Pkg
 import Vuna.Compiler.Frontend.Parser
 import Vuna.Index
+import Vuna.Compiler.Driver.Dt
 import Vuna.Interp
 import Base.IO
 
@@ -89,28 +90,36 @@ record ReplState where
   statePending : String
   stateLoadedFile : String
   stateBrowseIndex : Maybe Index
+  -- M34.6（5b）：表达式求值的 termAux 预处理缓存（依赖接口不变时跨表达式复用）。
+  stateAuxCache : Maybe AuxCache
 
 replState : String -> String -> String -> ReplState
-replState imports defs pending = ReplState imports defs pending "" Nothing
+replState imports defs pending = ReplState imports defs pending "" Nothing Nothing
 
 -- 只替换 pending：imports / defs / :load 文件 / 索引缓存都保持（求值、追定义后清续行）。
+withAuxCache : ReplState -> Maybe AuxCache -> ReplState
+withAuxCache st aux =
+  ReplState st.stateImports st.stateDefs st.statePending st.stateLoadedFile st.stateBrowseIndex aux
+
 withPending : ReplState -> String -> ReplState
 withPending st pending =
   ReplState st.stateImports st.stateDefs pending st.stateLoadedFile st.stateBrowseIndex
+    st.stateAuxCache
 
 -- 替换 imports / defs 并清 pending（import 接受、定义追加）；:load 文件与索引缓存保持。
 withBuffers : ReplState -> String -> String -> ReplState
-withBuffers st imports defs = ReplState imports defs "" st.stateLoadedFile st.stateBrowseIndex
+withBuffers st imports defs =
+  ReplState imports defs "" st.stateLoadedFile st.stateBrowseIndex st.stateAuxCache
 
 -- :load 成功后的状态：imports 缓冲清空（文件自带的 import 已在源码里）、整段源码进 defs、
 -- 记录路径；pending 清空、索引缓存保留。
 withLoadedSource : ReplState -> String -> String -> ReplState
 withLoadedSource st path source =
-  ReplState "" (ensureTrailingNewline source) "" path st.stateBrowseIndex
+  ReplState "" (ensureTrailingNewline source) "" path st.stateBrowseIndex Nothing
 
 -- :reset：清空定义 / import / 待续输入与 :load 的文件；索引缓存保留（它只是源码快照缓存）。
 resetBuffers : ReplState -> ReplState
-resetBuffers st = ReplState "" "" "" "" st.stateBrowseIndex
+resetBuffers st = ReplState "" "" "" "" st.stateBrowseIndex Nothing
 
 ensureTrailingNewline : String -> String
 ensureTrailingNewline s = if s == "" || endsWith "\n" s then s else s ++ "\n"
@@ -239,15 +248,15 @@ else case parseExpressionSource exprText of
     let
       _ = runIO (prim_print ("错误: " ++ e ++ "\n"))
     in ReplContinue st
-  Ok _ => case evalExprInfo ctx (bufferProgram st) exprText of
+  Ok _ => case evalExprInfoWithAux ctx (bufferProgram st) exprText st.stateAuxCache of
     Err e =>
       let
         _ = runIO (prim_print ("错误: " ++ e ++ "\n"))
       in ReplContinue st
-    Ok info =>
+    Ok (Pair info aux2) =>
       let
         _ = runIO (prim_print (exprText ++ " : " ++ trim (secondOf info) ++ "\n"))
-      in ReplContinue st
+      in ReplContinue (withAuxCache st aux2)
 
 -- `:load FILE`：用文件源码整体替换 imports/defs 缓冲（成功才替换，失败状态不变）。
 -- 只接受无 `module ... where` 头的入口式源码：模块文件由 Loader 按模块加载，不能直接
@@ -313,6 +322,7 @@ else case st.stateBrowseIndex of
 withIndexCache : ReplState -> Index -> ReplState
 withIndexCache st index =
   ReplState st.stateImports st.stateDefs st.statePending st.stateLoadedFile (Just index)
+    st.stateAuxCache
 
 browseRender : ReplState -> Index -> String -> ReplOutcome
 browseRender st index modName = case renderApi index modName of
@@ -373,22 +383,22 @@ evalText ctx st text = case parseExpressionSource text of
     let
       _ = runIO (prim_print ("错误: " ++ e ++ "\n"))
     in ReplContinue (withPending st "")
-  Ok _ => case evalExprInfo ctx (bufferProgram st) text of
+  Ok _ => case evalExprInfoWithAux ctx (bufferProgram st) text st.stateAuxCache of
     Err e =>
       let
         _ = runIO (prim_print ("错误: " ++ e ++ "\n"))
       in ReplContinue (withPending st "")
-    Ok info =>
+    Ok (Pair info aux2) =>
       let
         tyText = secondOf info
       in if isIOTypeText tyText then
         let
           _ = evalIO ctx st text tyText
-        in ReplContinue (withPending st "")
+        in ReplContinue (withPending (withAuxCache st aux2) "")
       else
         let
           _ = runIO (prim_print (firstOf info ++ "\n"))
-        in ReplContinue (withPending st "")
+        in ReplContinue (withPending (withAuxCache st aux2) "")
 
 -- IO 表达式：合成 `main : <类型>` + `main = <表达式>`，临时编译并运行。
 -- 返回进程退出码（0 成功；非 0 只打印退出码，不改变 REPL 状态）；错误已打印。

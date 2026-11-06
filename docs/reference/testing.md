@@ -42,20 +42,30 @@ manifest（`iface-write=0/`）；损坏模块文件按自描述头拒绝、回�
 路径的 `compile` 产物 `diff -r` 全等；最后对仓库自身做「预热 base/compiler → `check .`」
 回归（C37 的 `Eq Type` 假歧义）。`VUNA_ELAB_FULL=1` 是排障/A-B 对拍开关（强制全量精化），
 默认不设；`VUNA_DEBUG_PERF=1` 等价于 `--debug-perf`（给 `vuna-compiler` 这类不经
-`Vuna.Cli` 的入口用）；`VUNA_CACHE_MTIME=1` 开 mtime+size 快判（默认内容哈希）。模块级
+`Vuna.Cli` 的入口用）；`VUNA_CACHE_MTIME=1` 开 mtime+size 快判（5s 安全窗内仍回读内容哈希；默认内容哈希）。模块级
 设计见 [cache.md](cache.md)。
 
 第 44f 段是包内增量回归：复制 `base`、改一个叶子模块后重算——其余模块复用、只 parse 改动
 模块、第二次运行收敛（`cache-own-clean=30`、`iface-write=0/`）；增量 `manifest` 与全量路径
 逐字节一致；注入类型错误后增量与全量诊断逐字节一致。
 
-第 44g 段开 `VUNA_IFACE_TOOL=1` 验证 LSP/REPL 消费依赖接口（REPL 输出
-`iface-source=repl modules=N` 且求值正确，LSP smoke 全过）；默认路径不受影响。
+第 44g 段验证 LSP/REPL 消费依赖接口（默认开启）：REPL 输出 `iface-source=repl modules=N`
+且求值正确，LSP smoke 全过；`VUNA_IFACE_TOOL=0` 作为 A/B 关闭开关。
 
-第 44h 段验证 codegen 单元级缓存（`VUNA_UNIT_CACHE=1`）：改入口重建命中依赖单元，
-增量产物与干净重建逐字节一致。第 44i 段验证依赖可见性收敛（S6）：dep 的实例在未 import
-的模块里时摘要/全量路径一致拒绝，import 后一致接受。第 44j 段验证单元缓存 entry 分桶与
-GC（同包不同 entry 交替构建只保留一个桶，同 entry 重建仍命中）。
+第 44h 段验证 codegen 单元级缓存（默认开启；`VUNA_UNIT_CACHE=0` 关闭）：改入口重建命中
+依赖单元，增量产物与干净重建逐字节一致。第 44i 段验证依赖可见性收敛（S6）：dep 的实例在
+未 import 的模块里时摘要/全量路径一致拒绝，import 后一致接受。第 44j 段验证单元缓存 entry
+分桶与 GC（同包不同 entry 交替构建只保留一个桶，同 entry 重建仍命中）。
+
+第 44k 段验证工具链惰性闭包完整性（M34.6）：同包模块自己的 dep import 必须进闭包（否则
+假 `TC_UnknownName`）；本包 manifest 缺失/新增模块时安全阀回退全量；依赖 data/ctor 在
+REPL 接口路径下可求值。第 44l 段验证 LSP 单文件增量/会话：LSP-only 写回 iface、接口 vs
+全量诊断逐字节一致、同一进程外部改依赖模块后下次请求失效重报、REPL 复用 `:reset`。
+
+第 51 段验证 mtime 快路径安全窗（`VUNA_CACHE_MTIME=1`）：同秒同大小编辑必失效；第 52 段
+验证缓存载荷 framing：split 截断/中部篡改后重建成功且产物逐字节一致、check 缓存损坏重算、
+AST 全量截断后重写。第 53 段验证单元缓存默认开 + 桶内 GC 有界（默认命中、`=0` 无 hit、
+连续改入口桶文件数收敛）。
 
 推荐入口（`nix/run-tests.nix` 包装，不修改原脚本；无参数等价于直接跑）：
 
@@ -203,10 +213,10 @@ nix run .#vuna-run-tests [-- --list | --only 34 | --only dt | --vuna stable]
 
 ## Nix checks 清单
 
-`nix flake check` 实测 **13 项**：3 个 package 构建（`vuna` / `vuna-compiler` /
-`vuna-seed`）+ 10 个 check 语义项（`context-budget`、`seed-selfhost`、`vuna-fmt`、
-`vuna-index`、`vuna-lint`、`vuna-metrics`、`vuna-package`、`vuna-tests`、`vuna-typecheck`、
-`vscode-ext`；主体是 `nix/checks/<name>.sh`）。语义项：
+`nix flake check` 实测 **15 项**：3 个 package 构建（`vuna` / `vuna-compiler` /
+`vuna-seed`）+ 12 个 check 语义项（`context-budget`、`seed-selfhost`、`vuna-compiler-growth`、
+`vuna-compiler-perf`、`vuna-fmt`、`vuna-index`、`vuna-lint`、`vuna-metrics`、`vuna-package`、
+`vuna-tests`、`vuna-typecheck`、`vscode-ext`；主体是 `nix/checks/<name>.sh`）。语义项：
 
 - `seed-selfhost`：seed→stage0→stage1→stage2 逐字节一致、TCB 黑名单、闭包数量、增量构建、
   行为抽查与 seed 滞后报告（不阻塞）；
@@ -214,6 +224,10 @@ nix run .#vuna-run-tests [-- --list | --only 34 | --only dt | --vuna stable]
 - `vuna-typecheck` / `vuna-lint`：`vuna check .` 自检、lint 零 finding；
 - `vuna-fmt`：workspace 全包与 `examples/`；
 - `vuna-package`：`examples/multi` 的 build/test/fmt/doc + 根包构建；
+- `vuna-compiler-perf`：冷/热 `check .` 比例 + 包内增量的 clean/parse 语义断言 + REPL
+  默认走接口路径（M34.6）；
+- `vuna-compiler-growth`：合成 500/1000/2000/4000 同形定义，相邻档墙钟比 ≤2.3（增长率
+  门槛，跨机器有效；M34.6）；
 - `vuna-metrics`：冻结夹具（`test/corpus/codegen`）的 codegen 产物对
   `nix/codegen.baseline` 的精确基线；种子尺寸不设门槛（见 [compiler.md](compiler.md)
   §codegen 夹具基线）；

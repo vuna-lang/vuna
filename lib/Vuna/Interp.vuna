@@ -1,4 +1,10 @@
-module Vuna.Interp (evalExprInfo, interpretExpr, interpretFile, runEffectProgram) where
+module Vuna.Interp
+  ( evalExprInfo
+  , evalExprInfoWithAux
+  , interpretExpr
+  , interpretFile
+  , runEffectProgram
+  ) where
 
 -- Vuna.Interp：解释器 facade（工具链侧；编译入口见 Vuna.Compiler.Driver.Compile）。
 --
@@ -43,6 +49,13 @@ interpretExpr ctx program expr = case depIfacesForToolProgram ctx program of
 
 -- M30 · REPL：值文本 + zonk 后的类型文本（`showTerm` 渲染，可直接写回合成签名）。
 -- 类型文本形如 `(Base.IO.IO Int)`（canonical 全名）；REPL 据此决定是否走效果执行。
+-- M34.6（5b）：REPL 会话复用 termAux（依赖包 decls）的 record/deriving 预处理结果。
+-- 缓存 key 由接口哈希决定（REPL 的依赖接口不变时一直命中），失败路径不缓存。
+evalExprInfoWithAux : PackageContext -> String -> String -> Maybe AuxCache -> Result (Pair (Pair String String) (Maybe AuxCache))
+evalExprInfoWithAux ctx program expr aux = case depIfacesForToolProgram ctx program of
+  Just ifaces => dtEvalExprInfoWithAuxCache ctx program expr ifaces aux
+  Nothing => andThen (dtEvalExprInfo ctx program expr) (\info => Ok (Pair info aux))
+
 evalExprInfo : PackageContext -> String -> String -> Result (Pair String String)
 evalExprInfo ctx program expr = case depIfacesForToolProgram ctx program of
   Just ifaces => dtEvalExprInfoWithIfaces ctx program expr ifaces

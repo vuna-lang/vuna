@@ -86,20 +86,15 @@ convBothFuel : Int -> HashMap Term -> Sols -> Int -> Value -> Value -> Result So
 convBothFuel fuel defs sols depth a b = if fuel <= 0 then Err "DT: internal: conv fuel exhausted"
 else case a of
   VType i => case b of
-    VType j => if levelEq i j then Ok sols else mismatchAt depth defs a b
-    _ => mismatchAt depth defs a b
+    VType j => if levelEq i j then Ok sols else mismatchAt depth a b
+    _ => mismatchAt depth a b
   VPi name implicit rig dom cod => case b of
-    VPi name2 implicit2 rig2 dom2 cod2 =>
-      let
-        _ =
-          note
-            ("vpi: " ++ name ++ " impl=" ++ boolText implicit ++ " <> " ++ name2 ++ " impl=" ++ boolText implicit2)
-      in if implicit == implicit2 then andThen (convFuel (fuel - 1) defs sols depth dom dom2) (\sols2 => let
-        v = freshVar name depth
-      in convFuel (fuel - 1) defs sols2 (depth + 1) (applyClosure cod v) (applyClosure cod2 v)
-      )
-      else mismatchAt depth defs a b
-    _ => mismatchAt depth defs a b
+    VPi name2 implicit2 rig2 dom2 cod2 => if implicit == implicit2 then andThen (convFuel (fuel - 1) defs sols depth dom dom2) (\sols2 => let
+      v = freshVar name depth
+    in convFuel (fuel - 1) defs sols2 (depth + 1) (applyClosure cod v) (applyClosure cod2 v)
+    )
+    else mismatchAt depth a b
+    _ => mismatchAt depth a b
   VLam name rig clo => case b of
     VLam name2 rig2 clo2 =>
       let
@@ -109,21 +104,21 @@ else case a of
   VNeutral n => case b of
     VNeutral n2 => convNeutralFuel (fuel - 1) defs sols depth n n2 a b
     VLam name2 rig2 clo2 => etaLeftFuel (fuel - 1) defs sols depth a name2 clo2
-    _ => mismatchAt depth defs a b
+    _ => mismatchAt depth a b
   VInt n => case b of
-    VInt m => if n == m then Ok sols else mismatchAt depth defs a b
-    _ => mismatchAt depth defs a b
+    VInt m => if n == m then Ok sols else mismatchAt depth a b
+    _ => mismatchAt depth a b
   VStr s => case b of
-    VStr s2 => if s == s2 then Ok sols else mismatchAt depth defs a b
-    _ => mismatchAt depth defs a b
+    VStr s2 => if s == s2 then Ok sols else mismatchAt depth a b
+    _ => mismatchAt depth a b
   VBool x => case b of
-    VBool y => if x == y then Ok sols else mismatchAt depth defs a b
-    _ => mismatchAt depth defs a b
+    VBool y => if x == y then Ok sols else mismatchAt depth a b
+    _ => mismatchAt depth a b
   VCon c args => case b of
     VCon c2 args2 =>
       if c == c2 then convValueListsFuel (fuel - 1) defs sols depth args args2
-      else mismatchAt depth defs a b
-    _ => mismatchAt depth defs a b
+      else mismatchAt depth a b
+    _ => mismatchAt depth a b
   VApp f x => case b of
     VApp f2 x2 =>
       let
@@ -133,18 +128,18 @@ else case a of
           else 0
       in andThen (convFuel (fuel - 1) defs sols depth f f2)
         (\sols2 => convFuel (fuel - 1) defs sols2 depth x x2)
-    _ => mismatchAt depth defs a b
+    _ => mismatchAt depth a b
   VCase scrut alts => case b of
     VCase scrut2 alts2 =>
       andThen (convFuel (fuel - 1) defs sols depth scrut scrut2)
         (\sols2 => convCaseAltsFuel (fuel - 1) defs sols2 depth alts alts2)
-    _ => mismatchAt depth defs a b
+    _ => mismatchAt depth a b
   VIf c th el => case b of
     VIf c2 th2 el2 =>
       andThen (convFuel (fuel - 1) defs sols depth c c2)
         (\sols2 => andThen (convFuel (fuel - 1) defs sols2 depth th th2) (\sols3 => convFuel (fuel - 1) defs sols3 depth el el2))
-    _ => mismatchAt depth defs a b
-  _ => mismatchAt depth defs a b
+    _ => mismatchAt depth a b
+  _ => mismatchAt depth a b
 
 etaLeftFuel : Int -> HashMap Term -> Sols -> Int -> Value -> String -> Closure -> Result Sols
 etaLeftFuel fuel defs sols depth a name clo = if fuel <= 0 then Err "DT: internal: conv fuel exhausted"
@@ -166,13 +161,13 @@ else case n1 of
   NVar name level sp => case n2 of
     NVar name2 level2 sp2 =>
       if level == level2 then convSpinesFuel (fuel - 1) defs sols depth sp sp2 v1 v2
-      else mismatchAt depth defs v1 v2
-    _ => mismatchAt depth defs v1 v2
+      else mismatchAt depth v1 v2
+    _ => mismatchAt depth v1 v2
   NGlobal g sp => case n2 of
     NGlobal g2 sp2 =>
       if g == g2 then convSpinesFuel (fuel - 1) defs sols depth sp sp2 v1 v2
-      else mismatchAt depth defs v1 v2
-    _ => mismatchAt depth defs v1 v2
+      else mismatchAt depth v1 v2
+    _ => mismatchAt depth v1 v2
 
 convSpinesFuel : Int -> HashMap Term -> Sols -> Int -> List Value -> List Value -> Value -> Value -> Result Sols
 convSpinesFuel fuel defs sols depth [] [] v1 v2 =
@@ -181,11 +176,8 @@ convSpinesFuel fuel defs sols depth (a :: xs) (b :: ys) v1 v2 =
   if fuel <= 0 then Err "DT: internal: conv fuel exhausted"
   else andThen (convFuel (fuel - 1) defs sols depth a b)
     (\sols2 => convSpinesFuel (fuel - 1) defs sols2 depth xs ys v1 v2)
-convSpinesFuel fuel defs sols depth _ _ v1 v2 = if fuel <= 0 then Err "DT: internal: conv fuel exhausted"
-else
-  let
-    _ = note ("spines: " ++ showValue v1 ++ " <> " ++ showValue v2)
-  in mismatchAt depth defs v1 v2
+convSpinesFuel fuel defs sols depth _ _ v1 v2 =
+  if fuel <= 0 then Err "DT: internal: conv fuel exhausted" else mismatchAt depth v1 v2
 
 convValueListsFuel : Int -> HashMap Term -> Sols -> Int -> List Value -> List Value -> Result Sols
 convValueListsFuel fuel defs sols depth [] [] =
@@ -220,18 +212,11 @@ else
   in convFuel (fuel - 1) defs sols (depth + n) (applyClosureBinder a.vCaseAltClosure args)
     (applyClosureBinder b.vCaseAltClosure args)
 
-mismatchAt : Int -> HashMap Term -> Value -> Value -> Result a
-mismatchAt depth defs a b =
+mismatchAt : Int -> Value -> Value -> Result a
+mismatchAt depth a b =
   let
     sa = showValueAt depth a
     sb = showValueAt depth b
-    _ = note ("mismatch: " ++ sa ++ " <> " ++ sb)
-    _ =
-      note
-        ("mismatch-term: " ++ showTerm (quote depth a) ++ " <> " ++ showTerm (quote depth b) ++ " =" ++ strFromInt depth)
-    _ =
-      note
-        ("mismatch-sigs: " ++ join "|" (map sigText (take 5 (filter (\p => contains "b" (showTerm (secondOf p))) (Base.HashMap.toList defs)))))
   in tcErr2NoLoc (TypeMismatch sa sb) sa sb
 
 -- ---------------------------------------------------------------
@@ -500,22 +485,4 @@ etaRight : HashMap Term -> Sols -> Int -> String -> Closure -> Value -> Result S
 etaRight a1 a2 a3 a4 a5 a6 = etaRightFuel 64 a1 a2 a3 a4 a5 a6
 
 solveMeta : HashMap Term -> Sols -> Int -> Int -> List Value -> Value -> Result Sols
-solveMeta a1 a2 a3 a4 a5 a6 =
-  let
-    _ = if a4 == 0 then note ("solve0: " ++ (showTerm (quote a3 a6) ++ (" sp=" ++ (strFromInt (length a5) ++ (" solved=" ++ (case solsLookup a4 a2 of
-      Just t => "yes"
-      Nothing => "no"
-    )
-    )
-    )
-    )
-    )
-    )
-    else 0
-  in solveMetaFuel 64 a1 a2 a3 a4 a5 a6
-
-sigText : Pair String Term -> String
-sigText p = firstOf p ++ ":" ++ showTerm (secondOf p)
-
-boolText : Bool -> String
-boolText b = if b then "T" else "F"
+solveMeta a1 a2 a3 a4 a5 a6 = solveMetaFuel 64 a1 a2 a3 a4 a5 a6

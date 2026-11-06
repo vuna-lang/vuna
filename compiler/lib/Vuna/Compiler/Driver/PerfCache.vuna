@@ -1,7 +1,9 @@
 module Vuna.Compiler.Driver.PerfCache
-  ( unitCacheDir
+  ( unitCacheBucketGc
+  , unitCacheDir
   , unitCacheEntryDir
   , unitCacheEntryKeyOf
+  , unitCacheFileName
   , unitCacheGc
   , unitCacheRead
   , unitCacheTag
@@ -15,8 +17,11 @@ module Vuna.Compiler.Driver.PerfCache
 -- 文本，不重新跑 codegen。key 由调用方（`Driver.Dt`）算好：单元名 + 声明/import 内容
 -- + 传递依赖单元 key + printResult。
 --
--- 文件 = 自描述头（tag，含 schema/编译器指纹）+ Marshal 的 `SplitFile`；头不符即视为
--- 未命中（编译器或格式变化后旧缓存自然失效）。产物放 `<cacheBase>/<pkg>/split-units/`。
+-- 文件 = 统一 framing（magic|tag|长度|校验和，见 `CacheFormat`）+ Marshal 的 `SplitFile`；
+-- 头/tag/校验和不符即视为未命中（编译器或格式变化后旧缓存自然失效；坏文件回退重算）。
+-- 产物放 `<cacheBase>/<pkg>/split-units/e-<entry 桶>/`，构建前先做**桶间 GC**（只留当前
+-- entry）与**桶内 GC**（只留本次单元 key 集合对应的文件，见 `unitCacheBucketGc`）。
+import Vuna.Compiler.CacheFormat
 import Vuna.Compiler.Common
 import Vuna.Compiler.Driver.Split
 import Vuna.Compiler.Version
@@ -54,14 +59,16 @@ hashTextOf : String -> String
 hashTextOf s = strFromInt (textHashOf s)
 
 unitCachePath : String -> String -> String -> String
-unitCachePath dir name key =
+unitCachePath dir name key = dir ++ "/" ++ unitCacheFileName name key
+
+-- 单元文件名（桶内 GC 用同一函数算「本次仍被引用」的集合，不能另写一套命名）。
+unitCacheFileName : String -> String -> String
+unitCacheFileName name key =
   let
     h1 = textHashOf ("k1:" ++ key)
     h2 = textHashOf ("k2:" ++ key)
     h3 = textHashOf ("k3:" ++ key)
-  in dir
-    ++ "/"
-    ++ unitNameSafe name
+  in unitNameSafe name
     ++ "-"
     ++ strFromInt h1
     ++ "-"
@@ -123,30 +130,40 @@ dropFiles dir (f :: rest) =
     _ = runIO (prim_removeFile (dir ++ "/" ++ f))
   in dropFiles dir rest
 
-unitCacheRead : String -> String -> String -> Maybe SplitFile
-unitCacheRead dir name key =
+-- M34.6（S7 补完）：**桶内 GC**。同一 entry 桶只清「本次构建仍会引用」的 unit 文件之外
+-- 的旧条目：`keepNames` = 本次全部单元 key（含 entry）算出的文件名，所以即将查询/命中的
+-- 单元一定在保留集合里（不会删掉马上要命中的），而同一入口反复编辑累积下来的旧 key 文件
+-- 全部清掉 ⇒ 桶内文件数有界（≤ 单元数 + 1）。
+-- key 的传递依赖链保证「依赖接口变化 ⇒ 依赖者 key 变化」，旧 key 文件不再可能被命中。
+unitCacheBucketGc : String -> List String -> Int
+unitCacheBucketGc dir keepNames =
   let
-    path = unitCachePath dir name key
-  in if runIO (prim_fileExists path) then
+    _ = ensureDirPath dir
+  in bucketGcGo dir keepNames (runIO (prim_readDir dir))
+
+bucketGcGo : String -> List String -> List String -> Int
+bucketGcGo dir keepNames [] = 0
+bucketGcGo dir keepNames (f :: rest) =
+  let
+    path = dir ++ "/" ++ f
+  in if memName f keepNames then bucketGcGo dir keepNames rest
+  else if runIO (prim_fileExists path) && runIO (prim_isDirectory path) then bucketGcGo dir keepNames rest
+  else
     let
-      raw = runIO (prim_readFile path)
-    in case breakFirstNewline (strUnpack raw) [] of
-      Just p => if firstOf p == unitCacheTag then Just (prim_unmarshal (secondOf p)) else Nothing
-      Nothing => Nothing
-  else Nothing
+      _ = runIO (prim_removeFile path)
+    in bucketGcGo dir keepNames rest
+
+unitCacheRead : String -> String -> String -> Maybe SplitFile
+unitCacheRead dir name key = case readFramed unitCacheTag (unitCachePath dir name key) of
+  Just payload => Just (prim_unmarshal payload)
+  Nothing => Nothing
 
 unitCacheWrite : String -> String -> String -> SplitFile -> Int
 unitCacheWrite dir name key sf =
   let
     _ = ensureDirPath dir
-    payload = unitCacheTag ++ "\n" ++ prim_marshal sf
-  in runIO (prim_writeFileAtomic (unitCachePath dir name key) payload)
-
-breakFirstNewline : List Int -> List Int -> Maybe (Pair String String)
-breakFirstNewline [] _ = Nothing
-breakFirstNewline (c :: rest) acc =
-  if c == 10 then Just (Pair (strPack (reverse acc)) (strPack rest))
-  else breakFirstNewline rest (c :: acc)
+  in runIO
+    (prim_writeFileAtomic (unitCachePath dir name key) (frameEncode unitCacheTag (prim_marshal sf)))
 
 ensureDirPath : String -> Int
 ensureDirPath path = ensureDirPathFuel 64 path

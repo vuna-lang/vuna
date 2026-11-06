@@ -5,8 +5,10 @@ module Vuna.Compiler.Driver.Iface
   , PackageManifest(..)
   , SourceInfo(..)
   , hashTextStrong
+  , ifaceOfModule
   , ifaceOfPackage
   , ifaceSchema
+  , manifestPathOf
   , meDepsOfEntry
   , meFileOfEntry
   , meIfaceHashOfEntry
@@ -38,6 +40,7 @@ module Vuna.Compiler.Driver.Iface
   , siMtimeOf
   , siPathOf
   , siSizeOf
+  , writeModuleIfaceMerge
   , writePackageIface
   ) where
 
@@ -188,14 +191,19 @@ hashTerm t = hashTextStrong (prim_marshal t)
 
 -- 哈希前按名字规范化顺序：同一集合在「全量 / 增量」两条路径上的列表顺序可能不同
 -- （例如 globals 由「干净模块产物 + 本次精化产物」拼接），接口哈希不能因此漂移。
-insertByKey : (a -> Int) -> a -> List a -> List a
-insertByKey _ x [] = [x]
-insertByKey key x (y :: rest) =
-  if key x <= key y then x :: y :: rest else y :: insertByKey key x rest
+-- M34.6：键只算一次（旧实现每次比较都重算 `key y`；nameKey 是 6 lane strHash +
+-- 字符串拼接，globals 排序上占接口阶段 ~270ms）。排序判据与旧实现逐项相同。
+insertByKey : Int -> a -> List (Pair Int a) -> List (Pair Int a)
+insertByKey k x [] = [Pair k x]
+insertByKey k x ((Pair ky y) :: rest) =
+  if k <= ky then Pair k x :: Pair ky y :: rest else Pair ky y :: insertByKey k x rest
+
+sortPairs : List (Pair Int a) -> List (Pair Int a)
+sortPairs [] = []
+sortPairs ((Pair k x) :: rest) = insertByKey k x (sortPairs rest)
 
 sortByKey : (a -> Int) -> List a -> List a
-sortByKey _ [] = []
-sortByKey key (x :: rest) = insertByKey key x (sortByKey key rest)
+sortByKey key xs = map secondOf (sortPairs (map (\x => Pair (key x) x) xs))
 
 nameKey : String -> Int
 nameKey n = hashTextStrong ("name:" ++ n)
@@ -211,41 +219,40 @@ canonStateEmpty : CanonState
 canonStateEmpty = CanonState 0 (Base.IntMap.fromList [])
 
 canonTerm : CanonState -> Term -> Pair Term CanonState
-canonTerm st t = case t of
-  TMeta m => case Base.IntMap.lookup m st.csMap of
-    Just m2 => Pair (TMeta m2) st
-    Nothing =>
-      Pair (TMeta st.csNext) (CanonState (st.csNext + 1) (Base.IntMap.insert m st.csNext st.csMap))
-  TPi n i r d c =>
-    let
-      pd = canonTerm st d
-      pc = canonTerm (secondOf pd) c
-    in Pair (TPi n i r (firstOf pd) (firstOf pc)) (secondOf pc)
-  TLam n r b =>
-    let
-      pb = canonTerm st b
-    in Pair (TLam n r (firstOf pb)) (secondOf pb)
-  TApp f a r =>
-    let
-      pf = canonTerm st f
-      pa = canonTerm (secondOf pf) a
-    in Pair (TApp (firstOf pf) (firstOf pa) r) (secondOf pa)
-  TCon c args =>
-    let
-      pr = canonArgs st args
-    in Pair (TCon c (firstOf pr)) (secondOf pr)
-  TCase s alts =>
-    let
-      ps = canonTerm st s
-      pa = canonAlts (secondOf ps) alts
-    in Pair (TCase (firstOf ps) (firstOf pa)) (secondOf pa)
-  TIf c th el =>
-    let
-      pc = canonTerm st c
-      pt = canonTerm (secondOf pc) th
-      pe = canonTerm (secondOf pt) el
-    in Pair (TIf (firstOf pc) (firstOf pt) (firstOf pe)) (secondOf pe)
-  _ => Pair t st
+canonTerm st (TMeta m) = case Base.IntMap.lookup m st.csMap of
+  Just m2 => Pair (TMeta m2) st
+  Nothing =>
+    Pair (TMeta st.csNext) (CanonState (st.csNext + 1) (Base.IntMap.insert m st.csNext st.csMap))
+canonTerm st (TPi n i r d c) =
+  let
+    pd = canonTerm st d
+    pc = canonTerm (secondOf pd) c
+  in Pair (TPi n i r (firstOf pd) (firstOf pc)) (secondOf pc)
+canonTerm st (TLam n r b) =
+  let
+    pb = canonTerm st b
+  in Pair (TLam n r (firstOf pb)) (secondOf pb)
+canonTerm st (TApp f a r) =
+  let
+    pf = canonTerm st f
+    pa = canonTerm (secondOf pf) a
+  in Pair (TApp (firstOf pf) (firstOf pa) r) (secondOf pa)
+canonTerm st (TCon c args) =
+  let
+    pr = canonArgs st args
+  in Pair (TCon c (firstOf pr)) (secondOf pr)
+canonTerm st (TCase s alts) =
+  let
+    ps = canonTerm st s
+    pa = canonAlts (secondOf ps) alts
+  in Pair (TCase (firstOf ps) (firstOf pa)) (secondOf pa)
+canonTerm st (TIf c th el) =
+  let
+    pc = canonTerm st c
+    pt = canonTerm (secondOf pc) th
+    pe = canonTerm (secondOf pt) el
+  in Pair (TIf (firstOf pc) (firstOf pt) (firstOf pe)) (secondOf pe)
+canonTerm st t = Pair t st
 
 canonArgs : CanonState -> List (Pair Term Rig) -> Pair (List (Pair Term Rig)) CanonState
 canonArgs st [] = Pair [] st
@@ -267,9 +274,8 @@ canonTermTop : Term -> Term
 canonTermTop t = firstOf (canonTerm canonStateEmpty t)
 
 canonMaybe : Maybe Term -> Maybe Term
-canonMaybe mo = case mo of
-  Just t => Just (canonTermTop t)
-  Nothing => Nothing
+canonMaybe (Just t) = Just (canonTermTop t)
+canonMaybe Nothing = Nothing
 
 -- 定义视图：名字 + 类型 + 体（`DtDef` 的 span 不参与；vuna 的精化会 delta 展开定义，
 -- 所以导出体的变化必须使依赖者失效——与 Idris2 的 `hashit = Public` 同一规则）。
@@ -310,10 +316,9 @@ hashFixities fs = foldl (\acc, f => combineHash acc (fixityText f)) 0 fs
 -- （`Elab.Records` 的 desugar 只用字段名；字段类型在 record 声明所在模块自己的精化里
 -- 已消耗）。
 recordHash : RecordInfo -> Int
-recordHash r = case r of
-  RecordInfo rname params fields derivings ctor =>
-    hashTextStrong
-      (rname ++ "|" ++ joinStrings params ++ "|" ++ joinStrings (map firstOf fields) ++ "|" ++ joinStrings derivings ++ "|" ++ ctor)
+recordHash (RecordInfo rname params fields derivings ctor) =
+  hashTextStrong
+    (rname ++ "|" ++ joinStrings params ++ "|" ++ joinStrings (map firstOf fields) ++ "|" ++ joinStrings derivings ++ "|" ++ ctor)
 
 hashRecords : List Decl -> Int
 hashRecords decls = case recordsOfDecls (\n => n) decls of
@@ -409,24 +414,63 @@ ownerIndexOf meta datas =
   OwnerIndex (Base.HashMap.fromList meta.smDefOwners) (Base.HashMap.fromList meta.smDataOwners)
     (Base.HashMap.fromList (ctorFamilyPairs datas)) meta.smKnownModules
 
-sameOwner : String -> Maybe String -> Bool
-sameOwner mod mo = case mo of
-  Just o => o == mod
-  Nothing => False
+-- M34.6：按 owner **一次分桶**。旧实现每个模块对整包 datas/defs/globals/insts/classes
+-- 各做一遍 `filter`（O(#模块 × #程序项)，接口阶段 ~457ms）；这里整包扫一遍建五张
+-- owner → 项表，逐模块 O(1) 取桶。桶内保持程序原顺序（前插后统一 reverse）。
+-- 整包 sols 的 IntMap 也只建一次：旧实现每个模块切片后 `cachedOfProgram` 都
+-- `IntMap.fromList (dtProgSols prog)`（O(#模块 × #sols)，本机 compiler 包接口阶段 ~40ms）。
+record ProgParts where
+  ppSols : IntMap Value
+  ppDatas : HashMap (List DtData)
+  ppDefs : HashMap (List DtDef)
+  ppGlobals : HashMap (List (Pair String Term))
+  ppInsts : HashMap (List DtInst)
+  ppClasses : HashMap (List DtClass)
 
--- 单模块的闭合产物：按归属过滤，再用整包 sols 做一次深度 zonk（`cachedOfProgram`）。
-cpOfModule : OwnerIndex -> DtProgram -> String -> CachedProgram
-cpOfModule oi prog mod =
+partitionByOwner : (a -> Maybe String) -> List a -> HashMap (List a)
+partitionByOwner ownerOf xs =
+  reverseBuckets (partitionByOwnerGo ownerOf xs (Base.HashMap.fromList []))
+
+partitionByOwnerGo : (a -> Maybe String) -> List a -> HashMap (List a) -> HashMap (List a)
+partitionByOwnerGo ownerOf [] tbl = tbl
+partitionByOwnerGo ownerOf (x :: rest) tbl = case ownerOf x of
+  Nothing => partitionByOwnerGo ownerOf rest tbl
+  Just o => partitionByOwnerGo ownerOf rest (Base.HashMap.insert o (x :: bucketOf o tbl) tbl)
+
+bucketOf : String -> HashMap (List a) -> List a
+bucketOf name tbl = case Base.HashMap.lookup name tbl of
+  Just xs => xs
+  Nothing => []
+
+reverseBuckets : HashMap (List a) -> HashMap (List a)
+reverseBuckets tbl = Base.HashMap.fromList (map reverseBucket (Base.HashMap.toList tbl))
+
+reverseBucket : Pair String (List a) -> Pair String (List a)
+reverseBucket (Pair k xs) = Pair k (reverse xs)
+
+progPartsOf : OwnerIndex -> DtProgram -> ProgParts
+progPartsOf oi prog =
+  ProgParts (Base.IntMap.fromList (dtProgSols prog))
+    (partitionByOwner (\d => dataOwnerOf oi (dtDataName d)) (dtProgDatas prog))
+    (partitionByOwner (\d => defOwnerOf oi (dtDefName d)) (dtProgDefs prog))
+    (partitionByOwner (\p => globalOwnerOf oi (firstOf p)) (dtProgGlobals prog))
+    (partitionByOwner (\i => defOwnerOf oi (dtInstName i)) (dtProgInsts prog))
+    (partitionByOwner (\c => defOwnerOf oi (dtClassName c)) (dtProgClasses prog))
+
+-- 单模块的闭合产物：从预分桶取切片，再用整包 sols 做一次深度 zonk。sols 表由
+-- `ProgParts` 整包建一次（`cachedOfProgramWith`），不再逐模块重建。
+cpOfModule : ProgParts -> DtProgram -> String -> CachedProgram
+cpOfModule parts prog mod =
   let
-    datas = filter (\d => sameOwner mod (dataOwnerOf oi (dtDataName d))) (dtProgDatas prog)
-    defs = filter (\d => sameOwner mod (defOwnerOf oi (dtDefName d))) (dtProgDefs prog)
-    globals = filter (\p => sameOwner mod (globalOwnerOf oi (firstOf p))) (dtProgGlobals prog)
-    insts = filter (\i => sameOwner mod (defOwnerOf oi (dtInstName i))) (dtProgInsts prog)
-    classes = filter (\c => sameOwner mod (defOwnerOf oi (dtClassName c))) (dtProgClasses prog)
+    datas = bucketOf mod parts.ppDatas
+    defs = bucketOf mod parts.ppDefs
+    globals = bucketOf mod parts.ppGlobals
+    insts = bucketOf mod parts.ppInsts
+    classes = bucketOf mod parts.ppClasses
     slice =
       DtProgram datas defs [] (dtProgSols prog) globals insts classes 0 (Base.HashMap.fromList [])
         []
-  in cachedOfProgram slice
+  in cachedOfProgramWith parts.ppSols slice
 
 sourceOf : List (Pair String SourceInfo) -> String -> SourceInfo
 sourceOf [] _ = SourceInfo "" 0 0 0
@@ -455,13 +499,13 @@ cleanIfaceOf (m :: rest) name = if miNameOf m == name then Just m else cleanIfac
 -- 也不会出现「依赖还没算到 → 哨兵/旧值」导致下一次运行误判脏。
 -- `clean` = 包内增量复用的模块（记录原样保留：重算依赖整包 sols，而增量路径没有干净
 -- 模块的 sols，重算会改变擦除位残 meta 的 zonk 结果 → 哈希漂移）。
-mkIfaceBase : String -> OwnerIndex -> DtProgram -> List (Pair String SourceInfo) -> List ModuleIface -> Module -> ModuleIface
-mkIfaceBase pkg oi prog sources clean m = case cleanIfaceOf clean (moduleNameOf m) of
+mkIfaceBase : String -> ProgParts -> DtProgram -> List (Pair String SourceInfo) -> List ModuleIface -> Module -> ModuleIface
+mkIfaceBase pkg parts prog sources clean m = case cleanIfaceOf clean (moduleNameOf m) of
   Just old => old
   Nothing =>
     let
       name = moduleNameOf m
-      cp = cpOfModule oi prog name
+      cp = cpOfModule parts prog name
       h =
         hashOfParts name pkg m.moduleImportsOf m.moduleImplicitImportsOf m.moduleFixitiesOf
           m.moduleDeclsOf cp
@@ -476,10 +520,10 @@ finishIface tbl clean m mi = case cleanIfaceOf clean (miNameOf mi) of
       (depHashesOf tbl m) (miImportsOf mi) (miImplicitImportsOf mi) (miCapabilitiesOf mi)
       (miExportsOf mi) (miFixitiesOf mi) (miDeclsOf mi) (miCachedOf mi)
 
-ifacesGo : String -> OwnerIndex -> DtProgram -> List (Pair String SourceInfo) -> List (Pair String Int) -> List ModuleIface -> List Module -> Pair (List ModuleIface) (List (Pair String Int))
-ifacesGo pkg oi prog sources knownDeps clean modules =
+ifacesGo : String -> ProgParts -> DtProgram -> List (Pair String SourceInfo) -> List (Pair String Int) -> List ModuleIface -> List Module -> Pair (List ModuleIface) (List (Pair String Int))
+ifacesGo pkg parts prog sources knownDeps clean modules =
   let
-    built = map (\m => Pair m (mkIfaceBase pkg oi prog sources clean m)) modules
+    built = map (\m => Pair m (mkIfaceBase pkg parts prog sources clean m)) modules
     hashes = map (\p => Pair (miNameOf (secondOf p)) (miIfaceHashOf (secondOf p))) built
     fullTbl = append knownDeps hashes
   in Pair (map (\p => finishIface fullTbl clean (firstOf p) (secondOf p)) built) fullTbl
@@ -487,10 +531,9 @@ ifacesGo pkg oi prog sources knownDeps clean modules =
 -- ---------------------------------------------------------------
 -- 覆盖性检查：本包模块拥有的 def/data/inst/class/global 必须全部出现在某个模块摘要里
 -- （归属表漏项会让依赖方静默拿到不完整接口，所以写侧宁可失败，不写缓存）。
+-- M34.6：四个成员判断改用 HashMap Bool（旧实现对每个 artifact 名线性扫 merged
+-- ~数千项，接口阶段 ~473ms）。
 -- ---------------------------------------------------------------
-isPreludeName : String -> Bool
-isPreludeName name = memName name preludeNames
-
 ownerOfAny : OwnerIndex -> String -> Maybe String
 ownerOfAny oi name = case defOwnerOf oi name of
   Just o => Just o
@@ -498,22 +541,22 @@ ownerOfAny oi name = case defOwnerOf oi name of
     Just o => Just o
     Nothing => ctorOwnerOf oi name
 
-coverageIssueOf : OwnerIndex -> List String -> List String -> List String -> String -> String
-coverageIssueOf oi ourNames inherited merged name = if isPreludeName name then ""
-else if memName name inherited then ""
+coverageIssueOf : OwnerIndex -> HashMap Bool -> HashMap Bool -> HashMap Bool -> HashMap Bool -> String -> String
+coverageIssueOf oi ourNames inherited merged prelude name = if Base.HashMap.member name prelude then ""
+else if Base.HashMap.member name inherited then ""
 else case ownerOfAny oi name of
   Just o =>
     if o == entryOwner then ""
-    else if memName o ourNames then if memName name merged then "" else "missing-from-iface " ++ name ++ " -> " ++ o
+    else if Base.HashMap.member o ourNames then if Base.HashMap.member name merged then "" else "missing-from-iface " ++ name ++ " -> " ++ o
     else ""
   Nothing => "unowned " ++ name
 
-coverageIssueGo : OwnerIndex -> List String -> List String -> List String -> List String -> String
-coverageIssueGo oi ourNames inherited merged [] = ""
-coverageIssueGo oi ourNames inherited merged (name :: rest) =
+coverageIssueGo : OwnerIndex -> HashMap Bool -> HashMap Bool -> HashMap Bool -> HashMap Bool -> List String -> String
+coverageIssueGo oi ourNames inherited merged prelude [] = ""
+coverageIssueGo oi ourNames inherited merged prelude (name :: rest) =
   let
-    issue = coverageIssueOf oi ourNames inherited merged name
-  in if issue == "" then coverageIssueGo oi ourNames inherited merged rest else issue
+    issue = coverageIssueOf oi ourNames inherited merged prelude name
+  in if issue == "" then coverageIssueGo oi ourNames inherited merged prelude rest else issue
 
 artifactNamesOf : DtProgram -> List String
 artifactNamesOf prog =
@@ -541,7 +584,11 @@ firstCoverageIssue : OwnerIndex -> List String -> List String -> List ModuleIfac
 firstCoverageIssue oi ourNames inherited ifaces prog =
   let
     merged = ifaceArtifactNames ifaces
-    issue = coverageIssueGo oi ourNames inherited merged (artifactNamesOf prog)
+    mergedTbl = Base.HashMap.ofNames merged
+    ourTbl = Base.HashMap.ofNames ourNames
+    inhTbl = Base.HashMap.ofNames inherited
+    preludeTbl = Base.HashMap.ofNames preludeNames
+    issue = coverageIssueGo oi ourTbl inhTbl mergedTbl preludeTbl (artifactNamesOf prog)
   in if issue == "" then Nothing else Just issue
 
 -- ---------------------------------------------------------------
@@ -562,9 +609,67 @@ ifaceOfPackage pkg sources knownDeps inherited clean modules entryDecls prog =
     declModules = map (\m => Pair (moduleNameOf m) (moduleDeclsOf m)) modules
     meta = splitMetaOf declModules entryDecls
     oi = ownerIndexOf meta (dtProgDatas prog)
+    parts = progPartsOf oi prog
     ourNames = map moduleNameOf ourModules
-  in case ifacesGo pkg oi prog sources knownDeps clean ourModules of
+  in case ifacesGo pkg parts prog sources knownDeps clean ourModules of
     Pair ifaces _ => coverageResult oi ourNames inherited ifaces prog
+
+-- ---------------------------------------------------------------
+-- 单模块接口（M34.6 5a：LSP 增量写回）
+-- ---------------------------------------------------------------
+-- 与 `ifaceOfPackage` 同一套归属 / 接口哈希 / 覆盖性语义，只构造 `name` 这一个模块的
+-- 摘要（LSP 每次请求只精化当前模块，写回也只写它）。
+--   - `clean`：包内其余已判干净的模块记录（原样参与覆盖性检查，不重算）；
+--   - `knownDeps`：依赖包模块的接口哈希表（调用方从依赖 manifest 汇总）；
+--   - 覆盖性检查用 clean ∪ {本模块} 的 artifact 名字集合：任一 artifact 缺归属或未被
+--     覆盖（例如同时还有别的脏模块被精化）⇒ Err，调用方跳过写（不写不完整摘要）。
+findNamedModule : List Module -> String -> Maybe Module
+findNamedModule [] _ = Nothing
+findNamedModule (m :: rest) name =
+  if moduleNameOf m == name then Just m else findNamedModule rest name
+
+-- 单模块覆盖性：只要求「归属本模块的 artifact」都出现在摘要里。依赖包注入的 artifact
+-- （`inherited`）与包内其它模块的 artifact 不参与（它们各自有接口，或不由本次写回负责）。
+sameOwner : String -> Maybe String -> Bool
+sameOwner mod (Just o) = o == mod
+sameOwner mod Nothing = False
+
+ownedByModule : OwnerIndex -> String -> String -> Bool
+ownedByModule oi name artifact = sameOwner name (globalOwnerOf oi artifact)
+
+moduleCoverageOk : OwnerIndex -> List String -> String -> DtProgram -> ModuleIface -> Bool
+moduleCoverageOk oi inherited name prog mi =
+  let
+    present = ifaceNamesOf mi
+  in allOwnedPresent oi inherited name (artifactNamesOf prog) present
+
+allOwnedPresent : OwnerIndex -> List String -> String -> List String -> List String -> Bool
+allOwnedPresent oi inherited name [] present = True
+allOwnedPresent oi inherited name (a :: rest) present =
+  let
+    skip = memName a inherited || not (ownedByModule oi name a)
+  in if skip then allOwnedPresent oi inherited name rest present
+  else memName a present && allOwnedPresent oi inherited name rest present
+
+ifaceOfModule : String -> SourceInfo -> List (Pair String Int) -> List String -> List ModuleIface -> List Module -> List Decl -> DtProgram -> String -> Result ModuleIface
+ifaceOfModule pkg si knownDeps inherited clean modules entryDecls prog name =
+  let
+    ourModules = reverse (filter (\m => modulePackageOf m == pkg) modules)
+    declModules = map (\m => Pair (moduleNameOf m) (moduleDeclsOf m)) modules
+    meta = splitMetaOf declModules entryDecls
+    oi = ownerIndexOf meta (dtProgDatas prog)
+    parts = progPartsOf oi prog
+    ourNames = map moduleNameOf ourModules
+  in case findNamedModule ourModules name of
+    Nothing => Err ("iface: module " ++ name ++ " is not part of the checked package")
+    Just m =>
+      let
+        mi0 = mkIfaceBase pkg parts prog [Pair name si] [] m
+        tbl =
+          append knownDeps (map (\x => Pair (miNameOf x) (miIfaceHashOf x)) (append clean [mi0]))
+        mi = finishIface tbl [] m mi0
+      in if moduleCoverageOk oi inherited name prog mi then Ok mi
+      else Err ("iface: module " ++ name ++ " has uncovered artifacts")
 
 -- 包接口自检：schema/编译器指纹由读侧校验；这里只检查模块集合非空 + 摘要闭合。
 packageIfaceValid : PackageIface -> Bool
@@ -725,6 +830,36 @@ writeModules dir compiler old (m :: rest) =
         _ = runIO (prim_writeFileAtomic path (encodeIfaceFile compiler (prim_marshal m)))
       in 1
   in n + writeModules dir compiler old rest
+
+-- 单模块接口写回（M34.6 5a）：只重写 `mi` 对应的模块文件，并把 manifest 里的同名条目
+-- 替换/追加（**保留其余条目**，不整包重写）。manifest 最后原子写 = 提交点；读侧对旧条目
+-- 逐个按源哈希 / 依赖哈希链校验，陈旧条目只会被判定脏，不会误用。
+-- 调用方必须保证 `mi` 的 `miSource` 与磁盘源码一致（buffer == 磁盘）——否则读侧会把它当
+-- 「脏」而丢弃，但写下错误哈希会让依赖者永远失配，所以一致性由调用方把关。
+replaceManifestEntry : List ManifestEntry -> ManifestEntry -> List ManifestEntry
+replaceManifestEntry [] e = [e]
+replaceManifestEntry (x :: rest) e =
+  if meNameOfEntry x == meNameOfEntry e then e :: rest else x :: replaceManifestEntry rest e
+
+entryNameIn : List ManifestEntry -> String -> Bool
+entryNameIn [] _ = False
+entryNameIn (e :: rest) name = meNameOfEntry e == name || entryNameIn rest name
+
+writeModuleIfaceMerge : String -> String -> String -> ModuleIface -> Int
+writeModuleIfaceMerge dir compiler pkg mi =
+  let
+    old = case readManifest dir compiler of
+      Just mf =>
+        if pmSchemaOf mf == ifaceSchema && pmCompilerOf mf == compiler && pmPackageOf mf == pkg then pmModulesOf mf
+        else []
+      Nothing => []
+    entry = manifestEntryOf mi
+    merged = replaceManifestEntry old entry
+    _ =
+      runIO
+        (prim_writeFileAtomic (modulePathOf dir (meFileOfEntry entry)) (encodeIfaceFile compiler (prim_marshal mi)))
+    _ = writeManifest dir compiler (PackageManifest ifaceSchema compiler pkg merged)
+  in 1
 
 writePackageIface : String -> String -> String -> List ModuleIface -> Int
 writePackageIface dir compiler pkg modules =

@@ -155,6 +155,25 @@ in
     script = ./compiler-perf.sh;
   };
 
+  # M34.6：编译器增长率门槛（合成 N 个同形定义，相邻档墙钟比有上界）。
+  # 绝对时间不可跨机器比；增长率可比，用来挡「某次改动把线性路径退化成 n²」。
+  vuna-compiler-growth = mkCheck {
+    name = "vuna-compiler-growth";
+    srcs = [
+      ../../base
+      ../../nix/checks/compiler-growth.sh
+      ../../vuna.toml
+    ];
+    env = {
+      VUNA = "${vuna}/bin/vuna";
+    };
+    nativeBuildInputs = [
+      pkgs.bash
+      pkgs.coreutils
+    ];
+    script = ./compiler-growth.sh;
+  };
+
   vuna-typecheck = mkCheck {
     name = "vuna-typecheck";
     srcs = [

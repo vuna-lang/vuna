@@ -42,6 +42,7 @@ Vuna.Search  ./lib/Vuna/Search.vuna
 Vuna.Sig  ./lib/Vuna/Sig.vuna
 Vuna.TestRunner  ./lib/Vuna/TestRunner.vuna
 app.Main  ./app/Main.vuna
+Vuna.Compiler.CacheFormat  compiler/lib/Vuna/Compiler/CacheFormat.vuna
 Vuna.Compiler.Codegen.Assembly  compiler/lib/Vuna/Compiler/Codegen/Assembly.vuna
 Vuna.Compiler.Codegen.Decl  compiler/lib/Vuna/Compiler/Codegen/Decl.vuna
 Vuna.Compiler.Codegen.Erase  compiler/lib/Vuna/Compiler/Codegen/Erase.vuna
@@ -144,6 +145,7 @@ Prelude  base/lib/Prelude.vuna
 
 
 ## compiler（vuna-compiler）
+Vuna.Compiler.CacheFormat  ./lib/Vuna/Compiler/CacheFormat.vuna
 Vuna.Compiler.Codegen.Assembly  ./lib/Vuna/Compiler/Codegen/Assembly.vuna
 Vuna.Compiler.Codegen.Decl  ./lib/Vuna/Compiler/Codegen/Decl.vuna
 Vuna.Compiler.Codegen.Erase  ./lib/Vuna/Compiler/Codegen/Erase.vuna

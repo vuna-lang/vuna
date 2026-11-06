@@ -765,17 +765,20 @@ solveLiftedMeta ec name level m = case solveMeta (ecDefTbl ec) (ecSolsP ec) 0 m 
   Err e => ec
 
 liftFreeDictGoals : String -> Ec -> Term -> Term -> Pair Term (Pair Term Ec)
-liftFreeDictGoals defName ec ty body =
-  let
-    groups = freeDictGoals ec
-    nGroups = length groups
-    -- M23/M29：字典 binder 插在**原始签名**的最后一个隐式 binder 之后。
-    -- `insertDictBinder`/`insertLamBinder` 的 idx 语义是「插在第 idx 个 binder 之后」，
-    -- 所以基准是 `隐式前缀长 - 1`，且**只在循环外算一次**：插入后 ty 的隐式前缀会变长，
-    -- 再读 `leadingImplicitCount ty` 会把已插入的字典重复计入（C05：第 2、3 只字典被推到
-    -- 显式参数之后，`ma` 的引用因此错位）。
-    baseIdx = maxInt 0 (leadingImplicitCount ty - 1)
-  in liftFreeDictGoalsGo defName ec ty body baseIdx nGroups 0 groups
+-- M34 冷路径：没有延迟字典目标时整段是恒等（旧实现每次都扫一遍目标表 + 求隐式前缀长）。
+liftFreeDictGoals defName ec ty body = case ecDictGoals ec of
+  [] => Pair ty (Pair body ec)
+  _ =>
+    let
+      groups = freeDictGoals ec
+      nGroups = length groups
+      -- M23/M29：字典 binder 插在**原始签名**的最后一个隐式 binder 之后。
+      -- `insertDictBinder`/`insertLamBinder` 的 idx 语义是「插在第 idx 个 binder 之后」，
+      -- 所以基准是 `隐式前缀长 - 1`，且**只在循环外算一次**：插入后 ty 的隐式前缀会变长，
+      -- 再读 `leadingImplicitCount ty` 会把已插入的字典重复计入（C05：第 2、3 只字典被推到
+      -- 显式参数之后，`ma` 的引用因此错位）。
+      baseIdx = maxInt 0 (leadingImplicitCount ty - 1)
+    in liftFreeDictGoalsGo defName ec ty body baseIdx nGroups 0 groups
 
 liftFreeDictGoalsGo : String -> Ec -> Term -> Term -> Int -> Int -> Int -> List DictGoalGroup -> Pair Term (Pair Term Ec)
 liftFreeDictGoalsGo defName ec ty body baseIdx nGroups k groups = case groups of

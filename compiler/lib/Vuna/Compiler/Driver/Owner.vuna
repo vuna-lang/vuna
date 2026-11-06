@@ -29,6 +29,7 @@ module Vuna.Compiler.Driver.Owner
 import Vuna.Compiler.Common
 import Vuna.Compiler.Elab
 import Vuna.Compiler.Frontend.Ast
+import Base.HashMap
 
 splitNoSpan : Span
 splitNoSpan = Span "" 0 0 0 0
@@ -127,6 +128,11 @@ record SplitMeta where
   smDefOwners : List (Pair String String)
   smDataOwners : List (Pair String String)
   smKnownModules : List String
+  -- M34.6：同一份归属表的哈希索引。清单保留给 `Driver.Iface.ownerIndexOf`（它按
+  -- `Base.HashMap.fromList` 建自己的表），但 codegen 侧逐 def/data 查归属不再线性扫清单
+  -- （旧实现 O(#def × #owner-pairs)：compiler 包一次 build 约 0.3s）。
+  smDefOwnerT : HashMap String
+  smDataOwnerT : HashMap String
 
 splitMetaOf : List (Pair String (List Decl)) -> List Decl -> SplitMeta
 splitMetaOf modules entryDecls =
@@ -137,7 +143,8 @@ splitMetaOf modules entryDecls =
     dataOwners =
       append (splitDataOwnerEntriesOfModules modules)
         (splitDataOwnerEntriesOf entryOwner entryDecls)
-  in SplitMeta defOwners dataOwners knownModules
+  in SplitMeta defOwners dataOwners knownModules (Base.HashMap.fromList defOwners)
+    (Base.HashMap.fromList dataOwners)
 
 lookupModuleOf : List (Pair String String) -> String -> Maybe String
 lookupModuleOf pairs name = lookupPair name pairs
@@ -151,14 +158,14 @@ knownModuleOrErr knownModules what name =
     ("DT split: `" ++ what ++ "` " ++ name ++ " has module prefix `" ++ prefix ++ "` but no such module")
 
 splitDataOwnerOf : SplitMeta -> DtData -> Result String
-splitDataOwnerOf meta d = case lookupModuleOf meta.smDataOwners (dtDataName d) of
+splitDataOwnerOf meta d = case Base.HashMap.lookup (dtDataName d) meta.smDataOwnerT of
   Just o => Ok o
   Nothing =>
     if containsDot (dtDataName d) then knownModuleOrErr meta.smKnownModules "data" (dtDataName d)
     else Err ("DT split: cannot determine module for data `" ++ dtDataName d ++ "`")
 
 splitDefOwnerOf : SplitMeta -> String -> Result String
-splitDefOwnerOf meta name = case lookupModuleOf meta.smDefOwners name of
+splitDefOwnerOf meta name = case Base.HashMap.lookup name meta.smDefOwnerT of
   Just o => Ok o
   Nothing =>
     if containsDot name then knownModuleOrErr meta.smKnownModules "definition" name
