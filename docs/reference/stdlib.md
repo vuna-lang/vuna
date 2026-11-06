@@ -179,7 +179,7 @@ module Base.ErrorT (ErrorT, throwError, catchError, runErrorT) where
 - **库级效应（M35.1）**：`State` / `Reader` / `Error` 是带 `Functor`/`Monad` 实例的纯函数
   monad（**不进入 `Prelude` / `Base` 门面**，显式 import）；`do` 可用；`Base.ST` 的 region
   隔离与「不声明 `Monad` 实例」的原因见 [effects.md](effects.md)；通用签名索引效应
-  （用户自定义 op + 深 handler + 行/重排）未实现（debt D03 / D26）；没有语言级并发 / async
+  （用户自定义 op + 深 handler + 行/重排）未实现（[roadmap.md](../roadmap.md) F3）；没有语言级并发 / async
   （M35.2）；
 - `Result` 暂无 `Functor` / `Monad` 实例；
 - 抽象类型（`Map`、`IO`）跨包不可构造、不可模式匹配，只能经 API 使用。

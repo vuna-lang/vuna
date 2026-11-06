@@ -119,8 +119,7 @@ vuna search [--type|--name|--doc] [--module PFX] [--limit N] [--json] <query...>
 
 - 类型名解析是**语法级近似**：短名歧义时回退源码短名比较；不按 import 闭包解析。
 - 无实例/隐式参数/依赖相等/类型别名展开的语义匹配；`Eq a =>` 约束在检索中忽略。
-- 语义级检索（精化后比较）只保留内部 `TypeMode.Semantic` 接口，不暴露 CLI flag；
-  见 [debt.md](debt.md)。
+- 没有语义级检索（精化后比较），CLI 也没有 `--semantic`；见 [debt.md](debt.md)。
 - 文档输出是单页 HTML；没有多页站点 / 搜索服务 / 托管。
 
 ## 4. 索引 v3

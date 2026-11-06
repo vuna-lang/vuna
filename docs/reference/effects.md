@@ -76,12 +76,12 @@ instance MonadIO IO where
 | `Base.ErrorT` | `record ErrorT e a where errorTRun : IO (Error e a)` | `runErrorT`；`throwError` / `catchError` | `Functor` / `Monad` / `MonadIO (ErrorT e)` |
 
 - 三者都在 `do` 块里与 `liftIO` 组合；handler 返回 `IO …`，由 `main`/`runIO` 执行。
-- **边界（已登记 debt B11/D32）**：transformer 固定以 IO 为基座，不是
+- **边界（已登记 debt D32）**：transformer 固定以 IO 为基座，不是
   `StateT s m a` 式的任意 monad 泛化。原因：vuna 的 record 参数统一按 `Type` kind 降级，
   且顶层签名/实例头里的自由隐式变量 kind 从「被应用次数」推断、不会从构造子 kind
   反推，`m : Type -> Type` 只在实参位置出现时会被误判成 `Type`。泛化需要先做
   「隐式参数 kind 从构造子 kind 推断」的编译器改进。
-- **没有效应多态类**：trait 只支持单参数、无父类（B11），所以没有
+- **没有效应多态类**：trait 只支持单参数、无父类（见 [roadmap.md](../roadmap.md) F4），所以没有
   `MonadState s m` / `MonadReader e m` 这类类；效应多态代码用具体 transformer +
   显式签名约束。`MonadIO` 也没有 `Monad` 父类：`do` 仍需要单独的 `Monad` 字典。
 
@@ -155,11 +155,10 @@ interp` 能直接归约；它们是「不需要 IO 的状态/环境/错误」。
 
 | debt | 内容 | 归属 |
 | --- | --- | --- |
-| D03 | 通用签名索引效应（用户自定义 op、行/重排、深 handler 组合）未实现 | F3 |
 | D22 | QTT 核心已落地（M38）；剩余：线性箭头/多态、一次性续延，`ST` 动作本身仍可复制；ST 无 `Monad` 实例 | 后续 / F3 |
 | D27 | 擦除依赖续延的运行时表示缺失（§5），三条路线见 §6 | F3 |
 | D28 | `base` 的 `unsafe` 授权没有机制约束使用点（`Base.IO.runIO` 别名 + `Base.ST.runST` + `Base.Debug.trace/traceShow` 的调试逃逸） | 后续收紧 |
-| B11/D32 | trait 单参数/无父类 ⇒ 无 `MonadState`/`MonadReader` 效应类；transformer 无任意 monad 泛化（隐式参数 kind 推断缺口） | F4 / M37 后续 |
+| D32 | transformer 无任意 monad 泛化（隐式参数 kind 推断缺口，§3.2） | M37 后续（F3 前置） |
 
 ## 9. 非目标（本阶段明确不做）
 
