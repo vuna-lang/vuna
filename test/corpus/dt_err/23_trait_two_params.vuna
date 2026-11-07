@@ -1,6 +1,0 @@
--- M19：多参数接口仍不支持（需要多参数字典编码，属后续阶段）。
-trait Bi a b where
-  combine : a -> b -> Int
-
-main : Int
-main = 1

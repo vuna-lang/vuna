@@ -699,9 +699,8 @@ showTypeSig (TCon c args) = "(" ++ c ++ showSigArgs args ++ ")"
 showTypeSig t = showTerm t
 
 showSigParenIfPi : Term -> String
-showSigParenIfPi t = case t of
-  TPi n i r d c => "(" ++ showTypeSig (TPi n i r d c) ++ ")"
-  _ => showTypeSig t
+showSigParenIfPi (TPi n i r d c) = "(" ++ showTypeSig (TPi n i r d c) ++ ")"
+showSigParenIfPi t = showTypeSig t
 
 showSigArgs : List (Pair Term Rig) -> String
 showSigArgs [] = ""

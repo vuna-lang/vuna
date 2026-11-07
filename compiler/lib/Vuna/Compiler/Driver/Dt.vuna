@@ -468,14 +468,15 @@ dedupInts (x :: rest) = if memMetaId x rest then dedupInts rest else x :: dedupI
 
 -- 某个元变量在类型项里被应用的最大元数（决定泛化后的 kind）。
 maxMetaArity : Int -> Term -> Int
-maxMetaArity m t = case t of
-  TApp f a r => imax (applyArity m (TApp f a r)) (imax (maxMetaArity m f) (maxMetaArity m a))
-  TPi _ _ _ dom cod => imax (maxMetaArity m dom) (maxMetaArity m cod)
-  TLam _ _ body => maxMetaArity m body
-  TCon _ args => maxMetaArityArgs m args
-  TCase scrut alts => imax (maxMetaArity m scrut) (maxMetaArityAlts m alts)
-  TIf c th el => imax (maxMetaArity m c) (imax (maxMetaArity m th) (maxMetaArity m el))
-  _ => 0
+maxMetaArity m (TApp f a r) =
+  imax (applyArity m (TApp f a r)) (imax (maxMetaArity m f) (maxMetaArity m a))
+maxMetaArity m (TPi _ _ _ dom cod) = imax (maxMetaArity m dom) (maxMetaArity m cod)
+maxMetaArity m (TLam _ _ body) = maxMetaArity m body
+maxMetaArity m (TCon _ args) = maxMetaArityArgs m args
+maxMetaArity m (TCase scrut alts) = imax (maxMetaArity m scrut) (maxMetaArityAlts m alts)
+maxMetaArity m (TIf c th el) =
+  imax (maxMetaArity m c) (imax (maxMetaArity m th) (maxMetaArity m el))
+maxMetaArity m _ = 0
 
 maxMetaArityArgs : Int -> List (Pair Term Rig) -> Int
 maxMetaArityArgs m [] = 0
@@ -489,15 +490,13 @@ applyArity : Int -> Term -> Int
 applyArity m t = if headIsMeta m t then spineLen t else 0
 
 headIsMeta : Int -> Term -> Bool
-headIsMeta m t = case t of
-  TApp f _ _ => headIsMeta m f
-  TMeta n => m == n
-  _ => False
+headIsMeta m (TApp f _ _) = headIsMeta m f
+headIsMeta m (TMeta n) = m == n
+headIsMeta m _ = False
 
 spineLen : Term -> Int
-spineLen t = case t of
-  TApp f _ _ => 1 + spineLen f
-  _ => 0
+spineLen (TApp f _ _) = 1 + spineLen f
+spineLen _ = 0
 
 imax : Int -> Int -> Int
 imax a b = if a >= b then a else b

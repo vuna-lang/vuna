@@ -173,6 +173,14 @@ paramSuffix : List String -> String
 paramSuffix [] = ""
 paramSuffix params = " ${join " " params}"
 
+traitParamSuffix : List TraitParam -> String
+traitParamSuffix [] = ""
+traitParamSuffix params = " " ++ join " " (map traitParamText params)
+
+traitParamText : TraitParam -> String
+traitParamText (TraitParam n Nothing) = n
+traitParamText (TraitParam n (Just k)) = "(${n} : ${renderType k})"
+
 signatureOf : String -> List Decl -> String
 signatureOf name [] = ""
 signatureOf name (d :: rest) = case d of
@@ -201,7 +209,7 @@ symbolsOfDecl sMod decls table d =
       Sym sMod name "record" "record ${name}${paramSuffix params}" "" (docForDecl table name) line col
         :: fieldSymbols sMod name fields table
     DTrait name params methods sp =>
-      Sym sMod name "trait" "trait ${name}${paramSuffix params}" "" (docForDecl table name) line col
+      Sym sMod name "trait" "trait ${name}${traitParamSuffix params}" "" (docForDecl table name) line col
         :: methodSymbols sMod name methods table
     DSig name ctx ty sp => []
     DAxiom name ty sp =>

@@ -1,0 +1,48 @@
+-- W10 收尾：fs 命名实例（F1/F2）——同一程序在 mock（F1，纯 answer）与真实（F2，
+-- IO-backed handler）下各跑一次；证明 mock/real handler 可以在同一程序里并存。
+-- mock 的 WriteFile/ReadFile 是固定答案（与 clock/env mock 同一风格）。
+import Base.Eff
+import Base.EffFs
+import Base.IO
+import Base.List
+
+dir : String
+dir = "/tmp/vuna_w10_fs_named"
+
+path : String
+path = "/tmp/vuna_w10_fs_named/a.txt"
+
+b2i : Bool -> Int
+b2i b = if b then 1 else 0
+
+prog : (n : Name) -> Eff (RCons (Fs n) RNil) String
+prog n =
+  bindEff (fsMakeDir n dir) (\_ =>
+    bindEff (fsRemoveFile n path) (\_ =>
+      bindEff (fsWriteFile n path "hello") (\w =>
+        bindEff (fsReadFile n path) (\s =>
+          bindEff (fsFileExists n path) (\e =>
+            bindEff (fsFileSize n path) (\sz =>
+              bindEff (fsRemoveFile n path) (\_ =>
+                pureEff (join "," (Cons (strFromInt w) (Cons s (Cons (strFromInt (b2i e)) (Cons (strFromInt sz) Nil))))))))))))
+
+mret : String -> String
+mret a = a
+
+mopH : (o : FsOp) -> (Base.EffFs.resFs o -> String) -> String
+mopH op k = case op of
+  ReadFile p => k "M"
+  WriteFile p s => k 5
+  WriteFileAtomic p s => k 5
+  ReadDir p => k Nil
+  IsDirectory p => k True
+  MakeDir p => k 0
+  RemoveFile p => k 0
+  FileExists p => k True
+  FileMtime p => k 0
+  FileSize p => k 42
+
+main : IO Int
+main = prim_bindIO (print ("mock " ++ runPure (handleFs F1 mret mopH (prog F1)) ++ "\n")) (\_ =>
+         prim_bindIO (runIOAnswer (handleFsIO F2 (prog F2))) (\real =>
+           prim_bindIO (print ("real " ++ real ++ "\n")) (\_ => prim_pureIO 0)))

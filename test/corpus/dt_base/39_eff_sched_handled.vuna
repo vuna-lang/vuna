@@ -1,0 +1,24 @@
+-- W9 effect-aware fork：显式 handler 把 Reader task 收成 RNil 后 fork；任务局部 env=7。
+import Base.Eff
+import Base.Eff.Reader
+import Base.EffSched
+import Base.Result
+
+opH : (o : ReaderOp Int) -> (Base.Eff.Reader.resReader Int o -> Int) -> Int
+opH op k = case op of
+  Ask => k 7
+
+handled : Eff (RCons (Reader Cnt1 Int) RNil) Int -> Eff RNil Int
+handled comp = handleReader Cnt1 Int (\a => a) opH comp
+
+prog : Eff RNil (Result Int)
+prog = withScope (\sc =>
+  bindEff (forkTaskWith sc handled (ask Cnt1 Int)) (\t =>
+    awaitTask t))
+
+main : IO Int
+main = do
+  r <- runIOEff prog
+  case r of
+    Ok n => pure n
+    Err _ => pure 0

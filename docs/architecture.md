@@ -160,6 +160,16 @@ vuna.toml → Frontend.{Toml.parseToml, Manifest.parseManifest/validateManifest}
 - 网络原语：`net` 能力（`prim_netListen/Accept/Recv/Send/Close/Port/Connect`，
   句柄是 Int、运行时映射 `Unix.file_descr`），见 [primitives.md](reference/primitives.md) §7。
   当前已落地 loopback TCP 与 Unix domain socket（异步/取消/TLS 未做，见 debt D36）。
+- **运行时效应（Layer 1–3，`runtime-effects` 分支）**：`prim_effectPerform` / `prim_effectHandle`
+  （`unsafe`）把 OCaml 5 一次性续延接入 `Base.Eff`（开放行 + 命名实例 + 一阶效应）；
+  `Vuna_runtime` 声明通用 `Perform (key, name, payload)`，handler 按 key/name 过滤并
+  `continue` 一次；W7 起 handler 壳是 `dtp_effect_handle`，它在 handler 退出时执行
+  每纤程 cleanup 栈（`prim_cleanupPush`/`prim_cleanupPop` → `dtp_cleanup_*`），
+  `Base.Eff.bracket`/`finally` 的 release 因此在非 `Exn` abort（续延被丢弃）时也会跑；
+  W9 起运行时还包含单线程 fiber 调度器 `dtSchedRuntime`（隐藏
+  `prim_sched*`；`Base.EffSched` 的 fork/yield/await/取消/结构化 scope/步数超时，main
+  钩子经 `dtp_sched_main` 把 main 跑成纤程 0）；`vuna interp` 不执行运行时效应（见
+  [effects.md](reference/effects.md) §8）。
 - **TCB**：工具链永不进 seed（`compiler/app/Main.vuna` 闭包不含 `Vuna.*` 工具模块；
   `nix/tcb-forbidden.txt` 黑名单）；效应边界是 manifest 显式能力
   （`[capabilities].effects` ∈ console/fs/process/env/clock/net/unsafe），

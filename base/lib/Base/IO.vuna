@@ -1,13 +1,18 @@
 module Base.IO
   ( Functor(..)
   , Monad(..)
+  , eprint
+  , execPath
   , exit
   , fileExists
   , fileMtime
   , fileSize
   , getArgs
+  , getCwd
+  , getEnv
   , isDirectory
   , makeDir
+  , nowMicros
   , print
   , println
   , readBytes
@@ -16,6 +21,7 @@ module Base.IO
   , readLine
   , removeFile
   , runIO
+  , sleepMicros
   , writeFile
   ) where
 
@@ -33,6 +39,8 @@ module Base.IO
 import Base.List
 import Base.Bool
 import Base.Monad
+-- W10：sleepMicros 用 `<=` / `>=`（Ord 方法别名）。
+import Base.Ord
 -- M36 跟进：模板字符串降级引用 Base.Interp.interp（split 依赖需要显式 import）。
 import Base.Interp
 -- `++` 的 fixity 声明在 Base.String；base 模块不自动注入 Prelude，println 需要它。
@@ -46,6 +54,10 @@ runIO = prim_runIO
 -- 效果 API：直接别名到 IO 化的原语（M31）。
 print : String -> IO Int
 print = prim_print
+
+-- 写 stderr（W10：console 效应标签的真实 handler 用；与 print 对称）。
+eprint : String -> IO Int
+eprint = prim_eprint
 
 println : String -> IO Int
 println s = print "${s}\n"
@@ -89,8 +101,26 @@ fileSize path = fmap natFromInt (prim_fileSize path)
 getArgs : IO (List String)
 getArgs = prim_getArgs
 
+-- 环境（W10：env 效应标签的真实 handler 用）。getEnv 对不存在的变量返回 ""。
+getEnv : String -> IO String
+getEnv = prim_getenv
+
+getCwd : IO String
+getCwd = prim_getcwd
+
+execPath : IO String
+execPath = prim_execPath
+
 exit : Int -> IO Int
 exit = prim_exit
+
+-- 时钟（W10：clock 效应标签的真实 handler 用）。nowMicros 是微秒时间戳；
+-- sleepMicros 走编译器原生 `prim_sleep`（`Unix.sleepf`），阻塞睡眠。
+nowMicros : IO Int
+nowMicros = timeUs
+
+sleepMicros : Int -> IO Int
+sleepMicros us = if us <= 0 then prim_pureIO 0 else prim_sleep us
 
 -- IO 代数：内建原语就是 thunk 构造/绑定，实例只做转接（没有第二套实现）。
 instance Functor IO where

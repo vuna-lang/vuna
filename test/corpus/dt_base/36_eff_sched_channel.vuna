@@ -1,0 +1,19 @@
+-- W9 生产者-消费者：fork producer 入队，主纤程 recvWait 轮询（yield 让 producer 跑），
+-- withScope 等两者结束。
+import Base.Eff
+import Base.EffChannel
+import Base.EffSched
+import Base.Result
+
+prog : Eff RNil (Result Int)
+prog = withScope (\sc =>
+  bindEff newChannelInt (\ch =>
+    bindEff (forkTask sc (send ch 42)) (\_ =>
+      recvWait 64 ch)))
+
+main : IO Int
+main = do
+  r <- runIOEff prog
+  case r of
+    Ok n => pure n
+    Err _ => pure 0

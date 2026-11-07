@@ -572,9 +572,9 @@ let rec v_Vuna_dCompiler_dCore_dTerm_dshowTypeSig = (fun mc0 -> (match mc0 with
   | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTPi (dtb__403, dtb__404, dtb__405, dtb__406, dtb__407) -> (if (dtb__403 = "_") then (String.concat "" [(v_Vuna_dCompiler_dCore_dTerm_dshowSigParenIfPi dtb__406); " -> "; (v_Vuna_dCompiler_dCore_dTerm_dshowTypeSig dtb__407)]) else (if dtb__404 then (String.concat "" ["{"; dtb__403; " : "; (v_Vuna_dCompiler_dCore_dTerm_dshowTypeSig dtb__406); "} -> "; (v_Vuna_dCompiler_dCore_dTerm_dshowTypeSig dtb__407)]) else (String.concat "" ["("; dtb__403; " : "; (v_Vuna_dCompiler_dCore_dTerm_dshowTypeSig dtb__406); ") -> "; (v_Vuna_dCompiler_dCore_dTerm_dshowTypeSig dtb__407)])))
   | _ -> (v_Vuna_dCompiler_dCore_dTerm_dshowTerm mc0)
 ))
-and v_Vuna_dCompiler_dCore_dTerm_dshowSigParenIfPi = (fun t -> (match t with
+and v_Vuna_dCompiler_dCore_dTerm_dshowSigParenIfPi = (fun mc0 -> (match mc0 with
   | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTPi (dtb__408, dtb__409, dtb__410, dtb__411, dtb__412) -> (String.concat "" ["("; (v_Vuna_dCompiler_dCore_dTerm_dshowTypeSig (C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTPi (dtb__408, dtb__409, dtb__410, dtb__411, dtb__412))); ")"])
-  | _ -> (v_Vuna_dCompiler_dCore_dTerm_dshowTypeSig t)
+  | _ -> (v_Vuna_dCompiler_dCore_dTerm_dshowTypeSig mc0)
 ))
 and v_Vuna_dCompiler_dCore_dTerm_dshowSigArgs = (fun mc0 -> (match mc0 with
   | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__413, dtb__414) -> (match dtb__413 with

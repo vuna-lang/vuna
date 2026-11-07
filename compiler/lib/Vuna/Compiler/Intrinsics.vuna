@@ -422,6 +422,17 @@ allIntrinsics : List Intrinsic
 -- 进 Intrinsics 表（base 源码在 seed rotation 之后才会使用它们）。
 -- 内部 cast（`visible = False`）：只由精化器插入，runtime 是 OCaml 的 `%identity`；
 -- 运行时位置的不透明擦除依赖值靠它进出（见 docs/reference/effects.md §5/§6）。
+-- 运行时续延（Layer 1）：一次性 effect handler。两者都要求 `unsafe` 能力，
+-- 只供 `Base.Eff` 的信任包装使用；类型在源码层由 Base.Eff 的 API 收紧，
+-- 运行时表达式用 Obj.magic 桥接（与 M39 的不透明 cast 同一套表示）。
+-- Layer 3：最小并发（OCaml 5 Domain）。只允许在 main 域 fork/await；任务体应是
+-- 行已被处理干净的 Eff（Base.EffAsync 的 API 强制 RNil）。
+-- W9：单线程 fiber 调度器原语（Base.EffSched 的信任边界；runtime = dtp_sched_*）。
+-- 与 effect 原语一样可见但要求 `unsafe` 能力：只有声明了 unsafe 的包（base）能直调。
+-- 原生睡眠（W10 收尾）：微秒；真实实现是 `Unix.sleepf`（阻塞，非忙等）。
+-- 能力 `clock`（与 timeUs 同族）；interp 不归约（OpNone），效果程序只 compile+run。
+-- 注意：`Base.IO` 在 seed 闭包内，旧 seed 不认识它，因此库层切换见 debt D43；
+-- 不在 seed 闭包内的 `Base.EffClock` 真实 handler 已直接使用它。
 allIntrinsics =
   [ Intrinsic "+" (IFun IInt (IFun IInt IInt)) OpAdd Nothing "bi_add" True,
     Intrinsic "-" (IFun IInt (IFun IInt IInt)) OpSub Nothing "bi_sub" True,
@@ -437,6 +448,7 @@ allIntrinsics =
     Intrinsic "strConcatMany" (IFun (IList IStr) IStr) OpStrConcatMany Nothing "dtp_concatMany" True,
     Intrinsic "strSubstTemplate" (IFun IStr (IFun (IList IStr) IStr)) OpStrSubstTemplate Nothing "dtp_substTemplate" True,
     Intrinsic "timeUs" (IIO IInt) OpNone (Just CapClock) "(dtp_timeUs ())" True,
+    Intrinsic "prim_sleep" (IFun IInt (IIO IInt)) OpNone (Just CapClock) "dtp_sleep" True,
     Intrinsic "strHash" (IFun IStr IInt) OpStrHash Nothing "dtp_strHash" True,
     Intrinsic "strAt" (IFun IStr (IFun IInt IInt)) OpStrAt Nothing "dtp_strAt" True,
     Intrinsic "strSubstring" (IFun IInt (IFun IInt (IFun IStr IStr))) OpStrSubstring Nothing "dtp_substring" True,
@@ -461,6 +473,25 @@ allIntrinsics =
     Intrinsic primBindIOName (IPi "a" (IPi "b" (IFun (IIO (IVar "a")) (IFun (IFun (IVar "a") (IIO (IVar "b"))) (IIO (IVar "b")))))) OpNone Nothing "(fun io k -> fun w -> k (io w) w)" True,
     Intrinsic primBindIO1Name (IPi "a" (IPi "b" (IFun1 (IIO (IVar "a")) (IFun1 (IFun1 (IVar "a") (IIO (IVar "b"))) (IIO (IVar "b")))))) OpNone Nothing "(fun io k -> fun w -> k (io w) w)" True,
     Intrinsic primRunIOName (IPi "a" (IFun (IIO (IVar "a")) (IVar "a"))) OpNone (Just CapUnsafe) "(fun io -> io 0)" True,
+    Intrinsic "prim_effectPerform" (IPi "a" (IPi "b" (IFun IStr (IFun IInt (IFun (IVar "a") (IVar "b")))))) OpNone (Just CapUnsafe) "(fun key name v -> Obj.obj (Effect.perform (Perform (key, name, Obj.repr v))))" True,
+    Intrinsic "prim_effectHandle" (IPi "u" (IPi "a" (IPi "b" (IPi "ret" (IPi "h" (IFun IStr (IFun IInt (IFun (IVar "ret") (IFun (IVar "h") (IFun (IFun (IVar "u") (IVar "a")) (IFun (IVar "u") (IVar "b")))))))))))) OpNone (Just CapUnsafe) "dtp_effect_handle" True,
+    Intrinsic "prim_cleanupPush" (IFun (IFun IInt IInt) IInt) OpNone (Just CapUnsafe) "dtp_cleanup_push" True,
+    Intrinsic "prim_cleanupPop" (IFun IInt IInt) OpNone (Just CapUnsafe) "dtp_cleanup_pop" True,
+    Intrinsic "prim_asyncFork" (IPi "a" (IFun (IFun IInt (IVar "a")) (IIO IInt))) OpNone Nothing "(fun th -> dtp_async_fork th)" True,
+    Intrinsic "prim_asyncAwait" (IPi "a" (IFun IInt (IVar "a"))) OpNone Nothing "(fun h -> Obj.obj (dtp_async_await h))" True,
+    Intrinsic "prim_schedNewScope" (IFun IInt IInt) OpNone (Just CapUnsafe) "(fun _ -> dtp_sched_new_scope ())" True,
+    Intrinsic "prim_schedFork" (IPi "a" (IFun IInt (IFun (IFun IInt (IVar "a")) IInt))) OpNone (Just CapUnsafe) "(fun sc th -> dtp_sched_fork sc th)" True,
+    Intrinsic "prim_schedYield" (IFun IInt IInt) OpNone (Just CapUnsafe) "(fun _ -> dtp_sched_yield ())" True,
+    Intrinsic "prim_schedIsCancelled" (IFun IInt IInt) OpNone (Just CapUnsafe) "(fun _ -> dtp_sched_is_cancelled ())" True,
+    Intrinsic "prim_schedAwait" (IFun IInt IInt) OpNone (Just CapUnsafe) "dtp_sched_await" True,
+    Intrinsic "prim_schedTaskResult" (IPi "a" (IFun IInt (IVar "a"))) OpNone (Just CapUnsafe) "(fun id -> Obj.obj (dtp_sched_task_result id))" True,
+    Intrinsic "prim_schedTaskError" (IFun IInt IStr) OpNone (Just CapUnsafe) "dtp_sched_task_error" True,
+    Intrinsic "prim_schedCancelTask" (IFun IInt IInt) OpNone (Just CapUnsafe) "dtp_sched_cancel_task_prim" True,
+    Intrinsic "prim_schedCancelScope" (IFun IInt IInt) OpNone (Just CapUnsafe) "dtp_sched_cancel_scope" True,
+    Intrinsic "prim_schedScopeWait" (IFun IInt IInt) OpNone (Just CapUnsafe) "dtp_sched_scope_wait" True,
+    Intrinsic "prim_schedScopeWaitTimeout" (IFun IInt (IFun IInt IInt)) OpNone (Just CapUnsafe) "dtp_sched_scope_wait_timeout" True,
+    Intrinsic "prim_schedScopeError" (IFun IInt IStr) OpNone (Just CapUnsafe) "dtp_sched_scope_error" True,
+    Intrinsic "prim_schedScopeCount" (IFun IInt IInt) OpNone (Just CapUnsafe) "dtp_sched_scope_count" True,
     Intrinsic "prim_newRef" (IPi "a" (IFun (IVar "a") (IIO (IRef (IVar "a"))))) OpNone Nothing "(fun x -> ref x)" True,
     Intrinsic "prim_readRef" (IPi "a" (IFun (IRef (IVar "a")) (IIO (IVar "a")))) OpNone Nothing "(fun r -> !r)" True,
     Intrinsic "prim_writeRef" (IPi "a" (IFun (IRef (IVar "a")) (IFun (IVar "a") (IIO IInt)))) OpNone Nothing "(fun r v -> r := v; 0)" True,

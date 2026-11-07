@@ -1,0 +1,10 @@
+-- W6 负例：tryWith 要求行首是 Exn n。
+import Base.Eff
+import Base.EffExn
+import Base.Result
+
+bad : Eff RNil (Result Int)
+bad = tryWith X1 (pureEff 1)
+
+main : Int
+main = 1

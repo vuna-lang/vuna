@@ -1,0 +1,58 @@
+module Base.EffClock
+  ( Clock
+  , ClockOp(..)
+  , Name(..)
+  , clockNow
+  , clockSleepMicros
+  , handleClock
+  , handleClockIO
+  , nameCode
+  , resClock
+  ) where
+
+-- Base.EffClock：一阶时钟效应（W10 IO 标签迁移）。
+--
+-- 标签 `Clock n` 是命名实例；操作 `Now`（微秒时间戳）与 `SleepMicros`
+-- （睡 n 微秒）。真实 handler 用 `Base.IO.nowMicros` 与编译器原生原语 `prim_sleep`
+-- 实现（W10 收尾：阻塞睡眠，不再是 `Base.IO.sleepMicros` 的忙等）。
+--
+-- 边界：`Base.IO` 在 seed 闭包内，旧 seed 不认识 `prim_sleep`，因此 `Base.IO.sleepMicros`
+-- 仍保留忙等实现，切换需先 seed rotation（见 debt D43）；`Base.EffClock` 不在 seed
+-- 闭包内，真实 handler 已走原生原语。
+import Base.Eff
+import Base.IO
+
+data Name : Type where
+  K1 : Name
+  K2 : Name
+
+nameCode : Name -> Int
+nameCode K1 = 0
+nameCode K2 = 1
+
+data Clock : Name -> Type where
+
+data ClockOp : Type where
+  Now : ClockOp
+  SleepMicros : Int -> ClockOp
+
+resClock : ClockOp -> Type
+resClock Now = Int
+resClock (SleepMicros us) = Int
+
+clockNow : (n : Name) -> {r : Row} -> {w : Member (Clock n) r} -> Eff r Int
+clockNow n = sendCore (Clock n) "clock" (nameCode n) Now
+
+clockSleepMicros : (n : Name) -> Int -> {r : Row} -> {w : Member (Clock n) r} -> Eff r Int
+clockSleepMicros n us = sendCore (Clock n) "clock" (nameCode n) (SleepMicros us)
+
+handleClock : {a : Type} -> {b : Type} -> {r : Row} -> (n : Name) -> {w : Member (Clock n) r} -> (a -> b) -> ((o : ClockOp) -> (resClock o -> b) -> b) -> Eff r a -> Eff (Base.Eff.rowRem (Clock n) r) b
+handleClock n ret opH comp = handleCore (Clock n) "clock" (nameCode n) ret opH comp
+
+clockOpHIO : {a : Type} -> (o : ClockOp) -> (resClock o -> IO a) -> IO a
+clockOpHIO op k = case op of
+  Now => prim_bindIO timeUs (\t => k t)
+  SleepMicros us => prim_bindIO (prim_sleep us) (\_ => k 0)
+
+handleClockIO : {a : Type} -> {r : Row} -> (n : Name) -> Eff (RCons (Clock n) r) a -> Eff r (IO a)
+handleClockIO n comp = handleClock n (\a => prim_pureIO a) clockOpHIO comp

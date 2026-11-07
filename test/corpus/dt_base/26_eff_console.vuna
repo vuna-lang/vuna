@@ -1,0 +1,28 @@
+-- W10：console 效应标签（命名实例）——同一程序在 mock（C1）与真实（C2）handler
+-- 下各跑一次；mock 收集日志（纯 answer），real 走 Base.IO.print/eprint。
+import Base.Eff
+import Base.EffConsole
+import Base.IO
+import Base.Pair
+
+prog : (n : Name) -> Eff (RCons (Console n) RNil) Int
+prog n =
+  bindEff (consolePrint n "hello") (\_ =>
+    bindEff (consoleEprint n "oops") (\_ =>
+      bindEff (consolePrint n "!") (\_ => pureEff 7)))
+
+mret : Int -> Pair Int String
+mret a = Pair a ""
+
+mopH : (o : ConsoleOp) -> (Base.EffConsole.resConsole o -> Pair Int String) -> Pair Int String
+mopH op k = case op of
+  Print s => case k 0 of
+    Pair a log => Pair a (("out:" ++ s ++ ";") ++ log)
+  EPrint s => case k 0 of
+    Pair a log => Pair a (("err:" ++ s ++ ";") ++ log)
+
+main : IO Int
+main = case runPure (handleConsole C1 mret mopH (prog C1)) of
+  Pair n log =>
+    prim_bindIO (print ("mock " ++ log ++ "value " ++ strFromInt n ++ "\n")) (\_ =>
+      prim_bindIO (runIOAnswer (handleConsoleIO C2 (prog C2))) (\r => prim_pureIO r))

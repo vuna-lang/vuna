@@ -1,0 +1,12 @@
+-- L3 负例：async 只接受 Eff RNil a（任务体不能依赖外层 handler）。
+import Base.Eff
+import Base.EffAsync
+
+prog : Eff (RCons Int RNil) Int
+prog = pureEff 1
+
+bad : IO (Task Int)
+bad = async prog
+
+main : Int
+main = 1

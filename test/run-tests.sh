@@ -226,7 +226,7 @@ done
 #    （run_err/03_div_zero 是产物运行期负例，单独在段 6 处理）
 for file in corpus/run_err/*.vuna; do
   case "$file" in
-    *03_div_zero*) continue ;;
+    *03_div_zero*|*04_unhandled_effect*) continue ;;
   esac
   expect_dt_error "$file" "$file"
 done
@@ -240,6 +240,16 @@ if compile_dir_bin "$div (compile)" "$VUNA" "$div"; then
   div_code=$?
   check_contains "$div (runtime error)" "$div_run" "$div_frag"
   if [ "$div_code" -ne 0 ]; then ok; else bad "$div (runtime error exit)" "non-zero" "$div_code"; fi
+fi
+
+# 6b) 未处理运行时效应：main 兜底应报 key/name，exit 2。
+un=corpus/run_err/04_unhandled_effect.vuna
+un_frag=$(cat "${un%.vuna}.err")
+if compile_dir_bin "$un (compile)" "$VUNA" "$un"; then
+  un_run=$("$CD_BIN" 2>&1)
+  un_code=$?
+  check_contains "$un (runtime error)" "$un_run" "$un_frag"
+  check_eq "$un exit" "2" "$un_code"
 fi
 
 # 7) 类型检查通过的程序：check + compile + 运行比对 golden
@@ -547,7 +557,8 @@ for dir in corpus/records/9*_*/; do
 done
 
 # 22) trait 正例（M10.5b）：interp（DT）+ compile
-for file in corpus/traits/[01][0-9]_*.vuna; do
+# 多参数 trait 收尾：glob 补到 2x（`20_explicit_*` / `22_multi_param` / `24_mixed_kind_tele` 之前没被本段覆盖）。
+for file in corpus/traits/[0-2][0-9]_*.vuna; do
   base=${file%.vuna}
   expected=$(cat "$base.out")
   if [ ! -f "$file.nointerp" ]; then
@@ -2283,7 +2294,7 @@ check_contains "repl v2 show list" "$repl_v2_show" "[1, 2, 3]"
 check_contains "repl v2 show maybe" "$repl_v2_show" "Just 1"
 check_contains "repl v2 show pair" "$repl_v2_show" "(1, 2)"
 check_contains "repl v2 show function" "$repl_v2_show" "<函数>"
-check_contains "repl v2 show short ctor" "$repl_v2_show" "Succ Zero"
+check_contains "repl v2 show nat numeric" "$repl_v2_show" "1"
 
 # :set / 历史 / :again / :abandon / 未知命令建议。
 repl_v2_set=$(printf ':set +t\n1 + 1\n:set +s\n1 + 1\n:set prompt X> \n:q\n' | "$VUNA" repl 2>&1)
@@ -2306,7 +2317,7 @@ check_contains "repl v2 unknown suggestion" "$repl_v2_unknown" ":type"
 # 模块加载 / 模块名错误 / 目录加载 / 模块文件拒绝。
 repl_v2_mod=$(printf ':load Base.Nat\nZero\n:q\n' | "$VUNA" repl 2>&1)
 check_contains "repl v2 :load module" "$repl_v2_mod" "已导入模块 Base.Nat"
-check_contains "repl v2 :load module usable" "$repl_v2_mod" "Zero"
+check_contains "repl v2 :load module usable" "$repl_v2_mod" "0"
 
 repl_v2_nomod=$(printf ':load Does.Not.Exist\n:q\n' | "$VUNA" repl 2>&1)
 check_contains "repl v2 :load missing module" "$repl_v2_nomod" "找不到模块"

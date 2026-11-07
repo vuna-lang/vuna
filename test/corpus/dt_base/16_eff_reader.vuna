@@ -1,0 +1,22 @@
+-- Layer 1：运行时续延 + 行 + 命名实例（两个 Reader Int 实例，按 name 区分）。
+import Base.Eff
+import Base.Eff.Reader
+
+prog : Eff (RCons (Reader Cnt1 Int) (RCons (Reader Cnt2 Int) RNil)) Int
+prog = bindEff (ask Cnt1 Int) (\x =>
+         bindEff (ask Cnt2 Int) (\y =>
+           pureEff (x * 10 + y)))
+
+op1 : (o : ReaderOp Int) -> (Base.Eff.Reader.resReader Int o -> Int) -> Int
+op1 op k = case op of
+  Ask => k 3
+
+op2 : (o : ReaderOp Int) -> (Base.Eff.Reader.resReader Int o -> Int) -> Int
+op2 op k = case op of
+  Ask => k 4
+
+main : Int
+main =
+  runPure
+    (handleReader Cnt1 Int (\a => a) op1
+      (handleReader Cnt2 Int (\a => a) op2 prog))

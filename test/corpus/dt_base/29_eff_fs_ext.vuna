@@ -1,0 +1,37 @@
+-- W10：fs 效应标签（命名实例 F2，真实 IO handler）——写/原子写/读/元数据/目录/删除。
+import Base.Eff
+import Base.EffFs
+import Base.IO
+
+dir : String
+dir = "/tmp/vuna_w10_fs"
+
+pathA : String
+pathA = "/tmp/vuna_w10_fs/a.txt"
+
+pathB : String
+pathB = "/tmp/vuna_w10_fs/b.txt"
+
+b2i : Bool -> Int
+b2i b = if b then 1 else 0
+
+prog : Eff (RCons (Fs F2) RNil) String
+prog =
+  bindEff (fsRemoveFile F2 pathA) (\_ =>
+    bindEff (fsRemoveFile F2 pathB) (\_ =>
+      bindEff (fsMakeDir F2 dir) (\_ =>
+        bindEff (fsWriteFile F2 pathA "hello") (\written =>
+          bindEff (fsWriteFileAtomic F2 pathB "yo") (\_ =>
+            bindEff (fsRemoveFile F2 pathB) (\_ =>
+              bindEff (fsFileExists F2 pathA) (\exists =>
+                bindEff (fsReadFile F2 pathA) (\content =>
+                  bindEff (fsFileSize F2 pathA) (\size =>
+                    bindEff (fsIsDirectory F2 dir) (\isdir =>
+                      bindEff (fsReadDir F2 dir) (\files =>
+                        bindEff (fsRemoveFile F2 pathA) (\_ =>
+                          bindEff (fsFileExists F2 pathA) (\exists2 =>
+                            pureEff (strFromInt written ++ ":" ++ content ++ ":" ++ strFromInt size ++ ":" ++ strFromInt (b2i isdir) ++ ":" ++ join "," files ++ ":" ++ strFromInt (b2i exists2)))))))))))))))
+
+main : IO Int
+main = prim_bindIO (runIOAnswer (handleFsIO F2 prog)) (\summary =>
+         prim_bindIO (print (summary ++ "\n")) (\_ => prim_pureIO 0))

@@ -1,0 +1,26 @@
+-- 多参数 trait 收尾：实例 tele 的 kind 按实参的构造子 kind 推断（不再只按「被应用次数」）。
+-- `T : N -> Type` ⇒ `instance Pretty (T n)` 的 tele `n` 是 `N`；旧启发式把 `n` 当
+-- `Type`，于是报 "expected N, got Type"。
+import Prelude
+
+data N : Type where
+  Nz : N
+  Ns : N -> N
+
+data T : N -> Type where
+  MkT : {n : N} -> T n
+
+trait Pretty a where
+  pretty : a -> String
+
+instance Pretty (T n) where
+  pretty _ = "t"
+
+mkT0 : T Nz
+mkT0 = MkT
+
+mkT1 : T (Ns Nz)
+mkT1 = MkT
+
+main : String
+main = pretty mkT0 ++ pretty mkT1

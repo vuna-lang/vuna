@@ -1,0 +1,32 @@
+-- W9：取消清理——挂起的任务在挂起点收到取消状态（yield 返回 1），
+-- 跑完自己的清理代码后返回；scopeWait 只等「全部结束」（取消不算 scope 错误），
+-- 取消结果由 awaitTask 的 Err "cancelled" 观察。
+import Base.Eff
+import Base.EffSched
+import Base.IO
+import Base.Result
+
+spin : List Int -> Eff RNil Int
+spin [] = pureEff 1
+spin (_ :: rest) =
+  bindEff yieldNow
+    (\st => if st <= 0 then spin rest else bindEff (liftIOEff (println "cleanup")) (\_ => pureEff 2))
+
+prog : Eff RNil (Result Int)
+prog = withScope (\sc => bindEff (forkTask sc (spin [0, 0, 0, 0, 0, 0])) (\w => bindEff yieldNow (\_ => bindEff (liftIOEff (println "cancel")) (\_ => bindEff (cancelScope sc) (\_ => bindEff (scopeWait sc) (\_ => bindEff (awaitTask w) (\rw => case rw of
+  Ok _ => pureEff (Ok 1)
+  Err _ => pureEff (Ok 3)
+)
+)
+)
+)
+)
+)
+)
+
+main : IO Int
+main = do
+  r <- runIOEff prog
+  case r of
+    Ok n => pure n
+    Err _ => pure 0

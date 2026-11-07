@@ -1,0 +1,19 @@
+-- Layer 1：State 效应（handler 以 s -> Pair a s 为 answer，续延线程状态）。
+import Base.Eff
+import Base.EffState
+import Base.Pair
+
+prog : Eff (RCons (State S1 Int) RNil) Int
+prog = bindEff (get S1 Int) (\x => bindEff (put S1 Int (x + 1)) (\_ => get S1 Int))
+
+ret : Int -> Int -> Pair Int Int
+ret a s = Pair a s
+
+opH : (o : StateOp Int) -> (Base.EffState.resState Int o -> Int -> Pair Int Int) -> Int -> Pair Int Int
+opH op k s = case op of
+  Get => k s s
+  Put x => k 0 x
+
+main : Int
+main = case runPure (handleState S1 Int ret opH prog) 3 of
+  Pair a s => a + s

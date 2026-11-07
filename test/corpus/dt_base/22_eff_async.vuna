@@ -1,0 +1,17 @@
+-- Layer 3：最小并发 async/await（OCaml 5 Domain；任务行 RNil）。
+import Base.Eff
+import Base.EffAsync
+
+progA : Eff RNil Int
+progA = pureEff 20
+
+progB : Eff RNil Int
+progB = pureEff 22
+
+main : IO Int
+main =
+  prim_bindIO (async progA) (\ta =>
+    prim_bindIO (async progB) (\tb =>
+      prim_bindIO (await ta) (\a =>
+        prim_bindIO (await tb) (\b =>
+          prim_pureIO (a + b)))))

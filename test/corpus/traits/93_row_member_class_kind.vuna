@@ -1,0 +1,12 @@
+-- 不使用显式 kind 时，trait 参数的 kind 仍按方法签名应用次数推断（这里 e、r 都是
+-- Type），因此类声明写不出 Row 类参数；实例头 `RCons e r`（kind Row）在类参数 kind
+-- 上检查失败。显式 kind 的正例见 `26_explicit_kind.vuna`。
+data Row : Type 1 where
+  RNil : Row
+  RCons : Type -> Row -> Row
+
+trait Member e r where
+  witness : Int
+
+instance Member e (RCons e r) where
+  witness = 0

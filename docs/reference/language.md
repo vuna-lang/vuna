@@ -11,6 +11,9 @@
 - 语法：Idris2 风格 `data ... where`、多子句函数、顶层 `axiom` 声明（无体 / 不透明）、
   `case ... of`、`let ... in`（绑定块可选签名行）、lambda、`if then else`、`do` 块、
   整数 / 字符串字面量、`[..]` 与 `x :: xs` 列表糖、中缀 / 反引号中缀 / section / 用户符号名运算符；
+- **行语法糖（运行时效应）**：`[Fetch]` / `[Fetch, Log]` / `[]` 在**期望 kind 为 `Row`**
+  的位置分别展开为 `RCons Fetch RNil` / `RCons Fetch (RCons Log RNil)` / `RNil`；
+  普通列表字面量（期望 `List a`）不变。例：`String -> Eff [Fetch] String`。
 - **模板字符串与多行字面量**（M36）："hi ${name}" 插值、"""...""" 多行（内容逐字，
   只丢开引号后的一个换行）；洞降级成 `Base.Interp.interp` 调用，转换语义由 `Interp`
   实例决定。规则、转义 `\$`、边界见 [templates.md](templates.md)；
@@ -158,6 +161,10 @@ idT x = x
 顶层签名可写约束前缀（`f : Eq a, Show a => a -> String`）；语义、绑定顺序、诊断与边界见
 [records-traits.md](records-traits.md)。约束只允许在顶层签名上，其它位置写 `=>` 报
 `[PS_ConstraintUnsupportedHere]`。
+
+显式隐式 binder 可以写在约束之前（`{a b : Type} -> Convert a b => a -> b`）：同一
+binder 组内的多个名字展开成嵌套 Pi，解析器把这段 Pi 前缀搬到返回类型上，约束本身仍是
+`C a b`。多名字 binder 同样适用于普通 `(x y : T) -> ...` / `{x y : T} -> ...` 形态。
 
 ## 源码写法惯例（现代形态）
 

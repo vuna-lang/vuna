@@ -162,6 +162,76 @@ checkDefUsage msp name body =
       Nothing => Span "" 0 0 0 0
   in andThen (checkTerm sp [] body) (\rest => Ok (natToInt (length rest)))
 
+-- ---------------------------------------------------------------
+-- W7：线性捕获的「立即消费」规则
+-- ---------------------------------------------------------------
+-- 精化期给「捕获线性值的 λ」打了 binder 名标记（`Meta.linClosureName`），因为
+-- λ 捕获线性值后，闭包一旦被复制就会复制线性值。这里按**位置**判断标记 λ 是否
+-- 被立即按 quantity 1 消费：
+--   * 函数位置（`(λ..) a`，β 立即发生）：闭包用一次；
+--   * 应用实参 / 构造子字段且该位置 multiplicity 是 1：调用方或被构造的线性数据
+--     承诺恰好用一次（`Cont` 的 `(1 k : a -> b)` 字段就是这个形态）；
+--   * 构造子字段还要求族本身是 `linear data`：否则族值可被复制，字段的一次性
+--     承诺会被绕开。
+-- 其余位置（定义体返回值、rig-ω 实参/字段、`if`/`case` 的普通位置）一律拒绝。
+-- 这是保守但可靠的近似：完整的多重性多态/依赖 multiplicity 未做（qtt.md §9）。
+capCheck : Ec -> Span -> Term -> Bool -> Result Int
+capCheck ec sp t allowed = capCheckFuel 2048 ec sp t allowed
+
+capCheckFuel : Int -> Ec -> Span -> Term -> Bool -> Result Int
+capCheckFuel fuel ec sp t allowed = if fuel <= 0 then Err "DT: internal: capture check fuel exhausted"
+else case t of
+  TVar name i => Ok 0
+  TGlobal g => Ok 0
+  TInt n => Ok 0
+  TStr s => Ok 0
+  TBool b => Ok 0
+  TMeta m => Ok 0
+  TType l => Ok 0
+  -- 类型层项不产生运行时闭包（λ 只在值层出现）。
+  TPi name implicit rig dom cod => Ok 0
+  TLam name rig body =>
+    if isLinClosureName name then if allowed then capCheckFuel (fuel - 1) ec sp body False
+    else tcErr1 sp (LinearCaptureEscapes (linClosureOrigName name)) (linClosureOrigName name)
+    else capCheckFuel (fuel - 1) ec sp body False
+  TApp f a rig =>
+    andThen (capCheckFuel (fuel - 1) ec sp f True)
+      (\_ => if isRigZero rig then capCheckFuel (fuel - 1) ec sp a False else capCheckFuel (fuel - 1) ec sp a (rigIsLinear rig))
+  TCon c args => capArgsFuel fuel ec sp c args
+  TIf c th el =>
+    andThen (capCheckFuel (fuel - 1) ec sp c True)
+      (\_ => andThen (capCheckFuel (fuel - 1) ec sp th allowed) (\_ => capCheckFuel (fuel - 1) ec sp el allowed))
+  TCase scrut alts =>
+    andThen (capCheckFuel (fuel - 1) ec sp scrut True) (\_ => capAltsFuel fuel ec sp allowed alts)
+
+capArgsFuel : Int -> Ec -> Span -> String -> List (Pair Term Rig) -> Result Int
+capArgsFuel fuel ec sp c args = capArgsGo fuel ec sp (ctorFamilyLinear ec c) args
+
+capArgsGo : Int -> Ec -> Span -> Bool -> List (Pair Term Rig) -> Result Int
+capArgsGo fuel ec sp famLin [] = Ok 0
+capArgsGo fuel ec sp famLin ((Pair arg rig) :: rest) =
+  let
+    allowed = famLin && rigIsLinear rig
+  in andThen (capCheckFuel (fuel - 1) ec sp arg allowed) (\_ => capArgsGo (fuel - 1) ec sp famLin rest)
+
+capAltsFuel : Int -> Ec -> Span -> Bool -> List CaseAlt -> Result Int
+capAltsFuel fuel ec sp allowed [] = Ok 0
+capAltsFuel fuel ec sp allowed ((CaseAlt cname binders body) :: rest) =
+  andThen (capCheckFuel (fuel - 1) ec sp body allowed)
+    (\_ => capAltsFuel (fuel - 1) ec sp allowed rest)
+
+-- 构造子所属族是不是 `linear data`（决定 rig-1 字段的一次性承诺是否可靠）。
+ctorFamilyLinear : Ec -> String -> Bool
+ctorFamilyLinear ec c = case dtCtorLookupEc ec c of
+  Just ctor => case dtDataLookup (dtCtorFamily ctor) (ecDatas ec) of
+    Just d => dtDataLinear d
+    Nothing => False
+  Nothing => False
+
+-- 顶层入口：定义体是闭项；根位置按「不受限使用」检查（返回值可能被调用方复制）。
+checkDefCapture : Ec -> DtDef -> Term -> Result Int
+checkDefCapture ec d body = capCheck ec (defSpanOf d) body False
+
 isTypeLevelDef : Ec -> DtDef -> Bool
 isTypeLevelDef ec d =
   isTypeForming (force (ecDefTbl ec) (ecSolsP ec) defaultFuel (eval [] (dtDefType d)))
@@ -177,8 +247,8 @@ else if isLinearType ec (eval [] (dtDefType d)) then tcErr1 (defSpanOf d) (Linea
 else case dtDefBody d of
   Nothing => checkProgramUsageGo ec rest n
   Just body =>
-    andThen (checkDefUsage (dtDefSpan d) (dtDefName d) body)
-      (\_ => checkProgramUsageGo ec rest (n + 1))
+    andThen (checkDefCapture ec d body)
+      (\_ => andThen (checkDefUsage (dtDefSpan d) (dtDefName d) body) (\_ => checkProgramUsageGo ec rest (n + 1)))
 
 defSpanOf : DtDef -> Span
 defSpanOf d = case dtDefSpan d of

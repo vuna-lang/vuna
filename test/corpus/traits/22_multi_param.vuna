@@ -1,0 +1,44 @@
+-- N>=1 参数 trait：Convert a b 的字典是 `Dict_Convert a b`，两个类参数各自从方法签名
+-- 推断 kind；Lift f a 覆盖「一个高阶参数 + 一个 Type 参数」的混合 kind。
+import Prelude
+
+trait Convert a b where
+  convert : a -> b
+  convertBack : b -> a
+
+instance Convert Int String where
+  convert n = strFromInt n
+  convertBack s = 0
+
+instance Convert Bool Int where
+  convert b = if b then 1 else 0
+  convertBack n = n /= 0
+
+instance Convert a a where
+  convert x = x
+  convertBack x = x
+
+data Box a : Type where
+  MkBox : a -> Box a
+
+trait Lift f a where
+  lift : a -> f a
+
+instance Lift Box Int where
+  lift n = MkBox n
+
+idConvert : {a b : Type} -> Convert a b => a -> b
+idConvert x = convert x
+
+idRound : {a b : Type} -> Convert a b => b -> a
+idRound x = convertBack x
+
+idLift : {f : Type -> Type} -> {a : Type} -> Lift f a => a -> f a
+idLift x = lift x
+
+unbox : Box Int -> Int
+unbox b = case b of
+  MkBox n => n
+
+main : String
+main = idConvert 42 ++ "/" ++ strFromInt (if idRound 1 then 1 else 0) ++ "/" ++ strFromInt (unbox (idLift 7)) ++ "/" ++ idConvert "x"

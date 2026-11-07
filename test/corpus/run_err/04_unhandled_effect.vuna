@@ -1,0 +1,5 @@
+-- W11：未处理运行时效应的诊断（main 兜底应报 key/name，而不是通用 Unhandled）。
+import Base.Eff
+
+main : Int
+main = Base.Eff.runEff (sendCore Int "k" 1 0)

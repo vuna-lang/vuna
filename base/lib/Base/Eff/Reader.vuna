@@ -1,0 +1,56 @@
+module Base.Eff.Reader
+  ( Name(..)
+  , Reader
+  , ReaderOp(..)
+  , ask
+  , handleReader
+  , handleReaderLin
+  , local
+  , nameCode
+  , resReader
+  ) where
+
+-- Base.Eff.Reader：一阶 Reader 效应（Layer 1 的命名实例示例）。
+--
+-- 标签类型 `Reader n s`（n : Name，s : 环境类型）；同一 s 可以有两个独立实例，
+-- 行里以 name 区分：`Reader Cnt1 Int` / `Reader Cnt2 Int`。
+-- 操作只有 `Ask`；结果族 `resReader s Ask = s`。
+import Base.Eff
+
+data Name : Type where
+  Cnt1 : Name
+  Cnt2 : Name
+
+-- 运行时实例码（与行里的 name 值对应；handler/send 用同一码）。
+nameCode : Name -> Int
+nameCode Cnt1 = 0
+nameCode Cnt2 = 1
+
+-- 标签类型：只做行索引，没有运行时构造子。
+data Reader : Name -> Type -> Type where
+
+data ReaderOp : Type -> Type where
+  Ask : {s : Type} -> ReaderOp s
+
+resReader : (s : Type) -> ReaderOp s -> Type
+resReader s Ask = s
+
+ask : (n : Name) -> (s : Type) -> {r : Row} -> {w : Member (Reader n s) r} -> Eff r s
+ask n s = sendCore (Reader n s) "reader" (nameCode n) Ask
+
+readerLocalOp : {s : Type} -> {a : Type} -> (env : s) -> (s -> s) -> (o : ReaderOp s) -> (resReader s o -> a) -> a
+readerLocalOp env f op k = case op of
+  Ask => k (f env)
+
+localWith : (n : Name) -> (s : Type) -> {a : Type} -> {r : Row} -> (s -> s) -> (env : s) -> Eff (RCons (Reader n s) r) a -> Eff (RCons (Reader n s) r) a
+localWith n s f env comp = weaken (handleReader n s (\a => a) (readerLocalOp env f) comp)
+
+local : (n : Name) -> (s : Type) -> {a : Type} -> {r : Row} -> (s -> s) -> Eff (RCons (Reader n s) r) a -> Eff (RCons (Reader n s) r) a
+local n s f comp = bindEff (ask n s) (\env => localWith n s f env comp)
+
+handleReader : {a : Type} -> {b : Type} -> {r : Row} -> (n : Name) -> (s : Type) -> {w : Member (Reader n s) r} -> (a -> b) -> ((o : ReaderOp s) -> (resReader s o -> b) -> b) -> Eff r a -> Eff (Base.Eff.rowRem (Reader n s) r) b
+handleReader n s ret opH comp = handleCore (Reader n s) "reader" (nameCode n) ret opH comp
+
+-- W7：线性 handler 版本；续延参数是 quantity 1 的 Cont，resume 两次会被用量检查拒绝。
+handleReaderLin : {a : Type} -> {b : Type} -> {r : Row} -> (n : Name) -> (s : Type) -> {w : Member (Reader n s) r} -> (a -> b) -> ((o : ReaderOp s) -> (1 k : Cont (resReader s o) b) -> b) -> Eff r a -> Eff (Base.Eff.rowRem (Reader n s) r) b
+handleReaderLin n s ret opH comp = handleCoreLin (Reader n s) "reader" (nameCode n) ret opH comp

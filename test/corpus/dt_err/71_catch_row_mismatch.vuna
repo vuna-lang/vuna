@@ -1,0 +1,9 @@
+-- L2 负例：catch 要求行首是 Error n。
+import Base.Eff
+import Base.EffError
+
+bad : Eff RNil Int
+bad = catch E1 (pureEff 1) (\_ => pureEff 2)
+
+main : Int
+main = 1

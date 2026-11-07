@@ -214,9 +214,17 @@ recordSignature name params fields derivings =
   join "\n"
     ("record ${name}${paramSuffix params} where" :: append (map fieldLine fields) (derivingLines derivings))
 
-traitSignature : String -> List String -> List TraitMethod -> String
+traitSignature : String -> List TraitParam -> List TraitMethod -> String
 traitSignature name params methods =
-  join "\n" ("trait ${name}${paramSuffix params} where" :: map methodLine methods)
+  join "\n" ("trait ${name}${traitParamSuffix params} where" :: map methodLine methods)
+
+traitParamSuffix : List TraitParam -> String
+traitParamSuffix [] = ""
+traitParamSuffix params = " " ++ join " " (map traitParamText params)
+
+traitParamText : TraitParam -> String
+traitParamText (TraitParam n Nothing) = n
+traitParamText (TraitParam n (Just k)) = "(${n} : ${renderType k})"
 
 ctorLine : Ctor -> String
 ctorLine (Ctor name ty arity sp) = "  ${name} : ${renderType ty}"

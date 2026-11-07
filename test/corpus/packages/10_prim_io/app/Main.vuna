@@ -1,4 +1,10 @@
 -- M37 / C1：IO 是内建效应类型，verbatim 代数原语可直接用，**不需要 import Base.IO**。
--- `prim_bindIO` 把两个 IO 动作串起来；`prim_exit 0` 让 golden 只含业务输出。
+-- `prim_bindIO` 把 IO 动作串起来；W10 收尾加 `prim_sleep`（微秒，原生阻塞睡眠）探针：
+-- 断言真实推进时间；`prim_exit 0` 让 golden 只含业务输出。
 main : IO Int
-main = prim_bindIO (prim_print "hi\n") (\_ => prim_exit 0)
+main = prim_bindIO (prim_print "hi\n") (\_ =>
+         prim_bindIO timeUs (\t0 =>
+           prim_bindIO (prim_sleep 5000) (\_ =>
+             prim_bindIO timeUs (\t1 =>
+               prim_bindIO (prim_print (if t1 - t0 >= 3000 then "slept\n" else "early\n")) (\_ =>
+                 prim_exit 0)))))

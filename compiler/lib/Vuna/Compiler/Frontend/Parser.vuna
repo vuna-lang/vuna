@@ -383,10 +383,23 @@ parseDerivingNames fuel st =
     (\name, st1 => if atSym st1 "," then step (parseDerivingNames (fuel - 1) (advance st1)) (\rest, st2 => Ok (Pair (name :: rest) st2)) else step (expectSym st1 ")") (\_, st2 => Ok (Pair [name] st2)))
 
 -- trait 声明（M10.5）：`trait Name params where` + 缩进方法签名 `m : Ty`。
+-- 多参数 trait 参数可带显式 kind：`trait C (a : Type) (r : Row)`（裸参数仍支持）。
 parseTrait : PState -> Int -> Pos -> Result (Pair Decl PState)
 parseTrait st blockCol kwPos =
   step (expectKw st "trait")
-    (\_, st1 => step (expectIdent st1) (\name, st2 => step (parseParams (stateFuel st2) st2) (\params, st3 => step (expectKw st3 "where") (\_, st4 => step (parseMethodSigs st4 blockCol) (\methods, st5 => Ok (Pair (DTrait name params methods (Span (fileOf st) (posLine kwPos) (posCol kwPos) (posLine (lastPos st5)) (posCol (lastPos st5)))) st5))))))
+    (\_, st1 => step (expectIdent st1) (\name, st2 => step (parseTraitParams (stateFuel st2) st2) (\params, st3 => step (expectKw st3 "where") (\_, st4 => step (parseMethodSigs st4 blockCol) (\methods, st5 => Ok (Pair (DTrait name params methods (Span (fileOf st) (posLine kwPos) (posCol kwPos) (posLine (lastPos st5)) (posCol (lastPos st5)))) st5))))))
+
+-- trait 参数：裸标识符（kind 由方法签名推断）或 `(a b : Kind)` / `(a : Kind)`。
+parseTraitParams : Int -> PState -> Result (Pair (List TraitParam) PState)
+parseTraitParams fuel st = if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
+else case peekTok st of
+  PTok (TIdent name) _ =>
+    step (parseTraitParams (fuel - 1) (advance st))
+      (\rest, st1 => Ok (Pair (TraitParam name Nothing :: rest) st1))
+  PTok (TSym "(") _ =>
+    step (expectSym st "(")
+      (\_, st1 => step (parsePiNames (fuel - 1) st1) (\names, st2 => step (expectSym st2 ":") (\_, st3 => step (parseExpr (stateFuel st3) st3 0 0) (\kind, st4 => step (expectSym st4 ")") (\_, st5 => step (parseTraitParams (fuel - 1) st5) (\rest, st6 => Ok (Pair (append (map (\n => TraitParam n (Just kind)) names) rest) st6)))))))
+  _ => Ok (Pair [] st)
 
 parseMethodSigs : PState -> Int -> Result (Pair (List TraitMethod) PState)
 parseMethodSigs st blockCol = if isEof st then Ok (Pair [] st)
@@ -422,7 +435,23 @@ parseCtxThenExpr : Int -> PState -> Int -> Result (Pair (Pair (List Expr) Expr) 
 parseCtxThenExpr fuel st blockCol =
   if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
   else step (parseExpr fuel st blockCol 0)
-    (\e1, st1 => if atSym st1 "=>" then step (parseExpr (fuel - 1) (advance st1) blockCol 0) (\hd, st2 => Ok (Pair (Pair [e1] hd) st2)) else if atSym st1 "," then parseCtxRest (fuel - 1) (advance st1) [e1] blockCol else Ok (Pair (Pair [] e1) st1))
+    (\e1, st1 => if atSym st1 "=>" then step (parseExpr (fuel - 1) (advance st1) blockCol 0) (\hd, st2 => Ok (Pair (ctxThenSplit e1 hd) st2)) else if atSym st1 "," then parseCtxRest (fuel - 1) (advance st1) [e1] blockCol else Ok (Pair (Pair [] e1) st1))
+
+-- `{a b : Type} -> Convert a b => ...`：显式 Pi 前缀写在约束之前时，把 Pi 链搬到
+-- 返回类型上，约束本身作为 ctx（与 `Convert a b => ...` 自由名量化的结果同一形态）。
+-- 只在 e1 是 Pi 表达式时触发；普通约束 `Eq a` 原样保留。
+ctxThenSplit : Expr -> Expr -> Pair (List Expr) Expr
+ctxThenSplit (EPi n i q d c sp) hd =
+  Pair [innermostPiCod (EPi n i q d c sp)] (replacePiCod (EPi n i q d c sp) hd)
+ctxThenSplit e1 hd = Pair [e1] hd
+
+innermostPiCod : Expr -> Expr
+innermostPiCod (EPi n i q d c sp) = innermostPiCod c
+innermostPiCod e = e
+
+replacePiCod : Expr -> Expr -> Expr
+replacePiCod (EPi n i q d c sp) new = EPi n i q d (replacePiCod c new) sp
+replacePiCod e new = new
 
 -- ctx 列表的剩余部分：`e , e ... => head`。
 parseCtxRest : Int -> PState -> List Expr -> Int -> Result (Pair (Pair (List Expr) Expr) PState)
@@ -646,13 +675,36 @@ parseSectionAtom fuel st blockCol op =
     (\_, st1 => step (expectSym st1 op) (\_, st2 => if atSym st2 ")" then Ok (Pair (ESectOp op (spanOf st (advance st2))) (advance st2)) else step (parseExpr (fuel - 1) st2 blockCol 0) (\rhs, st3 => step (expectSym st3 ")") (\_, st4 => Ok (Pair (ESectL op rhs (spanOf st st4)) st4)))))
 
 -- M38：Pi binder：`(x : A) -> B`、`{x : A} -> B`，以及带 quantity 的 `(0 x : A)` / `(1 x : A)`。
+-- 多参数 trait 探针的 `{a b : Type} -> ...` 支持同一 binder 组写多个名字（展开成嵌套 EPi）。
 -- 进入时已在开括号处；binder 头（可选 quantity + 名 + `:`）先由 lookahead 确认，再要求 `->`。
-parsePiBinder : Int -> PState -> Int -> Maybe Qty -> String -> Bool -> String -> String -> Result (Pair Expr PState)
-parsePiBinder fuel st blockCol qty name implicit openSym closeSym =
+parsePiBinder : Int -> PState -> Int -> Maybe Qty -> List String -> Bool -> String -> String -> Result (Pair Expr PState)
+parsePiBinder fuel st blockCol qty names implicit openSym closeSym =
   if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
-  else if containsDot name then psErr0 PiBinderNameNotSimple
+  else if anyDottedName names then psErr0 PiBinderNameNotSimple
   else step (expectSym st openSym)
-    (\_, st1 => step (consumeQty st1 qty) (\_, st2 => step (expectIdent st2) (\name2, st3 => step (expectSym st3 ":") (\_, st4 => step (parseExpr (fuel - 1) st4 blockCol 0) (\dom, st5 => step (expectSym st5 closeSym) (\_, st6 => step (expectSym st6 "->") (\_, st7 => step (parseExpr (fuel - 1) st7 blockCol 1) (\cod, st8 => Ok (Pair (EPi name2 implicit qty dom cod (spanOf st st8)) st8)))))))))
+    (\_, st1 => step (consumeQty st1 qty) (\_, st2 => step (parsePiNames (fuel - 1) st2) (\names2, st3 => step (expectSym st3 ":") (\_, st4 => step (parseExpr (fuel - 1) st4 blockCol 0) (\dom, st5 => step (expectSym st5 closeSym) (\_, st6 => step (expectSym st6 "->") (\_, st7 => step (parseExpr (fuel - 1) st7 blockCol 1) (\cod, st8 => Ok (Pair (foldPiNames names2 implicit qty dom cod (spanOf st st8)) st8)))))))))
+
+-- 连续的标识符（lookahead 已确认它们后面紧跟 `:`）。
+parsePiNames : Int -> PState -> Result (Pair (List String) PState)
+parsePiNames fuel st =
+  if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
+  else step (expectIdent st) (\name, st1 => parsePiNamesRest (fuel - 1) st1 [name])
+
+parsePiNamesRest : Int -> PState -> List String -> Result (Pair (List String) PState)
+parsePiNamesRest fuel st acc = if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
+else case peekTok st of
+  PTok (TIdent name) p => parsePiNamesRest (fuel - 1) (advance st) (name :: acc)
+  _ => Ok (Pair (reverse acc) st)
+
+-- 同名 binder 组展开成嵌套 EPi（外到内 = 源码顺序）。
+foldPiNames : List String -> Bool -> Maybe Qty -> Expr -> Expr -> Span -> Expr
+foldPiNames [] implicit qty dom cod sp = cod
+foldPiNames (n :: rest) implicit qty dom cod sp =
+  EPi n implicit qty dom (foldPiNames rest implicit qty dom cod sp) sp
+
+anyDottedName : List String -> Bool
+anyDottedName [] = False
+anyDottedName (n :: rest) = containsDot n || anyDottedName rest
 
 -- 消费 binder 前缀里的 quantity token（lookahead 已确认；这里只做机械前进）。
 consumeQty : PState -> Maybe Qty -> Result (Pair Int PState)

@@ -20,7 +20,7 @@
 | `Base.MArray` | IO 内的可变数组（`new` / `read` / `write` / `length`，全部 `IO`） |
 | `Base.Buffer` | 可变字符串缓冲（`new` / `add` / `contents` / `length`，全部 `IO`） |
 | `Base.ST` | region 隔离的局部可变数据（M35.1；M37 改建在 IO 上）：`ST r a`（包 `IO a`）+ `runST`（显式 region binder，句柄不逃逸）+ `Ref r a` / `SArray r a` + 显式组合子 `bindST` / `bindST1` / `pureST` / `fmapST`；`Ref`/`SArray` 为 linear record（消费式 API，结果记录 `RefPair` 等），`bindST1` 线程化线性结果；不声明 `Functor`/`Monad` 实例，`runST` 入口执行一次 `runIO` |
-| `Base.State` / `Base.Reader` / `Base.Error` | 库级效应 monad（M35.1）：纯函数表示 + `Functor`/`Monad` 实例（`do` 可用）；`State` 是 `s -> Pair a s`、`Reader` 是 `e -> a`、`Error` 是泛型 `Ok`/`Err` 和；handler 是 `runState` / `evalState` / `execState`、`runReader` / `ask` / `local`、`runError` / `throwError` / `catchError`；M33 的手写组合子（`bindState` 等）已删除。通用签名索引效应（通用 `Eff`）未实现，见 [effects.md](effects.md) |
+| `Base.State` / `Base.Reader` / `Base.Error` | 库级效应 monad（M35.1）：纯函数表示 + `Functor`/`Monad` 实例（`do` 可用）；`State` 是 `s -> Pair a s`、`Reader` 是 `e -> a`、`Error` 是泛型 `Ok`/`Err` 和；handler 是 `runState` / `evalState` / `execState`、`runReader` / `ask` / `local`、`runError` / `throwError` / `catchError`；M33 的手写组合子（`bindState` 等）已删除。通用运行时效应见 `Base.Eff`（[effects.md](effects.md) §8） |
 | `Base.Nat` | 非负整数（`Zero` / `Succ`）；运行时是 OCaml `int`。`plus` / `minus` / `mult` / `div` / `toInt` / `fromInt` / `fromIntMaybe` / `pred` / `isZero` + `Eq` / `Ord` / `Show` 实例 |
 | `Base.Vec` | `Vec(..)` 与 `substTemplate` / `vhead` / `vlen` / `vtail` |
 | `Base.Monad` | `Functor` / `Monad` trait |
@@ -29,9 +29,23 @@
 | `Base.Eq` | `Eq` trait（`eq` / `neq : a -> a -> Bool`）+ `Bool` 实例（Bool 是 `Eq` 返回类型，实例随 trait） |
 | `Base.Ord` | `Ord` trait（`lt` / `le` / `gt` / `ge : a -> a -> Bool`）+ `Bool` 实例 |
 | `Base.Int` | `Int` 的 `Eq` / `Ord` 实例宿主（`Int` 是 primitive 类型；实例跟类型模块走） |
-| `Base.IO` | `IO` 的公开 API 与实例（`IO` 本身是内建类型，不再由本模块声明）：print/readFile/writeFile/getArgs/exit 直接别名到 `prim_*`，`Functor`/`Monad IO` 经 `prim_pureIO`/`prim_bindIO`；`runIO : IO a -> a` = `prim_runIO`（要求 `unsafe` 能力） |
+| `Base.IO` | `IO` 的公开 API 与实例（`IO` 本身是内建类型，不再由本模块声明）：print/eprint/readFile/writeFile/getArgs/exit 直接别名到 `prim_*`，W10 增加 env/clock 别名 `getEnv`/`getCwd`/`execPath`/`nowMicros`/`sleepMicros`（编译器已有原生 `prim_sleep`；`Base.IO` 在 seed 闭包内，`sleepMicros` 暂时仍用 `nowMicros` 忙等，rotation 后切换，见 [effects.md](effects.md) §8.6），`Functor`/`Monad IO` 经 `prim_pureIO`/`prim_bindIO`；`runIO : IO a -> a` = `prim_runIO`（要求 `unsafe` 能力） |
 | `Base.Debug` | 调试工具（M38，**显式 import**，不进 `Prelude`/`Base` 门面）：`trace` / `traceShow` 写 stderr 后返回原值，`assert` / `todo` 失败走 `prim_fail` → 运行时报告器；见 [debugging.md](debugging.md) |
 | `Base.Effect` | `MonadIO` trait（`liftIO : IO a -> m a`）+ `MonadIO IO` 实例 |
+| `Base.Eff` | 通用运行时效应核心（Layer 1）：开放行 `Row`、抽象动作 `Eff`（无世界令牌）、`Member` 行成员证明/`rowRem`、`weaken`、线性 `Cont`/`resumeCont`/`handleCoreLin`、内建 `Monad (Eff r)`（`do`/`>>=`）、`sendCore`/`handleCore`、`runPure`/`runIOEff`/`runIOAnswer`；OCaml 5 一次性续延；见 [effects.md](effects.md) §8 |
+| `Base.Eff.Reader` | 命名 Reader 实例（`Reader n s` + `Ask`）：`ask`/`handleReader`/`handleReaderLin`/`local`（L2 作用域），`Cnt1`/`Cnt2` 两个同名实例 |
+| `Base.EffState` | 命名 State 实例（`State n s` + `Get`/`Put`）：`get`/`put`/`handleState`（answer `s -> Pair a s` 线程状态） |
+| `Base.EffFs` | IO-backed Fs 效应（W10 扩到完整 fs 面；收尾改为命名实例 `Fs n`，`F1`/`F2`）：`ReadFile`/`WriteFile`/`WriteFileAtomic`/`ReadDir`/`IsDirectory`/`MakeDir`/`RemoveFile`/`FileExists`/`FileMtime`/`FileSize` + `fsReadFile n`/`fsWriteFile n`/…/`handleFs n`/`handleFsIO n`；handler 用 `Base.IO` 实现；mock（纯 answer）与 real handler 可并存（`dt_base/37`） |
+| `Base.EffError` | 一阶 Error 效应 + 作用域 `catch`（L2）：`throw`/`handleError`/`runError`/`catch` |
+| `Base.EffExn` | W6/W7 高阶/作用域 Error：`Try` 操作携带 `Eff` 子计算，`handleExn`/`runExn`/`catchExn`/`bracketExn`；scoped handler |
+| `Base.EffAsync` | 最小 Domain 并发（L3 legacy）：`Task`/`async`/`await`，基于 OCaml 5 `Domain`；任务行必须是 `Eff RNil`；不算 W9 调度器（见 `Base.EffSched`） |
+| `Base.EffSched` | W9 单线程 fiber 调度器（L3）：不透明 `Task`/`Scope`，`forkTask`/`awaitTask`/`yieldNow`/`isCancelled`/`cancelTask`/`cancelScope`/`scopeWait`/`scopeWaitTimeout`/`withScope`/`withScopeTimeout`/`liftIOEff`/`forkTaskWith`/线性 `TaskLin`；协作式取消（含清理宽限）、结构化作用域、逻辑步数超时；任务体 `Eff RNil a`；见 [effects.md](effects.md) §8.5 |
+| `Base.EffChannel` | W9 cooperative channel：`send`/`tryRecv`/`recvWait`（忙等 yield，无 Mutex/信号量）；生产者-消费者夹具 `dt_base/36` |
+| `Base.EffMutex` | W9 cooperative Mutex/Semaphore（IORef + yield 忙等；无阻塞原语）；`acquire`/`release`/`semWait`/`semSignal` |
+| `Base.EffConsole` | W10 console 标签（命名实例 `C1`/`C2`）：`Print`/`EPrint`；`consolePrint`/`consoleEprint`/`handleConsole`/`handleConsoleIO`（真实 handler 用 `Base.IO.print`/`eprint`） |
+| `Base.EffClock` | W10 clock 标签（命名实例 `K1`/`K2`）：`Now`（微秒）/`SleepMicros`；`clockNow`/`clockSleepMicros`/`handleClock`/`handleClockIO`（真实 handler 用 `Base.IO.nowMicros` 与原生 `prim_sleep`） |
+| `Base.EffEnv` | W10 env 标签（命名实例 `V1`/`V2`）：`GetEnv`/`GetCwd`/`ExecPath`；`envGetEnv`/`envGetCwd`/`envExecPath`/`handleEnv`/`handleEnvIO`（真实 handler 用 `Base.IO.getEnv`/`getCwd`/`execPath`） |
+| `Base.EffProcess` | W10 process 标签（命名实例 `P1`/`P2`）：`Args`/`Exit`/`RunIn`；`processArgs`/`processExit`/`processRunIn`/`handleProcess`/`handleProcessIO`（真实 handler 用 `prim_getArgs`/`prim_exit`/`prim_runIn`）/`handleProcessIOWith`（自定义 `onExit`）/`handleProcessIOObserved`（`Exit` 可观察、不退出） |
 | `Base.StateT` / `Base.ReaderT` / `Base.ErrorT` | IO 基座的效应栈（M37）：`StateT s a` = `s -> IO (Pair a s)`、`ReaderT e a` = `e -> IO a`、`ErrorT e a` = `IO (Error e a)`；各带 handler、`Functor`/`Monad`/`MonadIO` 实例；固定以 IO 为基座（泛化到任意 monad 需要隐式参数 kind 推断，见 debt） |
 | `Base` | 包门面：整模块重导出核心模块（含 `Base.Nat`，不含 `Vec`；`import Base` 即可用） |
 | `Prelude` | 顶层模块（`base/lib/Prelude.vuna`）：重导出 `Base.Pair` / `Bool` / `Eq` / `Ord` / `Show` / `Interp` / `List` / `Maybe` / `Result` / `String` / `Monad`，按包上下文自动导入（规则见下节「Prelude 自动导入」）；显式 `import` 时不再重复注入；刻意不含 `Base.IO`（效果 API 需显式 import）与 `Base.Nat` |
@@ -199,7 +213,12 @@ module Base.ErrorT (ErrorT, throwError, catchError, runErrorT) where
   monad（**不进入 `Prelude` / `Base` 门面**，显式 import）；`do` 可用；`Base.ST` 的 region
   隔离与「不声明 `Monad` 实例」的原因见 [effects.md](effects.md)；通用签名索引效应
   （用户自定义 op + 深 handler + 行/重排）未实现（[roadmap.md](../roadmap.md) F3）；没有语言级并发 / async
-  （M35.2）；
+  （M35.2）；**W10 的 IO 标签迁移在库层完成**：`Base.EffFs` 扩到完整 fs 面并改为命名
+  实例（`F1`/`F2`），新增 `Base.EffConsole`/`EffClock`/`EffEnv`/`EffProcess`（命名实例 +
+  IO-backed handler），`IO` 仍是运行时基座/逃逸口；收尾又补原生 `prim_sleep`
+  （`Base.EffClock` 已用；`Base.IO.sleepMicros` 待 rotation）、可控 `Exit`
+  （`handleProcessIOWith`/`…Observed`）与工具链一条 console 路径（`vuna version`）；
+  见 [effects.md](effects.md) §8.6；
 - `Result` 暂无 `Functor` / `Monad` 实例；
 - 抽象类型（`Map`、`IO`）跨包不可构造、不可模式匹配，只能经 API 使用。
 

@@ -1,0 +1,60 @@
+module Base.EffEnv
+  ( Env
+  , EnvOp(..)
+  , Name(..)
+  , envExecPath
+  , envGetCwd
+  , envGetEnv
+  , handleEnv
+  , handleEnvIO
+  , nameCode
+  , resEnv
+  ) where
+
+-- Base.EffEnv：一阶环境效应（W10 IO 标签迁移）。
+--
+-- 标签 `Env n` 是命名实例；操作 GetEnv / GetCwd / ExecPath 都返回 String。
+-- 真实 handler 用 `Base.IO` 的 `getEnv` / `getCwd` / `execPath` 实现。
+import Base.Eff
+import Base.IO
+
+data Name : Type where
+  V1 : Name
+  V2 : Name
+
+nameCode : Name -> Int
+nameCode V1 = 0
+nameCode V2 = 1
+
+data Env : Name -> Type where
+
+data EnvOp : Type where
+  GetEnv : String -> EnvOp
+  GetCwd : EnvOp
+  ExecPath : EnvOp
+
+resEnv : EnvOp -> Type
+resEnv (GetEnv k) = String
+resEnv GetCwd = String
+resEnv ExecPath = String
+
+envGetEnv : (n : Name) -> String -> {r : Row} -> {w : Member (Env n) r} -> Eff r String
+envGetEnv n k = sendCore (Env n) "env" (nameCode n) (GetEnv k)
+
+envGetCwd : (n : Name) -> {r : Row} -> {w : Member (Env n) r} -> Eff r String
+envGetCwd n = sendCore (Env n) "env" (nameCode n) GetCwd
+
+envExecPath : (n : Name) -> {r : Row} -> {w : Member (Env n) r} -> Eff r String
+envExecPath n = sendCore (Env n) "env" (nameCode n) ExecPath
+
+handleEnv : {a : Type} -> {b : Type} -> {r : Row} -> (n : Name) -> {w : Member (Env n) r} -> (a -> b) -> ((o : EnvOp) -> (resEnv o -> b) -> b) -> Eff r a -> Eff (Base.Eff.rowRem (Env n) r) b
+handleEnv n ret opH comp = handleCore (Env n) "env" (nameCode n) ret opH comp
+
+envOpHIO : {a : Type} -> (o : EnvOp) -> (resEnv o -> IO a) -> IO a
+envOpHIO op k = case op of
+  GetEnv name => prim_bindIO (getEnv name) (\v => k v)
+  GetCwd => prim_bindIO getCwd (\v => k v)
+  ExecPath => prim_bindIO execPath (\v => k v)
+
+handleEnvIO : {a : Type} -> {r : Row} -> (n : Name) -> Eff (RCons (Env n) r) a -> Eff r (IO a)
+handleEnvIO n comp = handleEnv n (\a => prim_pureIO a) envOpHIO comp

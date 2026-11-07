@@ -91,11 +91,10 @@ editLine cfg =
     in outcomeOf result
 
 outcomeOf : EditResult -> EditOutcome
-outcomeOf r = case r of
-  ESubmit text => EditLine text
-  EExit => EditEof
-  ECancel => EditCancel
-  EContinue st => EditLine (strOf st.esBuf)
+outcomeOf (ESubmit text) = EditLine text
+outcomeOf EExit = EditEof
+outcomeOf ECancel = EditCancel
+outcomeOf (EContinue st) = EditLine (strOf st.esBuf)
 
 editLoop : Int -> EditConfig -> EditState -> EditResult
 editLoop fuel cfg st = if fuel <= 0 then ECancel
@@ -119,19 +118,23 @@ readKey _ =
   in if b < 0 then KEof
   else if b == 13 || b == 10 then KEnter
   else if b == 127 || b == 8 then KBackspace
-  else if b == 3 then KCtrC
-  else if b == 4 then KCtrD
-  else if b == 1 then KHome
-  else if b == 5 then KEnd
-  else if b == 11 then KCtrK
-  else if b == 21 then KCtrU
-  else if b == 23 then KCtrW
-  else if b == 12 then KCtrL
-  else if b == 18 then KCtrR
-  else if b == 16 then KUp
-  else if b == 14 then KDown
-  else if b == 2 then KLeft
-  else if b == 6 then KRight else if b == 9 then KTab else if b == 27 then readEscape 0 else KChar b
+  else case b of
+    3 => KCtrC
+    4 => KCtrD
+    1 => KHome
+    5 => KEnd
+    11 => KCtrK
+    21 => KCtrU
+    23 => KCtrW
+    12 => KCtrL
+    18 => KCtrR
+    16 => KUp
+    14 => KDown
+    2 => KLeft
+    6 => KRight
+    9 => KTab
+    27 => readEscape 0
+    _ => KChar b
 
 readEscape : Int -> Key
 readEscape _ =
@@ -197,10 +200,12 @@ csiKey _ =
     in KIgnore
 
 tildeKey : Int -> Key
-tildeKey n =
-  if n == 49 then KHome
-  else if n == 51 then KDelete
-  else if n == 52 then KEnd else if n == 55 then KHome else if n == 56 then KEnd else KIgnore
+tildeKey 49 = KHome
+tildeKey 51 = KDelete
+tildeKey 52 = KEnd
+tildeKey 55 = KHome
+tildeKey 56 = KEnd
+tildeKey _ = KIgnore
 
 -- ---------------------------------------------------------------
 -- 按键处理
@@ -210,45 +215,44 @@ applyKey cfg key st =
   if st.esSearching then applySearchKey cfg key st else applyNormalKey cfg key st
 
 applyNormalKey : EditConfig -> Key -> EditState -> EditResult
-applyNormalKey cfg key st = case key of
-  KChar b => if b >= 32 then EContinue (insertByte b st) else EContinue st
-  KEnter => ESubmit (strOf st.esBuf)
-  KBackspace => EContinue (deleteBack st)
-  KDelete => EContinue (deleteAt st)
-  KLeft => EContinue (withCursor st (prevCharStart st.esBuf st.esCursor))
-  KRight => EContinue (withCursor st (nextCharStart st.esBuf st.esCursor))
-  KHome => EContinue (withCursor st 0)
-  KEnd => EContinue (withCursor st (lenInt st.esBuf))
-  KUp => EContinue (historyUp cfg st)
-  KDown => EContinue (historyDown cfg st)
-  KTab => EContinue (complete cfg st)
-  KCtrK => EContinue (killToEnd st)
-  KCtrU => EContinue (killToStart st)
-  KCtrW => EContinue (killWord st)
-  KCtrL =>
-    let
-      _ = writeOut "${escCode}[2J${escCode}[H"
-    in EContinue st
-  KCtrR => EContinue (startSearch st)
-  KCtrC => ECancel
-  KCtrD => if lenInt st.esBuf == 0 then EExit else EContinue (deleteAt st)
-  KEsc => EContinue st
-  KEof => if lenInt st.esBuf == 0 then EExit else EContinue st
-  KIgnore => EContinue st
+applyNormalKey cfg (KChar b) st = if b >= 32 then EContinue (insertByte b st) else EContinue st
+applyNormalKey cfg KEnter st = ESubmit (strOf st.esBuf)
+applyNormalKey cfg KBackspace st = EContinue (deleteBack st)
+applyNormalKey cfg KDelete st = EContinue (deleteAt st)
+applyNormalKey cfg KLeft st = EContinue (withCursor st (prevCharStart st.esBuf st.esCursor))
+applyNormalKey cfg KRight st = EContinue (withCursor st (nextCharStart st.esBuf st.esCursor))
+applyNormalKey cfg KHome st = EContinue (withCursor st 0)
+applyNormalKey cfg KEnd st = EContinue (withCursor st (lenInt st.esBuf))
+applyNormalKey cfg KUp st = EContinue (historyUp cfg st)
+applyNormalKey cfg KDown st = EContinue (historyDown cfg st)
+applyNormalKey cfg KTab st = EContinue (complete cfg st)
+applyNormalKey cfg KCtrK st = EContinue (killToEnd st)
+applyNormalKey cfg KCtrU st = EContinue (killToStart st)
+applyNormalKey cfg KCtrW st = EContinue (killWord st)
+applyNormalKey cfg KCtrL st =
+  let
+    _ = writeOut "${escCode}[2J${escCode}[H"
+  in EContinue st
+applyNormalKey cfg KCtrR st = EContinue (startSearch st)
+applyNormalKey cfg KCtrC st = ECancel
+applyNormalKey cfg KCtrD st = if lenInt st.esBuf == 0 then EExit else EContinue (deleteAt st)
+applyNormalKey cfg KEsc st = EContinue st
+applyNormalKey cfg KEof st = if lenInt st.esBuf == 0 then EExit else EContinue st
+applyNormalKey cfg KIgnore st = EContinue st
 
 applySearchKey : EditConfig -> Key -> EditState -> EditResult
-applySearchKey cfg key st = case key of
-  KChar b => if b >= 32 then EContinue (searchQueryAppend cfg st b) else EContinue st
-  KBackspace => EContinue (searchQueryBackspace cfg st)
-  KCtrR => EContinue (searchContinue cfg st)
-  KEnter => case st.esMatch of
-    Just (Pair idx entry) => EContinue (acceptSearch st idx entry)
-    Nothing => EContinue (acceptSearchText st (strOf st.esQuery))
-  KEsc => EContinue (exitSearch st)
-  KCtrC => EContinue (exitSearch st)
-  KLeft => EContinue (exitSearch st)
-  KRight => EContinue (exitSearch st)
-  _ => EContinue st
+applySearchKey cfg (KChar b) st =
+  if b >= 32 then EContinue (searchQueryAppend cfg st b) else EContinue st
+applySearchKey cfg KBackspace st = EContinue (searchQueryBackspace cfg st)
+applySearchKey cfg KCtrR st = EContinue (searchContinue cfg st)
+applySearchKey cfg KEnter st = case st.esMatch of
+  Just (Pair idx entry) => EContinue (acceptSearch st idx entry)
+  Nothing => EContinue (acceptSearchText st (strOf st.esQuery))
+applySearchKey cfg KEsc st = EContinue (exitSearch st)
+applySearchKey cfg KCtrC st = EContinue (exitSearch st)
+applySearchKey cfg KLeft st = EContinue (exitSearch st)
+applySearchKey cfg KRight st = EContinue (exitSearch st)
+applySearchKey cfg _ st = EContinue st
 
 -- ---------------------------------------------------------------
 -- 编辑原语

@@ -1,0 +1,17 @@
+-- 多参数 trait 的显式 kind 参数：`trait Member (e : Type) (r : Row)`。
+-- 覆盖声明/实例/约束投影，以及非 Type 类参数（Row）的实例搜索。
+data Row : Type 1 where
+  RNil : Row
+  RCons : Type -> Row -> Row
+
+trait Member (e : Type) (r : Row) where
+  witness : Int
+
+instance Member Int RNil where
+  witness = 0
+
+g : Member Int RNil => Int
+g = witness
+
+main : Int
+main = g

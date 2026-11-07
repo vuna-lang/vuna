@@ -1,0 +1,15 @@
+-- W9 线性任务句柄：TaskLin 只能 await 一次（或 cancel 一次）；直接传入 awaitTaskLin。
+import Base.Eff
+import Base.EffSched
+import Base.Result
+
+prog : Eff RNil (Result Int)
+prog = withScope (\sc =>
+  bindEff (awaitTaskLin (forkTaskLin sc (pureEff 42))) (\r => pureEff r))
+
+main : IO Int
+main = do
+  r <- runIOEff prog
+  case r of
+    Ok n => pure n
+    Err _ => pure 0

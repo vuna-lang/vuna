@@ -1,0 +1,22 @@
+-- W6：op 携带子计算（Try），scoped handler 在嵌套 handler 里运行子计算；
+-- 子计算里的 Reader 效应继续由外层 handler 处理。
+import Base.Eff
+import Base.Eff.Reader
+import Base.EffExn
+import Base.Result
+
+prog : Eff (RCons (Exn X1) (RCons (Reader Cnt1 Int) RNil)) Int
+prog = catchExn X1
+         (bindEff (ask Cnt1 Int) (\x =>
+           bindEff (throwExn X1 "boom") (\_ => pureEff x)))
+         (\_ => bindEff (ask Cnt1 Int) (\x => pureEff (x + 100)))
+
+opH : (o : ReaderOp Int) -> (Base.Eff.Reader.resReader Int o -> Int) -> Int
+opH op k = case op of
+  Ask => k 7
+
+main : Int
+main = runPure (handleReader Cnt1 Int (\a => a) opH
+  (bindEff (runExn X1 prog) (\res => case res of
+    Ok n => pureEff n
+    Err _ => pureEff 0)))

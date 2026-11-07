@@ -1,0 +1,22 @@
+-- W9：任务句柄可复制；完成后重复 awaitTask 幂等（Ok 同值），
+-- 对已完成任务 cancelTask 是 no-op（不算错误）。
+import Base.Eff
+import Base.EffSched
+import Base.IO
+import Base.Result
+
+sumThree : Result Int -> Result Int -> Result Int -> Result Int
+sumThree (Ok a) (Ok b) (Ok c) = Ok (a + b + c)
+sumThree _ _ _ = Ok 0
+
+prog : Eff RNil (Result Int)
+prog =
+  withScope
+    (\sc => bindEff (forkTask sc (pureEff 11)) (\ta => bindEff (awaitTask ta) (\r1 => bindEff (awaitTask ta) (\r2 => bindEff (cancelTask ta) (\_ => bindEff (awaitTask ta) (\r3 => pureEff (sumThree r1 r2 r3)))))))
+
+main : IO Int
+main = do
+  r <- runIOEff prog
+  case r of
+    Ok n => pure n
+    Err _ => pure 0

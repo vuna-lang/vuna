@@ -1,0 +1,13 @@
+-- `Base.Eff` 自带 `Monad (Eff r)` 实例；import 后可直接 do / >>=。
+-- 本夹具用纯行 RNil 跑 runPure。
+import Prelude
+import Base.Eff
+
+prog : Eff RNil Int
+prog = do
+  x <- pure 1
+  y <- pure 2
+  pure (x + y)
+
+main : String
+main = strFromInt (runPure prog)

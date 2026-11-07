@@ -34,6 +34,20 @@ modules = [
   "Base.Reader",
   "Base.Error",
   "Base.Effect",
+  "Base.Eff",
+  "Base.Eff.Reader",
+  "Base.EffState",
+  "Base.EffFs",
+  "Base.EffError",
+  "Base.EffExn",
+  "Base.EffAsync",
+  "Base.EffChannel",
+  "Base.EffMutex",
+  "Base.EffClock",
+  "Base.EffConsole",
+  "Base.EffEnv",
+  "Base.EffProcess",
+  "Base.EffSched",
   "Base.ErrorT",
   "Base.Monad",
   "Base.ReaderT",
@@ -42,6 +56,6 @@ modules = [
   "Prelude"
 ]
 
-# M27：效应能力声明（Base.IO 包装 prim_*）。
+# M27：效应能力声明（Base.IO 包装 prim_*）；W10 增加 env/clock（EffEnv/EffClock）。
 [capabilities]
-effects = ["console", "fs", "process", "unsafe"]
+effects = ["console", "fs", "process", "env", "clock", "unsafe"]

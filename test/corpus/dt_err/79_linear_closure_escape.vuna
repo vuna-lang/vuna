@@ -1,0 +1,18 @@
+-- W7 负例：捕获线性 Token 的闭包按 rig-ω 传给普通函数 → 闭包可被复制 →
+-- 用量/捕获检查拒绝。
+import Base.Eff
+
+linear data Token : Type where
+  MkToken : (1 n : Int) -> Token
+
+useToken : (1 t : Token) -> Int
+useToken t = case t of MkToken n => n
+
+applyOmega : (Int -> Int) -> Int
+applyOmega f = f 1
+
+bad : (1 t : Token) -> Int
+bad t = applyOmega (\x => useToken t + x)
+
+main : Int
+main = bad (MkToken 5)

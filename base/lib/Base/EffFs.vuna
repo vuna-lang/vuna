@@ -1,0 +1,118 @@
+module Base.EffFs
+  ( Fs
+  , FsOp(..)
+  , Name(..)
+  , fsFileExists
+  , fsFileMtime
+  , fsFileSize
+  , fsIsDirectory
+  , fsMakeDir
+  , fsReadDir
+  , fsReadFile
+  , fsRemoveFile
+  , fsWriteFile
+  , fsWriteFileAtomic
+  , handleFs
+  , handleFsIO
+  , nameCode
+  , resFs
+  ) where
+
+-- Base.EffFs：一阶文件系统效应（Layer 1 的 IO-backed 示例；W10 扩到完整 fs 面）。
+--
+-- 操作是描述；handler 用 Base.IO 的原语实现真实语义。answer 用 IO a，
+-- 由 runIOAnswer 执行最终答案（见 Base.Eff）。`handleFsIO` 是 W10 增加的
+-- 可直接 `runIOAnswer` 的 IO-backed handler。
+--
+-- W10 收尾：`Fs` 改为**命名实例**（`Fs F1` / `Fs F2`，与 Console/Clock/Env/Process
+-- 一致）。同一个程序因此可以同时装 mock handler（如纯 answer 的内存表）与真实
+-- IO handler（`handleFsIO F2`），或用两个 mock 实例做对照；行条目按名字区分。
+-- 早期单实例 API（`fsReadFile path` / `handleFsIO prog`）已迁移：所有操作与 handler
+-- 都显式带实例名（夹具 dt_base/18、29、37）。
+import Base.Eff
+import Base.IO
+import Base.Bool
+import Base.List
+
+data Name : Type where
+  F1 : Name
+  F2 : Name
+
+nameCode : Name -> Int
+nameCode F1 = 0
+nameCode F2 = 1
+
+data Fs : Name -> Type where
+
+data FsOp : Type where
+  ReadFile : String -> FsOp
+  WriteFile : String -> String -> FsOp
+  WriteFileAtomic : String -> String -> FsOp
+  ReadDir : String -> FsOp
+  IsDirectory : String -> FsOp
+  MakeDir : String -> FsOp
+  RemoveFile : String -> FsOp
+  FileExists : String -> FsOp
+  FileMtime : String -> FsOp
+  FileSize : String -> FsOp
+
+resFs : FsOp -> Type
+resFs (ReadFile p) = String
+resFs (WriteFile p s) = Int
+resFs (WriteFileAtomic p s) = Int
+resFs (ReadDir p) = List String
+resFs (IsDirectory p) = Bool
+resFs (MakeDir p) = Int
+resFs (RemoveFile p) = Int
+resFs (FileExists p) = Bool
+resFs (FileMtime p) = Int
+resFs (FileSize p) = Int
+
+fsReadFile : (n : Name) -> String -> {r : Row} -> {w : Member (Fs n) r} -> Eff r String
+fsReadFile n p = sendCore (Fs n) "fs" (nameCode n) (ReadFile p)
+
+fsWriteFile : (n : Name) -> String -> String -> {r : Row} -> {w : Member (Fs n) r} -> Eff r Int
+fsWriteFile n p s = sendCore (Fs n) "fs" (nameCode n) (WriteFile p s)
+
+fsWriteFileAtomic : (n : Name) -> String -> String -> {r : Row} -> {w : Member (Fs n) r} -> Eff r Int
+fsWriteFileAtomic n p s = sendCore (Fs n) "fs" (nameCode n) (WriteFileAtomic p s)
+
+fsReadDir : (n : Name) -> String -> {r : Row} -> {w : Member (Fs n) r} -> Eff r (List String)
+fsReadDir n p = sendCore (Fs n) "fs" (nameCode n) (ReadDir p)
+
+fsIsDirectory : (n : Name) -> String -> {r : Row} -> {w : Member (Fs n) r} -> Eff r Bool
+fsIsDirectory n p = sendCore (Fs n) "fs" (nameCode n) (IsDirectory p)
+
+fsMakeDir : (n : Name) -> String -> {r : Row} -> {w : Member (Fs n) r} -> Eff r Int
+fsMakeDir n p = sendCore (Fs n) "fs" (nameCode n) (MakeDir p)
+
+fsRemoveFile : (n : Name) -> String -> {r : Row} -> {w : Member (Fs n) r} -> Eff r Int
+fsRemoveFile n p = sendCore (Fs n) "fs" (nameCode n) (RemoveFile p)
+
+fsFileExists : (n : Name) -> String -> {r : Row} -> {w : Member (Fs n) r} -> Eff r Bool
+fsFileExists n p = sendCore (Fs n) "fs" (nameCode n) (FileExists p)
+
+fsFileMtime : (n : Name) -> String -> {r : Row} -> {w : Member (Fs n) r} -> Eff r Int
+fsFileMtime n p = sendCore (Fs n) "fs" (nameCode n) (FileMtime p)
+
+fsFileSize : (n : Name) -> String -> {r : Row} -> {w : Member (Fs n) r} -> Eff r Int
+fsFileSize n p = sendCore (Fs n) "fs" (nameCode n) (FileSize p)
+
+handleFs : {a : Type} -> {b : Type} -> {r : Row} -> (n : Name) -> {w : Member (Fs n) r} -> (a -> b) -> ((o : FsOp) -> (resFs o -> b) -> b) -> Eff r a -> Eff (Base.Eff.rowRem (Fs n) r) b
+handleFs n ret opH comp = handleCore (Fs n) "fs" (nameCode n) ret opH comp
+
+fsOpHIO : {a : Type} -> (o : FsOp) -> (resFs o -> IO a) -> IO a
+fsOpHIO op k = case op of
+  ReadFile p => prim_bindIO (readFile p) (\s => k s)
+  WriteFile p s => prim_bindIO (writeFile p s) (\n => k n)
+  WriteFileAtomic p s => prim_bindIO (prim_writeFileAtomic p s) (\n => k n)
+  ReadDir p => prim_bindIO (readDir p) (\xs => k xs)
+  IsDirectory p => prim_bindIO (isDirectory p) (\b => k b)
+  MakeDir p => prim_bindIO (makeDir p) (\n => k n)
+  RemoveFile p => prim_bindIO (removeFile p) (\n => k n)
+  FileExists p => prim_bindIO (fileExists p) (\b => k b)
+  FileMtime p => prim_bindIO (fileMtime p) (\n => k n)
+  FileSize p => prim_bindIO (prim_fileSize p) (\n => k n)
+
+handleFsIO : {a : Type} -> {r : Row} -> (n : Name) -> Eff (RCons (Fs n) r) a -> Eff r (IO a)
+handleFsIO n comp = handleFs n (\a => prim_pureIO a) fsOpHIO comp

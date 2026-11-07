@@ -1,0 +1,23 @@
+-- Layer 1：IO-backed Fs 效应（handler 用 Base.IO 原语；answer = IO Int）。
+-- W10 收尾：`Fs` 是命名实例，操作与 handler 显式带实例名（本夹具用 F1）。
+import Base.Eff
+import Base.EffFs
+import Base.IO
+import Base.Nat
+
+prog : Eff (RCons (Fs F1) RNil) Int
+prog = bindEff (fsWriteFile F1 "/tmp/vuna_eff_fs.txt" "hello") (\_ =>
+         bindEff (fsReadFile F1 "/tmp/vuna_eff_fs.txt") (\s =>
+           pureEff (toInt (byteLength s))))
+
+ret : Int -> IO Int
+ret a = prim_pureIO a
+
+opH : (o : FsOp) -> (Base.EffFs.resFs o -> IO Int) -> IO Int
+opH op k = case op of
+  ReadFile p => prim_bindIO (readFile p) (\s => k s)
+  WriteFile p s => prim_bindIO (writeFile p s) (\n => k n)
+  _ => prim_fail "unexpected fs op in 18_eff_fs_io"
+
+main : IO Int
+main = runIOAnswer (handleFs F1 ret opH prog)

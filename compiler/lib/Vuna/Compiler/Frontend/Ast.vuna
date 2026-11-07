@@ -54,6 +54,7 @@ module Vuna.Compiler.Frontend.Ast
   , Qty(..)
   , SourceFile(..)
   , TraitMethod(..)
+  , TraitParam(..)
   , XBare
   , XModule
   , XTypeAll
@@ -100,6 +101,11 @@ record TraitMethod where
   traitMethodName : String
   traitMethodType : Expr
   traitMethodSpan : Span
+
+-- 多参数 trait 的显式 kind 参数：`trait C (a : Type) (r : Row)`；裸参数 kind = Nothing。
+record TraitParam where
+  traitParamName : String
+  traitParamKind : Maybe Expr
 
 data Pat : Type where
   PVar : String -> Span -> Pat
@@ -207,7 +213,7 @@ data Decl : Type where
   DFun : String -> List Pat -> Expr -> Span -> Decl
   -- M38：末位 `Bool` 是 `lin record` 标记（降级成 DData 时透传）。
   DRecord : String -> List String -> List Field -> List String -> Bool -> Span -> Decl
-  DTrait : String -> List String -> List TraitMethod -> Span -> Decl
+  DTrait : String -> List TraitParam -> List TraitMethod -> Span -> Decl
   DInstance : List Expr -> Expr -> List Decl -> Span -> Decl
 
 -- M10 模块头与导出项。

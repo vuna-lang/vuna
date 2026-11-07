@@ -1,0 +1,41 @@
+-- W7：通用 bracket 对「非 Exn abort」的 cleanup。
+-- Abort handler 丢弃续延（不 resume）时，运行时在 handler 退出点执行 release；
+-- release 里的 State 写入由外层 State handler 处理（经 State 观察 42）。
+import Base.Eff
+import Base.EffState
+import Base.Pair
+
+data AbortE : Type where
+
+data AbortOp : Type where
+  Abort : AbortOp
+
+abort : {r : Row} -> Eff (RCons AbortE r) Int
+abort = sendCore AbortE "abort" 0 Abort
+
+handleAbort : {a : Type} -> {b : Type} -> {r : Row} -> (a -> b) -> ((o : AbortOp) -> (Int -> b) -> b) -> Eff (RCons AbortE r) a -> Eff r b
+handleAbort ret opH comp = handleCore AbortE "abort" 0 ret opH comp
+
+abortH : (o : AbortOp) -> (Int -> Int) -> Int
+abortH Abort k = 7
+
+prog : Eff (RCons AbortE (RCons (State S1 Int) RNil)) Int
+prog = bracket
+  (weaken (bindEff (put S1 Int 0) (\_ => pureEff 0)))
+  (\_ => weaken (put S1 Int 42))
+  (\_ => bindEff abort (\_ => pureEff 1))
+
+ret : Int -> Int -> Pair Int Int
+ret a s = Pair a s
+
+opH : (o : StateOp Int) -> (Base.EffState.resState Int o -> Int -> Pair Int Int) -> Int -> Pair Int Int
+opH op k s = case op of
+  Get => k s s
+  Put x => k 0 x
+
+run : Pair Int Int
+run = runPure (handleState S1 Int ret opH (handleAbort (\a => a) abortH prog)) 3
+
+main : Int
+main = case run of
+  Pair a s => s * 100 + a

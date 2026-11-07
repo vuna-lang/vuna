@@ -49,6 +49,7 @@ module Vuna.Compiler.Elab.Meta
   , isFamilyKindValue
   , isImplicitDomain
   , isIndexDomain
+  , isLinClosureName
   , isLinearType
   , isOpaqueRuntimeTyIn
   , isSortVal
@@ -56,6 +57,8 @@ module Vuna.Compiler.Elab.Meta
   , isTypeLayerValue
   , isTypeName
   , kindWellFormed
+  , linClosureName
+  , linClosureOrigName
   , litEqName
   , lookupDataHead
   , maxInt
@@ -604,16 +607,23 @@ findClassByShortName short [] = Nothing
 findClassByShortName short (c :: rest) =
   if baseNameOf (dtClassName c) == short then Just c else findClassByShortName short rest
 
--- M36：blanket 实例（fallback 实例）判定——头是 `Dict_C x`，且 `x` 是本实例自己的
--- **裸 tele 变量**（例如 `instance Show a => Interp a`）。`n` 是 tele 长度，head 在该
--- n 个 binder 之下，所以合法索引是 0..n-1。
+-- M36：blanket 实例（fallback 实例）判定——头是 `Dict_C x1 .. xn`，且每个 `x` 都是
+-- 本实例自己的**裸 tele 变量**（例如 `instance Show a => Interp a`）。`n` 是 tele 长度，
+-- head 在该 n 个 binder 之下，所以合法索引是 0..n-1。多参数 trait 的所有头实参都满足
+-- 才算 blanket。
 --
 -- 用途分两处消费：`Elab/InstCoherence`（coherence：blanket 与具体实例可共存）与
 -- `Elab/Dict`（实例搜索：具体实例优先、blanket 兜底）。
 isBlanketInstHead : Int -> Term -> Bool
 isBlanketInstHead n head = if n <= 0 then False
-else case head of
-  TApp (TGlobal dictName) (TVar vname i) rig => i >= 0 && i < n
+else case flattenTaggedApp head of
+  Just (Pair g args) => nonEmpty args && allTeleArgs n args
+  Nothing => False
+
+allTeleArgs : Int -> List (Pair Term Rig) -> Bool
+allTeleArgs n [] = True
+allTeleArgs n (arg :: rest) = case firstOf arg of
+  TVar vname i => i >= 0 && i < n && allTeleArgs n rest
   _ => False
 
 isBlanketInst : DtInst -> Bool
@@ -624,6 +634,33 @@ isBlanketInst (DtInst name tele ctx head) = isBlanketInstHead (length tele) head
 -- 这里按 **索引** 替换（不按名字），避免上游换名失效。
 substClassParam : String -> Term -> Term -> Term
 substClassParam pname arg ty = substVarAt 0 arg ty
+
+-- ---------------------------------------------------------------
+-- M38 / W7：线性捕获标记（binder 名编码）
+-- ---------------------------------------------------------------
+-- 捕获线性值的 λ 不能一律拒绝：当它被**立即按 quantity 1 消费**（函数位应用 /
+-- rig-1 实参 / 线性数据的 rig-1 字段）时是安全的。精化期知道 ctx 里哪些 binder 是
+-- 线性类型（`termHasOuterLinear`），此时给 λ 的 binder 名加前缀标记；用量检查
+-- （`Elab.Usage`）按位置规则接受或拒绝，拒绝时报 `TC_LinearCaptureEscapes`。
+-- 名字必须**唯一**：codegen 用 binder 名渲染 OCaml 变量，两个同名的嵌套 λ 会让
+-- 内层遮蔽外层（引用外层时解析到内层）。因此把 span + ctx 深度编进名字；`#` 不是
+-- 源码标识符字符，`sanitizeName` 会把它变成合法 OCaml 名，用户不可见。
+linClosureMark : String
+linClosureMark = "#linclos"
+
+linClosureName : Span -> Int -> String -> String
+linClosureName sp depth name =
+  "${linClosureMark}${strFromInt sp.spanStartLine}_${strFromInt sp.spanStartCol}_${strFromInt depth}:${name}"
+
+isLinClosureName : String -> Bool
+isLinClosureName name = startsWith linClosureMark name
+
+linClosureOrigName : String -> String
+linClosureOrigName name = if isLinClosureName name then linClosureOrigGo (strUnpack name) else name
+
+linClosureOrigGo : List Int -> String
+linClosureOrigGo [] = ""
+linClosureOrigGo (c :: rest) = if c == 58 then strPack rest else linClosureOrigGo rest
 
 -- 字面量比较的运行时函数名（`==` 的跨类型特化；codegen 按名字映射）。
 litEqName : String -> String

@@ -1,0 +1,74 @@
+module Base.EffExn
+  ( Exn
+  , ExnOp(..)
+  , Name(..)
+  , bracketExn
+  , catchExn
+  , exnRes
+  , handleExn
+  , nameCode
+  , runExn
+  , throwExn
+  , tryWith
+  ) where
+
+-- Base.EffExn：高阶/作用域 Error（W6）。
+-- `Try` 操作携带一个子计算；handler 用嵌套的 `runExn` + `runEff` 在临时 handler
+-- 下运行子计算，实现 scoped handler（其余效应仍由外层运行时 handler 处理）。
+import Base.Eff
+import Base.Ord
+import Base.Result
+
+data Name : Type where
+  X1 : Name
+  X2 : Name
+
+nameCode : Name -> Int
+nameCode X1 = 0
+nameCode X2 = 1
+
+data Exn : Name -> Type where
+
+data ExnOp : Name -> Row -> Type -> Type where
+  ThrowExn : {n : Name} -> {r : Row} -> {a : Type} -> String -> ExnOp n r a
+  Try : {n : Name} -> {r : Row} -> {a : Type} -> Eff (RCons (Exn n) r) a -> ExnOp n r a
+
+exnRes : (n : Name) -> (r : Row) -> (a : Type) -> ExnOp n r a -> Type
+exnRes n r a (ThrowExn s) = Int
+exnRes n r a (Try comp) = Result a
+
+throwExn : (n : Name) -> String -> {a : Type} -> {r : Row} -> Eff (RCons (Exn n) r) a
+throwExn n msg = sendCore (Exn n) "exn" (nameCode n) (ThrowExn msg)
+
+tryWith : (n : Name) -> {a : Type} -> {r : Row} -> Eff (RCons (Exn n) r) a -> Eff (RCons (Exn n) r) (Result a)
+tryWith n comp = sendCore (Exn n) "exn" (nameCode n) (Try comp)
+
+handleExn : (n : Name) -> {a : Type} -> {b : Type} -> {r : Row} -> (a -> b) -> ((o : ExnOp n r a) -> (exnRes n r a o -> b) -> b) -> Eff (RCons (Exn n) r) a -> Eff r b
+handleExn n ret opH comp = handleCore (Exn n) "exn" (nameCode n) ret opH comp
+
+exnOpH : (fuel : Int) -> (n : Name) -> {r : Row} -> {a : Type} -> (o : ExnOp n r a) -> (exnRes n r a o -> Result a) -> Result a
+exnOpH fuel n op k = if fuel <= 0 then Err "exn: fuel exhausted"
+else case op of
+  ThrowExn s => Err s
+  Try sub => k (runEff (runExnFuel (fuel - 1) n sub))
+
+runExnFuel : (fuel : Int) -> (n : Name) -> {a : Type} -> {r : Row} -> Eff (RCons (Exn n) r) a -> Eff r (Result a)
+runExnFuel fuel n comp =
+  if fuel <= 0 then pureEff (Err "exn: fuel exhausted")
+  else handleExn n (\a => Ok a) (exnOpH (fuel - 1) n) comp
+
+runExn : (n : Name) -> {a : Type} -> {r : Row} -> Eff (RCons (Exn n) r) a -> Eff r (Result a)
+runExn n comp = runExnFuel 64 n comp
+
+catchExn : (n : Name) -> {a : Type} -> {r : Row} -> Eff (RCons (Exn n) r) a -> (String -> Eff (RCons (Exn n) r) a) -> Eff (RCons (Exn n) r) a
+catchExn n comp fallback = bindEff (tryWith n comp) (\res => case res of
+  Ok a => pureEff a
+  Err s => fallback s
+)
+
+bracketExn : (n : Name) -> {res : Type} -> {a : Type} -> {r : Row} -> Eff (RCons (Exn n) r) res -> (res -> Eff (RCons (Exn n) r) Int) -> (res -> Eff (RCons (Exn n) r) a) -> Eff (RCons (Exn n) r) a
+bracketExn n acquire release use = bindEff acquire (\res => bindEff (tryWith n (use res)) (\r => case r of
+  Ok a => bindEff (release res) (\_ => pureEff a)
+  Err s => bindEff (release res) (\_ => throwExn n s)
+)
+)

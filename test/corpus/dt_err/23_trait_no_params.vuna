@@ -1,0 +1,6 @@
+-- N>=1：trait 至少需要一个类参数（零参数接口没有字典参数可编码）。
+trait Empty where
+  method : Int
+
+main : Int
+main = 1

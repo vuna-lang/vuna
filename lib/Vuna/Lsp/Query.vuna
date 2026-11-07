@@ -176,9 +176,10 @@ holeIdentStart c = c >= 65 && c <= 90 || c >= 97 && c <= 122 || c == 95
 
 holeScan : List Int -> Int -> Bool
 holeScan [] prev = False
-holeScan (c :: rest) prev =
-  if c == 95 then holeAtUnderscore rest prev
-  else if c == 63 then holeNamedAhead rest else holeScan rest c
+holeScan (c :: rest) prev = case c of
+  95 => holeAtUnderscore rest prev
+  63 => holeNamedAhead rest
+  _ => holeScan rest c
 
 -- `?` 后面紧跟标识符起始字符（同行，无空格）⇒ 命名洞；否则按普通运算符字符继续扫。
 holeNamedAhead : List Int -> Bool

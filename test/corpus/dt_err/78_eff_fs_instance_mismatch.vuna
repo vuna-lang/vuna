@@ -1,0 +1,10 @@
+-- fs 命名实例：程序需要 `Fs F2`，handler 却处理 `Fs F1` → 行/类型不匹配，不能静默过。
+-- （W10 收尾把 Fs 从单实例迁移成命名实例后，实例名必须一致。）
+import Base.Eff
+import Base.EffFs
+
+prog : Eff (RCons (Fs F2) RNil) String
+prog = fsReadFile F2 "/tmp/vuna_w10_fs_err.txt"
+
+main : IO Int
+main = prim_bindIO (runIOAnswer (handleFsIO F1 prog)) (\_ => prim_pureIO 0)

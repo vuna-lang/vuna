@@ -1,0 +1,24 @@
+-- W10 收尾：process 的 `Exit` 可控——mock handler（P1）与可选参数 handler
+-- （P2 的 `handleProcessIOObserved`）都能观察退出码并继续执行；真实路径
+-- （`handleProcessIO` 的 `prim_exit`）保留，但本夹具不触发它（否则测试进程退出）。
+import Base.Eff
+import Base.EffProcess
+import Base.IO
+import Base.List
+
+prog : (n : Name) -> Eff (RCons (Process n) RNil) Int
+prog n = bindEff (processExit n 7) (\c => pureEff c)
+
+mret : Int -> Int
+mret a = a
+
+mopH : (o : ProcessOp) -> (Base.EffProcess.resProcess o -> Int) -> Int
+mopH op k = case op of
+  Args => k Nil
+  Exit c => k c
+  RunIn dir args => k 0
+
+main : IO Int
+main = prim_bindIO (print ("mock " ++ strFromInt (runPure (handleProcess P1 mret mopH (prog P1))) ++ "\n")) (\_ =>
+         prim_bindIO (runIOAnswer (handleProcessIOObserved P2 (prog P2))) (\observed =>
+           prim_bindIO (print ("observed " ++ strFromInt observed ++ "\n")) (\_ => prim_pureIO 0)))

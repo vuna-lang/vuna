@@ -1,0 +1,35 @@
+-- W7：调度器取消时的 bracket cleanup。
+-- 任务在挂起点（yield）收到取消状态 → use 正常返回 → 库层 bracket 在带内
+-- pop + release（不是硬中止路径；硬中止只有尽力清理，见 effects-layers.md）。
+import Base.Eff
+import Base.EffSched
+import Base.IO
+import Base.Result
+
+spin : List Int -> Eff RNil Int
+spin [] = pureEff 1
+spin (_ :: rest) = bindEff yieldNow (\st => if st <= 0 then spin rest else pureEff 1)
+
+task : Eff RNil Int
+task = bracket
+  (liftIOEff (println "acquire"))
+  (\_ => liftIOEff (println "release"))
+  (\_ => spin [0, 0, 0, 0, 0])
+
+prog : Eff RNil (Result Int)
+prog = withScope (\sc => bindEff (forkTask sc task) (\w => bindEff yieldNow (\_ => bindEff (cancelScope sc) (\_ => bindEff (scopeWait sc) (\_ => bindEff (awaitTask w) (\rw => case rw of
+  Ok n => pureEff (Ok n)
+  Err _ => pureEff (Ok 3)
+)
+)
+)
+)
+)
+)
+
+main : IO Int
+main = do
+  r <- runIOEff prog
+  case r of
+    Ok n => pure n
+    Err _ => pure 0

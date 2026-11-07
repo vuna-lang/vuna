@@ -393,8 +393,65 @@ strPrim3 sp f = Nothing
 
 -- 内建归约：唯一真源是 `Vuna.Compiler.Intrinsics` 的名字表 + 归约标签（M27）。
 -- 表查找是 O(1) 哈希（不再需要首字符预筛）。
+-- 行删除（W3 表示层修复）：`Base.Eff.rowRem` 是公理；这里按标签的类型值做结构相等
+-- 判断后再移除。类型族里重复变量（`rowRem e (RCons e r)`）不会强制相等，不能用于此。
+valueEqFuel : Int -> Value -> Value -> Maybe Bool
+valueEqFuel fuel a b = if fuel <= 0 then Nothing
+else case a of
+  VType la => case b of
+    VType lb => Just (levelEq la lb)
+    _ => Just False
+  VInt x => case b of
+    VInt y => Just (x == y)
+    _ => Just False
+  VStr x => case b of
+    VStr y => Just (strEq x y)
+    _ => Just False
+  VBool x => case b of
+    VBool y => Just (x == y)
+    _ => Just False
+  VCon ca aa => case b of
+    VCon cb bb => if ca == cb then valueListEqFuel (fuel - 1) aa bb else Just False
+    _ => Just False
+  VNeutral na => case b of
+    VNeutral nb => neutralEqFuel (fuel - 1) na nb
+    _ => Just False
+  _ => Nothing
+
+neutralEqFuel : Int -> Neutral -> Neutral -> Maybe Bool
+neutralEqFuel fuel (NGlobal ga spa) nb = case nb of
+  NGlobal gb spb => if ga == gb then valueListEqFuel (fuel - 1) spa spb else Just False
+  _ => Just False
+neutralEqFuel fuel (NVar na0 la spa) nb = case nb of
+  NVar nb0 lb spb =>
+    if na0 == nb0 && la == lb then valueListEqFuel (fuel - 1) spa spb else Just False
+  _ => Just False
+
+valueListEqFuel : Int -> List Value -> List Value -> Maybe Bool
+valueListEqFuel fuel [] [] = Just True
+valueListEqFuel fuel (a :: arest) (b :: brest) = case valueEqFuel fuel a b of
+  Just True => valueListEqFuel fuel arest brest
+  Just False => Just False
+  Nothing => Nothing
+valueListEqFuel fuel _ _ = Just False
+
+rowRemReduce : HashMap Term -> Sols -> Int -> Value -> Value -> Maybe Value
+rowRemReduce defs sols fuel e r = if fuel <= 0 then Nothing
+else case force defs sols (fuel - 1) r of
+  VCon "Base.Eff.RCons" (h :: t :: _) => case valueEqFuel (fuel - 1) e h of
+    Just True => Just t
+    Just False => case rowRemReduce defs sols (fuel - 1) e t of
+      Just t2 => Just (VCon "Base.Eff.RCons" [h, t2])
+      Nothing => Nothing
+    Nothing => Nothing
+  VCon "Base.Eff.RNil" _ => Just (VCon "Base.Eff.RNil" [])
+  _ => Nothing
+
 primReduce : HashMap Term -> Sols -> Int -> String -> List Value -> Maybe Value
 primReduce defs sols fuel g sp = if fuel <= 0 then Nothing
+else if g == "Base.Eff.rowRem" then case sp of
+  e :: r :: _ => rowRemReduce defs sols (fuel - 1) e r
+  _ => Nothing
 else case findIntrinsic g of
   Just i => case i.intrinsicOp of
     OpAdd => intPrim2 sp (\a, b => VInt (a + b))

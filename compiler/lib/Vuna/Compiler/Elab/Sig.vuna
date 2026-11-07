@@ -2,6 +2,7 @@ module Vuna.Compiler.Elab.Sig
   ( arityFun
   , bannedForModule
   , classParamKind
+  , classParamKindOf
   , definedNames
   , exprMaxAppArity
   , methodArgRigsOf
@@ -25,8 +26,13 @@ import Vuna.Compiler.Intrinsics
 -- ---------------------------------------------------------------------------
 -- 类参数 kind 推断（原 Elab/Kind.vuna）
 -- ---------------------------------------------------------------------------
+-- 类参数的 kind 推断（多参数 trait 逐参数调用）：参数名被应用了 k 个实参就当
+-- `Type -> ... -> Type`（k 个箭头），从未被应用就是 `Type`。
+classParamKindOf : String -> List (Pair String Expr) -> Term
+classParamKindOf pname methods = arityFun (methodMaxAppArity pname methods) (TType levelZero)
+
 classParamKind : String -> List (Pair String Expr) -> Term
-classParamKind pname methods = arityFun (methodMaxAppArity pname methods) (TType levelZero)
+classParamKind pname methods = classParamKindOf pname methods
 
 arityFun : Int -> Term -> Term
 arityFun n res = if n <= 0 then res else TPi "_" False Rig0 (TType levelZero) (arityFun (n - 1) res)

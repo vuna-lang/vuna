@@ -80,20 +80,50 @@ linear data Token : Type where
   需要时使用专用线性记录。
 - 线性值的 case：`_` 丢弃因分支 binder 用量为 0 报 `TC_LinearUnused`；as-pattern 别名
   暂未单独区分（同样会落成未用/多次用）。变量模式正常绑定。
-- 本阶段**没有**依赖 multiplicity / multiplicity 多态 / 线性箭头；线性多态与泛型容器
-  归后续（debt）。
+- 线性箭头 binder `(1 x : A) -> B` 是既有语法：`x` 在体内恰好用一次。它**不是**
+  「函数值本身线性」的箭头类型；要让一个闭包只能被消费一次，用 `Base.Eff.Cont`
+  （见 §6）。
+- 本阶段**没有**依赖 multiplicity / multiplicity 多态；线性多态与泛型容器归后续（debt）。
 
-## 6. 线性捕获（本阶段的健全性边界）
+## 6. 线性捕获与一次性闭包（已实现）
 
-捕获线性 binder 的 λ 只能被**立即消费**：
+捕获线性值（线性数据类型）的 λ 是一个「线性闭包」：闭包被复制就等于复制它捕获的线性
+值。因此它只能被**立即按 quantity 1 消费**：
 
-- 作为函数位置被应用、作为 quantity 1 的实参传入、或放进 quantity 1 的字段；
-- 不能从函数返回、不能绑定到 ω binder、不能进 ω 字段。
+- 作为应用函数位置（`(λ… ) a`，β 立即发生，闭包用一次）；
+- 作为应用实参、且该位置的 multiplicity 是 `1`；
+- 作为**线性数据**构造子的字段、且字段 multiplicity 是 `1`（例如 `Cont` 的
+  `(1 k : a -> b)`）。
 
-实现上由 `Usage` 的「捕获标记」承担：`TApp` 函数位置清除标记，实参按 Rig 缩放/消费；
-`TCon` 实参同理；顶层仍有标记则 `TC_LinearCaptureEscapes`。
+其它位置（定义体返回值、rig-ω 实参/字段、`if`/`case` 的普通位置）报
+`TC_LinearCaptureEscapes`。
 
-因此线性函数请写成单参数/线性记录风格；curried 多参数线性函数在本阶段不支持。
+实现分两段（两处都在编译器源码里，改一处必须同步另一处）：
+
+- `Elab/Term/Impl.checkLam`：捕获线性值的 λ 不再当场报错，而是给 binder 名打
+  `#linclos…` 私有标记（`Elab/Meta.linClosureName`；`#` 不是源码标识符字符、codegen
+  会 sanitize，用户不可见；名字里编入 span 与 ctx 深度以保证嵌套 λ 不撞名）；
+- `Elab/Usage.checkDefCapture`：沿项结构检查标记 λ 的位置，只有上面三种「立即消费」
+  放行；构造子字段还要求族本身是 `linear data`（否则族值可复制，一次性承诺不可靠）。
+
+配套的库 API（`Base.Eff`）：`Cont a b` 是线性数据包装的**一次性闭包**
+（`(1 k : a -> b)` 字段）；`mkCont : (1 k : a -> b) -> Cont a b` 装入，
+`resumeCont : (1 c : Cont a b) -> a -> b` 消费一次。handler 续延 API
+（`handleCoreLin`）就是用它表达 resume-once。
+
+示例（`dt_base/39_eff_linear_fn`）：
+
+```vuna
+mkContI : (1 k : Int -> Int) -> Cont Int Int
+mkContI k = mkCont k
+
+mk : (1 t : Token) -> Cont Int Int
+mk t = mkContI (\x => useToken t + x)   -- 捕获 t；rig-1 实参位置 → 允许
+```
+
+因此线性函数请写成单参数/线性记录风格；curried 多参数线性函数与「函数值线性」的
+通用箭头类型在本阶段不支持。case 分支体是 λ 时的 `TC_LambdaTooManyParams`（B32）
+也限制了 λ 的写法。
 
 ## 7. 擦除
 
@@ -115,10 +145,20 @@ linear data Token : Type where
 
 ## 9. 边界
 
-- 无依赖 multiplicity、multiplicity 变量/多态。
-- 无线性箭头/线性闭包类型；无借用（`&`）、region 推断、一次性续延。
+- 无依赖 multiplicity、multiplicity 变量/多态：`Rig` 仍只有 `0 / 1 / ω` 三值，签名里
+  写不出 multiplicity 变量（`(p : Qty) -> …` 不可写）。探针：`test/corpus/dt/80_qtt_usage`
+  只覆盖三值；多态 multiplicity 需要 `Rig` 变成项层/类型层数据 + 依赖 Pi，属后续。
+- 无「函数值线性」的通用箭头类型与借用（`&`）、region 推断；一次性闭包只有
+  `Base.Eff.Cont` 这一种库级包装（`mkCont`/`resumeCont`），不是语言级箭头。
+  线性箭头 binder `(1 x : A) -> B` 本身可用（§1）。
+- 捕获规则是**保守近似**：只会出现「该放行的被拒」，不会出现「该拒的被放行」；
+  嵌套/curried 线性闭包、`if`/`case` 里的捕获一律拒绝。
+- 用量检查的 let 降级按 λ 应用缩放 RHS（`Elab/Usage` 的 `TApp`），
+  `let z = y + 1 in z`（`y` 线性）会被误报 `TC_LinearOverused`；通用运算符/trait
+  方法的形参默认 ω，把线性值传给它们同样被拒（debt D45）。
 - 线性 IO 世界令牌 / per-module `unsafe` 未做（debt D28）。
-- 运行时不做所有权检查；线性是静态纪律。
+- 运行时不做所有权检查；线性是静态纪律（线性值仍可经非线性 data 的字段被复制，
+  见 D42）。
 
 ## 10. 与其它文档
 

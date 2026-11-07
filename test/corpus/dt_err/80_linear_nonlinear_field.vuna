@@ -1,0 +1,18 @@
+-- W7 负例：把捕获线性 Token 的闭包放进**非线性** data 的字段（字段可被复制，
+-- rig-1 一次性承诺不可靠）→ 捕获检查拒绝。
+import Base.Eff
+
+linear data Token : Type where
+  MkToken : (1 n : Int) -> Token
+
+useToken : (1 t : Token) -> Int
+useToken t = case t of MkToken n => n
+
+data Box : Type where
+  MkBox : (Int -> Int) -> Box
+
+bad : (1 t : Token) -> Box
+bad t = MkBox (\x => useToken t + x)
+
+main : Int
+main = 0

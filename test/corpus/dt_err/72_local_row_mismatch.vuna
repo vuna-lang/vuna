@@ -1,0 +1,9 @@
+-- L2 负例：local 要求行首是 Reader n s。
+import Base.Eff
+import Base.Eff.Reader
+
+bad : Eff RNil Int
+bad = local Cnt1 Int (\v => v) (pureEff 1)
+
+main : Int
+main = 1

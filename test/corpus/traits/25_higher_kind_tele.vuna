@@ -1,0 +1,15 @@
+-- 多参数 trait 收尾：高阶 kind 类参数 + 行 kind 的 tele 推断。`Eff : Row -> Type -> Type`、类参数
+-- `m : Type -> Type`；`instance Unary (Eff r)` 的 tele `r` 从 `Eff` 的第一个参数得到
+-- Row（旧启发式给 Type，于是报 "expected Row, got Type"）。这正是 W3 `Monad (Eff r)`
+-- 实例头需要的推断能力。
+import Prelude
+import Base.Eff
+
+trait Unary m where
+  u : m Int -> Int
+
+instance Unary (Eff r) where
+  u _ = 0
+
+main : String
+main = "ok"

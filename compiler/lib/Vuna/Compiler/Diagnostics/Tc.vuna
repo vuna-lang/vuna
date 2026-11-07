@@ -56,6 +56,7 @@ data TcErr : Nat -> Type where
   ConstraintNotDict : TcErr Zero
   InstanceMissingMethod : TcErr Zero
   InterfaceOneParam : TcErr Zero
+  InterfaceNoParam : TcErr Zero
   IntStringCaseNeedsFallback : TcErr Zero
   IntStringCaseRestriction : TcErr Zero
   InvalidArrowType : TcErr Zero
@@ -159,6 +160,7 @@ tcCode InstanceHeadNotApp = "TC_InstanceHeadNotApp"
 tcCode ConstraintNotDict = "TC_ConstraintNotDict"
 tcCode InstanceMissingMethod = "TC_InstanceMissingMethod"
 tcCode InterfaceOneParam = "TC_InterfaceOneParam"
+tcCode InterfaceNoParam = "TC_InterfaceNoParam"
 tcCode IntStringCaseNeedsFallback = "TC_IntStringCaseNeedsFallback"
 tcCode IntStringCaseRestriction = "TC_IntStringCaseRestriction"
 tcCode InvalidArrowType = "TC_InvalidArrowType"
@@ -258,9 +260,10 @@ tcTemplate InstanceAnnotationWrongUse =
   "@instance can only be used with a trait method (write `method @instance`)"
 tcTemplate InstanceHeadNotApp = "instance head must be an interface application (e.g. Show Int)"
 tcTemplate ConstraintNotDict =
-  "constraint must be a single-parameter interface application (e.g. Eq a)"
+  "constraint must be an interface application (e.g. Eq a, Convert a b)"
 tcTemplate InstanceMissingMethod = "instance is missing an implementation for an interface method"
 tcTemplate InterfaceOneParam = "interfaces must have exactly one parameter (M15 limitation)"
+tcTemplate InterfaceNoParam = "interfaces must have at least one parameter"
 tcTemplate IntStringCaseNeedsFallback =
   "case on Int / String needs a variable or wildcard branch as fallback (M19)"
 tcTemplate IntStringCaseRestriction =
@@ -392,9 +395,10 @@ tcChunk2 =
     TcEntry (tcCode IndexFuel) (tcTemplate IndexFuel) "索引归一化耗尽归约燃料",
     TcEntry (tcCode InstanceAnnotationWrongUse) (tcTemplate InstanceAnnotationWrongUse) "@instance 只能用于 trait 方法",
     TcEntry (tcCode InstanceHeadNotApp) (tcTemplate InstanceHeadNotApp) "instance 头必须是接口应用",
-    TcEntry (tcCode ConstraintNotDict) (tcTemplate ConstraintNotDict) "约束必须是单参数 trait 应用",
+    TcEntry (tcCode ConstraintNotDict) (tcTemplate ConstraintNotDict) "约束必须是 trait 应用",
     TcEntry (tcCode InstanceMissingMethod) (tcTemplate InstanceMissingMethod) "instance 缺方法实现",
     TcEntry (tcCode InterfaceOneParam) (tcTemplate InterfaceOneParam) "接口必须恰好一个参数",
+    TcEntry (tcCode InterfaceNoParam) (tcTemplate InterfaceNoParam) "接口至少一个参数",
     TcEntry (tcCode IntStringCaseNeedsFallback) (tcTemplate IntStringCaseNeedsFallback) "Int/String 的 case 需要兜底分支"
   ]
 

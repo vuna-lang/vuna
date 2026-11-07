@@ -1,0 +1,24 @@
+-- W9：超时是**逻辑步数**（调度器步进次数），不需要真实 sleep/时钟；
+-- 预算耗尽先取消范围（子任务在挂起点清理），再返回 Err "timeout"。
+import Base.Eff
+import Base.EffSched
+import Base.IO
+import Base.Result
+
+tick : List Int -> Eff RNil Int
+tick [] = pureEff 0
+tick (_ :: rest) =
+  bindEff (liftIOEff (println "tick"))
+    (\_ => bindEff yieldNow (\st => if st <= 0 then tick rest else bindEff (liftIOEff (println "cleanup")) (\_ => pureEff 1)))
+
+prog : Eff RNil (Result Int)
+prog =
+  withScopeTimeout 4
+    (\sc => bindEff (forkTask sc (tick [0, 0, 0, 0, 0, 0, 0, 0])) (\_ => bindEff (liftIOEff (println "body-done")) (\_ => pureEff (Ok 0))))
+
+main : IO Int
+main = do
+  r <- runIOEff prog
+  case r of
+    Ok n => pure n
+    Err _ => pure 7

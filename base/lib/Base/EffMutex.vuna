@@ -1,0 +1,63 @@
+module Base.EffMutex
+  ( Mutex
+  , Semaphore
+  , acquire
+  , newMutex
+  , newSemaphore
+  , release
+  , semSignal
+  , semWait
+  ) where
+
+-- Base.EffMutex：W9 单线程协作式 Mutex / Semaphore。
+-- 实现是 IORef + yield 忙等（无阻塞原语）；单线程下 read/write 之间不会被打断。
+-- 边界：持有者被硬取消时不会自动释放；无优先级/公平性。
+import Base.Eff
+import Base.EffSched
+import Base.Bool
+import Base.Eq
+import Base.IO
+import Base.IORef
+import Base.Ord
+import Base.Result
+
+data Mutex : Type where
+  MkMutex : IORef Int -> Mutex
+
+newMutex : Eff RNil Mutex
+newMutex = bindEff (liftIOEff (newRef 0)) (\r => pureEff (MkMutex r))
+
+tryAcquire : Mutex -> Eff RNil Bool
+tryAcquire (MkMutex r) =
+  bindEff (liftIOEff (readRef r))
+    (\v => if v == 0 then bindEff (liftIOEff (writeRef r 1)) (\_ => pureEff True) else pureEff False)
+
+acquireFuel : Int -> Mutex -> Eff RNil (Result Int)
+acquireFuel fuel m =
+  if fuel <= 0 then pureEff (Err "mutex: timeout")
+  else bindEff (tryAcquire m)
+    (\ok => if ok then pureEff (Ok 0) else bindEff yieldNow (\_ => acquireFuel (fuel - 1) m))
+
+acquire : Mutex -> Eff RNil (Result Int)
+acquire m = acquireFuel 256 m
+
+release : Mutex -> Eff RNil Int
+release (MkMutex r) = liftIOEff (writeRef r 0)
+
+data Semaphore : Type where
+  MkSemaphore : IORef Int -> Semaphore
+
+newSemaphore : Int -> Eff RNil Semaphore
+newSemaphore n = bindEff (liftIOEff (newRef n)) (\r => pureEff (MkSemaphore r))
+
+semWaitFuel : Int -> Semaphore -> Eff RNil (Result Int)
+semWaitFuel fuel (MkSemaphore r) =
+  if fuel <= 0 then pureEff (Err "semaphore: timeout")
+  else bindEff (liftIOEff (readRef r))
+    (\v => if v > 0 then bindEff (liftIOEff (writeRef r (v - 1))) (\_ => pureEff (Ok 0)) else bindEff yieldNow (\_ => semWaitFuel (fuel - 1) (MkSemaphore r)))
+
+semWait : Semaphore -> Eff RNil (Result Int)
+semWait s = semWaitFuel 256 s
+
+semSignal : Semaphore -> Eff RNil Int
+semSignal (MkSemaphore r) = bindEff (liftIOEff (readRef r)) (\v => liftIOEff (writeRef r (v + 1)))

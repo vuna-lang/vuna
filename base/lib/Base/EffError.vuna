@@ -1,0 +1,59 @@
+module Base.EffError
+  ( Error
+  , ErrorOp(..)
+  , Name(..)
+  , catch
+  , handleError
+  , nameCode
+  , resError
+  , runError
+  , throw
+  ) where
+
+-- Base.EffError：一阶 Error 效应 + 作用域 catch（Layer 2）。
+--
+-- `catch n comp fallback` 在 comp 内安装临时 Error handler；Throw 截获后不恢复
+-- 续延（一次性续延直接丢弃），返回 Result 给外层，再在 handler 之外执行 fallback。
+import Base.Eff
+import Base.Result
+
+data Name : Type where
+  E1 : Name
+  E2 : Name
+
+nameCode : Name -> Int
+nameCode E1 = 0
+nameCode E2 = 1
+
+data Error : Name -> Type where
+
+data ErrorOp : Type where
+  Throw : String -> ErrorOp
+
+resError : ErrorOp -> Type
+resError (Throw s) = Int
+
+throw : (n : Name) -> String -> {a : Type} -> {r : Row} -> Eff r a
+throw n msg = sendCore (Error n) "error" (nameCode n) (Throw msg)
+
+handleError : {a : Type} -> {b : Type} -> {r : Row} -> (n : Name) -> (a -> b) -> ((o : ErrorOp) -> (resError o -> b) -> b) -> Eff r a -> Eff (Base.Eff.rowRem (Error n) r) b
+handleError n ret opH comp = handleCore (Error n) "error" (nameCode n) ret opH comp
+
+errorRet : {a : Type} -> a -> Result a
+errorRet a = Ok a
+
+errorOpH : {a : Type} -> (o : ErrorOp) -> (resError o -> Result a) -> Result a
+errorOpH op k = case op of
+  Throw s => Err s
+
+catchResult : {a : Type} -> {r : Row} -> {n : Name} -> (String -> Eff (RCons (Error n) r) a) -> Result a -> Eff (RCons (Error n) r) a
+catchResult fallback res = case res of
+  Ok a => pureEff a
+  Err s => fallback s
+
+runError : (n : Name) -> {a : Type} -> {r : Row} -> Eff (RCons (Error n) r) a -> Eff r (Result a)
+runError n comp = handleError n errorRet errorOpH comp
+
+catch : (n : Name) -> {a : Type} -> {r : Row} -> Eff (RCons (Error n) r) a -> (String -> Eff (RCons (Error n) r) a) -> Eff (RCons (Error n) r) a
+catch n comp fallback =
+  bindEff (weaken (handleError n errorRet errorOpH comp)) (catchResult fallback)

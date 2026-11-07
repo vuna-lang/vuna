@@ -1,0 +1,24 @@
+-- W7：线性函数类型（一次性闭包）= `Cont a b`；`mkCont` 把捕获线性资源的 λ 装进
+-- 线性数据的 rig-1 字段，`resumeCont` 恰好消费一次。`(1 x : A) -> B` 的线性箭头
+-- binder 是既有 QTT 语法（handler 续延 API 用它传 `Cont`）。
+import Base.Eff
+
+linear data Token : Type where
+  MkToken : (1 n : Int) -> Token
+
+useToken : (1 t : Token) -> Int
+useToken t = case t of MkToken n => n
+
+-- 线性箭头 binder：k 恰好用一次（放进 Cont 的 rig-1 字段）。
+mkContI : (1 k : Int -> Int) -> Cont Int Int
+mkContI k = mkCont k
+
+-- 捕获线性 Token 的一次性闭包：交给 mkContI（rig-1 实参）后只可能用一次。
+mk : (1 t : Token) -> Cont Int Int
+mk t = mkContI (\x => useToken t + x)
+
+mk2 : (1 t : Token) -> Cont Int Int
+mk2 t = mkContI (\_ => useToken t)
+
+main : Int
+main = resumeCont (mk (MkToken 5)) 1 + resumeCont (mk2 (MkToken 7)) 0

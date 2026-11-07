@@ -1,18 +1,25 @@
 module Vuna.Compiler.Elab.Dict
-  ( allocTeleMetas
+  ( MemberLookup(..)
+  , allocTeleMetas
   , argHeadMatchesKind
   , boolShortCircuit
   , dictArgKind
+  , dictArgKinds
   , dictArgUnsolvedMeta
   , dictClassArg
+  , dictClassArgs
   , firstUnsolvedInterpGoal
+  , firstUnsolvedMemberGoal
   , hasSpecificInterpInstance
   , isCmpMethod
   , isDictDomain
   , isEqMethod
+  , isMemberDomain
   , isRigidDictArg
+  , memberLookup
   , neutralHeadOrSelf
   , resolveDictGoals
+  , resolveRowGoalsCtx
   , searchInstanceIn
   , specializeCmpTy
   , specializeEqTy
@@ -181,9 +188,9 @@ valueDictFamily (VNeutral n) = case n of
 valueDictFamily _ = ""
 
 instFamilyNameOf : DtInst -> String
-instFamilyNameOf i = case i.dtInstHead of
-  TApp (TGlobal g) arg rig => g
-  _ => ""
+instFamilyNameOf i = case flattenTaggedApp i.dtInstHead of
+  Just (Pair g args) => g
+  Nothing => ""
 
 -- M36 跟进：primitive `interp` 快捷路径的语义护栏——若程序里存在**具体** `Interp <ty>`
 -- 实例（如用户自定义 `instance Interp Int`），洞与显式 `interp` 都必须走字典路径，
@@ -198,8 +205,8 @@ hasSpecificInterpInstanceGo tyName (i :: rest) =
   else hasSpecificInterpInstanceGo tyName rest
 
 instHeadArgTypeName : DtInst -> String
-instHeadArgTypeName i = case i.dtInstHead of
-  TApp (TGlobal g) arg rig => termTypeNameOf arg
+instHeadArgTypeName i = case flattenTaggedApp i.dtInstHead of
+  Just (Pair g (arg :: rest)) => termTypeNameOf (firstOf arg)
   _ => ""
 
 termTypeNameOf : Term -> String
@@ -290,8 +297,124 @@ solveDictCtxs globals ctx fuel ec sp (cv :: rest) acc = case searchInstFuel glob
   Err e => Nothing
   Ok (Pair t ec1) => solveDictCtxs globals ctx fuel ec1 sp rest (Pair t RigOmega :: acc)
 
--- M22：回填延迟的字典元变量。每个 `DtDictGoal m dom`：类参数已解（非元变量）且能搜到
--- 唯一实例时解 `?m = <实例>`；仍未解或仍歧义则留到下一轮（幂等，可反复调用）。
+-- 行成员约束（W3）：把 `rowMem e r` 的隐式证明当作一个特殊的延迟目标。
+-- 这些名字来自受信任的 Base.Eff（见 effects.md §8）；编译器只认这三个头名。
+data RowProofKind : Type where
+  RowProofYes : RowProofKind
+  RowProofNo : RowProofKind
+  RowProofUnknown : RowProofKind
+
+rowMemDomName : String
+rowMemDomName = "Base.Eff.rowMem"
+
+rowYesDomName : String
+rowYesDomName = "Base.Eff.Yes"
+
+rowNoDomName : String
+rowNoDomName = "Base.Eff.No"
+
+rowYesCtorName : String
+rowYesCtorName = "Base.Eff.MkYes"
+
+-- 行成员证明（W3）：`Member e r` 是 Type-1 归纳族；精化器按行结构
+-- 构造 `Here`/`There` 证明。只认 Base.Eff 的族/构造子名。
+memberDomName : String
+memberDomName = "Base.Eff.Member"
+
+hereCtorName : String
+hereCtorName = "Base.Eff.Here"
+
+thereCtorName : String
+thereCtorName = "Base.Eff.There"
+
+data MemberLookup : Type where
+  MemberFound : Value -> Ec -> MemberLookup
+  MemberAbsent : MemberLookup
+  MemberStuck : MemberLookup
+
+isMemberDomain : Ec -> Value -> Bool
+isMemberDomain ec dom = case quote 0 dom of
+  TApp (TApp (TGlobal g) _ _) _ _ => g == memberDomName
+  _ => False
+
+memberSpine : Value -> Maybe (Pair Value Value)
+memberSpine (VNeutral (NGlobal g sp)) = if g == memberDomName then case sp of
+  e :: r :: _ => Just (Pair e r)
+  _ => Nothing
+else Nothing
+memberSpine _ = Nothing
+
+ctorValue : Ec -> String -> List Value -> Value
+ctorValue ec name vals = case dtCtorLookupEc ec name of
+  Just ctor => VCon (dtCtorName ctor) vals
+  Nothing => VCon name vals
+
+memberLookup : Int -> Int -> Ec -> Value -> MemberLookup
+memberLookup fuel depth ec dom = if fuel <= 0 then MemberStuck
+else case memberSpine dom of
+  Nothing => MemberStuck
+  Just (Pair eVal rVal) => memberLookupRow fuel depth ec eVal rVal
+
+memberLookupRow : Int -> Int -> Ec -> Value -> Value -> MemberLookup
+memberLookupRow fuel depth ec eVal rVal = if fuel <= 0 then MemberStuck
+else case forceVal ec rVal of
+  VCon "Base.Eff.RNil" _ => MemberAbsent
+  VCon "Base.Eff.RCons" (h :: t :: _) => if hasUnsolvedMetaValue (ecSolsP ec) eVal || hasUnsolvedMetaValue (ecSolsP ec) h then MemberStuck
+  else case convEc ec depth eVal h of
+    Ok ec1 => MemberFound (ctorValue ec1 hereCtorName [eVal, t]) ec1
+    Err _ => case memberLookupRow (fuel - 1) depth ec eVal t of
+      MemberFound sub ec1 => MemberFound (ctorValue ec1 thereCtorName [eVal, h, t, sub]) ec1
+      other => other
+  _ => MemberStuck
+
+-- 在局部上下文里找同类型的隐式证明 binder（wrapper 体里 `{w : Member e r}`）。
+ctxMemberProofTermGo : List (Pair String Term) -> Int -> String -> Maybe Term
+ctxMemberProofTermGo [] idx target = Nothing
+ctxMemberProofTermGo ((Pair name ty) :: rest) idx target =
+  if showTerm ty == target then Just (TVar name idx) else ctxMemberProofTermGo rest (idx + 1) target
+
+ctxMemberProofTerm : Ctx -> Ec -> Value -> Maybe Term
+ctxMemberProofTerm ctx ec dom =
+  ctxMemberProofTermGo ctx.ctxItems 0 (showTerm (quote (ctxDepth ctx) dom))
+
+-- 结构 proof 卡住时，用局部 binder 的类型与目标 dom 统一（例如 wrapper 体里
+-- `sendCore` 的行元变量尚未与 wrapper 的 r 统一）。
+ctxMemberProofUnify : Ctx -> Ec -> Value -> Maybe (Pair Term Ec)
+ctxMemberProofUnify ctx ec dom = ctxMemberProofUnifyGo ctx ctx.ctxItems 0 ec dom
+
+ctxMemberProofUnifyGo : Ctx -> List (Pair String Term) -> Int -> Ec -> Value -> Maybe (Pair Term Ec)
+ctxMemberProofUnifyGo ctx [] idx ec dom = Nothing
+ctxMemberProofUnifyGo ctx ((Pair name ty) :: rest) idx ec dom = case convEc ec (ctxDepth ctx) (evalCtx ctx ty) dom of
+  Ok ec2 => Just (Pair (TVar name idx) ec2)
+  Err _ => ctxMemberProofUnifyGo ctx rest (idx + 1) ec dom
+
+solveRowMeta : Ec -> Int -> Value -> Result Ec
+solveRowMeta ec m v = case solveMeta (ecDefTbl ec) (ecSolsP ec) 0 m [] v of
+  Ok sols2 => Ok (ecPutSols ec (solsList sols2))
+  Err e => Err e
+
+resolveRowGoalsCtx : List (Pair String Term) -> Ctx -> Ec -> Span -> Result Ec
+resolveRowGoalsCtx globals ctx ec sp = resolveRowGoalsCtxGo globals ctx sp (ecDictGoals ec) ec []
+
+resolveRowGoalsCtxGo : List (Pair String Term) -> Ctx -> Span -> List DtDictGoal -> Ec -> List DtDictGoal -> Result Ec
+resolveRowGoalsCtxGo globals ctx sp [] ec kept = Ok (ecPutDictGoals ec (reverse kept))
+resolveRowGoalsCtxGo globals ctx sp ((DtDictGoal m dom) :: rest) ec kept = case isMemberDomain ec dom of
+  True => case memberLookup 64 (ctxDepth ctx) ec dom of
+    MemberFound proof ec2 => case solveRowMeta ec2 m proof of
+      Ok ec3 => resolveRowGoalsCtxGo globals ctx sp rest ec3 kept
+      Err e => Err e
+    MemberAbsent => tcErr1 sp (NoInstanceFound "row membership") "row membership"
+    MemberStuck => case ctxMemberProofTerm ctx ec dom of
+      Just proofTerm => case solveRowMeta ec m (eval (ctxEnv ctx) proofTerm) of
+        Ok ec2 => resolveRowGoalsCtxGo globals ctx sp rest ec2 kept
+        Err e => Err e
+      Nothing => case ctxMemberProofUnify ctx ec dom of
+        Just (Pair proofTerm ec2) => case solveRowMeta ec2 m (eval (ctxEnv ctx) proofTerm) of
+          Ok ec3 => resolveRowGoalsCtxGo globals ctx sp rest ec3 kept
+          Err e => Err e
+        Nothing => tcErr1 sp (NoInstanceFound "row membership") "row membership"
+  False => resolveRowGoalsCtxGo globals ctx sp rest ec (DtDictGoal m dom :: kept)
+
 resolveDictGoals : List (Pair String Term) -> Ec -> Ec
 resolveDictGoals globals ec = resolveDictGoalsFuel 64 globals ec
 
@@ -303,22 +426,25 @@ else case ecDictGoals ec of
     let
       ec1 = ecPutDictGoals ec rest
       forced = forceVal ec1 dom
-      keep = ecAddDictGoal (resolveDictGoalsFuel (fuel - 1) globals ec1) (DtDictGoal m forced)
-    in case dictClassArg ec1 forced of
-      Just argTy => if hasUnsolvedMetaValue (ecSolsP ec1) argTy then keep
-      else if isRigidClassArg ec1 argTy && allInstancesMono (ecInsts ec1) then keep
-      else case searchInstance ec1 forced (Span "" 0 0 0 0) of
-        -- M35.1：刚性类参数不再无条件跳过搜索——新增了**泛型实例**（`Monad (ST r)` /
-        -- `Monad (State s)`，实例头自身带 tele），`ST r` 这类结构化刚性参数是能匹配上的。
-        -- 只有当全部实例都是单态（tele/ctx 均空）时，刚性参数才保证匹配不上、可以提前返回。
-        -- 类参数是定义体的刚性变量、且没有泛型实例时，任何实例头都匹配不上；搜一遍只会白跑
-        -- #实例 次 conv 再构造一条被丢弃的 NoInstanceFound。resolveDictGoals 在 by-infer
-        -- 路径上**每个节点**都会调用，这条提前返回很值钱。
-        Ok (Pair instTerm ec2) => case solveMeta (ecDefTbl ec2) (ecSolsP ec2) 0 m [] (eval [] instTerm) of
-          Ok sols2 => resolveDictGoalsFuel (fuel - 1) globals (ecPutSols ec2 (solsList sols2))
+      keep =
+        ecAddDictGoal (resolveDictGoalsFuel (fuel - 1) globals ec1)
+          (DtDictGoal m (if isMemberDomain ec1 dom then dom else forced))
+    in case isMemberDomain ec1 dom of
+      True => case memberLookup 64 0 ec1 dom of
+        MemberFound proof ec2 => case solveRowMeta ec2 m proof of
+          Ok ec3 => resolveDictGoalsFuel (fuel - 1) globals ec3
           Err e => keep
-        Err e => keep
-      Nothing => keep
+        MemberAbsent => keep
+        MemberStuck => keep
+      False => case dictClassArgs ec1 forced of
+        [] => keep
+        args => if anyUnsolvedMetaArg ec1 args then keep
+        else if isRigidDictArg ec1 forced && allInstancesMono (ecInsts ec1) then keep
+        else case searchInstance ec1 forced (Span "" 0 0 0 0) of
+          Ok (Pair instTerm ec2) => case solveMeta (ecDefTbl ec2) (ecSolsP ec2) 0 m [] (eval [] instTerm) of
+            Ok sols2 => resolveDictGoalsFuel (fuel - 1) globals (ecPutSols ec2 (solsList sols2))
+            Err e => keep
+          Err e => keep
 
 -- M29-T2b：字典解的 term 化要**保留 multiplicity**：参数化实例的字典项形如
 -- `TApp (TApp (TGlobal inst) <typeArg>) <dictArg>`，而 Value spine 不含 rig；
@@ -385,18 +511,35 @@ joinRestInstNames : List DtInst -> String
 joinRestInstNames [] = ""
 joinRestInstNames (i :: rest) = ", ${dtInstName i}${joinRestInstNames rest}"
 
--- 字典族的类参数 kind：字典 data `Dict_C` 的构造子类型第一个 binder 的域
--- （`MkDict_C : {p : K} -> <字段>` 里的 `K`）。
-dictArgKind : Ec -> Value -> Maybe Value
-dictArgKind ec dom = case dictFamilyNameOf ec dom of
+-- 字典族的类参数 kind：字典 data `Dict_C` 的构造子类型的前导隐式 Pi 域
+-- （`MkDict_C : {p1 : K1} -> {p2 : K2} -> <字段>` 里的 `K1, K2, ...`）。
+dictArgKinds : Ec -> Value -> Maybe (List Value)
+dictArgKinds ec dom = case dictFamilyNameOf ec dom of
   Nothing => Nothing
   Just fam => case dtDataLookup fam (ecDatas ec) of
     Nothing => Nothing
     Just dd => case dtDataCtors dd of
       [] => Nothing
-      c :: _ => case forceVal ec (eval [] (dtCtorType c)) of
-        VPi name implicit rig domK clo => Just domK
-        _ => Nothing
+      c :: _ => Just (ctorParamKinds ec (forceVal ec (eval [] (dtCtorType c))) 0 [])
+
+-- 构造子类型的前导隐式 binder 就是类参数（字段 binder 都显式，`foldPiFieldTys` 保证）。
+ctorParamKinds : Ec -> Value -> Int -> List Value -> List Value
+ctorParamKinds ec v lvl acc = ctorParamKindsFuel 64 ec v lvl acc
+
+ctorParamKindsFuel : Int -> Ec -> Value -> Int -> List Value -> List Value
+ctorParamKindsFuel fuel ec v lvl acc = if fuel <= 0 then reverse acc
+else case v of
+  VPi name implicit rig dom clo =>
+    if implicit then ctorParamKindsFuel (fuel - 1) ec (forceVal ec (applyClosure clo (VNeutral (NVar name lvl []))))
+      (lvl + 1) (dom :: acc)
+    else reverse acc
+  _ => reverse acc
+
+-- 第一个类参数的 kind（单参数路径与历史诊断共用）。
+dictArgKind : Ec -> Value -> Maybe Value
+dictArgKind ec dom = case dictArgKinds ec dom of
+  Just (k :: rest) => Just k
+  _ => Nothing
 
 dictFamilyNameOf : Ec -> Value -> Maybe String
 dictFamilyNameOf ec dom = case forceVal ec dom of
@@ -419,18 +562,28 @@ neutralHeadOrSelf : Value -> Value
 neutralHeadOrSelf (VNeutral (NGlobal g (_ :: _))) = VNeutral (NGlobal g [])
 neutralHeadOrSelf v = v
 
+-- 字典域的全部类参数（`Dict_C p1 .. pn` 的 spine）。单参数 trait 只有一个元素；
+-- 旧入口 `dictClassArg` 仍返回第一个参数（Interp 等单参数特化路径依赖它）。
+dictClassArgs : Ec -> Value -> List Value
+dictClassArgs ec dom = case forceVal ec dom of
+  VNeutral (NGlobal g sp) => sp
+  _ => []
+
 dictClassArg : Ec -> Value -> Maybe Value
-dictClassArg ec dom = case forceVal ec dom of
-  VNeutral (NGlobal g ([arg])) => Just arg
-  _ => Nothing
+dictClassArg ec dom = case dictClassArgs ec dom of
+  arg :: rest => Just arg
+  [] => Nothing
 
 -- 字典域类参数是否依赖**刚性局部变量**（绑定于当前定义/实例 tele 的类型变量）。
 -- M29-T2a：判定改为**结构化**——`a`、`Box a`、`List (Box a)` 都算刚性（旧实现只看裸 NVar，
 -- 导致 `mem (Box a)` 这类泛型调用点既搜不到实例、也不提升成隐式字典参数）。
+-- 多参数：任一参数含刚性变量，具体实例头就必然匹配不上（全单态实例时）。
 isRigidDictArg : Ec -> Value -> Bool
-isRigidDictArg ec dom = case dictClassArg ec dom of
-  Just arg => isRigidClassArg ec arg
-  Nothing => False
+isRigidDictArg ec dom = anyRigidClassArg ec (dictClassArgs ec dom)
+
+anyRigidClassArg : Ec -> List Value -> Bool
+anyRigidClassArg ec [] = False
+anyRigidClassArg ec (arg :: rest) = isRigidClassArg ec arg || anyRigidClassArg ec rest
 
 -- 已取出的类参数是否含刚性局部变量（resolveDictGoals 里先算 dictClassArg 再判，避免重复 force）。
 isRigidClassArg : Ec -> Value -> Bool
@@ -575,17 +728,20 @@ cmpGenericName "le" = "bi_le_generic"
 cmpGenericName "gt" = "bi_gt_generic"
 cmpGenericName _ = "bi_ge_generic"
 
--- 字典的类参数还是未解元变量时**不做实例搜索**：否则会像 `srt (\x,y => x <= y) xs`
+-- 字典的类参数还有未解元变量时**不做实例搜索**：否则会像 `srt (\x,y => x <= y) xs`
 -- 那样被第一个内建实例（Ord Int）提前定死，随后与 `List a` 统一时报 occurs check。
 -- 延迟成字典目标，等类参数被实参/结果类型解出来后再回填。
+-- 多参数：任一参数未解就延迟（实例头能同时约束所有参数，提前搜索会定死更多元变量）。
 dictArgUnsolvedMeta : Ec -> Value -> Bool
-dictArgUnsolvedMeta ec dom = case dictClassArg ec dom of
-  Just arg => case forceVal ec arg of
-    VMeta m sp => case metaLookup m (ecSolTbl ec) of
-      Just _ => False
-      Nothing => True
-    _ => False
-  Nothing => False
+dictArgUnsolvedMeta ec dom = anyUnsolvedMetaArg ec (dictClassArgs ec dom)
+
+anyUnsolvedMetaArg : Ec -> List Value -> Bool
+anyUnsolvedMetaArg ec [] = False
+anyUnsolvedMetaArg ec (arg :: rest) = case forceVal ec arg of
+  VMeta m sp => case metaLookup m (ecSolTbl ec) of
+    Just _ => anyUnsolvedMetaArg ec rest
+    Nothing => True
+  _ => anyUnsolvedMetaArg ec rest
 
 specializeCmpTy : List (Pair String Term) -> Ctx -> String -> Term -> Term -> Span -> Value -> Ec -> Result (Maybe (Pair Term (Pair Value Ec)))
 -- M24.7：`Ord` 类/实例在库（`Base.Ord`），按短名查类并用真实字典名/方法投影名。
@@ -619,3 +775,14 @@ specializeCmpTy globals ctx name aTerm bTerm sp aTy ec = case cmpBuiltinTyName (
 
 boolShortCircuit : String -> Term -> Term -> Term
 boolShortCircuit name a b = if name == "&&" then TIf a b (TBool False) else TIf a (TBool True) b
+
+-- W3：收尾检查——仍未解的行成员证明（缺效应，或推断不足）。
+firstUnsolvedMemberGoal : Ec -> Maybe String
+firstUnsolvedMemberGoal ec = firstUnsolvedMemberGoalGo ec (ecDictGoals ec)
+
+firstUnsolvedMemberGoalGo : Ec -> List DtDictGoal -> Maybe String
+firstUnsolvedMemberGoalGo ec [] = Nothing
+firstUnsolvedMemberGoalGo ec ((DtDictGoal m dom) :: rest) = if isMemberDomain ec dom then case metaLookup m (ecSolTbl ec) of
+  Nothing => Just (showValue (forceVal ec dom))
+  Just _ => firstUnsolvedMemberGoalGo ec rest
+else firstUnsolvedMemberGoalGo ec rest

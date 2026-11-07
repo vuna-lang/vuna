@@ -42,6 +42,12 @@ import Vuna.Lsp
 import Vuna.Cli.Args
 import qualified Vuna.Lint
 import Base.IO
+-- W10 收尾：产品 CLI 的 console 路径迁到效应标签（`Base.EffConsole`）。入口仍是
+-- `main : IO Int`（IO 是运行时基座/逃逸口）；只有 `consoleLine` 这一条真实路径
+-- 经标签 + IO-backed handler 输出，作为工具链逐步迁移的样板（边界见
+-- docs/reference/effects-layers.md §8.6 与 debt D43）。
+import Base.Eff
+import Base.EffConsole
 
 toolUsageLines : String -> String
 toolUsageLines prog = """  ${prog} lint [--fix] <file.vuna>...
@@ -119,11 +125,14 @@ runCli1 args = case args of
 
 -- M30：版本唯一真源在编译器包（Vuna.Compiler.Version），产品 CLI 与
 -- vuna-compiler 共用；VSCode 用它探测服务器。
+-- W10 收尾：这一条输出路径走 console 效应标签（mock/real 可替换的样板），
+-- 不再直接 `prim_print`；IO 只在最外层 `runIO` 处出现（工具链入口仍是 IO）。
+consoleLine : String -> Int
+consoleLine msg =
+  runIO (runIOAnswer (handleConsoleIO C1 (bindEff (consolePrint C1 msg) (\_ => pureEff 0))))
+
 printVersion : Int -> Int
-printVersion _ =
-  let
-    _ = runIO (prim_print "vuna ${vunaVersion}\n")
-  in 0
+printVersion _ = consoleLine "vuna ${vunaVersion}\n"
 
 anyHelp : List String -> Bool
 anyHelp [] = False

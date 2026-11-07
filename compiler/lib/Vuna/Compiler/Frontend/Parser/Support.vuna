@@ -126,22 +126,32 @@ peekTokAt : PState -> Int -> Maybe PTok
 peekTokAt st n = nthTok st.toksOf n
 
 -- M38：Pi binder 头：`标识符 :`、`0 标识符 :`、`1 标识符 :`（`(x : A) -> B` / `{x : A} -> B`）。
-binderHead : PState -> Maybe (Pair (Maybe Qty) String)
+-- 多参数 trait 的探针还写 `{a b : Type} -> ...`：同一 binder 组可含多个名字，这里返回
+-- 名字列表，`parsePiBinder` 展开成嵌套 EPi。
+binderHead : PState -> Maybe (Pair (Maybe Qty) (List String))
 binderHead st = case peekTok st of
-  PTok (TIdent name) _ => if symAt st 1 ":" then Just (Pair Nothing name) else Nothing
+  PTok (TIdent name) _ => case binderNameTail 64 st 1 [] of
+    Just names => Just (Pair Nothing (name :: names))
+    Nothing => Nothing
   PTok (TInt 0) _ => quantifiedHead st Q0
   PTok (TInt 1) _ => quantifiedHead st Q1
   _ => Nothing
 
-quantifiedHead : PState -> Qty -> Maybe (Pair (Maybe Qty) String)
-quantifiedHead st q = case peekTokAt st 1 of
-  Just (PTok (TIdent name) _) => if symAt st 2 ":" then Just (Pair (Just q) name) else Nothing
+-- 从第 n 个 token 起收集连续的标识符，直到 `:`（lookahead 不走状态）。
+-- fuel 只是终止性证据：每次向前看一个 token，最多走 token 数步。
+binderNameTail : Int -> PState -> Int -> List String -> Maybe (List String)
+binderNameTail fuel st n acc = if fuel <= 0 then Nothing
+else case peekTokAt st n of
+  Just (PTok (TIdent name) _) => binderNameTail (fuel - 1) st (n + 1) (name :: acc)
+  Just (PTok (TSym ":") _) => Just (reverse acc)
   _ => Nothing
 
-symAt : PState -> Int -> String -> Bool
-symAt st n s = case peekTokAt st n of
-  Just (PTok (TSym x) _) => x == s
-  _ => False
+quantifiedHead : PState -> Qty -> Maybe (Pair (Maybe Qty) (List String))
+quantifiedHead st q = case peekTokAt st 1 of
+  Just (PTok (TIdent name) _) => case binderNameTail 64 st 2 [] of
+    Just names => Just (Pair (Just q) (name :: names))
+    Nothing => Nothing
+  _ => Nothing
 
 atKw : PState -> String -> Bool
 atKw st k = case peekTok st of

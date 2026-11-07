@@ -1,0 +1,13 @@
+-- W7 负例：线性续延 resume 两次 → 用量检查拒绝。
+import Base.Eff
+import Base.Eff.Reader
+
+prog : Eff (RCons (Reader Cnt1 Int) RNil) Int
+prog = ask Cnt1 Int
+
+opH : (o : ReaderOp Int) -> (1 k : Cont (Base.Eff.Reader.resReader Int o) Int) -> Int
+opH op k = case op of
+  Ask => resumeCont k 1 + resumeCont k 2
+
+main : Int
+main = runPure (handleReaderLin Cnt1 Int (\a => a) opH prog)

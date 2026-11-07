@@ -7,6 +7,8 @@ let v_Base_dIO_drunIO = (fun _uarity1 -> ((fun io -> io 0) _uarity1))
 
 let v_Base_dIO_dprint = (fun _uarity0 -> ((fun dtio_0 -> fun (_ : int) -> dtp_print dtio_0) _uarity0))
 
+let v_Base_dIO_deprint = (fun _uarity0 -> ((fun dtio_0 -> fun (_ : int) -> (fun s -> prerr_string s; flush stderr; String.length s) dtio_0) _uarity0))
+
 let v_Base_dIO_dprintln = (fun s -> (v_Base_dIO_dprint (s ^ "\n")))
 
 let v_Base_dIO_dreadFile = (fun _uarity0 -> ((fun dtio_0 -> fun (_ : int) -> dtp_readFile dtio_0) _uarity0))
@@ -33,4 +35,14 @@ let v_Base_dIO_dfileSize = (fun path -> (((Base_dMonad.v_Base_dMonad_dfmap v_Fun
 
 let v_Base_dIO_dgetArgs = (fun (_ : int) -> (Base_dList.dtp_listOf (dtp_getArgs ())))
 
+let v_Base_dIO_dgetEnv = (fun _uarity0 -> ((fun dtio_0 -> fun (_ : int) -> dtp_getenv dtio_0) _uarity0))
+
+let v_Base_dIO_dgetCwd = (fun (_ : int) -> (dtp_getcwd ()))
+
+let v_Base_dIO_dexecPath = (fun (_ : int) -> (dtp_execPath ()))
+
 let v_Base_dIO_dexit = (fun _uarity0 -> ((fun dtio_0 -> fun (_ : int) -> dtp_exit dtio_0) _uarity0))
+
+let v_Base_dIO_dnowMicros = (fun (_ : int) -> (dtp_timeUs ()))
+
+let v_Base_dIO_dsleepMicros = (fun us -> (if (us <= 0) then ((fun x -> fun (_ : int) -> x) 0) else ((fun dtio_0 -> fun (_ : int) -> dtp_sleep dtio_0) us)))

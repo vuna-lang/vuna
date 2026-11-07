@@ -57,7 +57,9 @@ vuna 尚未发布任何版本：没有外部用户、下游生态与历史包袱
   `Base.Effect.MonadIO` + `StateT` / `ReaderT` / `ErrorT` 提供 IO 基座效应栈；**M39 落定
   D27 的表示轴**：卡住的类型族应用（`res op`）用不透明运行时值 + 恒等 cast 表示，异构结果
   类型的 CPS `Eff` 已可编译可运行（夹具 82/83）；用户级 `Eff` API / handler 语法 / 行多态 /
-  能力行仍未实现，归 F3（[effects.md](reference/effects.md)）。
+  能力行仍未实现，归 F3（[effects.md](reference/effects.md)）。**`runtime-effects` 分支已落地
+  Layer 1 运行时效应核心**：`Base.Eff`（开放行 + 抽象动作，无世界令牌）、命名 Reader/State
+  实例、IO-backed Fs；`Member` 约束与 `do` 实例待补（[effects.md](reference/effects.md) §8）。
 - **质量门禁**：`nix flake check`（packages + seed-selfhost + tests + typecheck + lint + fmt +
   index + metrics + package + context-budget + vscode-ext）、原生测试、lint / fmt / metrics /
   文档预算。
@@ -136,8 +138,10 @@ LSP-only 写回自愈归后续。
    修复（构造子族参数反推、实例头按类参数 kind、刚性类参数的泛型实例搜索）。
    **剩余（F3）**：**M39 已落定 D27 表示轴**——不透明擦除值让 CPS `Eff` 的 `res op`
    可编译可运行（[effects.md](reference/effects.md) §5）；用户级 `Eff` API / handler 语法 /
-   行与重排 / 能力行仍未实现，QTT 一次性续延与运行时类型码路线待评估。**明确不做**：
-   语言级 `handle` / `perform`、行多态、自动 lift；
+   行与重排 / 能力行仍未实现，QTT 一次性续延与运行时类型码路线待评估。**`runtime-effects`
+   分支已落地 Layer 1**（运行时续延 + 开放行 + 命名实例 + 一阶效应，见 §8）；下一步补
+   `Member` 行约束、`Monad (Eff r)`/`do`，再做 Layer 2 高阶/作用域与 Layer 3 并发。
+   **明确不做**：语言级 `handle` / `perform`、行多态、自动 lift；
 2. **结构化并发 / async**：调度器、取消 / 超时、结构化作用域、内存模型；先库级
    （线程池 / 事件循环 + IO），再语言级；
 3. **网络 / 系统库与完整 FFI**：socket / 文件 / 进程、异步 IO、回调 / GC 交互；

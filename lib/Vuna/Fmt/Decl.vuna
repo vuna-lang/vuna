@@ -78,14 +78,18 @@ renderRecordField env at f =
   attachAt at (fieldSpan f) 2
     (prefixFirst "  ${fieldName f} : " (renderTypeExpr env at 2 (fieldType f)))
 
-renderTraitDecl : List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> String -> List String -> List TraitMethod -> List String
+renderTraitDecl : List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> String -> List TraitParam -> List TraitMethod -> List String
 renderTraitDecl env at name params methods =
   let
-    header = "trait ${name}${joinSpace params} where"
+    header = "trait ${name}${joinSpace (map (traitParamText env at) params)} where"
     methodLines = concatMap (\m => renderMethodSig env at m) methods
   in append [header] methodLines
 
 -- M30（B20）：注释锚点用方法签名 span（方法名到类型结束），不再用类型表达式 span。
+traitParamText : List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> TraitParam -> String
+traitParamText env at (TraitParam n Nothing) = n
+traitParamText env at (TraitParam n (Just k)) = "(${n} : ${join " " (renderTypeExpr env at 0 k)})"
+
 renderMethodSig : List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> TraitMethod -> List String
 renderMethodSig env at m =
   attachAt at (traitMethodSpan m) 2

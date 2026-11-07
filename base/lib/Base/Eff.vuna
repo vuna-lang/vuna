@@ -1,0 +1,159 @@
+module Base.Eff
+  ( Cont
+  , Eff
+  , Member(..)
+  , Row(..)
+  , bindEff
+  , bracket
+  , effPrim
+  , finally
+  , handleCore
+  , handleCoreLin
+  , mkCont
+  , pureEff
+  , resumeCont
+  , rowRem
+  , runEff
+  , runIOAnswer
+  , runIOEff
+  , runPure
+  , sendCore
+  , weaken
+  ) where
+
+import Base.Monad
+
+-- Base.Eff：库级通用效应的核心（Layer 1）。
+--
+-- 表示：
+--   * 行 `Row` 是 Type-1 数据，存放**效应标签类型**（`Type`）；行只是擦除索引，
+--     运行时通过 `send`/`handle` 的 (key, name) 找到 handler。
+--   * `Eff r a` 是抽象动作（内部 = 私有 dummy thunk）；构造子不导出。
+--     没有世界令牌：dummy 参数只用于延迟执行。
+--   * 续延由 OCaml 5 的运行时 delimited continuations 提供（`Effect.Deep`），
+--     语义是**一次性**（one-shot）；resume 两次由运行时拒绝。
+--
+-- 边界（Layer 1）：
+--   * 只支持一阶效应：op 是普通值，不包含子计算。
+--   * 行成员 `Member e r` 是 Type-1 归纳族（Here/There）；effect wrapper 用隐式证明参数，
+--     精化器按行结构构造证明（W3）。`sendCore`/`handleCore` 是信任边界内的核心原语。
+--   * handler 结果行用 `rowRem`；它不是类型族，由编译器按标签类型值结构相等归约。
+-- 行：开放世界的效应标签（标签 = 类型；用户自己声明新效应）。
+data Row : Type 1 where
+  RNil : Row
+  RCons : Type -> Row -> Row
+
+-- 行成员证明（W3）：归纳族，`Here` 在头部命中，`There` 跳过头部。
+-- 隐式参数 `{w : Member e r}` 由精化器按行结构构造证明（见 effects.md §8）。
+data Member : Type -> Row -> Type 1 where
+  Here : {e : Type} -> {r : Row} -> Member e (RCons e r)
+  There : {e : Type} -> {x : Type} -> {r : Row} -> Member e r -> Member e (RCons x r)
+
+-- 行删除：从 r 中去掉标签 e（保留顺序）；handler 的结果行。
+-- 注意：不是类型族——类型族的重复变量模式（`RCons e r`）不会强制相等；
+-- 这里由编译器按标签类型值结构相等归约（Core.Eval.rowRemReduce）。
+axiom rowRem : Type -> Row -> Row
+
+-- Eff 的内部 dummy 参数（不是世界令牌；只为 thunk 延迟执行）。
+data EffUnit : Type where
+  MkEffUnit : EffUnit
+
+-- 抽象动作；构造子不导出。
+data Eff : Row -> Type -> Type where
+  MkEff : {r : Row} -> {a : Type} -> (EffUnit -> a) -> Eff r a
+
+pureEff : {r : Row} -> {a : Type} -> a -> Eff r a
+pureEff x = MkEff (\_ => x)
+
+bindEff : {r : Row} -> {a : Type} -> {b : Type} -> Eff r a -> (a -> Eff r b) -> Eff r b
+bindEff e k = MkEff (\u => case e of
+  MkEff f => case k (f u) of
+    MkEff g => g u
+)
+
+-- 信任边界：把「运行时原语 thunk」包装成 Eff 动作（dummy `Int` 只为延迟执行，
+-- 没有世界令牌语义）。只供运行时效应模块（如 `Base.EffSched`）包装隐藏 intrinsic；
+-- 普通用户用 pureEff/bindEff/sendCore/handleCore。
+effPrim : {r : Row} -> {a : Type} -> (Int -> a) -> Eff r a
+effPrim f = MkEff (\_ => f 0)
+
+-- 行扩宽：动作在更大的行里仍可执行（不安装/不删除 handler；运行时无操作）。
+weaken : {e : Type} -> {r : Row} -> {a : Type} -> Eff r a -> Eff (RCons e r) a
+weaken (MkEff f) = MkEff f
+
+runThunk : {r : Row} -> {a : Type} -> Eff r a -> EffUnit -> a
+runThunk e = case e of
+  MkEff f => f
+
+-- 运行一个「行已被处理干净」的动作（RNil）；有未处理效应时由运行时报告。
+runPure : {a : Type} -> Eff RNil a -> a
+runPure e = runThunk e MkEffUnit
+
+-- 运行任意行：把动作放进 IO 世界执行（handler 通过运行时栈安装）。
+-- 用 bindIO 延迟到动作执行时再求值，避免构造期就 perform。
+runIOEff : {r : Row} -> {a : Type} -> Eff r a -> IO a
+runIOEff e = prim_bindIO (prim_pureIO 0) (\_ => prim_pureIO (runEff e))
+
+-- 仅供作用域 handler 实现内部使用（W6）：在嵌套 handler 下运行子计算，外层运行时
+-- handler 继续处理 r。普通用户用 runPure/runIOEff。
+-- 仅供作用域 handler 实现内部使用（W6）：在嵌套 handler 下运行子计算，外层运行时
+-- handler 继续处理 r。普通用户用 runPure/runIOEff。
+runEff : {r : Row} -> {a : Type} -> Eff r a -> a
+runEff e = runThunk e MkEffUnit
+
+-- 核心发送：e 是标签类型；key/name 是运行时实例标识；op 是运行时值。
+-- `e` 是显式类型参数（宇宙域，恒擦除）；op 是运行时值。
+sendCore : (e : Type) -> {r : Row} -> {op : Type} -> {x : Type} -> String -> Int -> (o : op) -> Eff r x
+sendCore e key name o = MkEff (\_ => prim_effectPerform key name o)
+
+-- 核心 handler：ret 处理正常返回，opH 处理每个操作；结果行删除 e。
+handleCore : (e : Type) -> {r : Row} -> {op : Type} -> {a : Type} -> {b : Type} -> {h : Type} -> String -> Int -> (a -> b) -> h -> Eff r a -> Eff (rowRem e r) b
+handleCore e key name ret opH comp = MkEff (prim_effectHandle key name ret opH (runThunk comp))
+
+-- 执行「answer 本身是 IO 动作」的程序（IO-backed handler 的入口）。
+runIOAnswer : {a : Type} -> Eff RNil (IO a) -> IO a
+runIOAnswer e = prim_bindIO (prim_pureIO 0) (\_ => prim_pureIO (prim_runIO (runEff e)))
+
+linear data Cont a b : Type where
+  MkCont : {a : Type} -> {b : Type} -> (1 k : a -> b) -> Cont a b
+
+resumeCont : {a : Type} -> {b : Type} -> (1 c : Cont a b) -> a -> b
+resumeCont c x = case c of
+  MkCont k => k x
+
+contAdapter : {op : Type} -> {res : op -> Type} -> {b : Type} -> ((o : op) -> (1 k : Cont (res o) b) -> b) -> (o : op) -> (res o -> b) -> b
+contAdapter opH o k = opH o (MkCont k)
+
+handleCoreLin : (e : Type) -> {r : Row} -> {op : Type} -> {a : Type} -> {b : Type} -> {res : op -> Type} -> String -> Int -> (a -> b) -> ((o : op) -> (1 k : Cont (res o) b) -> b) -> Eff r a -> Eff (rowRem e r) b
+handleCoreLin e key name ret opH comp = handleCore e key name ret (contAdapter opH) comp
+
+-- ---------------------------------------------------------------
+-- W7：线性函数（一次性闭包）与通用 bracket
+-- ---------------------------------------------------------------
+-- `Cont a b` 就是本阶段的**线性函数类型**：一个只能被消费一次的闭包。
+-- `mkCont` 把「捕获线性资源的一次性闭包」装进 `Cont`；用量检查只允许这种捕获
+-- 出现在「立即按 quantity 1 消费」的位置（应用函数位 / rig-1 实参 / 线性数据
+-- 的 rig-1 字段），见 qtt.md §6。`resumeCont` 消费一次后值即消失。
+mkCont : {a : Type} -> {b : Type} -> (1 k : a -> b) -> Cont a b
+mkCont k = MkCont k
+
+-- 通用 `bracket`：acquire → use → release。
+-- 与 `Base.EffExn.bracketExn` 的区别：不依赖 `Exn` 效应，cleanup 由运行时的
+-- **handler 退出钩子**驱动——use 里发生的**任意效应 abort**（handler 丢弃续延，
+-- 包括 `Exn` 的 throw、自定义 abort、调度器硬中止）都会让 handler 退出时执行
+-- 登记表里 mark 之上的 release。正常返回路径由下面的 pop + release 在带内完成。
+-- 边界：release 在 handler 退出点执行，只能访问**外层** handler；它自身的异常
+-- 被吞掉；硬中止路径没有 handler 栈，只能做无效应清理（见 effects-layers.md）。
+bracket : {res : Type} -> {a : Type} -> {r : Row} -> Eff r res -> (res -> Eff r Int) -> (res -> Eff r a) -> Eff r a
+bracket acquire release use =
+  bindEff acquire
+    (\res => bindEff (effPrim (\_ => prim_cleanupPush (\_ => runEff (release res)))) (\_ => bindEff (use res) (\a => bindEff (effPrim (\_ => prim_cleanupPop 0)) (\_ => bindEff (release res) (\_ => pureEff a)))))
+
+-- `finally action cleanup`：action 正常返回 / 异常 / 其它效应 abort 都跑 cleanup。
+finally : {a : Type} -> {r : Row} -> Eff r a -> Eff r Int -> Eff r a
+finally comp cleanup = bracket (pureEff 0) (\_ => cleanup) (\_ => comp)
+
+-- W4/终态：`Eff r` 是 Monad；用户 import Base.Eff 后可直接用 `do` / `>>=`。
+instance Monad (Eff r) where
+  pure = pureEff
+  bind = bindEff

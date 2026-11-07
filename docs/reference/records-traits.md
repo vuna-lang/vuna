@@ -62,8 +62,31 @@ main : String
 main = pretty Red ++ "/" ++ show Red
 ```
 
-- **trait 只支持单参数**；多参数 trait、默认方法、父类、关联类型归 F4
-  （[roadmap.md](../roadmap.md)）。
+- **trait 支持 N>=1 个参数**：字典类型是 `Dict_C p1 .. pn`，构造子字段仍是方法；
+  默认方法、父类、关联类型归 F4（[roadmap.md](../roadmap.md)）。
+  每个参数的 kind 可显式写：`trait C (a : Type) (r : Row) where ...`；未写时从方法签名
+  推断（参数被应用 k 次即 `Type -> ... -> Type`，否则 `Type`）。空参数表报
+  `[TC_InterfaceNoParam]`。非 Type 类参数（如 `Row`）的实例搜索已支持；但**头可合一的重叠实例
+  仍被 coherence 拒绝**（`Member e (RCons e r)` 与 `Member e r => Member e (RCons x r)`），
+  因此 trait 版 `Member e r` 仍不可用（见 debt D39）。
+  实例头的 tele 变量 kind 按实参推断：裸变量取对应类参数的 kind，嵌套变量从
+  构造子的参数 kind 反推（`instance Pretty (T n)` 配 `T : N -> Type` ⇒ `n : N`，
+  `instance Monad (Eff r)` 配 `Eff : Row -> Type -> Type` ⇒ `r : Row`）；
+  都解不出时回退「被应用次数」启发式。
+  ```vuna
+  trait Convert a b where
+    convert : a -> b
+    convertBack : b -> a
+
+  instance Convert Int String where
+    convert n = strFromInt n
+    convertBack _ = 0
+
+  idConvert : {a b : Type} -> Convert a b => a -> b
+  idConvert x = convert x
+  ```
+  签名约束、实例头与实例 ctx 的实参个数必须与 trait 的参数个数一致；实例搜索按完整的
+  `Dict_C a1 .. an` 头统一（不是只看第一个参数）。
 - **实例按 head 全局唯一**：同一 head 的重复 / 重叠实例报 `duplicate instance` /
   `overlapping instance`（含 `deriving` 生成的实例）。**没有命名实例**：不存在
   `instance C T as name` 或 `@name` 选择，相干性只靠「同一 head 唯一」。
@@ -132,8 +155,8 @@ describe x y = if x == y then show x else show x ++ "/" ++ show y
 - 调用点没有新语法：类型实参由统一解出，字典实参按实例搜索填充。
 - 只支持顶层签名：`where` / `let`、`axiom`、trait 方法、构造子 / 记录字段写 `=>` 报
   `[PS_ConstraintUnsupportedHere]`（trait 方法约束是父类语义，归 F4）。未声明接口头报
-  `unknown interface <name>`；非单参数应用报 `[TC_ConstraintNotDict]`；kind 不符报
-  `[TC_TypeMismatch]`。
+  `unknown interface <name>`；实参个数与 trait 参数个数不符报 `[TC_ConstraintNotDict]`；
+  kind 不符报 `[TC_TypeMismatch]`。
 
 ## do、Monad 与 Functor
 

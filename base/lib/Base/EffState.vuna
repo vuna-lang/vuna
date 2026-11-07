@@ -1,0 +1,35 @@
+module Base.EffState (Name(..), State, StateOp(..), get, handleState, nameCode, put, resState) where
+
+-- Base.EffState：一阶 State 效应（Layer 1）。
+--
+-- 标签类型 `State n s`；操作 `Get` / `Put`；结果族 `resState s`。
+-- handler 的 answer 类型由调用方选择：经典写法是 `b = s -> Pair a s`，
+-- ret = \a s => Pair a s，opH 用续延线程状态（见夹具）。
+import Base.Eff
+
+data Name : Type where
+  S1 : Name
+  S2 : Name
+
+nameCode : Name -> Int
+nameCode S1 = 0
+nameCode S2 = 1
+
+data State : Name -> Type -> Type where
+
+data StateOp : Type -> Type where
+  Get : {s : Type} -> StateOp s
+  Put : {s : Type} -> s -> StateOp s
+
+resState : (s : Type) -> StateOp s -> Type
+resState s Get = s
+resState s (Put x) = Int
+
+get : (n : Name) -> (s : Type) -> {r : Row} -> {w : Member (State n s) r} -> Eff r s
+get n s = sendCore (State n s) "state" (nameCode n) Get
+
+put : (n : Name) -> (s : Type) -> s -> {r : Row} -> {w : Member (State n s) r} -> Eff r Int
+put n s x = sendCore (State n s) "state" (nameCode n) (Put x)
+
+handleState : {a : Type} -> {b : Type} -> {r : Row} -> (n : Name) -> (s : Type) -> {w : Member (State n s) r} -> (a -> b) -> ((o : StateOp s) -> (resState s o -> b) -> b) -> Eff r a -> Eff (Base.Eff.rowRem (State n s) r) b
+handleState n s ret opH comp = handleCore (State n s) "state" (nameCode n) ret opH comp

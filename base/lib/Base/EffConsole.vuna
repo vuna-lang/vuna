@@ -1,0 +1,60 @@
+module Base.EffConsole
+  ( Console
+  , ConsoleOp(..)
+  , Name(..)
+  , consoleEprint
+  , consolePrint
+  , handleConsole
+  , handleConsoleIO
+  , nameCode
+  , resConsole
+  ) where
+
+-- Base.EffConsole：一阶 console 效应（W10 IO 标签迁移）。
+--
+-- 标签 `Console n` 是命名实例（与 State/Reader 同构）：同一程序里可以同时安装
+-- 多个 console handler（例如 C1 = mock 收集器、C2 = 真实 stdout/stderr），
+-- 行里按 name 区分。操作只有 Print / EPrint；handler 用 `Base.IO` 的
+-- `print` / `eprint` 实现真实语义，`handleConsoleIO` 是可直接交给
+-- `runIOAnswer` 的 IO-backed handler。
+import Base.Eff
+import Base.IO
+
+data Name : Type where
+  C1 : Name
+  C2 : Name
+
+-- 运行时实例码（send/handler 用同一个码；与行里的 name 值对应）。
+nameCode : Name -> Int
+nameCode C1 = 0
+nameCode C2 = 1
+
+-- 标签类型：只做行索引，没有运行时构造子。
+data Console : Name -> Type where
+
+data ConsoleOp : Type where
+  Print : String -> ConsoleOp
+  EPrint : String -> ConsoleOp
+
+resConsole : ConsoleOp -> Type
+resConsole (Print s) = Int
+resConsole (EPrint s) = Int
+
+consolePrint : (n : Name) -> String -> {r : Row} -> {w : Member (Console n) r} -> Eff r Int
+consolePrint n s = sendCore (Console n) "console" (nameCode n) (Print s)
+
+consoleEprint : (n : Name) -> String -> {r : Row} -> {w : Member (Console n) r} -> Eff r Int
+consoleEprint n s = sendCore (Console n) "console" (nameCode n) (EPrint s)
+
+handleConsole : {a : Type} -> {b : Type} -> {r : Row} -> (n : Name) -> {w : Member (Console n) r} -> (a -> b) -> ((o : ConsoleOp) -> (resConsole o -> b) -> b) -> Eff r a -> Eff (Base.Eff.rowRem (Console n) r) b
+handleConsole n ret opH comp = handleCore (Console n) "console" (nameCode n) ret opH comp
+
+-- 真实 handler 的 op 解释：answer 里直接执行 IO 动作。
+consoleOpHIO : {a : Type} -> (o : ConsoleOp) -> (resConsole o -> IO a) -> IO a
+consoleOpHIO op k = case op of
+  Print s => prim_bindIO (print s) (\r => k r)
+  EPrint s => prim_bindIO (eprint s) (\r => k r)
+
+-- IO-backed handler：结果行删除 Console n，answer 是 IO 动作，可用 `runIOAnswer` 执行。
+handleConsoleIO : {a : Type} -> {r : Row} -> (n : Name) -> Eff (RCons (Console n) r) a -> Eff r (IO a)
+handleConsoleIO n comp = handleConsole n (\a => prim_pureIO a) consoleOpHIO comp

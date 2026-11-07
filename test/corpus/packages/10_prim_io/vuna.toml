@@ -5,4 +5,4 @@ name = "prim-io"
 vuna-base = "../../../../base"
 
 [capabilities]
-effects = ["console", "process"]
+effects = ["console", "process", "clock"]

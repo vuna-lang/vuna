@@ -1,0 +1,16 @@
+-- Layer 2：作用域 Reader（local）——先取外层 env，再在临时 handler 里用 f env 回答 Ask。
+import Base.Eff
+import Base.Eff.Reader
+
+prog : Eff (RCons (Reader Cnt1 Int) RNil) Int
+prog = bindEff (ask Cnt1 Int) (\x =>
+         bindEff (local Cnt1 Int (\v => v + 10) (ask Cnt1 Int)) (\y =>
+           bindEff (ask Cnt1 Int) (\z =>
+             pureEff (x * 100 + y * 10 + z))))
+
+opH : (o : ReaderOp Int) -> (Base.Eff.Reader.resReader Int o -> Int) -> Int
+opH op k = case op of
+  Ask => k 7
+
+main : Int
+main = runPure (handleReader Cnt1 Int (\a => a) opH prog)

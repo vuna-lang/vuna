@@ -1,0 +1,41 @@
+module Base.EffChannel (Channel, newChannelInt, recv, recvWait, send, tryRecv) where
+
+-- Base.EffChannel：W9 的 cooperative channel（单线程；忙等 yield）。
+-- 这是最小 Channel：send 入队；recvWait 用 yield 轮询直到有值（无阻塞原语）。
+-- 单实例/无界；生产者在父纤程 yield 时由调度器运行。
+import Base.Eff
+import Base.EffSched
+import Base.IO
+import Base.IORef
+import Base.List
+import Base.Maybe
+import Base.Ord
+import Base.Result
+
+data Channel a : Type where
+  MkChannel : {a : Type} -> IORef (List a) -> Channel a
+
+emptyInts : List Int
+emptyInts = drop 1 [0]
+
+newChannelInt : Eff RNil (Channel Int)
+newChannelInt = bindEff (liftIOEff (newRef emptyInts)) (\r => pureEff (MkChannel r))
+
+send : {a : Type} -> Channel a -> a -> Eff RNil Int
+send (MkChannel r) x = liftIOEff (modifyRef r (\xs => append xs [x]))
+
+tryRecv : {a : Type} -> Channel a -> Eff RNil (Maybe a)
+tryRecv (MkChannel r) = bindEff (liftIOEff (readRef r)) (\xs => case xs of
+  [] => pureEff Nothing
+  x :: rest => bindEff (liftIOEff (writeRef r rest)) (\_ => pureEff (Just x))
+)
+
+recvWait : {a : Type} -> Int -> Channel a -> Eff RNil (Result a)
+recvWait fuel c = if fuel <= 0 then pureEff (Err "channel: timeout")
+else bindEff (tryRecv c) (\m => case m of
+  Just x => pureEff (Ok x)
+  Nothing => bindEff yieldNow (\_ => recvWait (fuel - 1) c)
+)
+
+recv : {a : Type} -> Channel a -> Eff RNil (Result a)
+recv c = recvWait 64 c

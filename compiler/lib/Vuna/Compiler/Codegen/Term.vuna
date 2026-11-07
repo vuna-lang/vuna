@@ -94,7 +94,91 @@ ${dtPrimRuntime}"""
 -- `prim_readBytes` 是**函数**（`Int -> String`）：最多读 n 字节、有数据就立即返回
 -- （可能少于 n），EOF 返回 `""`——LSP 的帧循环靠它精确读 Content-Length 字节。
 dtPrimRuntime : String
-dtPrimRuntime = """let dtp_print s = print_string s; flush stdout; String.length s
+dtPrimRuntime = ("""type _ Effect.t += Perform : string * int * Obj.t -> Obj.t Effect.t
+
+(* W7：bracket 的 abort cleanup 登记表（每纤程一份，LIFO）。
+   `prim_effectHandle` 在安装 handler 时记下当前深度 mark；handler 正常返回 /
+   抛异常 / 丢弃续延（abort）时，把 mark 之上仍未弹出的 cleanup 逐个执行——这些
+   正是被丢弃的续延里打开的 bracket。纤程用 `dtp_cleanup_fiber` 区分（调度器在
+   运行某个任务时设置它）；非调度器上下文（-1）有一份独立栈。
+   注意：cleanup 在 handler 退出点执行，只能访问**外层** handler（当前 handler
+   的效应在该点不可用）；执行期异常被吞掉，避免污染 abort 结果。 *)
+let dtp_cleanup_fiber = ref (-1)
+let dtp_cleanup_stacks : (int, (unit -> unit) list ref) Hashtbl.t = Hashtbl.create 8
+let dtp_cleanup_stack_of (fid : int) =
+  match Hashtbl.find_opt dtp_cleanup_stacks fid with
+  | Some r -> r
+  | None ->
+    let r = ref [] in
+    Hashtbl.replace dtp_cleanup_stacks fid r;
+    r
+let dtp_cleanup_current () = dtp_cleanup_stack_of !dtp_cleanup_fiber
+let dtp_cleanup_mark () = List.length !(dtp_cleanup_current ())
+let dtp_cleanup_push (f : int -> int) : int =
+  let r = dtp_cleanup_current () in
+  r := (fun () -> ignore (f 0)) :: !r;
+  0
+let dtp_cleanup_pop (_ : int) : int =
+  let r = dtp_cleanup_current () in
+  (match !r with _ :: rest -> r := rest | [] -> ());
+  0
+let dtp_cleanup_run_to (mark : int) =
+  let r = dtp_cleanup_current () in
+  let rec go fuel =
+    if fuel <= 0 then ()
+    else if List.length !r <= mark then ()
+    else match !r with
+      | [] -> ()
+      | f :: rest -> r := rest; (try f () with _ -> ()); go (fuel - 1)
+  in
+  go 256
+let dtp_cleanup_run_all_for (fid : int) =
+  let r = dtp_cleanup_stack_of fid in
+  let rec go fuel =
+    if fuel <= 0 then ()
+    else match !r with
+      | [] -> ()
+      | f :: rest -> r := rest; (try f () with _ -> ()); go (fuel - 1)
+  in
+  go 256
+let dtp_cleanup_forget (fid : int) = Hashtbl.remove dtp_cleanup_stacks fid
+let dtp_cleanup_reset () =
+  Hashtbl.reset dtp_cleanup_stacks;
+  dtp_cleanup_fiber := -1
+
+(* handler 的运行时壳：与旧内联实现等价，但 handler 退出时清掉其 extent 内残留的
+   bracket cleanup（abort = 续延被丢弃，库层 finally 不会再跑）。 *)
+let dtp_effect_handle key name ret h th =
+  fun u ->
+    let mark = dtp_cleanup_mark () in
+    let run_cleanups () = dtp_cleanup_run_to mark in
+    (* 外层 Obj.magic 与旧内联实现一致：effc 的 continue 返回 Obj.t，去掉它会让
+       handler 的 answer 类型被钉成 Obj.t。 *)
+    Obj.magic
+      (match Effect.Deep.match_with (fun () -> (Obj.magic th) u) ()
+        { retc = (fun x -> (Obj.magic ret) x);
+          exnc = (fun e -> raise e);
+          effc = (fun (type a) (eff : a Effect.t) -> match eff with
+            | Perform (k, n, payload) when k = key && n = name ->
+              Some (fun (cont : (a, Obj.t) Effect.Deep.continuation) ->
+                (Obj.magic h) payload (fun v -> Effect.Deep.continue cont (Obj.repr v)))
+            | _ -> None) }
+      with
+      | r -> run_cleanups (); r
+      | exception e -> run_cleanups (); raise e)
+let dtp_print s = print_string s; flush stdout; String.length s
+let dtp_async_tbl : (int, unit -> Obj.t) Hashtbl.t = Hashtbl.create 16
+let dtp_async_next = ref 0
+let dtp_async_fork th =
+  let id = !dtp_async_next in
+  incr dtp_async_next;
+  let d = Domain.spawn (fun () -> th 0) in
+  Hashtbl.replace dtp_async_tbl id (fun () -> Obj.repr (Domain.join d));
+  id
+let dtp_async_await (h : int) : Obj.t =
+  match Hashtbl.find_opt dtp_async_tbl h with
+  | Some join -> join ()
+  | None -> failwith \"async: invalid task handle\"
 let dtp_readFile path =
   try
     let ch = open_in_bin path in
@@ -143,6 +227,9 @@ let dtp_fileMtime path =
 let dtp_fileSize path =
   try (Unix.stat path).Unix.st_size with _ -> 0
 let dtp_timeUs () = int_of_float (Unix.gettimeofday () *. 1000000.0)
+let dtp_sleep us =
+  (if us > 0 then Unix.sleepf (float_of_int us /. 1000000.0));
+  0
 let dtp_getenv k = try Sys.getenv k with Not_found -> \"\"
 let dtp_getcwd () = try Sys.getcwd () with _ -> \".\"
 let dtp_execPath () = try Unix.readlink \"/proc/self/exe\" with _ -> Sys.executable_name
@@ -257,6 +344,469 @@ let dtp_net_connect (addr : string) : int =
     (try Unix.connect s (Unix.ADDR_INET (Unix.inet_addr_of_string host, port)); dtp_net_put s
      with e -> (try Unix.close s with _ -> ()); dtp_net_error \"connect\" e)
 """
+) ++ dtSchedRuntime
+
+-- W9：单线程协作式 fiber 调度器（Layer 3）运行时。
+-- 纤程 = OCaml 5 一次性续延；调度器在纤程外的循环里决定下一步跑谁，
+-- 挂起经私有运行时效应（SchedYield/SchedAwait/SchedWaitScope*）。任务体是
+-- `Eff RNil a`；Base.EffSched 经隐藏 intrinsic 调用 dtp_sched_* 原语。
+dtSchedRuntime : String
+dtSchedRuntime = """(* ------------------------------------------------------------------ *)
+(* W9: single-threaded cooperative fiber scheduler (Layer 3).          *)
+(*                                                                     *)
+(* Fibers are one-shot OCaml 5 continuations captured by the root      *)
+(* Effect.Deep handler installed for every fiber. The scheduler loop   *)
+(* outside the fibers decides what runs next; suspension is requested  *)
+(* through private runtime effects (SchedYield/SchedAwait/WaitScope).  *)
+(* Tasks are `Eff RNil a` thunks: their user effects are handled       *)
+(* inside the fiber, and only the scheduler primitives cross fibers.   *)
+(* ------------------------------------------------------------------ *)
+
+type _ Effect.t +=
+  | SchedYield : int Effect.t
+  | SchedAwait : int -> int Effect.t
+  | SchedWaitScope : int -> int Effect.t
+  | SchedWaitScopeTimeout : int * int -> int Effect.t
+
+type dtp_sched_step =
+  | SchedStepYield of Obj.t
+  | SchedStepAwait of int * Obj.t
+  | SchedStepScope of int * Obj.t
+  | SchedStepScopeTimeout of int * int * Obj.t
+  | SchedStepDone of Obj.t
+  | SchedStepFailed of exn * Printexc.raw_backtrace
+
+type dtp_sched_wait = SchedWaitNone | SchedWaitTask of int | SchedWaitScope of int | SchedWaitTimed
+
+type dtp_sched_state =
+  | SchedQueued of Obj.t
+  | SchedRunning
+  | SchedSuspended
+  | SchedDone of Obj.t
+  | SchedFailed of exn * Printexc.raw_backtrace
+  | SchedCancelled
+
+type dtp_sched_task = {
+  sched_tid : int;
+  mutable sched_state : dtp_sched_state;
+  mutable sched_start : (unit -> Obj.t) option;
+  mutable sched_cont : Obj.t option;
+  sched_scope : int;
+  mutable sched_wait : dtp_sched_wait;
+  mutable sched_waiters : int list;
+  mutable sched_cancel : bool;
+  mutable sched_grace : int;
+}
+
+type dtp_sched_scope = {
+  sched_sid : int;
+  mutable sched_tasks : int list;
+  mutable sched_failed : string option;
+  mutable sched_waiters : int list;
+  mutable sched_timeout : bool;
+  mutable sched_completed : int;
+}
+
+let dtp_sched_tasks : (int, dtp_sched_task) Hashtbl.t = Hashtbl.create 64
+let dtp_sched_scopes : (int, dtp_sched_scope) Hashtbl.t = Hashtbl.create 16
+let dtp_sched_ready : int Queue.t = Queue.create ()
+let dtp_sched_next_task = ref 0
+let dtp_sched_next_scope = ref 0
+let dtp_sched_timeouts : (int * int * int) list ref = ref []
+let dtp_sched_main_tid = ref 0
+let dtp_sched_current = ref (-1)
+let dtp_sched_main_result : Obj.t option ref = ref None
+let dtp_sched_main_exn : (exn * Printexc.raw_backtrace) option ref = ref None
+let dtp_sched_grace_steps = 64
+
+let dtp_sched_reset () =
+  Hashtbl.reset dtp_sched_tasks;
+  Hashtbl.reset dtp_sched_scopes;
+  dtp_cleanup_reset ();
+  Queue.clear dtp_sched_ready;
+  dtp_sched_next_task := 0;
+  dtp_sched_next_scope := 0;
+  dtp_sched_timeouts := [];
+  dtp_sched_main_tid := 0;
+  dtp_sched_current := -1;
+  dtp_sched_main_result := None;
+  dtp_sched_main_exn := None
+
+let dtp_sched_task id =
+  match Hashtbl.find_opt dtp_sched_tasks id with
+  | Some t -> t
+  | None -> failwith \"scheduler: invalid task handle\"
+
+let dtp_sched_scope id =
+  match Hashtbl.find_opt dtp_sched_scopes id with
+  | Some s -> s
+  | None -> failwith \"scheduler: invalid scope handle\"
+
+let dtp_sched_exn_msg e =
+  match e with
+  | Effect.Unhandled (Perform (key, name, _)) ->
+    Printf.sprintf \"unhandled effect %s (instance %d)\" key name
+  | Failure m -> m
+  | _ -> Printexc.to_string e
+
+let dtp_sched_task_status t =
+  if t.sched_cancel then 1
+  else match t.sched_state with
+    | SchedDone _ -> 0
+    | SchedFailed _ -> 2
+    | SchedCancelled -> 1
+    | _ -> 0
+
+let dtp_sched_enqueue t v =
+  t.sched_state <- SchedQueued v;
+  Queue.push t.sched_tid dtp_sched_ready
+
+let dtp_sched_wake_scope s =
+  if s.sched_tasks = [] && s.sched_waiters <> [] then begin
+    let status =
+      if s.sched_timeout then 2
+      else if s.sched_failed <> None then 1
+      else 0
+    in
+    let ws = s.sched_waiters in
+    s.sched_waiters <- [];
+    dtp_sched_timeouts := List.filter (fun (w, _, _) -> not (List.mem w ws)) !dtp_sched_timeouts;
+    List.iter (fun wid ->
+      let w = dtp_sched_task wid in
+      w.sched_wait <- SchedWaitNone;
+      dtp_sched_enqueue w (Obj.repr status)) ws
+  end
+
+let dtp_sched_finish t st =
+  t.sched_state <- st;
+  t.sched_wait <- SchedWaitNone;
+  let ws = t.sched_waiters in
+  t.sched_waiters <- [];
+  let status = dtp_sched_task_status t in
+  List.iter (fun wid ->
+    let w = dtp_sched_task wid in
+    w.sched_wait <- SchedWaitNone;
+    dtp_sched_enqueue w (Obj.repr status)) ws;
+  if t.sched_tid = !dtp_sched_main_tid then begin
+    match st with
+    | SchedDone v -> dtp_sched_main_result := Some v
+    | SchedFailed (e, bt) -> dtp_sched_main_exn := Some (e, bt)
+    | _ -> ()
+  end;
+  match Hashtbl.find_opt dtp_sched_scopes t.sched_scope with
+  | Some s ->
+    s.sched_tasks <- List.filter (fun x -> x <> t.sched_tid) s.sched_tasks;
+    s.sched_completed <- s.sched_completed + 1;
+    dtp_sched_wake_scope s
+  | None -> ()
+
+let dtp_sched_remove_waiter t =
+  match t.sched_wait with
+  | SchedWaitTask id ->
+    let tg = dtp_sched_task id in
+    tg.sched_waiters <- List.filter (fun x -> x <> t.sched_tid) tg.sched_waiters
+  | SchedWaitScope id ->
+    let s = dtp_sched_scope id in
+    s.sched_waiters <- List.filter (fun x -> x <> t.sched_tid) s.sched_waiters
+  | SchedWaitTimed | SchedWaitNone -> ()
+
+let dtp_sched_cancel_task t =
+  let terminal = match t.sched_state with
+    | SchedDone _ | SchedFailed _ | SchedCancelled -> true
+    | _ -> false
+  in
+  if t.sched_cancel || terminal then ()
+  else begin
+    t.sched_cancel <- true;
+    match t.sched_state with
+    | SchedQueued _ -> if t.sched_start <> None then dtp_sched_finish t SchedCancelled
+      else t.sched_state <- SchedQueued (Obj.repr 1)
+    | SchedSuspended ->
+      let code = match t.sched_wait with
+        | SchedWaitTask _ -> 1
+        | SchedWaitScope _ | SchedWaitTimed -> 3
+        | SchedWaitNone -> 1
+      in
+      dtp_sched_remove_waiter t;
+      dtp_sched_timeouts := List.filter (fun (w, _, _) -> w <> t.sched_tid) !dtp_sched_timeouts;
+      dtp_sched_enqueue t (Obj.repr code)
+    | _ -> ()
+  end
+
+let dtp_sched_cancel_scope_tasks sid =
+  let s = dtp_sched_scope sid in
+  List.iter (fun id -> dtp_sched_cancel_task (dtp_sched_task id)) s.sched_tasks
+
+let dtp_sched_effc (type a) (eff : a Effect.t)
+  : ((a, Obj.t) Effect.Deep.continuation -> Obj.t) option =
+  match eff with
+  | SchedYield -> Some (fun k -> Obj.repr (SchedStepYield (Obj.repr k)))
+  | SchedAwait id -> Some (fun k -> Obj.repr (SchedStepAwait (id, Obj.repr k)))
+  | SchedWaitScope id -> Some (fun k -> Obj.repr (SchedStepScope (id, Obj.repr k)))
+  | SchedWaitScopeTimeout (n, id) ->
+    Some (fun k -> Obj.repr (SchedStepScopeTimeout (n, id, Obj.repr k)))
+  | _ -> None
+
+let dtp_sched_run_fresh t =
+  let start = match t.sched_start with
+    | Some f -> f
+    | None -> failwith \"scheduler: no start thunk\" in
+  t.sched_start <- None;
+  let r = Effect.Deep.match_with
+      (fun () -> start ())
+      ()
+      { retc = (fun x -> Obj.repr (SchedStepDone x));
+        exnc = (fun e -> Obj.repr (SchedStepFailed (e, Printexc.get_raw_backtrace ())));
+        effc = dtp_sched_effc } in
+  (Obj.obj r : dtp_sched_step)
+
+let dtp_sched_run_resume t v =
+  let k = match t.sched_cont with
+    | Some rep -> (Obj.magic rep : (Obj.t, Obj.t) Effect.Deep.continuation)
+    | None -> failwith \"scheduler: no continuation\" in
+  let r = Effect.Deep.continue k v in
+  (Obj.obj r : dtp_sched_step)
+
+let dtp_sched_new_task scope start =
+  let id = !dtp_sched_next_task in
+  dtp_sched_next_task := id + 1;
+  let t = {
+    sched_tid = id;
+    sched_state = SchedQueued (Obj.repr 0);
+    sched_start = Some start;
+    sched_cont = None;
+    sched_scope = scope;
+    sched_wait = SchedWaitNone;
+    sched_waiters = [];
+    sched_cancel = false;
+    sched_grace = dtp_sched_grace_steps;
+  } in
+  Hashtbl.replace dtp_sched_tasks id t;
+  (match Hashtbl.find_opt dtp_sched_scopes scope with
+   | Some s -> s.sched_tasks <- id :: s.sched_tasks
+   | None -> ());
+  Queue.push id dtp_sched_ready;
+  t
+
+let dtp_sched_new_scope () =
+  let id = !dtp_sched_next_scope in
+  dtp_sched_next_scope := id + 1;
+  Hashtbl.replace dtp_sched_scopes id {
+    sched_sid = id;
+    sched_tasks = [];
+    sched_failed = None;
+    sched_waiters = [];
+    sched_timeout = false;
+    sched_completed = 0;
+  };
+  id
+
+let dtp_sched_step t =
+  if t.sched_cancel then t.sched_grace <- t.sched_grace - 1;
+  if t.sched_cancel && t.sched_grace <= 0 then begin
+    (* 硬中止：续延被丢弃，bracket 的库层 finally 不会跑；尽力执行未弹出的
+       cleanup（它们只能做无效应/自包含的清理：挂起点之外没有 handler 栈）。 *)
+    dtp_cleanup_run_all_for t.sched_tid;
+    dtp_cleanup_forget t.sched_tid;
+    dtp_sched_finish t SchedCancelled;
+    None
+  end
+  else Some (match t.sched_start with
+    | Some _ -> dtp_sched_run_fresh t
+    | None -> match t.sched_state with
+      | SchedQueued v -> t.sched_state <- SchedRunning; dtp_sched_run_resume t v
+      | _ -> failwith \"scheduler: bad task state\")
+
+let dtp_sched_apply t (st : dtp_sched_step) =
+  match st with
+  | SchedStepYield krep ->
+    t.sched_cont <- Some krep;
+    t.sched_wait <- SchedWaitNone;
+    dtp_sched_enqueue t (Obj.repr (if t.sched_cancel then 1 else 0))
+  | SchedStepAwait (id, krep) ->
+    t.sched_cont <- Some krep;
+    t.sched_wait <- SchedWaitTask id;
+    t.sched_state <- SchedSuspended;
+    let tg = dtp_sched_task id in
+    tg.sched_waiters <- t.sched_tid :: tg.sched_waiters
+  | SchedStepScope (id, krep) ->
+    t.sched_cont <- Some krep;
+    t.sched_wait <- SchedWaitScope id;
+    t.sched_state <- SchedSuspended;
+    let s = dtp_sched_scope id in
+    s.sched_waiters <- t.sched_tid :: s.sched_waiters
+  | SchedStepScopeTimeout (n, id, krep) ->
+    t.sched_cont <- Some krep;
+    t.sched_wait <- SchedWaitTimed;
+    t.sched_state <- SchedSuspended;
+    let s = dtp_sched_scope id in
+    s.sched_waiters <- t.sched_tid :: s.sched_waiters;
+    (* n 是「开始等待之后」的调度步预算：武装这次等待的那一步不算。 *)
+    dtp_sched_timeouts := (t.sched_tid, id, n + 1) :: !dtp_sched_timeouts
+  | SchedStepDone v ->
+    (* 正常结束：bracket 已自行弹出；残留（异常边角）也一并清掉。 *)
+    dtp_cleanup_run_all_for t.sched_tid;
+    dtp_cleanup_forget t.sched_tid;
+    dtp_sched_finish t (if t.sched_cancel then SchedCancelled else SchedDone v)
+  | SchedStepFailed (e, bt) ->
+    (* 异常穿过纤程根 handler：被丢弃的续延里的 bracket cleanup 在这里兜底。 *)
+    dtp_cleanup_run_all_for t.sched_tid;
+    dtp_cleanup_forget t.sched_tid;
+    if t.sched_tid = !dtp_sched_main_tid then dtp_sched_finish t (SchedFailed (e, bt))
+    else begin
+      let s = dtp_sched_scope t.sched_scope in
+      if s.sched_failed = None then s.sched_failed <- Some (dtp_sched_exn_msg e);
+      dtp_sched_finish t (SchedFailed (e, bt));
+      dtp_sched_cancel_scope_tasks t.sched_scope
+    end
+
+let dtp_sched_tick () =
+  let expired = ref [] in
+  dtp_sched_timeouts := List.map (fun (w, sc, n) -> (w, sc, n - 1)) !dtp_sched_timeouts;
+  dtp_sched_timeouts := List.filter (fun (w, sc, n) ->
+    if n > 0 then true else (expired := (w, sc) :: !expired; false)) !dtp_sched_timeouts;
+  List.iter (fun (_, sc) ->
+    let s = dtp_sched_scope sc in
+    if not s.sched_timeout then begin
+      s.sched_timeout <- true;
+      dtp_sched_cancel_scope_tasks sc
+    end) !expired
+
+let dtp_sched_runnable t =
+  match t.sched_state with SchedQueued _ -> true | _ -> false
+
+let dtp_sched_run_one t =
+  if dtp_sched_runnable t then begin
+    dtp_sched_current := t.sched_tid;
+    dtp_cleanup_fiber := t.sched_tid;
+    (match dtp_sched_step t with
+     | Some st -> dtp_sched_apply t st
+     | None -> ());
+    dtp_cleanup_fiber := -1;
+    dtp_sched_current := -1
+  end
+
+let dtp_sched_deadlock () = failwith \"scheduler: deadlock (no runnable task)\"
+
+let dtp_sched_loop () =
+  let rec loop () =
+    if !dtp_sched_main_result <> None || !dtp_sched_main_exn <> None then ()
+    else if Queue.is_empty dtp_sched_ready then dtp_sched_deadlock ()
+    else begin
+      let tid = Queue.pop dtp_sched_ready in
+      dtp_sched_run_one (dtp_sched_task tid);
+      dtp_sched_tick ();
+      loop ()
+    end
+  in loop ()
+
+let dtp_sched_drain () =
+  let rec loop () =
+    if Queue.is_empty dtp_sched_ready then ()
+    else begin
+      let tid = Queue.pop dtp_sched_ready in
+      dtp_sched_run_one (dtp_sched_task tid);
+      loop ()
+    end
+  in loop ()
+
+let dtp_sched_cancel_leftovers () =
+  Hashtbl.iter (fun _ t -> match t.sched_state with
+    | SchedDone _ | SchedFailed _ | SchedCancelled -> ()
+    | _ -> dtp_sched_cancel_task t) dtp_sched_tasks
+
+let dtp_sched_main (th : unit -> 'a) : 'a =
+  dtp_sched_reset ();
+  ignore (dtp_sched_new_scope ());
+  let main = dtp_sched_new_task 0 (fun () -> Obj.repr (th ())) in
+  dtp_sched_main_tid := main.sched_tid;
+  (try dtp_sched_loop ()
+   with e -> dtp_sched_cancel_leftovers (); dtp_sched_drain (); raise e);
+  dtp_sched_cancel_leftovers ();
+  dtp_sched_drain ();
+  match !dtp_sched_main_exn with
+  | Some (e, bt) -> Printexc.raise_with_backtrace e bt
+  | None -> match !dtp_sched_main_result with
+    | Some v -> (Obj.obj v : 'a)
+    | None -> failwith \"scheduler: main did not finish\"
+
+(* scheduler primitives exposed to Base.EffSched through hidden intrinsics *)
+
+let dtp_sched_fork (scope : int) (f : int -> 'a) : int =
+  (dtp_sched_new_task scope (fun () -> Obj.repr (f 0))).sched_tid
+
+let dtp_sched_current_task () =
+  if !dtp_sched_current < 0 then failwith \"scheduler: no current fiber\"
+  else dtp_sched_task !dtp_sched_current
+
+let dtp_sched_yield () : int = Effect.perform SchedYield
+
+let dtp_sched_is_cancelled () : int =
+  match Hashtbl.find_opt dtp_sched_tasks !dtp_sched_current with
+  | Some t -> if t.sched_cancel then 1 else 0
+  | None -> 0
+
+let dtp_sched_await (id : int) : int =
+  let self = dtp_sched_current_task () in
+  if self.sched_cancel then begin ignore (Effect.perform SchedYield); 1 end
+  else begin
+    let target = dtp_sched_task id in
+    match target.sched_state with
+    | SchedDone _ | SchedFailed _ | SchedCancelled -> dtp_sched_task_status target
+    | _ -> Effect.perform (SchedAwait id)
+  end
+
+let dtp_sched_task_result (id : int) : 'a =
+  match (dtp_sched_task id).sched_state with
+  | SchedDone v -> Obj.obj v
+  | _ -> failwith \"scheduler: task has no result\"
+
+let dtp_sched_task_error (id : int) : string =
+  match (dtp_sched_task id).sched_state with
+  | SchedFailed (e, _) -> dtp_sched_exn_msg e
+  | _ -> \"\"
+
+let dtp_sched_cancel_task_prim (id : int) : int =
+  dtp_sched_cancel_task (dtp_sched_task id);
+  0
+
+let dtp_sched_cancel_scope (id : int) : int =
+  dtp_sched_cancel_scope_tasks id;
+  0
+
+let dtp_sched_scope_status (s : dtp_sched_scope) : int =
+  if s.sched_timeout then 2
+  else if s.sched_failed <> None then 1
+  else 0
+
+let dtp_sched_scope_wait (id : int) : int =
+  let s = dtp_sched_scope id in
+  let self = dtp_sched_current_task () in
+  if self.sched_cancel then begin ignore (Effect.perform SchedYield); 3 end
+  else if s.sched_tasks = [] then dtp_sched_scope_status s
+  else Effect.perform (SchedWaitScope id)
+
+let dtp_sched_scope_wait_timeout (steps : int) (id : int) : int =
+  let s = dtp_sched_scope id in
+  let self = dtp_sched_current_task () in
+  if self.sched_cancel then begin ignore (Effect.perform SchedYield); 3 end
+  else if s.sched_tasks = [] then dtp_sched_scope_status s
+  else if steps <= 0 then begin
+    s.sched_timeout <- true;
+    dtp_sched_cancel_scope_tasks id;
+    Effect.perform (SchedWaitScope id)
+  end else
+    Effect.perform (SchedWaitScopeTimeout (steps, id))
+
+let dtp_sched_scope_error (id : int) : string =
+  let s = dtp_sched_scope id in
+  match s.sched_failed with
+  | Some msg -> msg
+  | None -> \"\"
+
+let dtp_sched_scope_count (id : int) : int =
+  (dtp_sched_scope id).sched_completed
+"""
 
 -- M38：运行时错误报告器。位置表的键是 OCaml 值名（如 `v_main`）；回栈帧名形如
 -- `Main.v_main`（跨单元调用）或 `Main.v_main.(fun)`（lambda 内联后）。报告器取帧名
@@ -278,7 +828,7 @@ let dt_frame_label slot =
        | Some (display, loc) -> Some (display ^ \" (\" ^ loc ^ \")\")
        | None -> None)
 let dt_report_exn e bt =
-  let msg = match e with Failure m -> m | _ -> Printexc.to_string e in
+  let msg = match e with Effect.Unhandled (Perform (key, name, _)) -> Printf.sprintf \"unhandled effect %s (instance %d)\" key name | Failure m -> m | _ -> Printexc.to_string e in
   Printf.eprintf \"vuna: runtime error: %s\\n%!\" msg;
   match Printexc.backtrace_slots bt with
   | None -> ()
@@ -1263,8 +1813,10 @@ genDtHook bodyText table tyTerm mainExpr printResult = andThen (mainShow table t
 )
 
 -- `main : IO a` 的执行：IO = 裸 thunk，直接对世界令牌 0 应用（无构造子 / 无跨单元依赖）。
+-- W9：main 动作作为纤程 0 交给调度器（`dtp_sched_main`）：这样 main 里的
+-- `yieldNow`/`awaitTask` 也能挂起；没有任务的普通程序只是多一层 match_with。
 ioRunText : QualCtx -> Pair (List DtData) (List DtDef) -> String -> Pair String String
-ioRunText qc program mainRef = Pair "${mainRef} 0" ""
+ioRunText qc program mainRef = Pair "dtp_sched_main (fun () -> ${mainRef} 0)" ""
 
 genTerm : GenSt -> List (Pair String Rig) -> Term -> Result (Pair String GenSt)
 genTerm a1 a2 a3 = genTermFuel 512 a1 a2 a3

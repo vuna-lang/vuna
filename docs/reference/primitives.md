@@ -135,6 +135,7 @@
 | `strConcatMany` | `List String -> String` | 一次性拼接（OCaml `String.concat ""`） |
 | `strSubstTemplate` | `String -> List String -> String` | `<N>` 占位符按序号替换；非数字 `<`、越界序号原样保留（`Base.Vec.substTemplate`） |
 | `timeUs` | `IO Int` | 微秒时间戳（`Unix.gettimeofday`）；效果原语，能力 `clock` |
+| `prim_sleep` | `Int -> IO Int` | 阻塞睡眠 n 微秒（runtime `dtp_sleep` = `Unix.sleepf`；n <= 0 立即返回 0）；效果原语，能力 `clock`；interp 不归约 |
 
 `strHash` 的 interp 实现（`Core.Eval.strHashOf`）与 runtime `dtp_strHash` 是同一公式。
 
@@ -197,10 +198,20 @@
 | `prim_pureIO` | `{a : Type} -> a -> IO a` | 构造动作 |
 | `prim_bindIO` | `{a b : Type} -> IO a -> (a -> IO b) -> IO b` | 串行绑定 |
 | `prim_runIO` | `{a : Type} -> IO a -> a` | main 外唯一执行入口；能力 `unsafe` |
+| `prim_effectPerform` | `{a b : Type} -> String -> Int -> a -> b` | 运行时 effect perform（OCaml 5 `Effect.perform`）；能力 `unsafe`，仅 `Base.Eff` 包装使用 |
+| `prim_effectHandle` | `{u a b ret h : Type} -> String -> Int -> ret -> h -> (u -> a) -> (u -> b)` | 安装一次性 handler（`Effect.Deep.match_with`；按 key/name 过滤；退出时执行该 handler extent 内残留的 bracket cleanup）；能力 `unsafe` |
+| `prim_cleanupPush` / `prim_cleanupPop` | `(Int -> Int) -> Int` / `Int -> Int` | W7：bracket cleanup 栈登记/弹出（`dtp_cleanup_*`）；能力 `unsafe`，仅 `Base.Eff.bracket` 使用 |
+| `prim_asyncFork` / `prim_asyncAwait` | `{a : Type} -> (Int -> a) -> IO Int` / `{a : Type} -> Int -> a` | L3：OCaml 5 `Domain` fork/await（`Base.EffAsync`）；main 域、一次性 |
 
 `Base.IO` 把 `runIO` / `print` / … 暴露为别名，并提供 `Functor` / `Monad IO` 实例；
 `IO` 类型本身恒可见（不需要 import）。它不导出 `bindIO` / `pureIO` / `fmapIO` 这样的名字：
 动作组合统一走 `Functor` / `Monad` 实例（`fmap` / `bind` / `pure`、`>>=`、`do`）。
+W10 起它还暴露标签化效应 handler 需要的别名：`eprint`、`getEnv` / `getCwd` / `execPath`
+（env）、`nowMicros`（= `timeUs`）与 `sleepMicros`。W10 收尾新增了原生睡眠原语
+`prim_sleep : Int -> IO Int`（微秒；`Unix.sleepf`；能力 `clock`），`Base.EffClock`
+的真实 handler 已直接使用它。`Base.IO.sleepMicros` 仍是 `nowMicros` 忙等：`Base.IO`
+在 seed 闭包内，旧 seed 不认识新内建，切换需先 seed rotation（边界见
+[effects.md](effects.md) §8.6、debt D43）。
 
 **效果原语类型**：全部效果原语返回 `IO` 动作，而不是「立刻算完的值」：`prim_print : String -> IO Int`、
 `prim_readFile : String -> IO String`、`prim_readLine : IO String`、
@@ -210,7 +221,7 @@
 `prim_getcwd` / `prim_execPath : IO String`、`prim_exit : Int -> IO Int`（执行即退出、不返回）、
 `prim_runIn : String -> List String -> IO Int`、`prim_spawn : List String -> IO Int`、
 `prim_wait : Int -> IO Int`、`prim_readBytes : Int -> IO String`、
-`timeUs : IO Int`。零参原语因此是**真正的值**（动作值）：引用不执行、也不重新求值。
+`prim_sleep : Int -> IO Int`（阻塞 us 微秒）、`timeUs : IO Int`。零参原语因此是**真正的值**（动作值）：引用不执行、也不重新求值。
 
 纯 `main` 直接调用效果原语是类型错误（`TC_TypeMismatch`）：效果只能出现在 `IO` 动作里。
 
@@ -261,9 +272,9 @@ M35.3 新增 `net` 能力与 7 条 socket 原语（工具链 server 与测试用
 | `fs` | `prim_readFile`、`prim_writeFile`、`prim_writeFileAtomic`、`prim_readDir`、`prim_isDirectory`、`prim_makeDir`、`prim_removeFile`、`prim_fileExists`、`prim_fileMtime`、`prim_fileSize` |
 | `process` | `prim_getArgs`、`prim_exit`、`prim_runIn`、`prim_spawn`、`prim_wait` |
 | `env` | `prim_getenv`、`prim_getcwd`、`prim_execPath` |
-| `clock` | `timeUs` |
+| `clock` | `timeUs`、`prim_sleep` |
 | `net` | `prim_netListen`、`prim_netPort`、`prim_netAccept`、`prim_netRecv`、`prim_netSend`、`prim_netClose`、`prim_netConnect` |
-| `unsafe` | `prim_runIO`（= `Base.IO.runIO`：在 main 之外执行 IO 动作） |
+| `unsafe` | `prim_runIO`（= `Base.IO.runIO`：在 main 之外执行 IO 动作）；`prim_effectPerform` / `prim_effectHandle` / `prim_cleanupPush` / `prim_cleanupPop`（运行时续延与 bracket cleanup，仅 Base.Eff） |
 
 - 声明面：manifest `[capabilities] effects = ["console", "fs", ...]`，按**包**声明
   （`Frontend.Manifest.manifestCapabilities`）；无 manifest 的 ad-hoc 文件没有能力。
@@ -276,8 +287,9 @@ M35.3 新增 `net` 能力与 7 条 socket 原语（工具链 server 与测试用
   （`Loader.Resolve.checkEffectsBuiltins`）。
 - **这是权限声明，不是检查豁免**：能力不改变类型检查、擦除或 codegen 语义，只决定能否在
   源码里直接引用效果原语 / `runIO`；没有按包名字符串判定的 allowlist。
-- `Base.IO` 自身声明 `["console", "fs", "process"]`（只做别名，不调用 `runIO`）；`base` 另声明
-  `unsafe`（`Base.IO.runIO` 的别名定义与 `Base.ST.runST` 的 `runIO` 使用点，见
+- `base` 包声明 `["console", "fs", "process", "env", "clock", "unsafe"]`（`Base.IO` 的
+  别名定义需要 console/fs/process；W10 的 `Base.EffEnv` / `Base.EffClock` 需要 env/clock；
+  `unsafe` 来自 `Base.IO.runIO` 的别名定义与 `Base.ST.runST` 的 `runIO` 使用点，见
   [effects.md](effects.md)）；产品 CLI（根包）声明全部七个能力（含 `unsafe` 与 `net`），编译器包声明六个（不含 `net`）——编译器自身不使用网络。
 
 ## 8. 生成 runtime 的契约
@@ -285,6 +297,7 @@ M35.3 新增 `net` 能力与 7 条 socket 原语（工具链 server 与测试用
 产物固定包含一个 `Vuna_runtime.ml`（`Codegen.Term.dtRuntime`），**无条件**内嵌 Unix：
 
 - `Unix.stat`（`prim_fileMtime` / `prim_fileSize`）、`Unix.gettimeofday`（`timeUs`）、
+  `Unix.sleepf`（`prim_sleep`）、
   `Unix.readlink "/proc/self/exe"`（`prim_execPath`）；`build.sh` 无条件
   `-I +unix ... unix.cmxa`。因此任何产物都依赖 OCaml 的 unix 库。
 - 启动时设置 GC（`minor_heap_size` 16MB、`space_overhead` 200）。
@@ -307,6 +320,7 @@ M35.3 新增 `net` 能力与 7 条 socket 原语（工具链 server 与测试用
 | `prim_execPath` | 先读 `/proc/self/exe`（**Linux 假设**），失败回落 `Sys.executable_name` |
 | `prim_getArgs` | 排除 `argv[0]` 的其余参数 |
 | `prim_exit` | 立即退出进程（原语类型 `Int -> IO Int`，执行即退出、**不返回**） |
+| `prim_sleep` | 阻塞 `Unix.sleepf (us / 1000000)`；`us <= 0` 立即返回 `0`（真实睡眠，非忙等） |
 | `prim_runIn` | 在给定目录执行 `sh` 命令并返回退出码，执行后恢复原 cwd |
 | `prim_spawn` | 异步启动子进程（argv 列表，继承 stdin/stdout/stderr），返回 pid |
 | `prim_wait` | 等待子进程并返回退出码（signal/stopped 归 1） |

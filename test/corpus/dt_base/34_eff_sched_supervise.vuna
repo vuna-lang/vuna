@@ -1,0 +1,37 @@
+-- W9：结构化监督——子任务失败时同范围其余任务被取消（在挂起点清理），
+-- 失败消息经 awaitTask 的 Err 返回；body 返回 Err 后 withScope 先取消再等干净。
+import Base.Eff
+import Base.EffSched
+import Base.IO
+import Base.Result
+
+bad : Eff RNil Int
+bad = bindEff yieldNow (\_ => sendCore Int "boom" 0 0)
+
+work : List Int -> Eff RNil Int
+work [] = pureEff 0
+work (_ :: rest) =
+  bindEff (liftIOEff (println "tick"))
+    (\_ => bindEff yieldNow (\st => if st <= 0 then work rest else bindEff (liftIOEff (println "sibling-cleanup")) (\_ => pureEff 9)))
+
+prog : Eff RNil (Result Int)
+prog = withScope (\sc => bindEff (forkTask sc bad) (\tb => bindEff (forkTask sc (work [0, 0, 0])) (\tg => bindEff yieldNow (\_ => bindEff (awaitTask tb) (\rb => case rb of
+  Ok _ => pureEff (Ok 0)
+  Err e => bindEff (liftIOEff (println e)) (\_ => bindEff (scopeWait sc) (\_ => bindEff (awaitTask tg) (\rw => case rw of
+    Ok _ => pureEff (Err e)
+    Err e2 => bindEff (liftIOEff (println e2)) (\_ => pureEff (Err e))
+  )
+  )
+  )
+)
+)
+)
+)
+)
+
+main : IO Int
+main = do
+  r <- runIOEff prog
+  case r of
+    Ok n => pure n
+    Err _ => pure 2

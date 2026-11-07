@@ -1,0 +1,32 @@
+-- W9：单线程协作式 fiber 调度器（Layer 3）。
+-- fork/await 顺序：fork 只入队；父纤程 yield/await 时子任务才跑，轮转顺序确定。
+-- 结构化作用域：withScope 在 body 结束后等所有子任务结束，Ok 带回完成数汇总。
+import Base.Eff
+import Base.EffSched
+import Base.IO
+import Base.Result
+
+work : String -> String -> Int -> Eff RNil Int
+work first second n =
+  bindEff (liftIOEff (println first))
+    (\_ => bindEff yieldNow (\_ => bindEff (liftIOEff (println second)) (\_ => pureEff n)))
+
+prog : Eff RNil (Result Int)
+prog = withScope (\sc => bindEff (forkTask sc (work "a1" "a2" 10)) (\ta => bindEff (forkTask sc (work "b1" "b2" 20)) (\tb => bindEff (liftIOEff (println "forked")) (\_ => bindEff (awaitTask tb) (\rb => case rb of
+  Ok b => bindEff (awaitTask ta) (\ra => case ra of
+    Ok a => pureEff (Ok (a + b))
+    Err e => pureEff (Err e)
+  )
+  Err e => pureEff (Err e)
+)
+)
+)
+)
+)
+
+main : IO Int
+main = do
+  r <- runIOEff prog
+  case r of
+    Ok n => pure n
+    Err _ => pure 0

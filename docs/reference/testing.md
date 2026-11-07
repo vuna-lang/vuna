@@ -120,7 +120,8 @@ nix run .#vuna-run-tests [-- --list | --only 34 | --only dt | --vuna stable]
 `<base>.vuna.nointerp` 标记跳过 interp 对拍，只做 `compile` + 运行，用于效果程序
 （`main : IO a`）与核心求值器不可归约的夹具（`strUnpack` / `strPack` / `strConcatMany` /
 `strSubstTemplate`；这些内建的 interp 不归约是显式分类）。当前 `.nointerp` 包括 `dt/34`、
-`dt/35`、`dt/56`、`dt_base/01`–`03`/`06`/`10`、`run/10`/`16`/`17`、`stdlib/03`/`07`/`09`/`10`。
+`dt/35`、`dt/56`、`dt_base/01`–`03`/`06`/`09`/`10`、`dt_base/16`–`18`、`dt_base/20`–`38`
+（效果、W9 调度器、W10 标签与收尾）、`run/10`/`16`/`17`、`stdlib/03`/`07`/`09`/`10`。
 第 43 段对每个标记夹具跑一次 `interp`，断言**非 0（明确拒绝：效果不可执行或不归约为
 值）**；`.nocompile` 死标记已从 runner 删除。负例 `.err` 是稳定诊断子串，interp / compile
 文案不同时用 `.cerr`。

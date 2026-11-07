@@ -480,6 +480,29 @@ inferArgsFuel fuel globals ctx ec ty args sp =
   if fuel <= 0 then Err "DT: internal: inference fuel exhausted"
   else inferArgsGo 64 globals ctx ec ty args sp
 
+-- 行语法糖：`[Fetch, Log]` 在期望类型为 `Row` 时按 `RCons`/`RNil` 展开。
+-- parser 仍把 `[...]` 降级成列表字面量（Loader 解析成 Base.List.Cons/Nil）；
+-- 这里在**类型检查到 Row 参数**时识别该形状，避免另加 AST/parser 上下文。
+isRowTypeValue : Ec -> Value -> Bool
+isRowTypeValue ec v = case forceVal ec v of
+  VNeutral (NGlobal "Base.Eff.Row" []) => True
+  _ => False
+
+rowListElems : Expr -> Maybe (List Expr)
+rowListElems (EVar "Base.List.Nil" _) = Just []
+rowListElems (EVar "Nil" _) = Just []
+rowListElems (EApp (EVar "Base.List.Cons" _) ([h, t]) _) = case rowListElems t of
+  Just rest => Just (h :: rest)
+  Nothing => Nothing
+rowListElems (EApp (EVar "Cons" _) ([h, t]) _) = case rowListElems t of
+  Just rest => Just (h :: rest)
+  Nothing => Nothing
+rowListElems _ = Nothing
+
+rowExprFromElems : List Expr -> Span -> Expr
+rowExprFromElems [] sp = EVar "Base.Eff.RNil" sp
+rowExprFromElems (e :: rest) sp = EApp (EVar "Base.Eff.RCons" sp) [e, rowExprFromElems rest sp] sp
+
 inferArgsGo : Int -> List (Pair String Term) -> Ctx -> Ec -> Value -> List Expr -> Span -> Result (Pair (List (Pair Term Rig)) (Pair Value Ec))
 inferArgsGo fuel globals ctx ec ty args sp = if fuel <= 0 then Err "DT: internal: inference fuel exhausted"
 else
@@ -500,6 +523,23 @@ else
         else if isRigidDictArg ec0 (forceVal ec0 dom) then deferDictBinderFuel (fuel - 1) globals ctx ec0 dom clo args sp
         else Err e
     )
+    else if isMemberDomain ec dom then case memberLookup 64 (ctxDepth ctx) ec dom of
+      MemberFound proof ec1 => andThen (inferArgsGo (fuel - 1) globals ctx ec1 (applyClosure clo proof) args sp) (\p => case p of
+        Pair argTerms (Pair resTy ec2) =>
+          Ok (Pair (Pair (quote (ctxDepth ctx) proof) Rig0 :: argTerms) (Pair resTy ec2))
+      )
+      MemberAbsent => tcErr1 sp (NoInstanceFound "row membership") "row membership"
+      MemberStuck =>
+        let
+          m = ecNext ec
+        in case newMeta ctx ec of
+          Pair metaTerm ec1 =>
+            let
+              ec2 = ecAddDictGoal ec1 (DtDictGoal m dom)
+            in andThen (inferArgsGo (fuel - 1) globals ctx ec2 (applyClosure clo (eval (ctxEnv ctx) metaTerm)) args sp) (\p => case p of
+              Pair argTerms (Pair resTy ec3) =>
+                Ok (Pair (Pair metaTerm Rig0 :: argTerms) (Pair resTy ec3))
+            )
     else if isImplicitDomain ctx ec dom then case newMeta ctx ec of
       Pair metaTerm ec1 => andThen (inferArgsGo (fuel - 1) globals ctx ec1 (applyClosure clo (eval (ctxEnv ctx) metaTerm)) args sp) (\p => case p of
         Pair argTerms (Pair resTy ec2) =>
@@ -508,7 +548,20 @@ else
     else tcErr0 sp ImplicitParamKind
     else case args of
       [] => Ok (Pair [] (Pair forced ec))
-      a :: rest => andThen (rigForLinearDomain ec sp name rig dom) (\argRig => andThen (checkEFuel (fuel - 1) globals ctx ec a dom) (\p => case p of
+      a :: rest => andThen (rigForLinearDomain ec sp name rig dom) (\argRig => if isRowTypeValue ec (forceVal ec dom) then case rowListElems a of
+        Just elems => andThen (checkEFuel (fuel - 1) globals ctx ec (rowExprFromElems elems (exprSpan a)) dom) (\p => case p of
+          Pair aTerm ec1 => andThen (inferArgsGo (fuel - 1) globals ctx ec1 (applyClosure clo (evalCtx ctx aTerm)) rest sp) (\q => case q of
+            Pair argTerms (Pair resTy ec2) =>
+              Ok (Pair (Pair aTerm argRig :: argTerms) (Pair resTy ec2))
+          )
+        )
+        Nothing => andThen (checkEFuel (fuel - 1) globals ctx ec a dom) (\p => case p of
+          Pair aTerm ec1 => andThen (inferArgsGo (fuel - 1) globals ctx ec1 (applyClosure clo (evalCtx ctx aTerm)) rest sp) (\q => case q of
+            Pair argTerms (Pair resTy ec2) =>
+              Ok (Pair (Pair aTerm argRig :: argTerms) (Pair resTy ec2))
+          )
+        )
+      else andThen (checkEFuel (fuel - 1) globals ctx ec a dom) (\p => case p of
         Pair aTerm ec1 => andThen (inferArgsGo (fuel - 1) globals ctx ec1 (applyClosure clo (evalCtx ctx aTerm)) rest sp) (\q => case q of
           Pair argTerms (Pair resTy ec2) =>
             Ok (Pair (Pair aTerm argRig :: argTerms) (Pair resTy ec2))
@@ -679,6 +732,14 @@ else Ok Nothing
 
 checkEFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Expr -> Value -> Result (Pair Term Ec)
 checkEFuel fuel globals ctx ec expr expected = if fuel <= 0 then Err "DT: internal: inference fuel exhausted"
+else if isRowTypeValue ec (forceVal ec expected) then case rowListElems expr of
+  Just elems =>
+    checkEFuel (fuel - 1) globals ctx ec (rowExprFromElems elems (exprSpan expr)) expected
+  Nothing => checkEFuelNoRow fuel globals ctx ec expr expected
+else checkEFuelNoRow fuel globals ctx ec expr expected
+
+checkEFuelNoRow : Int -> List (Pair String Term) -> Ctx -> Ec -> Expr -> Value -> Result (Pair Term Ec)
+checkEFuelNoRow fuel globals ctx ec expr expected = if fuel <= 0 then Err "DT: internal: inference fuel exhausted"
 else case expr of
   EVar name sp => if isHoleName name then
     let
@@ -906,9 +967,14 @@ else
         Pair inner ec1 =>
           let
             inner2 = if isOpaqueRuntimeTyIn ec1 ctx dom then wrapOpaqueUses [0] inner else inner
-          in if ctxHasLinear ec ctx then if termHasOuterLinear ec ctx2 inner then tcErr1 sp (LinearCaptureEscapes name) name
-          else Ok (Pair (TLam name lamRig inner2) ec1)
-          else Ok (Pair (TLam name lamRig inner2) ec1)
+            -- W7：捕获线性值的 λ 不在这里直接拒绝——标记 binder 名，由 `Elab.Usage`
+            -- 检查它是否落在「立即按 quantity 1 消费」的位置；不落则报
+            -- TC_LinearCaptureEscapes（诊断码不变）。
+            binderName =
+              if ctxHasLinear ec ctx then if termHasOuterLinear ec ctx2 inner then linClosureName sp (ctxDepth ctx) name
+              else name
+              else name
+          in Ok (Pair (TLam binderName lamRig inner2) ec1)
       )
       )
     _ => tcErr0 sp LambdaTooManyParams
