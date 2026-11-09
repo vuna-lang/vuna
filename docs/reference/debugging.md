@@ -1,7 +1,7 @@
 # 调试与运行时错误报告（M38）
 
 本文覆盖**开发/调试回路**的三层支持：编译期诊断的源码片段、运行期未捕获异常的报告、
-纯代码里的 `Base.Debug` 工具，以及配套命令（`vuna run` / `vuna test --verbose` /
+语言级调试构造（`dbg` / `dbgShow` / `assert` / `todo`，见 §3），以及配套命令（`vuna run` / `vuna test --verbose` /
 REPL `:type`）。语言语义见 [language.md](language.md)，诊断错误码与 CLI 退出码见
 [tooling.md](tooling.md)，lint 规则边界见 [lint.md](lint.md)。
 
@@ -41,13 +41,13 @@ vuna: runtime error: division by zero
   at main (app/Main.vuna:2)
 ```
 
-- 消息：`Failure m` 解包成 `m`（所以 `prim_fail` / `Base.Debug.assert` 的文案直接可见），
+- 消息：`Failure m` 解包成 `m`（所以 `prim_fail` / `assert` / `todo` 的文案直接可见），
   其它异常用 `Printexc.to_string`。
 - 帧：`Printexc.Slot.name` → 生成代码里的 mangled 值名（如 `v_main`）→ 查
   `Vuna_runtime.dt_def_locs` 表（编译器生成，条目 = `vuna 定义名 + 相对路径:行`）；
   最多打印 12 条命中帧，未命中帧（如 `Stdlib.failwith`）跳过。
 - 位置是**定义级**（span 起点行），不是表达式级；路径归一成模块根/包目录下的相对路径
-  （`Base/Debug.vuna:30`、`app/Main.vuna:2`），保证同一输入的产物与 seed rotation 可复现。
+  （`Base/Show.vuna:42`、`app/Main.vuna:2`），保证同一输入的产物与 seed rotation 可复现。
 - 纯 `main`（零参值绑定）在**模块初始化期**求值，早于 main 钩子：`Main.ml` 第一行
   开启回栈、并给入口 main 的绑定套同一个报告器；`main : IO a` 的 thunk 在钩子的
   `try` 内执行。
@@ -58,49 +58,60 @@ vuna: runtime error: division by zero
 会归到调用者帧；非入口单元顶层初始化的异常不在覆盖范围；没有表达式级 span / 局部
 变量值 / 断点（无 DAP，真调试器不在本阶段）。
 
-## 3. `Base.Debug`：纯代码里的 trace / assert
+## 3. 语言级调试构造：`dbg` / `dbgShow` / `assert` / `todo`
 
-显式 `import Base.Debug` 才可见（不进 `Prelude`，也不进 `Base` 门面）：
+这些名字是**编译器内建的调试构造**（不是库函数；不需要 import，不需要能力位，
+也不进 `[trust]`）：
 
 | 名字 | 签名 | 行为 |
 | --- | --- | --- |
-| `trace` | `String -> a -> a` | 把 `msg` + 换行写 stderr 后返回原值 |
-| `traceShow` | `Show a => a -> a` | `show` 后写 stderr，返回原值 |
-| `assert` | `Bool -> String -> a -> a` | 失败时 `prim_fail "assertion failed: <msg>"` |
-| `todo` | `String -> a` | `prim_fail "TODO: <msg>"` |
+| `dbg` | `String -> a -> a` | 求值期把 `msg` + 换行写 stderr 后返回第二个实参（debug / release 都可用） |
+| `dbgShow` | `DebugShow a => a -> a` | 用 `debugShow`（默认由 `show` 派生）打印后返回原值 |
+| `assert` | `Bool -> String -> a -> a` | `True` 返回第三个实参；`False` 以 `assertion failed: <msg>` abort（debug-only） |
+| `todo` | `String -> a` | 以 `TODO: <msg>` abort（debug-only 占位） |
+
+`DebugShow` 在 `Base.Show` 里声明，并有一个 blanket instance `Show a => DebugShow a`，
+所以**所有 `Show` 实例自动获得 `dbgShow`**；需要不同调试格式的类型可另写实例。
 
 ```console
 $ cat app/Main.vuna
-import Base.Debug
-
 main : Int
-main = trace "starting" (traceShow 42)
+main = dbg "starting" (dbgShow 42)
 $ ./.output/bin/demo
 42                     # stdout：main 钩子打印的返回值
-starting               # stderr：trace
-42                     # stderr：traceShow
+starting               # stderr：dbg
+42                     # stderr：dbgShow
 ```
 
-`trace` / `traceShow` 用 base 的 `runIO`（既有内部信任点）执行 `prim_eprint`，是**调试
-专用**的纯度逃逸：不要在生产逻辑里依赖它（登记在 debt.md D34）。`assert` / `todo`
-失败经 `prim_fail` 抛 `Failure`，走第 2 节的报告路径：
+**release 构建**（`--release` 或 `VUNA_RELEASE=1`）拒绝 `assert` / `todo`：
+
+```console
+$ vuna check --release app/Main.vuna
+error: app/Main.vuna:4:8: [TC_DebugConstructInRelease] `assert` is only available in
+debug builds; remove it before a release build (--release)
+```
+
+`dbg` / `dbgShow` 是显式的调试输出，release 构建仍可用（调试输出不是程序语义的一部分）。
+`assert` / `todo` 失败经内建的 `failwith` 抛 `Failure`，走第 2 节报告路径；内建本身没有
+源码位置，帧只显示调用点：
 
 ```console
 $ ./.output/bin/demo
 vuna: runtime error: assertion failed: broken invariant
-  at Base.Debug.assert (Base/Debug.vuna:30)
   at main (app/Main.vuna:4)
 ```
 
 ## 4. 相关原语
 
-`Vuna.Compiler.Intrinsics` 新增两条（真源仍在 Intrinsics，语义见
+`Vuna.Compiler.Intrinsics` 的调试/诊断内建（真源在 Intrinsics，语义见
 [primitives.md](primitives.md) §7）：
 
+- `dbg` / `assert` / `todo`：§3 的语言级调试构造（无能力位；`assert` / `todo` 由
+  `Loader.Resolve` 在 release 构建拒绝）；
 - `prim_eprint : String -> IO Int`（能力 `console`）：写 stderr 并 flush；
 - `prim_fail : String -> a`（无能力）：抛 `Failure <msg>`，可被报告器渲染。
 
-普通程序请经 `Base.Debug` 使用；需要直接调用原语时按 `[capabilities].effects` 声明能力。
+普通程序用 §3 的构造即可；需要直接调用原语时按 `[capabilities].effects` 声明能力。
 
 ## 5. 调试回路里的命令
 

@@ -50,7 +50,7 @@ import Vuna.Compiler.Driver.Split
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Loader
 import Vuna.Compiler.Version
-import Base.IO
+import Base.IO.Host
 
 -- 包级 check：可执行包检查 app/Main.vuna；库包检查 [export].modules。
 -- M34.5：结果走磁盘缓存（key = 闭包源哈希 + 依赖哈希 + manifest + 版本）。
@@ -114,21 +114,21 @@ compileToDir ctx entry printResult outDir =
         Just clean =>
           let
             _ = note "cache-own-clean=${length clean}"
-          in andThen (dtSplitProjectIncremental ctx entry printResult ifaces clean)
+          in Vuna.Compiler.Common.bind (dtSplitProjectIncremental ctx entry printResult ifaces clean)
             (\p => finishBuild ctx outDir path (firstOf p) (secondOf p))
         Nothing =>
-          andThen (dtSplitProjectWithIfaces ctx entry printResult ifaces)
+          Vuna.Compiler.Common.bind (dtSplitProjectWithIfaces ctx entry printResult ifaces)
             (\p => finishBuild ctx outDir path (firstOf p) (secondOf p))
       Nothing =>
-        andThen (dtSplitProjectParts ctx entry printResult)
+        Vuna.Compiler.Common.bind (dtSplitProjectParts ctx entry printResult)
           (\p => finishBuild ctx outDir path (firstOf p) (secondOf p))
 
 -- 写产物 + 写 split 缓存 + 影子写模块接口（构建成功同样要产出接口，否则只 build 的工程
 -- 永远无法给下游提供接口）。
 finishBuild : PackageContext -> String -> String -> List SplitFile -> CheckedPackage -> Result Int
-finishBuild ctx outDir cachePath files checked = andThen (writeCompiled ctx outDir files) (\n => let
+finishBuild ctx outDir cachePath files checked = Vuna.Compiler.Common.bind (writeCompiled ctx outDir files) (\n => let
   _ = writeSplitCache ctx cachePath files
-in andThen (writeIfaceShadow ctx checked) (\_ => Ok n)
+in Vuna.Compiler.Common.bind (writeIfaceShadow ctx checked) (\_ => Ok n)
 )
 
 -- 把（缓存的或新生成的）split 文件写入 outDir 并写 build.sh。
@@ -137,7 +137,7 @@ writeCompiled ctx outDir files =
   let
     _ = ensureDirPath outDir
     _ = stamp "write-compiled-start"
-  in andThen (writeSplitFilesIfChanged outDir files) (\n => let
+  in Vuna.Compiler.Common.bind (writeSplitFilesIfChanged outDir files) (\n => let
     _ = stamp "write-split-files-done"
     graph = splitGraph (canonicalTopo files)
     _ = stamp "split-graph-done"
@@ -168,7 +168,7 @@ copyFfiFiles ctxDir outDir =
 -- loadPackage + compileToDir：给定包目录的代码生成（seed rotation / 测试用）。
 buildSplit : String -> String -> Result Int
 buildSplit dir outDir =
-  andThen (loadPackage dir)
+  Vuna.Compiler.Common.bind (loadPackage dir)
     (\pkg => compileToDir (packageContext pkg) (packageEntry pkg) True outDir)
 
 -- ---------------------------------------------------------------
@@ -815,7 +815,7 @@ toolCleanGo builtSec depTbl (m :: rest) cleanRev =
 -- manifest，保留其他条目）。语义与整包 ifaceOfPackage 一致（见 `Iface.ifaceOfModule`）；
 -- 有缺口/其他脏模块时返回 Err，调用方静默跳过（不影响诊断）。
 toolWriteModuleIface : PackageContext -> ToolContext -> List ModuleIface -> CheckedPackage -> String -> SourceInfo -> Result ModuleIface
-toolWriteModuleIface ctx tool clean checked name si = andThen (ifaceOfModule (contextPackageName ctx) si tool.tcDepHashes checked.checkedInherited clean checked.checkedModules checked.checkedEntryDecls checked.checkedProgram name) (\mi => let
+toolWriteModuleIface ctx tool clean checked name si = Vuna.Compiler.Common.bind (ifaceOfModule (contextPackageName ctx) si tool.tcDepHashes checked.checkedInherited clean checked.checkedModules checked.checkedEntryDecls checked.checkedProgram name) (\mi => let
   _ = writeModuleIfaceGuarded ctx mi
 in Ok mi
 )
@@ -840,7 +840,7 @@ toolWriteModuleIfaceCold : PackageContext -> CheckedPackage -> String -> SourceI
 toolWriteModuleIfaceCold ctx checked name si =
   let
     clean = cleanIfacesOrEmpty ctx
-  in andThen (ifaceOfModule (contextPackageName ctx) si (depIfaceHashTable ctx) checked.checkedInherited clean checked.checkedModules checked.checkedEntryDecls checked.checkedProgram name) (\mi => let
+  in Vuna.Compiler.Common.bind (ifaceOfModule (contextPackageName ctx) si (depIfaceHashTable ctx) checked.checkedInherited clean checked.checkedModules checked.checkedEntryDecls checked.checkedProgram name) (\mi => let
     _ = writeModuleIfaceGuarded ctx mi
   in Ok mi
   )
@@ -1126,12 +1126,12 @@ sameIfaceHashes (m :: rest) ys = case ifaceHashOfName ys (miNameOf m) of
 -- 写过缓存：检查成功才写；缓存内容对依赖方是接口摘要（读方校验），对本包是「同哈希跳过」标记
 -- （命中直接 Ok，不用重读内容——key 已含源哈希与编译器指纹）。
 checkAndCache : PackageContext -> String -> Result (Pair (List String) CheckedPackage) -> Result (List String)
-checkAndCache ctx path checked = andThen checked (\r => let
+checkAndCache ctx path checked = Vuna.Compiler.Common.bind checked (\r => let
   _ = ensureDirPath (checkCacheDir ctx)
   _ =
     runIO
       (prim_writeFileAtomic path (frameEncode checkCacheTag (prim_marshal (cachedOfProgram (secondOf r).checkedProgram))))
-in andThen (writeIfaceShadow ctx (secondOf r)) (\_ => Ok (firstOf r))
+in Vuna.Compiler.Common.bind (writeIfaceShadow ctx (secondOf r)) (\_ => Ok (firstOf r))
 )
 
 checkCachedLib : PackageContext -> List String -> Result (List String)

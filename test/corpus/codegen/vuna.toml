@@ -6,6 +6,7 @@
 # List 结构递归、Int 相等、IO/do、prim_* 的 IO 包装与跨模块 split；详见各模块头注释。
 [package]
 name = "codegen-fixture"
+privileged = true
 
 [export]
 modules = ["Core", "Fancy", "Effects"]

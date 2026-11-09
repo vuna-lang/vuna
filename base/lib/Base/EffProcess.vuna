@@ -9,6 +9,7 @@ module Base.EffProcess
   , processExit
   , processRunIn
   , resProcess
+  , runProcess
   ) where
 
 -- Base.EffProcess：一阶进程效应（W10 IO 标签迁移）。
@@ -25,7 +26,7 @@ module Base.EffProcess
 -- 程序继续执行）。mock handler（`handleProcess`）本来就能观察 `Exit`。
 -- 夹具 dt_base/38（mock + observed 两条路径；真实退出路径不触发，避免测试进程退出）。
 import Base.Eff
-import Base.IO
+import Base.IO.Host
 import Base.Monad
 import Base.List
 
@@ -88,3 +89,7 @@ handleProcessIO n comp = handleProcessIOWith n (\c => exit c) comp
 -- | 观察路径 handler：`Exit c` 不退出，把退出码作为操作结果交还给程序，程序继续执行。
 handleProcessIOObserved : {a : Type} -> {r : Row} -> (n : String) -> Eff (Base.Eff.Cons (Process n) r) a -> Eff r (IO a)
 handleProcessIOObserved n comp = handleProcessIOWith n (\c => pure c) comp
+
+-- | 单效应便捷入口（P3）：`handleProcessIO n` + `runIOAnswer` 的组合。
+runProcess : {a : Type} -> (n : String) -> Eff [Process n] a -> IO a
+runProcess n comp = runIOAnswer (handleProcessIO n comp)

@@ -18,13 +18,14 @@ import Vuna.Compiler.Driver.Compile
 import Vuna.Compiler.Driver.DiagRender
 import Vuna.Compiler.Driver.Dt
 import Vuna.Compiler.Version
-import Base.IO
+import Base.IO.Host
 
 compilerUsageLines : String -> String
-compilerUsageLines prog = """  ${prog} compile [--no-print] (<entry.vuna> | <package-dir>) <out-dir>
-  ${prog} check (<entry.vuna> | <package-dir>)
-  ${prog} build [--no-compile] [--out DIR] [--package NAME] [DIR]
+compilerUsageLines prog = """  ${prog} compile [--no-print] [--release] (<entry.vuna> | <package-dir>) <out-dir>
+  ${prog} check [--release] (<entry.vuna> | <package-dir>)
+  ${prog} build [--release] [--no-compile] [--out DIR] [--package NAME] [DIR]
   --no-print                    compile 生成的程序不打印 main 结果（默认打印）
+  --release                     release 构建：拒绝 assert / todo 等 debug 专用构造
   ${prog} version, --version          显示版本
   ${prog} help, -h
 """
@@ -148,7 +149,7 @@ executablePackage label dir =
 
 executablePackageAt : String -> String -> Result Package
 executablePackageAt label dir =
-  andThen (loadPackage dir)
+  Vuna.Compiler.Common.bind (loadPackage dir)
     (\pkg => if runIO (prim_fileExists (packageEntry pkg)) then Ok pkg else Err "${label}: library package ${packageName pkg} has no app/Main.vuna (executable package required)")
 
 -- ---------------------------------------------------------------
@@ -162,6 +163,7 @@ compileParse : String -> Bool -> Maybe String -> Maybe String -> List String -> 
 compileParse prog printResult entry outDir args = case args of
   [] => compileFinish prog printResult entry outDir
   "--no-print" :: rest => compileParse prog False entry outDir rest
+  "--release" :: rest => compileParse prog printResult entry outDir rest
   arg :: rest => if startsWith "-" arg then removedFlag prog arg
   else case entry of
     Nothing => compileParse prog printResult (Just arg) outDir rest
@@ -200,6 +202,7 @@ compilePkgDir printResult dir outDir = case executablePackage "compile" dir of
 -- ---------------------------------------------------------------
 checkArgs : String -> List String -> Int
 checkArgs prog [] = usageErr prog
+checkArgs prog ("--release" :: rest) = checkArgs prog rest
 checkArgs prog (arg :: rest) = if startsWith "-" arg then removedFlag prog arg
 else case rest of
   [] => checkEmit arg
@@ -278,6 +281,7 @@ buildParse : String -> Bool -> Maybe String -> Maybe String -> Maybe String -> L
 buildParse prog noCompile out dir pkg args = case args of
   [] => buildRun noCompile (defaultDir dir) out pkg
   "--no-compile" :: rest => buildParse prog True out dir pkg rest
+  "--release" :: rest => buildParse prog noCompile out dir pkg rest
   "--out" :: rest => case rest of
     outDir :: more => if startsWith "-" outDir then removedFlag prog outDir
     else case out of

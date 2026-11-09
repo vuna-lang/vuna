@@ -3,7 +3,7 @@
 -- 取消结果由 awaitTask 的 Err "cancelled" 观察。
 import Base.Eff
 import Base.EffSched
-import Base.IO
+import Base.IO.Host
 import Base.Result
 
 spin : List Int -> Eff [] Int

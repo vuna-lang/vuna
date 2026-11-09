@@ -1,14 +1,17 @@
 import Vuna.Hello
 import Dep
-import Base.IO
+import Base.Eff
+import Base.EffConsole
 
--- DT 的 build 会先执行 IO 效果、再打印 main 的返回值；do 块末用 `exit 0` 结束，
--- 让 golden 只含业务输出（不依赖「是否打印返回值」这一 CLI 细节）。
+-- P2c：宿主 console 走 Eff（runConsole）；main 返回 0，golden 含尾随 0。
 -- C35/M37：`tag` 让产物 Main.ml 引用依赖单元的构造子（跨单元全限定断言）。
 tag : DepTag
 tag = DepTagA
 
+prog : Eff [Console "real"] Int
+prog = do
+  _ <- consolePrint "real" (hello ++ "/" ++ depText)
+  pure 0
+
 main : IO Int
-main = do
-  _ <- print (hello ++ "/" ++ depText)
-  exit 0
+main = runConsole "real" prog

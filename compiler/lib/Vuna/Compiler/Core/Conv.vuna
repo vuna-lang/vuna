@@ -92,7 +92,7 @@ else case a of
     VType j => if levelEq i j then Ok sols else mismatchAt depth a b
     _ => mismatchAt depth a b
   VPi name implicit rig dom cod => case b of
-    VPi name2 implicit2 rig2 dom2 cod2 => if implicit == implicit2 then andThen (convFuel (fuel - 1) defs sols depth dom dom2) (\sols2 => let
+    VPi name2 implicit2 rig2 dom2 cod2 => if implicit == implicit2 then Vuna.Compiler.Common.bind (convFuel (fuel - 1) defs sols depth dom dom2) (\sols2 => let
       v = freshVar name depth
     in convFuel (fuel - 1) defs sols2 (depth + 1) (applyClosure cod v) (applyClosure cod2 v)
     )
@@ -131,18 +131,18 @@ else case a of
         _ =
           if debugOn then note "vapp: ${showValue a} <> ${showValue b} | x=${showValue x} x2=${showValue x2}"
           else 0
-      in andThen (convFuel (fuel - 1) defs sols depth f f2)
+      in Vuna.Compiler.Common.bind (convFuel (fuel - 1) defs sols depth f f2)
         (\sols2 => convFuel (fuel - 1) defs sols2 depth x x2)
     _ => mismatchAt depth a b
   VCase scrut alts => case b of
     VCase scrut2 alts2 =>
-      andThen (convFuel (fuel - 1) defs sols depth scrut scrut2)
+      Vuna.Compiler.Common.bind (convFuel (fuel - 1) defs sols depth scrut scrut2)
         (\sols2 => convCaseAltsFuel (fuel - 1) defs sols2 depth alts alts2)
     _ => mismatchAt depth a b
   VIf c th el => case b of
     VIf c2 th2 el2 =>
-      andThen (convFuel (fuel - 1) defs sols depth c c2)
-        (\sols2 => andThen (convFuel (fuel - 1) defs sols2 depth th th2) (\sols3 => convFuel (fuel - 1) defs sols3 depth el el2))
+      Vuna.Compiler.Common.bind (convFuel (fuel - 1) defs sols depth c c2)
+        (\sols2 => Vuna.Compiler.Common.bind (convFuel (fuel - 1) defs sols2 depth th th2) (\sols3 => convFuel (fuel - 1) defs sols3 depth el el2))
     _ => mismatchAt depth a b
   _ => mismatchAt depth a b
 
@@ -179,7 +179,7 @@ convSpinesFuel fuel defs sols depth [] [] v1 v2 =
   if fuel <= 0 then Err "DT: internal: conv fuel exhausted" else Ok sols
 convSpinesFuel fuel defs sols depth (a :: xs) (b :: ys) v1 v2 =
   if fuel <= 0 then Err "DT: internal: conv fuel exhausted"
-  else andThen (convFuel (fuel - 1) defs sols depth a b)
+  else Vuna.Compiler.Common.bind (convFuel (fuel - 1) defs sols depth a b)
     (\sols2 => convSpinesFuel (fuel - 1) defs sols2 depth xs ys v1 v2)
 convSpinesFuel fuel defs sols depth _ _ v1 v2 =
   if fuel <= 0 then Err "DT: internal: conv fuel exhausted" else mismatchAt depth v1 v2
@@ -189,7 +189,7 @@ convValueListsFuel fuel defs sols depth [] [] =
   if fuel <= 0 then Err "DT: internal: conv fuel exhausted" else Ok sols
 convValueListsFuel fuel defs sols depth (a :: xs) (b :: ys) =
   if fuel <= 0 then Err "DT: internal: conv fuel exhausted"
-  else andThen (convFuel (fuel - 1) defs sols depth a b)
+  else Vuna.Compiler.Common.bind (convFuel (fuel - 1) defs sols depth a b)
     (\sols2 => convValueListsFuel (fuel - 1) defs sols2 depth xs ys)
 convValueListsFuel fuel defs sols depth _ _ =
   if fuel <= 0 then Err "DT: internal: conv fuel exhausted" else tcErr0NoLoc TypeMismatchCtorArity
@@ -400,7 +400,7 @@ else case rhs of
     Just t => convFuel (fuel - 1) defs sols depth (applySpine (VMeta m sp) []) (applySpine t sp2)
     Nothing =>
       if m == n then convSpinesFuel (fuel - 1) defs sols depth sp sp2 (VMeta m sp) rhs
-      else andThen (solveMetaFuel (fuel - 1) defs sols depth m [] (VMeta n []))
+      else Vuna.Compiler.Common.bind (solveMetaFuel (fuel - 1) defs sols depth m [] (VMeta n []))
         (\sols2 => convSpinesFuel (fuel - 1) defs sols2 depth sp sp2 (VMeta m sp) rhs)
   VNeutral n => case n of
     NGlobal g args =>
@@ -419,7 +419,8 @@ else if length args >= length sp then
     extra = length args - length sp
   in case splitAtVals extra args of
     Pair headArgs tailArgs =>
-      andThen (solveMetaFuel (fuel - 1) defs sols depth m [] (applySpine headVal headArgs))
+      Vuna.Compiler.Common.bind
+        (solveMetaFuel (fuel - 1) defs sols depth m [] (applySpine headVal headArgs))
         (\sols2 => convSpinesFuel (fuel - 1) defs sols2 depth sp tailArgs (VMeta m sp) whole)
 else tcErr1NoLoc (CannotSolveHigherOrder (strFromInt m)) (strFromInt m)
 
@@ -450,7 +451,7 @@ else case solsLookup m sols of
       else case solsLookup n sols of
         Just t => solveMetaFuel (fuel - 1) defs sols depth m sp (applySpine t sp2)
         Nothing =>
-          andThen (solveMetaFuel (fuel - 1) defs sols depth m [] (VMeta n []))
+          Vuna.Compiler.Common.bind (solveMetaFuel (fuel - 1) defs sols depth m [] (VMeta n []))
             (\sols2 => convSpinesFuel (fuel - 1) defs sols2 depth sp sp2 (VMeta m sp) rhs)
       _ => solveMetaPattern (fuel - 1) defs sols depth m sp rhs
 

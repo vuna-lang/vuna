@@ -2,6 +2,7 @@
 # 定义级信任检查不启用。
 [package]
 name = "trust-non-strict"
+privileged = true
 
 [export]
 modules = ["TrustLib"]

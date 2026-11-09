@@ -17,8 +17,8 @@ m38_run_out_args=$("$VUNA" run corpus/packages/11_run_args --no-build --out "$m3
 check_eq "m38 run --out args passthrough" "alpha" "$m38_run_out_args"
 m38_run_exit="$tmp/m38-run-exit"
 mkdir -p "$m38_run_exit/app"
-printf '[package]\nname = "m38-run-exit"\n\n[dependencies]\nvuna-base = "%s"\n' "$VUNA_BASE" >"$m38_run_exit/vuna.toml"
-printf 'import Base.IO\n\nmain : IO Int\nmain = exit 7\n' >"$m38_run_exit/app/Main.vuna"
+printf '[package]\nname = "m38-run-exit"\nprivileged = true\n\n[dependencies]\nvuna-base = "%s"\n' "$VUNA_BASE" >"$m38_run_exit/vuna.toml"
+printf 'import Base.IO.Host\n\nmain : IO Int\nmain = exit 7\n' >"$m38_run_exit/app/Main.vuna"
 if "$VUNA" build "$m38_run_exit" >"$tmp/m38-run-exit-build.log" 2>&1; then
   "$VUNA" run "$m38_run_exit" --no-build >/dev/null 2>&1
   check_eq "m38 run child exit passthrough" "7" "$?"
@@ -27,7 +27,7 @@ else
 fi
 m38_run_nobin="$tmp/m38-run-nobin"
 mkdir -p "$m38_run_nobin/app"
-printf '[package]\nname = "m38-run-nobin"\n\n[dependencies]\nvuna-base = "%s"\n' "$VUNA_BASE" >"$m38_run_nobin/vuna.toml"
+printf '[package]\nname = "m38-run-nobin"\nprivileged = true\n\n[dependencies]\nvuna-base = "%s"\n' "$VUNA_BASE" >"$m38_run_nobin/vuna.toml"
 printf 'main : Int\nmain = 0\n' >"$m38_run_nobin/app/Main.vuna"
 m38_run_nobin_out=$("$VUNA" run "$m38_run_nobin" --no-build 2>&1)
 m38_run_nobin_code=$?

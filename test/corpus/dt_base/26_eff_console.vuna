@@ -2,7 +2,7 @@
 -- 下各跑一次；mock 收集日志（纯 answer），real 走 Base.IO.print/eprint。
 import Base.Eff
 import Base.EffConsole
-import Base.IO
+import Base.IO.Host
 import Base.Pair
 
 prog : (n : String) -> Eff [Console n] Int

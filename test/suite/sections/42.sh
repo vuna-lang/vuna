@@ -8,7 +8,7 @@ section_begin
 repl_multi=$(printf 'f : Int -> Int\nf x =\n  x + 1\n\nf 41\n:q\n' | "$VUNA" repl 2>&1)
 check_contains "vuna repl multiline def" "$repl_multi" "42"
 # REPL：IO 表达式走临时包编译+运行（效果输出直接到终端）
-repl_io=$(printf 'import Base.IO\nprint "hi"\n:q\n' | "$VUNA" repl 2>&1)
+repl_io=$(printf 'import Base.IO.Host\nprint "hi"\n:q\n' | "$VUNA" repl --privileged 2>&1)
 check_contains "vuna repl io effect" "$repl_io" "hi"
 # REPL：不完整输入 + 空行 → 报错丢弃但继续
 repl_bad=$(printf 'x =\n\n:q\n' | "$VUNA" repl 2>&1)

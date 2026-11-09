@@ -41,13 +41,13 @@ let v_Base_dBool_dbool
 let v_Base_dBool_dnot
 let v_Base_dBool_dor
 let v_Base_dBool_dxor
-let v_Hashable_uBase_dBool_dBool
-let v_Show_uBase_dBool_dBool
+let v_Hashable_uBase_uBool_uBool
+let v_Show_uBase_uBool_uBool
 
 == Base_dEq.ml
 let v_Base_dEq_deq
 let v_Base_dEq_dneq
-let v_Eq_uBase_dBool_dBool
+let v_Eq_uBase_uBool_uBool
 
 == Base_dFoldable.ml
 let v_Base_dFoldable_dfold
@@ -78,33 +78,33 @@ let v_Interp_uString
 let v_Interp_ua
 
 == Base_dList.ml
-let v_Applicative_uBase_dList_dList
+let v_Applicative_uBase_uList_uList
 let v_Base_dList_dconcatMap
 let v_Base_dList_dlength
 let v_Base_dList_drange
 let v_Base_dList_dreverse
 let v_Base_dList_dshowElems
-let v_Foldable_uBase_dList_dList
-let v_Functor_uBase_dList_dList
-let v_Monad_uBase_dList_dList
-let v_Monoid_uBase_dList_dList_ua
-let v_Semigroup_uBase_dList_dList_ua
-let v_Show_uBase_dList_dList_ua
+let v_Foldable_uBase_uList_uList
+let v_Functor_uBase_uList_uList
+let v_Monad_uBase_uList_uList
+let v_Monoid_uBase_uList_uList_ua
+let v_Semigroup_uBase_uList_uList_ua
+let v_Show_uBase_uList_uList_ua
 
 == Base_dMaybe.ml
-let v_Applicative_uBase_dMaybe_dMaybe
+let v_Applicative_uBase_uMaybe_uMaybe
 let v_Base_dMaybe_dfromMaybe
 let v_Base_dMaybe_disJust
 let v_Base_dMaybe_disNothing
 let v_Base_dMaybe_dmaybe
-let v_Foldable_uBase_dMaybe_dMaybe
-let v_Functor_uBase_dMaybe_dMaybe
-let v_Hashable_uBase_dMaybe_dMaybe_ua
-let v_Monad_uBase_dMaybe_dMaybe
-let v_Monoid_uBase_dMaybe_dMaybe_ua
-let v_Semigroup_uBase_dMaybe_dMaybe_ua
-let v_Show_uBase_dMaybe_dMaybe_ua
-let v_Traversable_uBase_dMaybe_dMaybe_uf
+let v_Foldable_uBase_uMaybe_uMaybe
+let v_Functor_uBase_uMaybe_uMaybe
+let v_Hashable_uBase_uMaybe_uMaybe_ua
+let v_Monad_uBase_uMaybe_uMaybe
+let v_Monoid_uBase_uMaybe_uMaybe_ua
+let v_Semigroup_uBase_uMaybe_uMaybe_ua
+let v_Show_uBase_uMaybe_uMaybe_ua
+let v_Traversable_uBase_uMaybe_uMaybe_uf
 
 == Base_dMonad.ml
 let v_Base_dMonad_dbind
@@ -124,12 +124,12 @@ let v_Base_dNat_dmult
 let v_Base_dNat_dplus
 let v_Base_dNat_dpred
 let v_Base_dNat_dtoInt
-let v_Eq_uBase_dNat_dNat
-let v_Hashable_uBase_dNat_dNat
-let v_Monoid_uBase_dNat_dNat
-let v_Ord_uBase_dNat_dNat
-let v_Semigroup_uBase_dNat_dNat
-let v_Show_uBase_dNat_dNat
+let v_Eq_uBase_uNat_uNat
+let v_Hashable_uBase_uNat_uNat
+let v_Monoid_uBase_uNat_uNat
+let v_Ord_uBase_uNat_uNat
+let v_Semigroup_uBase_uNat_uNat
+let v_Show_uBase_uNat_uNat
 
 == Base_dOrd.ml
 let v_Base_dOrd_dcompare
@@ -139,31 +139,34 @@ let v_Base_dOrd_dle
 let v_Base_dOrd_dlt
 let v_Base_dOrd_dmax
 let v_Base_dOrd_dmin
-let v_Hashable_uBase_dOrd_dOrdering
-let v_Ord_uBase_dBool_dBool
-let v_Show_uBase_dOrd_dOrdering
+let v_Hashable_uBase_uOrd_uOrdering
+let v_Ord_uBase_uBool_uBool
+let v_Show_uBase_uOrd_uOrdering
 type t_Base_dOrd_dOrdering
 
 == Base_dPair.ml
 let v_Base_dPair_dfirstOf
 let v_Base_dPair_dsecondOf
-let v_Hashable_uBase_dPair_dPair_ua_ub
-let v_Show_uBase_dPair_dPair_ua_ub
+let v_Hashable_uBase_uPair_uPair_ua_ub
+let v_Show_uBase_uPair_uPair_ua_ub
 
 == Base_dResult.ml
-let v_Applicative_uBase_dResult_dResult
+let v_Applicative_uBase_uResult_uResult
 let v_Base_dResult_dmapError
 let v_Base_dResult_dstep
 let v_Base_dResult_dwithDefault
-let v_Foldable_uBase_dResult_dResult
-let v_Functor_uBase_dResult_dResult
-let v_Hashable_uBase_dResult_dResult_ua
-let v_Monad_uBase_dResult_dResult
-let v_Show_uBase_dResult_dResult_ua
-let v_Traversable_uBase_dResult_dResult_uf
+let v_Foldable_uBase_uResult_uResult
+let v_Functor_uBase_uResult_uResult
+let v_Hashable_uBase_uResult_uResult_ua
+let v_Monad_uBase_uResult_uResult
+let v_Show_uBase_uResult_uResult_ua
+let v_Traversable_uBase_uResult_uResult_uf
 
 == Base_dShow.ml
+let v_Base_dShow_ddbgShow
+let v_Base_dShow_ddebugShow
 let v_Base_dShow_dshow
+let v_DebugShow_ua
 let v_Show_uString
 
 == Base_dString.ml
@@ -191,12 +194,12 @@ let v_Semigroup_uString
 let v_Base_dTraversable_dmapM
 
 == Base_dUnit.ml
-let v_Eq_uBase_dUnit_dUnit
-let v_Hashable_uBase_dUnit_dUnit
-let v_Monoid_uBase_dUnit_dUnit
-let v_Ord_uBase_dUnit_dUnit
-let v_Semigroup_uBase_dUnit_dUnit
-let v_Show_uBase_dUnit_dUnit
+let v_Eq_uBase_uUnit_uUnit
+let v_Hashable_uBase_uUnit_uUnit
+let v_Monoid_uBase_uUnit_uUnit
+let v_Ord_uBase_uUnit_uUnit
+let v_Semigroup_uBase_uUnit_uUnit
+let v_Show_uBase_uUnit_uUnit
 type t_Base_dUnit_dUnit
 
 == Lib.ml

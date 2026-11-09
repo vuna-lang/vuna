@@ -8,6 +8,7 @@ module Vuna.Compiler.Packages.Pkg
   , contextForDir
   , contextForFile
   , contextPackageName
+  , contextPrivileged
   , contextRoots
   , contextTrustUnsafe
   , findManifestDir
@@ -22,10 +23,13 @@ module Vuna.Compiler.Packages.Pkg
   , packageExports
   , packageName
   , packageRoots
+  , privilegedContext
   , rootCapabilities
   , rootDir
+  , rootHostModules
   , rootName
   , rootPackage
+  , rootPrivileged
   , rootTrustUnsafe
   , workspacePackages
   ) where
@@ -46,7 +50,7 @@ module Vuna.Compiler.Packages.Pkg
 -- （只是数据通路；合法能力名与放行判定由 Loader 消费）。
 import Vuna.Compiler.Common
 import Vuna.Compiler.Frontend.Manifest
-import Base.IO
+import Base.IO.Host
 
 -- 模块根：目录、包名、可选导出模块列表、能力列表（M27：该包 manifest 的
 -- `[capabilities].effects`）、信任点（D28：该包 manifest 的 `[trust] unsafe`）。
@@ -61,6 +65,10 @@ record Root where
   rootCapabilities : List String
   -- | D28：该包 manifest 的 `[trust] unsafe`（Nothing = 非严格模式）。
   rootTrustUnsafe : Maybe (List String)
+  -- | F3 P2：`[package] privileged`（宿主层 import / prim_* / [capabilities] 仅限特权包）。
+  rootPrivileged : Bool
+  -- | F3 P2：该包声明的宿主层模块（`[privileged] modules`）；非空即不可被非特权包 import。
+  rootHostModules : List String
 
 -- 已解析的包：manifest、直接依赖（顺序同 [dependencies]）、包目录（已规范化）。
 record Package where
@@ -87,12 +95,14 @@ record PackageContext where
   contextCapabilities : List String
   -- | D28：本包 manifest 的 `[trust] unsafe`（Nothing = 非严格模式）。
   contextTrustUnsafe : Maybe (List String)
+  -- | F3 P2：本包是否特权包（ad-hoc / 用户包为 False）。
+  contextPrivileged : Bool
 
 rootDir : Root -> String
-rootDir (Root dir name exports caps trust) = dir
+rootDir (Root dir name exports caps trust priv hosts) = dir
 
 rootName : Root -> String
-rootName (Root dir name exports caps trust) = name
+rootName (Root dir name exports caps trust priv hosts) = name
 
 -- rootName 的别名（Loader/CLI 侧更常用的叫法）。
 rootPackage : Root -> String
@@ -100,29 +110,48 @@ rootPackage root = rootName root
 
 -- M27：该模块根所属包声明的效应能力（空列表 = 只能经 Base.IO）。
 rootCapabilities : Root -> List String
-rootCapabilities (Root dir name exports caps trust) = caps
+rootCapabilities (Root dir name exports caps trust priv hosts) = caps
 
 -- | D28：该模块根所属包的信任点（`[trust] unsafe`；Nothing = 非严格模式）。
 rootTrustUnsafe : Root -> Maybe (List String)
-rootTrustUnsafe (Root dir name exports caps trust) = trust
+rootTrustUnsafe (Root dir name exports caps trust priv hosts) = trust
+
+-- | F3 P2：该模块根所属包是否特权包（`[package] privileged`）。
+rootPrivileged : Root -> Bool
+rootPrivileged (Root dir name exports caps trust priv hosts) = priv
+
+-- | F3 P2：该包的宿主层模块声明（`[privileged] modules`）。
+rootHostModules : Root -> List String
+rootHostModules (Root dir name exports caps trust priv hosts) = hosts
 
 contextDir : PackageContext -> String
-contextDir (PackageContext dir pkg roots name caps trust) = dir
+contextDir (PackageContext dir pkg roots name caps trust priv) = dir
 
 contextRoots : PackageContext -> List Root
-contextRoots (PackageContext dir pkg roots name caps trust) = roots
+contextRoots (PackageContext dir pkg roots name caps trust priv) = roots
 
 -- 上下文包名：base-only（ad-hoc）为空串；Loader 用它判同包可见性与效果内建。
 contextPackageName : PackageContext -> String
-contextPackageName (PackageContext dir pkg roots name caps trust) = name
+contextPackageName (PackageContext dir pkg roots name caps trust priv) = name
 
 -- M27：本包声明的效应能力（入口文件用；base-only / ad-hoc 为 []）。
 contextCapabilities : PackageContext -> List String
-contextCapabilities (PackageContext dir pkg roots name caps trust) = caps
+contextCapabilities (PackageContext dir pkg roots name caps trust priv) = caps
 
 -- | D28：本包的信任点（入口文件用；base-only / ad-hoc 为 Nothing）。
 contextTrustUnsafe : PackageContext -> Maybe (List String)
-contextTrustUnsafe (PackageContext dir pkg roots name caps trust) = trust
+contextTrustUnsafe (PackageContext dir pkg roots name caps trust priv) = trust
+
+-- | F3 P2：本包是否特权包（ad-hoc / 用户包为 False）。
+contextPrivileged : PackageContext -> Bool
+contextPrivileged (PackageContext dir pkg roots name caps trust priv) = priv
+
+-- | F3 P2（过渡）：把上下文标记为特权。仅供开发工具（REPL）对 ad-hoc 片段求值用；
+-- 用户包与普通 ad-hoc 编译仍按 manifest 判定。P2 收口时 REPL 改为显式 `--privileged`
+-- 或在非特权上下文里只接受 typed effects。
+privilegedContext : PackageContext -> PackageContext
+privilegedContext (PackageContext dir pkg roots name caps trust priv) =
+  PackageContext dir pkg roots name caps trust True
 
 packageDir : Package -> String
 packageDir (Package manifest dependencies dir) = dir
@@ -304,8 +333,8 @@ pkgFuelBound = 1048576
 -- 加载 dir/vuna.toml 及其 [dependencies] 路径依赖（递归、含循环检测）。
 loadPackage : String -> Result Package
 loadPackage dir =
-  andThen (loadPackageWalk pkgFuelBound [] Nothing dir)
-    (\package => andThen (checkUniquePackageNames [package]) (\_ => Ok package))
+  Vuna.Compiler.Common.bind (loadPackageWalk pkgFuelBound [] Nothing dir)
+    (\package => Vuna.Compiler.Common.bind (checkUniquePackageNames [package]) (\_ => Ok package))
 
 -- ---------------------------------------------------------------- workspace
 loadMembers : String -> List String -> Result (List Package)
@@ -328,7 +357,7 @@ workspacePackages rootBaseDir =
     Ok rootPackage => case loadMembers base rootPackage.packageManifest.manifestMembers of
       Err e => Err e
       Ok members =>
-        andThen (checkUniquePackageNames (rootPackage :: members))
+        Vuna.Compiler.Common.bind (checkUniquePackageNames (rootPackage :: members))
           (\_ => Ok (rootPackage :: members))
 
 -- ---------------------------------------------------------------- 模块根
@@ -336,6 +365,7 @@ dependencyRootOf : Package -> Root
 dependencyRootOf package =
   Root "${packageDir package}/lib" (packageName package) (packageExports package)
     package.packageManifest.manifestCapabilities package.packageManifest.manifestTrustUnsafe
+    package.packageManifest.manifestPrivileged package.packageManifest.manifestHostModules
 
 -- DFS 后序：先深依赖、再直接依赖本体；按包名去重（首次出现保留）。
 -- 包名唯一性由 `checkUniquePackageNames` 在加载期保证（同名 ⇒ 同目录），所以
@@ -356,7 +386,8 @@ packageRoots package =
     selfName = packageName package
     selfRoot =
       Root "${packageDir package}/lib" selfName Nothing package.packageManifest.manifestCapabilities
-        package.packageManifest.manifestTrustUnsafe
+        package.packageManifest.manifestTrustUnsafe package.packageManifest.manifestPrivileged
+        package.packageManifest.manifestHostModules
   in case dependencyRoots [selfName] package.packageDependencies of
     Pair seen roots => selfRoot :: roots
 
@@ -369,6 +400,7 @@ packageContext : Package -> PackageContext
 packageContext package =
   PackageContext (packageDir package) (Just package) (packageRoots package) (packageName package)
     package.packageManifest.manifestCapabilities package.packageManifest.manifestTrustUnsafe
+    package.packageManifest.manifestPrivileged
 
 -- ---------------------------------------------------------------- 查找
 findManifestUpMaybe : Int -> String -> Maybe String
@@ -446,15 +478,15 @@ locateBase _ =
 -- 入口能力为空（base 模块根各自携带 base manifest 的能力，不受影响）。
 baseOnlyContext : String -> Result PackageContext
 baseOnlyContext base =
-  andThen (loadPackage base)
-    (\package => Ok (PackageContext "" Nothing [dependencyRootOf package] "" [] Nothing))
+  Vuna.Compiler.Common.bind (loadPackage base)
+    (\package => Ok (PackageContext "" Nothing [dependencyRootOf package] "" [] Nothing False))
 
 -- 从 start（已绝对化的目录）向上找最近 manifest；找不到 → base-only。
 -- manifest 非法（解析/校验失败）必须报错，不回退到 base-only。
 contextAt : String -> Result PackageContext
 contextAt start = case findManifestDirMaybe start of
-  Just dir => andThen (loadPackage dir) (\package => Ok (packageContext package))
-  Nothing => andThen (locateBase 0) baseOnlyContext
+  Just dir => Vuna.Compiler.Common.bind (loadPackage dir) (\package => Ok (packageContext package))
+  Nothing => Vuna.Compiler.Common.bind (locateBase 0) baseOnlyContext
 
 -- 文件入口：相对路径先按 cwd 绝对化，再从文件所在目录向上找最近 vuna.toml。
 contextForFile : String -> Result PackageContext

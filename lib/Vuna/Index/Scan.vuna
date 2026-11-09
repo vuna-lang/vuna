@@ -40,7 +40,7 @@ import Vuna.Doc.Types
 import Vuna.FixityEnv
 import Vuna.Index.Types
 import Vuna.Sig
-import Base.IO
+import Base.IO.Host
 
 -- C41：工具链 fuel 耗尽不是「空结果」，而是内部不变量被破坏；与编译器一致硬失败。
 indexFuelExhausted : String -> a

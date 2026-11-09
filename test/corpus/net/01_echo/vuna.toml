@@ -1,6 +1,7 @@
 # M35.3：net 原语夹具（Unix domain socket echo + TCP 临时端口变体）。
 [package]
 name = "net-echo"
+privileged = true
 
 [dependencies]
 vuna-base = "../../../../base"

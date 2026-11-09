@@ -2,6 +2,7 @@
 # 效果测试只看进程退出码，所以失败测试显式 exit 1。
 [package]
 name = "test-m30-bad-io"
+privileged = true
 
 [dependencies]
 vuna-base = "../../../../base"

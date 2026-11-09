@@ -3,6 +3,7 @@
 # 它的入口闭包就是 seed/ 的内容。
 [package]
 name = "vuna"
+privileged = true
 
 
 [workspace]

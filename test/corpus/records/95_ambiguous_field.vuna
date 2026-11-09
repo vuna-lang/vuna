@@ -1,11 +1,16 @@
+-- 字段访问按 base 类型消歧：两个 record 可以同名不同字段类型。
 record A where
   x : Int
+  y : Int
 
 record B where
-  x : Int
+  x : String
 
-f : Int -> Int
-f n = n.x
+a : A
+a = A { x = 1, y = 2 }
+
+b : B
+b = B { x = "s" }
 
 main : Int
-main = f 1
+main = a.x + a.y + strLength b.x

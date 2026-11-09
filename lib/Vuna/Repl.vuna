@@ -72,7 +72,7 @@ import Vuna.Repl.Term
 import Vuna.Search.Query
 import Vuna.Search.Run
 import Vuna.Search.Types
-import Base.IO
+import Base.IO.Host
 import Base.IORef
 
 replTempFile : String
@@ -1514,7 +1514,9 @@ loadDirStep st dir = case doLoadDir st dir of
   Ok st2 => printOk st2 "已切换包 ${packageNameLabel st2}（缓冲与索引已重置）"
 
 doLoadDir : ReplState -> String -> Result ReplState
-doLoadDir st dir = contextForDir dir >>= (\ctx2 => Ok (switchedContext st ctx2))
+doLoadDir st dir =
+  contextForDir dir
+    >>= (\ctx2 => Ok (switchedContext st (if contextPrivileged st.stateCtx then privilegedContext ctx2 else ctx2)))
 
 reloadStep : ReplState -> String -> ReplOutcome
 reloadStep st arg = if trim arg /= "" then commandUsage st ":reload"

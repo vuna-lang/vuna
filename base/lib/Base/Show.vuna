@@ -1,4 +1,4 @@
-module Base.Show (Show(..)) where
+module Base.Show (DebugShow(..), Show(..), dbgShow) where
 
 -- Base.Show：`Show` trait 与 `String` 实例（M24.7：从编译器合成迁到库）。
 --
@@ -21,3 +21,17 @@ trait Show a where
 -- 与 runtime 展示共用同一实现（M27：`strShow` 是唯一转义源）。
 instance Show String where
   show s = strShow s
+
+-- | 调试展示 trait：默认实现由 `Show` 派生，因此**所有 `Show` 实例自动获得
+-- `DebugShow`**（blanket instance）；需要不同调试格式的类型可另写实例。
+trait DebugShow a where
+  debugShow : a -> String
+
+-- | 默认实现：直接用 `show`。blanket instance 的约束由实例 ctx 承担（`Show a`）。
+instance Show a => DebugShow a where
+  debugShow x = show x
+
+-- | 调试打印：把 `debugShow x` 写 stderr（经语言级内建 `dbg`）后返回 `x`；
+-- 值语义不变，只用于调试。见 docs/reference/debugging.md §3。
+dbgShow : DebugShow a => a -> a
+dbgShow x = dbg (debugShow x) x

@@ -1,14 +1,18 @@
-import Base.Monad
-import Base.IO
+-- P2c：文件元数据走 typed effects（Fs 标签 + runFs）。
+import Base.Eff
+import Base.EffFs
 
-main : IO Int
-main = do
-  self <- fileSize "corpus/run/17_file_meta.vuna"
-  stamp <- fileMtime "corpus/run/17_file_meta.vuna"
-  missingSize <- fileSize "/vuna/definitely-not-a-file-xyz"
-  missingMtime <- fileMtime "/vuna/definitely-not-a-file-xyz"
+prog : Eff [Fs "real"] Int
+prog = do
+  self <- fsFileSize "real" "corpus/run/17_file_meta.vuna"
+  stamp <- fsFileMtime "real" "corpus/run/17_file_meta.vuna"
+  missingSize <- fsFileSize "real" "/vuna/definitely-not-a-file-xyz"
+  missingMtime <- fsFileMtime "real" "/vuna/definitely-not-a-file-xyz"
   pure (if self > 0 then
           (if stamp > 1000000000 then
              (if missingSize == 0 then (if missingMtime == 0 then 7 else 1) else 2)
            else 3)
         else 4)
+
+main : IO Int
+main = runFs "real" prog

@@ -2,7 +2,7 @@
 -- real handler 走 Base.IO.nowMicros / sleepMicros，同程序验证 sleep 确实推进时间。
 import Base.Eff
 import Base.EffClock
-import Base.IO
+import Base.IO.Host
 
 prog : (n : String) -> Eff [Clock n] Int
 prog n = do

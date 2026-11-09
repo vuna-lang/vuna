@@ -1,0 +1,11 @@
+module Base.Field (Field) where
+
+-- Base.Field：`HasField` 的**类型级字段标签** `Field "id"`。
+--
+-- 空归纳族（与 `Base.EffConsole.Console` 等效应标签同形）：`Field "id" : Type` 是一个
+-- 没有值的类型，只按 String 索引区分字段。这样 `trait HasField (l : Type) ...` 用普通
+-- Type 参数即可（不触发自定义 kind 的 trait 参数在包/接口摘要路径下的限制），而用户写
+-- `HasField (Field "id") a t` 时 `Field "id"` 是普通类型应用。
+--
+-- | 类型级字段标签 `Field "id"`：空归纳族，只做 `HasField` 的索引，没有值 / 运行时语义。
+data Field : String -> Type where

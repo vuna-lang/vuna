@@ -1,4 +1,4 @@
-import Base.IO
+import Base.IO.Host
 
 -- 效果测试（失败）：进程退出码 1 → FAIL（`vuna test` 退出码 1）。
 main : IO Int

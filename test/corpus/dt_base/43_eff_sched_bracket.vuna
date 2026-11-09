@@ -3,7 +3,7 @@
 -- pop + release（不是硬中止路径；硬中止只有尽力清理，见 effects-layers.md）。
 import Base.Eff
 import Base.EffSched
-import Base.IO
+import Base.IO.Host
 import Base.Result
 
 spin : List Int -> Eff [] Int

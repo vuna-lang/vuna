@@ -22,7 +22,7 @@ module Vuna.Compiler.Driver.Split
 -- 构建脚本只用 POSIX sh + ocamlopt，可在 Nix 沙箱内复现。
 import Vuna.Compiler.Common
 import Base.HashMap
-import Base.IO
+import Base.IO.Host
 
 record SplitFile where
   splitName : String
@@ -41,7 +41,7 @@ splitDeps (SplitFile name text deps) = deps
 
 writeSplitFiles : String -> List SplitFile -> Result Int
 writeSplitFiles dir [] = Ok 0
-writeSplitFiles dir (f :: rest) = andThen (writeSplitFiles dir rest) (\n => let
+writeSplitFiles dir (f :: rest) = Vuna.Compiler.Common.bind (writeSplitFiles dir rest) (\n => let
   _ = runIO (prim_writeFile "${dir}/${splitName f}" (splitText f))
 in Ok (n + 1)
 )
@@ -49,7 +49,7 @@ in Ok (n + 1)
 -- M30：只写内容变化的文件（build 的逐模块增量写盘；内容相同不 touch）。
 writeSplitFilesIfChanged : String -> List SplitFile -> Result Int
 writeSplitFilesIfChanged dir [] = Ok 0
-writeSplitFilesIfChanged dir (f :: rest) = andThen (writeSplitFilesIfChanged dir rest) (\n => let
+writeSplitFilesIfChanged dir (f :: rest) = Vuna.Compiler.Common.bind (writeSplitFilesIfChanged dir rest) (\n => let
   path = "${dir}/${splitName f}"
   text = splitText f
   same = runIO (prim_fileExists path) && runIO (prim_readFile path) == text

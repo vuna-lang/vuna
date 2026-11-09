@@ -1,6 +1,6 @@
 -- M21：`Base.IO` 的公开 API 在 DT 下全部可用（类型面）。效果不在这条夹具里执行
 -- （纯核心求值器不跑效果），运行时效果见 corpus/dt_io/。
-import Base.IO
+import Base.IO.Host
 import Base.List
 import Base.Nat
 

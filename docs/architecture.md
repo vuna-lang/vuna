@@ -210,7 +210,7 @@ stage1 == stage2；seed 只含 compiler 包入口闭包。
 | 你改了什么 | 最小验证 |
 | --- | --- |
 | `lib/` / `base/` | 第 14–16、26–27、30–32 段 + `vuna check .` |
-| `base/` 的效应 monad / `Base.ST` / `Base.Debug` | 第 27 段 + `dt` / `dt_base` / `dt_err` 夹具 + `vuna check .`（见 [effects.md](reference/effects.md)、[debugging.md](reference/debugging.md)） |
+| `base/` 的效应 monad / `Base.ST` / 调试构造（`dbg`/`assert`） | 第 27 段 + `dt` / `dt_base` / `dt_err` 夹具 + `vuna check .`（见 [effects.md](reference/effects.md)、[debugging.md](reference/debugging.md)） |
 | `compiler/`（语法 / 类型 / 精化 / 擦除） | 全量测试 + `flake check`（至少 seed-selfhost） |
 | codegen 运行时 / main 钩子 / 位置表 | 第 6、13、38 段 + 第 45–46 段 + seed rotation（[debugging.md](reference/debugging.md)） |
 | CLI 工具（`run` / `test` 选项 / REPL / LSP） | 第 40、42、47–49 段 + `corpus/lsp/smoke.sh` + `vuna check .` |

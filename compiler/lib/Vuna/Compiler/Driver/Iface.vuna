@@ -84,7 +84,7 @@ import Vuna.Compiler.Debug
 import Vuna.Compiler.Driver.Owner
 import Vuna.Compiler.Loader.Modules
 import Vuna.Compiler.Packages.Pkg
-import Base.IO
+import Base.IO.Host
 
 -- 源信息：模块名 → (绝对路径, 内容哈希, mtime, size)。路径只用于本机校验（换 checkout
 -- 会失效，回退全量）；mtime/size 是可选快路径（`VUNA_CACHE_MTIME=1`），默认仍用内容哈希。

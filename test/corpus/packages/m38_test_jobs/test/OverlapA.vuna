@@ -1,4 +1,4 @@
-import Base.IO
+import Base.IO.Host
 
 -- 重叠探针 A：打印 START-A 后睡 3s 再打印 END-A。
 -- 与 OverlapB 一起用 `--filter Overlap --jobs 2` 驱动：并行时两个 START 都出现在

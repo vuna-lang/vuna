@@ -46,4 +46,4 @@ let v_Vuna_dCompiler_dCacheFormat_dframeDecode = (fun tag raw -> (match (v_Vuna_
   | _ -> failwith "DT: impossible branch"
 ))
 
-let v_Vuna_dCompiler_dCacheFormat_dreadFramed = (fun tag path -> (if (Base_dIO.v_Base_dIO_drunIO ((fun dtio_0 -> fun (_ : int) -> dtp_fileExists dtio_0) path)) then ((v_Vuna_dCompiler_dCacheFormat_dframeDecode tag) (Base_dIO.v_Base_dIO_drunIO ((fun dtio_0 -> fun (_ : int) -> dtp_readFile dtio_0) path))) else Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing))
+let v_Vuna_dCompiler_dCacheFormat_dreadFramed = (fun tag path -> (if (Base_dIO_dHost.v_Base_dIO_dHost_drunIO ((fun dtio_0 -> fun (_ : int) -> dtp_fileExists dtio_0) path)) then ((v_Vuna_dCompiler_dCacheFormat_dframeDecode tag) (Base_dIO_dHost.v_Base_dIO_dHost_drunIO ((fun dtio_0 -> fun (_ : int) -> dtp_readFile dtio_0) path))) else Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing))

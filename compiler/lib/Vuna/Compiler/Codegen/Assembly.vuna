@@ -64,11 +64,11 @@ prepareDtProgram program =
         allTypeNames = append typeNames familyTypeNames
       in let
         _ = stamp "cg-partition-done"
-      in andThen (checkNoAxiomRuntime axiomNames runtime) (\_ => andThen (checkAllDefScopes defs) (\_ => andThen (ensureUniqueOcamlNames datas runtime) (\_ => let
+      in Vuna.Compiler.Common.bind (checkNoAxiomRuntime axiomNames runtime) (\_ => Vuna.Compiler.Common.bind (checkAllDefScopes defs) (\_ => Vuna.Compiler.Common.bind (ensureUniqueOcamlNames datas runtime) (\_ => let
         _ = stamp "cg-names-done"
-      in andThen (checkAllErasure allTypeNames runtime) (\_ => let
+      in Vuna.Compiler.Common.bind (checkAllErasure allTypeNames runtime) (\_ => let
         _ = stamp "cg-erasure-done"
-      in andThen (groupRuntimeDefs runtime) (\groups => let
+      in Vuna.Compiler.Common.bind (groupRuntimeDefs runtime) (\groups => let
         _ = stamp "cg-groups-done"
       in Ok (Pair runtime groups)
       )
@@ -83,9 +83,9 @@ prepareDtProgram program =
 --   unitDatas ：写进本单元的类型声明
 --   groups    ：本单元运行时分组的 SCC 序（由调用方按归属过滤后分组）
 genUnitParts : List (Pair String (List Int)) -> QualCtx -> List DtData -> List DtData -> List (List DtDef) -> Result UnitParts
-genUnitParts usedTbl qc allDatas unitDatas groups = andThen (genTypeDeclsWith qc usedTbl allDatas unitDatas) (\typeText => let
+genUnitParts usedTbl qc allDatas unitDatas groups = Vuna.Compiler.Common.bind (genTypeDeclsWith qc usedTbl allDatas unitDatas) (\typeText => let
   _ = stamp "cg-typedecls-done"
-in andThen (genGroups (adjTblOf (depAdjacency (concatGroups groups))) (mkGenSt qc allDatas) groups) (\p => case p of
+in Vuna.Compiler.Common.bind (genGroups (adjTblOf (depAdjacency (concatGroups groups))) (mkGenSt qc allDatas) groups) (\p => case p of
   Pair bodies st =>
     let
       _ = stamp "cg-genGroups-done"
@@ -121,10 +121,10 @@ mainHook qc program runtimeDefs printResult = case findDtDef "main" runtimeDefs 
       Just innerTy =>
         let
           p = ioRunText qc program mainRef
-        in andThen (genDtHook "" table innerTy (firstOf p) printResult)
+        in Vuna.Compiler.Common.bind (genDtHook "" table innerTy (firstOf p) printResult)
           (\hook => Ok (Pair hook (hookDeps (secondOf p))))
       Nothing =>
-        andThen (genDtHook "" table (dtDefType mainDef) mainRef printResult)
+        Vuna.Compiler.Common.bind (genDtHook "" table (dtDefType mainDef) mainRef printResult)
           (\hook => Ok (Pair hook []))
 
 hookDeps : String -> List String
@@ -134,11 +134,11 @@ hookDeps dep = if dep == "" then [] else [dep]
 -- 擦除检查、构造子引用、SCC 分组、类型声明与函数生成都在这一步走到。
 -- main 的存在与返回类型只在生成阶段要求，这样没有 main 的库模块也能 check。
 checkDtProgram : Pair (List DtData) (List DtDef) -> Result Int
-checkDtProgram program = andThen (prepareDtProgram program) (\p => let
+checkDtProgram program = Vuna.Compiler.Common.bind (prepareDtProgram program) (\p => let
   _ = stamp "cg-prepare-done"
 in case p of
   Pair runtime groups =>
-    andThen
+    Vuna.Compiler.Common.bind
       (genUnitParts (usedTableOf (runtimeDatas (firstOf program))) noQual (runtimeDatas (firstOf program)) (runtimeDatas (firstOf program)) groups)
       (\_ => Ok 0)
 )

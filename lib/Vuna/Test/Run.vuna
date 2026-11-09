@@ -19,7 +19,7 @@ import qualified Vuna.Cli.Args
 import Vuna.Test.Suite
 import Vuna.Files
 import Vuna.Json
-import Base.IO
+import Base.IO.Host
 
 -- 执行环境。
 record Env where

@@ -35,7 +35,7 @@ import Vuna.Json
 import Vuna.Lsp.Diagnostics
 import Vuna.Lsp.Protocol
 import Vuna.Sig
-import Base.IO
+import Base.IO.Host
 
 -- ---------------------------------------------------------------
 -- 小工具

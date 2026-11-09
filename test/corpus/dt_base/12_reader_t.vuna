@@ -1,7 +1,7 @@
 -- M37：ReaderT 效应栈（IO 之上）。`ask` 读环境，`local` 局部改写；
 -- `runReaderT` 返回 IO 动作，由 main 执行。
 import Base.Effect
-import Base.IO
+import Base.IO.Host
 import Base.ReaderT
 
 prog : ReaderT Int Int

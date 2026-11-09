@@ -8,7 +8,7 @@ set -u
 #     与 IO main（main 钩子 thunk 执行期）两条路径都覆盖。
 m38_rt="$tmp/m38-rt"
 mkdir -p "$m38_rt/app"
-printf '[package]\nname = "m38-rt"\n\n[dependencies]\nvuna-base = "%s"\n' "$VUNA_BASE" >"$m38_rt/vuna.toml"
+printf '[package]\nname = "m38-rt"\nprivileged = true\n\n[dependencies]\nvuna-base = "%s"\n' "$VUNA_BASE" >"$m38_rt/vuna.toml"
 printf 'main : Int\nmain = 10 / 0\n' >"$m38_rt/app/Main.vuna"
 if ! "$VUNA" build "$m38_rt" >"$tmp/m38-rt-build.log" 2>&1; then
   bad "m38 runtime build" "exit 0" "$(tail -3 "$tmp/m38-rt-build.log")"
@@ -24,7 +24,7 @@ else
     *) ok ;;
   esac
 fi
-printf 'import Base.IO\n\nmain : IO Int\nmain = do\n  println "m38-start"\n  exit (10 / 0)\n' >"$m38_rt/app/Main.vuna"
+printf 'import Base.IO.Host\n\nmain : IO Int\nmain = do\n  println "m38-start"\n  exit (10 / 0)\n' >"$m38_rt/app/Main.vuna"
 if ! "$VUNA" build "$m38_rt" >"$tmp/m38-rt-io-build.log" 2>&1; then
   bad "m38 runtime io build" "exit 0" "$(tail -3 "$tmp/m38-rt-io-build.log")"
 else

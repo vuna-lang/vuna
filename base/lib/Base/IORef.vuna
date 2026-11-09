@@ -5,7 +5,7 @@ module Base.IORef (modifyRef, newRef, readRef, writeRef) where
 -- 所有操作都是 IO 动作：效果只在 `main`（或 `Base.IO.runIO`，需 `unsafe`）执行。
 -- `modifyRef` 读-改-写一次完成，避免调用方手写 do 时的中间绑定。
 import Base.Monad
-import Base.IO
+import Base.IO.Host
 
 -- | 创建初值为 `x` 的新引用（IO 动作）。
 newRef : a -> IO (IORef a)

@@ -20,7 +20,7 @@ module Vuna.Compiler.Driver.DiagRender (renderCliDiagnostic, renderWithPrefix) w
 -- 但 compiler 包不能 import lib，故在本模块内独立实现；file 可含 ':'，也可能带
 -- `Vuna.Compiler.X: ` / `[CG_X] ` 之类的前置标签，故对候选做宽松归一化后再读文件。
 import Vuna.Compiler.Common
-import Base.IO
+import Base.IO.Host
 
 -- ---------------------------------------------------------------
 -- 字符与文本小工具

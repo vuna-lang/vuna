@@ -6,6 +6,3 @@ name = "timeout-hang"
 [dependencies]
 vuna-base = "../../../../base"
 
-# 夹具里的 main : IO a 睡眠走 clock 效应。
-[capabilities]
-effects = ["clock"]

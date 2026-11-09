@@ -108,7 +108,7 @@ checkNoAxiomRuntimeGo axiomTbl (d :: rest) = case dtDefBody d of
 checkAllErasure : List String -> List DtDef -> Result Int
 checkAllErasure typeNames [] = Ok 0
 checkAllErasure typeNames (d :: rest) =
-  andThen (checkOneErasure typeNames d) (\_ => checkAllErasure typeNames rest)
+  Vuna.Compiler.Common.bind (checkOneErasure typeNames d) (\_ => checkAllErasure typeNames rest)
 
 -- 报错带上定义名：同一份程序里哪个函数有问题要能一眼看出来。
 -- M29（A14）：有 span 时前缀 `file:line:col:`（保留原有的 `in `name`: ` 形状）。
@@ -144,21 +144,21 @@ else case t of
     Just (Pair c args) => checkConArgsErasureFuel (fuel - 1) typeNames binders args
     Nothing =>
       if rigIsErased rig then checkErasureFuel (fuel - 1) typeNames binders f
-      else andThen (checkErasureFuel (fuel - 1) typeNames binders f)
+      else Vuna.Compiler.Common.bind (checkErasureFuel (fuel - 1) typeNames binders f)
         (\_ => checkErasureFuel (fuel - 1) typeNames binders a)
   -- M14：构造子应用只看非擦除实参（擦除实参是族参数/索引，允许是类型项）。
   TCon c args => checkConArgsErasureFuel (fuel - 1) typeNames binders args
   -- M14：case 的分支把「完整 telescope（表面顺序）」压栈后再检查分支体。
   TCase scrut alts =>
-    andThen (checkErasureFuel (fuel - 1) typeNames binders scrut)
+    Vuna.Compiler.Common.bind (checkErasureFuel (fuel - 1) typeNames binders scrut)
       (\_ => checkAltErasureFuel (fuel - 1) typeNames binders alts)
   TInt n => Ok 0
   TStr s => Ok 0
   TFloat raw => Ok 0
   TBool b => Ok 0
   TIf c th el =>
-    andThen (checkErasureFuel (fuel - 1) typeNames binders c)
-      (\_ => andThen (checkErasureFuel (fuel - 1) typeNames binders th) (\_ => checkErasureFuel (fuel - 1) typeNames binders el))
+    Vuna.Compiler.Common.bind (checkErasureFuel (fuel - 1) typeNames binders c)
+      (\_ => Vuna.Compiler.Common.bind (checkErasureFuel (fuel - 1) typeNames binders th) (\_ => checkErasureFuel (fuel - 1) typeNames binders el))
 
 checkConArgsErasureFuel : Int -> List String -> List (Pair String Rig) -> List (Pair Term Rig) -> Result Int
 checkConArgsErasureFuel fuel typeNames binders [] =
@@ -166,7 +166,7 @@ checkConArgsErasureFuel fuel typeNames binders [] =
 checkConArgsErasureFuel fuel typeNames binders ((Pair arg rig) :: rest) =
   if fuel <= 0 then Err "DT: internal: erasure fuel exhausted"
   else if rigIsErased rig then checkConArgsErasureFuel (fuel - 1) typeNames binders rest
-  else andThen (checkErasureFuel (fuel - 1) typeNames binders arg)
+  else Vuna.Compiler.Common.bind (checkErasureFuel (fuel - 1) typeNames binders arg)
     (\_ => checkConArgsErasureFuel (fuel - 1) typeNames binders rest)
 
 checkAltErasureFuel : Int -> List String -> List (Pair String Rig) -> List CaseAlt -> Result Int
@@ -177,7 +177,7 @@ else
   let
     altBinders = caseAltBinders alt
     env = append (reverse altBinders) binders
-  in andThen (checkErasureFuel (fuel - 1) typeNames env (caseAltBody alt))
+  in Vuna.Compiler.Common.bind (checkErasureFuel (fuel - 1) typeNames env (caseAltBody alt))
     (\_ => checkAltErasureFuel (fuel - 1) typeNames binders rest)
 
 binderAt : Int -> List (Pair String Rig) -> Maybe (Pair String Rig)
@@ -395,7 +395,7 @@ else case remaining of
   _ => case pickReady adjT remaining emitted of
     Nothing => cgErr0 DependencyCycle
     Just (Pair g rest) =>
-      andThen (orderGroupsAccFuel (fuel - 1) adjT rest (addAllNames g emitted))
+      Vuna.Compiler.Common.bind (orderGroupsAccFuel (fuel - 1) adjT rest (addAllNames g emitted))
         (\tail => Ok (g :: tail))
 
 -- 运行时定义的依赖邻接表（只保留运行时会用到的 TGlobal 边）。
@@ -422,7 +422,8 @@ groupRuntimeDefs defs =
       let
         comps = collectComps revT order (Base.HashMap.fromList []) []
         groups = groupsFromComps comps names
-      in andThen (orderGroups adjT groups) (\ordered => Ok (map (groupDefsOf defsTbl) ordered))
+      in Vuna.Compiler.Common.bind (orderGroups adjT groups)
+        (\ordered => Ok (map (groupDefsOf defsTbl) ordered))
 
 dtDefTblOf : List DtDef -> HashMap String DtDef
 dtDefTblOf defs =
@@ -458,8 +459,8 @@ ensureUniqueOcamlNames datas defs =
       concatMap
         (\d => if memName (dtDataName d) unboxed then [] else map (\c => ctorOcamlName (dtCtorFamily c) (dtCtorName c)) (dtDataCtors d))
         runtime
-  in andThen (checkNoDupOcamlNames "value" valueNames)
-    (\_ => andThen (checkNoDupOcamlNames "type" typeNames) (\_ => checkNoDupOcamlNames "constructor" ctorNames))
+  in Vuna.Compiler.Common.bind (checkNoDupOcamlNames "value" valueNames)
+    (\_ => Vuna.Compiler.Common.bind (checkNoDupOcamlNames "type" typeNames) (\_ => checkNoDupOcamlNames "constructor" ctorNames))
 
 -- M24.6 第三级（重新裁定后的最小落地）：de Bruijn index 的作用域护栏。
 -- `Core.varIndex` 越界已改为返回 -1（不再静默指向 0）；这里对**全部**定义体
@@ -479,26 +480,27 @@ checkTermScopes depth (TMeta m) = Ok 0
 -- C07：作用域与运行时擦除无关——擦除只影响 codegen，不是「可以引用越界变量」的
 -- 许可证；TApp 的擦除实参与构造子实参同样要查。
 checkTermScopes depth (TApp f a rig) =
-  andThen (checkTermScopes depth f) (\_ => checkTermScopes depth a)
+  Vuna.Compiler.Common.bind (checkTermScopes depth f) (\_ => checkTermScopes depth a)
 checkTermScopes depth (TCon c args) = checkTermScopesArgs depth args
 checkTermScopes depth (TLam name rig body) = checkTermScopes (depth + 1) body
 checkTermScopes depth (TPi name implicit rig dom cod) =
-  andThen (checkTermScopes depth dom) (\_ => checkTermScopes (depth + 1) cod)
+  Vuna.Compiler.Common.bind (checkTermScopes depth dom) (\_ => checkTermScopes (depth + 1) cod)
 checkTermScopes depth (TIf c th el) =
-  andThen (checkTermScopes depth c)
-    (\_ => andThen (checkTermScopes depth th) (\_ => checkTermScopes depth el))
+  Vuna.Compiler.Common.bind (checkTermScopes depth c)
+    (\_ => Vuna.Compiler.Common.bind (checkTermScopes depth th) (\_ => checkTermScopes depth el))
 checkTermScopes depth (TCase scrut alts) =
-  andThen (checkTermScopes depth scrut) (\_ => checkAltScopes depth alts)
+  Vuna.Compiler.Common.bind (checkTermScopes depth scrut) (\_ => checkAltScopes depth alts)
 
 checkTermScopesArgs : Int -> List (Pair Term Rig) -> Result Int
 checkTermScopesArgs depth [] = Ok 0
 checkTermScopesArgs depth ((Pair arg _) :: rest) =
-  andThen (checkTermScopes depth arg) (\_ => checkTermScopesArgs depth rest)
+  Vuna.Compiler.Common.bind (checkTermScopes depth arg) (\_ => checkTermScopesArgs depth rest)
 
 checkAltScopes : Int -> List CaseAlt -> Result Int
 checkAltScopes depth [] = Ok 0
 checkAltScopes depth (alt :: rest) =
-  andThen (checkTermScopes (depth + length (caseAltBinders alt)) (caseAltBody alt))
+  Vuna.Compiler.Common.bind
+    (checkTermScopes (depth + length (caseAltBinders alt)) (caseAltBody alt))
     (\_ => checkAltScopes depth rest)
 
 checkAllDefScopes : List DtDef -> Result Int

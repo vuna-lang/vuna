@@ -9,6 +9,3 @@ name = "vuna-repl-corpus"
 vuna = "../../.."
 vuna-base = "../../../base"
 
-# `test/ReplPure.vuna` 用 `exit 1` 表达失败（prim_exit 走 process 能力）。
-[capabilities]
-effects = ["process"]

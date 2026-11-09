@@ -8,6 +8,8 @@ let v_Vuna_dCompiler_dElab_dInstName_dinstanceHeadName = (fun mc0 -> (match mc0 
   | _ -> Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing
 ))
 
+let v_Vuna_dCompiler_dElab_dInstName_dsanitizeInstName = (fun s -> ((Base_dString.v_Base_dString_djoin "_") ((Base_dString.v_Base_dString_dsplit ".") s)))
+
 let rec v_Vuna_dCompiler_dElab_dInstName_dargSuffix = (fun mc0 -> (match mc0 with
   | Base_dList.C_Base_dList_dList_Cons (dtb__7, dtb__8) -> (String.concat "" ["_"; (v_Vuna_dCompiler_dElab_dInstName_dexprNameFor dtb__7); (v_Vuna_dCompiler_dElab_dInstName_dargSuffix dtb__8)])
   | Base_dList.C_Base_dList_dList_Nil -> ""
@@ -32,7 +34,7 @@ let v_Vuna_dCompiler_dElab_dInstName_dderivedInstName = (fun mc0 -> (match mc0 w
   | _ -> (v_Vuna_dCompiler_dElab_dInstName_dexprNameFor mc0)
 ))
 
-let v_Vuna_dCompiler_dElab_dInstName_dinstanceName = (fun cname headExpr -> (String.concat "" [(Vuna_dCompiler_dElab_dMeta.v_Vuna_dCompiler_dElab_dMeta_dbaseNameOf cname); "_"; (v_Vuna_dCompiler_dElab_dInstName_dderivedInstName headExpr)]))
+let v_Vuna_dCompiler_dElab_dInstName_dinstanceName = (fun cname headExpr -> (v_Vuna_dCompiler_dElab_dInstName_dsanitizeInstName (String.concat "" [(Vuna_dCompiler_dElab_dMeta.v_Vuna_dCompiler_dElab_dMeta_dbaseNameOf cname); "_"; (v_Vuna_dCompiler_dElab_dInstName_dderivedInstName headExpr)])))
 
 let v_Vuna_dCompiler_dElab_dInstName_dargNameOf = (fun mc0 -> (match mc0 with
   | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_EVar (dtb__23, dtb__24) -> dtb__23

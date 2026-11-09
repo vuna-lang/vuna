@@ -3,7 +3,7 @@
 -- （`handleProcessIO` 的 `prim_exit`）保留，但本夹具不触发它（否则测试进程退出）。
 import Base.Eff
 import Base.EffProcess
-import Base.IO
+import Base.IO.Host
 import Base.List
 
 prog : (n : String) -> Eff [Process n] Int

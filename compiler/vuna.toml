@@ -8,6 +8,7 @@
 # 这里列出全部模块，作为包对外的完整模块面（依赖包可见性由 [export] 控制）。
 [package]
 name = "vuna-compiler"
+privileged = true
 
 [export]
 modules = [

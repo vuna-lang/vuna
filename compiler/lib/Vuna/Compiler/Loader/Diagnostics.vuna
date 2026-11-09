@@ -28,6 +28,7 @@ data LdDiag : Nat -> Type where
   ImportCycle : String -> LdDiag (Succ Zero)
   InvalidModuleName : String -> LdDiag (Succ Zero)
   ModuleHeaderInEntryFile : String -> LdDiag (Succ Zero)
+  HostModulePrivileged : String -> LdDiag (Succ Zero)
   ModuleHeaderInEntrySource : String -> LdDiag (Succ Zero)
   -- arity 2
   ModuleNotFound : String -> String -> LdDiag (Succ (Succ Zero))
@@ -37,6 +38,7 @@ ldCode : {n : Nat} -> LdDiag n -> String
 ldCode (EntryFileNotFound _) = "LD_EntryFileNotFound"
 ldCode (ImportCycle _) = "LD_ImportCycle"
 ldCode (InvalidModuleName _) = "LD_InvalidModuleName"
+ldCode (HostModulePrivileged _) = "LD_HostModulePrivileged"
 ldCode (ModuleHeaderInEntryFile _) = "LD_ModuleHeaderInEntryFile"
 ldCode (ModuleHeaderInEntrySource _) = "LD_ModuleHeaderInEntrySource"
 ldCode (ModuleNotFound _ _) = "LD_ModuleNotFound"
@@ -46,6 +48,8 @@ ldTemplate : {n : Nat} -> LdDiag n -> String
 ldTemplate (EntryFileNotFound _) = "entry file not found: <0>"
 ldTemplate (ImportCycle _) = "import cycle: <0>"
 ldTemplate (InvalidModuleName _) = "invalid module name: <0>"
+ldTemplate (HostModulePrivileged _) =
+  "module <0> is a privileged host module; only [package] privileged = true packages may import it"
 ldTemplate (ModuleHeaderInEntryFile _) = "module header is not allowed in entry file (<0>)"
 ldTemplate (ModuleHeaderInEntrySource _) = "module header is not allowed in entry source (<0>)"
 ldTemplate (ModuleNotFound _ _) = "module <0> not found (roots: <1>)"
@@ -61,6 +65,7 @@ ldAll =
   [ LdEntry (ldCode (EntryFileNotFound "")) (ldTemplate (EntryFileNotFound "")) "入口文件不存在",
     LdEntry (ldCode (ImportCycle "")) (ldTemplate (ImportCycle "")) "import 成环",
     LdEntry (ldCode (InvalidModuleName "")) (ldTemplate (InvalidModuleName "")) "非法模块名",
+    LdEntry (ldCode (HostModulePrivileged "")) (ldTemplate (HostModulePrivileged "")) "宿主层模块只允许特权包 import",
     LdEntry (ldCode (ModuleHeaderInEntryFile "")) (ldTemplate (ModuleHeaderInEntryFile "")) "入口文件不允许模块头",
     LdEntry (ldCode (ModuleHeaderInEntrySource "")) (ldTemplate (ModuleHeaderInEntrySource "")) "入口源码不允许模块头",
     LdEntry (ldCode (ModuleNotFound "" "")) (ldTemplate (ModuleNotFound "" "")) "模块未找到",

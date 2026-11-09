@@ -1,0 +1,52 @@
+module Base.EffArgs
+  ( Args
+  , ArgsOp(..)
+  , argsGetArgs
+  , handleArgs
+  , handleArgsIO
+  , resArgs
+  , runArgs
+  ) where
+
+-- Base.EffArgs：一阶命令行参数效应（P2c：补 getArgs 标签，供夹具迁移 typed effects）。
+--
+-- 标签 `Args n` 是命名实例；操作只有 GetArgs，返回 `List String`。
+-- 真实 handler 用 `Base.IO.Host.getArgs` 实现。
+import Base.Eff
+import Base.IO.Host
+import Base.Monad
+import Base.List
+
+-- | 参数效应的标签类型 `Args n`：只做行索引，没有运行时构造子。
+data Args : String -> Type where
+
+-- | 参数操作：`GetArgs`（不含 argv[0] 的命令行参数）。
+data ArgsOp : Type where
+  GetArgs : ArgsOp
+
+-- | 操作的结果类型族：`GetArgs` 返回 `List String`。
+resArgs : ArgsOp -> Type
+resArgs GetArgs = List String
+
+-- | 通过命名实例取命令行参数。
+argsGetArgs : (n : String) -> {r : Row} -> {w : Member (Args n) r} -> Eff r (List String)
+argsGetArgs n = sendCore (Args n) "args" n GetArgs
+
+-- | 一阶 handler：`ret` / `opH` 由调用方给出，结果行删除 `Args n`。
+handleArgs : {a : Type} -> {b : Type} -> {r : Row} -> (n : String) -> {w : Member (Args n) r} -> (a -> b) -> ((o : ArgsOp) -> (resArgs o -> b) -> b) -> Eff r a -> Eff (Base.Eff.rowRem (Args n) r) b
+handleArgs n ret opH comp = handleCore (Args n) "args" n ret opH comp
+
+-- | 真实 handler 的操作解释：取 `Base.IO.Host.getArgs` 后继续。
+argsOpHIO : {a : Type} -> (o : ArgsOp) -> (resArgs o -> IO a) -> IO a
+argsOpHIO op k = case op of
+  GetArgs => do
+    xs <- getArgs
+    k xs
+
+-- | IO-backed handler：结果行删除 `Args n`，answer 是 IO 动作，可交给 `runIOAnswer`。
+handleArgsIO : {a : Type} -> {r : Row} -> (n : String) -> Eff (Base.Eff.Cons (Args n) r) a -> Eff r (IO a)
+handleArgsIO n comp = handleArgs n (\a => pure a) argsOpHIO comp
+
+-- | 单效应便捷入口（P3）：`handleArgsIO n` + `runIOAnswer` 的组合。
+runArgs : {a : Type} -> (n : String) -> Eff [Args n] a -> IO a
+runArgs n comp = runIOAnswer (handleArgsIO n comp)

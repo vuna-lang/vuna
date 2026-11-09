@@ -2,7 +2,7 @@
 -- main : IO Int——由运行时执行；getArgs/exit 是 Base.IO 的 IO API。
 import Vuna.Compiler.Driver.CompilerCli
 import Base.Monad
-import Base.IO
+import Base.IO.Host
 
 main : IO Int
 main = do

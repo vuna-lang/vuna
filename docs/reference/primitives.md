@@ -209,7 +209,7 @@
 W10 起它还暴露标签化效应 handler 需要的别名：`eprint`、`getEnv` / `getCwd` / `execPath`
 （env）、`nowMicros`（= `timeUs`）与 `sleepMicros`。W10 收尾新增了原生睡眠原语
 `prim_sleep : Int -> IO Int`（微秒；`Unix.sleepf`；能力 `clock`），`Base.EffClock`
-的真实 handler 已直接使用它。`Base.IO.sleepMicros` 仍是 `nowMicros` 忙等：`Base.IO`
+的真实 handler 已直接使用它。`Base.IO.Host.sleepMicros` 仍是 `nowMicros` 忙等：`Base.IO`
 在 seed 闭包内，旧 seed 不认识新内建，切换需先 seed rotation（边界见
 [effects.md](effects.md) §8.6、debt D43）。
 
@@ -225,13 +225,18 @@ W10 起它还暴露标签化效应 handler 需要的别名：`eprint`、`getEnv`
 
 纯 `main` 直接调用效果原语是类型错误（`TC_TypeMismatch`）：效果只能出现在 `IO` 动作里。
 
-M38 新增两条调试/诊断原语（`Base.Debug` 的实现基础，见
-[debugging.md](debugging.md)）：
+M38 新增两条调试/诊断原语；F3 B 起调试构造是**语言级内建**（见
+[debugging.md](debugging.md) §3）：
 
+- `dbg : String -> a -> a`（**无能力**）：求值期把消息 + 换行写 stderr 后返回第二个实参；
+- `assert : Bool -> String -> a -> a`（**无能力**、debug-only）：失败抛 `Failure`；
+- `todo : String -> a`（**无能力**、debug-only）：以 `TODO: <msg>` 抛 `Failure`；
 - `prim_eprint : String -> IO Int`（能力 `console`）：写 stderr 并 flush，返回写入字节数；
 - `prim_fail : String -> a`（**无能力**、不在 `IO` 里）：抛 `Failure <msg>` 的底值，
-  由生成的运行时报告器渲染成 `vuna: runtime error: ...` 并 exit 2。用户代码经
-  `Base.Debug.assert` / `todo` 使用。
+  由生成的运行时报告器渲染成 `vuna: runtime error: ...` 并 exit 2。
+
+`assert` / `todo` 在 release 构建（`--release` / `VUNA_RELEASE=1`）里由 `Loader.Resolve`
+拒绝（`TC_DebugConstructInRelease`）；`dbg` 在两种构建都可用。
 
 M35.3 新增 `net` 能力与 7 条 socket 原语（工具链 server 与测试用；用户代码同样按能力直调）：
 
@@ -256,7 +261,7 @@ M35.3 新增 `net` 能力与 7 条 socket 原语（工具链 server 与测试用
    不再要求 `import Base.IO`（类型是内建的），只是没有别名与实例可用。
 
 **执行入口**：动作只在 `main` 处由运行时执行；`main : IO a` 的产物钩子是 `v_main 0`。
-`Base.IO.runIO : IO a -> a`（= `prim_runIO`）是唯一的「main 之外执行」入口，要求能力
+`Base.IO.Host.runIO : IO a -> a`（= `prim_runIO`）是唯一的「main 之外执行」入口，要求能力
 `unsafe`（工具链特权）：未声明时报
 `` `runIO` executes IO outside main; requires capability `unsafe` ... ``；`runIO` 每次调用
 都重新执行动作（动作值可复用、效果不缓存）。
@@ -274,7 +279,7 @@ M35.3 新增 `net` 能力与 7 条 socket 原语（工具链 server 与测试用
 | `env` | `prim_getenv`、`prim_getcwd`、`prim_execPath` |
 | `clock` | `timeUs`、`prim_sleep` |
 | `net` | `prim_netListen`、`prim_netPort`、`prim_netAccept`、`prim_netRecv`、`prim_netSend`、`prim_netClose`、`prim_netConnect` |
-| `unsafe` | `prim_runIO`（= `Base.IO.runIO`：在 main 之外执行 IO 动作）；`prim_effectPerform` / `prim_effectHandle` / `prim_cleanupPush` / `prim_cleanupPop`（运行时续延与 bracket cleanup，仅 Base.Eff）；base 用 `[trust] unsafe` 显式列出直接使用点（D28 定义级信任，见 packages.md） |
+| `unsafe` | `prim_runIO`（= `Base.IO.Host.runIO`：在 main 之外执行 IO 动作）；`prim_effectPerform` / `prim_effectHandle` / `prim_cleanupPush` / `prim_cleanupPop`（运行时续延与 bracket cleanup，仅 Base.Eff）；base 用 `[trust] unsafe` 显式列出直接使用点（D28 定义级信任，见 packages.md） |
 
 - 声明面：manifest `[capabilities] effects = ["console", "fs", ...]`，按**包**声明
   （`Frontend.Manifest.manifestCapabilities`）；无 manifest 的 ad-hoc 文件没有能力。
@@ -289,7 +294,7 @@ M35.3 新增 `net` 能力与 7 条 socket 原语（工具链 server 与测试用
   源码里直接引用效果原语 / `runIO`；没有按包名字符串判定的 allowlist。声明 `[trust] unsafe`
   的包把 `unsafe` 收紧到定义级（opt-in；见 [packages.md](packages.md) §效应能力）。
 - `base` 包声明 `["console", "fs", "process", "env", "clock", "unsafe"]`，并把 `unsafe` 的直接
-  使用点逐条列进 `[trust] unsafe`（D28；`runIO` / `Base.Eff` / `Base.EffSched` / `Base.Debug`，
+  使用点逐条列进 `[trust] unsafe`（D28；`runIO` / `Base.Eff` / `Base.EffSched`，
   见 [effects.md](effects.md)）；根包声明七个能力（含 `unsafe`/`net`）但无 `[trust]`，编译器包六个（不含 `net`）。
 
 ## 8. 生成 runtime 的契约

@@ -10,7 +10,7 @@ module Vuna.Clean (runCleanIface) where
 -- 这样既不会把宿主异常漏给用户，也不会误删 `.vuna` 源码；`.iface` 扩展是 vuna 保留名。
 import Vuna.Compiler.Common
 import Vuna.Cli.Args
-import Base.IO
+import Base.IO.Host
 
 runCleanIface : List String -> Int
 runCleanIface args = case parseToolArgs "vuna clean-iface" [BoolFlag "dry-run"] args of

@@ -18,7 +18,7 @@ import Vuna.Files
 import Vuna.Lint.Diagnostics
 import Base.List
 import Base.String
-import Base.IO
+import Base.IO.Host
 
 record Entry where
   entryCode : String

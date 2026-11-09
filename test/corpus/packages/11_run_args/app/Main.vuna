@@ -1,6 +1,6 @@
 -- M38：`vuna run` 参数透传夹具。无参数时输出 "no args"（供包夹具循环比对）；
 -- 有参数时输出第一个参数（`vuna run <pkg> -- a b` 应输出 "a"）。
-import Base.IO
+import Base.IO.Host
 import Base.Monad
 
 firstArg : List String -> String

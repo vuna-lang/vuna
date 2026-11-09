@@ -3,7 +3,7 @@
 -- （open-row + Monad 字典 meta 未从期望类型早解）；拆分后语义/操作顺序不变。
 import Base.Eff
 import Base.EffFs
-import Base.IO
+import Base.IO.Host
 
 dir : String
 dir = "/tmp/vuna_w10_fs"

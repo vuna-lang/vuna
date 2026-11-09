@@ -12,7 +12,7 @@
 > - W1–W11 全部完成；W7 一次性闭包/捕获规则（`mkCont`）、通用 `bracket`/`finally`
 >   的 abort cleanup（每纤程 cleanup 栈）、D45；W9 Mutex/Semaphore、线性 `TaskLin`
 >   （恰好一次 await/cancel）、`forkTaskWith` 显式 handler；W10 原生 `prim_sleep` 并
->   切换 `Base.EffClock`/`Base.IO.sleepMicros`、fs 命名实例 `F1`/`F2`、可控 `Exit`、
+>   切换 `Base.EffClock`/`Base.IO.Host.sleepMicros`、fs 命名实例 `F1`/`F2`、可控 `Exit`、
 >   `vuna version` console 标签路径。
 > - 验证：`nix flake check` 全过（seed-selfhost、context-budget、lint/fmt/typecheck、
 >   vuna-tests、compiler-perf/growth 等）；seed rotation fixed point；snapshots 刷新。
@@ -227,7 +227,7 @@ effect_handle key name
 | **W7 线性** | QTT 线性箭头/多重性；resume 线性；资源安全基础 | W6（可并行） | resume 两次类型错误；线性 handler 通过；`bracket` 基础 |
 | **W8 多参数 trait** | `trait C a b`、N 参字典/投影/实例头/搜索/相干性、`C a b =>` | W3（约束解析） | 多参数用户 trait 正负例；单参不回归 |
 | **W9 并发** | 调度器、`Fork`/`Await`/`Cancel`/`Yield`、结构化作用域、取消/超时 | W6/W7 | echo/生产者-消费者；取消清理；无泄漏 |
-| **W10 IO 迁移** | fs/console/process/clock/env 标签；`IO`/`Unsafe` 退底层 | W4/W9 | 同程序真实↔mock；既有 IO 夹具不回归（库层已完成：`Base.Eff*` + `dt_base/26–30`；残项收口：`prim_sleep`、fs 命名实例、可控 `Exit`、工具链一条 console 路径，见 effects.md §8.6；剩余编译器级强制与 `Base.IO.sleepMicros` 切换归 D43） |
+| **W10 IO 迁移** | fs/console/process/clock/env 标签；`IO`/`Unsafe` 退底层 | W4/W9 | 同程序真实↔mock；既有 IO 夹具不回归（库层已完成：`Base.Eff*` + `dt_base/26–30`；残项收口：`prim_sleep`、fs 命名实例、可控 `Exit`、工具链一条 console 路径，见 effects.md §8.6；剩余编译器级强制与 `Base.IO.Host.sleepMicros` 切换归 D43） |
 | **W11 收尾** | 诊断、文档、性能、seed rotation、TCB、context budget | 全部 | `nix flake check` 仅剩已知 C43；seed-selfhost 通过；rotation 单独提交 |
 
 ## 4. 编译器/运行时改动面

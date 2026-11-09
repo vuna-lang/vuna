@@ -11,7 +11,7 @@ import Vuna.Cli.Args
 import Vuna.FixityEnv
 import Vuna.Lint.Fix
 import Vuna.Lint.Rules
-import Base.IO
+import Base.IO.Host
 
 printFinding : String -> Bool -> Finding -> Int
 printFinding path fixMode f =

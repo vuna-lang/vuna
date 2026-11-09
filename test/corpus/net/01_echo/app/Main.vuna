@@ -4,7 +4,7 @@
 --   serve PATH  —— 绑 Unix socket，accept 一个连接，回 "echo:<收到>"，退出；
 --   serve-tcp   —— 绑 127.0.0.1:0（临时端口），打印 `port:<N>`，accept 一个连接后同样 echo；
 --   client ADDR —— 连接、发 "ping\n"、打印回包、退出。
-import Base.IO
+import Base.IO.Host
 import Base.Monad
 
 serve : String -> IO Int

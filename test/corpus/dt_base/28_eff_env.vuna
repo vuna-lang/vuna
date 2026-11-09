@@ -2,7 +2,7 @@
 -- 各跑一次；两边都断言「缺失变量为空 / cwd 非空 / execPath 非空」。
 import Base.Eff
 import Base.EffEnv
-import Base.IO
+import Base.IO.Host
 
 prog : (n : String) -> Eff [Env n] Int
 prog n = do

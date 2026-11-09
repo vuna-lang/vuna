@@ -1,8 +1,12 @@
-import Base.Monad
-import Base.IO
+-- P2c：fs 查询走 typed effects（Fs 标签 + runFs），不再直接 import Host。
+import Base.Eff
+import Base.EffFs
+
+prog : Eff [Fs "real"] Int
+prog = do
+  root <- fsFileExists "real" "/"
+  nope <- fsFileExists "real" "/vuna/definitely-not-a-file-xyz"
+  pure (if root then (if nope then 0 else 42) else 0)
 
 main : IO Int
-main = do
-  root <- fileExists "/"
-  nope <- fileExists "/vuna/definitely-not-a-file-xyz"
-  pure (if root then (if nope then 0 else 42) else 0)
+main = runFs "real" prog

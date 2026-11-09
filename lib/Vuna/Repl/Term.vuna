@@ -24,7 +24,7 @@ module Vuna.Repl.Term
 -- 具体含义由调用方按当前读模式解释）。
 import Vuna.Cli.Args
 import Vuna.Compiler.Common
-import Base.IO
+import Base.IO.Host
 
 escCode : String
 escCode = strPack [27]

@@ -79,8 +79,30 @@ splitInstanceOwnerOf owner (DInstance ctxE headExpr methods sp) = case headClass
 splitInstanceOwnerOf owner (DData dname params kind ctors derivings viaField lin sp) =
   splitDerivedOwners owner dname params derivings
 splitInstanceOwnerOf owner (DRecord dname params fields derivings viaField lin sp) =
-  splitDerivedOwners owner dname params derivings
+  append (splitDerivedOwners owner dname params derivings)
+    (splitHasFieldOwners owner dname params fields)
 splitInstanceOwnerOf owner _ = []
+
+hasFieldRecordTypeExpr : String -> List String -> Expr
+hasFieldRecordTypeExpr dname params = case params of
+  [] => EVar dname splitNoSpan
+  _ => EApp (EVar dname splitNoSpan) (map (\p => EVar p splitNoSpan) params) splitNoSpan
+
+hasFieldOwnerOf : String -> String -> List String -> Field -> Pair String String
+hasFieldOwnerOf owner dname params f =
+  let
+    fname = fieldName f
+    fty = fieldType f
+    label = EApp (EVar "Base.Field.Field" splitNoSpan) [EStr fname splitNoSpan] splitNoSpan
+    head =
+      EApp (EVar "Base.Record.HasField" splitNoSpan)
+        [label, hasFieldRecordTypeExpr dname params, fty] splitNoSpan
+  in Pair (instanceName "Base.Record.HasField" head) owner
+
+splitHasFieldOwners : String -> String -> List String -> List Field -> List (Pair String String)
+splitHasFieldOwners owner dname params [] = []
+splitHasFieldOwners owner dname params (f :: rest) =
+  hasFieldOwnerOf owner dname params f :: splitHasFieldOwners owner dname params rest
 
 splitDerivedOwners : String -> String -> List String -> List String -> List (Pair String String)
 splitDerivedOwners owner dname params [] = []
@@ -173,11 +195,11 @@ splitDefOwnerOf meta name = case Base.HashMap.lookup name meta.smDefOwnerT of
 nameOwnerPairsOfDefs : SplitMeta -> List DtDef -> Result (List (Pair String String))
 nameOwnerPairsOfDefs meta [] = Ok []
 nameOwnerPairsOfDefs meta (d :: rest) =
-  andThen (splitDefOwnerOf meta (dtDefName d))
-    (\o => andThen (nameOwnerPairsOfDefs meta rest) (\ps => Ok (Pair (dtDefName d) o :: ps)))
+  Vuna.Compiler.Common.bind (splitDefOwnerOf meta (dtDefName d))
+    (\o => Vuna.Compiler.Common.bind (nameOwnerPairsOfDefs meta rest) (\ps => Ok (Pair (dtDefName d) o :: ps)))
 
 nameOwnerPairsOfDatas : SplitMeta -> List DtData -> Result (List (Pair String String))
 nameOwnerPairsOfDatas meta [] = Ok []
 nameOwnerPairsOfDatas meta (d :: rest) =
-  andThen (splitDataOwnerOf meta d)
-    (\o => andThen (nameOwnerPairsOfDatas meta rest) (\ps => Ok (Pair (dtDataName d) o :: ps)))
+  Vuna.Compiler.Common.bind (splitDataOwnerOf meta d)
+    (\o => Vuna.Compiler.Common.bind (nameOwnerPairsOfDatas meta rest) (\ps => Ok (Pair (dtDataName d) o :: ps)))

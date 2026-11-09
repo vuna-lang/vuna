@@ -141,7 +141,7 @@ instantiateNullaryCtorFuel : Int -> Ec -> Ctx -> Value -> Result (Pair Value (Pa
 instantiateNullaryCtorFuel fuel ec ctx v = if fuel <= 0 then Ok (Pair v (Pair [] ec))
 else case forceVal ec v of
   VPi _ True _ dom clo => if isImplicitDomain ctx ec dom then case newMeta ctx ec of
-    Pair metaTerm ec1 => andThen (instantiateNullaryCtorFuel (fuel - 1) ec1 ctx (applyClosure clo (eval (ctxEnv ctx) metaTerm))) (\p => case p of
+    Pair metaTerm ec1 => Vuna.Compiler.Common.bind (instantiateNullaryCtorFuel (fuel - 1) ec1 ctx (applyClosure clo (eval (ctxEnv ctx) metaTerm))) (\p => case p of
       Pair ty (Pair metas ec2) => Ok (Pair ty (Pair (metaTerm :: metas) ec2))
     )
   else Ok (Pair v (Pair [] ec))

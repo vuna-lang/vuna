@@ -2,7 +2,7 @@
 -- 预算耗尽先取消范围（子任务在挂起点清理），再返回 Err "timeout"。
 import Base.Eff
 import Base.EffSched
-import Base.IO
+import Base.IO.Host
 import Base.Result
 
 tick : List Int -> Eff [] Int

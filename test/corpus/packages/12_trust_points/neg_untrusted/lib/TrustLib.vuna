@@ -1,7 +1,7 @@
 module TrustLib (probeAlias, runIOHelper) where
 
 -- D28 负例：`probeAlias` 直接引用 `Base.IO.runIO` 别名但不在信任点里 → check 报错。
-import Base.IO
+import Base.IO.Host
 
 -- | 信任点：显式列出的直接使用点。
 runIOHelper : IO a -> a

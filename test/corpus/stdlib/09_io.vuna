@@ -1,14 +1,14 @@
--- stdlib：Base.IO 的显式 API + Monad/Functor trait（print/println/do/pure）。
--- main : IO Int 由运行时执行；所有效果放进单个 IO 动作，保证三路径输出顺序一致。
-import Base.Monad
-import Base.IO
+-- stdlib：宿主 console 效应（print/println 的 typed 版本）+ Eff 的 do/pure。
+-- main : IO Int 由运行时执行；所有效果放进单个 Eff 动作，保证输出顺序一致。
+import Base.Eff
+import Base.EffConsole
 
-program : IO Int
+program : Eff [Console "real"] Int
 program = do
-  n <- print "abc"
-  m <- print "de"
-  x <- println "x"
+  n <- consolePrint "real" "abc"
+  m <- consolePrint "real" "de"
+  x <- consolePrint "real" "x\n"
   pure (n + m + x + 10)
 
 main : IO Int
-main = program
+main = runConsole "real" program

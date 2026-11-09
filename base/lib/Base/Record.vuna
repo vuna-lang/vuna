@@ -1,0 +1,19 @@
+module Base.Record (HasField(..), module Base.Field) where
+
+import Base.Field
+
+-- Base.Record：nominal 记录的**泛型读访问**（HasField）。
+--
+-- record 仍是 nominal 单构造器 data（抽象 / deriving / 性能不变）；这里只提供按标签取
+-- 字段的类型类约束，让函数能对任意「含某字段的 record 类型」工作，而无需行类型：
+--
+--   getId : HasField (Field "id") a String => a -> String
+--   getId p = p.id
+--
+-- 标签 `Field "id"` 是类型（见 Base.Field）；`HasField` 的类参数都是 Type。字段访问仍写
+-- 点语法 `p.id`；精化器按标签找约束字典。每个 record 字段的实例由编译器在为「导入了
+-- Base.Record 的模块」里自动生成（实例落在定义 record 的模块，满足孤儿规则）。
+--
+-- | 泛型读访问：`HasField (Field "f") a t` 表示类型 `a` 含字段 `f : t`；`getField` 是该字段的投影。原型：字典由调用点构造（调用点尚未打通）。
+trait HasField (l : Type) (a : Type) (t : Type) where
+  getField : a -> t

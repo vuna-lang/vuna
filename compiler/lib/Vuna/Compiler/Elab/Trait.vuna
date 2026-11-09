@@ -96,7 +96,7 @@ classFieldTys globals ec paramsKinds methods =
 classFieldTysGo : List (Pair String Term) -> Ctx -> Ec -> List (Pair String Expr) -> List Term -> Result (Pair (List Term) Ec)
 classFieldTysGo globals ctx ec [] acc = Ok (Pair (reverse acc) ec)
 classFieldTysGo globals ctx ec (m :: rest) acc = case m of
-  Pair mname mexpr => andThen (checkType globals ctx ec (quantifyTraitSig (\nm => isJust (ctxLookup nm ctx)) mexpr (exprSpan mexpr))) (\p => case p of
+  Pair mname mexpr => Vuna.Compiler.Common.bind (checkType globals ctx ec (quantifyTraitSig (\nm => isJust (ctxLookup nm ctx)) mexpr (exprSpan mexpr))) (\p => case p of
     -- M20：trait 方法签名里的自由小写名（`fmap` 的 `a`/`b`）量化为隐式类型参数。
     Pair tyTerm (Pair sort ec1) => classFieldTysGo globals ctx ec1 rest (tyTerm :: acc)
   )
@@ -128,7 +128,7 @@ elabTrait globals ec (Pair d dsp) = case d of
     let
       -- 方法投影/kind 推断仍吃 (名字, 类型) 对；span 只在 projSpans 里用。
       methodsP = traitMethodPairs methods
-    in andThen (traitParamKinds globals ec params methodsP)
+    in Vuna.Compiler.Common.bind (traitParamKinds globals ec params methodsP)
       (\pk => elabTraitKinds globals (secondOf pk) tname params methods methodsP (firstOf pk))
   _ => errAt dsp "DT: internal: expected a trait declaration"
 
@@ -138,7 +138,7 @@ elabTraitKinds globals ec tname params methods methodsP pKinds =
   let
     paramNames = traitParamNames params
     paramsKinds = zip paramNames pKinds
-  in andThen (classFieldTys globals ec paramsKinds methodsP)
+  in Vuna.Compiler.Common.bind (classFieldTys globals ec paramsKinds methodsP)
     (\p => elabTraitFinal globals (secondOf p) tname paramNames methods methodsP pKinds (firstOf p))
 
 elabTraitFinal : List (Pair String Term) -> Ec -> String -> List String -> List TraitMethod -> List (Pair String Expr) -> List Term -> List Term -> Result (Pair DtData (Pair (List (Pair String Term)) (Pair DtClass (Pair (List (Pair String Span)) Ec))))
@@ -178,14 +178,14 @@ traitParamKinds globals ec ((TraitParam pname pkind) :: rest) methods = case pki
   Nothing => traitKindInfer globals ec pname rest methods
 
 traitKindExplicit : List (Pair String Term) -> Ec -> Expr -> List TraitParam -> List (Pair String Expr) -> Result (Pair (List Term) Ec)
-traitKindExplicit globals ec kexpr rest methods = andThen (checkType globals emptyCtx ec kexpr) (\pk => case pk of
-  Pair kterm (Pair _ ec1) => andThen (traitParamKinds globals ec1 rest methods) (\pr => case pr of
+traitKindExplicit globals ec kexpr rest methods = Vuna.Compiler.Common.bind (checkType globals emptyCtx ec kexpr) (\pk => case pk of
+  Pair kterm (Pair _ ec1) => Vuna.Compiler.Common.bind (traitParamKinds globals ec1 rest methods) (\pr => case pr of
     Pair ks ec2 => Ok (Pair (kterm :: ks) ec2)
   )
 )
 
 traitKindInfer : List (Pair String Term) -> Ec -> String -> List TraitParam -> List (Pair String Expr) -> Result (Pair (List Term) Ec)
-traitKindInfer globals ec pname rest methods = andThen (traitParamKinds globals ec rest methods) (\pr => case pr of
+traitKindInfer globals ec pname rest methods = Vuna.Compiler.Common.bind (traitParamKinds globals ec rest methods) (\pr => case pr of
   Pair ks ec2 => Ok (Pair (classParamKindOf pname methods :: ks) ec2)
 )
 
@@ -360,14 +360,14 @@ elabInstanceWithClass globals allDecls cls info ec0 headExpr methods msp = case 
         nCtx = length (instSigCtx info)
         nTele = length (instSigTele info)
         bodyDepth = nTele + nCtx
-      in andThen (elabInstanceMethodsCtx globals cls bodyCtx nCtx (instSigArgs info) ec0 methods msp) (\q => case q of
+      in Vuna.Compiler.Common.bind (elabInstanceMethodsCtx globals cls bodyCtx nCtx (instSigArgs info) ec0 methods msp) (\q => case q of
         Pair fieldTerms (Pair fieldArgs ec1) =>
           let
             solvedCtx = solveCtxGoals bodyCtx nCtx nTele ec1 []
             ctxSubs = firstOf solvedCtx
             ec2 = secondOf solvedCtx
             fields1 = map (applyCtxSubstsTo nCtx ctxSubs) fieldTerms
-          in andThen (resolveRigidGoals globals bodyCtx msp (ecPending ec2) [] ec2) (\r => case r of
+          in Vuna.Compiler.Common.bind (resolveRigidGoals globals bodyCtx msp (ecPending ec2) [] ec2) (\r => case r of
             Pair globSubs ec3 =>
               let
                 fields2 = map (applyTermSubstsTo bodyDepth globSubs) fields1
@@ -385,7 +385,7 @@ elabInstanceWithClass globals allDecls cls info ec0 headExpr methods msp = case 
 --   方法体里对 tele 变量的字典需求先在**声明的 ctx** 里消解，消不掉且仍是刚性 ⇒
 --   `TC_InstanceContextMissing`（ctx 不足）；具体类型的临时需求留给程序级字典搜索。
 elabInstance : List (Pair Decl Span) -> List (Pair Decl Span) -> List (Pair String Term) -> List DtClass -> List DtData -> Ec -> Pair Decl Span -> Result (Pair (List (Pair String Term)) Ec)
-elabInstance instDecls allDecls globals classes datas ec (Pair (DInstance ctxE headExpr methods msp) dsp) = andThen (elabInstanceSig classes globals (definedNames (map firstOf instDecls)) ec msp headExpr ctxE) (\p => case p of
+elabInstance instDecls allDecls globals classes datas ec (Pair (DInstance ctxE headExpr methods msp) dsp) = Vuna.Compiler.Common.bind (elabInstanceSig classes globals (definedNames (map firstOf instDecls)) ec msp headExpr ctxE) (\p => case p of
   Pair info ec0 => case findClass (instSigClass info) classes of
     Nothing => tcErr0 msp InstanceHeadNotApp
     Just cls =>
@@ -407,7 +407,7 @@ constraintPartsOf : Span -> List Expr -> Result (List (Pair String (List Expr)))
 constraintPartsOf sp [] = Ok []
 constraintPartsOf sp (e :: rest) = case instanceConstraintParts e of
   Nothing => tcErr0 sp ConstraintNotDict
-  Just p => andThen (constraintPartsOf sp rest) (\ps => Ok (p :: ps))
+  Just p => Vuna.Compiler.Common.bind (constraintPartsOf sp rest) (\ps => Ok (p :: ps))
 
 -- 约束 `C a1 .. an`：类名 + 全部头实参（N>=1 参数 trait 的签名约束与实例 ctx 共用）。
 instanceConstraintParts : Expr -> Maybe (Pair String (List Expr))
@@ -453,7 +453,7 @@ elabInstanceSig classes globals defined ec0 sp headExpr ctxE = case instanceHead
     Just cls => case secondOf parts of
       argExprs =>
         if length argExprs /= length cls.dtClassParams then tcErr0 sp InstanceHeadNotApp
-        else andThen (constraintPartsOf sp ctxE)
+        else Vuna.Compiler.Common.bind (constraintPartsOf sp ctxE)
           (\ctxParts => elabInstanceConstrained classes globals defined ec0 sp cls argExprs ctxParts)
 
 -- 参数化/带 ctx 实例的 head 类型化（在 teleCtx 下按**类参数 kind** 检查头实参与 ctx 实参）。
@@ -488,8 +488,8 @@ elabInstanceConstrained classes globals defined ec0 sp cls argExprs ctxParts =
         tele0 = firstOf init
         ec1 = secondOf init
         teleCtx0 = instanceTeleCtx tele0
-      in andThen (checkArgsAtKinds globals teleCtx0 ec1 argExprs kindVals sp) (\q => case q of
-        Pair argTerms ec2 => andThen (elabConstraintDomains classes globals teleCtx0 ctxParts sp ec2) (\r => case r of
+      in Vuna.Compiler.Common.bind (checkArgsAtKinds globals teleCtx0 ec1 argExprs kindVals sp) (\q => case q of
+        Pair argTerms ec2 => Vuna.Compiler.Common.bind (elabConstraintDomains classes globals teleCtx0 ctxParts sp ec2) (\r => case r of
           Pair ctxTys ec3 =>
             let
               tele = resolveTeleKinds combined tele0 ec3
@@ -501,8 +501,8 @@ elabInstanceConstrained classes globals defined ec0 sp cls argExprs ctxParts =
 -- 逐个头实参按其类参数 kind 检查（N>=1 参数 trait）。
 checkArgsAtKinds : List (Pair String Term) -> Ctx -> Ec -> List Expr -> List Value -> Span -> Result (Pair (List Term) Ec)
 checkArgsAtKinds globals ctx ec [] [] sp = Ok (Pair [] ec)
-checkArgsAtKinds globals ctx ec (a :: arest) (k :: ks) sp = andThen (checkTypeAtKind globals ctx ec a k sp) (\q => case q of
-  Pair t ec1 => andThen (checkArgsAtKinds globals ctx ec1 arest ks sp) (\r => case r of
+checkArgsAtKinds globals ctx ec (a :: arest) (k :: ks) sp = Vuna.Compiler.Common.bind (checkTypeAtKind globals ctx ec a k sp) (\q => case q of
+  Pair t ec1 => Vuna.Compiler.Common.bind (checkArgsAtKinds globals ctx ec1 arest ks sp) (\r => case r of
     Pair ts ec2 => Ok (Pair (t :: ts) ec2)
   )
 )
@@ -645,8 +645,8 @@ elabConstraintDomains classes globals ctx ((Pair cname argExprs) :: rest) sp ec 
           if debugOn then note "constraint-dom: ${cname} args=${length argExprs} kinds=${length kindVals}"
           else 0
       in if length kindVals /= length argExprs then tcErr0 sp ConstraintNotDict
-      else andThen (checkArgsAtKinds globals ctx ec argExprs kindVals sp) (\q => case q of
-        Pair argTerms ec1 => andThen (elabConstraintDomains classes globals ctx rest sp ec1) (\r => case r of
+      else Vuna.Compiler.Common.bind (checkArgsAtKinds globals ctx ec argExprs kindVals sp) (\q => case q of
+        Pair argTerms ec1 => Vuna.Compiler.Common.bind (elabConstraintDomains classes globals ctx rest sp ec1) (\r => case r of
           Pair tvs ec2 => Ok (Pair (ctorResultType cls argTerms :: tvs) ec2)
         )
       )
@@ -825,7 +825,7 @@ elabInstanceMethodsGo globals ctx nCtx ec ((Pair mname fty) :: rest) headArgs de
     instTy = shift 0 nCtx (substInstParams headArgs fty)
   in case clauses of
     [] => tcErr0 sp InstanceMissingMethod
-    _ => andThen (elabInstanceMethodIn globals ctx ec instTy clauses) (\p => case p of
+    _ => Vuna.Compiler.Common.bind (elabInstanceMethodIn globals ctx ec instTy clauses) (\p => case p of
       Pair term ec1 =>
         elabInstanceMethodsGo globals ctx nCtx ec1 rest headArgs decls (term :: terms)
           (Pair term RigOmega :: args) sp
@@ -1030,7 +1030,7 @@ liftFreeDictGoalsGo defName ec ty body baseIdx nGroups k groups = case groups of
       -- （同位置反复插入 ⇒ 新字典在旧字典外侧）。
       finalPos = baseIdx + 1 + (nGroups - 1 - k)
       -- 域按最终位置 quote：域里的刚性类参数 level l 落在 index `finalPos - l - 1`。
-      dictDom = substSolvedMetasAtTbl (ecSolTbl ec) finalPos (quote finalPos dom)
+      dictDom = substSolvedMetasAtTbl (ecSolTbl ec) (baseIdx + 1) (quote (baseIdx + 1) dom)
       ty2 = insertDictBinder dName baseIdx dictDom ty
       -- 先插 binder（会把插入点之后的引用整体移位），**再**把孤儿元变量替换成字典变量：
       -- 顺序反过来时被替换出来的 TVar 也会被 shift 再挪一次，索引会偏。
@@ -1140,7 +1140,7 @@ checkInstanceHeadsGo : List (Pair Decl Span) -> List DtClass -> List (Pair Strin
 checkInstanceHeadsGo [] classes globals ec acc insts seen =
   Ok (Pair (reverse acc) (foldlAddInst ec (reverse insts)))
 checkInstanceHeadsGo ((d@(Pair decl dsp)) :: rest) classes globals ec acc insts seen = case decl of
-  DInstance ctxE headExpr methods msp => andThen (elabInstanceSig classes globals (definedNames (map firstOf (d :: rest))) ec msp headExpr ctxE) (\p => case p of
+  DInstance ctxE headExpr methods msp => Vuna.Compiler.Common.bind (elabInstanceSig classes globals (definedNames (map firstOf (d :: rest))) ec msp headExpr ctxE) (\p => case p of
     Pair info ec1 =>
       let
         iname = instanceName (instSigClass info) headExpr
@@ -1165,7 +1165,7 @@ elabInstanceBodies allDecls classes datas globals ec =
 
 elabInstanceBodiesGo : List (Pair Decl Span) -> List (Pair Decl Span) -> List DtClass -> List DtData -> List (Pair String Term) -> Ec -> List DtDef -> Result (Pair (List DtDef) Ec)
 elabInstanceBodiesGo [] allDecls classes datas globals ec acc = Ok (Pair (reverse acc) ec)
-elabInstanceBodiesGo (d :: rest) allDecls classes datas globals ec acc = andThen (elabInstance (d :: rest) allDecls globals classes datas ec d) (\p => case p of
+elabInstanceBodiesGo (d :: rest) allDecls classes datas globals ec acc = Vuna.Compiler.Common.bind (elabInstance (d :: rest) allDecls globals classes datas ec d) (\p => case p of
   Pair gs ec1 =>
     let
       -- M29（A14）：实例生成的字典/方法定义统一挂**实例声明 span**（`d` 的 span）。
@@ -1194,7 +1194,7 @@ elabTraits decls globals ec = elabTraitsGo decls globals ec [] [] [] []
 elabTraitsGo : List (Pair Decl Span) -> List (Pair String Term) -> Ec -> List DtData -> List (Pair String Term) -> List DtClass -> List (Pair String Span) -> Result (Pair (List DtData) (Pair (List (Pair String Term)) (Pair (List DtClass) (Pair (List (Pair String Span)) Ec))))
 elabTraitsGo [] globals ec ds gs cs ps =
   Ok (Pair (reverse ds) (Pair (reverse gs) (Pair (reverse cs) (Pair (reverse ps) ec))))
-elabTraitsGo (d :: rest) globals ec ds gs cs ps = andThen (elabTrait globals ec d) (\p => case p of
+elabTraitsGo (d :: rest) globals ec ds gs cs ps = Vuna.Compiler.Common.bind (elabTrait globals ec d) (\p => case p of
   Pair dd (Pair projs (Pair cls (Pair pspans ec1))) =>
     elabTraitsGo rest (append globals projs) ec1 (dd :: ds) (append projs gs) (cls :: cs)
       (append pspans ps)
@@ -1207,7 +1207,7 @@ elabInstances decls classes datas globals ec = elabInstancesGo decls classes dat
 elabInstancesGo : List (Pair Decl Span) -> List DtClass -> List DtData -> List (Pair String Term) -> Ec -> List (Pair String Term) -> Result (Pair (List (Pair String Term)) Ec)
 elabInstancesGo [] classes datas globals ec acc = Ok (Pair (reverse acc) ec)
 -- 旧批量入口（无全量声明，方法级 span 不可用；保留签名以兼容既有导出）。
-elabInstancesGo (d :: rest) classes datas globals ec acc = andThen (elabInstance (d :: rest) [] globals classes datas ec d) (\p => case p of
+elabInstancesGo (d :: rest) classes datas globals ec acc = Vuna.Compiler.Common.bind (elabInstance (d :: rest) [] globals classes datas ec d) (\p => case p of
   Pair gs ec1 => elabInstancesGo rest classes datas (append globals gs) ec1 (append gs acc)
 )
 
@@ -1256,11 +1256,11 @@ else
       if implicit then if isDictDomain ec dom then bindDictBinderFuel (fuel - 1) globals ctx ec rig name dom clo [] body sp
       else if isImplicitDomain ctx ec dom then bindIndexBinderFuel (fuel - 1) globals ctx ec rig name dom clo [] body sp
       else tcErr0 sp ImplicitParamKind
-      else andThen (checkBodyAtEndFuel (fuel - 1) globals ctx ec body expected sp)
-        (\p => andThen (resolveRowGoalsCtx globals ctx (secondOf p) sp) (\ec2 => Ok (Pair (firstOf p) ec2)))
+      else Vuna.Compiler.Common.bind (checkBodyAtEndFuel (fuel - 1) globals ctx ec body expected sp)
+        (\p => Vuna.Compiler.Common.bind (resolveRowGoalsCtx globals ctx (secondOf p) sp) (\ec2 => Ok (Pair (firstOf p) ec2)))
     _ =>
-      andThen (checkE globals ctx ec body expected)
-        (\p => andThen (resolveRowGoalsCtx globals ctx (secondOf p) sp) (\ec2 => Ok (Pair (firstOf p) ec2)))
+      Vuna.Compiler.Common.bind (checkE globals ctx ec body expected)
+        (\p => Vuna.Compiler.Common.bind (resolveRowGoalsCtx globals ctx (secondOf p) sp) (\ec2 => Ok (Pair (firstOf p) ec2)))
 
 -- M32：显式约束的隐式字典 binder：自动绑定（不消耗 pattern）、绑成 `TLam Rig1`，body 经 `localDictLookup` 命中声明假设。
 bindDictBinderFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Rig -> String -> Value -> Closure -> List Pat -> Expr -> Span -> Result (Pair Term Ec)
@@ -1271,7 +1271,7 @@ else
     v = freshVarValue name lvl
     ctx2 = ctxBindValue name dom ctx
     expected2 = applyClosure clo v
-  in andThen (checkBindersFuel (fuel - 1) globals ctx2 ec pats body expected2 sp) (\p => case p of
+  in Vuna.Compiler.Common.bind (checkBindersFuel (fuel - 1) globals ctx2 ec pats body expected2 sp) (\p => case p of
     Pair inner ec1 => Ok (Pair (TLam name rig inner) ec1)
   )
 
@@ -1284,7 +1284,7 @@ else
     v = freshVarValue name lvl
     ctx2 = ctxBindValue name dom ctx
     expected2 = applyClosure clo v
-  in andThen (checkBindersFuel (fuel - 1) globals ctx2 ec pats body expected2 sp) (\p => case p of
+  in Vuna.Compiler.Common.bind (checkBindersFuel (fuel - 1) globals ctx2 ec pats body expected2 sp) (\p => case p of
     Pair inner ec1 => Ok (Pair (TLam name rig inner) ec1)
   )
 
@@ -1297,8 +1297,8 @@ checkBodyAtEndFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Expr -> Valu
 checkBodyAtEndFuel fuel globals ctx ec body expected sp = if fuel <= 0 then Err "DT: internal: binder check fuel exhausted"
 else case body of
   ELam names lambdaBody lambdaSp =>
-    andThen (checkE globals ctx ec body expected)
-      (\p => andThen (resolveRowGoalsCtx globals ctx (secondOf p) sp) (\ec2 => Ok (Pair (firstOf p) ec2)))
+    Vuna.Compiler.Common.bind (checkE globals ctx ec body expected)
+      (\p => Vuna.Compiler.Common.bind (resolveRowGoalsCtx globals ctx (secondOf p) sp) (\ec2 => Ok (Pair (firstOf p) ec2)))
   _ => case forceVal ec expected of
     VPi name implicit rig dom clo => if implicit then if isDictDomain ec dom then bindDictBinderFuel (fuel - 1) globals ctx ec rig name dom clo [] body sp
     else if isImplicitDomain ctx ec dom then bindIndexBinderFuel (fuel - 1) globals ctx ec rig name dom clo [] body sp
@@ -1310,7 +1310,7 @@ else case body of
         v = freshVarValue etaName lvl
         ctx2 = ctxBindValue etaName dom ctx
         body2 = EApp body [EVar etaName sp] sp
-      in andThen (rigForLinearDomain ec sp etaName rig dom) (\etaRig => andThen (checkBodyAtEndFuel (fuel - 1) globals ctx2 ec body2 (applyClosure clo v) sp) (\p => case p of
+      in Vuna.Compiler.Common.bind (rigForLinearDomain ec sp etaName rig dom) (\etaRig => Vuna.Compiler.Common.bind (checkBodyAtEndFuel (fuel - 1) globals ctx2 ec body2 (applyClosure clo v) sp) (\p => case p of
         Pair inner ec1 =>
           let
             inner2 = if isOpaqueRuntimeTyIn ec1 ctx dom then wrapOpaqueUses [0] inner else inner
@@ -1318,8 +1318,8 @@ else case body of
       )
       )
     _ =>
-      andThen (checkE globals ctx ec body expected)
-        (\p => andThen (resolveRowGoalsCtx globals ctx (secondOf p) sp) (\ec2 => Ok (Pair (firstOf p) ec2)))
+      Vuna.Compiler.Common.bind (checkE globals ctx ec body expected)
+        (\p => Vuna.Compiler.Common.bind (resolveRowGoalsCtx globals ctx (secondOf p) sp) (\ec2 => Ok (Pair (firstOf p) ec2)))
 
 checkBindersFuel fuel globals ctx ec (pat :: rest) body expected sp = if fuel <= 0 then Err "DT: internal: binder check fuel exhausted"
 else
@@ -1342,7 +1342,7 @@ else
     lvl = ctxDepth ctx
     v = freshVarValue pname lvl
     ctx2 = ctxBindValue pname dom ctx
-  in andThen (rigForLinearDomain ec sp pname rig dom) (\erasure => andThen (checkBindersFuel (fuel - 1) globals ctx2 ec pats body (applyClosure clo v) sp) (\p => case p of
+  in Vuna.Compiler.Common.bind (rigForLinearDomain ec sp pname rig dom) (\erasure => Vuna.Compiler.Common.bind (checkBindersFuel (fuel - 1) globals ctx2 ec pats body (applyClosure clo v) sp) (\p => case p of
     Pair inner ec1 =>
       let
         inner2 = if isOpaqueRuntimeTyIn ec1 ctx dom then wrapOpaqueUses [0] inner else inner
@@ -1367,8 +1367,8 @@ elabFunDefIn globals ctx0 ec clauses expected sp =
     else
       let
         _ = stampSample key "MULTI"
-      in andThen (resolveOverFunPats ec ctx0 expected clauses) (\r => case r of
-        Pair clauses2 ec1 => andThen (multiToExpr (ctorFamilyTable ec1) clauses2) (\bodyExpr => let
+      in Vuna.Compiler.Common.bind (resolveOverFunPats ec ctx0 expected clauses) (\r => case r of
+        Pair clauses2 ec1 => Vuna.Compiler.Common.bind (multiToExpr (ctorFamilyTable ec1) clauses2) (\bodyExpr => let
           _ = stampSample key "CHECKDEF"
         in checkDefIn globals ctx0 ec1 [] bodyExpr expected sp
         )
@@ -1376,8 +1376,8 @@ elabFunDefIn globals ctx0 ec clauses expected sp =
     _ =>
       let
         _ = stampSample key "MULTI"
-      in andThen (resolveOverFunPats ec ctx0 expected clauses) (\r => case r of
-        Pair clauses2 ec1 => andThen (multiToExpr (ctorFamilyTable ec1) clauses2) (\bodyExpr => let
+      in Vuna.Compiler.Common.bind (resolveOverFunPats ec ctx0 expected clauses) (\r => case r of
+        Pair clauses2 ec1 => Vuna.Compiler.Common.bind (multiToExpr (ctorFamilyTable ec1) clauses2) (\bodyExpr => let
           _ = stampSample key "CHECKDEF"
         in checkDefIn globals ctx0 ec1 [] bodyExpr expected sp
         )

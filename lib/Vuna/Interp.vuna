@@ -32,7 +32,7 @@ import Vuna.Compiler.Common
 import Vuna.Compiler.Packages.Pkg
 import Vuna.Compiler.Driver.Dt
 import Vuna.Compiler.Driver.Compile
-import Base.IO
+import Base.IO.Host
 
 interpretFile : PackageContext -> String -> String
 interpretFile ctx entry = case dtEvalFile ctx entry of
@@ -176,6 +176,7 @@ effects = [${join ", " (map tomlQuote caps)}]
 effectManifest : PackageContext -> String
 effectManifest ctx = """[package]
 name = ${tomlQuote effectPackageName}
+privileged = true
 ${depsSection (effectDeps ctx)}${capsSection (contextCapabilities ctx)}"""
 
 -- `ocamlopt` 是否在 PATH 里（链接阶段需要）。探针的 stdout/stderr 全部丢弃。

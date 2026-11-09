@@ -10,7 +10,7 @@ import Vuna.FixityEnv
 import Vuna.Fmt
 import Vuna.Compiler.Frontend.Parser
 import Base.Monad
-import Base.IO
+import Base.IO.Host
 
 main : IO Int
 main = do

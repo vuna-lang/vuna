@@ -46,7 +46,7 @@ import Vuna.Compiler.Driver.Dt
 import Vuna.Compiler.Driver.Compile
 import Vuna.Files
 import Vuna.Interp
-import Base.IO
+import Base.IO.Host
 
 -- `vuna test` 的选项；默认构造值（空过滤 + 全 False + jobs=1 + 无 only-file）等价于
 -- M30 的固定行为。

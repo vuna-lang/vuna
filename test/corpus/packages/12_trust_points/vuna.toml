@@ -1,6 +1,7 @@
 # D28 正例：声明 `[trust] unsafe` 的包进入严格模式，列出的定义可以直调 `runIO`。
 [package]
 name = "trust-points"
+privileged = true
 
 [dependencies]
 vuna-base = "../../../../base"

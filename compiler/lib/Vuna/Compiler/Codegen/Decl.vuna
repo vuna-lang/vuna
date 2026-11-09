@@ -570,12 +570,12 @@ ctorFieldTexts qc levels table datas (keep :: flags) (opq :: opqs) ((Pair name r
   VPi pname implicit _ dom clo =>
     let
       next = applyClosure clo (VNeutral (NVar pname lvl []))
-    in if keep then if opq then andThen (ctorFieldTexts qc levels table datas flags opqs rest (lvl + 1) next slot) (\p => case p of
+    in if keep then if opq then Vuna.Compiler.Common.bind (ctorFieldTexts qc levels table datas flags opqs rest (lvl + 1) next slot) (\p => case p of
       -- 不透明字段：整个字段渲染成不命名的运行时值；不消耗类型参数槽、不再结构化渲染。
       Pair texts slot3 => Ok (Pair ("Obj.t" :: texts) slot3)
     )
     else case renderFieldTy qc levels table datas lvl dom slot of
-      Pair text slot2 => andThen (ctorFieldTexts qc levels table datas flags opqs rest (lvl + 1) next slot2) (\p => case p of
+      Pair text slot2 => Vuna.Compiler.Common.bind (ctorFieldTexts qc levels table datas flags opqs rest (lvl + 1) next slot2) (\p => case p of
         Pair texts slot3 => Ok (Pair (text :: texts) slot3)
       )
     else ctorFieldTexts qc levels table datas flags opqs rest (lvl + 1) next slot
@@ -584,13 +584,13 @@ else Err "DT: internal: constructor keep flag disagrees with telescope rig"
 
 ctorArityNeed : QualCtx -> List Int -> List (Pair String (List Int)) -> List DtData -> DtCtor -> Result Int
 ctorArityNeed qc levels table datas c =
-  andThen
+  Vuna.Compiler.Common.bind
     (ctorFieldTexts qc levels table datas (ctorKeepFlags c) (ctorOpaqueFlagsOf datas c) (dtCtorTelescope c) 0 (eval [] (dtCtorType c)) (length levels))
     (\p => Ok (secondOf p - length levels))
 
 dataArityNeed : QualCtx -> List Int -> List (Pair String (List Int)) -> List DtData -> List DtCtor -> Result Int
 dataArityNeed qc levels table datas ctors =
-  andThen (traverse (ctorArityNeed qc levels table datas) ctors)
+  Vuna.Compiler.Common.bind (traverse (ctorArityNeed qc levels table datas) ctors)
     (\ns => Ok (length levels + maxIntList ns))
 
 maxIntList : List Int -> Int
@@ -611,13 +611,13 @@ parenOne t = "(${t})"
 
 genCtorDecl : QualCtx -> List Int -> List (Pair String (List Int)) -> List DtData -> DtCtor -> Result String
 genCtorDecl qc levels table datas c =
-  andThen
+  Vuna.Compiler.Common.bind
     (ctorFieldTexts qc levels table datas (ctorKeepFlags c) (ctorOpaqueFlagsOf datas c) (dtCtorTelescope c) 0 (eval [] (dtCtorType c)) (length levels))
     (\p => Ok (ctorDeclText (ctorOcamlName (dtCtorFamily c) (dtCtorName c)) (firstOf p)))
 
 -- 去装箱族：只声明透明类型别名，不生成变体/构造子。
 genUnboxedDataDecl : QualCtx -> List Int -> List (Pair String (List Int)) -> List DtData -> DtData -> DtCtor -> Int -> Result String
-genUnboxedDataDecl qc levels table datas d c idx = andThen (ctorFieldTexts qc levels table datas (ctorKeepFlags c) (ctorOpaqueFlagsOf datas c) (dtCtorTelescope c) 0 (eval [] (dtCtorType c)) (length levels)) (\p => case firstOf p of
+genUnboxedDataDecl qc levels table datas d c idx = Vuna.Compiler.Common.bind (ctorFieldTexts qc levels table datas (ctorKeepFlags c) (ctorOpaqueFlagsOf datas c) (dtCtorTelescope c) 0 (eval [] (dtCtorType c)) (length levels)) (\p => case firstOf p of
   text :: rest => case rest of
     [] => Ok "${typeParamDecl (secondOf p)}${typeName (dtDataName d)} = ${text}"
     _ => Err "DT: internal: unboxed constructor has more than one kept field: ${dtCtorName c}"
@@ -631,8 +631,8 @@ genDataDecl qc table datas unboxed d =
   in case lookupUnboxedInfo (dtDataName d) unboxed of
     Just (Pair c idx) => genUnboxedDataDecl qc levels table datas d c idx
     Nothing =>
-      andThen (dataArityNeed qc levels table datas (dtDataCtors d))
-        (\arity => andThen (traverse (genCtorDecl qc levels table datas) (dtDataCtors d)) (\cs => Ok "${typeParamDecl arity}${typeName (dtDataName d)} = ${ctorBodyText cs}"))
+      Vuna.Compiler.Common.bind (dataArityNeed qc levels table datas (dtDataCtors d))
+        (\arity => Vuna.Compiler.Common.bind (traverse (genCtorDecl qc levels table datas) (dtDataCtors d)) (\cs => Ok "${typeParamDecl arity}${typeName (dtDataName d)} = ${ctorBodyText cs}"))
 
 ctorBodyText : List String -> String
 ctorBodyText [] = "|"
@@ -664,7 +664,8 @@ genTypeDeclsOf qc allDatas subset = genTypeDeclsWith qc (usedTableOf allDatas) a
 genTypeDeclsWith : QualCtx -> List (Pair String (List Int)) -> List DtData -> List DtData -> Result String
 genTypeDeclsWith qc table allDatas [] = Ok ""
 genTypeDeclsWith qc table allDatas subset =
-  andThen (traverse (genDataDecl qc table allDatas (unboxedInfoOf allDatas)) subset)
+  Vuna.Compiler.Common.bind
+    (traverse (genDataDecl qc table allDatas (unboxedInfoOf allDatas)) subset)
     (\parts => Ok "type ${joinWith "\nand " parts}\n\n")
 
 collectUsedSpine : List Int -> List (Pair String (List Int)) -> List DtData -> Int -> List Value -> List Int

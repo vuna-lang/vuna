@@ -14,6 +14,7 @@
 | 模块 | 内容 |
 | --- | --- |
 | `Base.Pair` / `Base.Bool` / `Base.List` / `Base.Maybe` / `Base.Result` | 核心代数数据类型与常用 helper（append/reverse/map/filter/foldl/foldr/traverse/step/...）；`Result` / `Maybe` / `List` 带 `Functor`/`Applicative`/`Monad` 实例（`do` 可用）；容器带约束 `Show`，代数容器另带 `Eq`（List/Maybe/Pair 还有 `Ord`），容器 `Show` 的插值经 blanket `Interp` 复用 |
+| `Base.Field` / `Base.Record` | `Field` 类型级字段标签（`Field "id"`）+ `HasField` trait：nominal record 的泛型读访问；`Base.Record` 重导出 `Base.Field`；实例由编译器按 record 字段自动生成（仅导入 Base.Record 的模块）。见 [records-traits.md](records-traits.md)「HasField」 |
 | `Base.String` | split/join/lines/unlines/trim/contains/startsWith/endsWith/repeat/substring；`byteLength : String -> Nat` |
 | `Base.Sort` | 稳定排序 `mergeSort` / `sortBy`（当前实现是插入排序：稳定、O(n²)，适合小表） |
 | `Base.Map` | 关联表实现的抽象 Map（empty/insert/lookup/remove/keys/values/size/...）；小表用 |
@@ -34,7 +35,7 @@
 | `Base.Monoid` | `Semigroup`（`mappend`）与 `Monoid`（`mempty`）trait（无父类，泛型代码同时约束两者）；`List` / `String` / `Maybe` / `Nat` / `Unit` 实例 |
 | `Base.Foldable` | `Foldable` trait（方法 `fold`）+ 顶层 `foldMap : Foldable t, Monoid m, Semigroup m => ...`；`List` / `Maybe` / `Result` 实例 |
 | `Base.Traversable` | `Traversable t f`（双参数：容器 + Applicative）与方法 `mapM : (a -> f b) -> t a -> f (t b)`；`List` / `Maybe` / `Result` 实例 |
-| `Base.Show` | `Show` trait（`show : a -> String`）+ `String` 实例；`Show Int` / `Show Bool` 随类型模块（`Base.Int` / `Base.Bool`），`Show String` 因 String 经 Interp 依赖 Show 留在本模块 |
+| `Base.Show` | `Show` trait（`show : a -> String`）+ `String` 实例；`DebugShow` trait（`debugShow : a -> String`，blanket `instance Show a => DebugShow a`，所有 `Show` 实例自动获得）与 `dbgShow : DebugShow a => a -> a`（打印后返回原值）；`Show Int` / `Show Bool` 随类型模块（`Base.Int` / `Base.Bool`），`Show String` 因 String 经 Interp 依赖 Show 留在本模块 |
 | `Base.Interp` | 模板插值的转换 trait（M36）：`Interp a` + blanket `Show a => Interp a`（默认 = `show`）+ 具体 `Interp String`（原样输出）；插值降级与规则见 [templates.md](templates.md) |
 | `Base.Eq` | `Eq` trait（`eq` / `neq : a -> a -> Bool`）+ `Bool` 实例（Bool 是 `Eq` 返回类型，实例随 trait） |
 | `Base.Ord` | `Ord` trait（`lt` / `le` / `gt` / `ge : a -> a -> Bool`）+ `Bool` 实例；另含 `Ordering(..)`（`LT`/`EQ`/`GT`，带 `Eq`/`Ord`/`Show`/`Hashable` 实例）与 `compare` / `min` / `max` |
@@ -42,10 +43,10 @@
 | `Base.Float` | `Float` primitive 类型模块（**显式 import**，不进 `Prelude`）：`FromFloat` trait + `abs` / `sqrt` / `intToFloat` / `floatToInt` + `Eq` / `Ord` / `Show` 实例；字面量、算术/比较、`main : Float`、模板插值不需要 import（bootstrap 边界见 [floats.md](floats.md)） |
 | `Base.FromString` / `Base.FromInt` | 字面量转换 trait（`fromString` / `fromInt`）与 `String` / `Int` 恒等实例；`Prelude` 导出，`deriving (FromString)` / `(FromInt)` 为单字段包装类型自动派生（见 [floats.md](floats.md)） |
 | `Base.Bool` | `Bool` 类型与逻辑 helper + `Show` / `Hashable` 实例（`if` 输出 `True` / `False`）；`Eq` / `Ord` 实例因 Bool 是方法返回类型随 trait 留在 `Base.Eq` / `Base.Ord` |
-| `Base.IO` | `IO` 的公开 API 与实例（`IO` 本身是内建类型，不再由本模块声明）：print/eprint/readFile/writeFile/getArgs/exit 直接别名到 `prim_*`，W10 增加 env/clock 别名 `getEnv`/`getCwd`/`execPath`/`nowMicros`/`sleepMicros`（编译器已有原生 `prim_sleep`；`Base.IO` 在 seed 闭包内，`sleepMicros` 暂时仍用 `nowMicros` 忙等，rotation 后切换，见 [effects.md](effects.md) §8.6），`Functor`/`Applicative`/`Monad IO` 经 `prim_pureIO`/`prim_bindIO`；`runIO : IO a -> a` = `prim_runIO`（要求 `unsafe` 能力） |
-| `Base.Debug` | 调试工具（M38，**显式 import**，不进 `Prelude`/`Base` 门面）：`trace` / `traceShow` 写 stderr 后返回原值，`assert` / `todo` 失败走 `prim_fail` → 运行时报告器；见 [debugging.md](debugging.md) |
+| `Base.IO` | `IO` 的**公开代数**（F3 P2 拆分后）：`Functor`/`Applicative`/`Monad IO` 实例经 `prim_pureIO`/`prim_bindIO`；面向 `main : IO a`、`IORef`/`MArray`/`Buffer`/`ST` 的进程内 IO。宿主 API 不在本模块 |
+| `Base.IO.Host` | **特权宿主层**（F3 P2）：`runIO : IO a -> a` = `prim_runIO`（`unsafe`，门控在 `Loader.Resolve`）+ 宿主别名 print/eprint/readFile/writeFile/getArgs/exit 与 W10 env/clock 别名（`getEnv`/`getCwd`/`execPath`/`nowMicros`/`sleepMicros`）；只有 `[package] privileged = true` 的包可 import（base handler、编译器、根工具链），并 re-export `Base.IO` |
 | `Base.Effect` | `MonadIO` trait（`liftIO : IO a -> m a`）+ `MonadIO IO` 实例 |
-| `Base.Eff` | 通用运行时效应核心（Layer 1）：开放行 `Row`、抽象动作 `Eff`（无世界令牌）、`Member` 行成员证明/`rowRem`、`weaken`、线性 `Cont`/`resumeCont`/`handleCoreLin`、内建 `Functor`/`Applicative`/`Monad (Eff r)`（`do`/`>>=`；不提供 `bindEff`/`pureEff`）、`sendCore`/`handleCore`、`runPure`/`runIOEff`/`runIOAnswer`；OCaml 5 一次性续延；见 [effects.md](effects.md) §8 |
+| `Base.Eff` | 通用运行时效应核心（Layer 1）：开放行 `Row`、抽象动作 `Eff`（无世界令牌）、`Member` 行成员证明/`rowRem`、`weaken`、线性 `Cont`/`resumeCont`/`handleCoreLin`、内建 `Functor`/`Applicative`/`Monad (Eff r)`（`do`/`>>=`；不提供 `bindEff`/`pureEff`）、`sendCore`/`handleCore`、`runPure`/`runIOEff`/`runIOAnswer`（三个运行入口都要求行已处理干净——`runIOEff : Eff [] a -> IO a`，入口处未处理效应是类型错误）；OCaml 5 一次性续延；见 [effects.md](effects.md) §8 |
 | `Base.Eff.Reader` | 命名 Reader 实例（`Reader n s` + `Ask`，`n` 是 String 实例名）：`ask`/`handleReader`/`handleReaderLin`/`local`（L2 作用域） |
 | `Base.EffState` | 命名 State 实例（`State n s` + `Get`/`Put`）：`get`/`put`/`handleState`（answer `s -> Pair a s` 线程状态） |
 | `Base.EffFs` | IO-backed Fs 效应（W10 扩到完整 fs 面；收尾改为命名实例 `Fs n`，如 `"mock"`/`"real"`）：`ReadFile`/`WriteFile`/`WriteFileAtomic`/`ReadDir`/`IsDirectory`/`MakeDir`/`RemoveFile`/`FileExists`/`FileMtime`/`FileSize` + `fsReadFile n`/`fsWriteFile n`/…/`handleFs n`/`handleFsIO n`；handler 用 `Base.IO` 实现；mock（纯 answer）与 real handler 可并存（`dt_base/37`） |
@@ -55,9 +56,12 @@
 | `Base.EffSched` | W9 单线程 fiber 调度器（L3）：不透明 `Task`/`Scope`，`forkTask`/`awaitTask`/`yieldNow`/`isCancelled`/`cancelTask`/`cancelScope`/`scopeWait`/`scopeWaitTimeout`/`withScope`/`withScopeTimeout`/`liftIOEff`/`forkTaskWith`/线性 `TaskLin`；协作式取消（含清理宽限）、结构化作用域、逻辑步数超时；任务体 `Eff Nil a`；见 [effects.md](effects.md) §8.5 |
 | `Base.EffChannel` | W9 cooperative channel：`send`/`tryRecv`/`recvWait`（忙等 yield，无 Mutex/信号量）；生产者-消费者夹具 `dt_base/36` |
 | `Base.EffMutex` | W9 cooperative Mutex/Semaphore（IORef + yield 忙等；无阻塞原语）；`acquire`/`release`/`semWait`/`semSignal` |
-| `Base.EffConsole` | W10 console 标签（命名实例，如 `"mock"`/`"real"`）：`Print`/`EPrint`；`consolePrint`/`consoleEprint`/`handleConsole`/`handleConsoleIO`（真实 handler 用 `Base.IO.print`/`eprint`） |
-| `Base.EffClock` | W10 clock 标签（命名实例，如 `"mock"`/`"real"`）：`Now`（微秒）/`SleepMicros`；`clockNow`/`clockSleepMicros`/`handleClock`/`handleClockIO`（真实 handler 用 `Base.IO.nowMicros` 与原生 `prim_sleep`） |
+| `Base.EffConsole` | W10 console 标签（命名实例，如 `"mock"`/`"real"`）：`Print`/`EPrint`；`consolePrint`/`consoleEprint`/`handleConsole`/`handleConsoleIO`（真实 handler 用 `Base.IO.Host.print`/`eprint`）；`runConsole n`（`handleConsoleIO` + `runIOAnswer` 单效应入口） |
+| `Base.EffClock` | W10 clock 标签（命名实例，如 `"mock"`/`"real"`）：`Now`（微秒）/`SleepMicros`；`clockNow`/`clockSleepMicros`/`handleClock`/`handleClockIO`；`runClock n`（单效应入口）（真实 handler 用 `Base.IO.Host.nowMicros` 与原生 `prim_sleep`） |
 | `Base.EffEnv` | W10 env 标签（命名实例，如 `"mock"`/`"real"`）：`GetEnv`/`GetCwd`/`ExecPath`；`envGetEnv`/`envGetCwd`/`envExecPath`/`handleEnv`/`handleEnvIO`（真实 handler 用 `Base.IO.getEnv`/`getCwd`/`execPath`） |
+| `Base.EffArgs` | P2c 参数标签：`GetArgs`；`argsGetArgs`/`handleArgs`/`handleArgsIO`（真实 handler 用 `Base.IO.Host.getArgs`）；`runArgs n` 单效应入口 |
+| `Base.EffStdin` | P2c 标准输入标签：`ReadLine`/`ReadBytes`；`stdinReadLine`/`stdinReadBytes`/`handleStdin`/`handleStdinIO`（真实 handler 用 `Base.IO.Host.readLine`/`readBytes`）；`runStdin n` |
+| `Base.EffExit` | P2c 退出标签：`ExitWith`；`exitWith`/`handleExit`/`handleExitIO`（真实 handler 用 `Base.IO.Host.exit`）；`runExit n` |
 | `Base.EffProcess` | W10 process 标签（命名实例，如 `"mock"`/`"real"`）：`Args`/`Exit`/`RunIn`；`processArgs`/`processExit`/`processRunIn`/`handleProcess`/`handleProcessIO`（真实 handler 用 `prim_getArgs`/`prim_exit`/`prim_runIn`）/`handleProcessIOWith`（自定义 `onExit`）/`handleProcessIOObserved`（`Exit` 可观察、不退出） |
 | `Base.StateT` / `Base.ReaderT` / `Base.ErrorT` | IO 基座的效应栈（M37）：`StateT s a` = `s -> IO (Pair a s)`、`ReaderT e a` = `e -> IO a`、`ErrorT e a` = `IO (Error e a)`；各带 handler、`Functor`/`Applicative`/`Monad`/`MonadIO` 实例；固定以 IO 为基座（泛化到任意 monad 需要隐式参数 kind 推断，见 debt） |
 | `Base` | 包门面：整模块重导出核心模块（含 `Base.Nat` / `Base.Unit` / `Base.Applicative`(经 Monad) / `Base.Monoid` / `Base.Foldable` / `Base.Traversable` / `Base.Hashable`；不含 `Vec` 与哈希容器；`import Base` 即可用） |
@@ -86,6 +90,8 @@ module Base.List (List(..), append, reverse, length, map, filter, foldl, foldr, 
                   mem, memName, lookupPair, zip, take, drop, range, mapMaybe) where
 module Base.Maybe (Maybe(..), fromMaybe, isJust, isNothing, maybe) where
 module Base.Pair (Pair(..), firstOf, secondOf) where
+module Base.Field (Field(..)) where
+module Base.Record (module Base.Field, HasField(..)) where
 module Base.Result (Result(..), traverse, step, mapError, withDefault) where
 module Base.String (split, join, lines, unlines, trim, trimLeft, trimRight, contains,
                     startsWith, endsWith, repeat, substring, byteLength) where
@@ -229,7 +235,7 @@ module Base.ErrorT (ErrorT, throwError, catchError, runErrorT) where
   （M35.2）；**W10 的 IO 标签迁移在库层完成**：`Base.EffFs` 扩到完整 fs 面并改为命名
   实例（如 `"mock"`/`"real"`），新增 `Base.EffConsole`/`EffClock`/`EffEnv`/`EffProcess`（命名实例 +
   IO-backed handler），`IO` 仍是运行时基座/逃逸口；收尾又补原生 `prim_sleep`
-  （`Base.EffClock` 已用；`Base.IO.sleepMicros` 待 rotation）、可控 `Exit`
+  （`Base.EffClock` 已用；`Base.IO.Host.sleepMicros` 待 rotation）、可控 `Exit`
   （`handleProcessIOWith`/`…Observed`）与工具链一条 console 路径（`vuna version`）；
   见 [effects.md](effects.md) §8.6；
 - 抽象类型（`Map`、`HashMap`、`HashSet`、`IO`）跨包不可构造、不可模式匹配，只能经 API 使用；

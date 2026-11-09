@@ -39,6 +39,11 @@
    package manager）永不进入 seed 闭包；黑名单见 `nix/tcb-forbidden.txt`；
 5. **IO 是内建效应类型**：动作由 `prim_pureIO`/`prim_bindIO` 构造，只在 `main`（`v_main 0`）
    或 `runIO`/`prim_runIO`（需 `unsafe`）执行；效果原语 `prim_*` 需 `[capabilities] effects`；
+   **特权边界（F3 P2a）**：`[capabilities]`/`[trust]` 与宿主层模块 `Base.IO.Host` 只允许
+   `[package] privileged = true` 的包；用户包/ad-hoc 只能经 `Eff` + handler（见
+   [plans/effects-in-types.md](docs/plans/effects-in-types.md)）；
+   **用户面效果只经 `Eff`**：运行入口只接受行已处理干净的动作（`runIOEff : Eff [] a -> IO a`，
+   入口处未处理效应是类型错误，见 [plans/effects-in-types.md](docs/plans/effects-in-types.md)）；
 6. **唯一路径**：语言夹具、`vuna interp`、包构建与 seed 全部走 DT（精化 + 擦除
    codegen，`vuna check .` 也是 DT 自检）；没有可切换的检查器，也没有第二套 codegen；
 7. 编译器自检通过：`vuna check .` 必须能检查自身源码（`checks.vuna-typecheck`）。
@@ -61,7 +66,7 @@
 - **Monad/Functor 组合**：类型有实例时统一用 `do` / `>>=` / `bind` / `pure` / `fmap` /
   `liftA2` / `ap` / `foldMap` / `mapM`（`pure` 在 `Base.Applicative`，`Base.Monad` 重导出），
   不新增 `pureX` / `bindX` / `andThen` 这类重复入口；例外（ST 线性 bind、编译器内部
-  `Vuna.Compiler.Common.andThen`）与长 do 链性能边界见 `docs/reference/records-traits.md`、
+  `Vuna.Compiler.Common.bind`（限定名调用））与长 do 链性能边界见 `docs/reference/records-traits.md`、
   [effects.md](docs/reference/effects.md) §8.4 与 debt D46/D48。
 - **探索完必须落盘**：数据流 / 不变量 / 边界写进 `docs/` 并接进导航，别只留在会话里；**git 线性历史**：优先 ff-only merge / rebase / cherry-pick / 挤压提交
 
@@ -111,7 +116,7 @@ build，`dist/` 提交）；`nix/` = 构建图 + rotate/metrics/bench；`docs/` 
 - 工具链（`goal` / LSP / `doc` / `search` / 错误码；`vuna gen-errors` 生成
   `docs/.generated/errors.md`）：[tooling.md](docs/reference/tooling.md)；API 文档与检索：
   [api-docs.md](docs/reference/api-docs.md)；lint：[lint.md](docs/reference/lint.md)；
-  调试与运行时错误：[debugging.md](docs/reference/debugging.md)（片段/运行时报告/`Base.Debug`/`vuna run`/REPL）
+  调试与运行时错误：[debugging.md](docs/reference/debugging.md)（片段/运行时报告/`dbg`/`assert`/`vuna run`/REPL）
 - 仓库探索（按场景选工具、探索后落盘）：技能 `.agents/skills/repo-navigation/SKILL.md`
 - 自举与种子：[bootstrap.md](docs/reference/bootstrap.md)；测试与 CI：[testing.md](docs/reference/testing.md)；
   性能：[performance.md](docs/reference/performance.md)

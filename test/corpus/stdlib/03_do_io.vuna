@@ -1,12 +1,13 @@
--- stdlib：do 在 IO monad 上（含 `_ <-` 丢弃结果）；main : IO Int 由运行器执行。
-import Base.Monad
-import Base.IO
+-- stdlib：do 在 Eff 上（含 `_ <-` 丢弃结果）；main : IO Int 由运行器执行。
+-- P2c：用户面经 Eff + Console handler（runConsole）。
+import Base.Eff
+import Base.EffConsole
 
-program : IO Int
+program : Eff [Console "real"] Int
 program = do
-  _ <- print "abc"
+  _ <- consolePrint "real" "abc"
   n <- pure 3
   pure n
 
 main : IO Int
-main = program
+main = runConsole "real" program

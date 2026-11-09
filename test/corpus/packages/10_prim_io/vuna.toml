@@ -1,5 +1,6 @@
 [package]
 name = "prim-io"
+privileged = true
 
 [dependencies]
 vuna-base = "../../../../base"

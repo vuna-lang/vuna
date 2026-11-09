@@ -2,8 +2,8 @@
 module Vuna.Compiler.Common
   ( Pos(..)
   , Span(..)
-  , andThen
   , baseName
+  , bind
   , containsDot
   , joinArrows
   , joinDots
@@ -39,12 +39,12 @@ import Base.Result
 import Base.String
 
 -- | 编译器内部的 `Result` 绑定（固定类型）：与 `Base.Result` 的 `Monad` 实例 `bind` 同义。
--- 编译器源码用它而不是 trait 方法 `bind`：精化器对「Trait 方法应用的期望类型传播」不足，
--- `bind` 的 continuation 里 `Ok (Pair ...)` 这类重载构造子会在结果类型仍是 meta 时选错
--- 命名空间（`CG_TypeLevelNameRuntime`/内部 fuel 错误）；固定类型别名没有该问题。
--- 这是编译器内部实现细节，不是 base 的公开 API；精化器修好后删除并改回 `bind`（debt D46）。
-andThen : Result a -> (a -> Result b) -> Result b
-andThen r k = r >>= k
+-- 编译器源码用限定名 `Vuna.Compiler.Common.bind` 调用（推断位置的 bind 链没有期望类型，trait 方法会引入
+-- 字典 meta；固定类型没有该问题）。这是内部实现细节，不是 base 公开 API；见 debt D46。
+bind : Result a -> (a -> Result b) -> Result b
+bind r k = case r of
+  Ok x => k x
+  Err e => Err e
 
 -- | 源码位置：行、列，均从 1 开始。
 record Pos where

@@ -6,6 +6,7 @@ module Base.EffConsole
   , handleConsole
   , handleConsoleIO
   , resConsole
+  , runConsole
   ) where
 
 -- Base.EffConsole：一阶 console 效应（W10 IO 标签迁移）。
@@ -16,7 +17,7 @@ module Base.EffConsole
 -- `print` / `eprint` 实现真实语义，`handleConsoleIO` 是可直接交给
 -- `runIOAnswer` 的 IO-backed handler。
 import Base.Eff
-import Base.IO
+import Base.IO.Host
 import Base.Monad
 
 -- 标签类型：只做行索引，没有运行时构造子。
@@ -60,3 +61,7 @@ consoleOpHIO op k = case op of
 -- | IO-backed handler：结果行删除 `Console n`，answer 是 IO 动作，可直接交给 `runIOAnswer` 执行。
 handleConsoleIO : {a : Type} -> {r : Row} -> (n : String) -> Eff (Base.Eff.Cons (Console n) r) a -> Eff r (IO a)
 handleConsoleIO n comp = handleConsole n (\a => pure a) consoleOpHIO comp
+
+-- | 单效应便捷入口（P3）：`handleConsoleIO n` + `runIOAnswer` 的组合。
+runConsole : {a : Type} -> (n : String) -> Eff [Console n] a -> IO a
+runConsole n comp = runIOAnswer (handleConsoleIO n comp)

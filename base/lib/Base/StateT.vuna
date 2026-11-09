@@ -10,7 +10,7 @@ module Base.StateT (StateT, evalStateT, execStateT, get, modify, put, runStateT)
 -- 不能从构造子 kind 反推，所以 transformer 固定以 IO 为基座（不是 `m` 泛化）。
 -- 泛化到任意 monad 需要「隐式参数 kind 从构造子 kind 推断」，登记在 debt。
 import Base.Effect
-import Base.IO
+import Base.IO.Host
 import Base.Monad
 import Base.Pair
 

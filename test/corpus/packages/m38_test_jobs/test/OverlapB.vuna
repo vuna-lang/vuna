@@ -1,4 +1,4 @@
-import Base.IO
+import Base.IO.Host
 
 -- 重叠探针 B：打印 START-B 后只睡 100ms 再打印 END-B（比 A 早结束，用来区分
 -- 「并行时 B 的 END 早于 A 的 END」与「串行时 B 根本没在 A 结束前启动」）。

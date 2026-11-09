@@ -1,4 +1,7 @@
 -- stdlib：包门面 `import Base` 覆盖多个模块（List/Sort/Map/String/Monad/IO）。
+-- P2c：宿主 console 走 Eff（runConsole）。
+import Base.Eff
+import Base.EffConsole
 import Base
 
 sum : List Int -> Int
@@ -13,7 +16,10 @@ result =
        ++ join "-" (map (\x => strFromInt x) xs) ++ "/"
        ++ strFromInt (fromMaybe 0 (lookup "a" (insert "a" 7 empty))) ++ "/" ++ strFromInt (strLength "p")
 
-main : IO String
-main = do
-  _ <- print "p"
+prog : Eff [Console "real"] String
+prog = do
+  _ <- consolePrint "real" "p"
   pure result
+
+main : IO String
+main = runConsole "real" prog

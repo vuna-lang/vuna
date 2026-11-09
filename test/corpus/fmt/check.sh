@@ -55,6 +55,7 @@ cp "$HERE/_probe.vuna" "$pkg/app/Main.vuna"
 cat >"$pkg/vuna.toml" <<EOF
 [package]
 name = "vuna"
+privileged = true
 
 [dependencies]
 vuna-base = "$REPO/base"

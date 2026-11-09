@@ -335,7 +335,7 @@ let rec v_Vuna_dCompiler_dElab_dTermination_dcollectClauses = (fun mc0 mc1 mc2 m
 ))
 
 let rec v_Vuna_dCompiler_dElab_dTermination_dcollectMeasure = (fun mc0 mc1 mc2 mc3 mc4 mc5 mc6 mc7 -> (match mc6 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__225, dtb__226) -> ((Vuna_dCompiler_dCommon.v_Vuna_dCompiler_dCommon_dandThen ((((((((v_Vuna_dCompiler_dElab_dTermination_dcollectClauses ((Vuna_dCompiler_dElab_dTermination_dMeasure.v_Vuna_dCompiler_dElab_dTermination_dMeasure_dclausesOfDefTbl dtb__225) mc1)) mc0) mc2) mc3) mc4) dtb__225) mc5) mc7)) (fun acc2 -> ((((((((v_Vuna_dCompiler_dElab_dTermination_dcollectMeasure mc0) mc1) mc2) mc3) mc4) mc5) dtb__226) acc2)))
+  | Base_dList.C_Base_dList_dList_Cons (dtb__225, dtb__226) -> ((Vuna_dCompiler_dCommon.v_Vuna_dCompiler_dCommon_dbind ((((((((v_Vuna_dCompiler_dElab_dTermination_dcollectClauses ((Vuna_dCompiler_dElab_dTermination_dMeasure.v_Vuna_dCompiler_dElab_dTermination_dMeasure_dclausesOfDefTbl dtb__225) mc1)) mc0) mc2) mc3) mc4) dtb__225) mc5) mc7)) (fun acc2 -> ((((((((v_Vuna_dCompiler_dElab_dTermination_dcollectMeasure mc0) mc1) mc2) mc3) mc4) mc5) dtb__226) acc2)))
   | Base_dList.C_Base_dList_dList_Nil -> (Base_dResult.C_Base_dResult_dResult_Ok (mc7))
   | _ -> failwith "DT: impossible branch"
 ))
@@ -391,7 +391,7 @@ let rec v_Vuna_dCompiler_dElab_dTermination_danyOwn = (fun mc0 mc1 -> (match mc1
 ))
 
 let rec v_Vuna_dCompiler_dElab_dTermination_dcheckSccsWith = (fun mc0 mc1 mc2 mc3 mc4 mc5 mc6 -> (match mc1 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__245, dtb__246) -> (if ((v_Vuna_dCompiler_dElab_dTermination_danyOwn mc0) dtb__245) then ((Vuna_dCompiler_dCommon.v_Vuna_dCompiler_dCommon_dandThen ((((((v_Vuna_dCompiler_dElab_dTermination_dcheckComp dtb__245) mc2) mc3) mc4) mc5) mc6)) (fun n -> ((Vuna_dCompiler_dCommon.v_Vuna_dCompiler_dCommon_dandThen (((((((v_Vuna_dCompiler_dElab_dTermination_dcheckSccsWith mc0) dtb__246) mc2) mc3) mc4) mc5) mc6)) (fun m -> (Base_dResult.C_Base_dResult_dResult_Ok ((n + m))))))) else (((((((v_Vuna_dCompiler_dElab_dTermination_dcheckSccsWith mc0) dtb__246) mc2) mc3) mc4) mc5) mc6))
+  | Base_dList.C_Base_dList_dList_Cons (dtb__245, dtb__246) -> (if ((v_Vuna_dCompiler_dElab_dTermination_danyOwn mc0) dtb__245) then ((Vuna_dCompiler_dCommon.v_Vuna_dCompiler_dCommon_dbind ((((((v_Vuna_dCompiler_dElab_dTermination_dcheckComp dtb__245) mc2) mc3) mc4) mc5) mc6)) (fun n -> ((Vuna_dCompiler_dCommon.v_Vuna_dCompiler_dCommon_dbind (((((((v_Vuna_dCompiler_dElab_dTermination_dcheckSccsWith mc0) dtb__246) mc2) mc3) mc4) mc5) mc6)) (fun m -> (Base_dResult.C_Base_dResult_dResult_Ok ((n + m))))))) else (((((((v_Vuna_dCompiler_dElab_dTermination_dcheckSccsWith mc0) dtb__246) mc2) mc3) mc4) mc5) mc6))
   | Base_dList.C_Base_dList_dList_Nil -> (Base_dResult.C_Base_dResult_dResult_Ok (0))
   | _ -> failwith "DT: impossible branch"
 ))

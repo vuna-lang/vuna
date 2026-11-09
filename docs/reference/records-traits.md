@@ -29,17 +29,19 @@ onlyX p = case p of
 
 - 记录可以参数化（`record Pair a b where`）；记录类型名同时是它的构造器名。
 - 字段访问写作 `p.x`，支持链式（如 `s.start.x`）。
-- **字段名在 flatten 后的整个程序里必须唯一**：`EField` 按字段名查记录（`recordsWithField`），
-  同名多声明报 `ambiguous field`；新增 record 的字段名请带类型前缀。
+- **字段访问按 base 类型消歧**：`EField` / `ERecUpdate` 在精化期按 base 类型的
+  单构造子 data / telescope 找字段，不再要求字段名全局唯一；两个 record 可以有同名字段
+  （字段类型可以不同），按标注的 base 类型选择。
 - 编译器/stdlib 内部单构造器产品类型用 `record` + 字段访问取代「data + 位置访问器」；
   只有需要作为函数值传递（`map acc`）或参与终止性投影（递归实参）的投影才保留为访问器，
   因为无签名 lambda 没有参数类型推断、字段访问在其中不可类型化。
 - 导出遵循模块规则：`T` 只导出记录类型（构造器隐藏，跨模块不能构造 / 模式匹配，即
   抽象），`T(..)` 才公开记录构造器。
-- 实现上记录在精化前降级为单构造器 `data`（`Elab.Records`）：构造 = 构造器应用，
-  字段访问 / 更新 = 内联 `case`，所以核心求值器与 codegen 行为一致。
-- 字段访问 / 更新的 base 类型必须可推断；推断不出时报
-  `cannot resolve record type ... add a type signature`，给函数参数补类型签名即可。
+- 实现上记录在精化前降级为单构造子 `data`（`Elab.Records`，字段 binder 带内部前缀避免
+  字段类型引用前序字段名）；构造 / 模式匹配仍是构造器应用，字段访问 / 更新在精化期按
+  base 类型生成内联 `case`，核心求值器与 codegen 行为一致。
+- 字段访问 / 更新的 base 类型必须可推断；具体类型由基类型确定；推断不出（刚性类型变量）
+  时字段访问走 `HasField` 约束（见下），更新则报错提示补类型。
 - 错误：缺字段 / 重复字段 / 未知字段 / 非记录类型；记录支持 `deriving (Show, Eq, Ord, Hashable)`。
 
 ### 零成本表示（自动去装箱）
@@ -132,6 +134,32 @@ main = show (UserId { uid = 3 }) ++ "/" ++ show (MkWrap 5) ++ "/" ++ pretty (Tag
   `Elab.Data.checkViaDataDecls` 校验表示条件。因为 `interp` 是纯 Core 求值器（不做
   codegen 去装箱），`vuna interp` 对依赖表示委托的 `show` 等程序不适用；这些夹具用
   compile + run 验证。
+
+### `HasField`：nominal 记录的泛型读访问（`Base.Record`）
+
+行类型记录没有落地；只读的泛型字段访问用类型类约束表达，对任意 nominal record 都成立，
+且与字段位置无关：
+
+```vuna
+import Base.Record
+
+getId : HasField (Field "id") a String => a -> String
+getId p = p.id
+
+getCreated : HasField (Field "created") a Timestamp => a -> Timestamp
+getCreated p = p.created
+```
+
+- `Field` 是**类型级**标签（`Field "id"`，见 `Base.Field`）；`HasField (l : Type) (a : Type) (t : Type)` 是
+  trait，方法 `getField : a -> t`。标签做成类型 `Field "id"` 而不是 `String` 值索引：
+  隐式参数不能是 `String` 值（M15），类型级标签可以正常参与字典匹配。
+- 编译器为导入了 `Base.Record` 的模块中的 record 字段自动生成实例；显式 `instance HasField ...` 也可用，两者混用时自动生成会跳过。
+- 具体 record 的 `p.f` 仍是内联投影（零字典）；只有 base 类型是刚性类型变量时，`p.f`
+  使用签名里的 `HasField` 约束字典（调用点由自动生成或显式实例填充）。
+- 没有运行时按标签查找；没有行类型 / 结构子类型 / 字段重排。自动实例只生成在定义 record 的模块且该模块需 `import Base.Record`；其他模块的 record 需要显式实例。
+- **状态**：具体 record 的 `p.f`、泛型函数体里的约束字典、自动生成实例在 interp 与 compile 路径都可用；归属表按 record 声明为生成的实例补了模块归属，`10_has_field` 已回到 `records_files`（compile + interp 对比）。限制：自动实例只覆盖定义 record 且 `import Base.Record` 的模块；显式实例存在时跳过自动生成；仍未支持行类型 / 跨包自动实例。
+- `{ p | f = ... }` 更新仍要求具体 record 类型（未知行的更新没有 `SetField` 支持）。
+
 
 ## trait 与实例
 
@@ -306,17 +334,17 @@ main = case (MkEmail "x@y") of MkEmail s => s
   声明期报错。没有父类：`Monad` 不自动提供 `Applicative`，每个 monad 类型要写全三个实例。
 - **`IO`** 是 `base/lib/Base/IO.vuna` 的抽象类型（构造器私有）；组合统一用
   `Functor` / `Applicative` / `Monad` trait 的 `fmap` / `bind` / `pure` / `liftA2`、`>>=` 与 `do`。IO 动作只在 `main`
-  执行；`Base.IO.runIO` 是唯一的 main 外入口、需要能力 `unsafe`（工具链与 `Base.ST` 用）。
+  执行；`Base.IO.Host.runIO` 是唯一的 main 外入口、需要能力 `unsafe`（工具链与 `Base.ST` 用）。
   参数化效应 monad（`Base.State` / `Base.Reader` / `Base.Error`）与 ST 见
   [effects.md](effects.md)。
 - **库内组合约定**：类型已有实例时，组合统一写 `do` / `>>=` / `>>` / `bind` / `pure` /
   `fmap` / `liftA2` / `ap` / `foldMap` / `mapM`，不再提供 `pureX` / `bindX` / `andThen` 这类重复入口
   （`Base.Result.andThen`/`mapResult`、`Base.Maybe.mapJust`、`Base.List.flatMap` 均已删除）。
   例外：`Base.ST` 因线性 bind 不声明 `Monad` 实例，保留 `bindST` / `bindST1` / `pureST` / `fmapST`；
-  编译器内部 `Vuna.Compiler.Common.andThen` 是固定类型的 `Result` 绑定别名（见 debt D46），
-  不是 base 公开 API。`Eff` 的 `do` 已全面可用；长 do 链的精化指数已由 S1 的单趟字典求解
-  消除（20 步约 100ms）。S2 的期望类型定向与 S3b 的 do 块单 monad 均已落地；`Common.andThen`
-  的删除等一次 seed rotation + 机械替换（[effects.md](effects.md) §8.4）。
+  编译器内部 `Vuna.Compiler.Common.bind` 是固定类型的 `Result` 绑定别名（限定名调用，
+  不是 base 公开 API；D46 已删除 `andThen`）。`Eff` 的 `do` 已全面可用；长 do 链的精化指数
+  已由 S1 的单趟字典求解消除（20 步约 100ms）。S2 的期望类型定向与 S3b 的 do 块单 monad
+  均已落地。
 ### Applicative / Foldable / Traversable / Monoid / Hashable（M41）
 
 - `Applicative`：`pure : a -> f a`、`liftA2 : (a -> b -> c) -> f a -> f b -> f c`；

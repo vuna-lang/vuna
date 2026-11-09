@@ -76,7 +76,7 @@ checkBinderRig sp name RigOmega used = Ok 0
 checkLamBinder : Span -> String -> Rig -> List Rig -> Result (List Rig)
 checkLamBinder sp name rig [] = Err "DT: internal: usage vector lost lambda binder"
 checkLamBinder sp name rig (used :: rest) =
-  andThen (checkBinderRig sp name rig used) (\_ => Ok rest)
+  Vuna.Compiler.Common.bind (checkBinderRig sp name rig used) (\_ => Ok rest)
 
 -- case 分支：binders 是 telescope 顺序（第一个字段最外），body usage 的前 k 项按
 -- 逆序对应它们（index 0 = 最后一个字段）。检查完整体 drop。
@@ -87,7 +87,9 @@ checkAltBindersGo : Span -> List (Pair String Rig) -> List Rig -> Result (List R
 checkAltBindersGo sp [] us = Ok us
 checkAltBindersGo sp ((Pair name rig) :: rest) us = case us of
   [] => Err "DT: internal: usage vector lost case binder"
-  used :: more => andThen (checkBinderRig sp name rig used) (\_ => checkAltBindersGo sp rest more)
+  used :: more =>
+    Vuna.Compiler.Common.bind (checkBinderRig sp name rig used)
+      (\_ => checkAltBindersGo sp rest more)
 
 -- ---------------------------------------------------------------
 -- 项遍历
@@ -103,17 +105,17 @@ checkTerm sp env t = case t of
   TLam name rig body =>
     let
       env2 = Pair name rig :: env
-    in andThen (checkTerm sp env2 body) (\u => checkLamBinder sp name rig u)
+    in Vuna.Compiler.Common.bind (checkTerm sp env2 body) (\u => checkLamBinder sp name rig u)
   TApp f a rig =>
-    andThen (checkTerm sp env f)
-      (\uf => if isRigZero rig then Ok uf else andThen (checkTerm sp env a) (\ua => Ok (uAdd uf (uScale rig ua))))
+    Vuna.Compiler.Common.bind (checkTerm sp env f)
+      (\uf => if isRigZero rig then Ok uf else Vuna.Compiler.Common.bind (checkTerm sp env a) (\ua => Ok (uAdd uf (uScale rig ua))))
   TCon c args => checkArgs sp env args
   TCase scrut alts =>
-    andThen (checkTerm sp env scrut)
-      (\us => andThen (checkAlts sp env alts) (\ua => Ok (uAdd us ua)))
+    Vuna.Compiler.Common.bind (checkTerm sp env scrut)
+      (\us => Vuna.Compiler.Common.bind (checkAlts sp env alts) (\ua => Ok (uAdd us ua)))
   TIf c th el =>
-    andThen (checkTerm sp env c)
-      (\uc => andThen (checkTerm sp env th) (\ut => andThen (checkTerm sp env el) (\ue => Ok (uAdd uc (uJoin ut ue)))))
+    Vuna.Compiler.Common.bind (checkTerm sp env c)
+      (\uc => Vuna.Compiler.Common.bind (checkTerm sp env th) (\ut => Vuna.Compiler.Common.bind (checkTerm sp env el) (\ue => Ok (uAdd uc (uJoin ut ue)))))
   TInt n => Ok (uZeroOf (natToInt (length env)))
   TStr s => Ok (uZeroOf (natToInt (length env)))
   TFloat raw => Ok (uZeroOf (natToInt (length env)))
@@ -126,7 +128,8 @@ checkArgsGo : Span -> List (Pair String Rig) -> List (Pair Term Rig) -> List Rig
 checkArgsGo sp env [] acc = Ok acc
 checkArgsGo sp env ((Pair arg rig) :: rest) acc =
   if isRigZero rig then checkArgsGo sp env rest acc
-  else andThen (checkTerm sp env arg) (\ua => checkArgsGo sp env rest (uAdd acc (uScale rig ua)))
+  else Vuna.Compiler.Common.bind (checkTerm sp env arg)
+    (\ua => checkArgsGo sp env rest (uAdd acc (uScale rig ua)))
 
 checkAlts : Span -> List (Pair String Rig) -> List CaseAlt -> Result (List Rig)
 checkAlts sp env alts = checkAltsGo sp env alts Nothing
@@ -140,7 +143,7 @@ checkAltsGo sp env ((CaseAlt cname binders body) :: rest) acc =
   let
     env2 = append (reverse binders) env
     k = natToInt (length binders)
-  in andThen (checkTerm sp env2 body) (\u => andThen (checkAltBinders sp binders u) (\outer => checkAltsGo sp env rest (Just (case acc of
+  in Vuna.Compiler.Common.bind (checkTerm sp env2 body) (\u => Vuna.Compiler.Common.bind (checkAltBinders sp binders u) (\outer => checkAltsGo sp env rest (Just (case acc of
     Just prev => uJoin prev outer
     Nothing => outer
   )
@@ -161,7 +164,7 @@ checkDefUsage msp name body =
     sp = case msp of
       Just s => s
       Nothing => Span "" 0 0 0 0
-  in andThen (checkTerm sp [] body) (\rest => Ok (natToInt (length rest)))
+  in Vuna.Compiler.Common.bind (checkTerm sp [] body) (\rest => Ok (natToInt (length rest)))
 
 -- ---------------------------------------------------------------
 -- W7：线性捕获的「立即消费」规则
@@ -197,14 +200,15 @@ else case t of
     else tcErr1 sp (LinearCaptureEscapes (linClosureOrigName name)) (linClosureOrigName name)
     else capCheckFuel (fuel - 1) ec sp body False
   TApp f a rig =>
-    andThen (capCheckFuel (fuel - 1) ec sp f True)
+    Vuna.Compiler.Common.bind (capCheckFuel (fuel - 1) ec sp f True)
       (\_ => if isRigZero rig then capCheckFuel (fuel - 1) ec sp a False else capCheckFuel (fuel - 1) ec sp a (rigIsLinear rig))
   TCon c args => capArgsFuel fuel ec sp c args
   TIf c th el =>
-    andThen (capCheckFuel (fuel - 1) ec sp c True)
-      (\_ => andThen (capCheckFuel (fuel - 1) ec sp th allowed) (\_ => capCheckFuel (fuel - 1) ec sp el allowed))
+    Vuna.Compiler.Common.bind (capCheckFuel (fuel - 1) ec sp c True)
+      (\_ => Vuna.Compiler.Common.bind (capCheckFuel (fuel - 1) ec sp th allowed) (\_ => capCheckFuel (fuel - 1) ec sp el allowed))
   TCase scrut alts =>
-    andThen (capCheckFuel (fuel - 1) ec sp scrut True) (\_ => capAltsFuel fuel ec sp allowed alts)
+    Vuna.Compiler.Common.bind (capCheckFuel (fuel - 1) ec sp scrut True)
+      (\_ => capAltsFuel fuel ec sp allowed alts)
 
 capArgsFuel : Int -> Ec -> Span -> String -> List (Pair Term Rig) -> Result Int
 capArgsFuel fuel ec sp c args = capArgsGo fuel ec sp (ctorFamilyLinear ec c) args
@@ -214,12 +218,13 @@ capArgsGo fuel ec sp famLin [] = Ok 0
 capArgsGo fuel ec sp famLin ((Pair arg rig) :: rest) =
   let
     allowed = famLin && rigIsLinear rig
-  in andThen (capCheckFuel (fuel - 1) ec sp arg allowed) (\_ => capArgsGo (fuel - 1) ec sp famLin rest)
+  in Vuna.Compiler.Common.bind (capCheckFuel (fuel - 1) ec sp arg allowed)
+    (\_ => capArgsGo (fuel - 1) ec sp famLin rest)
 
 capAltsFuel : Int -> Ec -> Span -> Bool -> List CaseAlt -> Result Int
 capAltsFuel fuel ec sp allowed [] = Ok 0
 capAltsFuel fuel ec sp allowed ((CaseAlt cname binders body) :: rest) =
-  andThen (capCheckFuel (fuel - 1) ec sp body allowed)
+  Vuna.Compiler.Common.bind (capCheckFuel (fuel - 1) ec sp body allowed)
     (\_ => capAltsFuel (fuel - 1) ec sp allowed rest)
 
 -- 构造子所属族是不是 `linear data`（决定 rig-1 字段的一次性承诺是否可靠）。
@@ -249,8 +254,8 @@ else if isLinearType ec (eval [] (dtDefType d)) then tcErr1 (defSpanOf d) (Linea
 else case dtDefBody d of
   Nothing => checkProgramUsageGo ec rest n
   Just body =>
-    andThen (checkDefCapture ec d body)
-      (\_ => andThen (checkDefUsage (dtDefSpan d) (dtDefName d) body) (\_ => checkProgramUsageGo ec rest (n + 1)))
+    Vuna.Compiler.Common.bind (checkDefCapture ec d body)
+      (\_ => Vuna.Compiler.Common.bind (checkDefUsage (dtDefSpan d) (dtDefName d) body) (\_ => checkProgramUsageGo ec rest (n + 1)))
 
 defSpanOf : DtDef -> Span
 defSpanOf d = case dtDefSpan d of

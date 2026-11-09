@@ -1,5 +1,6 @@
 [package]
 name = "effect-unknown-capability"
+privileged = true
 
 [dependencies]
 vuna-base = "../../../../base"

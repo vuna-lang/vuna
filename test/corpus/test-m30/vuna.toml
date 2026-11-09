@@ -6,6 +6,7 @@
 # 是三个独立的失败夹具（纯失败 / 效果失败 / 不支持的 main 类型），用目录路径单独跑。
 [package]
 name = "test-m30"
+privileged = true
 
 [workspace]
 members = ["member"]

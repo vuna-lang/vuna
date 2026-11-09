@@ -9,9 +9,11 @@ module Vuna.Compiler.Elab.Dict
   , dictClassArg
   , dictClassArgs
   , firstUnsolvedDictGoal
-  , firstUnsolvedGoalSpan
+  , firstUnsolvedDictGoalSpan
   , firstUnsolvedInterpGoal
+  , firstUnsolvedInterpGoalSpan
   , firstUnsolvedMemberGoal
+  , firstUnsolvedMemberGoalSpan
   , hasSpecificInterpInstance
   , isCmpMethod
   , isDictDomain
@@ -187,7 +189,7 @@ else case args of
   arg :: rest => case viaWrapperOf ec fam arg of
     Nothing => tryViaArgs globals ctx (fuel - 1) ec sp fam rest (idx + 1)
     Just fieldTy =>
-      andThen
+      Vuna.Compiler.Common.bind
         (searchInstFuel globals ctx (fuel - 1) ec (VNeutral (NGlobal fam (replaceAt idx fieldTy args))) sp)
         (\p => Ok (Just p))
 
@@ -412,17 +414,18 @@ rowYesCtorName : String
 rowYesCtorName = "Base.Eff.Yes.MkYes"
 
 -- 行成员证明（W3）：`Member e r` 是 Type-1 归纳族；精化器按行结构
--- 构造 `Here`/`There` 证明。只认 Base.Eff 的族/构造子名。
+-- 构造 `Here`/`There` 证明。只认 Base.Eff 的族/构造子名
+-- （名字集中在 `Vuna.Compiler.Intrinsics` 的效果协议常量）。
 memberDomName : String
-memberDomName = "Base.Eff.Member"
+memberDomName = effMemberFamilyName
 
--- | 自动补注（M41 新增导出）：hereCtorName。
+-- | 行成员证明构造子 `Here` 的全名（协议常量在 `Intrinsics`）。
 hereCtorName : String
-hereCtorName = "Base.Eff.Member.Here"
+hereCtorName = effMemberHereCtor
 
--- | 自动补注（M41 新增导出）：thereCtorName。
+-- | 行成员证明构造子 `There` 的全名（协议常量在 `Intrinsics`）。
 thereCtorName : String
-thereCtorName = "Base.Eff.Member.There"
+thereCtorName = effMemberThereCtor
 
 data MemberLookup : Type where
   MemberFound : Value -> Ec -> MemberLookup
@@ -455,13 +458,16 @@ else case memberSpine dom of
 memberLookupRow : Int -> Int -> Ec -> Value -> Value -> MemberLookup
 memberLookupRow fuel depth ec eVal rVal = if fuel <= 0 then MemberStuck
 else case forceVal ec rVal of
-  VCon "Base.Eff.Row.Nil" _ => MemberAbsent
-  VCon "Base.Eff.Row.Cons" (h :: t :: _) => if hasUnsolvedMetaValue (ecSolsP ec) eVal || hasUnsolvedMetaValue (ecSolsP ec) h then MemberStuck
-  else case convEc ec depth eVal h of
-    Ok ec1 => MemberFound (ctorValue ec1 hereCtorName [eVal, t]) ec1
-    Err _ => case memberLookupRow (fuel - 1) depth ec eVal t of
-      MemberFound sub ec1 => MemberFound (ctorValue ec1 thereCtorName [eVal, h, t, sub]) ec1
-      other => other
+  VCon cname cargs => if cname == effRowNilCtor then MemberAbsent
+  else if cname == effRowConsCtor then case cargs of
+    h :: t :: _ => if hasUnsolvedMetaValue (ecSolsP ec) eVal || hasUnsolvedMetaValue (ecSolsP ec) h then MemberStuck
+    else case convEc ec depth eVal h of
+      Ok ec1 => MemberFound (ctorValue ec1 hereCtorName [eVal, t]) ec1
+      Err _ => case memberLookupRow (fuel - 1) depth ec eVal t of
+        MemberFound sub ec1 => MemberFound (ctorValue ec1 thereCtorName [eVal, h, t, sub]) ec1
+        other => other
+    _ => MemberStuck
+  else MemberStuck
   _ => MemberStuck
 
 -- 在局部上下文里找同类型的隐式证明 binder（wrapper 体里 `{w : Member e r}`）。
@@ -851,7 +857,7 @@ cmpMethodShortOf name = methodShortOf name
 specializeEqTy : List (Pair String Term) -> Ctx -> String -> Term -> Term -> Span -> Value -> Ec -> Result (Maybe (Pair Term (Pair Value Ec)))
 specializeEqTy globals ctx name aTerm bTerm sp aTy ec = case builtinEqTyName (forceVal ec aTy) of
   Just tyName =>
-    andThen (eqRuntimeName (eqMethodShortOf name) tyName)
+    Vuna.Compiler.Common.bind (eqRuntimeName (eqMethodShortOf name) tyName)
       (\rt => Ok (Just (Pair (TApp (TApp (TGlobal rt) aTerm Rig1) bTerm Rig1) (Pair (VNeutral (NGlobal boolTypeName [])) ec))))
   Nothing => case findClassByShortName "Eq" (ecClasses ec) of
     Nothing =>
@@ -938,7 +944,7 @@ specializeCmpTy : List (Pair String Term) -> Ctx -> String -> Term -> Term -> Sp
 -- （`Ord instance required`），不再生成 `bi_lt_generic` 等对用户 data 的 `compare`。
 specializeCmpTy globals ctx name aTerm bTerm sp aTy ec = case cmpBuiltinTyName (forceVal ec aTy) of
   Just tyName =>
-    andThen (cmpRuntimeName sp (cmpMethodShortOf name) tyName)
+    Vuna.Compiler.Common.bind (cmpRuntimeName sp (cmpMethodShortOf name) tyName)
       (\rt => Ok (Just (Pair (TApp (TApp (TGlobal rt) aTerm Rig1) bTerm Rig1) (Pair (VNeutral (NGlobal boolTypeName [])) ec))))
   Nothing => case findClassByShortName "Ord" (ecClasses ec) of
     Nothing =>
@@ -997,11 +1003,41 @@ firstUnsolvedDictGoalGo ec ((Constraint cid kind m dom cspan cdepth) :: rest) = 
 
 -- C5：第一条未解约束的延迟点 span（只用于给诊断加位置；与 `firstUnsolved*` 选中
 -- 的第一条未解约束一致：都按 pending 顺序扫描、跳过已解 meta）。
-firstUnsolvedGoalSpan : Ec -> Maybe Span
-firstUnsolvedGoalSpan ec = firstUnsolvedGoalSpanGo ec (ecPending ec)
+-- D51②：按目标类别精确取第一条未解约束的 span（与 `firstUnsolved*` 选中同一条）。
+firstUnsolvedInterpGoalSpan : Ec -> Maybe Span
+firstUnsolvedInterpGoalSpan ec = firstUnsolvedInterpSpanGo ec (ecPending ec)
 
-firstUnsolvedGoalSpanGo : Ec -> List Constraint -> Maybe Span
-firstUnsolvedGoalSpanGo ec [] = Nothing
-firstUnsolvedGoalSpanGo ec ((Constraint cid kind m dom cspan cdepth) :: rest) = case metaLookup m (ecSolTbl ec) of
-  Just _ => firstUnsolvedGoalSpanGo ec rest
+firstUnsolvedInterpSpanGo : Ec -> List Constraint -> Maybe Span
+firstUnsolvedInterpSpanGo ec [] = Nothing
+firstUnsolvedInterpSpanGo ec ((Constraint cid kind m dom cspan cdepth) :: rest) = case metaLookup m (ecSolTbl ec) of
+  Just _ => firstUnsolvedInterpSpanGo ec rest
+  Nothing =>
+    let
+      forced = forceVal ec dom
+    in if valueDictFamily forced == dictTypeName interpTypeName then cspan
+    else firstUnsolvedInterpSpanGo ec rest
+
+firstUnsolvedMemberGoalSpan : Ec -> Maybe Span
+firstUnsolvedMemberGoalSpan ec = firstUnsolvedMemberSpanGo ec (ecPending ec)
+
+firstUnsolvedMemberSpanGo : Ec -> List Constraint -> Maybe Span
+firstUnsolvedMemberSpanGo ec [] = Nothing
+firstUnsolvedMemberSpanGo ec ((Constraint cid kind m dom cspan cdepth) :: rest) = if isMemberDomain ec dom then case metaLookup m (ecSolTbl ec) of
   Nothing => cspan
+  Just _ => firstUnsolvedMemberSpanGo ec rest
+else firstUnsolvedMemberSpanGo ec rest
+
+firstUnsolvedDictGoalSpan : Ec -> Maybe Span
+firstUnsolvedDictGoalSpan ec = firstUnsolvedDictSpanGo ec (ecPending ec)
+
+firstUnsolvedDictSpanGo : Ec -> List Constraint -> Maybe Span
+firstUnsolvedDictSpanGo ec [] = Nothing
+firstUnsolvedDictSpanGo ec ((Constraint cid kind m dom cspan cdepth) :: rest) = case metaLookup m (ecSolTbl ec) of
+  Just _ => firstUnsolvedDictSpanGo ec rest
+  Nothing =>
+    let
+      forced = forceVal ec dom
+    in if valueDictFamily forced == dictTypeName interpTypeName then firstUnsolvedDictSpanGo ec rest
+    else if isMemberDomain ec forced then firstUnsolvedDictSpanGo ec rest
+    else if anyUnsolvedMetaArg ec (dictClassArgs ec forced) then firstUnsolvedDictSpanGo ec rest
+    else if isRigidDictArg ec forced then firstUnsolvedDictSpanGo ec rest else cspan

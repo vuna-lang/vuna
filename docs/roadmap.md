@@ -35,9 +35,9 @@ vuna 尚未发布任何版本：没有外部用户、下游生态与历史包袱
   `vuna run` 增量构建并执行；
   诊断源码片段；VSCode 扩展（build/run/tests）。
 - **调试支持（M38）**：运行时未捕获异常由生成代码统一报告为 `vuna: runtime error: ...` +
-  定义级位置帧 + exit 2（位置表随产物生成、路径归一）；`Base.Debug`（`trace`/`traceShow`/
-  `assert`/`todo`）与 `prim_eprint`/`prim_fail`；边界见 [debugging.md](reference/debugging.md)，
-  开放项见 debt D33–D35 / C38。
+  定义级位置帧 + exit 2（位置表随产物生成、路径归一）；语言级调试构造 `dbg` / `dbgShow` /
+  `assert` / `todo`（F3 B，见 [debugging.md](reference/debugging.md)）与 `prim_eprint`/`prim_fail`；
+  边界见 [debugging.md](reference/debugging.md)，开放项见 debt D33–D35 / C38。
 - **容器与查找表**：标准库有泛型 `Base.HashMap k v` / `Base.HashSet a`（1024 桶持久
   哈希表，键需 `Eq` + `Hashable`；M33 W3 起桶是 `Array (Array (List ...))`；M41 把原
   String/Int 两套容器合并、删除 `IntMap`）、不可变 `Base.Array`（copy-on-write）
@@ -74,6 +74,9 @@ vuna 尚未发布任何版本：没有外部用户、下游生态与历史包袱
   能力行仍未实现，归 F3（[effects.md](reference/effects.md)）。**`runtime-effects` 分支已落地
   Layer 1 运行时效应核心**：`Base.Eff`（开放行 + 抽象动作，无世界令牌）、命名 Reader/State
   实例、IO-backed Fs；`Member` 约束与 `do` 实例待补（[effects.md](reference/effects.md) §8）。
+- **记录**：字段访问 / 更新按 base 类型驱动（同名跨 record 允许）；`Base.Record.HasField`
+  提供 nominal record 的泛型读访问（实例按 record 字段生成，仅限导入 `Base.Record` 的模块）；
+  行类型 / 结构记录 / 字段重排尚未实现（见 [records-traits.md](reference/records-traits.md)）。
 - **质量门禁**：`nix flake check`（packages + seed-selfhost + tests + typecheck + lint + fmt +
   index + metrics + package + context-budget + vscode-ext）、原生测试、lint / fmt / metrics /
   文档预算。
@@ -95,8 +98,7 @@ vuna 尚未发布任何版本：没有外部用户、下游生态与历史包袱
   S3 的 do 块单 monad 已落地：前端把 `bind` 在块作用域解析一次（`resolveDo`）并发出
   内部标记链（`@vuna@do@bind@…`），精化器按整块一个 monad/字典解释；形状不认识时
   剥标记回退为普通 bind 应用。S2 的期望结果类型定向也已落地（`inferArgsGo` 的 result
-  hint：trait 方法应用在实参检查前从期望类型早解 `?m`/`?b`），`Common.andThen` 的删除
-  待一次 seed rotation。
+  hint：trait 方法应用在实参检查前从期望类型早解 `?m`/`?b`），`Common.andThen` 已删除（内部改用限定 `Common.bind`）。
 - **模块与包**：模块系统 v3、运行时 / 后端、效应与并发、生态属于未来轨道（F1–F4），不阻塞
   当前根修。
 
@@ -113,7 +115,7 @@ fixity 唯一来源、反引号中缀 / section / 用户符号名、fmt 程序�
 映射到 debt 条目，并在「范围」里列明关闭哪些项；B / C / E 系列残留按需插入。
 
 **M38（开发与调试体验）已收尾**：`vuna test` 筛选/耗时、`vuna run`、REPL 调试命令、LSP
-lint quick fix、CLI 诊断源码片段、运行时错误报告（定义级帧）与 `Base.Debug`。新阶段仍须
+lint quick fix、CLI 诊断源码片段、运行时错误报告（定义级帧）与语言级调试构造（`dbg`/`assert`/`todo`）。新阶段仍须
 映射 debt 并列出关闭项；未排期项见 debt D33–D35 / C38。
 
 ## 性能轨道（M34–M35）
@@ -205,7 +207,9 @@ GC / 运行时正确性与性能；后端语义一致与 seed 边界不变。
 通用效应系统（effect rows 或等价设计）、async/await 或结构化并发、调度器、取消 / 超时；
 把 `IO` 从 thunk 升级为正式效应接口。
 
-**前置**：F2 方向决策。**状态**：表示轴已落地（M39）；用户级效应 API / 行 / 并发不排期，可先库级后语言级。**M33–M35 决策**：最小效应
+**前置**：F2 方向决策。**状态**：表示轴已落地（M39）；效应部分已立项
+（[plans/effects-in-types.md](plans/effects-in-types.md)：用户面只留 `Eff`、入口未处理
+效应=类型错误、特权边界；P1 已落地），并发/async 部分仍不排期。**M33–M35 决策**：最小效应
 接口在 M33 尾段，通用效应 / 并发在 M35；F3 的完整形态以 M35 的范围为准。
 
 ### F4：标准库与包生态

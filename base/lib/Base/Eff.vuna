@@ -101,10 +101,11 @@ runThunk e = case e of
 runPure : {a : Type} -> Eff [] a -> a
 runPure e = runThunk e MkEffUnit
 
--- 运行任意行：把动作放进 IO 世界执行（handler 通过运行时栈安装）。
--- 用 bindIO 延迟到动作执行时再求值，避免构造期就 perform。
--- | 把任意行的动作放进 IO 世界执行（handler 通过运行时栈安装）；用 bindIO 延迟到动作执行时再求值，避免构造期就 perform。
-runIOEff : {r : Row} -> {a : Type} -> Eff r a -> IO a
+-- 运行「行已被处理干净」的动作：把动作放进 IO 世界执行。
+-- 行必须为 `Nil`（F3-1）：入口处未处理效应是**类型错误**，不再等运行时报告；
+-- 未处理的行要先用 handler 消掉。用 bindIO 延迟到动作执行时再求值，避免构造期就 perform。
+-- | 运行行已处理干净（`Nil`）的动作并把结果放回 IO 世界；入口处未处理效应是类型错误（`Eff []`），用 bindIO 延迟到执行时求值。
+runIOEff : {a : Type} -> Eff [] a -> IO a
 runIOEff e = prim_bindIO (prim_pureIO 0) (\_ => prim_pureIO (runEff e))
 
 -- 仅供作用域 handler 实现内部使用（W6）：在嵌套 handler 下运行子计算，外层运行时

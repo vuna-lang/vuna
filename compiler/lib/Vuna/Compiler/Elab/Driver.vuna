@@ -96,8 +96,8 @@ elabSigs sigs globals ec =
 -- 旧实现逐个 `append globals [sig]` 是 O(#globals)/次 ⇒ 整程序 O(n²)。
 elabSigsGo : List (Pair String (Pair (List Expr) (Pair Expr Span))) -> List (Pair String Term) -> Ec -> List (Pair String Term) -> Result (Pair (List (Pair String Term)) Ec)
 elabSigsGo [] globals0 ec acc = Ok (Pair (append globals0 (reverse acc)) ec)
-elabSigsGo ((Pair name (Pair ctxExprs (Pair tyExpr sigSpan))) :: rest) globals ec acc = andThen (checkType globals emptyCtx ec tyExpr) (\p => case p of
-  Pair tyTerm0 (Pair sortLvl ec1) => andThen (elabSigDictBinders globals ec1 tyTerm0 ctxExprs sigSpan) (\q => case q of
+elabSigsGo ((Pair name (Pair ctxExprs (Pair tyExpr sigSpan))) :: rest) globals ec acc = Vuna.Compiler.Common.bind (checkType globals emptyCtx ec tyExpr) (\p => case p of
+  Pair tyTerm0 (Pair sortLvl ec1) => Vuna.Compiler.Common.bind (elabSigDictBinders globals ec1 tyTerm0 ctxExprs sigSpan) (\q => case q of
     Pair tyTerm1 ec2 =>
       let
         sigTy = zonkTerm ec2 0 tyTerm1
@@ -123,7 +123,7 @@ leadingImplicitCtxGo ctx _ = ctx
 -- 正好落在 prefix 的 de Bruijn 环境里，可以直接作为新 Pi 的 domain。
 elabSigDictBinders : List (Pair String Term) -> Ec -> Term -> List Expr -> Span -> Result (Pair Term Ec)
 elabSigDictBinders globals ec tyTerm [] sp = Ok (Pair tyTerm ec)
-elabSigDictBinders globals ec tyTerm ctxExprs sp = andThen (constraintPartsOf sp ctxExprs) (\parts => andThen (elabConstraintDomains (ecClasses ec) globals (leadingImplicitCtx tyTerm) parts sp ec) (\q => let
+elabSigDictBinders globals ec tyTerm ctxExprs sp = Vuna.Compiler.Common.bind (constraintPartsOf sp ctxExprs) (\parts => Vuna.Compiler.Common.bind (elabConstraintDomains (ecClasses ec) globals (leadingImplicitCtx tyTerm) parts sp ec) (\q => let
   doms = firstOf q
   ec1 = secondOf q
 in Ok (Pair (insertSigDicts tyTerm doms (leadingImplicitCount tyTerm)) ec1)
@@ -280,7 +280,7 @@ elabBodies (d :: rest) globals doneDefs acc ec = case d of
     else
       let
         _ = stampSample (strFromInt (spanStartLine sp)) "DEF ${name}"
-      in andThen (elabFunDef globals ec (clausesOfTbl ec (d :: rest) name) (eval [] tyTerm) sp) (\p => let
+      in Vuna.Compiler.Common.bind (elabFunDef globals ec (clausesOfTbl ec (d :: rest) name) (eval [] tyTerm) sp) (\p => let
         _ = stampSample (strFromInt (spanStartLine sp)) "FUN ${name}"
       in case p of
         Pair bodyTerm ec1 =>
@@ -314,7 +314,7 @@ elabBodies (d :: rest) globals doneDefs acc ec = case d of
   DExtern name cName tyExpr sp => case globalsLookup name globals ec of
     Nothing => tcErr1 sp (ExpectedSignature name) name
     Just tyTerm =>
-      andThen (checkExternTy sp tyTerm)
+      Vuna.Compiler.Common.bind (checkExternTy sp tyTerm)
         (\_ => elabBodies rest globals doneDefs (DtExtern name tyTerm cName (Just sp) :: acc) ec)
   _ => elabBodies rest globals doneDefs acc ec
 
@@ -377,7 +377,7 @@ checkExternValue : Span -> Int -> Int -> Value -> Result Int
 checkExternValue sp fuel lvl (VPi name implicit _ dom clo) =
   if fuel <= 0 then tcErr1 sp (FfiTypeUnsupported "too many parameters") "too many parameters"
   else if implicit then tcErr1 sp (FfiTypeUnsupported "implicit parameter") "implicit parameter"
-  else andThen (checkExternDomain sp dom)
+  else Vuna.Compiler.Common.bind (checkExternDomain sp dom)
     (\_ => checkExternValue sp (fuel - 1) (lvl + 1) (applyClosure clo (VNeutral (NVar name lvl []))))
 checkExternValue sp fuel lvl v =
   if fuel <= 0 then tcErr1 sp (FfiTypeUnsupported "too many parameters") "too many parameters"
@@ -587,7 +587,8 @@ replNothingName : String
 replNothingName = "Base.Maybe.Maybe.Nothing"
 
 dtEvalExprIn : DtProgram -> Expr -> Result String
-dtEvalExprIn prog expr = andThen (dtEvalExprInInfo prog expr) (\p => Ok (firstOf p))
+dtEvalExprIn prog expr =
+  Vuna.Compiler.Common.bind (dtEvalExprInInfo prog expr) (\p => Ok (firstOf p))
 
 -- REPL/表达式求值的浮点 guard：AST 里出现浮点字面量或浮点内建引用就直接拒绝
 -- （核心求值器不能算浮点）。只查表达式本身，不扫全程序——`import Base` 的程序仍可
@@ -664,7 +665,7 @@ dtEvalExprInInfoCore prog expr = case prog of
           (Base.HashMap.fromList bodies) (globalsTableOf globals) (solsToTbl sols)
           (Base.HashMap.fromList []) True (Base.HashMap.fromList []) (ctorTblOfDatas datas) defvals
           (datasHaveLinear datas)
-    in andThen (inferE globals emptyCtx ec0 expr) (\p => case p of
+    in Vuna.Compiler.Common.bind (inferE globals emptyCtx ec0 expr) (\p => case p of
       Pair term (Pair ty ec1) =>
         let
           ec2 = resolveDictGoalsFix globals ec1 8
@@ -676,7 +677,7 @@ dtEvalExprInInfoCore prog expr = case prog of
             showTypeSig
               (zonkTerm ec2 0 (quote 0 (force (Base.HashMap.fromList bodies) (ecSolsP ec2) defaultFuel ty)))
         in case firstUnsolvedInterpGoal ec2 of
-          Just td => case firstUnsolvedGoalSpan ec2 of
+          Just td => case firstUnsolvedInterpGoalSpan ec2 of
             Just sp => tcErr1 sp (InterpNoInstance td) td
             Nothing => tcErr1NoLoc (InterpNoInstance td) td
           Nothing => case unsolvedFrom next (ecNext ec2) (ecSolTbl ec2) of
@@ -686,11 +687,49 @@ dtEvalExprInInfoCore prog expr = case prog of
               v => Ok (Pair (showValueRepl datas ec2 v) tyText)
     )
 
+-- 导入 Base.Record 的模块：为当前模块的 record 字段追加 HasField 实例。
+hasHasFieldDecls : List Decl -> Bool
+hasHasFieldDecls [] = False
+hasHasFieldDecls (d :: rest) = case d of
+  DTrait n ps ms sp =>
+    if n == "Base.Record.HasField" || baseNameOf n == "HasField" then True
+    else hasHasFieldDecls rest
+  _ => hasHasFieldDecls rest
+
+shortRecordInfos : List RecordInfo -> List RecordInfo
+shortRecordInfos [] = []
+shortRecordInfos (r :: rest) =
+  if baseNameOf r.recordInfoName == r.recordInfoName then r :: shortRecordInfos rest
+  else shortRecordInfos rest
+
+hasFieldInstancesOfDecls : List Decl -> List Decl
+hasFieldInstancesOfDecls decls =
+  recordHasFieldInstances (shortRecordInfos (firstOf (recordsOfDecls (\n => n) decls)))
+
+hasExplicitHasFieldInstance : List Decl -> Bool
+hasExplicitHasFieldInstance [] = False
+hasExplicitHasFieldInstance (d :: rest) = case d of
+  DInstance ctx head methods sp => case head of
+    EApp (EVar n _) _ _ =>
+      if baseNameOf n == "HasField" then True else hasExplicitHasFieldInstance rest
+    EVar n _ => if baseNameOf n == "HasField" then True else hasExplicitHasFieldInstance rest
+    _ => hasExplicitHasFieldInstance rest
+  _ => hasExplicitHasFieldInstance rest
+
+maybeAddHasFieldInstances : List (Pair String Term) -> List Decl -> List Decl
+maybeAddHasFieldInstances globals decls = if hasExplicitHasFieldInstance decls then decls
+else case globalLookup "Base.Record.getField" globals of
+  Just _ => append decls (hasFieldInstancesOfDecls decls)
+  Nothing => if hasHasFieldDecls decls then append decls (hasFieldInstancesOfDecls decls) else decls
+
 -- 精化入口。M19：先做 record 降级（`Elab.Records.prepareDecls`）——record 是纯记法。
 -- M25：没有 trusted/检查豁免；终止性对每个包、每个模块一致执行。
 elabProgramFull : List Decl -> Result DtProgram
 elabProgramFull decls =
-  andThen (prepareDecls decls) (\ds => andThen (expandDerivings ds) (\ds2 => elabProgramGo ds2))
+  let
+    decls2 = maybeAddHasFieldInstances preludeGlobals decls
+  in Vuna.Compiler.Common.bind (prepareDecls decls2)
+    (\ds => Vuna.Compiler.Common.bind (expandDerivings ds) (\ds2 => elabProgramGo ds2))
 
 elabProgramGo : List Decl -> Result DtProgram
 elabProgramGo decls = elabProgramGoWith ecEmpty preludeGlobals decls
@@ -705,8 +744,10 @@ elabProgramFullWith startEc startGlobals decls =
 -- 依赖包自己的终止性已在它自己的 check 里验过（本路径只报告本包函数的失败）。
 elabProgramFullWithAux : Ec -> List (Pair String Term) -> List Decl -> List Decl -> Result DtProgram
 elabProgramFullWithAux startEc startGlobals termAux decls =
-  andThen (prepareDeclsWith termAux decls)
-    (\ds => andThen (expandDerivings ds) (\ds2 => andThen (prepareDecls termAux) (\ads => andThen (expandDerivings ads) (\ads2 => elabProgramGoWithAux startEc startGlobals ads2 ds2))))
+  let
+    decls2 = maybeAddHasFieldInstances startGlobals decls
+  in Vuna.Compiler.Common.bind (prepareDeclsWith termAux decls2)
+    (\ds => Vuna.Compiler.Common.bind (expandDerivings ds) (\ds2 => Vuna.Compiler.Common.bind (prepareDecls termAux) (\ads => Vuna.Compiler.Common.bind (expandDerivings ads) (\ads2 => elabProgramGoWithAux startEc startGlobals ads2 ds2))))
 
 -- M34.5 接口摘要第一步：起始状态（依赖包的签名 globals + Ec 摘要）参数化，供
 -- 「只精化本包 decls、复用依赖包摘要」的调用方注入。行为与 elabProgramGo 完全一致。
@@ -724,16 +765,16 @@ record ElabCore where
   coreProjSpans : List (Pair String Span)
 
 elabProgramCoreWithAux : Ec -> List (Pair String Term) -> List Decl -> Result ElabCore
-elabProgramCoreWithAux startEc startGlobals decls = andThen (collectSigs decls) (\sigs => let
+elabProgramCoreWithAux startEc startGlobals decls = Vuna.Compiler.Common.bind (collectSigs decls) (\sigs => let
   _ = stamp "collectSigs-done"
-in andThen (elabDatas (collectDataDecls decls []) startGlobals startEc) (\pd => case pd of
+in Vuna.Compiler.Common.bind (elabDatas (collectDataDecls decls []) startGlobals startEc) (\pd => case pd of
   Pair datas (Pair globals0 ec0) =>
     let
       -- M30（D18）：data 精化完成后一次性建构造子索引（之后 ecAddData 增量维护）；
       -- 索引 miss 会回落线性扫 `ecDatas`，所以这里只影响速度。
       ec0b = ecPutCtorTbl ec0 (ctorTblOfDatas (ecDatas ec0))
       _ = stamp "datas-done"
-    in andThen (elabTraits (collectTraitDecls decls []) globals0 ec0b) (\pt => case pt of
+    in Vuna.Compiler.Common.bind (elabTraits (collectTraitDecls decls []) globals0 ec0b) (\pt => case pt of
       Pair classDatas (Pair projGlobals (Pair _ (Pair projSpans ec1))) =>
         let
           globals1 = append globals0 projGlobals
@@ -743,12 +784,12 @@ in andThen (elabDatas (collectDataDecls decls []) startGlobals startEc) (\pd => 
           -- `Base.Eq.Eq` 找不到）。全量路径下两者相同。
           classesAll = ecClasses ec1
           _ = stamp "traits-done"
-        in andThen (checkInstanceHeads (collectInstDecls decls []) classesAll globals1 ec1) (\pih => case pih of
+        in Vuna.Compiler.Common.bind (checkInstanceHeads (collectInstDecls decls []) classesAll globals1 ec1) (\pih => case pih of
           Pair instHeads ec1b =>
             let
               globals2 = append globals1 instHeads
               _ = stamp "instheads-done"
-            in andThen (elabSigs sigs globals2 ec1b) (\p => case p of
+            in Vuna.Compiler.Common.bind (elabSigs sigs globals2 ec1b) (\p => case p of
               Pair globals ec2 =>
                 let
                   -- 正文检查前的唯一一次建表：globals 此时已固定（sigs + inst heads）。
@@ -757,7 +798,7 @@ in andThen (elabDatas (collectDataDecls decls []) startGlobals startEc) (\pd => 
                       (ecSetGlobalsComplete (ecPutGlobalsTbl ec2 (globalsTableOf globals)) True)
                       (clausesTblOf decls)
                   _ = stamp "sigs-elab-done"
-                in andThen (checkAllDefined sigs globals decls) (\_ => andThen (elabBodies decls globals [] [] ec2b) (\q => case q of
+                in Vuna.Compiler.Common.bind (checkAllDefined sigs globals decls) (\_ => Vuna.Compiler.Common.bind (elabBodies decls globals [] [] ec2b) (\q => case q of
                   Pair defs0 ec3a =>
                     let
                       -- M23：字典目标可能在「类参数刚被解出」之后才有唯一实例，而
@@ -775,7 +816,7 @@ in andThen (elabDatas (collectDataDecls decls []) startGlobals startEc) (\pd => 
                         if debugOn then if ecInstsAudit ec3a then note "inst-index=ok"
                         else note "inst-index=MISMATCH"
                         else 0
-                    in andThen (elabInstanceBodies decls classesAll datas1 globals ec3) (\pi => case pi of
+                    in Vuna.Compiler.Common.bind (elabInstanceBodies decls classesAll datas1 globals ec3) (\pi => case pi of
                       Pair instDefs0 ec4a =>
                         let
                           ec4 = resolveDictGoalsFix globals ec4a 8
@@ -802,18 +843,18 @@ finishCore termAux decls core =
     globals = core.coreGlobals
     projSpans = core.coreProjSpans
   in case firstUnsolvedMemberGoal ec4 of
-    Just md => case firstUnsolvedGoalSpan ec4 of
+    Just md => case firstUnsolvedMemberGoalSpan ec4 of
       Just sp => tcErr1 sp (NoInstanceFound md) md
       Nothing => tcErr1NoLoc (NoInstanceFound md) md
     Nothing => case firstUnsolvedInterpGoal ec4 of
-      Just td => case firstUnsolvedGoalSpan ec4 of
+      Just td => case firstUnsolvedInterpGoalSpan ec4 of
         Just sp => tcErr1 sp (InterpNoInstance td) td
         Nothing => tcErr1NoLoc (InterpNoInstance td) td
       Nothing => case unsolvedMeta ec4 of
         -- C42：延迟字典目标里「类参数已解出但实例搜索失败」的，优先报缺实例——
         -- 否则用户只看到 unsolved metavariable，不知道缺的是哪个实例。
         Just m => case firstUnsolvedDictGoal ec4 of
-          Just sd => case firstUnsolvedGoalSpan ec4 of
+          Just sd => case firstUnsolvedDictGoalSpan ec4 of
             Just sp => tcErr1 sp (NoInstanceFound sd) sd
             Nothing => tcErr1NoLoc (NoInstanceFound sd) sd
           Nothing => Err (unsolvedMessage ec4 m)
@@ -831,7 +872,7 @@ finishCore termAux decls core =
               Nothing => g
             ) globals
             _ = stamp "extradefs-done"
-          in andThen (checkProgramUsage ec4 allDefs) (\_ => andThen (checkTerminationDeclsWith (declFunNames decls) (append termAux decls)) (\_ => let
+          in Vuna.Compiler.Common.bind (checkProgramUsage ec4 allDefs) (\_ => Vuna.Compiler.Common.bind (checkTerminationDeclsWith (declFunNames decls) (append termAux decls)) (\_ => let
             _ = stamp "termination-done"
           in Ok
             (DtProgram datas1 allDefs (ecGoals ec4) (ecSols ec4) globalsOut (ecInsts ec4) (ecClasses ec4) (ecNext ec4) (ecDefVals ec4) (Base.HashMap.toList (ecDepthTbl ec4)))
@@ -840,7 +881,7 @@ finishCore termAux decls core =
 
 elabProgramGoWithAux : Ec -> List (Pair String Term) -> List Decl -> List Decl -> Result DtProgram
 elabProgramGoWithAux startEc startGlobals termAux decls =
-  andThen (elabProgramCoreWithAux startEc startGlobals decls)
+  Vuna.Compiler.Common.bind (elabProgramCoreWithAux startEc startGlobals decls)
     (\core => finishCore termAux decls core)
 
 -- 用当前解重新 zonk 定义体（延迟字典元变量 → 实例项）；axiom 无体，原样保留。
@@ -982,7 +1023,7 @@ ctxEntriesAt ((Pair name ty) :: rest) idx depth =
 
 goalsOfProgram : List Decl -> Result (List DtGoalInfo)
 goalsOfProgram decls =
-  andThen (elabProgramFull decls)
+  Vuna.Compiler.Common.bind (elabProgramFull decls)
     (\prog => Ok (map (goalInfoOf (dtProgSols prog)) (dtProgGoals prog)))
 
 -- M40：工具查询的**容错**入口：洞未解（此时严格收尾会因 TC_UnsolvedHole 失败）时仍返回
@@ -990,12 +1031,13 @@ goalsOfProgram decls =
 -- 只给 `vuna goal` / LSP hover 用；check / compile / build 仍走 `elabProgramFull` 的严格收尾。
 goalsOfProgramTolerant : List Decl -> Result (List DtGoalInfo)
 goalsOfProgramTolerant decls =
-  andThen (prepareDecls decls)
-    (\ds => andThen (expandDerivings ds) (\ds2 => andThen (elabProgramCoreWithAux ecEmpty preludeGlobals ds2) (\core => Ok (map (goalInfoOf (ecSols core.coreEc)) (ecGoals core.coreEc)))))
+  Vuna.Compiler.Common.bind (prepareDecls decls)
+    (\ds => Vuna.Compiler.Common.bind (expandDerivings ds) (\ds2 => Vuna.Compiler.Common.bind (elabProgramCoreWithAux ecEmpty preludeGlobals ds2) (\core => Ok (map (goalInfoOf (ecSols core.coreEc)) (ecGoals core.coreEc)))))
 
 elabProgram : List Decl -> Result (Pair (List DtData) (List DtDef))
 elabProgram decls =
-  andThen (elabProgramFull decls) (\prog => Ok (Pair (dtProgDatas prog) (dtProgDefs prog)))
+  Vuna.Compiler.Common.bind (elabProgramFull decls)
+    (\prog => Ok (Pair (dtProgDatas prog) (dtProgDefs prog)))
 
 -- M34.5 接口摘要：从依赖包的缓存 DtProgram 重建精化起始状态（datas / insts / classes /
 -- sols / next / globals 表）。`elabProgramGoWith` 用它作为 startEc / startGlobals，

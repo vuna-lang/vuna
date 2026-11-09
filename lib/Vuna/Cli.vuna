@@ -44,7 +44,7 @@ import Vuna.Run
 import Vuna.Lsp
 import Vuna.Cli.Args
 import qualified Vuna.Lint
-import Base.IO
+import Base.IO.Host
 -- W10 收尾：产品 CLI 的 console 路径迁到效应标签（`Base.EffConsole`）。入口仍是
 -- `main : IO Int`（IO 是运行时基座/逃逸口）；只有 `consoleLine` 这一条真实路径
 -- 经标签 + IO-backed handler 输出，作为工具链逐步迁移的样板（边界见
@@ -86,11 +86,13 @@ toolUsageLines prog = """  ${prog} lint [--fix] <file.vuna>...
 usageFor : String -> String
 usageFor prog = "usage:\n${compilerUsageLines prog}${toolUsageLines prog}"
 
--- `--debug-perf` 是全局调试开关（见 Vuna.Compiler.Debug）：不参与子命令分发。
+-- `--debug-perf` / `--release` 是全局开关（见 Vuna.Compiler.Debug）：不参与子命令分发。
+-- `--release` 由编译器经 `prim_getArgs` 自行读取（strip 只影响分发，不影响 argv）。
 stripDebugFlags : List String -> List String
 stripDebugFlags [] = []
 stripDebugFlags (a :: rest) =
-  if a == "--debug-perf" then stripDebugFlags rest else a :: stripDebugFlags rest
+  if a == "--debug-perf" || a == "--release" then stripDebugFlags rest
+  else a :: stripDebugFlags rest
 
 runCli : List String -> Int
 runCli args = if anyHelp (helpSurface args) then help 0 else runCli1 (stripDebugFlags args)
@@ -404,7 +406,7 @@ fmtFiles check env (path :: rest) changed = case readText path of
 -- repl
 -- ---------------------------------------------------------------
 replArgs : List String -> Int
-replArgs args = case parseToolArgs "vuna repl" [ValueFlag "listen", ValueFlag "client"] args of
+replArgs args = case parseToolArgs "vuna repl" [ValueFlag "listen", ValueFlag "client", BoolFlag "privileged"] args of
   Err e => toolError e
   Ok parsed => case flagValue parsed "client" of
     Just addr => case flagValue parsed "listen" of
@@ -415,12 +417,16 @@ replArgs args = case parseToolArgs "vuna repl" [ValueFlag "listen", ValueFlag "c
           toolError "`--client` 不接受启动目标（它只做传输，不加载包上下文）"
     Nothing => case flagValue parsed "listen" of
       Just addr => case parsed.positionals of
-        [] => replServerWith addr StartNone (contextForDir ".")
-        [target] => replServerWithTarget addr target
+        [] =>
+          replServerWith addr StartNone
+            (maybePrivilegedCtx (flagSet parsed "privileged") (contextForDir "."))
+        [target] => replServerWithTarget addr target (flagSet parsed "privileged")
         _ => usageError 0
       Nothing => case parsed.positionals of
-        [] => replWith Nothing 0 StartNone (contextForDir ".")
-        [target] => replTargetWith Nothing target
+        [] =>
+          replWith Nothing 0 StartNone
+            (maybePrivilegedCtx (flagSet parsed "privileged") (contextForDir "."))
+        [target] => replTargetWith Nothing target (flagSet parsed "privileged")
         _ => usageError 0
 
 -- `--client`：纯传输（不加载包上下文；地址校验在 Server 层共用）。
@@ -435,10 +441,10 @@ replServerWith addr start ctxRes = case checkReplAddr addr of
   Err e => toolError e
   Ok _ => replWith (Just addr) 0 start ctxRes
 
-replServerWithTarget : String -> String -> Int
-replServerWithTarget addr target = case checkReplAddr addr of
+replServerWithTarget : String -> String -> Bool -> Int
+replServerWithTarget addr target priv = case checkReplAddr addr of
   Err e => toolError e
-  Ok _ => replTargetWith (Just addr) target
+  Ok _ => replTargetWith (Just addr) target priv
 
 replWith : Maybe String -> Int -> ReplStart -> Result PackageContext -> Int
 replWith Nothing _ start (Err e) = toolFailure e
@@ -448,11 +454,19 @@ replWith (Just addr) _ start (Ok ctx) = runReplServer ctx start addr
 
 -- 启动目标：存在目录 → 该包上下文；存在文件 → 文件所在包上下文 + 启动加载；
 -- 不存在且像模块名 → cwd 上下文 + 启动导入；其它报可操作错误。
-replTargetWith : Maybe String -> String -> Int
-replTargetWith listen target =
-  if runIO (prim_fileExists target) then if runIO (prim_isDirectory target) then replWith listen 0 (StartDir target) (contextForDir target)
-  else replWith listen 0 (StartFile target) (contextForFile target)
-  else if isModuleNameStr target then replWith listen 0 (StartModule target) (contextForDir ".")
+-- F3 P2b：REPL 默认按**非特权**上下文求值；`vuna repl --privileged` 显式以特权上下文
+-- 求值（开发工具开关，见 `Pkg.privilegedContext`）。
+maybePrivilegedCtx : Bool -> Result PackageContext -> Result PackageContext
+maybePrivilegedCtx False r = r
+maybePrivilegedCtx True r = case r of
+  Err e => Err e
+  Ok c => Ok (privilegedContext c)
+
+replTargetWith : Maybe String -> String -> Bool -> Int
+replTargetWith listen target priv =
+  if runIO (prim_fileExists target) then if runIO (prim_isDirectory target) then replWith listen 0 (StartDir target) (maybePrivilegedCtx priv (contextForDir target))
+  else replWith listen 0 (StartFile target) (maybePrivilegedCtx priv (contextForFile target))
+  else if isModuleNameStr target then replWith listen 0 (StartModule target) (maybePrivilegedCtx priv (contextForDir "."))
   else toolFailure
     ("找不到文件或目录: " ++ target ++ "（vuna repl 接受 <FILE> | <DIR> | <Module.Name>）")
 

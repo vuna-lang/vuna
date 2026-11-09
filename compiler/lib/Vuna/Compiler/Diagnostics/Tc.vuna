@@ -120,6 +120,10 @@ data TcErr : Nat -> Type where
   LinearValueNeedsLinearBinder : String -> TcErr (Succ Zero)
   LinearTopLevel : String -> TcErr (Succ Zero)
   LinearCaptureEscapes : String -> TcErr (Succ Zero)
+  -- F3-1：效果运行入口仍有未处理效应（行必须为 Nil）。
+  UnhandledEffects : String -> TcErr (Succ Zero)
+  -- F3 B：release 构建里的 debug-only 构造（assert / todo）。
+  DebugConstructInRelease : String -> TcErr (Succ Zero)
   -- arity 2
   AmbiguousCtor : String -> String -> TcErr (Succ (Succ Zero))
   AmbiguousInstance : String -> String -> TcErr (Succ (Succ Zero))
@@ -202,6 +206,8 @@ tcCode (LinearTypeNeedsOne _) = "TC_LinearTypeNeedsOne"
 tcCode (LinearValueNeedsLinearBinder _) = "TC_LinearValueNeedsLinearBinder"
 tcCode (LinearTopLevel _) = "TC_LinearTopLevel"
 tcCode (LinearCaptureEscapes _) = "TC_LinearCaptureEscapes"
+tcCode (UnhandledEffects _) = "TC_UnhandledEffects"
+tcCode (DebugConstructInRelease _) = "TC_DebugConstructInRelease"
 tcCode (TypeMismatchCaseVars _) = "TC_TypeMismatchCaseVars"
 tcCode (DuplicateInstance _) = "TC_DuplicateInstance"
 tcCode (InstanceContextMissing _) = "TC_InstanceContextMissing"
@@ -366,6 +372,10 @@ tcTemplate (LinearValueNeedsLinearBinder _) =
 tcTemplate (LinearTopLevel _) = "top-level `<0>` has a linear type; linear values cannot be global"
 tcTemplate (LinearCaptureEscapes _) =
   "lambda `<0>` captures a linear value from its context and may escape"
+tcTemplate (UnhandledEffects _) =
+  "row must be Nil here, but the action still has unhandled effect(s): <0>; handle them first"
+tcTemplate (DebugConstructInRelease _) =
+  "`<0>` is only available in debug builds; remove it before a release build (--release)"
 
 -- ---------------------------------------------------------------
 -- 文档遍历源（同构 List；`gen-errors` 遍历渲染；不承载 arity——arity 在构造子类型里）
@@ -525,10 +535,16 @@ tcChunk11 =
     TcEntry (tcCode (LinearCaptureEscapes "")) (tcTemplate (LinearCaptureEscapes "")) "λ 捕获线性值并可能逃逸"
   ]
 
+tcChunk12 : List TcEntry
+tcChunk12 =
+  [ TcEntry (tcCode (UnhandledEffects "")) (tcTemplate (UnhandledEffects "")) "效果运行入口仍有未处理效应（行必须为 Nil）",
+    TcEntry (tcCode (DebugConstructInRelease "")) (tcTemplate (DebugConstructInRelease "")) "release 构建里使用 assert / todo 等 debug-only 构造"
+  ]
+
 tcAll : List TcEntry
 tcAll =
   concatLists
-    [tcChunk0, tcChunk1, tcChunk2, tcChunk3, tcChunk4, tcChunk5, tcChunk6, tcChunk7, tcChunk8, tcChunk9, tcChunk10, tcChunk11]
+    [tcChunk0, tcChunk1, tcChunk2, tcChunk3, tcChunk4, tcChunk5, tcChunk6, tcChunk7, tcChunk8, tcChunk9, tcChunk10, tcChunk11, tcChunk12]
 
 -- ---------------------------------------------------------------
 -- throw：拼 `[CODE] 消息`（去掉旧 `DT: ` 前缀）；TC 的 Span 经 Common.showSpanLoc 拼在头部

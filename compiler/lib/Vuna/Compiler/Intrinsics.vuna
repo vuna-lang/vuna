@@ -7,12 +7,22 @@ module Vuna.Compiler.Intrinsics
   , TypeIntrinsic(..)
   , allIntrinsics
   , arityOfType
+  , assertIntrinsicName
   , boolFalseCtor
   , boolTrueCtor
   , boolTypeName
   , canonicalCtorsFor
   , capabilityName
   , capabilityNames
+  , dbgIntrinsicName
+  , effMemberFamilyName
+  , effMemberHereCtor
+  , effMemberThereCtor
+  , effRowConsCtor
+  , effRowFamilyName
+  , effRowNilCtor
+  , effRowRemName
+  , effTypeName
   , findIntrinsic
   , floatIntrinsicNames
   , floatTypeName
@@ -22,6 +32,7 @@ module Vuna.Compiler.Intrinsics
   , fromIntTypeName
   , fromStringMethodName
   , fromStringTypeName
+  , hostUnsafeExecutorName
   , intTypeName
   , interpMethodName
   , interpTypeName
@@ -33,6 +44,7 @@ module Vuna.Compiler.Intrinsics
   , intrinsicVisible
   , ioFamilyName
   , ioTypeName
+  , isDebugOnlyName
   , isEffectfulIntrinsic
   , isIOAlgebraName
   , isIntrinsicName
@@ -54,6 +66,7 @@ module Vuna.Compiler.Intrinsics
   , primPureIOName
   , primRunIOName
   , strTypeName
+  , todoIntrinsicName
   , typeIntrinsicArities
   , typeIntrinsicArityOf
   , typeIntrinsicCtorArity
@@ -245,6 +258,32 @@ primRunIOName = "prim_runIO"
 primEraseName : String
 primEraseName = "prim_erase"
 
+-- ---------------------------------------------------------------
+-- 调试构造（F3 B）：语言级 debug 名字
+-- ---------------------------------------------------------------
+-- 这些是**编译器内建的调试构造**，不是库函数、不需要能力位：
+--   * `dbg "msg" x`：求值期把 msg 写 stderr 后返回 x（debug / release 都可用；
+--     debug 输出不是程序语义的一部分）；
+--   * `assert cond "msg" x`：debug-only；失败走 failwith（main 钩子渲染），release
+--     构建由 `Loader.Resolve` 拒绝；
+--   * `todo "msg"`：debug-only 的未实现占位，语义同 assert(False, msg)。
+-- `DebugShow` / `dbgShow` 是 `Base.Show` 里的库层，建立在 `dbg` 上。
+-- | `dbg`：把消息写 stderr 后返回第二个实参（debug/release 都可用）。
+dbgIntrinsicName : String
+dbgIntrinsicName = "dbg"
+
+-- | `assert`：debug-only 断言（release 构建拒绝）。
+assertIntrinsicName : String
+assertIntrinsicName = "assert"
+
+-- | `todo`：debug-only 未实现占位（release 构建拒绝）。
+todoIntrinsicName : String
+todoIntrinsicName = "todo"
+
+-- | 是否是 release 构建要拒绝的 debug-only 构造名（assert / todo）。
+isDebugOnlyName : String -> Bool
+isDebugOnlyName name = name == assertIntrinsicName || name == todoIntrinsicName
+
 -- | 名字是否属于 IO 代数（构造/绑定/执行）原语；codegen 据此走 thunk 组合子特判。
 isIOAlgebraName : String -> Bool
 isIOAlgebraName name =
@@ -252,6 +291,53 @@ isIOAlgebraName name =
     || name == primBindIOName
     || name == primBindIO1Name
     || name == primRunIOName
+
+-- ---------------------------------------------------------------
+-- 效果协议（F3/D3）：库层效应编码的 canonical 身份
+-- ---------------------------------------------------------------
+-- 通用效应系统（W3–W10）把行/成员证明/行删除编码在 `vuna-base` 的数据里；编译器
+-- 按**这些全名**识别该编码（不是内建：base 是唯一真源，名字集中在此处，不再散落）。
+-- 消费方：`Core/Eval.rowRemReduce`（行删除归约）、`Elab/Dict`（行成员证明构造）。
+-- 形状：`Row : Type 1`（`Nil`/`Cons`），`Member : Type -> Row -> Type 1`（`Here`/`There`），
+-- `rowRem : Type -> Row -> Row`（axiom，由编译器按标签值结构相等归约）。
+-- | 效应行族 `Base.Eff.Row`（Type-1 数据）。
+effRowFamilyName : String
+effRowFamilyName = "Base.Eff.Row"
+
+-- | 空行构造子 `Base.Eff.Row.Nil`。
+effRowNilCtor : String
+effRowNilCtor = "Base.Eff.Row.Nil"
+
+-- | 行扩展构造子 `Base.Eff.Row.Cons`（标签 + 尾行）。
+effRowConsCtor : String
+effRowConsCtor = "Base.Eff.Row.Cons"
+
+-- | 行删除 `Base.Eff.rowRem`（axiom，由编译器归约）。
+effRowRemName : String
+effRowRemName = "Base.Eff.rowRem"
+
+-- | 行成员证明族 `Base.Eff.Member`（Type-1 归纳族）。
+effMemberFamilyName : String
+effMemberFamilyName = "Base.Eff.Member"
+
+-- | 行成员证明构造子 `Base.Eff.Member.Here`（头部命中）。
+effMemberHereCtor : String
+effMemberHereCtor = "Base.Eff.Member.Here"
+
+-- | 行成员证明构造子 `Base.Eff.Member.There`（跳过头部）。
+effMemberThereCtor : String
+effMemberThereCtor = "Base.Eff.Member.There"
+
+-- | 效应动作类型 `Base.Eff.Eff`（`Eff : Row -> Type -> Type`，用户面效果类型）。
+effTypeName : String
+effTypeName = "Base.Eff.Eff"
+
+-- ---------------------------------------------------------------
+-- 特权边界（F3 P2）：宿主层模块与执行入口
+-- ---------------------------------------------------------------
+-- | `unsafe` 定义级信任点名单里登记的执行入口别名（`runIO = prim_runIO`）。
+hostUnsafeExecutorName : String
+hostUnsafeExecutorName = "Base.IO.Host.runIO"
 
 -- | prelude 类型层名字：primitive 类型 + 内建类型构造子 + 内建效应类型 IO
 -- （禁止重定义 + Loader 放行）。
@@ -517,6 +603,7 @@ baseIntrinsics : List Intrinsic
 -- 能力 `clock`（与 timeUs 同族）；interp 不归约（OpNone），效果程序只 compile+run。
 -- 注意：`Base.IO` 在 seed 闭包内，旧 seed 不认识它，因此库层切换见 debt D43；
 -- 不在 seed 闭包内的 `Base.EffClock` 真实 handler 已直接使用它。
+-- F3 B：语言级调试构造（无能力位；assert/todo 由 Resolve 在 release 构建拒绝）。
 baseIntrinsics =
   [ Intrinsic "+" (IFun IInt (IFun IInt IInt)) OpAdd Nothing "bi_add" True,
     Intrinsic "-" (IFun IInt (IFun IInt IInt)) OpSub Nothing "bi_sub" True,
@@ -590,6 +677,9 @@ baseIntrinsics =
     Intrinsic "prim_print" (IFun IStr (IIO IInt)) OpNone (Just CapConsole) "dtp_print" True,
     Intrinsic "prim_eprint" (IFun IStr (IIO IInt)) OpNone (Just CapConsole) "(fun s -> prerr_string s; flush stderr; String.length s)" True,
     Intrinsic "prim_fail" (IPi "a" (IFun IStr (IVar "a"))) OpNone Nothing "(fun msg -> failwith msg)" True,
+    Intrinsic dbgIntrinsicName (IPi "a" (IFun IStr (IFun (IVar "a") (IVar "a")))) OpNone Nothing "(fun s x -> prerr_string s; prerr_newline (); x)" True,
+    Intrinsic assertIntrinsicName (IPi "a" (IFun IBool (IFun IStr (IFun (IVar "a") (IVar "a"))))) OpNone Nothing "(fun b msg x -> if b then x else failwith (\"assertion failed: \" ^ msg))" True,
+    Intrinsic todoIntrinsicName (IPi "a" (IFun IStr (IVar "a"))) OpNone Nothing "(fun msg -> failwith (\"TODO: \" ^ msg))" True,
     Intrinsic "prim_readFile" (IFun IStr (IIO IStr)) OpNone (Just CapFs) "dtp_readFile" True,
     Intrinsic "prim_writeFile" (IFun IStr (IFun IStr (IIO IInt))) OpNone (Just CapFs) "dtp_writeFile" True,
     Intrinsic "prim_writeFileAtomic" (IFun IStr (IFun IStr (IIO IInt))) OpNone (Just CapFs) "dtp_writeFileAtomic" True,

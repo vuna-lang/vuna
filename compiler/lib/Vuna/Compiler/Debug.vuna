@@ -1,4 +1,4 @@
-module Vuna.Compiler.Debug (debugOn, note, noteInt, sampleKey, stamp, stampSample) where
+module Vuna.Compiler.Debug (debugOn, note, noteInt, releaseOn, sampleKey, stamp, stampSample) where
 
 -- Vuna.Compiler.Debug：**CLI 参数开关**的性能/诊断探针（长期保留，关闭时近零成本）。
 --
@@ -18,13 +18,19 @@ module Vuna.Compiler.Debug (debugOn, note, noteInt, sampleKey, stamp, stampSampl
 import Vuna.Compiler.Common
 import Base.HashMap
 import Base.Hashable
-import Base.IO
+import Base.IO.Host
 
 args : List String
 args = runIO prim_getArgs
 
 debugOn : Bool
 debugOn = memName "--debug-perf" args || runIO (prim_getenv "VUNA_DEBUG_PERF") == "1"
+
+-- | release 构建开关：`--release`（任意位置；`Vuna.Cli` 先剥掉再分发）或环境变量
+-- `VUNA_RELEASE=1`。release 下 `assert` / `todo` 这类**只在 debug 模式有意义**的
+-- 调试构造被 `Loader.Resolve` 拒绝（见 docs/reference/debugging.md §3）。
+releaseOn : Bool
+releaseOn = memName "--release" args || runIO (prim_getenv "VUNA_RELEASE") == "1"
 
 note : String -> Int
 note msg = if debugOn then

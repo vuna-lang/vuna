@@ -1,6 +1,7 @@
 # D28 负例：未列入信任点的定义直接调用 `prim_runIO` 内建（不是 runIO 别名）→ 报错。
 [package]
 name = "trust-neg-prim"
+privileged = true
 
 [export]
 modules = ["TrustLib"]

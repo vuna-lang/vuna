@@ -1,8 +1,12 @@
--- M21：DT 产物真正执行 Base.IO 的效果（`interp` 是纯核心求值器，不执行效果，
--- 因此效果夹具只走 compile + ocamlopt；输出见同名 .out）。
-import Base.IO
+-- M21：DT 产物真正执行 Base.IO 的效果；P2c 起用户面经 Eff + handler，
+-- `runConsole` = handleConsoleIO + runIOAnswer。输出见同名 .out。
+import Base.Eff
+import Base.EffConsole
+
+prog : Eff [Console "real"] Int
+prog = do
+  _ <- consolePrint "real" "hello"
+  pure 7
 
 main : IO Int
-main = do
-  print "hello"
-  pure 7
+main = runConsole "real" prog

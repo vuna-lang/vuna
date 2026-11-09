@@ -12,7 +12,7 @@ import Vuna.Compiler.Packages.Pkg
 import Vuna.Doc.Html
 import Vuna.Doc.Model
 import Vuna.Files
-import Base.IO
+import Base.IO.Host
 
 runDoc : List String -> Int
 runDoc args = case parseToolArgs "vuna doc" [BoolFlag "check", ValueFlag "package"] args of

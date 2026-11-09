@@ -9,13 +9,13 @@ import Vuna.Compiler.Frontend.Parser.Support
 
 parseSource : String -> String -> Result SourceFile
 parseSource file source =
-  andThen (lexSource source)
-    (\toks => andThen (parseSourceFile (PState file toks (Pos 1 0) (length toks))) (\p => Ok (firstOf p)))
+  Vuna.Compiler.Common.bind (lexSource source)
+    (\toks => Vuna.Compiler.Common.bind (parseSourceFile (PState file toks (Pos 1 0) (length toks))) (\p => Ok (firstOf p)))
 
 -- 单表达式解析（REPL / 工具用）：整段输入必须恰好是一个表达式。
 parseExpressionSource : String -> Result Expr
 parseExpressionSource source =
-  andThen (lexSource source)
+  Vuna.Compiler.Common.bind (lexSource source)
     (\toks => step (parseExpr (stateFuel (PState "<expr>" toks (Pos 1 0) (length toks))) (PState "<expr>" toks (Pos 1 0) (length toks)) 0 0) (\e, st => if isEof st then Ok e else psErr0 ExpectedEndOfExpr))
 
 -- 可选模块头（M10）：`module M (导出项, ...) where`；列表省略 = 导出全部。
@@ -193,7 +193,7 @@ parseSignature st blockCol allowCtx name namePos = step (expectSym st ":") (\_, 
 )
 
 parseClause : PState -> Int -> String -> Pos -> Result (Pair Decl PState)
-parseClause st blockCol name namePos = step (parseClausePatterns (stateFuel st) st blockCol) (\pats, st1 => andThen (checkNoRepeatedBinders pats) (\_ => step (expectSym st1 "=") (\_, st2 => step (parseExpr (stateFuel st2) st2 blockCol 0) (\body, st3 => step (parseWhere st3 blockCol) (\wheres, st4 => let
+parseClause st blockCol name namePos = step (parseClausePatterns (stateFuel st) st blockCol) (\pats, st1 => Vuna.Compiler.Common.bind (checkNoRepeatedBinders pats) (\_ => step (expectSym st1 "=") (\_, st2 => step (parseExpr (stateFuel st2) st2 blockCol 0) (\body, st3 => step (parseWhere st3 blockCol) (\wheres, st4 => let
   body2 = case wheres of
     [] => body
     _ :: _ => ELet wheres body True (spanOf st st4)
@@ -228,7 +228,7 @@ parseWhereBindings st whereCol = if isEof st then Ok (Pair [] st)
 else case peekPos st of
   Pos line col =>
     if col > whereCol then step (parseBindingItemsAt (stateFuel st) st col)
-      (\items, st1 => andThen (bindingItemsToBinds items) (\binds => Ok (Pair binds st1)))
+      (\items, st1 => Vuna.Compiler.Common.bind (bindingItemsToBinds items) (\binds => Ok (Pair binds st1)))
     else Ok (Pair [] st)
 
 -- 绑定块的条目：签名行或一条绑定（`pat = expr` / `name pats = expr`）。
@@ -262,14 +262,14 @@ parseBindingDef fuel stStart st bindCol pat = if fuel <= 0 then Err "DT: parser 
 else case pat of
   PVar name _ =>
     if startsPatternAtom st && canContinue st bindCol then step (parseClausePatterns (stateFuel st) st bindCol)
-      (\pats, st2 => andThen (checkNoRepeatedBinders pats) (\_ => step (expectSym st2 "=") (\_, st3 => step (parseExpr (fuel - 1) st3 bindCol 0) (\value, st4 => Ok (Pair (BIBind (Pair (PVar name (patSpan pat)) (ELocalFun [Pair pats value] (spanOf stStart st4)))) st4)))))
+      (\pats, st2 => Vuna.Compiler.Common.bind (checkNoRepeatedBinders pats) (\_ => step (expectSym st2 "=") (\_, st3 => step (parseExpr (fuel - 1) st3 bindCol 0) (\value, st4 => Ok (Pair (BIBind (Pair (PVar name (patSpan pat)) (ELocalFun [Pair pats value] (spanOf stStart st4)))) st4)))))
     else step (parseBindingValue (fuel - 1) st pat bindCol) (\b, st2 => Ok (Pair (BIBind b) st2))
   _ => step (parseBindingValue (fuel - 1) st pat bindCol) (\b, st2 => Ok (Pair (BIBind b) st2))
 
 parseBindingValue : Int -> PState -> Pat -> Int -> Result (Pair (Pair Pat Expr) PState)
 parseBindingValue fuel st pat blockCol =
   if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
-  else andThen (checkNoRepeatedBinders [pat])
+  else Vuna.Compiler.Common.bind (checkNoRepeatedBinders [pat])
     (\_ => step (expectSym st "=") (\_, st1 => step (parseExpr (fuel - 1) st1 blockCol 0) (\value, st2 => Ok (Pair (Pair pat value) st2))))
 
 -- 条目 → ELet 绑定：把签名贴到同名定义的值上（`EAnn value ty`），并校验布局约束：
@@ -649,7 +649,7 @@ else case peekTok st of
 -- 字面量结束位置写入 `lastPos`：多行字面量之后的布局判定与 decl span 都依赖它。
 parseTemplateAtom : Int -> PState -> Bool -> List TmplPart -> Pos -> Result (Pair Expr PState)
 parseTemplateAtom fuel st multi parts endP = if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
-else andThen (parseTemplateParts (fuel - 1) (fileOf st) parts) (\ps => let
+else Vuna.Compiler.Common.bind (parseTemplateParts (fuel - 1) (fileOf st) parts) (\ps => let
   advanced = advance st
   st2 = PState (fileOf st) advanced.toksOf endP advanced.toksLeft
 in Ok (Pair (EInterp multi ps (spanOf st st2)) st2)
@@ -660,10 +660,10 @@ parseTemplateParts fuel file parts = if fuel <= 0 then Err "DT: parser fuel exha
 else case parts of
   [] => Ok []
   (TPText s) :: rest =>
-    andThen (parseTemplateParts (fuel - 1) file rest) (\ps => Ok (IPText s :: ps))
+    Vuna.Compiler.Common.bind (parseTemplateParts (fuel - 1) file rest) (\ps => Ok (IPText s :: ps))
   (TPHole toks) :: rest =>
-    andThen (parseTemplateHole (toksFuel toks) file toks)
-      (\e => andThen (parseTemplateParts (fuel - 1) file rest) (\ps => Ok (IPHole e :: ps)))
+    Vuna.Compiler.Common.bind (parseTemplateHole (toksFuel toks) file toks)
+      (\e => Vuna.Compiler.Common.bind (parseTemplateParts (fuel - 1) file rest) (\ps => Ok (IPHole e :: ps)))
 
 -- 一个插值洞：空 token → `TemplateHoleEmpty`；否则必须恰好解析成一个表达式。
 -- 前端诊断本来无位置，这里补上 `line:col:`（Loader 再补文件名），洞内错误才可定位。
@@ -803,7 +803,7 @@ else case peekPos st of
   Pos line col =>
     if col <= blockCol then psErr0 LetBindingNotIndented
     else step (parseBindingItemsAt (fuel - 1) st col)
-      (\items, st1 => andThen (bindingItemsToBinds items) (\binds => Ok (Pair binds st1)))
+      (\items, st1 => Vuna.Compiler.Common.bind (bindingItemsToBinds items) (\binds => Ok (Pair binds st1)))
 
 parseCase : Int -> PState -> Int -> Result (Pair Expr PState)
 parseCase fuel st blockCol =
@@ -828,7 +828,7 @@ else if isEof st then Ok (Pair [] st)
 else case peekPos st of
   Pos line col =>
     if col == altCol then step (parsePatternSingle (stateFuel st) st altCol)
-      (\pat, st1 => andThen (checkNoRepeatedBinders [pat]) (\_ => step (expectSym st1 "=>") (\_, st2 => step (parseExpr (fuel - 1) st2 altCol 0) (\body, st3 => step (parseAltList (fuel - 1) st3 altCol) (\rest, st4 => Ok (Pair (Pair pat body :: rest) st4))))))
+      (\pat, st1 => Vuna.Compiler.Common.bind (checkNoRepeatedBinders [pat]) (\_ => step (expectSym st1 "=>") (\_, st2 => step (parseExpr (fuel - 1) st2 altCol 0) (\body, st3 => step (parseAltList (fuel - 1) st3 altCol) (\rest, st4 => Ok (Pair (Pair pat body :: rest) st4))))))
     else Ok (Pair [] st)
 
 parseIf : Int -> PState -> Int -> Result (Pair Expr PState)
@@ -868,7 +868,7 @@ parseDoStmt : Int -> PState -> Int -> Result (Pair DoStmt PState)
 parseDoStmt fuel st stmtCol = if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
 else case parsePatternSingle (stateFuel st) st stmtCol of
   Ok (Pair pat st1) =>
-    if atSym st1 "<-" then andThen (checkNoRepeatedBinders [pat])
+    if atSym st1 "<-" then Vuna.Compiler.Common.bind (checkNoRepeatedBinders [pat])
       (\_ => step (expectSym st1 "<-") (\_, st2 => step (parseExpr (fuel - 1) st2 stmtCol 0) (\e, st3 => Ok (Pair (DBind pat e (spanOf st st3)) st3))))
     else parseDoExprStmt (fuel - 1) st stmtCol
   Err _ => parseDoExprStmt (fuel - 1) st stmtCol

@@ -20,7 +20,7 @@
 - `Base.EffExn`：`ExnOp.Try` 携带一个 `Eff` 子计算；`handleExn` 的 op handler 用
   `runEff (runExn sub)` 在**嵌套 handler** 下运行子计算，外层运行时 handler 继续处理
   子计算里的其它效应；`catchExn` 在 `tryWith` 上组合。
-- `runEff` 是信任边界内的作用域运行入口，普通用户用 `runPure`/`runIOEff`。
+- `runEff` 是信任边界内的作用域运行入口（任意行）；普通用户用 `runPure`/`runIOEff`——两者都只接受行已处理干净的动作（`Eff []`，入口处未处理效应是类型错误）。
 - 夹具 `dt_base/23_eff_scoped`（107：子计算里的 Reader 由外层 handler 处理）；
   负例 `dt_err/74_try_row_mismatch`（`tryWith` 要求行首 `Exn n`）。
 
@@ -129,8 +129,8 @@ main 结束时统一取消清理（最外层兜底）；跨域 handler / Domain 
 
 | 模块 | 标签（行条目） | 操作 | 真实 handler | mock 方式 |
 | --- | --- | --- | --- | --- |
-| `Base.EffConsole` | `Console n`（`n` 是 String 实例名，如 `"mock"`/`"real"`） | `Print String` / `EPrint String` | `handleConsoleIO` → `Base.IO.print`/`eprint` | 自定义 `handleConsole`（如收集日志） |
-| `Base.EffClock` | `Clock n`（如 `"mock"`/`"real"`） | `Now`（微秒）/`SleepMicros Int` | `handleClockIO` → `Base.IO.nowMicros` + **原生 `prim_sleep`** | 固定时间戳 / 忽略 sleep |
+| `Base.EffConsole` | `Console n`（`n` 是 String 实例名，如 `"mock"`/`"real"`） | `Print String` / `EPrint String` | `handleConsoleIO` → `Base.IO.Host.print`/`eprint` | 自定义 `handleConsole`（如收集日志） |
+| `Base.EffClock` | `Clock n`（如 `"mock"`/`"real"`） | `Now`（微秒）/`SleepMicros Int` | `handleClockIO` → `Base.IO.Host.nowMicros` + **原生 `prim_sleep`** | 固定时间戳 / 忽略 sleep |
 | `Base.EffEnv` | `Env n`（如 `"mock"`/`"real"`） | `GetEnv String`/`GetCwd`/`ExecPath` | `handleEnvIO` → `Base.IO.getEnv`/`getCwd`/`execPath` | 固定字符串 |
 | `Base.EffProcess` | `Process n`（如 `"mock"`/`"real"`） | `Args`/`Exit Int`/`RunIn String (List String)` | `handleProcessIO`（真实退出）/ `handleProcessIOWith`（自定义 onExit）/ `handleProcessIOObserved`（观察退出码） | 自定义 `handleProcess`（`Exit c` 作为操作结果） |
 | `Base.EffFs` | `Fs n`（如 `"mock"`/`"real"`，W10 收尾起命名实例） | `ReadFile`/`WriteFile`/`WriteFileAtomic`/`ReadDir`/`IsDirectory`/`MakeDir`/`RemoveFile`/`FileExists`/`FileMtime`/`FileSize` | `handleFsIO n` → `Base.IO`/`prim_*` | 自定义 `handleFs n`（纯 answer 内存表） |
@@ -144,7 +144,7 @@ main 结束时统一取消清理（最外层兜底）；跨域 handler / Domain 
   返回 `Eff r (IO a)`，由 `runIOAnswer` 执行（真实 handler 的 op 解释返回 `IO` 动作）。
 - **原生 sleep（W10 收尾）**：新增编译器原语 `prim_sleep : Int -> IO Int`（微秒；运行时
   `dtp_sleep` 用 `Unix.sleepf`，阻塞睡眠；能力 `clock`；`OpNone`，interp 不归约）。
-  `Base.EffClock` 的 `SleepMicros` 与 `Base.IO.sleepMicros` 都已改用 `prim_sleep`
+  `Base.EffClock` 的 `SleepMicros` 与 `Base.IO.Host.sleepMicros` 都已改用 `prim_sleep`
   （`spinMicros` 已删除；seed 已 rotation，旧 seed 认识 `prim_sleep`）。
 - **可控 `Exit`（W10 收尾）**：`handleProcessIO` 保留真实语义（`onExit = exit`，调用即
   结束进程）；`handleProcessIOWith n onExit` 让调用方替换退出行为，`handleProcessIOObserved n`

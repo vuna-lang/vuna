@@ -87,15 +87,20 @@
   `Module` / `Project` 都携带能力，`Loader.Resolve.checkEffectsBuiltins` 按
   `Vuna.Compiler.Intrinsics` 里每个内建声明的能力位检查。**没有按包名 / 路由的 allowlist**，
   能力声明不可由调用参数伪造；检查覆盖整个源文件（包括未求值的定义），不只看 `main`。
-- 未声明能力的包（普通用户包、`test/corpus` 夹具）只能经 `Base.IO` 使用效果。`Base.IO`
-  是 `prim_*` 的直接别名层（M31），也是推荐路径；`runIO` 在 main 之外执行动作、需 `unsafe`。
+- F3 P2 起能力声明是**特权包专属**：`[capabilities]` / `[trust]` 只能出现在
+  `[package] privileged = true` 的 manifest（`vuna-base` / `vuna-compiler` / 根包；测试夹具包
+  按需标记）；用户包/ad-hoc 声明即 manifest 错误。宿主层模块由特权包在
+  `[privileged] modules = ["Base.IO.Host"]` 里声明（base 的清单），非特权包 import 即
+  `LD_HostModulePrivileged`，也不能直调 `prim_*`；用户面宿主效应经 `Base.Eff.*` 标签 +
+  handler（`runIOEff : Eff [] a -> IO a`）。REPL 默认非特权，`vuna repl --privileged` 才以
+  特权上下文求值 ad-hoc 片段。
 
 ### 定义级信任点（D28，opt-in 严格模式）
 
 - `[trust] unsafe = ["Module.def", ...]` 是**定义级**信任声明：声明该 section 的包进入
   **严格模式**——只有列表里的定义可以**直接**引用 `unsafe` 门控目标（`intrinsicCapability`
   为 `unsafe` 的内建 `prim_runIO` / `prim_effectPerform` / `prim_effectHandle` /
-  `prim_cleanup*` / `prim_sched*`，以及 `Base.IO.runIO` 别名）。其它定义（同包所有模块 +
+  `prim_cleanup*` / `prim_sched*`，以及 `Base.IO.Host.runIO` 别名）。其它定义（同包所有模块 +
   入口文件）直调即被 `Loader.Resolve` 拒绝，错误给出定义全限定名、触发的内建名与修复写法。
 - 检查是**逐定义**的：`DFun` body 与 instance 方法体里**直接出现**目标名字才需要信任点；
   只经信任入口间接调用的传递调用者不需要列。新增直接使用点必须同时更新清单。
@@ -160,7 +165,7 @@ modules = [
 # D28：定义级信任点（opt-in 严格模式）。unsafe 的直接使用点必须显式列出。
 [trust]
 unsafe = [
-  "Base.IO.runIO",
+  "Base.IO.Host.runIO",
   "Base.ST.runST",
   "Base.Eff.bracket",
   # …完整清单见 base/vuna.toml
@@ -171,7 +176,7 @@ unsafe = [
 `vuna-base` 的 `[capabilities] effects` 列
 `["console", "fs", "process", "env", "clock", "unsafe"]`：`Base.IO` 封装了这些能力对应的
 `prim_*`；`unsafe` 的直接使用点（`runIO` 执行入口、`Base.Eff` 运行时续延、`Base.EffSched`
-调度器原语、`Base.Debug.trace` 调试逃逸等）逐条列在 `[trust] unsafe` 里，见
+调度器原语等）逐条列在 `[trust] unsafe` 里，见
 [effects.md](effects.md) 与 `base/vuna.toml`。）
 
 `[export]` 的每个名字都是模块全名；`[dependencies]` 的值是相对该包目录的路径（lexical

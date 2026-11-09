@@ -4,6 +4,7 @@
 # ad-hoc 入口自动注入 Prelude（M26 语义）。
 [package]
 name = "vuna-corpus"
+privileged = true
 
 [dependencies]
 vuna-base = "../../base"

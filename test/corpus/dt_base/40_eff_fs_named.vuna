@@ -3,7 +3,7 @@
 -- mock 的 WriteFile/ReadFile 是固定答案（与 clock/env mock 同一风格）。
 import Base.Eff
 import Base.EffFs
-import Base.IO
+import Base.IO.Host
 import Base.List
 
 dir : String

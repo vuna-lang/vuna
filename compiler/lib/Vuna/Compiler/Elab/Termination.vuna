@@ -336,7 +336,8 @@ collectClauses (cl :: rest) comp ctors projs p caller facts acc = case firstOf a
 collectMeasure : List String -> HashMap String (List (Pair (List Pat) Expr)) -> List String -> List (Pair String (List Int)) -> Int -> HashMap String (List Int) -> List String -> Pair Bool (List (Pair (Pair String String) Int)) -> Result (Pair Bool (List (Pair (Pair String String) Int)))
 collectMeasure comp defTbl ctors projs p facts [] acc = Ok acc
 collectMeasure comp defTbl ctors projs p facts (n :: rest) acc =
-  andThen (collectClauses (clausesOfDefTbl n defTbl) comp ctors projs p n facts acc)
+  Vuna.Compiler.Common.bind
+    (collectClauses (clausesOfDefTbl n defTbl) comp ctors projs p n facts acc)
     (\acc2 => collectMeasure comp defTbl ctors projs p facts rest acc2)
 
 -- 同一对 (caller, callee) 的所有调用点都非零 ⇒ 该边严格。
@@ -429,6 +430,6 @@ anyOwn own (n :: rest) = if memName n own then True else anyOwn own rest
 checkSccsWith : List String -> List (List String) -> HashMap String (List (Pair (List Pat) Expr)) -> List String -> List (Pair String (List Int)) -> HashMap String (List String) -> List (Pair String Int) -> Result Int
 checkSccsWith own [] defTbl ctors projs g facts = Ok 0
 checkSccsWith own (comp :: rest) defTbl ctors projs g facts =
-  if anyOwn own comp then andThen (checkComp comp defTbl ctors projs g facts)
-    (\n => andThen (checkSccsWith own rest defTbl ctors projs g facts) (\m => Ok (n + m)))
+  if anyOwn own comp then Vuna.Compiler.Common.bind (checkComp comp defTbl ctors projs g facts)
+    (\n => Vuna.Compiler.Common.bind (checkSccsWith own rest defTbl ctors projs g facts) (\m => Ok (n + m)))
   else checkSccsWith own rest defTbl ctors projs g facts

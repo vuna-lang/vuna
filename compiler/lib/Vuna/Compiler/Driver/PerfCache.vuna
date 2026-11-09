@@ -25,7 +25,7 @@ import Vuna.Compiler.CacheFormat
 import Vuna.Compiler.Common
 import Vuna.Compiler.Driver.Split
 import Vuna.Compiler.Version
-import Base.IO
+import Base.IO.Host
 
 unitCacheSchema : String
 unitCacheSchema = "vuna-unit-cache 1"

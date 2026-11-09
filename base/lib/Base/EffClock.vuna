@@ -6,6 +6,7 @@ module Base.EffClock
   , handleClock
   , handleClockIO
   , resClock
+  , runClock
   ) where
 
 -- Base.EffClock：一阶时钟效应（W10 IO 标签迁移）。
@@ -18,7 +19,7 @@ module Base.EffClock
 -- 仍保留忙等实现，切换需先 seed rotation（见 debt D43）；`Base.EffClock` 不在 seed
 -- 闭包内，真实 handler 已走原生原语。
 import Base.Eff
-import Base.IO
+import Base.IO.Host
 import Base.Monad
 
 -- | clock 效应的标签类型 `Clock n`：只做行索引，没有运行时构造子。
@@ -59,3 +60,7 @@ clockOpHIO op k = case op of
 -- | IO-backed handler：结果行删除 `Clock n`，answer 是 IO 动作，可交给 `runIOAnswer`。
 handleClockIO : {a : Type} -> {r : Row} -> (n : String) -> Eff (Base.Eff.Cons (Clock n) r) a -> Eff r (IO a)
 handleClockIO n comp = handleClock n (\a => pure a) clockOpHIO comp
+
+-- | 单效应便捷入口（P3）：`handleClockIO n` + `runIOAnswer` 的组合。
+runClock : {a : Type} -> (n : String) -> Eff [Clock n] a -> IO a
+runClock n comp = runIOAnswer (handleClockIO n comp)

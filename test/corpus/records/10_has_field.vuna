@@ -1,0 +1,26 @@
+-- HasField：泛型读访问；实例由编译器为导入 Base.Record 的模块的 record 字段生成。
+import Base.Record
+
+record User where
+  name : String
+  id : Int
+  created : Int
+
+record Item where
+  id : Int
+  created : Int
+
+getId : HasField (Field "id") a Int => a -> Int
+getId x = x.id
+
+getCreated : HasField (Field "created") a Int => a -> Int
+getCreated x = x.created
+
+u : User
+u = User { name = "u", id = 7, created = 3 }
+
+i : Item
+i = Item { id = 9, created = 4 }
+
+main : String
+main = show (getId u) ++ "/" ++ show (getCreated i)

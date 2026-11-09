@@ -78,7 +78,7 @@ unifyIdxList ec acc depth fuel xs ys =
 unifyIdxListGo : Ec -> List (Pair Int Value) -> Int -> Int -> List Value -> List Value -> Result (List (Pair Int Value))
 unifyIdxListGo ec acc depth fuel [] [] = Ok acc
 unifyIdxListGo ec acc depth fuel (x :: xs) (y :: ys) =
-  andThen (unifyIdx ec acc depth (fuel - 1) x y)
+  Vuna.Compiler.Common.bind (unifyIdx ec acc depth (fuel - 1) x y)
     (\acc2 => unifyIdxList ec acc2 depth (fuel - 1) xs ys)
 unifyIdxListGo ec acc depth fuel _ _ = unifyErr
 
@@ -486,4 +486,5 @@ checkCovered ctx ec dd idxs written alts sp (ctor :: rest) =
 checkCaseDone : Ec -> Ctx -> DtData -> List Value -> List (Pair Pat Expr) -> Value -> Span -> Term -> List CaseAlt -> Result (Pair Term Ec)
 checkCaseDone ec ctx dd idxs alts expected sp scrutTerm altTerms =
   if hasCatchAll alts then Ok (Pair (TCase scrutTerm altTerms) ec)
-  else andThen (checkCoverage ctx ec dd idxs alts sp) (\_ => Ok (Pair (TCase scrutTerm altTerms) ec))
+  else Vuna.Compiler.Common.bind (checkCoverage ctx ec dd idxs alts sp)
+    (\_ => Ok (Pair (TCase scrutTerm altTerms) ec))

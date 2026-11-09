@@ -3,7 +3,7 @@
 -- 结构化作用域：withScope 在 body 结束后等所有子任务结束，Ok 带回完成数汇总。
 import Base.Eff
 import Base.EffSched
-import Base.IO
+import Base.IO.Host
 import Base.Result
 
 work : String -> String -> Int -> Eff [] Int

@@ -33,7 +33,7 @@ module Vuna.Cli.Args
 -- `requireExists` / `requireDirectory` 是唯一入口。
 import Vuna.Compiler.Common
 import Vuna.Compiler.Driver.CompilerCli
-import Base.IO
+import Base.IO.Host
 
 -- ---------------------------------------------------------------
 -- 参数说明表

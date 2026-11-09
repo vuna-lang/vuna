@@ -2,12 +2,12 @@
 set -u
 . "$(dirname "$0")/../lib/harness.sh"
 
-# 46) M38 Base.Debug：trace/traceShow 走 stderr 且返回值不变；assert/todo 失败走
-#     运行时报告器（exit 2、帧指向 Base.Debug）。
+# 46) 语言级调试构造（F3 B）：dbg/dbgShow 走 stderr 且返回值不变；assert/todo 失败走
+#     运行时报告器（exit 2、帧指向调用点）。
 m38_dbg="$tmp/m38-dbg"
 mkdir -p "$m38_dbg/app"
 printf '[package]\nname = "m38-dbg"\n\n[dependencies]\nvuna-base = "%s"\n' "$VUNA_BASE" >"$m38_dbg/vuna.toml"
-printf 'import Base.Debug\n\nmain : Int\nmain = trace "m38-trace" (traceShow 42)\n' >"$m38_dbg/app/Main.vuna"
+printf 'main : Int\nmain = dbg "m38-trace" (dbgShow 42)\n' >"$m38_dbg/app/Main.vuna"
 if ! "$VUNA" build "$m38_dbg" >"$tmp/m38-dbg-build.log" 2>&1; then
   bad "m38 debug build" "exit 0" "$(tail -3 "$tmp/m38-dbg-build.log")"
 else
@@ -19,7 +19,7 @@ else
   check_contains "m38 debug trace stderr" "$m38_dbg_err" "m38-trace"
   check_contains "m38 debug traceshow stderr" "$m38_dbg_err" "42"
 fi
-printf 'import Base.Debug\n\nmain : Int\nmain = assert False "m38 assert" 7\n' >"$m38_dbg/app/Main.vuna"
+printf 'main : Int\nmain = assert False "m38 assert" 7\n' >"$m38_dbg/app/Main.vuna"
 if ! "$VUNA" build "$m38_dbg" >"$tmp/m38-assert-build.log" 2>&1; then
   bad "m38 assert build" "exit 0" "$(tail -3 "$tmp/m38-assert-build.log")"
 else
@@ -27,10 +27,10 @@ else
   m38_assert_code=$?
   m38_assert_err=$(cat "$tmp/m38-assert.err")
   check_contains "m38 assert message" "$m38_assert_err" "assertion failed: m38 assert"
-  check_contains "m38 assert frame" "$m38_assert_err" "  at Base.Debug.assert ("
+  check_contains "m38 assert frame" "$m38_assert_err" "  at main ("
   check_eq "m38 assert exit" "2" "$m38_assert_code"
 fi
-printf 'import Base.Debug\n\nmain : Int\nmain = todo "m38 todo"\n' >"$m38_dbg/app/Main.vuna"
+printf 'main : Int\nmain = todo "m38 todo"\n' >"$m38_dbg/app/Main.vuna"
 if ! "$VUNA" build "$m38_dbg" >"$tmp/m38-todo-build.log" 2>&1; then
   bad "m38 todo build" "exit 0" "$(tail -3 "$tmp/m38-todo-build.log")"
 else

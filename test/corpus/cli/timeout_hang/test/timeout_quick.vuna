@@ -1,6 +1,7 @@
-import Base.IO
-
 -- W1 超时夹具（通过路径）：1ms 睡眠在短超时内照常通过。
--- 超时机制不能误伤正常的 IO 测试（编译/链接/运行三步都要按原语义判 0 通过）。
+-- P2c：睡眠走 Clock 效应（runClock），不再直接 import Host。
+import Base.Eff
+import Base.EffClock
+
 main : IO Int
-main = sleepMicros 1000
+main = runClock "real" (clockSleepMicros "real" 1000)

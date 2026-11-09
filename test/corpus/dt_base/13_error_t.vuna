@@ -3,7 +3,7 @@
 import Base.Effect
 import Base.Error
 import Base.ErrorT
-import Base.IO
+import Base.IO.Host
 
 prog : ErrorT String Int
 prog = do

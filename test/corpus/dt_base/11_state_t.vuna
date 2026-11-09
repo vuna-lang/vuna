@@ -1,7 +1,7 @@
 -- M37：StateT 效应栈（IO 之上）。`runStateT` 返回 IO 动作，由 main 执行；
 -- `liftIO` 把 IO 动作提升进 StateT，handler 显式取 Pair。
 import Base.Effect
-import Base.IO
+import Base.IO.Host
 import Base.Pair
 import Base.StateT
 

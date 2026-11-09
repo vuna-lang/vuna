@@ -8,6 +8,7 @@
 # 探针用 clock（sleepMicros），IO 测试用 console。
 [package]
 name = "m38-test-jobs"
+privileged = true
 
 [dependencies]
 vuna-base = "../../../../base"

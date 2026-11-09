@@ -1,0 +1,9 @@
+-- D51③：同一定义同时需要两个不同类的字典（`Show a` + `Eq a`）。定义收尾时两组
+-- 字典 binder 都要正确插入/移位；此前会报 `DT: internal: negative de Bruijn index -2`。
+import Prelude
+
+mixed : a -> String
+mixed x = show x ++ (if x == x then "" else "!")
+
+main : String
+main = mixed 1

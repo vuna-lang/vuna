@@ -40,7 +40,7 @@ module Base.ST
 -- 执行：`runST` 在入口用一次 `runIO`；`ST r a` 运行时是 `IO a` 的单构造子 data。
 -- 低层 `IORef` / `MArray` 仍是非线性内建类型，但字段不导出；用户只能经这里的线性包装
 -- 使用（信任点在 `Base.ST`）。
-import Base.IO
+import Base.IO.Host
 import Base.Int
 import Base.Nat
 

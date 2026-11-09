@@ -1,11 +1,12 @@
--- Prelude 自动导入：不写 import 也能使用 List/String 的常用名；
--- IO 效果函数仍需显式 import Base.IO。
-import Base.IO
-import Base.Monad
+-- Prelude 自动导入：不写 import 也能使用 List/String 的常用名。
+-- P2c：宿主 console 走 Eff（runConsole）；main 返回 0，golden 含尾随 0。
+import Base.Eff
+import Base.EffConsole
 
--- DT 的 build 会先执行 IO 效果、再打印 main 的返回值；do 块末用 `exit 0` 结束，
--- 让 golden 只含业务输出（不依赖「是否打印返回值」这一 CLI 细节）。
+prog : Eff [Console "real"] Int
+prog = do
+  _ <- consolePrint "real" (join "-" (map strFromInt (map (\x => x + 1) [1, 2])))
+  pure 0
+
 main : IO Int
-main = do
-  _ <- print (join "-" (map strFromInt (map (\x => x + 1) [1, 2])))
-  exit 0
+main = runConsole "real" prog

@@ -21,7 +21,7 @@ import Vuna.Compiler.Common
 import Vuna.Compiler.Frontend.Toml
 import Vuna.Files
 import Vuna.Cli.Args
-import Base.IO
+import Base.IO.Host
 
 -- `vuna test --suite` 的选项。jobs = 0 表示 auto（由 runner 探测全部可用核）。
 record SuiteOpts where

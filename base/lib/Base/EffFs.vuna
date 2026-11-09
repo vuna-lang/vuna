@@ -14,6 +14,7 @@ module Base.EffFs
   , handleFs
   , handleFsIO
   , resFs
+  , runFs
   ) where
 
 -- Base.EffFs：一阶文件系统效应（Layer 1 的 IO-backed 示例；W10 扩到完整 fs 面）。
@@ -27,7 +28,7 @@ module Base.EffFs
 -- 真实 IO handler（`handleFsIO "real"`），或用两个 mock 实例做对照；行条目按实例名区分。
 -- 所有操作与 handler 都显式带实例名（夹具 dt_base/18、29、40）。
 import Base.Eff
-import Base.IO
+import Base.IO.Host
 import Base.Monad
 import Base.Bool
 import Base.List
@@ -142,3 +143,7 @@ fsOpHIO op k = case op of
 -- | IO-backed handler：结果行删除 `Fs n`，answer 是 IO 动作，可直接交给 `runIOAnswer`。
 handleFsIO : {a : Type} -> {r : Row} -> (n : String) -> Eff (Base.Eff.Cons (Fs n) r) a -> Eff r (IO a)
 handleFsIO n comp = handleFs n (\a => pure a) fsOpHIO comp
+
+-- | 单效应便捷入口（P3）：`handleFsIO n` + `runIOAnswer` 的组合。
+runFs : {a : Type} -> (n : String) -> Eff [Fs n] a -> IO a
+runFs n comp = runIOAnswer (handleFsIO n comp)

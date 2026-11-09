@@ -6,7 +6,7 @@ module Base.ReaderT (ReaderT, ask, local, runReaderT) where
 -- 环境。`MonadIO (ReaderT e)` 让 IO 动作经 `liftIO` 进入本层。
 -- 边界同 StateT：固定以 IO 为基座（record 参数的 kind 限制）。
 import Base.Effect
-import Base.IO
+import Base.IO.Host
 import Base.Monad
 
 -- | IO 之上的 Reader 效应 transformer：`ReaderT e a` = `e -> IO a`，环境只读；固定以 IO 为基座（record 参数的 kind 限制）。

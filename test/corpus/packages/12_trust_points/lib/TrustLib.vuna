@@ -2,7 +2,7 @@ module TrustLib (probe, runIOHelper) where
 
 -- D28 夹具：`runIOHelper` 是信任点（manifest `[trust] unsafe` 列出），可以直调 `runIO`；
 -- `probe` 只经信任入口间接使用 IO，不是直接使用点。
-import Base.IO
+import Base.IO.Host
 
 -- | 信任点：在纯位置执行 IO 动作（D28 夹具的合法直接使用点）。
 runIOHelper : IO a -> a

@@ -7,6 +7,7 @@ module Base.EffEnv
   , handleEnv
   , handleEnvIO
   , resEnv
+  , runEnv
   ) where
 
 -- Base.EffEnv：一阶环境效应（W10 IO 标签迁移）。
@@ -14,7 +15,7 @@ module Base.EffEnv
 -- 标签 `Env n` 是命名实例；操作 GetEnv / GetCwd / ExecPath 都返回 String。
 -- 真实 handler 用 `Base.IO` 的 `getEnv` / `getCwd` / `execPath` 实现。
 import Base.Eff
-import Base.IO
+import Base.IO.Host
 import Base.Monad
 
 -- | env 效应的标签类型 `Env n`：只做行索引，没有运行时构造子。
@@ -64,3 +65,7 @@ envOpHIO op k = case op of
 -- | IO-backed handler：结果行删除 `Env n`，answer 是 IO 动作，可交给 `runIOAnswer`。
 handleEnvIO : {a : Type} -> {r : Row} -> (n : String) -> Eff (Base.Eff.Cons (Env n) r) a -> Eff r (IO a)
 handleEnvIO n comp = handleEnv n (\a => pure a) envOpHIO comp
+
+-- | 单效应便捷入口（P3）：`handleEnvIO n` + `runIOAnswer` 的组合。
+runEnv : {a : Type} -> (n : String) -> Eff [Env n] a -> IO a
+runEnv n comp = runIOAnswer (handleEnvIO n comp)

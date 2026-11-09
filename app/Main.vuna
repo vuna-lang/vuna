@@ -3,7 +3,7 @@
 -- 用法见 `vuna help`。
 import Vuna.Cli
 import Base.Monad
-import Base.IO
+import Base.IO.Host
 
 main : IO Int
 main = do

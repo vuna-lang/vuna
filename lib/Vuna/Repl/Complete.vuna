@@ -17,7 +17,7 @@ module Vuna.Repl.Complete (argCompletions, argKindOf, moduleNameOf, splitLastSla
 -- `test/corpus/repl/app/Main.vuna` 直接单测；多匹配补最长公共前缀、唯一匹配直接补全的语义由
 -- `Vuna.Repl.Edit` 保持（本模块只给候选池）。
 import Vuna.Compiler.Common
-import Base.IO
+import Base.IO.Host
 
 -- ---------------------------------------------------------------
 -- 参数位判定（纯）

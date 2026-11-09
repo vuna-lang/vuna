@@ -36,7 +36,12 @@ instanceHeadName _ = Nothing
 -- duplicate（monad/01 等夹具的回归）。同一类内的 head 唯一性仍由 coherence 保证
 -- （`anyInstanceExact` / `anyInstanceOverlap` 按 head 判定）。
 instanceName : String -> Expr -> String
-instanceName cname headExpr = "${baseNameOf cname}_${derivedInstName headExpr}"
+instanceName cname headExpr = sanitizeInstName "${baseNameOf cname}_${derivedInstName headExpr}"
+
+-- 实例名里的限定名（`Base.Field.Field`）带点；codegen 按名字前缀切模块时会把
+-- `HasField_Base.Field` 误判成模块前缀。实例名只是内部符号，统一把点换成下划线。
+sanitizeInstName : String -> String
+sanitizeInstName s = join "_" (split "." s)
 
 -- | 实例头的名字后缀（类名本身不计入，类短名已由 `instanceName` 加过一次）：
 -- `Eq Int` → `Int`、`Eq Base.Bool.Bool` → `Base.Bool.Bool`、`Eq (Box a)` → `Box_a`。

@@ -256,7 +256,7 @@ let rec v_Vuna_dCompiler_dElab_dTermination_dScc_dedgesEqCanon = (fun mc0 mc1 ->
 ) = (match dtb__172 with
   | C_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge_ScEdge (dtb__183, dtb__184, dtb__185) -> dtb__184
   | _ -> failwith "DT: impossible branch"
-)) then (if (((Base_dEq.v_Base_dEq_deq Base_dEq.v_Eq_uBase_dBool_dBool) (match dtb__170 with
+)) then (if (((Base_dEq.v_Base_dEq_deq Base_dEq.v_Eq_uBase_uBool_uBool) (match dtb__170 with
   | C_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge_ScEdge (dtb__186, dtb__187, dtb__188) -> dtb__188
   | _ -> failwith "DT: impossible branch"
 )) (match dtb__172 with

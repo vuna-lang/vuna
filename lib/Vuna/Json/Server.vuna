@@ -17,7 +17,7 @@ module Vuna.Json.Server (ServerExit(..), serveConnection) where
 import Vuna.Compiler.Common
 import Vuna.Json
 import Vuna.Json.Frame
-import Base.IO
+import Base.IO.Host
 
 -- 连接结束的原因；**不含退出码**——同一个原因在不同 server 里映射不同。
 data ServerExit : Type where

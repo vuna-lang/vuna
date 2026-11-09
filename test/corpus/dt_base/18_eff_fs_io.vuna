@@ -2,7 +2,7 @@
 -- W10 收尾：`Fs` 是命名实例，操作与 handler 显式带实例名（本夹具用 "real"）。
 import Base.Eff
 import Base.EffFs
-import Base.IO
+import Base.IO.Host
 import Base.Nat
 
 prog : Eff [Fs "real"] Int

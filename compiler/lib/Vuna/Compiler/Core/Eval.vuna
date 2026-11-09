@@ -441,18 +441,19 @@ valueListEqFuel fuel _ _ = Just False
 rowRemReduce : HashMap String Term -> Sols -> Int -> Value -> Value -> Maybe Value
 rowRemReduce defs sols fuel e r = if fuel <= 0 then Nothing
 else case force defs sols (fuel - 1) r of
-  VCon "Base.Eff.Row.Cons" (h :: t :: _) => case valueEqFuel (fuel - 1) e h of
+  VCon consName (h :: t :: _) => if consName == effRowConsCtor then case valueEqFuel (fuel - 1) e h of
     Just True => Just t
     Just False => case rowRemReduce defs sols (fuel - 1) e t of
-      Just t2 => Just (VCon "Base.Eff.Row.Cons" [h, t2])
+      Just t2 => Just (VCon effRowConsCtor [h, t2])
       Nothing => Nothing
     Nothing => Nothing
-  VCon "Base.Eff.Row.Nil" _ => Just (VCon "Base.Eff.Row.Nil" [])
+  else Nothing
+  VCon nilName _ => if nilName == effRowNilCtor then Just (VCon effRowNilCtor []) else Nothing
   _ => Nothing
 
 primReduce : HashMap String Term -> Sols -> Int -> String -> List Value -> Maybe Value
 primReduce defs sols fuel g sp = if fuel <= 0 then Nothing
-else if g == "Base.Eff.rowRem" then case sp of
+else if g == effRowRemName then case sp of
   e :: r :: _ => rowRemReduce defs sols (fuel - 1) e r
   _ => Nothing
 else case findIntrinsic g of

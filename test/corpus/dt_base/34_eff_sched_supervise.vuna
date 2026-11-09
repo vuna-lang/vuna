@@ -2,7 +2,7 @@
 -- 失败消息经 awaitTask 的 Err 返回；body 返回 Err 后 withScope 先取消再等干净。
 import Base.Eff
 import Base.EffSched
-import Base.IO
+import Base.IO.Host
 import Base.Result
 
 bad : Eff [] Int

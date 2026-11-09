@@ -44,7 +44,7 @@ import Base.HashMap
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Frontend.Lexer
 import Base.Eq
-import Base.IO
+import Base.IO.Host
 import Vuna.Compiler.Packages.Pkg
 
 -- 显式 import 与自动注入的 Prelude（隐式 import）分开保存：
@@ -225,7 +225,8 @@ moduleDecls modules name = case findModule modules name of
   Nothing => missingModule name
 
 moduleCtors : List Module -> String -> Result (List String)
-moduleCtors modules name = andThen (moduleDecls modules name) (\decls => Ok (ctorsOf decls))
+moduleCtors modules name =
+  Vuna.Compiler.Common.bind (moduleDecls modules name) (\decls => Ok (ctorsOf decls))
 
 exportsOf : List Module -> String -> Result (List ExportEntry)
 exportsOf modules name = case findModule modules name of
@@ -260,8 +261,10 @@ findExportType entries name = lookupExport ["type"] name entries
 
 modulesExportingValueFrom : List Module -> List String -> String -> Result (List (Pair String ExportEntry))
 modulesExportingValueFrom modules [] name = Ok []
-modulesExportingValueFrom modules (m :: rest) name = andThen (exportsOf modules m) (\es => case findExportValue es name of
-  Just e => andThen (modulesExportingValueFrom modules rest name) (\more => Ok (Pair m e :: more))
+modulesExportingValueFrom modules (m :: rest) name = Vuna.Compiler.Common.bind (exportsOf modules m) (\es => case findExportValue es name of
+  Just e =>
+    Vuna.Compiler.Common.bind (modulesExportingValueFrom modules rest name)
+      (\more => Ok (Pair m e :: more))
   Nothing => modulesExportingValueFrom modules rest name
 )
 
@@ -273,8 +276,8 @@ modulesExportingValue modules imports name =
 modulesExportingCtorFrom : List Module -> List String -> String -> Result (List (Pair String ExportEntry))
 modulesExportingCtorFrom modules [] name = Ok []
 modulesExportingCtorFrom modules (m :: rest) name =
-  andThen (exportsOf modules m)
-    (\es => andThen (modulesExportingCtorFrom modules rest name) (\more => Ok (append (map (\e => Pair m e) (findExportCtors es name)) more)))
+  Vuna.Compiler.Common.bind (exportsOf modules m)
+    (\es => Vuna.Compiler.Common.bind (modulesExportingCtorFrom modules rest name) (\more => Ok (append (map (\e => Pair m e) (findExportCtors es name)) more)))
 
 modulesExportingCtor : List Module -> List Import -> String -> Result (List (Pair String ExportEntry))
 modulesExportingCtor modules imports name =
@@ -282,8 +285,10 @@ modulesExportingCtor modules imports name =
 
 modulesExportingTypeFrom : List Module -> List String -> String -> Result (List (Pair String ExportEntry))
 modulesExportingTypeFrom modules [] name = Ok []
-modulesExportingTypeFrom modules (m :: rest) name = andThen (exportsOf modules m) (\es => case findExportType es name of
-  Just e => andThen (modulesExportingTypeFrom modules rest name) (\more => Ok (Pair m e :: more))
+modulesExportingTypeFrom modules (m :: rest) name = Vuna.Compiler.Common.bind (exportsOf modules m) (\es => case findExportType es name of
+  Just e =>
+    Vuna.Compiler.Common.bind (modulesExportingTypeFrom modules rest name)
+      (\more => Ok (Pair m e :: more))
   Nothing => modulesExportingTypeFrom modules rest name
 )
 

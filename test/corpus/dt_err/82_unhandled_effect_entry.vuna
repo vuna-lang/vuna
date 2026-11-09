@@ -1,0 +1,10 @@
+-- F3-1：效果入口只接受已处理干净的行（`Eff []`）。直接 `runIOEff` 一个仍有未处理效应的
+-- 动作是**类型错误**，不再等运行时报 `unhandled effect`。
+import Base.Eff
+import Base.EffState
+
+prog : Eff [State "n" Int] Int
+prog = get "n" Int
+
+main : IO Int
+main = prim_bindIO (runIOEff prog) (\_ => prim_pureIO 0)

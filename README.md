@@ -155,7 +155,7 @@ manifest，不向上找。命令语义与包格式
 | [docs/reference/core.md](docs/reference/core.md) | Core TT / NbE / 合一 / 精化器 / 擦除 / codegen 护栏的实现参考 |
 | [docs/reference/api-docs.md](docs/reference/api-docs.md) | API 文档：docstring、单文件 HTML、`vuna search` / 类型检索 |
 | [docs/reference/tooling.md](docs/reference/tooling.md) | 工具链：`vuna goal`、LSP（含 codeAction quick fix）、`vuna doc`（单文件 HTML）、`vuna run` / REPL 调试命令、**REPL server / client（`--listen`/`--client`，JSON-RPC over socket）**、错误码体系与代表性错误索引 |
-| [docs/reference/debugging.md](docs/reference/debugging.md) | 调试：诊断源码片段、运行时错误报告（`vuna: runtime error` + 定义级帧 + exit 2）、`Base.Debug`（trace/assert）、`vuna run` / `test --verbose` / REPL `:type` |
+| [docs/reference/debugging.md](docs/reference/debugging.md) | 调试：诊断源码片段、运行时错误报告（`vuna: runtime error` + 定义级帧 + exit 2）、语言级调试构造（`dbg`/`dbgShow`/`assert`/`todo`）、`vuna run` / `test --verbose` / REPL `:type` |
 | [docs/reference/compiler.md](docs/reference/compiler.md) | 编译器模块职责、codegen 表示与输出模型、接口摘要（TTC 式模块化精化）、夹具指标 |
 | [docs/reference/cache.md](docs/reference/cache.md) | 模块级接口摘要：TTC 对照、写/读数据流、失效与校验、已知边界 |
 | [docs/reference/bootstrap.md](docs/reference/bootstrap.md) | 种子策略、rotation 流程、fixed point、TCB 边界 |

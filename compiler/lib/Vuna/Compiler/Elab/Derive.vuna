@@ -43,7 +43,8 @@ traitMethodGlobal tname methodName = case splitLastDot (splitOnDot tname) of
 -- ——那条 data 的族信息要等 `elabDatas` 阶段才进 `globals`，插在中间会让实例方法体里
 -- 的 `case` 拿不到 scrutinee 的类型。
 expandDerivings : List Decl -> Result (List Decl)
-expandDerivings decls = andThen (collectDerivings decls) (\insts => Ok (append decls insts))
+expandDerivings decls =
+  Vuna.Compiler.Common.bind (collectDerivings decls) (\insts => Ok (append decls insts))
 
 collectDerivings : List Decl -> Result (List Decl)
 collectDerivings [] = Ok []
@@ -51,8 +52,8 @@ collectDerivings (d :: rest) = case d of
   DData name params kind ctors derivings viaField lin sp =>
     if viaField then collectDerivings rest
     else if length derivings == 0 then collectDerivings rest
-    else andThen (derivingsFor name params ctors derivings sp)
-      (\insts => andThen (collectDerivings rest) (\more => Ok (append insts more)))
+    else Vuna.Compiler.Common.bind (derivingsFor name params ctors derivings sp)
+      (\insts => Vuna.Compiler.Common.bind (collectDerivings rest) (\more => Ok (append insts more)))
   _ => collectDerivings rest
 
 derivingsFor : String -> List String -> List Ctor -> List String -> Span -> Result (List Decl)
@@ -64,7 +65,7 @@ derivingsForGo dname params ctors [] sp acc = Ok (reverse acc)
 -- ctx 只包含「在某个构造子字段类型里出现过」的类型参数（顺序 = 声明顺序），
 -- 与实例 tele 一一对应；`deriving (Ord)` 的字段比较只用 lt/le，因此只要求 Ord ctx。
 derivingsForGo dname params ctors (t :: rest) sp acc =
-  andThen (deriveInstance dname params ctors t sp)
+  Vuna.Compiler.Common.bind (deriveInstance dname params ctors t sp)
     (\decl => derivingsForGo dname params ctors rest sp (decl :: acc))
 
 -- ctx 参数：data 参数里在构造子字段类型中出现过的（保持声明顺序）。
