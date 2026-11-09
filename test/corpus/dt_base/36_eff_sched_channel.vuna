@@ -5,11 +5,10 @@ import Base.EffChannel
 import Base.EffSched
 import Base.Result
 
-prog : Eff RNil (Result Int)
-prog = withScope (\sc =>
-  bindEff newChannelInt (\ch =>
-    bindEff (forkTask sc (send ch 42)) (\_ =>
-      recvWait 64 ch)))
+prog : Eff [] (Result Int)
+prog =
+  withScope
+    (\sc => bindEff newChannelInt (\ch => bindEff (forkTask sc (send ch 42)) (\_ => recvWait 64 ch)))
 
 main : IO Int
 main = do

@@ -67,7 +67,7 @@ main = pretty Red ++ "/" ++ show Red
   每个参数的 kind 可显式写：`trait C (a : Type) (r : Row) where ...`；未写时从方法签名
   推断（参数被应用 k 次即 `Type -> ... -> Type`，否则 `Type`）。空参数表报
   `[TC_InterfaceNoParam]`。非 Type 类参数（如 `Row`）的实例搜索已支持；但**头可合一的重叠实例
-  仍被 coherence 拒绝**（`Member e (RCons e r)` 与 `Member e r => Member e (RCons x r)`），
+  仍被 coherence 拒绝**（`Member e (Cons e r)` 与 `Member e r => Member e (Cons x r)`），
   因此 trait 版 `Member e r` 仍不可用（见 debt D39）。
   实例头的 tele 变量 kind 按实参推断：裸变量取对应类参数的 kind，嵌套变量从
   构造子的参数 kind 反推（`instance Pretty (T n)` 配 `T : N -> Type` ⇒ `n : N`，
@@ -95,9 +95,12 @@ main = pretty Red ++ "/" ++ show Red
   不到才试 blanket。**具体实例覆盖 blanket**（`instance Interp String` 赢过 blanket），
   具体实例之间仍禁止重叠；两个 blanket 仍报 `TC_DuplicateInstance`（见 [templates.md](templates.md)）。
 - **实例落点**：实例跟类型模块走；trait 签名直接依赖该类型、放类型模块会成 import 环时
-  例外（`Bool` 是 `Eq` / `Ord` 方法的返回类型，实例随 trait 留在 `Base.Eq` /
-  `Base.Ord`，放 `Base.Bool` 会成环）。**不再有「孤儿实例被拒」的表述**——实现从未强制
-  该检查（B23）。规则与理由见 [operators.md](operators.md)。
+  例外（`Eq` / `Ord` 的 `eq : a -> a -> Bool` 返回 Bool，Bool 实例随 trait 留在 `Base.Eq` /
+  `Base.Ord`；`Show String` 留在 `Base.Show`，因为 String 经 Interp 依赖 Show。`Show Bool`
+  的签名不依赖 Bool，按规则放 `Base.Bool`）。精化器**强制孤儿检查**（B23）：实例必须声明在
+  定义 trait 的文件，或定义 head 类型（任一类型参数）的文件；`Int` / `String` / `IO` 是
+  全局可见的内建类型，允许在任意模块声明实例（如 `Show Int`）。违反报 `TC_OrphanInstance`。
+  规则与理由见 [operators.md](operators.md)。
 - **约束实例**：ctx 写在 head 前，搜索时递归求解：
 
   ```vuna
@@ -120,15 +123,17 @@ main = pretty Red ++ "/" ++ show Red
   统一写显式约束，不再依赖该旧形态。语法与边界见 [language.md](language.md) §签名的 trait 约束。
 - **`Show` / `Eq` / `Ord` 是库里的普通 trait（M31.1 起声明与实例分离）**：声明在
   `Base.Show` / `Base.Eq` / `Base.Ord`；实例按**落点规则**分布：`Int` → `Base.Int`、
-  `String` → `Base.String`、`Bool` → `Base.Eq` / `Base.Ord`。运算符 `==` / `/=` / `<`
-  等是这些方法的解析期别名（见 [type-system.md](type-system.md)）。包上下文内所有源文件
+  `String` 的 Eq/Ord → `Base.String`、`Show String` → `Base.Show`、`Show Bool` →
+  `Base.Bool`、`Eq/Ord Bool` → `Base.Eq` / `Base.Ord`；容器 `Show` 实例在各自类型模块。
+  运算符 `==` / `/=` / `<` 等是这些方法的解析期别名（见 [type-system.md](type-system.md)）。
+  包上下文内所有源文件
   （含 ad-hoc 单文件）随自动注入的 `Prelude` 可用（`Prelude` 显式 `import Base.Int`
   以加载 Int 实例）；`show` / `eq` / `lt` 等短名不由编译器放行，必须经 import 解析。
   `deriving` 的展开使用 Loader 解析后的完整类名（如 `Base.Show.Show`）。详见
   [operators.md](operators.md)。
 - **没有结构性自动回退**：`List a` / `Box a` 这类要能比较 / 展示，必须有约束实例或
-  具体实例；Base 只带 `Int` / `String` / `Bool` 的实例。字符串展示只有 `strShow`
-  一个实现。
+  具体实例；Base 带 `Int` / `String` / `Bool` 与 `List` / `Maybe` / `Pair` / `Result` 的
+  `Show` 实例。字符串展示只有 `strShow` 一个实现。
 - 实现：字典按 trait 方法扁平化（`data Dict_C` + 方法投影 + 实例搜索）。具体类型的
   调用点走静态派发；方法调用点类型是**裸类型变量**时做方法级字典穿参（类型检查给该
   函数增加方法函数参数），支持跨函数传播、前向引用与递归。高阶 kind 与一般约束泛化

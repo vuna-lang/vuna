@@ -3,10 +3,10 @@ import Base.Eff
 import Base.EffError
 import Base.Result
 
-prog : Eff (RCons (Error E1) RNil) Int
+prog : Eff (Error E1 :: []) Int
 prog = catch E1 (throw E1 "boom") (\_ => pureEff 42)
 
-prog2 : Eff (RCons (Error E1) RNil) Int
+prog2 : Eff (Error E1 :: []) Int
 prog2 = catch E1 (catch E1 (throw E1 "a") (\_ => throw E1 "b")) (\_ => pureEff 7)
 
 main : Int

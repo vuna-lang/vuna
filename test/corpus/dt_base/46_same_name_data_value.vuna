@@ -1,0 +1,13 @@
+-- B18：同模块 `data T` 与值 `T` 同名。类型位置必须取族的 kind（`T`），
+-- 值位置取 `T : Int` 的签名；修复前类型位置会被值签名覆盖成 Int。
+data T : Type where
+  MkT : T
+
+T : Int
+T = 41
+
+use : T -> Int
+use MkT = T + 1
+
+main : Int
+main = use MkT + T

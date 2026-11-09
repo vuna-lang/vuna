@@ -11,9 +11,10 @@
 - 语法：Idris2 风格 `data ... where`、多子句函数、顶层 `axiom` 声明（无体 / 不透明）、
   `case ... of`、`let ... in`（绑定块可选签名行）、lambda、`if then else`、`do` 块、
   整数 / 字符串字面量、`[..]` 与 `x :: xs` 列表糖、中缀 / 反引号中缀 / section / 用户符号名运算符；
-- **行语法糖（运行时效应）**：`[Fetch]` / `[Fetch, Log]` / `[]` 在**期望 kind 为 `Row`**
-  的位置分别展开为 `RCons Fetch RNil` / `RCons Fetch (RCons Log RNil)` / `RNil`；
-  普通列表字面量（期望 `List a`）不变。例：`String -> Eff [Fetch] String`。
+- **列表字面量（运行时效应用法）**：`[Fetch]` / `[Fetch, Log]` / `[]` 在**期望 kind
+  为 `Row`** 的位置分别展开为 `Base.Eff.Row.Cons Fetch Nil` /
+  `Cons Fetch (Cons Log Nil)` / `Nil`；普通列表字面量（期望 `List a`）走同一套按族
+  展开的规则。例：`String -> Eff [Fetch] String`。
 - **模板字符串与多行字面量**（M36）："hi ${name}" 插值、"""...""" 多行（内容逐字，
   只丢开引号后的一个换行）；洞降级成 `Base.Interp.interp` 调用，转换语义由 `Interp`
   实例决定。规则、转义 `\$`、边界见 [templates.md](templates.md)；
@@ -213,6 +214,10 @@ vuna/base/compiler 三包源码统一按当前语言能力书写，新增/修改
   编译期由模式矩阵注入绑定（`Elab.Match`）；STR 把 as 绑定视为整个值（不改变结构下降）。
   `case` 分支左端也支持 as-pattern（`case xs of y@(t :: rest) => ...`），desugar 为
   `let` 绑定；scrutinee 是纯表达式，重复求值语义等价。
+- **非线性格（重复绑定名）不支持**：同一个子句的全部参数模式之间、同一模式内部的嵌套子模式
+  之间、as 名与内层模式之间（以及同一个 `case` 分支 / `let`(`where`) 绑定 / `do-bind` 的
+  模式内部）同名 binder 只能绑定一次，重复报 `[PS_RepeatedPatternBinder]`（不实现相等约束）。
+  不同子句 / 分支 / 绑定各自独立作用域，可复用同名 binder。
 - 变量 / 通配兜底只能放**最后一个**分支，否则报 `TC_CatchAllNotLast`；
 - `Bool` 的 `case` 只认 `True` / `False` / 变量 / 通配（`TC_BoolCaseRestriction`）；
 - `Int` / `String` 的 `case` 必须有一个变量 / 通配兜底（`TC_IntStringCaseNeedsFallback`），
@@ -302,6 +307,21 @@ vuna/base/compiler 三包源码统一按当前语言能力书写，新增/修改
   见下节）。两个 open import 导出同名但指向不同定义时，裸名报歧义（指向同一定义的重复
   导出不算歧义，例如原模块与它的门面重导出）；写全名或 alias 即可消歧；import 只提供
   目标模块**导出列表**中的名字（省略模块头 = 全部导出，`_` 前缀除外）；
+- **构造子身份是「数据类型 + 构造子」**：data 构造子的 canonical 名是
+  `Module.Data.Ctor`（entry 文件里是 `Data.Ctor`），record / trait 保持
+  `Module.Name`。因此不同数据类型可以有同名构造子（`List.Nil` 与 `Vec.Nil`）；
+  codegen 按族限定生成 OCaml 名，诊断显示族短名（`Vec.Nil`）。
+- **构造子名重载**：裸构造子名在解析期收集候选（本模块 data/record 构造子 + 所有
+  open import 的 data/record 构造子），多于一个候选时不立即报歧义，而是交给精化器按
+  **期望类型 / scrutinee 族**选 canonical 构造子（值位置、应用实参、类型位置、`case`
+  分支、多子句函数、实例方法、局部函数都参与）。期望族未知时，候选里含 `Base.List`
+  的 `Nil`/`Cons` 则默认 List（保持 `[]`/`Nil` 旧体验），否则报
+  `[TC_AmbiguousCtor]`。显式 `Data.Ctor`（如 `Vec.Nil`）永远无歧义；与本地**类型名**
+  同名的 record / 双命名空间构造子仍保持本地词法遮蔽。
+- **列表字面量按族通用展开**：parser 把 `[]` / `[a, b]` 解析成保留名
+  `@vuna@list@nil` / `@vuna@list@cons`，精化器按期望族的短名 `Nil`/`Cons` 展开
+  （`List` / `Vec` / `Base.Eff.Row` / 用户自定义同形族都可用）；期望未知时默认
+  `Base.List.List`。模式 `[]` / `[a, b]` 同样按 scrutinee 族展开。
 - 限定名用**完整模块名**或 alias，永远不会歧义，但同样只解析目标模块的导出项；import
   只算直接依赖，**不传递**：A import B，C import A 看不到 B 的名字——除非 A 用
   `module B` / `B.name` 显式重导出；
@@ -337,7 +357,9 @@ vuna/base/compiler 三包源码统一按当前语言能力书写，新增/修改
   与导出 kind 的 `val` / `ctor` / `type` 一一对应，解析器不再把三者拍平，精化器也不需要靠
   「kind 是不是宇宙」猜名字属于哪个命名空间。
 - **跨模块类型层引用**：类型层 def 退化路径只看**本模块**同名值定义；跨模块类型层定义
-  （含 `axiom t : Type`）在类型位置写**限定名** `M.t`（回退到导入值命名空间），裸小写名
-  仍是类型变量。
-- **同名声明**：三套命名空间互不遮蔽；但同模块 `data T` 与值 `T` 同名仍不可靠
-  （globals 单表），避免这种写法，见 [debt.md](debt.md) B18。
+  （含 `axiom t : Type`）只要在本模块 import 的导出面里，类型位置的裸小写名也会解析到它
+  （值 → 构造子 → 类型顺序，与限定名 `M.t` 等价）。未导入/未绑定的小写名仍是隐式类型变量；
+  显式 `{a : Type}` binder 会遮蔽同名 import。
+- **同名声明**：三套命名空间互不遮蔽；同模块 `data T` 与值 `T` 同名也可用——类型位置取
+  族 kind（`DtData.dtDataKind`），值位置取值签名，精化器的 globals 单表不再互相覆盖；
+  与数据族同名的值定义不做 delta 展开，避免把类型位置的 `T` 归约成值。

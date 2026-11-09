@@ -1,0 +1,16 @@
+-- D45：let 的 RHS 只求值一次；线性 y 经 let 传递不应按 binder multiplicity 缩放。
+k : (1 y : Int) -> Int
+k y =
+  let
+    z = y + 1
+  in z
+
+-- 通配 let 的不含体引用分支同样只应按 Rig1 计一次。
+j : (1 y : Int) -> Int
+j y =
+  let
+    _ = y + 1
+  in 0
+
+main : Int
+main = k 1 + j 1

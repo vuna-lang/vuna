@@ -5,6 +5,7 @@ module Vuna.Lsp.Protocol
   , decodeUri
   , digitsToInt
   , dirOfPath
+  , errInvalidParams
   , errMethodNotFound
   , fileNameOf
   , findNamePos

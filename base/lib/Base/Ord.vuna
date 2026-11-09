@@ -16,6 +16,7 @@ infixl 4 <= = le
 infixl 4 > = gt
 infixl 4 >= = ge
 
+-- | 全序比较的 trait：`lt` / `le` / `gt` / `ge` 四个方法；`<` / `<=` / `>` / `>=` 是它们的别名，fixity 由本模块的 `infixl` 声明提供。Bool 实例随 trait 留在本模块（方法返回 Bool，放 Base.Bool 会成 import 环），Int / String 实例在各自类型模块。
 trait Ord a where
   lt : a -> a -> Bool
   le : a -> a -> Bool

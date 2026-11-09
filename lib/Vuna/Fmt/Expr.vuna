@@ -80,7 +80,8 @@ interpOpen multi parts = if multi then case parts of
 else "\""
 
 interpClose : Bool -> String
-interpClose multi = if multi then "\"\"\"" else "\""
+interpClose True = "\"\"\""
+interpClose False = "\""
 
 -- 块布局洞的续行缩进（`lineInd + 2`）；不递归调用格式化器，SCT 组之外。
 joinHoleLines : Int -> List String -> String
@@ -133,10 +134,10 @@ interpBlockMarker = strPack [0]
 -- M31.3：keep 模式下 parser 的两种 cons 拼写都保留（中缀 `::` 与列表语法的 `Cons`；
 -- `[..]` 列表模式构造的是 canonical 的 `Cons`/`Nil`）。
 consPatName : String -> Bool
-consPatName name = name == "Cons" || name == "::"
+consPatName name = name == "Cons" || name == "::" || isListConsSyntax name
 
 patListElemsOf : String -> List Pat -> Maybe (List Pat)
-patListElemsOf name pats = if name == "Nil" then if isNilList pats then Just [] else Nothing
+patListElemsOf name pats = if name == "Nil" || isListNilSyntax name then if isNilList pats then Just [] else Nothing
 else if consPatName name then case pats of
   [a, rest] => case patListElems rest of
     Just elems => Just (a :: elems)
@@ -186,7 +187,7 @@ else case patListElemsOf name pats of
   Just elems => "[${renderPatElemsGo (fuel - 1) elems}]"
   Nothing =>
     if consPatName name then renderConsPatGo (fuel - 1) pats
-    else if name == "Nil" && isNilList pats then "[]"
+    else if (name == "Nil" || isListNilSyntax name) && isNilList pats then "[]"
     else if isNilList pats then name else name ++ renderPatAtomsSpacedGo (fuel - 1) pats
 
 renderConsPatGo : Int -> List Pat -> String
@@ -212,7 +213,7 @@ else case pat of
   PWild sp => "_"
   PInt n sp => strFromInt n
   PStr s sp => renderStr s
-  PCon name [] sp => if name == "Nil" then "[]" else name
+  PCon name [] sp => if name == "Nil" || isListNilSyntax name then "[]" else name
   PCon name pats sp => "(${renderConPatGo (fuel - 1) name pats})"
   PRecord name fields sp => "(${renderRecPatGo (fuel - 1) name fields})"
 
@@ -312,10 +313,15 @@ backtickLabel : String -> String
 backtickLabel name = "`${name}`"
 
 listExprElems : Expr -> Maybe (List Expr)
-listExprElems (EVar "Nil" sp) = Just []
-listExprElems (EApp (EVar "Cons" csp) ([a, rest]) sp) = case listExprElems rest of
+listExprElems (EVar name sp) = if name == "Nil" || isListNilSyntax name then Just [] else Nothing
+listExprElems (EApp (EVar name csp) ([a, rest]) sp) =
+  if isListConsSyntax name then listExprCons a rest else Nothing
+
+listExprCons : Expr -> Expr -> Maybe (List Expr)
+listExprCons a rest = case listExprElems rest of
   Just elems => Just (a :: elems)
   Nothing => Nothing
+
 listExprElems _ = Nothing
 
 inlineExprGo : Int -> List FixityDecl -> Expr -> Maybe String
@@ -325,7 +331,8 @@ inlinePrecGo : Int -> List FixityDecl -> Int -> Expr -> Maybe String
 inlinePrecGo fuel env minPrec e = if fuel <= 0 then Nothing
 else case e of
   EVar name sp =>
-    if name == "Nil" then Just "[]" else if isSymbolName name then Just "(${name})" else Just name
+    if name == "Nil" || isListNilSyntax name then Just "[]"
+    else if isSymbolName name then Just "(${name})" else Just name
   EInt n sp => Just (strFromInt n)
   EStr s sp => Just (renderStr s)
   -- M36：模板字面量。文本块转义；洞优先单行内联，洞需要块布局时放弃（交给块渲染）。
@@ -388,7 +395,8 @@ else case e of
   _ => Nothing
 
 wrapPrec : Bool -> String -> String
-wrapPrec need s = if need then "(${s})" else s
+wrapPrec True s = "(${s})"
+wrapPrec False s = s
 
 inlineFieldsGo : Int -> List FixityDecl -> List (Pair String Expr) -> Maybe (List String)
 inlineFieldsGo fuel env fields = if fuel <= 0 then Nothing

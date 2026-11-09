@@ -26,11 +26,20 @@
 #       （maxline 623 → 810、longlines 6 → 8）。ctorcount 口径同步扩到 `Unit.C_`
 #       形态（nix/metrics.sh），值仍是 20——匹配臂数量不变。
 #       按实测 bytes 4880 → 4295。
+# 漂移重标定（M38 基线之后合入的 elab/instance/effect 线，2026-11-08 复核）：
+#       夹具源码（test/corpus/codegen）与 main hook 生成文本均未变，但夹具模块产物
+#       bytes 4462 → 4458、maxline 882 → 878（其余指标不变，即恰好一行少 4 字符）。
+#       复核证据：用本任务开始前的二进制（HEAD 的 result）重跑夹具，产物与本任务后的
+#       编译器逐字节一致（同为 4458/878）⇒ 漂移早于本批改动、非本批引入；夹具
+#       Core.ml 的 label 分派与 Fancy/Effects 的实例字典形态是候选来源。按实测重标定。
+# M41（构造子族限定命名 + base Nil/Cons 统一）：Row/Vec 构造子改名后 codegen
+#       的构造子 OCaml 名变短（C_Base_dEff_dRow_dCons 等），夹具模块产物的最长行
+#       与长行数下降：按实测 maxline 878 → 823、longlines 7 → 5、bytes 4458 → 4215（其余指标不变）。
 files =4
-bytes =4462
+bytes =4215
 lines =86
-maxline =882
-longlines =7
+maxline =823
+longlines =5
 letrec =1
 strcat =1
 eqint =0

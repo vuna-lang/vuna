@@ -349,7 +349,7 @@ let dtp_net_connect (addr : string) : int =
 -- W9：单线程协作式 fiber 调度器（Layer 3）运行时。
 -- 纤程 = OCaml 5 一次性续延；调度器在纤程外的循环里决定下一步跑谁，
 -- 挂起经私有运行时效应（SchedYield/SchedAwait/SchedWaitScope*）。任务体是
--- `Eff RNil a`；Base.EffSched 经隐藏 intrinsic 调用 dtp_sched_* 原语。
+-- `Eff Nil a`；Base.EffSched 经隐藏 intrinsic 调用 dtp_sched_* 原语。
 dtSchedRuntime : String
 dtSchedRuntime = """(* ------------------------------------------------------------------ *)
 (* W9: single-threaded cooperative fiber scheduler (Layer 3).          *)
@@ -358,7 +358,7 @@ dtSchedRuntime = """(* ---------------------------------------------------------
 (* Effect.Deep handler installed for every fiber. The scheduler loop   *)
 (* outside the fibers decides what runs next; suspension is requested  *)
 (* through private runtime effects (SchedYield/SchedAwait/WaitScope).  *)
-(* Tasks are `Eff RNil a` thunks: their user effects are handled       *)
+(* Tasks are `Eff Nil a` thunks: their user effects are handled       *)
 (* inside the fiber, and only the scheduler primitives cross fibers.   *)
 (* ------------------------------------------------------------------ *)
 
@@ -1434,7 +1434,8 @@ else andThen (genTermFuel (fuel - 1) st binders arg) (\p => case p of
 
 -- 运行时不可命名的擦除依赖字段：声明侧是 `Obj.t`，实参在这里做表现层转换。
 ctorArgText : Bool -> String -> String
-ctorArgText opq text = if opq then "(Obj.magic ${text})" else text
+ctorArgText True text = "(Obj.magic ${text})"
+ctorArgText False text = text
 
 -- Nat 构造子链的常量折叠：字面量在 Elab 里展开成 Zero/Succ 链，codegen 折回整数。
 natChainNext : Int -> Int
@@ -1744,7 +1745,7 @@ genGroup : HashMap (List String) -> GenSt -> List DtDef -> Result (Pair String G
 genGroup adj st group = if groupNeedsRec adj group then case firstBadRecursiveValue group of
   -- M29（A14）：带来源位置（组里按名字找回定义）。
   Just name => case findDtDef name group of
-    Just d => cgErrDefAt (dtDefSpan d) name (RecursiveValueDefinition name) (VCons name VNil)
+    Just d => cgErrDefAt (dtDefSpan d) name (RecursiveValueDefinition name) (name :: [])
     Nothing => cgErr1 (RecursiveValueDefinition name) name
   Nothing => genGroupLet st group True
 else genGroupLet st group False

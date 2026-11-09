@@ -122,27 +122,36 @@ checkModuleDecls knownModules ((Pair mname decls) :: rest) =
 
 -- 入口的**声明身份**：签名/定义同名是正常形态（DSig + 多 clause DFun），所以只看
 -- data/record/trait/sig 这些唯一标识；它们必须是裸名（入口没有模块前缀）。
-entryDeclIdentities : List Decl -> List String
+-- B18：`data T` 与值 `T` 同名是允许的（两个命名空间），因此身份带命名空间标签；
+-- 只有同一命名空间内重名才是重复。
+entryDeclIdentities : List Decl -> List (Pair Bool String)
 entryDeclIdentities [] = []
 entryDeclIdentities (d :: rest) = case d of
-  DSig name ctx ty sp => name :: entryDeclIdentities rest
-  DExtern name cName ty sp => name :: entryDeclIdentities rest
-  DData name params kind ctors derivings lin sp => name :: entryDeclIdentities rest
-  DRecord name params fields derivings lin sp => name :: entryDeclIdentities rest
-  DTrait name params methods sp => name :: entryDeclIdentities rest
+  DSig name ctx ty sp => Pair False name :: entryDeclIdentities rest
+  DExtern name cName ty sp => Pair False name :: entryDeclIdentities rest
+  DData name params kind ctors derivings lin sp => Pair True name :: entryDeclIdentities rest
+  DRecord name params fields derivings lin sp => Pair True name :: entryDeclIdentities rest
+  DTrait name params methods sp => Pair True name :: entryDeclIdentities rest
   _ => entryDeclIdentities rest
 
-checkEntryDeclName : List String -> String -> Result Int
-checkEntryDeclName seen name =
-  if name == "" then Err "DT: internal: entry declaration has an empty name"
+entryDeclKey : Pair Bool String -> String
+entryDeclKey (Pair True name) = "type\t${name}"
+entryDeclKey (Pair False name) = "value\t${name}"
+
+checkEntryDeclName : List String -> Pair Bool String -> Result Int
+checkEntryDeclName seen identity =
+  let
+    name = secondOf identity
+    key = entryDeclKey identity
+  in if name == "" then Err "DT: internal: entry declaration has an empty name"
   else if containsDot name then Err
     "DT: internal: entry declaration `${name}` must not contain a module prefix (codegen requires Loader-resolved decls)"
-  else if memName name seen then Err "DT: internal: duplicate entry declaration `${name}`" else Ok 0
+  else if memName key seen then Err "DT: internal: duplicate entry declaration `${name}`" else Ok 0
 
-checkEntryDeclsGo : List String -> List String -> Result Int
+checkEntryDeclsGo : List String -> List (Pair Bool String) -> Result Int
 checkEntryDeclsGo seen [] = Ok 0
 checkEntryDeclsGo seen (n :: rest) =
-  andThen (checkEntryDeclName seen n) (\_ => checkEntryDeclsGo (n :: seen) rest)
+  andThen (checkEntryDeclName seen n) (\_ => checkEntryDeclsGo (entryDeclKey n :: seen) rest)
 
 checkEntryDecls : List Decl -> Result Int
 checkEntryDecls decls = checkEntryDeclsGo [] (entryDeclIdentities decls)

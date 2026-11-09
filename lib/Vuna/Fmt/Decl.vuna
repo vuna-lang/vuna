@@ -21,7 +21,8 @@ import Base.Sort
 -- ---------------------------------------------------------------
 -- M38：线性声明前缀。
 linearPrefix : Bool -> String
-linearPrefix lin = if lin then "linear " else ""
+linearPrefix True = "linear "
+linearPrefix False = ""
 
 -- 声明渲染
 -- ---------------------------------------------------------------
@@ -205,8 +206,8 @@ declNamed _ n = False
 -- 模块头 / import / `infix*` 声明 / 文件组装
 -- ---------------------------------------------------------------
 renderModDecl : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> ModDecl -> List String
-renderModDecl at (ModDecl name explicit items sp) =
-  if explicit then renderExplicitModDecl at name (sortExports items) else ["module ${name} where"]
+renderModDecl at (ModDecl name True items sp) = renderExplicitModDecl at name (sortExports items)
+renderModDecl at (ModDecl name False items sp) = ["module ${name} where"]
 
 -- 空导出列表（`module M () where`）与短列表保持单行；超宽或含项注释时逐项一行。
 renderExplicitModDecl : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> String -> List ExportItem -> List String

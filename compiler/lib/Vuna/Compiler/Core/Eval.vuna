@@ -394,7 +394,7 @@ strPrim3 sp f = Nothing
 -- 内建归约：唯一真源是 `Vuna.Compiler.Intrinsics` 的名字表 + 归约标签（M27）。
 -- 表查找是 O(1) 哈希（不再需要首字符预筛）。
 -- 行删除（W3 表示层修复）：`Base.Eff.rowRem` 是公理；这里按标签的类型值做结构相等
--- 判断后再移除。类型族里重复变量（`rowRem e (RCons e r)`）不会强制相等，不能用于此。
+-- 判断后再移除。类型族里重复变量（`rowRem e (Cons e r)`）不会强制相等，不能用于此。
 valueEqFuel : Int -> Value -> Value -> Maybe Bool
 valueEqFuel fuel a b = if fuel <= 0 then Nothing
 else case a of
@@ -438,13 +438,13 @@ valueListEqFuel fuel _ _ = Just False
 rowRemReduce : HashMap Term -> Sols -> Int -> Value -> Value -> Maybe Value
 rowRemReduce defs sols fuel e r = if fuel <= 0 then Nothing
 else case force defs sols (fuel - 1) r of
-  VCon "Base.Eff.RCons" (h :: t :: _) => case valueEqFuel (fuel - 1) e h of
+  VCon "Base.Eff.Row.Cons" (h :: t :: _) => case valueEqFuel (fuel - 1) e h of
     Just True => Just t
     Just False => case rowRemReduce defs sols (fuel - 1) e t of
-      Just t2 => Just (VCon "Base.Eff.RCons" [h, t2])
+      Just t2 => Just (VCon "Base.Eff.Row.Cons" [h, t2])
       Nothing => Nothing
     Nothing => Nothing
-  VCon "Base.Eff.RNil" _ => Just (VCon "Base.Eff.RNil" [])
+  VCon "Base.Eff.Row.Nil" _ => Just (VCon "Base.Eff.Row.Nil" [])
   _ => Nothing
 
 primReduce : HashMap Term -> Sols -> Int -> String -> List Value -> Maybe Value
@@ -558,51 +558,54 @@ else case xs of
 -- ---------------------------------------------------------------
 -- 深度正规化（interp --dt 展示 main 用）：先 force，再递归 spine / if 分支。
 -- 与 force 不同，它会继续深入中立项的实参，因此 `inc (dbl 20)` 能算成 41。
+--
+-- 两个 fuel：`fuel` 是深度正规化自己的递归深度预算（也是终止性判据的守卫 Int 见证），
+-- `evalFuel` 原样传给 force / primReduce（由它们的 fuel 控制定义展开深度）。
 -- ---------------------------------------------------------------
 normalizeFuel : Int -> HashMap Term -> Sols -> Int -> Value -> Value
-normalizeFuel fuel defs sols fuel v = if fuel <= 0 then v
-else if fuel <= 0 then v
-else case force defs sols fuel v of
-  VNeutral n => normalizeNeutralFuel (fuel - 1) defs sols fuel n
-  VIf c th el => normalizeIfFuel (fuel - 1) defs sols fuel c th el
-  VCase scrut alts => normalizeCaseFuel (fuel - 1) defs sols fuel scrut alts
+normalizeFuel fuel defs sols evalFuel v = if fuel <= 0 then v
+else if evalFuel <= 0 then v
+else case force defs sols evalFuel v of
+  VNeutral n => normalizeNeutralFuel (fuel - 1) defs sols evalFuel n
+  VIf c th el => normalizeIfFuel (fuel - 1) defs sols evalFuel c th el
+  VCase scrut alts => normalizeCaseFuel (fuel - 1) defs sols evalFuel scrut alts
   other => other
 
 -- case 正规化：scrutinee 归约到构造子就走该分支并继续正规化（分支体里可能还有
 -- case——嵌套模式展开出来的内层匹配就是这种形态）；否则只正规化 scrutinee、保持卡住。
 normalizeCaseFuel : Int -> HashMap Term -> Sols -> Int -> Value -> List VCaseAlt -> Value
-normalizeCaseFuel fuel defs sols fuel scrut alts = if fuel <= 0 then VCase scrut alts
-else if fuel <= 0 then VCase scrut alts
-else case normalizeFuel (fuel - 1) defs sols (fuel - 1) scrut of
-  VCon c args => normalizeFuel (fuel - 1) defs sols (fuel - 1) (applyCaseAlt c args alts)
+normalizeCaseFuel fuel defs sols evalFuel scrut alts = if fuel <= 0 then VCase scrut alts
+else if evalFuel <= 0 then VCase scrut alts
+else case normalizeFuel (fuel - 1) defs sols (evalFuel - 1) scrut of
+  VCon c args => normalizeFuel (fuel - 1) defs sols (evalFuel - 1) (applyCaseAlt c args alts)
   s2 => VCase s2 alts
 
 normalizeNeutralFuel : Int -> HashMap Term -> Sols -> Int -> Neutral -> Value
-normalizeNeutralFuel fuel defs sols fuel n = if fuel <= 0 then VNeutral n
-else if fuel <= 0 then VNeutral n
+normalizeNeutralFuel fuel defs sols evalFuel n = if fuel <= 0 then VNeutral n
+else if evalFuel <= 0 then VNeutral n
 else case n of
   NVar name level sp =>
-    VNeutral (NVar name level (map (normalizeFuel (fuel - 1) defs sols fuel) sp))
+    VNeutral (NVar name level (map (normalizeFuel (fuel - 1) defs sols evalFuel) sp))
   NGlobal g sp =>
     let
-      sp2 = map (normalizeFuel (fuel - 1) defs sols fuel) sp
+      sp2 = map (normalizeFuel (fuel - 1) defs sols evalFuel) sp
     in case defLookup g defs of
-      Just body => normalizeFuel (fuel - 1) defs sols (fuel - 1) (applySpine (eval [] body) sp2)
-      Nothing => case primReduce defs sols (fuel - 1) g sp2 of
-        Just v2 => normalizeFuel (fuel - 1) defs sols (fuel - 1) v2
+      Just body => normalizeFuel (fuel - 1) defs sols (evalFuel - 1) (applySpine (eval [] body) sp2)
+      Nothing => case primReduce defs sols (evalFuel - 1) g sp2 of
+        Just v2 => normalizeFuel (fuel - 1) defs sols (evalFuel - 1) v2
         Nothing => VNeutral (NGlobal g sp2)
 
 normalizeIfFuel : Int -> HashMap Term -> Sols -> Int -> Value -> Value -> Value -> Value
-normalizeIfFuel fuel defs sols fuel c th el = if fuel <= 0 then VIf c th el
-else if fuel <= 0 then VIf c th el
-else case normalizeFuel (fuel - 1) defs sols (fuel - 1) c of
-  VBool b => normalizeFuel (fuel - 1) defs sols (fuel - 1) (if b then th else el)
+normalizeIfFuel fuel defs sols evalFuel c th el = if fuel <= 0 then VIf c th el
+else if evalFuel <= 0 then VIf c th el
+else case normalizeFuel (fuel - 1) defs sols (evalFuel - 1) c of
+  VBool b => normalizeFuel (fuel - 1) defs sols (evalFuel - 1) (if b then th else el)
   VNeutral n =>
-    VIf (VNeutral n) (normalizeFuel (fuel - 1) defs sols (fuel - 1) th)
-      (normalizeFuel (fuel - 1) defs sols (fuel - 1) el)
+    VIf (VNeutral n) (normalizeFuel (fuel - 1) defs sols (evalFuel - 1) th)
+      (normalizeFuel (fuel - 1) defs sols (evalFuel - 1) el)
   other =>
-    VIf other (normalizeFuel (fuel - 1) defs sols (fuel - 1) th)
-      (normalizeFuel (fuel - 1) defs sols (fuel - 1) el)
+    VIf other (normalizeFuel (fuel - 1) defs sols (evalFuel - 1) th)
+      (normalizeFuel (fuel - 1) defs sols (evalFuel - 1) el)
 
 -- ---------------------------------------------------------------
 -- quote：值 → 项（level 转 de Bruijn index）

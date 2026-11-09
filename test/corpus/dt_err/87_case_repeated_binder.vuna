@@ -1,0 +1,11 @@
+-- D40：同一个 case 分支的模式内部重复绑定同名变量属于同一作用域；不同分支各自独立
+-- （本夹具只有这一条分支里重复）。
+data Pair : Type where
+  MkPair : Int -> Int -> Pair
+
+bad : Pair -> Int
+bad p = case p of
+  MkPair x x => x
+
+main : Int
+main = 1

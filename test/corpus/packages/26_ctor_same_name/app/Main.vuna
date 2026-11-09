@@ -1,0 +1,20 @@
+-- 跨模块同名构造子：X 与 Y 都向本包导出构造子 `Nil`（分属 X.A / Y.B 两族）。
+-- 裸 `Nil` 按期望类型（x : X.A、y : Y.B）与模式 scrutinee 类型定向解析；
+-- 解析成功则 main = pickA x + pickB y = 10 + 20 = 30。
+import X
+import Y
+
+x : X.A
+x = Nil
+
+y : Y.B
+y = Nil
+
+pickA : X.A -> Int
+pickA Nil = 10
+
+pickB : Y.B -> Int
+pickB Nil = 20
+
+main : Int
+main = pickA x + pickB y

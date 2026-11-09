@@ -1,0 +1,7 @@
+module T (Color(..), Pretty(..)) where
+
+data Color : Type where
+  Red : Color
+
+trait Pretty a where
+  pretty : a -> String

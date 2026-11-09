@@ -1,4 +1,10 @@
-module Vuna.Lsp.Bindings (bindingDefinitionAt, bindingHoverAt) where
+module Vuna.Lsp.Bindings
+  ( bindingDefinitionAt
+  , bindingHoverAt
+  , bindingRenameOccurrences
+  , localBindingAtSf
+  , moduleSourceIn
+  ) where
 
 -- Vuna.Lsp.Bindings：光标处「绑定」的解析（M40；工具链模块，**永不进 seed 闭包**）。
 --
@@ -115,6 +121,59 @@ bindingDefinitionAt uri line col text = case parseSource "<lsp>" text of
         Just lb => Just (JArr [JObj [Pair "uri" (JStr uri), Pair "range" (localRange lb)]])
 
 -- ---------------------------------------------------------------
+-- rename（C38）：局部绑定的身份与全部出现位置
+-- ---------------------------------------------------------------
+-- 光标处局部绑定的身份 = binder 定义位置（1-based line/col）；`Nothing` = 光标不在任何
+-- 可改名的局部绑定上（调用方继续走顶层符号）。解析失败也返回 Nothing，不抛错。
+-- 参数带已解析的 SourceFile：rename 需要在一份文档上重复判定很多位置，避免重复 parse。
+localBindingAtSf : SourceFile -> String -> Int -> Int -> Maybe (Pair Int Int)
+localBindingAtSf sf text line col = case tokenAtCursor text line col of
+  Nothing => Nothing
+  Just (Pair tokStart token) => case localBindAt line col text sf tokStart token of
+    Nothing => Nothing
+    Just lb => Just (Pair lb.lbLine lb.lbCol)
+
+-- 光标处局部绑定的全部出现位置（binder 定义 + 作用域内的使用），按文档顺序。
+-- 做法：对全文里该名字的每个整词出现位置**重新跑一次局部解析**，只有解析到同一个 binder
+-- 才计入——遮蔽（shadowing）与作用域顺序直接复用 `localBindAt`，不另写一套判断。
+bindingRenameOccurrences : Int -> Int -> String -> Maybe (List (Pair Int Int))
+bindingRenameOccurrences line col text = case parseSource "<lsp>" text of
+  Err e => Nothing
+  Ok sf => case tokenAtCursor text line col of
+    Nothing => Nothing
+    Just (Pair tokStart token) => case localBindAt line col text sf tokStart token of
+      Nothing => Nothing
+      Just target => Just (filter (sameBinding sf text target) (wordOccurrences text token))
+
+sameBinding : SourceFile -> String -> LocalBind -> Pair Int Int -> Bool
+sameBinding sf text target pos =
+  let
+    line = firstOf pos
+    col = secondOf pos
+  in case tokenAtCursor text line col of
+    Nothing => False
+    Just (Pair tokStart token) => case localBindAt line col text sf tokStart token of
+      Nothing => False
+      Just lb =>
+        lb.lbName == target.lbName && lb.lbLine == target.lbLine && lb.lbCol == target.lbCol
+
+-- 全文里 word 的整词出现位置（1-based line/col），按文档顺序。
+wordOccurrences : String -> String -> List (Pair Int Int)
+wordOccurrences text word = if word == "" then []
+else
+  let
+    lines = split "\n" text
+    starts = lineStarts lines
+    chars = strUnpack text
+  in reverse (wordOccurrencesGo chars (strUnpack word) (0 - 1) 0 starts [])
+
+wordOccurrencesGo : List Int -> List Int -> Int -> Int -> List Int -> List (Pair Int Int) -> List (Pair Int Int)
+wordOccurrencesGo [] needle prev idx starts acc = acc
+wordOccurrencesGo (c :: rest) needle prev idx starts acc =
+  if (prev < 0 || not (identCode prev)) && isPrefixChars needle (c :: rest) && afterBoundary (drop (length needle) (c :: rest)) then wordOccurrencesGo rest needle c (idx + 1) starts (posOfAbs starts idx :: acc)
+  else wordOccurrencesGo rest needle c (idx + 1) starts acc
+
+-- ---------------------------------------------------------------
 -- 模块引用
 -- ---------------------------------------------------------------
 currentModuleNameOfSf : SourceFile -> String
@@ -147,6 +206,14 @@ modulePathOf : String -> String -> String
 modulePathOf uri name = case contextForDoc uri of
   Err e => ""
   Ok (Pair label ctx) => probeRoots (contextRoots ctx) name
+
+-- 模块名 → 源文本：按包上下文的模块根探测（`probeRoots`），找不到 / 读失败 → Nothing。
+-- 调用方（LSP case split）持有一份 `PackageContext`，直接用它的 roots，避免每个 binder
+-- 都重算一次上下文；依赖模块每次读盘（与模块 hover 同口径，未保存改动不反映）。
+moduleSourceIn : List Root -> String -> Maybe String
+moduleSourceIn roots name = case probeRoots roots name of
+  "" => Nothing
+  path => if runIO (prim_fileExists path) then Just (runIO (prim_readFile path)) else Nothing
 
 moduleDocOf : SourceFile -> String -> String
 moduleDocOf sf text = case lexComments text of
@@ -488,6 +555,17 @@ signatureOfDecl (d :: rest) name = case d of
   DSig n ctx ty sp => if n == name then Just (arrowDomains ty) else signatureOfDecl rest name
   _ => signatureOfDecl rest name
 
+-- 顶层函数的**完整签名类型表达式**（区别于 `signatureOfDecl` 的 `arrowDomains`——后者只取参数
+-- domain 给 pattern 当签名、丢掉了 binder 名）。C45：Pi / 类型级 binder 可解析——签名
+-- `apply : (f : Int -> Int) -> Int` 里的 `(f : Int -> Int)` 是 EPi，binder 名 `f` 只有 walk 这个
+-- 类型表达式才可达（`findDeclBind` 原本只 walk pats + body，签名 Pi 是死代码）。hover 时把
+-- 签名类型喂给 `walkExpr`，其 `EPi` 分支即可按 `piNamePos` 命中 binder 名、类型取 domain。
+declSigType : List Decl -> String -> Maybe Expr
+declSigType [] name = Nothing
+declSigType (d :: rest) name = case d of
+  DSig n ctx ty sp => if n == name then Just ty else declSigType rest name
+  _ => declSigType rest name
+
 -- ---------------------------------------------------------------
 -- 作用域遍历
 -- ---------------------------------------------------------------
@@ -675,6 +753,48 @@ evarCovers n sp line col =
         (spanStartCol sp + strLength n)
   in spanContainsPos endSp line col
 
+-- Pi binder 名的位置：Pi 的 span 覆盖整个表达式（不落在 binder 名上），所以像 `asNamePos`
+-- 那样靠文本推导——binder 名在 domain 左侧、隔着 ` : `。从 domain 起点向左先跳过空格与 `:`，
+-- 再收集连续 ident 字符（含 `'`/`_`）定出名字左界，最后取该段文本与 binder 名**比对**（避免把
+-- domain 里碰巧紧邻的 token 误判成名字）。`(x : A) -> B` 里 domain `A` 左边扫到的就是 `x`。
+-- 匿名箭头（`A -> B`，名字是 `_`）回扫先遇 `-` 就停、得空段 ⇒ 返回零位，调用方据此跳过。
+-- C45：让 Pi / 类型级 binder 可解析（hover / definition / references）。
+piNamePos : WalkEnv -> Expr -> String -> Pair Int Int
+piNamePos env dom name = if name == "" || name == "_" then Pair 0 0
+else
+  let
+    Pair dl dc = exprStartOf dom
+    ln = lineText env.weText dl
+    len = strLength ln
+  in case piNameStart walkFuelBound ln len (dc - 2) [] of
+    Nothing => Pair 0 0
+    Just (Pair startIdx got) => if got == name then Pair dl (startIdx + 1) else Pair 0 0
+
+-- 从 domain 起点左侧（0-based 索引 i）向左回扫：先跳过空格 / tab / `:`，再收集连续 ident 字符。
+-- `acc` 反向累积已收集的名字字符（prepend，故 join 后即正序名字）；遇到非 ident 的代码字符
+-- （`-`/`(`/`{`/`,`）即停。返回 (名字起始索引, 名字文本)；fuel 耗尽 / 行首越界 / 先遇代码字符
+-- 且无累积 ⇒ Nothing。带 fuel 满足终止性检查（与 `walkFuelBound` 同口径）。
+piNameStart : Int -> String -> Int -> Int -> List String -> Maybe (Pair Int String)
+piNameStart fuel ln len i acc = if fuel <= 0 then Nothing
+else if i < 0 then Nothing
+else if i >= len then Nothing
+else
+  let
+    ch = substring (natFromInt i) 1 ln
+    isId = case strUnpack ch of
+      c :: _ => identCode c
+      [] => False
+  in case acc of
+    [] =>
+      if ch == " " || ch == "\t" || ch == ":" then piNameStart (fuel - 1) ln len (i - 1) []
+      else if isId then piNameStart (fuel - 1) ln len (i - 1) [ch] else Nothing
+    collected =>
+      let
+        got = join "" collected
+      in if ch == " " || ch == "\t" || ch == ":" then Just (Pair (i + 1) got)
+      else if isId then piNameStart (fuel - 1) ln len (i - 1) (ch :: collected)
+      else Just (Pair (i + 1) got)
+
 -- 表达式首 token 位置（`EInfix` 等的 span 从运算符开始，body 起点要取左操作数）。
 exprStartOf : Expr -> Pair Int Int
 exprStartOf (EInfix op lhs rhs sp) = exprStartOf lhs
@@ -693,9 +813,20 @@ else case e of
   EApp f args sp => case walkExpr (fuel - 1) env scope line col name f of
     Just hit => Just hit
     Nothing => walkArgs (fuel - 1) env scope line col name args
-  EPi n implicit qty dom cod sp => case walkExpr (fuel - 1) env scope line col name dom of
-    Just hit => Just hit
-    Nothing => walkExpr (fuel - 1) env scope line col name cod
+  EPi n implicit qty dom cod sp =>
+    let
+      -- C45：Pi / 类型级 binder 可解析——光标落在 binder 名（domain 左侧隔着 ` : `）上时，把该
+      -- binder 当局部绑定返回，类型 = domain 的语法类型（`renderType dom`）。否则按原样走
+      -- domain（binder 尚不可见）/ codomain（binder 已入 scope，故 cod 里引用它也能解析）。
+      -- `piNamePos` 对匿名 binder（`_` / `A -> B`）返回零位 ⇒ `nl == 0` 不等于任何真实行（1-based），
+      -- 自然跳过，回落到 domain/codomain 遍历。
+      Pair nl ncol = piNamePos env dom n
+      domTy = renderType dom
+      bind = LocalBind n "Pi" nl ncol domTy ""
+    in if nl == line && ncol <= col && col <= ncol + strLength n then binderNamed name [bind]
+    else case walkExpr (fuel - 1) env scope line col name dom of
+      Just hit => Just hit
+      Nothing => walkExpr (fuel - 1) env (append scope [bind]) line col name cod
   ELet binds body isRec sp =>
     let
       kind = if isRec then "where" else "let"
@@ -742,16 +873,30 @@ bindersOfBinds env kind binds = concatMap (bindBinders env kind) binds
 -- ---------------------------------------------------------------
 -- 声明级：顶层函数参数 + 函数体（实例方法也要进）
 -- ---------------------------------------------------------------
+-- 签名里的 Pi binder（`apply : (f : Int -> Int) -> Int` 的 `f`）只有 walk **签名类型表达式**
+-- 才可达——`findDeclBind` 原本只 walk pats + body，签名 Pi 是死代码。这里把 `declSigType` 拿到的
+-- 完整签名喂给 `walkExpr`（空 scope 起，沿 arrow / Pi 链递归），其 `EPi` 分支按 `piNamePos`
+-- 命中 binder 名、类型取 domain。签名类型里的 `EVar`（`Int` 等）在空 scope 下不命中局部名，
+-- 不会误报。C45。
+sigPiBind : WalkEnv -> Int -> Int -> String -> Expr -> Maybe LocalBind
+sigPiBind env line col name sigTy = walkExpr walkFuelBound env [] line col name sigTy
+
 findDeclBind : WalkEnv -> Int -> Int -> String -> Decl -> Maybe LocalBind
 findDeclBind env line col name (DFun fn pats body sp) =
   let
     sigSig = signatureOfDecl env.weDecls fn
     paramBinds = patBindersWithSig env "parameter" sigSig pats
-  in case binderNamed name paramBinds of
-    Just paramHit =>
-      if patsHaveCursor env line col pats then Just paramHit
-      else walkExpr walkFuelBound env paramBinds line col name body
-    Nothing => walkExpr walkFuelBound env paramBinds line col name body
+    -- C45：先试签名 Pi binder（光标在签名 `(f : ...)` 上时命中），再回落 pattern 参数 / body。
+    sigHit = case declSigType env.weDecls fn of
+      Just sigTy => sigPiBind env line col name sigTy
+      Nothing => Nothing
+  in case sigHit of
+    Just hit => Just hit
+    Nothing => case binderNamed name paramBinds of
+      Just paramHit =>
+        if patsHaveCursor env line col pats then Just paramHit
+        else walkExpr walkFuelBound env paramBinds line col name body
+      Nothing => walkExpr walkFuelBound env paramBinds line col name body
 findDeclBind env line col name (DInstance ctxE head methods sp) =
   firstJust (map (findDeclBind env line col name) methods)
 findDeclBind env line col name d = Nothing

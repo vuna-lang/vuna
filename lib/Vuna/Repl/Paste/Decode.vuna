@@ -1,0 +1,84 @@
+module Vuna.Repl.Paste.Decode
+  ( PasteState(..)
+  , emptyPasteState
+  , pasteFeed
+  , pasteIsDone
+  , pasteTerminator
+  ) where
+
+-- Vuna.Repl.Paste.Decode：括号粘贴的**纯解码状态机**（工具链；不进 seed 闭包）。
+--
+-- 单独拆出来的原因：解码语义（终止序列识别、ESC 回退、跨字节边界）不依赖终端与 IO，
+-- 因此可以直接单测（见 `test/corpus/repl/app/Main.vuna`）；IO 部分（逐字节读、终端开关）在
+-- `Vuna.Repl.Paste`，本模块只被它和测试文件 import。
+--
+-- 终端开启 DECSET 2004 后，粘贴内容被包在 `\e[200~` … `\e[201~` 之间：
+--   * `pasteFeed` 吃一个字节返回新状态；`pasteDone` 后不再消费；
+--   * 内容里出现「终止序列的前缀」时先挂起（`pasteMatch`），后续不匹配再回吐，
+--     因此内容里的 ESC（如 `\e[A`）不会被误判成终止序列的一部分；
+--   * 终止序列固定 6 字节 `\e [ 2 0 1 ~`，回退用「最长真后缀是终止序列前缀」。
+import Vuna.Compiler.Common
+
+-- `\e[201~` 的字节。
+pasteTerminator : List Int
+pasteTerminator = [27, 91, 50, 48, 49, 126]
+
+-- 粘贴状态：`pasteContent` 是内容字节的**逆序**累积（避免 O(n²) 拼接），
+-- `pasteMatch` 是终止序列的已匹配前缀（正序），`pasteDone` 是完成标记。
+record PasteState where
+  pasteContent : List Int
+  pasteMatch : List Int
+  pasteDone : Bool
+
+emptyPasteState : PasteState
+emptyPasteState = PasteState [] [] False
+
+pasteIsDone : PasteState -> Bool
+pasteIsDone st = st.pasteDone
+
+-- 纯解码一步：一个字节进去，新状态出来（可完全脱离终端与 IO 测试）。
+pasteFeed : PasteState -> Int -> PasteState
+pasteFeed st b = if st.pasteDone then st
+else
+  let
+    cand = append st.pasteMatch [b]
+  in if lenInt cand == lenInt pasteTerminator then if isPrefixOf cand pasteTerminator then PasteState st.pasteContent [] True
+  else pasteFeedMismatch st cand
+  else if isPrefixOf cand pasteTerminator then PasteState st.pasteContent cand False
+  else pasteFeedMismatch st cand
+
+-- 失配：`cand` 的最长真后缀若仍是终止序列前缀就挂起，其余字节按内容回吐。
+pasteFeedMismatch : PasteState -> List Int -> PasteState
+pasteFeedMismatch st cand =
+  let
+    k = longestSuffixPrefix cand
+    kept = take (lenInt cand - k) cand
+    next = drop (lenInt cand - k) cand
+  in PasteState (append (reverse kept) st.pasteContent) next False
+
+-- `cand` 的「最长真后缀且是终止序列前缀」的长度（回退逻辑；终止序列长度 ≤ 6）。
+-- 走到这里时 cand 既不等于终止序列也不是它的前缀，所以 k < len(cand) 恒成立。
+longestSuffixPrefix : List Int -> Int
+longestSuffixPrefix cand = longestSuffixGo cand (lenInt cand - 1)
+
+longestSuffixGo : List Int -> Int -> Int
+longestSuffixGo cand k = if k <= 0 then 0
+else
+  let
+    suffix = takeLast k cand
+  in if isPrefixOf suffix pasteTerminator then k else longestSuffixGo cand (k - 1)
+
+takeLast : Int -> List a -> List a
+takeLast n xs = drop (imax 0 (lenInt xs - n)) xs
+
+lenInt : List a -> Int
+lenInt [] = 0
+lenInt (_ :: rest) = 1 + lenInt rest
+
+imax : Int -> Int -> Int
+imax a b = if a >= b then a else b
+
+isPrefixOf : List Int -> List Int -> Bool
+isPrefixOf [] ys = True
+isPrefixOf xs [] = False
+isPrefixOf (x :: xs) (y :: ys) = x == y && isPrefixOf xs ys

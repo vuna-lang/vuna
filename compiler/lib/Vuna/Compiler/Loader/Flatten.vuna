@@ -136,9 +136,12 @@ parseFileWithPath path src =
       else parseAndStoreAt cpath path src
     Nothing => parseAndStoreAt cpath path src
 
+-- 解析错误统一加 `<path>: ` 前缀（parser 诊断本身无位置）；例外：诊断首行已经以本文件
+-- 路径开头（parser 侧带 span 的诊断，如 `[PS_RepeatedPatternBinder]`）时不再重复加，
+-- 保持 CLI 首行的 `<file>:<line>:<col>: <消息>` 契约（DiagRender 才能追加源码片段）。
 parseAndStoreAt : String -> String -> String -> Result SourceFile
 parseAndStoreAt cpath path src = case parseSource path src of
-  Err e => Err "${path}: ${e}"
+  Err e => Err (if startsWith "${path}:" e then e else "${path}: ${e}")
   Ok parsed => Ok (storeAstCache cpath src parsed)
 
 visibleFixitiesOf : List Module -> List Import -> List FixityDecl
@@ -207,25 +210,58 @@ findMethodNamed name [] = Nothing
 findMethodNamed name ((TraitMethod mname ty msp) :: rest) =
   if mname == name then Just mname else findMethodNamed name rest
 
-findOwnCtorName : String -> List Decl -> Maybe (Pair String String)
-findOwnCtorName name [] = Nothing
-findOwnCtorName name (d :: rest) = case d of
-  DData dname params kind ctors derivings lin sp => case findCtorNamed name ctors of
-    Just cname => Just (Pair dname cname)
-    Nothing => findOwnCtorName name rest
+-- M41：返回**全部**同名构造子（不同族可同名）。裸名导出/重导出必须检测歧义。
+-- | 自动补注（M41 新增导出）：findOwnCtorNames。
+findOwnCtorNames : String -> List Decl -> List (Pair String String)
+findOwnCtorNames name [] = []
+findOwnCtorNames name (d :: rest) = case d of
+  DData dname params kind ctors derivings lin sp =>
+    append (map (\c => Pair dname (ctorName c)) (filter (\c => ctorName c == name) ctors))
+      (findOwnCtorNames name rest)
   DRecord dname params fields derivings lin sp =>
-    if dname == name then Just (Pair dname dname) else findOwnCtorName name rest
-  DTrait tname params methods sp => case findMethodNamed name methods of
-    Just mname => Just (Pair tname mname)
-    Nothing => findOwnCtorName name rest
-  _ => findOwnCtorName name rest
+    if dname == name then Pair dname dname :: findOwnCtorNames name rest
+    else findOwnCtorNames name rest
+  DTrait tname params methods sp =>
+    append
+      (map (\m => Pair tname (traitMethodName m)) (filter (\m => traitMethodName m == name) methods))
+      (findOwnCtorNames name rest)
+  _ => findOwnCtorNames name rest
 
+-- record / trait 的「构造子」条目：target = parent（构造子名 = 类型名 / 方法名）。
 ownCtorEntries : String -> String -> List String -> List ExportEntry
 ownCtorEntries prefix dname [] = []
 ownCtorEntries prefix dname (cname :: rest) =
   if isPrivateName cname then ownCtorEntries prefix dname rest
   else ExportEntry { kind = "ctor", public = cname, target = mangle prefix cname, parent = mangle prefix dname }
     :: ownCtorEntries prefix dname rest
+
+-- M41：data 构造子的 canonical target 是 `Module.Data.Ctor`。
+-- | 自动补注（M41 新增导出）：ownDataCtorEntries。
+ownDataCtorEntries : String -> String -> List String -> List ExportEntry
+ownDataCtorEntries prefix dname [] = []
+ownDataCtorEntries prefix dname (cname :: rest) =
+  if isPrivateName cname then ownDataCtorEntries prefix dname rest
+  else ExportEntry { kind = "ctor", public = cname, target = ctorCanonical prefix dname cname, parent = mangle prefix dname }
+    :: ownDataCtorEntries prefix dname rest
+
+-- 本地类型名的完整导出条目（type + 其构造子/方法），供 `T(..)` 导出使用。
+-- | 自动补注（M41 新增导出）：ownTypeEntries。
+ownTypeEntries : String -> List Decl -> String -> Maybe (List ExportEntry)
+ownTypeEntries prefix [] name = Nothing
+ownTypeEntries prefix (d :: rest) name = case d of
+  DData dname params kind ctors derivings lin sp =>
+    if dname == name then Just
+      (ExportEntry { kind = "type", public = dname, target = mangle prefix dname, parent = "" } :: ownDataCtorEntries prefix dname (map ctorName ctors))
+    else ownTypeEntries prefix rest name
+  DRecord dname params fields derivings lin sp =>
+    if dname == name then Just
+      (ExportEntry { kind = "type", public = dname, target = mangle prefix dname, parent = "" } :: ownCtorEntries prefix dname [dname])
+    else ownTypeEntries prefix rest name
+  DTrait tname params methods sp =>
+    if tname == name then Just
+      (ExportEntry { kind = "type", public = tname, target = mangle prefix tname, parent = "" } :: ownCtorEntries prefix tname (map traitMethodName methods))
+    else ownTypeEntries prefix rest name
+  _ => ownTypeEntries prefix rest name
 
 -- 从某模块的导出表里取某数据类型的构造器条目：重导出 `T(..)` 时只重新公开
 -- 源模块本来就公开的构造器，从而保持源模块的抽象性。
@@ -240,7 +276,7 @@ declImplicitExports prefix d = case d of
   DData dname params kind ctors derivings lin sp =>
     if isPrivateName dname then []
     else ExportEntry { kind = "type", public = dname, target = mangle prefix dname, parent = "" }
-      :: ownCtorEntries prefix dname (map ctorName ctors)
+      :: ownDataCtorEntries prefix dname (map ctorName ctors)
   DRecord dname params fields derivings lin sp =>
     if isPrivateName dname then []
     else ExportEntry { kind = "type", public = dname, target = mangle prefix dname, parent = "" }
@@ -273,12 +309,13 @@ implicitExports prefix decls = dedupeImplicitExports (concatMap (declImplicitExp
 dedupeImplicitExports : List ExportEntry -> List ExportEntry
 dedupeImplicitExports entries = dedupeByPublic entries (Base.HashMap.fromList []) []
 
--- 按 (kind, public) 去重：类型签名与子句会为同一个函数各产生一条 val 条目。
+-- 按 (kind, public, target) 去重：类型签名与子句会为同一个函数各产生一条 val 条目；
+-- M41 起同名不同族的构造子 target 不同，必须两条都保留。
 dedupeByPublic : List ExportEntry -> HashMap Int -> List ExportEntry -> List ExportEntry
 dedupeByPublic [] seen acc = reverse acc
 dedupeByPublic (e :: rest) seen acc =
   let
-    key = "${e.kind}|${e.public}"
+    key = "${e.kind}|${e.public}|${e.target}"
   in case Base.HashMap.lookup key seen of
     Just _ => dedupeByPublic rest seen acc
     Nothing => dedupeByPublic rest (Base.HashMap.insert key 1 seen) (e :: acc)
@@ -301,7 +338,7 @@ isRecordTarget modules decls prefix target = case splitLastDot (splitOnDot targe
       m = joinDots revPrefix
     in if m == prefix then isRecordDecl base decls
     else case findModule modules m of
-      Just (Module mname mpkg mimports mimps dcs exports mcaps mfx) => isRecordDecl base dcs
+      Just (Module mname mpkg mimports mimps dcs exports mcaps mtrust mfx) => isRecordDecl base dcs
       Nothing => False
 
 isRecordDecl : String -> List Decl -> Bool
@@ -330,17 +367,36 @@ ownOrImportedValueRef modules prefix decls imports name = case findOwnFn name de
   Just fn => Ok (Just (ExportRef "val" (mangle prefix fn) ""))
   Nothing => ownOrImportedValueRef2 modules prefix decls imports name
 
+-- | 自动补注（M41 新增导出）：ownOrImportedValueRef2。
 ownOrImportedValueRef2 : List Module -> String -> List Decl -> List Import -> String -> Result (Maybe ExportRef)
-ownOrImportedValueRef2 modules prefix decls imports name = case findOwnCtorName name decls of
-  Just (Pair dname cname) =>
-    Ok (Just (ExportRef "ctor" (mangle prefix cname) (mangle prefix dname)))
-  Nothing => andThen (modulesExportingValue modules imports name) (\pairs => case pairs of
+ownOrImportedValueRef2 modules prefix decls imports name = case ownCtorEntriesNamed prefix name decls of
+  [e] => Ok (Just (ExportRef "ctor" e.target e.parent))
+  _ :: _ :: _ => Err "${prefix}: ambiguous constructor export ${name} (write T(..) or qualify it)"
+  [] => andThen (modulesExportingValue modules imports name) (\pairs => case pairs of
     [] => Ok Nothing
     _ => andThen (unifyEntryPairs prefix "name" name pairs) (\p => let
       e = secondOf p
     in Ok (Just (ExportRef e.kind e.target e.parent))
     )
   )
+
+-- M41：本模块里名为 name 的构造子导出条目（data 用族限定 target；record/trait 用原名）。
+-- | 自动补注（M41 新增导出）：ownCtorEntriesNamed。
+ownCtorEntriesNamed : String -> String -> List Decl -> List ExportEntry
+ownCtorEntriesNamed prefix name [] = []
+ownCtorEntriesNamed prefix name (d :: rest) = case d of
+  DData dname params kind ctors derivings lin sp =>
+    append
+      (ownDataCtorEntries prefix dname (map ctorName (filter (\c => ctorName c == name) ctors)))
+      (ownCtorEntriesNamed prefix name rest)
+  DRecord dname params fields derivings lin sp =>
+    if dname == name then append (ownCtorEntries prefix dname [dname]) (ownCtorEntriesNamed prefix name rest)
+    else ownCtorEntriesNamed prefix name rest
+  DTrait tname params methods sp =>
+    append
+      (ownCtorEntries prefix tname (map traitMethodName (filter (\m => traitMethodName m == name) methods)))
+      (ownCtorEntriesNamed prefix name rest)
+  _ => ownCtorEntriesNamed prefix name rest
 
 exportBare : List Module -> String -> List Decl -> List Import -> String -> Span -> Result (List ExportEntry)
 exportBare modules prefix decls imports name sp = case splitLastDot (splitOnDot name) of
@@ -364,8 +420,10 @@ exportBare modules prefix decls imports name sp = case splitLastDot (splitOnDot 
         Nothing => Err "${prefix}: ${showSpanLoc sp}: module ${mprefix} is not imported"
         Just m => exportSelective modules prefix m base name sp
 
+-- | 自动补注（M41 新增导出）：exportSelective。
 exportSelective : List Module -> String -> String -> String -> String -> Span -> Result (List ExportEntry)
-exportSelective modules prefix m base name sp = andThen (exportsOf modules m) (\es => case findExportValue es base of
+exportSelective modules prefix m base name sp = andThen (exportsOf modules m) (\es => if length (findExportCtors es base) > 1 then Err "${prefix}: ${showSpanLoc sp}: ambiguous constructor ${base} in ${m}; export T(..) instead"
+else case findExportValue es base of
   Just e => case findExportType es base of
     Just te =>
       Ok
@@ -381,10 +439,8 @@ exportTypeAll : List Module -> String -> List Decl -> List Import -> String -> S
 exportTypeAll modules prefix decls imports name sp = case splitLastDot (splitOnDot name) of
   Pair revPrefix base => case revPrefix of
     [] => if isPrivateName name then Err (privateExportMsg prefix sp name)
-    else case findOwnData name decls of
-      Just (Pair dname ctorNames) =>
-        Ok
-          (ExportEntry { kind = "type", public = name, target = mangle prefix dname, parent = "" } :: ownCtorEntries prefix dname ctorNames)
+    else case ownTypeEntries prefix decls name of
+      Just entries => Ok entries
       Nothing => andThen (modulesExportingType modules imports name) (\pairs => case pairs of
         [] => Err "${prefix}: ${showSpanLoc sp}: cannot export unknown name ${name}"
         _ => andThen (unifyEntryPairs prefix "type" name pairs) (\p => let
@@ -423,10 +479,13 @@ hasSamePublicKind e (e2 :: rest) =
 
 -- 冲突判定：同名同 kind 但**定义处不同**才算重复导出。同一个定义经两条路径重导出
 -- （门面同时导出 Base.Monad 与 Base.IO，两者都重导出 `Functor(..)`）不是冲突。
+-- M41：同名不同族的构造子导出不冲突（`module M (A(..), B(..))` 两边都有 `Nil` 合法）；
+-- val/type 的重复导出规则不变。
 hasConflictingExport : ExportEntry -> List ExportEntry -> Bool
 hasConflictingExport e [] = False
 hasConflictingExport e (e2 :: rest) =
-  e.kind == e2.kind && e.public == e2.public && e.target /= e2.target || hasConflictingExport e rest
+  if e.kind == "ctor" then False
+  else e.kind == e2.kind && e.public == e2.public && e.target /= e2.target || hasConflictingExport e rest
 
 sameExportEntry : ExportEntry -> ExportEntry -> Bool
 sameExportEntry e e2 =
@@ -560,7 +619,7 @@ else case findModule modules name of
       visible =
         dedupeFixities (append fixities (visibleFixitiesOf modules2 (append imports implicit)))
     in Ok
-      (Module name (rootName root) imports implicit decls exports (rootCapabilities root) visible :: modules2)
+      (Module name (rootName root) imports implicit decls exports (rootCapabilities root) (rootTrustUnsafe root) visible :: modules2)
     )
     )
     )
@@ -586,7 +645,7 @@ loadProjectWithPreloaded ctx entry preloaded = if runIO (prim_fileExists entry) 
     Just (ModDecl dname hasList items sp) => ldErr1 (ModuleHeaderInEntryFile entry) entry
     Nothing =>
       andThen (validateImports "<entry>" imports)
-        (\_ => andThen (implicitPrelude (contextRoots ctx) (contextPackageName ctx) "" imports) (\implicit => andThen (loadAll 1048576 (contextRoots ctx) (contextPackageName ctx) preloaded [] (append imports implicit)) (\modules => Ok (Project decls imports implicit modules (contextPackageName ctx) (contextCapabilities ctx) fixities))))
+        (\_ => andThen (implicitPrelude (contextRoots ctx) (contextPackageName ctx) "" imports) (\implicit => andThen (loadAll 1048576 (contextRoots ctx) (contextPackageName ctx) preloaded [] (append imports implicit)) (\modules => Ok (Project decls imports implicit modules (contextPackageName ctx) (contextCapabilities ctx) (contextTrustUnsafe ctx) False fixities))))
 )
 else ldErr1 (EntryFileNotFound entry) entry
 
@@ -599,7 +658,7 @@ loadProjectModulesWithPreloaded ctx names preloaded =
   let
     entryImports = map (\n => Import n False Nothing (Span "" 0 0 0 0)) names
   in andThen (loadAll 1048576 (contextRoots ctx) (contextPackageName ctx) preloaded [] entryImports)
-    (\modules => Ok (Project [] [] [] modules (contextPackageName ctx) (contextCapabilities ctx) []))
+    (\modules => Ok (Project [] [] [] modules (contextPackageName ctx) (contextCapabilities ctx) (contextTrustUnsafe ctx) True []))
 
 -- 入口以**源码字符串**给出（REPL 的表达式求值）：入口不落盘（import 仍按上下文的
 -- roots 从磁盘解析）；隐式 Prelude 与文件入口同规则（ad-hoc 单文件也自动注入）。
@@ -613,7 +672,7 @@ loadProjectSourceWithPreloaded ctx label source preloaded = andThen (parseFileWi
     Just (ModDecl dname hasList items sp) => ldErr1 (ModuleHeaderInEntrySource label) label
     Nothing =>
       andThen (validateImports "<entry>" imports)
-        (\_ => andThen (implicitPrelude (contextRoots ctx) (contextPackageName ctx) "" imports) (\implicit => andThen (loadAll 1048576 (contextRoots ctx) (contextPackageName ctx) preloaded [] (append imports implicit)) (\modules => Ok (Project decls imports implicit modules (contextPackageName ctx) (contextCapabilities ctx) fixities))))
+        (\_ => andThen (implicitPrelude (contextRoots ctx) (contextPackageName ctx) "" imports) (\implicit => andThen (loadAll 1048576 (contextRoots ctx) (contextPackageName ctx) preloaded [] (append imports implicit)) (\modules => Ok (Project decls imports implicit modules (contextPackageName ctx) (contextCapabilities ctx) (contextTrustUnsafe ctx) False fixities))))
 )
 
 -- 以**源码字符串**给出一个**库模块**（M30 · LSP）：源码允许带 `module ... where`
@@ -633,7 +692,7 @@ loadModuleSourceWithPreloaded ctx label source preloaded = andThen (parseFileWit
       visible =
         dedupeFixities (append fixities (visibleFixitiesOf modules (append imports implicit)))
     in Ok
-      (Project [] imports implicit (Module name (contextPackageName ctx) imports implicit decls exports (contextCapabilities ctx) visible :: modules) (contextPackageName ctx) (contextCapabilities ctx) [])
+      (Project [] imports implicit (Module name (contextPackageName ctx) imports implicit decls exports (contextCapabilities ctx) (contextTrustUnsafe ctx) visible :: modules) (contextPackageName ctx) (contextCapabilities ctx) (contextTrustUnsafe ctx) False [])
     )
     )
     )
@@ -671,21 +730,21 @@ resolveProject project = resolveProjectKeeping [] project
 
 -- M34.5（S2）：`keep` 里的模块已经解析过（来自接口文件），原样保留、不重解析。
 resolveProjectKeeping : List String -> Project -> Result (Pair (List Decl) (List Module))
-resolveProjectKeeping keep (Project decls imports implicit modules entryPkg entryCaps entryFixes) =
+resolveProjectKeeping keep (Project decls imports implicit modules entryPkg entryCaps entryTrust complete entryFixes) =
   let
     entryTable =
       tableOf
         (dedupeFixities (append entryFixes (visibleFixitiesOf modules (append imports implicit))))
   in andThen (reorderProgram entryTable decls)
-    (\decls2 => andThen (resolveEntry modules entryPkg entryCaps (append imports implicit) decls2) (\entryDecls => andThen (resolveModulesKeep keep modules) (\modules2 => Ok (Pair entryDecls modules2))))
+    (\decls2 => andThen (resolveEntry modules entryPkg entryCaps entryTrust (append imports implicit) decls2) (\entryDecls => andThen (resolveModulesKeep keep modules) (\modules2 => andThen (checkTrustPoints entryPkg entryTrust complete entryDecls modules2) (\_ => Ok (Pair entryDecls modules2)))))
 
 resolveModulesKeep : List String -> List Module -> Result (List Module)
 resolveModulesKeep keep [] = Ok []
-resolveModulesKeep keep ((Module name pkg imports implicit decls exports mcaps fixities) :: rest) =
+resolveModulesKeep keep ((Module name pkg imports implicit decls exports mcaps mtrust fixities) :: rest) =
   if memName name keep then andThen (resolveModulesKeep keep rest)
-    (\d2 => Ok (Module name pkg imports implicit decls exports mcaps fixities :: d2))
+    (\d2 => Ok (Module name pkg imports implicit decls exports mcaps mtrust fixities :: d2))
   else andThen (reorderProgram (tableOf fixities) decls)
-    (\decls2 => andThen (andThen (resolveProgram (Module name pkg imports implicit decls2 exports mcaps fixities :: rest) name name (namespacesOf decls2) (append imports implicit) decls2) (\d => checkEffectsBuiltins name pkg mcaps d)) (\d1 => andThen (resolveModulesKeep keep rest) (\d2 => Ok (Module name pkg imports implicit d1 exports mcaps fixities :: d2))))
+    (\decls2 => andThen (andThen (resolveProgram (Module name pkg imports implicit decls2 exports mcaps mtrust fixities :: rest) name name (namespacesOf decls2) (append imports implicit) decls2) (\d => checkEffectsBuiltins name pkg mcaps mtrust d)) (\d1 => andThen (resolveModulesKeep keep rest) (\d2 => Ok (Module name pkg imports implicit d1 exports mcaps mtrust fixities :: d2))))
 
 dropPastSlash : List Int -> List Int
 dropPastSlash [] = []

@@ -5,16 +5,13 @@ import Base.ST
 import Base.Int
 
 prog : (r : Type) -> ST r Int
-prog r =
-  bindST1 (newRef 41) (\ref =>
-    bindST1 (readRef ref) (\rp =>
-      case rp of
-        RefPair a ref2 =>
-          bindST1 (writeRef (RefWrite ref2 42)) (\ref3 =>
-            bindST1 (readRef ref3) (\rp2 =>
-              case rp2 of
-                RefPair b ref4 =>
-                  bindST (freeRef ref4) (\_ => pureST (a + b))))))
+prog r = bindST1 (newRef 41) (\ref => bindST1 (readRef ref) (\rp => case rp of
+  RefPair a ref2 => bindST1 (writeRef (RefWrite ref2 42)) (\ref3 => bindST1 (readRef ref3) (\rp2 => case rp2 of
+    RefPair b ref4 => bindST (freeRef ref4) (\_ => pureST (a + b))
+  )
+  )
+)
+)
 
 main : Int
 main = runST prog

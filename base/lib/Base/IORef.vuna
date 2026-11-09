@@ -7,15 +7,19 @@ module Base.IORef (modifyRef, newRef, readRef, writeRef) where
 import Base.Monad
 import Base.IO
 
+-- | 创建初值为 `x` 的新引用（IO 动作）。
 newRef : a -> IO (IORef a)
 newRef x = prim_newRef x
 
+-- | 读取引用当前值。
 readRef : IORef a -> IO a
 readRef r = prim_readRef r
 
+-- | 写入新值，返回底层原语的 `Int` 结果（写入本身无有意义的返回值，通常忽略）。
 writeRef : IORef a -> a -> IO Int
 writeRef r v = prim_writeRef r v
 
+-- | 读-改-写一次完成：读到当前值、应用 `f` 后写回，返回写入原语的 `Int` 结果。
 modifyRef : IORef a -> (a -> a) -> IO Int
 modifyRef r f = do
   x <- readRef r

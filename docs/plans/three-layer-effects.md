@@ -69,11 +69,11 @@ main = runIO (handleFs (handleState Cnt2 (handleState Cnt1 prog)))
 
 ```vuna
 data Row : Type 1 where
-  RNil  : Row
-  RCons : (Type -> Type) -> Row -> Row
+  Nil  : Row
+  Cons : (Type -> Type) -> Row -> Row
 ```
 
-已实测：`RCons Fs RNil`、`RCons (State C1 Int) ...` 均可编译；行只做索引时会被擦除。
+已实测：`Cons Fs Nil`、`Cons (State C1 Int) ...` 均可编译；行只做索引时会被擦除。
 
 #### 效应定义（用户/库各自声明）
 
@@ -104,14 +104,14 @@ data Eff : Row -> Type -> Type where
 
 ```vuna
 Mem : (Type -> Type) -> Row -> Type
-Mem e RNil = No
-Mem e (RCons e r) = Yes
-Mem e (RCons x r) = Mem e r
+Mem e Nil = No
+Mem e (Cons e r) = Yes
+Mem e (Cons x r) = Mem e r
 
 Rem : (Type -> Type) -> Row -> Row
-Rem e RNil = RNil
-Rem e (RCons e r) = r
-Rem e (RCons x r) = RCons x (Rem e r)
+Rem e Nil = Nil
+Rem e (Cons e r) = r
+Rem e (Cons x r) = Cons x (Rem e r)
 ```
 
 （已实测非线性类型族模式可正确归约；`No` 为空族。）
@@ -255,7 +255,7 @@ effect_handle key name
 - **W6**：`dt_base/19_eff_scoped`（`catch`/`local`）。
 - **W7**：`dt_err/62_linear_resume_twice`（类型错误）；`dt_base/20_eff_bracket`。
 - **W8**：`traits/xx_multi_param_*`（正/负/相干性）。
-- **W9**：`dt_base/31–35`（fork/await 顺序与结构化 scope、取消清理、步数超时、失败监督、重复 await）、负例 `dt_err/76`（任务行非 `RNil`）；echo/生产者-消费者需要通道（D44，未做）。
+- **W9**：`dt_base/31–35`（fork/await 顺序与结构化 scope、取消清理、步数超时、失败监督、重复 await）、负例 `dt_err/76`（任务行非 `Nil`）；echo/生产者-消费者需要通道（D44，未做）。
 - **W10**：fs/console/process/clock/env 真实与 mock 对拍；收尾：`dt_base/37`（fs 命名实例
   mock/real 并存）、`dt_base/38`（`Exit` 可观察）、`dt_err/77`（fs 实例名不匹配）、
   `packages/10_prim_io`（原生 `prim_sleep` 探针）。

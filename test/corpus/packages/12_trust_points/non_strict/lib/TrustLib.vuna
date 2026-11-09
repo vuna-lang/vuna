@@ -1,0 +1,9 @@
+module TrustLib (directRun) where
+
+-- D28 正例（非严格模式）：包声明了 `unsafe` 但没有 `[trust]` → 没有定义级限制，
+-- 直接使用 `runIO` 走原有「包级能力 + 整模块首个效应」检查即可。
+import Base.IO
+
+-- | 非严格模式下允许的直接使用点。
+directRun : IO a -> a
+directRun = runIO

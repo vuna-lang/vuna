@@ -394,12 +394,12 @@ else case collectDepPackagesFuel (fuel - 1) (packageName p :: seen) p.packageDep
   Pair seen1 transitive => case collectDepPackagesFuel (fuel - 1) seen1 rest of
     Pair seen2 siblings => Pair seen2 (append transitive (p :: siblings))
 
--- 依赖包接口目录：与写侧 `ifaceDirOf` 同一 key（**只用包名**，与 check 缓存同一约定）。
--- 包目录在不同上下文里可能是相对/绝对/含 `..` 的不同写法，用目录参与 key 会让「单独
--- check 依赖包」与「作为依赖被根包读取」找不到同一份接口；跨项目同名包的陈旧接口由读侧
--- 源哈希 / 哈希链校验拒绝（回退全量），不会误用。
+-- 依赖包接口目录：与写侧 `ifaceDirOf` 同一规则（默认 = 包目录本身，接口文件与源码同目录；
+-- `VUNA_IFACE_DIR` 覆盖时 = 外部镜像根下按包绝对目录镜像）。key 不再是包名哈希：接口文件
+-- 落在源码树里，同一包在相对/绝对/含 `..` 的不同写法下指向同一份文件；同名不同目录的包
+-- 也天然各占一棵树。陈旧接口由读侧源哈希 / 哈希链校验拒绝（回退全量），不会误用。
 depIfaceDirOf : Package -> String
-depIfaceDirOf dep = "${cacheBase}/iface-${hashText (textHash (packageName dep))}"
+depIfaceDirOf dep = ifaceBaseOf (packageDir dep)
 
 depIfaceOf : Package -> Maybe PackageIface
 depIfaceOf dep = case readPackageIface (depIfaceDirOf dep) ifaceCompilerTag of
@@ -418,7 +418,7 @@ allNamesIn (x :: rest) ys = memName x ys && allNamesIn rest ys
 -- 依赖包接口哈希表：写本包接口时给 `miDepHashes` 用。
 -- M34.5（S2）：依赖包**模块接口**加载（TTC 的 module 复用）。
 --
--- 旧路径按包读 check 缓存里的 `CachedProgram`；S2 改为读每包的 `iface.pkg`
+-- 旧路径按包读 check 缓存里的 `CachedProgram`；S2 改为读每包的 `.vuna-iface`
 -- 并逐项校验：schema/编译器指纹/包名 → 每个模块的源码哈希 → 依赖接口哈希链
 -- （`miDepHashes`）→ 依赖包当前源码模块集合与接口模块集合一致。任一失败 ⇒ Nothing ⇒
 -- 调用方回退全量（宁可慢，不静默用陈旧接口）。
@@ -815,25 +815,33 @@ toolCleanGo builtSec depTbl (m :: rest) cleanRev =
 -- manifest，保留其他条目）。语义与整包 ifaceOfPackage 一致（见 `Iface.ifaceOfModule`）；
 -- 有缺口/其他脏模块时返回 Err，调用方静默跳过（不影响诊断）。
 toolWriteModuleIface : PackageContext -> ToolContext -> List ModuleIface -> CheckedPackage -> String -> SourceInfo -> Result ModuleIface
-toolWriteModuleIface ctx tool clean checked name si =
+toolWriteModuleIface ctx tool clean checked name si = andThen (ifaceOfModule (contextPackageName ctx) si tool.tcDepHashes checked.checkedInherited clean checked.checkedModules checked.checkedEntryDecls checked.checkedProgram name) (\mi => let
+  _ = writeModuleIfaceGuarded ctx mi
+in Ok mi
+)
+
+-- | 单模块写回的只读写降级：失败静默跳过（诊断/会话缓存不受影响）。
+writeModuleIfaceGuarded : PackageContext -> ModuleIface -> Int
+writeModuleIfaceGuarded ctx mi = if contextPackageName ctx == "" then 0
+else
   let
     dir = ifaceDirOf ctx
-    _ = ensureDirPath dir
-  in andThen (ifaceOfModule (contextPackageName ctx) si tool.tcDepHashes checked.checkedInherited clean checked.checkedModules checked.checkedEntryDecls checked.checkedProgram name) (\mi => let
-    _ = writeModuleIfaceMerge dir ifaceCompilerTag (contextPackageName ctx) mi
-  in Ok mi
-  )
+    pkgDir = contextDir ctx
+  in if not (ifaceFilesOk pkgDir [mi]) then 0
+  else if not (ifaceWriteReady dir pkgDir [mi]) then
+    let
+      _ = note "iface-skip readonly ${dir}"
+    in 0
+  else writeModuleIfaceMerge dir ifaceCompilerTag (contextPackageName ctx) pkgDir mi
 
 -- 冷启动（没有工具会话 / 本包还没有 manifest）：依赖哈希从磁盘接口汇总，干净模块按
 -- 现有判定重算；能写就写（LSP-only 会话逐步变热），失败不影响诊断。
 toolWriteModuleIfaceCold : PackageContext -> CheckedPackage -> String -> SourceInfo -> Result ModuleIface
 toolWriteModuleIfaceCold ctx checked name si =
   let
-    dir = ifaceDirOf ctx
-    _ = ensureDirPath dir
     clean = cleanIfacesOrEmpty ctx
   in andThen (ifaceOfModule (contextPackageName ctx) si (depIfaceHashTable ctx) checked.checkedInherited clean checked.checkedModules checked.checkedEntryDecls checked.checkedProgram name) (\mi => let
-    _ = writeModuleIfaceMerge dir ifaceCompilerTag (contextPackageName ctx) mi
+    _ = writeModuleIfaceGuarded ctx mi
   in Ok mi
   )
 
@@ -967,8 +975,52 @@ ifaceSchemaTag = ifaceSchema
 ifaceCompilerTag : String
 ifaceCompilerTag = "${vunaVersion}/${compilerFingerprint}"
 
+-- | iface 目录：默认与源码同布局（`<包目录>/lib/.../X.vuna` → 同目录 `X.iface`）；
+-- `VUNA_IFACE_DIR` 非空时整体镜像到该根（`<根>/<包绝对目录>/lib/.../X.iface`），便于
+-- 持久化/共享。相对值按进程 cwd 解析（启动时读取一次）。
+ifaceRootOverride : String
+ifaceRootOverride =
+  let
+    v = runIO (prim_getenv "VUNA_IFACE_DIR")
+  in if v == "" then "" else normalizeDir (absolutePath v)
+
+-- | 去掉路径前导 "/"，用于把包绝对目录拼到镜像根下。
+dropLeadingSlash : String -> String
+dropLeadingSlash s = if startsWith "/" s then strSubstring 1 (strLength s - 1) s else s
+
+-- | 某包目录对应的接口目录：默认 = 包目录本身（接口与源码同目录）；覆盖模式 = 镜像根下
+-- 按包绝对目录镜像。
+ifaceBaseOf : String -> String
+ifaceBaseOf pkgDir =
+  if ifaceRootOverride == "" then pkgDir
+  else normalizeDir "${ifaceRootOverride}/${dropLeadingSlash (absolutePath pkgDir)}"
+
 ifaceDirOf : PackageContext -> String
-ifaceDirOf ctx = "${cacheBase}/iface-${hashText (textHash (contextPackageName ctx))}"
+ifaceDirOf ctx = ifaceBaseOf (contextDir ctx)
+
+-- | 接口写权限探测（默认布局写在源树里；Nix 构建的源树只读）。一次 `sh`：`mkdir -p` 建目录
+-- （对已存在目录是 no-op）+ 逐目录 `test -w`；返回 True = 可写。失败只降级不写，绝不把
+-- `prim_writeFileAtomic` 的宿主异常漏给 check。
+ifaceDirsWritable : List String -> Bool
+ifaceDirsWritable dirs =
+  let
+    script = "mkdir -p \"$@\" && for d in \"$@\"; do test -w \"$d\" || exit 1; done"
+    code = runIO (prim_runIn "." (append ["sh", "-c", script, "sh"] dirs))
+  in code == 0
+
+-- | 写入前准备目录并确认可写：manifest 所在目录 + 每个接口文件的父目录。
+ifaceWriteReady : String -> String -> List ModuleIface -> Bool
+ifaceWriteReady dir pkgDir modules =
+  let
+    parents =
+      map (\m => parentOfPath (modulePathOf dir (ifaceRelPathOf pkgDir (miSourceOf m)))) modules
+  in ifaceDirsWritable (append [dir] parents)
+
+-- | 写侧安全阀：任一模块算不出「相对包目录」的镜像路径 ⇒ 整包不写（不写坏 manifest）。
+ifaceFilesOk : String -> List ModuleIface -> Bool
+ifaceFilesOk pkgDir [] = True
+ifaceFilesOk pkgDir (m :: rest) =
+  ifaceRelPathOf pkgDir (miSourceOf m) /= "" && ifaceFilesOk pkgDir rest
 
 ownSourceInfos : PackageContext -> List (Pair String SourceInfo)
 ownSourceInfos ctx =
@@ -983,12 +1035,26 @@ cleanIfacesOrEmpty ctx = case ownCleanModules ctx (depIfaceHashTable ctx) of
   Just clean => clean
   Nothing => []
 
+-- | 干净模块的 `miSource` 来自磁盘 manifest（可能是上一次以相对/绝对不同写法 check 时写入的
+-- 路径）。接口文件路径按「包目录 + 当前源路径」推导，复用时必须换成本次上下文的路径，
+-- 否则相对/绝对入口交替会算出空路径而整包跳过写（§57c 覆盖）。
+resyncCleanSources : List (Pair String SourceInfo) -> List ModuleIface -> List ModuleIface
+resyncCleanSources sources clean = map (\m => case lookupPair (miNameOf m) sources of
+  Just si =>
+    ModuleIface (miNameOf m) (miPackageOf m) si (miIfaceHashOf m) (miDepHashesOf m) (miImportsOf m)
+      (miImplicitImportsOf m) (miCapabilitiesOf m) (miExportsOf m) (miFixitiesOf m) (miDeclsOf m)
+      (miCachedOf m)
+  Nothing => m
+) clean
+
 writeIfaceShadow : PackageContext -> CheckedPackage -> Result Int
 writeIfaceShadow ctx checked = if contextPackageName ctx == "" then Ok 0
 else
   let
     _ = stamp "iface-shadow-start"
-  in case ifaceOfPackage (contextPackageName ctx) (ownSourceInfos ctx) (depIfaceHashTable ctx) checked.checkedInherited (cleanIfacesOrEmpty ctx) checked.checkedModules checked.checkedEntryDecls checked.checkedProgram of
+    sources = ownSourceInfos ctx
+    clean = resyncCleanSources sources (cleanIfacesOrEmpty ctx)
+  in case ifaceOfPackage (contextPackageName ctx) sources (depIfaceHashTable ctx) checked.checkedInherited clean checked.checkedModules checked.checkedEntryDecls checked.checkedProgram of
     Err e => if ifaceSelfTestRequested then Err e
     else
       let
@@ -1001,6 +1067,8 @@ else
 
 -- 真正写接口：入口-only 包（没有 lib 模块）不写（没有可复用的模块接口；写空包只会让
 -- 消费者读到 invalid 接口）。per-module 文件只重写接口哈希变化的模块，manifest 最后写。
+-- 目标目录不可写（Nix store / 只读 checkout / `VUNA_IFACE_DIR` 指到只读树）时静默降级：
+-- 不写、exit code 不变，读侧照旧（没有接口就回退全量）。
 writeIfaceNow : PackageContext -> List ModuleIface -> Result Int
 writeIfaceNow ctx modules = if length modules == 0 then
   let
@@ -1009,13 +1077,21 @@ writeIfaceNow ctx modules = if length modules == 0 then
 else
   let
     dir = ifaceDirOf ctx
-    _ = ensureDirPath dir
-    -- 旧布局（单文件 iface.pkg）清掉，避免与 per-module 布局混淆。
-    _ = runIO (prim_removeFile "${dir}/iface.pkg")
-    n = writePackageIface dir ifaceCompilerTag (contextPackageName ctx) modules
-    _ = note "iface-write=${n}/${length modules}"
-    _ = stamp "iface-write-done"
-  in if ifaceSelfTestRequested then ifaceSelfTest dir modules else Ok n
+    pkgDir = contextDir ctx
+  in if not (ifaceFilesOk pkgDir modules) then
+    let
+      _ = note "iface-skip path ${dir}"
+    in Ok 0
+  else if not (ifaceWriteReady dir pkgDir modules) then
+    let
+      _ = note "iface-skip readonly ${dir}"
+    in Ok 0
+  else
+    let
+      n = writePackageIface dir ifaceCompilerTag (contextPackageName ctx) pkgDir modules
+      _ = note "iface-write=${n}/${length modules}"
+      _ = stamp "iface-write-done"
+    in if ifaceSelfTestRequested then ifaceSelfTest dir modules else Ok n
 
 -- 影子写的自检（`VUNA_IFACE_SELFTEST=1`）：读回 + 包接口校验 + 模块名集合/接口哈希一致。
 -- 失败让 check 失败（宁可暴露，不静默写坏缓存）。

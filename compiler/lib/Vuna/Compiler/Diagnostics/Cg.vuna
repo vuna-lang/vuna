@@ -60,7 +60,7 @@ cgTemplate DependencyCycle = "dependency cycle between runtime definitions"
 cgTemplate InterpCannotExecuteEffects =
   "interp cannot execute effects (main : IO a); compile and run the program instead"
 cgTemplate MainNotValue = "main does not reduce to a value"
-cgTemplate MainReturnType = "main must return Int, String or Bool (M13 limitation)"
+cgTemplate MainReturnType = "main must return Int, Nat, String or Bool"
 cgTemplate NoMain = "no main definition"
 cgTemplate TypeUsedAtRuntime = "a type is used at runtime (M13 limitation)"
 cgTemplate (AxiomAtRuntime _) =
@@ -110,11 +110,13 @@ cgMsg e args = diagMsg (cgCode e) (cgTemplate e) args
 cgErr : {n : Nat} -> CgErr n -> Vec String n -> Result a
 cgErr e args = diagErr (cgMsg e args)
 
+-- | 自动补注（M41 新增导出）：cgErr0。
 cgErr0 : CgErr Zero -> Result a
-cgErr0 e = cgErr e VNil
+cgErr0 e = cgErr e []
 
+-- | 自动补注（M41 新增导出）：cgErr1。
 cgErr1 : CgErr (Succ Zero) -> String -> Result a
-cgErr1 e a0 = cgErr e (VCons a0 VNil)
+cgErr1 e a0 = cgErr e (a0 :: [])
 
 -- ---------------------------------------------------------------
 -- M29（A14）：定义级 CG 诊断（带来源位置）

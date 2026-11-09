@@ -11,6 +11,10 @@ module Vuna.Lsp (runLsp, runLspTool) where
 -- M40 查询管线（hover）：洞目标 → Bindings（模块引用 / 局部绑定）→ Index 符号；
 -- definition：Bindings → Index 符号 → 同文件缓冲兜底。Bindings 是 parse 级的，不触发
 -- `.local/index/` 构建；模块引用命中时 docstring 来自目标文件（当前文件用缓冲）。
+-- C38：rename / prepareRename 走 `Vuna.Lsp.Rename`（局部绑定复用 Bindings 的作用域
+-- 解析；顶层符号复用 Index 与 AST 声明位置）；codeAction 除 lint quick fix 外，新增洞的
+-- case split（`refactor.rewrite`，构造子解析在 Query）与 `vuna.fixAllLint` command
+-- （`workspace/executeCommand` → 服务器发 `workspace/applyEdit`）。
 --
 -- 协议约束：**stdout 只写协议帧**；日志走 stderr（内存累积、退出时一次写出）。
 -- 读取按 `Content-Length` 精确切字节（`readChunk`），**不能按行读**：标准 LSP 帧的
@@ -32,6 +36,7 @@ import Vuna.Lsp.Bindings
 import Vuna.Lsp.Diagnostics
 import Vuna.Lsp.Protocol
 import Vuna.Lsp.Query
+import Vuna.Lsp.Rename
 
 -- ---------------------------------------------------------------
 -- 常量
@@ -152,12 +157,12 @@ textForUri uri st = case docLookup uri st.stateDocs of
   Just d => d.docText
 
 -- ---------------------------------------------------------------
--- capabilities（M30 P2：全套）
+-- capabilities（M30 P2：全套；C38 增加 refactor.rewrite 与 executeCommand）
 -- ---------------------------------------------------------------
 serverCapabilities : Json
 serverCapabilities =
   JObj
-    [Pair "textDocumentSync" (JObj [Pair "openClose" (JBool True), Pair "change" (JNum syncKindFull)]), Pair "completionProvider" (JObj [Pair "triggerCharacters" (JArr [JStr "."]), Pair "resolveProvider" (JBool False)]), Pair "definitionProvider" (JBool True), Pair "referencesProvider" (JBool True), Pair "documentSymbolProvider" (JBool True), Pair "documentFormattingProvider" (JBool True), Pair "workspaceSymbolProvider" (JBool True), Pair "hoverProvider" (JBool True), Pair "codeActionProvider" (JObj [Pair "codeActionKinds" (JArr [JStr "quickfix"])])]
+    [Pair "textDocumentSync" (JObj [Pair "openClose" (JBool True), Pair "change" (JNum syncKindFull)]), Pair "completionProvider" (JObj [Pair "triggerCharacters" (JArr [JStr "."]), Pair "resolveProvider" (JBool False)]), Pair "definitionProvider" (JBool True), Pair "referencesProvider" (JBool True), Pair "renameProvider" (JObj [Pair "prepareProvider" (JBool True)]), Pair "documentSymbolProvider" (JBool True), Pair "documentFormattingProvider" (JBool True), Pair "workspaceSymbolProvider" (JBool True), Pair "hoverProvider" (JBool True), Pair "codeActionProvider" (JObj [Pair "codeActionKinds" (JArr [JStr "quickfix", JStr "refactor.rewrite"])]), Pair "executeCommandProvider" (JObj [Pair "commands" (JArr [JStr fixAllLintCommand])])]
 
 -- ---------------------------------------------------------------
 -- 请求分发
@@ -283,19 +288,22 @@ handleFormatting msg state =
   in Pair False (Pair state [responseOk (idOf msg) (JArr (formattingEdits uri text))])
 
 -- ---------------------------------------------------------------
--- codeAction（M38 P1c：lint quick fix）
+-- codeAction（M38 P1c：lint quick fix；C38：洞 case split + fix all 的 Command 形式）
 -- ---------------------------------------------------------------
--- 请求 range 是 0-based；Query 侧用 1-based 行区间。`context.only` 是客户端想要的
--- CodeActionKind 列表：本服务器只提供 quickfix，不含 quickfix 就回空数组。
+-- 请求 range 是 0-based；Query 侧用 1-based 行/列。`context.only` 是客户端想要的
+-- CodeActionKind 列表（Nothing = 不限制）：Query 按 quickfix / refactor.rewrite 分别过滤。
 rangeLineOf : String -> Json -> Int
 rangeLineOf key params = fromMaybe 0 (jsonGetIn ["range", key, "line"] params >>= jsonAsInt)
 
-onlyAllowsQuickfix : Json -> Bool
-onlyAllowsQuickfix params = case jsonGetIn ["context", "only"] params >>= jsonAsArr of
-  Nothing => True
-  Just kinds => memName "quickfix" (mapMaybe jsonAsStr kinds)
+rangeCharOf : String -> Json -> Int
+rangeCharOf key params = fromMaybe 0 (jsonGetIn ["range", key, "character"] params >>= jsonAsInt)
 
--- codeAction：当前缓冲 → lint finding 的 quick fix（纯查询，服务器状态不变）。
+onlyKindsOf : Json -> Maybe (List String)
+onlyKindsOf params = case jsonGetIn ["context", "only"] params >>= jsonAsArr of
+  Nothing => Nothing
+  Just kinds => Just (mapMaybe jsonAsStr kinds)
+
+-- codeAction：当前缓冲 → lint quick fix / fix all command / 洞 case split（纯查询）。
 handleCodeAction : Json -> LspState -> Pair Bool (Pair LspState (List Json))
 handleCodeAction msg state =
   let
@@ -303,9 +311,48 @@ handleCodeAction msg state =
     uri = uriOfParams params
     text = textForUri uri state
     startLine = rangeLineOf "start" params + 1
+    startCol = rangeCharOf "start" params + 1
     endLine = rangeLineOf "end" params + 1
-    actions = if onlyAllowsQuickfix params then codeActionsFor uri text startLine endLine else []
+    endCol = rangeCharOf "end" params + 1
+    actions = codeActionsFor uri text startLine startCol endLine endCol (onlyKindsOf params)
   in Pair False (Pair state [responseOk (idOf msg) (JArr actions)])
+
+-- ---------------------------------------------------------------
+-- workspace/executeCommand（C38：fix all 的 command 形式）
+-- ---------------------------------------------------------------
+-- codeAction 里的 `vuna.fixAllLint` 被客户端执行后到达这里：按当前缓冲重算整文档修正，
+-- 用**服务器 → 客户端**的 `workspace/applyEdit` 请求把 WorkspaceEdit 推给客户端
+-- （LSP 的 `workspace/executeCommand` 结果不会被自动应用，所以必须走 applyEdit）。
+-- 客户端对 applyEdit 的响应帧没有 method，按既有逻辑忽略；服务器不等待它。
+-- 服务器 → 客户端请求的 id：按 (uri, 当前文本) 派生，避免同一会话里两次 fix all
+-- 复用同一个未决 id（客户端响应按 id 配对；服务器不等响应，但 id 仍应唯一）。
+applyEditRequestId : String -> String -> String
+applyEditRequestId uri text = "vuna-apply-${strFromInt (strHash (uri ++ text))}"
+
+applyEditFrame : String -> Json -> Json
+applyEditFrame reqId edit =
+  JObj
+    [Pair "jsonrpc" (JStr "2.0"), Pair "id" (JStr reqId), Pair "method" (JStr "workspace/applyEdit"), Pair "params" (JObj [Pair "edit" edit])]
+
+firstCommandArg : List Json -> String
+firstCommandArg [] = ""
+firstCommandArg (arg :: rest) = fromMaybe "" (jsonAsStr arg)
+
+-- 支持的 command：`vuna.fixAllLint`（arguments = [文档 uri]）。未知 command → -32602。
+handleExecuteCommand : Json -> LspState -> Pair Bool (Pair LspState (List Json))
+handleExecuteCommand msg state =
+  let
+    params = paramsOf msg
+    command = fromMaybe "" (jsonGet "command" params >>= jsonAsStr)
+    args = fromMaybe [] (jsonGet "arguments" params >>= jsonAsArr)
+    uri = firstCommandArg args
+    text = textForUri uri state
+  in if command == fixAllLintCommand then case fixAllLintWorkspaceEdit uri text of
+    Nothing => Pair False (Pair state [responseOk (idOf msg) JNull])
+    Just edit =>
+      Pair False
+        (Pair state [applyEditFrame (applyEditRequestId uri text) edit, responseOk (idOf msg) JNull])
+  else Pair False (Pair state [responseErr (idOf msg) errInvalidParams "unknown command: ${command}"])
 
 -- documentSymbol：当前缓冲的 AST 声明树（不要求磁盘上存在）。
 handleDocumentSymbol : Json -> LspState -> Pair Bool (Pair LspState (List Json))
@@ -347,6 +394,35 @@ handleReferences msg state =
     state1 = firstOf indexPair
     midx = secondOf indexPair
   in Pair False (Pair state1 [responseOk (idOf msg) (JArr (referencesResult uri line col text midx))])
+
+-- prepareRename：光标 token 的范围 + 占位名（无法改名 → null）。
+handlePrepareRename : Json -> LspState -> Pair Bool (Pair LspState (List Json))
+handlePrepareRename msg state =
+  let
+    params = paramsOf msg
+    uri = uriOfParams params
+    line = lineOfParams params + 1
+    col = colOfParams params + 1
+    text = textForUri uri state
+    indexPair = ensureIndex uri state
+    state1 = firstOf indexPair
+    midx = secondOf indexPair
+  in Pair False (Pair state1 [responseOk (idOf msg) (prepareRenameAt uri line col text midx)])
+
+-- rename：局部绑定只改当前文档；顶层符号额外改目标模块与 import 它的模块。
+handleRename : Json -> LspState -> Pair Bool (Pair LspState (List Json))
+handleRename msg state =
+  let
+    params = paramsOf msg
+    uri = uriOfParams params
+    line = lineOfParams params + 1
+    col = colOfParams params + 1
+    newName = fromMaybe "" (jsonGet "newName" params >>= jsonAsStr)
+    text = textForUri uri state
+    indexPair = ensureIndex uri state
+    state1 = firstOf indexPair
+    midx = secondOf indexPair
+  in Pair False (Pair state1 [responseOk (idOf msg) (renameAt uri line col text newName midx)])
 
 -- completion：关键字 + 当前缓冲顶层名 + Index 符号；`.` 后按模块过滤。
 handleCompletion : Json -> LspState -> Pair Bool (Pair LspState (List Json))
@@ -395,9 +471,12 @@ dispatch "textDocument/hover" msg state = handleHover msg state
 dispatch "textDocument/completion" msg state = handleCompletion msg state
 dispatch "textDocument/definition" msg state = handleDefinition msg state
 dispatch "textDocument/references" msg state = handleReferences msg state
+dispatch "textDocument/prepareRename" msg state = handlePrepareRename msg state
+dispatch "textDocument/rename" msg state = handleRename msg state
 dispatch "textDocument/documentSymbol" msg state = handleDocumentSymbol msg state
 dispatch "textDocument/formatting" msg state = handleFormatting msg state
 dispatch "textDocument/codeAction" msg state = handleCodeAction msg state
+dispatch "workspace/executeCommand" msg state = handleExecuteCommand msg state
 dispatch "workspace/symbol" msg state = handleWorkspaceSymbol msg state
 -- 客户端能力注册（vscode-languageclient 的 fileEvents 等）：服务器不消费这些注册，
 -- 但必须回成功，否则客户端会把「注册失败」当成错误刷日志。

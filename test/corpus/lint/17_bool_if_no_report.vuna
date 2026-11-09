@@ -1,0 +1,18 @@
+debugOn : Bool
+debugOn = True
+
+note : String -> String
+note msg = if debugOn then msg else msg
+
+pick : Bool -> Int
+pick True = 0
+pick b = if b then 1 else 2
+
+nested : Bool -> Int
+nested b = 1 + (if b then 2 else 3)
+
+letBound : Bool -> Int
+letBound b =
+  let
+    x = if b then 1 else 2
+  in x

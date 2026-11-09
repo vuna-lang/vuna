@@ -3,7 +3,7 @@ import Base.Eff
 import Base.EffState
 import Base.Pair
 
-prog : Eff (RCons (State S1 Int) RNil) Int
+prog : Eff (State S1 Int :: []) Int
 prog = bindEff (get S1 Int) (\x => bindEff (put S1 Int (x + 1)) (\_ => get S1 Int))
 
 ret : Int -> Int -> Pair Int Int

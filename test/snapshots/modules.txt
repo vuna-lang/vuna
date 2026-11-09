@@ -1,6 +1,7 @@
 # M26 模块面快照（vuna map --modules）
 
 ## root（工具链 + 产品 CLI）
+Vuna.Clean  ./lib/Vuna/Clean.vuna
 Vuna.Cli.Args  ./lib/Vuna/Cli/Args.vuna
 Vuna.Cli  ./lib/Vuna/Cli.vuna
 Vuna.Doc.Comments  ./lib/Vuna/Doc/Comments.vuna
@@ -36,9 +37,14 @@ Vuna.Lsp.Bindings  ./lib/Vuna/Lsp/Bindings.vuna
 Vuna.Lsp.Diagnostics  ./lib/Vuna/Lsp/Diagnostics.vuna
 Vuna.Lsp.Protocol  ./lib/Vuna/Lsp/Protocol.vuna
 Vuna.Lsp.Query  ./lib/Vuna/Lsp/Query.vuna
+Vuna.Lsp.Rename  ./lib/Vuna/Lsp/Rename.vuna
 Vuna.Lsp  ./lib/Vuna/Lsp.vuna
 Vuna.Repl.Client  ./lib/Vuna/Repl/Client.vuna
+Vuna.Repl.Complete  ./lib/Vuna/Repl/Complete.vuna
 Vuna.Repl.Edit  ./lib/Vuna/Repl/Edit.vuna
+Vuna.Repl.History  ./lib/Vuna/Repl/History.vuna
+Vuna.Repl.Paste.Decode  ./lib/Vuna/Repl/Paste/Decode.vuna
+Vuna.Repl.Paste  ./lib/Vuna/Repl/Paste.vuna
 Vuna.Repl.Server  ./lib/Vuna/Repl/Server.vuna
 Vuna.Repl.Term  ./lib/Vuna/Repl/Term.vuna
 Vuna.Repl  ./lib/Vuna/Repl.vuna

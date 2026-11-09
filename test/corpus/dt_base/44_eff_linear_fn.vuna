@@ -7,7 +7,8 @@ linear data Token : Type where
   MkToken : (1 n : Int) -> Token
 
 useToken : (1 t : Token) -> Int
-useToken t = case t of MkToken n => n
+useToken t = case t of
+  MkToken n => n
 
 -- 线性箭头 binder：k 恰好用一次（放进 Cont 的 rig-1 字段）。
 mkContI : (1 k : Int -> Int) -> Cont Int Int

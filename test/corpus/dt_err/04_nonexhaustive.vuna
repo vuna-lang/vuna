@@ -4,9 +4,8 @@ data Nat : Type where
 
 -- 少了 Succ 分支：可达构造子没有覆盖全。
 toInt : Nat -> Int
-toInt n =
-  case n of
-    Zero => 0
+toInt n = case n of
+  Zero => 0
 
 main : Int
 main = toInt Zero

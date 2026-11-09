@@ -1,1 +1,1 @@
-corpus/lint/14_nested_alt.vuna:6:7: [LN_LiftDestructure] lift-destructure: single-alternative case on `w` can be folded into the enclosing pattern
+corpus/lint/14_nested_alt.vuna:6:7: [LN_DispatchLift] dispatch-lift: dispatch on `w` can be lifted into the enclosing pattern

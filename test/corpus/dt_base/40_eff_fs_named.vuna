@@ -15,16 +15,10 @@ path = "/tmp/vuna_w10_fs_named/a.txt"
 b2i : Bool -> Int
 b2i b = if b then 1 else 0
 
-prog : (n : Name) -> Eff (RCons (Fs n) RNil) String
+prog : (n : Name) -> Eff (Fs n :: []) String
 prog n =
-  bindEff (fsMakeDir n dir) (\_ =>
-    bindEff (fsRemoveFile n path) (\_ =>
-      bindEff (fsWriteFile n path "hello") (\w =>
-        bindEff (fsReadFile n path) (\s =>
-          bindEff (fsFileExists n path) (\e =>
-            bindEff (fsFileSize n path) (\sz =>
-              bindEff (fsRemoveFile n path) (\_ =>
-                pureEff (join "," (Cons (strFromInt w) (Cons s (Cons (strFromInt (b2i e)) (Cons (strFromInt sz) Nil))))))))))))
+  bindEff (fsMakeDir n dir)
+    (\_ => bindEff (fsRemoveFile n path) (\_ => bindEff (fsWriteFile n path "hello") (\w => bindEff (fsReadFile n path) (\s => bindEff (fsFileExists n path) (\e => bindEff (fsFileSize n path) (\sz => bindEff (fsRemoveFile n path) (\_ => pureEff (join "," (strFromInt w :: s :: strFromInt (b2i e) :: strFromInt sz :: [])))))))))
 
 mret : String -> String
 mret a = a
@@ -34,7 +28,7 @@ mopH op k = case op of
   ReadFile p => k "M"
   WriteFile p s => k 5
   WriteFileAtomic p s => k 5
-  ReadDir p => k Nil
+  ReadDir p => k []
   IsDirectory p => k True
   MakeDir p => k 0
   RemoveFile p => k 0
@@ -43,6 +37,6 @@ mopH op k = case op of
   FileSize p => k 42
 
 main : IO Int
-main = prim_bindIO (print ("mock " ++ runPure (handleFs F1 mret mopH (prog F1)) ++ "\n")) (\_ =>
-         prim_bindIO (runIOAnswer (handleFsIO F2 (prog F2))) (\real =>
-           prim_bindIO (print ("real " ++ real ++ "\n")) (\_ => prim_pureIO 0)))
+main =
+  prim_bindIO (print ("mock " ++ runPure (handleFs F1 mret mopH (prog F1)) ++ "\n"))
+    (\_ => prim_bindIO (runIOAnswer (handleFsIO F2 (prog F2))) (\real => prim_bindIO (print ("real " ++ real ++ "\n")) (\_ => prim_pureIO 0)))

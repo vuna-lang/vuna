@@ -57,7 +57,11 @@ prepareDtProgram program =
   in case partitionDefs table defs of
     Pair runtime typeNames =>
       let
-        allTypeNames = append typeNames familyNames
+        -- B18：与数据族同名的**运行时值定义**（`data T` 与 `T : Int` 同名）在项里也
+        -- 是 `TGlobal T`；这种名字属于值命名空间，不能按「类型级名字」拒绝。
+        runtimeNames = map dtDefName runtime
+        familyTypeNames = filter (\n => not (memName n runtimeNames)) familyNames
+        allTypeNames = append typeNames familyTypeNames
       in let
         _ = stamp "cg-partition-done"
       in andThen (checkNoAxiomRuntime axiomNames runtime) (\_ => andThen (checkAllDefScopes defs) (\_ => andThen (ensureUniqueOcamlNames datas runtime) (\_ => let

@@ -16,14 +16,14 @@
 
 | 能力 | Idris2 TTC | vuna 现状 |
 | --- | --- | --- |
-| 单位 | 每模块一个 `.ttc` | 每模块一个 `<Module.Name>.iface` + 包级 `manifest`（S3） |
+| 单位 | 每模块一个 `.ttc` | 每模块一个 `<源文件相对路径>.iface`（与源码同布局）+ 包级 `.vuna-iface`（S3/S8） |
 | 接口内容 | 接口 + 编译后定义（case tree）+ metadata + import hashes | 闭合精化产物（datas / defs 含 body / globals / insts / classes）+ **已解析源码声明** + exports / fixities / imports / capabilities |
 | 失效 | 源哈希 + 依赖 `ifaceHash`（public/inline 定义体参与） | 模块源码哈希 + `miDepHashes`（直接 import 的接口哈希）；`miIfaceHash` 覆盖导出面 + 导出定义体，不含 span/路径 |
 | 加载 | 读 `.ttc`，不读源 | 读接口；依赖模块以「已加载模块」注入 Loader（零 parse/resolve） |
 | 上游变化 | `importHashes` 链 | `miDepHashes` 链（包内模块也参与） |
 | 下游 | 编译器从 TTC 生成代码 | 同一份 `DtProgram` 视图（依赖 artifacts 来自接口）→ `Codegen.Split` |
 | 版本 | TTC header/version | `ifaceSchema` + 编译器 fingerprint + 包名 |
-| 快判 | TTC 在构建目录、mtime/hash | `$TMPDIR/vuna-cache/iface-<包名>/`；默认内容哈希，`VUNA_CACHE_MTIME=1` 时 mtime+size 快路径（距 now <5s 的文件仍回读内容哈希，见下） |
+| 快判 | TTC 在构建目录、mtime/hash | 默认在源文件旁（`<pkg>/lib/.../X.iface` + `<pkg>/.vuna-iface`）；`VUNA_IFACE_DIR` 可整体镜像到外部根。默认内容哈希，`VUNA_CACHE_MTIME=1` 时 mtime+size 快路径（距 now <5s 的文件仍回读内容哈希，见下） |
 
 **唯一实质字段差异**：vuna 的接口多存 `miDecls`（已解析源码声明）。原因：vuna 的 record
 语法降级（`Elab.Records.prepareDeclsWith`）与终止性 SCT（`Elab.Termination`）都工作在源码
@@ -41,7 +41,7 @@ Dt.check（全量或摘要路径）→ CheckedPackage = { DtProgram, modules, en
         （归属表来自 Driver.Owner：声明名 / 实例名 / 派生实例 / trait 投影 / Dict_）
       → 逐模块 hashOfParts（不含 span / 源路径）→ miIfaceHash
       → 逐模块 miDepHashes（直接 import 的接口哈希；包内模块边算边进表）
-      → 包级 PackageIface（schema / compiler / package / dir / modules）→ 原子写 iface.pkg
+      → 包级 PackageManifest（schema / compiler / package / modules）→ 原子写 `.vuna-iface`
   → 覆盖性检查：本包模块拥有的 artifact 必须全部进摘要（归属漏项 ⇒ 不写，回退下次）
 ```
 
@@ -49,7 +49,7 @@ Dt.check（全量或摘要路径）→ CheckedPackage = { DtProgram, modules, en
 
 ```text
 Driver.Compile.depIfacesOf
-  ├─ 逐依赖包读 iface.pkg，校验 schema / 编译器指纹 / 包名
+  ├─ 逐依赖包读该包的 `.vuna-iface`，校验 schema / 编译器指纹 / 包名
   ├─ depIfaceSourcesValid：每个模块源内容哈希 = 接口记录；且当前源码模块集合 == 接口模块集合
   ├─ depIfaceChainValid：每个模块记录的 miDepHashes 等于当前闭包里同名模块的 miIfaceHash
   └─ 全部通过 ⇒ Just (List ModuleIface)
@@ -83,13 +83,19 @@ Driver.Compile.depIfacesOf
 ## 存储与 key
 
 ```text
-$TMPDIR/vuna-cache/
-  iface-<hashText(textHash(包名))>/manifest                   # 包级 manifest（模块名→文件/源信息/接口哈希）
-  iface-<hashText(textHash(包名))>/<Module.Name>.iface        # per-module 接口（Marshal，原子写）
-  <hashText(textHash(包名))>/check/<key>                       # 包级 check 缓存（framing + 兼容）
-  <hashText(textHash(包名))>/split/<key>                       # codegen SplitFile 缓存（framing）
-  <hashText(textHash(包名))>/split-units/e-<entryId>/<unit>.unit  # 单元缓存（framing）
-  ast/<key>                                                    # parse 结果缓存（framing，schema 7）
+# 默认：接口文件与源码同布局（gitignored；`vuna clean-iface .` 批量清理）
+<包目录>/lib/Base/Int.iface          # 源文件 lib/Base/Int.vuna 的接口（Marshal，原子写）
+<包目录>/.vuna-iface                 # 包级 manifest（模块名 → 相对路径/源信息/接口哈希）
+
+# VUNA_IFACE_DIR=R 时：整体镜像到外部根（内部布局完全相同，适合持久化/共享）
+<R>/<包绝对目录>/lib/Base/Int.iface
+<R>/<包绝对目录>/.vuna-iface
+
+# 其余缓存仍在 $TMPDIR/vuna-cache/（按包名哈希，与本布局无关）
+$TMPDIR/vuna-cache/<hashText(textHash(包名))>/check/<key>                          # 包级 check 缓存（framing）
+$TMPDIR/vuna-cache/<hashText(textHash(包名))>/split/<key>                          # codegen SplitFile 缓存
+$TMPDIR/vuna-cache/<hashText(textHash(包名))>/split-units/e-<entryId>/<unit>.unit  # 单元缓存
+$TMPDIR/vuna-cache/ast/<key>                                                       # parse 结果缓存（schema 7）
 ```
 
 **载荷 framing（M34.6，C32 最小硬化）**：除 iface 文件自己的
@@ -99,13 +105,25 @@ $TMPDIR/vuna-cache/
 重算并覆盖；不再把任意字节喂给 `Marshal.from_bytes`。schema/tag 变化即拒绝旧缓存（无兼容
 义务）。载荷本身仍是 OCaml Marshal（显式编码格式是后续项，见 [debt.md](debt.md) C32）。
 
-接口 key **只用包名**（与 check 缓存同一约定）：包目录在「单独 check 依赖包」与「作为依赖被
-读」两个上下文里可能是相对/绝对/含 `..` 的不同写法，用目录参与 key 会找不到同一份接口。
-跨项目同名包的陈旧接口由读侧源哈希/哈希链校验拒绝（回退全量），不会误用；代价是两个项目
-交替 check 同名包时接口会互相覆盖（各自回退，正确性不受影响）。
+**key 与可移植性**：接口文件的 key 就是**包目录 + 相对源路径**，不再用包名哈希。默认布局
+下文件就在源码旁，同一包在相对/绝对/含 `..` 的不同写法下指向同一份文件；同名不同目录的包
+也天然各占一棵树。`VUNA_IFACE_DIR` 模式用**规范化绝对包目录**（lexical 归一、不解析
+symlink）镜像：换 checkout / 移动目录只是 miss（回退全量），不会误用；symlink / 挂载别名会
+各存一份。manifest 里的 `meFile` 是相对路径（换机器 / 复制源码树仍可命中，只要源内容不变）；
+读侧校验它必须是相对路径、无 `..` 段、`.iface` 后缀（防篡改穿越）。
+
+**只读降级**：写侧写前用一次 `sh`（`mkdir -p` + 逐目录 `test -w`，返回码判定、不抛异常）
+探测；不可写（Nix store 只读源树、只读 checkout、`VUNA_IFACE_DIR` 指到只读树）就
+`note "iface-skip readonly <dir>"` 并跳过写入，check/build 退出码与诊断不变，下次可写时照常
+写。manifest 写去抖：编码后与磁盘逐字节相同则不写（避免默认布局每次 check 都改源树 dotfile
+的 mtime）。
+
+**清理**：默认布局会在工作树留下 `*.iface` / `.vuna-iface`（`.gitignore` 已忽略）；
+`vuna clean-iface [--dry-run] [DIR]` 按文件名批量删除它们（以及原子写残留
+`*.iface.*.tmp`），不碰 `.vuna` 源码。
 
 **per-module 写**：写侧只重写接口哈希变化（或文件缺失）的模块，manifest 最后原子写 =
-提交点；读侧先读 manifest，再逐模块读文件并校验「文件名 ↔ 记录名/接口哈希」，缺件/损坏
+提交点；读侧先读 manifest，再逐模块读文件并校验「相对路径 ↔ 记录名/接口哈希」，缺件/损坏
 回退全量。`VUNA_IFACE_SELFTEST=1` 打开写侧自检（读回 + 模块名集合/接口哈希一致），失败让
 check 失败；`VUNA_DEBUG_PERF=1` 等价于 `--debug-perf`（给 `vuna-compiler` 这类不经过
 `Vuna.Cli` 的入口用）。写侧 `ifaceOfPackage` 对 DtProgram 只做**一遍** owner 分桶
@@ -143,8 +161,8 @@ manifest 逐字节、codegen 目录 `diff -r`）见测试 §44f。
 import 闭包需要的模块接口」作为预置模块交给 Loader（`dtCheckSourceWithIfaces` /
 `dtEvalExprInfoWithIfaces`）；接口缺失/失效自动退回全量。
 
-**惰性读（S7）**：manifest 自带每模块的直接 import 名（schema `vuna-iface 7`）。工具路径
-先只读依赖包 manifest（校验 schema/编译器指纹/包名/源哈希），按 entry（含隐式 Prelude）
+**惰性读（S7）**：manifest 自带每模块的直接 import 名（schema `vuna-iface 8`）。工具路径
+先只读依赖包的 `.vuna-iface`（校验 schema/编译器指纹/包名/源哈希），按 entry（含隐式 Prelude）
 的 import 闭包算出需要哪些模块，再只 unmarshal 这些文件；仍按 `miDepHashes` 链校验。
 
 **闭包完整性（M34.6）**：闭包起算集并入**同包模块自己的 import**（本包 manifest 的
@@ -192,7 +210,7 @@ key」保留文件、旧 key 清除，因此连续编辑不会让桶无限增长
 load 之后按闭包过滤模块表：起点 = entry 的全部 imports（含隐式 Prelude/导出根），沿
 `moduleImportsOf + moduleImplicitImportsOf` 传递；被过滤掉的依赖模块不再提供接口产物
 （`materializedDeps`），干净模块同理（`materializedOwn`），Loader 仍零 parse。摘要路径与
-全量路径因此看到同一组模块/实例/类（测试 §44i：实例在未 import 的模块里时两条路径一致
+全量路径因此看到同一组模块/实例/类（测试 §44i：trait/实例在未 import 的模块里时两条路径一致
 拒绝，import 后一致接受）。
 
 ## 已知边界（仍缺的部分）
@@ -203,8 +221,13 @@ load 之后按闭包过滤模块表：起点 = entry 的全部 imports（含隐�
   规范化保证增量/全量一致；`VUNA_UNIT_CACHE=0` 可关（测试 §44h/§44j/§53）。
 - **LSP / REPL 消费接口默认开启**：惰性闭包 + 会话缓存 + 单文件增量 + 单模块写回已落地
   （见上）；剩余是「LSP-only 冷启动写回的单模块 iface 哈希与整包 check 偶有差异」的
-  自愈（首次整包 check 重写一次），以及 REPL 每条表达式仍会重读 manifest/iface
-  （termAux/起始状态已缓存）。
+  自愈（首次整包 check 重写一次）。REPL 每条表达式重读 manifest/iface 的残余已关闭：REPL
+  把 `depIfacesForToolSourceDetailed` 的结果连校验面一起缓存在 `ReplState.stateToolSession`
+  （key = 编译器指纹 + 包名 + 包目录；复用前按校验面 stat + import 闭包未扩大判定，失效即
+  整条重建），因此轻量求值降到 ~6–8ms/条。`:browse` 首次建索引时另在
+  `ReplState.stateIndexCache` 记逐源文件 stat 快照，后续 `:browse`/`:info`/`:search` 只重新
+  stat 比对（`Vuna.Index.indexStatsUnchanged`：窗口外只 stat、窗口内回落内容哈希），命中就
+  不再读全部源码算内容哈希（~6ms vs ~0.6–1.0s）。
 - **快判**：默认内容哈希；`VUNA_CACHE_MTIME=1` 提供带 5s 安全窗的 mtime+size 快路径
   （可选、非默认；收益 <5%）。
 - **序列化**：载荷已有 framing + 损坏回退 + schema/编译器指纹拒绝，但**仍是 OCaml
@@ -212,6 +235,13 @@ load 之后按闭包过滤模块表：起点 = entry 的全部 imports（含隐�
   把 `ModuleIface`/`CachedProgram`/`SplitFile` 换成显式编码格式（C32 的完整形态）是后续项。
 - **依赖可见性已收敛（S6）**：摘要路径 load 后按 entry/本包 import 闭包过滤模块表，未
   materialize 的依赖模块不提供实例/类，等价于全量路径（测试 §44i）；模块签名隔离归 F1。
+- **默认 iface 落在源树里**：`*.iface` / `.vuna-iface` 已在 `.gitignore`（Nix dirty-tree
+  source 不会收进 store），工具链遍历只认 `.vuna` 扩展，不受影响；需要批量清理时用
+  `vuna clean-iface [DIR]`。模块删除/改名后的孤儿 `.iface` 不会被自动 GC（读侧只看
+  manifest，孤儿不参与），同样由 `clean-iface` 清。
+- **其余缓存仍是 TMPDIR + 包名哈希**：check / split / split-units / ast 按包名哈希隔离
+  （`VUNA_IFACE_DIR` 只影响 iface），跨项目同名包在 TMPDIR 缓存上仍可能互相覆盖（各自
+  回退，正确性不受影响）。
 - **擦除位残 meta** 仍靠包段重编号；彻底方案是精化收尾消 meta。
 - 接口多存 `miDecls`（见上），文件比 TTC 的「只存编译后定义」更接近源码体积；后续可换更
   紧凑的终止性/record 上下文表示。

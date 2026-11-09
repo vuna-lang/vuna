@@ -1,1 +1,1 @@
-corpus/lint/06_int_literal_chain.vuna:2:12: [LN_LiteralIfChain] literal-if-chain: if/else-if chain on `n` can be a case with literal patterns
+corpus/lint/06_int_literal_chain.vuna:2:12: [LN_LiteralIfChain] literal-if-chain: if dispatch on `n` can be lifted into the enclosing pattern or rewritten as a case

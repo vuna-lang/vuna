@@ -1,0 +1,7 @@
+module TrustLib (helper) where
+
+-- D28 负例：manifest 的信任点指向不存在的 `TrustLib.doesNotExist`；本模块本身不使用
+-- unsafe（错误必须在模块解析后的信任点校验里报出来）。
+-- | 存在的定义：形参唯一绑定、可被引用。
+helper : Int -> Int
+helper x = x

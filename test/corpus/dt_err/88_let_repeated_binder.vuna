@@ -1,0 +1,9 @@
+-- D40：let 绑定左端的模式内部重复绑定同名变量（`MkPair x x = ...`）不支持。
+data Pair : Type where
+  MkPair : Int -> Int -> Pair
+
+main : Int
+main =
+  let
+    MkPair x x = MkPair 1 2
+  in x

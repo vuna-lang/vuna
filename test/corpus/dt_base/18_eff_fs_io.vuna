@@ -5,10 +5,10 @@ import Base.EffFs
 import Base.IO
 import Base.Nat
 
-prog : Eff (RCons (Fs F1) RNil) Int
-prog = bindEff (fsWriteFile F1 "/tmp/vuna_eff_fs.txt" "hello") (\_ =>
-         bindEff (fsReadFile F1 "/tmp/vuna_eff_fs.txt") (\s =>
-           pureEff (toInt (byteLength s))))
+prog : Eff (Fs F1 :: []) Int
+prog =
+  bindEff (fsWriteFile F1 "/tmp/vuna_eff_fs.txt" "hello")
+    (\_ => bindEff (fsReadFile F1 "/tmp/vuna_eff_fs.txt") (\s => pureEff (toInt (byteLength s))))
 
 ret : Int -> IO Int
 ret a = prim_pureIO a

@@ -59,6 +59,11 @@ fs 命名实例 `F1`/`F2`（mock/real 可并存）、可控 `Exit`（`handleProc
 
 - `Base.IO`：`runIO = prim_runIO`；`print = prim_print` 等 API 仍是 `prim_*` 别名；
   `Functor` / `Monad IO` 实例经 `prim_pureIO` / `prim_bindIO`。
+- **`unsafe` 的定义级信任点（D28）**：包在 manifest 声明 `[trust] unsafe = ["Module.def", ...]`
+  后进入严格模式：只有列出的定义可以**直接**引用 `unsafe` 门控目标（CapUnsafe 内建或
+  `Base.IO.runIO` 别名）；`Loader.Resolve` 逐定义扫描，错误给出定义全限定名、触发内建名与
+  修复写法。未声明 `[trust]` 的包保持包级门控。base 是当前唯一 opt-in 方，清单即安全审计面
+  （`base/vuna.toml`；机制见 [packages.md](packages.md) §效应能力）。
 - **执行边界不变**：动作只在 `main` 由运行时执行；`main : IO a` 的产物钩子是
   `v_main 0`（不再 match 构造子）。`runIO` 与直接引用 `prim_runIO` 都受 `unsafe` 门控。
 - `vuna interp` 是纯核心求值器：遇到 `main : IO a` 一律报
@@ -67,7 +72,8 @@ fs 命名实例 `F1`/`F2`（mock/real 可并存）、可控 `Exit`（`handleProc
 - 没有异常 / handler 层：语言没有 `try` / `catch`、没有 effect handler；未捕获的宿主异常
   由生成的 main 钩子统一报告为 `vuna: runtime error: ...` + 位置帧 + exit 2（见
   [debugging.md](debugging.md)）。`Base.Debug.trace` / `traceShow` 是调试专用逃逸（base 的
-  `unsafe` `runIO`），不构成效应系统的一部分。
+  `unsafe` `runIO`），不构成效应系统的一部分；`trace` 是 `[trust] unsafe` 里显式列出的
+  审计点（`traceShow` 只经 `trace`，不是直接使用点）。
 - **能力边界不变**：效果原语只有 `prim_*` 名，是否可直调由 manifest
   `[capabilities].effects` 决定；`Base.IO` 的别名不需要调用方有额外能力。IO 升格**没有**
   把能力搬进类型（类型级能力行仍归 F3）。
@@ -187,7 +193,8 @@ CPS `Eff` 已经可 `check` + `compile` + 运行，且 interp 与产物逐字节
 3. **可变数据两条边界**：`IORef` / `MArray` / `Buffer` 只能在 `IO` 动作里用；
    `Ref` / `SArray` 只能在 `ST r` 里用，且不能逃出 `runST`。两者表示同构、类型隔离。
 4. **能力是权限层，不是类型豁免**：`runIO` / `prim_runIO` 使用点必须声明 `unsafe`；
-   base 因此声明 `unsafe`（§8、[primitives.md](primitives.md) §7）。
+   base 因此声明 `unsafe`，并用 `[trust] unsafe` 把直接使用点收敛到定义级（D28，opt-in
+   严格模式；清单见 `base/vuna.toml`，机制见 [packages.md](packages.md) §效应能力）。
 5. **效应组合显式**：transformer 的 handler 必须显式调用；没有自动 lift 到任意深度。
 6. **不透明擦除值的表示与 cast 由同一份判据驱动**：`Elab.Meta.valueOpaqueScoped` 与
    `Codegen.Decl` 的 `isTypeHeadOpaqueDatas` / `ctorOpaqueFlagsOf` 必须同步；
@@ -205,14 +212,15 @@ __EFF_SECTION__
 
 ### 8.1 表示
 
-- `Row` 是 Type-1 数据，存放**效应标签类型**（`RCons : Type -> Row -> Row`）；
-- **行字面量语法糖**：`[e1, e2]` 在**期望 kind 为 `Row`** 的位置展开为
-  `RCons e1 (RCons e2 RNil)`，`[]` 展开为 `RNil`；普通列表字面量（期望 `List a`）
-  不变。例：`String -> Eff [Fetch] String` 等价于
-  `String -> Eff (RCons Fetch RNil) String`。实现是 expected-kind-directed：精化器在
-  `checkEFuel` / 参数检查里识别 Loader 产生的 `Base.List.Cons`/`Nil` 形状并重写成
-  `RCons`/`RNil`（`Elab/Term/Impl` 的 `rowListElems`/`rowExprFromElems`），parser 与 AST
-  不需要区分类型/项位置（`[...]` 仍是列表字面量）。夹具 `dt_base/45_eff_row_sugar`。
+- `Row` 是 Type-1 数据，存放**效应标签类型**（`Cons : Type -> Row -> Row`）；
+- **列表字面量通用展开**：parser 把 `[]` / `[e1, e2]` 解析成保留名
+  `@vuna@list@nil` / `@vuna@list@cons`（不是构造子名字解析）；精化器按**期望族**的短名
+  `Nil`/`Cons` 展开，期望族未知时默认 `Base.List.List`。因此在**期望 kind 为 `Row`** 的
+  位置 `[Fetch]` 展开为 `Base.Eff.Row.Cons Fetch Base.Eff.Row.Nil`，`[]` 展开为
+  `Base.Eff.Row.Nil`；`Vec a n` / 用户自定义的 `Nil`/`Cons` 族同样适用。模式
+  `[]` / `[a, b]` 按 scrutinee 族逐层展开（`Elab/Term/Impl` 的
+  `listLitElems`/`expandListLit` 与模式解析器），parser/AST 不需要区分类型/项位置。
+  夹具 `dt_base/45_eff_row_sugar`、`dt_base/54_list_literal_families`。
   行只是擦除索引，不进入运行时值。
 - 标签是用户/库声明的数据类型（如 `Reader Cnt1 Int`、`State S1 Int`、`Fs`），
   没有闭合的 `data EffectLabel`；新增效应/实例不需要改中央表。
@@ -221,7 +229,8 @@ __EFF_SECTION__
 - `Member e r` 是 Type-1 归纳族（`Here`/`There`），effect wrapper 用隐式证明参数；
   精化器按行结构构造证明（定义级 ctx 收尾）。
 - `rowRem : Type -> Row -> Row` 去掉一个标签；它不是类型族，由编译器按标签类型值
-  结构相等归约（类型族的重复变量模式不强制相等，见 D40）。
+  结构相等归约（重复绑定名/非线性格不受支持：parser 直接报 `PS_RepeatedPatternBinder`，
+  见 language.md）。
 
 ### 8.2 运行时
 
@@ -258,8 +267,8 @@ __EFF_SECTION__
 | `Base.EffExn` | W6 高阶 scoped Error：`Try` 携带子计算；`tryWith`/`runExn`/`catchExn`/`bracketExn` |
 | `Base.EffMutex` | W9 Mutex/Semaphore（IORef + yield 忙等）：`acquire`/`release`/`semWait`/`semSignal` |
 | `Base.EffChannel` | W9 cooperative Channel：`send`/`tryRecv`/`recvWait` |
-| `Base.EffAsync` | 最小并发（L3，**legacy**）：`Task`/`async`/`await`，基于 OCaml 5 `Domain`；任务行 `RNil`（W9 的调度器取代其定位，见 §8.5） |
-| `Base.EffSched` | W9 单线程 fiber 调度器（L3）：`Task`/`Scope`/`TaskLin` + `forkTask`/`forkTaskWith`/`forkTaskLin`/`awaitTask`/`awaitTaskLin`/`yieldNow`/`cancelTask`/`cancelTaskLin`/`cancelScope`/`scopeWait`/`scopeWaitTimeout`/`withScope`/`withScopeTimeout`/`isCancelled`/`liftIOEff`；任务行 `RNil`，超时按逻辑步数 |
+| `Base.EffAsync` | 最小并发（L3，**legacy**）：`Task`/`async`/`await`，基于 OCaml 5 `Domain`；任务行 `Nil`（W9 的调度器取代其定位，见 §8.5） |
+| `Base.EffSched` | W9 单线程 fiber 调度器（L3）：`Task`/`Scope`/`TaskLin` + `forkTask`/`forkTaskWith`/`forkTaskLin`/`awaitTask`/`awaitTaskLin`/`yieldNow`/`cancelTask`/`cancelTaskLin`/`cancelScope`/`scopeWait`/`scopeWaitTimeout`/`withScope`/`withScopeTimeout`/`isCancelled`/`liftIOEff`；任务行 `Nil`，超时按逻辑步数 |
 
 夹具：`dt_base/16`（两个 Reader 实例嵌套 handler）、`17`（State 状态线程）、
 `18`（IO-backed Fs 真实读写，命名实例 F1）、`20–21`（W6 local/catch）、`23`（W6
@@ -278,7 +287,8 @@ process 可控 Exit）、`42–44`（W7 通用 bracket abort cleanup、调度器
   不走 trait 重叠实例（trait 版 `Member` 仍被 coherence 拒绝，D39）；`sendCore`/
   `handleCore` 本身不带证明，属于信任边界内的核心原语。
 - **行删除的表示层修复**：`rowRem` 改成公理 + 编译器按标签类型值结构相等归约；
-  不能写成类型族（重复变量模式不强制相等，D40）。
+  不能写成类型族（重复绑定名的模式会被 parser 以 `PS_RepeatedPatternBinder` 拒绝，
+  见 language.md）。
 - **`Monad (Eff r)` 已内建**：`Base.Eff` 直接声明
   `instance Monad (Eff r) where pure = pureEff; bind = bindEff`（实例 tele `r : Row`
   由 `Eff` 构造子 kind 推断）；import `Base.Eff` 后可直接用 `do` / `>>=` / `>>`。
@@ -307,12 +317,12 @@ fork/await/yield/cancel/结构化 scope；W10 console/clock/env/process/fs 标�
 | --- | --- | --- |
 | D22 | QTT 核心已落地（M38）；W7 补了线性捕获规则与一次性闭包（`Base.Eff.Cont`/`mkCont`）；剩余：multiplicity 多态/依赖 multiplicity、通用线性箭头类型、`ST` 动作本身仍可复制；ST 无 `Monad` 实例（另见 D45） | 后续 / F3 |
 | D27 | **M39 表示轴已落地**（§5）：CPS `Eff` 的 `res op` 用不透明值 + 恒等 cast 编译；残留：精化期未解 meta 的漏 cast 边界、trait 自动生成 λ 的插入点未覆盖、以及用户级 `Eff` API / 行 / 重排（D03） | F3 |
-| D28 | `base` 的 `unsafe` 授权没有机制约束使用点（`Base.IO.runIO` 别名 + `Base.ST.runST` + `Base.Debug.trace/traceShow` 的调试逃逸） | 后续收紧 |
+| D28 | `base` 的 `unsafe` 授权曾是包级（没有机制约束到使用点）：已落地**定义级信任点**（opt-in `[trust] unsafe` + `Loader.Resolve` 逐定义强制 + base 审计清单 `base/vuna.toml`）；剩余：严格模式仍是 opt-in（root/compiler 保持包级门控），更多信任收窄随 F3/QTT | `Frontend.Manifest`、`Loader.{Resolve,Modules}`、`Packages.Pkg`、`base/vuna.toml`；夹具 `packages/12_trust_points` | 已落地（2026-11，rotation 待执行） |
 | D32 | transformer 无任意 monad 泛化（隐式参数 kind 推断缺口，§3.2） | M37 后续（F3 前置） |
 | D37 | 运行时效应的剩余缺口：`Member`（W3）、W6 高阶 scoped handler、W7 线性续延/一次性闭包/`bracket`（含 abort cleanup）、W9 单线程调度器、W11 未处理效应诊断均已落地；L3 扩展见 D41/D44 | `Base/Eff*`；§8.4 | F3 |
 | D41 | Layer 2/3 已落地面：W6 scoped handler、W7 线性续延/一次性闭包/通用 `bracket`（abort cleanup）、W9 `Base.EffSched`（单线程调度器，含 Mutex/Channel/线性 TaskLin/forkTaskWith）；剩余：Domain 并行、父 fiber handler 继承 | §8.5；D44 | 后续（Layer 3 扩展） |
 | D43 | W10 的 IO 标签迁移只在**库层**（另有工具链一条真实路径）：`IO`/`Base.IO`/`prim_*` 仍可被包直接使用（无编译器强制）；原生 `prim_sleep` 已落地且 `Base.EffClock` 已用，但 `Base.IO` 在 seed 闭包内，`sleepMicros` 仍是忙等、切换需先 rotation；工具链仅 `vuna version` 一条 console 路径迁到标签，编译器不迁移 | `Base/Eff{Console,Clock,Env,Process,Fs}.vuna`、`Base/IO.vuna`、`lib/Vuna/Cli.vuna`、`base/vuna.toml`；fixtures `dt_base/26–30`/`37`/`38`、`dt_err/77`；§8.6 | 后续（W10 收尾 / seed rotation） |
-| D44 | W9 调度器边界：取消只在挂起点生效、清理有 64 步宽限后硬中止；Task/Scope legacy 可复制；TaskLin 恰好一次 await/cancel；Mutex/Semaphore/Channel 均为 cooperative 忙等；超时是逻辑步数；任务体只能 `Eff RNil a`（forkTaskWith 显式 handler，但无法继承父 fiber handler 栈）；`Base.EffAsync`（Domain）与调度器互不集成 | `Base.EffSched`、`Codegen/Term.vuna`（`dtSchedRuntime`）、`Intrinsics.vuna`（`prim_sched*`） | W10/W11 |
+| D44 | W9 调度器边界：取消只在挂起点生效、清理有 64 步宽限后硬中止；Task/Scope legacy 可复制；TaskLin 恰好一次 await/cancel；Mutex/Semaphore/Channel 均为 cooperative 忙等；超时是逻辑步数；任务体只能 `Eff Nil a`（forkTaskWith 显式 handler，但无法继承父 fiber handler 栈）；`Base.EffAsync`（Domain）与调度器互不集成 | `Base.EffSched`、`Codegen/Term.vuna`（`dtSchedRuntime`）、`Intrinsics.vuna`（`prim_sched*`） | W10/W11 |
 | D45 | QTT 用量检查对 `let` 降级按 λ 应用缩放 RHS，线性值 `let z = y + 1 in z` 误报 `TC_LinearOverused`；推断位置把线性值传给通用运算符/trait 方法（形参默认 ω）同样被拒 | `Elab/Usage.vuna`、`Elab/Term/Impl.*`；探针见 qtt.md §9 | W7 后续 |
 
 ## 10. 非目标（本阶段明确不做）

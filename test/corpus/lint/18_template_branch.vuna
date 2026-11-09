@@ -1,0 +1,5 @@
+greet : Bool -> String -> String
+greet b name = if b then "hi ${name}" else name
+
+main : String
+main = greet True "x"

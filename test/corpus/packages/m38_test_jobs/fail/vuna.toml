@@ -1,0 +1,7 @@
+# C23/C39 夹具：并行下的失败路径（一个通过 + 一个故意失败）。
+# 独立嵌套包（不属于父夹具的 [workspace]），用目录路径单独跑。
+[package]
+name = "m38-test-jobs-fail"
+
+[dependencies]
+vuna-base = "../../../../../base"

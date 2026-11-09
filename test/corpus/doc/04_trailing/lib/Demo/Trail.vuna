@@ -1,0 +1,24 @@
+-- | Trailing doc demo module.
+module Demo.Trail where
+
+-- | Leading doc wins.
+id : a -> a -- ^ trailing doc that must lose.
+id x = x
+
+-- 普通注释：不是 docstring。
+limit : Int
+limit = 1 -- ^ limit trailing.
+
+-- | A box (leading decl doc).
+data Box a : Type where
+  Empty : Box a -- ^ Empty trailing (line comment).
+  Full : a -> Box a {- ^ Full trailing (block comment). -}
+
+-- | A point (leading decl doc).
+record Point where
+  px : Int {- ^ px trailing. -}
+  py : Int
+
+-- | A shape (leading decl doc).
+trait Shape a where
+  area : a -> Int -- ^ area trailing.

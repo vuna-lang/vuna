@@ -67,12 +67,13 @@ rotation 是**按需**事件；`seed-selfhost` 在 seed 落后时只输出滞后
 `nix/seed-rotation.txt` 元数据可见。
 
 - 种子只通过 **seed rotation** 更新：用当前产品 CLI 对 compiler 包做 DT split codegen，
-  在临时目录完成 TCB、闭包数量与 fixed point 校验后才替换 `seed/`，并写入
+  在临时目录完成 TCB、完整 allowlist、闭包数量与 fixed point 校验后才替换 `seed/`，并写入
   `nix/seed-rotation.txt`（`nix/seed-rotate.sh`，失败不破坏工作树）；
 - CI 用 `checks.seed-selfhost` 守不变量 1/2：`seed/` 由 `packages.vuna-seed` 构建；种子对
   **compiler 包**做 DT split 得到 stage1 文件集并构建；stage1 再生成 stage2 文件集，
   `diff -r` 逐字节一致；同时报告 seed 与当前源码生成结果的滞后规模（不失败），按
   `nix/tcb-check.sh` / `nix/tcb-forbidden.txt` 断言 seed/stage1/stage2 都不含工具模块，按
+  `nix/tcb-allowlist.sh` / `nix/seed-files.txt` 断言 seed 文件集逐项一致，按
   `nix/seed-count.txt` 断言闭包 `.ml` 数量，并检查增量构建与行为抽查；
 - 如果新特性会让源码超出旧种子能编译的语法子集，必须先把特性实现成旧语法可编译的形式，
   rotate 种子后再在编译器源码里使用；
@@ -95,15 +96,15 @@ nix build .#vuna --out-link result
 sh nix/seed-rotate.sh ./result/bin/vuna   # 生成 → TCB + fixed point 校验 → 替换 seed/ 并写元数据
 nix flake check                           # seed-selfhost 等全部通过
 git diff seed/                            # 确认变化可解释（文件集 + 路径/代码变化）
-git add seed/ nix/seed-count.txt nix/seed-rotation.txt && git commit
+git add seed/ nix/seed-count.txt nix/seed-files.txt nix/seed-rotation.txt && git commit
 ```
 
 `nix/seed-rotate.sh` 在临时目录完成全部生成与校验：`vuna build --no-compile --out
 "$tmp/seed" compiler` → 按 `nix/tcb-forbidden.txt` 断言 TCB → 用该种子构建并验证自生成
 fixed point → 全部通过后才替换 `seed/` 并写入 `nix/seed-rotation.txt`，因此中间失败不会破坏
 当前信任锚点。TCB 黑名单只有 `nix/tcb-forbidden.txt` 一份（由 `nix/tcb-check.sh` 断言），
-新增工具模块时追加到那里。当前替换步骤是 `rm -rf seed && cp -r`，不是原子替换（开放债务
-E06）。
+新增工具模块时追加到那里。替换步骤先把新种子复制到同目录临时路径，再用 rename 换入
+（失败回滚旧 `seed/`），因此不再有 `rm -rf seed` 的半成品窗口。
 
 注意：种子必须从仓库根、以 `compiler` 为包目录生成（脚本已固定这一点），这样产物里嵌入的
 源码路径保持一致。如果改的是**现有语法的语义**（而非新增语法），旧种子会按旧语义编译新

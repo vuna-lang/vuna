@@ -2,7 +2,7 @@ module Vuna.Run (runRun) where
 
 -- Vuna.Run：`vuna run` —— 构建并运行包的可执行入口（M38；工具链，永不进 seed 闭包）。
 --
--- 参数模型：`vuna run [--no-build] [--package NAME] [DIR] [-- ARG]...`。
+-- 参数模型：`vuna run [--no-build] [--package NAME] [--out DIR] [DIR] [-- ARG]...`。
 -- 按**第一个** `--` 切分：前段是 vuna 自己的参数，后段原样透传给被运行的程序
 -- （参数与子进程退出码都不改）。DIR 默认 "."，可以是包目录，也可以是 workspace 根。
 --
@@ -35,12 +35,12 @@ runRun args =
     parts = splitPassthrough args
     own = firstOf parts
     passthrough = secondOf parts
-  in case parseToolArgs "vuna run" [BoolFlag "no-build", ValueFlag "package"] own of
+  in case parseToolArgs "vuna run" [BoolFlag "no-build", ValueFlag "package", ValueFlag "out"] own of
     Err e => runError e
     Ok parsed => case parsed.positionals of
       [] => runGo parsed passthrough "."
       [dir] => runGo parsed passthrough dir
-      _ => runError "usage: vuna run [--no-build] [--package NAME] [DIR] [-- ARG]..."
+      _ => runError "usage: vuna run [--no-build] [--package NAME] [--out DIR] [DIR] [-- ARG]..."
 
 runGo : Parsed -> List String -> String -> Int
 runGo parsed passthrough dir = case requireDirectory dir of
@@ -103,23 +103,40 @@ runTarget parsed passthrough dir target =
     pkgFlag = case flagValue parsed "package" of
       Nothing => []
       Just name => ["--package", name]
+    outFlag = case flagValue parsed "out" of
+      Nothing => []
+      Just out => ["--out", out]
   in if not (isExecutable target) then runError "package ${packageLabel target} has no executable entry (app/Main.vuna)"
   else
     let
       buildCode =
         if flagSet parsed "no-build" then 0
-        else runCompilerCliFor "vuna" (append ["build", dir] pkgFlag)
-    in if buildCode /= 0 then buildCode else execTarget passthrough target
+        else runCompilerCliFor "vuna" (append ["build", dir] (append pkgFlag outFlag))
+    in if buildCode /= 0 then buildCode else execTarget passthrough target (flagValue parsed "out")
 
 -- 执行：cwd 切到包目录，bin 用**相对包目录**的路径（`prim_runIn` 先 chdir 再执行，
 -- 传 `packageDir ++ "/.output/bin/..."` 会在相对 DIR 下被拼成两遍；见 M38 验证记录）。
-execTarget : List String -> Package -> Int
-execTarget passthrough target =
+-- `--out DIR` 时构建产物在 DIR/bin/<包名>；相对 DIR 按调用方 cwd 解析成绝对路径
+-- （`prim_runIn` 会 chdir 到包目录，绝对路径不受影响）。
+execTarget : List String -> Package -> Maybe String -> Int
+execTarget passthrough target outM =
   let
     pkgDir = packageDir target
-    relBin = ".output/bin/${packageName target}"
-  in if pathExistsFile "${pkgDir}/${relBin}" then runIO (prim_runIn pkgDir (relBin :: passthrough))
-  else runError "binary not found: ${pkgDir}/${relBin} (build the package first, or drop --no-build)"
+    name = packageName target
+  in case outM of
+    Nothing =>
+      let
+        relBin = ".output/bin/${name}"
+      in if pathExistsFile "${pkgDir}/${relBin}" then runIO (prim_runIn pkgDir (relBin :: passthrough))
+      else runError "binary not found: ${pkgDir}/${relBin} (build the package first, or drop --no-build)"
+    Just out =>
+      let
+        cwd = runIO getCwd
+        absOut = if startsWith "/" out then out else "${cwd}/${out}"
+        bin = "${absOut}/bin/${name}"
+      in if pathExistsFile bin then runIO (prim_runIn pkgDir (bin :: passthrough))
+      else runError
+        "binary not found: ${bin} (build the package first with --out ${out}, or drop --no-build)"
 
 -- ---------------------------------------------------------------
 -- 统一错误出口（2 = 用法/输入，1 = 被检查代码的语义失败）

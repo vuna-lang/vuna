@@ -1,0 +1,7 @@
+rig : Bool -> Bool -> Int
+rig True isTypeDom = 0
+rig False True = 0
+rig False False = 1
+
+main : Int
+main = rig True False

@@ -1,0 +1,15 @@
+# D28 负例：信任点列表里写本包不存在的定义 → manifest 加载后校验报错。
+[package]
+name = "trust-neg-fake"
+
+[export]
+modules = ["TrustLib"]
+
+[dependencies]
+vuna-base = "../../../../../base"
+
+[capabilities]
+effects = ["unsafe"]
+
+[trust]
+unsafe = ["TrustLib.doesNotExist"]

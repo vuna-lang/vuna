@@ -13,6 +13,10 @@ module Vuna.Compiler.Frontend.Manifest
 --   [export]      modules = ["Base.List"]（可选；值必须是字符串数组）
 --   [capabilities] effects = ["console", "fs"]（可选；M27 效应能力声明，值必须是
 --                 字符串数组；合法能力名的语义校验由 Loader 负责）
+--   [trust]       unsafe = ["Base.IO.runIO", ...]（可选；D28 定义级信任点。声明后该包
+--                 进入**严格模式**：只有列出的定义可以直接引用 `unsafe` 门控的内建
+--                 或 `Base.IO.runIO` 别名；值必须是字符串数组，每项是 `Module.def`
+--                 形式的全限定定义名，语义校验在模块解析后做）
 --   [dependencies] <dep-name> = "<相对路径>"
 -- parseManifest 只解析，不检查文件是否存在；validateManifest 做结构校验。
 -- 本模块不做文件 I/O：调用方用自己的 prim_readFile 读入内容后传入。
@@ -25,6 +29,9 @@ record Manifest where
   manifestExports : Maybe (List String)
   manifestDependencies : List (Pair String String)
   manifestCapabilities : List String
+  -- | D28：`[trust] unsafe` 信任点；`Nothing` = 没有声明该 section（非严格模式），
+  -- `Just []` = 严格模式但没有任何信任点。
+  manifestTrustUnsafe : Maybe (List String)
   manifestPath : String
 
 -- M27：manifest 的 `[capabilities].effects` 声明；空列表表示该包没有直接使用
@@ -82,6 +89,7 @@ checkOneEntry path (TomlEntry section key value line) =
   else if sameSection section ["export"] then if key == "modules" then Ok 0 else Err (atLine path line "unknown key \"${key}\" in [export]")
   else if sameSection section ["capabilities"] then if key == "effects" then Ok 0
   else Err (atLine path line "unknown key \"${key}\" in [capabilities]")
+  else if sameSection section ["trust"] then if key == "unsafe" then Ok 0 else Err (atLine path line "unknown key \"${key}\" in [trust]")
   else if sameSection section ["dependencies"] then Ok 0
   else Err (atLine path line "unknown section [${joinDots section}]")
 
@@ -104,7 +112,7 @@ else collectDependenciesAcc path rest acc
 buildManifest : String -> List TomlEntry -> Result Manifest
 buildManifest path entries =
   andThen (checkEntries path entries)
-    (\checked => andThen (stringField path ["package"] "name" entries) (\name => andThen (stringListField path ["workspace"] "members" entries) (\members => andThen (stringListField path ["export"] "modules" entries) (\exports => andThen (collectDependencies path entries) (\deps => andThen (stringListField path ["capabilities"] "effects" entries) (\caps => Ok (Manifest name (orEmptyList members) exports deps (orEmptyList caps) path)))))))
+    (\checked => andThen (stringField path ["package"] "name" entries) (\name => andThen (stringListField path ["workspace"] "members" entries) (\members => andThen (stringListField path ["export"] "modules" entries) (\exports => andThen (collectDependencies path entries) (\deps => andThen (stringListField path ["capabilities"] "effects" entries) (\caps => andThen (stringListField path ["trust"] "unsafe" entries) (\trust => Ok (Manifest name (orEmptyList members) exports deps (orEmptyList caps) trust path))))))))
 
 parseManifest : String -> String -> Result Manifest
 parseManifest path contents =
@@ -185,10 +193,33 @@ validateCapsSeen path seen (c :: rest) =
   else if memName c seen then Err (manifestErr path "duplicate capability \"${c}\"")
   else validateCapsSeen path (c :: seen) rest
 
+-- | D28：`[trust] unsafe` 的结构校验——声明了信任点就必须声明 `unsafe` 能力；
+-- 每项必须非空、不重复、形如 `Module.def`。「是否为本包真实定义」在模块解析后校验。
+validateTrust : String -> List String -> Maybe (List String) -> Result Int
+validateTrust path caps Nothing = Ok 0
+validateTrust path caps (Just entries) =
+  if memName "unsafe" caps then validateTrustEntries path [] entries
+  else Err (manifestErr path "[trust] unsafe requires capability \"unsafe\" in [capabilities] effects")
+
+-- | `[trust] unsafe` 的逐项校验（非空、无重复、形如 `Module.def`）。
+validateTrustEntries : String -> List String -> List String -> Result Int
+validateTrustEntries path seen [] = Ok 0
+validateTrustEntries path seen (entry :: rest) =
+  if entry == "" then Err (manifestErr path "trust point name must not be empty")
+  else if memName entry seen then Err (manifestErr path "duplicate trust point \"${entry}\"")
+  else if validTrustPointName entry then validateTrustEntries path (entry :: seen) rest
+  else Err
+    (manifestErr path "invalid trust point \"${entry}\" (expected a qualified definition name such as \"Base.IO.runIO\")")
+
+-- | 信任点名字的形状：`Module.Name.def`（至少一级模块名 + 一个定义名）。
+validTrustPointName : String -> Bool
+validTrustPointName name = case splitLastDot (splitOnDot name) of
+  Pair revPrefix base => validModuleName (joinDots revPrefix) && base /= "" && base /= "_"
+
 validateManifest : Manifest -> Result Manifest
-validateManifest (Manifest name members exports deps caps path) =
+validateManifest (Manifest name members exports deps caps trust path) =
   andThen (validateName path name)
-    (\okName => andThen (validateMembers path members) (\okMembers => andThen (validateExports path exports) (\okExports => andThen (validateDependencies path deps) (\okDeps => andThen (validateCapabilities path caps) (\okCaps => Ok (Manifest name members exports deps caps path))))))
+    (\okName => andThen (validateMembers path members) (\okMembers => andThen (validateExports path exports) (\okExports => andThen (validateDependencies path deps) (\okDeps => andThen (validateCapabilities path caps) (\okCaps => andThen (validateTrust path caps trust) (\okTrust => Ok (Manifest name members exports deps caps trust path)))))))
 
 -- manifest 所在目录：`a/b/vuna.toml` -> `a/b`；没有目录成分 -> "."。
 manifestDir : String -> String

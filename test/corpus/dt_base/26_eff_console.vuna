@@ -5,11 +5,10 @@ import Base.EffConsole
 import Base.IO
 import Base.Pair
 
-prog : (n : Name) -> Eff (RCons (Console n) RNil) Int
+prog : (n : Name) -> Eff (Console n :: []) Int
 prog n =
-  bindEff (consolePrint n "hello") (\_ =>
-    bindEff (consoleEprint n "oops") (\_ =>
-      bindEff (consolePrint n "!") (\_ => pureEff 7)))
+  bindEff (consolePrint n "hello")
+    (\_ => bindEff (consoleEprint n "oops") (\_ => bindEff (consolePrint n "!") (\_ => pureEff 7)))
 
 mret : Int -> Pair Int String
 mret a = Pair a ""
@@ -24,5 +23,5 @@ mopH op k = case op of
 main : IO Int
 main = case runPure (handleConsole C1 mret mopH (prog C1)) of
   Pair n log =>
-    prim_bindIO (print ("mock " ++ log ++ "value " ++ strFromInt n ++ "\n")) (\_ =>
-      prim_bindIO (runIOAnswer (handleConsoleIO C2 (prog C2))) (\r => prim_pureIO r))
+    prim_bindIO (print ("mock " ++ log ++ "value " ++ strFromInt n ++ "\n"))
+      (\_ => prim_bindIO (runIOAnswer (handleConsoleIO C2 (prog C2))) (\r => prim_pureIO r))

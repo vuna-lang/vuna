@@ -1,0 +1,5 @@
+rig : Bool -> Bool -> Int
+rig implicit isTypeDom = if implicit then 0 else if isTypeDom then 0 else 1
+
+main : Int
+main = rig True False

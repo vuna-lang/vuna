@@ -1,0 +1,8 @@
+-- `vuna test` 入口：纯逻辑断言（历史编解码 / 粘贴状态机 / 补全候选判定）。
+-- 断言集在 lib/ReplGapsPure.vuna；这里用 IO 主入口把失败变成非 0 退出码
+-- （`vuna test` 以进程退出码判定 IO 测试；`exit` 需要 manifest 的 process 能力）。
+import Base.IO
+import ReplGapsPure
+
+main : IO Int
+main = if checks == 0 then prim_pureIO 0 else exit 1

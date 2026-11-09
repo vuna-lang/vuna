@@ -1,0 +1,151 @@
+module ReplGapsPure (checks) where
+
+-- REPL v2 缺口（W2）的**纯函数**回归：历史文件编解码 / 括号粘贴解码 / 补全候选判定。
+--
+-- 这些逻辑不依赖终端与 IO，因此脱离 pty 也能断言（CI 沙箱没有 python，pty 只用
+-- `script` 且要能降级）。断言集放在本模块，两个入口共用：
+--   * `app/Main.vuna`（main : Int = 失败计数）→ `vuna run test/corpus/repl`；
+--   * `test/ReplPure.vuna`（main : IO Int，失败时 exit 1）→ `vuna test test/corpus/repl`。
+-- `checks = 0` 表示全部通过。
+import Vuna.Compiler.Common
+import Vuna.Repl.Complete
+import Vuna.Repl.History
+import Vuna.Repl.Paste.Decode
+
+expect : Bool -> Int
+expect b = if b then 0 else 1
+
+strListEq : List String -> List String -> Bool
+strListEq [] [] = True
+strListEq (x :: xs) (y :: ys) = x == y && strListEq xs ys
+strListEq _ _ = False
+
+intListEq : List Int -> List Int -> Bool
+intListEq [] [] = True
+intListEq (x :: xs) (y :: ys) = x == y && intListEq xs ys
+intListEq _ _ = False
+
+-- ---------------------------------------------------------------- History
+-- v1（旧格式，无头）：一行一条，原样读入；空文件与空行照旧。
+histV1 : Int
+histV1 =
+  expect (strListEq (parseHistoryFile "7 + 1\n") ["7 + 1"])
+    + expect (strListEq (parseHistoryFile "7 + 1") ["7 + 1"])
+    + expect (strListEq (parseHistoryFile "") [])
+
+-- v1 里的字面 `\n`（字符串转义）不能被当成 v2 的换行转义解码。
+histV1Literal : Int
+histV1Literal = expect (strListEq (parseHistoryFile "x = \"a\\nb\"\n") ["x = \"a\\nb\""])
+
+-- v2：首行头 + 每行一个编码单元；`\n` 还原为换行、`\\` 还原为反斜杠。
+histV2 : Int
+histV2 =
+  let
+    text = "vuna-repl-history 2\nx = 1 + 1\\ny = x + 40\n"
+  in expect (strListEq (parseHistoryFile text) ["x = 1 + 1\ny = x + 40"])
+
+-- 渲染 → 解析是恒等（含多行与反斜杠），空历史也行。
+histRoundtrip : Int
+histRoundtrip =
+  let
+    units = ["x = 1", "x = 1 + 1\ny = x + 40", "print \"a\\nb\"", "\\"]
+    units2 = ["one line"]
+  in expect (strListEq (parseHistoryFile (renderHistoryFile units)) units)
+    + expect (strListEq (parseHistoryFile (renderHistoryFile units2)) units2)
+    + expect (strListEq (parseHistoryFile (renderHistoryFile [])) [])
+
+-- 空行仍然丢弃（旧行为），条目顺序保持旧→新。
+histBlank : Int
+histBlank = expect (strListEq (parseHistoryFile "a\n\nb\n") ["a", "b"])
+
+-- ---------------------------------------------------------------- Paste
+feedAll : PasteState -> List Int -> PasteState
+feedAll st [] = st
+feedAll st (b :: rest) = feedAll (pasteFeed st b) rest
+
+pasteContentOf : PasteState -> List Int
+pasteContentOf st = reverse st.pasteContent
+
+-- 普通内容 + 终止序列 → done，内容是原字节。
+pastePlain : Int
+pastePlain =
+  let
+    st = feedAll emptyPasteState (append [97, 98] pasteTerminator)
+  in expect (pasteIsDone st) + expect (intListEq (pasteContentOf st) [97, 98])
+
+-- 内容里的 ESC（不是终止序列）原样保留：`ESC [` 之后接普通字节。
+pasteEscInside : Int
+pasteEscInside =
+  let
+    st = feedAll emptyPasteState (append [27, 91, 120] pasteTerminator)
+  in expect (pasteIsDone st) + expect (intListEq (pasteContentOf st) [27, 91, 120])
+
+-- 终止序列前缀挂在末尾时先不输出，补齐后判定为终止（跨 feed 边界）。
+pastePrefixSplit : Int
+pastePrefixSplit =
+  let
+    st1 = feedAll emptyPasteState [27, 91, 50]
+    st2 = feedAll st1 [48, 49, 126]
+  in expect (intListEq (pasteContentOf st1) [])
+    + expect (pasteIsDone st2)
+    + expect (intListEq (pasteContentOf st2) [])
+
+-- 完成后的后续字节不再消费。
+pasteAfterDone : Int
+pasteAfterDone =
+  let
+    st = feedAll (feedAll emptyPasteState [97]) (append pasteTerminator [98])
+  in expect (intListEq (pasteContentOf st) [97])
+
+-- ---------------------------------------------------------------- Complete
+splitLastSlashOk : Int
+splitLastSlashOk =
+  let
+    p1 = splitLastSlash "lib/Foo.vuna"
+    p2 = splitLastSlash "/tmp/x"
+    p3 = splitLastSlash "Foo"
+    p4 = splitLastSlash "lib/"
+  in expect (firstOf p1 == "lib")
+    + expect (secondOf p1 == "Foo.vuna")
+    + expect (firstOf p2 == "/tmp")
+    + expect (secondOf p2 == "x")
+    + expect (firstOf p3 == "")
+    + expect (secondOf p3 == "Foo")
+    + expect (firstOf p4 == "lib")
+    + expect (secondOf p4 == "")
+
+moduleNameOk : Int
+moduleNameOk =
+  expect (moduleNameOf "/r/lib" "/r/lib/Base/Nat.vuna" == "Base.Nat")
+    + expect (moduleNameOf "/r/lib/" "/r/lib/Base/Nat.vuna" == "Base.Nat")
+    + expect (moduleNameOf "/r/lib" "/other/Base/Nat.vuna" == "")
+    + expect (moduleNameOf "/r/lib" "/r/lib/NotVuna.txt" == "")
+
+kindOf : String -> Int
+kindOf s = argKindOf (strUnpack s) (byteLength s)
+
+argKindOk : Int
+argKindOk =
+  expect (kindOf ":load Ba" == 1)
+    + expect (kindOf ":browse F" == 2)
+    + expect (kindOf ":b Sub" == 2)
+    + expect (kindOf "import Ba" == 2)
+    + expect (kindOf ":load" == 0)
+    + expect (kindOf ":type x" == 0)
+    + expect (kindOf "1 + 1" == 0)
+    + expect (kindOf "  :load Ba" == 1)
+
+checks : Int
+checks =
+  histV1
+    + histV1Literal
+    + histV2
+    + histRoundtrip
+    + histBlank
+    + pastePlain
+    + pasteEscInside
+    + pastePrefixSplit
+    + pasteAfterDone
+    + splitLastSlashOk
+    + moduleNameOk
+    + argKindOk

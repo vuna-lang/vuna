@@ -8,10 +8,19 @@ module Vuna.Repl.Edit (EditConfig(..), EditOutcome(..), editLine, terminalWidth)
 --   * ↑/↓ 历史；Ctrl-R 反向增量历史搜索（Enter 接受、Esc/Ctrl-C 取消）；
 --   * Ctrl-A/E/K/U/W/L、Ctrl-P/N、Ctrl-B/F；
 --   * Ctrl-C 取消当前输入、Ctrl-D 空行退出；
---   * Tab 补全（命令名 / 当前缓冲绑定名，唯一匹配补全、多个补最长公共前缀）。
+--   * Tab 补全：普通位置补命令名 / 当前缓冲绑定名；`:load` / `:browse` / `import` 的
+--     参数位补模块名与文件路径（候选池在 `Vuna.Repl.Complete`，只在按 Tab 时枚举）。
+--     唯一匹配补全、多个匹配补最长公共前缀。
+--   * 括号粘贴（`Vuna.Repl.Paste`）：`\e[200~` … `\e[201~` 之间的内容原样进缓冲，
+--     粘贴里的换行不触发提交、Tab 不触发补全；换行在渲染时显示为 `↵`。
+--   * 空闲轮询 + 窗口 resize 重绘：`stty min 0 time 1` 每 0.1s 醒一次（不忙等），
+--     每 20 个空闲 tick（≈2s）查一次 `stty size`，宽度变了按新宽度重绘当前行（轮询频率是
+--     权衡：每次查询要起 `sh` + `stty` 两个进程，2s 延迟对 resize 可接受且常驻开销低）。
 -- 渲染用 `\r` + 水平窗口（超宽时只显示尾部）+ `\x1b[K`，光标用 `\x1b[nD` 回移。
--- 所有出口（提交/EOF/取消/不可用）都恢复终端状态。
+-- 所有出口（提交/EOF/取消/不可用）都恢复终端状态（含关闭括号粘贴）。
 import Vuna.Compiler.Common
+import Vuna.Repl.Complete
+import Vuna.Repl.Paste
 import Vuna.Repl.Term
 import Base.IO
 
@@ -22,6 +31,8 @@ record EditConfig where
   editCompletions : List String
   editWidth : Int
   editColorOn : Bool
+  -- 当前包上下文的模块根（`:load` / `:browse` / `import` 参数位补全用）。
+  editRoots : List String
 
 data EditOutcome : Type where
   EditLine : String -> EditOutcome
@@ -68,6 +79,10 @@ data Key : Type where
   KCtrD : Key
   KEsc : Key
   KEof : Key
+  -- 空闲 tick（0.1s 内没有输入；只用于 resize 检测，不产生编辑动作）。
+  KIdle : Key
+  -- 一次括号粘贴的完整内容（可能含换行）。
+  KPaste : String -> Key
   KIgnore : Key
 
 editLine : EditConfig -> EditOutcome
@@ -82,10 +97,18 @@ editLine cfg =
   else
     let
       st0 = EditState [] 0 0 [] False [] Nothing
-      _ = redraw cfg st0
-      result = editLoop 1000000 cfg st0
-      -- 先恢复终端（raw 模式下 `\n` 只下移不回车，输出会从输入结束列开始；
-      -- 恢复后再换行让 ONLCR 把它展开成 CRLF）。
+      _ = pasteEnable 0
+      -- 进入空闲轮询模式（min 0 time 1）：没有输入时每 0.1s 醒一次用于 resize 检测，
+      -- 不忙等；原绑定键读取改由 readKey 的 KIdle 分支处理。
+      _ = termReadTimeout 0
+      _ = redraw cfg cfg.editWidth st0
+      -- fuel 上限：空闲 tick 也扣 1，1e7 tick ≈ 11.6 天（远超一次交互会话）。
+      -- 边界：timed read 的**超时与 EOF 都返回 -1**（`prim_readBytes` 无法区分），本编辑器
+      -- 一律当 KIdle——所以 tty 关闭/EOF 会退化成空闲轮询，耗尽 fuel 后以 ECancel 结束
+      -- （≈11.6 天）；正常退出靠 Ctrl-D（空行）或 `:quit`，不依赖 EOF 判定。
+      result = editLoop 10000000 cfg cfg.editWidth 0 st0
+      -- 先关括号粘贴（终端设置），再恢复 raw 前保存的终端状态。
+      _ = pasteDisable 0
       _ = termRestoreState path
       _ = writeOut "\n"
     in outcomeOf result
@@ -96,26 +119,46 @@ outcomeOf EExit = EditEof
 outcomeOf ECancel = EditCancel
 outcomeOf (EContinue st) = EditLine (strOf st.esBuf)
 
-editLoop : Int -> EditConfig -> EditState -> EditResult
-editLoop fuel cfg st = if fuel <= 0 then ECancel
+-- 主循环：读一键 → 处理 → 重绘；`KIdle` 每 20 tick（≈2s）查一次终端宽度，
+-- 变化时按新宽度重绘。`width` 是本轮使用的列数（初值来自 Repl 的 `stty size`）。
+editLoop : Int -> EditConfig -> Int -> Int -> EditState -> EditResult
+editLoop fuel cfg width tick st = if fuel <= 0 then ECancel
 else
   let
     key = readKey 0
-  in case applyKey cfg key st of
+  in if isIdleKey key then
+    let
+      tick2 = tick + 1
+    in if tick2 < 20 then editLoop (fuel - 1) cfg width tick2 st
+    else
+      let
+        width2 = terminalWidth 0
+      in if width2 == width then editLoop (fuel - 1) cfg width 0 st
+      else
+        let
+          _ = redraw cfg width2 st
+        in editLoop (fuel - 1) cfg width2 0 st
+  else case applyKey cfg key st of
     EContinue st2 =>
       let
-        _ = redraw cfg st2
-      in editLoop (fuel - 1) cfg st2
+        _ = redraw cfg width st2
+      in editLoop (fuel - 1) cfg width 0 st2
     other => other
+
+isIdleKey : Key -> Bool
+isIdleKey KIdle = True
+isIdleKey _ = False
 
 -- ---------------------------------------------------------------
 -- 按键解码
 -- ---------------------------------------------------------------
+-- 终端处于 `min 0 time 1`（0.1s 超时）模式：没有输入时返回 KIdle，交给 resize 检测。
+-- Esc 序列的后续字节也用同一超时读取：单独的 Esc 键会在 0.1s 超时后判为 KEsc。
 readKey : Int -> Key
 readKey _ =
   let
     b = termReadByte 0
-  in if b < 0 then KEof
+  in if b < 0 then KIdle
   else if b == 13 || b == 10 then KEnter
   else if b == 127 || b == 8 then KBackspace
   else case b of
@@ -139,73 +182,44 @@ readKey _ =
 readEscape : Int -> Key
 readEscape _ =
   let
-    _ = termReadTimeout 0
     b2 = termReadByte 0
-  in if b2 < 0 then
-    let
-      _ = termReadBlock 0
-    in KEsc
-  else if b2 == 91 || b2 == 79 then csiKey 0
-  else
-    let
-      _ = termReadBlock 0
-    in KIgnore
+  in if b2 < 0 then KEsc else if b2 == 91 || b2 == 79 then csiKey 0 else KIgnore
 
+-- CSI / SS3：`ESC [ ... final`。参数位只取第一个数值（`;` 之后的忽略），最多 16 字节；
+-- 支持的 final：A/B/C/D（方向）、H/F（Home/End）、`~` 加参数（1/7 Home、4/8 End、
+-- 3 Delete、200 括号粘贴开始——随后读到 `ESC [ 2 0 1 ~` 为止作为一次粘贴内容）。
 csiKey : Int -> Key
-csiKey _ =
-  let
-    b3 = termReadByte 0
-  in if b3 < 0 then
-    let
-      _ = termReadBlock 0
-    in KIgnore
-  else if b3 == 65 then
-    let
-      _ = termReadBlock 0
-    in KUp
-  else if b3 == 66 then
-    let
-      _ = termReadBlock 0
-    in KDown
-  else if b3 == 67 then
-    let
-      _ = termReadBlock 0
-    in KRight
-  else if b3 == 68 then
-    let
-      _ = termReadBlock 0
-    in KLeft
-  else if b3 == 72 then
-    let
-      _ = termReadBlock 0
-    in KHome
-  else if b3 == 70 then
-    let
-      _ = termReadBlock 0
-    in KEnd
-  else if b3 >= 48 && b3 <= 57 then
-    let
-      b4 = termReadByte 0
-    in if b4 == 126 then
-      let
-        _ = termReadBlock 0
-      in tildeKey b3
-    else
-      let
-        _ = termReadBlock 0
-      in KIgnore
-  else
-    let
-      _ = termReadBlock 0
-    in KIgnore
+csiKey _ = csiParams 16 0 0
 
-tildeKey : Int -> Key
-tildeKey 49 = KHome
-tildeKey 51 = KDelete
-tildeKey 52 = KEnd
-tildeKey 55 = KHome
-tildeKey 56 = KEnd
-tildeKey _ = KIgnore
+csiParams : Int -> Int -> Int -> Key
+csiParams fuel acc digits = if fuel <= 0 then KIgnore
+else
+  let
+    b = termReadByte 0
+  in if b < 0 then KIgnore
+  else if b >= 48 && b <= 57 then csiParams (fuel - 1) (acc * 10 + (b - 48)) (digits + 1)
+  else case b of
+    59 => csiParams (fuel - 1) acc (digits + 1)
+    126 => if digits == 0 then KIgnore else csiTilde acc
+    _ => if b >= 64 && b <= 90 then csiLetter b else KIgnore
+
+csiLetter : Int -> Key
+csiLetter 65 = KUp
+csiLetter 66 = KDown
+csiLetter 67 = KRight
+csiLetter 68 = KLeft
+csiLetter 72 = KHome
+csiLetter 70 = KEnd
+csiLetter _ = KIgnore
+
+csiTilde : Int -> Key
+csiTilde 1 = KHome
+csiTilde 7 = KHome
+csiTilde 3 = KDelete
+csiTilde 4 = KEnd
+csiTilde 8 = KEnd
+csiTilde 200 = KPaste (readPasteBody 0)
+csiTilde _ = KIgnore
 
 -- ---------------------------------------------------------------
 -- 按键处理
@@ -238,6 +252,8 @@ applyNormalKey cfg KCtrC st = ECancel
 applyNormalKey cfg KCtrD st = if lenInt st.esBuf == 0 then EExit else EContinue (deleteAt st)
 applyNormalKey cfg KEsc st = EContinue st
 applyNormalKey cfg KEof st = if lenInt st.esBuf == 0 then EExit else EContinue st
+applyNormalKey cfg KIdle st = EContinue st
+applyNormalKey cfg (KPaste text) st = EContinue (insertText st text)
 applyNormalKey cfg KIgnore st = EContinue st
 
 applySearchKey : EditConfig -> Key -> EditState -> EditResult
@@ -252,7 +268,19 @@ applySearchKey cfg KEsc st = EContinue (exitSearch st)
 applySearchKey cfg KCtrC st = EContinue (exitSearch st)
 applySearchKey cfg KLeft st = EContinue (exitSearch st)
 applySearchKey cfg KRight st = EContinue (exitSearch st)
+applySearchKey cfg KIdle st = EContinue st
+applySearchKey cfg (KPaste text) st = EContinue (searchAppendText cfg st text)
 applySearchKey cfg _ st = EContinue st
+
+-- 粘贴进搜索查询：逐字节追加（与打字同语义），不触发其它按键。
+searchAppendText : EditConfig -> EditState -> String -> EditState
+searchAppendText cfg st text = searchAppendBytes cfg st (strUnpack text)
+
+searchAppendBytes : EditConfig -> EditState -> List Int -> EditState
+searchAppendBytes cfg st [] = st
+searchAppendBytes cfg st (b :: rest) =
+  if b >= 32 then searchAppendBytes cfg (searchQueryAppend cfg st b) rest
+  else searchAppendBytes cfg st rest
 
 -- ---------------------------------------------------------------
 -- 编辑原语
@@ -299,6 +327,14 @@ insertByte b st =
   let
     buf2 = append (append (take st.esCursor st.esBuf) [b]) (drop st.esCursor st.esBuf)
   in EditState buf2 (st.esCursor + 1) 0 st.esDraft st.esSearching st.esQuery st.esMatch
+
+-- 一次插入一段文本（括号粘贴）：换行作为普通字节进缓冲，不算提交。
+insertText : EditState -> String -> EditState
+insertText st text =
+  let
+    bytes = strUnpack text
+    buf2 = append (append (take st.esCursor st.esBuf) bytes) (drop st.esCursor st.esBuf)
+  in withBuf st buf2 (st.esCursor + lenInt bytes)
 
 withCursor : EditState -> Int -> EditState
 withCursor st cur =
@@ -387,8 +423,9 @@ complete cfg st =
   let
     start = tokenStart st.esBuf st.esCursor
     prefix = strOf (take (st.esCursor - start) (drop start st.esBuf))
-    cands =
-      filter (\c => startsWith prefix c && byteLength c > byteLength prefix) cfg.editCompletions
+    kind = argKindOf st.esBuf st.esCursor
+    pool = if kind == 0 then cfg.editCompletions else argCompletions kind cfg.editRoots prefix
+    cands = filter (\c => startsWith prefix c && byteLength c > byteLength prefix) pool
   in if prefix == "" then st
   else case cands of
     [] => bell st
@@ -484,17 +521,24 @@ exitSearch st = EditState st.esBuf st.esCursor st.esHistIdx st.esDraft False [] 
 -- ---------------------------------------------------------------
 -- 渲染
 -- ---------------------------------------------------------------
-redraw : EditConfig -> EditState -> Int
-redraw cfg st = if st.esSearching then redrawSearch cfg st else redrawNormal cfg st
+redraw : EditConfig -> Int -> EditState -> Int
+redraw cfg width st = if st.esSearching then redrawSearch cfg st else redrawNormal cfg width st
 
-redrawNormal : EditConfig -> EditState -> Int
-redrawNormal cfg st =
+redrawNormal : EditConfig -> Int -> EditState -> Int
+redrawNormal cfg width st =
   let
-    avail = imax 8 (cfg.editWidth - cfg.editPromptWidth)
+    avail = imax 8 (width - cfg.editPromptWidth)
     win = tailWindow avail st.esBuf
     left = immin (bytesWidth (drop st.esCursor st.esBuf)) (bytesWidth win)
-    text = "${cfg.editPrompt}${strOf win}${escCode}[K${moveLeftText left}"
+    text = "${cfg.editPrompt}${renderBytes win}${escCode}[K${moveLeftText left}"
   in writeOut "\r${text}"
+
+-- 缓冲字节 → 显示文本：裸换行（粘贴/历史里的多行单元）渲染成单列 `↵`，
+-- 其余字节原样输出（宽度口径与 `bytesWidth` 一致：换行算 1 列）。
+renderBytes : List Int -> String
+renderBytes [] = ""
+renderBytes (b :: rest) =
+  if b == 10 then "↵${renderBytes rest}" else "${strPack [b]}${renderBytes rest}"
 
 redrawSearch : EditConfig -> EditState -> Int
 redrawSearch cfg st =

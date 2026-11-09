@@ -1,4 +1,11 @@
 module VisTrait (Pretty, pretty) where
 
+import VisData
+
 trait Pretty a where
   pretty : a -> String
+
+-- 实例与 trait 同模块（B23 落点规则）；root2 import VisTrait 后才可见。
+instance Pretty Color where
+  pretty Red = "red"
+  pretty Blue = "blue"

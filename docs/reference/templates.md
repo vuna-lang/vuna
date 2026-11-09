@@ -84,8 +84,9 @@ line1 ${interp n}
   `strFromInt (toInt ...)`），不建字典；String 由 base 的具体实例固定为恒等（重复实例
   会报 `TC_DuplicateInstance`），Int / Nat 在快捷降级前**检查是否存在具体的
   `Interp Int` / `Interp Nat` 实例**，存在则回退字典路径（用户自定义实例仍然生效）。
-  其它类型走 blanket 实例。容器（`List` 等）的 `Show` 实例化目前受实例体精化性能限制
-  未内置，见 [debt.md](debt.md) B31。
+  其它类型走 blanket 实例。容器（`List` / `Maybe` / `Pair` / `Result`）在各自类型模块带
+  约束 `Show` 实例，`${xs}` / `${Just 1}` 经第二层 `Show` 实例搜索得到字典；参数化实例的
+  tele 实参按擦除 rig 落地，不进入运行时产物。
 
 全仓审计：`compiler/`、`base/`、`lib/` 下不应再有「字面量相邻的 `++`」（`base/lib/Base/String.vuna`
 的 fixity 声明、注释与 `strConcatMany` 算法除外）。

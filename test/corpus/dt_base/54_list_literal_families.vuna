@@ -1,0 +1,38 @@
+-- M41：`[]` / `[a, b]` 按期望类型/scrutinee 族通用展开：List / Vec / Row 同形；
+-- 用户自定义的 `Nil`/`Cons` 族也能直接用列表语法。
+import Base.Vec
+import Base.Eff
+
+data Tree : Type where
+  Leaf : Tree
+  Node : Tree -> Tree -> Tree
+
+-- 用户族：名字叫 List 但构造子是 Nil/Cons，与 Base.List 结构同形。
+data MyList a : Type where
+  Nil : MyList a
+  Cons : a -> MyList a -> MyList a
+
+v : Vec Int 3
+v = [1, 2, 3]
+
+vsum : Vec Int 3 -> Int
+vsum [a, b, c] = a + b + c
+
+ml : MyList Int
+ml = [7, 8]
+
+mlsum : MyList Int -> Int
+mlsum [a, b] = a + b
+mlsum _ = 0
+
+r : Row
+r = []
+
+r2 : Row
+r2 = [Tree]
+
+xs : List Int
+xs = [1, 2]
+
+main : Int
+main = vsum v + mlsum ml + length xs

@@ -1,24 +1,24 @@
 open Vuna_runtime
-type 'a0 t_Dict_uBase_dOrd_dOrd = C_Dict_uBase_dOrd_dOrd_MkDict_uBase_dOrd_dOrd of (('a0) -> ('a0) -> bool) * (('a0) -> ('a0) -> bool) * (('a0) -> ('a0) -> bool) * (('a0) -> ('a0) -> bool)
+type 'a0 t_Dict_uBase_dOrd_dOrd = C_Dict_uBase_dOrd_dOrd_Ord of (('a0) -> ('a0) -> bool) * (('a0) -> ('a0) -> bool) * (('a0) -> ('a0) -> bool) * (('a0) -> ('a0) -> bool)
 
-let v_Ord_uBase_dBool_dBool = (C_Dict_uBase_dOrd_dOrd_MkDict_uBase_dOrd_dOrd ((fun mc0 mc1 -> (if mc0 then false else (if mc1 then true else false))), (fun mc0 mc1 -> (if mc0 then mc1 else true)), (fun mc0 mc1 -> (if mc0 then (if mc1 then false else true) else false)), (fun mc0 mc1 -> (if mc0 then true else mc1))))
+let v_Ord_uBase_dBool_dBool = (C_Dict_uBase_dOrd_dOrd_Ord ((fun mc0 mc1 -> (if mc0 then false else (if mc1 then true else false))), (fun mc0 mc1 -> (if mc0 then mc1 else true)), (fun mc0 mc1 -> (if mc0 then (if mc1 then false else true) else false)), (fun mc0 mc1 -> (if mc0 then true else mc1))))
 
 let v_Base_dOrd_dlt = (fun _ud x0 x1 -> (match _ud with
-  | C_Dict_uBase_dOrd_dOrd_MkDict_uBase_dOrd_dOrd (dtb__0, dtb__1, dtb__2, dtb__3) -> ((dtb__0 x0) x1)
+  | C_Dict_uBase_dOrd_dOrd_Ord (dtb__0, dtb__1, dtb__2, dtb__3) -> ((dtb__0 x0) x1)
   | _ -> failwith "DT: impossible branch"
 ))
 
 let v_Base_dOrd_dle = (fun _ud x0 x1 -> (match _ud with
-  | C_Dict_uBase_dOrd_dOrd_MkDict_uBase_dOrd_dOrd (dtb__4, dtb__5, dtb__6, dtb__7) -> ((dtb__5 x0) x1)
+  | C_Dict_uBase_dOrd_dOrd_Ord (dtb__4, dtb__5, dtb__6, dtb__7) -> ((dtb__5 x0) x1)
   | _ -> failwith "DT: impossible branch"
 ))
 
 let v_Base_dOrd_dgt = (fun _ud x0 x1 -> (match _ud with
-  | C_Dict_uBase_dOrd_dOrd_MkDict_uBase_dOrd_dOrd (dtb__8, dtb__9, dtb__10, dtb__11) -> ((dtb__10 x0) x1)
+  | C_Dict_uBase_dOrd_dOrd_Ord (dtb__8, dtb__9, dtb__10, dtb__11) -> ((dtb__10 x0) x1)
   | _ -> failwith "DT: impossible branch"
 ))
 
 let v_Base_dOrd_dge = (fun _ud x0 x1 -> (match _ud with
-  | C_Dict_uBase_dOrd_dOrd_MkDict_uBase_dOrd_dOrd (dtb__12, dtb__13, dtb__14, dtb__15) -> ((dtb__15 x0) x1)
+  | C_Dict_uBase_dOrd_dOrd_Ord (dtb__12, dtb__13, dtb__14, dtb__15) -> ((dtb__15 x0) x1)
   | _ -> failwith "DT: impossible branch"
 ))

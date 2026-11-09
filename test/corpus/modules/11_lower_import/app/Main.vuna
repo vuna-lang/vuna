@@ -1,0 +1,11 @@
+import Util
+
+f : pick True -> Int
+f x = x + 1
+
+-- 显式 Pi binder 遮蔽同名 import：类型位置仍按类型变量处理。
+shadow : {pick : Type} -> pick -> pick
+shadow x = x
+
+main : Int
+main = f 3 + shadow 1

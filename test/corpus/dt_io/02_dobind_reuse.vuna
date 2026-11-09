@@ -1,0 +1,9 @@
+-- D40 正例：do 块里不同 do-bind 语句可复用同名 binder（每条绑定各自独立作用域）。
+import Base.IO
+
+main : IO Int
+main = do
+  x <- pure 41
+  x <- pure 42
+  print "dobind:"
+  pure x

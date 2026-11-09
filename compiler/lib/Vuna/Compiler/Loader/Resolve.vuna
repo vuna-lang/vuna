@@ -1,5 +1,6 @@
 module Vuna.Compiler.Loader.Resolve
   ( checkEffectsBuiltins
+  , checkTrustPoints
   , namespacesOf
   , resolveEntry
   , resolveProgram
@@ -106,13 +107,75 @@ valueNamesOf : List Decl -> List String
 valueNamesOf decls = concatMap declValueNames decls
 
 -- 从声明列表算出三个命名空间（Loader 入口与 Flatten 的分离编译入口共用）。
+-- M41：data/record 构造子的候选表。第二段是**未加模块 prefix**的族限定名：
+--   data 构造子 -> "Data.Ctor"；record 构造子 -> "Record"（构造子名 = 类型名）。
+-- trait 方法不在其中（不是族的构造子，仍按原名字解析）。
+-- | 自动补注（M41 新增导出）：ctorCandsOf。
+ctorCandsOf : List Decl -> List (Pair String String)
+ctorCandsOf [] = []
+ctorCandsOf (d :: rest) = case d of
+  DData dname params kind ctors derivings lin sp =>
+    append (map (\c => Pair (ctorName c) "${dname}.${ctorName c}") ctors) (ctorCandsOf rest)
+  DRecord dname params fields derivings lin sp => Pair dname dname :: ctorCandsOf rest
+  _ => ctorCandsOf rest
+
 namespacesOf : List Decl -> Namespaces
 namespacesOf decls =
   let
     vals = valueNamesOf decls
     cts = ctorsOf decls
     tys = typeNamesOf decls
-  in Namespaces { nsValues = vals, nsCtors = cts, nsTypes = tys, nsValueSet = Base.HashMap.ofNames vals, nsCtorSet = Base.HashMap.ofNames cts, nsTypeSet = Base.HashMap.ofNames tys }
+    cands = ctorCandsOf decls
+  in Namespaces { nsValues = vals, nsCtors = cts, nsTypes = tys, nsValueSet = Base.HashMap.ofNames vals, nsCtorSet = Base.HashMap.ofNames cts, nsTypeSet = Base.HashMap.ofNames tys, nsCtorCands = cands }
+
+-- 本模块内某个短名的构造子 canonical 目标（含 record）。
+-- | 自动补注（M41 新增导出）：localCtorTargets。
+localCtorTargets : String -> Namespaces -> String -> List String
+localCtorTargets prefix ns name =
+  map (\p => mangle prefix (secondOf p)) (filter (\p => firstOf p == name) ns.nsCtorCands)
+
+-- | 自动补注（M41 新增导出）：localCtorTarget。
+localCtorTarget : String -> Namespaces -> String -> Maybe String
+localCtorTarget prefix ns name = case localCtorTargets prefix ns name of
+  [t] => Just t
+  _ => Nothing
+
+-- M41：构造子候选 = 本模块 data/record 构造子 ∪ 所有 open import 里的
+-- data/record 构造子（trait method 不参与；本地不再无条件遮蔽 import）。
+-- | 自动补注（M41 新增导出）：dedupeTargets。
+dedupeTargets : List String -> List String
+dedupeTargets [] = []
+dedupeTargets (t :: rest) = if memName t rest then dedupeTargets rest else t :: dedupeTargets rest
+
+-- 从 (module, ExportEntry) 取 target（lambda 里直接字段访问在 vuna 里不可用）。
+-- | 自动补注（M41 新增导出）：pairExportTarget。
+pairExportTarget : Pair String ExportEntry -> String
+pairExportTarget p = (secondOf p).target
+
+-- | 自动补注（M41 新增导出）：pairIsDataCtor。
+pairIsDataCtor : List Module -> Pair String ExportEntry -> Bool
+pairIsDataCtor modules p = isDataOrRecordCtorTarget modules (pairExportTarget p)
+
+-- | 自动补注（M41 新增导出）：importedCtorTargets。
+importedCtorTargets : List Module -> List Import -> String -> Result (List String)
+importedCtorTargets modules imports name =
+  andThen (modulesExportingCtor modules imports name)
+    (\pairs => Ok (dedupeTargets (map pairExportTarget (filter (pairIsDataCtor modules) pairs))))
+
+-- | 自动补注（M41 新增导出）：ctorCandidates。
+ctorCandidates : List Module -> String -> Namespaces -> List Import -> String -> Result (List String)
+-- 与本地**类型名**同名的构造子（record 构造子 / `data Pair where Pair` 的双命名空间）
+-- 保持词法遮蔽：本地优先，不并入 import 候选。纯构造子名（`Nil` 等）才做 union。
+ctorCandidates modules prefix ns imports name = andThen (importedCtorTargets modules imports name) (\imp => let
+  local = localCtorTargets prefix ns name
+in if notEmptyList local && name /= "Nil" && name /= "Cons" then Ok local
+else Ok (dedupeTargets (append local imp))
+)
+
+-- | 自动补注（M41 新增导出）：notEmptyList。
+notEmptyList : List a -> Bool
+notEmptyList [] = False
+notEmptyList (_ :: rest) = True
 
 resolveQualified : List Module -> String -> List Import -> String -> Result String
 resolveQualified modules label imports name = case splitLastDot (splitOnDot name) of
@@ -131,6 +194,118 @@ resolveQualified modules label imports name = case splitLastDot (splitOnDot name
             Just e => Ok e.target
             Nothing => Err "${label}: ${base} is not exported by ${m}"
       )
+
+-- M41：`Family.Ctor` / `Module.Data.Ctor`：前缀先按类型命名空间解析，再在族里找短名。
+-- 本地族从 `nsCtorCands` 直接匹配（entry 文件也适用）；导入族扫描已加载模块的声明。
+-- | 自动补注（M41 新增导出）：ctorTargetInDecls。
+ctorTargetInDecls : String -> String -> String -> List Decl -> Maybe String
+ctorTargetInDecls mname famTarget base [] = Nothing
+ctorTargetInDecls mname famTarget base (d :: rest) = case d of
+  DData dname params kind ctors derivings lin sp =>
+    if mangle mname dname == famTarget then if anyCtorNamed base ctors then Just (ctorCanonical mname dname base) else Nothing
+    else ctorTargetInDecls mname famTarget base rest
+  DRecord dname params fields derivings lin sp =>
+    if mangle mname dname == famTarget && dname == base then Just (mangle mname dname)
+    else ctorTargetInDecls mname famTarget base rest
+  _ => ctorTargetInDecls mname famTarget base rest
+
+-- | 自动补注（M41 新增导出）：anyCtorNamed。
+anyCtorNamed : String -> List Ctor -> Bool
+anyCtorNamed name [] = False
+anyCtorNamed name (c :: rest) = ctorName c == name || anyCtorNamed name rest
+
+-- | 自动补注（M41 新增导出）：findFamilyCtorInModules。
+findFamilyCtorInModules : List Module -> String -> String -> Maybe String
+findFamilyCtorInModules [] famTarget base = Nothing
+findFamilyCtorInModules (m :: rest) famTarget base = case ctorTargetInDecls (moduleNameOf m) famTarget base (moduleDeclsOf m) of
+  Just t => Just t
+  Nothing => findFamilyCtorInModules rest famTarget base
+
+-- | 自动补注（M41 新增导出）：ctorRelFamily。
+ctorRelFamily : String -> String -> String
+ctorRelFamily prefix rel = case splitLastDot (splitOnDot rel) of
+  Pair revFam ctor => mangle prefix (joinDots revFam)
+
+-- | 自动补注（M41 新增导出）：ctorTargetInFamily。
+ctorTargetInFamily : List Module -> String -> Namespaces -> String -> String -> Maybe String
+ctorTargetInFamily modules prefix ns famTarget base = case filter (\p => firstOf p == base && ctorRelFamily prefix (secondOf p) == famTarget) ns.nsCtorCands of
+  [Pair _ rel] => Just (mangle prefix rel)
+  _ => findFamilyCtorInModules modules famTarget base
+
+-- 族前缀只按**类型命名空间**解析（不回头做构造子退化），避免与 resolveTypeName 形成
+-- 终止性上无法证明的互递归。
+-- | 自动补注（M41 新增导出）：resolveTypeTarget。
+resolveTypeTarget : List Module -> String -> String -> Namespaces -> List Import -> String -> Result String
+resolveTypeTarget modules label prefix ns imports name = if Base.HashMap.member name ns.nsTypeSet then Ok (mangle prefix name)
+else if isIntrinsicTypeName name then Ok name
+else if name == "Type" || name == "->" then Ok name
+else if containsDot name then resolveDottedTypeTargetOnly modules label imports name
+else andThen (modulesExportingType modules imports name) (\pairs => case pairs of
+  [] => Err "${label}: unknown type ${name}"
+  _ => andThen (unifyEntryPairs label "type" name pairs) (\p => Ok (secondOf p).target)
+)
+
+-- | 自动补注（M41 新增导出）：resolveDottedTypeTargetOnly。
+resolveDottedTypeTargetOnly : List Module -> String -> List Import -> String -> Result String
+resolveDottedTypeTargetOnly modules label imports name = case splitLastDot (splitOnDot name) of
+  Pair revPrefix base =>
+    let
+      typePrefix = joinDots revPrefix
+    in case findImportPrefix imports typePrefix of
+      Nothing => Err "${label}: module ${typePrefix} is not imported"
+      Just m => andThen (exportsOf modules m) (\es => case findExportType es base of
+        Just e => Ok e.target
+        Nothing => case findExportValue es base of
+          Just e => Ok e.target
+          Nothing => Err "${label}: type ${base} is not exported by ${m}"
+      )
+
+-- | 自动补注（M41 新增导出）：resolveFamilyQualifiedCtor。
+resolveFamilyQualifiedCtor : List Module -> String -> String -> Namespaces -> List Import -> String -> Result String
+resolveFamilyQualifiedCtor modules label prefix ns imports name = case splitLastDot (splitOnDot name) of
+  Pair revPrefix base =>
+    let
+      famName = joinDots revPrefix
+    in andThen (resolveTypeTarget modules label prefix ns imports famName) (\famTarget => case ctorTargetInFamily modules prefix ns famTarget base of
+      Just t => Ok t
+      Nothing => Err "${label}: type ${famName} has no constructor ${base}"
+    )
+
+-- 模块限定名里的构造子条目可能有多个同名（不同族）；这时必须用 Family.Ctor 消歧。
+-- | 自动补注（M41 新增导出）：exportTarget。
+exportTarget : ExportEntry -> String
+exportTarget e = e.target
+
+-- | 自动补注（M41 新增导出）：uniqueCtorTarget。
+uniqueCtorTarget : String -> String -> List ExportEntry -> Result String
+uniqueCtorTarget label name [] = Err "${label}: unknown constructor ${name}"
+uniqueCtorTarget label name (e :: rest) =
+  if allSameTarget (map exportTarget (e :: rest)) then Ok (exportTarget e)
+  else Ok (overCtorName name (dedupeTargets (map exportTarget (e :: rest))))
+
+-- | 自动补注（M41 新增导出）：allSameTarget。
+allSameTarget : List String -> Bool
+allSameTarget [] = True
+allSameTarget (x :: rest) = allEq x rest
+
+-- | 自动补注（M41 新增导出）：allEq。
+allEq : String -> List String -> Bool
+allEq x [] = True
+allEq x (y :: rest) = x == y && allEq x rest
+
+-- 模式里的限定名：import 模块前缀优先，其次 data family 前缀。
+-- | 自动补注（M41 新增导出）：resolveCtorDotted。
+resolveCtorDotted : List Module -> String -> String -> Namespaces -> List Import -> String -> Result String
+resolveCtorDotted modules label prefix ns imports name = case splitLastDot (splitOnDot name) of
+  Pair revPrefix base =>
+    let
+      prefixName = joinDots revPrefix
+    in case findImportPrefix imports prefixName of
+      Just m => andThen (exportsOf modules m) (\es => case findExportCtors es base of
+        [] => Err "${label}: ${base} is not exported by ${m}"
+        entries => uniqueCtorTarget label base entries
+      )
+      Nothing => resolveFamilyQualifiedCtor modules label prefix ns imports name
 
 -- 模式里的限定名只认构造器：`M.foo`（foo 是函数）必须报错，不能按值解析成构造器。
 resolveQualifiedCtor : List Module -> String -> List Import -> String -> Result String
@@ -153,12 +328,13 @@ resolveDottedExpr modules label prefix ns imports scope name sp = case splitOnDo
   head :: rest => if memName head scope then Ok (foldFieldChain (EVar head sp) rest sp)
   else andThen (resolveQualifiedPath modules label imports (splitOnDot name) (length (splitOnDot name)) sp) (\q => case q of
     Just e => Ok e
-    Nothing =>
-      if Base.HashMap.member head ns.nsValueSet then Ok (foldFieldChain (EVar (mangle prefix head) sp) rest sp)
-      else if isBuiltinName head then Ok (foldFieldChain (EVar head sp) rest sp)
-      else if startsUpperName head then Err "${label}: module ${head} is not imported"
-      else andThen (resolveGlobal modules label prefix ns imports scope head)
-        (\n => Ok (foldFieldChain (EVar n sp) rest sp))
+    Nothing => if Base.HashMap.member head ns.nsValueSet then Ok (foldFieldChain (EVar (mangle prefix head) sp) rest sp)
+    else if isBuiltinName head then Ok (foldFieldChain (EVar head sp) rest sp)
+    else if startsUpperName head then case resolveCtorDotted modules label prefix ns imports name of
+      Ok t => Ok (EVar t sp)
+      Err _ => Err "${label}: module ${head} is not imported"
+    else andThen (resolveGlobal modules label prefix ns imports scope head)
+      (\n => Ok (foldFieldChain (EVar n sp) rest sp))
   )
 
 foldFieldChain : Expr -> List String -> Span -> Expr
@@ -199,32 +375,52 @@ else case findImportPrefix imports (joinDots (takeSegs (n - 1) segs)) of
 resolveGlobal : List Module -> String -> String -> Namespaces -> List Import -> List String -> String -> Result String
 resolveGlobal modules label prefix ns imports scope name = if memName name scope then Ok name
 else if Base.HashMap.member name ns.nsValueSet then Ok (mangle prefix name)
-else if Base.HashMap.member name ns.nsCtorSet then Ok (mangle prefix name)
-else if containsDot name then resolveQualified modules label imports name
-else if isBuiltinName name then Ok name
-else if isDtPreludeName name then Ok name
-else andThen (modulesExportingValue modules imports name) (\pairs => case pairs of
-  [] => andThen (modulesExportingCtor modules imports name) (\cpairs => case cpairs of
-    [] => if Base.HashMap.member name ns.nsTypeSet then Ok (mangle prefix name)
-    else andThen (modulesExportingType modules imports name) (\tpairs => case tpairs of
-      [] =>
-        Err
-          "${label}: unbound variable ${name}${suggest name (append ns.nsValues (append ns.nsCtors (append ns.nsTypes scope)))}${traitImportHint name}"
-      _ => andThen (unifyEntryPairs label "name" name tpairs) (\p => Ok (secondOf p).target)
+else case localCtorTargets prefix ns name of
+  t :: rest =>
+    andThen (ctorCandidates modules prefix ns imports name)
+      (\cands => Ok (pickCtorOrOver name cands))
+  [] => if Base.HashMap.member name ns.nsCtorSet then Ok (mangle prefix name)
+  else if containsDot name then resolveQualified modules label imports name
+  else if isBuiltinName name then Ok name
+  else if isDtPreludeName name then Ok name
+  else andThen (modulesExportingValue modules imports name) (\pairs => case pairs of
+    [] => andThen (ctorCandidates modules prefix ns imports name) (\cands => case cands of
+      [] => andThen (modulesExportingCtor modules imports name) (\cpairs => case cpairs of
+        [] => if Base.HashMap.member name ns.nsTypeSet then Ok (mangle prefix name)
+        else andThen (modulesExportingType modules imports name) (\tpairs => case tpairs of
+          [] =>
+            Err
+              "${label}: unbound variable ${name}${suggest name (append ns.nsValues (append ns.nsCtors (append ns.nsTypes scope)))}${traitImportHint name}"
+          _ => andThen (unifyEntryPairs label "name" name tpairs) (\p => Ok (secondOf p).target)
+        )
+        _ => Ok (pickCtorOrOver name (dedupeTargets (map pairExportTarget cpairs)))
+      )
+      _ => Ok (pickCtorOrOver name cands)
     )
-    _ => andThen (unifyEntryPairs label "name" name cpairs) (\p => Ok (secondOf p).target)
+    _ => case ctorPairTargets modules pairs of
+      [] => andThen (unifyEntryPairs label "name" name pairs) (\p => Ok (secondOf p).target)
+      targets => Ok (pickCtorOrOver name (dedupeTargets targets))
   )
-  _ => andThen (unifyEntryPairs label "name" name pairs) (\p => Ok (secondOf p).target)
-)
 
--- 构造子位置（模式、record 构造、以及类型位置的索引构造子退化）：只查构造子命名空间。
+-- | 自动补注（M41 新增导出）：pickCtorOrOver。
+pickCtorOrOver : String -> List String -> String
+pickCtorOrOver name [] = overCtorName name []
+pickCtorOrOver name ([t]) = t
+pickCtorOrOver name cands = overCtorName name cands
+
+-- 构造子位置（模式、record 构造、以及类型位置的索引构造子退化）：候选集 = 本地
+-- data/record 构造子 ∪ open import 的 data/record 构造子；trait method 仍按旧名字解析。
+-- | 自动补注（M41 新增导出）：resolveCtor。
 resolveCtor : List Module -> String -> String -> Namespaces -> List Import -> String -> Result String
-resolveCtor modules label prefix ns imports name = if containsDot name then resolveQualifiedCtor modules label imports name
-else if Base.HashMap.member name ns.nsCtorSet then Ok (mangle prefix name)
-else if isIntrinsicName name then Ok name
-else andThen (modulesExportingCtor modules imports name) (\pairs => case pairs of
-  [] => Err "${label}: unknown constructor ${name}${suggest name ns.nsCtors}"
-  _ => andThen (unifyEntryPairs label "constructor" name pairs) (\p => Ok (secondOf p).target)
+resolveCtor modules label prefix ns imports name = if containsDot name then resolveCtorDotted modules label prefix ns imports name
+else andThen (ctorCandidates modules prefix ns imports name) (\cands => case cands of
+  [] => if Base.HashMap.member name ns.nsCtorSet then Ok (mangle prefix name)
+  else if isIntrinsicName name then Ok name
+  else andThen (modulesExportingCtor modules imports name) (\pairs => case pairs of
+    [] => Err "${label}: unknown constructor ${name}${suggest name ns.nsCtors}"
+    _ => Ok (pickCtorOrOver name (dedupeTargets (map pairExportTarget pairs)))
+  )
+  _ => Ok (pickCtorOrOver name cands)
 )
 
 checkBinder : String -> String -> Result String
@@ -250,7 +446,9 @@ else case pat of
   PInt n sp => Ok (Pair (PInt n sp) [])
   PStr s sp => Ok (Pair (PStr s sp) [])
   PCon name pats sp =>
-    andThen (resolveCtor modules label prefix ns imports name)
+    if isInternalSyntaxName name then andThen (traverse (\dtv => resolvePattern (fuel - 1) modules label prefix ns imports dtv) pats)
+      (\parts => Ok (Pair (PCon name (map firstOf parts) sp) (concatMap secondOf parts)))
+    else andThen (resolveCtor modules label prefix ns imports name)
       (\name2 => andThen (traverse (\dtv => resolvePattern (fuel - 1) modules label prefix ns imports dtv) pats) (\parts => Ok (Pair (PCon name2 (map firstOf parts) sp) (concatMap secondOf parts))))
   PRecord name fields sp =>
     andThen (resolveCtor modules label prefix ns imports name)
@@ -370,6 +568,7 @@ else case expr of
   -- 在这里直接放行，否则会报 unbound variable）。
   EVar name sp =>
     if isHoleName name then Ok (EVar name sp)
+    else if isInternalSyntaxName name then Ok (EVar name sp)
     else if containsDot name then resolveDottedExpr modules label prefix ns imports scope name sp
     else andThen (resolveGlobal modules label prefix ns imports scope name) (\n => Ok (EVar n sp))
   -- M31.2：`EInfix` / `EParen` 是 parser 的中间产物，正常路径在 Loader 重排里已消除；
@@ -466,9 +665,10 @@ resolveFieldValue fuel modules label prefix ns imports scope (Pair fname value) 
   else andThen (resolveExpr (fuel - 1) modules label prefix ns imports scope value)
     (\v => Ok (Pair fname v))
 
-resolveCtorDecl : String -> String -> String -> Result String
-resolveCtorDecl label prefix ctor =
-  andThen (checkTopName label ctor) (\_ => Ok (mangle prefix ctor))
+-- | 自动补注（M41 新增导出）：resolveCtorDecl。
+resolveCtorDecl : String -> String -> String -> String -> Result String
+resolveCtorDecl label prefix dname ctor =
+  andThen (checkTopName label ctor) (\_ => Ok (ctorCanonical prefix dname ctor))
 
 isLowerTypeName : String -> Bool
 isLowerTypeName name = case strUnpack name of
@@ -492,18 +692,66 @@ startsUpperName name = case strUnpack name of
 --      的退化路径，不是把值命名空间并进类型命名空间；
 --   2. 非小写名找不到类型时，退化为**索引构造子**（本地构造子 + 跨模块 import 的构造子），
 --      最后才是本模块的值定义（大写类型层 def，少见）。
+-- | 自动补注（M41 新增导出）：resolveTypeName。
 resolveTypeName : List Module -> String -> String -> Namespaces -> List Import -> String -> Result String
-resolveTypeName modules label prefix ns imports name = if Base.HashMap.member name ns.nsTypeSet then Ok (mangle prefix name)
-else if isIntrinsicTypeName name then Ok name
-else if name == "Type" || name == "->" then Ok name
-else if isLowerTypeName name then if Base.HashMap.member name ns.nsValueSet then Ok (mangle prefix name)
-else if Base.HashMap.member name ns.nsCtorSet then Ok (mangle prefix name) else Ok name
-else if containsDot name then case splitLastDot (splitOnDot name) of
+resolveTypeName modules label prefix ns imports name =
+  if Base.HashMap.member name ns.nsTypeSet then Ok (mangle prefix name)
+  else if isIntrinsicTypeName name then Ok name
+  else if name == "Type" || name == "->" then Ok name
+  else if isLowerTypeName name then resolveLowerTypeName modules label prefix ns imports name
+  else resolveNonLowerTypeName modules label prefix ns imports name
+
+-- 本地构造子（索引）候选：0 = 继续按导入面找；1 = 命中；>1 = 同名不同族，必须限定。
+-- | 自动补注（M41 新增导出）：localCtorResult。
+localCtorResult : String -> String -> Namespaces -> String -> Result (Maybe String)
+localCtorResult label prefix ns name = case localCtorTargets prefix ns name of
+  [t] => Ok (Just t)
+  [] => Ok Nothing
+  _ => Err "${label}: ambiguous constructor ${name} (qualify it as Data.${name})"
+
+-- | 自动补注（M41 新增导出）：resolveLowerTypeName。
+resolveLowerTypeName : List Module -> String -> String -> Namespaces -> List Import -> String -> Result String
+resolveLowerTypeName modules label prefix ns imports name = if Base.HashMap.member name ns.nsValueSet then Ok (mangle prefix name)
+else andThen (localCtorResult label prefix ns name) (\mc => case mc of
+  Just t => Ok t
+  Nothing => andThen (modulesExportingValue modules imports name) (\vp => case vp of
+    [] => andThen (modulesExportingCtor modules imports name) (\cp => case cp of
+      [] => andThen (modulesExportingType modules imports name) (\tp => case tp of
+        [] => Ok name
+        _ => andThen (unifyEntryPairs label "name" name tp) (\p => Ok (secondOf p).target)
+      )
+      _ => andThen (unifyEntryPairs label "name" name cp) (\p => Ok (secondOf p).target)
+    )
+    _ => andThen (unifyEntryPairs label "name" name vp) (\p => Ok (secondOf p).target)
+  )
+)
+
+-- | 自动补注（M41 新增导出）：resolveNonLowerTypeName。
+resolveNonLowerTypeName : List Module -> String -> String -> Namespaces -> List Import -> String -> Result String
+resolveNonLowerTypeName modules label prefix ns imports name = andThen (localCtorResult label prefix ns name) (\mc => case mc of
+  Just t => Ok t
+  Nothing => if containsDot name then resolveDottedTypeName modules label prefix ns imports name
+  else andThen (modulesExportingType modules imports name) (\pairs => case pairs of
+    -- M30：类型位置也可能出现**跨模块 import 的构造子**（依赖类型索引，如 `import Base.Nat`
+    -- 后 `Vec a Zero` 的 `Zero`）。`modulesExportingType` 只查 `"type"` entry，找不到构造子，
+    -- 故退化到 `resolveCtor`（认 `"ctor"` entry；本地构造子已在上面处理）。
+    [] => case resolveCtor modules label prefix ns imports name of
+      Ok c => Ok c
+      Err e => if Base.HashMap.member name ns.nsValueSet then Ok (mangle prefix name) else Err e
+    _ => andThen (unifyEntryPairs label "type" name pairs) (\p => Ok (secondOf p).target)
+  )
+)
+
+-- | 自动补注（M41 新增导出）：resolveDottedTypeName。
+resolveDottedTypeName : List Module -> String -> String -> Namespaces -> List Import -> String -> Result String
+resolveDottedTypeName modules label prefix ns imports name = case splitLastDot (splitOnDot name) of
   Pair revPrefix base =>
     let
       typePrefix = joinDots revPrefix
     in case findImportPrefix imports typePrefix of
-      Nothing => Err "${label}: module ${typePrefix} is not imported"
+      Nothing => case resolveFamilyQualifiedCtor modules label prefix ns imports name of
+        Ok t => Ok t
+        Err _ => Err "${label}: module ${typePrefix} is not imported"
       Just m => andThen (exportsOf modules m) (\es => case findExportType es base of
         Just e => Ok e.target
         -- M28：类型位置的值（axiom / 类型层 def）在限定名下也可用；是否为合法类型由 Elab 判定。
@@ -511,15 +759,6 @@ else if containsDot name then case splitLastDot (splitOnDot name) of
           Just e => Ok e.target
           Nothing => Err "${label}: type ${base} is not exported by ${m}"
       )
-else andThen (modulesExportingType modules imports name) (\pairs => case pairs of
-  -- M30：类型位置也可能出现**跨模块 import 的构造子**（依赖类型索引，如 `import Base.Nat`
-  -- 后 `Vec a Zero` 的 `Zero`）。`modulesExportingType` 只查 `"type"` entry，找不到构造子，
-  -- 故退化到 `resolveCtor`（认 `"ctor"` entry；本地构造子也在 `nsCtors` 里）。
-  [] => case resolveCtor modules label prefix ns imports name of
-    Ok c => Ok c
-    Err e => if Base.HashMap.member name ns.nsValueSet then Ok (mangle prefix name) else Err e
-  _ => andThen (unifyEntryPairs label "type" name pairs) (\p => Ok (secondOf p).target)
-)
 
 -- M32：约束项（签名 ctx / 实例 ctx）的接口名单独报错。`C a` 的 `C` 未绑定时若直接走
 -- `resolveTypeExpr`，类型位置会退化成构造子解析并报 "unknown constructor C"——对约束语义
@@ -537,36 +776,45 @@ constraintHeadOf (EVar n _) = Just n
 constraintHeadOf _ = Nothing
 
 resolveTypeExpr : Int -> List Module -> String -> String -> Namespaces -> List Import -> Expr -> Result Expr
-resolveTypeExpr fuel modules label prefix ns imports ty = if fuel <= 0 then Err "DT: resolve fuel exhausted (internal: resolver made no progress)"
+resolveTypeExpr fuel modules label prefix ns imports ty =
+  resolveTypeExprScoped fuel modules label prefix ns imports [] ty
+
+-- B33：类型表达式里的显式 Pi binder 必须遮蔽同名 import；`bound` 只含 binder 名，
+-- 未绑定的名字才交给 resolveTypeName（本地值定义优先，其次 import 的导出面）。
+resolveTypeExprScoped : Int -> List Module -> String -> String -> Namespaces -> List Import -> List String -> Expr -> Result Expr
+resolveTypeExprScoped fuel modules label prefix ns imports bound ty = if fuel <= 0 then Err "DT: resolve fuel exhausted (internal: resolver made no progress)"
 else case ty of
   -- M20：DT 的层级（`Type 1`）与洞（`_`）在这里只做结构放行，语义由下游检查器决定。
   EApp (EVar "Type" _) args _ => Ok ty
   EInt n sp => Ok ty
   EVar name sp =>
-    andThen (resolveTypeName modules label prefix ns imports name) (\n => Ok (EVar n sp))
+    if memName name bound then Ok ty
+    else if isInternalSyntaxName name then Ok ty
+    else andThen (resolveTypeName modules label prefix ns imports name) (\n => Ok (EVar n sp))
   EApp fn args sp =>
-    andThen (resolveTypeExpr (fuel - 1) modules label prefix ns imports fn)
-      (\fn2 => andThen (traverse (\dtv => resolveTypeExpr (fuel - 1) modules label prefix ns imports dtv) args) (\args2 => Ok (EApp fn2 args2 sp)))
+    andThen (resolveTypeExprScoped (fuel - 1) modules label prefix ns imports bound fn)
+      (\fn2 => andThen (traverse (\dtv => resolveTypeExprScoped (fuel - 1) modules label prefix ns imports bound dtv) args) (\args2 => Ok (EApp fn2 args2 sp)))
   -- M20：同上——只做结构递归，允许与否交给下游检查器。
   EPi name implicit qty dom cod sp =>
-    andThen (resolveTypeExpr (fuel - 1) modules label prefix ns imports dom)
-      (\dom2 => andThen (resolveTypeExpr (fuel - 1) modules label prefix ns imports cod) (\cod2 => Ok (EPi name implicit qty dom2 cod2 sp)))
+    andThen (resolveTypeExprScoped (fuel - 1) modules label prefix ns imports bound dom)
+      (\dom2 => andThen (resolveTypeExprScoped (fuel - 1) modules label prefix ns imports (name :: bound) cod) (\cod2 => Ok (EPi name implicit qty dom2 cod2 sp)))
   _ => Err "${label}: invalid type expression (${tyShape ty})"
 
 resolveTypeTopName : String -> String -> String -> Result String
 resolveTypeTopName label prefix name =
   andThen (checkTopName label name) (\_ => Ok (mangle prefix name))
 
-resolveCtorSpec : List Module -> String -> String -> Namespaces -> List Import -> Ctor -> Result Ctor
-resolveCtorSpec modules label prefix ns imports (Ctor ctor ty arity sp) =
-  andThen (resolveCtorDecl label prefix ctor)
+-- | 自动补注（M41 新增导出）：resolveCtorSpec。
+resolveCtorSpec : List Module -> String -> String -> Namespaces -> List Import -> String -> Ctor -> Result Ctor
+resolveCtorSpec modules label prefix ns imports dname (Ctor ctor ty arity sp) =
+  andThen (resolveCtorDecl label prefix dname ctor)
     (\c2 => andThen (resolveTypeExpr resolveFuelBound modules label prefix ns imports ty) (\ty2 => Ok (Ctor c2 ty2 arity sp)))
 
 resolveDecl : List Module -> String -> String -> Namespaces -> List Import -> Decl -> Result Decl
 resolveDecl modules label prefix ns imports d = case d of
   DData dname params kind ctors derivings lin sp =>
     andThen (resolveTypeTopName label prefix dname)
-      (\dn => andThen (resolveTypeExpr resolveFuelBound modules label prefix ns imports kind) (\kind2 => andThen (traverse (resolveCtorSpec modules label prefix ns imports) ctors) (\ctors2 => andThen (traverse (resolveTypeName modules label prefix ns imports) derivings) (\ds2 => Ok (DData dn params kind2 ctors2 ds2 lin sp)))))
+      (\dn => andThen (resolveTypeExpr resolveFuelBound modules label prefix ns imports kind) (\kind2 => andThen (traverse (resolveCtorSpec modules label prefix ns imports dname) ctors) (\ctors2 => andThen (traverse (resolveTypeName modules label prefix ns imports) derivings) (\ds2 => Ok (DData dn params kind2 ctors2 ds2 lin sp)))))
   DRecord dname params fields derivings lin sp =>
     andThen (resolveTypeTopName label prefix dname)
       (\dn => andThen (traverse (resolveRecordField modules label prefix ns imports) fields) (\fields2 => andThen (traverse (resolveTypeName modules label prefix ns imports) derivings) (\ds2 => Ok (DRecord dn params fields2 ds2 lin sp))))
@@ -614,34 +862,18 @@ resolveProgram : List Module -> String -> String -> Namespaces -> List Import ->
 resolveProgram modules label prefix ns imports decls =
   traverse (resolveDecl modules label prefix ns imports) decls
 
--- 入口文件（ad-hoc，无模块前缀）的构造子不 mangle：必须在全文件内唯一，否则同名
--- 构造子会静默共用一个全局名（M27 / A09 防御）。
-entryCtorNames : List Decl -> List String
-entryCtorNames [] = []
-entryCtorNames (d :: rest) = case d of
-  DData _ _ _ ctors _ _ _ => append (map ctorName ctors) (entryCtorNames rest)
-  _ => entryCtorNames rest
-
-firstDupName : List String -> Maybe String
-firstDupName [] = Nothing
-firstDupName (x :: rest) = if memName x rest then Just x else firstDupName rest
-
-checkEntryCtors : String -> List Decl -> Result Int
-checkEntryCtors label decls = case firstDupName (entryCtorNames decls) of
-  Just n =>
-    Err "${label}: duplicate constructor ${n} (entry-file constructors share one global namespace)"
-  Nothing => Ok 0
-
-resolveEntry : List Module -> String -> List String -> List Import -> List Decl -> Result (List Decl)
-resolveEntry modules entryPkg entryCaps imports decls =
-  andThen (checkEntryCtors "<entry>" decls)
-    (\_ => andThen (resolveProgram modules "<entry>" "" (namespacesOf decls) imports decls) (\d => checkEffectsBuiltins "<entry>" entryPkg entryCaps d))
+-- M41：entry 文件的构造子也按族限定（`Data.Ctor`），同名构造子不再互相覆盖；
+-- 原先的「entry 构造子共享一个全局命名空间」防御随 canonical 命名一并删除。
+resolveEntry : List Module -> String -> List String -> Maybe (List String) -> List Import -> List Decl -> Result (List Decl)
+resolveEntry modules entryPkg entryCaps entryTrust imports decls =
+  andThen (resolveProgram modules "<entry>" "" (namespacesOf decls) imports decls)
+    (\d => checkEffectsBuiltins "<entry>" entryPkg entryCaps entryTrust d)
 
 resolveModules : List Module -> Result (List Decl)
 resolveModules [] = Ok []
-resolveModules (modules@((Module name mpkg imports imps decls exports mcaps fx) :: rest)) =
+resolveModules (modules@((Module name mpkg imports imps decls exports mcaps mtrust fx) :: rest)) =
   andThen
-    (andThen (resolveProgram modules name name (namespacesOf decls) (append imports imps) decls) (\d => checkEffectsBuiltins name mpkg mcaps d))
+    (andThen (resolveProgram modules name name (namespacesOf decls) (append imports imps) decls) (\d => checkEffectsBuiltins name mpkg mcaps mtrust d))
     (\d1 => andThen (resolveModules rest) (\d2 => Ok (append d1 d2)))
 
 -- ---------------------------------------------------------------
@@ -767,25 +999,247 @@ effDecls : List Decl -> Maybe String
 effDecls [] = Nothing
 effDecls (d :: rest) = firstEffect [effDecl d, effDecls rest]
 
+-- ---------------------------------------------------------------
+-- D28：定义级信任点（opt-in 严格模式）
+--
+-- 包在 manifest 声明 `[trust] unsafe` 后进入严格模式：只有列出的定义可以**直接**
+-- 引用 `unsafe` 门控的目标——`intrinsicCapability == Just CapUnsafe` 的内建，或
+-- `Base.IO.runIO` 别名（`isUnsafeExecutor`）。非严格包维持原有「能力声明 + 整模块
+-- 首个效应」检查，不做定义级限制；没有按包名/路由的 allowlist。
+-- ---------------------------------------------------------------
+-- | 能力是否是 `unsafe`（CapUnsafe）。
+isUnsafeCapability : Capability -> Bool
+isUnsafeCapability CapUnsafe = True
+isUnsafeCapability _ = False
+
+-- | 名字是否是定义级信任检查的目标：`unsafe` 门控的内建或 `Base.IO.runIO` 别名。
+isUnsafeGatedName : String -> Bool
+isUnsafeGatedName name = if isUnsafeExecutor name then True
+else case findIntrinsic name of
+  Just i => case intrinsicCapability i of
+    Just c => isUnsafeCapability c
+    Nothing => False
+  Nothing => False
+
+-- | 表达式里**直接**出现的首个 unsafe 门控名字（结构递归；不做调用图/别名分析，
+-- 因此传递调用者不需要信任点，只有真正写出内建/别名的定义需要）。
+unsafeExpr : Expr -> Maybe String
+unsafeExpr (EVar n sp) = if isUnsafeGatedName n then Just n else Nothing
+unsafeExpr (EInt n sp) = Nothing
+unsafeExpr (EStr s sp) = Nothing
+unsafeExpr (ELam ps body sp) = unsafeExpr body
+unsafeExpr (EApp fn args sp) = firstEffect [unsafeExpr fn, unsafeExprs args]
+unsafeExpr (ELet binds body rec_ sp) = firstEffect [unsafeBinds binds, unsafeExpr body]
+unsafeExpr (ELocalFun clauses sp) = unsafeLocalClauses clauses
+unsafeExpr (ECase scrut alts sp) = firstEffect [unsafeExpr scrut, unsafeAlts alts]
+unsafeExpr (EIf c t el sp) = firstEffect [unsafeExpr c, unsafeExpr t, unsafeExpr el]
+unsafeExpr (EField base fname sp) = unsafeExpr base
+unsafeExpr (ERecord name fields sp) = unsafeFields fields
+unsafeExpr (ERecUpdate base fields sp) = firstEffect [unsafeExpr base, unsafeFields fields]
+unsafeExpr (EPi name implicit qty dom cod sp) = firstEffect [unsafeExpr dom, unsafeExpr cod]
+unsafeExpr (EDo stmts sp) = unsafeDos stmts
+unsafeExpr (EInterp multi parts sp) = unsafeInterpParts parts
+unsafeExpr (EInfix op l r sp) = firstEffect [unsafeExpr l, unsafeExpr r]
+unsafeExpr (EBacktick name l r sp) = firstEffect [unsafeExpr l, unsafeExpr r]
+unsafeExpr (ESectOp op sp) = Nothing
+unsafeExpr (ESectL op rhs sp) = unsafeExpr rhs
+unsafeExpr (ESectR lhs op sp) = unsafeExpr lhs
+unsafeExpr (EParen inner sp) = unsafeExpr inner
+unsafeExpr (EAnn value ty sp) = unsafeExpr value
+
+-- | `unsafeExpr` 的列表版（显式结构递归，终止性检查可见下降）。
+unsafeExprs : List Expr -> Maybe String
+unsafeExprs [] = Nothing
+unsafeExprs (e :: rest) = firstEffect [unsafeExpr e, unsafeExprs rest]
+
+-- | `unsafeExpr` 对 let 绑定的 RHS 版。
+unsafeBinds : List (Pair Pat Expr) -> Maybe String
+unsafeBinds [] = Nothing
+unsafeBinds ((Pair pat value) :: rest) = firstEffect [unsafeExpr value, unsafeBinds rest]
+
+-- | `unsafeExpr` 对 case 分支 body 版。
+unsafeAlts : List (Pair Pat Expr) -> Maybe String
+unsafeAlts [] = Nothing
+unsafeAlts ((Pair pat body) :: rest) = firstEffect [unsafeExpr body, unsafeAlts rest]
+
+-- | `unsafeExpr` 对局部函数 clause body 版。
+unsafeLocalClauses : List (Pair (List Pat) Expr) -> Maybe String
+unsafeLocalClauses [] = Nothing
+unsafeLocalClauses ((Pair pats body) :: rest) =
+  firstEffect [unsafeExpr body, unsafeLocalClauses rest]
+
+-- | `unsafeExpr` 对模板字符串洞版。
+unsafeInterpParts : List InterpPart -> Maybe String
+unsafeInterpParts [] = Nothing
+unsafeInterpParts ((IPText s) :: rest) = unsafeInterpParts rest
+unsafeInterpParts ((IPHole e) :: rest) = firstEffect [unsafeExpr e, unsafeInterpParts rest]
+
+-- | `unsafeExpr` 对 record 字段值版。
+unsafeFields : List (Pair String Expr) -> Maybe String
+unsafeFields [] = Nothing
+unsafeFields ((Pair fname value) :: rest) = firstEffect [unsafeExpr value, unsafeFields rest]
+
+-- | `unsafeExpr` 对 do 语句版。
+unsafeDo : DoStmt -> Maybe String
+unsafeDo (DBind pat value sp) = unsafeExpr value
+unsafeDo (DExpr value sp) = unsafeExpr value
+
+-- | `unsafeExpr` 对 do 块版。
+unsafeDos : List DoStmt -> Maybe String
+unsafeDos [] = Nothing
+unsafeDos (s :: rest) = firstEffect [unsafeDo s, unsafeDos rest]
+
+-- | 定义的信任点名：顶层定义已带模块前缀；实例方法 / 入口定义补前缀
+-- （入口定义保持裸名，但 manifest 只接受全限定名，所以入口里的直接使用无法被信任）。
+trustNameOf : String -> String -> String
+trustNameOf label name = if label == "<entry>" || containsDot name then name else "${label}.${name}"
+
+-- | 严格模式下单个定义的检查：直接引用 unsafe 门控目标且不在信任点里 → 报错。
+checkTrustDef : String -> String -> List String -> String -> Expr -> Result Int
+checkTrustDef label pkg trusted name body = case unsafeExpr body of
+  Nothing => Ok 0
+  Just ref =>
+    let
+      full = trustNameOf label name
+    in if memName full trusted then Ok 0
+    else Err
+      "${label}: definition `${full}` directly references unsafe-gated `${ref}` and is not a trust point of ${packageLabelForEffects pkg}; ${trustFixHint label full}"
+
+-- | 信任违反的修复提示：库定义列进 `[trust] unsafe`；入口定义必须先移进库模块。
+trustFixHint : String -> String -> String
+trustFixHint label full =
+  if label == "<entry>" then "move this definition into a package library module and list its qualified name under [trust] unsafe"
+  else "add \"${full}\" to [trust] unsafe in vuna.toml (or route the call through an existing trust point such as Base.IO.runIO)"
+
+-- | 严格模式下列表里逐个定义检查（DFun body 与 instance 方法体）。
+checkTrustDecls : String -> String -> List String -> List Decl -> Result Int
+checkTrustDecls label pkg trusted [] = Ok 0
+checkTrustDecls label pkg trusted (d :: rest) =
+  andThen (checkTrustDecl label pkg trusted d) (\_ => checkTrustDecls label pkg trusted rest)
+
+-- | 单个声明的定义级信任检查；非函数定义（data/record/trait/类型签名）没有 body。
+checkTrustDecl : String -> String -> List String -> Decl -> Result Int
+checkTrustDecl label pkg trusted (DFun name pats body sp) =
+  checkTrustDef label pkg trusted name body
+checkTrustDecl label pkg trusted (DInstance ctxE head methods sp) =
+  checkTrustDecls label pkg trusted methods
+checkTrustDecl label pkg trusted d = Ok 0
+
+-- | D28 严格模式入口：`Nothing`（没有 `[trust]` section）= 不做定义级检查。
+checkDefinitionTrust : String -> String -> Maybe (List String) -> List Decl -> Result Int
+checkDefinitionTrust label pkg Nothing decls = Ok 0
+checkDefinitionTrust label pkg (Just trusted) decls = checkTrustDecls label pkg trusted decls
+
+-- ---------------------------------------------------------------
+-- D28：信任点存在性（`[trust] unsafe` 的每项必须是本包真实定义）。
+-- 只在 **被检查的包**（上下文包）上做：依赖包的模块可能只加载了 import 闭包，
+-- 无法判断未加载模块里的定义；依赖包自己 check/build 时已经校验过。
+-- ---------------------------------------------------------------
+-- | 定义全限定名：顶层定义已带模块前缀，实例方法补模块前缀；`moduleName == ""`
+-- 表示入口文件（定义名保持裸名）。
+qualifyDefName : String -> String -> String
+qualifyDefName moduleName name =
+  if moduleName == "" || containsDot name then name else "${moduleName}.${name}"
+
+-- | 单个声明贡献的定义全限定名（只有 DFun / DAxiom 和 instance 的 DFun 方法）。
+declDefNames : String -> Decl -> List String
+declDefNames moduleName (DFun name pats body sp) = [qualifyDefName moduleName name]
+declDefNames moduleName (DAxiom name ty sp) = [qualifyDefName moduleName name]
+declDefNames moduleName (DInstance ctxE head methods sp) = methodDefNames moduleName methods
+declDefNames moduleName d = []
+
+-- | instance 方法体里的定义全限定名。
+methodDefNames : String -> List Decl -> List String
+methodDefNames moduleName [] = []
+methodDefNames moduleName (m :: rest) = case m of
+  DFun name pats body sp => append [qualifyDefName moduleName name] (methodDefNames moduleName rest)
+  _ => methodDefNames moduleName rest
+
+-- | 一个模块的全部定义名。
+moduleDefNames : String -> List Decl -> List String
+moduleDefNames moduleName decls = concatMap (declDefNames moduleName) decls
+
+-- | 上下文包里所有已加载模块的定义名（只算本包模块，不含依赖包）。
+ownPackageDefNames : String -> List Module -> List String
+ownPackageDefNames pkg [] = []
+ownPackageDefNames pkg (m :: rest) =
+  let
+    here =
+      if modulePackageOf m == pkg then moduleDefNames (moduleNameOf m) (moduleDeclsOf m) else []
+  in append here (ownPackageDefNames pkg rest)
+
+-- | 本包模块名集合（信任点存在性校验用；不含依赖包模块）。
+ownPackageModuleNames : String -> List Module -> List String
+ownPackageModuleNames pkg [] = []
+ownPackageModuleNames pkg (m :: rest) =
+  let
+    here = if modulePackageOf m == pkg then [moduleNameOf m] else []
+  in append here (ownPackageModuleNames pkg rest)
+
+-- | 信任点名字的模块前缀（`Base.IO.runIO` -> `Base.IO`）。
+trustPointModulePrefix : String -> String
+trustPointModulePrefix t = case splitLastDot (splitOnDot t) of
+  Pair revPrefix base => joinDots revPrefix
+
+-- | 信任点的「不是本包真实定义」错误（完整 / 部分加载共用文案）。
+trustPointMissing : String -> String -> Result a
+trustPointMissing pkg t =
+  Err
+    "${pkg}: trust point \"${t}\" is not a definition of this package; [trust] unsafe may only list real definitions (Module.def)"
+
+-- | 完整加载（库包 check/build）时的逐项校验：每项必须落在已知定义名集合里。
+checkTrustListFull : String -> List String -> List String -> Result Int
+checkTrustListFull pkg [] universe = Ok 0
+checkTrustListFull pkg (t :: rest) universe =
+  if memName t universe then checkTrustListFull pkg rest universe else trustPointMissing pkg t
+
+-- | 部分加载（入口 / 单文件 / REPL / LSP）时的逐项校验：只校验**本包已加载模块**里的项；
+-- 未加载模块的项无法判断（模块名拼错在整包 / 库包 check 时能报出，避免入口闭包误报）。
+checkTrustListLoaded : String -> List String -> List String -> List String -> Result Int
+checkTrustListLoaded pkg [] universe modNames = Ok 0
+checkTrustListLoaded pkg (t :: rest) universe modNames =
+  if memName t universe then checkTrustListLoaded pkg rest universe modNames
+  else if memName (trustPointModulePrefix t) modNames then trustPointMissing pkg t
+  else checkTrustListLoaded pkg rest universe modNames
+
+-- | D28 严格模式的信任点存在性校验：入口定义（裸名）+ 本包模块定义（全限定名）。
+-- `complete` 由 Loader 给出：库包 [export] 全量加载 = True（要求每项可解析）；
+-- 入口 / 单文件 / REPL / LSP 只加载 import 闭包 = False（只校验已加载模块里的项）。
+checkTrustPoints : String -> Maybe (List String) -> Bool -> List Decl -> List Module -> Result Int
+checkTrustPoints pkg Nothing complete entryDecls modules = Ok 0
+checkTrustPoints pkg (Just trusted) complete entryDecls modules =
+  let
+    universe = append (concatMap (declDefNames "") entryDecls) (ownPackageDefNames pkg modules)
+    modNames = ownPackageModuleNames pkg modules
+  in if complete then checkTrustListFull pkg trusted universe
+  else checkTrustListLoaded pkg trusted universe modNames
+
 -- 效果被拒的上下文描述：ad-hoc 文件（无 manifest、base-only 上下文）没有包名。
 packageLabelForEffects : String -> String
 packageLabelForEffects pkg = if pkg == "" then "ad-hoc file (no package)" else "package ${pkg}"
 
-checkEffectsBuiltins : String -> String -> List String -> List Decl -> Result (List Decl)
-checkEffectsBuiltins label pkg caps decls = andThen (checkCapabilities label caps) (\_ => case effDecls decls of
-  Nothing => Ok decls
-  Just name => if isUnsafeExecutor name then if memName "unsafe" caps then Ok decls
+-- | 现有（包级）效应检查：整模块第一个效应必须被能力表放行（unsafe 由能力 `unsafe`
+-- 单独放行；定义级信任检查在 `checkDefinitionTrust` 里）。
+checkModuleEffects : String -> String -> List String -> List Decl -> Result Int
+checkModuleEffects label pkg caps decls = case effDecls decls of
+  Nothing => Ok 0
+  Just name => if isUnsafeExecutor name then if memName "unsafe" caps then Ok 0
   else Err
     "${label}: `runIO` executes IO outside main; requires capability `unsafe` in ${packageLabelForEffects pkg} (declare [capabilities] effects = [\"unsafe\"])"
-  else if allowsEffect caps name then Ok decls
+  else if allowsEffect caps name then Ok 0
   else case findIntrinsic name of
     Just i => case intrinsicCapability i of
       Just c =>
         Err
           "${label}: effectful builtin `${name}` requires capability `${capabilityName c}` in ${packageLabelForEffects pkg} (declare [capabilities] effects = [\"${capabilityName c}\"] or use Base.IO)"
-      Nothing => Ok decls
-    Nothing => Ok decls
-)
+      Nothing => Ok 0
+    Nothing => Ok 0
+
+-- | M27 + D28：包级能力校验 → 整模块首个效应检查 → 严格模式定义级信任检查。
+checkEffectsBuiltins : String -> String -> List String -> Maybe (List String) -> List Decl -> Result (List Decl)
+checkEffectsBuiltins label pkg caps trust decls =
+  andThen (checkCapabilities label caps)
+    (\_ => andThen (checkModuleEffects label pkg caps decls) (\_ => andThen (checkDefinitionTrust label pkg trust decls) (\_ => Ok decls)))
 
 tyShape : Expr -> String
 tyShape (EVar n _) = "var ${n}"
@@ -798,3 +1252,13 @@ tyShape (ECase s alts _) = "case"
 tyShape (EIf c t e _) = "if"
 tyShape (EDo stmts _) = "do"
 tyShape _ = "other"
+
+-- 值命名空间命中里混入的同名构造子条目（含 module 重导出/iface 缓存）：
+-- 取 kind=ctor 或 target 是 data/record 构造子的条目，按重载候选处理。
+-- | 自动补注（M41 新增导出）：ctorPairTargets。
+ctorPairTargets : List Module -> List (Pair String ExportEntry) -> List String
+ctorPairTargets modules [] = []
+ctorPairTargets modules ((Pair m e) :: rest) =
+  let
+    isCtor = e.kind == "ctor" || isDataOrRecordCtorTarget modules e.target
+  in if isCtor then e.target :: ctorPairTargets modules rest else ctorPairTargets modules rest

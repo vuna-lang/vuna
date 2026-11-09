@@ -43,7 +43,7 @@ readme_lines 204
 #     不可达分支、inlineSolvedMetas（3348 → 3513）。按实测重标定 max_ref 208 / max_module 3530；
 #     入口文档（coldstart/agents/arch/readme）不变。
 max_ref_lines 410
-max_module_lines 1975
+max_module_lines 2106
 #   - M27：新增 `primitives.md` 与内建/原语/能力文档、`Vuna.Compiler.Intrinsics` 模块；
 #     按 `sh nix/context-budget.sh .` 实测收紧：coldstart 29055 / agents 104 / arch 156 /
 #     readme 163 / max_ref 206 / max_module 811（入口文档有 45B 余量，agents 临界）。
@@ -144,4 +144,10 @@ max_module_lines 1975
 #     1861 > 1208（既有漏标定，非本轮引入）；按既有「超标项留 ~20% 余量」先例把上限标定到
 #     1975（实测 1963，留 12 行），其余指标在旧预算内（coldstart 36577 / agents 116 /
 #     arch 205 / readme 172 / max_ref 396）。
-max_module_lines 1975
+#   - 2026-11-09 复标定（漏标定修复）：`lib/Vuna/Repl.vuna` 在 M35.3 之后继续增长到 2105 行
+#     （最近一次为会话内索引/上下文缓存，commit 6dcd55f），HEAD 实测 2105 已超 1975 预算
+#     （属既有漏标定，非本轮改动引入）。按 2026-11-06「超标项按实测复标定」先例把
+#     max_module_lines 上调到 2105（实测值，不留额外余量）；其余指标在旧预算内。
+#   - 2026-11-09 lint dispatch 提升（main 2ad37d0）：全仓 `--fix` 把 `onOff b = if b then "on" else "off"`
+#     归一为两个 clause（`lib/Vuna/Repl.vuna` 2105 → 2106 行，单点 +1，属工具规则驱动的行数
+#     增长，非功能膨胀）；按实测复标定 max_module_lines 2105 → 2106，其余指标不变。

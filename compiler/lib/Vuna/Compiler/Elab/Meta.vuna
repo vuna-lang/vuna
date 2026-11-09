@@ -11,6 +11,7 @@ module Vuna.Compiler.Elab.Meta
   , collectTraitDecls
   , convEc
   , ctorAppTerm
+  , ctorFamilyNameOf
   , ctorFamilyTable
   , ctorGlobals
   , ctorRefTerm
@@ -23,6 +24,7 @@ module Vuna.Compiler.Elab.Meta
   , dtCtorLookup
   , dtCtorLookupEc
   , dtDataLookup
+  , expectedFamilyOf
   , fieldBinderGo
   , fieldBinderNames
   , fieldVarName
@@ -34,6 +36,7 @@ module Vuna.Compiler.Elab.Meta
   , freshVarValue
   , globalLookup
   , globalsLookup
+  , globalsTableOf
   , hasFamParams
   , hasNoExplicitPi
   , hasOutOfScopeVar
@@ -74,6 +77,7 @@ module Vuna.Compiler.Elab.Meta
   , paramNameOf
   , prependFamParams
   , relevantMetas
+  , resolveOverCtor
   , resultSpine
   , rigCaseField
   , rigForLinearDomain
@@ -87,7 +91,9 @@ module Vuna.Compiler.Elab.Meta
   , termHasOuterLinear
   , termMetasAll
   , termMetasRuntime
+  , typeHeadLookup
   , typeLookup
+  , typeNameOfDualCtor
   , unsolvedFrom
   , valueLookup
   , valueOpaqueScoped
@@ -268,6 +274,13 @@ globalsLookup name globals ec = case Base.HashMap.lookup name (ecGlobalsTbl ec) 
   -- 的回落（未命中的绝大多数是数据族名，如 Base.List.List / String / Int）。
   Nothing => if ec.ecGlobalsComplete then Nothing else globalLookup name globals
 
+-- 全局签名表的构造：同名条目**后出现的获胜**。globals 的顺序是「数据族 kind 先登记、
+-- 值签名后追加」，因此值位置取到值签名（B18）；类型位置由 `typeHeadLookup` 走
+-- `dtDataKind`，不依赖这张表。注意 `Base.HashMap.fromList` 是**先出现获胜**，用它建
+-- 这张表会让同名值定义被族 kind 盖掉（旧实现即如此）。
+globalsTableOf : List (Pair String Term) -> HashMap Term
+globalsTableOf globals = Base.HashMap.insertAll globals (Base.HashMap.fromList [])
+
 -- ---------------------------------------------------------------
 memSig : Eq a => List (Pair a b) -> a -> Bool
 memSig [] name = False
@@ -404,10 +417,112 @@ isTypeLevelGlobal globals ec name = case globalsLookup name globals ec of
 isTypeName : List (Pair String Term) -> Ec -> String -> Bool
 isTypeName globals ec name = isTypeLevelGlobal globals ec name || isDataFamilyName ec name
 
+-- M41：与族同名的构造子（`data Pair ... where Pair : ...`）。data 构造子的 canonical 名
+-- 是 `Module.Data.Ctor`；若族前缀是一个数据族且其短名 == 构造子短名，那么该构造子在
+-- 「期望是宇宙」的位置按「类型作为项」解析（B18 双命名空间的既有行为）。
+-- | 自动补注（M41 新增导出）：dataShortNameOf。
+dataShortNameOf : String -> String
+dataShortNameOf name = secondOf (splitLastDot (splitOnDot name))
+
+-- | 自动补注（M41 新增导出）：typeNameOfDualCtor。
+typeNameOfDualCtor : Ec -> String -> Maybe String
+typeNameOfDualCtor ec name = case splitLastDot (splitOnDot name) of
+  Pair revPrefix base =>
+    let
+      fam = joinDots revPrefix
+    in if fam == "" then Nothing
+    else if dataShortNameOf fam == base then case dtDataLookup fam (ecDatas ec) of
+      Just dd => Just fam
+      Nothing => Nothing
+    else Nothing
+
+-- | 自动补注（M41 新增导出）：ctorFamilyNameOf。
+ctorFamilyNameOf : Ec -> String -> Maybe String
+ctorFamilyNameOf ec target = case dtCtorLookupEc ec target of
+  Just c => Just (dtCtorFamily c)
+  Nothing => Nothing
+
+-- | 自动补注（M41 新增导出）：expectedFamilyOf。
+expectedFamilyOf : Ec -> Value -> Maybe String
+expectedFamilyOf ec v = expectedFamilyOfFuel 64 ec v
+
+-- | 自动补注（M41 新增导出）：expectedFamilyOfFuel。
+expectedFamilyOfFuel : Int -> Ec -> Value -> Maybe String
+expectedFamilyOfFuel fuel ec v = if fuel <= 0 then Nothing
+else case forceVal ec v of
+  VNeutral (NGlobal fam args) => Just fam
+  VPi name implicit rig dom clo =>
+    expectedFamilyOfFuel (fuel - 1) ec (applyClosure clo (VNeutral (NVar "_over" 0 [])))
+  _ => Nothing
+
+-- | 自动补注（M41 新增导出）：overCandidatesText。
+overCandidatesText : List String -> String
+overCandidatesText targets = join ", " (map ctorDisplayName targets)
+
+-- | 自动补注（M41 新增导出）：dualFamilyOf。
+dualFamilyOf : Ec -> String -> List String -> Maybe String
+dualFamilyOf ec short [] = Nothing
+dualFamilyOf ec short (t :: rest) = case dtCtorLookupEc ec t of
+  Just c =>
+    if dataShortNameOf (dtCtorFamily c) == short then Just (dtCtorFamily c)
+    else dualFamilyOf ec short rest
+  Nothing => dualFamilyOf ec short rest
+
+-- | 自动补注（M41 新增导出）：ctorFamilyIs。
+ctorFamilyIs : Ec -> String -> String -> Bool
+ctorFamilyIs ec target fam = case ctorFamilyNameOf ec target of
+  Just f => f == fam
+  Nothing => False
+
+-- | 自动补注（M41 新增导出）：candidatesInFamily。
+candidatesInFamily : Ec -> Maybe String -> List String -> List String
+candidatesInFamily ec Nothing targets = targets
+candidatesInFamily ec (Just fam) targets = filter (\t => ctorFamilyIs ec t fam) targets
+
+-- | 自动补注（M41 新增导出）：resolveOverCtor。
+resolveOverCtor : Ec -> Span -> Maybe Value -> String -> List String -> Result String
+resolveOverCtor ec sp Nothing short targets = defaultOrOver ec sp short targets
+resolveOverCtor ec sp (Just expected) short targets = if isSortVal ec expected then case dualFamilyOf ec short targets of
+  Just fam => Ok fam
+  Nothing => resolveOverCtorGo ec sp (expectedFamilyOf ec expected) short targets
+else resolveOverCtorGo ec sp (expectedFamilyOf ec expected) short targets
+
+-- | 自动补注（M41 新增导出）：resolveOverCtorGo。
+resolveOverCtorGo : Ec -> Span -> Maybe String -> String -> List String -> Result String
+resolveOverCtorGo ec sp Nothing short targets = defaultOrOver ec sp short targets
+resolveOverCtorGo ec sp (Just fam) short targets = case candidatesInFamily ec (Just fam) targets of
+  [t] => Ok t
+  _ =>
+    tcErr2 sp (AmbiguousCtor short (overCandidatesText targets)) short (overCandidatesText targets)
+
+-- | 自动补注（M41 新增导出）：defaultOrOver。
+defaultOrOver : Ec -> Span -> String -> List String -> Result String
+defaultOrOver ec sp short targets = case listCtorTarget ec targets of
+  Just t => Ok t
+  Nothing => case targets of
+    [t] => Ok t
+    _ =>
+      tcErr2 sp (AmbiguousCtor short (overCandidatesText targets)) short
+        (overCandidatesText targets)
+
+-- | 自动补注（M41 新增导出）：listCtorTarget。
+listCtorTarget : Ec -> List String -> Maybe String
+listCtorTarget ec [] = Nothing
+listCtorTarget ec (t :: rest) =
+  if ctorFamilyIs ec t listFamilyName then Just t else listCtorTarget ec rest
+
+-- 类型头的签名项：数据族以 `DtData.dtDataKind` 为准。globals 是 name→Term 单表，
+-- 同模块同名值定义（`data T` 与 `T : Int`）会覆盖族的 kind；B18 起类型位置不再受
+-- 该覆盖影响，值位置仍由 `valueLookup` 取值签名。数据头登记阶段 `ecDatas` 尚未含
+-- 当前族，此时回退到 globals 里的 kind，因此前向引用 / 互递归语义不变。
+typeHeadLookup : List (Pair String Term) -> Ec -> String -> Maybe Term
+typeHeadLookup globals ec name = case dtDataLookup name (ecDatas ec) of
+  Just dd => Just (dtDataKind dd)
+  Nothing => if isTypeLevelGlobal globals ec name then globalsLookup name globals ec else Nothing
+
 -- 类型位置查类型命名空间：返回该名字的签名项（族的 kind / 类型层 def 的类型）。
 typeLookup : List (Pair String Term) -> Ec -> String -> Maybe Term
-typeLookup globals ec name =
-  if isTypeName globals ec name then globalsLookup name globals ec else Nothing
+typeLookup globals ec name = typeHeadLookup globals ec name
 
 -- 值命名空间的查询结果：构造子（值位置优先）或全局定义（含数据族名）。
 data ValueEntry : Type where
@@ -1090,7 +1205,7 @@ ctorAppTerm datas fn args = foldAppTerms fn args
 -- 与饱和应用产生的 `VCon` 在 conv 里对不上（报 `expected (Succ n), got (Succ n)`，
 -- `Elab/Case.vuna` 的 `ctorValueIn` 用 `_tele` 名字可见）；且 codegen 把裸构造子名
 -- 当运行期值输出，OCaml 报 `This expression should not be a constructor`。
--- 这里按 telescope 补 λ：`Succ` ⇒ `\x -> Succ x`、`VCons a` ⇒ `\n -> \x -> \xs -> VCons a n x xs`，
+-- 这里按 telescope 补 λ：`Succ` ⇒ `\x -> Succ x`、`Cons a` ⇒ `\n -> \x -> \xs -> Cons a n x xs`，
 -- 于是精化期 β 归约直接得到 `VCon`，运行期得到合法闭包。
 -- 已收到的实参先 `shift` 到 λ 之下（外层 de Bruijn 索引整体 +k）；零参与饱和应用不变。
 etaCtorTerm : DtCtor -> List (Pair Term Rig) -> Term

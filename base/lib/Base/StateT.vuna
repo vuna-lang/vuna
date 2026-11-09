@@ -14,24 +14,31 @@ import Base.IO
 import Base.Monad
 import Base.Pair
 
+-- | IO 之上的 State 效应 transformer：`StateT s a` = `s -> IO (Pair a s)`；固定以 IO 为基座（record 参数 kind 限制，泛化到任意 monad 见 debt）。
 record StateT s a where
   stateTRun : s -> IO (Pair a s)
 
+-- | 运行并返回「结果 + 最终状态」的 `IO (Pair a s)`；是唯一 handler，其余运行函数基于它。
 runStateT : StateT s a -> s -> IO (Pair a s)
 runStateT st s = st.stateTRun s
 
+-- | 运行并只取结果（丢弃最终状态）。
 evalStateT : StateT s a -> s -> IO a
 evalStateT st s = fmap firstOf (runStateT st s)
 
+-- | 运行并只取最终状态（丢弃结果）。
 execStateT : StateT s a -> s -> IO s
 execStateT st s = fmap secondOf (runStateT st s)
 
+-- | 取当前状态（结果与状态相同）。
 get : StateT s s
 get = StateT (\s => pure (Pair s s))
 
+-- | 替换状态，返回占位结果 `0`（签名 `StateT s Int`）。
 put : s -> StateT s Int
 put s = StateT (\_ => pure (Pair 0 s))
 
+-- | 用 `f` 变换状态，返回占位结果 `0`。
 modify : (s -> s) -> StateT s Int
 modify f = StateT (\s => pure (Pair 0 (f s)))
 

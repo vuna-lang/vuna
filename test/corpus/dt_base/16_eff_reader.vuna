@@ -2,10 +2,8 @@
 import Base.Eff
 import Base.Eff.Reader
 
-prog : Eff (RCons (Reader Cnt1 Int) (RCons (Reader Cnt2 Int) RNil)) Int
-prog = bindEff (ask Cnt1 Int) (\x =>
-         bindEff (ask Cnt2 Int) (\y =>
-           pureEff (x * 10 + y)))
+prog : Eff (Reader Cnt1 Int :: Reader Cnt2 Int :: []) Int
+prog = bindEff (ask Cnt1 Int) (\x => bindEff (ask Cnt2 Int) (\y => pureEff (x * 10 + y)))
 
 op1 : (o : ReaderOp Int) -> (Base.Eff.Reader.resReader Int o -> Int) -> Int
 op1 op k = case op of
@@ -16,7 +14,4 @@ op2 op k = case op of
   Ask => k 4
 
 main : Int
-main =
-  runPure
-    (handleReader Cnt1 Int (\a => a) op1
-      (handleReader Cnt2 Int (\a => a) op2 prog))
+main = runPure (handleReader Cnt1 Int (\a => a) op1 (handleReader Cnt2 Int (\a => a) op2 prog))

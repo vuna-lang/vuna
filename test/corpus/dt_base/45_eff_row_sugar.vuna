@@ -1,10 +1,11 @@
 -- 行语法糖：`[Fetch]` / `[Fetch, Log]` / `[]` 在期望 Row 的位置展开为
--- RCons/RNil；普通列表字面量（List Int）不受影响。
+-- Cons/Nil；普通列表字面量（List Int）不受影响。
 import Base.Eff
 import Base.List
 import Base.String
 
 data Fetch : Type where
+
 data Log : Type where
 
 data FetchOp : Type where
@@ -31,11 +32,7 @@ xs = [1, 2, 3]
 getPage : String -> Eff [Fetch] String
 getPage url = fetch url
 
-handleFetch : {a : Type} -> {b : Type} -> {r : Row}
-           -> (a -> b)
-           -> ((o : FetchOp) -> (resFetch o -> b) -> b)
-           -> Eff (RCons Fetch r) a
-           -> Eff r b
+handleFetch : {a : Type} -> {b : Type} -> {r : Row} -> (a -> b) -> ((o : FetchOp) -> (resFetch o -> b) -> b) -> Eff (Fetch :: r) a -> Eff r b
 handleFetch ret opH comp = handleCore Fetch "fetch" 0 ret opH comp
 
 opH : (o : FetchOp) -> (resFetch o -> String) -> String

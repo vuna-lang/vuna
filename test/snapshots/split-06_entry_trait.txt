@@ -26,6 +26,7 @@ let v_Base_dBool_dbool
 let v_Base_dBool_dnot
 let v_Base_dBool_dor
 let v_Base_dBool_dxor
+let v_Show_uBase_dBool_dBool
 
 == Base_dEq.ml
 let v_Base_dEq_deq
@@ -35,6 +36,7 @@ let v_Eq_uBase_dBool_dBool
 == Base_dInt.ml
 let v_Eq_uInt
 let v_Ord_uInt
+let v_Show_uInt
 
 == Base_dInterp.ml
 let v_Base_dInterp_dinterp
@@ -47,8 +49,10 @@ let v_Base_dList_dflatMap
 let v_Base_dList_dlength
 let v_Base_dList_drange
 let v_Base_dList_dreverse
+let v_Base_dList_dshowElems
 let v_Functor_uBase_dList_dList
 let v_Monad_uBase_dList_dList
+let v_Show_uBase_dList_dList_ua
 
 == Base_dMaybe.ml
 let v_Base_dMaybe_dfromMaybe
@@ -58,6 +62,7 @@ let v_Base_dMaybe_dmapJust
 let v_Base_dMaybe_dmaybe
 let v_Functor_uBase_dMaybe_dMaybe
 let v_Monad_uBase_dMaybe_dMaybe
+let v_Show_uBase_dMaybe_dMaybe_ua
 
 == Base_dMonad.ml
 let v_Base_dMonad_dbind
@@ -88,6 +93,7 @@ let v_Ord_uBase_dBool_dBool
 == Base_dPair.ml
 let v_Base_dPair_dfirstOf
 let v_Base_dPair_dsecondOf
+let v_Show_uBase_dPair_dPair_ua_ub
 
 == Base_dResult.ml
 let v_Base_dResult_dandThen
@@ -95,11 +101,10 @@ let v_Base_dResult_dmapError
 let v_Base_dResult_dmapResult
 let v_Base_dResult_dstep
 let v_Base_dResult_dwithDefault
+let v_Show_uBase_dResult_dResult_ua
 
 == Base_dShow.ml
 let v_Base_dShow_dshow
-let v_Show_uBase_dBool_dBool
-let v_Show_uInt
 let v_Show_uString
 
 == Base_dString.ml

@@ -8,7 +8,7 @@
 
 | 模块 | 内容 |
 | --- | --- |
-| `Base.Pair` / `Base.Bool` / `Base.List` / `Base.Maybe` / `Base.Result` | 核心代数数据类型与常用 helper（append/reverse/map/filter/foldl/foldr/traverse/andThen/step/...） |
+| `Base.Pair` / `Base.Bool` / `Base.List` / `Base.Maybe` / `Base.Result` | 核心代数数据类型与常用 helper（append/reverse/map/filter/foldl/foldr/traverse/andThen/step/...）；容器各带约束 `Show` 实例（模板插值经 blanket `Interp` 复用） |
 | `Base.String` | split/join/lines/unlines/trim/contains/startsWith/endsWith/repeat/substring；`byteLength : String -> Nat` |
 | `Base.Sort` | 稳定排序 `mergeSort` / `sortBy`（当前实现是插入排序：稳定、O(n²)，适合小表） |
 | `Base.Map` | 关联表实现的抽象 Map（empty/insert/lookup/remove/keys/values/size/...）；小表用 |
@@ -24,11 +24,12 @@
 | `Base.Nat` | 非负整数（`Zero` / `Succ`）；运行时是 OCaml `int`。`plus` / `minus` / `mult` / `div` / `toInt` / `fromInt` / `fromIntMaybe` / `pred` / `isZero` + `Eq` / `Ord` / `Show` 实例 |
 | `Base.Vec` | `Vec(..)` 与 `substTemplate` / `vhead` / `vlen` / `vtail` |
 | `Base.Monad` | `Functor` / `Monad` trait |
-| `Base.Show` | `Show` trait（`show : a -> String`）+ `Int` / `String` / `Bool` 实例 |
+| `Base.Show` | `Show` trait（`show : a -> String`）+ `String` 实例；`Show Int` / `Show Bool` 随类型模块（`Base.Int` / `Base.Bool`），`Show String` 因 String 经 Interp 依赖 Show 留在本模块 |
 | `Base.Interp` | 模板插值的转换 trait（M36）：`Interp a` + blanket `Show a => Interp a`（默认 = `show`）+ 具体 `Interp String`（原样输出）；插值降级与规则见 [templates.md](templates.md) |
 | `Base.Eq` | `Eq` trait（`eq` / `neq : a -> a -> Bool`）+ `Bool` 实例（Bool 是 `Eq` 返回类型，实例随 trait） |
 | `Base.Ord` | `Ord` trait（`lt` / `le` / `gt` / `ge : a -> a -> Bool`）+ `Bool` 实例 |
-| `Base.Int` | `Int` 的 `Eq` / `Ord` 实例宿主（`Int` 是 primitive 类型；实例跟类型模块走） |
+| `Base.Int` | `Int` 的 `Eq` / `Ord` / `Show` 实例宿主（`Int` 是 primitive 类型；实例跟类型模块走） |
+| `Base.Bool` | `Bool` 类型与逻辑 helper；`Show Bool` 实例（`if` 输出 `True` / `False`）；`Eq` / `Ord` 实例因 Bool 是方法返回类型随 trait 留在 `Base.Eq` / `Base.Ord` |
 | `Base.IO` | `IO` 的公开 API 与实例（`IO` 本身是内建类型，不再由本模块声明）：print/eprint/readFile/writeFile/getArgs/exit 直接别名到 `prim_*`，W10 增加 env/clock 别名 `getEnv`/`getCwd`/`execPath`/`nowMicros`/`sleepMicros`（编译器已有原生 `prim_sleep`；`Base.IO` 在 seed 闭包内，`sleepMicros` 暂时仍用 `nowMicros` 忙等，rotation 后切换，见 [effects.md](effects.md) §8.6），`Functor`/`Monad IO` 经 `prim_pureIO`/`prim_bindIO`；`runIO : IO a -> a` = `prim_runIO`（要求 `unsafe` 能力） |
 | `Base.Debug` | 调试工具（M38，**显式 import**，不进 `Prelude`/`Base` 门面）：`trace` / `traceShow` 写 stderr 后返回原值，`assert` / `todo` 失败走 `prim_fail` → 运行时报告器；见 [debugging.md](debugging.md) |
 | `Base.Effect` | `MonadIO` trait（`liftIO : IO a -> m a`）+ `MonadIO IO` 实例 |
@@ -38,8 +39,8 @@
 | `Base.EffFs` | IO-backed Fs 效应（W10 扩到完整 fs 面；收尾改为命名实例 `Fs n`，`F1`/`F2`）：`ReadFile`/`WriteFile`/`WriteFileAtomic`/`ReadDir`/`IsDirectory`/`MakeDir`/`RemoveFile`/`FileExists`/`FileMtime`/`FileSize` + `fsReadFile n`/`fsWriteFile n`/…/`handleFs n`/`handleFsIO n`；handler 用 `Base.IO` 实现；mock（纯 answer）与 real handler 可并存（`dt_base/37`） |
 | `Base.EffError` | 一阶 Error 效应 + 作用域 `catch`（L2）：`throw`/`handleError`/`runError`/`catch` |
 | `Base.EffExn` | W6/W7 高阶/作用域 Error：`Try` 操作携带 `Eff` 子计算，`handleExn`/`runExn`/`catchExn`/`bracketExn`；scoped handler |
-| `Base.EffAsync` | 最小 Domain 并发（L3 legacy）：`Task`/`async`/`await`，基于 OCaml 5 `Domain`；任务行必须是 `Eff RNil`；不算 W9 调度器（见 `Base.EffSched`） |
-| `Base.EffSched` | W9 单线程 fiber 调度器（L3）：不透明 `Task`/`Scope`，`forkTask`/`awaitTask`/`yieldNow`/`isCancelled`/`cancelTask`/`cancelScope`/`scopeWait`/`scopeWaitTimeout`/`withScope`/`withScopeTimeout`/`liftIOEff`/`forkTaskWith`/线性 `TaskLin`；协作式取消（含清理宽限）、结构化作用域、逻辑步数超时；任务体 `Eff RNil a`；见 [effects.md](effects.md) §8.5 |
+| `Base.EffAsync` | 最小 Domain 并发（L3 legacy）：`Task`/`async`/`await`，基于 OCaml 5 `Domain`；任务行必须是 `Eff Nil`；不算 W9 调度器（见 `Base.EffSched`） |
+| `Base.EffSched` | W9 单线程 fiber 调度器（L3）：不透明 `Task`/`Scope`，`forkTask`/`awaitTask`/`yieldNow`/`isCancelled`/`cancelTask`/`cancelScope`/`scopeWait`/`scopeWaitTimeout`/`withScope`/`withScopeTimeout`/`liftIOEff`/`forkTaskWith`/线性 `TaskLin`；协作式取消（含清理宽限）、结构化作用域、逻辑步数超时；任务体 `Eff Nil a`；见 [effects.md](effects.md) §8.5 |
 | `Base.EffChannel` | W9 cooperative channel：`send`/`tryRecv`/`recvWait`（忙等 yield，无 Mutex/信号量）；生产者-消费者夹具 `dt_base/36` |
 | `Base.EffMutex` | W9 cooperative Mutex/Semaphore（IORef + yield 忙等；无阻塞原语）；`acquire`/`release`/`semWait`/`semSignal` |
 | `Base.EffConsole` | W10 console 标签（命名实例 `C1`/`C2`）：`Print`/`EPrint`；`consolePrint`/`consoleEprint`/`handleConsole`/`handleConsoleIO`（真实 handler 用 `Base.IO.print`/`eprint`） |
@@ -163,9 +164,10 @@ module Base.ErrorT (ErrorT, throwError, catchError, runErrorT) where
   [effects.md](effects.md) §2。
 - **`Show` / `Eq` / `Ord` 在库（M31.1 起声明与实例分离）**：`Base.Show` / `Base.Eq` /
   `Base.Ord` 承载 trait 声明；实例按**落点规则**分布（见 [operators.md](operators.md)）：
-  `Int` → `Base.Int`、`String` → `Base.String`、`Bool` → `Base.Eq` / `Base.Ord`
-  （Bool 是方法返回类型，放 `Base.Bool` 会成 import 环）。实例随 `Prelude` 自动导入
-  （`Prelude` 显式 `import Base.Int` 加载 Int 实例）。编译器只保留**机制**：
+  `Int` → `Base.Int`、`String` 的 Eq/Ord → `Base.String`、`Show String` → `Base.Show`
+  （String 经 Interp 依赖 Show）、`Show Bool` → `Base.Bool`、`Eq/Ord Bool` → `Base.Eq` /
+  `Base.Ord`（Bool 是方法返回类型）；容器 `Show` 实例在各自类型模块。实例随 `Prelude` 自动
+  导入（`Prelude` 显式 `import Base.Int` 加载 Int 实例）。编译器只保留**机制**：
   `deriving (Show, Eq, Ord)` 的展开、`eq` / `lt` 等的 `Int` / `String` 运行时特化、
   `if` / 字面量等语法。**M31.1 起运算符是方法别名**：`==` / `/=` / `<` / `<=` / `>` / `>=`
   在 Loader 被解析成 `eq` / `neq` / `lt` / `le` / `gt` / `ge`（M31.1 起由 Loader 解析，

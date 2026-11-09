@@ -1,0 +1,24 @@
+-- 同名构造子 1：同一个 entry 文件里两个 data 类型都定义构造子 `Nil`。
+-- 构造子的 canonical 身份是 `Data.Ctor`（entry 文件没有 module，这里即 `A.Nil` / `B.Nil`），
+-- 因此不同 data 类型可以各有一个 `Nil`；限定名同时用于构造（`x = A.Nil`）
+-- 与模式匹配（`pickA A.Nil`），两族的模式不能串用。
+data A : Type where
+  Nil : A
+
+data B : Type where
+  Nil : B
+
+pickA : A -> Int
+pickA A.Nil = 10
+
+pickB : B -> Int
+pickB B.Nil = 20
+
+x : A
+x = A.Nil
+
+y : B
+y = B.Nil
+
+main : Int
+main = pickA x + pickB y

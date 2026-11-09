@@ -305,7 +305,8 @@ parseNumber chars = case signOf chars of
       let
         signed = if negative then 0 - value else value
       in case skipNumberTail rest2 of
-        Pair rest3 ok => if ok then Ok (Pair (JNum signed) rest3) else Err "invalid number"
+        Pair rest3 True => Ok (Pair (JNum signed) rest3)
+        Pair rest3 False => Err "invalid number"
 
 signOf : List Int -> Pair Bool (List Int)
 signOf (chars@(c :: rest)) = if c == 45 then Pair True rest else Pair False chars

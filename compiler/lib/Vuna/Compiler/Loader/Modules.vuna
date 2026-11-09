@@ -5,8 +5,10 @@ module Vuna.Compiler.Loader.Modules
   , Namespaces(..)
   , Project(..)
   , collectModuleFiles
+  , ctorCanonical
   , exportsOf
   , findExportCtor
+  , findExportCtors
   , findExportType
   , findExportValue
   , findImportPrefix
@@ -14,8 +16,10 @@ module Vuna.Compiler.Loader.Modules
   , findModuleFile
   , importModuleNames
   , importName
+  , isDataOrRecordCtorTarget
   , mangle
   , moduleAllImportsOf
+  , moduleDecls
   , moduleDeclsOf
   , moduleFixitiesOf
   , moduleNameOf
@@ -55,6 +59,8 @@ record Module where
   moduleDeclsOf : List Decl
   moduleExportsOf : List ExportEntry
   moduleCapabilities : List String
+  -- | D28：本模块所属包的 `[trust] unsafe` 信任点（Nothing = 非严格模式，不做定义级检查）。
+  moduleTrustUnsafe : Maybe (List String)
   moduleFixitiesOf : List FixityDecl
 
 -- 已加载项目：入口声明/import + 依赖模块列表（M12 分离编译用；保持 flatten 前的形态）。
@@ -67,25 +73,31 @@ record Project where
   projectModules : List Module
   projectEntryPkg : String
   projectEntryCapabilities : List String
+  -- | D28：入口文件所属包的 `[trust] unsafe` 信任点（Nothing = 非严格模式）。
+  projectEntryTrustUnsafe : Maybe (List String)
+  -- | D28：本次加载是否覆盖了本包**全部**库模块（库包 [export] 加载 = True；
+  -- 入口文件 / 单文件 / REPL / LSP 只加载 import 闭包 = False）。信任点存在性校验
+  -- 在完整加载时要求所有项都可解析，部分加载时只校验已加载模块里的项。
+  projectModulesComplete : Bool
   projectEntryFixities : List FixityDecl
 
 moduleNameOf : Module -> String
-moduleNameOf (Module n p is imps ds es cs fx) = n
+moduleNameOf (Module n p is imps ds es cs ts fx) = n
 
 modulePackageOf : Module -> String
-modulePackageOf (Module n p is imps ds es cs fx) = p
+modulePackageOf (Module n p is imps ds es cs ts fx) = p
 
 moduleAllImportsOf : Module -> List Import
-moduleAllImportsOf (Module n p is imps ds es cs fx) = append is imps
+moduleAllImportsOf (Module n p is imps ds es cs ts fx) = append is imps
 
 moduleDeclsOf : Module -> List Decl
-moduleDeclsOf (Module n p is imps ds es cs fx) = ds
+moduleDeclsOf (Module n p is imps ds es cs ts fx) = ds
 
 moduleFixitiesOf : Module -> List FixityDecl
-moduleFixitiesOf (Module n p is imps ds es cs fx) = fx
+moduleFixitiesOf (Module n p is imps ds es cs ts fx) = fx
 
 projectEntryAllImports : Project -> List Import
-projectEntryAllImports (Project ds is imps ms pkg pcaps fx) = append is imps
+projectEntryAllImports (Project ds is imps ms pkg pcaps ptrust complete fx) = append is imps
 
 -- M28（B18）：解析期的三个命名空间，与导出表 kind 一一对应，**不再拍平**。
 --   values = 值命名空间（DFun / 签名 / 实例名；导出 kind "val"）
@@ -101,6 +113,9 @@ record Namespaces where
   nsValueSet : HashMap Bool
   nsCtorSet : HashMap Bool
   nsTypeSet : HashMap Bool
+  -- M41：data/record 构造子的候选表（短名 → 未加模块 prefix 的 "Data.Ctor"）。
+  -- 同名构造子按族区分；trait 方法不在此表（不是族的构造子）。
+  nsCtorCands : List (Pair String String)
 
 -- 字段访问按全局唯一字段名解析（Elab 降级成模式绑定）；构造用命名字段。
 -- 模块导出表（M10）。每条是「本模块公开名 → 定义处带模块前缀的名字」。
@@ -142,6 +157,12 @@ validModuleName name = case splitOnDot name of
 
 mangle : String -> String -> String
 mangle prefix name = if prefix == "" then name else "${prefix}.${name}"
+
+-- M41：构造子 canonical 名 = `Module.Data.Ctor`（entry 文件 `Data.Ctor`）。
+-- 不同数据类型的同名构造子因此天然不冲突；裸名按期望类型在候选里选（见 Resolve/Elab）。
+-- | 自动补注（M41 新增导出）：ctorCanonical。
+ctorCanonical : String -> String -> String -> String
+ctorCanonical prefix dname cname = mangle prefix "${dname}.${cname}"
 
 importName : Import -> String
 importName (Import name isQualified alias sp) = name
@@ -200,7 +221,7 @@ missingModule name =
 
 moduleDecls : List Module -> String -> Result (List Decl)
 moduleDecls modules name = case findModule modules name of
-  Just (Module mname mpkg imports imps decls exports mcaps fx) => Ok decls
+  Just (Module mname mpkg imports imps decls exports mcaps mtrust fx) => Ok decls
   Nothing => missingModule name
 
 moduleCtors : List Module -> String -> Result (List String)
@@ -208,7 +229,7 @@ moduleCtors modules name = andThen (moduleDecls modules name) (\decls => Ok (cto
 
 exportsOf : List Module -> String -> Result (List ExportEntry)
 exportsOf modules name = case findModule modules name of
-  Just (Module mname mpkg imports imps decls exports mcaps fx) => Ok exports
+  Just (Module mname mpkg imports imps decls exports mcaps mtrust fx) => Ok exports
   Nothing => missingModule name
 
 -- 按命名空间查公开名：kinds 是允许的 kind 列表（val / ctor / type）。
@@ -222,6 +243,17 @@ findExportValue entries name = lookupExport ["val", "ctor"] name entries
 
 findExportCtor : List ExportEntry -> String -> Maybe ExportEntry
 findExportCtor entries name = lookupExport ["ctor"] name entries
+
+-- M41：同名构造子可以有多条导出（不同族、不同 target）。裸名解析要拿全集。
+-- | 自动补注（M41 新增导出）：findExportCtors。
+findExportCtors : List ExportEntry -> String -> List ExportEntry
+findExportCtors entries name = filterCtors name entries
+
+-- | 自动补注（M41 新增导出）：filterCtors。
+filterCtors : String -> List ExportEntry -> List ExportEntry
+filterCtors name [] = []
+filterCtors name (e :: rest) =
+  if e.kind == "ctor" && e.public == name then e :: filterCtors name rest else filterCtors name rest
 
 findExportType : List ExportEntry -> String -> Maybe ExportEntry
 findExportType entries name = lookupExport ["type"] name entries
@@ -237,12 +269,12 @@ modulesExportingValue : List Module -> List Import -> String -> Result (List (Pa
 modulesExportingValue modules imports name =
   modulesExportingValueFrom modules (openModuleNames imports) name
 
+-- | 自动补注（M41 新增导出）：modulesExportingCtorFrom。
 modulesExportingCtorFrom : List Module -> List String -> String -> Result (List (Pair String ExportEntry))
 modulesExportingCtorFrom modules [] name = Ok []
-modulesExportingCtorFrom modules (m :: rest) name = andThen (exportsOf modules m) (\es => case findExportCtor es name of
-  Just e => andThen (modulesExportingCtorFrom modules rest name) (\more => Ok (Pair m e :: more))
-  Nothing => modulesExportingCtorFrom modules rest name
-)
+modulesExportingCtorFrom modules (m :: rest) name =
+  andThen (exportsOf modules m)
+    (\es => andThen (modulesExportingCtorFrom modules rest name) (\more => Ok (append (map (\e => Pair m e) (findExportCtors es name)) more)))
 
 modulesExportingCtor : List Module -> List Import -> String -> Result (List (Pair String ExportEntry))
 modulesExportingCtor modules imports name =
@@ -307,6 +339,31 @@ findModuleFile roots name importerPkg = case collectModuleFiles roots name impor
 
 findModule : List Module -> String -> Maybe Module
 findModule [] name = Nothing
-findModule ((Module mname mpkg imports imps decls exports mcaps fx) :: rest) name =
-  if mname == name then Just (Module mname mpkg imports imps decls exports mcaps fx)
+findModule ((Module mname mpkg imports imps decls exports mcaps mtrust fx) :: rest) name =
+  if mname == name then Just (Module mname mpkg imports imps decls exports mcaps mtrust fx)
   else findModule rest name
+
+-- M41：target 是否是某个 data/record 的构造子（用于把 trait method 从“构造子重载候选”
+-- 里排除；trait method 不是族的构造子，仍按原名字解析）。
+-- | 自动补注（M41 新增导出）：isDataOrRecordCtorTarget。
+isDataOrRecordCtorTarget : List Module -> String -> Bool
+isDataOrRecordCtorTarget [] target = False
+isDataOrRecordCtorTarget (m :: rest) target =
+  isCtorTargetInDecls (moduleNameOf m) target (moduleDeclsOf m)
+    || isDataOrRecordCtorTarget rest target
+
+-- | 自动补注（M41 新增导出）：isCtorTargetInDecls。
+isCtorTargetInDecls : String -> String -> List Decl -> Bool
+isCtorTargetInDecls mname target [] = False
+isCtorTargetInDecls mname target (d :: rest) = case d of
+  DData dname params kind ctors derivings lin sp =>
+    anyCtorTarget mname dname target ctors || isCtorTargetInDecls mname target rest
+  DRecord dname params fields derivings lin sp =>
+    mangle mname dname == target || isCtorTargetInDecls mname target rest
+  _ => isCtorTargetInDecls mname target rest
+
+-- | 自动补注（M41 新增导出）：anyCtorTarget。
+anyCtorTarget : String -> String -> String -> List Ctor -> Bool
+anyCtorTarget mname dname target [] = False
+anyCtorTarget mname dname target (c :: rest) =
+  ctorCanonical mname dname (ctorName c) == target || anyCtorTarget mname dname target rest

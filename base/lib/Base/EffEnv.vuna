@@ -18,43 +18,54 @@ module Base.EffEnv
 import Base.Eff
 import Base.IO
 
+-- | env 效应的命名实例 `V1` / `V2`，同一程序可安装多个 env handler。
 data Name : Type where
   V1 : Name
   V2 : Name
 
+-- | 运行时实例码：`V1 = 0`、`V2 = 1`；send 与 handler 用同一个码。
 nameCode : Name -> Int
 nameCode V1 = 0
 nameCode V2 = 1
 
+-- | env 效应的标签类型 `Env n`：只做行索引，没有运行时构造子。
 data Env : Name -> Type where
 
+-- | env 操作：`GetEnv` 带变量名、`GetCwd`、`ExecPath`。
 data EnvOp : Type where
   GetEnv : String -> EnvOp
   GetCwd : EnvOp
   ExecPath : EnvOp
 
+-- | 操作的结果类型族：三个操作都返回 `String`。
 resEnv : EnvOp -> Type
 resEnv (GetEnv k) = String
 resEnv GetCwd = String
 resEnv ExecPath = String
 
+-- | 通过命名实例取环境变量；真实 handler 走 `Base.IO.getEnv`（未设置或为空串都返回空串）。
 envGetEnv : (n : Name) -> String -> {r : Row} -> {w : Member (Env n) r} -> Eff r String
 envGetEnv n k = sendCore (Env n) "env" (nameCode n) (GetEnv k)
 
+-- | 通过命名实例取当前工作目录。
 envGetCwd : (n : Name) -> {r : Row} -> {w : Member (Env n) r} -> Eff r String
 envGetCwd n = sendCore (Env n) "env" (nameCode n) GetCwd
 
+-- | 通过命名实例取可执行文件路径。
 envExecPath : (n : Name) -> {r : Row} -> {w : Member (Env n) r} -> Eff r String
 envExecPath n = sendCore (Env n) "env" (nameCode n) ExecPath
 
+-- | 一阶 handler：`ret` / `opH` 由调用方给出，结果行删除 `Env n`。
 handleEnv : {a : Type} -> {b : Type} -> {r : Row} -> (n : Name) -> {w : Member (Env n) r} -> (a -> b) -> ((o : EnvOp) -> (resEnv o -> b) -> b) -> Eff r a -> Eff (Base.Eff.rowRem (Env n) r) b
 handleEnv n ret opH comp = handleCore (Env n) "env" (nameCode n) ret opH comp
 
+-- | 真实 handler 的操作解释：把三个操作映射到 `Base.IO` 的 `getEnv` / `getCwd` / `execPath`。
 envOpHIO : {a : Type} -> (o : EnvOp) -> (resEnv o -> IO a) -> IO a
 envOpHIO op k = case op of
   GetEnv name => prim_bindIO (getEnv name) (\v => k v)
   GetCwd => prim_bindIO getCwd (\v => k v)
   ExecPath => prim_bindIO execPath (\v => k v)
 
-handleEnvIO : {a : Type} -> {r : Row} -> (n : Name) -> Eff (RCons (Env n) r) a -> Eff r (IO a)
+-- | IO-backed handler：结果行删除 `Env n`，answer 是 IO 动作，可交给 `runIOAnswer`。
+handleEnvIO : {a : Type} -> {r : Row} -> (n : Name) -> Eff (Env n :: r) a -> Eff r (IO a)
 handleEnvIO n comp = handleEnv n (\a => prim_pureIO a) envOpHIO comp

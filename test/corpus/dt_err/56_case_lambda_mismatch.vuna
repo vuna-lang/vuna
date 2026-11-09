@@ -1,0 +1,8 @@
+-- B32 负例：分支 lambda 的 Result 类型必须一致。
+main : Int
+main =
+  let
+    f = case True of
+      True => \x => x + 1
+      False => \x => x ++ "s"
+  in f 41

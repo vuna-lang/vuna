@@ -322,16 +322,16 @@ cannotProveMsg : List String -> String
 cannotProveMsg comp =
   let
     desc = groupMessage comp
-  in tcMsg (CannotProveTermination desc) (VCons desc VNil)
+  in tcMsg (CannotProveTermination desc) (desc :: [])
 
 collectClauses : List (Pair (List Pat) Expr) -> List String -> List String -> List (Pair String (List Int)) -> Int -> String -> HashMap (List Int) -> Pair Bool (List (Pair (Pair String String) Int)) -> Result (Pair Bool (List (Pair (Pair String String) Int)))
 collectClauses [] comp ctors projs p caller facts acc = Ok acc
 collectClauses (cl :: rest) comp ctors projs p caller facts acc = case firstOf acc of
   False => Ok acc
   True => case strClause comp ctors projs p caller facts cl of
-    Pair valid edges =>
-      if valid then collectClauses rest comp ctors projs p caller facts (Pair True (append (secondOf acc) edges))
-      else Ok (Pair False (secondOf acc))
+    Pair True edges =>
+      collectClauses rest comp ctors projs p caller facts (Pair True (append (secondOf acc) edges))
+    Pair False edges => Ok (Pair False (secondOf acc))
 
 collectMeasure : List String -> HashMap (List (Pair (List Pat) Expr)) -> List String -> List (Pair String (List Int)) -> Int -> HashMap (List Int) -> List String -> Pair Bool (List (Pair (Pair String String) Int)) -> Result (Pair Bool (List (Pair (Pair String String) Int)))
 collectMeasure comp defTbl ctors projs p facts [] acc = Ok acc
@@ -415,7 +415,7 @@ checkTerminationDeclsWith own decls =
     nodes = defNames defs
     rgT = reverseAdjOf g
     callerNames = filter (\n => notEmpty (adjOf n gT)) nodes
-    facts = computePosFactsWork nodes defTbl rgT 16 [] callerNames
+    facts = computePosFactsWork nodes defTbl rgT 1024 [] callerNames
     _ = stamp "term-facts"
     fuel = graphFuel g nodes
     post = postOrder gT g nodes

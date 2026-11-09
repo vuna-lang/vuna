@@ -1,0 +1,8 @@
+-- B31：参数化 `deriving (Show)` 实例经 blanket `Show a => Interp a` 插值。
+-- 实例字典的 tele 实参（元素类型）必须按擦除 rig 落地，不能出现在 OCaml 产物里。
+data Box a : Type where
+  MkBox : a -> Box a
+deriving (Show)
+
+main : String
+main = "${MkBox 1}"

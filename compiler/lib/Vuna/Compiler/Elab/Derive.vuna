@@ -146,9 +146,11 @@ showAlts proj ((Ctor cn ty ar cnsp) :: rest) sp =
   in Pair pat (showCtor proj cn vs sp) :: showAlts proj rest sp
 
 -- 零参 ⇒ `"C"`；否则 `"(C " ++ show f0 ++ " " ++ .. ++ ")"`。
+-- | 自动补注（M41 新增导出）：showCtor。
 showCtor : String -> String -> List String -> Span -> Expr
-showCtor proj cn [] sp = EStr cn sp
-showCtor proj cn vs sp = EApp (EVar "++" sp) [EStr "(${cn} " sp, showFields proj vs sp] sp
+showCtor proj cn [] sp = EStr (ctorShortName cn) sp
+showCtor proj cn vs sp =
+  EApp (EVar "++" sp) [EStr "(${ctorShortName cn} " sp, showFields proj vs sp] sp
 
 showFields : String -> List String -> Span -> Expr
 showFields proj [] sp = EStr ")" sp

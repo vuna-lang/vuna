@@ -36,6 +36,7 @@ import Base.Ord
 -- `+` / `-` 的 fixity 声明在 Base.Int；base 模块不自动注入 Prelude，
 -- range 的算术需要它的声明进入 import 闭包。
 import Base.Int
+import Base.Show
 
 -- `::` 是 canonical 构造子 `Cons` 的中缀别名（表达式与 pattern 都走这条声明）。
 infixr 5 :: = Cons
@@ -52,6 +53,7 @@ append : List a -> List a -> List a
 append [] ys = ys
 append (x :: xs) ys = x :: append xs ys
 
+-- | 内部：把 `xs` 逆序前插到 `acc` 上（尾递归，供 `reverse` / `concatMapGo` 复用）。
 reverseOnto : List a -> List a -> List a
 reverseOnto [] acc = acc
 reverseOnto (x :: xs) acc = reverseOnto xs (x :: acc)
@@ -65,6 +67,7 @@ reverse xs = reverseOnto xs []
 length : List a -> Nat
 length xs = natFromInt (lengthInt xs)
 
+-- | 内部：以 `Int` 累加的列表长度（`length` 的实现，末尾一次 `natFromInt`，避免逐元素 Nat 加法）。
 lengthInt : List a -> Int
 lengthInt [] = 0
 lengthInt (x :: xs) = 1 + lengthInt xs
@@ -96,6 +99,7 @@ foldr f acc (x :: xs) = f x (foldr f acc xs)
 concatMap : (a -> List b) -> List a -> List b
 concatMap f xs = concatMapGo f xs []
 
+-- | 内部：`concatMap` 的尾递归 accumulator 实现。每段逆序前插进 `acc`，最后整体 `reverse`，总代价 O(所有段长之和)。
 concatMapGo : (a -> List b) -> List a -> List b -> List b
 concatMapGo f [] acc = reverse acc
 concatMapGo f (x :: rest) acc = concatMapGo f rest (append (reverse (f x)) acc)
@@ -159,3 +163,20 @@ instance Functor List where
 instance Monad List where
   bind xs f = concatMap f xs
   pure x = [x]
+
+-- B31：容器 `Show` 实例。元素用 `show`（约束实例的 ctx 字典）；拼接只用 `++`
+-- intrinsic——`strConcatMany` 等带 List 桥接的 intrinsic 在「声明 List 族的单元」里
+-- 会触发 split 生成器的自依赖（bridgeUnit 固定为 List 单元），故避开。
+-- `++` 无 fixity 声明时用反引号形式（List 不能 import Base.String，避免成环）。
+-- | 内部：把已 `show` 的元素列表拼成 `[a, b, c]` 的正文（不含方括号，供 Show 实例使用）。
+showElems : List String -> String
+showElems [] = ""
+showElems (x :: rest) = x `++` (showElemsTail rest)
+
+-- | 内部：`showElems` 的尾部拼接，每个元素前加 `, `。
+showElemsTail : List String -> String
+showElemsTail [] = ""
+showElemsTail (x :: rest) = ", " `++` x `++` (showElemsTail rest)
+
+instance Show a => Show (List a) where
+  show xs = "[" `++` (showElems (map (\x => show x) xs)) `++` "]"

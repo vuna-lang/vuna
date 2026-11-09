@@ -1,3 +1,4 @@
+-- | 内建声明的唯一真源（M27）：内建/原语的名字、签名形状、interp 归约标签、能力与可见性。
 module Vuna.Compiler.Intrinsics
   ( Capability(..)
   , IType(..)
@@ -76,6 +77,7 @@ import Base.HashMap
 -- ---------------------------------------------------------------
 -- 能力（capability）：显式、不可按包名伪造的效应声明面
 -- ---------------------------------------------------------------
+-- | 效应能力：显式、不可按包名伪造的效应声明面（`[capabilities] effects`）。
 data Capability : Type where
   CapConsole : Capability
   CapFs : Capability
@@ -87,6 +89,7 @@ data Capability : Type where
   -- 网络（loopback TCP / Unix domain socket；工具链 server 模式用）。
   CapNetwork : Capability
 
+-- | 能力的源码名字（`vuna.toml` / 诊断里用的字符串）。
 capabilityName : Capability -> String
 capabilityName CapConsole = "console"
 capabilityName CapFs = "fs"
@@ -96,12 +99,15 @@ capabilityName CapClock = "clock"
 capabilityName CapUnsafe = "unsafe"
 capabilityName CapNetwork = "net"
 
+-- | 所有能力的源码名字列表（诊断「缺能力」提示用）。
 capabilityNames : List String
 capabilityNames = map capabilityName allCapabilities
 
+-- | 全部效应能力（`capabilityNames` / 放行检查用）。
 allCapabilities : List Capability
 allCapabilities = [CapConsole, CapFs, CapProcess, CapEnv, CapClock, CapUnsafe, CapNetwork]
 
+-- | 从源码名字解析能力；未知名字返回 `Nothing`。
 parseCapability : String -> Maybe Capability
 parseCapability "console" = Just CapConsole
 parseCapability "fs" = Just CapFs
@@ -115,6 +121,7 @@ parseCapability _ = Nothing
 -- ---------------------------------------------------------------
 -- 签名形状：只表达内建签名需要的形状（不含依赖 pi / 多态细节）
 -- ---------------------------------------------------------------
+-- | 内建签名形状：只表达内建签名需要的形状（不含依赖 pi / 多态细节）。
 data IType : Type where
   -- 宇宙 `Type`（类型构造子 / 类型变量参数的域）
   ITy : IType
@@ -139,6 +146,7 @@ data IType : Type where
   -- 隐式类型参数绑定（`{a : Type} -> ...`）；不进函数 arity。
   IPi : String -> IType -> IType
 
+-- | 签名形状的函数 arity：`IFun`/`IFun1` 各计 1，隐式 `IPi` 不计，其余为 0。
 arityOfType : IType -> Int
 arityOfType (IFun _ cod) = 1 + arityOfType cod
 arityOfType (IFun1 _ cod) = 1 + arityOfType cod
@@ -151,16 +159,22 @@ arityOfType _ = 0
 -- 与 `Int` / `String` 两个 primitive 类型名不同，这些是**带参数的**类型构造子：
 -- 名字恒可见（prelude 类型层），codegen 按固定 OCaml 类型渲染（见 Codegen.Decl）。
 -- 参数个数的唯一真源在此；Elab.Prelude 据此生成 kind，Codegen.Decl 据此渲染。
+-- | 内建类型构造子（M33 W3）：带参数的类型构造子，名字恒可见，参数个数在此定。
 record TypeIntrinsic where
+  -- | 构造子的源码名字（`Array` / `IORef` / `MArray` / `Buffer`）。
   typeIntrinsicCtorName : String
+  -- | 类型参数个数（`Buffer` 为 0）。
   typeIntrinsicCtorArity : Int
 
+-- | 取内建类型构造子的名字。
 typeIntrinsicCtorName : TypeIntrinsic -> String
 typeIntrinsicCtorName (TypeIntrinsic name arity) = name
 
+-- | 取内建类型构造子的类型参数个数。
 typeIntrinsicCtorArity : TypeIntrinsic -> Int
 typeIntrinsicCtorArity (TypeIntrinsic name arity) = arity
 
+-- | 全部内建类型构造子及其 arity（Elab.Prelude 生成 kind、Codegen.Decl 渲染的唯一真源）。
 typeIntrinsicArities : List TypeIntrinsic
 typeIntrinsicArities =
   [ TypeIntrinsic "Array" 1,
@@ -169,52 +183,55 @@ typeIntrinsicArities =
     TypeIntrinsic "Buffer" 0
   ]
 
--- `-1` = 不是内建类型构造子。
+-- | 名字对应的内建类型构造子 arity；不是内建类型构造子时返回 `-1`。
 typeIntrinsicArityOf : String -> Int
 typeIntrinsicArityOf name = typeIntrinsicArityOfRest name typeIntrinsicArities
 
+-- | `typeIntrinsicArityOf` 的递归实现：在 arity 表里线性找名字。
 typeIntrinsicArityOfRest : String -> List TypeIntrinsic -> Int
 typeIntrinsicArityOfRest name [] = 0 - 1
 typeIntrinsicArityOfRest name (t :: rest) =
   if typeIntrinsicCtorName t == name then typeIntrinsicCtorArity t
   else typeIntrinsicArityOfRest name rest
 
+-- | 所有内建类型构造子的名字列表（类型位置放行面用）。
 typeIntrinsicCtorNames : List String
 typeIntrinsicCtorNames = map typeIntrinsicCtorName typeIntrinsicArities
 
--- IO 的**源级名字**：`IO` 是编译器内建效应类型（不是 base 的 data），恒可见。
--- 源级名字，恒进 prelude 类型名名单（禁止 ad-hoc 重定义 + Loader 放行）；
+-- | IO 的**源级名字**：`IO` 是编译器内建效应类型（不是 base 的 data），恒可见。
 -- canonical 身份就是它（没有 base data）。
 ioTypeName : String
 ioTypeName = "IO"
 
--- 运行时「可命名类型头」的唯一真源：primitive 类型 + 内建类型构造子 + 内建效应类型。
+-- | 运行时「可命名类型头」的唯一真源：primitive 类型 + 内建类型构造子 + 内建效应类型。
 -- 其它类型头（类型族 / axiom / 未知全局）在运行时不可命名，按擦除依赖类型处理。
--- 数据族的身份不在本表里（按各程序自己的 DtData 表判定）。
 isTypeConstructorName : String -> Bool
 isTypeConstructorName name =
   name == intTypeName || name == strTypeName || name == ioTypeName || typeIntrinsicArityOf name >= 0
 
--- IO 代数（构造/绑定/执行）的内建名；codegen 需要按名字生成 thunk 组合子。
+-- | IO 代数「构造」原语的名字（`IO a` 的纯构造）。
 primPureIOName : String
 primPureIOName = "prim_pureIO"
 
+-- | IO 代数「绑定」原语的名字（`IO a -> (a -> IO b) -> IO b`）。
 primBindIOName : String
 primBindIOName = "prim_bindIO"
 
+-- | IO 代数「线性绑定」原语的名字（continuation binder 为 1，M38）。
 primBindIO1Name : String
 primBindIO1Name = "prim_bindIO1"
 
+-- | IO 代数「执行」原语的名字（需 `unsafe` 能力，在 `main` 之外跑动作）。
 primRunIOName : String
 primRunIOName = "prim_runIO"
 
--- 表现层 cast：精化器在「运行时位置出现不可命名的擦除依赖类型」时插入
+-- | 表现层 cast：精化器在「运行时位置出现不可命名的擦除依赖类型」时插入
 -- （见 docs/reference/effects.md §5/§6）。隐藏 intrinsic：只供精化器引用，
--- 不对用户源码可见；运行时是 OCaml 的 `%identity`（`Obj.magic`），求值期由
--- `IntrinsicOp.OpIdentity` 归约成参数本身，因此对定义性相等/正规化透明。
+-- 不对用户源码可见；求值期由 `IntrinsicOp.OpIdentity` 归约成参数本身。
 primEraseName : String
 primEraseName = "prim_erase"
 
+-- | 名字是否属于 IO 代数（构造/绑定/执行）原语；codegen 据此走 thunk 组合子特判。
 isIOAlgebraName : String -> Bool
 isIOAlgebraName name =
   name == primPureIOName
@@ -222,7 +239,7 @@ isIOAlgebraName name =
     || name == primBindIO1Name
     || name == primRunIOName
 
--- prelude 类型层名字：primitive 类型 + 内建类型构造子 + 内建效应类型 IO
+-- | prelude 类型层名字：primitive 类型 + 内建类型构造子 + 内建效应类型 IO
 -- （禁止重定义 + Loader 放行）。
 preludeTypeNames : List String
 preludeTypeNames = append typeIntrinsicNames (append typeIntrinsicCtorNames [ioTypeName])
@@ -230,6 +247,7 @@ preludeTypeNames = append typeIntrinsicNames (append typeIntrinsicCtorNames [ioT
 -- ---------------------------------------------------------------
 -- interp 归约标签（Core.Eval 按它归约；OpNone = 不在 interp 归约）
 -- ---------------------------------------------------------------
+-- | interp 归约标签（`Core.Eval` 按它归约；`OpNone` = 不在 interp 归约）。
 data IntrinsicOp : Type where
   OpNone : IntrinsicOp
   OpAdd : IntrinsicOp
@@ -278,27 +296,38 @@ data IntrinsicOp : Type where
 --
 -- 字段：名字、签名形状、interp 归约标签、所需能力（Nothing = 纯）、runtime 表达式、
 -- 是否对用户源码可见（False = 只供 codegen 映射的内部名）。
+-- | 内建声明：名字、签名形状、interp 归约标签、所需能力、runtime 表达式、可见性。
 record Intrinsic where
+  -- | 内建的源码名字（如 `+`、`strFromInt`、`prim_print`）。
   intrinsicName : String
+  -- | 签名形状（`IType`）。
   intrinsicSignature : IType
+  -- | interp 归约标签。
   intrinsicOp : IntrinsicOp
+  -- | 所需能力（`Nothing` = 纯）。
   intrinsicCapability : Maybe Capability
+  -- | OCaml runtime 表达式（codegen 全局名 → runtime 的映射目标）。
   intrinsicRuntime : String
+  -- | 是否对用户源码可见（`False` = 只供 codegen 映射的内部名 `bi_*`）。
   intrinsicVisible : Bool
 
+-- | 取内建的名字。
 intrinsicName : Intrinsic -> String
 intrinsicName (Intrinsic name sig op cap runtime visible) = name
 
+-- | 取内建的签名形状。
 intrinsicSignature : Intrinsic -> IType
 intrinsicSignature (Intrinsic name sig op cap runtime visible) = sig
 
+-- | 取内建所需的能力（`Nothing` = 纯）。
 intrinsicCapability : Intrinsic -> Maybe Capability
 intrinsicCapability (Intrinsic name sig op cap runtime visible) = cap
 
+-- | 该内建是否对用户源码可见。
 intrinsicVisible : Intrinsic -> Bool
 intrinsicVisible (Intrinsic name sig op cap runtime visible) = visible
 
--- 该内建的 runtime 表达式依赖 canonical `Base.List.List` 桥接 helper（`dtp_*`）。
+-- | 该内建的 runtime 表达式依赖 canonical `Base.List.List` 桥接 helper（`dtp_*`）。
 -- 没有 base 的包用这些内建时，生成前必须报错（而不是产出 Unbound value）。
 needsListBridge : Intrinsic -> Bool
 needsListBridge i = case i.intrinsicRuntime of
@@ -314,7 +343,7 @@ needsListBridge i = case i.intrinsicRuntime of
   "(fun a -> dtp_listOf (Array.to_list a))" => True
   _ => False
 
--- canonical 族（base 的 data 声明）必须由 vuna-base 以固定的构造子集合声明；
+-- | canonical 族（base 的 data 声明）必须由 vuna-base 以固定的构造子集合声明；
 -- 其它同名声明是非法伪造。IO 不在其中：它是编译器内建效应类型（没有构造子）。
 canonicalCtorsFor : String -> Maybe (List String)
 canonicalCtorsFor name =
@@ -322,16 +351,18 @@ canonicalCtorsFor name =
   else if name == listFamilyName then Just [listNilCtor, listConsCtor]
   else if name == natTypeName then Just [natZeroCtor, natSuccCtor] else Nothing
 
+-- | 内建的函数 arity（按 `arityOfType (intrinsicSignature i)` 计算）。
 intrinsicArity : Intrinsic -> Int
 intrinsicArity i = arityOfType (intrinsicSignature i)
 
--- 签名尾部是 `IIO _`：该内建返回 IO 动作，codegen 必须把 runtime 表达式包成
+-- | 签名尾部是 `IIO _`：该内建返回 IO 动作，codegen 必须把 runtime 表达式包成
 -- thunk（C2 内建模式：`fun args -> fun _ -> rt args`；C1 legacy 模式：`MkIO (fun _ -> …)`）。
 -- 零参原语因此是真正的值而不是每次求值的表达式。IO 代数原语（pure/bind）的 runtime
 -- 本身就是动作值，codegen 走 `isIOAlgebraName` 特判，不套通用包装。
 intrinsicReturnsIO : Intrinsic -> Bool
 intrinsicReturnsIO i = typeReturnsIO (intrinsicSignature i)
 
+-- | `IType` 尾部是否为 `IIO`（供 `intrinsicReturnsIO` 递归下钻函数箭头）。
 typeReturnsIO : IType -> Bool
 typeReturnsIO (IIO _) = True
 typeReturnsIO (IFun _ cod) = typeReturnsIO cod
@@ -339,71 +370,79 @@ typeReturnsIO (IFun1 _ cod) = typeReturnsIO cod
 typeReturnsIO (IPi _ cod) = typeReturnsIO cod
 typeReturnsIO _ = False
 
+-- | 该内建是否需要能力（`intrinsicCapability` 非 `Nothing`）。
 isEffectfulIntrinsic : Intrinsic -> Bool
 isEffectfulIntrinsic i = case intrinsicCapability i of
   Just _ => True
   Nothing => False
 
--- 语言 primitive 类型名（Bool 不在其中：它是 base 的普通 data 声明）。
+-- | 语言 primitive 类型名（Bool 不在其中：它是 base 的普通 data 声明）。
 typeIntrinsicNames : List String
 typeIntrinsicNames = [intTypeName, strTypeName]
 
+-- | `Int` primitive 类型的源码名字。
 intTypeName : String
 intTypeName = "Int"
 
+-- | `String` primitive 类型的源码名字。
 strTypeName : String
 strTypeName = "String"
 
--- Bool 是 base 里的普通 data 声明：身份 = 完整符号 `Base.Bool.Bool`（M27）。
+-- | Bool 的完整符号身份：它是 base 里的普通 data 声明，身份 = `Base.Bool.Bool`（M27）。
 boolTypeName : String
 boolTypeName = "Base.Bool.Bool"
 
+-- | canonical `True` 构造子的完整符号。
 boolTrueCtor : String
-boolTrueCtor = "Base.Bool.True"
+boolTrueCtor = "Base.Bool.Bool.True"
 
+-- | canonical `False` 构造子的完整符号。
 boolFalseCtor : String
-boolFalseCtor = "Base.Bool.False"
+boolFalseCtor = "Base.Bool.Bool.False"
 
--- Nat 是 base 里的普通 data 声明（`Base.Nat`），身份 = 完整符号；运行时表示固定为
--- OCaml `int`（Zero=0、Succ n=n+1 饱和），所以**不生成**变体类型（见 Codegen.Decl）。
+-- | Nat 的完整符号身份（`Base.Nat.Nat`）；运行时表示固定为 OCaml `int`
+-- （Zero=0、Succ n=n+1 饱和），所以**不生成**变体类型（见 Codegen.Decl）。
 natTypeName : String
 natTypeName = "Base.Nat.Nat"
 
+-- | canonical `Zero` 构造子的完整符号。
 natZeroCtor : String
-natZeroCtor = "Base.Nat.Zero"
+natZeroCtor = "Base.Nat.Nat.Zero"
 
+-- | canonical `Succ` 构造子的完整符号。
 natSuccCtor : String
-natSuccCtor = "Base.Nat.Succ"
+natSuccCtor = "Base.Nat.Nat.Succ"
 
--- 类型位置的放行面：primitive 类型名 + 内建类型构造子（M33 W3）。
+-- | 类型位置的放行面：primitive 类型名 + 内建类型构造子（M33 W3）。
 isIntrinsicTypeName : String -> Bool
 isIntrinsicTypeName name = memName name preludeTypeNames
 
--- base 里普通 data 声明的**完整符号身份**（不是短名）：List / IO 的判定只认它们。
+-- | List 的完整符号身份（base 里普通 data 声明，不是短名）：List 的判定只认它。
 listFamilyName : String
 listFamilyName = "Base.List.List"
 
+-- | canonical `Nil` 构造子的完整符号。
 listNilCtor : String
-listNilCtor = "Base.List.Nil"
+listNilCtor = "Base.List.List.Nil"
 
+-- | canonical `Cons` 构造子的完整符号。
 listConsCtor : String
-listConsCtor = "Base.List.Cons"
+listConsCtor = "Base.List.List.Cons"
 
--- `IO` 是编译器内建效应类型（与 Int/String 同级的类型构造子，kind `Type -> Type`）：
--- 运行时表示是裸 thunk `int -> 'a`，没有构造子；`Base.IO` 只导出 API 与实例。
--- 身份 = 源级名字 `IO`（M37 IO 升格；此前是 base 的普通 data `Base.IO.IO`）。
+-- | IO 的 canonical 族身份 = 源级名字 `IO`（M37 IO 升格；此前是 base 的普通 data）。
 ioFamilyName : String
 ioFamilyName = ioTypeName
 
--- M36：模板字符串插值的 trait 与方法（canonical 名）。编译器把 `${e}` 降级成对
+-- | M36：模板字符串插值的 trait 的 canonical 名。编译器把 `${e}` 降级成对
 -- `interp` 方法投影的调用（`Loader.Resolve`），转换语义完全由 base 里的实例决定。
 interpTypeName : String
 interpTypeName = "Base.Interp.Interp"
 
+-- | M36：模板插值 trait 的 `interp` 方法的 canonical 名。
 interpMethodName : String
 interpMethodName = "Base.Interp.interp"
 
--- 所有内建声明。用户可见项进 Loader/prelude；内部 `bi_*` 只服务 codegen。
+-- | 所有内建声明。用户可见项进 Loader/prelude；内部 `bi_*` 只服务 codegen。
 allIntrinsics : List Intrinsic
 -- 效果原语（M27：只保留 `prim_*` 名；公开名删除，用户经 Base.IO 或显式能力）。
 -- 精化器合成的比较/相等特化名（内部：不对用户源码可见）。
@@ -426,7 +465,7 @@ allIntrinsics : List Intrinsic
 -- 只供 `Base.Eff` 的信任包装使用；类型在源码层由 Base.Eff 的 API 收紧，
 -- 运行时表达式用 Obj.magic 桥接（与 M39 的不透明 cast 同一套表示）。
 -- Layer 3：最小并发（OCaml 5 Domain）。只允许在 main 域 fork/await；任务体应是
--- 行已被处理干净的 Eff（Base.EffAsync 的 API 强制 RNil）。
+-- 行已被处理干净的 Eff（Base.EffAsync 的 API 强制 Nil）。
 -- W9：单线程 fiber 调度器原语（Base.EffSched 的信任边界；runtime = dtp_sched_*）。
 -- 与 effect 原语一样可见但要求 `unsafe` 能力：只有声明了 unsafe 的包（base）能直调。
 -- 原生睡眠（W10 收尾）：微秒；真实实现是 `Unix.sleepf`（阻塞，非忙等）。
@@ -547,22 +586,26 @@ allIntrinsics =
     Intrinsic "bi_ge_generic" (IFun IInt (IFun IInt IBool)) OpGeGeneric Nothing "bi_ge_generic" False
   ]
 
+-- | 名字 → 内建声明的查询表（由 `allIntrinsics` 一次性建好，供 `findIntrinsic` 用）。
 intrinsicTbl : HashMap Intrinsic
 intrinsicTbl =
   Base.HashMap.insertAll (map (\i => Pair (intrinsicName i) i) allIntrinsics)
     (Base.HashMap.fromList [])
 
+-- | 按名字查内建声明（内部用 `HashMap` 表）；内部 `bi_*` 名也能查到。
 findIntrinsic : String -> Maybe Intrinsic
 findIntrinsic name = Base.HashMap.lookup name intrinsicTbl
 
+-- | 名字是否是**对用户源码可见**的内建（内部 `bi_*` 返回 `False`）。
 isIntrinsicName : String -> Bool
 isIntrinsicName name = case findIntrinsic name of
   Just i => intrinsicVisible i
   Nothing => False
 
+-- | 用户可见的内建声明子集（进 Loader / prelude）。
 userIntrinsics : List Intrinsic
 userIntrinsics = filter intrinsicVisible allIntrinsics
 
--- 用户可见的内建值名字（prelude 全局与「禁止重定义」名单共用）。
+-- | 用户可见的内建值名字（prelude 全局与「禁止重定义」名单共用）。
 preludeValueNames : List String
 preludeValueNames = map intrinsicName userIntrinsics

@@ -32,7 +32,7 @@ allVarPats (p :: rest) = case p of
 
 multiToExpr : List (Pair String (List String)) -> List (Pair (List Pat) Expr) -> Result Expr
 multiToExpr table clauses = case arityOf clauses of
-  Nothing => Err (tcMsg FunctionNoClauses VNil)
+  Nothing => Err (tcMsg FunctionNoClauses [])
   Just n =>
     let
       names = paramNames n
@@ -71,7 +71,7 @@ litAltExpr table clauses pos restParams fuel =
 litAltExprGo : List (Pair String (List String)) -> List (Pair (List Pat) Expr) -> String -> List String -> Int -> Result Expr
 litAltExprGo table clauses pos restParams fuel = if fuel <= 0 then Err "DT: internal: pattern matrix fuel exhausted"
 else case clauses of
-  [] => Err (tcMsg IntStringCaseNeedsFallback VNil)
+  [] => Err (tcMsg IntStringCaseNeedsFallback [])
   (Pair (p :: ps) body) :: rest => case p of
     PVar pname psp =>
       andThen (buildColumnExpr table (stripFirstCol clauses) restParams (fuel - 1))
@@ -84,7 +84,7 @@ else case clauses of
   -- 变量/通配行也匹配这个字面量，必须一起进入子矩阵，否则内层列会缺分支
   -- （`TCon "a" [] => ...; TCon "b" _ => ...; TCon _ _ => ...` 报 missing Cons，
   -- 且 `f "a" [] = 1; f "a" _ = 2; f _ _ = 3` 会丢掉第二条同字面量分支）。
-  (Pair [] body) :: rest => Err (tcMsg ClauseTooManyPatterns VNil)
+  (Pair [] body) :: rest => Err (tcMsg ClauseTooManyPatterns [])
 
 -- 字面量分支的子矩阵：同字面量的行 + 变量/通配行（它们也匹配该字面量），保持原顺序；
 -- 其它字面量的行不匹配这个值。变量/通配行要把该列的头变量改名成 scrutinee 位置名
@@ -123,11 +123,12 @@ litPatExpr (PInt n sp) = EInt n sp
 litPatExpr (PStr s sp) = EStr s sp
 litPatExpr _ = EInt 0 (Span "" 0 0 0 0)
 
+-- | 自动补注（M41 新增导出）：buildColumnExpr。
 buildColumnExpr : List (Pair String (List String)) -> List (Pair (List Pat) Expr) -> List String -> Int -> Result Expr
-buildColumnExpr table clauses params fuel = if fuel <= 0 then Err (tcMsg PatternFuel VNil)
+buildColumnExpr table clauses params fuel = if fuel <= 0 then Err (tcMsg PatternFuel [])
 else if allEmptyPats clauses then Ok (bodyOfFirst clauses)
 else case params of
-  [] => Err (tcMsg ClauseTooManyPatterns VNil)
+  [] => Err (tcMsg ClauseTooManyPatterns [])
   pos :: restParams =>
     if hasAsHead clauses then asColumn table clauses pos restParams fuel
     else if allVarHeads clauses then andThen (buildColumnExpr table (stripFirstCol clauses) restParams (fuel - 1))
@@ -146,7 +147,7 @@ hasAsHead (c :: rest) = case c of
 
 asColumn : List (Pair String (List String)) -> List (Pair (List Pat) Expr) -> String -> List String -> Int -> Result Expr
 asColumn table clauses pos restParams fuel =
-  if fuel <= 0 then Err (tcMsg PatternFuel VNil)
+  if fuel <= 0 then Err (tcMsg PatternFuel [])
   else andThen (buildColumnExpr table (map (asInnerClause pos) clauses) (pos :: restParams) (fuel - 1))
     (\e => Ok e)
 

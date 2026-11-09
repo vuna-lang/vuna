@@ -1,1 +1,1 @@
-case is not exhaustive: missing Base.Bool.False
+case is not exhaustive: missing Bool.False

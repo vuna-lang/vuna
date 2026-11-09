@@ -9,23 +9,30 @@ import Base.HashMap
 import Base.List
 import Base.Pair
 
+-- | `String` 集合，内部是键都映射到 `True` 的 `HashMap Bool`；构造器不导出。
 record HashSet where
   hashSetTable : HashMap Bool
 
+-- | 空集合。
 empty : HashSet
 empty = HashSet (Base.HashMap.fromList [])
 
+-- | 插入一个字符串（重复插入幂等）。
 insert : String -> HashSet -> HashSet
 insert key (HashSet t) = HashSet (Base.HashMap.insert key True t)
 
+-- | 判断字符串是否在集合中。
 member : String -> HashSet -> Bool
 member key (HashSet t) = Base.HashMap.member key t
 
+-- | 从字符串列表构造（重复元素自然去重）。
 fromList : List String -> HashSet
 fromList xs = foldl (\acc, x => insert x acc) empty xs
 
+-- | 按桶序展开为列表，**不保证插入序**。
 toList : HashSet -> List String
 toList (HashSet t) = map firstOf (Base.HashMap.toList t)
 
+-- | 元素个数（`Int`，O(n)，经 `toList` 计数）。
 size : HashSet -> Int
 size s = length (toList s)

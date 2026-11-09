@@ -1,0 +1,13 @@
+import Base.Pair
+
+data Wrap : Type where
+  Wrap : Bool -> Int -> Wrap
+  Other : Wrap
+
+h : Pair Wrap Int -> Int
+h p = case firstOf p of
+  Other => 0
+  Wrap b n => if b then n else 0
+
+main : Int
+main = h (Pair (Wrap True 1) 0)

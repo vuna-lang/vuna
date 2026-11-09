@@ -18,6 +18,7 @@ module Base.Interp (Interp(..)) where
 import Base.Show
 
 -- 插值的唯一方法：把值转成要拼进字符串的文本。
+-- | 模板字符串插值的转换方法：模板里每个 `${e}` 由编译器降级为 `interp e`，返回要拼入字符串的文本。语义全部由实例决定——`Show a => Interp a` 是 blanket（默认输出 `show x`），`String` 的具体实例覆盖 blanket 原样输出，用户可为自定义类型写具体实例覆盖展示；blanket 只作 fallback，具体实例优先。
 trait Interp a where
   interp : a -> String
 

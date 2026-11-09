@@ -1,0 +1,6 @@
+# B33：目录型夹具的独立包上下文（只依赖 vuna-base）。
+[package]
+name = "fix-11-lower-import"
+
+[dependencies]
+vuna-base = "../../../../base"

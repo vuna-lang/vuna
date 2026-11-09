@@ -42,6 +42,9 @@ data LexDiag : Nat -> Type where
   UnterminatedInterpolation : LexDiag Zero
   UnknownEscape : LexDiag Zero
   UnexpectedCharacter : LexDiag Zero
+  -- C40：十进制字面量超出 63 位可表示范围（OCaml int 上界）。词法期直接报错，
+  -- 不再按 `acc * 10 + d` 静默回绕。
+  IntLiteralOutOfRange : LexDiag Zero
 
 lexCode : {n : Nat} -> LexDiag n -> String
 lexCode UnterminatedBlockComment = "LX_UnterminatedBlockComment"
@@ -49,6 +52,7 @@ lexCode UnterminatedString = "LX_UnterminatedString"
 lexCode UnterminatedInterpolation = "LX_UnterminatedInterpolation"
 lexCode UnknownEscape = "LX_UnknownEscape"
 lexCode UnexpectedCharacter = "LX_UnexpectedCharacter"
+lexCode IntLiteralOutOfRange = "LX_IntLiteralOutOfRange"
 
 lexTemplate : {n : Nat} -> LexDiag n -> String
 lexTemplate UnterminatedBlockComment = "unterminated block comment"
@@ -56,6 +60,7 @@ lexTemplate UnterminatedString = "unterminated string literal"
 lexTemplate UnterminatedInterpolation = "unterminated string interpolation (missing closing '}')"
 lexTemplate UnknownEscape = "unknown escape sequence"
 lexTemplate UnexpectedCharacter = "unexpected character"
+lexTemplate IntLiteralOutOfRange = "integer literal is out of range (max is 4611686018427387903)"
 
 -- ---------------------------------------------------------------
 -- PS_：语法诊断
@@ -79,6 +84,9 @@ data PsDiag : Nat -> Type where
   ExpectedPattern : PsDiag Zero
   ExpectedRecordFieldPattern : PsDiag Zero
   ExpectedTopLevelDecl : PsDiag Zero
+  -- D40：非线性格检查——同一绑定作用域内重复的模式绑定名直接拒绝（不实现相等约束）。
+  -- | 同一绑定作用域内出现重复的模式绑定名（非线性格），当前不支持。
+  RepeatedPatternBinder : PsDiag Zero
   -- M36：模板字符串的两个语法边界（空洞 / 模式里带洞）。
   TemplateHoleEmpty : PsDiag Zero
   TemplateInPattern : PsDiag Zero
@@ -129,6 +137,7 @@ psCode ExpectedLetBinding = "PS_ExpectedLetBinding"
 psCode ExpectedPattern = "PS_ExpectedPattern"
 psCode ExpectedRecordFieldPattern = "PS_ExpectedRecordFieldPattern"
 psCode ExpectedTopLevelDecl = "PS_ExpectedTopLevelDecl"
+psCode RepeatedPatternBinder = "PS_RepeatedPatternBinder"
 psCode TemplateHoleEmpty = "PS_TemplateHoleEmpty"
 psCode TemplateInPattern = "PS_TemplateInPattern"
 psCode ExprNotIndented = "PS_ExprNotIndented"
@@ -172,6 +181,8 @@ psTemplate ExpectedLetBinding = "expected a let binding"
 psTemplate ExpectedPattern = "expected pattern"
 psTemplate ExpectedRecordFieldPattern = "expected a record field pattern"
 psTemplate ExpectedTopLevelDecl = "expected a top-level declaration"
+psTemplate RepeatedPatternBinder =
+  "pattern binds the same name more than once; non-linear patterns (repeated binders) are not supported"
 psTemplate TemplateHoleEmpty = "string interpolation \${...} needs an expression"
 psTemplate TemplateInPattern = "string interpolation is not supported in patterns"
 psTemplate ExprNotIndented = "expression is not indented enough"
@@ -218,7 +229,8 @@ lexAll =
     LexEntry (lexCode UnterminatedString) (lexTemplate UnterminatedString) "字符串字面量未闭合",
     LexEntry (lexCode UnterminatedInterpolation) (lexTemplate UnterminatedInterpolation) "模板插值洞未闭合",
     LexEntry (lexCode UnknownEscape) (lexTemplate UnknownEscape) "未知转义序列",
-    LexEntry (lexCode UnexpectedCharacter) (lexTemplate UnexpectedCharacter) "无法识别的字符"
+    LexEntry (lexCode UnexpectedCharacter) (lexTemplate UnexpectedCharacter) "无法识别的字符",
+    LexEntry (lexCode IntLiteralOutOfRange) (lexTemplate IntLiteralOutOfRange) "整数字面量超出范围"
   ]
 
 psAll : List PsEntry
@@ -240,6 +252,7 @@ psAll =
     PsEntry (psCode ExpectedPattern) (psTemplate ExpectedPattern) "期望模式",
     PsEntry (psCode ExpectedRecordFieldPattern) (psTemplate ExpectedRecordFieldPattern) "期望 record 字段模式",
     PsEntry (psCode ExpectedTopLevelDecl) (psTemplate ExpectedTopLevelDecl) "期望顶层声明",
+    PsEntry (psCode RepeatedPatternBinder) (psTemplate RepeatedPatternBinder) "模式重复绑定名（非线性格不支持）",
     PsEntry (psCode TemplateHoleEmpty) (psTemplate TemplateHoleEmpty) "插值洞缺少表达式",
     PsEntry (psCode TemplateInPattern) (psTemplate TemplateInPattern) "模式里不支持模板插值",
     PsEntry (psCode ExprNotIndented) (psTemplate ExprNotIndented) "表达式缩进不足",
@@ -281,11 +294,14 @@ lexErr e args = Err (lexMsg e args)
 psErr : {n : Nat} -> PsDiag n -> Vec String n -> Result a
 psErr e args = Err (psMsg e args)
 
+-- | 自动补注（M41 新增导出）：lexErr0。
 lexErr0 : LexDiag Zero -> Result a
-lexErr0 e = lexErr e VNil
+lexErr0 e = lexErr e []
 
+-- | 自动补注（M41 新增导出）：psErr0。
 psErr0 : PsDiag Zero -> Result a
-psErr0 e = psErr e VNil
+psErr0 e = psErr e []
 
+-- | 自动补注（M41 新增导出）：psErr1。
 psErr1 : PsDiag (Succ Zero) -> String -> Result a
-psErr1 e a0 = psErr e (VCons a0 VNil)
+psErr1 e a0 = psErr e (a0 :: [])

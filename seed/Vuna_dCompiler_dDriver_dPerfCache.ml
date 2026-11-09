@@ -3,11 +3,7 @@ let v_Vuna_dCompiler_dDriver_dPerfCache_dunitCacheSchema = "vuna-unit-cache 1"
 
 let v_Vuna_dCompiler_dDriver_dPerfCache_dtextHashOf = (fun s -> ((((dtp_strHash s) * 1000003) + (dtp_strHash ("unit:" ^ s))) + (bi_strLength s)))
 
-let v_Vuna_dCompiler_dDriver_dPerfCache_dbinaryFingerprint = ((fun argv -> (match argv with
-  | Base_dList.C_Base_dList_dList_Base_dList_dNil -> (v_Vuna_dCompiler_dDriver_dPerfCache_dtextHashOf Vuna_dCompiler_dVersion.v_Vuna_dCompiler_dVersion_dvunaVersion)
-  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__0, dtb__1) -> (if (Base_dIO.v_Base_dIO_drunIO ((fun dtio_0 -> fun (_ : int) -> dtp_fileExists dtio_0) dtb__0)) then (v_Vuna_dCompiler_dDriver_dPerfCache_dtextHashOf (Base_dIO.v_Base_dIO_drunIO ((fun dtio_0 -> fun (_ : int) -> dtp_readFile dtio_0) dtb__0))) else (v_Vuna_dCompiler_dDriver_dPerfCache_dtextHashOf Vuna_dCompiler_dVersion.v_Vuna_dCompiler_dVersion_dvunaVersion))
-  | _ -> failwith "DT: impossible branch"
-)) (Base_dIO.v_Base_dIO_drunIO (fun (_ : int) -> (Base_dList.dtp_listOf (dtp_getArgs ())))))
+let v_Vuna_dCompiler_dDriver_dPerfCache_dbinaryFingerprint = ((fun exe -> ((fun size -> ((fun mtime -> (if (size > 0) then (v_Vuna_dCompiler_dDriver_dPerfCache_dtextHashOf (String.concat "" [exe; ":"; (bi_strFromInt size); ":"; (bi_strFromInt mtime)])) else (v_Vuna_dCompiler_dDriver_dPerfCache_dtextHashOf Vuna_dCompiler_dVersion.v_Vuna_dCompiler_dVersion_dvunaVersion))) (Base_dIO.v_Base_dIO_drunIO ((fun dtio_0 -> fun (_ : int) -> dtp_fileMtime dtio_0) exe)))) (Base_dIO.v_Base_dIO_drunIO ((fun dtio_0 -> fun (_ : int) -> dtp_fileSize dtio_0) exe)))) (Base_dIO.v_Base_dIO_drunIO (fun (_ : int) -> (dtp_execPath ()))))
 
 let v_Vuna_dCompiler_dDriver_dPerfCache_dunitCacheTag = (String.concat "" [v_Vuna_dCompiler_dDriver_dPerfCache_dunitCacheSchema; "/"; Vuna_dCompiler_dVersion.v_Vuna_dCompiler_dVersion_dvunaVersion; "/"; (bi_strFromInt v_Vuna_dCompiler_dDriver_dPerfCache_dbinaryFingerprint)])
 
@@ -28,40 +24,40 @@ let v_Vuna_dCompiler_dDriver_dPerfCache_dunitCachePath = (fun dir name key -> (S
 let v_Vuna_dCompiler_dDriver_dPerfCache_dunitCacheEntryDir = (fun base entryKey -> (String.concat "" [base; "/e-"; (bi_strFromInt (v_Vuna_dCompiler_dDriver_dPerfCache_dtextHashOf ("entry:" ^ entryKey))); "-"; (bi_strFromInt (v_Vuna_dCompiler_dDriver_dPerfCache_dtextHashOf ("entry2:" ^ entryKey)))]))
 
 let v_Vuna_dCompiler_dDriver_dPerfCache_dunitCacheEntryKeyOf = (fun keys -> (match ((Base_dList.v_Base_dList_dlookupPair "__entry__") keys) with
-  | Base_dMaybe.C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__2) -> dtb__2
-  | Base_dMaybe.C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> ""
+  | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__0) -> dtb__0
+  | Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing -> ""
   | _ -> failwith "DT: impossible branch"
 ))
 
 let rec v_Vuna_dCompiler_dDriver_dPerfCache_ddropFiles = (fun mc0 mc1 -> (match mc1 with
-  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__3, dtb__4) -> ((fun _u -> ((v_Vuna_dCompiler_dDriver_dPerfCache_ddropFiles mc0) dtb__4)) (Base_dIO.v_Base_dIO_drunIO ((fun dtio_0 -> fun (_ : int) -> dtp_removeFile dtio_0) (String.concat "" [mc0; "/"; dtb__3]))))
-  | Base_dList.C_Base_dList_dList_Base_dList_dNil -> 0
+  | Base_dList.C_Base_dList_dList_Cons (dtb__1, dtb__2) -> ((fun _u -> ((v_Vuna_dCompiler_dDriver_dPerfCache_ddropFiles mc0) dtb__2)) (Base_dIO.v_Base_dIO_drunIO ((fun dtio_0 -> fun (_ : int) -> dtp_removeFile dtio_0) (String.concat "" [mc0; "/"; dtb__1]))))
+  | Base_dList.C_Base_dList_dList_Nil -> 0
   | _ -> failwith "DT: impossible branch"
 ))
 
 let v_Vuna_dCompiler_dDriver_dPerfCache_ddropDirFiles = (fun dir -> ((v_Vuna_dCompiler_dDriver_dPerfCache_ddropFiles dir) (Base_dIO.v_Base_dIO_drunIO ((fun dtio_0 -> fun (_ : int) -> (fun p -> Base_dList.dtp_listOf (dtp_readDir p)) dtio_0) dir))))
 
 let rec v_Vuna_dCompiler_dDriver_dPerfCache_dgcEntries = (fun mc0 mc1 mc2 -> (match mc2 with
-  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__5, dtb__6) -> ((fun path -> (if (path = mc1) then (((v_Vuna_dCompiler_dDriver_dPerfCache_dgcEntries mc0) mc1) dtb__6) else (if (Base_dIO.v_Base_dIO_drunIO ((fun dtio_0 -> fun (_ : int) -> dtp_isDirectory dtio_0) path)) then ((fun _u -> (((v_Vuna_dCompiler_dDriver_dPerfCache_dgcEntries mc0) mc1) dtb__6)) (v_Vuna_dCompiler_dDriver_dPerfCache_ddropDirFiles path)) else ((fun _u -> (((v_Vuna_dCompiler_dDriver_dPerfCache_dgcEntries mc0) mc1) dtb__6)) (Base_dIO.v_Base_dIO_drunIO ((fun dtio_0 -> fun (_ : int) -> dtp_removeFile dtio_0) path)))))) (String.concat "" [mc0; "/"; dtb__5]))
-  | Base_dList.C_Base_dList_dList_Base_dList_dNil -> 0
+  | Base_dList.C_Base_dList_dList_Cons (dtb__3, dtb__4) -> ((fun path -> (if (path = mc1) then (((v_Vuna_dCompiler_dDriver_dPerfCache_dgcEntries mc0) mc1) dtb__4) else (if (Base_dIO.v_Base_dIO_drunIO ((fun dtio_0 -> fun (_ : int) -> dtp_isDirectory dtio_0) path)) then ((fun _u -> (((v_Vuna_dCompiler_dDriver_dPerfCache_dgcEntries mc0) mc1) dtb__4)) (v_Vuna_dCompiler_dDriver_dPerfCache_ddropDirFiles path)) else ((fun _u -> (((v_Vuna_dCompiler_dDriver_dPerfCache_dgcEntries mc0) mc1) dtb__4)) (Base_dIO.v_Base_dIO_drunIO ((fun dtio_0 -> fun (_ : int) -> dtp_removeFile dtio_0) path)))))) (String.concat "" [mc0; "/"; dtb__3]))
+  | Base_dList.C_Base_dList_dList_Nil -> 0
   | _ -> failwith "DT: impossible branch"
 ))
 
 let rec v_Vuna_dCompiler_dDriver_dPerfCache_dbucketGcGo = (fun mc0 mc1 mc2 -> (match mc2 with
-  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__7, dtb__8) -> ((fun path -> (if ((Base_dList.v_Base_dList_dmemName dtb__7) mc1) then (((v_Vuna_dCompiler_dDriver_dPerfCache_dbucketGcGo mc0) mc1) dtb__8) else (if (if (Base_dIO.v_Base_dIO_drunIO ((fun dtio_0 -> fun (_ : int) -> dtp_fileExists dtio_0) path)) then (Base_dIO.v_Base_dIO_drunIO ((fun dtio_0 -> fun (_ : int) -> dtp_isDirectory dtio_0) path)) else false) then (((v_Vuna_dCompiler_dDriver_dPerfCache_dbucketGcGo mc0) mc1) dtb__8) else ((fun _u -> (((v_Vuna_dCompiler_dDriver_dPerfCache_dbucketGcGo mc0) mc1) dtb__8)) (Base_dIO.v_Base_dIO_drunIO ((fun dtio_0 -> fun (_ : int) -> dtp_removeFile dtio_0) path)))))) (String.concat "" [mc0; "/"; dtb__7]))
-  | Base_dList.C_Base_dList_dList_Base_dList_dNil -> 0
+  | Base_dList.C_Base_dList_dList_Cons (dtb__5, dtb__6) -> ((fun path -> (if ((Base_dList.v_Base_dList_dmemName dtb__5) mc1) then (((v_Vuna_dCompiler_dDriver_dPerfCache_dbucketGcGo mc0) mc1) dtb__6) else (if (if (Base_dIO.v_Base_dIO_drunIO ((fun dtio_0 -> fun (_ : int) -> dtp_fileExists dtio_0) path)) then (Base_dIO.v_Base_dIO_drunIO ((fun dtio_0 -> fun (_ : int) -> dtp_isDirectory dtio_0) path)) else false) then (((v_Vuna_dCompiler_dDriver_dPerfCache_dbucketGcGo mc0) mc1) dtb__6) else ((fun _u -> (((v_Vuna_dCompiler_dDriver_dPerfCache_dbucketGcGo mc0) mc1) dtb__6)) (Base_dIO.v_Base_dIO_drunIO ((fun dtio_0 -> fun (_ : int) -> dtp_removeFile dtio_0) path)))))) (String.concat "" [mc0; "/"; dtb__5]))
+  | Base_dList.C_Base_dList_dList_Nil -> 0
   | _ -> failwith "DT: impossible branch"
 ))
 
 let v_Vuna_dCompiler_dDriver_dPerfCache_dunitCacheRead = (fun dir name key -> (match ((Vuna_dCompiler_dCacheFormat.v_Vuna_dCompiler_dCacheFormat_dreadFramed v_Vuna_dCompiler_dDriver_dPerfCache_dunitCacheTag) (((v_Vuna_dCompiler_dDriver_dPerfCache_dunitCachePath dir) name) key)) with
-  | Base_dMaybe.C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__9) -> (Base_dMaybe.C_Base_dMaybe_dMaybe_Base_dMaybe_dJust ((dtp_unmarshal dtb__9)))
-  | Base_dMaybe.C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> Base_dMaybe.C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing
+  | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__7) -> (Base_dMaybe.C_Base_dMaybe_dMaybe_Just ((dtp_unmarshal dtb__7)))
+  | Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing -> Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing
   | _ -> failwith "DT: impossible branch"
 ))
 
 let rec v_Vuna_dCompiler_dDriver_dPerfCache_ddropPastSlash = (fun mc0 -> (match mc0 with
-  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__10, dtb__11) -> (if (dtb__10 = 47) then dtb__11 else (v_Vuna_dCompiler_dDriver_dPerfCache_ddropPastSlash dtb__11))
-  | Base_dList.C_Base_dList_dList_Base_dList_dNil -> Base_dList.C_Base_dList_dList_Base_dList_dNil
+  | Base_dList.C_Base_dList_dList_Cons (dtb__8, dtb__9) -> (if (dtb__8 = 47) then dtb__9 else (v_Vuna_dCompiler_dDriver_dPerfCache_ddropPastSlash dtb__9))
+  | Base_dList.C_Base_dList_dList_Nil -> Base_dList.C_Base_dList_dList_Nil
   | _ -> failwith "DT: impossible branch"
 ))
 

@@ -1,0 +1,11 @@
+# W1 夹具：`vuna test` 的单测超时（IO 测试路径）。
+# 默认不会被其它章节扫到：`test/run-tests.sh` 第 47 段用 VUNA_TEST_TIMEOUT=8 显式驱动。
+[package]
+name = "timeout-hang"
+
+[dependencies]
+vuna-base = "../../../../base"
+
+# 夹具里的 main : IO a 睡眠走 clock 效应。
+[capabilities]
+effects = ["clock"]

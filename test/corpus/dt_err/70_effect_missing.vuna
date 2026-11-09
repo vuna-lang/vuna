@@ -2,7 +2,7 @@
 import Base.Eff
 import Base.EffState
 
-bad : Eff (RCons (State S1 Int) RNil) Int
+bad : Eff (Cons (State S1 Int) Nil) Int
 bad = get S2 Int
 
 main : Int

@@ -1,7 +1,6 @@
 import VisData
-import VisTrait
 
--- 只 import trait/data，不 import 提供实例的 VisInst：应报 TC_NoInstanceFound
---（全量与摘要路径必须一致）。
+-- 只 import VisData，不 import 定义 Pretty 的 VisTrait：pretty 应不可见。
+--（全量与摘要路径必须一致拒绝。）
 main : String
 main = pretty Red

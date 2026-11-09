@@ -64,8 +64,8 @@
 - `/`：整数除法向零截断；`a / 0` 在产物运行期抛宿主 `Failure "division by zero"`
   （runtime `bi_div` 显式检查），未捕获时由运行时报告器输出 `vuna: runtime error: ...` 并以 2
   退出；`min_int / -1` 回绕成 `min_int`，不报错。
-- 字面量：十进制数字序列，按 `acc * 10 + digit` 累加，**越界同样回绕**（`Lexer.collectInt`）；
-  没有一元负号，负数写成 `0 - n`。
+- 字面量：十进制数字序列；累加超出 63 位可表示范围即报 `LX_IntLiteralOutOfRange`（不再回绕）。
+  没有一元负号，负数写 `0 - n`；`min_int` 的绝对值超出可表示字面量，写 `0 - 4611686018427387903 - 1`。
 - 比较：`==` `/=` `<` `<=` `>` `>=` 返回 canonical `Bool`。
 
 ## 3.1 Nat（M34.7）
@@ -74,10 +74,10 @@
   运行时表示是 OCaml `int`，值域 `0..max_int`（4611686018427387903）：`Zero = 0`、
   `Succ n = min(n + 1, max_int)`，**不生成变体类型**。
 - **字面量**：期望类型为 Nat 时 `3` 展开成 `Succ (Succ (Succ Zero))`（类型层可合一），
-  codegen 折回整数字面量；推断位置仍默认 `Int`。越界检查发生在词法累加（63 位回绕）之后：
-  回绕成负数才报 `TC_NatLiteralOutOfRange`（≥ 2^63 的回绕见 [debt.md](debt.md) C40）。
-  Nat 字面量只用于表达式：`case n of 0 =>` 这类字面量模式不支持（报
-  `TC_OnlyCtorPatterns`），模式侧用 `Zero` / `Succ` 或 `isZero`（见 [debt.md](debt.md) D24）。
+  codegen 折回整数字面量；推断位置仍默认 `Int`。超出 63 位可表示范围的字面量在词法期
+  报 `LX_IntLiteralOutOfRange`（不再回绕；`TC_NatLiteralOutOfRange` 仅作内部防御）；Nat 字面量模式支持 `case n of 0 =>`：模式只含字面量/变量/通配时降成 Int 比较的
+  if 链（`case n of 0 => a; k => b` 的 `k` 绑回原始 Nat）；与构造子模式混用仍报 `TC_OnlyCtorPatterns`，
+  混用时改用 `Zero` / `Succ` 或 `isZero`。
 - **纯 intrinsic**：`natAdd` / `natSub` / `natMul` / `natDiv`（饱和、减截断到 0、除零与 Int
   同文案）、`natToInt`（恒等）、`natFromInt`（负数 clamp 0）。interp 与产物同语义；
   `+ - * /` 在 Nat 上下文由精化器特化到这些名字（见 [operators.md](operators.md)）。
@@ -274,7 +274,7 @@ M35.3 新增 `net` 能力与 7 条 socket 原语（工具链 server 与测试用
 | `env` | `prim_getenv`、`prim_getcwd`、`prim_execPath` |
 | `clock` | `timeUs`、`prim_sleep` |
 | `net` | `prim_netListen`、`prim_netPort`、`prim_netAccept`、`prim_netRecv`、`prim_netSend`、`prim_netClose`、`prim_netConnect` |
-| `unsafe` | `prim_runIO`（= `Base.IO.runIO`：在 main 之外执行 IO 动作）；`prim_effectPerform` / `prim_effectHandle` / `prim_cleanupPush` / `prim_cleanupPop`（运行时续延与 bracket cleanup，仅 Base.Eff） |
+| `unsafe` | `prim_runIO`（= `Base.IO.runIO`：在 main 之外执行 IO 动作）；`prim_effectPerform` / `prim_effectHandle` / `prim_cleanupPush` / `prim_cleanupPop`（运行时续延与 bracket cleanup，仅 Base.Eff）；base 用 `[trust] unsafe` 显式列出直接使用点（D28 定义级信任，见 packages.md） |
 
 - 声明面：manifest `[capabilities] effects = ["console", "fs", ...]`，按**包**声明
   （`Frontend.Manifest.manifestCapabilities`）；无 manifest 的 ad-hoc 文件没有能力。
@@ -286,11 +286,11 @@ M35.3 新增 `net` 能力与 7 条 socket 原语（工具链 server 与测试用
   `` effectful builtin `<name>` requires capability `<cap>` in <package> (declare [capabilities] effects = ["<cap>"] or use Base.IO) ``
   （`Loader.Resolve.checkEffectsBuiltins`）。
 - **这是权限声明，不是检查豁免**：能力不改变类型检查、擦除或 codegen 语义，只决定能否在
-  源码里直接引用效果原语 / `runIO`；没有按包名字符串判定的 allowlist。
-- `base` 包声明 `["console", "fs", "process", "env", "clock", "unsafe"]`（`Base.IO` 的
-  别名定义需要 console/fs/process；W10 的 `Base.EffEnv` / `Base.EffClock` 需要 env/clock；
-  `unsafe` 来自 `Base.IO.runIO` 的别名定义与 `Base.ST.runST` 的 `runIO` 使用点，见
-  [effects.md](effects.md)）；产品 CLI（根包）声明全部七个能力（含 `unsafe` 与 `net`），编译器包声明六个（不含 `net`）——编译器自身不使用网络。
+  源码里直接引用效果原语 / `runIO`；没有按包名字符串判定的 allowlist。声明 `[trust] unsafe`
+  的包把 `unsafe` 收紧到定义级（opt-in；见 [packages.md](packages.md) §效应能力）。
+- `base` 包声明 `["console", "fs", "process", "env", "clock", "unsafe"]`，并把 `unsafe` 的直接
+  使用点逐条列进 `[trust] unsafe`（D28；`runIO` / `Base.Eff` / `Base.EffSched` / `Base.Debug`，
+  见 [effects.md](effects.md)）；根包声明七个能力（含 `unsafe`/`net`）但无 `[trust]`，编译器包六个（不含 `net`）。
 
 ## 8. 生成 runtime 的契约
 

@@ -62,7 +62,8 @@ modeOf parsed query =
   else if contains "->" query || contains "=>" query then Ok TypeMode else Ok (NameDocMode False False)
 
 boolInt : Bool -> Int
-boolInt b = if b then 1 else 0
+boolInt True = 1
+boolInt False = 0
 
 limitOf : Parsed -> Result Int
 limitOf parsed = case flagValue parsed "limit" of

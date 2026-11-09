@@ -10,6 +10,10 @@ module Vuna.Files (collectSourceFiles, collectVunaFiles, pathExistsDir, pathExis
 import Vuna.Compiler.Common
 import Base.IO
 
+-- C41：工具链 fuel 耗尽不是「空结果」，而是内部不变量被破坏；与编译器一致硬失败。
+toolFuelExhausted : String -> a
+toolFuelExhausted what = prim_fail "vuna: internal: ${what} fuel exhausted"
+
 -- 递归收集目录下所有 .vuna 文件（跳过 . / .. 与隐藏项）。
 -- 同时跳过生成物与本地缓存目录：它们可能包含符号链接 / 超大文件，
 -- 既不该被格式化，也不该被 doc / test 扫描。
@@ -35,11 +39,11 @@ collectVunaFiles dir = collectVunaFilesGo 1048576 dir
 -- 每次进入下一层目录消耗 1，触底返回空列表（合法目录树远小于该上限）。
 collectVunaFilesGo : Int -> String -> List String
 collectVunaFilesGo fuel dir =
-  if fuel <= 0 then []
+  if fuel <= 0 then toolFuelExhausted "directory walk"
   else if pathExistsDir dir then concatMap (walkVunaGo (fuel - 1) dir) (runIO (prim_readDir dir)) else []
 
 walkVunaGo : Int -> String -> String -> List String
-walkVunaGo fuel dir name = if fuel <= 0 then []
+walkVunaGo fuel dir name = if fuel <= 0 then toolFuelExhausted "directory walk"
 else case name of
   "." => []
   ".." => []
@@ -56,11 +60,11 @@ collectSourceFiles dir = collectSourceFilesGo 1048576 dir
 
 collectSourceFilesGo : Int -> String -> List String
 collectSourceFilesGo fuel dir =
-  if fuel <= 0 then []
+  if fuel <= 0 then toolFuelExhausted "directory walk"
   else if pathExistsDir dir then concatMap (walkAnyGo (fuel - 1) dir) (runIO (prim_readDir dir)) else []
 
 walkAnyGo : Int -> String -> String -> List String
-walkAnyGo fuel dir name = if fuel <= 0 then []
+walkAnyGo fuel dir name = if fuel <= 0 then toolFuelExhausted "directory walk"
 else case name of
   "." => []
   ".." => []

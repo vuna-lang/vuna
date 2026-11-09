@@ -3,6 +3,8 @@ module Vuna.Lsp.Query
   , completionItems
   , definitionResult
   , documentSymbols
+  , fixAllLintCommand
+  , fixAllLintWorkspaceEdit
   , formattingEdits
   , holeHoverAt
   , referencesResult
@@ -22,7 +24,11 @@ module Vuna.Lsp.Query
 --                     绑定，见 Vuna.Lsp），最后 Index 标识符签名/注释；
 --                     range 落在光标 token 上（不是定义位置）；
 --   formatting        `Vuna.Fmt.formatSourceWith`（程序级 fixity）成功且内容变化 ⇒ 全文 TextEdit；
---   codeAction        lint finding（可自动修复）→ quick fix TextEdit；另加全文档 fix all；
+--   codeAction        lint finding（可自动修复）→ quick fix TextEdit（内嵌诊断带
+--                     range/severity/source/code/message，与 publishDiagnostics 同源）；全文档
+--                     fix all 走 `Command`（`vuna.fixAllLint` + workspace/executeCommand）；
+--                     光标在洞上时按上下文 data / record binder 生成 `case split on <name>`
+--                     （`refactor.rewrite`，C38；构造子解析是 parse 级，见下方 case split 段）；
 --   documentSymbol    AST 声明树（data/record/trait 带子节点）；selectionRange 精确落名字；
 --   definition        位置 token（支持 `Mod.name`）→ Index 符号 → Location；Index 不可用时
 --                     同文件缓冲兜底；
@@ -42,6 +48,7 @@ import Vuna.Index
 import Vuna.Json
 import Vuna.Lint.Fix
 import Vuna.Lint.Rules
+import Vuna.Lsp.Bindings
 import Vuna.Lsp.Diagnostics
 import Vuna.Lsp.Protocol
 
@@ -220,11 +227,38 @@ definitionResult uri line col text (Just idx) = case tokenAtCursor text line col
       Just loc => JArr [loc]
 
 -- references：定义位置 + Index refs 的出现位置。
+-- C45：`references` 识别局部名——光标落在局部绑定上时，返回该 binder 在当前文档作用域内的
+-- 全部出现位置（定义 + 使用，遮蔽同源，复用 `Vuna.Lsp.Bindings.bindingRenameOccurrences`），
+-- 而不是按名字全局匹配（那会把同名顶层符号 / 其它作用域的同名局部混进来）。
+-- 局部未命中（顶层符号 / 模块名 / 洞 / 关键字 ⇒ `bindingRenameOccurrences` 返回 Nothing）才回落
+-- Index refs。返回扁平 Location 列表（与 `referencesFor` 同结构）。
 referencesResult : String -> Int -> Int -> String -> Maybe Index -> List Json
-referencesResult uri line col text Nothing = []
-referencesResult uri line col text (Just idx) = case tokenAtCursor text line col of
+referencesResult uri line col text midx =
+  let
+    localHits = localRefLocations uri line col text
+  in case localHits of
+    hit :: _ => localHits
+    [] => case tokenAtCursor text line col of
+      Nothing => []
+      Just (Pair startCol token) => case midx of
+        Nothing => []
+        Just idx => referencesFor idx (currentModuleNameOf text) token
+
+-- 局部绑定的引用位置（scope-aware）；光标不在局部绑定上返回 []。
+localRefLocations : String -> Int -> Int -> String -> List Json
+localRefLocations uri line col text = case bindingRenameOccurrences line col text of
   Nothing => []
-  Just (Pair startCol token) => referencesFor idx (currentModuleNameOf text) token
+  Just positions =>
+    map (\pos => localRefLocation uri text (firstOf pos) (secondOf pos))
+      (take maxReferences positions)
+
+localRefLocation : String -> String -> Int -> Int -> Json
+localRefLocation uri text line col =
+  let
+    width = case tokenAtCursor text line col of
+      Nothing => 0
+      Just (Pair _ token) => strLength token
+  in JObj [Pair "uri" (JStr uri), Pair "range" (lspRange line col line (col + width))]
 
 -- formatting：formatSourceWith 成功且内容有变化 ⇒ 全文 TextEdit；否则 []。
 -- M31.3（B27）：fixity 是程序级的——与 CLI 同源，用 `Vuna.FixityEnv`（按文件目录缓存模块图，
@@ -247,7 +281,7 @@ formattingFixities uri text =
   else secondOf (fixitiesForFile emptyFixityEnv path text)
 
 -- ---------------------------------------------------------------
--- codeAction：lint finding → quick fix（M38 P1c）
+-- codeAction：lint quick fix（M38 P1c）+ fix all 的 Command 形式 + 洞 case split（C38）
 -- ---------------------------------------------------------------
 -- 与诊断同源：程序级 fixity（`Vuna.FixityEnv`）→ `Vuna.Lint.Rules.lintSourceWith`；
 -- 只取**可自动修复**（`findingEdit = Just`）且编辑行范围与请求 range（1-based 行闭区间）
@@ -255,25 +289,51 @@ formattingFixities uri text =
 --   LSP range = (editStart - 1, 0) .. (editStop, 0)（末端取下一行行首，不吞掉下一行）；
 --   newText = `joinLines editLines`。
 -- 另加一条 "fix all lint findings"：`Vuna.Lint.Fix.fixLoop` 跑到收敛（与 CLI `--fix`
--- 同一条路径），发整文档替换编辑。请求 range 附近没有可修复 finding 时返回空数组，
--- 避免每一行都冒出全文档 fix。总条数上限 20（fix all 占最后一格）。
-codeActionsFor : String -> String -> Int -> Int -> List Json
-codeActionsFor uri text reqStart reqEnd = case contextForDoc uri of
+-- 同一条路径）；C38 起该动作走 **`Command` 形式**（`vuna.fixAllLint`），客户端执行后由
+-- `workspace/executeCommand` → `workspace/applyEdit` 推送整文档替换（见 Vuna.Lsp）。
+-- 请求 range 附近没有可修复 finding 时不给 fix all，避免每一行都冒出全文档 fix。
+-- 总条数上限 20；fix all 占最后一格，case split 动作排在最前。
+--
+-- `context.only`（Maybe：Nothing = 客户端不限制、Just [] = 明确不要任何 kind）：
+--   - quickfix 动作只在未限制或含 `quickfix` 时给；
+--   - case split 动作只在未限制或含 `refactor` / `refactor.rewrite` 时给。
+codeActionsFor : String -> String -> Int -> Int -> Int -> Int -> Maybe (List String) -> List Json
+codeActionsFor uri text reqStart reqStartCol reqEnd reqEndCol only = case contextForDoc uri of
   Err e => []
-  Ok (Pair label _) => case fixitiesForFile emptyFixityEnv label text of
+  Ok (Pair label ctx) => case fixitiesForFile emptyFixityEnv label text of
     Pair _ (Err e) => []
     Pair _ (Ok programFixities) => case lintSourceWith programFixities text of
       Err e => []
       Ok findings =>
         let
-          fixable = filter (editTouches reqStart reqEnd) findings
-        in if isEmptyList fixable then []
-        else
-          let
-            singles = mapMaybe (findingQuickFix uri) fixable
-            fixAll = fixAllActions uri programFixities text findings
-          in if isEmptyList fixAll then take maxCodeActions singles
-          else append (take (maxCodeActions - 1) singles) fixAll
+          splits =
+            take maxCodeActions
+              (if refactorAllowed only then caseSplitActions uri label ctx text reqStart reqStartCol reqEnd reqEndCol else [])
+          fixable =
+            if quickfixAllowed only then filter (editTouches reqStart reqEnd) findings else []
+          singles = mapMaybe (findingQuickFix uri) fixable
+          fixAll =
+            if not (isEmptyList fixable) then fixAllActions uri programFixities text findings
+            else []
+          budget = maxOf 0 (maxCodeActions - length splits)
+          singles2 = take (if isEmptyList fixAll then budget else maxOf 0 (budget - 1)) singles
+          -- fix all 需要一格；case split 已占满上限时不再追加（总数仍 ≤ maxCodeActions）。
+          fixAll2 = if isEmptyList fixAll || budget <= 0 then [] else fixAll
+        in append splits (append singles2 fixAll2)
+
+onlyKindsAllow : String -> Maybe (List String) -> Bool
+onlyKindsAllow kind Nothing = True
+onlyKindsAllow kind (Just kinds) = memName kind kinds
+
+quickfixAllowed : Maybe (List String) -> Bool
+quickfixAllowed only = onlyKindsAllow "quickfix" only
+
+-- `refactor` 是 `refactor.rewrite` 的父 kind：客户端只要 `refactor` 时也应给 rewrite。
+refactorAllowed : Maybe (List String) -> Bool
+refactorAllowed only = onlyKindsAllow "refactor.rewrite" only || onlyKindsAllow "refactor" only
+
+maxOf : Int -> Int -> Int
+maxOf a b = if a >= b then a else b
 
 -- 请求 range（1-based 行闭区间）与 Edit 的行范围（1-based 闭区间）是否相交。
 editTouches : Int -> Int -> Finding -> Bool
@@ -288,24 +348,306 @@ editLspRange e = lspRange e.editStart 1 (e.editEnd + 1) 1
 textEditJson : Json -> String -> Json
 textEditJson range newText = JObj [Pair "range" range, Pair "newText" (JStr newText)]
 
--- 单条 quick fix：title 带规则短名，diagnostics 只带 code（客户端按 code 关联到已有诊断），
--- edit.changes 按 uri 分组。
+-- 单条 quick fix：title 带规则短名；`diagnostics` 复用 `Vuna.Lsp.Diagnostics` 的
+-- finding→diagnostic 转换（与 publishDiagnostics 同一条 JSON：range/severity/source/code/
+-- message），客户端可按 code 关联到已有诊断；edit.changes 按 uri 分组。
 findingQuickFix : String -> Finding -> Maybe Json
 findingQuickFix uri f = case f.findingEdit of
   Nothing => Nothing
   Just e =>
     Just
-      (JObj [Pair "title" (JStr "fix: ${f.findingRule}"), Pair "kind" (JStr "quickfix"), Pair "diagnostics" (JArr [JObj [Pair "code" (JStr f.findingCode)]]), Pair "edit" (JObj [Pair "changes" (JObj [Pair uri (JArr [textEditJson (editLspRange e) (joinLines e.editLines)])])])])
+      (JObj [Pair "title" (JStr "fix: ${f.findingRule}"), Pair "kind" (JStr "quickfix"), Pair "diagnostics" (JArr [findingDiagJson f]), Pair "edit" (JObj [Pair "changes" (JObj [Pair uri (JArr [textEditJson (editLspRange e) (joinLines e.editLines)])])])])
 
--- 全文档 fix：fixLoop 把全部可修复 finding 迭代应用（8 轮，与 CLI `--fix` 一致）；
--- 有改动才发整文档替换编辑，否则不产生动作。
+-- fix all 的命令名（initialize capabilities 的 executeCommandProvider 与动作共用）。
+fixAllLintCommand : String
+fixAllLintCommand = "vuna.fixAllLint"
+
+-- C38：fix all 走 `Command`（不内嵌 WorkspaceEdit）：客户端选中后发
+-- `workspace/executeCommand`，服务器再以 `workspace/applyEdit` 推送整文档替换。
+-- 好处是 codeAction 结果不带大段 newText，且 command 通道可被客户端/脚本单独触发。
+fixAllActionJson : String -> Json
+fixAllActionJson uri =
+  JObj
+    [Pair "title" (JStr "fix all lint findings"), Pair "kind" (JStr "quickfix"), Pair "command" (JObj [Pair "title" (JStr "fix all lint findings"), Pair "command" (JStr fixAllLintCommand), Pair "arguments" (JArr [JStr uri])])]
+
+-- fixLoop 把全部可修复 finding 迭代应用（8 轮，与 CLI `--fix` 一致）；无改动 → Nothing。
+fixAllLintEdit : List FixityDecl -> String -> List Finding -> Maybe String
+fixAllLintEdit programFixities text findings = case fixLoop programFixities text findings 8 0 of
+  Err e => Nothing
+  Ok (Pair count newText) => if count == 0 || newText == text then Nothing else Just newText
+
+-- fix all 的 codeAction：只有确实有改动时才产生动作。
 fixAllActions : String -> List FixityDecl -> String -> List Finding -> List Json
-fixAllActions uri programFixities text findings = case fixLoop programFixities text findings 8 0 of
+fixAllActions uri programFixities text findings = case fixAllLintEdit programFixities text findings of
+  Nothing => []
+  Just newText => [fixAllActionJson uri]
+
+-- `workspace/executeCommand` 的 `vuna.fixAllLint`：按当前缓冲重算 lint + fixLoop，
+-- 返回 WorkspaceEdit（changes 按 uri 分组）；无改动 / 上下文不可用 → Nothing。
+fixAllLintWorkspaceEdit : String -> String -> Maybe Json
+fixAllLintWorkspaceEdit uri text = case contextForDoc uri of
+  Err e => Nothing
+  Ok (Pair label ctx) => case fixitiesForFile emptyFixityEnv label text of
+    Pair _ (Err e) => Nothing
+    Pair _ (Ok programFixities) => case lintSourceWith programFixities text of
+      Err e => Nothing
+      Ok findings => case fixAllLintEdit programFixities text findings of
+        Nothing => Nothing
+        Just newText =>
+          Just
+            (JObj [Pair "changes" (JObj [Pair uri (JArr [textEditJson (fullRange text) newText])])])
+
+-- ---------------------------------------------------------------
+-- case split（C38）：洞 → 上下文 binder 的 data 构造子 / record 分支
+-- ---------------------------------------------------------------
+-- 触发链（便宜 → 贵）：
+--   1. 文本级扫描请求 range 里的 `_` / `?name` token（不跑精化；没有就不查洞）；
+--   2. 命中才跑容错洞查询 `dtGoalsSourceTolerant`（与 hover / `vuna goal` 同源）；
+--   3. 取覆盖请求 range 的那个洞，对上下文里每个「类型头解析到非索引 data / record」的
+--      binder 生成一条 `refactor.rewrite`：`case <name> of` / `  <Ctor> _ => _` / ...；
+--      record 是单构造器类型，给**一条**分支 `  <Type> { f = _, g = _ } => _`。
+--
+-- 构造子信息是 parse 级：当前缓冲 AST + `Bindings.moduleSourceIn`（按包上下文模块根读
+-- 依赖模块源码；本模块内联）。类型头解析失败（函数类型 / 类型变量 / 索引族 / axiom /
+-- 依赖模块缺失）就跳过该 binder——不报错、不产生动作（安全降级）。构造子名 / record
+-- 类型名也按作用域决定：本模块 / open import / Prelude 重导出写短名，`import qualified`
+-- 写 `Mod.` 限定名；两者都不成立的类型（只经函数签名间接可见）给不了合法模式名 →
+-- 同样跳过。
+--
+-- 缩进：分支 = 洞所在行的行首缩进 + 2（与 fmt 对 `case` 的输出一致）。
+-- 边界：隐式构造子参数（`{a : Type} ->`）不进模式（`ctorPatArity` 按 EPi 的 implicit 判定）；
+-- 索引族**不枚举**（索引约束在 parse 级不可知，不可达分支会被精化器以
+-- `TC_ImpossibleBranchIndex` 拒绝）；record 分支字段全部写 `_`（省略字段 = 通配也可，
+-- 但写全字段不依赖字段默认值且与 fmt 输出一致）；洞若出现在类型位置，生成的 `case` 不是
+-- 合法表达式——goal API 不区分表达式/类型位置，由编辑器把 action 当建议展示（用户可撤销）。
+-- 请求 range 的行文本里是否有洞 token（文本级门控：没有就不跑整模块 DT 精化）。
+-- 只按行判（不比较列）：同行的洞在 goalAtRange 里按 span 精确判定，误报只多一次精化。
+rangeTouchesHole : String -> Int -> Int -> Int -> Int -> Bool
+rangeTouchesHole text sl sc el ec = hasHole (join "\n" (map (lineText text) (range sl (el + 1))))
+
+posBeforeOrEq : Pair Int Int -> Pair Int Int -> Bool
+posBeforeOrEq a b = firstOf a < firstOf b || firstOf a == firstOf b && secondOf a <= secondOf b
+
+-- 洞 span 对 `_` 是零宽（end = start）：末列至少放宽到 start + 1，让「光标在 token 右侧」
+-- 也能命中；命名洞的 span 本身覆盖整个 `?name`。
+goalTouchesRange : Int -> Int -> Int -> Int -> DtGoalInfo -> Bool
+goalTouchesRange sl sc el ec g =
+  let
+    sp = g.dtGoalInfoSpan
+    h1 = Pair (spanStartLine sp) (spanStartCol sp)
+    h2 = Pair (spanEndLine sp) (maxOf sp.spanEndCol (spanStartCol sp + 1))
+    p1 = Pair sl sc
+    p2 = Pair el ec
+  in posBeforeOrEq p1 h2 && posBeforeOrEq h1 p2
+
+goalAtRange : Int -> Int -> Int -> Int -> List DtGoalInfo -> Maybe DtGoalInfo
+goalAtRange sl sc el ec [] = Nothing
+goalAtRange sl sc el ec (g :: rest) =
+  if goalTouchesRange sl sc el ec g then Just g else goalAtRange sl sc el ec rest
+
+-- 非索引 data 的 kind 只能是 `Type`（索引族写成 `... -> Type`，不枚举）。
+dataKindIsType : Expr -> Bool
+dataKindIsType (EVar "Type" sp) = True
+dataKindIsType (EParen inner sp) = dataKindIsType inner
+dataKindIsType _ = False
+
+-- 可 split 的类型：非索引 data（多分支）或 record（单构造器，构造器名 = 类型名）。
+-- 索引族**不做**：parse 级拿不到索引约束，枚举全部构造子可能生成精化器直接拒绝的
+-- 不可达分支（`TC_ImpossibleBranchIndex`），所以宁可安全降级。`axiom` / 类型变量 /
+-- trait / 函数类型没有可枚举的构造子，同样不给动作。
+data SplitTy : Type where
+  SplitData : List Ctor -> SplitTy
+  SplitRecord : String -> List String -> SplitTy
+
+findSplitIn : List Decl -> String -> Maybe SplitTy
+findSplitIn [] name = Nothing
+findSplitIn ((DData dname params kind ctors derivings lin sp) :: rest) name =
+  if dname == name then if dataKindIsType kind && not (isEmptyList ctors) then Just (SplitData ctors) else Nothing
+  else findSplitIn rest name
+findSplitIn ((DRecord dname params fields derivings lin sp) :: rest) name =
+  if dname == name then Just (SplitRecord dname (map fieldName fields)) else findSplitIn rest name
+findSplitIn (_ :: rest) name = findSplitIn rest name
+
+-- 类型表达式的头名（`Base.Maybe.Maybe` / `T.Color` / 应用后的 `T.Box`）。函数类型 /
+-- Pi / 运算符不是构造子类型的候选 → Nothing。
+-- 注意：洞上下文里的类型是精化器 `showTerm` 的文本，应用写在全括号里且左结合
+-- （`((Base.Pair.Pair Int) Base.Bool.Bool)`），所以 EApp 要沿函数侧递归剥括号。
+-- 箭头 `A -> B` 也编码成 `EApp (EVar "->") [A, B]`：头名是 `->`，解析不到声明 → 降级。
+typeHeadName : Expr -> Maybe String
+typeHeadName (EVar n sp) = Just n
+typeHeadName (EApp f args sp2) = typeHeadName f
+typeHeadName (EParen inner sp) = typeHeadName inner
+typeHeadName _ = Nothing
+
+firstMaybe : List (Maybe a) -> Maybe a
+firstMaybe [] = Nothing
+firstMaybe (x :: rest) = case x of
+  Just v => Just v
+  Nothing => firstMaybe rest
+
+moduleSplitIn : List Root -> String -> String -> Maybe SplitTy
+moduleSplitIn roots modName tyName = case moduleSourceIn roots modName of
+  Nothing => Nothing
+  Just src => case parseSource "<case-split>" src of
+    Err e => Nothing
+    Ok dep => findSplitIn dep.sourceFileDecls tyName
+
+exportedSplit : List Root -> String -> ExportItem -> Maybe SplitTy
+exportedSplit roots tyName (XModule name sp) = moduleSplitIn roots name tyName
+exportedSplit roots tyName item = Nothing
+
+-- 未限定类型名：本模块 → Prelude 的整模块重导出 → 各 open/qualified import 的模块。
+preludeSplit : List Root -> String -> Maybe SplitTy
+preludeSplit roots tyName = case moduleSourceIn roots "Prelude" of
+  Nothing => Nothing
+  Just src => case parseSource "<prelude>" src of
+    Err e => Nothing
+    Ok sf => case sf.sourceFileModDecl of
+      Nothing => Nothing
+      Just m => firstMaybe (map (exportedSplit roots tyName) m.modDeclExportItems)
+
+importSplit : List Root -> String -> Import -> Maybe SplitTy
+importSplit roots tyName imp = moduleSplitIn roots imp.importName tyName
+
+importedSplit : List Root -> String -> List Import -> Maybe SplitTy
+importedSplit roots tyName imports = firstMaybe (map (importSplit roots tyName) imports)
+
+resolveUnqualifiedSplit : SourceFile -> List Root -> String -> Maybe (Pair String SplitTy)
+resolveUnqualifiedSplit sf roots tyName = case findSplitIn sf.sourceFileDecls tyName of
+  Just split => Just (Pair "" split)
+  Nothing => case preludeSplit roots tyName of
+    Just split => Just (Pair "" split)
+    Nothing => case importedSplit roots tyName sf.sourceFileImports of
+      Just split => Just (Pair "" split)
+      Nothing => Nothing
+
+-- 洞上下文里的类型文本 → (类型所在模块名, 可 split 的声明)。模块名 "" = 当前缓冲 /
+-- 经 Prelude 重导出（分支写短名）。
+-- 边界：类型文本是精化器 show 出来的**规范全名**（`Dep.Point` / `B.Local`），所以
+-- `import ... as` 的模块别名不会出现在这里；也没有类型别名声明可展开（见 lsp.md）。
+resolveTypeSplit : SourceFile -> List Root -> String -> String -> Maybe (Pair String SplitTy)
+resolveTypeSplit sf roots curMod tyText = case parseExpressionSource tyText of
+  Err e => Nothing
+  Ok ty => case typeHeadName ty of
+    Nothing => Nothing
+    Just head =>
+      let
+        split = splitLastDot (splitOnDot head)
+        modName = joinDots (firstOf split)
+        tyName = secondOf split
+      in if modName == "" then resolveUnqualifiedSplit sf roots tyName
+      else if modName == curMod then mapJust (\cs => Pair curMod cs) (findSplitIn sf.sourceFileDecls tyName)
+      else mapJust (\cs => Pair modName cs) (moduleSplitIn roots modName tyName)
+
+-- 构造子的模式参数个数：显式 `->` / `(a : Type) ->`（EPi implicit = False）才占通配；
+-- 隐式 `{a : Type} ->`（EPi implicit = True）由调用点推断，不进模式。
+ctorPatArity : Expr -> Int
+ctorPatArity (EInfix "->" lhs rhs sp) = 1 + ctorPatArity rhs
+ctorPatArity (EApp (EVar "->" sp1) ([x, rest]) sp2) = 1 + ctorPatArity rest
+ctorPatArity (EPi n implicit qty dom cod sp) = (if implicit then 0 else 1) + ctorPatArity cod
+ctorPatArity ty = 0
+
+ctorWildArgs : Int -> String
+ctorWildArgs n = join "" (map (\_ => " _") (range 0 n))
+
+-- 直接 `import qualified` 的目标模块：构造子 / record 类型名要写限定名；本模块 /
+-- open import / 经 Prelude 重导出的 base 类型短名在作用域里。既没直接 import、也不在
+-- Prelude 重导出面里的模块（类型只经函数签名间接可见）连限定名都不可解析 —— 不给动作。
+importQualifiedness : SourceFile -> String -> Maybe Bool
+importQualifiedness sf name = firstMaybe (map (matchImportQualified name) sf.sourceFileImports)
+
+matchImportQualified : String -> Import -> Maybe Bool
+matchImportQualified name imp =
+  if imp.importName == name then Just imp.importIsQualified else Nothing
+
+exportModuleName : ExportItem -> Maybe String
+exportModuleName (XModule name sp) = Just name
+exportModuleName item = Nothing
+
+-- Prelude 的整模块重导出面（`module Base.Bool` 等）：这些模块的短名在任意模块里可见。
+preludeReexportModules : List Root -> List String
+preludeReexportModules roots = case moduleSourceIn roots "Prelude" of
+  Nothing => []
+  Just src => case parseSource "<prelude>" src of
+    Err e => []
+    Ok sf => case sf.sourceFileModDecl of
+      Nothing => []
+      Just m => mapMaybe exportModuleName m.modDeclExportItems
+
+typePatternPrefix : SourceFile -> List String -> String -> Maybe String
+typePatternPrefix sf preludeModules modName = if modName == "" then Just ""
+else if modName == currentModuleName sf.sourceFileDecls sf.sourceFileModDecl then Just ""
+else case importQualifiedness sf modName of
+  Just True => Just "${modName}."
+  Just False => Just ""
+  Nothing => if memName modName preludeModules then Just "" else Nothing
+
+branchLine : String -> String -> Ctor -> String
+branchLine indent prefix c =
+  "\n${indent}${prefix}${ctorName c}${ctorWildArgs (ctorPatArity (ctorType c))} => _"
+
+-- record 是单构造器类型（构造器名 = 类型名）：一条分支，字段全写 `_`。
+recordBranchLine : String -> String -> String -> List String -> String
+recordBranchLine indent prefix name fields =
+  if isEmptyList fields then "\n${indent}${prefix}${name} => _"
+  else "\n${indent}${prefix}${name} { ${join ", " (map (\f => "${f} = _") fields)} } => _"
+
+splitBranchLines : String -> String -> SplitTy -> String
+splitBranchLines indent prefix (SplitData ctors) = join "" (map (branchLine indent prefix) ctors)
+splitBranchLines indent prefix (SplitRecord name fields) =
+  recordBranchLine indent prefix name fields
+
+caseSplitNewText : Int -> String -> String -> SplitTy -> String
+caseSplitNewText baseIndent binder prefix split =
+  "case ${binder} of" ++ splitBranchLines (spacesOf (baseIndent + 2)) prefix split
+
+leadingSpaces : String -> Int
+leadingSpaces s = leadingSpacesGo (strUnpack s) 0
+
+leadingSpacesGo : List Int -> Int -> Int
+leadingSpacesGo [] n = n
+leadingSpacesGo (c :: rest) n = if c == 32 then leadingSpacesGo rest (n + 1) else n
+
+spacesOf : Int -> String
+spacesOf n = join "" (map (\_ => " ") (range 0 n))
+
+splitActionJson : String -> Int -> Int -> Int -> String -> String -> Json
+splitActionJson uri line startCol endCol title newText =
+  JObj
+    [Pair "title" (JStr title), Pair "kind" (JStr "refactor.rewrite"), Pair "edit" (JObj [Pair "changes" (JObj [Pair uri (JArr [textEditJson (lspRange line startCol line endCol) newText])])])]
+
+-- 一个 binder → 最多一条 action（类型解析不到 / 构造子名不在作用域就 0 条）。
+binderSplitAction : String -> String -> SourceFile -> List Root -> List String -> DtGoalInfo -> Pair String String -> List Json
+binderSplitAction uri text sf roots preludeModules g (Pair name tyText) = case resolveTypeSplit sf roots (currentModuleName sf.sourceFileDecls sf.sourceFileModDecl) tyText of
+  Nothing => []
+  Just (Pair modName split) =>
+    let
+      sp = g.dtGoalInfoSpan
+      line = spanStartLine sp
+      startCol = spanStartCol sp
+      endCol = maxOf sp.spanEndCol (startCol + 1)
+      baseIndent = leadingSpaces (lineText text line)
+    in case typePatternPrefix sf preludeModules modName of
+      Nothing => []
+      Just prefix =>
+        [ splitActionJson uri line startCol endCol "case split on ${name}" (caseSplitNewText baseIndent name prefix split)
+        ]
+
+ctxSplitActions : String -> String -> SourceFile -> List Root -> List String -> DtGoalInfo -> List Json
+ctxSplitActions uri text sf roots preludeModules g =
+  concatMap (binderSplitAction uri text sf roots preludeModules g) g.dtGoalInfoCtx
+
+-- 入口：请求 range → 洞 → 上下文里的可分裂 binder（不命中返回 []）。
+caseSplitActions : String -> String -> PackageContext -> String -> Int -> Int -> Int -> Int -> List Json
+caseSplitActions uri label ctx text sl sc el ec = if not (rangeTouchesHole text sl sc el ec) then []
+else case dtGoalsSourceTolerant ctx label text of
   Err e => []
-  Ok (Pair count newText) =>
-    if count == 0 || newText == text then []
-    else [ JObj [Pair "title" (JStr "fix all lint findings"), Pair "kind" (JStr "quickfix"), Pair "edit" (JObj [Pair "changes" (JObj [Pair uri (JArr [textEditJson (fullRange text) newText])])])]
-    ]
+  Ok gs => case goalAtRange sl sc el ec gs of
+    Nothing => []
+    Just g => case parseSource "<lsp>" text of
+      Err e => []
+      Ok sf =>
+        ctxSplitActions uri text sf (contextRoots ctx) (preludeReexportModules (contextRoots ctx)) g
 
 -- Index：惰性加载（首次 definition/references/completion/workspaceSymbol 时）
 -- ---------------------------------------------------------------

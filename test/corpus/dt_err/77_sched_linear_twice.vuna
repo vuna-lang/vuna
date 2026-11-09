@@ -3,7 +3,7 @@ import Base.Eff
 import Base.EffSched
 import Base.Result
 
-bad : (1 t : TaskLin Int) -> Eff RNil Int
+bad : (1 t : TaskLin Int) -> Eff Nil Int
 bad t = bindEff (awaitTaskLin t) (\_ => cancelTaskLin t)
 
 main : IO Int

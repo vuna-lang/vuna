@@ -89,8 +89,8 @@ else
 -- 按源顺序精化签名：每个签名只对「prelude + 之前的签名」可见。
 elabSigs : List (Pair String (Pair (List Expr) (Pair Expr Span))) -> List (Pair String Term) -> Ec -> Result (Pair (List (Pair String Term)) Ec)
 elabSigs sigs globals ec =
-  elabSigsGo sigs globals
-    (ecSetGlobalsComplete (ecPutGlobalsTbl ec (Base.HashMap.fromList globals)) True) []
+  elabSigsGo sigs globals (ecSetGlobalsComplete (ecPutGlobalsTbl ec (globalsTableOf globals)) True)
+    []
 
 -- 新签名先前插到 acc（末尾一次 reverse 还原源顺序）；后续签名检查要看得到**已收集**的
 -- 签名，所以 live（globals 参数）也用前插累积（查找顺序无关语义）。
@@ -335,8 +335,8 @@ checkAllDefinedGo ((Pair name (Pair ctx (Pair tyExpr sigSpan))) :: rest) globals
     else checkAllDefinedGo rest globalsTbl funTbl axiomTbl
   Nothing =>
     if Base.HashMap.member name funTbl then if Base.HashMap.member name globalsTbl then checkAllDefinedGo rest globalsTbl funTbl axiomTbl
-    else Err (tcMsg (SignatureNoDef name) (VCons name VNil))
-    else Err (tcMsg (SignatureNoDef name) (VCons name VNil))
+    else Err (tcMsg (SignatureNoDef name) (name :: []))
+    else Err (tcMsg (SignatureNoDef name) (name :: []))
 
 -- DFun 名字集合（`declFunNames` 已在前面定义；表语义 = 集合）。
 funNamesTbl : List Decl -> HashMap Bool
@@ -452,11 +452,13 @@ spineOf t = Pair t []
 appendLastTerm : List Term -> Term -> List Term
 appendLastTerm xs x = append xs [x]
 
+-- | 自动补注（M41 新增导出）：replNatZeroName。
 replNatZeroName : String
-replNatZeroName = "Base.Nat.Zero"
+replNatZeroName = "Base.Nat.Nat.Zero"
 
+-- | 自动补注（M41 新增导出）：replNatSuccName。
 replNatSuccName : String
-replNatSuccName = "Base.Nat.Succ"
+replNatSuccName = "Base.Nat.Nat.Succ"
 
 replNatValue : Int -> List DtCtor -> Term -> Maybe Int
 replNatValue fuel ctors t = if fuel <= 0 then Nothing
@@ -565,20 +567,24 @@ zipKeptArgs (b :: bs) [] = []
 zipKeptArgs (b :: bs) ((Pair a rig) :: rest) =
   if rigIsErased (secondOf b) then zipKeptArgs bs rest else a :: zipKeptArgs bs rest
 
+-- | 自动补注（M41 新增导出）：replListNilName。
 replListNilName : String
-replListNilName = "Base.List.Nil"
+replListNilName = "Base.List.List.Nil"
 
+-- | 自动补注（M41 新增导出）：replListConsName。
 replListConsName : String
-replListConsName = "Base.List.Cons"
+replListConsName = "Base.List.List.Cons"
 
 replPairName : String
 replPairName = "Base.Pair.Pair"
 
+-- | 自动补注（M41 新增导出）：replJustName。
 replJustName : String
-replJustName = "Base.Maybe.Just"
+replJustName = "Base.Maybe.Maybe.Just"
 
+-- | 自动补注（M41 新增导出）：replNothingName。
 replNothingName : String
-replNothingName = "Base.Maybe.Nothing"
+replNothingName = "Base.Maybe.Maybe.Nothing"
 
 dtEvalExprIn : DtProgram -> Expr -> Result String
 dtEvalExprIn prog expr = andThen (dtEvalExprInInfo prog expr) (\p => Ok (firstOf p))
@@ -593,7 +599,7 @@ dtEvalExprInInfo prog expr = case prog of
       -- M30（D18）：表达式求值与程序同一套环（构造子索引 + 定义值共享缓存）。
       ec0 =
         Ec next sols (reverse bodies) datas [] [] insts classes [] (Base.HashMap.fromList bodies)
-          (Base.HashMap.fromList globals) (solsToTbl sols) (Base.IntMap.fromList []) True
+          (globalsTableOf globals) (solsToTbl sols) (Base.IntMap.fromList []) True
           (Base.HashMap.fromList []) (ctorTblOfDatas datas) defvals (datasHaveLinear datas)
     in andThen (inferE globals emptyCtx ec0 expr) (\p => case p of
       Pair term (Pair ty ec1) =>
@@ -683,7 +689,7 @@ in andThen (elabDatas (collectDataDecls decls []) startGlobals startEc) (\pd => 
                   -- 正文检查前的唯一一次建表：globals 此时已固定（sigs + inst heads）。
                   ec2b =
                     ecPutClausesTbl
-                      (ecSetGlobalsComplete (ecPutGlobalsTbl ec2 (Base.HashMap.fromList globals)) True)
+                      (ecSetGlobalsComplete (ecPutGlobalsTbl ec2 (globalsTableOf globals)) True)
                       (clausesTblOf decls)
                   _ = stamp "sigs-elab-done"
                 in andThen (checkAllDefined sigs globals decls) (\_ => andThen (elabBodies decls globals [] [] ec2b) (\q => case q of
@@ -729,7 +735,11 @@ finishCore termAux decls core =
     Nothing => case firstUnsolvedInterpGoal ec4 of
       Just td => tcErr1NoLoc (InterpNoInstance td) td
       Nothing => case unsolvedMeta ec4 of
-        Just m => Err (unsolvedMessage ec4 m)
+        -- C42：延迟字典目标里「类参数已解出但实例搜索失败」的，优先报缺实例——
+        -- 否则用户只看到 unsolved metavariable，不知道缺的是哪个实例。
+        Just m => case firstUnsolvedDictGoal ec4 of
+          Just sd => tcErr1NoLoc (NoInstanceFound sd) sd
+          Nothing => Err (unsolvedMessage ec4 m)
         Nothing =>
           let
             extra = extraDefsOf globals ec4 projSpans (append instDefs defs)
@@ -789,12 +799,12 @@ unsolvedMessage ec m = case findGoal m (ecGoals ec) of
       -- M40：命名洞在诊断里带上名字（`unsolved hole ?h (/x.vuna:4:7) with goal Int`）。
       spot = if g.dtGoalName == "" then loc else "${g.dtGoalName} (${loc})"
       detail = "${spot} with goal ${showValueAt (ctxDepthOf g) g.dtGoalType}"
-    in tcMsg (UnsolvedHole detail) (VCons detail VNil)
+    in tcMsg (UnsolvedHole detail) (detail :: [])
   Nothing =>
     let
       num = strFromInt m
       hint = metaOwnerHint ec m
-    in tcMsg (UnsolvedMetavar num hint) (VCons num (VCons hint VNil))
+    in tcMsg (UnsolvedMetavar num hint) (num :: hint :: [])
 
 -- 未解元变量的归属提示：扫已精化的定义体与类型，指出它出现在哪个定义里（否则只有 ?m，
 -- 在一个上万行的程序里无从定位）。
@@ -922,7 +932,7 @@ ecOfProgram prog =
     ec4 = ecPutCtorTbl ec3 (ctorTblOfDatas (dtProgDatas prog))
     ec5 = ecPutSols ec4 (dtProgSols prog)
     ec6 = ecPutNext ec5 prog.dtProgNext
-    ec7 = ecPutGlobalsTbl ec6 (Base.HashMap.fromList (dtProgGlobals prog))
+    ec7 = ecPutGlobalsTbl ec6 (globalsTableOf (dtProgGlobals prog))
   in Pair ec7 (dtProgGlobals prog)
 
 addDatasEc : Ec -> List DtData -> Ec

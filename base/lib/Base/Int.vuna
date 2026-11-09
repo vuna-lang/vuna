@@ -4,7 +4,7 @@ module Base.Int () where
 --
 -- `Int` 是 language primitive 类型（没有 data 声明）：类型身份、字面量、表示与
 -- 算术/比较原语都由编译器提供（唯一真源 `Vuna.Compiler.Intrinsics`）。本模块按
--- 「实例跟类型模块走」的落点规则承载 `Int` 的 Eq / Ord 实例；未来 `Int` 相关的
+-- 「实例跟类型模块走」的落点规则承载 `Int` 的 Eq / Ord / Show 实例；未来 `Int` 相关的
 -- 辅助函数也放这里。
 --
 -- primitive 类型没有构造子可模式匹配，所以实例实现走编译器内建特化：`x == y` /
@@ -12,6 +12,8 @@ module Base.Int () where
 -- 因此不会自递归。
 import Base.Eq
 import Base.Ord
+-- B24：`Show` 实例跟类型模块走（Int 是 primitive，无 data 声明）。
+import Base.Show
 
 -- 数值运算符的 fixity 声明在本模块（`+` 等是 Int 内建值，不是 trait 方法）。
 infixl 6 +
@@ -28,3 +30,7 @@ instance Ord Int where
   le x y = x <= y
   gt x y = x > y
   ge x y = x >= y
+
+-- B24：`Int` 的展示走内建 `strFromInt`（primitive 类型没有构造子可模式匹配）。
+instance Show Int where
+  show x = strFromInt x

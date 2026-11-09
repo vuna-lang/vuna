@@ -2,7 +2,7 @@
 import Base.Eff
 import Base.Eff.Reader
 
-prog : Eff (RCons (Reader Cnt1 Int) RNil) Int
+prog : Eff (Cons (Reader Cnt1 Int) Nil) Int
 prog = ask Cnt1 Int
 
 opH : (o : ReaderOp Int) -> (1 k : Cont (Base.Eff.Reader.resReader Int o) Int) -> Int

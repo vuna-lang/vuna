@@ -1,0 +1,16 @@
+# C23/C39 夹具：`vuna test --jobs N` 的包内测试进程级并行。
+#
+# 根包 test/ 有 3 个纯测试 + 2 个 IO 测试 + 2 个「START → sleep → END」重叠探针；
+# 并行断言用 `--filter Overlap --jobs 2` 保证两个探针一定在同一个窗口里一起跑。
+# fail/ 是**独立的嵌套包**（不在 [workspace].members 里）：一个通过 + 一个故意失败，
+# 用来锁「并行下失败文件 exit 1 且 FAIL 行存在」。
+#
+# 探针用 clock（sleepMicros），IO 测试用 console。
+[package]
+name = "m38-test-jobs"
+
+[dependencies]
+vuna-base = "../../../../base"
+
+[capabilities]
+effects = ["console", "clock"]

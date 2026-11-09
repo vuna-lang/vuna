@@ -39,32 +39,39 @@ import Base.Monad
 --     精化器按行结构构造证明（W3）。`sendCore`/`handleCore` 是信任边界内的核心原语。
 --   * handler 结果行用 `rowRem`；它不是类型族，由编译器按标签类型值结构相等归约。
 -- 行：开放世界的效应标签（标签 = 类型；用户自己声明新效应）。
+-- | 开放世界的效应行（Type-1 数据）：`Nil` 是空行，`Cons` 是 `Type` 标签 + 尾行。行只是擦除索引，运行时靠 `send` / `handle` 的 (key, name) 找 handler。
 data Row : Type 1 where
-  RNil : Row
-  RCons : Type -> Row -> Row
+  Nil : Row
+  Cons : Type -> Row -> Row
 
 -- 行成员证明（W3）：归纳族，`Here` 在头部命中，`There` 跳过头部。
 -- 隐式参数 `{w : Member e r}` 由精化器按行结构构造证明（见 effects.md §8）。
+-- | 行成员证明 `Member e r`（Type-1 归纳族）：`Here` 在头部命中，`There` 跳过头部；隐式参数由精化器按行结构构造。
 data Member : Type -> Row -> Type 1 where
-  Here : {e : Type} -> {r : Row} -> Member e (RCons e r)
-  There : {e : Type} -> {x : Type} -> {r : Row} -> Member e r -> Member e (RCons x r)
+  Here : {e : Type} -> {r : Row} -> Member e (Cons e r)
+  There : {e : Type} -> {x : Type} -> {r : Row} -> Member e r -> Member e (Cons x r)
 
 -- 行删除：从 r 中去掉标签 e（保留顺序）；handler 的结果行。
--- 注意：不是类型族——类型族的重复变量模式（`RCons e r`）不会强制相等；
+-- 注意：不是类型族——类型族的重复变量模式（`Cons e r`）不会强制相等；
 -- 这里由编译器按标签类型值结构相等归约（Core.Eval.rowRemReduce）。
+-- | 从行 `r` 中删除标签 `e` 并保留顺序（handler 的结果行）。它不是类型族：由编译器按标签类型的值结构相等归约（`Core.Eval.rowRemReduce`）。
 axiom rowRem : Type -> Row -> Row
 
 -- Eff 的内部 dummy 参数（不是世界令牌；只为 thunk 延迟执行）。
+-- | `Eff` 内部的 dummy 参数类型（**不是**世界令牌，只为 thunk 延迟执行）。
 data EffUnit : Type where
   MkEffUnit : EffUnit
 
 -- 抽象动作；构造子不导出。
+-- | 抽象效应动作 `Eff r a`：构造子不导出，内部是私有 dummy thunk；用 `pureEff` / `bindEff` / `sendCore` / `handleCore` 构造与消解。
 data Eff : Row -> Type -> Type where
   MkEff : {r : Row} -> {a : Type} -> (EffUnit -> a) -> Eff r a
 
+-- | 纯值提升为 Eff 动作。
 pureEff : {r : Row} -> {a : Type} -> a -> Eff r a
 pureEff x = MkEff (\_ => x)
 
+-- | Eff 的绑定：先执行 `e`，把结果喂给 `k`；与 `Monad (Eff r)` 实例一致。
 bindEff : {r : Row} -> {a : Type} -> {b : Type} -> Eff r a -> (a -> Eff r b) -> Eff r b
 bindEff e k = MkEff (\u => case e of
   MkEff f => case k (f u) of
@@ -74,23 +81,28 @@ bindEff e k = MkEff (\u => case e of
 -- 信任边界：把「运行时原语 thunk」包装成 Eff 动作（dummy `Int` 只为延迟执行，
 -- 没有世界令牌语义）。只供运行时效应模块（如 `Base.EffSched`）包装隐藏 intrinsic；
 -- 普通用户用 pureEff/bindEff/sendCore/handleCore。
+-- | 信任边界：把运行时原语 thunk 包装成 Eff 动作（dummy `Int` 只为延迟执行，没有世界令牌语义）。只供运行时效应模块（如 `Base.EffSched`）包装隐藏 intrinsic；普通用户用 pureEff / bindEff / sendCore / handleCore。
 effPrim : {r : Row} -> {a : Type} -> (Int -> a) -> Eff r a
 effPrim f = MkEff (\_ => f 0)
 
 -- 行扩宽：动作在更大的行里仍可执行（不安装/不删除 handler；运行时无操作）。
-weaken : {e : Type} -> {r : Row} -> {a : Type} -> Eff r a -> Eff (RCons e r) a
+-- | 行扩宽：动作在更大的行 `Cons e r` 下仍可执行（不安装也不删除 handler，运行时无操作）。
+weaken : {e : Type} -> {r : Row} -> {a : Type} -> Eff r a -> Eff (Cons e r) a
 weaken (MkEff f) = MkEff f
 
+-- | 内部：取出 Eff 动作的底层 thunk 并应用 dummy 参数（`runPure` / `runEff` 共用）。
 runThunk : {r : Row} -> {a : Type} -> Eff r a -> EffUnit -> a
 runThunk e = case e of
   MkEff f => f
 
--- 运行一个「行已被处理干净」的动作（RNil）；有未处理效应时由运行时报告。
-runPure : {a : Type} -> Eff RNil a -> a
+-- 运行一个「行已被处理干净」的动作（Nil）；有未处理效应时由运行时报告。
+-- | 运行行已处理干净（`Nil`）的动作；仍有未处理效应时由运行时报告。
+runPure : {a : Type} -> Eff [] a -> a
 runPure e = runThunk e MkEffUnit
 
 -- 运行任意行：把动作放进 IO 世界执行（handler 通过运行时栈安装）。
 -- 用 bindIO 延迟到动作执行时再求值，避免构造期就 perform。
+-- | 把任意行的动作放进 IO 世界执行（handler 通过运行时栈安装）；用 bindIO 延迟到动作执行时再求值，避免构造期就 perform。
 runIOEff : {r : Row} -> {a : Type} -> Eff r a -> IO a
 runIOEff e = prim_bindIO (prim_pureIO 0) (\_ => prim_pureIO (runEff e))
 
@@ -98,32 +110,40 @@ runIOEff e = prim_bindIO (prim_pureIO 0) (\_ => prim_pureIO (runEff e))
 -- handler 继续处理 r。普通用户用 runPure/runIOEff。
 -- 仅供作用域 handler 实现内部使用（W6）：在嵌套 handler 下运行子计算，外层运行时
 -- handler 继续处理 r。普通用户用 runPure/runIOEff。
+-- | 仅供作用域 handler 实现内部使用（W6）：在嵌套 handler 下运行子计算，外层运行时 handler 继续处理行 `r`；普通用户用 `runPure` / `runIOEff`。
 runEff : {r : Row} -> {a : Type} -> Eff r a -> a
 runEff e = runThunk e MkEffUnit
 
 -- 核心发送：e 是标签类型；key/name 是运行时实例标识；op 是运行时值。
 -- `e` 是显式类型参数（宇宙域，恒擦除）；op 是运行时值。
+-- | 核心发送：`e` 是标签类型（宇宙域、恒擦除），key/name 是运行时 handler 实例标识，op 是操作值；运行时按 (key, name) 找到 handler。
 sendCore : (e : Type) -> {r : Row} -> {op : Type} -> {x : Type} -> String -> Int -> (o : op) -> Eff r x
 sendCore e key name o = MkEff (\_ => prim_effectPerform key name o)
 
 -- 核心 handler：ret 处理正常返回，opH 处理每个操作；结果行删除 e。
+-- | 核心 handler：`ret` 处理正常返回，`opH` 处理每个操作，结果行删除 `e`（`rowRem e r`）；(key, name) 必须与 `sendCore` 匹配。
 handleCore : (e : Type) -> {r : Row} -> {op : Type} -> {a : Type} -> {b : Type} -> {h : Type} -> String -> Int -> (a -> b) -> h -> Eff r a -> Eff (rowRem e r) b
 handleCore e key name ret opH comp = MkEff (prim_effectHandle key name ret opH (runThunk comp))
 
 -- 执行「answer 本身是 IO 动作」的程序（IO-backed handler 的入口）。
-runIOAnswer : {a : Type} -> Eff RNil (IO a) -> IO a
+-- | 执行「结果本身是 IO 动作」的程序（IO-backed handler 的入口）：先 `runEff` 求值，再由 `prim_runIO` 执行得到的 IO 动作。
+runIOAnswer : {a : Type} -> Eff [] (IO a) -> IO a
 runIOAnswer e = prim_bindIO (prim_pureIO 0) (\_ => prim_pureIO (prim_runIO (runEff e)))
 
+-- | 线性 continuation（本阶段的一次性闭包类型）：`Cont a b` 由 `MkCont` 包装限量为 1 的函数，只能被消费一次。
 linear data Cont a b : Type where
   MkCont : {a : Type} -> {b : Type} -> (1 k : a -> b) -> Cont a b
 
+-- | 消费 `Cont` 一次并应用到参数；之后该 `Cont` 值消失（一次性）。
 resumeCont : {a : Type} -> {b : Type} -> (1 c : Cont a b) -> a -> b
 resumeCont c x = case c of
   MkCont k => k x
 
+-- | 内部适配器：把「接收线性 `Cont` 的 opH」适配成 `handleCore` 需要的普通续延回调 `res o -> b`。
 contAdapter : {op : Type} -> {res : op -> Type} -> {b : Type} -> ((o : op) -> (1 k : Cont (res o) b) -> b) -> (o : op) -> (res o -> b) -> b
 contAdapter opH o k = opH o (MkCont k)
 
+-- | 线性版核心 handler：`opH` 接收线性 `Cont (res o) b`（一次性续延），其余同 `handleCore`；供需要线性续延的效应使用。
 handleCoreLin : (e : Type) -> {r : Row} -> {op : Type} -> {a : Type} -> {b : Type} -> {res : op -> Type} -> String -> Int -> (a -> b) -> ((o : op) -> (1 k : Cont (res o) b) -> b) -> Eff r a -> Eff (rowRem e r) b
 handleCoreLin e key name ret opH comp = handleCore e key name ret (contAdapter opH) comp
 
@@ -134,6 +154,7 @@ handleCoreLin e key name ret opH comp = handleCore e key name ret (contAdapter o
 -- `mkCont` 把「捕获线性资源的一次性闭包」装进 `Cont`；用量检查只允许这种捕获
 -- 出现在「立即按 quantity 1 消费」的位置（应用函数位 / rig-1 实参 / 线性数据
 -- 的 rig-1 字段），见 qtt.md §6。`resumeCont` 消费一次后值即消失。
+-- | 把「捕获线性资源的一次性闭包」装进 `Cont`；用量检查只允许这种捕获出现在立即按 quantity 1 消费的位置（应用函数位 / rig-1 实参 / 线性数据的 rig-1 字段）。
 mkCont : {a : Type} -> {b : Type} -> (1 k : a -> b) -> Cont a b
 mkCont k = MkCont k
 
@@ -144,12 +165,14 @@ mkCont k = MkCont k
 -- 登记表里 mark 之上的 release。正常返回路径由下面的 pop + release 在带内完成。
 -- 边界：release 在 handler 退出点执行，只能访问**外层** handler；它自身的异常
 -- 被吞掉；硬中止路径没有 handler 栈，只能做无效应清理（见 effects-layers.md）。
+-- | 通用 bracket：acquire → use → release。cleanup 由运行时 handler 的**退出钩子**驱动——use 里任意效应 abort（`Exn` throw、自定义 abort、调度器硬中止）都会在退出时执行 release；正常返回路径在带内 pop + release。边界：release 只能访问外层 handler、自身异常被吞，硬中止路径只能做无效应清理。
 bracket : {res : Type} -> {a : Type} -> {r : Row} -> Eff r res -> (res -> Eff r Int) -> (res -> Eff r a) -> Eff r a
 bracket acquire release use =
   bindEff acquire
     (\res => bindEff (effPrim (\_ => prim_cleanupPush (\_ => runEff (release res)))) (\_ => bindEff (use res) (\a => bindEff (effPrim (\_ => prim_cleanupPop 0)) (\_ => bindEff (release res) (\_ => pureEff a)))))
 
 -- `finally action cleanup`：action 正常返回 / 异常 / 其它效应 abort 都跑 cleanup。
+-- | `finally action cleanup`：action 正常返回 / 异常 / 其它效应 abort 都执行 cleanup，最后返回 action 的结果。等价于 `bracket (pureEff 0) (\_ => cleanup) (\_ => comp)`。
 finally : {a : Type} -> {r : Row} -> Eff r a -> Eff r Int -> Eff r a
 finally comp cleanup = bracket (pureEff 0) (\_ => cleanup) (\_ => comp)
 

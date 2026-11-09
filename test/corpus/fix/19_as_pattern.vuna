@@ -1,0 +1,5 @@
+mark : String -> String
+mark label = if label == "x" then label else if label == "y" then label else "other"
+
+main : String
+main = mark "x"

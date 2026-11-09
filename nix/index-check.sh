@@ -148,8 +148,14 @@ cp -p "$target" "$tmpd/Resolve.vuna.bak"
 before_manifest=$(cat .local/index/manifest.txt)
 before_size=$(wc -c <"$target" | tr -d ' ')
 before_mtime=$(stat -c '%Y' "$target")
-# 第 8 行是行注释（第 7 行是空行）；替换注释文本首字符，字节数与语法都保持不变。
-sed -i '8s/^-- ./-- X/' "$target"
+# 取文件里第一条行注释（`-- ` 开头）而不是硬编码行号：模块头/导出表增删项会平移行号，
+# 硬编码会让本断言在无关改动上误报。替换注释文本首字符，字节数与语法都保持不变。
+probe_line=$(grep -n '^-- ' "$target" | head -1 | cut -d: -f1)
+if [ -z "${probe_line:-}" ]; then
+  bad "index invalidation probe: no line comment found in $target"
+  probe_line=8
+fi
+sed -i "${probe_line}s/^-- ./-- X/" "$target"
 touch -r "$tmpd/Resolve.vuna.bak" "$target" || cp -p "$tmpd/Resolve.vuna.bak" "$target"
 after_size=$(wc -c <"$target" | tr -d ' ')
 after_mtime=$(stat -c '%Y' "$target")

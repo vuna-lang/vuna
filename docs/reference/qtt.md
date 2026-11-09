@@ -122,8 +122,9 @@ mk t = mkContI (\x => useToken t + x)   -- 捕获 t；rig-1 实参位置 → 允
 ```
 
 因此线性函数请写成单参数/线性记录风格；curried 多参数线性函数与「函数值线性」的
-通用箭头类型在本阶段不支持。case 分支体是 λ 时的 `TC_LambdaTooManyParams`（B32）
-也限制了 λ 的写法。
+通用箭头类型在本阶段不支持。case 分支体是 λ 且结果类型未定时，精化器会合成
+`ω` 的 Pi 元变量求解（B32）；合成的 binder multiplicity 固定为 ω，线性函数值仍受
+上面的限制。
 
 ## 7. 擦除
 
@@ -153,9 +154,9 @@ mk t = mkContI (\x => useToken t + x)   -- 捕获 t；rig-1 实参位置 → 允
   线性箭头 binder `(1 x : A) -> B` 本身可用（§1）。
 - 捕获规则是**保守近似**：只会出现「该放行的被拒」，不会出现「该拒的被放行」；
   嵌套/curried 线性闭包、`if`/`case` 里的捕获一律拒绝。
-- 用量检查的 let 降级按 λ 应用缩放 RHS（`Elab/Usage` 的 `TApp`），
-  `let z = y + 1 in z`（`y` 线性）会被误报 `TC_LinearOverused`；通用运算符/trait
-  方法的形参默认 ω，把线性值传给它们同样被拒（debt D45）。
+- 用量检查把 let 的 RHS 按单次求值计（应用 rig=1），线性值经 let 传递不再误报；
+  但推断位置把线性值传给通用运算符/trait 方法仍被拒（形参默认 ω；期望类型触发
+  `bi_add` 等特化才通过），见 debt D45。
 - 线性 IO 世界令牌 / per-module `unsafe` 未做（debt D28）。
 - 运行时不做所有权检查；线性是静态纪律（线性值仍可经非线性 data 的字段被复制，
   见 D42）。

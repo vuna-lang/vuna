@@ -1,1 +1,1 @@
-corpus/lint/08_case_single_alt.vuna:2:11: [LN_LiftDestructure] lift-destructure: single-alternative case on `p` can be folded into the enclosing pattern
+corpus/lint/08_case_single_alt.vuna:2:11: [LN_DispatchLift] dispatch-lift: dispatch on `p` can be lifted into the enclosing pattern

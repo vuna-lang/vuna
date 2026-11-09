@@ -1,0 +1,7 @@
+# 跨模块同名构造子夹具：lib/X 与 lib/Y 各自导出 data 类型的一个 `Nil` 构造子；
+# app/Main.vuna 同时 import 两者，裸 `Nil` 必须按期望类型/scrutinee 族解析。
+[package]
+name = "ctor-same-name"
+
+[dependencies]
+vuna-base = "../../../../base"

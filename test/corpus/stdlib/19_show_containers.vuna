@@ -1,0 +1,31 @@
+-- B31：容器 `Show` 实例（List / Maybe / Pair / Result）在各自类型模块随包加载。
+-- `Nothing` / `Err` 的 payload 类型无法从 show 的约束反推，用签名绑定消歧。
+-- 容器插值走 blanket `Show a => Interp a`；参数化实例的 tele 实参必须按擦除 rig 落地。
+import Base.Int
+import Base.List
+import Base.Maybe
+import Base.Pair
+import Base.Result
+import Base.Show
+
+nothingInt : Maybe Int
+nothingInt = Nothing
+
+badResult : Result Int
+badResult = Err "bad"
+
+checks : Bool
+checks =
+  show [1, 2, 3] == "[1, 2, 3]"
+    && show (Just 4) == "Just 4"
+    && show nothingInt == "Nothing"
+    && show (Pair 5 "x") == "(5, \"x\")"
+    && show (Ok 6) == "Ok 6"
+    && show badResult == "Err \"bad\""
+    && "${[1, 2]}" == "[1, 2]"
+    && "${Just 3}" == "Just 3"
+    && show True == "True"
+    && show 41 == "41"
+
+main : Int
+main = if checks then 1 else 2

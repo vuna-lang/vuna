@@ -1,0 +1,11 @@
+-- D40：as 模式的名字与内层模式再次绑定同名变量（`x@(Succ x)`）是同一个绑定作用域，
+-- 非线性格不支持。
+data Nat : Type where
+  Zero : Nat
+  Succ : Nat -> Nat
+
+bad : Nat -> Int
+bad (x@(Succ x)) = x
+
+main : Int
+main = 1

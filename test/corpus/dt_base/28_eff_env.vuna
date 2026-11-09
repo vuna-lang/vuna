@@ -4,12 +4,10 @@ import Base.Eff
 import Base.EffEnv
 import Base.IO
 
-prog : (n : Name) -> Eff (RCons (Env n) RNil) Int
+prog : (n : Name) -> Eff (Env n :: []) Int
 prog n =
-  bindEff (envGetEnv n "VUNA_W10_MISSING_ENV_VAR") (\m =>
-    bindEff (envGetCwd n) (\c =>
-      bindEff (envExecPath n) (\e =>
-        pureEff ((if m == "" then 1 else 0) + (if c /= "" then 1 else 0) + (if e /= "" then 1 else 0)))))
+  bindEff (envGetEnv n "VUNA_W10_MISSING_ENV_VAR")
+    (\m => bindEff (envGetCwd n) (\c => bindEff (envExecPath n) (\e => pureEff ((if m == "" then 1 else 0) + (if c /= "" then 1 else 0) + (if e /= "" then 1 else 0)))))
 
 mret : Int -> Int
 mret a = a
@@ -23,7 +21,5 @@ mopH op k = case op of
 main : IO Int
 main = case runPure (handleEnv V1 mret mopH (prog V1)) of
   mockScore =>
-    prim_bindIO (print ("mock " ++ strFromInt mockScore ++ "\n")) (\_ =>
-      prim_bindIO (runIOAnswer (handleEnvIO V2 (prog V2))) (\realScore =>
-        prim_bindIO (print ("real " ++ strFromInt realScore ++ "\n")) (\_ =>
-          prim_pureIO 0)))
+    prim_bindIO (print ("mock " ++ strFromInt mockScore ++ "\n"))
+      (\_ => prim_bindIO (runIOAnswer (handleEnvIO V2 (prog V2))) (\realScore => prim_bindIO (print ("real " ++ strFromInt realScore ++ "\n")) (\_ => prim_pureIO 0)))

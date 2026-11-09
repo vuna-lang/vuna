@@ -28,14 +28,25 @@ data Box a : Type where
   -- | 字段/方法文档同理。
   Full : a -> Box a
 
+-- 尾随形式：与目标同一行、写在目标右侧。
+count : Int
+count = 0 -- ^ 尾随 doc。
+data Wrap a : Type where
+  Wrap : a -> Wrap a {- ^ 块注释尾随形式。 -}
+
 -- 普通注释：不是 docstring，不会出现在 HTML / hover / `vuna api` 中。
 ```
 
-- 行块：首行 `-- |`；后续**同列且行号连续**的 `--` / `-- |` 行为续行；空行结束。
-- 块：`{- | ... -}` / `{-| ... -}`；剥离首部 `|`，按非空行的最小前导空格 dedent。
-- 关联规则：doc block 归到第一个「行号更大、列相同、行距 ≤ 2 行、中间没有其他注释」的
+- 行块：首行 `-- |`（前置）或 `-- ^`（尾随）；后续**同列且行号连续**的 `--` /
+  `-- |` / `-- ^` 行为续行；空行结束。
+- 块：`{- | ... -}` / `{-| ... -}`（前置）、`{- ^ ... -}`（尾随）；剥离首部标记，按非空行的
+  最小前导空格 dedent。
+- 关联规则（前置）：doc block 归到第一个「行号更大、列相同、行距 ≤ 2 行、中间没有其他注释」的
   目标（模块头 / 顶层声明 / data 构造子 / record 字段 / trait 方法）。
-- 模块文档写在 `module` 头之前；无模块头的文件没有模块文档。
+- 关联规则（尾随）：必须是**同一行、列在目标右侧**；归到该行最后一个这样的目标。不支持把
+  尾随 doc 写在目标的下一行——fmt 会把单独成行的注释统一挂到下一个条目作为前置注释，那种
+  写法在 fmt 后归属会变，因此不纳入语义。同一目标同时有前置与尾随 doc 时**前置优先**。
+- 模块文档写在 `module` 头之前；尾随形式不参与模块文档。
 - M40：模块文档也用于 LSP hover——模块名（`import` / 导出项 `module B` / 模块头 / 限定名前缀）
   hover 时在 `module <全名>` 之后显示该模块的 docstring；被 import 的模块读盘取 docstring。
 - 孤儿 doc、缩进错误、普通注释都忽略（不报错）。
@@ -61,8 +72,11 @@ vuna doc [--check] [--package NAME] [DIR [OUT]]
 - `DIR` 是 workspace 根（含 `[workspace].members`）时渲染根包 + 所有成员包；是单个包时只
   渲染该包；`--package NAME` 只保留指定包。
 - 每个包尊重自己的 `[export].modules`（按 manifest 顺序；缺模块是错误，exit 2）。
-- `--check` 不写文件：逐个报告**顶层导出项**缺失 docstring，有缺失 exit 1；成员（构造子/
-  字段/方法）不强制。
+- `--check` 不写文件：逐个报告**顶层符号**缺失 docstring（前置 `-- |` 与尾随 `-- ^` 都
+  算；私有名 `_` 前缀跳过），有缺失 exit 1；成员（构造子/字段/方法）不强制。
+- `--check` 已接进 `nix flake check`（`checks.doc-coverage`）：以 ratchet 方式对比
+  `nix/doc-coverage.baseline`，缺失数超过基线即门禁失败（挡回归），低于基线提示下调；
+  覆盖全量后可换成直接的 `doc --check`。见 [testing.md](testing.md) 的 Nix checks 清单。
 - 输出包含：标题/统计、搜索框、包/kind 过滤、左侧 TOC、模块/符号章节、签名代码块、
   docstring 渲染、内嵌搜索 JSON 与客户端 JS。无外部 CSS/JS/CDN，`file://` 直接打开。
 - HTML 是可复现的：无时间戳/随机数，同一 DocBook 两次生成逐字节一致。
@@ -138,7 +152,9 @@ v3（本次 API 文档 + 检索）变化：
 
 ## 5. 设计参照
 
-- **Haddock**：`-- |` 前置文档、续行语义；vuna 取 `-- |` / `{- | -}`，不做 `-- ^` 尾随文档。
+- **Haddock**：`-- |` 前置文档、续行语义；vuna 取 `-- |` / `{- | -}` 与**同一行**的尾随
+  `-- ^` / `{- ^ -}`（不取写在目标下一行的尾随形式：fmt 会把单独成行的注释挂到下一条目，
+  归属会变；见 §1.1）。
 - **Idris2**：`|||` 是语言级 doc comment；vuna 不采用，因为 Lexer/Parser/AST 在 seed 闭包内，
   改语法需要 seed rotation，而工具链侧注释提取已能满足 hover / 生成 / 检索。
 - **Hoogle**：类型查询 + 多种匹配强度（exact/equivalent/instance/partial）；vuna 的
@@ -148,7 +164,7 @@ v3（本次 API 文档 + 检索）变化：
 
 | 模块 | 职责 |
 | --- | --- |
-| `Vuna.Doc.Comments` | 识别 `-- |` / `{- | -}`、关联声明、普通注释排除 |
+| `Vuna.Doc.Comments` | 识别 `-- |` / `{- | -}` / 同行尾随 `-- ^`、关联声明、普通注释排除 |
 | `Vuna.Doc.Types` | DocBlock / DocTable 数据模型 |
 | `Vuna.Doc.Model` | AST + DocTable → DocBook（模块/条目/成员） |
 | `Vuna.Doc.Prose` | docstring 受限 Markdown → HTML |

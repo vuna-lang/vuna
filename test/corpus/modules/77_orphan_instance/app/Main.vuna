@@ -1,0 +1,8 @@
+import T
+
+-- B23：trait 与 head 类型都在 T，实例却声明在 Main → 孤儿实例。
+instance Pretty Color where
+  pretty c = "red"
+
+main : String
+main = pretty Red

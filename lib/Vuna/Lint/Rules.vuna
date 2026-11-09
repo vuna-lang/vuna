@@ -7,21 +7,23 @@ module Vuna.Lint.Rules
   , splitLines
   ) where
 
--- Vuna.Lint.Rules：lint 的三条规则（AST 驱动）+ 源码切片工具。
+-- Vuna.Lint.Rules：lint 的两条 dispatch 规则（AST 驱动）+ 源码切片工具。
 --
 -- M31 重写：旧实现是纯 token 行扫描（按缩进猜结构），规范格式下几乎不触发。
 -- 现在 `lintSourceWith` 先 parseSource 得到 AST，规则判定全部走 AST；需要源码原文
 -- （字面量、模式、分支体）时再用 span + token 边界从源码切片，绝不重新渲染
 -- 字符串字面量。Edit 用行范围表示（`Edit start stop lines`），由 Vuna.Lint.Fix 应用。
 --
--- 规则：
---   * literal-if-chain：`if x == lit then a else if x == lit then b else c` 链，
---     lit 为 String/Int 字面量且 else 链同一 scrutinee → `case x of lit => a ... _ => c`；
---   * lift-destructure：单候选解构（单 alt case / 单绑定 let）提升到外层 clause/alt 模式
---     （原 redundant-case 的扩展；旧 RedundantCase 保留为历史别名，不再产生）；
---   * case-to-clauses：顶层单 clause 函数的 `case` 分支提升为多条同名 clause。
+-- 规则按 dispatch 源划分，改写目标统一为「把 dispatch 提升进外层模式」：
+--   * literal-if-chain：if dispatch（`x == lit` 链，或 `if b then A else B` 的 Bool
+--     变量分派）。scrutinee 是外层 clause/alt 模式变量时提升成多条 clause / 更细的
+--     alt；字面量链提升不了时回退成 case（`chainFindings`）；
+--   * dispatch-lift：case / let dispatch。单 alt 替换外层变量；多 alt 拆 clause / alt。
+--     （原 lift-destructure 与 case-to-clauses 合并而来，两个旧 code 不再产生。）
 --
--- 三条规则都只做语法可证的改写：判据不满足时只报告、不给 Edit（`findingEdit = Nothing`）。
+-- 提升只发生在 clause/alt 的**直接体**；嵌套在表达式里的 dispatch 需要上下文分发
+-- （case-of-case），会复制代码，不做。clause 拆分要求该名字只有一条 clause；alt
+-- 拆分/替换要求该 alt 是最后一个。判据不满足时只报告、不给 Edit。
 -- 候选按（行, 列）排序，被更大 Edit 行范围包含的内层 finding 会被丢弃，避免同一链/同一次
 -- 折叠产生互相冲突的 Edit。
 import Vuna.Compiler.Common
@@ -30,6 +32,10 @@ import Vuna.Compiler.Loader.Fixity
 import Vuna.Compiler.Frontend.Lexer
 import Vuna.Compiler.Frontend.Parser
 import Vuna.Lint.Diagnostics
+
+-- C41：工具链 fuel 耗尽不是「部分结果」，而是内部不变量被破坏；与编译器一致硬失败。
+lintFuelExhausted : String -> a
+lintFuelExhausted what = prim_fail "vuna: internal: lint ${what} fuel exhausted"
 
 record Edit where
   editStart : Int
@@ -45,9 +51,10 @@ record Finding where
   findingEdit : Maybe Edit
 
 -- 外层模式上下文：候选提升的目标位置。
--- LClause headLine pats isLast：外层是顶层子句；LAlt headLine pat isLast：外层是 alt。
+-- LClause headLine pats isLast isSingle：外层是顶层子句（isSingle = 该名字只有一条 clause）；
+-- LAlt headLine pat isLast：外层是 case alt。
 data Lane : Type where
-  LClause : Int -> List Pat -> Bool -> Lane
+  LClause : Int -> List Pat -> Bool -> Bool -> Lane
   LAlt : Int -> Pat -> Bool -> Lane
 
 -- 字面量 if 分支：literal 原文、then 原文、then 表达式。
@@ -56,10 +63,11 @@ record ChainItem where
   chainItemThenText : String
   chainItemThen : Expr
 
--- 链提取结果：scrutinee 名、分支、default 原文、default 表达式。
+-- 链提取结果：scrutinee 名、分支、default 模式原文、default 原文、default 表达式。
 record ChainRes where
   chainResName : String
   chainResItems : List ChainItem
+  chainResDefaultPat : String
   chainResDefaultText : String
   chainResDefaultExpr : Expr
 
@@ -265,10 +273,14 @@ tokenAt (t :: rest) line col =
   if tokLine t == line && tokCol t == col then Just t else tokenAt rest line col
 
 -- span 最后一个 token 之后的第一个 token（EOF 也返回）；用于定位切片右边界。
+-- 注意 span 的 end 位置有两种来源：普通 token 的 span 取最后一个 token 的**起点**，
+-- 而模板字面量（`TTmpl`）的 span 取字面量结束后的位置。两种都按“源码序严格在
+-- (line, col) 之后”查找，不能只做精确位置匹配（否则模板字面量会退化成切到行尾）。
 nextTokAfter : List PTok -> Int -> Int -> Maybe PTok
 nextTokAfter [] line col = Nothing
 nextTokAfter (t :: rest) line col =
-  if tokLine t == line && tokCol t == col then headToken rest else nextTokAfter rest line col
+  if tokLine t > line then Just t
+  else if tokLine t == line && tokCol t > col then Just t else nextTokAfter rest line col
 
 -- span 的原文（单行）。右边界 = span 末 token 之后的下一个 token（或行尾）。
 spanText : List String -> List PTok -> Span -> String
@@ -303,7 +315,7 @@ startFromSpan : Span -> Pair Int Int
 startFromSpan sp = Pair (spanStartLine sp) (spanStartCol sp)
 
 startExpr : Int -> Expr -> Pair Int Int
-startExpr fuel e = if fuel <= 0 then Pair 0 0
+startExpr fuel e = if fuel <= 0 then lintFuelExhausted "expression position"
 else case e of
   EVar n sp => startFromSpan sp
   EInt n sp => startFromSpan sp
@@ -336,46 +348,49 @@ else case e of
   ESectOp op sp => startFromSpan sp
   ESectL op rhs sp => minPair (startFromSpan sp) (startExpr (fuel - 1) rhs)
   ESectR lhs op sp => minPair (startFromSpan sp) (startExpr (fuel - 1) lhs)
-  _ => Pair 0 0
+  -- M31.2：中缀链 / 括号（parser 中间产物）也要给出真实起点，不能落到兜底 (0,0)。
+  EInfix op l r sp =>
+    minPair (startFromSpan sp) (minPair (startExpr (fuel - 1) l) (startExpr (fuel - 1) r))
+  EParen inner sp => minPair (startFromSpan sp) (startExpr (fuel - 1) inner)
 
 startExprs : Int -> List Expr -> Pair Int Int
-startExprs fuel exprs = if fuel <= 0 then Pair 1000000000 1000000000
+startExprs fuel exprs = if fuel <= 0 then lintFuelExhausted "expression position"
 else case exprs of
   [] => Pair 1000000000 1000000000
   e :: rest => minPair (startExpr (fuel - 1) e) (startExprs (fuel - 1) rest)
 
 startFields : Int -> List (Pair String Expr) -> Pair Int Int
-startFields fuel fields = if fuel <= 0 then Pair 1000000000 1000000000
+startFields fuel fields = if fuel <= 0 then lintFuelExhausted "expression position"
 else case fields of
   [] => Pair 1000000000 1000000000
   (Pair f e) :: rest => minPair (startExpr (fuel - 1) e) (startFields (fuel - 1) rest)
 
 startBinds : Int -> List (Pair Pat Expr) -> Pair Int Int
-startBinds fuel binds = if fuel <= 0 then Pair 1000000000 1000000000
+startBinds fuel binds = if fuel <= 0 then lintFuelExhausted "expression position"
 else case binds of
   [] => Pair 1000000000 1000000000
   (Pair pat e) :: rest => minPair (startExpr (fuel - 1) e) (startBinds (fuel - 1) rest)
 
 startAlts : Int -> List (Pair Pat Expr) -> Pair Int Int
-startAlts fuel alts = if fuel <= 0 then Pair 1000000000 1000000000
+startAlts fuel alts = if fuel <= 0 then lintFuelExhausted "expression position"
 else case alts of
   [] => Pair 1000000000 1000000000
   (Pair pat e) :: rest => minPair (startExpr (fuel - 1) e) (startAlts (fuel - 1) rest)
 
 startLocalClauses : Int -> List (Pair (List Pat) Expr) -> Pair Int Int
-startLocalClauses fuel clauses = if fuel <= 0 then Pair 1000000000 1000000000
+startLocalClauses fuel clauses = if fuel <= 0 then lintFuelExhausted "expression position"
 else case clauses of
   [] => Pair 1000000000 1000000000
   (Pair pats e) :: rest => minPair (startExpr (fuel - 1) e) (startLocalClauses (fuel - 1) rest)
 
 startStmts : Int -> List DoStmt -> Pair Int Int
-startStmts fuel stmts = if fuel <= 0 then Pair 1000000000 1000000000
+startStmts fuel stmts = if fuel <= 0 then lintFuelExhausted "expression position"
 else case stmts of
   [] => Pair 1000000000 1000000000
   stmt :: rest => minPair (startStmt (fuel - 1) stmt) (startStmts (fuel - 1) rest)
 
 startStmt : Int -> DoStmt -> Pair Int Int
-startStmt fuel stmt = if fuel <= 0 then Pair 1000000000 1000000000
+startStmt fuel stmt = if fuel <= 0 then lintFuelExhausted "expression position"
 else case stmt of
   DBind pat e sp => startExpr (fuel - 1) e
   DExpr e sp => startExpr (fuel - 1) e
@@ -441,13 +456,13 @@ patVars : List Pat -> List String
 patVars pats = patVarsFuel lintFuel pats
 
 patVarsFuel : Int -> List Pat -> List String
-patVarsFuel fuel pats = if fuel <= 0 then []
+patVarsFuel fuel pats = if fuel <= 0 then lintFuelExhausted "traversal"
 else case pats of
   [] => []
   p :: rest => append (patVarFuel (fuel - 1) p) (patVarsFuel (fuel - 1) rest)
 
 patVarFuel : Int -> Pat -> List String
-patVarFuel fuel pat = if fuel <= 0 then []
+patVarFuel fuel pat = if fuel <= 0 then lintFuelExhausted "traversal"
 else case pat of
   PVar name sp => [name]
   PAs name inner sp => name :: patVarFuel (fuel - 1) inner
@@ -458,7 +473,7 @@ else case pat of
   PRecord name fields sp => patFieldVarsFuel (fuel - 1) fields
 
 patFieldVarsFuel : Int -> List (Pair String Pat) -> List String
-patFieldVarsFuel fuel fields = if fuel <= 0 then []
+patFieldVarsFuel fuel fields = if fuel <= 0 then lintFuelExhausted "traversal"
 else case fields of
   [] => []
   (Pair f pat) :: rest => append (patVarFuel (fuel - 1) pat) (patFieldVarsFuel (fuel - 1) rest)
@@ -467,13 +482,13 @@ countVar : String -> List Pat -> Int
 countVar name pats = countPatsFuel lintFuel name pats
 
 countPatsFuel : Int -> String -> List Pat -> Int
-countPatsFuel fuel name pats = if fuel <= 0 then 0
+countPatsFuel fuel name pats = if fuel <= 0 then lintFuelExhausted "count"
 else case pats of
   [] => 0
   p :: rest => countPatFuel (fuel - 1) name p + countPatsFuel (fuel - 1) name rest
 
 countPatFuel : Int -> String -> Pat -> Int
-countPatFuel fuel name pat = if fuel <= 0 then 0
+countPatFuel fuel name pat = if fuel <= 0 then lintFuelExhausted "count"
 else case pat of
   PVar n sp => if n == name then 1 else 0
   PCon n args sp => countPatsFuel (fuel - 1) name args
@@ -481,7 +496,7 @@ else case pat of
   _ => 0
 
 countFieldsFuel : Int -> String -> List (Pair String Pat) -> Int
-countFieldsFuel fuel name fields = if fuel <= 0 then 0
+countFieldsFuel fuel name fields = if fuel <= 0 then lintFuelExhausted "count"
 else case fields of
   [] => 0
   (Pair f pat) :: rest => countPatFuel (fuel - 1) name pat + countFieldsFuel (fuel - 1) name rest
@@ -490,7 +505,7 @@ patVarSpan : String -> Pat -> Maybe Span
 patVarSpan name pat = patVarSpanFuel lintFuel name pat
 
 patVarSpanFuel : Int -> String -> Pat -> Maybe Span
-patVarSpanFuel fuel name pat = if fuel <= 0 then Nothing
+patVarSpanFuel fuel name pat = if fuel <= 0 then lintFuelExhausted "pattern variable"
 else case pat of
   PVar n sp => if n == name then Just sp else Nothing
   PCon n args sp => patVarSpanInPatsFuel (fuel - 1) name args
@@ -501,7 +516,7 @@ patVarSpanInPats : String -> List Pat -> Maybe Span
 patVarSpanInPats name pats = patVarSpanInPatsFuel lintFuel name pats
 
 patVarSpanInPatsFuel : Int -> String -> List Pat -> Maybe Span
-patVarSpanInPatsFuel fuel name pats = if fuel <= 0 then Nothing
+patVarSpanInPatsFuel fuel name pats = if fuel <= 0 then lintFuelExhausted "pattern variable"
 else case pats of
   [] => Nothing
   p :: rest => case patVarSpanFuel (fuel - 1) name p of
@@ -509,7 +524,7 @@ else case pats of
     Nothing => patVarSpanInPatsFuel (fuel - 1) name rest
 
 patVarSpanInFieldsFuel : Int -> String -> List (Pair String Pat) -> Maybe Span
-patVarSpanInFieldsFuel fuel name fields = if fuel <= 0 then Nothing
+patVarSpanInFieldsFuel fuel name fields = if fuel <= 0 then lintFuelExhausted "pattern variable"
 else case fields of
   [] => Nothing
   (Pair f pat) :: rest => case patVarSpanFuel (fuel - 1) name pat of
@@ -549,7 +564,7 @@ exprMentions : String -> Expr -> Bool
 exprMentions name e = mentionsExpr lintFuel name e
 
 mentionsExpr : Int -> String -> Expr -> Bool
-mentionsExpr fuel name e = if fuel <= 0 then False
+mentionsExpr fuel name e = if fuel <= 0 then lintFuelExhausted "mention scan"
 else case e of
   EVar n sp => n == name
   EInt n sp => False
@@ -572,6 +587,9 @@ else case e of
     mentionsExpr (fuel - 1) name base || mentionsFields (fuel - 1) name fields
   EDo stmts sp => mentionsStmts (fuel - 1) name stmts
   EAnn value ty sp => mentionsExpr (fuel - 1) name value || mentionsExpr (fuel - 1) name ty
+  -- M31.2：中缀链与括号（parser 中间产物）：操作数继续递归。
+  EInfix op l r sp => mentionsExpr (fuel - 1) name l || mentionsExpr (fuel - 1) name r
+  EParen inner sp => mentionsExpr (fuel - 1) name inner
   -- M31.3：反引号里的名字与 section 的 op 都是值引用，操作数继续递归。
   EBacktick nm l r sp =>
     nm == name || mentionsExpr (fuel - 1) name l || mentionsExpr (fuel - 1) name r
@@ -580,53 +598,52 @@ else case e of
   ESectR lhs op sp => op == name || mentionsExpr (fuel - 1) name lhs
   -- M36：模板字面量：洞内引用照常算 mention（否则 where 变量会被误报未使用）。
   EInterp multi parts sp => mentionsInterpParts (fuel - 1) name parts
-  _ => False
 
 mentionsInterpParts : Int -> String -> List InterpPart -> Bool
-mentionsInterpParts fuel name parts = if fuel <= 0 then False
+mentionsInterpParts fuel name parts = if fuel <= 0 then lintFuelExhausted "mention scan"
 else case parts of
   [] => False
   (IPText s) :: rest => mentionsInterpParts (fuel - 1) name rest
   (IPHole e) :: rest => mentionsExpr (fuel - 1) name e || mentionsInterpParts (fuel - 1) name rest
 
 mentionsExprs : Int -> String -> List Expr -> Bool
-mentionsExprs fuel name exprs = if fuel <= 0 then False
+mentionsExprs fuel name exprs = if fuel <= 0 then lintFuelExhausted "mention scan"
 else case exprs of
   [] => False
   e :: rest => mentionsExpr (fuel - 1) name e || mentionsExprs (fuel - 1) name rest
 
 mentionsFields : Int -> String -> List (Pair String Expr) -> Bool
-mentionsFields fuel name fields = if fuel <= 0 then False
+mentionsFields fuel name fields = if fuel <= 0 then lintFuelExhausted "mention scan"
 else case fields of
   [] => False
   (Pair f e) :: rest => mentionsExpr (fuel - 1) name e || mentionsFields (fuel - 1) name rest
 
 mentionsBinds : Int -> String -> List (Pair Pat Expr) -> Bool
-mentionsBinds fuel name binds = if fuel <= 0 then False
+mentionsBinds fuel name binds = if fuel <= 0 then lintFuelExhausted "mention scan"
 else case binds of
   [] => False
   (Pair pat e) :: rest => mentionsExpr (fuel - 1) name e || mentionsBinds (fuel - 1) name rest
 
 mentionsAlts : Int -> String -> List (Pair Pat Expr) -> Bool
-mentionsAlts fuel name alts = if fuel <= 0 then False
+mentionsAlts fuel name alts = if fuel <= 0 then lintFuelExhausted "mention scan"
 else case alts of
   [] => False
   (Pair pat e) :: rest => mentionsExpr (fuel - 1) name e || mentionsAlts (fuel - 1) name rest
 
 mentionsClauses : Int -> String -> List (Pair (List Pat) Expr) -> Bool
-mentionsClauses fuel name clauses = if fuel <= 0 then False
+mentionsClauses fuel name clauses = if fuel <= 0 then lintFuelExhausted "mention scan"
 else case clauses of
   [] => False
   (Pair pats e) :: rest => mentionsExpr (fuel - 1) name e || mentionsClauses (fuel - 1) name rest
 
 mentionsStmts : Int -> String -> List DoStmt -> Bool
-mentionsStmts fuel name stmts = if fuel <= 0 then False
+mentionsStmts fuel name stmts = if fuel <= 0 then lintFuelExhausted "mention scan"
 else case stmts of
   [] => False
   stmt :: rest => mentionsStmt (fuel - 1) name stmt || mentionsStmts (fuel - 1) name rest
 
 mentionsStmt : Int -> String -> DoStmt -> Bool
-mentionsStmt fuel name stmt = if fuel <= 0 then False
+mentionsStmt fuel name stmt = if fuel <= 0 then lintFuelExhausted "mention scan"
 else case stmt of
   DBind pat e sp => mentionsExpr (fuel - 1) name e
   DExpr e sp => mentionsExpr (fuel - 1) name e
@@ -657,15 +674,15 @@ chainCollect : List String -> List PTok -> String -> List ChainItem -> Expr -> C
 chainCollect lines toks name acc expr = chainCollectFuel lintFuel lines toks name acc expr
 
 chainCollectFuel : Int -> List String -> List PTok -> String -> List ChainItem -> Expr -> ChainRes
-chainCollectFuel fuel lines toks name acc expr = if fuel <= 0 then ChainRes name (reverse acc) "" expr
+chainCollectFuel fuel lines toks name acc expr = if fuel <= 0 then lintFuelExhausted "chain collection"
 else case expr of
   EIf cond yes no sp => case condShape lines toks cond of
     Just (Pair other lit) =>
       if other == name then chainCollectFuel (fuel - 1) lines toks name
         (ChainItem lit (exprText lines toks yes) yes :: acc) no
-      else ChainRes name (reverse acc) (exprText lines toks expr) expr
-    Nothing => ChainRes name (reverse acc) (exprText lines toks expr) expr
-  _ => ChainRes name (reverse acc) (exprText lines toks expr) expr
+      else ChainRes name (reverse acc) "_" (exprText lines toks expr) expr
+    Nothing => ChainRes name (reverse acc) "_" (exprText lines toks expr) expr
+  _ => ChainRes name (reverse acc) "_" (exprText lines toks expr) expr
 
 renderChainItem : Int -> ChainItem -> String
 renderChainItem indent (ChainItem lit thenText expr) = "${spaces (indent + 2)}${lit} => ${thenText}"
@@ -681,8 +698,8 @@ chainFixable lines toks sp items defaultExpr =
     && itemsSegmentsOk lines toks items
     && segmentOk lines toks defaultExpr
 
-chainFindings : List String -> List PTok -> Span -> String -> List ChainItem -> String -> Expr -> List Finding
-chainFindings lines toks sp name items defaultText defaultExpr = if not (atLeastTwo items) then []
+chainFindings : List String -> List PTok -> Span -> String -> List ChainItem -> String -> String -> Expr -> List Finding
+chainFindings lines toks sp name items defaultPat defaultText defaultExpr = if not (atLeastTwo items) then []
 else if not (chainFixable lines toks sp items defaultExpr) then []
 else
   let
@@ -693,13 +710,13 @@ else
     prefix = prefixBeforeCol line (spanStartCol sp)
     newLines =
       append ["${prefix}case ${name} of"]
-        (append (map (\item => renderChainItem indent item) items) ["${spaces (indent + 2)}_ => ${defaultText}"])
+        (append (map (\item => renderChainItem indent item) items) ["${spaces (indent + 2)}${defaultPat} => ${defaultText}"])
     edit = Just (Edit startLine endLine newLines)
   in [ Finding startLine (spanStartCol sp) (lintCode LiteralIfChain) (lintRule LiteralIfChain) (lintMsg LiteralIfChain name) edit
   ]
 
 walkChainItems : Int -> List String -> List PTok -> List ChainItem -> List Finding
-walkChainItems fuel lines toks items = if fuel <= 0 then []
+walkChainItems fuel lines toks items = if fuel <= 0 then lintFuelExhausted "traversal"
 else case items of
   [] => []
   item :: rest =>
@@ -707,26 +724,168 @@ else case items of
       (walkChainItems (fuel - 1) lines toks rest)
 
 -- ---------------------------------------------------------------
--- 规则 2：lift-destructure
+-- 规则 1b：if dispatch 提升（Bool 变量 / 字面量链）
+--
+-- 一个 if 分派 = scrutinee + 若干 (模式, body) 叶子。当它正好是外层 clause/alt 的
+-- 直接体、且 scrutinee 是外层模式变量时，把叶子提升进外层模式：
+--   * clause → 多条同名 clause（要求该名字只有一条 clause）；
+--   * alt    → 更细的 alt 模式（要求该 alt 是最后一个）。
+-- 这是 lift 语义，不经过 case；字面量链提升失败时仍由 walkIf 走原有 case 回退。
+-- ---------------------------------------------------------------
+record LiftLeaf where
+  leafSubsts : List (Pair String String)
+  leafBody : Expr
+
+hasSubst : String -> List (Pair String String) -> Bool
+hasSubst name substs = memName name (map (\p => firstOf p) substs)
+
+laneSplitOk : Lane -> Bool
+laneSplitOk (LClause line pats last single) = single
+laneSplitOk (LAlt line pat last) = last
+
+substReplacement : String -> String -> Expr -> String
+substReplacement name pat body =
+  if exprMentions name body then if pat == "_" then name else "${name}@${pat}" else pat
+
+-- (token, 替换文本)：token 来自外层模式里的变量出现点。
+substTokenPairs : List PTok -> Lane -> List (Pair String String) -> Expr -> List (Pair PTok String)
+substTokenPairs toks lane [] body = []
+substTokenPairs toks lane ((Pair name pat) :: rest) body = case laneVarSpan name lane of
+  Nothing => substTokenPairs toks lane rest body
+  Just sp => case tokenAt toks (spanStartLine sp) (spanStartCol sp) of
+    Nothing => substTokenPairs toks lane rest body
+    Just tok => Pair tok (substReplacement name pat body) :: substTokenPairs toks lane rest body
+
+substsApplicable : List PTok -> Lane -> List (Pair String String) -> Bool
+substsApplicable toks lane [] = True
+substsApplicable toks lane ((Pair name pat) :: rest) = case laneVarSpan name lane of
+  Nothing => False
+  Just sp => case tokenAt toks (spanStartLine sp) (spanStartCol sp) of
+    Nothing => False
+    Just tok => substsApplicable toks lane rest
+
+sortSubstDesc : List (Pair PTok String) -> List (Pair PTok String)
+sortSubstDesc [] = []
+sortSubstDesc (x :: rest) = insertSubstDesc x (sortSubstDesc rest)
+
+insertSubstDesc : Pair PTok String -> List (Pair PTok String) -> List (Pair PTok String)
+insertSubstDesc x [] = [x]
+insertSubstDesc x (y :: rest) =
+  if tokCol (firstOf x) > tokCol (firstOf y) then x :: y :: rest else y :: insertSubstDesc x rest
+
+applySubstPairs : List (Pair PTok String) -> String -> String
+applySubstPairs [] headText = headText
+applySubstPairs ((Pair tok repl) :: rest) headText =
+  applySubstPairs rest (replaceIdentInLine headText tok repl)
+
+leafHeadText : List PTok -> Lane -> String -> LiftLeaf -> String
+leafHeadText toks lane headText leaf =
+  applySubstPairs (sortSubstDesc (substTokenPairs toks lane leaf.leafSubsts leaf.leafBody)) headText
+
+liftLeafLines : List String -> List PTok -> Lane -> String -> List LiftLeaf -> Maybe (List String)
+liftLeafLines lines toks lane headText [] = Just []
+liftLeafLines lines toks lane headText (leaf :: rest) =
+  let
+    head = leafHeadText toks lane headText leaf
+    body = leaf.leafBody
+  in if not (exprSingleLine body) then Nothing
+  else
+    let
+      bodyText = exprText lines toks body
+    in if bodyText == "" then Nothing
+    else case liftLeafLines lines toks lane headText rest of
+      Nothing => Nothing
+      Just tailLines => Just ("${head} ${bodyText}" :: tailLines)
+
+leafPlacementOk : List String -> List PTok -> LiftLeaf -> Bool
+leafPlacementOk lines toks leaf = segmentOk lines toks leaf.leafBody
+
+leavesOk : List String -> List PTok -> Lane -> List LiftLeaf -> Bool
+leavesOk lines toks lane [] = True
+leavesOk lines toks lane (leaf :: rest) =
+  leafPlacementOk lines toks leaf
+    && substsApplicable toks lane leaf.leafSubsts
+    && leavesOk lines toks lane rest
+
+liftLeavesFixable : List String -> List PTok -> Lane -> List LiftLeaf -> Span -> Bool
+liftLeavesFixable lines toks lane leaves sp =
+  laneHeadSingleLine lane
+    && linesCleanRange lines (laneHeadLine lane) (spanEndLine sp)
+    && leavesOk lines toks lane leaves
+
+liftLeavesEdit : List String -> List PTok -> Lane -> List LiftLeaf -> Span -> Maybe Edit
+liftLeavesEdit lines toks lane leaves sp =
+  let
+    headText = laneHeadText lines lane (spanStartLine sp) (spanStartCol sp)
+  in case liftLeafLines lines toks lane headText leaves of
+    Nothing => Nothing
+    Just newLines => Just (Edit (laneHeadLine lane) (spanEndLine sp) newLines)
+
+-- Bool 变量 if / else-if 链 → 笛卡尔叶子。遇到非外层模式变量、重复 scrutinee 或
+-- 非 if 的 else 时，把剩余表达式当作叶子体（保留原 if）。
+boolIfLeaves : Lane -> List (Pair String String) -> Expr -> List LiftLeaf
+boolIfLeaves lane substs (EIf cond yes no sp) = case cond of
+  EVar name _ =>
+    if hasSubst name substs || countLaneVar name lane /= 1 then [LiftLeaf substs (EIf cond yes no sp)]
+    else append [LiftLeaf (append substs [Pair name "True"]) yes]
+      (boolIfLeaves lane (append substs [Pair name "False"]) no)
+  _ => [LiftLeaf substs (EIf cond yes no sp)]
+boolIfLeaves lane substs expr = [LiftLeaf substs expr]
+
+ifDispatchLeaves : List String -> List PTok -> Lane -> Expr -> Maybe (Pair String (List LiftLeaf))
+ifDispatchLeaves lines toks lane (EIf cond yes no sp) = case cond of
+  EVar name _ => if countLaneVar name lane == 1 then
+    let
+      leaves = boolIfLeaves lane [] (EIf cond yes no sp)
+    in if atLeastTwo leaves then Just (Pair name leaves) else Nothing
+  else literalIfLeaves lines toks lane (EIf cond yes no sp)
+  _ => literalIfLeaves lines toks lane (EIf cond yes no sp)
+ifDispatchLeaves lines toks lane _ = Nothing
+
+literalChainLeaf : String -> ChainItem -> LiftLeaf
+literalChainLeaf name item = LiftLeaf [Pair name item.chainItemLit] item.chainItemThen
+
+literalIfLeaves : List String -> List PTok -> Lane -> Expr -> Maybe (Pair String (List LiftLeaf))
+literalIfLeaves lines toks lane expr = case chainOf lines toks expr of
+  Nothing => Nothing
+  Just (ChainRes name items defPat _ defExpr) =>
+    if not (atLeastTwo items) || countLaneVar name lane /= 1 then Nothing
+    else Just
+      (Pair name (append (map (literalChainLeaf name) items) [LiftLeaf [Pair name defPat] defExpr]))
+
+ifLiftFindings : List String -> List PTok -> Lane -> Expr -> List Finding
+ifLiftFindings lines toks lane expr = case ifDispatchLeaves lines toks lane expr of
+  Nothing => []
+  Just (Pair name leaves) => if not (laneSplitOk lane) then []
+  else if not (liftLeavesFixable lines toks lane leaves (exprSpan expr)) then []
+  else case liftLeavesEdit lines toks lane leaves (exprSpan expr) of
+    Nothing => []
+    Just edit =>
+      [ Finding (spanStartLine (exprSpan expr)) (spanStartCol (exprSpan expr)) (lintCode LiteralIfChain) (lintRule LiteralIfChain) (lintMsg LiteralIfChain name) (Just edit)
+      ]
+
+-- ---------------------------------------------------------------
+-- 规则 2：dispatch-lift（case / let）
+-- 单 alt 替换外层变量；多 alt 拆 clause / alt。渲染与安全判据共用同一套 lane 工具。
 -- ---------------------------------------------------------------
 laneHeadLine : Lane -> Int
-laneHeadLine (LClause line pats last) = line
+laneHeadLine (LClause line pats last single) = line
 laneHeadLine (LAlt line pat last) = line
 
 laneLast : Lane -> Bool
-laneLast (LClause line pats last) = last
+laneLast (LClause line pats last single) = last
 laneLast (LAlt line pat last) = last
 
 laneVars : Lane -> List String
-laneVars (LClause line pats last) = patVars pats
+laneVars (LClause line pats last single) = patVars pats
 laneVars (LAlt line pat last) = patVarFuel lintFuel pat
 
 countLaneVar : String -> Lane -> Int
-countLaneVar name (LClause line pats last) = countVar name pats
+countLaneVar name (LClause line pats last single) = countVar name pats
 countLaneVar name (LAlt line pat last) = countPatFuel lintFuel name pat
 
 laneVarSpan : String -> Lane -> Maybe Span
-laneVarSpan name (LClause line pats last) = patVarSpanInPats name pats
+laneVarSpan name (LClause line pats last single) = patVarSpanInPats name pats
 laneVarSpan name (LAlt line pat last) = patVarSpan name pat
 
 laneHeadText : List String -> Lane -> Int -> Int -> String
@@ -742,7 +901,7 @@ patsOnLine (p :: rest) line =
   spanStartLine (patSpan p) == line && spanEndLine (patSpan p) == line && patsOnLine rest line
 
 laneHeadSingleLine : Lane -> Bool
-laneHeadSingleLine (LClause line pats last) = patsOnLine pats line
+laneHeadSingleLine (LClause line pats last single) = patsOnLine pats line
 laneHeadSingleLine (LAlt line pat last) = spanSingleLine (patSpan pat)
 
 -- 把外层 head 里的被提升变量替换成新模式。startLine/startCol 是被提升表达式
@@ -791,12 +950,12 @@ liftEdit lines toks lane pat body name sp =
 
 liftCaseOk : List String -> List PTok -> Lane -> Pat -> Expr -> String -> Span -> List Finding
 liftCaseOk lines toks lane pat body name sp =
-  if countLaneVar name lane == 1 && True && not (intersectsNames (patVarFuel lintFuel pat) (removeName name (laneVars lane))) && liftablePat pat && liftFixable lines toks lane pat body sp then [ Finding (spanStartLine sp) (spanStartCol sp) (lintCode LiftDestructure) (lintRule LiftDestructure) (lintMsg LiftDestructure name) (Just (liftEdit lines toks lane pat body name sp))
+  if countLaneVar name lane == 1 && True && not (intersectsNames (patVarFuel lintFuel pat) (removeName name (laneVars lane))) && liftablePat pat && liftFixable lines toks lane pat body sp then [ Finding (spanStartLine sp) (spanStartCol sp) (lintCode DispatchLift) (lintRule DispatchLift) (lintMsg DispatchLift name) (Just (liftEdit lines toks lane pat body name sp))
   ]
   else []
 
 laneIsClause : Lane -> Bool
-laneIsClause (LClause line pats last) = True
+laneIsClause (LClause line pats last single) = True
 laneIsClause (LAlt line pat last) = False
 
 asPatText : List String -> List PTok -> String -> Pat -> String
@@ -812,7 +971,7 @@ liftCase lines toks lane caseExpr scrut _ sp = []
 
 liftLet : List String -> List PTok -> Lane -> Span -> Pat -> Expr -> Expr -> List Finding
 liftLet lines toks lane sp pat (EVar name nsp) body =
-  if liftablePat pat && countLaneVar name lane == 1 && True && not (intersectsNames (patVarFuel lintFuel pat) (removeName name (laneVars lane))) && liftLetFixable lines toks lane pat body sp then [ Finding (spanStartLine sp) (spanStartCol sp) (lintCode LiftDestructure) (lintRule LiftDestructure) (lintMsg LiftDestructure name) (Just (liftLetEdit lines toks lane pat body name sp))
+  if liftablePat pat && countLaneVar name lane == 1 && True && not (intersectsNames (patVarFuel lintFuel pat) (removeName name (laneVars lane))) && liftLetFixable lines toks lane pat body sp then [ Finding (spanStartLine sp) (spanStartCol sp) (lintCode DispatchLift) (lintRule DispatchLift) (lintMsg DispatchLift name) (Just (liftLetEdit lines toks lane pat body name sp))
   ]
   else []
 liftLet lines toks lane sp pat _ body = []
@@ -854,7 +1013,7 @@ else []
 liftFindings lines toks lane _ = []
 
 -- ---------------------------------------------------------------
--- 规则 3：case-to-clauses
+-- 规则 3：dispatch-lift 的多 alt 拆分（顶层 case → 多 clause）
 -- ---------------------------------------------------------------
 -- 判据不再语法层证明穷尽性：lint 的输入应视为能通过 `vuna check` 的程序，
 -- 而 DT 已强制 `case` 穷尽；`case` 与多 clause 的匹配语义等价（分支/clause 顺序一致）。
@@ -911,7 +1070,7 @@ caseToClausesEdit lines toks x pats headLine sp alts =
     headPrefix =
       if caseStartLine == headLine then trimEnd (prefixBeforeCol headText (spanStartCol sp))
       else trimEnd headText
-    varTok = case laneVarSpan x (LClause headLine pats False) of
+    varTok = case laneVarSpan x (LClause headLine pats False False) of
       Nothing => PTok TEof (Pos 1 1)
       Just vsp => case tokenAt toks (spanStartLine vsp) (spanStartCol vsp) of
         Nothing => PTok TEof (Pos 1 1)
@@ -922,7 +1081,7 @@ caseToClausesEdit lines toks x pats headLine sp alts =
 caseToClauses : List String -> List PTok -> Int -> String -> List Pat -> Expr -> Bool -> List Finding
 caseToClauses lines toks headLine name pats (ECase scrut alts sp) singleClause = case scrut of
   EVar x xsp =>
-    if singleClause && countVar x pats == 1 && atLeastTwo alts && altsLiftable x pats alts && caseToClausesFixable lines toks pats headLine sp alts then [ Finding (spanStartLine sp) (spanStartCol sp) (lintCode CaseToClauses) (lintRule CaseToClauses) (lintMsg CaseToClauses x) (Just (caseToClausesEdit lines toks x pats headLine sp alts))
+    if singleClause && countVar x pats == 1 && atLeastTwo alts && altsLiftable x pats alts && caseToClausesFixable lines toks pats headLine sp alts then [ Finding (spanStartLine sp) (spanStartCol sp) (lintCode DispatchLift) (lintRule DispatchLift) (lintMsg DispatchLift x) (Just (caseToClausesEdit lines toks x pats headLine sp alts))
     ]
     else []
   _ => []
@@ -935,13 +1094,17 @@ caseToClauses lines toks headLine name pats _ singleClause = []
 -- `tryFuelThread` 判据能接受的形态（每个环至少一条 `fuel - k` 严格下降边）。
 -- ---------------------------------------------------------------
 scanBodyPos : Int -> List String -> List PTok -> Maybe Lane -> Expr -> List Finding
-scanBodyPos fuel lines toks maybeLane expr = if fuel <= 0 then []
+scanBodyPos fuel lines toks maybeLane expr = if fuel <= 0 then lintFuelExhausted "traversal"
 else case maybeLane of
   Nothing => walkExpr fuel lines toks expr
-  Just lane => append (liftFindings lines toks lane expr) (walkExpr fuel lines toks expr)
+  Just lane =>
+    let
+      lifted = ifLiftFindings lines toks lane expr
+    in if not (isNilList lifted) then append lifted (liftFindings lines toks lane expr)
+    else append (liftFindings lines toks lane expr) (walkExpr fuel lines toks expr)
 
 walkExpr : Int -> List String -> List PTok -> Expr -> List Finding
-walkExpr fuel lines toks e = if fuel <= 0 then []
+walkExpr fuel lines toks e = if fuel <= 0 then lintFuelExhausted "traversal"
 else case e of
   EVar name sp => []
   EInt n sp => []
@@ -964,6 +1127,9 @@ else case e of
   EDo stmts sp => walkStmts (fuel - 1) lines toks stmts
   EAnn value ty sp =>
     append (walkExpr (fuel - 1) lines toks value) (walkExpr (fuel - 1) lines toks ty)
+  -- M31.2：parser 中间产物（中缀链 / 括号）：显式递归，不静默丢子树。
+  EInfix op l r sp => append (walkExpr (fuel - 1) lines toks l) (walkExpr (fuel - 1) lines toks r)
+  EParen inner sp => walkExpr (fuel - 1) lines toks inner
   -- M31.3：keep 模式下保留的反引号中缀 / section：结构递归，不静默丢子树。
   EBacktick nm l r sp =>
     append (walkExpr (fuel - 1) lines toks l) (walkExpr (fuel - 1) lines toks r)
@@ -972,10 +1138,9 @@ else case e of
   ESectR lhs op sp => walkExpr (fuel - 1) lines toks lhs
   -- M36：模板字面量：洞内表达式同样参与规则遍历。
   EInterp multi parts sp => walkInterpParts (fuel - 1) lines toks parts
-  _ => []
 
 walkInterpParts : Int -> List String -> List PTok -> List InterpPart -> List Finding
-walkInterpParts fuel lines toks parts = if fuel <= 0 then []
+walkInterpParts fuel lines toks parts = if fuel <= 0 then lintFuelExhausted "traversal"
 else case parts of
   [] => []
   (IPText s) :: rest => walkInterpParts (fuel - 1) lines toks rest
@@ -983,39 +1148,39 @@ else case parts of
     append (walkExpr (fuel - 1) lines toks e) (walkInterpParts (fuel - 1) lines toks rest)
 
 walkIf : Int -> List String -> List PTok -> Expr -> Expr -> Expr -> Expr -> List Finding
-walkIf fuel lines toks e cond yes no = if fuel <= 0 then []
+walkIf fuel lines toks e cond yes no = if fuel <= 0 then lintFuelExhausted "traversal"
 else case chainOf lines toks e of
   Nothing =>
     append (walkExpr (fuel - 1) lines toks cond)
       (append (walkExpr (fuel - 1) lines toks yes) (walkExpr (fuel - 1) lines toks no))
-  Just (ChainRes name items defText defExpr) =>
+  Just (ChainRes name items defPat defText defExpr) =>
     if not (atLeastTwo items) then append (walkExpr (fuel - 1) lines toks cond)
       (append (walkExpr (fuel - 1) lines toks yes) (walkExpr (fuel - 1) lines toks no))
-    else append (chainFindings lines toks (exprSpan e) name items defText defExpr)
+    else append (chainFindings lines toks (exprSpan e) name items defPat defText defExpr)
       (append (walkChainItems (fuel - 1) lines toks items) (walkExpr (fuel - 1) lines toks defExpr))
 
 walkExprs : Int -> List String -> List PTok -> List Expr -> List Finding
-walkExprs fuel lines toks exprs = if fuel <= 0 then []
+walkExprs fuel lines toks exprs = if fuel <= 0 then lintFuelExhausted "traversal"
 else case exprs of
   [] => []
   e :: rest => append (walkExpr (fuel - 1) lines toks e) (walkExprs (fuel - 1) lines toks rest)
 
 walkFields : Int -> List String -> List PTok -> List (Pair String Expr) -> List Finding
-walkFields fuel lines toks fields = if fuel <= 0 then []
+walkFields fuel lines toks fields = if fuel <= 0 then lintFuelExhausted "traversal"
 else case fields of
   [] => []
   (Pair f e) :: rest =>
     append (walkExpr (fuel - 1) lines toks e) (walkFields (fuel - 1) lines toks rest)
 
 walkBinds : Int -> List String -> List PTok -> List (Pair Pat Expr) -> List Finding
-walkBinds fuel lines toks binds = if fuel <= 0 then []
+walkBinds fuel lines toks binds = if fuel <= 0 then lintFuelExhausted "traversal"
 else case binds of
   [] => []
   (Pair pat e) :: rest =>
     append (walkExpr (fuel - 1) lines toks e) (walkBinds (fuel - 1) lines toks rest)
 
 walkAlts : Int -> List String -> List PTok -> List (Pair Pat Expr) -> List Finding
-walkAlts fuel lines toks alts = if fuel <= 0 then []
+walkAlts fuel lines toks alts = if fuel <= 0 then lintFuelExhausted "traversal"
 else case alts of
   [] => []
   (Pair pat body) :: rest =>
@@ -1025,21 +1190,21 @@ else case alts of
       (walkAlts (fuel - 1) lines toks rest)
 
 walkLocalClauses : Int -> List String -> List PTok -> List (Pair (List Pat) Expr) -> List Finding
-walkLocalClauses fuel lines toks clauses = if fuel <= 0 then []
+walkLocalClauses fuel lines toks clauses = if fuel <= 0 then lintFuelExhausted "traversal"
 else case clauses of
   [] => []
   (Pair pats body) :: rest =>
     append (walkExpr (fuel - 1) lines toks body) (walkLocalClauses (fuel - 1) lines toks rest)
 
 walkStmts : Int -> List String -> List PTok -> List DoStmt -> List Finding
-walkStmts fuel lines toks stmts = if fuel <= 0 then []
+walkStmts fuel lines toks stmts = if fuel <= 0 then lintFuelExhausted "traversal"
 else case stmts of
   [] => []
   stmt :: rest =>
     append (walkStmt (fuel - 1) lines toks stmt) (walkStmts (fuel - 1) lines toks rest)
 
 walkStmt : Int -> List String -> List PTok -> DoStmt -> List Finding
-walkStmt fuel lines toks stmt = if fuel <= 0 then []
+walkStmt fuel lines toks stmt = if fuel <= 0 then lintFuelExhausted "traversal"
 else case stmt of
   DBind pat e sp => walkExpr (fuel - 1) lines toks e
   DExpr e sp => walkExpr (fuel - 1) lines toks e
@@ -1092,7 +1257,7 @@ else
   let
     lastForName = not (laterHasFun name rest)
     singleClause = countFunClauses name allDecls == 1
-    lane = LClause (spanStartLine sp) pats lastForName
+    lane = LClause (spanStartLine sp) pats lastForName singleClause
   in append (caseToClauses lines toks (spanStartLine sp) name pats body singleClause)
     (scanBodyPos lintFuel lines toks (Just lane) body)
 declFindings lines toks allDecls (DInstance ctxE head methods sp) rest =

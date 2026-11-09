@@ -6,12 +6,12 @@ import Base.EffSched
 import Base.IO
 import Base.Result
 
-work : String -> String -> Int -> Eff RNil Int
+work : String -> String -> Int -> Eff [] Int
 work first second n =
   bindEff (liftIOEff (println first))
     (\_ => bindEff yieldNow (\_ => bindEff (liftIOEff (println second)) (\_ => pureEff n)))
 
-prog : Eff RNil (Result Int)
+prog : Eff [] (Result Int)
 prog = withScope (\sc => bindEff (forkTask sc (work "a1" "a2" 10)) (\ta => bindEff (forkTask sc (work "b1" "b2" 20)) (\tb => bindEff (liftIOEff (println "forked")) (\_ => bindEff (awaitTask tb) (\rb => case rb of
   Ok b => bindEff (awaitTask ta) (\ra => case ra of
     Ok a => pureEff (Ok (a + b))

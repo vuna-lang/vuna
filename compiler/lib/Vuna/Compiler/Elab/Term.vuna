@@ -42,6 +42,7 @@ module Vuna.Compiler.Elab.Term
   , inferLetIgnored
   , inferPi
   , litAltStep
+  , resolveOverFunPats
   , specializeBoolApp
   , specializeCmpApp
   , specializeEqApp
@@ -202,3 +203,7 @@ elabCaseAlts a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 = elabCaseAltsFuel 256 a1 a2 a3 a4 a
 elabConAlt : List (Pair String Term) -> Ctx -> Ec -> DtData -> List Value -> Value -> Value -> String -> List Pat -> Span -> Expr -> Result (Pair CaseAlt Ec)
 elabConAlt a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 =
   elabConAltFuel 256 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11
+
+-- | 自动补注（M41 新增导出）：resolveOverFunPats。
+resolveOverFunPats : Ec -> Ctx -> Value -> List (Pair (List Pat) Expr) -> Result (Pair (List (Pair (List Pat) Expr)) Ec)
+resolveOverFunPats a1 a2 a3 a4 = Vuna.Compiler.Elab.Term.Impl.resolveOverFunPats a1 a2 a3 a4

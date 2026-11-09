@@ -1,0 +1,22 @@
+negate : Bool -> Bool
+negate True = False
+negate False = True
+
+same : Bool -> Bool
+same True = True
+same False = False
+
+keep : Bool -> Bool
+keep b@True = b
+keep b@False = b
+
+swap : Pair Bool Int -> Int
+swap (Pair True n) = n
+swap (Pair False n) = 0
+
+greet : Bool -> String -> String
+greet True name = "hi ${name}"
+greet False name = name
+
+main : Int
+main = swap (Pair True 1)

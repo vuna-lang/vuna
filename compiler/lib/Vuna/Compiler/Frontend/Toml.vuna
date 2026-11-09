@@ -200,7 +200,8 @@ else case cs.cursorChars of
     else Ok (Pair (makeInteger acc negative) cs)
 
 makeInteger : Int -> Bool -> Int
-makeInteger acc negative = if negative then 0 - acc else acc
+makeInteger acc True = 0 - acc
+makeInteger acc False = acc
 
 parseIntValue : String -> TomlCursor -> Result (Pair TomlValue TomlCursor)
 parseIntValue path cs = case parseInteger path cs of

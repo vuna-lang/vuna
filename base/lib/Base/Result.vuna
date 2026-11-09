@@ -2,9 +2,12 @@
 module Base.Result (Result(..), andThen, mapError, mapResult, step, traverse, withDefault) where
 
 -- Base.Result：成功/失败结果类型与组合子（Base 语义迁移 + 常用补充）。
--- 说明：`step` 处理 `Result (Pair a b)`，因此额外依赖 Base.Pair（叶模块，无环）。
+-- 说明：`step` 处理 `Result (Pair a b)`，因此额外依赖 Base.Pair（叶模块，无环）；
+-- B31 的 `Show` 实例依赖 Base.Show（同为叶模块）。
 import Base.List
 import Base.Pair
+-- B31：容器 `Show` 实例（`Interp` 由 Base.Interp 的 blanket 实例免费获得）。
+import Base.Show
 
 -- | 成功 `Ok x` 或失败 `Err message`。
 data Result a : Type where
@@ -46,3 +49,11 @@ mapError f (Err e) = Err (f e)
 withDefault : a -> Result a -> a
 withDefault d (Ok x) = x
 withDefault d (Err e) = d
+
+-- B31：容器 `Show` 实例；`Interp` 经 blanket `Show a => Interp a` 自动获得。
+-- `Err` 里的消息是 `String`，`show e` 按 `Show String` 加引号转义（`Err "bad"`）。
+-- 拼接用 `++` 的 intrinsic（interp 可归约），与 Maybe/Pair 保持同一写法。
+instance Show a => Show (Result a) where
+  show r = case r of
+    Ok x => "Ok " `++` (show x)
+    Err e => "Err " `++` (show e)

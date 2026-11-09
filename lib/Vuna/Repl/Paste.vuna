@@ -1,0 +1,44 @@
+module Vuna.Repl.Paste (pasteDisable, pasteEnable, readPasteBody) where
+
+-- Vuna.Repl.Paste：括号粘贴（bracketed paste）的终端开关与读取（工具链；不进 seed 闭包）。
+--
+-- 背景：终端开启 DECSET 2004 后，粘贴内容被包在 `\e[200~` … `\e[201~` 之间。行编辑器
+-- 若不认识这两个序列，`\e[200~` 会被拆成杂散字符、粘贴里的换行会被逐行当成 Enter 提交
+-- （debt D35）。解码状态机是纯函数（`Vuna.Repl.Paste.Decode`，可脱离 IO 单测），
+-- 本模块只负责：
+--   * `readPasteBody`：逐字节读、`\r` 规范化为 `\n`、读到终止序列/EOF 为止；
+--   * `pasteEnable` / `pasteDisable`：输出 `\e[?2004h` / `\e[?2004l`（退出时务必关闭）。
+--
+-- 语义：粘贴内容**原样**进入编辑缓冲（换行保留），Tab / Enter 都不触发按键语义；用户按
+-- Enter 才提交整段（整段作为一个输入单元或多行 pending，交给 Repl 的既有输入逻辑）。
+-- 不支持该模式的终端不会发 `\e[200~`，行为与旧版完全一致（只多输出一对被忽略的转义）；
+-- 非 tty 路径根本不进入编辑器。
+import Vuna.Compiler.Common
+import Vuna.Repl.Paste.Decode
+import Vuna.Repl.Term
+
+-- 读粘贴体（起点在 `\e[200~` 之后）：逐字节喂状态机，读到 `\e[201~` 或 EOF/超时
+-- （termReadByte 返回 -1）为止。fuel 是字节数守卫（1 MiB），防终端异常时无限读。
+readPasteBody : Int -> String
+readPasteBody _ = strPack (reverse (readPasteGo 1048576 emptyPasteState).pasteContent)
+
+readPasteGo : Int -> PasteState -> PasteState
+readPasteGo fuel st = if fuel <= 0 then st
+else if pasteIsDone st then st
+else
+  let
+    b = termReadByte 0
+  in if b < 0 then st else readPasteGo (fuel - 1) (pasteFeed st (normalizePasteByte b))
+
+-- 终端粘贴的行尾可能是 CR / CRLF 的前半；缓冲里只保留裸 LF。
+normalizePasteByte : Int -> Int
+normalizePasteByte b = if b == 13 then 10 else b
+
+-- ---------------------------------------------------------------
+-- 终端开关
+-- ---------------------------------------------------------------
+pasteEnable : Int -> Int
+pasteEnable _ = writeOut "${escCode}[?2004h"
+
+pasteDisable : Int -> Int
+pasteDisable _ = writeOut "${escCode}[?2004l"

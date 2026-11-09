@@ -1,1 +1,1 @@
-corpus/lint/09_case_to_clauses.vuna:5:27: [LN_CaseToClauses] case-to-clauses: top-level case on `subset` can be converted to multiple clauses
+corpus/lint/09_case_to_clauses.vuna:5:27: [LN_DispatchLift] dispatch-lift: dispatch on `subset` can be lifted into the enclosing pattern

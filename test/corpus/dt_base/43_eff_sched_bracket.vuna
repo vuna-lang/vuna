@@ -6,17 +6,16 @@ import Base.EffSched
 import Base.IO
 import Base.Result
 
-spin : List Int -> Eff RNil Int
+spin : List Int -> Eff [] Int
 spin [] = pureEff 1
 spin (_ :: rest) = bindEff yieldNow (\st => if st <= 0 then spin rest else pureEff 1)
 
-task : Eff RNil Int
-task = bracket
-  (liftIOEff (println "acquire"))
-  (\_ => liftIOEff (println "release"))
-  (\_ => spin [0, 0, 0, 0, 0])
+task : Eff [] Int
+task =
+  bracket (liftIOEff (println "acquire")) (\_ => liftIOEff (println "release"))
+    (\_ => spin [0, 0, 0, 0, 0])
 
-prog : Eff RNil (Result Int)
+prog : Eff [] (Result Int)
 prog = withScope (\sc => bindEff (forkTask sc task) (\w => bindEff yieldNow (\_ => bindEff (cancelScope sc) (\_ => bindEff (scopeWait sc) (\_ => bindEff (awaitTask w) (\rw => case rw of
   Ok n => pureEff (Ok n)
   Err _ => pureEff (Ok 3)

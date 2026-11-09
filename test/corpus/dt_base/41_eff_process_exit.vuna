@@ -6,7 +6,7 @@ import Base.EffProcess
 import Base.IO
 import Base.List
 
-prog : (n : Name) -> Eff (RCons (Process n) RNil) Int
+prog : (n : Name) -> Eff (Process n :: []) Int
 prog n = bindEff (processExit n 7) (\c => pureEff c)
 
 mret : Int -> Int
@@ -14,11 +14,12 @@ mret a = a
 
 mopH : (o : ProcessOp) -> (Base.EffProcess.resProcess o -> Int) -> Int
 mopH op k = case op of
-  Args => k Nil
+  Args => k []
   Exit c => k c
   RunIn dir args => k 0
 
 main : IO Int
-main = prim_bindIO (print ("mock " ++ strFromInt (runPure (handleProcess P1 mret mopH (prog P1))) ++ "\n")) (\_ =>
-         prim_bindIO (runIOAnswer (handleProcessIOObserved P2 (prog P2))) (\observed =>
-           prim_bindIO (print ("observed " ++ strFromInt observed ++ "\n")) (\_ => prim_pureIO 0)))
+main =
+  prim_bindIO
+    (print ("mock " ++ strFromInt (runPure (handleProcess P1 mret mopH (prog P1))) ++ "\n"))
+    (\_ => prim_bindIO (runIOAnswer (handleProcessIOObserved P2 (prog P2))) (\observed => prim_bindIO (print ("observed " ++ strFromInt observed ++ "\n")) (\_ => prim_pureIO 0)))

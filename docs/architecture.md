@@ -33,7 +33,7 @@ compiler/lib/Vuna/Compiler/   （64 个模块：60 个导出 + 4 个内部模块
 import 子模块并选择性重导出（对外名字面不变），实现只在叶子；**数据定义只在叶子**
 （`Core.Term`、`Elab.Types` 等）。目标每模块 ≤~800 行（当前最大 `Elab/Trait.vuna`，约 1.2k）。
 `compiler/` 是 seed 唯一来源（`compiler/app/Main.vuna` 的 import 闭包，数量以 `seed/` 与
-`nix/seed-count.txt` 为准）；`lib/` 工具链与 `app/` 在 TCB 之外；`base/` 模块名即 API。
+`nix/seed-count.txt` / `nix/seed-files.txt` 为准）；`lib/` 工具链与 `app/` 在 TCB 之外；`base/` 模块名即 API。
 
 ## 1. 编译链：Frontend → Loader → Elab → Codegen
 

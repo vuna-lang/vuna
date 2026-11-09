@@ -60,7 +60,7 @@
 | `Driver.Split` | 输出文件模型与构建脚本生成：`SplitFile`、依赖序、按内容哈希增量的 `build.sh` | `SplitFile`、`buildScript`、`writeSplitFiles`、`writeSplitFilesIfChanged` |
 | `Driver.Owner` | **声明归属表**（从 `Codegen.Split` 抽出）：声明名 / 实例名 / 派生实例名 / trait 投影名 / `Dict_` → 模块；codegen 与接口切分共用 | `splitMetaOf`、`splitOwnerEntriesOfModules`、`splitDefOwnerOf` |
 | `Driver.Cache` | 接口摘要载体（TTC 思路）：`CachedProgram` = 闭合 datas / defs（含 body）/ globals / insts / classes（**不含 sols/next**）；写侧按出现点深度 zonk，读侧 `cachedProgramValid` 校验（无 meta/负索引/自由变量；body 擦除位置的未解 meta 允许并按包段重编号） | `cachedOfProgram`、`cachedProgramValid`、`shiftCachedProgram`、`summaryMetaSegment` |
-| `Driver.Iface` | **模块级接口**（TTC 思路）：`ModuleIface`（闭合产物 + 已解析 decls + exports/fixities/imports + `miIfaceHash`/`miDepHashes`/`miSource`）、per-module 文件 + `PackageManifest`（模块名→文件/源信息/接口哈希）；按归属把 `DtProgram` 切成每模块摘要、强哈希、原子读写 | `ifaceOfPackage`、`readPackageIface`、`writePackageIface`、`packageIfaceValid` |
+| `Driver.Iface` | **模块级接口**（TTC 思路）：`ModuleIface`（闭合产物 + 已解析 decls + exports/fixities/imports + `miIfaceHash`/`miDepHashes`/`miSource`）、per-module 文件（与源码同布局，默认在源文件旁）+ `PackageManifest`（模块名→相对路径/源信息/接口哈希，写进包级 `.vuna-iface`）；按归属把 `DtProgram` 切成每模块摘要、强哈希、原子读写 | `ifaceOfPackage`、`readPackageIface`、`writePackageIface`、`packageIfaceValid` |
 | `Driver.Dt` | DT 路径 facade（供 `Compile` / `CompilerCli` / `Interp` / LSP 使用）：单一 `PackageContext` 加载形状；内存源码检查/洞目标、`dtMainKind`、`dtEvalExprInfo`；接口摘要路径的起始 Ec 组装（`depStartOf`）与接口/预置模块入口 | `dtCheck`、`dtCheckWithProgramParts`、`dtCheckPackageWithIfacesParts`、`dtSplitProjectParts`、`dtSplitProjectWithIfaces`、`CheckedPackage` |
 | `Driver.Compile` | 编译入口：`PackageContext` 检查/编译、目录式 codegen、构建脚本执行；build meta 与递归建目录；check 缓存 + 依赖接口校验（`depIfacesOf`）+ 接口影子写（`writeIfaceShadow`）；`VUNA_ELAB_FULL=1` 强制全量 | `checkPackage`、`compileToDir`、`depIfacesOf`、`buildMetaText`、`metaUpToDate`、`writeBuildMeta` |
 | `Driver.CompilerCli` | 编译器自己的 CLI（`vuna-compiler`）；含受限进程执行入口 `runIn`；workspace check/build 单元、`build --package`、`version` | `runCompilerCli`、`compilerUsageLines`、`runIn` |
@@ -127,9 +127,9 @@ elab 状态**（没有跨包 `sols` / `next` / dict goals）。
 - **包级摘要**（M34.5 起）：`Driver.Cache.CachedProgram`，一个包一份 datas / defs / globals /
   insts / classes；
 - **模块级接口**（M34.5 S1/S2/S3）：`Driver.Iface.ModuleIface`，每模块一个
-  `<Module.Name>.iface` + 包级 `manifest`（S3；写侧只重写接口哈希变化的模块），依赖侧
-  按模块装载、逐项校验。设计、字段、失效判定见
-  [cache.md](cache.md)。
+  `<源文件相对路径>.iface`（默认就在源文件旁，与源码同布局）+ 包级 `.vuna-iface`
+  （S3；写侧只重写接口哈希变化的模块），依赖侧按模块装载、逐项校验。`VUNA_IFACE_DIR`
+  可把整棵树镜像到外部根。设计、字段、失效判定见 [cache.md](cache.md)。
 
 ### 数据流
 
@@ -138,7 +138,7 @@ check / build pkg
   ├─ 包级 check 缓存命中（key = 源哈希 + 依赖哈希 + manifest + 编译器指纹 + schema）→ Ok
   └─ 未命中
       ├─ VUNA_ELAB_FULL=1 → 全量：loadProject + elabProgramFull（整闭包）
-      └─ depIfacesOf：逐依赖包读 iface.pkg（S4：本包有干净模块时走增量）
+      └─ depIfacesOf：逐依赖包读该包的 `.vuna-iface`（S4：本包有干净模块时走增量）
             ├─ schema/编译器/包名、模块源哈希、miDepHashes 链、源码模块集合 任一失败
             │     → 全量回退（并重写本包接口）
             └─ 全部可用 → 接口路径（无干净模块 = 包内全量；S4 有干净模块 = 只精化脏模块）：

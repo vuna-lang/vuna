@@ -67,8 +67,9 @@ import Vuna.Compiler.Frontend.Ast
 -- 不可合一 ⇒ 该分支不可达：省略即合法（覆盖率跳过），写出即报错。
 -- 方向约定：优先精化 **level 更大**（更内层）的变量，于是 ctor 一侧的新鲜变量精化成
 -- scrutinee 的真实变量（`m ↦ n`），不会把真实变量解到分支作用域外（level 形态，无需 de Bruijn）。
+-- | 自动补注（M41 新增导出）：unifyErr。
 unifyErr : Result a
-unifyErr = Err (tcMsg ImpossibleBranchIndex VNil)
+unifyErr = Err (tcMsg ImpossibleBranchIndex [])
 
 unifyIdxList : Ec -> List (Pair Int Value) -> Int -> Int -> List Value -> List Value -> Result (List (Pair Int Value))
 unifyIdxList ec acc depth fuel xs ys =
@@ -81,8 +82,9 @@ unifyIdxListGo ec acc depth fuel (x :: xs) (y :: ys) =
     (\acc2 => unifyIdxList ec acc2 depth (fuel - 1) xs ys)
 unifyIdxListGo ec acc depth fuel _ _ = unifyErr
 
+-- | 自动补注（M41 新增导出）：unifyIdx。
 unifyIdx : Ec -> List (Pair Int Value) -> Int -> Int -> Value -> Value -> Result (List (Pair Int Value))
-unifyIdx ec acc depth fuel a b = if fuel <= 0 then Err (tcMsg IndexFuel VNil)
+unifyIdx ec acc depth fuel a b = if fuel <= 0 then Err (tcMsg IndexFuel [])
 else
   let
     a2 = force (ecDefTbl ec) (ecSolsP ec) defaultFuel (refineValue acc defaultFuel a)
@@ -264,7 +266,7 @@ bindCtorGo ctx ty subpats acc = case ty of
         ctx2 = ctxBindValue famName domVal ctx
       in bindCtorGo ctx2 cod subpats (Pair famName Rig0 :: acc)
     else case subpats of
-      [] => Err (tcMsg CaseBranchTooFewArgs VNil)
+      [] => Err (tcMsg CaseBranchTooFewArgs [])
       p :: rest => case p of
         PVar pname psp => bindCtorField ctx rig domVal cod pname rest acc
         PWild psp => bindCtorField ctx rig domVal cod "_" rest acc
@@ -371,8 +373,21 @@ litLabel (PStr s sp) = "\"${s}\""
 litLabel _ = ""
 
 -- 源级校验：唯一入口。返回 `Ok 0`（成功）或第一条稳定诊断。
+-- 校验前剥掉 head 位置的 as-pattern：`x` 的覆盖性与 `pat` 相同；
+-- 这样 `checkCaseAltsGo` 的每个递归调用都在 `rest` 上严格下降（不再构造更大的列表）。
+-- | 剥掉 head 位置 as-pattern。
+stripAsPat : Pat -> Pat
+stripAsPat (PAs name inner sp) = stripAsPat inner
+stripAsPat pat = pat
+
+-- | 自动补注（M41 新增导出）：stripAsPats。
+stripAsPats : List (Pair Pat Expr) -> List (Pair Pat Expr)
+stripAsPats [] = []
+stripAsPats ((Pair pat body) :: rest) = Pair (stripAsPat pat) body :: stripAsPats rest
+
+-- | 自动补注（M41 新增导出）：checkCaseAltsFlat。
 checkCaseAltsFlat : List (Pair Pat Expr) -> Result Int
-checkCaseAltsFlat alts = checkCaseAltsGo [] alts
+checkCaseAltsFlat alts = checkCaseAltsGo [] (stripAsPats alts)
 
 checkCaseAltsGo : List (Pair Pat Expr) -> List (Pair Pat Expr) -> Result Int
 checkCaseAltsGo prevs alts = case alts of
@@ -382,19 +397,16 @@ checkCaseAltsGo prevs alts = case alts of
       if ctorHeadCovered cname prevs then tcErr1 psp (RedundantCtorBranch cname) cname
       else checkCaseAltsGo (Pair pat body :: prevs) rest
     -- as-pattern：覆盖性按内层模式判定（`x@pat` 与 `pat` 的头部相同）。
-    PAs name inner psp => checkCaseAltsGo prevs (Pair inner body :: rest)
-    PInt n psp => checkLitHead prevs (Pair pat body) rest psp
-    PStr s psp => checkLitHead prevs (Pair pat body) rest psp
+    PInt n psp =>
+      if litHeadCovered pat prevs then tcErr1 psp (RedundantLiteralBranch (litLabel pat)) (litLabel pat)
+      else checkCaseAltsGo (Pair pat body :: prevs) rest
+    PStr s psp =>
+      if litHeadCovered pat prevs then tcErr1 psp (RedundantLiteralBranch (litLabel pat)) (litLabel pat)
+      else checkCaseAltsGo (Pair pat body :: prevs) rest
+    PAs name inner psp => checkCaseAltsGo (Pair pat body :: prevs) rest
     PVar pname psp => checkCatchAll prevs (Pair pat body) rest psp
     PWild psp => checkCatchAll prevs (Pair pat body) rest psp
     PRecord rn fields psp => checkCaseAltsGo (Pair pat body :: prevs) rest
-
-checkLitHead : List (Pair Pat Expr) -> Pair Pat Expr -> List (Pair Pat Expr) -> Span -> Result Int
-checkLitHead prevs alt rest sp =
-  let
-    p = firstOf alt
-  in if litHeadCovered p prevs then tcErr1 sp (RedundantLiteralBranch (litLabel p)) (litLabel p)
-  else checkCaseAltsGo (alt :: prevs) rest
 
 -- 兜底分支只能最后；后面的字面量分支报 `BranchAfterCatchAll`（B15 新诊断），
 -- 其它分支沿用既有 `CatchAllNotLast`。
@@ -463,7 +475,7 @@ checkCovered : Ctx -> Ec -> DtData -> List Value -> List String -> List (Pair Pa
 checkCovered ctx ec dd idxs written alts sp [] = Ok 0
 checkCovered ctx ec dd idxs written alts sp (ctor :: rest) =
   if memName (dtCtorName ctor) written then checkCovered ctx ec dd idxs written alts sp rest
-  else if branchReachable ctx ec idxs ctor then tcErr1 sp (NotExhaustive (dtCtorName ctor)) (dtCtorName ctor)
+  else if branchReachable ctx ec idxs ctor then tcErr1 sp (NotExhaustive (ctorDisplayName (dtCtorName ctor))) (ctorDisplayName (dtCtorName ctor))
   else checkCovered ctx ec dd idxs written alts sp rest
 
 checkCaseDone : Ec -> Ctx -> DtData -> List Value -> List (Pair Pat Expr) -> Value -> Span -> Term -> List CaseAlt -> Result (Pair Term Ec)

@@ -3,7 +3,7 @@ import Base.Eff
 import Base.EffExn
 import Base.Result
 
-bad : Eff RNil (Result Int)
+bad : Eff Nil (Result Int)
 bad = tryWith X1 (pureEff 1)
 
 main : Int

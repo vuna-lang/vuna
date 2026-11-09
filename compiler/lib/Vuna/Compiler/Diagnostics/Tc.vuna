@@ -55,6 +55,7 @@ data TcErr : Nat -> Type where
   InstanceHeadNotApp : TcErr Zero
   ConstraintNotDict : TcErr Zero
   InstanceMissingMethod : TcErr Zero
+  OrphanInstance : TcErr Zero
   InterfaceOneParam : TcErr Zero
   InterfaceNoParam : TcErr Zero
   IntStringCaseNeedsFallback : TcErr Zero
@@ -120,6 +121,7 @@ data TcErr : Nat -> Type where
   LinearTopLevel : String -> TcErr (Succ Zero)
   LinearCaptureEscapes : String -> TcErr (Succ Zero)
   -- arity 2
+  AmbiguousCtor : String -> String -> TcErr (Succ (Succ Zero))
   AmbiguousInstance : String -> String -> TcErr (Succ (Succ Zero))
   AppliedNotType : String -> TcErr (Succ Zero)
   CtorDoesNotReturn : String -> String -> TcErr (Succ (Succ Zero))
@@ -137,6 +139,7 @@ data TcErr : Nat -> Type where
 -- ---------------------------------------------------------------
 -- code 派生（唯一真源；`gen-errors` 与 throw 都用它）
 -- ---------------------------------------------------------------
+-- | 自动补注（M41 新增导出）：tcCode。
 tcCode : {n : Nat} -> TcErr n -> String
 tcCode BoolCaseRestriction = "TC_BoolCaseRestriction"
 tcCode BranchAfterCatchAll = "TC_BranchAfterCatchAll"
@@ -160,6 +163,7 @@ tcCode InstanceHeadNotApp = "TC_InstanceHeadNotApp"
 tcCode ConstraintNotDict = "TC_ConstraintNotDict"
 tcCode InstanceMissingMethod = "TC_InstanceMissingMethod"
 tcCode InterfaceOneParam = "TC_InterfaceOneParam"
+tcCode OrphanInstance = "TC_OrphanInstance"
 tcCode InterfaceNoParam = "TC_InterfaceNoParam"
 tcCode IntStringCaseNeedsFallback = "TC_IntStringCaseNeedsFallback"
 tcCode IntStringCaseRestriction = "TC_IntStringCaseRestriction"
@@ -219,6 +223,7 @@ tcCode (UnknownName _) = "TC_UnknownName"
 tcCode (UnknownNamedInstance _) = "TC_UnknownNamedInstance"
 tcCode (UnsolvedHole _) = "TC_UnsolvedHole"
 tcCode (UnsolvedMetavarInfer _) = "TC_UnsolvedMetavarInfer"
+tcCode (AmbiguousCtor _ _) = "TC_AmbiguousCtor"
 tcCode (AmbiguousInstance _ _) = "TC_AmbiguousInstance"
 tcCode (AppliedNotType _) = "TC_AppliedNotType"
 tcCode (CtorDoesNotReturn _ _) = "TC_CtorDoesNotReturn"
@@ -236,6 +241,7 @@ tcCode (WhereNeedsSig _ _) = "TC_WhereNeedsSig"
 -- ---------------------------------------------------------------
 -- 模板（构造子 payload，占位符 `<0>`/`<1>`；已去掉旧 `DT: ` 前缀）
 -- ---------------------------------------------------------------
+-- | 自动补注（M41 新增导出）：tcTemplate。
 tcTemplate : {n : Nat} -> TcErr n -> String
 tcTemplate BoolCaseRestriction = "case on Bool only accepts True / False / variable patterns (M19)"
 tcTemplate BranchAfterCatchAll = "this branch is unreachable: it follows a catch-all branch"
@@ -262,12 +268,14 @@ tcTemplate InstanceHeadNotApp = "instance head must be an interface application 
 tcTemplate ConstraintNotDict =
   "constraint must be an interface application (e.g. Eq a, Convert a b)"
 tcTemplate InstanceMissingMethod = "instance is missing an implementation for an interface method"
+tcTemplate OrphanInstance =
+  "instance is orphan: declare it in the module that defines the trait or the head type"
 tcTemplate InterfaceOneParam = "interfaces must have exactly one parameter (M15 limitation)"
 tcTemplate InterfaceNoParam = "interfaces must have at least one parameter"
 tcTemplate IntStringCaseNeedsFallback =
-  "case on Int / String needs a variable or wildcard branch as fallback (M19)"
+  "case on Int / String / Nat needs a variable or wildcard branch as fallback (M19)"
 tcTemplate IntStringCaseRestriction =
-  "case on Int / String only accepts literals / variable patterns (M19)"
+  "case on Int / String / Nat only accepts literals / variable patterns (M19)"
 tcTemplate InvalidArrowType = "invalid arrow type"
 tcTemplate LambdaNoSignature = "cannot infer the type of a lambda; add a signature"
 tcTemplate LambdaTooManyParams = "lambda has more parameters than the expected function type"
@@ -323,6 +331,8 @@ tcTemplate (UnknownNamedInstance _) = "unknown named instance <0>"
 tcTemplate (UnsolvedHole _) = "unsolved hole <0>"
 tcTemplate (UnsolvedMetavarInfer _) =
   "cannot infer a type for this expression (unsolved metavariable ?<0>); add a type annotation"
+tcTemplate (AmbiguousCtor _ _) =
+  "ambiguous constructor <0> (candidates: <1>); add a type annotation or qualify it"
 tcTemplate (AmbiguousInstance _ _) = "ambiguous instance for <0> (candidates: <1>)"
 tcTemplate (AppliedNotType _) = "expected a type, but <0> applied to these arguments is not a type"
 tcTemplate (CtorDoesNotReturn _ _) = "constructor <0> does not return <1>"
@@ -397,6 +407,7 @@ tcChunk2 =
     TcEntry (tcCode InstanceHeadNotApp) (tcTemplate InstanceHeadNotApp) "instance 头必须是接口应用",
     TcEntry (tcCode ConstraintNotDict) (tcTemplate ConstraintNotDict) "约束必须是 trait 应用",
     TcEntry (tcCode InstanceMissingMethod) (tcTemplate InstanceMissingMethod) "instance 缺方法实现",
+    TcEntry (tcCode OrphanInstance) (tcTemplate OrphanInstance) "实例既不在 trait 也不在 head 类型的定义模块",
     TcEntry (tcCode InterfaceOneParam) (tcTemplate InterfaceOneParam) "接口必须恰好一个参数",
     TcEntry (tcCode InterfaceNoParam) (tcTemplate InterfaceNoParam) "接口至少一个参数",
     TcEntry (tcCode IntStringCaseNeedsFallback) (tcTemplate IntStringCaseNeedsFallback) "Int/String 的 case 需要兜底分支"
@@ -471,6 +482,7 @@ tcChunk8 =
     TcEntry (tcCode (UnknownNamedInstance "")) (tcTemplate (UnknownNamedInstance "")) "未知命名 instance",
     TcEntry (tcCode (UnsolvedHole "")) (tcTemplate (UnsolvedHole "")) "未填的洞",
     TcEntry (tcCode (UnsolvedMetavarInfer "")) (tcTemplate (UnsolvedMetavarInfer "")) "无法推断类型（未解元变量）",
+    TcEntry (tcCode (AmbiguousCtor "" "")) (tcTemplate (AmbiguousCtor "" "")) "构造子同名且无法按期望类型消歧",
     TcEntry (tcCode (AmbiguousInstance "" "")) (tcTemplate (AmbiguousInstance "" "")) "instance 歧义",
     TcEntry (tcCode (AppliedNotType "")) (tcTemplate (AppliedNotType "")) "应用结果不是类型",
     TcEntry (tcCode (CtorDoesNotReturn "" "")) (tcTemplate (CtorDoesNotReturn "" "")) "构造子结果族不符",
@@ -527,24 +539,30 @@ tcErr sp e args = diagErrAt sp (tcMsg e args)
 -- ---------------------------------------------------------------
 -- 人体工学：按 arity 分档的 throw（调用点不必手搓 Vec）
 -- ---------------------------------------------------------------
+-- | 自动补注（M41 新增导出）：tcErr0。
 tcErr0 : Span -> TcErr Zero -> Result a
-tcErr0 sp e = tcErr sp e VNil
+tcErr0 sp e = tcErr sp e []
 
+-- | 自动补注（M41 新增导出）：tcErr1。
 tcErr1 : Span -> TcErr (Succ Zero) -> String -> Result a
-tcErr1 sp e a0 = tcErr sp e (VCons a0 VNil)
+tcErr1 sp e a0 = tcErr sp e (a0 :: [])
 
+-- | 自动补注（M41 新增导出）：tcErr2。
 tcErr2 : Span -> TcErr (Succ (Succ Zero)) -> String -> String -> Result a
-tcErr2 sp e a0 a1 = tcErr sp e (VCons a0 (VCons a1 VNil))
+tcErr2 sp e a0 a1 = tcErr sp e (a0 :: a1 :: [])
 
 -- ---------------------------------------------------------------
 -- 无位置版本：Core（Conv/Eval）等底层诊断拿不到 Span，但仍要走同一套码与模板。
 -- 输出形态是无前缀的 `[CODE] 消息`（与带位置的 `文件:行:列: [CODE] 消息` 区分）。
 -- ---------------------------------------------------------------
+-- | 自动补注（M41 新增导出）：tcErr0NoLoc。
 tcErr0NoLoc : TcErr Zero -> Result a
-tcErr0NoLoc e = Err (tcMsg e VNil)
+tcErr0NoLoc e = Err (tcMsg e [])
 
+-- | 自动补注（M41 新增导出）：tcErr1NoLoc。
 tcErr1NoLoc : TcErr (Succ Zero) -> String -> Result a
-tcErr1NoLoc e a0 = Err (tcMsg e (VCons a0 VNil))
+tcErr1NoLoc e a0 = Err (tcMsg e (a0 :: []))
 
+-- | 自动补注（M41 新增导出）：tcErr2NoLoc。
 tcErr2NoLoc : TcErr (Succ (Succ Zero)) -> String -> String -> Result a
-tcErr2NoLoc e a0 a1 = Err (tcMsg e (VCons a0 (VCons a1 VNil)))
+tcErr2NoLoc e a0 a1 = Err (tcMsg e (a0 :: a1 :: []))

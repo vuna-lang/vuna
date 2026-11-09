@@ -134,7 +134,9 @@ rigIsOmega _ = False
 -- 其余显式值 binder 默认 ω（M38：不再默认 Rig1；1 是显式线性标注）。
 -- 注意这是**默认构造**入口；带源码 quantity 的路径走 Elab 的 `rigForPi`。
 rigOfBinder : Bool -> Bool -> Rig
-rigOfBinder implicit isTypeDom = if implicit then Rig0 else if isTypeDom then Rig0 else RigOmega
+rigOfBinder True isTypeDom = Rig0
+rigOfBinder False True = Rig0
+rigOfBinder False False = RigOmega
 
 defaultExplicitRig : Rig
 defaultExplicitRig = RigOmega

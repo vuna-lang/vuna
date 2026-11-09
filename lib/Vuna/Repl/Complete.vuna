@@ -1,0 +1,155 @@
+module Vuna.Repl.Complete (argCompletions, argKindOf, moduleNameOf, splitLastSlash) where
+
+-- Vuna.Repl.Complete：`:load` / `:browse` / `import` **参数位**的 Tab 补全候选
+-- （工具链；不进 seed 闭包）。
+--
+-- 两类候选（只在按下 Tab 时枚举 → 编辑器每读一行不做目录 IO）：
+--   * 模块名：包上下文模块根（自身 lib + 依赖闭包；base-only 时只有 base）下递归扫描
+--     `*.vuna`，相对路径 `Base/Nat.vuna` → `Base.Nat`（与 Loader 的 `modulePath` 一致）；
+--   * 文件路径：token 按**最后一个** `/` 拆成目录 + 末段，列出该目录项、只保留匹配末段
+--     前缀的条目，目录补尾随 `/`（cwd 相对路径与绝对路径都支持）。
+--
+-- 与 Loader 可见性的已知差异：依赖根有 `[export] modules` 限制时这里仍会列出该根下
+-- 全部模块（`Root` 的 exports 字段不在 `Pkg` 导出面内）；越权模块会在 `:load` 时被
+-- Loader 拒绝并给出可操作错误，补全只是建议，不改变语义。
+--
+-- 纯部分（`argKindOf` / `moduleNameOf` / `splitLastSlash`）与 IO 部分分离，便于用
+-- `test/corpus/repl/app/Main.vuna` 直接单测；多匹配补最长公共前缀、唯一匹配直接补全的语义由
+-- `Vuna.Repl.Edit` 保持（本模块只给候选池）。
+import Vuna.Compiler.Common
+import Base.IO
+
+-- ---------------------------------------------------------------
+-- 参数位判定（纯）
+-- ---------------------------------------------------------------
+-- 返回补全种类：0 = 普通（命令名 / 缓冲绑定名，由 Repl 提供）；
+--               1 = `:load` 参数（模块名 + 文件路径）；2 = 只要模块名（`:browse` / `import`）。
+argKindOf : List Int -> Int -> Int
+argKindOf buf cur =
+  let
+    text = trimLeft (strPack (take cur buf))
+    Pair word rest = splitFirstWord text
+  in if byteLength text <= byteLength word then 0
+  else case word of
+    ":load" => 1
+    ":browse" => 2
+    ":b" => 2
+    "import" => 2
+    _ => 0
+
+splitFirstWord : String -> Pair String String
+splitFirstWord s = splitFirstWordChars (strUnpack s) []
+
+splitFirstWordChars : List Int -> List Int -> Pair String String
+splitFirstWordChars [] acc = Pair (strPack (reverse acc)) ""
+splitFirstWordChars (c :: rest) acc =
+  if c == 32 || c == 9 then Pair (strPack (reverse acc)) (strPack rest)
+  else splitFirstWordChars rest (c :: acc)
+
+-- ---------------------------------------------------------------
+-- 候选池
+-- ---------------------------------------------------------------
+argCompletions : Int -> List String -> String -> List String
+argCompletions kind roots token = if token == "" then []
+else
+  let
+    mods =
+      if kind == 2 then moduleCompletions roots token
+      else if containsSlash token then [] else moduleCompletions roots token
+    paths = if kind == 2 then [] else pathCompletions token
+  in dedupStrs (append mods paths)
+
+containsSlash : String -> Bool
+containsSlash s = memInt 47 (strUnpack s)
+
+memInt : Int -> List Int -> Bool
+memInt c [] = False
+memInt c (x :: rest) = x == c || memInt c rest
+
+-- ---------------------------------------------------------------
+-- 模块名候选（递归扫描模块根）
+-- ---------------------------------------------------------------
+moduleCompletions : List String -> String -> List String
+moduleCompletions roots token = concatMap (\root => modulesUnder root token) roots
+
+modulesUnder : String -> String -> List String
+modulesUnder root token = filter (\m => startsWith token m) (walkModules 8192 root root)
+
+-- 递归扫描 `dir`（`root` 是模块根，用于把文件路径换算成模块全名）。
+-- 性能：只在按下 Tab 时扫；`startsWith token` 的过滤放到最后做（先收集路径）。
+walkModules : Int -> String -> String -> List String
+walkModules fuel root dir =
+  if fuel <= 0 then [] else concatMap (walkEntry (fuel - 1) root dir) (safeReadDir dir)
+
+walkEntry : Int -> String -> String -> String -> List String
+walkEntry fuel root dir name = if fuel <= 0 then []
+else if name == "" || name == "." || name == ".." || startsWith "." name then []
+else
+  let
+    path = "${dir}/${name}"
+  in if dirExists path then walkModules (fuel - 1) root path
+  else if endsWith ".vuna" name then [moduleNameOf root path] else []
+
+dotsOf : String -> String
+dotsOf s = strPack (mapSlashToDot (strUnpack s))
+
+mapSlashToDot : List Int -> List Int
+mapSlashToDot [] = []
+mapSlashToDot (c :: rest) = (if c == 47 then 46 else c) :: mapSlashToDot rest
+
+-- 路径 → 模块全名（`root` 是该模块根目录；不在根下返回空串）。纯函数，可直接单测。
+moduleNameOf : String -> String -> String
+moduleNameOf root path =
+  let
+    prefix = if endsWith "/" root then root else "${root}/"
+  in if not (startsWith prefix path) then ""
+  else if not (endsWith ".vuna" path) then ""
+  else
+    let
+      rel = substring (byteLength prefix) (byteLength path - byteLength prefix) path
+    in dotsOf (dropSuffix ".vuna" rel)
+
+dropSuffix : String -> String -> String
+dropSuffix suffix s =
+  if endsWith suffix s then substring 0 (byteLength s - byteLength suffix) s else s
+
+safeReadDir : String -> List String
+safeReadDir dir = if dirExists dir then runIO (prim_readDir dir) else []
+
+-- prim_isDirectory 对不存在的路径会抛宿主异常，必须先判存在（与 Cli.Args 的约定一致）。
+dirExists : String -> Bool
+dirExists path = runIO (prim_fileExists path) && runIO (prim_isDirectory path)
+
+-- ---------------------------------------------------------------
+-- 文件路径候选
+-- ---------------------------------------------------------------
+pathCompletions : String -> List String
+pathCompletions token =
+  let
+    Pair dirText base = splitLastSlash token
+    dir = if dirText == "" then "." else dirText
+    entries =
+      filter (\n => startsWith base n && n /= base && not (startsWith "." n)) (safeReadDir dir)
+  in map (\n => pathCandidate dirText dir n) entries
+
+pathCandidate : String -> String -> String -> String
+pathCandidate dirText dir name =
+  let
+    shown = if dirText == "" then name else "${dirText}/${name}"
+  in if dirExists "${dir}/${name}" then "${shown}/" else shown
+
+-- 按**最后一个** `/` 拆成 (目录, 末段)；没有 `/` 时目录为空串。
+splitLastSlash : String -> Pair String String
+splitLastSlash s = splitLastSlashRev (reverse (strUnpack s)) []
+
+splitLastSlashRev : List Int -> List Int -> Pair String String
+splitLastSlashRev [] acc = Pair "" (strPack acc)
+splitLastSlashRev (c :: rest) acc =
+  if c == 47 then Pair (strPack (reverse rest)) (strPack acc) else splitLastSlashRev rest (c :: acc)
+
+-- ---------------------------------------------------------------
+-- 去重（保序；候选规模很小）
+-- ---------------------------------------------------------------
+dedupStrs : List String -> List String
+dedupStrs [] = []
+dedupStrs (x :: rest) = if memName x rest then dedupStrs rest else x :: dedupStrs rest

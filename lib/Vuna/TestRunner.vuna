@@ -12,6 +12,14 @@ module Vuna.TestRunner (TestOpts(..), runTests) where
 -- main 的类别用 `Vuna.Compiler.Driver.Dt.dtMainKind` 判定（同一份 DT 精化，不猜语法）。
 -- 编译/精化失败也按 FAIL 记录诊断（单测失败不中断其余测试）。
 --
+-- W1（测试基建硬化）：`main : IO a` 的单测有**超时**（默认 120s，`VUNA_TEST_TIMEOUT`
+-- 环境变量覆盖，0 = 关闭，非数字回落默认）。实现方式：IO 测试直接在临时目录里
+-- `compileToDir` 测试入口，再用 coreutils `timeout` 包住「`sh build.sh` 链接」与「运行
+-- 产物」两步；任一步超时记 FAIL（"timed out after Ns"）并清理，不会让 `vuna test` 永久
+-- 挂起。没有 `timeout` 命令的环境优雅降级到 `runEffectProgram`（无外部超时，行为与旧版
+-- 一致，不算 FAIL 也不崩）。纯测试（`interpretFile`）不需要外部超时：其终止性由核心
+-- 求值器的 fuel 守卫保证（与 `vuna interp` 同一路径）。
+--
 -- M26：入口是 `Package`，内部用 `Pkg.packageContext` 构造包上下文（不再有环境根 flag）；
 -- 测试模块与包内模块走同一套模块可见性规则。
 -- M30：`vuna test <workspace-root>` 对 workspace 里每个包各跑自己的 `test/`（根包 +
@@ -23,19 +31,34 @@ module Vuna.TestRunner (TestOpts(..), runTests) where
 --   - `--list`：只列分组（workspace）与文件名，不执行，exit 0（单包缺 `test/` 仍 exit 2）；
 --   - `--verbose`：`ok` / `FAIL` 行尾追加 ` (Nms)`，末尾打印总耗时；
 --   - `--fail-fast`：首个失败即停止（跨包生效），已跑部分的汇总照常打印。
+-- C23/C39：`--jobs N` 包内测试**进程级并行**（默认 1 = 上面全部行为、输出逐字不变）。
+--   N>1 时每个测试文件一个子进程：spawn 当前可执行文件的隐藏模式
+--   `test <包目录> --only-file <文件名> --jobs 1`（`--verbose` 时追加 `--verbose`）；
+--   子进程继承 stdout/stderr，**行内容完整但行与行之间可能交错**。父进程用
+--   `prim_wait` 收退出码、按文件计 pass/fail，汇总行与串行逐字一致。`--fail-fast`
+--   在并行下只停止启动新文件，已在跑的文件等完（汇总只统计已跑文件）；`--verbose`
+--   的每文件耗时由子进程自己测量并打印在行尾，父进程照旧打印 `total:`。workspace
+--   聚合仍是各包串行（包内文件并行）。`--only-file` 只给子进程用：只跑一个文件、
+--   打印该文件的 ok/FAIL 行、不打印汇总、强制 jobs=1，不会再并行或递归 spawn。
 import Vuna.Compiler.Common
 import Vuna.Compiler.Packages.Pkg
 import Vuna.Compiler.Driver.Dt
+import Vuna.Compiler.Driver.Compile
 import Vuna.Files
 import Vuna.Interp
 import Base.IO
 
--- `vuna test` 的选项；默认构造值（空过滤 + 全 False）等价于 M30 的固定行为。
+-- `vuna test` 的选项；默认构造值（空过滤 + 全 False + jobs=1 + 无 only-file）等价于
+-- M30 的固定行为。
 record TestOpts where
   testFilter : List String
   testListOnly : Bool
   testVerbose : Bool
   testFailFast : Bool
+  -- `--jobs N`：包内测试文件的最大并发子进程数（默认 1 = 串行、行为与输出不变）。
+  testJobs : Int
+  -- 隐藏的内部子进程模式（`--only-file <name>`）：只跑该文件、不展开 workspace。
+  testOnlyFile : Maybe String
 
 -- 单测结果。打印集中在 runTestFiles（逐测耗时只有调用方知道），这里只带诊断文案。
 data TestOutcome : Type where
@@ -49,12 +72,14 @@ record Tally where
   tallyStopped : Bool
 
 runTests : TestOpts -> Package -> Int
-runTests opts pkg =
-  let
-    start = runIO timeUs
-    code = runTestsGo opts pkg
-    _ = if opts.testVerbose then runIO (prim_print "total: ${elapsedMs start}ms\n") else 0
-  in code
+runTests opts pkg = case opts.testOnlyFile of
+  Just name => runOnlyFile opts pkg name
+  Nothing =>
+    let
+      start = runIO timeUs
+      code = runTestsGo opts pkg
+      _ = if opts.testVerbose then runIO (prim_print "total: ${elapsedMs start}ms\n") else 0
+    in code
 
 runTestsGo : TestOpts -> Package -> Int
 runTestsGo opts pkg = case workspacePackages (packageDir pkg) of
@@ -78,12 +103,43 @@ runPackageTests opts pkg =
       let
         _ = map (\file => runIO (prim_print "${file}\n")) files
       in 0
-    else case runTestFiles opts (packageContext pkg) testDir files 0 0 of
+    else case runPackageTestGroup opts pkg testDir files of
       Tally _ fail _ => if fail == 0 then 0 else 1
   else
     let
       _ = runIO (prim_print "error: test directory not found: ${testDir}\n")
     in 2
+
+-- ---------------------------------------------------------------
+-- 隐藏的 `--only-file <name>`：父进程 spawn 出来的**子进程模式**（C23/C39）。
+-- 只跑一个测试文件，打印该文件的 ok/FAIL 行（--verbose 带行尾耗时），不打印汇总；
+-- 退出码 0/1 供父进程计数。此模式由 CLI 强制 jobs=1，不会再并行 / 递归 spawn。
+-- ---------------------------------------------------------------
+runOnlyFile : TestOpts -> Package -> String -> Int
+runOnlyFile opts pkg name =
+  let
+    testDir = "${packageDir pkg}/test"
+  in if pathExistsDir testDir then
+    let
+      path = "${testDir}/${name}"
+      t0 = runIO timeUs
+      outcome = runOneTest (packageContext pkg) path name
+      us = runIO timeUs - t0
+      _ = printOutcome opts name outcome us
+    in case outcome of
+      TestPassed => 0
+      TestFailed _ => 1
+  else
+    let
+      _ = runIO (prim_print "error: test directory not found: ${testDir}\n")
+    in 2
+
+-- 一个包的一组测试文件：jobs=1 用串行的 in-process 路径（行为逐字不变），
+-- jobs>1 用进程级并行。两个调用点（单包 / workspace 成员）共用这一处选择。
+runPackageTestGroup : TestOpts -> Package -> String -> List String -> Tally
+runPackageTestGroup opts pkg testDir files =
+  if opts.testJobs > 1 then runTestFilesParallel opts (packageDir pkg) testDir files
+  else runTestFiles opts (packageContext pkg) testDir files 0 0
 
 -- ---------------------------------------------------------------
 -- workspace 聚合：每个包一组，缺 test/ 的包跳过（不是错误：库成员常常没有测试）。
@@ -126,10 +182,9 @@ runWorkspaceGo opts (pkg :: rest) pass fail =
     else
       let
         _ = runIO (prim_print "-- ${label} --\n")
-      in case runTestFiles opts (packageContext pkg) testDir files 0 0 of
-        Tally p f stopped =>
-          if stopped then workspaceFinish (pass + p) (fail + f)
-          else runWorkspaceGo opts rest (pass + p) (fail + f)
+      in case runPackageTestGroup opts pkg testDir files of
+        Tally p f True => workspaceFinish (pass + p) (fail + f)
+        Tally p f False => runWorkspaceGo opts rest (pass + p) (fail + f)
   else
     let
       _ = runIO (prim_print "-- ${label} -- (no test directory)\n")
@@ -202,6 +257,68 @@ runTestFiles opts ctx dir (name :: rest) pass fail =
       in Tally pass (fail + 1) True
     else runTestFiles opts ctx dir rest pass (fail + 1)
 
+-- ---------------------------------------------------------------
+-- C23/C39：进程级并行（jobs > 1）
+--
+-- 每个测试文件一个子进程：spawn 当前可执行文件的隐藏模式
+-- `test <包目录> --only-file <文件名> --jobs 1`（父进程 --verbose 时追加 --verbose）。
+-- 子进程继承 stdin/stdout/stderr，因此 `ok`/`FAIL` 行与测试自身的输出**可能交错**
+-- （`prim_print` 每次 flush，单行内容完整；行序不保证）。父进程不打印每文件结果行，
+-- 只用 `prim_wait` 收退出码、按文件计 pass/fail；汇总行与串行逐字一致。
+--
+-- 调度：running 按启动顺序排队；窗口满（jobs 个在跑）时等**队首**退出再启动下一个。
+-- 因为 `prim_wait` 只能等指定 pid，失败检测发生在队首被 wait 时——并行下 fail-fast
+-- 保证「失败后不再启动新文件」，但不保证在窗口里其它文件失败时立即停（它们要等
+-- 排到队首才被 wait 到）；已在跑的文件总是等完并计入汇总。
+--
+-- fuel = 2 * 文件数 + jobs + 2：每一轮要么 spawn 一个（pending 减一）要么 wait 一个
+-- （running 减一），故步数上界成立；显式 fuel 让终止性检查不依赖跨参数测量。
+-- ---------------------------------------------------------------
+runTestFilesParallel : TestOpts -> String -> String -> List String -> Tally
+runTestFilesParallel opts pkgDir dir files =
+  runParallel (2 * length files + opts.testJobs + 2) opts pkgDir dir files [] 0 0 False
+
+runParallel : Int -> TestOpts -> String -> String -> List String -> List (Pair Int String) -> Int -> Int -> Bool -> Tally
+runParallel fuel opts pkgDir dir pending running pass fail stopped = if fuel <= 0 then finishRunning opts running pass fail stopped
+else case pending of
+  [] => finishRunning opts running pass fail stopped
+  name :: rest => if stopped then finishRunning opts running pass fail stopped
+  else if length running < opts.testJobs then
+    let
+      pid = runIO (prim_spawn (spawnTestArgs opts pkgDir name))
+    in runParallel (fuel - 1) opts pkgDir dir rest (append running [Pair pid name]) pass fail False
+  else case running of
+    [] => finishRunning opts [] pass fail stopped
+    (Pair pid _) :: more =>
+      let
+        code = runIO (prim_wait pid)
+        pass1 = if code == 0 then pass + 1 else pass
+        fail1 = if code == 0 then fail else fail + 1
+        stopped1 = opts.testFailFast && code /= 0
+      in runParallel (fuel - 1) opts pkgDir dir pending more pass1 fail1 stopped1
+
+-- 等完所有在跑子进程并打印与串行一致的汇总行（fail-fast 触发时也走这里）。
+finishRunning : TestOpts -> List (Pair Int String) -> Int -> Int -> Bool -> Tally
+finishRunning opts [] pass fail stopped =
+  let
+    _ = runIO (prim_print "\n${pass} passed, ${fail} failed\n")
+  in Tally pass fail stopped
+finishRunning opts ((Pair pid _) :: rest) pass fail stopped =
+  let
+    code = runIO (prim_wait pid)
+    pass1 = if code == 0 then pass + 1 else pass
+    fail1 = if code == 0 then fail else fail + 1
+    stopped1 = stopped || opts.testFailFast && code /= 0
+  in finishRunning opts rest pass1 fail1 stopped1
+
+-- 子进程 argv：`test <包目录> --only-file <文件名> --jobs 1 [--verbose]`。
+-- 子进程模式（runOnlyFile）不会再并行 / 递归 spawn。
+spawnTestArgs : TestOpts -> String -> String -> List String
+spawnTestArgs opts pkgDir name =
+  let
+    verbose = if opts.testVerbose then ["--verbose"] else []
+  in append ["test", pkgDir, "--only-file", name, "--jobs", "1"] verbose
+
 -- 单测结果行：默认与 M30 逐字一致；--verbose 时行尾追加耗时。
 printOutcome : TestOpts -> String -> TestOutcome -> Int -> Int
 printOutcome opts name TestPassed us = runIO (prim_print "ok   ${name}${timingText opts us}\n")
@@ -233,12 +350,102 @@ pureTest : String -> String -> String -> TestOutcome
 pureTest name output expected =
   if output == expected then TestPassed else TestFailed "expected ${expected}, got ${output}"
 
--- 效果测试：临时包编译 + 运行，退出码 0 通过；编译/链接失败按 FAIL 记录诊断。
+-- 效果测试：退出码 0 通过；编译/链接失败按 FAIL 记录诊断。
+-- 有 `timeout` 命令时走 runIOTestTimed（单测超时，W1），否则退回 runEffectProgram。
 runIOTest : PackageContext -> String -> String -> TestOutcome
 runIOTest ctx path name =
+  let
+    secs = testTimeoutSecs 0
+  in if secs <= 0 || not (hasTimeoutCmd 0) then runIOTestLegacy ctx path name
+  else runIOTestTimed ctx path name secs
+
+-- 无外部超时的旧路径：临时包编译 + 运行（效果输出直接写终端，只看进程退出码）。
+runIOTestLegacy : PackageContext -> String -> String -> TestOutcome
+runIOTestLegacy ctx path name =
   let
     source = runIO (prim_readFile path)
   in case runEffectProgram ctx source False of
     Err e => TestFailed e
     Ok 0 => TestPassed
     Ok code => TestFailed "effect program exited with code ${code}"
+
+-- ---------------------------------------------------------------
+-- W1：IO 测试的超时执行
+-- ---------------------------------------------------------------
+-- 一条子进程命令的结果：正常退出码 / 被超时杀掉。
+data CmdOutcome : Type where
+  CmdDone : Int -> CmdOutcome
+  CmdTimedOut : CmdOutcome
+
+-- 单测超时秒数：未设置/空 → 120；0 关闭；非数字 → 120（不静默放大）。
+testTimeoutSecs : Int -> Int
+testTimeoutSecs _ = case parseNat (runIO (prim_getenv "VUNA_TEST_TIMEOUT")) of
+  Nothing => 120
+  Just n => n
+
+parseNat : String -> Maybe Int
+parseNat s = if s == "" then Nothing else parseDigits (strUnpack s) 0
+
+parseDigits : List Int -> Int -> Maybe Int
+parseDigits [] acc = Just acc
+parseDigits (c :: rest) acc =
+  if c >= 48 && c <= 57 then parseDigits rest (acc * 10 + (c - 48)) else Nothing
+
+-- `timeout`（coreutils）在 PATH 里吗？不在时优雅降级为旧路径（不算 FAIL）。
+hasTimeoutCmd : Int -> Bool
+hasTimeoutCmd _ = runIO (prim_runIn "." ["sh", "-c", "command -v timeout >/dev/null 2>&1"]) == 0
+
+-- 临时目录根：`$TMPDIR`（去尾部 `/`），没有就用 `/tmp`。
+tempBase : Int -> String
+tempBase _ =
+  let
+    env = runIO (prim_getenv "TMPDIR")
+  in if env == "" then "/tmp"
+  else if endsWith "/" env then substring 0 (byteLength env - 1) env else env
+
+-- 唯一临时目录：microsecond 时间戳基名 + `-N` 后缀探测（与 Vuna.Interp 的同一策略；
+-- 递归按 fuel 结构下降，终止性检查可证）。
+freshTempDir : Int -> String -> String
+freshTempDir fuel base = if fuel <= 0 then base
+else
+  let
+    dir = "${base}-${fuel}"
+  in if runIO (prim_fileExists dir) then freshTempDir (fuel - 1) base else dir
+
+-- 在 dir 里跑命令；超时（TERM，5s 后 KILL）返回 CmdTimedOut。
+-- GNU timeout 的超时退出码是 124（-k 兜底杀掉时 137）；命令自身恰好以这两个码退出
+-- 会被当作超时（实际不可能来自 vuna/产物，可接受）。
+runTimedCmd : String -> List String -> Int -> CmdOutcome
+runTimedCmd dir argv secs =
+  let
+    code = runIO (prim_runIn dir (append ["timeout", "-s", "TERM", "-k", "5", "${secs}s"] argv))
+  in if code == 124 || code == 137 then CmdTimedOut else CmdDone code
+
+-- 有超时的 IO 测试：临时目录里编译测试入口（printResult=False，只看退出码），
+-- `sh build.sh` 与运行产物两步各自受 timeout 保护；失败/超时都清理临时目录。
+-- 目录名含测试文件名：`--jobs` 并行时同一包的多个子进程各自建目录，即使时间戳相同
+-- 也不会撞名（同包文件名唯一）。
+runIOTestTimed : PackageContext -> String -> String -> Int -> TestOutcome
+runIOTestTimed ctx path name secs =
+  let
+    dir = freshTempDir 1000 "${tempBase 0}/vuna-test-${runIO timeUs}-${name}"
+  in case compileToDir ctx path False dir of
+    Err e => ioCleanup dir (TestFailed e)
+    Ok _ =>
+      let
+        _ = runIO (prim_makeDir "${dir}/bin")
+      in case runTimedCmd dir ["sh", "build.sh", "bin/vuna-test"] secs of
+        CmdTimedOut => ioCleanup dir (TestFailed "timed out after ${secs}s (build)")
+        CmdDone code => if code /= 0 then ioCleanup dir
+          (TestFailed "build: ${name}: `sh build.sh bin/vuna-test` failed in ${dir} (exit ${code})")
+        else case runTimedCmd dir ["bin/vuna-test"] secs of
+          CmdTimedOut => ioCleanup dir (TestFailed "timed out after ${secs}s")
+          CmdDone 0 => ioCleanup dir TestPassed
+          CmdDone code => ioCleanup dir (TestFailed "effect program exited with code ${code}")
+
+-- 删掉本次 IO 测试的临时目录（绝对路径，cwd 无关）后返回结果。
+ioCleanup : String -> TestOutcome -> TestOutcome
+ioCleanup dir outcome =
+  let
+    _ = runIO (prim_runIn "/" ["rm", "-rf", dir])
+  in outcome

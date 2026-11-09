@@ -1,7 +1,11 @@
 -- | 布尔类型与逻辑辅助函数。
 module Base.Bool (Bool(..), and, bool, not, or, xor) where
 
--- Base.Bool：布尔类型与逻辑辅助函数。无依赖模块。
+-- Base.Bool：布尔类型与逻辑辅助函数。按「实例跟类型模块走」的落点规则承载
+-- `Show Bool` 实例（B24），因此依赖 Base.Show；`Eq` / `Ord` 实例随 trait 留在
+-- `Base.Eq` / `Base.Ord`（`Bool` 是它们方法的返回类型，放这里会成环）。
+import Base.Show
+
 -- `&&` / `||` 的 fixity 声明在本模块（它们是短路内建值，不是 trait 方法）。
 infixl 3 &&
 infixl 2 ||
@@ -15,20 +19,30 @@ data Bool : Type where
 
 -- | 逻辑非。
 not : Bool -> Bool
-not b = if b then False else True
+not True = False
+not False = True
 
 -- | 逻辑与（非短路版本；短路内建是 `&&`）。
 and : Bool -> Bool -> Bool
-and a b = if a then b else False
+and True b = b
+and False b = False
 
 -- | 逻辑或（非短路版本；短路内建是 `||`）。
 or : Bool -> Bool -> Bool
-or a b = if a then True else b
+or True b = True
+or False b = b
 
 -- | 逻辑异或。
 xor : Bool -> Bool -> Bool
-xor a b = if a then not b else b
+xor True b = not b
+xor False b = b
 
 -- | 布尔消除：先假分支、再真分支。
 bool : a -> a -> Bool -> a
-bool ifFalse ifTrue b = if b then ifTrue else ifFalse
+bool ifFalse ifTrue True = ifTrue
+bool ifFalse ifTrue False = ifFalse
+
+-- B24：`Bool` 的展示用 `if` 输出 True/False（与内建实例一致）；不能写 `show True`，
+-- 那会自递归。
+instance Show Bool where
+  show b = if b then "True" else "False"

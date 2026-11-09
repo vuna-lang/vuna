@@ -5,16 +5,16 @@ import Base.EffSched
 import Base.IO
 import Base.Result
 
-bad : Eff RNil Int
+bad : Eff [] Int
 bad = bindEff yieldNow (\_ => sendCore Int "boom" 0 0)
 
-work : List Int -> Eff RNil Int
+work : List Int -> Eff [] Int
 work [] = pureEff 0
 work (_ :: rest) =
   bindEff (liftIOEff (println "tick"))
     (\_ => bindEff yieldNow (\st => if st <= 0 then work rest else bindEff (liftIOEff (println "sibling-cleanup")) (\_ => pureEff 9)))
 
-prog : Eff RNil (Result Int)
+prog : Eff [] (Result Int)
 prog = withScope (\sc => bindEff (forkTask sc bad) (\tb => bindEff (forkTask sc (work [0, 0, 0])) (\tg => bindEff yieldNow (\_ => bindEff (awaitTask tb) (\rb => case rb of
   Ok _ => pureEff (Ok 0)
   Err e => bindEff (liftIOEff (println e)) (\_ => bindEff (scopeWait sc) (\_ => bindEff (awaitTask tg) (\rw => case rw of

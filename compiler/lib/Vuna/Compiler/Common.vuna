@@ -1,3 +1,4 @@
+-- | 编译器门面：源码位置类型与模块路径/诊断工具，并整模块重导出用到的 Base 片段。
 module Vuna.Compiler.Common
   ( Pos(..)
   , Span(..)
@@ -13,6 +14,7 @@ module Vuna.Compiler.Common
   , spanStartCol
   , spanStartLine
   , splitLastDot
+  , splitOnChar
   , splitOnDot
   , splitPath
   , suggest
@@ -35,49 +37,74 @@ import Base.Maybe
 import Base.Result
 import Base.String
 
--- 源码位置（行、列，均从 1 开始）。
+-- | 源码位置：行、列，均从 1 开始。
 record Pos where
+  -- | 行号（从 1 开始）。
   posLine : Int
+  -- | 列号（从 1 开始）。
   posCol : Int
 
--- 源码 span：文件、起始行列、结束行列。文件在解析时由调用方注入，
+-- | 源码 span：文件、起始行列、结束行列。文件在解析时由调用方注入，
 -- 供跨模块 flatten 后仍能追溯每个表达式来自哪个源文件。
 record Span where
+  -- | 该 span 所在的源文件路径。
   spanFile : String
+  -- | 起始行（从 1 开始）。
   spanStartLine : Int
+  -- | 起始列（从 1 开始）。
   spanStartCol : Int
+  -- | 结束行（从 1 开始）。
   spanEndLine : Int
+  -- | 结束列（从 1 开始）。
   spanEndCol : Int
 
+-- | 取源码位置的行号。
 posLine : Pos -> Int
 posLine (Pos l c) = l
 
+-- | 取源码位置的列号。
 posCol : Pos -> Int
 posCol (Pos l c) = c
 
+-- | 取 span 的起始行。
 spanStartLine : Span -> Int
 spanStartLine (Span f sl sc el ec) = sl
 
+-- | 取 span 的起始列。
 spanStartCol : Span -> Int
 spanStartCol (Span f sl sc el ec) = sc
 
+-- | 取 span 的结束行。
 spanEndLine : Span -> Int
 spanEndLine (Span f sl sc el ec) = el
 
--- 把 span 渲染成 `文件:行:列`（错误信息前缀）。
+-- | 把 span 渲染成 `文件:行:列`（错误信息前缀）。
 showSpanLoc : Span -> String
 showSpanLoc (Span f sl sc el ec) = "${f}:${sl}:${sc}"
 
+-- | 字符（码点）是否在列表里；线性扫描，用于小字符集判断。
 memChar : Int -> List Int -> Bool
 memChar c [] = False
 memChar c (x :: rest) = x == c || memChar c rest
 
--- 模块路径工具：`A.B.C` 的拆分/拼接（编译器专属）。
+-- | 字符串是否含 `.`（模块路径判定的快速路径）。
 containsDot : String -> Bool
 containsDot s = memChar 46 (strUnpack s)
 
+-- | 按 `.` 拆分模块路径 `A.B.C` → `["A","B","C"]`。
 splitOnDot : String -> List String
 splitOnDot s = splitCharsOnDot (strUnpack s) [] []
+
+-- | 按任意分隔字符切分（`splitOnDot` 的泛化；内部标记名解码用）。
+splitOnChar : Int -> String -> List String
+splitOnChar sep s = splitCharsOn sep (strUnpack s) [] []
+
+-- | 自动补注（M41 新增导出）：splitCharsOn。
+splitCharsOn : Int -> List Int -> List String -> List Int -> List String
+splitCharsOn sep [] acc seg = reverse (strPack (reverse seg) :: acc)
+splitCharsOn sep (c :: rest) acc seg =
+  if c == sep then splitCharsOn sep rest (strPack (reverse seg) :: acc) []
+  else splitCharsOn sep rest acc (c :: seg)
 
 splitCharsOnDot : List Int -> List String -> List Int -> List String
 splitCharsOnDot [] acc seg = reverse (strPack (reverse seg) :: acc)
@@ -85,31 +112,37 @@ splitCharsOnDot (c :: rest) acc seg =
   if c == 46 then splitCharsOnDot rest (strPack (reverse seg) :: acc) []
   else splitCharsOnDot rest acc (c :: seg)
 
+-- | 把已拆分的段列表的**最后一段**单独分出来：`["A","B"]` → `(["A"], "B")`；
+-- 空列表返回 `([], "")`。
 splitLastDot : List String -> Pair (List String) String
 splitLastDot parts = case reverse parts of
   [] => Pair [] ""
   last :: rest => Pair (reverse rest) last
 
+-- | 用 `.` 拼接模块路径段；空列表得空串，单段原样返回。
 joinDots : List String -> String
 joinDots [] = ""
 joinDots ([x]) = x
 joinDots (x :: rest) = "${x}.${joinDots rest}"
 
+-- | 用 `/` 拼接文件路径段；空列表得空串，单段原样返回。
 joinSlashes : List String -> String
 joinSlashes [] = ""
 joinSlashes ([x]) = x
 joinSlashes (x :: rest) = "${x}/${joinSlashes rest}"
 
+-- | 用 ` -> ` 拼接类型/签名片段（展示用）；空列表得空串，单段原样返回。
 joinArrows : List String -> String
 joinArrows [] = ""
 joinArrows ([x]) = x
 joinArrows (x :: rest) = "${x} -> ${joinArrows rest}"
 
--- 路径拆分：返回去掉最后一段的目录与最后一段（无 "/" 时目录为 ""）。
+-- | 路径拆分：返回去掉最后一段的目录与最后一段（无 "/" 时目录为 ""）。
 -- 编译器驱动（创建输出文件父目录）与 doc 共用，因此放在 Base 而不是工具模块。
 splitPath : String -> Pair String String
 splitPath path = splitPathChars (strUnpack path) []
 
+-- | `splitPath` 的码点级实现：遇 `/`（47）即切成目录与剩余（含最后一段）。
 splitPathChars : List Int -> List Int -> Pair String String
 splitPathChars [] acc =
   let
@@ -118,15 +151,18 @@ splitPathChars [] acc =
 splitPathChars (c :: rest) acc =
   if c == 47 then Pair (strPack (reverse acc)) (strPack rest) else splitPathChars rest (c :: acc)
 
+-- | 取路径最后一段（文件名/模块名），等价 `secondOf (splitPath path)`。
 baseName : String -> String
 baseName path = secondOf (splitPath path)
 
--- 候选建议：与出错名相似的名字（诊断）
+-- | 候选建议：与出错名相似的名字（诊断）。无相似项返回空串。
 suggest : String -> List String -> String
 suggest name [] = ""
 suggest name (c :: rest) =
   if _similarName name c then " (did you mean ${c}?)" else suggest name rest
 
+-- | 近似名判定（供 `suggest`）：相等不算（那是精确命中），其余按前缀包含、
+-- 长度差 ≤2 且公共前缀 ≥2 判为相似。
 _similarName : String -> String -> Bool
 _similarName a b = if a == b then False
 else if startsWith a b then True
@@ -138,10 +174,12 @@ else
     lb = strUnpack b
   in lengthDiffLE (length la) (length lb) 2 && prefixLen2 la lb >= 2
 
+-- | 两个码点列表的公共前缀长度。
 prefixLen2 : List Int -> List Int -> Int
 prefixLen2 [] _ = 0
 prefixLen2 _ [] = 0
 prefixLen2 (x :: xs) (y :: ys) = if x == y then 1 + prefixLen2 xs ys else 0
 
+-- | 两个长度的差是否 ≤ n（无符号比较的安全写法）。
 lengthDiffLE : Int -> Int -> Int -> Bool
 lengthDiffLE la lb n = if la >= lb then la - lb <= n else lb - la <= n

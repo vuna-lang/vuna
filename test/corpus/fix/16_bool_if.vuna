@@ -1,0 +1,17 @@
+negate : Bool -> Bool
+negate b = if b then False else True
+
+same : Bool -> Bool
+same b = if b then True else False
+
+keep : Bool -> Bool
+keep b = if b then b else b
+
+swap : Pair Bool Int -> Int
+swap (Pair b n) = if b then n else 0
+
+greet : Bool -> String -> String
+greet b name = if b then "hi ${name}" else name
+
+main : Int
+main = swap (Pair True 1)

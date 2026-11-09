@@ -39,6 +39,7 @@ import Vuna.Compiler.Common
 import Base.HashMap
 import Vuna.Compiler.Core
 import Vuna.Compiler.Elab
+import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Intrinsics
 
 -- M31.3：除 `[A-Za-z0-9]` 外的任意字符都必须转义成 `_x<code>_`——用户符号名函数
@@ -79,14 +80,16 @@ valueName name = "v_${sanitizeName name}"
 -- 单独提出来：OCaml `if` 直接作构造子实参时 早期 codegen 的括号处理不可靠，
 -- 这里把它包成一个命名函数，保证自举编译本文件时生成的 OCaml 合法。
 boolText : Bool -> String
-boolText b = if b then "true" else "false"
+boolText True = "true"
+boolText False = "false"
 
 -- M14：族 → OCaml 变体类型名；构造子 → 带族前缀的变体构造子名（避免跨族重名）。
 typeName : String -> String
 typeName name = "t_${sanitizeName name}"
 
+-- | 自动补注（M41 新增导出）：ctorOcamlName。
 ctorOcamlName : String -> String -> String
-ctorOcamlName family ctor = "C_${sanitizeName family}_${sanitizeName ctor}"
+ctorOcamlName family ctor = "C_${sanitizeName family}_${sanitizeName (ctorShortName ctor)}"
 
 -- ---------------------------------------------------------------
 -- 跨单元引用限定（C35）
@@ -530,7 +533,8 @@ ctorKeepFlags : DtCtor -> List Bool
 ctorKeepFlags c = map (\b => not (rigIsErased (secondOf b))) (dtCtorTelescope c)
 
 flagMatchesRig : Bool -> Rig -> Bool
-flagMatchesRig keep rig = if keep then not (rigIsErased rig) else rigIsErased rig
+flagMatchesRig True rig = not (rigIsErased rig)
+flagMatchesRig False rig = rigIsErased rig
 
 ctorShapeOf : List DtData -> List (Pair String (List Bool))
 ctorShapeOf [] = []

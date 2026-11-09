@@ -1,0 +1,11 @@
+-- D24 负例：Nat 字面量模式暂不能与构造子模式混用。
+import Base.Nat
+
+f : Nat -> Int
+f n = case n of
+  0 => 1
+  Succ k => 2
+  _ => 3
+
+main : Int
+main = f 0

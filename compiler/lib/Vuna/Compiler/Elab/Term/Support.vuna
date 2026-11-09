@@ -63,7 +63,8 @@ else case forceVal ec ty of
 -- 两者共用同一套绑定块模型（parser 的 `bindingItemsToBinds`），这里只收口「是否强制」，
 -- 使 check/infer 两条 let 路径不再各自重复这一段分支。
 checkBindingSigs : Bool -> List (Pair Pat Expr) -> Result Int
-checkBindingSigs requiresSigs binds = if requiresSigs then checkWhereSigs binds else Ok 0
+checkBindingSigs True binds = checkWhereSigs binds
+checkBindingSigs False binds = Ok 0
 
 checkWhereSigs : List (Pair Pat Expr) -> Result Int
 checkWhereSigs [] = Ok 0

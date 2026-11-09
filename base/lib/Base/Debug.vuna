@@ -17,6 +17,7 @@ import Base.Show
 import Base.Interp
 
 -- 写一行到 stderr 后返回原值（自动补换行；多段内容先自己拼好）。
+-- | 调试用：求值期把 `msg` 写入 stderr（自动补换行），随后原样返回 `x`；副作用依赖 `runIO` + `prim_eprint`。只用于调试，不是正式的错误通道。
 trace : String -> a -> a
 trace msg x =
   let
@@ -24,13 +25,17 @@ trace msg x =
   in x
 
 -- `trace` 的展示版：先 `show` 再写 stderr，返回原值（需要 Show 实例）。
+-- | `trace` 的展示版：先 `show x` 再写 stderr，随后原样返回 `x`；需要 `Show` 实例。
 traceShow : Show a => a -> a
 traceShow x = trace (show x) x
 
 -- 断言：失败时以 `assertion failed: <msg>` 终止（main 钩子报告；exit 2）。
+-- | 断言：`ok` 为 True 时返回 `x`，否则以 `assertion failed: <msg>` 经 `prim_fail` 终止（main 钩子报告位置并 exit 2）。
 assert : Bool -> String -> a -> a
-assert ok msg x = if ok then x else prim_fail "assertion failed: ${msg}"
+assert True msg x = x
+assert False msg x = prim_fail "assertion failed: ${msg}"
 
 -- 未实现占位：以 `TODO: <msg>` 终止（同 assert 的报告路径）。
+-- | 未实现占位：总是以 `TODO: <msg>` 经 `prim_fail` 终止（与 `assert` 同一报告路径）。
 todo : String -> a
 todo msg = prim_fail "TODO: ${msg}"

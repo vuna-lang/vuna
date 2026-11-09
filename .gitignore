@@ -63,5 +63,10 @@ examples/**/main
 /seed/program
 .local-tmp/
 
+# iface 缓存（默认与源码同目录生成；`vuna clean-iface` 批量清理）
+*.iface
+*.iface.*.tmp
+.vuna-iface
+
 # seed 构建缓存（rotation 生成，不入库）
 /seed/*.stamp

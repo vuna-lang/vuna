@@ -1,0 +1,9 @@
+# docstring 覆盖 ratchet 基线（checks.doc-coverage）。
+# 单个整数 = 受管辖包（见 nix/doc-coverage.sh 的 PACKAGES：vuna-compiler + vuna-base）
+# `vuna doc --check` 允许的最大缺失总数；超过即门禁失败。
+# 覆盖提升后把此数下调；压到 0 时可把 checks.doc-coverage 直接换成 `vuna doc --check`。
+# vuna-base 已全量（0）；vuna-compiler 在按模块补齐：接入门禁时 3116，本轮补齐
+# Common / Version / Intrinsics / Diagnostics.Common / Elab.InstName 后降到 3024；
+# 2026-11-09 D28/D40 落地后实测 3023（新增符号都带 docstring）；iface 布局（S8）新增辅助
+# 函数都带 docstring 后实测 3021，按 ratchet 下调。
+3021

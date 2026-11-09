@@ -1,11 +1,11 @@
--- L3 负例：forkTask 只接受 Eff RNil a（任务体不能依赖外层 handler）。
+-- L3 负例：forkTask 只接受 Eff Nil a（任务体不能依赖外层 handler）。
 import Base.Eff
 import Base.EffSched
 
-prog : Eff (RCons Int RNil) Int
+prog : Eff (Cons Int Nil) Int
 prog = pureEff 1
 
-bad : Eff RNil (Task Int)
+bad : Eff Nil (Task Int)
 bad = bindEff newScope (\sc => forkTask sc prog)
 
 main : Int

@@ -9,7 +9,7 @@ sumThree : Result Int -> Result Int -> Result Int -> Result Int
 sumThree (Ok a) (Ok b) (Ok c) = Ok (a + b + c)
 sumThree _ _ _ = Ok 0
 
-prog : Eff RNil (Result Int)
+prog : Eff [] (Result Int)
 prog =
   withScope
     (\sc => bindEff (forkTask sc (pureEff 11)) (\ta => bindEff (awaitTask ta) (\r1 => bindEff (awaitTask ta) (\r2 => bindEff (cancelTask ta) (\_ => bindEff (awaitTask ta) (\r3 => pureEff (sumThree r1 r2 r3)))))))

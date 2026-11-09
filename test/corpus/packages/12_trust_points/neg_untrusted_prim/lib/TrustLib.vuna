@@ -1,0 +1,11 @@
+module TrustLib (helper, probePrim) where
+
+-- D28 负例：`probePrim` 直接调用 unsafe 门控内建 `prim_runIO`（不是 `runIO` 别名），
+-- 不在信任点里 → check 报错；`helper` 是合法的纯信任点，保证 manifest 校验能通过。
+-- | 合法的纯信任点（与 unsafe 无关，但必须是真实定义）。
+helper : Int -> Int
+helper x = x
+
+-- | 未列入信任点的定义直接引用 `prim_runIO`（应被编译器拒绝）。
+probePrim : Int
+probePrim = prim_runIO (prim_pureIO 0)

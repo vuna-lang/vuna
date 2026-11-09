@@ -173,11 +173,21 @@ else if c == 46 then case rest of
   [] => Pair (strPack (reverse acc)) (Chars (c :: rest) p)
 else Pair (strPack (reverse acc)) (Chars (c :: rest) p)
 
-collectInt : Chars -> Int -> Pair Int Chars
-collectInt (Chars [] p) acc = Pair acc (Chars [] p)
-collectInt (Chars (c :: rest) p) acc =
-  if isDigit c then collectInt (Chars rest (advanceChar c p)) (acc * 10 + (c - 48))
-  else Pair acc (Chars (c :: rest) p)
+-- 63 位宿主 int 的上界（2^62 - 1）。字面量累加超过它就无法表示：C40 起在词法期报
+-- `LX_IntLiteralOutOfRange`，不再让 `acc * 10 + d` 静默回绕成小值或负数。
+maxIntLiteral : Int
+maxIntLiteral = 4611686018427387903
+
+-- 十进制字面量的累加。每位先判「再乘 10 加 d 是否会超出 maxIntLiteral」，越界即报错；
+-- 因此 `4611686018427387903` 仍合法，`...904` 起报 `LX_IntLiteralOutOfRange`。
+collectInt : Chars -> Int -> Result (Pair Int Chars)
+collectInt (Chars [] p) acc = Ok (Pair acc (Chars [] p))
+collectInt (Chars (c :: rest) p) acc = if isDigit c then
+  let
+    d = c - 48
+  in if acc > (maxIntLiteral - d) / 10 then lexErr0 IntLiteralOutOfRange
+  else collectInt (Chars rest (advanceChar c p)) (acc * 10 + d)
+else Ok (Pair acc (Chars (c :: rest) p))
 
 collectOp : Chars -> List Int -> Pair String Chars
 collectOp (Chars [] p) acc = Pair (strPack (reverse acc)) (Chars [] p)
@@ -286,7 +296,8 @@ else case cs of
   Chars (c :: rest) p => if isIdentStart c then case collectIdent (Chars rest (advanceChar c p)) [c] of
     Pair name cs2 => Ok (Pair (PTok (classifyIdent name) p) cs2)
   else if isDigit c then case collectInt (Chars rest (advanceChar c p)) (c - 48) of
-    Pair n cs2 => Ok (Pair (PTok (TInt n) p) cs2)
+    Err e => Err e
+    Ok (Pair n cs2) => Ok (Pair (PTok (TInt n) p) cs2)
   else if c == 34 then lexStringToken (fuel - 1) c rest p
   else if c == 40 || c == 41 || c == 91 || c == 93 || c == 44 || c == 123 || c == 125 then Ok (Pair (PTok (TSym (strPack [c])) p) (Chars rest (advanceChar c p)))
   else if c == 96 then Ok (Pair (PTok (TSym "`") p) (Chars rest (advanceChar c p)))

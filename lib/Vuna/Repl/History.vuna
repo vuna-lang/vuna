@@ -1,0 +1,72 @@
+module Vuna.Repl.History (historyHeader, parseHistoryFile, renderHistoryFile) where
+
+-- Vuna.Repl.History：REPL 会话历史文件的编解码（工具链；不进 seed 闭包）。
+--
+-- 动机：`Vuna.Repl` 早期只持久化**单行**输入单元（含换行的单元跳过），多行定义 /
+-- `:{ ... :}` 块刷新后丢失（debt D35）。这里把「单元 ↔ 一行文本」的编解码独立成
+-- **纯函数**，Repl 只负责路径、上限与去重，便于直接单测（见 `test/corpus/repl/app/Main.vuna`）。
+--
+-- 文件格式（v2）：首行固定 `historyHeader`，其后每行一个编码后的单元；单元内
+--   * `\`（0x5C）→ `\\`
+--   * 换行（0x0A）→ `\n`（反斜杠 + 字母 n 两个字符）
+-- 因此每行仍是「一个单元」，单元内不会有裸换行；条目仍按旧→新排列。
+--
+-- 向后兼容（v1 = 旧格式，纯文本一行一条、没有首行头）：
+--   * 读取按**首行判别**：首行等于 `historyHeader` 才按 v2 解码，否则整份文件按 v1
+--     原样读入——旧文件里的 `\` 与 `\n` 字面量不会被误解码；
+--   * 写入一律升级为 v2（parse v1 → 追加 → 写出 v2）。
+--
+-- 已知边界：v1 单元本身含裸换行时无法区分（旧实现只写单行，故不会出现）；v2 首行
+-- 与用户实际输入单元同名的概率可忽略（判别只看**首行**，首行必须是头）。
+import Vuna.Compiler.Common
+
+historyHeader : String
+historyHeader = "vuna-repl-history 2"
+
+backslash : Int
+backslash = 92
+
+newline : Int
+newline = 10
+
+-- 解析整份历史文件；空行（旧行为）一律丢弃。返回旧→新的单元列表。
+parseHistoryFile : String -> List String
+parseHistoryFile text = case lines text of
+  [] => []
+  first :: rest =>
+    if trim first == historyHeader then filterNonEmpty (map decodeUnit rest)
+    else filterNonEmpty (first :: rest)
+
+-- 渲染成 v2 文件文本（总是以 `\n` 结尾；空历史也写出头，保证格式判别稳定）。
+renderHistoryFile : List String -> String
+renderHistoryFile units = "${historyHeader}\n${join "\n" (map encodeUnit units)}\n"
+
+filterNonEmpty : List String -> List String
+filterNonEmpty [] = []
+filterNonEmpty (x :: rest) = if x == "" then filterNonEmpty rest else x :: filterNonEmpty rest
+
+-- ---------------------------------------------------------------
+-- 编码 / 解码（纯；逐字节处理，不做 UTF-8 解码，因此对任意字节串是恒等的逆）
+-- ---------------------------------------------------------------
+encodeUnit : String -> String
+encodeUnit s = encodeChars (strUnpack s)
+
+encodeChars : List Int -> String
+encodeChars [] = ""
+encodeChars (c :: rest) =
+  if c == newline then "${strPack [backslash]}n${encodeChars rest}"
+  else if c == backslash then "${strPack [backslash]}${strPack [backslash]}${encodeChars rest}"
+  else "${strPack [c]}${encodeChars rest}"
+
+decodeUnit : String -> String
+decodeUnit s = strPack (decodeChars (strUnpack s) [])
+
+-- 累加逆序，最后 reverse；`\` 后面非 `n`/`\` 时按字面保留（宽容解码，不报错）。
+decodeChars : List Int -> List Int -> List Int
+decodeChars [] acc = reverse acc
+decodeChars (c :: rest) acc = if c == backslash then case rest of
+  next :: rest2 =>
+    if next == 110 then decodeChars rest2 (newline :: acc)
+    else if next == backslash then decodeChars rest2 (backslash :: acc) else decodeChars rest (c :: acc)
+  [] => reverse (backslash :: acc)
+else decodeChars rest (c :: acc)

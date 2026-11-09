@@ -1,28 +1,23 @@
 module Base.Show (Show(..)) where
 
--- Base.Show：`Show` trait 与内建类型实例（M24.7：从编译器合成迁到库）。
+-- Base.Show：`Show` trait 与 `String` 实例（M24.7：从编译器合成迁到库）。
 --
 -- 方法与编译器内建 `Show` 的方法面**逐位对齐**（方法名 / 参数顺序 / 返回类型）：
 -- 下一波删除 `DtDerive` 的内建 trait/实例后，`deriving (Show)` 展开出的实例体
 -- （调用 `show` 方法）直接落在本 trait 上，无需改语义。
 --
+-- 实例按「实例跟类型模块走」的落点规则分布：`Int` 的实例在 `Base.Int`、`Bool` 的
+-- 实例在 `Base.Bool`；`String` 例外留在本 trait 模块——`show : a -> String` 直接依赖
+-- `String`，而 `Base.String → Base.Interp → Base.Show` 已构成 import 环，把
+-- `Show String` 放进 `Base.String` 会成环。
+--
 -- 内建清单收敛后，编译器只保留 `deriving` 展开机制与 `Int`/`String` 的运行时表示
 -- 特化；trait 声明、方法投影与实例搜索全部走库里的普通声明（见
 -- docs/reference/stdlib.md「内建与库的边界」）。
-import Base.Bool
-
+-- | 把值渲染为可读 String 的 trait，只有一个方法 `show`。方法面与编译器内建 Show 逐位对齐，`deriving (Show)` 展开出的实例体直接落在本 trait 上。`Int` / `Bool` 实例在各自类型模块，`String` 实例留本模块以避免 `Base.String -> Base.Interp -> Base.Show` 的 import 环。
 trait Show a where
   show : a -> String
-
--- `Int` 是语言原语（没有 data 声明）：展示走内建 `strFromInt`。
-instance Show Int where
-  show x = strFromInt x
 
 -- 与 runtime 展示共用同一实现（M27：`strShow` 是唯一转义源）。
 instance Show String where
   show s = strShow s
-
--- `Bool` 用 `if` 输出 True/False（与内建实例一致）；不能写 `show True`，那会自递归。
--- import Base.Bool 让 `data Bool` 声明进入程序（typed codegen 需要）。
-instance Show Bool where
-  show b = if b then "True" else "False"

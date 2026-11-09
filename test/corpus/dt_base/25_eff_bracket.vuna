@@ -5,13 +5,12 @@ import Base.EffState
 import Base.Result
 import Base.Pair
 
-prog : Eff (RCons (Exn X1) (RCons (State S1 Int) RNil)) Int
-prog = bracketExn X1
-  (pureEff 0)
-  (\_ => put S1 Int 99)
-  (\_ => bindEff (throwExn X1 "boom") (\_ => pureEff 1))
+prog : Eff (Exn X1 :: State S1 Int :: []) Int
+prog =
+  bracketExn X1 (pureEff 0) (\_ => put S1 Int 99)
+    (\_ => bindEff (throwExn X1 "boom") (\_ => pureEff 1))
 
-ret : (Base.Result.Result Int) -> (Int -> Pair (Base.Result.Result Int) Int)
+ret : Base.Result.Result Int -> Int -> Pair (Base.Result.Result Int) Int
 ret a s = Pair a s
 
 opH : (o : StateOp Int) -> (Base.EffState.resState Int o -> Int -> Pair (Base.Result.Result Int) Int) -> Int -> Pair (Base.Result.Result Int) Int

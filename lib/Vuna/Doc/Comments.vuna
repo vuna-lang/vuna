@@ -2,12 +2,15 @@ module Vuna.Doc.Comments (docTableOf) where
 
 -- Vuna.Doc.Comments：从 `lexComments` 的原始注释里识别 docstring 并关联到声明。
 --
--- 识别（只有这两种是 docstring，普通注释永远不进入文档）：
---   * 行块：首行 `-- | ...`；同列、行号连续的 `--` / `-- |` 续行；空行结束。
---   * 块：`{- | ... -}` / `{-| ... -}`；剥离首部 `|`，按最小公共缩进 dedent。
+-- 识别（只有这几种是 docstring，普通注释永远不进入文档）：
+--   * 行块：首行 `-- | ...`（前置）或 `-- ^ ...`（尾随）；同列、行号连续的 `--` /
+--     `-- |` / `-- ^` 续行；空行结束。
+--   * 块：`{- | ... -}` / `{-| ... -}`（前置）、`{- ^ ... -}`（尾随）；剥离首部标记，
+--     按最小公共缩进 dedent。
 --
--- 关联：doc block 归到第一个「行号更大、列相同、行距 <= 2 行、中间没有其他注释」
--- 的目标（模块头 / 顶层声明 / 构造子 / 字段 / trait 方法）。孤儿 doc 忽略。
+-- 关联：前置 doc block 归到第一个「行号更大、列相同、行距 <= 2 行、中间没有其他注释」
+-- 的目标（模块头 / 顶层声明 / 构造子 / 字段 / trait 方法）；尾随 doc block 归到**同一行、
+-- 列在注释左侧**的目标（模块头不参与）。两种位置同时存在时前置优先。孤儿 doc 忽略。
 -- `DSig` 与 `DFun` 同名：doc 写在签名前或首子句前都归到该名字（先出现者优先）。
 import Vuna.Compiler.Common
 import Vuna.Compiler.Frontend.Ast
@@ -95,28 +98,41 @@ record OpenLineBlock where
   openEndLine : Int
   openCol : Int
 
+-- 前置 doc（`-- |` / `{- | -}`）：两轮收集互不混淆——遇到另一轮的标记时当前块就收尾，
+-- 该标记交给对应的收集轮（否则 `-- ^` 会被当成 `-- |` 块的续行）。
 docBlocksOf : List Comment -> List DocBlock
-docBlocksOf comments = reverse (docBlocksGo comments Nothing [])
+docBlocksOf comments = reverse (docBlocksGo "|" comments Nothing [])
 
-docBlocksGo : List Comment -> Maybe OpenLineBlock -> List DocBlock -> List DocBlock
-docBlocksGo [] open acc = closeOpenBlock open acc
-docBlocksGo (c :: rest) open acc = case c.commentKind of
-  CLine => case docLineBody c.commentText of
-    Just body => case open of
+-- 尾随 doc（`-- ^` / `{- ^ -}`）：续行与收尾规则与前置相同。
+trailBlocksOf : List Comment -> List DocBlock
+trailBlocksOf comments = reverse (docBlocksGo "^" comments Nothing [])
+
+docBlocksGo : String -> List Comment -> Maybe OpenLineBlock -> List DocBlock -> List DocBlock
+docBlocksGo marker [] open acc = closeOpenBlock open acc
+docBlocksGo marker (c :: rest) open acc = case c.commentKind of
+  CLine => case lineDocMarker c.commentText of
+    Just (Pair m body) => if not (m == marker) then docBlocksGo marker rest Nothing (closeOpenBlock open acc)
+    else case open of
       Just ob =>
-        if spanStartLine (commentSpan c) == openEndLine ob + 1 && spanStartCol (commentSpan c) == openCol ob then docBlocksGo rest (Just (appendOpenLine ob body)) acc
-        else docBlocksGo rest (Just (newOpenBlock body c)) (closeOpenBlock open acc)
-      Nothing => docBlocksGo rest (Just (newOpenBlock body c)) acc
+        if continuesOpen ob c then docBlocksGo marker rest (Just (appendOpenLine ob body)) acc
+        else docBlocksGo marker rest (Just (newOpenBlock body c)) (closeOpenBlock open acc)
+      Nothing => docBlocksGo marker rest (Just (newOpenBlock body c)) acc
     Nothing => case open of
       Just ob =>
-        if spanStartLine (commentSpan c) == openEndLine ob + 1 && spanStartCol (commentSpan c) == openCol ob then docBlocksGo rest (Just (appendOpenLine ob (stripOneSpace c.commentText))) acc
-        else docBlocksGo rest Nothing (closeOpenBlock open acc)
-      Nothing => docBlocksGo rest Nothing acc
-  CBlock => case docBlockBody c.commentText of
-    Just body =>
-      docBlocksGo rest Nothing
+        if continuesOpen ob c then docBlocksGo marker rest (Just (appendOpenLine ob (stripOneSpace c.commentText))) acc
+        else docBlocksGo marker rest Nothing (closeOpenBlock open acc)
+      Nothing => docBlocksGo marker rest Nothing acc
+  CBlock => case blockDocMarker c.commentText of
+    Just (Pair m body) =>
+      if m == marker then docBlocksGo marker rest Nothing
         (DocBlock body (spanStartLine (commentSpan c)) (spanStartLine (commentSpan c)) (spanStartCol (commentSpan c)) :: closeOpenBlock open acc)
-    Nothing => docBlocksGo rest Nothing (closeOpenBlock open acc)
+      else docBlocksGo marker rest Nothing (closeOpenBlock open acc)
+    Nothing => docBlocksGo marker rest Nothing (closeOpenBlock open acc)
+
+-- 行块续行：同列、行号连续。
+continuesOpen : OpenLineBlock -> Comment -> Bool
+continuesOpen ob c =
+  spanStartLine (commentSpan c) == openEndLine ob + 1 && spanStartCol (commentSpan c) == openCol ob
 
 newOpenBlock : String -> Comment -> OpenLineBlock
 newOpenBlock body c =
@@ -132,12 +148,14 @@ closeOpenBlock Nothing acc = acc
 closeOpenBlock (Just ob) acc =
   DocBlock (trimRight (join "\n" ob.openLines)) ob.openStartLine ob.openEndLine ob.openCol :: acc
 
--- `-- | body`：commentText 是 `--` 之后，可能是 ` | body`。
-docLineBody : String -> Maybe String
-docLineBody text =
+-- `-- | body`（前置）/ `-- ^ body`（尾随）：commentText 是 `--` 之后，可能是
+-- ` | body`。返回 (标记, 正文)。
+lineDocMarker : String -> Maybe (Pair String String)
+lineDocMarker text =
   let
     t = trimLeft text
-  in if startsWith "|" t then Just (stripOneSpace (dropFirstChar t)) else Nothing
+  in if startsWith "|" t then Just (Pair "|" (stripOneSpace (dropFirstChar t)))
+  else if startsWith "^" t then Just (Pair "^" (stripOneSpace (dropFirstChar t))) else Nothing
 
 -- 行块续行：`-- body` 的 commentText 去一个前导空格（保留更深缩进给代码块）。
 stripOneSpace : String -> String
@@ -150,12 +168,13 @@ dropFirstChar s = case strUnpack s of
   c :: rest => strPack rest
   [] => s
 
--- `{- | body -}`：text 是 `{-` 与 `-}` 之间的原文。
-docBlockBody : String -> Maybe String
-docBlockBody text =
+-- `{- | body -}`（前置）/ `{- ^ body -}`（尾随）：text 是 `{-` 与 `-}` 之间的原文。
+blockDocMarker : String -> Maybe (Pair String String)
+blockDocMarker text =
   let
     t = trimLeft text
-  in if startsWith "|" t then Just (dedent (dropFirstChar t)) else Nothing
+  in if startsWith "|" t then Just (Pair "|" (dedent (dropFirstChar t)))
+  else if startsWith "^" t then Just (Pair "^" (dedent (dropFirstChar t))) else Nothing
 
 -- 去掉首尾空行，再按非空行的最小前导空格 dedent（块注释常整体缩进在 record/trait 内）。
 dedent : String -> String
@@ -265,6 +284,53 @@ pickTarget comments ((Pair idx t) :: rest) used b =
   else if targetLine t > b.docBlockEndLine && targetCol t == b.docBlockCol && targetLine t - b.docBlockEndLine <= 2 && not (commentStartsBetween comments b.docBlockEndLine (targetLine t)) then Just (Pair idx t)
   else pickTarget comments rest used b
 
+-- 尾随 doc（`-- ^`）在这之后单独关联：只取**前置目标**（模块头不参与），已用过的目标
+-- 不再复用；同一目标两种位置都有时前置优先（insertDoc 先到先得）。
+assignTrailBlocks : List Comment -> List (Pair Int DocTarget) -> List DocBlock -> Assign -> Assign
+assignTrailBlocks comments targets blocks acc = assignTrailBlocksGo comments targets blocks acc
+
+assignTrailBlocksGo : List Comment -> List (Pair Int DocTarget) -> List DocBlock -> Assign -> Assign
+assignTrailBlocksGo comments targets [] acc = acc
+assignTrailBlocksGo comments targets (b :: rest) acc = case pickTrailTarget comments targets acc.assignUsed b of
+  Nothing => assignTrailBlocksGo comments targets rest acc
+  Just (Pair idx t) =>
+    let
+      acc2 = case targetKind t of
+        "member" =>
+          Assign acc.assignUsed acc.assignDecls
+            (insertDoc "${targetParent t}\t${targetName t}" b.docBlockText acc.assignMembers)
+            acc.assignModuleDoc
+        _ =>
+          Assign acc.assignUsed (insertDoc (targetName t) b.docBlockText acc.assignDecls)
+            acc.assignMembers acc.assignModuleDoc
+    in assignTrailBlocksGo comments targets rest
+      (Assign (idx :: acc2.assignUsed) acc2.assignDecls acc2.assignMembers acc2.assignModuleDoc)
+
+-- 最近的**前置**目标：行号最大者；同行取列更大者（注释在目标右侧）。
+pickTrailTarget : List Comment -> List (Pair Int DocTarget) -> List Int -> DocBlock -> Maybe (Pair Int DocTarget)
+pickTrailTarget comments targets used b = pickTrailTargetGo used b targets Nothing
+
+pickTrailTargetGo : List Int -> DocBlock -> List (Pair Int DocTarget) -> Maybe (Pair Int DocTarget) -> Maybe (Pair Int DocTarget)
+pickTrailTargetGo used b [] best = best
+pickTrailTargetGo used b ((Pair idx t) :: rest) best = if memInt idx used || targetKind t == "module" then pickTrailTargetGo used b rest best
+else if not (trailAdjacent b t) then pickTrailTargetGo used b rest best
+else case best of
+  Nothing => pickTrailTargetGo used b rest (Just (Pair idx t))
+  Just (Pair _ bt) =>
+    if targetAfter t bt then pickTrailTargetGo used b rest (Just (Pair idx t))
+    else pickTrailTargetGo used b rest best
+
+-- t 是否比 bt 更靠近注释（行号更大；同行取列更大）。
+targetAfter : DocTarget -> DocTarget -> Bool
+targetAfter t bt =
+  if targetLine t > targetLine bt then True
+  else if targetLine t == targetLine bt then targetCol t > targetCol bt else False
+
+-- 尾随关系：doc 必须与目标在**同一行**且列在目标右侧。不支持「写在目标下一行」的尾随
+-- 形式：fmt 把单独成行的注释统一挂到下一条目作为前置注释，会静默改变文档归属。
+trailAdjacent : DocBlock -> DocTarget -> Bool
+trailAdjacent b t = targetLine t == b.docBlockStartLine && targetCol t < b.docBlockCol
+
 memInt : Int -> List Int -> Bool
 memInt n [] = False
 memInt n (x :: rest) = if x == n then True else memInt n rest
@@ -297,9 +363,12 @@ docTableOf : Maybe ModDecl -> List Decl -> List Comment -> DocTable
 docTableOf hdr decls comments =
   let
     blocks = docBlocksOf comments
+    trailBlocks = trailBlocksOf comments
     targets = indexTargets (append (moduleTargets hdr) (targetsOfDecls decls)) 0 []
     assigned = assignBlocks comments targets blocks
-  in DocTable assigned.assignModuleDoc (reverse assigned.assignDecls) (reverse assigned.assignMembers)
+    assigned2 = assignTrailBlocks comments targets trailBlocks assigned
+  in DocTable assigned2.assignModuleDoc (reverse assigned2.assignDecls)
+    (reverse assigned2.assignMembers)
 
 indexTargets : List DocTarget -> Int -> List (Pair Int DocTarget) -> List (Pair Int DocTarget)
 indexTargets [] n acc = reverse acc

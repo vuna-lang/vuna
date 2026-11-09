@@ -1,0 +1,32 @@
+-- D40 正例：非线性格检查按**绑定作用域**独立——不同 clause / 不同 case 分支 / 顺序
+-- 绑定的不同 let 模式可以复用同名 binder；只有同一个模式内部（子句全部参数之间 /
+-- 嵌套子模式之间 / as 名与内层之间）才禁止重复。
+data Val : Type where
+  VInt : Int -> Val
+  VOther : Int -> Val
+
+data Pair : Type where
+  MkPair : Int -> Int -> Pair
+
+-- 不同 clause 复用同名 binder：合法。
+pick : Val -> Int
+pick (VInt x) = x
+pick (VOther x) = x + 1
+
+-- 不同 case 分支复用同名 binder：合法。
+branch : Val -> Int
+branch v = case v of
+  VInt x => x
+  VOther x => x + 2
+
+-- as 名的绑定作用域是该模式内部；与内层名字不同即可。
+unpack : Val -> Int
+unpack (VInt (whole@x)) = whole + x
+unpack (VOther x) = x
+
+main : Int
+main =
+  let
+    MkPair x y = MkPair (pick (VInt 1)) (branch (VOther 2))
+    MkPair x z = MkPair (unpack (VInt 3)) 4
+  in x + y + z

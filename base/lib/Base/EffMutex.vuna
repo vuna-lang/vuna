@@ -21,43 +21,54 @@ import Base.IORef
 import Base.Ord
 import Base.Result
 
+-- | 单线程协作式互斥锁：内部是取值 0/1 的 `IORef`（构造器不导出）。
 data Mutex : Type where
   MkMutex : IORef Int -> Mutex
 
-newMutex : Eff RNil Mutex
+-- | 新建未加锁的 Mutex（内部计数 0）。
+newMutex : Eff [] Mutex
 newMutex = bindEff (liftIOEff (newRef 0)) (\r => pureEff (MkMutex r))
 
-tryAcquire : Mutex -> Eff RNil Bool
+-- | 非阻塞尝试加锁：计数为 0 时置 1 并返回 True，否则返回 False。
+tryAcquire : Mutex -> Eff [] Bool
 tryAcquire (MkMutex r) =
   bindEff (liftIOEff (readRef r))
     (\v => if v == 0 then bindEff (liftIOEff (writeRef r 1)) (\_ => pureEff True) else pureEff False)
 
-acquireFuel : Int -> Mutex -> Eff RNil (Result Int)
+-- | 带 fuel 的加锁：被占用时 `yieldNow` 后重试，fuel 耗尽返回 `Err mutex: timeout`。
+acquireFuel : Int -> Mutex -> Eff [] (Result Int)
 acquireFuel fuel m =
   if fuel <= 0 then pureEff (Err "mutex: timeout")
   else bindEff (tryAcquire m)
     (\ok => if ok then pureEff (Ok 0) else bindEff yieldNow (\_ => acquireFuel (fuel - 1) m))
 
-acquire : Mutex -> Eff RNil (Result Int)
+-- | `acquireFuel 256` 的便捷入口（最多轮询 256 次）。
+acquire : Mutex -> Eff [] (Result Int)
 acquire m = acquireFuel 256 m
 
-release : Mutex -> Eff RNil Int
+-- | 释放锁（计数置 0），返回 `IORef` 写入原语的 `Int` 结果。
+release : Mutex -> Eff [] Int
 release (MkMutex r) = liftIOEff (writeRef r 0)
 
+-- | 单线程协作式信号量：内部是计数值 `IORef`（构造器不导出）。
 data Semaphore : Type where
   MkSemaphore : IORef Int -> Semaphore
 
-newSemaphore : Int -> Eff RNil Semaphore
+-- | 新建初值为 `n` 的信号量。
+newSemaphore : Int -> Eff [] Semaphore
 newSemaphore n = bindEff (liftIOEff (newRef n)) (\r => pureEff (MkSemaphore r))
 
-semWaitFuel : Int -> Semaphore -> Eff RNil (Result Int)
+-- | 带 fuel 的 P 操作：计数 > 0 时减一并返回 `Ok`，否则 `yieldNow` 后重试；fuel 耗尽返回 `Err semaphore: timeout`。
+semWaitFuel : Int -> Semaphore -> Eff [] (Result Int)
 semWaitFuel fuel (MkSemaphore r) =
   if fuel <= 0 then pureEff (Err "semaphore: timeout")
   else bindEff (liftIOEff (readRef r))
     (\v => if v > 0 then bindEff (liftIOEff (writeRef r (v - 1))) (\_ => pureEff (Ok 0)) else bindEff yieldNow (\_ => semWaitFuel (fuel - 1) (MkSemaphore r)))
 
-semWait : Semaphore -> Eff RNil (Result Int)
+-- | `semWaitFuel 256` 的便捷入口。
+semWait : Semaphore -> Eff [] (Result Int)
 semWait s = semWaitFuel 256 s
 
-semSignal : Semaphore -> Eff RNil Int
+-- | V 操作：计数加一，返回 `IORef` 写入原语的 `Int` 结果。
+semSignal : Semaphore -> Eff [] Int
 semSignal (MkSemaphore r) = bindEff (liftIOEff (readRef r)) (\v => liftIOEff (writeRef r (v + 1)))

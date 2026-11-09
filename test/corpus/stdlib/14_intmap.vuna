@@ -4,9 +4,9 @@ import Base.List
 import Base.Maybe
 import Base.Pair
 
--- 63 位 Int 的字面量越界回绕：该字面量等于 min_int。
+-- 63 位 Int 的 min_int：绝对值超出可表示字面量，用算术构造。
 minKey : Int
-minKey = 4611686018427387904
+minKey = 0 - 4611686018427387903 - 1
 
 showMaybeInt : Maybe Int -> String
 showMaybeInt Nothing = "Nothing"

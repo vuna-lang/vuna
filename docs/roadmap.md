@@ -25,17 +25,19 @@ vuna 尚未发布任何版本：没有外部用户、下游生态与历史包袱
 - **自举**：`seed/` 是 compiler 包入口闭包的多文件 OCaml 信任锚点；旧 seed 能编译当前
   源码，rotation 按需（见 [bootstrap.md](reference/bootstrap.md)），之后 stage1 == stage2。
   工具链（fmt/lint/repl/doc/test/LSP/Index）不进 TCB。
-- **包与构建**：workspace 根即包；每文件唯一包上下文；声明式效应能力；逐模块 split 输出；
+- **包与构建**：workspace 根即包；每文件唯一包上下文；声明式效应能力 + `[trust] unsafe`
+  定义级信任点（opt-in 严格模式，base 已 opt-in；`unsafe` 直接使用点可审计）；逐模块 split 输出；
   确定性产物 + 依赖闭包哈希 + 按模块内容哈希增量。
 - **工具链**：CLI 统一参数 / 错误出口；LSP 走包上下文（诊断 / hover / 补全 / 定位 /
   references / 格式化 / 符号 / lint quick fix）；REPL 多行 + IO compile+run + `:type/:load/:reload/:browse`
   + `--listen`/`--client` REPL server（JSON-RPC over loopback TCP / Unix socket，跨进程会话）；
-  `vuna test` 纯 / 效果双路径 + `--list/--filter/--verbose/--fail-fast`；`vuna run` 增量构建并执行；
+  `vuna test` 纯 / 效果双路径 + `--list/--filter/--verbose/--fail-fast` + `--jobs N` 文件级并行；
+  `vuna run` 增量构建并执行；
   诊断源码片段；VSCode 扩展（build/run/tests）。
 - **调试支持（M38）**：运行时未捕获异常由生成代码统一报告为 `vuna: runtime error: ...` +
   定义级位置帧 + exit 2（位置表随产物生成、路径归一）；`Base.Debug`（`trace`/`traceShow`/
   `assert`/`todo`）与 `prim_eprint`/`prim_fail`；边界见 [debugging.md](reference/debugging.md)，
-  开放项见 debt D33–D35 / C38–C39。
+  开放项见 debt D33–D35 / C38。
 - **容器与查找表**：标准库有 `Base.HashMap` / `Base.HashSet` / `Base.IntMap`（1024 桶持久
   哈希表；M33 W3 起桶是 `Array (Array (List ...))`）、不可变 `Base.Array`（copy-on-write）
   与 IO 内 `Base.IORef` / `Base.MArray` / `Base.Buffer`；内建类型构造子 `Array` / `IORef` /
@@ -92,7 +94,7 @@ fixity 唯一来源、反引号中缀 / section / 用户符号名、fmt 程序�
 
 **M38（开发与调试体验）已收尾**：`vuna test` 筛选/耗时、`vuna run`、REPL 调试命令、LSP
 lint quick fix、CLI 诊断源码片段、运行时错误报告（定义级帧）与 `Base.Debug`。新阶段仍须
-映射 debt 并列出关闭项；未排期项见 debt D33–D35 / C38–C39。
+映射 debt 并列出关闭项；未排期项见 debt D33–D35 / C38。
 
 ## 性能轨道（M34–M35）
 
@@ -153,7 +155,7 @@ LSP-only 写回自愈归后续。
 
 **依赖**：M33 的运行时 / 受限 FFI / 库级效应已落地；M34 的确定性与缓存。
 **退出标准**：并发 echo / HTTP 基准；取消 / 超时语义正确；无数据竞争（类型层或运行时检测）。
-**映射 debt**：M35.1 收窄 D22 并新增 D27 / D28；运行时决策与生态方向见 F2 / F4（可选）。
+**映射 debt**：M35.1 收窄 D22 并新增 D27 / D28（D28 已落地定义级信任点）；运行时决策与生态方向见 F2 / F4（可选）。
 
 **明确排除**：不自研后端 / GC / LLVM / native；OCaml 后端长期保留（F2 的该分支关闭）。
 Wasm / JS 暂缓，不排期；若未来需要单独立项。性能轨道不改变「单一 DT 路径」、seed 不变量

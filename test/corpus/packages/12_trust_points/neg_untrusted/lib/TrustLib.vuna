@@ -1,0 +1,12 @@
+module TrustLib (probeAlias, runIOHelper) where
+
+-- D28 负例：`probeAlias` 直接引用 `Base.IO.runIO` 别名但不在信任点里 → check 报错。
+import Base.IO
+
+-- | 信任点：显式列出的直接使用点。
+runIOHelper : IO a -> a
+runIOHelper = runIO
+
+-- | 未列入信任点的定义直接使用 `runIO`（应被编译器拒绝）。
+probeAlias : Int
+probeAlias = runIO (prim_pureIO 0)

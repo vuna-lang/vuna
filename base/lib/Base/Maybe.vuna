@@ -6,6 +6,8 @@ module Base.Maybe (Maybe(..), fromMaybe, isJust, isNothing, mapJust, maybe) wher
 -- 程序里出现 Bool 声明才能生成 True/False 表达式。
 import Base.Bool
 import Base.Monad
+-- B31：容器 `Show` 实例（`Interp` 由 Base.Interp 的 blanket 实例免费获得）。
+import Base.Show
 
 -- | 可选值。
 data Maybe a : Type where
@@ -51,3 +53,12 @@ instance Monad Maybe where
     Nothing => Nothing
     Just x => f x
   pure x = Just x
+
+-- B31：容器 `Show` 实例；`Interp` 经 blanket `Show a => Interp a` 自动获得。
+-- 这里用 `++` 的反引号形式拼字符串：列表字面量会折叠成 `Cons`/`Nil`，而
+-- `Base.List → Base.Maybe` 已存在（Maybe 不能反向 import List），名字不可见；
+-- 反引号中缀不要求 fixity 声明，`++` 又是恒可见的 String intrinsic。
+instance Show a => Show (Maybe a) where
+  show m = case m of
+    Nothing => "Nothing"
+    Just x => "Just " `++` (show x)

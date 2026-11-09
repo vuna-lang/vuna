@@ -1,0 +1,41 @@
+-- 同名构造子 2：同一文件里两个 data 类型都叫 `Nil`，裸构造子名按**期望类型 /
+-- scrutinee 族**定向解析（不靠限定名）：
+--   * `x : A; x = Nil` → 期望类型 A 选中 A.Nil；`y : B; y = Nil` → 选中 B.Nil；
+--   * 多子句模式 `pickA Nil` / `pickB Nil` 按 scrutinee 类型解析；
+--   * `case a of Nil => ...` 按 case 的 scrutinee 类型解析；
+--   * 嵌套模式 `Box Nil` / `(Box Nil)` 由 `Box : a -> Box a` 的形参期望类型
+--     （这里是 B）逐层解析到 B.Nil。
+-- 期望：check / interp / compile+run 三路一致，输出 1+2+3+4 = 10。
+data A : Type where
+  Nil : A
+
+data B : Type where
+  Nil : B
+
+x : A
+x = Nil
+
+y : B
+y = Nil
+
+pickA : A -> Int
+pickA Nil = 1
+
+pickB : B -> Int
+pickB Nil = 4
+
+caseT : A -> Int
+caseT a = case a of
+  Nil => 2
+
+data Box a : Type where
+  Box : a -> Box a
+
+nested : Box B
+nested = Box Nil
+
+unboxB : Box B -> Int
+unboxB (Box Nil) = 3
+
+main : Int
+main = pickA x + caseT x + unboxB nested + pickB y

@@ -1,6 +1,7 @@
 module Vuna.Lsp.Diagnostics
   ( DiagCache
   , contextForDoc
+  , findingDiagJson
   , publishDiagnosticsCached
   , publishDiagnosticsEmpty
   , publishDiagnosticsFor
@@ -280,6 +281,12 @@ lintDiag : Finding -> Diag
 lintDiag f =
   Diag f.findingLine f.findingCol f.findingLine (f.findingCol + 1) severityWarning f.findingCode
     f.findingMessage
+
+-- 单个 lint finding 的 Diagnostic JSON（codeAction 内嵌诊断用）：与 `publishDiagnostics`
+-- 走同一条 `diagJson`（range/severity/source/code/message），客户端能按 code 与已发布诊断
+-- 直接关联，不另拼 JSON 结构。
+findingDiagJson : Finding -> Json
+findingDiagJson f = diagJson (lintDiag f)
 
 -- ---------------------------------------------------------------
 -- 一次请求的完整诊断链

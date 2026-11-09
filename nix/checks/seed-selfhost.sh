@@ -17,6 +17,8 @@ export VUNA_BASE="$PWD/base"
 
 # 提交入库的 seed 只能含 compiler 闭包（工具链与 dynamic codegen 都不在 TCB 里）。
 sh nix/tcb-check.sh nix/tcb-forbidden.txt seed
+# 完整 allowlist：seed/ 的文件集必须与 nix/seed-files.txt 逐项一致（多/少/换文件都报错）。
+sh nix/tcb-allowlist.sh nix/seed-files.txt seed
 
 # 闭包数量断言：只靠黑名单时 seed 静默缩水（漏模块）仍会绿；数量来自
 # `nix/seed-count.txt`，由 seed rotation 自动更新（见 nix/seed-rotate.sh）。

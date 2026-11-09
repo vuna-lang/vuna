@@ -31,10 +31,14 @@ cd "$(dirname "$0")"
 : "${VUNA:=vuna}"
 : "${VUNA_SEED:=vuna-seed}"
 : "${OCAMLOPT:=ocamlopt}"
+export OCAMLOPT
 # M26：单文件/无 manifest 夹具的 base 定位（corpus 自己有 vuna.toml，因此这里主要
 # 服务于 $tmp 里的临时夹具与 ad-hoc 单文件）。
 : "${VUNA_BASE:=$PWD/../base}"
 export VUNA_BASE
+# 工具链绝对入口：章节可被 --only 单独挑选，不能依赖前面章节的局部变量。
+summ_vuna=$(command -v "$VUNA" 2>/dev/null || true)
+[ -n "$summ_vuna" ] || summ_vuna="$VUNA"
 
 # 临时根必须位于**任何 vuna.toml 之外**：第 39 段要验证「无 manifest → base-only」，
 # 若 $tmp 落在包内（nix 沙箱里 TMPDIR=/build 就是工作树根），向上找 manifest 会命中仓库
@@ -66,6 +70,67 @@ tmp=$(mktemp -d "$tmpbase/vuna-tests.XXXXXX") || exit 1
 trap 'rm -rf "$tmp"' EXIT INT TERM
 # REPL 历史默认写 $HOME（测试不能污染用户目录）；统一指到临时目录。
 export VUNA_REPL_HISTORY="$tmp/repl-history"
+# iface 默认与源码同布局；测试统一走临时镜像根（VUNA_IFACE_DIR），避免往仓库工作树写
+# 缓存。默认（源码旁）布局由 §57 用临时副本单独验证。
+export VUNA_IFACE_DIR="$tmp/iface"
+
+# iface 镜像目录（VUNA_IFACE_DIR 模式 = <根>/<包绝对目录去掉前导 />）；用于布局断言。
+abs_norm_dir() { ( cd "$1" 2>/dev/null && pwd ) || printf '%s' "$1"; }
+mirror_under() {
+  _r=$1
+  _d=$(abs_norm_dir "$2")
+  printf '%s/%s' "$_r" "${_d#/}"
+}
+iface_mirror_dir() { mirror_under "$VUNA_IFACE_DIR" "$1"; }
+
+# ---------------------------------------------------------------- 命令超时（W1）
+# vuna / vuna-seed 经包装脚本统一加超时（默认 300s，VUNA_TEST_CMD_TIMEOUT 覆盖，0 = 关闭）；
+# 编译产物与 build.sh（ocamlopt 链接）经 run_bin 包装。语义：
+#   - 成功路径退出码/输出逐字不变（只是中间多一层 timeout）；
+#   - 超时打印明确 FAIL 行（stderr），命令退出码 124 → 调用点原有断言失败，脚本继续；
+#   - 最终统计再补一条 "command timeout"，保证有超时一定整体失败；
+#   - 没有 timeout 命令时优雅降级为直跑（不算 FAIL，也不崩）。
+cmd_timeout=${VUNA_TEST_CMD_TIMEOUT:-300}
+case "$cmd_timeout" in
+  '' | *[!0-9]*) cmd_timeout=300 ;;
+esac
+has_timeout_cmd=0
+if command -v timeout >/dev/null 2>&1; then has_timeout_cmd=1; fi
+timeout_mark="$tmp/command-timeouts"
+: >"$timeout_mark"
+mkdir -p "$tmp/timeout-bin"
+VUNA_REAL=$VUNA
+VUNA_SEED_REAL=$VUNA_SEED
+
+# 生成工具包装脚本：真实可执行文件 + timeout；超时打印 FAIL 并记录到 timeout_mark。
+# 注意：heredoc body 是**未引用**的（$2 / $cmd_timeout 要在生成期展开），因此 body 里
+# 不能出现裸反引号或 $(...)——它们会在生成脚本时被当前 shell 当命令替换执行。需要在
+# body 里写注释时用「」而不是反引号。
+# `timeout` 一律带 `--foreground`：默认它会为子进程新建进程组，REPL 的 pty 用例
+# （script -qec 起 vuna repl）里新 pgroup 不是控制终端的前台组，vuna 一读 tty 就吃
+# SIGTTIN 停住 → 会话挂死（§54 pty 全挂 + 章节超时）。--foreground 保留调用方进程组。
+write_tool_wrapper() { # wrapper-path real-path
+  cat >"$1" <<WRAPPER
+#!/bin/sh
+secs=\${VUNA_TEST_CMD_TIMEOUT:-$cmd_timeout}
+case "\$secs" in '' | *[!0-9]*) secs=$cmd_timeout ;; esac
+if [ "\$secs" -gt 0 ] && command -v timeout >/dev/null 2>&1; then
+  timeout --foreground -s TERM -k 10 "\$secs" "$2" "\$@"
+  rc=\$?
+  if [ "\$rc" -eq 124 ] || [ "\$rc" -eq 137 ]; then
+    printf 'FAIL: command timed out after %ss: %s %s\n' "\$secs" "$2" "\$*" >&2
+    printf '%s %s\n' "$2" "\$*" >>"$timeout_mark"
+  fi
+  exit \$rc
+fi
+exec "$2" "\$@"
+WRAPPER
+  chmod +x "$1"
+}
+write_tool_wrapper "$tmp/timeout-bin/vuna" "$VUNA_REAL"
+write_tool_wrapper "$tmp/timeout-bin/vuna-seed" "$VUNA_SEED_REAL"
+VUNA="$tmp/timeout-bin/vuna"
+VUNA_SEED="$tmp/timeout-bin/vuna-seed"
 
 pass=0
 fail=0
@@ -92,6 +157,47 @@ check_contains() { # name haystack needle
   esac
 }
 
+# 编译产物 / build.sh 的统一超时包装（与工具 wrapper 同语义；超时 return 124）。
+run_bin() { # cmd [args...]
+  if [ "$cmd_timeout" -gt 0 ] && [ "$has_timeout_cmd" -eq 1 ]; then
+    timeout -s TERM -k 10 "$cmd_timeout" "$@"
+    rb_rc=$?
+    if [ "$rb_rc" -eq 124 ] || [ "$rb_rc" -eq 137 ]; then
+      printf 'FAIL: command timed out after %ss: %s\n' "$cmd_timeout" "$*" >&2
+      printf '%s\n' "$*" >>"$timeout_mark"
+    fi
+    return "$rb_rc"
+  fi
+  "$@"
+}
+
+# 覆盖断言：靠 glob 枚举的章节先断言「至少匹配一个夹具」，夹具消失/改名前缀时不再静默漏跑。
+require_files() { # label first-match（未匹配时是字面量 glob，不是存在的路径）
+  if [ ! -e "$2" ]; then
+    bad "$1 (coverage)" ">=1 fixture matched" "glob matched nothing: $2"
+  fi
+}
+
+# 通过数下限：section_begin 记本段起点，assert_min_section_checks 断言本段新增 check 数。
+section_pass0=0
+section_begin() { section_pass0=$pass; }
+assert_min_section_checks() { # label min
+  _smc=$((pass - section_pass0))
+  if [ "$_smc" -ge "$2" ]; then
+    ok
+  else
+    bad "$1 (checks floor)" ">= $2 passed checks" "$_smc"
+  fi
+}
+
+# 汇总阶段调用（在结尾 tail 里）：任何命令超时都让本次运行失败。
+check_command_timeouts() {
+  if [ -s "$timeout_mark" ]; then
+    _tmo_n=$(wc -l <"$timeout_mark" | tr -d ' ')
+    bad "command timeout" "no command timed out" "${_tmo_n} timed out (VUNA_TEST_CMD_TIMEOUT=${cmd_timeout}s; see FAIL lines above)"
+  fi
+}
+
 # ---------------------------------------------------------------- 目录式 compile
 # M26：compile 的产物是「目录 + build.sh」，不再有单文件 .ml。成功时 compile 静默；
 # build.sh 用 `sh build.sh <OUT>` 把产物链接成可执行文件（OUT 相对 OUTDIR）。
@@ -114,7 +220,7 @@ compile_dir_bin() { # name compiler entry [compile flags...]；成功时设置 C
     bad "$name compile output" "" "$compile_msg"
     return 1
   fi
-  if ! ( cd "$outdir" && OCAMLOPT="$OCAMLOPT" sh build.sh prog ) >"$tmp/build-$compile_seq.log" 2>&1; then
+  if ! ( cd "$outdir" && run_bin sh build.sh prog ) >"$tmp/build-$compile_seq.log" 2>&1; then
     bad "$name build.sh" "exit 0" "$(tail -3 "$tmp/build-$compile_seq.log")"
     return 1
   fi
@@ -129,7 +235,7 @@ compile_dir_and_run() { # name compiler entry expected [compile flags...]
   run_expected=$4
   shift 4
   if compile_dir_bin "$run_name" "$run_compiler" "$run_entry" "$@"; then
-    check_eq "$run_name run" "$run_expected" "$("$CD_BIN" 2>&1)"
+    check_eq "$run_name run" "$run_expected" "$(run_bin "$CD_BIN" 2>&1)"
   fi
 }
 
@@ -189,6 +295,9 @@ expect_dt_dir_error() { # name dir
 
 # 1) corpus/run：interp（DT 核心求值）vs golden；compile → build.sh → 运行 vs golden。
 #    .nointerp 夹具（效果/不可归约）只跑编译产物。
+section_begin
+require_files "§1 corpus/run" corpus/run/*.vuna
+
 for file in corpus/run/*.vuna; do
   base=${file%.vuna}
   expected=$(cat "$base.out")
@@ -199,9 +308,12 @@ for file in corpus/run/*.vuna; do
   compile_dir_and_run "$file (compiler)" "$VUNA" "$file" "$expected"
 done
 
+assert_min_section_checks "§1 corpus/run" 30
+
 # 2) 模块夹具：DT 精化后核心求值 + compile 都要读取模块并得到 expected.out（正例 01–39）
 #    M26：每个夹具目录有独立 vuna.toml（只依赖 base），入口 app/Main.vuna 的 import
 #    从同包 lib/ 模块根解析（09_package_modules 覆盖「同包模块根」语义）。
+require_files "§2 corpus/modules 正例" corpus/modules/[0-3][0-9]_*
 for dir in corpus/modules/[0-3][0-9]_*; do
   expected=$(cat "$dir/expected.out")
   actual=$("$VUNA" interp "$dir/app/Main.vuna" 2>&1)
@@ -211,11 +323,13 @@ done
 
 # 3) 模块错误：DT interp / compile 都要因同一原因失败、给出含片段的错误，
 #    且不写输出目录（错误例 70–99）
+require_files "§3 corpus/modules 反例" corpus/modules/[789][0-9]_*
 for dir in corpus/modules/[789][0-9]_*; do
   expect_dt_dir_error "$dir" "$dir"
 done
 
 # 4) 解析错误：vuna interp 输出含片段（解析层 Parser/Lexer，与检查/生成共用）
+require_files "§4 corpus/err" corpus/err/*.vuna
 for file in corpus/err/*.vuna; do
   fragment=$(cat "${file%.vuna}.err")
   actual=$("$VUNA" interp "$file" 2>&1)
@@ -224,6 +338,7 @@ done
 
 # 5) 求值/编译错误：DT interp 与 compile 都要给出含片段的错误
 #    （run_err/03_div_zero 是产物运行期负例，单独在段 6 处理）
+require_files "§5 corpus/run_err" corpus/run_err/*.vuna
 for file in corpus/run_err/*.vuna; do
   case "$file" in
     *03_div_zero*|*04_unhandled_effect*) continue ;;
@@ -236,7 +351,7 @@ done
 div=corpus/run_err/03_div_zero.vuna
 div_frag=$(cat "${div%.vuna}.err")
 if compile_dir_bin "$div (compile)" "$VUNA" "$div"; then
-  div_run=$("$CD_BIN" 2>&1)
+  div_run=$(run_bin "$CD_BIN" 2>&1)
   div_code=$?
   check_contains "$div (runtime error)" "$div_run" "$div_frag"
   if [ "$div_code" -ne 0 ]; then ok; else bad "$div (runtime error exit)" "non-zero" "$div_code"; fi
@@ -246,13 +361,16 @@ fi
 un=corpus/run_err/04_unhandled_effect.vuna
 un_frag=$(cat "${un%.vuna}.err")
 if compile_dir_bin "$un (compile)" "$VUNA" "$un"; then
-  un_run=$("$CD_BIN" 2>&1)
+  un_run=$(run_bin "$CD_BIN" 2>&1)
   un_code=$?
   check_contains "$un (runtime error)" "$un_run" "$un_frag"
   check_eq "$un exit" "2" "$un_code"
 fi
 
 # 7) 类型检查通过的程序：check + compile + 运行比对 golden
+section_begin
+require_files "§7 corpus/type_ok" corpus/type_ok/*.vuna
+
 for file in corpus/type_ok/*.vuna; do
   base=${file%.vuna}
   "$VUNA" check "$file" >/dev/null 2>&1
@@ -260,7 +378,12 @@ for file in corpus/type_ok/*.vuna; do
   compile_dir_and_run "$file (compile)" "$VUNA" "$file" "$(cat "$base.out")"
 done
 
+assert_min_section_checks "§7 corpus/type_ok" 10
+
 # 8) 类型错误：check 与 compile 都必须报含片段的错误，且不写输出目录
+section_begin
+require_files "§8 corpus/type_err" corpus/type_err/*.vuna
+
 for file in corpus/type_err/*.vuna; do
   fragment=$(cat "${file%.vuna}.err")
   actual=$("$VUNA" check "$file" 2>&1)
@@ -283,7 +406,10 @@ for file in corpus/type_err/*.vuna; do
   fi
 done
 
+assert_min_section_checks "§8 corpus/type_err" 15
+
 # 9) 跨模块类型检查正例：导入模块后用其类型与构造器（check + compile + 运行）
+require_files "§9 corpus/type_modules 正例" corpus/type_modules/0*
 for dir in corpus/type_modules/0*; do
   case "$dir" in
     *.vuna) continue ;;
@@ -294,6 +420,7 @@ for dir in corpus/type_modules/0*; do
 done
 
 # 10) 跨模块类型错误：check / compile 都要含片段、非 0、不写输出目录
+require_files "§10 corpus/type_modules 反例" corpus/type_modules/9*
 for dir in corpus/type_modules/9*; do
   case "$dir" in
     *.vuna) continue ;;
@@ -321,6 +448,7 @@ done
 
 # 11) typed codegen（M8a）夹具：check + compile（DT 擦除 codegen）+ 运行比对 golden
 #     （与段 7 的 type_ok 覆盖点部分重复，M24 可合并；M23 保留）
+require_files "§11 corpus/typed_ok" corpus/typed_ok/*.vuna
 for file in corpus/typed_ok/*.vuna; do
   base=${file%.vuna}
   "$VUNA" check "$file" >/dev/null 2>&1
@@ -336,6 +464,7 @@ compile_dir_and_run "$fact (vuna-seed)" "$VUNA_SEED" "$fact" "$(cat "${fact%.vun
 
 # 14) 统一 CLI：help、退出码、子命令要求、已删除参数（M24：DT 是唯一路径，`--dt` 全删；
 #     M26：`--root` / `--split` / `seed` 子命令删除）。
+section_begin
 help_out=$("$VUNA" help 2>&1)
 check_contains "vuna help" "$help_out" "usage:"
 "$VUNA" >/dev/null 2>&1
@@ -387,7 +516,27 @@ check_eq "vuna interp missing exit" "2" "$?"
 "$VUNA" lint >/dev/null 2>&1
 check_eq "vuna lint no args exit" "2" "$?"
 
+# 14b) 编译器二进制指纹回归（PerfCache.binaryFingerprint）：指纹只能基于可执行文件
+#     自身（execPath+size+mtime），**不得**把「第一个用户参数」当路径去读——旧实现用
+#     不含 argv[0] 的 prim_getArgs 首参，cwd 里有同名文件/目录时直接
+#     `Fatal error: exception Failure("readFile: ...")`。这里 cwd 造一个 `build/`
+#     目录（旧实现会命中它）再 `vuna build pkg`，必须正常构建并运行。
+fp="$tmp/fp-probe"
+mkdir -p "$fp/build/keep" "$fp/pkg/app"
+printf '[package]\nname = "fp-probe"\n' >"$fp/pkg/vuna.toml"
+printf 'main : Int\nmain = 7\n' >"$fp/pkg/app/Main.vuna"
+fp_out=$( cd "$fp" && "$VUNA" build pkg 2>&1 )
+fp_code=$?
+check_eq "binary fingerprint build exit" "0" "$fp_code"
+check_contains "binary fingerprint build built" "$fp_out" "built"
+check_eq "binary fingerprint build runs" "7" "$(run_bin "$fp/pkg/.output/bin/fp-probe" 2>&1)"
+
+assert_min_section_checks "§14 统一 CLI" 20
+
 # 15) lint 检测 golden 与退出码
+section_begin
+require_files "§15 corpus/lint" corpus/lint/*.vuna
+
 for file in corpus/lint/*.vuna; do
   base=${file%.vuna}
   expected=$(cat "$base.out")
@@ -402,7 +551,12 @@ for file in corpus/lint/*.vuna; do
   fi
 done
 
+assert_min_section_checks "§15 corpus/lint" 16
+
 # 16) lint --fix golden、退出码与幂等
+section_begin
+require_files "§16 corpus/fix" corpus/fix/*.vuna
+
 for file in corpus/fix/*.vuna; do
   base=${file%.vuna}
   name=$(basename "$base")
@@ -417,6 +571,8 @@ for file in corpus/fix/*.vuna; do
   "$VUNA" lint --fix "$work" >/dev/null 2>&1
   check_eq "$file (fix idempotent)" "$(cat "$once")" "$(cat "$work")"
 done
+
+assert_min_section_checks "§16 corpus/fix" 18
 
 # 17) M9 诊断：穷尽性/模式诊断与退出码（M24 起 interp 与 check/compile 共用 DT 静态诊断）
 #     M26：$tmp 里的临时夹具没有 manifest → base-only 上下文，base 位置由 VUNA_BASE 给出。
@@ -526,6 +682,7 @@ m9_compile_code=$?
 if [ "$m9_compile_code" -ne 0 ]; then ok; else bad "m9 compile type err exit" "non-zero" "$m9_compile_code"; fi
 
 # 18) 记录正例（M10.5 Phase R）：interp（DT）+ compile
+require_files "§18 corpus/records 正例" corpus/records/0*.vuna
 for file in corpus/records/0*.vuna; do
   base=${file%.vuna}
   expected=$(cat "$base.out")
@@ -537,11 +694,13 @@ for file in corpus/records/0*.vuna; do
 done
 
 # 19) 记录错误（M10.5 Phase R）：DT interp / compile 都失败、含片段、不写输出目录
+require_files "§19 corpus/records 反例" corpus/records/9*.vuna
 for file in corpus/records/9*.vuna; do
   expect_dt_error "$file" "$file"
 done
 
 # 20) 跨模块记录正例：导出 Point(..) 可构造/模式匹配；导出 Point 保持抽象（interp + compile）
+require_files "§20 corpus/records 模块正例" corpus/records/0*_*/
 for dir in corpus/records/0*_*/; do
   dir=${dir%/}
   expected=$(cat "$dir/expected.out")
@@ -551,6 +710,7 @@ for dir in corpus/records/0*_*/; do
 done
 
 # 21) 跨模块记录错误：抽象记录的构造器不可见（interp 与 compile 都失败、含片段、不写输出目录）
+require_files "§21 corpus/records 模块反例" corpus/records/9*_*/
 for dir in corpus/records/9*_*/; do
   dir=${dir%/}
   expect_dt_dir_error "$dir" "$dir"
@@ -558,6 +718,7 @@ done
 
 # 22) trait 正例（M10.5b）：interp（DT）+ compile
 # 多参数 trait 收尾：glob 补到 2x（`20_explicit_*` / `22_multi_param` / `24_mixed_kind_tele` 之前没被本段覆盖）。
+require_files "§22 corpus/traits 正例" corpus/traits/[0-2][0-9]_*.vuna
 for file in corpus/traits/[0-2][0-9]_*.vuna; do
   base=${file%.vuna}
   expected=$(cat "$base.out")
@@ -569,11 +730,13 @@ for file in corpus/traits/[0-2][0-9]_*.vuna; do
 done
 
 # 23) trait 错误（M10.5b）：DT interp / compile 都失败、含片段、不写输出目录
+require_files "§23 corpus/traits 反例" corpus/traits/9[0-9]_*.vuna
 for file in corpus/traits/9[0-9]_*.vuna; do
   expect_dt_error "$file" "$file"
 done
 
 # 24) 跨模块 trait 正例：无头模块全导出 / header 显式 Trait(..)（interp + compile）
+require_files "§24 corpus/traits 模块正例" corpus/traits/[01][0-9]_*/
 for dir in corpus/traits/[01][0-9]_*/; do
   dir=${dir%/}
   expected=$(cat "$dir/expected.out")
@@ -583,6 +746,7 @@ for dir in corpus/traits/[01][0-9]_*/; do
 done
 
 # 25) 跨模块 trait 错误：显式导出只写 Trait 不写 (..) → app 用方法 unbound（interp 与 compile）
+require_files "§25 corpus/traits 模块反例" corpus/traits/9[0-9]_*/
 for dir in corpus/traits/9[0-9]_*/; do
   dir=${dir%/}
   expect_dt_dir_error "$dir" "$dir"
@@ -591,6 +755,7 @@ done
 # 26) do / Monad / 高阶 kind（M11）：正例 check + interp + compile；
 #     错误例都失败、含片段、不写输出目录。
 #     `.nointerp`：核心求值不执行效果/不归约 → 跳过 interp（M30 第 43 段补负向断言）。
+require_files "§26 corpus/monad 正例" corpus/monad/[01][0-9]_*.vuna
 for file in corpus/monad/[01][0-9]_*.vuna; do
   base=${file%.vuna}
   expected=$(cat "$base.out")
@@ -603,12 +768,14 @@ for file in corpus/monad/[01][0-9]_*.vuna; do
   compile_dir_and_run "$file (monad compile)" "$VUNA" "$file" "$expected"
 done
 
+require_files "§26 corpus/monad 反例" corpus/monad/9[0-9]_*.vuna
 for file in corpus/monad/9[0-9]_*.vuna; do
   expect_dt_error "$file" "$file"
 done
 
 # 27) stdlib（M11）：正例（interp + compile，base 经 corpus 包上下文的 vuna-base 依赖可见；
 #     .nointerp 跳过 interp）；错误例都失败、含片段、不写输出目录。
+require_files "§27 corpus/stdlib 正例" corpus/stdlib/[01][0-9]_*.vuna
 for file in corpus/stdlib/[01][0-9]_*.vuna; do
   base=${file%.vuna}
   expected=$(cat "$base.out")
@@ -619,6 +786,7 @@ for file in corpus/stdlib/[01][0-9]_*.vuna; do
   compile_dir_and_run "$file (stdlib compile)" "$VUNA" "$file" "$expected"
 done
 
+require_files "§27 corpus/stdlib 反例" corpus/stdlib/9[0-9]_*.vuna
 for file in corpus/stdlib/9[0-9]_*.vuna; do
   expect_dt_error "$file" "$file"
 done
@@ -627,6 +795,7 @@ done
 #     正例：`vuna build` 走 DT split → .output/{<Module>.ml,Main.ml,build.sh} + bin/<pkg>；
 #     `vuna check` / `vuna test` 也已是 DT（包 check = DT 精化；test = DT 核心求值）。
 #     E14（M26）：入口里声明的 data 必须发进产物 Main.ml（05_entry_data / 06_entry_trait）。
+require_files "§28 corpus/packages 正例" corpus/packages/[01][0-9]_*/
 for dir in corpus/packages/[01][0-9]_*/; do
   dir=${dir%/}
   expected=$(cat "$dir/expected.out")
@@ -648,7 +817,7 @@ for dir in corpus/packages/[01][0-9]_*/; do
     if [ -z "$pkg_bin" ]; then
       bad "$dir (package bin)" "executable under .output/bin" "missing"
     else
-      actual=$("$pkg_bin" 2>&1)
+      actual=$(run_bin "$pkg_bin" 2>&1)
       check_eq "$dir (package run)" "$expected" "$actual"
     fi
   fi
@@ -662,6 +831,7 @@ done
 # 29) 包模式错误：缺依赖 / 依赖环 / 隐藏模块（[export] 限制）/ 依赖包歧义 → 非 0、含片段、
 #     不写产物。`vuna build` 在写 .output 前就做包解析与 DT 精化，失败不得留下任何产物。
 #     95_cross_dep 是两包方向性实验（父目录本身不是包），见段 39。
+require_files "§29 corpus/packages 反例" corpus/packages/9[0-9]_*/ corpus/packages/m31_*/
 for dir in corpus/packages/9[0-9]_*/ corpus/packages/m31_*/; do
   [ -d "$dir" ] || continue
   dir=${dir%/}
@@ -681,6 +851,20 @@ for dir in corpus/packages/9[0-9]_*/ corpus/packages/m31_*/; do
   fi
   rm -rf "$dir/.output"
 done
+
+# 29b) D28 定义级信任点（`[trust] unsafe`）：夹具自带 check.sh（严格模式正例 + 非严格
+#      对照 + 4 组负例）。包内 trust 列表只允许真实定义；非信任定义直调 unsafe 门控
+#      入口即被 Loader 拒绝。正例包本身已被 §28 的 [01][0-9]_* glob 覆盖 build/test。
+trust_points_fixture=corpus/packages/12_trust_points
+if [ -f "$trust_points_fixture/check.sh" ]; then
+  if trust_points_out=$(sh "$trust_points_fixture/check.sh" "$VUNA" 2>&1); then
+    ok
+  else
+    bad "trust points fixture" "exit 0" "$(printf '%s\n' "$trust_points_out" | tail -5)"
+  fi
+else
+  bad "trust points fixture" "check.sh" "missing $trust_points_fixture/check.sh"
+fi
 
 # 30) fmt（M11.5/M11.6）：格式化后仍可解释（DT 语义）且输出不变；fmt 幂等。
 #     M26：格式化副本放进一个带 manifest 的临时包（= corpus 包同样的 base 上下文），
@@ -726,6 +910,7 @@ if [ "$fmt_code" -eq 0 ]; then ok; else bad "fmt corpus" "exit 0" "$(tail -3 "$t
 #     touch 模块只重编受影响者）。E14：入口 data 也在产物 Main.ml 里。
 #     C35：每单元只 `open Vuna_runtime`（无 open 链），跨单元引用全限定（`Unit.name`）；
 #     build.sh 的 compile_mod 只列直接依赖，层内并行、每模块 stamp 只含直接依赖。
+require_files "§33 corpus/packages split" corpus/packages/[01][0-9]_*/
 for pkg in corpus/packages/[01][0-9]_*/; do
   pkg=${pkg%/}
   split_dir=$tmp/split-$(basename "$pkg")
@@ -758,15 +943,15 @@ for pkg in corpus/packages/[01][0-9]_*/; do
     ok
   fi
   mkdir -p "$split_dir/bin"
-  ( cd "$split_dir" && OCAMLOPT="$OCAMLOPT" sh build.sh bin/prog ) >"$tmp/split_build.log" 2>&1
+  ( cd "$split_dir" && run_bin sh build.sh bin/prog ) >"$tmp/split_build.log" 2>&1
   check_eq "$pkg (package split build exit)" "0" "$?"
-  actual=$("$split_dir/bin/prog" 2>&1)
+  actual=$(run_bin "$split_dir/bin/prog" 2>&1)
   check_eq "$pkg (package split run)" "$(cat "$pkg/expected.out")" "$actual"
 done
 
 # 增量构建行为用 01_workspace 验证（DT split 的编译单元 = sanitizeName 后的模块名）。
 split_dir=$tmp/split-01_workspace
-( cd "$split_dir" && OCAMLOPT="$OCAMLOPT" sh build.sh bin/prog ) >"$tmp/split_noop.log" 2>&1
+( cd "$split_dir" && run_bin sh build.sh bin/prog ) >"$tmp/split_noop.log" 2>&1
 if grep -q '^compile ' "$tmp/split_noop.log"; then
   bad "package split incremental noop" "no compile lines" "$(cat "$tmp/split_noop.log")"
 else
@@ -774,7 +959,7 @@ else
 fi
 # M30：增量判定改内容哈希——touch 不再触发重编；改内容才触发。
 printf '\n(* M30 incremental probe *)\n' >>"$split_dir/Vuna_dHello.ml"
-( cd "$split_dir" && OCAMLOPT="$OCAMLOPT" sh build.sh bin/prog ) >"$tmp/split_inc.log" 2>&1
+( cd "$split_dir" && run_bin sh build.sh bin/prog ) >"$tmp/split_inc.log" 2>&1
 check_contains "package split incremental module" "$(cat "$tmp/split_inc.log")" "compile Vuna_dHello"
 if grep -q '^compile Vuna_runtime' "$tmp/split_inc.log"; then
   bad "package split incremental runtime untouched" "no runtime compile" "$(cat "$tmp/split_inc.log")"
@@ -796,7 +981,7 @@ fi
 main_ml=$split_dir/Main.ml
 check_contains "package split qualified value (Vuna.Hello)" "$(cat "$main_ml")" "Vuna_dHello.v_Vuna_dHello_dhello"
 check_contains "package split qualified value (Dep)" "$(cat "$main_ml")" "Dep.v_Dep_ddepText"
-check_contains "package split qualified constructor (Dep)" "$(cat "$main_ml")" "Dep.C_Dep_dDepTag_Dep_dDepTagA"
+check_contains "package split qualified constructor (Dep)" "$(cat "$main_ml")" "Dep.C_Dep_dDepTag_DepTagA"
 split_qual_ctors=$(grep -hoE '[A-Z][A-Za-z0-9_]*\.C_[A-Za-z0-9_]+' "$split_dir"/*.ml 2>/dev/null | sed -n '1,3p')
 if [ -n "$split_qual_ctors" ]; then
   ok
@@ -808,8 +993,8 @@ if grep -qE '(^|[^A-Za-z0-9_.])v_Vuna_dHello_dhello' "$main_ml"; then
 else
   ok
 fi
-if grep -qE '(^|[^A-Za-z0-9_.])C_Dep_dDepTag_Dep_dDepTagA' "$main_ml"; then
-  bad "package split no bare cross-unit constructor" "无未限定 C_Dep_dDepTag_Dep_dDepTagA" "$(grep -nE '(^|[^A-Za-z0-9_.])C_Dep_dDepTag_Dep_dDepTagA' "$main_ml" | sed -n 1p)"
+if grep -qE '(^|[^A-Za-z0-9_.])C_Dep_dDepTag_DepTagA' "$main_ml"; then
+  bad "package split no bare cross-unit constructor" "无未限定 C_Dep_dDepTag_DepTagA" "$(grep -nE '(^|[^A-Za-z0-9_.])C_Dep_dDepTag_DepTagA' "$main_ml" | sed -n 1p)"
 else
   ok
 fi
@@ -843,6 +1028,9 @@ fi
 # 与 `compile`+build.sh 产物的输出逐字节相同（不依赖 golden，直接对拍 interp 与 codegen）。
 # M24：DT 是唯一路径（`--dt` 已删）；`main : IO a` 的夹具（核心求值器不执行效果）
 # 带 `.nointerp` 标记，跳过 interp 只做 check+compile+run。
+section_begin
+require_files "§34 corpus/dt" corpus/dt/*.vuna
+
 for file in corpus/dt/*.vuna; do
   base=${file%.vuna}
   expected=$(cat "$base.out")
@@ -857,7 +1045,7 @@ for file in corpus/dt/*.vuna; do
   "$VUNA" check "$file" >/dev/null 2>&1
   check_eq "$file (dt check exit)" "0" "$?"
   if compile_dir_bin "$file (dt compile)" "$VUNA" "$file"; then
-    actual=$("$CD_BIN" 2>&1)
+    actual=$(run_bin "$CD_BIN" 2>&1)
     check_eq "$file (dt run)" "$expected" "$actual"
     if [ "$have_interp" -eq 1 ]; then
       check_eq "$file (dt interp == run)" "$interp_out" "$actual"
@@ -870,8 +1058,8 @@ nat_repr_dir="$tmp/nat-repr"
 rm -rf "$nat_repr_dir"
 if nat_repr_out=$("$VUNA" compile corpus/dt/73_nat_repr.vuna "$nat_repr_dir" 2>&1); then
   ok
-  if grep -qE 't_Base_dNat_dNat|C_Base_dNat_dNat' "$nat_repr_dir"/*.ml 2>/dev/null; then
-    bad "nat runtime representation" "no Nat variant type/constructor" "$(grep -hE 't_Base_dNat_dNat|C_Base_dNat_dNat' "$nat_repr_dir"/*.ml | head -2)"
+  if grep -qE 't_Base_dNat_dNat|C_Base_dNat_dNat_' "$nat_repr_dir"/*.ml 2>/dev/null; then
+    bad "nat runtime representation" "no Nat variant type/constructor" "$(grep -hE 't_Base_dNat_dNat|C_Base_dNat_dNat_' "$nat_repr_dir"/*.ml | head -2)"
   else
     ok
   fi
@@ -903,6 +1091,7 @@ else
 fi
 
 # DT 错误：check 与 compile 都失败、含片段、不写输出目录
+require_files "§34 corpus/dt_err" corpus/dt_err/*.vuna
 for file in corpus/dt_err/*.vuna; do
   fragment=$(cat "${file%.vuna}.err")
   actual=$("$VUNA" check "$file" 2>&1)
@@ -925,6 +1114,7 @@ done
 
 # 33b) 受限 FFI（M33 W5）：`extern name "c_symbol" : 基本类型` + 包根 `ffi/*.c`，
 #      由生成的 build.sh 编译并链接；运行输出与 expected.out 一致。
+require_files "§33b corpus/ffi" corpus/ffi/*/
 for dir in corpus/ffi/*/; do
   dir=${dir%/}
   expected=$(cat "$dir/expected.out")
@@ -933,14 +1123,17 @@ for dir in corpus/ffi/*/; do
     bad "$dir (ffi build)" "exit 0" "$ffi_out"
     continue
   fi
-  actual=$("$dir/.output/bin/ffi-add" 2>&1)
+  actual=$(run_bin "$dir/.output/bin/ffi-add" 2>&1)
   check_eq "$dir (ffi run)" "$expected" "$actual"
 done
+
+assert_min_section_checks "§34 corpus/dt" 500
 
 # 34a) DT + Base 库（M21）：包上下文（vuna-base 依赖）下 import Base.* 的三路一致性。
 # 全部夹具都是纯计算（core evaluator 不执行效果），因此可保留 interp == run 对拍。
 # 例外：带 `.nointerp` 标记的夹具（如 strUnpack/strPack 桥接尚不可归约）只要求
 # check + compile + run。
+require_files "§34a corpus/dt_base" corpus/dt_base/*.vuna
 for file in corpus/dt_base/*.vuna; do
   base=${file%.vuna}
   expected=$(cat "$base.out")
@@ -954,7 +1147,7 @@ for file in corpus/dt_base/*.vuna; do
     have_interp=1
   fi
   if compile_dir_bin "$file (dt base compile)" "$VUNA" "$file"; then
-    actual=$("$CD_BIN" 2>&1)
+    actual=$(run_bin "$CD_BIN" 2>&1)
     check_eq "$file (dt base run)" "$expected" "$actual"
     if [ "$have_interp" -eq 1 ]; then
       check_eq "$file (dt base interp == run)" "$interp_out" "$actual"
@@ -965,6 +1158,7 @@ done
 # 34b) DT 效果（M21）：`main : IO a` 的编译产物真正执行 Base.IO 效果。
 # core evaluator 是纯求值器（不跑效果），所以效果夹具只要求「编译产物输出 == golden」，
 # 并额外要求 `check` 通过。
+require_files "§34b corpus/dt_io" corpus/dt_io/*.vuna
 for file in corpus/dt_io/*.vuna; do
   base=${file%.vuna}
   expected=$(cat "$base.out")
@@ -1033,7 +1227,7 @@ if ! dt_build_out=$("$VUNA" build "$dt_pkg" 2>&1); then
 elif [ ! -x "$dt_pkg/.output/bin/dtpkg-exec" ]; then
   bad "$dt_src (build bin)" "executable" "missing"
 else
-  check_eq "$dt_src (build run)" "$dt_expected" "$("$dt_pkg/.output/bin/dtpkg-exec" 2>&1)"
+  check_eq "$dt_src (build run)" "$dt_expected" "$(run_bin "$dt_pkg/.output/bin/dtpkg-exec" 2>&1)"
 fi
 
 rm -rf "$dt_pkg/.output"
@@ -1051,10 +1245,10 @@ if ! dt_split_out=$("$VUNA" compile "$dt_pkg" "$dt_split" 2>&1); then
   bad "$dt_src (compile OUTDIR)" "exit 0" "$dt_split_out"
 elif [ ! -f "$dt_split/build.sh" ] || [ ! -f "$dt_split/Main.ml" ]; then
   bad "$dt_src (compile OUTDIR layout)" "Main.ml+build.sh" "missing"
-elif ! ( cd "$dt_split" && OCAMLOPT="$OCAMLOPT" sh build.sh prog ) >"$tmp/dt_split.log" 2>&1; then
+elif ! ( cd "$dt_split" && run_bin sh build.sh prog ) >"$tmp/dt_split.log" 2>&1; then
   bad "$dt_src (compile OUTDIR build.sh)" "exit 0" "$(cat "$tmp/dt_split.log")"
 else
-  check_eq "$dt_src (compile OUTDIR run)" "$dt_expected" "$("$dt_split/prog" 2>&1)"
+  check_eq "$dt_src (compile OUTDIR run)" "$dt_expected" "$(run_bin "$dt_split/prog" 2>&1)"
 fi
 
 dt_lib_err=$("$VUNA" build corpus/dt_pkg/02_lib 2>&1)
@@ -1183,11 +1377,13 @@ check_eq "gen-errors idempotent" "0" "$?"
 #     正例：check 通过（含结构下降、嵌套构造子、构造子包装、互递归、多 clause）；
 #     负例：check 非 0 且含诊断片段（HOF 递归 / where 外层递归 / Cons 实参隐藏递归在
 #     M25.2a 前是静默通过的，这些夹具锁住遍历补全的回归）。
+require_files "§37 corpus/term 正例" corpus/term/*.vuna
 for file in corpus/term/*.vuna; do
   term_out=$("$VUNA" check "$file" 2>&1)
   term_code=$?
   if [ "$term_code" -eq 0 ]; then ok; else bad "$file (term ok)" "exit 0" "$term_out"; fi
 done
+require_files "§37 corpus/term 反例" corpus/term_err/*.vuna
 for file in corpus/term_err/*.vuna; do
   fragment=$(cat "${file%.vuna}.err")
   actual=$("$VUNA" check "$file" 2>&1)
@@ -1287,7 +1483,7 @@ if ! cross_build_out=$("$VUNA" build "$cross/a" 2>&1); then
 elif [ ! -x "$cross/a/.output/bin/consumer-a" ]; then
   bad "context cross-dep consumer bin" "executable" "missing"
 else
-  check_eq "context cross-dep consumer run" "$(cat "$cross/a/expected.out")" "$("$cross/a/.output/bin/consumer-a" 2>&1)"
+  check_eq "context cross-dep consumer run" "$(cat "$cross/a/expected.out")" "$(run_bin "$cross/a/.output/bin/consumer-a" 2>&1)"
 fi
 rm -rf "$cross/a/.output"
 
@@ -1308,6 +1504,7 @@ esac
 
 # 40) M30 工具链回归：CLI 错误矩阵 + Index v3 自检 + doc [export] + search
 #     三个 check.sh 是独立 POSIX 脚本（内部 mktemp 隔离，不碰仓库缓存）。
+section_begin
 sh corpus/cli/check.sh "$VUNA" >"$tmp/cli_m30.log" 2>&1
 if [ "$?" -eq 0 ]; then ok; else bad "cli m30" "exit 0" "$(tail -8 "$tmp/cli_m30.log")"; fi
 sh corpus/index/check.sh "$VUNA" >"$tmp/index_m30.log" 2>&1
@@ -1331,6 +1528,8 @@ else
   esac
 fi
 
+assert_min_section_checks "§40 工具链回归" 3
+
 # 41) M30 workspace 检查/构建单元 + 确定性/增量构建
 # 41a) 成员错误不能再被根 check 忽略。
 member_err=$("$VUNA" check corpus/packages/m30_ws_member_error 2>&1)
@@ -1347,7 +1546,7 @@ if ! ws_build=$("$VUNA" build --out "$ws_out1" "$ws_pkg" 2>&1); then
 else
   check_contains "workspace build skips library member" "$ws_build" "skipped (library): member"
   if [ -x "$ws_out1/ws-build/bin/ws-build" ]; then
-    check_eq "workspace build binary runs" "\"hello from member\"" "$("$ws_out1/ws-build/bin/ws-build" 2>&1)"
+    check_eq "workspace build binary runs" "\"hello from member\"" "$(run_bin "$ws_out1/ws-build/bin/ws-build" 2>&1)"
   else
     bad "workspace build binary" "executable" "missing"
   fi
@@ -1377,6 +1576,7 @@ fi
 
 # 42) M30 P3：REPL 多行/效果 + TestRunner 效果/workspace 聚合
 # REPL：多行定义（`=` 续行 + 缩进 + 空行提交）与纯表达式
+section_begin
 repl_multi=$(printf 'f : Int -> Int\nf x =\n  x + 1\n\nf 41\n:q\n' | "$VUNA" repl 2>&1)
 check_contains "vuna repl multiline def" "$repl_multi" "42"
 # REPL：IO 表达式走临时包编译+运行（效果输出直接到终端）
@@ -1406,9 +1606,13 @@ check_eq "vuna test workspace fail exit" "1" "$?"
 "$VUNA" test ../base >/dev/null 2>&1
 check_eq "vuna test missing dir exit" "2" "$?"
 
+assert_min_section_checks "§42 vuna test/repl" 7
+
 # 43) E10：`.nointerp` 不再是「静默跳过」——每个标记夹具必须能被 interp 明确拒绝
 #     （效果不可执行 / 不归约为值），不得返回 0 或 golden。
+nointerp_total=0
 for mark in $(find corpus -name '*.vuna.nointerp' | LC_ALL=C sort); do
+  nointerp_total=$((nointerp_total + 1))
   nointerp_file=${mark%.nointerp}
   nointerp_out=$("$VUNA" interp "$nointerp_file" 2>&1)
   nointerp_code=$?
@@ -1418,6 +1622,12 @@ for mark in $(find corpus -name '*.vuna.nointerp' | LC_ALL=C sort); do
     bad "$nointerp_file (.nointerp must be rejected by interp)" "non-zero" "$nointerp_out"
   fi
 done
+# 覆盖断言：标记夹具清理/改名后不能让本段空跑（find 不匹配时循环 0 次，不会报错）。
+if [ "$nointerp_total" -gt 0 ]; then
+  ok
+else
+  bad "§43 .nointerp coverage" ">=1 marker file" "find matched nothing"
+fi
 
 # 44) M34.5 接口摘要（TTC 式模块化精化）：依赖包缓存预热后，根包只精化本包 decls。
 #     正向：摘要路径命中（cache-path=summary）且 check 通过、产物正确；
@@ -1426,8 +1636,6 @@ done
 summ_pkg=corpus/packages/m34_summary
 summ_cache="$tmp/summary-cache"
 mkdir -p "$summ_cache"
-summ_vuna=$(command -v "$VUNA" 2>/dev/null || true)
-[ -n "$summ_vuna" ] || summ_vuna="$VUNA"
 
 # 44a) 依赖闭包自底向上预热：base（无依赖）→ dep（库包，消费 base 接口）→ root。
 #      `VUNA_IFACE_SELFTEST=1` 让写侧读回校验（Marshal 稳定性 / 包接口 / 模块名集合）。
@@ -1444,13 +1652,13 @@ else
 fi
 check_contains "summary dep iface selftest" "$(cat "$tmp/summ-dep.log")" "iface-selftest=ok"
 
-# 44a-2) per-module 布局：manifest + 每模块一个 iface 文件；删掉 check 缓存后重算但接口
-#        未变 ⇒ 写侧只重写 manifest（`iface-write=0/`）。
-summ_iface_dir=$(ls -d "$summ_cache"/vuna-cache/iface-* 2>/dev/null | head -1)
-if [ -n "$summ_iface_dir" ] && [ -f "$summ_iface_dir/manifest" ] && ls "$summ_iface_dir"/*.iface >/dev/null 2>&1; then
+# 44a-2) 接口布局：包镜像根下有 `.vuna-iface` manifest + 每模块一个 iface 文件（与源码
+#        布局一致）；删掉 check 缓存后重算但接口未变 ⇒ 写侧只重写 manifest（`iface-write=0/`）。
+summ_iface_dir=$(iface_mirror_dir "$VUNA_BASE")
+if [ -f "$summ_iface_dir/.vuna-iface" ] && find "$summ_iface_dir" -name '*.iface' 2>/dev/null | grep -q .; then
   ok
 else
-  bad "summary per-module iface files" "manifest + *.iface" "missing under $summ_iface_dir"
+  bad "summary per-module iface files" ".vuna-iface + *.iface" "missing under $summ_iface_dir"
 fi
 find "$summ_cache"/vuna-cache -type d -name check -prune -exec rm -rf {} + 2>/dev/null || true
 if TMPDIR="$summ_cache" VUNA_IFACE_SELFTEST=1 "$summ_vuna" check "$VUNA_BASE" --debug-perf >"$tmp/summ-base2.log" 2>&1; then
@@ -1461,7 +1669,7 @@ fi
 
 # 44a-3) 损坏的模块接口文件：读侧按自描述头拒绝 ⇒ 回退全量；写侧强制全量重写并修复
 #        （不会因为「manifest 说哈希没变」而永久跳过损坏文件）。
-corrupt_file=$(ls "$summ_iface_dir"/*.iface 2>/dev/null | head -1)
+corrupt_file=$(find "$summ_iface_dir" -name '*.iface' 2>/dev/null | head -1)
 printf 'not-a-valid-iface' > "$corrupt_file"
 rm -rf "$summ_cache"/vuna-cache/*/check
 if TMPDIR="$summ_cache" VUNA_IFACE_SELFTEST=1 "$summ_vuna" check "$VUNA_BASE" --debug-perf >"$tmp/summ-corrupt.log" 2>&1; then
@@ -1500,7 +1708,7 @@ rm -rf "$tmp/summary-out"
 if ! "$summ_vuna" build --out "$tmp/summary-out" "$summ_pkg/root" >/dev/null 2>&1; then
   bad "summary build exit" "0" "failed"
 else
-  check_eq "summary build runs" "42" "$("$tmp/summary-out/bin/summary-root" 2>&1)"
+  check_eq "summary build runs" "42" "$(run_bin "$tmp/summary-out/bin/summary-root" 2>&1)"
 fi
 
 # 44d) 负例：摘要路径不得漏检；与全量路径诊断逐字节一致。
@@ -1556,7 +1764,7 @@ printf 'main : Int\nmain = 10 / 0\n' >"$m38_rt/app/Main.vuna"
 if ! "$VUNA" build "$m38_rt" >"$tmp/m38-rt-build.log" 2>&1; then
   bad "m38 runtime build" "exit 0" "$(tail -3 "$tmp/m38-rt-build.log")"
 else
-  m38_rt_err=$("$m38_rt/.output/bin/m38-rt" 2>&1 >/dev/null)
+  m38_rt_err=$(run_bin "$m38_rt/.output/bin/m38-rt" 2>&1 >/dev/null)
   m38_rt_code=$?
   check_contains "m38 runtime error message" "$m38_rt_err" "vuna: runtime error: division by zero"
   check_contains "m38 runtime error frame" "$m38_rt_err" "  at main ("
@@ -1571,7 +1779,7 @@ printf 'import Base.IO\n\nmain : IO Int\nmain = do\n  println "m38-start"\n  exi
 if ! "$VUNA" build "$m38_rt" >"$tmp/m38-rt-io-build.log" 2>&1; then
   bad "m38 runtime io build" "exit 0" "$(tail -3 "$tmp/m38-rt-io-build.log")"
 else
-  m38_rt_io_out=$("$m38_rt/.output/bin/m38-rt" 2>"$tmp/m38-rt-io.err")
+  m38_rt_io_out=$(run_bin "$m38_rt/.output/bin/m38-rt" 2>"$tmp/m38-rt-io.err")
   m38_rt_io_code=$?
   m38_rt_io_err=$(cat "$tmp/m38-rt-io.err")
   check_contains "m38 runtime io stdout" "$m38_rt_io_out" "m38-start"
@@ -1588,7 +1796,7 @@ printf 'import Base.Debug\n\nmain : Int\nmain = trace "m38-trace" (traceShow 42)
 if ! "$VUNA" build "$m38_dbg" >"$tmp/m38-dbg-build.log" 2>&1; then
   bad "m38 debug build" "exit 0" "$(tail -3 "$tmp/m38-dbg-build.log")"
 else
-  m38_dbg_out=$("$m38_dbg/.output/bin/m38-dbg" 2>"$tmp/m38-dbg.err")
+  m38_dbg_out=$(run_bin "$m38_dbg/.output/bin/m38-dbg" 2>"$tmp/m38-dbg.err")
   m38_dbg_code=$?
   m38_dbg_err=$(cat "$tmp/m38-dbg.err")
   check_eq "m38 debug trace stdout" "42" "$m38_dbg_out"
@@ -1600,7 +1808,7 @@ printf 'import Base.Debug\n\nmain : Int\nmain = assert False "m38 assert" 7\n' >
 if ! "$VUNA" build "$m38_dbg" >"$tmp/m38-assert-build.log" 2>&1; then
   bad "m38 assert build" "exit 0" "$(tail -3 "$tmp/m38-assert-build.log")"
 else
-  "$m38_dbg/.output/bin/m38-dbg" >/dev/null 2>"$tmp/m38-assert.err"
+  run_bin "$m38_dbg/.output/bin/m38-dbg" >/dev/null 2>"$tmp/m38-assert.err"
   m38_assert_code=$?
   m38_assert_err=$(cat "$tmp/m38-assert.err")
   check_contains "m38 assert message" "$m38_assert_err" "assertion failed: m38 assert"
@@ -1611,7 +1819,7 @@ printf 'import Base.Debug\n\nmain : Int\nmain = todo "m38 todo"\n' >"$m38_dbg/ap
 if ! "$VUNA" build "$m38_dbg" >"$tmp/m38-todo-build.log" 2>&1; then
   bad "m38 todo build" "exit 0" "$(tail -3 "$tmp/m38-todo-build.log")"
 else
-  "$m38_dbg/.output/bin/m38-dbg" >/dev/null 2>"$tmp/m38-todo.err"
+  run_bin "$m38_dbg/.output/bin/m38-dbg" >/dev/null 2>"$tmp/m38-todo.err"
   m38_todo_code=$?
   if grep -q "TODO: m38 todo" "$tmp/m38-todo.err"; then ok; else bad "m38 todo message" "TODO: m38 todo" "$(cat "$tmp/m38-todo.err")"; fi
   check_eq "m38 todo exit" "2" "$m38_todo_code"
@@ -1619,6 +1827,7 @@ fi
 
 # 47) M38 vuna test 选项：--list / --filter（可重复）/ --verbose / --fail-fast；
 #     默认输出与退出码不变（第 42 段已锁默认输出，这里锁新开关的行为）。
+section_begin
 m38_tlist=$("$VUNA" test corpus/test-m30 --list 2>&1)
 check_contains "m38 test list root group" "$m38_tlist" "-- test-m30 --"
 check_contains "m38 test list file" "$m38_tlist" "PureInt.vuna"
@@ -1663,6 +1872,77 @@ case "$m38_ff_stop" in
   *) ok ;;
 esac
 
+# 47b) W1 单测超时（`vuna test` 的 IO 路径）：corpus/cli/timeout_hang 有一个 1ms 的通过
+#      测试和一个 30s 的长睡眠测试；短超时（8s，够 build）下必须「长睡眠 FAIL 且不挂死、
+#      1ms 测试照常通过」。退出码 1（有失败），失败行文案带 timed out after Ns。
+m38_th_out=$(VUNA_TEST_TIMEOUT=8 "$VUNA" test corpus/cli/timeout_hang 2>&1)
+m38_th_code=$?
+check_eq "vuna test io timeout exit" "1" "$m38_th_code"
+check_contains "vuna test io timeout keeps quick test" "$m38_th_out" "ok   timeout_quick.vuna"
+check_contains "vuna test io timeout fail message" "$m38_th_out" "FAIL timeout_sleep.vuna: timed out after 8s"
+check_contains "vuna test io timeout summary" "$m38_th_out" "1 passed, 1 failed"
+
+# 47c) `vuna test --jobs N`：包内测试文件进程级并行（每个文件一个子进程，
+#      父进程 prim_wait 汇总）。夹具 corpus/packages/m38_test_jobs：3 个纯测试 + 2 个 IO
+#      测试 + 2 个「START → sleep → END」重叠探针；fail/ 是独立嵌套包（1 通过 + 1 失败）。
+#      断言：串行/并行 exit 0 且 pass/fail 行集合逐字一致、汇总一致；重叠证据（串行下
+#      第一个 END 早于第二个 START，jobs=2 下两个 START 都早于第一个 END）；失败文件
+#      exit 1 + FAIL 行；非法 --jobs exit 2；workspace 聚合行为不变。
+mp_fixture=corpus/packages/m38_test_jobs
+if [ -d "$mp_fixture" ]; then ok; else bad "m38 test jobs fixture" "directory" "missing $mp_fixture"; fi
+mp_serial=$("$VUNA" test "$mp_fixture" 2>&1)
+mp_serial_code=$?
+check_eq "m38 test jobs serial exit" "0" "$mp_serial_code"
+check_contains "m38 test jobs serial summary" "$mp_serial" "7 passed, 0 failed"
+mp_parallel=$("$VUNA" test "$mp_fixture" --jobs 2 2>&1)
+mp_parallel_code=$?
+check_eq "m38 test jobs parallel exit" "0" "$mp_parallel_code"
+check_contains "m38 test jobs parallel summary" "$mp_parallel" "7 passed, 0 failed"
+# 并行只改变行序，不改变 ok/FAIL 行的集合（IO 测试自身的输出行不参与比较）。
+mp_serial_lines=$(printf '%s\n' "$mp_serial" | grep -E '^(ok   |FAIL )' | LC_ALL=C sort)
+mp_parallel_lines=$(printf '%s\n' "$mp_parallel" | grep -E '^(ok   |FAIL )' | LC_ALL=C sort)
+check_eq "m38 test jobs parallel result lines" "$mp_serial_lines" "$mp_parallel_lines"
+# 重叠证据：首个 END 之前的 START 行数。用 --filter 只选两个探针，保证 jobs=2 时
+# 两者一定在同一个窗口里启动（不依赖 readdir 顺序）。
+mp_starts_before_first_end() {
+  printf '%s\n' "$1" | awk '/^START-/{n++} /^END-/{print n + 0; exit}'
+}
+mp_overlap_serial=$("$VUNA" test "$mp_fixture" --filter Overlap 2>&1)
+mp_overlap_parallel=$("$VUNA" test "$mp_fixture" --filter Overlap --jobs 2 2>&1)
+check_contains "m38 test jobs overlap serial summary" "$mp_overlap_serial" "2 passed, 0 failed"
+check_contains "m38 test jobs overlap parallel summary" "$mp_overlap_parallel" "2 passed, 0 failed"
+check_eq "m38 test jobs serial no overlap" "1" "$(mp_starts_before_first_end "$mp_overlap_serial")"
+check_eq "m38 test jobs parallel overlap" "2" "$(mp_starts_before_first_end "$mp_overlap_parallel")"
+# --verbose 并行：每文件耗时由子进程打印在行尾，total 行由父进程打印。
+mp_parallel_verbose=$("$VUNA" test "$mp_fixture" --filter Pure --jobs 2 --verbose 2>&1)
+check_contains "m38 test jobs parallel verbose per-file ms" "$mp_parallel_verbose" "ok   PureOne.vuna ("
+check_contains "m38 test jobs parallel verbose total" "$mp_parallel_verbose" "total: "
+# 失败路径：并行下 exit 1 + FAIL 行 + 正确汇总；fail-fast 下在跑文件等完再汇总。
+mp_jobs_fail=$("$VUNA" test "$mp_fixture/fail" --jobs 2 2>&1)
+mp_jobs_fail_code=$?
+check_eq "m38 test jobs parallel fail exit" "1" "$mp_jobs_fail_code"
+check_contains "m38 test jobs parallel fail line" "$mp_jobs_fail" "FAIL FailOne.vuna:"
+check_contains "m38 test jobs parallel fail summary" "$mp_jobs_fail" "1 passed, 1 failed"
+mp_jobs_ff=$("$VUNA" test "$mp_fixture/fail" --jobs 2 --fail-fast 2>&1)
+mp_jobs_ff_code=$?
+check_eq "m38 test jobs parallel fail-fast exit" "1" "$mp_jobs_ff_code"
+check_contains "m38 test jobs parallel fail-fast fail line" "$mp_jobs_ff" "FAIL FailOne.vuna:"
+# 非法 --jobs：0 / 非数字 / 缺值都是 usage error（exit 2）。
+"$VUNA" test "$mp_fixture" --jobs 0 >/dev/null 2>&1
+check_eq "m38 test jobs zero exit" "2" "$?"
+"$VUNA" test "$mp_fixture" --jobs abc >/dev/null 2>&1
+check_eq "m38 test jobs invalid exit" "2" "$?"
+"$VUNA" test "$mp_fixture" --jobs >/dev/null 2>&1
+check_eq "m38 test jobs missing value exit" "2" "$?"
+# workspace 聚合不变：包间仍串行，包内文件并行。
+mp_ws=$("$VUNA" test corpus/test-m30 --jobs 2 2>&1)
+mp_ws_code=$?
+check_eq "m38 test jobs workspace exit" "0" "$mp_ws_code"
+check_contains "m38 test jobs workspace summary" "$mp_ws" "workspace: 5 passed, 0 failed"
+check_contains "m38 test jobs workspace member group" "$mp_ws" "-- test-m30-member --"
+
+assert_min_section_checks "§47 vuna test 选项" 12
+
 # 48) M38 vuna run：增量 build + 执行 + 参数透传 + 退出码；--no-build / 缺 bin / 库包。
 "$VUNA" build corpus/packages/11_run_args >/dev/null 2>&1
 m38_run_out=$("$VUNA" run corpus/packages/11_run_args 2>&1)
@@ -1671,6 +1951,11 @@ check_contains "m38 run default output" "$m38_run_out" "no args"
 check_eq "m38 run exit" "0" "$m38_run_code"
 m38_run_args=$("$VUNA" run corpus/packages/11_run_args --no-build -- alpha beta 2>&1)
 check_eq "m38 run args passthrough" "alpha" "$m38_run_args"
+m38_run_outdir="$tmp/m38-run-outdir"
+m38_run_out_out=$("$VUNA" run corpus/packages/11_run_args --out "$m38_run_outdir" 2>&1)
+check_contains "m38 run --out output" "$m38_run_out_out" "no args"
+m38_run_out_args=$("$VUNA" run corpus/packages/11_run_args --no-build --out "$m38_run_outdir" -- alpha 2>&1)
+check_eq "m38 run --out args passthrough" "alpha" "$m38_run_out_args"
 m38_run_exit="$tmp/m38-run-exit"
 mkdir -p "$m38_run_exit/app"
 printf '[package]\nname = "m38-run-exit"\n\n[dependencies]\nvuna-base = "%s"\n' "$VUNA_BASE" >"$m38_run_exit/vuna.toml"
@@ -1752,7 +2037,7 @@ else
   incr_log=$(TMPDIR="$incr_cache" "$summ_vuna" check "$incr_base" --debug-perf 2>&1)
   incr_code=$?
   check_eq "summary incremental check exit" "0" "$incr_code"
-  incr_total=$(find "$incr_cache"/vuna-cache/iface-* -name "*.iface" 2>/dev/null | wc -l)
+  incr_total=$(find "$(iface_mirror_dir "$incr_base")" -name "*.iface" 2>/dev/null | wc -l)
   incr_clean=$(printf %s "$incr_log" | sed -n "s/.*cache-own-clean=\([0-9][0-9]*\).*/\1/p")
   if [ -n "$incr_clean" ] && [ "$incr_total" -gt 0 ] && [ "$incr_clean" -lt "$incr_total" ]; then ok; else bad "summary incremental reuses clean modules" "0 < clean < $incr_total" "clean=$incr_clean total=$incr_total"; fi
   incr_parse=$(printf %s "$incr_log" | grep -c "parse-module=Base\." || true)
@@ -1806,8 +2091,8 @@ else
   bad "summary unit cache cold build" "0" "failed"
 fi
 
-# 44i) 依赖可见性收敛（S6）：dep 的实例在**未被 import** 的模块里时，摘要路径与全量路径
-#      必须一致地拒绝（不能把整包实例并入视图）；import 后两条路径都必须接受。
+# 44i) 依赖可见性收敛（S6）：dep 的 trait/实例在**未被 import** 的模块里时，摘要路径与全量
+#      路径必须一致拒绝（不能把整包模块并入视图）；import 后两条路径都必须接受。
 vis_base="$tmp/vis-base"
 cp -r "$VUNA_BASE" "$vis_base"
 vis_pkgdir="$tmp/vis-pkg"
@@ -1819,7 +2104,7 @@ if TMPDIR="$vis_cache" "$VUNA" check "$vis_base" >/dev/null 2>&1 && TMPDIR="$vis
   vis_root_sum=$(TMPDIR="$vis_cache" "$VUNA" build --no-compile --out "$tmp/vis-root-out" "$vis_pkgdir/root" 2>&1); vis_root_sum_exit=$?
   vis_root_full=$(TMPDIR="$vis_cache" VUNA_ELAB_FULL=1 "$VUNA" build --no-compile --out "$tmp/vis-root-out-full" "$vis_pkgdir/root" 2>&1); vis_root_full_exit=$?
   if [ "$vis_root_sum_exit" -ne 0 ] && [ "$vis_root_full_exit" -ne 0 ]; then ok; else bad "summary vis root rejected" "nonzero/nonzero" "summary=$vis_root_sum_exit full=$vis_root_full_exit"; fi
-  check_contains "summary vis root error code" "$vis_root_sum" "TC_"
+  check_contains "summary vis root error code" "$vis_root_sum" "unbound variable"
   vis_root2_sum=$(TMPDIR="$vis_cache" "$VUNA" build --no-compile --out "$tmp/vis-root2-out" "$vis_pkgdir/root2" 2>&1); vis_root2_sum_exit=$?
   vis_root2_full=$(TMPDIR="$vis_cache" VUNA_ELAB_FULL=1 "$VUNA" build --no-compile --out "$tmp/vis-root2-out-full" "$vis_pkgdir/root2" 2>&1); vis_root2_full_exit=$?
   check_eq "summary vis root2 accepted (summary)" "0" "$vis_root2_sum_exit"
@@ -1941,7 +2226,7 @@ if TMPDIR="$lsp_wb_cache" "$summ_vuna" check "$VUNA_BASE" >/dev/null 2>&1; then
   lsp_wb_uri="file://$lsp_wb/lib/WOuter.vuna"
   lsp_wb_diags=$(lsp_inc_single 1 "$lsp_wb_cache" "$lsp_wb" "$lsp_wb_uri" "$lsp_wb/lib/WOuter.vuna" "$tmp/lsp-inc-wb.log")
   check_eq "lsp incremental cold clean diagnostics" "[]" "$lsp_wb_diags"
-  if find "$lsp_wb_cache"/vuna-cache/iface-* -name 'WOuter.iface' 2>/dev/null | grep -q .; then ok; else bad "lsp incremental writes back module iface" "WOuter.iface" "missing"; fi
+  if find "$(iface_mirror_dir "$lsp_wb")" -name 'WOuter.iface' 2>/dev/null | grep -q .; then ok; else bad "lsp incremental writes back module iface" "WOuter.iface" "missing"; fi
 else
   bad "lsp incremental writeback warmup base" "0" "base check failed"
 fi
@@ -2394,6 +2679,12 @@ else
   bad "repl v2 pty tests" "script (util-linux) in PATH" "missing"
 fi
 
+# 54b) W2：REPL v2 缺口回归（多行历史 / 括号粘贴 / resize 重绘 / 参数位补全 / 纯断言）。
+#      脚本自包含（`vuna test test/corpus/repl` + 管道历史断言 + pty 断言），
+#      `script` / `/dev/pts` 不可用时 pty 段自降级 SKIP 且 exit 0。
+sh corpus/repl/repl_v2_gaps.sh "$VUNA" >/dev/null 2>&1
+check_eq "repl v2 gaps smoke" "0" "$?"
+
 # 55) M35.3 net 原语：Unix domain socket echo / TCP 临时端口 / stale socket 重绑 / 错误路径。
 #     说明：TCP loopback 在部分 Nix 沙箱不可用（用 unix socket 覆盖协议面），此时打印 SKIP。
 net_pkg=corpus/net/01_echo
@@ -2403,20 +2694,20 @@ net_bin=$net_pkg/.output/bin/net-echo
 net_sock=$tmp/net-echo.sock
 rm -f "$net_sock"
 : >"$tmp/net-serve.log"
-"$net_bin" serve "unix:$net_sock" >"$tmp/net-serve.log" 2>&1 &
+run_bin "$net_bin" serve "unix:$net_sock" >"$tmp/net-serve.log" 2>&1 &
 net_srv=$!
 net_i=0
 while ! grep -q '^ready' "$tmp/net-serve.log" 2>/dev/null && [ "$net_i" -lt 100 ]; do
   net_i=$((net_i + 1))
   sleep 0.1
 done
-net_out=$("$net_bin" client "unix:$net_sock" 2>&1)
+net_out=$(run_bin "$net_bin" client "unix:$net_sock" 2>&1)
 check_contains "net unix echo" "$net_out" "echo:ping"
 wait "$net_srv"
 check_eq "net unix server exit" "0" "$?"
 
 : >"$tmp/net-tcp.log"
-"$net_bin" serve-tcp >"$tmp/net-tcp.log" 2>&1 &
+run_bin "$net_bin" serve-tcp >"$tmp/net-tcp.log" 2>&1 &
 net_tcp_srv=$!
 net_i=0
 while ! grep -q '^port:' "$tmp/net-tcp.log" 2>/dev/null && [ "$net_i" -lt 100 ]; do
@@ -2428,7 +2719,7 @@ if [ -z "$net_port" ]; then
   kill "$net_tcp_srv" 2>/dev/null
   printf 'SKIP: net tcp loopback unavailable in this sandbox\n' >&2
 else
-  net_out=$("$net_bin" client "tcp:127.0.0.1:$net_port" 2>&1)
+  net_out=$(run_bin "$net_bin" client "tcp:127.0.0.1:$net_port" 2>&1)
   check_contains "net tcp echo" "$net_out" "echo:ping"
   wait "$net_tcp_srv"
   check_eq "net tcp server exit" "0" "$?"
@@ -2436,19 +2727,19 @@ fi
 
 # stale socket：上一个 server 退出后路径仍在 → listen 前 unlink 并重绑。
 : >"$tmp/net-stale.log"
-"$net_bin" serve "unix:$net_sock" >"$tmp/net-stale.log" 2>&1 &
+run_bin "$net_bin" serve "unix:$net_sock" >"$tmp/net-stale.log" 2>&1 &
 net_srv2=$!
 net_i=0
 while ! grep -q '^ready' "$tmp/net-stale.log" 2>/dev/null && [ "$net_i" -lt 100 ]; do
   net_i=$((net_i + 1))
   sleep 0.1
 done
-net_out=$("$net_bin" client "unix:$net_sock" 2>&1)
+net_out=$(run_bin "$net_bin" client "unix:$net_sock" 2>&1)
 check_contains "net stale socket rebind" "$net_out" "echo:ping"
 wait "$net_srv2"
 check_eq "net stale server exit" "0" "$?"
 
-"$net_bin" client "bogus:" >"$tmp/net-bad.log" 2>&1
+run_bin "$net_bin" client "bogus:" >"$tmp/net-bad.log" 2>&1
 check_eq "net invalid address exit" "2" "$?"
 check_contains "net invalid address message" "$(cat "$tmp/net-bad.log")" "net: invalid address"
 rm -rf "$net_pkg/.output"
@@ -2458,8 +2749,127 @@ rm -rf "$net_pkg/.output"
 sh corpus/repl-server/smoke.sh "$VUNA" >/dev/null 2>&1
 check_eq "repl server smoke" "0" "$?"
 
+# 57) iface 布局（S8）：默认与源码同目录（`lib/Base/Int.vuna` 旁 `Int.iface` + 包级
+#     `.vuna-iface`）；`VUNA_IFACE_DIR` 覆盖时镜像到外部根，读侧两种布局都能消费。
+iface_beside="$tmp/iface-beside"
+iface_beside_cache="$tmp/iface-beside-cache"
+cp -r "$VUNA_BASE" "$iface_beside"
+if ( unset VUNA_IFACE_DIR; TMPDIR="$iface_beside_cache" "$summ_vuna" check "$iface_beside" >/dev/null 2>&1 ); then
+  if [ -f "$iface_beside/lib/Base/Int.iface" ] && [ -f "$iface_beside/.vuna-iface" ]; then ok; else bad "iface beside source layout" "lib/Base/Int.iface + .vuna-iface" "missing under $iface_beside"; fi
+else
+  bad "iface beside source check" "0" "check failed"
+fi
+rm -rf "$iface_beside_cache"/vuna-cache/*/check
+iface_beside_log=$( unset VUNA_IFACE_DIR; TMPDIR="$iface_beside_cache" VUNA_IFACE_SELFTEST=1 "$summ_vuna" check "$iface_beside" --debug-perf 2>&1 )
+check_contains "iface beside rewrite skip" "$iface_beside_log" "iface-write=0/"
+check_contains "iface beside selftest" "$iface_beside_log" "iface-selftest=ok"
+
+# 57b) 覆盖模式：镜像布局；依赖包接口按包目录（不是包名哈希）定位，根包走摘要路径。
+iface_mirror_pkg="$PWD/corpus/packages/m34_summary"
+iface_mirror_root="$tmp/iface-mirror-root"
+iface_mirror_cache="$tmp/iface-mirror-cache"
+iface_mirror_base=$(mirror_under "$iface_mirror_root" "$VUNA_BASE")
+if TMPDIR="$iface_mirror_cache" VUNA_IFACE_DIR="$iface_mirror_root" "$summ_vuna" check "$VUNA_BASE" >/dev/null 2>&1 \
+  && TMPDIR="$iface_mirror_cache" VUNA_IFACE_DIR="$iface_mirror_root" "$summ_vuna" check "$iface_mirror_pkg/dep" >/dev/null 2>&1; then
+  if [ -f "$iface_mirror_base/lib/Base/Int.iface" ] && [ -f "$iface_mirror_base/.vuna-iface" ]; then ok; else bad "iface mirror layout" "mirror lib/Base/Int.iface + .vuna-iface" "missing under $iface_mirror_base"; fi
+  iface_mirror_root_log=$(TMPDIR="$iface_mirror_cache" VUNA_IFACE_DIR="$iface_mirror_root" "$summ_vuna" check "$iface_mirror_pkg/root" --debug-perf 2>&1)
+  check_contains "iface mirror dep consumed" "$iface_mirror_root_log" "cache-path=summary deps=2"
+else
+  bad "iface mirror warmup" "0" "base/dep check failed"
+fi
+
+# 57c) 入口写法归一：`check base` / `check ./base` / `check <绝对路径>` 命中同一镜像目录。
+iface_enum_root="$tmp/iface-enum-root"
+iface_enum_cache="$tmp/iface-enum-cache"
+if ( cd .. && TMPDIR="$iface_enum_cache" VUNA_IFACE_DIR="$iface_enum_root" "$summ_vuna" check base >/dev/null 2>&1 && TMPDIR="$iface_enum_cache" VUNA_IFACE_DIR="$iface_enum_root" "$summ_vuna" check ./base >/dev/null 2>&1 ); then
+  iface_enum_n=$(find "$iface_enum_root" -name '.vuna-iface' 2>/dev/null | wc -l)
+  check_eq "iface entry form one mirror" "1" "$iface_enum_n"
+  rm -rf "$iface_enum_cache"/vuna-cache/*/check
+  iface_enum_log=$(TMPDIR="$iface_enum_cache" VUNA_IFACE_DIR="$iface_enum_root" "$summ_vuna" check "$VUNA_BASE" --debug-perf 2>&1)
+  check_contains "iface entry form absolute hits" "$iface_enum_log" "iface-write=0/"
+else
+  bad "iface entry form warmup" "0" "check failed"
+fi
+
+# 57d) 同名不同目录：同一镜像根下各占一棵树，不互相覆盖（旧实现按包名哈希会互踩）。
+iface_same_root="$tmp/iface-same-root"
+iface_same_cache="$tmp/iface-same-cache"
+same_a="$tmp/iface-same-a"
+same_b="$tmp/iface-same-b"
+mkdir -p "$same_a/lib" "$same_b/lib"
+printf '[package]\nname = "iface-same"\n\n[export]\nmodules = ["SA"]\n' >"$same_a/vuna.toml"
+printf '[package]\nname = "iface-same"\n\n[export]\nmodules = ["SB"]\n' >"$same_b/vuna.toml"
+printf 'module SA (saVal) where\n\nsaVal : Int\nsaVal = 1\n' >"$same_a/lib/SA.vuna"
+printf 'module SB (sbVal) where\n\nsbVal : Int\nsbVal = 2\n' >"$same_b/lib/SB.vuna"
+if TMPDIR="$iface_same_cache" VUNA_IFACE_DIR="$iface_same_root" "$summ_vuna" check "$same_a" >/dev/null 2>&1 \
+  && TMPDIR="$iface_same_cache" VUNA_IFACE_DIR="$iface_same_root" "$summ_vuna" check "$same_b" >/dev/null 2>&1; then
+  if [ -f "$(mirror_under "$iface_same_root" "$same_a")/.vuna-iface" ] && [ -f "$(mirror_under "$iface_same_root" "$same_b")/.vuna-iface" ]; then ok; else bad "iface same-name dirs coexist" "two mirrors" "missing"; fi
+else
+  bad "iface same-name dirs check" "0" "check failed"
+fi
+
+# 58) 只读降级：iface 目录不可写（父路径是普通文件，root 也必失败）时 check 退出码不变、
+#     打 `iface-skip readonly`、不崩；REPL 照旧（没有接口就回退全量）。
+iface_ro_file="$tmp/iface-ro-file"
+iface_ro_cache="$tmp/iface-ro-cache"
+: >"$iface_ro_file"
+iface_ro_log=$(TMPDIR="$iface_ro_cache" VUNA_IFACE_DIR="$iface_ro_file/iface" "$summ_vuna" check "$VUNA_BASE" --debug-perf 2>&1)
+iface_ro_code=$?
+check_eq "iface readonly check exit" "0" "$iface_ro_code"
+check_contains "iface readonly skip note" "$iface_ro_log" "iface-skip readonly"
+check_eq "iface readonly no stray file" "1" "$(find "$iface_ro_file" -maxdepth 0 -type f | wc -l)"
+iface_ro_repl=$(printf 'x : Int\nx = 1 + 1\nx\n:q\n' | TMPDIR="$iface_ro_cache" VUNA_IFACE_DIR="$iface_ro_file/iface" "$summ_vuna" repl 2>&1)
+check_contains "iface readonly repl works" "$iface_ro_repl" "2"
+
+# 58b) 默认布局写只读源树（Nix store 场景）：非 root 时用 chmod 模拟；root 下由
+#      `nix build` / `flake check` 的 store 只读路径覆盖，这里记一条 ok。
+iface_ro_src="$tmp/iface-ro-src"
+cp -r "$VUNA_BASE" "$iface_ro_src"
+if [ "$(id -u)" -ne 0 ]; then
+  chmod -R a-w "$iface_ro_src"
+  if ( unset VUNA_IFACE_DIR; TMPDIR="$tmp/iface-ro-src-cache" "$summ_vuna" check "$iface_ro_src" --debug-perf >"$tmp/iface-ro-src.log" 2>&1 ); then
+    check_contains "iface readonly source tree skip" "$(cat "$tmp/iface-ro-src.log")" "iface-skip readonly"
+  else
+    bad "iface readonly source tree check" "0" "$(tail -3 "$tmp/iface-ro-src.log")"
+  fi
+  chmod -R u+w "$iface_ro_src"
+else
+  ok
+fi
+
+# 59) `vuna clean-iface`：批量删除 `*.iface` / `.vuna-iface` / `*.iface.*.tmp`，不动源码与
+#     其他文件；--dry-run 只报数量；不存在的目录 exit 2。
+clean_dir="$tmp/clean-iface-pkg"
+cp -r "$VUNA_BASE" "$clean_dir"
+( unset VUNA_IFACE_DIR; TMPDIR="$tmp/clean-iface-cache" "$summ_vuna" check "$clean_dir" >/dev/null 2>&1 )
+printf 'user note\n' >"$clean_dir/keep.txt"
+clean_before=$(find "$clean_dir" -name '*.iface' | wc -l)
+if [ "$clean_before" -gt 0 ]; then ok; else bad "clean-iface warmup" ">0 iface" "none"; fi
+clean_dry=$("$summ_vuna" clean-iface --dry-run "$clean_dir" 2>&1)
+check_contains "clean-iface dry-run count" "$clean_dry" "would remove"
+check_eq "clean-iface dry-run keeps files" "$clean_before" "$(find "$clean_dir" -name '*.iface' | wc -l)"
+clean_out=$("$summ_vuna" clean-iface "$clean_dir" 2>&1)
+check_contains "clean-iface removed" "$clean_out" "removed"
+check_eq "clean-iface no module files left" "0" "$(find "$clean_dir" -name '*.iface' | wc -l)"
+check_eq "clean-iface manifest removed" "0" "$(find "$clean_dir" -maxdepth 1 -name '.vuna-iface' | wc -l)"
+if [ -f "$clean_dir/keep.txt" ]; then ok; else bad "clean-iface keeps other files" "present" "missing"; fi
+clean_out2=$("$summ_vuna" clean-iface "$clean_dir" 2>&1)
+check_contains "clean-iface no files message" "$clean_out2" "no iface files"
+"$summ_vuna" clean-iface "$tmp/no-such-clean-dir" >"$tmp/clean-iface-bad.log" 2>&1
+clean_bad_code=$?
+check_eq "clean-iface bad dir exit" "2" "$clean_bad_code"
+check_contains "clean-iface bad dir message" "$(cat "$tmp/clean-iface-bad.log")" "no such directory"
+
 if [ "$fail" -ne 0 ]; then
   printf '%s passed, %s failed\n' "$pass" "$fail"
   exit 1
 fi
-printf 'vuna tests passed (%s checks)\n' "$pass"
+# W1：命令超时也算失败（wrapper / run_bin 已逐条打印 FAIL；这里再兜底一条并改退出码）。
+check_command_timeouts
+case $fail in
+  0) printf 'vuna tests passed (%s checks)\n' "$pass" ;;
+  *)
+    printf '%s passed, %s failed\n' "$pass" "$fail"
+    exit 1
+    ;;
+esac

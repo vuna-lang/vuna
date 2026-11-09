@@ -1,1 +1,1 @@
-corpus/lint/13_as_lift.vuna:8:27: [LN_CaseToClauses] case-to-clauses: top-level case on `toks` can be converted to multiple clauses
+corpus/lint/13_as_lift.vuna:8:27: [LN_DispatchLift] dispatch-lift: dispatch on `toks` can be lifted into the enclosing pattern

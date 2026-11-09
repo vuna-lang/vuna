@@ -7,6 +7,7 @@ module Vuna.Compiler.Driver.Iface
   , hashTextStrong
   , ifaceOfModule
   , ifaceOfPackage
+  , ifaceRelPathOf
   , ifaceSchema
   , manifestPathOf
   , meDepsOfEntry
@@ -28,6 +29,7 @@ module Vuna.Compiler.Driver.Iface
   , miPackageOf
   , miSourceOf
   , moduleNamesOf
+  , modulePathOf
   , packageIfaceValid
   , pmCompilerOf
   , pmModulesOf
@@ -65,10 +67,11 @@ module Vuna.Compiler.Driver.Iface
 --     类型与体、data/ctor、实例、类、导出表、fixity、record 头），不含 span / 源路径，
 --     因此实现变化（未导出体）与换行/路径变化不会误失效。
 --
--- 物理布局（S3）：per-module 接口文件 `<Module.Name>.iface` + 包级 `manifest`（模块名 →
--- 文件名 / 源信息 / 接口哈希）。写侧只重写接口哈希变化的模块，manifest 最后原子写
--- （提交点）；读侧先读 manifest 再逐模块读文件并校验。文件格式仍是 Marshal，schema 见
--- `ifaceSchema`（布局/字段语义变化必须 bump）。
+-- 物理布局（S3/S8）：接口文件与源码同布局 + 包级 `.vuna-iface`（模块名 → 相对路径 /
+-- 源信息 / 接口哈希）。默认接口文件就在源文件旁；`VUNA_IFACE_DIR` 覆盖时整体镜像到外部
+-- 根。写侧只重写接口哈希变化的模块，manifest 最后原子写（提交点）；读侧先读 manifest
+-- 再逐模块读文件并校验。文件格式仍是 Marshal，schema 见 `ifaceSchema`
+-- （布局/字段语义变化必须 bump）。
 import Vuna.Compiler.Common
 import Base.HashMap
 import Base.IntMap
@@ -80,6 +83,7 @@ import Vuna.Compiler.Elab.Records
 import Vuna.Compiler.Driver.Cache
 import Vuna.Compiler.Driver.Owner
 import Vuna.Compiler.Loader.Modules
+import Vuna.Compiler.Packages.Pkg
 import Base.IO
 
 -- 源信息：模块名 → (绝对路径, 内容哈希, mtime, size)。路径只用于本机校验（换 checkout
@@ -162,7 +166,7 @@ miDeclsOf m = m.miDecls
 
 -- 接口格式版本：Marshal 布局或字段语义变化必须 bump（旧缓存自然失效）。
 ifaceSchema : String
-ifaceSchema = "vuna-iface 7"
+ifaceSchema = "vuna-iface 8"
 
 -- ---------------------------------------------------------------
 -- 哈希：接口哈希必须比 `strHash`（10 bit）强得多
@@ -684,20 +688,47 @@ moduleNamesOf [] = []
 moduleNamesOf (m :: rest) = miNameOf m :: moduleNamesOf rest
 
 -- ---------------------------------------------------------------
--- 磁盘布局：per-module 接口文件 + 包级 manifest（M34.5 S3）
+-- 磁盘布局：接口文件与源码同布局 + 包级 `.vuna-iface` manifest（S3）
 --
---   <ifaceDir>/manifest               PackageManifest（模块名 → 文件名 / 源信息 / 接口哈希）
---   <ifaceDir>/<Module.Name>.iface    Marshal 的 ModuleIface（模块名即文件名，可读）
+-- 默认（接口目录 = 包目录）：
+--   <pkg>/lib/Base/Int.iface   源文件 lib/Base/Int.vuna 的镜像（就在源码旁）
+--   <pkg>/.vuna-iface         PackageManifest（模块名 → 相对路径 / 源信息 / 接口哈希）
+-- `VUNA_IFACE_DIR` 覆盖时接口目录换成外部镜像根（`<根>/<包绝对目录>/...`），内部布局相同。
 --
 -- 写侧只重写「接口哈希变化或文件缺失」的模块；manifest 最后原子写 = 提交点。读侧先读
--- manifest，再逐模块读文件并校验「文件名 ↔ 记录名 / 接口哈希」；缺件/损坏 ⇒ Nothing ⇒
--- 调用方回退全量。这样包内未变模块的接口写盘可以按模块跳过（包内增量的第一步）。
+-- manifest，再逐模块读文件并校验「相对路径合法 ↔ 记录名 / 接口哈希」；缺件/损坏 ⇒
+-- Nothing ⇒ 调用方回退全量。这样包内未变模块的接口写盘可以按模块跳过（包内增量的第一步）。
 -- ---------------------------------------------------------------
 manifestFileName : String
-manifestFileName = "manifest"
+manifestFileName = ".vuna-iface"
 
-ifaceFileNameOf : String -> String
-ifaceFileNameOf name = "${name}.iface"
+-- 源文件相对包目录的路径（两侧 lexical 归一后剥前缀；包目录为 "." 时剥前导 "./"）。
+-- 写侧只用本包 roots 下的源文件，正常不会失败；失败返回 "" ⇒ 该模块不写（不写坏 manifest）。
+relUnder : String -> String -> String
+relUnder pkgDir path =
+  let
+    pkg = normalizeDir pkgDir
+    p = normalizeDir path
+  in if pkg == "." then if startsWith "./" p then strSubstring 2 (strLength p - 2) p else p
+  else if startsWith "${pkg}/" p then strSubstring (strLength pkg + 1) (strLength p - strLength pkg - 1) p
+  else ""
+
+-- 接口文件相对路径：源相对路径把 `.vuna` 换成 `.iface`（与源码布局逐段一致）。
+ifaceRelPathOf : String -> SourceInfo -> String
+ifaceRelPathOf pkgDir si =
+  let
+    rel = relUnder pkgDir (siPathOf si)
+  in if rel == "" then ""
+  else if endsWith ".vuna" rel then "${strSubstring 0 (strLength rel - 5) rel}.iface" else "${rel}.iface"
+
+-- manifest 里的文件路径来自磁盘缓存（可能被篡改）：只接受相对路径、无 `..` 段、`.iface` 后缀。
+validIfaceRelPath : String -> Bool
+validIfaceRelPath file =
+  file /= ""
+    && not (startsWith "/" file)
+    && not (startsWith "../" file)
+    && not (contains "/../" file)
+    && endsWith ".iface" file
 
 record ManifestEntry where
   meName : String
@@ -787,13 +818,19 @@ readManifest dir compiler = if runIO (prim_fileExists (manifestPathOf dir)) then
     Nothing => Nothing
 else Nothing
 
+-- manifest 写去抖：内容逐字节相同就跳过。默认布局的 manifest 在源树里，避免每次 check
+-- 都改 dotfile 的 mtime（工具会话按内容哈希判定是否变化，但工作树 mtime 抖动没必要）。
 writeManifest : String -> String -> PackageManifest -> Int
 writeManifest dir compiler mf =
-  runIO (prim_writeFileAtomic (manifestPathOf dir) (encodeIfaceFile compiler (prim_marshal mf)))
+  let
+    path = manifestPathOf dir
+    payload = encodeIfaceFile compiler (prim_marshal mf)
+  in if runIO (prim_fileExists path) then if runIO (prim_readFile path) == payload then 0 else runIO (prim_writeFileAtomic path payload)
+  else runIO (prim_writeFileAtomic path payload)
 
-manifestEntryOf : ModuleIface -> ManifestEntry
-manifestEntryOf m =
-  ManifestEntry (miNameOf m) (ifaceFileNameOf (miNameOf m)) (miSourceOf m) (miIfaceHashOf m)
+manifestEntryOf : String -> ModuleIface -> ManifestEntry
+manifestEntryOf pkgDir m =
+  ManifestEntry (miNameOf m) (ifaceRelPathOf pkgDir (miSourceOf m)) (miSourceOf m) (miIfaceHashOf m)
     (miDepHashesOf m)
     (append (map importNameOf (miImportsOf m)) (map importNameOf (miImplicitImportsOf m)))
 
@@ -812,23 +849,27 @@ depListIn ((Pair n h) :: rest) ys = case lookupPair n ys of
 
 -- 写判定同时看「接口哈希」与「依赖哈希」：依赖哈希不进 `miIfaceHash`（与 TTC 一致），
 -- 但过期后必须重写文件，否则依赖者会永远被判定脏（每次重精化却写不出新依赖表）。
-writeModules : String -> String -> List ManifestEntry -> List ModuleIface -> Int
-writeModules dir compiler old [] = 0
-writeModules dir compiler old (m :: rest) =
+writeModules : String -> String -> String -> List ManifestEntry -> List ModuleIface -> Int
+writeModules dir compiler pkgDir old [] = 0
+writeModules dir compiler pkgDir old (m :: rest) =
   let
-    path = modulePathOf dir (ifaceFileNameOf (miNameOf m))
-    unchanged = case oldEntryOf old (miNameOf m) of
-      Just e =>
-        e.meIfaceHash == miIfaceHashOf m
-          && depListsSame e.meDeps (miDepHashesOf m)
-          && runIO (prim_fileExists path)
-      Nothing => False
-    n = if unchanged then 0
-    else
-      let
-        _ = runIO (prim_writeFileAtomic path (encodeIfaceFile compiler (prim_marshal m)))
-      in 1
-  in n + writeModules dir compiler old rest
+    file = meFileOfEntry (manifestEntryOf pkgDir m)
+  in if file == "" then writeModules dir compiler pkgDir old rest
+  else
+    let
+      path = modulePathOf dir file
+      unchanged = case oldEntryOf old (miNameOf m) of
+        Just e =>
+          e.meIfaceHash == miIfaceHashOf m
+            && depListsSame e.meDeps (miDepHashesOf m)
+            && runIO (prim_fileExists path)
+        Nothing => False
+      n = if unchanged then 0
+      else
+        let
+          _ = runIO (prim_writeFileAtomic path (encodeIfaceFile compiler (prim_marshal m)))
+        in 1
+    in n + writeModules dir compiler pkgDir old rest
 
 -- 单模块接口写回（M34.6 5a）：只重写 `mi` 对应的模块文件，并把 manifest 里的同名条目
 -- 替换/追加（**保留其余条目**，不整包重写）。manifest 最后原子写 = 提交点；读侧对旧条目
@@ -844,39 +885,47 @@ entryNameIn : List ManifestEntry -> String -> Bool
 entryNameIn [] _ = False
 entryNameIn (e :: rest) name = meNameOfEntry e == name || entryNameIn rest name
 
-writeModuleIfaceMerge : String -> String -> String -> ModuleIface -> Int
-writeModuleIfaceMerge dir compiler pkg mi =
+writeModuleIfaceMerge : String -> String -> String -> String -> ModuleIface -> Int
+writeModuleIfaceMerge dir compiler pkg pkgDir mi =
   let
-    old = case readManifest dir compiler of
-      Just mf =>
-        if pmSchemaOf mf == ifaceSchema && pmCompilerOf mf == compiler && pmPackageOf mf == pkg then pmModulesOf mf
-        else []
-      Nothing => []
-    entry = manifestEntryOf mi
-    merged = replaceManifestEntry old entry
-    _ =
-      runIO
-        (prim_writeFileAtomic (modulePathOf dir (meFileOfEntry entry)) (encodeIfaceFile compiler (prim_marshal mi)))
-    _ = writeManifest dir compiler (PackageManifest ifaceSchema compiler pkg merged)
-  in 1
+    entry = manifestEntryOf pkgDir mi
+    file = meFileOfEntry entry
+  in if file == "" then 0
+  else
+    let
+      old = case readManifest dir compiler of
+        Just mf =>
+          if pmSchemaOf mf == ifaceSchema && pmCompilerOf mf == compiler && pmPackageOf mf == pkg then pmModulesOf mf
+          else []
+        Nothing => []
+      merged = replaceManifestEntry old entry
+      _ =
+        runIO
+          (prim_writeFileAtomic (modulePathOf dir file) (encodeIfaceFile compiler (prim_marshal mi)))
+      _ = writeManifest dir compiler (PackageManifest ifaceSchema compiler pkg merged)
+    in 1
 
-writePackageIface : String -> String -> String -> List ModuleIface -> Int
-writePackageIface dir compiler pkg modules =
+writePackageIface : String -> String -> String -> String -> List ModuleIface -> Int
+writePackageIface dir compiler pkg pkgDir modules =
   let
     -- 只有「整包接口可完整读回」时才信任旧 manifest 做按模块跳过；损坏/缺文件的旧接口
     -- 会让读侧回退全量，这里必须强制全量重写，否则损坏文件永远不被覆盖。
     oldEntries = case readPackageIface dir compiler of
-      Just pi => map manifestEntryOf pi.piModules
+      Just pi => map (manifestEntryOf pkgDir) pi.piModules
       Nothing => []
-    written = writeModules dir compiler oldEntries modules
-    mf = PackageManifest ifaceSchema compiler pkg (map manifestEntryOf modules)
+    written = writeModules dir compiler pkgDir oldEntries modules
+    mf = PackageManifest ifaceSchema compiler pkg (map (manifestEntryOf pkgDir) modules)
     _ = writeManifest dir compiler mf
   in written
 
 readModuleFile : String -> String -> ManifestEntry -> Maybe ModuleIface
 readModuleFile dir compiler e =
+  if not (validIfaceRelPath (meFileOfEntry e)) then Nothing else readModuleFileRaw dir compiler e
+
+readModuleFileRaw : String -> String -> ManifestEntry -> Maybe ModuleIface
+readModuleFileRaw dir compiler e =
   let
-    path = modulePathOf dir e.meFile
+    path = modulePathOf dir (meFileOfEntry e)
   in if runIO (prim_fileExists path) then
     let
       raw = runIO (prim_readFile path)

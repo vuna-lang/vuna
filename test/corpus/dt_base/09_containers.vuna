@@ -10,8 +10,9 @@ main =
     h = Base.HashMap.fromList [Pair "a" 1, Pair "b" 2, Pair "a" 3]
     m = Base.IntMap.fromList [Pair 0 10, Pair 1024 11]
   in (case Base.HashMap.lookup "a" h of
-        Just v => v
-        Nothing => 0)
-       + (case Base.IntMap.lookup 1024 m of
-            Just v => v
-            Nothing => 0)
+    Just v => v
+    Nothing => 0
+  ) + (case Base.IntMap.lookup 1024 m of
+    Just v => v
+    Nothing => 0
+  )

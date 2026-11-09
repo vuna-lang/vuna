@@ -2,19 +2,22 @@ module Base.EffAsync (Task, async, await) where
 
 -- Base.EffAsync：Layer 3 最小并发（OCaml 5 Domain，main 域 fork/await）。
 --
--- 任务体是行已处理干净的 `Eff RNil a`（效果在任务内被 handler 处理），因此可以
+-- 任务体是行已处理干净的 `Eff Nil a`（效果在任务内被 handler 处理），因此可以
 -- 安全地在独立 Domain 执行；任务间不共享 handler 栈/行。只允许从 main 域调用
 -- async/await（句柄表非线程安全）；await 一次性（同任务不要 join 两次）。
 import Base.Eff
 
+-- | 并发任务句柄，内部持有 runtime 的 Domain 句柄；由 `async` 产生、由 `await` 消费。
 data Task a : Type where
   MkTask : Int -> Task a
 
-async : {a : Type} -> Eff RNil a -> IO (Task a)
+-- | 在独立 Domain 上 fork 一个已把效果处理干净（`Eff Nil a`）的任务体，返回任务句柄；只能在 main 域调用。
+async : {a : Type} -> Eff [] a -> IO (Task a)
 async comp =
   prim_bindIO (prim_pureIO 0)
     (\_ => prim_bindIO (prim_asyncFork (\_ => runPure comp)) (\h => prim_pureIO (MkTask h)))
 
+-- | 等待任务完成并取回结果；一次性（同一任务不要 await 两次），只能在 main 域调用。
 await : {a : Type} -> Task a -> IO a
 await t = case t of
   MkTask h => prim_bindIO (prim_pureIO 0) (\_ => prim_pureIO (prim_asyncAwait h))

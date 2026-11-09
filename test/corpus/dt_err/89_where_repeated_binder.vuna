@@ -1,0 +1,8 @@
+-- D40：where 局部函数的子句参数模式内部重复绑定同名变量（与顶层子句同一检查）。
+data Pair : Type where
+  MkPair : Int -> Int -> Pair
+
+main : Int
+main = go (MkPair 1 2) where
+  go : Pair -> Int
+  go (MkPair x x) = x

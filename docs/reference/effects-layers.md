@@ -9,7 +9,7 @@
 **Layer 2（作用域/高阶组合）**：
 
 - `Base.Eff.Reader.local`：先 `ask` 取外层 env，在临时 handler 中回答 Ask，再用
-  `weaken` 把结果行扩宽回 `RCons e r`；外层 handler 仍在，所以 local 之后该效应仍可用。
+  `weaken` 把结果行扩宽回 `Cons e r`；外层 handler 仍在，所以 local 之后该效应仍可用。
 - `Base.EffError`：`throw`/`handleError`/`runError` + `catch`。catch 在 comp 内安装临时
   Error handler；Throw 丢弃一次性续延并返回 `Result`；fallback 在 handler **之外**执行，
   因此嵌套 catch 的 fallback 抛错可被外层 catch 捕获。
@@ -27,14 +27,14 @@
 **Layer 3（并发/async）**：
 
 - `Base.EffAsync`（legacy，最小 Domain 实现）：`Task`/`async`/`await`，基于 OCaml 5
-  `Domain`；`async : Eff RNil a -> IO (Task a)` 要求任务体行已处理干净（效果在任务内
+  `Domain`；`async : Eff Nil a -> IO (Task a)` 要求任务体行已处理干净（效果在任务内
   处理），`await` join 对应 Domain 并返回值。运行时 `dtp_async_fork`/`dtp_async_await`
   （句柄表）；隐藏 intrinsic `prim_asyncFork`/`prim_asyncAwait`。夹具
   `dt_base/22_eff_async`（42）。它**不是** W9 的调度器实现：不参与结构化作用域，
   只允许 main 域调用。W10/W11 视迁移情况决定保留或删除。
 
 - 负例 `dt_err/71_catch_row_mismatch`、`72_local_row_mismatch`、`73_async_row_not_nil`：
-  catch/local 要求行首是对应效应，async 只接受 `Eff RNil`。
+  catch/local 要求行首是对应效应，async 只接受 `Eff Nil`。
 
 **W9 单线程 fiber 调度器（`Base.EffSched`）**：
 
@@ -50,13 +50,13 @@
   只在任务自己的纤程里被 handler 处理。
 - 调度器原语是隐藏 intrinsic `prim_sched*`（实现 `dtp_sched_*`，要求 `unsafe`，只供
   `Base.EffSched` 包装；普通用户经 `Base.EffSched` 的 API）。它们**不是行里的效应**：
-  行 `RNil` 的任务也能 fork/yield/await。
+  行 `Nil` 的任务也能 fork/yield/await。
 
 API（`base/lib/Base/EffSched.vuna`）：
 
 | 名称 | 签名 | 语义 |
 | --- | --- | --- |
-| `forkTask` | `Scope -> Eff RNil a -> Eff r (Task a)` | 子任务入队；父纤程下一次挂起/结束等待时才跑 |
+| `forkTask` | `Scope -> Eff Nil a -> Eff r (Task a)` | 子任务入队；父纤程下一次挂起/结束等待时才跑 |
 | `awaitTask` | `Task a -> Eff r (Result a)` | `Ok a` / `Err "cancelled"` / `Err <失败消息>`；可重复 await（幂等） |
 | `yieldNow` | `Eff r Int` | 让出一次调度；返回 0 正常、1 = 已请求取消 |
 | `isCancelled` | `Eff r Int` | 查询当前纤程的取消位 |
@@ -84,7 +84,7 @@ API（`base/lib/Base/EffSched.vuna`）：
 - **超时**：W9 的超时是**调度器逻辑步数**（循环迭代次数；不依赖真实时钟/sleep）。
   `withScopeTimeout n` 表示「开始等待后的 n 个调度步内清空」；预算耗尽 → 取消范围 →
   子任务清理 → 返回 `Err "timeout"`。
-- **任务行限制**：任务体必须是 `Eff RNil a`（任务内用户效应必须由任务自己的 handler
+- **任务行限制**：任务体必须是 `Eff Nil a`（任务内用户效应必须由任务自己的 handler
   处理干净）；不能用外层 handler 的行。负例 `dt_err/76_sched_row_not_nil`。
   需要 IO 副作用时用 `liftIOEff`（同纤程、单线程）。任务体本身可以返回任意 `a`
   （包括 `Result`）；若任务体内再用 `withScope`，`awaitTask` 得到的是嵌套
@@ -113,7 +113,7 @@ API（`base/lib/Base/EffSched.vuna`）：
   用 `yieldNow` 忙等轮询（无阻塞原语），fork 的 producer 在父纤程 yield 时入队，输出 42。
 
 **边界（W9 之后仍开放）**：Mutex/Semaphore/Channel 都是 cooperative 忙等实现（无阻塞原语）；
-线性 TaskLin 只保证 handle 恰好一次 await/cancel，不保证资源释放；effect-aware 并发：新增 `forkTaskWith` 用显式 handler 把 effectful task 收成 RNil
+线性 TaskLin 只保证 handle 恰好一次 await/cancel，不保证资源释放；effect-aware 并发：新增 `forkTaskWith` 用显式 handler 把 effectful task 收成 Nil
 再 fork（handler 状态为任务局部）；仍无法继承父 fiber 的动态 handler 栈（D44）；
 取消只在挂起点生效，硬中止会丢弃未执行清理的纤程；`withScope` 的 body 若以非返回方式
 中止（abort/未捕获运行时异常），scope 的等待不会执行，残留任务由 `dtp_sched_main` 在
@@ -139,7 +139,7 @@ main 结束时统一取消清理（最外层兜底）；跨域 handler / Domain 
   `Fs F2` 是不同条目，因此同一个程序可以同时装 mock 与真实 handler（或两个 mock）；
   `send`/`handler` 用同一个 `nameCode`。fs 的早期单实例 API 已迁移（`fsReadFile n path`、
   `handleFsIO n`），夹具 `dt_base/18`/`29`/`40` 已更新。
-- **IO-backed handler 的形态**：`handleXIO` 接受行首为对应标签的 `Eff (RCons e r) a`，
+- **IO-backed handler 的形态**：`handleXIO` 接受行首为对应标签的 `Eff (Cons e r) a`，
   返回 `Eff r (IO a)`，由 `runIOAnswer` 执行（真实 handler 的 op 解释返回 `IO` 动作）。
 - **原生 sleep（W10 收尾）**：新增编译器原语 `prim_sleep : Int -> IO Int`（微秒；运行时
   `dtp_sleep` 用 `Unix.sleepf`，阻塞睡眠；能力 `clock`；`OpNone`，interp 不归约）。

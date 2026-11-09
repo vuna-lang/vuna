@@ -1,0 +1,1 @@
+corpus/lint/15_bool_if.vuna:2:12: [LN_LiteralIfChain] literal-if-chain: if dispatch on `b` can be lifted into the enclosing pattern or rewritten as a case

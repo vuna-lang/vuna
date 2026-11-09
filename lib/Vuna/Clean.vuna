@@ -1,0 +1,80 @@
+module Vuna.Clean (runCleanIface) where
+
+-- Vuna.Clean：批量删除 iface 缓存文件（`vuna clean-iface [--dry-run] [DIR]`）。
+--
+-- iface 默认与源码同目录（`lib/Base/Int.vuna` 旁就是 `Int.iface`）+ 包级 `.vuna-iface`；
+-- `VUNA_IFACE_DIR` 模式下在外部镜像根。清理按**文件名**识别、不读文件内容：
+--   - `*.iface`（模块接口）
+--   - `.vuna-iface`（包级 manifest）
+--   - `*.iface.*.tmp`（`prim_writeFileAtomic` 崩溃残留）
+-- 这样既不会把宿主异常漏给用户，也不会误删 `.vuna` 源码；`.iface` 扩展是 vuna 保留名。
+import Vuna.Compiler.Common
+import Vuna.Cli.Args
+import Base.IO
+
+runCleanIface : List String -> Int
+runCleanIface args = case parseToolArgs "vuna clean-iface" [BoolFlag "dry-run"] args of
+  Err e => cleanError e
+  Ok parsed => case parsed.positionals of
+    [] => cleanAt "." (flagSet parsed "dry-run")
+    [dir] => cleanAt dir (flagSet parsed "dry-run")
+    _ => cleanError "too many arguments; expected at most one directory"
+
+cleanAt : String -> Bool -> Int
+cleanAt dir dry = case requireDirectory dir of
+  Err e => cleanError e
+  Ok _ =>
+    let
+      files = filter isIfaceFile (walkFiles 1048576 dir)
+      count = length files
+      _ = if dry then 0 else foldl (\acc, f => acc + runIO (prim_removeFile f)) 0 files
+      message =
+        if count == 0 then "clean-iface: no iface files under ${dir}\n"
+        else if dry then "clean-iface: would remove ${strFromInt count} file(s) under ${dir}\n"
+        else "clean-iface: removed ${strFromInt count} file(s) under ${dir}\n"
+      _ = runIO (prim_print message)
+    in 0
+
+cleanError : String -> Int
+cleanError e =
+  let
+    _ = runIO (prim_print "error: ${e}\n")
+  in 2
+
+-- 与工作树其他遍历一致的跳过规则：`.local` 不跳过（`VUNA_IFACE_DIR=.local/iface` 时要能清到）。
+skipCleanDir : String -> Bool
+skipCleanDir name =
+  name == ".git"
+    || name == ".direnv"
+    || name == ".output"
+    || name == "node_modules"
+    || name == "_scratch"
+    || name == ".vscode"
+    || name == ".dsh-plugins"
+    || name == "seed"
+    || name == "result"
+    || startsWith "result-" name
+
+-- 目录树是文件系统图（符号链接可成环），用显式 fuel 守卫。
+walkFiles : Int -> String -> List String
+walkFiles fuel dir =
+  if fuel <= 0 then []
+  else if runIO (prim_fileExists dir) && runIO (prim_isDirectory dir) then concatMap (walkGo (fuel - 1) dir) (runIO (prim_readDir dir))
+  else []
+
+walkGo : Int -> String -> String -> List String
+walkGo fuel dir name = if fuel <= 0 then []
+else case name of
+  "." => []
+  ".." => []
+  _ => if skipCleanDir name then []
+  else
+    let
+      path = "${dir}/${name}"
+    in if runIO (prim_fileExists path) && runIO (prim_isDirectory path) then walkFiles (fuel - 1) path
+    else [path]
+
+isIfaceFile : String -> Bool
+isIfaceFile path =
+  if endsWith "/.vuna-iface" path then True
+  else if endsWith ".iface" path then True else endsWith ".tmp" path && contains ".iface." path

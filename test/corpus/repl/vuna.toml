@@ -1,0 +1,14 @@
+[package]
+name = "vuna-repl-corpus"
+
+# REPL v2 缺口回归（W2）：纯函数断言在 lib/ReplGapsPure.vuna，两个入口
+#   - app/Main.vuna：`vuna run test/corpus/repl`（main = 失败计数，0 通过）
+#   - test/ReplPure.vuna：`vuna test test/corpus/repl`（IO 入口，失败 exit 1）
+# pty 行为的 shell 断言在 repl_v2_gaps.sh 里。依赖根包以 import 工具链模块。
+[dependencies]
+vuna = "../../.."
+vuna-base = "../../../base"
+
+# `test/ReplPure.vuna` 用 `exit 1` 表达失败（prim_exit 走 process 能力）。
+[capabilities]
+effects = ["process"]

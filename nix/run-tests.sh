@@ -22,6 +22,10 @@
 #                    或 stable（用注册表别名 vuna#vuna / vuna#vuna-seed）。
 #   -h, --help       显示本帮助。
 #
+# 章节超时（--only / --jobs 路径）：每个章节单独加超时（默认 600s，
+# VUNA_TEST_SECTION_TIMEOUT 覆盖，0 = 关闭）；超时的章节计 FAIL 并继续跑其余章节。
+# 无参数路径直接 exec 原脚本，行为不变。
+#
 # 编译器解析（运行时，不在 Nix 构建期绑定）：
 #   VUNA / VUNA_SEED 已设置时直接使用，不调用 nix；
 #   否则运行时 nix build --no-link --print-out-paths <仓库>#vuna（及 vuna-seed）。
@@ -77,6 +81,11 @@ usage() {
   否则运行时 nix build --no-link --print-out-paths <仓库>#vuna（及 vuna-seed）。
   仓库根 = 当前目录向上第一个同时含 flake.nix 与 test/run-tests.sh 的目录，
   也可用 VUNA_REPO 显式指定。
+
+  章节超时（--only / --jobs 路径）：
+  VUNA_TEST_SECTION_TIMEOUT 每章节超时秒数（默认 600；0 = 关闭）；超时章节计 FAIL
+  并继续。每个 vuna 命令自身的超时由 test/run-tests.sh 的 VUNA_TEST_CMD_TIMEOUT
+  （默认 300s）控制。
 
 无参数时直接 exec test/run-tests.sh，行为与 sh test/run-tests.sh 等价。
 EOF
@@ -173,6 +182,15 @@ case $want_jobs in
   0) die "--jobs 必须 >= 1：$want_jobs" ;;
 esac
 jobs=$want_jobs
+
+# 章节级超时（--only / --jobs 路径）：默认 600s；0 = 关闭；非法值告警后回落默认。
+section_timeout=${VUNA_TEST_SECTION_TIMEOUT:-600}
+case $section_timeout in
+  '' | *[!0-9]*)
+    warn "VUNA_TEST_SECTION_TIMEOUT 不是整数秒，使用默认 600：$section_timeout"
+    section_timeout=600
+    ;;
+esac
 
 if [ -n "${VUNA_REPO:-}" ] && [ ! -d "$VUNA_REPO" ]; then
   die "VUNA_REPO 不是目录：$VUNA_REPO"
@@ -473,18 +491,6 @@ select_parts() { # tmpdir
   done <"$tmpdir/index.tsv"
 }
 
-compose_selected() { # tmpdir
-  local tmpdir=$1 out=$1/selected.sh idx
-  : >"$out"
-  cat "$tmpdir/preamble.sh" >>"$out"
-  for idx in "${selected[@]}"; do
-    printf '\n' >>"$out"
-    cat "$tmpdir/parts/$idx.sh" >>"$out"
-  done
-  printf '\n' >>"$out"
-  cat "$tmpdir/tail.sh" >>"$out"
-}
-
 if ! WORK_TMP=$(mktemp -d "${TMPDIR:-/tmp}/vuna-run-tests.XXXXXX"); then
   die "mktemp -d 失败"
 fi
@@ -503,20 +509,9 @@ fi
 test_dir=$(dirname "$run_script")
 cd "$test_dir" || die "无法进入测试目录：$test_dir"
 
-if [ "$jobs" -le 1 ]; then
-  compose_selected "$WORK_TMP"
-  warn "只运行 ${#selected[@]}/$SPLIT_COUNT 个章节："
-  for label in "${selected_labels[@]}"; do
-    printf '  %s\n' "$label" >&2
-  done
-  # 不用 exec：保留 trap，退出时清理临时脚本目录。
-  "${BASH:-bash}" "$WORK_TMP/selected.sh"
-  status=$?
-  exit "$status"
-fi
-
-# ---- 并行模式（--jobs N）：每个章节 = preamble + 该章节 + 结尾 summary，
-# 各自在独立临时目录（$tmp）里跑；日志按章节顺序回放，便于定位失败。
+# ---- 章节切片执行（--only / --jobs）：每个章节 = preamble + 该章节 + 结尾 summary，
+# 各自在独立临时目录（$tmp）里跑（jobs=1 时顺序跑）；日志按章节顺序回放，便于定位失败。
+# 每章节单独加超时（section_timeout），超时计 FAIL 并继续跑其余章节。
 compose_one() { # tmpdir idx
   local tmpdir=$1 idx=$2 out=$1/job-$idx.sh
   cat "$tmpdir/preamble.sh" >"$out"
@@ -526,25 +521,54 @@ compose_one() { # tmpdir idx
   cat "$tmpdir/tail.sh" >>"$out"
 }
 
-warn "并行运行 ${#selected[@]}/$SPLIT_COUNT 个章节（--jobs $jobs）："
-for label in "${selected_labels[@]}"; do
-  printf '  %s\n' "$label" >&2
-done
-
-running=0
-for idx in "${selected[@]}"; do
-  compose_one "$WORK_TMP" "$idx"
-  (
-    "${BASH:-bash}" "$WORK_TMP/job-$idx.sh" >"$WORK_TMP/out-$idx.log" 2>&1
-    printf '%s\n' "$?" >"$WORK_TMP/rc-$idx"
-  ) &
-  running=$((running + 1))
-  if [ "$running" -ge "$jobs" ]; then
-    wait -n || true
-    running=$((running - 1))
+run_section() { # idx label
+  local idx=$1 label=$2 out=$WORK_TMP/out-$idx.log rc
+  if [ "$section_timeout" -gt 0 ] && command -v timeout >/dev/null 2>&1; then
+    timeout -s TERM -k 10 "$section_timeout" "${BASH:-bash}" "$WORK_TMP/job-$idx.sh" >"$out" 2>&1
+  else
+    "${BASH:-bash}" "$WORK_TMP/job-$idx.sh" >"$out" 2>&1
   fi
-done
-wait
+  rc=$?
+  printf '%s\n' "$rc" >"$WORK_TMP/rc-$idx"
+  if [ "$rc" -eq 124 ] || [ "$rc" -eq 137 ]; then
+    printf 'FAIL: 章节超时（>%ss）：%s（VUNA_TEST_SECTION_TIMEOUT=%s）\n' \
+      "$section_timeout" "$label" "$section_timeout" >>"$out"
+  fi
+}
+
+if [ "$jobs" -le 1 ]; then
+  warn "只运行 ${#selected[@]}/$SPLIT_COUNT 个章节："
+  for label in "${selected_labels[@]}"; do
+    printf '  %s\n' "$label" >&2
+  done
+  i=0
+  for idx in "${selected[@]}"; do
+    compose_one "$WORK_TMP" "$idx"
+    run_section "$idx" "${selected_labels[$i]}"
+    i=$((i + 1))
+  done
+else
+  warn "并行运行 ${#selected[@]}/$SPLIT_COUNT 个章节（--jobs $jobs）："
+  for label in "${selected_labels[@]}"; do
+    printf '  %s\n' "$label" >&2
+  done
+
+  running=0
+  i=0
+  for idx in "${selected[@]}"; do
+    compose_one "$WORK_TMP" "$idx"
+    (
+      run_section "$idx" "${selected_labels[$i]}"
+    ) &
+    i=$((i + 1))
+    running=$((running + 1))
+    if [ "$running" -ge "$jobs" ]; then
+      wait -n || true
+      running=$((running - 1))
+    fi
+  done
+  wait
+fi
 
 total_pass=0
 total_fail=0

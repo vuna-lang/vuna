@@ -60,7 +60,9 @@ module Vuna.Compiler.Frontend.Ast
   , XTypeAll
   , clausesFor
   , ctorArity
+  , ctorDisplayName
   , ctorName
+  , ctorShortName
   , ctorSpan
   , ctorType
   , ctorsOf
@@ -78,6 +80,15 @@ module Vuna.Compiler.Frontend.Ast
   , funArity
   , holeNameOf
   , isHoleName
+  , isInternalSyntaxName
+  , isListConsSyntax
+  , isListNilSyntax
+  , isOverCtorName
+  , listConsSyntax
+  , listNilSyntax
+  , overCtorName
+  , overCtorShort
+  , overCtorTargets
   , patSpan
   , qtyIsZero
   , topNames
@@ -336,6 +347,22 @@ funArity name decls = case clausesFor decls name of
 ctorName : Ctor -> String
 ctorName (Ctor name ty arity _) = name
 
+-- canonical 构造子名的最后一段（短名）。data 构造子的 canonical 形如
+-- `Module.Data.Ctor`（entry 文件是 `Data.Ctor`），短名用于族内查找/OCaml 名字/诊断。
+-- | 自动补注（M41 新增导出）：ctorShortName。
+ctorShortName : String -> String
+ctorShortName name = secondOf (splitLastDot (splitOnDot name))
+
+-- 用户可见的构造子名：`FamilyShort.Ctor`（单段名原样返回）。
+-- 不用完整的 `Module.Data.Ctor`：那会把模块路径泄漏进诊断。
+-- | 自动补注（M41 新增导出）：ctorDisplayName。
+ctorDisplayName : String -> String
+ctorDisplayName name = case splitLastDot (splitOnDot name) of
+  Pair [] base => base
+  Pair revPrefix base => case reverse revPrefix of
+    [] => base
+    fam :: rest => "${fam}.${base}"
+
 ctorType : Ctor -> Expr
 ctorType (Ctor name ty arity _) = ty
 
@@ -420,3 +447,77 @@ holeNamed name = case strUnpack name of
 -- 洞的显示名：`_` → ""（匿名）；`?name` → "?name"。
 holeNameOf : String -> String
 holeNameOf name = if holeNamed name then name else ""
+
+-- ---------------------------------------------------------------
+-- M41：Loader → Elab 的内部引用编码
+-- ---------------------------------------------------------------
+-- 与 `?hole` 同一先例：不新增 AST 构造子，用保留名编码，Fmt/Lint/Doc/Index 等
+-- parse 阶段的结构遍历因此零改动（这些名字只在 Loader 之后出现，且不参与用户符号）。
+--   `@vuna@ctor@<短名>@<候选 canonical 1>@<候选 canonical 2>...`
+-- | 自动补注（M41 新增导出）：internalNamePrefix。
+internalNamePrefix : String
+internalNamePrefix = "@vuna@"
+
+-- | 自动补注（M41 新增导出）：overCtorPrefix。
+overCtorPrefix : String
+overCtorPrefix = "@vuna@ctor@"
+
+-- | 自动补注（M41 新增导出）：isInternalSyntaxName。
+isInternalSyntaxName : String -> Bool
+isInternalSyntaxName name = startsWith internalNamePrefix name
+
+-- | 自动补注（M41 新增导出）：dropNChars。
+dropNChars : Int -> List Int -> List Int
+dropNChars n xs = if n <= 0 then xs
+else case xs of
+  [] => []
+  _ :: rest => dropNChars (n - 1) rest
+
+-- | 自动补注（M41 新增导出）：dropNamePrefix。
+dropNamePrefix : String -> String -> String
+dropNamePrefix p name =
+  if startsWith p name then strPack (dropNChars (strLength p) (strUnpack name)) else name
+
+-- | 自动补注（M41 新增导出）：joinWithAt。
+joinWithAt : List String -> String
+joinWithAt [] = ""
+joinWithAt ([x]) = x
+joinWithAt (x :: rest) = "${x}@${joinWithAt rest}"
+
+-- | 自动补注（M41 新增导出）：overCtorName。
+overCtorName : String -> List String -> String
+overCtorName short targets = "${overCtorPrefix}${short}@${joinWithAt targets}"
+
+-- | 自动补注（M41 新增导出）：overCtorShort。
+overCtorShort : String -> String
+overCtorShort name = case splitOnChar 64 (dropNamePrefix overCtorPrefix name) of
+  [] => ""
+  s :: rest => s
+
+-- | 自动补注（M41 新增导出）：overCtorTargets。
+overCtorTargets : String -> List String
+overCtorTargets name = case splitOnChar 64 (dropNamePrefix overCtorPrefix name) of
+  [] => []
+  s :: rest => rest
+
+-- | 自动补注（M41 新增导出）：isOverCtorName。
+isOverCtorName : String -> Bool
+isOverCtorName name = startsWith overCtorPrefix name
+
+-- M41：列表字面量的保留名（parser 产出；Loader 原样放行；Elab 按期望族的 Nil/Cons
+-- 通用展开）。不再借裸 `Nil`/`Cons` 走构造子名字解析。
+-- | 自动补注（M41 新增导出）：listNilSyntax。
+listNilSyntax : String
+listNilSyntax = "@vuna@list@nil"
+
+-- | 自动补注（M41 新增导出）：listConsSyntax。
+listConsSyntax : String
+listConsSyntax = "@vuna@list@cons"
+
+-- | 自动补注（M41 新增导出）：isListNilSyntax。
+isListNilSyntax : String -> Bool
+isListNilSyntax name = name == listNilSyntax
+
+-- | 自动补注（M41 新增导出）：isListConsSyntax。
+isListConsSyntax : String -> Bool
+isListConsSyntax name = name == listConsSyntax

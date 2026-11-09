@@ -59,3 +59,37 @@ modules = [
 # M27：效应能力声明（Base.IO 包装 prim_*）；W10 增加 env/clock（EffEnv/EffClock）。
 [capabilities]
 effects = ["console", "fs", "process", "env", "clock", "unsafe"]
+
+# D28：`unsafe` 的**定义级信任点**（opt-in 严格模式）。声明本 section 后，只有这里
+# 列出的定义可以**直接**引用 `unsafe` 门控的目标（`prim_runIO` / `prim_effectPerform` /
+# `prim_effectHandle` / `prim_cleanup*` / `prim_sched*`，以及 `Base.IO.runIO` 别名）；
+# 其它定义直调即被 `Loader.Resolve` 拒绝。
+#
+# 这是 base 的安全审计面：只列**直接**使用点，传递调用者（如 `withScope` / `finally` /
+# `traceShow` / `awaitTaskLin`）不需要列。新增直接使用点必须同时更新本列表。
+[trust]
+unsafe = [
+  # IO 执行入口本身（`runIO = prim_runIO`）。
+  "Base.IO.runIO",
+  # ST/region 的唯一执行入口（入口处用一次 `runIO`）。
+  "Base.ST.runST",
+  # 调试逃逸：求值期写 stderr（`runIO` + `prim_eprint`）；D34 仍是独立债务项。
+  "Base.Debug.trace",
+  # Layer 1/2：运行时续延核心 + 通用 bracket cleanup 栈。
+  "Base.Eff.sendCore",
+  "Base.Eff.handleCore",
+  "Base.Eff.runIOAnswer",
+  "Base.Eff.bracket",
+  # W9 单线程调度器原语（`prim_sched*`）与纤程内 IO 动作。
+  "Base.EffSched.yieldNow",
+  "Base.EffSched.isCancelled",
+  "Base.EffSched.liftIOEff",
+  "Base.EffSched.newScope",
+  "Base.EffSched.forkTask",
+  "Base.EffSched.awaitTask",
+  "Base.EffSched.cancelTask",
+  "Base.EffSched.cancelScope",
+  "Base.EffSched.scopeWait",
+  "Base.EffSched.scopeWaitTimeout",
+  "Base.EffSched.forkTaskLin"
+]

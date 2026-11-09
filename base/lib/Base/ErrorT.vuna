@@ -12,15 +12,19 @@ import Base.Error
 import Base.IO
 import Base.Monad
 
+-- | IO 之上的 Error 效应 transformer：`ErrorT e a` 包一个 `IO (Error e a)`；固定以 IO 为基座（record 参数的 kind 限制）。
 record ErrorT e a where
   errorTRun : IO (Error e a)
 
+-- | handler：取出底层 `IO (Error e a)` 动作，由 `Base.Error.runError` 折叠。
 runErrorT : ErrorT e a -> IO (Error e a)
 runErrorT t = t.errorTRun
 
+-- | 在本层抛出错误（transformer 版；与 `Base.Error.throwError` 同名，同时使用时写限定名）。
 throwError : e -> ErrorT e a
 throwError e = ErrorT (pure (Base.Error.throwError e))
 
+-- | 在本层恢复错误：成功透传，`MkErr e` 时交给 handler `h`。
 catchError : ErrorT e a -> (e -> ErrorT e a) -> ErrorT e a
 catchError t h =
   ErrorT (t.errorTRun >>= (\r => runError r (\e => (h e).errorTRun) (\a => pure (Base.Error.ok a))))

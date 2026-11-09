@@ -2,12 +2,15 @@ module Vuna.Index
   ( Index(..)
   , ModuleInfo(..)
   , Ref(..)
+  , SourceStat(..)
   , Sym(..)
   , buildIndex
   , findReferences
   , findSymbol
   , impactOf
   , indexModules
+  , indexStatsOf
+  , indexStatsUnchanged
   , listAllSymbols
   , loadOrBuild
   , modBytes
@@ -41,6 +44,9 @@ module Vuna.Index
 -- 缓存设计（`.local/index/`，已 gitignore；M30 起 v2 内容哈希 + 原子写 + 目录锁）：
 --   - `manifest.txt` 首行 `vuna-index 3`，随后每行 `path TAB bytes TAB hash`——
 --     新鲜度判定的唯一依据（内容哈希；不再用 mtime+size，C11）；旧格式全量重建；
+--   - 内存 stat 快照（`indexStatsOf` / `indexStatsUnchanged`，只服务 REPL 会话缓存）：
+--     建立时记下每个源文件的 (path, bytes, mtime, 内容哈希)，复用前只重新 stat 比对，
+--     避免每次都读全部源码算内容哈希；窗口内文件仍回落内容哈希（语义同 Driver/Cache）。
 --   - `modules.txt`  每行 `module TAB pkg TAB path TAB bytes TAB declCount`；
 --   - `symbols.txt`  每行 `module TAB name TAB kind TAB line TAB col TAB sig TAB doc TAB type`；
 --   - `refs.txt`     每行 `module TAB name TAB line TAB col`（引用出现位置）。

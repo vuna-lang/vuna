@@ -10,7 +10,8 @@
 #   1. initialize            → capabilities 全套（textDocumentSync Full / hover /
 #                              completion(trigger ".") / definition / references /
 #                              documentSymbol / formatting / workspaceSymbol /
-#                              codeAction(codeActionKinds=["quickfix"])）
+#                              codeAction(codeActionKinds=["quickfix","refactor.rewrite"]) /
+#                              executeCommand(vuna.fixAllLint)）
 #   2. didOpen（有类型错误） → publishDiagnostics severity=1，range 0-based
 #   3. didChange（改成正确） → 同 uri 的 diagnostics 变成空数组
 #   4. hover（未解洞 `_`）   → 返回目标类型 Type
@@ -38,9 +39,23 @@
 # D. M38 P1c：lint quick fix（textDocument/codeAction）
 #  20. docstring hover（只显示 `-- |`，普通注释不显示，多行保留）
 #  21. 触发 LN_LiteralIfChain 的文本 + 光标 range → CodeAction：kind=quickfix、
-#      title 带规则短名、diagnostics.code 关联、0-based 整行替换 range、newText 是
-#      case 形式、全文档 "fix all lint findings"；context.only 不含 quickfix 或
-#      range 与可修复 finding 不相交时回空数组。
+#      title 带规则短名、内嵌完整诊断（range/severity/source/code/message）、0-based
+#      整行替换 range、newText 是 case 形式、全文档 "fix all lint findings"（C38 起是
+#      Command 形式）；context.only 不含 quickfix 或 range 与可修复 finding 不相交时回空数组。
+#
+# E. C38 codeAction 高 ROI（case split + command 形式）
+#  30. 洞 + 上下文 data / record binder → `refactor.rewrite` 的 `case split on <name>`：
+#      构造子顺序/参数通配（Box _）/隐式构造子参数不进模式（MkH => _）/分支缩进 =
+#      洞行缩进 + 2；base 类型经 Prelude 解析（Bool → False/True）；函数类型 binder、
+#      无洞行、context.only 不含 refactor 时不给动作；record 单分支（record 模式、字段全
+#      `_`，本模块 / 参数化 record）；多参数 data 的应用类型文本（`Either Int Bool`，
+#      show 成左结合全括号）也能解析。
+#  31. fix all 的 Command 形式：codeAction 带 `command`、initialize 声明
+#      executeCommandProvider；workspace/executeCommand("vuna.fixAllLint") 回 result
+#      null 并发 workspace/applyEdit 整文档替换；未知 command → -32602。
+#  32. case split 的限定 import（构造子/record 类型名写 `Dep.`）与命名洞 `?goal`（编辑
+#      range 覆盖整个 token）；axiom（不透明、无右侧可展开）与索引族（parse 级不知道索引
+#      约束，枚举会生成不可达分支）不给动作（安全降级）。
 #
 # 只依赖 POSIX sh / awk / sed 与传入的 vuna 可执行文件。
 set -u
@@ -305,10 +320,12 @@ check_contains "initialize 声明 completionProvider" "$init" '"completionProvid
 check_contains 'completion triggerCharacters = ["."]' "$init" '"triggerCharacters":["."]'
 check_contains "initialize 声明 definitionProvider" "$init" '"definitionProvider":true'
 check_contains "initialize 声明 referencesProvider" "$init" '"referencesProvider":true'
+check_contains "initialize 声明 renameProvider(prepareProvider)" "$init" '"renameProvider":{"prepareProvider":true}'
 check_contains "initialize 声明 documentSymbolProvider" "$init" '"documentSymbolProvider":true'
 check_contains "initialize 声明 documentFormattingProvider" "$init" '"documentFormattingProvider":true'
 check_contains "initialize 声明 workspaceSymbolProvider" "$init" '"workspaceSymbolProvider":true'
-check_contains "initialize 声明 codeActionProvider(codeActionKinds=[quickfix])" "$init" '"codeActionProvider":{"codeActionKinds":["quickfix"]}'
+check_contains "initialize 声明 codeActionProvider(codeActionKinds=[quickfix,refactor.rewrite])" "$init" '"codeActionProvider":{"codeActionKinds":["quickfix","refactor.rewrite"]}'
+check_contains "initialize 声明 executeCommandProvider(vuna.fixAllLint)" "$init" '"executeCommandProvider":{"commands":["vuna.fixAllLint"]}'
 
 # ---- 2) 含 import 的模块类型错误诊断（不再跳过）+ 0-based 范围 ----
 diag_open=$(frame_at 2)
@@ -520,10 +537,11 @@ check_contains "doc hover 显示 docstring" "$dochover_out" "Helper docs"
 check_contains "doc hover 保留多行" "$dochover_out" "second line"
 check_not_contains "doc hover 不含普通注释" "$dochover_out" "ordinary note"
 
-# ---- 21) codeAction：lint quick fix（M38 P1c）----
-# Linty.vuna 的 literal-if-chain：Edit 行范围 1-based 5..7（整行替换）。
-# 请求 range 用 LSP 的 0-based 4..6，与 Edit 相交 → 1 条单条 quickfix + 1 条 fix all。
-# 断言 0-based 整行替换 range = (4,0)..(7,0)（末端是下一行行首，不吞第 8 行）。
+# ---- 21) codeAction：lint quick fix（M38 P1c；C38 起 fix all 走 Command 形式）----
+# Linty.vuna 的 literal-if-chain：Edit 行范围 1-based 4..7（整行替换；if 分派直接提升成 clause）。
+# 请求 range 用 LSP 的 0-based 4..6，与 Edit 相交 → 1 条单条 quickfix + 1 条 fix all
+# （`Command`，不带内嵌 edit）。断言 0-based 整行替换 range = (3,0)..(7,0)
+# （末端是下一行行首，不吞第 8 行）。
 ca_open='{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"'"$linty_uri"'","languageId":"vuna","version":1,"text":"module Linty where\n\nnameArity : String -> Int\nnameArity name =\n  if name == \"+\" then 2\n  else if name == \"-\" then 2\n  else 0\n"}}}'
 ca_req='{"jsonrpc":"2.0","id":2,"method":"textDocument/codeAction","params":{"textDocument":{"uri":"'"$linty_uri"'"},"range":{"start":{"line":4,"character":0},"end":{"line":6,"character":0}},"context":{"diagnostics":[]}}}'
 ca_only='{"jsonrpc":"2.0","id":3,"method":"textDocument/codeAction","params":{"textDocument":{"uri":"'"$linty_uri"'"},"range":{"start":{"line":4,"character":0},"end":{"line":6,"character":0}},"context":{"diagnostics":[],"only":["source.organizeImports"]}}}'
@@ -543,12 +561,18 @@ check_eq "codeAction 会话退出码 0" "0" "$ca_code"
 check_contains "codeAction 回 id 2" "$ca_out" '"id":2'
 check_contains "codeAction kind=quickfix" "$ca_out" '"kind":"quickfix"'
 check_contains "codeAction title 带规则短名" "$ca_out" '"title":"fix: literal-if-chain"'
-check_contains "codeAction 关联诊断 code" "$ca_out" '"diagnostics":[{"code":"LN_LiteralIfChain"}]'
+# C38 收窄：内嵌诊断从「只带 code」升级为完整诊断（与 publishDiagnostics 同一条 JSON：
+# range / severity / source / code / message），客户端仍可按 code 关联。
+check_contains "codeAction 内嵌诊断带 0-based range" "$ca_out" '"diagnostics":[{"range":'
+check_contains "codeAction 内嵌诊断带 severity/source/code/message" "$ca_out" \
+  '"severity":2,"source":"vuna","code":"LN_LiteralIfChain","message":"if dispatch on'
 check_contains "codeAction 编辑按 uri 分组" "$ca_out" '"changes":{"'"$linty_uri"'":[{'
-check_contains "codeAction 是 0-based 整行替换 range（4..7）" "$ca_out" \
-  '"range":{"start":{"line":4,"character":0},"end":{"line":7,"character":0}}'
-check_contains "codeAction newText 改写为 case" "$ca_out" 'case name of'
+check_contains "codeAction 是 0-based 整行替换 range（3..7）" "$ca_out" \
+  '"range":{"start":{"line":3,"character":0},"end":{"line":7,"character":0}}'
+check_contains "codeAction newText 提升为 clause" "$ca_out" 'nameArity \"+\" = 2'
 check_contains "codeAction 含全文档 fix all" "$ca_out" '"title":"fix all lint findings"'
+check_contains "fix all 走 Command 形式（无内嵌 edit）" "$ca_out" \
+  '"command":{"title":"fix all lint findings","command":"vuna.fixAllLint"'
 check_contains "context.only 不含 quickfix → 空数组" "$ca_out" '"id":3,"result":[]'
 check_contains "range 无相交可修复 finding → 空数组" "$ca_out" '"id":4,"result":[]'
 
@@ -689,6 +713,43 @@ check_contains "遮蔽：body n 指向 let binder" "$local_out" \
 check_contains "遮蔽：值 n 指向函数参数" "$local_out" \
   '"id":10,"result":[{"uri":"file://'"$tmp"'/localws/lib/Local.vuna","range":{"start":{"line":9,"character":10}'
 
+# ---- 33) C45 Pi / 类型级 binder hover：顶层签名里的 `(f : A) -> B` binder 返回 domain 类型 ----
+# 回归点：Pi 类型住在签名里，而 hover 局部绑定原先只 walk pats + body、从不 walk 签名类型表达式，
+# 所以签名 Pi binder 是死代码（hover 返回 null）。修法：`findDeclBind` 先把 `DSig` 的完整签名
+# （`declSigType`，非 `arrowDomains`——后者丢 binder 名）喂给 `walkExpr`，其 `EPi` 分支按
+# `piNamePos` 命中 binder 名、类型取 domain。这里 hover 签名 binder 本体 + 带 `where` 的签名。
+mkdir -p "$tmp/piws/lib"
+printf '[package]\nname = "piws"\n\n[dependencies]\nvuna-base = "%s/base"\n' "$repo" >"$tmp/piws/vuna.toml"
+cat >"$tmp/piws/lib/PiTest.vuna" <<'VEOF'
+module PiTest where
+
+apply : (f : Int -> Int) -> Int
+apply f = f 0
+
+apply2 : (fn : Int -> Int) -> Int
+apply2 fn = fn 0
+  where zero = 0
+VEOF
+pi_uri="file://$tmp/piws/lib/PiTest.vuna"
+pi_text='module PiTest where\n\napply : (f : Int -> Int) -> Int\napply f = f 0\n\napply2 : (fn : Int -> Int) -> Int\napply2 fn = fn 0\n  where zero = 0\n'
+{
+  frame_line '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{}}}'
+  frame_line '{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"'"$pi_uri"'","languageId":"vuna","version":1,"text":"'"$pi_text"'"}}}'
+  # line2 char9 = `apply` 签名 `(f : Int -> Int)` 的 binder `f`（单字符名，紧跟 `(`）
+  frame_line '{"jsonrpc":"2.0","id":2,"method":"textDocument/hover","params":{"textDocument":{"uri":"'"$pi_uri"'"},"position":{"line":2,"character":9}}}'
+  # line5 char10 = `apply2`（带 where）签名 binder `fn`（两字符名，起点在 `(` 后一位）
+  frame_line '{"jsonrpc":"2.0","id":3,"method":"textDocument/hover","params":{"textDocument":{"uri":"'"$pi_uri"'"},"position":{"line":5,"character":10}}}'
+  frame_line '{"jsonrpc":"2.0","id":9,"method":"shutdown","params":null}'
+  frame_line '{"jsonrpc":"2.0","method":"exit","params":null}'
+} | "$VUNA" lsp >"$tmp/pihover.out" 2>/dev/null
+pi_out=$(tr -d '\r' <"$tmp/pihover.out")
+check_contains "Pi binder hover 回 id 2" "$pi_out" '"id":2'
+check_contains "Pi binder hover 给 domain 类型" "$pi_out" 'f : Int -> Int'
+check_contains "Pi binder hover 标种类" "$pi_out" 'local binding (Pi)'
+check_contains "Pi binder hover range 落在 binder f" "$pi_out" \
+  '"range":{"start":{"line":2,"character":9},"end":{"line":2,"character":10}}'
+check_contains "带 where 的签名 Pi binder hover（fn）" "$pi_out" 'fn : Int -> Int'
+
 # ---- 28) M40 洞：未解 `_` 的目标+上下文；命名洞 `?name` 的名字/目标/上下文 ----
 mkdir -p "$tmp/holews/lib"
 printf '[package]\nname = "holews"\n\n[dependencies]\nvuna-base = "%s/base"\n' "$repo" >"$tmp/holews/vuna.toml"
@@ -732,6 +793,335 @@ check_contains "命名洞 hover 显示 ?goal : 目标" "$hole_out" '?goal : Int'
 check_contains "命名洞 hover 给上下文" "$hole_out" '`m` : Int'
 check_contains "命名洞 range 覆盖整个 ?goal" "$hole_out" \
   '"range":{"start":{"line":5,"character":5},"end":{"line":5,"character":10}}'
+
+# ---- 29) C38 rename：顶层函数 / 局部绑定（遮蔽）/ 记录字段 / prepareRename / 拒绝 ----
+# 夹具覆盖三条路径：
+#   - topFn：签名行 + 定义子句 + 使用点（顶层函数，同一文件）；
+#   - shadow n：参数改名时只动参数 binder 与 let 值里的 n，**不碰** let binder / body n；
+#   - Point.px：字段声明 + `p.px` 字段访问 + 记录字面量标签。
+# 另验证 prepareRename（顶层 / 局部）、关键字与 base 标准库（Int）改名回 null。
+mkdir -p "$tmp/renamews/lib"
+printf '[package]\nname = "renamews"\n\n[dependencies]\nvuna-base = "%s/base"\n' "$repo" >"$tmp/renamews/vuna.toml"
+cat >"$tmp/renamews/lib/Rename.vuna" <<'VEOF'
+module Rename where
+
+topFn : Int -> Int
+topFn n = n + 1
+
+useTop : Int
+useTop = topFn 1
+
+shadow : Int -> Int
+shadow n =
+  let n = n + 1
+  in n
+
+record Point where
+  px : Int
+  py : Int
+
+moveX : Point -> Int
+moveX p = p.px
+
+mk : Int -> Point
+mk v = Point { px = v, py = 0 }
+VEOF
+rename_uri="file://$tmp/renamews/lib/Rename.vuna"
+rename_text='module Rename where\n\ntopFn : Int -> Int\ntopFn n = n + 1\n\nuseTop : Int\nuseTop = topFn 1\n\nshadow : Int -> Int\nshadow n =\n  let n = n + 1\n  in n\n\nrecord Point where\n  px : Int\n  py : Int\n\nmoveX : Point -> Int\nmoveX p = p.px\n\nmk : Int -> Point\nmk v = Point { px = v, py = 0 }\n'
+{
+  frame_line '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{}}}'
+  frame_line '{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"'"$rename_uri"'","languageId":"vuna","version":1,"text":"'"$rename_text"'"}}}'
+  frame_line '{"jsonrpc":"2.0","id":2,"method":"textDocument/rename","params":{"textDocument":{"uri":"'"$rename_uri"'"},"position":{"line":2,"character":0},"newName":"renamedTop"}}'
+  frame_line '{"jsonrpc":"2.0","id":3,"method":"textDocument/rename","params":{"textDocument":{"uri":"'"$rename_uri"'"},"position":{"line":9,"character":7},"newName":"m"}}'
+  frame_line '{"jsonrpc":"2.0","id":4,"method":"textDocument/rename","params":{"textDocument":{"uri":"'"$rename_uri"'"},"position":{"line":14,"character":2},"newName":"xcoord"}}'
+  frame_line '{"jsonrpc":"2.0","id":5,"method":"textDocument/prepareRename","params":{"textDocument":{"uri":"'"$rename_uri"'"},"position":{"line":2,"character":0}}}'
+  frame_line '{"jsonrpc":"2.0","id":6,"method":"textDocument/rename","params":{"textDocument":{"uri":"'"$rename_uri"'"},"position":{"line":0,"character":16},"newName":"x"}}'
+  frame_line '{"jsonrpc":"2.0","id":7,"method":"textDocument/rename","params":{"textDocument":{"uri":"'"$rename_uri"'"},"position":{"line":2,"character":8},"newName":"x"}}'
+  frame_line '{"jsonrpc":"2.0","id":8,"method":"textDocument/prepareRename","params":{"textDocument":{"uri":"'"$rename_uri"'"},"position":{"line":9,"character":7}}}'
+  frame_line '{"jsonrpc":"2.0","id":9,"method":"shutdown","params":null}'
+  frame_line '{"jsonrpc":"2.0","method":"exit","params":null}'
+} | "$VUNA" lsp >"$tmp/rename.out" 2>/dev/null
+rename_code=$?
+rename_out=$(tr -d '\r' <"$tmp/rename.out")
+check_eq "rename 会话退出码 0" "0" "$rename_code"
+check_contains "rename 回 id 2" "$rename_out" '"id":2'
+check_contains "rename 结果是 WorkspaceEdit（changes 按 uri 分组）" "$rename_out" \
+  '"result":{"changes":{"'"$rename_uri"'":[{'
+check_contains "顶层函数 rename：签名行" "$rename_out" \
+  '{"range":{"start":{"line":2,"character":0},"end":{"line":2,"character":5}},"newText":"renamedTop"}'
+check_contains "顶层函数 rename：定义子句" "$rename_out" \
+  '{"range":{"start":{"line":3,"character":0},"end":{"line":3,"character":5}},"newText":"renamedTop"}'
+check_contains "顶层函数 rename：使用点" "$rename_out" \
+  '{"range":{"start":{"line":6,"character":9},"end":{"line":6,"character":14}},"newText":"renamedTop"}'
+top_edits=$(printf '%s' "$rename_out" | grep -o '"newText":"renamedTop"' | wc -l | tr -d ' ')
+check_eq "顶层函数 rename 恰好 3 条 TextEdit" "3" "$top_edits"
+check_contains "局部 rename 回 id 3" "$rename_out" '"id":3'
+check_contains "局部 rename：参数 binder" "$rename_out" \
+  '{"range":{"start":{"line":9,"character":7},"end":{"line":9,"character":8}},"newText":"m"}'
+check_contains "局部 rename：let 值里的 n（参数）" "$rename_out" \
+  '{"range":{"start":{"line":10,"character":10},"end":{"line":10,"character":11}},"newText":"m"}'
+local_edits=$(printf '%s' "$rename_out" | grep -o '"newText":"m"' | wc -l | tr -d ' ')
+check_eq "局部 rename 只含参数两处（不碰 let binder / body）" "2" "$local_edits"
+check_not_contains "局部 rename 不改 let binder" "$rename_out" \
+  '{"range":{"start":{"line":10,"character":6},"end":{"line":10,"character":7}},"newText":"m"}'
+check_not_contains "局部 rename 不改 body n" "$rename_out" \
+  '{"range":{"start":{"line":11,"character":5},"end":{"line":11,"character":6}},"newText":"m"}'
+check_contains "记录字段 rename 回 id 4" "$rename_out" '"id":4'
+check_contains "记录字段 rename：字段声明" "$rename_out" \
+  '{"range":{"start":{"line":14,"character":2},"end":{"line":14,"character":4}},"newText":"xcoord"}'
+check_contains "记录字段 rename：字段访问 p.px" "$rename_out" \
+  '{"range":{"start":{"line":18,"character":12},"end":{"line":18,"character":14}},"newText":"xcoord"}'
+check_contains "记录字段 rename：记录字面量标签" "$rename_out" \
+  '{"range":{"start":{"line":21,"character":15},"end":{"line":21,"character":17}},"newText":"xcoord"}'
+field_edits=$(printf '%s' "$rename_out" | grep -o '"newText":"xcoord"' | wc -l | tr -d ' ')
+check_eq "记录字段 rename 恰好 3 条 TextEdit（同名 py 不动）" "3" "$field_edits"
+check_contains "prepareRename 回 id 5" "$rename_out" '"id":5'
+check_contains "prepareRename 给光标 token 范围与占位名" "$rename_out" \
+  '"id":5,"result":{"range":{"start":{"line":2,"character":0},"end":{"line":2,"character":5}},"placeholder":"topFn"}'
+check_contains "prepareRename 也支持局部绑定" "$rename_out" \
+  '"id":8,"result":{"range":{"start":{"line":9,"character":7},"end":{"line":9,"character":8}},"placeholder":"n"}'
+check_contains "rename 关键字 → result null" "$rename_out" '"id":6,"result":null'
+check_contains "rename base 标准库（Int）→ result null" "$rename_out" '"id":7,"result":null'
+
+# ---- 30) C38 case split：光标在洞上 + 上下文 data / record binder → refactor.rewrite 动作 ----
+# 夹具覆盖：本模块 data（Color 三分支 / Box 带参数 / H 隐式构造子参数）、record（Pt 单
+# 分支、Pairing 参数化单分支）、多参数 data（Either：应用类型文本在 show 里是左结合全括号
+# `((Either Int) Bool)`）、base 类型（Bool → False/True，经隐式 Prelude 重导出）、洞在缩进
+# 行（分支缩进 = 行缩进 + 2）、函数类型 binder 不给动作、无洞行不给动作、context.only 过滤。
+# 位置均为 LSP 0-based：pick 洞 line 14 char 11、unbox line 17 char 11、wrap line 21
+# char 2、apply line 24 char 10、hval line 27 char 9、still line 30 char 11；
+# rgb line 45 char 8、either line 48 char 11、pairof line 51 char 11。
+mkdir -p "$tmp/splitws/lib"
+printf '[package]\nname = "splitws"\n\n[dependencies]\nvuna-base = "%s/base"\n' "$repo" >"$tmp/splitws/vuna.toml"
+cat >"$tmp/splitws/lib/Split.vuna" <<'VEOF'
+module Split where
+
+data Color : Type where
+  Red : Color
+  Green : Color
+  Blue : Color
+
+data Box a : Type where
+  Box : a -> Box a
+
+data H : Type where
+  MkH : {n : Int} -> H
+
+pick : Color -> Bool -> Int
+pick c b = _
+
+unbox : Box Int -> Int
+unbox bx = _
+
+wrap : Color -> Int
+wrap c =
+  _
+
+apply : (Int -> Int) -> Int
+apply f = _
+
+hval : H -> Int
+hval h = _
+
+still : Color -> Int
+still c = 0
+
+record Pt where
+  ptX : Int
+  ptY : Bool
+
+record Pairing a b where
+  left : a
+  right : b
+
+data Either a b : Type where
+  Left : a -> Either a b
+  Right : b -> Either a b
+
+rgb : Pt -> Int
+rgb r = _
+
+either : Either Int Bool -> Int
+either e = _
+
+pairof : Pairing Int Bool -> Int
+pairof p = _
+VEOF
+split_uri="file://$tmp/splitws/lib/Split.vuna"
+split_text='module Split where\n\ndata Color : Type where\n  Red : Color\n  Green : Color\n  Blue : Color\n\ndata Box a : Type where\n  Box : a -> Box a\n\ndata H : Type where\n  MkH : {n : Int} -> H\n\npick : Color -> Bool -> Int\npick c b = _\n\nunbox : Box Int -> Int\nunbox bx = _\n\nwrap : Color -> Int\nwrap c =\n  _\n\napply : (Int -> Int) -> Int\napply f = _\n\nhval : H -> Int\nhval h = _\n\nstill : Color -> Int\nstill c = 0\n\nrecord Pt where\n  ptX : Int\n  ptY : Bool\n\nrecord Pairing a b where\n  left : a\n  right : b\n\ndata Either a b : Type where\n  Left : a -> Either a b\n  Right : b -> Either a b\n\nrgb : Pt -> Int\nrgb r = _\n\neither : Either Int Bool -> Int\neither e = _\n\npairof : Pairing Int Bool -> Int\npairof p = _\n'
+
+# 从会话输出里取指定 id 的响应帧（正文是单行 JSON）。
+lsp_frame_id() { # file id
+  tr -d '\r' <"$1" | sed 's/Content-Length: /\nContent-Length: /g' | grep -F "\"id\":$2," | head -n 1
+}
+
+{
+  frame_line '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{}}}'
+  frame_line '{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"'"$split_uri"'","languageId":"vuna","version":1,"text":"'"$split_text"'"}}}'
+  frame_line '{"jsonrpc":"2.0","id":2,"method":"textDocument/codeAction","params":{"textDocument":{"uri":"'"$split_uri"'"},"range":{"start":{"line":14,"character":11},"end":{"line":14,"character":11}},"context":{"diagnostics":[]}}}'
+  frame_line '{"jsonrpc":"2.0","id":3,"method":"textDocument/codeAction","params":{"textDocument":{"uri":"'"$split_uri"'"},"range":{"start":{"line":17,"character":11},"end":{"line":17,"character":11}},"context":{"diagnostics":[]}}}'
+  frame_line '{"jsonrpc":"2.0","id":4,"method":"textDocument/codeAction","params":{"textDocument":{"uri":"'"$split_uri"'"},"range":{"start":{"line":21,"character":2},"end":{"line":21,"character":2}},"context":{"diagnostics":[]}}}'
+  frame_line '{"jsonrpc":"2.0","id":5,"method":"textDocument/codeAction","params":{"textDocument":{"uri":"'"$split_uri"'"},"range":{"start":{"line":24,"character":10},"end":{"line":24,"character":10}},"context":{"diagnostics":[]}}}'
+  frame_line '{"jsonrpc":"2.0","id":6,"method":"textDocument/codeAction","params":{"textDocument":{"uri":"'"$split_uri"'"},"range":{"start":{"line":27,"character":9},"end":{"line":27,"character":9}},"context":{"diagnostics":[]}}}'
+  frame_line '{"jsonrpc":"2.0","id":7,"method":"textDocument/codeAction","params":{"textDocument":{"uri":"'"$split_uri"'"},"range":{"start":{"line":30,"character":11},"end":{"line":30,"character":11}},"context":{"diagnostics":[]}}}'
+  frame_line '{"jsonrpc":"2.0","id":8,"method":"textDocument/codeAction","params":{"textDocument":{"uri":"'"$split_uri"'"},"range":{"start":{"line":14,"character":11},"end":{"line":14,"character":11}},"context":{"diagnostics":[],"only":["refactor"]}}}'
+  frame_line '{"jsonrpc":"2.0","id":9,"method":"textDocument/codeAction","params":{"textDocument":{"uri":"'"$split_uri"'"},"range":{"start":{"line":14,"character":11},"end":{"line":14,"character":11}},"context":{"diagnostics":[],"only":["source.organizeImports"]}}}'
+  frame_line '{"jsonrpc":"2.0","id":10,"method":"textDocument/codeAction","params":{"textDocument":{"uri":"'"$split_uri"'"},"range":{"start":{"line":14,"character":11},"end":{"line":14,"character":11}},"context":{"diagnostics":[],"only":["quickfix"]}}}'
+  frame_line '{"jsonrpc":"2.0","id":12,"method":"textDocument/codeAction","params":{"textDocument":{"uri":"'"$split_uri"'"},"range":{"start":{"line":45,"character":8},"end":{"line":45,"character":8}},"context":{"diagnostics":[]}}}'
+  frame_line '{"jsonrpc":"2.0","id":13,"method":"textDocument/codeAction","params":{"textDocument":{"uri":"'"$split_uri"'"},"range":{"start":{"line":48,"character":11},"end":{"line":48,"character":11}},"context":{"diagnostics":[]}}}'
+  frame_line '{"jsonrpc":"2.0","id":14,"method":"textDocument/codeAction","params":{"textDocument":{"uri":"'"$split_uri"'"},"range":{"start":{"line":51,"character":11},"end":{"line":51,"character":11}},"context":{"diagnostics":[]}}}'
+  frame_line '{"jsonrpc":"2.0","id":11,"method":"shutdown","params":null}'
+  frame_line '{"jsonrpc":"2.0","method":"exit","params":null}'
+} | "$VUNA" lsp >"$tmp/split.out" 2>/dev/null
+split_code=$?
+check_eq "case split 会话退出码 0" "0" "$split_code"
+
+r2=$(lsp_frame_id "$tmp/split.out" 2)
+check_contains "case split 回 id 2" "$r2" '"id":2'
+check_contains "case split: Color binder 一条动作" "$r2" '"title":"case split on c"'
+check_contains "case split: Bool binder 一条动作" "$r2" '"title":"case split on b"'
+check_contains "case split kind=refactor.rewrite" "$r2" '"kind":"refactor.rewrite"'
+check_contains "case split: Color 三分支（源码顺序）+ 2 空格缩进" "$r2" \
+  '"newText":"case c of\n  Red => _\n  Green => _\n  Blue => _"'
+check_contains "case split: Bool 两分支（false/true 源码顺序）" "$r2" \
+  '"newText":"case b of\n  False => _\n  True => _"'
+check_contains "case split 编辑 range 精确覆盖洞 token" "$r2" \
+  '"range":{"start":{"line":14,"character":11},"end":{"line":14,"character":12}}'
+r3=$(lsp_frame_id "$tmp/split.out" 3)
+check_contains "case split: Box 参数用 _ 占位" "$r3" '"newText":"case bx of\n  Box _ => _"'
+r4=$(lsp_frame_id "$tmp/split.out" 4)
+check_contains "case split: 洞在缩进行 → 分支 = 行缩进 + 2" "$r4" \
+  '"newText":"case c of\n    Red => _\n    Green => _\n    Blue => _"'
+r5=$(lsp_frame_id "$tmp/split.out" 5)
+check_contains "函数类型 binder 不给 case split" "$r5" '"id":5,"result":[]'
+r6=$(lsp_frame_id "$tmp/split.out" 6)
+check_contains "case split: 隐式构造子参数不进模式（MkH => _）" "$r6" \
+  '"newText":"case h of\n  MkH => _"'
+r7=$(lsp_frame_id "$tmp/split.out" 7)
+check_contains "无洞行不给 case split" "$r7" '"id":7,"result":[]'
+r8=$(lsp_frame_id "$tmp/split.out" 8)
+check_contains "context.only=[refactor] 仍给 case split" "$r8" '"title":"case split on c"'
+check_not_contains "context.only=[refactor] 不混入 quickfix" "$r8" '"kind":"quickfix"'
+r9=$(lsp_frame_id "$tmp/split.out" 9)
+check_contains "context.only=[source.organizeImports] → 空数组" "$r9" '"id":9,"result":[]'
+r10=$(lsp_frame_id "$tmp/split.out" 10)
+check_contains "context.only=[quickfix] 不给 case split" "$r10" '"id":10,"result":[]'
+# record 是单构造器：一条分支，模式用 record 形式（`Type { 字段 = _, ... }`，字段写全）。
+r12=$(lsp_frame_id "$tmp/split.out" 12)
+check_contains "case split: 本模块 record 单分支（record 模式、字段全 _）" "$r12" \
+  '"newText":"case r of\n  Pt { ptX = _, ptY = _ } => _"'
+r13=$(lsp_frame_id "$tmp/split.out" 13)
+check_contains "case split: 多参数 data 的应用类型文本也能解析（Either）" "$r13" \
+  '"newText":"case e of\n  Left _ => _\n  Right _ => _"'
+r14=$(lsp_frame_id "$tmp/split.out" 14)
+check_contains "case split: 参数化 record 单分支" "$r14" \
+  '"newText":"case p of\n  Pairing { left = _, right = _ } => _"'
+
+# ---- 31) C38 command 形式：fix all → workspace/executeCommand → workspace/applyEdit ----
+# 服务器不写文件：收到 `vuna.fixAllLint` 后回 executeCommand result null，并发一条
+# `workspace/applyEdit` 请求（客户端应用整文档替换；客户端响应按无 method 帧忽略）。
+{
+  frame_line '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{}}}'
+  frame_line "$ca_open"
+  frame_line "$ca_req"
+  frame_line '{"jsonrpc":"2.0","id":3,"method":"workspace/executeCommand","params":{"command":"vuna.fixAllLint","arguments":["'"$linty_uri"'"]}}'
+  frame_line '{"jsonrpc":"2.0","id":4,"method":"workspace/executeCommand","params":{"command":"vuna.nope","arguments":[]}}'
+  frame_line '{"jsonrpc":"2.0","id":5,"method":"shutdown","params":null}'
+  frame_line '{"jsonrpc":"2.0","method":"exit","params":null}'
+} | "$VUNA" lsp >"$tmp/fixcmd.out" 2>/dev/null
+fixcmd_code=$?
+fixcmd_out=$(tr -d '\r' <"$tmp/fixcmd.out")
+check_eq "command 会话退出码 0" "0" "$fixcmd_code"
+check_contains "fix all codeAction 带（且只带）command 字段" "$fixcmd_out" \
+  '"command":{"title":"fix all lint findings","command":"vuna.fixAllLint","arguments":["'"$linty_uri"'"]}'
+check_contains "executeCommand 回 id 3 result null" "$fixcmd_out" '"id":3,"result":null'
+check_contains "服务器发 workspace/applyEdit 请求" "$fixcmd_out" '"method":"workspace/applyEdit"'
+check_contains "applyEdit 请求 id 带 vuna-apply 前缀" "$fixcmd_out" '"id":"vuna-apply-'
+check_contains "applyEdit 是整文档替换（0..7 行）" "$fixcmd_out" \
+  '"range":{"start":{"line":0,"character":0},"end":{"line":7,"character":0}}'
+check_contains "applyEdit newText 是 fixLoop 收敛结果" "$fixcmd_out" 'nameArity \"+\" = 2'
+check_contains "未知 command → JSON-RPC -32602" "$fixcmd_out" '"code":-32602'
+check_contains "未知 command 带命令名" "$fixcmd_out" 'unknown command: vuna.nope'
+
+# ---- 32) C38 case split 的限定 import、命名洞与安全降级 ----
+# `import qualified Dep` 时构造子 / record 类型名必须写限定名（Dep.Red / Dep.Point）；
+# 命名洞 `?goal` 的编辑 range 覆盖整个 token（不是 `_` 的零宽 span）。
+# 降级：axiom 是不透明类型（没有「别名右侧」可展开）→ 空数组；索引族的索引约束是 parse 级
+# 拿不到的（枚举全部构造子会写出精化器拒绝的不可达分支）→ 跳过该 binder（同一个洞的其它
+# 可分裂 binder，如 `n : Nat`，仍正常给动作）。
+mkdir -p "$tmp/splitqws/lib"
+printf '[package]\nname = "splitqws"\n\n[dependencies]\nvuna-base = "%s/base"\n' "$repo" >"$tmp/splitqws/vuna.toml"
+cat >"$tmp/splitqws/lib/Dep.vuna" <<'VEOF'
+module Dep where
+
+data Color : Type where
+  Red : Color
+  Green : Color
+
+record Point where
+  px : Int
+  py : Int
+VEOF
+cat >"$tmp/splitqws/lib/Q.vuna" <<'VEOF'
+module Q where
+
+import qualified Dep
+
+pick : Dep.Color -> Int
+pick c = _
+
+named : Dep.Color -> Int
+named c = ?goal
+
+pickR : Dep.Point -> Int
+pickR p = _
+
+axiom Opaque : Type
+
+opq : Opaque -> Int
+opq o = _
+
+data Nat : Type where
+  Zero : Nat
+  Succ : Nat -> Nat
+
+data Vec : Type -> Nat -> Type where
+  VNil : (a : Type) -> Vec a Zero
+  VCons : (a : Type) -> (n : Nat) -> a -> Vec a n -> Vec a (Succ n)
+
+vhead : (a : Type) -> (n : Nat) -> Vec a (Succ n) -> Int
+vhead a n xs = _
+VEOF
+q_uri="file://$tmp/splitqws/lib/Q.vuna"
+q_text='module Q where\n\nimport qualified Dep\n\npick : Dep.Color -> Int\npick c = _\n\nnamed : Dep.Color -> Int\nnamed c = ?goal\n\npickR : Dep.Point -> Int\npickR p = _\n\naxiom Opaque : Type\n\nopq : Opaque -> Int\nopq o = _\n\ndata Nat : Type where\n  Zero : Nat\n  Succ : Nat -> Nat\n\ndata Vec : Type -> Nat -> Type where\n  VNil : (a : Type) -> Vec a Zero\n  VCons : (a : Type) -> (n : Nat) -> a -> Vec a n -> Vec a (Succ n)\n\nvhead : (a : Type) -> (n : Nat) -> Vec a (Succ n) -> Int\nvhead a n xs = _\n'
+{
+  frame_line '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{}}}'
+  frame_line '{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"'"$q_uri"'","languageId":"vuna","version":1,"text":"'"$q_text"'"}}}'
+  frame_line '{"jsonrpc":"2.0","id":2,"method":"textDocument/codeAction","params":{"textDocument":{"uri":"'"$q_uri"'"},"range":{"start":{"line":5,"character":9},"end":{"line":5,"character":9}},"context":{"diagnostics":[]}}}'
+  frame_line '{"jsonrpc":"2.0","id":3,"method":"textDocument/codeAction","params":{"textDocument":{"uri":"'"$q_uri"'"},"range":{"start":{"line":8,"character":10},"end":{"line":8,"character":10}},"context":{"diagnostics":[]}}}'
+  frame_line '{"jsonrpc":"2.0","id":4,"method":"textDocument/codeAction","params":{"textDocument":{"uri":"'"$q_uri"'"},"range":{"start":{"line":11,"character":10},"end":{"line":11,"character":10}},"context":{"diagnostics":[]}}}'
+  frame_line '{"jsonrpc":"2.0","id":5,"method":"textDocument/codeAction","params":{"textDocument":{"uri":"'"$q_uri"'"},"range":{"start":{"line":16,"character":8},"end":{"line":16,"character":8}},"context":{"diagnostics":[]}}}'
+  frame_line '{"jsonrpc":"2.0","id":6,"method":"textDocument/codeAction","params":{"textDocument":{"uri":"'"$q_uri"'"},"range":{"start":{"line":27,"character":15},"end":{"line":27,"character":15}},"context":{"diagnostics":[]}}}'
+  frame_line '{"jsonrpc":"2.0","id":7,"method":"shutdown","params":null}'
+  frame_line '{"jsonrpc":"2.0","method":"exit","params":null}'
+} | "$VUNA" lsp >"$tmp/splitq.out" 2>/dev/null
+check_eq "限定 import case split 会话退出码 0" "0" "$?"
+qr2=$(lsp_frame_id "$tmp/splitq.out" 2)
+check_contains "限定 import：构造子写限定名（Dep.Red）" "$qr2" \
+  '"newText":"case c of\n  Dep.Red => _\n  Dep.Green => _"'
+qr3=$(lsp_frame_id "$tmp/splitq.out" 3)
+check_contains "命名洞 case split 回 id 3" "$qr3" '"title":"case split on c"'
+check_contains "命名洞编辑 range 覆盖整个 ?goal" "$qr3" \
+  '"range":{"start":{"line":8,"character":10},"end":{"line":8,"character":15}}'
+qr4=$(lsp_frame_id "$tmp/splitq.out" 4)
+check_contains "限定 import：record 类型名写限定名（Dep.Point）" "$qr4" \
+  '"newText":"case p of\n  Dep.Point { px = _, py = _ } => _"'
+qr5=$(lsp_frame_id "$tmp/splitq.out" 5)
+check_contains "axiom 不透明类型不给 case split" "$qr5" '"id":5,"result":[]'
+qr6=$(lsp_frame_id "$tmp/splitq.out" 6)
+check_contains "同洞的 Nat binder 仍给 case split" "$qr6" '"title":"case split on n"'
+check_not_contains "索引族 binder（xs : Vec ...）不给 case split（不可达分支风险）" "$qr6" \
+  '"title":"case split on xs"'
 
 printf 'lsp: %d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ] && echo "lsp smoke passed"

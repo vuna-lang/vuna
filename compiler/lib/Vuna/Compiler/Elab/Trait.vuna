@@ -122,16 +122,15 @@ foldPiFieldTysGo (f :: rest) n ty =
 -- M29（A14）：额外返回「投影名 → 来源 span」表，供 `extraDefsOf` 给生成定义标来源；
 -- M30（B20）方法签名带 span 后，这张表用**方法签名 span**（不再粗粒度到 trait 声明行）。
 elabTrait : List (Pair String Term) -> Ec -> Pair Decl Span -> Result (Pair DtData (Pair (List (Pair String Term)) (Pair DtClass (Pair (List (Pair String Span)) Ec))))
-elabTrait globals ec ds = case ds of
-  Pair d dsp => case d of
-    DTrait tname params methods sp => if length params == 0 then tcErr0 sp InterfaceNoParam
-    else
-      let
-        -- 方法投影/kind 推断仍吃 (名字, 类型) 对；span 只在 projSpans 里用。
-        methodsP = traitMethodPairs methods
-      in andThen (traitParamKinds globals ec params methodsP)
-        (\pk => elabTraitKinds globals (secondOf pk) tname params methods methodsP (firstOf pk))
-    _ => errAt dsp "DT: internal: expected a trait declaration"
+elabTrait globals ec (Pair d dsp) = case d of
+  DTrait tname params methods sp => if length params == 0 then tcErr0 sp InterfaceNoParam
+  else
+    let
+      -- 方法投影/kind 推断仍吃 (名字, 类型) 对；span 只在 projSpans 里用。
+      methodsP = traitMethodPairs methods
+    in andThen (traitParamKinds globals ec params methodsP)
+      (\pk => elabTraitKinds globals (secondOf pk) tname params methods methodsP (firstOf pk))
+  _ => errAt dsp "DT: internal: expected a trait declaration"
 
 -- 拿到类参数 kind 后：字段类型 → 字典族/构造子 → 投影 → 类表项。
 elabTraitKinds : List (Pair String Term) -> Ec -> String -> List TraitParam -> List TraitMethod -> List (Pair String Expr) -> List Term -> Result (Pair DtData (Pair (List (Pair String Term)) (Pair DtClass (Pair (List (Pair String Span)) Ec))))
@@ -280,6 +279,94 @@ projectionDefsGo ctor nParams ((Pair mname mexpr) :: rest) (t :: rest2) idx nFie
   Pair mname (projectionBody ctor idx (methodArgRigsOf binderRig t) nFields nParams)
     :: projectionDefsGo ctor nParams rest rest2 (idx + 1) nFields
 
+-- B23：实例落点静态检查（孤儿实例）。
+--
+-- 规则：实例可声明在**定义 trait 的模块**，或**定义 head 类型（任一参数）的模块**；
+-- 内建类型（Int / String / IO）视为全局可见，允许在任意模块声明实例（`Show Int` 这类
+-- base / 用户扩展）。不做该检查时，实例可以散落到任意 import 双方的文件里，实例查找
+-- 与 coherence 的可解释性都会变差；文档一直按落点规则描述，现在由精化器强制。
+declTopName : Decl -> Maybe String
+declTopName (DData n ps kind ctors derivings lin sp) = Just n
+declTopName (DRecord n ps fields derivings lin sp) = Just n
+declTopName (DTrait n ps methods sp) = Just n
+declTopName _ = Nothing
+
+declNamedInFile : List (Pair Decl Span) -> String -> String -> Bool
+declNamedInFile [] name file = False
+declNamedInFile ((Pair d sp) :: rest) name file = case declTopName d of
+  Just n => if n == name && sp.spanFile == file then True else declNamedInFile rest name file
+  Nothing => declNamedInFile rest name file
+
+headTypeNameOf : Expr -> Maybe String
+headTypeNameOf (EVar n sp) = Just n
+headTypeNameOf (EApp fn args sp) = headTypeNameOf fn
+headTypeNameOf _ = Nothing
+
+headTypeNamesOf : List Expr -> List String
+headTypeNamesOf [] = []
+headTypeNamesOf (e :: rest) = case headTypeNameOf e of
+  Just n => n :: headTypeNamesOf rest
+  Nothing => headTypeNamesOf rest
+
+isGlobalHeadType : String -> Bool
+isGlobalHeadType n = n == "Int" || n == "String" || n == "IO"
+
+instanceHeadTypeNames : Expr -> List String
+instanceHeadTypeNames headExpr = case instanceHeadParts headExpr of
+  Nothing => []
+  Just (Pair cls args) => headTypeNamesOf args
+
+anyDeclInFile : List (Pair Decl Span) -> List String -> String -> Bool
+anyDeclInFile decls [] file = False
+anyDeclInFile decls (n :: rest) file =
+  if declNamedInFile decls n file then True else anyDeclInFile decls rest file
+
+anyGlobalHead : List String -> Bool
+anyGlobalHead [] = False
+anyGlobalHead (n :: rest) = if isGlobalHeadType n then True else anyGlobalHead rest
+
+instanceLandingOk : List (Pair Decl Span) -> Span -> DtClass -> Expr -> Bool
+instanceLandingOk allDecls sp cls headExpr =
+  let
+    file = sp.spanFile
+    headNames = instanceHeadTypeNames headExpr
+  in declNamedInFile allDecls (dtClassName cls) file
+    || anyDeclInFile allDecls headNames file
+    || anyGlobalHead headNames
+
+-- 实例落点通过后的正常实例精化（方法检查 + 字典项构造）。
+elabInstanceWithClass : List (Pair String Term) -> List (Pair Decl Span) -> DtClass -> InstSigInfo -> Ec -> Expr -> List Decl -> Span -> Result (Pair (List (Pair String Term)) Ec)
+elabInstanceWithClass globals allDecls cls info ec0 headExpr methods msp = case firstUnknownInstanceMethod cls methods of
+  Just n => tcErr1 msp (InstanceUnknownMethod n) n
+  Nothing => case firstMissingInstanceMethod cls methods of
+    Just m => case traitMethodSpanOf (dtClassName cls) m allDecls of
+      -- M30（B20）：缺方法指向 trait 里的**方法签名行**，而不是实例声明行。
+      Just mspan => tcErr0 mspan InstanceMissingMethod
+      Nothing => tcErr0 msp InstanceMissingMethod
+    Nothing =>
+      let
+        bodyCtx = instBodyCtx info
+        nCtx = length (instSigCtx info)
+        nTele = length (instSigTele info)
+        bodyDepth = nTele + nCtx
+      in andThen (elabInstanceMethodsCtx globals cls bodyCtx nCtx (instSigArgs info) ec0 methods msp) (\q => case q of
+        Pair fieldTerms (Pair fieldArgs ec1) =>
+          let
+            solvedCtx = solveCtxGoals bodyCtx nCtx nTele ec1 []
+            ctxSubs = firstOf solvedCtx
+            ec2 = secondOf solvedCtx
+            fields1 = map (applyCtxSubstsTo nCtx ctxSubs) fieldTerms
+          in andThen (resolveRigidGoals globals bodyCtx msp (ecDictGoals ec2) [] ec2) (\r => case r of
+            Pair globSubs ec3 =>
+              let
+                fields2 = map (applyTermSubstsTo bodyDepth globSubs) fields1
+                iname = instanceName (dtClassName cls) headExpr
+                dictTerm = instValueOf info (dictCtorName (dtClassName cls)) fields2
+                dictTyTerm = instTypeOf info
+              in Ok (Pair [Pair iname dictTyTerm] (ecAddDef ec3 (Pair iname dictTerm)))
+          )
+      )
+
 -- 实例体：每个方法子句按方法签名 check，再按声明顺序组成字典构造子应用。
 -- M29-T2b：实例带 telescope（类型参数）与 context（字典约束）：
 --   字典类型 = `Π tele(Rig0). Π ctx(Rig1). Dict_C <arg>`；
@@ -287,43 +374,15 @@ projectionDefsGo ctor nParams ((Pair mname mexpr) :: rest) (t :: rest2) idx nFie
 --   方法体里对 tele 变量的字典需求先在**声明的 ctx** 里消解，消不掉且仍是刚性 ⇒
 --   `TC_InstanceContextMissing`（ctx 不足）；具体类型的临时需求留给程序级字典搜索。
 elabInstance : List (Pair Decl Span) -> List (Pair Decl Span) -> List (Pair String Term) -> List DtClass -> List DtData -> Ec -> Pair Decl Span -> Result (Pair (List (Pair String Term)) Ec)
-elabInstance instDecls allDecls globals classes datas ec ds = case ds of
-  Pair d dsp => case d of
-    DInstance ctxE headExpr methods msp => andThen (elabInstanceSig classes globals (definedNames (map firstOf instDecls)) ec msp headExpr ctxE) (\p => case p of
-      Pair info ec0 => case findClass (instSigClass info) classes of
-        Nothing => tcErr0 msp InstanceHeadNotApp
-        Just cls => case firstUnknownInstanceMethod cls methods of
-          Just n => tcErr1 msp (InstanceUnknownMethod n) n
-          Nothing => case firstMissingInstanceMethod cls methods of
-            Just m => case traitMethodSpanOf (dtClassName cls) m allDecls of
-              -- M30（B20）：缺方法指向 trait 里的**方法签名行**，而不是实例声明行。
-              Just mspan => tcErr0 mspan InstanceMissingMethod
-              Nothing => tcErr0 msp InstanceMissingMethod
-            Nothing =>
-              let
-                bodyCtx = instBodyCtx info
-                nCtx = length (instSigCtx info)
-                nTele = length (instSigTele info)
-                bodyDepth = nTele + nCtx
-              in andThen (elabInstanceMethodsCtx globals cls bodyCtx nCtx (instSigArgs info) ec0 methods msp) (\q => case q of
-                Pair fieldTerms (Pair fieldArgs ec1) =>
-                  let
-                    solvedCtx = solveCtxGoals bodyCtx nCtx nTele ec1 []
-                    ctxSubs = firstOf solvedCtx
-                    ec2 = secondOf solvedCtx
-                    fields1 = map (applyCtxSubstsTo nCtx ctxSubs) fieldTerms
-                  in andThen (resolveRigidGoals globals bodyCtx msp (ecDictGoals ec2) [] ec2) (\r => case r of
-                    Pair globSubs ec3 =>
-                      let
-                        fields2 = map (applyTermSubstsTo bodyDepth globSubs) fields1
-                        iname = instanceName (dtClassName cls) headExpr
-                        dictTerm = instValueOf info (dictCtorName (dtClassName cls)) fields2
-                        dictTyTerm = instTypeOf info
-                      in Ok (Pair [Pair iname dictTyTerm] (ecAddDef ec3 (Pair iname dictTerm)))
-                  )
-              )
-    )
-    _ => errAt dsp "DT: internal: expected an instance declaration"
+elabInstance instDecls allDecls globals classes datas ec (Pair (DInstance ctxE headExpr methods msp) dsp) = andThen (elabInstanceSig classes globals (definedNames (map firstOf instDecls)) ec msp headExpr ctxE) (\p => case p of
+  Pair info ec0 => case findClass (instSigClass info) classes of
+    Nothing => tcErr0 msp InstanceHeadNotApp
+    Just cls =>
+      if instanceLandingOk allDecls msp cls headExpr then elabInstanceWithClass globals allDecls cls info ec0 headExpr methods msp
+      else tcErr0 msp OrphanInstance
+)
+elabInstance instDecls allDecls globals classes datas ec (Pair d dsp) =
+  errAt dsp "DT: internal: expected an instance declaration"
 
 -- 实例头/上下文的语法拆分：头是 `C arg`（M29 单参数 trait），约束是 `C arg`。
 instanceHeadParts : Expr -> Maybe (Pair String (List Expr))
@@ -398,7 +457,7 @@ elabInstanceSig classes globals defined ec0 sp headExpr ctxE = case instanceHead
 --   ① head/ctx 实参里**裸 tele 变量**的位置，kind 就是该类参数的 kind（`Member e ...`
 --      的 `e` 取 `Member` 第一个参数的 kind）——单参数 trait 的 `instance Show a` 走这里；
 --   ② 其余 tele 变量先绑一只 kind 元变量，实参精化时由构造子的参数 kind 解出
---      （`instance Member e (RCons e r)` 的 `r` 从 `RCons` 第二个参数解成 `Row`）；
+--      （`instance Member e (Cons e r)` 的 `r` 从 `Cons` 第二个参数解成 `Row`）；
 --   ③ 仍解不出（元变量自由 / 解里含自由变量）⇒ 回退旧的「应用次数」启发式，
 --      保证单参数 trait（Functor/Monad/Eq/Ord/MonadIO）行为不回退。
 elabInstanceConstrained : List DtClass -> List (Pair String Term) -> List String -> Ec -> Span -> DtClass -> List Expr -> List (Pair String (List Expr)) -> Result (Pair InstSigInfo Ec)
@@ -1297,16 +1356,20 @@ elabFunDefIn globals ctx0 ec clauses expected sp =
     else
       let
         _ = stampSample key "MULTI"
-      in andThen (multiToExpr (ctorFamilyTable ec) clauses) (\bodyExpr => let
-        _ = stampSample key "CHECKDEF"
-      in checkDefIn globals ctx0 ec [] bodyExpr expected sp
+      in andThen (resolveOverFunPats ec ctx0 expected clauses) (\r => case r of
+        Pair clauses2 ec1 => andThen (multiToExpr (ctorFamilyTable ec1) clauses2) (\bodyExpr => let
+          _ = stampSample key "CHECKDEF"
+        in checkDefIn globals ctx0 ec1 [] bodyExpr expected sp
+        )
       )
     _ =>
       let
         _ = stampSample key "MULTI"
-      in andThen (multiToExpr (ctorFamilyTable ec) clauses) (\bodyExpr => let
-        _ = stampSample key "CHECKDEF"
-      in checkDefIn globals ctx0 ec [] bodyExpr expected sp
+      in andThen (resolveOverFunPats ec ctx0 expected clauses) (\r => case r of
+        Pair clauses2 ec1 => andThen (multiToExpr (ctorFamilyTable ec1) clauses2) (\bodyExpr => let
+          _ = stampSample key "CHECKDEF"
+        in checkDefIn globals ctx0 ec1 [] bodyExpr expected sp
+        )
       )
 
 elabFunDef : List (Pair String Term) -> Ec -> List (Pair (List Pat) Expr) -> Value -> Span -> Result (Pair Term Ec)

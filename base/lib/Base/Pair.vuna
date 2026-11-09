@@ -1,7 +1,10 @@
 -- | 二元组类型与投影函数。
 module Base.Pair (Pair(..), firstOf, secondOf) where
 
--- Base.Pair：二元组类型与投影函数。无依赖模块。
+-- Base.Pair：二元组类型与投影函数。按「实例跟类型模块走」的落点规则承载
+-- `Show (Pair a b)` 实例（B31），因此依赖 Base.Show。
+import Base.Show
+
 -- | 二元组 `Pair a b`；构造子字段是 `first` / `second`。
 record Pair a b where
   first : a
@@ -14,3 +17,11 @@ firstOf (Pair a b) = a
 -- | 取第二个分量。
 secondOf : Pair a b -> b
 secondOf (Pair a b) = b
+
+-- B31：容器 `Show` 实例；`Interp` 经 blanket `Show a => Interp a` 自动获得。
+-- 用 `++` 的反引号形式拼字符串：列表字面量会折叠成 `Cons`/`Nil`，而
+-- `Base.List → Base.Pair` 已存在（Pair 不能反向 import List），名字不可见；
+-- 反引号中缀不要求 fixity 声明，`++` 又是恒可见的 String intrinsic。
+instance Show a, Show b => Show (Pair a b) where
+  show p = case p of
+    Pair x y => "(" `++` (show x) `++` ", " `++` (show y) `++` ")"

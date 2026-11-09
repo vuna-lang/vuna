@@ -1,0 +1,16 @@
+-- 同名构造子歧义：`A` 与 `B` 都定义构造子 `Nil`；期望类型是第三个族 `C`，
+-- 候选里没有属于 C 的 `Nil`，且推断出的候选族无法判定 → TC_AmbiguousCtor。
+data A : Type where
+  Nil : A
+
+data B : Type where
+  Nil : B
+
+data C : Type where
+  MkC : C
+
+bad : C
+bad = Nil
+
+main : Int
+main = 0

@@ -1,0 +1,11 @@
+-- D40：同一子句的两个参数模式重复绑定同名变量 -> 非线性格（重复绑定名）显式拒绝，
+-- 不再被 Elab.Match 当作新 binder 静默重命名。
+data Nat : Type where
+  Zero : Nat
+  Succ : Nat -> Nat
+
+bad : Nat -> Nat -> Int
+bad x (Succ x) = 0
+
+main : Int
+main = 1

@@ -47,14 +47,17 @@ import Base.Interp
 infixr 5 ++
 
 -- 字节长度（UTF-8 字节数）是度量 → Nat；strLength 仍是低层 Int 原语。
+-- | UTF-8 字节长度（度量是 `Nat`；底层 `strLength` 仍是 Int 原语）。
 byteLength : String -> Nat
 byteLength s = natFromInt (strLength s)
 
+-- | 按分隔符切分，分隔符本身不保留；空分隔符退化为逐字符切分。用显式 fuel 计步（`2*len(text)+len(sep)+2`）让终止性可证。
 split : String -> String -> List String
 split sep text =
   if strLength sep == 0 then map (\c => strPack [c]) (strUnpack text)
   else splitAcc (strUnpack sep) (strUnpack text) (2 * strLength text + strLength sep + 2) [] []
 
+-- | 内部：`split` 的扫描循环——每次消费一个字符，命中分隔符时交给 `skipSep`；`fuel` 每步减一保证终止。
 splitAcc : List Int -> List Int -> Int -> List Int -> List String -> List String
 splitAcc sep [] fuel acc parts = reverse (strPack (reverse acc) :: parts)
 splitAcc sep (chars@(c :: rest)) fuel acc parts =
@@ -62,6 +65,7 @@ splitAcc sep (chars@(c :: rest)) fuel acc parts =
   else if _startsWithChars sep chars then skipSep sep chars (fuel - 1) (length sep) [] (strPack (reverse acc) :: parts)
   else splitAcc sep rest (fuel - 1) (c :: acc) parts
 
+-- | 内部：`split` 命中分隔符后逐个跳过 `n` 个字符，然后回到 `splitAcc`。
 skipSep : List Int -> List Int -> Int -> Int -> List Int -> List String -> List String
 skipSep sep [] fuel n acc parts = reverse (strPack (reverse acc) :: parts)
 skipSep sep (chars@(c :: rest)) fuel n acc parts =
@@ -69,6 +73,7 @@ skipSep sep (chars@(c :: rest)) fuel n acc parts =
   else if n <= 0 then splitAcc sep chars (fuel - 1) acc parts
   else skipSep sep rest (fuel - 1) (n - 1) acc parts
 
+-- | 用 `sep` 连接字符串列表（一次 `strConcatMany` 单遍分配，避免逐段拼接的 O(n²) 拷贝）。
 join : String -> List String -> String
 join sep xs = strConcatMany (_interleave sep xs)
 
@@ -79,28 +84,36 @@ _interleave sep [] = []
 _interleave sep ([x]) = [x]
 _interleave sep (x :: rest) = x :: sep :: _interleave sep rest
 
+-- | 按 `\n` 切分成行；与 `split` 一致，末尾换行会产生一个空串尾元素。
 lines : String -> List String
 lines s = split "\n" s
 
+-- | 每行补 `\n` 后拼接（`lines` 的逆操作，空列表得到空串）。
 unlines : List String -> String
 unlines [] = ""
 unlines xs = strConcatMany (map (\x => "${x}\n") xs)
 
+-- | 去掉左侧空白（空格 / `\t` / `\n` / `\r`）。
 trimLeft : String -> String
 trimLeft s = strPack (_dropSpace (strUnpack s))
 
+-- | 去掉右侧空白。
 trimRight : String -> String
 trimRight s = strPack (reverse (_dropSpace (reverse (strUnpack s))))
 
+-- | 去掉两端空白。
 trim : String -> String
 trim s = trimLeft (trimRight s)
 
+-- | `text` 是否包含子串 `needle`。
 contains : String -> String -> Bool
 contains needle text = _containsChars (strUnpack needle) (strUnpack text)
 
+-- | `text` 是否以 `prefix` 开头。
 startsWith : String -> String -> Bool
 startsWith prefix text = _startsWithChars (strUnpack prefix) (strUnpack text)
 
+-- | `text` 是否以 `suffix` 结尾。
 endsWith : String -> String -> Bool
 endsWith suffix text =
   let
@@ -110,11 +123,13 @@ endsWith suffix text =
   in if ls > lt then False else _startsWithChars (strUnpack suffix) (drop (lt - ls) (strUnpack text))
 
 -- M33 W4：`repeat` 改成一次 `strConcatMany`（原来 `s ++ repeat (n-1) s` 是 O(n²) 拷贝）。
+-- | 把 `s` 重复 `n` 次（一次 `strConcatMany`，避免 O(n²) 拷贝）。
 repeat : Nat -> String -> String
 repeat n s = strConcatMany (map (\_ => s) (range 0 (natToInt n)))
 
 -- M33 W4：`substring` 直接用 `strSubstring` 原语（runtime `String.sub` + clamp），
 -- 不再走 `strUnpack`/`take`/`drop`/`strPack` 的 List 桥接。
+-- | 取子串 `(start, len)`；越界由 `strSubstring` 原语 clamp，不走 List 桥接。
 substring : Nat -> Nat -> String -> String
 substring start len s = strSubstring (natToInt start) (natToInt len) s
 

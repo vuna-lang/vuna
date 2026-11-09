@@ -1,0 +1,6 @@
+-- 纯函数断言的**可执行入口**（`vuna run test/corpus/repl`）：main = 失败计数，0 = 通过。
+-- 断言集在 lib/ReplGapsPure.vuna；`vuna test` 的入口是 test/ReplPure.vuna（同一份 checks）。
+import ReplGapsPure
+
+main : Int
+main = checks

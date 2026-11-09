@@ -1,0 +1,6 @@
+module Util (pick) where
+
+-- 小写类型层 def：类型位置应用 `pick True` 应解析到本模块导出，而不是被当作
+-- 隐式的类型变量量化（B33）。
+pick : Bool -> Type
+pick b = if b then Int else String

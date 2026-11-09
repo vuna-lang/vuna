@@ -9,15 +9,19 @@ import Base.Effect
 import Base.IO
 import Base.Monad
 
+-- | IO 之上的 Reader 效应 transformer：`ReaderT e a` = `e -> IO a`，环境只读；固定以 IO 为基座（record 参数的 kind 限制）。
 record ReaderT e a where
   readerTRun : e -> IO a
 
+-- | handler：把环境喂给 ReaderT，得到 `IO a`。
 runReaderT : ReaderT e a -> e -> IO a
 runReaderT r e = r.readerTRun e
 
+-- | 取当前环境（`ReaderT e e`）。
 ask : ReaderT e e
 ask = ReaderT (\e => pure e)
 
+-- | 在 `f` 修改后的环境下运行 `r`；改写只作用于该动作。
 local : (e -> e) -> ReaderT e a -> ReaderT e a
 local f r = ReaderT (\e => r.readerTRun (f e))
 

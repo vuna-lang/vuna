@@ -10,20 +10,19 @@ data AbortE : Type where
 data AbortOp : Type where
   Abort : AbortOp
 
-abort : {r : Row} -> Eff (RCons AbortE r) Int
+abort : {r : Row} -> Eff (AbortE :: r) Int
 abort = sendCore AbortE "abort" 0 Abort
 
-handleAbort : {a : Type} -> {b : Type} -> {r : Row} -> (a -> b) -> ((o : AbortOp) -> (Int -> b) -> b) -> Eff (RCons AbortE r) a -> Eff r b
+handleAbort : {a : Type} -> {b : Type} -> {r : Row} -> (a -> b) -> ((o : AbortOp) -> (Int -> b) -> b) -> Eff (AbortE :: r) a -> Eff r b
 handleAbort ret opH comp = handleCore AbortE "abort" 0 ret opH comp
 
 abortH : (o : AbortOp) -> (Int -> Int) -> Int
 abortH Abort k = 7
 
-prog : Eff (RCons AbortE (RCons (State S1 Int) RNil)) Int
-prog = bracket
-  (weaken (bindEff (put S1 Int 0) (\_ => pureEff 0)))
-  (\_ => weaken (put S1 Int 42))
-  (\_ => bindEff abort (\_ => pureEff 1))
+prog : Eff (AbortE :: State S1 Int :: []) Int
+prog =
+  bracket (weaken (bindEff (put S1 Int 0) (\_ => pureEff 0))) (\_ => weaken (put S1 Int 42))
+    (\_ => bindEff abort (\_ => pureEff 1))
 
 ret : Int -> Int -> Pair Int Int
 ret a s = Pair a s

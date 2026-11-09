@@ -1,0 +1,3 @@
+-- 纯测试（通过）：main : String，空串通过（历史约定）。
+main : String
+main = ""

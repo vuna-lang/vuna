@@ -1,0 +1,7 @@
+mark : String -> String
+mark label@"x" = label
+mark label@"y" = label
+mark _ = "other"
+
+main : String
+main = mark "x"

@@ -30,16 +30,18 @@ import Base.IO
 unitCacheSchema : String
 unitCacheSchema = "vuna-unit-cache 1"
 
--- 编译器二进制指纹（argv[0] 内容哈希；与 Compile.check 缓存同一思路）。
+-- 编译器二进制指纹（缓存 key 必须含它：单元产物随编译器语义变化）。
+-- 与 `Driver.Compile.compilerFingerprint` 同口径：用**可执行文件自身**的路径 + 大小 +
+-- mtime，而不是 `prim_getArgs` 的第一个用户参数。旧实现把子命令名（如 `test`）当路径：
+-- 只要 cwd 里有同名文件/目录（包根的 `test/` 就是最常见的情况），`prim_readFile` 会去读
+-- 目录并抛 `Failure("readFile: ...")`——`vuna test` 在包根直接崩溃即此。
 binaryFingerprint : Int
 binaryFingerprint =
   let
-    argv = runIO prim_getArgs
-  in case argv of
-    [] => textHashOf vunaVersion
-    a :: rest =>
-      if runIO (prim_fileExists a) then textHashOf (runIO (prim_readFile a))
-      else textHashOf vunaVersion
+    exe = runIO prim_execPath
+    size = runIO (prim_fileSize exe)
+    mtime = runIO (prim_fileMtime exe)
+  in if size > 0 then textHashOf "${exe}:${size}:${mtime}" else textHashOf vunaVersion
 
 textHashOf : String -> Int
 textHashOf s = strHash s * 1000003 + strHash "unit:${s}" + strLength s

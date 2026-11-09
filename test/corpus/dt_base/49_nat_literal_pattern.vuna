@@ -1,0 +1,16 @@
+-- D24：Nat 字面量模式降成 Int 比较的 if 链；变量兜底绑定原始 Nat。
+import Base.Nat
+
+f : Nat -> Int
+f n = case n of
+  0 => 10
+  1 => 20
+  _ => 30
+
+g : Nat -> Int
+g n = case n of
+  0 => 1
+  k => toInt k
+
+main : Int
+main = f 0 + f 1 + f 2 + g 0 + g 3

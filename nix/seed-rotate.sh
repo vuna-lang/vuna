@@ -14,6 +14,11 @@
 # rotation 按需触发（见 docs/reference/bootstrap.md），不是每次 compiler/base 改动都做。
 set -eu
 cd "$(dirname "$0")/.."
+# 接口缓存默认开启后，`vuna build` 可能读/写源码旁 .iface：rotation 的第一遍（产品 CLI）
+# 与第二遍（新 seed）若走不同缓存路径，runtime 位置表会不同，fixed point 假失败。
+# rotation 一律强制全量精化，保证两遍走同一条路径。
+export VUNA_IFACE_TOOL=0
+export VUNA_ELAB_FULL=1
 VUNA=${1:-./result/bin/vuna}
 [ -x "$VUNA" ] || {
   echo "seed-rotate: 找不到可执行编译器 $VUNA（先 nix build .#vuna --out-link result）" >&2
@@ -23,7 +28,18 @@ VUNA=${1:-./result/bin/vuna}
 [ -d compiler ] || { echo "seed-rotate: 找不到 compiler/（seed 来源必须是 compiler 包）" >&2; exit 1; }
 
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/vuna-seed-rotate.XXXXXX") || exit 1
-trap 'rm -rf "$tmp"' EXIT INT TERM
+# 分级替换用的临时名：复制到 seed.new.$$ 后再 rename，失败时用 seed.old.$$ 回滚。
+# trap 兜底：若在「旧 seed 已移走、新 seed 尚未就位」的窗口里被信号打断，先把 old
+# 移回 seed/，再清理临时路径，避免信任锚点缺失。
+new_seed="seed.new.$$"
+old_seed="seed.old.$$"
+cleanup() {
+  if [ ! -e seed ] && [ -e "$old_seed" ]; then
+    mv "$old_seed" seed
+  fi
+  rm -rf "$tmp" "$new_seed" "$old_seed"
+}
+trap cleanup EXIT INT TERM
 
 # 从仓库根以包目录 "compiler" 生成，保证嵌入的文件路径与提交后的 seed/ 一致。
 # M26：包级输出只有 split 一种模型；`--out` 只 codegen、不链接。
@@ -58,11 +74,27 @@ seed_files=$(find "$tmp/seed" -maxdepth 1 -type f | wc -l | tr -d ' ')
 git_commit=$(git rev-parse HEAD 2>/dev/null || printf 'unknown')
 rotated_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 
-# 全部校验通过后再替换仓库里的 seed/。
-rm -rf seed
-cp -r "$tmp/seed" seed
-# 闭包数量断言由 checks.seed-selfhost 读取；rotation 时自动同步，避免清单腐化。
+# 全部校验通过后再替换仓库里的 seed/。分级替换：先完整复制到 seed.new.$$，再把旧
+# seed/ rename 成 seed.old.$$，最后把新副本 rename 就位。这样任意时刻 seed/ 要么是
+# 旧文件集、要么是新文件集，不会出现「删除后复制失败」的半空状态；就位失败则把旧
+# seed 移回（回滚）并以非零退出。
+rm -rf "$new_seed"
+cp -r "$tmp/seed" "$new_seed"
+if [ -e seed ]; then
+  mv seed "$old_seed"
+fi
+if ! mv "$new_seed" seed; then
+  if [ -e "$old_seed" ]; then
+    mv "$old_seed" seed
+  fi
+  echo "seed-rotate: 错误：无法把新 seed 就位，已回滚旧 seed" >&2
+  exit 1
+fi
+rm -rf "$old_seed"
+# 闭包数量/完整文件清单由 checks.seed-selfhost 读取；rotation 时自动同步，避免清单腐化。
+# 清单变更会进入 rotation 的 git diff，供 review 确认 TCB 边界。
 find seed -maxdepth 1 -type f -name '*.ml' | wc -l | tr -d ' ' >nix/seed-count.txt
+find seed -maxdepth 1 -type f -exec basename {} \; | LC_ALL=C sort >nix/seed-files.txt
 
 # 写元数据（同目录临时文件 + mv，尽量原子；元数据只用于审计）。
 meta_tmp="nix/seed-rotation.txt.tmp"

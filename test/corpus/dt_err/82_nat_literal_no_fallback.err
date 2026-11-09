@@ -1,0 +1,1 @@
+[TC_IntStringCaseNeedsFallback] case on Int / String / Nat needs a variable or wildcard branch as fallback

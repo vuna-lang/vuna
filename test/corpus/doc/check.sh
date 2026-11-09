@@ -76,6 +76,23 @@ check_contains "doc --check documented message" "$(cat "$tmp/check.log")" "docst
 check_eq "doc --check missing exit" "1" "$?"
 check_contains "doc --check missing names symbol" "$(cat "$tmp/missing.log")" "missing docstring: Demo.Missing.needDoc"
 
+# 尾随 doc（`-- ^` / `{- ^ -}`）：与目标同一行；前置 `-- |` 与尾随同时存在时前置优先。
+trail="$here/04_trailing"
+"$VUNA" doc "$trail" "$tmp/trail.html" >"$tmp/trail.log" 2>&1
+check_eq "trailing doc exit" "0" "$?"
+ttext=$(cat "$tmp/trail.html" 2>/dev/null)
+check_contains "trailing doc decl (same line)" "$ttext" "limit trailing."
+check_contains "trailing doc ctor (line comment)" "$ttext" "Empty trailing (line comment)."
+check_contains "trailing doc ctor (block comment)" "$ttext" "Full trailing (block comment)."
+check_contains "trailing doc field" "$ttext" "px trailing."
+check_contains "trailing doc method" "$ttext" "area trailing."
+check_contains "leading doc still wins" "$ttext" "Leading doc wins."
+check_absent "leading wins over trailing" "$ttext" "trailing doc that must lose."
+check_absent "trailing fixture ordinary comment not doc" "$ttext" "普通注释"
+"$VUNA" doc --check "$trail" >"$tmp/trail-check.log" 2>&1
+check_eq "trailing doc --check exit" "0" "$?"
+check_contains "trailing doc --check message" "$(cat "$tmp/trail-check.log")" "docstrings ok"
+
 "$VUNA" doc --package doc-html "$fixture" "$tmp/pkg.html" >/dev/null 2>&1
 check_eq "doc --package filter exit" "0" "$?"
 "$VUNA" doc --package no-such "$fixture" "$tmp/no.html" >"$tmp/no.log" 2>&1

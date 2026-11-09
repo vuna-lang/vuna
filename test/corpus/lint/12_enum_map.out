@@ -1,1 +1,1 @@
-corpus/lint/12_enum_map.vuna:10:20: [LN_CaseToClauses] case-to-clauses: top-level case on `c` can be converted to multiple clauses
+corpus/lint/12_enum_map.vuna:10:20: [LN_DispatchLift] dispatch-lift: dispatch on `c` can be lifted into the enclosing pattern

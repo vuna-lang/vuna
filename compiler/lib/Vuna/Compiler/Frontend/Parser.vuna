@@ -193,12 +193,13 @@ parseSignature st blockCol allowCtx name namePos = step (expectSym st ":") (\_, 
 )
 
 parseClause : PState -> Int -> String -> Pos -> Result (Pair Decl PState)
-parseClause st blockCol name namePos = step (parseClausePatterns (stateFuel st) st blockCol) (\pats, st1 => step (expectSym st1 "=") (\_, st2 => step (parseExpr (stateFuel st2) st2 blockCol 0) (\body, st3 => step (parseWhere st3 blockCol) (\wheres, st4 => let
+parseClause st blockCol name namePos = step (parseClausePatterns (stateFuel st) st blockCol) (\pats, st1 => andThen (checkNoRepeatedBinders pats) (\_ => step (expectSym st1 "=") (\_, st2 => step (parseExpr (stateFuel st2) st2 blockCol 0) (\body, st3 => step (parseWhere st3 blockCol) (\wheres, st4 => let
   body2 = case wheres of
     [] => body
     _ :: _ => ELet wheres body True (spanOf st st4)
 in Ok
   (Pair (DFun name pats body2 (Span (fileOf st) (posLine namePos) (posCol namePos) (posLine (lastPos st4)) (posCol (lastPos st4)))) st4)
+)
 )
 )
 )
@@ -261,15 +262,15 @@ parseBindingDef fuel stStart st bindCol pat = if fuel <= 0 then Err "DT: parser 
 else case pat of
   PVar name _ =>
     if startsPatternAtom st && canContinue st bindCol then step (parseClausePatterns (stateFuel st) st bindCol)
-      (\pats, st2 => step (expectSym st2 "=") (\_, st3 => step (parseExpr (fuel - 1) st3 bindCol 0) (\value, st4 => Ok (Pair (BIBind (Pair (PVar name (patSpan pat)) (ELocalFun [Pair pats value] (spanOf stStart st4)))) st4))))
+      (\pats, st2 => andThen (checkNoRepeatedBinders pats) (\_ => step (expectSym st2 "=") (\_, st3 => step (parseExpr (fuel - 1) st3 bindCol 0) (\value, st4 => Ok (Pair (BIBind (Pair (PVar name (patSpan pat)) (ELocalFun [Pair pats value] (spanOf stStart st4)))) st4)))))
     else step (parseBindingValue (fuel - 1) st pat bindCol) (\b, st2 => Ok (Pair (BIBind b) st2))
   _ => step (parseBindingValue (fuel - 1) st pat bindCol) (\b, st2 => Ok (Pair (BIBind b) st2))
 
 parseBindingValue : Int -> PState -> Pat -> Int -> Result (Pair (Pair Pat Expr) PState)
 parseBindingValue fuel st pat blockCol =
   if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
-  else step (expectSym st "=")
-    (\_, st1 => step (parseExpr (fuel - 1) st1 blockCol 0) (\value, st2 => Ok (Pair (Pair pat value) st2)))
+  else andThen (checkNoRepeatedBinders [pat])
+    (\_ => step (expectSym st "=") (\_, st1 => step (parseExpr (fuel - 1) st1 blockCol 0) (\value, st2 => Ok (Pair (Pair pat value) st2))))
 
 -- 条目 → ELet 绑定：把签名贴到同名定义的值上（`EAnn value ty`），并校验布局约束：
 -- 签名必须先于同名定义、不能重复、不能悬空。
@@ -279,18 +280,18 @@ bindingItemsToBinds items = bindingBindsGo items [] [] []
 bindingBindsGo : List BindingItem -> List (Pair String (Pair Expr Span)) -> List String -> List (Pair Pat Expr) -> Result (List (Pair Pat Expr))
 bindingBindsGo [] sigs bound acc = case firstDanglingSig (reverse sigs) bound of
   Nothing => Ok (reverse acc)
-  Just (Pair name sp) => Err "${showSpanLoc sp}: ${psMsg (WhereSigNoDef name) (VCons name VNil)}"
+  Just (Pair name sp) => Err "${showSpanLoc sp}: ${psMsg (WhereSigNoDef name) (name :: [])}"
 bindingBindsGo (item :: rest) sigs bound acc = case item of
   BISig name ty sp =>
-    if memName name bound then Err "${showSpanLoc sp}: ${psMsg (WhereSigBeforeClause name) (VCons name VNil)}"
-    else if hasBindingSig name sigs then Err "${showSpanLoc sp}: ${psMsg (WhereSigDuplicate name) (VCons name VNil)}"
+    if memName name bound then Err "${showSpanLoc sp}: ${psMsg (WhereSigBeforeClause name) (name :: [])}"
+    else if hasBindingSig name sigs then Err "${showSpanLoc sp}: ${psMsg (WhereSigDuplicate name) (name :: [])}"
     else bindingBindsGo rest (Pair name (Pair ty sp) :: sigs) bound acc
   BIBind (Pair pat value) => case localFunMerge (patBoundName pat) value acc of
     Just merged => bindingBindsGo rest sigs bound merged
     Nothing => case bindingSigOf (patBoundName pat) sigs of
       Just (Pair ty sp) =>
         if memName (patBoundName pat) bound then Err
-          "${showSpanLoc sp}: ${psMsg (WhereSigMultiClause (patBoundName pat)) (VCons (patBoundName pat) VNil)}"
+          "${showSpanLoc sp}: ${psMsg (WhereSigMultiClause (patBoundName pat)) (patBoundName pat :: [])}"
         else bindingBindsGo rest sigs (patBoundName pat :: bound) (Pair pat (EAnn value ty sp) :: acc)
       Nothing => bindingBindsGo rest sigs (patBoundName pat :: bound) (Pair pat value :: acc)
 
@@ -731,7 +732,7 @@ parseListExpr : Int -> PState -> Int -> Result (Pair Expr PState)
 parseListExpr fuel st blockCol =
   if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
   else step (expectSym st "[")
-    (\_, st1 => if atSym st1 "]" then Ok (Pair (EVar "Nil" (spanOf st (advance st1))) (advance st1)) else step (parseListExprElems (fuel - 1) st1 blockCol) (\elems, st2 => Ok (Pair (foldCons (spanOf st st2) elems) st2)))
+    (\_, st1 => if atSym st1 "]" then Ok (Pair (EVar listNilSyntax (spanOf st (advance st1))) (advance st1)) else step (parseListExprElems (fuel - 1) st1 blockCol) (\elems, st2 => Ok (Pair (foldCons (spanOf st st2) elems) st2)))
 
 parseListExprElems : Int -> PState -> Int -> Result (Pair (List Expr) PState)
 parseListExprElems fuel st blockCol =
@@ -739,9 +740,10 @@ parseListExprElems fuel st blockCol =
   else step (parseExpr (fuel - 1) st blockCol 0)
     (\e, st1 => if atSym st1 "," then step (parseListExprElems (fuel - 1) (advance st1) blockCol) (\rest, st2 => Ok (Pair (e :: rest) st2)) else if atSym st1 "]" then Ok (Pair [e] (advance st1)) else psErr0 ExpectedCommaOrBracket)
 
+-- | 自动补注（M41 新增导出）：foldCons。
 foldCons : Span -> List Expr -> Expr
-foldCons sp [] = EVar "Nil" sp
-foldCons sp (e :: rest) = EApp (EVar "Cons" sp) [e, foldCons sp rest] sp
+foldCons sp [] = EVar listNilSyntax sp
+foldCons sp (e :: rest) = EApp (EVar listConsSyntax sp) [e, foldCons sp rest] sp
 
 parseLambda : Int -> PState -> Int -> Result (Pair Expr PState)
 parseLambda fuel st blockCol =
@@ -797,7 +799,7 @@ else if isEof st then Ok (Pair [] st)
 else case peekPos st of
   Pos line col =>
     if col == altCol then step (parsePatternSingle (stateFuel st) st altCol)
-      (\pat, st1 => step (expectSym st1 "=>") (\_, st2 => step (parseExpr (fuel - 1) st2 altCol 0) (\body, st3 => step (parseAltList (fuel - 1) st3 altCol) (\rest, st4 => Ok (Pair (Pair pat body :: rest) st4)))))
+      (\pat, st1 => andThen (checkNoRepeatedBinders [pat]) (\_ => step (expectSym st1 "=>") (\_, st2 => step (parseExpr (fuel - 1) st2 altCol 0) (\body, st3 => step (parseAltList (fuel - 1) st3 altCol) (\rest, st4 => Ok (Pair (Pair pat body :: rest) st4))))))
     else Ok (Pair [] st)
 
 parseIf : Int -> PState -> Int -> Result (Pair Expr PState)
@@ -837,8 +839,8 @@ parseDoStmt : Int -> PState -> Int -> Result (Pair DoStmt PState)
 parseDoStmt fuel st stmtCol = if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
 else case parsePatternSingle (stateFuel st) st stmtCol of
   Ok (Pair pat st1) =>
-    if atSym st1 "<-" then step (expectSym st1 "<-")
-      (\_, st2 => step (parseExpr (fuel - 1) st2 stmtCol 0) (\e, st3 => Ok (Pair (DBind pat e (spanOf st st3)) st3)))
+    if atSym st1 "<-" then andThen (checkNoRepeatedBinders [pat])
+      (\_ => step (expectSym st1 "<-") (\_, st2 => step (parseExpr (fuel - 1) st2 stmtCol 0) (\e, st3 => Ok (Pair (DBind pat e (spanOf st st3)) st3))))
     else parseDoExprStmt (fuel - 1) st stmtCol
   Err _ => parseDoExprStmt (fuel - 1) st stmtCol
 
@@ -847,6 +849,44 @@ parseDoExprStmt fuel st stmtCol =
   if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
   else step (parseExpr (fuel - 1) (sameLineState st) stmtCol 0)
     (\e, st1 => Ok (Pair (DExpr e (spanOf st st1)) st1))
+
+-- ---------------------------------------------------------------
+-- D40：非线性格检查（模式绑定名唯一性）
+-- ---------------------------------------------------------------
+-- 同一个绑定作用域（一条函数子句的**全部**参数模式 / 一个 case 分支 / 一条 let(where)
+-- 绑定 / 一条 do-bind）里，一个名字只能绑定一次。当前不实现相等约束：重复绑定名在
+-- 解析后直接拒绝，而不是被 `Elab.Match` 当作新 binder 静默重命名。
+-- case 分支的 as-pattern、let 的嵌套模式等都在模式解析完成后走同一检查；不同子句 /
+-- 分支 / 绑定是不同作用域，复用同名 binder 合法。
+-- | 模式里按从左到右出现顺序的 (绑定名, span)：PVar 与 as 名算绑定，构造子 / 记录
+-- 模式递归，通配与字面量不绑定（D40）。
+patBinderBindings : Pat -> List (Pair String Span)
+patBinderBindings (PVar name sp) = [Pair name sp]
+patBinderBindings (PAs name inner sp) = Pair name sp :: patBinderBindings inner
+patBinderBindings (PCon cname pats sp) = concatMap patBinderBindings pats
+patBinderBindings (PRecord rname fields sp) =
+  concatMap (\f => patBinderBindings (secondOf f)) fields
+patBinderBindings (PWild sp) = []
+patBinderBindings (PInt n sp) = []
+patBinderBindings (PStr s sp) = []
+
+-- | 从左到右第一个重复绑定：返回第二次出现的 (名字, span)；没有重复返回 Nothing。
+firstRepeatedBinding : List (Pair String Span) -> Maybe (Pair String Span)
+firstRepeatedBinding binds = firstRepeatedBindingGo binds []
+
+-- | `firstRepeatedBinding` 的累加器版本（seen = 已出现的名字）。
+firstRepeatedBindingGo : List (Pair String Span) -> List String -> Maybe (Pair String Span)
+firstRepeatedBindingGo [] seen = Nothing
+firstRepeatedBindingGo ((Pair name sp) :: rest) seen =
+  if memName name seen then Just (Pair name sp) else firstRepeatedBindingGo rest (name :: seen)
+
+-- | D40 非线性格检查：一个绑定作用域的模式列表里出现重复绑定名 → 在第二次出现处报
+-- 语法错误（带位置与名字）；合法时返回 Ok 0。
+checkNoRepeatedBinders : List Pat -> Result Int
+checkNoRepeatedBinders pats = case firstRepeatedBinding (concatMap patBinderBindings pats) of
+  Nothing => Ok 0
+  Just (Pair name sp) =>
+    Err "${showSpanLoc sp}: ${psMsg RepeatedPatternBinder []} (repeated name: `${name}`)"
 
 parsePatternSingle : Int -> PState -> Int -> Result (Pair Pat PState)
 parsePatternSingle fuel st blockCol =
@@ -960,7 +1000,7 @@ parseListPattern : Int -> PState -> Int -> Result (Pair Pat PState)
 parseListPattern fuel st blockCol =
   if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
   else step (expectSym st "[")
-    (\_, st1 => if atSym st1 "]" then Ok (Pair (PCon "Nil" [] (spanOf st (advance st1))) (advance st1)) else step (parseListPatternElems (fuel - 1) st1 blockCol) (\pats, st2 => Ok (Pair (foldPCon (spanOf st st2) pats) st2)))
+    (\_, st1 => if atSym st1 "]" then Ok (Pair (PCon listNilSyntax [] (spanOf st (advance st1))) (advance st1)) else step (parseListPatternElems (fuel - 1) st1 blockCol) (\pats, st2 => Ok (Pair (foldPCon (spanOf st st2) pats) st2)))
 
 parseListPatternElems : Int -> PState -> Int -> Result (Pair (List Pat) PState)
 parseListPatternElems fuel st blockCol =
@@ -968,6 +1008,7 @@ parseListPatternElems fuel st blockCol =
   else step (parsePatternSingle (fuel - 1) st blockCol)
     (\pat, st1 => if atSym st1 "," then step (parseListPatternElems (fuel - 1) (advance st1) blockCol) (\rest, st2 => Ok (Pair (pat :: rest) st2)) else if atSym st1 "]" then Ok (Pair [pat] (advance st1)) else psErr0 ExpectedCommaOrBracket)
 
+-- | 自动补注（M41 新增导出）：foldPCon。
 foldPCon : Span -> List Pat -> Pat
-foldPCon sp [] = PCon "Nil" [] sp
-foldPCon sp (p :: rest) = PCon "Cons" [p, foldPCon sp rest] sp
+foldPCon sp [] = PCon listNilSyntax [] sp
+foldPCon sp (p :: rest) = PCon listConsSyntax [p, foldPCon sp rest] sp

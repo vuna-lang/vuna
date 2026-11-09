@@ -394,11 +394,22 @@ prefixUntilId pid [] = []
 prefixUntilId pid ((Pair cid cv) :: rest) =
   if cid == pid then [] else Pair cid cv :: prefixUntilId pid rest
 
+-- 数据族名在 `ecDatas` 里（B18：`data T` 与值 `T` 同名时，类型位置必须保持族身份）。
+memDataNameIn : String -> List DtData -> Bool
+memDataNameIn name [] = False
+memDataNameIn name (d :: rest) = if dtDataName d == name then True else memDataNameIn name rest
+
+-- 值定义进 delta 表；但与数据族同名的定义**不进**——否则 `force` 会把签名里的
+-- `TGlobal T`（类型位置，本应是族）delta 展开成值定义体，`T` 就退化成了值类型。
+-- 定义体仍进 `ecDefs`（codegen 照常产出 `v_T`），只是不做定义性展开。
 ecAddDef : Ec -> Pair String Term -> Ec
 ecAddDef (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals haslin) d =
-  Ec next sols (d :: defs) datas depths goals insts classes dgoals
-    (Base.HashMap.insert (firstOf d) (secondOf d) deftbl) gtbl soltbl dptbl gcomp ctbl ctortbl
-    defvals haslin
+  let
+    delta =
+      if memDataNameIn (firstOf d) datas then deftbl
+      else Base.HashMap.insert (firstOf d) (secondOf d) deftbl
+  in Ec next sols (d :: defs) datas depths goals insts classes dgoals delta gtbl soltbl dptbl gcomp
+    ctbl ctortbl defvals haslin
 
 ecAddData : Ec -> DtData -> Ec
 ecAddData (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals haslin) d =

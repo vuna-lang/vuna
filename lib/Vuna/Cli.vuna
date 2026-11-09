@@ -36,6 +36,7 @@ import Vuna.Repl.Server
 import Vuna.Search
 import Vuna.Doc
 import Vuna.GenErrors
+import Vuna.Clean
 import Vuna.TestRunner
 import Vuna.Run
 import Vuna.Lsp
@@ -52,9 +53,10 @@ import Base.EffConsole
 toolUsageLines : String -> String
 toolUsageLines prog = """  ${prog} lint [--fix] <file.vuna>...
   ${prog} interp <file.vuna>                   精化后核心求值（纯；不执行效果）
-  ${prog} test [--list] [--filter PAT]... [--verbose] [--fail-fast] [DIR]
-      运行包内 test/*.vuna（纯 String/Int/Bool 走核心求值；main : IO ... 走 compile+运行）
-  ${prog} run [--no-build] [--package NAME] [DIR] [-- ARG]...
+  ${prog} test [--list] [--filter PAT]... [--verbose] [--fail-fast] [--jobs N] [DIR]
+      运行包内 test/*.vuna（纯 String/Int/Bool 走核心求值；main : IO ... 走 compile+运行；
+      --jobs N 每个测试文件一个子进程、最多 N 并发，默认 1）
+  ${prog} run [--no-build] [--package NAME] [--out DIR] [DIR] [-- ARG]...
       构建并运行包的可执行入口（`--` 之后的参数原样透传）
   ${prog} fmt [--check] [PATH]...              格式化（PATH 可为文件或目录；省略 = workspace 内各包的 lib/app/test）
   ${prog} repl [FILE|DIR|MODULE]               交互式 REPL（可直接加载文件/目录/模块）
@@ -66,6 +68,7 @@ toolUsageLines prog = """  ${prog} lint [--fix] <file.vuna>...
   ${prog} search [--type|--name|--doc] [--module PFX] [--limit N] [--json] <query...>
       名称 / docstring / 类型检索（类型检索为 parse 级）
   ${prog} gen-errors [ROOT]  从枚举真源生成错误码文档（ROOT 必须是已存在目录；输出 ROOT/docs/.generated/errors.md）
+  ${prog} clean-iface [--dry-run] [DIR]         删除 DIR 下的 vuna iface 缓存文件（默认 `.`；不碰源码）
   ${prog} map [--modules]                      模块总览（索引缓存在 .local/index/，自动新鲜度判定）
   ${prog} map --find <Module.name>             定位符号：定义位置 + 引用者 + 建议测试
   ${prog} map --impact <Module.name>           改动影响面：受影响模块 + 测试标签
@@ -114,6 +117,7 @@ runCli1 args = case args of
     "doc" => Vuna.Doc.runDoc rest
     "search" => Vuna.Search.runSearch rest
     "gen-errors" => genErrorsArgs rest
+    "clean-iface" => Vuna.Clean.runCleanIface rest
     "map" => mapArgs rest
     "api" => apiArgs rest
     "lsp" => Vuna.Lsp.runLspTool rest
@@ -207,20 +211,41 @@ interpEmit path = case contextForFile path of
     in if startsWith "error:" output then 2 else 0
 
 -- ---------------------------------------------------------------
--- test（包模式；M38：--list / --filter / --verbose / --fail-fast）
+-- test（包模式；M38：--list / --filter / --verbose / --fail-fast；
+-- C23/C39：--jobs N 包内并行 + 隐藏的 --only-file（内部子进程模式））
 -- ---------------------------------------------------------------
 testArgs : List String -> Int
-testArgs args = case parseToolArgs "vuna test" [BoolFlag "list", BoolFlag "verbose", BoolFlag "fail-fast", MultiValueFlag "filter"] args of
+testArgs args = case parseToolArgs "vuna test" [BoolFlag "list", BoolFlag "verbose", BoolFlag "fail-fast", MultiValueFlag "filter", ValueFlag "jobs", ValueFlag "only-file"] args of
   Err e => toolError e
-  Ok parsed => case parsed.positionals of
-    [] => testRun (testOptsOf parsed) "."
-    [dir] => testRun (testOptsOf parsed) dir
-    _ => usageError 0
+  Ok parsed => case testJobsOf parsed of
+    Err e => toolError e
+    Ok jobs => case parsed.positionals of
+      [] => testRun (testOptsOf parsed jobs) "."
+      [dir] => testRun (testOptsOf parsed jobs) dir
+      _ => usageError 0
 
-testOptsOf : Parsed -> TestOpts
-testOptsOf parsed =
+-- `--jobs N`：缺省 1；必须是 >= 1 的十进制整数（0 / 非数字 → usage error exit 2；
+-- 负数会被参数解析当成缺值 flag，同样 exit 2）。
+testJobsOf : Parsed -> Result Int
+testJobsOf parsed = case flagValue parsed "jobs" of
+  Nothing => Ok 1
+  Just text => case parsePositiveInt text of
+    Nothing => Err "--jobs requires a positive integer (>= 1), got `${text}`"
+    Just n => Ok n
+
+parsePositiveInt : String -> Maybe Int
+parsePositiveInt s = if s == "" then Nothing else positiveDigits (strUnpack s) 0
+
+positiveDigits : List Int -> Int -> Maybe Int
+positiveDigits [] acc = if acc > 0 then Just acc else Nothing
+positiveDigits (c :: rest) acc =
+  if c >= 48 && c <= 57 then positiveDigits rest (acc * 10 + (c - 48)) else Nothing
+
+testOptsOf : Parsed -> Int -> TestOpts
+testOptsOf parsed jobs =
   TestOpts (flagValues parsed "filter") (flagSet parsed "list") (flagSet parsed "verbose")
-    (flagSet parsed "fail-fast")
+    (flagSet parsed "fail-fast") (if flagSet parsed "only-file" then 1 else jobs)
+    (flagValue parsed "only-file")
 
 testRun : TestOpts -> String -> Int
 testRun opts dir = case requireDirectory dir of

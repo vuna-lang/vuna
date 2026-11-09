@@ -6,19 +6,18 @@ import Base.IO
 import Base.IORef
 import Base.Result
 
-inc : Mutex -> IORef Int -> Eff RNil Int
+inc : Mutex -> IORef Int -> Eff [] Int
 inc m ctr = bindEff (acquire m) (\r => case r of
-  Ok _ => bindEff (liftIOEff (readRef ctr)) (\v =>
-            bindEff (liftIOEff (writeRef ctr (v + 1))) (\_ => release m))
-  Err _ => pureEff 0)
+  Ok _ =>
+    bindEff (liftIOEff (readRef ctr))
+      (\v => bindEff (liftIOEff (writeRef ctr (v + 1))) (\_ => release m))
+  Err _ => pureEff 0
+)
 
-prog : Eff RNil (Result Int)
-prog = withScope (\sc =>
-  bindEff newMutex (\m =>
-    bindEff (liftIOEff (newRef 0)) (\ctr =>
-      bindEff (forkTask sc (inc m ctr)) (\_ =>
-        bindEff (forkTask sc (inc m ctr)) (\_ =>
-          bindEff (scopeWait sc) (\_ => bindEff (liftIOEff (readRef ctr)) (\n => pureEff (Ok n))))))))
+prog : Eff [] (Result Int)
+prog =
+  withScope
+    (\sc => bindEff newMutex (\m => bindEff (liftIOEff (newRef 0)) (\ctr => bindEff (forkTask sc (inc m ctr)) (\_ => bindEff (forkTask sc (inc m ctr)) (\_ => bindEff (scopeWait sc) (\_ => bindEff (liftIOEff (readRef ctr)) (\n => pureEff (Ok n))))))))
 
 main : IO Int
 main = do

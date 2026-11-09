@@ -9,14 +9,18 @@ import Base.Monad
 import Base.IO
 import Base.Nat
 
+-- | 创建空的可变字符串缓冲区（IO 动作）。
 new : IO Buffer
 new = prim_newBuffer
 
+-- | 把字符串 `s` 追加到缓冲区，返回追加的字节数（`Nat`）。
 add : Buffer -> String -> IO Nat
 add b s = fmap natFromInt (prim_bufferAdd b s)
 
+-- | 取出缓冲区当前内容为 `String`（不消耗缓冲区，可继续追加）。
 contents : Buffer -> IO String
 contents b = prim_bufferContents b
 
+-- | 缓冲区当前字符长度（`Nat`）。
 length : Buffer -> IO Nat
 length b = fmap natFromInt (prim_bufferLength b)

@@ -3,7 +3,7 @@
 import Base.Eff
 import Base.EffFs
 
-prog : Eff (RCons (Fs F2) RNil) String
+prog : Eff (Cons (Fs F2) Nil) String
 prog = fsReadFile F2 "/tmp/vuna_w10_fs_err.txt"
 
 main : IO Int

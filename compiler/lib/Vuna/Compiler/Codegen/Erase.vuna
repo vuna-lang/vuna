@@ -102,7 +102,7 @@ checkNoAxiomRuntimeGo axiomTbl (d :: rest) = case dtDefBody d of
   Just body => case termDepsInto axiomTbl [] body of
     [] => checkNoAxiomRuntimeGo axiomTbl rest
     -- M29（A14）：带使用点定义的位置（旧实现这里既无位置也无定义名）。
-    name :: more => cgErrDefAt (dtDefSpan d) (dtDefName d) (AxiomAtRuntime name) (VCons name VNil)
+    name :: more => cgErrDefAt (dtDefSpan d) (dtDefName d) (AxiomAtRuntime name) (name :: [])
 
 checkAllErasure : List String -> List DtDef -> Result Int
 checkAllErasure typeNames [] = Ok 0
@@ -470,9 +470,10 @@ checkTermScopes depth (TStr s) = Ok 0
 checkTermScopes depth (TBool b) = Ok 0
 checkTermScopes depth (TType l) = Ok 0
 checkTermScopes depth (TMeta m) = Ok 0
+-- C07：作用域与运行时擦除无关——擦除只影响 codegen，不是「可以引用越界变量」的
+-- 许可证；TApp 的擦除实参与构造子实参同样要查。
 checkTermScopes depth (TApp f a rig) =
-  if rigIsErased rig then checkTermScopes depth f
-  else andThen (checkTermScopes depth f) (\_ => checkTermScopes depth a)
+  andThen (checkTermScopes depth f) (\_ => checkTermScopes depth a)
 checkTermScopes depth (TCon c args) = checkTermScopesArgs depth args
 checkTermScopes depth (TLam name rig body) = checkTermScopes (depth + 1) body
 checkTermScopes depth (TPi name implicit rig dom cod) =
@@ -485,9 +486,8 @@ checkTermScopes depth (TCase scrut alts) =
 
 checkTermScopesArgs : Int -> List (Pair Term Rig) -> Result Int
 checkTermScopesArgs depth [] = Ok 0
-checkTermScopesArgs depth ((Pair arg rig) :: rest) =
-  if rigIsErased rig then checkTermScopesArgs depth rest
-  else andThen (checkTermScopes depth arg) (\_ => checkTermScopesArgs depth rest)
+checkTermScopesArgs depth ((Pair arg _) :: rest) =
+  andThen (checkTermScopes depth arg) (\_ => checkTermScopesArgs depth rest)
 
 checkAltScopes : Int -> List CaseAlt -> Result Int
 checkAltScopes depth [] = Ok 0

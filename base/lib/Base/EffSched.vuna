@@ -26,10 +26,10 @@ module Base.EffSched
 --   * 纤程 = OCaml 5 **一次性**续延；调度器是纤程之外的一个循环，用私有运行时
 --     效应（SchedYield / SchedAwait / SchedWaitScope*）挂起当前纤程。
 --   * `Task a` / `Scope` 是不透明句柄（内部是调度器 id）；构造子不导出。
---   * 任务体是 `Eff RNil a`：任务里的用户效应必须在任务内被 handler 处理干净，
+--   * 任务体是 `Eff Nil a`：任务里的用户效应必须在任务内被 handler 处理干净，
 --     不能依赖外层 handler（外层 handler 的运行时栈在父纤程上）。
 --   * 调度器原语（`prim_sched*`）是隐藏 intrinsic，运行时是 `dtp_sched_*`；
---     它们不是行里的效应：行 `RNil` 里也能 fork/yield/await。
+--     它们不是行里的效应：行 `Nil` 里也能 fork/yield/await。
 --
 -- 语义（协作式）：
 --   * `forkTask` 只入队；子任务在父纤程下一次挂起（yield/await/scopeWait）时才开始跑。
@@ -52,16 +52,20 @@ import Base.Ord
 import Base.Result
 
 -- 任务句柄（不透明）。
+-- | 任务句柄（不透明）：内部是调度器 id；构造子不导出，由 `forkTask` 产生、`awaitTask` 消费。
 data Task a : Type where
   MkTask : Int -> Task a
 
 -- 作用域句柄（不透明）。
+-- | 作用域句柄（不透明）：内部是调度器 id；一般经 `withScope` / `withScopeTimeout` 使用。
 data Scope : Type where
   MkScope : Int -> Scope
 
+-- | 取任务句柄内部的调度器 id（内部 / 调试用）。
 taskId : {a : Type} -> Task a -> Int
 taskId (MkTask i) = i
 
+-- | 取作用域句柄内部的调度器 id（内部 / 调试用）。
 scopeId : Scope -> Int
 scopeId (MkScope i) = i
 
@@ -74,7 +78,7 @@ isCancelled : {r : Row} -> Eff r Int
 isCancelled = effPrim (\_ => prim_schedIsCancelled 0)
 
 -- | 在纤程里执行一个 IO 动作（打印/文件等）。信任边界：内部用 `runIO`；
--- 任务体是 `Eff RNil a`，需要 IO 副作用时经此进入（任务之间仍单线程）。
+-- 任务体是 `Eff Nil a`，需要 IO 副作用时经此进入（任务之间仍单线程）。
 liftIOEff : {r : Row} -> {a : Type} -> IO a -> Eff r a
 liftIOEff act = effPrim (\_ => runIO act)
 
@@ -83,7 +87,7 @@ newScope : {r : Row} -> Eff r Scope
 newScope = effPrim (\_ => MkScope (prim_schedNewScope 0))
 
 -- | 在作用域里 fork 一个任务体（只入队，不同步执行）。
-forkTask : {a : Type} -> {r : Row} -> Scope -> Eff RNil a -> Eff r (Task a)
+forkTask : {a : Type} -> {r : Row} -> Scope -> Eff [] a -> Eff r (Task a)
 forkTask sc child = effPrim (\_ => MkTask (prim_schedFork (scopeId sc) (\_ => runPure child)))
 
 -- | 等待任务结束：Ok 值 / Err "cancelled" / Err 子任务失败消息。可重复 await。
@@ -151,22 +155,27 @@ withScopeTimeout steps body = bindEff newScope (\sc => bindEff (body sc) (\res =
 
 -- W9 线性任务句柄：TaskLin 是线性数据，awaitTaskLin/cancelTaskLin 各消费一次；
 -- 因此「恰好一次 join 或 cancel」在用量检查阶段生效。普通 Task 保留为可复制 legacy。
+-- | 线性任务句柄（W9）：`awaitTaskLin` / `cancelTaskLin` 各消费一次，用量检查保证「恰好一次 join 或 cancel」；普通 `Task` 仍是可复制 legacy。
 linear data TaskLin a : Type where
   MkTaskLin : {a : Type} -> Int -> TaskLin a
 
-forkTaskLin : {a : Type} -> Scope -> Eff RNil a -> TaskLin a
+-- | 在作用域里 fork 一个线性任务句柄（只入队，不同步执行；任务体是 `Eff Nil a`）。
+forkTaskLin : {a : Type} -> Scope -> Eff [] a -> TaskLin a
 forkTaskLin sc child = MkTaskLin (prim_schedFork (scopeId sc) (\_ => runPure child))
 
+-- | 等待线性任务结束（消费句柄一次），语义同 `awaitTask`。
 awaitTaskLin : {a : Type} -> {r : Row} -> (1 t : TaskLin a) -> Eff r (Result a)
 awaitTaskLin t = case t of
   MkTaskLin id => awaitTask (MkTask id)
 
+-- | 请求取消线性任务（消费句柄一次，幂等），语义同 `cancelTask`。
 cancelTaskLin : {a : Type} -> {r : Row} -> (1 t : TaskLin a) -> Eff r Int
 cancelTaskLin t = case t of
   MkTaskLin id => cancelTask (MkTask id)
 
--- W9 effect-aware fork：父纤程提供显式 handler 把 Effectful task 收成 RNil 后再 fork。
+-- W9 effect-aware fork：父纤程提供显式 handler 把 Effectful task 收成 Nil 后再 fork。
 -- 这不是继承父 fiber 的 handler 栈（fiber 根 handler 只拦调度器效应），而是显式、
 -- 可捕获的 handler 闭包；因此 task 的 handler 状态是任务局部的（文档 D44）。
-forkTaskWith : {a : Type} -> {r : Row} -> {q : Row} -> Scope -> (Eff r a -> Eff RNil a) -> Eff r a -> Eff q (Task a)
+-- | effect-aware fork：父纤程提供显式 handler 把带效应的任务收成 `Nil` 后再 fork；handler 状态是任务局部的（不从父纤程继承 handler 栈，见 D44）。
+forkTaskWith : {a : Type} -> {r : Row} -> {q : Row} -> Scope -> (Eff r a -> Eff [] a) -> Eff r a -> Eff q (Task a)
 forkTaskWith sc handler comp = forkTask sc (handler comp)

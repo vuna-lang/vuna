@@ -3,9 +3,8 @@ import Base.Eff
 import Base.EffSched
 import Base.Result
 
-prog : Eff RNil (Result Int)
-prog = withScope (\sc =>
-  bindEff (awaitTaskLin (forkTaskLin sc (pureEff 42))) (\r => pureEff r))
+prog : Eff [] (Result Int)
+prog = withScope (\sc => bindEff (awaitTaskLin (forkTaskLin sc (pureEff 42))) (\r => pureEff r))
 
 main : IO Int
 main = do

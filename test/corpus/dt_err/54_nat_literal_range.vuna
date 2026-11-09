@@ -1,5 +1,4 @@
--- Nat 字面量超出 63 位范围：词法溢出回绕成负数，在期望 Nat 处必须报错。
-import Base.Nat
-
+-- Nat 字面量超出 63 位可表示范围：C40 起词法期直接报 LX_IntLiteralOutOfRange，
+-- 不再静默回绕（旧行为：2^62 回绕成 min_int 后在 Nat 期望处报 TC_NatLiteralOutOfRange）。
 main : Nat
 main = 4611686018427387904

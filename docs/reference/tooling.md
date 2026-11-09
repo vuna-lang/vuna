@@ -135,9 +135,10 @@ search` 无命中为 1（用法 / 查询解析 / 非 workspace 仍为 2）；`vu
 
 ## 4. `vuna run` 与 REPL 调试命令
 
-`vuna run [DIR] [--package NAME] [--no-build] [-- ARGS...]`：in-process 走与 `vuna build`
-同一条增量构建，然后执行 `<包目录>/.output/bin/<包名>`；`--` 之后的参数原样透传，子进程
-退出码原样返回。目标包选择：`--package` → workspace 根包（可执行时）→ 唯一可执行成员 →
+`vuna run [DIR] [--package NAME] [--no-build] [--out DIR] [-- ARGS...]`：in-process 走与 `vuna build`
+同一条增量构建，然后执行 `<包目录>/.output/bin/<包名>`；`--out DIR` 时构建到 `DIR/bin/<包名>`
+并从该处执行（相对 DIR 按调用方 cwd 解析），`--no-build` 直接使用现有产物；`--` 之后的参数
+原样透传，子进程退出码原样返回。目标包选择：`--package` → workspace 根包（可执行时）→ 唯一可执行成员 →
 否则列出候选并 exit 2；库包 / 缺产物 / 构建失败都给出可操作错误。实现入口
 `Vuna.Run.runRun`。
 
@@ -159,7 +160,7 @@ REPL（`vuna repl [FILE|DIR|MODULE]`，实现入口 `Vuna.Repl.runRepl`；行编
 | `:search [--type\|--name\|--doc] QUERY` | 复用 `vuna search` 的检索；含 `->` / `=>` 自动类型检索；最多 20 条 |
 | `:load TARGET` | 见下方加载矩阵；成功才改变状态，失败保持缓冲 |
 | `:reload` | 上次是文件则重读；是模块则重新校验导入；都没有给可操作提示 |
-| `:browse [MODULE]` | 惰性构建 `Vuna.Index`（首次可能触发索引重建）后打印模块接口；无参列出模块 |
+| `:browse [MODULE]` | 惰性构建 `Vuna.Index`（首次调用要校验 workspace 源码 + 缓存新鲜度，缓存过期时会重建）后打印模块接口；无参列出模块。校验结果按 REPL 会话缓存（逐源文件 stat 快照，`ReplState.stateIndexCache`），会话内后续 `:browse`/`:info`/`:search` 只重新 stat 比对，不再每次重读全部源码算内容哈希；快照失效（源码增删改，含安全窗内同 size 编辑）才退回完整 `loadOrBuild`。索引只覆盖 workspace 内源码，非 workspace 的外部依赖模块用 `:load <模块名>` 导入（`:browse` 查不到） |
 | `:defs` | 缓冲区定义的名字 + zonk 后类型；`:load` 文件来源标 `(文件)` |
 | `:imports` | 当前显式 import 行 + 隐式自动导入的 Prelude（标「隐式自动导入」） |
 | `:delete NAME` | 删除 REPL 内定义（含同名签名块）；文件来源报错，提示改文件后 `:reload` |
@@ -203,16 +204,34 @@ REPL（`vuna repl [FILE|DIR|MODULE]`，实现入口 `Vuna.Repl.runRepl`；行编
 | `path/to/pkg`（目录） | 切换包上下文并重置缓冲/索引（保留设置/历史） | `已切换包 …` |
 | `vuna repl FILE` / `vuna repl DIR` / `vuna repl MODULE` | 启动即加载 / 切换上下文 / 导入；加载失败报错退出（exit 2） | 同上 |
 
-**行编辑（tty）**：←/→ 码点移动、Home/End、Backspace/Delete、↑/↓ 历史、Ctrl-R 反向
-增量历史搜索（再按 Ctrl-R 找更早、Enter 接受、Esc/Ctrl-C 取消）、Ctrl-A/E/K/U/W、
-Ctrl-L 清屏、Ctrl-P/N/B/F、Ctrl-C 取消当前输入、Ctrl-D 空行退出、Tab 补全（命令名与
-当前缓冲绑定名；唯一匹配补全、多个补最长公共前缀）。超宽行按水平窗口只显示尾部，
-宽度来自 `stty size`（取不到时按 80）。若进程在编辑中被硬杀（SIGKILL），终端可能停在
-raw，执行 `stty sane` 恢复。历史持久化到 `VUNA_REPL_HISTORY` > `$XDG_STATE_HOME/vuna/repl_history`
-> `$HOME/.vuna_repl_history`（只存单行单元；目录不可写时静默跳过）。
+**行编辑（tty）**：←/→ 码点移动、Home/End、Backspace/Delete、↑/↓ 历史（多行单元
+原样回填，换行显示为 `↵`）、Ctrl-R 反向增量历史搜索（再按 Ctrl-R 找更早、Enter 接受、
+Esc/Ctrl-C 取消）、Ctrl-A/E/K/U/W、Ctrl-L 清屏、Ctrl-P/N/B/F、Ctrl-C 取消当前输入、
+Ctrl-D 空行退出。超宽行按水平窗口只显示尾部，宽度来自 `stty size`（取不到时按 80）；
+**窗口 resize** 在空闲时轮询检测（`stty min 0 time 1` 每 0.1s 醒一次、每 20 tick（≈2s）
+查一次宽度，变化后按新宽度重绘当前行；不忙等。2s 是权衡：每次查询要起 `sh` + `stty`
+两个进程，2s 的 resize 反应延迟可接受且常驻开销低）。若进程在编辑中被硬杀（SIGKILL），
+终端可能停在 raw，执行 `stty sane` 恢复。
+
+**Tab 补全**：普通位置补命令名与当前缓冲绑定名；`:load` 的参数位补**模块名 + 文件路径**，
+`:browse` / `import` 的参数位只补模块名。模块名来自包上下文模块根（自身 `lib` + 依赖
+闭包，相对路径 `/`→`.`；不按 `[export]` 过滤，越权模块在 `:load` 时被 Loader 拒绝），
+文件路径按 token 最后一个 `/` 拆目录/末段后列举（目录补尾随 `/`）。候选只在按下 Tab 时
+枚举（读行不做目录 IO）；唯一匹配直接补全、多个匹配补最长公共前缀，语义不变。
+
+**括号粘贴**：tty 下开启 bracketed paste（`\e[?2004h`，退出时 `\e[?2004l`）。
+`\e[200~` … `\e[201~` 之间的内容**原样**进编辑缓冲（Tab 不触发补全、换行不触发提交，
+`\r` 规范化为 `\n`）；按 Enter 才把整段作为一个输入单元（或按续行规则并入 pending）
+提交。不支持该模式的终端不会发送这两个序列，行为与旧版一致；非 tty 路径不进入编辑器。
+
+**历史持久化**：`VUNA_REPL_HISTORY` > `$XDG_STATE_HOME/vuna/repl_history` >
+`$HOME/.vuna_repl_history`。文件格式 v2：首行 `vuna-repl-history 2`，其后每行一条单元
+（单元内 `\`→`\\`、换行→`\n`），因此**多行单元也会持久化**；旧 v1（无首行头、纯文本
+一行一条）仍可读，下次写入自动升级为 v2。目录不可写时静默跳过。
 
 **非 tty / 无 stty 回退**：非交互管道、`:set editing off`、或无 POSIX `stty` 时退回
-`prim_readLine`（没有方向键/Ctrl-R，其它命令语义一致；测试全部走这条路径）。
+`prim_readLine`（没有方向键/Ctrl-R / 括号粘贴 / resize 重绘，其它命令语义一致；管道测试
+走这条路径，pty 行为另有 `script` 伪造终端的用例）。
 
 未知 `:命令` 给 `未知命令 ...（输入 :help 查看可用命令）` + 最近命令建议，不落到 parse
 error。调试与运行时错误的整体工作流见 [debugging.md](debugging.md)。
@@ -313,11 +332,12 @@ dedent，开引号后的首个换行由 lexer 丢弃、渲染时按需补回）�
 
 ## 6. 尚未实现（工具链自身缺口）
 
-- **case splitting**：按洞的目标类型自动展开 `case` 分支（需要与编辑器协议配合）。
 - `rewrite` / `with` 等证明工程 ergonomics：研究储备，未排期。
 - **语义索引**：Index 仍是 parse 级（签名必填 ⇒ 语法索引即语义面，不另建语义索引）。
-- LSP 只有 lint quick fix：无 rename、无 case split、codeAction 不提供 command 形式
-  （见 [debt.md](debt.md) C38）。
+- LSP codeAction 的剩余缺口：case split 枚举非索引 `data` 与 record（单构造器 record 模式），
+  不覆盖索引族（parse 级拿不到索引约束）与不透明 `axiom`；构造子是 parse 级解析（依赖模块
+  读盘）；`fix all` 的 command 形式依赖客户端支持 `workspace/applyEdit`；rename 由
+  `textDocument/rename` 提供（解析级，见 lsp.md）（见 [debt.md](debt.md) C38）。
 - **REPL server**：无请求取消/超时、无并发连接、无断线重连；阶段 1 不执行 `:!` 与效果
   表达式；没有 HTTP/TLS（端点只有 loopback TCP / Unix socket；见 debt D36）。
 

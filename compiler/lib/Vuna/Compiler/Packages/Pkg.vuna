@@ -2,17 +2,20 @@ module Vuna.Compiler.Packages.Pkg
   ( Package(..)
   , PackageContext
   , Root
+  , absolutePath
   , contextCapabilities
   , contextDir
   , contextForDir
   , contextForFile
   , contextPackageName
   , contextRoots
+  , contextTrustUnsafe
   , findManifestDir
   , findManifestDirMaybe
   , loadManifestAt
   , loadPackage
   , locateBase
+  , normalizeDir
   , packageContext
   , packageDir
   , packageEntry
@@ -23,6 +26,7 @@ module Vuna.Compiler.Packages.Pkg
   , rootDir
   , rootName
   , rootPackage
+  , rootTrustUnsafe
   , workspacePackages
   ) where
 
@@ -45,7 +49,7 @@ import Vuna.Compiler.Frontend.Manifest
 import Base.IO
 
 -- 模块根：目录、包名、可选导出模块列表、能力列表（M27：该包 manifest 的
--- `[capabilities].effects`）。
+-- `[capabilities].effects`）、信任点（D28：该包 manifest 的 `[trust] unsafe`）。
 -- exports = Nothing 表示该根不限制导出（自己包）；exports = Just mods 表示只有
 -- mods 里的模块可被跨包 import。
 -- 抽象性：导出表只写 `Root`（不含 `(..)`）——record 的裸导出隐藏构造子，
@@ -55,6 +59,8 @@ record Root where
   rootName : String
   rootExports : Maybe (List String)
   rootCapabilities : List String
+  -- | D28：该包 manifest 的 `[trust] unsafe`（Nothing = 非严格模式）。
+  rootTrustUnsafe : Maybe (List String)
 
 -- 已解析的包：manifest、直接依赖（顺序同 [dependencies]）、包目录（已规范化）。
 record Package where
@@ -72,18 +78,21 @@ packageDependencies (Package m ds p) = ds
 --   - List Root      = 模块根列表（自己 lib 在最前，随后是依赖闭包）
 --   - String         = 包名（base-only 时为 ""，无显式能力、effectful prim_* 被拒）
 --   - List String    = 本包 manifest 声明的能力（M27；base-only 时为 []）
+--   - Maybe (List String) = 本包 manifest 的 `[trust] unsafe`（D28；Nothing = 非严格模式）
 record PackageContext where
   contextDir : String
   contextPackage : Maybe Package
   contextRoots : List Root
   contextPackageName : String
   contextCapabilities : List String
+  -- | D28：本包 manifest 的 `[trust] unsafe`（Nothing = 非严格模式）。
+  contextTrustUnsafe : Maybe (List String)
 
 rootDir : Root -> String
-rootDir (Root dir name exports caps) = dir
+rootDir (Root dir name exports caps trust) = dir
 
 rootName : Root -> String
-rootName (Root dir name exports caps) = name
+rootName (Root dir name exports caps trust) = name
 
 -- rootName 的别名（Loader/CLI 侧更常用的叫法）。
 rootPackage : Root -> String
@@ -91,21 +100,29 @@ rootPackage root = rootName root
 
 -- M27：该模块根所属包声明的效应能力（空列表 = 只能经 Base.IO）。
 rootCapabilities : Root -> List String
-rootCapabilities (Root dir name exports caps) = caps
+rootCapabilities (Root dir name exports caps trust) = caps
+
+-- | D28：该模块根所属包的信任点（`[trust] unsafe`；Nothing = 非严格模式）。
+rootTrustUnsafe : Root -> Maybe (List String)
+rootTrustUnsafe (Root dir name exports caps trust) = trust
 
 contextDir : PackageContext -> String
-contextDir (PackageContext dir pkg roots name caps) = dir
+contextDir (PackageContext dir pkg roots name caps trust) = dir
 
 contextRoots : PackageContext -> List Root
-contextRoots (PackageContext dir pkg roots name caps) = roots
+contextRoots (PackageContext dir pkg roots name caps trust) = roots
 
 -- 上下文包名：base-only（ad-hoc）为空串；Loader 用它判同包可见性与效果内建。
 contextPackageName : PackageContext -> String
-contextPackageName (PackageContext dir pkg roots name caps) = name
+contextPackageName (PackageContext dir pkg roots name caps trust) = name
 
 -- M27：本包声明的效应能力（入口文件用；base-only / ad-hoc 为 []）。
 contextCapabilities : PackageContext -> List String
-contextCapabilities (PackageContext dir pkg roots name caps) = caps
+contextCapabilities (PackageContext dir pkg roots name caps trust) = caps
+
+-- | D28：本包的信任点（入口文件用；base-only / ad-hoc 为 Nothing）。
+contextTrustUnsafe : PackageContext -> Maybe (List String)
+contextTrustUnsafe (PackageContext dir pkg roots name caps trust) = trust
 
 packageDir : Package -> String
 packageDir (Package manifest dependencies dir) = dir
@@ -143,7 +160,7 @@ normalizeAcc absolute (seg :: rest) acc = case seg of
       else normalizeAcc absolute rest prevRest
   _ => normalizeAcc absolute rest (seg :: acc)
 
--- 目录字符串规范化（lexical，不解析符号链接）："a/./b/../c/" -> "a/c"。
+-- | 目录字符串规范化（lexical，不解析符号链接）："a/./b/../c/" -> "a/c"。
 -- 相对路径空结果归一为 "."，绝对路径空结果归一为 "/"。
 normalizeDir : String -> String
 normalizeDir path = if startsWith "/" path then case normalizeAcc True (splitOnSlash path) [] of
@@ -153,7 +170,7 @@ else case normalizeAcc False (splitOnSlash path) [] of
   [] => "."
   segments => joinSlashes (reverse segments)
 
--- 相对路径按当前工作目录归一为绝对路径（M26：向上找 manifest 前必须先绝对化，
+-- | 相对路径按当前工作目录归一为绝对路径（M26：向上找 manifest 前必须先绝对化，
 -- 否则 "." 这类相对路径的父目录仍是 "."，搜索在起点就停住）。
 absolutePath : String -> String
 absolutePath path =
@@ -318,7 +335,7 @@ workspacePackages rootBaseDir =
 dependencyRootOf : Package -> Root
 dependencyRootOf package =
   Root "${packageDir package}/lib" (packageName package) (packageExports package)
-    package.packageManifest.manifestCapabilities
+    package.packageManifest.manifestCapabilities package.packageManifest.manifestTrustUnsafe
 
 -- DFS 后序：先深依赖、再直接依赖本体；按包名去重（首次出现保留）。
 -- 包名唯一性由 `checkUniquePackageNames` 在加载期保证（同名 ⇒ 同目录），所以
@@ -339,6 +356,7 @@ packageRoots package =
     selfName = packageName package
     selfRoot =
       Root "${packageDir package}/lib" selfName Nothing package.packageManifest.manifestCapabilities
+        package.packageManifest.manifestTrustUnsafe
   in case dependencyRoots [selfName] package.packageDependencies of
     Pair seen roots => selfRoot :: roots
 
@@ -350,7 +368,7 @@ packageEntry package = "${packageDir package}/app/Main.vuna"
 packageContext : Package -> PackageContext
 packageContext package =
   PackageContext (packageDir package) (Just package) (packageRoots package) (packageName package)
-    package.packageManifest.manifestCapabilities
+    package.packageManifest.manifestCapabilities package.packageManifest.manifestTrustUnsafe
 
 -- ---------------------------------------------------------------- 查找
 findManifestUpMaybe : Int -> String -> Maybe String
@@ -429,7 +447,7 @@ locateBase _ =
 baseOnlyContext : String -> Result PackageContext
 baseOnlyContext base =
   andThen (loadPackage base)
-    (\package => Ok (PackageContext "" Nothing [dependencyRootOf package] "" []))
+    (\package => Ok (PackageContext "" Nothing [dependencyRootOf package] "" [] Nothing))
 
 -- 从 start（已绝对化的目录）向上找最近 manifest；找不到 → base-only。
 -- manifest 非法（解析/校验失败）必须报错，不回退到 base-only。

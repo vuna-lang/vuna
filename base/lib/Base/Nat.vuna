@@ -19,34 +19,44 @@ import Base.Maybe
 import Base.Ord
 import Base.Show
 
+-- | 非负整数（归纳族 `Zero` / `Succ`）。类型层是普通归纳族，供 Vec 索引、覆盖性与终止性复用；运行时表示是 OCaml int（`Zero = 0`、`Succ n = n + 1`，饱和到 max_int），没有变体分配。
 data Nat : Type where
   Zero : Nat
   Succ : Nat -> Nat
 
+-- | 加法，结果饱和到 max_int；`+` 在 Nat 上下文由精化器特化到同一原语。
 plus : Nat -> Nat -> Nat
 plus = natAdd
 
+-- | 截断减法：结果小于 0 时取 0，永不产生负数。
 minus : Nat -> Nat -> Nat
 minus = natSub
 
+-- | 乘法，结果饱和到 max_int。
 mult : Nat -> Nat -> Nat
 mult = natMul
 
+-- | 向下取整除法；除零与 Int 的 `/` 一样在运行期抛 `Failure division by zero`。
 div : Nat -> Nat -> Nat
 div = natDiv
 
+-- | 无损提升到 `Int`（运行时恒等）。
 toInt : Nat -> Int
 toInt = natToInt
 
+-- | 有损转换：负数 clamp 成 0；需要区分时用 `fromIntMaybe`。
 fromInt : Int -> Nat
 fromInt = natFromInt
 
+-- | `fromInt` 的可失败版：负数返回 `Nothing`，否则 `Just`。
 fromIntMaybe : Int -> Maybe Nat
 fromIntMaybe n = if n < 0 then Nothing else Just (fromInt n)
 
+-- | 前驱 `minus n 1`：零的前驱仍是零。
 pred : Nat -> Nat
 pred n = minus n 1
 
+-- | 是否为 `Zero`（运行时判 `toInt n == 0`）。
 isZero : Nat -> Bool
 isZero n = toInt n == 0
 

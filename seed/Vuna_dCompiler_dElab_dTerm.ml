@@ -90,3 +90,5 @@ let v_Vuna_dCompiler_dElab_dTerm_dcheckCaseOf = (fun a1 a2 a3 a4 a5 a6 a7 a8 a9 
 let v_Vuna_dCompiler_dElab_dTerm_delabCaseAlts = (fun a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 -> (((((((((((Vuna_dCompiler_dElab_dTerm_dImpl.v_Vuna_dCompiler_dElab_dTerm_dImpl_delabCaseAltsFuel 256) a1) a2) a3) a4) a5) a6) a7) a8) a9) a10))
 
 let v_Vuna_dCompiler_dElab_dTerm_delabConAlt = (fun a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 -> ((((((((((((Vuna_dCompiler_dElab_dTerm_dImpl.v_Vuna_dCompiler_dElab_dTerm_dImpl_delabConAltFuel 256) a1) a2) a3) a4) a5) a6) a7) a8) a9) a10) a11))
+
+let v_Vuna_dCompiler_dElab_dTerm_dresolveOverFunPats = (fun a1 a2 a3 a4 -> ((((Vuna_dCompiler_dElab_dTerm_dImpl.v_Vuna_dCompiler_dElab_dTerm_dImpl_dresolveOverFunPats a1) a2) a3) a4))

@@ -136,15 +136,15 @@ Codegen 对 Int 路径继续用内联运算符，对 Nat 路径用 `bi_nat*` hel
 
 | 类型 | 实例落点 | 原因 |
 | --- | --- | --- |
-| `Bool` | `Base.Eq` / `Base.Ord` | `eq : a -> a -> Bool` 的返回类型是 Bool；放 `Base.Bool` 会形成 `Base.Bool ↔ Base.Eq` 的 import 环（Loader 报 `ImportCycle`） |
+| `Bool` | `Show` → `Base.Bool`；`Eq` / `Ord` → `Base.Eq` / `Base.Ord` | `Show` 方法签名不依赖 Bool，可放类型模块；`eq : a -> a -> Bool` 的返回类型是 Bool，放 `Base.Bool` 会形成 `Base.Bool ↔ Base.Eq` 的 import 环（Loader 报 `ImportCycle`） |
 | `Int` | `Base.Int` | primitive 类型模块；实例体走 Int 内建特化 |
-| `String` | `Base.String` | primitive 类型模块；实例体走 String 内建特化 |
-| `List` / `Maybe` / `Pair` / `Result` | 各自模块（按需） | 容器实例当前不内置，将来按同一规则声明 |
+| `String` | `Eq` / `Ord` → `Base.String`；`Show` → `Base.Show` | String 经 `Base.Interp` 依赖 `Base.Show`，把 `Show String` 放回 String 会成环 |
+| `List` / `Maybe` / `Pair` / `Result` | 各自模块 | 约束 `Show` 实例（如 `instance Show a => Show (List a)`）；`Interp` 由 blanket 实例自动获得 |
 
 实例实现：data 类型用模式匹配（`Bool` 按 `True`/`False` 穷尽；`deriving (Eq)` 生成
 同形实例）；primitive 没有构造子，`Int`/`String` 的实例体写 `==` / `<`，命中内建特化，
 不自递归。实例必须被加载才参与搜索：`Base.vuna` / `Prelude.vuna` 显式
-`import Base.Int`（Bool 实例随 `Base.Eq` / `Base.Ord` 加载）。
+`import Base.Int`；`Show Bool` 随 `Base.Bool`、`Eq/Ord Bool` 随 `Base.Eq` / `Base.Ord` 加载。
 
 ## 实现落点
 

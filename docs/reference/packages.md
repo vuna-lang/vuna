@@ -7,8 +7,9 @@
 ## 包管理与工具链
 
 - 包元信息用 `vuna.toml`（TOML 子集）：`[package]`（只有 name）、`[workspace]`（members）、
-  `[export]`（modules）、`[capabilities]`（effects）、`[dependencies]`（依赖名 = 相对路径，
-  暂不做 registry）。`[package]` 里出现其他 key 是错误，不静默忽略。
+  `[export]`（modules）、`[capabilities]`（effects）、`[trust]`（unsafe 定义级信任点）、
+  `[dependencies]`（依赖名 = 相对路径，暂不做 registry）。未知 section / key、以及 `[package]`
+  里出现其他 key 都是错误，不静默忽略。
 - **workspace 根即一个包**（Cargo 风格）：根 `vuna.toml` 同时含 `[workspace]` 与
   `[package]`；成员是子目录，各自有自己的 `vuna.toml`。本仓库 = 根包 `vuna`（产品 CLI）+
   成员包 `vuna-compiler`（编译器）+ 成员包 `vuna-base`（标准库）；依赖图
@@ -59,6 +60,10 @@
   - `vuna doc [--check] [--package NAME] [DIR [OUT]]`：扫描 `lib/` 生成**单文件交互 HTML**
     API 文档（默认 `DIR/docs/api.html`，gitignored；workspace 根含所有成员包）；`--check`
     报告缺失 docstring 的顶层导出项；docstring / 搜索框 / 类型检索见 [api-docs.md](api-docs.md)；
+  - `vuna clean-iface [--dry-run] [DIR]`：批量删除 DIR 下的 vuna iface 缓存文件
+    （`*.iface` / `.vuna-iface` / 原子写残留 `*.iface.*.tmp`；默认 `DIR=.`，不碰 `.vuna`
+    源码）。接口缓存默认写在源文件旁，`VUNA_IFACE_DIR` 可整体镜像到外部根，见
+    [cache.md](cache.md)；
   - `vuna map [--modules]` / `vuna map --find <Module.name>` / `vuna map --impact
     <Module.name>` / `vuna api <Module.name>`：`Vuna.Index` 的源码符号索引，用于定位定义、
     引用者与建议测试标签；索引缓存在 `.local/index/`（gitignored），按**内容哈希**判定
@@ -84,9 +89,27 @@
   能力声明不可由调用参数伪造；检查覆盖整个源文件（包括未求值的定义），不只看 `main`。
 - 未声明能力的包（普通用户包、`test/corpus` 夹具）只能经 `Base.IO` 使用效果。`Base.IO`
   是 `prim_*` 的直接别名层（M31），也是推荐路径；`runIO` 在 main 之外执行动作、需 `unsafe`。
+
+### 定义级信任点（D28，opt-in 严格模式）
+
+- `[trust] unsafe = ["Module.def", ...]` 是**定义级**信任声明：声明该 section 的包进入
+  **严格模式**——只有列表里的定义可以**直接**引用 `unsafe` 门控目标（`intrinsicCapability`
+  为 `unsafe` 的内建 `prim_runIO` / `prim_effectPerform` / `prim_effectHandle` /
+  `prim_cleanup*` / `prim_sched*`，以及 `Base.IO.runIO` 别名）。其它定义（同包所有模块 +
+  入口文件）直调即被 `Loader.Resolve` 拒绝，错误给出定义全限定名、触发的内建名与修复写法。
+- 检查是**逐定义**的：`DFun` body 与 instance 方法体里**直接出现**目标名字才需要信任点；
+  只经信任入口间接调用的传递调用者不需要列。新增直接使用点必须同时更新清单。
+- `[trust]` 是 opt-in：没有该 section 的包保持原有「包级 `unsafe` 能力 + 整模块首个效应」
+  检查，不做定义级限制（根包 `vuna` 与 `vuna-compiler` 因此不受影响）。`[trust]` 但能力表
+  没有 `unsafe` → 报错；列表项必须是 `Module.def` 形式的字符串且是本包**真实定义**，
+  假项在模块解析后报错（`checkTrustPoints`）。入口文件定义没有全限定名，不能作为信任点。
+- **base 是唯一 opt-in 方**：`vuna-base` 的 `[trust] unsafe` 是它的安全审计面（直接使用点
+  见 `base/vuna.toml`，夹具 `test/corpus/packages/12_trust_points/`）。
+
 - 本仓库声明：根包 `vuna` 与 `vuna-compiler` 声明全部六个能力（含 `unsafe`；工具链在
-  main 之外用 `runIO`）；`vuna-base` 只声明 `console` / `fs` / `process`（别名面）。
-  无 manifest 的 ad-hoc 文件没有能力，直接调用 effectful 内建即被拒。
+  main 之外用 `runIO`，没有 `[trust]`，保持包级门控）；`vuna-base` 声明
+  `console` / `fs` / `process` / `env` / `clock` / `unsafe`，并用 `[trust] unsafe` 收紧
+  `unsafe` 的直接使用点。无 manifest 的 ad-hoc 文件没有能力，直接调用 effectful 内建即被拒。
 
 ## 包格式速查
 
@@ -133,12 +156,23 @@ modules = [
   "Base.ST",
   "Prelude"
 ]
+
+# D28：定义级信任点（opt-in 严格模式）。unsafe 的直接使用点必须显式列出。
+[trust]
+unsafe = [
+  "Base.IO.runIO",
+  "Base.ST.runST",
+  "Base.Eff.bracket",
+  # …完整清单见 base/vuna.toml
+]
 ```
 
 （`vuna-base` 不在 `[dependencies]` 里依赖别的包；上例的 `[dependencies]` 段从略。
-`vuna-base` 的 `[capabilities] effects` 列 `["console", "fs", "process", "unsafe"]`：
-`Base.IO` 封装了前三个能力对应的 `prim_*`；`unsafe` 的唯一使用点是 `Base.ST.runST`
-（region 内动作经 `runIO` 执行，见 [effects.md](effects.md)）。）
+`vuna-base` 的 `[capabilities] effects` 列
+`["console", "fs", "process", "env", "clock", "unsafe"]`：`Base.IO` 封装了这些能力对应的
+`prim_*`；`unsafe` 的直接使用点（`runIO` 执行入口、`Base.Eff` 运行时续延、`Base.EffSched`
+调度器原语、`Base.Debug.trace` 调试逃逸等）逐条列在 `[trust] unsafe` 里，见
+[effects.md](effects.md) 与 `base/vuna.toml`。）
 
 `[export]` 的每个名字都是模块全名；`[dependencies]` 的值是相对该包目录的路径（lexical
 规范化，不做 realpath）。manifest 只被解析与校验（`Vuna.Compiler.Frontend.Manifest`），

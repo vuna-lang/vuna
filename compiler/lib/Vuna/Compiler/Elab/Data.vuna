@@ -55,8 +55,8 @@ elabCtor globals fam arity famLevel ec c = case c of
           tyTerm = zonkTerm ec1 0 tyTerm0
         in case resultSpine (dropParams tyTerm) of
           Pair head args =>
-            if head /= fam then tcErr2 csp (CtorDoesNotReturn cname fam) cname fam
-            else if length args /= arity then tcErr2 csp (CtorWrongIndices cname fam) cname fam
+            if head /= fam then tcErr2 csp (CtorDoesNotReturn (ctorDisplayName cname) fam) (ctorDisplayName cname) fam
+            else if length args /= arity then tcErr2 csp (CtorWrongIndices (ctorDisplayName cname) fam) (ctorDisplayName cname) fam
             else andThen
               (checkCtorFieldSorts globals emptyCtx ec1 arity famLevel cname csp (countTelePis tyTerm) tyExpr2)
               (\_ => Ok (Pair (DtCtor cname fam (teleOfType tyTerm) tyTerm) ec1))
@@ -91,7 +91,7 @@ checkCtorFieldSorts globals ctx ec arity famLevel cname csp tyPis tyExpr =
     -- 表面形态与已精化形态必须同构（否则无法确定每个字段的层级，显式拒绝而不是静默放行）。
     surfacePis = countSurfacePis tyExpr
   in if surfacePis /= tyPis then tcErr2 csp
-    (CtorError cname "cannot verify the universe level of its field types; write the constructor type as a Pi chain")
+    (CtorError (ctorDisplayName cname) "cannot verify the universe level of its field types; write the constructor type as a Pi chain")
     cname
     "cannot verify the universe level of its field types; write the constructor type as a Pi chain"
   else ctorFieldSortsGo globals ctx ec 0 arity famLevel cname csp tyExpr
@@ -125,7 +125,7 @@ ctorFieldSortsBinder globals ctx ec pos arity famLevel cname csp name dom cod = 
         field = pos - arity
         msg =
           "field #${field}: its type sorts into Type ${levelToInt sort}, above the family level Type ${levelToInt famLevel}"
-      in tcErr2 csp (CtorError cname msg) cname msg
+      in tcErr2 csp (CtorError (ctorDisplayName cname) msg) (ctorDisplayName cname) msg
 )
 
 -- Phase A：只精化 kind、登记族名。构造子字段可以引用**后面**声明的族（AST 里

@@ -1,4 +1,10 @@
-module Vuna.Index.Scan (buildIndex, loadOrBuild) where
+module Vuna.Index.Scan
+  ( SourceStat(..)
+  , buildIndex
+  , indexStatsOf
+  , indexStatsUnchanged
+  , loadOrBuild
+  ) where
 
 -- Vuna.Index.Scan：parse 级扫描、符号抽取、全量构建与 `.local/index/` 缓存
 -- （M24 后维护·源码重组；M30 内容哈希缓存 v2 + 原子写 + 目录锁）。
@@ -34,6 +40,10 @@ import Vuna.FixityEnv
 import Vuna.Index.Types
 import Vuna.Sig
 import Base.IO
+
+-- C41：工具链 fuel 耗尽不是「空结果」，而是内部不变量被破坏；与编译器一致硬失败。
+indexFuelExhausted : String -> a
+indexFuelExhausted what = prim_fail "vuna: internal: ${what} fuel exhausted"
 
 -- ---------------------------------------------------------------
 -- 小型 helper（本模块自用，避免污染 Base）
@@ -131,10 +141,11 @@ collectVuna dir = collectVunaGo 1048576 dir
 -- 目录树递归（符号链接可成环）用显式 fuel 守卫；每次下钻一层消耗 1。
 collectVunaGo : Int -> String -> List String
 collectVunaGo fuel dir =
-  if fuel <= 0 then [] else concatMap (walkVunaGo (fuel - 1) dir) (runIO (prim_readDir dir))
+  if fuel <= 0 then indexFuelExhausted "directory walk"
+  else concatMap (walkVunaGo (fuel - 1) dir) (runIO (prim_readDir dir))
 
 walkVunaGo : Int -> String -> String -> List String
-walkVunaGo fuel dir name = if fuel <= 0 then []
+walkVunaGo fuel dir name = if fuel <= 0 then indexFuelExhausted "directory walk"
 else if skipDir name then []
 else
   let
@@ -368,7 +379,11 @@ refsInExprGo sMod e acc = case e of
     refsInExprGo sMod inner (Ref sMod op (spanStartLine sp) (spanStartCol sp) :: acc)
   ESectR inner op sp =>
     refsInExprGo sMod inner (Ref sMod op (spanStartLine sp) (spanStartCol sp) :: acc)
-  _ => acc
+  -- M31.2：中缀链与括号是 parser 中间产物：op 记一条引用，操作数按同一累积器顺序递归。
+  EInfix op l r sp =>
+    refsInExprGo sMod l
+      (refsInExprGo sMod r (Ref sMod op (spanStartLine sp) (spanStartCol sp) :: acc))
+  EParen inner sp => refsInExprGo sMod inner acc
 
 -- M36：模板片段里的引用（洞内表达式递归；文本块无引用）。
 refsInInterpParts : String -> List InterpPart -> List Ref -> List Ref
@@ -760,3 +775,69 @@ refsText index = "${join "\n" (map refLineText index.indexRefs)}\n"
 
 refLineText : Ref -> String
 refLineText r = "${refModule r}\t${refName r}\t${r.refLine}\t${r.refCol}"
+
+-- ---------------------------------------------------------------
+-- 廉价新鲜度探针（REPL 会话缓存用，D35）
+-- ---------------------------------------------------------------
+-- `loadOrBuild` 的新鲜度判定要**读每个源文件算内容哈希**（166 模块 ≈0.6–1.1s），这是 REPL
+-- 首次 `:browse` 卡顿的来源。REPL 会话改用 stat 快照判定：建立时记下每个源文件的
+-- (path, bytes, mtime, 内容哈希)，复用前只重新遍历目录 + stat，逐条比对。
+--
+-- 判定语义与 `Driver/Cache` 的 `sourceInfoUnchanged` 一致：
+--   * path 集合 / bytes / mtime 全部未变 ⇒ 内容未变（不读文件）；
+--   * mtime 距快照建立时刻 `builtSec` 不足 `indexMtimeSafetyWindowSec` 秒的文件**一律回落
+--     内容哈希**（mtime 只有秒级分辨率，同秒内同 size 的编辑不可分辨，宁可慢也不错用旧
+--     索引）；
+--   * 任一条目缺失 / 变化 / 回落哈希不一致 ⇒ 快照失效，调用方退回完整 `loadOrBuild`
+--     （内容哈希判定 + 按需重建 + 回写 `.local/index`）。
+-- 快照只存内存（REPL 会话内），不落盘、不改 `manifest.txt` 的 v3 格式与写侧语义。
+indexMtimeSafetyWindowSec : Int
+indexMtimeSafetyWindowSec = 5
+
+record SourceStat where
+  ssPath : String
+  ssBytes : Int
+  ssMtime : Int
+  ssHash : String
+
+-- 建立快照：遍历目录拿到当前源文件集合，逐个 stat；窗口内文件额外读内容算哈希。
+indexStatsOf : Int -> String -> List SourceStat
+indexStatsOf builtSec repo =
+  map (sourceStatOf builtSec) (concatMap packageSources (map firstOf (packageDirs repo)))
+
+-- mtime 距 `builtSec` 不足安全窗 ⇒ 内容哈希必须算（同秒同 size 的编辑 stat 不可分辨）；
+-- 窗外的文件只 stat，哈希留空。快照与校验用同一条规则、同一个 `builtSec` ⇒ 同一文件要么
+-- 两侧都算哈希、要么两侧都不算，不会出现「一侧有哈希一侧没有」的假失配。
+sourceStatOf : Int -> String -> SourceStat
+sourceStatOf builtSec path = if runIO (prim_fileExists path) then
+  let
+    bytes = runIO (prim_fileSize path)
+    mtime = runIO (prim_fileMtime path)
+  in if mtime + indexMtimeSafetyWindowSec > builtSec then
+    let
+      source = runIO (prim_readFile path)
+    in SourceStat path (strLength source) mtime (contentHash source)
+  else SourceStat path bytes mtime ""
+else SourceStat path 0 0 ""
+
+-- 快照校验：当前 stat 面与快照逐条一致（顺序无关，按 path 对齐；集合不同即失效）。
+indexStatsUnchanged : Int -> List SourceStat -> List SourceStat -> Bool
+indexStatsUnchanged builtSec snapshot current =
+  statCount snapshot == statCount current && indexStatsUnchangedGo current snapshot
+
+statCount : List SourceStat -> Int
+statCount [] = 0
+statCount (_ :: rest) = 1 + statCount rest
+
+indexStatsUnchangedGo : List SourceStat -> List SourceStat -> Bool
+indexStatsUnchangedGo [] _ = True
+indexStatsUnchangedGo _ [] = False
+indexStatsUnchangedGo snapshot (cur :: rest) =
+  statMatches snapshot cur && indexStatsUnchangedGo snapshot rest
+
+statMatches : List SourceStat -> SourceStat -> Bool
+statMatches [] _ = False
+statMatches (s :: rest) cur = case Pair s cur of
+  Pair (SourceStat p1 b1 m1 h1) (SourceStat p2 b2 m2 h2) =>
+    if p1 /= p2 then statMatches rest cur
+    else if b1 /= b2 || m1 /= m2 then False else if h1 /= "" || h2 /= "" then h1 == h2 else True

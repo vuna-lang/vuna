@@ -13,6 +13,7 @@ import Base.Nat
 -- 类存在与 split 单元顺序。
 import Base.Eq
 
+-- | 基于 assoc list 的持久映射，内部就是 `List (Pair k v)`；构造器不导出，只能经本模块 API 使用（`k` 需 `Eq`）。`lookup` 命中第一个匹配键，`insert` 覆盖时保留原位置。
 record Map k v where
   toList : List (Pair k v)
 
@@ -30,29 +31,38 @@ _removePair key [] = []
 _removePair key ((Pair k2 v2) :: rest) =
   if k2 == key then rest else Pair k2 v2 :: _removePair key rest
 
+-- | 空映射。
 empty : Map k v
 empty = Map []
 
+-- | 插入键 `key` 的值；键已存在时覆盖值（位置保留为首次出现处）。
 insert : Eq k => k -> v -> Map k v -> Map k v
 insert key value (Map pairs) = Map (_insertPair key value pairs)
 
+-- | 按键查找，返回 `Maybe v`；`Nothing` 表示无此键。
 lookup : Eq k => k -> Map k v -> Maybe v
 lookup key (Map pairs) = _lookupPair key pairs
 
+-- | 删除键 `key`；键不存在时原样返回。
 remove : Eq k => k -> Map k v -> Map k v
 remove key (Map pairs) = Map (_removePair key pairs)
 
+-- | 所有键（按内部关联表顺序，可能含重复键）。
 keys : Map k v -> List k
 keys (Map pairs) = map firstOf pairs
 
+-- | 所有值（与 `keys` 同序）。
 values : Map k v -> List v
 values (Map pairs) = map secondOf pairs
 
+-- | 键值对个数（`Nat`，线性计数）。
 size : Map k v -> Nat
 size (Map pairs) = length pairs
 
+-- | 从 `Pair` 列表直接构造，**不去重也不排序**；有重复键时 `lookup` 命中第一个。
 fromList : List (Pair k v) -> Map k v
 fromList pairs = Map pairs
 
+-- | 原样取回内部 `Pair` 列表（`fromList` 的逆操作，可能含重复键）。
 toList : Map k v -> List (Pair k v)
 toList (Map pairs) = pairs
