@@ -51,16 +51,16 @@ splitDeclNames (d :: rest) = case d of
   DSig name ctx ty sp => name :: splitDeclNames rest
   DExtern name cName ty sp => name :: splitDeclNames rest
   DFun name pats body sp => name :: splitDeclNames rest
-  DData name params kind ctors derivings lin sp => name :: splitDeclNames rest
-  DRecord name params fields derivings lin sp => name :: splitDeclNames rest
+  DData name params kind ctors derivings viaField lin sp => name :: splitDeclNames rest
+  DRecord name params fields derivings viaField lin sp => name :: splitDeclNames rest
   DTrait name params methods sp => name :: splitDeclNames rest
   _ => splitDeclNames rest
 
 splitDataNames : List Decl -> List String
 splitDataNames [] = []
 splitDataNames (d :: rest) = case d of
-  DData name params kind ctors derivings lin sp => name :: splitDataNames rest
-  DRecord name params fields derivings lin sp => name :: splitDataNames rest
+  DData name params kind ctors derivings viaField lin sp => name :: splitDataNames rest
+  DRecord name params fields derivings viaField lin sp => name :: splitDataNames rest
   _ => splitDataNames rest
 
 headClassName : Expr -> Maybe String
@@ -76,9 +76,9 @@ splitInstanceOwnerOf : String -> Decl -> List (Pair String String)
 splitInstanceOwnerOf owner (DInstance ctxE headExpr methods sp) = case headClassName headExpr of
   Just c => [Pair (instanceName c headExpr) owner]
   Nothing => []
-splitInstanceOwnerOf owner (DData dname params kind ctors derivings lin sp) =
+splitInstanceOwnerOf owner (DData dname params kind ctors derivings viaField lin sp) =
   splitDerivedOwners owner dname params derivings
-splitInstanceOwnerOf owner (DRecord dname params fields derivings lin sp) =
+splitInstanceOwnerOf owner (DRecord dname params fields derivings viaField lin sp) =
   splitDerivedOwners owner dname params derivings
 splitInstanceOwnerOf owner _ = []
 
@@ -131,8 +131,8 @@ record SplitMeta where
   -- M34.6：同一份归属表的哈希索引。清单保留给 `Driver.Iface.ownerIndexOf`（它按
   -- `Base.HashMap.fromList` 建自己的表），但 codegen 侧逐 def/data 查归属不再线性扫清单
   -- （旧实现 O(#def × #owner-pairs)：compiler 包一次 build 约 0.3s）。
-  smDefOwnerT : HashMap String
-  smDataOwnerT : HashMap String
+  smDefOwnerT : HashMap String String
+  smDataOwnerT : HashMap String String
 
 splitMetaOf : List (Pair String (List Decl)) -> List Decl -> SplitMeta
 splitMetaOf modules entryDecls =

@@ -1,0 +1,23 @@
+-- S4：实例候选匹配失败不得泄漏中间解（meta / 部分替换）。
+-- 搜索 `Pretty (Box Bool)` 时先试登记在前的候选 `Pretty (Box Int)`（同头不同参数，
+-- 匹配中途失败），再命中 `Pretty (Box Bool)`；随后的 `Pretty (Box Int)` 搜索
+-- 必须仍然正常（失败候选没有留下痕迹）。
+import Prelude
+
+trait Pretty a where
+  pretty : a -> String
+
+data Box a : Type where
+  MkBox : a -> Box a
+
+instance Pretty (Box Int) where
+  pretty (MkBox n) = "I" ++ strFromInt n
+
+instance Pretty (Box Bool) where
+  pretty (MkBox b) = if b then "BTrue" else "BFalse"
+
+probe : String
+probe = pretty (MkBox True) ++ "/" ++ pretty (MkBox 7) ++ "/" ++ pretty (MkBox False)
+
+main : String
+main = probe

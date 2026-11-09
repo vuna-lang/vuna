@@ -1,0 +1,55 @@
+module Base.Float (FromFloat(..), abs, floatToInt, intToFloat, sqrt) where
+
+-- Base.Float：`Float` primitive 类型的宿主模块（实例 + 字面量转换 trait + 转换 helper）。
+--
+-- 运行时表示是 OCaml IEEE-754 double（编译器内建；没有 data 声明）。本模块**刻意不在
+-- `Prelude` 里**：`Float` 语法进入 Prelude 闭包会让 pre-rotation 的旧 seed 无法编译
+-- 编译器（bootstrap 约束，见 docs/reference/floats.md）。因此：
+--
+--   * Float 字面量、`+ - * /`、比较、`==`、`main : Float`、模板插值都**不需要** import；
+--   * 但 `show` / `Eq` / `Ord` 字典、转换 helper、`FromFloat` 字面量转换、`deriving
+--     (FromFloat)` 需要 `import Base.Float`（实例全局可见，加载即参与实例搜索）。
+--
+-- 将来做一次 seed rotation 后，可以把本模块提升进 Prelude（debt 记录）。
+import Base.Eq
+import Base.Ord
+import Base.Show
+
+-- | 把 `Float` 字面量转换为 `a`：期望类型为 `a` 且存在本实例时，`1.5` 等价于
+-- `fromFloat 1.5`（与 `FromString` / `FromInt` 同一套 checking 位置降级规则）。
+trait FromFloat a where
+  fromFloat : Float -> a
+
+-- `Float` 是字面量的默认类型：恒等转换。
+instance FromFloat Float where
+  fromFloat x = x
+
+instance Eq Float where
+  eq x y = x == y
+  neq x y = x /= y
+
+instance Ord Float where
+  lt x y = x < y
+  le x y = x <= y
+  gt x y = x > y
+  ge x y = x >= y
+
+-- 与 runtime 展示共用同一实现（`string_of_float`）。
+instance Show Float where
+  show x = strFromFloat x
+
+-- | 浮点绝对值（对应 OCaml `abs_float`）。
+abs : Float -> Float
+abs = floatAbs
+
+-- | 浮点平方根（对应 OCaml `sqrt`）。
+sqrt : Float -> Float
+sqrt = floatSqrt
+
+-- | Int → Float（有损：超出 2^53 的整数会舍入；对应 OCaml `float_of_int`）。
+intToFloat : Int -> Float
+intToFloat = floatFromInt
+
+-- | Float → Int（向零截断；NaN/无穷/超出范围的行为由 OCaml `int_of_float` 决定）。
+floatToInt : Float -> Int
+floatToInt = intFromFloat

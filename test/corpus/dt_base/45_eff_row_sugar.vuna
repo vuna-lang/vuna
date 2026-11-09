@@ -15,7 +15,7 @@ resFetch : FetchOp -> Type
 resFetch (FetchUrl _) = String
 
 fetch : String -> {r : Row} -> {w : Member Fetch r} -> Eff r String
-fetch url = sendCore Fetch "fetch" 0 (FetchUrl url)
+fetch url = sendCore Fetch "fetch" "fetch" (FetchUrl url)
 
 r1 : Row
 r1 = [Fetch]
@@ -32,8 +32,8 @@ xs = [1, 2, 3]
 getPage : String -> Eff [Fetch] String
 getPage url = fetch url
 
-handleFetch : {a : Type} -> {b : Type} -> {r : Row} -> (a -> b) -> ((o : FetchOp) -> (resFetch o -> b) -> b) -> Eff (Fetch :: r) a -> Eff r b
-handleFetch ret opH comp = handleCore Fetch "fetch" 0 ret opH comp
+handleFetch : {a : Type} -> {b : Type} -> {r : Row} -> (a -> b) -> ((o : FetchOp) -> (resFetch o -> b) -> b) -> Eff (Cons Fetch r) a -> Eff r b
+handleFetch ret opH comp = handleCore Fetch "fetch" "fetch" ret opH comp
 
 opH : (o : FetchOp) -> (resFetch o -> String) -> String
 opH op k = case op of

@@ -3,13 +3,17 @@ import Base.Eff
 import Base.EffError
 import Base.Result
 
-prog : Eff (Error E1 :: []) Int
-prog = catch E1 (throw E1 "boom") (\_ => pureEff 42)
+prog : Eff [Error "main"] Int
+prog = catch "main" (throw "main" "boom") (\_ => pure 42)
 
-prog2 : Eff (Error E1 :: []) Int
-prog2 = catch E1 (catch E1 (throw E1 "a") (\_ => throw E1 "b")) (\_ => pureEff 7)
+prog2 : Eff [Error "main"] Int
+prog2 = catch "main" (catch "main" (throw "main" "a") (\_ => throw "main" "b")) (\_ => pure 7)
 
 main : Int
-main = case runPure (runError E1 (bindEff prog (\a => bindEff prog2 (\b => pureEff (a * 100 + b))))) of
+main = case runPure (runError "main" (do
+  a <- prog
+  b <- prog2
+  pure (a * 100 + b)
+)) of
   Ok n => n
   Err _ => 0

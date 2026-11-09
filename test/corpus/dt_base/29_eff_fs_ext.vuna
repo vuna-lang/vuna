@@ -1,4 +1,6 @@
--- W10：fs 效应标签（命名实例 F2，真实 IO handler）——写/原子写/读/元数据/目录/删除。
+-- W10：fs 效应标签（命名实例 "real"，真实 IO handler）——写/原子写/读/元数据/目录/删除。
+-- 注：fs 步骤拆成两个行类型已钉死的 helper。单段 14 步 do 链会触发 D48 的指数级精化
+-- （open-row + Monad 字典 meta 未从期望类型早解）；拆分后语义/操作顺序不变。
 import Base.Eff
 import Base.EffFs
 import Base.IO
@@ -15,12 +17,34 @@ pathB = "/tmp/vuna_w10_fs/b.txt"
 b2i : Bool -> Int
 b2i b = if b then 1 else 0
 
-prog : Eff (Fs F2 :: []) String
-prog =
-  bindEff (fsRemoveFile F2 pathA)
-    (\_ => bindEff (fsRemoveFile F2 pathB) (\_ => bindEff (fsMakeDir F2 dir) (\_ => bindEff (fsWriteFile F2 pathA "hello") (\written => bindEff (fsWriteFileAtomic F2 pathB "yo") (\_ => bindEff (fsRemoveFile F2 pathB) (\_ => bindEff (fsFileExists F2 pathA) (\exists => bindEff (fsReadFile F2 pathA) (\content => bindEff (fsFileSize F2 pathA) (\size => bindEff (fsIsDirectory F2 dir) (\isdir => bindEff (fsReadDir F2 dir) (\files => bindEff (fsRemoveFile F2 pathA) (\_ => bindEff (fsFileExists F2 pathA) (\exists2 => pureEff (strFromInt written ++ ":" ++ content ++ ":" ++ strFromInt size ++ ":" ++ strFromInt (b2i isdir) ++ ":" ++ join "," files ++ ":" ++ strFromInt (b2i exists2)))))))))))))))
+prepare : Eff [Fs "real"] Int
+prepare = do
+  _ <- fsRemoveFile "real" pathA
+  _ <- fsRemoveFile "real" pathB
+  _ <- fsMakeDir "real" dir
+  written <- fsWriteFile "real" pathA "hello"
+  _ <- fsWriteFileAtomic "real" pathB "yo"
+  _ <- fsRemoveFile "real" pathB
+  pure written
+
+inspectFs : Int -> Eff [Fs "real"] String
+inspectFs written = do
+  exists <- fsFileExists "real" pathA
+  content <- fsReadFile "real" pathA
+  size <- fsFileSize "real" pathA
+  isdir <- fsIsDirectory "real" dir
+  files <- fsReadDir "real" dir
+  _ <- fsRemoveFile "real" pathA
+  exists2 <- fsFileExists "real" pathA
+  pure (strFromInt written ++ ":" ++ content ++ ":" ++ strFromInt size ++ ":" ++ strFromInt (b2i isdir) ++ ":" ++ join "," files ++ ":" ++ strFromInt (b2i exists2))
+
+prog : Eff [Fs "real"] String
+prog = do
+  written <- prepare
+  result <- inspectFs written
+  pure result
 
 main : IO Int
 main =
-  prim_bindIO (runIOAnswer (handleFsIO F2 prog))
+  prim_bindIO (runIOAnswer (handleFsIO "real" prog))
     (\summary => prim_bindIO (print (summary ++ "\n")) (\_ => prim_pureIO 0))

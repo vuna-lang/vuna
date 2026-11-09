@@ -33,7 +33,7 @@ M34.6 之前的同一套命令在 HEAD `e640010` 上是 `check compiler` ~12 s�
 （见 §9）。读数须与 [`bench/compiler-baseline.txt`](../../bench/compiler-baseline.txt) 的
 同机口径比较；跨机器只比 §5 的增长率。
 
-容器改造（私有 `HashTbl` → `Base.HashMap`，元变量解表 → `Base.IntMap`）的实测对比：
+容器改造（私有 `HashTbl` → `Base.HashMap`；M41 起元变量解表合并为 `HashMap Int`）的实测对比：
 同一 worktree、同一份源码、独立进程各 3 次取中位数（本机绝对值与上表历史读数不可直接
 比较；改造前 = 编译器内部哈希表 + 解表 String 键，改造后 = 标准库容器 + Int 键索引）：
 
@@ -73,22 +73,18 @@ vuna check compiler --debug-perf
 避免打点成为主成本；单次 <50 µs 的条目用差值不可靠，判断趋势请用「同形规模的合成探针」
 对比总时间。关闭开关时：`stamp` 只判一次全局 Bool，`stampSample` 多一次字符串哈希。
 
-## 3. 查找表：`Base.HashMap` / `Base.IntMap`
+## 3. 查找表：泛型 `Base.HashMap k v`
 
-容器在标准库（`base/lib/Base/HashMap.vuna` / `base/lib/Base/IntMap.vuna`）：1024 桶
-（两层 32 叉）的持久哈希表、桶内前插、同键新值优先。编译器不再有私有 `HashTbl`。
+容器在标准库（`base/lib/Base/HashMap.vuna`）：键与值都泛型的 1024 桶（两层 32 叉）持久哈希表、桶内前插、同键新值优先。键需 `Eq` + `Hashable`：String 走 `strHash`，Int 走恒等哈希 + 归一化，元变量编号这类稠密小整数几乎不冲突；M41 起原先的 String/Int 两套容器合并为一个 `HashMap k v`，编译器不再有私有 `HashTbl`、也没有 `IntMap`。
 
 ```text
-HashMap.empty / insert / insertAll / lookup / member / fromList / ofNames
-IntMap.empty  / insert / insertAll / lookup / member / fromList
+HashMap.fromList / insert / insertAll / lookup / member / toList / size / ofNames
 ```
 
-单次查找 ≈ 32 步列表遍历 + 桶内 1–2 次比较；`IntMap` 的键是 `Int`，没有
-`strFromInt` 编码与字符串哈希开销（元变量编号这类稠密小整数几乎不冲突）。
-`Base.Map` **不是**可用的替代：它是关联列表（assoc list），换过去复杂度不变。
+单次查找 ≈ 32 步列表遍历 + 桶内 1–2 次比较；泛型容器的键比较与哈希经 `Eq` / `Hashable` 字典（具体 String/Int 类型下是静态派发）。`Base.Map` **不是**可用的替代：它是关联列表（assoc list），换过去复杂度不变。
 
 `Sols` 里有两张表：解表（`solsTbl`）与元变量创建深度表（`solsDepth`），键都是元变量
-编号，均用 `IntMap`；`metaLookup` 查 `ecSolTbl`（O(1)），`metaLookupList` 只保留给
+编号，均用 `HashMap Int`；`metaLookup` 查 `ecSolTbl`（O(1)），`metaLookupList` 只保留给
 「只有解表 list、没有索引」的少量纯 list 场景。
 
 索引点（都在 `Ec` 里，作为可重建的缓存；**真相永远是列表**）：
@@ -97,8 +93,8 @@ IntMap.empty  / insert / insertAll / lookup / member / fromList
 | --- | --- | --- |
 | `ecDefTbl` | `HashMap`：定义体（`force` 的 delta 展开） | `ecAddDef` 增量插入 |
 | `ecGlobalsTbl` | `HashMap`：全局签名（含构造子 / 族名） | `elabBodies` 前用当时 `globals` 建一次；每精化一个定义插入其提升后的类型 |
-| `ecSolTbl` | `IntMap`：解表（元变量编号 → 值） | `ecPutSols` 只插入本次新增的解（`solsDelta`） |
-| `ecDepthTbl` | `IntMap`：元变量创建深度（编号 → Int） | `newMeta` / `newHoleMeta` 增量插入 |
+| `ecSolTbl` | `HashMap Int`：解表（元变量编号 → 值） | `ecPutSols` 只插入本次新增的解（`solsDelta`） |
+| `ecDepthTbl` | `HashMap Int`：元变量创建深度（编号 → Int） | `newMeta` / `newHoleMeta` 增量插入 |
 | `ecCtorTbl` / `ecClausesTbl` / `ecDefVals` | `HashMap`：构造子、clause 表、定义体值缓存 | `ctorTblOfDatas` / `elabBodies` 增量插入 |
 
 不变量：索引与列表可能短暂不同步（例如建表前的数据族 / trait / 签名阶段），因此热路径入口
@@ -227,7 +223,7 @@ W3 落地的容器与表示（`Intrinsics` / `Elab.Prelude` / `Codegen.Decl` / `
    `'a array` / `'a ref` / `'a array` / `Buffer.t`），签名支持隐式 `{a : Type}`。
 2. **Array / IORef / MArray / Buffer 原语与库**（见 [primitives.md](primitives.md) §6.1、
    [stdlib.md](stdlib.md)）；`arrayEmpty` 用 non-expansive 的 `[||]` 让空表在 OCaml 侧可泛化。
-3. **HashMap / IntMap 桶改造**：`Array (Array (List ...))`，`empty` 移除、统一 `fromList []`；
+3. **HashMap 桶改造与泛型化**：`Array (Array (List ...))`；M41 起 `HashMap k v` 统一 String/Int 两套容器（`IntMap` 删除），`empty` 移除、统一 `fromList []`；
    hashmap 基准 3.0x → 2.0x。
 
 优化后重跑 `--json bench/baseline.json` 更新基线并在这里记录。

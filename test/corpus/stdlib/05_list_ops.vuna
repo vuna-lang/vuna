@@ -38,7 +38,7 @@ main =
     ++ " fl=" ++ strFromInt (foldl (\a, b => a + b) 0 (range 1 5))
     ++ " fr=" ++ strFromInt (foldr (\a, b => a - b) 0 (Cons 1 (Cons 2 (Cons 3 Nil))))
     ++ " cm=" ++ showIntList (concatMap (\x => Cons x (Cons (x * 10) Nil)) (Cons 1 (Cons 2 Nil)))
-    ++ " fm=" ++ showIntList (flatMap (\x => Cons x (Cons (x + 100) Nil)) (Cons 1 (Cons 2 Nil)))
+    ++ " fm=" ++ showIntList ((Cons 1 (Cons 2 Nil)) >>= (\x => Cons x (Cons (x + 100) Nil)))
     ++ " mem=" ++ showBool (mem 3 (range 1 5))
     ++ " zip=" ++ showStrList (map (\p => strFromInt (firstOf p) ++ secondOf p) (zip (Cons 1 (Cons 2 Nil)) (Cons "a" (Cons "b" Nil))))
     ++ " tk=" ++ showIntList (take 2 (range 1 5))

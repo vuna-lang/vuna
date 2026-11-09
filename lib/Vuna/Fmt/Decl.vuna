@@ -31,15 +31,15 @@ renderDeclAt env at lineInd decl =
   attachAt at (declSpan decl) lineInd (renderDeclBody env at lineInd decl)
 
 renderDeclBody : List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Decl -> List String
-renderDeclBody env at lineInd (DData name params kind ctors derivings lin sp) =
-  renderDataDecl env at (linearPrefix lin) name params kind ctors derivings
+renderDeclBody env at lineInd (DData name params kind ctors derivings viaField lin sp) =
+  renderDataDecl env at viaField (linearPrefix lin) name params kind ctors derivings
 renderDeclBody env at lineInd (DAxiom name ty sp) = renderSigLine env at lineInd "axiom " name [] ty
 renderDeclBody env at lineInd (DExtern name cName ty sp) =
   renderSigLine env at lineInd "extern ${name} ${strShow cName}" "" [] ty
 renderDeclBody env at lineInd (DSig name ctx ty sp) = renderSigLine env at lineInd "" name ctx ty
 renderDeclBody env at lineInd (DFun name pats body sp) = renderClause env at lineInd name pats body
-renderDeclBody env at lineInd (DRecord name params fields derivings lin sp) =
-  renderRecordDecl env at (linearPrefix lin) name params fields derivings
+renderDeclBody env at lineInd (DRecord name params fields derivings viaField lin sp) =
+  renderRecordDecl env at viaField (linearPrefix lin) name params fields derivings
 renderDeclBody env at lineInd (DTrait name params methods sp) =
   renderTraitDecl env at name params methods
 renderDeclBody env at lineInd (DInstance ctxE head methods sp) =
@@ -51,28 +51,30 @@ renderSigLine env at lineInd prefix name ctx ty =
   prefixFirst "${spaces lineInd}${prefix}${name} : ${renderInstanceCtx env ctx}"
     (renderTypeExpr env at lineInd ty)
 
-renderDataDecl : List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> String -> String -> List String -> Expr -> List Ctor -> List String -> List String
-renderDataDecl env at prefix name params kind ctors derivings =
+renderDataDecl : List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Bool -> String -> String -> List String -> Expr -> List Ctor -> List String -> List String
+renderDataDecl env at viaField prefix name params kind ctors derivings =
   let
     header =
       "${prefix}data ${name}${joinSpace params} : ${join " " (renderTypeExpr env at 0 kind)} where"
     ctorLines = concatMap (\c => renderCtorDecl env at c) ctors
-  in append [header] (append ctorLines (renderDerivings derivings))
+  in append [header] (append ctorLines (renderDerivings viaField derivings))
 
 renderCtorDecl : List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Ctor -> List String
 renderCtorDecl env at (Ctor cname ty arity sp) =
   attachAt at sp 2 (prefixFirst "  ${cname} : " (renderTypeExpr env at 2 ty))
 
-renderDerivings : List String -> List String
-renderDerivings [] = []
-renderDerivings names = ["deriving (${joinComma names})"]
+renderDerivings : Bool -> List String -> List String
+renderDerivings viaField [] = []
+renderDerivings viaField names =
+  if viaField then ["deriving via field (${joinComma names})"]
+  else ["deriving (${joinComma names})"]
 
-renderRecordDecl : List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> String -> String -> List String -> List Field -> List String -> List String
-renderRecordDecl env at prefix name params fields derivings =
+renderRecordDecl : List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Bool -> String -> String -> List String -> List Field -> List String -> List String
+renderRecordDecl env at viaField prefix name params fields derivings =
   let
     header = "${prefix}record ${name}${joinSpace params} where"
     fieldLines = concatMap (\f => renderRecordField env at f) fields
-  in append [header] (append fieldLines (renderDerivings derivings))
+  in append [header] (append fieldLines (renderDerivings viaField derivings))
 
 renderRecordField : List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Field -> List String
 renderRecordField env at f =

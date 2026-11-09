@@ -65,7 +65,7 @@ import Vuna.Compiler.Frontend.Ast
 
 deferDictBinder : List (Pair String Term) -> Ctx -> Ec -> Value -> Closure -> List Expr -> Span -> Result (Pair (List (Pair Term Rig)) (Pair Value Ec))
 deferDictBinder globals ctx ec dom clo args sp =
-  deferDictBinderFuel 64 globals ctx ec dom clo args sp
+  deferDictBinderFuel 64 globals ctx ec dom clo args sp Nothing
 
 specializeCmpApp : List (Pair String Term) -> Ctx -> Ec -> String -> List Expr -> Span -> Result (Maybe (Pair Term (Pair Value Ec)))
 specializeCmpApp a1 a2 a3 a4 a5 a6 = specializeCmpAppFuel 256 a1 a2 a3 a4 a5 a6
@@ -162,7 +162,7 @@ inferAppUnderType : List (Pair String Term) -> Ctx -> Ec -> String -> List Expr 
 inferAppUnderType a1 a2 a3 a4 a5 a6 = inferAppUnderTypeFuel 256 a1 a2 a3 a4 a5 a6
 
 inferArgs : List (Pair String Term) -> Ctx -> Ec -> Value -> List Expr -> Span -> Result (Pair (List (Pair Term Rig)) (Pair Value Ec))
-inferArgs a1 a2 a3 a4 a5 a6 = inferArgsFuel 256 a1 a2 a3 a4 a5 a6
+inferArgs a1 a2 a3 a4 a5 a6 = inferArgsFuel 256 a1 a2 a3 a4 a5 a6 Nothing
 
 constrainDictDom : List (Pair String Term) -> Ec -> Ctx -> Value -> List Expr -> Span -> Result Ec
 constrainDictDom a1 a2 a3 a4 a5 a6 = constrainDictDomFuel 256 a1 a2 a3 a4 a5 a6
@@ -171,13 +171,13 @@ constrainDictDomGoK : List (Pair String Term) -> Ec -> Ctx -> Value -> Value -> 
 constrainDictDomGoK a1 a2 a3 a4 a5 a6 a7 = constrainDictDomGoKFuel 256 a1 a2 a3 a4 a5 a6 a7
 
 inferApp : List (Pair String Term) -> Ctx -> Ec -> Expr -> List Expr -> Span -> Result (Pair Term (Pair Value Ec))
-inferApp a1 a2 a3 a4 a5 a6 = inferAppFuel 256 a1 a2 a3 a4 a5 a6
+inferApp a1 a2 a3 a4 a5 a6 = inferAppFuel 256 a1 a2 a3 a4 a5 a6 Nothing
 
 inferAppGeneral : List (Pair String Term) -> Ctx -> Ec -> Expr -> List Expr -> Span -> Result (Pair Term (Pair Value Ec))
-inferAppGeneral a1 a2 a3 a4 a5 a6 = inferAppGeneralFuel 256 a1 a2 a3 a4 a5 a6
+inferAppGeneral a1 a2 a3 a4 a5 a6 = inferAppGeneralFuel 256 a1 a2 a3 a4 a5 a6 Nothing
 
 inferAppGeneralGo : List (Pair String Term) -> Ctx -> Ec -> Expr -> List Expr -> Span -> Result (Pair Term (Pair Value Ec))
-inferAppGeneralGo a1 a2 a3 a4 a5 a6 = inferAppGeneralGoFuel 256 a1 a2 a3 a4 a5 a6
+inferAppGeneralGo a1 a2 a3 a4 a5 a6 = inferAppGeneralGoFuel 256 a1 a2 a3 a4 a5 a6 Nothing
 
 checkCondBool : List (Pair String Term) -> Ctx -> Ec -> Expr -> Span -> Result (Pair Term Ec)
 checkCondBool a1 a2 a3 a4 a5 = checkCondBoolFuel 256 a1 a2 a3 a4 a5

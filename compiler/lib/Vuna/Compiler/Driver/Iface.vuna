@@ -74,13 +74,13 @@ module Vuna.Compiler.Driver.Iface
 -- （布局/字段语义变化必须 bump）。
 import Vuna.Compiler.Common
 import Base.HashMap
-import Base.IntMap
 import Vuna.Compiler.Core
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Elab.Types
 import Vuna.Compiler.Elab.Prelude
 import Vuna.Compiler.Elab.Records
 import Vuna.Compiler.Driver.Cache
+import Vuna.Compiler.Debug
 import Vuna.Compiler.Driver.Owner
 import Vuna.Compiler.Loader.Modules
 import Vuna.Compiler.Packages.Pkg
@@ -166,7 +166,7 @@ miDeclsOf m = m.miDecls
 
 -- 接口格式版本：Marshal 布局或字段语义变化必须 bump（旧缓存自然失效）。
 ifaceSchema : String
-ifaceSchema = "vuna-iface 8"
+ifaceSchema = "vuna-iface 10"
 
 -- ---------------------------------------------------------------
 -- 哈希：接口哈希必须比 `strHash`（10 bit）强得多
@@ -217,16 +217,16 @@ nameKey n = hashTextStrong "name:${n}"
 -- 这里把每个定义里的 TMeta 按首次出现顺序重编号为 0,1,2,...（只影响擦除位、无解）。
 record CanonState where
   csNext : Int
-  csMap : IntMap Int
+  csMap : HashMap Int Int
 
 canonStateEmpty : CanonState
-canonStateEmpty = CanonState 0 (Base.IntMap.fromList [])
+canonStateEmpty = CanonState 0 (Base.HashMap.fromList [])
 
 canonTerm : CanonState -> Term -> Pair Term CanonState
-canonTerm st (TMeta m) = case Base.IntMap.lookup m st.csMap of
+canonTerm st (TMeta m) = case Base.HashMap.lookup m st.csMap of
   Just m2 => Pair (TMeta m2) st
   Nothing =>
-    Pair (TMeta st.csNext) (CanonState (st.csNext + 1) (Base.IntMap.insert m st.csNext st.csMap))
+    Pair (TMeta st.csNext) (CanonState (st.csNext + 1) (Base.HashMap.insert m st.csNext st.csMap))
 canonTerm st (TPi n i r d c) =
   let
     pd = canonTerm st d
@@ -319,9 +319,9 @@ hashFixities fs = foldl (\acc, f => combineHash acc (fixityText f)) 0 fs
 -- （`Elab.Records` 的 desugar 只用字段名；字段类型在 record 声明所在模块自己的精化里
 -- 已消耗）。
 recordHash : RecordInfo -> Int
-recordHash (RecordInfo rname params fields derivings ctor) =
+recordHash (RecordInfo rname params fields derivings derivingVia ctor) =
   hashTextStrong
-    "${rname}|${joinStrings params}|${joinStrings (map firstOf fields)}|${joinStrings derivings}|${ctor}"
+    "${rname}|${joinStrings params}|${joinStrings (map firstOf fields)}|${joinStrings derivings}|${if derivingVia then "1" else "0"}|${ctor}"
 
 hashRecords : List Decl -> Int
 hashRecords decls = case recordsOfDecls (\n => n) decls of
@@ -367,12 +367,12 @@ hashOfParts name pkg imports implicitImports fixities decls cp =
 -- 写接口的代价变成 O(#模块 × #声明 × #归属项)。
 -- ---------------------------------------------------------------
 record OwnerIndex where
-  oiDef : HashMap String
-  oiData : HashMap String
-  oiCtor : HashMap String
+  oiDef : HashMap String String
+  oiData : HashMap String String
+  oiCtor : HashMap String String
   oiKnown : List String
 
-tblOwner : HashMap String -> String -> Maybe String
+tblOwner : HashMap String String -> String -> Maybe String
 tblOwner t name = Base.HashMap.lookup name t
 
 prefixOwner : List String -> String -> Maybe String
@@ -420,32 +420,32 @@ ownerIndexOf meta datas =
 -- M34.6：按 owner **一次分桶**。旧实现每个模块对整包 datas/defs/globals/insts/classes
 -- 各做一遍 `filter`（O(#模块 × #程序项)，接口阶段 ~457ms）；这里整包扫一遍建五张
 -- owner → 项表，逐模块 O(1) 取桶。桶内保持程序原顺序（前插后统一 reverse）。
--- 整包 sols 的 IntMap 也只建一次：旧实现每个模块切片后 `cachedOfProgram` 都
--- `IntMap.fromList (dtProgSols prog)`（O(#模块 × #sols)，本机 compiler 包接口阶段 ~40ms）。
+-- 整包 sols 的 HashMap Int 也只建一次：旧实现每个模块切片后 `cachedOfProgram` 都
+-- `HashMap.fromList (dtProgSols prog)`（O(#模块 × #sols)，本机 compiler 包接口阶段 ~40ms）。
 record ProgParts where
-  ppSols : IntMap Value
-  ppDatas : HashMap (List DtData)
-  ppDefs : HashMap (List DtDef)
-  ppGlobals : HashMap (List (Pair String Term))
-  ppInsts : HashMap (List DtInst)
-  ppClasses : HashMap (List DtClass)
+  ppSols : HashMap Int Value
+  ppDatas : HashMap String (List DtData)
+  ppDefs : HashMap String (List DtDef)
+  ppGlobals : HashMap String (List (Pair String Term))
+  ppInsts : HashMap String (List DtInst)
+  ppClasses : HashMap String (List DtClass)
 
-partitionByOwner : (a -> Maybe String) -> List a -> HashMap (List a)
+partitionByOwner : (a -> Maybe String) -> List a -> HashMap String (List a)
 partitionByOwner ownerOf xs =
   reverseBuckets (partitionByOwnerGo ownerOf xs (Base.HashMap.fromList []))
 
-partitionByOwnerGo : (a -> Maybe String) -> List a -> HashMap (List a) -> HashMap (List a)
+partitionByOwnerGo : (a -> Maybe String) -> List a -> HashMap String (List a) -> HashMap String (List a)
 partitionByOwnerGo ownerOf [] tbl = tbl
 partitionByOwnerGo ownerOf (x :: rest) tbl = case ownerOf x of
   Nothing => partitionByOwnerGo ownerOf rest tbl
   Just o => partitionByOwnerGo ownerOf rest (Base.HashMap.insert o (x :: bucketOf o tbl) tbl)
 
-bucketOf : String -> HashMap (List a) -> List a
+bucketOf : String -> HashMap String (List a) -> List a
 bucketOf name tbl = case Base.HashMap.lookup name tbl of
   Just xs => xs
   Nothing => []
 
-reverseBuckets : HashMap (List a) -> HashMap (List a)
+reverseBuckets : HashMap String (List a) -> HashMap String (List a)
 reverseBuckets tbl = Base.HashMap.fromList (map reverseBucket (Base.HashMap.toList tbl))
 
 reverseBucket : Pair String (List a) -> Pair String (List a)
@@ -453,7 +453,7 @@ reverseBucket (Pair k xs) = Pair k (reverse xs)
 
 progPartsOf : OwnerIndex -> DtProgram -> ProgParts
 progPartsOf oi prog =
-  ProgParts (Base.IntMap.fromList (dtProgSols prog))
+  ProgParts (Base.HashMap.fromList (dtProgSols prog))
     (partitionByOwner (\d => dataOwnerOf oi (dtDataName d)) (dtProgDatas prog))
     (partitionByOwner (\d => defOwnerOf oi (dtDefName d)) (dtProgDefs prog))
     (partitionByOwner (\p => globalOwnerOf oi (firstOf p)) (dtProgGlobals prog))
@@ -534,7 +534,7 @@ ifacesGo pkg parts prog sources knownDeps clean modules =
 -- ---------------------------------------------------------------
 -- 覆盖性检查：本包模块拥有的 def/data/inst/class/global 必须全部出现在某个模块摘要里
 -- （归属表漏项会让依赖方静默拿到不完整接口，所以写侧宁可失败，不写缓存）。
--- M34.6：四个成员判断改用 HashMap Bool（旧实现对每个 artifact 名线性扫 merged
+-- M34.6：四个成员判断改用 HashMap String Bool（旧实现对每个 artifact 名线性扫 merged
 -- ~数千项，接口阶段 ~473ms）。
 -- ---------------------------------------------------------------
 ownerOfAny : OwnerIndex -> String -> Maybe String
@@ -544,7 +544,7 @@ ownerOfAny oi name = case defOwnerOf oi name of
     Just o => Just o
     Nothing => ctorOwnerOf oi name
 
-coverageIssueOf : OwnerIndex -> HashMap Bool -> HashMap Bool -> HashMap Bool -> HashMap Bool -> String -> String
+coverageIssueOf : OwnerIndex -> HashMap String Bool -> HashMap String Bool -> HashMap String Bool -> HashMap String Bool -> String -> String
 coverageIssueOf oi ourNames inherited merged prelude name = if Base.HashMap.member name prelude then ""
 else if Base.HashMap.member name inherited then ""
 else case ownerOfAny oi name of
@@ -554,7 +554,7 @@ else case ownerOfAny oi name of
     else ""
   Nothing => "unowned ${name}"
 
-coverageIssueGo : OwnerIndex -> HashMap Bool -> HashMap Bool -> HashMap Bool -> HashMap Bool -> List String -> String
+coverageIssueGo : OwnerIndex -> HashMap String Bool -> HashMap String Bool -> HashMap String Bool -> HashMap String Bool -> List String -> String
 coverageIssueGo oi ourNames inherited merged prelude [] = ""
 coverageIssueGo oi ourNames inherited merged prelude (name :: rest) =
   let

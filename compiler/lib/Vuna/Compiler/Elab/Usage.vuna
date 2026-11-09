@@ -116,6 +116,7 @@ checkTerm sp env t = case t of
       (\uc => andThen (checkTerm sp env th) (\ut => andThen (checkTerm sp env el) (\ue => Ok (uAdd uc (uJoin ut ue)))))
   TInt n => Ok (uZeroOf (natToInt (length env)))
   TStr s => Ok (uZeroOf (natToInt (length env)))
+  TFloat raw => Ok (uZeroOf (natToInt (length env)))
   TBool b => Ok (uZeroOf (natToInt (length env)))
 
 checkArgs : Span -> List (Pair String Rig) -> List (Pair Term Rig) -> Result (List Rig)
@@ -185,6 +186,7 @@ else case t of
   TGlobal g => Ok 0
   TInt n => Ok 0
   TStr s => Ok 0
+  TFloat raw => Ok 0
   TBool b => Ok 0
   TMeta m => Ok 0
   TType l => Ok 0

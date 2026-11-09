@@ -33,7 +33,13 @@ instance Monad (State s) where
   bind st k = State (\s => case st.stateRun s of
     Pair a s2 => (k a).stateRun s2
   )
+
+instance Applicative (State s) where
   pure a = State (\s => Pair a s)
+  liftA2 f sa sb = State (\s => case sa.stateRun s of
+    Pair a s1 => case sb.stateRun s1 of
+      Pair b s2 => Pair (f a b) s2
+  )
 
 -- | 取当前状态（结果与状态相同）。
 get : State s s

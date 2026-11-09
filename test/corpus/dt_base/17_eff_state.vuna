@@ -3,8 +3,11 @@ import Base.Eff
 import Base.EffState
 import Base.Pair
 
-prog : Eff (State S1 Int :: []) Int
-prog = bindEff (get S1 Int) (\x => bindEff (put S1 Int (x + 1)) (\_ => get S1 Int))
+prog : Eff [State "counter" Int] Int
+prog = do
+  x <- get "counter" Int
+  _ <- put "counter" Int (x + 1)
+  get "counter" Int
 
 ret : Int -> Int -> Pair Int Int
 ret a s = Pair a s
@@ -15,5 +18,5 @@ opH op k s = case op of
   Put x => k 0 x
 
 main : Int
-main = case runPure (handleState S1 Int ret opH prog) 3 of
+main = case runPure (handleState "counter" Int ret opH prog) 3 of
   Pair a s => a + s

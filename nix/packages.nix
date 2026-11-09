@@ -96,7 +96,7 @@ let
   };
 
   vuna-run-tests = import ./run-tests.nix {
-    inherit pkgs;
+    inherit pkgs vuna vuna-seed;
     tools = shellTools;
   };
 in

@@ -3,14 +3,12 @@ module Base.Eff
   , Eff
   , Member(..)
   , Row(..)
-  , bindEff
   , bracket
   , effPrim
   , finally
   , handleCore
   , handleCoreLin
   , mkCont
-  , pureEff
   , resumeCont
   , rowRem
   , runEff
@@ -63,25 +61,28 @@ data EffUnit : Type where
   MkEffUnit : EffUnit
 
 -- 抽象动作；构造子不导出。
--- | 抽象效应动作 `Eff r a`：构造子不导出，内部是私有 dummy thunk；用 `pureEff` / `bindEff` / `sendCore` / `handleCore` 构造与消解。
+-- | 抽象效应动作 `Eff r a`：构造子不导出，内部是私有 dummy thunk；用 `Monad (Eff r)` 的 `pure` / `do` / `>>=`（以及 `sendCore` / `handleCore`）构造与消解。
 data Eff : Row -> Type -> Type where
   MkEff : {r : Row} -> {a : Type} -> (EffUnit -> a) -> Eff r a
 
--- | 纯值提升为 Eff 动作。
-pureEff : {r : Row} -> {a : Type} -> a -> Eff r a
-pureEff x = MkEff (\_ => x)
+-- `Eff r` 的 Monad 实例：构造/组合的唯一入口（不再提供 `pureEff` / `bindEff` 专用组合子）。
+instance Monad (Eff r) where
+  bind e k = MkEff (\u => case e of
+    MkEff f => case k (f u) of
+      MkEff g => g u
+  )
 
--- | Eff 的绑定：先执行 `e`，把结果喂给 `k`；与 `Monad (Eff r)` 实例一致。
-bindEff : {r : Row} -> {a : Type} -> {b : Type} -> Eff r a -> (a -> Eff r b) -> Eff r b
-bindEff e k = MkEff (\u => case e of
-  MkEff f => case k (f u) of
-    MkEff g => g u
-)
+instance Applicative (Eff r) where
+  pure x = MkEff (\_ => x)
+  liftA2 f ma mb = MkEff (\u => case ma of
+    MkEff fa => case mb of
+      MkEff fb => f (fa u) (fb u)
+  )
 
 -- 信任边界：把「运行时原语 thunk」包装成 Eff 动作（dummy `Int` 只为延迟执行，
 -- 没有世界令牌语义）。只供运行时效应模块（如 `Base.EffSched`）包装隐藏 intrinsic；
--- 普通用户用 pureEff/bindEff/sendCore/handleCore。
--- | 信任边界：把运行时原语 thunk 包装成 Eff 动作（dummy `Int` 只为延迟执行，没有世界令牌语义）。只供运行时效应模块（如 `Base.EffSched`）包装隐藏 intrinsic；普通用户用 pureEff / bindEff / sendCore / handleCore。
+-- 普通用户用 `do` / `>>=` 与 `sendCore` / `handleCore`。
+-- | 信任边界：把运行时原语 thunk 包装成 Eff 动作（dummy `Int` 只为延迟执行，没有世界令牌语义）。只供运行时效应模块（如 `Base.EffSched`）包装隐藏 intrinsic；普通用户用 do / >>= 与 sendCore / handleCore。
 effPrim : {r : Row} -> {a : Type} -> (Int -> a) -> Eff r a
 effPrim f = MkEff (\_ => f 0)
 
@@ -117,12 +118,12 @@ runEff e = runThunk e MkEffUnit
 -- 核心发送：e 是标签类型；key/name 是运行时实例标识；op 是运行时值。
 -- `e` 是显式类型参数（宇宙域，恒擦除）；op 是运行时值。
 -- | 核心发送：`e` 是标签类型（宇宙域、恒擦除），key/name 是运行时 handler 实例标识，op 是操作值；运行时按 (key, name) 找到 handler。
-sendCore : (e : Type) -> {r : Row} -> {op : Type} -> {x : Type} -> String -> Int -> (o : op) -> Eff r x
+sendCore : (e : Type) -> {r : Row} -> {op : Type} -> {x : Type} -> (key : String) -> (name : String) -> (o : op) -> Eff r x
 sendCore e key name o = MkEff (\_ => prim_effectPerform key name o)
 
 -- 核心 handler：ret 处理正常返回，opH 处理每个操作；结果行删除 e。
 -- | 核心 handler：`ret` 处理正常返回，`opH` 处理每个操作，结果行删除 `e`（`rowRem e r`）；(key, name) 必须与 `sendCore` 匹配。
-handleCore : (e : Type) -> {r : Row} -> {op : Type} -> {a : Type} -> {b : Type} -> {h : Type} -> String -> Int -> (a -> b) -> h -> Eff r a -> Eff (rowRem e r) b
+handleCore : (e : Type) -> {r : Row} -> {op : Type} -> {a : Type} -> {b : Type} -> {h : Type} -> (key : String) -> (name : String) -> (a -> b) -> h -> Eff r a -> Eff (rowRem e r) b
 handleCore e key name ret opH comp = MkEff (prim_effectHandle key name ret opH (runThunk comp))
 
 -- 执行「answer 本身是 IO 动作」的程序（IO-backed handler 的入口）。
@@ -144,7 +145,7 @@ contAdapter : {op : Type} -> {res : op -> Type} -> {b : Type} -> ((o : op) -> (1
 contAdapter opH o k = opH o (MkCont k)
 
 -- | 线性版核心 handler：`opH` 接收线性 `Cont (res o) b`（一次性续延），其余同 `handleCore`；供需要线性续延的效应使用。
-handleCoreLin : (e : Type) -> {r : Row} -> {op : Type} -> {a : Type} -> {b : Type} -> {res : op -> Type} -> String -> Int -> (a -> b) -> ((o : op) -> (1 k : Cont (res o) b) -> b) -> Eff r a -> Eff (rowRem e r) b
+handleCoreLin : (e : Type) -> {r : Row} -> {op : Type} -> {a : Type} -> {b : Type} -> {res : op -> Type} -> (key : String) -> (name : String) -> (a -> b) -> ((o : op) -> (1 k : Cont (res o) b) -> b) -> Eff r a -> Eff (rowRem e r) b
 handleCoreLin e key name ret opH comp = handleCore e key name ret (contAdapter opH) comp
 
 -- ---------------------------------------------------------------
@@ -167,16 +168,15 @@ mkCont k = MkCont k
 -- 被吞掉；硬中止路径没有 handler 栈，只能做无效应清理（见 effects-layers.md）。
 -- | 通用 bracket：acquire → use → release。cleanup 由运行时 handler 的**退出钩子**驱动——use 里任意效应 abort（`Exn` throw、自定义 abort、调度器硬中止）都会在退出时执行 release；正常返回路径在带内 pop + release。边界：release 只能访问外层 handler、自身异常被吞，硬中止路径只能做无效应清理。
 bracket : {res : Type} -> {a : Type} -> {r : Row} -> Eff r res -> (res -> Eff r Int) -> (res -> Eff r a) -> Eff r a
-bracket acquire release use =
-  bindEff acquire
-    (\res => bindEff (effPrim (\_ => prim_cleanupPush (\_ => runEff (release res)))) (\_ => bindEff (use res) (\a => bindEff (effPrim (\_ => prim_cleanupPop 0)) (\_ => bindEff (release res) (\_ => pureEff a)))))
+bracket acquire release use = do
+  res <- acquire
+  effPrim (\_ => prim_cleanupPush (\_ => runEff (release res)))
+  a <- use res
+  effPrim (\_ => prim_cleanupPop 0)
+  release res
+  pure a
 
 -- `finally action cleanup`：action 正常返回 / 异常 / 其它效应 abort 都跑 cleanup。
--- | `finally action cleanup`：action 正常返回 / 异常 / 其它效应 abort 都执行 cleanup，最后返回 action 的结果。等价于 `bracket (pureEff 0) (\_ => cleanup) (\_ => comp)`。
+-- | `finally action cleanup`：action 正常返回 / 异常 / 其它效应 abort 都执行 cleanup，最后返回 action 的结果。等价于 `bracket (pure 0) (\_ => cleanup) (\_ => comp)`。
 finally : {a : Type} -> {r : Row} -> Eff r a -> Eff r Int -> Eff r a
-finally comp cleanup = bracket (pureEff 0) (\_ => cleanup) (\_ => comp)
-
--- W4/终态：`Eff r` 是 Monad；用户 import Base.Eff 后可直接用 `do` / `>>=`。
-instance Monad (Eff r) where
-  pure = pureEff
-  bind = bindEff
+finally comp cleanup = bracket (pure 0) (\_ => cleanup) (\_ => comp)

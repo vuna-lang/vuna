@@ -213,6 +213,7 @@ normExpr names st (EBacktick nm l r sp) =
       Just tr => Pair (firstOf pr) (Just (TApp (TCon nm) [tl, tr]))
 normExpr names st (EInt n sp) = Pair st (Just (TCon (strFromInt n)))
 normExpr names st (EStr s sp) = Pair st (Just (TCon s))
+normExpr names st (EFloat raw sp) = Pair st (Just (TCon raw))
 normExpr names st _ = Pair st Nothing
 
 tfIsArrow : Ty -> Bool

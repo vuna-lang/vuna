@@ -38,12 +38,24 @@ vuna 尚未发布任何版本：没有外部用户、下游生态与历史包袱
   定义级位置帧 + exit 2（位置表随产物生成、路径归一）；`Base.Debug`（`trace`/`traceShow`/
   `assert`/`todo`）与 `prim_eprint`/`prim_fail`；边界见 [debugging.md](reference/debugging.md)，
   开放项见 debt D33–D35 / C38。
-- **容器与查找表**：标准库有 `Base.HashMap` / `Base.HashSet` / `Base.IntMap`（1024 桶持久
-  哈希表；M33 W3 起桶是 `Array (Array (List ...))`）、不可变 `Base.Array`（copy-on-write）
+- **容器与查找表**：标准库有泛型 `Base.HashMap k v` / `Base.HashSet a`（1024 桶持久
+  哈希表，键需 `Eq` + `Hashable`；M33 W3 起桶是 `Array (Array (List ...))`；M41 把原
+  String/Int 两套容器合并、删除 `IntMap`）、不可变 `Base.Array`（copy-on-write）
   与 IO 内 `Base.IORef` / `Base.MArray` / `Base.Buffer`；内建类型构造子 `Array` / `IORef` /
   `MArray` / `Buffer`（M33 W3）。编译器查找表（defs / globals / ctor / clause / defVals）用
-  `HashMap`，元变量解表与创建深度表用 `IntMap`（`metaLookup` 走索引，不再线性扫 /
+  `HashMap String`，元变量解表与创建深度表用 `HashMap Int`（`metaLookup` 走索引，不再线性扫 /
   不再 `strFromInt`）。
+- **单字段零成本表示与委托派生（M42）**：单字段 `record` / 单构造子单运行时字段 `data` 在
+  codegen 中生成 OCaml 类型别名（无变体、无构造子；构造与 `case` 降为恒等 / `let`），判据见
+  [records-traits.md](reference/records-traits.md) §零成本表示；函数 / Pi 字段包装保持装箱
+  （OCaml 值限制）。`record` / 单字段 `data` 可写 `deriving via field (C...)`：实例搜索期把
+  `Dict_C Wrapper` 委托给底层字段的 `Dict_C Field`，class 集合由底层实例决定（不是硬编码
+  Show/Eq/Ord）；不引入 `newtype` / `type` 关键字（残余边界见 debt D50）。
+- **标准库 trait 层（M41）**：`Base.Hashable`（`hash` / `hashStr` / `hashCombine`，`deriving (Hashable)`）、
+  `Base.Applicative`（`pure` / `liftA2` / 派生 `ap`；`Monad` 只留 `bind`）、`Base.Monoid`
+  （`Semigroup` / `Monoid`）、`Base.Foldable`（`fold` / `foldMap`）、`Base.Traversable`
+  （双参数 `Traversable t f` + `mapM`），以及 `Ordering` / `compare` / `min` / `max` 与 `Unit`；
+  容器补 `Eq`/`Ord`/`Show` 实例。Array 的 `Show`/`Eq` 待 seed rotation 后补（debt B41）。
 - **Nat 零开销表示（M34.7）**：`Base.Nat` 保持归纳族语义，运行时是 OCaml `int`（无变体 /
   无分配）；期望类型处的字面量编译期展开、codegen 折回整数；`Zero`/`Succ` 与 `case` 降成
   整数与 `if`；`+ - * /` 在 Nat 上下文特化到 `bi_nat*`（饱和/截断），`Nat → Int` 隐式提升，
@@ -76,7 +88,15 @@ vuna 尚未发布任何版本：没有外部用户、下游生态与历史包袱
   语义。
 - **可信性**：不存在「跳过检查但不告知」的通道；任何放行都是显式、可审计、有诊断的。
 - **语言面**：顶层签名必填；不用的特性直接删；不保留兼容层。`record` / `deriving` /
-  多 clause / `do` / trait 保留，但降到普通 data/case/字典语义之上，不靠短名特判。
+  多 clause / `do` / trait 保留，但都降到普通 data/case/字典语义：`do` 解析为显式 bind 链
+  （`>>` 同），trait 是类型系统设施而非记法；解析按身份（canonical 名）而非短名。允许的
+  内建边界只有：内建类型/原语、`@vuna@…` 内部名、`Base.Eff`/`Base.IO` 的效应接口，以及
+  已声明的运算符 Eq/Ord 短名查找、deriving 末段名、终止性守卫、列表字面量族名。
+  S3 的 do 块单 monad 已落地：前端把 `bind` 在块作用域解析一次（`resolveDo`）并发出
+  内部标记链（`@vuna@do@bind@…`），精化器按整块一个 monad/字典解释；形状不认识时
+  剥标记回退为普通 bind 应用。S2 的期望结果类型定向也已落地（`inferArgsGo` 的 result
+  hint：trait 方法应用在实参检查前从期望类型早解 `?m`/`?b`），`Common.andThen` 的删除
+  待一次 seed rotation。
 - **模块与包**：模块系统 v3、运行时 / 后端、效应与并发、生态属于未来轨道（F1–F4），不阻塞
   当前根修。
 
@@ -85,7 +105,7 @@ vuna 尚未发布任何版本：没有外部用户、下游生态与历史包袱
 **M31 系列已收尾**（M31.1–M31.3：运算符=方法别名、parser 去优先级、库内 `infix*` 声明成为
 fixity 唯一来源、反引号中缀 / section / 用户符号名、fmt 程序级 fixity）。**M33 已收尾**（六波：
 测量地基 `nix run .#vuna-perf`、codegen / 运行时优化、容器与表示（`Array`/`IORef`/`MArray`/
-`Buffer` + `HashMap`/`IntMap` 的 `Array` 桶）、可变数据边界与字符串补齐、受限 FFI
+`Buffer` + `HashMap` 的 `Array` 桶）、可变数据边界与字符串补齐、受限 FFI
 （`extern` + `ffi/*.c`）、库级最小效应接口（`State`/`Reader`/`Error`）；生成程序基准全部进入
 2× 手写 OCaml；线性类型 / ST 按计划裁剪，见 debt D22）。**M34（编译器快）已收尾**
 （2026-11，见「性能轨道」；`check .` 冷 3.3 s / LSP 编辑 20–120 ms / 增长率与硬门槛落地，
@@ -117,7 +137,7 @@ M33（语言能写高性能系统程序）已收尾，历史在 git；M34（编�
 
 **落地主线**（M34.1–M34.6；历史细节在 git 与 [performance.md](reference/performance.md)）：
 测量设施与软/硬门槛 → 热点表化（termination worklist、`groupDefs`/`extraDefsOf`、
-`vuna map` 索引 O(n²)→O(n)、`unsolvedFrom` IntMap）→ AST/包级/模块级接口缓存（TTC 式，
+`vuna map` 索引 O(n²)→O(n)、`unsolvedFrom` HashMap Int）→ AST/包级/模块级接口缓存（TTC 式，
 依赖零 parse、包内逐模块增量 S4）→ codegen 单元缓存（S5/S7，默认开）→ workspace 并行
 check + LSP 诊断帧缓存（M34.4）→ 工具链惰性闭包/会话缓存/单文件增量（M34.6）。
 

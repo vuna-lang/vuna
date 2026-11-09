@@ -1,0 +1,17 @@
+module Base.FromInt (FromInt(..)) where
+
+-- Base.FromInt：整数字面量转换 trait（checking 位置的非内建期望类型）。
+--
+-- 编译器只负责把「期望类型不是 Int、且存在本实例」的整数字面量降级成
+-- `fromInt n`（见 docs/reference/language.md 与 records-traits.md）。字面量本身
+-- 没有一元负号（负数写 `0 - n`），实例收到的值是非负的。
+--
+-- 期望类型是 `Nat` 时字面量仍展开成 `Zero`/`Succ` 链，不走本 trait；显式 Int→Nat
+-- 用 `Base.Nat.fromInt`。
+-- | 把整数字面量转换为 `a`：期望类型为 `a` 且存在本实例时，`42` 等价于 `fromInt 42`。
+trait FromInt a where
+  fromInt : Int -> a
+
+-- `Int` 是字面量的默认类型：恒等转换。
+instance FromInt Int where
+  fromInt n = n

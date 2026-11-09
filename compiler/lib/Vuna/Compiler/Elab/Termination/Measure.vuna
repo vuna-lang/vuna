@@ -129,16 +129,16 @@ posHas f i ((Pair g j) :: rest) =
 
 -- facts 的 O(1) 查找：name → 正位置列表。不动点每轮建一次表（M34：posWalk 逐节点查 facts，
 -- 旧实现对每个实参位置线性扫整个 facts 列表，随 def 数增长呈 n²）。
-posTblOf : List (Pair String Int) -> HashMap (List Int)
+posTblOf : List (Pair String Int) -> HashMap String (List Int)
 posTblOf xs = posTblOfGo xs (Base.HashMap.fromList [])
 
-posTblOfGo : List (Pair String Int) -> HashMap (List Int) -> HashMap (List Int)
+posTblOfGo : List (Pair String Int) -> HashMap String (List Int) -> HashMap String (List Int)
 posTblOfGo [] tbl = tbl
 posTblOfGo ((Pair f i) :: rest) tbl = case Base.HashMap.lookup f tbl of
   Just is => posTblOfGo rest (Base.HashMap.insert f (i :: is) tbl)
   Nothing => posTblOfGo rest (Base.HashMap.insert f [i] tbl)
 
-posHasTbl : String -> Int -> HashMap (List Int) -> Bool
+posHasTbl : String -> Int -> HashMap String (List Int) -> Bool
 posHasTbl f i tbl = case Base.HashMap.lookup f tbl of
   Just is => memInt i is
   Nothing => False
@@ -168,12 +168,12 @@ posUnion ((Pair f i) :: rest) b = posUnion rest (posAdd f i b)
 
 -- 表版集合操作（M34）：不动点每轮的 filter / 并集 / 相等比较用 name→位置表，
 -- 旧实现对每个候选线性扫另一个集合（facts 千级 ⇒ 每轮 O(n²)）。
-posFilterTbl : List (Pair String Int) -> HashMap (List Int) -> List (Pair String Int)
+posFilterTbl : List (Pair String Int) -> HashMap String (List Int) -> List (Pair String Int)
 posFilterTbl [] neg = []
 posFilterTbl ((Pair f i) :: rest) neg =
   if posHasTbl f i neg then posFilterTbl rest neg else Pair f i :: posFilterTbl rest neg
 
-posSubsetTbl : List (Pair String Int) -> HashMap (List Int) -> Bool
+posSubsetTbl : List (Pair String Int) -> HashMap String (List Int) -> Bool
 posSubsetTbl [] b = True
 posSubsetTbl ((Pair f i) :: rest) b = posHasTbl f i b && posSubsetTbl rest b
 
@@ -212,7 +212,7 @@ groupDefs decls =
   ) (reverse order)
 
 -- O(1) 分组：HashMap 累积 clauses（逆序，最后 reverse），order 记录首次出现顺序。
-groupDefsGo : HashMap (List (Pair (List Pat) Expr)) -> List String -> List (Pair String (Pair (List Pat) Expr)) -> Pair (HashMap (List (Pair (List Pat) Expr))) (List String)
+groupDefsGo : HashMap String (List (Pair (List Pat) Expr)) -> List String -> List (Pair String (Pair (List Pat) Expr)) -> Pair (HashMap String (List (Pair (List Pat) Expr))) (List String)
 groupDefsGo tbl order [] = Pair tbl order
 groupDefsGo tbl order ((Pair name clause) :: rest) = case Base.HashMap.lookup name tbl of
   Just cls => groupDefsGo (Base.HashMap.insert name (clause :: cls) tbl) order rest
@@ -226,7 +226,7 @@ clausesOfDef name [] = []
 clausesOfDef name ((Pair n cls) :: rest) = if n == name then cls else clausesOfDef name rest
 
 -- O(1) 版：终止性检查（SCC / measure）用 name→clauses 表，避免逐 SCC 线性扫全部 defs（M34）。
-clausesOfDefTbl : String -> HashMap (List (Pair (List Pat) Expr)) -> List (Pair (List Pat) Expr)
+clausesOfDefTbl : String -> HashMap String (List (Pair (List Pat) Expr)) -> List (Pair (List Pat) Expr)
 clausesOfDefTbl name tbl = case Base.HashMap.lookup name tbl of
   Just cls => cls
   Nothing => []
@@ -235,7 +235,7 @@ defArity : List (Pair (List Pat) Expr) -> Int
 defArity [] = 0
 defArity (c :: rest) = maxInt (length (firstOf c)) (defArity rest)
 
-maxArityOf : List String -> HashMap (List (Pair (List Pat) Expr)) -> Int
+maxArityOf : List String -> HashMap String (List (Pair (List Pat) Expr)) -> Int
 maxArityOf [] defTbl = 0
 maxArityOf (n :: rest) defTbl =
   maxInt (defArity (clausesOfDefTbl n defTbl)) (maxArityOf rest defTbl)
@@ -243,8 +243,9 @@ maxArityOf (n :: rest) defTbl =
 ctorNamesOf : List Decl -> List String
 ctorNamesOf [] = []
 ctorNamesOf (d :: rest) = case d of
-  DData name params kind ctors derivings lin sp => append (map ctorNameOf ctors) (ctorNamesOf rest)
-  DRecord name params fields derivings lin sp => name :: ctorNamesOf rest
+  DData name params kind ctors derivings viaField lin sp =>
+    append (map ctorNameOf ctors) (ctorNamesOf rest)
+  DRecord name params fields derivings viaField lin sp => name :: ctorNamesOf rest
   _ => ctorNamesOf rest
 
 ctorNameOf : Ctor -> String
@@ -336,7 +337,7 @@ varOfExpr (EVar n sp) = Just n
 varOfExpr _ = Nothing
 
 -- 一个实参是否「已知为正」：字面量 >0，或变量处于守卫区 / 调用方同位置形参已有正事实。
-argPositive : List Expr -> Int -> List (Pair String (Pair Int (Pair Int (List Int)))) -> String -> HashMap (List Int) -> List String -> Bool
+argPositive : List Expr -> Int -> List (Pair String (Pair Int (Pair Int (List Int)))) -> String -> HashMap String (List Int) -> List String -> Bool
 argPositive args i sizes caller facts region = case nthExpr args i of
   Nothing => False
   Just a => case a of
@@ -362,7 +363,7 @@ posMarkNeg f i st = Pair (firstOf st) (Pair f i :: secondOf st)
 posNormalize : List (Pair String Int) -> List (Pair String Int)
 posNormalize xs = posTblPairs (posTblOf xs)
 
-posTblPairs : HashMap (List Int) -> List (Pair String Int)
+posTblPairs : HashMap String (List Int) -> List (Pair String Int)
 posTblPairs tbl = concatMap posEntryPairs (Base.HashMap.toList tbl)
 
 posEntryPairs : Pair String (List Int) -> List (Pair String Int)
@@ -372,31 +373,31 @@ dedupInts : List Int -> List Int
 dedupInts [] = []
 dedupInts (x :: rest) = if memInt x rest then dedupInts rest else x :: dedupInts rest
 
-posWalkArgs : HashMap Bool -> String -> List (Pair String (Pair Int (Pair Int (List Int)))) -> HashMap (List Int) -> List String -> List Expr -> Pair (List (Pair String Int)) (List (Pair String Int)) -> Pair (List (Pair String Int)) (List (Pair String Int))
+posWalkArgs : HashMap String Bool -> String -> List (Pair String (Pair Int (Pair Int (List Int)))) -> HashMap String (List Int) -> List String -> List Expr -> Pair (List (Pair String Int)) (List (Pair String Int)) -> Pair (List (Pair String Int)) (List (Pair String Int))
 posWalkArgs namesTbl caller sizes facts region [] st = st
 posWalkArgs namesTbl caller sizes facts region (a :: rest) st =
   posWalkArgs namesTbl caller sizes facts region rest
     (posWalk namesTbl caller sizes facts region a st)
 
-posWalkFields : HashMap Bool -> String -> List (Pair String (Pair Int (Pair Int (List Int)))) -> HashMap (List Int) -> List String -> List (Pair String Expr) -> Pair (List (Pair String Int)) (List (Pair String Int)) -> Pair (List (Pair String Int)) (List (Pair String Int))
+posWalkFields : HashMap String Bool -> String -> List (Pair String (Pair Int (Pair Int (List Int)))) -> HashMap String (List Int) -> List String -> List (Pair String Expr) -> Pair (List (Pair String Int)) (List (Pair String Int)) -> Pair (List (Pair String Int)) (List (Pair String Int))
 posWalkFields namesTbl caller sizes facts region [] st = st
 posWalkFields namesTbl caller sizes facts region ((Pair fn fe) :: rest) st =
   posWalkFields namesTbl caller sizes facts region rest
     (posWalk namesTbl caller sizes facts region fe st)
 
-posWalkAlts : HashMap Bool -> String -> List (Pair String (Pair Int (Pair Int (List Int)))) -> HashMap (List Int) -> List String -> List (Pair Pat Expr) -> Pair (List (Pair String Int)) (List (Pair String Int)) -> Pair (List (Pair String Int)) (List (Pair String Int))
+posWalkAlts : HashMap String Bool -> String -> List (Pair String (Pair Int (Pair Int (List Int)))) -> HashMap String (List Int) -> List String -> List (Pair Pat Expr) -> Pair (List (Pair String Int)) (List (Pair String Int)) -> Pair (List (Pair String Int)) (List (Pair String Int))
 posWalkAlts namesTbl caller sizes facts region [] st = st
 posWalkAlts namesTbl caller sizes facts region ((Pair pat body) :: rest) st =
   posWalkAlts namesTbl caller sizes facts region rest
     (posWalk namesTbl caller sizes facts region body st)
 
-posWalkBinds : HashMap Bool -> String -> List (Pair String (Pair Int (Pair Int (List Int)))) -> HashMap (List Int) -> List String -> List (Pair Pat Expr) -> Pair (List (Pair String Int)) (List (Pair String Int)) -> Pair (List (Pair String Int)) (List (Pair String Int))
+posWalkBinds : HashMap String Bool -> String -> List (Pair String (Pair Int (Pair Int (List Int)))) -> HashMap String (List Int) -> List String -> List (Pair Pat Expr) -> Pair (List (Pair String Int)) (List (Pair String Int)) -> Pair (List (Pair String Int)) (List (Pair String Int))
 posWalkBinds namesTbl caller sizes facts region [] st = st
 posWalkBinds namesTbl caller sizes facts region ((Pair pat val) :: rest) st =
   posWalkBinds namesTbl caller sizes facts region rest
     (posWalk namesTbl caller sizes facts region val st)
 
-posWalkStmts : HashMap Bool -> String -> List (Pair String (Pair Int (Pair Int (List Int)))) -> HashMap (List Int) -> List String -> List DoStmt -> Pair (List (Pair String Int)) (List (Pair String Int)) -> Pair (List (Pair String Int)) (List (Pair String Int))
+posWalkStmts : HashMap String Bool -> String -> List (Pair String (Pair Int (Pair Int (List Int)))) -> HashMap String (List Int) -> List String -> List DoStmt -> Pair (List (Pair String Int)) (List (Pair String Int)) -> Pair (List (Pair String Int)) (List (Pair String Int))
 posWalkStmts namesTbl caller sizes facts region [] st = st
 posWalkStmts namesTbl caller sizes facts region (s :: rest) st = case s of
   DBind pat e sp =>
@@ -406,7 +407,7 @@ posWalkStmts namesTbl caller sizes facts region (s :: rest) st = case s of
     posWalkStmts namesTbl caller sizes facts region rest
       (posWalk namesTbl caller sizes facts region e st)
 
-posWalk : HashMap Bool -> String -> List (Pair String (Pair Int (Pair Int (List Int)))) -> HashMap (List Int) -> List String -> Expr -> Pair (List (Pair String Int)) (List (Pair String Int)) -> Pair (List (Pair String Int)) (List (Pair String Int))
+posWalk : HashMap String Bool -> String -> List (Pair String (Pair Int (Pair Int (List Int)))) -> HashMap String (List Int) -> List String -> Expr -> Pair (List (Pair String Int)) (List (Pair String Int)) -> Pair (List (Pair String Int)) (List (Pair String Int))
 posWalk namesTbl caller sizes facts region (EApp fn args sp) st = case fn of
   EVar g gsp =>
     if Base.HashMap.member g namesTbl then posWalkArgs namesTbl caller sizes facts region args
@@ -452,11 +453,11 @@ posWalk namesTbl caller sizes facts region (EAnn value ty sp) st =
 posWalk namesTbl caller sizes facts region (EVar n sp) st = st
 posWalk namesTbl caller sizes facts region _ st = st
 
-posWalkCallee : HashMap Bool -> String -> List (Pair String (Pair Int (Pair Int (List Int)))) -> HashMap (List Int) -> List String -> String -> Int -> List Expr -> Pair (List (Pair String Int)) (List (Pair String Int)) -> Pair (List (Pair String Int)) (List (Pair String Int))
+posWalkCallee : HashMap String Bool -> String -> List (Pair String (Pair Int (Pair Int (List Int)))) -> HashMap String (List Int) -> List String -> String -> Int -> List Expr -> Pair (List (Pair String Int)) (List (Pair String Int)) -> Pair (List (Pair String Int)) (List (Pair String Int))
 posWalkCallee namesTbl caller sizes facts region g i args st =
   posWalkCalleeGo namesTbl caller sizes facts region g (length args - i) args st
 
-posWalkCalleeGo : HashMap Bool -> String -> List (Pair String (Pair Int (Pair Int (List Int)))) -> HashMap (List Int) -> List String -> String -> Int -> List Expr -> Pair (List (Pair String Int)) (List (Pair String Int)) -> Pair (List (Pair String Int)) (List (Pair String Int))
+posWalkCalleeGo : HashMap String Bool -> String -> List (Pair String (Pair Int (Pair Int (List Int)))) -> HashMap String (List Int) -> List String -> String -> Int -> List Expr -> Pair (List (Pair String Int)) (List (Pair String Int)) -> Pair (List (Pair String Int)) (List (Pair String Int))
 posWalkCalleeGo namesTbl caller sizes facts region g remaining args st = if remaining <= 0 then st
 else
   let
@@ -465,7 +466,7 @@ else
       if argPositive args i sizes caller facts region then posMarkPos g i st else posMarkNeg g i st
   in posWalkCalleeGo namesTbl caller sizes facts region g (remaining - 1) args st1
 
-posScanClauses : HashMap Bool -> List (Pair String (List (Pair (List Pat) Expr))) -> HashMap (List Int) -> String -> List (Pair (List Pat) Expr) -> Pair (List (Pair String Int)) (List (Pair String Int)) -> Pair (List (Pair String Int)) (List (Pair String Int))
+posScanClauses : HashMap String Bool -> List (Pair String (List (Pair (List Pat) Expr))) -> HashMap String (List Int) -> String -> List (Pair (List Pat) Expr) -> Pair (List (Pair String Int)) (List (Pair String Int)) -> Pair (List (Pair String Int)) (List (Pair String Int))
 posScanClauses namesTbl defs facts caller [] st = st
 posScanClauses namesTbl defs facts caller (cl :: rest) st =
   let
@@ -473,20 +474,20 @@ posScanClauses namesTbl defs facts caller (cl :: rest) st =
     st2 = posWalk namesTbl caller sizes facts [] (secondOf cl) st
   in posScanClauses namesTbl defs facts caller rest st2
 
-posScanDefs : HashMap Bool -> List (Pair String (List (Pair (List Pat) Expr))) -> HashMap (List Int) -> List (Pair String (List (Pair (List Pat) Expr))) -> Pair (List (Pair String Int)) (List (Pair String Int)) -> Pair (List (Pair String Int)) (List (Pair String Int))
+posScanDefs : HashMap String Bool -> List (Pair String (List (Pair (List Pat) Expr))) -> HashMap String (List Int) -> List (Pair String (List (Pair (List Pat) Expr))) -> Pair (List (Pair String Int)) (List (Pair String Int)) -> Pair (List (Pair String Int)) (List (Pair String Int))
 posScanDefs namesTbl defs facts [] st = st
 posScanDefs namesTbl defs facts (d :: rest) st =
   posScanDefs namesTbl defs facts rest
     (posScanClauses namesTbl defs facts (firstOf d) (secondOf d) st)
 
 -- 按名字列表扫描（worklist 不动点用）：只扫受影响的 caller，而不是每轮全量 defs（M34）。
-posScanNames : HashMap Bool -> HashMap (List (Pair (List Pat) Expr)) -> HashMap (List Int) -> List String -> Pair (List (Pair String Int)) (List (Pair String Int)) -> Pair (List (Pair String Int)) (List (Pair String Int))
+posScanNames : HashMap String Bool -> HashMap String (List (Pair (List Pat) Expr)) -> HashMap String (List Int) -> List String -> Pair (List (Pair String Int)) (List (Pair String Int)) -> Pair (List (Pair String Int)) (List (Pair String Int))
 posScanNames namesTbl defTbl factsTbl work st =
   let
     scanned = posScanNamesGo namesTbl defTbl factsTbl work st
   in Pair (posNormalize (firstOf scanned)) (posNormalize (secondOf scanned))
 
-posScanNamesGo : HashMap Bool -> HashMap (List (Pair (List Pat) Expr)) -> HashMap (List Int) -> List String -> Pair (List (Pair String Int)) (List (Pair String Int)) -> Pair (List (Pair String Int)) (List (Pair String Int))
+posScanNamesGo : HashMap String Bool -> HashMap String (List (Pair (List Pat) Expr)) -> HashMap String (List Int) -> List String -> Pair (List (Pair String Int)) (List (Pair String Int)) -> Pair (List (Pair String Int)) (List (Pair String Int))
 posScanNamesGo namesTbl defTbl factsTbl [] st = st
 posScanNamesGo namesTbl defTbl factsTbl (n :: rest) st =
   posScanNamesGo namesTbl defTbl factsTbl rest
@@ -564,20 +565,20 @@ wrapCheck p rest sizes k depth path = case depth > 0 of
     [] => findWrapField p rest sizes (k + 1)
   False => findWrapField p rest sizes (k + 1)
 
-posVarIn : String -> Int -> String -> HashMap (List Int) -> List String -> Bool
+posVarIn : String -> Int -> String -> HashMap String (List Int) -> List String -> Bool
 posVarIn x p caller facts region = memName x region || posHasTbl caller p facts
 
-arithRel : Int -> Expr -> List (Pair String (Pair Int (Pair Int (List Int)))) -> String -> HashMap (List Int) -> List String -> Maybe Int
+arithRel : Int -> Expr -> List (Pair String (Pair Int (Pair Int (List Int)))) -> String -> HashMap String (List Int) -> List String -> Maybe Int
 arithRel p (EApp (EVar op osp) args sp) sizes caller facts region =
   if op == "-" then arithMinus p args sizes caller facts region else Nothing
 arithRel p _ sizes caller facts region = Nothing
 
-arithMinus : Int -> List Expr -> List (Pair String (Pair Int (Pair Int (List Int)))) -> String -> HashMap (List Int) -> List String -> Maybe Int
+arithMinus : Int -> List Expr -> List (Pair String (Pair Int (Pair Int (List Int)))) -> String -> HashMap String (List Int) -> List String -> Maybe Int
 arithMinus p ([base, EInt k ksp]) sizes caller facts region =
   if k > 0 then arithMinusBase p base k sizes caller facts region else Nothing
 arithMinus p _ sizes caller facts region = Nothing
 
-arithMinusBase : Int -> Expr -> Int -> List (Pair String (Pair Int (Pair Int (List Int)))) -> String -> HashMap (List Int) -> List String -> Maybe Int
+arithMinusBase : Int -> Expr -> Int -> List (Pair String (Pair Int (Pair Int (List Int)))) -> String -> HashMap String (List Int) -> List String -> Maybe Int
 arithMinusBase p (EVar x xsp) k sizes caller facts region = case sizeOfVarStrict x sizes of
   Just sz => case sz of
     Pair baseIdx (Pair depth path) =>
@@ -596,7 +597,7 @@ projRel p ([v]) sizes = case v of
   _ => Nothing
 projRel p _ sizes = Nothing
 
-relOfArg : Int -> Expr -> List (Pair String (Pair Int (Pair Int (List Int)))) -> List String -> List (Pair String (List Int)) -> String -> HashMap (List Int) -> List String -> Maybe Int
+relOfArg : Int -> Expr -> List (Pair String (Pair Int (Pair Int (List Int)))) -> List String -> List (Pair String (List Int)) -> String -> HashMap String (List Int) -> List String -> Maybe Int
 relOfArg p (EVar n sp) sizes ctors projs caller facts region = case sizeOfVarStrict n sizes of
   Just sz => case sz of
     Pair base (Pair depth path) =>
@@ -609,7 +610,7 @@ relOfArg p (a@(EApp fn cargs sp)) sizes ctors projs caller facts region = case f
   _ => arithRel p a sizes caller facts region
 relOfArg p _ sizes ctors projs caller facts region = Nothing
 
-argRel : Int -> List Expr -> List (Pair String (Pair Int (Pair Int (List Int)))) -> List String -> List (Pair String (List Int)) -> String -> HashMap (List Int) -> List String -> Maybe Int
+argRel : Int -> List Expr -> List (Pair String (Pair Int (Pair Int (List Int)))) -> List String -> List (Pair String (List Int)) -> String -> HashMap String (List Int) -> List String -> Maybe Int
 argRel p args sizes ctors projs caller facts region = case nthExpr args p of
   Nothing => Nothing
   Just a => relOfArg p a sizes ctors projs caller facts region

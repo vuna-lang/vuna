@@ -1,0 +1,18 @@
+module Base.Foldable (Foldable(..), foldMap) where
+
+-- Base.Foldable：可折叠容器（方法 `fold`）与 `foldMap`。
+--
+-- 方法名是 `fold` 而不是 `foldr`：`Base.List.foldr` 随 Prelude 自动注入，同名会让
+-- 短名歧义；`fold` 语义就是右折叠。
+--
+-- `foldMap` 是**顶层约束函数**而不是 trait 方法：trait 方法签名当前不能写
+-- `Monoid m =>`（B29），约束放在顶层签名上；实例方法体只需要 `fold`。
+import Base.Monoid
+
+-- | 可折叠容器：`fold` 是右折叠，参数顺序为 `(元素 -> 累加器 -> 累加器) -> 初始值 -> 容器`。
+trait Foldable t where
+  fold : (a -> b -> b) -> b -> t a -> b
+
+-- | 把每个元素映射到 monoid 再合并；需要 `Monoid`（单位元）与 `Semigroup`（合并）两个假设。
+foldMap : Foldable t, Monoid m, Semigroup m => (a -> m) -> t a -> m
+foldMap f xs = fold (\v, acc => mappend (f v) acc) mempty xs

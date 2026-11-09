@@ -152,7 +152,7 @@ elabTraitFinal globals ec tname paramNames methods methodsP pKinds fieldTys =
     tele = teleOfType ctorTy
     dd =
       DtData dname tele [DtCtor cname dname tele ctorTy]
-        (foldParamPis paramsKinds (TType levelZero)) False
+        (foldParamPis paramsKinds (TType levelZero)) [] False
     projs = methodProjections tname paramNames pKinds methodsP fieldTys
     projSpans = map (\m => Pair (traitMethodName m) (traitMethodSpan m)) methods
     projBodies = projectionDefs tname (length paramNames) methodsP fieldTys (length methods)
@@ -286,8 +286,8 @@ projectionDefsGo ctor nParams ((Pair mname mexpr) :: rest) (t :: rest2) idx nFie
 -- base / 用户扩展）。不做该检查时，实例可以散落到任意 import 双方的文件里，实例查找
 -- 与 coherence 的可解释性都会变差；文档一直按落点规则描述，现在由精化器强制。
 declTopName : Decl -> Maybe String
-declTopName (DData n ps kind ctors derivings lin sp) = Just n
-declTopName (DRecord n ps fields derivings lin sp) = Just n
+declTopName (DData n ps kind ctors derivings viaField lin sp) = Just n
+declTopName (DRecord n ps fields derivings viaField lin sp) = Just n
 declTopName (DTrait n ps methods sp) = Just n
 declTopName _ = Nothing
 
@@ -308,8 +308,19 @@ headTypeNamesOf (e :: rest) = case headTypeNameOf e of
   Just n => n :: headTypeNamesOf rest
   Nothing => headTypeNamesOf rest
 
+-- 全局可见的内建类型（没有定义模块）：`Int` / `String` / `IO` 与 M33 的内建类型构造子
+-- `Array` / `IORef` / `MArray` / `Buffer`。它们的实例可以声明在任意模块，
+-- `base/lib/Base/{Array,IORef,MArray,Buffer}.vuna` 是约定落点。
 isGlobalHeadType : String -> Bool
-isGlobalHeadType n = n == "Int" || n == "String" || n == "IO"
+isGlobalHeadType n =
+  n == "Int"
+    || n == "String"
+    || n == "Float"
+    || n == "IO"
+    || n == "Array"
+    || n == "IORef"
+    || n == "MArray"
+    || n == "Buffer"
 
 instanceHeadTypeNames : Expr -> List String
 instanceHeadTypeNames headExpr = case instanceHeadParts headExpr of
@@ -356,7 +367,7 @@ elabInstanceWithClass globals allDecls cls info ec0 headExpr methods msp = case 
             ctxSubs = firstOf solvedCtx
             ec2 = secondOf solvedCtx
             fields1 = map (applyCtxSubstsTo nCtx ctxSubs) fieldTerms
-          in andThen (resolveRigidGoals globals bodyCtx msp (ecDictGoals ec2) [] ec2) (\r => case r of
+          in andThen (resolveRigidGoals globals bodyCtx msp (ecPending ec2) [] ec2) (\r => case r of
             Pair globSubs ec3 =>
               let
                 fields2 = map (applyTermSubstsTo bodyDepth globSubs) fields1
@@ -538,7 +549,7 @@ isLowerStart n = case strUnpack n of
 
 -- 实例 tele：裸变量位置先按类参数 kind 定位（seed），其余变量绑 kind 元变量等实参精化解出。
 -- tele 顺序与旧实现一致（自由小写名按出现顺序去重，保留最后一次出现的位置）。
-instanceTeleMetas : HashMap Bool -> Expr -> List Expr -> List (Pair String Term) -> Ec -> Pair (List (Pair String Term)) Ec
+instanceTeleMetas : HashMap String Bool -> Expr -> List Expr -> List (Pair String Term) -> Ec -> Pair (List (Pair String Term)) Ec
 instanceTeleMetas banned combined exprs seeds ec =
   teleMetasInit (uniqNames (keepOutBanned banned (concatMap exprFreeLower exprs))) seeds ec
 
@@ -607,7 +618,7 @@ uniqNames : List String -> List String
 uniqNames [] = []
 uniqNames (n :: rest) = if memName n rest then uniqNames rest else n :: uniqNames rest
 
-keepOutBanned : HashMap Bool -> List String -> List String
+keepOutBanned : HashMap String Bool -> List String -> List String
 keepOutBanned tbl [] = []
 keepOutBanned tbl (n :: rest) =
   if Base.HashMap.member n tbl then keepOutBanned tbl rest else n :: keepOutBanned tbl rest
@@ -847,15 +858,15 @@ elabInstanceMethod globals ec mty clauses = elabInstanceMethodIn globals emptyCt
 -- ---------------------------------------------------------------
 -- M29-T2b：实例 context 的字典消解
 -- ---------------------------------------------------------------
--- 方法体精化时对 tele 变量的字典需求被延迟成 `DtDictGoal m (Dict_C a …)`；这里按**声明的 context**
+-- 方法体精化时对 tele 变量的字典需求被延迟成 `Constraint CkDict m (Dict_C a …)`；这里按**声明的 context**
 -- 逐个消解：goal 域与第 i 个 ctx 字典 binder 的类型 conv 相等 ⇒ 该 goal 消解到
 -- `_ctx<nCtx-1-i>`（de Bruijn index = i）。返回 (meta, ctx 下标 k) 与已去掉这些 goal 的 Ec。
 solveCtxGoals : Ctx -> Int -> Int -> Ec -> List (Pair Int Int) -> Pair (List (Pair Int Int)) Ec
-solveCtxGoals ctx nCtx nTele ec acc = solveCtxGoalsGo ctx nCtx ec (ecDictGoals ec) [] acc
+solveCtxGoals ctx nCtx nTele ec acc = solveCtxGoalsGo ctx nCtx ec (ecPending ec) [] acc
 
-solveCtxGoalsGo : Ctx -> Int -> Ec -> List DtDictGoal -> List DtDictGoal -> List (Pair Int Int) -> Pair (List (Pair Int Int)) Ec
-solveCtxGoalsGo ctx nCtx ec [] kept acc = Pair (reverse acc) (ecPutDictGoals ec (reverse kept))
-solveCtxGoalsGo ctx nCtx ec ((g@(DtDictGoal m dom)) :: rest) kept acc = case metaLookup m (ecSolTbl ec) of
+solveCtxGoalsGo : Ctx -> Int -> Ec -> List Constraint -> List Constraint -> List (Pair Int Int) -> Pair (List (Pair Int Int)) Ec
+solveCtxGoalsGo ctx nCtx ec [] kept acc = Pair (reverse acc) (ecPutPending ec (reverse kept))
+solveCtxGoalsGo ctx nCtx ec ((g@(Constraint cid kind m dom cspan cdepth)) :: rest) kept acc = case metaLookup m (ecSolTbl ec) of
   Just _ => solveCtxGoalsGo ctx nCtx ec rest kept acc
   Nothing => case matchCtxDictIdx ctx nCtx dom ec of
     Nothing => solveCtxGoalsGo ctx nCtx ec rest (g :: kept) acc
@@ -892,13 +903,13 @@ applyCtxSubstsTo nCtx ((Pair m k) :: rest) t =
 
 -- 剩下的 goal：仍刚性 ⇒ 用带局部 ctx 的实例搜索解（`Dict_Eq (Box a)` 靠自实例 + ctx 递归）；
 -- 搜不到 ⇒ `TC_InstanceContextMissing`。非刚性（具体类型）的 goal 留给程序级搜索。
-resolveRigidGoals : List (Pair String Term) -> Ctx -> Span -> List DtDictGoal -> List (Pair Int Term) -> Ec -> Result (Pair (List (Pair Int Term)) Ec)
+resolveRigidGoals : List (Pair String Term) -> Ctx -> Span -> List Constraint -> List (Pair Int Term) -> Ec -> Result (Pair (List (Pair Int Term)) Ec)
 resolveRigidGoals globals ctx sp goals acc ec = resolveRigidGoalsGo globals ctx sp goals [] acc ec
 
-resolveRigidGoalsGo : List (Pair String Term) -> Ctx -> Span -> List DtDictGoal -> List DtDictGoal -> List (Pair Int Term) -> Ec -> Result (Pair (List (Pair Int Term)) Ec)
+resolveRigidGoalsGo : List (Pair String Term) -> Ctx -> Span -> List Constraint -> List Constraint -> List (Pair Int Term) -> Ec -> Result (Pair (List (Pair Int Term)) Ec)
 resolveRigidGoalsGo globals ctx sp [] kept acc ec =
-  Ok (Pair (reverse acc) (ecPutDictGoals ec (reverse kept)))
-resolveRigidGoalsGo globals ctx sp ((g@(DtDictGoal m dom)) :: rest) kept acc ec = if isRigidDictArg ec dom then case searchInstanceIn globals ctx ec dom sp of
+  Ok (Pair (reverse acc) (ecPutPending ec (reverse kept)))
+resolveRigidGoalsGo globals ctx sp ((g@(Constraint cid kind m dom cspan cdepth)) :: rest) kept acc ec = if isRigidDictArg ec dom then case searchInstanceIn globals ctx ec dom sp of
   Err e => tcErr1 sp (InstanceContextMissing (showValue dom)) (showValue dom)
   Ok (Pair rep ec1) => case solveMeta (ecDefTbl ec1) (ecSolsP ec1) 0 m [] (eval (ctxEnv ctx) rep) of
     Ok sols2 =>
@@ -955,12 +966,12 @@ record DictGoalGroup where
   dictGoalGroupExtras : List Int
 
 freeDictGoals : Ec -> List DictGoalGroup
-freeDictGoals ec = freeDictGoalsGo ec (ecDictGoals ec) []
+freeDictGoals ec = freeDictGoalsGo ec (ecPending ec) []
 
-freeDictGoalsGo : Ec -> List DtDictGoal -> List DictGoalGroup -> List DictGoalGroup
+freeDictGoalsGo : Ec -> List Constraint -> List DictGoalGroup -> List DictGoalGroup
 freeDictGoalsGo ec [] acc = acc
 freeDictGoalsGo ec (g :: rest) acc = case g of
-  DtDictGoal m dom => if isRigidDictArg ec dom then case metaLookup m (ecSolTbl ec) of
+  Constraint cid kind m dom cspan cdepth => if isRigidDictArg ec dom then case metaLookup m (ecSolTbl ec) of
     -- 已提升过的目标不再重复提升（`solveLiftedMeta` 已把 ?m 解成 `d`）；否则后续每个
     -- 定义都会被塞进一个多余的字典 binder（曾把 `xor` 的 `not b` 破坏成一次字典搜索）。
     Just _ => freeDictGoalsGo ec rest acc
@@ -994,7 +1005,7 @@ solveLiftedMeta ec name level m = case solveMeta (ecDefTbl ec) (ecSolsP ec) 0 m 
 
 liftFreeDictGoals : String -> Ec -> Term -> Term -> Pair Term (Pair Term Ec)
 -- M34 冷路径：没有延迟字典目标时整段是恒等（旧实现每次都扫一遍目标表 + 求隐式前缀长）。
-liftFreeDictGoals defName ec ty body = case ecDictGoals ec of
+liftFreeDictGoals defName ec ty body = case ecPending ec of
   [] => Pair ty (Pair body ec)
   _ =>
     let
@@ -1171,7 +1182,7 @@ instanceDefsOf ecBefore ecAfter srcSpan gs =
     (\g => DtDef (firstOf g) (defTypeOrDefaultTbl (Base.HashMap.fromList gs) (firstOf g)) (substDictTerm ecAfter (defBodyOf (ecDefTbl ecAfter) (firstOf g))) srcSpan)
     gs
 
-defBodyOf : HashMap Term -> String -> Term
+defBodyOf : HashMap String Term -> String -> Term
 defBodyOf defs name = case defLookup name defs of
   Just body => body
   Nothing => TInt 0
@@ -1209,7 +1220,7 @@ extraDefsOf globals ec srcSpans sourceDefs =
   extraDefsGo (ecGlobalsTbl ec) (Base.HashMap.ofNames (map dtDefName sourceDefs)) srcSpans
     (ecDefs ec) []
 
-extraDefsGo : HashMap Term -> HashMap Bool -> List (Pair String Span) -> List (Pair String Term) -> List DtDef -> List DtDef
+extraDefsGo : HashMap String Term -> HashMap String Bool -> List (Pair String Span) -> List (Pair String Term) -> List DtDef -> List DtDef
 extraDefsGo globalsTbl sourceNames srcSpans [] acc = reverse acc
 extraDefsGo globalsTbl sourceNames srcSpans (d :: rest) acc =
   if Base.HashMap.member (firstOf d) sourceNames then extraDefsGo globalsTbl sourceNames srcSpans rest acc
@@ -1220,7 +1231,7 @@ spanOfName : String -> List (Pair String Span) -> Maybe Span
 spanOfName name [] = Nothing
 spanOfName name ((Pair n sp) :: rest) = if n == name then Just sp else spanOfName name rest
 
-defTypeOrDefaultTbl : HashMap Term -> String -> Term
+defTypeOrDefaultTbl : HashMap String Term -> String -> Term
 defTypeOrDefaultTbl tbl name = case Base.HashMap.lookup name tbl of
   Just ty => ty
   Nothing => TGlobal "Int"

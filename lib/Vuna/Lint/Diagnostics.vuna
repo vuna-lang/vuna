@@ -39,25 +39,32 @@ import Base.String
 --   * `dispatch-lift`：case / let dispatch → 提升进外层模式（单 alt 替换、多 alt 拆分）。
 -- 旧 `lift-destructure` / `case-to-clauses` 的判定与渲染已合并进同一个 lift 内核，
 -- 两个旧 code 不再产生。
+--
+-- M41：新增 `list-literal`：表达式/类型位置的闭合 cons 链（`::` / `Cons` + `Nil`/`[]`）
+-- 以及裸 `Nil` 构造应写成列表字面量；模式匹配里的 `::`/`Cons` 不在规则范围。
 data LintRule : Type where
   LiteralIfChain : LintRule
   DispatchLift : LintRule
+  ListLiteral : LintRule
 
 -- code：文档与索引的稳定符号（`LN_` 前缀 + 驼峰）。
 lintCode : LintRule -> String
 lintCode LiteralIfChain = "LN_LiteralIfChain"
 lintCode DispatchLift = "LN_DispatchLift"
+lintCode ListLiteral = "LN_ListLiteral"
 
 -- rule：CLI 与 finding 输出用的 kebab 短名。与 code 一一对应（不再手写第二遍）。
 lintRule : LintRule -> String
 lintRule LiteralIfChain = "literal-if-chain"
 lintRule DispatchLift = "dispatch-lift"
+lintRule ListLiteral = "list-literal"
 
 -- 反向：由 code 查 rule（gen-errors 与输出层按 code 反查时用）
 lintRuleCode : String -> String
 lintRuleCode code =
   if code == lintCode LiteralIfChain then lintRule LiteralIfChain
-  else if code == lintCode DispatchLift then lintRule DispatchLift else ""
+  else if code == lintCode DispatchLift then lintRule DispatchLift
+  else if code == lintCode ListLiteral then lintRule ListLiteral else ""
 
 -- 消息模板（`<0>` 为插值；每个规则恰好一个插值：被检查的主体描述）
 lintMsg : LintRule -> String -> String
@@ -65,6 +72,7 @@ lintMsg LiteralIfChain scrutinee =
   "if dispatch on `${scrutinee}` can be lifted into the enclosing pattern or rewritten as a case"
 lintMsg DispatchLift scrutinee =
   "dispatch on `${scrutinee}` can be lifted into the enclosing pattern"
+lintMsg ListLiteral suggestion = "list construction can be written as `${suggestion}`"
 
 -- 修复动作描述（给 `vuna lint --explain` / 文档用）
 lintEdit : LintRule -> String
@@ -72,6 +80,8 @@ lintEdit LiteralIfChain =
   "把 if 分派提升进外层 clause/alt 模式；提升不了的字面量链改写为 case"
 lintEdit DispatchLift =
   "把 case / let 分派提升进外层模式（单 alt 替换；多 alt 拆 clause 或拆 alt）"
+lintEdit ListLiteral =
+  "把闭合 `::` / `Cons` 链与裸 `Nil` 改写为 `[a, b]` / `[]`（模式匹配不动）"
 
 -- 规则说明（文档用）
 lintDesc : LintRule -> String
@@ -79,11 +89,14 @@ lintDesc LiteralIfChain =
   "if 分派（字面量链 / Bool 变量）可提升进外层 clause/alt 模式；字面量链可回退为 case。"
 lintDesc DispatchLift =
   "case / let 分派可提升进外层 clause/alt 模式（单 alt 替换、多 alt 拆分）。"
+lintDesc ListLiteral =
+  "表达式/类型位置的闭合 cons 链与裸 `Nil` 应写成 `[a, b]` / `[]`；模式匹配里的 `::`/`Cons` 不受影响。"
 
 -- 是否可自动修复（可修复的规则会派生 FX_ 修复码）
 lintFixable : LintRule -> Bool
 lintFixable LiteralIfChain = True
 lintFixable DispatchLift = True
+lintFixable ListLiteral = True
 
 -- 文档遍历项（同构 List；gen-errors 遍历它渲染 LN_ 段）
 record LintEntry where
@@ -97,5 +110,6 @@ record LintEntry where
 lintAll : List LintEntry
 lintAll =
   [ LintEntry (lintCode LiteralIfChain) (lintRule LiteralIfChain) (lintDesc LiteralIfChain) (lintFixable LiteralIfChain) (lintEdit LiteralIfChain),
-    LintEntry (lintCode DispatchLift) (lintRule DispatchLift) (lintDesc DispatchLift) (lintFixable DispatchLift) (lintEdit DispatchLift)
+    LintEntry (lintCode DispatchLift) (lintRule DispatchLift) (lintDesc DispatchLift) (lintFixable DispatchLift) (lintEdit DispatchLift),
+    LintEntry (lintCode ListLiteral) (lintRule ListLiteral) (lintDesc ListLiteral) (lintFixable ListLiteral) (lintEdit ListLiteral)
   ]

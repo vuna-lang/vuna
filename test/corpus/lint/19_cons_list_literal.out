@@ -1,0 +1,5 @@
+corpus/lint/19_cons_list_literal.vuna:5:7: [LN_ListLiteral] list-literal: list construction can be written as `[n, 1, 2]`
+corpus/lint/19_cons_list_literal.vuna:8:5: [LN_ListLiteral] list-literal: list construction can be written as `[1, 2]`
+corpus/lint/19_cons_list_literal.vuna:11:6: [LN_ListLiteral] list-literal: list construction can be written as `[]`
+corpus/lint/19_cons_list_literal.vuna:22:11: [LN_ListLiteral] list-literal: list construction can be written as `[Int]`
+corpus/lint/19_cons_list_literal.vuna:29:7: [LN_ListLiteral] list-literal: list construction can be written as `[n]`

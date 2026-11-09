@@ -1,0 +1,21 @@
+-- D48：10 步 `Eff []`（纯行）do 链，每步 `pure (x_{i-1} + i)`，最后 `runPure` 收尾。
+-- 期望类型由签名钉死，interp 与编译产物必须给出一致的 55（1+2+...+10）。
+import Prelude
+import Base.Eff
+
+chain : Eff [] Int
+chain = do
+  x1 <- pure 1
+  x2 <- pure (x1 + 2)
+  x3 <- pure (x2 + 3)
+  x4 <- pure (x3 + 4)
+  x5 <- pure (x4 + 5)
+  x6 <- pure (x5 + 6)
+  x7 <- pure (x6 + 7)
+  x8 <- pure (x7 + 8)
+  x9 <- pure (x8 + 9)
+  x10 <- pure (x9 + 10)
+  pure x10
+
+main : String
+main = strFromInt (runPure chain)

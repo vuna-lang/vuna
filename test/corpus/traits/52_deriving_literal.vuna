@@ -1,0 +1,17 @@
+-- deriving (FromString / FromInt)：单构造子单字段包装类型的自动派生。
+import Base.FromString
+import Base.FromInt
+
+data Email : Type where
+  MkEmail : String -> Email
+deriving (FromString)
+
+data Age : Type where
+  MkAge : Int -> Age
+deriving (FromInt)
+
+main : String
+main = case (MkEmail "x@y") of
+    MkEmail s => s
+  ++ "/" ++ case (MkAge 42) of
+    MkAge n => strFromInt n

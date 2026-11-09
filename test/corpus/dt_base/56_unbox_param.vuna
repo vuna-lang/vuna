@@ -1,0 +1,16 @@
+-- M42：参数化单字段包装去装箱；嵌套的单字段包装也可透明。
+data Box : Type -> Type where
+  MkBox : {a : Type} -> a -> Box a
+
+record Single a where
+  value : a
+
+mk : Single (Box Int)
+mk = Single { value = MkBox 41 }
+
+get : Single (Box Int) -> Int
+get s = case s.value of
+  MkBox x => x
+
+main : Int
+main = get mk + 1

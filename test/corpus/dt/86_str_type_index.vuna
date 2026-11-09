@@ -1,0 +1,10 @@
+-- 类型表达式允许 String 字面量做索引（与 `Vec 3 a` 的 Int 字面量索引同构）：
+-- 族 kind、构造子结果索引、函数签名与依赖匹配都走定义性相等。
+data Box : String -> Type where
+  MkBox : Box "a"
+
+unbox : Box "a" -> Int
+unbox MkBox = 41
+
+main : Int
+main = unbox MkBox + 1

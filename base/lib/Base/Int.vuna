@@ -11,6 +11,7 @@ module Base.Int () where
 -- `x < y` 在 Int 实参上直接生成 `bi_eq_int` / `bi_lt_int`，不经过实例搜索，
 -- 因此不会自递归。
 import Base.Eq
+import Base.Hashable
 import Base.Ord
 -- B24：`Show` 实例跟类型模块走（Int 是 primitive，无 data 声明）。
 import Base.Show
@@ -34,3 +35,7 @@ instance Ord Int where
 -- B24：`Int` 的展示走内建 `strFromInt`（primitive 类型没有构造子可模式匹配）。
 instance Show Int where
   show x = strFromInt x
+
+-- 哈希：Int 直接用自身值（容器内部归一化到 0..1023 桶）。
+instance Hashable Int where
+  hash n = n

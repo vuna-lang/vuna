@@ -5,10 +5,11 @@ import Base.EffProcess
 import Base.IO
 import Base.List
 
-prog : (n : Name) -> Eff (Process n :: []) String
-prog n =
-  bindEff (processArgs n)
-    (\args => bindEff (processRunIn n "." ("true" :: [])) (\code => pureEff (join "," args ++ "|" ++ strFromInt code)))
+prog : (n : String) -> Eff [Process n] String
+prog n = do
+  args <- processArgs n
+  code <- processRunIn n "." ("true" :: [])
+  pure (join "," args ++ "|" ++ strFromInt code)
 
 mret : String -> String
 mret a = a
@@ -20,7 +21,7 @@ mopH op k = case op of
   RunIn dir args => k 3
 
 main : IO Int
-main = case runPure (handleProcess P1 mret mopH (prog P1)) of
+main = case runPure (handleProcess "mock" mret mopH (prog "mock")) of
   mockLog =>
     prim_bindIO (print ("mock " ++ mockLog ++ "\n"))
-      (\_ => prim_bindIO (runIOAnswer (handleProcessIO P2 (prog P2))) (\realLog => prim_bindIO (print ("real " ++ realLog ++ "\n")) (\_ => prim_pureIO 0)))
+      (\_ => prim_bindIO (runIOAnswer (handleProcessIO "real" (prog "real"))) (\realLog => prim_bindIO (print ("real " ++ realLog ++ "\n")) (\_ => prim_pureIO 0)))

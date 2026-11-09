@@ -13,10 +13,10 @@ data Box : Type where
 unbox : Box -> Nat
 unbox (MkBox n) = n
 
-v3 : Vec Int 3
+v3 : Vec 3 Int
 v3 = Cons 1 (Cons 2 (Cons 3 Nil))
 
-vsum : Vec Int 3 -> Int
+vsum : Vec 3 Int -> Int
 vsum xs = case xs of
   Cons a (Cons b (Cons c Nil)) => a + b + c
 

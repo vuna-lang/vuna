@@ -14,6 +14,14 @@ module Vuna.Compiler.Intrinsics
   , capabilityName
   , capabilityNames
   , findIntrinsic
+  , floatIntrinsicNames
+  , floatTypeName
+  , fromFloatMethodName
+  , fromFloatTypeName
+  , fromIntMethodName
+  , fromIntTypeName
+  , fromStringMethodName
+  , fromStringTypeName
   , intTypeName
   , interpMethodName
   , interpTypeName
@@ -145,6 +153,8 @@ data IType : Type where
   IBuf : IType
   -- 隐式类型参数绑定（`{a : Type} -> ...`）；不进函数 arity。
   IPi : String -> IType -> IType
+  -- `Float` primitive 类型的签名形状（放末尾保持 tag 顺序）。
+  IFloat : IType
 
 -- | 签名形状的函数 arity：`IFun`/`IFun1` 各计 1，隐式 `IPi` 不计，其余为 0。
 arityOfType : IType -> Int
@@ -207,7 +217,11 @@ ioTypeName = "IO"
 -- 其它类型头（类型族 / axiom / 未知全局）在运行时不可命名，按擦除依赖类型处理。
 isTypeConstructorName : String -> Bool
 isTypeConstructorName name =
-  name == intTypeName || name == strTypeName || name == ioTypeName || typeIntrinsicArityOf name >= 0
+  name == intTypeName
+    || name == strTypeName
+    || name == floatTypeName
+    || name == ioTypeName
+    || typeIntrinsicArityOf name >= 0
 
 -- | IO 代数「构造」原语的名字（`IO a` 的纯构造）。
 primPureIOName : String
@@ -378,7 +392,7 @@ isEffectfulIntrinsic i = case intrinsicCapability i of
 
 -- | 语言 primitive 类型名（Bool 不在其中：它是 base 的普通 data 声明）。
 typeIntrinsicNames : List String
-typeIntrinsicNames = [intTypeName, strTypeName]
+typeIntrinsicNames = [intTypeName, strTypeName, floatTypeName]
 
 -- | `Int` primitive 类型的源码名字。
 intTypeName : String
@@ -387,6 +401,10 @@ intTypeName = "Int"
 -- | `String` primitive 类型的源码名字。
 strTypeName : String
 strTypeName = "String"
+
+-- | `Float` primitive 类型的源码名字（运行时是 OCaml IEEE-754 double，无 data 声明）。
+floatTypeName : String
+floatTypeName = "Float"
 
 -- | Bool 的完整符号身份：它是 base 里的普通 data 声明，身份 = `Base.Bool.Bool`（M27）。
 boolTypeName : String
@@ -442,8 +460,35 @@ interpTypeName = "Base.Interp.Interp"
 interpMethodName : String
 interpMethodName = "Base.Interp.interp"
 
--- | 所有内建声明。用户可见项进 Loader/prelude；内部 `bi_*` 只服务 codegen。
-allIntrinsics : List Intrinsic
+-- | 字面量转换：`FromString` trait 的 canonical 名（checking 位置的字符串字面量按
+-- 期望类型降级时用；声明在 base 的 `Base.FromString`）。
+fromStringTypeName : String
+fromStringTypeName = "Base.FromString.FromString"
+
+-- | `FromString` 的方法投影 canonical 名。
+fromStringMethodName : String
+fromStringMethodName = "Base.FromString.fromString"
+
+-- | 字面量转换：`FromInt` trait 的 canonical 名（声明在 base 的 `Base.FromInt`）。
+fromIntTypeName : String
+fromIntTypeName = "Base.FromInt.FromInt"
+
+-- | `FromInt` 的方法投影 canonical 名。
+fromIntMethodName : String
+fromIntMethodName = "Base.FromInt.fromInt"
+
+-- | 字面量转换：`FromFloat` trait 的 canonical 名（声明在 base 的 `Base.Float`）。
+fromFloatTypeName : String
+fromFloatTypeName = "Base.Float.FromFloat"
+
+-- | `FromFloat` 的方法投影 canonical 名。
+fromFloatMethodName : String
+fromFloatMethodName = "Base.Float.fromFloat"
+
+-- | 所有内建声明（基础表；浮点表另立，见 `floatIntrinsics`）。用户可见项进 Loader/prelude；
+-- 内部 `bi_*` 只服务 codegen。分成两张表是为了让每段列表字面量的项大小留在旧 seed
+-- 擦除检查的 fuel 内（bootstrap 约束，见 docs/reference/bootstrap.md）。
+baseIntrinsics : List Intrinsic
 -- 效果原语（M27：只保留 `prim_*` 名；公开名删除，用户经 Base.IO 或显式能力）。
 -- 精化器合成的比较/相等特化名（内部：不对用户源码可见）。
 -- M33 W3：内建类型构造子 Array / IORef / MArray / Buffer 的原语。
@@ -472,7 +517,7 @@ allIntrinsics : List Intrinsic
 -- 能力 `clock`（与 timeUs 同族）；interp 不归约（OpNone），效果程序只 compile+run。
 -- 注意：`Base.IO` 在 seed 闭包内，旧 seed 不认识它，因此库层切换见 debt D43；
 -- 不在 seed 闭包内的 `Base.EffClock` 真实 handler 已直接使用它。
-allIntrinsics =
+baseIntrinsics =
   [ Intrinsic "+" (IFun IInt (IFun IInt IInt)) OpAdd Nothing "bi_add" True,
     Intrinsic "-" (IFun IInt (IFun IInt IInt)) OpSub Nothing "bi_sub" True,
     Intrinsic "*" (IFun IInt (IFun IInt IInt)) OpMul Nothing "bi_mul" True,
@@ -512,8 +557,8 @@ allIntrinsics =
     Intrinsic primBindIOName (IPi "a" (IPi "b" (IFun (IIO (IVar "a")) (IFun (IFun (IVar "a") (IIO (IVar "b"))) (IIO (IVar "b")))))) OpNone Nothing "(fun io k -> fun w -> k (io w) w)" True,
     Intrinsic primBindIO1Name (IPi "a" (IPi "b" (IFun1 (IIO (IVar "a")) (IFun1 (IFun1 (IVar "a") (IIO (IVar "b"))) (IIO (IVar "b")))))) OpNone Nothing "(fun io k -> fun w -> k (io w) w)" True,
     Intrinsic primRunIOName (IPi "a" (IFun (IIO (IVar "a")) (IVar "a"))) OpNone (Just CapUnsafe) "(fun io -> io 0)" True,
-    Intrinsic "prim_effectPerform" (IPi "a" (IPi "b" (IFun IStr (IFun IInt (IFun (IVar "a") (IVar "b")))))) OpNone (Just CapUnsafe) "(fun key name v -> Obj.obj (Effect.perform (Perform (key, name, Obj.repr v))))" True,
-    Intrinsic "prim_effectHandle" (IPi "u" (IPi "a" (IPi "b" (IPi "ret" (IPi "h" (IFun IStr (IFun IInt (IFun (IVar "ret") (IFun (IVar "h") (IFun (IFun (IVar "u") (IVar "a")) (IFun (IVar "u") (IVar "b")))))))))))) OpNone (Just CapUnsafe) "dtp_effect_handle" True,
+    Intrinsic "prim_effectPerform" (IPi "a" (IPi "b" (IFun IStr (IFun IStr (IFun (IVar "a") (IVar "b")))))) OpNone (Just CapUnsafe) "(fun key name v -> Obj.obj (Effect.perform (Perform (key, name, Obj.repr v))))" True,
+    Intrinsic "prim_effectHandle" (IPi "u" (IPi "a" (IPi "b" (IPi "ret" (IPi "h" (IFun IStr (IFun IStr (IFun (IVar "ret") (IFun (IVar "h") (IFun (IFun (IVar "u") (IVar "a")) (IFun (IVar "u") (IVar "b")))))))))))) OpNone (Just CapUnsafe) "dtp_effect_handle" True,
     Intrinsic "prim_cleanupPush" (IFun (IFun IInt IInt) IInt) OpNone (Just CapUnsafe) "dtp_cleanup_push" True,
     Intrinsic "prim_cleanupPop" (IFun IInt IInt) OpNone (Just CapUnsafe) "dtp_cleanup_pop" True,
     Intrinsic "prim_asyncFork" (IPi "a" (IFun (IFun IInt (IVar "a")) (IIO IInt))) OpNone Nothing "(fun th -> dtp_async_fork th)" True,
@@ -586,8 +631,54 @@ allIntrinsics =
     Intrinsic "bi_ge_generic" (IFun IInt (IFun IInt IBool)) OpGeGeneric Nothing "bi_ge_generic" False
   ]
 
+-- | 浮点相关内建（字面量转换/算术/比较/格式化）。单独成表：见 `baseIntrinsics` 的
+-- bootstrap 说明；顺序上追加在基础表之后。
+floatIntrinsics : List Intrinsic
+floatIntrinsics =
+  [ Intrinsic "strFromFloat" (IFun IFloat IStr) OpNone Nothing "string_of_float" True,
+    Intrinsic "floatFromInt" (IFun IInt IFloat) OpNone Nothing "float_of_int" True,
+    Intrinsic "intFromFloat" (IFun IFloat IInt) OpNone Nothing "int_of_float" True,
+    Intrinsic "floatAbs" (IFun IFloat IFloat) OpNone Nothing "abs_float" True,
+    Intrinsic "floatSqrt" (IFun IFloat IFloat) OpNone Nothing "sqrt" True,
+    Intrinsic "bi_add_float" (IFun IFloat (IFun IFloat IFloat)) OpNone Nothing "bi_add_float" False,
+    Intrinsic "bi_sub_float" (IFun IFloat (IFun IFloat IFloat)) OpNone Nothing "bi_sub_float" False,
+    Intrinsic "bi_mul_float" (IFun IFloat (IFun IFloat IFloat)) OpNone Nothing "bi_mul_float" False,
+    Intrinsic "bi_div_float" (IFun IFloat (IFun IFloat IFloat)) OpNone Nothing "bi_div_float" False,
+    Intrinsic "bi_eq_float" (IFun IFloat (IFun IFloat IBool)) OpNone Nothing "bi_eq_float" False,
+    Intrinsic "bi_neq_float" (IFun IFloat (IFun IFloat IBool)) OpNone Nothing "bi_neq_float" False,
+    Intrinsic "bi_lt_float" (IFun IFloat (IFun IFloat IBool)) OpNone Nothing "bi_lt_float" False,
+    Intrinsic "bi_le_float" (IFun IFloat (IFun IFloat IBool)) OpNone Nothing "bi_le_float" False,
+    Intrinsic "bi_gt_float" (IFun IFloat (IFun IFloat IBool)) OpNone Nothing "bi_gt_float" False,
+    Intrinsic "bi_ge_float" (IFun IFloat (IFun IFloat IBool)) OpNone Nothing "bi_ge_float" False
+  ]
+
+-- | 所有内建声明：基础表 + 浮点表。
+allIntrinsics : List Intrinsic
+allIntrinsics = append baseIntrinsics floatIntrinsics
+
+-- | 全部与 Float 有关的内建名（字面量/算术/比较/转换/格式化）：`vuna interp`/REPL 的
+-- 求值 guard 与 codegen 的按需 runtime helper 都按它判定「程序是否使用浮点」。
+floatIntrinsicNames : List String
+floatIntrinsicNames =
+  [ "strFromFloat",
+    "floatFromInt",
+    "intFromFloat",
+    "floatAbs",
+    "floatSqrt",
+    "bi_add_float",
+    "bi_sub_float",
+    "bi_mul_float",
+    "bi_div_float",
+    "bi_eq_float",
+    "bi_neq_float",
+    "bi_lt_float",
+    "bi_le_float",
+    "bi_gt_float",
+    "bi_ge_float"
+  ]
+
 -- | 名字 → 内建声明的查询表（由 `allIntrinsics` 一次性建好，供 `findIntrinsic` 用）。
-intrinsicTbl : HashMap Intrinsic
+intrinsicTbl : HashMap String Intrinsic
 intrinsicTbl =
   Base.HashMap.insertAll (map (\i => Pair (intrinsicName i) i) allIntrinsics)
     (Base.HashMap.fromList [])

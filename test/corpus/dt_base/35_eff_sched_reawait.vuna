@@ -12,7 +12,14 @@ sumThree _ _ _ = Ok 0
 prog : Eff [] (Result Int)
 prog =
   withScope
-    (\sc => bindEff (forkTask sc (pureEff 11)) (\ta => bindEff (awaitTask ta) (\r1 => bindEff (awaitTask ta) (\r2 => bindEff (cancelTask ta) (\_ => bindEff (awaitTask ta) (\r3 => pureEff (sumThree r1 r2 r3)))))))
+    (\sc => do
+      ta <- forkTask sc (pure 11)
+      r1 <- awaitTask ta
+      r2 <- awaitTask ta
+      _ <- cancelTask ta
+      r3 <- awaitTask ta
+      pure (sumThree r1 r2 r3)
+    )
 
 main : IO Int
 main = do

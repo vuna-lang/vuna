@@ -4,6 +4,10 @@
 > （session event seq 1030，turn 11）。review 被 dismiss，但用户随后以
 > “新建worktree,实现”批准并执行；此后作为交付清单使用。
 
+> 后续（2026-11-09）：命名实例的实例名已改为 String——`data Reader : String -> Type -> Type`，
+> 行里写 `Reader "books" Int`；运行时 `Perform : string * string * Obj.t`。`Name`/`nameCode`
+> 与 §2.1 的 `Cnt1`/`Cnt2` 只是历史示例，不再是库 API。
+
 > 进度快照（2026-11-07，W7/W9/W10 残项收口）：
 > - W1–W11 全部完成；W7 一次性闭包/捕获规则（`mkCont`）、通用 `bracket`/`finally`
 >   的 abort cleanup（每纤程 cleanup 栈）、D45；W9 Mutex/Semaphore、线性 `TaskLin`

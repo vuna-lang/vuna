@@ -2,8 +2,8 @@
 import Base.Eff
 import Base.Eff.Reader
 
-bad : Eff Nil Int
-bad = local Cnt1 Int (\v => v) (pureEff 1)
+bad : Eff [] Int
+bad = local "counter" Int (\v => v) (pure 1)
 
 main : Int
 main = 1

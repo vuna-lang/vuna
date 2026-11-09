@@ -1,0 +1,12 @@
+-- S4：同一刚性类型变量上的多个同类字典目标在定义收尾时归并/去重到**一个**字典 binder
+-- （`Eq a` 不重复提升）；调用点按具体类型一次性补字典。
+-- 注意：同一定义里同时需要两个**不同**类的字典（如 `Eq a` + `Show a`）目前仍会触发
+-- `liftFreeDictGoals` 的多 binder 缺陷（`DT: internal: negative de Bruijn index -2`），
+-- 属 S4 之外/之后单独修的范围，本夹具只钉已支持的单类去重形态。
+import Prelude
+
+eqTwice : a -> a -> Bool
+eqTwice x y = (x == y) && (x == y)
+
+main : String
+main = if eqTwice 1 1 && eqTwice "a" "a" then "ok" else "bad"

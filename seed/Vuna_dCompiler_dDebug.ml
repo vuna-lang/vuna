@@ -11,6 +11,6 @@ let v_Vuna_dCompiler_dDebug_dstampNow = (fun label -> ((fun _u -> 0) (Base_dIO.v
 
 let v_Vuna_dCompiler_dDebug_dstamp = (fun label -> (if v_Vuna_dCompiler_dDebug_ddebugOn then (v_Vuna_dCompiler_dDebug_dstampNow label) else 0))
 
-let v_Vuna_dCompiler_dDebug_dsampleKey = (fun name -> ((fun h -> ((h - ((if 64 = 0 then failwith "division by zero" else h / 64) * 64)) = 0)) (Base_dHashMap.v_Base_dHashMap_dhashStr name)))
+let v_Vuna_dCompiler_dDebug_dsampleKey = (fun name -> ((fun h -> ((h - ((if 64 = 0 then failwith "division by zero" else h / 64) * 64)) = 0)) (Base_dHashable.v_Base_dHashable_dhashStr name)))
 
 let v_Vuna_dCompiler_dDebug_dstampSample = (fun key label -> (if (v_Vuna_dCompiler_dDebug_dsampleKey key) then (v_Vuna_dCompiler_dDebug_dstamp label) else 0))

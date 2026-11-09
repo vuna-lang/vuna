@@ -57,7 +57,7 @@ interpretExpr ctx program expr = case depIfacesForToolProgram ctx program of
 evalExprInfoWithAux : PackageContext -> String -> String -> Maybe AuxCache -> Result (Pair (Pair String String) (Maybe AuxCache))
 evalExprInfoWithAux ctx program expr aux = case depIfacesForToolProgram ctx program of
   Just ifaces => dtEvalExprInfoWithAuxCache ctx program expr ifaces aux
-  Nothing => andThen (dtEvalExprInfo ctx program expr) (\info => Ok (Pair info aux))
+  Nothing => dtEvalExprInfo ctx program expr >>= (\info => Ok (Pair info aux))
 
 evalExprInfo : PackageContext -> String -> String -> Result (Pair String String)
 evalExprInfo ctx program expr = case depIfacesForToolProgram ctx program of

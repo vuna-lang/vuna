@@ -1,0 +1,9 @@
+-- M42：Ord 委托；单字段包装比较与底层字段一致。
+record Score where
+  score : Int
+deriving via field (Eq, Ord)
+
+main : String
+main =
+  (if Score { score = 1 } < Score { score = 2 } then "lt" else "ge")
+    ++ (if Score { score = 2 } <= Score { score = 2 } then "/le" else "/gt")

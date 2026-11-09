@@ -12,8 +12,8 @@ import Base.Nat
 import Base.Vec
 
 -- | 拼 `[CODE] 消息`：code 与 template 由调用方从各自域枚举派生，
--- args 的长度由 `Vec String n` 在编译期与 arity 锁定。
-diagMsg : {n : Nat} -> String -> String -> Vec String n -> String
+-- args 的长度由 `Vec n String` 在编译期与 arity 锁定。
+diagMsg : {n : Nat} -> String -> String -> Vec n String -> String
 diagMsg code template args = "[${code}] ${substTemplate template args}"
 
 -- | 纯消息诊断（CG：无位置）。

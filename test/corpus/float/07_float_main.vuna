@@ -1,0 +1,3 @@
+-- main : Float 的展示走 string_of_float。
+main : Float
+main = 7.0 / 2.0

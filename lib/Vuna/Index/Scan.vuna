@@ -29,6 +29,7 @@ module Vuna.Index.Scan
 --   - 缓存不可写 / 写失败一律降级为纯内存索引（不报错）。
 import Vuna.Compiler.Common
 import Base.HashMap
+import Base.Hashable
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Loader.Fixity
 import Vuna.Compiler.Frontend.Lexer
@@ -213,10 +214,10 @@ symbolsOfDecl sMod decls table d =
     line = declLine d
     col = declCol d
   in case d of
-    DData name params kind ctors derivings lin sp =>
+    DData name params kind ctors derivings viaField lin sp =>
       Sym sMod name "data" "data ${name}${paramSuffix params}" "" (docForDecl table name) line col
         :: ctorSymbols sMod name ctors table
-    DRecord name params fields derivings lin sp =>
+    DRecord name params fields derivings viaField lin sp =>
       Sym sMod name "record" "record ${name}${paramSuffix params}" "" (docForDecl table name) line col
         :: fieldSymbols sMod name fields table
     DTrait name params methods sp =>
@@ -295,8 +296,10 @@ refsInDeclsGo sMod (d :: rest) acc = refsInDeclsGo sMod rest (refsInDecl sMod d 
 
 refsInDecl : String -> Decl -> List Ref -> List Ref
 refsInDecl sMod (DFun name pats body sp) acc = refsInExprGo sMod body acc
-refsInDecl sMod (DData name params kind ctors derivings lin sp) acc = refsInCtors sMod ctors acc
-refsInDecl sMod (DRecord name params fields derivings lin sp) acc = refsInFieldTypes sMod fields acc
+refsInDecl sMod (DData name params kind ctors derivings viaField lin sp) acc =
+  refsInCtors sMod ctors acc
+refsInDecl sMod (DRecord name params fields derivings viaField lin sp) acc =
+  refsInFieldTypes sMod fields acc
 refsInDecl sMod (DTrait name params methods sp) acc = refsInMethods sMod methods acc
 refsInDecl sMod (DInstance ctxE head methods sp) acc =
   refsInDeclsGo sMod methods (refsInExprGo sMod head acc)
@@ -353,6 +356,7 @@ refsInExprGo sMod e acc = case e of
   EVar n sp => if isHoleName n then acc else Ref sMod n (spanStartLine sp) (spanStartCol sp) :: acc
   EInt n sp => acc
   EStr s sp => acc
+  EFloat raw sp => acc
   -- M36：模板字面量：洞内表达式的引用照常收集（find-references 需要）。
   EInterp multi parts sp => refsInInterpParts sMod parts acc
   ELam ps body sp => refsInExprGo sMod body acc
@@ -507,7 +511,7 @@ lockPath repo = "${cacheDir repo}/cache.lock"
 -- 哈希 = strHash(content) 与 strHash("v2:" ++ content) 的组合（同一内容必须得到同一
 -- 字符串；两个 10 位哈希组合降低「同 size 同 mtime 内容变更」漏判的概率）。
 contentHash : String -> String
-contentHash content = "${Base.HashMap.hashStr content}-${Base.HashMap.hashStr "v2:${content}"}"
+contentHash content = "${Base.Hashable.hashStr content}-${Base.Hashable.hashStr "v2:${content}"}"
 
 entryPath : Pair String (Pair Int String) -> String
 entryPath entry = firstOf entry

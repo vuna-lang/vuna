@@ -238,7 +238,7 @@ let v_Vuna_dCompiler_dPackages_dPkg_dcheckUniquePackageNames = (fun packages -> 
 
 let v_Vuna_dCompiler_dPackages_dPkg_dpkgFuelBound = 1048576
 
-let v_Vuna_dCompiler_dPackages_dPkg_dloadPackage = (fun dir -> ((Base_dResult.v_Base_dResult_dandThen ((((v_Vuna_dCompiler_dPackages_dPkg_dloadPackageWalk v_Vuna_dCompiler_dPackages_dPkg_dpkgFuelBound) Base_dList.C_Base_dList_dList_Nil) Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing) dir)) (fun package -> ((Base_dResult.v_Base_dResult_dandThen (v_Vuna_dCompiler_dPackages_dPkg_dcheckUniquePackageNames (Base_dList.C_Base_dList_dList_Cons (package, Base_dList.C_Base_dList_dList_Nil)))) (fun _u -> (Base_dResult.C_Base_dResult_dResult_Ok (package)))))))
+let v_Vuna_dCompiler_dPackages_dPkg_dloadPackage = (fun dir -> ((Vuna_dCompiler_dCommon.v_Vuna_dCompiler_dCommon_dandThen ((((v_Vuna_dCompiler_dPackages_dPkg_dloadPackageWalk v_Vuna_dCompiler_dPackages_dPkg_dpkgFuelBound) Base_dList.C_Base_dList_dList_Nil) Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing) dir)) (fun package -> ((Vuna_dCompiler_dCommon.v_Vuna_dCompiler_dCommon_dandThen (v_Vuna_dCompiler_dPackages_dPkg_dcheckUniquePackageNames (Base_dList.C_Base_dList_dList_Cons (package, Base_dList.C_Base_dList_dList_Nil)))) (fun _u -> (Base_dResult.C_Base_dResult_dResult_Ok (package)))))))
 
 let rec v_Vuna_dCompiler_dPackages_dPkg_dloadMembers = (fun mc0 mc1 -> (match mc1 with
   | Base_dList.C_Base_dList_dList_Cons (dtb__138, dtb__139) -> (match (v_Vuna_dCompiler_dPackages_dPkg_dloadPackage ((v_Vuna_dCompiler_dPackages_dPkg_djoinPath mc0) dtb__138)) with
@@ -264,7 +264,7 @@ let v_Vuna_dCompiler_dPackages_dPkg_dworkspacePackages = (fun rootBaseDir -> ((f
   | _ -> failwith "DT: impossible branch"
 )) with
   | Base_dResult.C_Base_dResult_dResult_Err (dtb__156) -> (Base_dResult.C_Base_dResult_dResult_Err (dtb__156))
-  | Base_dResult.C_Base_dResult_dResult_Ok (dtb__157) -> ((Base_dResult.v_Base_dResult_dandThen (v_Vuna_dCompiler_dPackages_dPkg_dcheckUniquePackageNames (Base_dList.C_Base_dList_dList_Cons (dtb__145, dtb__157)))) (fun _u -> (Base_dResult.C_Base_dResult_dResult_Ok ((Base_dList.C_Base_dList_dList_Cons (dtb__145, dtb__157))))))
+  | Base_dResult.C_Base_dResult_dResult_Ok (dtb__157) -> ((Vuna_dCompiler_dCommon.v_Vuna_dCompiler_dCommon_dandThen (v_Vuna_dCompiler_dPackages_dPkg_dcheckUniquePackageNames (Base_dList.C_Base_dList_dList_Cons (dtb__145, dtb__157)))) (fun _u -> (Base_dResult.C_Base_dResult_dResult_Ok ((Base_dList.C_Base_dList_dList_Cons (dtb__145, dtb__157))))))
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
@@ -357,11 +357,11 @@ let rec v_Vuna_dCompiler_dPackages_dPkg_dfirstExistingBase = (fun mc0 mc1 -> (ma
 
 let v_Vuna_dCompiler_dPackages_dPkg_dlocateBase = (fun _u -> ((fun env -> (if (env = "") then ((fun candidates -> ((v_Vuna_dCompiler_dPackages_dPkg_dfirstExistingBase candidates) candidates)) (v_Vuna_dCompiler_dPackages_dPkg_dbaseCandidates (Vuna_dCompiler_dFrontend_dManifest.v_Vuna_dCompiler_dFrontend_dManifest_dmanifestDir (v_Vuna_dCompiler_dPackages_dPkg_dabsolutePath (Base_dIO.v_Base_dIO_drunIO (fun (_ : int) -> (dtp_execPath ()))))))) else ((fun dir -> (if (v_Vuna_dCompiler_dPackages_dPkg_dhasManifest dir) then (Base_dResult.C_Base_dResult_dResult_Ok (dir)) else (v_Vuna_dCompiler_dPackages_dPkg_dbaseNotFound (Base_dList.C_Base_dList_dList_Cons (dir, Base_dList.C_Base_dList_dList_Nil))))) (v_Vuna_dCompiler_dPackages_dPkg_dabsolutePath env)))) (Base_dIO.v_Base_dIO_drunIO ((fun dtio_0 -> fun (_ : int) -> dtp_getenv dtio_0) "VUNA_BASE"))))
 
-let v_Vuna_dCompiler_dPackages_dPkg_dbaseOnlyContext = (fun base -> ((Base_dResult.v_Base_dResult_dandThen (v_Vuna_dCompiler_dPackages_dPkg_dloadPackage base)) (fun package -> (Base_dResult.C_Base_dResult_dResult_Ok ((C_Vuna_dCompiler_dPackages_dPkg_dPackageContext_PackageContext ("", Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing, (Base_dList.C_Base_dList_dList_Cons ((v_Vuna_dCompiler_dPackages_dPkg_ddependencyRootOf package), Base_dList.C_Base_dList_dList_Nil)), "", Base_dList.C_Base_dList_dList_Nil, Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing)))))))
+let v_Vuna_dCompiler_dPackages_dPkg_dbaseOnlyContext = (fun base -> ((Vuna_dCompiler_dCommon.v_Vuna_dCompiler_dCommon_dandThen (v_Vuna_dCompiler_dPackages_dPkg_dloadPackage base)) (fun package -> (Base_dResult.C_Base_dResult_dResult_Ok ((C_Vuna_dCompiler_dPackages_dPkg_dPackageContext_PackageContext ("", Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing, (Base_dList.C_Base_dList_dList_Cons ((v_Vuna_dCompiler_dPackages_dPkg_ddependencyRootOf package), Base_dList.C_Base_dList_dList_Nil)), "", Base_dList.C_Base_dList_dList_Nil, Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing)))))))
 
 let v_Vuna_dCompiler_dPackages_dPkg_dcontextAt = (fun start -> (match (v_Vuna_dCompiler_dPackages_dPkg_dfindManifestDirMaybe start) with
-  | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__232) -> ((Base_dResult.v_Base_dResult_dandThen (v_Vuna_dCompiler_dPackages_dPkg_dloadPackage dtb__232)) (fun package -> (Base_dResult.C_Base_dResult_dResult_Ok ((v_Vuna_dCompiler_dPackages_dPkg_dpackageContext package)))))
-  | Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing -> ((Base_dResult.v_Base_dResult_dandThen (v_Vuna_dCompiler_dPackages_dPkg_dlocateBase 0)) v_Vuna_dCompiler_dPackages_dPkg_dbaseOnlyContext)
+  | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__232) -> ((Vuna_dCompiler_dCommon.v_Vuna_dCompiler_dCommon_dandThen (v_Vuna_dCompiler_dPackages_dPkg_dloadPackage dtb__232)) (fun package -> (Base_dResult.C_Base_dResult_dResult_Ok ((v_Vuna_dCompiler_dPackages_dPkg_dpackageContext package)))))
+  | Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing -> ((Vuna_dCompiler_dCommon.v_Vuna_dCompiler_dCommon_dandThen (v_Vuna_dCompiler_dPackages_dPkg_dlocateBase 0)) v_Vuna_dCompiler_dPackages_dPkg_dbaseOnlyContext)
   | _ -> failwith "DT: impossible branch"
 ))
 

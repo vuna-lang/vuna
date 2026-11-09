@@ -36,16 +36,23 @@ showIntTail (Cons x xs) = "," ++ strFromInt x ++ showIntTail xs
 safeHalf : Int -> Result Int
 safeHalf n = if n / 2 * 2 == n then Ok (n / 2) else Err "odd"
 
+plusDo : Result Int
+plusDo = do
+  x <- Ok 3
+  y <- Ok 4
+  pure (x + y)
+
 main : String
 main =
   "fm=" ++ strFromInt (fromMaybe 0 (Just 5)) ++ "," ++ strFromInt (fromMaybe 7 Nothing)
     ++ " maybe=" ++ maybe "none" (\x => x) (Just "hi")
     ++ " just=" ++ showBool (isJust (Just 1)) ++ "/" ++ showBool (isNothing Nothing)
-    ++ " map=" ++ showMaybeInt (mapJust (\x => x * 3) (Just 2))
+    ++ " map=" ++ showMaybeInt (fmap (\x => x * 3) (Just 2))
     ++ " tr=" ++ showResultIntList (traverse safeHalf (Cons 2 (Cons 4 Nil)))
     ++ " tre=" ++ showResultIntList (traverse safeHalf (Cons 2 (Cons 3 Nil)))
-    ++ " and=" ++ showResultInt (andThen (Ok 3) (\x => Ok (x + 1)))
+    ++ " and=" ++ showResultInt (bind (Ok 3) (\x => Ok (x + 1)))
     ++ " step=" ++ showResultInt (step (Ok (Pair 2 3)) (\a, b => Ok (a * b)))
-    ++ " mr=" ++ showResultInt (mapResult (\x => x * 2) (Ok 3))
+    ++ " mr=" ++ showResultInt (fmap (\x => x * 2) (Ok 3))
     ++ " me=" ++ showResultInt (mapError (\e => e ++ "!") (Err "bad"))
     ++ " wd=" ++ strFromInt (withDefault 0 (Err "x"))
+    ++ " do=" ++ showResultInt plusDo

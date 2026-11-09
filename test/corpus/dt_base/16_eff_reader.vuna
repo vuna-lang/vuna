@@ -1,9 +1,12 @@
--- Layer 1：运行时续延 + 行 + 命名实例（两个 Reader Int 实例，按 name 区分）。
+-- Layer 1：运行时续延 + 行 + 命名实例（两个 Reader Int 实例，按实例名区分）。
 import Base.Eff
 import Base.Eff.Reader
 
-prog : Eff (Reader Cnt1 Int :: Reader Cnt2 Int :: []) Int
-prog = bindEff (ask Cnt1 Int) (\x => bindEff (ask Cnt2 Int) (\y => pureEff (x * 10 + y)))
+prog : Eff [Reader "counter" Int, Reader "config" Int] Int
+prog = do
+  x <- ask "counter" Int
+  y <- ask "config" Int
+  pure (x * 10 + y)
 
 op1 : (o : ReaderOp Int) -> (Base.Eff.Reader.resReader Int o -> Int) -> Int
 op1 op k = case op of
@@ -14,4 +17,4 @@ op2 op k = case op of
   Ask => k 4
 
 main : Int
-main = runPure (handleReader Cnt1 Int (\a => a) op1 (handleReader Cnt2 Int (\a => a) op2 prog))
+main = runPure (handleReader "counter" Int (\a => a) op1 (handleReader "config" Int (\a => a) op2 prog))

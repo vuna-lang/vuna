@@ -1,0 +1,28 @@
+module Base.Hashable (Hashable(..), hashCombine, hashStr) where
+
+-- Base.Hashable：通用哈希 trait（泛型哈希容器的键约束）。
+--
+-- `HashMap k v` / `HashSet a` 只要求键实现 `Eq` + `Hashable`；`hash` 返回任意 `Int`，
+-- 容器在内部归一化到 0..1023 桶（负数与 `min_int` 都安全）。相等但 hash 不同的键
+-- 不被发现——这是实例实现必须遵守的约定（与 `Eq` 一致）。
+--
+-- `hashStr` 是 `String` 的 0..1023 哈希（intrinsic `strHash` 的同一公式），也是
+-- 公开给需要采样键的工具（`Debug` / `Index.Scan`）的入口；`hashCombine` 供复合键
+-- 与 `deriving (Hashable)` 组合子哈希使用。
+--
+-- 本模块刻意不 import 任何模块（叶模块）：`String` / `Int` 等实例在各自类型模块，
+-- 避免 `Base.Hashable ↔ Base.Int` 的环。`+` / `*` 的 fixity 在本模块声明。
+infixl 6 +
+infixl 7 *
+
+-- | 可哈希的 trait：`hash : a -> Int`。约定：`eq x y` 为真时必须 `hash x == hash y`。
+trait Hashable a where
+  hash : a -> Int
+
+-- | `String` 的 0..1023 哈希（intrinsic `strHash` 的同一公式）；也供需要采样键的工具使用。
+hashStr : String -> Int
+hashStr s = strHash s
+
+-- | 组合两个哈希（复合键与 `deriving (Hashable)` 使用）；溢出按 Int 回绕，容器自行归一化。
+hashCombine : Int -> Int -> Int
+hashCombine a b = a * 31 + b

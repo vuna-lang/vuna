@@ -1,0 +1,37 @@
+-- stdlib：Applicative 的 pure / liftA2 / ap（M41）。
+import Base.Applicative
+import Base.Eq
+import Base.Int
+import Base.List
+import Base.Maybe
+import Base.Result
+
+liftMaybe : Maybe Int
+liftMaybe = liftA2 (\a, b => a + b) (Just 1) (Just 2)
+
+pureMaybe : Maybe Int
+pureMaybe = pure 5
+
+apMaybe : Maybe Int
+apMaybe = ap (Just (\n => n + 1)) (Just 41)
+
+liftList : List Int
+liftList = liftA2 (\a, b => a * 10 + b) [1, 2] [3, 4]
+
+liftOk : Result Int
+liftOk = liftA2 (\a, b => a + b) (Ok 1) (Ok 2)
+
+liftErr : Result Int
+liftErr = liftA2 (\a, b => a + b) (Ok 1) (Err "e")
+
+checks : Bool
+checks =
+  liftMaybe == Just 3
+    && pureMaybe == Just 5
+    && apMaybe == Just 42
+    && liftList == [13, 14, 23, 24]
+    && liftOk == Ok 3
+    && liftErr == Err "e"
+
+main : Int
+main = if checks then 1 else 2

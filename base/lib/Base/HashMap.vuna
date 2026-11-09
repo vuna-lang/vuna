@@ -1,7 +1,6 @@
 module Base.HashMap
   ( HashMap
   , fromList
-  , hashStr
   , insert
   , insertAll
   , lookup
@@ -11,67 +10,73 @@ module Base.HashMap
   , toList
   ) where
 
--- Base.HashMap：String 键、值泛型的持久哈希映射（1024 桶，两层 32 叉）。
+-- Base.HashMap：键泛型、值泛型的持久哈希映射（1024 桶，两层 32 叉）。
 --
--- M33 W3：桶结构从 list-of-list 改成 `Array (Array (List (Pair String a)))`；
--- `Array.get` 是 O(1)，`insert` 的 `Array.set` 复制 32 元素数组（copy-on-write，
--- 每次 insert 两次 32 元素复制）。比旧的 `_nthOr` 两次线性遍历 + 重建 64 个 cons
--- 更少分配。桶内前插，同键**新值优先**（与关联表的查找语义一致）。
+-- 键要求 `Eq` + `Hashable`：`hash` 归一化到 0..1023（负数与 `min_int` 都安全），
+-- 相等的键必定落在同一桶（实例约定见 `Base.Hashable`）。String / Int / Bool / Nat /
+-- Unit / List / Maybe / Pair / Result 已有实例；用户类型可 `deriving (Hashable)`。
+--
+-- 桶结构是 `Array (Array (List (Pair k v)))`：`Array.get` 是 O(1)，`insert` 的
+-- `Array.set` 复制 32 元素数组（copy-on-write，每次 insert 两次 32 元素复制）。
+-- 桶内前插，同键**新值优先**（与关联表的查找语义一致）。
 --
 -- 与 Base.Map 的分工：Map 是 assoc list（小表、语义简单），HashMap 适合构造后
 -- 频繁查找的大表；toList 按桶序展开，**不保证插入序**；size 是 O(n)。
 --
--- `hashStr` 是公开的 0..1023 哈希（intrinsic `strHash` 的同一公式，见
--- docs/reference/primitives.md）；`Debug` / `Index.Scan` 的采样键需要它。
---
--- base 模块不自动注入 Prelude，`==` / `<=` 的方法名与实例需要显式 import。
+-- base 模块不自动注入 Prelude，`==` / `<` / `/` 的方法名与实例需要显式 import。
 import Base.Array
 import Base.Bool
 import Base.Eq
+import Base.Hashable
 import Base.Int
 import Base.List
 import Base.Maybe
 import Base.Nat
 import Base.Ord
 import Base.Pair
+import Base.Show
 import Base.String
 
--- | `String` 键的持久哈希映射：1024 桶（两层 32 叉 `Array`）结构；构造器不导出。空表用 `[||]` 表示（non-expansive、可泛化），首次 `insert` 才分配 32×32 桶。
-record HashMap a where
-  hashMapBuckets : Array (Array (List (Pair String a)))
+-- | 键泛型的持久哈希映射：1024 桶（两层 32 叉 `Array`）结构；构造器不导出。空表用 `[||]` 表示（non-expansive、可泛化），首次 `insert` 才分配 32×32 桶。
+record HashMap k v where
+  hashMapBuckets : Array (Array (List (Pair k v)))
 
--- | `String` 的 0..1023 桶号（intrinsic `strHash` 的同一公式）；公开给需要采样键的工具。
-hashStr : String -> Int
-hashStr s = strHash s
+-- 任意 Int 哈希 → 0..1023 桶号（负数补 1024；`min_int` 回绕后余数仍是 0，安全）。
+-- | 哈希值归一化到 0..1023 桶号（负数补 1024，`min_int` 也安全）。
+_bucketOf : Int -> Int
+_bucketOf n =
+  let
+    m = n - n / 1024 * 1024
+  in if m < 0 then m + 1024 else m
 
-_lookupAssoc : String -> List (Pair String a) -> Maybe a
+_lookupAssoc : Eq k => k -> List (Pair k v) -> Maybe v
 _lookupAssoc key [] = Nothing
 _lookupAssoc key ((Pair k v) :: rest) = if key == k then Just v else _lookupAssoc key rest
 
 -- insert 走「桶内前插」：新值在桶首，lookup 天然新值优先；重复键的历史条目留着，
 -- 由 toList 在冷路径去重（保留桶首 = 最新值）。这样热路径 insert 不付去重成本。
-_hasKeyIn : String -> List (Pair String a) -> Bool
+_hasKeyIn : Eq k => k -> List (Pair k v) -> Bool
 _hasKeyIn key [] = False
 _hasKeyIn key ((Pair k v) :: rest) = key == k || _hasKeyIn key rest
 
-_dedupGo : List (Pair String a) -> List (Pair String a) -> List (Pair String a)
+_dedupGo : Eq k => List (Pair k v) -> List (Pair k v) -> List (Pair k v)
 _dedupGo [] acc = reverse acc
 _dedupGo ((Pair k v) :: rest) acc =
   if _hasKeyIn k acc then _dedupGo rest acc else _dedupGo rest (Pair k v :: acc)
 
-_dedupBucket : List (Pair String a) -> List (Pair String a)
+_dedupBucket : Eq k => List (Pair k v) -> List (Pair k v)
 _dedupBucket xs = _dedupGo xs []
 
--- 空表用 `[||]` 字面量表示：它是 non-expansive 的，`empty` / `fromList []` 因此在
--- OCaml 侧可泛化（`Array.make 32 ...` 是函数应用，会触发弱类型变量）；第一次 `insert`
--- 时才分配 32×32 桶。内层空数组可以共享（`Array.set` 不修改原数组）。
+-- 空表用 `[||]` 字面量表示：它是 non-expansive 的，`fromList []` 因此在 OCaml 侧可
+-- 泛化（`Array.make 32 ...` 是函数应用，会触发弱类型变量）；第一次 `insert` 时才
+-- 分配 32×32 桶。内层空数组可以共享（`Array.set` 不修改原数组）。
 -- | 插入键值；桶内前插使新值优先，重复键的历史条目留到 `toList` 冷路径去重（保留最新值）。`Array.set` 是 copy-on-write，返回新表。
-insert : String -> a -> HashMap a -> HashMap a
+insert : Hashable k => k -> v -> HashMap k v -> HashMap k v
 insert key v (HashMap outers) =
   let
     base =
       if Base.Array.length outers == 0 then Base.Array.make 32 (Base.Array.make 32 []) else outers
-    b = hashStr key
+    b = _bucketOf (hash key)
     qi = b / 32
     oi = natFromInt qi
     ii = natFromInt (b - qi * 32)
@@ -79,47 +84,50 @@ insert key v (HashMap outers) =
     inner = Base.Array.get outer ii
   in HashMap (Base.Array.set base oi (Base.Array.set outer ii (Pair key v :: inner)))
 
--- | 按键查找，返回 `Maybe a`；桶内命中第一个匹配即返回（该键最新值）。
-lookup : String -> HashMap a -> Maybe a
+-- | 按键查找，返回 `Maybe v`；桶内命中第一个匹配即返回（该键最新值）。
+lookup : Eq k, Hashable k => k -> HashMap k v -> Maybe v
 lookup key (HashMap outers) = if Base.Array.length outers == 0 then Nothing
 else
   let
-    b = hashStr key
+    b = _bucketOf (hash key)
     qi = b / 32
     oi = natFromInt qi
     ii = natFromInt (b - qi * 32)
   in _lookupAssoc key (Base.Array.get (Base.Array.get outers oi) ii)
 
 -- | 键是否存在（`lookup` 后判 `Just`）。
-member : String -> HashMap a -> Bool
+member : Eq k, Hashable k => k -> HashMap k v -> Bool
 member key t = case lookup key t of
   Just _ => True
   Nothing => False
 
 -- | 批量插入 `Pair` 列表：**后面的条目覆盖前面的**（与 `fromList` 的优先顺序相反）。
-insertAll : List (Pair String a) -> HashMap a -> HashMap a
+insertAll : Hashable k => List (Pair k v) -> HashMap k v -> HashMap k v
 insertAll [] t = t
 insertAll ((Pair k v) :: rest) t = insertAll rest (insert k v t)
 
 -- 列表**前面**的条目优先（先插 rest 再插头部，与 Base.Map.fromList 的查找语义一致）；
--- `insertAll` 相反：后面的条目覆盖前面的。两个语义都有编译器调用点（历史的
--- `tblFromList` / `tblInsertAll`），不要合并。
+-- `insertAll` 相反：后面的条目覆盖前面的。两个语义都有编译器调用点，不要合并。
 -- | 从 `Pair` 列表构造：**前面的条目优先**（先递归 rest，再插头部）。
-fromList : List (Pair String a) -> HashMap a
+fromList : Hashable k => List (Pair k v) -> HashMap k v
 fromList [] = HashMap arrayEmpty
 fromList ((Pair k v) :: rest) = insert k v (fromList rest)
 
 -- 名字集合的成员判定表（编译器历史上叫 `tblOfNames`）。
 -- | 名字集合的成员判定表：每个名字映射到 True（编译器历史上叫 `tblOfNames`）。
-ofNames : List String -> HashMap Bool
+ofNames : List String -> HashMap String Bool
 ofNames xs = insertAll (map (\n => Pair n True) xs) (fromList [])
 
 -- | 按桶序展开所有键值对并去重：每个键只保留最新值；**不保证插入序**。
-toList : HashMap a -> List (Pair String a)
+toList : Eq k => HashMap k v -> List (Pair k v)
 toList (HashMap outers) =
   concatMap (\outer => concatMap (\inner => _dedupBucket inner) (Base.Array.toList outer))
     (Base.Array.toList outers)
 
 -- | 键的个数（`Nat`，O(n)，经 `toList` 去重后计数）。
-size : HashMap a -> Nat
+size : Eq k => HashMap k v -> Nat
 size t = Base.List.length (toList t)
+
+-- `Show` 经 `toList`：构造器不导出；桶序展开（不保证插入序）。
+instance Show k, Show v, Eq k => Show (HashMap k v) where
+  show m = "fromList " `++` show (toList m)

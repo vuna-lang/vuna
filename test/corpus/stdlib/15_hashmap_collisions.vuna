@@ -7,17 +7,19 @@ import Base.Pair
 manyKeys : List String
 manyKeys = map strFromInt (range 0 1024)
 
-buildMany : List String -> Base.HashMap.HashMap Int
-buildMany ks = foldl (\acc, k => Base.HashMap.insert k (strLength k) acc) (Base.HashMap.fromList []) ks
+buildMany : List String -> Base.HashMap.HashMap String Int
+buildMany ks =
+  foldl (\acc, k => Base.HashMap.insert k (strLength k) acc) (Base.HashMap.fromList []) ks
 
-allThere : List String -> Base.HashMap.HashMap Int -> Bool
+allThere : List String -> Base.HashMap.HashMap String Int -> Bool
 allThere [] _ = True
-allThere (k :: rest) m =
-  if Base.HashMap.member k m then allThere rest m else False
+allThere (k :: rest) m = if Base.HashMap.member k m then allThere rest m else False
 
 main : String
 main =
   let
     big = buildMany manyKeys
-  in "big=" ++ strFromInt (Base.HashMap.size big)
-       ++ " all=" ++ (if allThere manyKeys big then "True" else "False")
+  in "big="
+    ++ strFromInt (Base.HashMap.size big)
+    ++ " all="
+    ++ (if allThere manyKeys big then "True" else "False")

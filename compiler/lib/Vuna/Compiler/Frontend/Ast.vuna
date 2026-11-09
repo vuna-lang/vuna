@@ -18,6 +18,7 @@ module Vuna.Compiler.Frontend.Ast
   , ECase
   , EDo
   , EField
+  , EFloat
   , EIf
   , EInfix
   , EInt
@@ -69,8 +70,13 @@ module Vuna.Compiler.Frontend.Ast
   , declDerivings
   , declNames
   , declSpan
+  , doBindSyntaxName
+  , doBindSyntaxPrefix
+  , doIgnoreSyntaxName
+  , doIgnoreSyntaxPrefix
   , doStmtExpr
   , doStmtSpan
+  , doSyntaxCanonical
   , exportItemSpan
   , exprSpan
   , fieldName
@@ -79,6 +85,8 @@ module Vuna.Compiler.Frontend.Ast
   , fixitySpan
   , funArity
   , holeNameOf
+  , isDoBindSyntaxName
+  , isDoIgnoreSyntaxName
   , isHoleName
   , isInternalSyntaxName
   , isListConsSyntax
@@ -184,6 +192,8 @@ data Expr : Type where
   -- 字面量保持单行转义形式）。`Loader.Resolve` 把它降级成 `Base.Interp.interp`
   -- 调用 + `++` 链；Fmt / Lint / Index / Doc 在 parse 后处理它。
   EInterp : Bool -> List InterpPart -> Span -> Expr
+  -- `Float` 字面量：原始十进制文本（放末尾以保持既有构造子 tag 顺序，bootstrap 兼容）。
+  EFloat : String -> Span -> Expr
 
 -- M31.2：fixity / 别名声明（`infixl 6 +`、`infixr 5 :: = Cons`、`infix 4 == = eq`）。
 -- 只进入 `SourceFile.fixities`，由 Loader 在中缀重排时消费；**不进入 `Decl`**，避免所有
@@ -212,7 +222,8 @@ record Ctor where
 data Decl : Type where
   -- M14：`data Name params : kind where`；kind 是索引族的类型表达式（HM 路径只接受 `Type`）。
   -- M38：末位 `Bool` 是 `lin data` 标记。
-  DData : String -> List String -> Expr -> List Ctor -> List String -> Bool -> Span -> Decl
+  -- M42：`derivings` 后的 `Bool` 是 `deriving via field` 标记（仅 record 允许）。
+  DData : String -> List String -> Expr -> List Ctor -> List String -> Bool -> Bool -> Span -> Decl
   -- M28：`axiom name : Ty` —— 无体的可擦除/不透明顶层（决策 5 / D10）。
   -- 它是**类型层**定义：类型层引用合法，运行时使用由擦除检查报错。
   DAxiom : String -> Expr -> Span -> Decl
@@ -223,7 +234,8 @@ data Decl : Type where
   DSig : String -> List Expr -> Expr -> Span -> Decl
   DFun : String -> List Pat -> Expr -> Span -> Decl
   -- M38：末位 `Bool` 是 `lin record` 标记（降级成 DData 时透传）。
-  DRecord : String -> List String -> List Field -> List String -> Bool -> Span -> Decl
+  -- M42：`derivings` 后的 `Bool` 是 `deriving via field` 标记。
+  DRecord : String -> List String -> List Field -> List String -> Bool -> Bool -> Span -> Decl
   DTrait : String -> List TraitParam -> List TraitMethod -> Span -> Decl
   DInstance : List Expr -> Expr -> List Decl -> Span -> Decl
 
@@ -268,6 +280,7 @@ exprSpan (ESectL op rhs sp) = sp
 exprSpan (ESectR lhs op sp) = sp
 exprSpan (EInt n sp) = sp
 exprSpan (EStr s sp) = sp
+exprSpan (EFloat raw sp) = sp
 exprSpan (ELam ps body sp) = sp
 exprSpan (EApp fn args sp) = sp
 exprSpan (EPi name implicit qty dom cod sp) = sp
@@ -291,12 +304,12 @@ doStmtExpr (DBind pat expr sp) = expr
 doStmtExpr (DExpr expr sp) = expr
 
 declSpan : Decl -> Span
-declSpan (DData name params kind ctors derivings lin sp) = sp
+declSpan (DData name params kind ctors derivings viaField lin sp) = sp
 declSpan (DAxiom name ty sp) = sp
 declSpan (DExtern name cName ty sp) = sp
 declSpan (DSig name ctx ty sp) = sp
 declSpan (DFun name pats body sp) = sp
-declSpan (DRecord name params fields derivings lin sp) = sp
+declSpan (DRecord name params fields derivings viaField lin sp) = sp
 declSpan (DTrait name params methods sp) = sp
 declSpan (DInstance ctxE head methods sp) = sp
 
@@ -378,10 +391,10 @@ lookupCtorArity name (c :: rest) =
 ctorArity : String -> List Decl -> Maybe Int
 ctorArity name [] = Nothing
 ctorArity name (d :: rest) = case d of
-  DData dname params kind ctors derivings lin sp => case lookupCtorArity name ctors of
+  DData dname params kind ctors derivings viaField lin sp => case lookupCtorArity name ctors of
     Just arity => Just arity
     Nothing => ctorArity name rest
-  DRecord dname params fields derivings lin sp =>
+  DRecord dname params fields derivings viaField lin sp =>
     if name == dname then Just (natToInt (length fields)) else ctorArity name rest
   _ => ctorArity name rest
 
@@ -390,26 +403,26 @@ declNames (DFun name pats body _) = [name]
 declNames (DAxiom name ty _) = [name]
 declNames (DExtern name cName ty _) = [name]
 declNames (DSig name ctx ty _) = [name]
-declNames (DData dname params kind ctors derivings lin _) = map ctorName ctors
-declNames (DRecord dname params fields derivings lin _) = [dname]
+declNames (DData dname params kind ctors derivings viaField lin _) = map ctorName ctors
+declNames (DRecord dname params fields derivings viaField lin _) = [dname]
 declNames (DTrait tname params methods _) = map traitMethodName methods
 declNames (DInstance ctxE head methods _) = []
 
 -- 顶层可见名字（M20：把 data / record / trait 的**类型名**也算进来）。
 -- Loader 用它判断「是不是本模块声明的名字」；DT 的类型名可以在值层位置出现
--- （`Vec Nat n` 的 `Nat`），所以必须一并认出来。语义仍由下游检查器决定。
+-- （`Vec n Nat` 的 `Nat`），所以必须一并认出来。语义仍由下游检查器决定。
 topNames : List Decl -> List String
 topNames decls = concatMap declNames decls
 
 declAllNames : Decl -> List String
-declAllNames (DData dname params kind ctors derivings lin _) = dname :: map ctorName ctors
-declAllNames (DRecord dname params fields derivings lin _) = [dname]
+declAllNames (DData dname params kind ctors derivings viaField lin _) = dname :: map ctorName ctors
+declAllNames (DRecord dname params fields derivings viaField lin _) = [dname]
 declAllNames (DTrait tname params methods _) = tname :: map traitMethodName methods
 declAllNames d = declNames d
 
 _declCtors : Decl -> List String
-_declCtors (DData dname params kind ctors derivings lin _) = map ctorName ctors
-_declCtors (DRecord dname params fields derivings lin _) = [dname]
+_declCtors (DData dname params kind ctors derivings viaField lin _) = map ctorName ctors
+_declCtors (DRecord dname params fields derivings viaField lin _) = [dname]
 _declCtors (DTrait tname params methods _) = map traitMethodName methods
 _declCtors _ = []
 
@@ -417,8 +430,8 @@ ctorsOf : List Decl -> List String
 ctorsOf decls = concatMap _declCtors decls
 
 declTypeNames : Decl -> List String
-declTypeNames (DData name params kind ctors derivings lin _) = [name]
-declTypeNames (DRecord name params fields derivings lin _) = [name]
+declTypeNames (DData name params kind ctors derivings viaField lin _) = [name]
+declTypeNames (DRecord name params fields derivings viaField lin _) = [name]
 declTypeNames (DTrait name params methods _) = [name]
 declTypeNames _ = []
 
@@ -426,8 +439,8 @@ typeNamesOf : List Decl -> List String
 typeNamesOf decls = concatMap declTypeNames decls
 
 declDerivings : Decl -> List String
-declDerivings (DData name params kind ctors derivings lin _) = derivings
-declDerivings (DRecord name params fields derivings lin _) = derivings
+declDerivings (DData name params kind ctors derivings viaField lin _) = derivings
+declDerivings (DRecord name params fields derivings viaField lin _) = derivings
 declDerivings _ = []
 
 -- ---------------------------------------------------------------
@@ -521,3 +534,48 @@ isListNilSyntax name = name == listNilSyntax
 -- | 自动补注（M41 新增导出）：isListConsSyntax。
 isListConsSyntax : String -> Bool
 isListConsSyntax name = name == listConsSyntax
+
+-- ---------------------------------------------------------------
+-- S3：do 块的内部标记链（carrier C）
+-- ---------------------------------------------------------------
+-- 与 `@vuna@ctor@...` 同一先例：不新增 AST 构造子，用保留名编码。`Resolver` 把 do 降级
+-- 成嵌套的 `EApp+ELam` 链（语句边界 / binder 名 / 语句 span 都仍编码在这条链上），但把每个
+-- 节点的头部换成携带 **块作用域里解析出的 bind canonical 名** 的内部标记：
+--
+--   `@vuna@do@bind@<canonical>`    —— `pat <- e`（binder 是用户变量名）
+--   `@vuna@do@ignore@<canonical>`  —— `_ <- e` / 裸语句 `e`（binder 是丢弃名）
+--
+-- 标记名只由 Loader 在 rename 之后产生，用户源码无法写出 `@vuna@` 开头的标识符；于是
+-- Elab 可以把整块按「一个 monad / 一个字典」精化，而不必逐个节点重新做名字解析。不认识
+-- 标记的精化器（以及任何形状不符/回退路径）可以剥掉标记、用 canonical 名还原成普通
+-- `bind` 应用——语义与今天的降级逐字一致。
+-- | 自动补注（S3 新增导出）：doBindSyntaxPrefix。
+doBindSyntaxPrefix : String
+doBindSyntaxPrefix = "@vuna@do@bind@"
+
+-- | 自动补注（S3 新增导出）：doIgnoreSyntaxPrefix。
+doIgnoreSyntaxPrefix : String
+doIgnoreSyntaxPrefix = "@vuna@do@ignore@"
+
+-- | 自动补注（S3 新增导出）：doBindSyntaxName。
+doBindSyntaxName : String -> String
+doBindSyntaxName canonical = "${doBindSyntaxPrefix}${canonical}"
+
+-- | 自动补注（S3 新增导出）：doIgnoreSyntaxName。
+doIgnoreSyntaxName : String -> String
+doIgnoreSyntaxName canonical = "${doIgnoreSyntaxPrefix}${canonical}"
+
+-- | 自动补注（S3 新增导出）：isDoBindSyntaxName。
+isDoBindSyntaxName : String -> Bool
+isDoBindSyntaxName name = startsWith doBindSyntaxPrefix name
+
+-- | 自动补注（S3 新增导出）：isDoIgnoreSyntaxName。
+isDoIgnoreSyntaxName : String -> Bool
+isDoIgnoreSyntaxName name = startsWith doIgnoreSyntaxPrefix name
+
+-- 标记头里的 canonical bind 名；不是 do 标记头返回 `Nothing`。
+-- | 自动补注（S3 新增导出）：doSyntaxCanonical。
+doSyntaxCanonical : String -> Maybe String
+doSyntaxCanonical name =
+  if isDoBindSyntaxName name then Just (dropNamePrefix doBindSyntaxPrefix name)
+  else if isDoIgnoreSyntaxName name then Just (dropNamePrefix doIgnoreSyntaxPrefix name) else Nothing

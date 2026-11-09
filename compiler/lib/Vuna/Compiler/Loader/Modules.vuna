@@ -110,9 +110,9 @@ record Namespaces where
   nsTypes : List String
   -- M34：解析期查找的 O(1) 版本（每个 EVar 都会查这三个集合；list 线性查找在几十万
   -- 节点上是主要 resolve 成本）。list 字段保留给错误提示的 suggest。
-  nsValueSet : HashMap Bool
-  nsCtorSet : HashMap Bool
-  nsTypeSet : HashMap Bool
+  nsValueSet : HashMap String Bool
+  nsCtorSet : HashMap String Bool
+  nsTypeSet : HashMap String Bool
   -- M41：data/record 构造子的候选表（短名 → 未加模块 prefix 的 "Data.Ctor"）。
   -- 同名构造子按族区分；trait 方法不在此表（不是族的构造子）。
   nsCtorCands : List (Pair String String)
@@ -356,9 +356,9 @@ isDataOrRecordCtorTarget (m :: rest) target =
 isCtorTargetInDecls : String -> String -> List Decl -> Bool
 isCtorTargetInDecls mname target [] = False
 isCtorTargetInDecls mname target (d :: rest) = case d of
-  DData dname params kind ctors derivings lin sp =>
+  DData dname params kind ctors derivings viaField lin sp =>
     anyCtorTarget mname dname target ctors || isCtorTargetInDecls mname target rest
-  DRecord dname params fields derivings lin sp =>
+  DRecord dname params fields derivings viaField lin sp =>
     mangle mname dname == target || isCtorTargetInDecls mname target rest
   _ => isCtorTargetInDecls mname target rest
 

@@ -25,6 +25,7 @@ import Vuna.Compiler.Diagnostics
 import Vuna.Compiler.Elab
 import Vuna.Compiler.Intrinsics
 import Vuna.Compiler.Codegen.Decl
+import Vuna.Compiler.Elab.Representation
 import Vuna.Compiler.Codegen.Erase
 
 -- DT runtime：只包含 prelude 里出现的运算与 show（名字/语义与运行时 helper 一致）。
@@ -94,7 +95,7 @@ ${dtPrimRuntime}"""
 -- `prim_readBytes` 是**函数**（`Int -> String`）：最多读 n 字节、有数据就立即返回
 -- （可能少于 n），EOF 返回 `""`——LSP 的帧循环靠它精确读 Content-Length 字节。
 dtPrimRuntime : String
-dtPrimRuntime = ("""type _ Effect.t += Perform : string * int * Obj.t -> Obj.t Effect.t
+dtPrimRuntime = ("""type _ Effect.t += Perform : string * string * Obj.t -> Obj.t Effect.t
 
 (* W7：bracket 的 abort cleanup 登记表（每纤程一份，LIFO）。
    `prim_effectHandle` 在安装 handler 时记下当前深度 mark；handler 正常返回 /
@@ -445,7 +446,7 @@ let dtp_sched_scope id =
 let dtp_sched_exn_msg e =
   match e with
   | Effect.Unhandled (Perform (key, name, _)) ->
-    Printf.sprintf \"unhandled effect %s (instance %d)\" key name
+    Printf.sprintf \"unhandled effect %s (instance %s)\" key name
   | Failure m -> m
   | _ -> Printexc.to_string e
 
@@ -828,7 +829,7 @@ let dt_frame_label slot =
        | Some (display, loc) -> Some (display ^ \" (\" ^ loc ^ \")\")
        | None -> None)
 let dt_report_exn e bt =
-  let msg = match e with Effect.Unhandled (Perform (key, name, _)) -> Printf.sprintf \"unhandled effect %s (instance %d)\" key name | Failure m -> m | _ -> Printexc.to_string e in
+  let msg = match e with Effect.Unhandled (Perform (key, name, _)) -> Printf.sprintf \"unhandled effect %s (instance %s)\" key name | Failure m -> m | _ -> Printexc.to_string e in
   Printf.eprintf \"vuna: runtime error: %s\\n%!\" msg;
   match Printexc.backtrace_slots bt with
   | None -> ()
@@ -859,11 +860,28 @@ dtDefLocRow norm d = case dtDefSpan d of
   Just sp =>
     "  (${ocamlString (valueName (dtDefName d))}, (${ocamlString (dtDefName d)}, ${ocamlString "${norm sp.spanFile}:${spanStartLine sp}"}));\n"
 
+-- | 浮点 runtime helper（仅在程序使用 Float 时追加；见 `dtRuntimeWith`）。单独的文本块
+-- 保证 no-float 程序的 `Vuna_runtime.ml` 与加 Float 之前逐字节一致（bootstrap/缓存）。
+dtFloatRuntime : String
+dtFloatRuntime = """let bi_add_float (a : float) (b : float) = a +. b
+let bi_sub_float (a : float) (b : float) = a -. b
+let bi_mul_float (a : float) (b : float) = a *. b
+let bi_div_float (a : float) (b : float) = a /. b
+let bi_eq_float (a : float) (b : float) = a = b
+let bi_neq_float (a : float) (b : float) = a <> b
+let bi_lt_float (a : float) (b : float) = a < b
+let bi_le_float (a : float) (b : float) = a <= b
+let bi_gt_float (a : float) (b : float) = a > b
+let bi_ge_float (a : float) (b : float) = a >= b
+"""
+
 -- 运行时文本 = 既有常量部分（`dtRuntime`） + 注入的定义位置表 + 报告器。
 -- `dt_def_locs` 必须定义在报告器之前（报告器读它）；空表写成 `[]`。
-dtRuntimeWith : String -> String
-dtRuntimeWith locs =
+-- `usesFloat` 为 False 时输出与 Float 之前**逐字节一致**（旧 seed 固定点/缓存关键）。
+dtRuntimeWith : String -> Bool -> String
+dtRuntimeWith locs usesFloat =
   dtRuntime
+    ++ (if usesFloat then dtFloatRuntime else "")
     ++ (if locs == "" then "let dt_def_locs = []\n" else "let dt_def_locs = [\n${locs}]\n")
     ++ dtReporterRuntime
 
@@ -1014,17 +1032,18 @@ record GenSt where
   gsCtors : List (Pair String String)
   gsCtorShapes : List (Pair String (List Bool))
   gsCtorOpaques : List (Pair String (List Bool))
+  gsUnboxed : List String
   gsNext : Int
   gsQual : QualCtx
   gsDeps : List String
 
 -- 程序声明的族名表（`strUnpack` / `strPack` 的映射要看有没有 List 族）。
 gsNext : GenSt -> Int
-gsNext (GenSt families ctors shapes opaques next qual deps) = next
+gsNext (GenSt families ctors shapes opaques unboxed next qual deps) = next
 
 gsPutNext : GenSt -> Int -> GenSt
-gsPutNext (GenSt families ctors shapes opaques next qual deps) n =
-  GenSt families ctors shapes opaques n qual deps
+gsPutNext (GenSt families ctors shapes opaques unboxed next qual deps) n =
+  GenSt families ctors shapes opaques unboxed n qual deps
 
 ctorTableOfData : DtData -> List (Pair String String)
 ctorTableOfData d = map (\c => Pair (dtCtorName c) (dtCtorFamily c)) (dtDataCtors d)
@@ -1035,8 +1054,8 @@ ctorTableOf (d :: rest) = append (ctorTableOfData d) (ctorTableOf rest)
 
 mkGenSt : QualCtx -> List DtData -> GenSt
 mkGenSt qc datas =
-  GenSt (map dtDataName datas) (ctorTableOf datas) (ctorShapeOf datas) (ctorOpaqueTableOf datas) 0
-    qc []
+  GenSt (map dtDataName datas) (ctorTableOf datas) (ctorShapeOf datas) (ctorOpaqueTableOf datas)
+    (unboxedFamilySet datas) 0 qc []
 
 -- ---------------------------------------------------------------
 -- C35：跨单元引用限定与依赖累积
@@ -1048,7 +1067,7 @@ mkGenSt qc datas =
 gsAddDep : GenSt -> String -> GenSt
 gsAddDep st unit =
   if unit == "" || memName unit st.gsDeps then st
-  else GenSt st.gsFamilies st.gsCtors st.gsCtorShapes st.gsCtorOpaques st.gsNext st.gsQual
+  else GenSt st.gsFamilies st.gsCtors st.gsCtorShapes st.gsCtorOpaques st.gsUnboxed st.gsNext st.gsQual
     (unit :: st.gsDeps)
 
 genValueRef : GenSt -> String -> Pair String GenSt
@@ -1178,6 +1197,7 @@ else case t of
   TGlobal name => genGlobalRef st name
   TInt n => Ok (Pair (strFromInt n) st)
   TStr s => Ok (Pair (ocamlString s) st)
+  TFloat raw => Ok (Pair raw st)
   TBool b => Ok (Pair (boolText b) st)
   TIf c th el => andThen (genTermFuel (fuel - 1) st binders c) (\pc => case pc of
     Pair gc st1 => andThen (genTermFuel (fuel - 1) st1 binders th) (\pt => case pt of
@@ -1268,6 +1288,16 @@ inlineOpArity "bi_lt_generic" = 2
 inlineOpArity "bi_le_generic" = 2
 inlineOpArity "bi_gt_generic" = 2
 inlineOpArity "bi_ge_generic" = 2
+inlineOpArity "bi_add_float" = 2
+inlineOpArity "bi_sub_float" = 2
+inlineOpArity "bi_mul_float" = 2
+inlineOpArity "bi_div_float" = 2
+inlineOpArity "bi_eq_float" = 2
+inlineOpArity "bi_neq_float" = 2
+inlineOpArity "bi_lt_float" = 2
+inlineOpArity "bi_le_float" = 2
+inlineOpArity "bi_gt_float" = 2
+inlineOpArity "bi_ge_float" = 2
 inlineOpArity "natToInt" = 1
 inlineOpArity "natFromInt" = 1
 inlineOpArity "natAdd" = 2
@@ -1296,6 +1326,17 @@ inlineText "bi_lt_generic" ([a, b]) = Just "(${a} < ${b})"
 inlineText "bi_le_generic" ([a, b]) = Just "(${a} <= ${b})"
 inlineText "bi_gt_generic" ([a, b]) = Just "(${a} > ${b})"
 inlineText "bi_ge_generic" ([a, b]) = Just "(${a} >= ${b})"
+-- Float：算术/比较直接内联到 OCaml 浮点运算符（除零按 IEEE 语义，不失败）。
+inlineText "bi_add_float" ([a, b]) = Just "(${a} +. ${b})"
+inlineText "bi_sub_float" ([a, b]) = Just "(${a} -. ${b})"
+inlineText "bi_mul_float" ([a, b]) = Just "(${a} *. ${b})"
+inlineText "bi_div_float" ([a, b]) = Just "(${a} /. ${b})"
+inlineText "bi_eq_float" ([a, b]) = Just "(${a} = ${b})"
+inlineText "bi_neq_float" ([a, b]) = Just "(${a} <> ${b})"
+inlineText "bi_lt_float" ([a, b]) = Just "(${a} < ${b})"
+inlineText "bi_le_float" ([a, b]) = Just "(${a} <= ${b})"
+inlineText "bi_gt_float" ([a, b]) = Just "(${a} > ${b})"
+inlineText "bi_ge_float" ([a, b]) = Just "(${a} >= ${b})"
 -- Nat 转换恒等/单分支，直接内联；算术用 runtime helper（饱和/截断逻辑只写一份）。
 inlineText "natToInt" ([a]) = Just a
 inlineText "natFromInt" ([a]) = Just "(bi_natFromInt ${a})"
@@ -1482,12 +1523,27 @@ else case lookupPair c st.gsCtors of
     Just flags => case lookupPair c st.gsCtorOpaques of
       Nothing => Err "DT: internal: no opaque shape for constructor ${c}"
       Just opqs => andThen (alignCtorArgs c flags args) (\runtimeArgs => andThen (genConArgsFuel (fuel - 1) st binders (ctorOpaqueKeptFlags flags opqs) runtimeArgs) (\p => case p of
-        Pair argTexts st2 =>
-          let
-            r = genCtorRef st2 family c
-          in Ok (Pair (conAppText (firstOf r) argTexts) (secondOf r))
+        Pair argTexts st2 => genConAppFinish st2 family c flags opqs argTexts
       )
       )
+
+genConAppFinish : GenSt -> String -> String -> List Bool -> List Bool -> List String -> Result (Pair String GenSt)
+genConAppFinish st family c flags opqs argTexts = if memName family st.gsUnboxed then genUnboxedConAppFinish st flags opqs argTexts
+else
+  let
+    r = genCtorRef st family c
+  in Ok (Pair (conAppText (firstOf r) argTexts) (secondOf r))
+
+genUnboxedConAppFinish : GenSt -> List Bool -> List Bool -> List String -> Result (Pair String GenSt)
+genUnboxedConAppFinish st flags opqs [] =
+  Err "DT: internal: unboxed constructor application has no runtime argument"
+genUnboxedConAppFinish st flags opqs (text :: rest) = case rest of
+  [] => case ctorOpaqueKeptFlags flags opqs of
+    opq :: more => case more of
+      [] => Ok (Pair (ctorArgText opq text) st)
+      _ => Err "DT: internal: unboxed constructor has more than one opaque flag"
+    [] => Err "DT: internal: unboxed constructor has no opaque flag"
+  _ => Err "DT: internal: unboxed constructor application has more than one runtime argument"
 
 hasFallbackAlt : List CaseAlt -> Bool
 hasFallbackAlt [] = False
@@ -1496,6 +1552,59 @@ hasFallbackAlt (alt :: rest) = caseAltName alt == "" || hasFallbackAlt rest
 armPatternText : String -> List String -> String
 armPatternText cname [] = cname
 armPatternText cname pats = "${cname} (${joinWith ", " pats})"
+
+-- 去装箱族的 case：单构造子 + 单运行时字段，等价于 `let` 绑定字段。
+unboxedCaseAlt : GenSt -> List CaseAlt -> Maybe CaseAlt
+unboxedCaseAlt st [] = Nothing
+unboxedCaseAlt st (alt :: rest) = case caseAltName alt of
+  "" => Nothing
+  name => case lookupPair name st.gsCtors of
+    Just family =>
+      if memName family st.gsUnboxed then if allCatchAll rest then Just alt else Nothing
+      else Nothing
+    Nothing => Nothing
+
+-- unboxed 族只有一个构造子：构造子分支之后的 catch-all 分支不可达，可安全丢弃。
+allCatchAll : List CaseAlt -> Bool
+allCatchAll [] = True
+allCatchAll (alt :: rest) = if caseAltName alt == "" then allCatchAll rest else False
+
+genUnboxedCaseFuel : Int -> GenSt -> List (Pair String Rig) -> Term -> CaseAlt -> Result (Pair String GenSt)
+genUnboxedCaseFuel fuel st outer scrut alt = if fuel <= 0 then Err "DT: internal: codegen fuel exhausted"
+else case caseAltName alt of
+  "" => Err "DT: internal: unboxed case arm has no constructor"
+  name => genUnboxedCaseByName (fuel - 1) st outer name scrut alt
+
+genUnboxedCaseByName : Int -> GenSt -> List (Pair String Rig) -> String -> Term -> CaseAlt -> Result (Pair String GenSt)
+genUnboxedCaseByName fuel st outer name scrut alt = if fuel <= 0 then Err "DT: internal: codegen fuel exhausted"
+else case lookupPair name st.gsCtorShapes of
+  Nothing => Err "DT: internal: no shape for constructor ${name}"
+  Just flags => genUnboxedCaseWithFlags (fuel - 1) st outer name scrut alt flags
+
+genUnboxedCaseWithFlags : Int -> GenSt -> List (Pair String Rig) -> String -> Term -> CaseAlt -> List Bool -> Result (Pair String GenSt)
+genUnboxedCaseWithFlags fuel st outer name scrut alt flags = if fuel <= 0 then Err "DT: internal: codegen fuel exhausted"
+else andThen (genTermFuel (fuel - 1) st outer scrut) (\p => case p of
+  Pair scrutText st1 => genUnboxedCaseWithScrut (fuel - 1) st1 outer name alt flags scrutText
+)
+
+genUnboxedCaseWithScrut : Int -> GenSt -> List (Pair String Rig) -> String -> CaseAlt -> List Bool -> String -> Result (Pair String GenSt)
+genUnboxedCaseWithScrut fuel st outer name alt flags scrutText =
+  if fuel <= 0 then Err "DT: internal: codegen fuel exhausted"
+  else andThen (altEnvChecked st name outer (caseAltBinders alt) flags)
+    (\bound => genUnboxedCaseWithBound (fuel - 1) st name alt bound scrutText)
+
+genUnboxedCaseWithBound : Int -> GenSt -> String -> CaseAlt -> AltEnv -> String -> Result (Pair String GenSt)
+genUnboxedCaseWithBound fuel st name alt bound scrutText = if fuel <= 0 then Err "DT: internal: codegen fuel exhausted"
+else andThen (genTermFuel (fuel - 1) (aeSt bound) (aeEnv bound) (caseAltBody alt)) (\p => case p of
+  Pair bodyText st2 => unboxedCaseLet scrutText bound bodyText st2
+)
+
+unboxedCaseLet : String -> AltEnv -> String -> GenSt -> Result (Pair String GenSt)
+unboxedCaseLet scrutText bound bodyText st2 = case aePats bound of
+  [] => Ok (Pair "(let _ = ${scrutText} in ${bodyText})" st2)
+  pat :: rest => case rest of
+    [] => Ok (Pair "(let ${pat} = ${scrutText} in ${bodyText})" st2)
+    _ => Err "DT: internal: unboxed case arm has more than one runtime binder"
 
 genArmFuel : Int -> GenSt -> List (Pair String Rig) -> CaseAlt -> Result (Pair String GenSt)
 genArmFuel fuel st outer alt = if fuel <= 0 then Err "DT: internal: codegen fuel exhausted"
@@ -1628,6 +1737,12 @@ natAltTextFuel fuel st binders (Just a) bindExpr = genNatAltBodyFuel fuel st bin
 genCaseFuel : Int -> GenSt -> List (Pair String Rig) -> Term -> List CaseAlt -> Result (Pair String GenSt)
 genCaseFuel fuel st binders scrut alts = if fuel <= 0 then Err "DT: internal: codegen fuel exhausted"
 else if natCaseApplies alts then genNatCaseFuel (fuel - 1) st binders scrut alts
+else case unboxedCaseAlt st alts of
+  Just alt => genUnboxedCaseFuel (fuel - 1) st binders scrut alt
+  Nothing => genGenericCaseFuel (fuel - 1) st binders scrut alts
+
+genGenericCaseFuel : Int -> GenSt -> List (Pair String Rig) -> Term -> List CaseAlt -> Result (Pair String GenSt)
+genGenericCaseFuel fuel st binders scrut alts = if fuel <= 0 then Err "DT: internal: codegen fuel exhausted"
 else andThen (genTermFuel (fuel - 1) st binders scrut) (\p => case p of
   Pair scrutText st1 => andThen (genArmsFuel (fuel - 1) st1 binders alts) (\q => case q of
     Pair arms st2 =>
@@ -1718,7 +1833,7 @@ genGroupBodies st isRec (d :: rest) = andThen (genGroupDef st isRec d) (\p => ca
 )
 
 -- 单函数 SCC 且不引用自身时用 let；多函数 SCC（互递归）或自递归才用 let rec。
-groupNeedsRec : HashMap (List String) -> List DtDef -> Bool
+groupNeedsRec : HashMap String (List String) -> List DtDef -> Bool
 groupNeedsRec adjT [] = False
 groupNeedsRec adjT ([d]) = memName (dtDefName d) (neighborsOf adjT (dtDefName d))
 groupNeedsRec adjT group = True
@@ -1741,11 +1856,11 @@ firstBadRecursiveValue (d :: rest) = case dtDefBody d of
     if runtimeArity body == 0 then if recursiveValueAllowed body then firstBadRecursiveValue rest else Just (dtDefName d)
     else firstBadRecursiveValue rest
 
-genGroup : HashMap (List String) -> GenSt -> List DtDef -> Result (Pair String GenSt)
+genGroup : HashMap String (List String) -> GenSt -> List DtDef -> Result (Pair String GenSt)
 genGroup adj st group = if groupNeedsRec adj group then case firstBadRecursiveValue group of
   -- M29（A14）：带来源位置（组里按名字找回定义）。
   Just name => case findDtDef name group of
-    Just d => cgErrDefAt (dtDefSpan d) name (RecursiveValueDefinition name) (name :: [])
+    Just d => cgErrDefAt (dtDefSpan d) name (RecursiveValueDefinition name) [name]
     Nothing => cgErr1 (RecursiveValueDefinition name) name
   Nothing => genGroupLet st group True
 else genGroupLet st group False
@@ -1760,7 +1875,7 @@ genGroupLet st group isRec = andThen (genGroupBodies st isRec group) (\p => case
     _ => Ok (Pair ((if isRec then "let rec " else "let ") ++ joinWith "\nand " defs) st2)
 )
 
-genGroups : HashMap (List String) -> GenSt -> List (List DtDef) -> Result (Pair (List String) GenSt)
+genGroups : HashMap String (List String) -> GenSt -> List (List DtDef) -> Result (Pair (List String) GenSt)
 genGroups adj st [] = Ok (Pair [] st)
 genGroups adj st (g :: rest) = andThen (genGroup adj st g) (\p => case p of
   Pair text st2 => andThen (genGroups adj st2 rest) (\q => case q of
@@ -1789,6 +1904,7 @@ mainShowForName g =
   if g == intTypeName then Ok (Pair "string_of_int" "int")
   else if g == natTypeName then Ok (Pair "string_of_int" "int")
   else if g == strTypeName then Ok (Pair "dt_show_string" "string")
+  else if g == floatTypeName then Ok (Pair "string_of_float" "float")
   else if g == boolTypeName then Ok (Pair "dt_show_bool" "bool") else mainShowErr
 
 mainShowErr : Result (Pair String String)

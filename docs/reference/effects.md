@@ -17,7 +17,7 @@ W10 的 IO 标签迁移也已在库层落地（§8.6）：`Base.EffFs` 扩到完
 `Base.EffConsole`/`EffClock`/`EffEnv`/`EffProcess`（命名实例 + IO-backed handler）；
 `IO` 仍保留为运行时基座/逃逸口。W10 收尾（`w10-io2`）再补：编译器原生
 `prim_sleep`（`Base.EffClock` 真实 handler 已用；`Base.IO.sleepMicros` 待 rotation 后切换）、
-fs 命名实例 `F1`/`F2`（mock/real 可并存）、可控 `Exit`（`handleProcessIOWith`/`…Observed`）、
+fs 命名实例（mock/real 可并存）、可控 `Exit`（`handleProcessIOWith`/`…Observed`）、
 工具链 `vuna version` 的 console 标签路径。`do` 的 base 内建实例与 W11 收尾（seed rotation）
 仍待后续。学习路径：想用现有
 效应写程序看 §2–§4；想知道 `Eff` 表示层怎么打通读 §5；想评估后续路线读 §6。
@@ -58,7 +58,7 @@ fs 命名实例 `F1`/`F2`（mock/real 可并存）、可控 `Exit`（`handleProc
 | `prim_runIO` | `{a : Type} -> IO a -> a` | 唯一 main 外执行入口，需能力 `unsafe` |
 
 - `Base.IO`：`runIO = prim_runIO`；`print = prim_print` 等 API 仍是 `prim_*` 别名；
-  `Functor` / `Monad IO` 实例经 `prim_pureIO` / `prim_bindIO`。
+  `Functor` / `Applicative` / `Monad IO` 实例经 `prim_pureIO` / `prim_bindIO`。
 - **`unsafe` 的定义级信任点（D28）**：包在 manifest 声明 `[trust] unsafe = ["Module.def", ...]`
   后进入严格模式：只有列出的定义可以**直接**引用 `unsafe` 门控目标（CapUnsafe 内建或
   `Base.IO.runIO` 别名）；`Loader.Resolve` 逐定义扫描，错误给出定义全限定名、触发内建名与
@@ -161,7 +161,7 @@ CPS `Eff` 已经可 `check` + `compile` + 运行，且 interp 与产物逐字节
   `MArray` / `Buffer`（即类型族定义 / axiom / 未知全局）；
 - 或**类型族参数**：kind 的 Pi 链里出现非宇宙域（`res : f -> Type`；`m : Type -> Type`
   这类普通类型构造子参数**不算**，所以字典方法字段 / base 泛型代码不受影响）；
-- 数据族的**索引值实参**（`Vec a (Succ n)` 的 `Succ n`）是擦除后的索引，不参与判定；
+- 数据族的**索引值实参**（`Vec (Succ n) a` 的 `Succ n`）是擦除后的索引，不参与判定；
 - 已知边界：精化期未解的元变量按可表示处理（可能漏 cast，见 D27 残留）；trait 自动
   生成的 λ（方法投影 / 实例 tele）不在插入点覆盖范围内。
 
@@ -217,13 +217,18 @@ __EFF_SECTION__
   `@vuna@list@nil` / `@vuna@list@cons`（不是构造子名字解析）；精化器按**期望族**的短名
   `Nil`/`Cons` 展开，期望族未知时默认 `Base.List.List`。因此在**期望 kind 为 `Row`** 的
   位置 `[Fetch]` 展开为 `Base.Eff.Row.Cons Fetch Base.Eff.Row.Nil`，`[]` 展开为
-  `Base.Eff.Row.Nil`；`Vec a n` / 用户自定义的 `Nil`/`Cons` 族同样适用。模式
+  `Base.Eff.Row.Nil`；`Vec n a` / 用户自定义的 `Nil`/`Cons` 族同样适用。模式
   `[]` / `[a, b]` 按 scrutinee 族逐层展开（`Elab/Term/Impl` 的
   `listLitElems`/`expandListLit` 与模式解析器），parser/AST 不需要区分类型/项位置。
   夹具 `dt_base/45_eff_row_sugar`、`dt_base/54_list_literal_families`。
   行只是擦除索引，不进入运行时值。
-- 标签是用户/库声明的数据类型（如 `Reader Cnt1 Int`、`State S1 Int`、`Fs`），
+- 标签是用户/库声明的数据类型（如 `Reader "counter" Int`、`State "counter" Int`、`Fs "real"`），
   没有闭合的 `data EffectLabel`；新增效应/实例不需要改中央表。
+- **实例名是 String**：命名实例的标签第一个参数就是实例名字符串（`Reader n s` 的 `n`），
+  行里 `Reader "counter" Int` 与 `Reader "config" Int` 是不同条目。String 字面量因此可以
+  出现在类型表达式里（与 `Vec 3 a` 的 Int 字面量同规则，见 language.md）；运行时按
+  `(key, name)` 的字符串相等找 handler。库不定义任何固定实例名枚举，使用方自选名字
+  （同一效应族同时安装的实例名必须互不相同）。
 - `Eff r a` 构造子不导出；内部是私有 dummy thunk（`EffUnit -> a`），
   **没有世界令牌**；dummy 只为延迟执行。
 - `Member e r` 是 Type-1 归纳族（`Here`/`There`），effect wrapper 用隐式证明参数；
@@ -234,7 +239,7 @@ __EFF_SECTION__
 
 ### 8.2 运行时
 
-- `Vuna_runtime` 声明 `type _ Effect.t += Perform : string * int * Obj.t -> Obj.t Effect.t`。
+- `Vuna_runtime` 声明 `type _ Effect.t += Perform : string * string * Obj.t -> Obj.t Effect.t`。
 - 隐藏 intrinsic `prim_effectPerform` / `prim_effectHandle`（要求 `unsafe`，只供
   `Base.Eff` 包装）：
   - `perform` → `Effect.perform`；
@@ -255,14 +260,14 @@ __EFF_SECTION__
 
 | 模块 | 内容 |
 | --- | --- |
-| `Base.Eff` | `Row(..)`、`Eff`、`Member(..)`/`rowRem`、`bindEff`/`bindEff1`、`sendCore`/`handleCore`/`handleCoreLin`、`Cont`/`mkCont`/`resumeCont`、`bracket`/`finally`、`weaken`、`runPure`/`runIOEff`/`runIOAnswer` |
-| `Base.Eff.Reader` | `Reader n s` + `Ask`；`ask`/`handleReader`；`Cnt1`/`Cnt2` 两个同名实例 |
+| `Base.Eff` | `Row(..)`、`Eff`、`Member(..)`/`rowRem`、内建 `Functor`/`Applicative`/`Monad (Eff r)`（`do`/`>>=`/`>>`，不提供 `bindEff`/`pureEff`）、`sendCore`/`handleCore`/`handleCoreLin`、`Cont`/`mkCont`/`resumeCont`、`bracket`/`finally`、`weaken`、`runPure`/`runIOEff`/`runIOAnswer` |
+| `Base.Eff.Reader` | `Reader n s` + `Ask`；`ask`/`handleReader`；`n` 是 String 实例名（`Reader "counter" Int`） |
 | `Base.EffState` | `State n s` + `Get`/`Put`；`get`/`put`/`handleState`（answer `s -> Pair a s` 线程状态） |
-| `Base.EffFs` | IO-backed Fs 效应（W10 扩到完整 fs 面；收尾改为**命名实例** `Fs n`，`F1`/`F2`）：`ReadFile`/`WriteFile`/`WriteFileAtomic`/`ReadDir`/`IsDirectory`/`MakeDir`/`RemoveFile`/`FileExists`/`FileMtime`/`FileSize` + `resFs`；`fsReadFile n`/`fsWriteFile n`/…/`handleFs n`（泛型）/`handleFsIO n`（IO-backed，可直接 `runIOAnswer`）；handler 用 `Base.IO` 实现。mock/real 可并存（`dt_base/37`） |
-| `Base.EffConsole` | W10 console 标签（命名实例 C1/C2）：`Print`/`EPrint`；`consolePrint`/`consoleEprint`/`handleConsole`/`handleConsoleIO`（真实 handler 用 `Base.IO.print`/`eprint`） |
-| `Base.EffClock` | W10 clock 标签（命名实例 K1/K2）：`Now`（微秒时间戳）/`SleepMicros`；`clockNow`/`clockSleepMicros`/`handleClock`/`handleClockIO`（真实 handler 用 `Base.IO.nowMicros` 与编译器原生 `prim_sleep`） |
-| `Base.EffEnv` | W10 env 标签（命名实例 V1/V2）：`GetEnv`/`GetCwd`/`ExecPath`；`envGetEnv`/`envGetCwd`/`envExecPath`/`handleEnv`/`handleEnvIO`（真实 handler 用 `Base.IO.getEnv`/`getCwd`/`execPath`） |
-| `Base.EffProcess` | W10 process 标签（命名实例 P1/P2）：`Args`/`Exit`/`RunIn`；`processArgs`/`processExit`/`processRunIn`/`handleProcess`/`handleProcessIO`（真实 handler 用 `prim_getArgs`/`prim_exit`/`prim_runIn`）/`handleProcessIOWith`（自定义 `onExit`）/`handleProcessIOObserved`（`Exit` 可观察、不退出） |
+| `Base.EffFs` | IO-backed Fs 效应（W10 扩到完整 fs 面；收尾改为**命名实例** `Fs n`，如 `Fs "mock"`/`Fs "real"`）：`ReadFile`/`WriteFile`/`WriteFileAtomic`/`ReadDir`/`IsDirectory`/`MakeDir`/`RemoveFile`/`FileExists`/`FileMtime`/`FileSize` + `resFs`；`fsReadFile n`/`fsWriteFile n`/…/`handleFs n`（泛型）/`handleFsIO n`（IO-backed，可直接 `runIOAnswer`）；handler 用 `Base.IO` 实现。mock/real 可并存（`dt_base/40`） |
+| `Base.EffConsole` | W10 console 标签（命名实例，如 `"mock"`/`"real"`）：`Print`/`EPrint`；`consolePrint`/`consoleEprint`/`handleConsole`/`handleConsoleIO`（真实 handler 用 `Base.IO.print`/`eprint`） |
+| `Base.EffClock` | W10 clock 标签（命名实例，如 `"mock"`/`"real"`）：`Now`（微秒时间戳）/`SleepMicros`；`clockNow`/`clockSleepMicros`/`handleClock`/`handleClockIO`（真实 handler 用 `Base.IO.nowMicros` 与编译器原生 `prim_sleep`） |
+| `Base.EffEnv` | W10 env 标签（命名实例，如 `"mock"`/`"real"`）：`GetEnv`/`GetCwd`/`ExecPath`；`envGetEnv`/`envGetCwd`/`envExecPath`/`handleEnv`/`handleEnvIO`（真实 handler 用 `Base.IO.getEnv`/`getCwd`/`execPath`） |
+| `Base.EffProcess` | W10 process 标签（命名实例，如 `"mock"`/`"real"`）：`Args`/`Exit`/`RunIn`；`processArgs`/`processExit`/`processRunIn`/`handleProcess`/`handleProcessIO`（真实 handler 用 `prim_getArgs`/`prim_exit`/`prim_runIn`）/`handleProcessIOWith`（自定义 `onExit`）/`handleProcessIOObserved`（`Exit` 可观察、不退出） |
 | `Base.EffError` | `Error`/`ErrorOp` + `throw`/`handleError`/`runError`/`catch`（L2 作用域 catch） |
 | `Base.EffExn` | W6 高阶 scoped Error：`Try` 携带子计算；`tryWith`/`runExn`/`catchExn`/`bracketExn` |
 | `Base.EffMutex` | W9 Mutex/Semaphore（IORef + yield 忙等）：`acquire`/`release`/`semWait`/`semSignal` |
@@ -271,7 +276,7 @@ __EFF_SECTION__
 | `Base.EffSched` | W9 单线程 fiber 调度器（L3）：`Task`/`Scope`/`TaskLin` + `forkTask`/`forkTaskWith`/`forkTaskLin`/`awaitTask`/`awaitTaskLin`/`yieldNow`/`cancelTask`/`cancelTaskLin`/`cancelScope`/`scopeWait`/`scopeWaitTimeout`/`withScope`/`withScopeTimeout`/`isCancelled`/`liftIOEff`；任务行 `Nil`，超时按逻辑步数 |
 
 夹具：`dt_base/16`（两个 Reader 实例嵌套 handler）、`17`（State 状态线程）、
-`18`（IO-backed Fs 真实读写，命名实例 F1）、`20–21`（W6 local/catch）、`23`（W6
+`18`（IO-backed Fs 真实读写，实例名 `"real"`）、`20–21`（W6 local/catch）、`23`（W6
 scoped handler）、`24–25`（W7 线性续延 / bracketExn）、`26–30`（W10 mock↔real 对拍）、
 `31–36`（W9 调度器：fork/await、取消、超时、监督、重复 await、Channel）、`37–39`
 （W9 Mutex、线性 TaskLin、effect-aware forkTaskWith）、`40–41`（W10 fs 命名实例 /
@@ -289,11 +294,18 @@ process 可控 Exit）、`42–44`（W7 通用 bracket abort cleanup、调度器
 - **行删除的表示层修复**：`rowRem` 改成公理 + 编译器按标签类型值结构相等归约；
   不能写成类型族（重复绑定名的模式会被 parser 以 `PS_RepeatedPatternBinder` 拒绝，
   见 language.md）。
-- **`Monad (Eff r)` 已内建**：`Base.Eff` 直接声明
-  `instance Monad (Eff r) where pure = pureEff; bind = bindEff`（实例 tele `r : Row`
-  由 `Eff` 构造子 kind 推断）；import `Base.Eff` 后可直接用 `do` / `>>=` / `>>`。
-  `do` 在行 `r` 上单子化，handler 仍显式解释；纯行用 `runPure` 收尾
-  （夹具 `dt_base/19_eff_monad`）。
+- **`Monad (Eff r)` 已内建**：`Base.Eff` 声明 `instance Monad (Eff r)`，实例方法直接构造
+  私有 `MkEff`（实例 tele `r : Row` 由 `Eff` 构造子 kind 推断）；import `Base.Eff` 后可直接用
+  `do` / `>>=` / `>>`，不提供 `bindEff` / `pureEff` 专用组合子。`do` 在行 `r` 上单子化，
+  handler 仍显式解释；纯行用 `runPure` 收尾（夹具 `dt_base/19_eff_monad` 覆盖
+  `do`/`>>=`/`>>`/`bind`）。行多态实现（`bracket`/`withScope`）同样用 `do`：延迟字典目标
+  在 `resolveRowGoalsCtx`（带 ctx 的收尾点）里、行成员解出后重新搜索实例，因此静态字典
+  在定义体结束时即可求出（见 type-system.md「延迟字典目标」）。
+- **长 do 链**：S1 把程序级字典目标求解改成单趟 worklist（`Dict.resolveDictGoals` 每个目标
+  每趟只处理一次），指数已消除：20 步纯 `Eff []` do 约 100ms、10 层 `Result >>=` 约 77ms、
+  20 层 `>>=` 约 77ms（`test/corpus/elab_perf/` 夹具）。期望结果类型定向已由 S2 落地（前导隐式前缀后 early solve 残余结果）；do 块已按块共享
+  一个 monad/字典（S3b）。剩余 D46 只是 `Common.andThen` 的清理（等一次 seed rotation）。
+  行多态 `Eff r` 的 `do` 不受影响。
 - **一阶效应核**：普通 send op 不含子计算；W6 通过 `Base.EffExn.Try` 支持携带子计算，
   `bracketExn` 提供 Exn 路径的 cleanup；W7 的通用 `Base.Eff.bracket`/`finally` 用运行时
   cleanup 栈覆盖**任意效应 abort**（handler 丢弃续延），见 §8.5 与 effects-layers.md。
@@ -301,7 +313,7 @@ process 可控 Exit）、`42–44`（W7 通用 bracket abort cleanup、调度器
   `forkTask`/`awaitTask`/`yieldNow`、取消（含清理宽限）、结构化 `withScope`、步数超时；
   并行/多核（Domain）仍不是本层目标。旧的 `Base.EffAsync`（Domain）保留但不算 W9。
 - **未处理效应诊断**：main 兜底已识别 `Effect.Unhandled (Perform (key,name,_))`，报告
-  `unhandled effect key (instance n)`（`test/corpus/run_err/04_unhandled_effect`）；任务内
+  `unhandled effect key (instance name)`（`name` 是 String 实例名；`test/corpus/run_err/04_unhandled_effect`）；任务内
   的未处理效应经 `awaitTask` 的 `Err` 返回同一条消息。
 
 ### 8.5 Layer 2/3（展开）

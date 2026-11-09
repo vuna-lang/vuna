@@ -82,22 +82,22 @@ splitLayers graph =
   in map (\d => filter (\q => depthOfUnit depths (firstOf q) == d) graph) (range 0 (maxD + 1))
 
 -- 扫描 graph 建 depth 表；依赖都已在前（拓扑序），因此一遍就够。
-splitDepths : List (Pair String (List String)) -> HashMap Int -> HashMap Int
+splitDepths : List (Pair String (List String)) -> HashMap String Int -> HashMap String Int
 splitDepths [] depths = depths
 splitDepths ((Pair unit deps) :: rest) depths =
   splitDepths rest (Base.HashMap.insert unit (depthOfDeps depths deps) depths)
 
 -- depth(unit) = 1 + max(depth(dep))；空依赖 = 0。
-depthOfDeps : HashMap Int -> List String -> Int
+depthOfDeps : HashMap String Int -> List String -> Int
 depthOfDeps depths [] = 0
 depthOfDeps depths (dep :: rest) = maxInt (depthOfUnit depths dep + 1) (depthOfDeps depths rest)
 
-depthOfUnit : HashMap Int -> String -> Int
+depthOfUnit : HashMap String Int -> String -> Int
 depthOfUnit depths unit = case Base.HashMap.lookup unit depths of
   Just d => d
   Nothing => 0
 
-graphMaxDepth : List (Pair String (List String)) -> HashMap Int -> Int -> Int
+graphMaxDepth : List (Pair String (List String)) -> HashMap String Int -> Int -> Int
 graphMaxDepth [] depths acc = acc
 graphMaxDepth ((Pair unit deps) :: rest) depths acc =
   graphMaxDepth rest depths (maxInt acc (depthOfUnit depths unit))

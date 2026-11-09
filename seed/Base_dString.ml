@@ -3,6 +3,12 @@ let v_Eq_uString = (Base_dEq.C_Dict_uBase_dEq_dEq_Eq ((fun x y -> (x = y)), (fun
 
 let v_Ord_uString = (Base_dOrd.C_Dict_uBase_dOrd_dOrd_Ord ((fun x y -> (x < y)), (fun x y -> (x <= y)), (fun x y -> (x > y)), (fun x y -> (x >= y))))
 
+let v_Hashable_uString = (Base_dHashable.C_Dict_uBase_dHashable_dHashable_Hashable ((fun s -> (Base_dHashable.v_Base_dHashable_dhashStr s))))
+
+let v_Semigroup_uString = (Base_dMonoid.C_Dict_uBase_dMonoid_dSemigroup_Semigroup ((fun x y -> (x ^ y))))
+
+let v_Monoid_uString = (Base_dMonoid.C_Dict_uBase_dMonoid_dMonoid_Monoid (""))
+
 let v_Base_dString_dbyteLength = (fun s -> (bi_natFromInt (bi_strLength s)))
 
 let rec v_Base_dString_d_uinterleave = (fun mc0 mc1 -> (match mc1 with

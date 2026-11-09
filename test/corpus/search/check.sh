@@ -30,6 +30,12 @@ check_contains() {
     *) bad "$1 (missing [$3])" ;;
   esac
 }
+check_absent() {
+  case "$2" in
+    *"$3"*) bad "$1 (unexpected [$3])" ;;
+    *) ok ;;
+  esac
+}
 
 run_in_ws() { ( cd "$ws" && "$@" ); }
 
@@ -77,6 +83,21 @@ check_contains "search bad type error" "$(cat "$tmp/badq.log")" "cannot parse ty
 ( cd "$tmp" && "$VUNA" search id >"$tmp/nonws.log" 2>&1 )
 check_eq "search non-workspace exit" "2" "$?"
 check_contains "search non-workspace error" "$(cat "$tmp/nonws.log")" "vuna.toml"
+
+# 类型打印（Vuna.Sig）：保留列表名必须还原成 [] / [..]，开放 :: 走中缀；
+# 不允许 @vuna@list@ 保留名或前缀形式 `(:: ...)` 泄漏到 api/search 输出。
+out=$(run_in_ws "$VUNA" api Demo.Search 2>&1)
+check_eq "api exit" "0" "$?"
+check_contains "api renders empty list literal" "$out" "runPure2 : (Eff [] a) -> a"
+check_contains "api renders infix cons" "$out" "Fetch :: r"
+check_contains "api renders closed cons spelling" "$out" "Fetch :: []"
+check_absent "api leaks no reserved list nil" "$out" "@vuna@list@nil"
+check_absent "api leaks no reserved list cons" "$out" "@vuna@list@cons"
+check_absent "api renders no prefix cons" "$out" "(:: "
+
+out=$(run_in_ws "$VUNA" search --type "Eff [] a -> a" 2>&1)
+check_eq "search list type exit" "0" "$?"
+check_contains "search list type hit" "$out" "Demo.Search.runPure2"
 
 printf 'search: %d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ] && echo "search check passed"

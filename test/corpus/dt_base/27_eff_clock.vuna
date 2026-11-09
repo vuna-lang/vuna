@@ -4,10 +4,12 @@ import Base.Eff
 import Base.EffClock
 import Base.IO
 
-prog : (n : Name) -> Eff (Clock n :: []) Int
-prog n =
-  bindEff (clockNow n)
-    (\t0 => bindEff (clockSleepMicros n 2000) (\_ => bindEff (clockNow n) (\t1 => pureEff (t1 - t0))))
+prog : (n : String) -> Eff [Clock n] Int
+prog n = do
+  t0 <- clockNow n
+  _ <- clockSleepMicros n 2000
+  t1 <- clockNow n
+  pure (t1 - t0)
 
 mret : Int -> Int
 mret a = a
@@ -18,7 +20,7 @@ mopH op k = case op of
   SleepMicros us => k 0
 
 main : IO Int
-main = case runPure (handleClock K1 mret mopH (prog K1)) of
+main = case runPure (handleClock "mock" mret mopH (prog "mock")) of
   mockElapsed =>
     prim_bindIO (print ("mock " ++ strFromInt mockElapsed ++ "\n"))
-      (\_ => prim_bindIO (runIOAnswer (handleClockIO K2 (prog K2))) (\realElapsed => prim_bindIO (print ("real " ++ strFromInt (if realElapsed >= 1000 then 1 else 0) ++ "\n")) (\_ => prim_pureIO 0)))
+      (\_ => prim_bindIO (runIOAnswer (handleClockIO "real" (prog "real"))) (\realElapsed => prim_bindIO (print ("real " ++ strFromInt (if realElapsed >= 1000 then 1 else 0) ++ "\n")) (\_ => prim_pureIO 0)))

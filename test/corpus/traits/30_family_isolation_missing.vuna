@@ -1,0 +1,15 @@
+-- S5a：族桶只按目标类过滤候选，但**缺实例**的诊断不能因此改变——别族的实例不算证据
+-- （这里 Int 有 `Flag` 实例，`Absent` 没有）。
+import Prelude
+
+trait Flag a where
+  flag : a -> Bool
+
+instance Flag Int where
+  flag n = n == 0
+
+data Absent : Type where
+  MkAbsent : Absent
+
+main : Bool
+main = flag MkAbsent

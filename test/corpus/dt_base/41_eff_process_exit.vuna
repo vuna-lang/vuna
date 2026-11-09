@@ -1,13 +1,15 @@
--- W10 收尾：process 的 `Exit` 可控——mock handler（P1）与可选参数 handler
--- （P2 的 `handleProcessIOObserved`）都能观察退出码并继续执行；真实路径
+-- W10 收尾：process 的 `Exit` 可控——mock handler（"mock"）与可选参数 handler
+-- （"observed" 的 `handleProcessIOObserved`）都能观察退出码并继续执行；真实路径
 -- （`handleProcessIO` 的 `prim_exit`）保留，但本夹具不触发它（否则测试进程退出）。
 import Base.Eff
 import Base.EffProcess
 import Base.IO
 import Base.List
 
-prog : (n : Name) -> Eff (Process n :: []) Int
-prog n = bindEff (processExit n 7) (\c => pureEff c)
+prog : (n : String) -> Eff [Process n] Int
+prog n = do
+  c <- processExit n 7
+  pure c
 
 mret : Int -> Int
 mret a = a
@@ -21,5 +23,5 @@ mopH op k = case op of
 main : IO Int
 main =
   prim_bindIO
-    (print ("mock " ++ strFromInt (runPure (handleProcess P1 mret mopH (prog P1))) ++ "\n"))
-    (\_ => prim_bindIO (runIOAnswer (handleProcessIOObserved P2 (prog P2))) (\observed => prim_bindIO (print ("observed " ++ strFromInt observed ++ "\n")) (\_ => prim_pureIO 0)))
+    (print ("mock " ++ strFromInt (runPure (handleProcess "mock" mret mopH (prog "mock"))) ++ "\n"))
+    (\_ => prim_bindIO (runIOAnswer (handleProcessIOObserved "observed" (prog "observed"))) (\observed => prim_bindIO (print ("observed " ++ strFromInt observed ++ "\n")) (\_ => prim_pureIO 0)))

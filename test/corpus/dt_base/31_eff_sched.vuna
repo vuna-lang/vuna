@@ -7,21 +7,25 @@ import Base.IO
 import Base.Result
 
 work : String -> String -> Int -> Eff [] Int
-work first second n =
-  bindEff (liftIOEff (println first))
-    (\_ => bindEff yieldNow (\_ => bindEff (liftIOEff (println second)) (\_ => pureEff n)))
+work first second n = do
+  _ <- liftIOEff (println first)
+  _ <- yieldNow
+  _ <- liftIOEff (println second)
+  pure n
 
 prog : Eff [] (Result Int)
-prog = withScope (\sc => bindEff (forkTask sc (work "a1" "a2" 10)) (\ta => bindEff (forkTask sc (work "b1" "b2" 20)) (\tb => bindEff (liftIOEff (println "forked")) (\_ => bindEff (awaitTask tb) (\rb => case rb of
-  Ok b => bindEff (awaitTask ta) (\ra => case ra of
-    Ok a => pureEff (Ok (a + b))
-    Err e => pureEff (Err e)
-  )
-  Err e => pureEff (Err e)
-)
-)
-)
-)
+prog = withScope (\sc => do
+  ta <- forkTask sc (work "a1" "a2" 10)
+  tb <- forkTask sc (work "b1" "b2" 20)
+  _ <- liftIOEff (println "forked")
+  rb <- awaitTask tb
+  case rb of
+    Ok b => do
+      ra <- awaitTask ta
+      case ra of
+        Ok a => pure (Ok (a + b))
+        Err e => pure (Err e)
+    Err e => pure (Err e)
 )
 
 main : IO Int

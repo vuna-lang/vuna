@@ -21,6 +21,7 @@ module Vuna.Compiler.Elab.Derive (expandDerivings, instHead) where
 --   Ord ：先按**声明顺序**比构造子索引，同构造子再逐字段比。
 import Vuna.Compiler.Common
 import Vuna.Compiler.Frontend.Ast
+import Vuna.Compiler.Diagnostics
 
 -- 类名最后一段：`Base.Show.Show` → `Show`；派生规则按它分派（找不到的类报不支持）。
 traitShortName : String -> String
@@ -47,8 +48,9 @@ expandDerivings decls = andThen (collectDerivings decls) (\insts => Ok (append d
 collectDerivings : List Decl -> Result (List Decl)
 collectDerivings [] = Ok []
 collectDerivings (d :: rest) = case d of
-  DData name params kind ctors derivings lin sp =>
-    if length derivings == 0 then collectDerivings rest
+  DData name params kind ctors derivings viaField lin sp =>
+    if viaField then collectDerivings rest
+    else if length derivings == 0 then collectDerivings rest
     else andThen (derivingsFor name params ctors derivings sp)
       (\insts => andThen (collectDerivings rest) (\more => Ok (append insts more)))
   _ => collectDerivings rest
@@ -120,7 +122,59 @@ deriveInstance dname params ctors tn sp =
             DFun "ge" [PVar "sx" sp, PVar "sy" sp] (geBody leProj sp) sp
           ]
       in Ok (DInstance ctxExprs hd ms sp)
-    kind => Err "${showSpanLoc sp}: cannot derive `${kind}` (supported: Show, Eq, Ord)"
+    "Hashable" =>
+      let
+        hashProj = traitMethodGlobal tn "hash"
+        combineProj = traitMethodGlobal tn "hashCombine"
+        ms = [DFun "hash" [PVar "sx" sp] (hashBody hashProj combineProj ctors sp) sp]
+      in Ok (DInstance ctxExprs hd ms sp)
+    "FromString" => deriveWrapper tn "fromString" "String" ctors hd sp
+    "FromInt" => deriveWrapper tn "fromInt" "Int" ctors hd sp
+    "FromFloat" => deriveWrapper tn "fromFloat" "Float" ctors hd sp
+    kind =>
+      Err
+        "${showSpanLoc sp}: cannot derive `${kind}` (supported: Show, Eq, Ord, Hashable, FromString, FromInt, FromFloat)"
+
+-- 字面量转换派生（FromString / FromInt / FromFloat）：只接受「一个构造子、一个字段、
+-- 字段声明类型就是对应内建类型」的包装类型。记录在 prepareDecls 已降级成单构造子
+-- DData，因此这里同时接受手写 data 的箭头链（`EApp (EVar "->")`）与记录降级的 `EPi` 链。
+-- 生成 `instance C T where fromX sx = C sx`：不递归调用 trait，因此没有自引用/终止性风险；
+-- 跨类型转换（如字段是 Email 而不是 String）需要手写 instance。
+deriveWrapper : String -> String -> String -> List Ctor -> Expr -> Span -> Result Decl
+deriveWrapper tn methodName wantTy [] hd sp =
+  Err
+    "${showSpanLoc sp}: cannot derive ${traitShortName tn}: type must have exactly one constructor"
+deriveWrapper tn methodName wantTy (c :: rest) hd sp = case rest of
+  [] => deriveWrapperCtor tn methodName wantTy c hd sp
+  _ =>
+    Err
+      "${showSpanLoc sp}: cannot derive ${traitShortName tn}: type must have exactly one constructor"
+
+deriveWrapperCtor : String -> String -> String -> Ctor -> Expr -> Span -> Result Decl
+deriveWrapperCtor tn methodName wantTy (Ctor cn ty ar cnsp) hd sp = if ar == 1 then case deriveFieldTypes ty of
+  dom :: rest => case rest of
+    [] =>
+      if deriveFieldTypeName dom == wantTy then Ok
+        (DInstance [] hd [DFun methodName [PVar "sx" sp] (EApp (EVar cn sp) [EVar "sx" sp] sp) sp] sp)
+      else Err
+        "${showSpanLoc sp}: cannot derive ${traitShortName tn}: field type must be ${wantTy} (got ${deriveFieldTypeName dom})"
+    _ =>
+      Err
+        "${showSpanLoc sp}: cannot derive ${traitShortName tn}: constructor must have exactly one field"
+  [] =>
+    Err
+      "${showSpanLoc sp}: cannot derive ${traitShortName tn}: constructor must have exactly one field"
+else Err "${showSpanLoc sp}: cannot derive ${traitShortName tn}: constructor must have exactly one field"
+
+deriveFieldTypes : Expr -> List Expr
+deriveFieldTypes (EApp (EVar "->" _) ([dom, cod]) _) = dom :: deriveFieldTypes cod
+deriveFieldTypes (EPi _ _ _ dom cod _) = dom :: deriveFieldTypes cod
+deriveFieldTypes _ = []
+
+deriveFieldTypeName : Expr -> String
+deriveFieldTypeName (EVar n sp) = n
+deriveFieldTypeName (EApp (EVar n sp) args sp2) = n
+deriveFieldTypeName _ = "?"
 
 -- `T <Data> a1 .. an` 形态的实例头（`T` 是解析后的完整类名）。
 instHead : String -> String -> List String -> Span -> Expr
@@ -162,6 +216,32 @@ showFields proj (v :: rest) sp = case rest of
 
 showOne : String -> String -> Span -> Expr
 showOne proj v sp = EApp (EVar proj sp) [EVar v sp] sp
+
+-- ---------------------------------------------------------------
+-- Hashable
+-- ---------------------------------------------------------------
+-- 每个构造子一个分支：`hash (C f0 .. fn) = hashCombine ctorIndex (hashCombine (hash f0) ..)`；
+-- 零字段 = 构造子下标。`hashCombine` 由 `Base.Hashable` 导出（完全限定）。
+-- | `deriving (Hashable)` 的方法体：对 `sx` 按构造子分派。
+hashBody : String -> String -> List Ctor -> Span -> Expr
+hashBody proj combineProj ctors sp = ECase (EVar "sx" sp) (hashAlts proj combineProj ctors 0 sp) sp
+
+-- | 每个构造子一个 `hash` 分支（构造子下标 + 字段 hash 的 `hashCombine` 链）。
+hashAlts : String -> String -> List Ctor -> Int -> Span -> List (Pair Pat Expr)
+hashAlts proj combineProj [] i sp = []
+hashAlts proj combineProj ((Ctor cn ty ar cnsp) :: rest) i sp =
+  let
+    vs = varNames "fa" ar
+    pat = PCon cn (map (\v => PVar v sp) vs) sp
+    body = hashFields proj combineProj vs (EInt i sp) sp
+  in Pair pat body :: hashAlts proj combineProj rest (i + 1) sp
+
+-- | 逐字段把 `hash field` 折进累加器（用完全限定的 `Base.Hashable.hashCombine`）。
+hashFields : String -> String -> List String -> Expr -> Span -> Expr
+hashFields proj combineProj [] acc sp = acc
+hashFields proj combineProj (v :: rest) acc sp =
+  hashFields proj combineProj rest
+    (EApp (EVar combineProj sp) [acc, EApp (EVar proj sp) [EVar v sp] sp] sp) sp
 
 -- ---------------------------------------------------------------
 -- Eq

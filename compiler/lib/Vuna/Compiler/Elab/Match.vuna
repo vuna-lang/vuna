@@ -260,6 +260,7 @@ renameExpr oldName newName e = case e of
   EVar nm sp => if nm == oldName then EVar newName sp else e
   EInt n sp => EInt n sp
   EStr s sp => EStr s sp
+  EFloat raw sp => EFloat raw sp
   ELam names body sp => ELam names (renameExprUnless oldName newName names body) sp
   EApp fn args sp => EApp (renameExpr oldName newName fn) (map (renameExpr oldName newName) args) sp
   EPi nm implicit qty dom cod sp =>

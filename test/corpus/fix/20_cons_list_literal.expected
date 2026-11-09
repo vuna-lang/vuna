@@ -1,0 +1,31 @@
+import Base.List
+
+f : Int -> List Int
+f n = [n, 1, 2]
+
+g : Int -> List Int
+g n = [n]
+
+h : Int -> List Int
+h n = f [n]
+
+i : List Int
+i = [1, 2]
+
+j : List Int
+j = []
+
+p : Int -> List Int -> List Int
+p n xs = n :: xs
+
+q : List Int -> Int
+q (n :: rest) = n
+
+r : List [Int]
+r = []
+
+u : Int -> List Int
+u n = n :: [] -- keep (comment)
+
+main : Int
+main = q (f 0)

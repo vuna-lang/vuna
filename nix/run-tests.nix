@@ -1,22 +1,29 @@
 # vuna 原生测试 runner：`nix run .#vuna-run-tests`。
 #
-# 主体在 nix/run-tests.sh；本文件只注入 PATH 与构建期回退模板（见脚本内注释）。
-# 编译器（VUNA / VUNA_SEED）在运行时解析：环境变量优先，否则运行时
-# `nix build --no-link --print-out-paths <flake>#vuna`（--vuna stable 用注册表别名 vuna）。
-{ pkgs, tools }:
+# 不再有 shell 编排层：直接调用仓库里刚构建出的 `vuna test --suite test/suite.toml`。
+# 编译器固定为同一个 Nix 构建产物（stage 1），种子通过 VUNA_SEED 注入；case 的
+# 并行度由 runner 的 `--jobs auto` 探测全部可用核。
+{ pkgs, tools, vuna, vuna-seed }:
 let
   inherit (pkgs) lib;
-
-  drv = pkgs.writeShellScriptBin "vuna-run-tests" ''
-    export PATH="${lib.makeBinPath tools}:$PATH"
-    # 找不到本地工作树时，--list 退回构建期的 test/run-tests.sh 副本（仅够列章节标题）。
-    export VUNA_RUN_TESTS_TEMPLATE="${../test/run-tests.sh}"
-    exec ${pkgs.bash}/bin/bash ${./run-tests.sh} "$@"
-  '';
 in
-drv
+pkgs.writeShellScriptBin "vuna-run-tests" ''
+  set -eu
+  export PATH="${lib.makeBinPath tools}:$PATH"
+  repo=$PWD
+  while [ ! -f "$repo/test/suite.toml" ]; do
+    if [ "$repo" = "/" ]; then
+      echo "vuna-run-tests: 找不到 test/suite.toml（请从 vuna 仓库内运行）" >&2
+      exit 2
+    fi
+    repo=$(dirname "$repo")
+  done
+  export VUNA_BASE="$repo/base"
+  export VUNA_SEED="${vuna-seed}/bin/vuna-seed"
+  exec "${vuna}/bin/vuna" test --suite "$repo/test/suite.toml" "$@"
+''
 // {
-  meta = drv.meta // {
-    description = "vuna 原生测试（包装 test/run-tests.sh，支持 --list / --only）";
+  meta = {
+    description = "vuna 原生测试（vuna test --suite，原生 case 级并行）";
   };
 }

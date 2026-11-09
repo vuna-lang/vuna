@@ -1,0 +1,3 @@
+-- Float 字面量与算术：期望 Float 时 `digits.digits` 直接是 TFloat，四则特化到浮点内建。
+main : Float
+main = 1.5 + 2.25 * 2.0

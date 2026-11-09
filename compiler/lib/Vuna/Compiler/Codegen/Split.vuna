@@ -24,6 +24,8 @@ import Vuna.Compiler.Codegen.Assembly
 import Vuna.Compiler.Codegen.Decl
 import Vuna.Compiler.Codegen.Erase
 import Vuna.Compiler.Codegen.Term
+import Vuna.Compiler.Core
+import Vuna.Compiler.Intrinsics
 
 splitUnitOfModule : String -> String
 splitUnitOfModule modName = sanitizeName modName
@@ -38,18 +40,18 @@ mainInitPrologue = "let () = Printexc.record_backtrace true\n"
 -- ---------------------------------------------------------------
 -- 名字 → 归属单元的哈希索引。旧实现对**每个**模块把全部 def/data 逐个做
 -- `mapOwnerOf`（线性扫 pairs）⇒ O(#模块 × #def × #pairs)，大包上就是几秒。
-ownerTblOf : List (Pair String String) -> HashMap String
+ownerTblOf : List (Pair String String) -> HashMap String String
 ownerTblOf pairs = Base.HashMap.insertAll pairs (Base.HashMap.fromList [])
 
-ownerOfTbl : HashMap String -> String -> String
+ownerOfTbl : HashMap String String -> String -> String
 ownerOfTbl t name = case Base.HashMap.lookup name t of
   Just o => o
   Nothing => ""
 
-datasInUnit : HashMap String -> String -> List DtData -> List DtData
+datasInUnit : HashMap String String -> String -> List DtData -> List DtData
 datasInUnit ownerT u datas = filter (\d => ownerOfTbl ownerT (dtDataName d) == u) datas
 
-defsInUnit : HashMap String -> String -> List DtDef -> List DtDef
+defsInUnit : HashMap String String -> String -> List DtDef -> List DtDef
 defsInUnit ownerT u defs = filter (\d => ownerOfTbl ownerT (dtDefName d) == u) defs
 
 -- ---------------------------------------------------------------
@@ -88,10 +90,10 @@ record SplitGenCtx where
   sgcUsedTbl : List (Pair String (List Int))
   sgcAllDatas : List DtData
   sgcAllDefs : List DtDef
-  sgcDefOwnerT : HashMap String
-  sgcDataOwnerT : HashMap String
-  sgcDefUnitT : HashMap String
-  sgcDataUnitT : HashMap String
+  sgcDefOwnerT : HashMap String String
+  sgcDataOwnerT : HashMap String String
+  sgcDefUnitT : HashMap String String
+  sgcDataUnitT : HashMap String String
   sgcOrdered : List String
 
 mapToUnit : List (Pair String String) -> List (Pair String String)
@@ -129,8 +131,9 @@ entryDeclIdentities [] = []
 entryDeclIdentities (d :: rest) = case d of
   DSig name ctx ty sp => Pair False name :: entryDeclIdentities rest
   DExtern name cName ty sp => Pair False name :: entryDeclIdentities rest
-  DData name params kind ctors derivings lin sp => Pair True name :: entryDeclIdentities rest
-  DRecord name params fields derivings lin sp => Pair True name :: entryDeclIdentities rest
+  DData name params kind ctors derivings viaField lin sp =>
+    Pair True name :: entryDeclIdentities rest
+  DRecord name params fields derivings viaField lin sp => Pair True name :: entryDeclIdentities rest
   DTrait name params methods sp => Pair True name :: entryDeclIdentities rest
   _ => entryDeclIdentities rest
 
@@ -220,6 +223,14 @@ storeModuleFile store key sf =
     _ = store key sf
   in sf
 
+-- 程序（含依赖 defs）是否用到浮点：决定 `Vuna_runtime.ml` 是否追加浮点 helper。
+-- no-float（含 compiler 自身）输出与 Float 之前逐字节一致。
+anyDefUsesFloat : List DtDef -> Bool
+anyDefUsesFloat [] = False
+anyDefUsesFloat (d :: rest) = case dtDefBody d of
+  Nothing => anyDefUsesFloat rest
+  Just body => termUsesFloat floatIntrinsicNames body || anyDefUsesFloat rest
+
 generateDtSplitProgramWith : (String -> Maybe SplitFile) -> (String -> SplitFile -> Int) -> List (Pair String (List Decl)) -> List Decl -> DtProgram -> Bool -> List String -> String -> Result (List SplitFile)
 generateDtSplitProgramWith lookup store modules entryDecls prog printResult roots contextDir =
   let
@@ -232,7 +243,8 @@ generateDtSplitProgramWith lookup store modules entryDecls prog printResult root
     _ = stamp "cg-splitmeta-done"
     locTbl = dtDefLocTable (splitLocPath roots contextDir) allDefs
     _ = stamp "cg-deflocs-done"
-    runtimeText = dtRuntimeWith locTbl
+    usesFloat = anyDefUsesFloat allDefs
+    runtimeText = dtRuntimeWith locTbl usesFloat
     _ = stamp "cg-runtimeText-done"
   in andThen (prepareDtProgram (Pair (dtProgDatas prog) allDefs)) (\p => case p of
     Pair runtime groups =>

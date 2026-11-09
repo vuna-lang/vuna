@@ -37,12 +37,13 @@ record RecordInfo where
   recordInfoParams : List String
   recordInfoFields : List (Pair String Expr)
   recordInfoDerivings : List String
+  recordInfoDerivingVia : Bool
   recordInfoCtor : String
 
 lookupRecord : String -> List RecordInfo -> Maybe RecordInfo
 lookupRecord name [] = Nothing
-lookupRecord name ((RecordInfo rname params fields derivings ctor) :: rest) =
-  if rname == name then Just (RecordInfo rname params fields derivings ctor)
+lookupRecord name ((RecordInfo rname params fields derivings derivingVia ctor) :: rest) =
+  if rname == name then Just (RecordInfo rname params fields derivings derivingVia ctor)
   else lookupRecord name rest
 
 fieldNamesOf : List (Pair a b) -> List a
@@ -97,9 +98,10 @@ recordsOfDecls : (String -> String) -> List Decl -> Pair (List RecordInfo) (List
 recordsOfDecls ctorOf [] = Pair [] []
 recordsOfDecls ctorOf (d :: rest) = case recordsOfDecls ctorOf rest of
   Pair recs ds => case d of
-    DRecord dname params fields derivings lin sp =>
+    DRecord dname params fields derivings viaField lin sp =>
       let
-        info = RecordInfo dname params (map recordFieldPair fields) derivings (ctorOf dname)
+        info =
+          RecordInfo dname params (map recordFieldPair fields) derivings viaField (ctorOf dname)
       in Pair (info :: recs) (recordDeclToData d (ctorOf dname) :: ds)
     _ => Pair recs (d :: ds)
 
@@ -122,10 +124,10 @@ recordArrowType (f :: fs) ret sp =
   EPi "_" False Nothing (fieldType f) (recordArrowType fs ret sp) sp
 
 recordDeclToData : Decl -> String -> Decl
-recordDeclToData (DRecord dname params fields derivings lin sp) ctor =
+recordDeclToData (DRecord dname params fields derivings viaField lin sp) ctor =
   DData dname params (EVar "Type" sp)
     [Ctor ctor (recordArrowType fields (recordRetType dname params sp) sp) (length fields) sp]
-    derivings lin sp
+    derivings viaField lin sp
 -- M23：DT 要求函数 clause 覆盖所有构造子（非 record 声明原样返回）。
 recordDeclToData d ctor = d
 
@@ -138,8 +140,8 @@ desugarRecordDecl records d = case d of
   DFun name pats body sp =>
     andThen (traverse (desugarPattern records) pats)
       (\pats2 => andThen (desugarExpr records body) (\body2 => Ok (DFun name pats2 body2 sp)))
-  DData name params kind ctors derivings lin sp => Ok d
-  DRecord name params fields derivings lin sp => Ok d
+  DData name params kind ctors derivings viaField lin sp => Ok d
+  DRecord name params fields derivings viaField lin sp => Ok d
   DTrait name params methods sp => Ok d
   DInstance ctxE head methods sp =>
     andThen (traverse (desugarRecordDecl records) methods) (\ms => Ok (DInstance ctxE head ms sp))
@@ -165,7 +167,7 @@ else case pat of
       (\ps => Ok (PCon name ps sp))
   PRecord name fields sp => case lookupRecord name records of
     Nothing => Err "${showSpanLoc sp}: unknown record: ${name}"
-    Just (RecordInfo rname params fdefs derivings ctor) =>
+    Just (RecordInfo rname params fdefs derivings derivingVia ctor) =>
       if hasDuplicateFieldNames fields then Err (duplicateFieldMsg sp)
       else if hasUnknownFields (fieldNamesOf fdefs) fields then Err (firstUnknownFieldMsg sp (fieldNamesOf fdefs) fields)
       else andThen (desugarRecordPatternFieldsFuel (fuel - 1) records fdefs fields sp)
@@ -193,6 +195,7 @@ else case e of
   EVar n sp => Ok e
   EInt n sp => Ok e
   EStr s sp => Ok e
+  EFloat raw sp => Ok e
   ELam ps b sp => andThen (desugarExprFuel (fuel - 1) records b) (\b2 => Ok (ELam ps b2 sp))
   EApp f args sp =>
     andThen (desugarExprFuel (fuel - 1) records f)
@@ -217,7 +220,7 @@ else case e of
   )
   ERecord name fields sp => case lookupRecord name records of
     Nothing => Err "${showSpanLoc sp}: unknown record: ${name}"
-    Just (RecordInfo rname params fdefs derivings ctor) =>
+    Just (RecordInfo rname params fdefs derivings derivingVia ctor) =>
       if hasDuplicateFieldNames fields then Err (duplicateFieldMsg sp)
       else if hasUnknownFields (fieldNamesOf fdefs) fields then Err (firstUnknownFieldMsg sp (fieldNamesOf fdefs) fields)
       else andThen (desugarRecordValuesFuel (fuel - 1) records fdefs fields sp)
@@ -280,7 +283,7 @@ else case recordsWithField fname records of
   _ => Err "${showSpanLoc sp}: ambiguous field ${fname} (declared by multiple records)"
 
 desugarRecUpdateWith : RecordInfo -> Expr -> List (Pair String Expr) -> Span -> Result Expr
-desugarRecUpdateWith (RecordInfo rname params fdefs derivings ctor) base fields sp = if hasUnknownFields (fieldNamesOf fdefs) fields then Err (firstUnknownFieldMsg sp (fieldNamesOf fdefs) fields)
+desugarRecUpdateWith (RecordInfo rname params fdefs derivings derivingVia ctor) base fields sp = if hasUnknownFields (fieldNamesOf fdefs) fields then Err (firstUnknownFieldMsg sp (fieldNamesOf fdefs) fields)
 else
   let
     vars = recUpdateVars (length fdefs)
@@ -329,13 +332,13 @@ desugarAltFuel fuel records (Pair pat body) =
 -- 声明了该字段的 record 列表（字段访问的语法层消歧用）。
 recordsWithField : String -> List RecordInfo -> List RecordInfo
 recordsWithField fname [] = []
-recordsWithField fname ((r@(RecordInfo rname params fdefs derivings ctor)) :: rest) =
+recordsWithField fname ((r@(RecordInfo rname params fdefs derivings derivingVia ctor)) :: rest) =
   if memName fname (fieldNamesOf fdefs) then r :: recordsWithField fname rest
   else recordsWithField fname rest
 
 -- 字段访问降级：`case base of Mk<R> f0 .. fn => f_k`（缺省位置补通配）。
 fieldAccessExpr : RecordInfo -> String -> Expr -> Span -> Expr
-fieldAccessExpr (RecordInfo rname params fdefs derivings ctor) fname b sp =
+fieldAccessExpr (RecordInfo rname params fdefs derivings derivingVia ctor) fname b sp =
   let
     pats = fieldAccessPats fname fdefs
     body = EVar fname sp

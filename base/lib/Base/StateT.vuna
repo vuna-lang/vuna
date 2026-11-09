@@ -47,7 +47,12 @@ instance Functor (StateT s) where
 
 instance Monad (StateT s) where
   bind st k = StateT (\s => st.stateTRun s >>= (\p => (k (firstOf p)).stateTRun (secondOf p)))
+
+instance Applicative (StateT s) where
   pure a = StateT (\s => pure (Pair a s))
+  liftA2 f sa sb =
+    StateT
+      (\s => sa.stateTRun s >>= (\pa => sb.stateTRun (secondOf pa) >>= (\pb => pure (Pair (f (firstOf pa) (firstOf pb)) (secondOf pb)))))
 
 instance MonadIO (StateT s) where
   liftIO io = StateT (\s => io >>= (\a => pure (Pair a s)))

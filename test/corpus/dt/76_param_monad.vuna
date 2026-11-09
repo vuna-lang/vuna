@@ -12,7 +12,13 @@ instance Monad (State s) where
   bind st k = MkState (\s => case runState st s of
     MkPair a s2 => runState (k a) s2
   )
+
+instance Applicative (State s) where
   pure x = MkState (\s => MkPair x s)
+  liftA2 f sa sb = MkState (\s => case runState sa s of
+    MkPair a s1 => case runState sb s1 of
+      MkPair b s2 => MkPair (f a b) s2
+  )
 
 get : {s : Type} -> State s s
 get = MkState (\s => MkPair s s)

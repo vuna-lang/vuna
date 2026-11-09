@@ -10,19 +10,27 @@ data AbortE : Type where
 data AbortOp : Type where
   Abort : AbortOp
 
-abort : {r : Row} -> Eff (AbortE :: r) Int
-abort = sendCore AbortE "abort" 0 Abort
+abort : {r : Row} -> Eff (Cons AbortE r) Int
+abort = sendCore AbortE "abort" "abort" Abort
 
-handleAbort : {a : Type} -> {b : Type} -> {r : Row} -> (a -> b) -> ((o : AbortOp) -> (Int -> b) -> b) -> Eff (AbortE :: r) a -> Eff r b
-handleAbort ret opH comp = handleCore AbortE "abort" 0 ret opH comp
+handleAbort : {a : Type} -> {b : Type} -> {r : Row} -> (a -> b) -> ((o : AbortOp) -> (Int -> b) -> b) -> Eff (Cons AbortE r) a -> Eff r b
+handleAbort ret opH comp = handleCore AbortE "abort" "abort" ret opH comp
 
 abortH : (o : AbortOp) -> (Int -> Int) -> Int
 abortH Abort k = 7
 
-prog : Eff (AbortE :: State S1 Int :: []) Int
+prog : Eff [AbortE, State "counter" Int] Int
 prog =
-  bracket (weaken (bindEff (put S1 Int 0) (\_ => pureEff 0))) (\_ => weaken (put S1 Int 42))
-    (\_ => bindEff abort (\_ => pureEff 1))
+  bracket
+    (weaken (do
+      _ <- put "counter" Int 0
+      pure 0
+    ))
+    (\_ => weaken (put "counter" Int 42))
+    (\_ => do
+      _ <- abort
+      pure 1
+    )
 
 ret : Int -> Int -> Pair Int Int
 ret a s = Pair a s
@@ -33,7 +41,7 @@ opH op k s = case op of
   Put x => k 0 x
 
 run : Pair Int Int
-run = runPure (handleState S1 Int ret opH (handleAbort (\a => a) abortH prog)) 3
+run = runPure (handleState "counter" Int ret opH (handleAbort (\a => a) abortH prog)) 3
 
 main : Int
 main = case run of

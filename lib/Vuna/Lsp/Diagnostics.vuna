@@ -114,9 +114,9 @@ contextForDoc : String -> Result (Pair String PackageContext)
 contextForDoc uri =
   let
     path = decodeUri uri
-  in if path == "" then mapResult (\ctx => Pair "" ctx) (contextForDir ".")
-  else if pathExistsFile path then mapResult (\ctx => Pair path ctx) (contextForFile path)
-  else mapResult (\ctx => Pair path ctx) (contextForDir ".")
+  in if path == "" then fmap (\ctx => Pair "" ctx) (contextForDir ".")
+  else if pathExistsFile path then fmap (\ctx => Pair path ctx) (contextForFile path)
+  else fmap (\ctx => Pair path ctx) (contextForDir ".")
 
 -- ---------------------------------------------------------------
 -- 会话缓存（M34.6 5c）

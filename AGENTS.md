@@ -25,7 +25,7 @@
 2. 本地不存在或编译不过：**一律** `nix run vuna -- <subcommand>`（`nix registry list`
    里的别名，即远端稳定版）；
 3. 测试：`nix run .#vuna-run-tests`（`nix/run-tests.nix`；`--list` / `--only <章节>` 过滤，
-   无参数等价 `sh test/run-tests.sh`）。
+   无参数等价 `vuna test --suite test/suite.toml`；`--jobs auto` 用全部可用核）。
 
 `vuna-seed`（stage 0）来自 `nix build .#vuna-seed`，stage 1 是 `nix build .#vuna-compiler`；
 测试需要 PATH 里有 `ocamlopt`（`nix develop` 提供）。
@@ -58,6 +58,11 @@
   本地 `./result/bin/vuna` 做小范围验证。
 - **探索按场景选工具**（规程见技能 `.agents/skills/repo-navigation/SKILL.md`）：要改的
   模块整篇 `read`；不改只引用的用 `vuna map` / `vuna api`，**不要 grep**（拿多拿少又没签名）。
+- **Monad/Functor 组合**：类型有实例时统一用 `do` / `>>=` / `bind` / `pure` / `fmap` /
+  `liftA2` / `ap` / `foldMap` / `mapM`（`pure` 在 `Base.Applicative`，`Base.Monad` 重导出），
+  不新增 `pureX` / `bindX` / `andThen` 这类重复入口；例外（ST 线性 bind、编译器内部
+  `Vuna.Compiler.Common.andThen`）与长 do 链性能边界见 `docs/reference/records-traits.md`、
+  [effects.md](docs/reference/effects.md) §8.4 与 debt D46/D48。
 - **探索完必须落盘**：数据流 / 不变量 / 边界写进 `docs/` 并接进导航，别只留在会话里；**git 线性历史**：优先 ff-only merge / rebase / cherry-pick / 挤压提交
 
 ## 常用命令速查
@@ -65,7 +70,7 @@
 ```console
 nix build .#vuna --out-link result   # 产品 CLI；.#vuna-compiler / .#vuna-seed 同理
 nix flake check                      # 16 项：3 packages + 13 checks（含 vscode-ext）
-nix run .#vuna-run-tests [-- --list | --only dt]   # 原生测试；bench：.#vuna-bench --quick / .#vuna-perf --check
+nix run .#vuna-run-tests [-- --list | --only dt]   # 原生 suite（vuna test --suite）；bench：.#vuna-bench --quick / .#vuna-perf --check
 vuna check .                         # 包级类型检查（自检）；vuna build . → .output/bin/<包名>
 vuna fmt --check <PATH>...           # 格式化检查（省略 PATH = workspace 各包 lib/app/test）；vuna lint <file>...
 vuna doc [--check] [--package NAME] [DIR [OUT]]  # 生成单文件交互 HTML API 文档（默认 DIR/docs/api.html）
@@ -86,8 +91,7 @@ vuna map [...] | vuna api <Module.name>  # 模块总览 / 定位符号 / 改动�
 `compiler/` = 编译器包（`Vuna.Compiler.*`，入口 `app/Main.vuna`，**进 seed**）；`base/` =
 标准库 `vuna-base`（`Base.*` + `Prelude`，**进 seed**）；`lib/` = 根包工具链（Cli/Interp/
 Files/Fmt/Lint/Repl/Run/Doc/Index/Lsp/TestRunner，**不进 seed**）；`app/` = 产品 CLI 入口；
-`seed/` = 提交入库的 OCaml 信任锚点（生成物，禁止手改、别读）；`test/` = `run-tests.sh` +
-`corpus/` 夹具 + `bench/` 生成程序基准；`vscode/` = VSCode 扩展（高亮 + LSP + lint/fmt/check/
+`seed/` = 提交入库的 OCaml 信任锚点（生成物，禁止手改、别读）；`test/` = `suite.toml` + `suite/`（原生 runner + 迁移章节）+ `corpus/` 夹具 + `bench/` 生成程序基准；`vscode/` = VSCode 扩展（高亮 + LSP + lint/fmt/check/
 build，`dist/` 提交）；`nix/` = 构建图 + rotate/metrics/bench；`docs/` = 分层文档。
 
 ## 文档导航

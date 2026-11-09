@@ -1,0 +1,28 @@
+module Base.Applicative (Applicative(..), ap) where
+
+-- Base.Applicative：`Applicative` trait（`pure` / `liftA2`）与派生 `ap`。
+--
+-- M41 起 `pure` 从 `Base.Monad` 移到本模块：`do` 只依赖 `bind`，而 `pure` 是
+-- Applicative 的能力。`Base.Monad` 为方便用户重导出本模块（`import Base.Monad`
+-- 仍能看到 `pure` / `liftA2` / `ap`）。
+--
+-- 最小定义用 `liftA2` 而不是 `ap`：当前精化器对实例方法签名里「高阶类参数套函数
+-- 类型」`f (a -> b)` 的实例体误报 `TC_ImpossibleBranchIndex`（见 debt）；`liftA2`
+-- 的函数参数不在 `f` 之下，实例体可以正常写。`ap` 用 `liftA2` 派生，语义等价。
+--
+-- 没有父类（`Functor` / `Monad` 不自动提供 Applicative 实例）：每个 monad 类型
+-- 需要同时声明 `Functor` / `Applicative` / `Monad` 三个实例。
+-- | 应用函子 trait：`pure` 提升纯值，`liftA2` 在动作上应用二元函数（`ap` 由 `liftA2` 派生）。
+trait Applicative f where
+  -- | 把纯值提升为动作。
+  pure : a -> f a
+  -- | 提升二元函数并在两个动作上应用。
+  liftA2 : (a -> b -> c) -> f a -> f b -> f c
+
+-- | `ap` 的内部辅助：给 `liftA2` 一个多态函数参数，使 lambda 参数类型可推断。
+_apply : (a -> b) -> a -> b
+_apply f x = f x
+
+-- | 应用动作里的函数：`ap f x = liftA2 (\g, y => g y) f x` 的等价形式（经 `_apply` 让推断稳定）。
+ap : Applicative f => f (a -> b) -> f a -> f b
+ap mf mx = liftA2 _apply mf mx

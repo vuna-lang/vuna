@@ -39,6 +39,7 @@ modules = [
   "Vuna.Compiler.Elab",
   "Vuna.Compiler.Elab.Sig",
   "Vuna.Compiler.Elab.Types",
+  "Vuna.Compiler.Elab.Representation",
   "Vuna.Compiler.Elab.Meta",
   "Vuna.Compiler.Elab.Case",
   "Vuna.Compiler.Elab.Dict",

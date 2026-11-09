@@ -1,0 +1,6 @@
+-- deriving (FromString) 拒绝非 String 字段（不递归、不跨类型转换）。
+import Base.FromString
+
+data Bad : Type where
+  MkBad : Int -> Bad
+deriving (FromString)

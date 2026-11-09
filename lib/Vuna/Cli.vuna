@@ -38,6 +38,8 @@ import Vuna.Doc
 import Vuna.GenErrors
 import Vuna.Clean
 import Vuna.TestRunner
+import Vuna.Test.Suite
+import Vuna.Test.Run
 import Vuna.Run
 import Vuna.Lsp
 import Vuna.Cli.Args
@@ -56,6 +58,8 @@ toolUsageLines prog = """  ${prog} lint [--fix] <file.vuna>...
   ${prog} test [--list] [--filter PAT]... [--verbose] [--fail-fast] [--jobs N] [DIR]
       运行包内 test/*.vuna（纯 String/Int/Bool 走核心求值；main : IO ... 走 compile+运行；
       --jobs N 每个测试文件一个子进程、最多 N 并发，默认 1）
+  ${prog} test --suite FILE [--only PAT] [--filter PAT] [--list] [--json] [--jobs auto|N]
+      运行原生 suite（test/suite.toml）；--jobs auto 用探测到的全部可用核
   ${prog} run [--no-build] [--package NAME] [--out DIR] [DIR] [-- ARG]...
       构建并运行包的可执行入口（`--` 之后的参数原样透传）
   ${prog} fmt [--check] [PATH]...              格式化（PATH 可为文件或目录；省略 = workspace 内各包的 lib/app/test）
@@ -133,7 +137,7 @@ runCli1 args = case args of
 -- 不再直接 `prim_print`；IO 只在最外层 `runIO` 处出现（工具链入口仍是 IO）。
 consoleLine : String -> Int
 consoleLine msg =
-  runIO (runIOAnswer (handleConsoleIO C1 (bindEff (consolePrint C1 msg) (\_ => pureEff 0))))
+  runIO (runIOAnswer (handleConsoleIO "vuna" (consolePrint "vuna" msg >>= (\_ => pure 0))))
 
 printVersion : Int -> Int
 printVersion _ = consoleLine "vuna ${vunaVersion}\n"
@@ -215,14 +219,79 @@ interpEmit path = case contextForFile path of
 -- C23/C39：--jobs N 包内并行 + 隐藏的 --only-file（内部子进程模式））
 -- ---------------------------------------------------------------
 testArgs : List String -> Int
-testArgs args = case parseToolArgs "vuna test" [BoolFlag "list", BoolFlag "verbose", BoolFlag "fail-fast", MultiValueFlag "filter", ValueFlag "jobs", ValueFlag "only-file"] args of
+testArgs args = case parseToolArgs "vuna test" [BoolFlag "list", BoolFlag "verbose", BoolFlag "fail-fast", BoolFlag "json", BoolFlag "no-cache", BoolFlag "audit", BoolFlag "strict-skips", BoolFlag "timings", BoolFlag "last-failed", BoolFlag "bless", BoolFlag "watch", BoolFlag "quiet", MultiValueFlag "filter", MultiValueFlag "only", ValueFlag "jobs", ValueFlag "only-file", ValueFlag "suite", ValueFlag "timeout", ValueFlag "worker", ValueFlag "results-dir", ValueFlag "cache-dir", ValueFlag "changed"] args of
   Err e => toolError e
-  Ok parsed => case testJobsOf parsed of
+  Ok parsed => case flagValue parsed "suite" of
+    Just suitePath => suiteRun parsed suitePath
+    Nothing => packageTestRun parsed
+
+packageTestRun : Parsed -> Int
+packageTestRun parsed = case testJobsOf parsed of
+  Err e => toolError e
+  Ok jobs => case parsed.positionals of
+    [] => testRun (testOptsOf parsed jobs) "."
+    [dir] => testRun (testOptsOf parsed jobs) dir
+    _ => usageError 0
+
+-- suite 模式：`--suite FILE`；位置参数只用于包模式，`--suite` 时不允许。
+suiteRun : Parsed -> String -> Int
+suiteRun parsed suitePath = case parsed.positionals of
+  [] => case suiteJobsOf parsed of
     Err e => toolError e
-    Ok jobs => case parsed.positionals of
-      [] => testRun (testOptsOf parsed jobs) "."
-      [dir] => testRun (testOptsOf parsed jobs) dir
-      _ => usageError 0
+    Ok jobs => case suiteTimeoutOf parsed of
+      Err e => toolError e
+      Ok timeout => case suiteWorkerOf parsed of
+        Err e => toolError e
+        Ok worker => case parseSuiteFile suitePath of
+          Err e => toolError e
+          Ok suite => runSuite (suiteOptsOf parsed jobs timeout worker suitePath) suite
+  _ => usageError 0
+
+suiteOptsOf : Parsed -> Int -> Int -> Maybe (Pair Int Int) -> String -> SuiteOpts
+suiteOptsOf parsed jobs timeout worker suitePath =
+  SuiteOpts suitePath jobs (flagSet parsed "list") (flagSet parsed "verbose")
+    (flagSet parsed "fail-fast") (flagSet parsed "json") (flagValues parsed "only")
+    (flagValues parsed "filter") timeout worker (flagValue parsed "results-dir")
+    (flagSet parsed "quiet") (flagSet parsed "no-cache") (flagSet parsed "last-failed")
+    (flagSet parsed "bless") (flagValue parsed "changed") (flagValue parsed "cache-dir")
+    (flagSet parsed "watch") (flagSet parsed "timings") (flagSet parsed "strict-skips")
+    (flagSet parsed "audit")
+
+-- suite 的 `--jobs`：缺省 0（auto）；`auto` 也映射到 0；其余必须是 >= 1 的整数。
+suiteJobsOf : Parsed -> Result Int
+suiteJobsOf parsed = case flagValue parsed "jobs" of
+  Nothing => Ok 0
+  Just "auto" => Ok 0
+  Just text => case parsePositiveInt text of
+    Nothing => Err "--jobs requires a positive integer (>= 1) or `auto`, got `${text}`"
+    Just n => Ok n
+
+suiteTimeoutOf : Parsed -> Result Int
+suiteTimeoutOf parsed = case flagValue parsed "timeout" of
+  Nothing => Ok 0
+  Just text => case parsePositiveInt text of
+    Nothing => Err "--timeout requires a positive integer (seconds), got `${text}`"
+    Just n => Ok n
+
+-- 隐藏的 worker 参数：`--worker i/N`（i 从 0 开始）。
+suiteWorkerOf : Parsed -> Result (Maybe (Pair Int Int))
+suiteWorkerOf parsed = case flagValue parsed "worker" of
+  Nothing => Ok Nothing
+  Just text => case split "/" text of
+    [iText, nText] => case parseNonNegInt iText of
+      Nothing => Err "--worker requires i/N with non-negative integers, got `${text}`"
+      Just i => case parsePositiveInt nText of
+        Nothing => Err "--worker requires i/N with non-negative integers, got `${text}`"
+        Just n => if i < n then Ok (Just (Pair i n)) else Err "--worker index must be < N"
+    _ => Err "--worker requires i/N, got `${text}`"
+
+parseNonNegInt : String -> Maybe Int
+parseNonNegInt s = if s == "" then Nothing else nonNegDigits (strUnpack s) 0
+
+nonNegDigits : List Int -> Int -> Maybe Int
+nonNegDigits [] acc = Just acc
+nonNegDigits (c :: rest) acc =
+  if c >= 48 && c <= 57 then nonNegDigits rest (acc * 10 + (c - 48)) else Nothing
 
 -- `--jobs N`：缺省 1；必须是 >= 1 的十进制整数（0 / 非数字 → usage error exit 2；
 -- 负数会被参数解析当成缺值 flag，同样 exit 2）。

@@ -1,0 +1,10 @@
+-- M42：委托只复用底层实例；底层没有实例时按普通缺实例诊断。
+trait Pretty a where
+  pretty : a -> String
+
+record Tagged where
+  tag : Int
+deriving via field (Pretty)
+
+main : String
+main = pretty (Tagged { tag = 7 })

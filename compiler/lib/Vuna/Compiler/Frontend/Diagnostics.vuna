@@ -282,16 +282,16 @@ psAll =
 -- ---------------------------------------------------------------
 -- throw：拼 `[CODE] 消息`（前端诊断无位置）
 -- ---------------------------------------------------------------
-lexMsg : {n : Nat} -> LexDiag n -> Vec String n -> String
+lexMsg : {n : Nat} -> LexDiag n -> Vec n String -> String
 lexMsg e args = "[${lexCode e}] ${substTemplate (lexTemplate e) args}"
 
-psMsg : {n : Nat} -> PsDiag n -> Vec String n -> String
+psMsg : {n : Nat} -> PsDiag n -> Vec n String -> String
 psMsg e args = "[${psCode e}] ${substTemplate (psTemplate e) args}"
 
-lexErr : {n : Nat} -> LexDiag n -> Vec String n -> Result a
+lexErr : {n : Nat} -> LexDiag n -> Vec n String -> Result a
 lexErr e args = Err (lexMsg e args)
 
-psErr : {n : Nat} -> PsDiag n -> Vec String n -> Result a
+psErr : {n : Nat} -> PsDiag n -> Vec n String -> Result a
 psErr e args = Err (psMsg e args)
 
 -- | 自动补注（M41 新增导出）：lexErr0。
@@ -304,4 +304,4 @@ psErr0 e = psErr e []
 
 -- | 自动补注（M41 新增导出）：psErr1。
 psErr1 : PsDiag (Succ Zero) -> String -> Result a
-psErr1 e a0 = psErr e (a0 :: [])
+psErr1 e a0 = psErr e [a0]

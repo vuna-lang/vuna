@@ -1,0 +1,1259 @@
+module Vuna.Test.Run (runSuite) where
+
+-- Vuna.Test.Run：suite 模式的原生执行器。
+--
+-- 数据流：
+--   test/suite.toml -> Vuna.Test.Suite.discoverCases -> 本模块并行执行
+--   -> 每 case 独立临时目录 + 子进程 capture/timeout -> 结果/汇总/JSON
+--
+-- 并行模型：父进程按 `--jobs` spawn N 个自身（隐藏 `--worker i/N`），worker 按
+-- `index mod N` 静态分片；每个 case 写一份 TSV 到临时 results 目录，父进程按序
+-- 读回。这样避开 `prim_wait` 只能等指定 pid 的队首阻塞，也避免父进程收集海量输出。
+--
+-- 子进程输出捕获不新增编译器原语：把一段固定的 shell helper 写进临时目录，由
+-- helper 做 `timeout ... >out 2>err`，Vuna 侧只读文件 + 退出码。
+import Vuna.Compiler.Common
+import Vuna.Compiler.Driver.Compile
+import Vuna.Compiler.Driver.Iface
+import qualified Vuna.Cli.Args
+import Vuna.Test.Suite
+import Vuna.Files
+import Vuna.Json
+import Base.IO
+
+-- 执行环境。
+record Env where
+  envRoot : String
+  envCwd : String
+  envTmp : String
+  envVuna : String
+  envSeed : String
+  envBase : String
+  envOcamlopt : String
+  envHelper : String
+  envCacheDir : String
+  envCacheEnabled : Bool
+  envBaseHash : Int
+  envBless : Bool
+  envWorker : Bool
+
+-- 一次子进程调用：退出码 + 分离的 stdout/stderr + 是否被 timeout 杀掉。
+record CmdResult where
+  cmdCode : Int
+  cmdOut : String
+  cmdErr : String
+  cmdTimedOut : Bool
+
+-- 一条断言。
+record Assertion where
+  assertionName : String
+  assertionOk : Bool
+  assertionDetail : String
+
+-- 一个 case 的结果。
+record CaseResult where
+  resId : String
+  resStatus : String
+  resPass : Int
+  resFail : Int
+  resChecks : Int
+  resMs : Int
+  resMessages : List String
+
+-- ---------------------------------------------------------------
+-- 小工具
+-- ---------------------------------------------------------------
+envVar : String -> String
+envVar name = runIO (getEnv name)
+
+envOr : String -> String -> String
+envOr name fallback =
+  let
+    value = envVar name
+  in if value == "" then fallback else value
+
+strOfInt : Int -> String
+strOfInt n = strFromInt n
+
+-- 去掉结尾换行（命令替换语义；旧套件用 $(...) 会吃掉尾随换行）。
+trimNewlines : String -> String
+trimNewlines s =
+  let
+    rev = reverse (strUnpack s)
+    kept = dropNewlineChars rev
+  in strPack (reverse kept)
+
+dropNewlineChars : List Int -> List Int
+dropNewlineChars [] = []
+dropNewlineChars (c :: rest) = if c == 10 then dropNewlineChars rest else c :: rest
+
+-- 文件名安全化：case id 里的 `/` 等替换成 `_`（避免把临时产物写进子目录）。
+safeName : String -> String
+safeName s = strPack (map safeChar (strUnpack s))
+
+safeChar : Int -> Int
+safeChar c =
+  if c >= 97 && c <= 122 then c
+  else if c >= 65 && c <= 90 then c
+  else if c >= 48 && c <= 57 then c else if c == 45 || c == 46 || c == 95 then c else 95
+
+listLength : List a -> Int
+listLength [] = 0
+listLength (x :: rest) = 1 + listLength rest
+
+sumInts : List Int -> Int
+sumInts [] = 0
+sumInts (x :: rest) = x + sumInts rest
+
+-- ---------------------------------------------------------------
+-- 临时目录与 helper
+-- ---------------------------------------------------------------
+tempBase : String
+tempBase =
+  let
+    value = envVar "TMPDIR"
+  in if value == "" then "/tmp"
+  else if endsWith "/" value then substring 0 (byteLength value - 1) value else value
+
+freshTempRoot : Int -> String -> String
+freshTempRoot fuel candidate = if fuel <= 0 then candidate
+else if pathExistsFile candidate then freshTempRoot (fuel - 1) "${candidate}-${strOfInt fuel}"
+else
+  let
+    _ = ensureDirPath candidate
+  in candidate
+
+makeTempRoot : String -> String
+makeTempRoot tag =
+  let
+    stamp = strOfInt (runIO nowMicros)
+  in freshTempRoot 1000 "${tempBase}/vuna-suite-${stamp}-${safeName tag}"
+
+helperScript : String
+helperScript =
+  "#!/bin/sh\nsecs=$1\nout=$2\nerr=$3\ninp=$4\nmerge=$5\nshift 5\nif [ \"$secs\" -gt 0 ] && command -v timeout >/dev/null 2>&1; then\n  if [ \"$merge\" = \"1\" ]; then\n    if [ \"$inp\" = \"-\" ]; then\n      timeout --foreground -s TERM -k 10 \"$secs\" \"$@\" >\"$out\" 2>&1\n    else\n      timeout --foreground -s TERM -k 10 \"$secs\" \"$@\" <\"$inp\" >\"$out\" 2>&1\n    fi\n  else\n    if [ \"$inp\" = \"-\" ]; then\n      timeout --foreground -s TERM -k 10 \"$secs\" \"$@\" >\"$out\" 2>\"$err\"\n    else\n      timeout --foreground -s TERM -k 10 \"$secs\" \"$@\" <\"$inp\" >\"$out\" 2>\"$err\"\n    fi\n  fi\n  rc=$?\nelse\n  if [ \"$merge\" = \"1\" ]; then\n    if [ \"$inp\" = \"-\" ]; then\n      \"$@\" >\"$out\" 2>&1\n    else\n      \"$@\" <\"$inp\" >\"$out\" 2>&1\n    fi\n  else\n    if [ \"$inp\" = \"-\" ]; then\n      \"$@\" >\"$out\" 2>\"$err\"\n    else\n      \"$@\" <\"$inp\" >\"$out\" 2>\"$err\"\n    fi\n  fi\n  rc=$?\nfi\nexit $rc\n"
+
+writeHelper : String -> String
+writeHelper tmp =
+  let
+    path = "${tmp}/run-capture.sh"
+    _ = runIO (writeFile path helperScript)
+  in path
+
+-- ---------------------------------------------------------------
+-- 子进程
+-- ---------------------------------------------------------------
+readMaybeFile : String -> String
+readMaybeFile path = if pathExistsFile path then runIO (readFile path) else ""
+
+-- 运行 argv（cwd 由 prim_runIn 控制），timeout 秒级；返回退出码与分离输出。
+runCmdWith : Bool -> Env -> String -> String -> Int -> List String -> CmdResult
+runCmdWith merge env tag cwd secs argv =
+  let
+    outPath = "${env.envTmp}/cmd-${safeName tag}.out"
+    errPath = "${env.envTmp}/cmd-${safeName tag}.err"
+    fullArgv =
+      append ["sh", env.envHelper, strOfInt secs, outPath, errPath, "-", if merge then "1" else "0"]
+        argv
+    code = runIO (prim_runIn cwd fullArgv)
+    out = readMaybeFile outPath
+    err = readMaybeFile errPath
+  in CmdResult code out err (code == 124 || code == 137)
+
+runCmd : Env -> String -> String -> Int -> List String -> CmdResult
+runCmd env tag cwd secs argv = runCmdWith False env tag cwd secs argv
+
+runCmdMerged : Env -> String -> String -> Int -> List String -> CmdResult
+runCmdMerged env tag cwd secs argv = runCmdWith True env tag cwd secs argv
+
+-- 给子进程注入 suite 需要的环境（父进程不能 setenv）。
+withEnv : Env -> List String -> List String
+withEnv env argv =
+  append
+    ["env", "VUNA=${env.envVuna}", "VUNA_SEED=${env.envSeed}", "VUNA_BASE=${env.envBase}", "OCAMLOPT=${env.envOcamlopt}", "VUNA_SUITE_ROOT=${env.envRoot}"]
+    argv
+
+-- family case 的 iface 镜像根：每个 worker/进程用独立 envTmp，避免并发写源文件旁
+-- 的 `*.iface`；章节脚本保持默认布局（它们自己要测布局）。
+withEnvIface : Env -> List String -> List String
+withEnvIface env argv = withEnvIfaceAt env "${env.envTmp}/iface" argv
+
+-- 指定 iface 目录的变体：seed 必须用自己的 iface（否则会读到新编译器写的
+-- `*.iface`，旧 seed 的 AST schema 不同会直接崩溃；与 seed 的独立性语义无关）。
+withEnvIfaceAt : Env -> String -> List String -> List String
+withEnvIfaceAt env ifaceDir argv =
+  withEnv env (append ["env", "TMPDIR=${env.envTmp}", "VUNA_IFACE_DIR=${ifaceDir}"] argv)
+
+combinedOut : CmdResult -> String
+combinedOut r = r.cmdOut ++ r.cmdErr
+
+-- ---------------------------------------------------------------
+-- 断言
+-- ---------------------------------------------------------------
+assertExit : String -> Int -> Assertion
+assertExit name code = Assertion name (code == 0) "exit ${strOfInt code}"
+
+assertExitNonZero : String -> Int -> Assertion
+assertExitNonZero name code = Assertion name (code /= 0) "expected non-zero exit, got 0"
+
+assertContains : String -> String -> String -> Assertion
+assertContains name hay needle =
+  Assertion name (contains needle hay) "missing fragment: ${needle}\nactual:\n${hay}"
+
+assertEq : String -> String -> String -> Assertion
+assertEq name expected actual =
+  Assertion name (expected == actual) "expected:\n${expected}\nactual:\n${actual}"
+
+assertAbsent : String -> String -> Assertion
+assertAbsent name path = Assertion name (not (pathExistsFile path)) "should not exist: ${path}"
+
+assertSilent : String -> String -> Assertion
+assertSilent name out = Assertion name (out == "") "expected no output, got:\n${out}"
+
+countPass : List Assertion -> Int
+countPass [] = 0
+countPass (a :: rest) = (if a.assertionOk then 1 else 0) + countPass rest
+
+countFail : List Assertion -> Int
+countFail [] = 0
+countFail (a :: rest) = (if a.assertionOk then 0 else 1) + countFail rest
+
+failMessages : List Assertion -> List String
+failMessages [] = []
+failMessages (a :: rest) =
+  if a.assertionOk then failMessages rest
+  else "${a.assertionName}: ${a.assertionDetail}" :: failMessages rest
+
+finishCase : String -> Int -> List Assertion -> CaseResult
+finishCase id start assertions =
+  let
+    failed = countFail assertions
+    ms = (runIO nowMicros - start) / 1000
+  in CaseResult id (if failed == 0 then "pass" else "fail") (countPass assertions) failed
+    (countPass assertions + failed) ms (failMessages assertions)
+
+-- ---------------------------------------------------------------
+-- golden / error case
+-- ---------------------------------------------------------------
+uniqueOutDir : Env -> String -> String
+uniqueOutDir env id = "${env.envTmp}/out-${safeName id}"
+
+removeTree : String -> Int
+removeTree path = runIO (prim_runIn "/" ["rm", "-rf", path])
+
+goldenCase : Env -> Case -> String -> String -> Bool -> Bool -> Bool -> Bool -> Bool -> CaseResult
+goldenCase env c source expected wantInterp wantCheck wantCompile wantRun wantCompare =
+  let
+    start = runIO nowMicros
+    expectedText = trimNewlines (runIO (readFile expected))
+    nointerp = pathExistsFile "${source}.nointerp"
+    interpOn = wantInterp && not nointerp
+    interpR =
+      if interpOn then runCmdMerged env "${c.caseId}-interp" env.envCwd c.caseTimeout
+        (withEnvIface env [env.envVuna, "interp", source])
+      else CmdResult 1 "" "" False
+    interpText = if interpOn then trimNewlines (combinedOut interpR) else ""
+    interpA = if interpOn then [assertEq "interp" expectedText interpText] else []
+    checkA = if wantCheck then
+      let
+        r =
+          runCmdMerged env "${c.caseId}-check" env.envCwd c.caseTimeout
+            (withEnvIface env [env.envVuna, "check", source])
+      in [assertExit "check exit" r.cmdCode]
+    else []
+    outdir = uniqueOutDir env c.caseId
+    _ = removeTree outdir
+    compileR =
+      if wantCompile then runCmdMerged env "${c.caseId}-compile" env.envCwd c.caseTimeout
+        (withEnvIface env [env.envVuna, "compile", source, outdir])
+      else CmdResult 1 "" "" False
+    compileA =
+      if wantCompile then [ assertExit "compile exit" compileR.cmdCode,
+        assertSilent "compile silent" (combinedOut compileR)
+      ]
+      else []
+    buildR =
+      if wantCompile && compileR.cmdCode == 0 then runCmdMerged env "${c.caseId}-build" outdir c.caseTimeout ["sh", "build.sh", "prog"]
+      else CmdResult 1 "" "" False
+    buildA =
+      if wantCompile && compileR.cmdCode == 0 then [assertExit "build exit" buildR.cmdCode] else []
+    runR =
+      if wantRun && wantCompile && compileR.cmdCode == 0 && buildR.cmdCode == 0 then runCmdMerged env "${c.caseId}-run" env.envCwd c.caseTimeout ["${outdir}/prog"]
+      else CmdResult 1 "" "" False
+    runA =
+      if wantRun && wantCompile && compileR.cmdCode == 0 && buildR.cmdCode == 0 then [assertEq "run" expectedText (trimNewlines (combinedOut runR))]
+      else []
+    compareA =
+      if wantCompare && interpOn && wantRun && compileR.cmdCode == 0 && buildR.cmdCode == 0 then [assertEq "interp == run" interpText (trimNewlines (combinedOut runR))]
+      else []
+  in let
+    base =
+      finishCase c.caseId start
+        (append interpA (append checkA (append compileA (append buildA (append runA compareA)))))
+    actualForBless =
+      if wantRun && compileR.cmdCode == 0 && buildR.cmdCode == 0 then trimNewlines (combinedOut runR)
+      else interpText
+  in if env.envBless && base.resFail > 0 then
+    let
+      _ = runIO (writeFile expected "${actualForBless}\n")
+    in CaseResult c.caseId "blessed" base.resChecks 0 base.resChecks base.resMs ["blessed ${expected}"]
+  else base
+
+errorCase : Env -> Case -> String -> String -> Bool -> Bool -> Bool -> CaseResult
+errorCase env c source expected wantInterp wantCheck wantCompile =
+  let
+    start = runIO nowMicros
+    fragment = trimNewlines (runIO (readFile expected))
+    cerrPath =
+      if endsWith ".vuna" source then "${substring 0 (byteLength source - 5) source}.cerr"
+      else "${source}.cerr"
+    compileFragment =
+      if pathExistsFile cerrPath then trimNewlines (runIO (readFile cerrPath)) else fragment
+    interpA = if wantInterp then
+      let
+        r =
+          runCmdMerged env "${c.caseId}-interp" env.envCwd c.caseTimeout
+            (withEnvIface env [env.envVuna, "interp", source])
+      in [ assertContains "interp fragment" (combinedOut r) fragment,
+        assertExitNonZero "interp exit" r.cmdCode
+      ]
+    else []
+    checkA = if wantCheck then
+      let
+        r =
+          runCmdMerged env "${c.caseId}-check" env.envCwd c.caseTimeout
+            (withEnvIface env [env.envVuna, "check", source])
+      in [ assertContains "check fragment" (combinedOut r) fragment,
+        assertExitNonZero "check exit" r.cmdCode
+      ]
+    else []
+    outdir = uniqueOutDir env c.caseId
+    _ = removeTree outdir
+    compileA = if wantCompile then
+      let
+        r =
+          runCmdMerged env "${c.caseId}-compile" env.envCwd c.caseTimeout
+            (withEnvIface env [env.envVuna, "compile", source, outdir])
+      in [ assertContains "compile fragment" (combinedOut r) compileFragment,
+        assertExitNonZero "compile exit" r.cmdCode,
+        assertAbsent "compile no output dir" outdir
+      ]
+    else []
+  in finishCase c.caseId start (append interpA (append checkA compileA))
+
+-- ---------------------------------------------------------------
+-- section case
+-- ---------------------------------------------------------------
+parseLeadingInt : String -> Maybe Int
+parseLeadingInt s = parseDigits (strUnpack s) 0 0
+
+parseDigits : List Int -> Int -> Int -> Maybe Int
+parseDigits [] acc count = if count == 0 then Nothing else Just acc
+parseDigits (c :: rest) acc count =
+  if c >= 48 && c <= 57 then parseDigits rest (acc * 10 + (c - 48)) (count + 1)
+  else if count == 0 then Nothing else Just acc
+
+sectionChecks : String -> Int
+sectionChecks text =
+  let
+    revLines = reverse (lines text)
+  in findSectionChecks revLines
+
+findSectionChecks : List String -> Int
+findSectionChecks [] = 0
+findSectionChecks (line :: rest) = if startsWith "vuna tests passed (" line then
+  let
+    body = substring 19 (byteLength line - 19) line
+    numText = case split " " body of
+      first :: _ => first
+      [] => body
+  in fromMaybe 0 (parseLeadingInt numText)
+else if contains " passed, " line then
+  let
+    p = fromMaybe 0 (parseLeadingInt line)
+    after = case split "passed, " line of
+      _ :: rest => case rest of
+        first :: _ => first
+        [] => "0"
+      [] => "0"
+    fText = case split " failed" after of
+      first :: _ => first
+      [] => after
+  in p + fromMaybe 0 (parseLeadingInt (trim fText))
+else findSectionChecks rest
+
+sectionEnv : Env -> Case -> List String -> List String
+sectionEnv env c argv =
+  if env.envWorker && not (serialSection c) then withEnvIface env argv else withEnv env argv
+
+sectionCase : Env -> Case -> String -> CaseResult
+sectionCase env c script =
+  let
+    start = runIO nowMicros
+    r =
+      runCmdMerged env "${c.caseId}-section" env.envRoot c.caseTimeout
+        (sectionEnv env c ["sh", script])
+    out = combinedOut r
+    checks = sectionChecks out
+    ok = r.cmdCode == 0
+    ms = (runIO nowMicros - start) / 1000
+    detail = if ok then "" else "section failed (exit ${strOfInt r.cmdCode})\n${tailText out}"
+  in CaseResult c.caseId (if ok then "pass" else "fail") (if ok then 1 else 0) (if ok then 0 else 1)
+    checks ms (if ok then [] else [detail])
+
+tailText : String -> String
+tailText text = join "\n" (takeLast 40 (lines text))
+
+takeLast : Int -> List a -> List a
+takeLast n xs = drop (listLength xs - n) xs
+
+drop : Int -> List a -> List a
+drop n xs = if n <= 0 then xs
+else case xs of
+  [] => []
+  x :: rest => drop (n - 1) rest
+
+-- ---------------------------------------------------------------
+-- 单 case 分派
+-- ---------------------------------------------------------------
+-- ---------------------------------------------------------------
+-- 结果缓存（本地增量；CI 用 --no-cache）
+-- ---------------------------------------------------------------
+-- 只缓存 golden/error case 的成功结果。key 含编译器指纹、base 源码树哈希、source/
+-- expected 内容（目录型再加整个夹具目录的 .vuna 树）。section/脚本一律不缓存。
+hashFileText : String -> String
+hashFileText path = if pathExistsFile path then runIO (readFile path) else ""
+
+hashFiles : Int -> List String -> Int
+hashFiles acc [] = acc
+hashFiles acc (path :: rest) = hashFiles (acc * 1000003 + hashTextStrong (hashFileText path)) rest
+
+hashTree : String -> Int
+hashTree dir = hashFiles 0 (collectVunaFiles dir)
+
+caseTreeHash : Case -> String -> String -> Int
+caseTreeHash c source expected = if contains "/app/" source then
+  let
+    root = Vuna.Cli.Args.parentOf (Vuna.Cli.Args.parentOf source)
+  in hashTree root * 1000003 + hashTextStrong (hashFileText expected)
+else
+  let
+    stamp = runIO (fileMtime source)
+    size = runIO (fileSize source)
+  in hashTextStrong
+    "${hashFileText source}|${hashFileText expected}|${strOfInt stamp}|${strOfInt size}"
+
+cacheKey : Env -> Case -> Int
+cacheKey env c = if not env.envCacheEnabled then 0
+else case c.caseKind of
+  CGolden source expected _ _ _ _ _ =>
+    hashTextStrong
+      "${strOfInt toolCompilerFingerprint}|${strOfInt env.envBaseHash}|${c.caseId}|${strOfInt (caseTreeHash c source expected)}"
+  CError source expected _ _ _ =>
+    hashTextStrong
+      "${strOfInt toolCompilerFingerprint}|${strOfInt env.envBaseHash}|${c.caseId}|${strOfInt (caseTreeHash c source expected)}"
+  _ => 0
+
+cachePath : Env -> Int -> String
+cachePath env key = "${env.envCacheDir}/${strOfInt key}.cache"
+
+-- ---------------------------------------------------------------
+-- --last-failed
+-- ---------------------------------------------------------------
+lastFailedDir : Env -> String
+lastFailedDir env = "${env.envRoot}/.local/test-suite"
+
+lastFailedPath : Env -> String
+lastFailedPath env = "${lastFailedDir env}/last-failed"
+
+lastFailedIds : Env -> List String
+lastFailedIds env =
+  let
+    path = lastFailedPath env
+  in if not (pathExistsFile path) then []
+  else filter (\line => line /= "") (lines (runIO (readFile path)))
+
+filterLastFailed : Env -> List Case -> List Case
+filterLastFailed env cases =
+  let
+    ids = lastFailedIds env
+  in filter (caseIdIn ids) cases
+
+recordLastFailed : Env -> List CaseResult -> Int
+recordLastFailed env [] = 0
+recordLastFailed env results =
+  let
+    _ = ensureDirPath (lastFailedDir env)
+    failed = filter isFailed results
+    text = join "\n" (map resIdOf failed)
+  in runIO (writeFile (lastFailedPath env) text)
+
+caseIdIn : List String -> Case -> Bool
+caseIdIn ids c = memName c.caseId ids
+
+resIdOf : CaseResult -> String
+resIdOf r = r.resId
+
+readCached : Env -> Case -> Maybe CaseResult
+readCached env c =
+  let
+    key = cacheKey env c
+  in if key == 0 then Nothing
+  else
+    let
+      path = cachePath env key
+    in if not (pathExistsFile path) then Nothing
+    else
+      let
+        checks = fromMaybe 0 (parseLeadingInt (trim (runIO (readFile path))))
+      in Just (CaseResult c.caseId "cached" checks 0 checks 0 [])
+
+writeCached : Env -> Case -> CaseResult -> Int
+writeCached env c r =
+  let
+    key = cacheKey env c
+  in if key == 0 || r.resStatus /= "pass" then 0
+  else runIO (writeFile (cachePath env key) "${strOfInt r.resChecks}\n")
+
+runCase : Env -> Case -> CaseResult
+runCase env c =
+  let
+    cached = readCached env c
+  in case cached of
+    Just r => r
+    Nothing =>
+      let
+        r = runCaseGo env c
+      in let
+        _ = writeCached env c r
+      in r
+
+checkCase : Env -> Case -> String -> Bool -> String -> CaseResult
+checkCase env c source expectPass expectedErr =
+  let
+    start = runIO nowMicros
+    r =
+      runCmdMerged env "${c.caseId}-check" env.envCwd c.caseTimeout
+        (withEnvIface env [env.envVuna, "check", source])
+  in if expectPass then finishCase c.caseId start [assertExit "check exit" r.cmdCode]
+  else
+    let
+      fragment = hashFileText expectedErr
+      checks =
+        if fragment == "" then [assertExitNonZero "check exit" r.cmdCode]
+        else [ assertContains "check fragment" (combinedOut r) (trimNewlines fragment),
+          assertExitNonZero "check exit" r.cmdCode
+        ]
+    in finishCase c.caseId start checks
+
+lintCase : Env -> Case -> String -> String -> CaseResult
+
+relativeTestPath : Env -> String -> String
+relativeTestPath env source =
+  let
+    prefix = "${env.envRoot}/test/"
+  in if startsWith prefix source then substring (byteLength prefix) (byteLength source - byteLength prefix) source
+  else source
+
+lintCase env c source expected =
+  let
+    start = runIO nowMicros
+    lintPath = relativeTestPath env source
+    expectedText = trimNewlines (runIO (readFile expected))
+    r =
+      runCmdMerged env "${c.caseId}-lint" env.envCwd c.caseTimeout
+        (withEnvIface env [env.envVuna, "lint", lintPath])
+    expectedExit = if expectedText == "" then 0 else 1
+    exitA =
+      Assertion "lint exit" (r.cmdCode == expectedExit)
+        "expected exit ${strOfInt expectedExit}, got ${strOfInt r.cmdCode}"
+  in finishCase c.caseId start
+    [assertEq "lint output" expectedText (trimNewlines (combinedOut r)), exitA]
+
+fixCase : Env -> Case -> String -> String -> CaseResult
+fixCase env c source expected =
+  let
+    start = runIO nowMicros
+    expectedText = trimNewlines (runIO (readFile expected))
+    work = "${env.envTmp}/fix-${safeName c.caseId}.vuna"
+    _ = runIO (writeFile work (runIO (readFile source)))
+    r1 =
+      runCmdMerged env "${c.caseId}-fix1" env.envCwd c.caseTimeout
+        (withEnvIface env [env.envVuna, "lint", "--fix", work])
+    once = trimNewlines (runIO (readFile work))
+    r2 =
+      runCmdMerged env "${c.caseId}-fix2" env.envCwd c.caseTimeout
+        (withEnvIface env [env.envVuna, "lint", "--fix", work])
+    twice = trimNewlines (runIO (readFile work))
+    fixA = assertEq "fix" expectedText once
+    idemA = assertEq "fix idempotent" once twice
+  in finishCase c.caseId start [fixA, idemA]
+
+runtimeCase : Env -> Case -> String -> String -> Int -> CaseResult
+runtimeCase env c source expectedErr expectedExit =
+  let
+    start = runIO nowMicros
+    fragment = trimNewlines (runIO (readFile expectedErr))
+    outdir = uniqueOutDir env c.caseId
+    _ = removeTree outdir
+    comp =
+      runCmdMerged env "${c.caseId}-compile" env.envCwd c.caseTimeout
+        (withEnvIface env [env.envVuna, "compile", source, outdir])
+    buildA = if comp.cmdCode == 0 then
+      let
+        b = runCmdMerged env "${c.caseId}-build" outdir c.caseTimeout ["sh", "build.sh", "prog"]
+      in if b.cmdCode == 0 then
+        let
+          r = runCmdMerged env "${c.caseId}-run" env.envCwd c.caseTimeout ["${outdir}/prog"]
+          exitA =
+            if expectedExit == 0 then assertExitNonZero "runtime exit" r.cmdCode
+            else Assertion "runtime exit" (r.cmdCode == expectedExit)
+              "expected exit ${strOfInt expectedExit}, got ${strOfInt r.cmdCode}"
+        in [assertContains "runtime fragment" (combinedOut r) fragment, exitA]
+      else [assertExit "build exit" b.cmdCode]
+    else [assertExit "compile exit" comp.cmdCode]
+  in finishCase c.caseId start buildA
+
+nointerpAsserts : Env -> String -> List Assertion
+nointerpAsserts env source =
+  let
+    r =
+      runCmdMerged env "nointerp-${safeName source}" env.envCwd 300
+        (withEnvIface env [env.envVuna, "interp", source])
+  in [assertExitNonZero "interp rejects ${source}" r.cmdCode]
+
+hasNointerpMarker : String -> Bool
+hasNointerpMarker source = pathExistsFile "${source}.nointerp"
+
+nointerpCase : Env -> Case -> CaseResult
+nointerpCase env c =
+  let
+    start = runIO nowMicros
+    files = filter hasNointerpMarker (collectVunaFiles "${env.envRoot}/test/corpus")
+    countA = Assertion "nointerp markers" (listLength files > 0) "no .vuna.nointerp markers found"
+    asserts = concatMap (nointerpAsserts env) files
+  in finishCase c.caseId start (countA :: asserts)
+
+seedCase : Env -> Case -> String -> String -> CaseResult
+seedCase env c source expected =
+  let
+    start = runIO nowMicros
+    expectedText = trimNewlines (runIO (readFile expected))
+    outdir = uniqueOutDir env c.caseId
+    _ = removeTree outdir
+    ifaceDir = "${outdir}-iface"
+    _ = removeTree ifaceDir
+    _ = ensureDirPath ifaceDir
+    comp =
+      runCmdMerged env "${c.caseId}-compile" env.envCwd c.caseTimeout
+        (withEnvIfaceAt env ifaceDir [env.envSeed, "compile", source, outdir])
+    buildA = if comp.cmdCode == 0 then
+      let
+        b = runCmdMerged env "${c.caseId}-build" outdir c.caseTimeout ["sh", "build.sh", "prog"]
+      in if b.cmdCode == 0 then
+        let
+          r = runCmdMerged env "${c.caseId}-run" env.envCwd c.caseTimeout ["${outdir}/prog"]
+        in [assertEq "seed run" expectedText (trimNewlines (combinedOut r))]
+      else [assertExit "seed build exit" b.cmdCode]
+    else [assertExit "seed compile exit" comp.cmdCode]
+  in finishCase c.caseId start buildA
+
+runCaseGo : Env -> Case -> CaseResult
+runCaseGo env c = case c.caseKind of
+  CGolden source expected wantInterp wantCheck wantCompile wantRun wantCompare =>
+    goldenCase env c source expected wantInterp wantCheck wantCompile wantRun wantCompare
+  CError source expected wantInterp wantCheck wantCompile =>
+    errorCase env c source expected wantInterp wantCheck wantCompile
+  CCheck source expectPass expectedErr => checkCase env c source expectPass expectedErr
+  CLint source expected => lintCase env c source expected
+  CFix source expected => fixCase env c source expected
+  CRuntime source expected exitCode => runtimeCase env c source expected exitCode
+  CNointerp => nointerpCase env c
+  CSeed source expected => seedCase env c source expected
+  CSection script => sectionCase env c script
+  CBroken msg =>
+    let
+      start = runIO nowMicros
+    in finishCase c.caseId start [Assertion "case" False msg]
+
+-- ---------------------------------------------------------------
+-- 过滤
+-- ---------------------------------------------------------------
+allDigits : String -> Bool
+allDigits s = s /= "" && allDigitChars (strUnpack s)
+
+allDigitChars : List Int -> Bool
+allDigitChars [] = True
+allDigitChars (c :: rest) = c >= 48 && c <= 57 && allDigitChars rest
+
+matchPattern : String -> Case -> Bool
+matchPattern pat c =
+  if allDigits pat then c.caseSection == pat || startsWith "${pat}/" c.caseId
+  else contains pat "${c.caseSection} ${c.caseId} ${join " " c.caseTags}"
+
+matchAny : List String -> Case -> Bool
+matchAny [] c = False
+matchAny (pat :: rest) c = if matchPattern pat c then True else matchAny rest c
+
+caseMatches : SuiteOpts -> Case -> Bool
+caseMatches opts c =
+  let
+    onlyOk = case opts.suiteOnly of
+      [] => True
+      pats => matchAny pats c
+    filterOk = case opts.suiteFilter of
+      [] => True
+      pats => matchAny pats c
+  in onlyOk && filterOk
+
+filterCases : SuiteOpts -> List Case -> List Case
+filterCases opts cases = filter (caseMatches opts) cases
+
+-- ---------------------------------------------------------------
+-- 打印与汇总
+-- ---------------------------------------------------------------
+printLine : String -> Int
+printLine s = runIO (print "${s}\n")
+
+statusLine : Bool -> CaseResult -> String
+statusLine verbose r =
+  let
+    tag = if r.resStatus == "fail" then "FAIL" else "ok  "
+    timing =
+      if r.resStatus == "cached" then " (cached)"
+      else if verbose then " (${strOfInt r.resMs}ms)" else ""
+  in "${tag} ${r.resId}${timing}"
+
+printMessages : List String -> Int
+printMessages [] = 0
+printMessages (m :: rest) =
+  let
+    _ = printLine "  ${m}"
+  in printMessages rest
+
+printResult : Bool -> CaseResult -> Int
+printResult verbose r =
+  let
+    _ = printLine (statusLine verbose r)
+  in printMessages r.resMessages
+
+resChecksOf : CaseResult -> Int
+resChecksOf r = r.resChecks
+
+resFailOf : CaseResult -> Int
+resFailOf r = r.resFail
+
+isFailed : CaseResult -> Bool
+isFailed r = r.resStatus == "fail"
+
+isSkipped : CaseResult -> Bool
+isSkipped r = r.resStatus == "skip"
+
+summarize : List CaseResult -> String
+summarize results =
+  let
+    checks = sumInts (map resChecksOf results)
+    failed = sumInts (map resFailOf results)
+    badCases = listLength (filter isFailed results)
+  in if failed == 0 && badCases == 0 then "vuna tests passed (${strOfInt checks} checks)"
+  else "${strOfInt checks} checks, ${strOfInt badCases} failed case(s)"
+
+printCompiler : Env -> Int
+printCompiler env =
+  printLine "compiler: ${env.envVuna} (fingerprint ${strOfInt toolCompilerFingerprint})"
+
+-- ---------------------------------------------------------------
+-- 顺序执行 + worker
+-- ---------------------------------------------------------------
+writeResultFile : String -> Int -> CaseResult -> Int
+writeResultFile dir index r =
+  let
+    path = "${dir}/${strOfInt index}.tsv"
+    line =
+      "${r.resId}\t${r.resStatus}\t${strOfInt r.resPass}\t${strOfInt r.resFail}\t${strOfInt r.resChecks}\t${strOfInt r.resMs}\n"
+  in runIO (writeFile path line)
+
+runCasesIndexed : Env -> Bool -> Bool -> Bool -> String -> List (Pair Int Case) -> List CaseResult
+runCasesIndexed env verbose failFast quiet resultsDir indexed =
+  runCasesIndexedGo env verbose failFast quiet resultsDir indexed [] False
+
+runCasesIndexedGo : Env -> Bool -> Bool -> Bool -> String -> List (Pair Int Case) -> List CaseResult -> Bool -> List CaseResult
+runCasesIndexedGo env verbose failFast quiet resultsDir [] acc stopped = reverse acc
+runCasesIndexedGo env verbose failFast quiet resultsDir ((Pair index c) :: rest) acc stopped = if stopped then
+  let
+    skip = CaseResult c.caseId "skip" 0 0 0 0 []
+    _ = writeResultFile resultsDir index skip
+  in runCasesIndexedGo env verbose failFast quiet resultsDir rest (skip :: acc) True
+else
+  let
+    r = runCase env c
+    _ = writeResultFile resultsDir index r
+    _ = if quiet then 0 else printResult verbose r
+    failed = r.resStatus == "fail"
+  in runCasesIndexedGo env verbose failFast quiet resultsDir rest (r :: acc) (failFast && failed)
+
+isSectionCase : Case -> Bool
+isSectionCase c = case c.caseKind of
+  CSection _ => True
+  _ => False
+
+isFamilyCase : Case -> Bool
+isFamilyCase c = not (isSectionCase c)
+
+not : Bool -> Bool
+not True = False
+not False = True
+
+-- 共享仓库路径/默认 iface 布局的 section 仍串行；其余 section 与 family 一样进 worker。
+serialSectionIds : List String
+serialSectionIds = ["38", "42", "47", "57", "58", "59"]
+
+serialSection : Case -> Bool
+serialSection c = case c.caseKind of
+  CSection _ => memName c.caseSection serialSectionIds
+  _ => False
+
+parallelSection : Case -> Bool
+parallelSection c = case c.caseKind of
+  CSection _ => not (serialSection c)
+  _ => False
+
+parallelCase : Case -> Bool
+parallelCase c = isFamilyCase c || parallelSection c
+
+runWorker : Env -> SuiteOpts -> List Case -> Int -> Int -> Int
+runWorker env opts cases index count =
+  let
+    parallel = filter parallelCase cases
+    indexed = indexedCases parallel index count
+    resultsDir = case opts.suiteResultsDir of
+      Just d => d
+      Nothing => "${env.envTmp}/results"
+    _ = ensureDirPath resultsDir
+    results =
+      runCasesIndexed env opts.suiteVerbose opts.suiteFailFast opts.suiteQuiet resultsDir indexed
+    bad = listLength (filter isFailed results)
+  in if bad == 0 then 0 else 1
+
+-- ---------------------------------------------------------------
+-- jobs
+-- ---------------------------------------------------------------
+detectJobs : Env -> Int
+detectJobs env =
+  let
+    override = envVar "VUNA_TEST_JOBS"
+  in if override /= "" then case parseLeadingInt override of
+    Just n => if n > 0 then n else 1
+    Nothing => 1
+  else
+    let
+      r = runCmd env "jobs-probe" "." 10 ["nproc"]
+      n = fromMaybe 0 (parseLeadingInt (trim r.cmdOut))
+    in if n > 0 then n else 1
+
+resolveJobs : Env -> SuiteOpts -> Int
+resolveJobs env opts = if opts.suiteJobs == 0 then detectJobs env else opts.suiteJobs
+
+-- ---------------------------------------------------------------
+-- 父进程
+-- ---------------------------------------------------------------
+waitPids : List Int -> Int
+waitPids [] = 0
+waitPids (pid :: rest) =
+  let
+    code = runIO (prim_wait pid)
+    last = waitPids rest
+  in if code /= 0 then 1 else last
+
+spawnWorkers : Env -> SuiteOpts -> String -> Int -> Int -> Int -> List Int -> List Int
+spawnWorkers env opts resultsDir jobs fuel index pids = if fuel <= 0 then reverse pids
+else if index >= jobs then reverse pids
+else
+  let
+    workerArg = "${strOfInt index}/${strOfInt jobs}"
+    filters =
+      append (concatMap (\p => ["--only", p]) opts.suiteOnly)
+        (concatMap (\p => ["--filter", p]) opts.suiteFilter)
+    cacheArgs = case opts.suiteCacheDir of
+      Just dir => ["--cache-dir", dir]
+      Nothing => []
+    changedArgs = case opts.suiteChanged of
+      Just rev => ["--changed", rev]
+      Nothing => []
+    flagArgs =
+      append (if opts.suiteFailFast then ["--fail-fast"] else [])
+        (append (if opts.suiteJSON then ["--quiet"] else []) (append (if opts.suiteNoCache then ["--no-cache"] else []) (append (if opts.suiteLastFailed then ["--last-failed"] else []) (append (if opts.suiteBless then ["--bless"] else []) (append cacheArgs changedArgs)))))
+    args =
+      append ["test", "--suite", opts.suitePath, "--worker", workerArg, "--results-dir", resultsDir]
+        (append filters flagArgs)
+    pid = runIO (prim_spawn args)
+  in spawnWorkers env opts resultsDir jobs (fuel - 1) (index + 1) (pid :: pids)
+
+readResultFile : String -> Int -> Maybe CaseResult
+readResultFile dir index =
+  let
+    path = "${dir}/${strOfInt index}.tsv"
+  in if not (pathExistsFile path) then Nothing
+  else
+    let
+      text = trimNewlines (runIO (readFile path))
+      fields = split "\t" text
+    in case fields of
+      [id, status, pass, fail, checks, ms] =>
+        Just
+          (CaseResult id status (fromMaybe 0 (parseLeadingInt pass)) (fromMaybe 0 (parseLeadingInt fail)) (fromMaybe 0 (parseLeadingInt checks)) (fromMaybe 0 (parseLeadingInt ms)) [])
+      _ => Nothing
+
+collectResults : String -> Int -> List CaseResult
+collectResults dir count = collectResultsGo (count + 1) dir count 0 []
+
+collectResultsGo : Int -> String -> Int -> Int -> List CaseResult -> List CaseResult
+collectResultsGo fuel dir count index acc = if fuel <= 0 then reverse acc
+else if index >= count then reverse acc
+else case readResultFile dir index of
+  Just r => collectResultsGo (fuel - 1) dir count (index + 1) (r :: acc)
+  Nothing =>
+    collectResultsGo (fuel - 1) dir count (index + 1)
+      (CaseResult "unknown-${strOfInt index}" "fail" 0 1 0 0 [] :: acc)
+
+printJSON : List CaseResult -> Int
+printJSON results =
+  let
+    cases = map resultJson results
+    doc =
+      JObj
+        [Pair "suite" (JStr "vuna"), Pair "total" (JNum (listLength results)), Pair "failed" (JNum (listLength (filter isFailed results))), Pair "checks" (JNum (sumInts (map resChecksOf results))), Pair "cases" (JArr cases)]
+  in printLine (renderJson doc)
+
+resultJson : CaseResult -> Json
+resultJson r =
+  JObj
+    [Pair "id" (JStr r.resId), Pair "status" (JStr r.resStatus), Pair "pass" (JNum r.resPass), Pair "fail" (JNum r.resFail), Pair "checks" (JNum r.resChecks), Pair "ms" (JNum r.resMs)]
+
+finishResults : Env -> SuiteOpts -> List CaseResult -> Int
+finishResults env opts results =
+  let
+    bad = listLength (filter isFailed results)
+    skipped = listLength (filter isSkipped results)
+    strictBad = if opts.suiteStrictSkips then skipped else 0
+    _ = if strictBad > 0 then printLine "strict-skips: ${strOfInt skipped} skipped case(s)" else 0
+    _ = recordLastFailed env results
+    _ = if opts.suiteTimings then printTimings results else 0
+    _ = if opts.suiteJSON then printJSON results else printLine (summarize results)
+  in if bad + strictBad == 0 then 0 else 1
+
+runSerial : Env -> SuiteOpts -> String -> List Case -> List CaseResult
+runSerial env opts serialDir serialCases =
+  if listLength serialCases <= 0 then []
+  else runCasesIndexed env opts.suiteVerbose opts.suiteFailFast (opts.suiteQuiet || opts.suiteJSON)
+    serialDir (indexAll serialCases 0 [])
+
+runParent : Env -> SuiteOpts -> Suite -> List Case -> Int
+runParent env opts suite cases =
+  let
+    jobs = resolveJobs env opts
+    serialCases = filter serialSection cases
+    parallelCases = filter parallelCase cases
+    n = listLength parallelCases
+    effective = if jobs > n then if n <= 0 then 1 else n else jobs
+    indexed = indexAll cases 0 []
+    resultsDir = case opts.suiteResultsDir of
+      Just d => d
+      Nothing => "${env.envTmp}/results"
+    serialDir = "${resultsDir}/serial"
+    _ = ensureDirPath resultsDir
+  in if effective <= 1 then finishResults env opts
+    (runCasesIndexed env opts.suiteVerbose opts.suiteFailFast opts.suiteJSON resultsDir indexed)
+  else if opts.suiteFailFast then
+    let
+      -- fail-fast：先串行 lane，失败则不再启动 worker。
+      _ = if listLength serialCases > 0 then ensureDirPath serialDir else 0
+      serialResults = runSerial env opts serialDir serialCases
+      stop = listLength (filter isFailed serialResults) > 0
+      pids =
+        if stop || n <= 0 then []
+        else spawnWorkers env opts resultsDir effective (effective + 1) 0 []
+      _ = waitPids pids
+      parallelResults = if stop || n <= 0 then [] else collectResults resultsDir n
+    in finishResults env opts (append serialResults parallelResults)
+  else
+    let
+      -- 默认：worker 与串行 lane 同时跑；section 在 worker 里有独立 TMPDIR/iface 镜像。
+      pids = if n <= 0 then [] else spawnWorkers env opts resultsDir effective (effective + 1) 0 []
+      _ = if listLength serialCases > 0 then ensureDirPath serialDir else 0
+      serialResults = runSerial env opts serialDir serialCases
+      _ = waitPids pids
+      parallelResults = if n <= 0 then [] else collectResults resultsDir n
+    in finishResults env opts (append serialResults parallelResults)
+
+indexAll : List Case -> Int -> List (Pair Int Case) -> List (Pair Int Case)
+indexAll [] i acc = reverse acc
+indexAll (c :: rest) i acc = indexAll rest (i + 1) (Pair i c :: acc)
+
+-- ---------------------------------------------------------------
+-- list
+-- ---------------------------------------------------------------
+insertByMs : CaseResult -> List CaseResult -> List CaseResult
+insertByMs r [] = [r]
+insertByMs r (x :: rest) = if r.resMs > x.resMs then r :: x :: rest else x :: insertByMs r rest
+
+sortByMs : List CaseResult -> List CaseResult
+sortByMs [] = []
+sortByMs (r :: rest) = insertByMs r (sortByMs rest)
+
+printTimingsGo : Int -> List CaseResult -> Int
+printTimingsGo n [] = 0
+printTimingsGo n (r :: rest) = if n <= 0 then 0
+else
+  let
+    _ = printLine "timing ${strOfInt r.resMs}ms ${r.resId}"
+  in printTimingsGo (n - 1) rest
+
+printTimings : List CaseResult -> Int
+printTimings results = printTimingsGo 10 (sortByMs results)
+
+printList : List Case -> Int
+printList cases = printListGo cases
+
+printListGo : List Case -> Int
+printListGo [] = 0
+printListGo (c :: rest) =
+  let
+    _ = printCase c
+  in printListGo rest
+
+printCase : Case -> Int
+printCase c = printLine c.caseId
+
+-- ---------------------------------------------------------------
+-- 入口
+-- ---------------------------------------------------------------
+-- ---------------------------------------------------------------
+-- --changed
+-- ---------------------------------------------------------------
+stripRoot : Env -> String -> String
+stripRoot env path =
+  let
+    prefix = "${env.envRoot}/"
+  in if startsWith prefix path then substring (byteLength prefix) (byteLength path - byteLength prefix) path
+  else path
+
+changedPaths : Env -> String -> Maybe (List String)
+changedPaths env rev =
+  let
+    r = runCmd env "git-diff" env.envRoot 60 ["git", "diff", "--name-only", rev]
+  in if r.cmdCode == 0 then Just (filter (\line => line /= "") (lines r.cmdOut)) else Nothing
+
+isGlobalChange : String -> Bool
+isGlobalChange path =
+  startsWith "compiler/" path
+    || startsWith "base/" path
+    || startsWith "lib/" path
+    || startsWith "app/" path
+    || path == "vuna.toml"
+    || startsWith "test/suite" path
+    || path == "test/suite.toml"
+
+takeFirstSegments : Int -> String -> String
+takeFirstSegments n s = collectSegments n (split "/" s) ""
+
+collectSegments : Int -> List String -> String -> String
+collectSegments n [] acc = acc
+collectSegments n (seg :: rest) acc =
+  if n <= 0 then acc
+  else if n == 1 then "${acc}${seg}/"
+  else if acc == "" then collectSegments (n - 1) rest "${seg}/"
+  else collectSegments (n - 1) rest "${acc}${seg}/"
+
+corpusDirPrefix : String -> String
+corpusDirPrefix rel = if startsWith "test/corpus/" rel then takeFirstSegments 3 rel else rel
+
+pathTouches : String -> String -> Bool
+pathTouches changed rel = changed == rel || startsWith changed rel || startsWith rel changed
+
+casePaths : Env -> Case -> List String
+casePaths env c = case c.caseKind of
+  CGolden source expected _ _ _ _ _ => [stripRoot env source, stripRoot env expected]
+  CError source expected _ _ _ => [stripRoot env source, stripRoot env expected]
+  CCheck source _ expectedErr =>
+    if expectedErr == "" then [stripRoot env source]
+    else [stripRoot env source, stripRoot env expectedErr]
+  CLint source expected => [stripRoot env source, stripRoot env expected]
+  CFix source expected => [stripRoot env source, stripRoot env expected]
+  CRuntime source expected _ => [stripRoot env source, stripRoot env expected]
+  CSeed source expected => [stripRoot env source, stripRoot env expected]
+  CSection script => [stripRoot env script]
+  CNointerp => []
+  CBroken _ => []
+
+caseAffected : Env -> List String -> Case -> Bool
+caseAffected env changed c = if any isGlobalChange changed then True
+else case c.caseKind of
+  CSection script =>
+    let
+      text = runIO (readFile script)
+      corpusChanges = filter (\p => startsWith "test/corpus/" p) changed
+    in any (\p => contains (corpusDirPrefix p) text) corpusChanges
+      || any (\p => contains (stripRoot env script) p) changed
+  CNointerp => any (\p => startsWith "test/corpus/" p) changed
+  _ =>
+    let
+      paths = casePaths env c
+    in any (\rel => any (\p => pathTouches p rel) changed) paths
+
+any : (a -> Bool) -> List a -> Bool
+any pred [] = False
+any pred (x :: rest) = if pred x then True else any pred rest
+
+changedFilter : Env -> String -> List Case -> List Case
+changedFilter env rev cases = case changedPaths env rev of
+  Nothing => cases
+  Just [] => []
+  Just changed => filter (caseAffected env changed) cases
+
+listSuite : Env -> List Case -> Int
+listSuite env cases =
+  let
+    _ = printCompiler env
+  in printList cases
+
+-- ---------------------------------------------------------------
+-- --audit / --watch
+-- ---------------------------------------------------------------
+stripTestPrefix : String -> String
+stripTestPrefix rel = if startsWith "test/" rel then substring 5 (byteLength rel - 5) rel else rel
+
+caseRoots : Env -> Case -> List String
+caseRoots env c = map rootOfPath (casePaths env c)
+
+rootOfPath : String -> String
+rootOfPath path =
+  if endsWith "/app/Main.vuna" path then "${Vuna.Cli.Args.parentOf (Vuna.Cli.Args.parentOf path)}/"
+  else path
+
+sectionTextPairs : List Case -> List (Pair String String)
+sectionTextPairs [] = []
+sectionTextPairs (c :: rest) = case c.caseKind of
+  CSection script => Pair script (runIO (readFile script)) :: sectionTextPairs rest
+  _ => sectionTextPairs rest
+
+anyText : List (Pair String String) -> String -> Bool
+anyText [] rel = False
+anyText ((Pair _ text) :: rest) rel =
+  if contains (stripTestPrefix rel) text || contains (stripTestPrefix (corpusDirPrefix rel)) text then True
+  else anyText rest rel
+
+auditClaimed : Env -> List Case -> List (Pair String String) -> String -> Bool
+auditClaimed env cases texts rel =
+  any (\c => any (\root => root == rel || startsWith root rel) (caseRoots env c)) cases
+    || anyText texts rel
+
+printOrphans : List String -> Int
+printOrphans [] = 0
+printOrphans (rel :: rest) =
+  let
+    _ = printLine "orphan ${rel}"
+  in printOrphans rest
+
+auditPathIgnored : String -> Bool
+auditPathIgnored path = contains "/test/corpus/codegen/" path
+
+auditSuite : SuiteOpts -> Suite -> Int
+auditSuite opts suite =
+  let
+    root = suite.suiteRoot
+    env = Env root "${root}/test" "/tmp" "" "" "${root}/base" "ocamlopt" "" "" False 0 False False
+    cases = discoverCases suite
+    texts = sectionTextPairs cases
+    fixtures =
+      filter (\path => not (auditPathIgnored path)) (collectVunaFiles "${root}/test/corpus")
+    unclaimed = filter (\path => not (auditClaimed env cases texts (stripRoot env path))) fixtures
+    _ = printOrphans unclaimed
+    _ = printLine "audit: ${strOfInt (listLength unclaimed)} orphan fixture(s)"
+  in case unclaimed of
+    [] => 0
+    _ => 1
+
+maxMtime : Int -> List String -> Int
+maxMtime acc [] = acc
+maxMtime acc (path :: rest) =
+  let
+    m = runIO (fileMtime path)
+  in maxMtime (if m > acc then m else acc) rest
+
+watchSnapshot : String -> Int
+watchSnapshot root =
+  let
+    paths =
+      append (collectSourceFiles "${root}/test/corpus")
+        (append (collectSourceFiles "${root}/test/suite") (append (collectSourceFiles "${root}/lib") (append (collectSourceFiles "${root}/compiler") (append (collectSourceFiles "${root}/app") (collectSourceFiles "${root}/base")))))
+  in maxMtime 0
+    (append paths (filter (\path => pathExistsFile path) ["${root}/test/suite.toml", "${root}/vuna.toml"]))
+
+watchLoop : Int -> SuiteOpts -> Suite -> Int -> Int -> Int
+watchLoop fuel opts suite last rc = if fuel <= 0 then rc
+else
+  let
+    _ = runIO (sleepMicros 500000)
+    now = watchSnapshot suite.suiteRoot
+  in if now /= last then
+    let
+      _ = printLine "watch: change detected, rerunning"
+      rc2 = runSuiteOnce opts suite
+    in watchLoop (fuel - 1) opts suite now rc2
+  else watchLoop (fuel - 1) opts suite last rc
+
+watchSuite : SuiteOpts -> Suite -> Int
+watchSuite opts suite =
+  let
+    rc = runSuiteOnce opts suite
+  in watchLoop 100000000 opts suite (watchSnapshot suite.suiteRoot) rc
+
+runSuite : SuiteOpts -> Suite -> Int
+runSuite opts suite =
+  if opts.suiteAudit then auditSuite opts suite
+  else if opts.suiteWatch then watchSuite opts suite else runSuiteOnce opts suite
+
+runSuiteOnce : SuiteOpts -> Suite -> Int
+runSuiteOnce opts suite =
+  let
+    root = suite.suiteRoot
+    tag = case opts.suiteWorker of
+      Just (Pair i _) => "suite-w${strOfInt i}"
+      Nothing => "suite"
+    tmp = makeTempRoot tag
+    helper = writeHelper tmp
+    baseDir = envOr "VUNA_BASE" "${root}/base"
+    cacheDir0 = "${root}/.local/test-cache"
+    cacheDir = case opts.suiteCacheDir of
+      Just dir => if startsWith "/" dir then dir else "${root}/${dir}"
+      Nothing => cacheDir0
+    _ =
+      if opts.suiteNoCache then 0 else if pathExistsDir cacheDir then 0 else ensureDirPath cacheDir
+    env = Env root "${root}/test" tmp (runIO execPath) (envOr "VUNA_SEED" "vuna-seed") baseDir (envOr "OCAMLOPT" "ocamlopt") helper cacheDir (not opts.suiteNoCache && not opts.suiteBless) (hashTree baseDir) opts.suiteBless (case opts.suiteWorker of
+      Just _ => True
+      Nothing => False
+    )
+    cases0 = filterCases opts (discoverCases suite)
+    cases1 = case opts.suiteChanged of
+      Just rev => changedFilter env rev cases0
+      Nothing => cases0
+    cases = if opts.suiteLastFailed then filterLastFailed env cases1 else cases1
+    result = if opts.suiteListOnly then listSuite env cases
+    else case opts.suiteWorker of
+      Just (Pair index count) => runWorker env opts cases index count
+      Nothing => runParent env opts suite cases
+    _ = runIO (prim_runIn "/" ["rm", "-rf", tmp])
+  in result
+
+-- 给每个 case 配全局下标：`zip cases [0..n-1]`，再按 worker index 过滤。
+rangeUp : Int -> Int -> List Int
+rangeUp fuel start = if fuel <= 0 then [] else start :: rangeUp (fuel - 1) (start + 1)
+
+indexedCases : List Case -> Int -> Int -> List (Pair Int Case)
+indexedCases cases index count =
+  filter (matchesIndex index count) (zip (rangeUp (listLength cases) 0) cases)
+
+-- 全局下标 i 属于 worker index：i mod count == index。
+matchesIndex : Int -> Int -> Pair Int Case -> Bool
+matchesIndex index count (Pair i _) = if count <= 0 then False else i - i / count * count == index

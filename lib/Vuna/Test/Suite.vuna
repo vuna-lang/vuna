@@ -1,0 +1,492 @@
+module Vuna.Test.Suite
+  ( Case(..)
+  , CaseKind(..)
+  , Family(..)
+  , Suite(..)
+  , SuiteOpts(..)
+  , discoverCases
+  , parseSuiteFile
+  ) where
+
+-- Vuna.Test.Suite：suite 文件（test/suite.toml）的模型、校验与 case discovery。
+--
+--   * `[family.<name>]` 按目录约定展开成一批 golden/error case，避免为每个夹具
+--     手写一段 TOML；
+--   * `[suite]` 只放全局默认（jobs/timeout/name）；
+--   * 旧 shell 章节在迁移期放在 test/suite/sections/NN.sh，本模块把它们作为
+--     `CSection` case 发现，供原生 runner 以独立进程并行执行。
+--
+-- 本模块不做执行；只做「文件/TOML -> List Case」的纯数据转换（读盘经 runIO）。
+import Vuna.Compiler.Common
+import Vuna.Compiler.Frontend.Toml
+import Vuna.Files
+import Vuna.Cli.Args
+import Base.IO
+
+-- `vuna test --suite` 的选项。jobs = 0 表示 auto（由 runner 探测全部可用核）。
+record SuiteOpts where
+  suitePath : String
+  suiteJobs : Int
+  suiteListOnly : Bool
+  suiteVerbose : Bool
+  suiteFailFast : Bool
+  suiteJSON : Bool
+  suiteOnly : List String
+  suiteFilter : List String
+  suiteTimeout : Int
+  -- `Just (i, n)` 是父进程 spawn 出来的 worker 模式：只跑 index mod n == i 的 case。
+  suiteWorker : Maybe (Pair Int Int)
+  suiteResultsDir : Maybe String
+  suiteQuiet : Bool
+  suiteNoCache : Bool
+  suiteLastFailed : Bool
+  suiteBless : Bool
+  suiteChanged : Maybe String
+  suiteCacheDir : Maybe String
+  suiteWatch : Bool
+  suiteTimings : Bool
+  suiteStrictSkips : Bool
+  suiteAudit : Bool
+
+-- 一个 family：目录约定 + 默认断言开关。
+record Family where
+  familyName : String
+  familySection : String
+  familyDir : String
+  familyKind : String
+  familyEntry : Maybe String
+  familyExpected : Maybe String
+  familyInterp : Bool
+  familyCheck : Bool
+  familyCompile : Bool
+  familyRun : Bool
+  familyCompareInterp : Bool
+  familyTags : List String
+  familyTimeout : Int
+  familyExclude : List String
+  familyInclude : List String
+  familyExit : Int
+
+record Suite where
+  suiteName : String
+  suiteRoot : String
+  suiteDefaultJobs : Int
+  suiteDefaultTimeout : Int
+  suiteFamilies : List Family
+
+-- `CGolden` 的字段：source expected interp check compile run compareInterp。
+-- `CError` 的字段：source expectedErr interp check compile。
+data CaseKind : Type where
+  CGolden : String -> String -> Bool -> Bool -> Bool -> Bool -> Bool -> CaseKind
+  CError : String -> String -> Bool -> Bool -> Bool -> CaseKind
+  CCheck : String -> Bool -> String -> CaseKind
+  CLint : String -> String -> CaseKind
+  CFix : String -> String -> CaseKind
+  CRuntime : String -> String -> Int -> CaseKind
+  CNointerp : CaseKind
+  CSeed : String -> String -> CaseKind
+  CSection : String -> CaseKind
+  CBroken : String -> CaseKind
+
+record Case where
+  caseId : String
+  caseSection : String
+  caseTags : List String
+  caseKind : CaseKind
+  caseTimeout : Int
+
+-- ---------------------------------------------------------------
+-- 路径与读盘
+-- ---------------------------------------------------------------
+readTextFile : String -> Result String
+readTextFile path =
+  if pathExistsFile path then if pathExistsDir path then Err "is a directory: ${path}" else Ok (runIO (readFile path))
+  else Err "no such file: ${path}"
+
+-- suite 文件在 <root>/test/suite.toml；root = 上两级。
+suiteFileRoot : String -> String
+suiteFileRoot path = parentOf (parentOf path)
+
+-- ---------------------------------------------------------------
+-- TOML 取值（类型错误显式报错，不静默回落默认）
+-- ---------------------------------------------------------------
+sectionText : List String -> String
+sectionText [] = ""
+sectionText section = " in [${joinDots section}]"
+
+samePathText : List String -> List String -> Bool
+samePathText [] [] = True
+samePathText (x :: xs) (y :: ys) = if x == y then samePathText xs ys else False
+samePathText _ _ = False
+
+fieldErr : List String -> String -> String -> String
+fieldErr section key msg = "wrong type for `${key}`${sectionText section}: ${msg}"
+
+getStr : List String -> String -> List TomlEntry -> Result (Maybe String)
+getStr section key entries = case lookupEntry section key entries of
+  Nothing => Ok Nothing
+  Just (TStr s) => Ok (Just s)
+  Just _ => Err (fieldErr section key "expected a string")
+
+getInt : List String -> String -> List TomlEntry -> Result (Maybe Int)
+getInt section key entries = case lookupEntry section key entries of
+  Nothing => Ok Nothing
+  Just (TInt n) => Ok (Just n)
+  Just _ => Err (fieldErr section key "expected an integer")
+
+getBool : List String -> String -> List TomlEntry -> Result (Maybe Bool)
+getBool section key entries = case lookupEntry section key entries of
+  Nothing => Ok Nothing
+  Just (TBool b) => Ok (Just b)
+  Just _ => Err (fieldErr section key "expected a boolean")
+
+getList : List String -> String -> List TomlEntry -> Result (Maybe (List String))
+getList section key entries = case lookupEntry section key entries of
+  Nothing => Ok Nothing
+  Just (TList xs) => Ok (Just xs)
+  Just _ => Err (fieldErr section key "expected an array of strings")
+
+-- 可选字段的解包（Maybe 默认值只用于“缺失”，类型错误仍由 get* 报出）。
+strOr : String -> Maybe String -> String
+strOr d m = fromMaybe d m
+
+intOr : Int -> Maybe Int -> Int
+intOr d m = fromMaybe d m
+
+boolOr : Bool -> Maybe Bool -> Bool
+boolOr d m = fromMaybe d m
+
+listOr : List String -> Maybe (List String) -> List String
+listOr d m = fromMaybe d m
+
+-- ---------------------------------------------------------------
+-- family 解析
+-- ---------------------------------------------------------------
+familyKeys : List String
+familyKeys =
+  [ "section",
+    "dir",
+    "kind",
+    "entry",
+    "expected",
+    "interp",
+    "check",
+    "compile",
+    "run",
+    "compare_interp",
+    "tags",
+    "timeout",
+    "exclude",
+    "include",
+    "exit"
+  ]
+
+checkFamilyKeys : List String -> List TomlEntry -> Result Int
+checkFamilyKeys section entries = checkFamilyKeysGo section entries
+
+checkFamilyKeysGo : List String -> List TomlEntry -> Result Int
+checkFamilyKeysGo section [] = Ok 0
+checkFamilyKeysGo section (e :: rest) =
+  if samePathText e.tomlEntrySection section then if memName e.tomlEntryKey familyKeys then checkFamilyKeysGo section rest
+  else Err "${sectionText section}: unknown key `${e.tomlEntryKey}`"
+  else checkFamilyKeysGo section rest
+
+-- buildFamily 的 option 读取拆成两段：单条 `>>=` 链过长会触发 D48 的推断 fuel /
+-- 指数级问题（Result 管道每层 bind 都带字典插入）。拆分后每段 ≤7 层。
+record FamilyOpts where
+  familyOptKind : Maybe String
+  familyOptEntry : Maybe String
+  familyOptExpected : Maybe String
+
+record FamilyFlags where
+  familyFlagInterp : Maybe Bool
+  familyFlagCheck : Maybe Bool
+  familyFlagCompile : Maybe Bool
+  familyFlagRun : Maybe Bool
+  familyFlagCompare : Maybe Bool
+  familyFlagTags : Maybe (List String)
+  familyFlagTimeout : Maybe Int
+
+readFamilyOpts : List String -> List TomlEntry -> Result FamilyOpts
+readFamilyOpts section entries =
+  getStr section "kind" entries
+    >>= (\kindOpt => getStr section "entry" entries >>= (\entryOpt => getStr section "expected" entries >>= (\expectedOpt => Ok (FamilyOpts kindOpt entryOpt expectedOpt))))
+
+readFamilyFlags : List String -> List TomlEntry -> Result FamilyFlags
+readFamilyFlags section entries =
+  getBool section "interp" entries
+    >>= (\interpOpt => getBool section "check" entries >>= (\checkOpt => getBool section "compile" entries >>= (\compileOpt => getBool section "run" entries >>= (\runOpt => getBool section "compare_interp" entries >>= (\compareOpt => getList section "tags" entries >>= (\tagsOpt => getInt section "timeout" entries >>= (\timeoutOpt => Ok (FamilyFlags interpOpt checkOpt compileOpt runOpt compareOpt tagsOpt timeoutOpt))))))))
+
+-- 长 `>>=` 链在 Result 管道上会触发 D48 的推断 fuel 问题；这里用显式 case 展开。
+buildFamily : Suite -> List TomlEntry -> String -> Result Family
+buildFamily suite entries name =
+  let
+    section = ["family", name]
+  in case checkFamilyKeys section entries of
+    Err e => Err e
+    Ok _ => case getStr section "section" entries of
+      Err e => Err e
+      Ok sectionOpt => case getStr section "dir" entries of
+        Err e => Err e
+        Ok dirOpt => case dirOpt of
+          Nothing => Err "family `${name}` needs `dir`"
+          Just dir => case readFamilyOpts section entries of
+            Err e => Err e
+            Ok opts => case readFamilyFlags section entries of
+              Err e => Err e
+              Ok flags =>
+                let
+                  excludeList = case lookupEntry section "exclude" entries of
+                    Just (TList xs) => xs
+                    _ => []
+                  includeList = case lookupEntry section "include" entries of
+                    Just (TList xs) => xs
+                    _ => []
+                  exitCode = case lookupEntry section "exit" entries of
+                    Just (TInt n) => n
+                    _ => 0
+                  kind = strOr "auto" opts.familyOptKind
+                in if kind == "auto" || kind == "golden" || kind == "error" || kind == "check-ok" || kind == "check-error" || kind == "lint" || kind == "fix" || kind == "runtime-error" then Ok
+                  (Family name (strOr "" sectionOpt) dir kind opts.familyOptEntry opts.familyOptExpected (boolOr True flags.familyFlagInterp) (boolOr False flags.familyFlagCheck) (boolOr True flags.familyFlagCompile) (boolOr True flags.familyFlagRun) (boolOr True flags.familyFlagCompare) (listOr [] flags.familyFlagTags) (intOr suite.suiteDefaultTimeout flags.familyFlagTimeout) excludeList includeList exitCode)
+                else Err (sectionText section ++ ": kind must be auto/golden/error, got `${kind}`")
+
+-- 从 entries 收集 family 名（保持首次出现顺序）。
+familyNames : List TomlEntry -> List String
+familyNames entries = familyNamesGo entries []
+
+familyNamesGo : List TomlEntry -> List String -> List String
+familyNamesGo [] acc = reverse acc
+familyNamesGo (e :: rest) acc = case e.tomlEntrySection of
+  ["family", name] =>
+    if memName name acc then familyNamesGo rest acc else familyNamesGo rest (name :: acc)
+  _ => familyNamesGo rest acc
+
+-- ---------------------------------------------------------------
+-- suite 解析
+-- ---------------------------------------------------------------
+buildSuiteWithEntries : String -> List TomlEntry -> Result Suite
+buildSuiteWithEntries path entries =
+  let
+    root = suiteFileRoot path
+    section = ["suite"]
+  in getStr section "name" entries >>= (\nameOpt => getInt section "jobs" entries >>= (\jobsOpt => getInt section "timeout" entries >>= (\timeoutOpt => let
+    draft = Suite (strOr "vuna" nameOpt) root (intOr 0 jobsOpt) (intOr 300 timeoutOpt) []
+  in buildFamiliesWith draft entries (familyNames entries)
+    >>= (\families => Ok (Suite draft.suiteName draft.suiteRoot draft.suiteDefaultJobs draft.suiteDefaultTimeout families))
+  )
+  )
+  )
+
+buildFamiliesWith : Suite -> List TomlEntry -> List String -> Result (List Family)
+buildFamiliesWith suite entries [] = Ok []
+buildFamiliesWith suite entries (name :: rest) = case buildFamily suite entries name of
+  Err e => Err e
+  Ok family => buildFamiliesWith suite entries rest >>= (\more => Ok (family :: more))
+
+-- ---------------------------------------------------------------
+-- discovery
+-- ---------------------------------------------------------------
+stripVuna : String -> String
+stripVuna name = if endsWith ".vuna" name then substring 0 (byteLength name - 5) name else name
+
+isFixtureName : String -> Bool
+isFixtureName name = endsWith ".vuna" name && not (startsWith "_" name)
+
+-- 目录型 family：entry 配置时每个子目录一个 case。
+discoverDirFamily : Suite -> Family -> String -> List Case
+discoverDirFamily suite family entry =
+  let
+    dir = "${suite.suiteRoot}/${family.familyDir}"
+  in if not (pathExistsDir dir) then [brokenFamilyCase family "family dir not found: ${dir}"]
+  else concatMap (oneDir family dir entry) (runIO (readDir dir))
+
+oneDir : Family -> String -> String -> String -> List Case
+oneDir family dir entry name =
+  let
+    caseDir = "${dir}/${name}"
+    source = "${caseDir}/${entry}"
+    expected = dirExpected family caseDir
+  in if pathExistsDir caseDir && pathExistsFile source then
+    let
+      id = "${family.familySection}/${family.familyName}/${name}"
+      outPath = "${caseDir}/expected.out"
+      errPath = "${caseDir}/expected.err"
+    in if family.familyKind == "error" then [ Case id family.familySection family.familyTags (CError source expected family.familyInterp family.familyCheck family.familyCompile) family.familyTimeout
+    ]
+    else if family.familyKind == "golden" then if pathExistsFile expected then [ Case id family.familySection family.familyTags (CGolden source expected family.familyInterp family.familyCheck family.familyCompile family.familyRun family.familyCompareInterp) family.familyTimeout
+    ]
+    else [brokenFamilyCase family "expected file not found: ${expected}"]
+    else if pathExistsFile outPath then [ Case id family.familySection family.familyTags (CGolden source outPath family.familyInterp family.familyCheck family.familyCompile family.familyRun family.familyCompareInterp) family.familyTimeout
+    ]
+    else if pathExistsFile errPath then [ Case id family.familySection family.familyTags (CError source errPath family.familyInterp family.familyCheck family.familyCompile) family.familyTimeout
+    ]
+    else [brokenFamilyCase family "neither expected.out nor expected.err in ${caseDir}"]
+  else []
+
+dirExpected : Family -> String -> String
+dirExpected family caseDir = case family.familyExpected of
+  Just name => "${caseDir}/${name}"
+  Nothing =>
+    if family.familyKind == "error" then "${caseDir}/expected.err" else "${caseDir}/expected.out"
+
+-- 文件型 family：每个 `*.vuna` 一个 case；auto 按磁盘上存在的 `.out`/`.err` 判定。
+discoverFileFamily : Suite -> Family -> List Case
+discoverFileFamily suite family =
+  let
+    dir = "${suite.suiteRoot}/${family.familyDir}"
+  in if not (pathExistsDir dir) then [brokenFamilyCase family "family dir not found: ${dir}"]
+  else concatMap (oneFile family dir) (runIO (readDir dir))
+
+matchesExclude : Family -> String -> Bool
+matchesExclude family name = matchesAnyExclude family.familyExclude name
+
+matchesAnyExclude : List String -> String -> Bool
+matchesAnyExclude [] name = False
+matchesAnyExclude (pat :: rest) name =
+  if contains pat name then True else matchesAnyExclude rest name
+
+matchesInclude : Family -> String -> Bool
+matchesInclude family name = matchesAnyExclude family.familyInclude name
+
+includeActive : Family -> Bool
+includeActive family = case family.familyInclude of
+  [] => False
+  _ => True
+
+oneFile : Family -> String -> String -> List Case
+oneFile family dir name = if isFixtureName name then if matchesExclude family name then []
+else if includeActive family && not (matchesInclude family name) then []
+else
+  let
+    source = "${dir}/${name}"
+  in case fileCase family source (stripVuna name) of
+    Nothing => [brokenFamilyCase family "expected file not found for: ${source}"]
+    Just c => [c]
+else []
+
+fileCase : Family -> String -> String -> Maybe Case
+fileCase family source rel =
+  let
+    base = if endsWith ".vuna" source then substring 0 (byteLength source - 5) source else source
+    id = "${family.familySection}/${family.familyName}/${rel}"
+  in if family.familyKind == "runtime-error" then
+    let
+      expected = fileExpected family base "err"
+    in if pathExistsFile expected then Just
+      (Case id family.familySection family.familyTags (CRuntime source expected family.familyExit) family.familyTimeout)
+    else Nothing
+  else if family.familyKind == "lint" then
+    let
+      expected = "${base}.out"
+    in if pathExistsFile expected then Just
+      (Case id family.familySection family.familyTags (CLint source expected) family.familyTimeout)
+    else Nothing
+  else if family.familyKind == "fix" then
+    let
+      expected = "${base}.expected"
+    in if pathExistsFile expected then Just
+      (Case id family.familySection family.familyTags (CFix source expected) family.familyTimeout)
+    else Nothing
+  else if family.familyKind == "check-ok" then Just (Case id family.familySection family.familyTags (CCheck source True "") family.familyTimeout)
+  else if family.familyKind == "check-error" then
+    let
+      expected = fileExpected family base "err"
+    in if pathExistsFile expected then Just
+      (Case id family.familySection family.familyTags (CCheck source False expected) family.familyTimeout)
+    else Nothing
+  else if family.familyKind == "golden" then
+    let
+      expected = fileExpected family base "out"
+    in if pathExistsFile expected then Just
+      (Case id family.familySection family.familyTags (CGolden source expected family.familyInterp family.familyCheck family.familyCompile family.familyRun family.familyCompareInterp) family.familyTimeout)
+    else Nothing
+  else if family.familyKind == "error" then
+    let
+      expected = fileExpected family base "err"
+    in if pathExistsFile expected then Just
+      (Case id family.familySection family.familyTags (CError source expected family.familyInterp family.familyCheck family.familyCompile) family.familyTimeout)
+    else Nothing
+  else if pathExistsFile "${base}.out" then Just
+    (Case id family.familySection family.familyTags (CGolden source "${base}.out" family.familyInterp family.familyCheck family.familyCompile family.familyRun family.familyCompareInterp) family.familyTimeout)
+  else if pathExistsFile "${base}.err" then Just
+    (Case id family.familySection family.familyTags (CError source "${base}.err" family.familyInterp family.familyCheck family.familyCompile) family.familyTimeout)
+  else Nothing
+
+fileExpected : Family -> String -> String -> String
+fileExpected family base want = case family.familyExpected of
+  Just "out" => "${base}.out"
+  Just "err" => "${base}.err"
+  Just name => name
+  Nothing => if want == "out" then "${base}.out" else "${base}.err"
+
+brokenFamilyCase : Family -> String -> Case
+brokenFamilyCase family msg =
+  Case "${family.familySection}/${family.familyName}/__missing__" family.familySection
+    family.familyTags (CBroken msg) family.familyTimeout
+
+discoverFamily : Suite -> Family -> List Case
+discoverFamily suite family = case family.familyEntry of
+  Just entry => discoverDirFamily suite family entry
+  Nothing => discoverFileFamily suite family
+
+-- ---------------------------------------------------------------
+-- 旧 shell 章节
+-- ---------------------------------------------------------------
+discoverSections : Suite -> List Case
+discoverSections suite =
+  let
+    dir = "${suite.suiteRoot}/test/suite/sections"
+  in if not (pathExistsDir dir) then [] else concatMap (oneSection dir) (runIO (readDir dir))
+
+normalizeNum : String -> String
+normalizeNum s = normalizeNumGo (byteLength s) s
+
+normalizeNumGo : Int -> String -> String
+normalizeNumGo fuel s =
+  if fuel <= 0 then s
+  else if byteLength s > 1 && startsWith "0" s then normalizeNumGo (fuel - 1) (substring 1 (byteLength s - 1) s)
+  else s
+
+leadingDigits : List Int -> String
+leadingDigits [] = ""
+leadingDigits (c :: rest) =
+  if c >= 48 && c <= 57 then strPack (c :: strUnpack (leadingDigits rest)) else ""
+
+sectionNum : String -> String
+sectionNum s = normalizeNum (leadingDigits (strUnpack s))
+
+oneSection : String -> String -> List Case
+oneSection dir name = if endsWith ".sh" name then
+  let
+    rawBase = substring 0 (byteLength name - 3) name
+    num = sectionNum rawBase
+    sectionId = if num == "" then rawBase else num
+    tags = [sectionId, rawBase, "legacy"]
+  in [Case "${rawBase}/section" sectionId tags (CSection "${dir}/${name}") 900]
+else []
+
+-- ---------------------------------------------------------------
+-- 对外入口
+-- ---------------------------------------------------------------
+parseSuiteFile : String -> Result Suite
+parseSuiteFile path =
+  let
+    absPath = if startsWith "/" path then path else "${runIO getCwd}/${path}"
+  in case readTextFile absPath of
+    Err e => Err e
+    Ok contents => case parseTomlAt absPath contents of
+      Err e => Err e
+      Ok entries => buildSuiteWithEntries absPath entries
+
+discoverCases : Suite -> List Case
+discoverCases suite =
+  let
+    base = append (discoverSections suite) (concatMap (discoverFamily suite) suite.suiteFamilies)
+    audit =
+      if pathExistsDir "${suite.suiteRoot}/test/corpus" then [Case "43/nointerp" "43" ["nointerp"] CNointerp 900]
+      else []
+    seed =
+      if pathExistsFile "${suite.suiteRoot}/test/corpus/run/12_fact.vuna" then [ Case "13/seed" "13" ["seed"] (CSeed "${suite.suiteRoot}/test/corpus/run/12_fact.vuna" "${suite.suiteRoot}/test/corpus/run/12_fact.out") 900
+      ]
+      else []
+  in append base (append audit seed)

@@ -1,0 +1,16 @@
+module Base.FromString (FromString(..)) where
+
+-- Base.FromString：字面量转换 trait（checking 位置的 `"..."` 按期望类型转换）。
+--
+-- 编译器只负责把「期望类型不是 String、且存在本实例」的字符串字面量降级成
+-- `fromString "..."`（见 docs/reference/language.md 与 records-traits.md）；转换语义
+-- 完全由实例决定。`String` 的恒等实例保证显式调用与字面量语义一致。
+--
+-- 实例落点沿用 trait 规则：实例跟类型模块走（孤儿检查见 records-traits.md）。
+-- | 把字符串字面量转换为 `a`：期望类型为 `a` 且存在本实例时，`"..."` 等价于 `fromString "..."`；没有可失败形态，解析失败由实例自行处理。
+trait FromString a where
+  fromString : String -> a
+
+-- `String` 是字面量的默认类型：恒等转换（不增删字符）。
+instance FromString String where
+  fromString s = s

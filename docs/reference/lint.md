@@ -1,9 +1,9 @@
-# lint：AST 驱动的 dispatch 提升与自动修复
+# lint：AST 驱动的 dispatch 提升、列表字面量归一与自动修复
 
 本文记录 `vuna lint` 的规则、可修复判据与语料。实现入口是
-`lib/Vuna/Lint/Rules.vuna`（dispatch 判定、提升渲染、源码切片）、`lib/Vuna/Lint/Fix.vuna`
-（应用 Edit 的多轮循环）、`lib/Vuna/Lint.vuna`（CLI 与输出）、`lib/Vuna/Lint/Diagnostics.vuna`
-（规则枚举：code / rule / 消息的唯一真源）。
+`lib/Vuna/Lint/Rules.vuna`（dispatch 判定、提升渲染、列表链检测、源码切片）、
+`lib/Vuna/Lint/Fix.vuna`（应用 Edit 的多轮循环）、`lib/Vuna/Lint.vuna`（CLI 与输出）、
+`lib/Vuna/Lint/Diagnostics.vuna`（规则枚举：code / rule / 消息的唯一真源）。
 
 ## 1. 用法与输出
 
@@ -39,9 +39,15 @@ token 的起点，模板字面量（`TTmpl`）的 span end 是字面量结束后
 遍历相互递归组把 `fuel` 放在第 0 形参并 `if fuel <= 0` 守卫，这是编译器
 `tryFuelThread` 判据能接受的形态。
 
-## 3. dispatch 模型（规则为什么是这两条）
+`list-literal` 用**独立的表达式遍历**（`walkListLiteral`），不进入 pattern，也不与
+dispatch 的 lane 判定耦合；类型位置（签名、axiom/extern、data kind/构造子、record 字段、
+trait 方法、instance 上下文/head/方法）由 `declFindings` 分别扫描。模板插值洞
+（`EInterp` 的 `IPHole`）跳过：lint 的顶层 token 列表不含洞内 token，`exprText` 无法
+可靠切片（已知边界，见 §6）。
 
-lint 的改写统一是：**识别一个 dispatch，把它提升进外层的 clause / alt 模式**。
+## 3. 规则概览
+
+lint 的 dispatch 类改写统一是：**识别一个 dispatch，把它提升进外层的 clause / alt 模式**。
 
 | dispatch 源 | 形态 | 叶子 |
 | --- | --- | --- |
@@ -68,9 +74,11 @@ let 值里的 if）需要上下文分发（case-of-case），会复制代码与�
 | --- | --- | --- | --- |
 | `LN_LiteralIfChain` | `literal-if-chain` | 是 | if dispatch（`x == lit` 链 / Bool 变量）在可提升位置；字面量链提升失败时改写为 case |
 | `LN_DispatchLift` | `dispatch-lift` | 是 | case / let dispatch 在可提升位置（单 alt 替换、多 alt 拆 clause / alt） |
+| `LN_ListLiteral` | `list-literal` | 是 | 表达式/类型位置的闭合 cons 链（`::` / `Cons` + `[]` / `Nil`）与裸 `Nil`；**模式匹配不动** |
 
-两条规则共用同一套 lane 判定与 as-pattern 渲染；`lift-destructure` / `case-to-clauses` 的
-旧 code 已删除（判定与渲染合并进 `dispatch-lift`）。
+dispatch 两条规则共用同一套 lane 判定与 as-pattern 渲染；`lift-destructure` /
+`case-to-clauses` 的旧 code 已删除（判定与渲染合并进 `dispatch-lift`）。`list-literal`
+是独立的表达式遍历（不是 dispatch 提升），见 §3.3。
 
 ### 3.1 `literal-if-chain`
 
@@ -125,16 +133,39 @@ clause（多 alt 拆分）；外层是嵌套 alt 时该 alt 是父 case 的最�
 
 拆分「分支体引用 scrutinee」时用 as-pattern 保持绑定（见 §5）。
 
+### 3.3 `list-literal`
+
+- **触发**：表达式或类型位置的**闭合 cons 链**：
+  - `a :: b :: []`（`::` 走 `Loader.Fixity` 的 alias，lint 看到 `EApp (EVar "::")`）；
+  - `Cons a (Cons b Nil)`（显式构造子）；
+  - 裸 `Nil`（空列表构造）。
+- **不触发**：pattern（`PCon "::"` / `PCon "Cons"` 不在表达式遍历内）、开放链
+  `a :: xs`（无法写成闭合字面量）、已经是列表字面量的保留名、模板插值洞（见 §6）。
+- **可修复判据**：整个表达式单行；被替换行无 `--` / `{-` / tab / CR；每个元素能由
+  `exprText` 从源码切出。修复文本是 `[e1, e2, ...]` / `[]`，并剥离**紧邻**表达式的
+  成对括号（`f (a :: [])` → `f [a]`；只剥紧邻成对的一层/多层，不跨表达式贪心）。
+- **不可修复形态仍报告**（跨行、含注释 / tab），`--fix` 不写文件并在输出标
+  ` (not auto-fixable)`。
+- 语法等价性由 M41 的「列表字面量按期望族展开」保证：`[..]` 与 `Cons`/`Nil` 链在
+  List / Vec / Row / 用户同形族上落到同一组构造子；模式里的 `::` 保持原样。
+- 一个已知边界：仓库里 `compiler/lib/Vuna/Compiler/Frontend/Parser.vuna` 的 4 处
+  `(name :: [])` 位于模板插值 `${...}` 内，规则跳过；这 4 处已手工改写为 `[name]`。
+- 语料中 `dt/67` / `dt_err/70` 的显式 `Cons`/`Nil` 与 `dt_base/53` 的裸 `Nil`
+  仍保留：它们测试的是构造子名解析 / 同名重载，不是列表语法覆盖；corpus 不在
+  `checks.vuna-lint` 门禁内。
+
 ## 4. 语料与测试
 
-`test/run-tests.sh` 第 15/16 段：
+原生 suite 的 `lint` / `fix` family（`test/suite.toml`，kind `lint` / `fix`）：
 
 - `test/corpus/lint/*.vuna` + `.out`：报告 golden 与退出码（01–04 为回归基线，05–14 覆盖
-  两条规则与「不报」形态；15–18 覆盖 Bool 变量 if 的 clause/alt 报告、不报形态与模板字符串
-  分支）；
+  dispatch 两条规则与「不报」形态；15–18 覆盖 Bool 变量 if 的 clause/alt 报告、不报形态与
+  模板字符串分支；19 覆盖 `list-literal`：`::` / `Cons` / 裸 `Nil` / 类型位置报告，
+  以及 pattern、开放链、注释行、既有字面量不误报）。
 - `test/corpus/fix/*.vuna` + `.expected`：`--fix` 产物与二次运行幂等（01–06 回归基线，
-  07–15 覆盖两条规则与 let 解构；16–19 覆盖 Bool if 的 clause/alt/链提升、as-pattern 与
-  模板字符串分支）。
+  07–15 覆盖 dispatch 两条规则与 let 解构；16–19 覆盖 Bool if 的 clause/alt/链提升、
+  as-pattern 与模板字符串分支；20 覆盖 `list-literal`：表达式/类型位置、括号剥离、
+  `Cons` / 裸 `Nil`、注释行不修、幂等）。
 
 ## 5. as-pattern 生成
 
@@ -157,8 +188,12 @@ Bool / 字面量分派同样适用：`keep b = if b then b else b` → `keep b@T
 
 ## 6. 已知边界
 
-- **规则只报告可安全自动修复的形态**：不可安全折叠的情形（非最后 clause、clause head
-  跨行、含注释 / tab / CR、分支体无法安全收束等）**不报告**（语料期望为空输出）。
+- **dispatch 规则只报告可安全自动修复的形态**：不可安全折叠的情形（非最后 clause、clause
+  head 跨行、含注释 / tab / CR、分支体无法安全收束等）**不报告**（语料期望为空输出）。
+  `list-literal` 例外：不可修复的闭合链 / 裸 `Nil` 仍报告（`--fix` 标 not auto-fixable），
+  因为「应写成列表字面量」本身是确定的。
+- **`list-literal` 的模板插值洞跳过**：lint 只拿到顶层 token 列表，`EInterp` 洞内 token
+  不可见，切片右边界不可靠；formatter 同样不保留洞内注释（已知边界）。
 - **提升只在直接体**：嵌套 dispatch 需要上下文分发，本轮不做；保持原形。
 - **子句拆分只对单 clause 函数**：多 clause 函数里拆子句可能暴露 unreachable clause，
   因此 `if` / `case` 的 clause 拆分都要求 `countFunClauses == 1`；多 clause 函数的 Bool
@@ -166,6 +201,7 @@ Bool / 字面量分派同样适用：`keep b = if b then b else b` → `keep b@T
 - **签名含隐式 Pi 的函数跳过 clause 级改写**：`{n : Nat} -> ...` 这类隐式参数由精化器
   插入，把 dispatch 折叠进 clause 模式会改变模式矩阵与隐式 Pi 的对齐（`Base.Vec.vhead`
   实测会把 `Cons` 错配到 `n : Nat`）；`literal-if-chain` / `dispatch-lift` 都跳过这类声明。
+  `list-literal` 不改变 clause 结构，因此这类函数的体仍会扫描。
 - **Bool 名字解析**：Bool if 提升按源码名字生成 `True` / `False` 模式；vuna 包内它们就是
   canonical `Base.Bool` 构造子。用户自定义同名构造子的极端情况不由 lint 判定，`vuna check`
   是最终裁决（与现有 case 拆分边界一致）。

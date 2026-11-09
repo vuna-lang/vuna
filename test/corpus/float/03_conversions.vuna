@@ -1,0 +1,3 @@
+-- 显式转换：Int→Float / Float→Int（截断），无隐式互转。
+main : String
+main = strFromFloat (floatFromInt 3) ++ "/" ++ strFromInt (intFromFloat 3.9)

@@ -17,6 +17,7 @@ module Vuna.Compiler.Debug (debugOn, note, noteInt, sampleKey, stamp, stampSampl
 -- `stamp` / `stampSample` 内部已处理，调用点不需要再判 `debugOn`。
 import Vuna.Compiler.Common
 import Base.HashMap
+import Base.Hashable
 import Base.IO
 
 args : List String
@@ -44,11 +45,11 @@ stampNow label =
 stamp : String -> Int
 stamp label = if debugOn then stampNow label else 0
 
--- 采样键：1/64 命中（名字哈希低位为 0），与 `Base.HashMap.hashStr` 同一哈希，结果确定。
+-- 采样键：1/64 命中（名字哈希低位为 0），与 `Base.Hashable.hashStr` 同一哈希，结果确定。
 sampleKey : String -> Bool
 sampleKey name =
   let
-    h = Base.HashMap.hashStr name
+    h = Base.Hashable.hashStr name
   in h - h / 64 * 64 == 0
 
 stampSample : String -> String -> Int

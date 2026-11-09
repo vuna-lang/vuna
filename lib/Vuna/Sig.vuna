@@ -8,13 +8,21 @@ module Vuna.Sig (renderType, renderTypeInCtx) where
 --
 -- 输出是**可回读**的：`vuna search --type` 会把它存进索引的 `symType` 再用
 -- parser 读回来。括号策略保持旧输出（应用参数加括号、箭头右结合）不变。
+--
+-- M41 之后 parser 把 `[..]` 降级成保留名 `@vuna@list@nil` / `@vuna@list@cons`；
+-- 本模块负责把它们还原成列表字面量，保留名不允许泄漏到 api/doc/search/hover。
+-- `::` 链仍按中缀打印（不把闭合 `::` 归一成 `[...]`），这样 `symType` 的
+-- parse 级形状与源码拼写一致，`search --type` 的匹配语义不受打印改动影响。
 import Vuna.Compiler.Common
 import Vuna.Compiler.Frontend.Ast
 
 renderType : Expr -> String
-renderType (EVar name sp) = name
-renderType (ty@(EApp (EVar arrow _) ([a, b]) _)) =
-  if arrow == "->" then "${renderTypeArg a} -> ${renderType b}" else renderTypePlain ty
+renderType (EVar name sp) = if isListNilSyntax name then "[]" else name
+renderType (ty@(EApp (EVar op _) ([a, b]) _)) = if op == "->" then "${renderTypeArg a} -> ${renderType b}"
+else if isListConsSyntax op then case listTailText b of
+  Just rest => "[" ++ renderType a ++ rest
+  Nothing => renderTypePlain ty
+else if op == "::" then "${renderTypeArg a} :: ${renderType b}" else renderTypePlain ty
 renderType (EInfix "->" a b sp) = "${renderTypeArg a} -> ${renderType b}"
 renderType (EPi name implicit qty dom cod sp) =
   let
@@ -23,6 +31,16 @@ renderType (EPi name implicit qty dom cod sp) =
       else "(${renderQty qty}${name} : ${renderType dom})"
   in "${binder} -> ${renderType cod}"
 renderType ty = renderTypePlain ty
+
+-- 列表字面量的尾段：`Nil` 结尾给 `"]"`，每个 cons 头给 `", <元素>"`。
+-- 只认保留名（parser 的 `[..]` 形状）；`::` 链不走这里，保持中缀。
+listTailText : Expr -> Maybe String
+listTailText (EVar name sp) = if isListNilSyntax name then Just "]" else Nothing
+listTailText (EApp (EVar cons _) ([h, t]) _) = if isListConsSyntax cons then case listTailText t of
+  Just rest => Just (", " ++ renderType h ++ rest)
+  Nothing => Nothing
+else Nothing
+listTailText _ = Nothing
 
 -- M38：quantity 前缀（与 Fmt 同形，保证输出可回读）。
 renderQty : Maybe Qty -> String
@@ -39,6 +57,7 @@ renderTypePlain : Expr -> String
 renderTypePlain (EApp f args sp) = "${renderTypeAtom f} ${join " " (map renderTypeArg args)}"
 renderTypePlain (EInt n sp) = strFromInt n
 renderTypePlain (EStr s sp) = "\"${s}\""
+renderTypePlain (EFloat raw sp) = raw
 renderTypePlain (EInfix op l r sp) = "${renderTypeArg l} ${op} ${renderTypeArg r}"
 -- 类型位置也可能出现反引号中缀 / section（keep 模式下保留原形）；显式渲染，
 -- 不落到 `_` 静默丢表达式。
@@ -49,12 +68,14 @@ renderTypePlain (ESectR e op sp) = "(${renderType e} ${op})"
 renderTypePlain _ = "_"
 
 renderTypeArg : Expr -> String
-renderTypeArg (EVar name sp) = name
-renderTypeArg (ty@(EApp (EVar arrow _) ([a, b]) _)) =
-  if arrow == "->" then "(${renderType ty})" else "(${renderType ty})"
+renderTypeArg (EVar name sp) = if isListNilSyntax name then "[]" else name
+renderTypeArg (ty@(EApp (EVar cons _) ([_, _]) _)) =
+  if isListConsSyntax cons then renderType ty else "(${renderType ty})"
 renderTypeArg (ty@(EInfix "->" a b sp)) = "(${renderType ty})"
 renderTypeArg ty = "(${renderType ty})"
 
 renderTypeAtom : Expr -> String
-renderTypeAtom (EVar name sp) = name
+renderTypeAtom (EVar name sp) = if isListNilSyntax name then "[]" else name
+renderTypeAtom (ty@(EApp (EVar cons _) ([_, _]) _)) =
+  if isListConsSyntax cons then renderType ty else "(${renderType ty})"
 renderTypeAtom ty = "(${renderType ty})"

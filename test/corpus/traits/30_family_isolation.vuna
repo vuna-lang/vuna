@@ -1,0 +1,49 @@
+-- S5a（实例表按头族索引）回归夹具：两个字典族共存时，实例搜索的候选必须只来自
+-- **目标类自己的族桶**（跨族不串）；同族内具体实例优先于 blanket fallback；
+-- blanket 的上下文约束仍按普通实例搜索递归求解（用到的正是另一个族的实例）。
+import Prelude
+
+-- 族 A（Marker）：三个具体头。
+trait Marker a where
+  marker : a -> String
+
+instance Marker Int where
+  marker n = "M-int"
+
+instance Marker String where
+  marker s = "M-str"
+
+data Token : Type where
+  MkToken : Token
+
+instance Marker Token where
+  marker t = case t of
+    MkToken => "M-token"
+
+-- 族 B（Wrap）：两个具体头 + 一个 blanket（`Marker a => Wrap a`）。
+trait Wrap a where
+  wrap : a -> String
+
+instance Wrap Int where
+  wrap n = "W-int"
+
+data Note : Type where
+  MkNote : Note
+
+instance Wrap Note where
+  wrap k = case k of
+    MkNote => "W-note"
+
+-- blanket fallback：同族具体实例不命中时才用；它的上下文是族 A 的实例。
+instance Marker a => Wrap a where
+  wrap x = "W-blanket:" ++ marker x
+
+main : String
+main =
+  wrap 1
+    ++ "/" ++ wrap 2
+    ++ "/" ++ wrap (MkNote)
+    ++ "/" ++ wrap (MkToken)
+    ++ "/" ++ wrap "s"
+    ++ "/" ++ marker 3
+    ++ "/" ++ marker (MkToken)

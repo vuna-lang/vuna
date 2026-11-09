@@ -1,5 +1,5 @@
 open Vuna_runtime
-let v_Vuna_dCompiler_dElab_dTerm_ddeferDictBinder = (fun globals ctx ec dom clo args sp -> ((((((((Vuna_dCompiler_dElab_dTerm_dImpl.v_Vuna_dCompiler_dElab_dTerm_dImpl_ddeferDictBinderFuel 64) globals) ctx) ec) dom) clo) args) sp))
+let v_Vuna_dCompiler_dElab_dTerm_ddeferDictBinder = (fun globals ctx ec dom clo args sp -> (((((((((Vuna_dCompiler_dElab_dTerm_dImpl.v_Vuna_dCompiler_dElab_dTerm_dImpl_ddeferDictBinderFuel 64) globals) ctx) ec) dom) clo) args) sp) Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing))
 
 let v_Vuna_dCompiler_dElab_dTerm_dspecializeCmpApp = (fun a1 a2 a3 a4 a5 a6 -> (((((((Vuna_dCompiler_dElab_dTerm_dImpl.v_Vuna_dCompiler_dElab_dTerm_dImpl_dspecializeCmpAppFuel 256) a1) a2) a3) a4) a5) a6))
 
@@ -63,17 +63,17 @@ let v_Vuna_dCompiler_dElab_dTerm_dcheckType = (fun a1 a2 a3 a4 -> (((((Vuna_dCom
 
 let v_Vuna_dCompiler_dElab_dTerm_dinferAppUnderType = (fun a1 a2 a3 a4 a5 a6 -> (((((((Vuna_dCompiler_dElab_dTerm_dImpl.v_Vuna_dCompiler_dElab_dTerm_dImpl_dinferAppUnderTypeFuel 256) a1) a2) a3) a4) a5) a6))
 
-let v_Vuna_dCompiler_dElab_dTerm_dinferArgs = (fun a1 a2 a3 a4 a5 a6 -> (((((((Vuna_dCompiler_dElab_dTerm_dImpl.v_Vuna_dCompiler_dElab_dTerm_dImpl_dinferArgsFuel 256) a1) a2) a3) a4) a5) a6))
+let v_Vuna_dCompiler_dElab_dTerm_dinferArgs = (fun a1 a2 a3 a4 a5 a6 -> ((((((((Vuna_dCompiler_dElab_dTerm_dImpl.v_Vuna_dCompiler_dElab_dTerm_dImpl_dinferArgsFuel 256) a1) a2) a3) a4) a5) a6) Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing))
 
 let v_Vuna_dCompiler_dElab_dTerm_dconstrainDictDom = (fun a1 a2 a3 a4 a5 a6 -> (((((((Vuna_dCompiler_dElab_dTerm_dImpl.v_Vuna_dCompiler_dElab_dTerm_dImpl_dconstrainDictDomFuel 256) a1) a2) a3) a4) a5) a6))
 
 let v_Vuna_dCompiler_dElab_dTerm_dconstrainDictDomGoK = (fun a1 a2 a3 a4 a5 a6 a7 -> ((((((((Vuna_dCompiler_dElab_dTerm_dImpl.v_Vuna_dCompiler_dElab_dTerm_dImpl_dconstrainDictDomGoKFuel 256) a1) a2) a3) a4) a5) a6) a7))
 
-let v_Vuna_dCompiler_dElab_dTerm_dinferApp = (fun a1 a2 a3 a4 a5 a6 -> (((((((Vuna_dCompiler_dElab_dTerm_dImpl.v_Vuna_dCompiler_dElab_dTerm_dImpl_dinferAppFuel 256) a1) a2) a3) a4) a5) a6))
+let v_Vuna_dCompiler_dElab_dTerm_dinferApp = (fun a1 a2 a3 a4 a5 a6 -> ((((((((Vuna_dCompiler_dElab_dTerm_dImpl.v_Vuna_dCompiler_dElab_dTerm_dImpl_dinferAppFuel 256) a1) a2) a3) a4) a5) a6) Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing))
 
-let v_Vuna_dCompiler_dElab_dTerm_dinferAppGeneral = (fun a1 a2 a3 a4 a5 a6 -> (((((((Vuna_dCompiler_dElab_dTerm_dImpl.v_Vuna_dCompiler_dElab_dTerm_dImpl_dinferAppGeneralFuel 256) a1) a2) a3) a4) a5) a6))
+let v_Vuna_dCompiler_dElab_dTerm_dinferAppGeneral = (fun a1 a2 a3 a4 a5 a6 -> ((((((((Vuna_dCompiler_dElab_dTerm_dImpl.v_Vuna_dCompiler_dElab_dTerm_dImpl_dinferAppGeneralFuel 256) a1) a2) a3) a4) a5) a6) Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing))
 
-let v_Vuna_dCompiler_dElab_dTerm_dinferAppGeneralGo = (fun a1 a2 a3 a4 a5 a6 -> (((((((Vuna_dCompiler_dElab_dTerm_dImpl.v_Vuna_dCompiler_dElab_dTerm_dImpl_dinferAppGeneralGoFuel 256) a1) a2) a3) a4) a5) a6))
+let v_Vuna_dCompiler_dElab_dTerm_dinferAppGeneralGo = (fun a1 a2 a3 a4 a5 a6 -> ((((((((Vuna_dCompiler_dElab_dTerm_dImpl.v_Vuna_dCompiler_dElab_dTerm_dImpl_dinferAppGeneralGoFuel 256) a1) a2) a3) a4) a5) a6) Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing))
 
 let v_Vuna_dCompiler_dElab_dTerm_dcheckCondBool = (fun a1 a2 a3 a4 a5 -> ((((((Vuna_dCompiler_dElab_dTerm_dImpl.v_Vuna_dCompiler_dElab_dTerm_dImpl_dcheckCondBoolFuel 256) a1) a2) a3) a4) a5))
 

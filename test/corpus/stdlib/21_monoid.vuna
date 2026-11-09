@@ -1,0 +1,35 @@
+-- stdlib：Semigroup / Monoid / foldMap（M41）。
+import Base.Eq
+import Base.Foldable
+import Base.Int
+import Base.List
+import Base.Maybe
+import Base.Monoid
+import Base.String
+import Base.Unit
+
+emptyString : String
+emptyString = mempty
+
+emptyList : List Int
+emptyList = mempty
+
+natSix : Int
+natSix = 6
+
+checks : Bool
+checks =
+  mappend "a" "b" == "ab"
+    && emptyString == ""
+    && emptyList == []
+    && mappend [1] [2] == [1, 2]
+    && mappend (Just "x") Nothing == Nothing
+    && mappend Nothing (Just "x") == Nothing
+    && mappend (Just "x") (Just "y") == Just "xy"
+    && foldMap (\n => strFromInt n) [1, 2, 3] == "123"
+    && foldMap (\n => [n]) [1, 2, 3] == [1, 2, 3]
+    && fold (\x, acc => x + acc) 0 [1, 2, 3] == natSix
+    && mappend MkUnit MkUnit == MkUnit
+
+main : Int
+main = if checks then 1 else 2

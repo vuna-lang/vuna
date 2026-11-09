@@ -1,0 +1,20 @@
+module Base.Traversable (Traversable(..)) where
+
+-- Base.Traversable：可遍历容器（方法 `mapM`）。
+--
+-- 用法：`mapM : (a -> f b) -> t a -> f (t b)`，其中 `f` 是 Applicative。
+-- 当前 trait 方法签名不能写 `Applicative f =>`（B29），因此把 `f` 提升为 trait 的
+-- 第二个参数，约束落在实例 ctx 上：
+--
+--   instance Applicative f => Traversable List f where
+--     mapM f xs = ...
+--
+-- 调用点 `mapM (\x => Ok x) xs` 由实参推出 `f = Result`，再按实例 ctx 求
+-- `Applicative Result` 字典（两条 trait 参数都由调用点解出）。
+--
+-- 方法名用 `mapM` 而不是 `traverse`：`Base.Result.traverse` 是 List + Result 的
+-- 具体组合子（编译器大量使用），保留它避免同名短名冲突。
+-- | 可遍历容器 trait（`t` 容器、`f` Applicative）：`mapM` 对每个元素执行 `f` 计算并收集。
+trait Traversable t f where
+  -- | 对每个元素执行 applicative 计算并收集结果；失败/短路语义由具体 `f` 决定。
+  mapM : (a -> f b) -> t a -> f (t b)

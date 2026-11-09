@@ -14,7 +14,7 @@ quantity / 线性规则见 [qtt.md](qtt.md)（quantity 与擦除口径以该页�
   `Type : Type` 被拒绝。唯一的层级流动是显式写更小的宇宙：`Type 0` 可以赋给
   `Type 1` 的签名（因为 `Type 0` 的类型就是 `Type 1`），反过来不行。
 - **data kind**：`data F : <kind>` 的 kind 必须是「Pi 链 → `Type l`」，`l ≥ 0`；
-  族层级就是末尾的 `l`（`data Vec : Type -> Nat -> Type` 的族层级是 0）；kind 里每个
+  族层级就是末尾的 `l`（`data Vec : Nat -> Type -> Type` 的族层级是 0）；kind 里每个
   binder 的域必须是类型。不以宇宙收尾的 kind 报 `TC_DataKindArrows`。
 - **构造子字段层级**：构造子类型 `... -> F r1..rk` 的前 `arity` 个 binder 是族参数 /
   索引（不受层级限制），其余是字段；每个字段 binder 的域 sort 必须 `≤` 族层级，
@@ -33,27 +33,36 @@ quantity / 线性规则见 [qtt.md](qtt.md)（quantity 与擦除口径以该页�
   分支汇合、`==`/比较、算术特化）把 `Nat` 项包装成 `natToInt` 当 `Int` 用。运行时
   `natToInt` 恒等，类型规则仍是定义性相等（`Nat` 与 `Int` 不相等，包装后的项才是 `Int`）。
 - 反向没有隐式：`Int → Nat` 必须显式 `Base.Nat.fromInt`（负数 clamp 0）或 `fromIntMaybe`。
-- 这与宇宙/一般子类型无关：`Vec Nat` 与 `Vec Int` 仍不相等。
+- 这与宇宙/一般子类型无关：`Vec 3 Nat` 与 `Vec 3 Int` 仍不相等。
 
 ## data 与索引归纳族
 
 - 声明形式是 `data F : <kind> where` 加缩进的构造子表。kind 的**箭头个数 = 族的
-  参数 / 索引个数（arity）**，域依次对应族应用的位置；`data Vec : Type -> Nat -> Type`
-  就是 `Vec a n`。族参数不写圆括号，构造子用**完整 telescope** 重新绑定：前 `arity`
+  参数 / 索引个数（arity）**，域依次对应族应用的位置；`data Vec : Nat -> Type -> Type`
+  就是 `Vec n a`。族参数不写圆括号，构造子用**完整 telescope** 重新绑定：前 `arity`
   个 binder 对应族参数 / 索引，其余是字段，结果索引写在类型里。
-- 构造子应用要写全**显式**族参数 / 索引（`Cons Int Zero 1 (Nil Int)`）；隐式索引
+- **族的参数顺序约定：值类型放最后**（`Vec n a` / `Eff r a` / `Error e a` / `StateT s a`）：
+  前面位置是参数 / 索引 / 上下文。除了与 base 其它族同序，硬理由是 trait 高阶实例只按
+  **最后一个类型参数**匹配——`Functor f` / `Monad m` 要求 `f : Type -> Type`，所以
+  `instance Functor (Vec n)` 只有在 `data Vec : Nat -> Type -> Type` 时成立
+  （`Vec a : Nat -> Type` 永远不行）。
+- 构造子应用要写全**显式**族参数 / 索引（`Cons Zero Int 1 (Nil Int)`）；隐式索引
   （`{n : Nat}`）由调用点或期望类型反推。推断仍是一阶的：没有期望类型、又需要解出
   带局部变量的解时可能报 `TC_UnsolvedMetavar`。
+- **类型表达式里的字面量**：`Loader.Resolve` 只放行 `Int` 与 `String` 字面量，其余字面量
+  报 `invalid type expression`。所以 `Vec 3 a`（Int 索引）与 `Reader "books" Int`
+  （String 索引）都可用；字面量按值参与索引相等（`Core/Eval.valueEqFuel` 的 `VStr`
+  分支与 `Core/Conv` 的字符串比较）。
 - **元变量求解**：局部变量 spine 优先走 Miller pattern（提取成 λ 抽象）；Miller pattern
   之外保留 M13 的「头一致就提取」近似（`Core/Conv.solveMetaHoLegacyFuel`），能提取就
   提取，提取不到才报 `TC_CannotSolveHigherOrder`。完整高阶合一是研究储备（debt B07）。
-- 族的类型级应用（`Vec a n`）保持中性（`TGlobal` / `NGlobal` spine），只在 unification
+- 族的类型级应用（`Vec n a`）保持中性（`TGlobal` / `NGlobal` spine），只在 unification
   时按定义性相等比较，不做类型级求值。
 - 没有内置的归纳相等族 `Eq`（DT 用来做证明的 `data Eq`）；`Base.Eq` 是 trait。`Nat` / `Vec` /
   `Fin` 也是用户（或 `Base.Nat`、`Base.Vec`）声明的普通族。`Bool` / `List` / `IO` 的
   canonical 身份见 [primitives.md](primitives.md)。
 - 索引 binder 的擦除：隐式索引恒擦除（无运行时字段）；显式索引未标注时是 `RigOmega`，
-  保留运行时字段（`Vec a n` 的 `(n : Nat)` 可被读回）；要擦除显式索引就写
+  保留运行时字段（`Vec n a` 的 `(n : Nat)` 可被读回）；要擦除显式索引就写
   `(0 n : Nat)`（quantity 规则见 [qtt.md](qtt.md)），代价是分支体读不到它。擦除只按
   binder 的 quantity 判定，不做整程序使用分析。
 - 实现：`Elab/Data`、`Elab/Types`；unification 见 [core.md](core.md)。
@@ -109,6 +118,7 @@ quantity / 线性规则见 [qtt.md](qtt.md)（quantity 与擦除口径以该页�
   Int 实例）；trait 与实例语义见 [records-traits.md](records-traits.md)。
 - **延迟字典目标的诊断**：类参数已解出但实例搜索失败的延迟目标在收尾时报
   `TC_NoInstanceFound`（带字典目标）；类参数仍含未解元变量、或类参数是刚性类型变量时
+- **延迟字典目标的 ctx 化重解**：`resolveRowGoalsCtx` 在定义体收尾的 ctx 里先解行成员目标，再对类参数已解、不触发刚性快路径的字典目标做实例搜索（`tryMatchInst` 按 ctx 深度 quote）；行元变量解出后 `Monad (Eff r)` 等参数化实例的字典因此能静态求出，不会被 `liftFreeDictGoals` 提升成单态字典参数。类参数里**嵌套**的未解 meta 也按未解处理（结构判定），避免提前搜索。
   保持 `unsolved metavariable`。立即搜索失败同样报 `TC_NoInstanceFound`。
 - **type-as-value**：不引入 type codes。Type 级等式走**擦除的 `Eq` 证据 + `cast`
   组合子**；把类型放到**运行时位置**仍被擦除检查拒（`CG_TypeUsedAtRuntime` /
@@ -150,6 +160,12 @@ quantity / 线性规则见 [qtt.md](qtt.md)（quantity 与擦除口径以该页�
   不可表示的全局类型头，或 kind 的 Pi 链含非宇宙域的**类型族参数**（`res : f -> Type`）；
   普通类型构造子参数（`m : Type -> Type`）与数据族的索引值实参不算。细节与边界见
   [effects.md](effects.md) §5。
+- **零成本表示（M42）**：擦除后**恰好一个运行时字段**的单构造子族（`record` 或
+  `data`）在 OCaml 侧不再有包装变体，而是字段类型的类型别名（`type t_UserId = int`）。
+  判据只看构造子形状（`ctorKeepFlags`）：单构造子、单保留字段、字段类型可表示（函数 / Pi 与不透明 / 未知名字段保持装箱，避免 OCaml 值限制与不可命名）、候选间无递归环、排除 `Bool` / `Nat` / 内建特殊族；类型参数
+  个数无关。构造应用变成恒等，构造子 `case` 变成 `let` 绑定；不改变类型检查、`deriving`
+  或语义，只改运行时表示。多字段 / 多构造子类型仍是普通变体，二者可在同一 `and` 组共存。
+  用户视角与例子见 [records-traits.md](records-traits.md) §零成本表示。
 - `axiom name : Ty` 是无运行时定义的擦除 / 类型层声明；运行时（非擦除位置）使用报
   `CG_AxiomAtRuntime`。
 - 擦除相关实现与 codegen 不变量（构造子字段形状 keep flags、作用域护栏、唯一名字）见

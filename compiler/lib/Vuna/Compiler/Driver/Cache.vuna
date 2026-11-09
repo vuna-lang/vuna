@@ -13,7 +13,7 @@ module Vuna.Compiler.Driver.Cache
   , summaryMetaSegment
   ) where
 
--- M34.5 / C37：接口摘要（依赖包 elab 复用）的载体——参考 Idris2 的 TTC：
+-- Vuna.Compiler.Driver.Cache：M34.5 / C37：接口摘要（依赖包 elab 复用）的载体——参考 Idris2 的 TTC：
 -- **只含闭合结果，不携带任何 elab 状态**（sols / next / dict goals / defVals）。
 --
 -- 写摘要（`cachedOfProgram`）：把 DtProgram 的项按**出现点深度**内联已解元变量
@@ -28,7 +28,7 @@ module Vuna.Compiler.Driver.Cache
 -- delta 展开的唯一来源）、globals（签名面）、insts（tele / 约束 / 头）、classes。
 -- 依赖闭包由调用方逐包读取并在 `depStartOf` 去重合并。
 import Vuna.Compiler.Common
-import Base.IntMap
+import Base.HashMap
 import Vuna.Compiler.Core
 import Vuna.Compiler.Core.Term
 import Vuna.Compiler.Elab.Meta
@@ -59,47 +59,48 @@ cachedClasses (CachedProgram datas defs globals insts classes) = classes
 -- ---------------------------------------------------------------
 -- 写摘要：按出现点深度内联已解元变量
 -- ---------------------------------------------------------------
-fixTerm : IntMap Value -> Int -> Term -> Term
+fixTerm : HashMap Int Value -> Int -> Term -> Term
 fixTerm tbl depth t = substSolvedMetasAtTbl tbl depth t
 
-fixDef : IntMap Value -> DtDef -> DtDef
+fixDef : HashMap Int Value -> DtDef -> DtDef
 fixDef tbl (DtDef n ty body sp) = DtDef n (fixTerm tbl 0 ty) (fixTerm tbl 0 body) sp
 fixDef tbl (DtAxiom n ty sp) = DtAxiom n (fixTerm tbl 0 ty) sp
 fixDef tbl (DtExtern n ty c sp) = DtExtern n (fixTerm tbl 0 ty) c sp
 
-fixCtor : IntMap Value -> DtCtor -> DtCtor
+fixCtor : HashMap Int Value -> DtCtor -> DtCtor
 fixCtor tbl (DtCtor n fam tele ty) = DtCtor n fam tele (fixTerm tbl 0 ty)
 
-fixData : IntMap Value -> DtData -> DtData
-fixData tbl (DtData n ps ctors kind lin) =
-  DtData n ps (map (fixCtor tbl) ctors) (fixTerm tbl 0 kind) lin
+fixData : HashMap Int Value -> DtData -> DtData
+fixData tbl (DtData n ps ctors kind viaClasses lin) =
+  DtData n ps (map (fixCtor tbl) ctors) (fixTerm tbl 0 kind) viaClasses lin
 
--- 投影签名是闭合的 Pi 链（`{p} -> {d} -> <方法类型>`）；字段类型只精化在类参数 binder 之下
--- （深度 1），自定义实例时由 `substInstParam` 把类参数换成头实参。
-fixClass : IntMap Value -> DtClass -> DtClass
+-- 投影签名是闭合的 Pi 链（`{p} -> {d} -> <方法类型>`）；字段类型精化在**全部类参数** binder
+-- 之下（深度 = 类参数个数；单参数类是 1，多参数 trait 必须按个数，否则会被误判 free-var），
+-- 自定义实例时由 `substInstParam` 把类参数换成头实参。
+fixClass : HashMap Int Value -> DtClass -> DtClass
 fixClass tbl (DtClass n ps projs tys) =
   DtClass n ps (map (\p => Pair (firstOf p) (fixTerm tbl 0 (secondOf p))) projs)
-    (map (fixTerm tbl 1) tys)
+    (map (fixTerm tbl (length ps)) tys)
 
 -- 实例 telescope：tele 第 i 项在 i 个 tele binder 之下；ctx 域与结果头在全部 tele binder 之下。
-fixTele : IntMap Value -> Int -> List (Pair String Term) -> List (Pair String Term)
+fixTele : HashMap Int Value -> Int -> List (Pair String Term) -> List (Pair String Term)
 fixTele tbl depth [] = []
 fixTele tbl depth ((Pair n t) :: rest) =
   Pair n (fixTerm tbl depth t) :: fixTele tbl (depth + 1) rest
 
-fixInst : IntMap Value -> DtInst -> DtInst
+fixInst : HashMap Int Value -> DtInst -> DtInst
 fixInst tbl (DtInst n tele ctxE head) =
   let
     nTele = length tele
   in DtInst n (fixTele tbl 0 tele) (map (fixTerm tbl nTele) ctxE) (fixTerm tbl nTele head)
 
 cachedOfProgram : DtProgram -> CachedProgram
-cachedOfProgram prog = cachedOfProgramWith (Base.IntMap.fromList (dtProgSols prog)) prog
+cachedOfProgram prog = cachedOfProgramWith (Base.HashMap.fromList (dtProgSols prog)) prog
 
--- M34.6：整包 sols 的 IntMap 可能很大（数万条）。接口写侧按模块切片后仍要按**整包**
--- sols 做一次深度 zonk：旧实现每个模块都重建一次整包 IntMap（O(#模块 × #sols)）。
+-- M34.6：整包 sols 的 HashMap Int 可能很大（数万条）。接口写侧按模块切片后仍要按**整包**
+-- sols 做一次深度 zonk：旧实现每个模块都重建一次整包 HashMap Int（O(#模块 × #sols)）。
 -- 这里把表做成显式参数，调用方（Iface 的 `ProgParts`）整包只建一次。
-cachedOfProgramWith : IntMap Value -> DtProgram -> CachedProgram
+cachedOfProgramWith : HashMap Int Value -> DtProgram -> CachedProgram
 cachedOfProgramWith tbl prog =
   CachedProgram (map (fixData tbl) (dtProgDatas prog)) (map (fixDef tbl) (dtProgDefs prog))
     (map (\p => Pair (firstOf p) (fixTerm tbl 0 (secondOf p))) (dtProgGlobals prog))
@@ -161,7 +162,9 @@ classesValid [] = True
 classesValid (c :: rest) =
   let
     projs = map (\p => secondOf p) c.dtClassMethods
-  in termsValidAt 0 projs && termsValidAt 1 c.dtClassFieldTys && classesValid rest
+  in termsValidAt 0 projs
+    && termsValidAt (length c.dtClassParams) c.dtClassFieldTys
+    && classesValid rest
 
 cachedProgramValid : CachedProgram -> Bool
 cachedProgramValid (CachedProgram datas defs globals insts classes) =
@@ -273,7 +276,7 @@ classIssue c =
   in if projIssue /= "" then "${dtClassName c} proj:${projIssue}"
   else
     let
-      fieldIssue = ctxIssues 1 c.dtClassFieldTys
+      fieldIssue = ctxIssues (length c.dtClassParams) c.dtClassFieldTys
     in if fieldIssue == "" then "" else "${dtClassName c} field:${fieldIssue}"
 
 classesIssue : List DtClass -> String
@@ -337,8 +340,8 @@ shiftCtor : Int -> DtCtor -> DtCtor
 shiftCtor off (DtCtor n fam tele ty) = DtCtor n fam tele (shiftTerm off ty)
 
 shiftData : Int -> DtData -> DtData
-shiftData off (DtData n ps ctors kind lin) =
-  DtData n ps (map (shiftCtor off) ctors) (shiftTerm off kind) lin
+shiftData off (DtData n ps ctors kind viaClasses lin) =
+  DtData n ps (map (shiftCtor off) ctors) (shiftTerm off kind) viaClasses lin
 
 shiftClass : Int -> DtClass -> DtClass
 shiftClass off (DtClass n ps projs tys) =

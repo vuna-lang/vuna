@@ -8,7 +8,11 @@ import Base.Result
 prog : Eff [] (Result Int)
 prog =
   withScope
-    (\sc => bindEff newChannelInt (\ch => bindEff (forkTask sc (send ch 42)) (\_ => recvWait 64 ch)))
+    (\sc => do
+      ch <- newChannelInt
+      _ <- forkTask sc (send ch 42)
+      recvWait 64 ch
+    )
 
 main : IO Int
 main = do

@@ -1,0 +1,40 @@
+-- stdlib：泛型 HashMap 的 Int 键路径（0 与 1024 必碰撞）。
+import Base.HashMap
+import Base.List
+import Base.Maybe
+import Base.Pair
+
+-- 63 位 Int 的 min_int：绝对值超出可表示字面量，用算术构造。
+minKey : Int
+minKey = 0 - 4611686018427387903 - 1
+
+showMaybeInt : Maybe Int -> String
+showMaybeInt Nothing = "Nothing"
+showMaybeInt (Just x) = "Just " ++ strFromInt x
+
+main : String
+main =
+  let
+    m = Base.HashMap.insert 0 10 (Base.HashMap.insert 1024 11 (Base.HashMap.fromList []))
+    m2 = Base.HashMap.fromList [Pair 0 1, Pair 0 2, Pair (0 - 1) 3]
+    m3 = Base.HashMap.insert (0 - 1024) 7 (Base.HashMap.fromList [])
+    mn = Base.HashMap.insert minKey 9 (Base.HashMap.fromList [])
+    m4 = Base.HashMap.insertAll [Pair 0 1, Pair 0 2] (Base.HashMap.fromList [])
+  in "a="
+    ++ showMaybeInt (Base.HashMap.lookup 0 m)
+    ++ " b="
+    ++ showMaybeInt (Base.HashMap.lookup 1024 m)
+    ++ " sz="
+    ++ strFromInt (Base.HashMap.size m)
+    ++ " fl="
+    ++ showMaybeInt (Base.HashMap.lookup 0 m2)
+    ++ " insall="
+    ++ showMaybeInt (Base.HashMap.lookup 0 m4)
+    ++ " neg="
+    ++ showMaybeInt (Base.HashMap.lookup (0 - 1) m2)
+    ++ " neg2="
+    ++ showMaybeInt (Base.HashMap.lookup (0 - 1024) m3)
+    ++ " min="
+    ++ showMaybeInt (Base.HashMap.lookup minKey mn)
+    ++ " miss="
+    ++ showMaybeInt (Base.HashMap.lookup 5 m)

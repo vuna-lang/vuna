@@ -2,6 +2,8 @@ open Vuna_runtime
 type t_Vuna_dCompiler_dCommon_dPos = C_Vuna_dCompiler_dCommon_dPos_Pos of (int) * (int)
 and t_Vuna_dCompiler_dCommon_dSpan = C_Vuna_dCompiler_dCommon_dSpan_Span of (string) * (int) * (int) * (int) * (int)
 
+let v_Vuna_dCompiler_dCommon_dandThen = (fun r k -> (((Base_dMonad.v_Base_dMonad_dbind Base_dResult.v_Monad_uBase_dResult_dResult) r) k))
+
 let v_Vuna_dCompiler_dCommon_dposLine = (fun mc0 -> (match mc0 with
   | C_Vuna_dCompiler_dCommon_dPos_Pos (dtb__0, dtb__1) -> dtb__0
   | _ -> failwith "DT: impossible branch"

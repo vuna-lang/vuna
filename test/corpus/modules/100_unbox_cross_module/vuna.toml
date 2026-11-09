@@ -1,0 +1,5 @@
+[package]
+name = "fix-100-unbox-cross-module"
+
+[dependencies]
+vuna-base = "../../../../base"

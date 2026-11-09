@@ -1,0 +1,3 @@
+-- Float 比较/相等：`< <= > >= == /=` 在两侧 Float 时特化到 IEEE 语义。
+main : String
+main = if 1.5 < 2.5 && 2.0 == 2.0 && 3.0 /= 4.0 then "ok" else "bad"

@@ -1,0 +1,6 @@
+-- deriving (FromInt) 拒绝多字段构造子（只接受单字段包装）。
+import Base.FromInt
+
+data Bad : Type where
+  MkBad : Int -> Int -> Bad
+deriving (FromInt)

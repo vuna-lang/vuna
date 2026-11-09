@@ -2,8 +2,8 @@
 import Base.Eff
 import Base.EffError
 
-bad : Eff Nil Int
-bad = catch E1 (pureEff 1) (\_ => pureEff 2)
+bad : Eff [] Int
+bad = catch "main" (pure 1) (\_ => pure 2)
 
 main : Int
 main = 1

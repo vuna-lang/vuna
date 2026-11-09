@@ -19,7 +19,7 @@ module Vuna.Compiler.Diagnostics.Tc
 -- 从 `Vuna.Compiler.Diagnostics` 拆出（M30 B19）；对外名字集合不变，门面仍是
 -- `Vuna.Compiler.Diagnostics`（选择性重导出，调用点零改动）。
 -- arity 由 `TcErr : Nat -> Type` 的构造子索引在编译期锁定（`UnknownName : String ->
--- TcErr (Succ Zero)`），throw 点给 `Vec String n`——arity 拼错**编译失败**。
+-- TcErr (Succ Zero)`），throw 点给 `Vec n String`——arity 拼错**编译失败**。
 -- 模板/说明/码的派生都在本模块；`tcAll` 是 `gen-errors` 的文档遍历源。
 --
 -- 约定：符号语义稳定、只增不删；一个码只承载一种语义；占位符 `<k>` 每个只出现一次。
@@ -135,6 +135,8 @@ data TcErr : Nat -> Type where
   TypeMismatch : String -> String -> TcErr (Succ (Succ Zero))
   TypeMismatchCaseBranch : String -> String -> TcErr (Succ (Succ Zero))
   WhereNeedsSig : String -> String -> TcErr (Succ (Succ Zero))
+  -- M42：`deriving via field` 只允许自动去装箱的单字段包装。
+  DerivingViaUnboxedRequired : TcErr Zero
 
 -- ---------------------------------------------------------------
 -- code 派生（唯一真源；`gen-errors` 与 throw 都用它）
@@ -237,6 +239,7 @@ tcCode (UnsolvedMetavar _ _) = "TC_UnsolvedMetavar"
 tcCode (TypeMismatch _ _) = "TC_TypeMismatch"
 tcCode (TypeMismatchCaseBranch _ _) = "TC_TypeMismatchCaseBranch"
 tcCode (WhereNeedsSig _ _) = "TC_WhereNeedsSig"
+tcCode DerivingViaUnboxedRequired = "TC_DerivingViaUnboxedRequired"
 
 -- ---------------------------------------------------------------
 -- 模板（构造子 payload，占位符 `<0>`/`<1>`；已去掉旧 `DT: ` 前缀）
@@ -347,6 +350,8 @@ tcTemplate (TypeMismatch _ _) = "type mismatch: expected <0>, got <1>"
 tcTemplate (TypeMismatchCaseBranch _ _) = "type mismatch: case branch <0> vs <1>"
 tcTemplate (WhereNeedsSig _ _) =
   "where binding `<0>` needs a type signature (write `<1> : <type>` before the clause)"
+tcTemplate DerivingViaUnboxedRequired =
+  "deriving via field requires a zero-cost single-field wrapper (auto-unboxed)"
 tcTemplate (LinearUnused _) =
   "linear binder `<0>` must be used exactly once at runtime, but it is never used"
 tcTemplate (LinearOverused _) =
@@ -503,7 +508,8 @@ tcChunk9 =
 
 tcChunk10 : List TcEntry
 tcChunk10 =
-  [ TcEntry (tcCode (WhereNeedsSig "" "")) (tcTemplate (WhereNeedsSig "" "")) "where 绑定缺类型签名"
+  [ TcEntry (tcCode (WhereNeedsSig "" "")) (tcTemplate (WhereNeedsSig "" "")) "where 绑定缺类型签名",
+    TcEntry (tcCode DerivingViaUnboxedRequired) (tcTemplate DerivingViaUnboxedRequired) "deriving via field 需要自动去装箱的单字段包装"
   ]
 
 tcChunk11 : List TcEntry
@@ -527,13 +533,13 @@ tcAll =
 -- ---------------------------------------------------------------
 -- throw：拼 `[CODE] 消息`（去掉旧 `DT: ` 前缀）；TC 的 Span 经 Common.showSpanLoc 拼在头部
 -- ---------------------------------------------------------------
-tcMsg : {n : Nat} -> TcErr n -> Vec String n -> String
+tcMsg : {n : Nat} -> TcErr n -> Vec n String -> String
 tcMsg e args = diagMsg (tcCode e) (tcTemplate e) args
 
 -- TC 诊断带位置（`文件:行:列: [CODE] 消息`）。
 -- 本模块**不**依赖 `Elab/Types`（避免 Elab ↔ Diagnostics 成环）：位置前缀由
 -- Diagnostics.Common 拼，与 `Elab/Types.errAt` 的输出格式一致。
-tcErr : {n : Nat} -> Span -> TcErr n -> Vec String n -> Result a
+tcErr : {n : Nat} -> Span -> TcErr n -> Vec n String -> Result a
 tcErr sp e args = diagErrAt sp (tcMsg e args)
 
 -- ---------------------------------------------------------------
@@ -545,11 +551,11 @@ tcErr0 sp e = tcErr sp e []
 
 -- | 自动补注（M41 新增导出）：tcErr1。
 tcErr1 : Span -> TcErr (Succ Zero) -> String -> Result a
-tcErr1 sp e a0 = tcErr sp e (a0 :: [])
+tcErr1 sp e a0 = tcErr sp e [a0]
 
 -- | 自动补注（M41 新增导出）：tcErr2。
 tcErr2 : Span -> TcErr (Succ (Succ Zero)) -> String -> String -> Result a
-tcErr2 sp e a0 a1 = tcErr sp e (a0 :: a1 :: [])
+tcErr2 sp e a0 a1 = tcErr sp e [a0, a1]
 
 -- ---------------------------------------------------------------
 -- 无位置版本：Core（Conv/Eval）等底层诊断拿不到 Span，但仍要走同一套码与模板。
@@ -561,8 +567,8 @@ tcErr0NoLoc e = Err (tcMsg e [])
 
 -- | 自动补注（M41 新增导出）：tcErr1NoLoc。
 tcErr1NoLoc : TcErr (Succ Zero) -> String -> Result a
-tcErr1NoLoc e a0 = Err (tcMsg e (a0 :: []))
+tcErr1NoLoc e a0 = Err (tcMsg e [a0])
 
 -- | 自动补注（M41 新增导出）：tcErr2NoLoc。
 tcErr2NoLoc : TcErr (Succ (Succ Zero)) -> String -> String -> Result a
-tcErr2NoLoc e a0 a1 = Err (tcMsg e (a0 :: a1 :: []))
+tcErr2NoLoc e a0 a1 = Err (tcMsg e [a0, a1])

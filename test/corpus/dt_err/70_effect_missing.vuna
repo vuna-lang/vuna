@@ -2,8 +2,8 @@
 import Base.Eff
 import Base.EffState
 
-bad : Eff (Cons (State S1 Int) Nil) Int
-bad = get S2 Int
+bad : Eff [State "handled" Int] Int
+bad = get "wanted" Int
 
 main : Int
 main = 1

@@ -212,6 +212,7 @@ startsAtom : PState -> Bool
 startsAtom st = case peekTok st of
   PTok (TIdent x) p => True
   PTok (TInt x) p => True
+  PTok (TFloat x) p => True
   PTok (TStr x) p => True
   PTok (TTmpl m parts ep) p => True
   PTok (TKw "Type") p => True

@@ -1,0 +1,52 @@
+-- stdlib：容器 Eq / Ord / Show 实例与 Ordering / Unit（M41）。
+-- `Show` 覆盖 List / Maybe / Pair / Result / Map；`Eq` / `Ord` 覆盖代数容器。
+import Base.Eq
+import Base.Int
+import Base.List
+import Base.Map
+import Base.Maybe
+import Base.Ord
+import Base.Pair
+import Base.Result
+import Base.Show
+import Base.Unit
+
+nothingInt : Maybe Int
+nothingInt = Nothing
+
+ints : List Int
+ints = [1, 2]
+
+pairLow : Pair Int Int
+pairLow = Pair 1 3
+
+pairHigh : Pair Int Int
+pairHigh = Pair 2 0
+
+unitMap : Map String Int
+unitMap = Base.Map.fromList [Pair "a" 1, Pair "b" 2]
+
+checks : Bool
+checks =
+  ints == [1, 2]
+    && ints < [2]
+    && nothingInt == Nothing
+    && Just 1 < Just 2
+    && Pair 1 2 == Pair 1 2
+    && pairLow < pairHigh
+    && Ok 1 == Ok 1
+    && Ok 1 /= Err "x"
+    && compare 1 2 == LT
+    && compare 2 2 == EQ
+    && compare 3 2 == GT
+    && min 2 3 == 2
+    && max 2 3 == 3
+    && show LT == "LT"
+    && show EQ == "EQ"
+    && show GT == "GT"
+    && MkUnit == MkUnit
+    && show MkUnit == "MkUnit"
+    && show unitMap == "fromList [(\"a\", 1), (\"b\", 2)]"
+
+main : Int
+main = if checks then 1 else 2

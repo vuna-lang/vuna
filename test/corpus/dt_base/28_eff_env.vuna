@@ -1,13 +1,15 @@
--- W10：env 效应标签（命名实例）——同一程序在 mock（V1）与真实（V2）handler 下
+-- W10：env 效应标签（命名实例）——同一程序在 mock（"mock"）与真实（"real"）handler 下
 -- 各跑一次；两边都断言「缺失变量为空 / cwd 非空 / execPath 非空」。
 import Base.Eff
 import Base.EffEnv
 import Base.IO
 
-prog : (n : Name) -> Eff (Env n :: []) Int
-prog n =
-  bindEff (envGetEnv n "VUNA_W10_MISSING_ENV_VAR")
-    (\m => bindEff (envGetCwd n) (\c => bindEff (envExecPath n) (\e => pureEff ((if m == "" then 1 else 0) + (if c /= "" then 1 else 0) + (if e /= "" then 1 else 0)))))
+prog : (n : String) -> Eff [Env n] Int
+prog n = do
+  m <- envGetEnv n "VUNA_W10_MISSING_ENV_VAR"
+  c <- envGetCwd n
+  e <- envExecPath n
+  pure ((if m == "" then 1 else 0) + (if c /= "" then 1 else 0) + (if e /= "" then 1 else 0))
 
 mret : Int -> Int
 mret a = a
@@ -19,7 +21,7 @@ mopH op k = case op of
   ExecPath => k "/mock/exe"
 
 main : IO Int
-main = case runPure (handleEnv V1 mret mopH (prog V1)) of
+main = case runPure (handleEnv "mock" mret mopH (prog "mock")) of
   mockScore =>
     prim_bindIO (print ("mock " ++ strFromInt mockScore ++ "\n"))
-      (\_ => prim_bindIO (runIOAnswer (handleEnvIO V2 (prog V2))) (\realScore => prim_bindIO (print ("real " ++ strFromInt realScore ++ "\n")) (\_ => prim_pureIO 0)))
+      (\_ => prim_bindIO (runIOAnswer (handleEnvIO "real" (prog "real"))) (\realScore => prim_bindIO (print ("real " ++ strFromInt realScore ++ "\n")) (\_ => prim_pureIO 0)))

@@ -1,0 +1,13 @@
+-- 泛型函数体里 `""` 是 String——检查位置不会因外层有其他实例而改变默认类型。
+data Tag : Type where
+  MkTag : String -> Tag
+
+instance FromString Tag where
+  fromString s = MkTag s
+
+describe : String -> String
+describe s = "tag=" ++ s
+
+main : String
+main = describe (case MkTag "x" of MkTag s => s)
+  ++ "/" ++ strFromInt (case MkTag "y" of MkTag s => 7)

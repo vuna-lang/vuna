@@ -6,15 +6,22 @@ import Base.IO
 import Base.Result
 
 tick : List Int -> Eff [] Int
-tick [] = pureEff 0
-tick (_ :: rest) =
-  bindEff (liftIOEff (println "tick"))
-    (\_ => bindEff yieldNow (\st => if st <= 0 then tick rest else bindEff (liftIOEff (println "cleanup")) (\_ => pureEff 1)))
+tick [] = pure 0
+tick (_ :: rest) = do
+  _ <- liftIOEff (println "tick")
+  st <- yieldNow
+  if st <= 0 then tick rest else do
+    _ <- liftIOEff (println "cleanup")
+    pure 1
 
 prog : Eff [] (Result Int)
 prog =
   withScopeTimeout 4
-    (\sc => bindEff (forkTask sc (tick [0, 0, 0, 0, 0, 0, 0, 0])) (\_ => bindEff (liftIOEff (println "body-done")) (\_ => pureEff (Ok 0))))
+    (\sc => do
+      _ <- forkTask sc (tick [0, 0, 0, 0, 0, 0, 0, 0])
+      _ <- liftIOEff (println "body-done")
+      pure (Ok 0)
+    )
 
 main : IO Int
 main = do

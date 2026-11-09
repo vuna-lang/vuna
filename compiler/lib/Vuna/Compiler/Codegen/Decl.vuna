@@ -1,7 +1,6 @@
 module Vuna.Compiler.Codegen.Decl
   ( QualCtx(..)
   , boolText
-  , ctorKeepFlags
   , ctorOcamlName
   , ctorOpaqueKeptFlags
   , ctorOpaqueTableOf
@@ -39,6 +38,7 @@ import Vuna.Compiler.Common
 import Base.HashMap
 import Vuna.Compiler.Core
 import Vuna.Compiler.Elab
+import Vuna.Compiler.Elab.Representation
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Intrinsics
 
@@ -106,16 +106,16 @@ ctorOcamlName family ctor = "C_${sanitizeName family}_${sanitizeName (ctorShortN
 -- （单文件装配、文本丢弃）用的空表，所有引用都回落成裸名。
 record QualCtx where
   qcUnit : String
-  qcDefs : HashMap String
-  qcDatas : HashMap String
+  qcDefs : HashMap String String
+  qcDatas : HashMap String String
 
 noQual : QualCtx
 noQual = QualCtx "" (Base.HashMap.fromList []) (Base.HashMap.fromList [])
 
-unitTblOf : List (Pair String String) -> HashMap String
+unitTblOf : List (Pair String String) -> HashMap String String
 unitTblOf pairs = Base.HashMap.insertAll pairs (Base.HashMap.fromList [])
 
-unitOfTbl : HashMap String -> String -> String
+unitOfTbl : HashMap String String -> String -> String
 unitOfTbl tbl name = case Base.HashMap.lookup name tbl of
   Just u => u
   Nothing => ""
@@ -139,44 +139,13 @@ qualCtorText qc family ctor =
 qualTypeText : QualCtx -> String -> Pair String String
 qualTypeText qc name = qualPrefix qc (unitOfTbl qc.qcDatas name) (typeName name)
 
--- 类型声明的跨单元依赖：ctor 类型项里出现的族名（`renderFieldTy` 只把 `allDatas`
--- 里的 runtime 族渲染成 `t_*`，其余全局名退化成不透明类型参数，因此这里按
--- `qcDatas` 过滤即可）。显式 Pi 字段与普通字段都在同一个类型项里，不用分别扫。
-termGlobalNames : List String -> Term -> List String
-termGlobalNames acc (TGlobal name) = addUniqueName name acc
-termGlobalNames acc (TVar name i) = acc
-termGlobalNames acc (TMeta m) = acc
-termGlobalNames acc (TType l) = acc
-termGlobalNames acc (TPi name implicit rig dom cod) = termGlobalNames (termGlobalNames acc dom) cod
-termGlobalNames acc (TLam name rig body) = termGlobalNames acc body
-termGlobalNames acc (TApp f a rig) = termGlobalNames (termGlobalNames acc f) a
-termGlobalNames acc (TCon c args) = termGlobalNamesInArgs acc args
-termGlobalNames acc (TCase scrut alts) = termGlobalNamesInAlts (termGlobalNames acc scrut) alts
-termGlobalNames acc (TInt n) = acc
-termGlobalNames acc (TStr s) = acc
-termGlobalNames acc (TBool b) = acc
-termGlobalNames acc (TIf c th el) = termGlobalNames (termGlobalNames (termGlobalNames acc c) th) el
-
-termGlobalNamesInArgs : List String -> List (Pair Term Rig) -> List String
-termGlobalNamesInArgs acc [] = acc
-termGlobalNamesInArgs acc (p :: rest) = termGlobalNamesInArgs (termGlobalNames acc (firstOf p)) rest
-
-termGlobalNamesInAlts : List String -> List CaseAlt -> List String
-termGlobalNamesInAlts acc [] = acc
-termGlobalNamesInAlts acc (a :: rest) =
-  termGlobalNamesInAlts (termGlobalNames acc (caseAltBody a)) rest
-
-addUniqueName : String -> List String -> List String
-addUniqueName name [] = [name]
-addUniqueName name (x :: rest) = if x == name then x :: rest else x :: addUniqueName name rest
-
 dataTypeGlobalNames : DtData -> List String
 dataTypeGlobalNames d = dataTypeGlobalNamesGo [] (dtDataCtors d)
 
 dataTypeGlobalNamesGo : List String -> List DtCtor -> List String
 dataTypeGlobalNamesGo acc [] = acc
 dataTypeGlobalNamesGo acc (c :: rest) =
-  dataTypeGlobalNamesGo (termGlobalNames acc (dtCtorType c)) rest
+  dataTypeGlobalNamesGo (append acc (termGlobalNames (dtCtorType c))) rest
 
 typeDepsOf : QualCtx -> List DtData -> List String
 typeDepsOf qc datas = typeDepsOfGo qc (concatMap dataTypeGlobalNames datas) []
@@ -308,10 +277,6 @@ typeParamLevelsGo [] i = []
 typeParamLevelsGo (p :: rest) i =
   if rigIsErased (secondOf p) then i :: typeParamLevelsGo rest (i + 1)
   else typeParamLevelsGo rest (i + 1)
-
-findDtData : String -> List DtData -> Maybe DtData
-findDtData name [] = Nothing
-findDtData name (d :: rest) = if dtDataName d == name then Just d else findDtData name rest
 
 memInt : Int -> List Int -> Bool
 memInt i [] = False
@@ -468,6 +433,7 @@ renderTypeArgGlobal qc fuel levels table datas g sp = case renderTypeIntrinsic g
   Nothing => if g == intTypeName then "int"
   else if g == natTypeName then "int"
   else if g == strTypeName then "string"
+  else if g == floatTypeName then "float"
   else if g == boolTypeName then "bool"
   else case findDtData g datas of
     Just gd =>
@@ -517,6 +483,7 @@ renderFieldTy qc levels table datas lvl (VNeutral n) slot = case n of
     Nothing => if g == intTypeName then Pair "int" slot
     else if g == natTypeName then Pair "int" slot
     else if g == strTypeName then Pair "string" slot
+    else if g == floatTypeName then Pair "float" slot
     else if g == boolTypeName then Pair "bool" slot
     else case findDtData g datas of
       Just gd =>
@@ -529,9 +496,6 @@ renderFieldTy qc levels table datas lvl _ slot = Pair (typeParamName slot) (slot
 -- （True = 该 binder 进运行时表示）。类型声明、构造子应用、case 分支绑定三处都消费
 -- 同一份 flags，并在使用点校验长度 / 擦除标志一致；三处各自 `if erased` 漂移会静默
 -- 错编译（字段数、telescope 长度、绑定数三者没有交叉校验）。
-ctorKeepFlags : DtCtor -> List Bool
-ctorKeepFlags c = map (\b => not (rigIsErased (secondOf b))) (dtCtorTelescope c)
-
 flagMatchesRig : Bool -> Rig -> Bool
 flagMatchesRig True rig = not (rigIsErased rig)
 flagMatchesRig False rig = rigIsErased rig
@@ -651,12 +615,24 @@ genCtorDecl qc levels table datas c =
     (ctorFieldTexts qc levels table datas (ctorKeepFlags c) (ctorOpaqueFlagsOf datas c) (dtCtorTelescope c) 0 (eval [] (dtCtorType c)) (length levels))
     (\p => Ok (ctorDeclText (ctorOcamlName (dtCtorFamily c) (dtCtorName c)) (firstOf p)))
 
-genDataDecl : QualCtx -> List (Pair String (List Int)) -> List DtData -> DtData -> Result String
-genDataDecl qc table datas d =
+-- 去装箱族：只声明透明类型别名，不生成变体/构造子。
+genUnboxedDataDecl : QualCtx -> List Int -> List (Pair String (List Int)) -> List DtData -> DtData -> DtCtor -> Int -> Result String
+genUnboxedDataDecl qc levels table datas d c idx = andThen (ctorFieldTexts qc levels table datas (ctorKeepFlags c) (ctorOpaqueFlagsOf datas c) (dtCtorTelescope c) 0 (eval [] (dtCtorType c)) (length levels)) (\p => case firstOf p of
+  text :: rest => case rest of
+    [] => Ok "${typeParamDecl (secondOf p)}${typeName (dtDataName d)} = ${text}"
+    _ => Err "DT: internal: unboxed constructor has more than one kept field: ${dtCtorName c}"
+  [] => Err "DT: internal: unboxed constructor has no kept field: ${dtCtorName c}"
+)
+
+genDataDecl : QualCtx -> List (Pair String (List Int)) -> List DtData -> List (Pair String (Pair DtCtor Int)) -> DtData -> Result String
+genDataDecl qc table datas unboxed d =
   let
     levels = lookupUsed table (dtDataName d)
-  in andThen (dataArityNeed qc levels table datas (dtDataCtors d))
-    (\arity => andThen (traverse (genCtorDecl qc levels table datas) (dtDataCtors d)) (\cs => Ok "${typeParamDecl arity}${typeName (dtDataName d)} = ${ctorBodyText cs}"))
+  in case lookupUnboxedInfo (dtDataName d) unboxed of
+    Just (Pair c idx) => genUnboxedDataDecl qc levels table datas d c idx
+    Nothing =>
+      andThen (dataArityNeed qc levels table datas (dtDataCtors d))
+        (\arity => andThen (traverse (genCtorDecl qc levels table datas) (dtDataCtors d)) (\cs => Ok "${typeParamDecl arity}${typeName (dtDataName d)} = ${ctorBodyText cs}"))
 
 ctorBodyText : List String -> String
 ctorBodyText [] = "|"
@@ -688,7 +664,7 @@ genTypeDeclsOf qc allDatas subset = genTypeDeclsWith qc (usedTableOf allDatas) a
 genTypeDeclsWith : QualCtx -> List (Pair String (List Int)) -> List DtData -> List DtData -> Result String
 genTypeDeclsWith qc table allDatas [] = Ok ""
 genTypeDeclsWith qc table allDatas subset =
-  andThen (traverse (genDataDecl qc table allDatas) subset)
+  andThen (traverse (genDataDecl qc table allDatas (unboxedInfoOf allDatas)) subset)
     (\parts => Ok "type ${joinWith "\nand " parts}\n\n")
 
 collectUsedSpine : List Int -> List (Pair String (List Int)) -> List DtData -> Int -> List Value -> List Int

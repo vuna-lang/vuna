@@ -154,6 +154,7 @@ reorderExpr : FixityTable -> Expr -> Result Expr
 reorderExpr t (EVar name sp) = Ok (EVar name sp)
 reorderExpr t (EInt n sp) = Ok (EInt n sp)
 reorderExpr t (EStr s sp) = Ok (EStr s sp)
+reorderExpr t (EFloat raw sp) = Ok (EFloat raw sp)
 reorderExpr t (EInfix op l r sp) = reorderChain t (EInfix op l r sp)
 reorderExpr t (EBacktick name l r sp) = reorderChain t (EBacktick name l r sp)
 -- section：rename 模式在名字解析前展开成 `EVar` / lambda（别名已替换）；keep 模式保留原形
@@ -265,9 +266,9 @@ reorderRecPatField t (Pair fname pat) = andThen (reorderPattern t pat) (\p2 => O
 
 -- 类型表达式同样走重排（`a -> b -> c` 是 `EInfix "->"` 链）。
 reorderDecl : FixityTable -> Decl -> Result Decl
-reorderDecl t (DData name params kind ctors derivings lin sp) =
+reorderDecl t (DData name params kind ctors derivings viaField lin sp) =
   andThen (reorderExpr t kind)
-    (\k2 => andThen (traverse (\c => reorderCtor t c) ctors) (\cs => Ok (DData name params k2 cs derivings lin sp)))
+    (\k2 => andThen (traverse (\c => reorderCtor t c) ctors) (\cs => Ok (DData name params k2 cs derivings viaField lin sp)))
 reorderDecl t (DAxiom name ty sp) = andThen (reorderExpr t ty) (\ty2 => Ok (DAxiom name ty2 sp))
 reorderDecl t (DExtern name cName ty sp) =
   andThen (reorderExpr t ty) (\ty2 => Ok (DExtern name cName ty2 sp))
@@ -277,14 +278,21 @@ reorderDecl t (DSig name ctx ty sp) =
 reorderDecl t (DFun name pats body sp) =
   andThen (traverse (\p => reorderPattern t p) pats)
     (\pats2 => andThen (reorderExpr t body) (\b2 => Ok (DFun name pats2 b2 sp)))
-reorderDecl t (DRecord name params fields derivings lin sp) =
+reorderDecl t (DRecord name params fields derivings viaField lin sp) =
   andThen (traverse (\v => reorderRecordField t v) fields)
-    (\fs => Ok (DRecord name params fs derivings lin sp))
+    (\fs => Ok (DRecord name params fs derivings viaField lin sp))
 reorderDecl t (DTrait name params methods sp) =
-  andThen (traverse (\v => reorderTraitMethod t v) methods) (\ms => Ok (DTrait name params ms sp))
+  andThen (traverse (\p => reorderTraitParam t p) params)
+    (\ps => andThen (traverse (\v => reorderTraitMethod t v) methods) (\ms => Ok (DTrait name ps ms sp)))
 reorderDecl t (DInstance ctx head methods sp) =
   andThen (traverse (\e => reorderExpr t e) ctx)
     (\ctx2 => andThen (reorderExpr t head) (\head2 => andThen (traverse (\v => reorderInstanceMethodDecl t v) methods) (\ms => Ok (DInstance ctx2 head2 ms sp))))
+
+-- | 重排 trait 参数显式 kind 里的中缀（`Type -> Type` 这类 kind 必须经过 Loader，否则 Elab 见到残留 EParen）。
+reorderTraitParam : FixityTable -> TraitParam -> Result TraitParam
+reorderTraitParam t p = case p.traitParamKind of
+  Nothing => Ok p
+  Just k => andThen (reorderExpr t k) (\k2 => Ok (TraitParam p.traitParamName (Just k2)))
 
 reorderCtor : FixityTable -> Ctor -> Result Ctor
 reorderCtor t (Ctor name ty arity sp) =

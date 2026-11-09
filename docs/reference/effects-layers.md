@@ -129,16 +129,17 @@ main 结束时统一取消清理（最外层兜底）；跨域 handler / Domain 
 
 | 模块 | 标签（行条目） | 操作 | 真实 handler | mock 方式 |
 | --- | --- | --- | --- | --- |
-| `Base.EffConsole` | `Console n`（`C1`/`C2`，`nameCode` 0/1） | `Print String` / `EPrint String` | `handleConsoleIO` → `Base.IO.print`/`eprint` | 自定义 `handleConsole`（如收集日志） |
-| `Base.EffClock` | `Clock n`（`K1`/`K2`） | `Now`（微秒）/`SleepMicros Int` | `handleClockIO` → `Base.IO.nowMicros` + **原生 `prim_sleep`** | 固定时间戳 / 忽略 sleep |
-| `Base.EffEnv` | `Env n`（`V1`/`V2`） | `GetEnv String`/`GetCwd`/`ExecPath` | `handleEnvIO` → `Base.IO.getEnv`/`getCwd`/`execPath` | 固定字符串 |
-| `Base.EffProcess` | `Process n`（`P1`/`P2`） | `Args`/`Exit Int`/`RunIn String (List String)` | `handleProcessIO`（真实退出）/ `handleProcessIOWith`（自定义 onExit）/ `handleProcessIOObserved`（观察退出码） | 自定义 `handleProcess`（`Exit c` 作为操作结果） |
-| `Base.EffFs` | `Fs n`（`F1`/`F2`，W10 收尾起命名实例） | `ReadFile`/`WriteFile`/`WriteFileAtomic`/`ReadDir`/`IsDirectory`/`MakeDir`/`RemoveFile`/`FileExists`/`FileMtime`/`FileSize` | `handleFsIO n` → `Base.IO`/`prim_*` | 自定义 `handleFs n`（纯 answer 内存表） |
+| `Base.EffConsole` | `Console n`（`n` 是 String 实例名，如 `"mock"`/`"real"`） | `Print String` / `EPrint String` | `handleConsoleIO` → `Base.IO.print`/`eprint` | 自定义 `handleConsole`（如收集日志） |
+| `Base.EffClock` | `Clock n`（如 `"mock"`/`"real"`） | `Now`（微秒）/`SleepMicros Int` | `handleClockIO` → `Base.IO.nowMicros` + **原生 `prim_sleep`** | 固定时间戳 / 忽略 sleep |
+| `Base.EffEnv` | `Env n`（如 `"mock"`/`"real"`） | `GetEnv String`/`GetCwd`/`ExecPath` | `handleEnvIO` → `Base.IO.getEnv`/`getCwd`/`execPath` | 固定字符串 |
+| `Base.EffProcess` | `Process n`（如 `"mock"`/`"real"`） | `Args`/`Exit Int`/`RunIn String (List String)` | `handleProcessIO`（真实退出）/ `handleProcessIOWith`（自定义 onExit）/ `handleProcessIOObserved`（观察退出码） | 自定义 `handleProcess`（`Exit c` 作为操作结果） |
+| `Base.EffFs` | `Fs n`（如 `"mock"`/`"real"`，W10 收尾起命名实例） | `ReadFile`/`WriteFile`/`WriteFileAtomic`/`ReadDir`/`IsDirectory`/`MakeDir`/`RemoveFile`/`FileExists`/`FileMtime`/`FileSize` | `handleFsIO n` → `Base.IO`/`prim_*` | 自定义 `handleFs n`（纯 answer 内存表） |
 
-- **命名实例**：console/clock/env/process/fs 的标签都带 `Name` 参数，行里 `Fs F1` 与
-  `Fs F2` 是不同条目，因此同一个程序可以同时装 mock 与真实 handler（或两个 mock）；
-  `send`/`handler` 用同一个 `nameCode`。fs 的早期单实例 API 已迁移（`fsReadFile n path`、
-  `handleFsIO n`），夹具 `dt_base/18`/`29`/`40` 已更新。
+- **命名实例**：console/clock/env/process/fs 的标签都带 String 实例名参数（`Fs n`），
+  行里 `Fs "mock"` 与 `Fs "real"` 是不同条目，因此同一个程序可以同时装 mock 与真实
+  handler（或两个 mock）；send/handler 用同一对 `(key, name)` 字符串。实例名由使用方
+  自选，同一效应族同时安装的实例名必须互不相同。fs 的早期单实例 API 已迁移
+  （`fsReadFile n path`、`handleFsIO n`），夹具 `dt_base/18`/`29`/`40` 已更新。
 - **IO-backed handler 的形态**：`handleXIO` 接受行首为对应标签的 `Eff (Cons e r) a`，
   返回 `Eff r (IO a)`，由 `runIOAnswer` 执行（真实 handler 的 op 解释返回 `IO` 动作）。
 - **原生 sleep（W10 收尾）**：新增编译器原语 `prim_sleep : Int -> IO Int`（微秒；运行时
@@ -150,11 +151,11 @@ main 结束时统一取消清理（最外层兜底）；跨域 handler / Domain 
   是现成实例：`Exit c` 不退出、把 `c` 交给续延，程序继续执行。mock handler 本来就能
   观察 `Exit`。真实路径的夹具（`dt_base/30`）仍只覆盖 `Args`/`RunIn`，避免测试进程退出；
   观察路径见 `dt_base/41`。
-- **fs mock/real 并存**：`dt_base/40` 用同一个 `prog n` 在 `Fs F1`（纯 answer mock：固定
-  内容/大小）与 `Fs F2`（真实 IO handler，真实目录读写）下各跑一次，mock 与 real handler
+- **fs mock/real 并存**：`dt_base/40` 用同一个 `prog n` 在 `Fs "mock"`（纯 answer mock：固定
+  内容/大小）与 `Fs "real"`（真实 IO handler，真实目录读写）下各跑一次，mock 与 real handler
   在同一程序里并存。
 - **工具链真实路径（W10 收尾）**：`lib/Vuna/Cli.vuna` 的 `vuna version` 输出改走
-  console 标签——`consoleLine` 用 `consolePrint C1` + `handleConsoleIO` + `runIOAnswer`，
+  console 标签——`consoleLine` 用 `consolePrint "vuna"` + `handleConsoleIO "vuna"` + `runIOAnswer`，
   只在最外层 `runIO`（工具链入口仍是 `main : IO Int`）。这是工具链逐步迁移的样板，不是
   全量迁移（`lib/` 其余模块仍直接用 `Base.IO` / `runIO`）。**编译器级强制不可行**的
   具体位置：`Loader.Resolve.checkEffectsBuiltins` 只做**包级**能力声明检查（manifest），
@@ -163,17 +164,17 @@ main 结束时统一取消清理（最外层兜底）；跨域 handler / Domain 
   增加一条模块级规则（如禁止 `lib/Vuna/**` 新增直接 `prim_*`/`Base.IO` 使用，白名单
   `Vuna.Cli.consoleLine` 一类的迁移点），而不是改类型检查器。
 - **对拍夹具**（`.nointerp`，只 check + compile + run）：
-  - `dt_base/26_eff_console`：同一 `prog n` 在 `Console C1`（mock，纯 answer 收集日志）
-    与 `Console C2`（real，`print`/`eprint`）下各跑一次；
+  - `dt_base/26_eff_console`：同一 `prog n` 在 `Console "mock"`（mock，纯 answer 收集日志）
+    与 `Console "real"`（real，`print`/`eprint`）下各跑一次；
   - `dt_base/27_eff_clock`：mock 固定时间 → elapsed 0；real 断言 sleep 后时间推进
     （真实 handler 现在走 `prim_sleep`）；
   - `dt_base/28_eff_env`：mock 与 real 对「缺失变量为空 / cwd 非空 / execPath 非空」打分；
-  - `dt_base/29_eff_fs_ext`：真实 fs 读写 + 原子写 + 元数据 + 目录 + 删除（`handleFsIO F2`）；
+  - `dt_base/29_eff_fs_ext`：真实 fs 读写 + 原子写 + 元数据 + 目录 + 删除（`handleFsIO "real"`）；
   - `dt_base/30_eff_process`：mock 固定 args/退出码；real 用 `prim_getArgs`（不含 argv[0]）
     与 `prim_runIn "true"`；
-  - `dt_base/40_eff_fs_named`：fs 命名实例 mock（F1）/ real（F2）并存对拍；
-  - `dt_base/41_eff_process_exit`：`Exit` 在 mock（P1）与观察 handler（P2）下可观察、不退出；
-  - 负例 `dt_err/78_eff_fs_instance_mismatch`：程序需要 `Fs F2`、handler 处理 `Fs F1`
+  - `dt_base/40_eff_fs_named`：fs 命名实例 mock（`"mock"`）/ real（`"real"`）并存对拍；
+  - `dt_base/41_eff_process_exit`：`Exit` 在 mock（`"mock"`）与观察 handler（`"observed"`）下可观察、不退出；
+  - 负例 `dt_err/78_eff_fs_instance_mismatch`：程序需要 `Fs "real"`、handler 处理 `Fs "mock"`
     → `TC_TypeMismatch`（实例名必须一致）；
   - 能力包夹具 `test/corpus/packages/10_prim_io`：声明 `clock` 后直调 `prim_sleep` 并断言
     真实推进时间（native sleep 的正向探针）。

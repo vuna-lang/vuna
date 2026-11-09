@@ -3,7 +3,6 @@ import Base.Monad
 
 instance Monad Int where
   bind n f = n
-  pure x = x
 
 main : Int
 main = 0

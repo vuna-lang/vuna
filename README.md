@@ -39,8 +39,8 @@ examples/multi/.output/bin/multi               # -> hi hi hi|n2 n1（--out 可�
 ./result/bin/vuna test examples/multi          # 纯 String/Int/Bool 走 interp；main : IO ... 走 compile+运行
 
 # 测试 / 格式化 / 文档
-nix run .#vuna-run-tests                            # 原生测试（= sh test/run-tests.sh）
-nix run .#vuna-run-tests -- --list                  # 列出章节（--only <章节> 只跑某段）
+nix run .#vuna-run-tests                            # 原生 suite（vuna test --suite test/suite.toml）
+nix run .#vuna-run-tests -- --list                  # 列出章节/case（--only <章节>/--filter PAT）
 ./result/bin/vuna fmt --check examples/multi   # 格式化检查（也可逐个给文件/目录）
 ./result/bin/vuna lint compiler/lib/Vuna/Compiler/Elab/Term.vuna   # 风格检查（必须给路径）
 ./result/bin/vuna doc                          # 生成 docs/api.html（gitignored）
@@ -106,7 +106,7 @@ manifest，不向上找。命令语义与包格式
 ├── lib/       # 产品 CLI 包 vuna 的模块根（工具链 Vuna.*）
 ├── app/       # 产品 CLI 入口 main : IO Int
 ├── seed/      # compiler 闭包的多文件自举信任锚点（生成物，禁止手改）
-├── test/      # run-tests.sh + corpus/ 夹具
+├── test/      # suite.toml + suite/（原生 runner）+ corpus/ 夹具
 ├── examples/  # 多包示例
 ├── vscode/    # VSCode 扩展（语法高亮 + LSP 客户端 + lint/fmt/check/build；提交 dist/）
 ├── nix/       # 构建图（packages/checks）+ rotate/metrics/bench
@@ -149,6 +149,7 @@ manifest，不向上找。命令语义与包格式
 | [docs/reference/effects.md](docs/reference/effects.md) | 效应：IO 内建效应类型、MonadIO + StateT/ReaderT/ErrorT、ST/region、运行时效应（行/命名/一次性续延）与 F3 路线 |
 | [docs/reference/stdlib.md](docs/reference/stdlib.md) | 标准库 `vuna-base` 模块清单与 `Prelude` 自动导入 |
 | [docs/reference/operators.md](docs/reference/operators.md) | 运算符=方法别名、`Eq`/`Ord` 真源、实例落点规则 |
+| [docs/reference/floats.md](docs/reference/floats.md) | `Float` 原语、字面量转换 trait（FromString/FromInt/FromFloat）、`deriving`、bootstrap 边界与 interp 限制 |
 | [docs/reference/primitives.md](docs/reference/primitives.md) | 内建/原语唯一声明面、Int/String/IO 语义、效应能力（`[capabilities]`） |
 | [docs/reference/packages.md](docs/reference/packages.md) | `vuna.toml` 包格式、workspace / 依赖 DAG、工具链命令一览 |
 | [docs/reference/core.md](docs/reference/core.md) | Core TT / NbE / 合一 / 精化器 / 擦除 / codegen 护栏的实现参考 |

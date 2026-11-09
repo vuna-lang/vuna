@@ -1,4 +1,4 @@
--- `Base.Eff` 自带 `Monad (Eff r)` 实例；import 后可直接 do / >>=。
+-- `Base.Eff` 自带 `Monad (Eff r)` 实例；import 后可直接 do / >>= / >> / bind。
 -- 本夹具用纯行 Nil 跑 runPure。
 import Prelude
 import Base.Eff
@@ -9,5 +9,22 @@ prog = do
   y <- pure 2
   pure (x + y)
 
+progBind : Eff [] Int
+progBind = pure 10 >>= (\x => pure (x + 20))
+
+progSeq : Eff [] Int
+progSeq = pure 100 >> pure 200
+
+progFn : Eff [] Int
+progFn = bind (pure 7) (\x => pure (x + 1))
+
+total : Eff [] Int
+total = do
+  a <- prog
+  b <- progBind
+  c <- progSeq
+  d <- progFn
+  pure (a * 10000 + b * 1000 + c * 10 + d)
+
 main : String
-main = strFromInt (runPure prog)
+main = strFromInt (runPure total)

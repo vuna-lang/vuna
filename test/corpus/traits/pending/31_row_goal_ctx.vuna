@@ -1,0 +1,22 @@
+-- S4：行目标（`Member e r`）在定义级 ctx 收尾时求解。`askTwice` 的签名里已有
+-- `{w : Member (Reader "r" Int) r}`（刚性行 `r`）；body 的两次 `ask` 需要同一份证明，
+-- 必须在定义收尾时用 ctx 里的 binder 解出，不能当作程序级 depth 0 的未解目标。
+import Prelude
+import Base.Eff
+import Base.Eff.Reader
+
+askTwice : {r : Row} -> {w : Member (Reader "r" Int) r} -> Eff r Int
+askTwice = do
+  a <- ask "r" Int
+  b <- ask "r" Int
+  pure (a + b)
+
+prog : Eff [Reader "r" Int] Int
+prog = askTwice
+
+opH : (o : ReaderOp Int) -> (resReader Int o -> Int) -> Int
+opH op k = case op of
+  Ask => k 21
+
+main : String
+main = strFromInt (runPure (handleReader "r" Int (\a => a) opH prog))

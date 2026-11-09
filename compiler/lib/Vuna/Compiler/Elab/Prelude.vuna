@@ -4,6 +4,7 @@ module Vuna.Compiler.Elab.Prelude
   , classMethodProjection
   , cmpBuiltinTyName
   , eqRuntimeName
+  , floatTy
   , fun2
   , intTy
   , preludeGlobals
@@ -35,6 +36,9 @@ intTy = TGlobal intTypeName
 strTy : Term
 strTy = TGlobal strTypeName
 
+floatTy : Term
+floatTy = TGlobal floatTypeName
+
 boolTy : Term
 boolTy = TGlobal boolTypeName
 
@@ -61,7 +65,8 @@ builtinTyName v = case v of
 eqRuntimeName : String -> String -> Result String
 eqRuntimeName method "Int" = if method == "eq" then Ok "bi_eq_int" else Ok "bi_neq_int"
 eqRuntimeName method "String" = if method == "eq" then Ok "bi_eq_str" else Ok "bi_neq_str"
-eqRuntimeName method tyName = Err (tcMsg (OpOnlyIntString method tyName) (method :: tyName :: []))
+eqRuntimeName method "Float" = if method == "eq" then Ok "bi_eq_float" else Ok "bi_neq_float"
+eqRuntimeName method tyName = Err (tcMsg (OpOnlyIntString method tyName) [method, tyName])
 
 -- ---------------------------------------------------------------
 -- IType → Core Term
@@ -82,6 +87,7 @@ ityToTermEnv : List String -> IType -> Term
 ityToTermEnv env ITy = TType levelZero
 ityToTermEnv env IInt = intTy
 ityToTermEnv env IStr = strTy
+ityToTermEnv env IFloat = floatTy
 ityToTermEnv env IBool = boolTy
 ityToTermEnv env INat = TGlobal natTypeName
 ityToTermEnv env (IList elem) = TApp (TGlobal listFamilyName) (ityToTermEnv env elem) Rig0
@@ -140,7 +146,8 @@ builtinEqTyName : Value -> Maybe String
 builtinEqTyName v = case builtinTyName v of
   Just g =>
     if g == intTypeName then Just intTypeName
-    else if g == strTypeName then Just strTypeName else Nothing
+    else if g == strTypeName then Just strTypeName
+    else if g == floatTypeName then Just floatTypeName else Nothing
   Nothing => Nothing
 
 -- 比较运算符的运行时特化只认 Int / String / canonical Bool；其它类型（用户 data /
@@ -150,6 +157,7 @@ cmpBuiltinTyName v = case builtinTyName v of
   Just g =>
     if g == intTypeName then Just intTypeName
     else if g == strTypeName then Just strTypeName
+    else if g == floatTypeName then Just floatTypeName
     else if g == boolTypeName then Just boolTypeName else Nothing
   Nothing => Nothing
 

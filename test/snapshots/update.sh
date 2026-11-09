@@ -3,10 +3,10 @@
 #
 # 用法（任意目录；第一个参数是输出目录，默认本目录）：
 #   sh test/snapshots/update.sh                 # 刷新并提交前三个/五个快照文件
-#   sh test/snapshots/update.sh /tmp/snapshots  # run-tests.sh 段 38 现场生成后与提交版 diff
+#   sh test/snapshots/update.sh /tmp/snapshots  # suite 的 §38 现场生成后与提交版 diff
 #
 # 环境变量：
-#   VUNA        编译器（默认 PATH 中的 vuna；run-tests.sh 会传绝对路径）
+#   VUNA        编译器（默认 PATH 中的 vuna；suite runner 会传绝对路径）
 #   VUNA_BASE   base 包目录（默认 <repo>/base）
 #
 # 产物（全部是规范化后的文本，逐字节比较）：

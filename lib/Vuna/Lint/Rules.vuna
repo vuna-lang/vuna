@@ -7,7 +7,7 @@ module Vuna.Lint.Rules
   , splitLines
   ) where
 
--- Vuna.Lint.Rules：lint 的两条 dispatch 规则（AST 驱动）+ 源码切片工具。
+-- Vuna.Lint.Rules：lint 的 dispatch 规则 + 列表字面量规则（AST 驱动）+ 源码切片工具。
 --
 -- M31 重写：旧实现是纯 token 行扫描（按缩进猜结构），规范格式下几乎不触发。
 -- 现在 `lintSourceWith` 先 parseSource 得到 AST，规则判定全部走 AST；需要源码原文
@@ -20,6 +20,8 @@ module Vuna.Lint.Rules
 --     alt；字面量链提升不了时回退成 case（`chainFindings`）；
 --   * dispatch-lift：case / let dispatch。单 alt 替换外层变量；多 alt 拆 clause / alt。
 --     （原 lift-destructure 与 case-to-clauses 合并而来，两个旧 code 不再产生。）
+--   * list-literal：表达式/类型位置的闭合 cons 链（`::` / `Cons` + `[]` / `Nil`）与裸
+--     `Nil` 改写为 `[a, b]` / `[]`；模式匹配不动（独立遍历 `walkListLiteral`）。
 --
 -- 提升只发生在 clause/alt 的**直接体**；嵌套在表达式里的 dispatch 需要上下文分发
 -- （case-of-case），会复制代码，不做。clause 拆分要求该名字只有一条 clause；alt
@@ -320,6 +322,7 @@ else case e of
   EVar n sp => startFromSpan sp
   EInt n sp => startFromSpan sp
   EStr s sp => startFromSpan sp
+  EFloat raw sp => startFromSpan sp
   EInterp multi parts sp => startFromSpan sp
   ELam ps body sp => minPair (startFromSpan sp) (startExpr (fuel - 1) body)
   EApp fn args sp =>
@@ -569,6 +572,7 @@ else case e of
   EVar n sp => n == name
   EInt n sp => False
   EStr s sp => False
+  EFloat raw sp => False
   ELam ps body sp => mentionsExpr (fuel - 1) name body
   EApp fn args sp => mentionsExpr (fuel - 1) name fn || mentionsExprs (fuel - 1) name args
   EPi n implicit _ dom cod sp =>
@@ -657,6 +661,7 @@ condShape lines toks (EApp (EVar op opSp) args appSp) = if op == "==" then case 
     EVar name nsp => case rhs of
       EStr s rsp => Just (Pair name (spanText lines toks (exprSpan rhs)))
       EInt n rsp => Just (Pair name (spanText lines toks (exprSpan rhs)))
+      EFloat raw rsp => Just (Pair name (spanText lines toks (exprSpan rhs)))
       _ => Nothing
     _ => Nothing
   _ => Nothing
@@ -1109,6 +1114,7 @@ else case e of
   EVar name sp => []
   EInt n sp => []
   EStr s sp => []
+  EFloat raw sp => []
   ELam ps body sp => walkExpr (fuel - 1) lines toks body
   EApp fn args sp =>
     append (walkExpr (fuel - 1) lines toks fn) (walkExprs (fuel - 1) lines toks args)
@@ -1210,6 +1216,219 @@ else case stmt of
   DExpr e sp => walkExpr (fuel - 1) lines toks e
 
 -- ---------------------------------------------------------------
+-- 规则 4：list-literal（闭合 cons 链 / 裸 Nil → 列表字面量）
+--
+-- 只遍历表达式与类型表达式，不进入 pattern：模式里的 `::` / `Cons` 是匹配形态，
+-- 不在本规则范围。闭链判据：`::` 或显式 `Cons` 的右嵌套链，尾部是 `[]` 或 `Nil`。
+-- 模板插值洞（`EInterp` 的 `IPHole`）跳过：lint 的顶层 token 列表不含洞内 token，
+-- 无法用 `exprText` 可靠切片（已知边界，见 docs/reference/lint.md）。
+-- ---------------------------------------------------------------
+trimStart : String -> String
+trimStart s = strPack (dropLeadingSpace (strUnpack s))
+
+dropLeadingSpace : List Int -> List Int
+dropLeadingSpace [] = []
+dropLeadingSpace (c :: rest) = if isSpaceChar c then dropLeadingSpace rest else c :: rest
+
+firstChar : String -> Maybe Int
+firstChar s = case strUnpack s of
+  c :: rest => Just c
+  [] => Nothing
+
+lastChar : String -> Maybe Int
+lastChar s = case reverse (strUnpack s) of
+  c :: rest => Just c
+  [] => Nothing
+
+dropLastChar : String -> String
+dropLastChar s = strPack (takeChars (strLength s - 1) (strUnpack s))
+
+dropFirstChar : String -> String
+dropFirstChar s = strPack (dropChars 1 (strUnpack s))
+
+-- 只剥离**紧邻**表达式的成对括号（可多层）：`f (a :: [])` → `f [a]`；
+-- `f (g (a :: []))` 只剥最内层，不会误删属于 `g` 的外层括号。
+stripParens : Int -> String -> String -> Pair String String
+stripParens fuel prefix suffix = if fuel <= 0 then Pair prefix suffix
+else
+  let
+    p = trimEnd prefix
+  in case lastChar p of
+    Just 40 => case firstChar (trimStart suffix) of
+      Just 41 => stripParens (fuel - 1) (dropLastChar p) (dropFirstChar (trimStart suffix))
+      _ => Pair prefix suffix
+    _ => Pair prefix suffix
+
+tokLen : PTok -> Int
+tokLen (PTok (TSym s) p) = strLength s
+tokLen (PTok (TIdent s) p) = strLength s
+tokLen (PTok (TKw s) p) = strLength s
+tokLen (PTok (TInt n) p) = strLength (strFromInt n)
+tokLen (PTok (TFloat raw) p) = strLength raw
+tokLen (PTok (TStr s) p) = strLength s + 2
+tokLen (PTok (TTmpl multi parts endP) p) = 0
+tokLen (PTok TEof p) = 0
+
+-- span 末 token 的**结束列之后**（1-based 列）；找得到末 token 才返回。
+exprEndColAfter : List PTok -> Int -> Int -> Maybe Int
+exprEndColAfter toks line col = case tokenAt toks line col of
+  Nothing => Nothing
+  Just tok => Just (col + tokLen tok)
+
+-- 用源码切片把整个表达式替换成 replacement（单行、行内无注释/tab/CR）。
+exprEdit : List String -> List PTok -> Expr -> String -> Maybe Edit
+exprEdit lines toks e replacement = if not (exprSingleLine e) then Nothing
+else if not (linesCleanRange lines (exprStartLine e) (spanEndLine (exprSpan e))) then Nothing
+else case exprEndColAfter toks (spanEndLine (exprSpan e)) (exprSpan e).spanEndCol of
+  Nothing => Nothing
+  Just endCol =>
+    let
+      line = lineAt lines (exprStartLine e)
+      prefix = prefixBeforeCol line (exprStartCol e)
+      suffix = tailFromCol line endCol
+      stripped = stripParens (strLength line + 1) prefix suffix
+    in Just
+      (Edit (exprStartLine e) (exprStartLine e) [firstOf stripped ++ replacement ++ secondOf stripped])
+
+consHeadOf : Expr -> Maybe (Pair Expr Expr)
+consHeadOf (EApp (EVar name _) ([h, t]) sp) =
+  if name == "::" || name == "Cons" then Just (Pair h t) else Nothing
+consHeadOf _ = Nothing
+
+isNilExpr : Expr -> Bool
+isNilExpr (EVar name _) = name == "Nil" || isListNilSyntax name
+isNilExpr _ = False
+
+-- 闭合链的元素列表；开放链 / 非链返回 Nothing。
+consElems : Int -> Expr -> Maybe (List Expr)
+consElems fuel e = if fuel <= 0 then Nothing
+else case consHeadOf e of
+  Just (Pair h t) => case consElems (fuel - 1) t of
+    Just rest => Just (h :: rest)
+    Nothing => Nothing
+  Nothing => if isNilExpr e then Just [] else Nothing
+
+allNonEmpty : List String -> Bool
+allNonEmpty [] = True
+allNonEmpty (s :: rest) = s /= "" && allNonEmpty rest
+
+consFindings : List String -> List PTok -> Expr -> List Expr -> List Finding
+consFindings lines toks e elems =
+  let
+    texts = map (exprText lines toks) elems
+    suggestion = if allNonEmpty texts then "[" ++ join ", " texts ++ "]" else "[...]"
+    edit = if allNonEmpty texts then exprEdit lines toks e suggestion else Nothing
+  in [ Finding (exprStartLine e) (exprStartCol e) (lintCode ListLiteral) (lintRule ListLiteral) (lintMsg ListLiteral suggestion) edit
+  ]
+
+nilFinding : List String -> List PTok -> Expr -> List Finding
+nilFinding lines toks e =
+  [ Finding (exprStartLine e) (exprStartCol e) (lintCode ListLiteral) (lintRule ListLiteral) (lintMsg ListLiteral "[]") (exprEdit lines toks e "[]")
+  ]
+
+walkListLiteral : Int -> List String -> List PTok -> Expr -> List Finding
+walkListLiteral fuel lines toks e = if fuel <= 0 then lintFuelExhausted "list literal traversal"
+else case e of
+  EVar name sp => if name == "Nil" then nilFinding lines toks e else []
+  EInt n sp => []
+  EStr s sp => []
+  EFloat raw sp => []
+  ELam ps body sp => walkListLiteral (fuel - 1) lines toks body
+  EApp fn args sp => case consHeadOf e of
+    Just (Pair h t) => case consElems (fuel - 1) e of
+      Just elems =>
+        append (consFindings lines toks e elems) (walkListLiteralExprs (fuel - 1) lines toks elems)
+      Nothing =>
+        append (walkListLiteral (fuel - 1) lines toks h) (walkListLiteral (fuel - 1) lines toks t)
+    Nothing =>
+      append (walkListLiteral (fuel - 1) lines toks fn)
+        (walkListLiteralExprs (fuel - 1) lines toks args)
+  EPi name implicit qty dom cod sp =>
+    append (walkListLiteral (fuel - 1) lines toks dom) (walkListLiteral (fuel - 1) lines toks cod)
+  ELet binds body recFlag sp =>
+    append (walkListLiteralBinds (fuel - 1) lines toks binds)
+      (walkListLiteral (fuel - 1) lines toks body)
+  ELocalFun clauses sp => walkListLiteralLocalClauses (fuel - 1) lines toks clauses
+  ECase scrut alts sp =>
+    append (walkListLiteral (fuel - 1) lines toks scrut)
+      (walkListLiteralAlts (fuel - 1) lines toks alts)
+  EIf cond yes no sp =>
+    append (walkListLiteral (fuel - 1) lines toks cond)
+      (append (walkListLiteral (fuel - 1) lines toks yes) (walkListLiteral (fuel - 1) lines toks no))
+  EField base f sp => walkListLiteral (fuel - 1) lines toks base
+  ERecord rname fields sp => walkListLiteralFields (fuel - 1) lines toks fields
+  ERecUpdate base fields sp =>
+    append (walkListLiteral (fuel - 1) lines toks base)
+      (walkListLiteralFields (fuel - 1) lines toks fields)
+  EDo stmts sp => walkListLiteralStmts (fuel - 1) lines toks stmts
+  EAnn value ty sp =>
+    append (walkListLiteral (fuel - 1) lines toks value) (walkListLiteral (fuel - 1) lines toks ty)
+  EInfix op l r sp =>
+    append (walkListLiteral (fuel - 1) lines toks l) (walkListLiteral (fuel - 1) lines toks r)
+  EParen inner sp => walkListLiteral (fuel - 1) lines toks inner
+  EBacktick nm l r sp =>
+    append (walkListLiteral (fuel - 1) lines toks l) (walkListLiteral (fuel - 1) lines toks r)
+  ESectOp op sp => []
+  ESectL op rhs sp => walkListLiteral (fuel - 1) lines toks rhs
+  ESectR lhs op sp => walkListLiteral (fuel - 1) lines toks lhs
+  -- 模板插值洞：token 切片不可靠，跳过（见本段头注释）。
+  EInterp multi parts sp => []
+
+walkListLiteralExprs : Int -> List String -> List PTok -> List Expr -> List Finding
+walkListLiteralExprs fuel lines toks exprs = if fuel <= 0 then lintFuelExhausted "list literal traversal"
+else case exprs of
+  [] => []
+  e :: rest =>
+    append (walkListLiteral (fuel - 1) lines toks e)
+      (walkListLiteralExprs (fuel - 1) lines toks rest)
+
+walkListLiteralFields : Int -> List String -> List PTok -> List (Pair String Expr) -> List Finding
+walkListLiteralFields fuel lines toks fields = if fuel <= 0 then lintFuelExhausted "list literal traversal"
+else case fields of
+  [] => []
+  (Pair f e) :: rest =>
+    append (walkListLiteral (fuel - 1) lines toks e)
+      (walkListLiteralFields (fuel - 1) lines toks rest)
+
+walkListLiteralBinds : Int -> List String -> List PTok -> List (Pair Pat Expr) -> List Finding
+walkListLiteralBinds fuel lines toks binds = if fuel <= 0 then lintFuelExhausted "list literal traversal"
+else case binds of
+  [] => []
+  (Pair pat e) :: rest =>
+    append (walkListLiteral (fuel - 1) lines toks e)
+      (walkListLiteralBinds (fuel - 1) lines toks rest)
+
+walkListLiteralAlts : Int -> List String -> List PTok -> List (Pair Pat Expr) -> List Finding
+walkListLiteralAlts fuel lines toks alts = if fuel <= 0 then lintFuelExhausted "list literal traversal"
+else case alts of
+  [] => []
+  (Pair pat body) :: rest =>
+    append (walkListLiteral (fuel - 1) lines toks body)
+      (walkListLiteralAlts (fuel - 1) lines toks rest)
+
+walkListLiteralLocalClauses : Int -> List String -> List PTok -> List (Pair (List Pat) Expr) -> List Finding
+walkListLiteralLocalClauses fuel lines toks clauses = if fuel <= 0 then lintFuelExhausted "list literal traversal"
+else case clauses of
+  [] => []
+  (Pair pats body) :: rest =>
+    append (walkListLiteral (fuel - 1) lines toks body)
+      (walkListLiteralLocalClauses (fuel - 1) lines toks rest)
+
+walkListLiteralStmts : Int -> List String -> List PTok -> List DoStmt -> List Finding
+walkListLiteralStmts fuel lines toks stmts = if fuel <= 0 then lintFuelExhausted "list literal traversal"
+else case stmts of
+  [] => []
+  stmt :: rest =>
+    append (walkListLiteralStmt (fuel - 1) lines toks stmt)
+      (walkListLiteralStmts (fuel - 1) lines toks rest)
+
+walkListLiteralStmt : Int -> List String -> List PTok -> DoStmt -> List Finding
+walkListLiteralStmt fuel lines toks stmt = if fuel <= 0 then lintFuelExhausted "list literal traversal"
+else case stmt of
+  DBind pat e sp => walkListLiteral (fuel - 1) lines toks e
+  DExpr e sp => walkListLiteral (fuel - 1) lines toks e
+
+-- ---------------------------------------------------------------
 -- 声明遍历与结果整理
 -- ---------------------------------------------------------------
 laterHasFun : String -> List Decl -> Bool
@@ -1220,7 +1439,7 @@ laterHasFun name (d :: rest) = case d of
 
 -- 签名里出现隐式 Pi（`{n : Nat} -> ...`）的函数跳过 clause 级改写：
 -- parser 的 clause 模式是所有显式参数，隐式参数由精化器插入；把 case 折叠进 clause
--- 模式会改变模式矩阵与隐式 Pi 的对齐（实测 `vhead : {n : Nat} -> Vec a (Succ n) -> a`
+-- 模式会改变模式矩阵与隐式 Pi 的对齐（实测 `vhead : {n : Nat} -> Vec (Succ n) a -> a`
 -- 会把 `VCons` 模式错配到 `n : Nat`）。literal-if-chain 与函数参数无关，不受影响。
 hasImplicitPi : Expr -> Bool
 hasImplicitPi (EPi name implicit _ dom cod sp) = implicit || hasImplicitPi cod
@@ -1248,20 +1467,62 @@ scanMethodDecls : List String -> List PTok -> List Decl -> List Finding
 scanMethodDecls lines toks [] = []
 scanMethodDecls lines toks (d :: rest) = case d of
   DFun name pats body sp =>
-    append (walkExpr lintFuel lines toks body) (scanMethodDecls lines toks rest)
+    append (walkListLiteral lintFuel lines toks body)
+      (append (walkExpr lintFuel lines toks body) (scanMethodDecls lines toks rest))
+  DSig name ctx ty sp =>
+    append (walkListLiteralExprs lintFuel lines toks ctx)
+      (append (walkListLiteral lintFuel lines toks ty) (scanMethodDecls lines toks rest))
+  DAxiom name ty sp =>
+    append (walkListLiteral lintFuel lines toks ty) (scanMethodDecls lines toks rest)
   _ => scanMethodDecls lines toks rest
 
+fieldTypes : List Field -> List Expr
+fieldTypes [] = []
+fieldTypes (f :: rest) = fieldType f :: fieldTypes rest
+
+ctorTypes : List Ctor -> List Expr
+ctorTypes [] = []
+ctorTypes (c :: rest) = ctorType c :: ctorTypes rest
+
+traitMethodTypes : List TraitMethod -> List Expr
+traitMethodTypes [] = []
+traitMethodTypes (m :: rest) = m.traitMethodType :: traitMethodTypes rest
+
+traitParamKinds : List TraitParam -> List Expr
+traitParamKinds [] = []
+traitParamKinds ((TraitParam name kind) :: rest) = case kind of
+  Just e => e :: traitParamKinds rest
+  Nothing => traitParamKinds rest
+
 declFindings : List String -> List PTok -> List Decl -> Decl -> List Decl -> List Finding
-declFindings lines toks allDecls (DFun name pats body sp) rest = if hasImplicitSig name allDecls then []
-else
+declFindings lines toks allDecls (DFun name pats body sp) rest =
   let
-    lastForName = not (laterHasFun name rest)
-    singleClause = countFunClauses name allDecls == 1
-    lane = LClause (spanStartLine sp) pats lastForName singleClause
-  in append (caseToClauses lines toks (spanStartLine sp) name pats body singleClause)
-    (scanBodyPos lintFuel lines toks (Just lane) body)
+    listFindings = walkListLiteral lintFuel lines toks body
+    lifted = if hasImplicitSig name allDecls then []
+    else
+      let
+        lastForName = not (laterHasFun name rest)
+        singleClause = countFunClauses name allDecls == 1
+        lane = LClause (spanStartLine sp) pats lastForName singleClause
+      in append (caseToClauses lines toks (spanStartLine sp) name pats body singleClause)
+        (scanBodyPos lintFuel lines toks (Just lane) body)
+  in append listFindings lifted
+declFindings lines toks allDecls (DSig name ctx ty sp) rest =
+  append (walkListLiteralExprs lintFuel lines toks ctx) (walkListLiteral lintFuel lines toks ty)
+declFindings lines toks allDecls (DAxiom name ty sp) rest = walkListLiteral lintFuel lines toks ty
+declFindings lines toks allDecls (DExtern name cName ty sp) rest =
+  walkListLiteral lintFuel lines toks ty
+declFindings lines toks allDecls (DData name params kind ctors derivings viaField lin sp) rest =
+  append (walkListLiteral lintFuel lines toks kind)
+    (walkListLiteralExprs lintFuel lines toks (ctorTypes ctors))
+declFindings lines toks allDecls (DRecord name params fields derivings viaField lin sp) rest =
+  walkListLiteralExprs lintFuel lines toks (fieldTypes fields)
+declFindings lines toks allDecls (DTrait name params methods sp) rest =
+  append (walkListLiteralExprs lintFuel lines toks (traitParamKinds params))
+    (walkListLiteralExprs lintFuel lines toks (traitMethodTypes methods))
 declFindings lines toks allDecls (DInstance ctxE head methods sp) rest =
-  scanMethodDecls lines toks methods
+  append (walkListLiteralExprs lintFuel lines toks ctxE)
+    (append (walkListLiteral lintFuel lines toks head) (scanMethodDecls lines toks methods))
 declFindings lines toks allDecls _ rest = []
 
 scanDecls : List String -> List PTok -> List Decl -> List Decl -> List Finding

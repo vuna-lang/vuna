@@ -9,6 +9,7 @@ import Base.IO
 import Base.IORef
 import Base.List
 import Base.Maybe
+import Base.Monad
 import Base.Ord
 import Base.Result
 
@@ -22,7 +23,9 @@ emptyInts = drop 1 [0]
 
 -- | 新建 `Channel Int`（当前只暴露 Int 通道）；通道是单实例、无界的。
 newChannelInt : Eff [] (Channel Int)
-newChannelInt = bindEff (liftIOEff (newRef emptyInts)) (\r => pureEff (MkChannel r))
+newChannelInt = do
+  r <- liftIOEff (newRef emptyInts)
+  pure (MkChannel r)
 
 -- | 把 `x` 追加到队尾；队首是下一次 `tryRecv` 取走的值。返回 `IORef` 写入原语的 `Int` 结果。
 send : {a : Type} -> Channel a -> a -> Eff [] Int
@@ -30,18 +33,24 @@ send (MkChannel r) x = liftIOEff (modifyRef r (\xs => append xs [x]))
 
 -- | 非阻塞取队首：有值就出队并返回 `Just x`，空队列返回 `Nothing`。
 tryRecv : {a : Type} -> Channel a -> Eff [] (Maybe a)
-tryRecv (MkChannel r) = bindEff (liftIOEff (readRef r)) (\xs => case xs of
-  [] => pureEff Nothing
-  x :: rest => bindEff (liftIOEff (writeRef r rest)) (\_ => pureEff (Just x))
-)
+tryRecv (MkChannel r) = do
+  xs <- liftIOEff (readRef r)
+  case xs of
+    [] => pure Nothing
+    x :: rest => do
+      _ <- liftIOEff (writeRef r rest)
+      pure (Just x)
 
 -- | 带 fuel 的等待取：轮询到空队列时 `yieldNow` 后重试，fuel 耗尽返回 `Err channel: timeout`。
 recvWait : {a : Type} -> Int -> Channel a -> Eff [] (Result a)
-recvWait fuel c = if fuel <= 0 then pureEff (Err "channel: timeout")
-else bindEff (tryRecv c) (\m => case m of
-  Just x => pureEff (Ok x)
-  Nothing => bindEff yieldNow (\_ => recvWait (fuel - 1) c)
-)
+recvWait fuel c = if fuel <= 0 then pure (Err "channel: timeout")
+else do
+  m <- tryRecv c
+  case m of
+    Just x => pure (Ok x)
+    Nothing => do
+      _ <- yieldNow
+      recvWait (fuel - 1) c
 
 -- | `recvWait 64` 的便捷入口（最多轮询 64 次）。
 recv : {a : Type} -> Channel a -> Eff [] (Result a)

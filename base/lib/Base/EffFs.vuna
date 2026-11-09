@@ -1,7 +1,6 @@
 module Base.EffFs
   ( Fs
   , FsOp(..)
-  , Name(..)
   , fsFileExists
   , fsFileMtime
   , fsFileSize
@@ -14,7 +13,6 @@ module Base.EffFs
   , fsWriteFileAtomic
   , handleFs
   , handleFsIO
-  , nameCode
   , resFs
   ) where
 
@@ -24,28 +22,18 @@ module Base.EffFs
 -- 由 runIOAnswer 执行最终答案（见 Base.Eff）。`handleFsIO` 是 W10 增加的
 -- 可直接 `runIOAnswer` 的 IO-backed handler。
 --
--- W10 收尾：`Fs` 改为**命名实例**（`Fs F1` / `Fs F2`，与 Console/Clock/Env/Process
--- 一致）。同一个程序因此可以同时装 mock handler（如纯 answer 的内存表）与真实
--- IO handler（`handleFsIO F2`），或用两个 mock 实例做对照；行条目按名字区分。
--- 早期单实例 API（`fsReadFile path` / `handleFsIO prog`）已迁移：所有操作与 handler
--- 都显式带实例名（夹具 dt_base/18、29、37）。
+-- W10 收尾：`Fs` 改为**命名实例**（`Fs n`，n 是 String 实例名，与 Console/Clock/Env/
+-- Process 一致）。同一个程序因此可以同时装 mock handler（如纯 answer 的内存表）与
+-- 真实 IO handler（`handleFsIO "real"`），或用两个 mock 实例做对照；行条目按实例名区分。
+-- 所有操作与 handler 都显式带实例名（夹具 dt_base/18、29、40）。
 import Base.Eff
 import Base.IO
+import Base.Monad
 import Base.Bool
 import Base.List
 
--- | fs 效应的命名实例 `F1` / `F2`：同一程序可以同时装 mock handler 与真实 IO handler，行条目按名字区分。
-data Name : Type where
-  F1 : Name
-  F2 : Name
-
--- | 运行时实例码：`F1 = 0`、`F2 = 1`；send 与 handler 用同一个码。
-nameCode : Name -> Int
-nameCode F1 = 0
-nameCode F2 = 1
-
 -- | fs 效应的标签类型 `Fs n`：只做行索引，没有运行时构造子。
-data Fs : Name -> Type where
+data Fs : String -> Type where
 
 -- | fs 操作描述：读 / 写 / 原子写 / 列目录 / 判目录 / 建目录 / 删文件 / 存在性 / mtime / size，各带路径参数。
 data FsOp : Type where
@@ -74,63 +62,83 @@ resFs (FileMtime p) = Int
 resFs (FileSize p) = Int
 
 -- | 通过命名实例读整个文件为 String；真实 handler 走 `Base.IO.readFile`。
-fsReadFile : (n : Name) -> String -> {r : Row} -> {w : Member (Fs n) r} -> Eff r String
-fsReadFile n p = sendCore (Fs n) "fs" (nameCode n) (ReadFile p)
+fsReadFile : (n : String) -> String -> {r : Row} -> {w : Member (Fs n) r} -> Eff r String
+fsReadFile n p = sendCore (Fs n) "fs" n (ReadFile p)
 
 -- | 通过命名实例把整串写入文件，返回写入字节数。
-fsWriteFile : (n : Name) -> String -> String -> {r : Row} -> {w : Member (Fs n) r} -> Eff r Int
-fsWriteFile n p s = sendCore (Fs n) "fs" (nameCode n) (WriteFile p s)
+fsWriteFile : (n : String) -> String -> String -> {r : Row} -> {w : Member (Fs n) r} -> Eff r Int
+fsWriteFile n p s = sendCore (Fs n) "fs" n (WriteFile p s)
 
 -- | 通过命名实例原子写（写临时文件后 rename）：并发读者只会看到完整旧内容或完整新内容。
-fsWriteFileAtomic : (n : Name) -> String -> String -> {r : Row} -> {w : Member (Fs n) r} -> Eff r Int
-fsWriteFileAtomic n p s = sendCore (Fs n) "fs" (nameCode n) (WriteFileAtomic p s)
+fsWriteFileAtomic : (n : String) -> String -> String -> {r : Row} -> {w : Member (Fs n) r} -> Eff r Int
+fsWriteFileAtomic n p s = sendCore (Fs n) "fs" n (WriteFileAtomic p s)
 
 -- | 通过命名实例列目录（真实 handler 按字符串排序；目录不存在时抛宿主异常）。
-fsReadDir : (n : Name) -> String -> {r : Row} -> {w : Member (Fs n) r} -> Eff r (List String)
-fsReadDir n p = sendCore (Fs n) "fs" (nameCode n) (ReadDir p)
+fsReadDir : (n : String) -> String -> {r : Row} -> {w : Member (Fs n) r} -> Eff r (List String)
+fsReadDir n p = sendCore (Fs n) "fs" n (ReadDir p)
 
 -- | 通过命名实例判断是否目录（真实 handler 对不存在的路径抛宿主异常）。
-fsIsDirectory : (n : Name) -> String -> {r : Row} -> {w : Member (Fs n) r} -> Eff r Bool
-fsIsDirectory n p = sendCore (Fs n) "fs" (nameCode n) (IsDirectory p)
+fsIsDirectory : (n : String) -> String -> {r : Row} -> {w : Member (Fs n) r} -> Eff r Bool
+fsIsDirectory n p = sendCore (Fs n) "fs" n (IsDirectory p)
 
 -- | 通过命名实例建目录（幂等，已存在时返回 0）。
-fsMakeDir : (n : Name) -> String -> {r : Row} -> {w : Member (Fs n) r} -> Eff r Int
-fsMakeDir n p = sendCore (Fs n) "fs" (nameCode n) (MakeDir p)
+fsMakeDir : (n : String) -> String -> {r : Row} -> {w : Member (Fs n) r} -> Eff r Int
+fsMakeDir n p = sendCore (Fs n) "fs" n (MakeDir p)
 
 -- | 通过命名实例删文件（幂等，不存在时返回 0）。
-fsRemoveFile : (n : Name) -> String -> {r : Row} -> {w : Member (Fs n) r} -> Eff r Int
-fsRemoveFile n p = sendCore (Fs n) "fs" (nameCode n) (RemoveFile p)
+fsRemoveFile : (n : String) -> String -> {r : Row} -> {w : Member (Fs n) r} -> Eff r Int
+fsRemoveFile n p = sendCore (Fs n) "fs" n (RemoveFile p)
 
 -- | 通过命名实例判断路径是否存在（不存在返回 False，不抛异常）。
-fsFileExists : (n : Name) -> String -> {r : Row} -> {w : Member (Fs n) r} -> Eff r Bool
-fsFileExists n p = sendCore (Fs n) "fs" (nameCode n) (FileExists p)
+fsFileExists : (n : String) -> String -> {r : Row} -> {w : Member (Fs n) r} -> Eff r Bool
+fsFileExists n p = sendCore (Fs n) "fs" n (FileExists p)
 
 -- | 通过命名实例取 mtime（秒级）；取不到时静默返回 0。
-fsFileMtime : (n : Name) -> String -> {r : Row} -> {w : Member (Fs n) r} -> Eff r Int
-fsFileMtime n p = sendCore (Fs n) "fs" (nameCode n) (FileMtime p)
+fsFileMtime : (n : String) -> String -> {r : Row} -> {w : Member (Fs n) r} -> Eff r Int
+fsFileMtime n p = sendCore (Fs n) "fs" n (FileMtime p)
 
 -- | 通过命名实例取文件字节数；取不到时静默返回 0。
-fsFileSize : (n : Name) -> String -> {r : Row} -> {w : Member (Fs n) r} -> Eff r Int
-fsFileSize n p = sendCore (Fs n) "fs" (nameCode n) (FileSize p)
+fsFileSize : (n : String) -> String -> {r : Row} -> {w : Member (Fs n) r} -> Eff r Int
+fsFileSize n p = sendCore (Fs n) "fs" n (FileSize p)
 
 -- | 一阶 handler：`ret` / `opH` 由调用方给出，结果行删除 `Fs n`。
-handleFs : {a : Type} -> {b : Type} -> {r : Row} -> (n : Name) -> {w : Member (Fs n) r} -> (a -> b) -> ((o : FsOp) -> (resFs o -> b) -> b) -> Eff r a -> Eff (Base.Eff.rowRem (Fs n) r) b
-handleFs n ret opH comp = handleCore (Fs n) "fs" (nameCode n) ret opH comp
+handleFs : {a : Type} -> {b : Type} -> {r : Row} -> (n : String) -> {w : Member (Fs n) r} -> (a -> b) -> ((o : FsOp) -> (resFs o -> b) -> b) -> Eff r a -> Eff (Base.Eff.rowRem (Fs n) r) b
+handleFs n ret opH comp = handleCore (Fs n) "fs" n ret opH comp
 
 -- | 真实 handler 的操作解释：把每个操作映射到 `Base.IO` 的对应原语（原子写走 `prim_writeFileAtomic`）。
 fsOpHIO : {a : Type} -> (o : FsOp) -> (resFs o -> IO a) -> IO a
 fsOpHIO op k = case op of
-  ReadFile p => prim_bindIO (readFile p) (\s => k s)
-  WriteFile p s => prim_bindIO (writeFile p s) (\n => k n)
-  WriteFileAtomic p s => prim_bindIO (prim_writeFileAtomic p s) (\n => k n)
-  ReadDir p => prim_bindIO (readDir p) (\xs => k xs)
-  IsDirectory p => prim_bindIO (isDirectory p) (\b => k b)
-  MakeDir p => prim_bindIO (makeDir p) (\n => k n)
-  RemoveFile p => prim_bindIO (removeFile p) (\n => k n)
-  FileExists p => prim_bindIO (fileExists p) (\b => k b)
-  FileMtime p => prim_bindIO (fileMtime p) (\n => k n)
-  FileSize p => prim_bindIO (prim_fileSize p) (\n => k n)
+  ReadFile p => do
+    s <- readFile p
+    k s
+  WriteFile p s => do
+    n <- writeFile p s
+    k n
+  WriteFileAtomic p s => do
+    n <- prim_writeFileAtomic p s
+    k n
+  ReadDir p => do
+    xs <- readDir p
+    k xs
+  IsDirectory p => do
+    b <- isDirectory p
+    k b
+  MakeDir p => do
+    n <- makeDir p
+    k n
+  RemoveFile p => do
+    n <- removeFile p
+    k n
+  FileExists p => do
+    b <- fileExists p
+    k b
+  FileMtime p => do
+    n <- fileMtime p
+    k n
+  FileSize p => do
+    n <- prim_fileSize p
+    k n
 
 -- | IO-backed handler：结果行删除 `Fs n`，answer 是 IO 动作，可直接交给 `runIOAnswer`。
-handleFsIO : {a : Type} -> {r : Row} -> (n : Name) -> Eff (Fs n :: r) a -> Eff r (IO a)
-handleFsIO n comp = handleFs n (\a => prim_pureIO a) fsOpHIO comp
+handleFsIO : {a : Type} -> {r : Row} -> (n : String) -> Eff (Base.Eff.Cons (Fs n) r) a -> Eff r (IO a)
+handleFsIO n comp = handleFs n (\a => pure a) fsOpHIO comp

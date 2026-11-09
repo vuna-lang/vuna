@@ -1,0 +1,9 @@
+-- M42：类型参数只在擦除位置出现时，去装箱别名不声明参数，构造/模式仍按恒等。
+data Tag a : Type where
+  MkTag : Int -> Tag a
+
+un : Tag Bool -> Int
+un (MkTag n) = n
+
+main : Int
+main = un (MkTag 42)

@@ -32,7 +32,12 @@ instance Functor (Error e) where
 instance Monad (Error e) where
   bind (MkOk a) k = k a
   bind (MkErr e) k = MkErr e
+
+instance Applicative (Error e) where
   pure a = MkOk a
+  liftA2 f (MkOk a) (MkOk b) = MkOk (f a b)
+  liftA2 f (MkErr e) _ = MkErr e
+  liftA2 f _ (MkErr e) = MkErr e
 
 -- | 错误恢复：`MkOk` 原样透传，`MkErr e` 时交给 handler `h`。
 catchError : Error e a -> (e -> Error e a) -> Error e a

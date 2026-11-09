@@ -161,7 +161,7 @@ manifest 逐字节、codegen 目录 `diff -r`）见测试 §44f。
 import 闭包需要的模块接口」作为预置模块交给 Loader（`dtCheckSourceWithIfaces` /
 `dtEvalExprInfoWithIfaces`）；接口缺失/失效自动退回全量。
 
-**惰性读（S7）**：manifest 自带每模块的直接 import 名（schema `vuna-iface 8`）。工具路径
+**惰性读（S7）**：manifest 自带每模块的直接 import 名（schema `vuna-iface 10`）。工具路径
 先只读依赖包的 `.vuna-iface`（校验 schema/编译器指纹/包名/源哈希），按 entry（含隐式 Prelude）
 的 import 闭包算出需要哪些模块，再只 unmarshal 这些文件；仍按 `miDepHashes` 链校验。
 

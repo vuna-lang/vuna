@@ -1,0 +1,3 @@
+-- 模板插值的 primitive 快捷路径覆盖 Float（不需要 Show 实例）。
+main : String
+main = "v=${1.5}"

@@ -1,0 +1,22 @@
+-- D46 探针：trait 方法 `bind` 的 continuation 里返回 `Ok (Pair ...)`。定义签名
+-- `probe : Result (Pair Int String)` 给出期望结果类型，continuation 的 `m b` 必须
+-- 收敛到 `Result (Pair Int String)`（不能因为结果类型仍是 meta 而选错构造子命名空间）。
+-- `Result` 的错误类型固定是 String（`Base.Result`），所以签名的信息量与
+-- `Result String (Pair Int String)` 等价。
+import Base.Pair
+import Base.Result
+import Base.String
+
+showPair : Pair Int String -> String
+showPair (Pair n s) = strFromInt n ++ ":" ++ s
+
+describe : Result (Pair Int String) -> String
+describe r = case r of
+  Ok p => showPair p
+  Err e => "Err " ++ e
+
+probe : Result (Pair Int String)
+probe = bind (Ok 1) (\x => Ok (Pair x "s"))
+
+main : String
+main = describe probe

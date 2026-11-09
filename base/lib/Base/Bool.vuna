@@ -4,6 +4,7 @@ module Base.Bool (Bool(..), and, bool, not, or, xor) where
 -- Base.Bool：布尔类型与逻辑辅助函数。按「实例跟类型模块走」的落点规则承载
 -- `Show Bool` 实例（B24），因此依赖 Base.Show；`Eq` / `Ord` 实例随 trait 留在
 -- `Base.Eq` / `Base.Ord`（`Bool` 是它们方法的返回类型，放这里会成环）。
+import Base.Hashable
 import Base.Show
 
 -- `&&` / `||` 的 fixity 声明在本模块（它们是短路内建值，不是 trait 方法）。
@@ -46,3 +47,7 @@ bool ifFalse ifTrue False = ifFalse
 -- 那会自递归。
 instance Show Bool where
   show b = if b then "True" else "False"
+
+-- 哈希：`False` = 0、`True` = 1。
+instance Hashable Bool where
+  hash b = if b then 1 else 0

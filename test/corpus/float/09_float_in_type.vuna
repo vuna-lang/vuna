@@ -1,0 +1,7 @@
+-- 类型表达式拒绝浮点字面量（类型层不做浮点归约）。
+import Base.Vec
+
+axiom bad : Vec 1.5 Int
+
+main : Int
+main = 0

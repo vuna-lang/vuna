@@ -1,6 +1,8 @@
 open Vuna_runtime
 let v_Show_uBase_dBool_dBool = (Base_dShow.C_Dict_uBase_dShow_dShow_Show ((fun b -> (if b then "True" else "False"))))
 
+let v_Hashable_uBase_dBool_dBool = (Base_dHashable.C_Dict_uBase_dHashable_dHashable_Hashable ((fun b -> (if b then 1 else 0))))
+
 let v_Base_dBool_dnot = (fun mc0 -> (if mc0 then false else true))
 
 let v_Base_dBool_dand = (fun mc0 mc1 -> (if mc0 then mc1 else false))

@@ -23,6 +23,7 @@ module Base.IO
   , runIO
   , sleepMicros
   , writeFile
+  , module Base.Applicative
   ) where
 
 -- Base.IO：IO 的公开 API 与 Functor/Monad 实例。
@@ -38,6 +39,7 @@ module Base.IO
 -- `IO` 类型本身恒可见（内建，无需 import）；`import Base.IO` 是为了 API 与实例。
 import Base.List
 import Base.Bool
+import Base.Applicative
 import Base.Monad
 -- W10：sleepMicros 用 `<=` / `>=`（Ord 方法别名）。
 import Base.Ord
@@ -150,4 +152,7 @@ instance Functor IO where
 
 instance Monad IO where
   bind io k = prim_bindIO io k
+
+instance Applicative IO where
   pure x = prim_pureIO x
+  liftA2 f ma mb = prim_bindIO ma (\a => prim_bindIO mb (\b => prim_pureIO (f a b)))

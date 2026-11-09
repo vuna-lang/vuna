@@ -1,0 +1,20 @@
+-- S4：字典目标按登记顺序处理。两个独立目标（`Eq (Box Int)` / `Eq (Box String)`）
+-- 在同一个定义里；每个目标经约束实例 `Eq a => Eq (Box a)` 展开出一个子目标
+-- （`Eq Int` / `Eq String`），子目标追加到队尾、按原顺序求解。前一个目标成功
+-- 不能改变后一个目标的候选顺序。
+import Prelude
+
+data Box a : Type where
+  MkBox : a -> Box a
+
+instance Eq a => Eq (Box a) where
+  eq x y = case x of
+    MkBox p => case y of
+      MkBox q => p == q
+  neq x y = if x == y then False else True
+
+bothSame : Bool
+bothSame = (MkBox 1 == MkBox 1) && (MkBox "a" == MkBox "a")
+
+main : String
+main = if bothSame then "same" else "diff"

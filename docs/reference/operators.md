@@ -46,10 +46,10 @@
 - `Elab` 的运算符特化按「名字是否为 Eq/Ord 类的方法投影」判定
   （`Elab.Dict.isEqMethod` / `isCmpMethod`，从类表取投影名，不硬编码模块前缀）；
   `==` 与 `eq`、`<` 与 `lt` 走完全相同的路径。
-- Int / String 上的特化（`bi_eq_int` / `bi_eq_str` / `bi_*_int` / `bi_*_generic`）是
-  **内建实例实现**，不是运算符的独立语义：它可以发生在方法投影的饱和应用上，因此
-  `eq` / `==` / deriving 生成的比较都命中同一条规则；特化优先于字典搜索，实例体里写
-  `==` 不会递归。
+- Int / String / Float 上的特化（`bi_eq_int` / `bi_eq_str` / `bi_eq_float` / `bi_*_int` /
+  `bi_*_float` / `bi_*_generic`）是 **内建实例实现**，不是运算符的独立语义：它可以发生在
+  方法投影的饱和应用上，因此 `eq` / `==` / deriving 生成的比较都命中同一条规则；
+  特化优先于字典搜索，实例体里写 `==` 不会递归。
 - 无 `Eq` 证据（具体类型无实例、`Eq` 类不在作用域）仍在 check 期报错；没有结构比较兜底。
 
 ## 库声明表（M31.3）
@@ -73,6 +73,10 @@
 `>>` 不走别名表：它需要「丢弃第一个结果」的适配，且必须用**调用点可见**的 `bind`（模块内自定义 Monad trait 时也要绑对），所以留在 Loader 的 do 派生里；`Base.Monad` 只提供它的 fixity
 声明与 `>>=` → `bind` 别名。base 包模块**不**自动注入 Prelude，因此每个模块用到的运算符
 必须由本模块声明或 import 闭包可见（审计清单见 git 历史）。
+
+M41 起 `pure` 从 `Monad` 移到 `Base.Applicative`（`Base.Monad` 重导出，既有的 `import
+Base.Monad` 仍可用）；`Applicative` 的最小方法是 `liftA2`，`ap` 是派生函数（实例方法签名
+里 `f (a -> b)` 的实例体当前会被误判，见 debt B42）。
 
 ## 反引号中缀、section、用户符号名（M31.3）
 
@@ -108,7 +112,7 @@
 - 期望类型或两侧都是 Nat（含 Nat + 整数字面量）→ `natAdd/natSub/natMul/natDiv`，结果 Nat；
 - 任一操作数是真正的 `Int` → 保持 Int intrinsic，Nat 一侧插入 `natToInt`（隐式提升）；
 - 期望 Int 而表达式推出 Nat → 整个表达式提升；期望 Nat 而操作数是 Int（非字面量）→ 类型错误；
-- 只有 Int/Nat 有这种特化，用户自定义数值类型不能重载 `+ - * /`（通用 `Num` 是 debt）。
+- 只有 Int/Nat/Float 有这种特化，用户自定义数值类型不能重载 `+ - * /`（通用 `Num` 是 debt）。Float 的 `+ - * /` 特化到 IEEE 语义（除零不失败，见 [floats.md](floats.md)），与 Int 的除零检查不同。
 
 实现入口：`Elab/Term/Impl.specializeArithCheck/AppFuel`（与 `==`/比较特化同一层）；
 Codegen 对 Int 路径继续用内联运算符，对 Nat 路径用 `bi_nat*` helper。
@@ -139,7 +143,10 @@ Codegen 对 Int 路径继续用内联运算符，对 Nat 路径用 `bi_nat*` hel
 | `Bool` | `Show` → `Base.Bool`；`Eq` / `Ord` → `Base.Eq` / `Base.Ord` | `Show` 方法签名不依赖 Bool，可放类型模块；`eq : a -> a -> Bool` 的返回类型是 Bool，放 `Base.Bool` 会形成 `Base.Bool ↔ Base.Eq` 的 import 环（Loader 报 `ImportCycle`） |
 | `Int` | `Base.Int` | primitive 类型模块；实例体走 Int 内建特化 |
 | `String` | `Eq` / `Ord` → `Base.String`；`Show` → `Base.Show` | String 经 `Base.Interp` 依赖 `Base.Show`，把 `Show String` 放回 String 会成环 |
-| `List` / `Maybe` / `Pair` / `Result` | 各自模块 | 约束 `Show` 实例（如 `instance Show a => Show (List a)`）；`Interp` 由 blanket 实例自动获得 |
+| `List` / `Maybe` / `Pair` / `Result` | 各自模块 | 约束 `Show`；M41 起另有约束 `Eq`（List/Maybe/Pair/Result）、`Ord`（List/Maybe/Pair）、`Hashable`、`Applicative` / `Foldable` / `Traversable` 实例 |
+| `Ordering` / `Unit` | `Base.Ord` / `Base.Unit` | `Ordering` 定义在 trait 模块 `Base.Ord`（`compare` 依赖它）；`Unit` 是普通 data，实例跟类型模块 |
+| `Array` / `IORef` / `MArray` / `Buffer` | 内建类型，实例可放任意模块（约定 `Base.Array` 等） | 没有定义模块；孤儿规则对它们放行（M41 扩 `isGlobalHeadType`），但 `Show`/`Eq Array` 需新种子，暂缺（debt B41） |
+| `HashMap` / `HashSet` | 各自模块 | 抽象类型，构造器不导出；`Show` 实例经 `toList`（`HashMap` 的 `toList` 需要 `Eq k`） |
 
 实例实现：data 类型用模式匹配（`Bool` 按 `True`/`False` 穷尽；`deriving (Eq)` 生成
 同形实例）；primitive 没有构造子，`Int`/`String` 的实例体写 `==` / `<`，命中内建特化，
@@ -156,7 +163,7 @@ Codegen 对 Int 路径继续用内联运算符，对 Nat 路径用 `bi_nat*` hel
 | 程序级 fixity（fmt / LSP） | `Loader.Flatten.fixitiesForSource` + `Vuna.Fmt.formatSourceWith` |
 | 方法投影判定 / 特化 | `Elab.Dict.isEqMethod` / `isCmpMethod` / `specializeEqTy` / `specializeCmpTy` |
 | 内建 runtime 名 | `Vuna.Compiler.Intrinsics.allIntrinsics`（`bi_*` 仅内部可见） |
-| trait 声明 / 库声明表 | `base/lib/Base/{Eq,Ord,Bool,Int,String,List,Monad}.vuna` |
+| trait 声明 / 库声明表 | `base/lib/Base/{Eq,Ord,Bool,Int,String,List,Monad,Applicative,Monoid,Foldable,Traversable,Hashable}.vuna` |
 | `>>` 的展开 | `Loader.Fixity.infixTerm`（`bind a (\_ -> b)`）；fixity 声明在 `base/lib/Base/Monad.vuna` |
 | 终止性守卫识别 | `Elab.Termination.Measure.guardPosVar`（按方法短名 `le`/`ge`/`lt`） |
 

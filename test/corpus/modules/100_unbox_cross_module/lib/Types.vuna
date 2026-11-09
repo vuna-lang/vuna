@@ -1,0 +1,14 @@
+module Types (UserId, Wrap(..), mkUser, getWrap) where
+
+record UserId where
+  uid : Int
+
+data Wrap : Type where
+  MkWrap : Int -> Wrap
+
+mkUser : Int -> UserId
+mkUser n = UserId { uid = n }
+
+getWrap : Wrap -> Int
+getWrap w = case w of
+  MkWrap n => n

@@ -3,10 +3,12 @@ import Base.Eff
 import Base.EffSched
 
 prog : Eff (Cons Int Nil) Int
-prog = pureEff 1
+prog = pure 1
 
 bad : Eff Nil (Task Int)
-bad = bindEff newScope (\sc => forkTask sc prog)
+bad = do
+  sc <- newScope
+  forkTask sc prog
 
 main : Int
 main = 1

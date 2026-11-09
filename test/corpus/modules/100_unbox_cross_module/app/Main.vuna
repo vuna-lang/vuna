@@ -1,0 +1,4 @@
+import Types
+
+main : Int
+main = (mkUser 40).uid + getWrap (MkWrap 2)

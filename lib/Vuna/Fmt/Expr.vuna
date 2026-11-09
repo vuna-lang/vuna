@@ -119,7 +119,7 @@ splitOnNewline : String -> List String
 splitOnNewline s = splitOnNewlineGo (strUnpack s) []
 
 splitOnNewlineGo : List Int -> List Int -> List String
-splitOnNewlineGo [] acc = strPack (reverse acc) :: []
+splitOnNewlineGo [] acc = [strPack (reverse acc)]
 splitOnNewlineGo (c :: rest) acc =
   if c == 10 then strPack (reverse acc) :: splitOnNewlineGo rest []
   else splitOnNewlineGo rest (c :: acc)
@@ -335,6 +335,7 @@ else case e of
     else if isSymbolName name then Just "(${name})" else Just name
   EInt n sp => Just (strFromInt n)
   EStr s sp => Just (renderStr s)
+  EFloat raw sp => Just raw
   -- M36：模板字面量。文本块转义；洞优先单行内联，洞需要块布局时放弃（交给块渲染）。
   EInterp multi parts sp =>
     let
@@ -499,6 +500,7 @@ atomForm : Expr -> Bool
 atomForm (EVar name sp) = True
 atomForm (EInt n sp) = True
 atomForm (EStr s sp) = True
+atomForm (EFloat raw sp) = True
 atomForm (EInterp multi parts sp) = True
 atomForm (EField base f sp) = True
 atomForm (ERecord name fields sp) = True
@@ -595,6 +597,7 @@ else case e of
   EVar name sp => if isSymbolName name then ["(${name})"] else [name]
   EInt n sp => [strFromInt n]
   EStr s sp => [renderStr s]
+  EFloat raw sp => [raw]
   -- M36：模板字面量（块布局）。文本块转义；洞可单行则单行，否则块渲染 + 缩进。
   EInterp multi parts sp =>
     let

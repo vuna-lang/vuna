@@ -1,0 +1,13 @@
+-- M42：委托的 class 集合是开放的：由底层字段类型有没有该实例决定。
+trait Pretty a where
+  pretty : a -> String
+
+instance Pretty Int where
+  pretty n = strFromInt n
+
+record Tagged where
+  tag : Int
+deriving via field (Pretty)
+
+main : String
+main = pretty (Tagged { tag = 7 })

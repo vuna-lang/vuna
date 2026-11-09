@@ -15,7 +15,9 @@ module Base.Nat (Nat(..), div, fromInt, fromIntMaybe, isZero, minus, mult, plus,
 import Base.Bool
 import Base.Eq
 import Base.Int
+import Base.Monoid
 import Base.Maybe
+import Base.Hashable
 import Base.Ord
 import Base.Show
 
@@ -72,3 +74,12 @@ instance Ord Nat where
 
 instance Show Nat where
   show n = strFromInt (toInt n)
+
+instance Hashable Nat where
+  hash n = toInt n
+
+instance Semigroup Nat where
+  mappend = plus
+
+instance Monoid Nat where
+  mempty = 0

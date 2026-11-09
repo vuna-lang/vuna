@@ -4,7 +4,6 @@ import Base.Maybe
 
 instance Monad Maybe where
   bind m f = m
-  pure x = Just x
 
 main : Int
 main = 0

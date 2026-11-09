@@ -40,7 +40,7 @@ options:
   --strict               与 --check 连用：同机器、同 compiler 的 WARN 变为退出 1；
                          跨机器/口径不同以及 bench 状态失败仍只告警、不阻断
   --threshold N          性能回退阈值，百分比（默认 20）
-  --with-tests           额外运行 test/run-tests.sh（较慢）
+  --with-tests           额外运行原生 suite（较慢）
   --keep                 保留临时构建目录
   -h, --help             显示本帮助
 
@@ -417,7 +417,8 @@ if diff -r -x "*.cmi" -x "*.cmx" -x "*.o" -x "vuna-seed" -x "build.log" -x "buil
 TESTS=skipped
 TESTS_SUMMARY=""
 if [ "$WITH_TESTS" = 1 ]; then
-  if ( cd test && VUNA=$VUNA_BIN VUNA_SEED=$SEED_BIN OCAMLOPT=ocamlopt sh run-tests.sh ) >"$WORK/tests.log" 2>&1; then
+  if VUNA_BASE="$REPO/base" VUNA=$VUNA_BIN VUNA_SEED=$SEED_BIN OCAMLOPT=ocamlopt \
+       "$VUNA_BIN" test --suite "$REPO/test/suite.toml" --jobs 1 --no-cache >"$WORK/tests.log" 2>&1; then
     TESTS=ok
   else
     TESTS=fail

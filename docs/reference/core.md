@@ -48,7 +48,7 @@ data Term where
   （`IntrinsicOp` 分派）。定义值缓存 `Sols.defVals` 在安全前缀检查后写入。delta 只认
   deftbl 里的定义体（签名表 `ecGlobalsTbl` 不参与展开）。
 - `quote` / `normalize`：值 → 项；深度正规化用于显示与终止性检查。
-- 类型级 `Vec a n` 是 `VNeutral (NGlobal "Vec" ...)`，因此两个族应用相等当且仅当参数
+- 类型级 `Vec n a` 是 `VNeutral (NGlobal "Vec" ...)`，因此两个族应用相等当且仅当参数
   定义性相等或可被元变量统一——这就是索引 unification 的用武之地。
 
 ## 3. 定义性相等与元变量求解

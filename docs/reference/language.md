@@ -10,11 +10,16 @@
   类型签名参与精化，运行时是否保留由擦除判据（`Rig`）决定；
 - 语法：Idris2 风格 `data ... where`、多子句函数、顶层 `axiom` 声明（无体 / 不透明）、
   `case ... of`、`let ... in`（绑定块可选签名行）、lambda、`if then else`、`do` 块、
-  整数 / 字符串字面量、`[..]` 与 `x :: xs` 列表糖、中缀 / 反引号中缀 / section / 用户符号名运算符；
+  整数 / 字符串 / 浮点字面量（`digits.digits`；见 [floats.md](floats.md)）、`[..]` 与 `x :: xs` 列表糖、中缀 / 反引号中缀 / section / 用户符号名运算符；
+- **类型表达式里的字面量**：签名、族 kind、构造子索引里可以用 `Int` / `String` 字面量
+  （`Vec 3 a`、`Reader "books" Int`）；只放行这两种（其它字面量，包括浮点，报
+  `invalid type expression`）。规则见 [type-system.md](type-system.md)。
 - **列表字面量（运行时效应用法）**：`[Fetch]` / `[Fetch, Log]` / `[]` 在**期望 kind
   为 `Row`** 的位置分别展开为 `Base.Eff.Row.Cons Fetch Nil` /
   `Cons Fetch (Cons Log Nil)` / `Nil`；普通列表字面量（期望 `List a`）走同一套按族
-  展开的规则。例：`String -> Eff [Fetch] String`。
+  展开的规则。例：`String -> Eff [Fetch] String`。构造数据时优先写 `[..]`：
+  `vuna lint --fix` 的 `list-literal` 规则会把表达式/类型位置的闭合 `::` / `Cons` 链
+  与裸 `Nil` 归一为列表字面量；模式匹配里的 `::` / `Cons` 保持原样。
 - **模板字符串与多行字面量**（M36）："hi ${name}" 插值、"""...""" 多行（内容逐字，
   只丢开引号后的一个换行）；洞降级成 `Base.Interp.interp` 调用，转换语义由 `Interp`
   实例决定。规则、转义 `\$`、边界见 [templates.md](templates.md)；
@@ -24,6 +29,14 @@
   `infix N op` 声明（可选 `= 目标名`，如 `infixl 4 == = eq`），优先级 0–9。没有内建运算符表：
   符号运算符用于中缀却无声明是**错误**；`->` 是语法，由 Loader 语法表恒可见。库声明表、
   可见闭包去重与 fmt 程序级 fixity 见 [operators.md](operators.md)；
+- **`record` / `data` 派生**：都可跟 `deriving (C...)` 或 `deriving via field (C...)`。
+  后者要求包装是自动去装箱的单字段类型，并在实例搜索期把 `Dict_C Wrapper` 委托给
+  `Dict_C Field`；class 集合是开放的，由底层类型有没有该实例决定，不限于 Show/Eq/Ord。
+  `record` 在精化前降级为单构造器 `data`。详细语法、记录更新 / 模式与委托边界见
+  [records-traits.md](records-traits.md)；
+- **自动去装箱**（M42）：单字段 record / 单构造器单运行时字段的 data 在 codegen 中表示为
+  字段类型的 OCaml 类型别名（没有构造子、没有变体）；这是声明级表示选择，不改变类型检查
+  与 `deriving` 语义。判据与边界见 [records-traits.md](records-traits.md) §零成本表示；
 - layout：offside 规则；顶层声明、`data` 构造器块、`case` 分支、`let` 绑定按块列对齐，
   表达式跨行必须缩进超过所在块列；
 - `main` 必须是零参数定义；展示由编译器钩子完成（`Int` / `Nat` → 十进制、`String` →
@@ -171,7 +184,7 @@ binder 组内的多个名字展开成嵌套 Pi，解析器把这段 Pi 前缀搬
 
 vuna/base/compiler 三包源码统一按当前语言能力书写，新增/修改代码沿用：
 
-- **签名不写可量化的类型参数**：自由小写名由精化器量化为隐式参数（`vhead : Vec a n -> a`
+- **签名不写可量化的类型参数**：自由小写名由精化器量化为隐式参数（`vhead : Vec n a -> a`
   等价 `{a : Type} -> ...`）；纯索引写 `{n : Nat} ->`，子句与调用点不再手写该参数；
 - **trait 约束显式**：泛型函数依赖 Eq/Ord/Show 字典时在顶层签名写 `Eq a =>`（M32 形态），
   不依赖 body 里 `==` 的隐式字典提升；
@@ -342,7 +355,7 @@ vuna/base/compiler 三包源码统一按当前语言能力书写，新增/修改
 - **类型位置只查类型命名空间**：先本模块声明的类型名（**优先于内建名**——`Base.Bool` 重新
   声明 `Bool` 就靠这条），再内建类型名；小写名保持为隐式类型变量（未被本模块值定义占用
   时）。都没有再查 import 导出的类型。退化约定：非小写名找不到类型时按**索引构造子**解析
-  （`Vec a Zero` 的 `Zero`），最后才退到本模块值定义（类型层 def，如 `sel : Nat -> Type`）。
+  （`Vec Zero a` 的 `Zero`），最后才退到本模块值定义（类型层 def，如 `sel : Nat -> Type`）。
 - **值位置查值命名空间**：局部绑定 → 本模块值定义 → 本模块构造子 → 内建 → import 导出
   （值项、再构造子）→ **本模块类型名 → import 导出的类型名**（类型作为项的两级退路，
   与类型位置一样本模块优先）。因此

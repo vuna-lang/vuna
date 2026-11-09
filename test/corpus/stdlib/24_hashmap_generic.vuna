@@ -1,0 +1,40 @@
+-- stdlib：泛型 HashMap / HashSet（任意 Eq + Hashable 键）。
+-- 需要 strHash intrinsic → 标 .nointerp，只 check + compile + run。
+import Base.Eq
+import Base.HashMap
+import Base.HashSet
+import Base.Int
+import Base.List
+import Base.Maybe
+import Base.Pair
+import Base.String
+
+data Key : Type where
+  MkKey : Int -> Key
+deriving (Eq, Hashable)
+
+intMap : HashMap Int Int
+intMap = Base.HashMap.insert 1 10 (Base.HashMap.insert 2 20 (Base.HashMap.fromList []))
+
+pairMap : HashMap (Pair String Int) Int
+pairMap = Base.HashMap.fromList [Pair (Pair "x" 1) 10, Pair (Pair "y" 2) 20]
+
+keyMap : HashMap Key Int
+keyMap = Base.HashMap.insert (MkKey 7) 70 (Base.HashMap.fromList [])
+
+setInt : HashSet Int
+setInt = Base.HashSet.fromList [3, 1, 2, 1]
+
+main : String
+main =
+  strFromInt (fromMaybe 0 (Base.HashMap.lookup 1 intMap))
+    ++ "/"
+    ++ strFromInt (fromMaybe 0 (Base.HashMap.lookup (Pair "y" 2) pairMap))
+    ++ "/"
+    ++ strFromInt (fromMaybe 0 (Base.HashMap.lookup (MkKey 7) keyMap))
+    ++ "/"
+    ++ strFromInt (Base.HashSet.size setInt)
+    ++ "/"
+    ++ (if Base.HashSet.member 2 setInt then "y" else "n")
+    ++ "/"
+    ++ (if Base.HashSet.member 9 setInt then "y" else "n")

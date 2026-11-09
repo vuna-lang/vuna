@@ -1,0 +1,3 @@
+-- 没有 Int/Float 隐式转换：混用必须显式 floatFromInt / intFromFloat。
+main : Float
+main = 1 + 1.5

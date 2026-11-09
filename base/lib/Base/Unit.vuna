@@ -1,0 +1,39 @@
+module Base.Unit (Unit(..)) where
+
+-- Base.Unit：单元素类型（「无有意义返回值」的惯用类型）。
+--
+-- 只有 `MkUnit` 一个构造子；用于 `IO Unit` 风格的动作结果占位。`Eq` / `Ord` /
+-- `Show` 实例为穷尽、零分配实现（只模式匹配一个构造子）。
+import Base.Bool
+import Base.Eq
+import Base.Hashable
+import Base.Monoid
+import Base.Ord
+import Base.Show
+
+-- | 单元素类型：只有 `MkUnit` 一个构造子。
+data Unit : Type where
+  -- | 唯一的值。
+  MkUnit : Unit
+
+instance Eq Unit where
+  eq MkUnit MkUnit = True
+  neq MkUnit MkUnit = False
+
+instance Ord Unit where
+  lt _ _ = False
+  le _ _ = True
+  gt _ _ = False
+  ge _ _ = True
+
+instance Show Unit where
+  show MkUnit = "MkUnit"
+
+instance Hashable Unit where
+  hash MkUnit = 0
+
+instance Semigroup Unit where
+  mappend MkUnit MkUnit = MkUnit
+
+instance Monoid Unit where
+  mempty = MkUnit

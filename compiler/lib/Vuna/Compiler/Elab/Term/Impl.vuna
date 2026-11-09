@@ -409,6 +409,16 @@ else case listLitElems expr of
 -- | 自动补注（M41 新增导出）：inferEFuelCore。
 inferEFuelCore : Int -> List (Pair String Term) -> Ctx -> Ec -> Expr -> Result (Pair Term (Pair Value Ec))
 inferEFuelCore fuel globals ctx ec expr = if fuel <= 0 then Err "DT: internal: inference fuel exhausted"
+else if doMarkerHead expr then case decodeDoBlock expr of
+  Just chain => andThen (inferDoBlockFuel (fuel - 1) globals ctx ec chain) (\r => case r of
+    Just p => Ok p
+    Nothing => inferEFuelCorePlain fuel globals ctx ec (doChainFallback chain)
+  )
+  Nothing => inferEFuelCorePlain fuel globals ctx ec expr
+else inferEFuelCorePlain fuel globals ctx ec expr
+
+inferEFuelCorePlain : Int -> List (Pair String Term) -> Ctx -> Ec -> Expr -> Result (Pair Term (Pair Value Ec))
+inferEFuelCorePlain fuel globals ctx ec expr = if fuel <= 0 then Err "DT: internal: inference fuel exhausted"
 else case expr of
   EVar name sp => case name of
     "Type" => Ok (Pair (TType levelZero) (Pair (VType (levelSucc levelZero)) ec))
@@ -420,9 +430,10 @@ else case expr of
       else inferVarRef globals ctx ec name sp
   EInt n sp => Ok (Pair (TInt n) (Pair (VNeutral (NGlobal "Int" [])) ec))
   EStr s sp => Ok (Pair (TStr s) (Pair (VNeutral (NGlobal "String" [])) ec))
+  EFloat raw sp => Ok (Pair (TFloat raw) (Pair (VNeutral (NGlobal floatTypeName [])) ec))
   EPi name implicit qty dom cod sp =>
     inferPiFuel (fuel - 1) globals ctx ec name implicit qty dom cod sp
-  EApp fn args sp => inferAppFuel (fuel - 1) globals ctx ec fn args sp
+  EApp fn args sp => inferAppFuel (fuel - 1) globals ctx ec fn args sp Nothing
   ELam names body sp => tcErr0 sp LambdaNoSignature
   EIf c t e sp => andThen (checkCondBoolFuel (fuel - 1) globals ctx ec c sp) (\pc => case pc of
     Pair cTerm ec1 => andThen (inferEFuel (fuel - 1) globals ctx ec1 t) (\pt => case pt of
@@ -492,8 +503,8 @@ else andThen (checkTypeFuel (fuel - 1) globals ctx ec dom) (\pd => case pd of
 )
 
 -- 应用：逐个消费显式实参，遇到隐式 Pi 先插入元变量。
-inferAppFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Expr -> List Expr -> Span -> Result (Pair Term (Pair Value Ec))
-inferAppFuel fuel globals ctx ec fn args sp = if fuel <= 0 then Err "DT: internal: inference fuel exhausted"
+inferAppFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Expr -> List Expr -> Span -> Maybe (Pair Int Value) -> Result (Pair Term (Pair Value Ec))
+inferAppFuel fuel globals ctx ec fn args sp hint = if fuel <= 0 then Err "DT: internal: inference fuel exhausted"
 else case fn of
   EVar "->" _ => case args of
     [a, b] => inferPiFuel (fuel - 1) globals ctx ec "_" False Nothing a b sp
@@ -505,15 +516,15 @@ else case fn of
     _ => tcErr0 tsp TypeLevelArg
   _ => case fn of
     EVar name vsp => if isOverCtorName name then andThen (resolveOverCtor ec vsp Nothing (overCtorShort name) (overCtorTargets name))
-      (\t => inferAppFuel (fuel - 1) globals ctx ec (EVar t vsp) args sp)
+      (\t => inferAppFuel (fuel - 1) globals ctx ec (EVar t vsp) args sp hint)
     else case ctxLookup name ctx of
-      Just _ => inferAppGeneralFuel (fuel - 1) globals ctx ec fn args sp
+      Just _ => inferAppGeneralFuel (fuel - 1) globals ctx ec fn args sp hint
       -- M23：与类型同名的构造子（`data Pair a b where Pair : a -> b -> ...`）在
       -- 推断位置按**构造子**解释（推断位置是值位置；类型位置由 checkTypeFuel (fuel - 1) / checkAppFuel (fuel - 1)
       -- 的「期望是宇宙」分支先走类型应用，不会到这里）。构造子表优先于 globals：
       -- globals 里同名项先登记的是族的 kind，直接查会拿到 `Type -> ... -> Type`。
       Nothing => case dtCtorLookupEc ec name of
-        Just ctor => andThen (inferArgsFuel (fuel - 1) globals ctx ec (eval [] (dtCtorType ctor)) args sp) (\pa => case pa of
+        Just ctor => andThen (inferArgsFuel (fuel - 1) globals ctx ec (eval [] (dtCtorType ctor)) args sp hint) (\pa => case pa of
           Pair argTerms (Pair resTy ec2) =>
             Ok (Pair (ctorAppTerm (ecDatas ec2) (TGlobal name) argTerms) (Pair resTy ec2))
         )
@@ -522,7 +533,7 @@ else case fn of
           -- `==`（codegen 默认映射成 bi_eq_int，字符串比较会生成类型错误的 OCaml）。
           Just tyTerm => andThen (specializeOpAppFuel (fuel - 1) globals ctx ec name args sp) (\mspec => case mspec of
             Just pair => Ok pair
-            Nothing => andThen (inferArgsFuel (fuel - 1) globals ctx ec (eval [] tyTerm) args sp) (\pa => case pa of
+            Nothing => andThen (inferArgsFuel (fuel - 1) globals ctx ec (eval [] tyTerm) args sp hint) (\pa => case pa of
               Pair argTerms (Pair resTy ec2) =>
                 Ok (Pair (ctorAppTerm (ecDatas ec2) (TGlobal name) argTerms) (Pair resTy ec2))
             )
@@ -535,30 +546,30 @@ else case fn of
             Just pair => Ok pair
             Nothing => tcErr1 vsp (UnknownName name) name
           )
-    _ => inferAppGeneralFuel (fuel - 1) globals ctx ec fn args sp
+    _ => inferAppGeneralFuel (fuel - 1) globals ctx ec fn args sp hint
 
-inferAppGeneralFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Expr -> List Expr -> Span -> Result (Pair Term (Pair Value Ec))
-inferAppGeneralFuel fuel globals ctx ec fn args sp = if fuel <= 0 then Err "DT: internal: inference fuel exhausted"
+inferAppGeneralFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Expr -> List Expr -> Span -> Maybe (Pair Int Value) -> Result (Pair Term (Pair Value Ec))
+inferAppGeneralFuel fuel globals ctx ec fn args sp hint = if fuel <= 0 then Err "DT: internal: inference fuel exhausted"
 else case fn of
   EVar name vsp => andThen (specializeOpAppFuel (fuel - 1) globals ctx ec name args sp) (\mspec => case mspec of
     Just pair => Ok pair
-    Nothing => inferAppGeneralGoFuel (fuel - 1) globals ctx ec fn args sp
+    Nothing => inferAppGeneralGoFuel (fuel - 1) globals ctx ec fn args sp hint
   )
-  _ => inferAppGeneralGoFuel (fuel - 1) globals ctx ec fn args sp
+  _ => inferAppGeneralGoFuel (fuel - 1) globals ctx ec fn args sp hint
 
-inferAppGeneralGoFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Expr -> List Expr -> Span -> Result (Pair Term (Pair Value Ec))
-inferAppGeneralGoFuel fuel globals ctx ec fn args sp = if fuel <= 0 then Err "DT: internal: inference fuel exhausted"
+inferAppGeneralGoFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Expr -> List Expr -> Span -> Maybe (Pair Int Value) -> Result (Pair Term (Pair Value Ec))
+inferAppGeneralGoFuel fuel globals ctx ec fn args sp hint = if fuel <= 0 then Err "DT: internal: inference fuel exhausted"
 else andThen (inferEFuel (fuel - 1) globals ctx ec fn) (\pf => case pf of
-  Pair fnTerm (Pair fnTy ec1) => andThen (inferArgsFuel (fuel - 1) globals ctx ec1 fnTy args sp) (\pa => case pa of
+  Pair fnTerm (Pair fnTy ec1) => andThen (inferArgsFuel (fuel - 1) globals ctx ec1 fnTy args sp hint) (\pa => case pa of
     Pair argTerms (Pair resTy ec2) =>
       Ok (Pair (ctorAppTerm (ecDatas ec2) fnTerm argTerms) (Pair resTy ec2))
   )
 )
 
-inferArgsFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Value -> List Expr -> Span -> Result (Pair (List (Pair Term Rig)) (Pair Value Ec))
-inferArgsFuel fuel globals ctx ec ty args sp =
+inferArgsFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Value -> List Expr -> Span -> Maybe (Pair Int Value) -> Result (Pair (List (Pair Term Rig)) (Pair Value Ec))
+inferArgsFuel fuel globals ctx ec ty args sp hint =
   if fuel <= 0 then Err "DT: internal: inference fuel exhausted"
-  else inferArgsGo 64 globals ctx ec ty args sp
+  else inferArgsGo 64 globals ctx ec ty args sp hint
 
 -- M41：列表字面量（parser 保留名）按期望族的 Nil/Cons 通用展开；期望未知时默认
 -- `Base.List.List`。族内按短名 `Nil`/`Cons` 找构造子（Row/Vec 改名后自然生效）。
@@ -614,28 +625,28 @@ expandArgListLit ec dom a = case listLitElems a of
   Just elems => expandListLit ec (listLitFamily ec (forceVal ec dom)) elems (exprSpan a)
   Nothing => Ok a
 
-inferArgsGo : Int -> List (Pair String Term) -> Ctx -> Ec -> Value -> List Expr -> Span -> Result (Pair (List (Pair Term Rig)) (Pair Value Ec))
-inferArgsGo fuel globals ctx ec ty args sp = if fuel <= 0 then Err "DT: internal: inference fuel exhausted"
+inferArgsGo : Int -> List (Pair String Term) -> Ctx -> Ec -> Value -> List Expr -> Span -> Maybe (Pair Int Value) -> Result (Pair (List (Pair Term Rig)) (Pair Value Ec))
+inferArgsGo fuel globals ctx ec ty args sp hint = if fuel <= 0 then Err "DT: internal: inference fuel exhausted"
 else
   let
     forced = forceVal ec ty
   in case forced of
-    VPi name implicit rig dom clo => if implicit then if isDictDomain ec dom then if dictArgUnsolvedMeta ec dom then deferDictBinderFuel (fuel - 1) globals ctx ec dom clo args sp
+    VPi name implicit rig dom clo => if implicit then if isDictDomain ec dom then if dictArgUnsolvedMeta ec dom then deferDictBinderFuel (fuel - 1) globals ctx ec dom clo args sp hint
     else andThen (constrainDictDomFuel (fuel - 1) globals ec ctx dom args sp) (\ec0 => case searchInstanceIn globals ctx ec0 (forceVal ec0 dom) sp of
       Ok (Pair instTerm ec1) =>
         let
           ty2 = applyClosure clo (evalCtx ctx instTerm)
-        in andThen (inferArgsGo (fuel - 1) globals ctx ec1 ty2 args sp) (\q => case q of
+        in andThen (inferArgsGo (fuel - 1) globals ctx ec1 ty2 args sp hint) (\q => case q of
           Pair argTerms (Pair resTy ec2) =>
             Ok (Pair (Pair instTerm RigOmega :: argTerms) (Pair resTy ec2))
         )
       Err e =>
-        if hasUnsolvedMetaValue (ecSolsP ec0) (forceVal ec0 dom) then deferDictBinderFuel (fuel - 1) globals ctx ec0 dom clo args sp
-        else if isRigidDictArg ec0 (forceVal ec0 dom) then deferDictBinderFuel (fuel - 1) globals ctx ec0 dom clo args sp
+        if hasUnsolvedMetaValue (ecSolsP ec0) (forceVal ec0 dom) then deferDictBinderFuel (fuel - 1) globals ctx ec0 dom clo args sp hint
+        else if isRigidDictArg ec0 (forceVal ec0 dom) then deferDictBinderFuel (fuel - 1) globals ctx ec0 dom clo args sp hint
         else Err e
     )
     else if isMemberDomain ec dom then case memberLookup 64 (ctxDepth ctx) ec dom of
-      MemberFound proof ec1 => andThen (inferArgsGo (fuel - 1) globals ctx ec1 (applyClosure clo proof) args sp) (\p => case p of
+      MemberFound proof ec1 => andThen (inferArgsGo (fuel - 1) globals ctx ec1 (applyClosure clo proof) args sp hint) (\p => case p of
         Pair argTerms (Pair resTy ec2) =>
           Ok (Pair (Pair (quote (ctxDepth ctx) proof) Rig0 :: argTerms) (Pair resTy ec2))
       )
@@ -646,41 +657,45 @@ else
         in case newMeta ctx ec of
           Pair metaTerm ec1 =>
             let
-              ec2 = ecAddDictGoal ec1 (DtDictGoal m dom)
-            in andThen (inferArgsGo (fuel - 1) globals ctx ec2 (applyClosure clo (eval (ctxEnv ctx) metaTerm)) args sp) (\p => case p of
+              ec2 = ecAddConstraint ec1 CkRow m dom (Just sp) (ctxDepth ctx)
+            in andThen (inferArgsGo (fuel - 1) globals ctx ec2 (applyClosure clo (eval (ctxEnv ctx) metaTerm)) args sp hint) (\p => case p of
               Pair argTerms (Pair resTy ec3) =>
                 Ok (Pair (Pair metaTerm Rig0 :: argTerms) (Pair resTy ec3))
             )
     else if isImplicitDomain ctx ec dom then case newMeta ctx ec of
-      Pair metaTerm ec1 => andThen (inferArgsGo (fuel - 1) globals ctx ec1 (applyClosure clo (eval (ctxEnv ctx) metaTerm)) args sp) (\p => case p of
+      Pair metaTerm ec1 => andThen (inferArgsGo (fuel - 1) globals ctx ec1 (applyClosure clo (eval (ctxEnv ctx) metaTerm)) args sp hint) (\p => case p of
         Pair argTerms (Pair resTy ec2) =>
           Ok (Pair (Pair metaTerm Rig0 :: argTerms) (Pair resTy ec2))
       )
     else tcErr0 sp ImplicitParamKind
     else case args of
       [] => Ok (Pair [] (Pair forced ec))
-      a :: rest => andThen (rigForLinearDomain ec sp name rig dom) (\argRig => andThen (expandArgListLit ec dom a) (\a2 => andThen (checkEFuel (fuel - 1) globals ctx ec a2 dom) (\p => case p of
-        Pair aTerm ec1 => andThen (inferArgsGo (fuel - 1) globals ctx ec1 (applyClosure clo (evalCtx ctx aTerm)) rest sp) (\q => case q of
-          Pair argTerms (Pair resTy ec2) =>
-            Ok (Pair (Pair aTerm argRig :: argTerms) (Pair resTy ec2))
+      a :: rest =>
+        let
+          ec0 = case hint of
+            Nothing => ec
+            Just (Pair goals0 expected) => case tryUseHint goals0 ctx expected ec forced of
+              Nothing => ec
+              Just ec1 => ec1
+        in andThen (rigForLinearDomain ec0 sp name rig dom) (\argRig => andThen (expandArgListLit ec0 dom a) (\a2 => andThen (checkEFuel (fuel - 1) globals ctx ec0 a2 dom) (\p => case p of
+          Pair aTerm ec1 => andThen (inferArgsGo (fuel - 1) globals ctx ec1 (applyClosure clo (evalCtx ctx aTerm)) rest sp Nothing) (\q => case q of
+            Pair argTerms (Pair resTy ec2) =>
+              Ok (Pair (Pair aTerm argRig :: argTerms) (Pair resTy ec2))
+          )
         )
-      )
-      )
-      )
+        )
+        )
     _ => case args of
       [] => Ok (Pair [] (Pair forced ec))
       a :: rest => tcErr0 (exprSpan a) TooManyArgs
 
--- 类参数未解且无唯一实例：延迟成裸元变量 + 字典目标，等 `?a` 被实参/结果类型解出来后
--- 由 `resolveDictGoals` 回填（`mem` 的刚性 `a` 也走这里）。抽成函数是为了在
--- 「类参数还是未解元变量」时**跳过实例搜索**——否则会被第一个内建实例提前定死。
-deferDictBinderFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Value -> Closure -> List Expr -> Span -> Result (Pair (List (Pair Term Rig)) (Pair Value Ec))
-deferDictBinderFuel fuel globals ctx ec dom clo args sp = if fuel <= 0 then Err "DT: internal: inference fuel exhausted"
+deferDictBinderFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Value -> Closure -> List Expr -> Span -> Maybe (Pair Int Value) -> Result (Pair (List (Pair Term Rig)) (Pair Value Ec))
+deferDictBinderFuel fuel globals ctx ec dom clo args sp hint = if fuel <= 0 then Err "DT: internal: inference fuel exhausted"
 else
   let
     m = ecNext ec
   in case newMeta ctx ec of
-    Pair metaTerm ec1 => andThen (inferArgsGo (fuel - 1) globals ctx (ecAddDictGoal ec1 (DtDictGoal m (forceVal ec1 dom))) (applyClosure clo (eval (ctxEnv ctx) metaTerm)) args sp) (\p => case p of
+    Pair metaTerm ec1 => andThen (inferArgsGo (fuel - 1) globals ctx (ecAddConstraint ec1 CkDict m (forceVal ec1 dom) (Just sp) (ctxDepth ctx)) (applyClosure clo (eval (ctxEnv ctx) metaTerm)) args sp hint) (\p => case p of
       Pair argTerms (Pair resTy ec2) =>
         Ok (Pair (Pair metaTerm RigOmega :: argTerms) (Pair resTy ec2))
     )
@@ -746,6 +761,9 @@ intTyValue = VNeutral (NGlobal intTypeName [])
 natTyValue : Value
 natTyValue = VNeutral (NGlobal natTypeName [])
 
+floatTyValue : Value
+floatTyValue = VNeutral (NGlobal floatTypeName [])
+
 isIntTy : Ec -> Value -> Bool
 isIntTy ec v = case forceVal ec v of
   VNeutral (NGlobal g []) => g == intTypeName
@@ -754,6 +772,11 @@ isIntTy ec v = case forceVal ec v of
 isNatTy : Ec -> Value -> Bool
 isNatTy ec v = case forceVal ec v of
   VNeutral (NGlobal g []) => g == natTypeName
+  _ => False
+
+isFloatTy : Ec -> Value -> Bool
+isFloatTy ec v = case forceVal ec v of
+  VNeutral (NGlobal g []) => g == floatTypeName
   _ => False
 
 -- 只在「期望 Int、实际 Nat」时插入 natToInt；反向没有隐式提升。
@@ -784,6 +807,16 @@ intApp2 name a b = TApp (TApp (TGlobal name) a Rig1) b Rig1
 natApp2 : String -> Term -> Term -> Term
 natApp2 name a b = TApp (TApp (TGlobal (arithNatName name)) a Rig1) b Rig1
 
+-- 浮点算术：特化到内部 `bi_*_float`（与 Int / Nat 同一条精化期降级路径）。
+floatApp2 : String -> Term -> Term -> Term
+floatApp2 name a b = TApp (TApp (TGlobal (arithFloatName name)) a Rig1) b Rig1
+
+arithFloatName : String -> String
+arithFloatName "+" = "bi_add_float"
+arithFloatName "-" = "bi_sub_float"
+arithFloatName "*" = "bi_mul_float"
+arithFloatName _ = "bi_div_float"
+
 isEIntExpr : Expr -> Maybe Int
 isEIntExpr (EInt n sp) = Just n
 isEIntExpr _ = Nothing
@@ -803,6 +836,11 @@ else if isArithOpName name then case args of
       Pair bTerm ec2 => Ok (Just (Pair (intApp2 name aTerm bTerm) ec2))
     )
   )
+  else if isFloatTy ec expected then andThen (checkEFuel (fuel - 1) globals ctx ec a floatTyValue) (\pa => case pa of
+    Pair aTerm ec1 => andThen (checkEFuel (fuel - 1) globals ctx ec1 b floatTyValue) (\pb => case pb of
+      Pair bTerm ec2 => Ok (Just (Pair (floatApp2 name aTerm bTerm) ec2))
+    )
+  )
   else Ok Nothing
   _ => Ok Nothing
 else Ok Nothing
@@ -815,6 +853,7 @@ else if isArithOpName name then case args of
     Pair aTerm (Pair aTy ec1) => andThen (inferEFuel (fuel - 1) globals ctx ec1 b) (\pb => case pb of
       Pair bTerm (Pair bTy ec2) => if isNatTy ec2 aTy && isNatTy ec2 bTy then Ok (Just (Pair (natApp2 name aTerm bTerm) (Pair natTyValue ec2)))
       else if isIntTy ec2 aTy && isIntTy ec2 bTy then Ok (Just (Pair (intApp2 name aTerm bTerm) (Pair intTyValue ec2)))
+      else if isFloatTy ec2 aTy && isFloatTy ec2 bTy then Ok (Just (Pair (floatApp2 name aTerm bTerm) (Pair floatTyValue ec2)))
       else if isNatTy ec2 aTy && isIntTy ec2 bTy then case isEIntExpr b of
         Just n =>
           andThen (natLitResult (exprSpan b) n)
@@ -839,8 +878,31 @@ else case listLitElems expr of
       (\e2 => checkEFuel (fuel - 1) globals ctx ec e2 expected)
   Nothing => checkEFuelNoRow fuel globals ctx ec expr expected
 
+-- 字面量转换（FromString / FromInt）：期望类型不是内建字面量类型时，若期望类型上存在
+-- 对应 trait 的实例，就把字面量降级成 trait 方法应用（`fromString "s"` / `fromInt n`），
+-- 交给现有 `EApp` 精化处理隐式类参、字典 binder 与延迟字典目标；搜索失败返回 Nothing，
+-- 调用方回退到原推断路径（诊断不变）。探针与随后降级各查一次实例，只有非内建期望类型
+-- 位置会走到。
+literalTraitLower : List (Pair String Term) -> Ctx -> Ec -> String -> String -> Expr -> Value -> Span -> Maybe (Pair Expr Ec)
+literalTraitLower globals ctx ec traitName methodName lit expected sp =
+  let
+    dictDom = VNeutral (NGlobal (dictTypeName traitName) [forceVal ec expected])
+  in case searchInstanceIn globals ctx ec dictDom sp of
+    Err _ => Nothing
+    Ok (Pair _ ec1) => Just (Pair (EApp (EVar methodName sp) [lit] sp) ec1)
+
 checkEFuelNoRow : Int -> List (Pair String Term) -> Ctx -> Ec -> Expr -> Value -> Result (Pair Term Ec)
 checkEFuelNoRow fuel globals ctx ec expr expected = if fuel <= 0 then Err "DT: internal: inference fuel exhausted"
+else if doMarkerHead expr then case decodeDoBlock expr of
+  Just chain => andThen (checkDoBlockFuel (fuel - 1) globals ctx ec chain expected) (\r => case r of
+    Just p => Ok p
+    Nothing => checkEFuelNoRowPlain fuel globals ctx ec (doChainFallback chain) expected
+  )
+  Nothing => checkEFuelNoRowPlain fuel globals ctx ec expr expected
+else checkEFuelNoRowPlain fuel globals ctx ec expr expected
+
+checkEFuelNoRowPlain : Int -> List (Pair String Term) -> Ctx -> Ec -> Expr -> Value -> Result (Pair Term Ec)
+checkEFuelNoRowPlain fuel globals ctx ec expr expected = if fuel <= 0 then Err "DT: internal: inference fuel exhausted"
 else case expr of
   EVar name sp => if isHoleName name then
     let
@@ -851,11 +913,33 @@ else case expr of
     (\t => checkAppFuel (fuel - 1) globals ctx ec (EVar t sp) [] expected sp)
   else checkAppFuel (fuel - 1) globals ctx ec (EVar name sp) [] expected sp
   EInt n sp => case forceVal ec expected of
-    VNeutral (NGlobal g []) =>
-      if g == natTypeName then andThen (natLitResult sp n) (\t => Ok (Pair t ec))
-      else checkByInferFuel (fuel - 1) globals ctx ec expr expected
-    _ => checkByInferFuel (fuel - 1) globals ctx ec expr expected
-  EStr s sp => checkByInferFuel (fuel - 1) globals ctx ec expr expected
+    VNeutral (NGlobal g []) => if g == natTypeName then andThen (natLitResult sp n) (\t => Ok (Pair t ec))
+    else if g == intTypeName then checkByInferFuel (fuel - 1) globals ctx ec expr expected
+    else case literalTraitLower globals ctx ec fromIntTypeName fromIntMethodName expr expected sp of
+      Just (Pair lower ec1) => checkEFuel (fuel - 1) globals ctx ec1 lower expected
+      Nothing => checkByInferFuel (fuel - 1) globals ctx ec expr expected
+    VMeta _ _ => checkByInferFuel (fuel - 1) globals ctx ec expr expected
+    _ => case literalTraitLower globals ctx ec fromIntTypeName fromIntMethodName expr expected sp of
+      Just (Pair lower ec1) => checkEFuel (fuel - 1) globals ctx ec1 lower expected
+      Nothing => checkByInferFuel (fuel - 1) globals ctx ec expr expected
+  EStr s sp => case forceVal ec expected of
+    VNeutral (NGlobal g []) => if g == strTypeName then Ok (Pair (TStr s) ec)
+    else case literalTraitLower globals ctx ec fromStringTypeName fromStringMethodName expr expected sp of
+      Just (Pair lower ec1) => checkEFuel (fuel - 1) globals ctx ec1 lower expected
+      Nothing => checkByInferFuel (fuel - 1) globals ctx ec expr expected
+    VMeta _ _ => checkByInferFuel (fuel - 1) globals ctx ec expr expected
+    _ => case literalTraitLower globals ctx ec fromStringTypeName fromStringMethodName expr expected sp of
+      Just (Pair lower ec1) => checkEFuel (fuel - 1) globals ctx ec1 lower expected
+      Nothing => checkByInferFuel (fuel - 1) globals ctx ec expr expected
+  EFloat raw sp => case forceVal ec expected of
+    VNeutral (NGlobal g []) => if g == floatTypeName then Ok (Pair (TFloat raw) ec)
+    else case literalTraitLower globals ctx ec fromFloatTypeName fromFloatMethodName expr expected sp of
+      Just (Pair lower ec1) => checkEFuel (fuel - 1) globals ctx ec1 lower expected
+      Nothing => checkByInferFuel (fuel - 1) globals ctx ec expr expected
+    VMeta _ _ => checkByInferFuel (fuel - 1) globals ctx ec expr expected
+    _ => case literalTraitLower globals ctx ec fromFloatTypeName fromFloatMethodName expr expected sp of
+      Just (Pair lower ec1) => checkEFuel (fuel - 1) globals ctx ec1 lower expected
+      Nothing => checkByInferFuel (fuel - 1) globals ctx ec expr expected
   ELam names body sp => checkLamFuel (fuel - 1) globals ctx ec names body expected sp
   EApp (EVar "->" _) args sp => checkByInferFuel (fuel - 1) globals ctx ec expr expected
   EApp (EVar "Type" _) args sp => checkByInferFuel (fuel - 1) globals ctx ec expr expected
@@ -929,6 +1013,7 @@ expandLocalFuns ec (ELocalFun clauses sp) =
 expandLocalFuns ec (EVar name sp) = Ok (EVar name sp)
 expandLocalFuns ec (EInt n sp) = Ok (EInt n sp)
 expandLocalFuns ec (EStr s sp) = Ok (EStr s sp)
+expandLocalFuns ec (EFloat raw sp) = Ok (EFloat raw sp)
 expandLocalFuns ec (ELam names body sp) =
   andThen (expandLocalFuns ec body) (\b2 => Ok (ELam names b2 sp))
 expandLocalFuns ec (EApp fn args sp) =
@@ -1068,9 +1153,57 @@ else andThen (inferEFuel (fuel - 1) globals ctx ec value) (\pv => case pv of
     )
 )
 
+-- S2：期望结果类型 hint。把剩余 Pi 链的每个 binder 用刚性占位变量实例化，取“残余结果
+-- 类型”；占位变量 level 从 depth 起递增，若结果引用它们（levelEscapes depth 0 res），
+-- 说明结果依赖显式实参，不能提前解字典类参数，调用方跳过。
+stripPisWithMetas : Int -> Ctx -> Ec -> Value -> Result (Pair Value Ec)
+stripPisWithMetas fuel ctx ec v = if fuel <= 0 then Err "DT: internal: inference fuel exhausted"
+else case forceVal ec v of
+  VPi _ _ _ _ clo => case newMeta ctx ec of
+    Pair metaTerm ec1 =>
+      stripPisWithMetas (fuel - 1) ctx ec1 (applyClosure clo (eval (ctxEnv ctx) metaTerm))
+  _ => Ok (Pair v ec)
+
+isMetaHeadedValue : Ec -> Value -> Bool
+isMetaHeadedValue ec v = case forceVal ec v of
+  VMeta _ (_ :: _) => True
+  _ => False
+
+isRigidHeadValue : Ec -> Value -> Bool
+isRigidHeadValue ec v = case forceVal ec v of
+  VNeutral (NGlobal _ _) => True
+  VNeutral (NVar _ _ _) => True
+  VCon _ _ => True
+  _ => False
+
+-- 只在“前导隐式前缀新增了延迟约束 + 残余结果 meta 头 + 期望刚性头”时，先把剩余显式
+-- binder 用**新鲜 meta** 实例化取残余结果，再 conv 期望类型；成功就把这次 early solve
+-- 带回（`?m`/`?b` 同时解出），失败丢弃整份快照，调用方照常检查实参。
+tryUseHint : Int -> Ctx -> Value -> Ec -> Value -> Maybe Ec
+tryUseHint goals0 ctx expected ec piTy = if length (ecPending ec) <= goals0 then Nothing
+else case stripPisWithMetas 64 ctx ec piTy of
+  Err _ => Nothing
+  Ok (Pair res ec1) =>
+    let
+      forcedRes = forceVal ec1 res
+    in if isMetaHeadedValue ec1 forcedRes then if isRigidHeadValue ec1 expected then case convEc ec1 (ctxDepth ctx) expected forcedRes of
+      Err _ => Nothing
+      Ok ec2 => Just ec2
+    else Nothing
+    else Nothing
+
+-- 与 inferEFuel 同形，只对 EApp 把期望结果类型传进 inferAppFuel（其余形状走旧路径）。
+-- 不复制 inferAppFuel 的 ctor/over-ctor/运算符分派，避免绕过分派导致的燃料问题。
+inferEFuelHint : Int -> List (Pair String Term) -> Ctx -> Ec -> Expr -> Value -> Result (Pair Term (Pair Value Ec))
+inferEFuelHint fuel globals ctx ec expr expected = if fuel <= 0 then Err "DT: internal: inference fuel exhausted"
+else case expr of
+  EApp fn args sp =>
+    inferAppFuel (fuel - 1) globals ctx ec fn args sp (Just (Pair (length (ecPending ec)) expected))
+  _ => inferEFuel fuel globals ctx ec expr
+
 checkByInferFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Expr -> Value -> Result (Pair Term Ec)
 checkByInferFuel fuel globals ctx ec expr expected = if fuel <= 0 then Err "DT: internal: inference fuel exhausted"
-else case inferEFuel (fuel - 1) globals ctx ec expr of
+else case inferEFuelHint (fuel - 1) globals ctx ec expr expected of
   Err e => Err e
   Ok (Pair term (Pair actual ec1)) => case coerceTerm ec1 expected actual term of
     Just coerced => Ok (Pair coerced (resolveDictGoals globals ec1))
@@ -1214,7 +1347,7 @@ inferAppUnderTypeFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> String ->
 inferAppUnderTypeFuel fuel globals ctx ec name args sp = if fuel <= 0 then Err "DT: internal: inference fuel exhausted"
 else case typeHeadLookup globals ec name of
   Nothing => tcErr1 sp (UnknownName name) name
-  Just tyTerm => andThen (inferArgsFuel (fuel - 1) globals ctx ec (eval [] tyTerm) args sp) (\pa => case pa of
+  Just tyTerm => andThen (inferArgsFuel (fuel - 1) globals ctx ec (eval [] tyTerm) args sp Nothing) (\pa => case pa of
     Pair argTerms (Pair resTy ec1) => case typeLevelOf (forceVal ec1 resTy) of
       Just lvl => Ok (Pair (foldAppTerms (TGlobal name) argTerms) (Pair lvl ec1))
       Nothing => tcErr1 sp (AppliedNotType name) name
@@ -1241,7 +1374,7 @@ checkTypeAtKind globals ctx ec expr expected sp = case forceVal ec expected of
     else checkEFuel 256 globals ctx ec expr expected
     EApp (EVar name _) args _ => if isTypeName globals ec name then case typeHeadLookup globals ec name of
       Nothing => tcErr1 sp (UnknownName name) name
-      Just kindTerm => andThen (inferArgsFuel 256 globals ctx ec (eval [] kindTerm) args sp) (\pa => case pa of
+      Just kindTerm => andThen (inferArgsFuel 256 globals ctx ec (eval [] kindTerm) args sp Nothing) (\pa => case pa of
         Pair argTerms (Pair resTy ec1) => case convEc ec1 (ctxDepth ctx) expected resTy of
           Ok ec2 => Ok (Pair (foldAppTerms (TGlobal name) argTerms) ec2)
           Err e =>
@@ -1322,6 +1455,7 @@ else case args of
       in if isStringTyValue tyv then Ok (Just (Pair eTerm (Pair tyv ec1)))
       else if isIntTy ec1 tyv && not (hasSpecificInterpInstance ec1 intTypeName) then Ok (Just (Pair (strFromIntTerm eTerm) (Pair strTyValue ec1)))
       else if isNatTy ec1 tyv && not (hasSpecificInterpInstance ec1 natTypeName) then Ok (Just (Pair (strFromIntTerm (natToIntTerm eTerm)) (Pair strTyValue ec1)))
+      else if isFloatTy ec1 tyv then Ok (Just (Pair (strFromFloatTerm eTerm) (Pair strTyValue ec1)))
       else Ok Nothing
   )
   _ => Ok Nothing
@@ -1329,6 +1463,9 @@ else case args of
 -- 原始类型的 `interp` 降级产物：`strFromInt e`（String 恒等直接返回 e）。
 strFromIntTerm : Term -> Term
 strFromIntTerm t = TApp (TGlobal "strFromInt") t Rig1
+
+strFromFloatTerm : Term -> Term
+strFromFloatTerm t = TApp (TGlobal "strFromFloat") t Rig1
 
 strTyValue : Value
 strTyValue = VNeutral (NGlobal strTypeName [])
@@ -1387,7 +1524,7 @@ else case fn of
 -- 索引已经是具体值。
 --
 -- 只对**恒等结果索引**生效：结果 `F x1..xk` 的 xi 必须就是第 i 个 binder 本身（如 `Eff`）。
--- `Vec a (Succ n)` 这类非恒等索引的 binder 不等于结果索引，喂进去会造出错误索引
+-- `Vec (Succ n) a` 这类非恒等索引的 binder 不等于结果索引，喂进去会造出错误索引
 -- （曾把 `Cons` 的 n 喂成结果长度，导致 `Nil` 期望 1 得到 0）。
 -- 构造子类型末尾的族应用 `F r1..rk` 的实参（跳过 Pi 链）。
 ctorResultArgs : Term -> List Term
@@ -1561,7 +1698,7 @@ checkAppCtorFuel fuel globals ctx ec name args expected sp = if fuel <= 0 then E
 else case dtCtorLookupEc ec name of
   Nothing => tcErr1 sp (UnknownName name) name
   Just ctor => case ctorFamilyArgs ec ctx ctor expected of
-    Just (Pair seedArgs (Pair ty2 ec0)) => andThen (inferArgsFuel (fuel - 1) globals ctx ec0 ty2 args sp) (\pa => case pa of
+    Just (Pair seedArgs (Pair ty2 ec0)) => andThen (inferArgsFuel (fuel - 1) globals ctx ec0 ty2 args sp Nothing) (\pa => case pa of
       Pair argTerms (Pair resTy ec1) =>
         let
           allArgs = append seedArgs argTerms
@@ -1571,7 +1708,7 @@ else case dtCtorLookupEc ec name of
             Ok ec2 => Ok (Pair (ctorAppTerm (ecDatas ec2) (TGlobal name) allArgs) ec2)
             Err e => tcErr2 sp (CtorError (ctorDisplayName name) e) (ctorDisplayName name) e
     )
-    Nothing => andThen (inferArgsFuel (fuel - 1) globals ctx ec (eval [] (dtCtorType ctor)) args sp) (\pa => case pa of
+    Nothing => andThen (inferArgsFuel (fuel - 1) globals ctx ec (eval [] (dtCtorType ctor)) args sp Nothing) (\pa => case pa of
       Pair argTerms (Pair resTy ec1) =>
         let
           ctorTerm = ctorAppTerm (ecDatas ec1) (TGlobal name) argTerms
@@ -1581,3 +1718,251 @@ else case dtCtorLookupEc ec name of
             Ok ec2 => Ok (Pair (ctorAppTerm (ecDatas ec2) (TGlobal name) argTerms) ec2)
             Err e => tcErr2 sp (CtorError (ctorDisplayName name) e) (ctorDisplayName name) e
     )
+
+-- ---------------------------------------------------------------
+-- S3b：do 块的内部标记链解释（carrier C）
+-- ---------------------------------------------------------------
+-- Loader.Resolve 把 do 降级成「语句边界全部编码在 EApp+ELam 链上」的嵌套应用，但每个非末条
+-- 节点的头部换成内部标记 `@vuna@do@bind@<canonical>` / `@vuna@do@ignore@<canonical>`
+-- （canonical = 块作用域里 resolve 出的 bind 名；标记名用户源码写不出来）。
+--
+-- 这里把整条链解释成一个 do 块，按**整块一个 monad / 一个字典**精化：
+--   * 期望类型能拆成 `m a`（force 后是中性应用、末实参即 a）就直接取 m/a，否则建共享 meta；
+--   * 每条语句的 element 类型各建一个 meta，语句按 `m a_i` 检查（复用 checkEFuel）；
+--   * 字典整块只建一次（延迟时是 meta + 一个 Constraint（CkDict）），装配出的每个 bind 应用与旧降级
+--     逐项一致：隐式 {m}/{Monad m}/{a}/{b}、rig、λ binder 名、语句 span。
+-- 形状不认识（bind 不是全局 / 签名不是 `{m}{Monad m}{a}{b} -> m a -> (a -> m b) -> m b` /
+-- 链形状不符）⇒ 把标记链重建为普通 bind 链交给既有路径，语义与 S3a 逐字一致。
+-- 标记头：`EApp (EVar <do marker>) _ _`。
+doMarkerHead : Expr -> Bool
+doMarkerHead (EApp (EVar name sp) args asp) = case doSyntaxCanonical name of
+  Just _ => True
+  Nothing => False
+doMarkerHead _ = False
+
+-- 链上的一个非末条语句：binder 名 + 语句表达式 + 语句 span。
+data DoChainStep : Type where
+  DoChainStep : String -> Expr -> Span -> DoChainStep
+
+-- 拆出来的 do 块：bind canonical 名 + 语句序列 + 末条表达式 + 块 span（= 首条语句 span）。
+record DoChain where
+  doChainCanonical : String
+  doChainSteps : List DoChainStep
+  doChainLast : Expr
+  doChainSpan : Span
+
+-- 逐层拆链：每层是 `EApp (EVar <marker> sp) [stmt, ELam [binder] tail _] sp`；
+-- 遇到非标记表达式就是末条语句。链上的 canonical 必须一致。
+decodeDoChain : Int -> String -> List DoChainStep -> Expr -> Maybe (Pair (List DoChainStep) Expr)
+decodeDoChain fuel canonical acc expr = if fuel <= 0 then Nothing
+else case expr of
+  EApp (EVar name sp) args asp => case doSyntaxCanonical name of
+    Nothing => Just (Pair (reverse acc) expr)
+    Just canonical2 => if canonical /= canonical2 then Nothing
+    else case args of
+      [e, ELam ([binder]) rest lsp] =>
+        decodeDoChain (fuel - 1) canonical2 (DoChainStep binder e sp :: acc) rest
+      _ => Nothing
+  _ => Just (Pair (reverse acc) expr)
+
+decodeDoBlock : Expr -> Maybe DoChain
+decodeDoBlock (expr@(EApp (EVar name sp) args asp)) = case doSyntaxCanonical name of
+  Just canonical => case decodeDoChain 4096 canonical [] expr of
+    Just (Pair steps last) => Just (DoChain canonical steps last sp)
+    Nothing => Nothing
+  Nothing => Nothing
+decodeDoBlock _ = Nothing
+
+-- 回退：把标记链重建为普通 bind 链（与 S3a 产出的 AST 相同），交给既有精化路径。
+doChainBuild : String -> List DoChainStep -> Expr -> Span -> Expr
+doChainBuild canonical [] last lastSp = last
+doChainBuild canonical ((DoChainStep binder e sp) :: rest) last lastSp =
+  EApp (EVar canonical sp) [e, ELam [binder] (doChainBuild canonical rest last lastSp) sp] sp
+
+doChainFallback : DoChain -> Expr
+doChainFallback chain =
+  doChainBuild chain.doChainCanonical chain.doChainSteps chain.doChainLast chain.doChainSpan
+
+-- 期望类型拆 `m a`：force 后是中性应用且 spine 非空 ⇒ (头应用 m, 末实参 a)。
+-- 只认中性头；meta 头/其它形状交给共享 meta 路径。
+splitDoSpine : Value -> List Value -> Maybe (Pair Value Value)
+splitDoSpine head [] = Nothing
+splitDoSpine head (x :: rest) = case splitDoSpine (applyValue head x) rest of
+  Nothing => Just (Pair head x)
+  Just p => Just p
+
+splitDoExpected : Ec -> Value -> Maybe (Pair Value Value)
+splitDoExpected ec expected = case forceVal ec expected of
+  VNeutral n => case n of
+    NVar name lvl sp => splitDoSpine (VNeutral (NVar name lvl [])) sp
+    NGlobal g sp => splitDoSpine (VNeutral (NGlobal g [])) sp
+  _ => Nothing
+
+-- bind 投影签名的唯一可接受形状：
+--   {m} -> {Dict_C m} -> {a} -> {b} -> m a -> (a -> m b) -> m b
+-- 返回显式实参 rig、λ 位置 rig、以及 `a -> m b` 里 λ binder 的 rig。
+data DoBindShape : Type where
+  DoBindShape : Rig -> Rig -> Rig -> DoBindShape
+
+bindShapeOf : Term -> Maybe DoBindShape
+bindShapeOf (TPi _ True _ _ (TPi _ True _ (TApp (TGlobal g) (TVar _ imD) _) (TPi _ True _ _ (TPi _ True _ _ (TPi _ False rigE (TApp (TVar _ imE) (TVar _ iaE) _) (TPi _ False rigL (TPi _ False rigInner (TVar _ iaL) (TApp (TVar _ imM) (TVar _ ibL) _)) (TApp (TVar _ imR) (TVar _ ibR) _))))))) =
+  if imD == 0 && imE == 3 && imM == 5 && imR == 5 then if iaE == 1 && iaL == 2 && ibL == 2 && ibR == 2 then Just (DoBindShape rigE rigL rigInner)
+  else if iaE == 0 && iaL == 1 && ibL == 3 && ibR == 3 then Just (DoBindShape rigE rigL rigInner)
+  else Nothing
+  else Nothing
+bindShapeOf _ = Nothing
+
+-- 块头的全局查找：局部 binder 遮蔽 / 不是全局 ⇒ 交给回退路径（局部 bind 的形状不受支持）。
+doBindHeadOf : List (Pair String Term) -> Ctx -> Ec -> String -> Maybe (Pair Term Term)
+doBindHeadOf globals ctx ec bindName = case ctxLookup bindName ctx of
+  Just _ => Nothing
+  Nothing => case globalsLookup bindName globals ec of
+    Just tyTerm => Just (Pair (TGlobal bindName) tyTerm)
+    Nothing => Nothing
+
+-- 静态形状检查（不改 Ec）：head 项 + bind 签名项 + 形状。
+doBlockShapeOf : List (Pair String Term) -> Ctx -> Ec -> String -> Maybe (Pair Term (Pair Term DoBindShape))
+doBlockShapeOf globals ctx ec bindName = case doBindHeadOf globals ctx ec bindName of
+  Nothing => Nothing
+  Just (Pair headTerm bindTyTerm) => case bindShapeOf bindTyTerm of
+    Nothing => Nothing
+    Just shape => Just (Pair headTerm (Pair bindTyTerm shape))
+
+-- 字典：整块只建一次。已知 m 且类参数无未解 meta 时直接搜实例；否则延迟成
+-- meta + 一个 Constraint（CkDict）（与 inferArgsGo 的延迟分支同一语义）。
+doDictDefer : Ctx -> Ec -> Value -> Span -> Result (Pair Term Ec)
+doDictDefer ctx ec dom sp =
+  let
+    m = ecNext ec
+  in case newMeta ctx ec of
+    Pair metaTerm ec1 =>
+      Ok (Pair metaTerm (ecAddConstraint ec1 CkDict m (forceVal ec1 dom) (Just sp) (ctxDepth ctx)))
+
+doDictStep : Int -> List (Pair String Term) -> Ctx -> Ec -> Span -> Value -> Result (Pair Term Ec)
+doDictStep fuel globals ctx ec sp dom = if fuel <= 0 then Err "DT: internal: inference fuel exhausted"
+else if dictArgUnsolvedMeta ec dom then doDictDefer ctx ec dom sp
+else case searchInstanceIn globals ctx ec (forceVal ec dom) sp of
+  Ok (Pair instTerm ec1) => Ok (Pair instTerm ec1)
+  Err e =>
+    if hasUnsolvedMetaValue (ecSolsP ec) (forceVal ec dom) then doDictDefer ctx ec dom sp
+    else if isRigidDictArg ec (forceVal ec dom) then doDictDefer ctx ec dom sp else Err e
+
+-- do 块的共享解释计划：bind canonical 名、head 项、共享 m（项/值）、块结果类型 a、字典项、
+-- 三个 rig、以及字典步之后的 Ec。
+record DoPlan where
+  planBind : String
+  planHead : Term
+  planMTerm : Term
+  planMVal : Value
+  planAVal : Value
+  planDictTerm : Term
+  planRigE : Rig
+  planRigL : Rig
+  planInnerRig : Rig
+  planEc : Ec
+
+-- 在形状已通过的前提下，应用 m 取字典域并决定字典项。只在完全成功时修改 Ec。
+planDoBlock : Int -> List (Pair String Term) -> Ctx -> Ec -> Span -> String -> Term -> Term -> DoBindShape -> Value -> Value -> Result (Maybe DoPlan)
+planDoBlock fuel globals ctx ec sp bindName headTerm bindTyTerm shape mVal aVal = if fuel <= 0 then Err "DT: internal: inference fuel exhausted"
+else case shape of
+  DoBindShape rigE rigL rigInner => case forceVal ec (eval [] bindTyTerm) of
+    VPi _ True _ _ cloM => case forceVal ec (applyClosure cloM mVal) of
+      VPi _ True _ domD _ => if isDictDomain ec domD then andThen (doDictStep (fuel - 1) globals ctx ec sp domD) (\dp => case dp of
+        Pair dictTerm ec1 =>
+          Ok
+            (Just (DoPlan bindName headTerm (quote (ctxDepth ctx) mVal) mVal aVal dictTerm rigE rigL rigInner ec1))
+      )
+      else Ok Nothing
+      _ => Ok Nothing
+    _ => Ok Nothing
+
+-- 组装一个 bind 应用：与旧降级逐项一致（隐式 m/dict/a/b、显式 e/λ 的 rig、λ binder 名）。
+-- `ecLinear` 是 λ 入口的 Ec（线性捕获判据与 checkLamFuel 同点采样），`ecPaper` 是体精化后的
+-- Ec（不透明运行时类型的域判据用解完的 Ec）。
+doBindAppTerm : Ec -> Ec -> Ctx -> Span -> DoPlan -> String -> Value -> Term -> Rig -> Rig -> Term -> Term
+doBindAppTerm ecLinear ecPaper ctx sp plan binder aVal eTerm argRig lamRig inner =
+  let
+    depth = ctxDepth ctx
+    ctx2 = ctxBindValue binder aVal ctx
+    inner2 = if isOpaqueRuntimeTyIn ecPaper ctx aVal then wrapOpaqueUses [0] inner else inner
+    binderName =
+      if ctxHasLinear ecLinear ctx then if termHasOuterLinear ecLinear ctx2 inner then linClosureName sp depth binder else binder
+      else binder
+    lamTerm = TLam binderName lamRig inner2
+    args =
+      [ Pair plan.planMTerm Rig0,
+        Pair plan.planDictTerm RigOmega,
+        Pair (quote depth aVal) Rig0,
+        Pair (quote depth plan.planAVal) Rig0,
+        Pair eTerm argRig,
+        Pair lamTerm plan.planRigL
+      ]
+  in foldAppTerms plan.planHead args
+
+-- 逐条语句的检查与链装配：`bind e_i (\binder -> <后缀>)`。后缀的 monad 与结果类型整块共享
+-- （`planAVal`），所以每个 bind 的 b 实参都直接用块结果类型 a。
+elabDoChain : Int -> List (Pair String Term) -> Ctx -> Ec -> DoPlan -> List DoChainStep -> Expr -> Result (Pair Term Ec)
+elabDoChain fuel globals ctx ec plan steps last = if fuel <= 0 then Err "DT: internal: inference fuel exhausted"
+else case steps of
+  [] => checkEFuel (fuel - 1) globals ctx ec last (applyValue plan.planMVal plan.planAVal)
+  (DoChainStep binder e sp) :: rest => case newMeta ctx ec of
+    Pair aTerm ec1 =>
+      let
+        aVal = evalCtx ctx aTerm
+        mArgTy = applyValue plan.planMVal aVal
+        ctx2 = ctxBindValue binder aVal ctx
+      in andThen (rigForLinearDomain ec1 sp "_" plan.planRigE mArgTy) (\argRig => andThen (checkEFuel (fuel - 1) globals ctx ec1 e mArgTy) (\p => case p of
+        Pair eTerm ec2 => andThen (rigForLinearDomain ec2 sp binder plan.planInnerRig aVal) (\lamRig => andThen (elabDoChain (fuel - 1) globals ctx2 ec2 plan rest last) (\q => case q of
+          Pair inner ec3 =>
+            Ok (Pair (doBindAppTerm ec2 ec3 ctx sp plan binder aVal eTerm argRig lamRig inner) ec3)
+        )
+        )
+      )
+      )
+
+-- check 方向的 do 块解释：期望能拆 `m a` 就直接用，否则建共享 m/a meta 并在收尾与期望统一。
+checkDoBlockFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> DoChain -> Value -> Result (Maybe (Pair Term Ec))
+checkDoBlockFuel fuel globals ctx ec chain expected = if fuel <= 0 then Err "DT: internal: inference fuel exhausted"
+else case doBlockShapeOf globals ctx ec chain.doChainCanonical of
+  Nothing => Ok Nothing
+  Just (Pair headTerm (Pair bindTyTerm shape)) => case splitDoExpected ec expected of
+    Just (Pair mVal aVal) => andThen (planDoBlock (fuel - 1) globals ctx ec chain.doChainSpan chain.doChainCanonical headTerm bindTyTerm shape mVal aVal) (\mp => case mp of
+      Nothing => Ok Nothing
+      Just plan => andThen (elabDoChain (fuel - 1) globals ctx plan.planEc plan chain.doChainSteps chain.doChainLast) (\q => case q of
+        Pair term ec1 => Ok (Just (Pair term (resolveDictGoals globals ec1)))
+      )
+    )
+    Nothing => case newMeta ctx ec of
+      Pair mTerm ec1 => case newMeta ctx ec1 of
+        Pair aTerm ec2 =>
+          let
+            mVal = evalCtx ctx mTerm
+            aVal = evalCtx ctx aTerm
+          in andThen (planDoBlock (fuel - 1) globals ctx ec2 chain.doChainSpan chain.doChainCanonical headTerm bindTyTerm shape mVal aVal) (\mp => case mp of
+            Nothing => Ok Nothing
+            Just plan => andThen (elabDoChain (fuel - 1) globals ctx plan.planEc plan chain.doChainSteps chain.doChainLast) (\q => case q of
+              Pair term ec3 =>
+                andThen
+                  (convEc ec3 (ctxDepth ctx) expected (applyValue plan.planMVal plan.planAVal))
+                  (\ec4 => Ok (Just (Pair term (resolveDictGoals globals ec4))))
+            )
+          )
+
+-- infer 方向的 do 块解释：没有期望类型，共享 m/a 都建 meta，结果类型 `m a` 交给外层统一。
+inferDoBlockFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> DoChain -> Result (Maybe (Pair Term (Pair Value Ec)))
+inferDoBlockFuel fuel globals ctx ec chain = if fuel <= 0 then Err "DT: internal: inference fuel exhausted"
+else case doBlockShapeOf globals ctx ec chain.doChainCanonical of
+  Nothing => Ok Nothing
+  Just (Pair headTerm (Pair bindTyTerm shape)) => case newMeta ctx ec of
+    Pair mTerm ec1 => case newMeta ctx ec1 of
+      Pair aTerm ec2 =>
+        let
+          mVal = evalCtx ctx mTerm
+          aVal = evalCtx ctx aTerm
+          resultTy = applyValue mVal aVal
+        in andThen (planDoBlock (fuel - 1) globals ctx ec2 chain.doChainSpan chain.doChainCanonical headTerm bindTyTerm shape mVal aVal) (\mp => case mp of
+          Nothing => Ok Nothing
+          Just plan => andThen (elabDoChain (fuel - 1) globals ctx plan.planEc plan chain.doChainSteps chain.doChainLast) (\q => case q of
+            Pair term ec3 => Ok (Just (Pair term (Pair resultTy ec3)))
+          )
+        )

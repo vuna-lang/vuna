@@ -158,7 +158,7 @@ visibleFixitiesOf modules imports = concatMap (\imp => case findModule modules (
 dedupeFixities : List FixityDecl -> List FixityDecl
 dedupeFixities ds = dedupeFixitiesGo ds (Base.HashMap.fromList []) []
 
-dedupeFixitiesGo : List FixityDecl -> HashMap Int -> List FixityDecl -> List FixityDecl
+dedupeFixitiesGo : List FixityDecl -> HashMap String Int -> List FixityDecl -> List FixityDecl
 dedupeFixitiesGo [] seen acc = reverse acc
 dedupeFixitiesGo (d :: rest) seen acc =
   let
@@ -182,9 +182,9 @@ privateExportMsg prefix sp name =
 findOwnData : String -> List Decl -> Maybe (Pair String (List String))
 findOwnData name [] = Nothing
 findOwnData name (d :: rest) = case d of
-  DData dname params kind ctors derivings lin sp =>
+  DData dname params kind ctors derivings viaField lin sp =>
     if dname == name then Just (Pair dname (map ctorName ctors)) else findOwnData name rest
-  DRecord dname params fields derivings lin sp =>
+  DRecord dname params fields derivings viaField lin sp =>
     if dname == name then Just (Pair dname [dname]) else findOwnData name rest
   DTrait tname params methods sp =>
     if tname == name then Just (Pair tname (map traitMethodName methods)) else findOwnData name rest
@@ -215,10 +215,10 @@ findMethodNamed name ((TraitMethod mname ty msp) :: rest) =
 findOwnCtorNames : String -> List Decl -> List (Pair String String)
 findOwnCtorNames name [] = []
 findOwnCtorNames name (d :: rest) = case d of
-  DData dname params kind ctors derivings lin sp =>
+  DData dname params kind ctors derivings viaField lin sp =>
     append (map (\c => Pair dname (ctorName c)) (filter (\c => ctorName c == name) ctors))
       (findOwnCtorNames name rest)
-  DRecord dname params fields derivings lin sp =>
+  DRecord dname params fields derivings viaField lin sp =>
     if dname == name then Pair dname dname :: findOwnCtorNames name rest
     else findOwnCtorNames name rest
   DTrait tname params methods sp =>
@@ -249,11 +249,11 @@ ownDataCtorEntries prefix dname (cname :: rest) =
 ownTypeEntries : String -> List Decl -> String -> Maybe (List ExportEntry)
 ownTypeEntries prefix [] name = Nothing
 ownTypeEntries prefix (d :: rest) name = case d of
-  DData dname params kind ctors derivings lin sp =>
+  DData dname params kind ctors derivings viaField lin sp =>
     if dname == name then Just
       (ExportEntry { kind = "type", public = dname, target = mangle prefix dname, parent = "" } :: ownDataCtorEntries prefix dname (map ctorName ctors))
     else ownTypeEntries prefix rest name
-  DRecord dname params fields derivings lin sp =>
+  DRecord dname params fields derivings viaField lin sp =>
     if dname == name then Just
       (ExportEntry { kind = "type", public = dname, target = mangle prefix dname, parent = "" } :: ownCtorEntries prefix dname [dname])
     else ownTypeEntries prefix rest name
@@ -273,11 +273,11 @@ ctorEntriesOfType typeTarget (e :: rest) =
 
 declImplicitExports : String -> Decl -> List ExportEntry
 declImplicitExports prefix d = case d of
-  DData dname params kind ctors derivings lin sp =>
+  DData dname params kind ctors derivings viaField lin sp =>
     if isPrivateName dname then []
     else ExportEntry { kind = "type", public = dname, target = mangle prefix dname, parent = "" }
       :: ownDataCtorEntries prefix dname (map ctorName ctors)
-  DRecord dname params fields derivings lin sp =>
+  DRecord dname params fields derivings viaField lin sp =>
     if isPrivateName dname then []
     else ExportEntry { kind = "type", public = dname, target = mangle prefix dname, parent = "" }
       :: ownCtorEntries prefix dname [dname]
@@ -311,7 +311,7 @@ dedupeImplicitExports entries = dedupeByPublic entries (Base.HashMap.fromList []
 
 -- 按 (kind, public, target) 去重：类型签名与子句会为同一个函数各产生一条 val 条目；
 -- M41 起同名不同族的构造子 target 不同，必须两条都保留。
-dedupeByPublic : List ExportEntry -> HashMap Int -> List ExportEntry -> List ExportEntry
+dedupeByPublic : List ExportEntry -> HashMap String Int -> List ExportEntry -> List ExportEntry
 dedupeByPublic [] seen acc = reverse acc
 dedupeByPublic (e :: rest) seen acc =
   let
@@ -344,7 +344,7 @@ isRecordTarget modules decls prefix target = case splitLastDot (splitOnDot targe
 isRecordDecl : String -> List Decl -> Bool
 isRecordDecl dname [] = False
 isRecordDecl dname (d :: rest) = case d of
-  DRecord dn params fields derivings lin sp => dn == dname || isRecordDecl dname rest
+  DRecord dn params fields derivings viaField lin sp => dn == dname || isRecordDecl dname rest
   _ => isRecordDecl dname rest
 
 refEntryList : String -> Maybe ExportRef -> List ExportEntry
@@ -385,11 +385,11 @@ ownOrImportedValueRef2 modules prefix decls imports name = case ownCtorEntriesNa
 ownCtorEntriesNamed : String -> String -> List Decl -> List ExportEntry
 ownCtorEntriesNamed prefix name [] = []
 ownCtorEntriesNamed prefix name (d :: rest) = case d of
-  DData dname params kind ctors derivings lin sp =>
+  DData dname params kind ctors derivings viaField lin sp =>
     append
       (ownDataCtorEntries prefix dname (map ctorName (filter (\c => ctorName c == name) ctors)))
       (ownCtorEntriesNamed prefix name rest)
-  DRecord dname params fields derivings lin sp =>
+  DRecord dname params fields derivings viaField lin sp =>
     if dname == name then append (ownCtorEntries prefix dname [dname]) (ownCtorEntriesNamed prefix name rest)
     else ownCtorEntriesNamed prefix name rest
   DTrait tname params methods sp =>
@@ -497,7 +497,7 @@ dedupeExportEntries entries = dedupeByFullKey entries (Base.HashMap.fromList [])
 exportEntryKey : ExportEntry -> String
 exportEntryKey e = "${e.kind}|${e.public}|${e.target}|${e.parent}"
 
-dedupeByFullKey : List ExportEntry -> HashMap Int -> List ExportEntry -> List ExportEntry
+dedupeByFullKey : List ExportEntry -> HashMap String Int -> List ExportEntry -> List ExportEntry
 dedupeByFullKey [] seen acc = reverse acc
 dedupeByFullKey (e :: rest) seen acc =
   let

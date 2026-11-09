@@ -3,10 +3,10 @@ import Base.Eff
 import Base.EffAsync
 
 progA : Eff [] Int
-progA = pureEff 20
+progA = pure 20
 
 progB : Eff [] Int
-progB = pureEff 22
+progB = pure 22
 
 main : IO Int
 main =

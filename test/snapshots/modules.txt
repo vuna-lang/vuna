@@ -54,6 +54,8 @@ Vuna.Search.Run  ./lib/Vuna/Search/Run.vuna
 Vuna.Search.Types  ./lib/Vuna/Search/Types.vuna
 Vuna.Search  ./lib/Vuna/Search.vuna
 Vuna.Sig  ./lib/Vuna/Sig.vuna
+Vuna.Test.Run  ./lib/Vuna/Test/Run.vuna
+Vuna.Test.Suite  ./lib/Vuna/Test/Suite.vuna
 Vuna.TestRunner  ./lib/Vuna/TestRunner.vuna
 app.Main  ./app/Main.vuna
 Vuna.Compiler.CacheFormat  compiler/lib/Vuna/Compiler/CacheFormat.vuna
@@ -93,6 +95,7 @@ Vuna.Compiler.Elab.Match  compiler/lib/Vuna/Compiler/Elab/Match.vuna
 Vuna.Compiler.Elab.Meta  compiler/lib/Vuna/Compiler/Elab/Meta.vuna
 Vuna.Compiler.Elab.Prelude  compiler/lib/Vuna/Compiler/Elab/Prelude.vuna
 Vuna.Compiler.Elab.Records  compiler/lib/Vuna/Compiler/Elab/Records.vuna
+Vuna.Compiler.Elab.Representation  compiler/lib/Vuna/Compiler/Elab/Representation.vuna
 Vuna.Compiler.Elab.Sig  compiler/lib/Vuna/Compiler/Elab/Sig.vuna
 Vuna.Compiler.Elab.Term.Impl  compiler/lib/Vuna/Compiler/Elab/Term/Impl.vuna
 Vuna.Compiler.Elab.Term.Support  compiler/lib/Vuna/Compiler/Elab/Term/Support.vuna
@@ -121,6 +124,7 @@ Vuna.Compiler.Loader  compiler/lib/Vuna/Compiler/Loader.vuna
 Vuna.Compiler.Packages.Pkg  compiler/lib/Vuna/Compiler/Packages/Pkg.vuna
 Vuna.Compiler.Version  compiler/lib/Vuna/Compiler/Version.vuna
 app.Main  compiler/app/Main.vuna
+Base.Applicative  base/lib/Base/Applicative.vuna
 Base.Array  base/lib/Base/Array.vuna
 Base.Bool  base/lib/Base/Bool.vuna
 Base.Buffer  base/lib/Base/Buffer.vuna
@@ -143,18 +147,23 @@ Base.Effect  base/lib/Base/Effect.vuna
 Base.Eq  base/lib/Base/Eq.vuna
 Base.Error  base/lib/Base/Error.vuna
 Base.ErrorT  base/lib/Base/ErrorT.vuna
+Base.Float  base/lib/Base/Float.vuna
+Base.Foldable  base/lib/Base/Foldable.vuna
+Base.FromInt  base/lib/Base/FromInt.vuna
+Base.FromString  base/lib/Base/FromString.vuna
 Base.HashMap  base/lib/Base/HashMap.vuna
 Base.HashSet  base/lib/Base/HashSet.vuna
+Base.Hashable  base/lib/Base/Hashable.vuna
 Base.IO  base/lib/Base/IO.vuna
 Base.IORef  base/lib/Base/IORef.vuna
 Base.Int  base/lib/Base/Int.vuna
-Base.IntMap  base/lib/Base/IntMap.vuna
 Base.Interp  base/lib/Base/Interp.vuna
 Base.List  base/lib/Base/List.vuna
 Base.MArray  base/lib/Base/MArray.vuna
 Base.Map  base/lib/Base/Map.vuna
 Base.Maybe  base/lib/Base/Maybe.vuna
 Base.Monad  base/lib/Base/Monad.vuna
+Base.Monoid  base/lib/Base/Monoid.vuna
 Base.Nat  base/lib/Base/Nat.vuna
 Base.Ord  base/lib/Base/Ord.vuna
 Base.Pair  base/lib/Base/Pair.vuna
@@ -167,6 +176,8 @@ Base.Sort  base/lib/Base/Sort.vuna
 Base.State  base/lib/Base/State.vuna
 Base.StateT  base/lib/Base/StateT.vuna
 Base.String  base/lib/Base/String.vuna
+Base.Traversable  base/lib/Base/Traversable.vuna
+Base.Unit  base/lib/Base/Unit.vuna
 Base.Vec  base/lib/Base/Vec.vuna
 Base  base/lib/Base.vuna
 Prelude  base/lib/Prelude.vuna
@@ -210,6 +221,7 @@ Vuna.Compiler.Elab.Match  ./lib/Vuna/Compiler/Elab/Match.vuna
 Vuna.Compiler.Elab.Meta  ./lib/Vuna/Compiler/Elab/Meta.vuna
 Vuna.Compiler.Elab.Prelude  ./lib/Vuna/Compiler/Elab/Prelude.vuna
 Vuna.Compiler.Elab.Records  ./lib/Vuna/Compiler/Elab/Records.vuna
+Vuna.Compiler.Elab.Representation  ./lib/Vuna/Compiler/Elab/Representation.vuna
 Vuna.Compiler.Elab.Sig  ./lib/Vuna/Compiler/Elab/Sig.vuna
 Vuna.Compiler.Elab.Term.Impl  ./lib/Vuna/Compiler/Elab/Term/Impl.vuna
 Vuna.Compiler.Elab.Term.Support  ./lib/Vuna/Compiler/Elab/Term/Support.vuna
@@ -241,6 +253,7 @@ app.Main  ./app/Main.vuna
 
 
 ## base（vuna-base）
+Base.Applicative  ./lib/Base/Applicative.vuna
 Base.Array  ./lib/Base/Array.vuna
 Base.Bool  ./lib/Base/Bool.vuna
 Base.Buffer  ./lib/Base/Buffer.vuna
@@ -263,18 +276,23 @@ Base.Effect  ./lib/Base/Effect.vuna
 Base.Eq  ./lib/Base/Eq.vuna
 Base.Error  ./lib/Base/Error.vuna
 Base.ErrorT  ./lib/Base/ErrorT.vuna
+Base.Float  ./lib/Base/Float.vuna
+Base.Foldable  ./lib/Base/Foldable.vuna
+Base.FromInt  ./lib/Base/FromInt.vuna
+Base.FromString  ./lib/Base/FromString.vuna
 Base.HashMap  ./lib/Base/HashMap.vuna
 Base.HashSet  ./lib/Base/HashSet.vuna
+Base.Hashable  ./lib/Base/Hashable.vuna
 Base.IO  ./lib/Base/IO.vuna
 Base.IORef  ./lib/Base/IORef.vuna
 Base.Int  ./lib/Base/Int.vuna
-Base.IntMap  ./lib/Base/IntMap.vuna
 Base.Interp  ./lib/Base/Interp.vuna
 Base.List  ./lib/Base/List.vuna
 Base.MArray  ./lib/Base/MArray.vuna
 Base.Map  ./lib/Base/Map.vuna
 Base.Maybe  ./lib/Base/Maybe.vuna
 Base.Monad  ./lib/Base/Monad.vuna
+Base.Monoid  ./lib/Base/Monoid.vuna
 Base.Nat  ./lib/Base/Nat.vuna
 Base.Ord  ./lib/Base/Ord.vuna
 Base.Pair  ./lib/Base/Pair.vuna
@@ -287,6 +305,8 @@ Base.Sort  ./lib/Base/Sort.vuna
 Base.State  ./lib/Base/State.vuna
 Base.StateT  ./lib/Base/StateT.vuna
 Base.String  ./lib/Base/String.vuna
+Base.Traversable  ./lib/Base/Traversable.vuna
+Base.Unit  ./lib/Base/Unit.vuna
 Base.Vec  ./lib/Base/Vec.vuna
 Base  ./lib/Base.vuna
 Prelude  ./lib/Prelude.vuna

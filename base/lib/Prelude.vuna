@@ -1,15 +1,22 @@
 module Prelude
   ( module Base.Bool
   , module Base.Eq
+  , module Base.Foldable
+  , module Base.FromInt
+  , module Base.FromString
+  , module Base.Hashable
   , module Base.Interp
   , module Base.List
   , module Base.Maybe
   , module Base.Monad
+  , module Base.Monoid
   , module Base.Ord
   , module Base.Pair
   , module Base.Result
   , module Base.Show
   , module Base.String
+  , module Base.Traversable
+  , module Base.Unit
   ) where
 
 -- Prelude：默认导入（自动 import）的精选门面。
@@ -29,8 +36,15 @@ import Base.Ord
 -- M31.1：加载 `Int` 的 Eq / Ord 实例（跟类型模块走；仅加载实例，不重导出名字）。
 import Base.Int
 import Base.Interp
+import Base.Foldable
+import Base.FromInt
+import Base.FromString
+import Base.Hashable
 import Base.List
+import Base.Monoid
 import Base.Maybe
 import Base.Result
 import Base.String
 import Base.Monad
+import Base.Traversable
+import Base.Unit

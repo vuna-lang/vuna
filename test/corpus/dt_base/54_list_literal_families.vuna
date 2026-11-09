@@ -12,10 +12,10 @@ data MyList a : Type where
   Nil : MyList a
   Cons : a -> MyList a -> MyList a
 
-v : Vec Int 3
+v : Vec 3 Int
 v = [1, 2, 3]
 
-vsum : Vec Int 3 -> Int
+vsum : Vec 3 Int -> Int
 vsum [a, b, c] = a + b + c
 
 ml : MyList Int

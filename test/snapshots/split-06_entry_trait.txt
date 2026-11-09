@@ -1,18 +1,26 @@
 # M26 split 产物快照：test/corpus/packages/06_entry_trait
 # files（排序，相对 OUTDIR）
+Base_dApplicative.ml
 Base_dBool.ml
 Base_dEq.ml
+Base_dFoldable.ml
+Base_dFromInt.ml
+Base_dFromString.ml
+Base_dHashable.ml
 Base_dInt.ml
 Base_dInterp.ml
 Base_dList.ml
 Base_dMaybe.ml
 Base_dMonad.ml
+Base_dMonoid.ml
 Base_dNat.ml
 Base_dOrd.ml
 Base_dPair.ml
 Base_dResult.ml
 Base_dShow.ml
 Base_dString.ml
+Base_dTraversable.ml
+Base_dUnit.ml
 Main.ml
 Prelude.ml
 Vuna_runtime.ml
@@ -20,12 +28,19 @@ build.sh
 
 # names（每个 .ml 的 ^type t_ / ^let v_，排序）
 
+== Base_dApplicative.ml
+let v_Base_dApplicative_d_uapply
+let v_Base_dApplicative_dap
+let v_Base_dApplicative_dliftA2
+let v_Base_dApplicative_dpure
+
 == Base_dBool.ml
 let v_Base_dBool_dand
 let v_Base_dBool_dbool
 let v_Base_dBool_dnot
 let v_Base_dBool_dor
 let v_Base_dBool_dxor
+let v_Hashable_uBase_dBool_dBool
 let v_Show_uBase_dBool_dBool
 
 == Base_dEq.ml
@@ -33,8 +48,26 @@ let v_Base_dEq_deq
 let v_Base_dEq_dneq
 let v_Eq_uBase_dBool_dBool
 
+== Base_dFoldable.ml
+let v_Base_dFoldable_dfold
+let v_Base_dFoldable_dfoldMap
+
+== Base_dFromInt.ml
+let v_Base_dFromInt_dfromInt
+let v_FromInt_uInt
+
+== Base_dFromString.ml
+let v_Base_dFromString_dfromString
+let v_FromString_uString
+
+== Base_dHashable.ml
+let v_Base_dHashable_dhash
+let v_Base_dHashable_dhashCombine
+let v_Base_dHashable_dhashStr
+
 == Base_dInt.ml
 let v_Eq_uInt
+let v_Hashable_uInt
 let v_Ord_uInt
 let v_Show_uInt
 
@@ -44,30 +77,41 @@ let v_Interp_uString
 let v_Interp_ua
 
 == Base_dList.ml
+let v_Applicative_uBase_dList_dList
 let v_Base_dList_dconcatMap
-let v_Base_dList_dflatMap
 let v_Base_dList_dlength
 let v_Base_dList_drange
 let v_Base_dList_dreverse
 let v_Base_dList_dshowElems
+let v_Foldable_uBase_dList_dList
 let v_Functor_uBase_dList_dList
 let v_Monad_uBase_dList_dList
+let v_Monoid_uBase_dList_dList_ua
+let v_Semigroup_uBase_dList_dList_ua
 let v_Show_uBase_dList_dList_ua
 
 == Base_dMaybe.ml
+let v_Applicative_uBase_dMaybe_dMaybe
 let v_Base_dMaybe_dfromMaybe
 let v_Base_dMaybe_disJust
 let v_Base_dMaybe_disNothing
-let v_Base_dMaybe_dmapJust
 let v_Base_dMaybe_dmaybe
+let v_Foldable_uBase_dMaybe_dMaybe
 let v_Functor_uBase_dMaybe_dMaybe
+let v_Hashable_uBase_dMaybe_dMaybe_ua
 let v_Monad_uBase_dMaybe_dMaybe
+let v_Monoid_uBase_dMaybe_dMaybe_ua
+let v_Semigroup_uBase_dMaybe_dMaybe_ua
 let v_Show_uBase_dMaybe_dMaybe_ua
+let v_Traversable_uBase_dMaybe_dMaybe_uf
 
 == Base_dMonad.ml
 let v_Base_dMonad_dbind
 let v_Base_dMonad_dfmap
-let v_Base_dMonad_dpure
+
+== Base_dMonoid.ml
+let v_Base_dMonoid_dmappend
+let v_Base_dMonoid_dmempty
 
 == Base_dNat.ml
 let v_Base_dNat_ddiv
@@ -80,28 +124,42 @@ let v_Base_dNat_dplus
 let v_Base_dNat_dpred
 let v_Base_dNat_dtoInt
 let v_Eq_uBase_dNat_dNat
+let v_Hashable_uBase_dNat_dNat
+let v_Monoid_uBase_dNat_dNat
 let v_Ord_uBase_dNat_dNat
+let v_Semigroup_uBase_dNat_dNat
 let v_Show_uBase_dNat_dNat
 
 == Base_dOrd.ml
+let v_Base_dOrd_dcompare
 let v_Base_dOrd_dge
 let v_Base_dOrd_dgt
 let v_Base_dOrd_dle
 let v_Base_dOrd_dlt
+let v_Base_dOrd_dmax
+let v_Base_dOrd_dmin
+let v_Hashable_uBase_dOrd_dOrdering
 let v_Ord_uBase_dBool_dBool
+let v_Show_uBase_dOrd_dOrdering
+type t_Base_dOrd_dOrdering
 
 == Base_dPair.ml
 let v_Base_dPair_dfirstOf
 let v_Base_dPair_dsecondOf
+let v_Hashable_uBase_dPair_dPair_ua_ub
 let v_Show_uBase_dPair_dPair_ua_ub
 
 == Base_dResult.ml
-let v_Base_dResult_dandThen
+let v_Applicative_uBase_dResult_dResult
 let v_Base_dResult_dmapError
-let v_Base_dResult_dmapResult
 let v_Base_dResult_dstep
 let v_Base_dResult_dwithDefault
+let v_Foldable_uBase_dResult_dResult
+let v_Functor_uBase_dResult_dResult
+let v_Hashable_uBase_dResult_dResult_ua
+let v_Monad_uBase_dResult_dResult
 let v_Show_uBase_dResult_dResult_ua
+let v_Traversable_uBase_dResult_dResult_uf
 
 == Base_dShow.ml
 let v_Base_dShow_dshow
@@ -123,7 +181,22 @@ let v_Base_dString_dtrimLeft
 let v_Base_dString_dtrimRight
 let v_Base_dString_dunlines
 let v_Eq_uString
+let v_Hashable_uString
+let v_Monoid_uString
 let v_Ord_uString
+let v_Semigroup_uString
+
+== Base_dTraversable.ml
+let v_Base_dTraversable_dmapM
+
+== Base_dUnit.ml
+let v_Eq_uBase_dUnit_dUnit
+let v_Hashable_uBase_dUnit_dUnit
+let v_Monoid_uBase_dUnit_dUnit
+let v_Ord_uBase_dUnit_dUnit
+let v_Semigroup_uBase_dUnit_dUnit
+let v_Show_uBase_dUnit_dUnit
+type t_Base_dUnit_dUnit
 
 == Main.ml
 let v_Pretty_uColor

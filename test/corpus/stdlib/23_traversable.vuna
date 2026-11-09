@@ -1,0 +1,27 @@
+-- stdlib：Traversable 的 mapM（双参数 trait：t 与 Applicative 的 f）。
+import Base.Applicative
+import Base.Eq
+import Base.Int
+import Base.List
+import Base.Maybe
+import Base.Ord
+import Base.Result
+
+positive : List Int -> Maybe (List Int)
+positive xs = mapM (\n => if n > 0 then Just n else Nothing) xs
+
+half : Int -> Result Int
+half n = if n / 2 * 2 == n then Ok (n / 2) else Err "odd"
+
+halves : List Int -> Result (List Int)
+halves xs = mapM half xs
+
+checks : Bool
+checks =
+  positive [1, 2] == Just [1, 2]
+    && positive [1, 0] == Nothing
+    && halves [2, 4] == Ok [1, 2]
+    && halves [2, 3] == Err "odd"
+
+main : Int
+main = if checks then 1 else 2

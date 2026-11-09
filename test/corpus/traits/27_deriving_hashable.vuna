@@ -1,0 +1,39 @@
+-- M41：`deriving (Hashable)`（参数化 data + 记录）。
+import Base.Hashable
+import Base.Int
+
+data Key a : Type where
+  MkKey : a -> a -> Key a
+deriving (Eq, Hashable)
+
+record Rec where
+  rx : Int
+  ry : Int
+deriving (Eq, Hashable)
+
+k1 : Key Int
+k1 = MkKey 1 2
+
+k2 : Key Int
+k2 = MkKey 1 2
+
+k3 : Key Int
+k3 = MkKey 2 1
+
+r1 : Rec
+r1 = Rec { rx = 3, ry = 4 }
+
+r2 : Rec
+r2 = Rec { rx = 3, ry = 4 }
+
+sameHash : Bool
+sameHash = hash k1 == hash k2 && hash r1 == hash r2
+
+diffHash : Bool
+diffHash = hash k1 == hash k3
+
+checks : Bool
+checks = sameHash && not diffHash
+
+main : Int
+main = if checks then 1 else 2

@@ -210,9 +210,9 @@ bufferTargetKind : String -> List Decl -> Maybe String
 bufferTargetKind name decls = firstJust (map (declKindOfName name) decls)
 
 declKindOfName : String -> Decl -> Maybe String
-declKindOfName name (DData n params kind ctors derivings lin sp) =
+declKindOfName name (DData n params kind ctors derivings viaField lin sp) =
   if n == name then Just "data" else if anyCtorNamed name ctors then Just "ctor" else Nothing
-declKindOfName name (DRecord n params fields derivings lin sp) =
+declKindOfName name (DRecord n params fields derivings viaField lin sp) =
   if n == name then Just "record" else if anyFieldNamed name fields then Just "field" else Nothing
 declKindOfName name (DTrait n params methods sp) =
   if n == name then Just "trait" else if anyMethodNamed name methods then Just "method" else Nothing
@@ -310,10 +310,10 @@ methodPositions lines kind name m =
   else []
 
 declPositions : List String -> String -> String -> Decl -> List (Pair Int Int)
-declPositions lines kind name (DData n params k ctors derivings lin sp) =
+declPositions lines kind name (DData n params k ctors derivings viaField lin sp) =
   append (if kindMatches kind "data" && n == name then firstInSpanOf lines sp name else [])
     (concatMap (ctorPositions lines kind name) ctors)
-declPositions lines kind name (DRecord n params fields derivings lin sp) =
+declPositions lines kind name (DRecord n params fields derivings viaField lin sp) =
   append (if kindMatches kind "record" && n == name then firstInSpanOf lines sp name else [])
     (concatMap (fieldPositions lines kind name) fields)
 declPositions lines kind name (DTrait n params methods sp) =
@@ -382,8 +382,8 @@ else case d of
   DFun n pats body sp =>
     append (concatMap (patUses (fuel - 1) ctx) pats) (usesInExpr (fuel - 1) ctx body)
   DSig n c ty sp => usesInExpr (fuel - 1) ctx ty
-  DData n params kind ctors derivings lin sp => concatMap (ctorUses (fuel - 1) ctx) ctors
-  DRecord n params fields derivings lin sp => concatMap (fieldUses (fuel - 1) ctx) fields
+  DData n params kind ctors derivings viaField lin sp => concatMap (ctorUses (fuel - 1) ctx) ctors
+  DRecord n params fields derivings viaField lin sp => concatMap (fieldUses (fuel - 1) ctx) fields
   DTrait n params methods sp => concatMap (methodUses (fuel - 1) ctx) methods
   DInstance ctxE head methods sp =>
     append (usesInExpr (fuel - 1) ctx head) (usesInDecls (fuel - 1) ctx methods)
@@ -495,6 +495,7 @@ else case e of
     else [start]
   EInt n sp => []
   EStr s sp => []
+  EFloat raw sp => []
   EInterp multi parts sp => concatMap (interpUses (fuel - 1) ctx) parts
   ELam ps body sp => usesInExpr (fuel - 1) ctx body
   EApp f args sp =>
@@ -578,7 +579,7 @@ declHasName : String -> Decl -> Bool
 declHasName name d = memName name (append (typeNamesOf [d]) (declNames d)) || memberNamed name d
 
 memberNamed : String -> Decl -> Bool
-memberNamed name (DRecord n params fields derivings lin sp) = anyFieldNamed name fields
+memberNamed name (DRecord n params fields derivings viaField lin sp) = anyFieldNamed name fields
 memberNamed name d = False
 
 crossModuleUseRefs : Index -> RenameTarget -> String -> List EditRef

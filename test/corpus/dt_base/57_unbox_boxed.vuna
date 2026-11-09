@@ -1,0 +1,13 @@
+-- M42：多字段/多构造子类型保持原变体，与去装箱共存。
+record Pair2 a b where
+  first : a
+  second : b
+deriving (Show)
+
+data Color : Type where
+  Red : Color
+  Blue : Color
+deriving (Show)
+
+main : String
+main = show (Pair2 { first = 1, second = Red })

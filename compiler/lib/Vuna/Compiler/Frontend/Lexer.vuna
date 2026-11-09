@@ -5,6 +5,7 @@ module Vuna.Compiler.Frontend.Lexer
   , Comment(..)
   , PTok(..)
   , TEof
+  , TFloat
   , TIdent
   , TInt
   , TKw
@@ -49,6 +50,8 @@ data Tok : Type where
   TTmpl : Bool -> List TmplPart -> Pos -> Tok
   TSym : String -> Tok
   TEof : Tok
+  -- `TFloat`：十进制浮点字面量的原始文本（放末尾保持 tag 顺序，bootstrap 兼容）。
+  TFloat : String -> Tok
 
 record PTok where
   ptokTok : Tok
@@ -189,6 +192,33 @@ collectInt (Chars (c :: rest) p) acc = if isDigit c then
   else collectInt (Chars rest (advanceChar c p)) (acc * 10 + d)
 else Ok (Pair acc (Chars (c :: rest) p))
 
+-- ---------------------------------------------------------------
+-- 浮点字面量（`digits '.' digits`）
+-- ---------------------------------------------------------------
+-- 先看数字串后面是否是「`.` + 数字」，是才走浮点扫描；否则保持旧的整数扫描
+-- （含 `LX_IntLiteralOutOfRange` 语义）。这样普通整数路径没有额外分配。
+digitRunIsFloat : Chars -> Bool
+digitRunIsFloat (Chars [] p) = False
+digitRunIsFloat (Chars (c :: rest) p) = if isDigit c then digitRunIsFloat (Chars rest (advanceChar c p))
+else if c == 46 then case rest of
+  d :: rest2 => isDigit d
+  [] => False
+else False
+
+-- 收集 `digits '.' digits` 的原始文本（首字符已消费，acc 是逆序的数字字符）。
+collectFloat : Chars -> List Int -> Pair String Chars
+collectFloat (Chars [] p) acc = Pair (strPack (reverse acc)) (Chars [] p)
+collectFloat (Chars (c :: rest) p) acc =
+  if isDigit c then collectFloat (Chars rest (advanceChar c p)) (c :: acc)
+  else if c == 46 then collectFrac (Chars rest (advanceChar c p)) (c :: acc)
+  else Pair (strPack (reverse acc)) (Chars (c :: rest) p)
+
+collectFrac : Chars -> List Int -> Pair String Chars
+collectFrac (Chars [] p) acc = Pair (strPack (reverse acc)) (Chars [] p)
+collectFrac (Chars (c :: rest) p) acc =
+  if isDigit c then collectFrac (Chars rest (advanceChar c p)) (c :: acc)
+  else Pair (strPack (reverse acc)) (Chars (c :: rest) p)
+
 collectOp : Chars -> List Int -> Pair String Chars
 collectOp (Chars [] p) acc = Pair (strPack (reverse acc)) (Chars [] p)
 collectOp (Chars (c :: rest) p) acc =
@@ -295,7 +325,11 @@ else case cs of
   Chars [] p => Err "DT: internal: lexOneToken on empty input"
   Chars (c :: rest) p => if isIdentStart c then case collectIdent (Chars rest (advanceChar c p)) [c] of
     Pair name cs2 => Ok (Pair (PTok (classifyIdent name) p) cs2)
-  else if isDigit c then case collectInt (Chars rest (advanceChar c p)) (c - 48) of
+  else if isDigit c then if digitRunIsFloat (Chars rest (advanceChar c p)) then
+    let
+      frac = collectFloat (Chars rest (advanceChar c p)) [c]
+    in Ok (Pair (PTok (TFloat (firstOf frac)) p) (secondOf frac))
+  else case collectInt (Chars rest (advanceChar c p)) (c - 48) of
     Err e => Err e
     Ok (Pair n cs2) => Ok (Pair (PTok (TInt n) p) cs2)
   else if c == 34 then lexStringToken (fuel - 1) c rest p

@@ -1,38 +1,47 @@
 module Base.HashSet (HashSet, empty, fromList, insert, member, size, toList) where
 
--- Base.HashSet：String 集合，内部是 `HashMap Bool`。
+-- Base.HashSet：键泛型的持久集合，内部是 `HashMap a Bool`。
 --
--- 与 HashMap 一样，构造器不导出；toList 按桶序展开，**不保证插入序**；size 是 O(n)。
+-- 键要求 `Eq` + `Hashable`（同 HashMap）。构造器不导出；`toList` 按桶序展开，
+-- **不保证插入序**；`size` 是 O(n)。
 -- base 模块不自动注入 Prelude，容器的限定名（HashMap.*）需要显式 import。
 import Base.Bool
+import Base.Eq
 import Base.HashMap
+import Base.Hashable
 import Base.List
+import Base.Nat
 import Base.Pair
+import Base.Show
 
--- | `String` 集合，内部是键都映射到 `True` 的 `HashMap Bool`；构造器不导出。
-record HashSet where
-  hashSetTable : HashMap Bool
+-- | 键泛型的集合，内部是键都映射到 `True` 的 `HashMap a Bool`；构造器不导出。
+record HashSet a where
+  hashSetTable : HashMap a Bool
 
--- | 空集合。
-empty : HashSet
+-- | 空集合（空表统一写 `HashMap.fromList []`）。
+empty : Hashable a => HashSet a
 empty = HashSet (Base.HashMap.fromList [])
 
--- | 插入一个字符串（重复插入幂等）。
-insert : String -> HashSet -> HashSet
+-- | 插入一个元素（重复插入幂等）。
+insert : Eq a, Hashable a => a -> HashSet a -> HashSet a
 insert key (HashSet t) = HashSet (Base.HashMap.insert key True t)
 
--- | 判断字符串是否在集合中。
-member : String -> HashSet -> Bool
+-- | 判断元素是否在集合中。
+member : Eq a, Hashable a => a -> HashSet a -> Bool
 member key (HashSet t) = Base.HashMap.member key t
 
--- | 从字符串列表构造（重复元素自然去重）。
-fromList : List String -> HashSet
+-- | 从列表构造（重复元素自然去重）。
+fromList : Eq a, Hashable a => List a -> HashSet a
 fromList xs = foldl (\acc, x => insert x acc) empty xs
 
 -- | 按桶序展开为列表，**不保证插入序**。
-toList : HashSet -> List String
+toList : Eq a => HashSet a -> List a
 toList (HashSet t) = map firstOf (Base.HashMap.toList t)
 
--- | 元素个数（`Int`，O(n)，经 `toList` 计数）。
-size : HashSet -> Int
+-- | 元素个数（`Nat`，O(n)，经 `toList` 计数）。
+size : Eq a => HashSet a -> Nat
 size s = length (toList s)
+
+-- `Show` 经 `toList`：构造器不可见；桶序展开。
+instance Show a, Eq a => Show (HashSet a) where
+  show s = "fromList " `++` show (toList s)

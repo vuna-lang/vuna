@@ -1,4 +1,4 @@
-module Base.EffState (Name(..), State, StateOp(..), get, handleState, nameCode, put, resState) where
+module Base.EffState (State, StateOp(..), get, handleState, put, resState) where
 
 -- Base.EffState：一阶 State 效应（Layer 1）。
 --
@@ -7,18 +7,8 @@ module Base.EffState (Name(..), State, StateOp(..), get, handleState, nameCode, 
 -- ret = \a s => Pair a s，opH 用续延线程状态（见夹具）。
 import Base.Eff
 
--- | state 效应的命名实例 `S1` / `S2`：同一状态类型可以有两个独立实例，行里按 name 区分。
-data Name : Type where
-  S1 : Name
-  S2 : Name
-
--- | 运行时实例码：`S1 = 0`、`S2 = 1`；send 与 handler 用同一个码。
-nameCode : Name -> Int
-nameCode S1 = 0
-nameCode S2 = 1
-
 -- | state 效应的标签类型 `State n s`：只做行索引，没有运行时构造子。
-data State : Name -> Type -> Type where
+data State : String -> Type -> Type where
 
 -- | state 操作：`Get` 与 `Put x`，都按状态类型 `s` 参数化。
 data StateOp : Type -> Type where
@@ -31,13 +21,13 @@ resState s Get = s
 resState s (Put x) = Int
 
 -- | 通过命名实例读状态；行里需要 `Member (State n s) r` 证明。
-get : (n : Name) -> (s : Type) -> {r : Row} -> {w : Member (State n s) r} -> Eff r s
-get n s = sendCore (State n s) "state" (nameCode n) Get
+get : (n : String) -> (s : Type) -> {r : Row} -> {w : Member (State n s) r} -> Eff r s
+get n s = sendCore (State n s) "state" n Get
 
 -- | 通过命名实例写状态，返回占位结果 `Int`。
-put : (n : Name) -> (s : Type) -> s -> {r : Row} -> {w : Member (State n s) r} -> Eff r Int
-put n s x = sendCore (State n s) "state" (nameCode n) (Put x)
+put : (n : String) -> (s : Type) -> s -> {r : Row} -> {w : Member (State n s) r} -> Eff r Int
+put n s x = sendCore (State n s) "state" n (Put x)
 
 -- | 一阶 handler：`ret` / `opH` 由调用方给出（answer 类型 `b` 可选，经典写法 `b = s -> Pair a s` 让续延线程状态），结果行删除 `State n s`。
-handleState : {a : Type} -> {b : Type} -> {r : Row} -> (n : Name) -> (s : Type) -> {w : Member (State n s) r} -> (a -> b) -> ((o : StateOp s) -> (resState s o -> b) -> b) -> Eff r a -> Eff (Base.Eff.rowRem (State n s) r) b
-handleState n s ret opH comp = handleCore (State n s) "state" (nameCode n) ret opH comp
+handleState : {a : Type} -> {b : Type} -> {r : Row} -> (n : String) -> (s : Type) -> {w : Member (State n s) r} -> (a -> b) -> ((o : StateOp s) -> (resState s o -> b) -> b) -> Eff r a -> Eff (Base.Eff.rowRem (State n s) r) b
+handleState n s ret opH comp = handleCore (State n s) "state" n ret opH comp

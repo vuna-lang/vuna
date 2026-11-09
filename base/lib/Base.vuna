@@ -2,12 +2,16 @@ module Base
   ( module Base.Bool
   , module Base.Effect
   , module Base.Eq
+  , module Base.Float
+  , module Base.Foldable
+  , module Base.Hashable
   , module Base.IO
   , module Base.Interp
   , module Base.List
   , module Base.Map
   , module Base.Maybe
   , module Base.Monad
+  , module Base.Monoid
   , module Base.Nat
   , module Base.Ord
   , module Base.Pair
@@ -15,6 +19,8 @@ module Base
   , module Base.Show
   , module Base.Sort
   , module Base.String
+  , module Base.Traversable
+  , module Base.Unit
   ) where
 
 -- Vuna：stdlib 包门面（M11-C）。整模块重导出核心模块，保留各模块的抽象性
@@ -28,12 +34,18 @@ import Base.Ord
 -- M31.1：加载 `Int` 的 Eq / Ord 实例（跟类型模块走；仅加载实例，不重导出名字）。
 import Base.Int
 import Base.Interp
+import Base.Foldable
+import Base.Float
+import Base.Hashable
 import Base.List
+import Base.Monoid
 import Base.Maybe
 import Base.Nat
 import Base.Result
 import Base.String
 import Base.Sort
+import Base.Traversable
+import Base.Unit
 import Base.Map
 import Base.Monad
 import Base.IO

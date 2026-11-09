@@ -1,6 +1,7 @@
-module Base.Ord (Ord(..)) where
+module Base.Ord (Ord(..), Ordering(..), compare, max, min) where
 
--- Base.Ord：`Ord` trait 的**声明**（M31.1：trait 声明与实例分离）。
+-- Base.Ord：`Ord` trait 的**声明**（M31.1：trait 声明与实例分离），外加三值比较
+-- `Ordering` / `compare` 与 `min` / `max`。
 --
 -- 实例落点规则同 `Base.Eq`：`Bool` 是 `Ord` 方法签名的一部分（返回类型），实例随
 -- trait 留本模块（放 `Base.Bool` 会成环）；`Int` / `String` 的实例在
@@ -9,7 +10,14 @@ module Base.Ord (Ord(..)) where
 -- `<` / `<=` / `>` / `>=` 是 `lt` / `le` / `gt` / `ge` 的别名：Int / String 上的
 -- 特化是内建实例实现。fixity 与别名的**唯一来源**是本模块的 `infixl` 声明（Loader
 -- 在中缀重排时消费，不再有编译器内建兜底表）。
+--
+-- `Ordering` 定义在本模块而不是独立模块：`compare` 的签名依赖它，独立模块会与
+-- 本模块形成 import 环。`compare` 用 `lt` 派生（不新增 `Ord` 方法），因此
+-- `deriving (Ord)` 的生成器无需改动。
 import Base.Bool
+import Base.Eq
+import Base.Hashable
+import Base.Show
 
 infixl 4 < = lt
 infixl 4 <= = le
@@ -33,3 +41,58 @@ instance Ord Bool where
   gt _ _ = False
   ge True _ = True
   ge False x = x
+
+-- | 三值比较结果：`LT`（小于）/ `EQ`（相等）/ `GT`（大于）；顺序即 `LT < EQ < GT`。
+data Ordering : Type where
+  -- | 小于。
+  LT : Ordering
+  -- | 相等。
+  EQ : Ordering
+  -- | 大于。
+  GT : Ordering
+
+instance Eq Ordering where
+  eq LT LT = True
+  eq EQ EQ = True
+  eq GT GT = True
+  eq _ _ = False
+  neq a b = if a == b then False else True
+
+instance Ord Ordering where
+  lt a b = case a of
+    LT => case b of
+      LT => False
+      EQ => True
+      GT => True
+    EQ => case b of
+      LT => False
+      EQ => False
+      GT => True
+    GT => False
+  le a b = a < b || not (b < a)
+  gt a b = b < a
+  ge a b = b <= a
+
+instance Show Ordering where
+  show o = case o of
+    LT => "LT"
+    EQ => "EQ"
+    GT => "GT"
+
+-- | 三值比较：`x < y` 为 `LT`，`y < x` 为 `GT`，否则 `EQ`（只用 `Ord.lt` 派生，不依赖 `Eq` 实例）。
+compare : Ord a => a -> a -> Ordering
+compare x y = if x < y then LT else if y < x then GT else EQ
+
+-- | 两值中较小者（用 `le` 判定，相等时返回第一个）。
+min : Ord a => a -> a -> a
+min x y = if x <= y then x else y
+
+-- | 两值中较大者（用 `le` 判定，相等时返回第二个）。
+max : Ord a => a -> a -> a
+max x y = if x <= y then y else x
+
+instance Hashable Ordering where
+  hash o = case o of
+    LT => 0
+    EQ => 1
+    GT => 2

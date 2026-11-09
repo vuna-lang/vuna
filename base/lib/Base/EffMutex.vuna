@@ -18,6 +18,7 @@ import Base.Bool
 import Base.Eq
 import Base.IO
 import Base.IORef
+import Base.Monad
 import Base.Ord
 import Base.Result
 
@@ -27,20 +28,28 @@ data Mutex : Type where
 
 -- | 新建未加锁的 Mutex（内部计数 0）。
 newMutex : Eff [] Mutex
-newMutex = bindEff (liftIOEff (newRef 0)) (\r => pureEff (MkMutex r))
+newMutex = do
+  r <- liftIOEff (newRef 0)
+  pure (MkMutex r)
 
 -- | 非阻塞尝试加锁：计数为 0 时置 1 并返回 True，否则返回 False。
 tryAcquire : Mutex -> Eff [] Bool
-tryAcquire (MkMutex r) =
-  bindEff (liftIOEff (readRef r))
-    (\v => if v == 0 then bindEff (liftIOEff (writeRef r 1)) (\_ => pureEff True) else pureEff False)
+tryAcquire (MkMutex r) = do
+  v <- liftIOEff (readRef r)
+  if v == 0 then do
+    _ <- liftIOEff (writeRef r 1)
+    pure True
+  else pure False
 
 -- | 带 fuel 的加锁：被占用时 `yieldNow` 后重试，fuel 耗尽返回 `Err mutex: timeout`。
 acquireFuel : Int -> Mutex -> Eff [] (Result Int)
-acquireFuel fuel m =
-  if fuel <= 0 then pureEff (Err "mutex: timeout")
-  else bindEff (tryAcquire m)
-    (\ok => if ok then pureEff (Ok 0) else bindEff yieldNow (\_ => acquireFuel (fuel - 1) m))
+acquireFuel fuel m = if fuel <= 0 then pure (Err "mutex: timeout")
+else do
+  ok <- tryAcquire m
+  if ok then pure (Ok 0)
+  else do
+    _ <- yieldNow
+    acquireFuel (fuel - 1) m
 
 -- | `acquireFuel 256` 的便捷入口（最多轮询 256 次）。
 acquire : Mutex -> Eff [] (Result Int)
@@ -56,14 +65,21 @@ data Semaphore : Type where
 
 -- | 新建初值为 `n` 的信号量。
 newSemaphore : Int -> Eff [] Semaphore
-newSemaphore n = bindEff (liftIOEff (newRef n)) (\r => pureEff (MkSemaphore r))
+newSemaphore n = do
+  r <- liftIOEff (newRef n)
+  pure (MkSemaphore r)
 
 -- | 带 fuel 的 P 操作：计数 > 0 时减一并返回 `Ok`，否则 `yieldNow` 后重试；fuel 耗尽返回 `Err semaphore: timeout`。
 semWaitFuel : Int -> Semaphore -> Eff [] (Result Int)
-semWaitFuel fuel (MkSemaphore r) =
-  if fuel <= 0 then pureEff (Err "semaphore: timeout")
-  else bindEff (liftIOEff (readRef r))
-    (\v => if v > 0 then bindEff (liftIOEff (writeRef r (v - 1))) (\_ => pureEff (Ok 0)) else bindEff yieldNow (\_ => semWaitFuel (fuel - 1) (MkSemaphore r)))
+semWaitFuel fuel (MkSemaphore r) = if fuel <= 0 then pure (Err "semaphore: timeout")
+else do
+  v <- liftIOEff (readRef r)
+  if v > 0 then do
+    _ <- liftIOEff (writeRef r (v - 1))
+    pure (Ok 0)
+  else do
+    _ <- yieldNow
+    semWaitFuel (fuel - 1) (MkSemaphore r)
 
 -- | `semWaitFuel 256` 的便捷入口。
 semWait : Semaphore -> Eff [] (Result Int)
@@ -71,4 +87,6 @@ semWait s = semWaitFuel 256 s
 
 -- | V 操作：计数加一，返回 `IORef` 写入原语的 `Int` 结果。
 semSignal : Semaphore -> Eff [] Int
-semSignal (MkSemaphore r) = bindEff (liftIOEff (readRef r)) (\v => liftIOEff (writeRef r (v + 1)))
+semSignal (MkSemaphore r) = do
+  v <- liftIOEff (readRef r)
+  liftIOEff (writeRef r (v + 1))

@@ -2,14 +2,16 @@
 import Base.Eff
 import Base.Eff.Reader
 
-prog : Eff (Reader Cnt1 Int :: []) Int
-prog =
-  bindEff (ask Cnt1 Int)
-    (\x => bindEff (local Cnt1 Int (\v => v + 10) (ask Cnt1 Int)) (\y => bindEff (ask Cnt1 Int) (\z => pureEff (x * 100 + y * 10 + z))))
+prog : Eff [Reader "counter" Int] Int
+prog = do
+  x <- ask "counter" Int
+  y <- local "counter" Int (\v => v + 10) (ask "counter" Int)
+  z <- ask "counter" Int
+  pure (x * 100 + y * 10 + z)
 
 opH : (o : ReaderOp Int) -> (Base.Eff.Reader.resReader Int o -> Int) -> Int
 opH op k = case op of
   Ask => k 7
 
 main : Int
-main = runPure (handleReader Cnt1 Int (\a => a) opH prog)
+main = runPure (handleReader "counter" Int (\a => a) opH prog)

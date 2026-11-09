@@ -280,18 +280,18 @@ bindingItemsToBinds items = bindingBindsGo items [] [] []
 bindingBindsGo : List BindingItem -> List (Pair String (Pair Expr Span)) -> List String -> List (Pair Pat Expr) -> Result (List (Pair Pat Expr))
 bindingBindsGo [] sigs bound acc = case firstDanglingSig (reverse sigs) bound of
   Nothing => Ok (reverse acc)
-  Just (Pair name sp) => Err "${showSpanLoc sp}: ${psMsg (WhereSigNoDef name) (name :: [])}"
+  Just (Pair name sp) => Err "${showSpanLoc sp}: ${psMsg (WhereSigNoDef name) [name]}"
 bindingBindsGo (item :: rest) sigs bound acc = case item of
   BISig name ty sp =>
-    if memName name bound then Err "${showSpanLoc sp}: ${psMsg (WhereSigBeforeClause name) (name :: [])}"
-    else if hasBindingSig name sigs then Err "${showSpanLoc sp}: ${psMsg (WhereSigDuplicate name) (name :: [])}"
+    if memName name bound then Err "${showSpanLoc sp}: ${psMsg (WhereSigBeforeClause name) [name]}"
+    else if hasBindingSig name sigs then Err "${showSpanLoc sp}: ${psMsg (WhereSigDuplicate name) [name]}"
     else bindingBindsGo rest (Pair name (Pair ty sp) :: sigs) bound acc
   BIBind (Pair pat value) => case localFunMerge (patBoundName pat) value acc of
     Just merged => bindingBindsGo rest sigs bound merged
     Nothing => case bindingSigOf (patBoundName pat) sigs of
       Just (Pair ty sp) =>
         if memName (patBoundName pat) bound then Err
-          "${showSpanLoc sp}: ${psMsg (WhereSigMultiClause (patBoundName pat)) (patBoundName pat :: [])}"
+          "${showSpanLoc sp}: ${psMsg (WhereSigMultiClause (patBoundName pat)) [patBoundName pat]}"
         else bindingBindsGo rest sigs (patBoundName pat :: bound) (Pair pat (EAnn value ty sp) :: acc)
       Nothing => bindingBindsGo rest sigs (patBoundName pat :: bound) (Pair pat value :: acc)
 
@@ -346,15 +346,31 @@ parseLinearDecl st blockCol kwPos = step (expectKw st "linear") (\_, st1 => case
 )
 
 parseData : Bool -> PState -> Int -> Pos -> Result (Pair Decl PState)
-parseData lin st blockCol kwPos =
-  step (expectKw st "data")
-    (\_, st1 => step (expectIdent st1) (\name, st2 => step (parseParams (stateFuel st2) st2) (\params, st3 => step (expectSym st3 ":") (\_, st4 => step (parseExpr (stateFuel st4) st4 blockCol 0) (\ty, st5 => step (expectKw st5 "where") (\_, st6 => step (parseCtors st6 blockCol) (\ctors, st7 => step (parseDeriving st7) (\derivings, st8 => Ok (Pair (DData name params ty ctors derivings lin (Span (fileOf st) (posLine kwPos) (posCol kwPos) (posLine (lastPos st8)) (posCol (lastPos st8)))) st8)))))))))
+parseData lin st blockCol kwPos = step (expectKw st "data") (\_, st1 => step (expectIdent st1) (\name, st2 => step (parseParams (stateFuel st2) st2) (\params, st3 => step (expectSym st3 ":") (\_, st4 => step (parseExpr (stateFuel st4) st4 blockCol 0) (\ty, st5 => step (expectKw st5 "where") (\_, st6 => step (parseCtors st6 blockCol) (\ctors, st7 => step (parseDeriving st7) (\dv, st8 => case dv of
+  Pair derivings via =>
+    Ok
+      (Pair (DData name params ty ctors derivings via lin (Span (fileOf st) (posLine kwPos) (posCol kwPos) (posLine (lastPos st8)) (posCol (lastPos st8)))) st8)
+)
+)
+)
+)
+)
+)
+)
+)
 
 -- 记录声明（M10.5）：`record Name params where` + 缩进字段 `f : Ty`，可跟 deriving。
 parseRecord : Bool -> PState -> Int -> Pos -> Result (Pair Decl PState)
-parseRecord lin st blockCol kwPos =
-  step (expectKw st "record")
-    (\_, st1 => step (expectIdent st1) (\name, st2 => step (parseParams (stateFuel st2) st2) (\params, st3 => step (expectKw st3 "where") (\_, st4 => step (parseFields st4 blockCol) (\fields, st5 => step (parseDeriving st5) (\derivings, st6 => Ok (Pair (DRecord name params fields derivings lin (Span (fileOf st) (posLine kwPos) (posCol kwPos) (posLine (lastPos st6)) (posCol (lastPos st6)))) st6)))))))
+parseRecord lin st blockCol kwPos = step (expectKw st "record") (\_, st1 => step (expectIdent st1) (\name, st2 => step (parseParams (stateFuel st2) st2) (\params, st3 => step (expectKw st3 "where") (\_, st4 => step (parseFields st4 blockCol) (\fields, st5 => step (parseDeriving st5) (\dv, st6 => case dv of
+  Pair derivings via =>
+    Ok
+      (Pair (DRecord name params fields derivings via lin (Span (fileOf st) (posLine kwPos) (posCol kwPos) (posLine (lastPos st6)) (posCol (lastPos st6)))) st6)
+)
+)
+)
+)
+)
+)
 
 parseFields : PState -> Int -> Result (Pair (List Field) PState)
 parseFields st blockCol = if isEof st then Ok (Pair [] st)
@@ -370,12 +386,24 @@ else case peekPos st of
       (\name, st1 => step (expectSym st1 ":") (\_, st2 => step (parseExpr (stateFuel st2) st2 fieldCol 0) (\ty, st3 => step (rejectCtxSuffix st3) (\_, st3b => step (parseFieldList (fuel - 1) st3b fieldCol) (\rest, st4 => Ok (Pair (Field name ty (spanOf st st3) :: rest) st4))))))
     else if col > fieldCol then psErr0 UnexpectedIndentInRecord else Ok (Pair [] st)
 
--- deriving (TraitA, TraitB)；可出现在 data/record 的构造器/字段块之后。
-parseDeriving : PState -> Result (Pair (List String) PState)
+-- M42：`deriving via field (C...)` 的 `via`/`field` 是上下文标识符，不进关键字表。
+atIdentName : PState -> String -> Bool
+atIdentName st name = case peekTok st of
+  PTok (TIdent n) _ => n == name
+  _ => False
+
+-- deriving (TraitA, TraitB) 或 deriving via field (TraitA, TraitB)；
+-- 可出现在 data/record 的构造器/字段块之后（strategy 只能用于 record）。
+parseDeriving : PState -> Result (Pair (Pair (List String) Bool) PState)
 parseDeriving st =
   if atKw st "deriving" then step (expectKw st "deriving")
-    (\_, st1 => step (expectSym st1 "(") (\_, st2 => if atSym st2 ")" then Ok (Pair [] (advance st2)) else step (parseDerivingNames (stateFuel st2) st2) (\names, st3 => Ok (Pair names st3))))
-  else Ok (Pair [] st)
+    (\_, st1 => if atIdentName st1 "via" then step (expectIdent st1) (\_, st2 => step (expectIdent st2) (\fld, st3 => if fld == "field" then parseDerivingParens True st3 else psErr1 (ExpectedToken "field") "field")) else parseDerivingParens False st1)
+  else Ok (Pair (Pair [] False) st)
+
+parseDerivingParens : Bool -> PState -> Result (Pair (Pair (List String) Bool) PState)
+parseDerivingParens via st =
+  step (expectSym st "(")
+    (\_, st1 => if atSym st1 ")" then Ok (Pair (Pair [] via) (advance st1)) else step (parseDerivingNames (stateFuel st1) st1) (\names, st2 => Ok (Pair (Pair names via) st2)))
 
 parseDerivingNames : Int -> PState -> Result (Pair (List String) PState)
 parseDerivingNames fuel st =
@@ -591,6 +619,7 @@ else case peekTok st of
       (\_, st1b => step (parseRecordAssignments (fuel - 1) st1b blockCol) (\fields, st2 => Ok (Pair (ERecord name fields (spanOf st st2)) st2)))
     else Ok (Pair (EVar name (spanOf st st1)) st1)
   PTok (TInt n) p => Ok (Pair (EInt n (spanOf st (advance st))) (advance st))
+  PTok (TFloat raw) p => Ok (Pair (EFloat raw (spanOf st (advance st))) (advance st))
   PTok (TStr s) p => Ok (Pair (EStr s (spanOf st (advance st))) (advance st))
   PTok (TTmpl multi parts endP) p => parseTemplateAtom (fuel - 1) st multi parts endP
   PTok (TKw "Type") p => Ok (Pair (EVar "Type" (spanOf st (advance st))) (advance st))

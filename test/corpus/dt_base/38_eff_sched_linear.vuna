@@ -4,7 +4,10 @@ import Base.EffSched
 import Base.Result
 
 prog : Eff [] (Result Int)
-prog = withScope (\sc => bindEff (awaitTaskLin (forkTaskLin sc (pureEff 42))) (\r => pureEff r))
+prog = withScope (\sc => do
+  r <- awaitTaskLin (forkTaskLin sc (pure 42))
+  pure r
+)
 
 main : IO Int
 main = do

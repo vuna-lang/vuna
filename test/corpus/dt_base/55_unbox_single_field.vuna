@@ -1,0 +1,16 @@
+-- M42：单字段 record / data 自动去装箱；字段访问与 case 都按 identity 表示。
+record UserId where
+  uid : Int
+
+data Wrap : Type where
+  MkWrap : Int -> Wrap
+
+getUser : UserId -> Int
+getUser u = u.uid
+
+getWrap : Wrap -> Int
+getWrap w = case w of
+  MkWrap n => n
+
+main : Int
+main = getUser (UserId { uid = 40 }) + getWrap (MkWrap 2)

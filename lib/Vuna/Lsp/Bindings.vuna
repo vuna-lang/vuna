@@ -809,6 +809,7 @@ else case e of
   EVar n sp => if evarCovers n sp line col then lookupScope scope name else Nothing
   EInt n sp => Nothing
   EStr s sp => Nothing
+  EFloat raw sp => Nothing
   ELam params body sp => lambdaWalk fuel env scope line col name sp params body
   EApp f args sp => case walkExpr (fuel - 1) env scope line col name f of
     Just hit => Just hit
@@ -822,11 +823,11 @@ else case e of
       -- 自然跳过，回落到 domain/codomain 遍历。
       Pair nl ncol = piNamePos env dom n
       domTy = renderType dom
-      bind = LocalBind n "Pi" nl ncol domTy ""
-    in if nl == line && ncol <= col && col <= ncol + strLength n then binderNamed name [bind]
+      piBind = LocalBind n "Pi" nl ncol domTy ""
+    in if nl == line && ncol <= col && col <= ncol + strLength n then binderNamed name [piBind]
     else case walkExpr (fuel - 1) env scope line col name dom of
       Just hit => Just hit
-      Nothing => walkExpr (fuel - 1) env (append scope [bind]) line col name cod
+      Nothing => walkExpr (fuel - 1) env (append scope [piBind]) line col name cod
   ELet binds body isRec sp =>
     let
       kind = if isRec then "where" else "let"

@@ -50,7 +50,7 @@
 | `Elab.Prelude` | 把 `Intrinsics` 表翻译成 DT prelude globals（签名）；没有第二份名字/签名表 | `preludeGlobals`、`builtinTyName`、`cmpBuiltinTyName` |
 | `Elab.Match` | 多 clause 模式矩阵降级：构造子列 → `case`、字面量列 → `if` 链（纯 Ast→Ast） | `multiToExpr`、`buildColumnExpr` |
 | `Elab.Records` | `record` 的语法降级：记录 → 单构造器 `data`、字段访问/更新（纯 Ast→Ast） | `desugarRecords`、`RecordInfo` |
-| `Elab.Derive` | `deriving` 的实例生成（展开成等价 `instance`，交给既有实例精化） | `expandDerivings` |
+| `Elab.Derive` | `deriving (Show, Eq, Ord, Hashable)` 的实例生成（展开成等价 `instance`，交给既有实例精化；`Hashable` 的字段哈希用 `Base.Hashable.hashCombine`） | `expandDerivings` |
 | `Codegen`（门面） | DT 擦除 codegen 的稳定入口；重导出 `Codegen.Assembly` 与 `Codegen.Split` | `checkDtProgram`、`generateDtSplitProgram` |
 | `Codegen.Decl` | OCaml 名字编码（sanitize/前缀/保留字）+ 跨单元引用限定（`Unit.name`）+ 变体类型声明；构造子字段形状 keep flags 与不透明字段 flags（`ctorOpaqueFlagsOf`）的实际消费点；内置身份按完整符号（canonical Bool 族不进运行时变体） | `ctorOcamlName`、`qualValueText`、`qualCtorText`、`qualTypeText`、`genTypeDecls`、`ctorKeepFlags`、`ctorOpaqueFlagsOf` |
 | `Codegen.Erase` | 擦除检查、de Bruijn 作用域/名字护栏、依赖分析与 SCC 分组；axiom 强制进类型级分区，运行时使用报 `CG_AxiomAtRuntime` | `checkAllErasure`、`checkAllDefScopes`、`ensureUniqueOcamlNames`、`checkNoAxiomRuntime` |
@@ -59,7 +59,7 @@
 | `Codegen.Split` | **唯一** codegen 生成器：逐模块 split 的声明归属表与分文件装配 | `generateDtSplitProgram` |
 | `Driver.Split` | 输出文件模型与构建脚本生成：`SplitFile`、依赖序、按内容哈希增量的 `build.sh` | `SplitFile`、`buildScript`、`writeSplitFiles`、`writeSplitFilesIfChanged` |
 | `Driver.Owner` | **声明归属表**（从 `Codegen.Split` 抽出）：声明名 / 实例名 / 派生实例名 / trait 投影名 / `Dict_` → 模块；codegen 与接口切分共用 | `splitMetaOf`、`splitOwnerEntriesOfModules`、`splitDefOwnerOf` |
-| `Driver.Cache` | 接口摘要载体（TTC 思路）：`CachedProgram` = 闭合 datas / defs（含 body）/ globals / insts / classes（**不含 sols/next**）；写侧按出现点深度 zonk，读侧 `cachedProgramValid` 校验（无 meta/负索引/自由变量；body 擦除位置的未解 meta 允许并按包段重编号） | `cachedOfProgram`、`cachedProgramValid`、`shiftCachedProgram`、`summaryMetaSegment` |
+| `Driver.Cache` | 接口摘要载体（TTC 思路）：`CachedProgram` = 闭合 datas / defs（含 body）/ globals / insts / classes（**不含 sols/next**）；写侧按出现点深度 zonk（class 字段类型的深度 = 类参数个数，多参数 trait 不是固定 1），读侧 `cachedProgramValid` 校验（无 meta/负索引/自由变量；body 擦除位置的未解 meta 允许并按包段重编号） | `cachedOfProgram`、`cachedProgramValid`、`shiftCachedProgram`、`summaryMetaSegment` |
 | `Driver.Iface` | **模块级接口**（TTC 思路）：`ModuleIface`（闭合产物 + 已解析 decls + exports/fixities/imports + `miIfaceHash`/`miDepHashes`/`miSource`）、per-module 文件（与源码同布局，默认在源文件旁）+ `PackageManifest`（模块名→相对路径/源信息/接口哈希，写进包级 `.vuna-iface`）；按归属把 `DtProgram` 切成每模块摘要、强哈希、原子读写 | `ifaceOfPackage`、`readPackageIface`、`writePackageIface`、`packageIfaceValid` |
 | `Driver.Dt` | DT 路径 facade（供 `Compile` / `CompilerCli` / `Interp` / LSP 使用）：单一 `PackageContext` 加载形状；内存源码检查/洞目标、`dtMainKind`、`dtEvalExprInfo`；接口摘要路径的起始 Ec 组装（`depStartOf`）与接口/预置模块入口 | `dtCheck`、`dtCheckWithProgramParts`、`dtCheckPackageWithIfacesParts`、`dtSplitProjectParts`、`dtSplitProjectWithIfaces`、`CheckedPackage` |
 | `Driver.Compile` | 编译入口：`PackageContext` 检查/编译、目录式 codegen、构建脚本执行；build meta 与递归建目录；check 缓存 + 依赖接口校验（`depIfacesOf`）+ 接口影子写（`writeIfaceShadow`）；`VUNA_ELAB_FULL=1` 强制全量 | `checkPackage`、`compileToDir`、`depIfacesOf`、`buildMetaText`、`metaUpToDate`、`writeBuildMeta` |
@@ -263,6 +263,16 @@ fixities / imports / capabilities、`miSource`、`miIfaceHash`、`miDepHashes`�
 `DtData` 报清晰错误，不静默丢弃。生成链的护栏（构造子字段形状单一真源、
 `checkResolvedModules`、entryDecls 与归属校验、`ensureUniqueOcamlNames`）见
 [core.md](core.md) §7。
+
+**零成本表示（M42）**：`Codegen.Decl.genTypeDeclsWith` 对单构造子单运行时字段的族生成
+OCaml 类型别名而不是变体（如 `type t_UserId = int`、`and t_Wrap = int`；字段不透明 /
+函数 / 未知名字段保持装箱，类型参数与别名实参按字段实际引用的参数渲染）。对应的构造子
+应用在 `Codegen.Term` 里生成恒等（`MkWrap 1` → `1`），构造子 `case` 生成 `let` 绑定
+（单构造子分支之后的 catch-all 分支不可达，直接丢弃）。`Bool` / `Nat` / 内建特殊族、
+多字段 / 多构造子族、递归候选仍走普通变体；判定在
+`Elab.Representation.unboxedInfoOf`，字段形状同源（`ctorKeepFlags`），详见
+[type-system.md](type-system.md) §擦除与运行时表示。`deriving via field` 的实例搜索
+委托见 [records-traits.md](records-traits.md) §`deriving via field`。
 
 ## codegen 夹具基线
 

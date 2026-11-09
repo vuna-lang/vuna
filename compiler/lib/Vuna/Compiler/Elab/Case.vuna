@@ -115,6 +115,7 @@ occursLevel lvl (VIf c th el) = occursLevel lvl c || occursLevel lvl th || occur
 occursLevel lvl (VType l) = False
 occursLevel lvl (VInt n) = False
 occursLevel lvl (VStr s) = False
+occursLevel lvl (VFloat raw) = False
 occursLevel lvl (VBool b) = False
 
 occursLevelList : Int -> List Value -> Bool
@@ -143,6 +144,9 @@ else case a of
     _ => unifyErr
   VStr s => case b of
     VStr s2 => if s == s2 then Ok acc else unifyErr
+    _ => unifyErr
+  VFloat s => case b of
+    VFloat s2 => if s == s2 then Ok acc else unifyErr
     _ => unifyErr
   VBool x => case b of
     VBool y => if x == y then Ok acc else unifyErr
@@ -233,6 +237,7 @@ isRigidVal (VCon c args) = rigidIdxVals args
 isRigidVal (VType l) = True
 isRigidVal (VInt n) = True
 isRigidVal (VStr s) = True
+isRigidVal (VFloat raw) = True
 isRigidVal (VBool b) = True
 isRigidVal _ = False
 
@@ -293,7 +298,7 @@ ctorResultVals c base =
   in map (\t => eval env t) (ctorResultTerms c)
 
 -- 分支里的结果索引：用分支上下文（含已绑定的构造子字段）求值。
--- 于是 `Cons b m y ys` 的结果索引 `Vec b (Succ m)` 里出现的就是这些真实 binder，
+-- 于是 `Cons b m y ys` 的结果索引 `Vec (Succ m) b` 里出现的就是这些真实 binder，
 -- 合一 `b ↦ a`、`Succ m ↦ n` 后分支体的类型自动被精化。
 ctorResultValsIn : Ctx -> DtCtor -> List Value
 ctorResultValsIn ctx c = map (\t => evalCtx ctx t) (ctorResultTerms c)

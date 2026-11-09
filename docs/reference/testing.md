@@ -1,151 +1,108 @@
 # 测试体系（testing）
 
-本文覆盖 `test/run-tests.sh` 的原生测试、corpus 分类、包上下文夹具、Nix checks、性能基准
+本文覆盖原生 suite（`vuna test --suite`）、corpus 分类、包上下文夹具、Nix checks、性能基准
 与本地开发。种子不变量与 rotation 见 [bootstrap.md](bootstrap.md)。
 
-## 原生测试：`test/run-tests.sh`
+## 原生测试：`vuna test --suite`
 
-vuna 原生测试按编号章节组织（**55 个章节**：编号到 56，无第 12 段；34a–34d 归在第 34
-段内）。用 `vuna` / `vuna-seed` 驱动，不依赖外部 vuna 实现，但需要 `ocamlopt` 作为 codegen
-后端。精确 checks 数随夹具增删变化，以运行输出为准。测试覆盖：
+repo 自测现在由 `vuna test --suite test/suite.toml` 驱动（原生 Vuna 实现，不再是 shell
+编排）。核心分层：
 
-- `corpus/cli/check.sh`：CLI 错误矩阵（参数 / 路径 / workspace / 包目录）；
-- `corpus/index/check.sh`：Index v3（内容哈希缓存、原子写、doc/type 字段、refs 位置）；
-- `corpus/doc/check.sh`：`vuna doc` 单文件 HTML、docstring 提取、`--check`、确定性；
-- `corpus/search/check.sh`：`vuna search` 名称/doc/类型检索、JSON、退出码；
-- `corpus/packages/{09_workspace_member_error, 10_workspace_build}`：workspace check/build；
-- `corpus/packages/11_run_args`：`vuna run` 的构建+参数透传夹具；
-- `corpus/test-m30/`：REPL / effect test；
-- REPL v2 缺口回归：`corpus/repl/repl_v2_gaps.sh`（多行历史 / 括号粘贴 / resize 重绘 /
-  参数位补全；`vuna test` 纯断言 + 管道历史断言 + pty 断言，`script` 或 `/dev/pts`
-  不可用时 pty 段自降级 SKIP；§54b）；
-- LSP smoke：`corpus/lsp/smoke.sh`（含 M38 codeAction quick fix + 传输层边界用例；M40 起
-  覆盖模块名 / 局部绑定 hover·definition、未解洞上下文与命名洞 `?name`）；
-- `net` 原语：`corpus/net/01_echo`（Unix socket echo / TCP 临时端口 / stale socket；§55）；
-- REPL server / client：`corpus/repl-server/smoke.sh`（JSON-RPC over Unix socket，跨进程
-  会话状态、错误码、shutdown 清理；§56）；
-- 接口摘要（check 期模块化精化）：`corpus/packages/m34_summary/` + 仓库自身预热回归；
-- **M38（§45–§50）**：运行时错误报告（`vuna: runtime error` + 位置帧 + exit 2）、
-  `Base.Debug`（trace/assert/todo）、`vuna test` 的 `--list/--filter/--verbose/--fail-fast`、
-  `vuna run`、REPL `:type/:load/:reload/:browse`、CLI 诊断源码片段。
-
-**`vuna test --jobs N`（包内进程级并行）**：默认 `--jobs 1` = 串行，行为与输出
-逐字不变；N>1 时每个测试文件在独立子进程里跑（spawn 当前可执行文件的隐藏模式
-`test <包目录> --only-file <文件名> --jobs 1`，`--verbose` 时追加 `--verbose`）。子进程继承
-stdout/stderr，所以 `ok` / `FAIL` 行与测试自身的输出**可能交错**——单行内容完整（`prim_print`
-每次 flush），但行序不保证。父进程不打印每文件结果行，只用 `prim_wait` 收退出码、按文件计
-pass/fail；`N passed, M failed`、workspace 汇总行与退出码语义（0 全过 / 1 有失败 / 2 输入错误）
-都与串行一致。`--fail-fast` 在并行下只**停止启动新文件**，已在跑的文件等完并计入汇总
-（`prim_wait` 只能等指定 pid，失败要等该子进程排到队首才被观察到，窗口里其它已失败的文件
-要等被 wait 才计数）；`--verbose` 的每文件耗时由子进程自己测量并打印在行尾，父进程照旧打印
-`total:`；`--list` / `--filter` 不变；workspace 聚合仍是各包串行（包内文件并行）。
-`--only-file` 是内部子进程模式（不出现在 help 主清单）：只跑一个文件、打印该文件的
-ok/FAIL 行、不打印汇总、强制 jobs=1（不会再并行 / 递归 spawn）。`--jobs` 非正整数
-（0 / 非数字 / 缺值）→ usage error exit 2。夹具：`corpus/packages/m38_test_jobs/`
-（3 纯 + 2 IO + 2 个 START→sleep→END 重叠探针；`fail/` 是独立嵌套包），断言在 §47c。
+- `test/suite.toml`：suite 配置。`[suite]` 放全局默认（`jobs`/`timeout`/`name`）；
+  `[family.<name>]` 按目录约定把夹具展开成 golden/error case；
+- `test/suite/lib/harness.sh`：迁移期共享 shell helper（旧章节仍用）；
+- `test/suite/sections/NN.sh`：尚未声明式化的旧章节，一个章节一个独立进程；
+- 执行器在 `lib/Vuna/Test/{Suite,Run}.vuna`，由 `Vuna.Cli.testArgs` 分派。
 
 ```console
-sh test/run-tests.sh        # 需要 PATH 中有 vuna 与 vuna-seed
+vuna test --suite test/suite.toml                 # 全量；--jobs 默认 auto
+vuna test --suite test/suite.toml --list          # 列出章节/case
+vuna test --suite test/suite.toml --only 34       # 纯数字按 section 精确匹配
+vuna test --suite test/suite.toml --filter dt/03  # 按 case id/tag 子串
+vuna test --suite test/suite.toml --jobs 16       # 显式并行度（覆盖 auto）
+vuna test --suite test/suite.toml --json          # 机器可读汇总
 ```
 
-环境变量：`VUNA`（stage 1 产品 CLI）、`VUNA_SEED`（stage 0 种子编译器）、`OCAMLOPT`
-（默认 `ocamlopt`）、`VUNA_TEST_CMD_TIMEOUT`（单条命令超时，默认 300s，见下节）。
-脚本会 `cd "$(dirname "$0")"`，从仓库根直接跑即可；并导出
-**`VUNA_BASE="$PWD/../base"`**——runner 写进 `$tmp` 的**无 manifest 临时夹具**靠它定位
-base 上下文（corpus 内的夹具由 `test/corpus/vuna.toml` 给出包上下文）。
+`--jobs auto`（默认）= 探测到的全部可用核（`VUNA_TEST_JOBS` 可覆盖，`--jobs N` 显式）。
+CLI 子进程各自带独立 `TMPDIR`/`VUNA_IFACE_DIR`，避免并行时写同一份 iface/缓存。
 
-**接口摘要路径的测试**（第 44 段，包级 + 模块级 S1/S2/S3/S4）：依赖包先单独 `check`（写摘要
-缓存与 per-module 接口 + manifest），再 `check` 根包 —— `--debug-perf` 应出现
-`cache-path=summary deps=N` 与 `iface-selftest=ok`（`VUNA_IFACE_SELFTEST=1` 打开写侧读回
-校验），且依赖模块**不再被 parse**（断言输出里没有 `parse-module=<依赖模块>`）；布局断言
-（包级 `.vuna-iface` + 每模块 `*.iface` 存在；测试统一把 `VUNA_IFACE_DIR` 指到临时镜像根，
-不往仓库工作树写缓存）、删掉 check 缓存后重算但接口未变时写侧只写
+### case 类型与语义
 
-`manifest`（`iface-write=0/`）；损坏模块文件按自描述头拒绝、回退全量并强制重写修复；独立缓存里以 `VUNA_CACHE_MTIME=1` 预热后根包仍命中摘要路径；
-负例注入后摘要路径与 `VUNA_ELAB_FULL=1` 全量路径的诊断逐字节一致；模块接口路径与全量
-路径的 `compile` 产物 `diff -r` 全等；最后对仓库自身做「预热 base/compiler → `check .`」
-回归（C37 的 `Eq Type` 假歧义）。`VUNA_ELAB_FULL=1` 是排障/A-B 对拍开关（强制全量精化），
-默认不设；`VUNA_DEBUG_PERF=1` 等价于 `--debug-perf`（给 `vuna-compiler` 这类不经
-`Vuna.Cli` 的入口用）；`VUNA_CACHE_MTIME=1` 开 mtime+size 快判（5s 安全窗内仍回读内容哈希；默认内容哈希）。模块级
-设计见 [cache.md](cache.md)。
+| kind | 语义 |
+| --- | --- |
+| `golden` | 可选 `interp` vs `.out`；`check` exit 0；`compile` + `build.sh` + 运行 vs `.out`；`interp == run`；`.nointerp` 只跑编译产物 |
+| `error` | `.err`（必要时 `.cerr`）片段；`interp/check/compile` 非 0、含片段、不写输出目录 |
+| `CSection` | 执行 `test/suite/sections/NN.sh`；退出码 + 章节自己的 `N checks` 汇总 |
+| `CCheck` | 只跑 `vuna check` 的正/负例；负例比对 `.err` 片段 |
+| `CLint` | `vuna lint` 输出 vs `.out` + 期望退出码 |
+| `CFix` | `vuna lint --fix` 后内容 vs `.expected`，并验证幂等 |
+| `CRuntime` | 编译产物运行期错误：片段 + 非 0/指定退出码 |
+| `CSeed` | 用 `VUNA_SEED` 编译运行，验证 seed 冒烟 |
+| `CNointerp` | 扫描带 `.nointerp` 标记的夹具，确认 `interp` 拒绝 |
+| `CBroken` | family/discovery 失败（缺 expected、目录不存在等），显式失败而不是静默跳过 |
 
-第 44f 段是包内增量回归：复制 `base`、改一个叶子模块后重算——其余模块复用、只 parse 改动
-模块、第二次运行收敛（`cache-own-clean=30`、`iface-write=0/`）；增量 `manifest` 与全量路径
-逐字节一致；注入类型错误后增量与全量诊断逐字节一致。
+`[family.*]` 的 `kind = "auto"` 按磁盘上存在的 `<base>.out` / `<base>.err`（目录型是
+`expected.out` / `expected.err`）判定 golden/error；显式 `kind`/`expected` 可覆盖。
+family 的 `interp/check/compile/run/compare_interp` 是每类 case 的断言开关。
 
-第 44g 段验证 LSP/REPL 消费依赖接口（默认开启）：REPL 输出 `iface-source=repl modules=N`
-且求值正确，LSP smoke 全过；`VUNA_IFACE_TOOL=0` 作为 A/B 关闭开关。
+### 执行模型
 
-第 44h 段验证 codegen 单元级缓存（默认开启；`VUNA_UNIT_CACHE=0` 关闭）：改入口重建命中
-依赖单元，增量产物与干净重建逐字节一致。第 44i 段验证依赖可见性收敛（S6）：dep 的 trait/实例在
-未 import 的模块里时摘要/全量路径一致拒绝，import 后一致接受。第 44j 段验证单元缓存 entry
-分桶与 GC（同包不同 entry 交替构建只保留一个桶，同 entry 重建仍命中）。
+- 父进程发现 case 后按 `--jobs` spawn N 个自身（隐藏 `--worker i/N`），worker 按
+  `index mod N` 静态分片；每个 case 写一份 TSV 结果到共享临时目录，父进程按序读回。
+- 每个 case 有独立临时目录与 per-case 超时（默认 300s；section 900s）。子进程输出经固定
+  shell helper 捕获（`timeout --foreground ... >out 2>err`，可选合并），不新增编译器原语。
+- 默认 family 与可并行的 `CSection` 一起进 worker；每个 worker 有独立 `TMPDIR` 与
+  `VUNA_IFACE_DIR` 镜像。共享仓库路径/默认 iface 布局的 §42/§47/§57/§58/§59 仍走父进程
+  串行 lane，并与 worker 同时运行（`--fail-fast` 时先串行、失败则不发 worker）。
+- `--fail-fast`：串行 lane 失败则不再启动 worker；worker 内部失败后不再启动新 case。
+- 失败行带 case id；断言失败给 expected/actual 片段。
+- 本地结果缓存：成功的 golden/error case 写入 `.local/test-cache/`，key 含编译器指纹、
+  base 源码树哈希、source/expected 内容（目录型再含夹具 .vuna 树）；命中打印 `(cached)`。
+  `--no-cache` 关闭，CI check 固定 `--no-cache`；section 脚本不缓存。
 
-第 44k 段验证工具链惰性闭包完整性（M34.6）：同包模块自己的 dep import 必须进闭包（否则
-假 `TC_UnknownName`）；本包 manifest 缺失/新增模块时安全阀回退全量；依赖 data/ctor 在
-REPL 接口路径下可求值。第 44l 段验证 LSP 单文件增量/会话：LSP-only 写回 iface、接口 vs
-全量诊断逐字节一致、同一进程外部改依赖模块后下次请求失效重报、REPL 复用 `:reset`。
+### 迁移状态
 
-第 51 段验证 mtime 快路径安全窗（`VUNA_CACHE_MTIME=1`）：同秒同大小编辑必失效；第 52 段
-验证缓存载荷 framing：split 截断/中部篡改后重建成功且产物逐字节一致、check 缓存损坏重算、
-AST 全量截断后重写。第 53 段验证单元缓存默认开 + 桶内 GC 有界（默认命中、`=0` 无 hit、
-连续改入口桶文件数收敛）。
+- 已声明式化：§1/2/3/4/5/6/7/8/9/10/11/13/15/16/18/19/20/21/22/23/24/25/26/27/37/43
+  与 §34 的 dt/dt_err/dt_base/dt_io（family 覆盖全部夹具；对应 section 脚本已删除）。
+- 仍是脚本：§14（CLI）、§17（诊断）、§28–34_extra（包/split/额外断言）、
+  §35–59 中尚未迁移的工具链/REPL/LSP/net/缓存/iface 段。
+- `test/run-tests.sh` 与 `nix/run-tests.sh` 已删除；旧章节脚本可在 `test/suite/sections/`
+  查看，后续逐段转成 family/cli case。
 
-第 57–59 段验证 iface 布局与清理：默认接口文件与源码同目录（`lib/Base/Int.iface` +
-`<pkg>/.vuna-iface`）；`VUNA_IFACE_DIR` 镜像布局、依赖包接口按包目录消费、`check base` /
-`check ./base` / 绝对路径三种入口命中同一镜像（含相对/绝对交替复用干净模块的路径归一）、
-同名不同目录各占一棵树；只读 iface 目录下 check/REPL 退出码不变并打
-`iface-skip readonly`；`vuna clean-iface` 批量删除 `*.iface` / `.vuna-iface` / 原子写残留且
-不动源码。
+### 超时
 
-推荐入口（`nix/run-tests.nix` 包装，不修改原脚本；无参数等价于直接跑）：
-
-```console
-nix run .#vuna-run-tests [-- --list | --only 34 | --only dt | --vuna stable]
-```
-
-`--only` 支持重复与逗号分隔（纯数字按章节序号匹配）；`VUNA` / `VUNA_SEED` 可直接覆盖
-编译器（覆盖时不再调用 `nix build`）。
-
-**并行**：`--jobs N` 把选中的章节切片后并发跑（每章节独立临时目录；日志按章节顺序回放并
-汇总 pass/fail）。各章节必须相互独立；写仓库 `.output` 的章节（§28/§41 一类）与其它章节
-并发时可能竞争，定位阶段用 `--only` 排除即可。CI 的 `checks.vuna-tests` 仍是串行全量
-（权威口径）。`--only` / `--jobs` 路径每章节还有独立超时（见下节）；两者现在是同一条
-「逐章节独立进程」执行路径：串行 `--only`（jobs=1）输出也变为「逐章节日志按序回放 +
-各章节总结 + 最终汇总」，不再拼成一个脚本跑（退出码语义与 `--jobs` 口径一致，失败章节
-照旧计 FAIL）。
-
-## 超时与覆盖断言（W1）
-
-三层超时互相独立，都可用环境变量覆盖（0 = 关闭）；超时一律是**明确 FAIL + 继续跑**，
-不会让整个测试挂死：
-
-| 层 | 环境变量 | 默认 | 行为 |
+| 层 | 控制 | 默认 | 行为 |
 | --- | --- | --- | --- |
-| 单条命令（`test/run-tests.sh`） | `VUNA_TEST_CMD_TIMEOUT` | 300s | 所有 `vuna` / `vuna-seed` 调用经 `$tmp/timeout-bin/` 里的包装脚本；编译产物与 `sh build.sh`（ocamlopt 链接）经 `run_bin`。超时打印 `FAIL: command timed out after Ns: <命令>`（stderr），命令退出码 124 ⇒ 调用点原有的 golden / 退出码断言随之失败，脚本继续跑；结尾再补一条 `FAIL: command timeout` 并整体 exit 1。没有 `timeout` 命令时降级为直跑（不算 FAIL，也不崩）。 |
-| 章节（`nix/run-tests.sh --only/--jobs`） | `VUNA_TEST_SECTION_TIMEOUT` | 600s | 每章节在独立进程里跑；超时后该章节计 FAIL（日志末尾追加 `FAIL: 章节超时（>Ns）：<章节>`），继续跑其余章节。`--list` 与无参数路径不加这一层（无参数直接 exec 原脚本，只有单命令超时）。 |
-| 单测（`vuna test` 的 `main : IO a`） | `VUNA_TEST_TIMEOUT` | 120s | `lib/Vuna/TestRunner.vuna` 在临时目录里编译测试入口，用 `timeout` 分别包住 `sh build.sh` 链接与产物运行；超时记 `FAIL <文件>: timed out after Ns`（build 步骤带 `(build)` 后缀）并清理临时目录。没有 `timeout` 命令时降级到 `runEffectProgram`（旧路径，无外部超时，不算 FAIL）。纯测试（`main : String/Int/Bool`）走核心求值，终止性由求值器 fuel 保证，不需要外部超时。 |
+| case | `--timeout` / family `timeout` / section 900s | 300s | 超时计 FAIL 并继续其余 case；`timeout` 缺失时降级直跑 |
+| 工具链 | `VUNA_TEST_CMD_TIMEOUT`（旧章节 harness 仍识别） | 300s | 章节内部命令的 wrapper 超时，超时打印 FAIL 并继续 |
 
-定位超时：先看失败章节 / 文件与 FAIL 行的命令文本；用同名环境变量缩短默认值复跑该章节
-（`VUNA_TEST_CMD_TIMEOUT=60 VUNA_TEST_SECTION_TIMEOUT=120 sh nix/run-tests.sh --only 34`），
-`vuna test` 用 `VUNA_TEST_TIMEOUT=30 vuna test <pkg>`。超时夹具是
-`test/corpus/cli/timeout_hang/`（1ms 通过测试 + 30s 长睡眠测试；§47 用
-`VUNA_TEST_TIMEOUT=8` 驱动，断言「快速测试照常 ok、长睡眠 timed out、exit 1」）。
+### 产品化过滤与更新
 
-**覆盖 / 计数断言**：所有靠 glob 枚举的 corpus 章节在循环前调用
-`require_files <标签> <glob>`——glob 没匹配到任何夹具时记 FAIL（新增夹具放错目录或改名
-不会再被静默漏跑）；关键章节在段末调用 `assert_min_section_checks <标签> <下限>`，锁住
-「本段通过 check 数」的下限（夹具 / 断言被大批删除时立刻失败）。下限取当前值的 ~60%，
-增加夹具时不需要调整；删除 / 合并夹具若跌破下限，按新基线下调即可（它是报警线，不是精确
-计数）。§43 的 `find` 枚举另有「`.nointerp` 标记数 > 0」断言。
+```console
+vuna test --suite test/suite.toml --changed HEAD   # 仅跑 git diff 影响到的 case
+vuna test --suite test/suite.toml --last-failed    # 重跑上次失败
+vuna test --suite test/suite.toml --bless          # 更新 golden .out（只写 golden）
+vuna test --suite test/suite.toml --watch          # 改文件后自动重跑
+vuna test --suite test/suite.toml --audit          # 孤儿 fixture 审计
+vuna test --suite test/suite.toml --timings        # 最慢 10 个 case
+vuna test --suite test/suite.toml --strict-skips   # fail-fast 产生的 skip 也算失败
+vuna test --suite test/suite.toml --cache-dir DIR   # 覆盖本地结果缓存目录
+```
 
-所有语言夹具与包构建都走 DT（`interp` = DT 精化 + 核心求值，`check` / `compile` = DT 精化
-+ 擦除 codegen，`build` = DT 逐模块 codegen + `build.sh`）。没有按检查器分支的段，也没有
-第二套 codegen 输出模型。
+- `--changed REV`：`git diff --name-only REV`；compiler/base/lib/app/suite 配置变更跑全量，
+  夹具变更只跑对应 family case 与引用该目录的 section；无变更时不跑 case。
+- `--last-failed`：失败 case id 写到 `.local/test-suite/last-failed`，重跑时按 id 过滤；
+  空结果不会清空已有失败列表。
+- `--bless`：golden 失败时把实际输出写回对应 `.out`，并打印 `blessed`；不处理 `.err`/`.cerr`。
+- `--watch`：首次跑完后每 500ms 比较 suite/corpus/工具链源码 mtime，变化即重跑。
+- `--cache-dir DIR`：覆盖 `.local/test-cache`；worker 继承同一目录。
+- `--strict-skips`：`--fail-fast` 跳过的 case 计为失败（CI 使用）。
+- `--audit`：扫描 `test/corpus` 的 `.vuna`，未被 family case 或 section 脚本引用的夹具列出
+  并 exit 1；`test/corpus/codegen` 是 metrics 固定输入，显式排除。
 
-**compile 是目录化产物**：`compile <entry|pkg-dir> OUTDIR` 写逐模块 `.ml` + `build.sh`，
-成功静默。脚本里的 `compile_dir_bin` / `compile_dir_and_run` helper 负责「codegen 到临时
-目录 → 执行 `build.sh` → 运行产物比对」，没有单文件 `.ml` 的写法。
+family discovery 对目录里每个夹具要求 `.out`/`.err` 或目录型 `expected.*`；缺期望文件会
+生成 `CBroken` case 并失败（防改名/放错目录静默漏跑）。旧章节的
+`assert_min_section_checks` 仍在脚本里保留，等该段转声明式后由 case/断言计数替代。
 
 ## corpus 的包上下文与 `VUNA_BASE`
 
@@ -200,7 +157,7 @@ nix run .#vuna-run-tests [-- --list | --only 34 | --only dt | --vuna stable]
   构造器不可见）同样覆盖；`95_ambiguous_field` 覆盖歧义字段；
 - `corpus/traits/`：正例 `interp` 与 `compile` 比对 golden（含泛型字典穿参、多类型
   default；`14_constrained_instance`（`instance Eq a => Eq (Box a)` +
-  `mem (Box 1) [...]`）、`15_parametric_deriving`（参数化 `deriving (Show, Eq, Ord)`）、
+  `mem (Box 1) [...]`）、`15_parametric_deriving`（参数化 `deriving (Show, Eq, Ord)`）、`27_deriving_hashable`（`deriving (Eq, Hashable)`，data + 记录）、
   `16_eq_ord_alias`（`==` / `eq`、`<` / `lt` 走同一路径，Int/String 特化 + Bool 实例）、
   `17`–`22`（M32 显式签名约束：单 / 多约束、结构化 `Eq (Box a)`、高阶 kind `Monad m`、
   约束函数互调、未使用约束））；
@@ -237,8 +194,9 @@ nix run .#vuna-run-tests [-- --list | --only 34 | --only dt | --vuna stable]
   `corpus/fmt/05_where`、`15_where_inst`、`fmt/typed/01_where`；where 缺签名负例是
   `corpus/dt_err/35_where_no_sig`；
 - `corpus/lint/`、`corpus/fix/`：`vuna lint` / `lint --fix` golden、退出码与幂等（工具链，
-  与检查器无关）。规则为 AST 驱动：`literal-if-chain`、`dispatch-lift`；
-  语料 05–14、15–18 与 fix 07–19 覆盖两条规则、Bool if 提升与「不报」形态。输出带错误码：
+  与检查器无关）。规则为 AST 驱动：`literal-if-chain`、`dispatch-lift`、`list-literal`；
+  语料 05–14、15–18、19 与 fix 07–19、20 覆盖 dispatch 提升、列表字面量归一与「不报」形态。
+  输出带错误码：
   `路径:行:列: [LN_XXX] <rule>: <message>`，错误码体系见 [tooling.md](tooling.md) 第 4 节，
   完整清单由 `vuna gen-errors` 生成。规则与边界见 [lint.md](lint.md)；
   `checks.vuna-lint` 对全部包源码要求零 finding；
@@ -283,7 +241,7 @@ nix run .#vuna-run-tests [-- --list | --only 34 | --only dt | --vuna stable]
 
 - `seed-selfhost`：seed→stage0→stage1→stage2 逐字节一致、TCB 黑名单、seed 完整 allowlist、闭包数量、增量构建、
   行为抽查与 seed 滞后报告（不阻塞）；
-- `vuna-tests`：沙箱跑上述原生测试；
+- `vuna-tests`：沙箱跑 `vuna test --suite test/suite.toml`（`--jobs auto --no-cache`）；
 - `vuna-typecheck` / `vuna-lint`：`vuna check .` 自检、lint 零 finding；
 - `vuna-fmt`：workspace 全包与 `examples/`；
 - `vuna-package`：`examples/multi` 的 build/test/fmt/doc + 根包构建；
@@ -315,7 +273,7 @@ nix build .#vuna --out-link result-vuna      # 产品 CLI（stage 1）
 nix build .#vuna-compiler --out-link result-compiler  # 编译器 CLI（stage 1）
 nix build .#vuna-seed --out-link result-seed          # stage 0 种子编译器
 VUNA=$PWD/result-vuna/bin/vuna VUNA_SEED=$PWD/result-seed/bin/vuna-seed \
-  sh test/run-tests.sh
+  vuna test --suite test/suite.toml --jobs auto
 ```
 
 **`result*` 可能过期**：out-link 只是手工指到某次构建，源码 / seed 变了不会自动更新。跑

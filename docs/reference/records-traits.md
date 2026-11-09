@@ -40,7 +40,98 @@ onlyX p = case p of
   字段访问 / 更新 = 内联 `case`，所以核心求值器与 codegen 行为一致。
 - 字段访问 / 更新的 base 类型必须可推断；推断不出时报
   `cannot resolve record type ... add a type signature`，给函数参数补类型签名即可。
-- 错误：缺字段 / 重复字段 / 未知字段 / 非记录类型；记录支持 `deriving (Show, Eq, Ord)`。
+- 错误：缺字段 / 重复字段 / 未知字段 / 非记录类型；记录支持 `deriving (Show, Eq, Ord, Hashable)`。
+
+### 零成本表示（自动去装箱）
+
+单字段 `record` / 单构造器单运行时字段的 `data` 在 codegen 中**没有运行时包装**：
+OCaml 类型别名直接指向字段类型，构造是恒等（`UserId { uid = 3 }` 生成 `3`），
+`case` / 字段访问生成 `let` 绑定，不生成变体构造子与 `match`。判据由擦除后的
+构造子形状决定（`ctorKeepFlags`）：
+
+1. 恰好一个构造子；
+2. 恰好一个**运行时保留**的字段（索引位 = 数据参数之后；类型参数、隐式参数、
+   `(0 _)` 参数不算）；
+3. 该字段类型可被 OCaml 表示；函数 / Pi 字段与不透明 / 未知名字段保持装箱（OCaml 值限制与可命名性）；
+4. 候选之间无递归环（单字段自引用包装仍装箱）；
+5. `Bool` / `Nat` / 内建特殊族不参与。
+
+```vuna
+record UserId where
+  uid : Int
+
+data Wrap : Type where
+  MkWrap : Int -> Wrap
+
+-- 两者都去装箱：以下函数在 OCaml 里就是 int -> int 与 int -> int。
+getUser : UserId -> Int
+getUser u = u.uid
+
+getWrap : Wrap -> Int
+getWrap w = case w of
+  MkWrap n => n
+```
+
+类型参数个数不影响判定：`record EitherStr a where runEitherStr : Result a`
+同样只保留 `Result a`。多字段 / 多构造子类型仍生成普通 OCaml 变体；两者可以共存。
+判定是**声明级**的，不改变语义、类型检查或 `deriving` 的结果；它只改变运行时表示。
+
+### `deriving via field`
+
+`record` 和 `data` 都可以写 `deriving via field (C1, C2, ...)`：它要求包装是
+**单构造子单运行时字段**且该字段自动去装箱。实例不是逐方法生成的，而是在实例搜索期
+做 **字典委托**（GND）：
+
+```text
+搜索 Dict_C Wrapper
+  → 如果没有 Wrapper 的显式实例，搜索 Dict_C Field
+  → 复用底层类型的同一份字典
+```
+
+因此能委托的 trait **完全由底层字段类型有没有该实例决定**，不是固定列表：`Show` /
+`Eq` / `Ord` 只是常见例子，用户自定义 class 同样可用。括号里的类名是允许委托的集合
+（`via field ()` 表示不委托任何类）。
+
+```vuna
+record UserId where
+  uid : Int
+deriving via field (Show, Eq)
+
+data Wrap : Type where
+  MkWrap : Int -> Wrap
+deriving via field (Show)
+
+trait Pretty a where
+  pretty : a -> String
+
+instance Pretty Int where
+  pretty n = strFromInt n
+
+record Tagged where
+  tag : Int
+deriving via field (Pretty)
+
+main : String
+main = show (UserId { uid = 3 }) ++ "/" ++ show (MkWrap 5) ++ "/" ++ pretty (Tagged { tag = 7 })
+```
+
+- `data` / `record` 同等；形状必须是自动去装箱的单字段包装，否则报
+  `[TC_DerivingViaUnboxedRequired]`（多字段、多构造子、函数 / Pi 字段、递归包装、
+  未知名 / 不透明字段都不满足）。
+- 委托是**表示级**的：只有 wrapper 与 field 运行时表示完全一致时才成立；当前这等价于
+  自动去装箱判据。因此函数 / Pi 字段包装（`Eff` / `Reader` / 续延）暂时不能用
+  `deriving via field`（它们保持装箱，见 debt D50）。
+- 显式实例优先：如果 wrapper 自己声明了 `instance C Wrapper`，不会被委托覆盖。
+- 参数化包装的字段类型会代入 wrapper 的实参；多参数 class 中 wrapper 出现在任一参数位置
+  时也可以委托。
+- 目前只处理 class 参数**头部**是 wrapper 的委托；`C (List (Wrapper a))` 这种嵌套在容器里的
+  包装不会自动回溯到 `C (List (Field a))`（见 debt D50）。
+- 没有 `newtype` / `type` 关键字：`record` 提供名义类型，自动去装箱负责表示，
+  `deriving via field` 负责实例；结构 `deriving` 保持逐字段比较 / 展示。
+- 实现：`Elab.Dict.searchInstFuel` 的 `tryViaDict` 在实例搜索期替换类参数；
+  `Elab.Data.checkViaDataDecls` 校验表示条件。因为 `interp` 是纯 Core 求值器（不做
+  codegen 去装箱），`vuna interp` 对依赖表示委托的 `show` 等程序不适用；这些夹具用
+  compile + run 验证。
 
 ## trait 与实例
 
@@ -65,7 +156,7 @@ main = pretty Red ++ "/" ++ show Red
 - **trait 支持 N>=1 个参数**：字典类型是 `Dict_C p1 .. pn`，构造子字段仍是方法；
   默认方法、父类、关联类型归 F4（[roadmap.md](../roadmap.md)）。
   每个参数的 kind 可显式写：`trait C (a : Type) (r : Row) where ...`；未写时从方法签名
-  推断（参数被应用 k 次即 `Type -> ... -> Type`，否则 `Type`）。空参数表报
+  推断（参数被应用 k 次即 `Type -> ... -> Type`，否则 `Type`；显式 kind 里的中缀如 `Type -> Type` 也会被 Loader 重排，M41）。空参数表报
   `[TC_InterfaceNoParam]`。非 Type 类参数（如 `Row`）的实例搜索已支持；但**头可合一的重叠实例
   仍被 coherence 拒绝**（`Member e (Cons e r)` 与 `Member e r => Member e (Cons x r)`），
   因此 trait 版 `Member e r` 仍不可用（见 debt D39）。
@@ -113,7 +204,7 @@ main = pretty Red ++ "/" ++ show Red
         MkBox b => a == b
   ```
 
-- **参数化 `deriving (Show, Eq, Ord)`**：按 data 的每个类型参数生成 ctx（形态是约束
+- **参数化 `deriving (Show, Eq, Ord, Hashable)`**：按 data 的每个类型参数生成 ctx（形态是约束
   实例 `instance Eq a => Eq (F a)`）；`Show` 要求字段可 show。`mem (Box 1) [...]`
   这类需要 `Dict_Eq (Box Int)` 的用法因此可用。
 - **顶层函数签名也可以写约束（M32）**：`f : Eq a, Show a => a -> String`。约束是定义体的
@@ -163,6 +254,27 @@ describe x y = if x == y then show x else show x ++ "/" ++ show y
   `unknown interface <name>`；实参个数与 trait 参数个数不符报 `[TC_ConstraintNotDict]`；
   kind 不符报 `[TC_TypeMismatch]`。
 
+## 字面量转换 trait（FromString / FromInt / FromFloat）
+
+checking 位置的 `"..."` / `42` / `1.5` 在期望类型不是对应内建类型（`String` / `Int` /
+`Float`；`Nat` 字面量仍展开成 `Zero`/`Succ` 链）时，会搜索 `FromString` / `FromInt` /
+`FromFloat` 实例，命中就把字面量降级成 `fromString "..."` / `fromInt 42` /
+`fromFloat 1.5`（找不到则回退，报通常的类型错误）。三者都是单方法 trait；`FromString` /
+`FromInt` 在 `Prelude`，`FromFloat` 在 `Base.Float`（需要 `import Base.Float`）。
+
+```vuna
+data Email : Type where
+  MkEmail : String -> Email
+deriving (FromString)          -- 单构造子单字段、字段类型 String
+
+main : String
+main = case (MkEmail "x@y") of MkEmail s => s
+```
+
+`deriving` 只接受单构造子、单字段、字段类型正好是 `String` / `Int` / `Float` 的包装
+类型（记录降级后同样适用）；多构造子/多字段/字段不匹配都报可解释错误。跨类型语义需手写
+实例。完整语义与 interp/REPL 限制见 [floats.md](floats.md)。
+
 ## do、Monad 与 Functor
 
 - 语法：`do` 块，语句是 `pat <- expr`（pat 只支持变量或 `_`）或裸表达式，最后一条
@@ -185,16 +297,42 @@ describe x y = if x == y then show x else show x ++ "/" ++ show y
     pure (x + y)
   ```
 
-- `Functor`（`fmap`）与 `Monad`（`bind` / `pure`）在 `base/lib/Base/Monad.vuna`；
-  `Maybe` / `List` / `IO` 各有 `Functor` / `Monad` 实例。`Monad m` 的 `m` 是
+- `Functor`（`fmap`）与 `Monad`（`bind`）在 `base/lib/Base/Monad.vuna`；`pure` / `liftA2` / `ap`
+  在 `Base.Applicative`（`Base.Monad` 为兼容重导出它）。`Maybe` / `List` / `Result` / `IO` /
+  `State` / `Reader` / `Error` 各有 `Functor` / `Applicative` / `Monad` 三个实例
+  （`Eff r` 也有，见 [effects.md](effects.md) §8）。`Monad m` 的 `m` 是
   kind `* -> *`：trait 声明的类型参数可以当类型构造器应用（`m a`），实例 head 是
   类型构造器本身（`instance Monad Maybe`），kind 不符（如 `instance Monad Int`）在
-  声明期报错。
+  声明期报错。没有父类：`Monad` 不自动提供 `Applicative`，每个 monad 类型要写全三个实例。
 - **`IO`** 是 `base/lib/Base/IO.vuna` 的抽象类型（构造器私有）；组合统一用
-  `Functor` / `Monad` trait 的 `fmap` / `bind` / `pure`、`>>=` 与 `do`。IO 动作只在 `main`
+  `Functor` / `Applicative` / `Monad` trait 的 `fmap` / `bind` / `pure` / `liftA2`、`>>=` 与 `do`。IO 动作只在 `main`
   执行；`Base.IO.runIO` 是唯一的 main 外入口、需要能力 `unsafe`（工具链与 `Base.ST` 用）。
   参数化效应 monad（`Base.State` / `Base.Reader` / `Base.Error`）与 ST 见
   [effects.md](effects.md)。
+- **库内组合约定**：类型已有实例时，组合统一写 `do` / `>>=` / `>>` / `bind` / `pure` /
+  `fmap` / `liftA2` / `ap` / `foldMap` / `mapM`，不再提供 `pureX` / `bindX` / `andThen` 这类重复入口
+  （`Base.Result.andThen`/`mapResult`、`Base.Maybe.mapJust`、`Base.List.flatMap` 均已删除）。
+  例外：`Base.ST` 因线性 bind 不声明 `Monad` 实例，保留 `bindST` / `bindST1` / `pureST` / `fmapST`；
+  编译器内部 `Vuna.Compiler.Common.andThen` 是固定类型的 `Result` 绑定别名（见 debt D46），
+  不是 base 公开 API。`Eff` 的 `do` 已全面可用；长 do 链的精化指数已由 S1 的单趟字典求解
+  消除（20 步约 100ms）。S2 的期望类型定向与 S3b 的 do 块单 monad 均已落地；`Common.andThen`
+  的删除等一次 seed rotation + 机械替换（[effects.md](effects.md) §8.4）。
+### Applicative / Foldable / Traversable / Monoid / Hashable（M41）
+
+- `Applicative`：`pure : a -> f a`、`liftA2 : (a -> b -> c) -> f a -> f b -> f c`；
+  `ap : Applicative f => f (a -> b) -> f a -> f b` 是派生函数（当前精化器对实例方法签名
+  里 `f (a -> b)` 的实例体误报 `TC_ImpossibleBranchIndex`，故最小方法用 `liftA2`）。
+  `Base.Monad` 重导出 `Base.Applicative`，`import Base.Monad` 仍能看到 `pure`。
+- `Semigroup`（`mappend`）/ `Monoid`（`mempty`）：无父类，泛型代码同时写
+  `Monoid m, Semigroup m =>`；方法名避开 `List.append` / `Map.empty`。
+- `Foldable`（方法 `fold`）+ 顶层 `foldMap : Foldable t, Monoid m, Semigroup m => ...`；
+  方法名不用 `foldr`，以免与自动注入的 `Base.List.foldr` 短名歧义。
+- `Traversable t f`（双参数：容器 + Applicative）方法 `mapM : (a -> f b) -> t a -> f (t b)`；
+  实例形如 `instance Applicative f => Traversable List f`。方法名不用 `traverse`，
+  保留 `Base.Result.traverse`（List + Result 的具体组合子）。
+- `Hashable`：`hash : a -> Int`，泛型 `HashMap` / `HashSet` 的键约束；用户类型可
+  `deriving (Hashable)`（与 Show/Eq/Ord 同一套展开，复合字段用 `hashCombine`）。
+
 - 效果 API 直接返回 IO：`print` / `println` / `readFile` / `writeFile` / `readLine` /
   `readDir` / `isDirectory` / `makeDir` / `removeFile` / `fileExists` / `getArgs` /
   `exit`（例如 `getArgs : IO (List String)`、`print : String -> IO Int`）；内部用

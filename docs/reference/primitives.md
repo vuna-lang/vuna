@@ -198,14 +198,14 @@
 | `prim_pureIO` | `{a : Type} -> a -> IO a` | 构造动作 |
 | `prim_bindIO` | `{a b : Type} -> IO a -> (a -> IO b) -> IO b` | 串行绑定 |
 | `prim_runIO` | `{a : Type} -> IO a -> a` | main 外唯一执行入口；能力 `unsafe` |
-| `prim_effectPerform` | `{a b : Type} -> String -> Int -> a -> b` | 运行时 effect perform（OCaml 5 `Effect.perform`）；能力 `unsafe`，仅 `Base.Eff` 包装使用 |
-| `prim_effectHandle` | `{u a b ret h : Type} -> String -> Int -> ret -> h -> (u -> a) -> (u -> b)` | 安装一次性 handler（`Effect.Deep.match_with`；按 key/name 过滤；退出时执行该 handler extent 内残留的 bracket cleanup）；能力 `unsafe` |
+| `prim_effectPerform` | `{a b : Type} -> String -> String -> a -> b` | 运行时 effect perform（OCaml 5 `Effect.perform`）；能力 `unsafe`，仅 `Base.Eff` 包装使用 |
+| `prim_effectHandle` | `{u a b ret h : Type} -> String -> String -> ret -> h -> (u -> a) -> (u -> b)` | 安装一次性 handler（`Effect.Deep.match_with`；按 key/name 过滤；退出时执行该 handler extent 内残留的 bracket cleanup）；能力 `unsafe` |
 | `prim_cleanupPush` / `prim_cleanupPop` | `(Int -> Int) -> Int` / `Int -> Int` | W7：bracket cleanup 栈登记/弹出（`dtp_cleanup_*`）；能力 `unsafe`，仅 `Base.Eff.bracket` 使用 |
 | `prim_asyncFork` / `prim_asyncAwait` | `{a : Type} -> (Int -> a) -> IO Int` / `{a : Type} -> Int -> a` | L3：OCaml 5 `Domain` fork/await（`Base.EffAsync`）；main 域、一次性 |
 
 `Base.IO` 把 `runIO` / `print` / … 暴露为别名，并提供 `Functor` / `Monad IO` 实例；
 `IO` 类型本身恒可见（不需要 import）。它不导出 `bindIO` / `pureIO` / `fmapIO` 这样的名字：
-动作组合统一走 `Functor` / `Monad` 实例（`fmap` / `bind` / `pure`、`>>=`、`do`）。
+动作组合统一走 `Functor` / `Applicative` / `Monad` 实例（`fmap` / `bind` / `pure` / `liftA2`、`>>=`、`do`）。
 W10 起它还暴露标签化效应 handler 需要的别名：`eprint`、`getEnv` / `getCwd` / `execPath`
 （env）、`nowMicros`（= `timeUs`）与 `sleepMicros`。W10 收尾新增了原生睡眠原语
 `prim_sleep : Int -> IO Int`（微秒；`Unix.sleepf`；能力 `clock`），`Base.EffClock`

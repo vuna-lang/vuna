@@ -104,10 +104,10 @@ cgChunk1 =
 -- ---------------------------------------------------------------
 -- throw：拼 `[CODE] 消息`（CG 无位置）
 -- ---------------------------------------------------------------
-cgMsg : {n : Nat} -> CgErr n -> Vec String n -> String
+cgMsg : {n : Nat} -> CgErr n -> Vec n String -> String
 cgMsg e args = diagMsg (cgCode e) (cgTemplate e) args
 
-cgErr : {n : Nat} -> CgErr n -> Vec String n -> Result a
+cgErr : {n : Nat} -> CgErr n -> Vec n String -> Result a
 cgErr e args = diagErr (cgMsg e args)
 
 -- | 自动补注（M41 新增导出）：cgErr0。
@@ -116,7 +116,7 @@ cgErr0 e = cgErr e []
 
 -- | 自动补注（M41 新增导出）：cgErr1。
 cgErr1 : CgErr (Succ Zero) -> String -> Result a
-cgErr1 e a0 = cgErr e (a0 :: [])
+cgErr1 e a0 = cgErr e [a0]
 
 -- ---------------------------------------------------------------
 -- M29（A14）：定义级 CG 诊断（带来源位置）
@@ -129,5 +129,5 @@ cgErr1 e a0 = cgErr e (a0 :: [])
 cgDefLoc : Maybe Span -> String -> String
 cgDefLoc span name = diagDefLoc span name
 
-cgErrDefAt : Maybe Span -> String -> {n : Nat} -> CgErr n -> Vec String n -> Result a
+cgErrDefAt : Maybe Span -> String -> {n : Nat} -> CgErr n -> Vec n String -> Result a
 cgErrDefAt span name e args = Err (cgDefLoc span name ++ cgMsg e args)

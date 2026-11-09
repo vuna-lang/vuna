@@ -634,10 +634,9 @@ applyStart : ReplState -> ReplStart -> Result (Pair ReplState String)
 applyStart st StartNone = Ok (Pair st "")
 applyStart st (StartDir dir) = Ok (Pair st "包上下文: ${packageNameLabel st}")
 applyStart st (StartFile path) =
-  andThen (doLoadFile st path)
-    (\p => Ok (Pair (secondOf p) "已加载 ${path}（${firstOf p} 个定义）"))
-applyStart st (StartModule m) =
-  andThen (doLoadModule st m) (\s => Ok (Pair s "已导入模块 ${m}"))
+  doLoadFile st path
+    >>= (\p => Ok (Pair (secondOf p) "已加载 ${path}（${firstOf p} 个定义）"))
+applyStart st (StartModule m) = doLoadModule st m >>= (\s => Ok (Pair s "已导入模块 ${m}"))
 
 replLoop : Int -> ReplState -> Int
 replLoop fuel st = if fuel <= 0 then 0
@@ -1515,7 +1514,7 @@ loadDirStep st dir = case doLoadDir st dir of
   Ok st2 => printOk st2 "已切换包 ${packageNameLabel st2}（缓冲与索引已重置）"
 
 doLoadDir : ReplState -> String -> Result ReplState
-doLoadDir st dir = andThen (contextForDir dir) (\ctx2 => Ok (switchedContext st ctx2))
+doLoadDir st dir = contextForDir dir >>= (\ctx2 => Ok (switchedContext st ctx2))
 
 reloadStep : ReplState -> String -> ReplOutcome
 reloadStep st arg = if trim arg /= "" then commandUsage st ":reload"

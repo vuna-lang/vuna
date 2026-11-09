@@ -43,7 +43,6 @@ module Vuna.Compiler.Elab.Driver
 -- 拆自 M24 的单一 `Elab.vuna`（按真实调用图切；门面仍是 `Vuna.Compiler.Elab`）。
 import Vuna.Compiler.Common
 import Base.HashMap
-import Base.IntMap
 import Vuna.Compiler.Debug
 import Vuna.Compiler.Core
 import Vuna.Compiler.Diagnostics
@@ -68,11 +67,11 @@ unsolvedMeta ec = unsolvedFromRelevant 0 (ecNext ec) (ecSolTbl ec) (relevantMeta
 -- 量化（f : t1 -> List (Pair t1 t2) -> ...），调用点传 Nil 这类多态值时不约束 t2，
 -- 于是留一个只出现在擦除位置的元变量——它对运行时没有意义（codegen 不生成该实参），
 -- 不应算错误。洞（有 goal 的元变量）永远算未解。
-unsolvedFromRelevant : Int -> Int -> IntMap Value -> List Int -> List DtGoal -> Maybe Int
+unsolvedFromRelevant : Int -> Int -> HashMap Int Value -> List Int -> List DtGoal -> Maybe Int
 unsolvedFromRelevant i stop sols relevant goals =
   unsolvedFromRelevantGo (stop - i) stop sols relevant goals
 
-unsolvedFromRelevantGo : Int -> Int -> IntMap Value -> List Int -> List DtGoal -> Maybe Int
+unsolvedFromRelevantGo : Int -> Int -> HashMap Int Value -> List Int -> List DtGoal -> Maybe Int
 unsolvedFromRelevantGo remaining stop sols relevant goals = if remaining <= 0 then Nothing
 else
   let
@@ -159,7 +158,7 @@ sigDictName k = "_ctx${k}"
 -- ---------------------------------------------------------------
 -- M32：显式签名约束下的字典目标消解
 -- ---------------------------------------------------------------
--- body 精化时，调用点的字典实参在类参数还没解出时被延迟成 `DtDictGoal`（裸 meta）；
+-- body 精化时，调用点的字典实参在类参数还没解出时被延迟成 `Constraint`（裸 meta）；
 -- 若签名声明了 `C a`，这些目标应解到声明的 `_ctx<k>` binder，而不是再被
 -- `liftFreeDictGoals` 提升成新的隐式参数。目标域与 binder 类型 conv 相等即命中。
 record DeclDictBinder where
@@ -183,13 +182,13 @@ declaredDictBindersGo ec ctx _ acc = reverse acc
 -- M34 冷路径：绝大多数定义体精化后没有任何延迟字典目标（编译器全包 3031 个定义中
 -- 只有 9 个非空），先查目标表可以省掉 `declaredDictBinders` 整条隐式 Pi 前缀的求值。
 solveDeclaredDictGoals : Ec -> Term -> Term -> Pair Term Ec
-solveDeclaredDictGoals ec ty body = case ecDictGoals ec of
+solveDeclaredDictGoals ec ty body = case ecPending ec of
   [] => Pair body ec
   _ => case declaredDictBinders ec ty of
     [] => Pair body ec
     binders =>
       let
-        solved = solveDeclaredDictGoalsGo ec binders (ecDictGoals ec) [] []
+        solved = solveDeclaredDictGoalsGo ec binders (ecPending ec) [] []
       in Pair (applyDeclaredDictSubsts (firstOf solved) body) (secondOf solved)
 
 record DictSubst where
@@ -197,10 +196,10 @@ record DictSubst where
   dictSubstName : String
   dictSubstQ : Int
 
-solveDeclaredDictGoalsGo : Ec -> List DeclDictBinder -> List DtDictGoal -> List DtDictGoal -> List DictSubst -> Pair (List DictSubst) Ec
+solveDeclaredDictGoalsGo : Ec -> List DeclDictBinder -> List Constraint -> List Constraint -> List DictSubst -> Pair (List DictSubst) Ec
 solveDeclaredDictGoalsGo ec binders goals kept acc = case goals of
-  [] => Pair (reverse acc) (ecPutDictGoals ec (reverse kept))
-  (g@(DtDictGoal m dom)) :: rest => case metaLookup m (ecSolTbl ec) of
+  [] => Pair (reverse acc) (ecPutPending ec (reverse kept))
+  (g@(Constraint cid kind m dom cspan cdepth)) :: rest => case metaLookup m (ecSolTbl ec) of
     Just _ => solveDeclaredDictGoalsGo ec binders rest (g :: kept) acc
     Nothing => case firstMatchDictBinder ec binders dom of
       Nothing => solveDeclaredDictGoalsGo ec binders rest (g :: kept) acc
@@ -232,10 +231,10 @@ applyDeclaredDictSubsts (s :: rest) body =
 
 -- 子句表（名字 → 该函数的全部 clause，源顺序）。旧实现每个定义都扫一遍剩余声明
 -- （clausesFor）⇒ O(n²)；这里在 bodies 开始时建一次表，查表 O(1)。
-clausesTblOf : List Decl -> HashMap (List (Pair (List Pat) Expr))
+clausesTblOf : List Decl -> HashMap String (List (Pair (List Pat) Expr))
 clausesTblOf decls = clausesTblGo decls (Base.HashMap.fromList [])
 
-clausesTblGo : List Decl -> HashMap (List (Pair (List Pat) Expr)) -> HashMap (List (Pair (List Pat) Expr))
+clausesTblGo : List Decl -> HashMap String (List (Pair (List Pat) Expr)) -> HashMap String (List (Pair (List Pat) Expr))
 clausesTblGo [] t = t
 clausesTblGo (d :: rest) t = case d of
   DFun n pats body sp =>
@@ -327,7 +326,7 @@ checkAllDefined sigs globals decls =
   checkAllDefinedGo sigs (Base.HashMap.ofNames (map firstOf globals)) (funNamesTbl decls)
     (axiomSpansTbl decls)
 
-checkAllDefinedGo : List (Pair String (Pair (List Expr) (Pair Expr Span))) -> HashMap Bool -> HashMap Bool -> HashMap Span -> Result (List String)
+checkAllDefinedGo : List (Pair String (Pair (List Expr) (Pair Expr Span))) -> HashMap String Bool -> HashMap String Bool -> HashMap String Span -> Result (List String)
 checkAllDefinedGo [] globalsTbl funTbl axiomTbl = Ok []
 checkAllDefinedGo ((Pair name (Pair ctx (Pair tyExpr sigSpan))) :: rest) globalsTbl funTbl axiomTbl = case Base.HashMap.lookup name axiomTbl of
   Just sp =>
@@ -335,16 +334,16 @@ checkAllDefinedGo ((Pair name (Pair ctx (Pair tyExpr sigSpan))) :: rest) globals
     else checkAllDefinedGo rest globalsTbl funTbl axiomTbl
   Nothing =>
     if Base.HashMap.member name funTbl then if Base.HashMap.member name globalsTbl then checkAllDefinedGo rest globalsTbl funTbl axiomTbl
-    else Err (tcMsg (SignatureNoDef name) (name :: []))
-    else Err (tcMsg (SignatureNoDef name) (name :: []))
+    else Err (tcMsg (SignatureNoDef name) [name])
+    else Err (tcMsg (SignatureNoDef name) [name])
 
 -- DFun 名字集合（`declFunNames` 已在前面定义；表语义 = 集合）。
-funNamesTbl : List Decl -> HashMap Bool
+funNamesTbl : List Decl -> HashMap String Bool
 funNamesTbl decls = Base.HashMap.ofNames (declFunNames decls)
 
 -- `axiom` / `extern` 声明的名字 → span（保留**首个**声明的 span，与线性首匹配一致：
 -- `HashMap.fromList` 同键时先出现的元素覆盖后出现的）。
-axiomSpansTbl : List Decl -> HashMap Span
+axiomSpansTbl : List Decl -> HashMap String Span
 axiomSpansTbl decls = Base.HashMap.fromList (axiomSpanPairs decls)
 
 axiomSpanPairs : List Decl -> List (Pair String Span)
@@ -496,7 +495,7 @@ renderReplList fuel ctors (h :: rest) = if fuel <= 0 then "[]"
 else case rest of
   [t] => case renderReplListTail (fuel - 1) ctors t of
     Just tailText => "[" ++ renderReplArg (fuel - 1) ctors h ++ tailText
-    Nothing => renderReplGeneric (fuel - 1) ctors "Cons" (h :: t :: [])
+    Nothing => renderReplGeneric (fuel - 1) ctors "Cons" [h, t]
   _ => renderReplGeneric (fuel - 1) ctors "Cons" (h :: rest)
 
 renderReplListTail : Int -> List DtCtor -> Term -> Maybe String
@@ -543,6 +542,7 @@ renderReplArg fuel ctors t =
 isReplAtom : List DtCtor -> Term -> Bool
 isReplAtom ctors (TInt n) = True
 isReplAtom ctors (TStr s) = True
+isReplAtom ctors (TFloat raw) = True
 isReplAtom ctors (TBool b) = True
 isReplAtom ctors (TVar name i) = True
 isReplAtom ctors (TGlobal g) = True
@@ -589,18 +589,81 @@ replNothingName = "Base.Maybe.Maybe.Nothing"
 dtEvalExprIn : DtProgram -> Expr -> Result String
 dtEvalExprIn prog expr = andThen (dtEvalExprInInfo prog expr) (\p => Ok (firstOf p))
 
--- M30 · REPL：同时返回值文本与 zonk 后的类型文本（类型决定是否走效果执行）。
+-- REPL/表达式求值的浮点 guard：AST 里出现浮点字面量或浮点内建引用就直接拒绝
+-- （核心求值器不能算浮点）。只查表达式本身，不扫全程序——`import Base` 的程序仍可
+-- 正常求值（见 docs/reference/floats.md）。
+exprHasFloat : Expr -> Bool
+exprHasFloat (EFloat raw sp) = True
+exprHasFloat (EVar n sp) = memName n floatIntrinsicNames
+exprHasFloat (EInt n sp) = False
+exprHasFloat (EStr s sp) = False
+exprHasFloat (ELam ps b sp) = exprHasFloat b
+exprHasFloat (EApp f args sp) = exprHasFloat f || anyExprHasFloat args
+exprHasFloat (EPi n i q d c sp) = exprHasFloat d || exprHasFloat c
+exprHasFloat (ELet binds body rec_ sp) = anyBindHasFloat binds || exprHasFloat body
+exprHasFloat (ELocalFun clauses sp) = anyClauseHasFloat clauses
+exprHasFloat (ECase scrut alts sp) = exprHasFloat scrut || anyBindHasFloat alts
+exprHasFloat (EIf c t el sp) = exprHasFloat c || exprHasFloat t || exprHasFloat el
+exprHasFloat (EField base f sp) = exprHasFloat base
+exprHasFloat (ERecord rn fields sp) = anyNamedHasFloat fields
+exprHasFloat (ERecUpdate base fields sp) = exprHasFloat base || anyNamedHasFloat fields
+exprHasFloat (EDo stmts sp) = anyDoHasFloat stmts
+exprHasFloat (EParen inner sp) = exprHasFloat inner
+exprHasFloat (EInfix op l r sp) = exprHasFloat l || exprHasFloat r
+exprHasFloat (EBacktick op l r sp) = exprHasFloat l || exprHasFloat r
+exprHasFloat (ESectOp op sp) = False
+exprHasFloat (ESectL op rhs sp) = exprHasFloat rhs
+exprHasFloat (ESectR lhs op sp) = exprHasFloat lhs
+exprHasFloat (EAnn v ty sp) = exprHasFloat v || exprHasFloat ty
+exprHasFloat (EInterp multi parts sp) = anyInterpHasFloat parts
+
+anyExprHasFloat : List Expr -> Bool
+anyExprHasFloat [] = False
+anyExprHasFloat (x :: rest) = exprHasFloat x || anyExprHasFloat rest
+
+anyBindHasFloat : List (Pair Pat Expr) -> Bool
+anyBindHasFloat [] = False
+anyBindHasFloat ((Pair p v) :: rest) = exprHasFloat v || anyBindHasFloat rest
+
+anyNamedHasFloat : List (Pair String Expr) -> Bool
+anyNamedHasFloat [] = False
+anyNamedHasFloat ((Pair n v) :: rest) = exprHasFloat v || anyNamedHasFloat rest
+
+anyClauseHasFloat : List (Pair (List Pat) Expr) -> Bool
+anyClauseHasFloat [] = False
+anyClauseHasFloat ((Pair ps body) :: rest) = exprHasFloat body || anyClauseHasFloat rest
+
+anyDoHasFloat : List DoStmt -> Bool
+anyDoHasFloat [] = False
+anyDoHasFloat ((DBind p v sp) :: rest) = exprHasFloat v || anyDoHasFloat rest
+anyDoHasFloat ((DExpr v sp) :: rest) = exprHasFloat v || anyDoHasFloat rest
+
+anyInterpHasFloat : List InterpPart -> Bool
+anyInterpHasFloat [] = False
+anyInterpHasFloat (part :: rest) = case part of
+  IPText t => anyInterpHasFloat rest
+  IPHole e => exprHasFloat e || anyInterpHasFloat rest
+
+-- REPL/表达式求值的浮点 guard：拒绝后不再进入核心求值器（核心求值器不能算浮点）。
 dtEvalExprInInfo : DtProgram -> Expr -> Result (Pair String String)
-dtEvalExprInInfo prog expr = case prog of
+dtEvalExprInInfo prog expr =
+  if exprHasFloat expr then Err
+    "vuna interp: Float is not supported by the interpreter (use vuna compile / vuna run; see docs/reference/floats.md)"
+  else dtEvalExprInInfoCore prog expr
+
+-- M30 · REPL：同时返回值文本与 zonk 后的类型文本（类型决定是否走效果执行）。
+dtEvalExprInInfoCore : DtProgram -> Expr -> Result (Pair String String)
+dtEvalExprInInfoCore prog expr = case prog of
   DtProgram datas defs goals sols globals insts classes next defvals depths =>
     let
       -- M28：axiom 无体，不进 delta 展开 / 求值环境（只剩 globals 里的类型）。
       bodies = defBodyPairs defs
       -- M30（D18）：表达式求值与程序同一套环（构造子索引 + 定义值共享缓存）。
       ec0 =
-        Ec next sols (reverse bodies) datas [] [] insts classes [] (Base.HashMap.fromList bodies)
-          (globalsTableOf globals) (solsToTbl sols) (Base.IntMap.fromList []) True
-          (Base.HashMap.fromList []) (ctorTblOfDatas datas) defvals (datasHaveLinear datas)
+        Ec next sols (reverse bodies) datas [] [] (instStoreOf insts) classes csEmpty
+          (Base.HashMap.fromList bodies) (globalsTableOf globals) (solsToTbl sols)
+          (Base.HashMap.fromList []) True (Base.HashMap.fromList []) (ctorTblOfDatas datas) defvals
+          (datasHaveLinear datas)
     in andThen (inferE globals emptyCtx ec0 expr) (\p => case p of
       Pair term (Pair ty ec1) =>
         let
@@ -613,7 +676,9 @@ dtEvalExprInInfo prog expr = case prog of
             showTypeSig
               (zonkTerm ec2 0 (quote 0 (force (Base.HashMap.fromList bodies) (ecSolsP ec2) defaultFuel ty)))
         in case firstUnsolvedInterpGoal ec2 of
-          Just td => tcErr1NoLoc (InterpNoInstance td) td
+          Just td => case firstUnsolvedGoalSpan ec2 of
+            Just sp => tcErr1 sp (InterpNoInstance td) td
+            Nothing => tcErr1NoLoc (InterpNoInstance td) td
           Nothing => case unsolvedFrom next (ecNext ec2) (ecSolTbl ec2) of
             Just m => tcErr1 (exprSpan expr) (UnsolvedMetavarInfer (strFromInt m)) (strFromInt m)
             Nothing => case normalize (Base.HashMap.fromList bodies) (ecSolsP ec2) defaultFuel (eval [] term) of
@@ -703,7 +768,13 @@ in andThen (elabDatas (collectDataDecls decls []) startGlobals startEc) (\pd => 
                       defs = rezonkDefs ec3 defs0
                       _ =
                         stamp
-                          "bodies-done g=${length globals} sols=${length (ecSols ec3a)} defs=${length (ecDefs ec3a)} metas=${ecNext ec3a} dgoals=${length (ecDictGoals ec3a)} datas=${length (ecDatas ec3a)} insts=${length (ecInsts ec3a)} classes=${length (ecClasses ec3a)}"
+                          "bodies-done g=${length globals} sols=${length (ecSols ec3a)} defs=${length (ecDefs ec3a)} metas=${ecNext ec3a} dgoals=${length (ecPending ec3a)} datas=${length (ecDatas ec3a)} insts=${length (ecInsts ec3a)} classes=${length (ecClasses ec3a)}"
+                      -- S5a：实例表索引自检（派生索引 == 权威表）。只在 --debug-perf 下跑：
+                      -- `ecInstsAudit` 会扫全实例表，生产路径不付这个成本。
+                      _ =
+                        if debugOn then if ecInstsAudit ec3a then note "inst-index=ok"
+                        else note "inst-index=MISMATCH"
+                        else 0
                     in andThen (elabInstanceBodies decls classesAll datas1 globals ec3) (\pi => case pi of
                       Pair instDefs0 ec4a =>
                         let
@@ -731,14 +802,20 @@ finishCore termAux decls core =
     globals = core.coreGlobals
     projSpans = core.coreProjSpans
   in case firstUnsolvedMemberGoal ec4 of
-    Just md => tcErr1NoLoc (NoInstanceFound md) md
+    Just md => case firstUnsolvedGoalSpan ec4 of
+      Just sp => tcErr1 sp (NoInstanceFound md) md
+      Nothing => tcErr1NoLoc (NoInstanceFound md) md
     Nothing => case firstUnsolvedInterpGoal ec4 of
-      Just td => tcErr1NoLoc (InterpNoInstance td) td
+      Just td => case firstUnsolvedGoalSpan ec4 of
+        Just sp => tcErr1 sp (InterpNoInstance td) td
+        Nothing => tcErr1NoLoc (InterpNoInstance td) td
       Nothing => case unsolvedMeta ec4 of
         -- C42：延迟字典目标里「类参数已解出但实例搜索失败」的，优先报缺实例——
         -- 否则用户只看到 unsolved metavariable，不知道缺的是哪个实例。
         Just m => case firstUnsolvedDictGoal ec4 of
-          Just sd => tcErr1NoLoc (NoInstanceFound sd) sd
+          Just sd => case firstUnsolvedGoalSpan ec4 of
+            Just sp => tcErr1 sp (NoInstanceFound sd) sd
+            Nothing => tcErr1NoLoc (NoInstanceFound sd) sd
           Nothing => Err (unsolvedMessage ec4 m)
         Nothing =>
           let
@@ -757,7 +834,7 @@ finishCore termAux decls core =
           in andThen (checkProgramUsage ec4 allDefs) (\_ => andThen (checkTerminationDeclsWith (declFunNames decls) (append termAux decls)) (\_ => let
             _ = stamp "termination-done"
           in Ok
-            (DtProgram datas1 allDefs (ecGoals ec4) (ecSols ec4) globalsOut (ecInsts ec4) (ecClasses ec4) (ecNext ec4) (ecDefVals ec4) (Base.IntMap.toList (ecDepthTbl ec4)))
+            (DtProgram datas1 allDefs (ecGoals ec4) (ecSols ec4) globalsOut (ecInsts ec4) (ecClasses ec4) (ecNext ec4) (ecDefVals ec4) (Base.HashMap.toList (ecDepthTbl ec4)))
           )
           )
 
@@ -778,7 +855,7 @@ rezonkDefs ec defs = map (\d => case dtDefBody d of
 -- 程序级字典目标收敛：反复回填直到字典目标不再减少（最多 n 轮，防振荡）。
 -- M34 冷路径：没有目标时不需要跑（全包在 bodies 收尾处通常只剩个位数目标）。
 resolveDictGoalsFix : List (Pair String Term) -> Ec -> Int -> Ec
-resolveDictGoalsFix globals ec n = case ecDictGoals ec of
+resolveDictGoalsFix globals ec n = case ecPending ec of
   [] => ec
   _ => resolveDictGoalsFixGo globals ec n
 
@@ -787,7 +864,7 @@ resolveDictGoalsFixGo globals ec n =
   let
     ec2 = resolveDictGoals globals ec
   in if n <= 0 then ec2
-  else if length (ecDictGoals ec2) < length (ecDictGoals ec) then resolveDictGoalsFixGo globals ec2 (n - 1)
+  else if length (ecPending ec2) < length (ecPending ec) then resolveDictGoalsFixGo globals ec2 (n - 1)
   else ec2
 
 -- M15：未解元变量若来自洞，报洞的目标（而不是光秃秃的编号）。
@@ -799,12 +876,12 @@ unsolvedMessage ec m = case findGoal m (ecGoals ec) of
       -- M40：命名洞在诊断里带上名字（`unsolved hole ?h (/x.vuna:4:7) with goal Int`）。
       spot = if g.dtGoalName == "" then loc else "${g.dtGoalName} (${loc})"
       detail = "${spot} with goal ${showValueAt (ctxDepthOf g) g.dtGoalType}"
-    in tcMsg (UnsolvedHole detail) (detail :: [])
+    in tcMsg (UnsolvedHole detail) [detail]
   Nothing =>
     let
       num = strFromInt m
       hint = metaOwnerHint ec m
-    in tcMsg (UnsolvedMetavar num hint) (num :: hint :: [])
+    in tcMsg (UnsolvedMetavar num hint) [num, hint]
 
 -- 未解元变量的归属提示：扫已精化的定义体与类型，指出它出现在哪个定义里（否则只有 ?m，
 -- 在一个上万行的程序里无从定位）。
@@ -830,6 +907,7 @@ termHasMeta m (TCon c args) = anyArgHasMeta m args
 termHasMeta m (TCase scrut alts) = termHasMeta m scrut || anyAltHasMeta m alts
 termHasMeta m (TInt n) = False
 termHasMeta m (TStr s) = False
+termHasMeta m (TFloat raw) = False
 termHasMeta m (TBool b) = False
 termHasMeta m (TIf c th el) = termHasMeta m c || termHasMeta m th || termHasMeta m el
 
@@ -855,6 +933,7 @@ termHasAnyMeta (TCon c args) = anyArgHasAnyMeta args
 termHasAnyMeta (TCase scrut alts) = termHasAnyMeta scrut || anyAltHasAnyMeta alts
 termHasAnyMeta (TInt n) = False
 termHasAnyMeta (TStr s) = False
+termHasAnyMeta (TFloat raw) = False
 termHasAnyMeta (TBool b) = False
 termHasAnyMeta (TIf c th el) = termHasAnyMeta c || termHasAnyMeta th || termHasAnyMeta el
 

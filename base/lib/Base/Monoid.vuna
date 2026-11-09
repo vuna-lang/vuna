@@ -1,0 +1,19 @@
+module Base.Monoid (Monoid(..), Semigroup(..)) where
+
+-- Base.Monoid：`Semigroup`（`mappend`）与 `Monoid`（`mempty`）。
+--
+-- 刻意拆成两个**无父子关系**的 trait：当前 trait 机制没有父类/默认方法，把两者
+-- 合在一个 trait 里会需要 `mappend` 默认实现，无法表达。泛型代码同时约束
+-- `Monoid m, Semigroup m =>`；等 F4 的父类落地后可合并。
+--
+-- 方法名用 `mappend` / `mempty`（与 `Base.List.append`、`Base.Map.empty` 错开，
+-- 避免 Prelude 自动注入后的短名歧义）。
+-- | 结合二元运算 trait：`mappend` 可结合（List 拼接、String 拼接、Nat 加法等）。
+trait Semigroup a where
+  -- | 结合二元运算（`List` 拼接、`String` 拼接、`Nat` 加法等）。
+  mappend : a -> a -> a
+
+-- | 单位元 trait：`mempty` 与 `Semigroup.mappend` 配合（无父类，泛型代码同时约束两者）。
+trait Monoid a where
+  -- | 单位元。
+  mempty : a

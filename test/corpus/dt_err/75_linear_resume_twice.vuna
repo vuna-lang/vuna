@@ -2,12 +2,12 @@
 import Base.Eff
 import Base.Eff.Reader
 
-prog : Eff (Cons (Reader Cnt1 Int) Nil) Int
-prog = ask Cnt1 Int
+prog : Eff [Reader "counter" Int] Int
+prog = ask "counter" Int
 
 opH : (o : ReaderOp Int) -> (1 k : Cont (Base.Eff.Reader.resReader Int o) Int) -> Int
 opH op k = case op of
   Ask => resumeCont k 1 + resumeCont k 2
 
 main : Int
-main = runPure (handleReaderLin Cnt1 Int (\a => a) opH prog)
+main = runPure (handleReaderLin "counter" Int (\a => a) opH prog)

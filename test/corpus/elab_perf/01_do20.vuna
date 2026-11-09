@@ -1,0 +1,26 @@
+-- D48：纯 `Eff Nil` 的 20 步 do 链（每步 `pure (x_i + 1)`），精化应保持线性。
+import Base.Eff
+
+prog : Eff [] Int
+prog = do
+  x1 <- pure 1
+  x2 <- pure (x1 + 1)
+  x3 <- pure (x2 + 1)
+  x4 <- pure (x3 + 1)
+  x5 <- pure (x4 + 1)
+  x6 <- pure (x5 + 1)
+  x7 <- pure (x6 + 1)
+  x8 <- pure (x7 + 1)
+  x9 <- pure (x8 + 1)
+  x10 <- pure (x9 + 1)
+  x11 <- pure (x10 + 1)
+  x12 <- pure (x11 + 1)
+  x13 <- pure (x12 + 1)
+  x14 <- pure (x13 + 1)
+  x15 <- pure (x14 + 1)
+  x16 <- pure (x15 + 1)
+  x17 <- pure (x16 + 1)
+  x18 <- pure (x17 + 1)
+  x19 <- pure (x18 + 1)
+  x20 <- pure (x19 + 1)
+  pure x20

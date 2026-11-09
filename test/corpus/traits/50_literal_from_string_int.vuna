@@ -1,0 +1,27 @@
+-- 字面量转换 trait（FromString / FromInt）：checking 位置按期望类型降级成 trait 方法。
+data Email : Type where
+  MkEmail : String -> Email
+
+data Age : Type where
+  MkAge : Int -> Age
+
+instance FromString Email where
+  fromString s = MkEmail s
+
+instance FromInt Age where
+  fromInt n = MkAge n
+
+describeEmail : Email -> String
+describeEmail e = case e of
+  MkEmail s => s
+
+describeAge : Age -> String
+describeAge a = case a of
+  MkAge n => strFromInt n
+
+main : String
+main = describeEmail "x@y"
+  ++ "/" ++ describeAge 42
+  ++ "/" ++ describeEmail "a@b"
+  ++ "/" ++ describeEmail "c@d"
+  ++ "/" ++ describeEmail "e@f"

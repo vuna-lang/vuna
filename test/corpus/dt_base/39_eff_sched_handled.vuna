@@ -8,11 +8,14 @@ opH : (o : ReaderOp Int) -> (Base.Eff.Reader.resReader Int o -> Int) -> Int
 opH op k = case op of
   Ask => k 7
 
-handled : Eff (Reader Cnt1 Int :: []) Int -> Eff [] Int
-handled comp = handleReader Cnt1 Int (\a => a) opH comp
+handled : Eff [Reader "task" Int] Int -> Eff [] Int
+handled comp = handleReader "task" Int (\a => a) opH comp
 
 prog : Eff [] (Result Int)
-prog = withScope (\sc => bindEff (forkTaskWith sc handled (ask Cnt1 Int)) (\t => awaitTask t))
+prog = withScope (\sc => do
+  t <- forkTaskWith sc handled (ask "task" Int)
+  awaitTask t
+)
 
 main : IO Int
 main = do

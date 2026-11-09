@@ -555,14 +555,31 @@ splitReplExpr decls = case reverse decls of
     else Err "DT: internal: REPL expression definition is not last"
   _ => Err "DT: internal: REPL expression was not parsed as a definition"
 
+-- 程序（main 可达定义）是否真的用到浮点：不能只看“程序里有没有 Base.Float 定义”，
+-- 否则 `import Base` 的正常程序会被误拒；用可达性扫描（见 docs/reference/floats.md）。
+programUsesFloat : DtProgram -> Bool
+programUsesFloat program = case findMainDef (dtProgDefs program) of
+  Nothing => False
+  Just d => termUsesFloat [floatTypeName] (dtDefType d) || (case dtDefBody d of
+    Nothing => False
+    Just body => termReachesFloat (defTableOf (dtProgDefs program)) floatIntrinsicNames body
+  )
+
+-- interp 的浮点 guard：核心求值器不能算浮点，先拒绝再求值。
+evalDtMain : DtProgram -> Result String
+evalDtMain program =
+  if programUsesFloat program then Err
+    "vuna interp: Float is not supported by the interpreter (use vuna compile / vuna run; see docs/reference/floats.md)"
+  else evalDtMainCore program
+
 -- 核心求值器对 `main` 的求值边界（M23 终态契约）：
 --   - 纯 `main : Int/String/Bool`：核心求值并展示值；
 --   - `main : IO a`：**一律报错**。核心求值器是纯的、不执行效果；即使动作结果不依赖
 --     效果（`do prim_print "hi"; pure 7`），效果也会被静默丢弃——误导用户。所以不做
 --     「尝试归约、卡住才报错」这种不可靠的判定。效果程序只走 compile + 运行
 --     （夹具用 `.nointerp` 标记）。IO 的识别按 main 的**类型**（M37 起是内建类型名 `IO`）。
-evalDtMain : DtProgram -> Result String
-evalDtMain program = case findMainDef (dtProgDefs program) of
+evalDtMainCore : DtProgram -> Result String
+evalDtMainCore program = case findMainDef (dtProgDefs program) of
   Nothing => cgErr0 NoMain
   Just mainDef =>
     let

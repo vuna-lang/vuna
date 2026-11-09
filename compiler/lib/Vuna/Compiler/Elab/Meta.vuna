@@ -31,7 +31,6 @@ module Vuna.Compiler.Elab.Meta
   , findCatchAllBody
   , findClassByShortName
   , findCtorIn
-  , flattenTaggedApp
   , foldAppTerms
   , freshVarValue
   , globalLookup
@@ -108,7 +107,6 @@ module Vuna.Compiler.Elab.Meta
 -- 拆自 M24 的单一 `Elab.vuna`（按真实调用图切；门面仍是 `Vuna.Compiler.Elab`）。
 import Vuna.Compiler.Common
 import Base.HashMap
-import Base.IntMap
 import Vuna.Compiler.Debug
 import Vuna.Compiler.Core
 import Vuna.Compiler.Diagnostics
@@ -199,10 +197,10 @@ convEc ec depth expected actual = case conv (ecDefTbl ec) (ecSolsP ec) depth exp
   Ok sols2 => Ok (ecPutSols ec (solsList sols2))
 
 -- 未解元变量：返回第一个未解的编号。
-unsolvedFrom : Int -> Int -> IntMap Value -> Maybe Int
+unsolvedFrom : Int -> Int -> HashMap Int Value -> Maybe Int
 unsolvedFrom i stop sols = unsolvedFromGo (stop - i) stop sols
 
-unsolvedFromGo : Int -> Int -> IntMap Value -> Maybe Int
+unsolvedFromGo : Int -> Int -> HashMap Int Value -> Maybe Int
 unsolvedFromGo remaining stop sols = if remaining <= 0 then Nothing
 else
   let
@@ -236,6 +234,7 @@ termMetasRuntime (TCase scrut alts) =
   append (termMetasRuntime scrut) (concatMap (\alt => termMetasRuntime (caseAltBody alt)) alts)
 termMetasRuntime (TInt n) = []
 termMetasRuntime (TStr s) = []
+termMetasRuntime (TFloat raw) = []
 termMetasRuntime (TBool b) = []
 termMetasRuntime (TIf c th el) =
   append (termMetasRuntime c) (append (termMetasRuntime th) (termMetasRuntime el))
@@ -254,6 +253,7 @@ termMetasAll (TCase scrut alts) =
   append (termMetasAll scrut) (concatMap (\alt => termMetasAll (caseAltBody alt)) alts)
 termMetasAll (TInt n) = []
 termMetasAll (TStr s) = []
+termMetasAll (TFloat raw) = []
 termMetasAll (TBool b) = []
 termMetasAll (TIf c th el) = append (termMetasAll c) (append (termMetasAll th) (termMetasAll el))
 
@@ -278,7 +278,7 @@ globalsLookup name globals ec = case Base.HashMap.lookup name (ecGlobalsTbl ec) 
 -- 值签名后追加」，因此值位置取到值签名（B18）；类型位置由 `typeHeadLookup` 走
 -- `dtDataKind`，不依赖这张表。注意 `Base.HashMap.fromList` 是**先出现获胜**，用它建
 -- 这张表会让同名值定义被族 kind 盖掉（旧实现即如此）。
-globalsTableOf : List (Pair String Term) -> HashMap Term
+globalsTableOf : List (Pair String Term) -> HashMap String Term
 globalsTableOf globals = Base.HashMap.insertAll globals (Base.HashMap.fromList [])
 
 -- ---------------------------------------------------------------
@@ -304,7 +304,7 @@ collectSigs decls =
 -- M28 / C29：banned 集按**签名所属模块**作用域；M30（D18）把这张集合改成共享缓存：
 -- `banned` 的键是「模块前缀 \t 名字」（`Sig.qualifiedBannedTbl`），`preludeBanned` 是
 -- 全局 prelude 名单，两者都只建一次。
-collectSigsInto : HashMap Bool -> HashMap Bool -> HashMap Bool -> List (Pair String (Pair (List Expr) (Pair Expr Span))) -> List Decl -> Result (List (Pair String (Pair (List Expr) (Pair Expr Span))))
+collectSigsInto : HashMap String Bool -> HashMap String Bool -> HashMap String Bool -> List (Pair String (Pair (List Expr) (Pair Expr Span))) -> List Decl -> Result (List (Pair String (Pair (List Expr) (Pair Expr Span))))
 collectSigsInto banned preludeBanned seen acc [] = Ok (reverse acc)
 collectSigsInto banned preludeBanned seen acc (d :: rest) = case d of
   DSig name ctx ty sp => collectSigOne banned preludeBanned seen acc name ctx ty sp rest
@@ -312,13 +312,14 @@ collectSigsInto banned preludeBanned seen acc (d :: rest) = case d of
   DAxiom name ty sp => collectSigOne banned preludeBanned seen acc name [] ty sp rest
   DExtern name cName ty sp => collectSigOne banned preludeBanned seen acc name [] ty sp rest
   DFun name pats body sp => collectSigsInto banned preludeBanned seen acc rest
-  DData name params kind ctors derivings lin sp =>
+  DData name params kind ctors derivings viaField lin sp =>
     collectSigsInto banned preludeBanned seen acc rest
-  DRecord name params fields derivings lin sp => errAt sp "DT: internal: record was not desugared"
+  DRecord name params fields derivings viaField lin sp =>
+    errAt sp "DT: internal: record was not desugared"
   DTrait name params methods sp => collectSigsInto banned preludeBanned seen acc rest
   DInstance ctxE head methods sp => collectSigsInto banned preludeBanned seen acc rest
 
-collectSigOne : HashMap Bool -> HashMap Bool -> HashMap Bool -> List (Pair String (Pair (List Expr) (Pair Expr Span))) -> String -> List Expr -> Expr -> Span -> List Decl -> Result (List (Pair String (Pair (List Expr) (Pair Expr Span))))
+collectSigOne : HashMap String Bool -> HashMap String Bool -> HashMap String Bool -> List (Pair String (Pair (List Expr) (Pair Expr Span))) -> String -> List Expr -> Expr -> Span -> List Decl -> Result (List (Pair String (Pair (List Expr) (Pair Expr Span))))
 collectSigOne banned preludeBanned seen acc name ctx ty sp rest =
   if memName name preludeNames then tcErr1 sp (CannotRedefineBuiltin name) name
   else if Base.HashMap.member name seen then tcErr1 sp (DuplicateSignature name) name
@@ -331,14 +332,15 @@ collectSigOne banned preludeBanned seen acc name ctx ty sp rest =
 collectDataDecls : List Decl -> List (Pair Decl Span) -> List (Pair Decl Span)
 collectDataDecls [] acc = reverse acc
 collectDataDecls (d :: rest) acc = case d of
-  DData dname params kind ctors derivings lin sp => collectDataDecls rest (Pair d sp :: acc)
+  DData dname params kind ctors derivings viaField lin sp =>
+    collectDataDecls rest (Pair d sp :: acc)
   _ => collectDataDecls rest acc
 
 -- 绑到实际族上。
 dataNamesOf : List Decl -> List String
 dataNamesOf [] = []
 dataNamesOf (d :: rest) = case d of
-  DData dname params kind ctors derivings lin sp => dname :: dataNamesOf rest
+  DData dname params kind ctors derivings viaField lin sp => dname :: dataNamesOf rest
   _ => dataNamesOf rest
 
 nonEmpty : List a -> Bool
@@ -781,13 +783,6 @@ linClosureOrigGo (c :: rest) = if c == 58 then strPack rest else linClosureOrigG
 litEqName : String -> String
 litEqName tyName = if tyName == "String" then "bi_eq_str" else "bi_eq_int"
 
-flattenTaggedApp : Term -> Maybe (Pair String (List (Pair Term Rig)))
-flattenTaggedApp (TApp f a rig) = case flattenTaggedApp f of
-  Just (Pair g args) => Just (Pair g (append args [Pair a rig]))
-  Nothing => Nothing
-flattenTaggedApp (TGlobal g) = Just (Pair g [])
-flattenTaggedApp _ = Nothing
-
 -- M14：隐式 binder 的域可以是：宇宙、已声明归纳族（`{n : Nat}` 这类索引），或**高阶 kind**
 -- （`{f : Type -> Type}`，M19 起 `trait Mapper f` 需要）。其它类型（Int/String/…）仍
 -- 拒绝：隐式实参不参与运行时计算。
@@ -971,7 +966,7 @@ else case sp of
     isTypeishValue v && valueOpaqueGo (fuel - 1) outerNVar headOpaque depth famLevels v
       || valueOpaqueTypeSpine (fuel - 1) outerNVar headOpaque depth famLevels rest
 
--- 类型实参 vs 索引值实参：数据族 / 内建类型构造子的值实参（`Vec a (Succ n)` 的
+-- 类型实参 vs 索引值实参：数据族 / 内建类型构造子的值实参（`Vec (Succ n) a` 的
 -- `Succ n`）是擦除后的索引，不进 OCaml 类型，不参与「不可命名」判定。
 isTypeishValue : Value -> Bool
 isTypeishValue (VType _) = True
@@ -1022,6 +1017,7 @@ else case t of
   TType l => TType l
   TInt n => TInt n
   TStr s => TStr s
+  TFloat raw => TFloat raw
   TBool b => TBool b
   TPi name implicit rig dom cod =>
     TPi name implicit rig (wrapOpaqueUsesFuel (fuel - 1) depth idxs dom)

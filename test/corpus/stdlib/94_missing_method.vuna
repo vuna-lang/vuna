@@ -1,11 +1,10 @@
--- stdlib 反例：instance 少实现 trait 方法 pure。
+-- stdlib 反例：instance 少实现 trait 方法 bind。
 import Base.Monad
 
 data Box a : Type where
   MkBox : a -> Box a
 
 instance Monad Box where
-  bind b f = b
 
 main : Int
 main = 0

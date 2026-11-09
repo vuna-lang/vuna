@@ -1,0 +1,16 @@
+-- S4 C5：定义级收尾的未解字典目标必须带位置（而不是无位置的 NoLoc 消息）。
+-- 当前实现走 `tcErr1NoLoc`（见 debt / S4 计划），所以 `.err` 先只断言错误码与模板；
+-- C5 已落地：`.err` 断言路径无关的位置片段 `:16:7: [TC_NoInstanceFound] ...`。
+import Prelude
+
+data B : Type where
+  MkB : B
+
+trait Name a where
+  nameOf : a -> String
+
+instance Name Int where
+  nameOf x = "int"
+
+bad : String
+bad = nameOf MkB

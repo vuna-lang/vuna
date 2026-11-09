@@ -1,0 +1,13 @@
+-- M42：委托派生可以嵌套：外层字段类型本身也委托到下一层，Show 一直落到 Int。
+record Inner where
+  inner : Int
+deriving via field (Show, Eq)
+
+record Outer where
+  outer : Inner
+deriving via field (Show, Eq)
+
+main : String
+main =
+  show (Outer { outer = Inner { inner = 5 } })
+    ++ (if Outer { outer = Inner { inner = 5 } } == Outer { outer = Inner { inner = 5 } } then "/eq" else "/ne")

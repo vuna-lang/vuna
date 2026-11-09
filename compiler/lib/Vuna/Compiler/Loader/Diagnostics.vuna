@@ -67,10 +67,10 @@ ldAll =
     LdEntry (ldCode (ModuleNotExported "" "")) (ldTemplate (ModuleNotExported "" "")) "模块未被包导出"
   ]
 
-ldMsg : {n : Nat} -> LdDiag n -> Vec String n -> String
+ldMsg : {n : Nat} -> LdDiag n -> Vec n String -> String
 ldMsg e args = "[${ldCode e}] ${substTemplate (ldTemplate e) args}"
 
-ldErr : {n : Nat} -> LdDiag n -> Vec String n -> Result a
+ldErr : {n : Nat} -> LdDiag n -> Vec n String -> Result a
 ldErr e args = Err (ldMsg e args)
 
 -- | 自动补注（M41 新增导出）：ldErr0。
@@ -79,8 +79,8 @@ ldErr0 e = ldErr e []
 
 -- | 自动补注（M41 新增导出）：ldErr1。
 ldErr1 : LdDiag (Succ Zero) -> String -> Result a
-ldErr1 e a0 = ldErr e (a0 :: [])
+ldErr1 e a0 = ldErr e [a0]
 
 -- | 自动补注（M41 新增导出）：ldErr2。
 ldErr2 : LdDiag (Succ (Succ Zero)) -> String -> String -> Result a
-ldErr2 e a0 a1 = ldErr e (a0 :: a1 :: [])
+ldErr2 e a0 a1 = ldErr e [a0, a1]

@@ -1,0 +1,167 @@
+module Vuna.Compiler.Elab.Representation
+  ( UnboxedCand(..)
+  , ctorFieldDomainTerm
+  , ctorKeepFlags
+  , findDtData
+  , isSpecialUnboxFamily
+  , keptIndices
+  , lookupUnboxedInfo
+  , termIsFunction
+  , termRepresentable
+  , unboxedFamilySet
+  , unboxedInfoOf
+  ) where
+
+-- Vuna.Compiler.Elab.Representation：**自动去装箱**的表示判定单一真源。
+--
+-- 这里只做结构与类型项判定，不依赖 Codegen：`Elab` 用它做 via-field 的表示校验，
+-- `Codegen.Decl` 用它生成类型别名 / 恒等构造 / case 绑定。判据见 `unboxedCandidateOfData`。
+import Vuna.Compiler.Common
+import Vuna.Compiler.Core
+import Vuna.Compiler.Elab.Types
+import Vuna.Compiler.Intrinsics
+
+record UnboxedCand where
+  unboxedCandName : String
+  unboxedCandCtor : DtCtor
+  unboxedCandIndex : Int
+
+unboxedCandName : UnboxedCand -> String
+unboxedCandName (UnboxedCand name ctor idx) = name
+
+unboxedCandCtor : UnboxedCand -> DtCtor
+unboxedCandCtor (UnboxedCand name ctor idx) = ctor
+
+unboxedCandIndex : UnboxedCand -> Int
+unboxedCandIndex (UnboxedCand name ctor idx) = idx
+
+-- 构造子字段形状唯一真源：True = 该 binder 进运行时表示。
+ctorKeepFlags : DtCtor -> List Bool
+ctorKeepFlags c = map (\b => not (rigIsErased (secondOf b))) (dtCtorTelescope c)
+
+keptIndices : List Bool -> List Int
+keptIndices flags = keptIndicesGo flags 0
+
+keptIndicesGo : List Bool -> Int -> List Int
+keptIndicesGo [] i = []
+keptIndicesGo (k :: rest) i =
+  if k then i :: keptIndicesGo rest (i + 1) else keptIndicesGo rest (i + 1)
+
+isSpecialUnboxFamily : String -> Bool
+isSpecialUnboxFamily name =
+  name == boolTypeName || name == natTypeName || isTypeConstructorName name
+
+-- 按族名查 data（Representation 自包含，不依赖 Codegen）。
+findDtData : String -> List DtData -> Maybe DtData
+findDtData name [] = Nothing
+findDtData name (d :: rest) = if dtDataName d == name then Just d else findDtData name rest
+
+knownTypeHead : List DtData -> String -> Bool
+knownTypeHead datas g = g == intTypeName || g == strTypeName || g == boolTypeName || g == natTypeName || isTypeConstructorName g || (case findDtData g datas of
+  Just _ => True
+  Nothing => False
+)
+
+-- 运行时字段类型是否可由现有字段渲染规则忠实命名（不做定义性展开）。
+termRepresentable : List DtData -> Term -> Bool
+termRepresentable datas (TPi name implicit rig dom cod) =
+  termRepresentable datas dom && termRepresentable datas cod
+termRepresentable datas (TApp f a rig) = termAppHeadRepresentable datas f
+termRepresentable datas (TGlobal g) = knownTypeHead datas g
+termRepresentable datas (TVar name i) = True
+termRepresentable datas t = False
+
+termAppHeadRepresentable : List DtData -> Term -> Bool
+termAppHeadRepresentable datas (TGlobal g) = knownTypeHead datas g
+termAppHeadRepresentable datas (TApp f a rig) = termAppHeadRepresentable datas f
+termAppHeadRepresentable datas t = False
+
+-- 构造子第 i 个 telescope binder 的域（0 基，按完整 telescope 计）。
+ctorFieldDomainTerm : DtCtor -> Int -> Maybe Term
+ctorFieldDomainTerm c i = ctorFieldDomainTermGo 512 i (dtCtorType c)
+
+ctorFieldDomainTermGo : Int -> Int -> Term -> Maybe Term
+ctorFieldDomainTermGo fuel i t = if fuel <= 0 then Nothing
+else case t of
+  TPi name implicit rig dom cod =>
+    if i <= 0 then Just dom else ctorFieldDomainTermGo (fuel - 1) (i - 1) cod
+  _ => Nothing
+
+-- 函数 / Pi 字段保持装箱：OCaml 值限制会让零参顶层定义的别名函数类型出现弱类型变量。
+termIsFunction : Term -> Bool
+termIsFunction (TPi _ _ _ _ _) = True
+termIsFunction _ = False
+
+-- 判据（唯一真源）：
+--   1. 恰好 1 个构造子；
+--   2. `ctorKeepFlags` 恰好 1 个 True，且位置 >= 族参数/索引个数；
+--   3. 字段类型可忠实命名（函数 / 未知名保守拒绝）；
+--   4. 自身/互递归候选拒绝。
+unboxedCandidateOfData : List DtData -> DtData -> List UnboxedCand
+unboxedCandidateOfData datas d = if isSpecialUnboxFamily (dtDataName d) then []
+else case dtDataCtors d of
+  [] => []
+  c :: rest => case rest of
+    [] => case keptIndices (ctorKeepFlags c) of
+      [] => []
+      i :: more => case more of
+        [] => if i >= length d.dtDataParams then case ctorFieldDomainTerm c i of
+          Just dom =>
+            if termIsFunction dom then []
+            else if termRepresentable datas dom then [UnboxedCand (dtDataName d) c i] else []
+          Nothing => []
+        else []
+        _ => []
+    _ => []
+
+unboxedCandidates : List DtData -> List UnboxedCand
+unboxedCandidates datas = concatMap (unboxedCandidateOfData datas) datas
+
+candidateNames : List UnboxedCand -> List String
+candidateNames cands = map unboxedCandName cands
+
+candidateEdges : List DtData -> List String -> List UnboxedCand -> List (Pair String (List String))
+candidateEdges datas names cands =
+  map (\cand => Pair (unboxedCandName cand) (candidateRefs datas names cand)) cands
+
+candidateRefs : List DtData -> List String -> UnboxedCand -> List String
+candidateRefs datas names cand = case ctorFieldDomainTerm (unboxedCandCtor cand) (unboxedCandIndex cand) of
+  Just dom => filter (\n => memName n names) (termGlobalNames dom)
+  Nothing => []
+
+lookupNeighbors : String -> List (Pair String (List String)) -> List String
+lookupNeighbors name [] = []
+lookupNeighbors name (p :: rest) =
+  if firstOf p == name then secondOf p else lookupNeighbors name rest
+
+reachesBackTo : Int -> List (Pair String (List String)) -> List String -> String -> String -> Bool
+reachesBackTo fuel edges visited target node =
+  if fuel <= 0 then True
+  else anyReachBack (fuel - 1) edges visited target (lookupNeighbors node edges)
+
+anyReachBack : Int -> List (Pair String (List String)) -> List String -> String -> List String -> Bool
+anyReachBack fuel edges visited target [] = False
+anyReachBack fuel edges visited target (n :: rest) =
+  if n == target then True
+  else if memName n visited then anyReachBack fuel edges visited target rest
+  else if fuel <= 0 then True
+  else if reachesBackTo (fuel - 1) edges (n :: visited) target n then True
+  else anyReachBack (fuel - 1) edges visited target rest
+
+unboxedInfoOf : List DtData -> List (Pair String (Pair DtCtor Int))
+unboxedInfoOf datas =
+  let
+    cands = unboxedCandidates datas
+    names = candidateNames cands
+    edges = candidateEdges datas names cands
+    fuel = length names + 2
+  in map (\cand => Pair (unboxedCandName cand) (Pair (unboxedCandCtor cand) (unboxedCandIndex cand)))
+    (filter (\cand => not (reachesBackTo fuel edges [unboxedCandName cand] (unboxedCandName cand) (unboxedCandName cand))) cands)
+
+unboxedFamilySet : List DtData -> List String
+unboxedFamilySet datas = map firstOf (unboxedInfoOf datas)
+
+lookupUnboxedInfo : String -> List (Pair String (Pair DtCtor Int)) -> Maybe (Pair DtCtor Int)
+lookupUnboxedInfo name [] = Nothing
+lookupUnboxedInfo name (p :: rest) =
+  if firstOf p == name then Just (secondOf p) else lookupUnboxedInfo name rest

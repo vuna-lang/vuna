@@ -14,6 +14,7 @@ module Vuna.Compiler.Core
   , TBool
   , TCase
   , TCon
+  , TFloat
   , TGlobal
   , TIf
   , TInt
@@ -29,6 +30,7 @@ module Vuna.Compiler.Core
   , VCase
   , VCaseAlt(..)
   , VCon
+  , VFloat
   , VIf
   , VInt
   , VLam
@@ -97,7 +99,10 @@ module Vuna.Compiler.Core
   , substSolvedMetasAt
   , substSolvedMetasAtTbl
   , substVarAt
+  , termGlobalNames
   , termHasUnsolvedMeta
+  , termReachesFloat
+  , termUsesFloat
   , typeLevelOf
   ) where
 

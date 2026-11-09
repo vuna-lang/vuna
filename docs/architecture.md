@@ -25,7 +25,7 @@ compiler/lib/Vuna/Compiler/   （64 个模块：60 个导出 + 4 个内部模块
   PerfCache                          codegen 单元缓存（S5）
                               Owner Iface Cache                 归属表 / 模块接口 / 包级摘要
 根包 vuna（模块根 lib/，入口 app/Main.vuna）：Cli/Interp/Fmt/Lint/Index（门面+子模块）、
-  Repl/Run/Doc（+子模块）/Search（+子模块）/Sig/Lsp/Json/TestRunner/Files
+  Repl/Run/Doc（+子模块）/Search（+子模块）/Sig/Lsp/Json/TestRunner/Files；suite 执行器在 Test/{Suite,Run}
 依赖图：vuna → vuna-compiler → vuna-base（根包也直接依赖 base）
 ```
 
@@ -162,7 +162,7 @@ vuna.toml → Frontend.{Toml.parseToml, Manifest.parseManifest/validateManifest}
   当前已落地 loopback TCP 与 Unix domain socket（异步/取消/TLS 未做，见 debt D36）。
 - **运行时效应（Layer 1–3，`runtime-effects` 分支）**：`prim_effectPerform` / `prim_effectHandle`
   （`unsafe`）把 OCaml 5 一次性续延接入 `Base.Eff`（开放行 + 命名实例 + 一阶效应）；
-  `Vuna_runtime` 声明通用 `Perform (key, name, payload)`，handler 按 key/name 过滤并
+  `Vuna_runtime` 声明通用 `Perform (key, name, payload)`（key/name 都是 String），handler 按 key/name 过滤并
   `continue` 一次；W7 起 handler 壳是 `dtp_effect_handle`，它在 handler 退出时执行
   每纤程 cleanup 栈（`prim_cleanupPush`/`prim_cleanupPop` → `dtp_cleanup_*`），
   `Base.Eff.bracket`/`finally` 的 release 因此在非 `Exn` abort（续延被丢弃）时也会跑；

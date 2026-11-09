@@ -65,7 +65,6 @@ module Vuna.Compiler.Core.Eval
 -- M24 后维护（源码重组）：从原 Core.vuna 拆出；依赖 Core.Term 的表示层与纯数据操作。
 import Vuna.Compiler.Common
 import Base.HashMap
-import Base.IntMap
 import Vuna.Compiler.Core.Term
 import Vuna.Compiler.Intrinsics
 
@@ -96,6 +95,7 @@ else case t of
   TCase scrut alts => evalCaseFuel (fuel - 1) (evalFuel (fuel - 1) env scrut) (evalAlts env alts)
   TInt n => VInt n
   TStr s => VStr s
+  TFloat raw => VFloat raw
   TBool b => VBool b
   TIf c th el =>
     evalIf (evalFuel (fuel - 1) env c) (evalFuel (fuel - 1) env th) (evalFuel (fuel - 1) env el)
@@ -194,7 +194,7 @@ applySpine v (a :: rest) = applySpine (applyValue v a) rest
 -- 定义体），先查缓存会让它们每次多付一次哈希查。实测（M30）：单次 `check compiler`
 -- 的定义展开只有 ~700 次，而 NGlobal force ~5M 次，所以先 defs 后缓存的顺序把
 -- 「未定义全局」的成本保持为原来的一次 defLookup，缓存 hit 的收益仍保留。
-force : HashMap Term -> Sols -> Int -> Value -> Value
+force : HashMap String Term -> Sols -> Int -> Value -> Value
 force defs sols fuel v = if fuel <= 0 then v
 else case v of
   VMeta m sp => case solsLookup m sols of
@@ -407,6 +407,9 @@ else case a of
   VStr x => case b of
     VStr y => Just (strEq x y)
     _ => Just False
+  VFloat x => case b of
+    VFloat y => Just (x == y)
+    _ => Just False
   VBool x => case b of
     VBool y => Just (x == y)
     _ => Just False
@@ -435,7 +438,7 @@ valueListEqFuel fuel (a :: arest) (b :: brest) = case valueEqFuel fuel a b of
   Nothing => Nothing
 valueListEqFuel fuel _ _ = Just False
 
-rowRemReduce : HashMap Term -> Sols -> Int -> Value -> Value -> Maybe Value
+rowRemReduce : HashMap String Term -> Sols -> Int -> Value -> Value -> Maybe Value
 rowRemReduce defs sols fuel e r = if fuel <= 0 then Nothing
 else case force defs sols (fuel - 1) r of
   VCon "Base.Eff.Row.Cons" (h :: t :: _) => case valueEqFuel (fuel - 1) e h of
@@ -447,7 +450,7 @@ else case force defs sols (fuel - 1) r of
   VCon "Base.Eff.Row.Nil" _ => Just (VCon "Base.Eff.Row.Nil" [])
   _ => Nothing
 
-primReduce : HashMap Term -> Sols -> Int -> String -> List Value -> Maybe Value
+primReduce : HashMap String Term -> Sols -> Int -> String -> List Value -> Maybe Value
 primReduce defs sols fuel g sp = if fuel <= 0 then Nothing
 else if g == "Base.Eff.rowRem" then case sp of
   e :: r :: _ => rowRemReduce defs sols (fuel - 1) e r
@@ -562,7 +565,7 @@ else case xs of
 -- 两个 fuel：`fuel` 是深度正规化自己的递归深度预算（也是终止性判据的守卫 Int 见证），
 -- `evalFuel` 原样传给 force / primReduce（由它们的 fuel 控制定义展开深度）。
 -- ---------------------------------------------------------------
-normalizeFuel : Int -> HashMap Term -> Sols -> Int -> Value -> Value
+normalizeFuel : Int -> HashMap String Term -> Sols -> Int -> Value -> Value
 normalizeFuel fuel defs sols evalFuel v = if fuel <= 0 then v
 else if evalFuel <= 0 then v
 else case force defs sols evalFuel v of
@@ -573,14 +576,14 @@ else case force defs sols evalFuel v of
 
 -- case 正规化：scrutinee 归约到构造子就走该分支并继续正规化（分支体里可能还有
 -- case——嵌套模式展开出来的内层匹配就是这种形态）；否则只正规化 scrutinee、保持卡住。
-normalizeCaseFuel : Int -> HashMap Term -> Sols -> Int -> Value -> List VCaseAlt -> Value
+normalizeCaseFuel : Int -> HashMap String Term -> Sols -> Int -> Value -> List VCaseAlt -> Value
 normalizeCaseFuel fuel defs sols evalFuel scrut alts = if fuel <= 0 then VCase scrut alts
 else if evalFuel <= 0 then VCase scrut alts
 else case normalizeFuel (fuel - 1) defs sols (evalFuel - 1) scrut of
   VCon c args => normalizeFuel (fuel - 1) defs sols (evalFuel - 1) (applyCaseAlt c args alts)
   s2 => VCase s2 alts
 
-normalizeNeutralFuel : Int -> HashMap Term -> Sols -> Int -> Neutral -> Value
+normalizeNeutralFuel : Int -> HashMap String Term -> Sols -> Int -> Neutral -> Value
 normalizeNeutralFuel fuel defs sols evalFuel n = if fuel <= 0 then VNeutral n
 else if evalFuel <= 0 then VNeutral n
 else case n of
@@ -595,7 +598,7 @@ else case n of
         Just v2 => normalizeFuel (fuel - 1) defs sols (evalFuel - 1) v2
         Nothing => VNeutral (NGlobal g sp2)
 
-normalizeIfFuel : Int -> HashMap Term -> Sols -> Int -> Value -> Value -> Value -> Value
+normalizeIfFuel : Int -> HashMap String Term -> Sols -> Int -> Value -> Value -> Value -> Value
 normalizeIfFuel fuel defs sols evalFuel c th el = if fuel <= 0 then VIf c th el
 else if evalFuel <= 0 then VIf c th el
 else case normalizeFuel (fuel - 1) defs sols (evalFuel - 1) c of
@@ -631,6 +634,7 @@ else case v of
       (map (\alt => quoteCaseAltFuel (fuel - 1) depth alt) alts)
   VInt n => TInt n
   VStr s => TStr s
+  VFloat raw => TFloat raw
   VBool b => TBool b
   VIf c th el =>
     TIf (quoteFuel (fuel - 1) depth c) (quoteFuel (fuel - 1) depth th)
@@ -776,16 +780,16 @@ showValueAt depth v = case v of
 showValue : Value -> String
 showValue v = showValueAt 0 v
 
-normalize : HashMap Term -> Sols -> Int -> Value -> Value
+normalize : HashMap String Term -> Sols -> Int -> Value -> Value
 normalize a1 a2 a3 a4 = normalizeFuel 1024 a1 a2 a3 a4
 
-normalizeCase : HashMap Term -> Sols -> Int -> Value -> List VCaseAlt -> Value
+normalizeCase : HashMap String Term -> Sols -> Int -> Value -> List VCaseAlt -> Value
 normalizeCase a1 a2 a3 a4 a5 = normalizeCaseFuel 1024 a1 a2 a3 a4 a5
 
-normalizeNeutral : HashMap Term -> Sols -> Int -> Neutral -> Value
+normalizeNeutral : HashMap String Term -> Sols -> Int -> Neutral -> Value
 normalizeNeutral a1 a2 a3 a4 = normalizeNeutralFuel 1024 a1 a2 a3 a4
 
-normalizeIf : HashMap Term -> Sols -> Int -> Value -> Value -> Value -> Value
+normalizeIf : HashMap String Term -> Sols -> Int -> Value -> Value -> Value -> Value
 normalizeIf a1 a2 a3 a4 a5 a6 = normalizeIfFuel 1024 a1 a2 a3 a4 a5 a6
 
 -- 已解元变量的**深度感知**内联（接口摘要 zonk 与字典提升共用的唯一入口）。
@@ -795,13 +799,13 @@ normalizeIf a1 a2 a3 a4 a5 a6 = normalizeIfFuel 1024 a1 a2 a3 a4 a5 a6
 -- 解 quote 后若含负索引，说明它引用了出现点作用域外的 binder（跨定义上下文），
 -- **不内联**、保留 `TMeta`，由接口摘要安全阀拒绝这份摘要（宁可回退全量，不静默错）。
 -- 替换出来的项可能仍含已解元变量：同深度递归（限 fuel 防环）。
-substSolvedMetasAtTbl : IntMap Value -> Int -> Term -> Term
+substSolvedMetasAtTbl : HashMap Int Value -> Int -> Term -> Term
 substSolvedMetasAtTbl sols depth t = substSolvedMetasAtTblFuel 128 sols depth t
 
-substSolvedMetasAtTblFuel : Int -> IntMap Value -> Int -> Term -> Term
+substSolvedMetasAtTblFuel : Int -> HashMap Int Value -> Int -> Term -> Term
 substSolvedMetasAtTblFuel fuel sols depth t = if fuel <= 0 then t
 else case t of
-  TMeta m => case Base.IntMap.lookup m sols of
+  TMeta m => case Base.HashMap.lookup m sols of
     Nothing => t
     Just v =>
       let
@@ -827,6 +831,6 @@ else case t of
   _ => t
 
 -- 分支体在 `depth + #分支绑定子` 的上下文里。
-substSolvedAltAtTbl : Int -> IntMap Value -> Int -> CaseAlt -> CaseAlt
+substSolvedAltAtTbl : Int -> HashMap Int Value -> Int -> CaseAlt -> CaseAlt
 substSolvedAltAtTbl fuel sols depth (CaseAlt n bs b) =
   CaseAlt n bs (substSolvedMetasAtTblFuel fuel sols (depth + length bs) b)

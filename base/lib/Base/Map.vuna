@@ -12,6 +12,7 @@ import Base.Nat
 -- M24.7：`_insertPair` 等对刚性 key 的 `==` 提升成 Dict_Eq（见上），显式 import 保证
 -- 类存在与 split 单元顺序。
 import Base.Eq
+import Base.Show
 
 -- | 基于 assoc list 的持久映射，内部就是 `List (Pair k v)`；构造器不导出，只能经本模块 API 使用（`k` 需 `Eq`）。`lookup` 命中第一个匹配键，`insert` 覆盖时保留原位置。
 record Map k v where
@@ -66,3 +67,8 @@ fromList pairs = Map pairs
 -- | 原样取回内部 `Pair` 列表（`fromList` 的逆操作，可能含重复键）。
 toList : Map k v -> List (Pair k v)
 toList (Map pairs) = pairs
+
+-- `Show` 经 `toList`：`Map` 构造器不导出，跨模块不能模式匹配。用反引号 `++`
+-- 拼字符串（本模块不 import Base.String，没有 `++` 的 fixity 声明）。
+instance Show k, Show v => Show (Map k v) where
+  show m = "fromList " `++` (show (toList m))

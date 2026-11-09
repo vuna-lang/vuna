@@ -3,7 +3,7 @@ import Base.Eff
 import Base.EffAsync
 
 prog : Eff (Cons Int Nil) Int
-prog = pureEff 1
+prog = pure 1
 
 bad : IO (Task Int)
 bad = async prog

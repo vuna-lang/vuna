@@ -5,7 +5,6 @@ module Base.List
   , concatMap
   , drop
   , filter
-  , flatMap
   , foldl
   , foldr
   , length
@@ -26,10 +25,14 @@ import Base.Pair
 import Base.Maybe
 import Base.Nat
 import Base.Bool
+import Base.Foldable
 import Base.Monad
+import Base.Monoid
+import Base.Traversable
 -- M24.7：`mem` 的 `==` 在刚性类型上提升成 Dict_Eq；显式 import Base.Eq 既保证类存在，
 -- 也让 split 产物有正确的单元依赖顺序（生成代码引用 Base.Eq.eq 投影）。
 import Base.Eq
+import Base.Hashable
 -- M31.1：`==` / `<=` 是 Eq / Ord 方法名的别名，base 模块不自动注入 Prelude，
 -- 因此 take/drop/rangeFrom 的 `<=` 需要 Ord 方法名可见。
 import Base.Ord
@@ -104,10 +107,6 @@ concatMapGo : (a -> List b) -> List a -> List b -> List b
 concatMapGo f [] acc = reverse acc
 concatMapGo f (x :: rest) acc = concatMapGo f rest (append (reverse (f x)) acc)
 
--- | `concatMap` 的别名。
-flatMap : (a -> List b) -> List a -> List b
-flatMap f xs = concatMap f xs
-
 -- | 列表成员判断（`Eq` 字典）。
 mem : Eq a => a -> List a -> Bool
 mem x [] = False
@@ -162,7 +161,10 @@ instance Functor List where
 
 instance Monad List where
   bind xs f = concatMap f xs
+
+instance Applicative List where
   pure x = [x]
+  liftA2 f xs ys = concatMap (\a => map (\b => f a b) ys) xs
 
 -- B31：容器 `Show` 实例。元素用 `show`（约束实例的 ctx 字典）；拼接只用 `++`
 -- intrinsic——`strConcatMany` 等带 List 桥接的 intrinsic 在「声明 List 族的单元」里
@@ -180,3 +182,42 @@ showElemsTail (x :: rest) = ", " `++` x `++` (showElemsTail rest)
 
 instance Show a => Show (List a) where
   show xs = "[" `++` (showElems (map (\x => show x) xs)) `++` "]"
+
+-- 逐元素相等；`[]` 只等于 `[]`。
+instance Eq a => Eq (List a) where
+  eq [] [] = True
+  eq (x :: xs) (y :: ys) = x == y && xs == ys
+  eq _ _ = False
+  neq xs ys = if xs == ys then False else True
+
+-- 字典序：`[]` 最小，同头再比尾。
+instance Ord a => Ord (List a) where
+  lt [] [] = False
+  lt [] (_ :: _) = True
+  lt (_ :: _) [] = False
+  lt (x :: xs) (y :: ys) = if x < y then True else if y < x then False else xs < ys
+  le xs ys = xs < ys || not (ys < xs)
+  gt xs ys = ys < xs
+  ge xs ys = ys <= xs
+
+-- 哈希：`[]` = 0，非空为 head/tail 的结构组合。
+instance Hashable a => Hashable (List a) where
+  hash xs = case xs of
+    [] => 0
+    x :: rest => hashCombine (hash x) (hash rest)
+
+-- 列表拼接是自由 monoid：`Semigroup` 用 `append`，`Monoid` 单位元是 `[]`。
+instance Semigroup (List a) where
+  mappend = append
+
+instance Monoid (List a) where
+  mempty = []
+
+-- 右折叠与可遍历：`fold` 直接复用 `foldr`；`mapM` 用 Applicative 的 `liftA2`。
+instance Foldable List where
+  fold f z xs = foldr f z xs
+
+instance Applicative f => Traversable List f where
+  mapM fun xs = case xs of
+    [] => pure []
+    x :: rest => liftA2 (\y, ys => y :: ys) (fun x) (mapM fun rest)

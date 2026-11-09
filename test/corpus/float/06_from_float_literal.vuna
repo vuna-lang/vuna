@@ -1,0 +1,13 @@
+-- FromFloat：单字段包装类型可用字面量 + deriving。
+import Base.Float
+
+data Money : Type where
+  MkMoney : Float -> Money
+deriving (FromFloat)
+
+moneyValue : Money -> Float
+moneyValue m = case m of
+  MkMoney x => x
+
+main : Float
+main = moneyValue 1.25

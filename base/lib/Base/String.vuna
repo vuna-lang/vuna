@@ -35,6 +35,7 @@ import Base.List
 import Base.Bool
 -- M31.1：`String` 是 primitive 类型，Eq / Ord 实例跟类型模块走（落点规则见 Base/Eq.vuna）。
 import Base.Eq
+import Base.Hashable
 import Base.Ord
 -- `+` / `-` / `*` / `/` 的 fixity 声明在 Base.Int；base 模块不自动注入 Prelude，
 -- 本模块的算术运算符需要它的声明进入 import 闭包。
@@ -42,6 +43,7 @@ import Base.Int
 import Base.Nat
 -- M36 跟进：模板字符串降级引用 Base.Interp.interp（split 依赖需要显式 import）。
 import Base.Interp
+import Base.Monoid
 
 -- `++` 的 fixity 声明（字符串拼接是内建值）。
 infixr 5 ++
@@ -163,3 +165,13 @@ instance Ord String where
   le x y = x <= y
   gt x y = x > y
   ge x y = x >= y
+
+-- 哈希：String 用 `hashStr`（intrinsic `strHash` 的 0..1023 公式）。
+instance Hashable String where
+  hash s = hashStr s
+
+instance Semigroup String where
+  mappend x y = x ++ y
+
+instance Monoid String where
+  mempty = ""

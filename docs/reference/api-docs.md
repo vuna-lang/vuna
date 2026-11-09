@@ -118,6 +118,11 @@ vuna search [--type|--name|--doc] [--module PFX] [--limit N] [--json] <query...>
 - 小写自由名与 `_` → 变量；大写 / `Type` → 构造子；
 - 用索引里 data/record/trait 的短名 → 全名做类型名归一（只有唯一短名时）。
 
+类型文本的列表语法（M41）：`Vuna.Sig` 把 parser 的保留名 `@vuna@list@nil` /
+`@vuna@list@cons` 还原成 `[]` / `[a, b]`；`a :: b` 仍打印为中缀（闭合 `::` 链**不**改写成
+`[...]`，保持 `symType` 的 parse 级形状与查询拼写一致）。因此 api/doc/search/hover 不再
+出现保留名或前缀形式 `(:: a b)`；源码侧的归一由 `vuna lint --fix` 的 `list-literal` 负责。
+
 匹配模式（按优先级/分数）：
 
 | 模式 | 含义 |

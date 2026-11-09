@@ -32,6 +32,7 @@ import Vuna.Compiler.Core
 import Vuna.Compiler.Diagnostics
 import Vuna.Compiler.Elab.Meta
 import Vuna.Compiler.Elab.Prelude
+import Vuna.Compiler.Elab.Representation
 import Vuna.Compiler.Elab.Term
 import Vuna.Compiler.Elab.Types
 import Vuna.Compiler.Intrinsics
@@ -130,12 +131,12 @@ ctorFieldSortsBinder globals ctx ec pos arity famLevel cname csp name dom cod = 
 
 -- Phase A：只精化 kind、登记族名。构造子字段可以引用**后面**声明的族（AST 里
 -- `Field` 引用后面的 `Expr`、`Expr` 与 `DoStmt` 互递归），所以必须先登记所有族。
--- kind 之间也可能互相引用（`data Vec : Type -> Nat -> Type`），用「一轮能算多少算多少」
+-- kind 之间也可能互相引用（`data Vec : Nat -> Type -> Type`），用「一轮能算多少算多少」
 -- 的迭代处理：一轮无进展时把首个失败声明的真实错误抛出。
 elabDataHead : List (Pair String Term) -> Ec -> Pair Decl Span -> Result (Pair DataHead (Pair (List (Pair String Term)) Ec))
 elabDataHead globals ec ds = case ds of
   Pair d dsp => case d of
-    DData dname writtenParams kindExpr ctors derivings lin dsp2 => if memName dname preludeNames then tcErr1 dsp2 (CannotRedefineBuiltin dname) dname
+    DData dname writtenParams kindExpr ctors derivings viaField lin dsp2 => if memName dname preludeNames then tcErr1 dsp2 (CannotRedefineBuiltin dname) dname
     else andThen (checkType globals emptyCtx ec kindExpr) (\pk => case pk of
       Pair kindTerm0 (Pair kindSort ec1) =>
         let
@@ -185,7 +186,7 @@ elabDataBodies decls heads globals ec acc = case decls of
   [] => Ok (Pair (reverse acc) (Pair globals ec))
   ds :: rest => case ds of
     Pair d dsp => case d of
-      DData dname writtenParams kindExpr ctors derivings lin dsp2 => case lookupDataHead dname heads of
+      DData dname writtenParams kindExpr ctors derivings viaField lin dsp2 => case lookupDataHead dname heads of
         Nothing => errAt dsp2 "DT: internal: missing data head for ${dname}"
         Just (Pair fullKind arity) =>
           let
@@ -198,7 +199,8 @@ elabDataBodies decls heads globals ec acc = case decls of
           in andThen (elabCtors globals dname arity famLevel ec ctors) (\q => case q of
             Pair dctors ec2 =>
               let
-                dd = DtData dname tele dctors fullKind lin
+                viaClasses = if viaField then derivings else []
+                dd = DtData dname tele dctors fullKind viaClasses lin
               in case canonicalCtorsFor dname of
                 Just expected =>
                   if sameCtorSet expected (map dtCtorName dctors) then elabDataBodies rest heads (append globals (ctorGlobals dctors)) (ecAddData ec2 dd)
@@ -220,17 +222,39 @@ allIn : List String -> List String -> Bool
 allIn [] actual = True
 allIn (e :: rest) actual = memName e actual && allIn rest actual
 
+-- M42：via-field 必须落到自动去装箱的单字段包装上（data / record 同等）。
+checkViaDataDecls : List (Pair Decl Span) -> List DtData -> Result Int
+checkViaDataDecls [] datas = Ok 0
+checkViaDataDecls ((Pair d sp) :: rest) datas = case d of
+  DData dname params kind ctors derivings viaField lin dsp2 =>
+    if viaField then if viaShapeOk dname datas then checkViaDataDecls rest datas
+    else tcErr0 dsp2 DerivingViaUnboxedRequired
+    else checkViaDataDecls rest datas
+  _ => checkViaDataDecls rest datas
+
+-- via 的字段必须是构造子 telescope 中紧跟族参数的第一个字段：
+-- 字典委托按 `field : F params` 替换类参数，不处理前面还有擦除字段的依赖类型。
+viaShapeOk : String -> List DtData -> Bool
+viaShapeOk dname datas = if memName dname (unboxedFamilySet datas) then case lookupUnboxedInfo dname (unboxedInfoOf datas) of
+  Just (Pair c idx) => case findDtData dname datas of
+    Just d => idx == length d.dtDataParams
+    Nothing => False
+  Nothing => False
+else False
+
 -- 两阶段精化所有 data 声明（M23：允许 data 之间的前向引用与互递归）。
 elabDatas : List (Pair Decl Span) -> List (Pair String Term) -> Ec -> Result (Pair (List DtData) (Pair (List (Pair String Term)) Ec))
 elabDatas decls globals ec = andThen (elabDataHeads decls globals ec []) (\p => case p of
-  Pair heads (Pair globals2 ec2) => elabDataBodies decls heads globals2 ec2 []
+  Pair heads (Pair globals2 ec2) => andThen (elabDataBodies decls heads globals2 ec2 []) (\q => case q of
+    Pair datas ec3 => andThen (checkViaDataDecls decls datas) (\_ => Ok (Pair datas ec3))
+  )
 )
 
 -- ===============================================================
 -- M16：索引擦除分析（诊断级，不改变 codegen）
 -- ===============================================================
 -- M13/M14 的擦除规则：binder 域是宇宙 ⇒ 擦除；域是归纳族（索引，如 `n : Nat`）⇒ **保留**运行时
--- 表示（`Vec a n` 的每个 Cons 带一个 `t_Nat` 长度字段）。
+-- 表示（`Vec n a` 的每个 Cons 带一个 `t_Nat` 长度字段）。
 -- 索引**不能无条件擦**：`vlen a n xs = case xs of Cons b m y ys => 1 + vlen b m ys` 把索引 `m`
 -- 当递归参数传下去，运行时**真的被读取**；无条件擦除会让这类定义无法生成代码。
 -- 正确擦除需要整程序使用分析，M16 落地的是**分析 + 诊断**：`eraseIndexMask` 给出保守可擦判定，
@@ -282,6 +306,7 @@ termUsesVar depth (TCon c args) = termUsesVarArgs depth args
 termUsesVar depth (TCase scrut alts) = termUsesVar depth scrut || termUsesVarAlts depth alts
 termUsesVar depth (TInt n) = False
 termUsesVar depth (TStr s) = False
+termUsesVar depth (TFloat raw) = False
 termUsesVar depth (TBool b) = False
 termUsesVar depth (TIf c th el) =
   termUsesVar depth c || termUsesVar depth th || termUsesVar depth el

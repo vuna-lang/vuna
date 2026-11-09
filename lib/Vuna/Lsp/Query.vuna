@@ -217,7 +217,7 @@ symbolHoverResult uri line col text (Just idx) = case tokenAtCursor text line co
 -- definition：光标 token → Index 符号 → Location；Index 不可用/未命中时同文件兜底。
 definitionResult : String -> Int -> Int -> String -> Maybe Index -> Json
 definitionResult uri line col text Nothing =
-  bufferDefinition uri text (fromMaybe "" (mapJust secondOf (tokenAtCursor text line col)))
+  bufferDefinition uri text (fromMaybe "" (fmap secondOf (tokenAtCursor text line col)))
 definitionResult uri line col text (Just idx) = case tokenAtCursor text line col of
   Nothing => JNull
   Just (Pair startCol token) => case bestSymbol idx (currentModuleNameOf text) token of
@@ -461,10 +461,10 @@ data SplitTy : Type where
 
 findSplitIn : List Decl -> String -> Maybe SplitTy
 findSplitIn [] name = Nothing
-findSplitIn ((DData dname params kind ctors derivings lin sp) :: rest) name =
+findSplitIn ((DData dname params kind ctors derivings viaField lin sp) :: rest) name =
   if dname == name then if dataKindIsType kind && not (isEmptyList ctors) then Just (SplitData ctors) else Nothing
   else findSplitIn rest name
-findSplitIn ((DRecord dname params fields derivings lin sp) :: rest) name =
+findSplitIn ((DRecord dname params fields derivings viaField lin sp) :: rest) name =
   if dname == name then Just (SplitRecord dname (map fieldName fields)) else findSplitIn rest name
 findSplitIn (_ :: rest) name = findSplitIn rest name
 
@@ -536,8 +536,8 @@ resolveTypeSplit sf roots curMod tyText = case parseExpressionSource tyText of
         modName = joinDots (firstOf split)
         tyName = secondOf split
       in if modName == "" then resolveUnqualifiedSplit sf roots tyName
-      else if modName == curMod then mapJust (\cs => Pair curMod cs) (findSplitIn sf.sourceFileDecls tyName)
-      else mapJust (\cs => Pair modName cs) (moduleSplitIn roots modName tyName)
+      else if modName == curMod then fmap (\cs => Pair curMod cs) (findSplitIn sf.sourceFileDecls tyName)
+      else fmap (\cs => Pair modName cs) (moduleSplitIn roots modName tyName)
 
 -- 构造子的模式参数个数：显式 `->` / `(a : Type) ->`（EPi implicit = False）才占通配；
 -- 隐式 `{a : Type} ->`（EPi implicit = True）由调用点推断，不进模式。
@@ -725,20 +725,20 @@ dedupeNamesGo (x :: rest) seen acc =
 -- documentSymbol：AST 声明树
 -- ---------------------------------------------------------------
 declNameOf : Decl -> String
-declNameOf (DData name params kind ctors derivings lin sp) = name
+declNameOf (DData name params kind ctors derivings viaField lin sp) = name
 declNameOf (DAxiom name ty sp) = name
 declNameOf (DExtern name cName ty sp) = name
 declNameOf (DSig name ctx ty sp) = name
 declNameOf (DFun name pats body sp) = name
-declNameOf (DRecord name params fields derivings lin sp) = name
+declNameOf (DRecord name params fields derivings viaField lin sp) = name
 declNameOf (DTrait name params methods sp) = name
 declNameOf (DInstance ctxE head methods sp) = "instance"
 
 -- LSP SymbolKind：Function=12、Field=8、Interface=11、Constant=14、
 -- EnumMember=22、Struct=23、Method=6。
 declSymbolKind : Decl -> Int
-declSymbolKind (DData name params kind ctors derivings lin sp) = 23
-declSymbolKind (DRecord name params fields derivings lin sp) = 23
+declSymbolKind (DData name params kind ctors derivings viaField lin sp) = 23
+declSymbolKind (DRecord name params fields derivings viaField lin sp) = 23
 declSymbolKind (DTrait name params methods sp) = 11
 declSymbolKind (DAxiom name ty sp) = 14
 declSymbolKind (DExtern name cName ty sp) = 14
@@ -768,9 +768,9 @@ methodSymbolJson lines m =
     (nameSelRange lines (traitMethodSpan m) (traitMethodName m)) []
 
 declChildrenJson : List String -> Decl -> List Json
-declChildrenJson lines (DData name params kind ctors derivings lin sp) =
+declChildrenJson lines (DData name params kind ctors derivings viaField lin sp) =
   map (ctorSymbolJson lines) ctors
-declChildrenJson lines (DRecord name params fields derivings lin sp) =
+declChildrenJson lines (DRecord name params fields derivings viaField lin sp) =
   map (fieldSymbolJson lines) fields
 declChildrenJson lines (DTrait name params methods sp) = map (methodSymbolJson lines) methods
 declChildrenJson lines _ = []

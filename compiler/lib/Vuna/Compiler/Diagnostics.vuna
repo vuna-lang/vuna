@@ -12,7 +12,7 @@ module Vuna.Compiler.Diagnostics
 -- **域枚举 + 构造子携带模板**。三个不变量：
 --
 -- 1. **arity 编译期锁定**（路 A）：`TcErr : Nat -> Type`，构造子的索引即模板插值个数
---    （`UnknownName : String -> TcErr (Succ Zero)` = arity 1）。throw 点给 `Vec String n`，
+--    （`UnknownName : String -> TcErr (Succ Zero)` = arity 1）。throw 点给 `Vec n String`，
 --    长度由类型 unify 锁定——arity 拼错**编译失败**。`n` 隐式（Rig0），运行时零开销。
 -- 2. **构造子 = 唯一真源**：每个构造子携带自己的模板（String payload，占位符 `<0>` `<1>`…）
 --    + arity（类型索引）+ code（`tcCode` 派生）。模板/arity/code 一处声明，永不漂移。

@@ -1,0 +1,32 @@
+-- list-literal：表达式/类型位置的闭合 cons 链与裸 Nil 应写成列表字面量。
+import Base.List
+
+f : Int -> List Int
+f n = n :: 1 :: 2 :: []
+
+g : List Int
+g = Cons 1 (Cons 2 Nil)
+
+h : List Int
+h = (Nil)
+
+p : List Int -> List Int
+p xs = 1 :: xs
+
+q : List Int -> Int
+q (n :: rest) = n
+
+r : List Int -> Int
+r (Cons n Nil) = n
+
+s : List (Int :: [])
+s = []
+
+t : List Int
+t = [1, 2]
+
+u : Int -> List Int
+u n = n :: [] -- keep (comment)
+
+main : Int
+main = q (f 0) + r g + p t

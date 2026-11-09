@@ -213,20 +213,21 @@ let v_Vuna_dCompiler_dFrontend_dParser_dSupport_dstartsAtom = (fun st -> ((fun n
   | Vuna_dCompiler_dFrontend_dLexer.C_Vuna_dCompiler_dFrontend_dLexer_dTok_TKw (dtb__99) -> (if (dtb__99 = "Type") then true else false)
   | Vuna_dCompiler_dFrontend_dLexer.C_Vuna_dCompiler_dFrontend_dLexer_dTok_TTmpl (dtb__100, dtb__101, dtb__102) -> true
   | Vuna_dCompiler_dFrontend_dLexer.C_Vuna_dCompiler_dFrontend_dLexer_dTok_TStr (dtb__103) -> true
-  | Vuna_dCompiler_dFrontend_dLexer.C_Vuna_dCompiler_dFrontend_dLexer_dTok_TInt (dtb__104) -> true
-  | Vuna_dCompiler_dFrontend_dLexer.C_Vuna_dCompiler_dFrontend_dLexer_dTok_TIdent (dtb__105) -> true
+  | Vuna_dCompiler_dFrontend_dLexer.C_Vuna_dCompiler_dFrontend_dLexer_dTok_TFloat (dtb__104) -> true
+  | Vuna_dCompiler_dFrontend_dLexer.C_Vuna_dCompiler_dFrontend_dLexer_dTok_TInt (dtb__105) -> true
+  | Vuna_dCompiler_dFrontend_dLexer.C_Vuna_dCompiler_dFrontend_dLexer_dTok_TIdent (dtb__106) -> true
   | _ -> false
 )
   | _ -> failwith "DT: impossible branch"
 )) (v_Vuna_dCompiler_dFrontend_dParser_dSupport_dpeekTok st)))
 
 let v_Vuna_dCompiler_dFrontend_dParser_dSupport_dstartsPatternAtom = (fun st -> ((fun nd_uscrut1 -> (match nd_uscrut1 with
-  | Vuna_dCompiler_dFrontend_dLexer.C_Vuna_dCompiler_dFrontend_dLexer_dPTok_PTok (dtb__106, dtb__107) -> (match dtb__106 with
-  | Vuna_dCompiler_dFrontend_dLexer.C_Vuna_dCompiler_dFrontend_dLexer_dTok_TSym (dtb__108) -> (if (dtb__108 = "(") then true else (if (dtb__108 = "[") then true else false))
-  | Vuna_dCompiler_dFrontend_dLexer.C_Vuna_dCompiler_dFrontend_dLexer_dTok_TTmpl (dtb__109, dtb__110, dtb__111) -> true
-  | Vuna_dCompiler_dFrontend_dLexer.C_Vuna_dCompiler_dFrontend_dLexer_dTok_TStr (dtb__112) -> true
-  | Vuna_dCompiler_dFrontend_dLexer.C_Vuna_dCompiler_dFrontend_dLexer_dTok_TInt (dtb__113) -> true
-  | Vuna_dCompiler_dFrontend_dLexer.C_Vuna_dCompiler_dFrontend_dLexer_dTok_TIdent (dtb__114) -> true
+  | Vuna_dCompiler_dFrontend_dLexer.C_Vuna_dCompiler_dFrontend_dLexer_dPTok_PTok (dtb__107, dtb__108) -> (match dtb__107 with
+  | Vuna_dCompiler_dFrontend_dLexer.C_Vuna_dCompiler_dFrontend_dLexer_dTok_TSym (dtb__109) -> (if (dtb__109 = "(") then true else (if (dtb__109 = "[") then true else false))
+  | Vuna_dCompiler_dFrontend_dLexer.C_Vuna_dCompiler_dFrontend_dLexer_dTok_TTmpl (dtb__110, dtb__111, dtb__112) -> true
+  | Vuna_dCompiler_dFrontend_dLexer.C_Vuna_dCompiler_dFrontend_dLexer_dTok_TStr (dtb__113) -> true
+  | Vuna_dCompiler_dFrontend_dLexer.C_Vuna_dCompiler_dFrontend_dLexer_dTok_TInt (dtb__114) -> true
+  | Vuna_dCompiler_dFrontend_dLexer.C_Vuna_dCompiler_dFrontend_dLexer_dTok_TIdent (dtb__115) -> true
   | _ -> false
 )
   | _ -> failwith "DT: impossible branch"
@@ -237,18 +238,18 @@ let v_Vuna_dCompiler_dFrontend_dParser_dSupport_disSyntaxSym = (fun op -> (if (o
 let v_Vuna_dCompiler_dFrontend_dParser_dSupport_disReservedValueName = (fun name -> (if (if (v_Vuna_dCompiler_dFrontend_dParser_dSupport_disSyntaxSym name) then true else (name = "->")) then true else (name = "`")))
 
 let v_Vuna_dCompiler_dFrontend_dParser_dSupport_dexpectValueName = (fun st -> ((fun nd_uscrut1 -> (match nd_uscrut1 with
-  | Vuna_dCompiler_dFrontend_dLexer.C_Vuna_dCompiler_dFrontend_dLexer_dPTok_PTok (dtb__115, dtb__116) -> (match dtb__115 with
-  | Vuna_dCompiler_dFrontend_dLexer.C_Vuna_dCompiler_dFrontend_dLexer_dTok_TSym (dtb__117) -> (if (v_Vuna_dCompiler_dFrontend_dParser_dSupport_disReservedValueName dtb__117) then ((Vuna_dCompiler_dFrontend_dDiagnostics.v_Vuna_dCompiler_dFrontend_dDiagnostics_dpsErr1 (Vuna_dCompiler_dFrontend_dDiagnostics.C_Vuna_dCompiler_dFrontend_dDiagnostics_dPsDiag_ExpectedToken ("value name"))) "value name") else (Base_dResult.C_Base_dResult_dResult_Ok ((Base_dPair.C_Base_dPair_dPair_Pair (dtb__117, (v_Vuna_dCompiler_dFrontend_dParser_dSupport_dadvance st))))))
-  | Vuna_dCompiler_dFrontend_dLexer.C_Vuna_dCompiler_dFrontend_dLexer_dTok_TIdent (dtb__118) -> (if (v_Vuna_dCompiler_dFrontend_dParser_dSupport_disReservedValueName dtb__118) then ((Vuna_dCompiler_dFrontend_dDiagnostics.v_Vuna_dCompiler_dFrontend_dDiagnostics_dpsErr1 (Vuna_dCompiler_dFrontend_dDiagnostics.C_Vuna_dCompiler_dFrontend_dDiagnostics_dPsDiag_ExpectedToken ("value name"))) "value name") else (Base_dResult.C_Base_dResult_dResult_Ok ((Base_dPair.C_Base_dPair_dPair_Pair (dtb__118, (v_Vuna_dCompiler_dFrontend_dParser_dSupport_dadvance st))))))
+  | Vuna_dCompiler_dFrontend_dLexer.C_Vuna_dCompiler_dFrontend_dLexer_dPTok_PTok (dtb__116, dtb__117) -> (match dtb__116 with
+  | Vuna_dCompiler_dFrontend_dLexer.C_Vuna_dCompiler_dFrontend_dLexer_dTok_TSym (dtb__118) -> (if (v_Vuna_dCompiler_dFrontend_dParser_dSupport_disReservedValueName dtb__118) then ((Vuna_dCompiler_dFrontend_dDiagnostics.v_Vuna_dCompiler_dFrontend_dDiagnostics_dpsErr1 (Vuna_dCompiler_dFrontend_dDiagnostics.C_Vuna_dCompiler_dFrontend_dDiagnostics_dPsDiag_ExpectedToken ("value name"))) "value name") else (Base_dResult.C_Base_dResult_dResult_Ok ((Base_dPair.C_Base_dPair_dPair_Pair (dtb__118, (v_Vuna_dCompiler_dFrontend_dParser_dSupport_dadvance st))))))
+  | Vuna_dCompiler_dFrontend_dLexer.C_Vuna_dCompiler_dFrontend_dLexer_dTok_TIdent (dtb__119) -> (if (v_Vuna_dCompiler_dFrontend_dParser_dSupport_disReservedValueName dtb__119) then ((Vuna_dCompiler_dFrontend_dDiagnostics.v_Vuna_dCompiler_dFrontend_dDiagnostics_dpsErr1 (Vuna_dCompiler_dFrontend_dDiagnostics.C_Vuna_dCompiler_dFrontend_dDiagnostics_dPsDiag_ExpectedToken ("value name"))) "value name") else (Base_dResult.C_Base_dResult_dResult_Ok ((Base_dPair.C_Base_dPair_dPair_Pair (dtb__119, (v_Vuna_dCompiler_dFrontend_dParser_dSupport_dadvance st))))))
   | _ -> (Vuna_dCompiler_dFrontend_dDiagnostics.v_Vuna_dCompiler_dFrontend_dDiagnostics_dpsErr0 Vuna_dCompiler_dFrontend_dDiagnostics.C_Vuna_dCompiler_dFrontend_dDiagnostics_dPsDiag_ExpectedIdentifier)
 )
   | _ -> failwith "DT: impossible branch"
 )) (v_Vuna_dCompiler_dFrontend_dParser_dSupport_dpeekTok st)))
 
 let v_Vuna_dCompiler_dFrontend_dParser_dSupport_dcloseParenNext = (fun st -> ((fun nd_uscrut1 -> (match nd_uscrut1 with
-  | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__119) -> (match dtb__119 with
-  | Vuna_dCompiler_dFrontend_dLexer.C_Vuna_dCompiler_dFrontend_dLexer_dPTok_PTok (dtb__120, dtb__121) -> (match dtb__120 with
-  | Vuna_dCompiler_dFrontend_dLexer.C_Vuna_dCompiler_dFrontend_dLexer_dTok_TSym (dtb__122) -> (if (dtb__122 = ")") then true else false)
+  | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__120) -> (match dtb__120 with
+  | Vuna_dCompiler_dFrontend_dLexer.C_Vuna_dCompiler_dFrontend_dLexer_dPTok_PTok (dtb__121, dtb__122) -> (match dtb__121 with
+  | Vuna_dCompiler_dFrontend_dLexer.C_Vuna_dCompiler_dFrontend_dLexer_dTok_TSym (dtb__123) -> (if (dtb__123 = ")") then true else false)
   | _ -> false
 )
   | _ -> failwith "DT: impossible branch"
@@ -257,13 +258,13 @@ let v_Vuna_dCompiler_dFrontend_dParser_dSupport_dcloseParenNext = (fun st -> ((f
 )) ((v_Vuna_dCompiler_dFrontend_dParser_dSupport_dpeekTokAt st) 1)))
 
 let v_Vuna_dCompiler_dFrontend_dParser_dSupport_dsectionOpAt = (fun st -> ((fun nd_uscrut1 -> (match nd_uscrut1 with
-  | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__123) -> (match dtb__123 with
-  | Vuna_dCompiler_dFrontend_dLexer.C_Vuna_dCompiler_dFrontend_dLexer_dPTok_PTok (dtb__124, dtb__125) -> (match dtb__124 with
-  | Vuna_dCompiler_dFrontend_dLexer.C_Vuna_dCompiler_dFrontend_dLexer_dTok_TSym (dtb__126) -> (if (v_Vuna_dCompiler_dFrontend_dParser_dSupport_disReservedValueName dtb__126) then Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing else (if (dtb__126 = "?") then (match (v_Vuna_dCompiler_dFrontend_dParser_dSupport_dholeAtomAt (v_Vuna_dCompiler_dFrontend_dParser_dSupport_dadvance st)) with
-  | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__127) -> Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing
-  | Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing -> (Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__126))
+  | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__124) -> (match dtb__124 with
+  | Vuna_dCompiler_dFrontend_dLexer.C_Vuna_dCompiler_dFrontend_dLexer_dPTok_PTok (dtb__125, dtb__126) -> (match dtb__125 with
+  | Vuna_dCompiler_dFrontend_dLexer.C_Vuna_dCompiler_dFrontend_dLexer_dTok_TSym (dtb__127) -> (if (v_Vuna_dCompiler_dFrontend_dParser_dSupport_disReservedValueName dtb__127) then Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing else (if (dtb__127 = "?") then (match (v_Vuna_dCompiler_dFrontend_dParser_dSupport_dholeAtomAt (v_Vuna_dCompiler_dFrontend_dParser_dSupport_dadvance st)) with
+  | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__128) -> Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing
+  | Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing -> (Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__127))
   | _ -> failwith "DT: impossible branch"
-) else (Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__126))))
+) else (Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__127))))
   | _ -> Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing
 )
   | _ -> failwith "DT: impossible branch"
@@ -272,11 +273,11 @@ let v_Vuna_dCompiler_dFrontend_dParser_dSupport_dsectionOpAt = (fun st -> ((fun 
 )) ((v_Vuna_dCompiler_dFrontend_dParser_dSupport_dpeekTokAt st) 1)))
 
 let rec v_Vuna_dCompiler_dFrontend_dParser_dSupport_dcountArrows = (fun mc0 -> (match mc0 with
-  | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_EApp (dtb__128, dtb__129, dtb__130) -> (match dtb__128 with
-  | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_EVar (dtb__131, dtb__132) -> (if (dtb__131 = "->") then (match dtb__129 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__133, dtb__134) -> (match dtb__134 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__135, dtb__136) -> (match dtb__136 with
-  | Base_dList.C_Base_dList_dList_Nil -> (1 + (v_Vuna_dCompiler_dFrontend_dParser_dSupport_dcountArrows dtb__135))
+  | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_EApp (dtb__129, dtb__130, dtb__131) -> (match dtb__129 with
+  | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_EVar (dtb__132, dtb__133) -> (if (dtb__132 = "->") then (match dtb__130 with
+  | Base_dList.C_Base_dList_dList_Cons (dtb__134, dtb__135) -> (match dtb__135 with
+  | Base_dList.C_Base_dList_dList_Cons (dtb__136, dtb__137) -> (match dtb__137 with
+  | Base_dList.C_Base_dList_dList_Nil -> (1 + (v_Vuna_dCompiler_dFrontend_dParser_dSupport_dcountArrows dtb__136))
   | _ -> 0
 )
   | _ -> 0
@@ -285,20 +286,20 @@ let rec v_Vuna_dCompiler_dFrontend_dParser_dSupport_dcountArrows = (fun mc0 -> (
 ) else 0)
   | _ -> 0
 )
-  | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_EInfix (dtb__137, dtb__138, dtb__139, dtb__140) -> (if (dtb__137 = "->") then (1 + (v_Vuna_dCompiler_dFrontend_dParser_dSupport_dcountArrows dtb__139)) else 0)
+  | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_EInfix (dtb__138, dtb__139, dtb__140, dtb__141) -> (if (dtb__138 = "->") then (1 + (v_Vuna_dCompiler_dFrontend_dParser_dSupport_dcountArrows dtb__140)) else 0)
   | _ -> 0
 ))
 
 let v_Vuna_dCompiler_dFrontend_dParser_dSupport_dterminatesExpression = (fun mc0 -> (match mc0 with
-  | Vuna_dCompiler_dFrontend_dLexer.C_Vuna_dCompiler_dFrontend_dLexer_dPTok_PTok (dtb__141, dtb__142) -> (match dtb__141 with
-  | Vuna_dCompiler_dFrontend_dLexer.C_Vuna_dCompiler_dFrontend_dLexer_dTok_TKw (dtb__143) -> (if (dtb__143 = "else") then true else (if (dtb__143 = "in") then true else (if (dtb__143 = "then") then true else false)))
-  | Vuna_dCompiler_dFrontend_dLexer.C_Vuna_dCompiler_dFrontend_dLexer_dTok_TSym (dtb__144) -> (if (dtb__144 = ")") then true else (if (dtb__144 = "]") then true else (if (dtb__144 = ",") then true else false)))
+  | Vuna_dCompiler_dFrontend_dLexer.C_Vuna_dCompiler_dFrontend_dLexer_dPTok_PTok (dtb__142, dtb__143) -> (match dtb__142 with
+  | Vuna_dCompiler_dFrontend_dLexer.C_Vuna_dCompiler_dFrontend_dLexer_dTok_TKw (dtb__144) -> (if (dtb__144 = "else") then true else (if (dtb__144 = "in") then true else (if (dtb__144 = "then") then true else false)))
+  | Vuna_dCompiler_dFrontend_dLexer.C_Vuna_dCompiler_dFrontend_dLexer_dTok_TSym (dtb__145) -> (if (dtb__145 = ")") then true else (if (dtb__145 = "]") then true else (if (dtb__145 = ",") then true else false)))
   | _ -> false
 )
   | _ -> failwith "DT: impossible branch"
 ))
 
 let v_Vuna_dCompiler_dFrontend_dParser_dSupport_dbadCaseIndent = (fun st altCol -> (if (v_Vuna_dCompiler_dFrontend_dParser_dSupport_disEof st) then false else (match (v_Vuna_dCompiler_dFrontend_dParser_dSupport_dpeekPos st) with
-  | Vuna_dCompiler_dCommon.C_Vuna_dCompiler_dCommon_dPos_Pos (dtb__145, dtb__146) -> (if (dtb__146 > altCol) then (if (v_Vuna_dCompiler_dFrontend_dParser_dSupport_dterminatesExpression (v_Vuna_dCompiler_dFrontend_dParser_dSupport_dpeekTok st)) then false else true) else false)
+  | Vuna_dCompiler_dCommon.C_Vuna_dCompiler_dCommon_dPos_Pos (dtb__146, dtb__147) -> (if (dtb__147 > altCol) then (if (v_Vuna_dCompiler_dFrontend_dParser_dSupport_dterminatesExpression (v_Vuna_dCompiler_dFrontend_dParser_dSupport_dpeekTok st)) then false else true) else false)
   | _ -> failwith "DT: impossible branch"
 )))

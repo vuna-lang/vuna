@@ -1,0 +1,10 @@
+import Base.HashMap
+
+data NoHash : Type where
+  MkNoHash : NoHash
+
+m : HashMap NoHash Int
+m = Base.HashMap.fromList []
+
+main : Int
+main = 0

@@ -1,6 +1,9 @@
 -- | Demo search module.
 module Demo.Search where
 
+import Base.Eff
+import Base.List
+
 -- | Identity.
 id : a -> a
 id x = x
@@ -27,3 +30,18 @@ data Maybe2 a : Type where
   Nothing2 : Maybe2 a
   -- | Just-like.
   Just2 : a -> Maybe2 a
+
+-- | A row tag for list/row rendering.
+data Fetch : Type where
+
+-- | Empty-row effect runner (list-syntax nil).
+runPure2 : Eff [] a -> a
+runPure2 e = runPure e
+
+-- | Open row with a cons chain (infix rendering).
+runWith : Eff (Fetch :: r) a -> Eff r a
+runWith e = e
+
+-- | Closed row written with `::` (kept infix by the pretty-printer).
+runFetch : Eff (Fetch :: []) a -> Eff a
+runFetch e = e

@@ -4,7 +4,9 @@ import Base.EffSched
 import Base.Result
 
 bad : (1 t : TaskLin Int) -> Eff Nil Int
-bad t = bindEff (awaitTaskLin t) (\_ => cancelTaskLin t)
+bad t = do
+  _ <- awaitTaskLin t
+  cancelTaskLin t
 
 main : IO Int
 main = pure 0

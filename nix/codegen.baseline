@@ -35,8 +35,12 @@
 # M41（构造子族限定命名 + base Nil/Cons 统一）：Row/Vec 构造子改名后 codegen
 #       的构造子 OCaml 名变短（C_Base_dEff_dRow_dCons 等），夹具模块产物的最长行
 #       与长行数下降：按实测 maxline 878 → 823、longlines 7 → 5、bytes 4458 → 4215（其余指标不变）。
+# 漂移复核（Float/FromString 分支，2026-11-09）：用本任务开始前的二进制
+#       （HEAD 的 result）与 clean HEAD worktree 分别重跑夹具，产物同为 4233 bytes
+#       （其余指标同上），即 +18 字节漂移早于本任务、非 Float 改动引入；按实测把
+#       bytes 重标定为 4233。
 files =4
-bytes =4215
+bytes =4233
 lines =86
 maxline =823
 longlines =5

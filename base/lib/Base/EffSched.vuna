@@ -48,6 +48,7 @@ module Base.EffSched
 --     并返回 `Err "timeout"`（不要求真实 sleep / 时钟）。
 import Base.Eff
 import Base.IO
+import Base.Monad
 import Base.Ord
 import Base.Result
 
@@ -132,26 +133,35 @@ else if st <= 2 then Err "timeout" else Err "cancelled"
 -- Ok x = body 返回 Ok 且子任务全部正常结束；Err m = body 失败（先取消子任务）
 -- 或 scope 失败/取消/超时。body 的 Result 与 scope 的 Result 合并成一层。
 withScope : {a : Type} -> {r : Row} -> (Scope -> Eff r (Result a)) -> Eff r (Result a)
-withScope body = bindEff newScope (\sc => bindEff (body sc) (\res => case res of
-  Ok x => bindEff (scopeWait sc) (\w => case w of
-    Ok _ => pureEff (Ok x)
-    Err m => pureEff (Err m)
-  )
-  Err e => bindEff (cancelScope sc) (\_ => bindEff (scopeWait sc) (\_ => pureEff (Err e)))
-)
-)
+withScope body = do
+  sc <- newScope
+  res <- body sc
+  case res of
+    Ok x => do
+      w <- scopeWait sc
+      case w of
+        Ok _ => pure (Ok x)
+        Err m => pure (Err m)
+    Err e => do
+      _ <- cancelScope sc
+      _ <- scopeWait sc
+      pure (Err e)
 
 -- | 结构化作用域 + 步数超时（超时取消子任务并返回 Err "timeout"）。
 withScopeTimeout : {a : Type} -> {r : Row} -> Int -> (Scope -> Eff r (Result a)) -> Eff r (Result a)
-withScopeTimeout steps body = bindEff newScope (\sc => bindEff (body sc) (\res => case res of
-  Ok x => bindEff (scopeWaitTimeout steps sc) (\w => case w of
-    Ok _ => pureEff (Ok x)
-    Err m => pureEff (Err m)
-  )
-  Err e =>
-    bindEff (cancelScope sc) (\_ => bindEff (scopeWaitTimeout steps sc) (\_ => pureEff (Err e)))
-)
-)
+withScopeTimeout steps body = do
+  sc <- newScope
+  res <- body sc
+  case res of
+    Ok x => do
+      w <- scopeWaitTimeout steps sc
+      case w of
+        Ok _ => pure (Ok x)
+        Err m => pure (Err m)
+    Err e => do
+      _ <- cancelScope sc
+      _ <- scopeWaitTimeout steps sc
+      pure (Err e)
 
 -- W9 线性任务句柄：TaskLin 是线性数据，awaitTaskLin/cancelTaskLin 各消费一次；
 -- 因此「恰好一次 join 或 cancel」在用量检查阶段生效。普通 Task 保留为可复制 legacy。

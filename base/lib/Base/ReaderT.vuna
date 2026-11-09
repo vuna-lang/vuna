@@ -30,7 +30,11 @@ instance Functor (ReaderT e) where
 
 instance Monad (ReaderT e) where
   bind r k = ReaderT (\e => r.readerTRun e >>= (\a => (k a).readerTRun e))
+
+instance Applicative (ReaderT e) where
   pure a = ReaderT (\_ => pure a)
+  liftA2 f ra rb =
+    ReaderT (\e => ra.readerTRun e >>= (\a => rb.readerTRun e >>= (\b => pure (f a b))))
 
 instance MonadIO (ReaderT e) where
   liftIO io = ReaderT (\_ => io)

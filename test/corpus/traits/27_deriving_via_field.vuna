@@ -1,0 +1,13 @@
+-- M42：`deriving via field` 把 Show/Eq 委托给唯一字段的实例（Show 输出底层值）。
+record UserId where
+  uid : Int
+deriving via field (Show, Eq)
+
+u : UserId
+u = UserId { uid = 3 }
+
+v : UserId
+v = UserId { uid = 3 }
+
+main : String
+main = show u ++ (if u == v then "/eq" else "/ne")
