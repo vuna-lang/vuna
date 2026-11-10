@@ -83,11 +83,11 @@ runTests opts pkg = case opts.testOnlyFile of
 
 runTestsGo : TestOpts -> Package -> Int
 runTestsGo opts pkg = case workspacePackages (packageDir pkg) of
-  Err e =>
+  ErrC e =>
     let
-      _ = runIO (prim_print "error: ${e}\n")
+      _ = runIO (prim_print "error: ${diagText e}\n")
     in 2
-  Ok pkgs => if length pkgs <= 1 then runPackageTests opts pkg else runWorkspaceTests opts pkgs
+  OkC pkgs => if length pkgs <= 1 then runPackageTests opts pkg else runWorkspaceTests opts pkgs
 
 -- ---------------------------------------------------------------
 -- 单包（行为与 M11.5 一致：没有 test/ 是输入错误，退出码 2）
@@ -334,8 +334,8 @@ elapsedMs start = (runIO timeUs - start) / 1000
 -- 单个测试：按 main 的返回类别选执行路径。
 runOneTest : PackageContext -> String -> String -> TestOutcome
 runOneTest ctx path name = case dtMainKind ctx path of
-  Err e => TestFailed e
-  Ok kind => case kind of
+  ErrC e => TestFailed (diagText e)
+  OkC kind => case kind of
     "IO" => runIOTest ctx path name
     "String" => pureTest name (interpretFile ctx path) "\"\""
     "Int" => pureTest name (interpretFile ctx path) "0"
@@ -365,9 +365,9 @@ runIOTestLegacy ctx path name =
   let
     source = runIO (prim_readFile path)
   in case runEffectProgram ctx source False of
-    Err e => TestFailed e
-    Ok 0 => TestPassed
-    Ok code => TestFailed "effect program exited with code ${code}"
+    ErrC e => TestFailed (diagText e)
+    OkC 0 => TestPassed
+    OkC code => TestFailed "effect program exited with code ${code}"
 
 -- ---------------------------------------------------------------
 -- W1：IO 测试的超时执行
@@ -430,8 +430,8 @@ runIOTestTimed ctx path name secs =
   let
     dir = freshTempDir 1000 "${tempBase 0}/vuna-test-${runIO timeUs}-${name}"
   in case compileToDir ctx path False dir of
-    Err e => ioCleanup dir (TestFailed e)
-    Ok _ =>
+    ErrC e => ioCleanup dir (TestFailed (diagText e))
+    OkC _ =>
       let
         _ = runIO (prim_makeDir "${dir}/bin")
       in case runTimedCmd dir ["sh", "build.sh", "bin/vuna-test"] secs of

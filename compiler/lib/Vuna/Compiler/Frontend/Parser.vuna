@@ -8,130 +8,135 @@ import Vuna.Compiler.Frontend.Diagnostics
 import Vuna.Compiler.Frontend.Lexer
 import Vuna.Compiler.Frontend.Parser.Support
 
-parseSource : String -> String -> Result SourceFile
+parseSource : String -> String -> Check SourceFile
 parseSource file source =
   Vuna.Compiler.Common.bind (lexSource source)
-    (\toks => Vuna.Compiler.Common.bind (parseSourceFile (PState file toks (Pos 1 0) (length toks))) (\p => Ok (firstOf p)))
+    (\toks => Vuna.Compiler.Common.bind (parseSourceFile (PState file toks (Pos 1 0) (length toks))) (\p => OkC (firstOf p)))
 
 -- 单表达式解析（REPL / 工具用）：整段输入必须恰好是一个表达式。
-parseExpressionSource : String -> Result Expr
+parseExpressionSource : String -> Check Expr
 parseExpressionSource source =
   Vuna.Compiler.Common.bind (lexSource source)
-    (\toks => step (parseExpr (stateFuel (PState "<expr>" toks (Pos 1 0) (length toks))) (PState "<expr>" toks (Pos 1 0) (length toks)) 0 0) (\e, st => if isEof st then Ok e else psErr0 ExpectedEndOfExpr))
+    (\toks => Vuna.Compiler.Common.step (parseExpr (stateFuel (PState "<expr>" toks (Pos 1 0) (length toks))) (PState "<expr>" toks (Pos 1 0) (length toks)) 0 0) (\e, st => if isEof st then OkC e else psErr0 ExpectedEndOfExpr))
 
 -- 可选模块头（M10）：`module M (导出项, ...) where`；列表省略 = 导出全部。
-parseSourceFile : PState -> Result (Pair SourceFile PState)
-parseSourceFile st = step (parseModDecl st) (\hdr, st1 => step (parseImports (stateFuel st1) st1) (\imports, st2 => if isEof st2 then Ok (Pair (SourceFile hdr imports [] []) st2)
+parseSourceFile : PState -> Check (Pair SourceFile PState)
+parseSourceFile st = Vuna.Compiler.Common.step (parseModDecl st) (\hdr, st1 => Vuna.Compiler.Common.step (parseImports (stateFuel st1) st1) (\imports, st2 => if isEof st2 then OkC (Pair (SourceFile hdr imports [] []) st2)
 else case peekPos st2 of
-  Pos line col => step (parseDecls (stateFuel st2) st2 col [] []) (\p, st3 => case p of
+  Pos line col => Vuna.Compiler.Common.step (parseDecls (stateFuel st2) st2 col [] []) (\p, st3 => case p of
     Pair fixities decls =>
-      if isEof st3 then Ok (Pair (SourceFile hdr imports fixities decls) st3)
+      if isEof st3 then OkC (Pair (SourceFile hdr imports fixities decls) st3)
       else psErr0 ExpectedEndOfInput
   )
 )
 )
 
-parseModDecl : PState -> Result (Pair (Maybe ModDecl) PState)
+parseModDecl : PState -> Check (Pair (Maybe ModDecl) PState)
 parseModDecl st =
-  if atKw st "module" then step (expectKw st "module")
-    (\_, st1 => step (expectIdent st1) (\name, st2 => if atSym st2 "(" then step (parseExportItems st2) (\items, st3 => step (expectKw st3 "where") (\_, st4 => Ok (Pair (Just (ModDecl name True items (spanOf st st4))) st4))) else step (expectKw st2 "where") (\_, st3 => Ok (Pair (Just (ModDecl name False [] (spanOf st st3))) st3))))
-  else Ok (Pair Nothing st)
+  if atKw st "module" then Vuna.Compiler.Common.step (expectKw st "module")
+    (\_, st1 => Vuna.Compiler.Common.step (expectIdent st1) (\name, st2 => if atSym st2 "(" then Vuna.Compiler.Common.step (parseExportItems st2) (\items, st3 => Vuna.Compiler.Common.step (expectKw st3 "where") (\_, st4 => OkC (Pair (Just (ModDecl name True items (spanOf st st4))) st4))) else Vuna.Compiler.Common.step (expectKw st2 "where") (\_, st3 => OkC (Pair (Just (ModDecl name False [] (spanOf st st3))) st3))))
+  else OkC (Pair Nothing st)
 
-parseExportItems : PState -> Result (Pair (List ExportItem) PState)
+parseExportItems : PState -> Check (Pair (List ExportItem) PState)
 parseExportItems st =
-  step (expectSym st "(")
-    (\_, st1 => if atSym st1 ")" then Ok (Pair [] (advance st1)) else parseExportItemsFrom (stateFuel st1) st1)
+  Vuna.Compiler.Common.step (expectSym st "(")
+    (\_, st1 => if atSym st1 ")" then OkC (Pair [] (advance st1)) else parseExportItemsFrom (stateFuel st1) st1)
 
-parseExportItemsFrom : Int -> PState -> Result (Pair (List ExportItem) PState)
+parseExportItemsFrom : Int -> PState -> Check (Pair (List ExportItem) PState)
 parseExportItemsFrom fuel st =
-  if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
-  else step (parseExportItem st)
-    (\item, st1 => if atSym st1 "," then step (parseExportItemsFrom (fuel - 1) (advance st1)) (\rest, st2 => Ok (Pair (Base.List.Cons item rest) st2)) else step (expectSym st1 ")") (\_, st2 => Ok (Pair [item] st2)))
+  if fuel <= 0 then err "DT: parser fuel exhausted (internal: parser made no progress)"
+  else Vuna.Compiler.Common.step (parseExportItem st)
+    (\item, st1 => if atSym st1 "," then Vuna.Compiler.Common.step (parseExportItemsFrom (fuel - 1) (advance st1)) (\rest, st2 => OkC (Pair (Base.List.Cons item rest) st2)) else Vuna.Compiler.Common.step (expectSym st1 ")") (\_, st2 => OkC (Pair [item] st2)))
 
-parseExportItem : PState -> Result (Pair ExportItem PState)
+parseExportItem : PState -> Check (Pair ExportItem PState)
 parseExportItem st = case peekTok st of
   PTok (TKw "module") p =>
-    step (expectKw st "module")
-      (\_, st1 => step (expectIdent st1) (\name, st2 => Ok (Pair (XModule name (spanOf st st2)) st2)))
+    Vuna.Compiler.Common.step (expectKw st "module")
+      (\_, st1 => Vuna.Compiler.Common.step (expectIdent st1) (\name, st2 => OkC (Pair (XModule name (spanOf st st2)) st2)))
   PTok (TIdent name) p =>
     let
       st1 = advance st
-    in if atSym st1 "(" then step (expectSym st1 "(")
-      (\_, st2 => step (expectSym st2 "..") (\_, st3 => step (expectSym st3 ")") (\_, st4 => Ok (Pair (XTypeAll name (spanOf st st4)) st4))))
-    else Ok (Pair (XBare name (spanOf st st1)) st1)
+    in if atSym st1 "(" then Vuna.Compiler.Common.step (expectSym st1 "(")
+      (\_, st2 => Vuna.Compiler.Common.step (expectSym st2 "..") (\_, st3 => Vuna.Compiler.Common.step (expectSym st3 ")") (\_, st4 => OkC (Pair (XTypeAll name (spanOf st st4)) st4))))
+    else OkC (Pair (XBare name (spanOf st st1)) st1)
   -- M31.3：导出用户符号名函数（`(<+>)`）。保留符号不可导出。
   PTok (TSym op) p =>
     if isReservedValueName op then psErr0 ExpectedExportItem
-    else Ok (Pair (XBare op (spanOf st (advance st))) (advance st))
+    else OkC (Pair (XBare op (spanOf st (advance st))) (advance st))
   _ => psErr0 ExpectedExportItem
 
-parseImportSpec : PState -> Result (Pair Import PState)
+parseImportSpec : PState -> Check (Pair Import PState)
 parseImportSpec st =
-  step (expectKw st "import")
-    (\_, st1 => if atKw st1 "qualified" then step (expectKw st1 "qualified") (\_, st2 => parseImportAlias st2 True) else parseImportAlias st1 False)
+  Vuna.Compiler.Common.step (expectKw st "import")
+    (\_, st1 => if atKw st1 "qualified" then Vuna.Compiler.Common.step (expectKw st1 "qualified") (\_, st2 => parseImportAlias st2 True) else parseImportAlias st1 False)
 
-parseImportAlias : PState -> Bool -> Result (Pair Import PState)
+parseImportAlias : PState -> Bool -> Check (Pair Import PState)
 parseImportAlias st isQualified =
-  step (expectIdent st)
-    (\name, st1 => if atKw st1 "as" then step (expectKw st1 "as") (\_, st2 => step (expectIdent st2) (\alias, st3 => Ok (Pair (Import name isQualified (Just alias) (spanOf st st3)) st3))) else Ok (Pair (Import name isQualified Nothing (spanOf st st1)) st1))
+  Vuna.Compiler.Common.step (expectIdent st)
+    (\name, st1 => if atKw st1 "as" then Vuna.Compiler.Common.step (expectKw st1 "as") (\_, st2 => Vuna.Compiler.Common.step (expectIdent st2) (\alias, st3 => OkC (Pair (Import name isQualified (Just alias) (spanOf st st3)) st3))) else OkC (Pair (Import name isQualified Nothing (spanOf st st1)) st1))
 
-parseImports : Int -> PState -> Result (Pair (List Import) PState)
+parseImports : Int -> PState -> Check (Pair (List Import) PState)
 parseImports fuel st =
-  if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
-  else if atKw st "import" then step (parseImportSpec st)
-    (\imp, st1 => step (parseImports (fuel - 1) st1) (\rest, st2 => Ok (Pair (Base.List.Cons imp rest) st2)))
-  else Ok (Pair [] st)
+  if fuel <= 0 then err "DT: parser fuel exhausted (internal: parser made no progress)"
+  else if atKw st "import" then Vuna.Compiler.Common.step (parseImportSpec st)
+    (\imp, st1 => Vuna.Compiler.Common.step (parseImports (fuel - 1) st1) (\rest, st2 => OkC (Pair (Base.List.Cons imp rest) st2)))
+  else OkC (Pair [] st)
 
 -- M31.2：`infixl` / `infixr` / `infix` 声明与顶层声明穿插收集（声明本身不进入 Decl，
 -- 由 Loader 在中缀重排时消费；见 `SourceFile.fixities`）。
-parseDecls : Int -> PState -> Int -> List FixityDecl -> List Decl -> Result (Pair (Pair (List FixityDecl) (List Decl)) PState)
-parseDecls fuel st blockCol fixAcc declAcc = if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
-else if isEof st then Ok (Pair (Pair (reverse fixAcc) (reverse declAcc)) st)
+parseDecls : Int -> PState -> Int -> List FixityDecl -> List Decl -> Check (Pair (Pair (List FixityDecl) (List Decl)) PState)
+parseDecls fuel st blockCol fixAcc declAcc = if fuel <= 0 then err "DT: parser fuel exhausted (internal: parser made no progress)"
+else if isEof st then OkC (Pair (Pair (reverse fixAcc) (reverse declAcc)) st)
 else case peekPos st of
-  Pos line col => if col == blockCol then step (parseFixityOrDecl st blockCol) (\p, st1 => case p of
+  Pos line col => if col == blockCol then Vuna.Compiler.Common.step (parseFixityOrDecl st blockCol) (\p, st1 => case p of
     Pair fd dl => case fd of
       Just f => parseDecls (fuel - 1) st1 blockCol (Base.List.Cons f fixAcc) declAcc
       Nothing => case dl of
         d :: _ => parseDecls (fuel - 1) st1 blockCol fixAcc (Base.List.Cons d declAcc)
-        [] => Err "DT: internal: parseFixityOrDecl returned nothing"
+        [] => err "DT: internal: parseFixityOrDecl returned nothing"
   )
   else psErr1 (ExpectedDeclAtColumn (strFromInt blockCol)) (strFromInt blockCol)
 
 -- 一条顶层声明：fixity 声明（返回 Just）或普通 Decl（返回单元素列表）。
-parseFixityOrDecl : PState -> Int -> Result (Pair (Pair (Maybe FixityDecl) (List Decl)) PState)
+parseFixityOrDecl : PState -> Int -> Check (Pair (Pair (Maybe FixityDecl) (List Decl)) PState)
 parseFixityOrDecl st blockCol = case peekTok st of
   PTok (TKw "infixl") p =>
-    step (parseFixityDecl st blockCol 1 p) (\fd, st1 => Ok (Pair (Pair (Just fd) []) st1))
+    Vuna.Compiler.Common.step (parseFixityDecl st blockCol 1 p)
+      (\fd, st1 => OkC (Pair (Pair (Just fd) []) st1))
   PTok (TKw "infixr") p =>
-    step (parseFixityDecl st blockCol 2 p) (\fd, st1 => Ok (Pair (Pair (Just fd) []) st1))
+    Vuna.Compiler.Common.step (parseFixityDecl st blockCol 2 p)
+      (\fd, st1 => OkC (Pair (Pair (Just fd) []) st1))
   PTok (TKw "infix") p =>
-    step (parseFixityDecl st blockCol 0 p) (\fd, st1 => Ok (Pair (Pair (Just fd) []) st1))
-  _ => step (parseDecl st blockCol) (\decl, st1 => Ok (Pair (Pair Nothing [decl]) st1))
+    Vuna.Compiler.Common.step (parseFixityDecl st blockCol 0 p)
+      (\fd, st1 => OkC (Pair (Pair (Just fd) []) st1))
+  _ =>
+    Vuna.Compiler.Common.step (parseDecl st blockCol)
+      (\decl, st1 => OkC (Pair (Pair Nothing [decl]) st1))
 
 -- `infixl 6 +` / `infixr 5 :: = Cons` / `infix 4 == = eq`。
-parseFixityDecl : PState -> Int -> Int -> Pos -> Result (Pair FixityDecl PState)
+parseFixityDecl : PState -> Int -> Int -> Pos -> Check (Pair FixityDecl PState)
 parseFixityDecl st blockCol assoc kwPos =
-  step (expectFixityLevel (advance st))
-    (\level, st1 => step (expectOpName st1) (\op, st2 => if atSym st2 "=" then step (expectSym st2 "=") (\_, st3 => step (expectOpName st3) (\target, st4 => Ok (Pair (FixityDecl op level assoc (Just target) (Span (fileOf st) (posLine kwPos) (posCol kwPos) (posLine (lastPos st4)) (posCol (lastPos st4)))) st4))) else Ok (Pair (FixityDecl op level assoc Nothing (Span (fileOf st) (posLine kwPos) (posCol kwPos) (posLine (lastPos st2)) (posCol (lastPos st2)))) st2)))
+  Vuna.Compiler.Common.step (expectFixityLevel (advance st))
+    (\level, st1 => Vuna.Compiler.Common.step (expectOpName st1) (\op, st2 => if atSym st2 "=" then Vuna.Compiler.Common.step (expectSym st2 "=") (\_, st3 => Vuna.Compiler.Common.step (expectOpName st3) (\target, st4 => OkC (Pair (FixityDecl op level assoc (Just target) (Span (fileOf st) (posLine kwPos) (posCol kwPos) (posLine (lastPos st4)) (posCol (lastPos st4)))) st4))) else OkC (Pair (FixityDecl op level assoc Nothing (Span (fileOf st) (posLine kwPos) (posCol kwPos) (posLine (lastPos st2)) (posCol (lastPos st2)))) st2)))
 
-expectFixityLevel : PState -> Result (Pair Int PState)
+expectFixityLevel : PState -> Check (Pair Int PState)
 expectFixityLevel st = case peekTok st of
-  PTok (TInt n) p => if n >= 0 && n <= 9 then Ok (Pair n (advance st)) else psErr0 FixityLevelRange
+  PTok (TInt n) p => if n >= 0 && n <= 9 then OkC (Pair n (advance st)) else psErr0 FixityLevelRange
   _ => psErr0 ExpectedFixityLevel
 
 -- fixity/别名声明里的运算符名：符号（`+`、`::`）或标识符（`eq`）。
 -- 保留符号（`isSyntaxSym` ∪ {`->`, `` ` ``}）不是用户运算符，不能声明 fixity。
-expectOpName : PState -> Result (Pair String PState)
+expectOpName : PState -> Check (Pair String PState)
 expectOpName st = case peekTok st of
   PTok (TSym op) p =>
     if isReservedValueName op then psErr1 (ExpectedToken "operator") "operator"
-    else Ok (Pair op (advance st))
+    else OkC (Pair op (advance st))
   PTok (TIdent name) p =>
     if isReservedValueName name then psErr1 (ExpectedToken "operator") "operator"
-    else Ok (Pair name (advance st))
+    else OkC (Pair name (advance st))
   _ => psErr1 (ExpectedToken "operator") "operator"
 
-parseDecl : PState -> Int -> Result (Pair Decl PState)
+parseDecl : PState -> Int -> Check (Pair Decl PState)
 parseDecl st blockCol = case peekTok st of
   PTok (TKw "data") p => parseData False st blockCol p
   PTok (TKw "linear") p => parseLinearDecl st blockCol p
@@ -159,18 +164,18 @@ parseDecl st blockCol = case peekTok st of
 
 -- M28 axiom 声明（决策 5 / D10）：`axiom name : Ty`，无 `=` 体。
 -- 它是无体的可擦除顶层，只在类型层可用（运行时使用由擦除检查拒绝）。
-parseAxiom : PState -> Int -> Pos -> Result (Pair Decl PState)
+parseAxiom : PState -> Int -> Pos -> Check (Pair Decl PState)
 parseAxiom st blockCol kwPos =
-  step (expectKw st "axiom")
-    (\_, st1 => step (expectIdent st1) (\name, st2 => step (expectSym st2 ":") (\_, st3 => step (parseExpr (stateFuel st3) st3 blockCol 0) (\ty, st4 => step (rejectCtxSuffix st4) (\_, st5 => Ok (Pair (DAxiom name ty (Span (fileOf st) (posLine kwPos) (posCol kwPos) (posLine (lastPos st5)) (posCol (lastPos st5)))) st5))))))
+  Vuna.Compiler.Common.step (expectKw st "axiom")
+    (\_, st1 => Vuna.Compiler.Common.step (expectIdent st1) (\name, st2 => Vuna.Compiler.Common.step (expectSym st2 ":") (\_, st3 => Vuna.Compiler.Common.step (parseExpr (stateFuel st3) st3 blockCol 0) (\ty, st4 => Vuna.Compiler.Common.step (rejectCtxSuffix st4) (\_, st5 => OkC (Pair (DAxiom name ty (Span (fileOf st) (posLine kwPos) (posCol kwPos) (posLine (lastPos st5)) (posCol (lastPos st5)))) st5))))))
 
 -- M33 W5：受限 FFI 声明 `extern name "c_name" : Ty`（无体）。类型只允许基本类型，
 -- 由 Elab 检查；运行时由包根 `ffi/*.c` 提供，codegen 生成 OCaml `external`。
-parseExtern : PState -> Int -> Pos -> Result (Pair Decl PState)
-parseExtern st blockCol kwPos = step (expectKw st "extern") (\_, st1 => step (expectIdent st1) (\name, st2 => case peekTok st2 of
+parseExtern : PState -> Int -> Pos -> Check (Pair Decl PState)
+parseExtern st blockCol kwPos = Vuna.Compiler.Common.step (expectKw st "extern") (\_, st1 => Vuna.Compiler.Common.step (expectIdent st1) (\name, st2 => case peekTok st2 of
   PTok (TStr cName) cp =>
-    step (Ok (Pair cName (advance st2)))
-      (\cName2, st3 => step (expectSym st3 ":") (\_, st4 => step (parseExpr (stateFuel st4) st4 blockCol 0) (\ty, st5 => step (rejectCtxSuffix st5) (\_, st6 => Ok (Pair (DExtern name cName2 ty (Span (fileOf st) (posLine kwPos) (posCol kwPos) (posLine (lastPos st6)) (posCol (lastPos st6)))) st6)))))
+    Vuna.Compiler.Common.step (OkC (Pair cName (advance st2)))
+      (\cName2, st3 => Vuna.Compiler.Common.step (expectSym st3 ":") (\_, st4 => Vuna.Compiler.Common.step (parseExpr (stateFuel st4) st4 blockCol 0) (\ty, st5 => Vuna.Compiler.Common.step (rejectCtxSuffix st5) (\_, st6 => OkC (Pair (DExtern name cName2 ty (Span (fileOf st) (posLine kwPos) (posCol kwPos) (posLine (lastPos st6)) (posCol (lastPos st6)))) st6)))))
   _ => psErr1 (ExpectedToken "string") "string"
 )
 )
@@ -178,30 +183,30 @@ parseExtern st blockCol kwPos = step (expectKw st "extern") (\_, st1 => step (ex
 -- M32：只有顶层签名允许 trait 约束 `C a =>`。其它签名位置（axiom / where / let /
 -- trait 方法 / 构造子 / 记录字段）见到 `=>` 时直接给出明确诊断，而不是让 `=>` 作为
 -- 残留 token 触发难懂的收尾错误。
-rejectCtxSuffix : PState -> Result (Pair Int PState)
-rejectCtxSuffix st = if atSym st "=>" then psErr0 ConstraintUnsupportedHere else Ok (Pair 0 st)
+rejectCtxSuffix : PState -> Check (Pair Int PState)
+rejectCtxSuffix st = if atSym st "=>" then psErr0 ConstraintUnsupportedHere else OkC (Pair 0 st)
 
 -- 顶层签名：`name : [C1 a, C2 b =>] τ`。`allowCtx=False` 供 instance 方法签名复用同一
 -- 解析入口（instance 方法的约束由实例 ctx 提供，签名上写 `=>` 报明确诊断）。
-parseSignature : PState -> Int -> Bool -> String -> Pos -> Result (Pair Decl PState)
-parseSignature st blockCol allowCtx name namePos = step (expectSym st ":") (\_, st1 => step (parseCtxThenExpr (stateFuel st1) st1 blockCol) (\hc, st2 => case hc of
+parseSignature : PState -> Int -> Bool -> String -> Pos -> Check (Pair Decl PState)
+parseSignature st blockCol allowCtx name namePos = Vuna.Compiler.Common.step (expectSym st ":") (\_, st1 => Vuna.Compiler.Common.step (parseCtxThenExpr (stateFuel st1) st1 blockCol) (\hc, st2 => case hc of
   Pair ctx ty => case ctx of
     [] =>
-      Ok
+      OkC
         (Pair (DSig name [] ty (Span (fileOf st) (posLine namePos) (posCol namePos) (posLine (lastPos st2)) (posCol (lastPos st2)))) st2)
     _ =>
-      if allowCtx then Ok
+      if allowCtx then OkC
         (Pair (DSig name ctx ty (Span (fileOf st) (posLine namePos) (posCol namePos) (posLine (lastPos st2)) (posCol (lastPos st2)))) st2)
       else psErr0 ConstraintUnsupportedHere
 )
 )
 
-parseClause : PState -> Int -> String -> Pos -> Result (Pair Decl PState)
-parseClause st blockCol name namePos = step (parseClausePatterns (stateFuel st) st blockCol) (\pats, st1 => Vuna.Compiler.Common.bind (checkNoRepeatedBinders pats) (\_ => step (expectSym st1 "=") (\_, st2 => step (parseExpr (stateFuel st2) st2 blockCol 0) (\body, st3 => step (parseWhere st3 blockCol) (\wheres, st4 => let
+parseClause : PState -> Int -> String -> Pos -> Check (Pair Decl PState)
+parseClause st blockCol name namePos = Vuna.Compiler.Common.step (parseClausePatterns (stateFuel st) st blockCol) (\pats, st1 => Vuna.Compiler.Common.bind (checkNoRepeatedBinders pats) (\_ => Vuna.Compiler.Common.step (expectSym st1 "=") (\_, st2 => Vuna.Compiler.Common.step (parseExpr (stateFuel st2) st2 blockCol 0) (\body, st3 => Vuna.Compiler.Common.step (parseWhere st3 blockCol) (\wheres, st4 => let
   body2 = case wheres of
     [] => body
     _ :: _ => ELet wheres body True (spanOf st st4)
-in Ok
+in OkC
   (Pair (DFun name pats body2 (Span (fileOf st) (posLine namePos) (posCol namePos) (posLine (lastPos st4)) (posCol (lastPos st4)))) st4)
 )
 )
@@ -219,83 +224,89 @@ in Ok
 -- Elab 据此在 checking 模式精化该值。两条记法只差一条：`where` 块**要求**每个绑定都有
 -- 签名行（由 Elab 的 `checkBindingSigs` 用一个诊断收口），`let` 的签名是可选的。
 -- ---------------------------------------------------------------
-parseWhere : PState -> Int -> Result (Pair (List (Pair Pat Expr)) PState)
+parseWhere : PState -> Int -> Check (Pair (List (Pair Pat Expr)) PState)
 parseWhere st blockCol = case peekTok st of
   PTok (TKw "where") p =>
-    if posCol p > blockCol then step (Ok (Pair 0 (advance st)))
-      (\_, st1 => step (parseWhereBindings st1 blockCol) (\binds, st2 => Ok (Pair binds st2)))
-    else Ok (Pair [] st)
-  _ => Ok (Pair [] st)
+    if posCol p > blockCol then Vuna.Compiler.Common.step (OkC (Pair 0 (advance st)))
+      (\_, st1 => Vuna.Compiler.Common.step (parseWhereBindings st1 blockCol) (\binds, st2 => OkC (Pair binds st2)))
+    else OkC (Pair [] st)
+  _ => OkC (Pair [] st)
 
-parseWhereBindings : PState -> Int -> Result (Pair (List (Pair Pat Expr)) PState)
-parseWhereBindings st whereCol = if isEof st then Ok (Pair [] st)
+parseWhereBindings : PState -> Int -> Check (Pair (List (Pair Pat Expr)) PState)
+parseWhereBindings st whereCol = if isEof st then OkC (Pair [] st)
 else case peekPos st of
   Pos line col =>
-    if col > whereCol then step (parseBindingItemsAt (stateFuel st) st col)
-      (\items, st1 => Vuna.Compiler.Common.bind (bindingItemsToBinds items) (\binds => Ok (Pair binds st1)))
-    else Ok (Pair [] st)
+    if col > whereCol then Vuna.Compiler.Common.step (parseBindingItemsAt (stateFuel st) st col)
+      (\items, st1 => Vuna.Compiler.Common.bind (bindingItemsToBinds items) (\binds => OkC (Pair binds st1)))
+    else OkC (Pair [] st)
 
 -- 绑定块的条目：签名行或一条绑定（`pat = expr` / `name pats = expr`）。
 data BindingItem : Type where
   BISig : String -> Expr -> Span -> BindingItem
   BIBind : Pair Pat Expr -> BindingItem
 
-parseBindingItemsAt : Int -> PState -> Int -> Result (Pair (List BindingItem) PState)
-parseBindingItemsAt fuel st bindCol = if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
-else if isEof st then Ok (Pair [] st)
-else if atKw st "in" then Ok (Pair [] st)
+parseBindingItemsAt : Int -> PState -> Int -> Check (Pair (List BindingItem) PState)
+parseBindingItemsAt fuel st bindCol = if fuel <= 0 then err "DT: parser fuel exhausted (internal: parser made no progress)"
+else if isEof st then OkC (Pair [] st)
+else if atKw st "in" then OkC (Pair [] st)
 else case peekPos st of
   Pos line col =>
-    if col == bindCol then step (parseBindingItem (fuel - 1) st bindCol)
-      (\item, st1 => step (parseBindingItemsAt (fuel - 1) st1 bindCol) (\rest, st2 => Ok (Pair (Base.List.Cons item rest) st2)))
-    else if col > bindCol then psErr0 UnexpectedIndentInBinding else Ok (Pair [] st)
+    if col == bindCol then Vuna.Compiler.Common.step (parseBindingItem (fuel - 1) st bindCol)
+      (\item, st1 => Vuna.Compiler.Common.step (parseBindingItemsAt (fuel - 1) st1 bindCol) (\rest, st2 => OkC (Pair (Base.List.Cons item rest) st2)))
+    else if col > bindCol then psErr0 UnexpectedIndentInBinding else OkC (Pair [] st)
 
-parseBindingItem : Int -> PState -> Int -> Result (Pair BindingItem PState)
-parseBindingItem fuel st bindCol = if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
-else step (parsePatternSingle (stateFuel st) st bindCol) (\pat, st1 => case pat of
+parseBindingItem : Int -> PState -> Int -> Check (Pair BindingItem PState)
+parseBindingItem fuel st bindCol = if fuel <= 0 then err "DT: parser fuel exhausted (internal: parser made no progress)"
+else Vuna.Compiler.Common.step (parsePatternSingle (stateFuel st) st bindCol) (\pat, st1 => case pat of
   PVar name psp =>
-    if atSym st1 ":" then step (expectSym st1 ":")
-      (\_, st2 => step (parseExpr (fuel - 1) st2 bindCol 0) (\ty, st3 => step (rejectCtxSuffix st3) (\_, st4 => Ok (Pair (BISig name ty (spanOf st st4)) st4))))
+    if atSym st1 ":" then Vuna.Compiler.Common.step (expectSym st1 ":")
+      (\_, st2 => Vuna.Compiler.Common.step (parseExpr (fuel - 1) st2 bindCol 0) (\ty, st3 => Vuna.Compiler.Common.step (rejectCtxSuffix st3) (\_, st4 => OkC (Pair (BISig name ty (spanOf st st4)) st4))))
     else parseBindingDef (fuel - 1) st st1 bindCol pat
   _ => parseBindingDef (fuel - 1) st st1 bindCol pat
 )
 
 -- 单条绑定：`pat = expr` 或函数子句 `name pats = expr`（desugar 成 λ）。
-parseBindingDef : Int -> PState -> PState -> Int -> Pat -> Result (Pair BindingItem PState)
-parseBindingDef fuel stStart st bindCol pat = if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
+parseBindingDef : Int -> PState -> PState -> Int -> Pat -> Check (Pair BindingItem PState)
+parseBindingDef fuel stStart st bindCol pat = if fuel <= 0 then err "DT: parser fuel exhausted (internal: parser made no progress)"
 else case pat of
   PVar name _ =>
-    if startsPatternAtom st && canContinue st bindCol then step (parseClausePatterns (stateFuel st) st bindCol)
-      (\pats, st2 => Vuna.Compiler.Common.bind (checkNoRepeatedBinders pats) (\_ => step (expectSym st2 "=") (\_, st3 => step (parseExpr (fuel - 1) st3 bindCol 0) (\value, st4 => Ok (Pair (BIBind (Pair (PVar name (patSpan pat)) (ELocalFun [Pair pats value] (spanOf stStart st4)))) st4)))))
-    else step (parseBindingValue (fuel - 1) st pat bindCol) (\b, st2 => Ok (Pair (BIBind b) st2))
-  _ => step (parseBindingValue (fuel - 1) st pat bindCol) (\b, st2 => Ok (Pair (BIBind b) st2))
+    if startsPatternAtom st && canContinue st bindCol then Vuna.Compiler.Common.step (parseClausePatterns (stateFuel st) st bindCol)
+      (\pats, st2 => Vuna.Compiler.Common.bind (checkNoRepeatedBinders pats) (\_ => Vuna.Compiler.Common.step (expectSym st2 "=") (\_, st3 => Vuna.Compiler.Common.step (parseExpr (fuel - 1) st3 bindCol 0) (\value, st4 => OkC (Pair (BIBind (Pair (PVar name (patSpan pat)) (ELocalFun [Pair pats value] (spanOf stStart st4)))) st4)))))
+    else Vuna.Compiler.Common.step (parseBindingValue (fuel - 1) st pat bindCol)
+      (\b, st2 => OkC (Pair (BIBind b) st2))
+  _ =>
+    Vuna.Compiler.Common.step (parseBindingValue (fuel - 1) st pat bindCol)
+      (\b, st2 => OkC (Pair (BIBind b) st2))
 
-parseBindingValue : Int -> PState -> Pat -> Int -> Result (Pair (Pair Pat Expr) PState)
+parseBindingValue : Int -> PState -> Pat -> Int -> Check (Pair (Pair Pat Expr) PState)
 parseBindingValue fuel st pat blockCol =
-  if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
+  if fuel <= 0 then err "DT: parser fuel exhausted (internal: parser made no progress)"
   else Vuna.Compiler.Common.bind (checkNoRepeatedBinders [pat])
-    (\_ => step (expectSym st "=") (\_, st1 => step (parseExpr (fuel - 1) st1 blockCol 0) (\value, st2 => Ok (Pair (Pair pat value) st2))))
+    (\_ => Vuna.Compiler.Common.step (expectSym st "=") (\_, st1 => Vuna.Compiler.Common.step (parseExpr (fuel - 1) st1 blockCol 0) (\value, st2 => OkC (Pair (Pair pat value) st2))))
 
 -- 条目 → ELet 绑定：把签名贴到同名定义的值上（`EAnn value ty`），并校验布局约束：
 -- 签名必须先于同名定义、不能重复、不能悬空。
-bindingItemsToBinds : List BindingItem -> Result (List (Pair Pat Expr))
+bindingItemsToBinds : List BindingItem -> Check (List (Pair Pat Expr))
 bindingItemsToBinds items = bindingBindsGo items [] [] []
 
-bindingBindsGo : List BindingItem -> List (Pair String (Pair Expr Span)) -> List String -> List (Pair Pat Expr) -> Result (List (Pair Pat Expr))
+bindingBindsGo : List BindingItem -> List (Pair String (Pair Expr Span)) -> List String -> List (Pair Pat Expr) -> Check (List (Pair Pat Expr))
 bindingBindsGo [] sigs bound acc = case firstDanglingSig (reverse sigs) bound of
-  Nothing => Ok (reverse acc)
-  Just (Pair name sp) => Err "${showSpanLoc sp}: ${psMsg (WhereSigNoDef name) [name]}"
+  Nothing => OkC (reverse acc)
+  Just (Pair name sp) =>
+    ErrC (withLabel (Label (Just sp) "" LabelPrimary Nothing) (psMsg (WhereSigNoDef name) [name]))
 bindingBindsGo (Base.List.Cons item rest) sigs bound acc = case item of
   BISig name ty sp =>
-    if memName name bound then Err "${showSpanLoc sp}: ${psMsg (WhereSigBeforeClause name) [name]}"
-    else if hasBindingSig name sigs then Err "${showSpanLoc sp}: ${psMsg (WhereSigDuplicate name) [name]}"
+    if memName name bound then ErrC
+      (withLabel (Label (Just sp) "" LabelPrimary Nothing) (psMsg (WhereSigBeforeClause name) [name]))
+    else if hasBindingSig name sigs then ErrC
+      (withLabel (Label (Just sp) "" LabelPrimary Nothing) (psMsg (WhereSigDuplicate name) [name]))
     else bindingBindsGo rest (Pair name (Pair ty sp) :: sigs) bound acc
   BIBind (Pair pat value) => case localFunMerge (patBoundName pat) value acc of
     Just merged => bindingBindsGo rest sigs bound merged
     Nothing => case bindingSigOf (patBoundName pat) sigs of
       Just (Pair ty sp) =>
-        if memName (patBoundName pat) bound then Err
-          "${showSpanLoc sp}: ${psMsg (WhereSigMultiClause (patBoundName pat)) [patBoundName pat]}"
+        if memName (patBoundName pat) bound then ErrC
+          (withLabel (Label (Just sp) "" LabelPrimary Nothing) (psMsg (WhereSigMultiClause (patBoundName pat)) [patBoundName pat]))
         else bindingBindsGo rest sigs (patBoundName pat :: bound) (Pair pat (EAnn value ty sp) :: acc)
       Nothing => bindingBindsGo rest sigs (patBoundName pat :: bound) (Pair pat value :: acc)
 
@@ -335,16 +346,16 @@ firstDanglingSig ((Pair name (Pair ty sp)) :: rest) bound =
   if memName name bound then firstDanglingSig rest bound else Just (Pair name sp)
 
 -- λ 参数名：绑定块里的函数子句参数必须是简单变量名（A2 起保留模式，见 parseBindingDef）。
-parseClausePatterns : Int -> PState -> Int -> Result (Pair (List Pat) PState)
+parseClausePatterns : Int -> PState -> Int -> Check (Pair (List Pat) PState)
 parseClausePatterns fuel st blockCol =
-  if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
-  else if startsPatternAtom st && canContinue st blockCol then step (parsePatternAtom (stateFuel st) st blockCol)
-    (\pat, st1 => step (parseClausePatterns (fuel - 1) st1 blockCol) (\rest, st2 => Ok (Pair (Base.List.Cons pat rest) st2)))
-  else Ok (Pair [] st)
+  if fuel <= 0 then err "DT: parser fuel exhausted (internal: parser made no progress)"
+  else if startsPatternAtom st && canContinue st blockCol then Vuna.Compiler.Common.step (parsePatternAtom (stateFuel st) st blockCol)
+    (\pat, st1 => Vuna.Compiler.Common.step (parseClausePatterns (fuel - 1) st1 blockCol) (\rest, st2 => OkC (Pair (Base.List.Cons pat rest) st2)))
+  else OkC (Pair [] st)
 
 -- M38：`lin data ...` / `lin record ...`。kwPos 指向 `linear`，声明 span 从这里开始。
-parseLinearDecl : PState -> Int -> Pos -> Result (Pair Decl PState)
-parseLinearDecl st blockCol kwPos = step (expectKw st "linear") (\_, st1 => case peekTok st1 of
+parseLinearDecl : PState -> Int -> Pos -> Check (Pair Decl PState)
+parseLinearDecl st blockCol kwPos = Vuna.Compiler.Common.step (expectKw st "linear") (\_, st1 => case peekTok st1 of
   PTok (TKw "data") _ => parseData True st1 blockCol kwPos
   PTok (TKw "record") _ => parseRecord True ReprAuto st1 blockCol kwPos
   _ => psErr1 (ExpectedToken "data/record") "data/record"
@@ -352,7 +363,7 @@ parseLinearDecl st blockCol kwPos = step (expectKw st "linear") (\_, st1 => case
 
 -- | R1（records-v2）：`transparent record ...` / `opaque record ...`（可再带 `lin`）。
 -- kwPos 指向档位前缀，声明 span 从这里开始；档位只对 record 有意义（对 data 报错）。
-parseTieredDecl : ReprTier -> PState -> Int -> Pos -> Result (Pair Decl PState)
+parseTieredDecl : ReprTier -> PState -> Int -> Pos -> Check (Pair Decl PState)
 parseTieredDecl tier st blockCol kwPos = case peekTok (advance st) of
   PTok (TKw "linear") _ =>
     let
@@ -363,10 +374,10 @@ parseTieredDecl tier st blockCol kwPos = case peekTok (advance st) of
   PTok (TKw "record") _ => parseRecord False tier (advance st) blockCol kwPos
   _ => psErr1 (ExpectedToken "record") "record"
 
-parseData : Bool -> PState -> Int -> Pos -> Result (Pair Decl PState)
-parseData lin st blockCol kwPos = step (expectKw st "data") (\_, st1 => step (expectIdent st1) (\name, st2 => step (parseParams (stateFuel st2) st2) (\params, st3 => step (expectSym st3 ":") (\_, st4 => step (parseExpr (stateFuel st4) st4 blockCol 0) (\ty, st5 => step (expectKw st5 "where") (\_, st6 => step (parseCtors st6 blockCol) (\ctors, st7 => step (parseDeriving st7) (\dv, st8 => case dv of
+parseData : Bool -> PState -> Int -> Pos -> Check (Pair Decl PState)
+parseData lin st blockCol kwPos = Vuna.Compiler.Common.step (expectKw st "data") (\_, st1 => Vuna.Compiler.Common.step (expectIdent st1) (\name, st2 => Vuna.Compiler.Common.step (parseParams (stateFuel st2) st2) (\params, st3 => Vuna.Compiler.Common.step (expectSym st3 ":") (\_, st4 => Vuna.Compiler.Common.step (parseExpr (stateFuel st4) st4 blockCol 0) (\ty, st5 => Vuna.Compiler.Common.step (expectKw st5 "where") (\_, st6 => Vuna.Compiler.Common.step (parseCtors st6 blockCol) (\ctors, st7 => Vuna.Compiler.Common.step (parseDeriving st7) (\dv, st8 => case dv of
   Pair derivings via =>
-    Ok
+    OkC
       (Pair (DData name params ty ctors derivings via ReprAuto lin (Span (fileOf st) (posLine kwPos) (posCol kwPos) (posLine (lastPos st8)) (posCol (lastPos st8)))) st8)
 )
 )
@@ -379,10 +390,10 @@ parseData lin st blockCol kwPos = step (expectKw st "data") (\_, st1 => step (ex
 
 -- 记录声明（M10.5）：`record Name params where` + 缩进字段 `f : Ty`，可跟 deriving。
 -- R1：第二参数是表示档位（`transparent`/`opaque` 前缀给出，缺省 `ReprAuto`）。
-parseRecord : Bool -> ReprTier -> PState -> Int -> Pos -> Result (Pair Decl PState)
-parseRecord lin tier st blockCol kwPos = step (expectKw st "record") (\_, st1 => step (expectIdent st1) (\name, st2 => step (parseParams (stateFuel st2) st2) (\params, st3 => step (expectKw st3 "where") (\_, st4 => step (parseFields st4 blockCol) (\fields, st5 => step (parseDeriving st5) (\dv, st6 => case dv of
+parseRecord : Bool -> ReprTier -> PState -> Int -> Pos -> Check (Pair Decl PState)
+parseRecord lin tier st blockCol kwPos = Vuna.Compiler.Common.step (expectKw st "record") (\_, st1 => Vuna.Compiler.Common.step (expectIdent st1) (\name, st2 => Vuna.Compiler.Common.step (parseParams (stateFuel st2) st2) (\params, st3 => Vuna.Compiler.Common.step (expectKw st3 "where") (\_, st4 => Vuna.Compiler.Common.step (parseFields st4 blockCol) (\fields, st5 => Vuna.Compiler.Common.step (parseDeriving st5) (\dv, st6 => case dv of
   Pair derivings via =>
-    Ok
+    OkC
       (Pair (DRecord name params fields derivings via tier lin (Span (fileOf st) (posLine kwPos) (posCol kwPos) (posLine (lastPos st6)) (posCol (lastPos st6)))) st6)
 )
 )
@@ -391,19 +402,19 @@ parseRecord lin tier st blockCol kwPos = step (expectKw st "record") (\_, st1 =>
 )
 )
 
-parseFields : PState -> Int -> Result (Pair (List Field) PState)
-parseFields st blockCol = if isEof st then Ok (Pair [] st)
+parseFields : PState -> Int -> Check (Pair (List Field) PState)
+parseFields st blockCol = if isEof st then OkC (Pair [] st)
 else case peekPos st of
-  Pos line col => if col > blockCol then parseFieldList (stateFuel st) st col else Ok (Pair [] st)
+  Pos line col => if col > blockCol then parseFieldList (stateFuel st) st col else OkC (Pair [] st)
 
-parseFieldList : Int -> PState -> Int -> Result (Pair (List Field) PState)
-parseFieldList fuel st fieldCol = if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
-else if isEof st then Ok (Pair [] st)
+parseFieldList : Int -> PState -> Int -> Check (Pair (List Field) PState)
+parseFieldList fuel st fieldCol = if fuel <= 0 then err "DT: parser fuel exhausted (internal: parser made no progress)"
+else if isEof st then OkC (Pair [] st)
 else case peekPos st of
   Pos line col =>
-    if col == fieldCol then step (expectIdent st)
-      (\name, st1 => step (expectSym st1 ":") (\_, st2 => step (parseExpr (stateFuel st2) st2 fieldCol 0) (\ty, st3 => step (rejectCtxSuffix st3) (\_, st3b => step (parseFieldList (fuel - 1) st3b fieldCol) (\rest, st4 => Ok (Pair (Base.List.Cons (Field name ty (spanOf st st3)) rest) st4))))))
-    else if col > fieldCol then psErr0 UnexpectedIndentInRecord else Ok (Pair [] st)
+    if col == fieldCol then Vuna.Compiler.Common.step (expectIdent st)
+      (\name, st1 => Vuna.Compiler.Common.step (expectSym st1 ":") (\_, st2 => Vuna.Compiler.Common.step (parseExpr (stateFuel st2) st2 fieldCol 0) (\ty, st3 => Vuna.Compiler.Common.step (rejectCtxSuffix st3) (\_, st3b => Vuna.Compiler.Common.step (parseFieldList (fuel - 1) st3b fieldCol) (\rest, st4 => OkC (Pair (Base.List.Cons (Field name ty (spanOf st st3)) rest) st4))))))
+    else if col > fieldCol then psErr0 UnexpectedIndentInRecord else OkC (Pair [] st)
 
 -- M42：`deriving via field (C...)` 的 `via`/`field` 是上下文标识符，不进关键字表。
 -- | 当前 token 是否是指定名字的标识符（`via`/`field` 等上下文关键字用）。
@@ -414,78 +425,78 @@ atIdentName st name = case peekTok st of
 
 -- deriving (TraitA, TraitB) 或 deriving via field (TraitA, TraitB)；
 -- 可出现在 data/record 的构造器/字段块之后（strategy 只能用于 record）。
-parseDeriving : PState -> Result (Pair (Pair (List String) Bool) PState)
+parseDeriving : PState -> Check (Pair (Pair (List String) Bool) PState)
 parseDeriving st =
-  if atKw st "deriving" then step (expectKw st "deriving")
-    (\_, st1 => if atIdentName st1 "via" then step (expectIdent st1) (\_, st2 => step (expectIdent st2) (\fld, st3 => if fld == "field" then parseDerivingParens True st3 else psErr1 (ExpectedToken "field") "field")) else parseDerivingParens False st1)
-  else Ok (Pair (Pair [] False) st)
+  if atKw st "deriving" then Vuna.Compiler.Common.step (expectKw st "deriving")
+    (\_, st1 => if atIdentName st1 "via" then Vuna.Compiler.Common.step (expectIdent st1) (\_, st2 => Vuna.Compiler.Common.step (expectIdent st2) (\fld, st3 => if fld == "field" then parseDerivingParens True st3 else psErr1 (ExpectedToken "field") "field")) else parseDerivingParens False st1)
+  else OkC (Pair (Pair [] False) st)
 
 -- | 解析 `deriving` 后的 `(TraitA, TraitB)` 括号列表；`via` 标志原样带回结果。
-parseDerivingParens : Bool -> PState -> Result (Pair (Pair (List String) Bool) PState)
+parseDerivingParens : Bool -> PState -> Check (Pair (Pair (List String) Bool) PState)
 parseDerivingParens via st =
-  step (expectSym st "(")
-    (\_, st1 => if atSym st1 ")" then Ok (Pair (Pair [] via) (advance st1)) else step (parseDerivingNames (stateFuel st1) st1) (\names, st2 => Ok (Pair (Pair names via) st2)))
+  Vuna.Compiler.Common.step (expectSym st "(")
+    (\_, st1 => if atSym st1 ")" then OkC (Pair (Pair [] via) (advance st1)) else Vuna.Compiler.Common.step (parseDerivingNames (stateFuel st1) st1) (\names, st2 => OkC (Pair (Pair names via) st2)))
 
-parseDerivingNames : Int -> PState -> Result (Pair (List String) PState)
+parseDerivingNames : Int -> PState -> Check (Pair (List String) PState)
 parseDerivingNames fuel st =
-  if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
-  else step (expectIdent st)
-    (\name, st1 => if atSym st1 "," then step (parseDerivingNames (fuel - 1) (advance st1)) (\rest, st2 => Ok (Pair (Base.List.Cons name rest) st2)) else step (expectSym st1 ")") (\_, st2 => Ok (Pair [name] st2)))
+  if fuel <= 0 then err "DT: parser fuel exhausted (internal: parser made no progress)"
+  else Vuna.Compiler.Common.step (expectIdent st)
+    (\name, st1 => if atSym st1 "," then Vuna.Compiler.Common.step (parseDerivingNames (fuel - 1) (advance st1)) (\rest, st2 => OkC (Pair (Base.List.Cons name rest) st2)) else Vuna.Compiler.Common.step (expectSym st1 ")") (\_, st2 => OkC (Pair [name] st2)))
 
 -- trait 声明（M10.5）：`trait Name params where` + 缩进方法签名 `m : Ty`。
 -- 多参数 trait 参数可带显式 kind：`trait C (a : Type) (r : Row)`（裸参数仍支持）。
-parseTrait : PState -> Int -> Pos -> Result (Pair Decl PState)
+parseTrait : PState -> Int -> Pos -> Check (Pair Decl PState)
 parseTrait st blockCol kwPos =
-  step (expectKw st "trait")
-    (\_, st1 => step (expectIdent st1) (\name, st2 => step (parseTraitParams (stateFuel st2) st2) (\params, st3 => step (expectKw st3 "where") (\_, st4 => step (parseMethodSigs st4 blockCol) (\methods, st5 => Ok (Pair (DTrait name params methods (Span (fileOf st) (posLine kwPos) (posCol kwPos) (posLine (lastPos st5)) (posCol (lastPos st5)))) st5))))))
+  Vuna.Compiler.Common.step (expectKw st "trait")
+    (\_, st1 => Vuna.Compiler.Common.step (expectIdent st1) (\name, st2 => Vuna.Compiler.Common.step (parseTraitParams (stateFuel st2) st2) (\params, st3 => Vuna.Compiler.Common.step (expectKw st3 "where") (\_, st4 => Vuna.Compiler.Common.step (parseMethodSigs st4 blockCol) (\methods, st5 => OkC (Pair (DTrait name params methods (Span (fileOf st) (posLine kwPos) (posCol kwPos) (posLine (lastPos st5)) (posCol (lastPos st5)))) st5))))))
 
 -- trait 参数：裸标识符（kind 由方法签名推断）或 `(a b : Kind)` / `(a : Kind)`。
-parseTraitParams : Int -> PState -> Result (Pair (List TraitParam) PState)
-parseTraitParams fuel st = if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
+parseTraitParams : Int -> PState -> Check (Pair (List TraitParam) PState)
+parseTraitParams fuel st = if fuel <= 0 then err "DT: parser fuel exhausted (internal: parser made no progress)"
 else case peekTok st of
   PTok (TIdent name) _ =>
-    step (parseTraitParams (fuel - 1) (advance st))
-      (\rest, st1 => Ok (Pair (Base.List.Cons (TraitParam name Nothing) rest) st1))
+    Vuna.Compiler.Common.step (parseTraitParams (fuel - 1) (advance st))
+      (\rest, st1 => OkC (Pair (Base.List.Cons (TraitParam name Nothing) rest) st1))
   PTok (TSym "(") _ =>
-    step (expectSym st "(")
-      (\_, st1 => step (parsePiNames (fuel - 1) st1) (\names, st2 => step (expectSym st2 ":") (\_, st3 => step (parseExpr (stateFuel st3) st3 0 0) (\kind, st4 => step (expectSym st4 ")") (\_, st5 => step (parseTraitParams (fuel - 1) st5) (\rest, st6 => Ok (Pair (append (map (\n => TraitParam n (Just kind)) names) rest) st6)))))))
-  _ => Ok (Pair [] st)
+    Vuna.Compiler.Common.step (expectSym st "(")
+      (\_, st1 => Vuna.Compiler.Common.step (parsePiNames (fuel - 1) st1) (\names, st2 => Vuna.Compiler.Common.step (expectSym st2 ":") (\_, st3 => Vuna.Compiler.Common.step (parseExpr (stateFuel st3) st3 0 0) (\kind, st4 => Vuna.Compiler.Common.step (expectSym st4 ")") (\_, st5 => Vuna.Compiler.Common.step (parseTraitParams (fuel - 1) st5) (\rest, st6 => OkC (Pair (append (map (\n => TraitParam n (Just kind)) names) rest) st6)))))))
+  _ => OkC (Pair [] st)
 
-parseMethodSigs : PState -> Int -> Result (Pair (List TraitMethod) PState)
-parseMethodSigs st blockCol = if isEof st then Ok (Pair [] st)
+parseMethodSigs : PState -> Int -> Check (Pair (List TraitMethod) PState)
+parseMethodSigs st blockCol = if isEof st then OkC (Pair [] st)
 else case peekPos st of
   Pos line col =>
-    if col > blockCol then parseMethodSigList (stateFuel st) st col else Ok (Pair [] st)
+    if col > blockCol then parseMethodSigList (stateFuel st) st col else OkC (Pair [] st)
 
-parseMethodSigList : Int -> PState -> Int -> Result (Pair (List TraitMethod) PState)
-parseMethodSigList fuel st methodCol = if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
-else if isEof st then Ok (Pair [] st)
+parseMethodSigList : Int -> PState -> Int -> Check (Pair (List TraitMethod) PState)
+parseMethodSigList fuel st methodCol = if fuel <= 0 then err "DT: parser fuel exhausted (internal: parser made no progress)"
+else if isEof st then OkC (Pair [] st)
 else case peekPos st of
   Pos line col =>
-    if col == methodCol then step (expectIdent st)
-      (\name, st1 => step (expectSym st1 ":") (\_, st2 => step (parseExpr (stateFuel st2) st2 methodCol 0) (\ty, st3 => step (rejectCtxSuffix st3) (\_, st3b => step (parseMethodSigList (fuel - 1) st3b methodCol) (\rest, st4 => Ok (Pair (Base.List.Cons (TraitMethod name ty (spanOf st st3)) rest) st4))))))
-    else if col > methodCol then psErr0 UnexpectedIndentInTrait else Ok (Pair [] st)
+    if col == methodCol then Vuna.Compiler.Common.step (expectIdent st)
+      (\name, st1 => Vuna.Compiler.Common.step (expectSym st1 ":") (\_, st2 => Vuna.Compiler.Common.step (parseExpr (stateFuel st2) st2 methodCol 0) (\ty, st3 => Vuna.Compiler.Common.step (rejectCtxSuffix st3) (\_, st3b => Vuna.Compiler.Common.step (parseMethodSigList (fuel - 1) st3b methodCol) (\rest, st4 => OkC (Pair (Base.List.Cons (TraitMethod name ty (spanOf st st3)) rest) st4))))))
+    else if col > methodCol then psErr0 UnexpectedIndentInTrait else OkC (Pair [] st)
 
 -- instance 声明（M10.5 / M29）：`instance [<ctx> ,... =>] Head where` + 缩进方法定义。
 -- ctx 是逗号分隔的字典约束（每个形如 `C arg`；M29 只支持单参数 trait）。
 -- M29-T2b：命名实例（`as name`）已删除。
 -- M32：实例头与顶层签名共用「[ctx , ... =>] expr」解析（ctx 为空 = 无约束）。
-parseInstance : PState -> Int -> Pos -> Result (Pair Decl PState)
-parseInstance st blockCol kwPos = step (expectKw st "instance") (\_, st1 => step (parseCtxThenExpr (stateFuel st1) st1 blockCol) (\hc, st2 => case hc of
+parseInstance : PState -> Int -> Pos -> Check (Pair Decl PState)
+parseInstance st blockCol kwPos = Vuna.Compiler.Common.step (expectKw st "instance") (\_, st1 => Vuna.Compiler.Common.step (parseCtxThenExpr (stateFuel st1) st1 blockCol) (\hc, st2 => case hc of
   Pair ctxE head => parseInstanceTail ctxE head st blockCol kwPos st2
 )
 )
 
-parseInstanceTail : List Expr -> Expr -> PState -> Int -> Pos -> PState -> Result (Pair Decl PState)
+parseInstanceTail : List Expr -> Expr -> PState -> Int -> Pos -> PState -> Check (Pair Decl PState)
 parseInstanceTail ctxE head st blockCol kwPos st2 =
-  step (expectKw st2 "where")
-    (\_, st3 => step (parseInstanceBody st3 blockCol) (\methods, st4 => Ok (Pair (DInstance ctxE head methods (Span (fileOf st) (posLine kwPos) (posCol kwPos) (posLine (lastPos st4)) (posCol (lastPos st4)))) st4)))
+  Vuna.Compiler.Common.step (expectKw st2 "where")
+    (\_, st3 => Vuna.Compiler.Common.step (parseInstanceBody st3 blockCol) (\methods, st4 => OkC (Pair (DInstance ctxE head methods (Span (fileOf st) (posLine kwPos) (posCol kwPos) (posLine (lastPos st4)) (posCol (lastPos st4)))) st4)))
 
-parseCtxThenExpr : Int -> PState -> Int -> Result (Pair (Pair (List Expr) Expr) PState)
+parseCtxThenExpr : Int -> PState -> Int -> Check (Pair (Pair (List Expr) Expr) PState)
 parseCtxThenExpr fuel st blockCol =
-  if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
-  else step (parseExpr fuel st blockCol 0)
-    (\e1, st1 => if atSym st1 "=>" then step (parseExpr (fuel - 1) (advance st1) blockCol 0) (\hd, st2 => Ok (Pair (ctxThenSplit e1 hd) st2)) else if atSym st1 "," then parseCtxRest (fuel - 1) (advance st1) [e1] blockCol else Ok (Pair (Pair [] e1) st1))
+  if fuel <= 0 then err "DT: parser fuel exhausted (internal: parser made no progress)"
+  else Vuna.Compiler.Common.step (parseExpr fuel st blockCol 0)
+    (\e1, st1 => if atSym st1 "=>" then Vuna.Compiler.Common.step (parseExpr (fuel - 1) (advance st1) blockCol 0) (\hd, st2 => OkC (Pair (ctxThenSplit e1 hd) st2)) else if atSym st1 "," then parseCtxRest (fuel - 1) (advance st1) [e1] blockCol else OkC (Pair (Pair [] e1) st1))
 
 -- `{a b : Type} -> Convert a b => ...`：显式 Pi 前缀写在约束之前时，把 Pi 链搬到
 -- 返回类型上，约束本身作为 ctx（与 `Convert a b => ...` 自由名量化的结果同一形态）。
@@ -504,30 +515,30 @@ replacePiCod (EPi n i q d c sp) new = EPi n i q d (replacePiCod c new) sp
 replacePiCod e new = new
 
 -- ctx 列表的剩余部分：`e , e ... => head`。
-parseCtxRest : Int -> PState -> List Expr -> Int -> Result (Pair (Pair (List Expr) Expr) PState)
+parseCtxRest : Int -> PState -> List Expr -> Int -> Check (Pair (Pair (List Expr) Expr) PState)
 parseCtxRest fuel st acc blockCol =
-  if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
-  else if atSym st "=>" then step (parseExpr (fuel - 1) (advance st) blockCol 0)
-    (\hd, st1 => Ok (Pair (Pair (reverse acc) hd) st1))
-  else step (parseExpr fuel st blockCol 0)
-    (\e, st1 => if atSym st1 "," then parseCtxRest (fuel - 1) (advance st1) (e :: acc) blockCol else step (expectSym st1 "=>") (\_, st2 => step (parseExpr (fuel - 1) st2 blockCol 0) (\hd, st3 => Ok (Pair (Pair (reverse (e :: acc)) hd) st3))))
+  if fuel <= 0 then err "DT: parser fuel exhausted (internal: parser made no progress)"
+  else if atSym st "=>" then Vuna.Compiler.Common.step (parseExpr (fuel - 1) (advance st) blockCol 0)
+    (\hd, st1 => OkC (Pair (Pair (reverse acc) hd) st1))
+  else Vuna.Compiler.Common.step (parseExpr fuel st blockCol 0)
+    (\e, st1 => if atSym st1 "," then parseCtxRest (fuel - 1) (advance st1) (e :: acc) blockCol else Vuna.Compiler.Common.step (expectSym st1 "=>") (\_, st2 => Vuna.Compiler.Common.step (parseExpr (fuel - 1) st2 blockCol 0) (\hd, st3 => OkC (Pair (Pair (reverse (e :: acc)) hd) st3))))
 
-parseInstanceBody : PState -> Int -> Result (Pair (List Decl) PState)
-parseInstanceBody st blockCol = if isEof st then Ok (Pair [] st)
+parseInstanceBody : PState -> Int -> Check (Pair (List Decl) PState)
+parseInstanceBody st blockCol = if isEof st then OkC (Pair [] st)
 else case peekPos st of
   Pos line col =>
-    if col > blockCol then parseInstanceDeclList (stateFuel st) st col else Ok (Pair [] st)
+    if col > blockCol then parseInstanceDeclList (stateFuel st) st col else OkC (Pair [] st)
 
-parseInstanceDeclList : Int -> PState -> Int -> Result (Pair (List Decl) PState)
-parseInstanceDeclList fuel st declCol = if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
-else if isEof st then Ok (Pair [] st)
+parseInstanceDeclList : Int -> PState -> Int -> Check (Pair (List Decl) PState)
+parseInstanceDeclList fuel st declCol = if fuel <= 0 then err "DT: parser fuel exhausted (internal: parser made no progress)"
+else if isEof st then OkC (Pair [] st)
 else case peekPos st of
   Pos line col =>
-    if col == declCol then step (parseInstanceDecl st declCol)
-      (\decl, st1 => step (parseInstanceDeclList (fuel - 1) st1 declCol) (\rest, st2 => Ok (Pair (Base.List.Cons decl rest) st2)))
-    else if col > declCol then psErr0 UnexpectedIndentInInstance else Ok (Pair [] st)
+    if col == declCol then Vuna.Compiler.Common.step (parseInstanceDecl st declCol)
+      (\decl, st1 => Vuna.Compiler.Common.step (parseInstanceDeclList (fuel - 1) st1 declCol) (\rest, st2 => OkC (Pair (Base.List.Cons decl rest) st2)))
+    else if col > declCol then psErr0 UnexpectedIndentInInstance else OkC (Pair [] st)
 
-parseInstanceDecl : PState -> Int -> Result (Pair Decl PState)
+parseInstanceDecl : PState -> Int -> Check (Pair Decl PState)
 parseInstanceDecl st blockCol = case peekTok st of
   PTok (TIdent name) p =>
     let
@@ -536,57 +547,57 @@ parseInstanceDecl st blockCol = case peekTok st of
     else parseClause st1 blockCol name p
   _ => psErr0 ExpectedInstanceMethod
 
-parseParams : Int -> PState -> Result (Pair (List String) PState)
-parseParams fuel st = if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
+parseParams : Int -> PState -> Check (Pair (List String) PState)
+parseParams fuel st = if fuel <= 0 then err "DT: parser fuel exhausted (internal: parser made no progress)"
 else case peekTok st of
   PTok (TIdent name) p =>
-    step (parseParams (fuel - 1) (advance st))
-      (\rest, st1 => Ok (Pair (Base.List.Cons name rest) st1))
-  _ => Ok (Pair [] st)
+    Vuna.Compiler.Common.step (parseParams (fuel - 1) (advance st))
+      (\rest, st1 => OkC (Pair (Base.List.Cons name rest) st1))
+  _ => OkC (Pair [] st)
 
-parseCtors : PState -> Int -> Result (Pair (List Ctor) PState)
-parseCtors st blockCol = if isEof st then Ok (Pair [] st)
+parseCtors : PState -> Int -> Check (Pair (List Ctor) PState)
+parseCtors st blockCol = if isEof st then OkC (Pair [] st)
 else case peekPos st of
-  Pos line col => if col > blockCol then parseCtorList (stateFuel st) st col else Ok (Pair [] st)
+  Pos line col => if col > blockCol then parseCtorList (stateFuel st) st col else OkC (Pair [] st)
 
-parseCtorList : Int -> PState -> Int -> Result (Pair (List Ctor) PState)
-parseCtorList fuel st ctorCol = if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
-else if isEof st then Ok (Pair [] st)
+parseCtorList : Int -> PState -> Int -> Check (Pair (List Ctor) PState)
+parseCtorList fuel st ctorCol = if fuel <= 0 then err "DT: parser fuel exhausted (internal: parser made no progress)"
+else if isEof st then OkC (Pair [] st)
 else case peekPos st of
   Pos line col =>
-    if col == ctorCol then step (expectIdent st)
-      (\name, st1 => step (expectSym st1 ":") (\_, st2 => step (parseExpr (stateFuel st2) st2 ctorCol 0) (\ty, st3 => step (rejectCtxSuffix st3) (\_, st3b => step (parseCtorList (fuel - 1) st3b ctorCol) (\rest, st4 => Ok (Pair (Base.List.Cons (Ctor name ty (countArrows ty) (spanOf st st3)) rest) st4))))))
-    else if col > ctorCol then psErr0 UnexpectedIndentInData else Ok (Pair [] st)
+    if col == ctorCol then Vuna.Compiler.Common.step (expectIdent st)
+      (\name, st1 => Vuna.Compiler.Common.step (expectSym st1 ":") (\_, st2 => Vuna.Compiler.Common.step (parseExpr (stateFuel st2) st2 ctorCol 0) (\ty, st3 => Vuna.Compiler.Common.step (rejectCtxSuffix st3) (\_, st3b => Vuna.Compiler.Common.step (parseCtorList (fuel - 1) st3b ctorCol) (\rest, st4 => OkC (Pair (Base.List.Cons (Ctor name ty (countArrows ty) (spanOf st st3)) rest) st4))))))
+    else if col > ctorCol then psErr0 UnexpectedIndentInData else OkC (Pair [] st)
 
-parseExpr : Int -> PState -> Int -> Int -> Result (Pair Expr PState)
+parseExpr : Int -> PState -> Int -> Int -> Check (Pair Expr PState)
 parseExpr fuel st blockCol minPrec =
-  if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
+  if fuel <= 0 then err "DT: parser fuel exhausted (internal: parser made no progress)"
   else if isEof st then psErr0 UnexpectedEndOfInput
-  else if canContinue st blockCol then step (parseLhs (fuel - 1) st blockCol)
+  else if canContinue st blockCol then Vuna.Compiler.Common.step (parseLhs (fuel - 1) st blockCol)
     (\lhs, st1 => parseInfix (fuel - 1) st1 blockCol minPrec lhs)
   else psErr0 ExprNotIndented
 
 -- M31.2：优先级/结合性不在 parser 决定——中缀链原样收成 `EInfix`（右嵌套，保留
 -- 括号边界用 `EParen`），Loader 按 `infix*` 声明重排。`minPrec` 参数保留只为少改调用点。
-parseInfix : Int -> PState -> Int -> Int -> Expr -> Result (Pair Expr PState)
-parseInfix fuel st blockCol minPrec lhs = if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
+parseInfix : Int -> PState -> Int -> Int -> Expr -> Check (Pair Expr PState)
+parseInfix fuel st blockCol minPrec lhs = if fuel <= 0 then err "DT: parser fuel exhausted (internal: parser made no progress)"
 else case peekTok st of
   -- M31.3：反引号中缀 `` a `f` b ``。名字是普通值名或符号名（expectValueName）；
   -- rhs 用 parseExpr（与普通中缀一致，会继续吞后续中缀），形成右嵌套链交给 Loader 重排。
   PTok (TSym "`") p =>
-    if canContinue st blockCol then step (expectValueName (advance st))
-      (\name, st1 => step (expectSym st1 "`") (\_, st2 => step (parseExpr (fuel - 1) st2 blockCol 0) (\rhs, st3 => parseInfix (fuel - 1) st3 blockCol minPrec (EBacktick name lhs rhs (spanOf st st3)))))
-    else Ok (Pair lhs st)
+    if canContinue st blockCol then Vuna.Compiler.Common.step (expectValueName (advance st))
+      (\name, st1 => Vuna.Compiler.Common.step (expectSym st1 "`") (\_, st2 => Vuna.Compiler.Common.step (parseExpr (fuel - 1) st2 blockCol 0) (\rhs, st3 => parseInfix (fuel - 1) st3 blockCol minPrec (EBacktick name lhs rhs (spanOf st st3)))))
+    else OkC (Pair lhs st)
   PTok (TSym op) p =>
-    if canContinue st blockCol && not (isSyntaxSym op) then if closeParenNext st then Ok (Pair (ESectR lhs op (spanOf st (advance st))) (advance st))
-    else step (parseExpr (fuel - 1) (advance st) blockCol 0)
+    if canContinue st blockCol && not (isSyntaxSym op) then if closeParenNext st then OkC (Pair (ESectR lhs op (spanOf st (advance st))) (advance st))
+    else Vuna.Compiler.Common.step (parseExpr (fuel - 1) (advance st) blockCol 0)
       (\rhs, st2 => parseInfix (fuel - 1) st2 blockCol minPrec (EInfix op lhs rhs (spanOf st st2)))
-    else Ok (Pair lhs st)
+    else OkC (Pair lhs st)
   -- M31.3：右 section `(e op)`。只消费 op；`)` 由外层 `(` 分支消费。
-  _ => Ok (Pair lhs st)
+  _ => OkC (Pair lhs st)
 
-parseLhs : Int -> PState -> Int -> Result (Pair Expr PState)
-parseLhs fuel st blockCol = if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
+parseLhs : Int -> PState -> Int -> Check (Pair Expr PState)
+parseLhs fuel st blockCol = if fuel <= 0 then err "DT: parser fuel exhausted (internal: parser made no progress)"
 else case peekTok st of
   PTok (TSym "\\") p => parseLambda (fuel - 1) st blockCol
   PTok (TKw "let") p => parseLet (fuel - 1) st blockCol
@@ -596,11 +607,11 @@ else case peekTok st of
   PTok (TKw "perform") p => parsePerform (fuel - 1) st blockCol
   _ => parseApplication (fuel - 1) st blockCol
 
-parseApplication : Int -> PState -> Int -> Result (Pair Expr PState)
-parseApplication fuel st blockCol = if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
-else step (parseAtom (fuel - 1) st blockCol) (\first, st1 => step (parseArgs (fuel - 1) st1 blockCol) (\args, st2 => case args of
-  [] => Ok (Pair first st2)
-  _ => Ok (Pair (EApp first args (spanOf st st2)) st2)
+parseApplication : Int -> PState -> Int -> Check (Pair Expr PState)
+parseApplication fuel st blockCol = if fuel <= 0 then err "DT: parser fuel exhausted (internal: parser made no progress)"
+else Vuna.Compiler.Common.step (parseAtom (fuel - 1) st blockCol) (\first, st1 => Vuna.Compiler.Common.step (parseArgs (fuel - 1) st1 blockCol) (\args, st2 => case args of
+  [] => OkC (Pair first st2)
+  _ => OkC (Pair (EApp first args (spanOf st st2)) st2)
 )
 )
 
@@ -611,88 +622,88 @@ spanFromExpr e st2 =
   in Span sp.spanFile (spanStartLine sp) (spanStartCol sp) (posLine (lastPos st2))
     (posCol (lastPos st2))
 
-parseArgs : Int -> PState -> Int -> Result (Pair (List Expr) PState)
+parseArgs : Int -> PState -> Int -> Check (Pair (List Expr) PState)
 parseArgs fuel st blockCol =
-  if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
-  else if startsAtom st && canContinue st blockCol then step (parseAtom (fuel - 1) st blockCol)
-    (\arg, st1 => step (parseArgs (fuel - 1) st1 blockCol) (\rest, st2 => Ok (Pair (Base.List.Cons arg rest) st2)))
-  else Ok (Pair [] st)
+  if fuel <= 0 then err "DT: parser fuel exhausted (internal: parser made no progress)"
+  else if startsAtom st && canContinue st blockCol then Vuna.Compiler.Common.step (parseAtom (fuel - 1) st blockCol)
+    (\arg, st1 => Vuna.Compiler.Common.step (parseArgs (fuel - 1) st1 blockCol) (\rest, st2 => OkC (Pair (Base.List.Cons arg rest) st2)))
+  else OkC (Pair [] st)
 
-parseAtom : Int -> PState -> Int -> Result (Pair Expr PState)
+parseAtom : Int -> PState -> Int -> Check (Pair Expr PState)
 parseAtom fuel st blockCol =
-  if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
-  else step (parseAtomBase (fuel - 1) st blockCol)
+  if fuel <= 0 then err "DT: parser fuel exhausted (internal: parser made no progress)"
+  else Vuna.Compiler.Common.step (parseAtomBase (fuel - 1) st blockCol)
     (\base, st1 => parseFieldSuffix (stateFuel st1) st1 blockCol base)
 
 -- 字段访问后缀：`e.f` / `(e).f`；`p.x` 因 lexer 合成单 token 由 loader 拆分。
-parseFieldSuffix : Int -> PState -> Int -> Expr -> Result (Pair Expr PState)
+parseFieldSuffix : Int -> PState -> Int -> Expr -> Check (Pair Expr PState)
 parseFieldSuffix fuel st blockCol base =
-  if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
-  else if atSym st "." then step (expectSym st ".")
-    (\_, st1 => step (expectIdent st1) (\fname, st2 => parseFieldSuffix (fuel - 1) st2 blockCol (EField base fname (spanFromExpr base st2))))
-  else Ok (Pair base st)
+  if fuel <= 0 then err "DT: parser fuel exhausted (internal: parser made no progress)"
+  else if atSym st "." then Vuna.Compiler.Common.step (expectSym st ".")
+    (\_, st1 => Vuna.Compiler.Common.step (expectIdent st1) (\fname, st2 => parseFieldSuffix (fuel - 1) st2 blockCol (EField base fname (spanFromExpr base st2))))
+  else OkC (Pair base st)
 
-parseAtomBase : Int -> PState -> Int -> Result (Pair Expr PState)
-parseAtomBase fuel st blockCol = if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
+parseAtomBase : Int -> PState -> Int -> Check (Pair Expr PState)
+parseAtomBase fuel st blockCol = if fuel <= 0 then err "DT: parser fuel exhausted (internal: parser made no progress)"
 else case peekTok st of
   PTok (TIdent name) p =>
     let
       st1 = advance st
-    in if atSym st1 "{" then step (expectSym st1 "{")
-      (\_, st1b => step (parseRecordAssignments (fuel - 1) st1b blockCol) (\fields, st2 => Ok (Pair (ERecord name fields (spanOf st st2)) st2)))
-    else Ok (Pair (EVar name (spanOf st st1)) st1)
-  PTok (TInt n) p => Ok (Pair (EInt n (spanOf st (advance st))) (advance st))
-  PTok (TFloat raw) p => Ok (Pair (EFloat raw (spanOf st (advance st))) (advance st))
-  PTok (TStr s) p => Ok (Pair (EStr s (spanOf st (advance st))) (advance st))
+    in if atSym st1 "{" then Vuna.Compiler.Common.step (expectSym st1 "{")
+      (\_, st1b => Vuna.Compiler.Common.step (parseRecordAssignments (fuel - 1) st1b blockCol) (\fields, st2 => OkC (Pair (ERecord name fields (spanOf st st2)) st2)))
+    else OkC (Pair (EVar name (spanOf st st1)) st1)
+  PTok (TInt n) p => OkC (Pair (EInt n (spanOf st (advance st))) (advance st))
+  PTok (TFloat raw) p => OkC (Pair (EFloat raw (spanOf st (advance st))) (advance st))
+  PTok (TStr s) p => OkC (Pair (EStr s (spanOf st (advance st))) (advance st))
   PTok (TTmpl multi parts endP) p => parseTemplateAtom (fuel - 1) st multi parts endP
-  PTok (TKw "Type") p => Ok (Pair (EVar "Type" (spanOf st (advance st))) (advance st))
+  PTok (TKw "Type") p => OkC (Pair (EVar "Type" (spanOf st (advance st))) (advance st))
   PTok (TSym "(") p => case binderHead (advance st) of
     Just qn => parsePiBinder (fuel - 1) st blockCol (firstOf qn) (secondOf qn) False "(" ")"
     -- M31.3：`(+)` / `(+ e)` section。`(e op)` 由 parseInfix 的右 section 分支处理。
     Nothing => case sectionOpAt st of
       Just op => parseSectionAtom (fuel - 1) st blockCol op
       Nothing =>
-        step (parseExpr (fuel - 1) (advance st) blockCol 0)
-          (\inner, st1 => step (expectSym st1 ")") (\_, st2 => Ok (Pair (EParen inner (spanOf st st2)) st2)))
+        Vuna.Compiler.Common.step (parseExpr (fuel - 1) (advance st) blockCol 0)
+          (\inner, st1 => Vuna.Compiler.Common.step (expectSym st1 ")") (\_, st2 => OkC (Pair (EParen inner (spanOf st st2)) st2)))
   PTok (TSym "[") p => parseListExpr (fuel - 1) st blockCol
   -- M40：命名洞 `?name`（`?` 与标识符紧邻）。编码成 `EVar "?name"`（不新增 AST 构造子），
   -- span 覆盖整个 `?name`；精化器据 `isHoleName` 把它当洞。
   PTok (TSym "?") p => case holeAtomAt st of
-    Just h => Ok (Pair (EVar (firstOf h) (secondOf h)) (advance (advance st)))
+    Just h => OkC (Pair (EVar (firstOf h) (secondOf h)) (advance (advance st)))
     Nothing => psErr0 ExpectedExpression
   PTok (TSym "{") p => case binderHead (advance st) of
     Just qn => parsePiBinder (fuel - 1) st blockCol (firstOf qn) (secondOf qn) True "{" "}"
     Nothing =>
-      step (expectSym st "{")
-        (\_, st1 => step (parseExpr (fuel - 1) st1 blockCol 0) (\base, st2 => step (expectSym st2 "|") (\_, st3 => step (parseRecordAssignments (fuel - 1) st3 blockCol) (\fields, st4 => Ok (Pair (ERecUpdate base fields (spanOf st st4)) st4)))))
+      Vuna.Compiler.Common.step (expectSym st "{")
+        (\_, st1 => Vuna.Compiler.Common.step (parseExpr (fuel - 1) st1 blockCol 0) (\base, st2 => Vuna.Compiler.Common.step (expectSym st2 "|") (\_, st3 => Vuna.Compiler.Common.step (parseRecordAssignments (fuel - 1) st3 blockCol) (\fields, st4 => OkC (Pair (ERecUpdate base fields (spanOf st st4)) st4)))))
   _ => psErr0 ExpectedExpression
 
 -- M36：模板字符串原子。文本块直接成为 `IPText`；插值洞用**洞内 token** 现场解析
 -- （token 位置由 lexer 原位给出，仍是绝对源码位置），再组装成 `EInterp`。
 -- 字面量结束位置写入 `lastPos`：多行字面量之后的布局判定与 decl span 都依赖它。
-parseTemplateAtom : Int -> PState -> Bool -> List TmplPart -> Pos -> Result (Pair Expr PState)
-parseTemplateAtom fuel st multi parts endP = if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
+parseTemplateAtom : Int -> PState -> Bool -> List TmplPart -> Pos -> Check (Pair Expr PState)
+parseTemplateAtom fuel st multi parts endP = if fuel <= 0 then err "DT: parser fuel exhausted (internal: parser made no progress)"
 else Vuna.Compiler.Common.bind (parseTemplateParts (fuel - 1) (fileOf st) parts) (\ps => let
   advanced = advance st
   st2 = PState (fileOf st) advanced.toksOf endP advanced.toksLeft
-in Ok (Pair (EInterp multi ps (spanOf st st2)) st2)
+in OkC (Pair (EInterp multi ps (spanOf st st2)) st2)
 )
 
-parseTemplateParts : Int -> String -> List TmplPart -> Result (List InterpPart)
-parseTemplateParts fuel file parts = if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
+parseTemplateParts : Int -> String -> List TmplPart -> Check (List InterpPart)
+parseTemplateParts fuel file parts = if fuel <= 0 then err "DT: parser fuel exhausted (internal: parser made no progress)"
 else case parts of
-  [] => Ok []
+  [] => OkC []
   (TPText s) :: rest =>
     Vuna.Compiler.Common.bind (parseTemplateParts (fuel - 1) file rest)
-      (\ps => Ok (Base.List.Cons (IPText s) ps))
+      (\ps => OkC (Base.List.Cons (IPText s) ps))
   (TPHole toks) :: rest =>
     Vuna.Compiler.Common.bind (parseTemplateHole (toksFuel toks) file toks)
-      (\e => Vuna.Compiler.Common.bind (parseTemplateParts (fuel - 1) file rest) (\ps => Ok (Base.List.Cons (IPHole e) ps)))
+      (\e => Vuna.Compiler.Common.bind (parseTemplateParts (fuel - 1) file rest) (\ps => OkC (Base.List.Cons (IPHole e) ps)))
 
 -- 一个插值洞：空 token → `TemplateHoleEmpty`；否则必须恰好解析成一个表达式。
 -- 前端诊断本来无位置，这里补上 `line:col:`（Loader 再补文件名），洞内错误才可定位。
-parseTemplateHole : Int -> String -> List PTok -> Result Expr
-parseTemplateHole fuel file toks = if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
+parseTemplateHole : Int -> String -> List PTok -> Check Expr
+parseTemplateHole fuel file toks = if fuel <= 0 then err "DT: parser fuel exhausted (internal: parser made no progress)"
 else case toks of
   [] => psErr0 TemplateHoleEmpty
   first :: _ =>
@@ -700,13 +711,15 @@ else case toks of
       pos = first.ptokPos
       subState = PState file toks pos (length toks)
     in case parseExpr (fuel - 1) subState 0 0 of
-      Err e => Err (holePosPrefix pos ++ e)
-      Ok (Pair e st2) =>
-        if isEof st2 then Ok e
-        else Err "${holePosPrefix pos}[PS_ExpectedEndOfExpr] expected end of expression"
+      ErrC e => ErrC (withLabel (Label (Just (holeSpan file pos)) "" LabelPrimary Nothing) e)
+      OkC (Pair e st2) =>
+        if isEof st2 then OkC e
+        else ErrC
+          (withLabel (Label (Just (holeSpan file pos)) "" LabelPrimary Nothing) (psMsg ExpectedEndOfExpr []))
 
-holePosPrefix : Pos -> String
-holePosPrefix (Pos line col) = "${line}:${col}: "
+-- 插值洞的位置：洞内 token 的首位置（文件在 lexer 侧已知）。
+holeSpan : String -> Pos -> Span
+holeSpan file (Pos line col) = Span file line col line col
 
 -- 洞内 token 的 parser fuel 种子（与 `stateFuel` 同形，按 token 数线性放大）。
 toksFuel : List PTok -> Int
@@ -722,33 +735,33 @@ textPartsOf ((TPHole toks) :: rest) = Nothing
 
 -- M31.3：section 的 op 值 / 左 section 形态：`(op)` 与 `(op e)`。
 -- 进入时已在 `(`，op 已由 sectionOpAt 确认（TSym 且非保留名）。
-parseSectionAtom : Int -> PState -> Int -> String -> Result (Pair Expr PState)
+parseSectionAtom : Int -> PState -> Int -> String -> Check (Pair Expr PState)
 parseSectionAtom fuel st blockCol op =
-  if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
-  else step (expectSym st "(")
-    (\_, st1 => step (expectSym st1 op) (\_, st2 => if atSym st2 ")" then Ok (Pair (ESectOp op (spanOf st (advance st2))) (advance st2)) else step (parseExpr (fuel - 1) st2 blockCol 0) (\rhs, st3 => step (expectSym st3 ")") (\_, st4 => Ok (Pair (ESectL op rhs (spanOf st st4)) st4)))))
+  if fuel <= 0 then err "DT: parser fuel exhausted (internal: parser made no progress)"
+  else Vuna.Compiler.Common.step (expectSym st "(")
+    (\_, st1 => Vuna.Compiler.Common.step (expectSym st1 op) (\_, st2 => if atSym st2 ")" then OkC (Pair (ESectOp op (spanOf st (advance st2))) (advance st2)) else Vuna.Compiler.Common.step (parseExpr (fuel - 1) st2 blockCol 0) (\rhs, st3 => Vuna.Compiler.Common.step (expectSym st3 ")") (\_, st4 => OkC (Pair (ESectL op rhs (spanOf st st4)) st4)))))
 
 -- M38：Pi binder：`(x : A) -> B`、`{x : A} -> B`，以及带 quantity 的 `(0 x : A)` / `(1 x : A)`。
 -- 多参数 trait 探针的 `{a b : Type} -> ...` 支持同一 binder 组写多个名字（展开成嵌套 EPi）。
 -- 进入时已在开括号处；binder 头（可选 quantity + 名 + `:`）先由 lookahead 确认，再要求 `->`。
-parsePiBinder : Int -> PState -> Int -> Maybe Qty -> List String -> Bool -> String -> String -> Result (Pair Expr PState)
+parsePiBinder : Int -> PState -> Int -> Maybe Qty -> List String -> Bool -> String -> String -> Check (Pair Expr PState)
 parsePiBinder fuel st blockCol qty names implicit openSym closeSym =
-  if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
+  if fuel <= 0 then err "DT: parser fuel exhausted (internal: parser made no progress)"
   else if anyDottedName names then psErr0 PiBinderNameNotSimple
-  else step (expectSym st openSym)
-    (\_, st1 => step (consumeQty st1 qty) (\_, st2 => step (parsePiNames (fuel - 1) st2) (\names2, st3 => step (expectSym st3 ":") (\_, st4 => step (parseExpr (fuel - 1) st4 blockCol 0) (\dom, st5 => step (expectSym st5 closeSym) (\_, st6 => step (expectSym st6 "->") (\_, st7 => step (parseExpr (fuel - 1) st7 blockCol 1) (\cod, st8 => Ok (Pair (foldPiNames names2 implicit qty dom cod (spanOf st st8)) st8)))))))))
+  else Vuna.Compiler.Common.step (expectSym st openSym)
+    (\_, st1 => Vuna.Compiler.Common.step (consumeQty st1 qty) (\_, st2 => Vuna.Compiler.Common.step (parsePiNames (fuel - 1) st2) (\names2, st3 => Vuna.Compiler.Common.step (expectSym st3 ":") (\_, st4 => Vuna.Compiler.Common.step (parseExpr (fuel - 1) st4 blockCol 0) (\dom, st5 => Vuna.Compiler.Common.step (expectSym st5 closeSym) (\_, st6 => Vuna.Compiler.Common.step (expectSym st6 "->") (\_, st7 => Vuna.Compiler.Common.step (parseExpr (fuel - 1) st7 blockCol 1) (\cod, st8 => OkC (Pair (foldPiNames names2 implicit qty dom cod (spanOf st st8)) st8)))))))))
 
 -- 连续的标识符（lookahead 已确认它们后面紧跟 `:`）。
-parsePiNames : Int -> PState -> Result (Pair (List String) PState)
+parsePiNames : Int -> PState -> Check (Pair (List String) PState)
 parsePiNames fuel st =
-  if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
-  else step (expectIdent st) (\name, st1 => parsePiNamesRest (fuel - 1) st1 [name])
+  if fuel <= 0 then err "DT: parser fuel exhausted (internal: parser made no progress)"
+  else Vuna.Compiler.Common.step (expectIdent st) (\name, st1 => parsePiNamesRest (fuel - 1) st1 [name])
 
-parsePiNamesRest : Int -> PState -> List String -> Result (Pair (List String) PState)
-parsePiNamesRest fuel st acc = if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
+parsePiNamesRest : Int -> PState -> List String -> Check (Pair (List String) PState)
+parsePiNamesRest fuel st acc = if fuel <= 0 then err "DT: parser fuel exhausted (internal: parser made no progress)"
 else case peekTok st of
   PTok (TIdent name) p => parsePiNamesRest (fuel - 1) (advance st) (name :: acc)
-  _ => Ok (Pair (reverse acc) st)
+  _ => OkC (Pair (reverse acc) st)
 
 -- 同名 binder 组展开成嵌套 EPi（外到内 = 源码顺序）。
 foldPiNames : List String -> Bool -> Maybe Qty -> Expr -> Expr -> Span -> Expr
@@ -761,108 +774,109 @@ anyDottedName [] = False
 anyDottedName (n :: rest) = containsDot n || anyDottedName rest
 
 -- 消费 binder 前缀里的 quantity token（lookahead 已确认；这里只做机械前进）。
-consumeQty : PState -> Maybe Qty -> Result (Pair Int PState)
-consumeQty st Nothing = Ok (Pair 0 st)
+consumeQty : PState -> Maybe Qty -> Check (Pair Int PState)
+consumeQty st Nothing = OkC (Pair 0 st)
 consumeQty st (Just q) = case peekTok st of
-  PTok (TInt 0) _ => Ok (Pair 0 (advance st))
-  PTok (TInt 1) _ => Ok (Pair 0 (advance st))
+  PTok (TInt 0) _ => OkC (Pair 0 (advance st))
+  PTok (TInt 1) _ => OkC (Pair 0 (advance st))
   _ => psErr0 ExpectedIdentifier
 
 -- `{ f = e, ... }`：构造与更新的公共字段列表（进入时已在 `{` 之后）。
-parseRecordAssignments : Int -> PState -> Int -> Result (Pair (List (Pair String Expr)) PState)
+parseRecordAssignments : Int -> PState -> Int -> Check (Pair (List (Pair String Expr)) PState)
 parseRecordAssignments fuel st blockCol =
-  if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
-  else if atSym st "}" then Ok (Pair [] (advance st))
-  else step (parseRecordAssignList (fuel - 1) st blockCol) (\fs, st1 => Ok (Pair fs st1))
+  if fuel <= 0 then err "DT: parser fuel exhausted (internal: parser made no progress)"
+  else if atSym st "}" then OkC (Pair [] (advance st))
+  else Vuna.Compiler.Common.step (parseRecordAssignList (fuel - 1) st blockCol)
+    (\fs, st1 => OkC (Pair fs st1))
 
-parseRecordAssignList : Int -> PState -> Int -> Result (Pair (List (Pair String Expr)) PState)
+parseRecordAssignList : Int -> PState -> Int -> Check (Pair (List (Pair String Expr)) PState)
 parseRecordAssignList fuel st blockCol =
-  if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
-  else step (expectIdent st)
-    (\fname, st1 => step (expectSym st1 "=") (\_, st2 => step (parseExpr (fuel - 1) st2 blockCol 0) (\value, st3 => if atSym st3 "," then step (parseRecordAssignList (fuel - 1) (advance st3) blockCol) (\rest, st4 => Ok (Pair (Base.List.Cons (Pair fname value) rest) st4)) else step (expectSym st3 "}") (\_, st4 => Ok (Pair [Pair fname value] st4)))))
+  if fuel <= 0 then err "DT: parser fuel exhausted (internal: parser made no progress)"
+  else Vuna.Compiler.Common.step (expectIdent st)
+    (\fname, st1 => Vuna.Compiler.Common.step (expectSym st1 "=") (\_, st2 => Vuna.Compiler.Common.step (parseExpr (fuel - 1) st2 blockCol 0) (\value, st3 => if atSym st3 "," then Vuna.Compiler.Common.step (parseRecordAssignList (fuel - 1) (advance st3) blockCol) (\rest, st4 => OkC (Pair (Base.List.Cons (Pair fname value) rest) st4)) else Vuna.Compiler.Common.step (expectSym st3 "}") (\_, st4 => OkC (Pair [Pair fname value] st4)))))
 
-parseListExpr : Int -> PState -> Int -> Result (Pair Expr PState)
+parseListExpr : Int -> PState -> Int -> Check (Pair Expr PState)
 parseListExpr fuel st blockCol =
-  if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
-  else step (expectSym st "[")
-    (\_, st1 => if atSym st1 "]" then Ok (Pair (EVar listNilSyntax (spanOf st (advance st1))) (advance st1)) else step (parseListExprElems (fuel - 1) st1 blockCol) (\elems, st2 => Ok (Pair (foldCons (spanOf st st2) elems) st2)))
+  if fuel <= 0 then err "DT: parser fuel exhausted (internal: parser made no progress)"
+  else Vuna.Compiler.Common.step (expectSym st "[")
+    (\_, st1 => if atSym st1 "]" then OkC (Pair (EVar listNilSyntax (spanOf st (advance st1))) (advance st1)) else Vuna.Compiler.Common.step (parseListExprElems (fuel - 1) st1 blockCol) (\elems, st2 => OkC (Pair (foldCons (spanOf st st2) elems) st2)))
 
-parseListExprElems : Int -> PState -> Int -> Result (Pair (List Expr) PState)
+parseListExprElems : Int -> PState -> Int -> Check (Pair (List Expr) PState)
 parseListExprElems fuel st blockCol =
-  if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
-  else step (parseExpr (fuel - 1) st blockCol 0)
-    (\e0, st0 => step (parseListElemAt (fuel - 1) e0 st0) (\e, st1 => if atSym st1 "," then step (parseListExprElems (fuel - 1) (advance st1) blockCol) (\rest, st2 => Ok (Pair (Base.List.Cons e rest) st2)) else if atSym st1 "]" then Ok (Pair [e] (advance st1)) else psErr0 ExpectedCommaOrBracket))
+  if fuel <= 0 then err "DT: parser fuel exhausted (internal: parser made no progress)"
+  else Vuna.Compiler.Common.step (parseExpr (fuel - 1) st blockCol 0)
+    (\e0, st0 => Vuna.Compiler.Common.step (parseListElemAt (fuel - 1) e0 st0) (\e, st1 => if atSym st1 "," then Vuna.Compiler.Common.step (parseListExprElems (fuel - 1) (advance st1) blockCol) (\rest, st2 => OkC (Pair (Base.List.Cons e rest) st2)) else if atSym st1 "]" then OkC (Pair [e] (advance st1)) else psErr0 ExpectedCommaOrBracket))
 
 -- 列表字面量元素里的 `X@name`（native-effects ND4）：`@` 在 vuna 里也是模式的
 -- as-pattern，所以只在列表元素位置接受它，不做全局后缀。
-parseListElemAt : Int -> Expr -> PState -> Result (Pair Expr PState)
+parseListElemAt : Int -> Expr -> PState -> Check (Pair Expr PState)
 parseListElemAt fuel e st =
-  if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
-  else if atSym st "@" then step (expectSym st "@")
-    (\_, st1 => step (parseAtom (fuel - 1) st1 0) (\nm, st2 => Ok (Pair (EApp (EVar rowAtSyntax (spanFromExpr e st2)) [e, rowAtNameExpr nm] (spanFromExpr e st2)) st2)))
-  else Ok (Pair e st)
+  if fuel <= 0 then err "DT: parser fuel exhausted (internal: parser made no progress)"
+  else if atSym st "@" then Vuna.Compiler.Common.step (expectSym st "@")
+    (\_, st1 => Vuna.Compiler.Common.step (parseAtom (fuel - 1) st1 0) (\nm, st2 => OkC (Pair (EApp (EVar rowAtSyntax (spanFromExpr e st2)) [e, rowAtNameExpr nm] (spanFromExpr e st2)) st2)))
+  else OkC (Pair e st)
 
 -- | 自动补注（M41 新增导出）：foldCons。
 foldCons : Span -> List Expr -> Expr
 foldCons sp [] = EVar listNilSyntax sp
 foldCons sp (e :: rest) = EApp (EVar listConsSyntax sp) [e, foldCons sp rest] sp
 
-parseLambda : Int -> PState -> Int -> Result (Pair Expr PState)
+parseLambda : Int -> PState -> Int -> Check (Pair Expr PState)
 parseLambda fuel st blockCol =
-  if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
-  else step (expectSym st "\\")
-    (\_, st1 => step (expectIdent st1) (\first, st2 => step (parseLambdaParams (stateFuel st2) st2 [first]) (\params, st3 => step (expectSym st3 "=>") (\_, st4 => step (parseExpr (fuel - 1) st4 blockCol 0) (\body, st5 => Ok (Pair (ELam params body (spanOf st st5)) st5))))))
+  if fuel <= 0 then err "DT: parser fuel exhausted (internal: parser made no progress)"
+  else Vuna.Compiler.Common.step (expectSym st "\\")
+    (\_, st1 => Vuna.Compiler.Common.step (expectIdent st1) (\first, st2 => Vuna.Compiler.Common.step (parseLambdaParams (stateFuel st2) st2 [first]) (\params, st3 => Vuna.Compiler.Common.step (expectSym st3 "=>") (\_, st4 => Vuna.Compiler.Common.step (parseExpr (fuel - 1) st4 blockCol 0) (\body, st5 => OkC (Pair (ELam params body (spanOf st st5)) st5))))))
 
-parseLambdaParams : Int -> PState -> List String -> Result (Pair (List String) PState)
+parseLambdaParams : Int -> PState -> List String -> Check (Pair (List String) PState)
 parseLambdaParams fuel st acc =
-  if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
-  else if atSym st "," then step (expectIdent (advance st))
+  if fuel <= 0 then err "DT: parser fuel exhausted (internal: parser made no progress)"
+  else if atSym st "," then Vuna.Compiler.Common.step (expectIdent (advance st))
     (\name, st1 => parseLambdaParams (fuel - 1) st1 (append acc [name]))
-  else Ok (Pair acc st)
+  else OkC (Pair acc st)
 
-parseLet : Int -> PState -> Int -> Result (Pair Expr PState)
+parseLet : Int -> PState -> Int -> Check (Pair Expr PState)
 parseLet fuel st blockCol =
-  if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
-  else step (expectKw st "let")
-    (\_, st1 => step (parseLetBindings (fuel - 1) st1 blockCol) (\binds, st2 => step (expectKw st2 "in") (\_, st3 => step (parseExpr (fuel - 1) st3 blockCol 0) (\body, st4 => Ok (Pair (ELet binds body False (spanOf st st4)) st4)))))
+  if fuel <= 0 then err "DT: parser fuel exhausted (internal: parser made no progress)"
+  else Vuna.Compiler.Common.step (expectKw st "let")
+    (\_, st1 => Vuna.Compiler.Common.step (parseLetBindings (fuel - 1) st1 blockCol) (\binds, st2 => Vuna.Compiler.Common.step (expectKw st2 "in") (\_, st3 => Vuna.Compiler.Common.step (parseExpr (fuel - 1) st3 blockCol 0) (\body, st4 => OkC (Pair (ELet binds body False (spanOf st st4)) st4)))))
 
 -- `let` 绑定块：与 `where` 共用 `parseBindingItemsAt` / `bindingItemsToBinds`
 -- （签名行可选；函数子句降级成 λ）。块结束于缩进回退或 `in`。
-parseLetBindings : Int -> PState -> Int -> Result (Pair (List (Pair Pat Expr)) PState)
-parseLetBindings fuel st blockCol = if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
+parseLetBindings : Int -> PState -> Int -> Check (Pair (List (Pair Pat Expr)) PState)
+parseLetBindings fuel st blockCol = if fuel <= 0 then err "DT: parser fuel exhausted (internal: parser made no progress)"
 else if isEof st then psErr0 ExpectedLetBinding
 else if atKw st "in" then psErr0 ExpectedLetBinding
 else case peekPos st of
   Pos line col =>
     if col <= blockCol then psErr0 LetBindingNotIndented
-    else step (parseBindingItemsAt (fuel - 1) st col)
-      (\items, st1 => Vuna.Compiler.Common.bind (bindingItemsToBinds items) (\binds => Ok (Pair binds st1)))
+    else Vuna.Compiler.Common.step (parseBindingItemsAt (fuel - 1) st col)
+      (\items, st1 => Vuna.Compiler.Common.bind (bindingItemsToBinds items) (\binds => OkC (Pair binds st1)))
 
-parseCase : Int -> PState -> Int -> Result (Pair Expr PState)
+parseCase : Int -> PState -> Int -> Check (Pair Expr PState)
 parseCase fuel st blockCol =
-  if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
-  else step (expectKw st "case")
-    (\_, st1 => step (parseExpr (fuel - 1) st1 blockCol 0) (\scrut, st2 => step (expectKw st2 "of") (\_, st3 => step (parseCaseAlts (fuel - 1) st3 blockCol) (\alts, st4 => Ok (Pair (ECase scrut alts (spanOf st st4)) st4)))))
+  if fuel <= 0 then err "DT: parser fuel exhausted (internal: parser made no progress)"
+  else Vuna.Compiler.Common.step (expectKw st "case")
+    (\_, st1 => Vuna.Compiler.Common.step (parseExpr (fuel - 1) st1 blockCol 0) (\scrut, st2 => Vuna.Compiler.Common.step (expectKw st2 "of") (\_, st3 => Vuna.Compiler.Common.step (parseCaseAlts (fuel - 1) st3 blockCol) (\alts, st4 => OkC (Pair (ECase scrut alts (spanOf st st4)) st4)))))
 
-parseCaseAlts : Int -> PState -> Int -> Result (Pair (List (Pair Pat Expr)) PState)
-parseCaseAlts fuel st blockCol = if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
+parseCaseAlts : Int -> PState -> Int -> Check (Pair (List (Pair Pat Expr)) PState)
+parseCaseAlts fuel st blockCol = if fuel <= 0 then err "DT: parser fuel exhausted (internal: parser made no progress)"
 else if isEof st then psErr0 CaseNeedsAlternative
 else case peekPos st of
   Pos line col => if col <= blockCol then psErr0 CaseAltNotIndented
-  else step (parseAltList (fuel - 1) st col) (\alts, st2 => if badCaseIndent st2 col then psErr0 UnexpectedIndentAfterCaseAlt
+  else Vuna.Compiler.Common.step (parseAltList (fuel - 1) st col) (\alts, st2 => if badCaseIndent st2 col then psErr0 UnexpectedIndentAfterCaseAlt
   else case alts of
     [] => psErr0 CaseNeedsAlternative
-    _ => Ok (Pair alts st2)
+    _ => OkC (Pair alts st2)
   )
 
-parseAltList : Int -> PState -> Int -> Result (Pair (List (Pair Pat Expr)) PState)
-parseAltList fuel st altCol = if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
-else if isEof st then Ok (Pair [] st)
+parseAltList : Int -> PState -> Int -> Check (Pair (List (Pair Pat Expr)) PState)
+parseAltList fuel st altCol = if fuel <= 0 then err "DT: parser fuel exhausted (internal: parser made no progress)"
+else if isEof st then OkC (Pair [] st)
 else case peekPos st of
   Pos line col =>
-    if col == altCol then step (parsePatternSingle (stateFuel st) st altCol)
-      (\pat, st1 => Vuna.Compiler.Common.bind (checkNoRepeatedBinders [pat]) (\_ => step (expectSym st1 "=>") (\_, st2 => step (parseExpr (fuel - 1) st2 altCol 0) (\body, st3 => step (parseAltList (fuel - 1) st3 altCol) (\rest, st4 => Ok (Pair (Base.List.Cons (Pair pat body) rest) st4))))))
-    else Ok (Pair [] st)
+    if col == altCol then Vuna.Compiler.Common.step (parsePatternSingle (stateFuel st) st altCol)
+      (\pat, st1 => Vuna.Compiler.Common.bind (checkNoRepeatedBinders [pat]) (\_ => Vuna.Compiler.Common.step (expectSym st1 "=>") (\_, st2 => Vuna.Compiler.Common.step (parseExpr (fuel - 1) st2 altCol 0) (\body, st3 => Vuna.Compiler.Common.step (parseAltList (fuel - 1) st3 altCol) (\rest, st4 => OkC (Pair (Base.List.Cons (Pair pat body) rest) st4))))))
+    else OkC (Pair [] st)
 
 -- `@` 后面的裸标识符是实例名**字面量**（`[Console@audit]` → 名字 "audit"）；字符串原样。
 rowAtNameExpr : Expr -> Expr
@@ -871,59 +885,59 @@ rowAtNameExpr e = e
 
 -- `perform <expr>`（native-effects N1 / ND12）：保留名单实参应用；Elab 侧按 op 族
 -- 推导 key / 实例名 / res 族后降级到 `Base.Eff.performCore`，不新增 AST 构造子。
-parsePerform : Int -> PState -> Int -> Result (Pair Expr PState)
+parsePerform : Int -> PState -> Int -> Check (Pair Expr PState)
 parsePerform fuel st blockCol =
-  if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
-  else step (expectKw st "perform")
-    (\_, st1 => step (parseApplication (fuel - 1) st1 blockCol) (\operand, st2 => Ok (Pair (EApp (EVar performSyntax (spanOf st st2)) [operand] (spanOf st st2)) st2)))
+  if fuel <= 0 then err "DT: parser fuel exhausted (internal: parser made no progress)"
+  else Vuna.Compiler.Common.step (expectKw st "perform")
+    (\_, st1 => Vuna.Compiler.Common.step (parseApplication (fuel - 1) st1 blockCol) (\operand, st2 => OkC (Pair (EApp (EVar performSyntax (spanOf st st2)) [operand] (spanOf st st2)) st2)))
 
-parseIf : Int -> PState -> Int -> Result (Pair Expr PState)
+parseIf : Int -> PState -> Int -> Check (Pair Expr PState)
 parseIf fuel st blockCol =
-  if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
-  else step (expectKw st "if")
-    (\_, st1 => step (parseExpr (fuel - 1) st1 blockCol 0) (\cond, st2 => step (expectKw st2 "then") (\_, st3 => step (parseExpr (fuel - 1) st3 blockCol 0) (\yes, st4 => step (expectKw st4 "else") (\_, st5 => step (parseExpr (fuel - 1) st5 blockCol 0) (\no, st6 => Ok (Pair (EIf cond yes no (spanOf st st6)) st6)))))))
+  if fuel <= 0 then err "DT: parser fuel exhausted (internal: parser made no progress)"
+  else Vuna.Compiler.Common.step (expectKw st "if")
+    (\_, st1 => Vuna.Compiler.Common.step (parseExpr (fuel - 1) st1 blockCol 0) (\cond, st2 => Vuna.Compiler.Common.step (expectKw st2 "then") (\_, st3 => Vuna.Compiler.Common.step (parseExpr (fuel - 1) st3 blockCol 0) (\yes, st4 => Vuna.Compiler.Common.step (expectKw st4 "else") (\_, st5 => Vuna.Compiler.Common.step (parseExpr (fuel - 1) st5 blockCol 0) (\no, st6 => OkC (Pair (EIf cond yes no (spanOf st st6)) st6)))))))
 
 -- do 块（M11）：`do` + 缩进对齐的语句，语句是 `pat <- expr` 或裸表达式；
 -- 最后一条必须是裸表达式（do 本身不引入 pure，最后表达式即块结果）。
-parseDo : Int -> PState -> Int -> Result (Pair Expr PState)
-parseDo fuel st blockCol = if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
-else step (expectKw st "do") (\_, st1 => if isEof st1 then psErr0 DoBlockNeedsStatement
+parseDo : Int -> PState -> Int -> Check (Pair Expr PState)
+parseDo fuel st blockCol = if fuel <= 0 then err "DT: parser fuel exhausted (internal: parser made no progress)"
+else Vuna.Compiler.Common.step (expectKw st "do") (\_, st1 => if isEof st1 then psErr0 DoBlockNeedsStatement
 else case peekPos st1 of
   Pos line col => if col <= blockCol then psErr0 DoStatementNotIndented
-  else step (parseDoStmts (fuel - 1) st1 col []) (\stmts, st2 => case reverse stmts of
-    (DExpr lastExpr lastSp) :: rest => Ok (Pair (EDo stmts (spanOf st st2)) st2)
+  else Vuna.Compiler.Common.step (parseDoStmts (fuel - 1) st1 col []) (\stmts, st2 => case reverse stmts of
+    (DExpr lastExpr lastSp) :: rest => OkC (Pair (EDo stmts (spanOf st st2)) st2)
     _ => psErr0 DoBlockMustEndWithExpr
   )
 )
 
-parseDoStmts : Int -> PState -> Int -> List DoStmt -> Result (Pair (List DoStmt) PState)
-parseDoStmts fuel st stmtCol acc = if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
-else if isEof st then Ok (Pair (reverse acc) st)
+parseDoStmts : Int -> PState -> Int -> List DoStmt -> Check (Pair (List DoStmt) PState)
+parseDoStmts fuel st stmtCol acc = if fuel <= 0 then err "DT: parser fuel exhausted (internal: parser made no progress)"
+else if isEof st then OkC (Pair (reverse acc) st)
 else case peekPos st of
-  Pos line col => if col < stmtCol then Ok (Pair (reverse acc) st)
+  Pos line col => if col < stmtCol then OkC (Pair (reverse acc) st)
   else if col > stmtCol then psErr0 UnexpectedIndentInDo
-  else step (parseDoStmt (fuel - 1) st stmtCol) (\stmt, st1 => case peekPos st1 of
+  else Vuna.Compiler.Common.step (parseDoStmt (fuel - 1) st stmtCol) (\stmt, st1 => case peekPos st1 of
     Pos line2 col2 =>
-      if isEof st1 then Ok (Pair (reverse (stmt :: acc)) st1)
-      else if col2 < stmtCol then Ok (Pair (reverse (stmt :: acc)) st1)
+      if isEof st1 then OkC (Pair (reverse (stmt :: acc)) st1)
+      else if col2 < stmtCol then OkC (Pair (reverse (stmt :: acc)) st1)
       else if col2 > stmtCol then psErr0 UnexpectedIndentInDo
       else parseDoStmts (fuel - 1) st1 stmtCol (stmt :: acc)
   )
 
-parseDoStmt : Int -> PState -> Int -> Result (Pair DoStmt PState)
-parseDoStmt fuel st stmtCol = if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
+parseDoStmt : Int -> PState -> Int -> Check (Pair DoStmt PState)
+parseDoStmt fuel st stmtCol = if fuel <= 0 then err "DT: parser fuel exhausted (internal: parser made no progress)"
 else case parsePatternSingle (stateFuel st) st stmtCol of
-  Ok (Pair pat st1) =>
+  OkC (Pair pat st1) =>
     if atSym st1 "<-" then Vuna.Compiler.Common.bind (checkNoRepeatedBinders [pat])
-      (\_ => step (expectSym st1 "<-") (\_, st2 => step (parseExpr (fuel - 1) st2 stmtCol 0) (\e, st3 => Ok (Pair (DBind pat e (spanOf st st3)) st3))))
+      (\_ => Vuna.Compiler.Common.step (expectSym st1 "<-") (\_, st2 => Vuna.Compiler.Common.step (parseExpr (fuel - 1) st2 stmtCol 0) (\e, st3 => OkC (Pair (DBind pat e (spanOf st st3)) st3))))
     else parseDoExprStmt (fuel - 1) st stmtCol
-  Err _ => parseDoExprStmt (fuel - 1) st stmtCol
+  ErrC _ => parseDoExprStmt (fuel - 1) st stmtCol
 
-parseDoExprStmt : Int -> PState -> Int -> Result (Pair DoStmt PState)
+parseDoExprStmt : Int -> PState -> Int -> Check (Pair DoStmt PState)
 parseDoExprStmt fuel st stmtCol =
-  if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
-  else step (parseExpr (fuel - 1) (sameLineState st) stmtCol 0)
-    (\e, st1 => Ok (Pair (DExpr e (spanOf st st1)) st1))
+  if fuel <= 0 then err "DT: parser fuel exhausted (internal: parser made no progress)"
+  else Vuna.Compiler.Common.step (parseExpr (fuel - 1) (sameLineState st) stmtCol 0)
+    (\e, st1 => OkC (Pair (DExpr e (spanOf st st1)) st1))
 
 -- ---------------------------------------------------------------
 -- D40：非线性格检查（模式绑定名唯一性）
@@ -958,131 +972,133 @@ firstRepeatedBindingGo ((Pair name sp) :: rest) seen =
 
 -- | D40 非线性格检查：一个绑定作用域的模式列表里出现重复绑定名 → 在第二次出现处报
 -- 语法错误（带位置与名字）；合法时返回 Ok 0。
-checkNoRepeatedBinders : List Pat -> Result Int
+checkNoRepeatedBinders : List Pat -> Check Int
 checkNoRepeatedBinders pats = case firstRepeatedBinding (concatMap patBinderBindings pats) of
-  Nothing => Ok 0
+  Nothing => OkC 0
   Just (Pair name sp) =>
-    Err "${showSpanLoc sp}: ${psMsg RepeatedPatternBinder []} (repeated name: `${name}`)"
+    ErrC
+      (withLabel (Label (Just sp) "" LabelPrimary Nothing) (appendMessage " (repeated name: `${name}`)" (psMsg RepeatedPatternBinder [])))
 
-parsePatternSingle : Int -> PState -> Int -> Result (Pair Pat PState)
+parsePatternSingle : Int -> PState -> Int -> Check (Pair Pat PState)
 parsePatternSingle fuel st blockCol =
-  if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
+  if fuel <= 0 then err "DT: parser fuel exhausted (internal: parser made no progress)"
   else parsePatternCons (fuel - 1) st blockCol
 
-parsePatternCons : Int -> PState -> Int -> Result (Pair Pat PState)
+parsePatternCons : Int -> PState -> Int -> Check (Pair Pat PState)
 -- M31.2：pattern 里的 `::` 保留符号原形，由 Loader 按 fixity/别名声明换成
 -- canonical `Cons`（base 声明 `infixr 5 :: = Cons`）。
 parsePatternCons fuel st blockCol =
-  if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
-  else step (parsePatternHead (fuel - 1) st blockCol)
-    (\lhs, st1 => if atSym st1 "::" && canContinue st1 blockCol then step (parsePatternCons (fuel - 1) (advance st1) blockCol) (\rhs, st2 => Ok (Pair (PCon "::" [lhs, rhs] (spanOf st st2)) st2)) else Ok (Pair lhs st1))
+  if fuel <= 0 then err "DT: parser fuel exhausted (internal: parser made no progress)"
+  else Vuna.Compiler.Common.step (parsePatternHead (fuel - 1) st blockCol)
+    (\lhs, st1 => if atSym st1 "::" && canContinue st1 blockCol then Vuna.Compiler.Common.step (parsePatternCons (fuel - 1) (advance st1) blockCol) (\rhs, st2 => OkC (Pair (PCon "::" [lhs, rhs] (spanOf st st2)) st2)) else OkC (Pair lhs st1))
 
-parsePatternHead : Int -> PState -> Int -> Result (Pair Pat PState)
-parsePatternHead fuel st blockCol = if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
+parsePatternHead : Int -> PState -> Int -> Check (Pair Pat PState)
+parsePatternHead fuel st blockCol = if fuel <= 0 then err "DT: parser fuel exhausted (internal: parser made no progress)"
 else case peekTok st of
   PTok (TIdent name) p =>
     let
       st1 = advance st
-    in if ctorPatternStart name && atSym st1 "{" then step (parseRecordPatternFields (fuel - 1) st1 blockCol)
-      (\fields, st2 => Ok (Pair (PRecord name fields (spanOf st st2)) st2))
-    else if ctorPatternStart name then step (parsePatternAtoms (fuel - 1) st1 blockCol)
-      (\args, st2 => Ok (Pair (PCon name args (spanOf st st2)) st2))
+    in if ctorPatternStart name && atSym st1 "{" then Vuna.Compiler.Common.step (parseRecordPatternFields (fuel - 1) st1 blockCol)
+      (\fields, st2 => OkC (Pair (PRecord name fields (spanOf st st2)) st2))
+    else if ctorPatternStart name then Vuna.Compiler.Common.step (parsePatternAtoms (fuel - 1) st1 blockCol)
+      (\args, st2 => OkC (Pair (PCon name args (spanOf st st2)) st2))
     else parsePatternAtom (fuel - 1) st blockCol
   _ => parsePatternAtom (fuel - 1) st blockCol
 
-parseRecordPatternFields : Int -> PState -> Int -> Result (Pair (List (Pair String Pat)) PState)
+parseRecordPatternFields : Int -> PState -> Int -> Check (Pair (List (Pair String Pat)) PState)
 parseRecordPatternFields fuel st blockCol =
-  if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
-  else step (expectSym st "{") (\_, st1 => parseRecordPatternList (fuel - 1) st1 blockCol)
+  if fuel <= 0 then err "DT: parser fuel exhausted (internal: parser made no progress)"
+  else Vuna.Compiler.Common.step (expectSym st "{")
+    (\_, st1 => parseRecordPatternList (fuel - 1) st1 blockCol)
 
-parseRecordPatternList : Int -> PState -> Int -> Result (Pair (List (Pair String Pat)) PState)
+parseRecordPatternList : Int -> PState -> Int -> Check (Pair (List (Pair String Pat)) PState)
 parseRecordPatternList fuel st blockCol =
-  if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
-  else if atSym st "}" then Ok (Pair [] (advance st))
-  else step (parseRecordPatternField (fuel - 1) st blockCol)
-    (\f, st1 => if atSym st1 "," then step (parseRecordPatternList (fuel - 1) (advance st1) blockCol) (\rest, st2 => Ok (Pair (Base.List.Cons f rest) st2)) else step (expectSym st1 "}") (\_, st2 => Ok (Pair [f] st2)))
+  if fuel <= 0 then err "DT: parser fuel exhausted (internal: parser made no progress)"
+  else if atSym st "}" then OkC (Pair [] (advance st))
+  else Vuna.Compiler.Common.step (parseRecordPatternField (fuel - 1) st blockCol)
+    (\f, st1 => if atSym st1 "," then Vuna.Compiler.Common.step (parseRecordPatternList (fuel - 1) (advance st1) blockCol) (\rest, st2 => OkC (Pair (Base.List.Cons f rest) st2)) else Vuna.Compiler.Common.step (expectSym st1 "}") (\_, st2 => OkC (Pair [f] st2)))
 
-parseRecordPatternField : Int -> PState -> Int -> Result (Pair (Pair String Pat) PState)
-parseRecordPatternField fuel st blockCol = if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
+parseRecordPatternField : Int -> PState -> Int -> Check (Pair (Pair String Pat) PState)
+parseRecordPatternField fuel st blockCol = if fuel <= 0 then err "DT: parser fuel exhausted (internal: parser made no progress)"
 else case peekTok st of
   PTok (TIdent fname) p =>
     let
       st1 = advance st
-    in if atSym st1 "=" then step (expectSym st1 "=")
-      (\_, st2 => step (parsePatternSingle (fuel - 1) st2 blockCol) (\pat, st3 => Ok (Pair (Pair fname pat) st3)))
-    else Ok
+    in if atSym st1 "=" then Vuna.Compiler.Common.step (expectSym st1 "=")
+      (\_, st2 => Vuna.Compiler.Common.step (parsePatternSingle (fuel - 1) st2 blockCol) (\pat, st3 => OkC (Pair (Pair fname pat) st3)))
+    else OkC
       (Pair (Pair fname (PVar fname (Span (fileOf st) (posLine p) (posCol p) (posLine p) (posCol p)))) st1)
   _ => psErr0 ExpectedRecordFieldPattern
 
-parsePatternAtoms : Int -> PState -> Int -> Result (Pair (List Pat) PState)
+parsePatternAtoms : Int -> PState -> Int -> Check (Pair (List Pat) PState)
 parsePatternAtoms fuel st blockCol =
-  if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
-  else if startsPatternAtom st && canContinue st blockCol then step (parsePatternAtom (fuel - 1) st blockCol)
-    (\pat, st1 => step (parsePatternAtoms (fuel - 1) st1 blockCol) (\rest, st2 => Ok (Pair (Base.List.Cons pat rest) st2)))
-  else Ok (Pair [] st)
+  if fuel <= 0 then err "DT: parser fuel exhausted (internal: parser made no progress)"
+  else if startsPatternAtom st && canContinue st blockCol then Vuna.Compiler.Common.step (parsePatternAtom (fuel - 1) st blockCol)
+    (\pat, st1 => Vuna.Compiler.Common.step (parsePatternAtoms (fuel - 1) st1 blockCol) (\rest, st2 => OkC (Pair (Base.List.Cons pat rest) st2)))
+  else OkC (Pair [] st)
 
-parsePatternAtom : Int -> PState -> Int -> Result (Pair Pat PState)
+parsePatternAtom : Int -> PState -> Int -> Check (Pair Pat PState)
 parsePatternAtom fuel st blockCol =
-  if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
-  else step (parsePatternAtomBase (fuel - 1) st blockCol)
+  if fuel <= 0 then err "DT: parser fuel exhausted (internal: parser made no progress)"
+  else Vuna.Compiler.Common.step (parsePatternAtomBase (fuel - 1) st blockCol)
     (\base, st1 => finishAsPattern (fuel - 1) st base st1 blockCol)
 
 -- as-pattern：`x@pat`（前缀）与 `(pat)@x`（后缀）；`_@x` 等价于 `x@_`。
-finishAsPattern : Int -> PState -> Pat -> PState -> Int -> Result (Pair Pat PState)
-finishAsPattern fuel st base st1 blockCol = if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
+finishAsPattern : Int -> PState -> Pat -> PState -> Int -> Check (Pair Pat PState)
+finishAsPattern fuel st base st1 blockCol = if fuel <= 0 then err "DT: parser fuel exhausted (internal: parser made no progress)"
 else if atSym st1 "@" && canContinue st1 blockCol then case base of
   PVar "_" psp =>
-    step (parseAsName (fuel - 1) (advance st1))
-      (\name, st2 => Ok (Pair (PAs name (PWild psp) (spanOf st st2)) st2))
+    Vuna.Compiler.Common.step (parseAsName (fuel - 1) (advance st1))
+      (\name, st2 => OkC (Pair (PAs name (PWild psp) (spanOf st st2)) st2))
   PVar name psp =>
-    step (parsePatternAtom (fuel - 1) (advance st1) blockCol)
-      (\rhs, st2 => Ok (Pair (PAs name rhs (spanOf st st2)) st2))
+    Vuna.Compiler.Common.step (parsePatternAtom (fuel - 1) (advance st1) blockCol)
+      (\rhs, st2 => OkC (Pair (PAs name rhs (spanOf st st2)) st2))
   _ =>
-    step (parseAsName (fuel - 1) (advance st1))
-      (\name, st2 => Ok (Pair (PAs name base (spanOf st st2)) st2))
-else Ok (Pair base st1)
+    Vuna.Compiler.Common.step (parseAsName (fuel - 1) (advance st1))
+      (\name, st2 => OkC (Pair (PAs name base (spanOf st st2)) st2))
+else OkC (Pair base st1)
 
-parseAsName : Int -> PState -> Result (Pair String PState)
-parseAsName fuel st = if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
+parseAsName : Int -> PState -> Check (Pair String PState)
+parseAsName fuel st = if fuel <= 0 then err "DT: parser fuel exhausted (internal: parser made no progress)"
 else case peekTok st of
   PTok (TIdent name) p =>
-    if name == "_" then psErr0 ExpectedPattern else Ok (Pair name (advance st))
+    if name == "_" then psErr0 ExpectedPattern else OkC (Pair name (advance st))
   _ => psErr0 ExpectedPattern
 
-parsePatternAtomBase : Int -> PState -> Int -> Result (Pair Pat PState)
-parsePatternAtomBase fuel st blockCol = if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
+parsePatternAtomBase : Int -> PState -> Int -> Check (Pair Pat PState)
+parsePatternAtomBase fuel st blockCol = if fuel <= 0 then err "DT: parser fuel exhausted (internal: parser made no progress)"
 else case peekTok st of
-  PTok (TIdent "_") p => Ok (Pair (PWild (spanOf st (advance st))) (advance st))
+  PTok (TIdent "_") p => OkC (Pair (PWild (spanOf st (advance st))) (advance st))
   PTok (TIdent name) p =>
-    if ctorPatternStart name then Ok (Pair (PCon name [] (spanOf st (advance st))) (advance st))
-    else Ok (Pair (PVar name (spanOf st (advance st))) (advance st))
-  PTok (TInt n) p => Ok (Pair (PInt n (spanOf st (advance st))) (advance st))
-  PTok (TStr s) p => Ok (Pair (PStr s (spanOf st (advance st))) (advance st))
+    if ctorPatternStart name then OkC (Pair (PCon name [] (spanOf st (advance st))) (advance st))
+    else OkC (Pair (PVar name (spanOf st (advance st))) (advance st))
+  PTok (TInt n) p => OkC (Pair (PInt n (spanOf st (advance st))) (advance st))
+  PTok (TStr s) p => OkC (Pair (PStr s (spanOf st (advance st))) (advance st))
   -- M36：多行字面量模式只允许**无洞**（等价于普通字符串字面量模式）；带洞不支持。
   PTok (TTmpl multi parts endP) p => case textPartsOf parts of
     Just s =>
       let
         advanced = advance st
         st2 = PState (fileOf st) advanced.toksOf endP advanced.toksLeft
-      in Ok (Pair (PStr s (spanOf st st2)) st2)
+      in OkC (Pair (PStr s (spanOf st st2)) st2)
     Nothing => psErr0 TemplateInPattern
   PTok (TSym "(") p =>
-    step (parsePatternSingle (fuel - 1) (advance st) blockCol)
-      (\inner, st1 => step (expectSym st1 ")") (\_, st2 => Ok (Pair inner st2)))
+    Vuna.Compiler.Common.step (parsePatternSingle (fuel - 1) (advance st) blockCol)
+      (\inner, st1 => Vuna.Compiler.Common.step (expectSym st1 ")") (\_, st2 => OkC (Pair inner st2)))
   PTok (TSym "[") p => parseListPattern (fuel - 1) st blockCol
   _ => psErr0 ExpectedPattern
 
-parseListPattern : Int -> PState -> Int -> Result (Pair Pat PState)
+parseListPattern : Int -> PState -> Int -> Check (Pair Pat PState)
 parseListPattern fuel st blockCol =
-  if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
-  else step (expectSym st "[")
-    (\_, st1 => if atSym st1 "]" then Ok (Pair (PCon listNilSyntax [] (spanOf st (advance st1))) (advance st1)) else step (parseListPatternElems (fuel - 1) st1 blockCol) (\pats, st2 => Ok (Pair (foldPCon (spanOf st st2) pats) st2)))
+  if fuel <= 0 then err "DT: parser fuel exhausted (internal: parser made no progress)"
+  else Vuna.Compiler.Common.step (expectSym st "[")
+    (\_, st1 => if atSym st1 "]" then OkC (Pair (PCon listNilSyntax [] (spanOf st (advance st1))) (advance st1)) else Vuna.Compiler.Common.step (parseListPatternElems (fuel - 1) st1 blockCol) (\pats, st2 => OkC (Pair (foldPCon (spanOf st st2) pats) st2)))
 
-parseListPatternElems : Int -> PState -> Int -> Result (Pair (List Pat) PState)
+parseListPatternElems : Int -> PState -> Int -> Check (Pair (List Pat) PState)
 parseListPatternElems fuel st blockCol =
-  if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
-  else step (parsePatternSingle (fuel - 1) st blockCol)
-    (\pat, st1 => if atSym st1 "," then step (parseListPatternElems (fuel - 1) (advance st1) blockCol) (\rest, st2 => Ok (Pair (Base.List.Cons pat rest) st2)) else if atSym st1 "]" then Ok (Pair [pat] (advance st1)) else psErr0 ExpectedCommaOrBracket)
+  if fuel <= 0 then err "DT: parser fuel exhausted (internal: parser made no progress)"
+  else Vuna.Compiler.Common.step (parsePatternSingle (fuel - 1) st blockCol)
+    (\pat, st1 => if atSym st1 "," then Vuna.Compiler.Common.step (parseListPatternElems (fuel - 1) (advance st1) blockCol) (\rest, st2 => OkC (Pair (Base.List.Cons pat rest) st2)) else if atSym st1 "]" then OkC (Pair [pat] (advance st1)) else psErr0 ExpectedCommaOrBracket)
 
 -- | 自动补注（M41 新增导出）：foldPCon。
 foldPCon : Span -> List Pat -> Pat

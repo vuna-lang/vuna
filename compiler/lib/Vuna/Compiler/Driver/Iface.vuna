@@ -201,10 +201,10 @@ preparedForModule modules entryDecls name =
     auxDecls = append (concatMap moduleDeclsOf others) entryDecls
   in if length modules <= 1 then Nothing
   else case prepareDeclsWith auxDecls own of
-    Err _ => Nothing
-    Ok p => case expandDerivings (secondOf p) of
-      Err _ => Nothing
-      Ok ds2 => Just ds2
+    ErrC _ => Nothing
+    OkC p => case expandDerivings (secondOf p) of
+      ErrC _ => Nothing
+      OkC ds2 => Just ds2
 
 setPrepared : List Decl -> ModuleIface -> ModuleIface
 setPrepared prepared mi =
@@ -678,12 +678,12 @@ firstCoverageIssue oi ourNames inherited ifaces prog =
 -- 本包模块 → `PackageIface` 的模块列表（拓扑序：Loader 的列表是依赖者在前的反序）。
 -- 入口声明（合成模块 `Main`）暂不写接口：它没有导出面、加载侧永远从源码进；模块级
 -- 增量（S4）需要时再补。
-coverageResult : OwnerIndex -> List String -> List String -> List ModuleIface -> DtProgram -> Result (List ModuleIface)
+coverageResult : OwnerIndex -> List String -> List String -> List ModuleIface -> DtProgram -> Check (List ModuleIface)
 coverageResult oi ourNames inherited ifaces prog = case firstCoverageIssue oi ourNames inherited ifaces prog of
-  Just issue => Err "iface: ${issue}"
-  Nothing => Ok ifaces
+  Just issue => err "iface: ${issue}"
+  Nothing => OkC ifaces
 
-ifaceOfPackage : String -> List (Pair String SourceInfo) -> List (Pair String Int) -> List String -> List ModuleIface -> List Module -> List Decl -> DtProgram -> Result (List ModuleIface)
+ifaceOfPackage : String -> List (Pair String SourceInfo) -> List (Pair String Int) -> List String -> List ModuleIface -> List Module -> List Decl -> DtProgram -> Check (List ModuleIface)
 ifaceOfPackage pkg sources knownDeps inherited clean modules entryDecls prog =
   let
     ourModules = reverse (filter (\m => modulePackageOf m == pkg) modules)
@@ -732,7 +732,7 @@ allOwnedPresent oi inherited name (a :: rest) present =
   in if skip then allOwnedPresent oi inherited name rest present
   else memName a present && allOwnedPresent oi inherited name rest present
 
-ifaceOfModule : String -> SourceInfo -> List (Pair String Int) -> List String -> List ModuleIface -> List Module -> List Decl -> DtProgram -> String -> Result ModuleIface
+ifaceOfModule : String -> SourceInfo -> List (Pair String Int) -> List String -> List ModuleIface -> List Module -> List Decl -> DtProgram -> String -> Check ModuleIface
 ifaceOfModule pkg si knownDeps inherited clean modules entryDecls prog name =
   let
     ourModules = reverse (filter (\m => modulePackageOf m == pkg) modules)
@@ -742,7 +742,7 @@ ifaceOfModule pkg si knownDeps inherited clean modules entryDecls prog name =
     parts = progPartsOf oi prog
     ourNames = map moduleNameOf ourModules
   in case findNamedModule ourModules name of
-    Nothing => Err "iface: module ${name} is not part of the checked package"
+    Nothing => err "iface: module ${name} is not part of the checked package"
     Just m =>
       let
         mi0 = mkIfaceBase pkg parts prog [Pair name si] [] m
@@ -752,8 +752,8 @@ ifaceOfModule pkg si knownDeps inherited clean modules entryDecls prog name =
         miP = case preparedForModule ourModules entryDecls name of
           Nothing => mi
           Just decls => setPrepared decls mi
-      in if moduleCoverageOk oi inherited name prog miP then Ok miP
-      else Err "iface: module ${name} has uncovered artifacts"
+      in if moduleCoverageOk oi inherited name prog miP then OkC miP
+      else err "iface: module ${name} has uncovered artifacts"
 
 -- 包接口自检：schema/编译器指纹由读侧校验；这里只检查模块集合非空 + 摘要闭合。
 packageIfaceValid : PackageIface -> Bool

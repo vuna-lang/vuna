@@ -22,9 +22,9 @@ import Vuna.Compiler.Frontend.Ast
 
 -- M28（B18）：值位置只查值命名空间（`valueLookup`：构造子优先，再全局定义）。
 -- 类型名只在没有任何值候选时作为「类型作为项」命中（数据族名在 globals 里有 kind）。
-inferVarRef : List (Pair String Term) -> Ctx -> Ec -> String -> Span -> Result (Pair Term (Pair Value Ec))
+inferVarRef : List (Pair String Term) -> Ctx -> Ec -> String -> Span -> Check (Pair Term (Pair Value Ec))
 inferVarRef globals ctx ec name sp = case ctxLookup name ctx of
-  Just (Pair idx tyTerm) => Ok (Pair (TVar name idx) (Pair (varTypeValue ctx idx tyTerm) ec))
+  Just (Pair idx tyTerm) => OkC (Pair (TVar name idx) (Pair (varTypeValue ctx idx tyTerm) ec))
   Nothing => case valueLookup globals ec name of
     Just (VECtor ctor) => inferCtorRef ec ctx name (dtCtorType ctor)
     -- M23：全隐式前缀的全局值（HM 泛化出的 unifyErr : Result a、empty : Map k v）
@@ -33,8 +33,8 @@ inferVarRef globals ctx ec name sp = case ctxLookup name ctx of
     Just (VEDef tyTerm) => if allImplicitPrefix tyTerm then
       let
         inst = instantiateAllImplicit ctx ec (ctorRefTerm (ecDatas ec) name) (eval [] tyTerm) []
-      in Ok inst
-    else Ok (Pair (ctorRefTerm (ecDatas ec) name) (Pair (eval [] tyTerm) ec))
+      in OkC inst
+    else OkC (Pair (ctorRefTerm (ecDatas ec) name) (Pair (eval [] tyTerm) ec))
     Nothing => tcErr1 sp (UnknownName name) name
 
 -- 签名项是否以隐式 Pi 开头并最终落到值（{a : Type} -> Result a）；显式 Pi 不算。
@@ -62,12 +62,12 @@ else case forceVal ec ty of
 -- where 块（parser 的 `ELet .. True`）要求每个绑定都有签名行；普通 `let` 的签名可选。
 -- 两者共用同一套绑定块模型（parser 的 `bindingItemsToBinds`），这里只收口「是否强制」，
 -- 使 check/infer 两条 let 路径不再各自重复这一段分支。
-checkBindingSigs : Bool -> List (Pair Pat Expr) -> Result Int
+checkBindingSigs : Bool -> List (Pair Pat Expr) -> Check Int
 checkBindingSigs True binds = checkWhereSigs binds
-checkBindingSigs False binds = Ok 0
+checkBindingSigs False binds = OkC 0
 
-checkWhereSigs : List (Pair Pat Expr) -> Result Int
-checkWhereSigs [] = Ok 0
+checkWhereSigs : List (Pair Pat Expr) -> Check Int
+checkWhereSigs [] = OkC 0
 checkWhereSigs (bind :: rest) = case secondOf bind of
   EAnn value ty annSp => checkWhereSigs rest
   _ =>

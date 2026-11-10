@@ -79,12 +79,12 @@ decodeFrame fuel len afterHeaders readN writeS warn dispatch state =
     body = substring 0 (natFromInt len) afterHeaders
     rest = substring (natFromInt len) (natFromInt (strLength afterHeaders - len)) afterHeaders
   in case parseJson body of
-    Err e =>
+    ErrC e =>
       let
-        w = warn "malformed frame: ${e}" state
+        w = warn "malformed frame: ${diagText e}" state
         _ = writeFrames writeS (secondOf w)
       in connLoop (fuel - 1) rest readN writeS warn dispatch (firstOf w)
-    Ok msg =>
+    OkC msg =>
       let
         result = dispatch msg state
         shouldExit = firstOf result

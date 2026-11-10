@@ -183,8 +183,8 @@ currentModuleNameOf sf = case sf.sourceFileModDecl of
 
 moduleNameOfText : String -> String
 moduleNameOfText text = case parseSource "<lsp>" text of
-  Err e => ""
-  Ok sf => currentModuleNameOf sf
+  ErrC e => ""
+  OkC sf => currentModuleNameOf sf
 
 -- 光标 token 左侧紧邻 `?` ⇒ 命名洞，不参与改名。
 namedHoleBefore : String -> Int -> Int -> Bool
@@ -254,8 +254,8 @@ loadIndexTarget uri bufText bufSf idx sym tokInfo = case moduleInfoOf idx (symMo
     let
       source = runIO (prim_readFile (modPath mi))
     in case parseSource (modPath mi) source of
-      Err e => Nothing
-      Ok sf2 =>
+      ErrC e => Nothing
+      OkC sf2 =>
         Just
           (Pair (RenameTarget (symName sym) (symKind sym) (symModule sym) (pathToUri (modPath mi)) source sf2) tokInfo)
 
@@ -263,8 +263,8 @@ loadIndexTarget uri bufText bufSf idx sym tokInfo = case moduleInfoOf idx (symMo
 -- 顺序：局部绑定 → 当前缓冲顶层声明 → Index 符号（拒绝 base 标准库）。
 resolveTarget : String -> Int -> Int -> String -> Maybe Index -> Maybe (Pair RenameTarget (Pair Int String))
 resolveTarget uri line col text midx = case parseSource "<lsp>" text of
-  Err e => Nothing
-  Ok sf => case tokenAtCursor text line col of
+  ErrC e => Nothing
+  OkC sf => case tokenAtCursor text line col of
     Nothing => Nothing
     Just (Pair tokStart token) => if namedHoleBefore text line tokStart then Nothing
     else
@@ -280,8 +280,8 @@ resolveTarget uri line col text midx = case parseSource "<lsp>" text of
           Nothing => case midx of
             Nothing => Nothing
             Just idx => case findSymbol idx token of
-              Err e => Nothing
-              Ok syms => case pickIndexSymbol curModule idx syms of
+              ErrC e => Nothing
+              OkC syms => case pickIndexSymbol curModule idx syms of
                 Nothing => Nothing
                 Just sym => loadIndexTarget uri text sf idx sym tokInfo
 
@@ -594,8 +594,8 @@ crossModuleUseRefs idx target modName = case moduleInfoOf idx modName of
     let
       source = runIO (prim_readFile (modPath mi))
     in case parseSource (modPath mi) source of
-      Err e => []
-      Ok sf =>
+      ErrC e => []
+      OkC sf =>
         if not (importsModule target.rtModule sf) then []
         else if declaresName target.rtName sf.sourceFileDecls then []
         else useRefs (pathToUri (modPath mi)) source sf target.rtName target.rtKind
@@ -740,5 +740,5 @@ symbolEdits uri curText target midx =
 
 currentUseRefs : String -> String -> RenameTarget -> List EditRef
 currentUseRefs uri text target = case parseSource "<lsp>" text of
-  Err e => []
-  Ok sf => useRefs uri text sf target.rtName target.rtKind
+  ErrC e => []
+  OkC sf => useRefs uri text sf target.rtName target.rtKind

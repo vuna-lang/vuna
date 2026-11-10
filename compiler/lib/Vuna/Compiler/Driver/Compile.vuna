@@ -55,11 +55,11 @@ import Base.IO.Host
 
 -- 包级 check：可执行包检查 app/Main.vuna；库包检查 [export].modules。
 -- M34.5：结果走磁盘缓存（key = 闭包源哈希 + 依赖哈希 + manifest + 版本）。
-checkPackage : Package -> Result (List String)
+checkPackage : Package -> Check (List String)
 checkPackage pkg = if runIO (prim_fileExists (packageEntry pkg)) then checkCachedExe (packageContext pkg) (packageEntry pkg)
 else case packageExports pkg of
   Nothing =>
-    Err
+    err
       "check: library package ${packageName pkg} has no app/Main.vuna (executable) and no [export].modules (library)"
   Just names => checkCachedLib (packageContext pkg) names
 
@@ -99,14 +99,14 @@ parentOfPath path =
 -- 逐模块 split 输出到 outDir：各模块 .ml + Main.ml + build.sh；Ok 写出的文件数。
 -- outDir 在 codegen 成功后才创建（精化失败不留产物）。
 -- M33 W5：包根 `ffi/*.c` 复制到 `OUTDIR/ffi/` 并写进 build.sh（受限 FFI 的 C 实现）。
-compileToDir : PackageContext -> String -> Bool -> String -> Result Int
+compileToDir : PackageContext -> String -> Bool -> String -> Check Int
 compileToDir ctx entry printResult outDir =
   if ifaceAuditRequested then auditCompile ctx entry printResult outDir
   else compileToDirNormal ctx entry printResult outDir
 
 -- 摘要路径的 split（**不读 split 缓存**）：接口可用 ⇒ 摘要路径（干净模块 + 依赖接口），
 -- 否则全量。抽出来供正常路径与审计路径共用，保证两条路径的「摘要分支」完全一致。
-summarySplitParts : PackageContext -> String -> Bool -> Result (Pair (List SplitFile) CheckedPackage)
+summarySplitParts : PackageContext -> String -> Bool -> Check (Pair (List SplitFile) CheckedPackage)
 summarySplitParts ctx entry printResult = case depIfacesOf ctx of
   Just ifaces => case ownCleanModules ctx (depIfaceHashTable ctx) of
     Just clean =>
@@ -116,7 +116,7 @@ summarySplitParts ctx entry printResult = case depIfacesOf ctx of
     Nothing => dtSplitProjectWithIfaces ctx entry printResult ifaces
   Nothing => dtSplitProjectParts ctx entry printResult
 
-compileToDirNormal : PackageContext -> String -> Bool -> String -> Result Int
+compileToDirNormal : PackageContext -> String -> Bool -> String -> Check Int
 compileToDirNormal ctx entry printResult outDir =
   let
     key = splitCacheKey ctx entry printResult
@@ -134,7 +134,7 @@ compileToDirNormal ctx entry printResult outDir =
 -- 审计（`VUNA_IFACE_AUDIT=1`）：同一进程分别走摘要路径与全量路径，codegen 产物逐字节比较；
 -- 一致才按摘要结果落盘，不一致报 `iface-audit-mismatch` 且**不写任何缓存/接口**
 -- （坏缓存不能被下一次运行「合法」消费）。
-auditCompile : PackageContext -> String -> Bool -> String -> Result Int
+auditCompile : PackageContext -> String -> Bool -> String -> Check Int
 auditCompile ctx entry printResult outDir =
   let
     key = splitCacheKey ctx entry printResult
@@ -148,14 +148,14 @@ auditCompile ctx entry printResult outDir =
 
 -- 写产物 + 写 split 缓存 + 影子写模块接口（构建成功同样要产出接口，否则只 build 的工程
 -- 永远无法给下游提供接口）。
-finishBuild : PackageContext -> String -> String -> List SplitFile -> CheckedPackage -> Result Int
+finishBuild : PackageContext -> String -> String -> List SplitFile -> CheckedPackage -> Check Int
 finishBuild ctx outDir cachePath files checked = Vuna.Compiler.Common.bind (writeCompiled ctx outDir files) (\n => let
   _ = writeSplitCache ctx cachePath files
-in Vuna.Compiler.Common.bind (writeIfaceShadow ctx checked) (\_ => Ok n)
+in Vuna.Compiler.Common.bind (writeIfaceShadow ctx checked) (\_ => OkC n)
 )
 
 -- 把（缓存的或新生成的）split 文件写入 outDir 并写 build.sh。
-writeCompiled : PackageContext -> String -> List SplitFile -> Result Int
+writeCompiled : PackageContext -> String -> List SplitFile -> Check Int
 writeCompiled ctx outDir files =
   let
     _ = ensureDirPath outDir
@@ -167,7 +167,7 @@ writeCompiled ctx outDir files =
     cFiles = copyFfiFiles (contextDir ctx) outDir
     _ = runIO (prim_writeFile "${outDir}/build.sh" (buildScript graph cFiles))
     _ = stamp "build-script-done"
-  in Ok n
+  in OkC n
   )
 
 -- 包根 `ffi/*.c` → OUTDIR/ffi/<name>.c；返回写进 build.sh 的相对路径列表。
@@ -189,7 +189,7 @@ copyFfiFiles ctxDir outDir =
   else []
 
 -- loadPackage + compileToDir：给定包目录的代码生成（seed rotation / 测试用）。
-buildSplit : String -> String -> Result Int
+buildSplit : String -> String -> Check Int
 buildSplit dir outDir =
   Vuna.Compiler.Common.bind (loadPackage dir)
     (\pkg => compileToDir (packageContext pkg) (packageEntry pkg) True outDir)
@@ -355,12 +355,12 @@ metaUpToDate outDir ctx entry binPath =
 
 -- 在 dir 里跑生成的 build.sh：`sh build.sh <out>`（out 相对 dir，例如 "bin/<pkg>"）。
 -- 链接失败给出带包名/目录/退出码的清晰错误（ocamlopt 的 stderr 已在终端）。
-runBuildScript : String -> String -> String -> Result Int
+runBuildScript : String -> String -> String -> Check Int
 runBuildScript dir out name =
   let
     code = runIO (prim_runIn dir ["sh", "build.sh", out])
-  in if code == 0 then Ok 0
-  else Err "build: ${name}: `sh build.sh ${out}` failed in ${dir} (exit ${code})"
+  in if code == 0 then OkC 0
+  else err "build: ${name}: `sh build.sh ${out}` failed in ${dir} (exit ${code})"
 
 -- ---------------------------------------------------------------
 -- M34.5：check 结果磁盘缓存（elab 级缓存的 check 结果版）
@@ -655,15 +655,15 @@ importNameStr (Import n alias q sp) = n
 
 toolImportsOfSource : PackageContext -> String -> String -> List String
 toolImportsOfSource ctx label source = case parseFileWithPath label source of
-  Err _ => []
-  Ok (SourceFile hdr imports fixities decls) => case hdr of
+  ErrC _ => []
+  OkC (SourceFile hdr imports fixities decls) => case hdr of
     Just (ModDecl dname _ _ _) => toolImportNamesOf ctx dname imports
     Nothing => toolImportNamesOf ctx "" imports
 
 toolImportNamesOf : PackageContext -> String -> List Import -> List String
 toolImportNamesOf ctx current imports = case implicitPrelude (contextRoots ctx) (contextPackageName ctx) current imports of
-  Err _ => map importNameStr imports
-  Ok implicit => map importNameStr (append imports implicit)
+  ErrC _ => map importNameStr imports
+  OkC implicit => map importNameStr (append imports implicit)
 
 -- 工具链消费：默认按源码 import 闭包按需读依赖接口；`VUNA_IFACE_TOOL=0` 关闭（排障/A-B）。
 -- M34.6：闭包必须含**同包模块的 import**——entry 直接 import 的模块可能再由同包模块
@@ -874,10 +874,10 @@ toolCleanGo builtSec depTbl (m :: rest) cleanRev =
 -- 单模块接口写回（M34.6 5a）：LSP 每次成功请求后只写「当前模块」的接口（合并进本包
 -- manifest，保留其他条目）。语义与整包 ifaceOfPackage 一致（见 `Iface.ifaceOfModule`）；
 -- 有缺口/其他脏模块时返回 Err，调用方静默跳过（不影响诊断）。
-toolWriteModuleIface : PackageContext -> ToolContext -> List ModuleIface -> CheckedPackage -> String -> SourceInfo -> Result ModuleIface
+toolWriteModuleIface : PackageContext -> ToolContext -> List ModuleIface -> CheckedPackage -> String -> SourceInfo -> Check ModuleIface
 toolWriteModuleIface ctx tool clean checked name si = Vuna.Compiler.Common.bind (ifaceOfModule (contextPackageName ctx) si tool.tcDepHashes checked.checkedInherited clean checked.checkedModules checked.checkedEntryDecls checked.checkedProgram name) (\mi => let
   _ = writeModuleIfaceGuarded ctx mi
-in Ok mi
+in OkC mi
 )
 
 -- | 单模块写回的只读写降级：失败静默跳过（诊断/会话缓存不受影响）。
@@ -897,13 +897,13 @@ else
 
 -- 冷启动（没有工具会话 / 本包还没有 manifest）：依赖哈希从磁盘接口汇总，干净模块按
 -- 现有判定重算；能写就写（LSP-only 会话逐步变热），失败不影响诊断。
-toolWriteModuleIfaceCold : PackageContext -> CheckedPackage -> String -> SourceInfo -> Result ModuleIface
+toolWriteModuleIfaceCold : PackageContext -> CheckedPackage -> String -> SourceInfo -> Check ModuleIface
 toolWriteModuleIfaceCold ctx checked name si =
   let
     clean = cleanIfacesOrEmpty ctx
   in Vuna.Compiler.Common.bind (ifaceOfModule (contextPackageName ctx) si (depIfaceHashTable ctx) checked.checkedInherited clean checked.checkedModules checked.checkedEntryDecls checked.checkedProgram name) (\mi => let
     _ = writeModuleIfaceGuarded ctx mi
-  in Ok mi
+  in OkC mi
   )
 
 -- LSP 写回守卫：本包 manifest 是否已存在（冷启动写回只在没有 manifest 时做，
@@ -936,24 +936,24 @@ checkCacheHit path = case readFramed checkCacheTag path of
   Just _ => True
   Nothing => False
 
-checkCachedExe : PackageContext -> String -> Result (List String)
+checkCachedExe : PackageContext -> String -> Check (List String)
 checkCachedExe ctx entry =
   let
     key = checkCacheKeyExe ctx entry
     path = checkCachePath ctx key
-  in if checkCacheHit path && not ifaceAuditRequested then Ok [] else checkUncachedExe ctx entry path
+  in if checkCacheHit path && not ifaceAuditRequested then OkC [] else checkUncachedExe ctx entry path
 
 -- 缓存未命中时的精化入口：默认「依赖接口摘要齐全 ⇒ 摘要路径，否则全量」。
 -- 摘要路径返回 `Err` 时**直接上报**（不回退——回退会吞掉本包真实错误）。
 -- `VUNA_ELAB_FULL=1` 强制全量：排障/A-B 对拍用（测试里对两份诊断逐字节比较）。
-checkUncachedExe : PackageContext -> String -> String -> Result (List String)
+checkUncachedExe : PackageContext -> String -> String -> Check (List String)
 checkUncachedExe ctx entry path =
   if elabFullRequested then fullCheckExe ctx entry path
   else if ifaceAuditRequested then auditCheckExe ctx entry path
   else checkAndCache ctx path (summaryCheckExeParts ctx entry)
 
 -- 摘要路径（**不落盘**）：接口不可用 ⇒ 全量（与旧行为一致，只是不再直接写缓存）。
-summaryCheckExeParts : PackageContext -> String -> Result (Pair (List String) CheckedPackage)
+summaryCheckExeParts : PackageContext -> String -> Check (Pair (List String) CheckedPackage)
 summaryCheckExeParts ctx entry = case depIfacesOf ctx of
   Nothing =>
     let
@@ -970,7 +970,7 @@ summaryCheckExeParts ctx entry = case depIfacesOf ctx of
         _ = note "cache-path=summary deps=${depPackageCount ctx}"
       in dtCheckPackageWithIfacesParts ctx entry ifaces
 
-fullCheckExe : PackageContext -> String -> String -> Result (List String)
+fullCheckExe : PackageContext -> String -> String -> Check (List String)
 fullCheckExe ctx entry path =
   let
     _ = note "cache-path=full"
@@ -978,7 +978,7 @@ fullCheckExe ctx entry path =
 
 -- 审计（`VUNA_IFACE_AUDIT=1`）：摘要路径 vs 全量路径的诊断逐字节对拍。一致才按摘要结果
 -- 落盘；不一致报 `iface-audit-mismatch` 并**不写缓存/接口**。
-auditCheckExe : PackageContext -> String -> String -> Result (List String)
+auditCheckExe : PackageContext -> String -> String -> Check (List String)
 auditCheckExe ctx entry path =
   let
     summary = summaryCheckExeParts ctx entry
@@ -999,13 +999,13 @@ ifaceAuditRequested = runIO (prim_getenv "VUNA_IFACE_AUDIT") == "1"
 
 -- 诊断签名：`Ok`/`Err` 都参与比较（顺序敏感，逐字节）。
 -- 直接按构造子在 clause 头分派（dispatch-lift），避免再嵌一层 case。
-checkSignatureOf : Result (Pair (List String) CheckedPackage) -> String
-checkSignatureOf (Ok p) = "ok\n${joinLines (firstOf p)}"
-checkSignatureOf (Err e) = "err\n${e}"
+checkSignatureOf : Check (Pair (List String) CheckedPackage) -> String
+checkSignatureOf (OkC p) = "ok\n${joinLines (firstOf p)}"
+checkSignatureOf (ErrC e) = "err\n${diagText e}"
 
-splitSignatureOf : Result (Pair (List SplitFile) CheckedPackage) -> String
-splitSignatureOf (Ok p) = "ok\n${prim_marshal (firstOf p)}"
-splitSignatureOf (Err e) = "err\n${e}"
+splitSignatureOf : Check (Pair (List SplitFile) CheckedPackage) -> String
+splitSignatureOf (OkC p) = "ok\n${prim_marshal (firstOf p)}"
+splitSignatureOf (ErrC e) = "err\n${diagText e}"
 
 joinLines : List String -> String
 joinLines [] = ""
@@ -1013,10 +1013,10 @@ joinLines (x :: rest) = if rest == [] then x else "${x}\n${joinLines rest}"
 
 -- 不一致时只报签名指纹与长度（诊断可能很长，整段回显会把终端淹掉）；
 -- `subject`/`at` 给出入口与位置，便于定位。
-auditCompare : String -> String -> String -> String -> Result Int
+auditCompare : String -> String -> String -> String -> Check Int
 auditCompare subject at s f =
-  if s == f then Ok 0
-  else Err
+  if s == f then OkC 0
+  else err
     "iface-audit-mismatch subject=${subject} at=${at} summary=${textHash s}/${strLength s} full=${textHash f}/${strLength f}"
 
 depIfaceHashTable : PackageContext -> List (Pair String Int)
@@ -1288,8 +1288,8 @@ resyncCleanSources sources clean = map (\m => case lookupPair (miNameOf m) sourc
   Nothing => m
 ) clean
 
-writeIfaceShadow : PackageContext -> CheckedPackage -> Result Int
-writeIfaceShadow ctx checked = if contextPackageName ctx == "" then Ok 0
+writeIfaceShadow : PackageContext -> CheckedPackage -> Check Int
+writeIfaceShadow ctx checked = if contextPackageName ctx == "" then OkC 0
 else
   let
     _ = stamp "iface-shadow-start"
@@ -1300,12 +1300,12 @@ else
       Nothing => []
     )
   in case ifaceOfPackage (contextPackageName ctx) sources (depIfaceHashTable ctx) checked.checkedInherited clean checked.checkedModules checked.checkedEntryDecls checked.checkedProgram of
-    Err e => if ifaceSelfTestRequested then Err e
+    ErrC e => if ifaceSelfTestRequested then ErrC e
     else
       let
-        _ = note "iface-reject=compute iface-skip ${e}"
-      in Ok 0
-    Ok modules =>
+        _ = note "iface-reject=compute iface-skip ${diagText e}"
+      in OkC 0
+    OkC modules =>
       let
         _ = stamp "iface-compute-done"
       in writeIfaceNow (firstOf info) ctx modules
@@ -1315,11 +1315,11 @@ else
 -- 目标目录不可写（Nix store / 只读 checkout / `VUNA_IFACE_DIR` 指到只读树）时静默降级：
 -- 不写、exit code 不变，读侧照旧（没有接口就回退全量）。`oldReadable` 来自写前那次
 -- 整包接口读取，避免写回时再解码一遍所有模块文件。
-writeIfaceNow : Bool -> PackageContext -> List ModuleIface -> Result Int
+writeIfaceNow : Bool -> PackageContext -> List ModuleIface -> Check Int
 writeIfaceNow oldReadable ctx modules = if length modules == 0 then
   let
     _ = note "iface-reject=empty-package iface-skip empty-package"
-  in Ok 0
+  in OkC 0
 else
   let
     dir = ifaceDirOf ctx
@@ -1327,11 +1327,11 @@ else
   in if not (ifaceFilesOk pkgDir modules) then
     let
       _ = note "iface-reject=path iface-skip path ${dir}"
-    in Ok 0
+    in OkC 0
   else if not (ifaceWriteReady dir pkgDir modules) then
     let
       _ = note "iface-reject=readonly iface-skip readonly ${dir}"
-    in Ok 0
+    in OkC 0
   else
     let
       n =
@@ -1340,7 +1340,7 @@ else
       _ = note "iface-write=${n}/${length modules}"
       _ = stamp "iface-write-done"
       _ = if ifaceMirrorMode then gcIfaceOrphans dir pkgDir modules else 0
-    in if ifaceSelfTestRequested then ifaceSelfTest dir modules else Ok n
+    in if ifaceSelfTestRequested then ifaceSelfTest dir modules else OkC n
 
 -- 影子写的自检（`VUNA_IFACE_SELFTEST=1`）：读回 + 包接口校验 + 模块名集合/接口哈希一致。
 -- 失败让 check 失败（宁可暴露，不静默写坏缓存）。
@@ -1352,20 +1352,20 @@ ifaceHashOfName [] _ = Nothing
 ifaceHashOfName (m :: rest) name =
   if miNameOf m == name then Just (miIfaceHashOf m) else ifaceHashOfName rest name
 
-ifaceSelfTest : String -> List ModuleIface -> Result Int
+ifaceSelfTest : String -> List ModuleIface -> Check Int
 ifaceSelfTest dir modules = case readPackageIface dir ifaceCompilerTag of
-  Nothing => Err "iface selftest: written iface cannot be read back"
-  Just pi2 => if not (packageIfaceValid pi2) then Err "iface selftest: package iface invalid"
-  else if pi2.piCompiler /= ifaceCompilerTag then Err "iface selftest: compiler tag mismatch"
-  else if pi2.piSchema /= ifaceSchemaTag then Err "iface selftest: schema mismatch"
-  else if length pi2.piModules /= length modules then Err "iface selftest: module count mismatch"
-  else if not (sameNameSet (moduleNamesOf pi2.piModules) (moduleNamesOf modules)) then Err "iface selftest: module name set mismatch"
-  else if not (sameIfaceHashes pi2.piModules modules) then Err "iface selftest: iface hash mismatch"
-  else if not (allSelfHashesOk pi2.piModules) then Err "iface selftest: payload hash mismatch"
+  Nothing => err "iface selftest: written iface cannot be read back"
+  Just pi2 => if not (packageIfaceValid pi2) then err "iface selftest: package iface invalid"
+  else if pi2.piCompiler /= ifaceCompilerTag then err "iface selftest: compiler tag mismatch"
+  else if pi2.piSchema /= ifaceSchemaTag then err "iface selftest: schema mismatch"
+  else if length pi2.piModules /= length modules then err "iface selftest: module count mismatch"
+  else if not (sameNameSet (moduleNamesOf pi2.piModules) (moduleNamesOf modules)) then err "iface selftest: module name set mismatch"
+  else if not (sameIfaceHashes pi2.piModules modules) then err "iface selftest: iface hash mismatch"
+  else if not (allSelfHashesOk pi2.piModules) then err "iface selftest: payload hash mismatch"
   else
     let
       _ = note "iface-selftest=ok modules=${length modules}"
-    in Ok 0
+    in OkC 0
 
 -- 读回的每个模块都必须满足「载荷重算哈希 == 记录哈希」（写侧自证）。
 allSelfHashesOk : List ModuleIface -> Bool
@@ -1380,29 +1380,29 @@ sameIfaceHashes (m :: rest) ys = case ifaceHashOfName ys (miNameOf m) of
 
 -- 写过缓存：检查成功才写；缓存内容对依赖方是接口摘要（读方校验），对本包是「同哈希跳过」标记
 -- （命中直接 Ok，不用重读内容——key 已含源哈希与编译器指纹）。
-checkAndCache : PackageContext -> String -> Result (Pair (List String) CheckedPackage) -> Result (List String)
+checkAndCache : PackageContext -> String -> Check (Pair (List String) CheckedPackage) -> Check (List String)
 checkAndCache ctx path checked = Vuna.Compiler.Common.bind checked (\r => let
   _ = ensureDirPath (checkCacheDir ctx)
   _ =
     runIO
       (prim_writeFileAtomic path (frameEncode checkCacheTag (prim_marshal (cachedOfProgram (secondOf r).checkedProgram))))
-in Vuna.Compiler.Common.bind (writeIfaceShadow ctx (secondOf r)) (\_ => Ok (firstOf r))
+in Vuna.Compiler.Common.bind (writeIfaceShadow ctx (secondOf r)) (\_ => OkC (firstOf r))
 )
 
-checkCachedLib : PackageContext -> List String -> Result (List String)
+checkCachedLib : PackageContext -> List String -> Check (List String)
 checkCachedLib ctx names =
   let
     key = checkCacheKeyLib ctx names
     path = checkCachePath ctx key
-  in if checkCacheHit path && not ifaceAuditRequested then Ok [] else checkUncachedLib ctx names path
+  in if checkCacheHit path && not ifaceAuditRequested then OkC [] else checkUncachedLib ctx names path
 
-checkUncachedLib : PackageContext -> List String -> String -> Result (List String)
+checkUncachedLib : PackageContext -> List String -> String -> Check (List String)
 checkUncachedLib ctx names path =
   if elabFullRequested then fullCheckLib ctx names path
   else if ifaceAuditRequested then auditCheckLib ctx names path
   else checkAndCache ctx path (summaryCheckLibParts ctx names)
 
-summaryCheckLibParts : PackageContext -> List String -> Result (Pair (List String) CheckedPackage)
+summaryCheckLibParts : PackageContext -> List String -> Check (Pair (List String) CheckedPackage)
 summaryCheckLibParts ctx names = case depIfacesOf ctx of
   Nothing =>
     let
@@ -1419,13 +1419,13 @@ summaryCheckLibParts ctx names = case depIfacesOf ctx of
         _ = note "cache-path=summary deps=${depPackageCount ctx}"
       in dtCheckLibraryPackageWithIfacesParts ctx names ifaces
 
-fullCheckLib : PackageContext -> List String -> String -> Result (List String)
+fullCheckLib : PackageContext -> List String -> String -> Check (List String)
 fullCheckLib ctx names path =
   let
     _ = note "cache-path=full"
   in checkAndCache ctx path (dtCheckLibraryWithProgramParts ctx names)
 
-auditCheckLib : PackageContext -> List String -> String -> Result (List String)
+auditCheckLib : PackageContext -> List String -> String -> Check (List String)
 auditCheckLib ctx names path =
   let
     summary = summaryCheckLibParts ctx names

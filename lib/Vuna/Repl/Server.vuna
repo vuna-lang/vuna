@@ -30,11 +30,11 @@ import Base.IO.Host
 import Base.IORef
 
 -- 地址校验（CLI 层）：只接受本机端点。
-checkReplAddr : String -> Result String
+checkReplAddr : String -> Check String
 checkReplAddr addr =
-  if startsWith "unix:" addr && strLength addr > 5 then Ok addr
-  else if startsWith "tcp:127.0.0.1:" addr && strLength addr > 14 then Ok addr
-  else Err
+  if startsWith "unix:" addr && strLength addr > 5 then OkC addr
+  else if startsWith "tcp:127.0.0.1:" addr && strLength addr > 14 then OkC addr
+  else err
     "地址必须是 unix:PATH 或 tcp:127.0.0.1:PORT（只允许本机 loopback / Unix socket；任意地址 = 任意代码执行）"
 
 -- server 诊断（stderr；stdout 只留给 `listening` 行）。
@@ -143,11 +143,11 @@ runReplServer ctx start addr =
     errRef = runIO (newRef "")
     sink = SinkCapture outRef errRef
   in case startReplSession ctx start sink of
-    Err e =>
+    ErrC e =>
       let
-        _ = runIO (prim_eprint "[vuna-repl-server] ${e}\n")
+        _ = runIO (prim_eprint "[vuna-repl-server] ${diagText e}\n")
       in 2
-    Ok (Pair st0 _) =>
+    OkC (Pair st0 _) =>
       let
         h = runIO (prim_netListen addr)
         _ = runIO (prim_print "listening ${listeningText addr h}\n")

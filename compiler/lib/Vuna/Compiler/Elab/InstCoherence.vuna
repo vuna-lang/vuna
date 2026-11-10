@@ -69,8 +69,8 @@ instanceExactQuiet ec n head inst =
 -- 同一 tele 长度下按 index 对齐的 α-等价（两个 head 的 tele 变量都映射到同一组占位 level）。
 headsAlphaEqual : Ec -> Int -> Term -> Term -> Bool
 headsAlphaEqual ec n a b = case conv (ecDefTbl ec) (ecSolsP ec) 0 (eval (teleAlphaEnv n) a) (eval (teleAlphaEnv n) b) of
-  Ok _ => True
-  Err e => False
+  OkC _ => True
+  ErrC e => False
 
 teleAlphaEnv : Int -> List Value
 teleAlphaEnv n = teleAlphaEnvGo n 0
@@ -97,8 +97,8 @@ headsOverlapOne ec teleA hA teleB hB = case allocTeleMetas emptyCtx ec teleA of
       envA = map (\m => VMeta m []) ids
       envB = teleGlobalEnv (length teleB)
     in case conv (ecDefTbl ec1) (ecSolsP ec1) 0 (eval envA hA) (eval envB hB) of
-      Ok sols2 => Pair True (ecPutSols ec1 (solsList sols2))
-      Err e => Pair False ec1
+      OkC sols2 => Pair True (ecPutSols ec1 (solsList sols2))
+      ErrC e => Pair False ec1
 
 teleGlobalEnv : Int -> List Value
 teleGlobalEnv n = teleGlobalEnvGo n 0

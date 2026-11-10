@@ -953,38 +953,38 @@ findListFamilyData (d :: rest) =
 
 -- 零参 user 构造子作为普通值引用时，OCaml 里就是裸构造子；只有 datas 表知道它是
 -- 构造子，所以生成入口先查构造子表，再回落到 Intrinsics/值名。
-genGlobalRef : GenSt -> String -> Result (Pair String GenSt)
-genGlobalRef st name = if name == natZeroCtor then Ok (Pair "0" st)
-else if name == natSuccCtor then Ok (Pair "bi_natSucc" st)
+genGlobalRef : GenSt -> String -> Check (Pair String GenSt)
+genGlobalRef st name = if name == natZeroCtor then OkC (Pair "0" st)
+else if name == natSuccCtor then OkC (Pair "bi_natSucc" st)
 else case lookupPair name st.gsCtors of
   Just family =>
     let
       p = genCtorRef st family name
-    in Ok (Pair (firstOf p) (secondOf p))
+    in OkC (Pair (firstOf p) (secondOf p))
   Nothing => case findIntrinsic name of
     Just i => if isIOAlgebraName name then ioAlgebraText st name
     else if intrinsicReturnsIO i then ioPrimText st name i
     else if needsListBridge i then if memName listFamilyName st.gsFamilies then
       let
         p = genBridgeRef st i.intrinsicRuntime
-      in Ok (Pair (firstOf p) (secondOf p))
+      in OkC (Pair (firstOf p) (secondOf p))
     else cgErr1 (ListBridgeRequired name) name
-    else Ok (Pair i.intrinsicRuntime st)
+    else OkC (Pair i.intrinsicRuntime st)
     Nothing =>
       let
         p = genValueRef st name
-      in Ok (Pair (firstOf p) (secondOf p))
+      in OkC (Pair (firstOf p) (secondOf p))
 
 -- M37：效果原语的 runtime 是「立刻算完的表达式」；IO 是内建效应类型（运行时 = 裸
 -- thunk `int -> 'a`），所以按 arity 包成 `fun args -> fun _ -> rt args`，由 main 钩子
 -- 或 `runIO` 执行。`prim_getArgs` / `prim_readDir` 一类返回 `List` 的原语，其 runtime
 -- 文本里内嵌 List 桥接 helper 调用（`dtp_listOf`），仍要按声明 List 族的单元限定。
-ioPrimText : GenSt -> String -> Intrinsic -> Result (Pair String GenSt)
+ioPrimText : GenSt -> String -> Intrinsic -> Check (Pair String GenSt)
 ioPrimText st name i = if needsListBridge i then
   let
     rt = genBridgeRef st i.intrinsicRuntime
-  in Ok (Pair (ioPrimThunkText (firstOf rt) (intrinsicArity i)) (secondOf rt))
-else Ok (Pair (ioPrimThunkText i.intrinsicRuntime (intrinsicArity i)) st)
+  in OkC (Pair (ioPrimThunkText (firstOf rt) (intrinsicArity i)) (secondOf rt))
+else OkC (Pair (ioPrimThunkText i.intrinsicRuntime (intrinsicArity i)) st)
 
 -- 内建模式的 thunk 包装：`prim_print` → `(fun s -> fun (_ : int) -> dtp_print s)`；
 -- 零参 `prim_getArgs` → `(fun (_ : int) -> (dtp_listOf (dtp_getArgs ())))`。
@@ -999,8 +999,8 @@ ioPrimThunkText rt arity =
 
 -- IO 代数原语（`prim_pureIO` / `prim_bindIO` / `prim_runIO`）的 runtime：它们**本身**
 -- 产生 IO 动作（thunk 值），不能套通用的 eager 包装，因此单独生成。
-ioAlgebraText : GenSt -> String -> Result (Pair String GenSt)
-ioAlgebraText st name = Ok (Pair (ioAlgebraIntrinsicText name) st)
+ioAlgebraText : GenSt -> String -> Check (Pair String GenSt)
+ioAlgebraText st name = OkC (Pair (ioAlgebraIntrinsicText name) st)
 
 ioAlgebraIntrinsicText : String -> String
 ioAlgebraIntrinsicText name =
@@ -1167,56 +1167,56 @@ altEnv st outer tele = altEnvGo st outer tele []
 --      按完整 telescope 数）；
 --   2. **仅保留字段**（Elab 生成的字典投影分支：只绑方法字段，body index 按字段数）。
 -- 按 binders 长度落在哪个口径选择，并逐位校验 rig 与形状一致。
-altEnvChecked : GenSt -> String -> List (Pair String Rig) -> List (Pair String Rig) -> List Bool -> Result AltEnv
+altEnvChecked : GenSt -> String -> List (Pair String Rig) -> List (Pair String Rig) -> List Bool -> Check AltEnv
 altEnvChecked st label outer binders flags =
   if length binders == length flags then altEnvFull st label outer binders flags []
   else if length binders == countKept flags then altEnvKept st label outer binders []
-  else Err
+  else err
     "DT: internal: constructor ${label}: case branch binder count matches neither full telescope nor kept fields"
 
 countKept : List Bool -> Int
 countKept [] = 0
 countKept (k :: rest) = if k then 1 + countKept rest else countKept rest
 
-altEnvFull : GenSt -> String -> List (Pair String Rig) -> List (Pair String Rig) -> List Bool -> List String -> Result AltEnv
+altEnvFull : GenSt -> String -> List (Pair String Rig) -> List (Pair String Rig) -> List Bool -> List String -> Check AltEnv
 altEnvFull st label outer [] flags pats = case flags of
-  [] => Ok (AltEnv outer (reverse pats) st)
-  _ :: _ => Err "DT: internal: constructor ${label}: case branch has fewer binders than its shape"
+  [] => OkC (AltEnv outer (reverse pats) st)
+  _ :: _ => err "DT: internal: constructor ${label}: case branch has fewer binders than its shape"
 altEnvFull st label outer ((Pair name rig) :: rest) flags pats = case flags of
-  [] => Err "DT: internal: constructor ${label}: case branch has more binders than its shape"
+  [] => err "DT: internal: constructor ${label}: case branch has more binders than its shape"
   keep :: flags2 => if flagMatchesRig keep rig then if keep then
     let
       fresh = gsNext st
       nm = "dtb__${fresh}"
     in altEnvFull (gsPutNext st (fresh + 1)) label (Pair nm Rig1 :: outer) rest flags2 (nm :: pats)
   else altEnvFull st label (Pair "" Rig0 :: outer) rest flags2 pats
-  else Err "DT: internal: constructor ${label}: case branch binder rig disagrees with its shape"
+  else err "DT: internal: constructor ${label}: case branch binder rig disagrees with its shape"
 
-altEnvKept : GenSt -> String -> List (Pair String Rig) -> List (Pair String Rig) -> List String -> Result AltEnv
-altEnvKept st label outer [] pats = Ok (AltEnv outer (reverse pats) st)
-altEnvKept st label outer ((Pair name rig) :: rest) pats = if rigIsErased rig then Err "DT: internal: constructor ${label}: kept-field branch has an erased binder"
+altEnvKept : GenSt -> String -> List (Pair String Rig) -> List (Pair String Rig) -> List String -> Check AltEnv
+altEnvKept st label outer [] pats = OkC (AltEnv outer (reverse pats) st)
+altEnvKept st label outer ((Pair name rig) :: rest) pats = if rigIsErased rig then err "DT: internal: constructor ${label}: kept-field branch has an erased binder"
 else
   let
     fresh = gsNext st
     nm = "dtb__${fresh}"
   in altEnvKept (gsPutNext st (fresh + 1)) label (Pair nm Rig1 :: outer) rest (nm :: pats)
 
-genTermFuel : Int -> GenSt -> List (Pair String Rig) -> Term -> Result (Pair String GenSt)
-genTermFuel fuel st binders t = if fuel <= 0 then Err "DT: internal: codegen fuel exhausted"
+genTermFuel : Int -> GenSt -> List (Pair String Rig) -> Term -> Check (Pair String GenSt)
+genTermFuel fuel st binders t = if fuel <= 0 then err "DT: internal: codegen fuel exhausted"
 else case t of
   TVar name i => case binderAt i binders of
     Just (Pair oc rig) =>
-      if rigIsErased rig then cgErr1 (TypeLevelBindingRuntime name) name else Ok (Pair oc st)
-    Nothing => Err "DT: internal: unbound runtime variable"
+      if rigIsErased rig then cgErr1 (TypeLevelBindingRuntime name) name else OkC (Pair oc st)
+    Nothing => err "DT: internal: unbound runtime variable"
   TGlobal name => genGlobalRef st name
-  TInt n => Ok (Pair (strFromInt n) st)
-  TStr s => Ok (Pair (ocamlString s) st)
-  TFloat raw => Ok (Pair raw st)
-  TBool b => Ok (Pair (boolText b) st)
+  TInt n => OkC (Pair (strFromInt n) st)
+  TStr s => OkC (Pair (ocamlString s) st)
+  TFloat raw => OkC (Pair raw st)
+  TBool b => OkC (Pair (boolText b) st)
   TIf c th el => Vuna.Compiler.Common.bind (genTermFuel (fuel - 1) st binders c) (\pc => case pc of
     Pair gc st1 => Vuna.Compiler.Common.bind (genTermFuel (fuel - 1) st1 binders th) (\pt => case pt of
       Pair gt st2 => Vuna.Compiler.Common.bind (genTermFuel (fuel - 1) st2 binders el) (\pe => case pe of
-        Pair ge st3 => Ok (Pair "(if ${gc} then ${gt} else ${ge})" st3)
+        Pair ge st3 => OkC (Pair "(if ${gc} then ${gt} else ${ge})" st3)
       )
     )
   )
@@ -1233,7 +1233,7 @@ else case t of
     Just fields => case lookupRtLabel fi fields of
       Just label => Vuna.Compiler.Common.bind (genTermFuel (fuel - 1) st binders base) (\p => case p of
         Pair baseText st2 =>
-          Ok (Pair "(${baseText}).${recordLabelOf st2 c label}" (gsDepOfFamily st2 c))
+          OkC (Pair "(${baseText}).${recordLabelOf st2 c label}" (gsDepOfFamily st2 c))
       )
       Nothing => genProjAsCaseFuel (fuel - 1) st binders base c tele i fi
     Nothing => genProjAsCaseFuel (fuel - 1) st binders base c tele i fi
@@ -1262,8 +1262,8 @@ lamParamPair (Pair name rig) =
 lamParamName : Pair String Rig -> List String
 lamParamName (Pair name rig) = if rigIsErased rig then [] else [ocamlBinderName name]
 
-genTermLamFuel : Int -> GenSt -> List (Pair String Rig) -> String -> Rig -> Term -> Result (Pair String GenSt)
-genTermLamFuel fuel st binders name rig body = if fuel <= 0 then Err "DT: internal: codegen fuel exhausted"
+genTermLamFuel : Int -> GenSt -> List (Pair String Rig) -> String -> Rig -> Term -> Check (Pair String GenSt)
+genTermLamFuel fuel st binders name rig body = if fuel <= 0 then err "DT: internal: codegen fuel exhausted"
 else case collectLamChain (TLam name rig body) of
   LamChain params inner =>
     let
@@ -1271,15 +1271,15 @@ else case collectLamChain (TLam name rig body) of
       names = concatMap lamParamName params
     in Vuna.Compiler.Common.bind (genTermFuel (fuel - 1) st env inner) (\p => case p of
       Pair b st2 => case names of
-        [] => Ok (Pair b st2)
-        _ => Ok (Pair "(fun ${joinWith " " names} -> ${b})" st2)
+        [] => OkC (Pair b st2)
+        _ => OkC (Pair "(fun ${joinWith " " names} -> ${b})" st2)
     )
 
 -- 应用：精化器可能把饱和的构造子应用表示成嵌套 `TApp (TApp (TCon c []) a) b`。
 -- 这种形态必须先折叠成 `TCon c [a, b]`，否则 OCaml 侧会把它当成 curried 调用
 -- （多变体构造子是 tupled 的，`C 1 2` 类型不对）。
-genAppFuel : Int -> GenSt -> List (Pair String Rig) -> Term -> Term -> Rig -> Result (Pair String GenSt)
-genAppFuel fuel st binders f a rig = if fuel <= 0 then Err "DT: internal: codegen fuel exhausted"
+genAppFuel : Int -> GenSt -> List (Pair String Rig) -> Term -> Term -> Rig -> Check (Pair String GenSt)
+genAppFuel fuel st binders f a rig = if fuel <= 0 then err "DT: internal: codegen fuel exhausted"
 else if rigIsErased rig then genTermFuel (fuel - 1) st binders f
 else case flattenConApp (TApp f a rig) of
   Just (Pair c args) => genConAppFuel (fuel - 1) st binders c args
@@ -1403,64 +1403,64 @@ else case head of
   _ => [TApp (TApp head l rl) r rr]
 concatLeaves t = [t]
 
-genAppOptimizedFuel : Int -> GenSt -> List (Pair String Rig) -> Term -> Result (Pair String GenSt)
-genAppOptimizedFuel fuel st binders t = if fuel <= 0 then Err "DT: internal: codegen fuel exhausted"
+genAppOptimizedFuel : Int -> GenSt -> List (Pair String Rig) -> Term -> Check (Pair String GenSt)
+genAppOptimizedFuel fuel st binders t = if fuel <= 0 then err "DT: internal: codegen fuel exhausted"
 else case flattenConcatChain t of
   Just parts =>
     if length parts >= 3 then genConcatPartsFuel (fuel - 1) st binders parts
     else genPlainAppFuel fuel st binders t
   Nothing => genPlainAppFuel fuel st binders t
 
-genPlainAppFuel : Int -> GenSt -> List (Pair String Rig) -> Term -> Result (Pair String GenSt)
-genPlainAppFuel fuel st binders t = if fuel <= 0 then Err "DT: internal: codegen fuel exhausted"
+genPlainAppFuel : Int -> GenSt -> List (Pair String Rig) -> Term -> Check (Pair String GenSt)
+genPlainAppFuel fuel st binders t = if fuel <= 0 then err "DT: internal: codegen fuel exhausted"
 else case t of
   TApp f a rig => case flattenIntrinsicApp t of
     Just (Pair name args) =>
       if inlineArityMatches name args then genInlineAppFuel (fuel - 1) st binders name args
       else genPlainAppFallback (fuel - 1) st binders f a rig
     Nothing => genPlainAppFallback (fuel - 1) st binders f a rig
-  _ => Err "DT: internal: genPlainAppFuel expects an application"
+  _ => err "DT: internal: genPlainAppFuel expects an application"
 
-genPlainAppFallback : Int -> GenSt -> List (Pair String Rig) -> Term -> Term -> Rig -> Result (Pair String GenSt)
-genPlainAppFallback fuel st binders f a rig = if fuel <= 0 then Err "DT: internal: codegen fuel exhausted"
+genPlainAppFallback : Int -> GenSt -> List (Pair String Rig) -> Term -> Term -> Rig -> Check (Pair String GenSt)
+genPlainAppFallback fuel st binders f a rig = if fuel <= 0 then err "DT: internal: codegen fuel exhausted"
 else Vuna.Compiler.Common.bind (genTermFuel (fuel - 1) st binders f) (\pf => case pf of
   Pair fs st1 => Vuna.Compiler.Common.bind (genTermFuel (fuel - 1) st1 binders a) (\pa => case pa of
-    Pair at st2 => Ok (Pair "(${fs} ${at})" st2)
+    Pair at st2 => OkC (Pair "(${fs} ${at})" st2)
   )
 )
 
-genInlineAppFuel : Int -> GenSt -> List (Pair String Rig) -> String -> List (Pair Term Rig) -> Result (Pair String GenSt)
-genInlineAppFuel fuel st binders name args = if fuel <= 0 then Err "DT: internal: codegen fuel exhausted"
+genInlineAppFuel : Int -> GenSt -> List (Pair String Rig) -> String -> List (Pair Term Rig) -> Check (Pair String GenSt)
+genInlineAppFuel fuel st binders name args = if fuel <= 0 then err "DT: internal: codegen fuel exhausted"
 else Vuna.Compiler.Common.bind (genInlineArgsFuel (fuel - 1) st binders args) (\p => case p of
   Pair texts st2 => case inlineText name texts of
-    Just text => Ok (Pair text st2)
-    Nothing => Err "DT: internal: no inline text for builtin `${name}`"
+    Just text => OkC (Pair text st2)
+    Nothing => err "DT: internal: no inline text for builtin `${name}`"
 )
 
-genInlineArgsFuel : Int -> GenSt -> List (Pair String Rig) -> List (Pair Term Rig) -> Result (Pair (List String) GenSt)
+genInlineArgsFuel : Int -> GenSt -> List (Pair String Rig) -> List (Pair Term Rig) -> Check (Pair (List String) GenSt)
 genInlineArgsFuel fuel st binders [] =
-  if fuel <= 0 then Err "DT: internal: codegen fuel exhausted" else Ok (Pair [] st)
-genInlineArgsFuel fuel st binders ((Pair arg rig) :: rest) = if fuel <= 0 then Err "DT: internal: codegen fuel exhausted"
-else if rigIsErased rig then Err "DT: internal: erased argument in inlined builtin application"
+  if fuel <= 0 then err "DT: internal: codegen fuel exhausted" else OkC (Pair [] st)
+genInlineArgsFuel fuel st binders ((Pair arg rig) :: rest) = if fuel <= 0 then err "DT: internal: codegen fuel exhausted"
+else if rigIsErased rig then err "DT: internal: erased argument in inlined builtin application"
 else Vuna.Compiler.Common.bind (genTermFuel (fuel - 1) st binders arg) (\p => case p of
   Pair text st2 => Vuna.Compiler.Common.bind (genInlineArgsFuel (fuel - 1) st2 binders rest) (\q => case q of
-    Pair texts st3 => Ok (Pair (Base.List.Cons text texts) st3)
+    Pair texts st3 => OkC (Pair (Base.List.Cons text texts) st3)
   )
 )
 
-genConcatPartsFuel : Int -> GenSt -> List (Pair String Rig) -> List Term -> Result (Pair String GenSt)
-genConcatPartsFuel fuel st binders parts = if fuel <= 0 then Err "DT: internal: codegen fuel exhausted"
+genConcatPartsFuel : Int -> GenSt -> List (Pair String Rig) -> List Term -> Check (Pair String GenSt)
+genConcatPartsFuel fuel st binders parts = if fuel <= 0 then err "DT: internal: codegen fuel exhausted"
 else Vuna.Compiler.Common.bind (genConcatPartTexts (fuel - 1) st binders parts) (\p => case p of
-  Pair texts st2 => Ok (Pair "(String.concat \"\" [${joinWith "; " texts}])" st2)
+  Pair texts st2 => OkC (Pair "(String.concat \"\" [${joinWith "; " texts}])" st2)
 )
 
-genConcatPartTexts : Int -> GenSt -> List (Pair String Rig) -> List Term -> Result (Pair (List String) GenSt)
+genConcatPartTexts : Int -> GenSt -> List (Pair String Rig) -> List Term -> Check (Pair (List String) GenSt)
 genConcatPartTexts fuel st binders [] =
-  if fuel <= 0 then Err "DT: internal: codegen fuel exhausted" else Ok (Pair [] st)
-genConcatPartTexts fuel st binders (t :: rest) = if fuel <= 0 then Err "DT: internal: codegen fuel exhausted"
+  if fuel <= 0 then err "DT: internal: codegen fuel exhausted" else OkC (Pair [] st)
+genConcatPartTexts fuel st binders (t :: rest) = if fuel <= 0 then err "DT: internal: codegen fuel exhausted"
 else Vuna.Compiler.Common.bind (genTermFuel (fuel - 1) st binders t) (\p => case p of
   Pair text st2 => Vuna.Compiler.Common.bind (genConcatPartTexts (fuel - 1) st2 binders rest) (\q => case q of
-    Pair texts st3 => Ok (Pair (Base.List.Cons text texts) st3)
+    Pair texts st3 => OkC (Pair (Base.List.Cons text texts) st3)
   )
 )
 
@@ -1475,29 +1475,29 @@ conAppText name args = "(${name} (${joinWith ", " args}))"
 --   1. **全 telescope**（含擦除位，普通构造子经 `inferArgs` 插入隐式后如此）；
 --   2. **仅保留字段**（字典构造子 `MkDict_C` 只带方法实现，省略擦除的类参数）。
 -- 两种都按 shape 归一成「运行时实参列表」（全部非擦除），供 `genConArgs` 生成。
-alignCtorArgs : String -> List Bool -> List (Pair Term Rig) -> Result (List (Pair Term Rig))
-alignCtorArgs label [] [] = Ok []
+alignCtorArgs : String -> List Bool -> List (Pair Term Rig) -> Check (List (Pair Term Rig))
+alignCtorArgs label [] [] = OkC []
 alignCtorArgs label [] (_ :: _) =
-  Err "DT: internal: constructor ${label}: application has more arguments than its shape"
+  err "DT: internal: constructor ${label}: application has more arguments than its shape"
 alignCtorArgs label (keep :: flags) [] =
-  if keep then Err "DT: internal: constructor ${label}: application has fewer arguments than its shape"
+  if keep then err "DT: internal: constructor ${label}: application has fewer arguments than its shape"
   else alignCtorArgs label flags []
 alignCtorArgs label (keep :: flags) ((Pair arg rig) :: rest) =
-  if keep then if rigIsErased rig then Err "DT: internal: constructor ${label}: runtime field marked erased"
+  if keep then if rigIsErased rig then err "DT: internal: constructor ${label}: runtime field marked erased"
   else Vuna.Compiler.Common.bind (alignCtorArgs label flags rest)
-    (\ts => Ok (Base.List.Cons (Pair arg rig) ts))
+    (\ts => OkC (Base.List.Cons (Pair arg rig) ts))
   else if rigIsErased rig then alignCtorArgs label flags rest
   else alignCtorArgs label flags (Pair arg rig :: rest)
 
-genConArgsFuel : Int -> GenSt -> List (Pair String Rig) -> List Bool -> List (Pair Term Rig) -> Result (Pair (List String) GenSt)
+genConArgsFuel : Int -> GenSt -> List (Pair String Rig) -> List Bool -> List (Pair Term Rig) -> Check (Pair (List String) GenSt)
 genConArgsFuel fuel st binders opqs [] =
-  if fuel <= 0 then Err "DT: internal: codegen fuel exhausted" else Ok (Pair [] st)
+  if fuel <= 0 then err "DT: internal: codegen fuel exhausted" else OkC (Pair [] st)
 genConArgsFuel fuel st binders [] (_ :: _) =
-  Err "DT: internal: constructor opaque flags shorter than runtime arguments"
-genConArgsFuel fuel st binders (opq :: opqs) ((Pair arg rig) :: rest) = if fuel <= 0 then Err "DT: internal: codegen fuel exhausted"
+  err "DT: internal: constructor opaque flags shorter than runtime arguments"
+genConArgsFuel fuel st binders (opq :: opqs) ((Pair arg rig) :: rest) = if fuel <= 0 then err "DT: internal: codegen fuel exhausted"
 else Vuna.Compiler.Common.bind (genTermFuel (fuel - 1) st binders arg) (\p => case p of
   Pair text st2 => Vuna.Compiler.Common.bind (genConArgsFuel (fuel - 1) st2 binders opqs rest) (\q => case q of
-    Pair texts st3 => Ok (Pair (Base.List.Cons (ctorArgText opq text) texts) st3)
+    Pair texts st3 => OkC (Pair (Base.List.Cons (ctorArgText opq text) texts) st3)
   )
 )
 
@@ -1522,34 +1522,34 @@ else if c == natSuccCtor then case args of
 else Nothing
 natChainValue _ = Nothing
 
-genConAppFuel : Int -> GenSt -> List (Pair String Rig) -> String -> List (Pair Term Rig) -> Result (Pair String GenSt)
-genConAppFuel fuel st binders c args = if fuel <= 0 then Err "DT: internal: codegen fuel exhausted"
+genConAppFuel : Int -> GenSt -> List (Pair String Rig) -> String -> List (Pair Term Rig) -> Check (Pair String GenSt)
+genConAppFuel fuel st binders c args = if fuel <= 0 then err "DT: internal: codegen fuel exhausted"
 else case natChainValue (TCon c args) of
-  Just n => Ok (Pair (strFromInt n) st)
+  Just n => OkC (Pair (strFromInt n) st)
   Nothing => genConAppNonChainFuel fuel st binders c args
 
-genConAppNonChainFuel : Int -> GenSt -> List (Pair String Rig) -> String -> List (Pair Term Rig) -> Result (Pair String GenSt)
-genConAppNonChainFuel fuel st binders c args = if fuel <= 0 then Err "DT: internal: codegen fuel exhausted"
+genConAppNonChainFuel : Int -> GenSt -> List (Pair String Rig) -> String -> List (Pair Term Rig) -> Check (Pair String GenSt)
+genConAppNonChainFuel fuel st binders c args = if fuel <= 0 then err "DT: internal: codegen fuel exhausted"
 else if c == natZeroCtor then case alignCtorArgs c [] args of
-  Err e => Err e
-  Ok runtimeArgs => case runtimeArgs of
-    [] => Ok (Pair "0" st)
-    _ => Err "DT: internal: Nat Zero applied to arguments"
+  ErrC e => ErrC e
+  OkC runtimeArgs => case runtimeArgs of
+    [] => OkC (Pair "0" st)
+    _ => err "DT: internal: Nat Zero applied to arguments"
 else if c == natSuccCtor then case alignCtorArgs c [True] args of
-  Err e => Err e
-  Ok runtimeArgs => Vuna.Compiler.Common.bind (genConArgsFuel (fuel - 1) st binders [False] runtimeArgs) (\p => case p of
+  ErrC e => ErrC e
+  OkC runtimeArgs => Vuna.Compiler.Common.bind (genConArgsFuel (fuel - 1) st binders [False] runtimeArgs) (\p => case p of
     Pair texts st2 => case texts of
       argText :: rest => case rest of
-        [] => Ok (Pair "(bi_natSucc ${argText})" st2)
-        _ => Err "DT: internal: Nat Succ must have exactly one runtime argument"
-      [] => Err "DT: internal: Nat Succ must have exactly one runtime argument"
+        [] => OkC (Pair "(bi_natSucc ${argText})" st2)
+        _ => err "DT: internal: Nat Succ must have exactly one runtime argument"
+      [] => err "DT: internal: Nat Succ must have exactly one runtime argument"
   )
 else case lookupPair c st.gsCtors of
-  Nothing => Err "DT: internal: unknown constructor ${c}"
+  Nothing => err "DT: internal: unknown constructor ${c}"
   Just family => case lookupPair c st.gsCtorShapes of
-    Nothing => Err "DT: internal: no shape for constructor ${c}"
+    Nothing => err "DT: internal: no shape for constructor ${c}"
     Just flags => case lookupPair c st.gsCtorOpaques of
-      Nothing => Err "DT: internal: no opaque shape for constructor ${c}"
+      Nothing => err "DT: internal: no opaque shape for constructor ${c}"
       Just opqs => Vuna.Compiler.Common.bind (alignCtorArgs c flags args) (\runtimeArgs => Vuna.Compiler.Common.bind (genConArgsFuel (fuel - 1) st binders (ctorOpaqueKeptFlags flags opqs) runtimeArgs) (\p => case p of
         Pair argTexts st2 => genConAppFinish st2 family c flags opqs argTexts
       )
@@ -1622,8 +1622,8 @@ updateAssigned st family fields (p :: rest) (t :: ts) = case lookupRtLabel (firs
   Nothing => updateAssigned st family fields rest ts
 
 -- | R4：record 更新 codegen：base 文本 + 重建体（`TCon`）的运行时实参 → record update 语法。
-genRecordUpdateFuel : Int -> GenSt -> List (Pair String Rig) -> Term -> String -> List (Pair String Rig) -> List (Pair Int String) -> List Int -> Term -> Result (Pair String GenSt)
-genRecordUpdateFuel fuel st binders base c tele fields idxs body = if fuel <= 0 then Err "DT: internal: codegen fuel exhausted"
+genRecordUpdateFuel : Int -> GenSt -> List (Pair String Rig) -> Term -> String -> List (Pair String Rig) -> List (Pair Int String) -> List Int -> Term -> Check (Pair String GenSt)
+genRecordUpdateFuel fuel st binders base c tele fields idxs body = if fuel <= 0 then err "DT: internal: codegen fuel exhausted"
 else Vuna.Compiler.Common.bind (genTermFuel (fuel - 1) st binders base) (\p => case p of
   Pair baseText st1 => case body of
     TMk c2 args =>
@@ -1632,7 +1632,7 @@ else Vuna.Compiler.Common.bind (genTermFuel (fuel - 1) st binders base) (\p => c
     TCon c2 args =>
       genRecordUpdateArgsFuel (fuel - 1) st1 (recordAltBinders tele binders) baseText c fields idxs
         args
-    _ => Err "DT: internal: record update body is not a constructor application"
+    _ => err "DT: internal: record update body is not a constructor application"
 )
 
 -- | R4：把 record 字段 binder 补进 codegen binder 栈（被改值在 alt 上下文里精化，
@@ -1642,30 +1642,30 @@ recordAltBinders tele binders = append (reverse (map (\b => Pair (firstOf b) Rig
 
 -- | R4：record 更新的实参处理：只生成**被改字段**的实参文本（其余字段由 record update
 -- 语法沿用 base，旧 binder 在当前上下文里并不存在）。
-genRecordUpdateArgsFuel : Int -> GenSt -> List (Pair String Rig) -> String -> String -> List (Pair Int String) -> List Int -> List (Pair Term Rig) -> Result (Pair String GenSt)
-genRecordUpdateArgsFuel fuel st binders baseText c fields idxs args = if fuel <= 0 then Err "DT: internal: codegen fuel exhausted"
+genRecordUpdateArgsFuel : Int -> GenSt -> List (Pair String Rig) -> String -> String -> List (Pair Int String) -> List Int -> List (Pair Term Rig) -> Check (Pair String GenSt)
+genRecordUpdateArgsFuel fuel st binders baseText c fields idxs args = if fuel <= 0 then err "DT: internal: codegen fuel exhausted"
 else case lookupPair c st.gsCtorShapes of
-  Nothing => Err "DT: internal: no shape for constructor ${c}"
+  Nothing => err "DT: internal: no shape for constructor ${c}"
   Just flags => case lookupPair c st.gsCtorOpaques of
-    Nothing => Err "DT: internal: no opaque shape for constructor ${c}"
+    Nothing => err "DT: internal: no opaque shape for constructor ${c}"
     Just opqs => Vuna.Compiler.Common.bind (alignCtorArgs c flags args) (\runtimeArgs => let
       positions = lookupRtPositions fields idxs
     in Vuna.Compiler.Common.bind (genUpdTextsFuel (fuel - 1) st binders (ctorOpaqueKeptFlags flags opqs) positions runtimeArgs) (\q => case q of
       Pair texts st2 =>
-        Ok (Pair (recordUpdateTextOf st2 baseText c fields positions texts) (gsDepOfFamily st2 c))
+        OkC (Pair (recordUpdateTextOf st2 baseText c fields positions texts) (gsDepOfFamily st2 c))
     )
     )
 
 -- | R4：按 (字段序号, 运行时实参位置) 取实参并生成文本（只覆盖被改字段）。
-genUpdTextsFuel : Int -> GenSt -> List (Pair String Rig) -> List Bool -> List (Pair Int Int) -> List (Pair Term Rig) -> Result (Pair (List String) GenSt)
+genUpdTextsFuel : Int -> GenSt -> List (Pair String Rig) -> List Bool -> List (Pair Int Int) -> List (Pair Term Rig) -> Check (Pair (List String) GenSt)
 genUpdTextsFuel fuel st binders opqs [] args =
-  if fuel <= 0 then Err "DT: internal: codegen fuel exhausted" else Ok (Pair [] st)
-genUpdTextsFuel fuel st binders opqs (p :: rest) args = if fuel <= 0 then Err "DT: internal: codegen fuel exhausted"
+  if fuel <= 0 then err "DT: internal: codegen fuel exhausted" else OkC (Pair [] st)
+genUpdTextsFuel fuel st binders opqs (p :: rest) args = if fuel <= 0 then err "DT: internal: codegen fuel exhausted"
 else case nthOpqArg (secondOf p) opqs args of
-  Nothing => Err "DT: internal: record update position out of range"
+  Nothing => err "DT: internal: record update position out of range"
   Just arg => Vuna.Compiler.Common.bind (genTermFuel (fuel - 1) st binders arg) (\q => case q of
     Pair text st2 => Vuna.Compiler.Common.bind (genUpdTextsFuel (fuel - 1) st2 binders opqs rest args) (\r => case r of
-      Pair texts st3 => Ok (Pair (Base.List.Cons text texts) st3)
+      Pair texts st3 => OkC (Pair (Base.List.Cons text texts) st3)
     )
   )
 
@@ -1677,7 +1677,7 @@ nthOpqArg n (opq :: opqs) ((Pair a rig) :: rest) =
   if n <= 0 then Just a else nthOpqArg (n - 1) opqs rest
 
 -- | 非 record 的投影仍按原 `case` 形状展开。
-genProjAsCaseFuel : Int -> GenSt -> List (Pair String Rig) -> Term -> String -> List (Pair String Rig) -> Int -> Int -> Result (Pair String GenSt)
+genProjAsCaseFuel : Int -> GenSt -> List (Pair String Rig) -> Term -> String -> List (Pair String Rig) -> Int -> Int -> Check (Pair String GenSt)
 genProjAsCaseFuel fuel st binders base c tele i fi =
   let
     n = length tele
@@ -1686,27 +1686,27 @@ genProjAsCaseFuel fuel st binders base c tele i fi =
 
 -- | 构造子应用的收尾：去装箱族转交 `genUnboxedConAppFinish`；record 族生成 OCaml record；
 -- 其余按族取 OCaml 构造子引用并拼上实参文本。
-genConAppFinish : GenSt -> String -> String -> List Bool -> List Bool -> List String -> Result (Pair String GenSt)
+genConAppFinish : GenSt -> String -> String -> List Bool -> List Bool -> List String -> Check (Pair String GenSt)
 genConAppFinish st family c flags opqs argTexts = if memName family st.gsUnboxed then genUnboxedConAppFinish st flags opqs argTexts
 else case lookupPair family st.gsRecordFields of
-  Just fields => Ok (Pair (recordConText st family fields argTexts) (gsDepOfFamily st family))
+  Just fields => OkC (Pair (recordConText st family fields argTexts) (gsDepOfFamily st family))
   Nothing =>
     let
       r = genCtorRef st family c
-    in Ok (Pair (conAppText (firstOf r) argTexts) (secondOf r))
+    in OkC (Pair (conAppText (firstOf r) argTexts) (secondOf r))
 
 -- | 去装箱构造子的应用收尾：要求恰好一个运行时实参，按构造子的 opaque 标志把实参
 -- 包成 `ctorArgText`（不需要 OCaml 变体构造）。
-genUnboxedConAppFinish : GenSt -> List Bool -> List Bool -> List String -> Result (Pair String GenSt)
+genUnboxedConAppFinish : GenSt -> List Bool -> List Bool -> List String -> Check (Pair String GenSt)
 genUnboxedConAppFinish st flags opqs [] =
-  Err "DT: internal: unboxed constructor application has no runtime argument"
+  err "DT: internal: unboxed constructor application has no runtime argument"
 genUnboxedConAppFinish st flags opqs (text :: rest) = case rest of
   [] => case ctorOpaqueKeptFlags flags opqs of
     opq :: more => case more of
-      [] => Ok (Pair (ctorArgText opq text) st)
-      _ => Err "DT: internal: unboxed constructor has more than one opaque flag"
-    [] => Err "DT: internal: unboxed constructor has no opaque flag"
-  _ => Err "DT: internal: unboxed constructor application has more than one runtime argument"
+      [] => OkC (Pair (ctorArgText opq text) st)
+      _ => err "DT: internal: unboxed constructor has more than one opaque flag"
+    [] => err "DT: internal: unboxed constructor has no opaque flag"
+  _ => err "DT: internal: unboxed constructor application has more than one runtime argument"
 
 hasFallbackAlt : List CaseAlt -> Bool
 hasFallbackAlt [] = False
@@ -1736,51 +1736,51 @@ allCatchAll [] = True
 allCatchAll (alt :: rest) = if caseAltName alt == "" then allCatchAll rest else False
 
 -- | 去装箱 case 的降级入口：取出分支的构造子名后交给 `genUnboxedCaseByName`。
-genUnboxedCaseFuel : Int -> GenSt -> List (Pair String Rig) -> Term -> CaseAlt -> Result (Pair String GenSt)
-genUnboxedCaseFuel fuel st outer scrut alt = if fuel <= 0 then Err "DT: internal: codegen fuel exhausted"
+genUnboxedCaseFuel : Int -> GenSt -> List (Pair String Rig) -> Term -> CaseAlt -> Check (Pair String GenSt)
+genUnboxedCaseFuel fuel st outer scrut alt = if fuel <= 0 then err "DT: internal: codegen fuel exhausted"
 else case caseAltName alt of
-  "" => Err "DT: internal: unboxed case arm has no constructor"
+  "" => err "DT: internal: unboxed case arm has no constructor"
   name => genUnboxedCaseByName (fuel - 1) st outer name scrut alt
 
 -- | 查构造子的运行时字段形状（keep/opaque 标志），再转交 `genUnboxedCaseWithFlags`。
-genUnboxedCaseByName : Int -> GenSt -> List (Pair String Rig) -> String -> Term -> CaseAlt -> Result (Pair String GenSt)
-genUnboxedCaseByName fuel st outer name scrut alt = if fuel <= 0 then Err "DT: internal: codegen fuel exhausted"
+genUnboxedCaseByName : Int -> GenSt -> List (Pair String Rig) -> String -> Term -> CaseAlt -> Check (Pair String GenSt)
+genUnboxedCaseByName fuel st outer name scrut alt = if fuel <= 0 then err "DT: internal: codegen fuel exhausted"
 else case lookupPair name st.gsCtorShapes of
-  Nothing => Err "DT: internal: no shape for constructor ${name}"
+  Nothing => err "DT: internal: no shape for constructor ${name}"
   Just flags => genUnboxedCaseWithFlags (fuel - 1) st outer name scrut alt flags
 
 -- | 先生成 scrutinee 的 OCaml 文本，再带着它转交 `genUnboxedCaseWithScrut`。
-genUnboxedCaseWithFlags : Int -> GenSt -> List (Pair String Rig) -> String -> Term -> CaseAlt -> List Bool -> Result (Pair String GenSt)
-genUnboxedCaseWithFlags fuel st outer name scrut alt flags = if fuel <= 0 then Err "DT: internal: codegen fuel exhausted"
+genUnboxedCaseWithFlags : Int -> GenSt -> List (Pair String Rig) -> String -> Term -> CaseAlt -> List Bool -> Check (Pair String GenSt)
+genUnboxedCaseWithFlags fuel st outer name scrut alt flags = if fuel <= 0 then err "DT: internal: codegen fuel exhausted"
 else Vuna.Compiler.Common.bind (genTermFuel (fuel - 1) st outer scrut) (\p => case p of
   Pair scrutText st1 => genUnboxedCaseWithScrut (fuel - 1) st1 outer name alt flags scrutText
 )
 
 -- | 按构造子的字段标志为分支 binder 建 AltEnv（擦除字段丢弃），再生成分支体
 -- 并组装成 `let`。
-genUnboxedCaseWithScrut : Int -> GenSt -> List (Pair String Rig) -> String -> CaseAlt -> List Bool -> String -> Result (Pair String GenSt)
+genUnboxedCaseWithScrut : Int -> GenSt -> List (Pair String Rig) -> String -> CaseAlt -> List Bool -> String -> Check (Pair String GenSt)
 genUnboxedCaseWithScrut fuel st outer name alt flags scrutText =
-  if fuel <= 0 then Err "DT: internal: codegen fuel exhausted"
+  if fuel <= 0 then err "DT: internal: codegen fuel exhausted"
   else Vuna.Compiler.Common.bind (altEnvChecked st name outer (caseAltBinders alt) flags)
     (\bound => genUnboxedCaseWithBound (fuel - 1) st name alt bound scrutText)
 
 -- | 在已绑定的 AltEnv 下生成分支体文本，交给 `unboxedCaseLet` 拼成 `let` 表达式。
-genUnboxedCaseWithBound : Int -> GenSt -> String -> CaseAlt -> AltEnv -> String -> Result (Pair String GenSt)
-genUnboxedCaseWithBound fuel st name alt bound scrutText = if fuel <= 0 then Err "DT: internal: codegen fuel exhausted"
+genUnboxedCaseWithBound : Int -> GenSt -> String -> CaseAlt -> AltEnv -> String -> Check (Pair String GenSt)
+genUnboxedCaseWithBound fuel st name alt bound scrutText = if fuel <= 0 then err "DT: internal: codegen fuel exhausted"
 else Vuna.Compiler.Common.bind (genTermFuel (fuel - 1) (aeSt bound) (aeEnv bound) (caseAltBody alt)) (\p => case p of
   Pair bodyText st2 => unboxedCaseLet scrutText bound bodyText st2
 )
 
 -- | 把分支体包成 `let <binder> = <scrut> in <body>`；无运行时 binder 时用 `_`。
-unboxedCaseLet : String -> AltEnv -> String -> GenSt -> Result (Pair String GenSt)
+unboxedCaseLet : String -> AltEnv -> String -> GenSt -> Check (Pair String GenSt)
 unboxedCaseLet scrutText bound bodyText st2 = case aePats bound of
-  [] => Ok (Pair "(let _ = ${scrutText} in ${bodyText})" st2)
+  [] => OkC (Pair "(let _ = ${scrutText} in ${bodyText})" st2)
   pat :: rest => case rest of
-    [] => Ok (Pair "(let ${pat} = ${scrutText} in ${bodyText})" st2)
-    _ => Err "DT: internal: unboxed case arm has more than one runtime binder"
+    [] => OkC (Pair "(let ${pat} = ${scrutText} in ${bodyText})" st2)
+    _ => err "DT: internal: unboxed case arm has more than one runtime binder"
 
-genArmFuel : Int -> GenSt -> List (Pair String Rig) -> CaseAlt -> Result (Pair String GenSt)
-genArmFuel fuel st outer alt = if fuel <= 0 then Err "DT: internal: codegen fuel exhausted"
+genArmFuel : Int -> GenSt -> List (Pair String Rig) -> CaseAlt -> Check (Pair String GenSt)
+genArmFuel fuel st outer alt = if fuel <= 0 then err "DT: internal: codegen fuel exhausted"
 else if caseAltName alt == "" then
   let
     bound = altEnv st outer (caseAltBinders alt)
@@ -1788,32 +1788,32 @@ else if caseAltName alt == "" then
       [] => "_"
       p :: rest => p
   in Vuna.Compiler.Common.bind (genTermFuel (fuel - 1) (aeSt bound) (aeEnv bound) (caseAltBody alt)) (\p => case p of
-    Pair b st2 => Ok (Pair "  | ${patText} -> ${b}\n" st2)
+    Pair b st2 => OkC (Pair "  | ${patText} -> ${b}\n" st2)
   )
 else case lookupPair (caseAltName alt) st.gsCtors of
-  Nothing => Err "DT: internal: unknown constructor ${caseAltName alt}"
+  Nothing => err "DT: internal: unknown constructor ${caseAltName alt}"
   Just family => case lookupPair (caseAltName alt) st.gsCtorShapes of
-    Nothing => Err "DT: internal: no shape for constructor ${caseAltName alt}"
+    Nothing => err "DT: internal: no shape for constructor ${caseAltName alt}"
     Just flags => Vuna.Compiler.Common.bind (altEnvChecked st (caseAltName alt) outer (caseAltBinders alt) flags) (\bound => Vuna.Compiler.Common.bind (genTermFuel (fuel - 1) (aeSt bound) (aeEnv bound) (caseAltBody alt)) (\p => case p of
       Pair b st2 => case lookupPair family st2.gsRecordFields of
         Just fields =>
-          Ok
+          OkC
             (Pair "  | ${recordPatText st2 family fields (aePats bound)} -> ${b}\n" (gsDepOfFamily st2 family))
         Nothing =>
           let
             r = genCtorRef st2 family (caseAltName alt)
             patText = armPatternText (firstOf r) (aePats bound)
-          in Ok (Pair "  | ${patText} -> ${b}\n" (secondOf r))
+          in OkC (Pair "  | ${patText} -> ${b}\n" (secondOf r))
     )
     )
 
-genArmsFuel : Int -> GenSt -> List (Pair String Rig) -> List CaseAlt -> Result (Pair String GenSt)
+genArmsFuel : Int -> GenSt -> List (Pair String Rig) -> List CaseAlt -> Check (Pair String GenSt)
 genArmsFuel fuel st binders [] =
-  if fuel <= 0 then Err "DT: internal: codegen fuel exhausted" else Ok (Pair "" st)
-genArmsFuel fuel st binders (alt :: rest) = if fuel <= 0 then Err "DT: internal: codegen fuel exhausted"
+  if fuel <= 0 then err "DT: internal: codegen fuel exhausted" else OkC (Pair "" st)
+genArmsFuel fuel st binders (alt :: rest) = if fuel <= 0 then err "DT: internal: codegen fuel exhausted"
 else Vuna.Compiler.Common.bind (genArmFuel (fuel - 1) st binders alt) (\p => case p of
   Pair arm st2 => Vuna.Compiler.Common.bind (genArmsFuel (fuel - 1) st2 binders rest) (\q => case q of
-    Pair arms st3 => Ok (Pair (arm ++ arms) st3)
+    Pair arms st3 => OkC (Pair (arm ++ arms) st3)
   )
 )
 
@@ -1850,23 +1850,23 @@ findCatchAllAlt (alt :: rest) = if caseAltName alt == "" then Just alt else find
 
 -- Nat 分支体：按其 telescope binder 生成；Succ 的唯一 binder 绑定到 (sc - 1)，
 -- 兜底变量绑定到 sc。bindExpr = Nothing 表示该分支不应有保留 binder（Zero）。
-genNatAltBodyFuel : Int -> GenSt -> List (Pair String Rig) -> CaseAlt -> Maybe String -> Result (Pair String GenSt)
-genNatAltBodyFuel fuel st outer alt bindExpr = if fuel <= 0 then Err "DT: internal: codegen fuel exhausted"
+genNatAltBodyFuel : Int -> GenSt -> List (Pair String Rig) -> CaseAlt -> Maybe String -> Check (Pair String GenSt)
+genNatAltBodyFuel fuel st outer alt bindExpr = if fuel <= 0 then err "DT: internal: codegen fuel exhausted"
 else
   let
     bound = altEnv st outer (caseAltBinders alt)
   in Vuna.Compiler.Common.bind (genTermFuel (fuel - 1) (aeSt bound) (aeEnv bound) (caseAltBody alt)) (\p => case p of
     Pair body st2 => case aePats bound of
-      [] => Ok (Pair body st2)
+      [] => OkC (Pair body st2)
       nm :: rest => case rest of
         [] => case bindExpr of
-          Just expr => Ok (Pair "(let ${nm} = ${expr} in ${body})" st2)
-          Nothing => Err "DT: internal: Nat case arm has a binder but no runtime binding"
-        _ => Err "DT: internal: Nat case arm has more than one runtime binder"
+          Just expr => OkC (Pair "(let ${nm} = ${expr} in ${body})" st2)
+          Nothing => err "DT: internal: Nat case arm has a binder but no runtime binding"
+        _ => err "DT: internal: Nat case arm has more than one runtime binder"
   )
 
-genNatCaseFuel : Int -> GenSt -> List (Pair String Rig) -> Term -> List CaseAlt -> Result (Pair String GenSt)
-genNatCaseFuel fuel st binders scrut alts = if fuel <= 0 then Err "DT: internal: codegen fuel exhausted"
+genNatCaseFuel : Int -> GenSt -> List (Pair String Rig) -> Term -> List CaseAlt -> Check (Pair String GenSt)
+genNatCaseFuel fuel st binders scrut alts = if fuel <= 0 then err "DT: internal: codegen fuel exhausted"
 else Vuna.Compiler.Common.bind (genTermFuel (fuel - 1) st binders scrut) (\p => case p of
   Pair scrutText st1 =>
     let
@@ -1881,8 +1881,8 @@ else Vuna.Compiler.Common.bind (genTermFuel (fuel - 1) st binders scrut) (\p => 
 )
 
 -- 组装：true/else 两支取 Zero/Succ；缺的一支用兜底（绑定 scrutinee）或 failwith。
-natCaseBranchesFuel : Int -> GenSt -> List (Pair String Rig) -> Maybe CaseAlt -> Maybe CaseAlt -> Maybe CaseAlt -> String -> String -> String -> Result (Pair String GenSt)
-natCaseBranchesFuel fuel st binders zeroAlt succAlt catchAlt sc scrutText predExpr = if fuel <= 0 then Err "DT: internal: codegen fuel exhausted"
+natCaseBranchesFuel : Int -> GenSt -> List (Pair String Rig) -> Maybe CaseAlt -> Maybe CaseAlt -> Maybe CaseAlt -> String -> String -> String -> Check (Pair String GenSt)
+natCaseBranchesFuel fuel st binders zeroAlt succAlt catchAlt sc scrutText predExpr = if fuel <= 0 then err "DT: internal: codegen fuel exhausted"
 else
   let
     impossible = "(failwith \"DT: impossible branch\")"
@@ -1901,18 +1901,18 @@ else
               Nothing => case catchAlt of
                 Just _ => catchText
                 Nothing => impossible
-          in Ok
+          in OkC
             (Pair "(let ${sc} = ${scrutText} in (if ${sc} = 0 then ${trueText} else ${falseText}))" st3)
       )
     )
   )
 
-natAltTextFuel : Int -> GenSt -> List (Pair String Rig) -> Maybe CaseAlt -> Maybe String -> Result (Pair String GenSt)
-natAltTextFuel fuel st binders Nothing bindExpr = Ok (Pair "" st)
+natAltTextFuel : Int -> GenSt -> List (Pair String Rig) -> Maybe CaseAlt -> Maybe String -> Check (Pair String GenSt)
+natAltTextFuel fuel st binders Nothing bindExpr = OkC (Pair "" st)
 natAltTextFuel fuel st binders (Just a) bindExpr = genNatAltBodyFuel fuel st binders a bindExpr
 
-genCaseFuel : Int -> GenSt -> List (Pair String Rig) -> Term -> List CaseAlt -> Result (Pair String GenSt)
-genCaseFuel fuel st binders scrut alts = if fuel <= 0 then Err "DT: internal: codegen fuel exhausted"
+genCaseFuel : Int -> GenSt -> List (Pair String Rig) -> Term -> List CaseAlt -> Check (Pair String GenSt)
+genCaseFuel fuel st binders scrut alts = if fuel <= 0 then err "DT: internal: codegen fuel exhausted"
 else if natCaseApplies alts then genNatCaseFuel (fuel - 1) st binders scrut alts
 else case unboxedCaseAlt st alts of
   Just alt => genUnboxedCaseFuel (fuel - 1) st binders scrut alt
@@ -1920,15 +1920,15 @@ else case unboxedCaseAlt st alts of
 
 -- | 通用 case 降级：生成 scrutinee 与各分支的 `match` 臂；没有 catch-all 时补一条
 -- `| _ -> failwith` 兜底，保证 OCaml match 完整。
-genGenericCaseFuel : Int -> GenSt -> List (Pair String Rig) -> Term -> List CaseAlt -> Result (Pair String GenSt)
-genGenericCaseFuel fuel st binders scrut alts = if fuel <= 0 then Err "DT: internal: codegen fuel exhausted"
+genGenericCaseFuel : Int -> GenSt -> List (Pair String Rig) -> Term -> List CaseAlt -> Check (Pair String GenSt)
+genGenericCaseFuel fuel st binders scrut alts = if fuel <= 0 then err "DT: internal: codegen fuel exhausted"
 else Vuna.Compiler.Common.bind (genTermFuel (fuel - 1) st binders scrut) (\p => case p of
   Pair scrutText st1 => Vuna.Compiler.Common.bind (genArmsFuel (fuel - 1) st1 binders alts) (\q => case q of
     Pair arms st2 =>
       let
         fallback =
           if hasFallbackAlt alts then "" else "  | _ -> failwith \"DT: impossible branch\"\n"
-      in Ok (Pair "(match ${scrutText} with\n${arms}${fallback})" st2)
+      in OkC (Pair "(match ${scrutText} with\n${arms}${fallback})" st2)
   )
 )
 
@@ -1954,60 +1954,60 @@ mainInitWrap st isRec name body =
   else if st.gsQual.qcUnit == mainUnitName && name == "main" && runtimeArity body == 0 then True
   else False
 
-genGroupDef : GenSt -> Bool -> DtDef -> Result (Pair String GenSt)
+genGroupDef : GenSt -> Bool -> DtDef -> Check (Pair String GenSt)
 genGroupDef st isRec d = case dtDefExtern d of
   -- M33 W5：受限 FFI → OCaml `external`；C 符号名由 `ffi/*.c` 提供（build.sh 编译链接）。
   Just cName => case genExternTy (dtDefType d) of
-    Err e => Err (cgDefLoc (dtDefSpan d) (dtDefName d) ++ e)
-    Ok tyText =>
-      Ok (Pair "external ${valueName (dtDefName d)} : ${tyText} = ${ocamlString cName}" st)
+    ErrC e => ErrC (withContext (dtDefSpan d) (dtDefName d) e)
+    OkC tyText =>
+      OkC (Pair "external ${valueName (dtDefName d)} : ${tyText} = ${ocamlString cName}" st)
   Nothing => case dtDefBody d of
     Just body => case genTerm st [] body of
-      Err e => Err (cgDefLoc (dtDefSpan d) (dtDefName d) ++ e)
-      Ok (Pair bodyText st2) =>
+      ErrC e => ErrC (withContext (dtDefSpan d) (dtDefName d) e)
+      OkC (Pair bodyText st2) =>
         let
           finalText =
             if mainInitWrap st isRec (dtDefName d) body then "(try ${bodyText} with e -> dt_report_exn e (Printexc.get_raw_backtrace ()); exit 2)"
             else bodyText
-        in Ok (Pair "${valueName (dtDefName d)} = ${finalText}" st2)
+        in OkC (Pair "${valueName (dtDefName d)} = ${finalText}" st2)
     Nothing =>
-      Err
-        "${cgDefLoc (dtDefSpan d) (dtDefName d)}DT: internal: axiom reached runtime code generation (partition must erase it)"
+      ErrC
+        (withContext (dtDefSpan d) (dtDefName d) (diagNoLoc SevError PhInternal CatInternal "IC_AxiomRuntime" "axiom reached runtime code generation (partition must erase it)"))
 
 -- extern 的类型 → OCaml 类型文本（Int/String/Bool/Array 基本类型；Elab 已限制形状，
 -- 这里再护栏一次，fuel 递减保证终止）。
-genExternTy : Term -> Result String
+genExternTy : Term -> Check String
 genExternTy ty = externTyText 64 0 (eval [] ty)
 
-externTyText : Int -> Int -> Value -> Result String
+externTyText : Int -> Int -> Value -> Check String
 externTyText fuel lvl (VPi name implicit _ dom clo) =
-  if fuel <= 0 then Err "DT: internal: extern type is too deep"
-  else if implicit then Err "DT: internal: extern has an implicit parameter"
+  if fuel <= 0 then err "DT: internal: extern type is too deep"
+  else if implicit then err "DT: internal: extern has an implicit parameter"
   else Vuna.Compiler.Common.bind (externDomText dom)
-    (\domText => Vuna.Compiler.Common.bind (externTyText (fuel - 1) (lvl + 1) (applyClosure clo (VNeutral (NVar name lvl [])))) (\resText => Ok "(${domText}) -> ${resText}"))
+    (\domText => Vuna.Compiler.Common.bind (externTyText (fuel - 1) (lvl + 1) (applyClosure clo (VNeutral (NVar name lvl [])))) (\resText => OkC "(${domText}) -> ${resText}"))
 externTyText fuel lvl v =
-  if fuel <= 0 then Err "DT: internal: extern type is too deep" else externDomText v
+  if fuel <= 0 then err "DT: internal: extern type is too deep" else externDomText v
 
-externDomText : Value -> Result String
+externDomText : Value -> Check String
 externDomText (VNeutral (NGlobal "Array" ([elem]))) =
-  Vuna.Compiler.Common.bind (externBasicText elem) (\e => Ok "(${e} array)")
+  Vuna.Compiler.Common.bind (externBasicText elem) (\e => OkC "(${e} array)")
 externDomText (VNeutral (NGlobal "Array" _)) =
-  Err "DT: internal: extern Array needs one type argument"
+  err "DT: internal: extern Array needs one type argument"
 externDomText v = externBasicText v
 
-externBasicText : Value -> Result String
+externBasicText : Value -> Check String
 externBasicText (VNeutral (NGlobal g args)) =
-  if g == intTypeName then Ok "int"
-  else if g == strTypeName then Ok "string"
-  else if g == boolTypeName then Ok "bool" else Err "DT: internal: extern type is not basic: ${g}"
-externBasicText (VNeutral _) = Err "DT: internal: extern type is not a global type"
-externBasicText _ = Err "DT: internal: extern type is not basic"
+  if g == intTypeName then OkC "int"
+  else if g == strTypeName then OkC "string"
+  else if g == boolTypeName then OkC "bool" else err "DT: internal: extern type is not basic: ${g}"
+externBasicText (VNeutral _) = err "DT: internal: extern type is not a global type"
+externBasicText _ = err "DT: internal: extern type is not basic"
 
-genGroupBodies : GenSt -> Bool -> List DtDef -> Result (Pair (List String) GenSt)
-genGroupBodies st isRec [] = Ok (Pair [] st)
+genGroupBodies : GenSt -> Bool -> List DtDef -> Check (Pair (List String) GenSt)
+genGroupBodies st isRec [] = OkC (Pair [] st)
 genGroupBodies st isRec (d :: rest) = Vuna.Compiler.Common.bind (genGroupDef st isRec d) (\p => case p of
   Pair def st2 => Vuna.Compiler.Common.bind (genGroupBodies st2 isRec rest) (\q => case q of
-    Pair defs st3 => Ok (Pair (Base.List.Cons def defs) st3)
+    Pair defs st3 => OkC (Pair (Base.List.Cons def defs) st3)
   )
 )
 
@@ -2035,7 +2035,7 @@ firstBadRecursiveValue (d :: rest) = case dtDefBody d of
     if runtimeArity body == 0 then if recursiveValueAllowed body then firstBadRecursiveValue rest else Just (dtDefName d)
     else firstBadRecursiveValue rest
 
-genGroup : HashMap String (List String) -> GenSt -> List DtDef -> Result (Pair String GenSt)
+genGroup : HashMap String (List String) -> GenSt -> List DtDef -> Check (Pair String GenSt)
 genGroup adj st group = if groupNeedsRec adj group then case firstBadRecursiveValue group of
   -- M29（A14）：带来源位置（组里按名字找回定义）。
   Just name => case findDtDef name group of
@@ -2044,28 +2044,28 @@ genGroup adj st group = if groupNeedsRec adj group then case firstBadRecursiveVa
   Nothing => genGroupLet st group True
 else genGroupLet st group False
 
-genGroupLet : GenSt -> List DtDef -> Bool -> Result (Pair String GenSt)
+genGroupLet : GenSt -> List DtDef -> Bool -> Check (Pair String GenSt)
 genGroupLet st group isRec = Vuna.Compiler.Common.bind (genGroupBodies st isRec group) (\p => case p of
   Pair defs st2 => case group of
     -- M33 W5：单个 extern 定义直接生成 `external ...`（不能加 `let` 前缀）。
     [d] => case dtDefExtern d of
-      Just _ => Ok (Pair (joinWith "\n" defs) st2)
-      Nothing => Ok (Pair ((if isRec then "let rec " else "let ") ++ joinWith "\nand " defs) st2)
-    _ => Ok (Pair ((if isRec then "let rec " else "let ") ++ joinWith "\nand " defs) st2)
+      Just _ => OkC (Pair (joinWith "\n" defs) st2)
+      Nothing => OkC (Pair ((if isRec then "let rec " else "let ") ++ joinWith "\nand " defs) st2)
+    _ => OkC (Pair ((if isRec then "let rec " else "let ") ++ joinWith "\nand " defs) st2)
 )
 
-genGroups : HashMap String (List String) -> GenSt -> List (List DtDef) -> Result (Pair (List String) GenSt)
-genGroups adj st [] = Ok (Pair [] st)
+genGroups : HashMap String (List String) -> GenSt -> List (List DtDef) -> Check (Pair (List String) GenSt)
+genGroups adj st [] = OkC (Pair [] st)
 genGroups adj st (g :: rest) = Vuna.Compiler.Common.bind (genGroup adj st g) (\p => case p of
   Pair text st2 => Vuna.Compiler.Common.bind (genGroups adj st2 rest) (\q => case q of
-    Pair texts st3 => Ok (Pair (Base.List.Cons text texts) st3)
+    Pair texts st3 => OkC (Pair (Base.List.Cons text texts) st3)
   )
 )
 
 -- main 的展示方式：内建类型用 runtime 展示函数；其它类型用 Elab 收尾合成的
 -- `@vuna@main_show : T -> String`（D17，见 `Elab.Driver.synthMainShow`）。
 -- 按 canonical 符号识别：Int / String / Float 是 primitive 类型，Bool / Nat 是 base 的 data。
-mainShow : List (Pair String Term) -> Term -> Result (Pair String String)
+mainShow : List (Pair String Term) -> Term -> Check (Pair String String)
 mainShow table tyTerm = case force (Base.HashMap.fromList table) solsEmpty defaultFuel (eval [] tyTerm) of
   VNeutral n => case n of
     NGlobal g [] => mainShowForName g
@@ -2079,24 +2079,24 @@ ioResultTy (TApp fn arg _) = case fn of
   _ => Nothing
 ioResultTy _ = Nothing
 
-mainShowForName : String -> Result (Pair String String)
+mainShowForName : String -> Check (Pair String String)
 mainShowForName g =
-  if g == intTypeName then Ok (Pair "string_of_int" "int")
-  else if g == natTypeName then Ok (Pair "string_of_int" "int")
-  else if g == strTypeName then Ok (Pair "dt_show_string" "string")
-  else if g == floatTypeName then Ok (Pair "string_of_float" "float")
-  else if g == boolTypeName then Ok (Pair "dt_show_bool" "bool") else mainShowSynth
+  if g == intTypeName then OkC (Pair "string_of_int" "int")
+  else if g == natTypeName then OkC (Pair "string_of_int" "int")
+  else if g == strTypeName then OkC (Pair "dt_show_string" "string")
+  else if g == floatTypeName then OkC (Pair "string_of_float" "float")
+  else if g == boolTypeName then OkC (Pair "dt_show_bool" "bool") else mainShowSynth
 
 -- 非内建类型：Elab 已保证合成定义存在（缺 `Show T` 在精化期报 TC 诊断）。
-mainShowSynth : Result (Pair String String)
-mainShowSynth = Ok (Pair (valueName mainShowDefName) "show")
+mainShowSynth : Check (Pair String String)
+mainShowSynth = OkC (Pair (valueName mainShowDefName) "show")
 
 -- main 钩子：`mainExpr` 是运行时求 main 值的表达式（普通 main 直接是 `v_main`；
 -- main : IO a 则是 `v_main 0`），按类型 `tyTerm` 选展示函数。
 -- M38：动作整体包进 `try`——未捕获异常交给运行时报告器（dt_report_exn）打印
 -- "vuna: runtime error: ..." + 命中的 vuna 位置帧，然后 exit 2（不再是 OCaml 的
 -- Fatal error 形态）。try 只包 main 这一处，不碰 lambda，尾调不受影响。
-genDtHook : String -> List (Pair String Term) -> Term -> String -> Bool -> Result String
+genDtHook : String -> List (Pair String Term) -> Term -> String -> Bool -> Check String
 genDtHook bodyText table tyTerm mainExpr printResult = Vuna.Compiler.Common.bind (mainShow table tyTerm) (\showPair => case showPair of
   Pair showFn kind =>
     let
@@ -2107,7 +2107,7 @@ genDtHook bodyText table tyTerm mainExpr printResult = Vuna.Compiler.Common.bind
   try ${action}
   with e -> dt_report_exn e (Printexc.get_raw_backtrace ()); exit 2
 """
-    in Ok "${bodyText}\n${hook}"
+    in OkC "${bodyText}\n${hook}"
 )
 
 -- `main : IO a` 的执行：IO = 裸 thunk，直接对世界令牌 0 应用（无构造子 / 无跨单元依赖）。
@@ -2116,26 +2116,26 @@ genDtHook bodyText table tyTerm mainExpr printResult = Vuna.Compiler.Common.bind
 ioRunText : QualCtx -> Pair (List DtData) (List DtDef) -> String -> Pair String String
 ioRunText qc program mainRef = Pair "dtp_sched_main (fun () -> ${mainRef} 0)" ""
 
-genTerm : GenSt -> List (Pair String Rig) -> Term -> Result (Pair String GenSt)
+genTerm : GenSt -> List (Pair String Rig) -> Term -> Check (Pair String GenSt)
 genTerm a1 a2 a3 = genTermFuel 512 a1 a2 a3
 
-genTermLam : GenSt -> List (Pair String Rig) -> String -> Rig -> Term -> Result (Pair String GenSt)
+genTermLam : GenSt -> List (Pair String Rig) -> String -> Rig -> Term -> Check (Pair String GenSt)
 genTermLam a1 a2 a3 a4 a5 = genTermLamFuel 512 a1 a2 a3 a4 a5
 
-genApp : GenSt -> List (Pair String Rig) -> Term -> Term -> Rig -> Result (Pair String GenSt)
+genApp : GenSt -> List (Pair String Rig) -> Term -> Term -> Rig -> Check (Pair String GenSt)
 genApp a1 a2 a3 a4 a5 = genAppFuel 512 a1 a2 a3 a4 a5
 
-genConApp : GenSt -> List (Pair String Rig) -> String -> List (Pair Term Rig) -> Result (Pair String GenSt)
+genConApp : GenSt -> List (Pair String Rig) -> String -> List (Pair Term Rig) -> Check (Pair String GenSt)
 genConApp a1 a2 a3 a4 = genConAppFuel 512 a1 a2 a3 a4
 
-genConArgs : GenSt -> List (Pair String Rig) -> List Bool -> List (Pair Term Rig) -> Result (Pair (List String) GenSt)
+genConArgs : GenSt -> List (Pair String Rig) -> List Bool -> List (Pair Term Rig) -> Check (Pair (List String) GenSt)
 genConArgs a1 a2 a3 a4 = genConArgsFuel 512 a1 a2 a3 a4
 
-genArm : GenSt -> List (Pair String Rig) -> CaseAlt -> Result (Pair String GenSt)
+genArm : GenSt -> List (Pair String Rig) -> CaseAlt -> Check (Pair String GenSt)
 genArm a1 a2 a3 = genArmFuel 512 a1 a2 a3
 
-genArms : GenSt -> List (Pair String Rig) -> List CaseAlt -> Result (Pair String GenSt)
+genArms : GenSt -> List (Pair String Rig) -> List CaseAlt -> Check (Pair String GenSt)
 genArms a1 a2 a3 = genArmsFuel 512 a1 a2 a3
 
-genCase : GenSt -> List (Pair String Rig) -> Term -> List CaseAlt -> Result (Pair String GenSt)
+genCase : GenSt -> List (Pair String Rig) -> Term -> List CaseAlt -> Check (Pair String GenSt)
 genCase a1 a2 a3 a4 = genCaseFuel 512 a1 a2 a3 a4

@@ -67,24 +67,24 @@ posOfNameGo : Int -> String -> List String -> Int
 posOfNameGo i name [] = 0
 posOfNameGo i name (u :: rest) = if u == name then i else posOfNameGo (i + 1) name rest
 
-checkDepsOrder : List String -> String -> List String -> Result Int
-checkDepsOrder ordered self [] = Ok 0
+checkDepsOrder : List String -> String -> List String -> Check Int
+checkDepsOrder ordered self [] = OkC 0
 checkDepsOrder ordered self (d :: rest) =
   let
     selfPos = posOfName self ordered
     depPos = posOfName d ordered
-  in if depPos == 0 then Err "DT: internal: ${self} references unknown unit `${d}`"
-  else if selfPos == 0 then Err "DT: internal: split unit `${self}` is not in the module order"
-  else if depPos >= selfPos then Err "DT: internal: split dependency is not in topological order: ${self} -> ${d}"
+  in if depPos == 0 then err "DT: internal: ${self} references unknown unit `${d}`"
+  else if selfPos == 0 then err "DT: internal: split unit `${self}` is not in the module order"
+  else if depPos >= selfPos then err "DT: internal: split dependency is not in topological order: ${self} -> ${d}"
   else checkDepsOrder ordered self rest
 
 depsInOrder : List String -> String -> List String -> List String
 depsInOrder ordered self deps = filter (\u => not (u == self) && memName u deps) ordered
 
-unitDepsOf : List String -> String -> List String -> Result (List String)
+unitDepsOf : List String -> String -> List String -> Check (List String)
 unitDepsOf ordered self deps =
   Vuna.Compiler.Common.bind (checkDepsOrder ordered self deps)
-    (\_ => Ok (depsInOrder ordered self deps))
+    (\_ => OkC (depsInOrder ordered self deps))
 
 -- 分文件生成的共享上下文（归属表一次建好，所有单元复用）。
 record SplitGenCtx where
@@ -103,22 +103,22 @@ mapToUnit pairs = map (\q => Pair (firstOf q) (splitUnitOfModule (secondOf q))) 
 -- ---------------------------------------------------------------
 -- 生成前护栏（C08）：模块声明必须已 resolved、入口声明必须是裸名、归属必须全覆盖
 -- ---------------------------------------------------------------
-checkModuleDeclName : List String -> String -> String -> Result Int
+checkModuleDeclName : List String -> String -> String -> Check Int
 checkModuleDeclName knownModules mname name =
-  if containsDot name then if memName (modulePrefixOfName name) knownModules then Ok 0
-  else Err
+  if containsDot name then if memName (modulePrefixOfName name) knownModules then OkC 0
+  else err
     "DT: internal: module ${mname} declares `${name}` whose module prefix `${modulePrefixOfName name}` is not a known module (codegen requires Loader-resolved decls)"
-  else Err
+  else err
     "DT: internal: module ${mname} has an unresolved declaration name `${name}` (codegen requires Loader-resolved decls)"
 
-checkModuleDeclNames : List String -> String -> List String -> Result Int
-checkModuleDeclNames knownModules mname [] = Ok 0
+checkModuleDeclNames : List String -> String -> List String -> Check Int
+checkModuleDeclNames knownModules mname [] = OkC 0
 checkModuleDeclNames knownModules mname (n :: rest) =
   Vuna.Compiler.Common.bind (checkModuleDeclName knownModules mname n)
     (\_ => checkModuleDeclNames knownModules mname rest)
 
-checkModuleDecls : List String -> List (Pair String (List Decl)) -> Result Int
-checkModuleDecls knownModules [] = Ok 0
+checkModuleDecls : List String -> List (Pair String (List Decl)) -> Check Int
+checkModuleDecls knownModules [] = OkC 0
 checkModuleDecls knownModules ((Pair mname decls) :: rest) =
   Vuna.Compiler.Common.bind (checkModuleDeclNames knownModules mname (splitDeclNames decls))
     (\_ => checkModuleDecls knownModules rest)
@@ -143,38 +143,38 @@ entryDeclKey : Pair Bool String -> String
 entryDeclKey (Pair True name) = "type\t${name}"
 entryDeclKey (Pair False name) = "value\t${name}"
 
-checkEntryDeclName : List String -> Pair Bool String -> Result Int
+checkEntryDeclName : List String -> Pair Bool String -> Check Int
 checkEntryDeclName seen identity =
   let
     name = secondOf identity
     key = entryDeclKey identity
-  in if name == "" then Err "DT: internal: entry declaration has an empty name"
-  else if containsDot name then Err
+  in if name == "" then err "DT: internal: entry declaration has an empty name"
+  else if containsDot name then err
     "DT: internal: entry declaration `${name}` must not contain a module prefix (codegen requires Loader-resolved decls)"
-  else if memName key seen then Err "DT: internal: duplicate entry declaration `${name}`" else Ok 0
+  else if memName key seen then err "DT: internal: duplicate entry declaration `${name}`" else OkC 0
 
-checkEntryDeclsGo : List String -> List (Pair Bool String) -> Result Int
-checkEntryDeclsGo seen [] = Ok 0
+checkEntryDeclsGo : List String -> List (Pair Bool String) -> Check Int
+checkEntryDeclsGo seen [] = OkC 0
 checkEntryDeclsGo seen (n :: rest) =
   Vuna.Compiler.Common.bind (checkEntryDeclName seen n)
     (\_ => checkEntryDeclsGo (entryDeclKey n :: seen) rest)
 
-checkEntryDecls : List Decl -> Result Int
+checkEntryDecls : List Decl -> Check Int
 checkEntryDecls decls = checkEntryDeclsGo [] (entryDeclIdentities decls)
 
 -- 每个 runtime `DtDef` / `DtData` 都必须有归属（查表命中或带点名字命中已知模块），
 -- 在生成前失败并带名字，而不是静默丢定义。
-checkDefOwners : SplitMeta -> List DtDef -> Result Int
-checkDefOwners meta [] = Ok 0
+checkDefOwners : SplitMeta -> List DtDef -> Check Int
+checkDefOwners meta [] = OkC 0
 checkDefOwners meta (d :: rest) =
   Vuna.Compiler.Common.bind (splitDefOwnerOf meta (dtDefName d)) (\_ => checkDefOwners meta rest)
 
-checkDataOwners : SplitMeta -> List DtData -> Result Int
-checkDataOwners meta [] = Ok 0
+checkDataOwners : SplitMeta -> List DtData -> Check Int
+checkDataOwners meta [] = OkC 0
 checkDataOwners meta (d :: rest) =
   Vuna.Compiler.Common.bind (splitDataOwnerOf meta d) (\_ => checkDataOwners meta rest)
 
-checkResolvedModules : SplitMeta -> List (Pair String (List Decl)) -> List Decl -> List DtDef -> List DtData -> Result Int
+checkResolvedModules : SplitMeta -> List (Pair String (List Decl)) -> List Decl -> List DtDef -> List DtData -> Check Int
 checkResolvedModules meta modules entryDecls runtime datas =
   Vuna.Compiler.Common.bind (checkModuleDecls meta.smKnownModules modules)
     (\_ => Vuna.Compiler.Common.bind (checkEntryDecls entryDecls) (\_ => Vuna.Compiler.Common.bind (checkDefOwners meta runtime) (\_ => checkDataOwners meta datas)))
@@ -212,7 +212,7 @@ noUnitLookup _ = Nothing
 noUnitStore : String -> SplitFile -> Int
 noUnitStore _ _ = 0
 
-generateDtSplitProgram : List (Pair String (List Decl)) -> List Decl -> DtProgram -> Bool -> List String -> String -> Result (List SplitFile)
+generateDtSplitProgram : List (Pair String (List Decl)) -> List Decl -> DtProgram -> Bool -> List String -> String -> Check (List SplitFile)
 generateDtSplitProgram modules entryDecls prog printResult roots contextDir =
   generateDtSplitProgramWith noUnitLookup noUnitStore modules entryDecls prog printResult roots
     contextDir
@@ -236,7 +236,7 @@ anyDefUsesFloat (d :: rest) = case dtDefBody d of
   Nothing => anyDefUsesFloat rest
   Just body => termUsesFloat floatIntrinsicNames body || anyDefUsesFloat rest
 
-generateDtSplitProgramWith : (String -> Maybe SplitFile) -> (String -> SplitFile -> Int) -> List (Pair String (List Decl)) -> List Decl -> DtProgram -> Bool -> List String -> String -> Result (List SplitFile)
+generateDtSplitProgramWith : (String -> Maybe SplitFile) -> (String -> SplitFile -> Int) -> List (Pair String (List Decl)) -> List Decl -> DtProgram -> Bool -> List String -> String -> Check (List SplitFile)
 generateDtSplitProgramWith lookup store modules entryDecls prog printResult roots contextDir =
   let
     -- M34.6：把「精化完成 → prepare 开始」之间的构建独有开销分段（compiler 包约 0.4s，
@@ -257,12 +257,12 @@ generateDtSplitProgramWith lookup store modules entryDecls prog printResult root
         meta runtimeText
   )
 
-splitProgramFilesWith : (String -> Maybe SplitFile) -> (String -> SplitFile -> Int) -> List (Pair String (List Decl)) -> List Decl -> Bool -> List DtDef -> List DtData -> List DtDef -> SplitMeta -> String -> Result (List SplitFile)
+splitProgramFilesWith : (String -> Maybe SplitFile) -> (String -> SplitFile -> Int) -> List (Pair String (List Decl)) -> List Decl -> Bool -> List DtDef -> List DtData -> List DtDef -> SplitMeta -> String -> Check (List SplitFile)
 splitProgramFilesWith lookup store modules entryDecls printResult runtime allDatas allDefs meta runtimeText =
   Vuna.Compiler.Common.bind (checkResolvedModules meta modules entryDecls runtime allDatas)
     (\_ => Vuna.Compiler.Common.bind (nameOwnerPairsOfDefs meta runtime) (\defPairs => Vuna.Compiler.Common.bind (nameOwnerPairsOfDatas meta allDatas) (\dataPairs => splitWithOwnersWith lookup store modules printResult runtime allDatas allDefs defPairs dataPairs runtimeText)))
 
-splitWithOwnersWith : (String -> Maybe SplitFile) -> (String -> SplitFile -> Int) -> List (Pair String (List Decl)) -> Bool -> List DtDef -> List DtData -> List DtDef -> List (Pair String String) -> List (Pair String String) -> String -> Result (List SplitFile)
+splitWithOwnersWith : (String -> Maybe SplitFile) -> (String -> SplitFile -> Int) -> List (Pair String (List Decl)) -> Bool -> List DtDef -> List DtData -> List DtDef -> List (Pair String String) -> List (Pair String String) -> String -> Check (List SplitFile)
 splitWithOwnersWith lookup store modules printResult runtime allDatas allDefs defPairs dataPairs runtimeText =
   let
     defUnitT = unitTblOf (mapToUnit defPairs)
@@ -274,28 +274,28 @@ splitWithOwnersWith lookup store modules printResult runtime allDatas allDefs de
       SplitGenCtx (usedTableOf allDatas) allDatas runtime (ownerTblOf defPairs)
         (ownerTblOf dataPairs) defUnitT dataUnitT ordered
   in Vuna.Compiler.Common.bind (splitModuleFilesWith lookup store ctx modules)
-    (\moduleFiles => Vuna.Compiler.Common.bind (splitMainFileWith lookup store ctx printResult) (\mainFile => Ok (SplitFile "Vuna_runtime.ml" runtimeText [] :: append moduleFiles [mainFile])))
+    (\moduleFiles => Vuna.Compiler.Common.bind (splitMainFileWith lookup store ctx printResult) (\mainFile => OkC (SplitFile "Vuna_runtime.ml" runtimeText [] :: append moduleFiles [mainFile])))
 
-splitModuleFilesWith : (String -> Maybe SplitFile) -> (String -> SplitFile -> Int) -> SplitGenCtx -> List (Pair String (List Decl)) -> Result (List SplitFile)
-splitModuleFilesWith lookup store ctx [] = Ok []
+splitModuleFilesWith : (String -> Maybe SplitFile) -> (String -> SplitFile -> Int) -> SplitGenCtx -> List (Pair String (List Decl)) -> Check (List SplitFile)
+splitModuleFilesWith lookup store ctx [] = OkC []
 splitModuleFilesWith lookup store ctx ((Pair mname decls) :: rest) =
   let
     unit = splitUnitOfModule mname
   in case lookup mname of
     Just cached =>
       Vuna.Compiler.Common.bind (splitModuleFilesWith lookup store ctx rest)
-        (\tail => Ok (cached :: tail))
+        (\tail => OkC (cached :: tail))
     Nothing =>
       let
         unitDatas = datasInUnit ctx.sgcDataOwnerT mname ctx.sgcAllDatas
         unitDefs = defsInUnit ctx.sgcDefOwnerT mname ctx.sgcAllDefs
         qc = QualCtx unit ctx.sgcDefUnitT ctx.sgcDataUnitT
       in Vuna.Compiler.Common.bind (groupRuntimeDefs unitDefs)
-        (\groups => Vuna.Compiler.Common.bind (genUnitParts ctx.sgcUsedTbl qc ctx.sgcAllDatas unitDatas groups) (\parts => Vuna.Compiler.Common.bind (splitModuleFilesWith lookup store ctx rest) (\tail => Vuna.Compiler.Common.bind (unitDepsOf ctx.sgcOrdered unit (unitPartsDeps parts)) (\deps => Ok (storeModuleFile store mname (SplitFile "${unit}.ml" "${genUnitText parts}\n" deps) :: tail)))))
+        (\groups => Vuna.Compiler.Common.bind (genUnitParts ctx.sgcUsedTbl qc ctx.sgcAllDatas unitDatas groups) (\parts => Vuna.Compiler.Common.bind (splitModuleFilesWith lookup store ctx rest) (\tail => Vuna.Compiler.Common.bind (unitDepsOf ctx.sgcOrdered unit (unitPartsDeps parts)) (\deps => OkC (storeModuleFile store mname (SplitFile "${unit}.ml" "${genUnitText parts}\n" deps) :: tail)))))
 
-splitMainFileWith : (String -> Maybe SplitFile) -> (String -> SplitFile -> Int) -> SplitGenCtx -> Bool -> Result SplitFile
+splitMainFileWith : (String -> Maybe SplitFile) -> (String -> SplitFile -> Int) -> SplitGenCtx -> Bool -> Check SplitFile
 splitMainFileWith lookup store ctx printResult = case lookup "__entry__" of
-  Just cached => Ok cached
+  Just cached => OkC cached
   Nothing =>
     let
       entryUnit = splitUnitOfModule entryOwner
@@ -303,4 +303,4 @@ splitMainFileWith lookup store ctx printResult = case lookup "__entry__" of
       entryDatas = datasInUnit ctx.sgcDataOwnerT entryOwner ctx.sgcAllDatas
       qc = QualCtx entryUnit ctx.sgcDefUnitT ctx.sgcDataUnitT
     in Vuna.Compiler.Common.bind (groupRuntimeDefs entryDefs)
-      (\groups => Vuna.Compiler.Common.bind (genUnitParts ctx.sgcUsedTbl qc ctx.sgcAllDatas entryDatas groups) (\parts => Vuna.Compiler.Common.bind (mainHook qc (Pair ctx.sgcAllDatas ctx.sgcAllDefs) ctx.sgcAllDefs printResult) (\hook => Vuna.Compiler.Common.bind (unitDepsOf ctx.sgcOrdered entryUnit (append (unitPartsDeps parts) (secondOf hook))) (\deps => Ok (storeModuleFile store "__entry__" (SplitFile "Main.ml" (mainInitPrologue ++ genUnitText parts ++ firstOf hook) deps))))))
+      (\groups => Vuna.Compiler.Common.bind (genUnitParts ctx.sgcUsedTbl qc ctx.sgcAllDatas entryDatas groups) (\parts => Vuna.Compiler.Common.bind (mainHook qc (Pair ctx.sgcAllDatas ctx.sgcAllDefs) ctx.sgcAllDefs printResult) (\hook => Vuna.Compiler.Common.bind (unitDepsOf ctx.sgcOrdered entryUnit (append (unitPartsDeps parts) (secondOf hook))) (\deps => OkC (storeModuleFile store "__entry__" (SplitFile "Main.ml" (mainInitPrologue ++ genUnitText parts ++ firstOf hook) deps))))))

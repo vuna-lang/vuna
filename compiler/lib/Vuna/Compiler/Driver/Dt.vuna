@@ -85,7 +85,7 @@ dtProjectDecls : Pair (List Decl) (List Module) -> List Decl
 dtProjectDecls parts = append (concatMap moduleDeclsOf (reverse (secondOf parts))) (firstOf parts)
 
 -- 可执行包：入口文件 + 依赖模块（模块可见性由上下文的 roots 决定）。
-dtLoad : PackageContext -> String -> Result (List Decl)
+dtLoad : PackageContext -> String -> Check (List Decl)
 dtLoad ctx entry =
   let
     _ = stamp "load-start"
@@ -93,56 +93,56 @@ dtLoad ctx entry =
     _ = stamp "load-modules-done"
   in Vuna.Compiler.Common.bind (resolveProject project) (\parts => let
     _ = stamp "resolve-done"
-  in Ok (dtProjectDecls parts)
+  in OkC (dtProjectDecls parts)
   )
   )
 
 -- M34.5 接口摘要（S1）：加载 + resolve 并保留模块归属（入口 / 库包两条入口）。
-dtLoadPartsForCheck : PackageContext -> String -> Result (Pair (List Decl) (List Module))
+dtLoadPartsForCheck : PackageContext -> String -> Check (Pair (List Decl) (List Module))
 dtLoadPartsForCheck ctx entry = Vuna.Compiler.Common.bind (loadProject ctx entry) resolveProject
 
-dtLoadModulesParts : PackageContext -> List String -> Result (Pair (List Decl) (List Module))
+dtLoadModulesParts : PackageContext -> List String -> Check (Pair (List Decl) (List Module))
 dtLoadModulesParts ctx names =
   Vuna.Compiler.Common.bind (loadProjectModules ctx names) resolveProject
 
 -- 声明序列的 check 尾部（入口与库包同一条精化路径）。
-dtCheckDecls : Result (List Decl) -> Result (List String)
+dtCheckDecls : Check (List Decl) -> Check (List String)
 dtCheckDecls loaded = Vuna.Compiler.Common.bind loaded (\decls => let
   _ = stamp "decls-ready"
 in Vuna.Compiler.Common.bind (elabProgram decls) (\program => let
   _ = stamp "elab-done"
 in Vuna.Compiler.Common.bind (checkDtProgram program) (\_ => let
   _ = stamp "codegen-check-done"
-in Ok []
+in OkC []
 )
 )
 )
 
 -- M34.5：与 dtCheck 同一条精化路径，但把 DtProgram / 模块表 / 入口声明一并返回
 -- （检查缓存写接口摘要用）。
-dtCheckWithProgramParts : PackageContext -> String -> Result (Pair (List String) CheckedPackage)
+dtCheckWithProgramParts : PackageContext -> String -> Check (Pair (List String) CheckedPackage)
 dtCheckWithProgramParts ctx entry = dtCheckPartsWithProgram (dtLoadPartsForCheck ctx entry)
 
-dtCheckLibraryWithProgramParts : PackageContext -> List String -> Result (Pair (List String) CheckedPackage)
+dtCheckLibraryWithProgramParts : PackageContext -> List String -> Check (Pair (List String) CheckedPackage)
 dtCheckLibraryWithProgramParts ctx names = dtCheckPartsWithProgram (dtLoadModulesParts ctx names)
 
-dtCheckPartsWithProgram : Result (Pair (List Decl) (List Module)) -> Result (Pair (List String) CheckedPackage)
+dtCheckPartsWithProgram : Check (Pair (List Decl) (List Module)) -> Check (Pair (List String) CheckedPackage)
 dtCheckPartsWithProgram loaded = Vuna.Compiler.Common.bind loaded (\parts => let
   decls = dtProjectDecls parts
 in Vuna.Compiler.Common.bind (elabProgramFull decls) (\program => let
   _ = stamp "elab-done"
 in Vuna.Compiler.Common.bind (checkDtProgram (Pair (dtProgDatas program) (dtProgDefs program))) (\_ => let
   _ = stamp "codegen-check-done"
-in Ok (Pair [] (CheckedPackage program (secondOf parts) (firstOf parts) []))
+in OkC (Pair [] (CheckedPackage program (secondOf parts) (firstOf parts) []))
 )
 )
 )
 
-dtCheck : PackageContext -> String -> Result (List String)
+dtCheck : PackageContext -> String -> Check (List String)
 dtCheck ctx entry = dtCheckDecls (dtLoad ctx entry)
 
 -- 核心求值器：精化后用 NbE + delta 求 main 的值并 show（与 codegen 结果对照）。
-dtEvalFile : PackageContext -> String -> Result String
+dtEvalFile : PackageContext -> String -> Check String
 dtEvalFile ctx entry =
   Vuna.Compiler.Common.bind (dtLoad ctx entry)
     (\decls => Vuna.Compiler.Common.bind (elabProgramFull decls) evalDtMain)
@@ -157,13 +157,13 @@ dtEvalFile ctx entry =
 -- 加载，取回解析/限定后的体，再把这条合成定义从声明表里摘掉、交给 DT 精化。
 -- 全量加载 REPL program + 合成表达式定义，并取出 (DtProgram, Expr)。
 -- 接口路径不可用/闭包不完整时的回退目标（与 dtEvalExpr* 共用，避免两套加载语义）。
-replProgramFull : PackageContext -> String -> String -> Result (Pair DtProgram Expr)
+replProgramFull : PackageContext -> String -> String -> Check (Pair DtProgram Expr)
 replProgramFull ctx program exprSource =
   Vuna.Compiler.Common.bind
     (loadProjectSource ctx "<repl>" "${program}\n${replExprName} = ${exprSource}\n")
-    (\project => Vuna.Compiler.Common.bind (resolveProject project) (\parts => Vuna.Compiler.Common.bind (splitReplExpr (dtProjectDecls parts)) (\p => Vuna.Compiler.Common.bind (elabProgramFull (firstOf p)) (\prog => Ok (Pair prog (secondOf p))))))
+    (\project => Vuna.Compiler.Common.bind (resolveProject project) (\parts => Vuna.Compiler.Common.bind (splitReplExpr (dtProjectDecls parts)) (\p => Vuna.Compiler.Common.bind (elabProgramFull (firstOf p)) (\prog => OkC (Pair prog (secondOf p))))))
 
-dtEvalExpr : PackageContext -> String -> String -> Result String
+dtEvalExpr : PackageContext -> String -> String -> Check String
 dtEvalExpr ctx program exprSource =
   Vuna.Compiler.Common.bind (replProgramFull ctx program exprSource)
     (\p => dtEvalExprIn (firstOf p) (secondOf p))
@@ -171,17 +171,17 @@ dtEvalExpr ctx program exprSource =
 -- M30 · REPL：表达式求值 + 类型文本。REPL 用类型判断是否为 `IO a`（决定是否走
 -- compile+run）；类型文本经 `showTerm` 渲染 zonk 后的类型，可直接写回合成签名的
 -- `main : <type>`。
-dtEvalExprInfo : PackageContext -> String -> String -> Result (Pair String String)
+dtEvalExprInfo : PackageContext -> String -> String -> Check (Pair String String)
 dtEvalExprInfo ctx program exprSource =
   Vuna.Compiler.Common.bind (replProgramFull ctx program exprSource)
     (\p => dtEvalExprInInfo (firstOf p) (secondOf p))
 
 -- M30 · LSP：把内存里的源码当入口（无模块头）或库模块（有模块头）加载并精化。
 -- 返回空 warning 列表；错误串仍是带 `<label>:line:col` 的稳定诊断，LSP 自行解析。
-dtCheckSource : PackageContext -> String -> String -> Result (List String)
+dtCheckSource : PackageContext -> String -> String -> Check (List String)
 dtCheckSource ctx label source =
   Vuna.Compiler.Common.bind (loadModuleSource ctx label source)
-    (\project => Vuna.Compiler.Common.bind (resolveProject project) (\parts => Vuna.Compiler.Common.bind (elabProgramFull (dtProjectDecls parts)) (\_ => Ok [])))
+    (\project => Vuna.Compiler.Common.bind (resolveProject project) (\parts => Vuna.Compiler.Common.bind (elabProgramFull (dtProjectDecls parts)) (\_ => OkC [])))
 
 -- M34.5（LSP 消费接口）：依赖包模块从接口预置（零 parse/resolve/elab），只精化当前
 -- 源码文件与同包源码。接口不可用时调用方退回不带 ifaces 的版本。
@@ -194,7 +194,7 @@ missingDepModules pkg (m :: rest) ifaceNames =
   if modulePackageOf m /= pkg && memName (moduleNameOf m) ifaceNames == False then Base.List.Cons (moduleNameOf m) (missingDepModules pkg rest ifaceNames)
   else missingDepModules pkg rest ifaceNames
 
-dtCheckSourceWithIfaces : PackageContext -> String -> String -> List ModuleIface -> Result (List String)
+dtCheckSourceWithIfaces : PackageContext -> String -> String -> List ModuleIface -> Check (List String)
 dtCheckSourceWithIfaces ctx label source ifaces =
   let
     _ = note "iface-source=check modules=${length ifaces}"
@@ -205,7 +205,7 @@ dtCheckSourceWithIfaces ctx label source ifaces =
         _ =
           if length missing == 0 then 0 else note "iface-fallback=check missing=${join "," missing}"
       in if length missing == 0 then Vuna.Compiler.Common.bind (resolveProjectKeeping (preloadKeepOf ifaces mods) filtered)
-        (\parts => Vuna.Compiler.Common.bind (dtCheckOursParts ctx parts (shiftedDepPrograms (materializedDeps (contextPackageName ctx) parts ifaces))) (\_ => Ok []))
+        (\parts => Vuna.Compiler.Common.bind (dtCheckOursParts ctx parts (shiftedDepPrograms (materializedDeps (contextPackageName ctx) parts ifaces))) (\_ => OkC []))
       else dtCheckSource ctx label source
   )
 
@@ -217,13 +217,13 @@ dtCheckSourceWithIfaces ctx label source ifaces =
 --     的 datas，表达式求值 `dtEvalExprIn` 会从 DtProgram 重建 Ec；缺依赖 datas ⇒ 依赖包
 --     构造子查不到，`[1, 2, 3]` 这类字面量在 REPL 里报 `TC_UnknownName Base.List.Cons`）；
 --   ③ M34.6（5b）：termAux（依赖包 decls）跨表达式不变，record/deriving 预处理可复用。
-replCheckParts : Pair Ec (List (Pair String Term)) -> String -> List CachedProgram -> Pair (List Decl) (List Module) -> Result (Pair DtProgram Expr)
+replCheckParts : Pair Ec (List (Pair String Term)) -> String -> List CachedProgram -> Pair (List Decl) (List Module) -> Check (Pair DtProgram Expr)
 replCheckParts start pkgName deps parts =
   Vuna.Compiler.Common.bind (replCheckPartsAux start pkgName deps parts [] Nothing)
-    (\r => Ok (firstOf r))
+    (\r => OkC (firstOf r))
 
 -- `ifaces` 只用于缓存 key（与 termAux 的模块集合一一对应；为空时不共享缓存）。
-replCheckPartsAux : Pair Ec (List (Pair String Term)) -> String -> List CachedProgram -> Pair (List Decl) (List Module) -> List ModuleIface -> Maybe AuxCache -> Result (Pair (Pair DtProgram Expr) (Maybe AuxCache))
+replCheckPartsAux : Pair Ec (List (Pair String Term)) -> String -> List CachedProgram -> Pair (List Decl) (List Module) -> List ModuleIface -> Maybe AuxCache -> Check (Pair (Pair DtProgram Expr) (Maybe AuxCache))
 replCheckPartsAux start pkgName deps parts ifaces cache =
   let
     modules = reverse (secondOf parts)
@@ -238,7 +238,7 @@ replCheckPartsAux start pkgName deps parts ifaces cache =
     cacheable = length ifaces > 0
     cachedDecls = if cacheable then dtAuxOfCache key cache else Nothing
     prepared = case cachedDecls of
-      Just c => Ok c.auxCacheDecls
+      Just c => OkC c.auxCacheDecls
       Nothing => dtPrepareTermAux termAux
   in Vuna.Compiler.Common.bind prepared (\preparedAux => Vuna.Compiler.Common.bind (splitReplExpr sourceDecls) (\p => Vuna.Compiler.Common.bind (dtElabFullWithPrepared (firstOf start) (secondOf start) termAux preparedAux (firstOf p)) (\prog => let
     depDatas = concatMap cachedDatas deps
@@ -248,19 +248,19 @@ replCheckPartsAux start pkgName deps parts ifaces cache =
       DtProgram (append depDatas (dtProgDatas prog)) (append depDefs (dtProgDefs prog))
         (dtProgGoals prog) (dtProgSols prog) (dedupGlobals (append depGlobals (dtProgGlobals prog)))
         (dtProgInsts prog) (dtProgClasses prog) prog.dtProgNext prog.dtProgDefVals prog.dtProgDepths
-  in Ok
+  in OkC
     (Pair (Pair assembled (secondOf p)) (if cacheable then Just (AuxCache key preparedAux (Pair ecEmpty []) [] []) else Nothing))
   )
   )
   )
 
-replProgramWithIfaces : PackageContext -> String -> String -> List ModuleIface -> Result (Pair DtProgram Expr)
+replProgramWithIfaces : PackageContext -> String -> String -> List ModuleIface -> Check (Pair DtProgram Expr)
 replProgramWithIfaces ctx program exprSource ifaces =
   Vuna.Compiler.Common.bind (replProgramWithIfacesAux ctx program exprSource ifaces Nothing)
-    (\r => Ok (firstOf r))
+    (\r => OkC (firstOf r))
 
 -- M34.6（5b）：会话入口带 termAux 预处理缓存（同一条加载/精化路径，缓存只是省的固定开销）。
-replProgramWithIfacesAux : PackageContext -> String -> String -> List ModuleIface -> Maybe AuxCache -> Result (Pair (Pair DtProgram Expr) (Maybe AuxCache))
+replProgramWithIfacesAux : PackageContext -> String -> String -> List ModuleIface -> Maybe AuxCache -> Check (Pair (Pair DtProgram Expr) (Maybe AuxCache))
 replProgramWithIfacesAux ctx program exprSource ifaces cache =
   let
     _ = note "iface-source=repl modules=${length ifaces}"
@@ -276,26 +276,26 @@ replProgramWithIfacesAux ctx program exprSource ifaces cache =
         deps = shiftedDepPrograms (materializedDeps (contextPackageName ctx) parts ifaces)
       in replCheckPartsAux (depStartOf deps) (contextPackageName ctx) deps parts ifaces cache
       )
-      else Vuna.Compiler.Common.bind (replProgramFull ctx program exprSource) (\p => Ok (Pair p cache))
+      else Vuna.Compiler.Common.bind (replProgramFull ctx program exprSource) (\p => OkC (Pair p cache))
   )
 
 -- REPL 会话入口：复用 termAux 预处理缓存（5b），返回更新后的缓存。
-dtEvalExprInfoWithAuxCache : PackageContext -> String -> String -> List ModuleIface -> Maybe AuxCache -> Result (Pair (Pair String String) (Maybe AuxCache))
+dtEvalExprInfoWithAuxCache : PackageContext -> String -> String -> List ModuleIface -> Maybe AuxCache -> Check (Pair (Pair String String) (Maybe AuxCache))
 dtEvalExprInfoWithAuxCache ctx program exprSource ifaces cache =
   Vuna.Compiler.Common.bind (replProgramWithIfacesAux ctx program exprSource ifaces cache)
-    (\p => Vuna.Compiler.Common.bind (dtEvalExprInInfo (firstOf (firstOf p)) (secondOf (firstOf p))) (\info => Ok (Pair info (secondOf p))))
+    (\p => Vuna.Compiler.Common.bind (dtEvalExprInInfo (firstOf (firstOf p)) (secondOf (firstOf p))) (\info => OkC (Pair info (secondOf p))))
 
-dtEvalExprWithAuxCache : PackageContext -> String -> String -> List ModuleIface -> Maybe AuxCache -> Result (Pair String (Maybe AuxCache))
+dtEvalExprWithAuxCache : PackageContext -> String -> String -> List ModuleIface -> Maybe AuxCache -> Check (Pair String (Maybe AuxCache))
 dtEvalExprWithAuxCache ctx program exprSource ifaces cache =
   Vuna.Compiler.Common.bind (replProgramWithIfacesAux ctx program exprSource ifaces cache)
-    (\p => Vuna.Compiler.Common.bind (dtEvalExprIn (firstOf (firstOf p)) (secondOf (firstOf p))) (\out => Ok (Pair out (secondOf p))))
+    (\p => Vuna.Compiler.Common.bind (dtEvalExprIn (firstOf (firstOf p)) (secondOf (firstOf p))) (\out => OkC (Pair out (secondOf p))))
 
-dtEvalExprInfoWithIfaces : PackageContext -> String -> String -> List ModuleIface -> Result (Pair String String)
+dtEvalExprInfoWithIfaces : PackageContext -> String -> String -> List ModuleIface -> Check (Pair String String)
 dtEvalExprInfoWithIfaces ctx program exprSource ifaces =
   Vuna.Compiler.Common.bind (replProgramWithIfaces ctx program exprSource ifaces)
     (\p => dtEvalExprInInfo (firstOf p) (secondOf p))
 
-dtEvalExprWithIfaces : PackageContext -> String -> String -> List ModuleIface -> Result String
+dtEvalExprWithIfaces : PackageContext -> String -> String -> List ModuleIface -> Check String
 dtEvalExprWithIfaces ctx program exprSource ifaces =
   Vuna.Compiler.Common.bind (replProgramWithIfaces ctx program exprSource ifaces)
     (\p => dtEvalExprIn (firstOf p) (secondOf p))
@@ -317,15 +317,15 @@ record GenMeta where
   genMetaName : String
   genMetaKind : Term
 
-dtInferDefTypes : PackageContext -> String -> List String -> String -> Result (List (Pair String String))
-dtInferDefTypes ctx program targets defSource = if length targets == 0 then Ok []
+dtInferDefTypes : PackageContext -> String -> List String -> String -> Check (List (Pair String String))
+dtInferDefTypes ctx program targets defSource = if length targets == 0 then OkC []
 else case parseSource "<repl>" defSource of
-  Err e => Err e
-  Ok (SourceFile hdr _ _ defDecls) => case hdr of
-    Just _ => Err "自动签名不支持模块文件"
+  ErrC e => ErrC e
+  OkC (SourceFile hdr _ _ defDecls) => case hdr of
+    Just _ => err "自动签名不支持模块文件"
     Nothing => case aritiesOf targets defDecls of
-      Err e => Err e
-      Ok arities =>
+      ErrC e => ErrC e
+      OkC arities =>
         let
           Pair entries ecStart = allocTelescopes emptyCtx ecEmpty arities
           startGlobals = append entries preludeGlobals
@@ -337,12 +337,12 @@ else case parseSource "<repl>" defSource of
         )
 
 -- target 名 → 参数元数（找不到 DFun 就报错：自动签名只处理函数/值定义）。
-aritiesOf : List String -> List Decl -> Result (List (Pair String Int))
-aritiesOf [] decls = Ok []
+aritiesOf : List String -> List Decl -> Check (List (Pair String Int))
+aritiesOf [] decls = OkC []
 aritiesOf (t :: rest) decls = case findArity t decls of
-  Nothing => Err ("自动签名: 找不到定义 " ++ t ++ "（需要 DFun）")
+  Nothing => err ("自动签名: 找不到定义 " ++ t ++ "（需要 DFun）")
   Just n =>
-    Vuna.Compiler.Common.bind (aritiesOf rest decls) (\more => Ok (Base.List.Cons (Pair t n) more))
+    Vuna.Compiler.Common.bind (aritiesOf rest decls) (\more => OkC (Base.List.Cons (Pair t n) more))
 
 findArity : String -> List Decl -> Maybe Int
 findArity name [] = Nothing
@@ -376,47 +376,47 @@ buildPi : List Term -> Term -> Term
 buildPi [] result = result
 buildPi (dom :: rest) result = TPi "_" False RigOmega dom (buildPi rest result)
 
-inferEachType : List String -> DtProgram -> Ec -> List String -> Result (List (Pair String String))
-inferEachType [] prog ec taken = Ok []
+inferEachType : List String -> DtProgram -> Ec -> List String -> Check (List (Pair String String))
+inferEachType [] prog ec taken = OkC []
 inferEachType (t :: rest) prog ec taken = case findDtDef t (dtProgDefs prog) of
-  Nothing => Err ("自动签名: 精化结果里找不到定义 " ++ t)
+  Nothing => err ("自动签名: 精化结果里找不到定义 " ++ t)
   Just def =>
     Vuna.Compiler.Common.bind (generalizeSignature (zonkTerm ec 0 (dtDefType def)) taken)
-      (\sigText => Vuna.Compiler.Common.bind (inferEachType rest prog ec taken) (\more => Ok (Base.List.Cons (Pair t sigText) more)))
+      (\sigText => Vuna.Compiler.Common.bind (inferEachType rest prog ec taken) (\more => OkC (Base.List.Cons (Pair t sigText) more)))
 
 findDtDef : String -> List DtDef -> Maybe DtDef
 findDtDef name [] = Nothing
 findDtDef name (d :: rest) = if dtDefName d == name then Just d else findDtDef name rest
 
 -- 全量读取内存 program 的声明（Loader flatten → 入口+模块声明）。
-loadReplDecls : PackageContext -> String -> Result (List Decl)
+loadReplDecls : PackageContext -> String -> Check (List Decl)
 loadReplDecls ctx source =
   Vuna.Compiler.Common.bind (loadProjectSource ctx "<repl>" source)
-    (\project => Vuna.Compiler.Common.bind (resolveProject project) (\parts => Ok (dtProjectDecls parts)))
+    (\project => Vuna.Compiler.Common.bind (resolveProject project) (\parts => OkC (dtProjectDecls parts)))
 
 -- `:defs` / `:info`：program 里每个定义的 zonk 后类型文本。
-dtBindingTypes : PackageContext -> String -> Result (List (Pair String String))
+dtBindingTypes : PackageContext -> String -> Check (List (Pair String String))
 dtBindingTypes ctx program = Vuna.Compiler.Common.bind (loadReplDecls ctx program) (\decls => Vuna.Compiler.Common.bind (elabProgramFull decls) (\prog => let
   Pair ec _ = ecOfProgram prog
-in Ok (map (\d => Pair (dtDefName d) (showTypeSig (zonkTerm ec 0 (dtDefType d)))) (dtProgDefs prog))
+in OkC (map (\d => Pair (dtDefName d) (showTypeSig (zonkTerm ec 0 (dtDefType d)))) (dtProgDefs prog))
 )
 )
 
 -- 残余未解元变量 → 隐式类型参数；元变量按类型项中出现顺序（去重）编号。
-generalizeSignature : Term -> List String -> Result String
+generalizeSignature : Term -> List String -> Check String
 generalizeSignature ty taken =
   let
     metas = dedupInts (metaIdsOf ty)
-  in if length metas == 0 then Ok (showTypeSig ty)
-  else if length metas > 8 then Err "自动推断出的类型参数超过 8 个，请先写类型签名"
+  in if length metas == 0 then OkC (showTypeSig ty)
+  else if length metas > 8 then err "自动推断出的类型参数超过 8 个，请先写类型签名"
   else
     let
       entries = buildGenMetas metas taken 0 ty
       total = listLen entries
       body = substGenMetas ty entries 0 total
       sigText = showTypeSig (wrapGenMetas entries body)
-    in if contains "?" sigText then Err "自动推断的签名仍含未解元变量，请先写类型签名"
-    else Ok sigText
+    in if contains "?" sigText then err "自动推断的签名仍含未解元变量，请先写类型签名"
+    else OkC sigText
 
 buildGenMetas : List Int -> List String -> Int -> Term -> List GenMeta
 buildGenMetas [] taken i ty = []
@@ -517,13 +517,13 @@ listLen [] = 0
 listLen (_ :: rest) = 1 + listLen rest
 
 -- M30 · LSP hover：内存源码的洞目标（与 `vuna goal` 同源）。
-dtGoalsSource : PackageContext -> String -> String -> Result (List DtGoalInfo)
+dtGoalsSource : PackageContext -> String -> String -> Check (List DtGoalInfo)
 dtGoalsSource ctx label source =
   Vuna.Compiler.Common.bind (loadModuleSource ctx label source)
     (\project => Vuna.Compiler.Common.bind (resolveProject project) (\parts => goalsOfProgram (dtProjectDecls parts)))
 
 -- M40 · 容错版：未解洞也会让严格收尾失败，但 hover 仍要显示目标与上下文（M40 起改用这个）。
-dtGoalsSourceTolerant : PackageContext -> String -> String -> Result (List DtGoalInfo)
+dtGoalsSourceTolerant : PackageContext -> String -> String -> Check (List DtGoalInfo)
 dtGoalsSourceTolerant ctx label source =
   Vuna.Compiler.Common.bind (loadModuleSource ctx label source)
     (\project => Vuna.Compiler.Common.bind (resolveProject project) (\parts => goalsOfProgramTolerant (dtProjectDecls parts)))
@@ -534,41 +534,41 @@ dtGoalsSourceTolerant ctx label source =
 --   "Int"    —— 0 通过；
 --   "Bool"   —— True 通过；
 --   "Other"  —— 明确拒绝（不是静默当失败）。
-dtMainKind : PackageContext -> String -> Result String
+dtMainKind : PackageContext -> String -> Check String
 dtMainKind ctx entry = Vuna.Compiler.Common.bind (dtLoad ctx entry) (\decls => Vuna.Compiler.Common.bind (elabProgram decls) (\p => case findMainDef (secondOf p) of
   Nothing => cgErr0 NoMain
-  Just mainDef => if isIOType (dtDefType mainDef) then Ok "IO"
+  Just mainDef => if isIOType (dtDefType mainDef) then OkC "IO"
   else case force (Base.HashMap.fromList (defTableOf (secondOf p))) solsEmpty defaultFuel (eval [] (dtDefType mainDef)) of
     VNeutral n => case n of
       NGlobal g sp => case sp of
         [] => mainKindForName g
-        _ => Ok "Other"
-      _ => Ok "Other"
-    _ => Ok "Other"
+        _ => OkC "Other"
+      _ => OkC "Other"
+    _ => OkC "Other"
 )
 )
 
-mainKindForName : String -> Result String
+mainKindForName : String -> Check String
 mainKindForName g =
-  if g == intTypeName then Ok "Int"
-  else if g == natTypeName then Ok "Nat"
-  else if g == strTypeName then Ok "String" else if g == boolTypeName then Ok "Bool" else Ok "Other"
+  if g == intTypeName then OkC "Int"
+  else if g == natTypeName then OkC "Nat"
+  else if g == strTypeName then OkC "String" else if g == boolTypeName then OkC "Bool" else OkC "Other"
 
 -- 合成定义的唯一名字：只在 `dtEvalExpr` 内部出现，摘除时按名字识别。
 replExprName : String
 replExprName = "vuna_repl_expr"
 
 -- 取出合成定义并还原成表达式；它一定是加载后的最后一条声明（追加在源码末尾）。
-splitReplExpr : List Decl -> Result (Pair (List Decl) Expr)
+splitReplExpr : List Decl -> Check (Pair (List Decl) Expr)
 splitReplExpr decls = case reverse decls of
   (DFun n pats body sp) :: rest =>
-    if n == replExprName then Ok (Pair (reverse rest) body)
-    else Err "DT: internal: REPL expression definition is not last"
-  _ => Err "DT: internal: REPL expression was not parsed as a definition"
+    if n == replExprName then OkC (Pair (reverse rest) body)
+    else err "DT: internal: REPL expression definition is not last"
+  _ => err "DT: internal: REPL expression was not parsed as a definition"
 
 -- B44：核心求值器支持浮点（`Float` 原语按 IEEE-754 double 归约，见 `Core/Eval`），
 -- interp 不再需要「程序用到浮点就拒绝」的 guard。
-evalDtMain : DtProgram -> Result String
+evalDtMain : DtProgram -> Check String
 evalDtMain program = evalDtMainCore program
 
 -- 核心求值器对 `main` 的求值边界（M23 终态契约，B44 起含 Float）：
@@ -579,7 +579,7 @@ evalDtMain program = evalDtMainCore program
 --     「尝试归约、卡住才报错」这种不可靠的判定。效果程序只走 compile + 运行
 --     （夹具用 `.nointerp` 标记）。IO 的识别按 main 的**类型**（M37 起是内建类型名 `IO`）。
 -- | 核心求值器对 `main` 的求值边界：纯 Int/String/Bool/Nat/Float 归约并展示，`IO a` 一律报错。
-evalDtMainCore : DtProgram -> Result String
+evalDtMainCore : DtProgram -> Check String
 evalDtMainCore program = case findMainDef (dtProgDefs program) of
   Nothing => cgErr0 NoMain
   Just mainDef =>
@@ -590,23 +590,23 @@ evalDtMainCore program = case findMainDef (dtProgDefs program) of
         normalize (Base.HashMap.fromList table) sols defaultFuel (VNeutral (NGlobal "main" []))
     in if isIOType (dtDefType mainDef) then cgErr0 InterpCannotExecuteEffects
     else case mainVal of
-      VInt n => Ok (strFromInt n)
-      VStr s => Ok (showValue mainVal)
-      VBool b => Ok (showValue mainVal)
-      VFloat raw => Ok raw
+      VInt n => OkC (strFromInt n)
+      VStr s => OkC (showValue mainVal)
+      VBool b => OkC (showValue mainVal)
+      VFloat raw => OkC raw
       VCon c args => case natValueToInt mainVal of
-        Just n => Ok (strFromInt n)
+        Just n => OkC (strFromInt n)
         Nothing => interpMainShow table sols mainVal
       _ => interpMainShow table sols mainVal
 
 -- D17：非内建 main 类型的展示。Elab 收尾已合成 `@vuna@main_show : T -> String`
 -- （`Elab.Driver.synthMainShow`），这里对 main 值应用它并打印结果字符串；与编译产物的
 -- main 钩子走同一展示（Show 字典投影）。
-interpMainShow : List (Pair String Term) -> Sols -> Value -> Result String
+interpMainShow : List (Pair String Term) -> Sols -> Value -> Check String
 interpMainShow table sols mainVal = case normalize (Base.HashMap.fromList table) sols defaultFuel (VNeutral (NGlobal mainShowDefName [mainVal])) of
   -- 与非内建 main 的编译路径一致：main 钩子直接 `print_endline (show T x)`（不加引号），
   -- 所以 interp 也返回 raw 文本（内建 String main 仍走 dt_show_string 的加引号形态）。
-  VStr s => Ok s
+  VStr s => OkC s
   _ => cgErr0 MainNotValue
 
 -- main 的类型是不是内建 `IO a`（M37：canonical 身份就是源级名 `IO`）。
@@ -630,7 +630,7 @@ defTableOf (d :: rest) = case dtDefBody d of
 -- 与单文件路径共用同一次精化，生成器把 datas/defs 按声明归属切到各模块文件；
 -- 模块列表按依赖序（Loader 的 modules 是依赖者在前的反序，这里 reverse）。
 -- M34.5 接口摘要：加载 + resolve 项目并保留模块归属（本包 decls 过滤用）。
-dtLoadParts : PackageContext -> String -> Result (Pair (List Decl) (List Module))
+dtLoadParts : PackageContext -> String -> Check (Pair (List Decl) (List Module))
 dtLoadParts ctx entry = dtLoadPartsForCheck ctx entry
 
 -- 只精化本包 decls（依赖 artifact 从接口合并）；调用方保证接口已校验。
@@ -644,7 +644,7 @@ cachedNamesOne cp =
   append (map dtDataName (cachedDatas cp))
     (append (concatMap (\d => map dtCtorName (dtDataCtors d)) (cachedDatas cp)) (append (map dtDefName (cachedDefs cp)) (append (map firstOf (cachedGlobals cp)) (append (map dtInstName (cachedInsts cp)) (map dtClassName (cachedClasses cp))))))
 
-dtCheckOursParts : PackageContext -> Pair (List Decl) (List Module) -> List CachedProgram -> Result (Pair (List String) CheckedPackage)
+dtCheckOursParts : PackageContext -> Pair (List Decl) (List Module) -> List CachedProgram -> Check (Pair (List String) CheckedPackage)
 dtCheckOursParts ctx parts deps =
   let
     pkgName = contextPackageName ctx
@@ -660,7 +660,7 @@ dtCheckOursParts ctx parts deps =
     -- 只生成本包 defs（依赖包 body 不重精化、不重新生成）。
     allDatas = append (concatMap cachedDatas deps) (dtProgDatas prog)
   in Vuna.Compiler.Common.bind (checkDtProgram (Pair allDatas (dtProgDefs prog)))
-    (\_ => Ok (Pair [] (CheckedPackage prog (secondOf parts) (firstOf parts) (cachedNamesOf deps))))
+    (\_ => OkC (Pair [] (CheckedPackage prog (secondOf parts) (firstOf parts) (cachedNamesOf deps))))
   )
 
 -- 依赖接口 → 精化起始状态。
@@ -782,7 +782,7 @@ modulesOfIfaces ifaces = reverse (map moduleOfIface ifaces)
 -- 脏模块 + 入口声明；然后按同样顺序把干净产物合并回 DtProgram（codegen / 接口写仍看
 -- 整包）。干净模块判定在 Compile（依赖源哈希 + miDepHashes 链，保守传播）。
 -- ---------------------------------------------------------------
-dtLoadPartsIncremental : PackageContext -> String -> List ModuleIface -> List ModuleIface -> Result (Pair (List Decl) (List Module))
+dtLoadPartsIncremental : PackageContext -> String -> List ModuleIface -> List ModuleIface -> Check (Pair (List Decl) (List Module))
 dtLoadPartsIncremental ctx entry depIfaces cleanIfaces =
   let
     preloaded = append (modulesOfIfaces depIfaces) (reverse (map moduleOfIface cleanIfaces))
@@ -799,7 +799,7 @@ dtLoadPartsIncremental ctx entry depIfaces cleanIfaces =
 -- 可复用参数（语义与 `elabProgramFullWithAux` 逐项相同：startEc/startGlobals 不变，
 -- termAux 原始 decls 仍传给 `prepareDeclsWith`，prepared 版本只服务 record 头解消与
 -- 终止性 SCT 上下文）。
-dtPrepareTermAux : List Decl -> Result (List Decl)
+dtPrepareTermAux : List Decl -> Check (List Decl)
 dtPrepareTermAux aux =
   Vuna.Compiler.Common.bind (prepareDecls aux) (\p => expandDerivings (secondOf p))
 
@@ -816,7 +816,7 @@ dtAuxForTermination (d :: rest) = case d of
     Nothing => dtAuxForTermination rest
   _ => d :: dtAuxForTermination rest
 
-dtElabFullWithPrepared : Ec -> List (Pair String Term) -> List Decl -> List Decl -> List Decl -> Result DtProgram
+dtElabFullWithPrepared : Ec -> List (Pair String Term) -> List Decl -> List Decl -> List Decl -> Check DtProgram
 -- 与全量路径（`Elab.Driver.elabProgramFullWithAux`）对齐：记录字段的 `HasField`
 -- 自动实例也必须在增量路径上生成，否则 `getField` 在 LSP / 测试会话里会假报
 -- `TC_NoInstanceFound`（夹具 18/records_files/10_has_field 就是这条用例）。
@@ -850,17 +850,17 @@ dtAuxOfCache : String -> Maybe AuxCache -> Maybe AuxCache
 dtAuxOfCache key Nothing = Nothing
 dtAuxOfCache key (Just c) = if c.auxCacheKey == key then Just c else Nothing
 
-dtIncrementalChecked : PackageContext -> Pair (List Decl) (List Module) -> List ModuleIface -> List ModuleIface -> Result CheckedPackage
+dtIncrementalChecked : PackageContext -> Pair (List Decl) (List Module) -> List ModuleIface -> List ModuleIface -> Check CheckedPackage
 dtIncrementalChecked ctx parts depIfaces cleanIfaces = Vuna.Compiler.Common.bind (dtIncrementalCheckedCore ctx parts depIfaces cleanIfaces Nothing True) (\r => case firstOf r of
-  Just checked => Ok checked
-  Nothing => Err "DT: internal: incremental check produced no package"
+  Just checked => OkC checked
+  Nothing => err "DT: internal: incremental check produced no package"
 )
 
 -- 增量精化核心：`needPackage` = 是否需要组装整包 DtProgram（写接口 / codegen 用）。
 -- 工具链诊断只要「当前文件能不能过检查」，此时跳过整包组装与全量 codegen 检查
 -- （依赖 / 干净模块的产物在写各自接口时已经验过），只对本次新精化的 datas/defs 跑同一条
 -- 检查链 —— 诊断语义与全量路径一致（错误都落在本次精化的文件上）。
-dtIncrementalCheckedCore : PackageContext -> Pair (List Decl) (List Module) -> List ModuleIface -> List ModuleIface -> Maybe AuxCache -> Bool -> Result (Pair (Maybe CheckedPackage) (Maybe AuxCache))
+dtIncrementalCheckedCore : PackageContext -> Pair (List Decl) (List Module) -> List ModuleIface -> List ModuleIface -> Maybe AuxCache -> Bool -> Check (Pair (Maybe CheckedPackage) (Maybe AuxCache))
 dtIncrementalCheckedCore ctx parts depIfaces cleanIfaces cache needPackage =
   let
     pkgName = contextPackageName ctx
@@ -890,9 +890,9 @@ dtIncrementalCheckedCore ctx parts depIfaces cleanIfaces cache needPackage =
     ifacePrepared = concatMap miPreparedOf (append depIfaces cleanIfaces)
     missingPrepared = filter (\mi => length (miPreparedOf mi) == 0) (append depIfaces cleanIfaces)
     prepared = case hit of
-      Just c => Ok c.auxCacheDecls
+      Just c => OkC c.auxCacheDecls
       Nothing =>
-        if length ifacePrepared > 0 && length missingPrepared == 0 then Ok ifacePrepared
+        if length ifacePrepared > 0 && length missingPrepared == 0 then OkC ifacePrepared
         else dtPrepareTermAux termAux
     startGlobals = secondOf start
     startEc = firstOf start
@@ -903,7 +903,7 @@ dtIncrementalCheckedCore ctx parts depIfaces cleanIfaces cache needPackage =
   )
 
 -- 需要整包产物（写接口 / build）：组装 DtProgram + 整包 codegen 检查（与旧行为一致）。
-dtFinishPackage : List CachedProgram -> List CachedProgram -> DtProgram -> Pair (List Decl) (List Module) -> Maybe AuxCache -> Result (Pair (Maybe CheckedPackage) (Maybe AuxCache))
+dtFinishPackage : List CachedProgram -> List CachedProgram -> DtProgram -> Pair (List Decl) (List Module) -> Maybe AuxCache -> Check (Pair (Maybe CheckedPackage) (Maybe AuxCache))
 dtFinishPackage depCps cleanCps prog parts next =
   let
     assembled =
@@ -915,13 +915,13 @@ dtFinishPackage depCps cleanCps prog parts next =
         (dtProgInsts prog) (dtProgClasses prog) prog.dtProgNext prog.dtProgDefVals prog.dtProgDepths
     checked = CheckedPackage assembled (secondOf parts) (firstOf parts) (cachedNamesOf depCps)
   in Vuna.Compiler.Common.bind (checkDtProgram (Pair (dtProgDatas assembled) (dtProgDefs assembled)))
-    (\_ => Ok (Pair (Just checked) next))
+    (\_ => OkC (Pair (Just checked) next))
 
 -- 增量路径的整包组装：产物照常组装（写 iface 需要 per-module 的 cp/parts），但
 -- codegen 检查只跑**本次新精化**的 datas/defs（`dtCheckScoped`）——干净模块在它们
 -- 自己的接口写回时就跑过整包检查，依赖包同理。整包 `checkDtProgram` 会把这 65 个
 -- 模块再检查一遍（编辑一个模块后 1.4s 里的大头），对增量路径是纯重复。
-dtFinishPackageScoped : List CachedProgram -> List CachedProgram -> DtProgram -> Pair (List Decl) (List Module) -> Maybe AuxCache -> Result (Pair (Maybe CheckedPackage) (Maybe AuxCache))
+dtFinishPackageScoped : List CachedProgram -> List CachedProgram -> DtProgram -> Pair (List Decl) (List Module) -> Maybe AuxCache -> Check (Pair (Maybe CheckedPackage) (Maybe AuxCache))
 dtFinishPackageScoped depCps cleanCps prog parts next =
   let
     assembled =
@@ -936,10 +936,10 @@ dtFinishPackageScoped depCps cleanCps prog parts next =
       append (concatMap cachedDatas depCps)
         (append (concatMap cachedDatas cleanCps) (dtProgDatas prog))
   in Vuna.Compiler.Common.bind (dtCheckScoped allDatas (dtProgDatas prog) (dtProgDefs prog))
-    (\_ => Ok (Pair (Just checked) next))
+    (\_ => OkC (Pair (Just checked) next))
 
 -- 工具链诊断：只对本次新精化的 datas/defs 跑检查链（组装省掉），返回无 CheckedPackage。
-dtFinishScoped : List CachedProgram -> List CachedProgram -> DtProgram -> Maybe AuxCache -> Result (Pair (Maybe CheckedPackage) (Maybe AuxCache))
+dtFinishScoped : List CachedProgram -> List CachedProgram -> DtProgram -> Maybe AuxCache -> Check (Pair (Maybe CheckedPackage) (Maybe AuxCache))
 dtFinishScoped depCps cleanCps prog cache =
   let
     allDatas =
@@ -948,12 +948,12 @@ dtFinishScoped depCps cleanCps prog cache =
     newDatas = dtProgDatas prog
     newDefs = dtProgDefs prog
   in Vuna.Compiler.Common.bind (dtCheckScoped allDatas newDatas newDefs)
-    (\_ => Ok (Pair Nothing cache))
+    (\_ => OkC (Pair Nothing cache))
 
 -- `checkDtProgram` 的收窄版：`allDatas` 是渲染/构造子表的完整视图（依赖 + 干净 + 本次），
 -- `unitDatas` 只生成本次精化模块的类型声明；检查链（名字护栏 / 擦除 / SCC / 生成）只跑
 -- `defs`。每个 def 的检查只看自身项与全部数据族，因此对本文件的诊断语义与整包检查一致。
-dtCheckScoped : List DtData -> List DtData -> List DtDef -> Result Int
+dtCheckScoped : List DtData -> List DtData -> List DtDef -> Check Int
 dtCheckScoped allDatas unitDatas defs =
   let
     program = Pair allDatas defs
@@ -961,7 +961,7 @@ dtCheckScoped allDatas unitDatas defs =
     Pair runtime groups =>
       Vuna.Compiler.Common.bind
         (genUnitParts (usedTableOf (runtimeDatas allDatas)) noQual (runtimeDatas allDatas) (runtimeDatas unitDatas) groups)
-        (\_ => Ok 0)
+        (\_ => OkC 0)
   )
 
 -- M34.6（5a）：单文件（LSP buffer / REPL 所在模块）的增量精化。
@@ -971,7 +971,7 @@ dtCheckScoped allDatas unitDatas defs =
 --   3. termAux 预处理 / 起始 Ec / 已 shift 产物都可经 `cache` 复用（5b）；`needPackage` =
 --      调用方是否需要整包 CheckedPackage（只做诊断时跳过整包组装 + 整包 codegen 检查）。
 -- 返回 `Nothing` 表示「本路径不适用」（调用方回退全量，诊断必须仍正确）。
-dtCheckSourceIncremental : PackageContext -> String -> String -> List ModuleIface -> List ModuleIface -> Maybe AuxCache -> Bool -> Result (Pair Bool (Pair (Maybe CheckedPackage) (Maybe AuxCache)))
+dtCheckSourceIncremental : PackageContext -> String -> String -> List ModuleIface -> List ModuleIface -> Maybe AuxCache -> Bool -> Check (Pair Bool (Pair (Maybe CheckedPackage) (Maybe AuxCache)))
 dtCheckSourceIncremental ctx label source depIfaces cleanIfaces cache needPackage =
   let
     pkgName = contextPackageName ctx
@@ -984,34 +984,34 @@ dtCheckSourceIncremental ctx label source depIfaces cleanIfaces cache needPackag
         _ =
           if length missing == 0 then 0
           else note "iface-fallback=check-incremental missing=${join "," missing}"
-      in if length missing > 0 then Ok (Pair False (Pair Nothing cache))
+      in if length missing > 0 then OkC (Pair False (Pair Nothing cache))
       else Vuna.Compiler.Common.bind (resolveProjectKeeping (preloadKeepOf allIfaces mods) filtered)
-        (\parts => Vuna.Compiler.Common.bind (dtIncrementalCheckedCore ctx parts (materializedDeps pkgName parts depIfaces) (materializedOwn pkgName parts cleanIfaces) cache needPackage) (\r => Ok (Pair True r)))
+        (\parts => Vuna.Compiler.Common.bind (dtIncrementalCheckedCore ctx parts (materializedDeps pkgName parts depIfaces) (materializedOwn pkgName parts cleanIfaces) cache needPackage) (\r => OkC (Pair True r)))
   )
 
 -- M44：会话化 interp。与 `dtCheckSourceIncremental` 同一条增量路径（依赖包 / 干净
 -- 同包模块以接口预置，只精化当前入口），但需要整包组装后的 `CheckedPackage`——依赖
 -- 模块的 defs 要在场，`evalDtMain` 才能归约跨模块调用（`needPackage = True`）。
 -- 第一分量沿用后者的语义：False = 本路径不适用（调用方回退全量）。
-dtEvalSourceIncremental : PackageContext -> String -> String -> List ModuleIface -> Maybe AuxCache -> Result (Pair Bool (Pair String (Maybe AuxCache)))
+dtEvalSourceIncremental : PackageContext -> String -> String -> List ModuleIface -> Maybe AuxCache -> Check (Pair Bool (Pair String (Maybe AuxCache)))
 dtEvalSourceIncremental ctx label source depIfaces cache = Vuna.Compiler.Common.bind (dtCheckSourceIncremental ctx label source depIfaces [] cache True) (\r => case secondOf r of
   Pair (Just checked) aux =>
     Vuna.Compiler.Common.bind (evalDtMain checked.checkedProgram)
-      (\out => Ok (Pair (firstOf r) (Pair out aux)))
-  Pair Nothing aux => Ok (Pair (firstOf r) (Pair "" aux))
+      (\out => OkC (Pair (firstOf r) (Pair out aux)))
+  Pair Nothing aux => OkC (Pair (firstOf r) (Pair "" aux))
 )
 
 -- 全量 checked（无 iface / 安全阀回退时用）：与 `dtCheckSource` 同一条加载/精化路径，
 -- 但保留 CheckedPackage（LSP 冷启动写回单模块接口用）。
-dtCheckSourceChecked : PackageContext -> String -> String -> Result (Pair (List String) CheckedPackage)
+dtCheckSourceChecked : PackageContext -> String -> String -> Check (Pair (List String) CheckedPackage)
 dtCheckSourceChecked ctx label source =
   dtCheckPartsWithProgram
     (Vuna.Compiler.Common.bind (loadModuleSource ctx label source) resolveProject)
 
-dtCheckPackageIncrementalParts : PackageContext -> String -> List ModuleIface -> List ModuleIface -> Result (Pair (List String) CheckedPackage)
+dtCheckPackageIncrementalParts : PackageContext -> String -> List ModuleIface -> List ModuleIface -> Check (Pair (List String) CheckedPackage)
 dtCheckPackageIncrementalParts ctx entry depIfaces cleanIfaces =
   Vuna.Compiler.Common.bind (dtLoadPartsIncremental ctx entry depIfaces cleanIfaces)
-    (\parts => Vuna.Compiler.Common.bind (dtIncrementalChecked ctx parts (materializedDeps (contextPackageName ctx) parts depIfaces) (materializedOwn (contextPackageName ctx) parts cleanIfaces)) (\checked => Ok (Pair [] checked)))
+    (\parts => Vuna.Compiler.Common.bind (dtIncrementalChecked ctx parts (materializedDeps (contextPackageName ctx) parts depIfaces) (materializedOwn (contextPackageName ctx) parts cleanIfaces)) (\checked => OkC (Pair [] checked)))
 
 -- codegen 的 split 层要求模块列表按依赖序（外部依赖在前）。增量路径的 loader 列表是
 -- 「新加载者前插 + 预置模块在尾」，直接 reverse 会把干净模块排在它们依赖的外部模块
@@ -1116,7 +1116,7 @@ unitCacheStore dir keys name sf = case lookupPair name keys of
 unitCacheEnabled : Bool
 unitCacheEnabled = runIO (prim_getenv "VUNA_UNIT_CACHE") /= "0"
 
-splitGenerateCached : PackageContext -> String -> List Module -> List (Pair String (List Decl)) -> List Decl -> DtProgram -> Bool -> Result (List SplitFile)
+splitGenerateCached : PackageContext -> String -> List Module -> List (Pair String (List Decl)) -> List Decl -> DtProgram -> Bool -> Check (List SplitFile)
 splitGenerateCached ctx entry modules moduleParts entryDecls prog printResult =
   let
     pkg = contextPackageName ctx
@@ -1135,16 +1135,16 @@ splitGenerateCached ctx entry modules moduleParts entryDecls prog printResult =
   else generateDtSplitProgramWith (unitCacheLookup dir keys) (unitCacheStore dir keys) moduleParts
     entryDecls prog printResult roots cdir
 
-dtGenerateIncremental : PackageContext -> String -> Pair (List Decl) (List Module) -> CheckedPackage -> Bool -> Result (Pair (List SplitFile) CheckedPackage)
+dtGenerateIncremental : PackageContext -> String -> Pair (List Decl) (List Module) -> CheckedPackage -> Bool -> Check (Pair (List SplitFile) CheckedPackage)
 dtGenerateIncremental ctx entry parts checked printResult =
   let
     modules = topoModules (secondOf parts)
     moduleParts = map (\m => Pair (moduleNameOf m) (moduleDeclsOf m)) modules
   in Vuna.Compiler.Common.bind
     (splitGenerateCached ctx entry modules moduleParts (firstOf parts) checked.checkedProgram printResult)
-    (\files => Ok (Pair files checked))
+    (\files => OkC (Pair files checked))
 
-dtSplitProjectIncremental : PackageContext -> String -> Bool -> List ModuleIface -> List ModuleIface -> Result (Pair (List SplitFile) CheckedPackage)
+dtSplitProjectIncremental : PackageContext -> String -> Bool -> List ModuleIface -> List ModuleIface -> Check (Pair (List SplitFile) CheckedPackage)
 dtSplitProjectIncremental ctx entry printResult depIfaces cleanIfaces =
   Vuna.Compiler.Common.bind (dtLoadPartsIncremental ctx entry depIfaces cleanIfaces)
     (\parts => Vuna.Compiler.Common.bind (dtIncrementalChecked ctx parts (materializedDeps (contextPackageName ctx) parts depIfaces) (materializedOwn (contextPackageName ctx) parts cleanIfaces)) (\checked => dtGenerateIncremental ctx entry parts checked printResult))
@@ -1199,22 +1199,22 @@ materializedOwn pkg parts ifaces =
     ourNames = map moduleNameOf (filter (\m => modulePackageOf m == pkg) (secondOf parts))
   in filter (\mi => memName (miNameOf mi) ourNames) ifaces
 
-dtLoadPartsWithIfaces : PackageContext -> String -> List ModuleIface -> Result (Pair (List Decl) (List Module))
+dtLoadPartsWithIfaces : PackageContext -> String -> List ModuleIface -> Check (Pair (List Decl) (List Module))
 dtLoadPartsWithIfaces ctx entry ifaces = Vuna.Compiler.Common.bind (loadProjectWithPreloaded ctx entry (modulesOfIfaces ifaces)) (\project => case filterProjectToImports (contextPackageName ctx) project of
   Pair filtered mods => resolveProjectKeeping (preloadKeepOf ifaces mods) filtered
 )
 
-dtLoadModulesPartsWithIfaces : PackageContext -> List String -> List ModuleIface -> Result (Pair (List Decl) (List Module))
+dtLoadModulesPartsWithIfaces : PackageContext -> List String -> List ModuleIface -> Check (Pair (List Decl) (List Module))
 dtLoadModulesPartsWithIfaces ctx names ifaces = Vuna.Compiler.Common.bind (loadProjectModulesWithPreloaded ctx names (modulesOfIfaces ifaces)) (\project => case filterProjectToImports (contextPackageName ctx) project of
   Pair filtered mods => resolveProjectKeeping (preloadKeepOf ifaces mods) filtered
 )
 
-dtCheckPackageWithIfacesParts : PackageContext -> String -> List ModuleIface -> Result (Pair (List String) CheckedPackage)
+dtCheckPackageWithIfacesParts : PackageContext -> String -> List ModuleIface -> Check (Pair (List String) CheckedPackage)
 dtCheckPackageWithIfacesParts ctx entry ifaces =
   Vuna.Compiler.Common.bind (dtLoadPartsWithIfaces ctx entry ifaces)
     (\parts => dtCheckOursParts ctx parts (shiftedDepPrograms (materializedDeps (contextPackageName ctx) parts ifaces)))
 
-dtLoadModulesPartsIncremental : PackageContext -> List String -> List ModuleIface -> List ModuleIface -> Result (Pair (List Decl) (List Module))
+dtLoadModulesPartsIncremental : PackageContext -> List String -> List ModuleIface -> List ModuleIface -> Check (Pair (List Decl) (List Module))
 dtLoadModulesPartsIncremental ctx names depIfaces cleanIfaces =
   let
     preloaded = append (modulesOfIfaces depIfaces) (reverse (map moduleOfIface cleanIfaces))
@@ -1223,24 +1223,24 @@ dtLoadModulesPartsIncremental ctx names depIfaces cleanIfaces =
     Pair filtered mods => resolveProjectKeeping (preloadKeepOf allIfaces mods) filtered
   )
 
-dtCheckLibraryPackageIncrementalParts : PackageContext -> List String -> List ModuleIface -> List ModuleIface -> Result (Pair (List String) CheckedPackage)
+dtCheckLibraryPackageIncrementalParts : PackageContext -> List String -> List ModuleIface -> List ModuleIface -> Check (Pair (List String) CheckedPackage)
 dtCheckLibraryPackageIncrementalParts ctx names depIfaces cleanIfaces =
   Vuna.Compiler.Common.bind (dtLoadModulesPartsIncremental ctx names depIfaces cleanIfaces)
-    (\parts => Vuna.Compiler.Common.bind (dtIncrementalChecked ctx parts (materializedDeps (contextPackageName ctx) parts depIfaces) (materializedOwn (contextPackageName ctx) parts cleanIfaces)) (\checked => Ok (Pair [] checked)))
+    (\parts => Vuna.Compiler.Common.bind (dtIncrementalChecked ctx parts (materializedDeps (contextPackageName ctx) parts depIfaces) (materializedOwn (contextPackageName ctx) parts cleanIfaces)) (\checked => OkC (Pair [] checked)))
 
-dtCheckLibraryPackageWithIfacesParts : PackageContext -> List String -> List ModuleIface -> Result (Pair (List String) CheckedPackage)
+dtCheckLibraryPackageWithIfacesParts : PackageContext -> List String -> List ModuleIface -> Check (Pair (List String) CheckedPackage)
 dtCheckLibraryPackageWithIfacesParts ctx names ifaces =
   Vuna.Compiler.Common.bind (dtLoadModulesPartsWithIfaces ctx names ifaces)
     (\parts => dtCheckOursParts ctx parts (shiftedDepPrograms (materializedDeps (contextPackageName ctx) parts ifaces)))
 
 -- 只精化本包声明、从接口合并依赖产物，再走同一条逐模块 split；返回 codegen 文件 +
 -- CheckedPackage（构建路径也写接口摘要）。
-dtSplitProjectWithIfaces : PackageContext -> String -> Bool -> List ModuleIface -> Result (Pair (List SplitFile) CheckedPackage)
+dtSplitProjectWithIfaces : PackageContext -> String -> Bool -> List ModuleIface -> Check (Pair (List SplitFile) CheckedPackage)
 dtSplitProjectWithIfaces ctx entry printResult ifaces =
   Vuna.Compiler.Common.bind (dtLoadPartsWithIfaces ctx entry ifaces)
     (\parts => dtSplitPartsOurs ctx entry parts (shiftedDepPrograms (materializedDeps (contextPackageName ctx) parts ifaces)) printResult)
 
-dtSplitPartsOurs : PackageContext -> String -> Pair (List Decl) (List Module) -> List CachedProgram -> Bool -> Result (Pair (List SplitFile) CheckedPackage)
+dtSplitPartsOurs : PackageContext -> String -> Pair (List Decl) (List Module) -> List CachedProgram -> Bool -> Check (Pair (List SplitFile) CheckedPackage)
 dtSplitPartsOurs ctx entry parts deps printResult =
   let
     pkgName = contextPackageName ctx
@@ -1260,15 +1260,15 @@ dtSplitPartsOurs ctx entry parts deps printResult =
     checked = CheckedPackage prog (secondOf parts) (firstOf parts) (cachedNamesOf deps)
   in Vuna.Compiler.Common.bind
     (splitGenerateCached ctx entry modules moduleParts (firstOf parts) assembled printResult)
-    (\files => Ok (Pair files checked))
+    (\files => OkC (Pair files checked))
   )
 
 -- 全量路径的 parts 版本（构建缓存未命中且依赖接口不可用）：同一份 CheckedPackage 供
 -- 接口影子写使用，避免 build 后还要再 check 一次才写接口。
-dtSplitProjectParts : PackageContext -> String -> Bool -> Result (Pair (List SplitFile) CheckedPackage)
+dtSplitProjectParts : PackageContext -> String -> Bool -> Check (Pair (List SplitFile) CheckedPackage)
 dtSplitProjectParts ctx entry printResult = Vuna.Compiler.Common.bind (dtLoadParts ctx entry) (\parts => let
   modules = reverse (secondOf parts)
   allDecls = append (concatMap moduleDeclsOf modules) (firstOf parts)
 in Vuna.Compiler.Common.bind (elabProgramFull allDecls)
-  (\prog => Vuna.Compiler.Common.bind (splitGenerateCached ctx entry modules (map (\m => Pair (moduleNameOf m) (moduleDeclsOf m)) modules) (firstOf parts) prog printResult) (\files => Ok (Pair files (CheckedPackage prog (secondOf parts) (firstOf parts) []))))
+  (\prog => Vuna.Compiler.Common.bind (splitGenerateCached ctx entry modules (map (\m => Pair (moduleNameOf m) (moduleDeclsOf m)) modules) (firstOf parts) prog printResult) (\files => OkC (Pair files (CheckedPackage prog (secondOf parts) (firstOf parts) []))))
 )

@@ -331,31 +331,31 @@ else case unifyFlex 100 (Subst []) query sig of
 -- ---------------------------------------------------------------
 -- 类型检索
 -- ---------------------------------------------------------------
-parseQuery : String -> Result Expr
+parseQuery : String -> Check Expr
 parseQuery query = case parseSource "<type-query>" "q : ${query}" of
-  Err e => Err e
-  Ok (SourceFile hdr imports fx decls) => case decls of
-    (DSig name ctx ty sp) :: rest => Ok ty
-    _ => Err "type query is not a signature"
+  ErrC e => ErrC e
+  OkC (SourceFile hdr imports fx decls) => case decls of
+    (DSig name ctx ty sp) :: rest => OkC ty
+    _ => err "type query is not a signature"
 
 parseSymType : List (Pair String String) -> Sym -> Maybe Ty
 parseSymType names s = case parseExpressionSource (symType s) of
-  Err e => Nothing
-  Ok e => schemeOf names e
+  ErrC e => Nothing
+  OkC e => schemeOf names e
 
-searchType : Index -> String -> Result (List SearchHit)
+searchType : Index -> String -> Check (List SearchHit)
 searchType index query = case parseQuery query of
-  Err e => Err "cannot parse type query: ${e}"
-  Ok queryExpr =>
+  ErrC e => err "cannot parse type query: ${diagText e}"
+  OkC queryExpr =>
     let
       names = typeNameMap index
     in case schemeOf names queryExpr of
-      Nothing => Err "cannot normalize type query"
+      Nothing => err "cannot normalize type query"
       Just queryTy =>
         let
           syms = filter (\s => symType s /= "" && not (privateSym s)) index.indexSymbols
           hits = map (typeHit names query queryTy) syms
-        in Ok (sortHits (filter (\h => hitScore h > 0) hits))
+        in OkC (sortHits (filter (\h => hitScore h > 0) hits))
 
 typeHit : List (Pair String String) -> String -> Ty -> Sym -> SearchHit
 typeHit names query queryTy s = case parseSymType names s of

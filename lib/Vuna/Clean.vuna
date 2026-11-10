@@ -14,16 +14,16 @@ import Base.IO.Host
 
 runCleanIface : List String -> Int
 runCleanIface args = case parseToolArgs "vuna clean-iface" [BoolFlag "dry-run"] args of
-  Err e => cleanError e
-  Ok parsed => case parsed.positionals of
+  ErrC e => cleanError (diagText e)
+  OkC parsed => case parsed.positionals of
     [] => cleanAt "." (flagSet parsed "dry-run")
     [dir] => cleanAt dir (flagSet parsed "dry-run")
     _ => cleanError "too many arguments; expected at most one directory"
 
 cleanAt : String -> Bool -> Int
 cleanAt dir dry = case requireDirectory dir of
-  Err e => cleanError e
-  Ok _ =>
+  ErrC e => cleanError (diagText e)
+  OkC _ =>
     let
       files = filter isIfaceFile (walkFiles 1048576 dir)
       count = length files

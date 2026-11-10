@@ -141,13 +141,13 @@ ensureIndex uri st = case st.stateIndex of
     let
       root = workspaceRoot uri
     in case loadOrBuild root of
-      Ok idx =>
+      OkC idx =>
         let
           st1 = logTo "index ready: ${root}" (setIndexTried True (setIndex (Just idx) st))
         in Pair st1 (Just idx)
-      Err e =>
+      ErrC e =>
         let
-          st1 = logTo "index unavailable: ${e}" (setIndexTried True st)
+          st1 = logTo "index unavailable: ${diagText e}" (setIndexTried True st)
         in Pair st1 Nothing
 
 -- 打开的文档文本（未打开 → ""）。

@@ -70,8 +70,8 @@ termRestoreState : String -> Int
 termRestoreState path =
   let
     saved = case readText path of
-      Err e => ""
-      Ok s => trim s
+      ErrC e => ""
+      OkC s => trim s
     code = if saved == "" then 1 else runIO (prim_runIn "." ["stty", saved])
     _ = rmFile path
   in if code == 0 then 0 else runIO (prim_runIn "." ["stty", "sane"])
@@ -104,8 +104,8 @@ termWidth _ =
     path = "${termTmpPath 0}.size"
     _ = runIO (prim_runIn "." ["sh", "-c", "stty size > ${shellQuote path}"])
     text = case readText path of
-      Err e => ""
-      Ok s => trim s
+      ErrC e => ""
+      OkC s => trim s
     _ = rmFile path
     parts = filter (\p => p /= "") (split " " text)
   in case parts of

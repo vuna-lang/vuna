@@ -71,25 +71,25 @@ fieldLoc path section key entries = case lookupEntryLine section key entries of
   Just line => if path == "" then "line ${line}: " else "${path}:${line}: "
   Nothing => if path == "" then "" else "${path}: "
 
-stringField : String -> List String -> String -> List TomlEntry -> Result (Maybe String)
+stringField : String -> List String -> String -> List TomlEntry -> Check (Maybe String)
 stringField path section key entries = case lookupEntry section key entries of
-  Nothing => Ok Nothing
-  Just (TStr s) => Ok (Just s)
-  Just value => Err "${fieldLoc path section key entries}expected a string for \"${key}\""
+  Nothing => OkC Nothing
+  Just (TStr s) => OkC (Just s)
+  Just value => err "${fieldLoc path section key entries}expected a string for \"${key}\""
 
-stringListField : String -> List String -> String -> List TomlEntry -> Result (Maybe (List String))
+stringListField : String -> List String -> String -> List TomlEntry -> Check (Maybe (List String))
 stringListField path section key entries = case lookupEntry section key entries of
-  Nothing => Ok Nothing
-  Just (TList xs) => Ok (Just xs)
+  Nothing => OkC Nothing
+  Just (TList xs) => OkC (Just xs)
   Just value =>
-    Err "${fieldLoc path section key entries}expected an array of strings for \"${key}\""
+    err "${fieldLoc path section key entries}expected an array of strings for \"${key}\""
 
 -- | 读 `[section] key` 的布尔值：缺省返回 `Nothing`，类型不符报带位置的行号错误。
-boolField : String -> List String -> String -> List TomlEntry -> Result (Maybe Bool)
+boolField : String -> List String -> String -> List TomlEntry -> Check (Maybe Bool)
 boolField path section key entries = case lookupEntry section key entries of
-  Nothing => Ok Nothing
-  Just (TBool b) => Ok (Just b)
-  Just value => Err "${fieldLoc path section key entries}expected a boolean for \"${key}\""
+  Nothing => OkC Nothing
+  Just (TBool b) => OkC (Just b)
+  Just value => err "${fieldLoc path section key entries}expected a boolean for \"${key}\""
 
 orEmptyList : Maybe (List a) -> List a
 orEmptyList Nothing = []
@@ -101,42 +101,43 @@ orFalse Nothing = False
 orFalse (Just b) = b
 
 -- 只接受约定表；未知表 / 未知 key 报带行号的错误（防止字段拼写错误被静默忽略）。
-checkOneEntry : String -> TomlEntry -> Result Int
+checkOneEntry : String -> TomlEntry -> Check Int
 checkOneEntry path (TomlEntry section key value line) =
-  if sameSection section [] then Err (atLine path line "unexpected top-level key \"${key}\"")
-  else if sameSection section ["package"] then if key == "name" || key == "privileged" then Ok 0
-  else Err (atLine path line "unknown key \"${key}\" in [package]")
-  else if sameSection section ["workspace"] then if key == "members" then Ok 0 else Err (atLine path line "unknown key \"${key}\" in [workspace]")
-  else if sameSection section ["export"] then if key == "modules" then Ok 0 else Err (atLine path line "unknown key \"${key}\" in [export]")
-  else if sameSection section ["capabilities"] then if key == "effects" then Ok 0
-  else Err (atLine path line "unknown key \"${key}\" in [capabilities]")
-  else if sameSection section ["trust"] then if key == "unsafe" then Ok 0 else Err (atLine path line "unknown key \"${key}\" in [trust]")
-  else if sameSection section ["privileged"] then if key == "modules" then Ok 0 else Err (atLine path line "unknown key \"${key}\" in [privileged]")
-  else if sameSection section ["dependencies"] then Ok 0
-  else Err (atLine path line "unknown section [${joinDots section}]")
+  if sameSection section [] then err (atLine path line "unexpected top-level key \"${key}\"")
+  else if sameSection section ["package"] then if key == "name" || key == "privileged" then OkC 0
+  else err (atLine path line "unknown key \"${key}\" in [package]")
+  else if sameSection section ["workspace"] then if key == "members" then OkC 0 else err (atLine path line "unknown key \"${key}\" in [workspace]")
+  else if sameSection section ["export"] then if key == "modules" then OkC 0 else err (atLine path line "unknown key \"${key}\" in [export]")
+  else if sameSection section ["capabilities"] then if key == "effects" then OkC 0
+  else err (atLine path line "unknown key \"${key}\" in [capabilities]")
+  else if sameSection section ["trust"] then if key == "unsafe" then OkC 0 else err (atLine path line "unknown key \"${key}\" in [trust]")
+  else if sameSection section ["privileged"] then if key == "modules" then OkC 0
+  else err (atLine path line "unknown key \"${key}\" in [privileged]")
+  else if sameSection section ["dependencies"] then OkC 0
+  else err (atLine path line "unknown section [${joinDots section}]")
 
-checkEntries : String -> List TomlEntry -> Result Int
-checkEntries path [] = Ok 0
+checkEntries : String -> List TomlEntry -> Check Int
+checkEntries path [] = OkC 0
 checkEntries path (entry :: rest) = case checkOneEntry path entry of
-  Err e => Err e
-  Ok ok => checkEntries path rest
+  ErrC e => ErrC e
+  OkC ok => checkEntries path rest
 
-collectDependencies : String -> List TomlEntry -> Result (List (Pair String String))
+collectDependencies : String -> List TomlEntry -> Check (List (Pair String String))
 collectDependencies path entries = collectDependenciesAcc path entries []
 
-collectDependenciesAcc : String -> List TomlEntry -> List (Pair String String) -> Result (List (Pair String String))
-collectDependenciesAcc path [] acc = Ok (reverse acc)
+collectDependenciesAcc : String -> List TomlEntry -> List (Pair String String) -> Check (List (Pair String String))
+collectDependenciesAcc path [] acc = OkC (reverse acc)
 collectDependenciesAcc path ((TomlEntry section key value line) :: rest) acc = if sameSection section ["dependencies"] then case value of
   TStr rel => collectDependenciesAcc path rest (Pair key rel :: acc)
-  _ => Err (atLine path line "dependency \"${key}\" must have a string relative path")
+  _ => err (atLine path line "dependency \"${key}\" must have a string relative path")
 else collectDependenciesAcc path rest acc
 
-buildManifest : String -> List TomlEntry -> Result Manifest
+buildManifest : String -> List TomlEntry -> Check Manifest
 buildManifest path entries =
   Vuna.Compiler.Common.bind (checkEntries path entries)
-    (\checked => Vuna.Compiler.Common.bind (stringField path ["package"] "name" entries) (\name => Vuna.Compiler.Common.bind (stringListField path ["workspace"] "members" entries) (\members => Vuna.Compiler.Common.bind (stringListField path ["export"] "modules" entries) (\exports => Vuna.Compiler.Common.bind (collectDependencies path entries) (\deps => Vuna.Compiler.Common.bind (stringListField path ["capabilities"] "effects" entries) (\caps => Vuna.Compiler.Common.bind (stringListField path ["trust"] "unsafe" entries) (\trust => Vuna.Compiler.Common.bind (boolField path ["package"] "privileged" entries) (\privileged => Vuna.Compiler.Common.bind (stringListField path ["privileged"] "modules" entries) (\hosts => Ok (Manifest name (orEmptyList members) exports deps (orEmptyList caps) trust (orFalse privileged) (orEmptyList hosts) path))))))))))
+    (\checked => Vuna.Compiler.Common.bind (stringField path ["package"] "name" entries) (\name => Vuna.Compiler.Common.bind (stringListField path ["workspace"] "members" entries) (\members => Vuna.Compiler.Common.bind (stringListField path ["export"] "modules" entries) (\exports => Vuna.Compiler.Common.bind (collectDependencies path entries) (\deps => Vuna.Compiler.Common.bind (stringListField path ["capabilities"] "effects" entries) (\caps => Vuna.Compiler.Common.bind (stringListField path ["trust"] "unsafe" entries) (\trust => Vuna.Compiler.Common.bind (boolField path ["package"] "privileged" entries) (\privileged => Vuna.Compiler.Common.bind (stringListField path ["privileged"] "modules" entries) (\hosts => OkC (Manifest name (orEmptyList members) exports deps (orEmptyList caps) trust (orFalse privileged) (orEmptyList hosts) path))))))))))
 
-parseManifest : String -> String -> Result Manifest
+parseManifest : String -> String -> Check Manifest
 parseManifest path contents =
   Vuna.Compiler.Common.bind (parseTomlAt path contents) (\entries => buildManifest path entries)
 
@@ -169,68 +170,68 @@ validModuleTail (c :: rest) =
   if isUpperAlphaChar c || isLowerAlphaChar c || isDigitChar c || c == 95 then validModuleTail rest
   else False
 
-validateName : String -> Maybe String -> Result Int
-validateName path Nothing = Err (manifestErr path "missing [package] name")
+validateName : String -> Maybe String -> Check Int
+validateName path Nothing = err (manifestErr path "missing [package] name")
 validateName path (Just n) =
-  if n == "" then Err (manifestErr path "package name must not be empty")
-  else if validPackageName n then Ok 0
-  else Err (manifestErr path "invalid package name \"${n}\" (allowed characters: a-z, 0-9, '-')")
+  if n == "" then err (manifestErr path "package name must not be empty")
+  else if validPackageName n then OkC 0
+  else err (manifestErr path "invalid package name \"${n}\" (allowed characters: a-z, 0-9, '-')")
 
-validateMembers : String -> List String -> Result Int
-validateMembers path [] = Ok 0
+validateMembers : String -> List String -> Check Int
+validateMembers path [] = OkC 0
 validateMembers path (m :: rest) =
-  if m == "" then Err (manifestErr path "workspace member must not be empty")
+  if m == "" then err (manifestErr path "workspace member must not be empty")
   else validateMembers path rest
 
-validateModules : String -> List String -> Result Int
-validateModules path [] = Ok 0
+validateModules : String -> List String -> Check Int
+validateModules path [] = OkC 0
 validateModules path (m :: rest) =
   if validModuleName m then validateModules path rest
-  else Err (manifestErr path "invalid export module \"${m}\" (segments must match [A-Z][A-Za-z0-9_]*)")
+  else err (manifestErr path "invalid export module \"${m}\" (segments must match [A-Z][A-Za-z0-9_]*)")
 
-validateExports : String -> Maybe (List String) -> Result Int
-validateExports path Nothing = Ok 0
+validateExports : String -> Maybe (List String) -> Check Int
+validateExports path Nothing = OkC 0
 validateExports path (Just modules) = validateModules path modules
 
-validateDependencies : String -> List (Pair String String) -> Result Int
+validateDependencies : String -> List (Pair String String) -> Check Int
 validateDependencies path deps = validateDepsSeen path [] deps
 
-validateDepsSeen : String -> List String -> List (Pair String String) -> Result Int
-validateDepsSeen path seen [] = Ok 0
+validateDepsSeen : String -> List String -> List (Pair String String) -> Check Int
+validateDepsSeen path seen [] = OkC 0
 validateDepsSeen path seen ((Pair name rel) :: rest) =
-  if name == "" then Err (manifestErr path "dependency name must not be empty")
-  else if rel == "" then Err (manifestErr path "dependency \"${name}\" path must not be empty")
-  else if memName name seen then Err (manifestErr path "duplicate dependency \"${name}\"")
+  if name == "" then err (manifestErr path "dependency name must not be empty")
+  else if rel == "" then err (manifestErr path "dependency \"${name}\" path must not be empty")
+  else if memName name seen then err (manifestErr path "duplicate dependency \"${name}\"")
   else validateDepsSeen path (name :: seen) rest
 
 -- M27：能力声明只做结构校验（非空、无重复）；合法能力名的语义表在 Loader 侧，
 -- 这里不重复一份名字表（避免两处真源漂移）。
-validateCapabilities : String -> List String -> Result Int
+validateCapabilities : String -> List String -> Check Int
 validateCapabilities path caps = validateCapsSeen path [] caps
 
-validateCapsSeen : String -> List String -> List String -> Result Int
-validateCapsSeen path seen [] = Ok 0
+validateCapsSeen : String -> List String -> List String -> Check Int
+validateCapsSeen path seen [] = OkC 0
 validateCapsSeen path seen (c :: rest) =
-  if c == "" then Err (manifestErr path "capability name must not be empty")
-  else if memName c seen then Err (manifestErr path "duplicate capability \"${c}\"")
+  if c == "" then err (manifestErr path "capability name must not be empty")
+  else if memName c seen then err (manifestErr path "duplicate capability \"${c}\"")
   else validateCapsSeen path (c :: seen) rest
 
 -- | D28：`[trust] unsafe` 的结构校验——声明了信任点就必须声明 `unsafe` 能力；
 -- 每项必须非空、不重复、形如 `Module.def`。「是否为本包真实定义」在模块解析后校验。
-validateTrust : String -> List String -> Maybe (List String) -> Result Int
-validateTrust path caps Nothing = Ok 0
+validateTrust : String -> List String -> Maybe (List String) -> Check Int
+validateTrust path caps Nothing = OkC 0
 validateTrust path caps (Just entries) =
   if memName "unsafe" caps then validateTrustEntries path [] entries
-  else Err (manifestErr path "[trust] unsafe requires capability \"unsafe\" in [capabilities] effects")
+  else err (manifestErr path "[trust] unsafe requires capability \"unsafe\" in [capabilities] effects")
 
 -- | `[trust] unsafe` 的逐项校验（非空、无重复、形如 `Module.def`）。
-validateTrustEntries : String -> List String -> List String -> Result Int
-validateTrustEntries path seen [] = Ok 0
+validateTrustEntries : String -> List String -> List String -> Check Int
+validateTrustEntries path seen [] = OkC 0
 validateTrustEntries path seen (entry :: rest) =
-  if entry == "" then Err (manifestErr path "trust point name must not be empty")
-  else if memName entry seen then Err (manifestErr path "duplicate trust point \"${entry}\"")
+  if entry == "" then err (manifestErr path "trust point name must not be empty")
+  else if memName entry seen then err (manifestErr path "duplicate trust point \"${entry}\"")
   else if validTrustPointName entry then validateTrustEntries path (entry :: seen) rest
-  else Err
+  else err
     (manifestErr path "invalid trust point \"${entry}\" (expected a qualified definition name such as \"Base.IO.runIO\")")
 
 -- | 信任点名字的形状：`Module.Name.def`（至少一级模块名 + 一个定义名）。
@@ -241,17 +242,17 @@ validTrustPointName name = case splitLastDot (splitOnDot name) of
 -- | F3 P2：`[capabilities]` / `[trust]` / `[privileged] modules` 只允许特权包声明。
 -- 用户包与 ad-hoc 文件的正常路径是 typed effects（`Base.Eff.*` + handler），
 -- 不允许直调宿主原语、也不允许声明宿主层模块。
-validatePrivilege : String -> Bool -> List String -> Maybe (List String) -> List String -> Result Int
+validatePrivilege : String -> Bool -> List String -> Maybe (List String) -> List String -> Check Int
 validatePrivilege path True caps trust hosts = validateModules path hosts
-validatePrivilege path False [] Nothing [] = Ok 0
+validatePrivilege path False [] Nothing [] = OkC 0
 validatePrivilege path False _ _ _ =
-  Err
+  err
     (manifestErr path "non-privileged package declares [capabilities]/[trust]/[privileged]; only [package] privileged = true packages may declare capabilities, trust points or host-layer modules (user code should use Base.Eff.* handlers)")
 
-validateManifest : Manifest -> Result Manifest
+validateManifest : Manifest -> Check Manifest
 validateManifest (Manifest name members exports deps caps trust privileged hosts path) =
   Vuna.Compiler.Common.bind (validateName path name)
-    (\okName => Vuna.Compiler.Common.bind (validateMembers path members) (\okMembers => Vuna.Compiler.Common.bind (validateExports path exports) (\okExports => Vuna.Compiler.Common.bind (validateDependencies path deps) (\okDeps => Vuna.Compiler.Common.bind (validateCapabilities path caps) (\okCaps => Vuna.Compiler.Common.bind (validateTrust path caps trust) (\okTrust => Vuna.Compiler.Common.bind (validatePrivilege path privileged caps trust hosts) (\okPriv => Ok (Manifest name members exports deps caps trust privileged hosts path))))))))
+    (\okName => Vuna.Compiler.Common.bind (validateMembers path members) (\okMembers => Vuna.Compiler.Common.bind (validateExports path exports) (\okExports => Vuna.Compiler.Common.bind (validateDependencies path deps) (\okDeps => Vuna.Compiler.Common.bind (validateCapabilities path caps) (\okCaps => Vuna.Compiler.Common.bind (validateTrust path caps trust) (\okTrust => Vuna.Compiler.Common.bind (validatePrivilege path privileged caps trust hosts) (\okPriv => OkC (Manifest name members exports deps caps trust privileged hosts path))))))))
 
 -- manifest 所在目录：`a/b/vuna.toml` -> `a/b`；没有目录成分 -> "."。
 manifestDir : String -> String

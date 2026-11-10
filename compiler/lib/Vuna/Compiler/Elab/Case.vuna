@@ -70,15 +70,15 @@ import Vuna.Compiler.Intrinsics
 -- 方向约定：优先精化 **level 更大**（更内层）的变量，于是 ctor 一侧的新鲜变量精化成
 -- scrutinee 的真实变量（`m ↦ n`），不会把真实变量解到分支作用域外（level 形态，无需 de Bruijn）。
 -- | 自动补注（M41 新增导出）：unifyErr。
-unifyErr : Result a
-unifyErr = Err (tcMsg ImpossibleBranchIndex [])
+unifyErr : Check a
+unifyErr = ErrC (tcMsg ImpossibleBranchIndex [])
 
-unifyIdxList : Ec -> List (Pair Int Value) -> Int -> Int -> List Value -> List Value -> Result (List (Pair Int Value))
+unifyIdxList : Ec -> List (Pair Int Value) -> Int -> Int -> List Value -> List Value -> Check (List (Pair Int Value))
 unifyIdxList ec acc depth fuel xs ys =
   if fuel <= 0 then unifyErr else unifyIdxListGo ec acc depth fuel xs ys
 
-unifyIdxListGo : Ec -> List (Pair Int Value) -> Int -> Int -> List Value -> List Value -> Result (List (Pair Int Value))
-unifyIdxListGo ec acc depth fuel [] [] = Ok acc
+unifyIdxListGo : Ec -> List (Pair Int Value) -> Int -> Int -> List Value -> List Value -> Check (List (Pair Int Value))
+unifyIdxListGo ec acc depth fuel [] [] = OkC acc
 unifyIdxListGo ec acc depth fuel (x :: xs) (y :: ys) =
   Vuna.Compiler.Common.bind (unifyIdx ec acc depth (fuel - 1) x y)
     (\acc2 => unifyIdxList ec acc2 depth (fuel - 1) xs ys)
@@ -91,7 +91,7 @@ unifyIdxListGo ec acc depth fuel _ _ = unifyErr
 -- unifyIdx 大约消耗 4 步）。入口按两侧值里的 Nat 链前缀深度派生燃料（上限 `idxFuelMax`
 -- 防失控输入）。**只动入口**：递归路径仍按递减 fuel 走，`unifyIdxList` 的 SCT 终止性
 -- 证明不受影响。
-unifyIdxListSized : Ec -> List (Pair Int Value) -> Int -> List Value -> List Value -> Result (List (Pair Int Value))
+unifyIdxListSized : Ec -> List (Pair Int Value) -> Int -> List Value -> List Value -> Check (List (Pair Int Value))
 unifyIdxListSized ec acc depth xs ys = unifyIdxList ec acc depth (idxFuelFor xs ys) xs ys
 
 idxFuelFor : List Value -> List Value -> Int
@@ -162,8 +162,8 @@ idxIsNatSuccHead (VNeutral n) = case n of
 idxIsNatSuccHead _ = False
 
 -- | 自动补注（M41 新增导出）：unifyIdx。
-unifyIdx : Ec -> List (Pair Int Value) -> Int -> Int -> Value -> Value -> Result (List (Pair Int Value))
-unifyIdx ec acc depth fuel a b = if fuel <= 0 then Err (tcMsg IndexFuel [])
+unifyIdx : Ec -> List (Pair Int Value) -> Int -> Int -> Value -> Value -> Check (List (Pair Int Value))
+unifyIdx ec acc depth fuel a b = if fuel <= 0 then ErrC (tcMsg IndexFuel [])
 else
   let
     a2 = force (ecDefTbl ec) (ecSolsP ec) defaultFuel (refineValue acc defaultFuel a)
@@ -171,18 +171,18 @@ else
   in case a2 of
     VNeutral (NVar an al []) => case b2 of
       VNeutral (NVar bn bl []) =>
-        if al == bl then Ok acc
+        if al == bl then OkC acc
         else if al < bl then if occursLevel occursFuel depth bl a2 then unifyErr
-        else Ok (Base.List.Cons (Pair bl a2) acc)
+        else OkC (Base.List.Cons (Pair bl a2) acc)
         else if occursLevel occursFuel depth al b2 then unifyErr
-        else Ok (Base.List.Cons (Pair al b2) acc)
+        else OkC (Base.List.Cons (Pair al b2) acc)
       _ =>
         if occursLevel occursFuel depth al b2 then unifyErr
-        else Ok (Base.List.Cons (Pair al b2) acc)
+        else OkC (Base.List.Cons (Pair al b2) acc)
     _ => case b2 of
       VNeutral (NVar bn bl []) =>
         if occursLevel occursFuel depth bl a2 then unifyErr
-        else Ok (Base.List.Cons (Pair bl a2) acc)
+        else OkC (Base.List.Cons (Pair bl a2) acc)
       _ => unifyIdxRigid ec acc depth (fuel - 1) a2 b2
 
 -- occurs check：精化成自己会导致无限链。
@@ -237,7 +237,7 @@ occursFuel : Int
 occursFuel = 1000000
 
 -- 刚性位置：构造子/中性头按结构递归，其余回落到 conv 的相等性判定。
-unifyIdxRigid : Ec -> List (Pair Int Value) -> Int -> Int -> Value -> Value -> Result (List (Pair Int Value))
+unifyIdxRigid : Ec -> List (Pair Int Value) -> Int -> Int -> Value -> Value -> Check (List (Pair Int Value))
 unifyIdxRigid ec acc depth fuel a b = if fuel <= 0 then unifyErr
 else case a of
   VCon c xs => case b of
@@ -248,27 +248,27 @@ else case a of
       if g == g2 then unifyIdxList ec acc depth (fuel - 1) sp sp2 else unifyIdxConv ec acc depth a b
     _ => unifyIdxConv ec acc depth a b
   VType i => case b of
-    VType j => if levelEq i j then Ok acc else unifyErr
+    VType j => if levelEq i j then OkC acc else unifyErr
     _ => unifyErr
   VInt n => case b of
-    VInt m => if n == m then Ok acc else unifyErr
+    VInt m => if n == m then OkC acc else unifyErr
     _ => unifyErr
   VStr s => case b of
-    VStr s2 => if s == s2 then Ok acc else unifyErr
+    VStr s2 => if s == s2 then OkC acc else unifyErr
     _ => unifyErr
   VFloat s => case b of
-    VFloat s2 => if s == s2 then Ok acc else unifyErr
+    VFloat s2 => if s == s2 then OkC acc else unifyErr
     _ => unifyErr
   VBool x => case b of
-    VBool y => if x == y then Ok acc else unifyErr
+    VBool y => if x == y then OkC acc else unifyErr
     _ => unifyErr
   _ => unifyIdxConv ec acc depth a b
 
 -- conv 回落：只判定相等（索引里的 meta 求解读 M15）。
-unifyIdxConv : Ec -> List (Pair Int Value) -> Int -> Value -> Value -> Result (List (Pair Int Value))
+unifyIdxConv : Ec -> List (Pair Int Value) -> Int -> Value -> Value -> Check (List (Pair Int Value))
 unifyIdxConv ec acc depth a b = case conv (ecDefTbl ec) (ecSolsP ec) depth a b of
-  Ok sols2 => Ok acc
-  Err e => unifyErr
+  OkC sols2 => OkC acc
+  ErrC e => unifyErr
 
 -- ---------------------------------------------------------------
 -- M28：分支可达性 —— 唯一判据（省略/写出共用）
@@ -296,11 +296,11 @@ branchAfterUnify ec branchCtx refs =
 -- 覆盖率用它模拟一个**未写出**的构造子分支：绑哑通配（只借绑定与求值），不合成分支体。
 branchVerdict : Ctx -> Ec -> List Value -> DtCtor -> BranchVerdict
 branchVerdict ctx ec idxs ctor = case bindCtorTele ctx (dtCtorType ctor) (wildArgs (ctorExplicitArity (dtCtorType ctor))) of
-  Err e => BranchOk
-  Ok (Pair branchCtx (Pair binders leftover)) => if nonEmpty leftover then BranchOk
+  ErrC e => BranchOk
+  OkC (Pair branchCtx (Pair binders leftover)) => if nonEmpty leftover then BranchOk
   else case unifyIdxListSized ec [] (ctxDepth branchCtx) (ctorResultValsIn branchCtx ctor) (map (\v => refineValue [] defaultFuel v) idxs) of
-    Err e => BranchImpossibleIndex
-    Ok refs => branchAfterUnify ec branchCtx refs
+    ErrC e => BranchImpossibleIndex
+    OkC refs => branchAfterUnify ec branchCtx refs
 
 branchReachable : Ctx -> Ec -> List Value -> DtCtor -> Bool
 branchReachable ctx ec idxs ctor = branchIsReachable (branchVerdict ctx ec idxs ctor)
@@ -358,8 +358,8 @@ allCtorsUnsatisfiable ec dd idxs depth = allCtorsUnsatisfiableGo ec (dtDataCtors
 allCtorsUnsatisfiableGo : Ec -> List DtCtor -> List Value -> Int -> Bool
 allCtorsUnsatisfiableGo ec [] idxs depth = True
 allCtorsUnsatisfiableGo ec (ctor :: rest) idxs depth = case unifyIdxListSized ec [] depth (ctorResultVals ctor depth) idxs of
-  Ok refs => False
-  Err e => allCtorsUnsatisfiableGo ec rest idxs depth
+  OkC refs => False
+  ErrC e => allCtorsUnsatisfiableGo ec rest idxs depth
 
 -- ---------------------------------------------------------------
 -- M14/M19：构造子 telescope 绑定 + 构造子结果值
@@ -367,10 +367,10 @@ allCtorsUnsatisfiableGo ec (ctor :: rest) idxs depth = case unifyIdxListSized ec
 -- M28：这条路径只服务**规范形** case（每个构造子一个分支、子模式全是变量/通配）。
 -- 嵌套模式在 `checkCase` 里先降级成模式矩阵（`Elab.Match.multiToCaseExpr`），因此这里
 -- 遇到非变量子模式只可能是内部错误，报 `NestedPatterns`。
-bindCtorTele : Ctx -> Term -> List Pat -> Result (Pair Ctx (Pair (List (Pair String Rig)) (List Pat)))
+bindCtorTele : Ctx -> Term -> List Pat -> Check (Pair Ctx (Pair (List (Pair String Rig)) (List Pat)))
 bindCtorTele ctx ty subpats = bindCtorGo ctx ty subpats []
 
-bindCtorGo : Ctx -> Term -> List Pat -> List (Pair String Rig) -> Result (Pair Ctx (Pair (List (Pair String Rig)) (List Pat)))
+bindCtorGo : Ctx -> Term -> List Pat -> List (Pair String Rig) -> Check (Pair Ctx (Pair (List (Pair String Rig)) (List Pat)))
 bindCtorGo ctx ty subpats acc = case ty of
   TPi name implicit rig dom cod =>
     let
@@ -382,14 +382,14 @@ bindCtorGo ctx ty subpats acc = case ty of
         ctx2 = ctxBindValue famName domVal ctx
       in bindCtorGo ctx2 cod subpats (Pair famName Rig0 :: acc)
     else case subpats of
-      [] => Err (tcMsg CaseBranchTooFewArgs [])
+      [] => ErrC (tcMsg CaseBranchTooFewArgs [])
       p :: rest => case p of
         PVar pname psp => bindCtorField ctx rig domVal cod pname rest acc
         PWild psp => bindCtorField ctx rig domVal cod "_" rest acc
         _ => tcErr0 (patSpan p) NestedPatterns
-  _ => Ok (Pair ctx (Pair (reverse acc) subpats))
+  _ => OkC (Pair ctx (Pair (reverse acc) subpats))
 
-bindCtorField : Ctx -> Rig -> Value -> Term -> String -> List Pat -> List (Pair String Rig) -> Result (Pair Ctx (Pair (List (Pair String Rig)) (List Pat)))
+bindCtorField : Ctx -> Rig -> Value -> Term -> String -> List Pat -> List (Pair String Rig) -> Check (Pair Ctx (Pair (List (Pair String Rig)) (List Pat)))
 bindCtorField ctx rig domVal cod binderName rest acc =
   let
     ctx2 = ctxBindValue binderName domVal ctx
@@ -439,12 +439,12 @@ teleValsFrom low k =
 -- 只对**中性变量**（`NVar` 且 spine 为空）反射：非变量 scrutinee（`f x`、字面量、别的
 -- 分支绑定子……）拿不到等式，保持旧行为；Bool/Int/String 的 case 走各自的专用路径，
 -- 不会到这里。
-reflectScrutinee : Ec -> Int -> List (Pair Int Value) -> Value -> Value -> Result (List (Pair Int Value))
+reflectScrutinee : Ec -> Int -> List (Pair Int Value) -> Value -> Value -> Check (List (Pair Int Value))
 reflectScrutinee ec depth refs ctorVal scrutVal = case force (ecDefTbl ec) (ecSolsP ec) defaultFuel (refineValue refs defaultFuel scrutVal) of
   VNeutral n => case n of
     NVar name lvl [] => unifyIdx ec refs depth defaultFuel (VNeutral n) ctorVal
-    _ => Ok refs
-  _ => Ok refs
+    _ => OkC refs
+  _ => OkC refs
 
 -- ---------------------------------------------------------------
 -- M28/B15：case 分支的源级校验（唯一入口 `checkCase` 先跑它）
@@ -503,12 +503,12 @@ stripAsPats [] = []
 stripAsPats ((Pair pat body) :: rest) = Pair (stripAsPat pat) body :: stripAsPats rest
 
 -- | 自动补注（M41 新增导出）：checkCaseAltsFlat。
-checkCaseAltsFlat : List (Pair Pat Expr) -> Result Int
+checkCaseAltsFlat : List (Pair Pat Expr) -> Check Int
 checkCaseAltsFlat alts = checkCaseAltsGo [] (stripAsPats alts)
 
-checkCaseAltsGo : List (Pair Pat Expr) -> List (Pair Pat Expr) -> Result Int
+checkCaseAltsGo : List (Pair Pat Expr) -> List (Pair Pat Expr) -> Check Int
 checkCaseAltsGo prevs alts = case alts of
-  [] => Ok 0
+  [] => OkC 0
   (Pair pat body) :: rest => case pat of
     PCon cname args psp =>
       if ctorHeadCovered cname prevs then tcErr1 psp (RedundantCtorBranch cname) cname
@@ -527,8 +527,8 @@ checkCaseAltsGo prevs alts = case alts of
 
 -- 兜底分支只能最后；后面的字面量分支报 `BranchAfterCatchAll`（B15 新诊断），
 -- 其它分支沿用既有 `CatchAllNotLast`。
-checkCatchAll : List (Pair Pat Expr) -> Pair Pat Expr -> List (Pair Pat Expr) -> Span -> Result Int
-checkCatchAll prevs alt [] sp = Ok 0
+checkCatchAll : List (Pair Pat Expr) -> Pair Pat Expr -> List (Pair Pat Expr) -> Span -> Check Int
+checkCatchAll prevs alt [] sp = OkC 0
 checkCatchAll prevs alt rest sp =
   if hasLitHead rest then tcErr0 sp BranchAfterCatchAll else tcErr0 sp CatchAllNotLast
 
@@ -584,19 +584,19 @@ anyNestedArg (a :: rest) = case a of
 -- 性能：**已写出的分支直接跳过**（不跑可达性），只有「没写的构造子」才需要判可达性——
 -- 否则每个 case 的每个构造子都要模拟一次分支（绑定 telescope + 上下文空类型检查），
 -- 编译器自检会慢 4 倍以上。
-checkCoverage : Ctx -> Ec -> DtData -> List Value -> List (Pair Pat Expr) -> Span -> Result Int
+checkCoverage : Ctx -> Ec -> DtData -> List Value -> List (Pair Pat Expr) -> Span -> Check Int
 checkCoverage ctx ec dd idxs alts sp =
   checkCovered ctx ec dd idxs (altNames alts) alts sp (dtDataCtors dd)
 
-checkCovered : Ctx -> Ec -> DtData -> List Value -> List String -> List (Pair Pat Expr) -> Span -> List DtCtor -> Result Int
-checkCovered ctx ec dd idxs written alts sp [] = Ok 0
+checkCovered : Ctx -> Ec -> DtData -> List Value -> List String -> List (Pair Pat Expr) -> Span -> List DtCtor -> Check Int
+checkCovered ctx ec dd idxs written alts sp [] = OkC 0
 checkCovered ctx ec dd idxs written alts sp (ctor :: rest) =
   if memName (dtCtorName ctor) written then checkCovered ctx ec dd idxs written alts sp rest
   else if branchReachable ctx ec idxs ctor then tcErr1 sp (NotExhaustive (ctorDisplayName (dtCtorName ctor))) (ctorDisplayName (dtCtorName ctor))
   else checkCovered ctx ec dd idxs written alts sp rest
 
-checkCaseDone : Ec -> Ctx -> DtData -> List Value -> List (Pair Pat Expr) -> Value -> Span -> Term -> List CaseAlt -> Result (Pair Term Ec)
+checkCaseDone : Ec -> Ctx -> DtData -> List Value -> List (Pair Pat Expr) -> Value -> Span -> Term -> List CaseAlt -> Check (Pair Term Ec)
 checkCaseDone ec ctx dd idxs alts expected sp scrutTerm altTerms =
-  if hasCatchAll alts then Ok (Pair (TCase scrutTerm altTerms) ec)
+  if hasCatchAll alts then OkC (Pair (TCase scrutTerm altTerms) ec)
   else Vuna.Compiler.Common.bind (checkCoverage ctx ec dd idxs alts sp)
-    (\_ => Ok (Pair (TCase scrutTerm altTerms) ec))
+    (\_ => OkC (Pair (TCase scrutTerm altTerms) ec))

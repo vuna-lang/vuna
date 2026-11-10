@@ -353,6 +353,9 @@ captureMode st = case st.stateSink of
   SinkStdout => False
   SinkCapture _ _ => True
 
+printDiag : ReplState -> Diagnostic -> Int
+printDiag st d = printError st (diagText d)
+
 printError : ReplState -> String -> Int
 printError st msg = replEmitErr st "${c st "31" "错误: "}${msg}\n"
 
@@ -371,7 +374,7 @@ printOk st msg =
 -- 起一个 session：非 tty 设置（无颜色 / 无行编辑）、历史文件为空（不读不写盘；
 -- 内存历史与 `:history` / `:again` 仍可用）、不打印 banner；`applyStart` 的提示消息
 -- 随 Ok 返回，由调用方决定是否放进协议响应。
-startReplSession : PackageContext -> ReplStart -> ReplSink -> Result (Pair ReplState String)
+startReplSession : PackageContext -> ReplStart -> ReplSink -> Check (Pair ReplState String)
 startReplSession ctx start sink =
   let
     settings = defaultSettings False
@@ -469,9 +472,9 @@ mkBlock text0 fromFile =
   let
     text = ensureTrailingNewline text0
   in case parseSource replTempFile text of
-    Ok (SourceFile _ _ _ decls) =>
+    OkC (SourceFile _ _ _ decls) =>
       ReplBlock text (dedupStrs (funNamesOf decls)) (dedupStrs (sigNamesOf decls)) fromFile
-    Err e => ReplBlock text [] [] fromFile
+    ErrC e => ReplBlock text [] [] fromFile
 
 ensureTrailingNewline : String -> String
 ensureTrailingNewline s = if s == "" || endsWith "\n" s then s else "${s}\n"
@@ -505,8 +508,8 @@ historyFilePath _ =
 -- 读历史文件：v2（有头，`\n` 转义）或旧 v1（纯文本一行一条）由 History 判别。
 historyEntriesOf : String -> List String
 historyEntriesOf path = case readText path of
-  Err e => []
-  Ok s => parseHistoryFile s
+  ErrC e => []
+  OkC s => parseHistoryFile s
 
 loadHistoryFrom : String -> List String
 loadHistoryFrom path = if path == "" then [] else takeLast replMaxHistory (historyEntriesOf path)
@@ -607,11 +610,11 @@ runRepl ctx start =
     st0 = initialState ctx settings history histFile SinkStdout
     _ = replEmit st0 (bannerText st0)
   in case applyStart st0 start of
-    Err e =>
+    ErrC e =>
       let
-        _ = printError st0 e
+        _ = printDiag st0 e
       in 2
-    Ok (Pair st1 msg) =>
+    OkC (Pair st1 msg) =>
       let
         _ = replEmit st1 "${msg}\n"
       in replLoop replFuelBound st1
@@ -630,13 +633,13 @@ packageNameLabel st =
     name = contextPackageName st.stateCtx
   in if name == "" then "base-only" else name
 
-applyStart : ReplState -> ReplStart -> Result (Pair ReplState String)
-applyStart st StartNone = Ok (Pair st "")
-applyStart st (StartDir dir) = Ok (Pair st "包上下文: ${packageNameLabel st}")
+applyStart : ReplState -> ReplStart -> Check (Pair ReplState String)
+applyStart st StartNone = OkC (Pair st "")
+applyStart st (StartDir dir) = OkC (Pair st "包上下文: ${packageNameLabel st}")
 applyStart st (StartFile path) =
   doLoadFile st path
-    >>= (\p => Ok (Pair (secondOf p) "已加载 ${path}（${firstOf p} 个定义）"))
-applyStart st (StartModule m) = doLoadModule st m >>= (\s => Ok (Pair s "已导入模块 ${m}"))
+    >>= (\p => OkC (Pair (secondOf p) "已加载 ${path}（${firstOf p} 个定义）"))
+applyStart st (StartModule m) = doLoadModule st m >>= (\s => OkC (Pair s "已导入模块 ${m}"))
 
 replLoop : Int -> ReplState -> Int
 replLoop fuel st = if fuel <= 0 then 0
@@ -741,29 +744,29 @@ addImport st line =
   let
     imports2 = "${st.stateImports}${line}\n"
   in case parseSource replTempFile (imports2 ++ bufferDefs st) of
-    Err e =>
+    ErrC e =>
       let
-        _ = printError st "parse error: ${e}"
+        _ = printError st "parse error: ${diagText e}"
       in ReplContinue st
-    Ok _ => ReplContinue (withImports st imports2)
+    OkC _ => ReplContinue (withImports st imports2)
 
 -- 定义还是表达式：整段能解析成顶层声明就追加到定义缓冲，否则按表达式求值。
 -- 缺签名的 DFun 先走自动签名（写回后复查，失败回滚）。
 submitText : ReplState -> String -> ReplOutcome
 submitText st text = case parseSource replTempFile "${bufferProgram st}${text}\n" of
-  Ok (SourceFile hdr imp fx decls) => case hdr of
+  OkC (SourceFile hdr imp fx decls) => case hdr of
     Just md => evalText st text
     Nothing => appendDecls st text
-  Err e => evalText st text
+  ErrC e => evalText st text
 
 appendDecls : ReplState -> String -> ReplOutcome
 appendDecls st text = case parseSource replTempFile text of
-  Ok (SourceFile Nothing _ _ newDecls) => case prepareRedefinition st newDecls of
-    Err e =>
+  OkC (SourceFile Nothing _ _ newDecls) => case prepareRedefinition st newDecls of
+    ErrC e =>
       let
-        _ = printError st e
+        _ = printDiag st e
       in ReplContinue st
-    Ok stRemoved =>
+    OkC stRemoved =>
       let
         targets = missingTargets newDecls (bufferSigNames stRemoved)
       in if lenInt targets == 0 then ReplContinue (withDefs stRemoved (appendLast stRemoved.stateDefs (mkBlock text False)))
@@ -771,17 +774,17 @@ appendDecls st text = case parseSource replTempFile text of
   _ => evalText st text
 
 -- 重定义：移除同名旧定义块（以及新块自带签名时同名的旧签名块）；文件块冲突直接报错。
-prepareRedefinition : ReplState -> List Decl -> Result ReplState
+prepareRedefinition : ReplState -> List Decl -> Check ReplState
 prepareRedefinition st newDecls =
   let
     newDefines = dedupStrs (funNamesOf newDecls)
     newSigs = dedupStrs (sigNamesOf newDecls)
-  in if hasFileConflict st.stateDefs newDefines then Err
+  in if hasFileConflict st.stateDefs newDefines then err
     "定义来自已加载的文件（${fileBlockOrigin st.stateDefs}）；请修改文件后 :reload（或 :reset 清空）"
   else
     let
       kept = filter (\b => keepBlock newDefines newSigs b) st.stateDefs
-    in Ok (withDefs st kept)
+    in OkC (withDefs st kept)
 
 hasFileConflict : List ReplBlock -> List String -> Bool
 hasFileConflict [] newDefines = False
@@ -807,22 +810,24 @@ inferAndAppend stOrig stRemoved text targets =
   let
     ctx = stRemoved.stateCtx
   in case inferDefTypes ctx (bufferProgram stRemoved) targets text of
-    Err e =>
+    ErrC e =>
       let
-        _ = printError stOrig "无法自动推断签名：${e}"
+        _ = printError stOrig "无法自动推断签名：${diagText e}"
         _ =
           printHint stOrig
             "提示: 带模式匹配 / trait 约束 / 高阶参数的定义请先写类型签名（如 `f : Int -> Int`）"
       in ReplContinue stOrig
-    Ok sigs =>
+    OkC sigs =>
       let
         text2 = join "" (map sigLine sigs) ++ text
       in case checkProgram ctx "${bufferProgram stRemoved}\n${text2}\n" of
-        Err e =>
+        ErrC e =>
           let
-            _ = printError stOrig "自动推断的签名未通过复查（请手写签名）：${e}"
+            _ =
+              printError stOrig
+                "自动推断的签名未通过复查（请手写签名）：${diagText e}"
           in ReplContinue stOrig
-        Ok _ =>
+        OkC _ =>
           ReplContinue (withDefs stRemoved (appendLast stRemoved.stateDefs (mkBlock text2 False)))
 
 sigLine : Pair String String -> String
@@ -857,8 +862,8 @@ replToolSession ctx program = case depIfacesForToolSourceDetailed ctx "<repl>" p
 -- import 时判定不变；一旦 import 名不在会话闭包里就整条重建。
 sessionClosureOk : PackageContext -> ReplToolSession -> String -> Bool
 sessionClosureOk ctx session program = case parseSource replTempFile program of
-  Err _ => True
-  Ok (SourceFile _ imports _ _) =>
+  ErrC _ => True
+  OkC (SourceFile _ imports _ _) =>
     neededInClosure session.sessionTool.tcNeeded (map replImportName imports)
 
 neededInClosure : List String -> List String -> Bool
@@ -882,7 +887,7 @@ sessionUsable st program = case st.stateToolSession of
 -- 会话可用就复用依赖接口；否则（一次）重建；都不可能时（base-only / 依赖接口不全）走
 -- 不带 iface 的旧求值路径，且不记住会话（下次求值再试一次，成本是零：直接返回 Nothing）。
 -- 返回值带上「本次实际用的会话」，由调用方写回状态。
-evalExprInfoWithSession : ReplState -> String -> String -> Pair (Maybe ReplToolSession) (Result (Pair (Pair String String) (Maybe AuxCache)))
+evalExprInfoWithSession : ReplState -> String -> String -> Pair (Maybe ReplToolSession) (Check (Pair (Pair String String) (Maybe AuxCache)))
 evalExprInfoWithSession st program expr = case st.stateToolSession of
   Just session =>
     if sessionUsable st program then Pair (Just session)
@@ -890,7 +895,7 @@ evalExprInfoWithSession st program expr = case st.stateToolSession of
     else evalExprInfoRebuild st program expr
   Nothing => evalExprInfoRebuild st program expr
 
-evalExprInfoRebuild : ReplState -> String -> String -> Pair (Maybe ReplToolSession) (Result (Pair (Pair String String) (Maybe AuxCache)))
+evalExprInfoRebuild : ReplState -> String -> String -> Pair (Maybe ReplToolSession) (Check (Pair (Pair String String) (Maybe AuxCache)))
 evalExprInfoRebuild st program expr = case replToolSession st.stateCtx program of
   Nothing => Pair Nothing (evalExprInfoWithAux st.stateCtx program expr st.stateAuxCache)
   Just session =>
@@ -905,17 +910,17 @@ evalText st text =
   let
     start = runIO timeUs
   in case parseExpressionSource text of
-    Err e =>
+    ErrC e =>
       let
-        _ = printError st e
+        _ = printDiag st e
       in ReplContinue (withPending st "")
-    Ok _ => case evalExprInfoWithSession st (bufferProgram st) text of
+    OkC _ => case evalExprInfoWithSession st (bufferProgram st) text of
       Pair session res => case res of
-        Err e =>
+        ErrC e =>
           let
-            _ = printError st e
+            _ = printDiag st e
           in ReplContinue (withToolSession (withPending st "") session)
-        Ok (Pair info aux2) =>
+        OkC (Pair info aux2) =>
           let
             tyText = secondOf info
             st2 = withToolSession (withAuxCache st aux2) session
@@ -970,11 +975,11 @@ else
   let
     source = "${ioTypeImports st tyText}${bufferProgram st}\nmain : ${tyText}\nmain = ${text}\n"
   in case runEffectProgram st.stateCtx source (ioPrintResult tyText) of
-    Err e =>
+    ErrC e =>
       let
-        _ = printError st e
+        _ = printDiag st e
       in 0
-    Ok code => if code == 0 then 0
+    OkC code => if code == 0 then 0
     else
       let
         _ = replEmit st "${c st "33" "[进程退出码 ${code}]"}\n"
@@ -993,8 +998,8 @@ ioTypeImports st tyText =
 
 hasMainDef : String -> Bool
 hasMainDef program = case parseSource replTempFile program of
-  Err e => False
-  Ok (SourceFile _ _ _ decls) => memName "main" (topNames decls)
+  ErrC e => False
+  OkC (SourceFile _ _ _ decls) => memName "main" (topNames decls)
 
 -- 顶层类型文本是 canonical `IO a` 吗？`showTypeSig` 把 TApp 渲染成 `(Base.IO.IO Int)`。
 isIOTypeText : String -> Bool
@@ -1191,10 +1196,10 @@ printTypeDoc st text =
   else case findManifestDirMaybe (contextDir st.stateCtx) of
     Nothing => st
     Just _ => case ensureIndex st of
-      Err _ => st
-      Ok (Pair idx st2) => case findSymbol idx name of
-        Err _ => st2
-        Ok syms =>
+      ErrC _ => st
+      OkC (Pair idx st2) => case findSymbol idx name of
+        ErrC _ => st2
+        OkC syms =>
           let
             _ = printFirstDoc st2 syms
           in st2
@@ -1241,19 +1246,19 @@ else
   let
     expr = normalizeTypeArg exprText
   in case parseExpressionSource expr of
-    Err e =>
+    ErrC e =>
       let
-        _ = printError st e
+        _ = printDiag st e
         _ = printTypeOpHint st exprText
       in ReplContinue st
-    Ok _ => case evalExprInfoWithSession st (bufferProgram st) expr of
+    OkC _ => case evalExprInfoWithSession st (bufferProgram st) expr of
       Pair session res => case res of
-        Err e =>
+        ErrC e =>
           let
-            _ = printError st e
+            _ = printDiag st e
             _ = printTypeOpHint st exprText
           in ReplContinue (withToolSession st session)
-        Ok (Pair info aux2) =>
+        OkC (Pair info aux2) =>
           let
             _ = replEmit st "${exprText} : ${colorTypeText st (trim (secondOf info))}\n"
           in ReplContinue (withToolSession (withAuxCache st aux2) session)
@@ -1266,19 +1271,19 @@ else
   let
     expr = normalizeTypeArg exprText
   in case parseExpressionSource expr of
-    Err e =>
+    ErrC e =>
       let
-        _ = printError st e
+        _ = printDiag st e
         _ = printTypeOpHint st exprText
       in ReplContinue st
-    Ok _ => case evalExprInfoWithSession st (bufferProgram st) expr of
+    OkC _ => case evalExprInfoWithSession st (bufferProgram st) expr of
       Pair session res => case res of
-        Err e =>
+        ErrC e =>
           let
-            _ = printError st e
+            _ = printDiag st e
             _ = printTypeOpHint st exprText
           in ReplContinue (withToolSession st session)
-        Ok (Pair info aux2) =>
+        OkC (Pair info aux2) =>
           let
             st2 = withToolSession (withAuxCache st aux2) session
             Pair implicits explicitTy = splitImplicitParts (trim (secondOf info))
@@ -1471,40 +1476,40 @@ else
 
 loadFileStep : ReplState -> String -> String -> ReplOutcome
 loadFileStep st verb path = case doLoadFile st path of
-  Err e =>
+  ErrC e =>
     let
-      _ = printError st e
+      _ = printDiag st e
     in ReplContinue st
-  Ok (Pair n st2) =>
+  OkC (Pair n st2) =>
     let
       _ = replEmit st2 "${verb} ${path}（${n} 个定义）\n"
     in ReplContinue st2
 
-doLoadFile : ReplState -> String -> Result (Pair Int ReplState)
+doLoadFile : ReplState -> String -> Check (Pair Int ReplState)
 doLoadFile st path = case readText path of
-  Err e => Err e
-  Ok source => case parseSource path source of
-    Err e => Err e
-    Ok (SourceFile (Just _) _ _ _) =>
-      Err
+  ErrC e => ErrC e
+  OkC source => case parseSource path source of
+    ErrC e => ErrC e
+    OkC (SourceFile (Just _) _ _ _) =>
+      err
         "${path} 是模块文件（含 `module ... where` 头）；用 :load <模块名> 导入，或用 :browse <模块名> 查看接口"
-    Ok (SourceFile Nothing _ _ decls) => Ok (Pair (lenInt decls) (loadedFileState st path source))
+    OkC (SourceFile Nothing _ _ decls) => OkC (Pair (lenInt decls) (loadedFileState st path source))
 
 loadModuleStep : ReplState -> String -> String -> ReplOutcome
 loadModuleStep st m verb = case doLoadModule st m of
-  Err e =>
+  ErrC e =>
     let
-      _ = printError st e
+      _ = printDiag st e
     in ReplContinue st
-  Ok st2 => printOk st2 "${verb} ${m}"
+  OkC st2 => printOk st2 "${verb} ${m}"
 
-doLoadModule : ReplState -> String -> Result ReplState
+doLoadModule : ReplState -> String -> Check ReplState
 doLoadModule st m =
   let
     probe = "import ${m}\n\nvuna_repl_probe : Int\nvuna_repl_probe = 0\n"
   in case checkProgram st.stateCtx probe of
-    Err e => Err "找不到模块 ${m}（${packageLabel st}）：${e}"
-    Ok _ =>
+    ErrC e => err "找不到模块 ${m}（${packageLabel st}）：${diagText e}"
+    OkC _ =>
       let
         imports2 =
           if importAlready st.stateImports m then st.stateImports
@@ -1513,23 +1518,23 @@ doLoadModule st m =
           ReplState st.stateCtx imports2 st.stateDefs st.statePending st.stateBlock 2 m
             st.stateBrowseIndex st.stateSettings st.stateHistory st.stateHistoryFile Nothing
             st.stateToolSession st.stateIndexCache st.stateSink
-      in Ok st2
+      in OkC st2
 
 importAlready : String -> String -> Bool
 importAlready imports m = memName "import ${m}" (map (\l => trim l) (lines imports))
 
 loadDirStep : ReplState -> String -> ReplOutcome
 loadDirStep st dir = case doLoadDir st dir of
-  Err e =>
+  ErrC e =>
     let
-      _ = printError st e
+      _ = printDiag st e
     in ReplContinue st
-  Ok st2 => printOk st2 "已切换包 ${packageNameLabel st2}（缓冲与索引已重置）"
+  OkC st2 => printOk st2 "已切换包 ${packageNameLabel st2}（缓冲与索引已重置）"
 
-doLoadDir : ReplState -> String -> Result ReplState
+doLoadDir : ReplState -> String -> Check ReplState
 doLoadDir st dir =
   contextForDir dir
-    >>= (\ctx2 => Ok (switchedContext st (if contextPrivileged st.stateCtx then privilegedContext ctx2 else ctx2)))
+    >>= (\ctx2 => OkC (switchedContext st (if contextPrivileged st.stateCtx then privilegedContext ctx2 else ctx2)))
 
 reloadStep : ReplState -> String -> ReplOutcome
 reloadStep st arg = if trim arg /= "" then commandUsage st ":reload"
@@ -1565,15 +1570,15 @@ replIndexCacheFresh cache dir =
   cache.indexCacheDir == dir
     && indexStatsUnchanged cache.indexCacheBuiltSec cache.indexCacheStats (indexStatsOf cache.indexCacheBuiltSec dir)
 
-ensureIndex : ReplState -> Result (Pair Index ReplState)
+ensureIndex : ReplState -> Check (Pair Index ReplState)
 ensureIndex st = case st.stateBrowseIndex of
-  Just idx => Ok (Pair idx st)
+  Just idx => OkC (Pair idx st)
   Nothing =>
     let
       dir = contextDir st.stateCtx
     in case findManifestDirMaybe dir of
       Nothing =>
-        Err
+        err
           "当前目录不在 vuna workspace 内（向上找不到 vuna.toml）；:browse/:info/:search 需要在包或 workspace 根运行"
       Just _ =>
         let
@@ -1582,54 +1587,54 @@ ensureIndex st = case st.stateBrowseIndex of
               if replIndexCacheFresh cache dir then Just cache.indexCacheIndex else Nothing
             Nothing => Nothing
         in case cached of
-          Just idx => Ok (Pair idx st)
+          Just idx => OkC (Pair idx st)
           Nothing =>
             let
               _ = replEmit st (c st "2" "正在构建源码索引…\n")
             in case loadOrBuild dir of
-              Err e => Err e
-              Ok idx =>
+              ErrC e => ErrC e
+              OkC idx =>
                 let
                   builtSec = runIO timeUs / 1000000
-                in Ok (Pair idx (withIndexSession st idx (indexStatsOf builtSec dir) builtSec dir))
+                in OkC (Pair idx (withIndexSession st idx (indexStatsOf builtSec dir) builtSec dir))
 
 browseStep : ReplState -> String -> ReplOutcome
 browseStep st arg = case ensureIndex st of
-  Err e =>
+  ErrC e =>
     let
-      _ = printError st e
+      _ = printDiag st e
     in ReplContinue st
-  Ok (Pair idx st2) => if arg == "" then printOk st2 (renderModules idx)
+  OkC (Pair idx st2) => if arg == "" then printOk st2 (renderModules idx)
   else case renderApi idx arg of
-    Err e =>
+    ErrC e =>
       let
-        _ = printError st2 e
+        _ = printDiag st2 e
       in ReplContinue st2
-    Ok text => printOk st2 text
+    OkC text => printOk st2 text
 
 infoStep : ReplState -> String -> ReplOutcome
 infoStep st name = if name == "" then commandUsage st ":info"
 else case bindingTypes st.stateCtx (bufferProgram st) of
-  Ok types => case lookupPair name types of
+  OkC types => case lookupPair name types of
     Just ty =>
       let
         _ = replEmit st "${c st "1" name} : ${c st "36" ty}${c st "2" "   -- REPL"}\n"
       in ReplContinue st
     Nothing => infoFromIndex st name
-  Err e => infoFromIndex st name
+  ErrC e => infoFromIndex st name
 
 infoFromIndex : ReplState -> String -> ReplOutcome
 infoFromIndex st name = case ensureIndex st of
-  Err e =>
+  ErrC e =>
     let
-      _ = printError st e
+      _ = printDiag st e
     in ReplContinue st
-  Ok (Pair idx st2) => case findSymbol idx name of
-    Err e =>
+  OkC (Pair idx st2) => case findSymbol idx name of
+    ErrC e =>
       let
-        _ = printError st2 e
+        _ = printDiag st2 e
       in ReplContinue st2
-    Ok syms =>
+    OkC syms =>
       let
         _ = printSymInfos st2 idx syms
       in ReplContinue st2
@@ -1658,19 +1663,19 @@ modulePathOf idx m = case filter (\mi => modName mi == m) (indexModules idx) of
 searchStep : ReplState -> String -> ReplOutcome
 searchStep st arg = if arg == "" then commandUsage st ":search"
 else case ensureIndex st of
-  Err e =>
+  ErrC e =>
     let
-      _ = printError st e
+      _ = printDiag st e
     in ReplContinue st
-  Ok (Pair idx st2) =>
+  OkC (Pair idx st2) =>
     let
       Pair mode query = searchModeOf arg
     in case runSearchHits idx mode query of
-      Err e =>
+      ErrC e =>
         let
-          _ = printError st2 e
+          _ = printDiag st2 e
         in ReplContinue st2
-      Ok hits => case take 20 hits of
+      OkC hits => case take 20 hits of
         [] => printOk st2 "没有匹配结果: ${query}"
         limited =>
           let
@@ -1684,13 +1689,13 @@ searchModeOf arg =
   else if startsWith "--doc " arg then Pair 3 (trim (substring 6 (byteLength arg - 6) arg))
   else Pair 0 (trim arg)
 
-runSearchHits : Index -> Int -> String -> Result (List SearchHit)
+runSearchHits : Index -> Int -> String -> Check (List SearchHit)
 runSearchHits idx mode query =
   if mode == 1 then searchType idx query
-  else if mode == 2 then Ok (searchNameDoc idx query True False)
-  else if mode == 3 then Ok (searchNameDoc idx query False True)
+  else if mode == 2 then OkC (searchNameDoc idx query True False)
+  else if mode == 3 then OkC (searchNameDoc idx query False True)
   else if contains "->" query || contains "=>" query then searchType idx query
-  else Ok (searchNameDoc idx query False False)
+  else OkC (searchNameDoc idx query False False)
 
 printHits : ReplState -> List SearchHit -> Int
 printHits st [] = 0
@@ -1704,13 +1709,13 @@ printHits st (h :: rest) =
 -- ---------------------------------------------------------------
 defsStep : ReplState -> ReplOutcome
 defsStep st = case bindingTypes st.stateCtx (bufferProgram st) of
-  Err e =>
+  ErrC e =>
     let
-      _ = printError st e
+      _ = printDiag st e
       _ = replEmit st "定义（仅名字）：\n"
       _ = printBlockNames st [] st.stateDefs
     in ReplContinue st
-  Ok types =>
+  OkC types =>
     let
       _ = replEmit st "${c st "1" "定义："}\n"
       n = printBlockNames st types st.stateDefs
@@ -1745,14 +1750,14 @@ importNameOf (Import n _ _ _) = n
 
 implicitImportNames : ReplState -> List String
 implicitImportNames st = case parseSource replTempFile st.stateImports of
-  Err _ => []
-  Ok (SourceFile _ imports _ _) =>
+  ErrC _ => []
+  OkC (SourceFile _ imports _ _) =>
     let
       verdict =
         implicitPrelude (contextRoots st.stateCtx) (contextPackageName st.stateCtx) "" imports
     in case verdict of
-      Err _ => []
-      Ok implicit => map importNameOf implicit
+      ErrC _ => []
+      OkC implicit => map importNameOf implicit
 
 importsStep : ReplState -> ReplOutcome
 importsStep st =

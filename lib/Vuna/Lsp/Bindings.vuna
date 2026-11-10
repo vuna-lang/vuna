@@ -100,8 +100,8 @@ record WalkEnv where
 -- ---------------------------------------------------------------
 bindingHoverAt : String -> Int -> Int -> String -> Maybe Json
 bindingHoverAt uri line col text = case parseSource "<lsp>" text of
-  Err e => Nothing
-  Ok sf => case tokenAtCursor text line col of
+  ErrC e => Nothing
+  OkC sf => case tokenAtCursor text line col of
     Nothing => Nothing
     Just (Pair tokStart token) => case moduleRefAt uri line col text sf tokStart token of
       Just ref => Just (moduleHoverJson ref line tokStart token)
@@ -111,8 +111,8 @@ bindingHoverAt uri line col text = case parseSource "<lsp>" text of
 
 bindingDefinitionAt : String -> Int -> Int -> String -> Maybe Json
 bindingDefinitionAt uri line col text = case parseSource "<lsp>" text of
-  Err e => Nothing
-  Ok sf => case tokenAtCursor text line col of
+  ErrC e => Nothing
+  OkC sf => case tokenAtCursor text line col of
     Nothing => Nothing
     Just (Pair tokStart token) => case moduleRefAt uri line col text sf tokStart token of
       Just ref => moduleLocationJson ref
@@ -138,8 +138,8 @@ localBindingAtSf sf text line col = case tokenAtCursor text line col of
 -- 才计入——遮蔽（shadowing）与作用域顺序直接复用 `localBindAt`，不另写一套判断。
 bindingRenameOccurrences : Int -> Int -> String -> Maybe (List (Pair Int Int))
 bindingRenameOccurrences line col text = case parseSource "<lsp>" text of
-  Err e => Nothing
-  Ok sf => case tokenAtCursor text line col of
+  ErrC e => Nothing
+  OkC sf => case tokenAtCursor text line col of
     Nothing => Nothing
     Just (Pair tokStart token) => case localBindAt line col text sf tokStart token of
       Nothing => Nothing
@@ -204,8 +204,8 @@ probeRoots (root :: rest) name =
 
 modulePathOf : String -> String -> String
 modulePathOf uri name = case contextForDoc uri of
-  Err e => ""
-  Ok (Pair label ctx) => probeRoots (contextRoots ctx) name
+  ErrC e => ""
+  OkC (Pair label ctx) => probeRoots (contextRoots ctx) name
 
 -- 模块名 → 源文本：按包上下文的模块根探测（`probeRoots`），找不到 / 读失败 → Nothing。
 -- 调用方（LSP case split）持有一份 `PackageContext`，直接用它的 roots，避免每个 binder
@@ -217,8 +217,8 @@ moduleSourceIn roots name = case probeRoots roots name of
 
 moduleDocOf : SourceFile -> String -> String
 moduleDocOf sf text = case lexComments text of
-  Err e => ""
-  Ok comments => docTableModuleDoc (docTableOf sf.sourceFileModDecl sf.sourceFileDecls comments)
+  ErrC e => ""
+  OkC comments => docTableModuleDoc (docTableOf sf.sourceFileModDecl sf.sourceFileDecls comments)
 
 moduleHeaderPos : SourceFile -> List String -> String -> Pair Int Int
 moduleHeaderPos sf lines name = case sf.sourceFileModDecl of
@@ -232,16 +232,16 @@ moduleFileInfo : Bool -> String -> String -> String -> Pair String (Pair Int Int
 moduleFileInfo isSelf text path name = if isSelf then
   let
     sf = case parseSource "<lsp>" text of
-      Err e => SourceFile Nothing [] [] []
-      Ok parsed => parsed
+      ErrC e => SourceFile Nothing [] [] []
+      OkC parsed => parsed
   in Pair (moduleDocOf sf text) (moduleHeaderPos sf (split "\n" text) name)
 else if path == "" then Pair "" (Pair 1 1)
 else if runIO (prim_fileExists path) then
   let
     source = runIO (prim_readFile path)
     sf = case parseSource path source of
-      Err e => SourceFile Nothing [] [] []
-      Ok parsed => parsed
+      ErrC e => SourceFile Nothing [] [] []
+      OkC parsed => parsed
   in Pair (moduleDocOf sf source) (moduleHeaderPos sf (split "\n" source) name)
 else Pair "" (Pair 1 1)
 

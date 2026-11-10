@@ -46,7 +46,7 @@ unitPartsDeps (UnitParts fragments bodies st deps) = deps
 
 -- check / split 共用的准备阶段：名字护栏 + 分区 + 擦除检查 + SCC 分组。
 -- 返回 (运行时定义（源码顺序）, 已按依赖排序的分组)。
-prepareDtProgram : Pair (List DtData) (List DtDef) -> Result (Pair (List DtDef) (List (List DtDef)))
+prepareDtProgram : Pair (List DtData) (List DtDef) -> Check (Pair (List DtDef) (List (List DtDef)))
 prepareDtProgram program =
   let
     datas = firstOf program
@@ -70,7 +70,7 @@ prepareDtProgram program =
         _ = stamp "cg-erasure-done"
       in Vuna.Compiler.Common.bind (groupRuntimeDefs runtime) (\groups => let
         _ = stamp "cg-groups-done"
-      in Ok (Pair runtime groups)
+      in OkC (Pair runtime groups)
       )
       )
       )
@@ -82,7 +82,7 @@ prepareDtProgram program =
 --   allDatas  ：整个程序的运行时族（类型渲染与构造子表的完整视图）
 --   unitDatas ：写进本单元的类型声明
 --   groups    ：本单元运行时分组的 SCC 序（由调用方按归属过滤后分组）
-genUnitParts : List (Pair String (List Int)) -> QualCtx -> List DtData -> List DtData -> List (List DtDef) -> Result UnitParts
+genUnitParts : List (Pair String (List Int)) -> QualCtx -> List DtData -> List DtData -> List (List DtDef) -> Check UnitParts
 genUnitParts usedTbl qc allDatas unitDatas groups = Vuna.Compiler.Common.bind (genTypeDeclsWith qc usedTbl allDatas unitDatas) (\typeText => let
   _ = stamp "cg-typedecls-done"
 in Vuna.Compiler.Common.bind (genGroups (adjTblOf (depAdjacency (concatGroups groups))) (mkGenSt qc allDatas) groups) (\p => case p of
@@ -90,7 +90,7 @@ in Vuna.Compiler.Common.bind (genGroups (adjTblOf (depAdjacency (concatGroups gr
     let
       _ = stamp "cg-genGroups-done"
       deps = uniqueDeps (append (append [runtimeUnit] (typeDepsOf qc unitDatas)) st.gsDeps)
-    in Ok (UnitParts [openHeader qc, typeText, listBridgeFor allDatas unitDatas] bodies st deps)
+    in OkC (UnitParts [openHeader qc, typeText, listBridgeFor allDatas unitDatas] bodies st deps)
 )
 )
 
@@ -110,7 +110,7 @@ genUnitText (UnitParts fragments bodies st deps) =
 -- main 输出钩子的唯一实现（原 Program.generateDtProgram 与 Split.splitMainHook 合并）。
 -- 返回的文本以换行开头，调用方直接接在正文之后；`main : IO a` 时先跑 IO 动作。
 -- 第二个分量是 main 钩子引用到的依赖单元（IO 构造子所属单元，C35）。
-mainHook : QualCtx -> Pair (List DtData) (List DtDef) -> List DtDef -> Bool -> Result (Pair String (List String))
+mainHook : QualCtx -> Pair (List DtData) (List DtDef) -> List DtDef -> Bool -> Check (Pair String (List String))
 mainHook qc program runtimeDefs printResult = case findDtDef "main" runtimeDefs of
   Nothing => cgErr0 NoMain
   Just mainDef =>
@@ -122,10 +122,10 @@ mainHook qc program runtimeDefs printResult = case findDtDef "main" runtimeDefs 
         let
           p = ioRunText qc program mainRef
         in Vuna.Compiler.Common.bind (genDtHook "" table innerTy (firstOf p) printResult)
-          (\hook => Ok (Pair hook (hookDeps (secondOf p))))
+          (\hook => OkC (Pair hook (hookDeps (secondOf p))))
       Nothing =>
         Vuna.Compiler.Common.bind (genDtHook "" table (dtDefType mainDef) mainRef printResult)
-          (\hook => Ok (Pair hook []))
+          (\hook => OkC (Pair hook []))
 
 hookDeps : String -> List String
 hookDeps dep = if dep == "" then [] else [dep]
@@ -133,14 +133,14 @@ hookDeps dep = if dep == "" then [] else [dep]
 -- `vuna check` 跑一遍完整装配（丢弃文本），保证「能 check 就能 build」：
 -- 擦除检查、构造子引用、SCC 分组、类型声明与函数生成都在这一步走到。
 -- main 的存在与返回类型只在生成阶段要求，这样没有 main 的库模块也能 check。
-checkDtProgram : Pair (List DtData) (List DtDef) -> Result Int
+checkDtProgram : Pair (List DtData) (List DtDef) -> Check Int
 checkDtProgram program = Vuna.Compiler.Common.bind (prepareDtProgram program) (\p => let
   _ = stamp "cg-prepare-done"
 in case p of
   Pair runtime groups =>
     Vuna.Compiler.Common.bind
       (genUnitParts (usedTableOf (runtimeDatas (firstOf program))) noQual (runtimeDatas (firstOf program)) (runtimeDatas (firstOf program)) groups)
-      (\_ => Ok 0)
+      (\_ => OkC 0)
 )
 
 -- 单元文件头：只 open 运行时单元（C35：其余跨单元引用都是 `Unit.name` 全限定，没有

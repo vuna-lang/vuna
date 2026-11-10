@@ -60,8 +60,8 @@ allEntries =
 
 runGenErrors : String -> Int
 runGenErrors root = case requireDirectory root of
-  Err e => genErrorsError e
-  Ok _ =>
+  ErrC e => genErrorsError (diagText e)
+  OkC _ =>
     let
       outPath = "${root}/docs/.generated/errors.md"
       _ = ensureDirPath (parentOf outPath)

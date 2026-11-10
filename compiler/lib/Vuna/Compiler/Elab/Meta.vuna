@@ -136,18 +136,18 @@ else case forceVal ec v of
 -- 元变量项要作为 `TCon` 的擦除实参保留：核心求值器的 `VCon` 实参表与构造子
 -- telescope **逐位对齐**（case 分支按 telescope 绑定子压环境），少一个擦除实参就会让
 -- 分支体里的变量索引整体偏移（`foldl` 的 `Nil` 分支取到错误的值）。
-instantiateNullaryCtor : Ec -> Ctx -> Value -> Result (Pair Value (Pair (List Term) Ec))
+instantiateNullaryCtor : Ec -> Ctx -> Value -> Check (Pair Value (Pair (List Term) Ec))
 instantiateNullaryCtor ec ctx v = instantiateNullaryCtorFuel 64 ec ctx v
 
-instantiateNullaryCtorFuel : Int -> Ec -> Ctx -> Value -> Result (Pair Value (Pair (List Term) Ec))
-instantiateNullaryCtorFuel fuel ec ctx v = if fuel <= 0 then Ok (Pair v (Pair [] ec))
+instantiateNullaryCtorFuel : Int -> Ec -> Ctx -> Value -> Check (Pair Value (Pair (List Term) Ec))
+instantiateNullaryCtorFuel fuel ec ctx v = if fuel <= 0 then OkC (Pair v (Pair [] ec))
 else case forceVal ec v of
   VPi _ True _ dom clo => if isImplicitDomain ctx ec dom then case newMeta ctx ec of
     Pair metaTerm ec1 => Vuna.Compiler.Common.bind (instantiateNullaryCtorFuel (fuel - 1) ec1 ctx (applyClosure clo (eval (ctxEnv ctx) metaTerm))) (\p => case p of
-      Pair ty (Pair metas ec2) => Ok (Pair ty (Pair (Base.List.Cons metaTerm metas) ec2))
+      Pair ty (Pair metas ec2) => OkC (Pair ty (Pair (Base.List.Cons metaTerm metas) ec2))
     )
-  else Ok (Pair v (Pair [] ec))
-  _ => Ok (Pair v (Pair [] ec))
+  else OkC (Pair v (Pair [] ec))
+  _ => OkC (Pair v (Pair [] ec))
 
 -- 零参构造子的项：`TCon name [擦除实参...]`。元变量个数必须与 telescope 等长才
 -- 能保持 VCon 实参对齐；长度对不上（隐式非索引参数等边缘形态）退回 `TGlobal`。
@@ -178,25 +178,26 @@ isBoolFamilyName name = name == boolTypeName
 
 -- `inferE (EVar ctor)`：零参构造子（`Nil`/`Nothing` 等）的隐式类型参数实例化成元变量，
 -- 使其类型为 `List ?m`/`Maybe ?m`（值），而非 `{a}->List a`（函数）。
-inferCtorRef : Ec -> Ctx -> String -> Term -> Result (Pair Term (Pair Value Ec))
+inferCtorRef : Ec -> Ctx -> String -> Term -> Check (Pair Term (Pair Value Ec))
 inferCtorRef ec ctx name tyTerm = case dtCtorLookupEc ec name of
-  Just ctor => if isBoolFamilyName (dtCtorFamily ctor) then Ok (Pair (boolCtorTerm (dtCtorName ctor)) (Pair (VNeutral (NGlobal boolTypeName [])) ec))
+  Just ctor => if isBoolFamilyName (dtCtorFamily ctor) then OkC (Pair (boolCtorTerm (dtCtorName ctor)) (Pair (VNeutral (NGlobal boolTypeName [])) ec))
   else
     let
       ctorTy = eval [] tyTerm
     in if hasNoExplicitPi ec ctorTy then case instantiateNullaryCtor ec ctx ctorTy of
-      Ok (Pair instTy (Pair metas ec1)) => Ok (Pair (nullaryCtorTerm ctor metas) (Pair instTy ec1))
-      Err e => Err e
-    else Ok (Pair (ctorRefTerm (ecDatas ec) name) (Pair ctorTy ec))
-  Nothing => Ok (Pair (ctorRefTerm (ecDatas ec) name) (Pair (eval [] tyTerm) ec))
+      OkC (Pair instTy (Pair metas ec1)) =>
+        OkC (Pair (nullaryCtorTerm ctor metas) (Pair instTy ec1))
+      ErrC e => ErrC e
+    else OkC (Pair (ctorRefTerm (ecDatas ec) name) (Pair ctorTy ec))
+  Nothing => OkC (Pair (ctorRefTerm (ecDatas ec) name) (Pair (eval [] tyTerm) ec))
 
 -- 定义性相等（唯一入口；Bool 与其它 primitive 类型一样按同名全局比较）。
 -- M28：解的作用域在求解点就地检查（Core.Conv.solveMeta*），这里只把解表写回 Ec；
 -- 不再事后扫新增解（旧 checkSolsDelta 两段式已删除）。
-convEc : Ec -> Int -> Value -> Value -> Result Ec
+convEc : Ec -> Int -> Value -> Value -> Check Ec
 convEc ec depth expected actual = case conv (ecDefTbl ec) (ecSolsP ec) depth expected actual of
-  Err e => Err e
-  Ok sols2 => Ok (ecPutSols ec (solsList sols2))
+  ErrC e => ErrC e
+  OkC sols2 => OkC (ecPutSols ec (solsList sols2))
 
 -- 未解元变量：返回第一个未解的编号。
 unsolvedFrom : Int -> Int -> HashMap Int Value -> Maybe Int
@@ -300,7 +301,7 @@ memDefName : String -> List (Pair String Term) -> Bool
 memDefName name [] = False
 memDefName name ((Pair n ty) :: rest) = n == name || memDefName name rest
 
-collectSigs : List Decl -> Result (List (Pair String (Pair (List Expr) (Pair Expr Span))))
+collectSigs : List Decl -> Check (List (Pair String (Pair (List Expr) (Pair Expr Span))))
 collectSigs decls =
   let
     defined = definedNames decls
@@ -314,8 +315,8 @@ collectSigs decls =
 -- M28 / C29：banned 集按**签名所属模块**作用域；M30（D18）把这张集合改成共享缓存：
 -- `banned` 的键是「模块前缀 \t 名字」（`Sig.qualifiedBannedTbl`），`preludeBanned` 是
 -- 全局 prelude 名单，两者都只建一次。
-collectSigsInto : HashMap String Bool -> HashMap String Bool -> HashMap String Bool -> List (Pair String (Pair (List Expr) (Pair Expr Span))) -> List Decl -> Result (List (Pair String (Pair (List Expr) (Pair Expr Span))))
-collectSigsInto banned preludeBanned seen acc [] = Ok (reverse acc)
+collectSigsInto : HashMap String Bool -> HashMap String Bool -> HashMap String Bool -> List (Pair String (Pair (List Expr) (Pair Expr Span))) -> List Decl -> Check (List (Pair String (Pair (List Expr) (Pair Expr Span))))
+collectSigsInto banned preludeBanned seen acc [] = OkC (reverse acc)
 collectSigsInto banned preludeBanned seen acc (d :: rest) = case d of
   DSig name ctx ty sp => collectSigOne banned preludeBanned seen acc name ctx ty sp rest
   -- M28：axiom 与签名同一套类型检查/量化；区别只在 `checkAllDefined` 不要求它有体。
@@ -329,7 +330,7 @@ collectSigsInto banned preludeBanned seen acc (d :: rest) = case d of
   DTrait name params methods sp => collectSigsInto banned preludeBanned seen acc rest
   DInstance ctxE head methods sp => collectSigsInto banned preludeBanned seen acc rest
 
-collectSigOne : HashMap String Bool -> HashMap String Bool -> HashMap String Bool -> List (Pair String (Pair (List Expr) (Pair Expr Span))) -> String -> List Expr -> Expr -> Span -> List Decl -> Result (List (Pair String (Pair (List Expr) (Pair Expr Span))))
+collectSigOne : HashMap String Bool -> HashMap String Bool -> HashMap String Bool -> List (Pair String (Pair (List Expr) (Pair Expr Span))) -> String -> List Expr -> Expr -> Span -> List Decl -> Check (List (Pair String (Pair (List Expr) (Pair Expr Span))))
 collectSigOne banned preludeBanned seen acc name ctx ty sp rest =
   if memName name preludeNames then tcErr1 sp (CannotRedefineBuiltin name) name
   else if Base.HashMap.member name seen then tcErr1 sp (DuplicateSignature name) name
@@ -492,18 +493,18 @@ candidatesInFamily ec Nothing targets = targets
 candidatesInFamily ec (Just fam) targets = filter (\t => ctorFamilyIs ec t fam) targets
 
 -- | 自动补注（M41 新增导出）：resolveOverCtor。
-resolveOverCtor : Ec -> Span -> Maybe Value -> String -> List String -> Result String
+resolveOverCtor : Ec -> Span -> Maybe Value -> String -> List String -> Check String
 resolveOverCtor ec sp Nothing short targets = defaultOrOver ec sp short targets
 resolveOverCtor ec sp (Just expected) short targets = if isSortVal ec expected then case dualFamilyOf ec short targets of
-  Just fam => Ok fam
+  Just fam => OkC fam
   Nothing => resolveOverCtorGo ec sp (expectedFamilyOf ec expected) short targets
 else resolveOverCtorGo ec sp (expectedFamilyOf ec expected) short targets
 
 -- | 自动补注（M41 新增导出）：resolveOverCtorGo。
-resolveOverCtorGo : Ec -> Span -> Maybe String -> String -> List String -> Result String
+resolveOverCtorGo : Ec -> Span -> Maybe String -> String -> List String -> Check String
 resolveOverCtorGo ec sp Nothing short targets = defaultOrOver ec sp short targets
 resolveOverCtorGo ec sp (Just fam) short targets = case candidatesInFamily ec (Just fam) targets of
-  [t] => Ok t
+  [t] => OkC t
   _ =>
     tcErr2 sp (AmbiguousCtor short (overCandidatesText targets)) short (overCandidatesText targets)
 
@@ -511,8 +512,8 @@ resolveOverCtorGo ec sp (Just fam) short targets = case candidatesInFamily ec (J
 -- B43：推断位（无期望类型）**不再**默认到 List 族——`Nil` / `Fs :: Nil` 这类在 `List a`
 -- 与其他族都有同名构造子时，猜 List 会把错误藏到后面（或静默选错族）；多候选一律报
 -- `TC_AmbiguousCtor`，由用户补期望类型消歧。单候选可直接选。
-defaultOrOver : Ec -> Span -> String -> List String -> Result String
-defaultOrOver ec sp short ([t]) = Ok t
+defaultOrOver : Ec -> Span -> String -> List String -> Check String
+defaultOrOver ec sp short ([t]) = OkC t
 defaultOrOver ec sp short targets =
   tcErr2 sp (AmbiguousCtor short (overCandidatesText targets)) short (overCandidatesText targets)
 
@@ -1091,11 +1092,11 @@ ctorLinearName ec c = case dtCtorLookupEc ec c of
   Nothing => False
 
 -- M38：Pi 域若线性，binder 必须是 1；否则保留声明量。
-rigForLinearDomain : Ec -> Span -> String -> Rig -> Value -> Result Rig
+rigForLinearDomain : Ec -> Span -> String -> Rig -> Value -> Check Rig
 rigForLinearDomain ec sp name rig dom = if isLinearType ec dom then case rig of
-  Rig1 => Ok Rig1
+  Rig1 => OkC Rig1
   _ => tcErr1 sp (LinearValueNeedsLinearBinder name) name
-else Ok rig
+else OkC rig
 
 -- case 分支字段：线性域强制 1（构造侧已经检查过；这里防御旧值/unsafe）。
 rigCaseField : Ec -> Value -> Rig -> Rig

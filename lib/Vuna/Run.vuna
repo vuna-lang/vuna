@@ -36,44 +36,44 @@ runRun args =
     own = firstOf parts
     passthrough = secondOf parts
   in case parseToolArgs "vuna run" [BoolFlag "no-build", ValueFlag "package", ValueFlag "out"] own of
-    Err e => runError e
-    Ok parsed => case parsed.positionals of
+    ErrC e => runError (diagText e)
+    OkC parsed => case parsed.positionals of
       [] => runGo parsed passthrough "."
       [dir] => runGo parsed passthrough dir
       _ => runError "usage: vuna run [--no-build] [--package NAME] [--out DIR] [DIR] [-- ARG]..."
 
 runGo : Parsed -> List String -> String -> Int
 runGo parsed passthrough dir = case requireDirectory dir of
-  Err e => runError e
-  Ok _ => case loadPackage dir of
-    Err e => runFailure e
-    Ok rootPkg => case selectTarget parsed dir rootPkg of
-      Err e => runError e
-      Ok target => runTarget parsed passthrough dir target
+  ErrC e => runError (diagText e)
+  OkC _ => case loadPackage dir of
+    ErrC e => runFailure (diagText e)
+    OkC rootPkg => case selectTarget parsed dir rootPkg of
+      ErrC e => runError (diagText e)
+      OkC target => runTarget parsed passthrough dir target
 
 -- 目标包选择；workspace 成员列表来自 `workspacePackages`（与 build 同一真源）。
-selectTarget : Parsed -> String -> Package -> Result Package
+selectTarget : Parsed -> String -> Package -> Check Package
 selectTarget parsed dir rootPkg = case rootPkg.packageManifest.manifestMembers of
   [] => case flagValue parsed "package" of
-    Nothing => Ok rootPkg
+    Nothing => OkC rootPkg
     Just name =>
-      if packageName rootPkg == name then Ok rootPkg
-      else Err "no such package: ${name} (only package at ${dir} is ${packageLabel rootPkg})"
+      if packageName rootPkg == name then OkC rootPkg
+      else err "no such package: ${name} (only package at ${dir} is ${packageLabel rootPkg})"
   _ => case workspacePackages dir of
-    Err e => Err e
-    Ok pkgs => case flagValue parsed "package" of
+    ErrC e => ErrC e
+    OkC pkgs => case flagValue parsed "package" of
       Just name => case findPackageByName name pkgs of
-        Nothing => Err "no such package in workspace: ${name}"
-        Just target => Ok target
+        Nothing => err "no such package in workspace: ${name}"
+        Just target => OkC target
       Nothing => case rootExecutable rootPkg of
-        Just target => Ok target
+        Just target => OkC target
         Nothing => case filter isExecutable pkgs of
-          [only] => Ok only
+          [only] => OkC only
           [] =>
-            Err
+            err
               "no executable package in workspace ${dir} (packages need app/Main.vuna): ${packageLabels pkgs}"
           many =>
-            Err
+            err
               "multiple executable packages in workspace ${dir}: ${packageLabels many}; choose one with --package"
 
 rootExecutable : Package -> Maybe Package

@@ -20,23 +20,23 @@ data SearchMode : Type where
 
 runSearch : List String -> Int
 runSearch args = case parseToolArgs "vuna search" [BoolFlag "type", BoolFlag "name", BoolFlag "doc", ValueFlag "module", ValueFlag "limit", BoolFlag "json"] args of
-  Err e => toolError e
-  Ok parsed =>
+  ErrC e => toolError (diagText e)
+  OkC parsed =>
     let
       query = join " " parsed.positionals
     in if query == "" then toolError "usage: vuna search [--type|--name|--doc] [--module PFX] [--limit N] [--json] <query>"
     else case modeOf parsed query of
-      Err e => toolError e
-      Ok mode => case limitOf parsed of
-        Err e => toolError e
-        Ok limit => case loadOrBuild "." of
-          Err e => toolError e
-          Ok index => runOnIndex parsed mode query limit index
+      ErrC e => toolError (diagText e)
+      OkC mode => case limitOf parsed of
+        ErrC e => toolError (diagText e)
+        OkC limit => case loadOrBuild "." of
+          ErrC e => toolError (diagText e)
+          OkC index => runOnIndex parsed mode query limit index
 
 runOnIndex : Parsed -> SearchMode -> String -> Int -> Index -> Int
 runOnIndex parsed (mode@TypeMode) query limit index = case searchType index query of
-  Err e => toolError e
-  Ok hits => finish parsed mode query (filterHits parsed limit hits)
+  ErrC e => toolError (diagText e)
+  OkC hits => finish parsed mode query (filterHits parsed limit hits)
 runOnIndex parsed (mode@(NameDocMode nameOnly docOnly)) query limit index =
   finish parsed mode query (filterHits parsed limit (searchNameDoc index query nameOnly docOnly))
 
@@ -48,29 +48,29 @@ filterHits parsed limit hits =
       Nothing => ""
   in takeHits limit (filter (\h => pfx == "" || startsWith pfx (hitModule h)) hits)
 
-modeOf : Parsed -> String -> Result SearchMode
+modeOf : Parsed -> String -> Check SearchMode
 modeOf parsed query =
   let
     isType = flagSet parsed "type"
     isName = flagSet parsed "name"
     isDoc = flagSet parsed "doc"
     count = boolInt isType + boolInt isName + boolInt isDoc
-  in if count > 1 then Err "choose one of --type / --name / --doc"
-  else if isType then Ok TypeMode
-  else if isName then Ok (NameDocMode True False)
-  else if isDoc then Ok (NameDocMode False True)
-  else if contains "->" query || contains "=>" query then Ok TypeMode else Ok (NameDocMode False False)
+  in if count > 1 then err "choose one of --type / --name / --doc"
+  else if isType then OkC TypeMode
+  else if isName then OkC (NameDocMode True False)
+  else if isDoc then OkC (NameDocMode False True)
+  else if contains "->" query || contains "=>" query then OkC TypeMode else OkC (NameDocMode False False)
 
 boolInt : Bool -> Int
 boolInt True = 1
 boolInt False = 0
 
-limitOf : Parsed -> Result Int
+limitOf : Parsed -> Check Int
 limitOf parsed = case flagValue parsed "limit" of
-  Nothing => Ok 20
+  Nothing => OkC 20
   Just text => case parseInt text of
-    Just n => if n > 0 then Ok n else Err "--limit must be a positive integer"
-    Nothing => Err "--limit is not an integer: ${text}"
+    Just n => if n > 0 then OkC n else err "--limit must be a positive integer"
+    Nothing => err "--limit is not an integer: ${text}"
 
 parseInt : String -> Maybe Int
 parseInt s = parseIntChars (strUnpack s) 0

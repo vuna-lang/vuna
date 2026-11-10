@@ -16,61 +16,61 @@ import Vuna.Index.Types
 -- ---------------------------------------------------------------
 -- 查找
 -- ---------------------------------------------------------------
-findSymbol : Index -> String -> Result (List Sym)
+findSymbol : Index -> String -> Check (List Sym)
 findSymbol index query =
   let
     syms = index.indexSymbols
     exact = filter (\s => symFullName s == query) syms
   in case exact of
-    _ :: _ => Ok exact
+    _ :: _ => OkC exact
     [] => findByBare syms query
 
-findByBare : List Sym -> String -> Result (List Sym)
+findByBare : List Sym -> String -> Check (List Sym)
 findByBare syms query =
   let
     bare = filter (\s => symName s == query) syms
   in case bare of
-    _ :: _ => Ok bare
+    _ :: _ => OkC bare
     [] => findBySuffix syms query
 
-findBySuffix : List Sym -> String -> Result (List Sym)
+findBySuffix : List Sym -> String -> Check (List Sym)
 findBySuffix syms query =
   let
     suffix = ".${query}"
     hits = filter (\s => endsWith suffix (symFullName s)) syms
   in case hits of
-    [] => Err "no such symbol: ${query}"
-    _ => Ok hits
+    [] => err "no such symbol: ${query}"
+    _ => OkC hits
 
 -- 某模块里给定行/列上的符号：先按行收窄；多候选时优先列完全一致的，否则取该行
 -- 第一个符号。用于 LSP/referencesAt 这类「光标位置 → 定义」的查询。
-symbolAt : Index -> String -> Int -> Int -> Result Sym
+symbolAt : Index -> String -> Int -> Int -> Check Sym
 symbolAt index modQuery queryLine queryCol =
   let
     onLine = filter (\s => symModule s == modQuery && symLine s == queryLine) index.indexSymbols
   in case onLine of
-    [] => Err "no symbol at ${modQuery}:${queryLine}:${queryCol}"
-    [s] => Ok s
+    [] => err "no symbol at ${modQuery}:${queryLine}:${queryCol}"
+    [s] => OkC s
     _ => case filter (\s => symCol s == queryCol) onLine of
-      s :: _ => Ok s
+      s :: _ => OkC s
       [] => case onLine of
-        s :: _ => Ok s
-        [] => Err "no symbol at ${modQuery}:${queryLine}:${queryCol}"
+        s :: _ => OkC s
+        [] => err "no symbol at ${modQuery}:${queryLine}:${queryCol}"
 
 -- 位置上的符号被哪些地方引用（refs 的 line/col 是引用出现处）。
-referencesAt : Index -> String -> Int -> Int -> Result (List Ref)
+referencesAt : Index -> String -> Int -> Int -> Check (List Ref)
 referencesAt index modQuery queryLine queryCol = case symbolAt index modQuery queryLine queryCol of
-  Err e => Err e
-  Ok sym => Ok (refsNamed (symName sym) index.indexRefs)
+  ErrC e => ErrC e
+  OkC sym => OkC (refsNamed (symName sym) index.indexRefs)
 
 refsNamed : String -> List Ref -> List Ref
 refsNamed name refs = filter (\r => refName r == name) refs
 
 -- 按名/全名查引用点（LSP references 的按名视图；referencesAt 是先由位置找符号）。
-findReferences : Index -> String -> Result (List Ref)
+findReferences : Index -> String -> Check (List Ref)
 findReferences index query = case findSymbol index query of
-  Err e => Err e
-  Ok syms => Ok (refsForNames (map symName syms) index.indexRefs)
+  ErrC e => ErrC e
+  OkC syms => OkC (refsForNames (map symName syms) index.indexRefs)
 
 refsForNames : List String -> List Ref -> List Ref
 refsForNames names refs = filter (\r => memName (refName r) names) refs
@@ -79,15 +79,15 @@ refsForNames names refs = filter (\r => memName (refName r) names) refs
 -- 影响面
 -- ---------------------------------------------------------------
 -- 影响面：引用该符号的模块（来自 refs 反向边）+ 建议测试标签。
-impactOf : Index -> String -> Result String
+impactOf : Index -> String -> Check String
 impactOf index query = case findSymbol index query of
-  Err e => Err e
-  Ok syms =>
+  ErrC e => ErrC e
+  OkC syms =>
     let
       names = map symName syms
       refs = filter (\r => memName (refName r) names) index.indexRefs
       readers = distinct (map refModule refs)
-    in Ok
+    in OkC
       "symbol: ${join ", " (map symFullName syms)}\nreaders: ${join ", " readers}\ntests: ${testTagsFor syms}\n"
 
 testTagsFor : List Sym -> String

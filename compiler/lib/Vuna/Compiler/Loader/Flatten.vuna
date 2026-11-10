@@ -127,23 +127,25 @@ else
     _ = ensureDirPathFuel (fuel - 1) (parentOfPath path)
   in runIO (prim_makeDir path)
 
-parseFileWithPath : String -> String -> Result SourceFile
+parseFileWithPath : String -> String -> Check SourceFile
 parseFileWithPath path src =
   let
     cpath = "${astCacheDir}/${astKeyOf path src}"
   in case readAstCache cpath of
     Just entry =>
-      if astCacheSource entry == src then Ok (astCacheFile entry)
+      if astCacheSource entry == src then OkC (astCacheFile entry)
       else parseAndStoreAt cpath path src
     Nothing => parseAndStoreAt cpath path src
 
 -- 解析错误统一加 `<path>: ` 前缀（parser 诊断本身无位置）；例外：诊断首行已经以本文件
 -- 路径开头（parser 侧带 span 的诊断，如 `[PS_RepeatedPatternBinder]`）时不再重复加，
 -- 保持 CLI 首行的 `<file>:<line>:<col>: <消息>` 契约（DiagRender 才能追加源码片段）。
-parseAndStoreAt : String -> String -> String -> Result SourceFile
+parseAndStoreAt : String -> String -> String -> Check SourceFile
 parseAndStoreAt cpath path src = case parseSource path src of
-  Err e => Err (if startsWith "${path}:" e then e else "${path}: ${e}")
-  Ok parsed => Ok (storeAstCache cpath src parsed)
+  ErrC e =>
+    ErrC
+      (if startsWith "${path}:" (diagText e) then e else withLabel (Label Nothing path LabelContext Nothing) e)
+  OkC parsed => OkC (storeAstCache cpath src parsed)
 
 visibleFixitiesOf : List Module -> List Import -> List FixityDecl
 visibleFixitiesOf modules imports = concatMap (\imp => case findModule modules (importName imp) of
@@ -174,9 +176,10 @@ dedupeFixitiesGo (d :: rest) seen acc =
 isPrivateName : String -> Bool
 isPrivateName name = startsWith "_" name
 
-privateExportMsg : String -> Span -> String -> String
+privateExportMsg : String -> Span -> String -> Diagnostic
 privateExportMsg prefix sp name =
-  "${prefix}: ${showSpanLoc sp}: cannot export private name ${name} (names starting with _ are module-private)"
+  diagAt sp SevError PhLoad CatPackage ""
+    "${prefix}: cannot export private name ${name} (names starting with _ are module-private)"
 
 -- 本模块里与导出相关的「数据类型」信息：类型名 + 公开构造器名列表。
 -- data / record / trait 都按同一套 T / T(..) 规则导出（trait 的方法是它的「构造器」）。
@@ -358,31 +361,31 @@ refEntryList pub Nothing = []
 refEntryList pub (Just (ExportRef k tgt parent)) =
   [ExportEntry { kind = k, public = pub, target = tgt, parent = parent }]
 
-ownOrImportedTypeRef : List Module -> String -> List Decl -> List Import -> String -> Result (Maybe ExportRef)
+ownOrImportedTypeRef : List Module -> String -> List Decl -> List Import -> String -> Check (Maybe ExportRef)
 ownOrImportedTypeRef modules prefix decls imports name = case findOwnData name decls of
-  Just (Pair dname ctorNames) => Ok (Just (ExportRef "type" (mangle prefix dname) ""))
+  Just (Pair dname ctorNames) => OkC (Just (ExportRef "type" (mangle prefix dname) ""))
   Nothing => Vuna.Compiler.Common.bind (modulesExportingType modules imports name) (\pairs => case pairs of
-    [] => Ok Nothing
+    [] => OkC Nothing
     _ =>
       Vuna.Compiler.Common.bind (unifyEntryPairs prefix "type" name pairs)
-        (\p => Ok (Just (ExportRef "type" (secondOf p).target "")))
+        (\p => OkC (Just (ExportRef "type" (secondOf p).target "")))
   )
 
-ownOrImportedValueRef : List Module -> String -> List Decl -> List Import -> String -> Result (Maybe ExportRef)
+ownOrImportedValueRef : List Module -> String -> List Decl -> List Import -> String -> Check (Maybe ExportRef)
 ownOrImportedValueRef modules prefix decls imports name = case findOwnFn name decls of
-  Just fn => Ok (Just (ExportRef "val" (mangle prefix fn) ""))
+  Just fn => OkC (Just (ExportRef "val" (mangle prefix fn) ""))
   Nothing => ownOrImportedValueRef2 modules prefix decls imports name
 
 -- | 自动补注（M41 新增导出）：ownOrImportedValueRef2。
-ownOrImportedValueRef2 : List Module -> String -> List Decl -> List Import -> String -> Result (Maybe ExportRef)
+ownOrImportedValueRef2 : List Module -> String -> List Decl -> List Import -> String -> Check (Maybe ExportRef)
 ownOrImportedValueRef2 modules prefix decls imports name = case ownCtorEntriesNamed prefix name decls of
-  [e] => Ok (Just (ExportRef "ctor" e.target e.parent))
-  _ :: _ :: _ => Err "${prefix}: ambiguous constructor export ${name} (write T(..) or qualify it)"
+  [e] => OkC (Just (ExportRef "ctor" e.target e.parent))
+  _ :: _ :: _ => err "${prefix}: ambiguous constructor export ${name} (write T(..) or qualify it)"
   [] => Vuna.Compiler.Common.bind (modulesExportingValue modules imports name) (\pairs => case pairs of
-    [] => Ok Nothing
+    [] => OkC Nothing
     _ => Vuna.Compiler.Common.bind (unifyEntryPairs prefix "name" name pairs) (\p => let
       e = secondOf p
-    in Ok (Just (ExportRef e.kind e.target e.parent))
+    in OkC (Just (ExportRef e.kind e.target e.parent))
     )
   )
 
@@ -404,74 +407,74 @@ ownCtorEntriesNamed prefix name (d :: rest) = case d of
       (ownCtorEntriesNamed prefix name rest)
   _ => ownCtorEntriesNamed prefix name rest
 
-exportBare : List Module -> String -> List Decl -> List Import -> String -> Span -> Result (List ExportEntry)
+exportBare : List Module -> String -> List Decl -> List Import -> String -> Span -> Check (List ExportEntry)
 exportBare modules prefix decls imports name sp = case splitLastDot (splitOnDot name) of
   Pair revPrefix base => case revPrefix of
-    [] => if isPrivateName name then Err (privateExportMsg prefix sp name)
+    [] => if isPrivateName name then ErrC (privateExportMsg prefix sp name)
     else Vuna.Compiler.Common.bind (ownOrImportedTypeRef modules prefix decls imports name) (\tr => Vuna.Compiler.Common.bind (ownOrImportedValueRef modules prefix decls imports name) (\vr => case tr of
       Nothing => case vr of
-        Nothing => Err "${prefix}: ${showSpanLoc sp}: cannot export unknown name ${name}"
-        Just _ => Ok (refEntryList name vr)
+        Nothing => err "${prefix}: ${showSpanLoc sp}: cannot export unknown name ${name}"
+        Just _ => OkC (refEntryList name vr)
       Just _ => case vr of
-        Nothing => Ok (refEntryList name tr)
+        Nothing => OkC (refEntryList name tr)
         Just _ =>
-          if typeRefDominates modules decls prefix tr vr then Ok (refEntryList name tr)
-          else Ok (append (refEntryList name tr) (refEntryList name vr))
+          if typeRefDominates modules decls prefix tr vr then OkC (refEntryList name tr)
+          else OkC (append (refEntryList name tr) (refEntryList name vr))
     )
     )
     _ =>
       let
         mprefix = joinDots revPrefix
       in case findImportPrefix imports mprefix of
-        Nothing => Err "${prefix}: ${showSpanLoc sp}: module ${mprefix} is not imported"
+        Nothing => err "${prefix}: ${showSpanLoc sp}: module ${mprefix} is not imported"
         Just m => exportSelective modules prefix m base name sp
 
 -- | 自动补注（M41 新增导出）：exportSelective。
-exportSelective : List Module -> String -> String -> String -> String -> Span -> Result (List ExportEntry)
-exportSelective modules prefix m base name sp = Vuna.Compiler.Common.bind (exportsOf modules m) (\es => if length (findExportCtors es base) > 1 then Err "${prefix}: ${showSpanLoc sp}: ambiguous constructor ${base} in ${m}; export T(..) instead"
+exportSelective : List Module -> String -> String -> String -> String -> Span -> Check (List ExportEntry)
+exportSelective modules prefix m base name sp = Vuna.Compiler.Common.bind (exportsOf modules m) (\es => if length (findExportCtors es base) > 1 then err "${prefix}: ${showSpanLoc sp}: ambiguous constructor ${base} in ${m}; export T(..) instead"
 else case findExportValue es base of
   Just e => case findExportType es base of
     Just te =>
-      Ok
+      OkC
         [ExportEntry { kind = e.kind, public = base, target = e.target, parent = e.parent }, ExportEntry { kind = "type", public = base, target = te.target, parent = "" }]
     Nothing =>
-      Ok [ExportEntry { kind = e.kind, public = base, target = e.target, parent = e.parent }]
+      OkC [ExportEntry { kind = e.kind, public = base, target = e.target, parent = e.parent }]
   Nothing => case findExportType es base of
-    Just te => Ok [ExportEntry { kind = "type", public = base, target = te.target, parent = "" }]
-    Nothing => Err "${prefix}: ${showSpanLoc sp}: cannot export unknown name ${name}"
+    Just te => OkC [ExportEntry { kind = "type", public = base, target = te.target, parent = "" }]
+    Nothing => err "${prefix}: ${showSpanLoc sp}: cannot export unknown name ${name}"
 )
 
-exportTypeAll : List Module -> String -> List Decl -> List Import -> String -> Span -> Result (List ExportEntry)
+exportTypeAll : List Module -> String -> List Decl -> List Import -> String -> Span -> Check (List ExportEntry)
 exportTypeAll modules prefix decls imports name sp = case splitLastDot (splitOnDot name) of
   Pair revPrefix base => case revPrefix of
-    [] => if isPrivateName name then Err (privateExportMsg prefix sp name)
+    [] => if isPrivateName name then ErrC (privateExportMsg prefix sp name)
     else case ownTypeEntries prefix decls name of
-      Just entries => Ok entries
+      Just entries => OkC entries
       Nothing => Vuna.Compiler.Common.bind (modulesExportingType modules imports name) (\pairs => case pairs of
-        [] => Err "${prefix}: ${showSpanLoc sp}: cannot export unknown name ${name}"
+        [] => err "${prefix}: ${showSpanLoc sp}: cannot export unknown name ${name}"
         _ => Vuna.Compiler.Common.bind (unifyEntryPairs prefix "type" name pairs) (\p => let
           m = firstOf p
         in let
           tgt = (secondOf p).target
         in Vuna.Compiler.Common.bind (exportsOf modules m)
-          (\es => Ok (Base.List.Cons ExportEntry { kind = "type", public = name, target = tgt, parent = "" } (ctorEntriesOfType tgt es)))
+          (\es => OkC (Base.List.Cons ExportEntry { kind = "type", public = name, target = tgt, parent = "" } (ctorEntriesOfType tgt es)))
         )
       )
     _ =>
       let
         mprefix = joinDots revPrefix
       in case findImportPrefix imports mprefix of
-        Nothing => Err "${prefix}: ${showSpanLoc sp}: module ${mprefix} is not imported"
+        Nothing => err "${prefix}: ${showSpanLoc sp}: module ${mprefix} is not imported"
         Just m => Vuna.Compiler.Common.bind (exportsOf modules m) (\es => case findExportType es base of
           Just e =>
-            Ok
+            OkC
               (Base.List.Cons ExportEntry { kind = "type", public = base, target = e.target, parent = "" } (ctorEntriesOfType e.target es))
-          Nothing => Err "${prefix}: ${showSpanLoc sp}: type ${base} is not exported by ${m}"
+          Nothing => err "${prefix}: ${showSpanLoc sp}: type ${base} is not exported by ${m}"
         )
 
-exportItemEntries : List Module -> String -> List Decl -> List Import -> ExportItem -> Result (List ExportEntry)
+exportItemEntries : List Module -> String -> List Decl -> List Import -> ExportItem -> Check (List ExportEntry)
 exportItemEntries modules prefix decls imports (XModule name sp) = case findImportPrefix imports name of
-  Nothing => Err "${prefix}: ${showSpanLoc sp}: module ${name} is not imported"
+  Nothing => err "${prefix}: ${showSpanLoc sp}: module ${name} is not imported"
   Just m => exportsOf modules m
 exportItemEntries modules prefix decls imports (XTypeAll name sp) =
   exportTypeAll modules prefix decls imports name sp
@@ -512,10 +515,10 @@ dedupeByFullKey (e :: rest) seen acc =
     Just _ => dedupeByFullKey rest seen acc
     Nothing => dedupeByFullKey rest (Base.HashMap.insert key 1 seen) (e :: acc)
 
-checkExportDuplicates : String -> List ExportEntry -> Result (List a)
-checkExportDuplicates prefix [] = Ok []
+checkExportDuplicates : String -> List ExportEntry -> Check (List a)
+checkExportDuplicates prefix [] = OkC []
 checkExportDuplicates prefix (e :: rest) =
-  if hasConflictingExport e rest then Err "${prefix}: duplicate export ${e.public}"
+  if hasConflictingExport e rest then err "${prefix}: duplicate export ${e.public}"
   else checkExportDuplicates prefix rest
 
 -- 显式导出列表里「同一个名字写了两遍」是错误（`module M (foo, foo)`）；
@@ -544,37 +547,37 @@ exportItemName (XBare n sp) = n
 exportItemName (XTypeAll n sp) = n
 exportItemName (XModule n sp) = n
 
-checkExportItems : String -> List ExportItem -> Result Int
+checkExportItems : String -> List ExportItem -> Check Int
 checkExportItems prefix items = case duplicateExportItem items of
-  Just n => Err "${prefix}: duplicate export ${n}"
-  Nothing => Ok 0
+  Just n => err "${prefix}: duplicate export ${n}"
+  Nothing => OkC 0
 
-explicitExports : List Module -> String -> List Decl -> List Import -> List ExportItem -> Result (List ExportEntry)
-explicitExports modules prefix decls imports [] = Ok []
+explicitExports : List Module -> String -> List Decl -> List Import -> List ExportItem -> Check (List ExportEntry)
+explicitExports modules prefix decls imports [] = OkC []
 explicitExports modules prefix decls imports items =
   Vuna.Compiler.Common.bind (checkExportItems prefix items)
-    (\_ => Vuna.Compiler.Common.bind (exportItemsAll modules prefix decls imports items) (\es => Ok (dedupeExportEntries es)))
+    (\_ => Vuna.Compiler.Common.bind (exportItemsAll modules prefix decls imports items) (\es => OkC (dedupeExportEntries es)))
 
 -- 逐项解析条目。整表只做一次重复检查、最后只去重一次：旧实现在每个导出项上重查剩余
 -- 列表并把 append 结果整体去重，合计 O(k³)（k=400 时约 16s）。
-exportItemsAll : List Module -> String -> List Decl -> List Import -> List ExportItem -> Result (List ExportEntry)
-exportItemsAll modules prefix decls imports [] = Ok []
+exportItemsAll : List Module -> String -> List Decl -> List Import -> List ExportItem -> Check (List ExportEntry)
+exportItemsAll modules prefix decls imports [] = OkC []
 exportItemsAll modules prefix decls imports (item :: rest) =
   Vuna.Compiler.Common.bind (exportItemEntries modules prefix decls imports item)
-    (\es => Vuna.Compiler.Common.bind (exportItemsAll modules prefix decls imports rest) (\tail => Ok (append es tail)))
+    (\es => Vuna.Compiler.Common.bind (exportItemsAll modules prefix decls imports rest) (\tail => OkC (append es tail)))
 
-validateModuleHeader : String -> Maybe ModDecl -> Result (List a)
-validateModuleHeader label Nothing = Ok []
+validateModuleHeader : String -> Maybe ModDecl -> Check (List a)
+validateModuleHeader label Nothing = OkC []
 validateModuleHeader label (Just (ModDecl declared hasList items sp)) =
-  if declared == label then Ok []
-  else Err "${label}: ${showSpanLoc sp}: module name mismatch: source declares ${declared}"
+  if declared == label then OkC []
+  else err "${label}: ${showSpanLoc sp}: module name mismatch: source declares ${declared}"
 
-computeExports : List Module -> String -> Maybe ModDecl -> List Import -> List Decl -> Result (List ExportEntry)
-computeExports modules prefix Nothing imports decls = Ok (implicitExports prefix decls)
+computeExports : List Module -> String -> Maybe ModDecl -> List Import -> List Decl -> Check (List ExportEntry)
+computeExports modules prefix Nothing imports decls = OkC (implicitExports prefix decls)
 computeExports modules prefix (Just (ModDecl declared hasList items sp)) imports decls =
   if hasList then Vuna.Compiler.Common.bind (explicitExports modules prefix decls imports items)
-    (\es => Vuna.Compiler.Common.bind (checkExportDuplicates prefix es) (\_ => Ok es))
-  else Ok (implicitExports prefix decls)
+    (\es => Vuna.Compiler.Common.bind (checkExportDuplicates prefix es) (\_ => OkC es))
+  else OkC (implicitExports prefix decls)
 
 showCycle : String -> List String -> String
 showCycle name stack = joinArrows (reverse (name :: stack))
@@ -584,22 +587,22 @@ showCycle name stack = joinArrows (reverse (name :: stack))
 -- 的 Prelude 不算候选（`implicitPreludeDeps` 按包名过滤）。
 -- M26：ad-hoc（importerPkg==""）不再绕过——无 manifest 的单文件同样是包上下文
 -- （base-only），自动注入 base 的 Prelude；没有 base 依赖的包没有候选，于是不注入。
-implicitPrelude : List Root -> String -> String -> List Import -> Result (List Import)
+implicitPrelude : List Root -> String -> String -> List Import -> Check (List Import)
 implicitPrelude roots importerPkg currentName imports =
-  if currentName == "Prelude" then Ok []
-  else if memName "Prelude" (importModuleNames imports) then Ok []
+  if currentName == "Prelude" then OkC []
+  else if memName "Prelude" (importModuleNames imports) then OkC []
   else implicitPreludeFrom roots importerPkg
 
-implicitPreludeFrom : List Root -> String -> Result (List Import)
+implicitPreludeFrom : List Root -> String -> Check (List Import)
 implicitPreludeFrom roots importerPkg = case collectModuleFiles roots "Prelude" importerPkg [] [] of
   Pair allowed hidden =>
     implicitPreludeDeps importerPkg (filter (\c => rootName (secondOf c) /= importerPkg) allowed)
 
-implicitPreludeDeps : String -> List (Pair String Root) -> Result (List Import)
-implicitPreludeDeps importerPkg [] = Ok []
-implicitPreludeDeps importerPkg ([_]) = Ok [Import "Prelude" False Nothing (Span "" 0 0 0 0)]
+implicitPreludeDeps : String -> List (Pair String Root) -> Check (List Import)
+implicitPreludeDeps importerPkg [] = OkC []
+implicitPreludeDeps importerPkg ([_]) = OkC [Import "Prelude" False Nothing (Span "" 0 0 0 0)]
 implicitPreludeDeps importerPkg deps =
-  Err
+  err
     "ambiguous implicit Prelude (found in: ${joinArrows (map (\c => rootName (secondOf c)) deps)})"
 
 -- F3 P2：按包名查模块根的 `[package] privileged`；找不到按非特权处理。
@@ -623,19 +626,19 @@ hostModuleIn [] name = False
 hostModuleIn (root :: rest) name =
   if memName name (rootHostModules root) then True else hostModuleIn rest name
 
-loadAll : Int -> List Root -> Bool -> String -> List Module -> List String -> List Import -> Result (List Module)
-loadAll fuel roots selfPriv importerPkg modules stack imports = if fuel <= 0 then Err "DT: loader fuel exhausted (internal: module graph too deep)"
+loadAll : Int -> List Root -> Bool -> String -> List Module -> List String -> List Import -> Check (List Module)
+loadAll fuel roots selfPriv importerPkg modules stack imports = if fuel <= 0 then err "DT: loader fuel exhausted (internal: module graph too deep)"
 else case imports of
-  [] => Ok modules
+  [] => OkC modules
   imp :: rest =>
     Vuna.Compiler.Common.bind
       (loadModule (fuel - 1) roots selfPriv importerPkg modules stack (importName imp))
       (\modules2 => loadAll (fuel - 1) roots selfPriv importerPkg modules2 stack rest)
 
-loadModule : Int -> List Root -> Bool -> String -> List Module -> List String -> String -> Result (List Module)
-loadModule fuel roots selfPriv importerPkg modules stack name = if fuel <= 0 then Err "DT: loader fuel exhausted (internal: module graph too deep)"
+loadModule : Int -> List Root -> Bool -> String -> List Module -> List String -> String -> Check (List Module)
+loadModule fuel roots selfPriv importerPkg modules stack name = if fuel <= 0 then err "DT: loader fuel exhausted (internal: module graph too deep)"
 else case findModule modules name of
-  Just m => Ok modules
+  Just m => OkC modules
   Nothing => if memName name stack then ldErr1 (ImportCycle (showCycle name stack)) (showCycle name stack)
   else if hostModuleIn roots name && not (importerPrivileged roots selfPriv importerPkg) then ldErr1 (HostModulePrivileged name) name
   else if validModuleName name then Vuna.Compiler.Common.bind (findModuleFile roots name importerPkg) (\found => let
@@ -648,7 +651,7 @@ else case findModule modules name of
     SourceFile hdr imports fixities decls => Vuna.Compiler.Common.bind (validateModuleHeader name hdr) (\_ => Vuna.Compiler.Common.bind (validateImports name imports) (\_ => Vuna.Compiler.Common.bind (implicitPrelude roots (rootName root) name imports) (\implicit => Vuna.Compiler.Common.bind (loadAll (fuel - 1) roots selfPriv (rootName root) modules (name :: stack) (append imports implicit)) (\modules2 => Vuna.Compiler.Common.bind (computeExports modules2 name hdr imports decls) (\exports => let
       visible =
         dedupeFixities (append fixities (visibleFixitiesOf modules2 (append imports implicit)))
-    in Ok
+    in OkC
       (Base.List.Cons (Module name (rootName root) imports implicit decls exports (rootCapabilities root) (rootTrustUnsafe root) visible) modules2)
     )
     )
@@ -662,48 +665,48 @@ else case findModule modules name of
 -- 包上下文入口：ctx 给出模块根（自己 lib 在最前 + 依赖闭包）与导入方包名
 -- （决定同包/跨包导出可见性与 manifest 能力声明）。
 -- loadProject 返回 flatten 前的形态（入口声明 + 依赖模块列表），供分离编译使用。
-loadProject : PackageContext -> String -> Result Project
+loadProject : PackageContext -> String -> Check Project
 loadProject ctx entry = loadProjectWithPreloaded ctx entry []
 
 -- M34.5（S2）：接口模式加载。`preloaded` 是依赖包里**已解析**的模块（来自模块接口），
 -- 加载器把它们当「已加载模块」直接命中：不读源码、不 parse、不算导出表。本包模块与入口
 -- 仍按源码加载；模块表的顺序约定与 `loadAll` 一致（新加载模块前插，dependents-first），
 -- 所以调用方应把 `preloaded` 按 reverse(topo) 传入。
-loadProjectWithPreloaded : PackageContext -> String -> List Module -> Result Project
+loadProjectWithPreloaded : PackageContext -> String -> List Module -> Check Project
 loadProjectWithPreloaded ctx entry preloaded = if runIO (prim_fileExists entry) then Vuna.Compiler.Common.bind (parseFileWithPath entry (runIO (prim_readFile entry))) (\src => case src of
   SourceFile hdr imports fixities decls => case hdr of
     Just (ModDecl dname hasList items sp) => ldErr1 (ModuleHeaderInEntryFile entry) entry
     Nothing =>
       Vuna.Compiler.Common.bind (validateImports "<entry>" imports)
-        (\_ => Vuna.Compiler.Common.bind (implicitPrelude (contextRoots ctx) (contextPackageName ctx) "" imports) (\implicit => Vuna.Compiler.Common.bind (loadAll 1048576 (contextRoots ctx) (contextPrivileged ctx) (contextPackageName ctx) preloaded [] (append imports implicit)) (\modules => Ok (Project decls imports implicit modules (contextPackageName ctx) (contextCapabilities ctx) (contextTrustUnsafe ctx) False fixities))))
+        (\_ => Vuna.Compiler.Common.bind (implicitPrelude (contextRoots ctx) (contextPackageName ctx) "" imports) (\implicit => Vuna.Compiler.Common.bind (loadAll 1048576 (contextRoots ctx) (contextPrivileged ctx) (contextPackageName ctx) preloaded [] (append imports implicit)) (\modules => OkC (Project decls imports implicit modules (contextPackageName ctx) (contextCapabilities ctx) (contextTrustUnsafe ctx) False fixities))))
 )
 else ldErr1 (EntryFileNotFound entry) entry
 
 -- 库包入口：不带 app/Main.vuna 的包，以 [export].modules 作为根模块集合。
-loadProjectModules : PackageContext -> List String -> Result Project
+loadProjectModules : PackageContext -> List String -> Check Project
 loadProjectModules ctx names = loadProjectModulesWithPreloaded ctx names []
 
-loadProjectModulesWithPreloaded : PackageContext -> List String -> List Module -> Result Project
+loadProjectModulesWithPreloaded : PackageContext -> List String -> List Module -> Check Project
 loadProjectModulesWithPreloaded ctx names preloaded =
   let
     entryImports = map (\n => Import n False Nothing (Span "" 0 0 0 0)) names
   in Vuna.Compiler.Common.bind
     (loadAll 1048576 (contextRoots ctx) (contextPrivileged ctx) (contextPackageName ctx) preloaded [] entryImports)
-    (\modules => Ok (Project [] [] [] modules (contextPackageName ctx) (contextCapabilities ctx) (contextTrustUnsafe ctx) True []))
+    (\modules => OkC (Project [] [] [] modules (contextPackageName ctx) (contextCapabilities ctx) (contextTrustUnsafe ctx) True []))
 
 -- 入口以**源码字符串**给出（REPL 的表达式求值）：入口不落盘（import 仍按上下文的
 -- roots 从磁盘解析）；隐式 Prelude 与文件入口同规则（ad-hoc 单文件也自动注入）。
-loadProjectSource : PackageContext -> String -> String -> Result Project
+loadProjectSource : PackageContext -> String -> String -> Check Project
 loadProjectSource ctx label source = loadProjectSourceWithPreloaded ctx label source []
 
 -- M34.5（LSP/REPL 消费接口）：入口以源码字符串给出，依赖包模块可预置（零 parse）。
-loadProjectSourceWithPreloaded : PackageContext -> String -> String -> List Module -> Result Project
+loadProjectSourceWithPreloaded : PackageContext -> String -> String -> List Module -> Check Project
 loadProjectSourceWithPreloaded ctx label source preloaded = Vuna.Compiler.Common.bind (parseFileWithPath label source) (\src => case src of
   SourceFile hdr imports fixities decls => case hdr of
     Just (ModDecl dname hasList items sp) => ldErr1 (ModuleHeaderInEntrySource label) label
     Nothing =>
       Vuna.Compiler.Common.bind (validateImports "<entry>" imports)
-        (\_ => Vuna.Compiler.Common.bind (implicitPrelude (contextRoots ctx) (contextPackageName ctx) "" imports) (\implicit => Vuna.Compiler.Common.bind (loadAll 1048576 (contextRoots ctx) (contextPrivileged ctx) (contextPackageName ctx) preloaded [] (append imports implicit)) (\modules => Ok (Project decls imports implicit modules (contextPackageName ctx) (contextCapabilities ctx) (contextTrustUnsafe ctx) False fixities))))
+        (\_ => Vuna.Compiler.Common.bind (implicitPrelude (contextRoots ctx) (contextPackageName ctx) "" imports) (\implicit => Vuna.Compiler.Common.bind (loadAll 1048576 (contextRoots ctx) (contextPrivileged ctx) (contextPackageName ctx) preloaded [] (append imports implicit)) (\modules => OkC (Project decls imports implicit modules (contextPackageName ctx) (contextCapabilities ctx) (contextTrustUnsafe ctx) False fixities))))
 )
 
 -- 以**源码字符串**给出一个**库模块**（M30 · LSP）：源码允许带 `module ... where`
@@ -711,18 +714,18 @@ loadProjectSourceWithPreloaded ctx label source preloaded = Vuna.Compiler.Common
 -- 把该模块本身作为合成的 `Module` 放进 Project，再交给 `resolveProject` 做名字解析；
 -- 无模块头时退化为入口语义（与 `loadProjectSource` 相同）。
 -- 入口声明保持为空：调用方（LSP）只需要逐模块已解析的声明。
-loadModuleSource : PackageContext -> String -> String -> Result Project
+loadModuleSource : PackageContext -> String -> String -> Check Project
 loadModuleSource ctx label source = loadModuleSourceWithPreloaded ctx label source []
 
 -- M34.5（LSP）：依赖包模块可预置（来自接口的 `Module`），只 parse 当前文件与同包源码。
-loadModuleSourceWithPreloaded : PackageContext -> String -> String -> List Module -> Result Project
+loadModuleSourceWithPreloaded : PackageContext -> String -> String -> List Module -> Check Project
 loadModuleSourceWithPreloaded ctx label source preloaded = Vuna.Compiler.Common.bind (parseFileWithPath label source) (\src => case src of
   SourceFile hdr imports fixities decls => case hdr of
     Nothing => loadProjectSourceWithPreloaded ctx label source preloaded
     Just (ModDecl name hasList items sp) => Vuna.Compiler.Common.bind (validateImports name imports) (\_ => Vuna.Compiler.Common.bind (implicitPrelude (contextRoots ctx) (contextPackageName ctx) name imports) (\implicit => Vuna.Compiler.Common.bind (loadAll 1048576 (contextRoots ctx) (contextPrivileged ctx) (contextPackageName ctx) preloaded [] (append imports implicit)) (\modules => Vuna.Compiler.Common.bind (computeExports modules name hdr imports decls) (\exports => let
       visible =
         dedupeFixities (append fixities (visibleFixitiesOf modules (append imports implicit)))
-    in Ok
+    in OkC
       (Project [] imports implicit (Module name (contextPackageName ctx) imports implicit decls exports (contextCapabilities ctx) (contextTrustUnsafe ctx) visible :: modules) (contextPackageName ctx) (contextCapabilities ctx) (contextTrustUnsafe ctx) False [])
     )
     )
@@ -739,43 +742,43 @@ loadModuleSourceWithPreloaded ctx label source preloaded = Vuna.Compiler.Common.
 -- imports 不同，跨文件复用声明表会让 fmt 给 `::`/`+` 等打出错误的括号。
 -- 返回值同时带回更新后的模块表，供调用方继续复用。
 -- 注意：本函数及其包装进 seed 闭包（compiler 包），保持小而纯。
-fixitiesForSourceIn : PackageContext -> List Module -> String -> String -> Result (Pair (List Module) (List FixityDecl))
+fixitiesForSourceIn : PackageContext -> List Module -> String -> String -> Check (Pair (List Module) (List FixityDecl))
 fixitiesForSourceIn ctx modules0 label source = Vuna.Compiler.Common.bind (parseFileWithPath label source) (\src => case src of
   SourceFile hdr imports fixities decls => case hdr of
     Nothing =>
       Vuna.Compiler.Common.bind (validateImports label imports)
-        (\_ => Vuna.Compiler.Common.bind (implicitPrelude (contextRoots ctx) (contextPackageName ctx) "" imports) (\implicit => Vuna.Compiler.Common.bind (loadAll 1048576 (contextRoots ctx) (contextPrivileged ctx) (contextPackageName ctx) modules0 [] (append imports implicit)) (\modules => Ok (Pair modules (dedupeFixities (append fixities (visibleFixitiesOf modules (append imports implicit))))))))
+        (\_ => Vuna.Compiler.Common.bind (implicitPrelude (contextRoots ctx) (contextPackageName ctx) "" imports) (\implicit => Vuna.Compiler.Common.bind (loadAll 1048576 (contextRoots ctx) (contextPrivileged ctx) (contextPackageName ctx) modules0 [] (append imports implicit)) (\modules => OkC (Pair modules (dedupeFixities (append fixities (visibleFixitiesOf modules (append imports implicit))))))))
     Just (ModDecl name hasList items sp) =>
       Vuna.Compiler.Common.bind (validateImports name imports)
-        (\_ => Vuna.Compiler.Common.bind (implicitPrelude (contextRoots ctx) (contextPackageName ctx) name imports) (\implicit => Vuna.Compiler.Common.bind (loadAll 1048576 (contextRoots ctx) (contextPrivileged ctx) (contextPackageName ctx) modules0 [] (append imports implicit)) (\modules => Ok (Pair modules (dedupeFixities (append fixities (visibleFixitiesOf modules (append imports implicit))))))))
+        (\_ => Vuna.Compiler.Common.bind (implicitPrelude (contextRoots ctx) (contextPackageName ctx) name imports) (\implicit => Vuna.Compiler.Common.bind (loadAll 1048576 (contextRoots ctx) (contextPrivileged ctx) (contextPackageName ctx) modules0 [] (append imports implicit)) (\modules => OkC (Pair modules (dedupeFixities (append fixities (visibleFixitiesOf modules (append imports implicit))))))))
 )
 
 -- 单文件便捷入口（LSP formatting / fmt 探针）：不跨调用复用模块表。
-fixitiesForSource : PackageContext -> String -> String -> Result (List FixityDecl)
+fixitiesForSource : PackageContext -> String -> String -> Check (List FixityDecl)
 fixitiesForSource ctx label source =
-  Vuna.Compiler.Common.bind (fixitiesForSourceIn ctx [] label source) (\p => Ok (secondOf p))
+  Vuna.Compiler.Common.bind (fixitiesForSourceIn ctx [] label source) (\p => OkC (secondOf p))
 
 -- 返回逐模块已解析（未 flatten）的声明，供 M12 分离编译使用。
-resolveProject : Project -> Result (Pair (List Decl) (List Module))
+resolveProject : Project -> Check (Pair (List Decl) (List Module))
 resolveProject project = resolveProjectKeeping [] project
 
 -- M34.5（S2）：`keep` 里的模块已经解析过（来自接口文件），原样保留、不重解析。
-resolveProjectKeeping : List String -> Project -> Result (Pair (List Decl) (List Module))
+resolveProjectKeeping : List String -> Project -> Check (Pair (List Decl) (List Module))
 resolveProjectKeeping keep (Project decls imports implicit modules entryPkg entryCaps entryTrust complete entryFixes) =
   let
     entryTable =
       tableOf
         (dedupeFixities (append entryFixes (visibleFixitiesOf modules (append imports implicit))))
   in Vuna.Compiler.Common.bind (reorderProgram entryTable decls)
-    (\decls2 => Vuna.Compiler.Common.bind (resolveEntry modules entryPkg entryCaps entryTrust (append imports implicit) decls2) (\entryDecls => Vuna.Compiler.Common.bind (resolveModulesKeep keep modules) (\modules2 => Vuna.Compiler.Common.bind (checkTrustPoints entryPkg entryTrust complete entryDecls modules2) (\_ => Ok (Pair entryDecls modules2)))))
+    (\decls2 => Vuna.Compiler.Common.bind (resolveEntry modules entryPkg entryCaps entryTrust (append imports implicit) decls2) (\entryDecls => Vuna.Compiler.Common.bind (resolveModulesKeep keep modules) (\modules2 => Vuna.Compiler.Common.bind (checkTrustPoints entryPkg entryTrust complete entryDecls modules2) (\_ => OkC (Pair entryDecls modules2)))))
 
-resolveModulesKeep : List String -> List Module -> Result (List Module)
-resolveModulesKeep keep [] = Ok []
+resolveModulesKeep : List String -> List Module -> Check (List Module)
+resolveModulesKeep keep [] = OkC []
 resolveModulesKeep keep ((Module name pkg imports implicit decls exports mcaps mtrust fixities) :: rest) =
   if memName name keep then Vuna.Compiler.Common.bind (resolveModulesKeep keep rest)
-    (\d2 => Ok (Base.List.Cons (Module name pkg imports implicit decls exports mcaps mtrust fixities) d2))
+    (\d2 => OkC (Base.List.Cons (Module name pkg imports implicit decls exports mcaps mtrust fixities) d2))
   else Vuna.Compiler.Common.bind (reorderProgram (tableOf fixities) decls)
-    (\decls2 => Vuna.Compiler.Common.bind (Vuna.Compiler.Common.bind (resolveProgram (Module name pkg imports implicit decls2 exports mcaps mtrust fixities :: rest) name name (namespacesOf decls2) (append imports implicit) decls2) (\d => checkEffectsBuiltins name pkg mcaps mtrust d)) (\d1 => Vuna.Compiler.Common.bind (resolveModulesKeep keep rest) (\d2 => Ok (Base.List.Cons (Module name pkg imports implicit d1 exports mcaps mtrust fixities) d2))))
+    (\decls2 => Vuna.Compiler.Common.bind (Vuna.Compiler.Common.bind (resolveProgram (Module name pkg imports implicit decls2 exports mcaps mtrust fixities :: rest) name name (namespacesOf decls2) (append imports implicit) decls2) (\d => checkEffectsBuiltins name pkg mcaps mtrust d)) (\d1 => Vuna.Compiler.Common.bind (resolveModulesKeep keep rest) (\d2 => OkC (Base.List.Cons (Module name pkg imports implicit d1 exports mcaps mtrust fixities) d2))))
 
 dropPastSlash : List Int -> List Int
 dropPastSlash [] = []

@@ -28,14 +28,14 @@ import Vuna.Fmt.Comment
 import Vuna.Fmt.Decl
 import Vuna.Fmt.Util
 
-formatSourceWith : List FixityDecl -> String -> Result String
+formatSourceWith : List FixityDecl -> String -> Check String
 formatSourceWith programFixities source = case parseSource "<fmt>" source of
-  Err e => Err e
-  Ok (SourceFile hdr imports fx decls0) => case reorderProgram (tableOfKeepOps (append fx programFixities)) decls0 of
-    Err e => Err e
-    Ok decls => case lexComments source of
-      Err e => Err e
-      Ok comments => case assignComments (anchorSpans hdr imports fx decls) comments [] [] of
+  ErrC e => ErrC e
+  OkC (SourceFile hdr imports fx decls0) => case reorderProgram (tableOfKeepOps (append fx programFixities)) decls0 of
+    ErrC e => ErrC e
+    OkC decls => case lexComments source of
+      ErrC e => ErrC e
+      OkC comments => case assignComments (anchorSpans hdr imports fx decls) comments [] [] of
         Pair at eof => case joinSections (filterSections (renderSourceSections (append fx programFixities) hdr imports fx decls at eof)) of
-          [] => Ok ""
-          lines => Ok (unlines lines)
+          [] => OkC ""
+          lines => OkC (unlines lines)

@@ -24,11 +24,12 @@ module Vuna.Compiler.Frontend.Diagnostics
 -- Vuna.Compiler.Frontend.Diagnostics：词法/语法诊断的域枚举（M30 重构）。
 --
 -- 与 `Vuna.Compiler.Diagnostics`（TC_/CG_，带 Span）同构，但前端诊断**无位置**：
--- Lexer/Parser 的 `Err` 只携带字符串，位置信息留在 token/状态里由上层拼。
+-- Lexer/Parser 的 `ErrC` 只携带字符串，位置信息留在 token/状态里由上层拼。
 --
 -- 域：`LX_`（词法）、`PS_`（语法）。arity 由 `Nat` 索引在编译期锁定（同 TC 机制）。
 -- 说明：`DT: internal:` 的 fuel 耗尽等内部不变量**不占符号**，仍走裸字符串。
 import Vuna.Compiler.Common
+import Vuna.Compiler.Diagnostics.Common
 import Base.Nat
 import Base.Vec
 
@@ -280,28 +281,28 @@ psAll =
   ]
 
 -- ---------------------------------------------------------------
--- throw：拼 `[CODE] 消息`（前端诊断无位置）
+-- throw：构造结构化诊断（前端诊断由调用方补位置；当前多数仍无 span）
 -- ---------------------------------------------------------------
-lexMsg : {n : Nat} -> LexDiag n -> Vec n String -> String
-lexMsg e args = "[${lexCode e}] ${substTemplate (lexTemplate e) args}"
+lexMsg : {n : Nat} -> LexDiag n -> Vec n String -> Diagnostic
+lexMsg e args = mkDiag SevError PhLex CatSyntax (lexCode e) (diagBody (lexTemplate e) args)
 
-psMsg : {n : Nat} -> PsDiag n -> Vec n String -> String
-psMsg e args = "[${psCode e}] ${substTemplate (psTemplate e) args}"
+psMsg : {n : Nat} -> PsDiag n -> Vec n String -> Diagnostic
+psMsg e args = mkDiag SevError PhParse CatSyntax (psCode e) (diagBody (psTemplate e) args)
 
-lexErr : {n : Nat} -> LexDiag n -> Vec n String -> Result a
-lexErr e args = Err (lexMsg e args)
+lexErr : {n : Nat} -> LexDiag n -> Vec n String -> Check a
+lexErr e args = ErrC (lexMsg e args)
 
-psErr : {n : Nat} -> PsDiag n -> Vec n String -> Result a
-psErr e args = Err (psMsg e args)
+psErr : {n : Nat} -> PsDiag n -> Vec n String -> Check a
+psErr e args = ErrC (psMsg e args)
 
 -- | 自动补注（M41 新增导出）：lexErr0。
-lexErr0 : LexDiag Zero -> Result a
+lexErr0 : LexDiag Zero -> Check a
 lexErr0 e = lexErr e []
 
 -- | 自动补注（M41 新增导出）：psErr0。
-psErr0 : PsDiag Zero -> Result a
+psErr0 : PsDiag Zero -> Check a
 psErr0 e = psErr e []
 
 -- | 自动补注（M41 新增导出）：psErr1。
-psErr1 : PsDiag (Succ Zero) -> String -> Result a
+psErr1 : PsDiag (Succ Zero) -> String -> Check a
 psErr1 e a0 = psErr e [a0]

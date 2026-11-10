@@ -1,0 +1,342 @@
+-- | 结构化诊断模型与编译器结果通道（`Check` 的 `ErrC` 载荷是 `Diagnostic`）。
+module Vuna.Compiler.Diag
+  ( Applicability(..)
+  , CallInfo(..)
+  , Candidate(..)
+  , Category(..)
+  , Check(..)
+  , DiagEdit(..)
+  , DiagField(..)
+  , Diagnostic(..)
+  , IceInfo(..)
+  , Label(..)
+  , LabelStyle(..)
+  , Origin(..)
+  , Phase(..)
+  , Severity(..)
+  , Suggestion(..)
+  , TraceFrame(..)
+  , appendMessage
+  , diagAt
+  , diagNoLoc
+  , diagText
+  , err
+  , rawAt
+  , rawNoLoc
+  , withContext
+  , withField
+  , withHelp
+  , withLabel
+  , withNote
+  , withOrigin
+  , withSuggestion
+  , withTrace
+  ) where
+
+-- Vuna.Compiler.Diag：诊断的唯一数据模型。
+--
+-- 约定（诊断重设计）：
+--   * 诊断从产生到消费都是 `Diagnostic` 值；字符串只在最终渲染器里出现。
+--   * 位置只放在 `Label` 里（首端/末端 span），禁止在错误路径拼 `file:line:col`。
+--   * 无位置必须显式：构造时不给 label，而不是「忘记带」。
+--   * `ErrC` 载荷即 `Diagnostic`；`OkC` 构造子名保持不变，便于逐步迁移。
+--   * `err` 只用于工具错误（phase = Tool）；源码诊断必须走各域带 code 的构造器。
+--   * `rawAt`/`rawNoLoc` 是迁移期过渡：用于尚未分类的裸消息，分类完成后删除。
+--
+-- 本模块不 import `Common`（避免 Common -> Diag -> Common 成环）：Span 来自 `Source`。
+import Vuna.Compiler.Source
+import Base.Monad
+
+-- ---------------------------------------------------------------
+-- 枚举
+-- ---------------------------------------------------------------
+-- | 诊断严重度。`Note`/`Help` 用于挂在某个告警/错误下的子信息。
+data Severity : Type where
+  SevError : Severity
+  SevWarning : Severity
+  SevNote : Severity
+  SevHelp : Severity
+
+-- | 产生诊断的编译器阶段（决定排序、退出码与文档分区）。
+data Phase : Type where
+  PhLex : Phase
+  PhParse : Phase
+  PhResolve : Phase
+  PhLoad : Phase
+  PhElab : Phase
+  PhUnify : Phase
+  PhCoverage : Phase
+  PhTermination : Phase
+  PhUsage : Phase
+  PhCodegen : Phase
+  PhPackage : Phase
+  PhDriver : Phase
+  PhTool : Phase
+  PhInternal : Phase
+
+-- | 文档/统计用的语义分类。
+data Category : Type where
+  CatSyntax : Category
+  CatNames : Category
+  CatTypes : Category
+  CatUniverses : Category
+  CatCoverage : Category
+  CatTermination : Category
+  CatQuantity : Category
+  CatEffects : Category
+  CatRecords : Category
+  CatTraits : Category
+  CatCodegen : Category
+  CatPackage : Category
+  CatTool : Category
+  CatInternal : Category
+
+-- | 标签角色：主位置、次位置、上下文（定义名等）。
+data LabelStyle : Type where
+  LabelPrimary : LabelStyle
+  LabelSecondary : LabelStyle
+  LabelContext : LabelStyle
+
+-- | 诊断来源：直接产生，或因先前失败被标记为级联（可指向父诊断 id）。
+data Origin : Type where
+  OriginDirect : Origin
+  OriginCascade : Maybe Int -> Origin
+
+-- | 建议的可自动应用程度（对应 LSP code action 的 confidence）。
+data Applicability : Type where
+  MachineApplicable : Applicability
+  MaybeIncorrect : Applicability
+  HasPlaceholder : Applicability
+
+-- ---------------------------------------------------------------
+-- 结构
+-- ---------------------------------------------------------------
+-- | 诊断标签：位置 + 文本 + 角色 + 可选来源 span（desugar/派生实例溯源）。
+record Label where
+  labelSpan : Maybe Span
+  labelText : String
+  labelStyle : LabelStyle
+  labelProvenance : Maybe Span
+
+-- | 单个文本编辑（建议/自动修复）。
+record DiagEdit where
+  editSpan : Span
+  editNewText : String
+
+-- | 一条建议（标题 + 可应用程度 + 编辑集）。
+record Suggestion where
+  suggestionTitle : String
+  suggestionApplicability : Applicability
+  suggestionEdits : List DiagEdit
+
+-- | 候选（名字建议 / 实例头 / 重载），可带声明位置与拒绝原因。
+record Candidate where
+  candidateText : String
+  candidateSpan : Maybe Span
+  candidateReason : Maybe String
+
+-- | 终止性 call matrix 的一行：被调者、实参摘要、大小关系、调用点。
+record CallInfo where
+  callCallee : String
+  callArg : String
+  callRelation : String
+  callSpan : Maybe Span
+
+-- | 机器可读语义字段（给 LSP/JSON/测试消费，不从散文反解析）。
+data DiagField : Type where
+  FieldExpected : String -> DiagField
+  FieldFound : String -> DiagField
+  FieldName : String -> DiagField
+  FieldCandidates : List Candidate -> DiagField
+  FieldCall : CallInfo -> DiagField
+  FieldQuantity : String -> Int -> Int -> DiagField
+  FieldEffect : String -> DiagField
+  FieldModule : String -> DiagField
+  FieldSpan : String -> Span -> DiagField
+  FieldNote : String -> DiagField
+
+-- | 合一/实例搜索/终止性等过程轨迹的一帧。
+record TraceFrame where
+  tracePhase : Phase
+  traceText : String
+  traceSpan : Maybe Span
+  traceChildren : List TraceFrame
+
+-- | 内部编译器错误（ICE）载荷。
+record IceInfo where
+  icePhase : Phase
+  iceFunction : String
+  iceInvariant : String
+  iceFingerprint : String
+  iceHint : String
+
+-- | 一条完整诊断。字段顺序即构造顺序（记录按位置构造）。
+record Diagnostic where
+  diagId : Int
+  diagSeverity : Severity
+  diagPhase : Phase
+  diagCategory : Category
+  diagCode : String
+  diagMessage : String
+  diagLabels : List Label
+  diagFields : List DiagField
+  diagTrace : List TraceFrame
+  diagNotes : List String
+  diagSuggestions : List Suggestion
+  diagOrigin : Origin
+  diagChildren : List Diagnostic
+  diagInternal : Bool
+  diagIce : Maybe IceInfo
+
+-- ---------------------------------------------------------------
+-- 编译器结果通道
+-- ---------------------------------------------------------------
+-- | `OkC a` 或 `ErrC Diagnostic`。构造子名与 `Base.Check` 一致，便于迁移。
+data Check a : Type where
+  OkC : a -> Check a
+  ErrC : Diagnostic -> Check a
+
+-- ---------------------------------------------------------------
+-- 构造
+-- ---------------------------------------------------------------
+-- | 无 label 的源码诊断（显式「无位置」）。
+diagNoLoc : Severity -> Phase -> Category -> String -> String -> Diagnostic
+diagNoLoc sev phase cat code msg =
+  Diagnostic 0 sev phase cat code msg [] [] [] [] [] OriginDirect [] False Nothing
+
+-- | 带主 label 的源码诊断。
+diagAt : Span -> Severity -> Phase -> Category -> String -> String -> Diagnostic
+diagAt sp sev phase cat code msg =
+  Diagnostic 0 sev phase cat code msg [Label (Just sp) "" LabelPrimary Nothing] [] [] [] []
+    OriginDirect [] False Nothing
+
+-- | 工具/用法错误（phase = Tool，无位置，无码）。
+err : String -> Check a
+err msg =
+  ErrC (Diagnostic 0 SevError PhTool CatTool "" msg [] [] [] [] [] OriginDirect [] False Nothing)
+
+-- | 迁移期过渡：尚未分类但带位置的裸消息。分类完成后删除。
+rawAt : Span -> String -> Check a
+rawAt sp msg =
+  ErrC
+    (Diagnostic 0 SevError PhElab CatTypes "" msg [Label (Just sp) "" LabelPrimary Nothing] [] [] [] [] OriginDirect [] False Nothing)
+
+-- | 迁移期过渡：尚未分类且无位置的裸消息。分类完成后删除。
+rawNoLoc : String -> Check a
+rawNoLoc msg =
+  ErrC (Diagnostic 0 SevError PhElab CatTypes "" msg [] [] [] [] [] OriginDirect [] False Nothing)
+
+-- ---------------------------------------------------------------
+-- 组合（不修改原值）
+-- ---------------------------------------------------------------
+-- | 追加一个标签。
+withLabel : Label -> Diagnostic -> Diagnostic
+withLabel l d =
+  Diagnostic d.diagId d.diagSeverity d.diagPhase d.diagCategory d.diagCode d.diagMessage
+    (append d.diagLabels [l]) d.diagFields d.diagTrace d.diagNotes d.diagSuggestions d.diagOrigin
+    d.diagChildren d.diagInternal d.diagIce
+
+-- | 追加一个字段。
+withField : DiagField -> Diagnostic -> Diagnostic
+withField f d =
+  Diagnostic d.diagId d.diagSeverity d.diagPhase d.diagCategory d.diagCode d.diagMessage
+    d.diagLabels (append d.diagFields [f]) d.diagTrace d.diagNotes d.diagSuggestions d.diagOrigin
+    d.diagChildren d.diagInternal d.diagIce
+
+-- | 追加一条 note。
+withNote : String -> Diagnostic -> Diagnostic
+withNote n d =
+  Diagnostic d.diagId d.diagSeverity d.diagPhase d.diagCategory d.diagCode d.diagMessage
+    d.diagLabels d.diagFields d.diagTrace (append d.diagNotes [n]) d.diagSuggestions d.diagOrigin
+    d.diagChildren d.diagInternal d.diagIce
+
+-- | 追加一条 help（渲染为 `help: ...`）。
+withHelp : String -> Diagnostic -> Diagnostic
+withHelp h d = withNote "help: ${h}" d
+
+-- | 追加一条建议。
+withSuggestion : Suggestion -> Diagnostic -> Diagnostic
+withSuggestion s d =
+  Diagnostic d.diagId d.diagSeverity d.diagPhase d.diagCategory d.diagCode d.diagMessage
+    d.diagLabels d.diagFields d.diagTrace d.diagNotes (append d.diagSuggestions [s]) d.diagOrigin
+    d.diagChildren d.diagInternal d.diagIce
+
+-- | 追加一帧轨迹。
+withTrace : TraceFrame -> Diagnostic -> Diagnostic
+withTrace t d =
+  Diagnostic d.diagId d.diagSeverity d.diagPhase d.diagCategory d.diagCode d.diagMessage
+    d.diagLabels d.diagFields (append d.diagTrace [t]) d.diagNotes d.diagSuggestions d.diagOrigin
+    d.diagChildren d.diagInternal d.diagIce
+
+-- | 改写来源（级联标记用）。
+withOrigin : Origin -> Diagnostic -> Diagnostic
+withOrigin o d =
+  Diagnostic d.diagId d.diagSeverity d.diagPhase d.diagCategory d.diagCode d.diagMessage
+    d.diagLabels d.diagFields d.diagTrace d.diagNotes d.diagSuggestions o d.diagChildren
+    d.diagInternal d.diagIce
+
+-- | 定义级诊断：主位置 + `in \`name\`` 上下文标签（替代旧字符串前缀）。
+withContext : Maybe Span -> String -> Diagnostic -> Diagnostic
+withContext msp name d =
+  let
+    added = withLabel (Label msp "in `${name}`" LabelContext Nothing) d
+  in case msp of
+    Just sp => withLabel (Label (Just sp) "" LabelPrimary Nothing) added
+    Nothing => added
+
+-- ---------------------------------------------------------------
+-- 过渡渲染：与旧字符串输出逐字节一致（M2 期间 fixture 依赖；M7 换新格式）
+-- ---------------------------------------------------------------
+-- | 一个诊断的主 span（首个 Primary 标签）。
+primarySpanOf : List Label -> Maybe Span
+primarySpanOf [] = Nothing
+primarySpanOf ((Label sp _ LabelPrimary _) :: rest) = sp
+primarySpanOf (_ :: rest) = primarySpanOf rest
+
+-- | 上下文前缀（`in \`name\`: `）。
+contextPrefixOf : List Label -> String
+contextPrefixOf [] = ""
+contextPrefixOf ((Label _ text LabelContext _) :: rest) = "${text}: "
+contextPrefixOf (_ :: rest) = contextPrefixOf rest
+
+-- | 位置前缀（`file:line:col: `）；无主 span 时为空。
+locPrefixOf : List Label -> String
+locPrefixOf labels = case primarySpanOf labels of
+  Just sp => "${showSpanLoc sp}: "
+  Nothing => ""
+
+-- | 诊断首行文本：`[file:l:c: ][in \`name\`: ][CODE] 消息`。
+diagText : Diagnostic -> String
+diagText d =
+  let
+    body = if d.diagCode == "" then d.diagMessage else "[${d.diagCode}] ${d.diagMessage}"
+  in locPrefixOf d.diagLabels ++ contextPrefixOf d.diagLabels ++ body
+
+-- | 在消息末尾追加细节（不改变 code/位置；用于把阶段细节并进首行）。
+appendMessage : String -> Diagnostic -> Diagnostic
+appendMessage suffix d =
+  Diagnostic d.diagId d.diagSeverity d.diagPhase d.diagCategory d.diagCode (d.diagMessage ++ suffix)
+    d.diagLabels d.diagFields d.diagTrace d.diagNotes d.diagSuggestions d.diagOrigin d.diagChildren
+    d.diagInternal d.diagIce
+
+-- ---------------------------------------------------------------
+-- Check 的 Functor / Applicative / Monad（根工具链用 `fmap`/`do` 组合编译器结果）
+-- ---------------------------------------------------------------
+instance Functor Check where
+  fmap f (OkC x) = OkC (f x)
+  fmap f (ErrC e) = ErrC e
+
+instance Monad Check where
+  bind (OkC x) k = k x
+  bind (ErrC e) k = ErrC e
+
+instance Applicative Check where
+  pure = OkC
+  ap mf mx = case mf of
+    OkC g => case mx of
+      OkC x => OkC (g x)
+      ErrC e => ErrC e
+    ErrC e => ErrC e
+  liftA2 f (OkC x) (OkC y) = OkC (f x y)
+  liftA2 f (ErrC e) _ = ErrC e
+  liftA2 f _ (ErrC e) = ErrC e

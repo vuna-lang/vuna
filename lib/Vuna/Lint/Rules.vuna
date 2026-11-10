@@ -1569,14 +1569,14 @@ dedupGo kept (f :: rest) = if coveredBy kept f then dedupGo kept rest else dedup
 -- `programFixities` = 本文件 `infix*` 声明 ++ 该文件 import 闭包可见声明（调用方算）；
 -- 这里再把它放在本文件声明（parse 得到的 env）之前——本地优先，与 Loader 一致。
 -- 缺声明时严格报 unknown fixity（不静默按默认优先级重排）。
-lintSourceWith : List FixityDecl -> String -> Result (List Finding)
+lintSourceWith : List FixityDecl -> String -> Check (List Finding)
 lintSourceWith programFixities source = case parseSource "<lint>" source of
-  Err e => Err e
-  Ok (SourceFile _ _ fx decls0) => case reorderProgram (tableOfKeepOps (append programFixities fx)) decls0 of
-    Err e => Err e
-    Ok decls => case lexSource source of
-      Err e => Err e
-      Ok toks =>
+  ErrC e => ErrC e
+  OkC (SourceFile _ _ fx decls0) => case reorderProgram (tableOfKeepOps (append programFixities fx)) decls0 of
+    ErrC e => ErrC e
+    OkC decls => case lexSource source of
+      ErrC e => ErrC e
+      OkC toks =>
         let
           lines = splitLines source
-        in Ok (dedupFindings (sortFindings (scanDecls lines toks decls decls)))
+        in OkC (dedupFindings (sortFindings (scanDecls lines toks decls decls)))

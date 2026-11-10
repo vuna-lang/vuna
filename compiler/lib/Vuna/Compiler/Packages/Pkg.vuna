@@ -216,13 +216,13 @@ joinPathsText (path :: rest) = "${path}, ${joinPathsText rest}"
 
 -- ---------------------------------------------------------------- manifest
 -- path 是 vuna.toml 的路径；缺失时报 `pkg: missing vuna.toml in <目录>`。
-loadManifestAt : String -> Result Manifest
+loadManifestAt : String -> Check Manifest
 loadManifestAt path = if runIO (prim_fileExists path) then case parseManifest path (runIO (prim_readFile path)) of
-  Err e => Err "pkg: ${e}"
-  Ok manifest => case validateManifest manifest of
-    Err e => Err "pkg: ${e}"
-    Ok validated => Ok validated
-else Err "pkg: missing vuna.toml in ${normalizeDir (manifestDir path)}"
+  ErrC e => err "pkg: ${diagText e}"
+  OkC manifest => case validateManifest manifest of
+    ErrC e => err "pkg: ${diagText e}"
+    OkC validated => OkC validated
+else err "pkg: missing vuna.toml in ${normalizeDir (manifestDir path)}"
 
 manifestNameString : Manifest -> String
 manifestNameString manifest = case manifest.manifestName of
@@ -258,31 +258,31 @@ mismatchMessage Nothing actual = "pkg: package name mismatch"
 mismatchMessage (Just expected) actual =
   "pkg: dependency ${expected} expects package name ${expected} but found ${actual}"
 
-loadDependencyList : Int -> List (Pair String String) -> String -> List (Pair String String) -> Result (List Package)
-loadDependencyList fuel stack baseDir deps = if fuel <= 0 then Err "DT: pkg fuel exhausted (internal: dependency graph too deep)"
+loadDependencyList : Int -> List (Pair String String) -> String -> List (Pair String String) -> Check (List Package)
+loadDependencyList fuel stack baseDir deps = if fuel <= 0 then err "DT: pkg fuel exhausted (internal: dependency graph too deep)"
 else case deps of
-  [] => Ok []
+  [] => OkC []
   (Pair depName rel) :: rest => case loadPackageWalk (fuel - 1) stack (Just depName) (joinPath baseDir rel) of
-    Err e => Err e
-    Ok dependency => case loadDependencyList (fuel - 1) stack baseDir rest of
-      Err e => Err e
-      Ok dependencies => Ok (dependency :: dependencies)
+    ErrC e => ErrC e
+    OkC dependency => case loadDependencyList (fuel - 1) stack baseDir rest of
+      ErrC e => ErrC e
+      OkC dependencies => OkC (dependency :: dependencies)
 
-loadPackageWalk : Int -> List (Pair String String) -> Maybe String -> String -> Result Package
-loadPackageWalk fuel stack depName dir = if fuel <= 0 then Err "DT: pkg fuel exhausted (internal: dependency graph too deep)"
+loadPackageWalk : Int -> List (Pair String String) -> Maybe String -> String -> Check Package
+loadPackageWalk fuel stack depName dir = if fuel <= 0 then err "DT: pkg fuel exhausted (internal: dependency graph too deep)"
 else
   let
     normalized = normalizeDir dir
-  in if memStackDir normalized stack then Err (cycleMessage normalized depName stack)
+  in if memStackDir normalized stack then err (cycleMessage normalized depName stack)
   else case loadManifestAt "${normalized}/vuna.toml" of
-    Err e => Err e
-    Ok manifest =>
+    ErrC e => ErrC e
+    OkC manifest =>
       let
         name = manifestNameString manifest
       in if dependencyNameOk depName name then case loadDependencyList (fuel - 1) (Pair normalized name :: stack) normalized manifest.manifestDependencies of
-        Err e => Err e
-        Ok dependencies => Ok (Package manifest dependencies normalized)
-      else Err (mismatchMessage depName name)
+        ErrC e => ErrC e
+        OkC dependencies => OkC (Package manifest dependencies normalized)
+      else err (mismatchMessage depName name)
 
 -- ---------------------------------------------------------------- 包名唯一性（M24.7）
 -- 包名不是纯标签，它参与两项语义判定：
@@ -307,16 +307,16 @@ lookupPackageDir name [] = Nothing
 lookupPackageDir name ((Pair n dir) :: rest) =
   if n == name then Just dir else lookupPackageDir name rest
 
-checkUniqueNamesGo : List (Pair String String) -> List (Pair String String) -> Result Int
-checkUniqueNamesGo seen [] = Ok 0
+checkUniqueNamesGo : List (Pair String String) -> List (Pair String String) -> Check Int
+checkUniqueNamesGo seen [] = OkC 0
 checkUniqueNamesGo seen ((Pair name dir) :: rest) = case lookupPackageDir name seen of
   Nothing => checkUniqueNamesGo (Pair name dir :: seen) rest
   Just prevDir =>
     if prevDir == dir then checkUniqueNamesGo seen rest
-    else Err
+    else err
       "pkg: duplicate package name \"${name}\" in ${prevDir} and ${dir} (package names must be unique within a dependency graph)"
 
-checkUniquePackageNames : List Package -> Result Int
+checkUniquePackageNames : List Package -> Check Int
 checkUniquePackageNames packages = checkUniqueNamesGo [] (collectDependencyIds packages)
 
 -- 依赖 DFS 的初值（M30/C27：保留 1M，但补上「为什么不可能耗尽」的论证）。
@@ -331,34 +331,34 @@ pkgFuelBound : Int
 pkgFuelBound = 1048576
 
 -- 加载 dir/vuna.toml 及其 [dependencies] 路径依赖（递归、含循环检测）。
-loadPackage : String -> Result Package
+loadPackage : String -> Check Package
 loadPackage dir =
   Vuna.Compiler.Common.bind (loadPackageWalk pkgFuelBound [] Nothing dir)
-    (\package => Vuna.Compiler.Common.bind (checkUniquePackageNames [package]) (\_ => Ok package))
+    (\package => Vuna.Compiler.Common.bind (checkUniquePackageNames [package]) (\_ => OkC package))
 
 -- ---------------------------------------------------------------- workspace
-loadMembers : String -> List String -> Result (List Package)
-loadMembers baseDir [] = Ok []
+loadMembers : String -> List String -> Check (List Package)
+loadMembers baseDir [] = OkC []
 loadMembers baseDir (rel :: rest) = case loadPackage (joinPath baseDir rel) of
-  Err e => Err e
-  Ok memberPackage => case loadMembers baseDir rest of
-    Err e => Err e
-    Ok memberPackages => Ok (memberPackage :: memberPackages)
+  ErrC e => ErrC e
+  OkC memberPackage => case loadMembers baseDir rest of
+    ErrC e => ErrC e
+    OkC memberPackages => OkC (memberPackage :: memberPackages)
 
 -- 根包 + [workspace].members（顺序同 manifest）；没有 members 时只含根包。
 -- 每个成员自己的依赖图已由 loadPackage 校验；这里再校验并集，捕获跨成员的
 -- 同名不同目录冲突。
-workspacePackages : String -> Result (List Package)
+workspacePackages : String -> Check (List Package)
 workspacePackages rootBaseDir =
   let
     base = normalizeDir rootBaseDir
   in case loadPackage base of
-    Err e => Err e
-    Ok rootPackage => case loadMembers base rootPackage.packageManifest.manifestMembers of
-      Err e => Err e
-      Ok members =>
+    ErrC e => ErrC e
+    OkC rootPackage => case loadMembers base rootPackage.packageManifest.manifestMembers of
+      ErrC e => ErrC e
+      OkC members =>
         Vuna.Compiler.Common.bind (checkUniquePackageNames (rootPackage :: members))
-          (\_ => Ok (rootPackage :: members))
+          (\_ => OkC (rootPackage :: members))
 
 -- ---------------------------------------------------------------- 模块根
 dependencyRootOf : Package -> Root
@@ -427,10 +427,10 @@ findManifestDirMaybe startDir =
 
 -- `findManifestDir` 保留给 fmt / index 这类「向上找 workspace 根」的工具；
 -- 包上下文一律走 `contextForFile` / `contextForDir`。
-findManifestDir : String -> Result String
+findManifestDir : String -> Check String
 findManifestDir startDir = case findManifestDirMaybe startDir of
-  Just dir => Ok dir
-  Nothing => Err "pkg: no vuna.toml found from ${normalizeDir startDir} (searched upward)"
+  Just dir => OkC dir
+  Nothing => err "pkg: no vuna.toml found from ${normalizeDir startDir} (searched upward)"
 
 -- ---------------------------------------------------------------- base 定位（M26）
 -- base 只由两处决定：`VUNA_BASE`（显式覆盖，相对路径按 cwd 归一），或可执行文件
@@ -447,19 +447,19 @@ baseCandidates exeDir =
     joinPath exeDir "../../../base"
   ]
 
-baseNotFound : List String -> Result a
+baseNotFound : List String -> Check a
 baseNotFound tried =
-  Err
+  err
     "pkg: cannot locate vuna-base (tried: ${joinPathsText tried}); set VUNA_BASE to a directory containing vuna.toml"
 
-firstExistingBase : List String -> List String -> Result String
+firstExistingBase : List String -> List String -> Check String
 firstExistingBase original [] = baseNotFound original
 firstExistingBase original (dir :: rest) =
-  if hasManifest dir then Ok dir else firstExistingBase original rest
+  if hasManifest dir then OkC dir else firstExistingBase original rest
 
 -- base 定位是启动期读环境/探路径的**动作**（A05 后零参顶层值会在模块初始化时求值），
 -- 因此函数化：调用方传 dummy 0，真正用到 base-only 上下文时才解析。
-locateBase : Int -> Result String
+locateBase : Int -> Check String
 locateBase _ =
   let
     env = runIO (prim_getenv "VUNA_BASE")
@@ -470,30 +470,30 @@ locateBase _ =
   else
     let
       dir = absolutePath env
-    in if hasManifest dir then Ok dir else baseNotFound [dir]
+    in if hasManifest dir then OkC dir else baseNotFound [dir]
 
 -- ---------------------------------------------------------------- 包上下文
 -- base-only 上下文：不属于任何包的文件（ad-hoc 入口）。包名为空串（效果内建
 -- 仍被拒绝），模块根只有 base/lib，导出限制沿用 base 的 [export].modules。
 -- 入口能力为空（base 模块根各自携带 base manifest 的能力，不受影响）。
-baseOnlyContext : String -> Result PackageContext
+baseOnlyContext : String -> Check PackageContext
 baseOnlyContext base =
   Vuna.Compiler.Common.bind (loadPackage base)
-    (\package => Ok (PackageContext "" Nothing [dependencyRootOf package] "" [] Nothing False))
+    (\package => OkC (PackageContext "" Nothing [dependencyRootOf package] "" [] Nothing False))
 
 -- 从 start（已绝对化的目录）向上找最近 manifest；找不到 → base-only。
 -- manifest 非法（解析/校验失败）必须报错，不回退到 base-only。
-contextAt : String -> Result PackageContext
+contextAt : String -> Check PackageContext
 contextAt start = case findManifestDirMaybe start of
-  Just dir => Vuna.Compiler.Common.bind (loadPackage dir) (\package => Ok (packageContext package))
+  Just dir => Vuna.Compiler.Common.bind (loadPackage dir) (\package => OkC (packageContext package))
   Nothing => Vuna.Compiler.Common.bind (locateBase 0) baseOnlyContext
 
 -- 文件入口：相对路径先按 cwd 绝对化，再从文件所在目录向上找最近 vuna.toml。
-contextForFile : String -> Result PackageContext
+contextForFile : String -> Check PackageContext
 contextForFile path = contextAt (manifestDir (absolutePath path))
 
 -- 目录入口（REPL / 工具从 cwd 取上下文）：同样先绝对化再向上找 manifest。
 -- 「显式包目录」语义（check/compile/build 的目录参数）不用本函数，而是直接
 -- `loadPackage`：只认该目录自己的 vuna.toml，不向上搜索。
-contextForDir : String -> Result PackageContext
+contextForDir : String -> Check PackageContext
 contextForDir dir = contextAt (absolutePath dir)

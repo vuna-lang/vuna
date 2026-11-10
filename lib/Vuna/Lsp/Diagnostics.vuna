@@ -110,7 +110,7 @@ diagIfOwn label severity message =
 
 -- 包上下文：file:// URI → 路径 → `contextForFile`；非 file URI（或磁盘上不存在的
 -- 路径）退化到 cwd 的 `contextForDir "."`。失败由调用方转成 0:0 的 `pkg: ...` 诊断。
-contextForDoc : String -> Result (Pair String PackageContext)
+contextForDoc : String -> Check (Pair String PackageContext)
 contextForDoc uri =
   let
     path = decodeUri uri
@@ -203,9 +203,9 @@ currentNameOf (Just n) = n
 -- ---------------------------------------------------------------
 -- 精化 + 写回
 -- ---------------------------------------------------------------
-diagsOfCheck : String -> Result (List String) -> List Diag
-diagsOfCheck label (Ok _) = []
-diagsOfCheck label (Err e) = case diagIfOwn label severityError e of
+diagsOfCheck : String -> Check (List Diagnostic) -> List Diag
+diagsOfCheck label (OkC _) = []
+diagsOfCheck label (ErrC e) = case diagIfOwn label severityError (diagText e) of
   Nothing => []
   Just d => [d]
 
@@ -239,8 +239,8 @@ checkIncremental session label text modName imports = case session.dcTool of
         dtCheckSourceIncremental session.dcCtx label text tool.tcDepIfaces cleanNeeded session.dcAux
           needPkg
     in case checked of
-      Err e => Pair (Just session) (diagsOfCheck label (Err e))
-      Ok (Pair applied (Pair maybePkg maybeAux)) => if applied then
+      ErrC e => Pair (Just session) (diagsOfCheck label (ErrC e))
+      OkC (Pair applied (Pair maybePkg maybeAux)) => if applied then
         let
           session2 =
             DiagCache session.dcLabel session.dcKey session.dcCtx session.dcTool session.dcClean
@@ -253,8 +253,8 @@ checkIncremental session label text modName imports = case session.dcTool of
 -- 上下文的精简入口（`dtCheckSourceChecked` 需要 ctx）。
 checkFullWith : Maybe DiagCache -> PackageContext -> String -> String -> Maybe String -> Pair (Maybe DiagCache) (List Diag)
 checkFullWith cache ctx label text modName = case dtCheckSourceChecked ctx label text of
-  Err e => Pair cache (diagsOfCheck label (Err e))
-  Ok (Pair _ checkedPkg) =>
+  ErrC e => Pair cache (diagsOfCheck label (ErrC e))
+  OkC (Pair _ checkedPkg) =>
     let
       session = case cache of
         Just c => c
@@ -271,10 +271,10 @@ checkFullWith cache ctx label text modName = case dtCheckSourceChecked ctx label
 -- ---------------------------------------------------------------
 lintWithEnv : FixityEnv -> String -> String -> Pair FixityEnv (List Diag)
 lintWithEnv env label text = case fixitiesForFile env label text of
-  Pair env2 (Err _) => Pair env2 []
-  Pair env2 (Ok fx) => Pair env2 (case lintSourceWith fx text of
-    Err _ => []
-    Ok findings => map lintDiag findings
+  Pair env2 (ErrC _) => Pair env2 []
+  Pair env2 (OkC fx) => Pair env2 (case lintSourceWith fx text of
+    ErrC _ => []
+    OkC findings => map lintDiag findings
   )
 
 lintDiag : Finding -> Diag
@@ -307,10 +307,10 @@ checkDiagnostics cache label ctx text modName imports =
 
 diagnosticsForCached : Maybe DiagCache -> String -> String -> Pair (Maybe DiagCache) (List Diag)
 diagnosticsForCached cache uri text = case contextForDoc uri of
-  Err e => Pair cache [Diag 0 0 0 0 severityError "" e]
-  Ok (Pair label ctx) => case parseSource label text of
-    Err e => Pair cache [diagOfMessage severityError "" e]
-    Ok (SourceFile hdr imports fixities decls) =>
+  ErrC e => Pair cache [Diag 0 0 0 0 severityError "" (diagText e)]
+  OkC (Pair label ctx) => case parseSource label text of
+    ErrC e => Pair cache [diagOfMessage severityError "" (diagText e)]
+    OkC (SourceFile hdr imports fixities decls) =>
       let
         modName = case hdr of
           Just (ModDecl n hasList items sp) => Just n
@@ -367,8 +367,8 @@ writeBackModule session label text checked (Just name) = if diskMatches label te
         else Just (toolWriteModuleIfaceCold session.dcCtx checked name si)
   in case attempt of
     Nothing => session
-    Just (Err _) => session
-    Just (Ok mi) =>
+    Just (ErrC _) => session
+    Just (OkC mi) =>
       DiagCache session.dcLabel session.dcKey session.dcCtx session.dcTool (mi :: session.dcClean)
         session.dcBuiltSec session.dcStats session.dcAux session.dcFix
 else session

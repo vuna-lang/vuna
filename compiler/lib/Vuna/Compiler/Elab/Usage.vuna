@@ -66,30 +66,30 @@ else case us of
   _ :: rest => uDrop (n - 1) rest
 
 -- 声明与实测是否相符；不符时给 TC 诊断。返回的 Int 只是占位（错误已短路）。
-checkBinderRig : Span -> String -> Rig -> Rig -> Result Int
+checkBinderRig : Span -> String -> Rig -> Rig -> Check Int
 checkBinderRig sp name Rig0 used =
-  if isRigZero used then Ok 0 else tcErr1 sp (ErasedBinderUsed name) name
+  if isRigZero used then OkC 0 else tcErr1 sp (ErasedBinderUsed name) name
 checkBinderRig sp name Rig1 used = case used of
   Rig0 => tcErr1 sp (LinearUnused name) name
-  Rig1 => Ok 0
+  Rig1 => OkC 0
   RigOmega => tcErr1 sp (LinearOverused name) name
-checkBinderRig sp name RigOmega used = Ok 0
+checkBinderRig sp name RigOmega used = OkC 0
 
 -- 进入一个 binder：body usage 的头部就是它；检查后 drop。
-checkLamBinder : Span -> String -> Rig -> List Rig -> Result (List Rig)
-checkLamBinder sp name rig [] = Err "DT: internal: usage vector lost lambda binder"
+checkLamBinder : Span -> String -> Rig -> List Rig -> Check (List Rig)
+checkLamBinder sp name rig [] = err "DT: internal: usage vector lost lambda binder"
 checkLamBinder sp name rig (used :: rest) =
-  Vuna.Compiler.Common.bind (checkBinderRig sp name rig used) (\_ => Ok rest)
+  Vuna.Compiler.Common.bind (checkBinderRig sp name rig used) (\_ => OkC rest)
 
 -- case 分支：binders 是 telescope 顺序（第一个字段最外），body usage 的前 k 项按
 -- 逆序对应它们（index 0 = 最后一个字段）。检查完整体 drop。
-checkAltBinders : Span -> List (Pair String Rig) -> List Rig -> Result (List Rig)
+checkAltBinders : Span -> List (Pair String Rig) -> List Rig -> Check (List Rig)
 checkAltBinders sp binders us = checkAltBindersGo sp (reverse binders) us
 
-checkAltBindersGo : Span -> List (Pair String Rig) -> List Rig -> Result (List Rig)
-checkAltBindersGo sp [] us = Ok us
+checkAltBindersGo : Span -> List (Pair String Rig) -> List Rig -> Check (List Rig)
+checkAltBindersGo sp [] us = OkC us
 checkAltBindersGo sp ((Pair name rig) :: rest) us = case us of
-  [] => Err "DT: internal: usage vector lost case binder"
+  [] => err "DT: internal: usage vector lost case binder"
   used :: more =>
     Vuna.Compiler.Common.bind (checkBinderRig sp name rig used)
       (\_ => checkAltBindersGo sp rest more)
@@ -97,53 +97,53 @@ checkAltBindersGo sp ((Pair name rig) :: rest) us = case us of
 -- ---------------------------------------------------------------
 -- 项遍历
 -- ---------------------------------------------------------------
-checkTerm : Span -> List (Pair String Rig) -> Term -> Result (List Rig)
+checkTerm : Span -> List (Pair String Rig) -> Term -> Check (List Rig)
 checkTerm sp env t = case t of
-  TVar name i => Ok (uVarAt (natToInt (length env)) i)
-  TMeta m => Ok (uZeroOf (natToInt (length env)))
-  TGlobal g => Ok (uZeroOf (natToInt (length env)))
-  TType l => Ok (uZeroOf (natToInt (length env)))
+  TVar name i => OkC (uVarAt (natToInt (length env)) i)
+  TMeta m => OkC (uZeroOf (natToInt (length env)))
+  TGlobal g => OkC (uZeroOf (natToInt (length env)))
+  TType l => OkC (uZeroOf (natToInt (length env)))
   -- 类型：0-fragment，里面的 binder 不产生运行时用量。
-  TPi name implicit rig dom cod => Ok (uZeroOf (natToInt (length env)))
+  TPi name implicit rig dom cod => OkC (uZeroOf (natToInt (length env)))
   TLam name rig body =>
     let
       env2 = Base.List.Cons (Pair name rig) env
     in Vuna.Compiler.Common.bind (checkTerm sp env2 body) (\u => checkLamBinder sp name rig u)
   TApp f a rig =>
     Vuna.Compiler.Common.bind (checkTerm sp env f)
-      (\uf => if isRigZero rig then Ok uf else Vuna.Compiler.Common.bind (checkTerm sp env a) (\ua => Ok (uAdd uf (uScale rig ua))))
+      (\uf => if isRigZero rig then OkC uf else Vuna.Compiler.Common.bind (checkTerm sp env a) (\ua => OkC (uAdd uf (uScale rig ua))))
   TCon c args => checkArgs sp env args
   TMk c args => checkArgs sp env args
   TProj base c tele i fi => checkTerm sp env base
   TRecUpd base c tele idxs body =>
     Vuna.Compiler.Common.bind (checkTerm sp env base)
-      (\ub => Vuna.Compiler.Common.bind (checkTerm sp (append (reverse tele) env) body) (\ua => Ok (uAdd ub ua)))
+      (\ub => Vuna.Compiler.Common.bind (checkTerm sp (append (reverse tele) env) body) (\ua => OkC (uAdd ub ua)))
   TCase scrut alts =>
     Vuna.Compiler.Common.bind (checkTerm sp env scrut)
-      (\us => Vuna.Compiler.Common.bind (checkAlts sp env alts) (\ua => Ok (uAdd us ua)))
+      (\us => Vuna.Compiler.Common.bind (checkAlts sp env alts) (\ua => OkC (uAdd us ua)))
   TIf c th el =>
     Vuna.Compiler.Common.bind (checkTerm sp env c)
-      (\uc => Vuna.Compiler.Common.bind (checkTerm sp env th) (\ut => Vuna.Compiler.Common.bind (checkTerm sp env el) (\ue => Ok (uAdd uc (uJoin ut ue)))))
-  TInt n => Ok (uZeroOf (natToInt (length env)))
-  TStr s => Ok (uZeroOf (natToInt (length env)))
-  TFloat raw => Ok (uZeroOf (natToInt (length env)))
-  TBool b => Ok (uZeroOf (natToInt (length env)))
+      (\uc => Vuna.Compiler.Common.bind (checkTerm sp env th) (\ut => Vuna.Compiler.Common.bind (checkTerm sp env el) (\ue => OkC (uAdd uc (uJoin ut ue)))))
+  TInt n => OkC (uZeroOf (natToInt (length env)))
+  TStr s => OkC (uZeroOf (natToInt (length env)))
+  TFloat raw => OkC (uZeroOf (natToInt (length env)))
+  TBool b => OkC (uZeroOf (natToInt (length env)))
 
-checkArgs : Span -> List (Pair String Rig) -> List (Pair Term Rig) -> Result (List Rig)
+checkArgs : Span -> List (Pair String Rig) -> List (Pair Term Rig) -> Check (List Rig)
 checkArgs sp env args = checkArgsGo sp env args (uZeroOf (natToInt (length env)))
 
-checkArgsGo : Span -> List (Pair String Rig) -> List (Pair Term Rig) -> List Rig -> Result (List Rig)
-checkArgsGo sp env [] acc = Ok acc
+checkArgsGo : Span -> List (Pair String Rig) -> List (Pair Term Rig) -> List Rig -> Check (List Rig)
+checkArgsGo sp env [] acc = OkC acc
 checkArgsGo sp env ((Pair arg rig) :: rest) acc =
   if isRigZero rig then checkArgsGo sp env rest acc
   else Vuna.Compiler.Common.bind (checkTerm sp env arg)
     (\ua => checkArgsGo sp env rest (uAdd acc (uScale rig ua)))
 
-checkAlts : Span -> List (Pair String Rig) -> List CaseAlt -> Result (List Rig)
+checkAlts : Span -> List (Pair String Rig) -> List CaseAlt -> Check (List Rig)
 checkAlts sp env alts = checkAltsGo sp env alts Nothing
 
-checkAltsGo : Span -> List (Pair String Rig) -> List CaseAlt -> Maybe (List Rig) -> Result (List Rig)
-checkAltsGo sp env [] acc = Ok (case acc of
+checkAltsGo : Span -> List (Pair String Rig) -> List CaseAlt -> Maybe (List Rig) -> Check (List Rig)
+checkAltsGo sp env [] acc = OkC (case acc of
   Just u => u
   Nothing => uZeroOf (natToInt (length env))
 )
@@ -166,13 +166,13 @@ isRigZero _ = False
 
 -- 顶层入口：body 是闭项；遍历后应无残留用量（有残留说明存在未绑定变量，作用域护栏会
 -- 在 codegen 侧再查；这里只保证不静默）。
-checkDefUsage : Maybe Span -> String -> Term -> Result Int
+checkDefUsage : Maybe Span -> String -> Term -> Check Int
 checkDefUsage msp name body =
   let
     sp = case msp of
       Just s => s
       Nothing => Span "" 0 0 0 0
-  in Vuna.Compiler.Common.bind (checkTerm sp [] body) (\rest => Ok (natToInt (length rest)))
+  in Vuna.Compiler.Common.bind (checkTerm sp [] body) (\rest => OkC (natToInt (length rest)))
 
 -- ---------------------------------------------------------------
 -- W7：线性捕获的「立即消费」规则
@@ -187,7 +187,7 @@ checkDefUsage msp name body =
 --     承诺会被绕开。
 -- 其余位置（定义体返回值、rig-ω 实参/字段、`if`/`case` 的普通位置）一律拒绝。
 -- 这是保守但可靠的近似：完整的多重性多态/依赖 multiplicity 未做（qtt.md §9）。
-capCheck : Ec -> Span -> Term -> Bool -> Result Int
+capCheck : Ec -> Span -> Term -> Bool -> Check Int
 capCheck ec sp t allowed = capCheckFuel (capCheckFuelFor t) ec sp t allowed
 
 -- | capture check 的 fuel 派生（D24）：固定 2048 对含深 Nat 链/大项的体不够（字面量
@@ -202,19 +202,19 @@ capCheckFuelFor t =
 capCheckFuelMax : Int
 capCheckFuelMax = 1000000
 
-capCheckFuel : Int -> Ec -> Span -> Term -> Bool -> Result Int
-capCheckFuel fuel ec sp t allowed = if fuel <= 0 then Err "DT: internal: capture check fuel exhausted"
+capCheckFuel : Int -> Ec -> Span -> Term -> Bool -> Check Int
+capCheckFuel fuel ec sp t allowed = if fuel <= 0 then err "DT: internal: capture check fuel exhausted"
 else case t of
-  TVar name i => Ok 0
-  TGlobal g => Ok 0
-  TInt n => Ok 0
-  TStr s => Ok 0
-  TFloat raw => Ok 0
-  TBool b => Ok 0
-  TMeta m => Ok 0
-  TType l => Ok 0
+  TVar name i => OkC 0
+  TGlobal g => OkC 0
+  TInt n => OkC 0
+  TStr s => OkC 0
+  TFloat raw => OkC 0
+  TBool b => OkC 0
+  TMeta m => OkC 0
+  TType l => OkC 0
   -- 类型层项不产生运行时闭包（λ 只在值层出现）。
-  TPi name implicit rig dom cod => Ok 0
+  TPi name implicit rig dom cod => OkC 0
   TLam name rig body =>
     if isLinClosureName name then if allowed then capCheckFuel (fuel - 1) ec sp body False
     else tcErr1 sp (LinearCaptureEscapes (linClosureOrigName name)) (linClosureOrigName name)
@@ -235,19 +235,19 @@ else case t of
     Vuna.Compiler.Common.bind (capCheckFuel (fuel - 1) ec sp scrut True)
       (\_ => capAltsFuel fuel ec sp allowed alts)
 
-capArgsFuel : Int -> Ec -> Span -> String -> List (Pair Term Rig) -> Result Int
+capArgsFuel : Int -> Ec -> Span -> String -> List (Pair Term Rig) -> Check Int
 capArgsFuel fuel ec sp c args = capArgsGo fuel ec sp (ctorFamilyLinear ec c) args
 
-capArgsGo : Int -> Ec -> Span -> Bool -> List (Pair Term Rig) -> Result Int
-capArgsGo fuel ec sp famLin [] = Ok 0
+capArgsGo : Int -> Ec -> Span -> Bool -> List (Pair Term Rig) -> Check Int
+capArgsGo fuel ec sp famLin [] = OkC 0
 capArgsGo fuel ec sp famLin ((Pair arg rig) :: rest) =
   let
     allowed = famLin && rigIsLinear rig
   in Vuna.Compiler.Common.bind (capCheckFuel (fuel - 1) ec sp arg allowed)
     (\_ => capArgsGo (fuel - 1) ec sp famLin rest)
 
-capAltsFuel : Int -> Ec -> Span -> Bool -> List CaseAlt -> Result Int
-capAltsFuel fuel ec sp allowed [] = Ok 0
+capAltsFuel : Int -> Ec -> Span -> Bool -> List CaseAlt -> Check Int
+capAltsFuel fuel ec sp allowed [] = OkC 0
 capAltsFuel fuel ec sp allowed ((CaseAlt cname binders body) :: rest) =
   Vuna.Compiler.Common.bind (capCheckFuel (fuel - 1) ec sp body allowed)
     (\_ => capAltsFuel (fuel - 1) ec sp allowed rest)
@@ -261,7 +261,7 @@ ctorFamilyLinear ec c = case dtCtorLookupEc ec c of
   Nothing => False
 
 -- 顶层入口：定义体是闭项；根位置按「不受限使用」检查（返回值可能被调用方复制）。
-checkDefCapture : Ec -> DtDef -> Term -> Result Int
+checkDefCapture : Ec -> DtDef -> Term -> Check Int
 checkDefCapture ec d body = capCheck ec (defSpanOf d) body False
 
 isTypeLevelDef : Ec -> DtDef -> Bool
@@ -269,11 +269,11 @@ isTypeLevelDef ec d =
   isTypeForming (force (ecDefTbl ec) (ecSolsP ec) defaultFuel (eval [] (dtDefType d)))
 
 -- 程序级入口：只检查有体的运行时定义（类型级定义跳过）。
-checkProgramUsage : Ec -> List DtDef -> Result Int
+checkProgramUsage : Ec -> List DtDef -> Check Int
 checkProgramUsage ec defs = checkProgramUsageGo ec defs 0
 
-checkProgramUsageGo : Ec -> List DtDef -> Int -> Result Int
-checkProgramUsageGo ec [] n = Ok n
+checkProgramUsageGo : Ec -> List DtDef -> Int -> Check Int
+checkProgramUsageGo ec [] n = OkC n
 checkProgramUsageGo ec (d :: rest) n = if isTypeLevelDef ec d then checkProgramUsageGo ec rest n
 else if isLinearType ec (eval [] (dtDefType d)) then tcErr1 (defSpanOf d) (LinearTopLevel (dtDefName d)) (dtDefName d)
 else case dtDefBody d of

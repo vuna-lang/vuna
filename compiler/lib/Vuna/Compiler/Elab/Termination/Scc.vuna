@@ -404,15 +404,16 @@ sctBadText ((Pair (Pair f g) gs) :: rest) =
 sctDiag : List (Pair (Pair String String) (List (List ScEdge))) -> String
 sctDiag table = joinComma (dedup (sctBadText table))
 
-sctCheck : List String -> HashMap String (List (Pair (List Pat) Expr)) -> List String -> List (Pair String (List Int)) -> HashMap String (List Int) -> String -> Result Int
+sctCheck : List String -> HashMap String (List (Pair (List Pat) Expr)) -> List String -> List (Pair String (List Int)) -> HashMap String (List Int) -> Diagnostic -> Check Int
 sctCheck comp defTbl ctors projs facts msg =
   let
     sites = siteCollect comp ctors projs defTbl facts
     table0 = initialTable sites ctors projs facts
   in case closureLoop table0 240 of
     Pair table1 True =>
-      if sctCheckTable table1 then Ok 0 else Err "${msg} [SCT 无下降环: ${sctDiag table1}]"
-    Pair table1 False => Err msg
+      if sctCheckTable table1 then OkC 0
+      else ErrC (appendMessage " [SCT 无下降环: ${sctDiag table1}]" msg)
+    Pair table1 False => ErrC msg
 
 -- ===============================================================
 -- 12. fuel 线程判据（M25.2c）：整组函数的第 0 个形参是 Int fuel，函数体以
@@ -472,12 +473,12 @@ fuelMembersGuarded (f :: rest) defTbl = case clausesOfDefTbl f defTbl of
     Nothing => False
     Just p0 => hasFuelGuard p0 (secondOf cl) && fuelMembersGuarded rest defTbl
 
-tryFuelThread : List String -> HashMap String (List (Pair (List Pat) Expr)) -> List String -> List (Pair String (List Int)) -> HashMap String (List Int) -> String -> Result Int
+tryFuelThread : List String -> HashMap String (List (Pair (List Pat) Expr)) -> List String -> List (Pair String (List Int)) -> HashMap String (List Int) -> Diagnostic -> Check Int
 tryFuelThread comp defTbl ctors projs facts msg =
   let
     sites = siteCollect comp ctors projs defTbl facts
     edges = fuelEdgesOf comp defTbl sites
     strictCount = length (filterModes (map secondOf edges))
-  in if strictCount > 0 then if fuelMembersGuarded comp defTbl then if hasWeakCycle comp edges then Err msg else Ok 0
-  else Err msg
-  else Err msg
+  in if strictCount > 0 then if fuelMembersGuarded comp defTbl then if hasWeakCycle comp edges then ErrC msg else OkC 0
+  else ErrC msg
+  else ErrC msg

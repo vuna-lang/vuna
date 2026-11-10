@@ -167,10 +167,10 @@ packageSources dir =
 
 packageDirs : String -> List (Pair String String)
 packageDirs repo = case findManifestDir repo of
-  Err e => [Pair repo ""]
-  Ok dir => case workspacePackages dir of
-    Err e => [Pair dir ""]
-    Ok pkgs => map (\p => Pair (packageDir p) (packageName p)) pkgs
+  ErrC e => [Pair repo ""]
+  OkC dir => case workspacePackages dir of
+    ErrC e => [Pair dir ""]
+    OkC pkgs => map (\p => Pair (packageDir p) (packageName p)) pkgs
 
 -- ---------------------------------------------------------------
 -- 符号抽取（v3：doc 来自 DocTable，普通注释不再进入 symDoc）
@@ -406,12 +406,12 @@ record Built where
 
 -- 索引一个文件。parse/fixity 失败返回 Err（调用方转成 warning），不中断整体。
 -- 返回推进后的 `FixityEnv`：按目录复用包上下文与已加载模块图（见 Vuna.FixityEnv）。
-indexOne : FixityEnv -> String -> String -> String -> Pair FixityEnv (Result Built)
+indexOne : FixityEnv -> String -> String -> String -> Pair FixityEnv (Check Built)
 indexOne env dir pkgName path =
   if runIO (prim_fileExists path) then indexOneExisting env dir pkgName path
-  else Pair env (Err "${path}: no such file")
+  else Pair env (err "${path}: no such file")
 
-indexOneExisting : FixityEnv -> String -> String -> String -> Pair FixityEnv (Result Built)
+indexOneExisting : FixityEnv -> String -> String -> String -> Pair FixityEnv (Check Built)
 indexOneExisting env dir pkgName path =
   let
     source = runIO (prim_readFile path)
@@ -419,31 +419,31 @@ indexOneExisting env dir pkgName path =
     looked = fixitiesForFile env path source
     env2 = firstOf looked
   in case secondOf looked of
-    Err e => Pair env2 (Err "${path}: cannot load package fixity context: ${e}")
-    Ok programFixities => case parseSource path source of
-      Err e => Pair env2 (Err "${path}: ${e}")
+    ErrC e => Pair env2 (err "${path}: cannot load package fixity context: ${diagText e}")
+    OkC programFixities => case parseSource path source of
+      ErrC e => Pair env2 (err "${path}: ${diagText e}")
       -- M31.3（B26/B27）：必须按**程序级** fixity 重排（本文件声明 ++ import 闭包，
       -- 本地优先）。只用本地声明会让用到 `+`/`==`/`::` 的文件报 unknown fixity，
       -- 然后被当错误跳过 → `vuna map` 静默漏模块。
-      Ok (SourceFile srcHdr imports fx decls0) => case reorderProgram (tableOfKeepOps (append programFixities fx)) decls0 of
-        Err e => Pair env2 (Err "${path}: ${e}")
-        Ok decls =>
+      OkC (SourceFile srcHdr imports fx decls0) => case reorderProgram (tableOfKeepOps (append programFixities fx)) decls0 of
+        ErrC e => Pair env2 (err "${path}: ${diagText e}")
+        OkC decls =>
           let
             sMod = moduleNameOf dir path srcHdr
             comments = case lexComments source of
-              Err e => []
-              Ok cs => cs
+              ErrC e => []
+              OkC cs => cs
             table = docTableOf srcHdr decls comments
             info = ModuleInfo sMod pkgName path bytes (length decls)
             syms = symbolsOfModule sMod decls table
             refs = refsInDecls sMod decls
-          in Pair env2 (Ok (Built [info] syms refs))
+          in Pair env2 (OkC (Built [info] syms refs))
 
 record Acc where
   accModules : List ModuleInfo
   accSymbols : List Sym
   accRefs : List Ref
-  accWarns : List String
+  accWarns : List Diagnostic
 
 -- 把 xs 逆序前插到 ys（O(#xs)）：跨文件累积用，避免每文件 append 复制整个已累积列表（M34）。
 prependRev : List a -> List a -> List a
@@ -463,8 +463,8 @@ foldFiles env dir pkgName (path :: rest) acc =
 indexFileInto : FixityEnv -> String -> String -> String -> Acc -> Pair FixityEnv Acc
 indexFileInto env dir pkgName path acc = case indexOne env dir pkgName path of
   Pair env2 result => case result of
-    Err e => Pair env2 (Acc acc.accModules acc.accSymbols acc.accRefs (e :: acc.accWarns))
-    Ok b =>
+    ErrC e => Pair env2 (Acc acc.accModules acc.accSymbols acc.accRefs (e :: acc.accWarns))
+    OkC b =>
       Pair env2
         (Acc (prependRev b.builtModules acc.accModules) (prependRev b.builtSymbols acc.accSymbols) (prependRev b.builtRefs acc.accRefs) acc.accWarns)
 
@@ -479,12 +479,13 @@ collectAll env (root :: rest) acc =
   in collectAll (firstOf stepped) rest (secondOf stepped)
 
 -- 全量构建（parse 所有源码，不读写缓存）。
-buildIndex : String -> Result Index
+buildIndex : String -> Check Index
 buildIndex repo =
   let
     stepped = collectAll emptyFixityEnv (packageDirs repo) (Acc [] [] [] [])
     acc = secondOf stepped
-  in Ok (Index (reverse acc.accModules) (dedupeSymbols (reverse acc.accSymbols)) (reverse acc.accRefs))
+  in OkC
+    (Index (reverse acc.accModules) (dedupeSymbols (reverse acc.accSymbols)) (reverse acc.accRefs))
 
 -- ---------------------------------------------------------------
 -- 缓存读写（v2：内容哈希）
@@ -738,25 +739,25 @@ parseRefs (line :: rest) = case splitOnTab line of
 
 -- 带缓存的入口：manifest 完全一致则回读缓存，否则重建并写回。
 -- 非 workspace（向上找不到 vuna.toml）是**输入错误**，不再静默建空索引。
-loadOrBuild : String -> Result Index
+loadOrBuild : String -> Check Index
 loadOrBuild repo = case findManifestDirMaybe repo of
-  Nothing => Err "index: no vuna.toml found from ${runIO prim_getcwd} (searched upward)"
+  Nothing => err "index: no vuna.toml found from ${runIO prim_getcwd} (searched upward)"
   Just manifestDir =>
     let
       entries = scanSources repo
     in if manifestMatches repo entries then
       let
         _ = cleanupStaleLock repo
-      in Ok (loadIndexFromCache repo)
+      in OkC (loadIndexFromCache repo)
     else saveAndReturn repo entries
 
-saveAndReturn : String -> List (Pair String (Pair Int String)) -> Result Index
+saveAndReturn : String -> List (Pair String (Pair Int String)) -> Check Index
 saveAndReturn repo entries = case buildIndex repo of
-  Err e => Err e
-  Ok index =>
+  ErrC e => ErrC e
+  OkC index =>
     let
       _ = saveIndex repo entries index
-    in Ok index
+    in OkC index
 
 -- ---------------------------------------------------------------
 -- 序列化（写缓存用）

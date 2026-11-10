@@ -43,25 +43,25 @@ traitMethodGlobal tname methodName = case splitLastDot (splitOnDot tname) of
 -- 两段式：先收集所有派生实例，再整体**追加到声明列表末尾**。不能就地插到 data 之后
 -- ——那条 data 的族信息要等 `elabDatas` 阶段才进 `globals`，插在中间会让实例方法体里
 -- 的 `case` 拿不到 scrutinee 的类型。
-expandDerivings : List Decl -> Result (List Decl)
+expandDerivings : List Decl -> Check (List Decl)
 expandDerivings decls =
-  Vuna.Compiler.Common.bind (collectDerivings decls) (\insts => Ok (append decls insts))
+  Vuna.Compiler.Common.bind (collectDerivings decls) (\insts => OkC (append decls insts))
 
-collectDerivings : List Decl -> Result (List Decl)
-collectDerivings [] = Ok []
+collectDerivings : List Decl -> Check (List Decl)
+collectDerivings [] = OkC []
 collectDerivings (d :: rest) = case d of
   DData name params kind ctors derivings viaField repr lin sp =>
     if viaField then collectDerivings rest
     else if length derivings == 0 then collectDerivings rest
     else Vuna.Compiler.Common.bind (derivingsFor name params ctors derivings sp)
-      (\insts => Vuna.Compiler.Common.bind (collectDerivings rest) (\more => Ok (append insts more)))
+      (\insts => Vuna.Compiler.Common.bind (collectDerivings rest) (\more => OkC (append insts more)))
   _ => collectDerivings rest
 
-derivingsFor : String -> List String -> List Ctor -> List String -> Span -> Result (List Decl)
+derivingsFor : String -> List String -> List Ctor -> List String -> Span -> Check (List Decl)
 derivingsFor dname params ctors derivings sp = derivingsForGo dname params ctors derivings sp []
 
-derivingsForGo : String -> List String -> List Ctor -> List String -> Span -> List Decl -> Result (List Decl)
-derivingsForGo dname params ctors [] sp acc = Ok (reverse acc)
+derivingsForGo : String -> List String -> List Ctor -> List String -> Span -> List Decl -> Check (List Decl)
+derivingsForGo dname params ctors [] sp acc = OkC (reverse acc)
 -- M29-T2b：参数化 data 的派生生成**带 context 的实例**（`Eq a => Eq (Box a)`）。
 -- ctx 只包含「在某个构造子字段类型里出现过」的类型参数（顺序 = 声明顺序），
 -- 与实例 tele 一一对应；`deriving (Ord)` 的字段比较只用 lt/le，因此只要求 Ord ctx。
@@ -94,7 +94,7 @@ anyExprMentions p (e :: rest) = exprMentionsName p e || anyExprMentions p rest
 -- 单个类的实例声明。`tn` 是 Loader 解析后的完整类名；方法名（`show` / `eq` / ...）由
 -- `elabInstance` 按类方法的最后一段匹配，因此实例里仍写短名。
 -- M29-T2b：参数化 data 生成带 ctx 的 DInstance（ctx 顺序 = 声明顺序，见 deriveCtxParams）。
-deriveInstance : String -> List String -> List Ctor -> String -> Span -> Result Decl
+deriveInstance : String -> List String -> List Ctor -> String -> Span -> Check Decl
 deriveInstance dname params ctors tn sp =
   let
     hd = instHead tn dname params sp
@@ -105,7 +105,7 @@ deriveInstance dname params ctors tn sp =
       let
         proj = traitMethodGlobal tn "show"
         ms = [DFun "show" [PVar "sx" sp] (showBody proj ctors "sx" sp) sp]
-      in Ok (DInstance ctxExprs hd ms sp)
+      in OkC (DInstance ctxExprs hd ms sp)
     "Eq" =>
       let
         eqProj = traitMethodGlobal tn "eq"
@@ -113,7 +113,7 @@ deriveInstance dname params ctors tn sp =
           [ DFun "eq" [PVar "sx" sp, PVar "sy" sp] (eqBody ctors sp) sp,
             DFun "neq" [PVar "sx" sp, PVar "sy" sp] (neqBody eqProj sp) sp
           ]
-      in Ok (DInstance ctxExprs hd ms sp)
+      in OkC (DInstance ctxExprs hd ms sp)
     "Ord" =>
       let
         ltProj = traitMethodGlobal tn "lt"
@@ -124,18 +124,18 @@ deriveInstance dname params ctors tn sp =
             DFun "gt" [PVar "sx" sp, PVar "sy" sp] (gtBody ltProj sp) sp,
             DFun "ge" [PVar "sx" sp, PVar "sy" sp] (geBody leProj sp) sp
           ]
-      in Ok (DInstance ctxExprs hd ms sp)
+      in OkC (DInstance ctxExprs hd ms sp)
     "Hashable" =>
       let
         hashProj = traitMethodGlobal tn "hash"
         combineProj = traitMethodGlobal tn "hashCombine"
         ms = [DFun "hash" [PVar "sx" sp] (hashBody hashProj combineProj ctors sp) sp]
-      in Ok (DInstance ctxExprs hd ms sp)
+      in OkC (DInstance ctxExprs hd ms sp)
     "FromString" => deriveWrapper tn "fromString" "String" ctors hd sp
     "FromInt" => deriveWrapper tn "fromInt" "Int" ctors hd sp
     "FromFloat" => deriveWrapper tn "fromFloat" "Float" ctors hd sp
     kind =>
-      Err
+      err
         "${showSpanLoc sp}: cannot derive `${kind}` (supported: Show, Eq, Ord, Hashable, FromString, FromInt, FromFloat)"
 
 -- 字面量转换派生（FromString / FromInt / FromFloat）：只接受「一个构造子、一个字段、
@@ -145,33 +145,33 @@ deriveInstance dname params ctors tn sp =
 -- 跨类型转换（如字段是 Email 而不是 String）需要手写 instance。
 -- | 字面量转换派生（`FromString`/`FromInt`/`FromFloat`）：要求「单构造子、单字段、
 -- 字段类型就是目标内建类型」，生成 `instance C T where fromX sx = C sx`。
-deriveWrapper : String -> String -> String -> List Ctor -> Expr -> Span -> Result Decl
+deriveWrapper : String -> String -> String -> List Ctor -> Expr -> Span -> Check Decl
 deriveWrapper tn methodName wantTy [] hd sp =
-  Err
+  err
     "${showSpanLoc sp}: cannot derive ${traitShortName tn}: type must have exactly one constructor"
 deriveWrapper tn methodName wantTy (c :: rest) hd sp = case rest of
   [] => deriveWrapperCtor tn methodName wantTy c hd sp
   _ =>
-    Err
+    err
       "${showSpanLoc sp}: cannot derive ${traitShortName tn}: type must have exactly one constructor"
 
 -- | `deriveWrapper` 的单构造子分支：校验构造子 arity 为 1、字段类型等于目标类型名，
 -- 然后生成转发到构造子的实例方法。
-deriveWrapperCtor : String -> String -> String -> Ctor -> Expr -> Span -> Result Decl
+deriveWrapperCtor : String -> String -> String -> Ctor -> Expr -> Span -> Check Decl
 deriveWrapperCtor tn methodName wantTy (Ctor cn ty ar cnsp) hd sp = if ar == 1 then case deriveFieldTypes ty of
   dom :: rest => case rest of
     [] =>
-      if deriveFieldTypeName dom == wantTy then Ok
+      if deriveFieldTypeName dom == wantTy then OkC
         (DInstance [] hd [DFun methodName [PVar "sx" sp] (EApp (EVar cn sp) [EVar "sx" sp] sp) sp] sp)
-      else Err
+      else err
         "${showSpanLoc sp}: cannot derive ${traitShortName tn}: field type must be ${wantTy} (got ${deriveFieldTypeName dom})"
     _ =>
-      Err
+      err
         "${showSpanLoc sp}: cannot derive ${traitShortName tn}: constructor must have exactly one field"
   [] =>
-    Err
+    err
       "${showSpanLoc sp}: cannot derive ${traitShortName tn}: constructor must have exactly one field"
-else Err "${showSpanLoc sp}: cannot derive ${traitShortName tn}: constructor must have exactly one field"
+else err "${showSpanLoc sp}: cannot derive ${traitShortName tn}: constructor must have exactly one field"
 
 -- | 把箭头链（`EApp (EVar "->")` 或 `EPi`）拆成字段类型列表：依次取出域类型。
 deriveFieldTypes : Expr -> List Expr

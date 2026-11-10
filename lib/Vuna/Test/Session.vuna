@@ -78,8 +78,8 @@ sessionCheck ref baseDir source = if sessionDisabled then Nothing
 else case ensureSession ref baseDir of
   Nothing => Nothing
   Just ifaces => case contextForFile source of
-    Err _ => Nothing
-    Ok ctx => sessionCheckIn ref baseDir ctx ifaces source
+    ErrC _ => Nothing
+    OkC ctx => sessionCheckIn ref baseDir ctx ifaces source
 
 sessionCheckIn : IORef Session -> String -> PackageContext -> List ModuleIface -> String -> Maybe (Pair Int String)
 sessionCheckIn ref baseDir ctx ifaces source =
@@ -87,8 +87,8 @@ sessionCheckIn ref baseDir ctx ifaces source =
     text = runIO (readFile source)
     s = runIO (readRef ref)
   in case dtCheckSourceIncremental ctx source text ifaces [] s.sesAux False of
-    Err e => Just (Pair 1 e)
-    Ok (Pair applied (Pair _ aux)) => if not applied then Nothing
+    ErrC e => Just (Pair 1 (diagText e))
+    OkC (Pair applied (Pair _ aux)) => if not applied then Nothing
     else
       let
         _ = runIO (writeRef ref (Session s.sesRoot baseDir ifaces aux s.sesEvalAux))
@@ -101,8 +101,8 @@ sessionInterp ref baseDir source = if sessionDisabled then Nothing
 else case ensureSession ref baseDir of
   Nothing => Nothing
   Just ifaces => case contextForFile source of
-    Err _ => Nothing
-    Ok ctx => sessionInterpIn ref baseDir ctx ifaces source
+    ErrC _ => Nothing
+    OkC ctx => sessionInterpIn ref baseDir ctx ifaces source
 
 sessionInterpIn : IORef Session -> String -> PackageContext -> List ModuleIface -> String -> Maybe (Pair Int String)
 sessionInterpIn ref baseDir ctx ifaces source =
@@ -110,8 +110,8 @@ sessionInterpIn ref baseDir ctx ifaces source =
     text = runIO (readFile source)
     s = runIO (readRef ref)
   in case dtEvalSourceIncremental ctx source text ifaces s.sesEvalAux of
-    Err e => Just (Pair 1 e)
-    Ok (Pair applied (Pair out aux)) => if not applied then Nothing
+    ErrC e => Just (Pair 1 (diagText e))
+    OkC (Pair applied (Pair out aux)) => if not applied then Nothing
     else
       let
         _ = runIO (writeRef ref (Session s.sesRoot baseDir ifaces s.sesAux aux))

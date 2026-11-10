@@ -3,7 +3,6 @@ module Vuna.Compiler.Diagnostics.Cg
   , CgErr(..)
   , cgAll
   , cgCode
-  , cgDefLoc
   , cgErr
   , cgErr0
   , cgErr1
@@ -98,32 +97,24 @@ cgChunk1 =
   ]
 
 -- ---------------------------------------------------------------
--- throw：拼 `[CODE] 消息`（CG 无位置）
+-- throw：构造结构化诊断（CG 无位置；定义级由 cgErrDefAt 补上下文）
 -- ---------------------------------------------------------------
-cgMsg : {n : Nat} -> CgErr n -> Vec n String -> String
-cgMsg e args = diagMsg (cgCode e) (cgTemplate e) args
+cgMsg : {n : Nat} -> CgErr n -> Vec n String -> Diagnostic
+cgMsg e args = mkDiag SevError PhCodegen CatCodegen (cgCode e) (diagBody (cgTemplate e) args)
 
-cgErr : {n : Nat} -> CgErr n -> Vec n String -> Result a
-cgErr e args = diagErr (cgMsg e args)
+cgErr : {n : Nat} -> CgErr n -> Vec n String -> Check a
+cgErr e args = ErrC (cgMsg e args)
 
 -- | 自动补注（M41 新增导出）：cgErr0。
-cgErr0 : CgErr Zero -> Result a
+cgErr0 : CgErr Zero -> Check a
 cgErr0 e = cgErr e []
 
 -- | 自动补注（M41 新增导出）：cgErr1。
-cgErr1 : CgErr (Succ Zero) -> String -> Result a
+cgErr1 : CgErr (Succ Zero) -> String -> Check a
 cgErr1 e a0 = cgErr e [a0]
 
 -- ---------------------------------------------------------------
--- M29（A14）：定义级 CG 诊断（带来源位置）
+-- 定义级 CG 诊断：主位置 + `in \`name\`` 上下文标签。
 -- ---------------------------------------------------------------
--- `DtDef` 现在携带来源 `Maybe Span`（顶层定义 = 子句 span；instance 生成定义 =
--- instance 声明 span；trait 投影 = trait 声明 span）。CG 诊断在 **def 粒度**补位置，
--- 格式与 Elab 诊断一致：`文件:行:列: in `name`: [CODE] 消息`；没有 span 时退回旧的
--- `in `name`: `（不改变既有夹具断言的子串）。位置前缀的实现在 Diagnostics.Common
--- （`diagDefLoc`），本模块不依赖 `Elab/Types`（避免环）。
-cgDefLoc : Maybe Span -> String -> String
-cgDefLoc span name = diagDefLoc span name
-
-cgErrDefAt : Maybe Span -> String -> {n : Nat} -> CgErr n -> Vec n String -> Result a
-cgErrDefAt span name e args = Err (cgDefLoc span name ++ cgMsg e args)
+cgErrDefAt : Maybe Span -> String -> {n : Nat} -> CgErr n -> Vec n String -> Check a
+cgErrDefAt span name e args = ErrC (withContext span name (cgMsg e args))

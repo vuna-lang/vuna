@@ -565,30 +565,28 @@ tcAll =
     [tcChunk0, tcChunk1, tcChunk2, tcChunk3, tcChunk4, tcChunk5, tcChunk6, tcChunk7, tcChunk8, tcChunk9, tcChunk10, tcChunk11, tcChunk12]
 
 -- ---------------------------------------------------------------
--- throw：拼 `[CODE] 消息`（去掉旧 `DT: ` 前缀）；TC 的 Span 经 Common.showSpanLoc 拼在头部
+-- throw：构造结构化诊断（code/template 仍由本域枚举唯一持有）
 -- ---------------------------------------------------------------
-tcMsg : {n : Nat} -> TcErr n -> Vec n String -> String
-tcMsg e args = diagMsg (tcCode e) (tcTemplate e) args
+tcMsg : {n : Nat} -> TcErr n -> Vec n String -> Diagnostic
+tcMsg e args = mkDiag SevError PhElab CatTypes (tcCode e) (diagBody (tcTemplate e) args)
 
--- TC 诊断带位置（`文件:行:列: [CODE] 消息`）。
--- 本模块**不**依赖 `Elab/Types`（避免 Elab ↔ Diagnostics 成环）：位置前缀由
--- Diagnostics.Common 拼，与 `Elab/Types.errAt` 的输出格式一致。
-tcErr : {n : Nat} -> Span -> TcErr n -> Vec n String -> Result a
-tcErr sp e args = diagErrAt sp (tcMsg e args)
+-- TC 诊断带位置（渲染器负责 `文件:行:列: [CODE] 消息`）。
+tcErr : {n : Nat} -> Span -> TcErr n -> Vec n String -> Check a
+tcErr sp e args = ErrC (withDiagSpan sp (tcMsg e args))
 
 -- ---------------------------------------------------------------
 -- 人体工学：按 arity 分档的 throw（调用点不必手搓 Vec）
 -- ---------------------------------------------------------------
 -- | 自动补注（M41 新增导出）：tcErr0。
-tcErr0 : Span -> TcErr Zero -> Result a
+tcErr0 : Span -> TcErr Zero -> Check a
 tcErr0 sp e = tcErr sp e []
 
 -- | 自动补注（M41 新增导出）：tcErr1。
-tcErr1 : Span -> TcErr (Succ Zero) -> String -> Result a
+tcErr1 : Span -> TcErr (Succ Zero) -> String -> Check a
 tcErr1 sp e a0 = tcErr sp e [a0]
 
 -- | 自动补注（M41 新增导出）：tcErr2。
-tcErr2 : Span -> TcErr (Succ (Succ Zero)) -> String -> String -> Result a
+tcErr2 : Span -> TcErr (Succ (Succ Zero)) -> String -> String -> Check a
 tcErr2 sp e a0 a1 = tcErr sp e [a0, a1]
 
 -- ---------------------------------------------------------------
@@ -596,13 +594,13 @@ tcErr2 sp e a0 a1 = tcErr sp e [a0, a1]
 -- 输出形态是无前缀的 `[CODE] 消息`（与带位置的 `文件:行:列: [CODE] 消息` 区分）。
 -- ---------------------------------------------------------------
 -- | 自动补注（M41 新增导出）：tcErr0NoLoc。
-tcErr0NoLoc : TcErr Zero -> Result a
-tcErr0NoLoc e = Err (tcMsg e [])
+tcErr0NoLoc : TcErr Zero -> Check a
+tcErr0NoLoc e = ErrC (tcMsg e [])
 
 -- | 自动补注（M41 新增导出）：tcErr1NoLoc。
-tcErr1NoLoc : TcErr (Succ Zero) -> String -> Result a
-tcErr1NoLoc e a0 = Err (tcMsg e [a0])
+tcErr1NoLoc : TcErr (Succ Zero) -> String -> Check a
+tcErr1NoLoc e a0 = ErrC (tcMsg e [a0])
 
 -- | 自动补注（M41 新增导出）：tcErr2NoLoc。
-tcErr2NoLoc : TcErr (Succ (Succ Zero)) -> String -> String -> Result a
-tcErr2NoLoc e a0 a1 = Err (tcMsg e [a0, a1])
+tcErr2NoLoc : TcErr (Succ (Succ Zero)) -> String -> String -> Check a
+tcErr2NoLoc e a0 a1 = ErrC (tcMsg e [a0, a1])

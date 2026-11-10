@@ -210,26 +210,26 @@ convNatFuel depth = if depth > 24984 then convFuelMax else 64 + 4 * depth
 
 -- Nat 构造子应对：两边都能折成整数时按整数判等 / 不等（O(链深)，不再逐层消耗 fuel）；
 -- 折不动（meta / 中性尾巴）才回落到逐层比较，并在回落点补足 fuel。
-convNatChains : HashMap String Term -> Sols -> Int -> Value -> Value -> List Value -> List Value -> Int -> Result Sols
+convNatChains : HashMap String Term -> Sols -> Int -> Value -> Value -> List Value -> List Value -> Int -> Check Sols
 convNatChains defs sols depth a b args args2 fuel = case natFoldValue a of
   Just n => case natFoldValue b of
-    Just m => if n == m then Ok sols else mismatchAt depth a b
+    Just m => if n == m then OkC sols else mismatchAt depth a b
     Nothing => convValueListsFuel (fuel - 1) defs sols depth args args2
   Nothing => convValueListsFuel (fuel - 1) defs sols depth args args2
 
 -- 中性脊形态的 Nat 链判等（与 `convNatChains` 同一规则，回落到 `convNeutralFuel`）。
-convNatNeutral : Int -> HashMap String Term -> Sols -> Int -> Neutral -> Neutral -> Value -> Value -> Result Sols
+convNatNeutral : Int -> HashMap String Term -> Sols -> Int -> Neutral -> Neutral -> Value -> Value -> Check Sols
 convNatNeutral fuel defs sols depth n1 n2 a b = case natFoldValue a of
   Just x => case natFoldValue b of
-    Just y => if x == y then Ok sols else mismatchAt depth a b
+    Just y => if x == y then OkC sols else mismatchAt depth a b
     Nothing => convNeutralFuel (fuel - 1) defs sols depth n1 n2 a b
   Nothing => convNeutralFuel (fuel - 1) defs sols depth n1 n2 a b
 
 -- `VApp` 形态的 Nat 链判等：折不动时回落到逐分量比较（同样补足 fuel）。
-convNatApplied : Int -> HashMap String Term -> Sols -> Int -> Value -> Value -> Value -> Value -> Value -> Value -> Result Sols
+convNatApplied : Int -> HashMap String Term -> Sols -> Int -> Value -> Value -> Value -> Value -> Value -> Value -> Check Sols
 convNatApplied fuel defs sols depth f x f2 x2 a b = case natFoldValue a of
   Just n => case natFoldValue b of
-    Just m => if n == m then Ok sols else mismatchAt depth a b
+    Just m => if n == m then OkC sols else mismatchAt depth a b
     Nothing =>
       Vuna.Compiler.Common.bind (convFuel (fuel - 1) defs sols depth f f2)
         (\sols2 => convFuel (fuel - 1) defs sols2 depth x x2)
@@ -249,9 +249,9 @@ sameNeutralAtom (NVar name1 lvl1 sp1) n2 = case n2 of
   NVar name2 lvl2 sp2 => name1 == name2 && lvl1 == lvl2 && isNilList sp1 && isNilList sp2
   _ => False
 
-convFuel : Int -> HashMap String Term -> Sols -> Int -> Value -> Value -> Result Sols
-convFuel fuel defs sols depth a b = if fuel <= 0 then Err "DT: internal: conv fuel exhausted"
-else if fastSame a b then Ok sols
+convFuel : Int -> HashMap String Term -> Sols -> Int -> Value -> Value -> Check Sols
+convFuel fuel defs sols depth a b = if fuel <= 0 then err "DT: internal: conv fuel exhausted"
+else if fastSame a b then OkC sols
 else
   let
     a2 = force defs sols defaultFuel a
@@ -262,11 +262,11 @@ else
       VMeta m sp => solveMetaFuel (fuel - 1) defs sols depth m sp a2
       _ => convBothFuel (fuel - 1) defs sols depth a2 y2
 
-convBothFuel : Int -> HashMap String Term -> Sols -> Int -> Value -> Value -> Result Sols
-convBothFuel fuel defs sols depth a b = if fuel <= 0 then Err "DT: internal: conv fuel exhausted"
+convBothFuel : Int -> HashMap String Term -> Sols -> Int -> Value -> Value -> Check Sols
+convBothFuel fuel defs sols depth a b = if fuel <= 0 then err "DT: internal: conv fuel exhausted"
 else case a of
   VType i => case b of
-    VType j => if levelEq i j then Ok sols else mismatchAt depth a b
+    VType j => if levelEq i j then OkC sols else mismatchAt depth a b
     _ => mismatchAt depth a b
   VPi name implicit rig dom cod => case b of
     VPi name2 implicit2 rig2 dom2 cod2 => if implicit == implicit2 then Vuna.Compiler.Common.bind (convFuel (fuel - 1) defs sols depth dom dom2) (\sols2 => let
@@ -288,16 +288,16 @@ else case a of
     VLam name2 rig2 clo2 => etaLeftFuel (fuel - 1) defs sols depth a name2 clo2
     _ => mismatchAt depth a b
   VInt n => case b of
-    VInt m => if n == m then Ok sols else mismatchAt depth a b
+    VInt m => if n == m then OkC sols else mismatchAt depth a b
     _ => mismatchAt depth a b
   VStr s => case b of
-    VStr s2 => if s == s2 then Ok sols else mismatchAt depth a b
+    VStr s2 => if s == s2 then OkC sols else mismatchAt depth a b
     _ => mismatchAt depth a b
   VFloat s => case b of
-    VFloat s2 => if s == s2 then Ok sols else mismatchAt depth a b
+    VFloat s2 => if s == s2 then OkC sols else mismatchAt depth a b
     _ => mismatchAt depth a b
   VBool x => case b of
-    VBool y => if x == y then Ok sols else mismatchAt depth a b
+    VBool y => if x == y then OkC sols else mismatchAt depth a b
     _ => mismatchAt depth a b
   VCon c args => case b of
     VCon c2 args2 =>
@@ -333,22 +333,22 @@ else case a of
     _ => mismatchAt depth a b
   _ => mismatchAt depth a b
 
-etaLeftFuel : Int -> HashMap String Term -> Sols -> Int -> Value -> String -> Closure -> Result Sols
-etaLeftFuel fuel defs sols depth a name clo = if fuel <= 0 then Err "DT: internal: conv fuel exhausted"
+etaLeftFuel : Int -> HashMap String Term -> Sols -> Int -> Value -> String -> Closure -> Check Sols
+etaLeftFuel fuel defs sols depth a name clo = if fuel <= 0 then err "DT: internal: conv fuel exhausted"
 else
   let
     v = freshVar name depth
   in convFuel (fuel - 1) defs sols (depth + 1) (applyValue a v) (applyClosure clo v)
 
-etaRightFuel : Int -> HashMap String Term -> Sols -> Int -> String -> Closure -> Value -> Result Sols
-etaRightFuel fuel defs sols depth name clo b = if fuel <= 0 then Err "DT: internal: conv fuel exhausted"
+etaRightFuel : Int -> HashMap String Term -> Sols -> Int -> String -> Closure -> Value -> Check Sols
+etaRightFuel fuel defs sols depth name clo b = if fuel <= 0 then err "DT: internal: conv fuel exhausted"
 else
   let
     v = freshVar name depth
   in convFuel (fuel - 1) defs sols (depth + 1) (applyClosure clo v) (applyValue b v)
 
-convNeutralFuel : Int -> HashMap String Term -> Sols -> Int -> Neutral -> Neutral -> Value -> Value -> Result Sols
-convNeutralFuel fuel defs sols depth n1 n2 v1 v2 = if fuel <= 0 then Err "DT: internal: conv fuel exhausted"
+convNeutralFuel : Int -> HashMap String Term -> Sols -> Int -> Neutral -> Neutral -> Value -> Value -> Check Sols
+convNeutralFuel fuel defs sols depth n1 n2 v1 v2 = if fuel <= 0 then err "DT: internal: conv fuel exhausted"
 else case n1 of
   NVar name level sp => case n2 of
     NVar name2 level2 sp2 =>
@@ -361,41 +361,41 @@ else case n1 of
       else mismatchAt depth v1 v2
     _ => mismatchAt depth v1 v2
 
-convSpinesFuel : Int -> HashMap String Term -> Sols -> Int -> List Value -> List Value -> Value -> Value -> Result Sols
+convSpinesFuel : Int -> HashMap String Term -> Sols -> Int -> List Value -> List Value -> Value -> Value -> Check Sols
 convSpinesFuel fuel defs sols depth [] [] v1 v2 =
-  if fuel <= 0 then Err "DT: internal: conv fuel exhausted" else Ok sols
+  if fuel <= 0 then err "DT: internal: conv fuel exhausted" else OkC sols
 convSpinesFuel fuel defs sols depth (a :: xs) (b :: ys) v1 v2 =
-  if fuel <= 0 then Err "DT: internal: conv fuel exhausted"
+  if fuel <= 0 then err "DT: internal: conv fuel exhausted"
   else Vuna.Compiler.Common.bind (convFuel (fuel - 1) defs sols depth a b)
     (\sols2 => convSpinesFuel (fuel - 1) defs sols2 depth xs ys v1 v2)
 convSpinesFuel fuel defs sols depth _ _ v1 v2 =
-  if fuel <= 0 then Err "DT: internal: conv fuel exhausted" else mismatchAt depth v1 v2
+  if fuel <= 0 then err "DT: internal: conv fuel exhausted" else mismatchAt depth v1 v2
 
-convValueListsFuel : Int -> HashMap String Term -> Sols -> Int -> List Value -> List Value -> Result Sols
+convValueListsFuel : Int -> HashMap String Term -> Sols -> Int -> List Value -> List Value -> Check Sols
 convValueListsFuel fuel defs sols depth [] [] =
-  if fuel <= 0 then Err "DT: internal: conv fuel exhausted" else Ok sols
+  if fuel <= 0 then err "DT: internal: conv fuel exhausted" else OkC sols
 convValueListsFuel fuel defs sols depth (a :: xs) (b :: ys) =
-  if fuel <= 0 then Err "DT: internal: conv fuel exhausted"
+  if fuel <= 0 then err "DT: internal: conv fuel exhausted"
   else Vuna.Compiler.Common.bind (convFuel (fuel - 1) defs sols depth a b)
     (\sols2 => convValueListsFuel (fuel - 1) defs sols2 depth xs ys)
 convValueListsFuel fuel defs sols depth _ _ =
-  if fuel <= 0 then Err "DT: internal: conv fuel exhausted" else tcErr0NoLoc TypeMismatchCtorArity
+  if fuel <= 0 then err "DT: internal: conv fuel exhausted" else tcErr0NoLoc TypeMismatchCtorArity
 
 -- 卡住的 case 相等：scrutinee 相等 + 每个构造子名的分支绑定数相同且分支体相等。
-convCaseAltsFuel : Int -> HashMap String Term -> Sols -> Int -> List VCaseAlt -> List VCaseAlt -> Result Sols
+convCaseAltsFuel : Int -> HashMap String Term -> Sols -> Int -> List VCaseAlt -> List VCaseAlt -> Check Sols
 convCaseAltsFuel fuel defs sols depth [] [] =
-  if fuel <= 0 then Err "DT: internal: conv fuel exhausted" else Ok sols
-convCaseAltsFuel fuel defs sols depth (a :: rest) (b :: rest2) = if fuel <= 0 then Err "DT: internal: conv fuel exhausted"
+  if fuel <= 0 then err "DT: internal: conv fuel exhausted" else OkC sols
+convCaseAltsFuel fuel defs sols depth (a :: rest) (b :: rest2) = if fuel <= 0 then err "DT: internal: conv fuel exhausted"
 else if a.vCaseAltName == b.vCaseAltName then if length a.vCaseAltBinders == length b.vCaseAltBinders then case convOneAltFuel (fuel - 1) defs sols depth a b of
-  Err e => Err e
-  Ok sols2 => convCaseAltsFuel (fuel - 1) defs sols2 depth rest rest2
+  ErrC e => ErrC e
+  OkC sols2 => convCaseAltsFuel (fuel - 1) defs sols2 depth rest rest2
 else tcErr1NoLoc (TypeMismatchCaseVars a.vCaseAltName) a.vCaseAltName
 else tcErr2NoLoc (TypeMismatchCaseBranch a.vCaseAltName b.vCaseAltName) a.vCaseAltName b.vCaseAltName
 convCaseAltsFuel fuel defs sols depth _ _ =
-  if fuel <= 0 then Err "DT: internal: conv fuel exhausted" else tcErr0NoLoc TypeMismatchCaseCount
+  if fuel <= 0 then err "DT: internal: conv fuel exhausted" else tcErr0NoLoc TypeMismatchCaseCount
 
-convOneAltFuel : Int -> HashMap String Term -> Sols -> Int -> VCaseAlt -> VCaseAlt -> Result Sols
-convOneAltFuel fuel defs sols depth a b = if fuel <= 0 then Err "DT: internal: conv fuel exhausted"
+convOneAltFuel : Int -> HashMap String Term -> Sols -> Int -> VCaseAlt -> VCaseAlt -> Check Sols
+convOneAltFuel fuel defs sols depth a b = if fuel <= 0 then err "DT: internal: conv fuel exhausted"
 else
   let
     bs = a.vCaseAltBinders
@@ -404,7 +404,7 @@ else
   in convFuel (fuel - 1) defs sols (depth + n) (applyClosureBinder a.vCaseAltClosure args)
     (applyClosureBinder b.vCaseAltClosure args)
 
-mismatchAt : Int -> Value -> Value -> Result a
+mismatchAt : Int -> Value -> Value -> Check a
 mismatchAt depth a b =
   let
     sa = showValueAt depth a
@@ -563,18 +563,18 @@ patternSolution ((Pair name lvl) :: rest) created depth body =
 
 -- 空 spine：直接存解，但先就地检查作用域（自由变量必须早于创建深度）。
 -- `?m = ?m`（同一个未解元变量）是恒真约束，不能走 occurs 检查。
-solveMetaEmpty : Sols -> Int -> Int -> Value -> Result Sols
+solveMetaEmpty : Sols -> Int -> Int -> Value -> Check Sols
 solveMetaEmpty sols depth m (rhs@(VMeta n [])) =
-  if n == m then Ok sols else solveMetaEmptyStore sols depth m rhs
+  if n == m then OkC sols else solveMetaEmptyStore sols depth m rhs
 solveMetaEmpty sols depth m rhs = solveMetaEmptyStore sols depth m rhs
 
-solveMetaEmptyStore : Sols -> Int -> Int -> Value -> Result Sols
+solveMetaEmptyStore : Sols -> Int -> Int -> Value -> Check Sols
 solveMetaEmptyStore sols depth m rhs =
   let
     created = metaCreatedDepth sols depth m
     t = quote depth rhs
   in if hasMeta m 0 t then tcErr1NoLoc (CannotSolveOccurs (strFromInt m)) (strFromInt m)
-  else if termScopedTo created depth 0 [] t then Ok (solsCons m rhs sols)
+  else if termScopedTo created depth 0 [] t then OkC (solsCons m rhs sols)
   else tcErr1NoLoc (CannotSolveMetavar (strFromInt m)) (strFromInt m)
 
 -- 非空 spine：Miller pattern 才求解，其它形状明确拒绝。
@@ -587,8 +587,8 @@ splitAtVals n [] = Pair [] []
 splitAtVals n (x :: xs) = case splitAtVals (n - 1) xs of
   Pair a b => Pair (Base.List.Cons x a) b
 
-solveMetaHoLegacyFuel : Int -> HashMap String Term -> Sols -> Int -> Int -> List Value -> Value -> Result Sols
-solveMetaHoLegacyFuel fuel defs sols depth m sp rhs = if fuel <= 0 then Err "DT: internal: conv fuel exhausted"
+solveMetaHoLegacyFuel : Int -> HashMap String Term -> Sols -> Int -> Int -> List Value -> Value -> Check Sols
+solveMetaHoLegacyFuel fuel defs sols depth m sp rhs = if fuel <= 0 then err "DT: internal: conv fuel exhausted"
 else case rhs of
   VMeta n sp2 => case solsLookup n sols of
     Just t => convFuel (fuel - 1) defs sols depth (applySpine (VMeta m sp) []) (applySpine t sp2)
@@ -606,8 +606,8 @@ else case rhs of
     _ => tcErr1NoLoc (CannotSolveHigherOrder (strFromInt m)) (strFromInt m)
   _ => tcErr1NoLoc (CannotSolveHigherOrder (strFromInt m)) (strFromInt m)
 
-solveMetaHeadLegacyFuel : Int -> HashMap String Term -> Sols -> Int -> Int -> List Value -> Value -> Value -> List Value -> Result Sols
-solveMetaHeadLegacyFuel fuel defs sols depth m sp whole headVal args = if fuel <= 0 then Err "DT: internal: conv fuel exhausted"
+solveMetaHeadLegacyFuel : Int -> HashMap String Term -> Sols -> Int -> Int -> List Value -> Value -> Value -> List Value -> Check Sols
+solveMetaHeadLegacyFuel fuel defs sols depth m sp whole headVal args = if fuel <= 0 then err "DT: internal: conv fuel exhausted"
 else if length args >= length sp then
   let
     extra = length args - length sp
@@ -618,8 +618,8 @@ else if length args >= length sp then
         (\sols2 => convSpinesFuel (fuel - 1) defs sols2 depth sp tailArgs (VMeta m sp) whole)
 else tcErr1NoLoc (CannotSolveHigherOrder (strFromInt m)) (strFromInt m)
 
-solveMetaPattern : Int -> HashMap String Term -> Sols -> Int -> Int -> List Value -> Value -> Result Sols
-solveMetaPattern fuel defs sols depth m sp rhs = if fuel <= 0 then Err "DT: internal: conv fuel exhausted"
+solveMetaPattern : Int -> HashMap String Term -> Sols -> Int -> Int -> List Value -> Value -> Check Sols
+solveMetaPattern fuel defs sols depth m sp rhs = if fuel <= 0 then err "DT: internal: conv fuel exhausted"
 else case patternSpineOf sp of
   Nothing => solveMetaHoLegacyFuel (fuel - 1) defs sols depth m sp rhs
   Just pats =>
@@ -629,12 +629,12 @@ else case patternSpineOf sp of
       n = length pats
       levels = spineLevels pats
     in if hasMeta m 0 t then tcErr1NoLoc (CannotSolveOccurs (strFromInt m)) (strFromInt m)
-    else if termScopedTo created depth 0 pats t then Ok
+    else if termScopedTo created depth 0 pats t then OkC
       (solsCons m (patternSolution pats created depth (absPatternBody n created depth 0 levels t)) sols)
     else tcErr1NoLoc (CannotSolveMetavar (strFromInt m)) (strFromInt m)
 
-solveMetaFuel : Int -> HashMap String Term -> Sols -> Int -> Int -> List Value -> Value -> Result Sols
-solveMetaFuel fuel defs sols depth m sp rhs = if fuel <= 0 then Err "DT: internal: conv fuel exhausted"
+solveMetaFuel : Int -> HashMap String Term -> Sols -> Int -> Int -> List Value -> Value -> Check Sols
+solveMetaFuel fuel defs sols depth m sp rhs = if fuel <= 0 then err "DT: internal: conv fuel exhausted"
 else case solsLookup m sols of
   Just t => convFuel (fuel - 1) defs sols depth (applySpine t sp) rhs
   Nothing => case sp of
@@ -649,10 +649,10 @@ else case solsLookup m sols of
             (\sols2 => convSpinesFuel (fuel - 1) defs sols2 depth sp sp2 (VMeta m sp) rhs)
       _ => solveMetaPattern (fuel - 1) defs sols depth m sp rhs
 
-solveMetaNew : HashMap String Term -> Sols -> Int -> Int -> Value -> Result Sols
+solveMetaNew : HashMap String Term -> Sols -> Int -> Int -> Value -> Check Sols
 solveMetaNew defs sols depth m rhs = solveMetaEmpty sols depth m rhs
 
-conv : HashMap String Term -> Sols -> Int -> Value -> Value -> Result Sols
+conv : HashMap String Term -> Sols -> Int -> Value -> Value -> Check Sols
 conv a1 a2 a3 a4 a5 = if debugOn then
   let
     _ =
@@ -661,29 +661,29 @@ conv a1 a2 a3 a4 a5 = if debugOn then
   in convFuel (convFuelFor a4 a5) a1 a2 a3 a4 a5
 else convFuel (convFuelFor a4 a5) a1 a2 a3 a4 a5
 
-convBoth : HashMap String Term -> Sols -> Int -> Value -> Value -> Result Sols
+convBoth : HashMap String Term -> Sols -> Int -> Value -> Value -> Check Sols
 convBoth a1 a2 a3 a4 a5 = convBothFuel (convFuelFor a4 a5) a1 a2 a3 a4 a5
 
-convCaseAlts : HashMap String Term -> Sols -> Int -> List VCaseAlt -> List VCaseAlt -> Result Sols
+convCaseAlts : HashMap String Term -> Sols -> Int -> List VCaseAlt -> List VCaseAlt -> Check Sols
 convCaseAlts a1 a2 a3 a4 a5 = convCaseAltsFuel 64 a1 a2 a3 a4 a5
 
-convOneAlt : HashMap String Term -> Sols -> Int -> VCaseAlt -> VCaseAlt -> Result Sols
+convOneAlt : HashMap String Term -> Sols -> Int -> VCaseAlt -> VCaseAlt -> Check Sols
 convOneAlt a1 a2 a3 a4 a5 = convOneAltFuel 64 a1 a2 a3 a4 a5
 
-convValueLists : HashMap String Term -> Sols -> Int -> List Value -> List Value -> Result Sols
+convValueLists : HashMap String Term -> Sols -> Int -> List Value -> List Value -> Check Sols
 convValueLists a1 a2 a3 a4 a5 = convValueListsFuel 64 a1 a2 a3 a4 a5
 
-convNeutral : HashMap String Term -> Sols -> Int -> Neutral -> Neutral -> Value -> Value -> Result Sols
+convNeutral : HashMap String Term -> Sols -> Int -> Neutral -> Neutral -> Value -> Value -> Check Sols
 convNeutral a1 a2 a3 a4 a5 a6 a7 = convNeutralFuel 64 a1 a2 a3 a4 a5 a6 a7
 
-convSpines : HashMap String Term -> Sols -> Int -> List Value -> List Value -> Value -> Value -> Result Sols
+convSpines : HashMap String Term -> Sols -> Int -> List Value -> List Value -> Value -> Value -> Check Sols
 convSpines a1 a2 a3 a4 a5 a6 a7 = convSpinesFuel 64 a1 a2 a3 a4 a5 a6 a7
 
-etaLeft : HashMap String Term -> Sols -> Int -> Value -> String -> Closure -> Result Sols
+etaLeft : HashMap String Term -> Sols -> Int -> Value -> String -> Closure -> Check Sols
 etaLeft a1 a2 a3 a4 a5 a6 = etaLeftFuel 64 a1 a2 a3 a4 a5 a6
 
-etaRight : HashMap String Term -> Sols -> Int -> String -> Closure -> Value -> Result Sols
+etaRight : HashMap String Term -> Sols -> Int -> String -> Closure -> Value -> Check Sols
 etaRight a1 a2 a3 a4 a5 a6 = etaRightFuel 64 a1 a2 a3 a4 a5 a6
 
-solveMeta : HashMap String Term -> Sols -> Int -> Int -> List Value -> Value -> Result Sols
+solveMeta : HashMap String Term -> Sols -> Int -> Int -> List Value -> Value -> Check Sols
 solveMeta a1 a2 a3 a4 a5 a6 = solveMetaFuel 64 a1 a2 a3 a4 a5 a6

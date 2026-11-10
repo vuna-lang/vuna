@@ -36,30 +36,30 @@ import Base.IO.Host
 
 interpretFile : PackageContext -> String -> String
 interpretFile ctx entry = case dtEvalFile ctx entry of
-  Err e => "error: ${e}"
-  Ok output => output
+  ErrC e => "error: ${diagText e}"
+  OkC output => output
 
 -- REPL 用：program（imports + 定义，定义必须已写签名）与表达式都在内存里求值，
 -- 不需要临时文件；表达式类型由 DT 精化器推断，值用 showValue 展示。
 interpretExpr : PackageContext -> String -> String -> String
 interpretExpr ctx program expr = case depIfacesForToolProgram ctx program of
   Just ifaces => case dtEvalExprWithIfaces ctx program expr ifaces of
-    Err e => "error: ${e}"
-    Ok output => output
+    ErrC e => "error: ${diagText e}"
+    OkC output => output
   Nothing => case dtEvalExpr ctx program expr of
-    Err e => "error: ${e}"
-    Ok output => output
+    ErrC e => "error: ${diagText e}"
+    OkC output => output
 
 -- M30 · REPL：值文本 + zonk 后的类型文本（`showTerm` 渲染，可直接写回合成签名）。
 -- 类型文本形如 `(Base.IO.IO Int)`（canonical 全名）；REPL 据此决定是否走效果执行。
 -- M34.6（5b）：REPL 会话复用 termAux（依赖包 decls）的 record/deriving 预处理结果。
 -- 缓存 key 由接口哈希决定（REPL 的依赖接口不变时一直命中），失败路径不缓存。
-evalExprInfoWithAux : PackageContext -> String -> String -> Maybe AuxCache -> Result (Pair (Pair String String) (Maybe AuxCache))
+evalExprInfoWithAux : PackageContext -> String -> String -> Maybe AuxCache -> Check (Pair (Pair String String) (Maybe AuxCache))
 evalExprInfoWithAux ctx program expr aux = case depIfacesForToolProgram ctx program of
   Just ifaces => dtEvalExprInfoWithAuxCache ctx program expr ifaces aux
-  Nothing => dtEvalExprInfo ctx program expr >>= (\info => Ok (Pair info aux))
+  Nothing => dtEvalExprInfo ctx program expr >>= (\info => OkC (Pair info aux))
 
-evalExprInfo : PackageContext -> String -> String -> Result (Pair String String)
+evalExprInfo : PackageContext -> String -> String -> Check (Pair String String)
 evalExprInfo ctx program expr = case depIfacesForToolProgram ctx program of
   Just ifaces => dtEvalExprInfoWithIfaces ctx program expr ifaces
   Nothing => dtEvalExprInfo ctx program expr
@@ -69,15 +69,15 @@ evalExprInfo ctx program expr = case depIfacesForToolProgram ctx program of
 -- ---------------------------------------------------------------
 -- 为缺签名的顶层 DFun 推断可回读的签名；targets 由 REPL 选出（块内无签名、且缓冲里
 -- 也没有只含签名的块）。失败返回可读错误，由 REPL 加提示后保持会话状态不变。
-inferDefTypes : PackageContext -> String -> List String -> String -> Result (List (Pair String String))
+inferDefTypes : PackageContext -> String -> List String -> String -> Check (List (Pair String String))
 inferDefTypes ctx program targets defSource = dtInferDefTypes ctx program targets defSource
 
 -- program 里每个顶层定义的名字 + zonk 后类型文本（`:defs` / `:info` 用）。
-bindingTypes : PackageContext -> String -> Result (List (Pair String String))
+bindingTypes : PackageContext -> String -> Check (List (Pair String String))
 bindingTypes ctx program = dtBindingTypes ctx program
 
 -- 内存 program 的整程序检查（自动签名写回后的复查；也用于 :load 模块的立即校验）。
-checkProgram : PackageContext -> String -> Result (List String)
+checkProgram : PackageContext -> String -> Check (List String)
 checkProgram ctx program = dtCheckSource ctx "<repl>" program
 
 -- ---------------------------------------------------------------
@@ -193,16 +193,16 @@ cleanupTemp dir code =
     _ = runIO (prim_runIn "/" ["rm", "-rf", dir])
   in code
 
-cleanupErr : String -> String -> Result Int
+cleanupErr : String -> String -> Check Int
 cleanupErr dir e =
   let
     _ = runIO (prim_runIn "/" ["rm", "-rf", dir])
-  in Err e
+  in err e
 
 -- 把带 main 的入口源码编译成临时包里的可执行文件并运行，返回进程退出码。
 -- `printResult` 透传给 codegen 的 main 钩子（IO a 时先跑动作、再按 a 的类型打印）；
 -- effect 测试用 False（只看退出码，不比较输出）。
-runEffectProgram : PackageContext -> String -> Bool -> Result Int
+runEffectProgram : PackageContext -> String -> Bool -> Check Int
 runEffectProgram ctx source printResult =
   let
     dir = freshTempDir "${tempBase 0}/vuna-effect-${runIO timeUs}"
@@ -213,13 +213,13 @@ runEffectProgram ctx source printResult =
     _ = runIO (prim_writeFile "${dir}/vuna.toml" (effectManifest ctx))
     _ = runIO (prim_writeFile entry source)
   in case contextForDir dir of
-    Err e => cleanupErr dir e
-    Ok ctxTmp => case compileToDir ctxTmp entry printResult outDir of
-      Err e => cleanupErr dir e
-      Ok _ =>
+    ErrC e => cleanupErr dir (diagText e)
+    OkC ctxTmp => case compileToDir ctxTmp entry printResult outDir of
+      ErrC e => cleanupErr dir (diagText e)
+      OkC _ =>
         let
           _ = runIO (prim_makeDir "${outDir}/bin")
         in if hasOcamlopt 0 then case runBuildScript outDir "bin/${effectBinaryName}" effectBinaryName of
-          Err e => cleanupErr dir e
-          Ok _ => Ok (cleanupTemp dir (runIO (prim_runIn outDir ["bin/${effectBinaryName}"])))
+          ErrC e => cleanupErr dir (diagText e)
+          OkC _ => OkC (cleanupTemp dir (runIO (prim_runIn outDir ["bin/${effectBinaryName}"])))
         else cleanupErr dir noOcamloptMessage

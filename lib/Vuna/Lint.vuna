@@ -48,31 +48,31 @@ reportFindings path fixMode findings =
 
 fixReport : String -> String -> List Finding -> List FixityDecl -> Int
 fixReport path source findings programFixities = case fixLoop programFixities source findings 8 0 of
-  Err e =>
+  ErrC e =>
     let
-      _ = runIO (prim_print "${path}: error: ${e}\n")
+      _ = runIO (prim_print "${path}: error: ${diagText e}\n")
     in 2
-  Ok (Pair count newSource) => if count == 0 then reportFindings path True findings
+  OkC (Pair count newSource) => if count == 0 then reportFindings path True findings
   else
     let
       _ = runIO (prim_writeFile path newSource)
     in case lintSourceWith programFixities newSource of
-      Err e =>
+      ErrC e =>
         let
-          _ = runIO (prim_print "${path}: error: ${e}\n")
+          _ = runIO (prim_print "${path}: error: ${diagText e}\n")
         in 2
-      Ok remaining =>
+      OkC remaining =>
         let
           _ = runIO (prim_print "${path}: fixed ${count} finding(s)\n")
         in reportFindings path True remaining
 
 lintExisting : Bool -> String -> String -> List FixityDecl -> Int
 lintExisting doFix path source programFixities = case lintSourceWith programFixities source of
-  Err e =>
+  ErrC e =>
     let
-      _ = runIO (prim_print "${path}: error: ${e}\n")
+      _ = runIO (prim_print "${path}: error: ${diagText e}\n")
     in 2
-  Ok findings =>
+  OkC findings =>
     if doFix then fixReport path source findings programFixities
     else reportFindings path False findings
 
@@ -80,20 +80,20 @@ lintExisting doFix path source programFixities = case lintSourceWith programFixi
 -- 不静默按本地声明表继续（那会把 import 闭包里的运算符判成 unknown fixity）。
 lintOne : Bool -> FixityEnv -> String -> Pair FixityEnv Int
 lintOne doFix env path = case readText path of
-  Err e =>
+  ErrC e =>
     let
-      _ = runIO (prim_print "error: ${e}\n")
+      _ = runIO (prim_print "error: ${diagText e}\n")
     in Pair env 2
-  Ok source =>
+  OkC source =>
     let
       looked = fixitiesForFile env path source
       env2 = firstOf looked
     in case secondOf looked of
-      Err e =>
+      ErrC e =>
         let
-          _ = runIO (prim_print "${path}: cannot load package fixity context: ${e}\n")
+          _ = runIO (prim_print "${path}: cannot load package fixity context: ${diagText e}\n")
         in Pair env2 2
-      Ok programFixities => Pair env2 (lintExisting doFix path source programFixities)
+      OkC programFixities => Pair env2 (lintExisting doFix path source programFixities)
 
 lintFiles : Bool -> FixityEnv -> List String -> Int
 lintFiles doFix env [] = 0
@@ -107,10 +107,10 @@ lintFiles doFix env (path :: rest) =
 
 runLint : List String -> Int
 runLint args = case parseToolArgs "vuna lint" [BoolFlag "fix"] args of
-  Err e =>
+  ErrC e =>
     let
-      _ = runIO (prim_print "error: ${e}\n")
+      _ = runIO (prim_print "error: ${diagText e}\n")
     in 2
-  Ok parsed => case parsed.positionals of
+  OkC parsed => case parsed.positionals of
     [] => lintUsageError 0
     files => lintFiles (flagSet parsed "fix") emptyFixityEnv files

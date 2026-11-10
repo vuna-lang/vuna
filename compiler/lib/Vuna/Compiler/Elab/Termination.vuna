@@ -320,63 +320,63 @@ groupMessage ([f]) = "${f} (recursive call does not structurally decrease)"
 groupMessage comp =
   "recursive group {${joinComma comp}} (mutual recursion: no parameter position decreases on every recursive call)"
 
-cannotProveMsg : List String -> String
+cannotProveMsg : List String -> Diagnostic
 cannotProveMsg comp =
   let
     desc = groupMessage comp
   in tcMsg (CannotProveTermination desc) [desc]
 
-collectClauses : List (Pair (List Pat) Expr) -> List String -> List String -> List (Pair String (List Int)) -> Int -> String -> HashMap String (List Int) -> Pair Bool (List (Pair (Pair String String) Int)) -> Result (Pair Bool (List (Pair (Pair String String) Int)))
-collectClauses [] comp ctors projs p caller facts acc = Ok acc
+collectClauses : List (Pair (List Pat) Expr) -> List String -> List String -> List (Pair String (List Int)) -> Int -> String -> HashMap String (List Int) -> Pair Bool (List (Pair (Pair String String) Int)) -> Check (Pair Bool (List (Pair (Pair String String) Int)))
+collectClauses [] comp ctors projs p caller facts acc = OkC acc
 collectClauses (cl :: rest) comp ctors projs p caller facts acc = case firstOf acc of
-  False => Ok acc
+  False => OkC acc
   True => case strClause comp ctors projs p caller facts cl of
     Pair True edges =>
       collectClauses rest comp ctors projs p caller facts (Pair True (append (secondOf acc) edges))
-    Pair False edges => Ok (Pair False (secondOf acc))
+    Pair False edges => OkC (Pair False (secondOf acc))
 
-collectMeasure : List String -> HashMap String (List (Pair (List Pat) Expr)) -> List String -> List (Pair String (List Int)) -> Int -> HashMap String (List Int) -> List String -> Pair Bool (List (Pair (Pair String String) Int)) -> Result (Pair Bool (List (Pair (Pair String String) Int)))
-collectMeasure comp defTbl ctors projs p facts [] acc = Ok acc
+collectMeasure : List String -> HashMap String (List (Pair (List Pat) Expr)) -> List String -> List (Pair String (List Int)) -> Int -> HashMap String (List Int) -> List String -> Pair Bool (List (Pair (Pair String String) Int)) -> Check (Pair Bool (List (Pair (Pair String String) Int)))
+collectMeasure comp defTbl ctors projs p facts [] acc = OkC acc
 collectMeasure comp defTbl ctors projs p facts (n :: rest) acc =
   Vuna.Compiler.Common.bind
     (collectClauses (clausesOfDefTbl n defTbl) comp ctors projs p n facts acc)
     (\acc2 => collectMeasure comp defTbl ctors projs p facts rest acc2)
 
 -- 同一对 (caller, callee) 的所有调用点都非零 ⇒ 该边严格。
-tryMeasure : List String -> HashMap String (List (Pair (List Pat) Expr)) -> List String -> List (Pair String (List Int)) -> HashMap String (List Int) -> Int -> Int -> Result Int
+tryMeasure : List String -> HashMap String (List (Pair (List Pat) Expr)) -> List String -> List (Pair String (List Int)) -> HashMap String (List Int) -> Int -> Int -> Check Int
 tryMeasure comp defTbl ctors projs facts p maxP =
   tryMeasureGo comp defTbl ctors projs facts (maxP - p) maxP
 
-tryMeasureGo : List String -> HashMap String (List (Pair (List Pat) Expr)) -> List String -> List (Pair String (List Int)) -> HashMap String (List Int) -> Int -> Int -> Result Int
-tryMeasureGo comp defTbl ctors projs facts remaining maxP = if remaining <= 0 then Err (cannotProveMsg comp)
+tryMeasureGo : List String -> HashMap String (List (Pair (List Pat) Expr)) -> List String -> List (Pair String (List Int)) -> HashMap String (List Int) -> Int -> Int -> Check Int
+tryMeasureGo comp defTbl ctors projs facts remaining maxP = if remaining <= 0 then ErrC (cannotProveMsg comp)
 else
   let
     p = maxP - remaining
   in case collectMeasure comp defTbl ctors projs p facts comp (Pair True []) of
-    Err e => Err e
-    Ok (Pair valid edges) => if valid then
+    ErrC e => ErrC e
+    OkC (Pair valid edges) => if valid then
       let
         modes = filterModes (map secondOf edges)
       in if notEmpty modes then if allSame modes then if hasWeakCycle comp edges then tryMeasureGo comp defTbl ctors projs facts (remaining - 1) maxP
-      else Ok 0
+      else OkC 0
       else tryMeasureGo comp defTbl ctors projs facts (remaining - 1) maxP
       else tryMeasureGo comp defTbl ctors projs facts (remaining - 1) maxP
     else tryMeasureGo comp defTbl ctors projs facts (remaining - 1) maxP
 
-checkStrictGroup : List String -> HashMap String (List (Pair (List Pat) Expr)) -> List String -> List (Pair String (List Int)) -> List (Pair String Int) -> Result Int
+checkStrictGroup : List String -> HashMap String (List (Pair (List Pat) Expr)) -> List String -> List (Pair String (List Int)) -> List (Pair String Int) -> Check Int
 checkStrictGroup comp defTbl ctors projs facts =
   let
     factsTbl = posTblOf facts
   in case tryMeasure comp defTbl ctors projs factsTbl 0 (maxArityOf comp defTbl) of
-    Ok n => Ok n
-    Err e => case tryFuelThread comp defTbl ctors projs factsTbl e of
-      Ok n => Ok n
-      Err e2 => sctCheck comp defTbl ctors projs factsTbl e2
+    OkC n => OkC n
+    ErrC e => case tryFuelThread comp defTbl ctors projs factsTbl e of
+      OkC n => OkC n
+      ErrC e2 => sctCheck comp defTbl ctors projs factsTbl e2
 
-checkComp : List String -> HashMap String (List (Pair (List Pat) Expr)) -> List String -> List (Pair String (List Int)) -> HashMap String (List String) -> List (Pair String Int) -> Result Int
-checkComp [] defTbl ctors projs g facts = Ok 0
+checkComp : List String -> HashMap String (List (Pair (List Pat) Expr)) -> List String -> List (Pair String (List Int)) -> HashMap String (List String) -> List (Pair String Int) -> Check Int
+checkComp [] defTbl ctors projs g facts = OkC 0
 checkComp (comp@([f])) defTbl ctors projs g facts =
-  if memName f (adjOf f g) then checkStrictGroup comp defTbl ctors projs facts else Ok 0
+  if memName f (adjOf f g) then checkStrictGroup comp defTbl ctors projs facts else OkC 0
 checkComp comp defTbl ctors projs g facts = checkStrictGroup comp defTbl ctors projs facts
 
 -- M34：worklist 不动点——首轮扫所有有出边的 caller，之后只重扫「新 facts 的 callee 的
@@ -397,7 +397,7 @@ else
 
 -- 只报告 own 里定义的函数的终止性失败；其余（依赖包已在自己 check 里验过）只作为
 -- 分析上下文参与 SCT（跨包调用/投影/构造子关系需要它们的子句）。全量路径 own = 全部名字。
-checkTerminationDecls : List Decl -> Result Int
+checkTerminationDecls : List Decl -> Check Int
 checkTerminationDecls decls = checkTerminationDeclsWith (dfunNames decls) decls
 
 dfunNames : List Decl -> List String
@@ -406,7 +406,7 @@ dfunNames (d :: rest) = case d of
   DFun name pats body sp => name :: dfunNames rest
   _ => dfunNames rest
 
-checkTerminationDeclsWith : List String -> List Decl -> Result Int
+checkTerminationDeclsWith : List String -> List Decl -> Check Int
 checkTerminationDeclsWith own decls =
   let
     defs = groupDefs decls
@@ -431,9 +431,9 @@ anyOwnTbl : HashMap String Bool -> List String -> Bool
 anyOwnTbl ownTbl [] = False
 anyOwnTbl ownTbl (n :: rest) = if Base.HashMap.member n ownTbl then True else anyOwnTbl ownTbl rest
 
-checkSccsWith : HashMap String Bool -> List (List String) -> HashMap String (List (Pair (List Pat) Expr)) -> List String -> List (Pair String (List Int)) -> HashMap String (List String) -> List (Pair String Int) -> Result Int
-checkSccsWith ownTbl [] defTbl ctors projs g facts = Ok 0
+checkSccsWith : HashMap String Bool -> List (List String) -> HashMap String (List (Pair (List Pat) Expr)) -> List String -> List (Pair String (List Int)) -> HashMap String (List String) -> List (Pair String Int) -> Check Int
+checkSccsWith ownTbl [] defTbl ctors projs g facts = OkC 0
 checkSccsWith ownTbl (comp :: rest) defTbl ctors projs g facts =
   if anyOwnTbl ownTbl comp then Vuna.Compiler.Common.bind (checkComp comp defTbl ctors projs g facts)
-    (\n => Vuna.Compiler.Common.bind (checkSccsWith ownTbl rest defTbl ctors projs g facts) (\m => Ok (n + m)))
+    (\n => Vuna.Compiler.Common.bind (checkSccsWith ownTbl rest defTbl ctors projs g facts) (\m => OkC (n + m)))
   else checkSccsWith ownTbl rest defTbl ctors projs g facts

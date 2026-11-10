@@ -44,26 +44,26 @@ applyEditList (e :: rest) lines limit count =
   if e.editEnd < limit then applyEditList rest (replaceRange e.editStart e.editEnd e.editLines lines) e.editStart (count + 1)
   else applyEditList rest lines limit count
 
-applyFixes : String -> List Finding -> Result (Pair Int String)
+applyFixes : String -> List Finding -> Check (Pair Int String)
 applyFixes source findings =
   let
     edits = sortEdits (collectEdits findings [])
   in case applyEditList edits (splitLines source) (length (splitLines source) + 1) 0 of
-    Pair count newLines => if count == 0 then Ok (Pair 0 source)
+    Pair count newLines => if count == 0 then OkC (Pair 0 source)
     else
       let
         newSource = joinLines newLines
       in case parseSource "<lint>" newSource of
-        Err e => Err "parse failed after fix: ${e}"
-        Ok ignored => Ok (Pair count newSource)
+        ErrC e => err "parse failed after fix: ${diagText e}"
+        OkC ignored => OkC (Pair count newSource)
 
 -- `programFixities` 与首轮 lint 用的是同一份程序级 fixity（--fix 只做格式/结构改写，
 -- 不改 imports），每轮复验必须继续按它重排，否则会退化成 unknown fixity。
-fixLoop : List FixityDecl -> String -> List Finding -> Int -> Int -> Result (Pair Int String)
-fixLoop programFixities source findings passes total = if passes <= 0 then Ok (Pair total source)
+fixLoop : List FixityDecl -> String -> List Finding -> Int -> Int -> Check (Pair Int String)
+fixLoop programFixities source findings passes total = if passes <= 0 then OkC (Pair total source)
 else case applyFixes source findings of
-  Err e => Err e
-  Ok (Pair count newSource) => if count == 0 then Ok (Pair total source)
+  ErrC e => ErrC e
+  OkC (Pair count newSource) => if count == 0 then OkC (Pair total source)
   else case lintSourceWith programFixities newSource of
-    Err e => Err e
-    Ok remaining => fixLoop programFixities newSource remaining (passes - 1) (total + count)
+    ErrC e => ErrC e
+    OkC remaining => fixLoop programFixities newSource remaining (passes - 1) (total + count)

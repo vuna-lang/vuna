@@ -104,10 +104,10 @@ hasValue name values = case lookupValue name values of
 -- ---------------------------------------------------------------
 -- 工具命令共用入口：`cmd` 只用于错误文案，`specs` 是允许的 flag 表，
 -- `args` 是去掉子命令后的参数。
-parseToolArgs : String -> List ArgSpec -> List String -> Result Parsed
+parseToolArgs : String -> List ArgSpec -> List String -> Check Parsed
 parseToolArgs cmd specs args = case parseGo False specs args [] [] [] of
-  POk parsed => Ok parsed
-  PErr e => Err (argErrText cmd e)
+  POk parsed => OkC parsed
+  PErr e => err (argErrText cmd e)
 
 parseGo : Bool -> List ArgSpec -> List String -> List String -> List (Pair String String) -> List String -> ParseOut
 parseGo literal specs args flags values items = case args of
@@ -179,21 +179,21 @@ argErrText cmd (MissingValue flag) = "flag requires a value: ${flag}"
 -- 读盘守卫（禁止在不存在路径上调 prim_isDirectory）
 -- ---------------------------------------------------------------
 -- 读一个文本文件：先判存在、再判目录，最后才读。
-readText : String -> Result String
+readText : String -> Check String
 readText path =
-  if runIO (prim_fileExists path) then if runIO (prim_isDirectory path) then Err "is a directory: ${path}"
-  else Ok (runIO (prim_readFile path))
-  else Err "no such file: ${path}"
+  if runIO (prim_fileExists path) then if runIO (prim_isDirectory path) then err "is a directory: ${path}"
+  else OkC (runIO (prim_readFile path))
+  else err "no such file: ${path}"
 
 -- 要求路径存在（文件或目录均可）。
-requireExists : String -> Result Int
-requireExists path = if runIO (prim_fileExists path) then Ok 0 else Err "no such file: ${path}"
+requireExists : String -> Check Int
+requireExists path = if runIO (prim_fileExists path) then OkC 0 else err "no such file: ${path}"
 
 -- 要求路径存在且是目录。
-requireDirectory : String -> Result Int
+requireDirectory : String -> Check Int
 requireDirectory path =
-  if runIO (prim_fileExists path) then if runIO (prim_isDirectory path) then Ok 0 else Err "not a directory: ${path}"
-  else Err "no such directory: ${path}"
+  if runIO (prim_fileExists path) then if runIO (prim_isDirectory path) then OkC 0 else err "not a directory: ${path}"
+  else err "no such directory: ${path}"
 
 -- ---------------------------------------------------------------
 -- 目录创建（prim_makeDir 只建一层）

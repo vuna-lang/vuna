@@ -152,8 +152,8 @@ symbolHoverJson s line startCol token =
 -- ---------------------------------------------------------------
 currentModuleNameOf : String -> String
 currentModuleNameOf text = case parseSource "<lsp>" text of
-  Err e => ""
-  Ok (SourceFile hdr imports fx decls) => currentModuleName decls hdr
+  ErrC e => ""
+  OkC (SourceFile hdr imports fx decls) => currentModuleName decls hdr
 
 -- hover 的第一段：DT 洞目标（包上下文；与 `vuna goal` 同源）。
 -- 快速判据：文本里没有洞（`_` / `?name`）时直接跳过——否则每次 hover 都要跑一遍
@@ -164,10 +164,10 @@ holeHoverAt uri line col text = if hasHole text then holeHoverChecked uri line c
 
 holeHoverChecked : String -> Int -> Int -> String -> Maybe Json
 holeHoverChecked uri line col text = case contextForDoc uri of
-  Err e => Nothing
-  Ok (Pair label ctx) => case dtGoalsSourceTolerant ctx label text of
-    Err e => Nothing
-    Ok gs => case holeAt line col gs of
+  ErrC e => Nothing
+  OkC (Pair label ctx) => case dtGoalsSourceTolerant ctx label text of
+    ErrC e => Nothing
+    OkC gs => case holeAt line col gs of
       Nothing => Nothing
       Just g => Just (holeHoverJson g)
 
@@ -266,18 +266,18 @@ localRefLocation uri text line col =
 -- （不让 LSP 请求失败，也不静默改语义）。
 formattingEdits : String -> String -> List Json
 formattingEdits uri text = case formattingFixities uri text of
-  Err e => []
-  Ok fixities => case formatSourceWith fixities text of
-    Err e => []
-    Ok formatted =>
+  ErrC e => []
+  OkC fixities => case formatSourceWith fixities text of
+    ErrC e => []
+    OkC formatted =>
       if formatted == text then []
       else [JObj [Pair "range" (fullRange text), Pair "newText" (JStr formatted)]]
 
-formattingFixities : String -> String -> Result (List FixityDecl)
+formattingFixities : String -> String -> Check (List FixityDecl)
 formattingFixities uri text =
   let
     path = decodeUri uri
-  in if path == "" then Err "empty document uri"
+  in if path == "" then err "empty document uri"
   else secondOf (fixitiesForFile emptyFixityEnv path text)
 
 -- ---------------------------------------------------------------
@@ -299,12 +299,12 @@ formattingFixities uri text =
 --   - case split 动作只在未限制或含 `refactor` / `refactor.rewrite` 时给。
 codeActionsFor : String -> String -> Int -> Int -> Int -> Int -> Maybe (List String) -> List Json
 codeActionsFor uri text reqStart reqStartCol reqEnd reqEndCol only = case contextForDoc uri of
-  Err e => []
-  Ok (Pair label ctx) => case fixitiesForFile emptyFixityEnv label text of
-    Pair _ (Err e) => []
-    Pair _ (Ok programFixities) => case lintSourceWith programFixities text of
-      Err e => []
-      Ok findings =>
+  ErrC e => []
+  OkC (Pair label ctx) => case fixitiesForFile emptyFixityEnv label text of
+    Pair _ (ErrC e) => []
+    Pair _ (OkC programFixities) => case lintSourceWith programFixities text of
+      ErrC e => []
+      OkC findings =>
         let
           splits =
             take maxCodeActions
@@ -373,8 +373,8 @@ fixAllActionJson uri =
 -- fixLoop 把全部可修复 finding 迭代应用（8 轮，与 CLI `--fix` 一致）；无改动 → Nothing。
 fixAllLintEdit : List FixityDecl -> String -> List Finding -> Maybe String
 fixAllLintEdit programFixities text findings = case fixLoop programFixities text findings 8 0 of
-  Err e => Nothing
-  Ok (Pair count newText) => if count == 0 || newText == text then Nothing else Just newText
+  ErrC e => Nothing
+  OkC (Pair count newText) => if count == 0 || newText == text then Nothing else Just newText
 
 -- fix all 的 codeAction：只有确实有改动时才产生动作。
 fixAllActions : String -> List FixityDecl -> String -> List Finding -> List Json
@@ -386,12 +386,12 @@ fixAllActions uri programFixities text findings = case fixAllLintEdit programFix
 -- 返回 WorkspaceEdit（changes 按 uri 分组）；无改动 / 上下文不可用 → Nothing。
 fixAllLintWorkspaceEdit : String -> String -> Maybe Json
 fixAllLintWorkspaceEdit uri text = case contextForDoc uri of
-  Err e => Nothing
-  Ok (Pair label ctx) => case fixitiesForFile emptyFixityEnv label text of
-    Pair _ (Err e) => Nothing
-    Pair _ (Ok programFixities) => case lintSourceWith programFixities text of
-      Err e => Nothing
-      Ok findings => case fixAllLintEdit programFixities text findings of
+  ErrC e => Nothing
+  OkC (Pair label ctx) => case fixitiesForFile emptyFixityEnv label text of
+    Pair _ (ErrC e) => Nothing
+    Pair _ (OkC programFixities) => case lintSourceWith programFixities text of
+      ErrC e => Nothing
+      OkC findings => case fixAllLintEdit programFixities text findings of
         Nothing => Nothing
         Just newText =>
           Just
@@ -489,8 +489,8 @@ moduleSplitIn : List Root -> String -> String -> Maybe SplitTy
 moduleSplitIn roots modName tyName = case moduleSourceIn roots modName of
   Nothing => Nothing
   Just src => case parseSource "<case-split>" src of
-    Err e => Nothing
-    Ok dep => findSplitIn dep.sourceFileDecls tyName
+    ErrC e => Nothing
+    OkC dep => findSplitIn dep.sourceFileDecls tyName
 
 exportedSplit : List Root -> String -> ExportItem -> Maybe SplitTy
 exportedSplit roots tyName (XModule name sp) = moduleSplitIn roots name tyName
@@ -501,8 +501,8 @@ preludeSplit : List Root -> String -> Maybe SplitTy
 preludeSplit roots tyName = case moduleSourceIn roots "Prelude" of
   Nothing => Nothing
   Just src => case parseSource "<prelude>" src of
-    Err e => Nothing
-    Ok sf => case sf.sourceFileModDecl of
+    ErrC e => Nothing
+    OkC sf => case sf.sourceFileModDecl of
       Nothing => Nothing
       Just m => firstMaybe (map (exportedSplit roots tyName) m.modDeclExportItems)
 
@@ -527,8 +527,8 @@ resolveUnqualifiedSplit sf roots tyName = case findSplitIn sf.sourceFileDecls ty
 -- `import ... as` 的模块别名不会出现在这里；也没有类型别名声明可展开（见 lsp.md）。
 resolveTypeSplit : SourceFile -> List Root -> String -> String -> Maybe (Pair String SplitTy)
 resolveTypeSplit sf roots curMod tyText = case parseExpressionSource tyText of
-  Err e => Nothing
-  Ok ty => case typeHeadName ty of
+  ErrC e => Nothing
+  OkC ty => case typeHeadName ty of
     Nothing => Nothing
     Just head =>
       let
@@ -569,8 +569,8 @@ preludeReexportModules : List Root -> List String
 preludeReexportModules roots = case moduleSourceIn roots "Prelude" of
   Nothing => []
   Just src => case parseSource "<prelude>" src of
-    Err e => []
-    Ok sf => case sf.sourceFileModDecl of
+    ErrC e => []
+    OkC sf => case sf.sourceFileModDecl of
       Nothing => []
       Just m => mapMaybe exportModuleName m.modDeclExportItems
 
@@ -641,12 +641,12 @@ ctxSplitActions uri text sf roots preludeModules g =
 caseSplitActions : String -> String -> PackageContext -> String -> Int -> Int -> Int -> Int -> List Json
 caseSplitActions uri label ctx text sl sc el ec = if not (rangeTouchesHole text sl sc el ec) then []
 else case dtGoalsSourceTolerant ctx label text of
-  Err e => []
-  Ok gs => case goalAtRange sl sc el ec gs of
+  ErrC e => []
+  OkC gs => case goalAtRange sl sc el ec gs of
     Nothing => []
     Just g => case parseSource "<lsp>" text of
-      Err e => []
-      Ok sf =>
+      ErrC e => []
+      OkC sf =>
         ctxSplitActions uri text sf (contextRoots ctx) (preludeReexportModules (contextRoots ctx)) g
 
 -- Index：惰性加载（首次 definition/references/completion/workspaceSymbol 时）
@@ -696,8 +696,8 @@ pickBestSymbol curMod syms = case filter (\s => symModule s == curMod) syms of
 
 bestSymbol : Index -> String -> String -> Maybe Sym
 bestSymbol idx curMod token = case findSymbol idx token of
-  Ok syms => pickBestSymbol curMod syms
-  Err e => Nothing
+  OkC syms => pickBestSymbol curMod syms
+  ErrC e => Nothing
 
 -- 当前文档的模块名（无 module 头 → ""）。
 currentModuleName : List Decl -> Maybe ModDecl -> String
@@ -710,8 +710,8 @@ declBufferNames d = append (typeNamesOf [d]) (declNames d)
 
 bufferNames : String -> List String
 bufferNames text = case parseSource "<completion>" text of
-  Err e => []
-  Ok (SourceFile hdr imports fx decls) => dedupeNames (concatMap declBufferNames decls)
+  ErrC e => []
+  OkC (SourceFile hdr imports fx decls) => dedupeNames (concatMap declBufferNames decls)
 
 dedupeNames : List String -> List String
 dedupeNames xs = dedupeNamesGo xs [] []
@@ -785,12 +785,12 @@ declSymbolJson lines d =
 
 documentSymbols : String -> String -> List Json
 documentSymbols uri text = case parseSource uri text of
-  Err e => []
-  Ok (SourceFile hdr imports fx decls0) => case formattingFixities uri text of
-    Err _ => []
-    Ok programFixities => case reorderProgram (tableOfKeepOps (append programFixities fx)) decls0 of
-      Err e => []
-      Ok decls => map (declSymbolJson (split "\n" text)) decls
+  ErrC e => []
+  OkC (SourceFile hdr imports fx decls0) => case formattingFixities uri text of
+    ErrC _ => []
+    OkC programFixities => case reorderProgram (tableOfKeepOps (append programFixities fx)) decls0 of
+      ErrC e => []
+      OkC decls => map (declSymbolJson (split "\n" text)) decls
 
 -- ---------------------------------------------------------------
 -- definition：位置 → token → Index → Location
@@ -803,8 +803,8 @@ findDeclByName name (d :: rest) =
 -- Index 不可用/未命中时的同文件兜底：在当前缓冲的顶层声明里找同名定义。
 bufferDefinition : String -> String -> String -> Json
 bufferDefinition uri text token = case parseSource uri text of
-  Err e => JNull
-  Ok (SourceFile hdr imports fx decls) => case findDeclByName (lastSegment token) decls of
+  ErrC e => JNull
+  OkC (SourceFile hdr imports fx decls) => case findDeclByName (lastSegment token) decls of
     Nothing => JNull
     Just d =>
       JArr
@@ -826,8 +826,8 @@ referencesFor idx curMod token = case bestSymbol idx curMod token of
   Just sym =>
     let
       refs = case findReferences idx (symName sym) of
-        Ok rs => take maxReferences rs
-        Err e => []
+        OkC rs => take maxReferences rs
+        ErrC e => []
       refLocs = mapMaybe (refLocation idx) refs
       defLocs = case symLocation idx sym of
         Nothing => []
@@ -960,8 +960,8 @@ completionItems text line0 col0 midx =
 -- ---------------------------------------------------------------
 matchingSymbols : Index -> String -> List Sym
 matchingSymbols idx query = case findSymbol idx query of
-  Ok syms => syms
-  Err e =>
+  OkC syms => syms
+  ErrC e =>
     filter (\s => contains query (symName s) || contains query (symFullName s)) idx.indexSymbols
 
 symbolInfoJson : Index -> Sym -> Maybe Json

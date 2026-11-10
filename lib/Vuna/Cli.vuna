@@ -193,24 +193,24 @@ firstMissingPath (path :: rest) =
 -- ---------------------------------------------------------------
 interpArgs : List String -> Int
 interpArgs args = case parseToolArgs "vuna interp" [] args of
-  Err e => toolError e
-  Ok parsed => case parsed.positionals of
+  ErrC e => toolError (diagText e)
+  OkC parsed => case parsed.positionals of
     [file] => interpFile file
     _ => usageError 0
 
 -- interp 只接受单文件；包目录的入口是 check / compile。
 interpFile : String -> Int
 interpFile path = case requireExists path of
-  Err e => toolError e
-  Ok _ => if runIO (prim_isDirectory path) then interpDirErr path else interpEmit path
+  ErrC e => toolError (diagText e)
+  OkC _ => if runIO (prim_isDirectory path) then interpDirErr path else interpEmit path
 
 interpDirErr : String -> Int
 interpDirErr path = toolError "interp takes a single file, not a package directory: ${path}"
 
 interpEmit : String -> Int
 interpEmit path = case contextForFile path of
-  Err e => toolFailure e
-  Ok ctx =>
+  ErrC e => toolFailure (diagText e)
+  OkC ctx =>
     let
       output = interpretFile ctx path
     in let
@@ -223,15 +223,15 @@ interpEmit path = case contextForFile path of
 -- ---------------------------------------------------------------
 testArgs : List String -> Int
 testArgs args = case parseToolArgs "vuna test" [BoolFlag "list", BoolFlag "verbose", BoolFlag "fail-fast", BoolFlag "json", BoolFlag "no-cache", BoolFlag "audit", BoolFlag "strict-skips", BoolFlag "timings", BoolFlag "last-failed", BoolFlag "bless", BoolFlag "watch", BoolFlag "quiet", MultiValueFlag "filter", MultiValueFlag "only", ValueFlag "jobs", ValueFlag "only-file", ValueFlag "suite", ValueFlag "timeout", ValueFlag "worker", ValueFlag "results-dir", ValueFlag "cache-dir", ValueFlag "changed"] args of
-  Err e => toolError e
-  Ok parsed => case flagValue parsed "suite" of
+  ErrC e => toolError (diagText e)
+  OkC parsed => case flagValue parsed "suite" of
     Just suitePath => suiteRun parsed suitePath
     Nothing => packageTestRun parsed
 
 packageTestRun : Parsed -> Int
 packageTestRun parsed = case testJobsOf parsed of
-  Err e => toolError e
-  Ok jobs => case parsed.positionals of
+  ErrC e => toolError (diagText e)
+  OkC jobs => case parsed.positionals of
     [] => testRun (testOptsOf parsed jobs) "."
     [dir] => testRun (testOptsOf parsed jobs) dir
     _ => usageError 0
@@ -240,14 +240,14 @@ packageTestRun parsed = case testJobsOf parsed of
 suiteRun : Parsed -> String -> Int
 suiteRun parsed suitePath = case parsed.positionals of
   [] => case suiteJobsOf parsed of
-    Err e => toolError e
-    Ok jobs => case suiteTimeoutOf parsed of
-      Err e => toolError e
-      Ok timeout => case suiteWorkerOf parsed of
-        Err e => toolError e
-        Ok worker => case parseSuiteFile suitePath of
-          Err e => toolError e
-          Ok suite => runSuite (suiteOptsOf parsed jobs timeout worker suitePath) suite
+    ErrC e => toolError (diagText e)
+    OkC jobs => case suiteTimeoutOf parsed of
+      ErrC e => toolError (diagText e)
+      OkC timeout => case suiteWorkerOf parsed of
+        ErrC e => toolError (diagText e)
+        OkC worker => case parseSuiteFile suitePath of
+          ErrC e => toolError (diagText e)
+          OkC suite => runSuite (suiteOptsOf parsed jobs timeout worker suitePath) suite
   _ => usageError 0
 
 suiteOptsOf : Parsed -> Int -> Int -> Maybe (Pair Int Int) -> String -> SuiteOpts
@@ -261,32 +261,32 @@ suiteOptsOf parsed jobs timeout worker suitePath =
     (flagSet parsed "audit")
 
 -- suite 的 `--jobs`：缺省 0（auto）；`auto` 也映射到 0；其余必须是 >= 1 的整数。
-suiteJobsOf : Parsed -> Result Int
+suiteJobsOf : Parsed -> Check Int
 suiteJobsOf parsed = case flagValue parsed "jobs" of
-  Nothing => Ok 0
-  Just "auto" => Ok 0
+  Nothing => OkC 0
+  Just "auto" => OkC 0
   Just text => case parsePositiveInt text of
-    Nothing => Err "--jobs requires a positive integer (>= 1) or `auto`, got `${text}`"
-    Just n => Ok n
+    Nothing => err "--jobs requires a positive integer (>= 1) or `auto`, got `${text}`"
+    Just n => OkC n
 
-suiteTimeoutOf : Parsed -> Result Int
+suiteTimeoutOf : Parsed -> Check Int
 suiteTimeoutOf parsed = case flagValue parsed "timeout" of
-  Nothing => Ok 0
+  Nothing => OkC 0
   Just text => case parsePositiveInt text of
-    Nothing => Err "--timeout requires a positive integer (seconds), got `${text}`"
-    Just n => Ok n
+    Nothing => err "--timeout requires a positive integer (seconds), got `${text}`"
+    Just n => OkC n
 
 -- 隐藏的 worker 参数：`--worker i/N`（i 从 0 开始）。
-suiteWorkerOf : Parsed -> Result (Maybe (Pair Int Int))
+suiteWorkerOf : Parsed -> Check (Maybe (Pair Int Int))
 suiteWorkerOf parsed = case flagValue parsed "worker" of
-  Nothing => Ok Nothing
+  Nothing => OkC Nothing
   Just text => case split "/" text of
     [iText, nText] => case parseNonNegInt iText of
-      Nothing => Err "--worker requires i/N with non-negative integers, got `${text}`"
+      Nothing => err "--worker requires i/N with non-negative integers, got `${text}`"
       Just i => case parsePositiveInt nText of
-        Nothing => Err "--worker requires i/N with non-negative integers, got `${text}`"
-        Just n => if i < n then Ok (Just (Pair i n)) else Err "--worker index must be < N"
-    _ => Err "--worker requires i/N, got `${text}`"
+        Nothing => err "--worker requires i/N with non-negative integers, got `${text}`"
+        Just n => if i < n then OkC (Just (Pair i n)) else err "--worker index must be < N"
+    _ => err "--worker requires i/N, got `${text}`"
 
 parseNonNegInt : String -> Maybe Int
 parseNonNegInt s = if s == "" then Nothing else nonNegDigits (strUnpack s) 0
@@ -298,12 +298,12 @@ nonNegDigits (c :: rest) acc =
 
 -- `--jobs N`：缺省 1；必须是 >= 1 的十进制整数（0 / 非数字 → usage error exit 2；
 -- 负数会被参数解析当成缺值 flag，同样 exit 2）。
-testJobsOf : Parsed -> Result Int
+testJobsOf : Parsed -> Check Int
 testJobsOf parsed = case flagValue parsed "jobs" of
-  Nothing => Ok 1
+  Nothing => OkC 1
   Just text => case parsePositiveInt text of
-    Nothing => Err "--jobs requires a positive integer (>= 1), got `${text}`"
-    Just n => Ok n
+    Nothing => err "--jobs requires a positive integer (>= 1), got `${text}`"
+    Just n => OkC n
 
 parsePositiveInt : String -> Maybe Int
 parsePositiveInt s = if s == "" then Nothing else positiveDigits (strUnpack s) 0
@@ -321,23 +321,23 @@ testOptsOf parsed jobs =
 
 testRun : TestOpts -> String -> Int
 testRun opts dir = case requireDirectory dir of
-  Err e => toolError e
-  Ok _ => case loadPackage dir of
-    Err e => toolFailure e
-    Ok pkg => runTests opts pkg
+  ErrC e => toolError (diagText e)
+  OkC _ => case loadPackage dir of
+    ErrC e => toolFailure (diagText e)
+    OkC pkg => runTests opts pkg
 
 -- ---------------------------------------------------------------
 -- fmt
 -- ---------------------------------------------------------------
 fmtArgs : List String -> Int
 fmtArgs args = case parseToolArgs "vuna fmt" [BoolFlag "check"] args of
-  Err e => toolError e
-  Ok parsed => fmtRun (flagSet parsed "check") parsed.positionals
+  ErrC e => toolError (diagText e)
+  OkC parsed => fmtRun (flagSet parsed "check") parsed.positionals
 
 fmtRun : Bool -> List String -> Int
 fmtRun check [] = case fmtDefaultTargets 0 of
-  Err e => toolError e
-  Ok targets => fmtFiles check emptyFixityEnv (concatMap expandPath targets) 0
+  ErrC e => toolError (diagText e)
+  OkC targets => fmtFiles check emptyFixityEnv (concatMap expandPath targets) 0
 fmtRun check paths = case firstMissingPath paths of
   Just missing => toolError "no such file: ${missing}"
   Nothing => fmtFiles check emptyFixityEnv (concatMap expandPath paths) 0
@@ -346,19 +346,19 @@ fmtRun check paths = case firstMissingPath paths of
 -- 不是 workspace 或没有任何源码目录都是**输入错误**（exit 2），不再静默回退到相对
 -- 路径 `lib/app/test`（旧实现会在非包目录把 `lib` 当文件读而抛宿主异常）。
 -- A05：零参顶层定义在模块初始化时求值；这里是启动期读盘动作，必须函数化。
-fmtDefaultTargets : Int -> Result (List String)
+fmtDefaultTargets : Int -> Check (List String)
 fmtDefaultTargets _ = case findManifestDirMaybe "." of
   Nothing =>
-    Err
+    err
       "not inside a vuna workspace (no vuna.toml found from ${runIO prim_getcwd}); pass PATH explicitly"
   Just dir => case workspacePackages dir of
-    Err e => Err e
-    Ok pkgs =>
+    ErrC e => ErrC e
+    OkC pkgs =>
       let
         targets = existingTargets (concatMap packageTargets pkgs) []
-      in if length targets == 0 then Err
+      in if length targets == 0 then err
         "no vuna sources found in workspace at ${dir} (looked for lib/, app/, test/ under each package); pass PATH explicitly"
-      else Ok targets
+      else OkC targets
 
 packageTargets : Package -> List String
 packageTargets pkg = ["${packageDir pkg}/lib", "${packageDir pkg}/app", "${packageDir pkg}/test"]
@@ -382,16 +382,16 @@ fmtFiles check env [] changed = if check && changed > 0 then
   in 1
 else 0
 fmtFiles check env (path :: rest) changed = case readText path of
-  Err e => toolError e
-  Ok original =>
+  ErrC e => toolError (diagText e)
+  OkC original =>
     let
       looked = fixitiesForFile env path original
       env2 = firstOf looked
     in case secondOf looked of
-      Err e => toolError "${path}: cannot determine fixity context: ${e}"
-      Ok fixities => case formatSourceWith fixities original of
-        Err e => toolError "${path}: ${e}"
-        Ok formatted => if formatted == original then fmtFiles check env2 rest changed
+      ErrC e => toolError "${path}: cannot determine fixity context: ${diagText e}"
+      OkC fixities => case formatSourceWith fixities original of
+        ErrC e => toolError "${path}: ${diagText e}"
+        OkC formatted => if formatted == original then fmtFiles check env2 rest changed
         else if check then
           let
             _ = runIO (prim_print "would reformat: ${path}\n")
@@ -408,8 +408,8 @@ fmtFiles check env (path :: rest) changed = case readText path of
 -- ---------------------------------------------------------------
 replArgs : List String -> Int
 replArgs args = case parseToolArgs "vuna repl" [ValueFlag "listen", ValueFlag "client", BoolFlag "privileged"] args of
-  Err e => toolError e
-  Ok parsed => case flagValue parsed "client" of
+  ErrC e => toolError (diagText e)
+  OkC parsed => case flagValue parsed "client" of
     Just addr => case flagValue parsed "listen" of
       Just _ => toolError "`--listen` 与 `--client` 只能二选一"
       Nothing => case parsed.positionals of
@@ -433,35 +433,35 @@ replArgs args = case parseToolArgs "vuna repl" [ValueFlag "listen", ValueFlag "c
 -- `--client`：纯传输（不加载包上下文；地址校验在 Server 层共用）。
 replClientWith : String -> Int
 replClientWith addr = case checkReplAddr addr of
-  Err e => toolError e
-  Ok _ => runReplClient addr
+  ErrC e => toolError (diagText e)
+  OkC _ => runReplClient addr
 
 -- `--listen`：socket 上的常驻 server；启动目标与交互式同一套解析。
-replServerWith : String -> ReplStart -> Result PackageContext -> Int
+replServerWith : String -> ReplStart -> Check PackageContext -> Int
 replServerWith addr start ctxRes = case checkReplAddr addr of
-  Err e => toolError e
-  Ok _ => replWith (Just addr) 0 start ctxRes
+  ErrC e => toolError (diagText e)
+  OkC _ => replWith (Just addr) 0 start ctxRes
 
 replServerWithTarget : String -> String -> Bool -> Int
 replServerWithTarget addr target priv = case checkReplAddr addr of
-  Err e => toolError e
-  Ok _ => replTargetWith (Just addr) target priv
+  ErrC e => toolError (diagText e)
+  OkC _ => replTargetWith (Just addr) target priv
 
-replWith : Maybe String -> Int -> ReplStart -> Result PackageContext -> Int
-replWith Nothing _ start (Err e) = toolFailure e
-replWith Nothing _ start (Ok ctx) = runRepl ctx start
-replWith (Just addr) _ start (Err e) = toolFailure e
-replWith (Just addr) _ start (Ok ctx) = runReplServer ctx start addr
+replWith : Maybe String -> Int -> ReplStart -> Check PackageContext -> Int
+replWith Nothing _ start (ErrC e) = toolFailure (diagText e)
+replWith Nothing _ start (OkC ctx) = runRepl ctx start
+replWith (Just addr) _ start (ErrC e) = toolFailure (diagText e)
+replWith (Just addr) _ start (OkC ctx) = runReplServer ctx start addr
 
 -- 启动目标：存在目录 → 该包上下文；存在文件 → 文件所在包上下文 + 启动加载；
 -- 不存在且像模块名 → cwd 上下文 + 启动导入；其它报可操作错误。
 -- F3 P2b：REPL 默认按**非特权**上下文求值；`vuna repl --privileged` 显式以特权上下文
 -- 求值（开发工具开关，见 `Pkg.privilegedContext`）。
-maybePrivilegedCtx : Bool -> Result PackageContext -> Result PackageContext
+maybePrivilegedCtx : Bool -> Check PackageContext -> Check PackageContext
 maybePrivilegedCtx False r = r
 maybePrivilegedCtx True r = case r of
-  Err e => Err e
-  Ok c => Ok (privilegedContext c)
+  ErrC e => ErrC e
+  OkC c => OkC (privilegedContext c)
 
 replTargetWith : Maybe String -> String -> Bool -> Int
 replTargetWith listen target priv =
@@ -478,8 +478,8 @@ replTargetWith listen target priv =
 -- ---------------------------------------------------------------
 genErrorsArgs : List String -> Int
 genErrorsArgs args = case parseToolArgs "vuna gen-errors" [] args of
-  Err e => toolError e
-  Ok parsed => case parsed.positionals of
+  ErrC e => toolError (diagText e)
+  OkC parsed => case parsed.positionals of
     [] => runGenErrors "."
     [root] => runGenErrors root
     _ => usageError 0
@@ -491,8 +491,8 @@ genErrorsArgs args = case parseToolArgs "vuna gen-errors" [] args of
 -- ---------------------------------------------------------------
 mapArgs : List String -> Int
 mapArgs args = case parseToolArgs "vuna map" [BoolFlag "modules", ValueFlag "find", ValueFlag "impact"] args of
-  Err e => toolError e
-  Ok parsed => case parsed.positionals of
+  ErrC e => toolError (diagText e)
+  OkC parsed => case parsed.positionals of
     [] => mapRun parsed
     _ => usageError 0
 
@@ -512,8 +512,8 @@ withIndex f = case findManifestDirMaybe "." of
     toolError
       "not inside a vuna workspace (no vuna.toml found from ${runIO prim_getcwd}); run `vuna map` from a package or workspace root"
   Just _ => case loadOrBuild "." of
-    Err e => toolError e
-    Ok index => f index
+    ErrC e => toolError (diagText e)
+    OkC index => f index
 
 printOverview : Bool -> Int
 printOverview modulesOnly = withIndex (\index => let
@@ -525,11 +525,11 @@ in 0
 
 runFind : String -> Int
 runFind query = withIndex (\index => case findSymbol index query of
-  Err e =>
+  ErrC e =>
     let
-      _ = runIO (prim_print "error: ${e}\n")
+      _ = runIO (prim_print "error: ${diagText e}\n")
     in 1
-  Ok hits =>
+  OkC hits =>
     let
       _ = map (\s => runIO (prim_print "${symLineText s}\n")) hits
     in case hits of
@@ -548,11 +548,11 @@ symLineText s =
 
 runImpact : String -> Int
 runImpact query = withIndex (\index => case impactOf index query of
-  Err e =>
+  ErrC e =>
     let
-      _ = runIO (prim_print "error: ${e}\n")
+      _ = runIO (prim_print "error: ${diagText e}\n")
     in 1
-  Ok text =>
+  OkC text =>
     let
       _ = runIO (prim_print "${text}\n")
     in 0
@@ -560,18 +560,18 @@ runImpact query = withIndex (\index => case impactOf index query of
 
 apiArgs : List String -> Int
 apiArgs args = case parseToolArgs "vuna api" [] args of
-  Err e => toolError e
-  Ok parsed => case parsed.positionals of
+  ErrC e => toolError (diagText e)
+  OkC parsed => case parsed.positionals of
     [modName] => runApi modName
     _ => usageError 0
 
 runApi : String -> Int
 runApi modName = withIndex (\index => case renderApi index modName of
-  Err e =>
+  ErrC e =>
     let
-      _ = runIO (prim_print "error: ${e}\n")
+      _ = runIO (prim_print "error: ${diagText e}\n")
     in 1
-  Ok text =>
+  OkC text =>
     let
       _ = runIO (prim_print "${text}\n")
     in 0
@@ -583,23 +583,23 @@ runApi modName = withIndex (\index => case renderApi index modName of
 -- ---------------------------------------------------------------
 goalArgs : List String -> Int
 goalArgs args = case parseToolArgs "vuna goal" [] args of
-  Err e => toolError e
-  Ok parsed => case parsed.positionals of
+  ErrC e => toolError (diagText e)
+  OkC parsed => case parsed.positionals of
     [file] => goalRun file
     _ => usageError 0
 
 goalRun : String -> Int
 goalRun file = case readText file of
-  Err e => toolError e
-  Ok source => case parseSource file source of
-    Err e => toolFailure e
-    Ok (SourceFile _ _ fx decls0) => case secondOf (fixitiesForFile emptyFixityEnv file source) of
-      Err e => toolFailure e
-      Ok programFixities => case reorderProgram (tableOfKeepOps (append programFixities fx)) decls0 of
-        Err e => toolFailure e
-        Ok decls => case goalsOfProgramTolerant decls of
-          Err e => toolFailure e
-          Ok infos =>
+  ErrC e => toolError (diagText e)
+  OkC source => case parseSource file source of
+    ErrC e => toolFailure (diagText e)
+    OkC (SourceFile _ _ fx decls0) => case secondOf (fixitiesForFile emptyFixityEnv file source) of
+      ErrC e => toolFailure (diagText e)
+      OkC programFixities => case reorderProgram (tableOfKeepOps (append programFixities fx)) decls0 of
+        ErrC e => toolFailure (diagText e)
+        OkC decls => case goalsOfProgramTolerant decls of
+          ErrC e => toolFailure (diagText e)
+          OkC infos =>
             let
               _ = runIO (prim_print (goalHeader file (length infos) ++ renderGoals file infos))
             in 0

@@ -181,18 +181,18 @@ importAliases (imp :: rest) = case imp.importAlias of
   Nothing => importAliases rest
   Just alias => Pair alias (importName imp) :: importAliases rest
 
-checkImportAliases : String -> List String -> List (Pair String String) -> Result (List a)
-checkImportAliases label moduleNames [] = Ok []
+checkImportAliases : String -> List String -> List (Pair String String) -> Check (List a)
+checkImportAliases label moduleNames [] = OkC []
 checkImportAliases label moduleNames ((Pair alias m) :: rest) =
-  if validSegment alias then if memName alias (map firstOf rest) then Err "${label}: duplicate module alias ${alias}"
+  if validSegment alias then if memName alias (map firstOf rest) then err "${label}: duplicate module alias ${alias}"
   else if memName alias moduleNames then if alias == m then checkImportAliases label moduleNames rest
-  else Err "${label}: module alias ${alias} conflicts with an imported module"
+  else err "${label}: module alias ${alias} conflicts with an imported module"
   else checkImportAliases label moduleNames rest
-  else Err "${label}: invalid module alias ${alias}"
+  else err "${label}: invalid module alias ${alias}"
 
-validateImports : String -> List Import -> Result (List a)
+validateImports : String -> List Import -> Check (List a)
 validateImports label imports =
-  if hasDuplicateName (importModuleNames imports) then Err "${label}: duplicate import"
+  if hasDuplicateName (importModuleNames imports) then err "${label}: duplicate import"
   else checkImportAliases label (importModuleNames imports) (importAliases imports)
 
 openModuleNames : List Import -> List String
@@ -217,22 +217,22 @@ _joinNames (x :: rest) = "${x}, ${_joinNames rest}"
 -- （`moduleDecls` / `exportsOf` 的 `Nothing => []`）：调用方只看到「没有这个导出」，
 -- 于是一个加载器状态不一致被伪装成普通的「名字不存在」，错误被静默吞掉。
 -- 现在缺模块直接返回清晰的 Err（这是内部不变量，不是用户源码错误）。
-missingModule : String -> Result a
+missingModule : String -> Check a
 missingModule name =
-  Err "loader: internal: module ${name} is not loaded (import list and module table disagree)"
+  err "loader: internal: module ${name} is not loaded (import list and module table disagree)"
 
-moduleDecls : List Module -> String -> Result (List Decl)
+moduleDecls : List Module -> String -> Check (List Decl)
 moduleDecls modules name = case findModule modules name of
-  Just (Module mname mpkg imports imps decls exports mcaps mtrust fx) => Ok decls
+  Just (Module mname mpkg imports imps decls exports mcaps mtrust fx) => OkC decls
   Nothing => missingModule name
 
-moduleCtors : List Module -> String -> Result (List String)
+moduleCtors : List Module -> String -> Check (List String)
 moduleCtors modules name =
-  Vuna.Compiler.Common.bind (moduleDecls modules name) (\decls => Ok (ctorsOf decls))
+  Vuna.Compiler.Common.bind (moduleDecls modules name) (\decls => OkC (ctorsOf decls))
 
-exportsOf : List Module -> String -> Result (List ExportEntry)
+exportsOf : List Module -> String -> Check (List ExportEntry)
 exportsOf modules name = case findModule modules name of
-  Just (Module mname mpkg imports imps decls exports mcaps mtrust fx) => Ok exports
+  Just (Module mname mpkg imports imps decls exports mcaps mtrust fx) => OkC exports
   Nothing => missingModule name
 
 -- 按命名空间查公开名：kinds 是允许的 kind 列表（val / ctor / type）。
@@ -262,40 +262,40 @@ filterCtors name (e :: rest) =
 findExportType : List ExportEntry -> String -> Maybe ExportEntry
 findExportType entries name = lookupExport ["type"] name entries
 
-modulesExportingValueFrom : List Module -> List String -> String -> Result (List (Pair String ExportEntry))
-modulesExportingValueFrom modules [] name = Ok []
+modulesExportingValueFrom : List Module -> List String -> String -> Check (List (Pair String ExportEntry))
+modulesExportingValueFrom modules [] name = OkC []
 modulesExportingValueFrom modules (m :: rest) name = Vuna.Compiler.Common.bind (exportsOf modules m) (\es => case findExportValue es name of
   Just e =>
     Vuna.Compiler.Common.bind (modulesExportingValueFrom modules rest name)
-      (\more => Ok (Base.List.Cons (Pair m e) more))
+      (\more => OkC (Base.List.Cons (Pair m e) more))
   Nothing => modulesExportingValueFrom modules rest name
 )
 
-modulesExportingValue : List Module -> List Import -> String -> Result (List (Pair String ExportEntry))
+modulesExportingValue : List Module -> List Import -> String -> Check (List (Pair String ExportEntry))
 modulesExportingValue modules imports name =
   modulesExportingValueFrom modules (openModuleNames imports) name
 
 -- | 自动补注（M41 新增导出）：modulesExportingCtorFrom。
-modulesExportingCtorFrom : List Module -> List String -> String -> Result (List (Pair String ExportEntry))
-modulesExportingCtorFrom modules [] name = Ok []
+modulesExportingCtorFrom : List Module -> List String -> String -> Check (List (Pair String ExportEntry))
+modulesExportingCtorFrom modules [] name = OkC []
 modulesExportingCtorFrom modules (m :: rest) name =
   Vuna.Compiler.Common.bind (exportsOf modules m)
-    (\es => Vuna.Compiler.Common.bind (modulesExportingCtorFrom modules rest name) (\more => Ok (append (map (\e => Pair m e) (findExportCtors es name)) more)))
+    (\es => Vuna.Compiler.Common.bind (modulesExportingCtorFrom modules rest name) (\more => OkC (append (map (\e => Pair m e) (findExportCtors es name)) more)))
 
-modulesExportingCtor : List Module -> List Import -> String -> Result (List (Pair String ExportEntry))
+modulesExportingCtor : List Module -> List Import -> String -> Check (List (Pair String ExportEntry))
 modulesExportingCtor modules imports name =
   modulesExportingCtorFrom modules (openModuleNames imports) name
 
-modulesExportingTypeFrom : List Module -> List String -> String -> Result (List (Pair String ExportEntry))
-modulesExportingTypeFrom modules [] name = Ok []
+modulesExportingTypeFrom : List Module -> List String -> String -> Check (List (Pair String ExportEntry))
+modulesExportingTypeFrom modules [] name = OkC []
 modulesExportingTypeFrom modules (m :: rest) name = Vuna.Compiler.Common.bind (exportsOf modules m) (\es => case findExportType es name of
   Just e =>
     Vuna.Compiler.Common.bind (modulesExportingTypeFrom modules rest name)
-      (\more => Ok (Base.List.Cons (Pair m e) more))
+      (\more => OkC (Base.List.Cons (Pair m e) more))
   Nothing => modulesExportingTypeFrom modules rest name
 )
 
-modulesExportingType : List Module -> List Import -> String -> Result (List (Pair String ExportEntry))
+modulesExportingType : List Module -> List Import -> String -> Check (List (Pair String ExportEntry))
 modulesExportingType modules imports name =
   modulesExportingTypeFrom modules (openModuleNames imports) name
 
@@ -304,11 +304,11 @@ sameTargetRest : ExportEntry -> List (Pair a ExportEntry) -> Bool
 sameTargetRest e [] = True
 sameTargetRest e ((Pair m e2) :: rest) = e.target == e2.target && sameTargetRest e rest
 
-unifyEntryPairs : String -> String -> String -> List (Pair String ExportEntry) -> Result (Pair String ExportEntry)
-unifyEntryPairs label kindLabel name [] = Err "${label}: unknown ${kindLabel} ${name}"
+unifyEntryPairs : String -> String -> String -> List (Pair String ExportEntry) -> Check (Pair String ExportEntry)
+unifyEntryPairs label kindLabel name [] = err "${label}: unknown ${kindLabel} ${name}"
 unifyEntryPairs label kindLabel name (p :: rest) =
-  if sameTargetRest (secondOf p) rest then Ok p
-  else Err
+  if sameTargetRest (secondOf p) rest then OkC p
+  else err
     "${label}: ambiguous ${kindLabel} ${name} (imported from ${_joinNames (map firstOf (p :: rest))}); qualify it"
 
 modulePath : Root -> String -> String
@@ -335,15 +335,15 @@ _joinRootDirs roots = _joinNames (map rootDir roots)
 candidateDir : Pair String Root -> String
 candidateDir candidate = rootDir (secondOf candidate)
 
-findModuleFile : List Root -> String -> String -> Result (Pair String Root)
+findModuleFile : List Root -> String -> String -> Check (Pair String Root)
 findModuleFile roots name importerPkg = case collectModuleFiles roots name importerPkg [] [] of
   Pair allowed hidden => case allowed of
     [] => case hidden of
       [] => ldErr2 (ModuleNotFound name (_joinRootDirs roots)) name (_joinRootDirs roots)
       pkgs => ldErr2 (ModuleNotExported name (_joinNames hidden)) name (_joinNames hidden)
-    [only] => Ok only
+    [only] => OkC only
     candidates =>
-      Err "ambiguous module ${name} (found in: ${_joinNames (map candidateDir allowed)})"
+      err "ambiguous module ${name} (found in: ${_joinNames (map candidateDir allowed)})"
 
 findModule : List Module -> String -> Maybe Module
 findModule [] name = Nothing

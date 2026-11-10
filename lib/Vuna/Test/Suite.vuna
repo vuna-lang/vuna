@@ -97,10 +97,10 @@ record Case where
 -- ---------------------------------------------------------------
 -- 路径与读盘
 -- ---------------------------------------------------------------
-readTextFile : String -> Result String
+readTextFile : String -> Check String
 readTextFile path =
-  if pathExistsFile path then if pathExistsDir path then Err "is a directory: ${path}" else Ok (runIO (readFile path))
-  else Err "no such file: ${path}"
+  if pathExistsFile path then if pathExistsDir path then err "is a directory: ${path}" else OkC (runIO (readFile path))
+  else err "no such file: ${path}"
 
 -- suite 文件在 <root>/test/suite.toml；root = 上两级。
 suiteFileRoot : String -> String
@@ -121,29 +121,29 @@ samePathText _ _ = False
 fieldErr : List String -> String -> String -> String
 fieldErr section key msg = "wrong type for `${key}`${sectionText section}: ${msg}"
 
-getStr : List String -> String -> List TomlEntry -> Result (Maybe String)
+getStr : List String -> String -> List TomlEntry -> Check (Maybe String)
 getStr section key entries = case lookupEntry section key entries of
-  Nothing => Ok Nothing
-  Just (TStr s) => Ok (Just s)
-  Just _ => Err (fieldErr section key "expected a string")
+  Nothing => OkC Nothing
+  Just (TStr s) => OkC (Just s)
+  Just _ => err (fieldErr section key "expected a string")
 
-getInt : List String -> String -> List TomlEntry -> Result (Maybe Int)
+getInt : List String -> String -> List TomlEntry -> Check (Maybe Int)
 getInt section key entries = case lookupEntry section key entries of
-  Nothing => Ok Nothing
-  Just (TInt n) => Ok (Just n)
-  Just _ => Err (fieldErr section key "expected an integer")
+  Nothing => OkC Nothing
+  Just (TInt n) => OkC (Just n)
+  Just _ => err (fieldErr section key "expected an integer")
 
-getBool : List String -> String -> List TomlEntry -> Result (Maybe Bool)
+getBool : List String -> String -> List TomlEntry -> Check (Maybe Bool)
 getBool section key entries = case lookupEntry section key entries of
-  Nothing => Ok Nothing
-  Just (TBool b) => Ok (Just b)
-  Just _ => Err (fieldErr section key "expected a boolean")
+  Nothing => OkC Nothing
+  Just (TBool b) => OkC (Just b)
+  Just _ => err (fieldErr section key "expected a boolean")
 
-getList : List String -> String -> List TomlEntry -> Result (Maybe (List String))
+getList : List String -> String -> List TomlEntry -> Check (Maybe (List String))
 getList section key entries = case lookupEntry section key entries of
-  Nothing => Ok Nothing
-  Just (TList xs) => Ok (Just xs)
-  Just _ => Err (fieldErr section key "expected an array of strings")
+  Nothing => OkC Nothing
+  Just (TList xs) => OkC (Just xs)
+  Just _ => err (fieldErr section key "expected an array of strings")
 
 -- 可选字段的解包（Maybe 默认值只用于“缺失”，类型错误仍由 get* 报出）。
 strOr : String -> Maybe String -> String
@@ -178,14 +178,14 @@ familyKeys =
     "include"
   ]
 
-checkFamilyKeys : List String -> List TomlEntry -> Result Int
+checkFamilyKeys : List String -> List TomlEntry -> Check Int
 checkFamilyKeys section entries = checkFamilyKeysGo section entries
 
-checkFamilyKeysGo : List String -> List TomlEntry -> Result Int
-checkFamilyKeysGo section [] = Ok 0
+checkFamilyKeysGo : List String -> List TomlEntry -> Check Int
+checkFamilyKeysGo section [] = OkC 0
 checkFamilyKeysGo section (e :: rest) =
   if samePathText e.tomlEntrySection section then if memName e.tomlEntryKey familyKeys then checkFamilyKeysGo section rest
-  else Err "${sectionText section}: unknown key `${e.tomlEntryKey}`"
+  else err "${sectionText section}: unknown key `${e.tomlEntryKey}`"
   else checkFamilyKeysGo section rest
 
 -- buildFamily 的 option 读取拆成两段：单条 `>>=` 链过长会触发 D48 的推断 fuel /
@@ -203,34 +203,34 @@ record FamilyFlags where
   familyFlagTags : Maybe (List String)
   familyFlagTimeout : Maybe Int
 
-readFamilyOpts : List String -> List TomlEntry -> Result FamilyOpts
+readFamilyOpts : List String -> List TomlEntry -> Check FamilyOpts
 readFamilyOpts section entries =
   getStr section "kind" entries
-    >>= (\kindOpt => getStr section "entry" entries >>= (\entryOpt => Ok (FamilyOpts kindOpt entryOpt)))
+    >>= (\kindOpt => getStr section "entry" entries >>= (\entryOpt => OkC (FamilyOpts kindOpt entryOpt)))
 
-readFamilyFlags : List String -> List TomlEntry -> Result FamilyFlags
+readFamilyFlags : List String -> List TomlEntry -> Check FamilyFlags
 readFamilyFlags section entries =
   getBool section "interp" entries
-    >>= (\interpOpt => getBool section "check" entries >>= (\checkOpt => getBool section "compile" entries >>= (\compileOpt => getBool section "run" entries >>= (\runOpt => getBool section "compare_interp" entries >>= (\compareOpt => getList section "tags" entries >>= (\tagsOpt => getInt section "timeout" entries >>= (\timeoutOpt => Ok (FamilyFlags interpOpt checkOpt compileOpt runOpt compareOpt tagsOpt timeoutOpt))))))))
+    >>= (\interpOpt => getBool section "check" entries >>= (\checkOpt => getBool section "compile" entries >>= (\compileOpt => getBool section "run" entries >>= (\runOpt => getBool section "compare_interp" entries >>= (\compareOpt => getList section "tags" entries >>= (\tagsOpt => getInt section "timeout" entries >>= (\timeoutOpt => OkC (FamilyFlags interpOpt checkOpt compileOpt runOpt compareOpt tagsOpt timeoutOpt))))))))
 
 -- 长 `>>=` 链在 Result 管道上会触发 D48 的推断 fuel 问题；这里用显式 case 展开。
-buildFamily : Suite -> List TomlEntry -> String -> Result Family
+buildFamily : Suite -> List TomlEntry -> String -> Check Family
 buildFamily suite entries name =
   let
     section = ["family", name]
   in case checkFamilyKeys section entries of
-    Err e => Err e
-    Ok _ => case getStr section "section" entries of
-      Err e => Err e
-      Ok sectionOpt => case getStr section "dir" entries of
-        Err e => Err e
-        Ok dirOpt => case dirOpt of
-          Nothing => Err "family `${name}` needs `dir`"
+    ErrC e => ErrC e
+    OkC _ => case getStr section "section" entries of
+      ErrC e => ErrC e
+      OkC sectionOpt => case getStr section "dir" entries of
+        ErrC e => ErrC e
+        OkC dirOpt => case dirOpt of
+          Nothing => err "family `${name}` needs `dir`"
           Just dir => case readFamilyOpts section entries of
-            Err e => Err e
-            Ok opts => case readFamilyFlags section entries of
-              Err e => Err e
-              Ok flags =>
+            ErrC e => ErrC e
+            OkC opts => case readFamilyFlags section entries of
+              ErrC e => ErrC e
+              OkC flags =>
                 let
                   excludeList = case lookupEntry section "exclude" entries of
                     Just (TList xs) => xs
@@ -239,9 +239,9 @@ buildFamily suite entries name =
                     Just (TList xs) => xs
                     _ => []
                   kind = strOr "auto" opts.familyOptKind
-                in if kind == "auto" || kind == "golden" || kind == "error" || kind == "check-ok" || kind == "check-error" || kind == "lint" || kind == "fix" || kind == "steps" then Ok
+                in if kind == "auto" || kind == "golden" || kind == "error" || kind == "check-ok" || kind == "check-error" || kind == "lint" || kind == "fix" || kind == "steps" then OkC
                   (Family name (strOr "" sectionOpt) dir kind opts.familyOptEntry (boolOr True flags.familyFlagInterp) (boolOr False flags.familyFlagCheck) (boolOr True flags.familyFlagCompile) (boolOr True flags.familyFlagRun) (boolOr True flags.familyFlagCompare) (listOr [] flags.familyFlagTags) (intOr suite.suiteDefaultTimeout flags.familyFlagTimeout) excludeList includeList)
-                else Err
+                else err
                   (sectionText section ++ ": kind must be auto/golden/error/check-ok/check-error/lint/fix/steps, got `${kind}`")
 
 -- 从 entries 收集 family 名（保持首次出现顺序）。
@@ -258,32 +258,32 @@ familyNamesGo (e :: rest) acc = case e.tomlEntrySection of
 -- ---------------------------------------------------------------
 -- suite 解析
 -- ---------------------------------------------------------------
-buildSuiteWithEntries : String -> List TomlEntry -> Result Suite
+buildSuiteWithEntries : String -> List TomlEntry -> Check Suite
 buildSuiteWithEntries path entries =
   let
     root = suiteFileRoot path
     section = ["suite"]
   in case getStr section "name" entries of
-    Err e => Err e
-    Ok nameOpt => case getInt section "jobs" entries of
-      Err e => Err e
-      Ok jobsOpt => case getInt section "timeout" entries of
-        Err e => Err e
-        Ok timeoutOpt => case getInt section "min_cases" entries of
-          Err e => Err e
-          Ok minOpt =>
+    ErrC e => ErrC e
+    OkC nameOpt => case getInt section "jobs" entries of
+      ErrC e => ErrC e
+      OkC jobsOpt => case getInt section "timeout" entries of
+        ErrC e => ErrC e
+        OkC timeoutOpt => case getInt section "min_cases" entries of
+          ErrC e => ErrC e
+          OkC minOpt =>
             let
               draft =
                 Suite (strOr "vuna" nameOpt) root (intOr 0 jobsOpt) (intOr 300 timeoutOpt) []
                   (intOr 0 minOpt)
             in buildFamiliesWith draft entries (familyNames entries)
-              >>= (\families => Ok (Suite draft.suiteName draft.suiteRoot draft.suiteDefaultJobs draft.suiteDefaultTimeout families draft.suiteMinCases))
+              >>= (\families => OkC (Suite draft.suiteName draft.suiteRoot draft.suiteDefaultJobs draft.suiteDefaultTimeout families draft.suiteMinCases))
 
-buildFamiliesWith : Suite -> List TomlEntry -> List String -> Result (List Family)
-buildFamiliesWith suite entries [] = Ok []
+buildFamiliesWith : Suite -> List TomlEntry -> List String -> Check (List Family)
+buildFamiliesWith suite entries [] = OkC []
 buildFamiliesWith suite entries (name :: rest) = case buildFamily suite entries name of
-  Err e => Err e
-  Ok family => buildFamiliesWith suite entries rest >>= (\more => Ok (family :: more))
+  ErrC e => ErrC e
+  OkC family => buildFamiliesWith suite entries rest >>= (\more => OkC (family :: more))
 
 -- ---------------------------------------------------------------
 -- discovery
@@ -355,7 +355,7 @@ firstExisting [] = Nothing
 firstExisting (p :: rest) = if pathExistsFile p then Just p else firstExisting rest
 
 -- 从 want 推导 case。矛盾组合 / family 不允许的阶段显式 Err（→ CBroken）。
-wantCase : Family -> String -> String -> FixtureWant -> Result Case
+wantCase : Family -> String -> String -> FixtureWant -> Check Case
 wantCase family source id want =
   let
     negRun = hasOpt want.fwRunErr || hasOpt want.fwRunExit
@@ -364,13 +364,13 @@ wantCase family source id want =
     exitCode = case want.fwRunExit of
       Just p => readExitCode p
       Nothing => 0
-  in if posAny && negAny then Err "conflicting expect: golden (`.out`/`.interp.out`/`.run.out`) with error (`.check.err`/…)"
-  else if hasOpt want.fwCheckErr && hasOpt want.fwInterpErr then Err "conflicting expect: `.check.err` with `.interp.err`"
-  else if hasOpt want.fwCompileErr && negRun then Err "conflicting expect: `.compile.err` with `.run.err`/`.run.exit`"
-  else if hasOpt want.fwInterpErr && (hasOpt want.fwCheckErr || hasOpt want.fwCompileErr) then Err "conflicting expect: `.interp.err` with another error stage"
-  else if hasOpt want.fwInterpErr && not family.familyInterp then Err "family does not allow interp expectations"
-  else if hasOpt want.fwRunOut && negRun then Err "conflicting expect: `.run.out` with `.run.err`/`.run.exit`"
-  else if negRun then if not family.familyRun then Err "family does not allow run expectations"
+  in if posAny && negAny then err "conflicting expect: golden (`.out`/`.interp.out`/`.run.out`) with error (`.check.err`/…)"
+  else if hasOpt want.fwCheckErr && hasOpt want.fwInterpErr then err "conflicting expect: `.check.err` with `.interp.err`"
+  else if hasOpt want.fwCompileErr && negRun then err "conflicting expect: `.compile.err` with `.run.err`/`.run.exit`"
+  else if hasOpt want.fwInterpErr && (hasOpt want.fwCheckErr || hasOpt want.fwCompileErr) then err "conflicting expect: `.interp.err` with another error stage"
+  else if hasOpt want.fwInterpErr && not family.familyInterp then err "family does not allow interp expectations"
+  else if hasOpt want.fwRunOut && negRun then err "conflicting expect: `.run.out` with `.run.err`/`.run.exit`"
+  else if negRun then if not family.familyRun then err "family does not allow run expectations"
   else
     let
       expect = fromMaybe "" want.fwRunErr
@@ -378,24 +378,24 @@ wantCase family source id want =
       -- 0–255 范围）= 断言恰好退出 0；n > 0 → 断言恰好 n。无 `.run.exit` 时
       -- 0 = 遗留语义（断言非 0）。
       code = if hasOpt want.fwRunExit then if exitCode == 0 then 256 else exitCode else 0
-    in Ok
+    in OkC
       (Case id family.familySection family.familyTags (CRuntime source expect code) family.familyTimeout)
-  else if negAny then if hasOpt want.fwCompileErr && not family.familyCompile then Err "family does not allow compile expectations"
+  else if negAny then if hasOpt want.fwCompileErr && not family.familyCompile then err "family does not allow compile expectations"
   else
     let
       expect = fromMaybe "" (orOpt (orOpt want.fwCheckErr want.fwInterpErr) want.fwCompileErr)
       interpOn = family.familyInterp && (hasOpt want.fwCheckErr || hasOpt want.fwInterpErr)
       checkOn = family.familyCheck && hasOpt want.fwCheckErr
-    in Ok
+    in OkC
       (Case id family.familySection family.familyTags (CError source expect interpOn checkOn family.familyCompile) family.familyTimeout)
-  else if hasOpt want.fwRunOut then if not family.familyCompile || not family.familyRun then Err "family does not allow compile+run"
-  else Ok
+  else if hasOpt want.fwRunOut then if not family.familyCompile || not family.familyRun then err "family does not allow compile+run"
+  else OkC
     (Case id family.familySection family.familyTags (CGolden source (fromMaybe "" want.fwRunOut) False family.familyCheck True True False) family.familyTimeout)
-  else if hasOpt want.fwSharedOut then Ok
+  else if hasOpt want.fwSharedOut then OkC
     (Case id family.familySection family.familyTags (CGolden source (fromMaybe "" want.fwSharedOut) family.familyInterp family.familyCheck family.familyCompile family.familyRun family.familyCompareInterp) family.familyTimeout)
-  else if hasOpt want.fwInterpOut then Ok
+  else if hasOpt want.fwInterpOut then OkC
     (Case id family.familySection family.familyTags (CGolden source (fromMaybe "" want.fwInterpOut) True family.familyCheck False False False) family.familyTimeout)
-  else Err "no expect file (need one of `.out` / `.check.err` / `.run.out` / …)"
+  else err "no expect file (need one of `.out` / `.check.err` / `.run.out` / …)"
 
 -- check 负例期望路径：阶段限定优先，裸 `.err` 兼容。
 expectPath : String -> String
@@ -418,8 +418,8 @@ oneDir family dir entry name =
     let
       id = "${family.familySection}/${family.familyName}/${name}"
     in case wantCase family source id (dirWant caseDir) of
-      Err msg => [brokenFamilyCase family msg]
-      Ok c => [c]
+      ErrC msg => [brokenFamilyCase family (diagText msg)]
+      OkC c => [c]
   else []
 
 -- 文件型 family：每个 `*.vuna` 一个 case；auto 按磁盘上存在的 `.out`/`.err` 判定。
@@ -453,32 +453,33 @@ else
   let
     source = "${dir}/${name}"
   in case fileCase family source (stripVuna source) (stripVuna name) of
-    Err msg => [brokenFamilyCase family msg]
-    Ok c => [c]
+    ErrC msg => [brokenFamilyCase family (diagText msg)]
+    OkC c => [c]
 else []
 
-fileCase : Family -> String -> String -> String -> Result Case
+fileCase : Family -> String -> String -> String -> Check Case
 fileCase family source base rel =
   let
     id = "${family.familySection}/${family.familyName}/${rel}"
   in if family.familyKind == "lint" then
     let
       expected = "${base}.out"
-    in if pathExistsFile expected then Ok (Case id family.familySection family.familyTags (CLint source expected) family.familyTimeout)
-    else Err "expected file not found: ${expected}"
+    in if pathExistsFile expected then OkC
+      (Case id family.familySection family.familyTags (CLint source expected) family.familyTimeout)
+    else err "expected file not found: ${expected}"
   else if family.familyKind == "fix" then
     let
       expected = "${base}.expected"
-    in if pathExistsFile expected then Ok (Case id family.familySection family.familyTags (CFix source expected) family.familyTimeout)
-    else Err "expected file not found: ${expected}"
-  else if family.familyKind == "steps" then Ok (Case id family.familySection family.familyTags (CSteps source) family.familyTimeout)
-  else if family.familyKind == "check-ok" then Ok (Case id family.familySection family.familyTags (CCheck source True "") family.familyTimeout)
+    in if pathExistsFile expected then OkC (Case id family.familySection family.familyTags (CFix source expected) family.familyTimeout)
+    else err "expected file not found: ${expected}"
+  else if family.familyKind == "steps" then OkC (Case id family.familySection family.familyTags (CSteps source) family.familyTimeout)
+  else if family.familyKind == "check-ok" then OkC (Case id family.familySection family.familyTags (CCheck source True "") family.familyTimeout)
   else if family.familyKind == "check-error" then
     let
       expected = expectPath base
-    in if pathExistsFile expected then Ok
+    in if pathExistsFile expected then OkC
       (Case id family.familySection family.familyTags (CCheck source False expected) family.familyTimeout)
-    else Err "expected file not found: ${expected}"
+    else err "expected file not found: ${expected}"
   else wantCase family source id (parseWant base)
 
 brokenFamilyCase : Family -> String -> Case
@@ -509,15 +510,15 @@ else case family.familyEntry of
 -- ---------------------------------------------------------------
 -- 对外入口
 -- ---------------------------------------------------------------
-parseSuiteFile : String -> Result Suite
+parseSuiteFile : String -> Check Suite
 parseSuiteFile path =
   let
     absPath = if startsWith "/" path then path else "${runIO getCwd}/${path}"
   in case readTextFile absPath of
-    Err e => Err e
-    Ok contents => case parseTomlAt absPath contents of
-      Err e => Err e
-      Ok entries => buildSuiteWithEntries absPath entries
+    ErrC e => ErrC e
+    OkC contents => case parseTomlAt absPath contents of
+      ErrC e => ErrC e
+      OkC entries => buildSuiteWithEntries absPath entries
 
 discoverCases : Suite -> List Case
 discoverCases suite =

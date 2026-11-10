@@ -29,12 +29,12 @@ renderModules index =
   "${join "\n" (map (\m => "${modName m}  ${modPath m}") (indexModules index))}\n"
 
 -- 某模块的 API 面（签名 + 行号 + 注释）。
-renderApi : Index -> String -> Result String
+renderApi : Index -> String -> Check String
 renderApi index modQuery =
   let
     syms = filter (\s => symModule s == modQuery) index.indexSymbols
-  in if length syms == 0 then Err "no such module: ${modQuery}"
-  else Ok "## ${modQuery}\n\n${join "\n" (map apiRow syms)}"
+  in if length syms == 0 then err "no such module: ${modQuery}"
+  else OkC "## ${modQuery}\n\n${join "\n" (map apiRow syms)}"
 
 apiRow : Sym -> String
 apiRow s =

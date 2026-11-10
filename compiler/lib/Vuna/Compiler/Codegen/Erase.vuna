@@ -91,16 +91,16 @@ partitionDefsGo table (d :: rest) runtime typeNames =
 -- M29（A14）：定义级诊断前缀（唯一实现在 `Diagnostics.cgDefLoc`，此处只做访问器适配）。
 -- 有来源 span（`DtDef` 的 `Maybe Span`）时输出 `file:line:col: in `name`: `，
 -- 没有时保持旧的 `in `name`: `。CG 诊断是 `Err String`（不走位置层），在拼串处补前缀。
-defLocPrefix : DtDef -> String
-defLocPrefix d = cgDefLoc (dtDefSpan d) (dtDefName d)
+defLocDiag : DtDef -> Diagnostic -> Diagnostic
+defLocDiag d e = withContext (dtDefSpan d) (dtDefName d) e
 
 -- M28：axiom 只在擦除/类型层可用；运行时位置（非擦除实参/非类型层）的使用报
 -- `CG_AxiomAtRuntime`。用运行时依赖遍历（跳过擦除实参）找名字，类型层引用不报。
-checkNoAxiomRuntime : List String -> List DtDef -> Result Int
+checkNoAxiomRuntime : List String -> List DtDef -> Check Int
 checkNoAxiomRuntime axiomNames defs = checkNoAxiomRuntimeGo (Base.HashMap.ofNames axiomNames) defs
 
-checkNoAxiomRuntimeGo : HashMap String Bool -> List DtDef -> Result Int
-checkNoAxiomRuntimeGo axiomTbl [] = Ok 0
+checkNoAxiomRuntimeGo : HashMap String Bool -> List DtDef -> Check Int
+checkNoAxiomRuntimeGo axiomTbl [] = OkC 0
 checkNoAxiomRuntimeGo axiomTbl (d :: rest) = case dtDefBody d of
   Nothing => checkNoAxiomRuntimeGo axiomTbl rest
   Just body => case termDepsInto axiomTbl [] body of
@@ -108,36 +108,36 @@ checkNoAxiomRuntimeGo axiomTbl (d :: rest) = case dtDefBody d of
     -- M29（A14）：带使用点定义的位置（旧实现这里既无位置也无定义名）。
     name :: more => cgErrDefAt (dtDefSpan d) (dtDefName d) (AxiomAtRuntime name) [name]
 
-checkAllErasure : List String -> List DtDef -> Result Int
-checkAllErasure typeNames [] = Ok 0
+checkAllErasure : List String -> List DtDef -> Check Int
+checkAllErasure typeNames [] = OkC 0
 checkAllErasure typeNames (d :: rest) =
   Vuna.Compiler.Common.bind (checkOneErasure typeNames d) (\_ => checkAllErasure typeNames rest)
 
 -- 报错带上定义名：同一份程序里哪个函数有问题要能一眼看出来。
 -- M29（A14）：有 span 时前缀 `file:line:col:`（保留原有的 `in `name`: ` 形状）。
-checkOneErasure : List String -> DtDef -> Result Int
+checkOneErasure : List String -> DtDef -> Check Int
 checkOneErasure typeNames d = case dtDefExtern d of
   -- M33 W5：extern 没有 vuna 体，运行时实现由 OCaml `external` 提供；不参与擦除检查。
-  Just _ => Ok 0
+  Just _ => OkC 0
   Nothing => case dtDefBody d of
-    Nothing => Err "DT: internal: axiom reached the runtime erasure check (partition must erase it)"
+    Nothing => err "DT: internal: axiom reached the runtime erasure check (partition must erase it)"
     Just body => case checkErasure typeNames [] body of
-      Err e => Err (defLocPrefix d ++ e)
-      Ok n => Ok n
+      ErrC e => ErrC (defLocDiag d e)
+      OkC n => OkC n
 
 -- binders：最近绑定在前（名字 + 是否擦除）。
 showMetaHint : Int -> String
 showMetaHint m = " ?${m}"
 
-checkErasureFuel : Int -> List String -> List (Pair String Rig) -> Term -> Result Int
-checkErasureFuel fuel typeNames binders t = if fuel <= 0 then Err "DT: internal: erasure fuel exhausted"
+checkErasureFuel : Int -> List String -> List (Pair String Rig) -> Term -> Check Int
+checkErasureFuel fuel typeNames binders t = if fuel <= 0 then err "DT: internal: erasure fuel exhausted"
 else case t of
   TVar name i => case binderAt i binders of
     Just (Pair n rig) =>
-      if rigIsErased rig then cgErr1 (TypeLevelBindingRuntime name) name else Ok 0
+      if rigIsErased rig then cgErr1 (TypeLevelBindingRuntime name) name else OkC 0
     Nothing =>
-      Err "DT: internal: unbound runtime variable ${name} (index ${i}, binders ${length binders})"
-  TGlobal name => if memName name typeNames then cgErr1 (TypeLevelNameRuntime name) name else Ok 0
+      err "DT: internal: unbound runtime variable ${name} (index ${i}, binders ${length binders})"
+  TGlobal name => if memName name typeNames then cgErr1 (TypeLevelNameRuntime name) name else OkC 0
   TType l => cgErr0 TypeUsedAtRuntime
   TPi name implicit rig dom cod => cgErr0 TypeUsedAtRuntime
   TMeta m => cgErr1 (UnsolvedMetavarRuntime (showMetaHint m)) (showMetaHint m)
@@ -160,27 +160,27 @@ else case t of
   TCase scrut alts =>
     Vuna.Compiler.Common.bind (checkErasureFuel (fuel - 1) typeNames binders scrut)
       (\_ => checkAltErasureFuel (fuel - 1) typeNames binders alts)
-  TInt n => Ok 0
-  TStr s => Ok 0
-  TFloat raw => Ok 0
-  TBool b => Ok 0
+  TInt n => OkC 0
+  TStr s => OkC 0
+  TFloat raw => OkC 0
+  TBool b => OkC 0
   TIf c th el =>
     Vuna.Compiler.Common.bind (checkErasureFuel (fuel - 1) typeNames binders c)
       (\_ => Vuna.Compiler.Common.bind (checkErasureFuel (fuel - 1) typeNames binders th) (\_ => checkErasureFuel (fuel - 1) typeNames binders el))
 
-checkConArgsErasureFuel : Int -> List String -> List (Pair String Rig) -> List (Pair Term Rig) -> Result Int
+checkConArgsErasureFuel : Int -> List String -> List (Pair String Rig) -> List (Pair Term Rig) -> Check Int
 checkConArgsErasureFuel fuel typeNames binders [] =
-  if fuel <= 0 then Err "DT: internal: erasure fuel exhausted" else Ok 0
+  if fuel <= 0 then err "DT: internal: erasure fuel exhausted" else OkC 0
 checkConArgsErasureFuel fuel typeNames binders ((Pair arg rig) :: rest) =
-  if fuel <= 0 then Err "DT: internal: erasure fuel exhausted"
+  if fuel <= 0 then err "DT: internal: erasure fuel exhausted"
   else if rigIsErased rig then checkConArgsErasureFuel (fuel - 1) typeNames binders rest
   else Vuna.Compiler.Common.bind (checkErasureFuel (fuel - 1) typeNames binders arg)
     (\_ => checkConArgsErasureFuel (fuel - 1) typeNames binders rest)
 
-checkAltErasureFuel : Int -> List String -> List (Pair String Rig) -> List CaseAlt -> Result Int
+checkAltErasureFuel : Int -> List String -> List (Pair String Rig) -> List CaseAlt -> Check Int
 checkAltErasureFuel fuel typeNames binders [] =
-  if fuel <= 0 then Err "DT: internal: erasure fuel exhausted" else Ok 0
-checkAltErasureFuel fuel typeNames binders (alt :: rest) = if fuel <= 0 then Err "DT: internal: erasure fuel exhausted"
+  if fuel <= 0 then err "DT: internal: erasure fuel exhausted" else OkC 0
+checkAltErasureFuel fuel typeNames binders (alt :: rest) = if fuel <= 0 then err "DT: internal: erasure fuel exhausted"
 else
   let
     altBinders = caseAltBinders alt
@@ -398,22 +398,22 @@ pickReadyAcc adjT (g :: rest) before emitted =
   if groupReady adjT g emitted then Just (Pair g (append (reverse before) rest))
   else pickReadyAcc adjT rest (g :: before) emitted
 
-orderGroups : HashMap String (List String) -> List (List String) -> Result (List (List String))
+orderGroups : HashMap String (List String) -> List (List String) -> Check (List (List String))
 orderGroups adjT groups = orderGroupsAcc adjT groups (Base.HashMap.fromList [])
 
-orderGroupsAcc : HashMap String (List String) -> List (List String) -> HashMap String Bool -> Result (List (List String))
+orderGroupsAcc : HashMap String (List String) -> List (List String) -> HashMap String Bool -> Check (List (List String))
 orderGroupsAcc adjT remaining emitted =
   orderGroupsAccFuel (length remaining + 1) adjT remaining emitted
 
-orderGroupsAccFuel : Int -> HashMap String (List String) -> List (List String) -> HashMap String Bool -> Result (List (List String))
+orderGroupsAccFuel : Int -> HashMap String (List String) -> List (List String) -> HashMap String Bool -> Check (List (List String))
 orderGroupsAccFuel fuel adjT remaining emitted = if fuel <= 0 then cgErr0 DependencyCycle
 else case remaining of
-  [] => Ok []
+  [] => OkC []
   _ => case pickReady adjT remaining emitted of
     Nothing => cgErr0 DependencyCycle
     Just (Pair g rest) =>
       Vuna.Compiler.Common.bind (orderGroupsAccFuel (fuel - 1) adjT rest (addAllNames g emitted))
-        (\tail => Ok (Base.List.Cons g tail))
+        (\tail => OkC (Base.List.Cons g tail))
 
 -- 运行时定义的依赖邻接表（只保留运行时会用到的 TGlobal 边）。
 -- 入参只会有体定义（axiom 已被分区到类型级）；无体项按空依赖处理。
@@ -426,7 +426,7 @@ depAdjacency defs =
     Nothing => Pair (dtDefName d) []
   ) defs
 
-groupRuntimeDefs : List DtDef -> Result (List (List DtDef))
+groupRuntimeDefs : List DtDef -> Check (List (List DtDef))
 groupRuntimeDefs defs =
   let
     names = runtimeNamesOf defs
@@ -440,7 +440,7 @@ groupRuntimeDefs defs =
         comps = collectComps revT order (Base.HashMap.fromList []) []
         groups = groupsFromComps comps names
       in Vuna.Compiler.Common.bind (orderGroups adjT groups)
-        (\ordered => Ok (map (groupDefsOf defsTbl) ordered))
+        (\ordered => OkC (map (groupDefsOf defsTbl) ordered))
 
 dtDefTblOf : List DtDef -> HashMap String DtDef
 dtDefTblOf defs =
@@ -456,16 +456,16 @@ groupDefsOf defsTbl (n :: rest) = case Base.HashMap.lookup n defsTbl of
 -- （'_' 只会以 `_d/_u/_p/_h` 形式出现），理论上已单射；这里仍对**实际生成的**
 -- value/type/ctor 名字做去重校验，任何未来改动引入碰撞都在 check 期报错，而不是
 -- 静默覆盖（三族前缀 v_/t_/C_ 互不相同，只需族内校验）。
-checkNoDupOcamlNames : String -> List String -> Result Int
+checkNoDupOcamlNames : String -> List String -> Check Int
 checkNoDupOcamlNames kind names = checkNoDupOcamlNamesGo kind names (Base.HashMap.fromList [])
 
-checkNoDupOcamlNamesGo : String -> List String -> HashMap String Bool -> Result Int
-checkNoDupOcamlNamesGo kind [] seen = Ok 0
+checkNoDupOcamlNamesGo : String -> List String -> HashMap String Bool -> Check Int
+checkNoDupOcamlNamesGo kind [] seen = OkC 0
 checkNoDupOcamlNamesGo kind (n :: rest) seen =
-  if Base.HashMap.member n seen then Err "DT: internal: OCaml name collision among ${kind}s: `${n}`"
+  if Base.HashMap.member n seen then err "DT: internal: OCaml name collision among ${kind}s: `${n}`"
   else checkNoDupOcamlNamesGo kind rest (Base.HashMap.insert n True seen)
 
-ensureUniqueOcamlNames : List DtData -> List DtDef -> Result Int
+ensureUniqueOcamlNames : List DtData -> List DtDef -> Check Int
 ensureUniqueOcamlNames datas defs =
   let
     runtime = runtimeDatas datas
@@ -483,17 +483,18 @@ ensureUniqueOcamlNames datas defs =
 -- `Core.varIndex` 越界已改为返回 -1（不再静默指向 0）；这里对**全部**定义体
 -- （含类型级定义，它们现在整体擦除、不再过擦除检查）做一次作用域验证，任何
 -- 越界/负 index 都在 check 期报内部错误，而不是在 codegen/OCaml 阶段才炸。
-checkTermScopes : Int -> Term -> Result Int
+checkTermScopes : Int -> Term -> Check Int
 checkTermScopes depth (TVar name i) =
-  if i >= 0 then if i < depth then Ok 0 else Err "DT: internal: out-of-scope de Bruijn index ${i} (depth ${depth})"
-  else Err "DT: internal: negative de Bruijn index ${i}"
-checkTermScopes depth (TGlobal name) = Ok 0
-checkTermScopes depth (TInt n) = Ok 0
-checkTermScopes depth (TStr s) = Ok 0
-checkTermScopes depth (TFloat raw) = Ok 0
-checkTermScopes depth (TBool b) = Ok 0
-checkTermScopes depth (TType l) = Ok 0
-checkTermScopes depth (TMeta m) = Ok 0
+  if i >= 0 then if i < depth then OkC 0
+  else err "DT: internal: out-of-scope de Bruijn index ${i} (depth ${depth})"
+  else err "DT: internal: negative de Bruijn index ${i}"
+checkTermScopes depth (TGlobal name) = OkC 0
+checkTermScopes depth (TInt n) = OkC 0
+checkTermScopes depth (TStr s) = OkC 0
+checkTermScopes depth (TFloat raw) = OkC 0
+checkTermScopes depth (TBool b) = OkC 0
+checkTermScopes depth (TType l) = OkC 0
+checkTermScopes depth (TMeta m) = OkC 0
 -- C07：作用域与运行时擦除无关——擦除只影响 codegen，不是「可以引用越界变量」的
 -- 许可证；TApp 的擦除实参与构造子实参同样要查。
 checkTermScopes depth (TApp f a rig) =
@@ -513,27 +514,27 @@ checkTermScopes depth (TRecUpd base c tele idxs body) =
 checkTermScopes depth (TCase scrut alts) =
   Vuna.Compiler.Common.bind (checkTermScopes depth scrut) (\_ => checkAltScopes depth alts)
 
-checkTermScopesArgs : Int -> List (Pair Term Rig) -> Result Int
-checkTermScopesArgs depth [] = Ok 0
+checkTermScopesArgs : Int -> List (Pair Term Rig) -> Check Int
+checkTermScopesArgs depth [] = OkC 0
 checkTermScopesArgs depth ((Pair arg _) :: rest) =
   Vuna.Compiler.Common.bind (checkTermScopes depth arg) (\_ => checkTermScopesArgs depth rest)
 
-checkAltScopes : Int -> List CaseAlt -> Result Int
-checkAltScopes depth [] = Ok 0
+checkAltScopes : Int -> List CaseAlt -> Check Int
+checkAltScopes depth [] = OkC 0
 checkAltScopes depth (alt :: rest) =
   Vuna.Compiler.Common.bind
     (checkTermScopes (depth + length (caseAltBinders alt)) (caseAltBody alt))
     (\_ => checkAltScopes depth rest)
 
-checkAllDefScopes : List DtDef -> Result Int
-checkAllDefScopes [] = Ok 0
+checkAllDefScopes : List DtDef -> Check Int
+checkAllDefScopes [] = OkC 0
 checkAllDefScopes (d :: rest) = case dtDefBody d of
   -- axiom 没有体；作用域护栏只检查会落项的体。
   Nothing => checkAllDefScopes rest
   -- M29（A14）：内部护栏错误也带定义来源位置，便于定位生成定义。
   Just body => case checkTermScopes 0 body of
-    Err e => Err (defLocPrefix d ++ e)
-    Ok n => checkAllDefScopes rest
+    ErrC e => ErrC (defLocDiag d e)
+    OkC n => checkAllDefScopes rest
 
 termDepsInto : HashMap String Bool -> List String -> Term -> List String
 termDepsInto a1 a2 a3 = termDepsIntoFuel 100000 a1 a2 a3
@@ -544,11 +545,11 @@ termDepsArgs a1 a2 a3 = termDepsArgsFuel 100000 a1 a2 a3
 termDepsAlts : HashMap String Bool -> List String -> List CaseAlt -> List String
 termDepsAlts a1 a2 a3 = termDepsAltsFuel 100000 a1 a2 a3
 
-checkErasure : List String -> List (Pair String Rig) -> Term -> Result Int
+checkErasure : List String -> List (Pair String Rig) -> Term -> Check Int
 checkErasure typeNames binders t = case natChainValue t of
   -- D24：`Zero` / `Succ` 字面量链只由运行时构造子组成，没有类型级引用；入口 O(1) 折回，
   -- 不再按链长消耗 fuel（`n = 1000` 曾经在第 512 个链节点假报 erasure fuel exhausted）。
-  Just _ => Ok 0
+  Just _ => OkC 0
   Nothing => checkErasureFuel (erasureFuelFor (termSize t)) typeNames binders t
 
 -- | 擦除检查的 fuel 派生（D24）：固定 512 对深项不够，按项节点数放大（每节点最多几步
@@ -566,11 +567,11 @@ erasureFuelForArgs : List (Pair Term Rig) -> Int
 erasureFuelForArgs [] = 0
 erasureFuelForArgs ((Pair a _) :: rest) = termSize a + erasureFuelForArgs rest
 
-checkConArgsErasure : List String -> List (Pair String Rig) -> List (Pair Term Rig) -> Result Int
+checkConArgsErasure : List String -> List (Pair String Rig) -> List (Pair Term Rig) -> Check Int
 checkConArgsErasure a1 a2 a3 =
   checkConArgsErasureFuel (erasureFuelFor (erasureFuelForArgs a3)) a1 a2 a3
 
-checkAltErasure : List String -> List (Pair String Rig) -> List CaseAlt -> Result Int
+checkAltErasure : List String -> List (Pair String Rig) -> List CaseAlt -> Check Int
 checkAltErasure a1 a2 a3 = checkAltErasureFuel (erasureFuelFor (erasureFuelForAlts a3)) a1 a2 a3
 
 erasureFuelForAlts : List CaseAlt -> Int

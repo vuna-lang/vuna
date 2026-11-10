@@ -732,8 +732,8 @@ emptyCtx = Ctx [] []
 -- ---------------------------------------------------------------
 -- 错误 / 状态 helper
 -- ---------------------------------------------------------------
-errAt : Span -> String -> Result a
-errAt sp msg = Err "${showSpanLoc sp}: ${msg}"
+errAt : Span -> String -> Check a
+errAt sp msg = rawAt sp msg
 
 -- M15：新建元变量并记录创建深度（求解时的作用域检查用）。
 newMeta : Ctx -> Ec -> Pair Term Ec

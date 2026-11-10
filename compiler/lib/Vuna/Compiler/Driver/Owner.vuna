@@ -172,19 +172,19 @@ splitMetaOf modules entryDecls =
 lookupModuleOf : List (Pair String String) -> String -> Maybe String
 lookupModuleOf pairs name = lookupPair name pairs
 
-knownModuleOrErr : List String -> String -> String -> Result String
+knownModuleOrErr : List String -> String -> String -> Check String
 knownModuleOrErr knownModules what name =
   let
     prefix = modulePrefixOfName name
-  in if memName prefix knownModules then Ok prefix
-  else Err "DT split: `${what}` ${name} has module prefix `${prefix}` but no such module"
+  in if memName prefix knownModules then OkC prefix
+  else err "DT split: `${what}` ${name} has module prefix `${prefix}` but no such module"
 
-splitDataOwnerOf : SplitMeta -> DtData -> Result String
+splitDataOwnerOf : SplitMeta -> DtData -> Check String
 splitDataOwnerOf meta d = case Base.HashMap.lookup (dtDataName d) meta.smDataOwnerT of
-  Just o => Ok o
+  Just o => OkC o
   Nothing =>
     if containsDot (dtDataName d) then knownModuleOrErr meta.smKnownModules "data" (dtDataName d)
-    else Err "DT split: cannot determine module for data `${dtDataName d}`"
+    else err "DT split: cannot determine module for data `${dtDataName d}`"
 
 -- D17：Elab 收尾合成的内部名字（`@vuna@` 前缀，如 `@vuna@main_show`）不属于任何源
 -- 模块、也没有模块前缀；它们由入口收尾阶段产生，归入口单元 `Main`。
@@ -192,22 +192,22 @@ splitDataOwnerOf meta d = case Base.HashMap.lookup (dtDataName d) meta.smDataOwn
 isSyntheticInternalName : String -> Bool
 isSyntheticInternalName name = name == mainShowDefName || startsWith "@vuna@" name
 
-splitDefOwnerOf : SplitMeta -> String -> Result String
+splitDefOwnerOf : SplitMeta -> String -> Check String
 splitDefOwnerOf meta name = case Base.HashMap.lookup name meta.smDefOwnerT of
-  Just o => Ok o
+  Just o => OkC o
   Nothing =>
     if containsDot name then knownModuleOrErr meta.smKnownModules "definition" name
-    else if isSyntheticInternalName name then Ok entryOwner
-    else Err "DT split: cannot determine module for definition `${name}`"
+    else if isSyntheticInternalName name then OkC entryOwner
+    else err "DT split: cannot determine module for definition `${name}`"
 
-nameOwnerPairsOfDefs : SplitMeta -> List DtDef -> Result (List (Pair String String))
-nameOwnerPairsOfDefs meta [] = Ok []
+nameOwnerPairsOfDefs : SplitMeta -> List DtDef -> Check (List (Pair String String))
+nameOwnerPairsOfDefs meta [] = OkC []
 nameOwnerPairsOfDefs meta (d :: rest) =
   Vuna.Compiler.Common.bind (splitDefOwnerOf meta (dtDefName d))
-    (\o => Vuna.Compiler.Common.bind (nameOwnerPairsOfDefs meta rest) (\ps => Ok (Pair (dtDefName d) o :: ps)))
+    (\o => Vuna.Compiler.Common.bind (nameOwnerPairsOfDefs meta rest) (\ps => OkC (Pair (dtDefName d) o :: ps)))
 
-nameOwnerPairsOfDatas : SplitMeta -> List DtData -> Result (List (Pair String String))
-nameOwnerPairsOfDatas meta [] = Ok []
+nameOwnerPairsOfDatas : SplitMeta -> List DtData -> Check (List (Pair String String))
+nameOwnerPairsOfDatas meta [] = OkC []
 nameOwnerPairsOfDatas meta (d :: rest) =
   Vuna.Compiler.Common.bind (splitDataOwnerOf meta d)
-    (\o => Vuna.Compiler.Common.bind (nameOwnerPairsOfDatas meta rest) (\ps => Ok (Pair (dtDataName d) o :: ps)))
+    (\o => Vuna.Compiler.Common.bind (nameOwnerPairsOfDatas meta rest) (\ps => OkC (Pair (dtDataName d) o :: ps)))
