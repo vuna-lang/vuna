@@ -50,13 +50,16 @@ lexEntryToEntry e = Entry e.lexEntryCode e.lexEntryTemplate e.lexEntryDesc "" ""
 psEntryToEntry : PsEntry -> Entry
 psEntryToEntry e = Entry e.psEntryCode e.psEntryTemplate e.psEntryDesc "" "" False
 
+icEntryToEntry : IcEntry -> Entry
+icEntryToEntry e = Entry e.icEntryCode e.icEntryTemplate e.icEntryDesc "" "" False
+
 ldEntryToEntry : LdEntry -> Entry
 ldEntryToEntry e = Entry e.ldEntryCode e.ldEntryTemplate e.ldEntryDesc "" "" False
 
 allEntries : List Entry
 allEntries =
   append (map tcEntryToEntry tcAll)
-    (append (map cgEntryToEntry cgAll) (append (map lintEntryToEntry lintAll) (append (map lexEntryToEntry lexAll) (append (map psEntryToEntry psAll) (map ldEntryToEntry ldAll)))))
+    (append (map cgEntryToEntry cgAll) (append (map lintEntryToEntry lintAll) (append (map lexEntryToEntry lexAll) (append (map psEntryToEntry psAll) (append (map icEntryToEntry icAll) (map ldEntryToEntry ldAll))))))
 
 runGenErrors : String -> Int
 runGenErrors root = case requireDirectory root of
@@ -86,6 +89,7 @@ renderDoc entries =
     lxs = filter (isDomain "LX_") entries
     pss = filter (isDomain "PS_") entries
     lds = filter (isDomain "LD_") entries
+    ics = filter (isDomain "IC_") entries
     lns = filter (isDomain "LN_") entries
     fxs = fixEntries entries
   in """# vuna 错误码
@@ -95,7 +99,7 @@ renderDoc entries =
 `Vuna.Lint.Diagnostics` 的 `lintAll`）生成；**勿手改**（生成物，不纳入 git）。
 
 约定：运行诊断输出 `[CODE] 消息`；符号语义稳定、只增不删；
-域前缀 TC_/CG_/LX_/PS_/LD_/LN_/FX_。
+域前缀 TC_/CG_/LX_/PS_/LD_/IC_/LN_/FX_。
 模板中 `<0>`/`<1>` 是插值占位符，arity 由枚举构造子的类型索引在编译期锁定。
 
 ## 类型检查 / 精化（TC_）
@@ -113,6 +117,9 @@ ${renderTable pss}
 ## 模块加载（LD_）
 
 ${renderTable lds}
+## 内部错误（IC_）
+
+${renderTable ics}
 ## Lint 规则（LN_）
 
 ${renderLintTable lns}
