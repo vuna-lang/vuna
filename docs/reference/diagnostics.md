@@ -104,6 +104,7 @@ JSON 字段是机器契约：`code/severity/phase/category/message/labels[]/fiel
 | `format` | `short`/`human`/`json`/`sarif` | 默认渲染格式（等价 `--error-format`） |
 | `warnings` | bool | 是否默认显示 `UN_` 告警（等价 `-W`；`--deny-warnings` 仍提升退出码） |
 | `max-errors` | 正整数 | 一次检查最多显示/序列化多少条诊断（0 或缺省 = 不限） |
+| `lang` | `en`/`zh` | human 视图语言；`zh` 追加目录中文说明并默认切 human（命令行 `--lang` 优先） |
 
 非法值是该清单的结构诊断（`PKG_InvalidDiagFormat` / `PKG_InvalidDiagMaxErrors`）；未知 key 报 `PKG_UnknownKey`。
 
@@ -137,7 +138,7 @@ JSON 字段是机器契约：`code/severity/phase/category/message/labels[]/fiel
 - 负例夹具双轨：206 个 `.diag.json` 结构化期望（`--json` 聚合文档，`--bless-diag` 生成）
   与原有 `.err` 首行片段断言并存；`--bless-diag` 在 runner 内写盘（worker 透传）。
 - `nix/checks/diag-coverage.sh`：目录码 vs 结构化夹具覆盖门禁（allowlist 记录缺口、
-  基线 `nix/diag-coverage.min` 防回退；当前 173/240，缺口已在 allowlist 逐码登记）。
+  基线 `nix/diag-coverage.min` 防回退；当前 174/241，缺口已在 allowlist 逐码登记）。
 - `vuna check .`（旧/新编译器）、全量 suite、`nix build .#vuna-seed` 必须通过。
 
 ## 9. 迁移状态（对照完整设计）
@@ -149,7 +150,7 @@ JSON 字段是机器契约：`code/severity/phase/category/message/labels[]/fiel
 | D3 位置契约（end span、UTF-16、显式 NoLoc） | 已落地（span 填充仍在补齐） |
 | D4 码域（RN_/PKG_ 独立域、死码清理） | 已落地（`RN_` 27 码、`PKG_` 27 码；9 个不再触发的 TC 死码已删除） |
 | D5 目录单一真源 + 生成枚举/文档 | 部分（条目仍是手写；`explain`/`gen-errors` 已同源；两者都输出 severity/phase/category 元数据（`Vuna.Compiler.Diagnostics.Meta` 单点映射）） |
-| D6 渲染/LSP/CLI | 已落地 short/human/JSON/SARIF + LSP push/pull + `[diagnostics]` 配置；i18n 部分（`--lang zh` 的 human 中文说明；机器格式保持英文） |
+| D6 渲染/LSP/CLI | 已落地 short/human/JSON/SARIF + LSP push/pull + `[diagnostics]` 配置；i18n 部分（`--lang zh` 与 `[diagnostics] lang` 的 human 中文说明；机器格式保持英文） |
 | D7.1 多错误 + Cascade | 部分（parser 顶层 resync：多个语法错误一次报出，`--max-errors` 截断且作用于 short/JSON/SARIF；elab 逐 decl 恢复 + Cascade 待办） |
 | D7.2 warnings（未使用/冗余/不可达） | 部分（`UN_UnusedBinder`/`UN_ShadowedBinder`/`UN_RedundantCtorBranch`/`UN_RedundantLiteralBranch`/`UN_BranchAfterCatchAll`/`UN_UnusedImport`（限定/别名 import）已落地；`-W`/`--deny-warnings` 已接；未使用定义、open import 追踪待办） |
 | D7.3 建议引擎 + Fix | 部分（`Candidate`/`Suggestion` 模型就绪；自动候选未接） |
@@ -160,7 +161,7 @@ JSON 字段是机器契约：`code/severity/phase/category/message/labels[]/fiel
 | D7.8 QTT 使用点 | 待办（需要 Core `TSp`） |
 | D7.9 文案规范/门禁 | 待办 |
 | D7.10 explanation/example/`explain` | 部分（模板+中文说明+severity/phase/category 元数据可用；example 待补；元变量/洞已有 `name`/`note` 字段） |
-| 结构化夹具 + 每码覆盖门禁 | 部分（206 个 `.diag.json`；覆盖门禁 173/240，缺口 allowlist 逐码登记） |
+| 结构化夹具 + 每码覆盖门禁 | 部分（206 个 `.diag.json`；覆盖门禁 174/241，缺口 allowlist 逐码登记） |
 
 ## 10. 后续路线（按依赖排序）
 
@@ -182,4 +183,4 @@ JSON 字段是机器契约：`code/severity/phase/category/message/labels[]/fiel
 - 列单位是 UTF-8 字节（不是码点）；渲染宽字符按字节/显示字符混合处理，LSP 边界换算
   UTF-16。
 - `base/` 标准库仍用 `Base.Result`（字符串错误）；不要把 `Check` 扩散进 base。
-- 消息模板为英文（机器格式稳定）；`--lang zh` 的 human 视图追加目录中文说明（`[diagnostics]` 的 lang 尚未接入）。
+- 消息模板为英文（机器格式稳定）；`--lang zh` / `[diagnostics].lang` 的 human 视图追加目录中文说明。

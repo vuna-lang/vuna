@@ -1,0 +1,6 @@
+[package]
+name = "p"
+[diagnostics]
+lang = "fr"
+[export]
+modules = ["Main"]

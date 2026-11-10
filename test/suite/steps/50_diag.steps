@@ -118,3 +118,8 @@ out-contains: 说明: 类型不匹配
 run: "$VUNA" check "$TMPDIR/m40-i18n.vuna" --json --lang zh 2>&1
 exit: 1
 out-not-contains: 说明:
+# [diagnostics].lang：manifest 配置 zh 时 human 输出中文说明（CLI flag 优先）。
+run: sh -c 'd="$TMPDIR/m41-langpkg"; rm -rf "$d"; mkdir -p "$d/app"; printf "[package]\nname = \"m41-langpkg\"\n[diagnostics]\nlang = \"zh\"\n" > "$d/vuna.toml"; printf "main : Int\nmain = \"x\"\n" > "$d/app/Main.vuna"'
+run: sh -c 'cd "$TMPDIR/m41-langpkg" && "$VUNA" check . 2>&1'
+exit: 1
+out-contains: 说明: 类型不匹配

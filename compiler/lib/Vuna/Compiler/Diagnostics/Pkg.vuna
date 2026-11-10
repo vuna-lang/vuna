@@ -50,6 +50,7 @@ data PkgErr : Nat -> Type where
   ExpectedInt : String -> PkgErr (Succ Zero)
   InvalidDiagFormat : String -> PkgErr (Succ Zero)
   InvalidDiagMaxErrors : String -> PkgErr (Succ Zero)
+  InvalidDiagLang : String -> PkgErr (Succ Zero)
   ExpectedStringArray : String -> PkgErr (Succ Zero)
   Invalid : String -> PkgErr (Succ Zero)
   InvalidExportModule : String -> PkgErr (Succ Zero)
@@ -87,6 +88,7 @@ pkgCode (ExpectedString _) = "PKG_ExpectedString"
 pkgCode (ExpectedInt _) = "PKG_ExpectedInt"
 pkgCode (InvalidDiagFormat _) = "PKG_InvalidDiagFormat"
 pkgCode (InvalidDiagMaxErrors _) = "PKG_InvalidDiagMaxErrors"
+pkgCode (InvalidDiagLang _) = "PKG_InvalidDiagLang"
 pkgCode (ExpectedStringArray _) = "PKG_ExpectedStringArray"
 pkgCode (Invalid _) = "PKG_Invalid"
 pkgCode (InvalidExportModule _) = "PKG_InvalidExportModule"
@@ -127,6 +129,7 @@ pkgTemplate (InvalidDiagFormat _) =
   "invalid [diagnostics] format \"<0>\" (expected short|human|json|sarif)"
 pkgTemplate (InvalidDiagMaxErrors _) =
   "invalid [diagnostics] max-errors \"<0>\" (expected a positive integer)"
+pkgTemplate (InvalidDiagLang _) = "invalid [diagnostics] lang \"<0>\" (expected en|zh)"
 pkgTemplate (ExpectedStringArray _) = "expected an array of strings for \"<0>\""
 pkgTemplate (Invalid _) = "<0>"
 pkgTemplate (InvalidExportModule _) =
@@ -238,6 +241,7 @@ pkgAll =
     PkgEntry (pkgCode (ExpectedInt "")) (pkgTemplate (ExpectedInt "")) "整数字段类型错误",
     PkgEntry (pkgCode (InvalidDiagFormat "")) (pkgTemplate (InvalidDiagFormat "")) "非法诊断格式",
     PkgEntry (pkgCode (InvalidDiagMaxErrors "")) (pkgTemplate (InvalidDiagMaxErrors "")) "非法 max-errors",
+    PkgEntry (pkgCode (InvalidDiagLang "")) (pkgTemplate (InvalidDiagLang "")) "非法诊断语言",
     PkgEntry (pkgCode (ExpectedStringArray "")) (pkgTemplate (ExpectedStringArray "")) "字符串数组字段类型错误",
     PkgEntry (pkgCode (Invalid "")) (pkgTemplate (Invalid "")) "通用清单/包图错误",
     PkgEntry (pkgCode (InvalidExportModule "")) (pkgTemplate (InvalidExportModule "")) "非法导出模块名",

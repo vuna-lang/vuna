@@ -122,6 +122,18 @@ applyDiagConfig (Just pkg) =
       Just b => runIO (writeRef showWarningsRef b)
       Nothing => 0
     else 0
+    _ = if not (runIO (readRef langExplicitRef)) then case m.manifestDiagLang of
+      Just l =>
+        let
+          _ = setDiagLang l
+          _ = if l == "en" then 0
+            else if not (runIO (readRef formatExplicitRef)) then case m.manifestDiagFormat of
+              Nothing => runIO (writeRef diagFormatRef "human")
+              Just _ => 0
+            else 0
+        in 0
+      Nothing => 0
+    else 0
     _ = case m.manifestDiagMaxErrors of
       Just n => runIO (writeRef maxErrorsRef n)
       Nothing => 0
@@ -207,6 +219,7 @@ runCompilerCliFor prog args =
     _ = runIO (writeRef denyWarningsRef (hasDenyWarnings args))
     _ = runIO (writeRef showWarningsRef (hasDenyWarnings args || hasShowWarnings args))
     _ = runIO (writeRef formatExplicitRef (hasFormatFlag args))
+    _ = runIO (writeRef langExplicitRef (hasLangFlag args))
     _ = runIO (writeRef warningsExplicitRef (hasDenyWarnings args || hasShowWarnings args))
   in if anyHelp kept then helpFor prog else flushSarif (runCompilerCliFor1 prog kept)
 
@@ -746,3 +759,12 @@ stripLangGo ("--lang" :: rest) acc lang = case rest of
 stripLangGo (arg :: rest) acc lang =
   if startsWith "--lang=" arg then stripLangGo rest acc (substring (natFromInt 7) (natFromInt (strLength arg - 7)) arg)
   else stripLangGo rest (arg :: acc) lang
+
+-- | 语言是否由命令行显式指定（显式 flag 优先于 manifest）。
+langExplicitRef : IORef Bool
+langExplicitRef = runIO (newRef False)
+
+hasLangFlag : List String -> Bool
+hasLangFlag [] = False
+hasLangFlag (arg :: rest) =
+  if arg == "--lang" || startsWith "--lang=" arg then True else hasLangFlag rest

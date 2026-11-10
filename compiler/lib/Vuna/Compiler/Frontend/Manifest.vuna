@@ -46,6 +46,7 @@ record Manifest where
   manifestDiagFormat : Maybe String
   manifestDiagWarnings : Maybe Bool
   manifestDiagMaxErrors : Maybe Int
+  manifestDiagLang : Maybe String
 
 -- M27：manifest 的 `[capabilities].effects` 声明；空列表表示该包没有直接使用
 -- effectful 内建的能力（只能经 Base.IO）。
@@ -128,7 +129,7 @@ checkOneEntry path (TomlEntry section key value line) =
   else if sameSection section ["trust"] then if key == "unsafe" then OkC 0 else pkgAt2 path line (UnknownKey key "trust") key "trust"
   else if sameSection section ["privileged"] then if key == "modules" then OkC 0
   else pkgAt2 path line (UnknownKey key "privileged") key "privileged"
-  else if sameSection section ["diagnostics"] then if key == "format" || key == "warnings" || key == "max-errors" then OkC 0
+  else if sameSection section ["diagnostics"] then if key == "format" || key == "warnings" || key == "max-errors" || key == "lang" then OkC 0
   else pkgAt2 path line (UnknownKey key "diagnostics") key "diagnostics"
   else if sameSection section ["dependencies"] then OkC 0
   else pkgAt1 path line (UnknownSection (joinDots section)) (joinDots section)
@@ -163,7 +164,7 @@ validateDiagMax path (Just n) =
 buildManifest : String -> List TomlEntry -> Check Manifest
 buildManifest path entries =
   Vuna.Compiler.Common.bind (checkEntries path entries)
-    (\checked => Vuna.Compiler.Common.bind (stringField path ["package"] "name" entries) (\name => Vuna.Compiler.Common.bind (stringListField path ["workspace"] "members" entries) (\members => Vuna.Compiler.Common.bind (stringListField path ["export"] "modules" entries) (\exports => Vuna.Compiler.Common.bind (collectDependencies path entries) (\deps => Vuna.Compiler.Common.bind (stringListField path ["capabilities"] "effects" entries) (\caps => Vuna.Compiler.Common.bind (stringListField path ["trust"] "unsafe" entries) (\trust => Vuna.Compiler.Common.bind (boolField path ["package"] "privileged" entries) (\privileged => Vuna.Compiler.Common.bind (stringListField path ["privileged"] "modules" entries) (\hosts => Vuna.Compiler.Common.bind (stringField path ["diagnostics"] "format" entries) (\diagFmt => Vuna.Compiler.Common.bind (boolField path ["diagnostics"] "warnings" entries) (\diagWarns => Vuna.Compiler.Common.bind (intField path ["diagnostics"] "max-errors" entries) (\diagMax => Vuna.Compiler.Common.bind (validateDiagFormat path diagFmt) (\_ => Vuna.Compiler.Common.bind (validateDiagMax path diagMax) (\_ => OkC (Manifest name (orEmptyList members) exports deps (orEmptyList caps) trust (orFalse privileged) (orEmptyList hosts) path diagFmt diagWarns diagMax)))))))))))))))
+    (\checked => Vuna.Compiler.Common.bind (stringField path ["package"] "name" entries) (\name => Vuna.Compiler.Common.bind (stringListField path ["workspace"] "members" entries) (\members => Vuna.Compiler.Common.bind (stringListField path ["export"] "modules" entries) (\exports => Vuna.Compiler.Common.bind (collectDependencies path entries) (\deps => Vuna.Compiler.Common.bind (stringListField path ["capabilities"] "effects" entries) (\caps => Vuna.Compiler.Common.bind (stringListField path ["trust"] "unsafe" entries) (\trust => Vuna.Compiler.Common.bind (boolField path ["package"] "privileged" entries) (\privileged => Vuna.Compiler.Common.bind (stringListField path ["privileged"] "modules" entries) (\hosts => Vuna.Compiler.Common.bind (stringField path ["diagnostics"] "format" entries) (\diagFmt => Vuna.Compiler.Common.bind (boolField path ["diagnostics"] "warnings" entries) (\diagWarns => Vuna.Compiler.Common.bind (intField path ["diagnostics"] "max-errors" entries) (\diagMax => Vuna.Compiler.Common.bind (stringField path ["diagnostics"] "lang" entries) (\diagLang => Vuna.Compiler.Common.bind (validateDiagFormat path diagFmt) (\_ => Vuna.Compiler.Common.bind (validateDiagMax path diagMax) (\_ => Vuna.Compiler.Common.bind (validateDiagLang path diagLang) (\_ => OkC (Manifest name (orEmptyList members) exports deps (orEmptyList caps) trust (orFalse privileged) (orEmptyList hosts) path diagFmt diagWarns diagMax diagLang)))))))))))))))))
 
 parseManifest : String -> String -> Check Manifest
 parseManifest path contents =
@@ -272,9 +273,9 @@ validatePrivilege path False [] Nothing [] = OkC 0
 validatePrivilege path False _ _ _ = pkgPath0 path NonPrivileged
 
 validateManifest : Manifest -> Check Manifest
-validateManifest (Manifest name members exports deps caps trust privileged hosts path diagFmt diagWarns diagMax) =
+validateManifest (Manifest name members exports deps caps trust privileged hosts path diagFmt diagWarns diagMax diagLang) =
   Vuna.Compiler.Common.bind (validateName path name)
-    (\okName => Vuna.Compiler.Common.bind (validateMembers path members) (\okMembers => Vuna.Compiler.Common.bind (validateExports path exports) (\okExports => Vuna.Compiler.Common.bind (validateDependencies path deps) (\okDeps => Vuna.Compiler.Common.bind (validateCapabilities path caps) (\okCaps => Vuna.Compiler.Common.bind (validateTrust path caps trust) (\okTrust => Vuna.Compiler.Common.bind (validatePrivilege path privileged caps trust hosts) (\okPriv => OkC (Manifest name members exports deps caps trust privileged hosts path diagFmt diagWarns diagMax))))))))
+    (\okName => Vuna.Compiler.Common.bind (validateMembers path members) (\okMembers => Vuna.Compiler.Common.bind (validateExports path exports) (\okExports => Vuna.Compiler.Common.bind (validateDependencies path deps) (\okDeps => Vuna.Compiler.Common.bind (validateCapabilities path caps) (\okCaps => Vuna.Compiler.Common.bind (validateTrust path caps trust) (\okTrust => Vuna.Compiler.Common.bind (validatePrivilege path privileged caps trust hosts) (\okPriv => OkC (Manifest name members exports deps caps trust privileged hosts path diagFmt diagWarns diagMax diagLang))))))))
 
 -- manifest 所在目录：`a/b/vuna.toml` -> `a/b`；没有目录成分 -> "."。
 manifestDir : String -> String
@@ -293,3 +294,9 @@ resolveManifestPath manifest rel =
   let
     dir = manifestDir manifest.manifestPath
   in if startsWith "/" rel then rel else if dir == "." then rel else "${dir}/${rel}"
+
+-- | `[diagnostics].lang`：只接受 en/zh。
+validateDiagLang : String -> Maybe String -> Check Int
+validateDiagLang path Nothing = OkC 0
+validateDiagLang path (Just l) =
+  if l == "en" || l == "zh" then OkC 0 else pkgPath1 path (InvalidDiagLang l) l
