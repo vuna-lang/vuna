@@ -48,7 +48,7 @@ readme_lines 173
 #     max_ref_lines 438（primitives.md）与 max_module_lines 2400（Elab/Term/Impl.vuna）
 #     是改动前已存在的漏标定（旧预算 415/2300 本身已红），按实测重标定。
 max_ref_lines 438
-max_module_lines 2516
+max_module_lines 2517
 #   - M27：新增 `primitives.md` 与内建/原语/能力文档、`Vuna.Compiler.Intrinsics` 模块；
 #     按 `sh nix/context-budget.sh .` 实测收紧：coldstart 29055 / agents 104 / arch 156 /
 #     readme 163 / max_ref 206 / max_module 811（入口文档有 45B 余量，agents 临界）。
@@ -186,3 +186,5 @@ max_module_lines 2516
 #     arch 224 / readme 173（均超旧预算，属本特性文档增长）；`Elab/Term/Impl.vuna` 增加
 #     效应标签字段与元变量/洞字段后 2515 → 2516 行（特性增长）。按 `sh nix/context-budget.sh .`
 #     实测复标定以上五项；max_ref 不变。后续诊断文档压缩时按 ratchet 再下调。
+#   - 诊断重设计（effects 行字段）：`Elab/Term/Impl.vuna` 的 `TC_UnhandledEffects` 同时挂
+#     labels/expected/actual 三个 effect 字段（+1 行，特性增长），max_module_lines 2516 → 2517。
