@@ -1,0 +1,6 @@
+data N : Type where
+  Z : N
+  S : N -> N
+
+f : N -> Int
+f (S) = 0

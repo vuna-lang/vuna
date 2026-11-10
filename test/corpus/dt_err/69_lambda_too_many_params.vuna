@@ -1,0 +1,5 @@
+f : Int -> Int
+f x = \y => _
+
+main : Int
+main = 0

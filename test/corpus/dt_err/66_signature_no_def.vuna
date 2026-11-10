@@ -1,0 +1,4 @@
+f : Int
+
+main : Int
+main = 0

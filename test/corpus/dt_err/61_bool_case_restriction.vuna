@@ -1,0 +1,4 @@
+main : Int
+main = case True of
+  0 => 1
+  _ => 0

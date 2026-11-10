@@ -1,0 +1,5 @@
+axiom ax : Int
+ax = 1
+
+main : Int
+main = 0

@@ -137,7 +137,7 @@ JSON 字段是机器契约：`code/severity/phase/category/message/labels[]/fiel
 - 负例夹具双轨：206 个 `.diag.json` 结构化期望（`--json` 聚合文档，`--bless-diag` 生成）
   与原有 `.err` 首行片段断言并存；`--bless-diag` 在 runner 内写盘（worker 透传）。
 - `nix/checks/diag-coverage.sh`：目录码 vs 结构化夹具覆盖门禁（allowlist 记录缺口、
-  基线 `nix/diag-coverage.min` 防回退；当前 156/240，缺口已在 allowlist 逐码登记）。
+  基线 `nix/diag-coverage.min` 防回退；当前 166/240，缺口已在 allowlist 逐码登记）。
 - `vuna check .`（旧/新编译器）、全量 suite、`nix build .#vuna-seed` 必须通过。
 
 ## 9. 迁移状态（对照完整设计）
@@ -160,7 +160,7 @@ JSON 字段是机器契约：`code/severity/phase/category/message/labels[]/fiel
 | D7.8 QTT 使用点 | 待办（需要 Core `TSp`） |
 | D7.9 文案规范/门禁 | 待办 |
 | D7.10 explanation/example/`explain` | 部分（模板+中文说明+severity/phase/category 元数据可用；example 待补；元变量/洞已有 `name`/`note` 字段） |
-| 结构化夹具 + 每码覆盖门禁 | 部分（206 个 `.diag.json`；覆盖门禁 156/240，缺口 allowlist 逐码登记） |
+| 结构化夹具 + 每码覆盖门禁 | 部分（206 个 `.diag.json`；覆盖门禁 166/240，缺口 allowlist 逐码登记） |
 
 ## 10. 后续路线（按依赖排序）
 

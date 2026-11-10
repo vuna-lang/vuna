@@ -1,0 +1,7 @@
+data N : Type where
+  Z : N
+
+f : N -> Int
+f n = case n of
+  _ => 0
+  Z => 1
