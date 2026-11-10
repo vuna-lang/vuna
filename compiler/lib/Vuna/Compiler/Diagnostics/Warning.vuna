@@ -1,0 +1,72 @@
+-- | UN_ 域：不影响检查结果的告警（未使用/冗余/遮蔽），severity = warning。
+module Vuna.Compiler.Diagnostics.Warning
+  ( WarnEntry(..)
+  , WarnErr(..)
+  , warnAll
+  , warnAt0
+  , warnAt1
+  , warnCode
+  , warnMsg
+  , warnTemplate
+  ) where
+
+-- Vuna.Compiler.Diagnostics.Warning：warning 目录（phase/category 由具体检查给）。
+--
+-- warning 与 error 共用 `Diagnostic`/渲染/LSP；区别只有 `Severity` 与退出码策略：
+-- 默认不影响退出码，`--deny-warnings` 时提升为失败。`Check` 不短路，warning 经
+-- `Diagnostics.Sink` 在检查结束后由驱动层取走。
+import Vuna.Compiler.Common
+import Vuna.Compiler.Diagnostics.Common
+import Vuna.Compiler.Diagnostics.Sink
+import Base.Nat
+import Base.Vec
+
+data WarnErr : Nat -> Type where
+  -- arity 0
+  RedundantBranch : WarnErr Zero
+  -- arity 1
+  UnusedBinder : String -> WarnErr (Succ Zero)
+  UnusedDefinition : String -> WarnErr (Succ Zero)
+  UnusedImport : String -> WarnErr (Succ Zero)
+  ShadowedBinder : String -> WarnErr (Succ Zero)
+
+warnCode : {n : Nat} -> WarnErr n -> String
+warnCode RedundantBranch = "UN_RedundantBranch"
+warnCode (UnusedBinder _) = "UN_UnusedBinder"
+warnCode (UnusedDefinition _) = "UN_UnusedDefinition"
+warnCode (UnusedImport _) = "UN_UnusedImport"
+warnCode (ShadowedBinder _) = "UN_ShadowedBinder"
+
+warnTemplate : {n : Nat} -> WarnErr n -> String
+warnTemplate RedundantBranch = "this branch is redundant (covered by earlier branches)"
+warnTemplate (UnusedBinder _) = "binder `<0>` is never used"
+warnTemplate (UnusedDefinition _) = "definition `<0>` is never used"
+warnTemplate (UnusedImport _) = "module `<0>` is imported but never used"
+warnTemplate (ShadowedBinder _) = "binder `<0>` shadows an outer binder"
+
+warnMsg : {n : Nat} -> WarnErr n -> Vec n String -> Diagnostic
+warnMsg e args = diagNoLoc SevWarning PhUsage CatQuantity (warnCode e) (diagBody (warnTemplate e) args)
+
+-- | 在 span 上发一条 warning（进 Sink，不影响 Check 结果）。
+warnAt : Span -> {n : Nat} -> WarnErr n -> Vec n String -> Int
+warnAt sp e args = emitWarning (withLabel (Label (Just sp) "" LabelPrimary Nothing) (warnMsg e args))
+
+warnAt0 : Span -> WarnErr Zero -> Int
+warnAt0 sp e = warnAt sp e []
+
+warnAt1 : Span -> WarnErr (Succ Zero) -> String -> Int
+warnAt1 sp e a0 = warnAt sp e [a0]
+
+record WarnEntry where
+  warnEntryCode : String
+  warnEntryTemplate : String
+  warnEntryDesc : String
+
+warnAll : List WarnEntry
+warnAll =
+  [ WarnEntry (warnCode RedundantBranch) (warnTemplate RedundantBranch) "分支冗余（被前面的分支覆盖）",
+    WarnEntry (warnCode (UnusedBinder "")) (warnTemplate (UnusedBinder "")) "binder 未使用",
+    WarnEntry (warnCode (UnusedDefinition "")) (warnTemplate (UnusedDefinition "")) "定义未使用",
+    WarnEntry (warnCode (UnusedImport "")) (warnTemplate (UnusedImport "")) "import 未使用",
+    WarnEntry (warnCode (ShadowedBinder "")) (warnTemplate (ShadowedBinder "")) "binder 遮蔽外层同名 binder"
+  ]

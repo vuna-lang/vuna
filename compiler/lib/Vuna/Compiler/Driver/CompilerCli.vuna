@@ -13,6 +13,7 @@ module Vuna.Compiler.Driver.CompilerCli
 -- 工具命令（lint / interp / test / fmt / repl / doc）在 Vuna.Cli。
 -- compiler/app/Main.vuna 的入口闭包就是 seed 闭包。
 import Vuna.Compiler.Common
+import Vuna.Compiler.Diagnostics.Sink
 import Vuna.Compiler.Packages.Pkg
 import Vuna.Compiler.Driver.Compile
 import Vuna.Compiler.Driver.DiagRender
@@ -43,6 +44,21 @@ runCompilerCli args = runCompilerCliFor "vuna-compiler" args
 diagFormatRef : IORef String
 diagFormatRef = runIO (newRef "short")
 
+denyWarningsRef : IORef Bool
+denyWarningsRef = runIO (newRef False)
+
+denyWarningsOn : Int -> Bool
+denyWarningsOn _ = runIO (readRef denyWarningsRef)
+
+stripDenyWarnings : List String -> List String
+stripDenyWarnings [] = []
+stripDenyWarnings (arg :: rest) =
+  if arg == "--deny-warnings" then stripDenyWarnings rest else arg :: stripDenyWarnings rest
+
+hasDenyWarnings : List String -> Bool
+hasDenyWarnings [] = False
+hasDenyWarnings (arg :: rest) = if arg == "--deny-warnings" then True else hasDenyWarnings rest
+
 stripDiagFormat : List String -> Pair (List String) (Maybe String)
 stripDiagFormat args = stripDiagFormatGo args [] Nothing
 
@@ -66,7 +82,8 @@ runCompilerCliFor prog args =
     _ = case secondOf stripped of
       Just fmt => runIO (writeRef diagFormatRef fmt)
       Nothing => 0
-    kept = firstOf stripped
+    kept = stripDenyWarnings (firstOf stripped)
+    _ = runIO (writeRef denyWarningsRef (hasDenyWarnings args))
   in if anyHelp kept then helpFor prog else runCompilerCliFor1 prog kept
 
 runCompilerCliFor1 : String -> List String -> Int
@@ -154,24 +171,32 @@ printErrText e =
 diagFormatOf : Int -> String
 diagFormatOf _ = runIO (readRef diagFormatRef)
 
+severityLabelOf : Diagnostic -> String
+severityLabelOf d = case d.diagSeverity of
+  SevError => "error"
+  SevWarning => "warning"
+  SevNote => "note"
+  SevHelp => "help"
+
 printDiagWithPrefix : String -> Diagnostic -> Int
-printDiagWithPrefix prefix d =
+printDiagWithPrefix extra d =
   let
     fmt = diagFormatOf 0
   in if fmt == "json" then printErrText (renderJson d ++ "\n")
   else if fmt == "human" then printErrText (renderHuman d ++ "\n")
-  else printErrText (prefix ++ renderShort d ++ "\n")
+  else printErrText (severityLabelOf d ++ ": " ++ extra ++ renderShort d ++ "\n")
 
 printDiag : Diagnostic -> Int
-printDiag d =
-  let
-    fmt = runIO (readRef diagFormatRef)
-  in if fmt == "json" then printErrText (renderJson d ++ "\n")
-  else if fmt == "human" then printErrText (renderHuman d ++ "\n")
-  else printErrText ("error: " ++ renderShort d ++ "\n")
+printDiag d = printDiagWithPrefix "" d
 
 printErr : String -> Int
 printErr e = printErrText "error: ${e}\n"
+
+printDiagList : String -> List Diagnostic -> Int
+printDiagList extra ds =
+  let
+    _ = map (printDiagWithPrefix extra) ds
+  in 0
 
 printWarnings : List String -> Int
 printWarnings [] = 0
@@ -277,7 +302,9 @@ checkSpawnArgs : String -> List String
 checkSpawnArgs dir =
   let
     fmt = diagFormatOf 0
-  in if fmt == "short" then ["check", dir] else ["check", "--error-format", fmt, dir]
+  in let
+    base = if fmt == "short" then ["check", dir] else ["check", "--error-format", fmt, dir]
+  in if denyWarningsOn 0 then append base ["--deny-warnings"] else base
 
 checkPackages : List Package -> Int -> Int
 checkPackages [] code = code
@@ -306,9 +333,14 @@ checkPackageSeq pkg code =
     c = case checkPackage pkg of
       ErrC e =>
         let
-          _ = printDiagWithPrefix "error: [${packageName pkg}] " e
+          _ = printDiagWithPrefix "[${packageName pkg}] " e
         in 1
-      OkC warnings => printWarnings warnings
+      OkC _ =>
+        let
+          ws = takeWarnings 0
+          _ = printDiagList "[${packageName pkg}] " ws
+          failed = if denyWarningsOn 0 && length ws > 0 then 1 else 0
+        in failed
   in if c > code then c else code
 
 countFailures : Int -> List Int -> Int
@@ -320,7 +352,11 @@ checkFileEntry path = case contextForFile path of
   ErrC e => printDiag e
   OkC ctx => case dtCheck ctx path of
     ErrC e => printDiag e
-    OkC warnings => printWarnings warnings
+    OkC _ =>
+      let
+        ws = takeWarnings 0
+        _ = printDiagList "" ws
+      in if denyWarningsOn 0 && length ws > 0 then 1 else 0
 
 -- ---------------------------------------------------------------
 -- build：包级逐模块 codegen 到 DIR（默认 <PKG-DIR>/.output），再跑 build.sh 链接到

@@ -27,6 +27,7 @@ import Base.IO.Host
 import Vuna.Compiler.CacheFormat
 import Vuna.Compiler.Loader.Diagnostics
 import Vuna.Compiler.Common
+import Vuna.Compiler.Diagnostics.Sink
 import Vuna.Compiler.Diagnostics.Rn
 import Base.HashMap
 import Vuna.Compiler.Frontend.Ast
@@ -673,7 +674,10 @@ loadProject ctx entry = loadProjectWithPreloaded ctx entry []
 -- 仍按源码加载；模块表的顺序约定与 `loadAll` 一致（新加载模块前插，dependents-first），
 -- 所以调用方应把 `preloaded` 按 reverse(topo) 传入。
 loadProjectWithPreloaded : PackageContext -> String -> List Module -> Check Project
-loadProjectWithPreloaded ctx entry preloaded = if runIO (prim_fileExists entry) then Vuna.Compiler.Common.bind (parseFileWithPath entry (runIO (prim_readFile entry))) (\src => case src of
+loadProjectWithPreloaded ctx entry preloaded =
+  let
+    _ = resetWarnings 0
+  in if runIO (prim_fileExists entry) then Vuna.Compiler.Common.bind (parseFileWithPath entry (runIO (prim_readFile entry))) (\src => case src of
   SourceFile hdr imports fixities decls => case hdr of
     Just (ModDecl dname hasList items sp) => ldErr1 (ModuleHeaderInEntryFile entry) entry
     Nothing =>
@@ -689,6 +693,7 @@ loadProjectModules ctx names = loadProjectModulesWithPreloaded ctx names []
 loadProjectModulesWithPreloaded : PackageContext -> List String -> List Module -> Check Project
 loadProjectModulesWithPreloaded ctx names preloaded =
   let
+    _ = resetWarnings 0
     entryImports = map (\n => Import n False Nothing (Span "" 0 0 0 0)) names
   in Vuna.Compiler.Common.bind
     (loadAll 1048576 (contextRoots ctx) (contextPrivileged ctx) (contextPackageName ctx) preloaded [] entryImports)
@@ -701,7 +706,10 @@ loadProjectSource ctx label source = loadProjectSourceWithPreloaded ctx label so
 
 -- M34.5（LSP/REPL 消费接口）：入口以源码字符串给出，依赖包模块可预置（零 parse）。
 loadProjectSourceWithPreloaded : PackageContext -> String -> String -> List Module -> Check Project
-loadProjectSourceWithPreloaded ctx label source preloaded = Vuna.Compiler.Common.bind (parseFileWithPath label source) (\src => case src of
+loadProjectSourceWithPreloaded ctx label source preloaded =
+  let
+    _ = resetWarnings 0
+  in Vuna.Compiler.Common.bind (parseFileWithPath label source) (\src => case src of
   SourceFile hdr imports fixities decls => case hdr of
     Just (ModDecl dname hasList items sp) => ldErr1 (ModuleHeaderInEntrySource label) label
     Nothing =>
@@ -719,7 +727,10 @@ loadModuleSource ctx label source = loadModuleSourceWithPreloaded ctx label sour
 
 -- M34.5（LSP）：依赖包模块可预置（来自接口的 `Module`），只 parse 当前文件与同包源码。
 loadModuleSourceWithPreloaded : PackageContext -> String -> String -> List Module -> Check Project
-loadModuleSourceWithPreloaded ctx label source preloaded = Vuna.Compiler.Common.bind (parseFileWithPath label source) (\src => case src of
+loadModuleSourceWithPreloaded ctx label source preloaded =
+  let
+    _ = resetWarnings 0
+  in Vuna.Compiler.Common.bind (parseFileWithPath label source) (\src => case src of
   SourceFile hdr imports fixities decls => case hdr of
     Nothing => loadProjectSourceWithPreloaded ctx label source preloaded
     Just (ModDecl name hasList items sp) => Vuna.Compiler.Common.bind (validateImports name imports) (\_ => Vuna.Compiler.Common.bind (implicitPrelude (contextRoots ctx) (contextPackageName ctx) name imports) (\implicit => Vuna.Compiler.Common.bind (loadAll 1048576 (contextRoots ctx) (contextPrivileged ctx) (contextPackageName ctx) preloaded [] (append imports implicit)) (\modules => Vuna.Compiler.Common.bind (computeExports modules name hdr imports decls) (\exports => let

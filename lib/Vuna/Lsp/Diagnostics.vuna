@@ -30,6 +30,7 @@ module Vuna.Lsp.Diagnostics
 --     这让 LSP-only 会话逐步变热；
 --   - 无接口（依赖包还没 check / 本包没有 manifest）时回退全量精化，诊断语义不变。
 import Vuna.Compiler.Common
+import Vuna.Compiler.Diagnostics.Sink
 import Vuna.Compiler.Driver.Compile
 import Vuna.Compiler.Driver.Dt
 import Vuna.Compiler.Driver.Iface
@@ -396,7 +397,7 @@ diagnosticsForCached cache uri text = case contextForDoc uri of
             Just
               (DiagCache c.dcLabel c.dcKey c.dcCtx c.dcTool c.dcClean c.dcBuiltSec c.dcStats c.dcAux (firstOf linted))
           Nothing => Nothing
-      in Pair cache3 (Pair label (append (secondOf checked) (secondOf linted)))
+      in Pair cache3 (Pair label (append (secondOf checked) (append (secondOf linted) (filter (diagOwns label) (takeWarnings 0)))))
 
 publishDiagnostics : String -> Int -> String -> List Diagnostic -> Json
 publishDiagnostics uri version text diags =

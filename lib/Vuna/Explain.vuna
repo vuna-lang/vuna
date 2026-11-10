@@ -13,6 +13,7 @@ import Vuna.Compiler.Frontend.Diagnostics
 import Vuna.Compiler.Loader.Diagnostics
 import Vuna.Compiler.Diagnostics.Rn
 import Vuna.Compiler.Diagnostics.Pkg
+import Vuna.Compiler.Diagnostics.Warning
 import Vuna.Lint.Diagnostics
 import Base.IO.Host
 
@@ -36,6 +37,9 @@ lexInfo e = Info e.lexEntryCode e.lexEntryTemplate e.lexEntryDesc
 psInfo : PsEntry -> Info
 psInfo e = Info e.psEntryCode e.psEntryTemplate e.psEntryDesc
 
+warnInfo : WarnEntry -> Info
+warnInfo e = Info e.warnEntryCode e.warnEntryTemplate e.warnEntryDesc
+
 pkgInfo : PkgEntry -> Info
 pkgInfo e = Info e.pkgEntryCode e.pkgEntryTemplate e.pkgEntryDesc
 
@@ -51,7 +55,7 @@ lintInfo e = Info e.lintEntryCode e.lintEntryRule e.lintEntryDesc
 allInfos : List Info
 allInfos =
   append (map tcInfo tcAll)
-    (append (map cgInfo cgAll) (append (map icInfo icAll) (append (map lexInfo lexAll) (append (map psInfo psAll) (append (map rnInfo rnAll) (append (map pkgInfo pkgAll) (append (map ldInfo ldAll) (map lintInfo lintAll))))))))
+    (append (map cgInfo cgAll) (append (map icInfo icAll) (append (map lexInfo lexAll) (append (map psInfo psAll) (append (map rnInfo rnAll) (append (map pkgInfo pkgAll) (append (map warnInfo warnAll) (append (map ldInfo ldAll) (map lintInfo lintAll)))))))))
 
 findInfo : String -> List Info -> Maybe Info
 findInfo code [] = Nothing

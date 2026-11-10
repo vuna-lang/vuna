@@ -18,6 +18,7 @@ import Vuna.Compiler.Core.Term
 import Vuna.Compiler.Diagnostics
 import Vuna.Compiler.Elab.Meta
 import Vuna.Compiler.Elab.Types
+import Vuna.Compiler.Diagnostics.Warning
 
 -- 类型级定义的判据：定义**类型** force 后以宇宙收尾（`Type` 或 `... -> Type` 的 Pi 链）。
 -- M38 从 Codegen/Erase 上移到 Elab，成为用量检查与 codegen 分区的共同真源。
@@ -79,7 +80,12 @@ checkBinderRig sp name RigOmega used = OkC 0
 checkLamBinder : Span -> String -> Rig -> List Rig -> Check (List Rig)
 checkLamBinder sp name rig [] = icInternal "usage vector lost lambda binder"
 checkLamBinder sp name rig (used :: rest) =
-  Vuna.Compiler.Common.bind (checkBinderRig sp name rig used) (\_ => OkC rest)
+  let
+    _ = if isRigZero used then case rig of
+      RigOmega => warnAt1 sp (UnusedBinder name) name
+      _ => 0
+    else 0
+  in Vuna.Compiler.Common.bind (checkBinderRig sp name rig used) (\_ => OkC rest)
 
 -- case 分支：binders 是 telescope 顺序（第一个字段最外），body usage 的前 k 项按
 -- 逆序对应它们（index 0 = 最后一个字段）。检查完整体 drop。
@@ -91,7 +97,12 @@ checkAltBindersGo sp [] us = OkC us
 checkAltBindersGo sp ((Pair name rig) :: rest) us = case us of
   [] => icInternal "usage vector lost case binder"
   used :: more =>
-    Vuna.Compiler.Common.bind (checkBinderRig sp name rig used)
+    let
+      _ = if isRigZero used then case rig of
+        RigOmega => warnAt1 sp (UnusedBinder name) name
+        _ => 0
+      else 0
+    in Vuna.Compiler.Common.bind (checkBinderRig sp name rig used)
       (\_ => checkAltBindersGo sp rest more)
 
 -- ---------------------------------------------------------------
