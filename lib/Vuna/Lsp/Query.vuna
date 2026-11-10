@@ -319,7 +319,12 @@ codeActionsFor uri text reqStart reqStartCol reqEnd reqEndCol only = case contex
           singles2 = take (if isEmptyList fixAll then budget else maxOf 0 (budget - 1)) singles
           -- fix all 需要一格；case split 已占满上限时不再追加（总数仍 ≤ maxCodeActions）。
           fixAll2 = if isEmptyList fixAll || budget <= 0 then [] else fixAll
-        in append splits (append singles2 fixAll2)
+          diagActions =
+            if quickfixAllowed only then diagnosticSuggestionActions uri text reqStart reqEnd
+            else []
+          used = length splits + length singles2 + length fixAll2
+          diagActions2 = take (maxOf 0 (maxCodeActions - used)) diagActions
+        in append splits (append singles2 (append fixAll2 diagActions2))
 
 onlyKindsAllow : String -> Maybe (List String) -> Bool
 onlyKindsAllow kind Nothing = True
@@ -979,3 +984,32 @@ workspaceSymbols (Just idx) query =
   in mapMaybe (symbolInfoJson idx) (take maxWorkspaceSymbols syms)
 
 -- ---------------------------------------------------------------
+-- 诊断自带的 suggestion（如 UN_UnusedDefinition 的删除编辑）→ quick fix CodeAction。
+diagnosticSuggestionActions : String -> String -> Int -> Int -> List Json
+diagnosticSuggestionActions uri text reqStart reqEnd =
+  let
+    diags = secondOf (secondOf (diagnosticsForCached Nothing uri text))
+  in concatMap (diagSuggestionActions uri reqStart reqEnd) diags
+
+diagSuggestionActions : String -> Int -> Int -> Diagnostic -> List Json
+diagSuggestionActions uri reqStart reqEnd d =
+  if not (diagTouchesReq d reqStart reqEnd) then []
+  else map (suggestionActionJson uri) d.diagSuggestions
+
+diagTouchesReq : Diagnostic -> Int -> Int -> Bool
+diagTouchesReq d reqStart reqEnd = case primarySpanQ d.diagLabels of
+  Nothing => False
+  Just sp => spanStartLine sp - 1 <= reqEnd && spanEndLine sp - 1 >= reqStart
+
+suggestionActionJson : String -> Suggestion -> Json
+suggestionActionJson uri s =
+  JObj
+    [Pair "title" (JStr s.suggestionTitle), Pair "kind" (JStr "quickfix"), Pair "edit" (JObj [Pair "changes" (JObj [Pair uri (JArr (map suggestionEditJson s.suggestionEdits))])])]
+
+suggestionEditJson : DiagEdit -> Json
+suggestionEditJson e = textEditJson (spanRange e.editSpan) e.editNewText
+
+primarySpanQ : List Label -> Maybe Span
+primarySpanQ [] = Nothing
+primarySpanQ ((Label sp _ LabelPrimary _) :: rest) = sp
+primarySpanQ (_ :: rest) = primarySpanQ rest

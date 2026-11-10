@@ -85,7 +85,7 @@ checkLamBinder sp name rig [] = icInternal "usage vector lost lambda binder"
 checkLamBinder sp name rig (used :: rest) =
   let
     _ = if isRigZero used && not (startsWith "_" name) then case rig of
-      RigOmega => warnAt1 sp (UnusedBinder name) name
+      RigOmega => warnUnusedBinder sp name
       _ => 0
     else 0
   in Vuna.Compiler.Common.bind (checkBinderRig sp name rig used) (\_ => OkC rest)
@@ -106,7 +106,7 @@ checkAltBindersGo sp ((Pair name rig) :: rest) us = case us of
         else 0
     in let
       _ = if isRigZero used && not (startsWith "_" name) then case rig of
-        RigOmega => warnAt1 sp (UnusedBinder name) name
+        RigOmega => warnUnusedBinder sp name
         _ => 0
       else 0
     in Vuna.Compiler.Common.bind (checkBinderRig sp name rig used)
@@ -307,3 +307,10 @@ defSpanOf : DtDef -> Span
 defSpanOf d = case dtDefSpan d of
   Just sp => sp
   Nothing => Span "" 0 0 0 0
+
+-- 未使用 binder → `_<name>` 的 machine-applicable 改名建议（无引用，改名安全）。
+warnUnusedBinder : Span -> String -> Int
+warnUnusedBinder sp name =
+  warnAt1Mod
+    (\d => withSuggestion (Suggestion "rename unused binder `${name}` to `_${name}`" MachineApplicable [DiagEdit sp "_${name}"]) d)
+    sp (UnusedBinder name) name
