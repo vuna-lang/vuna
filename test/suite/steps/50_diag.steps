@@ -174,3 +174,12 @@ out-contains: remove unreachable branch
 # LSP 诊断建议 quick fix 集成：冗余分支删除 + 未使用 binder 改名。
 run: sh corpus/lsp/quickfix.sh "$VUNA"
 out-contains: quickfix: ok
+# elab best-effort 多错误：--continue-on-error 逐次移除失败声明后继续（文件入口）。
+run: sh -c 'printf "a : Int\na = \"x\"\n\nb : Int\nb = \"y\"\n\nmain : Int\nmain = 0\n" > "$TMPDIR/m45-multi.vuna"; "$VUNA" check "$TMPDIR/m45-multi.vuna" --continue-on-error --json 2>&1'
+exit: 1
+out-contains: "line":2
+out-contains: "line":5
+run: sh -c 'printf "a : Int\na = \"x\"\n\nb : Int\nb = \"y\"\n\nmain : Int\nmain = 0\n" > "$TMPDIR/m45-multi2.vuna"; "$VUNA" check "$TMPDIR/m45-multi2.vuna" --json 2>&1'
+exit: 1
+out-contains: "line":2
+out-not-contains: "line":5

@@ -26,10 +26,11 @@ import Base.Nat
 -- | CLI 辅助：compilerUsageLines（参数/退出码约定见 tooling.md）。
 compilerUsageLines : String -> String
 compilerUsageLines prog = """  ${prog} compile [--no-print] [--release] (<entry.vuna> | <package-dir>) <out-dir>
-  ${prog} check [--release] (<entry.vuna> | <package-dir>)
+  ${prog} check [--release] [--continue-on-error] (<entry.vuna> | <package-dir>)
   ${prog} build [--release] [--no-compile] [--out DIR] [--package NAME] [DIR]
   --no-print                    compile 生成的程序不打印 main 结果（默认打印）
   --release                     release 构建：拒绝 assert / todo 等 debug 专用构造
+  --continue-on-error           best-effort 多错误：逐次移除失败声明后继续（仅文件入口）
   ${prog} version, --version          显示版本
   ${prog} help, -h
 """
@@ -218,6 +219,7 @@ runCompilerCliFor prog args =
       Just fmt => runIO (writeRef diagFormatRef fmt)
       Nothing => 0
     kept = stripDenyWarnings (firstOf strippedMax)
+    strippedContinue = stripContinueOnError kept
     _ = setDiagLang (secondOf strippedLang)
     _ =
       if secondOf strippedLang == "en" then 0
@@ -230,7 +232,9 @@ runCompilerCliFor prog args =
     _ = runIO (writeRef langExplicitRef (hasLangFlag args))
     _ = runIO (writeRef denyExplicitRef (hasDenyWarnings args))
     _ = runIO (writeRef warningsExplicitRef (hasDenyWarnings args || hasShowWarnings args))
-  in if anyHelp kept then helpFor prog else flushSarif (runCompilerCliFor1 prog kept)
+    _ = runIO (writeRef continueOnErrorRef (secondOf strippedContinue))
+  in if anyHelp (firstOf strippedContinue) then helpFor prog
+  else flushSarif (runCompilerCliFor1 prog (firstOf strippedContinue))
 
 -- 剥离 `--max-errors N`（写入全局上限；默认 0 = 不限）。
 -- | 诊断参数解析：十进制数字，失败用默认值。
@@ -579,7 +583,14 @@ checkFileEntry path = case contextForFile path of
     let
       _ = applyDiagConfig (contextPackageOf ctx)
     in case dtCheck ctx path of
-      ErrC e => printDiag e
+      ErrC e => if runIO (readRef continueOnErrorRef) then case dtCheckRecovering ctx path of
+        OkC ds =>
+          let
+            shown = takeDiags (runIO (readRef maxErrorsRef)) ds
+            _ = printDiagList "" shown
+          in if length shown == 0 then printDiag e else 1
+        ErrC e2 => printDiag e
+      else printDiag e
       OkC _ =>
         let
           ws = filter (ownedByFile path) (takeWarnings 0)
@@ -782,3 +793,15 @@ hasLangFlag (arg :: rest) =
 -- | `--deny-warnings` 是否由命令行显式给出（显式优先于 manifest）。
 denyExplicitRef : IORef Bool
 denyExplicitRef = runIO (newRef False)
+
+-- | best-effort 多错误（elab 逐 decl 恢复）是否开启。
+continueOnErrorRef : IORef Bool
+continueOnErrorRef = runIO (newRef False)
+
+stripContinueOnError : List String -> Pair (List String) Bool
+stripContinueOnError args = stripContinueGo args [] False
+
+stripContinueGo : List String -> List String -> Bool -> Pair (List String) Bool
+stripContinueGo [] acc found = Pair (reverse acc) found
+stripContinueGo ("--continue-on-error" :: rest) acc found = stripContinueGo rest acc True
+stripContinueGo (arg :: rest) acc found = stripContinueGo rest (arg :: acc) found

@@ -9,6 +9,7 @@ module Vuna.Compiler.Driver.Dt
   , dtCheckLibraryWithProgramParts
   , dtCheckPackageIncrementalParts
   , dtCheckPackageWithIfacesParts
+  , dtCheckRecovering
   , dtCheckSource
   , dtCheckSourceChecked
   , dtCheckSourceIncremental
@@ -1313,3 +1314,46 @@ warnUnusedDefsGo (d :: rest) used =
           sp (UnusedDefinition name) name
       Nothing => 0
   in warnUnusedDefsGo rest used
+
+-- 恢复式检查（MVP，仅入口文件）：逐次精化，失败时按诊断所在行移除对应顶层声明后重试，
+-- 收集最多 fuel 条独立错误。移除导致的后续级联错误也会被收集（调用方标注 best-effort）。
+-- 成功路径仍由 `dtCheck` 负责（含 codegen）；本函数只在首次失败时使用。
+-- | 诊断/告警实现：dtCheckRecovering（详见 diagnostics.md）。
+dtCheckRecovering : PackageContext -> String -> Check (List Diagnostic)
+dtCheckRecovering ctx entry =
+  Vuna.Compiler.Common.bind (dtLoad ctx entry) (\decls => recoverElab 8 decls [])
+
+recoverElab : Int -> List Decl -> List Diagnostic -> Check (List Diagnostic)
+recoverElab fuel decls errs = if fuel <= 0 then OkC (reverse errs)
+else case elabProgram decls of
+  OkC _ => OkC (reverse errs)
+  ErrC d =>
+    let
+      decls2 = case diagPrimaryLine d of
+        Nothing => decls
+        Just line =>
+          let
+            names =
+              concatMap (\x => if spanContainsLine (declSpan x) line then declNames x else []) decls
+            drops = declDropped names
+          in filter (\x => not (drops x)) decls
+    in if length decls2 == length decls then OkC (reverse (Base.List.Cons d errs))
+    else recoverElab (fuel - 1) decls2 (Base.List.Cons d errs)
+
+diagPrimaryLine : Diagnostic -> Maybe Int
+diagPrimaryLine d = primaryLineOf d.diagLabels
+
+primaryLineOf : List Label -> Maybe Int
+primaryLineOf [] = Nothing
+primaryLineOf ((Label (Just sp) _ LabelPrimary _) :: _) = Just (spanStartLine sp)
+primaryLineOf (_ :: rest) = primaryLineOf rest
+
+spanContainsLine : Span -> Int -> Bool
+spanContainsLine sp line = spanStartLine sp <= line && line <= spanEndLine sp
+
+declDropped : List String -> Decl -> Bool
+declDropped names d = anyNameIn (declNames d) names
+
+anyNameIn : List String -> List String -> Bool
+anyNameIn [] names = False
+anyNameIn (n :: rest) names = if memName n names then True else anyNameIn rest names

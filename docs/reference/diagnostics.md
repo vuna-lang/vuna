@@ -88,7 +88,7 @@ Diagnostic = { id, severity, phase, category, code, message, labels, fields, tra
 | JSON | `renderJsonList` | `{version,tool,diagnostics[]}`，含 labels/fields/trace/notes/suggestions/origin/internal/ice |
 | SARIF | `renderSarif` | SARIF 2.1.0 单 run：ruleId/level/message/locations/relatedLocations |
 
-CLI 开关：`--error-format=short|human|json|sarif`、`--json`、`--message-format=...`、`--lang en|zh`（zh 时 human 追加目录中文说明并默认切 human）；包级 check
+CLI 开关：`--error-format=short|human|json|sarif`、`--json`、`--message-format=...`、`--lang en|zh`（zh 时 human 消息本地化）、`--continue-on-error`（elab best-effort 多错误，仅文件入口）；包级 check
 会把格式透传给成员包子进程；成员包错误带 `[包名]` 前缀。
 
 JSON 字段是机器契约：`code/severity/phase/category/message/labels[]/fields[]`；
@@ -152,7 +152,7 @@ JSON 字段是机器契约：`code/severity/phase/category/message/labels[]/fiel
 | D4 码域（RN_/PKG_ 独立域、死码清理） | 已落地（`RN_` 23 码、`PKG_` 27 码；已删除 9 个 TC + 4 RN + 2 PS + 1 LD 无发射点死码） |
 | D5 目录单一真源 + 生成枚举/文档 | 部分（条目仍是手写；`explain`/`gen-errors` 同源，`gen-errors` 同时生成 `errors.md` 与目录 JSON `errors.json`（均内嵌每码 `example` 夹具路径）；两者都输出 severity/phase/category 元数据） |
 | D6 渲染/LSP/CLI | 已落地 short/human/JSON/SARIF + LSP push/pull + `[diagnostics]` 配置；human 视图展示 fields/trace/suggestions（与 JSON 同源）；SARIF rules 带目录 shortDescription/help/defaultConfiguration/tags；i18n 部分（`--lang zh` 与 `[diagnostics] lang` 的 human 消息本地化 + `= message:` 英文原文附注；机器格式保持英文） |
-| D7.1 多错误 + Cascade | 部分（parser 顶层 resync：多个语法错误一次报出，`--max-errors` 截断且作用于 short/JSON/SARIF；elab 逐 decl 恢复 + Cascade 待办） |
+| D7.1 多错误 + Cascade | 部分（parser 顶层 resync + `--max-errors`；elab 新增 `--continue-on-error` best-effort：文件入口逐次移除失败声明后继续，最多 8 条；包/模块路径与完整 Cascade 分类待补） |
 | D7.2 warnings（未使用/冗余/不可达） | 已落地（`UN_UnusedBinder`/`UN_ShadowedBinder`/`UN_RedundantCtorBranch`/`UN_RedundantLiteralBranch`/`UN_BranchAfterCatchAll`/`UN_UnusedImport`（限定/别名/open import 统一追踪）/`UN_UnusedDefinition`；`-W`/`--deny-warnings` 已接） |
 | D7.3 建议引擎 + Fix | 部分（`Candidate`/`Suggestion` 模型就绪；`UN_UnusedBinder`/`UN_UnusedDefinition`/`UN_UnusedImport`/`UN_Redundant*`/`UN_BranchAfterCatchAll` 附 machine-applicable 编辑；LSP codeAction 应用诊断 suggestions，并有 `test/corpus/lsp/quickfix.sh` 集成测试；更多码待接） |
 | D7.4 类型不匹配 expected/found | 已落地（fields + PhUnify trace 帧 expected/found；双端 label 待补） |
