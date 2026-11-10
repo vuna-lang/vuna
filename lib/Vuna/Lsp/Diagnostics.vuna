@@ -139,9 +139,13 @@ fieldJson (FieldSpan name sp) =
 fieldJson (FieldNote s) = JObj [Pair "kind" (JStr "note"), Pair "value" (JStr s)]
 
 candidateJson : Candidate -> Json
-candidateJson c = JObj (append [Pair "text" (JStr c.candidateText)] (case c.candidateReason of
+candidateJson c = JObj (append [Pair "text" (JStr c.candidateText)] (append (case c.candidateSpan of
+  Nothing => []
+  Just sp => [Pair "span" (spanRange sp)]
+) (case c.candidateReason of
   Nothing => []
   Just r => [Pair "reason" (JStr r)]
+)
 )
 )
 
