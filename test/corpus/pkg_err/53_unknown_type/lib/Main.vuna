@@ -1,0 +1,10 @@
+module Main where
+
+data T : Type where
+  C : T
+
+f : T -> Int
+f Nope.C = 0
+
+main : Int
+main = 0
