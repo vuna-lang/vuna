@@ -42,7 +42,6 @@ TC_FfiTypeUnsupported
 TC_FunctionNoClauses
 TC_HoleNoExpectedType
 TC_IndexFuel
-TC_IntStringCaseRestriction
 TC_InvalidArrowType
 TC_NatLiteralOutOfRange
 TC_NestedPatterns
