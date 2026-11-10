@@ -25,3 +25,6 @@ file-contains: $TMPDIR/errroot/docs/.generated/errors.json "version":1
 file-contains: $TMPDIR/errroot/docs/.generated/errors.json "code":"TC_NotExhaustive"
 file-contains: $TMPDIR/errroot/docs/.generated/errors.json "phase":"elab"
 file-contains: $TMPDIR/errroot/docs/.generated/errors.json "desc":"类型不匹配"
+# 目录内嵌 example：md 表列 + JSON 字段均带夹具路径。
+file-contains: $TMPDIR/errroot/docs/.generated/errors.md | example |
+file-contains: $TMPDIR/errroot/docs/.generated/errors.json "example":"

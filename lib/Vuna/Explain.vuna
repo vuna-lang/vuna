@@ -120,34 +120,6 @@ stripExplainJson (arg :: rest) =
 runExplain : List String -> Int
 runExplain args = explainArgs args
 
--- 目录 example：在 test/corpus 下找第一个包含该码的结构化夹具（展示用，不参与门禁）。
-exampleOf : String -> Maybe String
-exampleOf code = case findDiagExample 512 "test/corpus" code of
-  Just p => Just p
-  Nothing => case findDiagExample 512 "corpus" code of
-    Just p => Just p
-    Nothing => findDiagExample 512 "../test/corpus" code
-
-findDiagExample : Int -> String -> String -> Maybe String
-findDiagExample fuel dir code =
-  if fuel <= 0 then Nothing
-  else if not (pathExistsDir dir) then Nothing
-  else firstJustExamples (map (oneEntry (fuel - 1) dir code) (runIO (prim_readDir dir)))
-
-oneEntry : Int -> String -> String -> String -> Maybe String
-oneEntry fuel dir code name = if name == "." || name == ".." || name == ".git" || name == ".local" then Nothing
-else
-  let
-    path = "${dir}/${name}"
-  in if pathExistsDir path then findDiagExample fuel path code
-  else if endsWith ".diag.json" name && pathExistsFile path then if contains "\"code\":\"${code}\"" (runIO (prim_readFile path)) then Just path else Nothing
-  else Nothing
-
-firstJustExamples : List (Maybe String) -> Maybe String
-firstJustExamples [] = Nothing
-firstJustExamples ((Just x) :: rest) = Just x
-firstJustExamples (Nothing :: rest) = firstJustExamples rest
-
 -- JSON 输出（`vuna explain --json` / `--list --json`）；本地转义，不依赖 Vuna.Json
 -- （避免把 Explain 加进 Json 的依赖扇出）。
 printInfoJson : Info -> Int

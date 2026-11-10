@@ -1,4 +1,10 @@
-module Vuna.Files (collectSourceFiles, collectVunaFiles, pathExistsDir, pathExistsFile) where
+module Vuna.Files
+  ( collectSourceFiles
+  , collectVunaFiles
+  , exampleOf
+  , pathExistsDir
+  , pathExistsFile
+  ) where
 
 -- Vuna.Files：目录遍历工具（fmt / doc / test / Index 共用）。
 -- 只依赖 prim_readDir / prim_isDirectory / prim_fileExists 内建；prim_readDir 返回字典序，遍历顺序确定。
@@ -80,3 +86,34 @@ pathExistsDir path = pathExistsFile path && runIO (prim_isDirectory path)
 
 pathExistsFile : String -> Bool
 pathExistsFile path = runIO (prim_fileExists path)
+
+-- ---------------------------------------------------------------
+-- 诊断码 → 示例夹具（`explain`/`gen-errors` 共用；生成物不参与门禁）
+-- ---------------------------------------------------------------
+-- | 在 test/corpus（及 test/ 工作目录下的 corpus）找第一个包含该码的 `.diag.json`。
+exampleOf : String -> Maybe String
+exampleOf code = case findDiagExample 512 "test/corpus" code of
+  Just p => Just p
+  Nothing => case findDiagExample 512 "corpus" code of
+    Just p => Just p
+    Nothing => findDiagExample 512 "../test/corpus" code
+
+findDiagExample : Int -> String -> String -> Maybe String
+findDiagExample fuel dir code =
+  if fuel <= 0 then Nothing
+  else if not (pathExistsDir dir) then Nothing
+  else firstJustExamples (map (oneEntry (fuel - 1) dir code) (runIO (prim_readDir dir)))
+
+oneEntry : Int -> String -> String -> String -> Maybe String
+oneEntry fuel dir code name = if name == "." || name == ".." || name == ".git" || name == ".local" then Nothing
+else
+  let
+    path = "${dir}/${name}"
+  in if pathExistsDir path then findDiagExample fuel path code
+  else if endsWith ".diag.json" name && pathExistsFile path then if contains "\"code\":\"${code}\"" (runIO (prim_readFile path)) then Just path else Nothing
+  else Nothing
+
+firstJustExamples : List (Maybe String) -> Maybe String
+firstJustExamples [] = Nothing
+firstJustExamples ((Just x) :: rest) = Just x
+firstJustExamples (Nothing :: rest) = firstJustExamples rest

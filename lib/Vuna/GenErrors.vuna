@@ -159,14 +159,14 @@ isDomain dom e = startsWith dom e.entryCode
 
 renderTable : List Entry -> String
 renderTable [] = "（无）\n"
-renderTable entries = """| code | severity | phase | category | 消息 | 说明 |
-| --- | --- | --- | --- | --- | --- |
+renderTable entries = """| code | severity | phase | category | 消息 | 说明 | example |
+| --- | --- | --- | --- | --- | --- | --- |
 ${join "\n" (map renderRow entries)}
 """
 
 renderRow : Entry -> String
 renderRow e =
-  "| ${e.entryCode} | ${diagSeverityOf (codeDomain e.entryCode)} | ${diagPhaseOf (codeDomain e.entryCode)} | ${diagCategoryOf (codeDomain e.entryCode)} | `${escapeMsg e.entryMsg}` | ${e.entryDesc} |"
+  "| ${e.entryCode} | ${diagSeverityOf (codeDomain e.entryCode)} | ${diagPhaseOf (codeDomain e.entryCode)} | ${diagCategoryOf (codeDomain e.entryCode)} | `${escapeMsg e.entryMsg}` | ${e.entryDesc} | ${exampleCell e.entryCode} |"
 
 renderLintTable : List Entry -> String
 renderLintTable [] = "（无）\n"
@@ -204,6 +204,7 @@ entryJsonText : Entry -> String
 entryJsonText e =
   "{"
     ++ join "," [field "code" e.entryCode, field "severity" (diagSeverityOf (codeDomain e.entryCode)), field "phase" (diagPhaseOf (codeDomain e.entryCode)), field "category" (diagCategoryOf (codeDomain e.entryCode)), field "message" e.entryMsg, field "desc" e.entryDesc, field "rule" e.entryRule, field "edit" e.entryEdit, " \"fixable\":" ++ (if e.entryFixable then "true" else "false") ++ " "]
+    ++ exampleField e.entryCode
     ++ "}"
 
 field : String -> String -> String
@@ -229,3 +230,18 @@ hexPair c = strPack [hexDigit (c / 16), hexDigit (c - c / 16 * 16)]
 
 hexDigit : Int -> Int
 hexDigit n = if n < 10 then 48 + n else 87 + n
+
+exampleCell : String -> String
+exampleCell code = case exampleOf code of
+  Just p => p
+  Nothing => "—"
+
+jsonExample : String -> String
+jsonExample code = case exampleOf code of
+  Just p => jsonQuote p
+  Nothing => "null"
+
+exampleField : String -> String
+exampleField code = case exampleOf code of
+  Just p => "," ++ field "example" p
+  Nothing => ""
