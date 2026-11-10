@@ -108,6 +108,7 @@ dtLoadModulesParts ctx names =
   Vuna.Compiler.Common.bind (loadProjectModules ctx names) resolveProject
 
 -- 声明序列的 check 尾部（入口与库包同一条精化路径）。
+-- | 从已加载声明跑完整检查。
 dtCheckDecls : Check (List Decl) -> Check (List String)
 dtCheckDecls loaded = Vuna.Compiler.Common.bind loaded (\decls => let
   _ = stamp "decls-ready"
@@ -142,6 +143,7 @@ in OkC (Pair [] (CheckedPackage program (secondOf parts) (firstOf parts) []))
 )
 )
 
+-- | 入口文件检查。
 dtCheck : PackageContext -> String -> Check (List String)
 dtCheck ctx entry = dtCheckDecls (dtLoad ctx entry)
 
