@@ -114,7 +114,7 @@ JSON 字段是机器契约：`code/severity/phase/category/message/labels[]/fiel
 
 - 直接消费 `Diagnostic`：不再从文本扫位置；依赖文件诊断按 span 文件过滤。
 - range 用完整 span（起止），UTF-16 换算；无位置诊断落到 0:0。
-- 所有错误都发布（编译器 + lint 合并）；lint `Finding` 转成同一 `Diagnostic`。
+- 所有错误都发布（编译器 + lint 合并）；lint `Finding` 转成同一 `Diagnostic`；`UN_UnusedImport` 在 LSP 增量路径不回放（编辑器侧使用集未重算，避免误报；CLI 仍报告）。
 - `relatedInformation` 来自 secondary/context 标签；`data` 来自 `diagFields`；
   `code` 直接给客户端；消息追加 notes/suggestions。
 - lint quick fix 的内嵌诊断与发布诊断字段集合一致；诊断自带 `suggestions`（如未使用 binder/定义）也生成 quick fix CodeAction（应用其 `DiagEdit`）。

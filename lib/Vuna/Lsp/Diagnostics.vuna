@@ -400,7 +400,7 @@ diagnosticsForCached cache uri text = case contextForDoc uri of
               (DiagCache c.dcLabel c.dcKey c.dcCtx c.dcTool c.dcClean c.dcBuiltSec c.dcStats c.dcAux (firstOf linted))
           Nothing => Nothing
       in Pair cache3
-        (Pair label (append (secondOf checked) (append (secondOf linted) (filter (diagOwns label) (takeWarnings 0)))))
+        (Pair label (append (secondOf checked) (append (secondOf linted) (filter (diagOwns label) (filter lspWarnable (takeWarnings 0))))))
 
 publishDiagnostics : String -> Int -> String -> List Diagnostic -> Json
 publishDiagnostics uri version text diags =
@@ -468,3 +468,8 @@ lspTagsOf : String -> List Json
 lspTagsOf code =
   if startsWith "UN_Unused" code || startsWith "UN_Redundant" code || code == "UN_BranchAfterCatchAll" then [JNum 1]
   else []
+
+-- LSP 增量路径不重算 import 使用集：`UN_UnusedImport` 在编辑器侧可能误报，
+-- 故 publish 链路不回放该告警（CLI 全量检查仍报告）。
+lspWarnable : Diagnostic -> Bool
+lspWarnable d = d.diagCode /= "UN_UnusedImport"
