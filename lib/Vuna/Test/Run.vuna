@@ -411,7 +411,7 @@ errorCase env c source expected wantInterp wantCheck wantCompile =
       if endsWith ".vuna" source then substring 0 (byteLength source - 5) source else source
     compileErrPath = "${baseName}.compile.err"
     legacyCerrPath = "${baseName}.cerr"
-    denyPath = ".deny"
+    denyPath = if startsWith "/" baseName then "${baseName}.deny" else "${env.envCwd}/${baseName}.deny"
     denyArgs = if pathExistsFile denyPath then ["--deny-warnings"] else []
     compileFragment =
       if pathExistsFile compileErrPath then trimNewlines (runIO (readFile compileErrPath))

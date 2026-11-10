@@ -23,7 +23,6 @@ import Base.Vec
 
 data WarnErr : Nat -> Type where
   -- arity 0
-  WarnRedundantBranch : WarnErr Zero
   WarnBranchAfterCatchAll : WarnErr Zero
   -- arity 1
   WarnRedundantCtorBranch : String -> WarnErr (Succ Zero)
@@ -34,20 +33,20 @@ data WarnErr : Nat -> Type where
   ShadowedBinder : String -> WarnErr (Succ Zero)
 
 warnCode : {n : Nat} -> WarnErr n -> String
-warnCode WarnRedundantBranch = "UN_WarnRedundantBranch"
-warnCode WarnBranchAfterCatchAll = "UN_WarnBranchAfterCatchAll"
-warnCode (WarnRedundantCtorBranch _) = "UN_WarnRedundantCtorBranch"
-warnCode (WarnRedundantLiteralBranch _) = "UN_WarnRedundantLiteralBranch"
+warnCode WarnBranchAfterCatchAll = "UN_BranchAfterCatchAll"
+warnCode (WarnRedundantCtorBranch _) = "UN_RedundantCtorBranch"
+warnCode (WarnRedundantLiteralBranch _) = "UN_RedundantLiteralBranch"
 warnCode (UnusedBinder _) = "UN_UnusedBinder"
 warnCode (UnusedDefinition _) = "UN_UnusedDefinition"
 warnCode (UnusedImport _) = "UN_UnusedImport"
 warnCode (ShadowedBinder _) = "UN_ShadowedBinder"
 
 warnTemplate : {n : Nat} -> WarnErr n -> String
-warnTemplate WarnRedundantBranch = "this branch is redundant (covered by earlier branches)"
 warnTemplate WarnBranchAfterCatchAll = "this branch is unreachable (a catch-all precedes it)"
-warnTemplate (WarnRedundantCtorBranch _) = "redundant constructor branch: `<0>` is already covered by an earlier branch"
-warnTemplate (WarnRedundantLiteralBranch _) = "redundant literal branch: `<0>` is already covered by an earlier branch"
+warnTemplate (WarnRedundantCtorBranch _) =
+  "redundant constructor branch: `<0>` is already covered by an earlier branch"
+warnTemplate (WarnRedundantLiteralBranch _) =
+  "redundant literal branch: `<0>` is already covered by an earlier branch"
 warnTemplate (UnusedBinder _) = "binder `<0>` is never used"
 warnTemplate (UnusedDefinition _) = "definition `<0>` is never used"
 warnTemplate (UnusedImport _) = "module `<0>` is imported but never used"
@@ -75,8 +74,7 @@ record WarnEntry where
 
 warnAll : List WarnEntry
 warnAll =
-  [ WarnEntry (warnCode WarnRedundantBranch) (warnTemplate WarnRedundantBranch) "分支冗余（被前面的分支覆盖）",
-    WarnEntry (warnCode WarnBranchAfterCatchAll) (warnTemplate WarnBranchAfterCatchAll) "catch-all 之后的分支不可达",
+  [ WarnEntry (warnCode WarnBranchAfterCatchAll) (warnTemplate WarnBranchAfterCatchAll) "catch-all 之后的分支不可达",
     WarnEntry (warnCode (WarnRedundantCtorBranch "")) (warnTemplate (WarnRedundantCtorBranch "")) "冗余构造子分支",
     WarnEntry (warnCode (WarnRedundantLiteralBranch "")) (warnTemplate (WarnRedundantLiteralBranch "")) "冗余字面量分支",
     WarnEntry (warnCode (UnusedBinder "")) (warnTemplate (UnusedBinder "")) "binder 未使用",

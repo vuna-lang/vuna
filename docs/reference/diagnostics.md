@@ -151,7 +151,7 @@ JSON 字段是机器契约：`code/severity/phase/category/message/labels[]/fiel
 | D5 目录单一真源 + 生成枚举/文档 | 部分（条目仍是手写；`explain`/`gen-errors` 已同源） |
 | D6 渲染/LSP/CLI | 已落地 short/human/JSON/SARIF + LSP push/pull + `[diagnostics]` 配置；i18n 待办 |
 | D7.1 多错误 + Cascade | 待办（当前仍首错短路） |
-| D7.2 warnings（未使用/冗余/不可达） | 部分（`UN_UnusedBinder`/`UN_ShadowedBinder` 已落地；`-W`/`--deny-warnings` 已接；未使用 import/定义、冗余分支待办） |
+| D7.2 warnings（未使用/冗余/不可达） | 部分（`UN_UnusedBinder`/`UN_ShadowedBinder`/`UN_RedundantCtorBranch`/`UN_RedundantLiteralBranch`/`UN_BranchAfterCatchAll` 已落地；`-W`/`--deny-warnings` 已接；未使用 import/定义待办） |
 | D7.3 建议引擎 + Fix | 部分（`Candidate`/`Suggestion` 模型就绪；自动候选未接） |
 | D7.4 类型不匹配 expected/found | 已落地（fields；双端 label 待补） |
 | D7.5 实例搜索 trace | 待办 |

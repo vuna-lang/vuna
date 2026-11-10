@@ -170,6 +170,7 @@ vuna test --suite test/suite.toml --cache-dir DIR   # 覆盖本地结果缓存�
   空结果不会清空已有失败列表。
 - `--bless`：golden 失败时把实际输出写回对应 `.out`，并打印 `blessed`；不处理 `.check.err`/`.compile.err`。
 - `--bless-diag`：负例 case 用 `check/compile --json` 的实际聚合文档写回 `.diag.json`（源码路径相对 cwd，机器无关）。
+- 夹具旁的 `.deny` 标记：check/compile 探测加 `--deny-warnings`（用于断言「warning 在 deny 模式下失败」，如冗余分支夹具）。
 - `nix/checks/diag-coverage.sh`：`vuna explain --list` 与全部 `.diag.json` 的码集合对比；缺口必须在 `nix/diag-coverage-allow.txt`，覆盖数不得低于 `nix/diag-coverage.min`。
 - `--watch`：首次跑完后每 500ms 比较 suite/corpus/工具链源码 mtime，变化即重跑。
 - `--cache-dir DIR`：覆盖 `.local/test-cache`；worker 继承同一目录。

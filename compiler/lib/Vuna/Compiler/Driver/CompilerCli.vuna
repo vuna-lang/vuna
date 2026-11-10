@@ -364,16 +364,22 @@ compileRun printResult entry outDir =
 compileFileEntry : Bool -> String -> String -> Int
 compileFileEntry printResult entry outDir = case contextForFile entry of
   ErrC e => printDiag e
-  OkC ctx => case compileToDir ctx entry printResult outDir of
-    ErrC e => printDiag e
-    OkC _ => 0
+  OkC ctx =>
+    let
+      _ = applyDiagConfig (contextPackageOf ctx)
+    in case compileToDir ctx entry printResult outDir of
+      ErrC e => printDiag e
+      OkC _ => finishWarningsDir outDir 0
 
 compilePkgDir : Bool -> String -> String -> Int
 compilePkgDir printResult dir outDir = case executablePackage "compile" dir of
   ErrC e => printDiag e
-  OkC pkg => case compileToDir (packageContext pkg) (packageEntry pkg) printResult outDir of
-    ErrC e => printDiag e
-    OkC _ => 0
+  OkC pkg =>
+    let
+      _ = applyDiagConfig (Just pkg)
+    in case compileToDir (packageContext pkg) (packageEntry pkg) printResult outDir of
+      ErrC e => printDiag e
+      OkC _ => finishWarningsDir outDir 0
 
 -- ---------------------------------------------------------------
 -- check：文件入口（包上下文）或包目录（可执行包 check 入口；库包 check [export].modules）
@@ -606,3 +612,25 @@ ownedByPackage pkg d =
   in startsWith "${prefix}lib/" file
     || startsWith "${prefix}app/" file
     || startsWith "${prefix}test/" file
+
+-- compile/build 成功路径的 warning 消费（默认静默；-W 显示；--deny-warnings 提升退出码）。
+finishWarnings : Int -> Int
+finishWarnings code =
+  let
+    ws = takeWarnings 0
+    shown = if showWarningsOn 0 || denyWarningsOn 0 then ws else []
+    _ = printDiagList "" shown
+  in if denyWarningsOn 0 && length ws > 0 then 1 else code
+
+-- 与 finishWarnings 相同，但失败时删除已生成的输出目录（编译失败不留产物）。
+finishWarningsDir : String -> Int -> Int
+finishWarningsDir dir code =
+  let
+    ws = takeWarnings 0
+    shown = if showWarningsOn 0 || denyWarningsOn 0 then ws else []
+    _ = printDiagList "" shown
+  in if denyWarningsOn 0 && length ws > 0 then
+    let
+      _ = runIO (prim_runIn "/" ["rm", "-rf", dir])
+    in 1
+  else code

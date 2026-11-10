@@ -39,7 +39,6 @@ import Base.Vec
 data TcErr : Nat -> Type where
   -- arity 0
   BoolCaseRestriction : TcErr Zero
-  BranchAfterCatchAll : TcErr Zero
   CaseBranchTooFewArgs : TcErr Zero
   CatchAllNotLast : TcErr Zero
   ClauseTooManyPatterns : TcErr Zero
@@ -98,8 +97,6 @@ data TcErr : Nat -> Type where
   -- M36：模板字符串插值（`${e}` → `Base.Interp.interp e`）找不到 `Interp`/`Show` 实例。
   InterpNoInstance : String -> TcErr (Succ Zero)
   NotExhaustive : String -> TcErr (Succ Zero)
-  RedundantCtorBranch : String -> TcErr (Succ Zero)
-  RedundantLiteralBranch : String -> TcErr (Succ Zero)
   SignatureNoDef : String -> TcErr (Succ Zero)
   UnknownInterface : String -> TcErr (Succ Zero)
   UnknownName : String -> TcErr (Succ Zero)
@@ -157,7 +154,6 @@ data TcErr : Nat -> Type where
 -- | 自动补注（M41 新增导出）：tcCode。
 tcCode : {n : Nat} -> TcErr n -> String
 tcCode BoolCaseRestriction = "TC_BoolCaseRestriction"
-tcCode BranchAfterCatchAll = "TC_BranchAfterCatchAll"
 tcCode CaseBranchTooFewArgs = "TC_CaseBranchTooFewArgs"
 tcCode CatchAllNotLast = "TC_CatchAllNotLast"
 tcCode ClauseTooManyPatterns = "TC_ClauseTooManyPatterns"
@@ -225,8 +221,6 @@ tcCode (NeedsTwoArgs _) = "TC_NeedsTwoArgs"
 tcCode (NoInstanceFound _) = "TC_NoInstanceFound"
 tcCode (InterpNoInstance _) = "TC_InterpNoInstance"
 tcCode (NotExhaustive _) = "TC_NotExhaustive"
-tcCode (RedundantCtorBranch _) = "TC_RedundantCtorBranch"
-tcCode (RedundantLiteralBranch _) = "TC_RedundantLiteralBranch"
 tcCode (SignatureNoDef _) = "TC_SignatureNoDef"
 tcCode (UnknownInterface _) = "TC_UnknownInterface"
 tcCode (UnknownName _) = "TC_UnknownName"
@@ -264,7 +258,6 @@ tcCode (DeriveUnsupportedKind _) = "TC_DeriveUnsupportedKind"
 -- | 自动补注（M41 新增导出）：tcTemplate。
 tcTemplate : {n : Nat} -> TcErr n -> String
 tcTemplate BoolCaseRestriction = "case on Bool only accepts True / False / variable patterns (M19)"
-tcTemplate BranchAfterCatchAll = "this branch is unreachable: it follows a catch-all branch"
 tcTemplate CaseBranchTooFewArgs = "case branch has too few arguments for its constructor"
 tcTemplate CatchAllNotLast = "the catch-all branch must be the last one"
 tcTemplate ClauseTooManyPatterns = "clause has more patterns than the function arity"
@@ -331,10 +324,6 @@ tcTemplate (NoInstanceFound _) = "no instance found for <0>"
 tcTemplate (InterpNoInstance _) =
   "template interpolation needs an `Interp` or `Show` instance for <0> (add `deriving (Show)`, define `instance Interp <0>`, or convert explicitly with `show`/`strFromInt`)"
 tcTemplate (NotExhaustive _) = "case is not exhaustive: missing <0>"
-tcTemplate (RedundantCtorBranch cname) =
-  "redundant constructor branch: `${cname}` is already covered by an earlier branch"
-tcTemplate (RedundantLiteralBranch lit) =
-  "redundant literal branch: ${lit} is already covered by an earlier branch"
 tcTemplate (SignatureNoDef _) = "signature for <0> has no definition"
 tcTemplate (UnknownInterface _) = "unknown interface <0> in instance head or constraint"
 tcTemplate (UnknownName _) = "unknown name <0>"
@@ -409,7 +398,6 @@ tcChunk0 : List TcEntry
 tcChunk0 =
   [ TcEntry (tcCode BoolCaseRestriction) (tcTemplate BoolCaseRestriction) "Bool 的 case 只接受 True/False/变量模式",
     TcEntry (tcCode (AxiomWithDefinition "")) (tcTemplate (AxiomWithDefinition "")) "axiom 不能同时有定义体",
-    TcEntry (tcCode BranchAfterCatchAll) (tcTemplate BranchAfterCatchAll) "兜底分支之后的分支不可达",
     TcEntry (tcCode CaseBranchTooFewArgs) (tcTemplate CaseBranchTooFewArgs) "case 分支实参少于构造子字段",
     TcEntry (tcCode CatchAllNotLast) (tcTemplate CatchAllNotLast) "兜底分支必须在最后",
     TcEntry (tcCode ClauseTooManyPatterns) (tcTemplate ClauseTooManyPatterns) "子句模式多于函数元数",
@@ -492,8 +480,6 @@ tcChunk7 =
     TcEntry (tcCode (NoInstanceFound "")) (tcTemplate (NoInstanceFound "")) "找不到 instance",
     TcEntry (tcCode (InterpNoInstance "")) (tcTemplate (InterpNoInstance "")) "插值缺少 Interp/Show 实例",
     TcEntry (tcCode (NotExhaustive "")) (tcTemplate (NotExhaustive "")) "case 漏写可达分支",
-    TcEntry (tcCode (RedundantCtorBranch "")) (tcTemplate (RedundantCtorBranch "")) "重复的构造子分支（不可达）",
-    TcEntry (tcCode (RedundantLiteralBranch "")) (tcTemplate (RedundantLiteralBranch "")) "重复的字面量分支（不可达）",
     TcEntry (tcCode (SignatureNoDef "")) (tcTemplate (SignatureNoDef "")) "签名没有对应定义",
     TcEntry (tcCode (UnknownInterface "")) (tcTemplate (UnknownInterface "")) "未知接口"
   ]
