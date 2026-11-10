@@ -165,12 +165,12 @@ renderHuman d =
 -- JSON
 -- ---------------------------------------------------------------
 jsonEscapeChar : Int -> String
-jsonEscapeChar c =
-  if c == 34 then "\\\""
-  else if c == 92 then "\\\\"
-  else if c == 10 then "\\n"
-  else if c == 13 then "\\r"
-  else if c == 9 then "\\t" else if c < 32 then "\\u00" ++ hex2 c else strPack [c]
+jsonEscapeChar 34 = "\\\""
+jsonEscapeChar 92 = "\\\\"
+jsonEscapeChar 10 = "\\n"
+jsonEscapeChar 13 = "\\r"
+jsonEscapeChar 9 = "\\t"
+jsonEscapeChar c = if c < 32 then "\\u00" ++ hex2 c else strPack [c]
 
 hex2 : Int -> String
 hex2 n =
@@ -219,19 +219,20 @@ maybeJsonString Nothing = "null"
 maybeJsonString (Just s) = jsonStr s
 
 jsonField : DiagField -> String
-jsonField f = case f of
-  FieldExpected s => "{\"kind\":\"expected\",\"value\":${jsonStr s}}"
-  FieldFound s => "{\"kind\":\"found\",\"value\":${jsonStr s}}"
-  FieldName s => "{\"kind\":\"name\",\"value\":${jsonStr s}}"
-  FieldCandidates cs => "{\"kind\":\"candidates\",\"value\":[${join "," (map jsonCandidate cs)}]}"
-  FieldCall c =>
-    "{\"kind\":\"call\",\"value\":{\"callee\":${jsonStr c.callCallee},\"arg\":${jsonStr c.callArg},\"relation\":${jsonStr c.callRelation}}}"
-  FieldQuantity name declared observed =>
-    "{\"kind\":\"quantity\",\"value\":{\"name\":${jsonStr name},\"declared\":${declared},\"observed\":${observed}}}"
-  FieldEffect s => "{\"kind\":\"effect\",\"value\":${jsonStr s}}"
-  FieldModule s => "{\"kind\":\"module\",\"value\":${jsonStr s}}"
-  FieldSpan name sp => "{\"kind\":\"span\",\"name\":${jsonStr name},\"value\":${jsonSpan sp}}"
-  FieldNote s => "{\"kind\":\"note\",\"value\":${jsonStr s}}"
+jsonField (FieldExpected s) = "{\"kind\":\"expected\",\"value\":${jsonStr s}}"
+jsonField (FieldFound s) = "{\"kind\":\"found\",\"value\":${jsonStr s}}"
+jsonField (FieldName s) = "{\"kind\":\"name\",\"value\":${jsonStr s}}"
+jsonField (FieldCandidates cs) =
+  "{\"kind\":\"candidates\",\"value\":[${join "," (map jsonCandidate cs)}]}"
+jsonField (FieldCall c) =
+  "{\"kind\":\"call\",\"value\":{\"callee\":${jsonStr c.callCallee},\"arg\":${jsonStr c.callArg},\"relation\":${jsonStr c.callRelation}}}"
+jsonField (FieldQuantity name declared observed) =
+  "{\"kind\":\"quantity\",\"value\":{\"name\":${jsonStr name},\"declared\":${declared},\"observed\":${observed}}}"
+jsonField (FieldEffect s) = "{\"kind\":\"effect\",\"value\":${jsonStr s}}"
+jsonField (FieldModule s) = "{\"kind\":\"module\",\"value\":${jsonStr s}}"
+jsonField (FieldSpan name sp) =
+  "{\"kind\":\"span\",\"name\":${jsonStr name},\"value\":${jsonSpan sp}}"
+jsonField (FieldNote s) = "{\"kind\":\"note\",\"value\":${jsonStr s}}"
 
 jsonDiagEdit : DiagEdit -> String
 jsonDiagEdit e = "{\"span\":${jsonSpan e.editSpan},\"newText\":${jsonStr e.editNewText}}"

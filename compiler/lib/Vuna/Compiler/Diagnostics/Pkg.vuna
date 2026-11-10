@@ -28,6 +28,7 @@ import Vuna.Compiler.Diagnostics.Common
 import Base.Nat
 import Base.Vec
 
+-- | 诊断域实现：Vuna.Compiler.Diagnostics.Pkg.PkgErr（目录/模板见 diagnostics.md）。
 data PkgErr : Nat -> Type where
   -- arity 0
   EmptyCapability : PkgErr Zero
@@ -66,6 +67,7 @@ data PkgErr : Nat -> Type where
   TrustPointMissing : String -> String -> PkgErr (Succ (Succ Zero))
   EffectCapabilityRequired : String -> String -> String -> PkgErr (Succ (Succ (Succ Zero)))
 
+-- | 诊断域实现：Vuna.Compiler.Diagnostics.Pkg.pkgCode（目录/模板见 diagnostics.md）。
 pkgCode : {n : Nat} -> PkgErr n -> String
 pkgCode EmptyCapability = "PKG_EmptyCapability"
 pkgCode EmptyDependencyName = "PKG_EmptyDependencyName"
@@ -101,6 +103,7 @@ pkgCode (UnknownKey _ _) = "PKG_UnknownKey"
 pkgCode (TrustPointMissing _ _) = "PKG_TrustPointMissing"
 pkgCode (EffectCapabilityRequired _ _ _) = "PKG_EffectCapabilityRequired"
 
+-- | 诊断域实现：Vuna.Compiler.Diagnostics.Pkg.pkgTemplate（目录/模板见 diagnostics.md）。
 pkgTemplate : {n : Nat} -> PkgErr n -> String
 pkgTemplate EmptyCapability = "capability name must not be empty"
 pkgTemplate EmptyDependencyName = "dependency name must not be empty"
@@ -147,57 +150,74 @@ pkgTemplate (TrustPointMissing _ _) =
 pkgTemplate (EffectCapabilityRequired _ _ _) =
   "effectful builtin `<0>` requires capability `<1>` in <2> (declare [capabilities] effects = [\"<1>\"] or use Base.IO / typed effects)"
 
+-- | 诊断域实现：Vuna.Compiler.Diagnostics.Pkg.pkgMsg（目录/模板见 diagnostics.md）。
 pkgMsg : {n : Nat} -> PkgErr n -> Vec n String -> Diagnostic
 pkgMsg e args = diagNoLoc SevError PhLoad CatPackage (pkgCode e) (diagBody (pkgTemplate e) args)
 
+-- | 诊断域实现：Vuna.Compiler.Diagnostics.Pkg.pkgSpan（目录/模板见 diagnostics.md）。
 pkgSpan : String -> Int -> Maybe Span
 pkgSpan path line = if path == "" then Nothing else Just (Span path line 1 line 1)
 
+-- | 诊断域实现：Vuna.Compiler.Diagnostics.Pkg.atSpan（目录/模板见 diagnostics.md）。
 atSpan : Maybe Span -> Diagnostic -> Diagnostic
 atSpan Nothing d = d
 atSpan (Just sp) d = withLabel (Label (Just sp) "" LabelPrimary Nothing) d
 
+-- | 诊断域实现：Vuna.Compiler.Diagnostics.Pkg.pkgAt（目录/模板见 diagnostics.md）。
 pkgAt : String -> Int -> {n : Nat} -> PkgErr n -> Vec n String -> Check a
 pkgAt path line e args = ErrC (atSpan (pkgSpan path line) (pkgMsg e args))
 
+-- | 诊断域实现：Vuna.Compiler.Diagnostics.Pkg.pkgPath（目录/模板见 diagnostics.md）。
 pkgPath : String -> {n : Nat} -> PkgErr n -> Vec n String -> Check a
 pkgPath path e args = pkgAt path 1 e args
 
+-- | 诊断域实现：Vuna.Compiler.Diagnostics.Pkg.pkgNoLoc（目录/模板见 diagnostics.md）。
 pkgNoLoc : {n : Nat} -> PkgErr n -> Vec n String -> Check a
 pkgNoLoc e args = ErrC (pkgMsg e args)
 
+-- | 诊断域实现：Vuna.Compiler.Diagnostics.Pkg.pkgNoLoc1（目录/模板见 diagnostics.md）。
 pkgNoLoc1 : PkgErr (Succ Zero) -> String -> Check a
 pkgNoLoc1 e a0 = pkgNoLoc e [a0]
 
+-- | 诊断域实现：Vuna.Compiler.Diagnostics.Pkg.pkgNoLoc2（目录/模板见 diagnostics.md）。
 pkgNoLoc2 : PkgErr (Succ (Succ Zero)) -> String -> String -> Check a
 pkgNoLoc2 e a0 a1 = pkgNoLoc e [a0, a1]
 
+-- | 诊断域实现：Vuna.Compiler.Diagnostics.Pkg.pkgAt0（目录/模板见 diagnostics.md）。
 pkgAt0 : String -> Int -> PkgErr Zero -> Check a
 pkgAt0 path line e = pkgAt path line e []
 
+-- | 诊断域实现：Vuna.Compiler.Diagnostics.Pkg.pkgAt1（目录/模板见 diagnostics.md）。
 pkgAt1 : String -> Int -> PkgErr (Succ Zero) -> String -> Check a
 pkgAt1 path line e a0 = pkgAt path line e [a0]
 
+-- | 诊断域实现：Vuna.Compiler.Diagnostics.Pkg.pkgAt2（目录/模板见 diagnostics.md）。
 pkgAt2 : String -> Int -> PkgErr (Succ (Succ Zero)) -> String -> String -> Check a
 pkgAt2 path line e a0 a1 = pkgAt path line e [a0, a1]
 
+-- | 诊断域实现：Vuna.Compiler.Diagnostics.Pkg.pkgPath0（目录/模板见 diagnostics.md）。
 pkgPath0 : String -> PkgErr Zero -> Check a
 pkgPath0 path e = pkgPath path e []
 
+-- | 诊断域实现：Vuna.Compiler.Diagnostics.Pkg.pkgPath1（目录/模板见 diagnostics.md）。
 pkgPath1 : String -> PkgErr (Succ Zero) -> String -> Check a
 pkgPath1 path e a0 = pkgPath path e [a0]
 
+-- | 诊断域实现：Vuna.Compiler.Diagnostics.Pkg.pkgPath2（目录/模板见 diagnostics.md）。
 pkgPath2 : String -> PkgErr (Succ (Succ Zero)) -> String -> String -> Check a
 pkgPath2 path e a0 a1 = pkgPath path e [a0, a1]
 
+-- | 诊断域实现：Vuna.Compiler.Diagnostics.Pkg.pkgInvalid（目录/模板见 diagnostics.md）。
 pkgInvalid : String -> Check a
 pkgInvalid msg = pkgNoLoc (Invalid msg) [msg]
 
+-- | 诊断域实现：Vuna.Compiler.Diagnostics.Pkg.PkgEntry（目录/模板见 diagnostics.md）。
 record PkgEntry where
   pkgEntryCode : String
   pkgEntryTemplate : String
   pkgEntryDesc : String
 
+-- | 诊断域实现：Vuna.Compiler.Diagnostics.Pkg.pkgAll（目录/模板见 diagnostics.md）。
 pkgAll : List PkgEntry
 pkgAll =
   [ PkgEntry (pkgCode EmptyCapability) (pkgTemplate EmptyCapability) "能力名为空",
@@ -235,5 +255,6 @@ pkgAll =
     PkgEntry (pkgCode (EffectCapabilityRequired "" "" "")) (pkgTemplate (EffectCapabilityRequired "" "" "")) "effectful builtin 缺能力声明"
   ]
 
+-- | 诊断域实现：Vuna.Compiler.Diagnostics.Pkg.pkgNoLoc3（目录/模板见 diagnostics.md）。
 pkgNoLoc3 : {n : Nat} -> PkgErr (Succ (Succ (Succ Zero))) -> String -> String -> String -> Check a
 pkgNoLoc3 e a0 a1 a2 = pkgNoLoc e [a0, a1, a2]

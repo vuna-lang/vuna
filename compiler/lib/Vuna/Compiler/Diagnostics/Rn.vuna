@@ -25,6 +25,7 @@ import Vuna.Compiler.Diagnostics.Common
 import Base.Nat
 import Base.Vec
 
+-- | 诊断域实现：Vuna.Compiler.Diagnostics.Rn.RnErr（目录/模板见 diagnostics.md）。
 data RnErr : Nat -> Type where
   -- arity 0
   DuplicateImport : RnErr Zero
@@ -59,6 +60,7 @@ data RnErr : Nat -> Type where
   UnknownKind : String -> String -> RnErr (Succ (Succ Zero))
   ValueNotExported : String -> String -> RnErr (Succ (Succ Zero))
 
+-- | 诊断域实现：Vuna.Compiler.Diagnostics.Rn.rnCode（目录/模板见 diagnostics.md）。
 rnCode : {n : Nat} -> RnErr n -> String
 rnCode DuplicateImport = "RN_DuplicateImport"
 rnCode InstanceBodyForm = "RN_InstanceBodyForm"
@@ -90,6 +92,7 @@ rnCode (TypeNotExported _ _) = "RN_TypeNotExported"
 rnCode (UnknownKind _ _) = "RN_UnknownKind"
 rnCode (ValueNotExported _ _) = "RN_ValueNotExported"
 
+-- | 诊断域实现：Vuna.Compiler.Diagnostics.Rn.rnTemplate（目录/模板见 diagnostics.md）。
 rnTemplate : {n : Nat} -> RnErr n -> String
 rnTemplate DuplicateImport = "duplicate import"
 rnTemplate InstanceBodyForm = "instance body may only contain method signatures/definitions"
@@ -124,38 +127,49 @@ rnTemplate (TypeNotExported _ _) = "type <0> is not exported by <1>"
 rnTemplate (UnknownKind _ _) = "unknown <0> <1>"
 rnTemplate (ValueNotExported _ _) = "<0> is not exported by <1>"
 
+-- | 诊断域实现：Vuna.Compiler.Diagnostics.Rn.rnMsg（目录/模板见 diagnostics.md）。
 rnMsg : {n : Nat} -> RnErr n -> Vec n String -> Diagnostic
 rnMsg e args = diagNoLoc SevError PhResolve CatNames (rnCode e) (diagBody (rnTemplate e) args)
 
+-- | 诊断域实现：Vuna.Compiler.Diagnostics.Rn.rnErr（目录/模板见 diagnostics.md）。
 rnErr : Span -> {n : Nat} -> RnErr n -> Vec n String -> Check a
 rnErr sp e args = ErrC (withLabel (Label (Just sp) "" LabelPrimary Nothing) (rnMsg e args))
 
+-- | 诊断域实现：Vuna.Compiler.Diagnostics.Rn.rnNoLoc（目录/模板见 diagnostics.md）。
 rnNoLoc : {n : Nat} -> RnErr n -> Vec n String -> Check a
 rnNoLoc e args = ErrC (rnMsg e args)
 
+-- | 诊断域实现：Vuna.Compiler.Diagnostics.Rn.rnAt0（目录/模板见 diagnostics.md）。
 rnAt0 : Span -> RnErr Zero -> Check a
 rnAt0 sp e = rnErr sp e []
 
+-- | 诊断域实现：Vuna.Compiler.Diagnostics.Rn.rnAt1（目录/模板见 diagnostics.md）。
 rnAt1 : Span -> RnErr (Succ Zero) -> String -> Check a
 rnAt1 sp e a0 = rnErr sp e [a0]
 
+-- | 诊断域实现：Vuna.Compiler.Diagnostics.Rn.rnAt2（目录/模板见 diagnostics.md）。
 rnAt2 : Span -> RnErr (Succ (Succ Zero)) -> String -> String -> Check a
 rnAt2 sp e a0 a1 = rnErr sp e [a0, a1]
 
+-- | 诊断域实现：Vuna.Compiler.Diagnostics.Rn.rnNoLoc0（目录/模板见 diagnostics.md）。
 rnNoLoc0 : RnErr Zero -> Check a
 rnNoLoc0 e = rnNoLoc e []
 
+-- | 诊断域实现：Vuna.Compiler.Diagnostics.Rn.rnNoLoc1（目录/模板见 diagnostics.md）。
 rnNoLoc1 : RnErr (Succ Zero) -> String -> Check a
 rnNoLoc1 e a0 = rnNoLoc e [a0]
 
+-- | 诊断域实现：Vuna.Compiler.Diagnostics.Rn.rnNoLoc2（目录/模板见 diagnostics.md）。
 rnNoLoc2 : RnErr (Succ (Succ Zero)) -> String -> String -> Check a
 rnNoLoc2 e a0 a1 = rnNoLoc e [a0, a1]
 
+-- | 诊断域实现：Vuna.Compiler.Diagnostics.Rn.RnEntry（目录/模板见 diagnostics.md）。
 record RnEntry where
   rnEntryCode : String
   rnEntryTemplate : String
   rnEntryDesc : String
 
+-- | 诊断域实现：Vuna.Compiler.Diagnostics.Rn.rnAll（目录/模板见 diagnostics.md）。
 rnAll : List RnEntry
 rnAll =
   [ RnEntry (rnCode DuplicateImport) (rnTemplate DuplicateImport) "重复 import",

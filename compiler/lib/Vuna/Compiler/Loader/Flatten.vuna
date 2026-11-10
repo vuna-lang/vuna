@@ -832,7 +832,8 @@ warnImportsList (imp :: rest) used =
   let
     warnable = imp.importIsQualified || (case imp.importAlias of
       Just _ => True
-      Nothing => False)
+      Nothing => False
+    )
     _ =
       if not warnable then 0
       else if memName imp.importName used then 0

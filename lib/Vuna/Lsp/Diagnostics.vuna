@@ -112,33 +112,31 @@ labelRangeJson lines sp =
 
 -- 次级/上下文标签 → relatedInformation 的一项。
 labelRelatedJson : String -> List String -> Label -> List Json
-labelRelatedJson label lines (Label sp text style _) = case sp of
-  Nothing => []
-  Just s =>
-    if text == "" then []
-    else [ JObj [Pair "location" (JObj [Pair "uri" (JStr (pathToUri label)), Pair "range" (labelRangeJson lines s)]), Pair "message" (JStr text)]
-    ]
+labelRelatedJson label lines (Label Nothing text _ _) = []
+labelRelatedJson label lines (Label (Just s) text _ _) =
+  if text == "" then []
+  else [ JObj [Pair "location" (JObj [Pair "uri" (JStr (pathToUri label)), Pair "range" (labelRangeJson lines s)]), Pair "message" (JStr text)]
+  ]
 
 -- 字段 → `data` 数组项（机器消费，不解析散文）。
 fieldJson : DiagField -> Json
-fieldJson f = case f of
-  FieldExpected s => JObj [Pair "kind" (JStr "expected"), Pair "value" (JStr s)]
-  FieldFound s => JObj [Pair "kind" (JStr "found"), Pair "value" (JStr s)]
-  FieldName s => JObj [Pair "kind" (JStr "name"), Pair "value" (JStr s)]
-  FieldCandidates cs =>
-    JObj [Pair "kind" (JStr "candidates"), Pair "value" (JArr (map candidateJson cs))]
-  FieldCall c =>
-    JObj
-      [Pair "kind" (JStr "call"), Pair "value" (JObj [Pair "callee" (JStr c.callCallee), Pair "arg" (JStr c.callArg), Pair "relation" (JStr c.callRelation)])]
-  FieldQuantity name declared observed =>
-    JObj
-      [Pair "kind" (JStr "quantity"), Pair "value" (JObj [Pair "name" (JStr name), Pair "declared" (JNum declared), Pair "observed" (JNum observed)])]
-  FieldEffect s => JObj [Pair "kind" (JStr "effect"), Pair "value" (JStr s)]
-  FieldModule s => JObj [Pair "kind" (JStr "module"), Pair "value" (JStr s)]
-  FieldSpan name sp =>
-    JObj
-      [Pair "kind" (JStr "span"), Pair "name" (JStr name), Pair "value" (JObj [Pair "file" (JStr sp.spanFile), Pair "line" (JNum sp.spanStartLine), Pair "column" (JNum sp.spanStartCol)])]
-  FieldNote s => JObj [Pair "kind" (JStr "note"), Pair "value" (JStr s)]
+fieldJson (FieldExpected s) = JObj [Pair "kind" (JStr "expected"), Pair "value" (JStr s)]
+fieldJson (FieldFound s) = JObj [Pair "kind" (JStr "found"), Pair "value" (JStr s)]
+fieldJson (FieldName s) = JObj [Pair "kind" (JStr "name"), Pair "value" (JStr s)]
+fieldJson (FieldCandidates cs) =
+  JObj [Pair "kind" (JStr "candidates"), Pair "value" (JArr (map candidateJson cs))]
+fieldJson (FieldCall c) =
+  JObj
+    [Pair "kind" (JStr "call"), Pair "value" (JObj [Pair "callee" (JStr c.callCallee), Pair "arg" (JStr c.callArg), Pair "relation" (JStr c.callRelation)])]
+fieldJson (FieldQuantity name declared observed) =
+  JObj
+    [Pair "kind" (JStr "quantity"), Pair "value" (JObj [Pair "name" (JStr name), Pair "declared" (JNum declared), Pair "observed" (JNum observed)])]
+fieldJson (FieldEffect s) = JObj [Pair "kind" (JStr "effect"), Pair "value" (JStr s)]
+fieldJson (FieldModule s) = JObj [Pair "kind" (JStr "module"), Pair "value" (JStr s)]
+fieldJson (FieldSpan name sp) =
+  JObj
+    [Pair "kind" (JStr "span"), Pair "name" (JStr name), Pair "value" (JObj [Pair "file" (JStr sp.spanFile), Pair "line" (JNum sp.spanStartLine), Pair "column" (JNum sp.spanStartCol)])]
+fieldJson (FieldNote s) = JObj [Pair "kind" (JStr "note"), Pair "value" (JStr s)]
 
 candidateJson : Candidate -> Json
 candidateJson c = JObj (append [Pair "text" (JStr c.candidateText)] (case c.candidateReason of

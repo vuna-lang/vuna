@@ -22,10 +22,12 @@ import Vuna.Compiler.Common
 
 -- 用记录包一层：`newRef []` 在模块边界上留弱类型变量（OCaml value restriction），
 -- 记录类型让 ref 的载荷在定义处就是单态的。
+-- | 诊断域实现：Vuna.Compiler.Diagnostics.Sink.WarnBox（目录/模板见 diagnostics.md）。
 record WarnBox where
   warnBoxItems : List Diagnostic
   warnBoxTag : Int
 
+-- | 诊断域实现：Vuna.Compiler.Diagnostics.Sink.warningsRef（目录/模板见 diagnostics.md）。
 warningsRef : IORef WarnBox
 warningsRef = runIO (newRef (WarnBox [] 0))
 
@@ -49,31 +51,38 @@ takeWarnings _ =
     _ = runIO (writeRef warningsRef (WarnBox [] 0))
   in dedupeWarnings b.warnBoxItems
 
+-- | 诊断域实现：Vuna.Compiler.Diagnostics.Sink.containsDiag（目录/模板见 diagnostics.md）。
 containsDiag : Diagnostic -> List Diagnostic -> Bool
 containsDiag d [] = False
 containsDiag d (x :: xs) = if sameDiag d x then True else containsDiag d xs
 
+-- | 诊断域实现：Vuna.Compiler.Diagnostics.Sink.dedupeWarnings（目录/模板见 diagnostics.md）。
 dedupeWarnings : List Diagnostic -> List Diagnostic
 dedupeWarnings ds =
   reverse (foldl (\acc => \d => if containsDiag d acc then acc else d :: acc) [] ds)
 
 -- 本次检查中用到的 import（模块名）：unused-import warning 的数据源。
+-- | 诊断域实现：Vuna.Compiler.Diagnostics.Sink.UsedImportsBox（目录/模板见 diagnostics.md）。
 record UsedImportsBox where
   usedImportNames : List String
   usedImportTag : Int
 
+-- | 诊断域实现：Vuna.Compiler.Diagnostics.Sink.usedImportsRef（目录/模板见 diagnostics.md）。
 usedImportsRef : IORef UsedImportsBox
 usedImportsRef = runIO (newRef (UsedImportsBox [] 0))
 
+-- | 诊断域实现：Vuna.Compiler.Diagnostics.Sink.memUsedImport（目录/模板见 diagnostics.md）。
 memUsedImport : String -> List String -> Bool
 memUsedImport n [] = False
 memUsedImport n (x :: xs) = if n == x then True else memUsedImport n xs
 
+-- | 诊断域实现：Vuna.Compiler.Diagnostics.Sink.markImportUsed（目录/模板见 diagnostics.md）。
 markImportUsed : String -> Int
 markImportUsed name =
   runIO
     (modifyRef usedImportsRef (\b => if memUsedImport name b.usedImportNames then b else UsedImportsBox (append b.usedImportNames [name]) 0))
 
+-- | 诊断域实现：Vuna.Compiler.Diagnostics.Sink.takeUsedImports（目录/模板见 diagnostics.md）。
 takeUsedImports : Int -> List String
 takeUsedImports _ =
   let

@@ -21,6 +21,7 @@ import Vuna.Compiler.Diagnostics.Sink
 import Base.Nat
 import Base.Vec
 
+-- | 诊断域实现：Vuna.Compiler.Diagnostics.Warning.WarnErr（目录/模板见 diagnostics.md）。
 data WarnErr : Nat -> Type where
   -- arity 0
   WarnBranchAfterCatchAll : WarnErr Zero
@@ -32,6 +33,7 @@ data WarnErr : Nat -> Type where
   UnusedImport : String -> WarnErr (Succ Zero)
   ShadowedBinder : String -> WarnErr (Succ Zero)
 
+-- | 诊断域实现：Vuna.Compiler.Diagnostics.Warning.warnCode（目录/模板见 diagnostics.md）。
 warnCode : {n : Nat} -> WarnErr n -> String
 warnCode WarnBranchAfterCatchAll = "UN_BranchAfterCatchAll"
 warnCode (WarnRedundantCtorBranch _) = "UN_RedundantCtorBranch"
@@ -41,6 +43,7 @@ warnCode (UnusedDefinition _) = "UN_UnusedDefinition"
 warnCode (UnusedImport _) = "UN_UnusedImport"
 warnCode (ShadowedBinder _) = "UN_ShadowedBinder"
 
+-- | 诊断域实现：Vuna.Compiler.Diagnostics.Warning.warnTemplate（目录/模板见 diagnostics.md）。
 warnTemplate : {n : Nat} -> WarnErr n -> String
 warnTemplate WarnBranchAfterCatchAll = "this branch is unreachable (a catch-all precedes it)"
 warnTemplate (WarnRedundantCtorBranch _) =
@@ -52,6 +55,7 @@ warnTemplate (UnusedDefinition _) = "definition `<0>` is never used"
 warnTemplate (UnusedImport _) = "module `<0>` is imported but never used"
 warnTemplate (ShadowedBinder _) = "binder `<0>` shadows an outer binder"
 
+-- | 诊断域实现：Vuna.Compiler.Diagnostics.Warning.warnMsg（目录/模板见 diagnostics.md）。
 warnMsg : {n : Nat} -> WarnErr n -> Vec n String -> Diagnostic
 warnMsg e args =
   diagNoLoc SevWarning PhUsage CatQuantity (warnCode e) (diagBody (warnTemplate e) args)
@@ -61,17 +65,21 @@ warnAt : Span -> {n : Nat} -> WarnErr n -> Vec n String -> Int
 warnAt sp e args =
   emitWarning (withLabel (Label (Just sp) "" LabelPrimary Nothing) (warnMsg e args))
 
+-- | 诊断域实现：Vuna.Compiler.Diagnostics.Warning.warnAt0（目录/模板见 diagnostics.md）。
 warnAt0 : Span -> WarnErr Zero -> Int
 warnAt0 sp e = warnAt sp e []
 
+-- | 诊断域实现：Vuna.Compiler.Diagnostics.Warning.warnAt1（目录/模板见 diagnostics.md）。
 warnAt1 : Span -> WarnErr (Succ Zero) -> String -> Int
 warnAt1 sp e a0 = warnAt sp e [a0]
 
+-- | 诊断域实现：Vuna.Compiler.Diagnostics.Warning.WarnEntry（目录/模板见 diagnostics.md）。
 record WarnEntry where
   warnEntryCode : String
   warnEntryTemplate : String
   warnEntryDesc : String
 
+-- | 诊断域实现：Vuna.Compiler.Diagnostics.Warning.warnAll（目录/模板见 diagnostics.md）。
 warnAll : List WarnEntry
 warnAll =
   [ WarnEntry (warnCode WarnBranchAfterCatchAll) (warnTemplate WarnBranchAfterCatchAll) "catch-all 之后的分支不可达",

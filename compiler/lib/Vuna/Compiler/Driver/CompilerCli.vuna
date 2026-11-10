@@ -76,9 +76,11 @@ flushSarif code =
   let
     fmt = diagFormatOf 0
     box = runIO (readRef sarifRef)
-    _ =
-      if fmt == "sarif" then runIO (prim_print (renderSarif box.sarifItems ++ "\n"))
-      else if fmt == "json" then runIO (prim_print (renderJsonList box.sarifItems ++ "\n")) else 0
+    shown = takeDiags (maxErrorsOf 0) box.sarifItems
+    _ = case fmt of
+      "sarif" => runIO (prim_print (renderSarif shown ++ "\n"))
+      "json" => runIO (prim_print (renderJsonList shown ++ "\n"))
+      _ => 0
     _ = resetSarif 0
   in code
 
@@ -109,23 +111,22 @@ maxErrorsOf _ = runIO (readRef maxErrorsRef)
 -- 应用 vuna.toml [diagnostics]（命令行显式 flag 优先）。
 -- | 诊断/告警实现：applyDiagConfig（详见 diagnostics.md）。
 applyDiagConfig : Maybe Package -> Int
-applyDiagConfig mp = case mp of
-  Nothing => 0
-  Just pkg =>
-    let
-      m = pkg.packageManifest
-      _ = if not (runIO (readRef formatExplicitRef)) then case m.manifestDiagFormat of
-        Just f => runIO (writeRef diagFormatRef f)
-        Nothing => 0
-      else 0
-      _ = if not (runIO (readRef warningsExplicitRef)) then case m.manifestDiagWarnings of
-        Just b => runIO (writeRef showWarningsRef b)
-        Nothing => 0
-      else 0
-      _ = case m.manifestDiagMaxErrors of
-        Just n => runIO (writeRef maxErrorsRef n)
-        Nothing => 0
-    in 0
+applyDiagConfig Nothing = 0
+applyDiagConfig (Just pkg) =
+  let
+    m = pkg.packageManifest
+    _ = if not (runIO (readRef formatExplicitRef)) then case m.manifestDiagFormat of
+      Just f => runIO (writeRef diagFormatRef f)
+      Nothing => 0
+    else 0
+    _ = if not (runIO (readRef warningsExplicitRef)) then case m.manifestDiagWarnings of
+      Just b => runIO (writeRef showWarningsRef b)
+      Nothing => 0
+    else 0
+    _ = case m.manifestDiagMaxErrors of
+      Just n => runIO (writeRef maxErrorsRef n)
+      Nothing => 0
+  in 0
 
 -- | 诊断/告警实现：takeDiags（详见 diagnostics.md）。
 takeDiags : Int -> List Diagnostic -> List Diagnostic
