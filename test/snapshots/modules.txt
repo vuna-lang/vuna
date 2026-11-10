@@ -72,6 +72,8 @@ Vuna.Compiler.Core.Eval  compiler/lib/Vuna/Compiler/Core/Eval.vuna
 Vuna.Compiler.Core.Term  compiler/lib/Vuna/Compiler/Core/Term.vuna
 Vuna.Compiler.Core  compiler/lib/Vuna/Compiler/Core.vuna
 Vuna.Compiler.Debug  compiler/lib/Vuna/Compiler/Debug.vuna
+Vuna.Compiler.Diag.Format  compiler/lib/Vuna/Compiler/Diag/Format.vuna
+Vuna.Compiler.Diag  compiler/lib/Vuna/Compiler/Diag.vuna
 Vuna.Compiler.Diagnostics.Cg  compiler/lib/Vuna/Compiler/Diagnostics/Cg.vuna
 Vuna.Compiler.Diagnostics.Common  compiler/lib/Vuna/Compiler/Diagnostics/Common.vuna
 Vuna.Compiler.Diagnostics.Tc  compiler/lib/Vuna/Compiler/Diagnostics/Tc.vuna
@@ -123,6 +125,7 @@ Vuna.Compiler.Loader.Modules  compiler/lib/Vuna/Compiler/Loader/Modules.vuna
 Vuna.Compiler.Loader.Resolve  compiler/lib/Vuna/Compiler/Loader/Resolve.vuna
 Vuna.Compiler.Loader  compiler/lib/Vuna/Compiler/Loader.vuna
 Vuna.Compiler.Packages.Pkg  compiler/lib/Vuna/Compiler/Packages/Pkg.vuna
+Vuna.Compiler.Source  compiler/lib/Vuna/Compiler/Source.vuna
 Vuna.Compiler.Version  compiler/lib/Vuna/Compiler/Version.vuna
 app.Main  compiler/app/Main.vuna
 Base.Applicative  base/lib/Base/Applicative.vuna
@@ -204,6 +207,8 @@ Vuna.Compiler.Core.Eval  ./lib/Vuna/Compiler/Core/Eval.vuna
 Vuna.Compiler.Core.Term  ./lib/Vuna/Compiler/Core/Term.vuna
 Vuna.Compiler.Core  ./lib/Vuna/Compiler/Core.vuna
 Vuna.Compiler.Debug  ./lib/Vuna/Compiler/Debug.vuna
+Vuna.Compiler.Diag.Format  ./lib/Vuna/Compiler/Diag/Format.vuna
+Vuna.Compiler.Diag  ./lib/Vuna/Compiler/Diag.vuna
 Vuna.Compiler.Diagnostics.Cg  ./lib/Vuna/Compiler/Diagnostics/Cg.vuna
 Vuna.Compiler.Diagnostics.Common  ./lib/Vuna/Compiler/Diagnostics/Common.vuna
 Vuna.Compiler.Diagnostics.Tc  ./lib/Vuna/Compiler/Diagnostics/Tc.vuna
@@ -255,6 +260,7 @@ Vuna.Compiler.Loader.Modules  ./lib/Vuna/Compiler/Loader/Modules.vuna
 Vuna.Compiler.Loader.Resolve  ./lib/Vuna/Compiler/Loader/Resolve.vuna
 Vuna.Compiler.Loader  ./lib/Vuna/Compiler/Loader.vuna
 Vuna.Compiler.Packages.Pkg  ./lib/Vuna/Compiler/Packages/Pkg.vuna
+Vuna.Compiler.Source  ./lib/Vuna/Compiler/Source.vuna
 Vuna.Compiler.Version  ./lib/Vuna/Compiler/Version.vuna
 app.Main  ./app/Main.vuna
 

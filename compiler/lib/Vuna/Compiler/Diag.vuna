@@ -24,6 +24,7 @@ module Vuna.Compiler.Diag
   , rawAt
   , rawNoLoc
   , withContext
+  , withFallbackSpan
   , withField
   , withHelp
   , withLabel
@@ -340,3 +341,13 @@ instance Applicative Check where
   liftA2 f (OkC x) (OkC y) = OkC (f x y)
   liftA2 f (ErrC e) _ = ErrC e
   liftA2 f _ (ErrC e) = ErrC e
+
+-- | 若诊断没有主位置，就用给定 span 补一个（包装器用）。
+withFallbackSpan : Span -> Diagnostic -> Diagnostic
+withFallbackSpan sp d =
+  if hasPrimaryLabel d.diagLabels then d else withLabel (Label (Just sp) "" LabelPrimary Nothing) d
+
+hasPrimaryLabel : List Label -> Bool
+hasPrimaryLabel [] = False
+hasPrimaryLabel ((Label _ _ LabelPrimary _) :: rest) = True
+hasPrimaryLabel (_ :: rest) = hasPrimaryLabel rest

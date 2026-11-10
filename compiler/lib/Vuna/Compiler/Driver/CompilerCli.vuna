@@ -18,7 +18,10 @@ import Vuna.Compiler.Driver.Compile
 import Vuna.Compiler.Driver.DiagRender
 import Vuna.Compiler.Driver.Dt
 import Vuna.Compiler.Version
+import Vuna.Compiler.Diag.Format
 import Base.IO.Host
+import Base.IORef
+import Base.Nat
 
 compilerUsageLines : String -> String
 compilerUsageLines prog = """  ${prog} compile [--no-print] [--release] (<entry.vuna> | <package-dir>) <out-dir>
@@ -36,8 +39,35 @@ compilerUsage prog = "usage:\n${compilerUsageLines prog}"
 runCompilerCli : List String -> Int
 runCompilerCli args = runCompilerCliFor "vuna-compiler" args
 
+-- --error-format=short|human|json（也接受 --json）在入口统一剥离并写进全局渲染模式。
+diagFormatRef : IORef String
+diagFormatRef = runIO (newRef "short")
+
+stripDiagFormat : List String -> Pair (List String) (Maybe String)
+stripDiagFormat args = stripDiagFormatGo args [] Nothing
+
+stripDiagFormatGo : List String -> List String -> Maybe String -> Pair (List String) (Maybe String)
+stripDiagFormatGo [] acc found = Pair (reverse acc) found
+stripDiagFormatGo ("--json" :: rest) acc found = stripDiagFormatGo rest acc (Just "json")
+stripDiagFormatGo ("--error-format" :: rest) acc found = case rest of
+  value :: more => stripDiagFormatGo more acc (Just value)
+  [] => Pair (reverse acc) (Just "short")
+stripDiagFormatGo (arg :: rest) acc found =
+  if startsWith "--error-format=" arg then stripDiagFormatGo rest acc
+    (Just (substring (natFromInt 15) (natFromInt (strLength arg - 15)) arg))
+  else if startsWith "--message-format=" arg then stripDiagFormatGo rest acc
+    (Just (substring (natFromInt 17) (natFromInt (strLength arg - 17)) arg))
+  else stripDiagFormatGo rest (arg :: acc) found
+
 runCompilerCliFor : String -> List String -> Int
-runCompilerCliFor prog args = if anyHelp args then helpFor prog else runCompilerCliFor1 prog args
+runCompilerCliFor prog args =
+  let
+    stripped = stripDiagFormat args
+    _ = case secondOf stripped of
+      Just fmt => runIO (writeRef diagFormatRef fmt)
+      Nothing => 0
+    kept = firstOf stripped
+  in if anyHelp kept then helpFor prog else runCompilerCliFor1 prog kept
 
 runCompilerCliFor1 : String -> List String -> Int
 runCompilerCliFor1 prog args = case args of
@@ -122,7 +152,12 @@ printErrText e =
   in 1
 
 printDiag : Diagnostic -> Int
-printDiag d = printErrText ("error: " ++ diagText d ++ "\n")
+printDiag d =
+  let
+    fmt = runIO (readRef diagFormatRef)
+  in if fmt == "json" then printErrText (renderJson d ++ "\n")
+  else if fmt == "human" then printErrText (renderHuman d ++ "\n")
+  else printErrText ("error: " ++ renderShort d ++ "\n")
 
 printErr : String -> Int
 printErr e = printErrText "error: ${e}\n"

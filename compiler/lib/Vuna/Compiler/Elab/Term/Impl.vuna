@@ -1725,7 +1725,7 @@ else case inferEFuelHint (fuel - 1) globals ctx ec expr expected of
         Just p => OkC (Pair (firstOf p) (resolveDictGoals globals (secondOf p)))
         Nothing => case unhandledEffectLabel ec1 expected actual of
           Just labels => tcErr1 (exprSpan expr) (UnhandledEffects labels) labels
-          Nothing => err "${showSpanLoc (exprSpan expr)}: ${diagText e}"
+          Nothing => ErrC (withFallbackSpan (exprSpan expr) e)
       OkC ec2 => OkC (Pair term (resolveDictGoals globals ec2))
 
 checkLamFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> List String -> Expr -> Value -> Span -> Check (Pair Term Ec)

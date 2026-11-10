@@ -1,0 +1,270 @@
+-- | 诊断渲染：short（首行）/ human（源码片段 + notes）/ JSON。
+module Vuna.Compiler.Diag.Format (renderHuman, renderJson, renderJsonList, renderShort) where
+
+-- Vuna.Compiler.Diag.Format：诊断的唯一渲染层（诊断重设计 M5/M6）。
+--
+-- 三个视图共享同一个 `Diagnostic`：
+--   * `renderShort`：`file:line:col: [CODE] 消息`（编辑器 / grep / 过渡期夹具）；
+--   * `renderHuman`：rustc 风格首行 + 源码片段 + note/help；
+--   * `renderJson`：版本化机器格式（LSP / CI / 测试消费）。
+-- 禁止任何下游再从文本反解析位置或错误码。
+--
+-- 列单位沿用编译器内部约定：1-based，UTF-8 字节（见 `Source`）。JSON 同时给出
+-- 行/列；LSP 适配器负责转 UTF-16。
+import Vuna.Compiler.Source
+import Vuna.Compiler.Diag
+import Base.IO.Host
+import Base.Nat
+
+-- ---------------------------------------------------------------
+-- 名称
+-- ---------------------------------------------------------------
+severityName : Severity -> String
+severityName SevError = "error"
+severityName SevWarning = "warning"
+severityName SevNote = "note"
+severityName SevHelp = "help"
+
+phaseName : Phase -> String
+phaseName PhLex = "lex"
+phaseName PhParse = "parse"
+phaseName PhResolve = "resolve"
+phaseName PhLoad = "load"
+phaseName PhElab = "elab"
+phaseName PhUnify = "unify"
+phaseName PhCoverage = "coverage"
+phaseName PhTermination = "termination"
+phaseName PhUsage = "usage"
+phaseName PhCodegen = "codegen"
+phaseName PhPackage = "package"
+phaseName PhDriver = "driver"
+phaseName PhTool = "tool"
+phaseName PhInternal = "internal"
+
+categoryName : Category -> String
+categoryName CatSyntax = "syntax"
+categoryName CatNames = "names"
+categoryName CatTypes = "types"
+categoryName CatUniverses = "universes"
+categoryName CatCoverage = "coverage"
+categoryName CatTermination = "termination"
+categoryName CatQuantity = "quantity"
+categoryName CatEffects = "effects"
+categoryName CatRecords = "records"
+categoryName CatTraits = "traits"
+categoryName CatCodegen = "codegen"
+categoryName CatPackage = "package"
+categoryName CatTool = "tool"
+categoryName CatInternal = "internal"
+
+originName : Origin -> String
+originName OriginDirect = "direct"
+originName (OriginCascade _) = "cascade"
+
+applicabilityName : Applicability -> String
+applicabilityName MachineApplicable = "machine-applicable"
+applicabilityName MaybeIncorrect = "maybe-incorrect"
+applicabilityName HasPlaceholder = "has-placeholder"
+
+-- ---------------------------------------------------------------
+-- short：首行（与过渡期 CLI 逐字节兼容）
+-- ---------------------------------------------------------------
+renderShort : Diagnostic -> String
+renderShort = diagText
+
+-- ---------------------------------------------------------------
+-- human
+-- ---------------------------------------------------------------
+-- 主 span（首个 primary 标签）。
+primarySpan : List Label -> Maybe Span
+primarySpan [] = Nothing
+primarySpan ((Label sp _ LabelPrimary _) :: rest) = sp
+primarySpan (_ :: rest) = primarySpan rest
+
+-- 主标签文本。
+primaryText : List Label -> String
+primaryText [] = ""
+primaryText ((Label _ text LabelPrimary _) :: rest) = text
+primaryText (_ :: rest) = primaryText rest
+
+-- 行文本（1-based）；越界返回空串。
+lineAt : List String -> Int -> String
+lineAt [] n = ""
+lineAt (x :: rest) n = if n <= 1 then x else lineAt rest (n - 1)
+
+-- tab 显示成单空格（与旧渲染一致）。
+displayLine : String -> String
+displayLine s = strPack (map tabToSpace (strUnpack s))
+
+tabToSpace : Int -> Int
+tabToSpace 9 = 32
+tabToSpace c = c
+
+repeatSpace : Int -> String
+repeatSpace n = if n <= 0 then "" else " " ++ repeatSpace (n - 1)
+
+padLeft : Int -> String -> String
+padLeft n s = if strLength s >= n then s else repeatSpace (n - strLength s) ++ s
+
+-- 插入符宽度：同一行用 end - start；跨行或退化时至少 1。
+caretWidth : Span -> Int
+caretWidth sp =
+  if spanEndLine sp /= spanStartLine sp then 1
+  else if spanEndCol sp > spanStartCol sp then spanEndCol sp - spanStartCol sp else 1
+
+-- 单个源码片段块。
+snippetOf : Span -> String -> String
+snippetOf sp text =
+  let
+    lines = lines text
+    src = lineAt lines (spanStartLine sp)
+    display = displayLine src
+    lineNumber = strFromInt (spanStartLine sp)
+    width = strLength lineNumber
+    start = if spanStartCol sp <= 0 then 0 else spanStartCol sp - 1
+    carets = caretWidth sp
+    gutter = repeatSpace (width + 1) ++ "|"
+    numberRow = padLeft width lineNumber ++ " | " ++ display
+    caretRow =
+      repeatSpace (width + 1) ++ "|" ++ repeatSpace (start + 1) ++ repeat (natFromInt carets) "^"
+  in join "\n" ["  --> ${showSpanLoc sp}", gutter, numberRow, caretRow]
+
+-- 文件可读才渲染片段（失败静默退回无片段）。
+renderSnippet : Span -> String
+renderSnippet sp =
+  if runIO (fileExists (spanFile sp)) then if runIO (isDirectory (spanFile sp)) then "" else snippetOf sp (runIO (readFile (spanFile sp)))
+  else ""
+
+-- 头部：`error[CODE]: 消息`（无 code 时 `error: 消息`）。
+headerOf : Diagnostic -> String
+headerOf d =
+  if d.diagCode == "" then "${severityName d.diagSeverity}: ${d.diagMessage}"
+  else "${severityName d.diagSeverity}[${d.diagCode}]: ${d.diagMessage}"
+
+renderHuman : Diagnostic -> String
+renderHuman d =
+  let
+    primary = primarySpan d.diagLabels
+    ptext = primaryText d.diagLabels
+    snippet = case primary of
+      Just sp => renderSnippet sp
+      Nothing => ""
+    labelNote = if ptext == "" then "" else "  = note: ${ptext}"
+    notes = join "\n" (map (\n => "  = note: ${n}") d.diagNotes)
+    block = join "\n" [headerOf d, snippet, labelNote, notes]
+  in trim block
+
+-- ---------------------------------------------------------------
+-- JSON
+-- ---------------------------------------------------------------
+jsonEscapeChar : Int -> String
+jsonEscapeChar c =
+  if c == 34 then "\\\""
+  else if c == 92 then "\\\\"
+  else if c == 10 then "\\n"
+  else if c == 13 then "\\r"
+  else if c == 9 then "\\t" else if c < 32 then "\\u00" ++ hex2 c else strPack [c]
+
+hex2 : Int -> String
+hex2 n =
+  let
+    hi = n / 16
+    lo = n - hi * 16
+  in hexDigit hi ++ hexDigit lo
+
+hexDigit : Int -> String
+hexDigit n =
+  if n < 10 then substring (natFromInt n) 1 "0123456789abcdef"
+  else substring (natFromInt n) 1 "0123456789abcdef"
+
+jsonEscape : String -> String
+jsonEscape s = join "" (map jsonEscapeChar (strUnpack s))
+
+jsonStr : String -> String
+jsonStr s = "\"${jsonEscape s}\""
+
+jsonPos : Int -> Int -> String
+jsonPos line col = "{\"line\":${line},\"column\":${col}}"
+
+jsonSpan : Span -> String
+jsonSpan sp =
+  "{\"file\":${jsonStr sp.spanFile},\"start\":${jsonPos sp.spanStartLine sp.spanStartCol},\"end\":${jsonPos sp.spanEndLine sp.spanEndCol}}"
+
+jsonLabel : Label -> String
+jsonLabel (Label sp text style prov) =
+  "{\"span\":${maybeJsonSpan sp},\"style\":${jsonStr (styleName style)},\"text\":${jsonStr text},\"provenance\":${maybeJsonSpan prov}}"
+
+styleName : LabelStyle -> String
+styleName LabelPrimary = "primary"
+styleName LabelSecondary = "secondary"
+styleName LabelContext = "context"
+
+maybeJsonSpan : Maybe Span -> String
+maybeJsonSpan Nothing = "null"
+maybeJsonSpan (Just sp) = jsonSpan sp
+
+jsonCandidate : Candidate -> String
+jsonCandidate c =
+  "{\"text\":${jsonStr c.candidateText},\"reason\":${maybeJsonString c.candidateReason}}"
+
+maybeJsonString : Maybe String -> String
+maybeJsonString Nothing = "null"
+maybeJsonString (Just s) = jsonStr s
+
+jsonField : DiagField -> String
+jsonField f = case f of
+  FieldExpected s => "{\"kind\":\"expected\",\"value\":${jsonStr s}}"
+  FieldFound s => "{\"kind\":\"found\",\"value\":${jsonStr s}}"
+  FieldName s => "{\"kind\":\"name\",\"value\":${jsonStr s}}"
+  FieldCandidates cs => "{\"kind\":\"candidates\",\"value\":[${join "," (map jsonCandidate cs)}]}"
+  FieldCall c =>
+    "{\"kind\":\"call\",\"value\":{\"callee\":${jsonStr c.callCallee},\"arg\":${jsonStr c.callArg},\"relation\":${jsonStr c.callRelation}}}"
+  FieldQuantity name declared observed =>
+    "{\"kind\":\"quantity\",\"value\":{\"name\":${jsonStr name},\"declared\":${declared},\"observed\":${observed}}}"
+  FieldEffect s => "{\"kind\":\"effect\",\"value\":${jsonStr s}}"
+  FieldModule s => "{\"kind\":\"module\",\"value\":${jsonStr s}}"
+  FieldSpan name sp => "{\"kind\":\"span\",\"name\":${jsonStr name},\"value\":${jsonSpan sp}}"
+  FieldNote s => "{\"kind\":\"note\",\"value\":${jsonStr s}}"
+
+jsonDiagEdit : DiagEdit -> String
+jsonDiagEdit e = "{\"span\":${jsonSpan e.editSpan},\"newText\":${jsonStr e.editNewText}}"
+
+jsonSuggestion : Suggestion -> String
+jsonSuggestion s =
+  "{\"title\":${jsonStr s.suggestionTitle},\"applicability\":${jsonStr (applicabilityName s.suggestionApplicability)},\"edits\":[${join "," (map jsonDiagEdit s.suggestionEdits)}]}"
+
+jsonTrace : TraceFrame -> String
+jsonTrace t = jsonTraceFuel 64 t
+
+jsonTraceFuel : Int -> TraceFrame -> String
+jsonTraceFuel fuel t =
+  if fuel <= 0 then "{\"phase\":\"truncated\"}"
+  else "{\"phase\":${jsonStr (phaseName t.tracePhase)},\"text\":${jsonStr t.traceText},\"span\":${maybeJsonSpan t.traceSpan},\"children\":[${join "," (map (jsonTraceFuel (fuel - 1)) t.traceChildren)}]}"
+
+jsonIce : IceInfo -> String
+jsonIce i =
+  "{\"phase\":${jsonStr (phaseName i.icePhase)},\"function\":${jsonStr i.iceFunction},\"invariant\":${jsonStr i.iceInvariant},\"fingerprint\":${jsonStr i.iceFingerprint},\"hint\":${jsonStr i.iceHint}}"
+
+maybeJsonIce : Maybe IceInfo -> String
+maybeJsonIce Nothing = "null"
+maybeJsonIce (Just i) = jsonIce i
+
+originJson : Origin -> String
+originJson OriginDirect = "{\"kind\":\"direct\"}"
+originJson (OriginCascade parent) = "{\"kind\":\"cascade\",\"parent\":${maybeParent parent}}"
+
+maybeParent : Maybe Int -> String
+maybeParent Nothing = "null"
+maybeParent (Just n) = "${n}"
+
+jsonDiag : Diagnostic -> String
+jsonDiag d =
+  join ""
+    ["{\"code\":${jsonStr d.diagCode}", ",\"severity\":${jsonStr (severityName d.diagSeverity)}", ",\"phase\":${jsonStr (phaseName d.diagPhase)}", ",\"category\":${jsonStr (categoryName d.diagCategory)}", ",\"message\":${jsonStr d.diagMessage}", ",\"labels\":[${join "," (map jsonLabel d.diagLabels)}]", ",\"fields\":[${join "," (map jsonField d.diagFields)}]", ",\"trace\":[${join "," (map jsonTrace d.diagTrace)}]", ",\"notes\":[${join "," (map jsonStr d.diagNotes)}]", ",\"suggestions\":[${join "," (map jsonSuggestion d.diagSuggestions)}]", ",\"origin\":${originJson d.diagOrigin}", ",\"internal\":${if d.diagInternal then "true" else "false"}", ",\"ice\":${maybeJsonIce d.diagIce}}"]
+
+renderJson : Diagnostic -> String
+renderJson d = jsonDiag d
+
+renderJsonList : List Diagnostic -> String
+renderJsonList ds =
+  "{\"version\":1,\"tool\":\"vuna\",\"diagnostics\":[${join "," (map jsonDiag ds)}]}"

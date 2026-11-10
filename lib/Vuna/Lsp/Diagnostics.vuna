@@ -52,61 +52,132 @@ severityWarning = 2
 
 -- 诊断
 -- ---------------------------------------------------------------
--- 行/列 1-based；code 为空串表示无规则码（编译错误）。
-record Diag where
-  diagStartLine : Int
-  diagStartCol : Int
-  diagEndLine : Int
-  diagEndCol : Int
-  diagSeverity : Int
-  diagCode : String
-  diagMessage : String
+-- LSP 直接消费编译器的 `Diagnostic`（结构化值），不再从文本反解析位置。
+-- 列单位：编译器内部 1-based UTF-8 字节；LSP 要求 0-based UTF-16 code units，
+-- 这里按 buffer 文本换算（非 ASCII 行的 range 才正确）。
+-- 首个 primary 标签的 span。
+diagPrimarySpan : List Label -> Maybe Span
+diagPrimarySpan [] = Nothing
+diagPrimarySpan ((Label sp _ LabelPrimary _) :: rest) = sp
+diagPrimarySpan (_ :: rest) = diagPrimarySpan rest
 
-diagJson : Diag -> Json
-diagJson d =
-  JObj
-    (append [Pair "range" (lspRange d.diagStartLine d.diagStartCol d.diagEndLine d.diagEndCol), Pair "severity" (JNum d.diagSeverity), Pair "source" (JStr "vuna")] (append (if d.diagCode == "" then [] else [Pair "code" (JStr d.diagCode)]) [Pair "message" (JStr d.diagMessage)]))
+-- 首个 primary 标签的文本。
+diagPrimaryText : List Label -> String
+diagPrimaryText [] = ""
+diagPrimaryText ((Label _ text LabelPrimary _) :: rest) = text
+diagPrimaryText (_ :: rest) = diagPrimaryText rest
 
--- 编译器的错误/警告串形如 `<file>:<line>:<col>: <msg>`；file 本身可能含冒号
--- （例如 URI `file:///x.vuna:2:7: ...`）。所以扫描第一个「连续两段都是数字」的位置，
--- 而不是取头两段。识别不出来就当无位置（0,0）。
--- 返回 (file, (line, (col, msg)))。
-splitLocFull : String -> Pair String (Pair Int (Pair Int String))
-splitLocFull message = case scanLocFull (split ":" message) [] of
-  Nothing => Pair "" (Pair 0 (Pair 0 message))
-  Just loc => loc
+-- 诊断是否属于当前文件：无位置的诊断归到当前 buffer；依赖文件的诊断不发。
+diagOwns : String -> Diagnostic -> Bool
+diagOwns label d = case diagPrimarySpan d.diagLabels of
+  Nothing => True
+  Just sp =>
+    if sp.spanFile == "" then True
+    else if sp.spanFile == label then True
+    else if fileNameOf label /= "" && endsWith "/${fileNameOf label}" sp.spanFile then True else False
 
-scanLocFull : List String -> List String -> Maybe (Pair String (Pair Int (Pair Int String)))
-scanLocFull [] acc = Nothing
-scanLocFull (a :: rest) acc = case rest of
-  b :: more =>
-    if allDigits a && allDigits b then Just
-      (Pair (join ":" (reverse acc)) (Pair (digitsToInt (strUnpack a) 0) (Pair (digitsToInt (strUnpack b) 0) (trim (join ":" more)))))
-    else scanLocFull rest (a :: acc)
-  [] => Nothing
+-- Severity → LSP 1..4。
+lspSeverityOf : Severity -> Int
+lspSeverityOf SevError = 1
+lspSeverityOf SevWarning = 2
+lspSeverityOf SevNote = 3
+lspSeverityOf SevHelp = 4
 
-diagOfMessage : Int -> String -> String -> Diag
-diagOfMessage severity code message =
+-- 第 n 行文本（1-based）；越界返回空串。
+lineTextAt : List String -> Int -> String
+lineTextAt [] n = ""
+lineTextAt (x :: rest) n = if n <= 1 then x else lineTextAt rest (n - 1)
+
+-- UTF-8 字节列（1-based）→ UTF-16 code unit 列（1-based）。
+-- 只数到 byteCol-1 的字节：4 字节序列（>= 0xF0）计 2 个 unit，续字节（0x80..0xBF）计 0。
+utf16ColOf : String -> Int -> Int
+utf16ColOf lineText byteCol = utf16ColGo (strUnpack lineText) 0 0 (byteCol - 1) + 1
+
+utf16ColGo : List Int -> Int -> Int -> Int -> Int
+utf16ColGo [] i units stop = units
+utf16ColGo (b :: rest) i units stop =
+  if i >= stop then units
+  else if b >= 240 then utf16ColGo rest (i + 1) (units + 2) stop
+  else if b >= 128 && b < 192 then utf16ColGo rest (i + 1) units stop
+  else utf16ColGo rest (i + 1) (units + 1) stop
+
+-- 一个标签的位置转 LSP range（用 buffer 文本换算 UTF-16）。
+labelRangeJson : List String -> Span -> Json
+labelRangeJson lines sp =
+  lspRange (spanStartLine sp) (utf16ColOf (lineTextAt lines (spanStartLine sp)) (spanStartCol sp))
+    (spanEndLine sp) (utf16ColOf (lineTextAt lines (spanEndLine sp)) (spanEndCol sp))
+
+-- 次级/上下文标签 → relatedInformation 的一项。
+labelRelatedJson : String -> List String -> Label -> List Json
+labelRelatedJson label lines (Label sp text style _) = case sp of
+  Nothing => []
+  Just s =>
+    if text == "" then []
+    else [ JObj [Pair "location" (JObj [Pair "uri" (JStr (pathToUri label)), Pair "range" (labelRangeJson lines s)]), Pair "message" (JStr text)]
+    ]
+
+-- 字段 → `data` 数组项（机器消费，不解析散文）。
+fieldJson : DiagField -> Json
+fieldJson f = case f of
+  FieldExpected s => JObj [Pair "kind" (JStr "expected"), Pair "value" (JStr s)]
+  FieldFound s => JObj [Pair "kind" (JStr "found"), Pair "value" (JStr s)]
+  FieldName s => JObj [Pair "kind" (JStr "name"), Pair "value" (JStr s)]
+  FieldCandidates cs =>
+    JObj [Pair "kind" (JStr "candidates"), Pair "value" (JArr (map candidateJson cs))]
+  FieldCall c =>
+    JObj
+      [Pair "kind" (JStr "call"), Pair "value" (JObj [Pair "callee" (JStr c.callCallee), Pair "arg" (JStr c.callArg), Pair "relation" (JStr c.callRelation)])]
+  FieldQuantity name declared observed =>
+    JObj
+      [Pair "kind" (JStr "quantity"), Pair "value" (JObj [Pair "name" (JStr name), Pair "declared" (JNum declared), Pair "observed" (JNum observed)])]
+  FieldEffect s => JObj [Pair "kind" (JStr "effect"), Pair "value" (JStr s)]
+  FieldModule s => JObj [Pair "kind" (JStr "module"), Pair "value" (JStr s)]
+  FieldSpan name sp =>
+    JObj
+      [Pair "kind" (JStr "span"), Pair "name" (JStr name), Pair "value" (JObj [Pair "file" (JStr sp.spanFile), Pair "line" (JNum sp.spanStartLine), Pair "column" (JNum sp.spanStartCol)])]
+  FieldNote s => JObj [Pair "kind" (JStr "note"), Pair "value" (JStr s)]
+
+candidateJson : Candidate -> Json
+candidateJson c = JObj (append [Pair "text" (JStr c.candidateText)] (case c.candidateReason of
+  Nothing => []
+  Just r => [Pair "reason" (JStr r)]
+)
+)
+
+-- 诊断消息 + notes + suggestions（LSP 客户端只显示 message）。
+messageWithExtras : Diagnostic -> String
+messageWithExtras d =
   let
-    loc = splitLocFull message
-    line = firstOf (secondOf loc)
-  in if line <= 0 then Diag 0 0 0 0 severity code message
-  else
-    let
-      col = firstOf (secondOf (secondOf loc))
-      msg = secondOf (secondOf (secondOf loc))
-    in Diag line col line col severity code msg
+    notes = map (\n => "note: ${n}") d.diagNotes
+    fixes = map suggestionHelp d.diagSuggestions
+  in join "\n" (append [d.diagMessage] (append notes fixes))
 
--- 错误属于当前文件才发；无位置的错误归到当前文件；依赖文件的错误过滤掉。
-diagIfOwn : String -> Int -> String -> Maybe Diag
-diagIfOwn label severity message =
+suggestionHelp : Suggestion -> String
+suggestionHelp s = "help: ${s.suggestionTitle}"
+
+-- 一条结构化诊断 → LSP Diagnostic JSON。
+diagnosticJson : String -> List String -> Diagnostic -> Json
+diagnosticJson label lines d =
   let
-    loc = splitLocFull message
-    file = firstOf loc
-    line = firstOf (secondOf loc)
-  in if line <= 0 then Just (diagOfMessage severity "" message)
-  else if file == "" || file == label || fileNameOf label /= "" && endsWith "/${fileNameOf label}" file then Just (diagOfMessage severity "" message)
-  else Nothing
+    range = case diagPrimarySpan d.diagLabels of
+      Nothing => lspRange 0 0 0 0
+      Just sp => labelRangeJson lines sp
+    related = concatMap (labelRelatedJson label lines) d.diagLabels
+    fieldData = map fieldJson d.diagFields
+    base =
+      [ Pair "range" range,
+        Pair "severity" (JNum (lspSeverityOf d.diagSeverity)),
+        Pair "source" (JStr "vuna"),
+        Pair "message" (JStr (messageWithExtras d))
+      ]
+    withCode = if d.diagCode == "" then base else append base [Pair "code" (JStr d.diagCode)]
+    withRelated =
+      if length related == 0 then withCode
+      else append withCode [Pair "relatedInformation" (JArr related)]
+    withData =
+      if length fieldData == 0 then withRelated
+      else append withRelated [Pair "data" (JArr fieldData)]
+  in JObj withData
 
 -- 包上下文：file:// URI → 路径 → `contextForFile`；非 file URI（或磁盘上不存在的
 -- 路径）退化到 cwd 的 `contextForDir "."`。失败由调用方转成 0:0 的 `pkg: ...` 诊断。
@@ -203,11 +274,9 @@ currentNameOf (Just n) = n
 -- ---------------------------------------------------------------
 -- 精化 + 写回
 -- ---------------------------------------------------------------
-diagsOfCheck : String -> Check (List Diagnostic) -> List Diag
+diagsOfCheck : String -> Check (List Diagnostic) -> List Diagnostic
 diagsOfCheck label (OkC _) = []
-diagsOfCheck label (ErrC e) = case diagIfOwn label severityError (diagText e) of
-  Nothing => []
-  Just d => [d]
+diagsOfCheck label (ErrC e) = if diagOwns label e then [e] else []
 
 -- buffer == 磁盘吗？单模块写回的前置条件（否则写下的 SourceInfo 与磁盘不符，读侧会判脏）。
 diskMatches : String -> String -> Bool
@@ -225,7 +294,7 @@ entryHashMatches (Just h) x = h == x
 
 -- 单文件增量精化（会话可用）：依赖接口 + 本包干净模块预置，只精化当前 buffer。
 -- 安全阀说「不适用」（Nothing）时回退全量。
-checkIncremental : DiagCache -> String -> String -> Maybe String -> List Import -> Pair (Maybe DiagCache) (List Diag)
+checkIncremental : DiagCache -> String -> String -> Maybe String -> List Import -> Pair (Maybe DiagCache) (List Diagnostic)
 checkIncremental session label text modName imports = case session.dcTool of
   Nothing => Pair Nothing []
   Just tool =>
@@ -251,7 +320,7 @@ checkIncremental session label text modName imports = case session.dcTool of
       else Pair Nothing []
 
 -- 上下文的精简入口（`dtCheckSourceChecked` 需要 ctx）。
-checkFullWith : Maybe DiagCache -> PackageContext -> String -> String -> Maybe String -> Pair (Maybe DiagCache) (List Diag)
+checkFullWith : Maybe DiagCache -> PackageContext -> String -> String -> Maybe String -> Pair (Maybe DiagCache) (List Diagnostic)
 checkFullWith cache ctx label text modName = case dtCheckSourceChecked ctx label text of
   ErrC e => Pair cache (diagsOfCheck label (ErrC e))
   OkC (Pair _ checkedPkg) =>
@@ -269,30 +338,32 @@ checkFullWith cache ctx label text modName = case dtCheckSourceChecked ctx label
 -- ---------------------------------------------------------------
 -- lint（会话复用 fixity 模块图；外部文件变化会随会话重建清空）
 -- ---------------------------------------------------------------
-lintWithEnv : FixityEnv -> String -> String -> Pair FixityEnv (List Diag)
+lintWithEnv : FixityEnv -> String -> String -> Pair FixityEnv (List Diagnostic)
 lintWithEnv env label text = case fixitiesForFile env label text of
   Pair env2 (ErrC _) => Pair env2 []
   Pair env2 (OkC fx) => Pair env2 (case lintSourceWith fx text of
     ErrC _ => []
-    OkC findings => map lintDiag findings
+    OkC findings => map findingToDiagnostic findings
   )
 
-lintDiag : Finding -> Diag
-lintDiag f =
-  Diag f.findingLine f.findingCol f.findingLine (f.findingCol + 1) severityWarning f.findingCode
-    f.findingMessage
+-- lint finding 与编译器诊断共用同一个 `Diagnostic` 模型（phase = Tool，category = Tool）。
+findingToDiagnostic : Finding -> Diagnostic
+findingToDiagnostic f =
+  diagAt (Span "" f.findingLine f.findingCol f.findingLine (f.findingCol + 1)) SevWarning PhTool
+    CatTool f.findingCode f.findingMessage
 
--- 单个 lint finding 的 Diagnostic JSON（codeAction 内嵌诊断用）：与 `publishDiagnostics`
--- 走同一条 `diagJson`（range/severity/source/code/message），客户端能按 code 与已发布诊断
--- 直接关联，不另拼 JSON 结构。
+-- 单个 lint finding 的 Diagnostic JSON（codeAction 内嵌诊断用）：与 publishDiagnostics
+-- 的字段集合一致（range/severity/source/code/message），客户端可按 code 关联。
 findingDiagJson : Finding -> Json
-findingDiagJson f = diagJson (lintDiag f)
+findingDiagJson f =
+  JObj
+    (append [Pair "range" (lspRange f.findingLine f.findingCol f.findingLine (f.findingCol + 1)), Pair "severity" (JNum severityWarning), Pair "source" (JStr "vuna")] (append (if f.findingCode == "" then [] else [Pair "code" (JStr f.findingCode)]) [Pair "message" (JStr f.findingMessage)]))
 
 -- ---------------------------------------------------------------
 -- 一次请求的完整诊断链
 -- ---------------------------------------------------------------
 -- DT 诊断：会话可用时走单文件增量精化，否则回退全量（诊断语义不变）。
-checkDiagnostics : Maybe DiagCache -> String -> PackageContext -> String -> Maybe String -> List Import -> Pair (Maybe DiagCache) (List Diag)
+checkDiagnostics : Maybe DiagCache -> String -> PackageContext -> String -> Maybe String -> List Import -> Pair (Maybe DiagCache) (List Diagnostic)
 checkDiagnostics cache label ctx text modName imports =
   let
     session = usableSession cache ctx label text modName imports
@@ -305,11 +376,11 @@ checkDiagnostics cache label ctx text modName imports =
         Just s2 => Pair (Just s2) (secondOf inc)
         Nothing => checkFullWith (Just s) ctx label text modName
 
-diagnosticsForCached : Maybe DiagCache -> String -> String -> Pair (Maybe DiagCache) (List Diag)
+diagnosticsForCached : Maybe DiagCache -> String -> String -> Pair (Maybe DiagCache) (Pair String (List Diagnostic))
 diagnosticsForCached cache uri text = case contextForDoc uri of
-  ErrC e => Pair cache [Diag 0 0 0 0 severityError "" (diagText e)]
+  ErrC e => Pair cache (Pair "" [e])
   OkC (Pair label ctx) => case parseSource label text of
-    ErrC e => Pair cache [diagOfMessage severityError "" (diagText e)]
+    ErrC e => Pair cache (Pair label [e])
     OkC (SourceFile hdr imports fixities decls) =>
       let
         modName = case hdr of
@@ -325,23 +396,27 @@ diagnosticsForCached cache uri text = case contextForDoc uri of
             Just
               (DiagCache c.dcLabel c.dcKey c.dcCtx c.dcTool c.dcClean c.dcBuiltSec c.dcStats c.dcAux (firstOf linted))
           Nothing => Nothing
-      in Pair cache3 (append (secondOf checked) (secondOf linted))
+      in Pair cache3 (Pair label (append (secondOf checked) (secondOf linted)))
 
-publishDiagnostics : String -> Int -> List Diag -> Json
-publishDiagnostics uri version diags =
-  notify "textDocument/publishDiagnostics"
-    (JObj [Pair "uri" (JStr uri), Pair "version" (JNum version), Pair "diagnostics" (JArr (map diagJson diags))])
+publishDiagnostics : String -> Int -> String -> List Diagnostic -> Json
+publishDiagnostics uri version text diags =
+  let
+    lines0 = lines text
+    jsonDiags = map (diagnosticJson uri lines0) diags
+  in notify "textDocument/publishDiagnostics"
+    (JObj [Pair "uri" (JStr uri), Pair "version" (JNum version), Pair "diagnostics" (JArr jsonDiags)])
 
 -- 一次请求的完整发布帧 + 更新后的会话缓存（LSP 门面持有缓存，跨请求复用）。
 publishDiagnosticsCached : Maybe DiagCache -> String -> Int -> String -> Pair (Maybe DiagCache) Json
 publishDiagnosticsCached cache uri version text =
   let
     result = diagnosticsForCached cache uri text
-  in Pair (firstOf result) (publishDiagnostics uri version (secondOf result))
+    labeled = secondOf result
+  in Pair (firstOf result) (publishDiagnostics uri version text (secondOf labeled))
 
 -- didClose：直接发空诊断（不跑检查链）。
 publishDiagnosticsEmpty : String -> Int -> Json
-publishDiagnosticsEmpty uri version = publishDiagnostics uri version []
+publishDiagnosticsEmpty uri version = publishDiagnostics uri version "" []
 
 -- 无会话的便捷入口（测试 / 一次性请求）。
 publishDiagnosticsFor : String -> Int -> String -> Json
