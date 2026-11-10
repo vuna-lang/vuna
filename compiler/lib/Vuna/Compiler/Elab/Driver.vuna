@@ -978,13 +978,15 @@ unsolvedMessage ec m = case findGoal m (ecGoals ec) of
       loc = showSpanLoc g.dtGoalSpan
       -- M40：命名洞在诊断里带上名字（`unsolved hole ?h (/x.vuna:4:7) with goal Int`）。
       spot = if g.dtGoalName == "" then loc else "${g.dtGoalName} (${loc})"
-      detail = "${spot} with goal ${showValueAt (ctxDepthOf g) g.dtGoalType}"
-    in tcMsg (UnsolvedHole detail) [detail]
+      goalTy = showValueAt (ctxDepthOf g) g.dtGoalType
+      detail = "${spot} with goal ${goalTy}"
+    in withField (FieldNote "goal: ${goalTy}") (tcMsg (UnsolvedHole detail) [detail])
   Nothing =>
     let
       num = strFromInt m
       hint = metaOwnerHint ec m
-    in tcMsg (UnsolvedMetavar num hint) [num, hint]
+    in withField (FieldName num)
+      (withField (FieldNote hint) (tcMsg (UnsolvedMetavar num hint) [num, hint]))
 
 -- 未解元变量的归属提示：扫已精化的定义体与类型，指出它出现在哪个定义里（否则只有 ?m，
 -- 在一个上万行的程序里无从定位）。
