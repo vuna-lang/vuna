@@ -35,15 +35,16 @@ if [ -n "$unknown" ]; then
   exit 1
 fi
 
-uncovered=$(comm -23 "$tmp/catalog.txt" "$tmp/covered.txt")
-new_uncovered=$(comm -23 "$uncovered" "$tmp/allow.txt")
+comm -23 "$tmp/catalog.txt" "$tmp/covered.txt" > "$tmp/uncovered.txt"
+uncovered=$(cat "$tmp/uncovered.txt")
+new_uncovered=$(comm -23 "$tmp/uncovered.txt" "$tmp/allow.txt")
 if [ -n "$new_uncovered" ]; then
   echo "diag-coverage: codes without a structured fixture (add one or extend $allowfile):" >&2
   printf '%s\n' "$new_uncovered" >&2
   exit 1
 fi
 
-stale=$(comm -12 "$uncovered" "$tmp/allow.txt")
+stale=$(comm -13 "$tmp/uncovered.txt" "$tmp/allow.txt")
 if [ -n "$stale" ]; then
   echo "diag-coverage: allowlist entries are now covered; remove them from $allowfile:" >&2
   printf '%s\n' "$stale" >&2

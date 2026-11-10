@@ -333,6 +333,26 @@ in
     ];
     script = ./vscode-ext.sh;
   };
+  # 诊断码覆盖门禁：每个目录码至少有结构化夹具（或显式 allowlist）；覆盖数不低于基线。
+  diag-coverage = mkCheck {
+    name = "vuna-diag-coverage";
+    srcs = [
+      ../../test/corpus
+      ../../nix/checks/diag-coverage.sh
+      ../../nix/diag-coverage-allow.txt
+      ../../nix/diag-coverage.min
+    ];
+    env = {
+      VUNA = "${vuna}/bin/vuna";
+    };
+    nativeBuildInputs = [
+      pkgs.bash
+      pkgs.coreutils
+      pkgs.gnugrep
+    ];
+    script = ./diag-coverage.sh;
+  };
+
 
   # 诊断门禁：compiler 内源码诊断必须走域码（TC_/CG_/RN_/LD_/IC_...）；位置渲染只在
   # Diag.Format/Source。工具/构建/清单错误（exit 2）是显式白名单。
