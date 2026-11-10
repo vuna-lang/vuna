@@ -5,6 +5,7 @@ module Vuna.Compiler.Diagnostics.Warning
   , warnAll
   , warnAt0
   , warnAt1
+  , warnAt1Mod
   , warnCode
   , warnMsg
   , warnTemplate
@@ -90,3 +91,8 @@ warnAll =
     WarnEntry (warnCode (UnusedImport "")) (warnTemplate (UnusedImport "")) "import 未使用",
     WarnEntry (warnCode (ShadowedBinder "")) (warnTemplate (ShadowedBinder "")) "binder 遮蔽外层同名 binder"
   ]
+
+-- | 诊断域实现：带后处理（如附加 suggestion）的 arity-1 告警。
+warnAt1Mod : (Diagnostic -> Diagnostic) -> Span -> WarnErr (Succ Zero) -> String -> Int
+warnAt1Mod f sp e a0 =
+  emitWarning (f (withLabel (Label (Just sp) "" LabelPrimary Nothing) (warnMsg e [a0])))

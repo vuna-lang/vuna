@@ -1307,6 +1307,9 @@ warnUnusedDefsGo (d :: rest) used =
     _ = if skip then 0
     else if memName name used then 0
     else case dtDefSpan d of
-      Just sp => warnAt1 sp (UnusedDefinition name) name
+      Just sp =>
+        warnAt1Mod
+          (\d => withSuggestion (Suggestion "remove unused definition `${name}`" MachineApplicable [DiagEdit sp ""]) d)
+          sp (UnusedDefinition name) name
       Nothing => 0
   in warnUnusedDefsGo rest used
