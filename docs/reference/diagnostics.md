@@ -86,8 +86,9 @@ Diagnostic = { id, severity, phase, category, code, message, labels, fields, tra
 | short | `renderShort` / `diagText` | `file:line:col: [CODE] 消息`（过渡期/编辑器/grep） |
 | human | `renderHuman` | `error[CODE]: 消息` + `--> file:line:col` + 源码行 + 插入符 + notes |
 | JSON | `renderJsonList` | `{version,tool,diagnostics[]}`，含 labels/fields/trace/notes/suggestions/origin/internal/ice |
+| SARIF | `renderSarif` | SARIF 2.1.0 单 run：ruleId/level/message/locations/relatedLocations |
 
-CLI 开关：`--error-format=short|human|json`、`--json`、`--message-format=...`；包级 check
+CLI 开关：`--error-format=short|human|json|sarif`、`--json`、`--message-format=...`；包级 check
 会把格式透传给成员包子进程；成员包错误带 `[包名]` 前缀。
 
 JSON 字段是机器契约：`code/severity/phase/category/message/labels[]/fields[]`；
@@ -112,7 +113,7 @@ JSON 字段是机器契约：`code/severity/phase/category/message/labels[]/fiel
 | 0 | 成功 |
 | 1 | 源码诊断错误 |
 | 2 | 用法/工具错误；内部编译器错误（ICE） |
-| 70 | 预留给 ICE 的独立退出码（尚未启用；当前 ICE 走 2 + `internal compiler error` 文案） |
+| 70 | 内部编译器错误（ICE）：`diagInternal = True` 的诊断；输出仍带 `internal compiler error`/ICE 载荷 |
 
 ## 8. 测试与门禁（当前）
 
@@ -133,7 +134,7 @@ JSON 字段是机器契约：`code/severity/phase/category/message/labels[]/fiel
 | D3 位置契约（end span、UTF-16、显式 NoLoc） | 已落地（span 填充仍在补齐） |
 | D4 码域（RN_/PKG_ 独立域、死码清理） | 已落地（`RN_` 27 码、`PKG_` 27 码；9 个不再触发的 TC 死码已删除） |
 | D5 目录单一真源 + 生成枚举/文档 | 部分（条目仍是手写；`explain`/`gen-errors` 已同源） |
-| D6 渲染/LSP/CLI | 已落地 short/human/JSON + LSP 结构化；SARIF/i18n 待办 |
+| D6 渲染/LSP/CLI | 已落地 short/human/JSON/SARIF + LSP 结构化；i18n 待办 |
 | D7.1 多错误 + Cascade | 待办（当前仍首错短路） |
 | D7.2 warnings（未使用/冗余/不可达） | 部分（`UN_UnusedBinder`/`UN_ShadowedBinder` 已落地；`-W`/`--deny-warnings` 已接；未使用 import/定义、冗余分支待办） |
 | D7.3 建议引擎 + Fix | 部分（`Candidate`/`Suggestion` 模型就绪；自动候选未接） |
@@ -158,7 +159,7 @@ JSON 字段是机器契约：`code/severity/phase/category/message/labels[]/fiel
    排序/去重/上限。
 5. **语义质量**：实例搜索树、终止性 call matrix、覆盖性缺失构造子标签、QTT 使用点
    （Core `TSp` + 使用日志）、统一建议引擎（编辑距离 + Fix）。
-6. **消费端**：SARIF、i18n、`vuna.toml [diagnostics]`、ICE 独立退出码、LSP pull diagnostics。
+6. **消费端**：i18n、`vuna.toml [diagnostics]`、LSP pull diagnostics / quick fix 扩展（SARIF 与 ICE 退出码已落地）。
 7. **夹具迁移**：232 个 `.err` → `.diag.json`，`--bless` 流程；渲染 golden。
 
 ## 11. 边界

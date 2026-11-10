@@ -56,3 +56,10 @@ run: sh -c 'printf "f : Int -> Int -> Int\nf x = \\x => x\n\nmain : Int\nmain = 
 run: "$VUNA" check -W "$TMPDIR/m38-shadow.vuna" 2>&1
 out-contains: [UN_ShadowedBinder]
 out-contains: shadows an outer binder
+# SARIF 2.1.0：单 run、ruleId/level/locations/region 来自结构化诊断。
+run: "$VUNA" check "$TMPDIR/m38-diag-pkg" --error-format=sarif 2>&1
+exit: 1
+out-contains: "version":"2.1.0"
+out-contains: "ruleId":"TC_TypeMismatch"
+out-contains: "level":"error"
+out-contains: "startLine":2

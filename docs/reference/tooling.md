@@ -110,7 +110,9 @@ CLI 统一使用 0 / 1 / 2 三档：
 
 约定之外：`vuna interp` 把任何检查 / 求值失败报成 2（输出以 `error:` 开头）；`vuna
 search` 无命中为 1（用法 / 查询解析 / 非 workspace 仍为 2）；`vuna run` 透传子进程退出
-码；`vuna repl` 的启动目标既不存在也不是模块名时为 1、加载失败为 2。产物运行期未捕获
+码；`vuna repl` 的启动目标既不存在也不是模块名时为 1、加载失败为 2。（ICE 的独立退出码为 70，见 [diagnostics.md](diagnostics.md) §7。）
+
+产物运行期未捕获
 异常由运行时报告器以 2 退出（见 [debugging.md](debugging.md) §2）。
 
 ### 代表性诊断
