@@ -594,20 +594,24 @@ tcErr2NoLoc e a0 a1 = ErrC (tcMsg e [a0, a1])
 -- ---------------------------------------------------------------
 -- 类型不匹配：code + expected/found 机器可读字段（LSP/JSON 不解析散文）。
 -- ---------------------------------------------------------------
+-- | 诊断构造辅助：tcTypeMismatch（code/template 见本模块目录）。
 tcTypeMismatch : Span -> String -> String -> Check a
 tcTypeMismatch sp expected found =
   ErrC
     (withField (FieldFound found) (withField (FieldExpected expected) (withDiagSpan sp (tcMsg (TypeMismatch expected found) [expected, found]))))
 
+-- | 诊断构造辅助：tcTypeMismatchNoLoc（code/template 见本模块目录）。
 tcTypeMismatchNoLoc : String -> String -> Check a
 tcTypeMismatchNoLoc expected found =
   ErrC
     (withField (FieldFound found) (withField (FieldExpected expected) (tcMsg (TypeMismatch expected found) [expected, found])))
 
+-- | 诊断构造辅助：tcErr3（code/template 见本模块目录）。
 tcErr3 : Span -> TcErr (Succ (Succ (Succ Zero))) -> String -> String -> String -> Check a
 tcErr3 sp e a0 a1 a2 = tcErr sp e [a0, a1, a2]
 
 -- | 覆盖性：把所有不可达/未覆盖的构造子一次性列出（每个构造子进 `fields.candidates`）。
+-- | 诊断构造辅助：tcCoverageMissing（code/template 见本模块目录）。
 tcCoverageMissing : Span -> List String -> Check a
 tcCoverageMissing sp names =
   let

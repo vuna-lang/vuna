@@ -24,6 +24,7 @@ import Base.IO.Host
 import Base.IORef
 import Base.Nat
 
+-- | CLI 辅助：compilerUsageLines（参数/退出码约定见 tooling.md）。
 compilerUsageLines : String -> String
 compilerUsageLines prog = """  ${prog} compile [--no-print] [--release] (<entry.vuna> | <package-dir>) <out-dir>
   ${prog} check [--release] (<entry.vuna> | <package-dir>)
@@ -37,10 +38,12 @@ compilerUsageLines prog = """  ${prog} compile [--no-print] [--release] (<entry.
 compilerUsage : String -> String
 compilerUsage prog = "usage:\n${compilerUsageLines prog}"
 
+-- | CLI 辅助：runCompilerCli（参数/退出码约定见 tooling.md）。
 runCompilerCli : List String -> Int
 runCompilerCli args = runCompilerCliFor "vuna-compiler" args
 
 -- --error-format=short|human|json（也接受 --json）在入口统一剥离并写进全局渲染模式。
+-- | CLI 辅助：diagFormatRef（参数/退出码约定见 tooling.md）。
 diagFormatRef : IORef String
 diagFormatRef = runIO (newRef "short")
 
@@ -48,21 +51,26 @@ record SarifBox where
   sarifItems : List Diagnostic
   sarifTag : Int
 
+-- | 诊断/告警实现：sarifRef（详见 diagnostics.md）。
 sarifRef : IORef SarifBox
 sarifRef = runIO (newRef (SarifBox [] 0))
 
+-- | 诊断/告警实现：resetSarif（详见 diagnostics.md）。
 resetSarif : Int -> Int
 resetSarif _ = runIO (writeRef sarifRef (SarifBox [] 0))
 
+-- | 诊断/告警实现：collectSarif（详见 diagnostics.md）。
 collectSarif : Diagnostic -> Int
 collectSarif d = runIO (modifyRef sarifRef (\b => SarifBox (append b.sarifItems [d]) 0))
 
+-- | 诊断/告警实现：diagExitFor（详见 diagnostics.md）。
 diagExitFor : Diagnostic -> Int
 diagExitFor d = if d.diagInternal then 70
 else case d.diagSeverity of
   SevError => 1
   _ => 0
 
+-- | 诊断/告警实现：flushSarif（详见 diagnostics.md）。
 flushSarif : Int -> Int
 flushSarif code =
   let
@@ -74,25 +82,32 @@ flushSarif code =
     _ = resetSarif 0
   in code
 
+-- | 诊断/告警实现：denyWarningsRef（详见 diagnostics.md）。
 denyWarningsRef : IORef Bool
 denyWarningsRef = runIO (newRef False)
 
+-- | 诊断/告警实现：showWarningsRef（详见 diagnostics.md）。
 showWarningsRef : IORef Bool
 showWarningsRef = runIO (newRef False)
 
+-- | 诊断/告警实现：formatExplicitRef（详见 diagnostics.md）。
 formatExplicitRef : IORef Bool
 formatExplicitRef = runIO (newRef False)
 
+-- | 诊断/告警实现：warningsExplicitRef（详见 diagnostics.md）。
 warningsExplicitRef : IORef Bool
 warningsExplicitRef = runIO (newRef False)
 
+-- | 诊断/告警实现：maxErrorsRef（详见 diagnostics.md）。
 maxErrorsRef : IORef Int
 maxErrorsRef = runIO (newRef 0)
 
+-- | 诊断/告警实现：maxErrorsOf（详见 diagnostics.md）。
 maxErrorsOf : Int -> Int
 maxErrorsOf _ = runIO (readRef maxErrorsRef)
 
 -- 应用 vuna.toml [diagnostics]（命令行显式 flag 优先）。
+-- | 诊断/告警实现：applyDiagConfig（详见 diagnostics.md）。
 applyDiagConfig : Maybe Package -> Int
 applyDiagConfig mp = case mp of
   Nothing => 0
@@ -112,34 +127,42 @@ applyDiagConfig mp = case mp of
         Nothing => 0
     in 0
 
+-- | 诊断/告警实现：takeDiags（详见 diagnostics.md）。
 takeDiags : Int -> List Diagnostic -> List Diagnostic
 takeDiags n ds = if n <= 0 then ds else takeDiagsGo n ds
 
+-- | 诊断/告警实现：takeDiagsGo（详见 diagnostics.md）。
 takeDiagsGo : Int -> List Diagnostic -> List Diagnostic
 takeDiagsGo n [] = []
 takeDiagsGo n (d :: rest) = if n <= 0 then [] else d :: takeDiagsGo (n - 1) rest
 
+-- | 诊断/告警实现：denyWarningsOn（详见 diagnostics.md）。
 denyWarningsOn : Int -> Bool
 denyWarningsOn _ = runIO (readRef denyWarningsRef)
 
+-- | 诊断/告警实现：showWarningsOn（详见 diagnostics.md）。
 showWarningsOn : Int -> Bool
 showWarningsOn _ = runIO (readRef showWarningsRef)
 
+-- | 诊断/告警实现：stripDenyWarnings（详见 diagnostics.md）。
 stripDenyWarnings : List String -> List String
 stripDenyWarnings [] = []
 stripDenyWarnings (arg :: rest) =
   if arg == "--deny-warnings" || arg == "--warnings" || arg == "-W" then stripDenyWarnings rest
   else arg :: stripDenyWarnings rest
 
+-- | 诊断/告警实现：hasDenyWarnings（详见 diagnostics.md）。
 hasDenyWarnings : List String -> Bool
 hasDenyWarnings [] = False
 hasDenyWarnings (arg :: rest) = if arg == "--deny-warnings" then True else hasDenyWarnings rest
 
+-- | 诊断/告警实现：hasShowWarnings（详见 diagnostics.md）。
 hasShowWarnings : List String -> Bool
 hasShowWarnings [] = False
 hasShowWarnings (arg :: rest) =
   if arg == "--warnings" || arg == "-W" then True else hasShowWarnings rest
 
+-- | 诊断/告警实现：hasFormatFlag（详见 diagnostics.md）。
 hasFormatFlag : List String -> Bool
 hasFormatFlag [] = False
 hasFormatFlag (arg :: rest) =
@@ -200,18 +223,21 @@ anyHelp : List String -> Bool
 anyHelp [] = False
 anyHelp (arg :: rest) = if arg == "-h" || arg == "--help" then True else anyHelp rest
 
+-- | CLI 辅助：helpFor（参数/退出码约定见 tooling.md）。
 helpFor : String -> Int
 helpFor prog =
   let
     _ = runIO (prim_print (compilerUsage prog))
   in 0
 
+-- | CLI 辅助：usageErr（参数/退出码约定见 tooling.md）。
 usageErr : String -> Int
 usageErr prog =
   let
     _ = runIO (prim_print (compilerUsage prog))
   in 2
 
+-- | CLI 辅助：unknownCommand（参数/退出码约定见 tooling.md）。
 unknownCommand : String -> String -> Int
 unknownCommand prog arg =
   let
@@ -243,6 +269,7 @@ removedFlagHint flag =
   else if flag == dashFlag "typecheck" then Just "checking is always enabled"
   else if flag == dashFlag "typed" then Just "DT is the only path" else Nothing
 
+-- | CLI 辅助：removedFlag（参数/退出码约定见 tooling.md）。
 removedFlag : String -> String -> Int
 removedFlag prog flag = case removedFlagHint flag of
   Nothing => usageErr prog
@@ -253,15 +280,18 @@ removedFlag prog flag = case removedFlagHint flag of
 
 -- 诊断打印统一走 DiagRender：能定位到源码时追加「位置 + 源码行 + 插入符」片段，
 -- 定位失败（无位置 / 文件不可读 / 行越界 / 消息含换行）时逐字原样输出。
+-- | CLI 辅助：printErrText（参数/退出码约定见 tooling.md）。
 printErrText : String -> Int
 printErrText e =
   let
     _ = runIO (prim_print (renderCliDiagnostic e))
   in 1
 
+-- | 诊断/告警实现：diagFormatOf（详见 diagnostics.md）。
 diagFormatOf : Int -> String
 diagFormatOf _ = runIO (readRef diagFormatRef)
 
+-- | 诊断/告警实现：severityLabelOf（详见 diagnostics.md）。
 severityLabelOf : Diagnostic -> String
 severityLabelOf d = case d.diagSeverity of
   SevError => "error"
@@ -296,6 +326,7 @@ printDiag d = printDiagWithPrefix "" d
 printErr : String -> Int
 printErr e = printErrText "error: ${e}\n"
 
+-- | 诊断/告警实现：printDiagList（详见 diagnostics.md）。
 printDiagList : String -> List Diagnostic -> Int
 printDiagList extra ds =
   let
@@ -315,6 +346,7 @@ defaultDir Nothing = "."
 
 -- 路径既不是文件也不是目录时的统一错误（先 prim_fileExists 再 prim_isDirectory：
 -- 内建 prim_isDirectory 对不存在的路径会抛异常）。
+-- | CLI 辅助：dtPathErr（参数/退出码约定见 tooling.md）。
 dtPathErr : String -> Int
 dtPathErr path = printErr "no such file or package directory: ${path}"
 
@@ -334,6 +366,7 @@ executablePackageAt label dir =
 -- compile：文件入口（最近的 vuna.toml 包上下文 / 无 manifest 的 base-only）
 -- 或包目录入口（可执行包），逐模块写出到 OUTDIR；成功静默。
 -- ---------------------------------------------------------------
+-- | CLI 辅助：compileArgs（参数/退出码约定见 tooling.md）。
 compileArgs : String -> List String -> Int
 compileArgs prog args = compileParse prog True Nothing Nothing args
 
@@ -384,6 +417,7 @@ compilePkgDir printResult dir outDir = case executablePackage "compile" dir of
 -- ---------------------------------------------------------------
 -- check：文件入口（包上下文）或包目录（可执行包 check 入口；库包 check [export].modules）
 -- ---------------------------------------------------------------
+-- | CLI 辅助：checkArgs（参数/退出码约定见 tooling.md）。
 checkArgs : String -> List String -> Int
 checkArgs prog [] = usageErr prog
 checkArgs prog ("--release" :: rest) = checkArgs prog rest
@@ -392,6 +426,7 @@ else case rest of
   [] => checkEmit arg
   _ => usageErr prog
 
+-- | CLI 辅助：checkEmit（参数/退出码约定见 tooling.md）。
 checkEmit : String -> Int
 checkEmit path =
   if runIO (prim_fileExists path) then if runIO (prim_isDirectory path) then checkPkgDir path else checkFileEntry path
@@ -408,6 +443,7 @@ checkPkgDir dir = case workspacePackages dir of
 -- 串行）。根包目录就是 workspace 根，spawn 它会再展开整个 workspace ⇒ 递归，所以按
 -- `workspacePackages <dir>` 是否返回多包区分根 / 成员；单包目录的子进程只查自己。
 -- 子进程继承 stdout/stderr（错误可能交错），退出码按失败汇总。
+-- | CLI 辅助：checkSpawnArgs（参数/退出码约定见 tooling.md）。
 checkSpawnArgs : String -> List String
 checkSpawnArgs dir =
   let
@@ -482,6 +518,7 @@ checkFileEntry path = case contextForFile path of
 -- 库成员只检查）；--package NAME 只建指定包（Nix 构建根包用，避免重复构建成员）。
 -- build meta（同哈希跳过）见 Vuna.Compiler.Driver.Compile。
 -- ---------------------------------------------------------------
+-- | CLI 辅助：buildArgs（参数/退出码约定见 tooling.md）。
 buildArgs : String -> List String -> Int
 buildArgs prog args = buildParse prog False Nothing Nothing Nothing args
 
@@ -537,6 +574,7 @@ findPackageByName name [] = Nothing
 findPackageByName name (pkg :: rest) =
   if packageName pkg == name then Just pkg else findPackageByName name rest
 
+-- | CLI 辅助：buildTargets（参数/退出码约定见 tooling.md）。
 buildTargets : Bool -> Bool -> Maybe String -> List Package -> Int -> Int
 buildTargets noCompile multiOut outM [] code = code
 buildTargets noCompile multiOut outM (pkg :: rest) code =
@@ -596,13 +634,16 @@ buildLinked ctx entry outDir name =
 -- ---------------------------------------------------------------
 -- warning 归属：只显示当前检查单元自己的文件（依赖包的 warning 不重复刷屏）。
 -- ---------------------------------------------------------------
+-- | 诊断/告警实现：stripDotSlash（详见 diagnostics.md）。
 stripDotSlash : String -> String
 stripDotSlash s =
   if startsWith "./" s then substring (natFromInt 2) (natFromInt (strLength s - 2)) s else s
 
+-- | 诊断/告警实现：ownedByFile（详见 diagnostics.md）。
 ownedByFile : String -> Diagnostic -> Bool
 ownedByFile path d = stripDotSlash (diagFileOf d) == stripDotSlash path
 
+-- | 诊断/告警实现：ownedByPackage（详见 diagnostics.md）。
 ownedByPackage : Package -> Diagnostic -> Bool
 ownedByPackage pkg d =
   let
@@ -614,6 +655,7 @@ ownedByPackage pkg d =
     || startsWith "${prefix}test/" file
 
 -- compile/build 成功路径的 warning 消费（默认静默；-W 显示；--deny-warnings 提升退出码）。
+-- | 诊断/告警实现：finishWarnings（详见 diagnostics.md）。
 finishWarnings : Int -> Int
 finishWarnings code =
   let
@@ -623,6 +665,7 @@ finishWarnings code =
   in if denyWarningsOn 0 && length ws > 0 then 1 else code
 
 -- 与 finishWarnings 相同，但失败时删除已生成的输出目录（编译失败不留产物）。
+-- | 诊断/告警实现：finishWarningsDir（详见 diagnostics.md）。
 finishWarningsDir : String -> Int -> Int
 finishWarningsDir dir code =
   let
