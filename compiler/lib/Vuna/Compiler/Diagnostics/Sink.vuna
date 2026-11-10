@@ -17,22 +17,23 @@ import Vuna.Compiler.Common
 -- 记录类型让 ref 的载荷在定义处就是单态的。
 record WarnBox where
   warnBoxItems : List Diagnostic
+  warnBoxTag : Int
 
 warningsRef : IORef WarnBox
-warningsRef = runIO (newRef (WarnBox []))
+warningsRef = runIO (newRef (WarnBox [] 0))
 
 -- | 清空收集器（检查入口调用）。返回 0 便于放在 let 链里。
 resetWarnings : Int -> Int
-resetWarnings _ = runIO (writeRef warningsRef (WarnBox []))
+resetWarnings _ = runIO (writeRef warningsRef (WarnBox [] 0))
 
 -- | 追加一条 warning；返回 0 便于放在 let 链里。
 emitWarning : Diagnostic -> Int
-emitWarning d = runIO (modifyRef warningsRef (\b => WarnBox (append b.warnBoxItems [d])))
+emitWarning d = runIO (modifyRef warningsRef (\b => WarnBox (append b.warnBoxItems [d]) 0))
 
 -- | 取走当前全部 warning（读取后清空，避免下一次检查串扰）。
 takeWarnings : Int -> List Diagnostic
 takeWarnings _ =
   let
     b = runIO (readRef warningsRef)
-    _ = runIO (writeRef warningsRef (WarnBox []))
+    _ = runIO (writeRef warningsRef (WarnBox [] 0))
   in b.warnBoxItems
