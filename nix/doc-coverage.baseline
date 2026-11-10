@@ -6,7 +6,7 @@
 # Common / Version / Intrinsics / Diagnostics.Common / Elab.InstName 后降到 3024；
 # 2026-11-09 D28/D40 落地后实测 3023（新增符号都带 docstring）；iface 布局（S8）新增辅助
 # 函数都带 docstring 后实测 3021，按 ratchet 下调。
-3056
+3058
 # 2026-11-10 rotation 后收尾：补 D51/via-field 新增的 202 个内部符号 docstring
 # （vuna-compiler 3159 → 2957），按 ratchet 下调基线；仍剩 2957 条既有内部符号欠账，
 # 后续继续按模块补齐并继续下调。vuna-base 仍为 0。
@@ -32,3 +32,8 @@
 #   - 2026-11-10 records-v2 R4（OCaml record 表示）：Codegen.Decl 新增 record 表示探测/
 #     标签/字段表 helper（+4 导出），实测 compiler 3054（合计 3056）。属特性增长，
 #     新增 helper 均带 `-- |`，其余为既有欠账；按实测复标定。
+#   - 2026-11-11 native-effects N1 提交 4b 分支（`handle` 语法）rebase 到 main：main 上的
+#     perform/rowAt 提交把 compiler 欠账从 3054 推到 3056（合计 3058，属 main 既有漂移）；
+#     本分支新增的顶层符号（`Core/Eval.forceLabelArgs`、Parser `parseHandle*` 族、Impl
+#     `handle*` 族、base `ResFn`/`handleWith` 等）全部带 `-- |` docstring，实测合计仍为 3058。
+#     按实测定到 3058；后续继续按模块补齐并下调。

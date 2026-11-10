@@ -529,30 +529,50 @@ valueListEqFuel fuel (a :: arest) (b :: brest) = case valueEqFuel fuel a b of
   Nothing => Nothing
 valueListEqFuel fuel _ _ = Just False
 
+-- 已解 meta 在值里仍以 `VMeta` 节点出现（解表不改写已经构造好的值），而 `valueEqFuel`
+-- 不做 force，于是 `rowRem` 的 name/label 参数里只要留过 meta 就永远比较不出相等
+-- （`handle` 语法：名字/标签由 Member 在调用点解出，但结果行里的 value 还是旧节点）。
+-- 比较前把名字 force 一次、把标签（中性 spine 的一层实参）各 force 一次：已解 meta 变
+-- 具体值，未解 meta 原样保留（随后照旧卡住）。
+-- | 把标签值中性 spine 的一层实参 force 一次（已解 meta 变具体值，未解原样）。
+forceLabelArgs : HashMap String Term -> Sols -> Int -> Value -> Value
+forceLabelArgs defs sols fuel v = case force defs sols fuel v of
+  VNeutral (NGlobal g sp) => VNeutral (NGlobal g (map (\a => force defs sols fuel a) sp))
+  VNeutral (NVar name lvl sp) => VNeutral (NVar name lvl (map (\a => force defs sols fuel a) sp))
+  other => other
+
 -- 命名行（native-effects ND1）：`rowRem n e r` 按 (名字, 标签) 双匹配删除条目。
 -- 名字或条目名字是未解 meta 时卡住（Nothing）：等名字槽求解后由 force/重推归约；
 -- 不做「只匹配标签」的贪婪删除，否则 `[ConsoleOp@mock, ConsoleOp@audit]` 会删错条目。
 rowRemReduce : HashMap String Term -> Sols -> Int -> Value -> Value -> Value -> Maybe Value
 rowRemReduce defs sols fuel n e r = if fuel <= 0 then Nothing
-else if hasUnsolvedMetaValue sols n then Nothing
-else case force defs sols (fuel - 1) r of
-  VCon consName args => if consName == effRowNilCtor then Just (VCon effRowNilCtor [])
-  else if consName == effRowConsCtor then case args of
-    n1 :: h :: t :: _ => if hasUnsolvedMetaValue sols n1 then Nothing
-    else case valueEqFuel (fuel - 1) n n1 of
-      Nothing => Nothing
-      Just False => case rowRemReduce defs sols (fuel - 1) n e t of
-        Just t2 => Just (VCon effRowConsCtor [n1, h, t2])
-        Nothing => Nothing
-      Just True => case valueEqFuel (fuel - 1) e h of
-        Just True => Just t
-        Just False => case rowRemReduce defs sols (fuel - 1) n e t of
-          Just t2 => Just (VCon effRowConsCtor [n1, h, t2])
+else
+  let
+    n2 = force defs sols (fuel - 1) n
+    e2 = forceLabelArgs defs sols (fuel - 1) e
+  in if hasUnsolvedMetaValue sols n2 then Nothing
+  else case force defs sols (fuel - 1) r of
+    VCon consName args => if consName == effRowNilCtor then Just (VCon effRowNilCtor [])
+    else if consName == effRowConsCtor then case args of
+      n1 :: h :: t :: _ =>
+        let
+          n1b = force defs sols (fuel - 1) n1
+          h2 = forceLabelArgs defs sols (fuel - 1) h
+        in if hasUnsolvedMetaValue sols n1b then Nothing
+        else case valueEqFuel (fuel - 1) n2 n1b of
           Nothing => Nothing
-        Nothing => Nothing
+          Just False => case rowRemReduce defs sols (fuel - 1) n2 e2 t of
+            Just t2 => Just (VCon effRowConsCtor [n1b, h2, t2])
+            Nothing => Nothing
+          Just True => case valueEqFuel (fuel - 1) e2 h2 of
+            Just True => Just t
+            Just False => case rowRemReduce defs sols (fuel - 1) n2 e2 t of
+              Just t2 => Just (VCon effRowConsCtor [n1b, h2, t2])
+              Nothing => Nothing
+            Nothing => Nothing
+      _ => Nothing
+    else Nothing
     _ => Nothing
-  else Nothing
-  _ => Nothing
 
 primReduce : HashMap String Term -> Sols -> Int -> String -> List Value -> Maybe Value
 primReduce defs sols fuel g sp = if fuel <= 0 then Nothing

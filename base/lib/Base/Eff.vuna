@@ -2,6 +2,7 @@ module Base.Eff
   ( Cont
   , Eff
   , Member(..)
+  , ResFn(..)
   , Row(..)
   , bracket
   , defaultInstance
@@ -9,8 +10,11 @@ module Base.Eff
   , finally
   , handleCore
   , handleCoreLin
+  , handleWith
   , mkCont
   , performCore
+  , resFn
+  , resOf
   , resumeCont
   , rowRem
   , runEff
@@ -172,6 +176,38 @@ contAdapter opH o k = opH o (MkCont k)
 -- | 线性版核心 handler：`opH` 接收线性 `Cont (res o) b`（一次性续延），其余同 `handleCore`；供需要线性续延的效应使用。
 handleCoreLin : (e : Type) -> {r : Row} -> {op : Type} -> {a : Type} -> {b : Type} -> {res : op -> Type} -> (key : String) -> (name : String) -> (a -> b) -> ((o : op) -> (1 k : Cont (res o) b) -> b) -> Eff r a -> Eff (rowRem name e r) b
 handleCoreLin e key name ret opH comp = handleCore e key name ret (contAdapter opH) comp
+
+-- ---------------------------------------------------------------
+-- `handle` 语法（native-effects N1 提交 4b）的 base 协议
+-- ---------------------------------------------------------------
+-- `handle` 的降级点（`Elab/Term/Impl.handleCallExpr`）需要把「结果族 `res : op -> Type`」
+-- 当**值**传给 handler 类型的定义点：类型级函数不能作显式实参（M15 禁
+-- `(0 res : op -> Type)`；不标擦除则调用点会把 `resXxx` 名字带进运行时），所以用 data
+-- 包装 + 显式擦除量。构造子名在精化期按规范名查不到（globals 只含定义），因此降级点
+-- 只能经 `resFn` 这个 base 函数构造包装值；`resOf` 在类型位置把族取回来（NbE 归约）。
+-- | 结果族包装：把 `op -> Type` 包成可作擦除量传递的值（`handleWith` 的 `res` 协议）。
+data ResFn : Type -> Type 1 where
+  MkResFn : {op : Type} -> (op -> Type) -> ResFn op
+
+-- | 结果族包装的构造入口：`handle` 降级点只能经函数构造，不能直接引用构造子名。
+resFn : {op : Type} -> (op -> Type) -> ResFn op
+resFn r = MkResFn r
+
+-- | 从包装里取出结果族：`resOf rf o` 在类型位置按 `rf` 的族求值（NbE 归约）。
+resOf : {op : Type} -> (0 rf : ResFn op) -> op -> Type
+resOf rf o = case rf of
+  MkResFn r => r o
+
+-- 核心 handler 的类型化入口（`handle` 语法降级目标）：与 `handleCore` 的唯一区别是
+-- handler 类型显式写成 `(o : op) -> (resOf rf o -> b) -> b`——`handleCore` 的 `h` 是裸类型
+-- 变量，合成代码里的 `case o of ...` 拿不到 op 族、`k` 也拿不到续延域。
+-- 参数顺序是求解顺序的一部分：
+--   * `comp` 在 `ret` 之前：先由 comp 解出 `a`，ret 体才不会被 Numeric 默认成 `Int`；
+--   * `{w : Member n e r}` 放最后：`r` 已由 comp 解出，Member 当场解掉 name/label 两个洞
+--     （结果行 `rowRem n e r` 的归约需要这些值已解；见 `Core/Eval.rowRemReduce`）。
+-- | 核心 handler 的类型化包装：handler 类型为 `(o : op) -> (resOf rf o -> b) -> b`；`rf` 是擦除量，`{w}` 置尾以便 `r` 先由 `comp` 解出。
+handleWith : (n : String) -> (key : String) -> (e : Type) -> (op : Type) -> {r : Row} -> {a : Type} -> {b : Type} -> (0 rf : ResFn op) -> Eff r a -> (a -> b) -> ((o : op) -> (resOf rf o -> b) -> b) -> {w : Member n e r} -> Eff (rowRem n e r) b
+handleWith n key e op rf comp ret opH = handleCore e key n ret opH comp
 
 -- ---------------------------------------------------------------
 -- W7：线性函数（一次性闭包）与通用 bracket
