@@ -1689,17 +1689,15 @@ replaceAllText needle replacement haystack =
   in strPack (reverse (replaceAllGo needle replacement chars [] chars))
 
 replaceAllGo : String -> String -> List Int -> List Int -> List Int -> List Int
-replaceAllGo needle replacement rest acc fuel = case fuel of
-  [] => acc
-  _ :: fs => replaceStep needle replacement rest acc fs
+replaceAllGo needle replacement rest acc [] = acc
+replaceAllGo needle replacement rest acc (_ :: fs) = replaceStep needle replacement rest acc fs
 
 replaceStep : String -> String -> List Int -> List Int -> List Int -> List Int
-replaceStep needle replacement rest acc fs = case rest of
-  [] => acc
-  c :: cs =>
-    if prefixOfInts (strUnpack needle) rest then replaceAllGo needle replacement (dropNInts (length (strUnpack needle)) rest)
-      (append (reverse (strUnpack replacement)) acc) fs
-    else replaceAllGo needle replacement cs (c :: acc) fs
+replaceStep needle replacement [] acc fs = acc
+replaceStep needle replacement (c :: cs) acc fs =
+  if prefixOfInts (strUnpack needle) (c :: cs) then replaceAllGo needle replacement (dropNInts (length (strUnpack needle)) (c :: cs))
+    (append (reverse (strUnpack replacement)) acc) fs
+  else replaceAllGo needle replacement cs (c :: acc) fs
 
 prefixOfInts : List Int -> List Int -> Bool
 prefixOfInts [] _ = True
