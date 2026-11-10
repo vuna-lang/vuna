@@ -95,6 +95,18 @@ JSON 字段是机器契约：`code/severity/phase/category/message/labels[]/fiel
 `fields` 目前包含 `expected`/`found`（类型不匹配）、`name`/`candidates`/`call`/`quantity`/
 `effect`/`module`/`span`/`note` 的构造器，后续按语义族填充。
 
+## 5.1 配置（`vuna.toml [diagnostics]`）
+
+可选 section；命令行显式 flag 优先：
+
+| key | 值 | 语义 |
+| --- | --- | --- |
+| `format` | `short`/`human`/`json`/`sarif` | 默认渲染格式（等价 `--error-format`） |
+| `warnings` | bool | 是否默认显示 `UN_` 告警（等价 `-W`；`--deny-warnings` 仍提升退出码） |
+| `max-errors` | 正整数 | 一次检查最多显示/序列化多少条诊断（0 或缺省 = 不限） |
+
+非法值是该清单的结构诊断（`PKG_InvalidDiagFormat` / `PKG_InvalidDiagMaxErrors`）；未知 key 报 `PKG_UnknownKey`。
+
 ## 6. LSP 映射
 
 实现：`lib/Vuna/Lsp/Diagnostics.vuna`。
@@ -105,6 +117,7 @@ JSON 字段是机器契约：`code/severity/phase/category/message/labels[]/fiel
 - `relatedInformation` 来自 secondary/context 标签；`data` 来自 `diagFields`；
   `code` 直接给客户端；消息追加 notes/suggestions。
 - lint quick fix 的内嵌诊断与发布诊断字段集合一致。
+- **pull**：`textDocument/diagnostic` 回 `{kind:"full", items:[...]}`（与 push 同一诊断链/JSON 字段），initialize 声明 `diagnosticProvider`。
 
 ## 7. 退出码
 
@@ -136,7 +149,7 @@ JSON 字段是机器契约：`code/severity/phase/category/message/labels[]/fiel
 | D3 位置契约（end span、UTF-16、显式 NoLoc） | 已落地（span 填充仍在补齐） |
 | D4 码域（RN_/PKG_ 独立域、死码清理） | 已落地（`RN_` 27 码、`PKG_` 27 码；9 个不再触发的 TC 死码已删除） |
 | D5 目录单一真源 + 生成枚举/文档 | 部分（条目仍是手写；`explain`/`gen-errors` 已同源） |
-| D6 渲染/LSP/CLI | 已落地 short/human/JSON/SARIF + LSP 结构化；i18n 待办 |
+| D6 渲染/LSP/CLI | 已落地 short/human/JSON/SARIF + LSP push/pull + `[diagnostics]` 配置；i18n 待办 |
 | D7.1 多错误 + Cascade | 待办（当前仍首错短路） |
 | D7.2 warnings（未使用/冗余/不可达） | 部分（`UN_UnusedBinder`/`UN_ShadowedBinder` 已落地；`-W`/`--deny-warnings` 已接；未使用 import/定义、冗余分支待办） |
 | D7.3 建议引擎 + Fix | 部分（`Candidate`/`Suggestion` 模型就绪；自动候选未接） |
@@ -161,7 +174,7 @@ JSON 字段是机器契约：`code/severity/phase/category/message/labels[]/fiel
    排序/去重/上限。
 5. **语义质量**：实例搜索树、终止性 call matrix、覆盖性缺失构造子标签、QTT 使用点
    （Core `TSp` + 使用日志）、统一建议引擎（编辑距离 + Fix）。
-6. **消费端**：i18n、`vuna.toml [diagnostics]`、LSP pull diagnostics / quick fix 扩展（SARIF 与 ICE 退出码已落地）。
+6. **消费端**：i18n、LSP quick fix 扩展（SARIF、ICE 退出码、`[diagnostics]` 配置、pull diagnostics 已落地）。
 7. **夹具迁移**：`.diag.json` + `--bless-diag` 已落地（206 份）；继续补 allowlist 中 143 个码的结构化夹具，渲染 golden。
 
 ## 11. 边界

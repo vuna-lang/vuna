@@ -454,12 +454,12 @@ errorCase env c source expected wantInterp wantCheck wantCompile =
         runCmdMerged env "${c.caseId}-diag" env.envCwd c.caseTimeout
           (withEnvIface env [env.envVuna, "check", diagSource, "--json"])
     actualDiag = trimNewlines (combinedOut diagRun)
-    diagA = if pathExistsFile diagPath then
-        [assertEq "diag json" (trimNewlines (runIO (readFile diagPath))) actualDiag]
-      else if env.envBlessDiag then
+    diagA = if env.envBlessDiag then
         let
           _ = runIO (writeFile diagPath "${actualDiag}\n")
         in []
+      else if pathExistsFile diagPath then
+        [assertEq "diag json" (trimNewlines (runIO (readFile diagPath))) actualDiag]
       else []
   in finishCase c.caseId start (append interpA (append checkA (append compileA diagA)))
 

@@ -8,6 +8,7 @@
 
 - 包元信息用 `vuna.toml`（TOML 子集）：`[package]`（只有 name）、`[workspace]`（members）、
   `[export]`（modules）、`[capabilities]`（effects）、`[trust]`（unsafe 定义级信任点）、
+  `[diagnostics]`（format / warnings / max-errors，见 [diagnostics.md](diagnostics.md) §5.1）、
   `[dependencies]`（依赖名 = 相对路径，暂不做 registry）。未知 section / key、以及 `[package]`
   里出现其他 key 都是错误，不静默忽略。
 - **workspace 根即一个包**（Cargo 风格）：根 `vuna.toml` 同时含 `[workspace]` 与

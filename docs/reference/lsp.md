@@ -29,10 +29,11 @@ Content-Length: <字节数>\r\n
 
 | 方法 | 行为 |
 | --- | --- |
-| `initialize` | capabilities：Full 同步、hover、completion（`.` 触发）、definition、references、documentSymbol、documentFormatting、workspaceSymbol、codeAction（`quickfix` + `refactor.rewrite`）、rename（`prepareProvider: true`）、executeCommand（`vuna.fixAllLint`）；`serverInfo` |
+| `initialize` | capabilities：Full 同步、hover、completion（`.` 触发）、definition、references、documentSymbol、documentFormatting、workspaceSymbol、codeAction（`quickfix` + `refactor.rewrite`）、rename（`prepareProvider: true`）、executeCommand（`vuna.fixAllLint`）、diagnosticProvider（pull）；`serverInfo` |
 | `initialized` | 通知，无响应 |
 | `textDocument/didOpen` / `didChange` / `didClose` | 内存维护打开文档表（Full 同步） |
 | `textDocument/publishDiagnostics` | 包上下文解析 / DT 精化 / 覆盖性诊断 + lint 诊断 |
+| `textDocument/diagnostic` | **pull diagnostics**（LSP 3.17）：`{kind:"full", items:[...]}`，与 push 同一条诊断链与 JSON 字段；不额外发通知 |
 | `textDocument/hover` | 洞（`_` / `?name`）的目标类型与上下文（容错查询；文本里没有洞 token 时跳过精化）→ 模块引用（`import` / 导出项 `module B` / 模块头 / 限定名前缀；带模块 docstring）→ 局部绑定（参数 / λ / `let` / `where` / `case` / `do` / `as` / 模式；语法级类型与值）→ 标识符签名 + `-- |` docstring（多行保留）。普通注释不进入 hover。`range` 落在**光标 token** 上（不是符号定义位置）——客户端用它判断 hover 何时失效 |
 | `textDocument/formatting` | `Vuna.Fmt.formatSourceWith` 全文替换 TextEdit（fixity 取程序级可见闭包）（解析失败返回空） |
 | `textDocument/documentSymbol` | AST 声明树（data/record/trait 带子节点） |

@@ -1,1 +1,1 @@
-{"version":1,"tool":"vuna","diagnostics":[{"code":"","severity":"error","phase":"tool","category":"tool","message":"<entry>: unbound variable MkIO","labels":[],"fields":[],"trace":[],"notes":[],"suggestions":[],"origin":{"kind":"direct"},"internal":false,"ice":null}]}
+{"version":1,"tool":"vuna","diagnostics":[{"code":"RN_UnknownVariable","severity":"error","phase":"resolve","category":"names","message":"unbound variable MkIO","labels":[],"fields":[],"trace":[],"notes":[],"suggestions":[],"origin":{"kind":"direct"},"internal":false,"ice":null}]}
