@@ -1,0 +1,51 @@
+-- | 诊断码目录的稳定元数据：由码域推导 severity/phase/category（不另建真源）。
+module Vuna.Compiler.Diagnostics.Meta
+  ( codeDomain
+  , diagCategoryOf
+  , diagPhaseOf
+  , diagSeverityOf
+  ) where
+
+import Base.String
+
+-- | 码的域前缀（`TC_TypeMismatch` → `TC`）。
+codeDomain : String -> String
+codeDomain code = case split "_" code of
+  [] => code
+  d :: _ => d
+
+-- | 码域 → 诊断阶段。
+diagPhaseOf : String -> String
+diagPhaseOf "LX" = "lex"
+diagPhaseOf "PS" = "parse"
+diagPhaseOf "RN" = "resolve"
+diagPhaseOf "LD" = "load"
+diagPhaseOf "PKG" = "package"
+diagPhaseOf "TC" = "elab"
+diagPhaseOf "CG" = "codegen"
+diagPhaseOf "IC" = "internal"
+diagPhaseOf "UN" = "usage"
+diagPhaseOf "LN" = "lint"
+diagPhaseOf "FX" = "effect"
+diagPhaseOf _ = "tool"
+
+-- | 码域 → 诊断类别。
+diagCategoryOf : String -> String
+diagCategoryOf "LX" = "syntax"
+diagCategoryOf "PS" = "syntax"
+diagCategoryOf "RN" = "resolve"
+diagCategoryOf "LD" = "package"
+diagCategoryOf "PKG" = "package"
+diagCategoryOf "TC" = "types"
+diagCategoryOf "CG" = "codegen"
+diagCategoryOf "IC" = "internal"
+diagCategoryOf "UN" = "quantity"
+diagCategoryOf "LN" = "style"
+diagCategoryOf "FX" = "effects"
+diagCategoryOf _ = "tool"
+
+-- | 码域 → 默认 severity（UN_/LN_ 为 warning，其余 error）。
+diagSeverityOf : String -> String
+diagSeverityOf "UN" = "warning"
+diagSeverityOf "LN" = "warning"
+diagSeverityOf _ = "error"

@@ -15,6 +15,7 @@ import Vuna.Compiler.Diagnostics
 import Vuna.Compiler.Diagnostics.Rn
 import Vuna.Compiler.Diagnostics.Pkg
 import Vuna.Compiler.Diagnostics.Warning
+import Vuna.Compiler.Diagnostics.Meta
 import Vuna.Compiler.Frontend.Diagnostics
 import Vuna.Compiler.Loader.Diagnostics
 import Vuna.Files
@@ -157,23 +158,25 @@ isDomain dom e = startsWith dom e.entryCode
 
 renderTable : List Entry -> String
 renderTable [] = "（无）\n"
-renderTable entries = """| code | 消息 | 说明 |
-| --- | --- | --- |
+renderTable entries = """| code | severity | phase | category | 消息 | 说明 |
+| --- | --- | --- | --- | --- | --- |
 ${join "\n" (map renderRow entries)}
 """
 
 renderRow : Entry -> String
-renderRow e = "| ${e.entryCode} | `${escapeMsg e.entryMsg}` | ${e.entryDesc} |"
+renderRow e =
+  "| ${e.entryCode} | ${diagSeverityOf (codeDomain e.entryCode)} | ${diagPhaseOf (codeDomain e.entryCode)} | ${diagCategoryOf (codeDomain e.entryCode)} | `${escapeMsg e.entryMsg}` | ${e.entryDesc} |"
 
 renderLintTable : List Entry -> String
 renderLintTable [] = "（无）\n"
-renderLintTable entries = """| code | 规则 | 说明 | 自动修复 |
-| --- | --- | --- | --- |
+renderLintTable entries = """| code | severity | phase | category | 规则 | 说明 | 自动修复 |
+| --- | --- | --- | --- | --- | --- | --- |
 ${join "\n" (map renderLintRow entries)}
 """
 
 renderLintRow : Entry -> String
-renderLintRow e = "| ${e.entryCode} | `${e.entryRule}` | ${e.entryDesc} | ${fixCell e} |"
+renderLintRow e =
+  "| ${e.entryCode} | ${diagSeverityOf (codeDomain e.entryCode)} | ${diagPhaseOf (codeDomain e.entryCode)} | ${diagCategoryOf (codeDomain e.entryCode)} | `${e.entryRule}` | ${e.entryDesc} | ${fixCell e} |"
 
 fixCell : Entry -> String
 fixCell e = if entryFixable e then "是" else "否"
