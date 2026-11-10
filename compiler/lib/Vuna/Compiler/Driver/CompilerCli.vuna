@@ -59,7 +59,8 @@ showWarningsOn _ = runIO (readRef showWarningsRef)
 stripDenyWarnings : List String -> List String
 stripDenyWarnings [] = []
 stripDenyWarnings (arg :: rest) =
-  if arg == "--deny-warnings" || arg == "--warnings" || arg == "-W" then stripDenyWarnings rest else arg :: stripDenyWarnings rest
+  if arg == "--deny-warnings" || arg == "--warnings" || arg == "-W" then stripDenyWarnings rest
+  else arg :: stripDenyWarnings rest
 
 hasDenyWarnings : List String -> Bool
 hasDenyWarnings [] = False
@@ -67,7 +68,8 @@ hasDenyWarnings (arg :: rest) = if arg == "--deny-warnings" then True else hasDe
 
 hasShowWarnings : List String -> Bool
 hasShowWarnings [] = False
-hasShowWarnings (arg :: rest) = if arg == "--warnings" || arg == "-W" then True else hasShowWarnings rest
+hasShowWarnings (arg :: rest) =
+  if arg == "--warnings" || arg == "-W" then True else hasShowWarnings rest
 
 stripDiagFormat : List String -> Pair (List String) (Maybe String)
 stripDiagFormat args = stripDiagFormatGo args [] Nothing
@@ -494,7 +496,8 @@ buildLinked ctx entry outDir name =
 -- warning 归属：只显示当前检查单元自己的文件（依赖包的 warning 不重复刷屏）。
 -- ---------------------------------------------------------------
 stripDotSlash : String -> String
-stripDotSlash s = if startsWith "./" s then substring (natFromInt 2) (natFromInt (strLength s - 2)) s else s
+stripDotSlash s =
+  if startsWith "./" s then substring (natFromInt 2) (natFromInt (strLength s - 2)) s else s
 
 ownedByFile : String -> Diagnostic -> Bool
 ownedByFile path d = stripDotSlash (diagFileOf d) == stripDotSlash path
@@ -505,4 +508,6 @@ ownedByPackage pkg d =
     dir = stripDotSlash (packageDir pkg)
     file = stripDotSlash (diagFileOf d)
     prefix = if dir == "." || dir == "" then "" else "${dir}/"
-  in startsWith "${prefix}lib/" file || startsWith "${prefix}app/" file || startsWith "${prefix}test/" file
+  in startsWith "${prefix}lib/" file
+    || startsWith "${prefix}app/" file
+    || startsWith "${prefix}test/" file

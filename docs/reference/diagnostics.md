@@ -71,6 +71,7 @@ Diagnostic = { id, severity, phase, category, code, message, labels, fields, tra
 | `TC_` | 精化/覆盖性/终止性/用量 | `Diagnostics/Tc.vuna` |
 | `CG_` | codegen/驱动 | `Diagnostics/Cg.vuna` |
 | `IC_` | 编译器内部错误 | `Diagnostics/Ic.vuna` |
+| `UN_` | 告警（未使用/冗余/遮蔽），severity = warning | `Diagnostics/Warning.vuna` |
 | `LN_`/`FX_` | lint 规则/修复 | `lib/Vuna/Lint/Diagnostics.vuna` |
 
 约定：符号语义稳定；一个码一种语义。`vuna explain CODE` 与 `vuna gen-errors` 都从这些
@@ -134,7 +135,7 @@ JSON 字段是机器契约：`code/severity/phase/category/message/labels[]/fiel
 | D5 目录单一真源 + 生成枚举/文档 | 部分（条目仍是手写；`explain`/`gen-errors` 已同源） |
 | D6 渲染/LSP/CLI | 已落地 short/human/JSON + LSP 结构化；SARIF/i18n 待办 |
 | D7.1 多错误 + Cascade | 待办（当前仍首错短路） |
-| D7.2 warnings（未使用/冗余/不可达） | 待办 |
+| D7.2 warnings（未使用/冗余/不可达） | 部分（`UN_UnusedBinder` 已落地；`-W`/`--deny-warnings` 已接；未使用 import/定义、冗余分支待办） |
 | D7.3 建议引擎 + Fix | 部分（`Candidate`/`Suggestion` 模型就绪；自动候选未接） |
 | D7.4 类型不匹配 expected/found | 已落地（fields；双端 label 待补） |
 | D7.5 实例搜索 trace | 待办 |

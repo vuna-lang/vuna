@@ -78,6 +78,7 @@ $ vuna search --type "a -> a"
 | `PKG_` | `vuna.toml` 清单解析/校验、包图 | `Diagnostics/Pkg.vuna` |
 | `LD_` | Loader / 包 / 能力诊断 | `Loader/Diagnostics.vuna` |
 | `IC_` | 编译器内部错误（不变量/燃料耗尽；internal compiler error，exit 2） | `Diagnostics/Ic.vuna` |
+| `UN_` | 告警（未使用/冗余/遮蔽；severity = warning） | `Diagnostics/Warning.vuna` |
 | `LN_` | lint 规则 | `lib/Vuna/Lint/Diagnostics.vuna` |
 | `FX_` | 错误修复规则（从可修复 `LN_` 推导，`FX_` + 规则名去 `-`） | `lib/Vuna/Lint/Diagnostics.vuna` |
 
@@ -104,6 +105,8 @@ CLI 统一使用 0 / 1 / 2 三档：
 | 0 | 成功 | 命令完成；`--check` 无差异；lint 无 finding；测试全过 |
 | 1 | 源码 / 诊断错误 | `check` / `compile` / `build` 的一切失败（解析、精化、覆盖性、终止性、codegen，以及入口路径不存在；**解析错误也是 1**）；`lint` 有 finding；`fmt --check` 有需重排文件；`doc --check` 缺 docstring；`test` 有失败 |
 | 2 | 用法 / 工具错误 | 未知命令或 flag、缺值、参数个数不对；工具命令的 IO / 上下文错误（`lint` / `fmt` / `interp` / `test` / `goal` / `doc` 的路径不存在、非 workspace、包或依赖加载失败、取不到程序级 fixity 上下文） |
+
+约定之外：`vuna check` 的 warning（`UN_` 域）默认静默：`-W`/`--warnings` 打开显示，`--deny-warnings` 显示并把退出码提升为 1（源码检查本身仍成功）。warning 只报当前检查单元自己的文件（依赖包不重复刷屏）。
 
 约定之外：`vuna interp` 把任何检查 / 求值失败报成 2（输出以 `error:` 开头）；`vuna
 search` 无命中为 1（用法 / 查询解析 / 非 workspace 仍为 2）；`vuna run` 透传子进程退出

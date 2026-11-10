@@ -41,3 +41,13 @@ exit: 1
 out-contains: [PKG_UnknownKey]
 out-contains: unknown key "version" in [package]
 out-contains: vuna.toml:3:1
+# warning 通道：默认静默；-W 显示；--deny-warnings 提升退出码。
+run: sh -c 'printf "apply : (Int -> Int) -> Int\napply f = f 1\n\nunused : Int\nunused = apply (\\x => 2)\n\nmain : Int\nmain = unused\n" > "$TMPDIR/m38-warn.vuna"'
+run: "$VUNA" check "$TMPDIR/m38-warn.vuna" 2>&1
+out-not-contains: UN_UnusedBinder
+run: "$VUNA" check -W "$TMPDIR/m38-warn.vuna" 2>&1
+out-contains: [UN_UnusedBinder]
+out-contains: binder `x` is never used
+run: "$VUNA" check "$TMPDIR/m38-warn.vuna" --deny-warnings 2>&1
+exit: 1
+out-contains: [UN_UnusedBinder]
