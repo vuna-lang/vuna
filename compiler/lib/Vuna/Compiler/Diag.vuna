@@ -18,6 +18,8 @@ module Vuna.Compiler.Diag
   , TraceFrame(..)
   , appendMessage
   , diagAt
+  , diagFileOf
+  , sameDiag
   , diagNoLoc
   , diagText
   , err
@@ -50,6 +52,8 @@ module Vuna.Compiler.Diag
 -- 本模块不 import `Common`（避免 Common -> Diag -> Common 成环）：Span 来自 `Source`。
 import Vuna.Compiler.Source
 import Base.Monad
+import Base.List
+import Base.Pair
 
 -- ---------------------------------------------------------------
 -- 枚举
@@ -382,3 +386,35 @@ icInternal what =
 onErrDiag : (Diagnostic -> Diagnostic) -> Check a -> Check a
 onErrDiag f (ErrC d) = ErrC (f d)
 onErrDiag f (OkC x) = OkC x
+
+-- | 主位置的文件（无位置返回 ""）。
+diagFileOf : Diagnostic -> String
+diagFileOf d = case primaryLabelOf d.diagLabels of
+  Nothing => ""
+  Just (Label (Just sp) _ _ _) => spanFile sp
+  _ => ""
+
+primaryLabelOf : List Label -> Maybe Label
+primaryLabelOf [] = Nothing
+primaryLabelOf (l :: rest) = case l of
+  Label _ _ LabelPrimary _ => Just l
+  _ => primaryLabelOf rest
+
+sameSeverity : Severity -> Severity -> Bool
+sameSeverity SevError SevError = True
+sameSeverity SevWarning SevWarning = True
+sameSeverity SevNote SevNote = True
+sameSeverity SevHelp SevHelp = True
+sameSeverity _ _ = False
+
+-- | 两条诊断是否「同一位置 + 同一码 + 同一消息」（去重用；忽略字段/建议）。
+sameDiag : Diagnostic -> Diagnostic -> Bool
+sameDiag a b =
+  a.diagCode == b.diagCode && a.diagMessage == b.diagMessage && sameSeverity a.diagSeverity b.diagSeverity
+    && labelSpanOf a.diagLabels == labelSpanOf b.diagLabels
+
+labelSpanOf : List Label -> List (Pair String (Pair Int (Pair Int Int)))
+labelSpanOf [] = []
+labelSpanOf (Label msp _ _ _ :: rest) = case msp of
+  Nothing => Base.List.Cons (Pair "" (Pair 0 (Pair 0 0))) (labelSpanOf rest)
+  Just sp => Base.List.Cons (Pair (spanFile sp) (Pair (spanStartLine sp) (Pair (spanStartCol sp) (spanEndLine sp)))) (labelSpanOf rest)

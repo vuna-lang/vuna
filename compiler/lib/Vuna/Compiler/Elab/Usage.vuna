@@ -81,7 +81,7 @@ checkLamBinder : Span -> String -> Rig -> List Rig -> Check (List Rig)
 checkLamBinder sp name rig [] = icInternal "usage vector lost lambda binder"
 checkLamBinder sp name rig (used :: rest) =
   let
-    _ = if isRigZero used then case rig of
+    _ = if isRigZero used && not (startsWith "_" name) then case rig of
       RigOmega => warnAt1 sp (UnusedBinder name) name
       _ => 0
     else 0
@@ -98,7 +98,7 @@ checkAltBindersGo sp ((Pair name rig) :: rest) us = case us of
   [] => icInternal "usage vector lost case binder"
   used :: more =>
     let
-      _ = if isRigZero used then case rig of
+      _ = if isRigZero used && not (startsWith "_" name) then case rig of
         RigOmega => warnAt1 sp (UnusedBinder name) name
         _ => 0
       else 0

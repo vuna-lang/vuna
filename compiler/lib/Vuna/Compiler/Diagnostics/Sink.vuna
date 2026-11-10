@@ -36,4 +36,11 @@ takeWarnings _ =
   let
     b = runIO (readRef warningsRef)
     _ = runIO (writeRef warningsRef (WarnBox [] 0))
-  in b.warnBoxItems
+  in dedupeWarnings b.warnBoxItems
+
+containsDiag : Diagnostic -> List Diagnostic -> Bool
+containsDiag d [] = False
+containsDiag d (x :: xs) = if sameDiag d x then True else containsDiag d xs
+
+dedupeWarnings : List Diagnostic -> List Diagnostic
+dedupeWarnings ds = reverse (foldl (\acc => \d => if containsDiag d acc then acc else d :: acc) [] ds)
