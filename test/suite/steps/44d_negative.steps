@@ -1,0 +1,17 @@
+# 44d) 负例：摘要路径不得漏检。corpus/packages/m34_summary/root 复制到 $TMPDIR/汇总并追加
+#      类型错误，摘要路径与全量路径（VUNA_ELAB_FULL=1）诊断逐字节一致。
+run: sh -c 'mkdir -p "$TMPDIR/summary-cache" "$TMPDIR/summary-bad/app"'
+run: sh -c 'TMPDIR="$TMPDIR/summary-cache" "$VUNA" check "$VUNA_BASE" >/dev/null 2>&1 || true'
+run: sh -c 'TMPDIR="$TMPDIR/summary-cache" "$VUNA" check corpus/packages/m34_summary/dep >/dev/null 2>&1 || true'
+run: sh -c 'TMPDIR="$TMPDIR/summary-cache" "$VUNA" check corpus/packages/m34_summary/root >/dev/null 2>&1 || true'
+run: sh -c 'cp corpus/packages/m34_summary/root/app/Main.vuna "$TMPDIR/summary-bad/app/Main.vuna"; printf "\nbroken : Int\nbroken = \"x\"\n" >> "$TMPDIR/summary-bad/app/Main.vuna"'
+# 副本 manifest：../dep 与 ../../../../../base 改成本仓库绝对路径。
+run: sh -c 'dep_abs=$(cd corpus/packages/m34_summary/dep && pwd); sed "s|\.\./dep|$dep_abs|; s|\.\./\.\./\.\./\.\./\.\./base|$VUNA_BASE|" corpus/packages/m34_summary/root/vuna.toml > "$TMPDIR/summary-bad/vuna.toml"'
+run: sh -c 'TMPDIR="$TMPDIR/summary-cache" "$VUNA" check "$TMPDIR/summary-bad" > "$TMPDIR/summary-bad.out" 2>&1'
+exit: nonzero
+read: $TMPDIR/summary-bad.out
+out-contains: TC_TypeMismatch
+run: sh -c 'TMPDIR="$TMPDIR/summary-bad-full" VUNA_ELAB_FULL=1 "$VUNA" check "$TMPDIR/summary-bad" > "$TMPDIR/summary-bad-full.out" 2>&1'
+exit: nonzero
+read: $TMPDIR/summary-bad.out
+out-equals-file: $TMPDIR/summary-bad-full.out

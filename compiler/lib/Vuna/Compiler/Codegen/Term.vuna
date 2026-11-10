@@ -1034,17 +1034,28 @@ record GenSt where
   gsCtorShapes : List (Pair String (List Bool))
   gsCtorOpaques : List (Pair String (List Bool))
   gsUnboxed : List String
+  -- R4：record 族 → 运行时字段（字段声明序号 → OCaml record label）。
+  gsRecordFields : List (Pair String (List (Pair Int String)))
   gsNext : Int
   gsQual : QualCtx
   gsDeps : List String
 
+-- | R3：记录投影在生成的 `case` 里使用的字段 binder 名（与 `Elab/Term/Impl` 一致）。
+recordProjVar : Int -> String
+recordProjVar i = "@vuna@record@proj${i}"
+
+-- | R3：字段 telescope → `case` 绑定子（名字换成本地投影变量，rig 沿用字段）。
+projBinders : List (Pair String Rig) -> Int -> List (Pair String Rig)
+projBinders [] i = []
+projBinders (b :: rest) i = Pair (recordProjVar i) (secondOf b) :: projBinders rest (i + 1)
+
 -- 程序声明的族名表（`strUnpack` / `strPack` 的映射要看有没有 List 族）。
 gsNext : GenSt -> Int
-gsNext (GenSt families ctors shapes opaques unboxed next qual deps) = next
+gsNext (GenSt families ctors shapes opaques unboxed recfields next qual deps) = next
 
 gsPutNext : GenSt -> Int -> GenSt
-gsPutNext (GenSt families ctors shapes opaques unboxed next qual deps) n =
-  GenSt families ctors shapes opaques unboxed n qual deps
+gsPutNext (GenSt families ctors shapes opaques unboxed recfields next qual deps) n =
+  GenSt families ctors shapes opaques unboxed recfields n qual deps
 
 ctorTableOfData : DtData -> List (Pair String String)
 ctorTableOfData d = map (\c => Pair (dtCtorName c) (dtCtorFamily c)) (dtDataCtors d)
@@ -1056,7 +1067,9 @@ ctorTableOf (d :: rest) = append (ctorTableOfData d) (ctorTableOf rest)
 mkGenSt : QualCtx -> List DtData -> GenSt
 mkGenSt qc datas =
   GenSt (map dtDataName datas) (ctorTableOf datas) (ctorShapeOf datas) (ctorOpaqueTableOf datas)
-    (unboxedFamilySet datas) 0 qc []
+    (unboxedFamilySet datas)
+    (map (\d => Pair (dtDataName d) (recordRtFields d)) (filter hasRecordRepr (filter (\d => not (memName (dtDataName d) (unboxedFamilySet datas))) datas)))
+    0 qc []
 
 -- ---------------------------------------------------------------
 -- C35：跨单元引用限定与依赖累积
@@ -1068,8 +1081,8 @@ mkGenSt qc datas =
 gsAddDep : GenSt -> String -> GenSt
 gsAddDep st unit =
   if unit == "" || memName unit st.gsDeps then st
-  else GenSt st.gsFamilies st.gsCtors st.gsCtorShapes st.gsCtorOpaques st.gsUnboxed st.gsNext st.gsQual
-    (unit :: st.gsDeps)
+  else GenSt st.gsFamilies st.gsCtors st.gsCtorShapes st.gsCtorOpaques st.gsUnboxed st.gsRecordFields
+    st.gsNext st.gsQual (unit :: st.gsDeps)
 
 genValueRef : GenSt -> String -> Pair String GenSt
 genValueRef st name =
@@ -1210,7 +1223,20 @@ else case t of
   TLam name rig body => genTermLamFuel (fuel - 1) st binders name rig body
   TApp f a rig => genAppFuel (fuel - 1) st binders f a rig
   TCon c args => genConAppFuel (fuel - 1) st binders c args
+  TMk c args => genConAppFuel (fuel - 1) st binders c args
   TCase scrut alts => genCaseFuel (fuel - 1) st binders scrut alts
+  -- R4：record 族的更新/投影直接用 OCaml record 语法；非 record 仍按 case 形状展开。
+  TRecUpd base c tele idxs body => case lookupPair c st.gsRecordFields of
+    Just fields => genRecordUpdateFuel (fuel - 1) st binders base c tele fields idxs body
+    Nothing => genTermFuel (fuel - 1) st binders (TCase base [CaseAlt c tele body])
+  TProj base c tele i fi => case lookupPair c st.gsRecordFields of
+    Just fields => case lookupRtLabel fi fields of
+      Just label => Vuna.Compiler.Common.bind (genTermFuel (fuel - 1) st binders base) (\p => case p of
+        Pair baseText st2 =>
+          Ok (Pair "(${baseText}).${recordLabelOf st2 c label}" (gsDepOfFamily st2 c))
+      )
+      Nothing => genProjAsCaseFuel (fuel - 1) st binders base c tele i fi
+    Nothing => genProjAsCaseFuel (fuel - 1) st binders base c tele i fi
   TPi name implicit rig dom cod => cgErr0 TypeUsedAtRuntime
   TType l => cgErr0 TypeUsedAtRuntime
   TMeta m => cgErr1 (UnsolvedMetavarRuntime (showMetaHint m)) (showMetaHint m)
@@ -1529,14 +1555,145 @@ else case lookupPair c st.gsCtors of
       )
       )
 
--- | 构造子应用的收尾：去装箱族转交 `genUnboxedConAppFinish`，其余按族取 OCaml 构造子
--- 引用并拼上实参文本，返回表达式与更新后的生成状态。
+-- R4：record 族的 OCaml record 文本（构造 / 模式 / 更新共用）。
+-- | R4：record 字段 label 的跨单元限定文本。
+-- | R4：按 record 族归属单元记依赖（同单元不记，否则 split 会出现自依环）。
+gsDepOfFamily : GenSt -> String -> GenSt
+gsDepOfFamily st family =
+  let
+    unit = unitOfTbl st.gsQual.qcDatas family
+  in if unit == "" || unit == st.gsQual.qcUnit then st else gsAddDep st unit
+
+-- | R4：record OCaml 表示的 codegen helper。
+recordLabelOf : GenSt -> String -> String -> String
+recordLabelOf st family label =
+  let
+    unit = unitOfTbl st.gsQual.qcDatas family
+  in if unit == "" || unit == st.gsQual.qcUnit then label else "${unit}.${label}"
+
+-- | R4：构造 `{ f = a; ... }`（字段表与运行时实参按序对齐）。
+recordConText : GenSt -> String -> List (Pair Int String) -> List String -> String
+recordConText st family fields texts =
+  "{ ${joinWith "; " (recordAssigned st family fields texts)} }"
+
+-- | R4：record OCaml 表示的 codegen helper。
+recordAssigned : GenSt -> String -> List (Pair Int String) -> List String -> List String
+recordAssigned st family [] texts = []
+recordAssigned st family fields [] = []
+recordAssigned st family (f :: fs) (t :: ts) =
+  "${recordLabelOf st family (secondOf f)} = ${t}" :: recordAssigned st family fs ts
+
+-- | R4：record 模式 `{ f = p; ... }`。
+recordPatText : GenSt -> String -> List (Pair Int String) -> List String -> String
+recordPatText st family fields pats = "{ ${joinWith "; " (recordAssigned st family fields pats)} }"
+
+-- | R4：运行时字段表里按**字段声明序号**找 OCaml label。
+lookupRtLabel : Int -> List (Pair Int String) -> Maybe String
+lookupRtLabel fi [] = Nothing
+lookupRtLabel fi ((Pair i label) :: rest) = if i == fi then Just label else lookupRtLabel fi rest
+
+-- | R4：字段声明序号在运行时字段表里的位置（用于对齐 record 更新实参）。
+lookupRtPos : Int -> List (Pair Int String) -> Int -> Maybe Int
+lookupRtPos fi [] n = Nothing
+lookupRtPos fi ((Pair i label) :: rest) n = if i == fi then Just n else lookupRtPos fi rest (n + 1)
+
+-- | R4：record OCaml 表示的 codegen helper。
+lookupRtPositions : List (Pair Int String) -> List Int -> List (Pair Int Int)
+lookupRtPositions fields [] = []
+lookupRtPositions fields (i :: rest) = case lookupRtPos i fields 0 of
+  Just pos => Pair i pos :: lookupRtPositions fields rest
+  Nothing => lookupRtPositions fields rest
+
+nthTextOr : Int -> List String -> String
+nthTextOr n [] = ""
+nthTextOr n (x :: rest) = if n <= 0 then x else nthTextOr (n - 1) rest
+
+-- | R4：record 更新文本 `{ base with f_a = v; ... }`（只取被改字段）。
+recordUpdateTextOf : GenSt -> String -> String -> List (Pair Int String) -> List (Pair Int Int) -> List String -> String
+recordUpdateTextOf st baseText family fields positions texts =
+  "{ ${baseText} with ${joinWith "; " (updateAssigned st family fields positions texts)} }"
+
+-- | R4：record OCaml 表示的 codegen helper。
+updateAssigned : GenSt -> String -> List (Pair Int String) -> List (Pair Int Int) -> List String -> List String
+updateAssigned st family fields [] texts = []
+updateAssigned st family fields positions [] = []
+updateAssigned st family fields (p :: rest) (t :: ts) = case lookupRtLabel (firstOf p) fields of
+  Just label => "${recordLabelOf st family label} = ${t}" :: updateAssigned st family fields rest ts
+  Nothing => updateAssigned st family fields rest ts
+
+-- | R4：record 更新 codegen：base 文本 + 重建体（`TCon`）的运行时实参 → record update 语法。
+genRecordUpdateFuel : Int -> GenSt -> List (Pair String Rig) -> Term -> String -> List (Pair String Rig) -> List (Pair Int String) -> List Int -> Term -> Result (Pair String GenSt)
+genRecordUpdateFuel fuel st binders base c tele fields idxs body = if fuel <= 0 then Err "DT: internal: codegen fuel exhausted"
+else Vuna.Compiler.Common.bind (genTermFuel (fuel - 1) st binders base) (\p => case p of
+  Pair baseText st1 => case body of
+    TMk c2 args =>
+      genRecordUpdateArgsFuel (fuel - 1) st1 (recordAltBinders tele binders) baseText c fields idxs
+        args
+    TCon c2 args =>
+      genRecordUpdateArgsFuel (fuel - 1) st1 (recordAltBinders tele binders) baseText c fields idxs
+        args
+    _ => Err "DT: internal: record update body is not a constructor application"
+)
+
+-- | R4：把 record 字段 binder 补进 codegen binder 栈（被改值在 alt 上下文里精化，
+-- 其 de Bruijn index 含这些槽位；旧字段 binder 在本路径不生成，故标成 erased 占位）。
+recordAltBinders : List (Pair String Rig) -> List (Pair String Rig) -> List (Pair String Rig)
+recordAltBinders tele binders = append (reverse (map (\b => Pair (firstOf b) Rig0) tele)) binders
+
+-- | R4：record 更新的实参处理：只生成**被改字段**的实参文本（其余字段由 record update
+-- 语法沿用 base，旧 binder 在当前上下文里并不存在）。
+genRecordUpdateArgsFuel : Int -> GenSt -> List (Pair String Rig) -> String -> String -> List (Pair Int String) -> List Int -> List (Pair Term Rig) -> Result (Pair String GenSt)
+genRecordUpdateArgsFuel fuel st binders baseText c fields idxs args = if fuel <= 0 then Err "DT: internal: codegen fuel exhausted"
+else case lookupPair c st.gsCtorShapes of
+  Nothing => Err "DT: internal: no shape for constructor ${c}"
+  Just flags => case lookupPair c st.gsCtorOpaques of
+    Nothing => Err "DT: internal: no opaque shape for constructor ${c}"
+    Just opqs => Vuna.Compiler.Common.bind (alignCtorArgs c flags args) (\runtimeArgs => let
+      positions = lookupRtPositions fields idxs
+    in Vuna.Compiler.Common.bind (genUpdTextsFuel (fuel - 1) st binders (ctorOpaqueKeptFlags flags opqs) positions runtimeArgs) (\q => case q of
+      Pair texts st2 =>
+        Ok (Pair (recordUpdateTextOf st2 baseText c fields positions texts) (gsDepOfFamily st2 c))
+    )
+    )
+
+-- | R4：按 (字段序号, 运行时实参位置) 取实参并生成文本（只覆盖被改字段）。
+genUpdTextsFuel : Int -> GenSt -> List (Pair String Rig) -> List Bool -> List (Pair Int Int) -> List (Pair Term Rig) -> Result (Pair (List String) GenSt)
+genUpdTextsFuel fuel st binders opqs [] args =
+  if fuel <= 0 then Err "DT: internal: codegen fuel exhausted" else Ok (Pair [] st)
+genUpdTextsFuel fuel st binders opqs (p :: rest) args = if fuel <= 0 then Err "DT: internal: codegen fuel exhausted"
+else case nthOpqArg (secondOf p) opqs args of
+  Nothing => Err "DT: internal: record update position out of range"
+  Just arg => Vuna.Compiler.Common.bind (genTermFuel (fuel - 1) st binders arg) (\q => case q of
+    Pair text st2 => Vuna.Compiler.Common.bind (genUpdTextsFuel (fuel - 1) st2 binders opqs rest args) (\r => case r of
+      Pair texts st3 => Ok (Pair (Base.List.Cons text texts) st3)
+    )
+  )
+
+-- | R4：record OCaml 表示的 codegen helper。
+nthOpqArg : Int -> List Bool -> List (Pair Term Rig) -> Maybe Term
+nthOpqArg n [] args = Nothing
+nthOpqArg n (opq :: opqs) [] = Nothing
+nthOpqArg n (opq :: opqs) ((Pair a rig) :: rest) =
+  if n <= 0 then Just a else nthOpqArg (n - 1) opqs rest
+
+-- | 非 record 的投影仍按原 `case` 形状展开。
+genProjAsCaseFuel : Int -> GenSt -> List (Pair String Rig) -> Term -> String -> List (Pair String Rig) -> Int -> Int -> Result (Pair String GenSt)
+genProjAsCaseFuel fuel st binders base c tele i fi =
+  let
+    n = length tele
+  in genTermFuel fuel st binders
+    (TCase base [CaseAlt c (projBinders tele 0) (TVar (recordProjVar fi) (n - 1 - fi))])
+
+-- | 构造子应用的收尾：去装箱族转交 `genUnboxedConAppFinish`；record 族生成 OCaml record；
+-- 其余按族取 OCaml 构造子引用并拼上实参文本。
 genConAppFinish : GenSt -> String -> String -> List Bool -> List Bool -> List String -> Result (Pair String GenSt)
 genConAppFinish st family c flags opqs argTexts = if memName family st.gsUnboxed then genUnboxedConAppFinish st flags opqs argTexts
-else
-  let
-    r = genCtorRef st family c
-  in Ok (Pair (conAppText (firstOf r) argTexts) (secondOf r))
+else case lookupPair family st.gsRecordFields of
+  Just fields => Ok (Pair (recordConText st family fields argTexts) (gsDepOfFamily st family))
+  Nothing =>
+    let
+      r = genCtorRef st family c
+    in Ok (Pair (conAppText (firstOf r) argTexts) (secondOf r))
 
 -- | 去装箱构造子的应用收尾：要求恰好一个运行时实参，按构造子的 opaque 标志把实参
 -- 包成 `ctorArgText`（不需要 OCaml 变体构造）。
@@ -1638,11 +1795,15 @@ else case lookupPair (caseAltName alt) st.gsCtors of
   Just family => case lookupPair (caseAltName alt) st.gsCtorShapes of
     Nothing => Err "DT: internal: no shape for constructor ${caseAltName alt}"
     Just flags => Vuna.Compiler.Common.bind (altEnvChecked st (caseAltName alt) outer (caseAltBinders alt) flags) (\bound => Vuna.Compiler.Common.bind (genTermFuel (fuel - 1) (aeSt bound) (aeEnv bound) (caseAltBody alt)) (\p => case p of
-      Pair b st2 =>
-        let
-          r = genCtorRef st2 family (caseAltName alt)
-          patText = armPatternText (firstOf r) (aePats bound)
-        in Ok (Pair "  | ${patText} -> ${b}\n" (secondOf r))
+      Pair b st2 => case lookupPair family st2.gsRecordFields of
+        Just fields =>
+          Ok
+            (Pair "  | ${recordPatText st2 family fields (aePats bound)} -> ${b}\n" (gsDepOfFamily st2 family))
+        Nothing =>
+          let
+            r = genCtorRef st2 family (caseAltName alt)
+            patText = armPatternText (firstOf r) (aePats bound)
+          in Ok (Pair "  | ${patText} -> ${b}\n" (secondOf r))
     )
     )
 

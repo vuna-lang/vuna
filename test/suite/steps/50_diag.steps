@@ -1,0 +1,15 @@
+# 50) M38 CLI 诊断片段：`-->` + 源码行 + 插入符；无位置错误保持单行；退出码不变。
+#     夹具写在 case 私有 $TMPDIR（包上下文只依赖 $VUNA_BASE），不触碰工作树。
+#     注：steps 的 out-contains 值会 trim 首尾空白，原 `"  --> "` 改为 `-->`（片段语义不变）。
+run: sh -c 'd="$TMPDIR/m38-diag-pkg"; rm -rf "$d"; mkdir -p "$d/app"; printf "[package]\nname = \"m38-diag-pkg\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "main : Int\nmain = \"boom\"\n" > "$d/app/Main.vuna"'
+run: "$VUNA" check "$TMPDIR/m38-diag-pkg" 2>&1
+exit: 1
+out-contains: -->
+out-contains: app/Main.vuna:2:8
+out-contains: main = "boom"
+out-contains: ^
+# 无位置错误（入口文件不存在）保持单行诊断：有消息、没有源码片段、退出码 1。
+run: "$VUNA" check "$TMPDIR/m38-no-such-entry.vuna" 2>&1
+exit: 1
+out-contains: no such file
+out-not-contains: -->

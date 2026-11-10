@@ -1,0 +1,17 @@
+# 55) M35.3 net 原语：Unix domain socket echo / TCP 临时端口 / stale socket 重绑 / 错误路径。
+#     说明：TCP loopback 在部分 Nix 沙箱不可用（用 unix socket 覆盖协议面），此时打印 SKIP。
+#     夹具 corpus/net/01_echo 会写 .output：复制到 $TMPDIR 并重写 vuna.toml 的 base 行。
+run: sh -c 'cp -R corpus/net/01_echo "$TMPDIR/net-fixture"; find "$TMPDIR/net-fixture" -name vuna.toml -exec sed -i "s|^vuna-base = .*|vuna-base = \"$VUNA_BASE\"|" {} +'
+run: "$VUNA" build "$TMPDIR/net-fixture" >/dev/null 2>&1
+run: B="$TMPDIR/net-fixture/.output/bin/net-echo"; S="$TMPDIR/net-echo.sock"; L="$TMPDIR/net-serve.log"; rm -f "$S"; : >"$L"; "$B" serve "unix:$S" >"$L" 2>&1 & srv=$!; i=0; while ! grep -q '^ready' "$L" 2>/dev/null && [ "$i" -lt 100 ]; do i=$((i+1)); sleep 0.1; done; out=$("$B" client "unix:$S" 2>&1); rc=$?; if [ "$rc" -ne 0 ]; then kill "$srv" 2>/dev/null; wait "$srv" 2>/dev/null; printf '%s\nclient-exit:%s\n' "$out" "$rc"; exit 1; fi; printf '%s\n' "$out"; wait "$srv"; printf 'server-exit:%s\n' "$?"
+out-contains: echo:ping
+out-contains: server-exit:0
+run: B="$TMPDIR/net-fixture/.output/bin/net-echo"; L="$TMPDIR/net-tcp.log"; : >"$L"; "$B" serve-tcp >"$L" 2>&1 & srv=$!; i=0; while ! grep -q '^port:' "$L" 2>/dev/null && [ "$i" -lt 100 ]; do i=$((i+1)); sleep 0.1; done; port=$(sed -n 's/^port://p' "$L" | head -1); if [ -z "$port" ]; then kill "$srv" 2>/dev/null; wait "$srv" 2>/dev/null; printf 'SKIP: net tcp loopback unavailable in this sandbox\n'; exit 0; fi; out=$("$B" client "tcp:127.0.0.1:$port" 2>&1); rc=$?; if [ "$rc" -ne 0 ]; then kill "$srv" 2>/dev/null; wait "$srv" 2>/dev/null; printf '%s\ntcp-client-exit:%s\n' "$out" "$rc"; exit 1; fi; case "$out" in *echo:ping*) ;; *) kill "$srv" 2>/dev/null; wait "$srv" 2>/dev/null; printf '%s\n' "$out"; exit 1 ;; esac; printf '%s\n' "$out"; wait "$srv"; printf 'tcp-server-exit:%s\ntcp-result:ok\n' "$?"
+out-contains: tcp-result:ok
+# stale socket：上一个 server 退出后路径仍在 → listen 前 unlink 并重绑。
+run: B="$TMPDIR/net-fixture/.output/bin/net-echo"; S="$TMPDIR/net-echo.sock"; L="$TMPDIR/net-stale.log"; : >"$L"; "$B" serve "unix:$S" >"$L" 2>&1 & srv=$!; i=0; while ! grep -q '^ready' "$L" 2>/dev/null && [ "$i" -lt 100 ]; do i=$((i+1)); sleep 0.1; done; out=$("$B" client "unix:$S" 2>&1); rc=$?; if [ "$rc" -ne 0 ]; then kill "$srv" 2>/dev/null; wait "$srv" 2>/dev/null; printf '%s\nstale-client-exit:%s\n' "$out" "$rc"; exit 1; fi; printf '%s\n' "$out"; wait "$srv"; printf 'stale-server-exit:%s\n' "$?"
+out-contains: echo:ping
+out-contains: stale-server-exit:0
+run: "$TMPDIR/net-fixture/.output/bin/net-echo" client "bogus:" 2>&1
+exit: 2
+out-contains: net: invalid address

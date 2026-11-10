@@ -646,16 +646,16 @@ hasHasFieldDecls (d :: rest) = case d of
   _ => hasHasFieldDecls rest
 
 -- | 只保留短名（非限定名）的记录声明，避免为依赖包的记录重复生成实例。
-shortRecordInfos : List RecordInfo -> List RecordInfo
-shortRecordInfos [] = []
-shortRecordInfos (r :: rest) =
-  if baseNameOf r.recordInfoName == r.recordInfoName then Base.List.Cons r (shortRecordInfos rest)
-  else shortRecordInfos rest
+shortRecordMetas : List RecordMeta -> List RecordMeta
+shortRecordMetas [] = []
+shortRecordMetas (r :: rest) =
+  if baseNameOf r.recordMetaName == r.recordMetaName then Base.List.Cons r (shortRecordMetas rest)
+  else shortRecordMetas rest
 
 -- | 从声明里抽取记录信息，为当前模块的记录字段生成 `HasField` 实例。
 hasFieldInstancesOfDecls : List Decl -> List Decl
 hasFieldInstancesOfDecls decls =
-  recordHasFieldInstances (shortRecordInfos (firstOf (recordsOfDecls (\n => n) decls)))
+  recordHasFieldInstances (shortRecordMetas (firstOf (recordsOfDecls (\n => n) decls)))
 
 -- | 判断声明列表里是否已有显式的 `HasField` 实例（有则不再自动生成）。
 hasExplicitHasFieldInstance : List Decl -> Bool
@@ -681,11 +681,14 @@ elabProgramFull : List Decl -> Result DtProgram
 elabProgramFull decls =
   let
     decls2 = maybeAddHasFieldInstances preludeGlobals decls
-  in Vuna.Compiler.Common.bind (prepareDecls decls2)
-    (\ds => Vuna.Compiler.Common.bind (expandDerivings ds) (\ds2 => elabProgramGo ds2))
+  in Vuna.Compiler.Common.bind (prepareDecls decls2) (\p => case p of
+    Pair records ds =>
+      Vuna.Compiler.Common.bind (expandDerivings ds)
+        (\ds2 => elabProgramGoWith ecEmpty preludeGlobals records ds2)
+  )
 
 elabProgramGo : List Decl -> Result DtProgram
-elabProgramGo decls = elabProgramGoWith ecEmpty preludeGlobals decls
+elabProgramGo decls = elabProgramGoWith ecEmpty preludeGlobals [] decls
 
 -- 接口摘要路径的完整入口：与 elabProgramFull 同一条前置降级链（record / deriving），
 -- 但起始 Ec / globals 由依赖摘要注入。
@@ -699,13 +702,20 @@ elabProgramFullWithAux : Ec -> List (Pair String Term) -> List Decl -> List Decl
 elabProgramFullWithAux startEc startGlobals termAux decls =
   let
     decls2 = maybeAddHasFieldInstances startGlobals decls
-  in Vuna.Compiler.Common.bind (prepareDeclsWith termAux decls2)
-    (\ds => Vuna.Compiler.Common.bind (expandDerivings ds) (\ds2 => Vuna.Compiler.Common.bind (prepareDecls termAux) (\ads => Vuna.Compiler.Common.bind (expandDerivings ads) (\ads2 => elabProgramGoWithAux startEc startGlobals ads2 ds2))))
+  in Vuna.Compiler.Common.bind (prepareDeclsWith termAux decls2) (\p => case p of
+    Pair records ds => Vuna.Compiler.Common.bind (expandDerivings ds) (\ds2 => Vuna.Compiler.Common.bind (prepareDecls termAux) (\ap => case ap of
+      Pair _ ads =>
+        Vuna.Compiler.Common.bind (expandDerivings ads)
+          (\ads2 => elabProgramGoWithAux startEc startGlobals records ads2 ds2)
+    )
+    )
+  )
 
 -- M34.5 接口摘要第一步：起始状态（依赖包的签名 globals + Ec 摘要）参数化，供
 -- 「只精化本包 decls、复用依赖包摘要」的调用方注入。行为与 elabProgramGo 完全一致。
-elabProgramGoWith : Ec -> List (Pair String Term) -> List Decl -> Result DtProgram
-elabProgramGoWith startEc startGlobals decls = elabProgramGoWithAux startEc startGlobals [] decls
+elabProgramGoWith : Ec -> List (Pair String Term) -> List RecordMeta -> List Decl -> Result DtProgram
+elabProgramGoWith startEc startGlobals records decls =
+  elabProgramGoWithAux startEc startGlobals records [] decls
 
 -- M40：精化到「定义体 + 实例体」完成的状态。收尾校验（未解洞/用量/终止性）与工具查询
 -- （洞目标）都从这里分叉：未解洞只让 strict 收尾失败；`goalsOfProgramTolerant` 仍可读 goals。
@@ -717,10 +727,10 @@ record ElabCore where
   coreGlobals : List (Pair String Term)
   coreProjSpans : List (Pair String Span)
 
-elabProgramCoreWithAux : Ec -> List (Pair String Term) -> List Decl -> Result ElabCore
-elabProgramCoreWithAux startEc startGlobals decls = Vuna.Compiler.Common.bind (collectSigs decls) (\sigs => let
+elabProgramCoreWithAux : Ec -> List (Pair String Term) -> List RecordMeta -> List Decl -> Result ElabCore
+elabProgramCoreWithAux startEc startGlobals records decls = Vuna.Compiler.Common.bind (collectSigs decls) (\sigs => let
   _ = stamp "collectSigs-done"
-in Vuna.Compiler.Common.bind (elabDatas (collectDataDecls decls []) startGlobals startEc) (\pd => case pd of
+in Vuna.Compiler.Common.bind (elabDatas (collectDataDecls decls []) records startGlobals startEc) (\pd => case pd of
   Pair datas (Pair globals0 ec0) =>
     let
       -- M30（D18）：data 精化完成后一次性建构造子索引（之后 ecAddData 增量维护）；
@@ -931,9 +941,9 @@ finishCore termAux decls core =
           )
           )
 
-elabProgramGoWithAux : Ec -> List (Pair String Term) -> List Decl -> List Decl -> Result DtProgram
-elabProgramGoWithAux startEc startGlobals termAux decls =
-  Vuna.Compiler.Common.bind (elabProgramCoreWithAux startEc startGlobals decls)
+elabProgramGoWithAux : Ec -> List (Pair String Term) -> List RecordMeta -> List Decl -> List Decl -> Result DtProgram
+elabProgramGoWithAux startEc startGlobals records termAux decls =
+  Vuna.Compiler.Common.bind (elabProgramCoreWithAux startEc startGlobals records decls)
     (\core => finishCore termAux decls core)
 
 -- 用当前解重新 zonk 定义体（延迟字典元变量 → 实例项）；axiom 无体，原样保留。
@@ -997,6 +1007,9 @@ termHasMeta m (TPi n implicit rig dom cod) = termHasMeta m dom || termHasMeta m 
 termHasMeta m (TLam n rig body) = termHasMeta m body
 termHasMeta m (TApp f a rig) = termHasMeta m f || termHasMeta m a
 termHasMeta m (TCon c args) = anyArgHasMeta m args
+termHasMeta m (TMk c args) = anyArgHasMeta m args
+termHasMeta m (TProj base c tele i fi) = termHasMeta m base
+termHasMeta m (TRecUpd base c tele idxs body) = termHasMeta m base || termHasMeta m body
 termHasMeta m (TCase scrut alts) = termHasMeta m scrut || anyAltHasMeta m alts
 termHasMeta m (TInt n) = False
 termHasMeta m (TStr s) = False
@@ -1023,6 +1036,9 @@ termHasAnyMeta (TPi n implicit rig dom cod) = termHasAnyMeta dom || termHasAnyMe
 termHasAnyMeta (TLam n rig body) = termHasAnyMeta body
 termHasAnyMeta (TApp f a rig) = termHasAnyMeta f || termHasAnyMeta a
 termHasAnyMeta (TCon c args) = anyArgHasAnyMeta args
+termHasAnyMeta (TMk c args) = anyArgHasAnyMeta args
+termHasAnyMeta (TProj base c tele i fi) = termHasAnyMeta base
+termHasAnyMeta (TRecUpd base c tele idxs body) = termHasAnyMeta base || termHasAnyMeta body
 termHasAnyMeta (TCase scrut alts) = termHasAnyMeta scrut || anyAltHasAnyMeta alts
 termHasAnyMeta (TInt n) = False
 termHasAnyMeta (TStr s) = False
@@ -1082,9 +1098,11 @@ goalsOfProgram decls =
 -- 洞目标与上下文快照；用量/终止性校验也跳过（它们不影响洞的显示）。
 -- 只给 `vuna goal` / LSP hover 用；check / compile / build 仍走 `elabProgramFull` 的严格收尾。
 goalsOfProgramTolerant : List Decl -> Result (List DtGoalInfo)
-goalsOfProgramTolerant decls =
-  Vuna.Compiler.Common.bind (prepareDecls decls)
-    (\ds => Vuna.Compiler.Common.bind (expandDerivings ds) (\ds2 => Vuna.Compiler.Common.bind (elabProgramCoreWithAux ecEmpty preludeGlobals ds2) (\core => Ok (map (goalInfoOf (ecSols core.coreEc)) (ecGoals core.coreEc)))))
+goalsOfProgramTolerant decls = Vuna.Compiler.Common.bind (prepareDecls decls) (\p => case p of
+  Pair records ds =>
+    Vuna.Compiler.Common.bind (expandDerivings ds)
+      (\ds2 => Vuna.Compiler.Common.bind (elabProgramCoreWithAux ecEmpty preludeGlobals records ds2) (\core => Ok (map (goalInfoOf (ecSols core.coreEc)) (ecGoals core.coreEc))))
+)
 
 elabProgram : List Decl -> Result (Pair (List DtData) (List DtDef))
 elabProgram decls =

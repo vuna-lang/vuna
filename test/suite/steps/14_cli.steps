@@ -1,0 +1,51 @@
+# 14) 统一 CLI：help、退出码、子命令要求、已删除参数（M24：DT 是唯一路径，`--dt` 全删；
+#     M26：`--root` / `--split` / `seed` 子命令删除）。
+#     旧脚本 test/suite/sections/14.sh 的 14 段（14b 见 14b_binary_fingerprint.steps）。
+#     corpus/run/01_arithmetic.vuna、corpus/dt_pkg/01_exec 等路径保留以认领夹具。
+run: "$VUNA" help 2>&1
+out-contains: usage:
+run: sh -c '"$VUNA" >/dev/null 2>&1'
+exit: 2
+run: "$VUNA" compile corpus/run/01_arithmetic.vuna "$TMPDIR/cli-ok" >/dev/null 2>&1
+run: "$VUNA" compile corpus/err/01_case_indent.vuna "$TMPDIR/cli-err" >/dev/null 2>&1
+exit: nonzero
+run: "$VUNA" corpus/run/01_arithmetic.vuna 2>&1
+exit: nonzero
+out-contains: unknown command
+run: "$VUNA" compile --no-typecheck corpus/run/01_arithmetic.vuna 2>&1
+exit: 2
+out-contains: has been removed
+run: "$VUNA" --typed corpus/run/01_arithmetic.vuna 2>&1
+exit: 2
+out-contains: has been removed
+# M24：`--dt` 不再属于任何命令（DT 是唯一路径）。
+run: sh -c 'for cmd in compile check build interp; do out=$("$VUNA" "$cmd" --dt 2>&1); code=$?; [ "$code" = 2 ] || { printf "%s: expected exit 2, got %s\n" "$cmd" "$code"; exit 1; }; case "$out" in *removed*) ;; *) printf "%s: missing removed hint: %s\n" "$cmd" "$out"; exit 1 ;; esac; done'
+run: "$VUNA" compile --package corpus/run/01_arithmetic.vuna 2>&1
+exit: nonzero
+out-contains: error
+# M26：removed hint（--root / --split / seed）都必须是 exit 2 + 明确提示。
+run: "$VUNA" compile --root lib corpus/run/01_arithmetic.vuna "$TMPDIR/removed-1" 2>&1
+exit: 2
+out-contains: removed
+run: "$VUNA" interp --root lib corpus/run/01_arithmetic.vuna 2>&1
+exit: 2
+out-contains: removed
+run: "$VUNA" check --root lib corpus/run/01_arithmetic.vuna 2>&1
+exit: 2
+out-contains: removed
+run: "$VUNA" compile --split "$TMPDIR/removed-2" corpus/dt_pkg/01_exec 2>&1
+exit: 2
+out-contains: removed
+run: "$VUNA" build --split "$TMPDIR/removed-3" corpus/dt_pkg/01_exec 2>&1
+exit: 2
+out-contains: removed
+run: "$VUNA" seed "$TMPDIR/removed-4" corpus/dt_pkg/01_exec 2>&1
+exit: 2
+out-contains: removed
+run: "$VUNA" seed 2>&1
+exit: 2
+out-contains: removed
+run: "$VUNA" interp /no/such/file.vuna >/dev/null 2>&1
+exit: 2
+run: "$VUNA" lint >/dev/null 2>&1
+exit: 2

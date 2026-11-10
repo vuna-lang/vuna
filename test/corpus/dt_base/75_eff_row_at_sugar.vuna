@@ -1,0 +1,20 @@
+-- native-effects N1（ND4）：行字面量的显式实例名 `X@name` 展开成
+-- `Cons "name" (X "name") Nil`，等价于 `[X "name"]`。
+import Base.Eff
+import Base.EffConsole
+import Base.List
+import Base.Monad
+import Base.Nat
+
+mockH : (o : ConsoleOp) -> (resConsole o -> Nat) -> Nat
+mockH op k = case op of
+  Print s => k 5
+  EPrint s => k 0
+
+prog : Eff [Console@audit] Nat
+prog = do
+  n <- consolePrint "audit" "hi"
+  pure n
+
+main : Nat
+main = runPure (handleConsole "audit" (\a => a) mockH prog)

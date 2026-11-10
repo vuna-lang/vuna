@@ -1,0 +1,29 @@
+# 28) 包模式（M11.5/M12.8/M24/M26）：workspace + 依赖包 + [export] + app/Main.vuna 入口。
+#     正例：`vuna build` 走 DT split → .output/{<Module>.ml,Main.ml,build.sh} + bin/<pkg>；
+#     `vuna check` / `vuna test` 也已是 DT（包 check = DT 精化；test = DT 核心求值）。
+#     E14（M26）：入口里声明的 data 必须发进产物 Main.ml（corpus/packages/05_entry_data /
+#     corpus/packages/06_entry_trait）。
+#     夹具 corpus/packages/[01][0-9]_*/ 先复制到 case 私有 $TMPDIR 并重写 vuna.toml 的
+#     vuna-base（绝对路径），避免往仓库工作树写 .output。
+for-each: corpus/packages/[01][0-9]_*/
+  run: mkdir -p "$TMPDIR/pkgs"; dst="$TMPDIR/pkgs/{name}"; rm -rf "$dst"; cp -R "corpus/packages/{name}" "$dst"; find "$dst" -name vuna.toml -exec sed -i 's|^vuna-base = .*|vuna-base = "'"$VUNA_BASE"'"|' {} +
+  exit: 0
+  run: "$VUNA" build "$TMPDIR/pkgs/{name}" 2>&1
+  exit: 0
+  file-exists: $TMPDIR/pkgs/{name}/.output/Main.ml
+  file-exists: $TMPDIR/pkgs/{name}/.output/build.sh
+  run: bin=; for b in "$TMPDIR/pkgs/{name}"/.output/bin/*; do if [ -x "$b" ]; then bin=$b; fi; done; [ -n "$bin" ] || exit 3; "$bin" 2>&1
+  exit: 0
+  out-equals-file: $TMPDIR/pkgs/{name}/expected.out
+  run: "$VUNA" check "$TMPDIR/pkgs/{name}" 2>&1
+  exit: 0
+  run: "$VUNA" test "$TMPDIR/pkgs/{name}" 2>&1
+  exit: 0
+  out-contains: 1 passed, 0 failed
+end:
+# E14：入口里声明的 data（C_Color_Red）必须发进产物 Main.ml。
+for-each: corpus/packages/05_entry_data/ corpus/packages/06_entry_trait/
+  run: sh -c 'test -f "$TMPDIR/pkgs/{name}/.output/Main.ml"'
+  exit: 0
+  file-contains: $TMPDIR/pkgs/{name}/.output/Main.ml C_Color_Red
+end:

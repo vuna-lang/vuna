@@ -183,9 +183,9 @@ privateExportMsg prefix sp name =
 findOwnData : String -> List Decl -> Maybe (Pair String (List String))
 findOwnData name [] = Nothing
 findOwnData name (d :: rest) = case d of
-  DData dname params kind ctors derivings viaField lin sp =>
+  DData dname params kind ctors derivings viaField repr lin sp =>
     if dname == name then Just (Pair dname (map ctorName ctors)) else findOwnData name rest
-  DRecord dname params fields derivings viaField lin sp =>
+  DRecord dname params fields derivings viaField repr lin sp =>
     if dname == name then Just (Pair dname [dname]) else findOwnData name rest
   DTrait tname params methods sp =>
     if tname == name then Just (Pair tname (map traitMethodName methods)) else findOwnData name rest
@@ -216,10 +216,10 @@ findMethodNamed name ((TraitMethod mname ty msp) :: rest) =
 findOwnCtorNames : String -> List Decl -> List (Pair String String)
 findOwnCtorNames name [] = []
 findOwnCtorNames name (d :: rest) = case d of
-  DData dname params kind ctors derivings viaField lin sp =>
+  DData dname params kind ctors derivings viaField repr lin sp =>
     append (map (\c => Pair dname (ctorName c)) (filter (\c => ctorName c == name) ctors))
       (findOwnCtorNames name rest)
-  DRecord dname params fields derivings viaField lin sp =>
+  DRecord dname params fields derivings viaField repr lin sp =>
     if dname == name then Base.List.Cons (Pair dname dname) (findOwnCtorNames name rest)
     else findOwnCtorNames name rest
   DTrait tname params methods sp =>
@@ -252,11 +252,11 @@ ownDataCtorEntries prefix dname (cname :: rest) =
 ownTypeEntries : String -> List Decl -> String -> Maybe (List ExportEntry)
 ownTypeEntries prefix [] name = Nothing
 ownTypeEntries prefix (d :: rest) name = case d of
-  DData dname params kind ctors derivings viaField lin sp =>
+  DData dname params kind ctors derivings viaField repr lin sp =>
     if dname == name then Just
       (Base.List.Cons ExportEntry { kind = "type", public = dname, target = mangle prefix dname, parent = "" } (ownDataCtorEntries prefix dname (map ctorName ctors)))
     else ownTypeEntries prefix rest name
-  DRecord dname params fields derivings viaField lin sp =>
+  DRecord dname params fields derivings viaField repr lin sp =>
     if dname == name then Just
       (Base.List.Cons ExportEntry { kind = "type", public = dname, target = mangle prefix dname, parent = "" } (ownCtorEntries prefix dname [dname]))
     else ownTypeEntries prefix rest name
@@ -276,12 +276,12 @@ ctorEntriesOfType typeTarget (e :: rest) =
 
 declImplicitExports : String -> Decl -> List ExportEntry
 declImplicitExports prefix d = case d of
-  DData dname params kind ctors derivings viaField lin sp =>
+  DData dname params kind ctors derivings viaField repr lin sp =>
     if isPrivateName dname then []
     else Base.List.Cons
       ExportEntry { kind = "type", public = dname, target = mangle prefix dname, parent = "" }
       (ownDataCtorEntries prefix dname (map ctorName ctors))
-  DRecord dname params fields derivings viaField lin sp =>
+  DRecord dname params fields derivings viaField repr lin sp =>
     if isPrivateName dname then []
     else Base.List.Cons
       ExportEntry { kind = "type", public = dname, target = mangle prefix dname, parent = "" }
@@ -350,7 +350,7 @@ isRecordTarget modules decls prefix target = case splitLastDot (splitOnDot targe
 isRecordDecl : String -> List Decl -> Bool
 isRecordDecl dname [] = False
 isRecordDecl dname (d :: rest) = case d of
-  DRecord dn params fields derivings viaField lin sp => dn == dname || isRecordDecl dname rest
+  DRecord dn params fields derivings viaField repr lin sp => dn == dname || isRecordDecl dname rest
   _ => isRecordDecl dname rest
 
 refEntryList : String -> Maybe ExportRef -> List ExportEntry
@@ -391,11 +391,11 @@ ownOrImportedValueRef2 modules prefix decls imports name = case ownCtorEntriesNa
 ownCtorEntriesNamed : String -> String -> List Decl -> List ExportEntry
 ownCtorEntriesNamed prefix name [] = []
 ownCtorEntriesNamed prefix name (d :: rest) = case d of
-  DData dname params kind ctors derivings viaField lin sp =>
+  DData dname params kind ctors derivings viaField repr lin sp =>
     append
       (ownDataCtorEntries prefix dname (map ctorName (filter (\c => ctorName c == name) ctors)))
       (ownCtorEntriesNamed prefix name rest)
-  DRecord dname params fields derivings viaField lin sp =>
+  DRecord dname params fields derivings viaField repr lin sp =>
     if dname == name then append (ownCtorEntries prefix dname [dname]) (ownCtorEntriesNamed prefix name rest)
     else ownCtorEntriesNamed prefix name rest
   DTrait tname params methods sp =>

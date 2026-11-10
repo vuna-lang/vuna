@@ -1,0 +1,11 @@
+# 62) P2c 标签：Args / Stdin / Exit（runArgs / runStdin / runExit 单效应入口）。
+run: D="$TMPDIR/p2c-labels"; rm -rf "$D"; mkdir -p "$D/p2c-args/app" "$D/p2c-stdin/app" "$D/p2c-exit/app"; printf '[package]\nname = "p2c-args"\n\n[dependencies]\nvuna-base = "%s"\n' "$VUNA_BASE" >"$D/p2c-args/vuna.toml"; printf 'import Base.Eff\nimport Base.EffArgs\nimport Base.List\n\nprog : Eff [Args "real"] Int\nprog = do\n  xs <- argsGetArgs "real"\n  pure (natToInt (length xs))\n\nmain : IO Int\nmain = runArgs "real" prog\n' >"$D/p2c-args/app/Main.vuna"; printf '[package]\nname = "p2c-stdin"\n\n[dependencies]\nvuna-base = "%s"\n' "$VUNA_BASE" >"$D/p2c-stdin/vuna.toml"; printf 'import Base.Eff\nimport Base.EffStdin\nimport Base.String\n\nprog : Eff [Stdin "real"] String\nprog = stdinReadLine "real"\n\nmain : IO Int\nmain = do\n  s <- runStdin "real" prog\n  pure (strLength s)\n' >"$D/p2c-stdin/app/Main.vuna"; printf '[package]\nname = "p2c-exit"\n\n[dependencies]\nvuna-base = "%s"\n' "$VUNA_BASE" >"$D/p2c-exit/vuna.toml"; printf 'import Base.Eff\nimport Base.EffExit\n\nprog : Eff [Exit "real"] Int\nprog = exitWith "real" 3\n\nmain : IO Int\nmain = runExit "real" prog\n' >"$D/p2c-exit/app/Main.vuna"
+run: "$VUNA" build "$TMPDIR/p2c-labels/p2c-args" >/dev/null 2>&1
+run: "$TMPDIR/p2c-labels/p2c-args/.output/bin/p2c-args" 2>&1
+out-contains: 0
+run: "$VUNA" build "$TMPDIR/p2c-labels/p2c-stdin" >/dev/null 2>&1
+run: printf '' | "$TMPDIR/p2c-labels/p2c-stdin/.output/bin/p2c-stdin" 2>&1
+out-contains: 0
+run: "$VUNA" build "$TMPDIR/p2c-labels/p2c-exit" >/dev/null 2>&1
+run: "$TMPDIR/p2c-labels/p2c-exit/.output/bin/p2c-exit" >/dev/null 2>&1
+exit: 3

@@ -87,7 +87,7 @@ let rec v_Base_dResult_dtraverse = (fun mc0 mc1 -> (match mc1 with
 let v_Base_dResult_dstep = (fun mc0 mc1 -> (match mc0 with
   | C_Base_dResult_dResult_Err (dtb__31) -> (C_Base_dResult_dResult_Err (dtb__31))
   | C_Base_dResult_dResult_Ok (dtb__32) -> (match dtb__32 with
-  | Base_dPair.C_Base_dPair_dPair_Pair (dtb__33, dtb__34) -> ((mc1 dtb__33) dtb__34)
+  | { Base_dPair.f_Base_dPair_dPair_first = dtb__33; Base_dPair.f_Base_dPair_dPair_second = dtb__34 } -> ((mc1 dtb__33) dtb__34)
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"

@@ -20,7 +20,10 @@ module Vuna.Compiler.Core
   , TInt
   , TLam
   , TMeta
+  , TMk
   , TPi
+  , TProj
+  , TRecUpd
   , TStr
   , TType
   , TVar
@@ -37,6 +40,7 @@ module Vuna.Compiler.Core
   , VMeta
   , VNeutral
   , VPi
+  , VProj
   , VStr
   , VType
   , Value

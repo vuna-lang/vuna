@@ -1512,10 +1512,10 @@ declFindings lines toks allDecls (DSig name ctx ty sp) rest =
 declFindings lines toks allDecls (DAxiom name ty sp) rest = walkListLiteral lintFuel lines toks ty
 declFindings lines toks allDecls (DExtern name cName ty sp) rest =
   walkListLiteral lintFuel lines toks ty
-declFindings lines toks allDecls (DData name params kind ctors derivings viaField lin sp) rest =
+declFindings lines toks allDecls (DData name params kind ctors derivings viaField repr lin sp) rest =
   append (walkListLiteral lintFuel lines toks kind)
     (walkListLiteralExprs lintFuel lines toks (ctorTypes ctors))
-declFindings lines toks allDecls (DRecord name params fields derivings viaField lin sp) rest =
+declFindings lines toks allDecls (DRecord name params fields derivings viaField repr lin sp) rest =
   walkListLiteralExprs lintFuel lines toks (fieldTypes fields)
 declFindings lines toks allDecls (DTrait name params methods sp) rest =
   append (walkListLiteralExprs lintFuel lines toks (traitParamKinds params))

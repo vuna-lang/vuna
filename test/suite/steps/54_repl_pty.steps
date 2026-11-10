@@ -1,0 +1,14 @@
+# 54) REPL v2 pty 行编辑：方向键 / Ctrl-R / 退格 / Ctrl-C / Ctrl-D / Tab。
+#     保留 `script -qec "$VUNA repl" /dev/null`；计数型断言用单步 sh 的 grep -c 校验。
+#     每个 pty 场景用独立 VUNA_REPL_HISTORY（case 私有 $TMPDIR）。
+run: sh -c 'n=$( ( sleep 0.5; printf "1 + 1\n"; sleep 0.3; printf "\033[A\n"; sleep 0.3; printf ":q\n" ) | NO_COLOR=1 VUNA_REPL_HISTORY="$TMPDIR/pty-a" script -qec "$VUNA repl" /dev/null 2>&1 | tr -d "\r" | grep -c "^2$"); [ "$n" -eq 2 ]'
+run: sh -c 'n=$( ( sleep 0.5; printf "1 + 1\n"; sleep 0.3; printf "\0221 + 1\r\r"; sleep 0.3; printf ":q\n" ) | NO_COLOR=1 VUNA_REPL_HISTORY="$TMPDIR/pty-r" script -qec "$VUNA repl" /dev/null 2>&1 | tr -d "\r" | grep -c "^2$"); [ "$n" -eq 2 ]'
+run: sh -c 'n=$( ( sleep 0.5; printf "12\033[D\177\n"; sleep 0.3; printf ":q\n" ) | NO_COLOR=1 VUNA_REPL_HISTORY="$TMPDIR/pty-b" script -qec "$VUNA repl" /dev/null 2>&1 | tr -d "\r" | grep -c "^2$"); [ "$n" -eq 1 ]'
+run: sh -c '( sleep 0.5; printf "1 + 1\003"; sleep 0.3; printf "2 + 2\n"; sleep 0.3; printf ":q\n" ) | NO_COLOR=1 VUNA_REPL_HISTORY="$TMPDIR/pty-c" script -qec "$VUNA repl" /dev/null 2>&1 | tr -d "\r" > "$TMPDIR/pty-c.log"'
+run: sh -c 'n=$(grep -c "^2$" "$TMPDIR/pty-c.log"); [ "$n" -eq 0 ]'
+run: sh -c 'n=$(grep -c "^4$" "$TMPDIR/pty-c.log"); [ "$n" -eq 1 ]'
+run: sh -c '( sleep 0.5; printf "\004" ) | NO_COLOR=1 VUNA_REPL_HISTORY="$TMPDIR/pty-d" script -qec "$VUNA repl" /dev/null >/dev/null 2>&1'
+exit: 0
+run: sh -c '( sleep 0.5; printf ":he\t\n"; sleep 0.3; printf ":q\n" ) | NO_COLOR=1 VUNA_REPL_HISTORY="$TMPDIR/pty-t" script -qec "$VUNA repl" /dev/null 2>&1 | tr -d "\r" > "$TMPDIR/pty-t.log"'
+read: $TMPDIR/pty-t.log
+out-contains: 命令：

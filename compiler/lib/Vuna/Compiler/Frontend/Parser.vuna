@@ -135,9 +135,12 @@ parseDecl : PState -> Int -> Result (Pair Decl PState)
 parseDecl st blockCol = case peekTok st of
   PTok (TKw "data") p => parseData False st blockCol p
   PTok (TKw "linear") p => parseLinearDecl st blockCol p
+  -- R1（records-v2）：表示档位前缀只允许 record（A2：data 收归位置/求和类型）。
+  PTok (TKw "transparent") p => parseTieredDecl ReprTransparent st blockCol p
+  PTok (TKw "opaque") p => parseTieredDecl ReprOpaque st blockCol p
   PTok (TKw "axiom") p => parseAxiom st blockCol p
   PTok (TKw "extern") p => parseExtern st blockCol p
-  PTok (TKw "record") p => parseRecord False st blockCol p
+  PTok (TKw "record") p => parseRecord False ReprAuto st blockCol p
   PTok (TKw "trait") p => parseTrait st blockCol p
   PTok (TKw "instance") p => parseInstance st blockCol p
   PTok (TIdent name) p =>
@@ -343,15 +346,28 @@ parseClausePatterns fuel st blockCol =
 parseLinearDecl : PState -> Int -> Pos -> Result (Pair Decl PState)
 parseLinearDecl st blockCol kwPos = step (expectKw st "linear") (\_, st1 => case peekTok st1 of
   PTok (TKw "data") _ => parseData True st1 blockCol kwPos
-  PTok (TKw "record") _ => parseRecord True st1 blockCol kwPos
+  PTok (TKw "record") _ => parseRecord True ReprAuto st1 blockCol kwPos
   _ => psErr1 (ExpectedToken "data/record") "data/record"
 )
+
+-- | R1（records-v2）：`transparent record ...` / `opaque record ...`（可再带 `lin`）。
+-- kwPos 指向档位前缀，声明 span 从这里开始；档位只对 record 有意义（对 data 报错）。
+parseTieredDecl : ReprTier -> PState -> Int -> Pos -> Result (Pair Decl PState)
+parseTieredDecl tier st blockCol kwPos = case peekTok (advance st) of
+  PTok (TKw "linear") _ =>
+    let
+      st1 = advance (advance st)
+    in case peekTok st1 of
+      PTok (TKw "record") _ => parseRecord True tier st1 blockCol kwPos
+      _ => psErr1 (ExpectedToken "record") "record"
+  PTok (TKw "record") _ => parseRecord False tier (advance st) blockCol kwPos
+  _ => psErr1 (ExpectedToken "record") "record"
 
 parseData : Bool -> PState -> Int -> Pos -> Result (Pair Decl PState)
 parseData lin st blockCol kwPos = step (expectKw st "data") (\_, st1 => step (expectIdent st1) (\name, st2 => step (parseParams (stateFuel st2) st2) (\params, st3 => step (expectSym st3 ":") (\_, st4 => step (parseExpr (stateFuel st4) st4 blockCol 0) (\ty, st5 => step (expectKw st5 "where") (\_, st6 => step (parseCtors st6 blockCol) (\ctors, st7 => step (parseDeriving st7) (\dv, st8 => case dv of
   Pair derivings via =>
     Ok
-      (Pair (DData name params ty ctors derivings via lin (Span (fileOf st) (posLine kwPos) (posCol kwPos) (posLine (lastPos st8)) (posCol (lastPos st8)))) st8)
+      (Pair (DData name params ty ctors derivings via ReprAuto lin (Span (fileOf st) (posLine kwPos) (posCol kwPos) (posLine (lastPos st8)) (posCol (lastPos st8)))) st8)
 )
 )
 )
@@ -362,11 +378,12 @@ parseData lin st blockCol kwPos = step (expectKw st "data") (\_, st1 => step (ex
 )
 
 -- 记录声明（M10.5）：`record Name params where` + 缩进字段 `f : Ty`，可跟 deriving。
-parseRecord : Bool -> PState -> Int -> Pos -> Result (Pair Decl PState)
-parseRecord lin st blockCol kwPos = step (expectKw st "record") (\_, st1 => step (expectIdent st1) (\name, st2 => step (parseParams (stateFuel st2) st2) (\params, st3 => step (expectKw st3 "where") (\_, st4 => step (parseFields st4 blockCol) (\fields, st5 => step (parseDeriving st5) (\dv, st6 => case dv of
+-- R1：第二参数是表示档位（`transparent`/`opaque` 前缀给出，缺省 `ReprAuto`）。
+parseRecord : Bool -> ReprTier -> PState -> Int -> Pos -> Result (Pair Decl PState)
+parseRecord lin tier st blockCol kwPos = step (expectKw st "record") (\_, st1 => step (expectIdent st1) (\name, st2 => step (parseParams (stateFuel st2) st2) (\params, st3 => step (expectKw st3 "where") (\_, st4 => step (parseFields st4 blockCol) (\fields, st5 => step (parseDeriving st5) (\dv, st6 => case dv of
   Pair derivings via =>
     Ok
-      (Pair (DRecord name params fields derivings via lin (Span (fileOf st) (posLine kwPos) (posCol kwPos) (posLine (lastPos st6)) (posCol (lastPos st6)))) st6)
+      (Pair (DRecord name params fields derivings via tier lin (Span (fileOf st) (posLine kwPos) (posCol kwPos) (posLine (lastPos st6)) (posCol (lastPos st6)))) st6)
 )
 )
 )
@@ -774,7 +791,16 @@ parseListExprElems : Int -> PState -> Int -> Result (Pair (List Expr) PState)
 parseListExprElems fuel st blockCol =
   if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
   else step (parseExpr (fuel - 1) st blockCol 0)
-    (\e, st1 => if atSym st1 "," then step (parseListExprElems (fuel - 1) (advance st1) blockCol) (\rest, st2 => Ok (Pair (Base.List.Cons e rest) st2)) else if atSym st1 "]" then Ok (Pair [e] (advance st1)) else psErr0 ExpectedCommaOrBracket)
+    (\e0, st0 => step (parseListElemAt (fuel - 1) e0 st0) (\e, st1 => if atSym st1 "," then step (parseListExprElems (fuel - 1) (advance st1) blockCol) (\rest, st2 => Ok (Pair (Base.List.Cons e rest) st2)) else if atSym st1 "]" then Ok (Pair [e] (advance st1)) else psErr0 ExpectedCommaOrBracket))
+
+-- 列表字面量元素里的 `X@name`（native-effects ND4）：`@` 在 vuna 里也是模式的
+-- as-pattern，所以只在列表元素位置接受它，不做全局后缀。
+parseListElemAt : Int -> Expr -> PState -> Result (Pair Expr PState)
+parseListElemAt fuel e st =
+  if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
+  else if atSym st "@" then step (expectSym st "@")
+    (\_, st1 => step (parseAtom (fuel - 1) st1 0) (\nm, st2 => Ok (Pair (EApp (EVar rowAtSyntax (spanFromExpr e st2)) [e, rowAtNameExpr nm] (spanFromExpr e st2)) st2)))
+  else Ok (Pair e st)
 
 -- | 自动补注（M41 新增导出）：foldCons。
 foldCons : Span -> List Expr -> Expr
@@ -837,6 +863,11 @@ else case peekPos st of
     if col == altCol then step (parsePatternSingle (stateFuel st) st altCol)
       (\pat, st1 => Vuna.Compiler.Common.bind (checkNoRepeatedBinders [pat]) (\_ => step (expectSym st1 "=>") (\_, st2 => step (parseExpr (fuel - 1) st2 altCol 0) (\body, st3 => step (parseAltList (fuel - 1) st3 altCol) (\rest, st4 => Ok (Pair (Base.List.Cons (Pair pat body) rest) st4))))))
     else Ok (Pair [] st)
+
+-- `@` 后面的裸标识符是实例名**字面量**（`[Console@audit]` → 名字 "audit"）；字符串原样。
+rowAtNameExpr : Expr -> Expr
+rowAtNameExpr (EVar nm sp) = EStr nm sp
+rowAtNameExpr e = e
 
 -- `perform <expr>`（native-effects N1 / ND12）：保留名单实参应用；Elab 侧按 op 族
 -- 推导 key / 实例名 / res 族后降级到 `Base.Eff.performCore`，不新增 AST 构造子。

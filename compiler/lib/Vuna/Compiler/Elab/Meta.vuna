@@ -113,6 +113,7 @@ import Vuna.Compiler.Core
 import Vuna.Compiler.Diagnostics
 import Vuna.Compiler.Elab.Prelude
 import Vuna.Compiler.Intrinsics
+import Vuna.Compiler.Elab.Representation
 import Vuna.Compiler.Elab.Sig
 import Vuna.Compiler.Elab.Types
 import Vuna.Compiler.Frontend.Ast
@@ -231,6 +232,11 @@ termMetasRuntime (TApp f a rig) =
   if rigIsErased rig then termMetasRuntime f else append (termMetasRuntime f) (termMetasRuntime a)
 termMetasRuntime (TCon c args) =
   concatMap (\p => if rigIsErased (secondOf p) then [] else termMetasRuntime (firstOf p)) args
+termMetasRuntime (TMk c args) =
+  concatMap (\p => if rigIsErased (secondOf p) then [] else termMetasRuntime (firstOf p)) args
+termMetasRuntime (TProj base c tele i fi) = termMetasRuntime base
+termMetasRuntime (TRecUpd base c tele idxs body) =
+  append (termMetasRuntime base) (termMetasRuntime body)
 termMetasRuntime (TCase scrut alts) =
   append (termMetasRuntime scrut) (concatMap (\alt => termMetasRuntime (caseAltBody alt)) alts)
 termMetasRuntime (TInt n) = []
@@ -250,6 +256,9 @@ termMetasAll (TPi n implicit rig dom cod) = append (termMetasAll dom) (termMetas
 termMetasAll (TLam n rig body) = termMetasAll body
 termMetasAll (TApp f a rig) = append (termMetasAll f) (termMetasAll a)
 termMetasAll (TCon c args) = concatMap (\p => termMetasAll (firstOf p)) args
+termMetasAll (TMk c args) = concatMap (\p => termMetasAll (firstOf p)) args
+termMetasAll (TProj base c tele i fi) = termMetasAll base
+termMetasAll (TRecUpd base c tele idxs body) = append (termMetasAll base) (termMetasAll body)
 termMetasAll (TCase scrut alts) =
   append (termMetasAll scrut) (concatMap (\alt => termMetasAll (caseAltBody alt)) alts)
 termMetasAll (TInt n) = []
@@ -313,9 +322,9 @@ collectSigsInto banned preludeBanned seen acc (d :: rest) = case d of
   DAxiom name ty sp => collectSigOne banned preludeBanned seen acc name [] ty sp rest
   DExtern name cName ty sp => collectSigOne banned preludeBanned seen acc name [] ty sp rest
   DFun name pats body sp => collectSigsInto banned preludeBanned seen acc rest
-  DData name params kind ctors derivings viaField lin sp =>
+  DData name params kind ctors derivings viaField repr lin sp =>
     collectSigsInto banned preludeBanned seen acc rest
-  DRecord name params fields derivings viaField lin sp =>
+  DRecord name params fields derivings viaField repr lin sp =>
     errAt sp "DT: internal: record was not desugared"
   DTrait name params methods sp => collectSigsInto banned preludeBanned seen acc rest
   DInstance ctxE head methods sp => collectSigsInto banned preludeBanned seen acc rest
@@ -333,7 +342,7 @@ collectSigOne banned preludeBanned seen acc name ctx ty sp rest =
 collectDataDecls : List Decl -> List (Pair Decl Span) -> List (Pair Decl Span)
 collectDataDecls [] acc = reverse acc
 collectDataDecls (d :: rest) acc = case d of
-  DData dname params kind ctors derivings viaField lin sp =>
+  DData dname params kind ctors derivings viaField repr lin sp =>
     collectDataDecls rest (Pair d sp :: acc)
   _ => collectDataDecls rest acc
 
@@ -341,7 +350,7 @@ collectDataDecls (d :: rest) acc = case d of
 dataNamesOf : List Decl -> List String
 dataNamesOf [] = []
 dataNamesOf (d :: rest) = case d of
-  DData dname params kind ctors derivings viaField lin sp => dname :: dataNamesOf rest
+  DData dname params kind ctors derivings viaField repr lin sp => dname :: dataNamesOf rest
   _ => dataNamesOf rest
 
 nonEmpty : List a -> Bool
@@ -588,6 +597,8 @@ else case t of
   TApp f a r => TApp (zonkTermFuel (fuel - 1) ec depth f) (zonkTermFuel (fuel - 1) ec depth a) r
   TCon c args =>
     TCon c (map (\p => Pair (zonkTermFuel (fuel - 1) ec depth (firstOf p)) (secondOf p)) args)
+  TMk c args =>
+    TMk c (map (\p => Pair (zonkTermFuel (fuel - 1) ec depth (firstOf p)) (secondOf p)) args)
   TCase s alts =>
     TCase (zonkTermFuel (fuel - 1) ec depth s)
       (map (\alt => zonkAltFuel (fuel - 1) ec depth alt) alts)
@@ -611,6 +622,7 @@ hasOutOfScopeVar (TPi n i r d c) = hasOutOfScopeVar d || hasOutOfScopeVar c
 hasOutOfScopeVar (TLam n r b) = hasOutOfScopeVar b
 hasOutOfScopeVar (TApp f a r) = hasOutOfScopeVar f || hasOutOfScopeVar a
 hasOutOfScopeVar (TCon c args) = hasOutOfScopeVarArgs args
+hasOutOfScopeVar (TMk c args) = hasOutOfScopeVarArgs args
 hasOutOfScopeVar (TCase s alts) = hasOutOfScopeVar s || hasOutOfScopeVarAlts alts
 hasOutOfScopeVar (TIf c th el) = hasOutOfScopeVar c || hasOutOfScopeVar th || hasOutOfScopeVar el
 hasOutOfScopeVar _ = False
@@ -1028,6 +1040,13 @@ else case t of
   TCon c args =>
     TCon c
       (map (\p => Pair (wrapOpaqueUsesFuel (fuel - 1) depth idxs (firstOf p)) (secondOf p)) args)
+  TMk c args =>
+    TMk c
+      (map (\p => Pair (wrapOpaqueUsesFuel (fuel - 1) depth idxs (firstOf p)) (secondOf p)) args)
+  TProj base c tele i fi => TProj (wrapOpaqueUsesFuel (fuel - 1) depth idxs base) c tele i fi
+  TRecUpd base c tele idxs2 body =>
+    TRecUpd (wrapOpaqueUsesFuel (fuel - 1) depth idxs base) c tele idxs2
+      (wrapOpaqueUsesFuel (fuel - 1) (depth + length tele) idxs body)
   TCase scrut alts =>
     TCase (wrapOpaqueUsesFuel (fuel - 1) depth idxs scrut)
       (map (\alt => wrapOpaqueAltFuel (fuel - 1) depth idxs alt) alts)
@@ -1109,6 +1128,7 @@ outerScan ec ctx depth (TPi n i r dom cod) = False
 outerScan ec ctx depth (TLam n r b) = outerScan ec ctx (depth + 1) b
 outerScan ec ctx depth (TApp f a r) = outerScan ec ctx depth f || outerScan ec ctx depth a
 outerScan ec ctx depth (TCon c args) = outerScanArgs ec ctx depth args
+outerScan ec ctx depth (TMk c args) = outerScanArgs ec ctx depth args
 outerScan ec ctx depth (TCase s alts) = outerScan ec ctx depth s || outerScanAlts ec ctx depth alts
 outerScan ec ctx depth (TIf c th el) =
   outerScan ec ctx depth c || outerScan ec ctx depth th || outerScan ec ctx depth el
@@ -1190,9 +1210,19 @@ ctorAppTerm : List DtData -> Term -> List (Pair Term Rig) -> Term
 ctorAppTerm datas (TGlobal g) args = case dtCtorLookup g datas of
   Just ctor =>
     if isBoolFamilyName (dtCtorFamily ctor) then boolCtorTerm g
-    else if length args >= length (dtCtorTelescope ctor) then TCon g args else etaCtorTerm ctor args
+    else if length args >= length (dtCtorTelescope ctor) then mkCtorTerm datas ctor g args
+    else etaCtorTerm ctor args
   Nothing => foldAppTerms (TGlobal g) args
 ctorAppTerm datas fn args = foldAppTerms fn args
+
+-- | R3：record 族的构造产出 `TMk` 原语（语义同 `TCon`，
+-- 多带记录身份供 R4 原语化）；普通 data 仍生成 `TCon`。
+mkCtorTerm : List DtData -> DtCtor -> String -> List (Pair Term Rig) -> Term
+mkCtorTerm datas ctor g args = case findDtData (dtCtorFamily ctor) datas of
+  Just dd => case dtDataFields dd of
+    [] => TCon g args
+    _ => TMk g args
+  Nothing => TCon g args
 
 -- M29（B13/D12）：构造子**未饱和**引用/应用的 η 展开。
 --

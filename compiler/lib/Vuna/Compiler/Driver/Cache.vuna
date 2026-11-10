@@ -71,8 +71,13 @@ fixCtor : HashMap Int Value -> DtCtor -> DtCtor
 fixCtor tbl (DtCtor n fam tele ty) = DtCtor n fam tele (fixTerm tbl 0 ty)
 
 fixData : HashMap Int Value -> DtData -> DtData
-fixData tbl (DtData n ps ctors kind viaClasses lin) =
-  DtData n ps (map (fixCtor tbl) ctors) (fixTerm tbl 0 kind) viaClasses lin
+
+fixFieldMeta : HashMap Int Value -> DtFieldMeta -> DtFieldMeta
+fixFieldMeta tbl (DtFieldMeta fn fi fty) = DtFieldMeta fn fi (fixTerm tbl 0 fty)
+
+fixData tbl (DtData n ps ctors kind viaClasses lin repr fields) =
+  DtData n ps (map (fixCtor tbl) ctors) (fixTerm tbl 0 kind) viaClasses lin repr
+    (map (fixFieldMeta tbl) fields)
 
 -- 投影签名是闭合的 Pi 链（`{p} -> {d} -> <方法类型>`）；字段类型精化在**全部类参数** binder
 -- 之下（深度 = 类参数个数；单参数类是 1，多参数 trait 必须按个数，否则会被误判 free-var），
@@ -340,8 +345,13 @@ shiftCtor : Int -> DtCtor -> DtCtor
 shiftCtor off (DtCtor n fam tele ty) = DtCtor n fam tele (shiftTerm off ty)
 
 shiftData : Int -> DtData -> DtData
-shiftData off (DtData n ps ctors kind viaClasses lin) =
-  DtData n ps (map (shiftCtor off) ctors) (shiftTerm off kind) viaClasses lin
+
+shiftFieldMeta : Int -> DtFieldMeta -> DtFieldMeta
+shiftFieldMeta off (DtFieldMeta fn fi fty) = DtFieldMeta fn fi (shiftTerm off fty)
+
+shiftData off (DtData n ps ctors kind viaClasses lin repr fields) =
+  DtData n ps (map (shiftCtor off) ctors) (shiftTerm off kind) viaClasses lin repr
+    (map (shiftFieldMeta off) fields)
 
 shiftClass : Int -> DtClass -> DtClass
 shiftClass off (DtClass n ps projs tys) =

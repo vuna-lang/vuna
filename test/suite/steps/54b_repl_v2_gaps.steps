@@ -1,0 +1,4 @@
+# 54b) REPL v2 缺口回归（多行历史 / 括号粘贴 / resize 重绘 / 参数位补全）。
+#      脚本自包含；`script`/`/dev/pts` 不可用时 pty 段自降级并 exit 0。
+run: sh corpus/repl/repl_v2_gaps.sh "$VUNA"
+exit: 0

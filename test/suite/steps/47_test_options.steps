@@ -1,0 +1,39 @@
+# 47) M38 vuna test 选项：--list / --filter（可重复）/ --verbose / --fail-fast；
+#     默认输出与退出码不变（第 42 段已锁默认输出，这里锁新开关的行为）。
+#     夹具 corpus/test-m30（root + member workspace + bad-* 独立失败夹具）复制到
+#     case 私有 $TMPDIR，重写所有 vuna.toml 的 vuna-base，避免与 §42/§47a 争 .output。
+run: dst="$TMPDIR/m38-test-m30"; rm -rf "$dst"; cp -r corpus/test-m30 "$dst"; find "$dst" -name vuna.toml -exec sed -i 's|^vuna-base = .*|vuna-base = "'"$VUNA_BASE"'"|' {} +
+exit: 0
+run: "$VUNA" test "$TMPDIR/m38-test-m30" --list 2>&1
+exit: 0
+out-contains: -- test-m30 --
+out-contains: PureInt.vuna
+out-contains: -- test-m30-member --
+run: "$VUNA" test "$TMPDIR/m38-test-m30" --filter Pure 2>&1
+exit: 0
+out-contains: workspace: 4 passed, 0 failed
+out-not-contains: IoPass.vuna
+run: "$VUNA" test "$TMPDIR/m38-test-m30" --filter IoPass --filter member 2>&1
+exit: 0
+out-contains: workspace: 2 passed, 0 failed
+run: "$VUNA" test "$TMPDIR/m38-test-m30" --filter zzz-nomatch 2>&1
+exit: 0
+out-contains: workspace: 0 passed, 0 failed
+run: "$VUNA" test "$TMPDIR/m38-test-m30" --filter IoPass --verbose 2>&1
+exit: 0
+out-contains: ok   IoPass.vuna (
+out-contains: total:
+run: "$VUNA" test "$TMPDIR/m38-test-m30" --filter 2>&1
+exit: 2
+# fail-fast：root 组失败、member 组通过；默认会跑到 member，fail-fast 不会。
+# 夹具在 $TMPDIR 现场构造（绝对 vuna-base 避免落回仓库）。
+run: ff="$TMPDIR/m38-ff"; mkdir -p "$ff/app" "$ff/test" "$ff/member/app" "$ff/member/test"; printf '[package]\nname = "m38-ff"\n\n[workspace]\nmembers = ["member"]\n\n[dependencies]\nvuna-base = "%s"\n' "$VUNA_BASE" >"$ff/vuna.toml"; printf '[package]\nname = "m38-ff-member"\n\n[dependencies]\nvuna-base = "%s"\n' "$VUNA_BASE" >"$ff/member/vuna.toml"; printf 'main : Int\nmain = 0\n' >"$ff/app/Main.vuna"; printf 'main : Int\nmain = 0\n' >"$ff/member/app/Main.vuna"; printf 'main : Int\nmain = 1\n' >"$ff/test/Fail.vuna"; printf 'main : Int\nmain = 0\n' >"$ff/member/test/Pass.vuna"
+exit: 0
+run: "$VUNA" test "$TMPDIR/m38-ff" 2>&1
+exit: 1
+out-contains: -- m38-ff-member --
+out-contains: workspace: 1 passed, 1 failed
+run: "$VUNA" test "$TMPDIR/m38-ff" --fail-fast 2>&1
+exit: 1
+out-contains: workspace: 0 passed, 1 failed
+out-not-contains: -- m38-ff-member --

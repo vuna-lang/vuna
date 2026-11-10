@@ -1,0 +1,43 @@
+# 39) M26 上下文回归：包上下文/无 manifest 语义、效果边界、base 定位、已删路径，以及
+#      95_cross_dep 的依赖方向（build/check/compile 三入口都拒；consumer 正常构建运行）。
+#      临时夹具位于 case 私有 $TMPDIR；交叉依赖夹具复制到 $TMPDIR 后操作。
+run: sh -c 'ctx="$TMPDIR/ctx"; mkdir -p "$ctx"; printf "%s\n" "import Base.Nat" "" "main : Int" "main = case Succ Zero of" "  Zero => 0" "  Succ _ => 42" > "$ctx/use_base.vuna"; printf "%s\n" "import Vuna.Compiler.Common" "" "main : Int" "main = 1" > "$ctx/use_compiler.vuna"; printf "%s\n" "main : Int" "main = prim_print \"x\"" > "$ctx/effect.vuna"; printf "%s\n" "main : Int" "main = 1" > "$ctx/simple.vuna"; cp -R corpus/packages/95_cross_dep "$TMPDIR/cross"'
+exit: 0
+run: "$VUNA" check "$TMPDIR/ctx/use_base.vuna" 2>&1
+exit: 0
+out-equals:
+run: "$VUNA" check "$TMPDIR/ctx/use_compiler.vuna" 2>&1
+exit: nonzero
+out-contains: LD_ModuleNotFound
+run: "$VUNA" check "$TMPDIR/ctx/effect.vuna" 2>&1
+exit: nonzero
+out-contains: requires capability
+run: "$VUNA" check "$TMPDIR/ctx/simple.vuna" 2>&1
+exit: 0
+out-equals:
+run: VUNA_BASE=/nonexistent "$VUNA" check "$TMPDIR/ctx/simple.vuna" 2>&1
+exit: nonzero
+out-contains: /nonexistent
+run: "$VUNA" interp corpus/dt_ad_hoc/Main.vuna 2>&1
+exit: 0
+out-equals: 42
+run: "$VUNA" build "$TMPDIR/cross/b" 2>&1
+exit: nonzero
+out-contains: module A not found
+run: "$VUNA" check "$TMPDIR/cross/b" 2>&1
+exit: nonzero
+out-contains: module A not found
+run: "$VUNA" compile "$TMPDIR/cross/b" "$TMPDIR/cross-out" 2>&1
+exit: nonzero
+out-contains: module A not found
+run: "$VUNA" build "$TMPDIR/cross/a" 2>&1
+exit: 0
+file-exists: $TMPDIR/cross/a/.output/bin/consumer-a
+run: "$TMPDIR/cross/a/.output/bin/consumer-a" 2>&1
+exit: 0
+out-equals-file: $TMPDIR/cross/a/expected.out
+run: "$VUNA" help 2>&1
+exit: 0
+out-not-contains: --root
+out-not-contains: --split
+out-not-contains: seed

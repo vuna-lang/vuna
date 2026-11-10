@@ -1,0 +1,27 @@
+# 17) M9 诊断：穷尽性/模式诊断与退出码（M24 起 interp 与 check/compile 共用 DT 静态诊断）。
+#     临时夹具位于 case 私有 $TMPDIR（无 manifest 祖先 → base-only 上下文，base 由 VUNA_BASE 给出）。
+run: sh -c 'mkdir -p "$TMPDIR/m9"; printf "%s\n" "data Maybe : Type where" "  Just : Int -> Maybe" "  Nothing : Maybe" "" "f : Maybe -> Int" "f (Just x) = x" "" "main : Int" "main = f Nothing" > "$TMPDIR/m9/loc.vuna"; printf "%s\n" "data Maybe : Type where" "  Just : Int -> Maybe" "  Nothing : Maybe" "" "f : Maybe -> Int" "f (Just x) = x" "" "main : Int" "main = f Nothing" > "/m9/ne_fun.vuna"; printf "%s\n" "data Maybe : Type where" "  Just : Int -> Maybe" "  Nothing : Maybe" "" "g : Maybe -> Int" "g x = case x of" "  Just a => a" "" "main : Int" "main = g Nothing" > "$TMPDIR/m9/ne_case.vuna"; printf "%s\n" "data B : Type where" "  T : B" "  F : B" "" "g : B -> Int" "g x = case x of" "  T => 1" "  _ => 0" "  F => 2" "" "main : Int" "main = g T" > "$TMPDIR/m9/red.vuna"; printf "%s\n" "data Maybe : Type where" "  Just : Int -> Maybe" "  Nothing : Maybe" "" "g : Maybe -> Int" "g x = case x of" "  Just a => a" "  Nothing => 0" "" "main : Int" "main = g Nothing" > "$TMPDIR/m9/ok.vuna"; printf "%s\n" "main : Int" "main = \"oops\"" > "$TMPDIR/m9/type_err.vuna"'
+exit: 0
+run: "$VUNA" interp "$TMPDIR/m9/loc.vuna" 2>&1
+exit: nonzero
+out-contains: case is not exhaustive
+run: "$VUNA" compile "$TMPDIR/m9/loc.vuna" "$TMPDIR/m9/loc-out" 2>&1
+exit: nonzero
+out-contains: case is not exhaustive
+file-absent: $TMPDIR/m9/loc-out
+run: "$VUNA" check "$TMPDIR/m9/ne_case.vuna" 2>&1
+exit: nonzero
+out-contains: case is not exhaustive
+run: "$VUNA" check "$TMPDIR/m9/ne_fun.vuna" 2>&1
+exit: nonzero
+run: "$VUNA" check "$TMPDIR/m9/red.vuna" 2>&1
+exit: nonzero
+out-contains: catch-all branch must be the last one
+run: "$VUNA" check "$TMPDIR/m9/ok.vuna" 2>&1
+exit: 0
+out-equals:
+run: "$VUNA" check "$TMPDIR/m9/type_err.vuna" 2>&1
+exit: nonzero
+run: "$VUNA" compile "$TMPDIR/m9/type_err.vuna" "$TMPDIR/m9/type_err-out" 2>&1
+exit: nonzero
+file-absent: $TMPDIR/m9/type_err-out

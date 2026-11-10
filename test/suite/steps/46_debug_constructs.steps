@@ -1,0 +1,23 @@
+# 46) 语言级调试构造（F3 B）：dbg/dbgShow 走 stderr 且返回值不变；assert/todo 失败走
+#     运行时报告器（exit 2、帧指向调用点）。
+run: sh -c 'mkdir -p "$TMPDIR/m38-dbg/app"; printf "[package]\nname = \"m38-dbg\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" >"$TMPDIR/m38-dbg/vuna.toml"; printf "main : Int\nmain = dbg \"m38-trace\" (dbgShow 42)\n" >"$TMPDIR/m38-dbg/app/Main.vuna"'
+run: "$VUNA" build "$TMPDIR/m38-dbg" 2>&1
+run: sh -c '"$TMPDIR/m38-dbg/.output/bin/m38-dbg" >"$TMPDIR/m38-dbg.out" 2>"$TMPDIR/m38-dbg.err"'
+read: $TMPDIR/m38-dbg.out
+out-equals: 42
+read: $TMPDIR/m38-dbg.err
+out-contains: m38-trace
+out-contains: 42
+run: sh -c 'printf "main : Int\nmain = assert False \"m38 assert\" 7\n" >"$TMPDIR/m38-dbg/app/Main.vuna"'
+run: "$VUNA" build "$TMPDIR/m38-dbg" 2>&1
+run: sh -c '"$TMPDIR/m38-dbg/.output/bin/m38-dbg" >/dev/null 2>"$TMPDIR/m38-assert.err"'
+exit: 2
+read: $TMPDIR/m38-assert.err
+out-contains: assertion failed: m38 assert
+out-contains:   at main (
+run: sh -c 'printf "main : Int\nmain = todo \"m38 todo\"\n" >"$TMPDIR/m38-dbg/app/Main.vuna"'
+run: "$VUNA" build "$TMPDIR/m38-dbg" 2>&1
+run: sh -c '"$TMPDIR/m38-dbg/.output/bin/m38-dbg" >/dev/null 2>"$TMPDIR/m38-todo.err"'
+exit: 2
+read: $TMPDIR/m38-todo.err
+out-contains: TODO: m38 todo

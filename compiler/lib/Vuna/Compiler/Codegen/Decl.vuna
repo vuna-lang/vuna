@@ -8,6 +8,8 @@ module Vuna.Compiler.Codegen.Decl
   , flagMatchesRig
   , genTypeDeclsOf
   , genTypeDeclsWith
+  , hasRecordRepr
+  , isRecordData
   , joinWith
   , noQual
   , ocamlBinderName
@@ -16,6 +18,8 @@ module Vuna.Compiler.Codegen.Decl
   , qualOf
   , qualTypeText
   , qualValueText
+  , recordFieldLabel
+  , recordRtFields
   , runtimeDatas
   , sanitizeName
   , typeDepsOf
@@ -346,13 +350,14 @@ ctorUsedLevels tps table datas famLevels [] lvl v = []
 ctorUsedLevels tps table datas famLevels ((Pair name rig) :: rest) lvl v = case v of
   VPi pname implicit _ dom clo =>
     let
-      opaque =
+      -- R1：`opaque` 进关键字表，局部绑定改名（语义不变）。
+      isOpq =
         valueOpaqueScoped (\l => memOpaqueLevel l famLevels) (isTypeHeadOpaqueDatas datas) lvl
           famLevels dom
       fam2 = if isFamilyKindValue dom then lvl :: famLevels else famLevels
       next = applyClosure clo (VNeutral (NVar pname lvl []))
     in if rigIsErased rig then ctorUsedLevels tps table datas fam2 rest (lvl + 1) next
-    else if opaque then ctorUsedLevels tps table datas fam2 rest (lvl + 1) next
+    else if isOpq then ctorUsedLevels tps table datas fam2 rest (lvl + 1) next
     else append (collectUsedLevels tps table datas lvl dom)
       (ctorUsedLevels tps table datas fam2 rest (lvl + 1) next)
   -- 不透明字段渲染成独立运行时值，不再引用数据族参数：collect 必须与渲染同步跳过，
@@ -615,7 +620,62 @@ genCtorDecl qc levels table datas c =
     (ctorFieldTexts qc levels table datas (ctorKeepFlags c) (ctorOpaqueFlagsOf datas c) (dtCtorTelescope c) 0 (eval [] (dtCtorType c)) (length levels))
     (\p => Ok (ctorDeclText (ctorOcamlName (dtCtorFamily c) (dtCtorName c)) (firstOf p)))
 
--- 去装箱族：只声明透明类型别名，不生成变体/构造子。
+-- R4（records-v2）：record 族的运行时表示是 OCaml record。
+-- | R4：record 族的 OCaml record 表示探测与标签命名。
+-- 判定：带结构化字段表且单构造子（普通 data 的字段表为空）。
+-- | R4：该族是否为 record（单构造子 + 非空字段表）。
+isRecordData : DtData -> Bool
+isRecordData d = case dtDataFields d of
+  [] => False
+  _ => case dtDataCtors d of
+    [_] => True
+    _ => False
+
+-- | R4：record 字段的 OCaml record label（按 record 名前缀，避免不同 record 间标签撞车）。
+recordFieldLabel : String -> String -> String
+recordFieldLabel family field = "f_${sanitizeName family}_${sanitizeName field}"
+
+-- | R4：record 的运行时字段（字段声明序号 → label），只含 keep 字段。
+recordRtFields : DtData -> List (Pair Int String)
+recordRtFields d = case dtDataCtors d of
+  [c] =>
+    let
+      arity = length d.dtDataParams
+    in recordRtFieldsGo (dtDataName d) (drop arity (ctorKeepFlags c)) (dtDataFields d)
+  _ => []
+
+-- | R4：recordRtFields 的递归实现：按 keep 标志过滤字段表。
+recordRtFieldsGo : String -> List Bool -> List DtFieldMeta -> List (Pair Int String)
+recordRtFieldsGo family [] fs = []
+recordRtFieldsGo family (k :: ks) [] = []
+recordRtFieldsGo family (k :: ks) (f :: fs) =
+  if k then Pair f.dtFieldIndex (recordFieldLabel family f.dtFieldName) :: recordRtFieldsGo family ks fs
+  else recordRtFieldsGo family ks fs
+
+-- | R4：该族用 OCaml record 表示：是 record 且**有**运行时字段
+-- （εrecord 的字段表为空；零运行时字段的 record 仍用变体）。
+hasRecordRepr : DtData -> Bool
+hasRecordRepr d = if isRecordData d then case recordRtFields d of
+  [] => False
+  _ => True
+else False
+
+-- | R4：record 族的 OCaml record 类型声明：`type 'a t_X = { f_X_a : ty; ... }`。
+genRecordDecl : QualCtx -> List Int -> List (Pair String (List Int)) -> List DtData -> DtData -> Result String
+genRecordDecl qc levels table datas d = case dtDataCtors d of
+  [c] =>
+    Vuna.Compiler.Common.bind
+      (ctorFieldTexts qc levels table datas (ctorKeepFlags c) (ctorOpaqueFlagsOf datas c) (dtCtorTelescope c) 0 (eval [] (dtCtorType c)) (length levels))
+      (\p => Ok "${typeParamDecl (secondOf p)}${typeName (dtDataName d)} = { ${joinWith "; " (recordFieldDecls (recordRtFields d) (firstOf p))} }")
+  _ => Err "DT: internal: record family must have exactly one constructor: ${dtDataName d}"
+
+-- | R4：record OCaml 表示的 codegen helper。
+recordFieldDecls : List (Pair Int String) -> List String -> List String
+recordFieldDecls [] texts = []
+recordFieldDecls fields [] = []
+recordFieldDecls (f :: fs) (t :: ts) = "${secondOf f} : ${t}" :: recordFieldDecls fs ts
+
+-- | 去装箱族：只声明透明类型别名，不生成变体/构造子。
 -- | 去装箱族的 data 声明：只把该族声明成透明类型别名（`type T = 字段类型`），
 -- 不生成变体与构造子，因此要求恰好一个保留字段。
 genUnboxedDataDecl : QualCtx -> List Int -> List (Pair String (List Int)) -> List DtData -> DtData -> DtCtor -> Int -> Result String
@@ -633,7 +693,8 @@ genDataDecl qc table datas unboxed d =
   in case lookupUnboxedInfo (dtDataName d) unboxed of
     Just (Pair c idx) => genUnboxedDataDecl qc levels table datas d c idx
     Nothing =>
-      Vuna.Compiler.Common.bind (dataArityNeed qc levels table datas (dtDataCtors d))
+      if hasRecordRepr d then genRecordDecl qc levels table datas d
+      else Vuna.Compiler.Common.bind (dataArityNeed qc levels table datas (dtDataCtors d))
         (\arity => Vuna.Compiler.Common.bind (traverse (genCtorDecl qc levels table datas) (dtDataCtors d)) (\cs => Ok "${typeParamDecl arity}${typeName (dtDataName d)} = ${ctorBodyText cs}"))
 
 ctorBodyText : List String -> String

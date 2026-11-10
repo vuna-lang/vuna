@@ -1,0 +1,17 @@
+# 36) 错误码文档：`vuna gen-errors` 从 docstring 生成（M3），分区 + 幂等（M4）
+#     沙箱里源码树只读，gen-errors 写 ROOT/docs/.generated/——用 tmp 根：软链 compiler +
+#     复制 Rules（readDir 跟随软链），再写 $errroot/docs/.generated/errors.md。
+run: sh -c 'mkdir -p "$TMPDIR/errroot/lib/Vuna/Lint" "$TMPDIR/errroot/docs"; ln -s "$PWD/../compiler" "$TMPDIR/errroot/compiler"; cp ../lib/Vuna/Lint/Rules.vuna "$TMPDIR/errroot/lib/Vuna/Lint/Rules.vuna"'
+run: "$VUNA" gen-errors "$TMPDIR/errroot" >/dev/null 2>&1
+file-contains: $TMPDIR/errroot/docs/.generated/errors.md ## 类型检查 / 精化（TC_）
+file-contains: $TMPDIR/errroot/docs/.generated/errors.md ## 代码生成（CG_）
+file-contains: $TMPDIR/errroot/docs/.generated/errors.md ## Lint 规则（LN_）
+file-contains: $TMPDIR/errroot/docs/.generated/errors.md ## 修复规则（FX_）
+file-contains: $TMPDIR/errroot/docs/.generated/errors.md TC_NotExhaustive
+file-contains: $TMPDIR/errroot/docs/.generated/errors.md CG_NoMain
+file-contains: $TMPDIR/errroot/docs/.generated/errors.md LN_LiteralIfChain
+file-contains: $TMPDIR/errroot/docs/.generated/errors.md FX_literalifchain
+run: sh -c 'cp "$TMPDIR/errroot/docs/.generated/errors.md" "$TMPDIR/errs1.md"'
+run: "$VUNA" gen-errors "$TMPDIR/errroot" >/dev/null 2>&1
+read: $TMPDIR/errroot/docs/.generated/errors.md
+out-equals-file: $TMPDIR/errs1.md

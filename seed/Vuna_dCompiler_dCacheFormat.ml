@@ -12,7 +12,7 @@ let v_Vuna_dCompiler_dCacheFormat_dheaderFields = (fun line -> ((fun nd_uscrut1 
   | Base_dList.C_Base_dList_dList_Cons (dtb__2, dtb__3) -> (match dtb__3 with
   | Base_dList.C_Base_dList_dList_Cons (dtb__4, dtb__5) -> (match dtb__5 with
   | Base_dList.C_Base_dList_dList_Cons (dtb__6, dtb__7) -> (match dtb__7 with
-  | Base_dList.C_Base_dList_dList_Nil -> (Base_dMaybe.C_Base_dMaybe_dMaybe_Just ((Base_dPair.C_Base_dPair_dPair_Pair (dtb__0, (Base_dPair.C_Base_dPair_dPair_Pair (dtb__2, (Base_dPair.C_Base_dPair_dPair_Pair (dtb__4, dtb__6))))))))
+  | Base_dList.C_Base_dList_dList_Nil -> (Base_dMaybe.C_Base_dMaybe_dMaybe_Just ({ Base_dPair.f_Base_dPair_dPair_first = dtb__0; Base_dPair.f_Base_dPair_dPair_second = { Base_dPair.f_Base_dPair_dPair_first = dtb__2; Base_dPair.f_Base_dPair_dPair_second = { Base_dPair.f_Base_dPair_dPair_first = dtb__4; Base_dPair.f_Base_dPair_dPair_second = dtb__6 } } }))
   | _ -> Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing
 )
   | _ -> Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing
@@ -25,14 +25,14 @@ let v_Vuna_dCompiler_dCacheFormat_dheaderFields = (fun line -> ((fun nd_uscrut1 
 )) ((Base_dString.v_Base_dString_dsplit "|") line)))
 
 let rec v_Vuna_dCompiler_dCacheFormat_dbreakFirstNewline = (fun mc0 mc1 -> (match mc0 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__8, dtb__9) -> (if (dtb__8 = 10) then (Base_dMaybe.C_Base_dMaybe_dMaybe_Just ((Base_dPair.C_Base_dPair_dPair_Pair ((Base_dList.dtp_pack (Base_dList.v_Base_dList_dreverse mc1)), (Base_dList.dtp_pack dtb__9))))) else ((v_Vuna_dCompiler_dCacheFormat_dbreakFirstNewline dtb__9) (Base_dList.C_Base_dList_dList_Cons (dtb__8, mc1))))
+  | Base_dList.C_Base_dList_dList_Cons (dtb__8, dtb__9) -> (if (dtb__8 = 10) then (Base_dMaybe.C_Base_dMaybe_dMaybe_Just ({ Base_dPair.f_Base_dPair_dPair_first = (Base_dList.dtp_pack (Base_dList.v_Base_dList_dreverse mc1)); Base_dPair.f_Base_dPair_dPair_second = (Base_dList.dtp_pack dtb__9) })) else ((v_Vuna_dCompiler_dCacheFormat_dbreakFirstNewline dtb__9) (Base_dList.C_Base_dList_dList_Cons (dtb__8, mc1))))
   | Base_dList.C_Base_dList_dList_Nil -> Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing
   | _ -> failwith "DT: impossible branch"
 ))
 
 let v_Vuna_dCompiler_dCacheFormat_dframeSplit = (fun raw -> ((fun n -> ((fun headLen -> (match ((v_Vuna_dCompiler_dCacheFormat_dbreakFirstNewline (Base_dList.dtp_unpack (((dtp_substring 0) headLen) raw))) Base_dList.C_Base_dList_dList_Nil) with
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing -> Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing
-  | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__10) -> ((fun header -> ((fun start -> (Base_dMaybe.C_Base_dMaybe_dMaybe_Just ((Base_dPair.C_Base_dPair_dPair_Pair (header, (((dtp_substring start) (n - start)) raw)))))) ((bi_strLength header) + 1))) (Base_dPair.v_Base_dPair_dfirstOf dtb__10))
+  | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__10) -> ((fun header -> ((fun start -> (Base_dMaybe.C_Base_dMaybe_dMaybe_Just ({ Base_dPair.f_Base_dPair_dPair_first = header; Base_dPair.f_Base_dPair_dPair_second = (((dtp_substring start) (n - start)) raw) }))) ((bi_strLength header) + 1))) (Base_dPair.v_Base_dPair_dfirstOf dtb__10))
   | _ -> failwith "DT: impossible branch"
 )) (if (n < 512) then n else 512))) (bi_strLength raw)))
 

@@ -1,0 +1,58 @@
+# 47c) `vuna test --jobs N`：包内测试文件进程级并行（每个文件一个子进程，父进程汇总）。
+#      夹具 corpus/packages/m38_test_jobs（3 纯 + 2 IO + 2 重叠探针，fail/ 独立嵌套包）
+#      与 corpus/test-m30（workspace 聚合）复制到 case 私有 $TMPDIR 并重写 vuna-base，
+#      避免与 §42/§47a/§47 争 .output。
+run: for src in corpus/packages/m38_test_jobs corpus/test-m30; do name=$(basename "$src"); dst="$TMPDIR/$name"; rm -rf "$dst"; cp -r "$src" "$dst"; find "$dst" -name vuna.toml -exec sed -i 's|^vuna-base = .*|vuna-base = "'"$VUNA_BASE"'"|' {} +; done
+exit: 0
+file-exists: $TMPDIR/m38_test_jobs
+# 串行/并行：exit 0 且 pass/fail 行集合逐字一致、汇总一致。
+run: "$VUNA" test "$TMPDIR/m38_test_jobs" >"$TMPDIR/serial.out" 2>&1
+exit: 0
+read: $TMPDIR/serial.out
+out-contains: 7 passed, 0 failed
+run: "$VUNA" test "$TMPDIR/m38_test_jobs" --jobs 2 >"$TMPDIR/parallel.out" 2>&1
+exit: 0
+read: $TMPDIR/parallel.out
+out-contains: 7 passed, 0 failed
+# 并行只改变行序，不改变 ok/FAIL 行的集合（IO 测试自身的输出行不参与比较）。
+run: grep -E '^(ok   |FAIL )' "$TMPDIR/serial.out" | LC_ALL=C sort >"$TMPDIR/serial.lines"; grep -E '^(ok   |FAIL )' "$TMPDIR/parallel.out" | LC_ALL=C sort >"$TMPDIR/parallel.lines"; cmp -s "$TMPDIR/serial.lines" "$TMPDIR/parallel.lines"
+exit: 0
+# 重叠证据：首个 END 之前的 START 行数。用 --filter 只选两个探针，保证 jobs=2 时
+# 两者一定在同一个窗口里启动（不依赖 readdir 顺序）。
+run: "$VUNA" test "$TMPDIR/m38_test_jobs" --filter Overlap >"$TMPDIR/ov-serial.out" 2>&1
+exit: 0
+read: $TMPDIR/ov-serial.out
+out-contains: 2 passed, 0 failed
+run: awk '/^START-/{n++} /^END-/{print n + 0; exit}' "$TMPDIR/ov-serial.out"
+out-equals: 1
+run: "$VUNA" test "$TMPDIR/m38_test_jobs" --filter Overlap --jobs 2 >"$TMPDIR/ov-parallel.out" 2>&1
+exit: 0
+read: $TMPDIR/ov-parallel.out
+out-contains: 2 passed, 0 failed
+run: awk '/^START-/{n++} /^END-/{print n + 0; exit}' "$TMPDIR/ov-parallel.out"
+out-equals: 2
+# --verbose 并行：每文件耗时由子进程打印在行尾，total 行由父进程打印。
+run: "$VUNA" test "$TMPDIR/m38_test_jobs" --filter Pure --jobs 2 --verbose 2>&1
+exit: 0
+out-contains: ok   PureOne.vuna (
+out-contains: total:
+# 失败路径：并行下 exit 1 + FAIL 行 + 正确汇总；fail-fast 下在跑文件等完再汇总。
+run: "$VUNA" test "$TMPDIR/m38_test_jobs/fail" --jobs 2 2>&1
+exit: 1
+out-contains: FAIL FailOne.vuna:
+out-contains: 1 passed, 1 failed
+run: "$VUNA" test "$TMPDIR/m38_test_jobs/fail" --jobs 2 --fail-fast 2>&1
+exit: 1
+out-contains: FAIL FailOne.vuna:
+# 非法 --jobs：0 / 非数字 / 缺值都是 usage error（exit 2）。
+run: "$VUNA" test "$TMPDIR/m38_test_jobs" --jobs 0 2>&1
+exit: 2
+run: "$VUNA" test "$TMPDIR/m38_test_jobs" --jobs abc 2>&1
+exit: 2
+run: "$VUNA" test "$TMPDIR/m38_test_jobs" --jobs 2>&1
+exit: 2
+# workspace 聚合不变：包间仍串行，包内文件并行。
+run: "$VUNA" test "$TMPDIR/test-m30" --jobs 2 2>&1
+exit: 0
+out-contains: workspace: 5 passed, 0 failed
+out-contains: -- test-m30-member --

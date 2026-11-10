@@ -1,0 +1,36 @@
+# 44a) M34.5 接口摘要（TTC 式模块化精化）：依赖闭包自底向上预热
+#      corpus/packages/m34_summary：base（无依赖）→ dep（库包，消费 base 接口）。
+#      `VUNA_IFACE_SELFTEST=1` 让写侧读回校验（Marshal 稳定性 / 包接口 / 模块名集合）；
+#      包镜像根下有 `.vuna-iface` manifest + 每模块一个 iface 文件；删掉 check 缓存后重算
+#      但接口未变 ⇒ 写侧只重写 manifest（`iface-write=0/`）；损坏的模块接口文件按自描述头
+#      拒绝 ⇒ 回退全量、写侧强制全量重写并修复（不会因「manifest 说哈希没变」永久跳过）。
+run: sh -c 'mkdir -p "$TMPDIR/summary-cache"'
+run: TMPDIR="$TMPDIR/summary-cache" VUNA_IFACE_SELFTEST=1 "$VUNA" check "$VUNA_BASE" --debug-perf
+exit: 0
+out-contains: iface-selftest=ok
+run: TMPDIR="$TMPDIR/summary-cache" VUNA_IFACE_SELFTEST=1 "$VUNA" check corpus/packages/m34_summary/dep --debug-perf
+exit: 0
+out-contains: iface-selftest=ok
+# 接口布局：base 的镜像目录（VUNA_IFACE_DIR + 包绝对路径）下有 manifest + iface 文件。
+run: sh -c 'm="$VUNA_IFACE_DIR$(cd "$VUNA_BASE" && pwd)"; [ -f "$m/.vuna-iface" ] && find "$m" -name "*.iface" | grep -q .'
+run: sh -c 'find "$TMPDIR/summary-cache"/vuna-cache -name check -type d -prune -exec rm -rf {} + 2>/dev/null || true'
+run: TMPDIR="$TMPDIR/summary-cache" VUNA_IFACE_SELFTEST=1 "$VUNA" check "$VUNA_BASE" --debug-perf
+exit: 0
+out-contains: iface-write=0/
+# 损坏一个模块接口文件（保留路径供后续断言它被修复）；清缓存后重算 ⇒ 回退全量并重写。
+run: sh -c 'm="$VUNA_IFACE_DIR$(cd "$VUNA_BASE" && pwd)"; f=$(find "$m" -name "*.iface" | head -1); printf "not-a-valid-iface" > "$f"; printf "%s" "$f" > "$TMPDIR/corrupt-iface"'
+run: sh -c 'find "$TMPDIR/summary-cache"/vuna-cache -name check -type d -prune -exec rm -rf {} + 2>/dev/null || true'
+run: TMPDIR="$TMPDIR/summary-cache" VUNA_IFACE_SELFTEST=1 "$VUNA" check "$VUNA_BASE" --debug-perf
+exit: 0
+out-contains: cache-path=summary deps=0
+out-contains: iface-selftest=ok
+run: sh -c 'head -c 40 "$(cat "$TMPDIR/corrupt-iface")"'
+out-contains: vuna-iface-file 1
+
+# 44c) 同一份源码全量路径也通过；构建产物正确（摘要只服务 check，codegen 仍全量）。
+run: TMPDIR="$TMPDIR/summary-full-cache" VUNA_ELAB_FULL=1 "$VUNA" check corpus/packages/m34_summary/root
+exit: 0
+run: sh -c 'rm -rf "$TMPDIR/summary-out"; "$VUNA" build --out "$TMPDIR/summary-out" corpus/packages/m34_summary/root'
+exit: 0
+run: "$TMPDIR/summary-out/bin/summary-root"
+out-equals: 42

@@ -998,15 +998,14 @@ ifaceAuditRequested : Bool
 ifaceAuditRequested = runIO (prim_getenv "VUNA_IFACE_AUDIT") == "1"
 
 -- 诊断签名：`Ok`/`Err` 都参与比较（顺序敏感，逐字节）。
+-- 直接按构造子在 clause 头分派（dispatch-lift），避免再嵌一层 case。
 checkSignatureOf : Result (Pair (List String) CheckedPackage) -> String
-checkSignatureOf r = case r of
-  Ok p => "ok\n${joinLines (firstOf p)}"
-  Err e => "err\n${e}"
+checkSignatureOf (Ok p) = "ok\n${joinLines (firstOf p)}"
+checkSignatureOf (Err e) = "err\n${e}"
 
 splitSignatureOf : Result (Pair (List SplitFile) CheckedPackage) -> String
-splitSignatureOf r = case r of
-  Ok p => "ok\n${prim_marshal (firstOf p)}"
-  Err e => "err\n${e}"
+splitSignatureOf (Ok p) = "ok\n${prim_marshal (firstOf p)}"
+splitSignatureOf (Err e) = "err\n${e}"
 
 joinLines : List String -> String
 joinLines [] = ""
@@ -1278,7 +1277,7 @@ resyncCleanSources sources clean = map (\m => case lookupPair (miNameOf m) sourc
   Just si =>
     ModuleIface (miNameOf m) (miPackageOf m) si (miIfaceHashOf m) (miDepHashesOf m) (miImportsOf m)
       (miImplicitImportsOf m) (miCapabilitiesOf m) (miExportsOf m) (miFixitiesOf m) (miDeclsOf m)
-      (miPreparedOf m) (miCachedOf m)
+      (miRecordsOf m) (miPreparedOf m) (miCachedOf m)
   Nothing => m
 ) clean
 

@@ -1,10 +1,8 @@
 module Vuna.Compiler.Elab.Records
-  ( RecordInfo(..)
-  , checkProvidedFields
+  ( RecordFieldMeta(..)
+  , RecordMeta(..)
   , desugarRecords
   , duplicateFieldMsg
-  , fieldBinderName
-  , fieldIndex
   , fieldNamesOf
   , firstUnknownFieldMsg
   , hasDuplicateFieldNames
@@ -14,51 +12,58 @@ module Vuna.Compiler.Elab.Records
   , prepareDecls
   , prepareDeclsWith
   , recordDeclToData
+  , recordFieldPairs
   , recordHasFieldInstances
   , recordsOfDecls
   , unknownFieldMsg
   ) where
 
--- Vuna.Compiler.Records：`record` 的**语法降级**（M19 提取成共享模块）。
+-- Vuna.Compiler.Elab.Records：`record` 的**语法降级**（M19 提取成共享模块）。
 --
--- record 在 vuna 里不是独立的核心语言特性，而是**纯记法**：一条 `record R where ...`
--- 等价于「带一个构造子的 data，构造子按声明顺序接收全部字段」，record 的构造、字段
--- 访问、更新与模式匹配都能在 AST 层无歧义地改写成等价的 data 记法。因此降级发生在
--- **精化之前**，HM 与 DT 两条路径共用同一份改写（这也是终态需要的行为——M24 删除 HM
--- 时这条降级留在共享模块里，不需要搬家）。
---
--- 本模块只做 AST → AST 变换，不依赖任何检查器状态（HM 的类型变量表、DT 的元变量上下文
--- 都不进来），因此放在编译器包的中立位置。
+-- R2（records-v2）：字段名不再是构造子 binder 名里编码的字符串，而是下面
+-- `RecordFieldMeta` 的（名字 / 类型 / 声明序号）三元组；`RecordMeta` 是跨包的
+-- 结构化字段表，进 iface（`miRecords`）。降级本身仍是 AST → AST，不依赖检查器状态。
 import Vuna.Compiler.Common
 import Vuna.Compiler.Frontend.Ast
 
--- 记录声明信息。第五个字段是**构造子名**：与记录名同名（M23 起；Elab 让值位置先查
--- 构造子表、类型位置走 globals，两者同名不再冲突）。
-record RecordInfo where
-  recordInfoName : String
-  recordInfoParams : List String
-  recordInfoFields : List (Pair String Expr)
-  recordInfoDerivings : List String
-  recordInfoDerivingVia : Bool
-  recordInfoCtor : String
+-- | R2：一条 record 字段的结构化元数据。`recordFieldIndex` 是声明序号（也是降级后
+-- 构造子里的位置参数序号）；`recordFieldType` 仍带源码 span，供 `HasField` 实例生成。
+record RecordFieldMeta where
+  recordFieldName : String
+  recordFieldType : Expr
+  recordFieldIndex : Int
 
-lookupRecord : String -> List RecordInfo -> Maybe RecordInfo
+-- | R2：一条 record 声明的结构化元数据（名字 / 参数 / 字段表 / 派生 / 表示档位 / 构造子 /
+-- 线性标记）。进 iface 后工具与下游包按字段表查表，不再依赖前缀约定或重跑源码解析。
+record RecordMeta where
+  recordMetaName : String
+  recordMetaParams : List String
+  recordMetaFields : List RecordFieldMeta
+  recordMetaDerivings : List String
+  recordMetaDerivingVia : Bool
+  -- R1：表示档位（`transparent`/`opaque` 声明；`ReprAuto` = 未声明）。
+  recordMetaRepr : ReprTier
+  recordMetaCtor : String
+  recordMetaLinear : Bool
+
+-- | R2：字段表 → （名字，类型）对（只用于仍需该形状的旧 helper）。
+recordFieldPairs : List RecordFieldMeta -> List (Pair String Expr)
+recordFieldPairs [] = []
+recordFieldPairs (f :: rest) = Pair f.recordFieldName f.recordFieldType :: recordFieldPairs rest
+
+-- | R2：字段表 → 字段名列表。
+recordFieldNames : List RecordFieldMeta -> List String
+recordFieldNames [] = []
+recordFieldNames (f :: rest) = f.recordFieldName :: recordFieldNames rest
+
+-- | R2：按名字查 record 元数据。
+lookupRecord : String -> List RecordMeta -> Maybe RecordMeta
 lookupRecord name [] = Nothing
-lookupRecord name ((RecordInfo rname params fields derivings derivingVia ctor) :: rest) =
-  if rname == name then Just (RecordInfo rname params fields derivings derivingVia ctor)
-  else lookupRecord name rest
+lookupRecord name (r :: rest) = if r.recordMetaName == name then Just r else lookupRecord name rest
 
 fieldNamesOf : List (Pair a b) -> List a
 fieldNamesOf [] = []
 fieldNamesOf ((Pair n t) :: rest) = n :: fieldNamesOf rest
-
-fieldIndexAt : Eq a => a -> List (Pair a b) -> Int -> Maybe Int
-fieldIndexAt fname [] i = Nothing
-fieldIndexAt fname ((Pair n t) :: rest) i =
-  if n == fname then Just i else fieldIndexAt fname rest (i + 1)
-
-fieldIndex : Eq a => a -> List (Pair a b) -> Maybe Int
-fieldIndex fname fields = fieldIndexAt fname fields 0
 
 lookupProvided : String -> List (Pair String a) -> Maybe a
 lookupProvided fname [] = Nothing
@@ -89,26 +94,24 @@ firstUnknownFieldMsg sp fieldNames [] = unknownFieldMsg sp ""
 firstUnknownFieldMsg sp fieldNames ((Pair n v) :: rest) =
   if memName n fieldNames then firstUnknownFieldMsg sp fieldNames rest else unknownFieldMsg sp n
 
-checkProvidedFields : List String -> List (Pair String a) -> Span -> Result (List b)
-checkProvidedFields fieldNames [] sp = Ok []
-checkProvidedFields fieldNames ((Pair n v) :: rest) sp =
-  if memName n fieldNames then checkProvidedFields fieldNames rest sp
-  else Err (unknownFieldMsg sp n)
-
--- 记录声明抽取：DRecord 记住 RecordInfo，并降级成单构造器 DData。
-recordsOfDecls : (String -> String) -> List Decl -> Pair (List RecordInfo) (List Decl)
+-- 记录声明抽取：DRecord 记住 RecordMeta，并降级成单构造器 DData。
+recordsOfDecls : (String -> String) -> List Decl -> Pair (List RecordMeta) (List Decl)
 recordsOfDecls ctorOf [] = Pair [] []
 recordsOfDecls ctorOf (d :: rest) = case recordsOfDecls ctorOf rest of
   Pair recs ds => case d of
-    DRecord dname params fields derivings viaField lin sp =>
+    DRecord dname params fields derivings viaField repr lin sp =>
       let
-        info =
-          RecordInfo dname params (map recordFieldPair fields) derivings viaField (ctorOf dname)
-      in Pair (info :: recs) (recordDeclToData d (ctorOf dname) :: ds)
+        meta =
+          RecordMeta dname params (recordFieldsOf fields 0) derivings viaField repr (ctorOf dname)
+            lin
+      in Pair (meta :: recs) (recordDeclToData d (ctorOf dname) repr :: ds)
     _ => Pair recs (d :: ds)
 
-recordFieldPair : Field -> Pair String Expr
-recordFieldPair (Field fname ty sp) = Pair fname ty
+-- | R2：给字段表标注声明序号（字段名/类型的唯一真源）。
+recordFieldsOf : List Field -> Int -> List RecordFieldMeta
+recordFieldsOf [] i = []
+recordFieldsOf (f :: rest) i =
+  RecordFieldMeta (fieldName f) (fieldType f) i :: recordFieldsOf rest (i + 1)
 
 -- 记录的构造子名：`Mk<R>`。
 -- 记录声明降级：单构造子 DData。构造子名由 `ctor` 参数给出（见上面的策略说明）。
@@ -120,19 +123,15 @@ recordRetType dname params sp = EApp (EVar dname sp) (recordParamVarExprs params
 
 -- 构造子类型用一等的 `EPi` 表示（不是 `EVar "->"` 的语法编码）：这是记录降级的
 -- **输出**，交给下游检查器，不应当依赖某个检查器对箭头语法的特殊处理。
+-- R2：binder 名只带**位置**信息（`@vuna@record@arg<i>`），不再编码字段名——字段身份
+-- 由 `RecordMeta` / `DtData.dtDataFields` 的结构化字段表承载。
 recordArrowType : List Field -> Expr -> Span -> Expr
-recordArrowType [] ret sp = ret
-recordArrowType (f :: fs) ret sp =
-  EPi (fieldBinderName (fieldName f)) False Nothing (fieldType f) (recordArrowType fs ret sp) sp
+recordArrowType fields ret sp = recordArrowTypeGo 0 fields ret sp
 
--- 字段 binder 名带内部前缀：字段类型表达式不能把前序字段名解析成 binder。
--- | 记录字段 binder 的内部前缀：避免字段类型表达式把前序字段名解析成 binder。
-fieldBinderPrefix : String
-fieldBinderPrefix = "@vuna@record@field@"
-
--- | 给记录字段名加上内部前缀，生成构造子类型的 binder 名。
-fieldBinderName : String -> String
-fieldBinderName fname = "${fieldBinderPrefix}${fname}"
+recordArrowTypeGo : Int -> List Field -> Expr -> Span -> Expr
+recordArrowTypeGo i [] ret sp = ret
+recordArrowTypeGo i (f :: fs) ret sp =
+  EPi "@vuna@record@arg${i}" False Nothing (fieldType f) (recordArrowTypeGo (i + 1) fs ret sp) sp
 
 -- 记录构造子类型显式带族参数（`elabCtor` 用首 binder 名判断，字段 binder 已不是 `_`）。
 -- | 把记录族参数包成显式 Pi（implicit=True），供构造子类型使用。
@@ -145,25 +144,25 @@ recordParamPis (p :: rest) ret sp =
 recordCtorType : List String -> List Field -> Expr -> Span -> Expr
 recordCtorType params fields ret sp = recordParamPis params (recordArrowType fields ret sp) sp
 
-recordDeclToData : Decl -> String -> Decl
-recordDeclToData (DRecord dname params fields derivings viaField lin sp) ctor =
+recordDeclToData : Decl -> String -> ReprTier -> Decl
+recordDeclToData (DRecord dname params fields derivings viaField repr lin sp) ctor tier =
   DData dname params (EVar "Type" sp)
     [Ctor ctor (recordCtorType params fields (recordRetType dname params sp) sp) (length fields) sp]
-    derivings viaField lin sp
+    derivings viaField tier lin sp
 -- M23：DT 要求函数 clause 覆盖所有构造子（非 record 声明原样返回）。
-recordDeclToData d ctor = d
+recordDeclToData d ctor tier = d
 
 -- 记录语法降级：构造 → 构造器应用；记录模式 → 构造器模式（按声明顺序补 PWild）。
-desugarRecords : List RecordInfo -> List Decl -> Result (List Decl)
+desugarRecords : List RecordMeta -> List Decl -> Result (List Decl)
 desugarRecords records decls = traverse (desugarRecordDecl records) decls
 
-desugarRecordDecl : List RecordInfo -> Decl -> Result Decl
+desugarRecordDecl : List RecordMeta -> Decl -> Result Decl
 desugarRecordDecl records d = case d of
   DFun name pats body sp =>
     Vuna.Compiler.Common.bind (traverse (desugarPattern records) pats)
       (\pats2 => Vuna.Compiler.Common.bind (desugarExpr records body) (\body2 => Ok (DFun name pats2 body2 sp)))
-  DData name params kind ctors derivings viaField lin sp => Ok d
-  DRecord name params fields derivings viaField lin sp => Ok d
+  DData name params kind ctors derivings viaField repr lin sp => Ok d
+  DRecord name params fields derivings viaField repr lin sp => Ok d
   DTrait name params methods sp => Ok d
   DInstance ctxE head methods sp =>
     Vuna.Compiler.Common.bind (traverse (desugarRecordDecl records) methods)
@@ -174,10 +173,10 @@ desugarRecordDecl records d = case d of
   DAxiom name ty sp => Ok d
   DExtern name cName ty sp => Ok d
 
-desugarPattern : List RecordInfo -> Pat -> Result Pat
+desugarPattern : List RecordMeta -> Pat -> Result Pat
 desugarPattern records pat = desugarPatternFuel 64 records pat
 
-desugarPatternFuel : Int -> List RecordInfo -> Pat -> Result Pat
+desugarPatternFuel : Int -> List RecordMeta -> Pat -> Result Pat
 desugarPatternFuel fuel records pat = if fuel <= 0 then Ok pat
 else case pat of
   PWild sp => Ok (PWild sp)
@@ -191,21 +190,18 @@ else case pat of
       (\ps => Ok (PCon name ps sp))
   PRecord name fields sp => case lookupRecord name records of
     Nothing => Err "${showSpanLoc sp}: unknown record: ${name}"
-    Just (RecordInfo rname params fdefs derivings derivingVia ctor) =>
+    Just r =>
       if hasDuplicateFieldNames fields then Err (duplicateFieldMsg sp)
-      else if hasUnknownFields (fieldNamesOf fdefs) fields then Err (firstUnknownFieldMsg sp (fieldNamesOf fdefs) fields)
-      else Vuna.Compiler.Common.bind (desugarRecordPatternFieldsFuel (fuel - 1) records fdefs fields sp)
-        (\ps => Ok (PCon ctor ps sp))
+      else if hasUnknownFields (recordFieldNames r.recordMetaFields) fields then Err (firstUnknownFieldMsg sp (recordFieldNames r.recordMetaFields) fields)
+      else Vuna.Compiler.Common.bind
+        (desugarRecordPatternFieldsFuel (fuel - 1) records r.recordMetaFields fields sp)
+        (\ps => Ok (PCon r.recordMetaCtor ps sp))
 
-desugarRecordPatternFields : List RecordInfo -> List (Pair String Expr) -> List (Pair String Pat) -> Span -> Result (List Pat)
-desugarRecordPatternFields records fdefs provided sp =
-  desugarRecordPatternFieldsFuel 64 records fdefs provided sp
-
-desugarRecordPatternFieldsFuel : Int -> List RecordInfo -> List (Pair String Expr) -> List (Pair String Pat) -> Span -> Result (List Pat)
+desugarRecordPatternFieldsFuel : Int -> List RecordMeta -> List RecordFieldMeta -> List (Pair String Pat) -> Span -> Result (List Pat)
 desugarRecordPatternFieldsFuel fuel records fdefs provided sp = if fuel <= 0 then Ok []
 else case fdefs of
   [] => Ok []
-  (Pair fname fty) :: rest => case lookupProvided fname provided of
+  f :: rest => case lookupProvided f.recordFieldName provided of
     Nothing =>
       Vuna.Compiler.Common.bind (desugarRecordPatternFieldsFuel (fuel - 1) records rest provided sp)
         (\ps => Ok (PWild sp :: ps))
@@ -213,7 +209,7 @@ else case fdefs of
       Vuna.Compiler.Common.bind (desugarPatternFuel (fuel - 1) records p)
         (\p2 => Vuna.Compiler.Common.bind (desugarRecordPatternFieldsFuel (fuel - 1) records rest provided sp) (\ps => Ok (p2 :: ps)))
 
-desugarExprFuel : Int -> List RecordInfo -> Expr -> Result Expr
+desugarExprFuel : Int -> List RecordMeta -> Expr -> Result Expr
 desugarExprFuel fuel records e = if fuel <= 0 then Err "DT: internal: record desugar fuel exhausted"
 else case e of
   EVar n sp => Ok e
@@ -238,17 +234,18 @@ else case e of
   EIf c t el sp =>
     Vuna.Compiler.Common.bind (desugarExprFuel (fuel - 1) records c)
       (\c2 => Vuna.Compiler.Common.bind (desugarExprFuel (fuel - 1) records t) (\t2 => Vuna.Compiler.Common.bind (desugarExprFuel (fuel - 1) records el) (\e2 => Ok (EIf c2 t2 e2 sp))))
-  -- 字段访问/更新的消歧需要 base 的类型，留给精化器（字段名不再全局唯一）。
+  -- 字段访问/更新的消歧需要 base 的类型，留给精化期按结构化字段表查表。
   EField base fname sp =>
     Vuna.Compiler.Common.bind (desugarExprFuel (fuel - 1) records base)
       (\b => Ok (EField b fname sp))
   ERecord name fields sp => case lookupRecord name records of
     Nothing => Err "${showSpanLoc sp}: unknown record: ${name}"
-    Just (RecordInfo rname params fdefs derivings derivingVia ctor) =>
+    Just r =>
       if hasDuplicateFieldNames fields then Err (duplicateFieldMsg sp)
-      else if hasUnknownFields (fieldNamesOf fdefs) fields then Err (firstUnknownFieldMsg sp (fieldNamesOf fdefs) fields)
-      else Vuna.Compiler.Common.bind (desugarRecordValuesFuel (fuel - 1) records fdefs fields sp)
-        (\vs => Ok (EApp (EVar ctor sp) vs sp))
+      else if hasUnknownFields (recordFieldNames r.recordMetaFields) fields then Err (firstUnknownFieldMsg sp (recordFieldNames r.recordMetaFields) fields)
+      else Vuna.Compiler.Common.bind
+        (desugarRecordValuesFuel (fuel - 1) records r.recordMetaFields fields sp)
+        (\vs => Ok (EApp (EVar r.recordMetaCtor sp) vs sp))
   ERecUpdate base fields sp =>
     Vuna.Compiler.Common.bind (desugarExprFuel (fuel - 1) records base)
       (\b => Vuna.Compiler.Common.bind (traverse (desugarFieldValueFuel (fuel - 1) records) fields) (\fs => Ok (ERecUpdate b fs sp)))
@@ -265,7 +262,7 @@ else case e of
       (\v2 => Vuna.Compiler.Common.bind (desugarExprFuel (fuel - 1) records ty) (\t2 => Ok (EAnn v2 t2 sp)))
   _ => Err "DT: internal: unreordered infix/paren in elaboration"
 
-desugarDoStmtFuel : Int -> List RecordInfo -> DoStmt -> Result DoStmt
+desugarDoStmtFuel : Int -> List RecordMeta -> DoStmt -> Result DoStmt
 desugarDoStmtFuel fuel records stmt = if fuel <= 0 then Err "DT: internal: record desugar fuel exhausted"
 else case stmt of
   DBind p e sp =>
@@ -274,120 +271,52 @@ else case stmt of
   DExpr e sp =>
     Vuna.Compiler.Common.bind (desugarExprFuel (fuel - 1) records e) (\e2 => Ok (DExpr e2 sp))
 
-desugarRecordValuesFuel : Int -> List RecordInfo -> List (Pair String Expr) -> List (Pair String Expr) -> Span -> Result (List Expr)
+desugarRecordValuesFuel : Int -> List RecordMeta -> List RecordFieldMeta -> List (Pair String Expr) -> Span -> Result (List Expr)
 desugarRecordValuesFuel fuel records [] provided sp =
   if fuel <= 0 then Err "DT: internal: record desugar fuel exhausted" else Ok []
-desugarRecordValuesFuel fuel records ((Pair fname fty) :: rest) provided sp = if fuel <= 0 then Err "DT: internal: record desugar fuel exhausted"
-else case lookupProvided fname provided of
-  Nothing => Err (missingFieldMsg sp fname)
+desugarRecordValuesFuel fuel records (f :: rest) provided sp = if fuel <= 0 then Err "DT: internal: record desugar fuel exhausted"
+else case lookupProvided f.recordFieldName provided of
+  Nothing => Err (missingFieldMsg sp f.recordFieldName)
   Just v =>
     Vuna.Compiler.Common.bind (desugarExprFuel (fuel - 1) records v)
       (\v2 => Vuna.Compiler.Common.bind (desugarRecordValuesFuel (fuel - 1) records rest provided sp) (\vs => Ok (v2 :: vs)))
 
-desugarFieldValueFuel : Int -> List RecordInfo -> Pair String Expr -> Result (Pair String Expr)
+desugarFieldValueFuel : Int -> List RecordMeta -> Pair String Expr -> Result (Pair String Expr)
 desugarFieldValueFuel fuel records (Pair fname v) =
   if fuel <= 0 then Err "DT: internal: record desugar fuel exhausted"
   else Vuna.Compiler.Common.bind (desugarExprFuel (fuel - 1) records v) (\v2 => Ok (Pair fname v2))
 
--- ---------------------------------------------------------------
--- 记录更新 `{ p | x = 40, y = 1 }` 的降级
--- ---------------------------------------------------------------
--- 与字段访问同构：`case base of <ctor> v0 .. vn => <ctor> (更新值 | 旧字段绑定)`。
--- 只改**更新字段**位置，其余字段原样搬运。record 按字段名定位：
---   - 首个更新字段没有任何 record 声明 ⇒ unknown field；
---   - 多个 record 都声明它 ⇒ ambiguous field（与字段访问同一措辞）；
---   - 唯一候选但其余更新字段不在它里面 ⇒ unknown field。
--- 模式绑定子用 `vuna_ru<i>` 前缀，降低与用户表达式里同名变量发生捕获的概率
--- （记录更新右侧表达式按外层作用域求值）。
-desugarRecUpdate : List RecordInfo -> Expr -> List (Pair String Expr) -> Span -> Result Expr
-desugarRecUpdate records base [] sp =
-  Err "${showSpanLoc sp}: record update needs at least one field"
-desugarRecUpdate records base (fields@((Pair fname fv) :: rest)) sp = if hasDuplicateFieldNames fields then Err (duplicateFieldMsg sp)
-else case recordsWithField fname records of
-  [] => Err (unknownFieldMsg sp fname)
-  [one] => desugarRecUpdateWith one base fields sp
-  _ => Err "${showSpanLoc sp}: ambiguous field ${fname} (declared by multiple records)"
-
-desugarRecUpdateWith : RecordInfo -> Expr -> List (Pair String Expr) -> Span -> Result Expr
-desugarRecUpdateWith (RecordInfo rname params fdefs derivings derivingVia ctor) base fields sp = if hasUnknownFields (fieldNamesOf fdefs) fields then Err (firstUnknownFieldMsg sp (fieldNamesOf fdefs) fields)
-else
-  let
-    vars = recUpdateVars (length fdefs)
-    pats = map (\v => PVar v sp) vars
-    args = recUpdateArgs fdefs fields vars 0 sp
-    pat = PCon ctor pats sp
-  in Ok (ECase base [Pair pat (EApp (EVar ctor sp) args sp)] sp)
-
-recUpdateVars : Int -> List String
-recUpdateVars n = recUpdateVarsAt 0 n
-
-recUpdateVarsAt : Int -> Int -> List String
-recUpdateVarsAt i n = recUpdateVarsAtGo (n - i) n
-
-recUpdateVarsAtGo : Int -> Int -> List String
-recUpdateVarsAtGo remaining n =
-  if remaining <= 0 then [] else "vuna_ru${n - remaining}" :: recUpdateVarsAtGo (remaining - 1) n
-
-recUpdateArgs : List (Pair String Expr) -> List (Pair String Expr) -> List String -> Int -> Span -> List Expr
-recUpdateArgs [] provided vars i sp = []
-recUpdateArgs fields provided [] i sp = []
-recUpdateArgs ((Pair fname fty) :: rest) provided (v :: vs) i sp = (case lookupProvided fname provided of
-  Just e => e
-  Nothing => EVar v sp
-) :: recUpdateArgs rest provided vs (i + 1) sp
-
-desugarBindFuel : Int -> List RecordInfo -> Pair Pat Expr -> Result (Pair Pat Expr)
+desugarBindFuel : Int -> List RecordMeta -> Pair Pat Expr -> Result (Pair Pat Expr)
 desugarBindFuel fuel records (Pair pat value) =
   if fuel <= 0 then Err "DT: internal: record desugar fuel exhausted"
   else Vuna.Compiler.Common.bind (desugarPatternFuel (fuel - 1) records pat)
     (\p2 => Vuna.Compiler.Common.bind (desugarExprFuel (fuel - 1) records value) (\v2 => Ok (Pair p2 v2)))
 
 -- A2：局部函数 clause（参数模式列表 + body）。
-desugarLocalClauseFuel : Int -> List RecordInfo -> Pair (List Pat) Expr -> Result (Pair (List Pat) Expr)
+desugarLocalClauseFuel : Int -> List RecordMeta -> Pair (List Pat) Expr -> Result (Pair (List Pat) Expr)
 desugarLocalClauseFuel fuel records clause =
   if fuel <= 0 then Err "DT: internal: record desugar fuel exhausted"
   else Vuna.Compiler.Common.bind (traverse (desugarPatternFuel (fuel - 1) records) (firstOf clause))
     (\p2 => Vuna.Compiler.Common.bind (desugarExprFuel (fuel - 1) records (secondOf clause)) (\b2 => Ok (Pair p2 b2)))
 
-desugarAltFuel : Int -> List RecordInfo -> Pair Pat Expr -> Result (Pair Pat Expr)
+desugarAltFuel : Int -> List RecordMeta -> Pair Pat Expr -> Result (Pair Pat Expr)
 desugarAltFuel fuel records (Pair pat body) =
   if fuel <= 0 then Err "DT: internal: record desugar fuel exhausted"
   else Vuna.Compiler.Common.bind (desugarPatternFuel (fuel - 1) records pat)
     (\p2 => Vuna.Compiler.Common.bind (desugarExprFuel (fuel - 1) records body) (\b2 => Ok (Pair p2 b2)))
 
--- 声明了该字段的 record 列表（字段访问的语法层消歧用）。
-recordsWithField : String -> List RecordInfo -> List RecordInfo
-recordsWithField fname [] = []
-recordsWithField fname ((r@(RecordInfo rname params fdefs derivings derivingVia ctor)) :: rest) =
-  if memName fname (fieldNamesOf fdefs) then r :: recordsWithField fname rest
-  else recordsWithField fname rest
-
--- 字段访问降级：`case base of Mk<R> f0 .. fn => f_k`（缺省位置补通配）。
-fieldAccessExpr : RecordInfo -> String -> Expr -> Span -> Expr
-fieldAccessExpr (RecordInfo rname params fdefs derivings derivingVia ctor) fname b sp =
-  let
-    pats = fieldAccessPats fname fdefs
-    body = EVar fname sp
-    alt = Pair (PCon ctor pats sp) body
-  in ECase b [alt] sp
-
--- 分支模式：命中的字段位置绑定成与字段同名的变量，其余补通配。
-fieldAccessPats : String -> List (Pair String Expr) -> List Pat
-fieldAccessPats fname [] = []
-fieldAccessPats fname ((Pair f alt) :: rest) =
-  (if f == fname then PVar f (exprSpan alt) else PWild (exprSpan alt)) :: fieldAccessPats fname rest
-
 -- HasField 实例：为当前模块的 record 字段生成 `instance HasField (Field "f") R T`。
 -- | 为一批记录的每个字段生成 `HasField` 实例声明。
-recordHasFieldInstances : List RecordInfo -> List Decl
+recordHasFieldInstances : List RecordMeta -> List Decl
 recordHasFieldInstances [] = []
 recordHasFieldInstances (r :: rest) =
   append (recordHasFieldInstancesOf r) (recordHasFieldInstances rest)
 
 -- | 为单个记录的所有字段生成 `HasField` 实例声明。
-recordHasFieldInstancesOf : RecordInfo -> List Decl
-recordHasFieldInstancesOf (RecordInfo rname params fields derivings derivingVia ctor) =
-  recordHasFieldInstancesGo rname params ctor (length fields) fields 0
+recordHasFieldInstancesOf : RecordMeta -> List Decl
+recordHasFieldInstancesOf r =
+  recordHasFieldInstancesGo r.recordMetaName r.recordMetaParams r.recordMetaCtor
+    (length r.recordMetaFields) (recordFieldPairs r.recordMetaFields) 0
 
 -- | 逐字段生成 `HasField` 实例的递归辅助（带字段下标）。
 recordHasFieldInstancesGo : String -> List String -> String -> Int -> List (Pair String Expr) -> Int -> List Decl
@@ -426,20 +355,20 @@ hasFieldInstanceDecl rname params ctor n fi fname fty =
   in DInstance [] head [meth] fsp
 
 -- DT 的一步式入口：抽取 record 信息并完成全部降级。
--- `Elab.elabProgramFull` 只需 `Vuna.Compiler.Common.bind (prepareDecls decls) elabProgramGo`。
-prepareDecls : List Decl -> Result (List Decl)
+-- R2：同时返回本包/依赖包的 `RecordMeta` 表，供 `elabDatas` 把字段表写进 `DtData`。
+prepareDecls : List Decl -> Result (Pair (List RecordMeta) (List Decl))
 prepareDecls decls0 = prepareDeclsWith [] decls0
 
 -- M34.5 接口摘要路径：本包的 record 降级需要**依赖包 record 头**参与字段访问/record 更新/
 -- 模式降级的消解（依赖包只提供语法头，不精化）；auxDecls 是依赖模块的原始 decls。
-prepareDeclsWith : List Decl -> List Decl -> Result (List Decl)
+prepareDeclsWith : List Decl -> List Decl -> Result (Pair (List RecordMeta) (List Decl))
 prepareDeclsWith auxDecls decls0 =
   let
     auxSplit = recordsOfDecls ctorName auxDecls
     split = recordsOfDecls ctorName decls0
     records = append (firstOf auxSplit) (firstOf split)
     decls = secondOf split
-  in desugarRecords records decls
+  in Vuna.Compiler.Common.bind (desugarRecords records decls) (\ds => Ok (Pair records ds))
 
 -- 记录的构造子名：记录名本身。
 -- M23：旧实现用 `Mk<R>` 前缀，避免「类型名与构造子同名」被当成「把类型当函数应用」。
@@ -449,22 +378,7 @@ prepareDeclsWith auxDecls decls0 =
 ctorName : String -> String
 ctorName dname = dname
 
-desugarAlt : List RecordInfo -> Pair Pat Expr -> Result (Pair Pat Expr)
-desugarAlt a1 a2 = desugarAltFuel 512 a1 a2
-
-desugarBind : List RecordInfo -> Pair Pat Expr -> Result (Pair Pat Expr)
-desugarBind a1 a2 = desugarBindFuel 512 a1 a2
-
-desugarFieldValue : List RecordInfo -> Pair String Expr -> Result (Pair String Expr)
-desugarFieldValue a1 a2 = desugarFieldValueFuel 512 a1 a2
-
-desugarRecordValues : List RecordInfo -> List (Pair String Expr) -> List (Pair String Expr) -> Span -> Result (List Expr)
-desugarRecordValues a1 a2 a3 a4 = desugarRecordValuesFuel 512 a1 a2 a3 a4
-
-desugarDoStmt : List RecordInfo -> DoStmt -> Result DoStmt
-desugarDoStmt a1 a2 = desugarDoStmtFuel 512 a1 a2
-
-desugarExpr : List RecordInfo -> Expr -> Result Expr
+desugarExpr : List RecordMeta -> Expr -> Result Expr
 desugarExpr a1 a2 = desugarExprFuel 512 a1 a2
 
 -- case 分支左端的 as-pattern（`y@pat => body`）：等价于 `pat => let y = <scrutinee> in body`。

@@ -1,0 +1,24 @@
+# 34a) DT 核心路径的产物表示断言（原 section 34_extra 第一段）。
+# M34.7：Nat 零开销表示——产物里不得出现 Nat 变体类型/构造子，算术走 bi_nat*。
+# 夹具：corpus/dt/73_nat_repr.vuna。
+run: "$VUNA" compile corpus/dt/73_nat_repr.vuna "$TMPDIR/nat-repr" 2>&1
+exit: 0
+out-equals:
+run: sh -c 'grep -qE "t_Base_dNat_dNat|C_Base_dNat_dNat_" "$TMPDIR/nat-repr"/*.ml'
+exit: nonzero
+read: $TMPDIR/nat-repr/Main.ml
+out-contains: bi_natAdd
+# D27 表现层：含类型族（不可命名的擦除依赖）的程序必须生成不透明运行时值
+# （Obj.t 字段）+ 表现层 cast（Obj.magic）；不含类型族的程序两者都不得出现。
+# 夹具：corpus/dt/82_eff_cps.vuna（含类型族）/ corpus/dt/01_id.vuna（不含）。
+run: "$VUNA" compile corpus/dt/82_eff_cps.vuna "$TMPDIR/d27-opaque" 2>&1
+exit: 0
+out-equals:
+read: $TMPDIR/d27-opaque/Main.ml
+out-contains: Obj.t
+out-contains: Obj.magic
+run: "$VUNA" compile corpus/dt/01_id.vuna "$TMPDIR/d27-plain" 2>&1
+exit: 0
+out-equals:
+run: sh -c 'grep -qE "Obj\.magic|Obj\.t" "$TMPDIR/d27-plain/Main.ml"'
+exit: nonzero

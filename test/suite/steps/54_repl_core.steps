@@ -1,0 +1,75 @@
+# 54) REPL v2：自动签名 / 泛化 / 重定义 / 块输入 / 命令面 / 类型文本 / 颜色 / 辅助命令。
+#     每个场景一条 `printf ... | "$VUNA" repl`；pty 行编辑在 54_repl_pty.steps。
+#     注：steps 的 out-contains 值会 trim 首尾空白，原片段 `" ms]"` / `"prompt = X> "` 的
+#     前导/尾随空格无法表达，按去空白后的片段断言（语义不变）。
+run: printf 'x = 1 + 1\nx + 40\nf y = x + y\nf 40\nid z = z\nid 41\n:q\n' | "$VUNA" repl 2>&1
+out-contains: 42
+out-contains: 41
+run: printf 'id z = z\n:type id\n:q\n' | "$VUNA" repl 2>&1
+out-contains: id : {t0 : Type} -> t0 -> t0
+run: printf 'f 0 = 1\n1 + 1\n:q\n' | "$VUNA" repl 2>&1
+out-contains: 请先写类型签名
+out-contains: 2
+run: printf 'x = 1\nx = 2\nx\n:delete x\nx\n:q\n' | "$VUNA" repl 2>&1
+out-contains: 已删除 x
+out-contains: unbound variable x
+run: printf ':{\n  x = 1 + 1\n  f y = x + y\n:}\nf 40\n:q\n' | "$VUNA" repl 2>&1
+out-contains: 42
+run: printf 'x = 1\nf y = x + y\n:defs\n:imports\nimport Base.IO\n:imports\n:q\n' | "$VUNA" repl 2>&1
+out-contains: x : Int
+out-contains: f : Int -> Int
+out-contains: import Base.IO
+# B1 回归：显式隐式 binder 不再被重复量化；B3 回归：类型文本 zonk。
+run: printf 'm : {a : Type} -> a -> a\nm x = x\n:type m\n:type [1, 2, 3]\nid z = z\n:type id 1\n:q\n' | "$VUNA" repl 2>&1
+out-contains: m : {a : Type} -> a -> a
+out-not-contains: {a : Type} -> {a : Type}
+out-contains: List Int
+out-contains: id 1 : Int
+# v2.1：隐式 Prelude 可见；导入模块的类型名可作为项（`:type` 给 kind）。
+run: printf ':type Maybe\n:type Maybe Int\n:type Bool\n:type List\n:imports\n:q\n' | "$VUNA" repl 2>&1
+out-contains: Maybe : (a : Type) -> Type
+out-contains: Maybe Int : Type
+out-contains: Bool : Type
+out-contains: List : (a : Type) -> Type
+out-contains: import Prelude
+out-contains: 隐式自动导入
+run: printf ':load Base.Maybe\n:type Base.Maybe.Maybe\n:q\n' | "$VUNA" repl 2>&1
+out-contains: Base.Maybe.Maybe : (a : Type) -> Type
+run: printf ':load Base\n:type Maybe\n:q\n' | "$VUNA" repl 2>&1
+out-contains: Maybe : (a : Type) -> Type
+# v2.2：`:typeinfo`（`:ti`）单独列隐式参数 + 文档；裸运算符自动补括号；`>>` 给 do 派生提示。
+run: printf 'id z = z\n:typeinfo id\n:ti id\n:type +\n:type >>\n:type (>>)\n:typeinfo Maybe\n:q\n' | "$VUNA" repl 2>&1
+out-contains: 隐式参数
+out-contains: {t0 : Type}
+out-contains: id : t0 -> t0
+out-contains: id : t0 -> t0
+out-contains: + : {a : Type} -> (Dict_Base.Num.Num a) -> a -> a -> a
+out-contains: do 派生
+out-contains: 可选值
+run: printf ':typeinfo\n:q\n' | "$VUNA" repl 2>&1
+out-contains: 用法: :typeinfo
+# v2.3：`:type` 的类型文本按 token 类别着色（universe / 箭头 / 全局名）；ANSI 用 printf '\033' 构造。
+run: sh -c 'printf ":set color on\n:type Just\n:q\n" | "$VUNA" repl 2>&1 | grep -qF "$(printf "\033")[1;35mType"'
+run: sh -c 'printf ":set color on\n:type Just\n:q\n" | "$VUNA" repl 2>&1 | grep -qF "$(printf "\033")[34m->"'
+run: sh -c 'printf ":set color on\n:type Just\n:q\n" | "$VUNA" repl 2>&1 | grep -qF "$(printf "\033")[36mBase.Maybe.Maybe"'
+# 值显示：列表 / 元组 / Maybe / 函数 / 构造子短名。
+run: printf ':load Base.Nat\nSucc Zero\nimport Base.List\nimport Base.Maybe\nimport Base.Pair\n[1, 2, 3]\nJust 1\nPair 1 2\nfun x = x\nfun\n:q\n' | "$VUNA" repl 2>&1
+out-contains: [1, 2, 3]
+out-contains: Just 1
+out-contains: (1, 2)
+out-contains: <函数>
+out-contains: 1
+# :set / :again / :abandon / 未知命令建议。
+run: printf ':set +t\n1 + 1\n:set +s\n1 + 1\n:set prompt X> \n:q\n' | "$VUNA" repl 2>&1
+out-contains: :: Int
+out-contains: ms]
+out-contains: prompt = X>
+run: sh -c 'rm -f "$TMPDIR/repl-v2-again-hist"; hits=$(printf ":set +t\n:set -t\n:again 1\n:q\n" | VUNA_REPL_HISTORY="$TMPDIR/repl-v2-again-hist" "$VUNA" repl 2>&1 | grep -c "+t on"); [ "$hits" -eq 2 ]'
+run: printf 'x =\n:abandon\n1 + 1\n:q\n' | "$VUNA" repl 2>&1
+out-contains: 已放弃当前输入
+out-contains: 2
+run: printf ':typ\n:q\n' | "$VUNA" repl 2>&1
+out-contains: :type
+# 颜色：管道默认关闭；`:set color on` 强制开启（ANSI 用 printf '\033' 构造）。
+run: sh -c '! printf "1 + 1\n:q\n" | "$VUNA" repl 2>&1 | grep -qF "$(printf "\033")"'
+run: sh -c 'printf ":set color on\n1 + 1\n:q\n" | "$VUNA" repl 2>&1 | grep -qF "$(printf "\033")["'

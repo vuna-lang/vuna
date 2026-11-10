@@ -1,0 +1,23 @@
+# 90) steps DSL 自测（for-each / read / file-* / out-* / {item} {name} 替换 / 缺省 exit）。
+#     只依赖 case 私有 $TMPDIR；失败信息应指出具体 item/片段。
+run: sh -c 'mkdir -p "$TMPDIR/dsl"; printf "file a.txt\n" > "$TMPDIR/dsl/a.txt"; printf "file a.txt\n" > "$TMPDIR/dsl/a.txt.want"; printf "file b.txt\n" > "$TMPDIR/dsl/b.txt"; printf "file b.txt\n" > "$TMPDIR/dsl/b.txt.want"'
+exit: 0
+file-exists: $TMPDIR/dsl/a.txt
+file-absent: $TMPDIR/dsl/missing.txt
+file-contains: $TMPDIR/dsl/a.txt file a.txt
+read: $TMPDIR/dsl/a.txt
+out-equals: file a.txt
+out-contains: a.txt
+out-not-contains: b.txt
+run: sh -c 'printf "wire\n"'
+out-equals: wire
+run: sh -c 'exit 3'
+exit: nonzero
+for-each: $TMPDIR/dsl/[ab].txt
+  run: sh -c 'test -f "{item}" && printf "ok %s\n" "{name}"'
+  exit: 0
+  out-contains: ok {name}
+  read: {item}
+  out-contains: {name}
+  out-equals-file: $TMPDIR/dsl/{name}.want
+end:

@@ -35,9 +35,9 @@
 #   - 文档按主题重整：删除 history/dt-core/dt-parity/dt.md，新增 core/tooling/records-traits
 #     并把 DT 语义并入 type-system；合并 main 的 LSP/readBytes 文档后按实测复标定：
 #     coldstart 29731 / agents 104 / arch 167 / readme 163 / max_ref 279。
-coldstart_bytes 39333
+coldstart_bytes 39486
 agents_lines 130
-arch_lines 219
+arch_lines 220
 readme_lines 172
 #   - M24.5：dt-parity.md §6 重写（实测能力表 + 边界）到 203 行；Elab 新增 scrutinee 反射、
 #     不可达分支、inlineSolvedMetas（3348 → 3513）。按实测重标定 max_ref 208 / max_module 3530；
@@ -48,7 +48,7 @@ readme_lines 172
 #     max_ref_lines 438（primitives.md）与 max_module_lines 2400（Elab/Term/Impl.vuna）
 #     是改动前已存在的漏标定（旧预算 415/2300 本身已红），按实测重标定。
 max_ref_lines 438
-max_module_lines 2400
+max_module_lines 2515
 #   - M27：新增 `primitives.md` 与内建/原语/能力文档、`Vuna.Compiler.Intrinsics` 模块；
 #     按 `sh nix/context-budget.sh .` 实测收紧：coldstart 29055 / agents 104 / arch 156 /
 #     readme 163 / max_ref 206 / max_module 811（入口文档有 45B 余量，agents 临界）。
@@ -165,3 +165,19 @@ max_module_lines 2400
 #     `Elab/Term/Impl.vuna` 2236 → 2300 行（+64 行注释）。这是文档覆盖率门禁要求的注释
 #     行数、不是代码膨胀，按既有「格式化/文档规则驱动的单点增长」先例把 max_module_lines
 #     复标定到 2300；其余指标不变（max_ref 仍 415）。
+#   - 2026-11-10 records-v2 R1 rebase 到 main 后复标定：main（0caef76）实测已有
+#     max_module_lines 2430（Elab/Term/Impl.vuna，native-effects N1 的双形状改动）> 旧预算
+#     2400，属 R1 之前的既有漏标定；R1 未改该文件。按实测重标定到 2430，其余指标不变。
+#   - 2026-11-10 records-v2 R2 rebase 到 main 632d089 后复标定：main 实测
+#     coldstart 39486 / arch 220 / max_module 2450 均已超旧预算 39333/219/2430
+#     （main 最近一轮 iface 工作加了行，属既有漂移；R2 未改 AGENTS/architecture）。
+#     R2 删除 record 降级死代码把 max_module 从 2430 压到 2418（Impl.vuna），按 ratchet
+#     下调到 2418；coldstart/arch 按实测值上调，其余指标不变。
+#   - 2026-11-10 再 rebase 到 main 1561e79（增量 check scoped codegen）：main 让
+#     `Elab/Term/Impl.vuna` 涨到 2489（R2 的删除已含在内），属本轮 main 特性增长；
+#     按实测重标定 max_module_lines 2418 → 2489，其余指标不变。
+#   - 2026-11-10 records-v2 R3：`Elab/Term/Impl.elabEFieldFuel` 改为产出 `TProj` 原语
+#     （+6 行），`Impl.vuna` 2489 → 2495。属特性增长，按实测复标定。
+#   - 2026-11-10 records-v2 R3（TRecUpd 增量）：`Impl.vuna` 2495 → 2497（+2 行构造原语）。
+#   - 2026-11-10 R4 rebase 到 main 0d9c7d1：main 实测 max_module 2515（Impl.vuna，effects N1 4a）
+#     已超旧预算 2497，属 main 漂移；按实测复标定。

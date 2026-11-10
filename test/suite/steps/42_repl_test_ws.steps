@@ -1,0 +1,30 @@
+# 42) M30 P3：REPL 多行/效果 + TestRunner 效果/workspace 聚合
+# REPL：多行定义（`=` 续行 + 缩进 + 空行提交）与纯表达式。
+# `vuna test` 会写 .output：把 corpus/test-m30/ 复制到 $TMPDIR 并重写所有嵌套
+# vuna.toml 的 base 行（包内 workspace 相对路径保持不变）。
+run: sh -c 'cp -R corpus/test-m30 "$TMPDIR/test-m30"; find "$TMPDIR/test-m30" -name vuna.toml -exec sed -i "s|^vuna-base = .*|vuna-base = \"$VUNA_BASE\"|" {} +'
+run: sh -c 'printf "f : Int -> Int\nf x =\n  x + 1\n\nf 41\n:q\n" | "$VUNA" repl 2>&1'
+out-contains: 42
+# REPL：IO 表达式走临时包编译+运行（效果输出直接到终端）。
+run: sh -c 'printf "import Base.IO.Host\nprint \"hi\"\n:q\n" | "$VUNA" repl --privileged 2>&1'
+out-contains: hi
+# REPL：不完整输入 + 空行 → 报错丢弃但继续。
+run: sh -c 'printf "x =\n\n:q\n" | "$VUNA" repl 2>&1'
+out-contains: 输入不完整
+# TestRunner：workspace 聚合（根包 3 纯 + 1 IO，成员 1 纯）。
+run: "$VUNA" test "$TMPDIR/test-m30" 2>&1
+out-contains: workspace: 5 passed, 0 failed
+out-contains: ok   IoPass.vuna
+out-contains: -- test-m30-member --
+# 失败路径：纯失败 / 效果失败（退出码非 0）/ 不支持的 main 类型 / 聚合失败。
+run: "$VUNA" test "$TMPDIR/test-m30/bad-pure" >/dev/null 2>&1
+exit: 1
+run: "$VUNA" test "$TMPDIR/test-m30/bad-io" >/dev/null 2>&1
+exit: 1
+run: "$VUNA" test "$TMPDIR/test-m30/bad-other" >/dev/null 2>&1
+exit: 1
+run: "$VUNA" test "$TMPDIR/test-m30/ws-fail" >/dev/null 2>&1
+exit: 1
+# 单包行为不变：没有 test/ 仍是输入错误（exit 2）。
+run: "$VUNA" test ../base >/dev/null 2>&1
+exit: 2

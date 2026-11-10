@@ -1,0 +1,18 @@
+# 44l2) M34.6（5a/5c）LSP 大闭包一致 + REPL termAux 缓存：
+#      - 大闭包文件（仓库根包 lib/）的 LSP 诊断在接口路径与全量路径一致；
+#      - REPL 同进程多次求值复用 termAux 缓存，结果不变（:reset 后仍正确）。
+# LSP 帧驱动：Content-Length 精确字节（body 后没有换行）；didOpen 是 Full 同步。
+# 仓库根包路径由 `cd ..`（test/ 的上一级）取得；base 接口先预热（原脚本的 repo 缓存）。
+run: "$VUNA" check "$VUNA_BASE"
+run: d=$(cd .. && pwd); uri="file://$d/lib/Vuna/Interp.vuna"; log="$TMPDIR/lsp-big-iface.log"; esc() { sed -e 's/$/\\n/' "$1" | tr -d '\n'; }; fr() { printf 'Content-Length: %s\r\n\r\n%s' "$(printf '%s' "$1" | wc -c)" "$1"; }; init=$(printf '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"processId":null,"rootUri":"file://%s","capabilities":{}}}' "$d"); open=$(printf '{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"%s","languageId":"vuna","version":1,"text":"%s"}}}' "$uri" "$(esc "$d/lib/Vuna/Interp.vuna")"); { fr "$init"; fr '{"jsonrpc":"2.0","method":"initialized","params":{}}'; fr "$open"; sleep 0.3; fr '{"jsonrpc":"2.0","id":9,"method":"shutdown","params":null}'; fr '{"jsonrpc":"2.0","method":"exit","params":null}'; } | ( cd "$d" && "$VUNA" lsp >"$log" 2>/dev/null ); grep -o '"diagnostics":\[[^]]*\]' "$log" | tail -1 | sed 's/^"diagnostics"://' > "$TMPDIR/lsp-big-iface.diag"
+run: d=$(cd .. && pwd); uri="file://$d/lib/Vuna/Interp.vuna"; log="$TMPDIR/lsp-big-full.log"; esc() { sed -e 's/$/\\n/' "$1" | tr -d '\n'; }; fr() { printf 'Content-Length: %s\r\n\r\n%s' "$(printf '%s' "$1" | wc -c)" "$1"; }; init=$(printf '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"processId":null,"rootUri":"file://%s","capabilities":{}}}' "$d"); open=$(printf '{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"%s","languageId":"vuna","version":1,"text":"%s"}}}' "$uri" "$(esc "$d/lib/Vuna/Interp.vuna")"); { fr "$init"; fr '{"jsonrpc":"2.0","method":"initialized","params":{}}'; fr "$open"; sleep 0.3; fr '{"jsonrpc":"2.0","id":9,"method":"shutdown","params":null}'; fr '{"jsonrpc":"2.0","method":"exit","params":null}'; } | ( cd "$d" && TMPDIR="$TMPDIR/lsp-big-full-cache" VUNA_IFACE_TOOL=0 "$VUNA" lsp >"$log" 2>/dev/null ); grep -o '"diagnostics":\[[^]]*\]' "$log" | tail -1 | sed 's/^"diagnostics"://' > "$TMPDIR/lsp-big-full.diag"
+read: $TMPDIR/lsp-big-iface.diag
+out-equals-file: $TMPDIR/lsp-big-full.diag
+# D) REPL：同进程多次求值复用 termAux 缓存（依赖接口路径），结果不变。
+run: cd .. && printf 'import Vuna.Compiler.Driver.Dt\n1 + 1\n2 + 2\n3 + 3\n:q\n' | "$VUNA" repl 2>&1
+out-contains: vuna> 2
+out-contains: vuna> 4
+out-contains: vuna> 6
+out-not-contains: TC_
+run: cd .. && printf 'import Vuna.Compiler.Driver.Dt\n1 + 1\n:reset\n2 + 2\n:q\n' | "$VUNA" repl 2>&1
+out-contains: vuna> 4

@@ -145,6 +145,8 @@ data TcErr : Nat -> Type where
   WhereNeedsSig : String -> String -> TcErr (Succ (Succ Zero))
   -- M42：`deriving via field` 只允许自动去装箱的单字段包装。
   DerivingViaUnboxedRequired : TcErr Zero
+  -- R1（records-v2）：`transparent record` 声明不满足「擦除后恰好一个运行时字段」（含递归）。
+  ReprTransparentInvalid : TcErr Zero
 
 -- ---------------------------------------------------------------
 -- code 派生（唯一真源；`gen-errors` 与 throw 都用它）
@@ -252,6 +254,7 @@ tcCode (TypeMismatch _ _) = "TC_TypeMismatch"
 tcCode (TypeMismatchCaseBranch _ _) = "TC_TypeMismatchCaseBranch"
 tcCode (WhereNeedsSig _ _) = "TC_WhereNeedsSig"
 tcCode DerivingViaUnboxedRequired = "TC_DerivingViaUnboxedRequired"
+tcCode ReprTransparentInvalid = "TC_ReprTransparentInvalid"
 
 -- ---------------------------------------------------------------
 -- 模板（构造子 payload，占位符 `<0>`/`<1>`；已去掉旧 `DT: ` 前缀）
@@ -366,6 +369,8 @@ tcTemplate (WhereNeedsSig _ _) =
   "where binding `<0>` needs a type signature (write `<1> : <type>` before the clause)"
 tcTemplate DerivingViaUnboxedRequired =
   "deriving via field requires a zero-cost single-field wrapper (auto-unboxed)"
+tcTemplate ReprTransparentInvalid =
+  "declared transparent requires exactly one non-recursive runtime field"
 tcTemplate (LinearUnused _) =
   "linear binder `<0>` must be used exactly once at runtime, but it is never used"
 tcTemplate (LinearOverused _) =
@@ -529,7 +534,8 @@ tcChunk9 =
 tcChunk10 : List TcEntry
 tcChunk10 =
   [ TcEntry (tcCode (WhereNeedsSig "" "")) (tcTemplate (WhereNeedsSig "" "")) "where 绑定缺类型签名",
-    TcEntry (tcCode DerivingViaUnboxedRequired) (tcTemplate DerivingViaUnboxedRequired) "deriving via field 需要自动去装箱的单字段包装"
+    TcEntry (tcCode DerivingViaUnboxedRequired) (tcTemplate DerivingViaUnboxedRequired) "deriving via field 需要自动去装箱的单字段包装",
+    TcEntry (tcCode ReprTransparentInvalid) (tcTemplate ReprTransparentInvalid) "transparent record 要求擦除后恰好一个（非递归）运行时字段"
   ]
 
 tcChunk11 : List TcEntry

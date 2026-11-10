@@ -115,12 +115,36 @@ sumInts (x :: rest) = x + sumInts rest
 -- ---------------------------------------------------------------
 -- 临时目录与 helper
 -- ---------------------------------------------------------------
+-- 临时根必须位于**任何 vuna.toml 之外**：§39 一类用例要验证「无 manifest → base-only」，
+-- 若临时根落在包内（Nix 沙箱里 TMPDIR 可能就是工作树根），向上找 manifest 会命中仓库根包，
+-- 上下文语义被悄悄改写。策略：优先 TMPDIR，其次 /tmp；两者都在
+-- manifest 内时回落 TMPDIR（调用方自己的断言会暴露问题）。
+hasManifestAncestorFuel : Int -> String -> Bool
+hasManifestAncestorFuel fuel dir = if fuel <= 0 then False
+else if pathExistsFile "${dir}/vuna.toml" then True
+else
+  let
+    parent = Vuna.Cli.Args.parentOf dir
+  in if parent == dir then False else hasManifestAncestorFuel (fuel - 1) parent
+
+hasManifestAncestor : String -> Bool
+hasManifestAncestor dir = hasManifestAncestorFuel 64 dir
+
+firstManifestFree : List String -> Maybe String
+firstManifestFree [] = Nothing
+firstManifestFree (dir :: rest) =
+  if pathExistsDir dir && not (hasManifestAncestor dir) then Just dir else firstManifestFree rest
+
 tempBase : String
 tempBase =
   let
     value = envVar "TMPDIR"
-  in if value == "" then "/tmp"
-  else if endsWith "/" value then substring 0 (byteLength value - 1) value else value
+    primary =
+      if value == "" then "/tmp"
+      else if endsWith "/" value then substring 0 (byteLength value - 1) value else value
+  in case firstManifestFree [primary, "/tmp"] of
+    Just dir => dir
+    Nothing => primary
 
 freshTempRoot : Int -> String -> String
 freshTempRoot fuel candidate = if fuel <= 0 then candidate
@@ -190,6 +214,14 @@ withEnvIface env argv = withEnvIfaceAt env "${env.envTmp}/iface" argv
 withEnvIfaceAt : Env -> String -> List String -> List String
 withEnvIfaceAt env ifaceDir argv =
   withEnv env (append ["env", "TMPDIR=${env.envTmp}", "VUNA_IFACE_DIR=${ifaceDir}"] argv)
+
+-- steps case 的进程环境：TMPDIR/iface/REPL 历史都按 **case** 隔离（同一 worker 内多个
+-- steps case 顺序执行，共享 envTmp 会让 `$TMPDIR/ws1` 之类互相污染）。章节脚本时代的
+-- harness 用 mktemp 给每段一个独立 tmp；这里由 runner 直接提供。
+withStepsEnv : Env -> String -> List String -> List String
+withStepsEnv env caseTmp argv =
+  withEnv env
+    (append ["env", "TMPDIR=${caseTmp}", "VUNA_IFACE_DIR=${caseTmp}/iface", "VUNA_REPL_HISTORY=${caseTmp}/repl-history"] argv)
 
 combinedOut : CmdResult -> String
 combinedOut r = r.cmdOut ++ r.cmdErr
@@ -406,7 +438,7 @@ errorCase env c source expected wantInterp wantCheck wantCompile =
   in finishCase c.caseId start (append interpA (append checkA compileA))
 
 -- ---------------------------------------------------------------
--- section case
+-- 小工具
 -- ---------------------------------------------------------------
 parseLeadingInt : String -> Maybe Int
 parseLeadingInt s = parseDigits (strUnpack s) 0 0
@@ -416,66 +448,6 @@ parseDigits [] acc count = if count == 0 then Nothing else Just acc
 parseDigits (c :: rest) acc count =
   if c >= 48 && c <= 57 then parseDigits rest (acc * 10 + (c - 48)) (count + 1)
   else if count == 0 then Nothing else Just acc
-
-sectionChecks : String -> Int
-sectionChecks text =
-  let
-    revLines = reverse (lines text)
-  in findSectionChecks revLines
-
-findSectionChecks : List String -> Int
-findSectionChecks [] = 0
-findSectionChecks (line :: rest) = if startsWith "vuna tests passed (" line then
-  let
-    body = substring 19 (byteLength line - 19) line
-    numText = case split " " body of
-      first :: _ => first
-      [] => body
-  in fromMaybe 0 (parseLeadingInt numText)
-else if contains " passed, " line then
-  let
-    p = fromMaybe 0 (parseLeadingInt line)
-    after = case split "passed, " line of
-      _ :: rest => case rest of
-        first :: _ => first
-        [] => "0"
-      [] => "0"
-    fText = case split " failed" after of
-      first :: _ => first
-      [] => after
-  in p + fromMaybe 0 (parseLeadingInt (trim fText))
-else findSectionChecks rest
-
-sectionEnv : Env -> Case -> List String -> List String
-sectionEnv env c argv =
-  if env.envWorker && not (serialSection c) then withEnvIface env argv else withEnv env argv
-
-sectionCase : Env -> Case -> String -> CaseResult
-sectionCase env c script =
-  let
-    start = runIO nowMicros
-    r =
-      runCmdMerged env "${c.caseId}-section" env.envRoot c.caseTimeout
-        (sectionEnv env c ["sh", script])
-    out = combinedOut r
-    checks = sectionChecks out
-    ok = r.cmdCode == 0
-    ms = (runIO nowMicros - start) / 1000
-    detail = if ok then "" else "section failed (exit ${strOfInt r.cmdCode})\n${tailText out}"
-  in CaseResult c.caseId (if ok then "pass" else "fail") (if ok then 1 else 0) (if ok then 0 else 1)
-    checks ms (if ok then [] else [detail])
-
-tailText : String -> String
-tailText text = join "\n" (takeLast 40 (lines text))
-
-takeLast : Int -> List a -> List a
-takeLast n xs = drop (listLength xs - n) xs
-
-drop : Int -> List a -> List a
-drop n xs = if n <= 0 then xs
-else case xs of
-  [] => []
-  x :: rest => drop (n - 1) rest
 
 -- ---------------------------------------------------------------
 -- 单 case 分派
@@ -687,6 +659,329 @@ runtimeCase env c source expectedErr expectedExit =
     else [assertExit "compile exit" comp.cmdCode]
   in finishCase c.caseId start buildA
 
+-- ---------------------------------------------------------------
+-- 声明式步进用例（`*.steps`）
+-- ---------------------------------------------------------------
+-- 行式指令，一个文件 = 一个 case。步骤由 `run:` / `read:` 开启，其余指令挂当前步：
+--   exit: 0 | nonzero | <n>          缺省 0（run/read 默认必须成功）
+--   out-contains: / out-not-contains: / out-equals: <literal> / out-equals-file: <path>
+--   file-exists: / file-absent: / file-contains: <path> <fragment>
+-- `for-each: <shell word list>` … `end:` 把块内步骤按匹配项各跑一次；`{item}` = 匹配项
+-- （去尾 `/`）、`{name}` = basename、`{stem}` = 去掉结尾 `.vuna` 的匹配项。空匹配 = 失败。
+-- 路径：`$TMPDIR` 展开为 case 临时根；相对路径按 cwd = test/ 解析。
+record Step where
+  stRun : String
+  stRead : String
+  stExit : String
+  stContains : List String
+  stNotContains : List String
+  stEquals : List String
+  stEqualsFile : List String
+  stFiles : List String
+  stAbsent : List String
+  stFileContains : List (Pair String String)
+
+emptyStep : Step
+emptyStep = Step "" "" "" [] [] [] [] [] [] []
+
+stepWithRun : String -> Step
+stepWithRun body = Step body "" "" [] [] [] [] [] [] []
+
+stepWithRead : String -> Step
+stepWithRead path = Step "" path "" [] [] [] [] [] [] []
+
+record StepGroup where
+  sgGlob : String
+  sgSteps : List Step
+
+record StepParse where
+  spDone : List StepGroup
+  spOpen : Bool
+  spGlob : String
+  spSteps : List Step
+  spErr : String
+
+data StepEdit : Type where
+  SeOk : Step -> StepEdit
+  SeErr : String -> StepEdit
+
+data StepsParse : Type where
+  SpOk : List StepGroup -> StepsParse
+  SpErr : String -> StepsParse
+
+isBlankOrComment : String -> Bool
+isBlankOrComment line =
+  let
+    t = trim line
+  in byteLength t == 0 || startsWith "#" t
+
+firstSpaceIndex : List Int -> Int -> Int
+firstSpaceIndex [] i = 0 - 1
+firstSpaceIndex (c :: rest) i = if c == 32 then i else firstSpaceIndex rest (i + 1)
+
+splitFirstSpace : String -> Pair String String
+splitFirstSpace text =
+  let
+    i = firstSpaceIndex (strUnpack text) 0
+    n = natToInt (byteLength text)
+  in if i < 0 then Pair text ""
+  else Pair (substring 0 (natFromInt i) text)
+    (trim (substring (natFromInt (i + 1)) (natFromInt (n - i - 1)) text))
+
+stepWithExit : Step -> String -> Step
+stepWithExit st x =
+  Step st.stRun st.stRead x st.stContains st.stNotContains st.stEquals st.stEqualsFile st.stFiles
+    st.stAbsent st.stFileContains
+
+stepWithContains : Step -> String -> Step
+stepWithContains st x =
+  Step st.stRun st.stRead st.stExit (append st.stContains [x]) st.stNotContains st.stEquals
+    st.stEqualsFile st.stFiles st.stAbsent st.stFileContains
+
+stepWithNotContains : Step -> String -> Step
+stepWithNotContains st x =
+  Step st.stRun st.stRead st.stExit st.stContains (append st.stNotContains [x]) st.stEquals
+    st.stEqualsFile st.stFiles st.stAbsent st.stFileContains
+
+stepWithEqualsFile : Step -> String -> Step
+stepWithEqualsFile st x =
+  Step st.stRun st.stRead st.stExit st.stContains st.stNotContains st.stEquals
+    (append st.stEqualsFile [x]) st.stFiles st.stAbsent st.stFileContains
+
+stepWithEquals : Step -> String -> Step
+stepWithEquals st x =
+  Step st.stRun st.stRead st.stExit st.stContains st.stNotContains (append st.stEquals [x])
+    st.stEqualsFile st.stFiles st.stAbsent st.stFileContains
+
+stepWithFile : Step -> String -> Step
+stepWithFile st x =
+  Step st.stRun st.stRead st.stExit st.stContains st.stNotContains st.stEquals st.stEqualsFile
+    (append st.stFiles [x]) st.stAbsent st.stFileContains
+
+stepWithAbsent : Step -> String -> Step
+stepWithAbsent st x =
+  Step st.stRun st.stRead st.stExit st.stContains st.stNotContains st.stEquals st.stEqualsFile
+    st.stFiles (append st.stAbsent [x]) st.stFileContains
+
+stepWithFileContains : Step -> Pair String String -> Step
+stepWithFileContains st x =
+  Step st.stRun st.stRead st.stExit st.stContains st.stNotContains st.stEquals st.stEqualsFile
+    st.stFiles st.stAbsent (append st.stFileContains [x])
+
+applyDirective : Step -> String -> StepEdit
+applyDirective st t =
+  let
+    n = byteLength t
+  in if startsWith "exit:" t then SeOk (stepWithExit st (trim (substring 5 (n - 5) t)))
+  else if startsWith "out-contains:" t then SeOk (stepWithContains st (trim (substring 13 (n - 13) t)))
+  else if startsWith "out-not-contains:" t then SeOk (stepWithNotContains st (trim (substring 17 (n - 17) t)))
+  else if startsWith "out-equals-file:" t then SeOk (stepWithEqualsFile st (trim (substring 16 (n - 16) t)))
+  else if startsWith "out-equals:" t then SeOk (stepWithEquals st (trim (substring 11 (n - 11) t)))
+  else if startsWith "file-exists:" t then SeOk (stepWithFile st (trim (substring 12 (n - 12) t)))
+  else if startsWith "file-absent:" t then SeOk (stepWithAbsent st (trim (substring 12 (n - 12) t)))
+  else if startsWith "file-contains:" t then SeOk (stepWithFileContains st (splitFirstSpace (trim (substring 14 (n - 14) t))))
+  else SeErr "unknown step directive: ${t}"
+
+setParseErr : StepParse -> String -> StepParse
+setParseErr st msg = StepParse st.spDone st.spOpen st.spGlob st.spSteps msg
+
+setParseSteps : StepParse -> List Step -> StepParse
+setParseSteps st steps = StepParse st.spDone st.spOpen st.spGlob steps st.spErr
+
+openGroup : StepParse -> String -> StepParse
+openGroup st spec = StepParse st.spDone True spec st.spSteps st.spErr
+
+closeGroup : StepParse -> StepParse
+closeGroup st = StepParse st.spDone False "" st.spSteps st.spErr
+
+pushStep : StepParse -> Step -> StepParse
+pushStep st step = setParseSteps st (step :: st.spSteps)
+
+flushGroup : StepParse -> StepParse
+flushGroup st =
+  if listLength st.spSteps == 0 then st
+  else StepParse (StepGroup st.spGlob (reverse st.spSteps) :: st.spDone) st.spOpen st.spGlob [] st.spErr
+
+-- 逐行解析（不用 foldl / 记录更新：把 `StepParse` 当多态 fold 的累加器、或在递归函数里
+-- 用记录更新，都会触发 QTT 擦除 binder 推断 bug；显式构造器 + 错误字段更直接）。
+parseLine : StepParse -> String -> StepParse
+parseLine st line =
+  let
+    t = trim line
+    n = byteLength t
+  in if st.spErr /= "" then st
+  else if isBlankOrComment line then st
+  else if startsWith "for-each:" t then if st.spOpen then setParseErr st "nested for-each is not supported"
+  else
+    let
+      spec = trim (substring 9 (n - 9) t)
+      flushed = flushGroup st
+    in if byteLength spec == 0 then setParseErr st "for-each needs a shell word list"
+    else openGroup flushed spec
+  else if t == "end:" then if not st.spOpen then setParseErr st "end: without matching for-each"
+  else closeGroup (flushGroup st)
+  else if startsWith "run:" t then pushStep st (stepWithRun (trim (substring 4 (n - 4) t)))
+  else if startsWith "read:" t then pushStep st (stepWithRead (trim (substring 5 (n - 5) t)))
+  else case st.spSteps of
+    [] => setParseErr st "directive before any run:/read: step: ${t}"
+    step :: rest => case applyDirective step t of
+      SeErr e => setParseErr st e
+      SeOk step2 => setParseSteps st (step2 :: rest)
+
+parseLines : List String -> StepParse -> StepParse
+parseLines [] st = st
+parseLines (line :: rest) st = parseLines rest (parseLine st line)
+
+parseStepsV2 : String -> StepsParse
+parseStepsV2 text =
+  let
+    st = parseLines (splitOnChar 10 text) (StepParse [] False "" [] "")
+  in if st.spErr /= "" then SpErr st.spErr
+  else if st.spOpen then SpErr "unclosed for-each: ${st.spGlob}"
+  else
+    let
+      flushed = flushGroup st
+    in SpOk (reverse flushed.spDone)
+
+countGroupSteps : StepGroup -> Int
+countGroupSteps g = listLength g.sgSteps
+
+countStepGroups : List StepGroup -> Int
+countStepGroups [] = 0
+countStepGroups (g :: rest) = countGroupSteps g + countStepGroups rest
+
+replaceAll : String -> String -> String -> String
+replaceAll needle repl text = if byteLength needle == 0 then text else join repl (split needle text)
+
+dropTrailingSlashes : List Int -> List Int
+dropTrailingSlashes [] = []
+dropTrailingSlashes (c :: rest) = if c == 47 then dropTrailingSlashes rest else c :: rest
+
+stripTrailingSlash : String -> String
+stripTrailingSlash text =
+  if byteLength text > 1 then strPack (reverse (dropTrailingSlashes (reverse (strUnpack text))))
+  else text
+
+lastSegment : List String -> String
+lastSegment [] = ""
+lastSegment ([x]) = x
+lastSegment (x :: rest) = lastSegment rest
+
+baseNameOf : String -> String
+baseNameOf path = lastSegment (filter (\part => part /= "") (split "/" path))
+
+stemOf : String -> String
+stemOf path = if endsWith ".vuna" path then substring 0 (byteLength path - 5) path else path
+
+substText : String -> String -> String -> String
+substText item name text =
+  replaceAll "{item}" item (replaceAll "{name}" name (replaceAll "{stem}" (stemOf item) text))
+
+substFileContains : String -> String -> Pair String String -> Pair String String
+substFileContains item name (Pair path frag) =
+  Pair (substText item name path) (substText item name frag)
+
+substStep : String -> String -> Step -> Step
+substStep item name st =
+  let
+    s = substText item name
+  in Step (s st.stRun) (s st.stRead) (s st.stExit) (map s st.stContains) (map s st.stNotContains)
+    (map s st.stEquals) (map s st.stEqualsFile) (map s st.stFiles) (map s st.stAbsent)
+    (map (substFileContains item name) st.stFileContains)
+
+stepPath : Env -> String -> String -> String
+stepPath env caseTmp path =
+  let
+    expanded = replaceAll "$TMPDIR" caseTmp path
+  in if startsWith "/" expanded then expanded else "${env.envCwd}/${expanded}"
+
+exitAsserts : String -> Int -> List Assertion
+exitAsserts spec code =
+  if spec == "" || spec == "0" then [assertExit "exit" code]
+  else if spec == "nonzero" then [assertExitNonZero "exit" code]
+  else [ Assertion "exit" (code == fromMaybe 0 (parseLeadingInt spec)) "expected ${spec}, got ${strOfInt code}"
+  ]
+
+fileContainsAssert : Env -> String -> Pair String String -> Assertion
+fileContainsAssert env caseTmp (Pair path frag) =
+  let
+    text = readMaybeFile (stepPath env caseTmp path)
+  in Assertion "file" (contains frag text) "file ${path} missing fragment: ${frag}\nactual:\n${text}"
+
+outAsserts : Env -> String -> String -> Step -> List Assertion
+outAsserts env caseTmp out st =
+  append (map (\frag => assertContains "out" out frag) st.stContains)
+    (append (map (\frag => Assertion "out" (not (contains frag out)) "unexpected fragment: ${frag}\nactual:\n${out}") st.stNotContains) (append (map (\want => assertEq "out" want (trimNewlines out)) st.stEquals) (append (map (\path => assertEq "out" (trimNewlines (readMaybeFile (stepPath env caseTmp path))) (trimNewlines out)) st.stEqualsFile) (append (map (\f => Assertion "file" (pathExistsFile (stepPath env caseTmp f)) "missing ${f}") st.stFiles) (append (map (\f => Assertion "file" (not (pathExistsFile (stepPath env caseTmp f))) "should not exist: ${f}") st.stAbsent) (map (fileContainsAssert env caseTmp) st.stFileContains))))))
+
+stepAssertsV2 : Env -> String -> Int -> Step -> List Assertion
+stepAssertsV2 env caseTmp timeout st = if byteLength st.stRun > 0 then
+  let
+    r = runCmdMerged env "step" env.envCwd timeout (withStepsEnv env caseTmp ["sh", "-c", st.stRun])
+    timeoutA =
+      if r.cmdTimedOut then [Assertion "timeout" False "step timed out after ${strOfInt timeout}s"]
+      else []
+  in append timeoutA
+    (append (exitAsserts st.stExit r.cmdCode) (outAsserts env caseTmp (combinedOut r) st))
+else if byteLength st.stRead > 0 then
+  let
+    resolved = stepPath env caseTmp st.stRead
+    exists = pathExistsFile resolved
+    missingA = if exists then [] else [Assertion "read" False "no such file: ${st.stRead}"]
+    codeA =
+      if byteLength st.stExit == 0 then [] else exitAsserts st.stExit (if exists then 0 else 1)
+  in append missingA
+    (append codeA (outAsserts env caseTmp (if exists then readMaybeFile resolved else "") st))
+else []
+
+prefixAssertions : String -> List Assertion -> List Assertion
+prefixAssertions name [] = []
+prefixAssertions name (a :: rest) =
+  Assertion "${name}: ${a.assertionName}" a.assertionOk a.assertionDetail
+    :: prefixAssertions name rest
+
+expandLoopItems : Env -> String -> String -> CmdResult
+expandLoopItems env caseTmp spec =
+  let
+    body =
+      "for x in ${spec}; do if [ -e \"$x\" ]; then printf '%s\\n' \"$x\"; else exit 3; fi; done"
+  in runCmdMerged env "for-each" env.envCwd 60 (withStepsEnv env caseTmp ["sh", "-c", body])
+
+loopItemAsserts : Env -> String -> Int -> StepGroup -> String -> List Assertion
+loopItemAsserts env caseTmp timeout g raw =
+  let
+    item = stripTrailingSlash raw
+    name = baseNameOf item
+    steps = map (substStep item name) g.sgSteps
+  in prefixAssertions name (concatMap (stepAssertsV2 env caseTmp timeout) steps)
+
+stepGroupAsserts : Env -> String -> Int -> StepGroup -> List Assertion
+stepGroupAsserts env caseTmp timeout g = if byteLength g.sgGlob == 0 then concatMap (stepAssertsV2 env caseTmp timeout) g.sgSteps
+else
+  let
+    r = expandLoopItems env caseTmp g.sgGlob
+    items = filter (\raw => raw /= "") (lines r.cmdOut)
+  in if r.cmdCode /= 0 then [ Assertion "for-each" False "failed to expand ${g.sgGlob} (exit ${strOfInt r.cmdCode}):\n${combinedOut r}"
+  ]
+  else if listLength items == 0 then [Assertion "for-each" False "matched nothing: ${g.sgGlob}"]
+  else concatMap (loopItemAsserts env caseTmp timeout g) items
+
+stepsCase : Env -> Case -> String -> CaseResult
+stepsCase env c path =
+  let
+    start = runIO nowMicros
+    caseTmp = "${env.envTmp}/c-${strOfInt (hashTextStrong c.caseId)}"
+    _ = ensureDirPath caseTmp
+    text = if pathExistsFile path then runIO (readFile path) else ""
+  in case parseStepsV2 text of
+    SpErr msg =>
+      finishCase c.caseId start [Assertion "steps" False "parse error in ${path}: ${msg}"]
+    SpOk groups =>
+      let
+        assertions = concatMap (stepGroupAsserts env caseTmp c.caseTimeout) groups
+        hasWork = countStepGroups groups > 0
+      in finishCase c.caseId start
+        (Assertion "steps" hasWork "no run:/read: directive in ${path}" :: assertions)
+
 seedCase : Env -> Case -> String -> String -> CaseResult
 seedCase env c source expected =
   let
@@ -722,7 +1017,7 @@ runCaseGo env c = case c.caseKind of
   CFix source expected => fixCase env c source expected
   CRuntime source expected exitCode => runtimeCase env c source expected exitCode
   CSeed source expected => seedCase env c source expected
-  CSection script => sectionCase env c script
+  CSteps path => stepsCase env c path
   CBroken msg =>
     let
       start = runIO nowMicros
@@ -845,40 +1140,14 @@ else
     failed = r.resStatus == "fail"
   in runCasesIndexedGo env verbose failFast quiet resultsDir rest (r :: acc) (failFast && failed)
 
-isSectionCase : Case -> Bool
-isSectionCase c = case c.caseKind of
-  CSection _ => True
-  _ => False
-
-isFamilyCase : Case -> Bool
-isFamilyCase c = not (isSectionCase c)
-
 not : Bool -> Bool
 not True = False
 not False = True
 
--- 共享仓库路径/默认 iface 布局的 section 仍串行；其余 section 与 family 一样进 worker。
-serialSectionIds : List String
-serialSectionIds = ["38", "42", "47", "57", "58", "59"]
-
-serialSection : Case -> Bool
-serialSection c = case c.caseKind of
-  CSection _ => memName c.caseSection serialSectionIds
-  _ => False
-
-parallelSection : Case -> Bool
-parallelSection c = case c.caseKind of
-  CSection _ => not (serialSection c)
-  _ => False
-
-parallelCase : Case -> Bool
-parallelCase c = isFamilyCase c || parallelSection c
-
 runWorker : Env -> SuiteOpts -> List Case -> Int -> Int -> Int
 runWorker env opts cases index count =
   let
-    parallel = filter parallelCase cases
-    indexed = indexedCases parallel index count
+    indexed = indexedCases cases index count
     resultsDir = case opts.suiteResultsDir of
       Just d => d
       Nothing => "${env.envTmp}/results"
@@ -995,49 +1264,25 @@ finishResults env opts results =
     _ = if opts.suiteJSON then printJSON results else printLine (summarize results)
   in if bad + strictBad == 0 then 0 else 1
 
-runSerial : Env -> SuiteOpts -> String -> List Case -> List CaseResult
-runSerial env opts serialDir serialCases =
-  if listLength serialCases <= 0 then []
-  else runCasesIndexed env opts.suiteVerbose opts.suiteFailFast (opts.suiteQuiet || opts.suiteJSON)
-    serialDir (indexAll serialCases 0 [])
-
 runParent : Env -> SuiteOpts -> Suite -> List Case -> Int
 runParent env opts suite cases =
   let
     jobs = resolveJobs env opts
-    serialCases = filter serialSection cases
-    parallelCases = filter parallelCase cases
-    n = listLength parallelCases
+    n = listLength cases
     effective = if jobs > n then if n <= 0 then 1 else n else jobs
     indexed = indexAll cases 0 []
     resultsDir = case opts.suiteResultsDir of
       Just d => d
       Nothing => "${env.envTmp}/results"
-    serialDir = "${resultsDir}/serial"
     _ = ensureDirPath resultsDir
   in if effective <= 1 then finishResults env opts
     (runCasesIndexed env opts.suiteVerbose opts.suiteFailFast opts.suiteJSON resultsDir indexed)
-  else if opts.suiteFailFast then
-    let
-      -- fail-fast：先串行 lane，失败则不再启动 worker。
-      _ = if listLength serialCases > 0 then ensureDirPath serialDir else 0
-      serialResults = runSerial env opts serialDir serialCases
-      stop = listLength (filter isFailed serialResults) > 0
-      pids =
-        if stop || n <= 0 then []
-        else spawnWorkers env opts resultsDir effective (effective + 1) 0 []
-      _ = waitPids pids
-      parallelResults = if stop || n <= 0 then [] else collectResults resultsDir n
-    in finishResults env opts (append serialResults parallelResults)
   else
     let
-      -- 默认：worker 与串行 lane 同时跑；section 在 worker 里有独立 TMPDIR/iface 镜像。
-      pids = if n <= 0 then [] else spawnWorkers env opts resultsDir effective (effective + 1) 0 []
-      _ = if listLength serialCases > 0 then ensureDirPath serialDir else 0
-      serialResults = runSerial env opts serialDir serialCases
+      pids = spawnWorkers env opts resultsDir effective (effective + 1) 0 []
       _ = waitPids pids
-      parallelResults = if n <= 0 then [] else collectResults resultsDir n
-    in finishResults env opts (append serialResults parallelResults)
+      results = collectResults resultsDir n
+    in finishResults env opts results
 
 indexAll : List Case -> Int -> List (Pair Int Case) -> List (Pair Int Case)
 indexAll [] i acc = reverse acc
@@ -1135,18 +1380,22 @@ casePaths env c = case c.caseKind of
   CFix source expected => [stripRoot env source, stripRoot env expected]
   CRuntime source expected _ => [stripRoot env source, stripRoot env expected]
   CSeed source expected => [stripRoot env source, stripRoot env expected]
-  CSection script => [stripRoot env script]
+  CSteps path => [stripRoot env path]
   CBroken _ => []
+
+-- 章节/步骤文件的文本认领：夹具变更时，文件里提到该 corpus 目录就算“相关”。
+claimTextTouches : Env -> String -> List String -> Bool
+claimTextTouches env path changed =
+  let
+    text = runIO (readFile path)
+    corpusChanges = filter (\p => startsWith "test/corpus/" p) changed
+  in any (\p => contains (corpusDirPrefix p) text) corpusChanges
+    || any (\p => contains (stripRoot env path) p) changed
 
 caseAffected : Env -> List String -> Case -> Bool
 caseAffected env changed c = if any isGlobalChange changed then True
 else case c.caseKind of
-  CSection script =>
-    let
-      text = runIO (readFile script)
-      corpusChanges = filter (\p => startsWith "test/corpus/" p) changed
-    in any (\p => contains (corpusDirPrefix p) text) corpusChanges
-      || any (\p => contains (stripRoot env script) p) changed
+  CSteps path => claimTextTouches env path changed
   _ =>
     let
       paths = casePaths env c
@@ -1182,11 +1431,11 @@ rootOfPath path =
   if endsWith "/app/Main.vuna" path then "${Vuna.Cli.Args.parentOf (Vuna.Cli.Args.parentOf path)}/"
   else path
 
-sectionTextPairs : List Case -> List (Pair String String)
-sectionTextPairs [] = []
-sectionTextPairs (c :: rest) = case c.caseKind of
-  CSection script => Pair script (runIO (readFile script)) :: sectionTextPairs rest
-  _ => sectionTextPairs rest
+claimTextPairs : List Case -> List (Pair String String)
+claimTextPairs [] = []
+claimTextPairs (c :: rest) = case c.caseKind of
+  CSteps path => Pair path (runIO (readFile path)) :: claimTextPairs rest
+  _ => claimTextPairs rest
 
 anyText : List (Pair String String) -> String -> Bool
 anyText [] rel = False
@@ -1220,7 +1469,7 @@ auditOrphans suite =
       Env root "${root}/test" "/tmp" "" "" "${root}/base" "ocamlopt" "" "" False 0 False False
         "/tmp/vuna-build" (runIO (newRef (sessionNew "/tmp/iface-session")))
     cases = discoverCases suite
-    texts = sectionTextPairs cases
+    texts = claimTextPairs cases
     fixtures =
       filter (\path => not (auditPathIgnored path)) (collectVunaFiles "${root}/test/corpus")
   in filter (\path => not (auditClaimed env cases texts (stripRoot env path))) fixtures

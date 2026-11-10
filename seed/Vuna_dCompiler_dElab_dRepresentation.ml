@@ -1,18 +1,18 @@
 open Vuna_runtime
-type t_Vuna_dCompiler_dElab_dRepresentation_dUnboxedCand = C_Vuna_dCompiler_dElab_dRepresentation_dUnboxedCand_UnboxedCand of (string) * (Vuna_dCompiler_dElab_dTypes.t_Vuna_dCompiler_dElab_dTypes_dDtCtor) * (int)
+type t_Vuna_dCompiler_dElab_dRepresentation_dUnboxedCand = { f_Vuna_dCompiler_dElab_dRepresentation_dUnboxedCand_unboxedCandName : string; f_Vuna_dCompiler_dElab_dRepresentation_dUnboxedCand_unboxedCandCtor : Vuna_dCompiler_dElab_dTypes.t_Vuna_dCompiler_dElab_dTypes_dDtCtor; f_Vuna_dCompiler_dElab_dRepresentation_dUnboxedCand_unboxedCandIndex : int }
 
 let v_Vuna_dCompiler_dElab_dRepresentation_dunboxedCandName = (fun mc0 -> (match mc0 with
-  | C_Vuna_dCompiler_dElab_dRepresentation_dUnboxedCand_UnboxedCand (dtb__0, dtb__1, dtb__2) -> dtb__0
+  | { f_Vuna_dCompiler_dElab_dRepresentation_dUnboxedCand_unboxedCandName = dtb__0; f_Vuna_dCompiler_dElab_dRepresentation_dUnboxedCand_unboxedCandCtor = dtb__1; f_Vuna_dCompiler_dElab_dRepresentation_dUnboxedCand_unboxedCandIndex = dtb__2 } -> dtb__0
   | _ -> failwith "DT: impossible branch"
 ))
 
 let v_Vuna_dCompiler_dElab_dRepresentation_dunboxedCandCtor = (fun mc0 -> (match mc0 with
-  | C_Vuna_dCompiler_dElab_dRepresentation_dUnboxedCand_UnboxedCand (dtb__3, dtb__4, dtb__5) -> dtb__4
+  | { f_Vuna_dCompiler_dElab_dRepresentation_dUnboxedCand_unboxedCandName = dtb__3; f_Vuna_dCompiler_dElab_dRepresentation_dUnboxedCand_unboxedCandCtor = dtb__4; f_Vuna_dCompiler_dElab_dRepresentation_dUnboxedCand_unboxedCandIndex = dtb__5 } -> dtb__4
   | _ -> failwith "DT: impossible branch"
 ))
 
 let v_Vuna_dCompiler_dElab_dRepresentation_dunboxedCandIndex = (fun mc0 -> (match mc0 with
-  | C_Vuna_dCompiler_dElab_dRepresentation_dUnboxedCand_UnboxedCand (dtb__6, dtb__7, dtb__8) -> dtb__8
+  | { f_Vuna_dCompiler_dElab_dRepresentation_dUnboxedCand_unboxedCandName = dtb__6; f_Vuna_dCompiler_dElab_dRepresentation_dUnboxedCand_unboxedCandCtor = dtb__7; f_Vuna_dCompiler_dElab_dRepresentation_dUnboxedCand_unboxedCandIndex = dtb__8 } -> dtb__8
   | _ -> failwith "DT: impossible branch"
 ))
 
@@ -66,17 +66,19 @@ let v_Vuna_dCompiler_dElab_dRepresentation_dtermIsFunction = (fun mc0 -> (match 
   | _ -> false
 ))
 
-let v_Vuna_dCompiler_dElab_dRepresentation_dunboxedCandidateOfData = (fun datas d -> (if (v_Vuna_dCompiler_dElab_dRepresentation_disSpecialUnboxFamily (Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_ddtDataName d)) then Base_dList.C_Base_dList_dList_Nil else (match (Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_ddtDataCtors d) with
+let v_Vuna_dCompiler_dElab_dRepresentation_dreprIsOpaque = (fun mc0 -> (match mc0 with
+  | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dReprTier_ReprOpaque -> true
+  | _ -> false
+))
+
+let v_Vuna_dCompiler_dElab_dRepresentation_dunboxedCandidateOfData = (fun datas d -> (if (v_Vuna_dCompiler_dElab_dRepresentation_disSpecialUnboxFamily (Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_ddtDataName d)) then Base_dList.C_Base_dList_dList_Nil else (if (v_Vuna_dCompiler_dElab_dRepresentation_dreprIsOpaque (Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_ddtDataRepr d)) then Base_dList.C_Base_dList_dList_Nil else (match (Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_ddtDataCtors d) with
   | Base_dList.C_Base_dList_dList_Nil -> Base_dList.C_Base_dList_dList_Nil
   | Base_dList.C_Base_dList_dList_Cons (dtb__39, dtb__40) -> (match dtb__40 with
   | Base_dList.C_Base_dList_dList_Nil -> (match (v_Vuna_dCompiler_dElab_dRepresentation_dkeptIndices (v_Vuna_dCompiler_dElab_dRepresentation_dctorKeepFlags dtb__39)) with
   | Base_dList.C_Base_dList_dList_Nil -> Base_dList.C_Base_dList_dList_Nil
   | Base_dList.C_Base_dList_dList_Cons (dtb__41, dtb__42) -> (match dtb__42 with
-  | Base_dList.C_Base_dList_dList_Nil -> (if (dtb__41 >= (Base_dList.v_Base_dList_dlength (match d with
-  | Vuna_dCompiler_dElab_dTypes.C_Vuna_dCompiler_dElab_dTypes_dDtData_DtData (dtb__43, dtb__44, dtb__45, dtb__46, dtb__47, dtb__48) -> dtb__44
-  | _ -> failwith "DT: impossible branch"
-))) then (match ((v_Vuna_dCompiler_dElab_dRepresentation_dctorFieldDomainTerm dtb__39) dtb__41) with
-  | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__49) -> (if (v_Vuna_dCompiler_dElab_dRepresentation_dtermIsFunction dtb__49) then Base_dList.C_Base_dList_dList_Nil else (if ((v_Vuna_dCompiler_dElab_dRepresentation_dtermRepresentable datas) dtb__49) then (Base_dList.C_Base_dList_dList_Cons ((C_Vuna_dCompiler_dElab_dRepresentation_dUnboxedCand_UnboxedCand ((Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_ddtDataName d), dtb__39, dtb__41)), Base_dList.C_Base_dList_dList_Nil)) else Base_dList.C_Base_dList_dList_Nil))
+  | Base_dList.C_Base_dList_dList_Nil -> (if (dtb__41 >= (Base_dList.v_Base_dList_dlength (d).Vuna_dCompiler_dElab_dTypes.f_Vuna_dCompiler_dElab_dTypes_dDtData_dtDataParams)) then (match ((v_Vuna_dCompiler_dElab_dRepresentation_dctorFieldDomainTerm dtb__39) dtb__41) with
+  | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__43) -> (if (v_Vuna_dCompiler_dElab_dRepresentation_dtermIsFunction dtb__43) then Base_dList.C_Base_dList_dList_Nil else (if ((v_Vuna_dCompiler_dElab_dRepresentation_dtermRepresentable datas) dtb__43) then (Base_dList.C_Base_dList_dList_Cons ({ f_Vuna_dCompiler_dElab_dRepresentation_dUnboxedCand_unboxedCandName = (Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_ddtDataName d); f_Vuna_dCompiler_dElab_dRepresentation_dUnboxedCand_unboxedCandCtor = dtb__39; f_Vuna_dCompiler_dElab_dRepresentation_dUnboxedCand_unboxedCandIndex = dtb__41 }, Base_dList.C_Base_dList_dList_Nil)) else Base_dList.C_Base_dList_dList_Nil))
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing -> Base_dList.C_Base_dList_dList_Nil
   | _ -> failwith "DT: impossible branch"
 ) else Base_dList.C_Base_dList_dList_Nil)
@@ -87,39 +89,39 @@ let v_Vuna_dCompiler_dElab_dRepresentation_dunboxedCandidateOfData = (fun datas 
   | _ -> Base_dList.C_Base_dList_dList_Nil
 )
   | _ -> failwith "DT: impossible branch"
-)))
+))))
 
 let v_Vuna_dCompiler_dElab_dRepresentation_dunboxedCandidates = (fun datas -> ((Base_dList.v_Base_dList_dconcatMap (v_Vuna_dCompiler_dElab_dRepresentation_dunboxedCandidateOfData datas)) datas))
 
 let v_Vuna_dCompiler_dElab_dRepresentation_dcandidateNames = (fun cands -> ((Base_dList.v_Base_dList_dmap v_Vuna_dCompiler_dElab_dRepresentation_dunboxedCandName) cands))
 
 let v_Vuna_dCompiler_dElab_dRepresentation_dcandidateRefs = (fun datas names cand -> (match ((v_Vuna_dCompiler_dElab_dRepresentation_dctorFieldDomainTerm (v_Vuna_dCompiler_dElab_dRepresentation_dunboxedCandCtor cand)) (v_Vuna_dCompiler_dElab_dRepresentation_dunboxedCandIndex cand)) with
-  | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__50) -> ((Base_dList.v_Base_dList_dfilter (fun n -> ((Base_dList.v_Base_dList_dmemName n) names))) (Vuna_dCompiler_dCore_dTerm.v_Vuna_dCompiler_dCore_dTerm_dtermGlobalNames dtb__50))
+  | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__44) -> ((Base_dList.v_Base_dList_dfilter (fun n -> ((Base_dList.v_Base_dList_dmemName n) names))) (Vuna_dCompiler_dCore_dTerm.v_Vuna_dCompiler_dCore_dTerm_dtermGlobalNames dtb__44))
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing -> Base_dList.C_Base_dList_dList_Nil
   | _ -> failwith "DT: impossible branch"
 ))
 
-let v_Vuna_dCompiler_dElab_dRepresentation_dcandidateEdges = (fun datas names cands -> ((Base_dList.v_Base_dList_dmap (fun cand -> (Base_dPair.C_Base_dPair_dPair_Pair ((v_Vuna_dCompiler_dElab_dRepresentation_dunboxedCandName cand), (((v_Vuna_dCompiler_dElab_dRepresentation_dcandidateRefs datas) names) cand))))) cands))
+let v_Vuna_dCompiler_dElab_dRepresentation_dcandidateEdges = (fun datas names cands -> ((Base_dList.v_Base_dList_dmap (fun cand -> { Base_dPair.f_Base_dPair_dPair_first = (v_Vuna_dCompiler_dElab_dRepresentation_dunboxedCandName cand); Base_dPair.f_Base_dPair_dPair_second = (((v_Vuna_dCompiler_dElab_dRepresentation_dcandidateRefs datas) names) cand) })) cands))
 
 let rec v_Vuna_dCompiler_dElab_dRepresentation_dlookupNeighbors = (fun mc0 mc1 -> (match mc1 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__51, dtb__52) -> (if ((Base_dPair.v_Base_dPair_dfirstOf dtb__51) = mc0) then (Base_dPair.v_Base_dPair_dsecondOf dtb__51) else ((v_Vuna_dCompiler_dElab_dRepresentation_dlookupNeighbors mc0) dtb__52))
+  | Base_dList.C_Base_dList_dList_Cons (dtb__45, dtb__46) -> (if ((Base_dPair.v_Base_dPair_dfirstOf dtb__45) = mc0) then (Base_dPair.v_Base_dPair_dsecondOf dtb__45) else ((v_Vuna_dCompiler_dElab_dRepresentation_dlookupNeighbors mc0) dtb__46))
   | Base_dList.C_Base_dList_dList_Nil -> Base_dList.C_Base_dList_dList_Nil
   | _ -> failwith "DT: impossible branch"
 ))
 
 let rec v_Vuna_dCompiler_dElab_dRepresentation_dreachesBackTo = (fun fuel edges visited target node -> (if (fuel <= 0) then true else (((((v_Vuna_dCompiler_dElab_dRepresentation_danyReachBack (fuel - 1)) edges) visited) target) ((v_Vuna_dCompiler_dElab_dRepresentation_dlookupNeighbors node) edges))))
 and v_Vuna_dCompiler_dElab_dRepresentation_danyReachBack = (fun mc0 mc1 mc2 mc3 mc4 -> (match mc4 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__53, dtb__54) -> (if (dtb__53 = mc3) then true else (if ((Base_dList.v_Base_dList_dmemName dtb__53) mc2) then (((((v_Vuna_dCompiler_dElab_dRepresentation_danyReachBack mc0) mc1) mc2) mc3) dtb__54) else (if (mc0 <= 0) then true else (if (((((v_Vuna_dCompiler_dElab_dRepresentation_dreachesBackTo (mc0 - 1)) mc1) (Base_dList.C_Base_dList_dList_Cons (dtb__53, mc2))) mc3) dtb__53) then true else (((((v_Vuna_dCompiler_dElab_dRepresentation_danyReachBack (mc0 - 1)) mc1) mc2) mc3) dtb__54)))))
+  | Base_dList.C_Base_dList_dList_Cons (dtb__47, dtb__48) -> (if (dtb__47 = mc3) then true else (if ((Base_dList.v_Base_dList_dmemName dtb__47) mc2) then (((((v_Vuna_dCompiler_dElab_dRepresentation_danyReachBack mc0) mc1) mc2) mc3) dtb__48) else (if (mc0 <= 0) then true else (if (((((v_Vuna_dCompiler_dElab_dRepresentation_dreachesBackTo (mc0 - 1)) mc1) (Base_dList.C_Base_dList_dList_Cons (dtb__47, mc2))) mc3) dtb__47) then true else (((((v_Vuna_dCompiler_dElab_dRepresentation_danyReachBack (mc0 - 1)) mc1) mc2) mc3) dtb__48)))))
   | Base_dList.C_Base_dList_dList_Nil -> false
   | _ -> failwith "DT: impossible branch"
 ))
 
-let v_Vuna_dCompiler_dElab_dRepresentation_dunboxedInfoOf = (fun datas -> ((fun cands -> ((fun names -> ((fun edges -> ((fun fuel -> ((Base_dList.v_Base_dList_dmap (fun cand -> (Base_dPair.C_Base_dPair_dPair_Pair ((v_Vuna_dCompiler_dElab_dRepresentation_dunboxedCandName cand), (Base_dPair.C_Base_dPair_dPair_Pair ((v_Vuna_dCompiler_dElab_dRepresentation_dunboxedCandCtor cand), (v_Vuna_dCompiler_dElab_dRepresentation_dunboxedCandIndex cand))))))) ((Base_dList.v_Base_dList_dfilter (fun cand -> (Base_dBool.v_Base_dBool_dnot (((((v_Vuna_dCompiler_dElab_dRepresentation_dreachesBackTo fuel) edges) (Base_dList.C_Base_dList_dList_Cons ((v_Vuna_dCompiler_dElab_dRepresentation_dunboxedCandName cand), Base_dList.C_Base_dList_dList_Nil))) (v_Vuna_dCompiler_dElab_dRepresentation_dunboxedCandName cand)) (v_Vuna_dCompiler_dElab_dRepresentation_dunboxedCandName cand))))) cands))) (bi_natAdd (Base_dList.v_Base_dList_dlength names) 2))) (((v_Vuna_dCompiler_dElab_dRepresentation_dcandidateEdges datas) names) cands))) (v_Vuna_dCompiler_dElab_dRepresentation_dcandidateNames cands))) (v_Vuna_dCompiler_dElab_dRepresentation_dunboxedCandidates datas)))
+let v_Vuna_dCompiler_dElab_dRepresentation_dunboxedInfoOf = (fun datas -> ((fun cands -> ((fun names -> ((fun edges -> ((fun fuel -> ((Base_dList.v_Base_dList_dmap (fun cand -> { Base_dPair.f_Base_dPair_dPair_first = (v_Vuna_dCompiler_dElab_dRepresentation_dunboxedCandName cand); Base_dPair.f_Base_dPair_dPair_second = { Base_dPair.f_Base_dPair_dPair_first = (v_Vuna_dCompiler_dElab_dRepresentation_dunboxedCandCtor cand); Base_dPair.f_Base_dPair_dPair_second = (v_Vuna_dCompiler_dElab_dRepresentation_dunboxedCandIndex cand) } })) ((Base_dList.v_Base_dList_dfilter (fun cand -> (Base_dBool.v_Base_dBool_dnot (((((v_Vuna_dCompiler_dElab_dRepresentation_dreachesBackTo fuel) edges) (Base_dList.C_Base_dList_dList_Cons ((v_Vuna_dCompiler_dElab_dRepresentation_dunboxedCandName cand), Base_dList.C_Base_dList_dList_Nil))) (v_Vuna_dCompiler_dElab_dRepresentation_dunboxedCandName cand)) (v_Vuna_dCompiler_dElab_dRepresentation_dunboxedCandName cand))))) cands))) (bi_natAdd (Base_dList.v_Base_dList_dlength names) 2))) (((v_Vuna_dCompiler_dElab_dRepresentation_dcandidateEdges datas) names) cands))) (v_Vuna_dCompiler_dElab_dRepresentation_dcandidateNames cands))) (v_Vuna_dCompiler_dElab_dRepresentation_dunboxedCandidates datas)))
 
 let v_Vuna_dCompiler_dElab_dRepresentation_dunboxedFamilySet = (fun datas -> ((Base_dList.v_Base_dList_dmap Base_dPair.v_Base_dPair_dfirstOf) (v_Vuna_dCompiler_dElab_dRepresentation_dunboxedInfoOf datas)))
 
 let rec v_Vuna_dCompiler_dElab_dRepresentation_dlookupUnboxedInfo = (fun mc0 mc1 -> (match mc1 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__55, dtb__56) -> (if ((Base_dPair.v_Base_dPair_dfirstOf dtb__55) = mc0) then (Base_dMaybe.C_Base_dMaybe_dMaybe_Just ((Base_dPair.v_Base_dPair_dsecondOf dtb__55))) else ((v_Vuna_dCompiler_dElab_dRepresentation_dlookupUnboxedInfo mc0) dtb__56))
+  | Base_dList.C_Base_dList_dList_Cons (dtb__49, dtb__50) -> (if ((Base_dPair.v_Base_dPair_dfirstOf dtb__49) = mc0) then (Base_dMaybe.C_Base_dMaybe_dMaybe_Just ((Base_dPair.v_Base_dPair_dsecondOf dtb__49))) else ((v_Vuna_dCompiler_dElab_dRepresentation_dlookupUnboxedInfo mc0) dtb__50))
   | Base_dList.C_Base_dList_dList_Nil -> Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing
   | _ -> failwith "DT: impossible branch"
 ))

@@ -800,7 +800,8 @@ dtLoadPartsIncremental ctx entry depIfaces cleanIfaces =
 -- termAux 原始 decls 仍传给 `prepareDeclsWith`，prepared 版本只服务 record 头解消与
 -- 终止性 SCT 上下文）。
 dtPrepareTermAux : List Decl -> Result (List Decl)
-dtPrepareTermAux aux = Vuna.Compiler.Common.bind (prepareDecls aux) expandDerivings
+dtPrepareTermAux aux =
+  Vuna.Compiler.Common.bind (prepareDecls aux) (\p => expandDerivings (secondOf p))
 
 -- 终止性 SCT 的 termAux 裁剪（5b 的关键）：依赖包 / 干净模块的终止性已在写它们自己的
 -- 接口时验过，本路径只报告当前模块函数的失败。import 图无环 ⇒ 调用图无跨模块环 ⇒
@@ -819,10 +820,11 @@ dtElabFullWithPrepared : Ec -> List (Pair String Term) -> List Decl -> List Decl
 -- 与全量路径（`Elab.Driver.elabProgramFullWithAux`）对齐：记录字段的 `HasField`
 -- 自动实例也必须在增量路径上生成，否则 `getField` 在 LSP / 测试会话里会假报
 -- `TC_NoInstanceFound`（夹具 18/records_files/10_has_field 就是这条用例）。
-dtElabFullWithPrepared startEc startGlobals termAux preparedAux decls =
-  Vuna.Compiler.Common.bind
-    (prepareDeclsWith termAux (maybeAddHasFieldInstances startGlobals decls))
-    (\ds => Vuna.Compiler.Common.bind (expandDerivings ds) (\ds2 => elabProgramGoWithAux startEc startGlobals (dtAuxForTermination preparedAux) ds2))
+dtElabFullWithPrepared startEc startGlobals termAux preparedAux decls = Vuna.Compiler.Common.bind (prepareDeclsWith termAux (maybeAddHasFieldInstances startGlobals decls)) (\p => case p of
+  Pair records ds =>
+    Vuna.Compiler.Common.bind (expandDerivings ds)
+      (\ds2 => elabProgramGoWithAux startEc startGlobals records (dtAuxForTermination preparedAux) ds2)
+)
 
 -- 工具链增量会话缓存（M34.6 5a/5b）：一次请求的**固定开销**按 iface 集合缓存。
 --   - decls：termAux（依赖包 + 干净同包模块 decls）的 record / deriving 预处理结果；

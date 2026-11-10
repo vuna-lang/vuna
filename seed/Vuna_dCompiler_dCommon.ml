@@ -1,6 +1,6 @@
 open Vuna_runtime
-type t_Vuna_dCompiler_dCommon_dPos = C_Vuna_dCompiler_dCommon_dPos_Pos of (int) * (int)
-and t_Vuna_dCompiler_dCommon_dSpan = C_Vuna_dCompiler_dCommon_dSpan_Span of (string) * (int) * (int) * (int) * (int)
+type t_Vuna_dCompiler_dCommon_dPos = { f_Vuna_dCompiler_dCommon_dPos_posLine : int; f_Vuna_dCompiler_dCommon_dPos_posCol : int }
+and t_Vuna_dCompiler_dCommon_dSpan = { f_Vuna_dCompiler_dCommon_dSpan_spanFile : string; f_Vuna_dCompiler_dCommon_dSpan_spanStartLine : int; f_Vuna_dCompiler_dCommon_dSpan_spanStartCol : int; f_Vuna_dCompiler_dCommon_dSpan_spanEndLine : int; f_Vuna_dCompiler_dCommon_dSpan_spanEndCol : int }
 
 let v_Vuna_dCompiler_dCommon_dbind = (fun mc0 mc1 -> (match mc0 with
   | Base_dResult.C_Base_dResult_dResult_Err (dtb__0) -> (Base_dResult.C_Base_dResult_dResult_Err (dtb__0))
@@ -9,32 +9,32 @@ let v_Vuna_dCompiler_dCommon_dbind = (fun mc0 mc1 -> (match mc0 with
 ))
 
 let v_Vuna_dCompiler_dCommon_dposLine = (fun mc0 -> (match mc0 with
-  | C_Vuna_dCompiler_dCommon_dPos_Pos (dtb__2, dtb__3) -> dtb__2
+  | { f_Vuna_dCompiler_dCommon_dPos_posLine = dtb__2; f_Vuna_dCompiler_dCommon_dPos_posCol = dtb__3 } -> dtb__2
   | _ -> failwith "DT: impossible branch"
 ))
 
 let v_Vuna_dCompiler_dCommon_dposCol = (fun mc0 -> (match mc0 with
-  | C_Vuna_dCompiler_dCommon_dPos_Pos (dtb__4, dtb__5) -> dtb__5
+  | { f_Vuna_dCompiler_dCommon_dPos_posLine = dtb__4; f_Vuna_dCompiler_dCommon_dPos_posCol = dtb__5 } -> dtb__5
   | _ -> failwith "DT: impossible branch"
 ))
 
 let v_Vuna_dCompiler_dCommon_dspanStartLine = (fun mc0 -> (match mc0 with
-  | C_Vuna_dCompiler_dCommon_dSpan_Span (dtb__6, dtb__7, dtb__8, dtb__9, dtb__10) -> dtb__7
+  | { f_Vuna_dCompiler_dCommon_dSpan_spanFile = dtb__6; f_Vuna_dCompiler_dCommon_dSpan_spanStartLine = dtb__7; f_Vuna_dCompiler_dCommon_dSpan_spanStartCol = dtb__8; f_Vuna_dCompiler_dCommon_dSpan_spanEndLine = dtb__9; f_Vuna_dCompiler_dCommon_dSpan_spanEndCol = dtb__10 } -> dtb__7
   | _ -> failwith "DT: impossible branch"
 ))
 
 let v_Vuna_dCompiler_dCommon_dspanStartCol = (fun mc0 -> (match mc0 with
-  | C_Vuna_dCompiler_dCommon_dSpan_Span (dtb__11, dtb__12, dtb__13, dtb__14, dtb__15) -> dtb__13
+  | { f_Vuna_dCompiler_dCommon_dSpan_spanFile = dtb__11; f_Vuna_dCompiler_dCommon_dSpan_spanStartLine = dtb__12; f_Vuna_dCompiler_dCommon_dSpan_spanStartCol = dtb__13; f_Vuna_dCompiler_dCommon_dSpan_spanEndLine = dtb__14; f_Vuna_dCompiler_dCommon_dSpan_spanEndCol = dtb__15 } -> dtb__13
   | _ -> failwith "DT: impossible branch"
 ))
 
 let v_Vuna_dCompiler_dCommon_dspanEndLine = (fun mc0 -> (match mc0 with
-  | C_Vuna_dCompiler_dCommon_dSpan_Span (dtb__16, dtb__17, dtb__18, dtb__19, dtb__20) -> dtb__19
+  | { f_Vuna_dCompiler_dCommon_dSpan_spanFile = dtb__16; f_Vuna_dCompiler_dCommon_dSpan_spanStartLine = dtb__17; f_Vuna_dCompiler_dCommon_dSpan_spanStartCol = dtb__18; f_Vuna_dCompiler_dCommon_dSpan_spanEndLine = dtb__19; f_Vuna_dCompiler_dCommon_dSpan_spanEndCol = dtb__20 } -> dtb__19
   | _ -> failwith "DT: impossible branch"
 ))
 
 let v_Vuna_dCompiler_dCommon_dshowSpanLoc = (fun mc0 -> (match mc0 with
-  | C_Vuna_dCompiler_dCommon_dSpan_Span (dtb__21, dtb__22, dtb__23, dtb__24, dtb__25) -> (String.concat "" [dtb__21; ":"; (bi_strFromInt dtb__22); ":"; (bi_strFromInt dtb__23)])
+  | { f_Vuna_dCompiler_dCommon_dSpan_spanFile = dtb__21; f_Vuna_dCompiler_dCommon_dSpan_spanStartLine = dtb__22; f_Vuna_dCompiler_dCommon_dSpan_spanStartCol = dtb__23; f_Vuna_dCompiler_dCommon_dSpan_spanEndLine = dtb__24; f_Vuna_dCompiler_dCommon_dSpan_spanEndCol = dtb__25 } -> (String.concat "" [dtb__21; ":"; (bi_strFromInt dtb__22); ":"; (bi_strFromInt dtb__23)])
   | _ -> failwith "DT: impossible branch"
 ))
 
@@ -63,8 +63,8 @@ let rec v_Vuna_dCompiler_dCommon_dsplitCharsOnDot = (fun mc0 mc1 mc2 -> (match m
 let v_Vuna_dCompiler_dCommon_dsplitOnDot = (fun s -> (((v_Vuna_dCompiler_dCommon_dsplitCharsOnDot (Base_dList.dtp_unpack s)) Base_dList.C_Base_dList_dList_Nil) Base_dList.C_Base_dList_dList_Nil))
 
 let v_Vuna_dCompiler_dCommon_dsplitLastDot = (fun parts -> (match (Base_dList.v_Base_dList_dreverse parts) with
-  | Base_dList.C_Base_dList_dList_Nil -> (Base_dPair.C_Base_dPair_dPair_Pair (Base_dList.C_Base_dList_dList_Nil, ""))
-  | Base_dList.C_Base_dList_dList_Cons (dtb__32, dtb__33) -> (Base_dPair.C_Base_dPair_dPair_Pair ((Base_dList.v_Base_dList_dreverse dtb__33), dtb__32))
+  | Base_dList.C_Base_dList_dList_Nil -> { Base_dPair.f_Base_dPair_dPair_first = Base_dList.C_Base_dList_dList_Nil; Base_dPair.f_Base_dPair_dPair_second = "" }
+  | Base_dList.C_Base_dList_dList_Cons (dtb__32, dtb__33) -> { Base_dPair.f_Base_dPair_dPair_first = (Base_dList.v_Base_dList_dreverse dtb__33); Base_dPair.f_Base_dPair_dPair_second = dtb__32 }
   | _ -> failwith "DT: impossible branch"
 ))
 
@@ -96,8 +96,8 @@ let rec v_Vuna_dCompiler_dCommon_djoinArrows = (fun mc0 -> (match mc0 with
 ))
 
 let rec v_Vuna_dCompiler_dCommon_dsplitPathChars = (fun mc0 mc1 -> (match mc0 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__40, dtb__41) -> (if (dtb__40 = 47) then (Base_dPair.C_Base_dPair_dPair_Pair ((Base_dList.dtp_pack (Base_dList.v_Base_dList_dreverse mc1)), (Base_dList.dtp_pack dtb__41))) else ((v_Vuna_dCompiler_dCommon_dsplitPathChars dtb__41) (Base_dList.C_Base_dList_dList_Cons (dtb__40, mc1))))
-  | Base_dList.C_Base_dList_dList_Nil -> ((fun chars -> (Base_dPair.C_Base_dPair_dPair_Pair ("", (Base_dList.dtp_pack chars)))) (Base_dList.v_Base_dList_dreverse mc1))
+  | Base_dList.C_Base_dList_dList_Cons (dtb__40, dtb__41) -> (if (dtb__40 = 47) then { Base_dPair.f_Base_dPair_dPair_first = (Base_dList.dtp_pack (Base_dList.v_Base_dList_dreverse mc1)); Base_dPair.f_Base_dPair_dPair_second = (Base_dList.dtp_pack dtb__41) } else ((v_Vuna_dCompiler_dCommon_dsplitPathChars dtb__41) (Base_dList.C_Base_dList_dList_Cons (dtb__40, mc1))))
+  | Base_dList.C_Base_dList_dList_Nil -> ((fun chars -> { Base_dPair.f_Base_dPair_dPair_first = ""; Base_dPair.f_Base_dPair_dPair_second = (Base_dList.dtp_pack chars) }) (Base_dList.v_Base_dList_dreverse mc1))
   | _ -> failwith "DT: impossible branch"
 ))
 

@@ -1,0 +1,12 @@
+# 44c-2) 模块接口构建路径与全量构建路径的 codegen 产物逐字节一致（只 codegen、不链接）。
+#        夹具 corpus/packages/m34_summary/root；接口路径靠镜像里预热的 base/dep 接口生效。
+run: sh -c 'mkdir -p "$TMPDIR/summary-warm-cache"'
+run: sh -c 'TMPDIR="$TMPDIR/summary-warm-cache" "$VUNA" check "$VUNA_BASE"'
+run: sh -c 'TMPDIR="$TMPDIR/summary-warm-cache" "$VUNA" check corpus/packages/m34_summary/dep'
+run: sh -c 'rm -rf "$TMPDIR/summary-gen-iface" "$TMPDIR/summary-gen-full"; mkdir -p "$TMPDIR/summary-gen-cache-iface" "$TMPDIR/summary-gen-cache-full"'
+run: sh -c 'TMPDIR="$TMPDIR/summary-gen-cache-iface" "$VUNA" compile corpus/packages/m34_summary/root "$TMPDIR/summary-gen-iface"'
+exit: 0
+run: sh -c 'TMPDIR="$TMPDIR/summary-gen-cache-full" VUNA_ELAB_FULL=1 "$VUNA" compile corpus/packages/m34_summary/root "$TMPDIR/summary-gen-full"'
+exit: 0
+run: sh -c 'diff -r "$TMPDIR/summary-gen-iface" "$TMPDIR/summary-gen-full"'
+exit: 0

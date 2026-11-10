@@ -209,6 +209,7 @@ else case v of
   VCon c args => occursLevelList (fuel - 1) depth lvl args
   VApp f a => occursLevel (fuel - 1) depth lvl f || occursLevel (fuel - 1) depth lvl a
   VCase scrut alts => occursLevel (fuel - 1) depth lvl scrut
+  VProj base c tele i fi => occursLevel (fuel - 1) depth lvl base
   VIf c th el =>
     occursLevel (fuel - 1) depth lvl c
       || occursLevel (fuel - 1) depth lvl th

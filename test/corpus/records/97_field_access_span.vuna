@@ -1,5 +1,5 @@
--- M29（A14）：记录字段访问在精化期已有正确 span（`Elab/Records.fieldAccessExpr` 把访问
--- span 写进生成的 case），本夹具锁定 `文件:行:列: [CODE]` 格式不回退。
+-- M29（A14）：记录字段访问 span 由 `Impl.recordFieldPlan` 查结构化字段表生成 case。
+-- 本夹具锁定 `文件:行:列: [CODE]` 格式不回退（注释行数也参与行号断言）。
 record Point where
   x : Int
   y : Int

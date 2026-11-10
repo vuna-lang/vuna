@@ -1,0 +1,42 @@
+# 34c) DT 包目录（M22.1）：check / compile 接受包目录（包上下文 + resolveProject）。
+#      夹具：corpus/dt_pkg/01_exec（可执行包）/ 02_lib（库包）/ 03_bad（无 manifest）/
+#      99_missing（不存在），以及 corpus/dt_ad_hoc/Main.vuna（包内 ad-hoc 单文件入口）。
+run: "$VUNA" check corpus/dt_pkg/01_exec 2>&1
+exit: 0
+run: "$VUNA" compile corpus/dt_pkg/01_exec "$TMPDIR/dt-exec" 2>&1
+exit: 0
+out-equals:
+file-exists: $TMPDIR/dt-exec/Main.ml
+file-exists: $TMPDIR/dt-exec/build.sh
+run: cd "$TMPDIR/dt-exec" && sh build.sh prog 2>&1
+exit: 0
+run: "$TMPDIR/dt-exec/prog" 2>&1
+exit: 0
+out-equals-file: corpus/dt_pkg/01_exec/expected.out
+# 库包：check 通过；compile 清晰报错（非崩溃），且不写输出目录。
+run: "$VUNA" check corpus/dt_pkg/02_lib 2>&1
+exit: 0
+run: "$VUNA" compile corpus/dt_pkg/02_lib "$TMPDIR/dt-lib" 2>&1
+exit: nonzero
+out-contains: library package
+file-absent: $TMPDIR/dt-lib
+# 非法目录 / 不存在的路径：清晰错误而非 Fatal error。
+run: "$VUNA" check corpus/dt_pkg/03_bad 2>&1
+exit: nonzero
+out-contains: missing vuna.toml
+run: "$VUNA" check corpus/dt_pkg/99_missing 2>&1
+exit: nonzero
+out-contains: no such file or package directory
+out-contains: error:
+# interp 只接受单文件：包目录给出清晰错误（M22.1）。
+run: "$VUNA" interp corpus/dt_pkg/01_exec 2>&1
+exit: nonzero
+out-contains: single file
+# M24：check/compile 默认就是 DT；help 不再宣传 `--dt`。
+run: "$VUNA" help 2>&1
+exit: 0
+out-not-contains: --dt
+# M26：包内 ad-hoc 单文件入口（包根 Main.vuna + 同包 lib/ 模块，见 corpus/dt_ad_hoc）。
+run: "$VUNA" interp corpus/dt_ad_hoc/Main.vuna 2>&1
+exit: 0
+out-equals: 42

@@ -30,6 +30,7 @@ module Vuna.Compiler.Elab
   , Types.DtCtor
   , Types.DtData
   , Types.DtDef
+  , Types.DtFieldMeta(..)
   , Types.DtGoal
   , Types.DtProgram
   , Types.dtClassName
@@ -38,6 +39,7 @@ module Vuna.Compiler.Elab
   , Types.dtCtorTelescope
   , Types.dtCtorType
   , Types.dtDataCtors
+  , Types.dtDataFields
   , Types.dtDataName
   , Types.dtDefBody
   , Types.dtDefExtern

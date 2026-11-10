@@ -1,0 +1,12 @@
+# 31) doc / repl 冒烟：doc 产出 HTML 含 Vuna.Hello；repl 顶层定义 + 裸表达式可求值。
+run: "$VUNA" doc corpus/packages/01_workspace "$TMPDIR/api.html"
+exit: 0
+run: grep -q Vuna.Hello "$TMPDIR/api.html"
+exit: 0
+run: sh corpus/doc/check.sh "$VUNA"
+exit: 0
+run: printf 'x : Int\nx = 1 + 1\nx + 40\n:q\n' | "$VUNA" repl 2>&1
+exit: 0
+out-contains: 42
+run: printf ':q\n' | "$VUNA" repl
+exit: 0

@@ -1,0 +1,20 @@
+# 49) M38 REPL 调试命令：:type / :load / :reload / :browse + 错误路径。
+run: printf 'answer : Int\nanswer = 42\n' >"$TMPDIR/m38-scratch.vuna"
+run: sh -c 'printf ":type 1 + 1\n:q\n" | "$VUNA" repl 2>&1'
+out-contains: 1 + 1 : Int
+run: sh -c 'printf ":type\n:q\n" | "$VUNA" repl 2>&1'
+out-contains: 用法: :type
+run: sh -c 'printf ":load %s\nanswer\n:reload\nanswer\n:q\n" "$TMPDIR/m38-scratch.vuna" | "$VUNA" repl 2>&1'
+out-contains: 已加载
+out-contains: 已重新加载
+out-contains: 42
+run: sh -c 'printf ":load %s/../lib/Vuna/Repl.vuna\n:q\n" "$VUNA_BASE" | "$VUNA" repl 2>&1'
+out-contains: 是模块文件
+run: sh -c 'printf ":reload\n:q\n" | "$VUNA" repl 2>&1'
+out-contains: 还没有 :load
+run: sh -c 'printf ":frobnicate\n:q\n" | "$VUNA" repl 2>&1'
+out-contains: 未知命令
+run: sh -c 'mkdir -p "$TMPDIR/m38-bws/lib"; printf "[package]\nname = \"m38-browse\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" >"$TMPDIR/m38-bws/vuna.toml"; printf "module Foo where\n\ngreeting : String\ngreeting = \"hi\"\n" >"$TMPDIR/m38-bws/lib/Foo.vuna"'
+run: sh -c 'cd "$TMPDIR/m38-bws" && printf ":browse Foo\n:q\n" | "$VUNA" repl 2>&1'
+out-contains: ## Foo
+out-contains: greeting : String

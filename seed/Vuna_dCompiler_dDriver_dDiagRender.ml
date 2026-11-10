@@ -44,9 +44,9 @@ let rec v_Vuna_dCompiler_dDriver_dDiagRender_dlastText = (fun mc0 -> (match mc0 
   | _ -> failwith "DT: impossible branch"
 ))
 
-let v_Vuna_dCompiler_dDriver_dDiagRender_dsplitCliPrefix = (fun s -> ((fun n -> (Base_dPair.C_Base_dPair_dPair_Pair ((((Base_dString.v_Base_dString_dsubstring 0) (bi_natFromInt n)) s), (((Base_dString.v_Base_dString_dsubstring (bi_natFromInt n)) (bi_natFromInt ((bi_strLength s) - n))) s)))) (if ((Base_dString.v_Base_dString_dstartsWith "error: ") s) then 7 else (if ((Base_dString.v_Base_dString_dstartsWith "warning: ") s) then 9 else 0))))
+let v_Vuna_dCompiler_dDriver_dDiagRender_dsplitCliPrefix = (fun s -> ((fun n -> { Base_dPair.f_Base_dPair_dPair_first = (((Base_dString.v_Base_dString_dsubstring 0) (bi_natFromInt n)) s); Base_dPair.f_Base_dPair_dPair_second = (((Base_dString.v_Base_dString_dsubstring (bi_natFromInt n)) (bi_natFromInt ((bi_strLength s) - n))) s) }) (if ((Base_dString.v_Base_dString_dstartsWith "error: ") s) then 7 else (if ((Base_dString.v_Base_dString_dstartsWith "warning: ") s) then 9 else 0))))
 
-let v_Vuna_dCompiler_dDriver_dDiagRender_dsplitPkg = (fun s -> (if ((Base_dString.v_Base_dString_dstartsWith "[") s) then ((fun i -> (if (i < 0) then (Base_dPair.C_Base_dPair_dPair_Pair ("", s)) else (if (((v_Vuna_dCompiler_dDriver_dDiagRender_dcharAt (Base_dList.dtp_unpack s)) (i + 1)) = 32) then (Base_dPair.C_Base_dPair_dPair_Pair ((((Base_dString.v_Base_dString_dsubstring 0) (bi_natFromInt (i + 2))) s), (((Base_dString.v_Base_dString_dsubstring (bi_natFromInt (i + 2))) (bi_natFromInt (((bi_strLength s) - i) - 2))) s))) else (Base_dPair.C_Base_dPair_dPair_Pair ("", s))))) (((v_Vuna_dCompiler_dDriver_dDiagRender_dfindCharIdx 93) (Base_dList.dtp_unpack s)) 0)) else (Base_dPair.C_Base_dPair_dPair_Pair ("", s))))
+let v_Vuna_dCompiler_dDriver_dDiagRender_dsplitPkg = (fun s -> (if ((Base_dString.v_Base_dString_dstartsWith "[") s) then ((fun i -> (if (i < 0) then { Base_dPair.f_Base_dPair_dPair_first = ""; Base_dPair.f_Base_dPair_dPair_second = s } else (if (((v_Vuna_dCompiler_dDriver_dDiagRender_dcharAt (Base_dList.dtp_unpack s)) (i + 1)) = 32) then { Base_dPair.f_Base_dPair_dPair_first = (((Base_dString.v_Base_dString_dsubstring 0) (bi_natFromInt (i + 2))) s); Base_dPair.f_Base_dPair_dPair_second = (((Base_dString.v_Base_dString_dsubstring (bi_natFromInt (i + 2))) (bi_natFromInt (((bi_strLength s) - i) - 2))) s) } else { Base_dPair.f_Base_dPair_dPair_first = ""; Base_dPair.f_Base_dPair_dPair_second = s }))) (((v_Vuna_dCompiler_dDriver_dDiagRender_dfindCharIdx 93) (Base_dList.dtp_unpack s)) 0)) else { Base_dPair.f_Base_dPair_dPair_first = ""; Base_dPair.f_Base_dPair_dPair_second = s }))
 
 let v_Vuna_dCompiler_dDriver_dDiagRender_ddropBracket = (fun s -> ((fun i -> (if (i < 0) then s else (Base_dString.v_Base_dString_dtrim (((Base_dString.v_Base_dString_dsubstring (bi_natFromInt (i + 1))) (bi_natFromInt (((bi_strLength s) - i) - 1))) s)))) (((v_Vuna_dCompiler_dDriver_dDiagRender_dfindCharIdx 93) (Base_dList.dtp_unpack s)) 0)))
 
@@ -57,7 +57,7 @@ let rec v_Vuna_dCompiler_dDriver_dDiagRender_dscanCandidates = (fun mc0 mc1 mc2 
   | Base_dList.C_Base_dList_dList_Nil -> Base_dList.C_Base_dList_dList_Nil
   | Base_dList.C_Base_dList_dList_Cons (dtb__12, dtb__13) -> (match dtb__13 with
   | Base_dList.C_Base_dList_dList_Nil -> Base_dList.C_Base_dList_dList_Nil
-  | Base_dList.C_Base_dList_dList_Cons (dtb__14, dtb__15) -> ((fun next -> (if (if (v_Vuna_dCompiler_dDriver_dDiagRender_disNumText dtb__12) then (v_Vuna_dCompiler_dDriver_dDiagRender_disNumText dtb__14) else false) then (Base_dList.C_Base_dList_dList_Cons ((Base_dPair.C_Base_dPair_dPair_Pair ((v_Vuna_dCompiler_dDriver_dDiagRender_dnormalizeFile ((Base_dString.v_Base_dString_djoin ":") (Base_dList.v_Base_dList_dreverse (Base_dList.C_Base_dList_dList_Cons (dtb__10, mc1))))), (Base_dPair.C_Base_dPair_dPair_Pair ((v_Vuna_dCompiler_dDriver_dDiagRender_dparseNum dtb__12), (v_Vuna_dCompiler_dDriver_dDiagRender_dparseNum dtb__14))))), next)) else next)) (((v_Vuna_dCompiler_dDriver_dDiagRender_dscanCandidates mc0) (Base_dList.C_Base_dList_dList_Cons (dtb__10, mc1))) dtb__11))
+  | Base_dList.C_Base_dList_dList_Cons (dtb__14, dtb__15) -> ((fun next -> (if (if (v_Vuna_dCompiler_dDriver_dDiagRender_disNumText dtb__12) then (v_Vuna_dCompiler_dDriver_dDiagRender_disNumText dtb__14) else false) then (Base_dList.C_Base_dList_dList_Cons ({ Base_dPair.f_Base_dPair_dPair_first = (v_Vuna_dCompiler_dDriver_dDiagRender_dnormalizeFile ((Base_dString.v_Base_dString_djoin ":") (Base_dList.v_Base_dList_dreverse (Base_dList.C_Base_dList_dList_Cons (dtb__10, mc1))))); Base_dPair.f_Base_dPair_dPair_second = { Base_dPair.f_Base_dPair_dPair_first = (v_Vuna_dCompiler_dDriver_dDiagRender_dparseNum dtb__12); Base_dPair.f_Base_dPair_dPair_second = (v_Vuna_dCompiler_dDriver_dDiagRender_dparseNum dtb__14) } }, next)) else next)) (((v_Vuna_dCompiler_dDriver_dDiagRender_dscanCandidates mc0) (Base_dList.C_Base_dList_dList_Cons (dtb__10, mc1))) dtb__11))
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
@@ -78,10 +78,10 @@ let v_Vuna_dCompiler_dDriver_dDiagRender_dstripCr = (fun s -> (if ((Base_dString
 
 let rec v_Vuna_dCompiler_dDriver_dDiagRender_dfirstReadableLoc = (fun mc0 -> (match mc0 with
   | Base_dList.C_Base_dList_dList_Cons (dtb__18, dtb__19) -> (match dtb__18 with
-  | Base_dPair.C_Base_dPair_dPair_Pair (dtb__20, dtb__21) -> (match dtb__21 with
-  | Base_dPair.C_Base_dPair_dPair_Pair (dtb__22, dtb__23) -> (if (dtb__22 < 1) then (v_Vuna_dCompiler_dDriver_dDiagRender_dfirstReadableLoc dtb__19) else (if (Base_dIO_dHost.v_Base_dIO_dHost_drunIO (Base_dIO_dHost.v_Base_dIO_dHost_dfileExists dtb__20)) then (if (Base_dIO_dHost.v_Base_dIO_dHost_drunIO (Base_dIO_dHost.v_Base_dIO_dHost_disDirectory dtb__20)) then (v_Vuna_dCompiler_dDriver_dDiagRender_dfirstReadableLoc dtb__19) else ((fun srcLines -> (match ((v_Vuna_dCompiler_dDriver_dDiagRender_dlineAt srcLines) dtb__22) with
+  | { Base_dPair.f_Base_dPair_dPair_first = dtb__20; Base_dPair.f_Base_dPair_dPair_second = dtb__21 } -> (match dtb__21 with
+  | { Base_dPair.f_Base_dPair_dPair_first = dtb__22; Base_dPair.f_Base_dPair_dPair_second = dtb__23 } -> (if (dtb__22 < 1) then (v_Vuna_dCompiler_dDriver_dDiagRender_dfirstReadableLoc dtb__19) else (if (Base_dIO_dHost.v_Base_dIO_dHost_drunIO (Base_dIO_dHost.v_Base_dIO_dHost_dfileExists dtb__20)) then (if (Base_dIO_dHost.v_Base_dIO_dHost_drunIO (Base_dIO_dHost.v_Base_dIO_dHost_disDirectory dtb__20)) then (v_Vuna_dCompiler_dDriver_dDiagRender_dfirstReadableLoc dtb__19) else ((fun srcLines -> (match ((v_Vuna_dCompiler_dDriver_dDiagRender_dlineAt srcLines) dtb__22) with
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing -> (v_Vuna_dCompiler_dDriver_dDiagRender_dfirstReadableLoc dtb__19)
-  | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__24) -> (Base_dMaybe.C_Base_dMaybe_dMaybe_Just ((Base_dPair.C_Base_dPair_dPair_Pair (dtb__20, (Base_dPair.C_Base_dPair_dPair_Pair (dtb__22, (Base_dPair.C_Base_dPair_dPair_Pair (dtb__23, (v_Vuna_dCompiler_dDriver_dDiagRender_dstripCr dtb__24)))))))))
+  | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__24) -> (Base_dMaybe.C_Base_dMaybe_dMaybe_Just ({ Base_dPair.f_Base_dPair_dPair_first = dtb__20; Base_dPair.f_Base_dPair_dPair_second = { Base_dPair.f_Base_dPair_dPair_first = dtb__22; Base_dPair.f_Base_dPair_dPair_second = { Base_dPair.f_Base_dPair_dPair_first = dtb__23; Base_dPair.f_Base_dPair_dPair_second = (v_Vuna_dCompiler_dDriver_dDiagRender_dstripCr dtb__24) } } }))
   | _ -> failwith "DT: impossible branch"
 )) (Base_dString.v_Base_dString_dlines (Base_dIO_dHost.v_Base_dIO_dHost_drunIO (Base_dIO_dHost.v_Base_dIO_dHost_dreadFile dtb__20))))) else (v_Vuna_dCompiler_dDriver_dDiagRender_dfirstReadableLoc dtb__19)))
   | _ -> failwith "DT: impossible branch"
@@ -126,9 +126,9 @@ let v_Vuna_dCompiler_dDriver_dDiagRender_dsnippetBlock = (fun file line col srcL
 
 let v_Vuna_dCompiler_dDriver_dDiagRender_drenderBody = (fun msg -> ((fun nd_uscrut1 -> (match nd_uscrut1 with
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__31) -> (match dtb__31 with
-  | Base_dPair.C_Base_dPair_dPair_Pair (dtb__32, dtb__33) -> (match dtb__33 with
-  | Base_dPair.C_Base_dPair_dPair_Pair (dtb__34, dtb__35) -> (match dtb__35 with
-  | Base_dPair.C_Base_dPair_dPair_Pair (dtb__36, dtb__37) -> (String.concat "" [msg; "\n"; ((((v_Vuna_dCompiler_dDriver_dDiagRender_dsnippetBlock dtb__32) dtb__34) dtb__36) dtb__37)])
+  | { Base_dPair.f_Base_dPair_dPair_first = dtb__32; Base_dPair.f_Base_dPair_dPair_second = dtb__33 } -> (match dtb__33 with
+  | { Base_dPair.f_Base_dPair_dPair_first = dtb__34; Base_dPair.f_Base_dPair_dPair_second = dtb__35 } -> (match dtb__35 with
+  | { Base_dPair.f_Base_dPair_dPair_first = dtb__36; Base_dPair.f_Base_dPair_dPair_second = dtb__37 } -> (String.concat "" [msg; "\n"; ((((v_Vuna_dCompiler_dDriver_dDiagRender_dsnippetBlock dtb__32) dtb__34) dtb__36) dtb__37)])
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"

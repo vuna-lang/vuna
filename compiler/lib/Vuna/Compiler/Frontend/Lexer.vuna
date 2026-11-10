@@ -107,6 +107,7 @@ isOpChar c =
 
 -- 关键字表（M28 增 `axiom`；M31.2 增 `infixl` / `infixr` / `infix`）。
 isKeyword : String -> Bool
+-- R1（records-v2）：记录表示档位前缀（`transparent record` / `opaque record`）。
 -- native-effects N1：`perform op`（ND12 保留名编码）。
 isKeyword s =
   s == "data"
@@ -121,6 +122,8 @@ isKeyword s =
     || s == "else"
     || s == "where"
     || s == "linear"
+    || s == "transparent"
+    || s == "opaque"
     || s == "Type"
     || s == "import"
     || s == "module"

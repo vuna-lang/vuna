@@ -52,16 +52,16 @@ splitDeclNames (d :: rest) = case d of
   DSig name ctx ty sp => name :: splitDeclNames rest
   DExtern name cName ty sp => name :: splitDeclNames rest
   DFun name pats body sp => name :: splitDeclNames rest
-  DData name params kind ctors derivings viaField lin sp => name :: splitDeclNames rest
-  DRecord name params fields derivings viaField lin sp => name :: splitDeclNames rest
+  DData name params kind ctors derivings viaField repr lin sp => name :: splitDeclNames rest
+  DRecord name params fields derivings viaField repr lin sp => name :: splitDeclNames rest
   DTrait name params methods sp => name :: splitDeclNames rest
   _ => splitDeclNames rest
 
 splitDataNames : List Decl -> List String
 splitDataNames [] = []
 splitDataNames (d :: rest) = case d of
-  DData name params kind ctors derivings viaField lin sp => name :: splitDataNames rest
-  DRecord name params fields derivings viaField lin sp => name :: splitDataNames rest
+  DData name params kind ctors derivings viaField repr lin sp => name :: splitDataNames rest
+  DRecord name params fields derivings viaField repr lin sp => name :: splitDataNames rest
   _ => splitDataNames rest
 
 headClassName : Expr -> Maybe String
@@ -77,9 +77,9 @@ splitInstanceOwnerOf : String -> Decl -> List (Pair String String)
 splitInstanceOwnerOf owner (DInstance ctxE headExpr methods sp) = case headClassName headExpr of
   Just c => [Pair (instanceName c headExpr) owner]
   Nothing => []
-splitInstanceOwnerOf owner (DData dname params kind ctors derivings viaField lin sp) =
+splitInstanceOwnerOf owner (DData dname params kind ctors derivings viaField repr lin sp) =
   splitDerivedOwners owner dname params derivings
-splitInstanceOwnerOf owner (DRecord dname params fields derivings viaField lin sp) =
+splitInstanceOwnerOf owner (DRecord dname params fields derivings viaField repr lin sp) =
   append (splitDerivedOwners owner dname params derivings)
     (splitHasFieldOwners owner dname params fields)
 splitInstanceOwnerOf owner _ = []

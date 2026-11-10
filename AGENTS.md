@@ -100,7 +100,7 @@ vuna map [...] | vuna api <Module.name>  # 模块总览 / 定位符号 / 改动�
 `compiler/` = 编译器包（`Vuna.Compiler.*`，入口 `app/Main.vuna`，**进 seed**）；`base/` =
 标准库 `vuna-base`（`Base.*` + `Prelude`，**进 seed**）；`lib/` = 根包工具链（Cli/Interp/
 Files/Fmt/Lint/Repl/Run/Doc/Index/Lsp/TestRunner，**不进 seed**）；`app/` = 产品 CLI 入口；
-`seed/` = 提交入库的 OCaml 信任锚点（生成物，禁止手改、别读）；`test/` = `suite.toml` + `suite/`（原生 runner + 迁移章节）+ `corpus/` 夹具 + `bench/` 生成程序基准；`vscode/` = VSCode 扩展（高亮 + LSP + lint/fmt/check/
+`seed/` = 提交入库的 OCaml 信任锚点（生成物，禁止手改、别读）；`test/` = `suite.toml` + `suite/`（原生 runner + steps 用例）+ `corpus/` 夹具 + `bench/` 生成程序基准；`vscode/` = VSCode 扩展（高亮 + LSP + lint/fmt/check/
 build，`dist/` 提交）；`nix/` = 构建图 + rotate/metrics/bench；`docs/` = 分层文档。
 
 ## 文档导航

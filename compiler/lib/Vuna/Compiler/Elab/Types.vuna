@@ -7,6 +7,7 @@ module Vuna.Compiler.Elab.Types
   , DtCtor(..)
   , DtData(..)
   , DtDef(..)
+  , DtFieldMeta(..)
   , DtGoal(..)
   , DtInst(..)
   , DtProgram(..)
@@ -29,9 +30,11 @@ module Vuna.Compiler.Elab.Types
   , dtCtorTelescope
   , dtCtorType
   , dtDataCtors
+  , dtDataFields
   , dtDataKind
   , dtDataLinear
   , dtDataName
+  , dtDataRepr
   , dtDefBody
   , dtDefExtern
   , dtDefHasBody
@@ -177,6 +180,15 @@ dtCtorTelescope (DtCtor name family tele ty) = tele
 dtCtorType : DtCtor -> Term
 dtCtorType (DtCtor name family tele ty) = ty
 
+-- | R2（records-v2）：一条 record 字段的 Core 元数据（名字 / 声明序号 / 字段类型）。
+-- `dtFieldType` 处在**外层上下文**（只剩族参数）里：构造子 telescope 的字段域已按
+-- 序号 shift 掉前序字段 binder（record 字段类型不能引用前序字段），因此投影时
+-- `eval (reverse idxs) dtFieldType` 即可，无需 `@vuna@record@dep` 占位值。
+record DtFieldMeta where
+  dtFieldName : String
+  dtFieldIndex : Int
+  dtFieldType : Term
+
 -- M14：一个归纳族（索引族）。params 来自 kind 的 Pi binder（域是宇宙的擦除）。
 record DtData where
   dtDataName : String
@@ -187,22 +199,34 @@ record DtData where
   dtDataViaClasses : List String
   -- M38：`lin data` / `lin record` 声明；线性族的值必须由 quantity 1 的 binder 绑定。
   dtDataLinear : Bool
+  dtDataRepr : ReprTier
+  -- R2：record 字段表（名字 → 序号 → 外层字段类型）；普通 data 为空表。
+  dtDataFields : List DtFieldMeta
 
 dtDataName : DtData -> String
-dtDataName (DtData name params ctors kind viaClasses lin) = name
+dtDataName (DtData name params ctors kind viaClasses lin repr fields) = name
 
 dtDataCtors : DtData -> List DtCtor
-dtDataCtors (DtData name params ctors kind viaClasses lin) = ctors
+dtDataCtors (DtData name params ctors kind viaClasses lin repr fields) = ctors
 
 dtDataKind : DtData -> Term
-dtDataKind (DtData name params ctors kind viaClasses lin) = kind
+dtDataKind (DtData name params ctors kind viaClasses lin repr fields) = kind
 
 -- | 取出 `deriving via field` 声明的类名列表（canonical 名；空表示普通 data）。
 dtDataViaClasses : DtData -> List String
-dtDataViaClasses (DtData name params ctors kind viaClasses lin) = viaClasses
+dtDataViaClasses (DtData name params ctors kind viaClasses lin repr fields) = viaClasses
 
 dtDataLinear : DtData -> Bool
-dtDataLinear (DtData name params ctors kind viaClasses lin) = lin
+
+-- | R1（records-v2）：表示档位（`ReprAuto` = 未声明，回落自动去装箱推断；档位进 iface，下游与 FFI 可依赖）。
+dtDataRepr : DtData -> ReprTier
+dtDataRepr (DtData name params ctors kind viaClasses lin repr fields) = repr
+
+-- | R2：record 字段表（普通 data 为空）。进 iface（`miCached`），跨包字段访问据此查表。
+dtDataFields : DtData -> List DtFieldMeta
+dtDataFields (DtData name params ctors kind viaClasses lin repr fields) = fields
+
+dtDataLinear (DtData name params ctors kind viaClasses lin repr fields) = lin
 
 -- M15：一个洞的目标。编号、位置、目标类型（level 形态）、绑定时上下文快照。
 -- M40：`dtGoalName` 是洞的显示名（`_` = 匿名 → `""`；`?name` → `"?name"`）。

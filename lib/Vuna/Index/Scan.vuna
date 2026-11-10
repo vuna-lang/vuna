@@ -214,10 +214,10 @@ symbolsOfDecl sMod decls table d =
     line = declLine d
     col = declCol d
   in case d of
-    DData name params kind ctors derivings viaField lin sp =>
+    DData name params kind ctors derivings viaField repr lin sp =>
       Sym sMod name "data" "data ${name}${paramSuffix params}" "" (docForDecl table name) line col
         :: ctorSymbols sMod name ctors table
-    DRecord name params fields derivings viaField lin sp =>
+    DRecord name params fields derivings viaField repr lin sp =>
       Sym sMod name "record" "record ${name}${paramSuffix params}" "" (docForDecl table name) line col
         :: fieldSymbols sMod name fields table
     DTrait name params methods sp =>
@@ -296,9 +296,9 @@ refsInDeclsGo sMod (d :: rest) acc = refsInDeclsGo sMod rest (refsInDecl sMod d 
 
 refsInDecl : String -> Decl -> List Ref -> List Ref
 refsInDecl sMod (DFun name pats body sp) acc = refsInExprGo sMod body acc
-refsInDecl sMod (DData name params kind ctors derivings viaField lin sp) acc =
+refsInDecl sMod (DData name params kind ctors derivings viaField repr lin sp) acc =
   refsInCtors sMod ctors acc
-refsInDecl sMod (DRecord name params fields derivings viaField lin sp) acc =
+refsInDecl sMod (DRecord name params fields derivings viaField repr lin sp) acc =
   refsInFieldTypes sMod fields acc
 refsInDecl sMod (DTrait name params methods sp) acc = refsInMethods sMod methods acc
 refsInDecl sMod (DInstance ctxE head methods sp) acc =

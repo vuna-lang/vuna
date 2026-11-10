@@ -533,12 +533,12 @@ else case expr of
   _ => Err "DT: internal: unreordered infix/paren in elaboration"
 
 -- ---------------------------------------------------------------
--- 记录字段访问 / 更新（字段名不再全局唯一，按 base 类型消歧）
+-- 记录字段访问 / 更新（R2：按结构化字段表查表）
 -- ---------------------------------------------------------------
--- record 在 Elab.Records 降级成单构造子 data，字段 binder 名带 @vuna@record@field@
--- 前缀（字段类型不能把前序字段名当 binder）。访问/更新留在精化期：先推断 base 类型，
--- 用单构造子 data 的 telescope 定位字段，再复用 case 分支精化（bindCtorTele 负责隐式
--- 参数、索引合一与 M39 不透明字段的 cast）。
+-- record 在 Elab.Records 降级成单构造子 data；字段身份由 `DtData.dtDataFields`
+-- （名字 / 声明序号 / 外层字段类型）承载，不再从构造器 telescope 的 binder 名反推。
+-- 访问/更新留在精化期：先推断 base 类型，用字段表定位字段，再复用 case 分支精化
+-- （bindCtorTele 负责隐式参数、索引合一与 M39 不透明字段的 cast）。
 -- | 把类型值解析成单构造子 record（数据族、构造子、索引实参）；否则 Nothing。
 recordTypeOf : Ec -> Value -> Maybe (Pair DtData (Pair DtCtor (List Value)))
 recordTypeOf ec ty = case forceVal ec ty of
@@ -549,43 +549,9 @@ recordTypeOf ec ty = case forceVal ec ty of
     Nothing => Nothing
   _ => Nothing
 
--- | record 投影/更新生成的字段 binder 名（`@vuna@record@field@` 前缀 + 序号）。
+-- | record 投影/更新生成的字段 binder 名（位置序号）。
 recordFieldVarName : Int -> String
-recordFieldVarName i = "@vuna@record@proj${strFromInt i}"
-
--- | 从列表取第 n 个元素（0 起），n < 0 或越界时返回 Nothing。
-listNthGo : Int -> List a -> Maybe a
-listNthGo n [] = Nothing
-listNthGo n (x :: rest) = if n <= 0 then Just x else listNthGo (n - 1) rest
-
--- | 取列表第 n 个元素（0 起）；listNthGo 的公开入口。
-listNth : Int -> List a -> Maybe a
-listNth n xs = listNthGo n xs
-
--- 构造子 telescope 里**字段**域项（跳过 arity 个族参数）。
--- | 遍历构造子 telescope，跳过 arity 个族参数后按顺序收集字段域项（逆序累积）。
-ctorFieldDomainsGo : Int -> Term -> List Term -> List Term
-ctorFieldDomainsGo arity (TPi name implicit rig dom cod) acc =
-  if arity > 0 then ctorFieldDomainsGo (arity - 1) cod acc
-  else ctorFieldDomainsGo 0 cod (dom :: acc)
-ctorFieldDomainsGo arity ty acc = reverse acc
-
--- | 返回构造子 telescope 中字段部分的域项列表（跳过前 arity 个族参数）。
-ctorFieldDomains : Int -> Term -> List Term
-ctorFieldDomains arity ty = ctorFieldDomainsGo arity ty []
-
--- 第 fi 个字段在**外层上下文**里的类型：字段域在 telescope 上下文（参数 + 前序字段）
--- 上求值；record 不支持字段间依赖，前序字段用中性占位值（依赖字段会在这里失配并报错）。
--- | 求第 fi 个字段在外层上下文的类型：前序字段用中性占位值代入。
-recordFieldTypeAt : Int -> Int -> List Value -> DtCtor -> Maybe Value
-recordFieldTypeAt arity fi params ctor = case listNth fi (ctorFieldDomains arity (dtCtorType ctor)) of
-  Nothing => Nothing
-  Just dom =>
-    let
-      dummy = VNeutral (NVar "@vuna@record@dep" 0 [])
-      before = map (\_ => dummy) (range 0 fi)
-      env = append (reverse before) (reverse params)
-    in Just (eval env dom)
+recordFieldVarName i = "@vuna@record@proj${i}"
 
 -- | 为 record 的 n 个字段生成 PVar 模式列表（binder 名由 recordFieldVarName 给出）。
 recordFieldPats : Int -> Span -> List Pat
@@ -597,95 +563,97 @@ recordFieldPatsFrom i remaining sp =
   if remaining <= 0 then []
   else Base.List.Cons (PVar (recordFieldVarName i) sp) (recordFieldPatsFrom (i + 1) (remaining - 1) sp)
 
--- | 在构造子 telescope 的字段部分按字段名查找，返回字段序号与字段总数。
-recordFieldLookup : String -> Int -> DtCtor -> Maybe (Pair Int Int)
-recordFieldLookup fname arity ctor =
-  let
-    tele = drop arity (dtCtorTelescope ctor)
-  in recordFieldLookupGo fname tele 0 (length tele)
+-- | R2：按名字在结构化字段表里查（字段序号 / 字段总数 / 外层字段类型）。
+recordFieldLookup : String -> DtData -> Maybe (Pair Int (Pair Int Term))
+recordFieldLookup fname dd = recordFieldLookupGo fname (dtDataFields dd) (length (dtDataFields dd))
 
--- | 顺序比较 telescope 字段 binder 的 `@vuna@record@field@` 名，命中返回 (序号, 总数)。
-recordFieldLookupGo : String -> List (Pair String Rig) -> Int -> Int -> Maybe (Pair Int Int)
-recordFieldLookupGo fname [] i n = Nothing
-recordFieldLookupGo fname ((Pair bname rig) :: rest) i n =
-  if bname == fieldBinderName fname then Just (Pair i n)
-  else recordFieldLookupGo fname rest (i + 1) n
+recordFieldLookupGo : String -> List DtFieldMeta -> Int -> Maybe (Pair Int (Pair Int Term))
+recordFieldLookupGo fname [] n = Nothing
+recordFieldLookupGo fname (f :: rest) n =
+  if f.dtFieldName == fname then Just (Pair f.dtFieldIndex (Pair n f.dtFieldType))
+  else recordFieldLookupGo fname rest n
 
 -- | 逐个检查更新字段是否属于该 record，返回第一个未知字段名。
-recordUpdateUnknownGo : Int -> DtCtor -> List (Pair String Expr) -> Maybe String
-recordUpdateUnknownGo arity ctor [] = Nothing
-recordUpdateUnknownGo arity ctor ((Pair fname e) :: rest) = case recordFieldLookup fname arity ctor of
+recordUpdateUnknownGo : DtData -> List (Pair String Expr) -> Maybe String
+recordUpdateUnknownGo dd [] = Nothing
+recordUpdateUnknownGo dd ((Pair fname e) :: rest) = case recordFieldLookup fname dd of
   Nothing => Just fname
-  Just _ => recordUpdateUnknownGo arity ctor rest
+  Just _ => recordUpdateUnknownGo dd rest
 
 -- | 报告第一个不属于该 record 的更新字段名；全部已知则返回 Nothing。
-recordUpdateUnknown : Int -> DtCtor -> List (Pair String Expr) -> Maybe String
-recordUpdateUnknown arity ctor fields = recordUpdateUnknownGo arity ctor fields
+recordUpdateUnknown : DtData -> List (Pair String Expr) -> Maybe String
+recordUpdateUnknown dd fields = recordUpdateUnknownGo dd fields
 
--- | 在更新字段表里按 record 字段 binder 名查找对应的新值表达式。
+-- | R2：在更新字段表里按 record 字段名查找对应的新值表达式。
 recordUpdateValueFor : String -> List (Pair String Expr) -> Maybe Expr
-recordUpdateValueFor bname [] = Nothing
-recordUpdateValueFor bname ((Pair fname e) :: rest) =
-  if fieldBinderName fname == bname then Just e else recordUpdateValueFor bname rest
+recordUpdateValueFor fname [] = Nothing
+recordUpdateValueFor fname ((Pair n e) :: rest) =
+  if n == fname then Just e else recordUpdateValueFor fname rest
 
 -- | 生成更新后构造子的第 i 个实参：提供新值就用它，否则引用原字段 binder。
-recordUpdateArg : Int -> Pair String Rig -> List (Pair String Expr) -> Span -> Expr
-recordUpdateArg i bname provided sp = case recordUpdateValueFor (firstOf bname) provided of
+recordUpdateArg : Int -> DtFieldMeta -> List (Pair String Expr) -> Span -> Expr
+recordUpdateArg i f provided sp = case recordUpdateValueFor f.dtFieldName provided of
   Just e => e
   Nothing => EVar (recordFieldVarName i) sp
 
--- | 按 telescope 顺序生成全部字段的更新实参，未提供的字段沿用原 binder。
-recordUpdateArgs : Int -> List (Pair String Rig) -> List (Pair String Expr) -> Span -> List Expr
+-- | 按字段表顺序生成全部字段的更新实参，未提供的字段沿用原 binder。
+recordUpdateArgs : Int -> List DtFieldMeta -> List (Pair String Expr) -> Span -> List Expr
 recordUpdateArgs i [] provided sp = []
-recordUpdateArgs i (b :: rest) provided sp =
-  recordUpdateArg i b provided sp :: recordUpdateArgs (i + 1) rest provided sp
+recordUpdateArgs i (f :: rest) provided sp =
+  recordUpdateArg i f provided sp :: recordUpdateArgs (i + 1) rest provided sp
 
--- 访问/更新的解析计划：纯解析（只查 data/字段，不递归回精化器），避免把额外 helper
+-- | R2：更新表达式涉及到的字段序号（结构化标注，供后续原语化复用）。
+recordUpdatedIndices : DtData -> List (Pair String Expr) -> List Int
+recordUpdatedIndices dd [] = []
+recordUpdatedIndices dd ((Pair fname e) :: rest) = case recordFieldLookup fname dd of
+  Just (Pair fi _) => fi :: recordUpdatedIndices dd rest
+  Nothing => recordUpdatedIndices dd rest
+
+-- 访问/更新的解析计划：纯解析（只查 data/字段表，不递归回精化器），避免把额外 helper
 -- 拉进 SCT 递归组；组里只多 elabEFieldFuel / elabERecUpdateFuel 两个入口。
--- | 字段访问解析结果：数据族、构造子、索引、字段序号与字段类型。
+-- R2：计划携带（记录名，字段序号）标注——`EField` / `ERecUpdate` 在精化期消歧后
+-- 的显式身份，后续 R3 的 `TProj` 原语直接消费它。
+-- | 字段访问解析结果：数据族、构造子、索引、记录名、字段序号/总数与字段类型。
 record FieldAccessPlan where
   planData : DtData
   planCtor : DtCtor
   planIdxs : List Value
+  planRecord : String
   planField : Int
   planFieldCount : Int
   planType : Value
 
--- | record 更新解析结果：数据族、构造子、索引、字段数与重建构造子的实参。
+-- | record 更新解析结果：数据族、构造子、索引、记录名、字段数 / 被改字段序号与重建实参。
 record UpdateAccessPlan where
   upData : DtData
   upCtor : DtCtor
   upIdxs : List Value
+  upRecord : String
   upFieldCount : Int
+  upFieldIndices : List Int
   upBodyArgs : List Expr
 
--- | 解析字段访问：校验 base 是单构造子 record，定位字段并求出字段类型。
+-- | 解析字段访问：校验 base 是单构造子 record，按字段表定位字段并求出字段类型。
 recordFieldPlan : Ec -> Value -> String -> Span -> Result FieldAccessPlan
 recordFieldPlan ec baseTy fname sp = case recordTypeOf ec baseTy of
   Nothing => errAt sp "cannot resolve record type for field ${fname}; add a type signature"
-  Just (Pair dd (Pair ctor idxs)) =>
-    let
-      arity = length dd.dtDataParams
-    in case recordFieldLookup fname arity ctor of
-      Nothing => errAt sp "record type has no field ${fname}"
-      Just (Pair fi nFields) => case recordFieldTypeAt arity fi idxs ctor of
-        Nothing => errAt sp "record field type is not representable"
-        Just fieldTy => Ok (FieldAccessPlan dd ctor idxs fi nFields fieldTy)
+  Just (Pair dd (Pair ctor idxs)) => case recordFieldLookup fname dd of
+    Nothing => errAt sp "record type has no field ${fname}"
+    Just (Pair fi (Pair nFields dom)) =>
+      Ok (FieldAccessPlan dd ctor idxs dd.dtDataName fi nFields (eval (reverse idxs) dom))
 
 -- | 解析 record 更新：校验字段都存在，并为重建构造子生成逐字段实参。
 recordUpdatePlan : Ec -> Value -> List (Pair String Expr) -> Span -> Result UpdateAccessPlan
 recordUpdatePlan ec baseTy fields sp = case recordTypeOf ec baseTy of
   Nothing => errAt sp "cannot resolve record type for update; add a type signature"
-  Just (Pair dd (Pair ctor idxs)) =>
-    let
-      arity = length dd.dtDataParams
-    in case recordUpdateUnknown arity ctor fields of
-      Just unknown => errAt sp "record type has no field ${unknown}"
-      Nothing =>
-        let
-          tele = drop arity (dtCtorTelescope ctor)
-          bodyArgs = recordUpdateArgs 0 tele fields sp
-        in Ok (UpdateAccessPlan dd ctor idxs (length tele) bodyArgs)
+  Just (Pair dd (Pair ctor idxs)) => case recordUpdateUnknown dd fields of
+    Just unknown => errAt sp "record type has no field ${unknown}"
+    Nothing =>
+      let
+        fs = dtDataFields dd
+        bodyArgs = recordUpdateArgs 0 fs fields sp
+      in Ok
+        (UpdateAccessPlan dd ctor idxs dd.dtDataName (length fs) (recordUpdatedIndices dd fields) bodyArgs)
 
 -- | `Base.Record.HasField` 字典族的 canonical 名，供上下文查找字段约束使用。
 hasFieldDictName : String
@@ -741,9 +709,14 @@ elabEFieldFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Expr -> String -
 elabEFieldFuel fuel globals ctx ec base fname sp = if fuel <= 0 then Err "DT: internal: inference fuel exhausted"
 else Vuna.Compiler.Common.bind (inferEFuel (fuel - 1) globals ctx ec base) (\pb => case pb of
   Pair baseTerm (Pair baseTy ec1) => case recordTypeOf ec1 baseTy of
-    Just _ => Vuna.Compiler.Common.bind (recordFieldPlan ec1 baseTy fname sp) (\plan => Vuna.Compiler.Common.bind (elabConAltFuel (fuel - 1) globals ctx ec1 plan.planData plan.planIdxs (evalCtx ctx baseTerm) plan.planType (dtCtorName plan.planCtor) (recordFieldPats plan.planFieldCount sp) sp (EVar (recordFieldVarName plan.planField) sp)) (\q => case q of
-      Pair alt ec2 => Ok (Pair (TCase baseTerm [alt]) (Pair plan.planType ec2))
-    )
+    -- R3：具体 record 的字段访问直接产出 `TProj` 原语（codegen 按原 case 形状展开）；
+    -- record 族只有参数、没有索引，因此 projection 不需要再走 `elabConAltFuel` 的
+    -- 索引合一 / 不透明字段 cast，字段类型直接来自结构化字段表。
+    Just _ => Vuna.Compiler.Common.bind (recordFieldPlan ec1 baseTy fname sp) (\plan => let
+      arity = length plan.planData.dtDataParams
+      tele = drop arity (dtCtorTelescope plan.planCtor)
+      proj = TProj baseTerm (dtCtorName plan.planCtor) tele (arity + plan.planField) plan.planField
+    in Ok (Pair proj (Pair plan.planType ec1))
     )
     Nothing => hasFieldAccessFuel (fuel - 1) globals ctx ec1 baseTerm baseTy fname sp
 )
@@ -758,7 +731,10 @@ else case fields of
     Pair baseTerm (Pair baseTy ec1) => Vuna.Compiler.Common.bind (recordUpdatePlan ec1 baseTy fields sp) (\plan => let
       body = EApp (EVar (dtCtorName plan.upCtor) sp) plan.upBodyArgs sp
     in Vuna.Compiler.Common.bind (elabConAltFuel (fuel - 1) globals ctx ec1 plan.upData plan.upIdxs (evalCtx ctx baseTerm) baseTy (dtCtorName plan.upCtor) (recordFieldPats plan.upFieldCount sp) sp body) (\q => case q of
-      Pair alt ec2 => Ok (Pair (TCase baseTerm [alt]) (Pair baseTy ec2))
+      -- R3：重建体装进 `TRecUpd` 原语（带记录身份）；语义仍是单分支 case。
+      Pair alt ec2 =>
+        Ok
+          (Pair (TRecUpd baseTerm alt.caseAltName alt.caseAltBinders plan.upFieldIndices alt.caseAltBody) (Pair baseTy ec2))
     )
     )
   )
@@ -936,8 +912,26 @@ expandListLitGo nilName consName (e :: rest) sp =
 -- `[Console "real"]` → `Cons "real" (Console "real") Nil`，`[Console n]` → `Cons n (Console n) Nil`；
 -- 无该实参的裸标签（如 `Fetch`）→ `defaultInstance`。ND2 从标签移除 String 后，
 -- 本规则收敛为「裸标签 = 默认名」+ ND4 的 `@` 显式名糖。
+-- `X@name`（ND4）：标记应用取出 (标签 X, 名字 name)。
+rowAtParts : Expr -> Maybe (Pair Expr Expr)
+rowAtParts (EApp (EVar name _) ([e, n]) _) = if isRowAtSyntax name then Just (Pair e n) else Nothing
+rowAtParts _ = Nothing
+
+-- 行条目的标签表达式：`X@name` 展开成 `X name`（过渡期标签是 `String -> Type`，
+-- 名字要进标签）；否则原样。
+rowLitLabel : Expr -> Expr
+rowLitLabel e = case rowAtParts e of
+  Just (Pair x n) => EApp x [n] (exprSpan e)
+  Nothing => e
+
 rowLitNameArg : Expr -> Maybe Expr
-rowLitNameArg (EApp f args _) = case rowLitNameArg f of
+rowLitNameArg e = case rowAtParts e of
+  Just (Pair _ n) => Just n
+  Nothing => rowLitNameArgPlain e
+
+-- 标签 `X "name" ...` 或 `X n`：首个实参即实例名；裸标签 → Nothing（用默认名）。
+rowLitNameArgPlain : Expr -> Maybe Expr
+rowLitNameArgPlain (EApp f args _) = case rowLitNameArgPlain f of
   Just nExpr => Just nExpr
   Nothing => case args of
     a :: _ => case a of
@@ -945,7 +939,7 @@ rowLitNameArg (EApp f args _) = case rowLitNameArg f of
       EVar nm _ => Just a
       _ => Nothing
     _ => Nothing
-rowLitNameArg _ = Nothing
+rowLitNameArgPlain _ = Nothing
 
 rowLitNameExpr : Expr -> Span -> Expr
 rowLitNameExpr e sp = case rowLitNameArg e of
@@ -956,7 +950,7 @@ expandRowListLitGo : String -> String -> List Expr -> Span -> Result Expr
 expandRowListLitGo nilName consName [] sp = Ok (EVar nilName sp)
 expandRowListLitGo nilName consName (e :: rest) sp =
   Vuna.Compiler.Common.bind (expandRowListLitGo nilName consName rest sp)
-    (\t => Ok (EApp (EVar consName sp) [rowLitNameExpr e sp, e, t] sp))
+    (\t => Ok (EApp (EVar consName sp) [rowLitNameExpr e sp, rowLitLabel e, t] sp))
 
 -- | 自动补注（M41 新增导出）：expandListLit。
 expandListLit : Ec -> String -> List Expr -> Span -> Result Expr

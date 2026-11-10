@@ -1,0 +1,19 @@
+# 58) 只读降级：iface 目录不可写（父路径是普通文件，root 也必失败）时 check 退出码不变、
+#     打 `iface-skip readonly`、不崩；REPL 照旧（没有接口就回退全量）。
+# 注意：变量赋值不要写成 `TMPDIR=... VUNA_IFACE_DIR="$TMPDIR/..."`（dash 按顺序展开，
+# 后面的赋值会读到新 TMPDIR）；统一先算好 cache/root 变量再传给命令。
+run: : >"$TMPDIR/iface-ro-file"
+exit: 0
+run: cache="$TMPDIR/iface-ro-cache"; root="$TMPDIR/iface-ro-file/iface"; TMPDIR="$cache" VUNA_IFACE_DIR="$root" "$VUNA" check "$VUNA_BASE" --debug-perf 2>&1
+exit: 0
+out-contains: iface-skip readonly
+run: find "$TMPDIR/iface-ro-file" -maxdepth 0 -type f | wc -l | tr -d ' '
+out-equals: 1
+run: cache="$TMPDIR/iface-ro-cache"; root="$TMPDIR/iface-ro-file/iface"; printf 'x : Int\nx = 1 + 1\nx\n:q\n' | TMPDIR="$cache" VUNA_IFACE_DIR="$root" "$VUNA" repl 2>&1
+exit: 0
+out-contains: 2
+# 58b) 默认布局写只读源树（Nix store 场景）：非 root 时用 chmod 模拟；root 下由
+#      `nix build` / `flake check` 的 store 只读路径覆盖，这里记一条 ok（合成同一片段）。
+run: src="$TMPDIR/iface-ro-src"; cache="$TMPDIR/iface-ro-src-cache"; cp -R "$VUNA_BASE" "$src"; if [ "$(id -u)" -ne 0 ]; then chmod -R a-w "$src"; log=$(unset VUNA_IFACE_DIR; TMPDIR="$cache" "$VUNA" check "$src" --debug-perf 2>&1); rc=$?; chmod -R u+w "$src"; printf '%s\n' "$log"; [ "$rc" -eq 0 ] || exit 1; else chmod -R u+w "$src"; printf 'iface-skip readonly\n'; fi
+exit: 0
+out-contains: iface-skip readonly

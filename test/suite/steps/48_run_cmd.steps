@@ -1,0 +1,24 @@
+# 48) M38 vuna run：增量 build + 执行 + 参数透传 + 退出码；--no-build / 缺 bin / 库包。
+#     `vuna run` 会写 .output：先把 corpus/packages/11_run_args 复制到 $TMPDIR 并重写
+#     其 vuna.toml 的 base 行。
+run: sh -c 'cp -R corpus/packages/11_run_args "$TMPDIR/run-args"; find "$TMPDIR/run-args" -name vuna.toml -exec sed -i "s|^vuna-base = .*|vuna-base = \"$VUNA_BASE\"|" {} +'
+run: "$VUNA" build "$TMPDIR/run-args" >/dev/null 2>&1
+run: "$VUNA" run "$TMPDIR/run-args" 2>&1
+out-contains: no args
+run: "$VUNA" run "$TMPDIR/run-args" --no-build -- alpha beta 2>&1
+out-equals: alpha
+run: "$VUNA" run "$TMPDIR/run-args" --out "$TMPDIR/m38-run-outdir" 2>&1
+out-contains: no args
+run: "$VUNA" run "$TMPDIR/run-args" --no-build --out "$TMPDIR/m38-run-outdir" -- alpha 2>&1
+out-equals: alpha
+run: sh -c 'mkdir -p "$TMPDIR/m38-run-exit/app"; printf "[package]\nname = \"m38-run-exit\"\nprivileged = true\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" >"$TMPDIR/m38-run-exit/vuna.toml"; printf "import Base.IO.Host\n\nmain : IO Int\nmain = exit 7\n" >"$TMPDIR/m38-run-exit/app/Main.vuna"'
+run: "$VUNA" build "$TMPDIR/m38-run-exit" >/dev/null 2>&1
+run: "$VUNA" run "$TMPDIR/m38-run-exit" --no-build >/dev/null 2>&1
+exit: 7
+run: sh -c 'mkdir -p "$TMPDIR/m38-run-nobin/app"; printf "[package]\nname = \"m38-run-nobin\"\nprivileged = true\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" >"$TMPDIR/m38-run-nobin/vuna.toml"; printf "main : Int\nmain = 0\n" >"$TMPDIR/m38-run-nobin/app/Main.vuna"'
+run: "$VUNA" run "$TMPDIR/m38-run-nobin" --no-build 2>&1
+exit: 2
+out-contains: binary not found
+run: "$VUNA" run ../base 2>&1
+exit: 2
+out-contains: no executable entry

@@ -1,0 +1,13 @@
+# 44g) LSP/REPL 消费依赖接口（`VUNA_IFACE_TOOL=1`，默认关闭）：预热依赖接口后，
+#      REPL 求值走接口路径（`iface-source=repl`），LSP 诊断链仍全部通过；默认路径不变。
+#      依赖接口以 corpus/packages/m34_summary（仓库自身 check 写入镜像）为上下文；
+#      LSP 冒烟脚本为 corpus/lsp/smoke.sh（自包含）。
+run: sh -c 'mkdir -p "$TMPDIR/repo-cache"; ( cd .. && TMPDIR="$TMPDIR/repo-cache" "$VUNA" check . >/dev/null 2>&1 ) || true'
+run: sh -c 'cd .. && printf "x : Int\nx = 1 + 1\nx + 40\n:q\n" | TMPDIR="$TMPDIR/repo-cache" VUNA_IFACE_TOOL=1 VUNA_DEBUG_PERF=1 "$VUNA" repl 2>&1 | tee "$TMPDIR/repl-iface.log"'
+out-contains: iface-source=repl modules=
+out-contains: 42
+# 懒加载闭包规模：iface-tool-lazy modules=N，N < 60（不是把整棵 base 全载入）。
+run: sh -c 'mods=$(grep -o "iface-tool-lazy modules=[0-9]*" "$TMPDIR/repl-iface.log" | head -1 | sed "s/.*=//"); [ -n "$mods" ] && [ "$mods" -lt 60 ]'
+# LSP 诊断链在依赖接口路径下全部通过（脚本自包含，非 0 即失败）。
+run: sh -c 'cd .. && TMPDIR="$TMPDIR/repo-cache" VUNA_IFACE_TOOL=1 sh test/corpus/lsp/smoke.sh "$VUNA" >/dev/null 2>&1'
+exit: 0

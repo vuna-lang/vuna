@@ -10,8 +10,7 @@ repo 自测现在由 `vuna test --suite test/suite.toml` 驱动（原生 Vuna �
 
 - `test/suite.toml`：suite 配置。`[suite]` 放全局默认（`jobs`/`timeout`/`name`）；
   `[family.<name>]` 按目录约定把夹具展开成 golden/error case；
-- `test/suite/lib/harness.sh`：迁移期共享 shell helper（旧章节仍用）；
-- `test/suite/sections/NN.sh`：尚未声明式化的旧章节，一个章节一个独立进程；
+- `test/suite/steps/*.steps`：声明式步进用例（一套行式 DSL，见下）；
 - 执行器在 `lib/Vuna/Test/{Suite,Run}.vuna`，由 `Vuna.Cli.testArgs` 分派。
 
 ```console
@@ -49,6 +48,46 @@ error（`.check.err`/…）并存、`.check.err` 与 `.interp.err` 并存、`.ru
 CBroken。原 `<base>.vuna.nointerp` 旁标记已删除——它的语义由「有 run 期望而无 interp
 期望」自然表达。
 
+
+### 声明式步进用例（`*.steps`）
+
+一个 `*.steps` 文件 = 一个 case，挂在 `kind = "steps"` 的 family 下
+（`[family.steps_native] dir = "test/suite/steps"`，section 90）。行式指令，`#` 注释；
+`run:` / `read:` 开新步，其余指令挂到当前步。每个 case 有独立 `TMPDIR` /
+`VUNA_IFACE_DIR` / `VUNA_REPL_HISTORY`，可安全并行。
+
+```text
+run: sh -c 'printf "%s\n" "main : Int" "main = 1" > "$TMPDIR/pkg/Main.vuna"'
+exit: 0
+file-exists: $TMPDIR/pkg/Main.vuna
+file-contains: $TMPDIR/pkg/Main.vuna "main = 1"
+read: $TMPDIR/pkg/Main.vuna
+out-contains: main
+for-each: corpus/packages/[01][0-9]_*/
+  run: "$VUNA" check "$TMPDIR/{name}" 2>&1
+  exit: 0
+end:
+```
+
+| 指令 | 语义 |
+| --- | --- |
+| `run:` | 新起一步：`sh -c <cmd>`，cwd = `test/`，注入 `VUNA` / `VUNA_SEED` / `VUNA_BASE` / `OCAMLOPT` / `VUNA_SUITE_ROOT` / `TMPDIR` / `VUNA_IFACE_DIR` / `VUNA_REPL_HISTORY` |
+| `read:` | 读文件内容作为该步输出（不执行命令）；文件缺失即失败 |
+| `exit:` | `0` / `nonzero` / 具体值；缺省断言 0 |
+| `out-contains:` | 合并输出必须包含该片段（可多条） |
+| `out-not-contains:` | 合并输出必须**不**包含该片段 |
+| `out-equals:` | 合并输出（去尾部换行）逐字相等；空值 = 空串 |
+| `out-equals-file:` | 合并输出（去尾部换行）与文件内容逐字相等（快照/诊断对拍） |
+| `file-exists:` / `file-absent:` | 路径存在 / 不存在 |
+| `file-contains:` | 文件存在且包含片段：`<path> <fragment>` 在首个空格处切分（路径不能含空格） |
+| `for-each:` … `end:` | 按 shell 词列表（可 glob）逐项重复块内步骤；`{item}` = 匹配项（去尾 `/`）、`{name}` = basename、`{stem}` = 去掉结尾 `.vuna` 的匹配项；匹配为空 = 显式失败；不支持嵌套 |
+
+路径解析：`$TMPDIR` 展开成该 case 的私有临时根；相对路径按 `test/` 解析（写
+`corpus/...`，不是 `test/corpus/...`）。每步额外断言没有被 timeout（超时取 case/family
+`timeout`），解析错误（未闭合 loop、指令出现在任何步骤之前等）让 case 显式失败。
+
+断言走统一计数器，失败信息带步骤与 item 名；`*.steps` 不进入本地结果缓存。
+
 ### case 类型与语义
 
 | kind | 语义 |
@@ -57,36 +96,37 @@ CBroken。原 `<base>.vuna.nointerp` 旁标记已删除——它的语义由「�
 | `golden` / `error` | 与 auto 同一推导路径（kind 只剩语义提示） |
 | `check-ok` | 只跑 `vuna check`，必须 exit 0 |
 | `check-error` | check 必须 fail（片段） |
-| `CSection` | 执行 `test/suite/sections/NN.sh`；退出码 + 章节自己的 `N checks` 汇总 |
 | `CLint` | `vuna lint` 输出 vs `.out` + 期望退出码 |
 | `CFix` | `vuna lint --fix` 后内容 vs `.expected`，并验证幂等 |
 | `CRuntime` | compile+build+run：片段（可选）+ 退出码（`.run.err`/`.run.exit`） |
 | `CSeed` | 用 `VUNA_SEED` 编译运行，验证 seed 冒烟 |
+| `CSteps` | 解释执行 `*.steps` 声明式用例（见上） |
 | `CBroken` | discovery 失败（缺期望文件、矛盾组合、目录不存在等），显式失败而不是静默跳过 |
 
 ### 执行模型
 
 - 父进程发现 case 后按 `--jobs` spawn N 个自身（隐藏 `--worker i/N`），worker 按
   `index mod N` 静态分片；每个 case 写一份 TSV 结果到共享临时目录，父进程按序读回。
-- 每个 case 有独立临时目录与 per-case 超时（默认 300s；section 900s）。子进程输出经固定
-  shell helper 捕获（`timeout --foreground ... >out 2>err`，可选合并），不新增编译器原语。
-- 默认 family 与可并行的 `CSection` 一起进 worker；每个 worker 有独立 `TMPDIR` 与
-  `VUNA_IFACE_DIR` 镜像。共享仓库路径/默认 iface 布局的 §42/§47/§57/§58/§59 仍走父进程
-  串行 lane，并与 worker 同时运行（`--fail-fast` 时先串行、失败则不发 worker）。
-- `--fail-fast`：串行 lane 失败则不再启动 worker；worker 内部失败后不再启动新 case。
-- 失败行带 case id；断言失败给 expected/actual 片段。
+- 每个 case 有独立临时目录与 per-case 超时（默认 300s，`--timeout` / family `timeout`
+  覆盖）。子进程输出经固定 shell helper 捕获（`timeout --foreground ... >out 2>err`，
+  可选合并），不新增编译器原语。
+- family 与 `*.steps` case 都进 worker 并行；worker 按 `index mod N` 静态分片。每个
+  steps case 额外有独立的 `TMPDIR` / `VUNA_IFACE_DIR` / `VUNA_REPL_HISTORY`（不再有
+  串行 lane；需要独占仓库路径的用例在步骤里把夹具复制到 `$TMPDIR`）。
+- `--fail-fast`：worker 内部失败后不再启动新 case。
+- 失败行带 case id；断言失败给步骤名 / expected / actual 片段。
 - 本地结果缓存：成功的 golden/error case 写入 `.local/test-cache/`，key 含编译器指纹、
   base 源码树哈希、source/expected 内容（目录型再含夹具 .vuna 树）；命中打印 `(cached)`。
-  `--no-cache` 关闭，CI check 固定 `--no-cache`；section 脚本不缓存。
+  `--no-cache` 关闭，CI check 固定 `--no-cache`；`*.steps` 不缓存。
 
 ### 迁移状态
 
-- 已声明式化：§1/2/3/4/5/6/7/8/9/10/11/13/15/16/18/19/20/21/22/23/24/25/26/27/37/43
-  与 §34 的 dt/dt_err/dt_base/dt_io（family 覆盖全部夹具；对应 section 脚本已删除）。
-- 仍是脚本：§14（CLI）、§17（诊断）、§28–34_extra（包/split/额外断言）、
-  §35–59 中尚未迁移的工具链/REPL/LSP/net/缓存/iface 段。
-- `test/run-tests.sh` 与 `nix/run-tests.sh` 已删除；旧章节脚本可在 `test/suite/sections/`
-  查看，后续逐段转成 family/cli case。
+- 语言/corpus 夹具由 family 覆盖（§1–§34 的 dt/dt_err/dt_base/dt_io 与 run/modules/
+  records/traits/monad/stdlib/lint/fix/term 等；对应 section 脚本早已删除）。
+- 其余工具链/包/REPL/LSP/net/缓存/iface 段全部是 `test/suite/steps/*.steps` 声明式用例；
+  `test/suite/sections/` 与 `test/suite/lib/harness.sh` 已删除，`CSection` 机制随之移除。
+- `test/run-tests.sh` 与 `nix/run-tests.sh` 已删除；suite 入口只有
+  `vuna test --suite test/suite.toml`。
 
 ### iface 判据回归（§44m–§44p）
 
@@ -106,8 +146,8 @@ CBroken。原 `<base>.vuna.nointerp` 旁标记已删除——它的语义由「�
 
 | 层 | 控制 | 默认 | 行为 |
 | --- | --- | --- | --- |
-| case | `--timeout` / family `timeout` / section 900s | 300s | 超时计 FAIL 并继续其余 case；`timeout` 缺失时降级直跑 |
-| 工具链 | `VUNA_TEST_CMD_TIMEOUT`（旧章节 harness 仍识别） | 300s | 章节内部命令的 wrapper 超时，超时打印 FAIL 并继续 |
+| case | `--timeout` / family `timeout` | 300s | 超时计 FAIL 并继续其余 case；`timeout` 缺失时降级直跑 |
+| steps 单步 | 同上（继承 case timeout） | 300s | 单步超时即失败，失败信息带 `timed out after Ns` |
 
 ### 产品化过滤与更新
 
@@ -123,14 +163,14 @@ vuna test --suite test/suite.toml --cache-dir DIR   # 覆盖本地结果缓存�
 ```
 
 - `--changed REV`：`git diff --name-only REV`；compiler/base/lib/app/suite 配置变更跑全量，
-  夹具变更只跑对应 family case 与引用该目录的 section；无变更时不跑 case。
+  夹具变更只跑对应 family case，以及 steps 文件文本里提到该目录的 case；无变更时不跑 case。
 - `--last-failed`：失败 case id 写到 `.local/test-suite/last-failed`，重跑时按 id 过滤；
   空结果不会清空已有失败列表。
 - `--bless`：golden 失败时把实际输出写回对应 `.out`，并打印 `blessed`；不处理 `.check.err`/`.compile.err`。
 - `--watch`：首次跑完后每 500ms 比较 suite/corpus/工具链源码 mtime，变化即重跑。
 - `--cache-dir DIR`：覆盖 `.local/test-cache`；worker 继承同一目录。
 - `--strict-skips`：`--fail-fast` 跳过的 case 计为失败（CI 使用）。
-- `--audit`：扫描 `test/corpus` 的 `.vuna`，未被 family case 或 section 脚本引用的夹具列出
+- `--audit`：扫描 `test/corpus` 的 `.vuna`，未被 family case 或 steps 文件文本引用的夹具列出
   并 exit 1；`test/corpus/codegen` 是 metrics 固定输入，显式排除。
 
 family discovery 对目录里每个夹具要求一个期望文件（阶段限定后缀或兼容裸后缀；目录型是
@@ -140,9 +180,9 @@ family discovery 对目录里每个夹具要求一个期望文件（阶段限定
 **默认护栏**（不依赖 `--audit` 手动开关，跑 suite 就生效）：
 
 - `audit/orphans`：已声明 family 目录里的每个夹具必须与某个 case 的 source 精确对应，
-  否则注入一个失败 case。旧的 `--audit` 仍保留全 corpus 的宽松报告（section 脚本里
+  否则注入一个失败 case。旧的 `--audit` 仍保留全 corpus 的宽松报告（steps 文件里
   提到目录名就算认领），两者互不替代。
-- `audit/min-cases`：`[suite] min_cases = 600` 是 case 总数下限。整族从 `suite.toml`
+- `audit/min-cases`：`[suite] min_cases = 630` 是 case 总数下限。整族从 `suite.toml`
   消失时，孤儿审计连目录都看不到了，只有总数骤降能兜住这类「少跑 case 却全绿」。
   新增夹具无需调整；批量删除夹具时同步下调。
 
@@ -184,9 +224,6 @@ golden/runtime case 的 codegen 产物按「生成模块集」分桶（`set-<key
 （约 -24%）。`Compile.cacheBase` 另有 `VUNA_CACHE_DIR` 覆盖（默认
 `$TMPDIR/vuna-cache`），供 CI 显式指定 split/unit 缓存位置；runner 不设置它——
 实测把 split 缓存塞进同一桶会因首次填充变慢。
-旧章节的 `assert_min_section_checks` 仍在脚本里保留，等该段转声明式后由
-case/断言计数替代。
-
 ## corpus 的包上下文与 `VUNA_BASE`
 
 `test/corpus/vuna.toml` 给整个 corpus 一个**独立包上下文**（`name = "vuna-corpus"`，

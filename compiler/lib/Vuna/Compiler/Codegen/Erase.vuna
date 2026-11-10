@@ -46,6 +46,7 @@ flattenConApp (TApp f a rig) = case flattenConApp f of
   Just (Pair c args) => Just (Pair c (append args [Pair a rig]))
   Nothing => Nothing
 flattenConApp (TCon c args) = Just (Pair c args)
+flattenConApp (TMk c args) = Just (Pair c args)
 flattenConApp _ = Nothing
 
 -- ---------------------------------------------------------------
@@ -150,7 +151,12 @@ else case t of
         (\_ => checkErasureFuel (fuel - 1) typeNames binders a)
   -- M14：构造子应用只看非擦除实参（擦除实参是族参数/索引，允许是类型项）。
   TCon c args => checkConArgsErasureFuel (fuel - 1) typeNames binders args
+  TMk c args => checkConArgsErasureFuel (fuel - 1) typeNames binders args
   -- M14：case 的分支把「完整 telescope（表面顺序）」压栈后再检查分支体。
+  TProj base c tele i fi => checkErasureFuel (fuel - 1) typeNames binders base
+  TRecUpd base c tele idxs body =>
+    Vuna.Compiler.Common.bind (checkErasureFuel (fuel - 1) typeNames binders base)
+      (\_ => checkAltErasureFuel (fuel - 1) typeNames binders [CaseAlt c tele body])
   TCase scrut alts =>
     Vuna.Compiler.Common.bind (checkErasureFuel (fuel - 1) typeNames binders scrut)
       (\_ => checkAltErasureFuel (fuel - 1) typeNames binders alts)
@@ -202,6 +208,11 @@ else case t of
       if rigIsErased rig then termDepsIntoFuel (fuel - 1) runtimeNames acc f
       else termDepsIntoFuel (fuel - 1) runtimeNames (termDepsIntoFuel (fuel - 1) runtimeNames acc f) a
   TCon c args => termDepsArgsFuel (fuel - 1) runtimeNames acc args
+  TMk c args => termDepsArgsFuel (fuel - 1) runtimeNames acc args
+  TProj base c tele i fi => termDepsIntoFuel (fuel - 1) runtimeNames acc base
+  TRecUpd base c tele idxs body =>
+    termDepsAltsFuel (fuel - 1) runtimeNames (termDepsIntoFuel (fuel - 1) runtimeNames acc base)
+      [CaseAlt c tele body]
   TCase scrut alts =>
     termDepsAltsFuel (fuel - 1) runtimeNames (termDepsIntoFuel (fuel - 1) runtimeNames acc scrut)
       alts
@@ -488,12 +499,17 @@ checkTermScopes depth (TMeta m) = Ok 0
 checkTermScopes depth (TApp f a rig) =
   Vuna.Compiler.Common.bind (checkTermScopes depth f) (\_ => checkTermScopes depth a)
 checkTermScopes depth (TCon c args) = checkTermScopesArgs depth args
+checkTermScopes depth (TMk c args) = checkTermScopesArgs depth args
 checkTermScopes depth (TLam name rig body) = checkTermScopes (depth + 1) body
 checkTermScopes depth (TPi name implicit rig dom cod) =
   Vuna.Compiler.Common.bind (checkTermScopes depth dom) (\_ => checkTermScopes (depth + 1) cod)
 checkTermScopes depth (TIf c th el) =
   Vuna.Compiler.Common.bind (checkTermScopes depth c)
     (\_ => Vuna.Compiler.Common.bind (checkTermScopes depth th) (\_ => checkTermScopes depth el))
+checkTermScopes depth (TProj base c tele i fi) = checkTermScopes depth base
+checkTermScopes depth (TRecUpd base c tele idxs body) =
+  Vuna.Compiler.Common.bind (checkTermScopes depth base)
+    (\_ => checkTermScopes (depth + length tele) body)
 checkTermScopes depth (TCase scrut alts) =
   Vuna.Compiler.Common.bind (checkTermScopes depth scrut) (\_ => checkAltScopes depth alts)
 

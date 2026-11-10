@@ -1,0 +1,17 @@
+# 41) workspace 检查/构建单元 + 确定性/增量构建
+run: "$VUNA" check corpus/packages/m30_ws_member_error 2>&1
+exit: nonzero
+out-contains: [bad]
+run: "$VUNA" build --out "$TMPDIR/ws1" corpus/packages/m30_ws_build 2>&1
+exit: 0
+out-contains: skipped (library): member
+run: "$TMPDIR/ws1/ws-build/bin/ws-build" 2>&1
+exit: 0
+out-equals: "hello from member"
+run: "$VUNA" build --out "$TMPDIR/ws1" corpus/packages/m30_ws_build 2>&1
+out-contains: up to date:
+run: "$VUNA" build --package member --out "$TMPDIR/ws-pkg" corpus/packages/m30_ws_build 2>&1
+exit: 0
+out-contains: skipped (library): member
+run: sh -c '"$VUNA" build --out "$TMPDIR/ws2" corpus/packages/m30_ws_build >/dev/null 2>&1 && for f in "$TMPDIR/ws1/ws-build"/*.ml "$TMPDIR/ws1/ws-build/build.sh" "$TMPDIR/ws1/ws-build/build-meta.json"; do cmp -s "$f" "$TMPDIR/ws2/ws-build/$(basename "$f")" || exit 1; done'
+exit: 0

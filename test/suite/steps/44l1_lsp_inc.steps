@@ -1,0 +1,43 @@
+# 44l1) M34.6（5a/5c）LSP 单文件增量精化 + 会话缓存：
+#      - LSP-only 会话（依赖已 check、本包未 check）didOpen 成功后写回当前模块接口；
+#      - 接口路径与全量路径（VUNA_IFACE_TOOL=0）对同一 buffer 的诊断逐字节一致；
+#      - 外部修改同包依赖模块后，**同一 LSP 进程**的下一次请求必须失效并重报。
+# LSP 帧驱动：Content-Length 精确字节（body 后没有换行）；didOpen/didChange 都是 Full 同步。
+
+# A) LSP-only 写回：依赖接口预热、本包不 check；didOpen 后镜像里出现当前模块接口。
+run: mkdir -p "$TMPDIR/lsp-inc-wb/app" "$TMPDIR/lsp-inc-wb/lib"
+run: printf '[package]\nname = "lsp-inc-wb"\n\n[dependencies]\nvuna-base = "%s"\n' "$VUNA_BASE" > "$TMPDIR/lsp-inc-wb/vuna.toml"
+run: printf 'module WInner (innerVal) where\n\ninnerVal : Int\ninnerVal = 41\n' > "$TMPDIR/lsp-inc-wb/lib/WInner.vuna"
+run: printf 'module WOuter (outerVal) where\n\nimport WInner\n\nouterVal : Int\nouterVal = innerVal + 1\n' > "$TMPDIR/lsp-inc-wb/lib/WOuter.vuna"
+run: printf 'import WOuter\n\nmain : Int\nmain = outerVal\n' > "$TMPDIR/lsp-inc-wb/app/Main.vuna"
+run: "$VUNA" check "$VUNA_BASE"
+run: d="$TMPDIR/lsp-inc-wb"; log="$TMPDIR/lsp-inc-wb.log"; esc() { sed -e 's/$/\\n/' "$1" | tr -d '\n'; }; fr() { printf 'Content-Length: %s\r\n\r\n%s' "$(printf '%s' "$1" | wc -c)" "$1"; }; uri="file://$d/lib/WOuter.vuna"; init=$(printf '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"processId":null,"rootUri":"file://%s","capabilities":{}}}' "$d"); open=$(printf '{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"%s","languageId":"vuna","version":1,"text":"%s"}}}' "$uri" "$(esc "$d/lib/WOuter.vuna")"); { fr "$init"; fr '{"jsonrpc":"2.0","method":"initialized","params":{}}'; fr "$open"; sleep 0.3; fr '{"jsonrpc":"2.0","id":9,"method":"shutdown","params":null}'; fr '{"jsonrpc":"2.0","method":"exit","params":null}'; } | ( cd "$d" && "$VUNA" lsp >"$log" 2>/dev/null ); grep -o '"diagnostics":\[[^]]*\]' "$log" | tail -1 | sed 's/^"diagnostics"://'
+out-equals: []
+# 镜像模式（VUNA_IFACE_DIR）下接口文件名是内容寻址的 `WOuter-<hash>.iface`，
+# 不能再按固定名找（a996723 起）。这里只断言「当前模块的接口确实被写回」。
+run: m="$VUNA_IFACE_DIR$(cd "$TMPDIR/lsp-inc-wb" && pwd)"; find "$m" -name 'WOuter*.iface' 2>/dev/null | grep -q .
+exit: 0
+
+# B) 会话失效：warm 包（Inner/Outer 都有接口）里，外部把 Inner 改成 Bool——
+#    同一 LSP 进程的下一次请求必须重读并报出 Outer 的类型错误（不能复用陈旧接口）。
+run: mkdir -p "$TMPDIR/lsp-inc-sess/app" "$TMPDIR/lsp-inc-sess/lib"
+run: printf '[package]\nname = "lsp-inc-sess"\n\n[dependencies]\nvuna-base = "%s"\n' "$VUNA_BASE" > "$TMPDIR/lsp-inc-sess/vuna.toml"
+run: printf 'module SInner (innerVal) where\n\ninnerVal : Int\ninnerVal = 41\n' > "$TMPDIR/lsp-inc-sess/lib/SInner.vuna"
+run: printf 'module SOuter (outerVal) where\n\nimport SInner\n\nouterVal : Int\nouterVal = innerVal + 1\n' > "$TMPDIR/lsp-inc-sess/lib/SOuter.vuna"
+run: printf 'import SOuter\n\nmain : Int\nmain = outerVal\n' > "$TMPDIR/lsp-inc-sess/app/Main.vuna"
+run: "$VUNA" check "$TMPDIR/lsp-inc-sess"
+# 诊断一致性：错误 buffer 下接口路径与全量路径逐字节一致。
+run: printf 'module SOuter (outerVal) where\n\nimport SInner\n\nouterVal : Int\nouterVal = innerVal + True\n' > "$TMPDIR/lsp-inc-err.vuna"
+run: d="$TMPDIR/lsp-inc-sess"; buf="$TMPDIR/lsp-inc-err.vuna"; log="$TMPDIR/lsp-inc-iface.log"; esc() { sed -e 's/$/\\n/' "$1" | tr -d '\n'; }; fr() { printf 'Content-Length: %s\r\n\r\n%s' "$(printf '%s' "$1" | wc -c)" "$1"; }; uri="file://$d/lib/SOuter.vuna"; init=$(printf '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"processId":null,"rootUri":"file://%s","capabilities":{}}}' "$d"); open=$(printf '{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"%s","languageId":"vuna","version":1,"text":"%s"}}}' "$uri" "$(esc "$buf")"); { fr "$init"; fr '{"jsonrpc":"2.0","method":"initialized","params":{}}'; fr "$open"; sleep 0.3; fr '{"jsonrpc":"2.0","id":9,"method":"shutdown","params":null}'; fr '{"jsonrpc":"2.0","method":"exit","params":null}'; } | ( cd "$d" && "$VUNA" lsp >"$log" 2>/dev/null ); grep -o '"diagnostics":\[[^]]*\]' "$log" | tail -1 | sed 's/^"diagnostics"://' > "$TMPDIR/lsp-inc-iface.diag"
+run: d="$TMPDIR/lsp-inc-sess"; buf="$TMPDIR/lsp-inc-err.vuna"; log="$TMPDIR/lsp-inc-full.log"; esc() { sed -e 's/$/\\n/' "$1" | tr -d '\n'; }; fr() { printf 'Content-Length: %s\r\n\r\n%s' "$(printf '%s' "$1" | wc -c)" "$1"; }; uri="file://$d/lib/SOuter.vuna"; init=$(printf '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"processId":null,"rootUri":"file://%s","capabilities":{}}}' "$d"); open=$(printf '{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"%s","languageId":"vuna","version":1,"text":"%s"}}}' "$uri" "$(esc "$buf")"); { fr "$init"; fr '{"jsonrpc":"2.0","method":"initialized","params":{}}'; fr "$open"; sleep 0.3; fr '{"jsonrpc":"2.0","id":9,"method":"shutdown","params":null}'; fr '{"jsonrpc":"2.0","method":"exit","params":null}'; } | ( cd "$d" && TMPDIR="$TMPDIR/lsp-inc-full-cache" VUNA_IFACE_TOOL=0 "$VUNA" lsp >"$log" 2>/dev/null ); grep -o '"diagnostics":\[[^]]*\]' "$log" | tail -1 | sed 's/^"diagnostics"://' > "$TMPDIR/lsp-inc-full.diag"
+read: $TMPDIR/lsp-inc-iface.diag
+out-contains: TC_
+out-equals-file: $TMPDIR/lsp-inc-full.diag
+# 同一进程：先 didOpen（无错），外部改 SInner 后 didChange（无错文本 + 注释）⇒ 报错。
+# FIFO + 后台 LSP 的全部交互在单步 sh 内完成；日志/诊断落 $TMPDIR 后由后续步骤断言。
+run: d="$TMPDIR/lsp-inc-sess"; out="$TMPDIR/lsp-inc-sess.out"; err="$TMPDIR/lsp-inc-sess.err"; fifo="$TMPDIR/lsp-inc-sess.in"; rm -f "$fifo" "$out" "$err"; mkfifo "$fifo"; esc() { sed -e 's/$/\\n/' "$1" | tr -d '\n'; }; fr() { printf 'Content-Length: %s\r\n\r\n%s' "$(printf '%s' "$1" | wc -c)" "$1"; }; diagsof() { grep -o '"diagnostics":\[[^]]*\]' "$out" | sed -n "$1p" | sed 's/^"diagnostics"://'; }; waitdiag() { _i=0; while [ "$_i" -lt 400 ]; do _c=$(grep -o '"method":"textDocument/publishDiagnostics"' "$out" 2>/dev/null | wc -l); [ "$_c" -ge "$1" ] && return 0; sleep 0.05; _i=$((_i + 1)); done; return 1; }; uri="file://$d/lib/SOuter.vuna"; ( cd "$d" && "$VUNA" lsp <"$fifo" >"$out" 2>"$err" ) & pid=$!; exec 8>"$fifo"; init=$(printf '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"processId":null,"rootUri":"file://%s","capabilities":{}}}' "$d"); open=$(printf '{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"%s","languageId":"vuna","version":1,"text":"%s"}}}' "$uri" "$(esc "$d/lib/SOuter.vuna")"); fr "$init" >&8; fr '{"jsonrpc":"2.0","method":"initialized","params":{}}' >&8; fr "$open" >&8; waitdiag 1 || exit 1; diagsof 1 > "$TMPDIR/lsp-inc-sess-diag1.txt"; printf 'module SInner (innerVal) where\n\ninnerVal : Bool\ninnerVal = True\n' > "$d/lib/SInner.vuna"; cp "$d/lib/SOuter.vuna" "$TMPDIR/lsp-inc-sess-change.vuna"; printf '\n-- lsp session touch\n' >> "$TMPDIR/lsp-inc-sess-change.vuna"; change=$(printf '{"jsonrpc":"2.0","method":"textDocument/didChange","params":{"textDocument":{"uri":"%s","version":2},"contentChanges":[{"text":"%s"}]}}' "$uri" "$(esc "$TMPDIR/lsp-inc-sess-change.vuna")"); fr "$change" >&8; waitdiag 2 || exit 1; diagsof 2 > "$TMPDIR/lsp-inc-sess-diag2.txt"; fr '{"jsonrpc":"2.0","id":9,"method":"shutdown","params":null}' >&8; fr '{"jsonrpc":"2.0","method":"exit","params":null}' >&8; exec 8>&-; wait "$pid" 2>/dev/null || true; rm -f "$fifo"
+exit: 0
+read: $TMPDIR/lsp-inc-sess-diag1.txt
+out-equals: []
+read: $TMPDIR/lsp-inc-sess-diag2.txt
+out-contains: TC_

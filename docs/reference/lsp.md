@@ -134,14 +134,14 @@ shutdown/exit 退出码，以及**交互式帧读取**（第 18 项：body 后�
 立刻响应）、**符号 hover 的 range 落点**（第 19 项）、**codeAction quick fix**（第 21 项：
 `kind`/`title`/`newText`/0-based range、fix all 的 Command 形式、`context.only` 过滤）与
 **rename/prepareRename**（第 29 项：顶层函数改名、遮蔽下的局部变量、记录字段、关键字/内建
-拒绝）。`test/suite/sections/35.sh` 的 LSP 段调用它。
+拒绝）。`test/suite/steps/35_goal_lsp.steps` 的 LSP 段调用它。
 
 还覆盖：模块名 hover/definition（import 名字、导出项 `module B`、
 模块头、模块 docstring）、局部绑定 hover/definition（参数类型、λ、`let` 值、遮蔽：
 body 指向 `let` binder / 值指向函数参数）、未解 `_` 洞的目标+上下文（容错查询）、
 命名洞 `?goal` 的名字/目标/上下文与 range 覆盖；传输层边界（坏 JSON 帧 / 无
 `Content-Length` / 超大帧声明 / 半帧 EOF）在第 22–25 项。CLI 侧的目标查询与 `?name` 的
-fmt/lint/check 行为在 `test/suite/sections/35.sh` 的 35b 段。
+fmt/lint/check 行为在 `test/suite/steps/35_goal_lsp.steps` 的 35b 段。
 
 再覆盖：**case split**（洞 + 上下文 data / record binder →
 `refactor.rewrite`；构造子顺序 / `Box _` 参数通配 / 隐式构造子参数不进模式 / 分支缩进 =

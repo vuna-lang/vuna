@@ -153,7 +153,7 @@ elabTraitFinal globals ec tname paramNames methods methodsP pKinds fieldTys =
     tele = teleOfType ctorTy
     dd =
       DtData dname tele [DtCtor cname dname tele ctorTy]
-        (foldParamPis paramsKinds (TType levelZero)) [] False
+        (foldParamPis paramsKinds (TType levelZero)) [] False ReprAuto []
     projs = methodProjections tname paramNames pKinds methodsP fieldTys
     projSpans = map (\m => Pair (traitMethodName m) (traitMethodSpan m)) methods
     -- D27：字段（方法类型）在运行时不可表示 ⇒ 该方法的投影体里字典字段的使用要包 cast。
@@ -315,8 +315,8 @@ projectionDefsGo ctor nParams methods fieldTys idx nFields =
 -- base / 用户扩展）。不做该检查时，实例可以散落到任意 import 双方的文件里，实例查找
 -- 与 coherence 的可解释性都会变差；文档一直按落点规则描述，现在由精化器强制。
 declTopName : Decl -> Maybe String
-declTopName (DData n ps kind ctors derivings viaField lin sp) = Just n
-declTopName (DRecord n ps fields derivings viaField lin sp) = Just n
+declTopName (DData n ps kind ctors derivings viaField repr lin sp) = Just n
+declTopName (DRecord n ps fields derivings viaField repr lin sp) = Just n
 declTopName (DTrait n ps methods sp) = Just n
 declTopName _ = Nothing
 
@@ -831,6 +831,8 @@ substInstParamsGo n args depth (TApp f a r) =
   TApp (substInstParamsGo n args depth f) (substInstParamsGo n args depth a) r
 substInstParamsGo n args depth (TCon c cs) =
   TCon c (map (\p => Pair (substInstParamsGo n args depth (firstOf p)) (secondOf p)) cs)
+substInstParamsGo n args depth (TMk c cs) =
+  TMk c (map (\p => Pair (substInstParamsGo n args depth (firstOf p)) (secondOf p)) cs)
 substInstParamsGo n args depth (TCase scrut alts) =
   TCase (substInstParamsGo n args depth scrut)
     (map (\alt => substInstParamsAlt n args depth alt) alts)
@@ -967,6 +969,8 @@ substMetaTermGo m rep depth (TApp f a r) =
   TApp (substMetaTermGo m rep depth f) (substMetaTermGo m rep depth a) r
 substMetaTermGo m rep depth (TCon c args) =
   TCon c (map (\p => Pair (substMetaTermGo m rep depth (firstOf p)) (secondOf p)) args)
+substMetaTermGo m rep depth (TMk c args) =
+  TMk c (map (\p => Pair (substMetaTermGo m rep depth (firstOf p)) (secondOf p)) args)
 substMetaTermGo m rep depth (TCase s alts) =
   TCase (substMetaTermGo m rep depth s) (map (\alt => substMetaTermAlt m rep depth alt) alts)
 substMetaTermGo m rep depth (TIf c th el) =
@@ -1111,6 +1115,9 @@ else case t of
         (injectDictGoFuel (fuel - 1) defName dName appPos depth a) r
   TCon c args =>
     TCon c
+      (map (\p => Pair (injectDictGoFuel (fuel - 1) defName dName appPos depth (firstOf p)) (secondOf p)) args)
+  TMk c args =>
+    TMk c
       (map (\p => Pair (injectDictGoFuel (fuel - 1) defName dName appPos depth (firstOf p)) (secondOf p)) args)
   TCase scrut alts =>
     TCase (injectDictGoFuel (fuel - 1) defName dName appPos depth scrut)

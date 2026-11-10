@@ -3,13 +3,13 @@
 # 阶段矩阵由夹具期望文件的阶段限定后缀表达（`<base>.<stage>.<artifact>`，如
 # `01.check.err` / `01.interp.out` / `01.run.out`）；裸 `.out`（interp+run 共享
 # golden）与裸 `.err`（check 负例）是兼容形态。family 旗标只是各阶段的上限。
-# 旧 shell 章节（迁移期）由 test/suite/sections/*.sh 自动发现，不需要在这里声明。
+# 工具链/包/REPL/LSP/缓存类用例在 test/suite/steps/（声明式 steps family），见 testing.md。
 
 [suite]
 name = "vuna"
 jobs = 0          # 0 = auto（探测全部可用核）
 timeout = 300
-min_cases = 600    # case 数下限：整族从配置消失时显式失败（当前 633）
+min_cases = 630    # case 数下限：整族从配置消失时显式失败（当前 662）
 
 # --- golden（interp + check + compile + run + 互证）---
 [family.dt]
@@ -48,6 +48,13 @@ dir = "test/corpus/elab_perf"
 kind = "check-ok"
 timeout = 15
 tags = ["dt", "perf"]
+
+# 声明式步进用例（run/expect 指令，见 docs/reference/testing.md）
+[family.steps_native]
+section = "90"
+dir = "test/suite/steps"
+kind = "steps"
+tags = ["declarative"]
 
 [family.run]
 section = "1"

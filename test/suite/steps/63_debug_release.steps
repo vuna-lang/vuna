@@ -1,0 +1,13 @@
+# 63) F3 B：语言级调试构造 `dbg` / `assert` / `todo` 与 release 构建拒绝。
+run: D="$TMPDIR/debug-constructs"; rm -rf "$D"; mkdir -p "$D"; printf 'main : Int\nmain = dbg "msg" (assert True "ok" 1)\n' >"$D/ok.vuna"; printf 'main : Int\nmain = assert False "boom" 0\n' >"$D/assert.vuna"; printf 'main : Int\nmain = todo "later"\n' >"$D/todo.vuna"; printf 'main : Int\nmain = dbg "x" 1\n' >"$D/dbg.vuna"
+run: "$VUNA" check "$TMPDIR/debug-constructs/ok.vuna" >/dev/null 2>&1
+run: VUNA_RELEASE=1 "$VUNA" check "$TMPDIR/debug-constructs/assert.vuna" 2>&1
+exit: 1
+out-contains: TC_DebugConstructInRelease
+run: VUNA_RELEASE=1 "$VUNA" check "$TMPDIR/debug-constructs/todo.vuna" 2>&1
+exit: 1
+out-contains: TC_DebugConstructInRelease
+run: VUNA_RELEASE=1 "$VUNA" check "$TMPDIR/debug-constructs/dbg.vuna" >/dev/null 2>&1
+run: VUNA_RELEASE= "$VUNA" check --release "$TMPDIR/debug-constructs/assert.vuna" 2>&1
+exit: 1
+out-contains: TC_DebugConstructInRelease

@@ -159,7 +159,7 @@ let rec v_Base_dList_dlookupPair = (fun mc0 mc1 -> (match mc1 with
 
 let rec v_Base_dList_dzip = (fun mc0 mc1 -> (match mc0 with
   | C_Base_dList_dList_Cons (dtb__36, dtb__37) -> (match mc1 with
-  | C_Base_dList_dList_Cons (dtb__38, dtb__39) -> (C_Base_dList_dList_Cons ((Base_dPair.C_Base_dPair_dPair_Pair (dtb__36, dtb__38)), ((v_Base_dList_dzip dtb__37) dtb__39)))
+  | C_Base_dList_dList_Cons (dtb__38, dtb__39) -> (C_Base_dList_dList_Cons ({ Base_dPair.f_Base_dPair_dPair_first = dtb__36; Base_dPair.f_Base_dPair_dPair_second = dtb__38 }, ((v_Base_dList_dzip dtb__37) dtb__39)))
   | _ -> C_Base_dList_dList_Nil
 )
   | _ -> C_Base_dList_dList_Nil

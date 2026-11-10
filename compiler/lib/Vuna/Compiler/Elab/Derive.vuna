@@ -50,7 +50,7 @@ expandDerivings decls =
 collectDerivings : List Decl -> Result (List Decl)
 collectDerivings [] = Ok []
 collectDerivings (d :: rest) = case d of
-  DData name params kind ctors derivings viaField lin sp =>
+  DData name params kind ctors derivings viaField repr lin sp =>
     if viaField then collectDerivings rest
     else if length derivings == 0 then collectDerivings rest
     else Vuna.Compiler.Common.bind (derivingsFor name params ctors derivings sp)

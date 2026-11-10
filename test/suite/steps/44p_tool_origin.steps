@@ -1,0 +1,23 @@
+# 44p) LSP 单模块写回标记为 `tool`：命令行 check 不复用它（`iface-reject=tool-origin`），
+#      下一次整包写回归为 `pkg`（`iface-write=0/`）。夹具 corpus/packages/m34_iface_audit
+#      复制到 $TMPDIR，vuna.toml 的 base 改到本仓库；LSP 帧从 stdin 喂入。
+run: sh -c 'rm -rf "$TMPDIR/iface-audit-pkg" "$TMPDIR/iface-origin-cache"; cp -R corpus/packages/m34_iface_audit "$TMPDIR/iface-audit-pkg"; mkdir -p "$TMPDIR/iface-origin-cache"'
+run: sh -c 'for mf in "$TMPDIR/iface-audit-pkg"/*/vuna.toml; do sed "s|vuna-base = \"[^\"]*\"|vuna-base = \"$VUNA_BASE\"|" "$mf" > "$mf.tmp" && mv "$mf.tmp" "$mf"; done'
+run: sh -c 'TMPDIR="$TMPDIR/iface-origin-cache" "$VUNA" check "$TMPDIR/iface-audit-pkg/dep" && TMPDIR="$TMPDIR/iface-origin-cache" "$VUNA" check "$TMPDIR/iface-audit-pkg/mid"'
+exit: 0
+# 清掉本包接口 ⇒ LSP 走冷启动写回分支（`toolWriteModuleIfaceCold`），产物必须标 tool。
+run: sh -c 'm="$VUNA_IFACE_DIR$(cd "$TMPDIR/iface-audit-pkg/mid" && pwd)"; rm -rf "$m"'
+# 构造 JSON-RPC 帧（每行一个紧凑 JSON；text 里换行必须是转义序列 \n，不能是真换行）。
+run: pkg="$TMPDIR/iface-audit-pkg/mid"; src="$pkg/lib/Mid.vuna"; text=$(sed 's/\\/\\\\/g; s/"/\\"/g' "$src" | awk '{ if (NR > 1) printf "\\n"; printf "%s", $0 }'); printf '%s\n' "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"rootUri\":\"file://$pkg\",\"capabilities\":{}}}" '{"jsonrpc":"2.0","method":"initialized","params":{}}' "{\"jsonrpc\":\"2.0\",\"method\":\"textDocument/didOpen\",\"params\":{\"textDocument\":{\"uri\":\"file://$src\",\"languageId\":\"vuna\",\"version\":1,\"text\":\"$text\"}}}" '{"jsonrpc":"2.0","id":2,"method":"shutdown"}' '{"jsonrpc":"2.0","method":"exit"}' > "$TMPDIR/lsp-origin.jsonl"; LC_ALL=C awk '{ printf "Content-Length: %d\r\n\r\n%s", length($0), $0 }' "$TMPDIR/lsp-origin.jsonl" > "$TMPDIR/lsp-origin.frames"
+run: sh -c 'TMPDIR="$TMPDIR/iface-origin-cache" "$VUNA" lsp < "$TMPDIR/lsp-origin.frames" > /dev/null 2>&1'
+exit: 0
+# manifest 里出现 tool 来源条目。
+run: sh -c 'mf="$VUNA_IFACE_DIR$(cd "$TMPDIR/iface-audit-pkg/mid" && pwd)/.vuna-iface"; LC_ALL=C grep -ao "tool" "$mf" | grep -q .'
+run: sh -c 'find "$TMPDIR/iface-origin-cache"/vuna-cache -name check -type d -prune -exec rm -rf {} + 2>/dev/null || true'
+run: TMPDIR="$TMPDIR/iface-origin-cache" "$VUNA" check "$TMPDIR/iface-audit-pkg/mid" --debug-perf
+exit: 0
+out-contains: iface-reject=tool-origin
+run: sh -c 'find "$TMPDIR/iface-origin-cache"/vuna-cache -name check -type d -prune -exec rm -rf {} + 2>/dev/null || true'
+run: TMPDIR="$TMPDIR/iface-origin-cache" "$VUNA" check "$TMPDIR/iface-audit-pkg/mid" --debug-perf
+exit: 0
+out-contains: iface-write=0/

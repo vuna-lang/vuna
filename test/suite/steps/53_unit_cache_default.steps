@@ -1,0 +1,23 @@
+# 53) codegen 单元缓存**默认开启**（`VUNA_UNIT_CACHE=0` opt-out）+ 桶内 GC：
+#     - 多模块包改叶子后默认路径必须命中未受影响单元（`unit-cache-hit`），产物与干净重建
+#       逐字节一致；`VUNA_UNIT_CACHE=0` 必须完全不写/不用单元缓存。
+#     - 同一入口反复编辑（entry key 每轮都变）后，桶内 `.unit` 文件数必须收敛到「本次单元
+#       数」（= 产物 .ml 数），不能随编辑次数累积。
+run: sh -c 'rm -rf "$TMPDIR/u53" "$TMPDIR/u53-cache" "$TMPDIR/u53-out"; mkdir -p "$TMPDIR/u53/lib" "$TMPDIR/u53/app"; printf "[package]\nname = \"unit-default-pkg\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$TMPDIR/u53/vuna.toml"; printf "module Leaf (leafVal) where\n\nleafVal : Int\nleafVal = 1\n" > "$TMPDIR/u53/lib/Leaf.vuna"; printf "module Mid (midVal) where\n\nimport Leaf\n\nmidVal : Int\nmidVal = leafVal + 1\n" > "$TMPDIR/u53/lib/Mid.vuna"; printf "module Top (topVal) where\n\nimport Mid\n\ntopVal : Int\ntopVal = midVal + 1\n" > "$TMPDIR/u53/lib/Top.vuna"; n=1; while [ "$n" -le 4 ]; do printf "module Other%d (other%d) where\n\nother%d : Int\nother%d = %d\n" "$n" "$n" "$n" "$n" "$n" > "$TMPDIR/u53/lib/Other$n.vuna"; n=$((n + 1)); done; printf "import Top\nimport Other1\nimport Other2\nimport Other3\nimport Other4\n\nmain : Int\nmain = topVal + other1 + other2 + other3 + other4\n" > "$TMPDIR/u53/app/Main.vuna"'
+# 预热默认路径，并记录「本次单元数」（产物 .ml 数）与桶内 .unit 基线。
+run: sh -c 'TMPDIR="$TMPDIR/u53-cache" "$VUNA" build --no-compile --out "$TMPDIR/u53-out" "$TMPDIR/u53" >/dev/null 2>&1; find "$TMPDIR/u53-out" -maxdepth 1 -name "*.ml" | wc -l | tr -d " " > "$TMPDIR/u53-units"; find "$TMPDIR/u53-cache"/vuna-cache/*/split-units -name "*.unit" 2>/dev/null | wc -l | tr -d " " > "$TMPDIR/u53-bucket0"'
+# 改叶子（Leaf/Mid/Top 三个单元失效；Other1..4 与 runtime/entry 中 runtime 仍可命中）。
+run: sh -c 'printf "module Leaf (leafVal) where\n\nleafVal : Int\nleafVal = 2\n" > "$TMPDIR/u53/lib/Leaf.vuna"; TMPDIR="$TMPDIR/u53-cache" VUNA_DEBUG_PERF=1 "$VUNA" build --no-compile --out "$TMPDIR/u53-out" "$TMPDIR/u53" 2>&1 | tee "$TMPDIR/u53.log"'
+out-contains: unit-cache-hit
+# 干净重建（独立缓存 + 显式关闭）→ 产物逐字节一致。
+run: sh -c 'rm -rf "$TMPDIR/u53-fresh" "$TMPDIR/u53-fresh-out"; TMPDIR="$TMPDIR/u53-fresh" VUNA_UNIT_CACHE=0 "$VUNA" build --no-compile --out "$TMPDIR/u53-fresh-out" "$TMPDIR/u53" >/dev/null 2>&1'
+run: diff -r "$TMPDIR/u53-out" "$TMPDIR/u53-fresh-out"
+# opt-out：完全不使用单元缓存（无 hit 记录，也不产生 split-units 文件）。
+run: sh -c 'TMPDIR="$TMPDIR/u53-optout-cache" VUNA_UNIT_CACHE=0 VUNA_DEBUG_PERF=1 "$VUNA" build --no-compile --out "$TMPDIR/u53-optout-out" "$TMPDIR/u53" > "$TMPDIR/u53-optout.log" 2>&1'
+read: $TMPDIR/u53-optout.log
+out-not-contains: unit-cache-hit
+run: sh -c '! find "$TMPDIR/u53-optout-cache" -name "*.unit" 2>/dev/null | grep -q .'
+# 桶内 GC：连续编辑入口 6 轮，桶内文件数收敛到单元数。
+run: sh -c 'i=1; while [ "$i" -le 6 ]; do printf "import Top\nimport Other1\nimport Other2\nimport Other3\nimport Other4\n\nmain : Int\nmain = topVal + other1 + other2 + other3 + other4 + %d\n" "$i" > "$TMPDIR/u53/app/Main.vuna"; TMPDIR="$TMPDIR/u53-cache" "$VUNA" build --no-compile --out "$TMPDIR/u53-out" "$TMPDIR/u53" >/dev/null 2>&1 || exit 1; i=$((i + 1)); done'
+run: sh -c 'bucket0=$(cat "$TMPDIR/u53-bucket0"); bucket=$(find "$TMPDIR/u53-cache"/vuna-cache/*/split-units -name "*.unit" 2>/dev/null | wc -l | tr -d " "); [ "$bucket" -eq "$bucket0" ]'
+run: sh -c 'units=$(cat "$TMPDIR/u53-units"); bucket0=$(cat "$TMPDIR/u53-bucket0"); [ "$units" -gt 0 ] && [ "$bucket0" -gt 0 ] && [ "$bucket0" -le "$units" ]'

@@ -24,6 +24,10 @@ linearPrefix : Bool -> String
 linearPrefix True = "linear "
 linearPrefix False = ""
 
+-- R1（records-v2）：声明前缀 = 表示档位前缀 + 线性前缀（`transparent record` / `lin record`）。
+declPrefix : ReprTier -> Bool -> String
+declPrefix tier lin = reprPrefix tier ++ linearPrefix lin
+
 -- 声明渲染
 -- ---------------------------------------------------------------
 renderDeclAt : List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Decl -> List String
@@ -31,15 +35,15 @@ renderDeclAt env at lineInd decl =
   attachAt at (declSpan decl) lineInd (renderDeclBody env at lineInd decl)
 
 renderDeclBody : List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Decl -> List String
-renderDeclBody env at lineInd (DData name params kind ctors derivings viaField lin sp) =
-  renderDataDecl env at viaField (linearPrefix lin) name params kind ctors derivings
+renderDeclBody env at lineInd (DData name params kind ctors derivings viaField repr lin sp) =
+  renderDataDecl env at viaField (declPrefix repr lin) name params kind ctors derivings
 renderDeclBody env at lineInd (DAxiom name ty sp) = renderSigLine env at lineInd "axiom " name [] ty
 renderDeclBody env at lineInd (DExtern name cName ty sp) =
   renderSigLine env at lineInd "extern ${name} ${strShow cName}" "" [] ty
 renderDeclBody env at lineInd (DSig name ctx ty sp) = renderSigLine env at lineInd "" name ctx ty
 renderDeclBody env at lineInd (DFun name pats body sp) = renderClause env at lineInd name pats body
-renderDeclBody env at lineInd (DRecord name params fields derivings viaField lin sp) =
-  renderRecordDecl env at viaField (linearPrefix lin) name params fields derivings
+renderDeclBody env at lineInd (DRecord name params fields derivings viaField repr lin sp) =
+  renderRecordDecl env at viaField (declPrefix repr lin) name params fields derivings
 renderDeclBody env at lineInd (DTrait name params methods sp) =
   renderTraitDecl env at name params methods
 renderDeclBody env at lineInd (DInstance ctxE head methods sp) =

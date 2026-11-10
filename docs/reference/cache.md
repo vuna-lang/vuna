@@ -275,6 +275,10 @@ load 之后按闭包过滤模块表：起点 = entry 的全部 imports（含隐�
   不再读全部源码算内容哈希（~6ms vs ~0.6–1.0s）。
 - **快判**：默认内容哈希；`VUNA_CACHE_MTIME=1` 提供带 5s 安全窗的 mtime+size 快路径
   （可选、非默认；收益 <5%）。
+- **R2（records-v2）**：`miRecords : List RecordMeta` 是模块的**结构化字段表**
+  （名字 / 类型 / 声明序号 / 派生 / 表示档位），`miIfaceHash` 的 `hashRecords` 直接吃它；
+  `miCached.cachedDatas` 里的 `DtData.dtDataFields` 是 Core 侧等价表（跨包字段访问查表用）。
+  两处布局变化 ⇒ `vuna-iface 13 → 14`，旧缓存自然失效。
 - **序列化**：载荷已有 framing + 损坏回退 + schema/编译器指纹拒绝 + 内容寻址文件名
   + `hashOfIface` 自证，但**仍是 OCaml Marshal**（非自描述格式；同长同校验和的构造性损坏
   仍可能让 `Marshal.from_string` 抛异常；这种情况下读侧 `readModuleFileRaw` 的
@@ -297,6 +301,14 @@ load 之后按闭包过滤模块表：起点 = entry 的全部 imports（含隐�
 - **其余缓存仍是 TMPDIR + 包名哈希**：check / split / split-units / ast 按包名哈希隔离
   （`VUNA_IFACE_DIR` 只影响 iface），跨项目同名包在 TMPDIR 缓存上仍可能互相覆盖（各自
   回退，正确性不受影响）。
+- **`ast` 解析缓存不按编译器指纹隔离（2026-11-10 实测）**：它只按「文件路径 + 内容」命中，
+  存的是编译器自身 `Ast` 的 Marshal 载荷。两个 AST 布局不同的编译器（例如改了
+  `DRecord`/`DtData` 但尚未 rotation 的 seed 与新 vuna，或同一 TMPDIR 里的新旧二进制）
+  会互相读到对方的条目：轻则误报类型错误（如把 `lin` 位读错），重则段错误。表现特征：
+  「同一源码、`vuna check <单包>` 通过但 `vuna check .` 崩、或换个 TMPDIR 就好了」。
+  规避：换二进制或改 AST 走 `TMPDIR=$(mktemp -d) vuna ...`（rotation 会同步 seed 与 vuna
+  的布局，之后自然一致）。彻底修复 = 缓存键纳入编译器指纹（与 iface 的 `compilerTag`
+  同源）。
 - **擦除位残 meta** 仍靠包段重编号；彻底方案是精化收尾消 meta。
 - 接口多存 `miDecls`（见上），文件比 TTC 的「只存编译后定义」更接近源码体积；后续可换更
   紧凑的终止性/record 上下文表示。

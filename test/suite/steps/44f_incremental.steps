@@ -1,0 +1,28 @@
+# 44f) 包内逐模块增量（S4）：复制 base，改一个叶子模块后重算——其余模块复用、只 parse
+#      改动模块、第二次运行收敛（全部干净、零重写）、manifest 与全量路径逐字节一致，
+#      注入类型错误后增量与全量诊断逐字节一致。
+#      夹具：$VUNA_BASE 复制到 $TMPDIR/incr-base（不改工作树）；缓存与临时 TMPDIR 均在 case 私有根下。
+run: sh -c 'rm -rf "$TMPDIR/incr-base" "$TMPDIR/incr-cache"; mkdir -p "$TMPDIR/incr-cache"; cp -r "$VUNA_BASE" "$TMPDIR/incr-base"; TMPDIR="$TMPDIR/incr-cache" "$VUNA" check "$TMPDIR/incr-base" >/dev/null 2>&1'
+# 改一个叶子模块后带 --debug-perf 重算，日志落盘供后续计数/片段断言。
+run: sh -c 'printf "\nincrProbe : Int\nincrProbe = 1\n" >> "$TMPDIR/incr-base/lib/Base/Error.vuna"; TMPDIR="$TMPDIR/incr-cache" "$VUNA" check "$TMPDIR/incr-base" --debug-perf > "$TMPDIR/incr.log" 2>&1'
+# 0 < cache-own-clean < 模块总数（总数取 iface-write=N/M 的 M；内容寻址下目录文件数不可靠）。
+run: sh -c 'log="$TMPDIR/incr.log"; total=$(grep -o "iface-write=[0-9]*/[0-9]*" "$log" | head -1 | cut -d/ -f2); clean=$(sed -n "s/.*cache-own-clean=\([0-9][0-9]*\).*/\1/p" "$log"); [ -n "$clean" ] && [ -n "$total" ] && [ "$total" -gt 0 ] && [ "$clean" -lt "$total" ]'
+# 只 parse 脏模块：parse-module 行数 == total - clean。
+run: sh -c 'log="$TMPDIR/incr.log"; total=$(grep -o "iface-write=[0-9]*/[0-9]*" "$log" | head -1 | cut -d/ -f2); clean=$(sed -n "s/.*cache-own-clean=\([0-9][0-9]*\).*/\1/p" "$log"); parse=$(grep -c "parse-module=Base\." "$log" || true); [ "$parse" -eq "$((total - clean))" ]'
+# 改动模块被写回：iface-write >= 1。
+run: sh -c 'log="$TMPDIR/incr.log"; writes=$(grep -o "iface-write=[0-9]*" "$log" | head -1 | cut -d= -f2); [ -n "$writes" ] && [ "$writes" -ge 1 ]'
+# 删掉 check 缓存后重跑：全部命中 clean、零 iface 写（收敛）。
+run: sh -c 'rm -rf "$TMPDIR/incr-cache"/vuna-cache/*/check; TMPDIR="$TMPDIR/incr-cache" "$VUNA" check "$TMPDIR/incr-base" --debug-perf > "$TMPDIR/incr2.log" 2>&1'
+run: sh -c 'log="$TMPDIR/incr2.log"; total=$(grep -o "iface-write=[0-9]*/[0-9]*" "$log" | head -1 | cut -d/ -f2); [ -n "$total" ] && grep -qF "cache-own-clean=$total" "$log"'
+read: $TMPDIR/incr2.log
+out-contains: iface-write=0/
+# 注入类型错误：增量路径与全量路径（VUNA_ELAB_FULL=1）的诊断（去掉 DEBUG/PERF 行）逐字节一致。
+run: sh -c 'printf "\nbadProbe : Int\nbadProbe = \"x\"\n" >> "$TMPDIR/incr-base/lib/Base/Error.vuna"'
+run: sh -c 'TMPDIR="$TMPDIR/incr-cache" "$VUNA" check "$TMPDIR/incr-base" > "$TMPDIR/incr-bad.log" 2>&1'
+exit: nonzero
+run: sh -c 'TMPDIR="$TMPDIR/incr-bad-full" VUNA_ELAB_FULL=1 "$VUNA" check "$TMPDIR/incr-base" > "$TMPDIR/incr-bad-full.log" 2>&1'
+exit: nonzero
+run: sh -c 'grep -vE "^(DEBUG|PERF) " "$TMPDIR/incr-bad.log" > "$TMPDIR/incr-bad-diag"; grep -vE "^(DEBUG|PERF) " "$TMPDIR/incr-bad-full.log" > "$TMPDIR/incr-bad-full-diag"'
+read: $TMPDIR/incr-bad-diag
+out-contains: TC_TypeMismatch
+out-equals-file: $TMPDIR/incr-bad-full-diag

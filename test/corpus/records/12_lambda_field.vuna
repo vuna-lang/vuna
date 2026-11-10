@@ -1,0 +1,13 @@
+-- R3（records-v2）：字段类型是函数时投影（`TProj` iota 走 `force` 展开 base），
+-- 覆盖「命名定义 + 参数化函数字段」这条路径（曾经因 stuck 投影不 force 而不归约）。
+record Fn a where
+  run : a -> a
+
+mk : Fn Int
+mk = Fn { run = \x => x + 41 }
+
+applyFn : Fn Int -> Int
+applyFn g = g.run 1
+
+main : Int
+main = applyFn mk

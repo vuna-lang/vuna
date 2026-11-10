@@ -1,0 +1,33 @@
+# 54) REPL v2 加载矩阵：模块 / 目录 / 文件 / CLI 参数 / 包内浏览与检索 / 历史持久化。
+#     工作区夹具写在 case 私有 $TMPDIR（包上下文只依赖 $VUNA_BASE），不改工作树。
+run: sh -c 'rm -rf "$TMPDIR/repl-ws"; mkdir -p "$TMPDIR/repl-ws/lib"; printf "[package]\nname = \"replws\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$TMPDIR/repl-ws/vuna.toml"; printf "module Foo (greeting) where\n\ngreeting : String\ngreeting = \"hi\"\n" > "$TMPDIR/repl-ws/lib/Foo.vuna"; printf "answer : Int\nanswer = 42\n" > "$TMPDIR/repl-entry.vuna"'
+# 模块加载 / 模块名错误。
+run: printf ':load Base.Nat\nZero\n:q\n' | "$VUNA" repl 2>&1
+out-contains: 已导入模块 Base.Nat
+out-contains: 0
+run: printf ':load Does.Not.Exist\n:q\n' | "$VUNA" repl 2>&1
+out-contains: 找不到模块
+# 目录加载：CLI 位置参数给包上下文；`:load DIR` 切换包（包名出现在提示/输出里）。
+run: printf ':q\n' | "$VUNA" repl "$TMPDIR/repl-ws" 2>&1
+out-contains: replws
+run: printf ':load %s\n:q\n' "$TMPDIR/repl-ws" | "$VUNA" repl 2>&1
+out-contains: 已切换包 replws
+run: sh -c 'cd "$TMPDIR/repl-ws" && printf ":browse Foo\n:info greeting\n:search greeting\n:browse\n:q\n" | "$VUNA" repl 2>&1'
+out-contains: ## Foo
+out-contains: Foo.greeting
+out-contains: greeting : String
+out-contains: Foo.vuna
+# 单文件加载（CLI FILE）与 CLI MODULE 参数；坏模块非 0（退出码 2）。
+run: printf 'answer\n:q\n' | "$VUNA" repl "$TMPDIR/repl-entry.vuna" 2>&1
+out-contains: 已加载
+out-contains: 42
+run: printf 'Zero\n:q\n' | "$VUNA" repl Base.Nat 2>&1
+out-contains: 已导入模块 Base.Nat
+run: printf ':q\n' | "$VUNA" repl Does.Not.Exist
+exit: 2
+# 历史持久化：单行单元写入文件，下一次会话恢复。
+run: sh -c 'printf "7 + 1\n:q\n" | VUNA_REPL_HISTORY="$TMPDIR/repl-v2-hist" "$VUNA" repl >/dev/null 2>&1'
+read: $TMPDIR/repl-v2-hist
+out-contains: 7 + 1
+run: printf ':history\n:q\n' | VUNA_REPL_HISTORY="$TMPDIR/repl-v2-hist" "$VUNA" repl 2>&1
+out-contains: 7 + 1

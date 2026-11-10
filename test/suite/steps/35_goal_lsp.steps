@@ -1,0 +1,35 @@
+# 35) M17 工具链：`vuna goal` 洞目标显示 + LSP 编辑器冒烟；35b 容错目标查询（未解洞 /
+#      命名洞 ?goal）与 fmt/lint/check。包夹具在 case 私有 $TMPDIR（绝对 $VUNA_BASE）。
+run: "$VUNA" goal corpus/dt/15_goal.vuna 2>&1
+exit: 0
+out-contains: 15_goal.vuna:7:11
+out-contains: goal Type
+run: "$VUNA" goal corpus/dt/01_id.vuna 2>&1
+exit: 0
+out-contains: no holes
+run: "$VUNA" goal 2>&1
+exit: 2
+run: sh corpus/lsp/smoke.sh "$VUNA"
+exit: 0
+run: sh -c 'hole="$TMPDIR/hole-pkg"; named="$TMPDIR/named-hole-pkg"; mkdir -p "$hole/lib" "$named/lib"; printf "[package]\nname = \"hole-pkg\"\n\n[dependencies]\nvuna-base = \"%s\"\n\n[export]\nmodules = [\"Holes\"]\n" "$VUNA_BASE" > "$hole/vuna.toml"; printf "[package]\nname = \"named-hole-pkg\"\n\n[dependencies]\nvuna-base = \"%s\"\n\n[export]\nmodules = [\"Named\"]\n" "$VUNA_BASE" > "$named/vuna.toml"; printf "%s\n" "module Holes where" "" "g : Int -> Int" "g n =" "  let m = n + 1" "  in _" > "$hole/lib/Holes.vuna"; printf "%s\n" "module Named where" "" "g : Int -> Int" "g n =" "  let m = n + 1" "  in ?goal" > "$named/lib/Named.vuna"'
+exit: 0
+run: "$VUNA" goal "$TMPDIR/hole-pkg/lib/Holes.vuna" 2>&1
+exit: 0
+out-contains: : goal Int
+out-contains: m : Int
+out-contains: n : Int
+run: "$VUNA" goal "$TMPDIR/named-hole-pkg/lib/Named.vuna" 2>&1
+exit: 0
+out-contains: : goal ?goal : Int
+out-contains: m : Int
+run: "$VUNA" check "$TMPDIR/named-hole-pkg" 2>&1
+exit: 1
+out-contains: TC_UnsolvedHole
+out-contains: ?goal
+run: "$VUNA" fmt "$TMPDIR/named-hole-pkg/lib/Named.vuna"
+exit: 0
+file-contains: $TMPDIR/named-hole-pkg/lib/Named.vuna ?goal
+run: "$VUNA" fmt --check "$TMPDIR/named-hole-pkg/lib/Named.vuna"
+exit: 0
+run: "$VUNA" lint "$TMPDIR/named-hole-pkg/lib/Named.vuna"
+exit: 0

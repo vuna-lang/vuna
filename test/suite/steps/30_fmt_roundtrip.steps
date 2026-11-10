@@ -1,0 +1,11 @@
+# 30) fmt（M11.5/M11.6）：格式化后仍可解释（DT 语义）且输出不变；fmt 幂等。
+#     M26：格式化副本放进一个带 manifest 的临时包（= corpus 包同样的 base 上下文），
+#     这样 interp 看到的可见性与原文件一致（无 manifest 时是 base-only 上下文）。
+#     corpus/run/01_arithmetic.vuna、corpus/fmt/run/07_wrap.vuna 等路径保留以认领夹具。
+run: sh -c 'mkdir -p "$TMPDIR/fmt-pkg"; printf "[package]\nname = \"fmt-roundtrip\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" >"$TMPDIR/fmt-pkg/vuna.toml"'
+for-each: corpus/run/01_arithmetic.vuna corpus/run/03_data_case.vuna corpus/fmt/run/07_wrap.vuna corpus/monad/01_do_maybe.vuna corpus/traits/03_deriving_show_eq_enum.vuna
+  run: sh -c 'cp "{item}" "$TMPDIR/fmt-pkg/src.vuna"; chmod u+w "$TMPDIR/fmt-pkg/src.vuna"; "$VUNA" fmt "$TMPDIR/fmt-pkg/src.vuna" >/dev/null 2>&1'
+  run: "$VUNA" interp "$TMPDIR/fmt-pkg/src.vuna" 2>&1
+  out-equals-file: {stem}.out
+  run: "$VUNA" fmt --check "$TMPDIR/fmt-pkg/src.vuna" >/dev/null 2>&1
+end:

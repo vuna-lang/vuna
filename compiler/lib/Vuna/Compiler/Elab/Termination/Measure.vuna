@@ -244,9 +244,9 @@ maxArityOf (n :: rest) defTbl =
 ctorNamesOf : List Decl -> List String
 ctorNamesOf [] = []
 ctorNamesOf (d :: rest) = case d of
-  DData name params kind ctors derivings viaField lin sp =>
+  DData name params kind ctors derivings viaField repr lin sp =>
     append (map ctorNameOf ctors) (ctorNamesOf rest)
-  DRecord name params fields derivings viaField lin sp => name :: ctorNamesOf rest
+  DRecord name params fields derivings viaField repr lin sp => name :: ctorNamesOf rest
   _ => ctorNamesOf rest
 
 ctorNameOf : Ctor -> String

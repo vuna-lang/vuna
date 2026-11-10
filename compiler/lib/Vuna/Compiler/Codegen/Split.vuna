@@ -132,9 +132,10 @@ entryDeclIdentities [] = []
 entryDeclIdentities (d :: rest) = case d of
   DSig name ctx ty sp => Pair False name :: entryDeclIdentities rest
   DExtern name cName ty sp => Pair False name :: entryDeclIdentities rest
-  DData name params kind ctors derivings viaField lin sp =>
+  DData name params kind ctors derivings viaField repr lin sp =>
     Pair True name :: entryDeclIdentities rest
-  DRecord name params fields derivings viaField lin sp => Pair True name :: entryDeclIdentities rest
+  DRecord name params fields derivings viaField repr lin sp =>
+    Pair True name :: entryDeclIdentities rest
   DTrait name params methods sp => Pair True name :: entryDeclIdentities rest
   _ => entryDeclIdentities rest
 

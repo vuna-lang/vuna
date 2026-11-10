@@ -1,0 +1,11 @@
+# 14b) 编译器二进制指纹回归（PerfCache.binaryFingerprint）：指纹只能基于可执行文件
+#      自身（execPath+size+mtime），**不得**把「第一个用户参数」当路径去读——旧实现用
+#      不含 argv[0] 的 prim_getArgs 首参，cwd 里有同名文件/目录时直接
+#      `Fatal error: exception Failure("readFile: ...")`。这里 cwd 造一个 `build/`
+#      目录（旧实现会命中它）再 `vuna build pkg`，必须正常构建并运行。
+#      夹具是 $TMPDIR 里的临时包（旧脚本里是 $tmp/fp-probe）。
+run: sh -c 'mkdir -p "$TMPDIR/fp/build/keep" "$TMPDIR/fp/pkg/app"; printf "[package]\nname = \"fp-probe\"\n" >"$TMPDIR/fp/pkg/vuna.toml"; printf "main : Int\nmain = 7\n" >"$TMPDIR/fp/pkg/app/Main.vuna"'
+run: sh -c 'cd "$TMPDIR/fp" && "$VUNA" build pkg 2>&1'
+out-contains: built
+run: "$TMPDIR/fp/pkg/.output/bin/fp-probe" 2>&1
+out-equals: 7

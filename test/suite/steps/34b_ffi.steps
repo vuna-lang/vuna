@@ -1,0 +1,12 @@
+# 34b) 受限 FFI（M33 W5）：`extern name "c_symbol" : 基本类型` + 包根 `ffi/*.c`，
+#      由生成的 build.sh 编译并链接；运行输出与 expected.out 一致。
+#      夹具：corpus/ffi/*/（复制到 $TMPDIR 并重写 vuna-base，避免污染工作树）。
+for-each: corpus/ffi/*/
+  run: mkdir -p "$TMPDIR/ffi"; dst="$TMPDIR/ffi/{name}"; rm -rf "$dst"; cp -R "corpus/ffi/{name}" "$dst"; rm -rf "$dst/.output"; find "$dst" -name vuna.toml -exec sed -i 's|^vuna-base = .*|vuna-base = "'"$VUNA_BASE"'"|' {} +
+  exit: 0
+  run: "$VUNA" build "$TMPDIR/ffi/{name}" 2>&1
+  exit: 0
+  run: "$TMPDIR/ffi/{name}/.output/bin/ffi-add" 2>&1
+  exit: 0
+  out-equals-file: $TMPDIR/ffi/{name}/expected.out
+end:

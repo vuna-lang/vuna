@@ -12,13 +12,18 @@ module Vuna.Compiler.Elab.Representation
   , unboxedInfoOf
   ) where
 
--- Vuna.Compiler.Elab.Representation：**自动去装箱**的表示判定单一真源。
+-- Vuna.Compiler.Elab.Representation：表示判定的单一真源（R1：声明优先，推断回落）。
+-- `ReprOpaque` 强制装箱；`ReprTransparent` 强制去装箱（仍要求单保留字段形状）；
+-- `ReprAuto` 未声明，回落自动去装箱推断（R1 过渡；终态删除推断）。
+-- 这里只做结构与类型项判定，不依赖 Codegen：`Elab` 用它做 via-field 的表示校验，
+-- `Codegen.Decl` 用它生成类型别名 / 恒等构造 / case 绑定。判据见 `unboxedCandidateOfData`。
 --
 -- 这里只做结构与类型项判定，不依赖 Codegen：`Elab` 用它做 via-field 的表示校验，
 -- `Codegen.Decl` 用它生成类型别名 / 恒等构造 / case 绑定。判据见 `unboxedCandidateOfData`。
 import Vuna.Compiler.Common
 import Vuna.Compiler.Core
 import Vuna.Compiler.Elab.Types
+import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Intrinsics
 
 -- | 自动去装箱候选：族名、唯一保留字段所在的构造子，以及该字段在完整 telescope 中的下标。
@@ -112,9 +117,17 @@ termIsFunction _ = False
 --   2. `ctorKeepFlags` 恰好 1 个 True，且位置 >= 族参数/索引个数；
 --   3. 字段类型可忠实命名（函数 / 未知名保守拒绝）；
 --   4. 自身/互递归候选拒绝。
+-- | R1：`ReprOpaque` 判定（不引入 Eq 实例）。
+reprIsOpaque : ReprTier -> Bool
+reprIsOpaque ReprOpaque = True
+reprIsOpaque _ = False
+
+-- R1：声明档位优先。`ReprOpaque` 永不去装箱；`ReprTransparent` 与 `ReprAuto` 共用同一
+-- 形状判据（R1 过渡：transparent 仍要求单保留字段 + 可表示；D52 落地后放开函数字段）。
 -- | 判定单个数据族能否去装箱：特殊族、非单构造子、多保留字段、函数或未知名、递归候选都拒绝。
 unboxedCandidateOfData : List DtData -> DtData -> List UnboxedCand
 unboxedCandidateOfData datas d = if isSpecialUnboxFamily (dtDataName d) then []
+else if reprIsOpaque (dtDataRepr d) then []
 else case dtDataCtors d of
   [] => []
   c :: rest => case rest of

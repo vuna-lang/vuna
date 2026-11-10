@@ -1,0 +1,1 @@
+deriving via field requires a zero-cost single-field wrapper

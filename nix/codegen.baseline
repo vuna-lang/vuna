@@ -40,16 +40,20 @@
 #       （其余指标同上），即 +18 字节漂移早于本任务、非 Float 改动引入；按实测把
 #       bytes 重标定为 4233。
 files =4
-bytes =4245
-lines =86
+bytes =4097
+lines =80
 maxline =823
 longlines =5
 letrec =1
 strcat =1
 eqint =0
 zeroarg =0
-ctorcount =20
+ctorcount =17
 # 漂移复核（2026-11-10，rotation 后收尾）：干净 HEAD（aeef0aa）之前就已漂移——把
 #       base 的 Prelude/Array 回退到 aeef0aa 后重跑夹具，产物仍为 4245 bytes（其余
 #       指标同上），说明 +12 来自 918c89c 之后的既有改动、非本次 Array 实例 /
 #       Float Prelude 引入；按实测把 bytes 4233 → 4245 重标定，其余指标不变。
+# R4（records-v2，OCaml record 表示）：多字段 record 不再生成变体构造子，改成 OCaml
+#       record（`type t_Point = { f_Point_x; f_Point_y }`），构造/模式/投影/更新都走
+#       record 语法。夹具的 Point 臂因此少一个变体构造子与 match（ctorcount 20 → 17），
+#       产物变短（bytes 4245 → 4097、lines 86 → 80），maxline/longlines 不变。

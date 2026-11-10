@@ -161,6 +161,9 @@ meta → 报未解，不发明行。**禁止贪婪 Here**：名字槽受限统�
 4. **提交 3 — perform 语法**（已完成）：`perform` 关键字（保留名 `@vuna@perform` 编码）
    + Elab 降级（ND8 key = op 族规范名、实例名由行解出、res 族存在性校验）
    + `TC_EffResFamilyMissing` + Fmt 回渲染 + 3 个夹具。实现要点见 §9。
+   **提交 4a — `@` 行糖**（已完成）：`[X@name]` → `Cons "name" (X "name") Nil`
+   （保留名 `@vuna@row@at` 编码，Fmt 往返稳定），夹具 `dt_base/75`。
+   **提交 4b — `handle` 语法**（暂缓，见 §9「handle 的阻塞点」）。
 5. **提交 4 — handle 语法**：clause 降级 + op 族推断 + 夹具 + `@` 行糖。
 6. **提交 5 — 文档收尾**：`effects.md` §8 改写、`AGENTS.md` 硬不变量 5 措辞、`debt` 条目。
 
@@ -272,6 +275,22 @@ meta → 报未解，不发明行。**禁止贪婪 Here**：名字槽受限统�
   5. **运行期 key 尚未统一（ND8 下半）**：`perform` 用 op 族规范名，现有 base wrapper
      仍手写 `"console"` 等 key，所以 perform 程序要用**同 key 的 handler**
      （夹具 74 演示）；统一留给 `handle` 语法的提交。
+- **`handle` 语法的阻塞点（提交 4b 未落地，2026-11-10 实测）**：
+  1. **`handleCore` 的 handler 是裸类型变量**（`{h : Type}`），没有期望类型 ⇒ clause 里合成的
+     `case o of { C p => b }` 拿不到 `o` 的族（`TC_NotInductiveFamily`），`k` 也拿不到续延
+     类型（`k 5` → `TC_TooManyArgs`）。给 lambda 加 `(o : op)` 标注能让 case 过检查，但 `k`
+     的类型仍需 `res<族> o`；给整个 lambda 加 Pi 标注时，`k` 的域只能写洞，而**类型位置的洞**
+     报 `TC_HoleNoExpectedType`。
+  2. **`res` 不能作为显式擦除参数**：`(0 res : op -> Type)` 被 M15 判 `TC_MultiplicityTypeDomain`
+     （类型域不许写 `(0 x : T)`），不标擦除则在 `perform`/`handle` 降级点传 `resConsole`
+     触发 `CG_TypeLevelNameRuntime`。用 data 包装（`ResFn op` + `(0 rf : ResFn op)`）在类型上
+     可行，但**构造子在精化期按规范名解析不到**（`Base.Eff.MkResFn` → `TC_UnknownName`；
+     构造子只在 Loader 的导出面里，`globalsLookup` 不含）。
+  3. 把 `res` 改成隐式也不行：`res (Print s) =?= Nat` 需要高阶合一，报
+     `TC_CannotSolveHigherOrder`（M15 限制）。
+  **下一步方案（倾向）**：新增一个 base 入口 `handleWith`，其 handler 类型显式写
+  `(o : op) -> (res o -> b) -> b`；`res` 用 data 包装 + 擦除量传入，且**通过一个 base 函数**
+  （而不是直接引用构造子名）构造包装值，绕开「构造子在 globals 里查不到」。
 - **相关：`fmt` 规范化与列表字面量模式冲突**：`fmt` 把 `a :: b :: []` 精确链改写成
   `[a, b]` 后，与该模式相邻的后续 Cons 分支会触发 `TC_RedundantCtorBranch`
   （无位置信息 `:0:0`，覆盖检查判定与 codegen 解糖不一致，机制待独立修复）。

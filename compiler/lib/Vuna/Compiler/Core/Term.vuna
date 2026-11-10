@@ -221,8 +221,17 @@ data Term : Type where
   TApp : Term -> Term -> Rig -> Term
   -- M14：构造子应用（自携每个实参的 multiplicity，与 TApp 一致）。
   TCon : String -> List (Pair Term Rig) -> Term
+  -- R3：record 构造原语（记录构造子名 + 实参）：语义与 TCon 相同，codegen 扩展回 TCon。
+  TMk : String -> List (Pair Term Rig) -> Term
   -- M14：依赖模式匹配。CaseAlt 的名字是构造子名（case 已按分支顺序排列）。
   TCase : Term -> List CaseAlt -> Term
+  -- R3（records-v2）：记录字段投影原语（base、构造子/记录名、字段序号、字段数）。
+  -- 精化期把 `p.x` 从生成的 `case` 改为这个原语；codegen 再按同一形状展开成
+  -- 原有 `TCase`（产物逐字节一致），eval/quote/conv 直接消费它（iota + stuck）。
+  TProj : Term -> String -> List (Pair String Rig) -> Int -> Int -> Term
+  -- R3：记录更新原语（base、构造子名、字段 telescope、被改字段序号、重建体）。
+  -- 语义与「单分支 TCase」完全相同（eval 直接按 case 展开），原语只多带记录身份标注。
+  TRecUpd : Term -> String -> List (Pair String Rig) -> List Int -> Term -> Term
   TInt : Int -> Term
   TStr : String -> Term
   TBool : Bool -> Term
@@ -265,6 +274,8 @@ data Value : Type where
   VCon : String -> List Value -> Value
   -- M14：卡住的 case（scrutinee 是中性值）。
   VCase : Value -> List VCaseAlt -> Value
+  -- R3：卡住的记录投影（base 是中性值）；base 为 VCon 时 eval 直接取字段（iota）。
+  VProj : Value -> String -> List (Pair String Rig) -> Int -> Int -> Value
   VInt : Int -> Value
   VStr : String -> Value
   VBool : Bool -> Value
@@ -345,7 +356,10 @@ termSize (TPi _ _ _ dom cod) = 1 + termSize dom + termSize cod
 termSize (TLam _ _ body) = 1 + termSize body
 termSize (TApp f a _) = 1 + termSize f + termSize a
 termSize (TCon _ args) = 1 + termSizeArgs args
+termSize (TMk _ args) = 1 + termSizeArgs args
 termSize (TCase scrut alts) = 1 + termSize scrut + termSizeAlts alts
+termSize (TProj base c tele i fi) = 1 + termSize base
+termSize (TRecUpd base c tele idxs body) = 1 + termSize base + termSize body
 termSize (TInt _) = 1
 termSize (TStr _) = 1
 termSize (TFloat _) = 1
@@ -438,6 +452,10 @@ termHasUnsolvedMeta sols (TPi name implicit rig dom cod) =
 termHasUnsolvedMeta sols (TLam name rig body) = termHasUnsolvedMeta sols body
 termHasUnsolvedMeta sols (TApp f a rig) = termHasUnsolvedMeta sols f || termHasUnsolvedMeta sols a
 termHasUnsolvedMeta sols (TCon c args) = termHasUnsolvedMetaArgs sols args
+termHasUnsolvedMeta sols (TMk c args) = termHasUnsolvedMetaArgs sols args
+termHasUnsolvedMeta sols (TProj base c tele i fi) = termHasUnsolvedMeta sols base
+termHasUnsolvedMeta sols (TRecUpd base c tele idxs body) =
+  termHasUnsolvedMeta sols base || termHasUnsolvedMeta sols body
 termHasUnsolvedMeta sols (TCase scrut alts) =
   termHasUnsolvedMeta sols scrut || termHasUnsolvedMetaAlts sols alts
 termHasUnsolvedMeta sols (TInt n) = False
@@ -469,6 +487,10 @@ termUsesFloat names (TPi n i r dom cod) = termUsesFloat names dom || termUsesFlo
 termUsesFloat names (TLam n r b) = termUsesFloat names b
 termUsesFloat names (TApp f a r) = termUsesFloat names f || termUsesFloat names a
 termUsesFloat names (TCon c args) = anyArgUsesFloat names args
+termUsesFloat names (TMk c args) = anyArgUsesFloat names args
+termUsesFloat names (TProj base c tele i fi) = termUsesFloat names base
+termUsesFloat names (TRecUpd base c tele idxs body) =
+  termUsesFloat names base || termUsesFloat names body
 termUsesFloat names (TCase s alts) = termUsesFloat names s || anyAltUsesFloat names alts
 termUsesFloat names (TInt n) = False
 termUsesFloat names (TStr s) = False
@@ -498,6 +520,10 @@ termGlobalNames (TPi n i r dom cod) = append (termGlobalNames dom) (termGlobalNa
 termGlobalNames (TLam n r b) = termGlobalNames b
 termGlobalNames (TApp f a r) = append (termGlobalNames f) (termGlobalNames a)
 termGlobalNames (TCon c args) = concatMap (\p => termGlobalNames (firstOf p)) args
+termGlobalNames (TMk c args) = concatMap (\p => termGlobalNames (firstOf p)) args
+termGlobalNames (TProj base c tele i fi) = termGlobalNames base
+termGlobalNames (TRecUpd base c tele idxs body) =
+  append (termGlobalNames base) (termGlobalNames body)
 termGlobalNames (TCase s alts) =
   append (termGlobalNames s) (concatMap (\a => termGlobalNames (caseAltBody a)) alts)
 termGlobalNames (TInt n) = []
@@ -549,6 +575,10 @@ hasFreeVar depth (TPi name implicit rig dom cod) =
 hasFreeVar depth (TLam name rig body) = hasFreeVar (depth + 1) body
 hasFreeVar depth (TApp f a rig) = hasFreeVar depth f || hasFreeVar depth a
 hasFreeVar depth (TCon c args) = hasFreeVarArgs depth args
+hasFreeVar depth (TMk c args) = hasFreeVarArgs depth args
+hasFreeVar depth (TProj base c tele i fi) = hasFreeVar depth base
+hasFreeVar depth (TRecUpd base c tele idxs body) =
+  hasFreeVar depth base || hasFreeVar (depth + length tele) body
 hasFreeVar depth (TCase scrut alts) = hasFreeVar depth scrut || hasFreeVarAlts depth alts
 hasFreeVar depth (TInt n) = False
 hasFreeVar depth (TStr s) = False
@@ -574,6 +604,10 @@ hasMeta m depth (TPi name implicit rig dom cod) = hasMeta m depth dom || hasMeta
 hasMeta m depth (TLam name rig body) = hasMeta m (depth + 1) body
 hasMeta m depth (TApp f a rig) = hasMeta m depth f || hasMeta m depth a
 hasMeta m depth (TCon c args) = hasMetaArgs m depth args
+hasMeta m depth (TMk c args) = hasMetaArgs m depth args
+hasMeta m depth (TProj base c tele i fi) = hasMeta m depth base
+hasMeta m depth (TRecUpd base c tele idxs body) =
+  hasMeta m depth base || hasMeta m (depth + length tele) body
 hasMeta m depth (TCase scrut alts) = hasMeta m depth scrut || hasMetaAlts m depth alts
 hasMeta m depth (TInt n) = False
 hasMeta m depth (TStr s) = False
@@ -604,6 +638,10 @@ shift depth amount (TPi name implicit rig dom cod) =
 shift depth amount (TLam name rig body) = TLam name rig (shift (depth + 1) amount body)
 shift depth amount (TApp f a rig) = TApp (shift depth amount f) (shift depth amount a) rig
 shift depth amount (TCon c args) = TCon c (shiftArgs depth amount args)
+shift depth amount (TMk c args) = TMk c (shiftArgs depth amount args)
+shift depth amount (TProj base c tele i fi) = TProj (shift depth amount base) c tele i fi
+shift depth amount (TRecUpd base c tele idxs body) =
+  TRecUpd (shift depth amount base) c tele idxs (shift (depth + length tele) amount body)
 shift depth amount (TCase scrut alts) =
   TCase (shift depth amount scrut) (shiftAlts depth amount alts)
 shift depth amount (t@(TInt n)) = t
@@ -638,6 +676,11 @@ substVarAt idx arg (TLam n erased body) = TLam n erased (substVarAt (idx + 1) ar
 substVarAt idx arg (TApp f a erased) = TApp (substVarAt idx arg f) (substVarAt idx arg a) erased
 substVarAt idx arg (TCon c cargs) =
   TCon c (map (\p => Pair (substVarAt idx arg (firstOf p)) (secondOf p)) cargs)
+substVarAt idx arg (TMk c cargs) =
+  TMk c (map (\p => Pair (substVarAt idx arg (firstOf p)) (secondOf p)) cargs)
+substVarAt idx arg (TProj base c tele i fi) = TProj (substVarAt idx arg base) c tele i fi
+substVarAt idx arg (TRecUpd base c tele idxs body) =
+  TRecUpd (substVarAt idx arg base) c tele idxs (substVarAt (idx - length tele) arg body)
 substVarAt idx arg (TCase scrut alts) =
   TCase (substVarAt idx arg scrut) (map (substAltAt idx arg) alts)
 substVarAt idx arg (t@(TInt n)) = t
@@ -664,6 +707,10 @@ substMetaVarGo m name q depth (TApp f a r) =
   TApp (substMetaVarGo m name q depth f) (substMetaVarGo m name q depth a) r
 substMetaVarGo m name q depth (TCon c args) =
   TCon c (map (\p => Pair (substMetaVarGo m name q depth (firstOf p)) (secondOf p)) args)
+substMetaVarGo m name q depth (TMk c args) =
+  TMk c (map (\p => Pair (substMetaVarGo m name q depth (firstOf p)) (secondOf p)) args)
+substMetaVarGo m name q depth (TProj base c tele i fi) =
+  TProj (substMetaVarGo m name q depth base) c tele i fi
 substMetaVarGo m name q depth (TCase s alts) =
   TCase (substMetaVarGo m name q depth s) (map (substMetaVarAlt m name q depth) alts)
 substMetaVarGo m name q depth (TIf c th el) =
@@ -722,6 +769,9 @@ hasFreeTermVar d (TPi n i r dm cd) = hasFreeTermVar d dm || hasFreeTermVar (d + 
 hasFreeTermVar d (TLam n r b) = hasFreeTermVar (d + 1) b
 hasFreeTermVar d (TApp f a r) = hasFreeTermVar d f || hasFreeTermVar d a
 hasFreeTermVar d (TCon c args) = anyPairFree d args
+hasFreeTermVar d (TMk c args) = anyPairFree d args
+hasFreeTermVar d (TProj base c tele i fi) = hasFreeTermVar d base
+hasFreeTermVar d (TRecUpd base c tele idxs body) = hasFreeTermVar d base || hasFreeTermVar d body
 hasFreeTermVar d (TCase s alts) = hasFreeTermVar d s || anyAltFree d alts
 hasFreeTermVar d (TIf c th el) = hasFreeTermVar d c || hasFreeTermVar d th || hasFreeTermVar d el
 hasFreeTermVar d _ = False
@@ -743,6 +793,9 @@ hasNegativeVar (TPi n i r d c) = hasNegativeVar d || hasNegativeVar c
 hasNegativeVar (TLam n r b) = hasNegativeVar b
 hasNegativeVar (TApp f a r) = hasNegativeVar f || hasNegativeVar a
 hasNegativeVar (TCon c args) = anyNegativeVarArgs args
+hasNegativeVar (TMk c args) = anyNegativeVarArgs args
+hasNegativeVar (TProj base c tele i fi) = hasNegativeVar base
+hasNegativeVar (TRecUpd base c tele idxs body) = hasNegativeVar base || hasNegativeVar body
 hasNegativeVar (TCase s alts) = hasNegativeVar s || anyNegativeVarAlts alts
 hasNegativeVar (TIf c th el) = hasNegativeVar c || hasNegativeVar th || hasNegativeVar el
 hasNegativeVar _ = False
@@ -775,6 +828,7 @@ else case v of
   VApp f a =>
     hasUnsolvedMetaValueFuel (fuel - 1) sols f || hasUnsolvedMetaValueFuel (fuel - 1) sols a
   VCase scrut alts => hasUnsolvedMetaValueFuel (fuel - 1) sols scrut
+  VProj base c i fi n => hasUnsolvedMetaValueFuel (fuel - 1) sols base
   VIf c th el =>
     hasUnsolvedMetaValueFuel (fuel - 1) sols c
       || hasUnsolvedMetaValueFuel (fuel - 1) sols th
@@ -825,6 +879,7 @@ levelEscapes limit depth (VMeta m sp) = levelEscapesList limit sp
 levelEscapes limit depth (VCon c args) = levelEscapesList limit args
 levelEscapes limit depth (VApp f a) = levelEscapes limit depth f || levelEscapes limit depth a
 levelEscapes limit depth (VCase scrut alts) = levelEscapes limit depth scrut
+levelEscapes limit depth (VProj base c i fi n) = levelEscapes limit depth base
 levelEscapes limit depth (VIf c th el) =
   levelEscapes limit depth c || levelEscapes limit depth th || levelEscapes limit depth el
 levelEscapes limit depth (VType l) = False
@@ -852,6 +907,9 @@ showTerm (TPi name implicit rig dom cod) =
 showTerm (TLam name rig body) = "\\${name} => ${showTerm body}"
 showTerm (TApp f a rig) = "(${showTerm f} ${showTerm a})"
 showTerm (TCon c args) = "(${c}${showArgTerms args})"
+showTerm (TMk c args) = "(${c}${showArgTerms args})"
+showTerm (TProj base c tele i fi) = "${showTerm base}.${c}#${fi}"
+showTerm (TRecUpd base c tele idxs body) = "${showTerm base} with ${c} ${showTerm body}"
 showTerm (TCase scrut alts) = "case ${showTerm scrut} of ${showCoreAlts alts}"
 showTerm (TInt n) = strFromInt n
 showTerm (TStr s) = showCoreString s

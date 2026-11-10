@@ -364,9 +364,9 @@ isDataOrRecordCtorTarget (m :: rest) target =
 isCtorTargetInDecls : String -> String -> List Decl -> Bool
 isCtorTargetInDecls mname target [] = False
 isCtorTargetInDecls mname target (d :: rest) = case d of
-  DData dname params kind ctors derivings viaField lin sp =>
+  DData dname params kind ctors derivings viaField repr lin sp =>
     anyCtorTarget mname dname target ctors || isCtorTargetInDecls mname target rest
-  DRecord dname params fields derivings viaField lin sp =>
+  DRecord dname params fields derivings viaField repr lin sp =>
     mangle mname dname == target || isCtorTargetInDecls mname target rest
   _ => isCtorTargetInDecls mname target rest
 

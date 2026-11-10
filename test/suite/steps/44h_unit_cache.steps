@@ -1,0 +1,10 @@
+# 44h) codegen 单元级缓存（S5）：改入口后重建——依赖单元命中缓存，产物与干净重建逐字节一致。
+#      夹具 corpus/packages/m34_summary 复制到 $TMPDIR（不改工作树），副本内所有
+#      vuna.toml 的 `vuna-base =` 行重写为 $VUNA_BASE。
+run: sh -c 'rm -rf "$TMPDIR/unit-pkg" "$TMPDIR/unit-cache" "$TMPDIR/unit-gen1" "$TMPDIR/unit-gen2"; cp -r corpus/packages/m34_summary "$TMPDIR/unit-pkg"; for mf in "$TMPDIR/unit-pkg"/*/vuna.toml; do sed -i "s|^vuna-base = .*|vuna-base = \"$VUNA_BASE\"|" "$mf"; done; TMPDIR="$TMPDIR/unit-cache" VUNA_UNIT_CACHE=1 "$VUNA" build --no-compile --out "$TMPDIR/unit-gen1" "$TMPDIR/unit-pkg/root" >/dev/null 2>&1'
+# 改入口后原地重建：依赖单元命中缓存（日志含 unit-cache-hit）。
+run: sh -c 'printf "\nunitProbe : Int\nunitProbe = 1\n" >> "$TMPDIR/unit-pkg/root/app/Main.vuna"; TMPDIR="$TMPDIR/unit-cache" VUNA_UNIT_CACHE=1 VUNA_DEBUG_PERF=1 "$VUNA" build --no-compile --out "$TMPDIR/unit-gen1" "$TMPDIR/unit-pkg/root" 2>&1 | tee "$TMPDIR/unit.log"'
+out-contains: unit-cache-hit
+# 独立缓存干净重建 → 产物逐字节一致。
+run: sh -c 'rm -rf "$TMPDIR/unit-fresh-cache" "$TMPDIR/unit-gen2"; TMPDIR="$TMPDIR/unit-fresh-cache" VUNA_UNIT_CACHE=1 "$VUNA" build --no-compile --out "$TMPDIR/unit-gen2" "$TMPDIR/unit-pkg/root" >/dev/null 2>&1'
+run: diff -r "$TMPDIR/unit-gen1" "$TMPDIR/unit-gen2"

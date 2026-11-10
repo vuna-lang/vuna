@@ -37,19 +37,57 @@ onlyX p = case p of
   因为无签名 lambda 没有参数类型推断、字段访问在其中不可类型化。
 - 导出遵循模块规则：`T` 只导出记录类型（构造器隐藏，跨模块不能构造 / 模式匹配，即
   抽象），`T(..)` 才公开记录构造器。
-- 实现上记录在精化前降级为单构造子 `data`（`Elab.Records`，字段 binder 带内部前缀避免
-  字段类型引用前序字段名）；构造 / 模式匹配仍是构造器应用，字段访问 / 更新在精化期按
-  base 类型生成内联 `case`，核心求值器与 codegen 行为一致。
+- 实现上记录在精化前降级为单构造子 `data`（`Elab.Records`）；构造 / 模式匹配仍是构造器
+  应用，字段访问 / 更新在精化期按 base 类型生成内联 `case`，核心求值器与 codegen 行为一致。
+- **R2 起字段身份是结构化元数据**（见下节）：构造子字段 binder 只带位置信息
+  （`@vuna@record@arg<i>`），字段名 / 序号 / 类型由 `RecordMeta`（iface）与
+  `DtData.dtDataFields`（Core）承载；精化期按表查字段，不再反推 binder 名。
 - 字段访问 / 更新的 base 类型必须可推断；具体类型由基类型确定；推断不出（刚性类型变量）
   时字段访问走 `HasField` 约束（见下），更新则报错提示补类型。
 - 错误：缺字段 / 重复字段 / 未知字段 / 非记录类型；记录支持 `deriving (Show, Eq, Ord, Hashable)`。
 
-### 零成本表示（自动去装箱）
+### 字段表结构化（R2）
 
-单字段 `record` / 单构造器单运行时字段的 `data` 在 codegen 中**没有运行时包装**：
-OCaml 类型别名直接指向字段类型，构造是恒等（`UserId { uid = 3 }` 生成 `3`），
-`case` / 字段访问生成 `let` 绑定，不生成变体构造子与 `match`。判据由擦除后的
-构造子形状决定（`ctorKeepFlags`）：
+`record` 声明抽取成 `RecordMeta`（`Elab.Records`）：名字 / 参数 / 字段表
+（`RecordFieldMeta` = 名字 + 类型 + 声明序号）/ 派生 / 表示档位 / 构造子 / 线性标记。
+它进 `ModuleIface.miRecords`（`vuna-iface 12`），并参与 `miIfaceHash`：字段重排、改名、
+序号变化都会让依赖者失效；字段类型由 `hashDatas`（`DtData` 的 Marshal）覆盖。
+
+Core 侧每个 record 族的 `DtData.dtDataFields : List DtFieldMeta` 存（名字、序号、外层
+字段类型）；字段类型在精化 data 体时取构造子 telescope 的域项并用 `shift 0 (-i)` 去掉
+前序字段 binder 槽位，因此投影只需 `eval (reverse idxs) dtFieldType`——旧的
+`@vuna@record@dep` 中性占位值随之删除。`EField` / `ERecUpdate` 在精化期消歧后，解析计划
+`FieldAccessPlan` / `UpdateAccessPlan` 显式携带（记录名，字段序号 / 被改字段序号）标注，
+供 R3 的 `TProj` 原语直接消费；AST 形状保持不变（R2 是纯行为保持步骤）。
+
+R3 起 Core 侧有记录原语（行为保持：codegen 展开回原 `case`/构造子，产物逐字节一致）：
+`TProj base ctor fieldTele absIdx fieldIdx`（字段访问，`VProj` 是卡住形态，`force` 会先
+force base 再取字段）、`TRecUpd base ctor fieldTele updatedIdxs rebuiltBody`（更新，语义 =
+单分支 `TCase`）、`TMk ctor args`（记录构造，语义 = `TCon`）。`TRecord` 类型前导留到
+record 不再是 `data` 的 R4。
+
+字段表随 `miCached.cachedDatas` 跨包流动（普通 `data` 为空表），所以抽象记录
+（`07_export_abstract`）仍能字段访问 / 更新；工具面（`vuna api` / LSP hover）后续按
+`miRecords` 渲染，不再依赖前缀约定。§1.6 的语法层消歧死代码
+（`desugarRecUpdate` / `recordsWithField` / `fieldAccessExpr` / `checkProvidedFields` 等）
+与 `fieldBinderName` 前缀一并删除。
+
+### 零成本表示（声明档位 + 推断回落）
+
+记录可以**声明**自己的运行时表示档位（三档）：
+
+| 写法 | 档位 | 语义 |
+| --- | --- | --- |
+| `transparent record R where ...` | `ReprTransparent` | 透明别名：构造 / 投影是定义性恒等；**要求擦除后恰好一个运行时字段**，否则 `[TC_ReprTransparentInvalid]` |
+| `record R where ...`（无前缀） | `ReprAuto` | 未声明：回落到自动去装箱推断（R1 过渡档；终态删除推断） |
+| `opaque record R where ...` | `ReprOpaque` | 强制装箱（FFI / ABI 稳定）：即使形状满足去装箱判据也保留运行时包装 |
+
+档位进 `DtData` 与 iface（`recordHash` 参与失效判定），下游包与 codegen 看到的是
+**同一个**声明结论，不再各自推断。`transparent` / `opaque` 只适用于 `record`
+（`transparent data` 是语法错误）；`lin` 可与档位组合（`transparent lin record`）。
+
+`ReprAuto` 的推断判据（`Elab.Representation.unboxedCandidateOfData`，由擦除后的
+构造子形状决定，`ctorKeepFlags`）：
 
 1. 恰好一个构造子；
 2. 恰好一个**运行时保留**的字段（索引位 = 数据参数之后；类型参数、隐式参数、
@@ -59,30 +97,35 @@ OCaml 类型别名直接指向字段类型，构造是恒等（`UserId { uid = 3
 5. `Bool` / `Nat` / 内建特殊族不参与。
 
 ```vuna
-record UserId where
+transparent record UserId where
   uid : Int
 
-data Wrap : Type where
-  MkWrap : Int -> Wrap
+record Wrap where
+  w : Int
 
--- 两者都去装箱：以下函数在 OCaml 里就是 int -> int 与 int -> int。
+opaque record Handle where
+  h : Int
+
+-- UserId / Wrap 去装箱（后者靠推断回落）：OCaml 里就是 int；
+-- Handle 保持装箱（声明优先于推断）。
 getUser : UserId -> Int
 getUser u = u.uid
-
-getWrap : Wrap -> Int
-getWrap w = case w of
-  MkWrap n => n
 ```
 
 类型参数个数不影响判定：`record EitherStr a where runEitherStr : Result a`
-同样只保留 `Result a`。多字段 / 多构造子类型仍生成普通 OCaml 变体；两者可以共存。
+同样只保留 `Result a`。**多字段 record 生成真正的 OCaml record**
+（`type t_Point = { f_Point_x : int; f_Point_y : int }`，字段标签按 record 名前缀避免撞车），
+构造是 `{ f_Point_x = 1; f_Point_y = 2 }`、投影是 `p.f_Point_x`、更新是
+`{ p with f_Point_x = 40 }`、模式是 `{ f_Point_x = x; f_Point_y = y }`；跨单元时标签按
+`Unit.f_...` 限定。普通 `data` 仍是 OCaml 变体，两者可以共存；零运行时字段的 record
+（以及去装箱的单字段 record）沿用变体 / 类型别名。
 判定是**声明级**的，不改变语义、类型检查或 `deriving` 的结果；它只改变运行时表示。
 
 ### `deriving via field`
 
-`record` 和 `data` 都可以写 `deriving via field (C1, C2, ...)`：它要求包装是
-**单构造子单运行时字段**且该字段自动去装箱。实例不是逐方法生成的，而是在实例搜索期
-做 **字典委托**（GND）：
+`record` 和 `data` 都可以写 `deriving via field (C1, C2, ...)`：合法性**只看声明档位**
+（R1）：`transparent` 直接成立；未声明（`ReprAuto`）按自动去装箱推断判定；
+`opaque` 恒为装箱，直接拒绝。实例不是逐方法生成的，而是在实例搜索期做 **字典委托**（GND）：
 
 ```text
 搜索 Dict_C Wrapper
@@ -117,9 +160,9 @@ main : String
 main = show (UserId { uid = 3 }) ++ "/" ++ show (MkWrap 5) ++ "/" ++ pretty (Tagged { tag = 7 })
 ```
 
-- `data` / `record` 同等；形状必须是自动去装箱的单字段包装，否则报
-  `[TC_DerivingViaUnboxedRequired]`（多字段、多构造子、函数 / Pi 字段、递归包装、
-  未知名 / 不透明字段都不满足）。
+- `data` / `record` 同等；包装必须实际去装箱（`transparent` 声明，或未声明且形状满足
+  单字段判据），否则报 `[TC_DerivingViaUnboxedRequired]`（多字段、多构造子、函数 / Pi 字段、
+  递归包装、未知名 / 不透明字段、`opaque` 声明都不满足）。
 - 委托是**表示级**的：只有 wrapper 与 field 运行时表示完全一致时才成立；当前这等价于
   自动去装箱判据。因此函数 / Pi 字段包装（`Eff` / `Reader` / 续延）暂时不能用
   `deriving via field`（它们保持装箱，见 debt D50）。
@@ -128,7 +171,7 @@ main = show (UserId { uid = 3 }) ++ "/" ++ show (MkWrap 5) ++ "/" ++ pretty (Tag
   时也可以委托。
 - 目前只处理 class 参数**头部**是 wrapper 的委托；`C (List (Wrapper a))` 这种嵌套在容器里的
   包装不会自动回溯到 `C (List (Field a))`（见 debt D50）。
-- 没有 `newtype` / `type` 关键字：`record` 提供名义类型，自动去装箱负责表示，
+- 没有 `newtype` / `type` 关键字：`record` 提供名义类型，`transparent` / 缺省推断负责表示，
   `deriving via field` 负责实例；结构 `deriving` 保持逐字段比较 / 展示。
 - 实现：`Elab.Dict.searchInstFuel` 的 `tryViaDict` 在实例搜索期替换类参数；
   `Elab.Data.checkViaDataDecls` 校验表示条件。因为 `interp` 是纯 Core 求值器（不做

@@ -1,0 +1,22 @@
+# 44i) 依赖可见性收敛（S6）：dep 的 trait/实例在**未被 import** 的模块里时，摘要路径与全量
+#      路径必须一致拒绝（不能把整包模块并入视图）；import 后两条路径都必须接受。
+# 夹具复制到 case 私有 $TMPDIR，并把三份 vuna.toml 的 `^vuna-base =` 行重写为 $VUNA_BASE
+# （原脚本复制一份 base 再指向副本；base 是逐字节同一棵树，直接指向 $VUNA_BASE 只改变
+# pmEnv 里的规范化目录，不影响本段「依赖可见性」语义，因此省掉整树复制）。
+run: rm -rf "$TMPDIR/vis-pkg" && mkdir -p "$TMPDIR/vis-pkg" && cp -r corpus/packages/vis_scope/. "$TMPDIR/vis-pkg/" && sed -i "s|^vuna-base = .*|vuna-base = \"$VUNA_BASE\"|" "$TMPDIR/vis-pkg/dep/vuna.toml" "$TMPDIR/vis-pkg/root/vuna.toml" "$TMPDIR/vis-pkg/root2/vuna.toml"
+run: cat "$TMPDIR/vis-pkg/dep/vuna.toml" "$TMPDIR/vis-pkg/root/vuna.toml" "$TMPDIR/vis-pkg/root2/vuna.toml" | grep -c "^vuna-base = \"$VUNA_BASE\""
+out-equals: 3
+# 预热 base / dep 接口（原脚本的 warmup；失败即整段失败）。
+run: "$VUNA" check "$VUNA_BASE"
+run: "$VUNA" check "$TMPDIR/vis-pkg/dep"
+# 摘要路径与全量路径都必须拒绝 root（未 import trait 所在模块 ⇒ 不能把整包模块并入视图）。
+run: "$VUNA" build --no-compile --out "$TMPDIR/vis-root-out" "$TMPDIR/vis-pkg/root" 2>&1
+exit: nonzero
+out-contains: unbound variable
+run: VUNA_ELAB_FULL=1 "$VUNA" build --no-compile --out "$TMPDIR/vis-root-out-full" "$TMPDIR/vis-pkg/root" 2>&1
+exit: nonzero
+# import 之后两条路径都必须接受。
+run: "$VUNA" build --no-compile --out "$TMPDIR/vis-root2-out" "$TMPDIR/vis-pkg/root2" 2>&1
+exit: 0
+run: VUNA_ELAB_FULL=1 "$VUNA" build --no-compile --out "$TMPDIR/vis-root2-out-full" "$TMPDIR/vis-pkg/root2" 2>&1
+exit: 0

@@ -304,6 +304,12 @@ else case a of
       if c == c2 then if isNatCtorName c then convNatChains defs sols depth a b args args2 fuel
       else convValueListsFuel (fuel - 1) defs sols depth args args2
       else mismatchAt depth a b
+    -- R3：卡住的投影与构造子不判等（与卡住的 case 同等保守）。
+    _ => mismatchAt depth a b
+  VProj base c tele i fi => case b of
+    VProj base2 c2 tele2 i2 fi2 =>
+      if c == c2 && i == i2 then convFuel (fuel - 1) defs sols depth base base2
+      else mismatchAt depth a b
     _ => mismatchAt depth a b
   VApp f x => case b of
     VApp f2 x2 => if isNatLikeValue a && isNatLikeValue b then convNatApplied fuel defs sols depth f x f2 x2 a b
@@ -442,6 +448,12 @@ termScopedTo created depth extra levels (TLam name rig body) =
 termScopedTo created depth extra levels (TApp f a rig) =
   termScopedTo created depth extra levels f && termScopedTo created depth extra levels a
 termScopedTo created depth extra levels (TCon c args) = argsScopedTo created depth extra levels args
+termScopedTo created depth extra levels (TMk c args) = argsScopedTo created depth extra levels args
+termScopedTo created depth extra levels (TProj base c tele i fi) =
+  termScopedTo created depth extra levels base
+termScopedTo created depth extra levels (TRecUpd base c tele idxs body) =
+  termScopedTo created depth extra levels base
+    && termScopedTo created depth (extra + length tele) levels body
 termScopedTo created depth extra levels (TCase scrut alts) =
   termScopedTo created depth extra levels scrut && altsScopedTo created depth extra levels alts
 termScopedTo created depth extra levels (TInt n) = True

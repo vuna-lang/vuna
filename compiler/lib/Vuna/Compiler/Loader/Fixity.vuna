@@ -278,9 +278,9 @@ reorderRecPatField t (Pair fname pat) =
 
 -- 类型表达式同样走重排（`a -> b -> c` 是 `EInfix "->"` 链）。
 reorderDecl : FixityTable -> Decl -> Result Decl
-reorderDecl t (DData name params kind ctors derivings viaField lin sp) =
+reorderDecl t (DData name params kind ctors derivings viaField repr lin sp) =
   Vuna.Compiler.Common.bind (reorderExpr t kind)
-    (\k2 => Vuna.Compiler.Common.bind (traverse (\c => reorderCtor t c) ctors) (\cs => Ok (DData name params k2 cs derivings viaField lin sp)))
+    (\k2 => Vuna.Compiler.Common.bind (traverse (\c => reorderCtor t c) ctors) (\cs => Ok (DData name params k2 cs derivings viaField repr lin sp)))
 reorderDecl t (DAxiom name ty sp) =
   Vuna.Compiler.Common.bind (reorderExpr t ty) (\ty2 => Ok (DAxiom name ty2 sp))
 reorderDecl t (DExtern name cName ty sp) =
@@ -291,9 +291,9 @@ reorderDecl t (DSig name ctx ty sp) =
 reorderDecl t (DFun name pats body sp) =
   Vuna.Compiler.Common.bind (traverse (\p => reorderPattern t p) pats)
     (\pats2 => Vuna.Compiler.Common.bind (reorderExpr t body) (\b2 => Ok (DFun name pats2 b2 sp)))
-reorderDecl t (DRecord name params fields derivings viaField lin sp) =
+reorderDecl t (DRecord name params fields derivings viaField repr lin sp) =
   Vuna.Compiler.Common.bind (traverse (\v => reorderRecordField t v) fields)
-    (\fs => Ok (DRecord name params fs derivings viaField lin sp))
+    (\fs => Ok (DRecord name params fs derivings viaField repr lin sp))
 reorderDecl t (DTrait name params methods sp) =
   Vuna.Compiler.Common.bind (traverse (\p => reorderTraitParam t p) params)
     (\ps => Vuna.Compiler.Common.bind (traverse (\v => reorderTraitMethod t v) methods) (\ms => Ok (DTrait name ps ms sp)))

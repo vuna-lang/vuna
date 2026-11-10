@@ -1,0 +1,10 @@
+# 38) M26 API/产物快照：exports（导出面）/ modules（模块面）/ split 产物布局与逐文件
+#     `type t_`/`let v_` 名字清单。快照由 `sh test/snapshots/update.sh` 生成并提交；
+#     这里现场重生成到 case 私有 $TMPDIR 再逐文件对拍（失败提示重生成命令）。
+#     快照文件：snapshots/{exports,modules,split-05_entry_data,split-06_entry_trait,split-dt_ad_hoc}.txt
+run: sh snapshots/update.sh "$TMPDIR/snapshots" 2>&1
+exit: 0
+for-each: snapshots/*.txt
+  read: $TMPDIR/snapshots/{name}
+  out-equals-file: snapshots/{name}
+end:

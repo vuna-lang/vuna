@@ -117,9 +117,9 @@ valueNamesOf decls = concatMap declValueNames decls
 ctorCandsOf : List Decl -> List (Pair String String)
 ctorCandsOf [] = []
 ctorCandsOf (d :: rest) = case d of
-  DData dname params kind ctors derivings viaField lin sp =>
+  DData dname params kind ctors derivings viaField repr lin sp =>
     append (map (\c => Pair (ctorName c) "${dname}.${ctorName c}") ctors) (ctorCandsOf rest)
-  DRecord dname params fields derivings viaField lin sp => Pair dname dname :: ctorCandsOf rest
+  DRecord dname params fields derivings viaField repr lin sp => Pair dname dname :: ctorCandsOf rest
   _ => ctorCandsOf rest
 
 namespacesOf : List Decl -> Namespaces
@@ -205,10 +205,10 @@ resolveQualified modules label imports name = case splitLastDot (splitOnDot name
 ctorTargetInDecls : String -> String -> String -> List Decl -> Maybe String
 ctorTargetInDecls mname famTarget base [] = Nothing
 ctorTargetInDecls mname famTarget base (d :: rest) = case d of
-  DData dname params kind ctors derivings viaField lin sp =>
+  DData dname params kind ctors derivings viaField repr lin sp =>
     if mangle mname dname == famTarget then if anyCtorNamed base ctors then Just (ctorCanonical mname dname base) else Nothing
     else ctorTargetInDecls mname famTarget base rest
-  DRecord dname params fields derivings viaField lin sp =>
+  DRecord dname params fields derivings viaField repr lin sp =>
     if mangle mname dname == famTarget && dname == base then Just (mangle mname dname)
     else ctorTargetInDecls mname famTarget base rest
   _ => ctorTargetInDecls mname famTarget base rest
@@ -893,12 +893,12 @@ resolveCtorSpec modules label prefix ns imports dname (Ctor ctor ty arity sp) =
 
 resolveDecl : List Module -> String -> String -> Namespaces -> List Import -> Decl -> Result Decl
 resolveDecl modules label prefix ns imports d = case d of
-  DData dname params kind ctors derivings viaField lin sp =>
+  DData dname params kind ctors derivings viaField repr lin sp =>
     Vuna.Compiler.Common.bind (resolveTypeTopName label prefix dname)
-      (\dn => Vuna.Compiler.Common.bind (resolveTypeExpr resolveFuelBound modules label prefix ns imports kind) (\kind2 => Vuna.Compiler.Common.bind (traverse (resolveCtorSpec modules label prefix ns imports dname) ctors) (\ctors2 => Vuna.Compiler.Common.bind (traverse (resolveTypeName modules label prefix ns imports) derivings) (\ds2 => Ok (DData dn params kind2 ctors2 ds2 viaField lin sp)))))
-  DRecord dname params fields derivings viaField lin sp =>
+      (\dn => Vuna.Compiler.Common.bind (resolveTypeExpr resolveFuelBound modules label prefix ns imports kind) (\kind2 => Vuna.Compiler.Common.bind (traverse (resolveCtorSpec modules label prefix ns imports dname) ctors) (\ctors2 => Vuna.Compiler.Common.bind (traverse (resolveTypeName modules label prefix ns imports) derivings) (\ds2 => Ok (DData dn params kind2 ctors2 ds2 viaField repr lin sp)))))
+  DRecord dname params fields derivings viaField repr lin sp =>
     Vuna.Compiler.Common.bind (resolveTypeTopName label prefix dname)
-      (\dn => Vuna.Compiler.Common.bind (traverse (resolveRecordField modules label prefix ns imports) fields) (\fields2 => Vuna.Compiler.Common.bind (traverse (resolveTypeName modules label prefix ns imports) derivings) (\ds2 => Ok (DRecord dn params fields2 ds2 viaField lin sp))))
+      (\dn => Vuna.Compiler.Common.bind (traverse (resolveRecordField modules label prefix ns imports) fields) (\fields2 => Vuna.Compiler.Common.bind (traverse (resolveTypeName modules label prefix ns imports) derivings) (\ds2 => Ok (DRecord dn params fields2 ds2 viaField repr lin sp))))
   DTrait tname params methods sp =>
     Vuna.Compiler.Common.bind (resolveTypeTopName label prefix tname)
       (\tn => Vuna.Compiler.Common.bind (traverse (resolveTraitMethod modules label prefix ns imports) methods) (\ms => Ok (DTrait tn params ms sp)))

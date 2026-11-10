@@ -1,0 +1,14 @@
+# 40) 工具链回归：CLI 错误矩阵 + Index v3 自检 + doc [export] + search
+run: sh corpus/cli/check.sh "$VUNA"
+exit: 0
+run: sh corpus/index/check.sh "$VUNA"
+exit: 0
+run: sh corpus/search/check.sh "$VUNA"
+exit: 0
+run: mkdir -p "$TMPDIR/doc-m30"
+run: "$VUNA" doc corpus/doc/01_export "$TMPDIR/doc-m30/api.html"
+exit: 0
+run: grep -q "id='visible'" "$TMPDIR/doc-m30/api.html"
+exit: 0
+run: sh -c '! grep -q "## Hidden" "$TMPDIR/doc-m30/api.html"'
+exit: 0

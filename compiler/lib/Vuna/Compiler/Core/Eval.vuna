@@ -107,7 +107,12 @@ else case t of
   TLam name rig body => VLam name rig (Closure env body)
   TApp f a rig => applyValueFuel (fuel - 1) (evalFuel (fuel - 1) env f) (evalFuel (fuel - 1) env a)
   TCon c args => VCon c (evalArgTermsFuel (fuel - 1) env args)
+  TMk c args => VCon c (evalArgTermsFuel (fuel - 1) env args)
   TCase scrut alts => evalCaseFuel (fuel - 1) (evalFuel (fuel - 1) env scrut) (evalAlts env alts)
+  TProj base c tele i fi => evalProjFuel (fuel - 1) (evalFuel (fuel - 1) env base) c tele i fi
+  -- R3：记录更新原语的语义 = 单分支 case。
+  TRecUpd base c tele idxs body =>
+    evalCaseFuel (fuel - 1) (evalFuel (fuel - 1) env base) [evalAlt env (CaseAlt c tele body)]
   TInt n => VInt n
   TStr s => VStr s
   -- B44：VFloat 载荷统一为 string_of_float 规范文本（定义性相等与展示一致）。
@@ -216,6 +221,14 @@ else case v of
   VMeta m sp => case solsLookup m sols of
     Just t => force defs sols (fuel - 1) (applySpine t sp)
     Nothing => v
+  VProj base c tele i fi =>
+    let
+      b2 = force defs sols (fuel - 1) base
+    in case b2 of
+      VCon _ args => case argAt i args of
+        Just a => force defs sols (fuel - 1) a
+        Nothing => VProj b2 c tele i fi
+      _ => VProj b2 c tele i fi
   VCase scrut alts =>
     let
       s2 = force defs sols (fuel - 1) scrut
@@ -677,6 +690,20 @@ else case xs of
 -- 两个 fuel：`fuel` 是深度正规化自己的递归深度预算（也是终止性判据的守卫 Int 见证），
 -- `evalFuel` 原样传给 force / primReduce（由它们的 fuel 控制定义展开深度）。
 -- ---------------------------------------------------------------
+-- | R3：取列表第 i 个元素（投影 iota 用）。
+argAt : Int -> List Value -> Maybe Value
+argAt i [] = Nothing
+argAt i (x :: rest) = if i <= 0 then Just x else argAt (i - 1) rest
+
+-- | R3：`TProj` 的求值：base 规约到 `VCon` 时取第 i 个实参（iota），否则保持卡住。
+evalProjFuel : Int -> Value -> String -> List (Pair String Rig) -> Int -> Int -> Value
+evalProjFuel fuel v c tele i fi = if fuel <= 0 then VProj v c tele i fi
+else case v of
+  VCon _ args => case argAt i args of
+    Just a => a
+    Nothing => VProj v c tele i fi
+  _ => VProj v c tele i fi
+
 normalizeFuel : Int -> HashMap String Term -> Sols -> Int -> Value -> Value
 normalizeFuel fuel defs sols evalFuel v = if fuel <= 0 then v
 else if evalFuel <= 0 then v
@@ -684,6 +711,7 @@ else case force defs sols evalFuel v of
   VNeutral n => normalizeNeutralFuel (fuel - 1) defs sols evalFuel n
   VIf c th el => normalizeIfFuel (fuel - 1) defs sols evalFuel c th el
   VCase scrut alts => normalizeCaseFuel (fuel - 1) defs sols evalFuel scrut alts
+  VProj base c tele i fi => normalizeProjFuel (fuel - 1) defs sols evalFuel base c tele i fi
   other => other
 
 -- case 正规化：scrutinee 归约到构造子就走该分支并继续正规化（分支体里可能还有
@@ -694,6 +722,16 @@ else if evalFuel <= 0 then VCase scrut alts
 else case normalizeFuel (fuel - 1) defs sols (evalFuel - 1) scrut of
   VCon c args => normalizeFuel (fuel - 1) defs sols (evalFuel - 1) (applyCaseAlt c args alts)
   s2 => VCase s2 alts
+
+-- | R3：投影正规化：base 规约到构造子后取字段并继续正规化；否则保持卡住。
+normalizeProjFuel : Int -> HashMap String Term -> Sols -> Int -> Value -> String -> List (Pair String Rig) -> Int -> Int -> Value
+normalizeProjFuel fuel defs sols evalFuel v c tele i fi = if fuel <= 0 then VProj v c tele i fi
+else if evalFuel <= 0 then VProj v c tele i fi
+else case normalizeFuel (fuel - 1) defs sols (evalFuel - 1) v of
+  VCon _ args => case argAt i args of
+    Just a => normalizeFuel (fuel - 1) defs sols (evalFuel - 1) a
+    Nothing => VProj v c tele i fi
+  v2 => VProj v2 c tele i fi
 
 normalizeNeutralFuel : Int -> HashMap String Term -> Sols -> Int -> Neutral -> Value
 normalizeNeutralFuel fuel defs sols evalFuel n = if fuel <= 0 then VNeutral n
@@ -744,6 +782,7 @@ else case v of
   VCase scrut alts =>
     TCase (quoteFuel (fuel - 1) depth scrut)
       (map (\alt => quoteCaseAltFuel (fuel - 1) depth alt) alts)
+  VProj base c tele i fi => TProj (quoteFuel (fuel - 1) depth base) c tele i fi
   VInt n => TInt n
   VStr s => TStr s
   VFloat raw => TFloat raw
@@ -828,6 +867,11 @@ substSolvedMetas sols (TLam n r b) = TLam n r (substSolvedMetas sols b)
 substSolvedMetas sols (TApp f a r) = TApp (substSolvedMetas sols f) (substSolvedMetas sols a) r
 substSolvedMetas sols (TCon c args) =
   TCon c (map (\p => Pair (substSolvedMetas sols (firstOf p)) (secondOf p)) args)
+substSolvedMetas sols (TMk c args) =
+  TMk c (map (\p => Pair (substSolvedMetas sols (firstOf p)) (secondOf p)) args)
+substSolvedMetas sols (TProj base c tele i fi) = TProj (substSolvedMetas sols base) c tele i fi
+substSolvedMetas sols (TRecUpd base c tele idxs body) =
+  TRecUpd (substSolvedMetas sols base) c tele idxs (substSolvedMetas sols body)
 substSolvedMetas sols (TCase s alts) =
   TCase (substSolvedMetas sols s) (map (substSolvedAlt sols) alts)
 substSolvedMetas sols (TIf c th el) =
@@ -858,6 +902,12 @@ substSolvedMetasAtGo depth sols (TApp f a r) =
   TApp (substSolvedMetasAtGo depth sols f) (substSolvedMetasAtGo depth sols a) r
 substSolvedMetasAtGo depth sols (TCon c args) =
   TCon c (map (\p => Pair (substSolvedMetasAtGo depth sols (firstOf p)) (secondOf p)) args)
+substSolvedMetasAtGo depth sols (TMk c args) =
+  TMk c (map (\p => Pair (substSolvedMetasAtGo depth sols (firstOf p)) (secondOf p)) args)
+substSolvedMetasAtGo depth sols (TProj base c tele i fi) =
+  TProj (substSolvedMetasAtGo depth sols base) c tele i fi
+substSolvedMetasAtGo depth sols (TRecUpd base c tele idxs body) =
+  TRecUpd (substSolvedMetasAtGo depth sols base) c tele idxs (substSolvedMetasAtGo depth sols body)
 substSolvedMetasAtGo depth sols (TCase s alts) =
   TCase (substSolvedMetasAtGo depth sols s) (map (substSolvedAltAt depth sols) alts)
 substSolvedMetasAtGo depth sols (TIf c th el) =

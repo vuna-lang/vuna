@@ -31,6 +31,7 @@ module Vuna.Compiler.Driver.Iface
   , miNameOf
   , miPackageOf
   , miPreparedOf
+  , miRecordsOf
   , miSourceOf
   , moduleNamesOf
   , modulePathOf
@@ -115,6 +116,9 @@ record ModuleIface where
   miExports : List ExportEntry
   miFixities : List FixityDecl
   miDecls : List Decl
+  -- R2（records-v2）：结构化字段表（名字 / 类型 / 序号 / 派生 / 表示档位），
+  -- 工具与下游包按表查字段，不再依赖 `@vuna@record@field@` 前缀约定。
+  miRecords : List RecordMeta
   -- 本模块 decls 的 prepared 形态（`prepareDeclsWith` + `expandDerivings` 之后），
   -- 供包内增量的 `termAux` 直接拼接，免去每次 CLI 重跑干净模块的 record 降级 /
   -- deriving 展开（那是「编辑一个模块后重建」的主要成本）。空表 = 无缓存/不完整，
@@ -179,6 +183,10 @@ miFixitiesOf m = m.miFixities
 miDeclsOf : ModuleIface -> List Decl
 miDeclsOf m = m.miDecls
 
+-- | R2：模块的结构化 record 字段表。
+miRecordsOf : ModuleIface -> List RecordMeta
+miRecordsOf m = m.miRecords
+
 miPreparedOf : ModuleIface -> List Decl
 miPreparedOf m = m.miPrepared
 
@@ -194,19 +202,22 @@ preparedForModule modules entryDecls name =
   in if length modules <= 1 then Nothing
   else case prepareDeclsWith auxDecls own of
     Err _ => Nothing
-    Ok ds => case expandDerivings ds of
+    Ok p => case expandDerivings (secondOf p) of
       Err _ => Nothing
       Ok ds2 => Just ds2
 
 setPrepared : List Decl -> ModuleIface -> ModuleIface
 setPrepared prepared mi =
   ModuleIface mi.miName mi.miPackage mi.miSource mi.miIfaceHash mi.miDepHashes mi.miImports
-    mi.miImplicitImports mi.miCapabilities mi.miExports mi.miFixities mi.miDecls prepared
-    mi.miCached
+    mi.miImplicitImports mi.miCapabilities mi.miExports mi.miFixities mi.miDecls mi.miRecords
+    prepared mi.miCached
 
 -- 接口格式版本：Marshal 布局或字段语义变化必须 bump（旧缓存自然失效）。
+-- R1（records-v2）：DRecord/DData/DtData 增加 ReprTier 槽位，Marshal 布局变化 ⇒ bump。
+-- R2：ModuleIface.miRecords / DtData.dtDataFields 新增字段表，布局再变 ⇒ bump（13 → 14）。
+-- R3：Term/Value 新增 TProj/VProj 构造子，Marshal 布局变化 ⇒ 15。
 ifaceSchema : String
-ifaceSchema = "vuna-iface 13"
+ifaceSchema = "vuna-iface 16"
 
 -- ---------------------------------------------------------------
 -- 哈希：接口哈希必须比 `strHash`（10 bit）强得多
@@ -285,6 +296,10 @@ canonTerm st (TCon c args) =
   let
     pr = canonArgs st args
   in Pair (TCon c (firstOf pr)) (secondOf pr)
+canonTerm st (TMk c args) =
+  let
+    pr = canonArgs st args
+  in Pair (TMk c (firstOf pr)) (secondOf pr)
 canonTerm st (TCase s alts) =
   let
     ps = canonTerm st s
@@ -360,17 +375,20 @@ fixityText f = hashTextStrong "${f.fixityOp}|${f.fixityLevel}|${f.fixityAssoc}"
 hashFixities : List FixityDecl -> Int
 hashFixities fs = foldl (\acc, f => combineHash acc (fixityText f)) 0 fs
 
--- record 头：语法降级只看（名字、参数、字段名、deriving、构造子名），字段类型不参与
--- （`Elab.Records` 的 desugar 只用字段名；字段类型在 record 声明所在模块自己的精化里
--- 已消耗）。
-recordHash : RecordInfo -> Int
-recordHash (RecordInfo rname params fields derivings derivingVia ctor) =
-  hashTextStrong
-    "${rname}|${joinStrings params}|${joinStrings (map firstOf fields)}|${joinStrings derivings}|${if derivingVia then "1" else "0"}|${ctor}"
+-- record 头：语法降级只看（名字、参数、字段名 + 序号、deriving、构造子名、档位、
+-- 线性标记），字段类型不参与（字段类型已由 `hashDatas` 的 DtData Marshal 覆盖）。
+-- R2：哈希吃结构化 `RecordMeta`，字段名重排/改名/序号变化都会让依赖者失效。
+fieldKeyText : RecordFieldMeta -> String
+fieldKeyText (RecordFieldMeta fname fty i) = "${fname}:${i}"
 
-hashRecords : List Decl -> Int
-hashRecords decls = case recordsOfDecls (\n => n) decls of
-  Pair recs _ => foldl (\acc, r => combineHash acc (recordHash r)) 0 recs
+recordHash : RecordMeta -> Int
+recordHash r =
+  hashTextStrong
+    "${r.recordMetaName}|${joinStrings r.recordMetaParams}|${joinStrings (map fieldKeyText r.recordMetaFields)}|${joinStrings r.recordMetaDerivings}|${if r.recordMetaDerivingVia then "1" else "0"}|${reprPrefix r.recordMetaRepr}|${r.recordMetaCtor}|${if r.recordMetaLinear then "1" else "0"}"
+
+-- | R2：哈希结构化字段表（进 `miRecords` 的同一份数据）。
+hashRecords : List RecordMeta -> Int
+hashRecords recs = foldl (\acc, r => combineHash acc (recordHash r)) 0 recs
 
 joinStrings : List String -> String
 joinStrings [] = ""
@@ -392,14 +410,14 @@ importNameText i = "${i.importName}|${importAliasText i}|${importQualifiedText i
 hashImports : List Import -> Int
 hashImports is = foldl (\acc, i => combineHash acc (hashTextStrong (importNameText i))) 0 is
 
-hashOfParts : String -> String -> List Import -> List Import -> List FixityDecl -> List Decl -> List ExportEntry -> List String -> CachedProgram -> Int
-hashOfParts name pkg imports implicitImports fixities decls exports capabilities cp =
+hashOfParts : String -> String -> List Import -> List Import -> List FixityDecl -> List RecordMeta -> List ExportEntry -> List String -> CachedProgram -> Int
+hashOfParts name pkg imports implicitImports fixities records exports capabilities cp =
   let
     h0 = hashTextStrong "${name}|${pkg}"
     h1 = combineHash h0 (hashImports imports)
     h2 = combineHash h1 (hashImports implicitImports)
     h3 = combineHash h2 (hashFixities fixities)
-    h4 = combineHash h3 (hashRecords decls)
+    h4 = combineHash h3 (hashRecords records)
     h5 = combineHash h4 (hashDatas (cachedDatas cp))
     h6 = combineHash h5 (hashDefs (cachedDefs cp))
     h7 = combineHash h6 (hashGlobals (cachedGlobals cp))
@@ -414,7 +432,7 @@ hashOfParts name pkg imports implicitImports fixities decls exports capabilities
 hashOfIface : ModuleIface -> Int
 hashOfIface m =
   hashOfParts (miNameOf m) (miPackageOf m) (miImportsOf m) (miImplicitImportsOf m) (miFixitiesOf m)
-    (miDeclsOf m) (miExportsOf m) (miCapabilitiesOf m) (miCachedOf m)
+    (miRecordsOf m) (miExportsOf m) (miCapabilitiesOf m) (miCachedOf m)
 
 -- ---------------------------------------------------------------
 -- 归属索引（与 codegen 同一规则）：decl/data 表命中优先，带点名字回落模块前缀。
@@ -564,11 +582,12 @@ mkIfaceBase pkg parts prog sources clean m = case cleanIfaceOf clean (moduleName
     let
       name = moduleNameOf m
       cp = cpOfModule parts prog name
+      records = firstOf (recordsOfDecls (\n => n) m.moduleDeclsOf)
       h =
-        hashOfParts name pkg m.moduleImportsOf m.moduleImplicitImportsOf m.moduleFixitiesOf
-          m.moduleDeclsOf m.moduleExportsOf m.moduleCapabilities cp
+        hashOfParts name pkg m.moduleImportsOf m.moduleImplicitImportsOf m.moduleFixitiesOf records
+          m.moduleExportsOf m.moduleCapabilities cp
     in ModuleIface name pkg (sourceOf sources name) h [] m.moduleImportsOf m.moduleImplicitImportsOf
-      m.moduleCapabilities m.moduleExportsOf m.moduleFixitiesOf m.moduleDeclsOf [] cp
+      m.moduleCapabilities m.moduleExportsOf m.moduleFixitiesOf m.moduleDeclsOf records [] cp
 
 finishIface : List (Pair String Int) -> List ModuleIface -> Module -> ModuleIface -> ModuleIface
 finishIface tbl clean m mi = case cleanIfaceOf clean (miNameOf mi) of
@@ -576,7 +595,8 @@ finishIface tbl clean m mi = case cleanIfaceOf clean (miNameOf mi) of
   Nothing =>
     ModuleIface (miNameOf mi) (miPackageOf mi) (miSourceOf mi) (miIfaceHashOf mi)
       (depHashesOf tbl m) (miImportsOf mi) (miImplicitImportsOf mi) (miCapabilitiesOf mi)
-      (miExportsOf mi) (miFixitiesOf mi) (miDeclsOf mi) (miPreparedOf mi) (miCachedOf mi)
+      (miExportsOf mi) (miFixitiesOf mi) (miDeclsOf mi) (miRecordsOf mi) (miPreparedOf mi)
+      (miCachedOf mi)
 
 ifacesGo : String -> ProgParts -> DtProgram -> List (Pair String SourceInfo) -> List (Pair String Int) -> List ModuleIface -> List Module -> Pair (List ModuleIface) (List (Pair String Int))
 ifacesGo pkg parts prog sources knownDeps clean modules =
