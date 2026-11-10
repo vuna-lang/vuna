@@ -51,7 +51,6 @@ TC_IndexFuel
 TC_IntStringCaseRestriction
 TC_InvalidArrowType
 TC_NatLiteralOutOfRange
-TC_NeedsTwoArgs
 TC_NestedPatterns
 TC_NotInductiveFamily
 TC_NotTraitMethod
