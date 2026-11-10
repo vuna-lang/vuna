@@ -164,7 +164,7 @@ elabDataHeads : List (Pair Decl Span) -> List (Pair String Term) -> Ec -> List D
 elabDataHeads pending globals ec heads = elabDataHeadsFuel 64 pending globals ec heads
 
 elabDataHeadsFuel : Int -> List (Pair Decl Span) -> List (Pair String Term) -> Ec -> List DataHead -> Check (Pair (List DataHead) (Pair (List (Pair String Term)) Ec))
-elabDataHeadsFuel fuel pending globals ec heads = if fuel <= 0 then err "DT: internal: data head registration fuel exhausted"
+elabDataHeadsFuel fuel pending globals ec heads = if fuel <= 0 then icInternal "data head registration fuel exhausted"
 else case pending of
   [] => OkC (Pair (reverse heads) (Pair globals ec))
   _ => case elabDataHeadsRound pending globals ec heads [] of
@@ -176,10 +176,10 @@ else case pending of
 
 -- 一轮毫无进展：重跑首个失败声明，把它的真实错误报出去（通常是 kind 依赖成环）。
 elabDataHeadsNoProgress : List (Pair String Term) -> Ec -> List (Pair Decl Span) -> Check (Pair (List DataHead) (Pair (List (Pair String Term)) Ec))
-elabDataHeadsNoProgress globals ec [] = err "DT: internal: no failed data declarations"
+elabDataHeadsNoProgress globals ec [] = icInternal "no failed data declarations"
 elabDataHeadsNoProgress globals ec (ds :: rest) = case elabDataHead globals ec ds of
   ErrC e => ErrC e
-  OkC _ => err "DT: internal: data head registration made no progress"
+  OkC _ => icInternal "data head registration made no progress"
 
 -- | R2：按结构化字段表把 record 字段写进 `DtData`（普通 data 为空表）。
 -- 字段类型取自构造子 telescope 的字段域，用 `shift 0 (-i)` 去掉前序字段 binder 的

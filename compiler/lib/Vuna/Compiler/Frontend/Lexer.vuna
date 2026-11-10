@@ -160,7 +160,7 @@ skipBlockComment depth (Chars (c :: rest) p) = case rest of
 -- 跳过 trivia。fuel 按字符/注释段递减（M36 起所有扫描器都不再回传 fuel：
 -- 主循环与各扫描器各自持有一个够用的显式 fuel，终止性走「守卫 Int + 严格递减」）。
 skipTrivia : Int -> Chars -> Check Chars
-skipTrivia fuel cs = if fuel <= 0 then err "DT: lexer fuel exhausted (internal: lexer made no progress)"
+skipTrivia fuel cs = if fuel <= 0 then icFuel "lexer"
 else case cs of
   Chars [] p => OkC cs
   Chars (c :: rest) p => if isSpace c then skipTrivia (fuel - 1) (Chars rest (advanceChar c p))
@@ -268,7 +268,7 @@ flushText acc parts = TPText (strPack (reverse acc)) :: parts
 -- 返回：(parts（正序）、(字面量之后的 Chars, 结束引号位置))。
 scanTemplateText : Int -> Bool -> Chars -> List Int -> List TmplPart -> Check (Pair (List TmplPart) (Pair Chars Pos))
 -- 单行结束 `"`；单行不允许原始换行
-scanTemplateText fuel multi cs acc parts = if fuel <= 0 then err "DT: lexer fuel exhausted (internal: lexer made no progress)"
+scanTemplateText fuel multi cs acc parts = if fuel <= 0 then icFuel "lexer"
 else case cs of
   Chars [] p => lexErr0 UnterminatedString
   Chars (c :: rest) p => if c == 36 then case rest of
@@ -311,7 +311,7 @@ else case cs of
 -- 洞内 token 扫描：从 `${` 之后开始，`{`/`}` 计深度，深度 0 的 `}` 不消费。
 -- 内部字符串/注释由 token 词法（`lexOneToken` / `skipTrivia`）整体跳过。
 lexHoleTokens : Int -> Int -> Chars -> List PTok -> Check (Pair (List PTok) Chars)
-lexHoleTokens fuel depth cs acc = if fuel <= 0 then err "DT: lexer fuel exhausted (internal: lexer made no progress)"
+lexHoleTokens fuel depth cs acc = if fuel <= 0 then icFuel "lexer"
 else case skipTrivia (fuel - 1) cs of
   ErrC e => ErrC e
   OkC cs2 => case cs2 of
@@ -329,9 +329,9 @@ depthAfter depth _ = depth
 
 -- 消费一个 token（调用方保证已 skipTrivia 且输入非空）。
 lexOneToken : Int -> Chars -> Check (Pair PTok Chars)
-lexOneToken fuel cs = if fuel <= 0 then err "DT: lexer fuel exhausted (internal: lexer made no progress)"
+lexOneToken fuel cs = if fuel <= 0 then icFuel "lexer"
 else case cs of
-  Chars [] p => err "DT: internal: lexOneToken on empty input"
+  Chars [] p => icInternal "lexOneToken on empty input"
   Chars (c :: rest) p => if isIdentStart c then case collectIdent (Chars rest (advanceChar c p)) [c] of
     Pair name cs2 => OkC (Pair (PTok (classifyIdent name) p) cs2)
   else if isDigit c then if digitRunIsFloat (Chars rest (advanceChar c p)) then
@@ -353,7 +353,7 @@ else case cs of
 -- `"..."` / `"""..."""`：判定形式后走模板扫描，再决定 token 形态。
 -- 单行且无洞 → `TStr`（保持旧 token 形态）；其余（多行 / 含洞）→ `TTmpl`。
 lexStringToken : Int -> Int -> List Int -> Pos -> Check (Pair PTok Chars)
-lexStringToken fuel c rest p = if fuel <= 0 then err "DT: lexer fuel exhausted (internal: lexer made no progress)"
+lexStringToken fuel c rest p = if fuel <= 0 then icFuel "lexer"
 else case rest of
   c2 :: rest3 => case rest3 of
     c3 :: rest4 => if c2 == 34 && c3 == 34 then
@@ -367,7 +367,7 @@ else case rest of
   [] => lexSingleStringToken (fuel - 1) (Chars rest (advanceChar c p)) p
 
 lexSingleStringToken : Int -> Chars -> Pos -> Check (Pair PTok Chars)
-lexSingleStringToken fuel body p = if fuel <= 0 then err "DT: lexer fuel exhausted (internal: lexer made no progress)"
+lexSingleStringToken fuel body p = if fuel <= 0 then icFuel "lexer"
 else case scanTemplateText (fuel - 1) False body [] [] of
   ErrC e => ErrC e
   OkC (Pair parts (Pair cs2 endP)) => case parts of
@@ -377,7 +377,7 @@ else case scanTemplateText (fuel - 1) False body [] [] of
 -- 主循环：trivia 之后逐个 token，直到 EOF。每个 token 扣 1 步（各扫描器自带够用的
 -- fuel：token 内的字符数 ≤ 剩余源码长度，见 `sourceFuel` 的上界说明）。
 lexChars : Int -> Chars -> Check (List PTok)
-lexChars fuel cs = if fuel <= 0 then err "DT: lexer fuel exhausted (internal: lexer made no progress)"
+lexChars fuel cs = if fuel <= 0 then icFuel "lexer"
 else case skipTrivia fuel cs of
   ErrC e => ErrC e
   OkC cs2 => case cs2 of
@@ -468,10 +468,8 @@ skipSingleStringLiteral fuel body = case scanTemplateText (fuel - 1) False body 
   OkC (Pair parts (Pair cs2 endP)) => OkC cs2
 
 scanComments : Int -> Chars -> List Comment -> Check (List Comment)
-scanComments fuel (Chars [] p) acc =
-  if fuel <= 0 then err "DT: lexer fuel exhausted (internal: lexer made no progress)"
-  else OkC (reverse acc)
-scanComments fuel (Chars (c :: rest) p) acc = if fuel <= 0 then err "DT: lexer fuel exhausted (internal: lexer made no progress)"
+scanComments fuel (Chars [] p) acc = if fuel <= 0 then icFuel "lexer" else OkC (reverse acc)
+scanComments fuel (Chars (c :: rest) p) acc = if fuel <= 0 then icFuel "lexer"
 else if c == 34 then case skipStringLiteral (fuel - 1) c rest p of
   ErrC e => ErrC e
   OkC cs2 => scanComments (fuel - 1) cs2 acc

@@ -563,8 +563,8 @@ splitReplExpr : List Decl -> Check (Pair (List Decl) Expr)
 splitReplExpr decls = case reverse decls of
   (DFun n pats body sp) :: rest =>
     if n == replExprName then OkC (Pair (reverse rest) body)
-    else err "DT: internal: REPL expression definition is not last"
-  _ => err "DT: internal: REPL expression was not parsed as a definition"
+    else icInternal "REPL expression definition is not last"
+  _ => icInternal "REPL expression was not parsed as a definition"
 
 -- B44：核心求值器支持浮点（`Float` 原语按 IEEE-754 double 归约，见 `Core/Eval`），
 -- interp 不再需要「程序用到浮点就拒绝」的 guard。
@@ -853,7 +853,7 @@ dtAuxOfCache key (Just c) = if c.auxCacheKey == key then Just c else Nothing
 dtIncrementalChecked : PackageContext -> Pair (List Decl) (List Module) -> List ModuleIface -> List ModuleIface -> Check CheckedPackage
 dtIncrementalChecked ctx parts depIfaces cleanIfaces = Vuna.Compiler.Common.bind (dtIncrementalCheckedCore ctx parts depIfaces cleanIfaces Nothing True) (\r => case firstOf r of
   Just checked => OkC checked
-  Nothing => err "DT: internal: incremental check produced no package"
+  Nothing => icInternal "incremental check produced no package"
 )
 
 -- 增量精化核心：`needPackage` = 是否需要组装整包 DtProgram（写接口 / codegen 用）。

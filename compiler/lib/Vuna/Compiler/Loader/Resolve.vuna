@@ -447,7 +447,7 @@ resolveTopName label prefix name =
   Vuna.Compiler.Common.bind (checkTopName label name) (\_ => OkC (mangle prefix name))
 
 resolvePattern : Int -> List Module -> String -> String -> Namespaces -> List Import -> Pat -> Check (Pair Pat (List String))
-resolvePattern fuel modules label prefix ns imports pat = if fuel <= 0 then err "DT: resolve fuel exhausted (internal: resolver made no progress)"
+resolvePattern fuel modules label prefix ns imports pat = if fuel <= 0 then icFuel "resolver"
 else case pat of
   PWild sp => OkC (Pair (PWild sp) [])
   PVar name sp =>
@@ -468,13 +468,13 @@ else case pat of
       (\name2 => Vuna.Compiler.Common.bind (Vuna.Compiler.Common.traverse (\dtv => resolveRecordPatternField (fuel - 1) modules label prefix ns imports dtv) fields) (\parts => OkC (Pair (PRecord name2 (map firstOf parts) sp) (concatMap secondOf parts))))
 
 resolveRecordPatternField : Int -> List Module -> String -> String -> Namespaces -> List Import -> Pair String Pat -> Check (Pair (Pair String Pat) (List String))
-resolveRecordPatternField fuel modules label prefix ns imports (Pair fname pat) = if fuel <= 0 then err "DT: resolve fuel exhausted (internal: resolver made no progress)"
+resolveRecordPatternField fuel modules label prefix ns imports (Pair fname pat) = if fuel <= 0 then icFuel "resolver"
 else Vuna.Compiler.Common.bind (resolvePattern (fuel - 1) modules label prefix ns imports pat) (\p => case p of
   Pair pat2 bound => OkC (Pair (Pair fname pat2) bound)
 )
 
 resolveAlt : Int -> List Module -> String -> String -> Namespaces -> List Import -> List String -> Pair Pat Expr -> Check (Pair Pat Expr)
-resolveAlt fuel modules label prefix ns imports scope (Pair pat body) = if fuel <= 0 then err "DT: resolve fuel exhausted (internal: resolver made no progress)"
+resolveAlt fuel modules label prefix ns imports scope (Pair pat body) = if fuel <= 0 then icFuel "resolver"
 else Vuna.Compiler.Common.bind (resolvePattern resolveFuelBound modules label prefix ns imports pat) (\p => case p of
   Pair pat2 bound =>
     Vuna.Compiler.Common.bind
@@ -484,7 +484,7 @@ else Vuna.Compiler.Common.bind (resolvePattern resolveFuelBound modules label pr
 
 -- A2：局部函数的一个 clause（参数模式列表 + body）；参数绑定累加到 body 的作用域。
 resolveLocalClause : Int -> List Module -> String -> String -> Namespaces -> List Import -> List String -> Pair (List Pat) Expr -> Check (Pair (List Pat) Expr)
-resolveLocalClause fuel modules label prefix ns imports scope (Pair pats body) = if fuel <= 0 then err "DT: resolve fuel exhausted (internal: resolver made no progress)"
+resolveLocalClause fuel modules label prefix ns imports scope (Pair pats body) = if fuel <= 0 then icFuel "resolver"
 else Vuna.Compiler.Common.bind (resolveLocalPats (fuel - 1) modules label prefix ns imports pats) (\p => case p of
   Pair pats2 bound =>
     Vuna.Compiler.Common.bind
@@ -494,9 +494,8 @@ else Vuna.Compiler.Common.bind (resolveLocalPats (fuel - 1) modules label prefix
 
 resolveLocalPats : Int -> List Module -> String -> String -> Namespaces -> List Import -> List Pat -> Check (Pair (List Pat) (List String))
 resolveLocalPats fuel modules label prefix ns imports [] =
-  if fuel <= 0 then err "DT: resolve fuel exhausted (internal: resolver made no progress)"
-  else OkC (Pair [] [])
-resolveLocalPats fuel modules label prefix ns imports (pat :: rest) = if fuel <= 0 then err "DT: resolve fuel exhausted (internal: resolver made no progress)"
+  if fuel <= 0 then icFuel "resolver" else OkC (Pair [] [])
+resolveLocalPats fuel modules label prefix ns imports (pat :: rest) = if fuel <= 0 then icFuel "resolver"
 else Vuna.Compiler.Common.bind (resolvePattern (fuel - 1) modules label prefix ns imports pat) (\p => case p of
   Pair pat2 bound => Vuna.Compiler.Common.bind (resolveLocalPats (fuel - 1) modules label prefix ns imports rest) (\r => case r of
     Pair rest2 restBound => OkC (Pair (Base.List.Cons pat2 rest2) (append bound restBound))
@@ -505,12 +504,12 @@ else Vuna.Compiler.Common.bind (resolvePattern (fuel - 1) modules label prefix n
 
 resolveLet : Int -> List Module -> String -> String -> Namespaces -> List Import -> List String -> Bool -> List (Pair Pat Expr) -> Expr -> Check (Pair (List (Pair Pat Expr)) Expr)
 resolveLet fuel modules label prefix ns imports scope rec_ binds body =
-  if fuel <= 0 then err "DT: resolve fuel exhausted (internal: resolver made no progress)"
+  if fuel <= 0 then icFuel "resolver"
   else if rec_ then resolveRecLet (fuel - 1) modules label prefix ns imports scope binds body
   else resolveLetSeq (fuel - 1) modules label prefix ns imports scope binds body
 
 resolveLetSeq : Int -> List Module -> String -> String -> Namespaces -> List Import -> List String -> List (Pair Pat Expr) -> Expr -> Check (Pair (List (Pair Pat Expr)) Expr)
-resolveLetSeq fuel modules label prefix ns imports scope binds body = if fuel <= 0 then err "DT: resolve fuel exhausted (internal: resolver made no progress)"
+resolveLetSeq fuel modules label prefix ns imports scope binds body = if fuel <= 0 then icFuel "resolver"
 else case binds of
   [] =>
     Vuna.Compiler.Common.bind (resolveExpr (fuel - 1) modules label prefix ns imports scope body)
@@ -524,7 +523,7 @@ else case binds of
 
 -- 递归 let（where 块）：所有绑定名对全部 value 与 body 可见。
 resolveRecLet : Int -> List Module -> String -> String -> Namespaces -> List Import -> List String -> List (Pair Pat Expr) -> Expr -> Check (Pair (List (Pair Pat Expr)) Expr)
-resolveRecLet fuel modules label prefix ns imports scope binds body = if fuel <= 0 then err "DT: resolve fuel exhausted (internal: resolver made no progress)"
+resolveRecLet fuel modules label prefix ns imports scope binds body = if fuel <= 0 then icFuel "resolver"
 else case collectRecBinds modules label prefix ns imports binds of
   ErrC e => ErrC e
   OkC (Pair names pairs) =>
@@ -544,10 +543,9 @@ collectRecBinds modules label prefix ns imports ((Pair pat value) :: rest) = Vun
 
 resolveRecValues : Int -> List Module -> String -> String -> Namespaces -> List Import -> List String -> List (Pair Pat Expr) -> Check (List (Pair Pat Expr))
 resolveRecValues fuel modules label prefix ns imports scope [] =
-  if fuel <= 0 then err "DT: resolve fuel exhausted (internal: resolver made no progress)"
-  else OkC []
+  if fuel <= 0 then icFuel "resolver" else OkC []
 resolveRecValues fuel modules label prefix ns imports scope ((Pair pat value) :: rest) =
-  if fuel <= 0 then err "DT: resolve fuel exhausted (internal: resolver made no progress)"
+  if fuel <= 0 then icFuel "resolver"
   else Vuna.Compiler.Common.bind (resolveExpr (fuel - 1) modules label prefix ns imports scope value)
     (\value2 => Vuna.Compiler.Common.bind (resolveRecValues (fuel - 1) modules label prefix ns imports scope rest) (\tail => OkC (Base.List.Cons (Pair pat value2) tail)))
 
@@ -590,7 +588,7 @@ checkDebugConstruct sp name resolved scope =
   else OkC (EVar resolved sp)
 
 resolveExpr : Int -> List Module -> String -> String -> Namespaces -> List Import -> List String -> Expr -> Check Expr
-resolveExpr fuel modules label prefix ns imports scope expr = if fuel <= 0 then err "DT: resolve fuel exhausted (internal: resolver made no progress)"
+resolveExpr fuel modules label prefix ns imports scope expr = if fuel <= 0 then icFuel "resolver"
 else case expr of
   -- M40：`_` / `?name` 是洞，不是可解析的名字（`_` 也走 `dtPreludeNames`，命名洞必须
   -- 在这里直接放行，否则会报 unbound variable）。
@@ -664,7 +662,7 @@ else case expr of
 
 -- M36：模板片段的名字解析（洞内表达式按普通作用域解析；文本块原样）。
 resolveInterpParts : Int -> List Module -> String -> String -> Namespaces -> List Import -> List String -> List InterpPart -> Check (List InterpPart)
-resolveInterpParts fuel modules label prefix ns imports scope parts = if fuel <= 0 then err "DT: resolve fuel exhausted (internal: resolver made no progress)"
+resolveInterpParts fuel modules label prefix ns imports scope parts = if fuel <= 0 then icFuel "resolver"
 else case parts of
   [] => OkC []
   (IPText s) :: rest =>
@@ -685,7 +683,7 @@ else case parts of
 -- 现在降级与解析合并成一次遍历，链头直接使用块作用域解析好的名字。
 -- | 把 do 块降级成 bind 应用：空块报错，单条裸表达式即块结果，其余走 `resolveDoChain`。
 resolveDo : Int -> List Module -> String -> String -> Namespaces -> List Import -> List String -> List DoStmt -> Check Expr
-resolveDo fuel modules label prefix ns imports scope stmts = if fuel <= 0 then err "DT: resolve fuel exhausted (internal: resolver made no progress)"
+resolveDo fuel modules label prefix ns imports scope stmts = if fuel <= 0 then icFuel "resolver"
 else case stmts of
   [] => psErr0 DoBlockNeedsStatement
   [DExpr e sp] => resolveExpr (fuel - 1) modules label prefix ns imports scope e
@@ -711,7 +709,7 @@ resolveDoBind modules label prefix ns imports scope =
 -- | 非末条语句的链式降级：逐条解析语句，按 `@vuna@do@bind@...` / `@vuna@do@ignore@...`
 -- 内部标记构造 bind 应用（do-binder 对后续语句可见）。
 resolveDoChain : Int -> List Module -> String -> String -> Namespaces -> List Import -> List String -> String -> List DoStmt -> Check Expr
-resolveDoChain fuel modules label prefix ns imports scope bindName stmts = if fuel <= 0 then err "DT: resolve fuel exhausted (internal: resolver made no progress)"
+resolveDoChain fuel modules label prefix ns imports scope bindName stmts = if fuel <= 0 then icFuel "resolver"
 else case stmts of
   [] => psErr0 DoBlockNeedsStatement
   [DExpr e sp] => resolveExpr (fuel - 1) modules label prefix ns imports scope e
@@ -728,7 +726,7 @@ else case stmts of
 
 resolveFieldValue : Int -> List Module -> String -> String -> Namespaces -> List Import -> List String -> Pair String Expr -> Check (Pair String Expr)
 resolveFieldValue fuel modules label prefix ns imports scope (Pair fname value) =
-  if fuel <= 0 then err "DT: resolve fuel exhausted (internal: resolver made no progress)"
+  if fuel <= 0 then icFuel "resolver"
   else Vuna.Compiler.Common.bind (resolveExpr (fuel - 1) modules label prefix ns imports scope value)
     (\v => OkC (Pair fname v))
 
@@ -857,7 +855,7 @@ resolveTypeExpr fuel modules label prefix ns imports ty =
 -- B33：类型表达式里的显式 Pi binder 必须遮蔽同名 import；`bound` 只含 binder 名，
 -- 未绑定的名字才交给 resolveTypeName（本地值定义优先，其次 import 的导出面）。
 resolveTypeExprScoped : Int -> List Module -> String -> String -> Namespaces -> List Import -> List String -> Expr -> Check Expr
-resolveTypeExprScoped fuel modules label prefix ns imports bound ty = if fuel <= 0 then err "DT: resolve fuel exhausted (internal: resolver made no progress)"
+resolveTypeExprScoped fuel modules label prefix ns imports bound ty = if fuel <= 0 then icFuel "resolver"
 else case ty of
   -- M20：DT 的层级（`Type 1`）与洞（`_`）在这里只做结构放行，语义由下游检查器决定。
   EApp (EVar "Type" _) args _ => OkC ty

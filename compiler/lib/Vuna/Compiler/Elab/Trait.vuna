@@ -1286,7 +1286,7 @@ checkDef : List (Pair String Term) -> Ec -> List Pat -> Expr -> Value -> Span ->
 checkDef globals ec pats body expected sp = checkDefIn globals emptyCtx ec pats body expected sp
 
 checkBindersFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> List Pat -> Expr -> Value -> Span -> Check (Pair Term Ec)
-checkBindersFuel fuel globals ctx ec [] body expected sp = if fuel <= 0 then err "DT: internal: binder check fuel exhausted"
+checkBindersFuel fuel globals ctx ec [] body expected sp = if fuel <= 0 then icFuel "binder check"
 else
   let
     forced = forceVal ec expected
@@ -1303,7 +1303,7 @@ else
 
 -- M32：显式约束的隐式字典 binder：自动绑定（不消耗 pattern）、绑成 `TLam Rig1`，body 经 `localDictLookup` 命中声明假设。
 bindDictBinderFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Rig -> String -> Value -> Closure -> List Pat -> Expr -> Span -> Check (Pair Term Ec)
-bindDictBinderFuel fuel globals ctx ec rig name dom clo pats body sp = if fuel <= 0 then err "DT: internal: binder check fuel exhausted"
+bindDictBinderFuel fuel globals ctx ec rig name dom clo pats body sp = if fuel <= 0 then icFuel "binder check"
 else
   let
     lvl = ctxDepth ctx
@@ -1316,7 +1316,7 @@ else
 
 -- 隐式索引 binder（`{n : Nat}`）：绑成擦除的 lambda（Rig0），体在扩展上下文里继续。
 bindIndexBinderFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Rig -> String -> Value -> Closure -> List Pat -> Expr -> Span -> Check (Pair Term Ec)
-bindIndexBinderFuel fuel globals ctx ec rig name dom clo pats body sp = if fuel <= 0 then err "DT: internal: binder check fuel exhausted"
+bindIndexBinderFuel fuel globals ctx ec rig name dom clo pats body sp = if fuel <= 0 then icFuel "binder check"
 else
   let
     lvl = ctxDepth ctx
@@ -1333,7 +1333,7 @@ else
 -- 隐式 binder 沿用既有规则：index 域绑成擦除 λ（隐式实参由精化器插入），其它域仍是
 -- ImplicitParamKind。`TC_DefFewerParams` 保留在错误表里但不再触发（见 Diagnostics）。
 checkBodyAtEndFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Expr -> Value -> Span -> Check (Pair Term Ec)
-checkBodyAtEndFuel fuel globals ctx ec body expected sp = if fuel <= 0 then err "DT: internal: binder check fuel exhausted"
+checkBodyAtEndFuel fuel globals ctx ec body expected sp = if fuel <= 0 then icFuel "binder check"
 else case body of
   ELam names lambdaBody lambdaSp =>
     Vuna.Compiler.Common.bind (checkE globals ctx ec body expected)
@@ -1360,7 +1360,7 @@ else case body of
       Vuna.Compiler.Common.bind (checkE globals ctx ec body expected)
         (\p => Vuna.Compiler.Common.bind (resolveRowGoalsCtx globals ctx (secondOf p) sp) (\ec2 => OkC (Pair (firstOf p) ec2)))
 
-checkBindersFuel fuel globals ctx ec (pat :: rest) body expected sp = if fuel <= 0 then err "DT: internal: binder check fuel exhausted"
+checkBindersFuel fuel globals ctx ec (pat :: rest) body expected sp = if fuel <= 0 then icFuel "binder check"
 else
   let
     forced = forceVal ec expected
@@ -1375,7 +1375,7 @@ else
     _ => tcErr0 sp DefMoreParams
 
 bindOnePatternFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Rig -> String -> List Pat -> Expr -> Value -> Closure -> Span -> Check (Pair Term Ec)
-bindOnePatternFuel fuel globals ctx ec rig pname pats body dom clo sp = if fuel <= 0 then err "DT: internal: binder check fuel exhausted"
+bindOnePatternFuel fuel globals ctx ec rig pname pats body dom clo sp = if fuel <= 0 then icFuel "binder check"
 else
   let
     lvl = ctxDepth ctx

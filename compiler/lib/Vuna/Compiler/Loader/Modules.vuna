@@ -219,7 +219,7 @@ _joinNames (x :: rest) = "${x}, ${_joinNames rest}"
 -- 现在缺模块直接返回清晰的 Err（这是内部不变量，不是用户源码错误）。
 missingModule : String -> Check a
 missingModule name =
-  err "loader: internal: module ${name} is not loaded (import list and module table disagree)"
+  icInternal "module ${name} is not loaded (import list and module table disagree)"
 
 moduleDecls : List Module -> String -> Check (List Decl)
 moduleDecls modules name = case findModule modules name of

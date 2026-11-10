@@ -1,0 +1,33 @@
+-- | IC_ 域：编译器内部错误（不变量/燃料耗尽）的目录项与模板。
+module Vuna.Compiler.Diagnostics.Ic (IcEntry(..), IcErr(..), icAll, icCode, icTemplate) where
+
+-- Vuna.Compiler.Diagnostics.Ic：IC_ 域的**目录真源**（code + 模板 + 说明）。
+-- 抛出 helper（`icFuel` / `icInternal`）在 `Vuna.Compiler.Diag`（所有编译器模块都可见）。
+-- 渲染时阶段 = Internal，`diagInternal = True`；渲染器输出 internal compiler error，
+-- 退出码 2。
+import Base.Nat
+
+data IcErr : Nat -> Type where
+  -- arity 1：`<0>` = 阶段/子系统（"inference"/"parser"/"codegen"…）
+  FuelExhausted : String -> IcErr (Succ Zero)
+  InvariantViolated : String -> IcErr (Succ Zero)
+
+icCode : {n : Nat} -> IcErr n -> String
+icCode (FuelExhausted _) = "IC_FuelExhausted"
+icCode (InvariantViolated _) = "IC_InvariantViolated"
+
+icTemplate : {n : Nat} -> IcErr n -> String
+icTemplate (FuelExhausted _) =
+  "<0> ran out of fuel (compiler invariant: the phase must make progress)"
+icTemplate (InvariantViolated _) = "internal invariant violated: <0>"
+
+record IcEntry where
+  icEntryCode : String
+  icEntryTemplate : String
+  icEntryDesc : String
+
+icAll : List IcEntry
+icAll =
+  [ IcEntry (icCode (FuelExhausted "")) (icTemplate (FuelExhausted "")) "阶段燃料耗尽（编译器不变量：必须推进）",
+    IcEntry (icCode (InvariantViolated "")) (icTemplate (InvariantViolated "")) "编译器内部不变量被破坏"
+  ]

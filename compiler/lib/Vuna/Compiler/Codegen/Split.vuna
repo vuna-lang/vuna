@@ -73,9 +73,9 @@ checkDepsOrder ordered self (d :: rest) =
   let
     selfPos = posOfName self ordered
     depPos = posOfName d ordered
-  in if depPos == 0 then err "DT: internal: ${self} references unknown unit `${d}`"
-  else if selfPos == 0 then err "DT: internal: split unit `${self}` is not in the module order"
-  else if depPos >= selfPos then err "DT: internal: split dependency is not in topological order: ${self} -> ${d}"
+  in if depPos == 0 then icInternal "${self} references unknown unit `${d}`"
+  else if selfPos == 0 then icInternal "split unit `${self}` is not in the module order"
+  else if depPos >= selfPos then icInternal "split dependency is not in topological order: ${self} -> ${d}"
   else checkDepsOrder ordered self rest
 
 depsInOrder : List String -> String -> List String -> List String
@@ -148,10 +148,10 @@ checkEntryDeclName seen identity =
   let
     name = secondOf identity
     key = entryDeclKey identity
-  in if name == "" then err "DT: internal: entry declaration has an empty name"
+  in if name == "" then icInternal "entry declaration has an empty name"
   else if containsDot name then err
     "DT: internal: entry declaration `${name}` must not contain a module prefix (codegen requires Loader-resolved decls)"
-  else if memName key seen then err "DT: internal: duplicate entry declaration `${name}`" else OkC 0
+  else if memName key seen then icInternal "duplicate entry declaration `${name}`" else OkC 0
 
 checkEntryDeclsGo : List String -> List (Pair Bool String) -> Check Int
 checkEntryDeclsGo seen [] = OkC 0

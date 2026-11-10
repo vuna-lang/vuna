@@ -21,6 +21,8 @@ module Vuna.Compiler.Diag
   , diagNoLoc
   , diagText
   , err
+  , icFuel
+  , icInternal
   , rawAt
   , rawNoLoc
   , withContext
@@ -351,3 +353,26 @@ hasPrimaryLabel : List Label -> Bool
 hasPrimaryLabel [] = False
 hasPrimaryLabel ((Label _ _ LabelPrimary _) :: rest) = True
 hasPrimaryLabel (_ :: rest) = hasPrimaryLabel rest
+
+-- ---------------------------------------------------------------
+-- 内部错误（IC_）：阶段/不变量错误，渲染为 internal compiler error，exit 2。
+-- ---------------------------------------------------------------
+-- | 打上 internal 标记与 ICE 载荷。
+markInternal : String -> String -> Diagnostic -> Diagnostic
+markInternal fn invariant d =
+  Diagnostic d.diagId d.diagSeverity d.diagPhase d.diagCategory d.diagCode d.diagMessage
+    d.diagLabels d.diagFields d.diagTrace d.diagNotes d.diagSuggestions d.diagOrigin d.diagChildren
+    True
+    (Just (IceInfo PhInternal fn invariant "" "this is a compiler bug; please report it with the command line and source"))
+
+-- | 内部：燃料耗尽（`phase` = 阶段/函数名）。
+icFuel : String -> Check a
+icFuel phase =
+  ErrC
+    (markInternal "fuel" phase (diagNoLoc SevError PhInternal CatInternal "IC_FuelExhausted" "${phase} ran out of fuel (compiler invariant: the phase must make progress)"))
+
+-- | 内部：不变量违例。
+icInternal : String -> Check a
+icInternal what =
+  ErrC
+    (markInternal "invariant" what (diagNoLoc SevError PhInternal CatInternal "IC_InvariantViolated" "internal invariant violated: ${what}"))

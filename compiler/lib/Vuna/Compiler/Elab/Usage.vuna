@@ -77,7 +77,7 @@ checkBinderRig sp name RigOmega used = OkC 0
 
 -- 进入一个 binder：body usage 的头部就是它；检查后 drop。
 checkLamBinder : Span -> String -> Rig -> List Rig -> Check (List Rig)
-checkLamBinder sp name rig [] = err "DT: internal: usage vector lost lambda binder"
+checkLamBinder sp name rig [] = icInternal "usage vector lost lambda binder"
 checkLamBinder sp name rig (used :: rest) =
   Vuna.Compiler.Common.bind (checkBinderRig sp name rig used) (\_ => OkC rest)
 
@@ -89,7 +89,7 @@ checkAltBinders sp binders us = checkAltBindersGo sp (reverse binders) us
 checkAltBindersGo : Span -> List (Pair String Rig) -> List Rig -> Check (List Rig)
 checkAltBindersGo sp [] us = OkC us
 checkAltBindersGo sp ((Pair name rig) :: rest) us = case us of
-  [] => err "DT: internal: usage vector lost case binder"
+  [] => icInternal "usage vector lost case binder"
   used :: more =>
     Vuna.Compiler.Common.bind (checkBinderRig sp name rig used)
       (\_ => checkAltBindersGo sp rest more)
@@ -203,7 +203,7 @@ capCheckFuelMax : Int
 capCheckFuelMax = 1000000
 
 capCheckFuel : Int -> Ec -> Span -> Term -> Bool -> Check Int
-capCheckFuel fuel ec sp t allowed = if fuel <= 0 then err "DT: internal: capture check fuel exhausted"
+capCheckFuel fuel ec sp t allowed = if fuel <= 0 then icInternal "capture check fuel exhausted"
 else case t of
   TVar name i => OkC 0
   TGlobal g => OkC 0

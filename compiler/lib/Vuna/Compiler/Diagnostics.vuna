@@ -3,6 +3,7 @@ module Vuna.Compiler.Diagnostics
   , module Base.Vec
   , module Vuna.Compiler.Common
   , module Vuna.Compiler.Diagnostics.Cg
+  , module Vuna.Compiler.Diagnostics.Ic
   , module Vuna.Compiler.Diagnostics.Tc
   ) where
 
@@ -39,4 +40,5 @@ import Vuna.Compiler.Common
 import Base.Nat
 import Base.Vec
 import Vuna.Compiler.Diagnostics.Cg as Cg
+import Vuna.Compiler.Diagnostics.Ic as Ic
 import Vuna.Compiler.Diagnostics.Tc as Tc

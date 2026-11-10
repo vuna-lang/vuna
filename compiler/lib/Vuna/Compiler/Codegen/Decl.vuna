@@ -566,11 +566,11 @@ ctorOpaqueKeptFlags (keep :: keeps) (opq :: opqs) =
 ctorFieldTexts : QualCtx -> List Int -> List (Pair String (List Int)) -> List DtData -> List Bool -> List Bool -> List (Pair String Rig) -> Int -> Value -> Int -> Check (Pair (List String) Int)
 ctorFieldTexts qc levels table datas keepFlags opaqueFlags [] lvl v slot = OkC (Pair [] slot)
 ctorFieldTexts qc levels table datas [] (_ :: _) tele lvl v slot =
-  err "DT: internal: constructor opaque flags longer than its shape"
+  icInternal "constructor opaque flags longer than its shape"
 ctorFieldTexts qc levels table datas [] [] (_ :: _) lvl v slot =
-  err "DT: internal: constructor shape has more binders than its telescope"
+  icInternal "constructor shape has more binders than its telescope"
 ctorFieldTexts qc levels table datas (_ :: _) [] (_ :: _) lvl v slot =
-  err "DT: internal: constructor opaque flags shorter than its shape"
+  icInternal "constructor opaque flags shorter than its shape"
 ctorFieldTexts qc levels table datas (keep :: flags) (opq :: opqs) ((Pair name rig) :: rest) lvl v slot = if flagMatchesRig keep rig then case v of
   VPi pname implicit _ dom clo =>
     let
@@ -584,8 +584,8 @@ ctorFieldTexts qc levels table datas (keep :: flags) (opq :: opqs) ((Pair name r
         Pair texts slot3 => OkC (Pair (text :: texts) slot3)
       )
     else ctorFieldTexts qc levels table datas flags opqs rest (lvl + 1) next slot
-  _ => err "DT: internal: constructor telescope does not match its type"
-else err "DT: internal: constructor keep flag disagrees with telescope rig"
+  _ => icInternal "constructor telescope does not match its type"
+else icInternal "constructor keep flag disagrees with telescope rig"
 
 ctorArityNeed : QualCtx -> List Int -> List (Pair String (List Int)) -> List DtData -> DtCtor -> Check Int
 ctorArityNeed qc levels table datas c =
@@ -668,7 +668,7 @@ genRecordDecl qc levels table datas d = case dtDataCtors d of
     Vuna.Compiler.Common.bind
       (ctorFieldTexts qc levels table datas (ctorKeepFlags c) (ctorOpaqueFlagsOf datas c) (dtCtorTelescope c) 0 (eval [] (dtCtorType c)) (length levels))
       (\p => OkC "${typeParamDecl (secondOf p)}${typeName (dtDataName d)} = { ${joinWith "; " (recordFieldDecls (recordRtFields d) (firstOf p))} }")
-  _ => err "DT: internal: record family must have exactly one constructor: ${dtDataName d}"
+  _ => icInternal "record family must have exactly one constructor: ${dtDataName d}"
 
 -- | R4：record OCaml 表示的 codegen helper。
 recordFieldDecls : List (Pair Int String) -> List String -> List String
@@ -683,8 +683,8 @@ genUnboxedDataDecl : QualCtx -> List Int -> List (Pair String (List Int)) -> Lis
 genUnboxedDataDecl qc levels table datas d c idx = Vuna.Compiler.Common.bind (ctorFieldTexts qc levels table datas (ctorKeepFlags c) (ctorOpaqueFlagsOf datas c) (dtCtorTelescope c) 0 (eval [] (dtCtorType c)) (length levels)) (\p => case firstOf p of
   text :: rest => case rest of
     [] => OkC "${typeParamDecl (secondOf p)}${typeName (dtDataName d)} = ${text}"
-    _ => err "DT: internal: unboxed constructor has more than one kept field: ${dtCtorName c}"
-  [] => err "DT: internal: unboxed constructor has no kept field: ${dtCtorName c}"
+    _ => icInternal "unboxed constructor has more than one kept field: ${dtCtorName c}"
+  [] => icInternal "unboxed constructor has no kept field: ${dtCtorName c}"
 )
 
 genDataDecl : QualCtx -> List (Pair String (List Int)) -> List DtData -> List (Pair String (Pair DtCtor Int)) -> DtData -> Check String

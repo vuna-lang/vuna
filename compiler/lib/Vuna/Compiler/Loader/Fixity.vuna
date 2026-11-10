@@ -127,7 +127,7 @@ collectChain t e = Vuna.Compiler.Common.bind (reorderExpr t e) (\e2 => OkC (Pair
 -- 显式 fuel 计步（M31.2：`more` 是列表模式变量，SCT 对「tuple 列表」的递减度量
 -- 不闭合；按 R2「守卫 Int」判据给上界，每次递归消费一个运算符）。
 climb : Int -> FixityTable -> Int -> Expr -> List ChainOp -> Span -> Check (Pair Expr (List ChainOp))
-climb fuel t minPrec lhs rest sp = if fuel <= 0 then err "DT: internal: infix reorder fuel exhausted"
+climb fuel t minPrec lhs rest sp = if fuel <= 0 then icInternal "infix reorder fuel exhausted"
 else case rest of
   [] => OkC (Pair lhs [])
   c :: more => case fixityOf t c of
@@ -148,7 +148,7 @@ reorderChain : FixityTable -> Expr -> Check Expr
 reorderChain t e = Vuna.Compiler.Common.bind (collectChain t e) (\p => case p of
   Pair first rest => Vuna.Compiler.Common.bind (climb (2 * length rest + 2) t 0 first rest (exprSpan e)) (\q => case q of
     Pair out leftover =>
-      if length leftover == 0 then OkC out else err "DT: internal: infix reorder left an operator"
+      if length leftover == 0 then OkC out else icInternal "infix reorder left an operator"
   )
 )
 
@@ -206,7 +206,7 @@ reorderExpr t (EAnn inner ty sp) =
 -- 表达式；降级为 `interp` 调用发生在 `Loader.Resolve`（rename 之后）。
 reorderExpr t (EInterp multi parts sp) =
   Vuna.Compiler.Common.bind (reorderInterpParts t parts) (\ps => OkC (EInterp multi ps sp))
-reorderExpr t other = err "DT: internal: Fixity.reorderExpr: unexpected expression form"
+reorderExpr t other = icInternal "Fixity.reorderExpr: unexpected expression form"
 
 -- 模板片段列表（`EInterp` 的洞内表达式同样要按 fixity 重排）。
 reorderInterpParts : FixityTable -> List InterpPart -> Check (List InterpPart)

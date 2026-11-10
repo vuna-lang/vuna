@@ -211,7 +211,7 @@ else case fdefs of
         (\p2 => Vuna.Compiler.Common.bind (desugarRecordPatternFieldsFuel (fuel - 1) records rest provided sp) (\ps => OkC (p2 :: ps)))
 
 desugarExprFuel : Int -> List RecordMeta -> Expr -> Check Expr
-desugarExprFuel fuel records e = if fuel <= 0 then err "DT: internal: record desugar fuel exhausted"
+desugarExprFuel fuel records e = if fuel <= 0 then icFuel "record desugar"
 else case e of
   EVar n sp => OkC e
   EInt n sp => OkC e
@@ -264,10 +264,10 @@ else case e of
   EAnn value ty sp =>
     Vuna.Compiler.Common.bind (desugarExprFuel (fuel - 1) records value)
       (\v2 => Vuna.Compiler.Common.bind (desugarExprFuel (fuel - 1) records ty) (\t2 => OkC (EAnn v2 t2 sp)))
-  _ => err "DT: internal: unreordered infix/paren in elaboration"
+  _ => icInternal "unreordered infix/paren in elaboration"
 
 desugarDoStmtFuel : Int -> List RecordMeta -> DoStmt -> Check DoStmt
-desugarDoStmtFuel fuel records stmt = if fuel <= 0 then err "DT: internal: record desugar fuel exhausted"
+desugarDoStmtFuel fuel records stmt = if fuel <= 0 then icFuel "record desugar"
 else case stmt of
   DBind p e sp =>
     Vuna.Compiler.Common.bind (desugarPatternFuel (fuel - 1) records p)
@@ -277,8 +277,8 @@ else case stmt of
 
 desugarRecordValuesFuel : Int -> List RecordMeta -> List RecordFieldMeta -> List (Pair String Expr) -> Span -> Check (List Expr)
 desugarRecordValuesFuel fuel records [] provided sp =
-  if fuel <= 0 then err "DT: internal: record desugar fuel exhausted" else OkC []
-desugarRecordValuesFuel fuel records (f :: rest) provided sp = if fuel <= 0 then err "DT: internal: record desugar fuel exhausted"
+  if fuel <= 0 then icFuel "record desugar" else OkC []
+desugarRecordValuesFuel fuel records (f :: rest) provided sp = if fuel <= 0 then icFuel "record desugar"
 else case lookupProvided f.recordFieldName provided of
   Nothing => ErrC (missingFieldMsg sp f.recordFieldName)
   Just v =>
@@ -287,26 +287,26 @@ else case lookupProvided f.recordFieldName provided of
 
 desugarFieldValueFuel : Int -> List RecordMeta -> Pair String Expr -> Check (Pair String Expr)
 desugarFieldValueFuel fuel records (Pair fname v) =
-  if fuel <= 0 then err "DT: internal: record desugar fuel exhausted"
+  if fuel <= 0 then icFuel "record desugar"
   else Vuna.Compiler.Common.bind (desugarExprFuel (fuel - 1) records v) (\v2 => OkC (Pair fname v2))
 
 desugarBindFuel : Int -> List RecordMeta -> Pair Pat Expr -> Check (Pair Pat Expr)
 desugarBindFuel fuel records (Pair pat value) =
-  if fuel <= 0 then err "DT: internal: record desugar fuel exhausted"
+  if fuel <= 0 then icFuel "record desugar"
   else Vuna.Compiler.Common.bind (desugarPatternFuel (fuel - 1) records pat)
     (\p2 => Vuna.Compiler.Common.bind (desugarExprFuel (fuel - 1) records value) (\v2 => OkC (Pair p2 v2)))
 
 -- A2：局部函数 clause（参数模式列表 + body）。
 desugarLocalClauseFuel : Int -> List RecordMeta -> Pair (List Pat) Expr -> Check (Pair (List Pat) Expr)
 desugarLocalClauseFuel fuel records clause =
-  if fuel <= 0 then err "DT: internal: record desugar fuel exhausted"
+  if fuel <= 0 then icFuel "record desugar"
   else Vuna.Compiler.Common.bind
     (Vuna.Compiler.Common.traverse (desugarPatternFuel (fuel - 1) records) (firstOf clause))
     (\p2 => Vuna.Compiler.Common.bind (desugarExprFuel (fuel - 1) records (secondOf clause)) (\b2 => OkC (Pair p2 b2)))
 
 desugarAltFuel : Int -> List RecordMeta -> Pair Pat Expr -> Check (Pair Pat Expr)
 desugarAltFuel fuel records (Pair pat body) =
-  if fuel <= 0 then err "DT: internal: record desugar fuel exhausted"
+  if fuel <= 0 then icFuel "record desugar"
   else Vuna.Compiler.Common.bind (desugarPatternFuel (fuel - 1) records pat)
     (\p2 => Vuna.Compiler.Common.bind (desugarExprFuel (fuel - 1) records body) (\b2 => OkC (Pair p2 b2)))
 

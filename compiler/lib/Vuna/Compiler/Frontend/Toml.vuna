@@ -149,7 +149,7 @@ parseStringValue path cs = case cs.cursorChars of
     in parseStringChars (cursorFuel cs1) path cs cs1 []
 
 parseStringChars : Int -> String -> TomlCursor -> TomlCursor -> List Int -> Check (Pair String TomlCursor)
-parseStringChars fuel path startCs cs acc = if fuel <= 0 then err "DT: toml fuel exhausted (internal: toml parser made no progress)"
+parseStringChars fuel path startCs cs acc = if fuel <= 0 then icFuel "toml"
 else case cs.cursorChars of
   [] => failAt path startCs.cursorLine "unterminated basic string"
   c :: rest => case c of
@@ -159,7 +159,7 @@ else case cs.cursorChars of
     _ => parseStringChars (fuel - 1) path startCs (advanceCursor cs) (c :: acc)
 
 parseStringEscape : Int -> String -> TomlCursor -> TomlCursor -> List Int -> Check (Pair String TomlCursor)
-parseStringEscape fuel path startCs cs acc = if fuel <= 0 then err "DT: toml fuel exhausted (internal: toml parser made no progress)"
+parseStringEscape fuel path startCs cs acc = if fuel <= 0 then icFuel "toml"
 else case cs.cursorChars of
   [] => failAt path startCs.cursorLine "unterminated escape sequence"
   c :: rest => case c of
@@ -182,7 +182,7 @@ parseInteger path cs = case cs.cursorChars of
     else failAt path cs.cursorLine "expected an integer"
 
 parseIntegerDigits : Int -> String -> TomlCursor -> TomlCursor -> Int -> Int -> Bool -> Check (Pair Int TomlCursor)
-parseIntegerDigits fuel path startCs cs count acc negative = if fuel <= 0 then err "DT: toml fuel exhausted (internal: toml parser made no progress)"
+parseIntegerDigits fuel path startCs cs count acc negative = if fuel <= 0 then icFuel "toml"
 else case cs.cursorChars of
   [] => finishInteger path startCs cs count acc negative
   c :: rest =>
@@ -232,7 +232,7 @@ parseStringArray path cs = case cs.cursorChars of
     in parseArrayItems (cursorFuel cs1) path cs1 []
 
 parseArrayItems : Int -> String -> TomlCursor -> List String -> Check (Pair TomlValue TomlCursor)
-parseArrayItems fuel path cs acc = if fuel <= 0 then err "DT: toml fuel exhausted (internal: toml parser made no progress)"
+parseArrayItems fuel path cs acc = if fuel <= 0 then icFuel "toml"
 else case skipGap cs of
   TomlCursor chars line col => case chars of
     [] => failAt path line "unterminated array"
@@ -242,7 +242,7 @@ else case skipGap cs of
       _ => failAt path line "expected a string in array"
 
 parseArrayString : Int -> String -> TomlCursor -> List String -> Check (Pair TomlValue TomlCursor)
-parseArrayString fuel path cs acc = if fuel <= 0 then err "DT: toml fuel exhausted (internal: toml parser made no progress)"
+parseArrayString fuel path cs acc = if fuel <= 0 then icFuel "toml"
 else case parseStringValue path cs of
   ErrC e => ErrC e
   OkC (Pair s afterString) => case skipGap afterString of
@@ -273,7 +273,7 @@ parseSectionPath : String -> TomlCursor -> Check (Pair (List String) TomlCursor)
 parseSectionPath path cs = parseSectionSegments (cursorFuel cs) path cs []
 
 parseSectionSegments : Int -> String -> TomlCursor -> List String -> Check (Pair (List String) TomlCursor)
-parseSectionSegments fuel path cs acc = if fuel <= 0 then err "DT: toml fuel exhausted (internal: toml parser made no progress)"
+parseSectionSegments fuel path cs acc = if fuel <= 0 then icFuel "toml"
 else case parseBareKey path (skipBlank cs) of
   ErrC e => ErrC e
   OkC (Pair seg afterSeg) => case skipBlank afterSeg of
@@ -320,7 +320,7 @@ hasEntry section key ((TomlEntry s k v line) :: rest) =
   samePath section s && k == key || hasEntry section key rest
 
 parseEntryValue : Int -> String -> TomlCursor -> Int -> String -> List String -> List (List String) -> List TomlEntry -> Check (List TomlEntry)
-parseEntryValue fuel path cs keyLine key section seen entries = if fuel <= 0 then err "DT: toml fuel exhausted (internal: toml parser made no progress)"
+parseEntryValue fuel path cs keyLine key section seen entries = if fuel <= 0 then icFuel "toml"
 else case parseValue path (skipBlank cs) of
   ErrC e => ErrC e
   OkC (Pair value afterValue) => case expectEol path afterValue of
@@ -331,7 +331,7 @@ else case parseValue path (skipBlank cs) of
         (TomlEntry section key value keyLine :: entries)
 
 parseKeyLine : Int -> String -> TomlCursor -> List String -> List (List String) -> List TomlEntry -> Check (List TomlEntry)
-parseKeyLine fuel path cs section seen entries = if fuel <= 0 then err "DT: toml fuel exhausted (internal: toml parser made no progress)"
+parseKeyLine fuel path cs section seen entries = if fuel <= 0 then icFuel "toml"
 else case parseBareKey path cs of
   ErrC e => ErrC e
   OkC (Pair key afterKey) => case skipBlank afterKey of
@@ -343,7 +343,7 @@ else case parseBareKey path cs of
         else failAt path cs.cursorLine "expected '=' after key \"${key}\""
 
 parseSectionLine : Int -> String -> TomlCursor -> a -> List (List String) -> List TomlEntry -> Check (List TomlEntry)
-parseSectionLine fuel path cs section seen entries = if fuel <= 0 then err "DT: toml fuel exhausted (internal: toml parser made no progress)"
+parseSectionLine fuel path cs section seen entries = if fuel <= 0 then icFuel "toml"
 else case parseSectionPath path (advanceCursor cs) of
   ErrC e => ErrC e
   OkC (Pair newSection afterHeader) => if memSectionPath newSection seen then failAt path cs.cursorLine "duplicate section [${joinDots newSection}]"
@@ -353,11 +353,11 @@ else case parseSectionPath path (advanceCursor cs) of
 
 parseTomlLoop : Int -> String -> TomlCursor -> List String -> List (List String) -> List TomlEntry -> Check (List TomlEntry)
 parseTomlLoop fuel path cs section seen entries =
-  if fuel <= 0 then err "DT: toml fuel exhausted (internal: toml parser made no progress)"
+  if fuel <= 0 then icFuel "toml"
   else parseTomlLoopAt (fuel - 1) path (skipGap cs) section seen entries
 
 parseTomlLoopAt : Int -> String -> TomlCursor -> List String -> List (List String) -> List TomlEntry -> Check (List TomlEntry)
-parseTomlLoopAt fuel path cs section seen entries = if fuel <= 0 then err "DT: toml fuel exhausted (internal: toml parser made no progress)"
+parseTomlLoopAt fuel path cs section seen entries = if fuel <= 0 then icFuel "toml"
 else case cs.cursorChars of
   [] => OkC (reverse entries)
   c :: rest =>

@@ -120,7 +120,7 @@ checkOneErasure typeNames d = case dtDefExtern d of
   -- M33 W5：extern 没有 vuna 体，运行时实现由 OCaml `external` 提供；不参与擦除检查。
   Just _ => OkC 0
   Nothing => case dtDefBody d of
-    Nothing => err "DT: internal: axiom reached the runtime erasure check (partition must erase it)"
+    Nothing => icInternal "axiom reached the runtime erasure check (partition must erase it)"
     Just body => case checkErasure typeNames [] body of
       ErrC e => ErrC (defLocDiag d e)
       OkC n => OkC n
@@ -130,13 +130,12 @@ showMetaHint : Int -> String
 showMetaHint m = " ?${m}"
 
 checkErasureFuel : Int -> List String -> List (Pair String Rig) -> Term -> Check Int
-checkErasureFuel fuel typeNames binders t = if fuel <= 0 then err "DT: internal: erasure fuel exhausted"
+checkErasureFuel fuel typeNames binders t = if fuel <= 0 then icFuel "erasure"
 else case t of
   TVar name i => case binderAt i binders of
     Just (Pair n rig) =>
       if rigIsErased rig then cgErr1 (TypeLevelBindingRuntime name) name else OkC 0
-    Nothing =>
-      err "DT: internal: unbound runtime variable ${name} (index ${i}, binders ${length binders})"
+    Nothing => icInternal "unbound runtime variable ${name} (index ${i}, binders ${length binders})"
   TGlobal name => if memName name typeNames then cgErr1 (TypeLevelNameRuntime name) name else OkC 0
   TType l => cgErr0 TypeUsedAtRuntime
   TPi name implicit rig dom cod => cgErr0 TypeUsedAtRuntime
@@ -169,18 +168,16 @@ else case t of
       (\_ => Vuna.Compiler.Common.bind (checkErasureFuel (fuel - 1) typeNames binders th) (\_ => checkErasureFuel (fuel - 1) typeNames binders el))
 
 checkConArgsErasureFuel : Int -> List String -> List (Pair String Rig) -> List (Pair Term Rig) -> Check Int
-checkConArgsErasureFuel fuel typeNames binders [] =
-  if fuel <= 0 then err "DT: internal: erasure fuel exhausted" else OkC 0
+checkConArgsErasureFuel fuel typeNames binders [] = if fuel <= 0 then icFuel "erasure" else OkC 0
 checkConArgsErasureFuel fuel typeNames binders ((Pair arg rig) :: rest) =
-  if fuel <= 0 then err "DT: internal: erasure fuel exhausted"
+  if fuel <= 0 then icFuel "erasure"
   else if rigIsErased rig then checkConArgsErasureFuel (fuel - 1) typeNames binders rest
   else Vuna.Compiler.Common.bind (checkErasureFuel (fuel - 1) typeNames binders arg)
     (\_ => checkConArgsErasureFuel (fuel - 1) typeNames binders rest)
 
 checkAltErasureFuel : Int -> List String -> List (Pair String Rig) -> List CaseAlt -> Check Int
-checkAltErasureFuel fuel typeNames binders [] =
-  if fuel <= 0 then err "DT: internal: erasure fuel exhausted" else OkC 0
-checkAltErasureFuel fuel typeNames binders (alt :: rest) = if fuel <= 0 then err "DT: internal: erasure fuel exhausted"
+checkAltErasureFuel fuel typeNames binders [] = if fuel <= 0 then icFuel "erasure" else OkC 0
+checkAltErasureFuel fuel typeNames binders (alt :: rest) = if fuel <= 0 then icFuel "erasure"
 else
   let
     altBinders = caseAltBinders alt
@@ -462,7 +459,7 @@ checkNoDupOcamlNames kind names = checkNoDupOcamlNamesGo kind names (Base.HashMa
 checkNoDupOcamlNamesGo : String -> List String -> HashMap String Bool -> Check Int
 checkNoDupOcamlNamesGo kind [] seen = OkC 0
 checkNoDupOcamlNamesGo kind (n :: rest) seen =
-  if Base.HashMap.member n seen then err "DT: internal: OCaml name collision among ${kind}s: `${n}`"
+  if Base.HashMap.member n seen then icInternal "OCaml name collision among ${kind}s: `${n}`"
   else checkNoDupOcamlNamesGo kind rest (Base.HashMap.insert n True seen)
 
 ensureUniqueOcamlNames : List DtData -> List DtDef -> Check Int
@@ -485,9 +482,8 @@ ensureUniqueOcamlNames datas defs =
 -- 越界/负 index 都在 check 期报内部错误，而不是在 codegen/OCaml 阶段才炸。
 checkTermScopes : Int -> Term -> Check Int
 checkTermScopes depth (TVar name i) =
-  if i >= 0 then if i < depth then OkC 0
-  else err "DT: internal: out-of-scope de Bruijn index ${i} (depth ${depth})"
-  else err "DT: internal: negative de Bruijn index ${i}"
+  if i >= 0 then if i < depth then OkC 0 else icInternal "out-of-scope de Bruijn index ${i} (depth ${depth})"
+  else icInternal "negative de Bruijn index ${i}"
 checkTermScopes depth (TGlobal name) = OkC 0
 checkTermScopes depth (TInt n) = OkC 0
 checkTermScopes depth (TStr s) = OkC 0

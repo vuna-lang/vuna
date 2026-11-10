@@ -627,7 +627,7 @@ hostModuleIn (root :: rest) name =
   if memName name (rootHostModules root) then True else hostModuleIn rest name
 
 loadAll : Int -> List Root -> Bool -> String -> List Module -> List String -> List Import -> Check (List Module)
-loadAll fuel roots selfPriv importerPkg modules stack imports = if fuel <= 0 then err "DT: loader fuel exhausted (internal: module graph too deep)"
+loadAll fuel roots selfPriv importerPkg modules stack imports = if fuel <= 0 then icFuel "loader"
 else case imports of
   [] => OkC modules
   imp :: rest =>
@@ -636,7 +636,7 @@ else case imports of
       (\modules2 => loadAll (fuel - 1) roots selfPriv importerPkg modules2 stack rest)
 
 loadModule : Int -> List Root -> Bool -> String -> List Module -> List String -> String -> Check (List Module)
-loadModule fuel roots selfPriv importerPkg modules stack name = if fuel <= 0 then err "DT: loader fuel exhausted (internal: module graph too deep)"
+loadModule fuel roots selfPriv importerPkg modules stack name = if fuel <= 0 then icFuel "loader"
 else case findModule modules name of
   Just m => OkC modules
   Nothing => if memName name stack then ldErr1 (ImportCycle (showCycle name stack)) (showCycle name stack)

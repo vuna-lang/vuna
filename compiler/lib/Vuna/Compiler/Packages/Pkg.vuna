@@ -259,7 +259,7 @@ mismatchMessage (Just expected) actual =
   "pkg: dependency ${expected} expects package name ${expected} but found ${actual}"
 
 loadDependencyList : Int -> List (Pair String String) -> String -> List (Pair String String) -> Check (List Package)
-loadDependencyList fuel stack baseDir deps = if fuel <= 0 then err "DT: pkg fuel exhausted (internal: dependency graph too deep)"
+loadDependencyList fuel stack baseDir deps = if fuel <= 0 then icFuel "pkg"
 else case deps of
   [] => OkC []
   (Pair depName rel) :: rest => case loadPackageWalk (fuel - 1) stack (Just depName) (joinPath baseDir rel) of
@@ -269,7 +269,7 @@ else case deps of
       OkC dependencies => OkC (dependency :: dependencies)
 
 loadPackageWalk : Int -> List (Pair String String) -> Maybe String -> String -> Check Package
-loadPackageWalk fuel stack depName dir = if fuel <= 0 then err "DT: pkg fuel exhausted (internal: dependency graph too deep)"
+loadPackageWalk fuel stack depName dir = if fuel <= 0 then icFuel "pkg"
 else
   let
     normalized = normalizeDir dir

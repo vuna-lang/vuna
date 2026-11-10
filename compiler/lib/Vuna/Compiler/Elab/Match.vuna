@@ -67,11 +67,10 @@ wrapLambdas (n :: rest) body = ELam [n] (wrapLambdas rest body) (Span "" 0 0 0 0
 -- if pos == 1 then b else c`；变量/通配 clause 在字面量之后提供 fallback（体按剩余列递归构建）。
 litAltExpr : List (Pair String (List String)) -> List (Pair (List Pat) Expr) -> String -> List String -> Int -> Check Expr
 litAltExpr table clauses pos restParams fuel =
-  if fuel <= 0 then err "DT: internal: pattern matrix fuel exhausted"
-  else litAltExprGo table clauses pos restParams fuel
+  if fuel <= 0 then icFuel "pattern matrix" else litAltExprGo table clauses pos restParams fuel
 
 litAltExprGo : List (Pair String (List String)) -> List (Pair (List Pat) Expr) -> String -> List String -> Int -> Check Expr
-litAltExprGo table clauses pos restParams fuel = if fuel <= 0 then err "DT: internal: pattern matrix fuel exhausted"
+litAltExprGo table clauses pos restParams fuel = if fuel <= 0 then icFuel "pattern matrix"
 else case clauses of
   [] => ErrC (tcMsg IntStringCaseNeedsFallback [])
   (Pair (p :: ps) body) :: rest => case p of
@@ -180,7 +179,7 @@ firstPatSpan _ = Span "" 0 0 0 0
 -- （`mergeBy le [] ys` / `mergeBy le xs []` / `mergeBy le (x::xs) (y::ys)`
 -- 曾报 `missing Cons`）。族信息由 Elab 传入（`ctorTable`）。
 ctorColumn : List (Pair String (List String)) -> List (Pair (List Pat) Expr) -> String -> List String -> Int -> Check Expr
-ctorColumn table clauses pos restParams fuel = if fuel <= 0 then err "DT: internal: pattern matrix fuel exhausted"
+ctorColumn table clauses pos restParams fuel = if fuel <= 0 then icFuel "pattern matrix"
 else Vuna.Compiler.Common.bind (ctorAltList table clauses pos restParams (fuel - 1)) (\alts => let
   caseSp = firstPatSpan clauses
 in if familyCovered table (ctorHeads clauses) then OkC (ECase (EVar pos caseSp) alts caseSp)
@@ -349,13 +348,13 @@ renameAlt oldName newName alt =
 -- `buildColumnExpr` 用 case 表达。
 ctorAltList : List (Pair String (List String)) -> List (Pair (List Pat) Expr) -> String -> List String -> Int -> Check (List (Pair Pat Expr))
 ctorAltList table clauses pos restParams fuel =
-  if fuel <= 0 then err "DT: internal: pattern matrix fuel exhausted"
+  if fuel <= 0 then icFuel "pattern matrix"
   else ctorAltListGo table clauses (ctorHeads clauses) pos restParams fuel
 
 ctorAltListGo : List (Pair String (List String)) -> List (Pair (List Pat) Expr) -> List String -> String -> List String -> Int -> Check (List (Pair Pat Expr))
 ctorAltListGo table clauses [] pos restParams fuel =
-  if fuel <= 0 then err "DT: internal: pattern matrix fuel exhausted" else OkC []
-ctorAltListGo table clauses (cname :: rest) pos restParams fuel = if fuel <= 0 then err "DT: internal: pattern matrix fuel exhausted"
+  if fuel <= 0 then icFuel "pattern matrix" else OkC []
+ctorAltListGo table clauses (cname :: rest) pos restParams fuel = if fuel <= 0 then icFuel "pattern matrix"
 else
   let
     subpatCount = ctorSubPatCount clauses cname
@@ -429,7 +428,7 @@ filterFallback (c :: rest) = case c of
 -- 要改写成外层 scrutinee 位置名（`pos`）。M22.2 修：旧实现直接拿原始体，变量名
 -- 在通配分支里没有 binder（`join sep (x :: rest)` 的 `rest` 曾报 unknown name）。
 fallbackAltList : List (Pair String (List String)) -> String -> List (Pair (List Pat) Expr) -> List String -> Int -> Check (List (Pair Pat Expr))
-fallbackAltList table pos clauses restParams fuel = if fuel <= 0 then err "DT: internal: pattern matrix fuel exhausted"
+fallbackAltList table pos clauses restParams fuel = if fuel <= 0 then icFuel "pattern matrix"
 else case prepFallbacks pos (filterFallback clauses) of
   [] => OkC []
   fbs =>
