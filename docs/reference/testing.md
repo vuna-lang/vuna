@@ -172,8 +172,7 @@ vuna test --suite test/suite.toml --cache-dir DIR   # 覆盖本地结果缓存�
 - `--bless-diag`：负例 case 用 `check/compile --json` 的实际聚合文档写回 `.diag.json`（源码路径相对 cwd；环境路径归一化为 `<ROOT>`/`<BASE>`，本地与 nix 构建可比）。
 - 目录型夹具根部的 `.package-dir` 标记：check/compile 以该目录为 cwd 运行 `vuna <cmd> .`，用于包级诊断（`PKG_`/`LD_`），对应 family `pkg_err`（`entry = "lib/Main.vuna"`）。
 - 夹具旁的 `.deny` 标记：check/compile 探测加 `--deny-warnings`（用于断言「warning 在 deny 模式下失败」，如冗余分支夹具）。
-- `nix/checks/diag-coverage.sh` 对比码集合（`.diag.json` + lint `.out`；缺口与不可达审计在 `nix/diag-coverage-allow.txt`，覆盖数不低于 `nix/diag-coverage.min`）；LSP quick fix 集成：`test/corpus/lsp/quickfix.sh`（诊断 suggestions：冗余分支删除/未使用 binder 改名）；
-- `nix/checks/diag-style.sh` 用 `vuna gen-errors` 的消息列查文案规范（句号/大小写/空白/占位符，专有名词例外在 `nix/diag-style-allow.txt`）。
+- `nix/checks/diag-coverage.sh` 对比码集合（`.diag.json` + lint `.out`；缺口与不可达审计在 `nix/diag-coverage-allow.txt`，覆盖数不低于 `nix/diag-coverage.min`）；`nix/checks/diag-style.sh` 查消息列文案规范（句号/大小写/空白/占位符，例外在 `nix/diag-style-allow.txt`）；LSP quick fix 集成在 `test/corpus/lsp/quickfix.sh`。
 - `--watch`：首次跑完后每 500ms 比较 suite/corpus/工具链源码 mtime，变化即重跑。
 - `--cache-dir DIR`：覆盖 `.local/test-cache`；worker 继承同一目录。
 - `--strict-skips`：`--fail-fast` 跳过的 case 计为失败（CI 使用）。
