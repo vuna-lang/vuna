@@ -1,0 +1,10 @@
+import Base.FromString
+
+data X : Type where
+  A : Int -> X
+  B : X
+
+deriving (FromString)
+
+main : Int
+main = 0

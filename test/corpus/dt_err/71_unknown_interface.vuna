@@ -1,0 +1,7 @@
+data T : Type where
+  T : T
+
+instance T Int where
+
+main : Int
+main = 0

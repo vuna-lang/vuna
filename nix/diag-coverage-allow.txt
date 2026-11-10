@@ -42,7 +42,6 @@ TC_CannotSolveOccurs
 TC_CtorWrongIndices
 TC_DebugConstructInRelease
 TC_DefParamsMustBeVars
-TC_DeriveSingleCtor
 TC_DoUnsupported
 TC_EqRequiresEvidence
 TC_FfiTypeUnsupported
@@ -65,7 +64,6 @@ TC_TypeMismatchCaseCount
 TC_TypeMismatchCaseVars
 TC_TypeMismatchCtorArity
 TC_UniverseLevelNonNegative
-TC_UnknownInterface
 TC_UnknownName
 TC_UnknownRecord
 TC_UnsolvedMetavar
