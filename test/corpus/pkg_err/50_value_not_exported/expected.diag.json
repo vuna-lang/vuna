@@ -1,0 +1,1 @@
+{"version":1,"tool":"vuna","diagnostics":[{"code":"RN_ValueNotExported","severity":"error","phase":"resolve","category":"names","message":"w is not exported by M","labels":[],"fields":[],"trace":[],"notes":[],"suggestions":[],"origin":{"kind":"direct"},"internal":false,"ice":null}]}

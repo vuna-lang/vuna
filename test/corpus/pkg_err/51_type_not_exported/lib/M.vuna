@@ -1,0 +1,7 @@
+module M (v) where
+
+v : Int
+v = 1
+
+data T : Type where
+  MkT : T

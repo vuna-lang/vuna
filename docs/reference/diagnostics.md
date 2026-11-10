@@ -135,7 +135,7 @@ JSON 字段是机器契约：`code/severity/phase/category/message/labels[]/fiel
   quick fix、relatedInformation）。
 - `nix/checks/diag-raw.sh`：compiler 内源码/清单诊断不得走裸 `err`（工具/构建白名单：`CompilerCli`/`Compile`/`Dt`），
   `showSpanLoc` 只能出现在渲染器/目标消息组装处。
-- 负例夹具双轨：206 个 `.diag.json` 结构化期望（`--json` 聚合文档，`--bless-diag` 生成）
+- 负例夹具双轨：210 个 `.diag.json` 结构化期望（`--json` 聚合文档，`--bless-diag` 生成）
   与原有 `.err` 首行片段断言并存；`--bless-diag` 在 runner 内写盘（worker 透传）。
 - `nix/checks/diag-coverage.sh`：目录码 vs 结构化夹具覆盖门禁（allowlist 记录缺口、
   基线 `nix/diag-coverage.min` 防回退；当前 177/241，缺口已在 allowlist 逐码登记）。
@@ -161,7 +161,7 @@ JSON 字段是机器契约：`code/severity/phase/category/message/labels[]/fiel
 | D7.8 QTT 使用点 | 部分（线性/擦除错误附 `fields.quantity`：name/declared/observed；逐使用点 span 待 Core `TSp`） |
 | D7.9 文案规范/门禁 | 待办 |
 | D7.10 explanation/example/`explain` | 部分（模板+中文说明+severity/phase/category 元数据+`example:` 夹具路径可用；元变量/洞已有 `name`/`note` 字段） |
-| 结构化夹具 + 每码覆盖门禁 | 部分（206 个 `.diag.json`；覆盖门禁 177/241，缺口 allowlist 逐码登记） |
+| 结构化夹具 + 每码覆盖门禁 | 部分（210 个 `.diag.json`；覆盖门禁 177/241，缺口 allowlist 逐码登记） |
 
 ## 10. 后续路线（按依赖排序）
 

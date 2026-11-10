@@ -1,0 +1,7 @@
+module M (v) where
+
+v : Int
+v = 1
+
+w : Int
+w = 2
