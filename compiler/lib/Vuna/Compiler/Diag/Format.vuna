@@ -350,6 +350,7 @@ renderSarif ds =
 -- ---------------------------------------------------------------
 -- i18n：当前仅 human 视图在 zh 下追加目录说明（JSON/short 保持机器稳定）。
 -- ---------------------------------------------------------------
+-- | 渲染语言状态。
 langRef : IORef String
 langRef = runIO (newRef "en")
 
@@ -357,9 +358,11 @@ langRef = runIO (newRef "en")
 setDiagLang : String -> Int
 setDiagLang lang = runIO (writeRef langRef lang)
 
+-- | 当前渲染语言。
 diagLang : Int -> String
 diagLang _ = runIO (readRef langRef)
 
+-- | human 中文说明行。
 diagDescLine : Diagnostic -> String
 diagDescLine d = if diagLang 0 == "zh" then case Vuna.Compiler.Diagnostics.diagDescOf d.diagCode of
   Just s => "  = 说明: ${s}"

@@ -104,47 +104,58 @@ diagSeverityOf _ = "error"
 diagDescOf : String -> Maybe String
 diagDescOf code = lookupDesc code allDescPairs
 
+-- | TC 目录 (code,desc) 对。
 tcDescPairs : List TcEntry -> List (Pair String String)
 tcDescPairs [] = []
 tcDescPairs (e :: rest) = Pair e.tcEntryCode e.tcEntryDesc :: tcDescPairs rest
 
+-- | CG 目录 (code,desc) 对。
 cgDescPairs : List CgEntry -> List (Pair String String)
 cgDescPairs [] = []
 cgDescPairs (e :: rest) = Pair e.cgEntryCode e.cgEntryDesc :: cgDescPairs rest
 
+-- | IC 目录 (code,desc) 对。
 icDescPairs : List IcEntry -> List (Pair String String)
 icDescPairs [] = []
 icDescPairs (e :: rest) = Pair e.icEntryCode e.icEntryDesc :: icDescPairs rest
 
+-- | LX 目录 (code,desc) 对。
 lexDescPairs : List LexEntry -> List (Pair String String)
 lexDescPairs [] = []
 lexDescPairs (e :: rest) = Pair e.lexEntryCode e.lexEntryDesc :: lexDescPairs rest
 
+-- | PS 目录 (code,desc) 对。
 psDescPairs : List PsEntry -> List (Pair String String)
 psDescPairs [] = []
 psDescPairs (e :: rest) = Pair e.psEntryCode e.psEntryDesc :: psDescPairs rest
 
+-- | RN 目录 (code,desc) 对。
 rnDescPairs : List RnEntry -> List (Pair String String)
 rnDescPairs [] = []
 rnDescPairs (e :: rest) = Pair e.rnEntryCode e.rnEntryDesc :: rnDescPairs rest
 
+-- | PKG 目录 (code,desc) 对。
 pkgDescPairs : List PkgEntry -> List (Pair String String)
 pkgDescPairs [] = []
 pkgDescPairs (e :: rest) = Pair e.pkgEntryCode e.pkgEntryDesc :: pkgDescPairs rest
 
+-- | UN 目录 (code,desc) 对。
 warnDescPairs : List WarnEntry -> List (Pair String String)
 warnDescPairs [] = []
 warnDescPairs (e :: rest) = Pair e.warnEntryCode e.warnEntryDesc :: warnDescPairs rest
 
+-- | LD 目录 (code,desc) 对。
 ldDescPairs : List LdEntry -> List (Pair String String)
 ldDescPairs [] = []
 ldDescPairs (e :: rest) = Pair e.ldEntryCode e.ldEntryDesc :: ldDescPairs rest
 
+-- | 全部目录条目的 (code,desc) 对。
 allDescPairs : List (Pair String String)
 allDescPairs =
   append (tcDescPairs tcAll)
     (append (cgDescPairs cgAll) (append (icDescPairs icAll) (append (lexDescPairs lexAll) (append (psDescPairs psAll) (append (rnDescPairs rnAll) (append (pkgDescPairs pkgAll) (append (warnDescPairs warnAll) (ldDescPairs ldAll))))))))
 
+-- | 按 code 查说明。
 lookupDesc : String -> List (Pair String String) -> Maybe String
 lookupDesc code [] = Nothing
 lookupDesc code ((Pair c d) :: rest) = if c == code then Just d else lookupDesc code rest
