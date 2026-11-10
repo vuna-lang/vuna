@@ -355,7 +355,20 @@ memCode c [] = False
 memCode c (x :: xs) = if c == x then True else memCode c xs
 
 ruleJson : String -> String
-ruleJson code = "{\"id\":${jsonStr code},\"shortDescription\":{\"text\":${jsonStr code}}}"
+ruleJson code =
+  let
+    desc = case Vuna.Compiler.Diagnostics.diagDescOf code of
+      Just s => s
+      Nothing => code
+    sev = Vuna.Compiler.Diagnostics.diagSeverityOf (Vuna.Compiler.Diagnostics.codeDomain code)
+    phase = Vuna.Compiler.Diagnostics.diagPhaseOf (Vuna.Compiler.Diagnostics.codeDomain code)
+    cat = Vuna.Compiler.Diagnostics.diagCategoryOf (Vuna.Compiler.Diagnostics.codeDomain code)
+  in "{\"id\":${jsonStr code},\"shortDescription\":{\"text\":${jsonStr desc}},\"help\":{\"text\":${jsonStr desc}},\"defaultConfiguration\":{\"level\":${jsonStr (sarifLevelName sev)}},\"properties\":{\"tags\":[${jsonStr phase},${jsonStr cat}]}}"
+
+sarifLevelName : String -> String
+sarifLevelName "error" = "error"
+sarifLevelName "warning" = "warning"
+sarifLevelName _ = "note"
 
 -- | SARIF 2.1.0 文档（所有诊断进一个 run）。
 renderSarif : List Diagnostic -> String

@@ -63,6 +63,8 @@ out-contains: "version":"2.1.0"
 out-contains: "ruleId":"TC_TypeMismatch"
 out-contains: "level":"error"
 out-contains: "startLine":2
+out-contains: "shortDescription":{"text":"类型不匹配"}
+out-contains: "properties":{"tags":["elab","types"]}
 # vuna.toml [diagnostics]：format / warnings / max-errors（命令行 flag 优先）。
 run: sh -c 'd="$TMPDIR/m38-cfgfmt"; rm -rf "$d"; mkdir -p "$d/lib"; printf "[package]\nname = \"cfgfmt\"\n[export]\nmodules = [\"Main\"]\n\n[diagnostics]\nformat = \"json\"\n" > "$d/vuna.toml"; printf "module Main where\n\nmain : Int\nmain = \"x\"\n" > "$d/lib/Main.vuna"'
 run: "$VUNA" check "$TMPDIR/m38-cfgfmt" 2>&1
