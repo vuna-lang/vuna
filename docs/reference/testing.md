@@ -169,8 +169,7 @@ vuna test --suite test/suite.toml --cache-dir DIR   # 覆盖本地结果缓存�
 - `--last-failed`：失败 case id 写到 `.local/test-suite/last-failed`，重跑时按 id 过滤；
   空结果不会清空已有失败列表。
 - `--bless`：golden 失败时把实际输出写回对应 `.out`，并打印 `blessed`；不处理 `.check.err`/`.compile.err`。
-- `--bless-diag`：负例 case 用 `check/compile --json` 的实际聚合文档写回 `.diag.json`（源码路径相对 cwd，机器无关）。
-- `.diag.json` 中的环境路径归一化为 `<ROOT>`/`<BASE>`（本地工作树与 nix 构建目录一致；bless 时写入，比较前同样归一化）。
+- `--bless-diag`：负例 case 用 `check/compile --json` 的实际聚合文档写回 `.diag.json`（源码路径相对 cwd；环境路径归一化为 `<ROOT>`/`<BASE>`，本地与 nix 构建可比）。
 - 目录型夹具根部的 `.package-dir` 标记：check/compile 以该目录为 cwd 运行 `vuna <cmd> .`，用于包级诊断（`PKG_`/`LD_`），对应 family `pkg_err`（`entry = "lib/Main.vuna"`）。
 - 夹具旁的 `.deny` 标记：check/compile 探测加 `--deny-warnings`（用于断言「warning 在 deny 模式下失败」，如冗余分支夹具）。
 - `nix/checks/diag-coverage.sh`：`vuna explain --list` 与全部 `.diag.json` 的码集合对比；缺口必须在 `nix/diag-coverage-allow.txt`，覆盖数不得低于 `nix/diag-coverage.min`。
