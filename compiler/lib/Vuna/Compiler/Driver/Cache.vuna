@@ -94,10 +94,10 @@ fixTele tbl depth ((Pair n t) :: rest) =
   Pair n (fixTerm tbl depth t) :: fixTele tbl (depth + 1) rest
 
 fixInst : HashMap Int Value -> DtInst -> DtInst
-fixInst tbl (DtInst n tele ctxE head) =
+fixInst tbl (DtInst n tele ctxE head sp) =
   let
     nTele = length tele
-  in DtInst n (fixTele tbl 0 tele) (map (fixTerm tbl nTele) ctxE) (fixTerm tbl nTele head)
+  in DtInst n (fixTele tbl 0 tele) (map (fixTerm tbl nTele) ctxE) (fixTerm tbl nTele head) sp
 
 cachedOfProgram : DtProgram -> CachedProgram
 cachedOfProgram prog = cachedOfProgramWith (Base.HashMap.fromList (dtProgSols prog)) prog
@@ -359,9 +359,9 @@ shiftClass off (DtClass n ps projs tys) =
     (map (shiftTerm off) tys)
 
 shiftInst : Int -> DtInst -> DtInst
-shiftInst off (DtInst n tele ctxE head) =
+shiftInst off (DtInst n tele ctxE head sp) =
   DtInst n (map (\p => Pair (firstOf p) (shiftTerm off (secondOf p))) tele)
-    (map (shiftTerm off) ctxE) (shiftTerm off head)
+    (map (shiftTerm off) ctxE) (shiftTerm off head) sp
 
 shiftCachedProgram : Int -> CachedProgram -> CachedProgram
 shiftCachedProgram off (CachedProgram datas defs globals insts classes) =

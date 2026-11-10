@@ -256,9 +256,10 @@ record DtInst where
   dtInstTele : List (Pair String Term)
   dtInstCtx : List Term
   dtInstHead : Term
+  dtInstSpan : Maybe Span
 
 dtInstName : DtInst -> String
-dtInstName (DtInst name tele ctxE head) = name
+dtInstName (DtInst name tele ctxE head sp) = name
 
 -- 把一个项拆成「全局头 + 带 multiplicity 的实参表」（`Dict_C a` ⇒ `(Dict_C, [a])`）。
 -- 非全局头（元变量/局部变量/lambda/…）返回 Nothing。实例头识别、族名提取共用它。

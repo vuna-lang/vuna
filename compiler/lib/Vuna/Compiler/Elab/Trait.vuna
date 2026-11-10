@@ -1184,7 +1184,7 @@ checkInstanceHeadsGo ((d@(Pair decl dsp)) :: rest) classes globals ec acc insts 
       let
         iname = instanceName (instSigClass info) headExpr
         ty = instTypeOf info
-        inst = DtInst iname (instSigTele info) (instSigCtx info) (instSigHead info)
+        inst = DtInst iname (instSigTele info) (instSigCtx info) (instSigHead info) (Just msp)
       in case findInstanceClash ec1 iname (instSigTele info) (instSigHead info) seen of
         Pair (Just ClashDuplicate) ec2 => tcErr1 msp (DuplicateInstance iname) iname
         Pair (Just ClashOverlap) ec2 => tcErr1 msp (OverlappingInstances iname) iname

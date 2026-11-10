@@ -203,3 +203,7 @@ out-not-contains: "line":5
 run: sh -c 'printf "a : Int\na = \"x\"\n\nb : Int\nb = a\n\nmain : Int\nmain = b\n" > "$TMPDIR/m47-dep.vuna"; "$VUNA" check "$TMPDIR/m47-dep.vuna" --continue-on-error --error-format human 2>&1'
 exit: 1
 out-contains: best-effort: may be a cascade
+# 实例搜索候选也带声明 span（可跳转到 instance 定义）。
+run: "$VUNA" check corpus/dt_err/25_no_instance.vuna --json 2>&1
+exit: 1
+out-contains: "text":"Name_A","span":{"file"

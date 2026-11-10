@@ -156,7 +156,7 @@ JSON 字段是机器契约：`code/severity/phase/category/message/labels[]/fiel
 | D7.2 warnings（未使用/冗余/不可达） | 已落地（`UN_UnusedBinder`/`UN_ShadowedBinder`/`UN_RedundantCtorBranch`/`UN_RedundantLiteralBranch`/`UN_BranchAfterCatchAll`/`UN_UnusedImport`（限定/别名/open import 统一追踪）/`UN_UnusedDefinition`；`-W`/`--deny-warnings` 已接） |
 | D7.3 建议引擎 + Fix | 部分（`Candidate`/`Suggestion` 模型就绪；`UN_UnusedBinder`/`UN_UnusedDefinition`/`UN_UnusedImport`/`UN_Redundant*`/`UN_BranchAfterCatchAll` 附 machine-applicable 编辑；LSP codeAction 应用诊断 suggestions，并有 `test/corpus/lsp/quickfix.sh` 集成测试；更多码待接） |
 | D7.4 类型不匹配 expected/found | 已落地（fields + PhUnify trace 帧 expected/found；双端 label 待补） |
-| D7.5 实例搜索 trace | 部分（`TC_NoInstanceFound` 附失败目标族桶的候选实例 `fields.candidates`；完整搜索树/拒绝原因仍待补） |
+| D7.5 实例搜索 trace | 部分（`TC_NoInstanceFound` 附失败目标族桶的候选实例 `fields.candidates`，每个候选带 instance 声明 span；完整搜索树/逐候选拒绝原因仍待补） |
 | D7.6 终止性 call matrix | 部分（`TC_CannotProveTermination` 附 `fields.call` 边：caller/callee/relation；逐参数矩阵与完整调用点待补） |
 | D7.7 覆盖性缺失构造子标签 | 已落地（缺失构造子进 `fields.candidates`，每个候选带构造子声明 `span`；JSON/SARIF/LSP（含 diag fields 的 candidates.span）可跳转） |
 | D7.8 QTT 使用点 | 部分（线性/擦除错误附 `fields.quantity`：name/declared/observed；逐使用点 span 待 Core `TSp`） |

@@ -1156,7 +1156,7 @@ dictCandidatesOf ec shown =
     fam = dictFamilyOfShown shown
     insts = if fam == "" then ecInsts ec else ecInstsFamily ec fam
   in map
-    (\i => Candidate (dtInstName i) Nothing (Just "instance family matched but this goal did not"))
+    (\i => Candidate (dtInstName i) i.dtInstSpan (Just "instance family matched but this goal did not"))
     insts
 
 -- | 从 (Dict_Class Arg) 文本取族名。
