@@ -11,6 +11,7 @@ Vuna.Doc.Prose  ./lib/Vuna/Doc/Prose.vuna
 Vuna.Doc.Run  ./lib/Vuna/Doc/Run.vuna
 Vuna.Doc.Types  ./lib/Vuna/Doc/Types.vuna
 Vuna.Doc  ./lib/Vuna/Doc.vuna
+Vuna.Explain  ./lib/Vuna/Explain.vuna
 Vuna.Files  ./lib/Vuna/Files.vuna
 Vuna.FixityEnv  ./lib/Vuna/FixityEnv.vuna
 Vuna.Fmt.Comment  ./lib/Vuna/Fmt/Comment.vuna

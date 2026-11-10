@@ -81,7 +81,7 @@ compiler/lib/Vuna/Compiler/Diagnostics.vuna: module Base.Nat, module Base.Vec, m
 compiler/lib/Vuna/Compiler/Diagnostics/Cg.vuna: CgEntry(..), CgErr(..), cgAll, cgCode, cgErr, cgErr0, cgErr1, cgErrDefAt, cgMsg, cgTemplate
 compiler/lib/Vuna/Compiler/Diagnostics/Common.vuna: concatLists, diagBody, mkDiag, withDiagDef, withDiagSpan
 compiler/lib/Vuna/Compiler/Diagnostics/Ic.vuna: IcEntry(..), IcErr(..), icAll, icCode, icTemplate
-compiler/lib/Vuna/Compiler/Diagnostics/Tc.vuna: TcEntry(..), TcErr(..), tcAll, tcCode, tcErr, tcErr0, tcErr0NoLoc, tcErr1, tcErr1NoLoc, tcErr2, tcErr2NoLoc, tcMsg, tcTemplate
+compiler/lib/Vuna/Compiler/Diagnostics/Tc.vuna: TcEntry(..), TcErr(..), tcAll, tcCode, tcErr, tcErr0, tcErr0NoLoc, tcErr1, tcErr1NoLoc, tcErr2, tcErr2NoLoc, tcMsg, tcTemplate, tcTypeMismatch, tcTypeMismatchNoLoc
 compiler/lib/Vuna/Compiler/Driver/Cache.vuna: CachedProgram(..), cachedClasses, cachedDatas, cachedDefs, cachedGlobals, cachedInsts, cachedOfProgram, cachedOfProgramWith, cachedProgramIssue, cachedProgramValid, shiftCachedProgram, summaryMetaSegment
 compiler/lib/Vuna/Compiler/Driver/Compile.vuna: ToolContext, baseDepIfacesOf, buildMetaText, buildSplit, checkPackage, compileToDir, depIfacesForCheck, depIfacesForTool, depIfacesForToolProgram, depIfacesForToolSource, depIfacesForToolSourceDetailed, ensureDirPath, metaUpToDate, runBuildScript, sourceInfoForPath, toolCleanOwnModules, toolCompilerFingerprint, toolHasOwnManifest, toolNeededOfImports, toolNowSec, toolOwnEntrySourceHash, toolSessionFresh, toolTextHash, toolWriteModuleIface, toolWriteModuleIfaceCold, writeBuildMeta
 compiler/lib/Vuna/Compiler/Driver/CompilerCli.vuna: compilerUsageLines, removedFlagHint, runCompilerCli, runCompilerCliFor
@@ -141,6 +141,7 @@ lib/Vuna/Doc/Model.vuna: DocBook(..), DocItem(..), DocModule(..), bookModules, b
 lib/Vuna/Doc/Prose.vuna: htmlEscape, renderProse
 lib/Vuna/Doc/Run.vuna: runDoc
 lib/Vuna/Doc/Types.vuna: DocBlock(..), DocTable(..), docBlockCol, docBlockEndLine, docBlockStartLine, docBlockText, docForDecl, docForMember, docTableDecls, docTableMembers, docTableModuleDoc
+lib/Vuna/Explain.vuna: runExplain
 lib/Vuna/Files.vuna: collectSourceFiles, collectVunaFiles, pathExistsDir, pathExistsFile
 lib/Vuna/FixityEnv.vuna: FixityEnv, emptyFixityEnv, fixitiesForFile
 lib/Vuna/Fmt.vuna: formatSourceWith
