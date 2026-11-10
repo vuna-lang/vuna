@@ -108,6 +108,13 @@ data PsDiag : Nat -> Type where
   FixityLevelRange : PsDiag Zero
   -- M32：`C a => τ` 的约束语法只允许在顶层签名上；其它签名位置给明确诊断。
   ConstraintUnsupportedHere : PsDiag Zero
+  -- native-effects N1（提交 4b）：`handle` 语法的块与子句错误。
+  HandleClauseNeedsCtor : PsDiag Zero
+  HandleClauseNotIndented : PsDiag Zero
+  HandleNeedsOpClause : PsDiag Zero
+  HandleReturnMisplaced : PsDiag Zero
+  -- arity 2
+  HandleContinuationNameMismatch : String -> String -> PsDiag (Succ (Succ Zero))
   -- arity 1（绑定块签名诊断；调用点自拼 span 前缀。M28 起 let/where 共用，
   -- 码名保持不变以稳定错误码文档，消息文案改为通用 "binding signature"）
   WhereSigBeforeClause : String -> PsDiag (Succ Zero)
@@ -153,6 +160,11 @@ psCode UnexpectedIndentInBinding = "PS_UnexpectedIndentInBinding"
 psCode ExpectedFixityLevel = "PS_ExpectedFixityLevel"
 psCode FixityLevelRange = "PS_FixityLevelRange"
 psCode ConstraintUnsupportedHere = "PS_ConstraintUnsupportedHere"
+psCode HandleClauseNeedsCtor = "PS_HandleClauseNeedsCtor"
+psCode HandleClauseNotIndented = "PS_HandleClauseNotIndented"
+psCode HandleNeedsOpClause = "PS_HandleNeedsOpClause"
+psCode HandleReturnMisplaced = "PS_HandleReturnMisplaced"
+psCode (HandleContinuationNameMismatch _ _) = "PS_HandleContinuationNameMismatch"
 psCode (ExpectedDeclAtColumn _) = "PS_ExpectedDeclAtColumn"
 psCode (ExpectedToken _) = "PS_ExpectedToken"
 psCode (WhereSigBeforeClause _) = "PS_WhereSigBeforeClause"
@@ -197,6 +209,14 @@ psTemplate ExpectedFixityLevel = "expected a fixity level (0-9)"
 psTemplate FixityLevelRange = "fixity level must be between 0 and 9"
 psTemplate ConstraintUnsupportedHere =
   "trait constraints (`C a =>`) are only supported on top-level signatures"
+psTemplate HandleClauseNeedsCtor =
+  "handle operation clause must be `Ctor pats k` (a constructor pattern followed by the continuation binder)"
+psTemplate HandleClauseNotIndented = "handle clause is not indented enough"
+psTemplate HandleNeedsOpClause = "handle block needs at least one operation clause"
+psTemplate HandleReturnMisplaced =
+  "handle return clause must be the first clause and appear at most once"
+psTemplate (HandleContinuationNameMismatch _ _) =
+  "all handle operation clauses must use the same continuation binder name (expected `<0>`, got `<1>`)"
 psTemplate (ExpectedDeclAtColumn _) = "expected a declaration at column <0>"
 psTemplate (ExpectedToken _) = "expected <0>"
 psTemplate (WhereSigBeforeClause _) = "binding signature for `<0>` must come before its clause"
@@ -269,7 +289,12 @@ psAll =
     PsEntry (psCode (WhereSigNoDef "")) (psTemplate (WhereSigNoDef "")) "绑定签名无对应定义",
     PsEntry (psCode ExpectedFixityLevel) (psTemplate ExpectedFixityLevel) "fixity 声明缺少优先级",
     PsEntry (psCode FixityLevelRange) (psTemplate FixityLevelRange) "fixity 优先级必须在 0–9",
-    PsEntry (psCode ConstraintUnsupportedHere) (psTemplate ConstraintUnsupportedHere) "trait 约束只能在顶层签名上写"
+    PsEntry (psCode ConstraintUnsupportedHere) (psTemplate ConstraintUnsupportedHere) "trait 约束只能在顶层签名上写",
+    PsEntry (psCode HandleClauseNeedsCtor) (psTemplate HandleClauseNeedsCtor) "handle 子句头必须是构造子模式 + 续延 binder",
+    PsEntry (psCode HandleClauseNotIndented) (psTemplate HandleClauseNotIndented) "handle 子句缩进不足",
+    PsEntry (psCode HandleNeedsOpClause) (psTemplate HandleNeedsOpClause) "handle 块至少一个操作子句",
+    PsEntry (psCode HandleReturnMisplaced) (psTemplate HandleReturnMisplaced) "handle return 子句必须唯一且在最前",
+    PsEntry (psCode (HandleContinuationNameMismatch "" "")) (psTemplate (HandleContinuationNameMismatch "" "")) "handle 各操作子句的续延 binder 名必须一致"
   ]
 
 -- ---------------------------------------------------------------

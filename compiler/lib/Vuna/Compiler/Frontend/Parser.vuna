@@ -637,6 +637,7 @@ else case peekTok st of
   PTok (TKw "if") p => parseIf (fuel - 1) st blockCol
   PTok (TKw "do") p => parseDo (fuel - 1) st blockCol
   PTok (TKw "perform") p => parsePerform (fuel - 1) st blockCol
+  PTok (TKw "handle") p => parseHandle (fuel - 1) st blockCol
   _ => parseApplication (fuel - 1) st blockCol
 
 parseApplication : Int -> PState -> Int -> Check (Pair Expr PState)
@@ -922,6 +923,147 @@ parsePerform fuel st blockCol =
   if fuel <= 0 then icFuel "parser"
   else Vuna.Compiler.Common.step (expectKw st "perform")
     (\_, st1 => Vuna.Compiler.Common.step (parseApplication (fuel - 1) st1 blockCol) (\operand, st2 => OkC (Pair (EApp (EVar performSyntax (spanOf st st2)) [operand] (spanOf st st2)) st2)))
+
+-- ---------------------------------------------------------------
+-- native-effects N1（提交 4b）：`handle <comp> { ... }`
+-- ---------------------------------------------------------------
+-- 表面语法：
+--   handle <comp> { return x -> <expr>
+--                   C p1 .. pn k -> <expr>
+--                   ... }
+-- 编码（ND12，不新增 Expr 构造子）：`EApp (EVar "@vuna@handle") [comp, ret, opH]`
+--   * ret = `ELam [x] body`；缺 return 子句时是哨兵 `EVar "@vuna@handle@noret"`；
+--   * opH = `ELam [o, k] (ECase (EVar o) alts)`：alt pattern 只含构造子实参（续延 binder
+--     是 λ 的第二个参数）；op 族、实例名、结果族全部由 Elab 从 clause 构造子推导。
+-- | 一个 `handle` op 子句：构造子名、实参模式、子句 span、续延 binder 名、子句体。
+data HandleOp : Type where
+  HandleOp : String -> List Pat -> Span -> String -> Expr -> HandleOp
+
+-- | `handle` 块：可选 return 子句（binder 名 + 体 + span）与 op 子句列表。
+data HandleBlock : Type where
+  HandleBlock : Maybe (Pair String (Pair Expr Span)) -> List HandleOp -> HandleBlock
+
+-- | `handle` 块合成的 op λ 的 scrutinee binder 名（保留名，用户写不出）。
+handleOpBinder : String
+handleOpBinder = "@vuna@handle@o"
+
+-- | `handle comp { return? op-clause+ }`：解析并降到保留名标记。
+parseHandle : Int -> PState -> Int -> Check (Pair Expr PState)
+parseHandle fuel st blockCol = if fuel <= 0 then icFuel "parser"
+else Vuna.Compiler.Common.step (expectKw st "handle") (\_, st1 => Vuna.Compiler.Common.step (parseHandleComp (fuel - 1) st1 blockCol) (\comp, st2 => Vuna.Compiler.Common.step (expectSym st2 "{") (\_, st3 => Vuna.Compiler.Common.step (parseHandleBody (fuel - 1) st3 blockCol) (\blk, st4 => case handleExpr comp blk (spanOf st st4) of
+  ErrC e => ErrC e
+  OkC expr => OkC (Pair expr st4)
+)
+)
+)
+)
+
+-- | 解析被 handle 包裹的 comp：裸标识符紧跟 `{` 时直接收成 `EVar`（避免记录字面量歧义）。
+parseHandleComp : Int -> PState -> Int -> Check (Pair Expr PState)
+parseHandleComp fuel st blockCol = if fuel <= 0 then icFuel "parser"
+else case peekTok st of
+  PTok (TIdent name) p => case peekTokAt st 1 of
+    Just (PTok (TSym "{") _) => OkC (Pair (EVar name (spanOf st (advance st))) (advance st))
+    _ => parseExpr (fuel - 1) st blockCol 0
+  _ => parseExpr (fuel - 1) st blockCol 0
+
+-- | 解析 handle 块体：可选的 return 子句 + op 子句列表，随后消费 `}`。
+parseHandleBody : Int -> PState -> Int -> Check (Pair HandleBlock PState)
+parseHandleBody fuel st handleCol = if fuel <= 0 then icFuel "parser"
+else if atSym st "}" then psErr0 HandleNeedsOpClause
+else case peekPos st of
+  Pos line col => if col <= handleCol then psErr0 HandleClauseNotIndented
+  else Vuna.Compiler.Common.step (parseHandleClauses (fuel - 1) st col Nothing []) (\p, st2 => case p of
+    Pair retOpt ops => Vuna.Compiler.Common.step (expectSym st2 "}") (\_, st3 => OkC (Pair (HandleBlock retOpt ops) st3))
+  )
+
+-- | 子句头是否是 return 子句（`return` 不是全局关键字，只在子句头按标识符识别）。
+isReturnClauseHead : PState -> Bool
+isReturnClauseHead stat = case peekTok stat of
+  PTok (TIdent nm) _ => nm == "return"
+  _ => False
+
+-- | handle 子句循环：同列续行；遇 `}` 或缩进回退结束。
+parseHandleClauses : Int -> PState -> Int -> Maybe (Pair String (Pair Expr Span)) -> List HandleOp -> Check (Pair (Pair (Maybe (Pair String (Pair Expr Span))) (List HandleOp)) PState)
+parseHandleClauses fuel st clauseCol retOpt acc = if fuel <= 0 then icFuel "parser"
+else if isEof st then psErr0 UnexpectedEndOfInput
+else if atSym st "}" then OkC (Pair (Pair retOpt (reverse acc)) st)
+else case peekPos st of
+  Pos line col => if col == clauseCol then if isReturnClauseHead st then case retOpt of
+    Just _ => psErr0 HandleReturnMisplaced
+    Nothing => case acc of
+      _ :: _ => psErr0 HandleReturnMisplaced
+      [] => Vuna.Compiler.Common.step (parseHandleRetClause (fuel - 1) st clauseCol) (\p, st2 => case p of
+        Pair x (Pair body rsp) =>
+          parseHandleClauses (fuel - 1) st2 clauseCol (Just (Pair x (Pair body rsp))) acc
+      )
+  else Vuna.Compiler.Common.step (parseHandleOpClause (fuel - 1) st clauseCol)
+    (\op, st2 => parseHandleClauses (fuel - 1) st2 clauseCol retOpt (op :: acc))
+  else OkC (Pair (Pair retOpt (reverse acc)) st)
+
+-- | 解析 `return x -> body` 子句。
+parseHandleRetClause : Int -> PState -> Int -> Check (Pair (Pair String (Pair Expr Span)) PState)
+parseHandleRetClause fuel st clauseCol =
+  if fuel <= 0 then icFuel "parser"
+  else Vuna.Compiler.Common.step (expectIdent st)
+    (\_kw, st0 => Vuna.Compiler.Common.step (expectIdent st0) (\x, st1 => Vuna.Compiler.Common.step (expectSym st1 "->") (\_, st2 => Vuna.Compiler.Common.step (parseExpr (fuel - 1) st2 clauseCol 0) (\body, st3 => OkC (Pair (Pair x (Pair body (spanOf st st3))) st3)))))
+
+-- | 解析一个 op 子句头：构造子模式 + 尾部续延 binder（`_` 允许，统一成 `_`）。
+parseHandleOpClause : Int -> PState -> Int -> Check (Pair HandleOp PState)
+parseHandleOpClause fuel st clauseCol = if fuel <= 0 then icFuel "parser"
+else Vuna.Compiler.Common.step (parsePatternSingle (stateFuel st) st clauseCol) (\pat, st1 => Vuna.Compiler.Common.bind (checkNoRepeatedBinders [pat]) (\_ => case pat of
+  PCon cname args psp => case reverse args of
+    [] => psErr0 HandleClauseNeedsCtor
+    last :: revRest => case last of
+      PVar kname _ => handleOpTail (fuel - 1) st1 clauseCol cname (reverse revRest) psp kname
+      PWild _ => handleOpTail (fuel - 1) st1 clauseCol cname (reverse revRest) psp "_"
+      _ => psErr0 HandleClauseNeedsCtor
+  _ => psErr0 HandleClauseNeedsCtor
+)
+)
+
+-- | op 子句的 `-> body` 尾段。
+handleOpTail : Int -> PState -> Int -> String -> List Pat -> Span -> String -> Check (Pair HandleOp PState)
+handleOpTail fuel st clauseCol cname pats psp kname =
+  if fuel <= 0 then icFuel "parser"
+  else Vuna.Compiler.Common.step (expectSym st "->")
+    (\_, st1 => Vuna.Compiler.Common.step (parseExpr (fuel - 1) st1 clauseCol 0) (\body, st2 => OkC (Pair (HandleOp cname pats psp kname body) st2)))
+
+-- | op 子句的续延 binder 名。
+handleOpKName : HandleOp -> String
+handleOpKName (HandleOp _ _ _ k _) = k
+
+-- | 找出与基准不同的续延 binder 名（都一致则 Nothing）。
+firstOtherKName : List HandleOp -> String -> Maybe String
+firstOtherKName [] k = Nothing
+firstOtherKName (op :: rest) k =
+  let
+    k2 = handleOpKName op
+  in if k2 == k then firstOtherKName rest k else Just k2
+
+-- | HandleOp → 合成 case 的 alt（pattern 只含构造子实参）。
+handleAlt : HandleOp -> Pair Pat Expr
+handleAlt (HandleOp cname pats psp _ body) = Pair (PCon cname pats psp) body
+
+-- | ret 实参表达式（缺 return 子句时用哨兵）。
+handleRetExpr : Maybe (Pair String (Pair Expr Span)) -> Span -> Expr
+handleRetExpr Nothing sp = EVar handleNoRetSyntax sp
+handleRetExpr (Just (Pair x (Pair body rsp))) sp = ELam [x] body rsp
+
+-- | 合成 op λ：`\o, k => case o of alts`。
+handleOpLam : List HandleOp -> String -> Span -> Expr
+handleOpLam ops kname sp =
+  ELam [handleOpBinder, kname] (ECase (EVar handleOpBinder sp) (map handleAlt ops) sp) sp
+
+-- | 校验子句并合成 `EApp (EVar "@vuna@handle") [comp, ret, opH]`。
+handleExpr : Expr -> HandleBlock -> Span -> Check Expr
+handleExpr comp (HandleBlock retOpt []) sp = psErr0 HandleNeedsOpClause
+handleExpr comp (HandleBlock retOpt (first :: rest)) sp = case firstOtherKName rest (handleOpKName first) of
+  Nothing =>
+    OkC
+      (EApp (EVar handleSyntax sp) [comp, handleRetExpr retOpt sp, handleOpLam (first :: rest) (handleOpKName first) sp] sp)
+  Just k1 =>
+    psErr (HandleContinuationNameMismatch (handleOpKName first) k1) [handleOpKName first, k1]
 
 parseIf : Int -> PState -> Int -> Check (Pair Expr PState)
 parseIf fuel st blockCol =

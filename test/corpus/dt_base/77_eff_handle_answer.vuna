@@ -1,0 +1,31 @@
+-- native-effects N1（提交 4b）：答案本身是 Eff 动作（`return x -> pure x`，两层 runPure），
+-- 以及丢弃续延（abort，续延 binder 用 `_`）。
+import Base.Eff
+import Base.EffConsole
+import Base.List
+import Base.Monad
+import Base.Nat
+
+prog : Eff [Console@audit] Nat
+prog = do
+  n <- perform Print "hello"
+  pure (n + 1)
+
+runAnswer : Eff (Cons "audit" (Console "audit") []) Nat -> Nat
+runAnswer comp = runPure (runPure (handle comp {
+  return x -> pure x
+  Print s k -> k 5
+  EPrint s k -> k 7
+}
+)
+)
+
+runAbort : Eff (Cons "audit" (Console "audit") []) Nat -> Nat
+runAbort comp = runPure (handle comp {
+  Print s _ -> 5
+  EPrint s _ -> 7
+}
+)
+
+main : Nat
+main = runAnswer prog + runAbort prog

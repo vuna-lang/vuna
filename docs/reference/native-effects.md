@@ -5,8 +5,9 @@
 **不动**。原 labeled-rows 库级路线（P1/P1.5）不再实施，本文吸收其全部语义决策
 （D1–D9、名字求解规则、表面语法）作为 N1 的内建规则。分四个阶段：N1 语法内建 →
 N2 IO 降级 → N3 表示收敛 → N4 箭头行 direct-style。当前进度：N1 提交 1
-（双形状兼容 + 名字求解内建）、rotation、提交 2（3 参命名行全量迁移 + 删旧分支）
-已完成，下一步是提交 3（perform 语法）；实施记录与过渡决策见 §3.4 / §9。
+（双形状兼容 + 名字求解内建）、rotation、提交 2（3 参命名行全量迁移 + 删旧分支）、
+提交 3（`perform` 语法）、提交 4a（`@` 行糖）、提交 4b（`handle` 语法）均已完成，
+N1 语法面收口；实施记录与过渡决策见 §3.4 / §9。
 
 ## 1. 诊断：库级编码到头了
 
@@ -97,22 +98,30 @@ main : Eff [] Nat
 
 | 写法 | 降级目标 |
 | --- | --- |
-| `perform (Print s)` | `Base.Eff.sendCore <op族> <key=族规范名> <n=行解> (Print s)`，结果类型 `res<短名> o` |
-| `handle comp { return x -> e1  C p k -> e2 }` | `Base.Eff.handleCore <op族> <key> <n> (\x => e1) (\o resume => case o of { C p _ => e2 }) comp` |
-| `[ConsoleOp]` | `Cons "main" ConsoleOp Nil`（ND3，行字面量按族补默认名——现有 `expandListLit` 机制不变） |
-| `[ConsoleOp@audit]` | `Cons "audit" ConsoleOp Nil` |
+| `perform (Print s)` | `Base.Eff.performCore <n=洞> "<op族规范名>" (<族标签> <n=洞>) (Print s)`，结果类型由上下文定 |
+| `handle comp { return x -> e1  C p k -> e2 }` | `Base.Eff.handleWith <n=洞> "<op族规范名>" (<族标签> <n=洞>) <op族> (Base.Eff.resFn <res族>) comp (\x => e1) (\o, k => case o of { C p => e2 })` |
+| `[Console@audit]` | `Cons "audit" (Console "audit") Nil`（ND4；裸标签条目名取首个 String 实参，否则 `defaultInstance`） |
 
 `handle` 块的 clause 形状：
 
 ```vuna
 handle comp {
-  return x -> retFn            -- \x -> retFn
-  Ctor pats k -> body          -- \o resume => case o of { Ctor pats _ => body[k := resume] }
+  return x -> retFn            -- 可省略；省略时 ret = \x => x
+  Ctor pats k -> body          -- \o, k => case o of { Ctor pats => body }
 }
 ```
 
-`k` 绑定的是 `resume : res<族> (Ctor pats)`（N1 是 ω 续延；N3 起 QTT 线性化）。
-`k` 后续构造子 wildcard（`_`）——依赖匹配下 res 类型按构造子索引正确收窄。
+- 合成 λ 的第二个参数就是续延 `k`：alt 的 pattern **只含构造子实参**，不补通配；
+  `k` 的类型是 `resOf rf (Ctor pats)`，依赖匹配下按构造子索引收窄（N1 是 ω 续延，
+  N3 起 QTT 线性化）。同一 handle 块的所有 op 子句共用一个续延 binder 名。
+- `handleWith` 的 handler 类型显式写成 `(o : op) -> (resOf rf o -> b) -> b`，这是
+  `handleCore` 的裸 `h : Type` 做不到的（否则 clause 里的 `case o of ...` 拿不到族、
+  `k` 拿不到续延域）。`rf` 是**擦除量**：结果族 `op -> Type` 不能作显式类型实参
+  （M15 禁 `(0 res : op -> Type)`，不标擦除则把 `resXxx` 名字带进运行时），所以用
+  `Base.Eff.ResFn` 包装、由 base 函数 `resFn` 构造（构造子名在精化期按规范名查不到）。
+- 名字仍由行解出（与 `perform` 同一 `Member` 求解路径）；key 两边都是 op 族规范名
+  （ND8），所以 `perform` 发的效应正好被 `handle` 接住。
+- 子句必须**穷尽**该 op 族（合成 case 走普通覆盖检查，缺一个构造子即 `TC_NotExhaustive`）。
 
 ### 3.2 名字求解（内建规则）
 
@@ -133,17 +142,17 @@ meta → 报未解，不发明行。**禁止贪婪 Here**：名字槽受限统�
 
 | 位置 | 改动 |
 | --- | --- |
-| `Frontend/Lexer.vuna` `isKeyword`（L108–136） | 新增 `"perform"`、`"handle"`、`"return"`（handle 块内） |
-| `Frontend/Parser.vuna` `parseExpr`（L544）+ `parseAtomBase`（L617） | `perform` → `parsePerform`（单表达式 + 可选 `:` 结果注解）；`handle` → `parseHandle`（`comp { return-clause? op-clause* }`，clause 体走现有 `parseExpr`） |
-| `Frontend/Ast.vuna`（L520–536 保留名区） | 保留名 `performSyntax`/`handleRetSyntax`/`handleOpSyntax` + 降级函数；`Expr` 不加变体（ND12） |
-| `Loader`（do 降级同区，Ast.vuna L539–581） | parse 阶段直接把 `perform` 降为 `EApp (EVar "@vuna@perform") [op]`、`handle` 降为 `EVar "@vuna@handle@ret"` + clause 携带结构（clause 头非表达式，需 Parser 侧转成 lambda/case 拼接） |
-| `Intrinsics.vuna` 效果协议常量（L311–340） | `Row.Cons` 3 参、`Member` 3 参（名字槽）、新增 `effDefaultInstance`、`effResPrefix`（`"res"`）、key 推导辅助；`sendCore`/`handleCore` 的 key 实参改由降级点生成 |
-| `Elab/Dict.vuna` `memberLookupRow`（L476–486）/`resolveRowGoalsCtx`（L518）/`resolveDictGoals`（L548） | 3 参模式 + §3.2 名字求解规则 + 最终化兜底（ND1/ND6/ND7） |
-| `Elab/Term/Impl.vuna` | `@vuna@perform` 标记降级（找 res 族 → 组 sendCore 应用）；`@vuna@handle` 标记降级（clause → ret/opHandler）；op 族从 clause 构造子推断（ND10）；`tryEffLift`（L1575–1599）随行形状同步 |
-| `Core/Eval.vuna` `rowRemReduce`（L518–534） | `VCon consName (n :: h :: t :: _)` 双匹配（先名后标签，`valueEqFuel`） |
+| `Frontend/Lexer.vuna` `isKeyword` | 新增 `"perform"`、`"handle"`；`"return"` **不**占全局关键字（只在 handle 子句头按标识符识别，可继续当普通变量名） |
+| `Frontend/Parser.vuna` `parseLhs` + `parseHandle*` | `perform` → `parsePerform`（单表达式）；`handle` → `parseHandle`（`comp { return-clause? op-clause+ }`）。op 子句头解析成模式后**拆出尾部续延 binder**，再合成 `\o, k => case o of { Ctor pats => body }`；`comp` 为裸标识符且紧跟 `{` 时直接收成 `EVar`（否则会被 `parseAtomBase` 当记录字面量） |
+| `Frontend/Ast.vuna` 保留名区 | `performSyntax` / `handleSyntax` / `handleNoRetSyntax`（无 return 子句的哨兵）+ 判定函数；`Expr` 不加变体（ND12） |
+| `Loader` | 无专门分支：parser 已把 handle 降到 markers + 普通 λ/case，Loader 只做常规名字解析（构造子解析成规范名/over 名，供 ND10 推族） |
+| `Intrinsics.vuna` 效果协议常量 | `Row.Cons` 3 参、`Member` 3 参（名字槽）、`effDefaultInstance`；`perform`/`handle` 的 key 由降级点生成 |
+| `Elab/Dict.vuna` `memberLookupRow`/`resolveRowGoalsCtx`/`resolveDictGoals` | 3 参模式 + §3.2 名字求解规则 + 最终化兜底（ND1/ND6/ND7） |
+| `Elab/Term/Impl.vuna` | `@vuna@perform` → `performCore`；`@vuna@handle` → `Base.Eff.handleWith`：从 clause 构造子推 op 族（ND10，跨族报 `TC_HandleClauseFamilyMismatch`）、按 `<族>Op` ↔ `<族>` ↔ `res<族>` 推 label/res（ND9）、校验 op 族是 nullary（否则 `TC_HandleFamilyUnsupported`）；`handleOperand` 在 `inferEFuel`/`checkEFuel`/`inferEFuelHint` 三处内联拦截 |
+| `Core/Eval.vuna` `rowRemReduce` | `VCon consName (n :: h :: t :: _)` 双匹配（先名后标签）；比较前对 name/label（含 label 一层 spine 实参）做 `force`——已解 meta 在值里仍是 `VMeta` 节点，不 force 就永远比较不出相等（`handle` 的结果行依赖这一点） |
 | `Elab/Sig.vuna` / `Elab/Term/Impl.vuna` | 行条目展示 `Console@real`；名字未解诊断带 `(name, label)` |
-| `Diagnostics/Tc.vuna` | 新增 `TC_AmbiguousInstance`（复用既有歧义模板）、`TC_EffResFamilyMissing`（ND9 查不到 res 族）、`TC_HandleClauseFamilyMismatch`（ND10）；构造子 + `tcCode`/`tcTemplate` + 分块遍历源登记 |
-| `Base.Eff`（base 包，不进 seed） | `defaultInstance`、`Row.Cons`/`Member` 3 参、`send`/`handle` 签名收 key；12 个效应模块去 `String` 参数 |
+| `Diagnostics/{Tc,Frontend/Diagnostics}.vuna` | `TC_AmbiguousInstance`、`TC_EffResFamilyMissing`（ND9）、`TC_HandleClauseFamilyMismatch`（ND10）、`TC_HandleFamilyUnsupported`（族形状）；PS 侧 `PS_Handle{NeedsOpClause,ClauseNotIndented,ClauseNeedsCtor,ContinuationNameMismatch,ReturnMisplaced}` |
+| `Base.Eff`（base 包，不进 seed） | `defaultInstance`、`Row.Cons`/`Member` 3 参、`ResFn(..)`/`resFn`/`resOf`/`handleWith`（handler 类型显式、`rf` 擦除量、`{w : Member n e r}` 置尾）、12 个效应模块去 `String` 参数 |
 
 不改：`Eff` 本体、`runPure`/`runIOEff`/`runIOAnswer`、`prim_effectPerform`/`prim_effectHandle`
 语义、`Codegen/Term.dtPrimRuntime` 的运行时块、`Eff` 的私有 `MkEff` 表示。
@@ -163,9 +172,11 @@ meta → 报未解，不发明行。**禁止贪婪 Here**：名字槽受限统�
    + `TC_EffResFamilyMissing` + Fmt 回渲染 + 3 个夹具。实现要点见 §9。
    **提交 4a — `@` 行糖**（已完成）：`[X@name]` → `Cons "name" (X "name") Nil`
    （保留名 `@vuna@row@at` 编码，Fmt 往返稳定），夹具 `dt_base/75`。
-   **提交 4b — `handle` 语法**（暂缓，见 §9「handle 的阻塞点」）。
-5. **提交 4 — handle 语法**：clause 降级 + op 族推断 + 夹具 + `@` 行糖。
-6. **提交 5 — 文档收尾**：`effects.md` §8 改写、`AGENTS.md` 硬不变量 5 措辞、`debt` 条目。
+   **提交 4b — `handle` 语法**（已完成）：`handleWith` + `ResFn` 擦除量 + op 族推断
+   + rowRem 归约修复 + Fmt/Lint 接线；夹具 `dt_base/76`、`dt_base/77` 与
+   `dt_err/99–104`；实现要点与边界见 §9。
+5. **N1 收口**（已完成）：语法面（`perform` / `handle` / `@` 行糖）与名字求解全部落地，
+   文档同步到本节与 §9。
 
 **提交 2 的两条过渡决策**（ND2/ND4 真正落地前的桥，提交 3/4 会替换）：
 
@@ -221,10 +232,14 @@ meta → 报未解，不发明行。**禁止贪婪 Here**：名字槽受限统�
 
 ## 8. 测试与验收
 
-- N1 正例：`perform` 单实例不写名字；`[ConsoleOp@mock, ConsoleOp@audit]` 双 handler
-  互不干扰；`handle` 嵌套 + `k` 续延；`@` 行糖。
-- N1 负例：多实例裸标签 → `TC_AmbiguousInstance`；res 族缺失 → `TC_EffResFamilyMissing`；
-  clause 构造子跨族 → `TC_HandleClauseFamilyMismatch`；行多态 wrapper 裸标签钉死 → 诊断指到名字。
+- N1 正例：`perform` 单实例不写名字（`dt_base/74`）；`@` 行糖（`75`）；`handle` 语法
+  （`76_eff_handle_syntax`：省略 return / 显式 return / 开放尾行 wrapper / infer 位置的
+  let 绑定；`77_eff_handle_answer`：`return x -> pure x` 答案 + 两层 `runPure`、abort 续延）。
+- N1 负例：res 族缺失 → `TC_EffResFamilyMissing`（`dt_err/98`、`101`）；clause 构造子跨族
+  → `TC_HandleClauseFamilyMismatch`（`99`）；参数化 op 族 → `TC_HandleFamilyUnsupported`
+  （`100`）；子句不穷尽 → `TC_NotExhaustive`（`102`）；续延 binder 名不一致 → `PS_…`（`103`）；
+  return 子句位置错 → `PS_HandleReturnMisplaced`（`104`）。
+- 工具链：`30_fmt_roundtrip` 覆盖 handle 夹具的 fmt 往返（格式化后仍 `check` 通过、二次 fmt 幂等）。
 - 全域：`vuna check .`、`vuna fmt --check`、`nix run .#vuna-run-tests`；rotation 后
   stage1 == stage2；`seed/` 闭包不变（`nix/tcb-check.sh`）。
 - 性能：`elab_perf` 全绿；D48 长 do 链边界回归（Member 证明参数 4 → 6）。
@@ -237,8 +252,8 @@ meta → 报未解，不发明行。**禁止贪婪 Here**：名字槽受限统�
   需要稳定 key 的场景要显式覆盖（后续若有 IPC/插件需求再议）。
 - **`handle` clause 与依赖匹配**：`k` 的类型 `res o` 在 case 分支内收窄，降级产生的
   case 是依赖 matcher，验证 elab_perf 与深层依赖匹配的组合。
-- **`return` 关键字占用**：`return` 成为关键字后，用户标识符 `return` 被 reserved；
-  评估频率后可改为块内上下文关键字（仅在 `{` clause 头解析时识别）。
+- **`return` 不是全局关键字**（提交 4b 定）：只在 handle 子句头按标识符识别，普通作用域里
+  仍是合法标识符；return 子句的位置/重复由 `PS_HandleReturnMisplaced` 覆盖。
 - **工具链展示**：`vuna api`/`doc`/LSP hover 显示 `Console@main`；`showValue`/doc 渲染路径。
 - **N2 宿主 op 不导出的粒度**：按 op 类型整体不导出还是按构造子分支导出（mock 可构造）
   ——倾向整体不导出 + 库提供 mock 构造器（mock op 独立类型或同名 mock 模块），N2 设计时定。
@@ -275,22 +290,40 @@ meta → 报未解，不发明行。**禁止贪婪 Here**：名字槽受限统�
   5. **运行期 key 尚未统一（ND8 下半）**：`perform` 用 op 族规范名，现有 base wrapper
      仍手写 `"console"` 等 key，所以 perform 程序要用**同 key 的 handler**
      （夹具 74 演示）；统一留给 `handle` 语法的提交。
-- **`handle` 语法的阻塞点（提交 4b 未落地，2026-11-10 实测）**：
-  1. **`handleCore` 的 handler 是裸类型变量**（`{h : Type}`），没有期望类型 ⇒ clause 里合成的
-     `case o of { C p => b }` 拿不到 `o` 的族（`TC_NotInductiveFamily`），`k` 也拿不到续延
-     类型（`k 5` → `TC_TooManyArgs`）。给 lambda 加 `(o : op)` 标注能让 case 过检查，但 `k`
-     的类型仍需 `res<族> o`；给整个 lambda 加 Pi 标注时，`k` 的域只能写洞，而**类型位置的洞**
-     报 `TC_HoleNoExpectedType`。
-  2. **`res` 不能作为显式擦除参数**：`(0 res : op -> Type)` 被 M15 判 `TC_MultiplicityTypeDomain`
-     （类型域不许写 `(0 x : T)`），不标擦除则在 `perform`/`handle` 降级点传 `resConsole`
-     触发 `CG_TypeLevelNameRuntime`。用 data 包装（`ResFn op` + `(0 rf : ResFn op)`）在类型上
-     可行，但**构造子在精化期按规范名解析不到**（`Base.Eff.MkResFn` → `TC_UnknownName`；
-     构造子只在 Loader 的导出面里，`globalsLookup` 不含）。
-  3. 把 `res` 改成隐式也不行：`res (Print s) =?= Nat` 需要高阶合一，报
-     `TC_CannotSolveHigherOrder`（M15 限制）。
-  **下一步方案（倾向）**：新增一个 base 入口 `handleWith`，其 handler 类型显式写
-  `(o : op) -> (res o -> b) -> b`；`res` 用 data 包装 + 擦除量传入，且**通过一个 base 函数**
-  （而不是直接引用构造子名）构造包装值，绕开「构造子在 globals 里查不到」。
+- **`handle` 降级的实现要点（提交 4b 实测，改这段代码前必读）**：
+  1. **handler 类型由 base 入口供给**：`handleCore` 的 `h` 是裸类型变量，合成 clause 里的
+     `case o of { C p => b }` 拿不到 `o` 的族（`TC_NotInductiveFamily`）、`k` 也拿不到续延
+     类型（`k 5` → `TC_TooManyArgs`）。新增 `Base.Eff.handleWith`，handler 域显式写
+     `(o : op) -> (resOf rf o -> b) -> b`；结果族 `res : op -> Type` 不能作显式类型实参
+     （M15 禁 `(0 res : op -> Type)`，不标擦除则 `resXxx` 名字进运行时触发
+     `CG_TypeLevelNameRuntime`），所以用 `ResFn` 包装 + `(0 rf)` 擦除量传入，并且降级点
+     通过 base 函数 `resFn` 构造包装值（构造子在精化期按规范名查不到；`globalsLookup` 只含定义）。
+  2. **`{w : Member n e r}` 必须排在 `comp` 之后**：`r` 由 comp 解出后 Member 当场解掉
+     name/label 两个洞；排前面会推迟到最终化，而调用点 conv 此时要归约结果行
+     `rowRem n e r`，只会得到 `expected Nil, got rowRem ?n ...`。`comp` 也排在 `ret` 之前：
+     先定 `a`，ret 体里的数字运算才不会被 Numeric 默认成 `Int`。
+  3. **`rowRemReduce` 要能看见已解 meta**：解表不改写已经构造好的 value，结果行里
+     name/label 仍是 `VMeta` 节点，而 `valueEqFuel` 不做 force ⇒ 永远比较不出相等。比较前
+     对 name、label（含 label 的一层 spine 实参）各 `force` 一次；未解 meta 仍照旧卡住。
+  4. **族形状限制**：只支持 nullary op 族 + `<Label> : String -> Type` + `res<Label> : Op -> Type`
+     （Console/Fs/Clock/Env/Process/Args/Stdin/Exit/Error）。State/Reader/Exn 是参数化族
+     （`StateOp : Type -> Type`），res 族还要按族参数实例化 → `TC_HandleFamilyUnsupported`，
+     继续用手写 handler（[debt.md](debt.md) D54）。
+  5. **key 配对**：`handle` 与 `perform` 的 key 都是 op 族规范名，二者配对；与 base 里手写
+     `"console"` 等 key 的旧 wrapper **不**配对（过渡期并存，统一留 N2/N3）。
+  6. **同族多实例 + 裸标签**：标签含未解 meta 时 Member 走线性合一匹配、取首个匹配条目，
+     不报 `TC_AmbiguousInstance`（perform/handle 共用同一路径，[debt.md](debt.md) D55）。
+  7. **语法边界**：`comp` 是裸标识符且紧跟 `{` 时按 handle 块解析（记录字面量作 comp 需加括号）；
+     同一 handle 块的所有 op 子句共用一个续延 binder 名（`PS_HandleContinuationNameMismatch`）；
+     `return` 不是全局关键字（只在子句头识别）。
+  8. **comp 的行必须在 handle 点已具体**（正常 handler 完全体天然满足）：
+     `runX comp = handle comp { ... }` 里 `comp` 是参数（行由调用点固定），或
+     `runOpen : {r} -> Eff (Cons "audit" (Console "audit") r) a -> Eff r a` 里行首是具体条目。
+     若 comp 是**行多态表达式**（`handle (pure e) { ... }`、内联 `do` 块、泛型函数直接调用），
+     comp 的行仍是未解 meta，结果行 `rowRem n e r` 在调用点 conv 时无法归约，报
+     `TC_TypeMismatch expected <row>, got rowRem ?n ...`。规避：把 comp 绑到带签名/参数的位置
+     （`let c : Eff [Console@audit] Nat = ...` 或函数参数）。更好的诊断/延迟默认化见
+     [debt.md](debt.md) D56。
 - **相关：`fmt` 规范化与列表字面量模式冲突**：`fmt` 把 `a :: b :: []` 精确链改写成
   `[a, b]` 后，与该模式相邻的后续 Cons 分支会触发 `TC_RedundantCtorBranch`
   （无位置信息 `:0:0`，覆盖检查判定与 codegen 解糖不一致，机制待独立修复）。

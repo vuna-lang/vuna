@@ -9,3 +9,12 @@ for-each: corpus/run/01_arithmetic.vuna corpus/run/03_data_case.vuna corpus/fmt/
   out-equals-file: {stem}.out
   run: "$VUNA" fmt --check "$TMPDIR/fmt-pkg/src.vuna" >/dev/null 2>&1
 end:
+# native-effects N1（提交 4b）：handle 语法的 fmt 往返——格式化后仍能 check，且二次 fmt 幂等。
+for-each: corpus/dt_base/76_eff_handle_syntax.vuna corpus/dt_base/77_eff_handle_answer.vuna
+  run: sh -c 'cp "{item}" "$TMPDIR/fmt-pkg/handle.vuna"; chmod u+w "$TMPDIR/fmt-pkg/handle.vuna"; "$VUNA" fmt "$TMPDIR/fmt-pkg/handle.vuna" >/dev/null 2>&1'
+  exit: 0
+  run: "$VUNA" check "$TMPDIR/fmt-pkg/handle.vuna" 2>&1
+  exit: 0
+  run: "$VUNA" fmt --check "$TMPDIR/fmt-pkg/handle.vuna" >/dev/null 2>&1
+  exit: 0
+end:

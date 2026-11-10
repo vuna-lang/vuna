@@ -1,0 +1,49 @@
+-- native-effects N1（提交 4b）：`handle` 语法。省略 return（答案类型 = comp 结果类型）、
+-- 显式 return（b 与 a 不同）、开放尾行 wrapper 与 infer 位置的 let 绑定。
+import Base.Eff
+import Base.EffConsole
+import Base.List
+import Base.Monad
+import Base.Nat
+
+prog : Eff [Console@audit] Nat
+prog = do
+  n <- perform Print "hello"
+  pure (n + 1)
+
+-- 省略 return：ret = \x => x
+runMock : Eff (Cons "audit" (Console "audit") []) Nat -> Nat
+runMock comp = runPure (handle comp {
+  Print s k -> k 5
+  EPrint s k -> k 7
+}
+)
+
+-- 显式 return：答案类型 b 可以与 comp 结果类型 a 不同
+runBumped : Eff (Cons "audit" (Console "audit") []) Nat -> Nat
+runBumped comp = runPure (handle comp {
+  return x -> x + 100
+  Print s k -> k 5
+  EPrint s k -> k 7
+}
+)
+
+-- 开放尾行：结果行 = rowRem 之后剩下的 r
+runOpen : {r : Row} -> {a : Type} -> Eff (Cons "audit" (Console "audit") r) a -> Eff r a
+runOpen comp = handle comp {
+  Print s k -> k 5
+  EPrint s k -> k 7
+}
+
+-- infer 位置：let 绑定没有签名
+runLet : Nat
+runLet =
+  let
+    c = handle prog {
+      Print s k -> k 5
+      EPrint s k -> k 7
+    }
+  in runPure c
+
+main : Nat
+main = runMock prog + runBumped prog + runPure (runOpen prog) + runLet

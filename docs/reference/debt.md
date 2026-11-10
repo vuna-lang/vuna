@@ -29,6 +29,9 @@
 | D50 | 特权残留：`packages/11_run_args` 仍特权——缺「任意行位 IO handler + 多层 IO 展平」组合子 | `base/lib/Base/EffConsole.vuna`（`handleConsoleIO` 强绑行首）、`Base/Eff.vuna`（无 `joinIO`）；[effects.md](effects.md) §8.6 | 后续 |
 | D52 | 生成的字典/方法投影无类型标注：OCaml 侧会把 `f a` 与 `f (a -> b)` 错误统一（`Applicative.liftA2` 从 `ap` 派生即失败），只能逐实例手写；codegen 加类型标注后才能恢复派生 | `compiler/lib/Vuna/Compiler/Codegen/{Decl,Term}.vuna` | 后续 |
 | D53 | 同一 `case` 里深度不同的两个 `Cons` 分支：深分支部分匹配失败回退到浅分支时，浅分支变量错误绑到深分支的部分绑定；`fmt` 把 `a :: b :: []` 改写成 `[a, b]` 后还会误报 `TC_RedundantCtorBranch` | 最小复现：`pickA : List (List Int) -> Nat; pickA sp = case sp of n :: e :: r :: _ => 0 \| e :: r :: _ => length e \| _ => 99`，对 `[[7], [8,9]]` 编译运行得 `2`（正确 `1`）；`vuna interp` 不复现，是 codegen 匹配器；规避见 `Core/Eval.rowRemReduceDispatch` 注释、[native-effects.md](native-effects.md) §9 | 后续 |
+| D54 | `handle` 语法只支持 nullary op 族 + `<Label> : String -> Type` + `res<Label> : Op -> Type`；State/Reader/Exn 等参数化 op 族仍只能手写 handler（报 `TC_HandleFamilyUnsupported`） | `compiler/lib/Vuna/Compiler/Elab/Term/Impl.vuna`（`handleOpKind`/`handleCallExpr`）、`base/lib/Base/Eff.vuna`（`handleWith`）；夹具 `dt_err/100_eff_handle_family_unsupported`；[native-effects.md](native-effects.md) §9 | 后续 |
+| D55 | 标签含未解 meta 时 `Member` 求解走「线性合一 + 首个匹配」（`memberLookupRowGreedy`）：同一 op 族装了 ≥2 个实例且 `perform`/`handle` 用裸标签时不报 `TC_AmbiguousInstance`，静默取行里首个匹配条目 | `compiler/lib/Vuna/Compiler/Elab/Dict.vuna`（`memberLookupRowGreedy`）；[native-effects.md](native-effects.md) §9 | 后续 |
+| D56 | `handle` 的 comp 若是行多态表达式（`pure e`、内联 do 块），comp 的行仍是未解 meta，结果行 `rowRem` 卡住 → 报裸 `TC_TypeMismatch expected <row>, got rowRem ?n ...`。需要「comp 行未定」专用诊断或延迟默认化（按 ND3 默认实例名 + 期望结果行反推 comp 行） | `compiler/lib/Vuna/Compiler/Elab/Term/Impl.vuna`（`handleCallExpr`/`checkEFuel` 钩子）、`compiler/lib/Vuna/Compiler/Core/Eval.vuna`（`rowRemReduce`）；[native-effects.md](native-effects.md) §9 第 8 条 | 后续 |
 
 ## 工具、构建与验证
 

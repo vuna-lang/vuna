@@ -85,9 +85,13 @@ module Vuna.Compiler.Frontend.Ast
   , fieldType
   , fixitySpan
   , funArity
+  , handleNoRetSyntax
+  , handleSyntax
   , holeNameOf
   , isDoBindSyntaxName
   , isDoIgnoreSyntaxName
+  , isHandleNoRetSyntax
+  , isHandleSyntax
   , isHoleName
   , isInternalSyntaxName
   , isListConsSyntax
@@ -585,6 +589,30 @@ performSyntax = "@vuna@perform"
 -- | 自动补注（N1 新增导出）：isPerformSyntax。
 isPerformSyntax : String -> Bool
 isPerformSyntax name = name == performSyntax
+
+-- native-effects N1（提交 4b）：`handle <comp> { ... }` 的保留名编码（ND12）。parser 产出
+-- `EApp (EVar "@vuna@handle") [comp, ret, opH]`：
+--   * `comp` 是被 handler 包裹的动作；
+--   * `ret` 是 `ELam [x] body`；没有 return 子句时是哨兵 `EVar "@vuna@handle@noret"`
+--     （Fmt 据此不打印 return 子句）；
+--   * `opH` 是 `ELam [o, k] (ECase (EVar o) alts)`：每个 alt 的 pattern 只含构造子实参，
+--     续延 binder `k` 是 λ 的第二个参数（同一 handle 块的所有 op 子句共用这个名字）。
+-- Elab 从 clause 构造子推 op 族，再降级到 `Base.Eff.handleWith`。
+-- | 自动补注（N1 提交 4b 新增导出）：handleSyntax。
+handleSyntax : String
+handleSyntax = "@vuna@handle"
+
+-- | 自动补注（N1 提交 4b 新增导出）：isHandleSyntax。
+isHandleSyntax : String -> Bool
+isHandleSyntax name = name == handleSyntax
+
+-- | 自动补注（N1 提交 4b 新增导出）：handleNoRetSyntax（无 return 子句的哨兵）。
+handleNoRetSyntax : String
+handleNoRetSyntax = "@vuna@handle@noret"
+
+-- | 自动补注（N1 提交 4b 新增导出）：isHandleNoRetSyntax。
+isHandleNoRetSyntax : String -> Bool
+isHandleNoRetSyntax name = name == handleNoRetSyntax
 
 -- native-effects N1（ND4）：行字面量里的显式实例名 `X@name`，编码成
 -- `EApp (EVar "@vuna@row@at") [X, name]`；只在行字面量展开时被解释。

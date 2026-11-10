@@ -228,7 +228,8 @@ __EFF_SECTION__
   精化器按行结构构造证明（定义级 ctx 收尾）。
 - `rowRem : Type -> Row -> Row` 去掉一个标签；它不是类型族，由编译器按标签类型值
   结构相等归约（重复绑定名/非线性格不受支持：parser 直接报 `PS_RepeatedPatternBinder`，
-  见 language.md）。
+  见 language.md）。归约前对 name/label 做一次 `force`：解表不改写已构造好的 value，
+  已解 meta 在结果行里仍是 `VMeta` 节点（`handle` 语法依赖这条才让结果行归约掉）。
 
 ### 8.2 运行时
 
@@ -253,7 +254,7 @@ __EFF_SECTION__
 
 | 模块 | 内容 |
 | --- | --- |
-| `Base.Eff` | `Row(..)`、`Eff`、`Member(..)`/`rowRem`、内建 `Functor`/`Applicative`/`Monad (Eff r)`（`do`/`>>=`/`>>`，不提供 `bindEff`/`pureEff`）、`sendCore`/`handleCore`/`handleCoreLin`、`Cont`/`mkCont`/`resumeCont`、`bracket`/`finally`、`weaken`、`runPure`/`runIOEff`/`runIOAnswer` |
+| `Base.Eff` | `Row(..)`、`Eff`、`Member(..)`/`rowRem`、内建 `Functor`/`Applicative`/`Monad (Eff r)`（`do`/`>>=`/`>>`，不提供 `bindEff`/`pureEff`）、`sendCore`/`handleCore`/`handleCoreLin`、`handleWith` + `ResFn(..)`/`resFn`/`resOf`（`handle` 语法的降级目标：handler 类型显式、结果族作擦除量）、`Cont`/`mkCont`/`resumeCont`、`bracket`/`finally`、`weaken`、`runPure`/`runIOEff`/`runIOAnswer` |
 | `Base.Eff.Reader` | `Reader n s` + `Ask`；`ask`/`handleReader`；`n` 是 String 实例名（`Reader "counter" Int`） |
 | `Base.EffState` | `State n s` + `Get`/`Put`；`get`/`put`/`handleState`（answer `s -> Pair a s` 线程状态） |
 | `Base.EffFs` | IO-backed Fs 效应（完整 fs 面；**命名实例** `Fs n`，如 `Fs "mock"`/`Fs "real"`）：`ReadFile`/`WriteFile`/`WriteFileAtomic`/`ReadDir`/`IsDirectory`/`MakeDir`/`RemoveFile`/`FileExists`/`FileMtime`/`FileSize` + `resFs`；`fsReadFile n`/`fsWriteFile n`/…/`handleFs n`（泛型）/`handleFsIO n`（IO-backed，可直接 `runIOAnswer`）；handler 用 `Base.IO` 实现。mock/real 可并存（`dt_base/40`） |
@@ -292,7 +293,8 @@ process 可控 Exit）、`42–44`（通用 bracket abort cleanup、调度器 br
   夹具 `dt_base/72_eff_auto_lift`。剩余：只在 check 方向；不会自动重排/合并行。
 - **行删除的表示层修复**：`rowRem` 改成公理 + 编译器按标签类型值结构相等归约；
   不能写成类型族（重复绑定名的模式会被 parser 以 `PS_RepeatedPatternBinder` 拒绝，
-  见 language.md）。
+  见 language.md）。归约前对 name/label（含 label 一层 spine 实参）先 `force`，
+  让已解 meta 参与比较；未解 meta 仍卡住（`Core/Eval.rowRemReduce`）。
 - **`Monad (Eff r)` 已内建**：`Base.Eff` 声明 `instance Monad (Eff r)`，实例方法直接构造
   私有 `MkEff`（实例 tele `r : Row` 由 `Eff` 构造子 kind 推断）；import `Base.Eff` 后可直接用
   `do` / `>>=` / `>>`，不提供 `bindEff` / `pureEff` 专用组合子。`do` 在行 `r` 上单子化，
@@ -350,7 +352,8 @@ fork/await/yield/cancel/结构化 scope；W10 console/clock/env/process/fs 标�
 - **单效应组合子与自动 lift**：`runConsole`/`runFs`/`runEnv`/`runClock`/`runProcess`
   组合子；check 方向的自动 lift 见 §8.4（`tryEffLift`）。
 
-剩余：语言级 `perform`/`handle` 语法与高阶效应类型（见 §10 非目标）。
+剩余：高阶效应类型（见 §10 非目标）。语言级 `perform`/`handle` 语法已落地
+（`Base.Eff.performCore` / `handleWith`，语法与边界见 [native-effects.md](native-effects.md)）。
 
 ## 9. 债务映射
 
@@ -366,8 +369,10 @@ fork/await/yield/cancel/结构化 scope；W10 console/clock/env/process/fs 标�
 
 ## 10. 非目标（明确不做）
 
-- 语言级 `handle` / `perform` 语法、多射续延；自动 lift 已在 check 方向提供（`tryEffLift`，
-  见 §8.4），其余用户自定义效应已可在库级声明（§8）。
+- 多射续延（N1 的 `perform`/`handle` 已落地但只有 one-shot 续延；`Cont` 的线性类型化留
+  N3/N4，见 [native-effects.md](native-effects.md)）；高阶效应类型（当前 `catch`/`local`/
+  `bracket`/scoped `Exn` 是库层 + 行约束的组合）；自动 lift 只在 check 方向（`tryEffLift`，
+  见 §8.4）。
 - 高阶/作用域、一次性闭包与单线程调度器已落地；完整线性箭头、Domain 并行、父 fiber handler 继承仍属后续（见 D41/D44/D22）。
 - 高阶/作用域效应的**类型系统**（当前 `catch`/`local`/`bracket`/scoped `Exn` 是库层 + 行约束的组合，未做语言级高阶效应类型）。
 - 网络/服务端框架；只有最小 `async`/`await`（Domain，legacy）。

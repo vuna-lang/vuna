@@ -459,19 +459,119 @@ performCallExpr globals ctx ec opTy op sp = case perfFamilyOfValue ec opTy of
           OkC
             (EApp (EVar "Base.Eff.performCore" sp) [EVar "_" sp, EStr canon sp, EApp (EVar labelName sp) [EVar "_" sp] sp, op] sp)
 
+-- ---------------------------------------------------------------
+-- native-effects N1（提交 4b）：`handle <comp> { ... }` 降级（ND10）
+-- ---------------------------------------------------------------
+-- 标记：`EApp (EVar "@vuna@handle") [comp, ret, opH]`（Ast.handleSyntax）。`opH` 是
+-- `ELam [o, k] (ECase (EVar o) alts)` 的合成形态；族由 alts 的构造子推出来。
+-- 降级目标（顺序 = Base.Eff.handleWith 的签名）：
+--   handleWith <n=洞> "<op族规范名>" (<M.Xxx> <n=洞>) <op族> (Base.Eff.resFn <M.resXxx>)
+--              <comp> <ret> <opH>
+-- `n`/标签里的名字仍由 `{w : Member n e r}` 隐式解出（与 perform 同一条求解路径）。
+-- | 识别 handle 标记，返回 (comp, ret, opH)。
+handleOperand : Expr -> Maybe (Pair Expr (Pair Expr Expr))
+handleOperand (EApp (EVar name _) ([comp, ret, opH]) _) =
+  if isHandleSyntax name then Just (Pair comp (Pair ret opH)) else Nothing
+handleOperand _ = Nothing
+
+-- | op 子句构造子 → op 族：Loader 已把 pattern 里的构造子名解析成规范名或 over 名。
+handleClauseFamily : Ec -> String -> Span -> Check String
+handleClauseFamily ec cname sp =
+  if isOverCtorName cname then Vuna.Compiler.Common.bind
+    (resolveOverCtor ec sp Nothing (overCtorShort cname) (overCtorTargets cname))
+    (\canon => handleFamilyOfCtor ec canon sp)
+  else handleFamilyOfCtor ec cname sp
+
+-- | 构造子规范名 → op 族（查 dt 构造子表）。
+handleFamilyOfCtor : Ec -> String -> Span -> Check String
+handleFamilyOfCtor ec cname sp = case ctorFamilyNameOf ec cname of
+  Just fam => OkC fam
+  Nothing => tcErr1 sp (UnknownName cname) cname
+
+-- | op 子句 pattern → op 族。
+handleClauseFamilyOfPat : Ec -> Pat -> Check String
+handleClauseFamilyOfPat ec (PCon cname _ psp) = handleClauseFamily ec cname psp
+handleClauseFamilyOfPat ec _ = icInternal "handle mirror case pattern is not a constructor"
+
+-- | 所有 op 子句必须同族（ND10），跨族报 TC_HandleClauseFamilyMismatch。
+handleCheckFamilies : Ec -> String -> List (Pair Pat Expr) -> Check String
+handleCheckFamilies ec fam [] = OkC fam
+handleCheckFamilies ec fam ((Pair pat _) :: rest) = case handleClauseFamilyOfPat ec pat of
+  ErrC e => ErrC e
+  OkC fam2 =>
+    if fam2 == fam then handleCheckFamilies ec fam rest
+    else tcErr2 (patSpan pat) (HandleClauseFamilyMismatch fam fam2) fam fam2
+
+-- | 从 handle 的合成 case 分支推出 op 族。
+handleClauseFamilies : Ec -> List (Pair Pat Expr) -> Check String
+handleClauseFamilies ec [] = icInternal "handle marker has no operation clause"
+handleClauseFamilies ec ((Pair pat _) :: rest) = case handleClauseFamilyOfPat ec pat of
+  ErrC e => ErrC e
+  OkC fam => handleCheckFamilies ec fam rest
+
+-- | kind 是否恰为 `Type`（nullary data 族）。
+isUniverseTerm : Term -> Bool
+isUniverseTerm (TType _) = True
+isUniverseTerm _ = False
+
+-- | op 族必须是 nullary（kind 恰为 `Type`）：State/Reader/Exn 这类 `Type -> Type` 的族
+-- 需要额外地按族参数实例化 res 族，当前协议不支持（走 TC_HandleFamilyUnsupported）。
+handleOpKind : List (Pair String Term) -> Ec -> String -> Maybe Term
+handleOpKind globals ec canon = case dtDataLookup canon (ecDatas ec) of
+  Just dd => Just (dtDataKind dd)
+  Nothing => globalsLookup canon globals ec
+
+-- | 缺 return 子句时补 `\x -> x`（哨兵由 parser 产生）。
+handleDefaultRetBinder : String
+handleDefaultRetBinder = "@vuna@handle@ret"
+
+-- | ret 实参：无 return 子句的哨兵换成恒等 λ，其余原样。
+handleRetArg : Expr -> Expr
+handleRetArg (EVar nm rsp) =
+  if isHandleNoRetSyntax nm then ELam [handleDefaultRetBinder] (EVar handleDefaultRetBinder rsp) rsp
+  else EVar nm rsp
+handleRetArg e = e
+
+-- | 纯函数（不递归、不调精化器）：从标记构造 `Base.Eff.handleWith` 调用表达式。
+handleCallExpr : List (Pair String Term) -> Ec -> Expr -> Span -> Check Expr
+handleCallExpr globals ec expr sp = case handleOperand expr of
+  Nothing => icInternal "handle marker expected"
+  Just (Pair comp (Pair ret opH)) => case opH of
+    ELam (_ :: _ :: _) (ECase _ alts _) _ => Vuna.Compiler.Common.bind (handleClauseFamilies ec alts) (\fam => case perfFamilyOfCanonical fam of
+      Nothing => tcErr1 sp (HandleFamilyUnsupported fam) fam
+      Just (PerfFamily canon mod short) =>
+        let
+          labelName = qualifyShort mod short
+          resName = qualifyShort mod ("res" ++ short)
+        in case globalsLookup labelName globals ec of
+          Nothing => tcErr1 sp (EffResFamilyMissing canon) canon
+          Just _ => case globalsLookup resName globals ec of
+            Nothing => tcErr1 sp (EffResFamilyMissing canon) canon
+            Just _ => case handleOpKind globals ec canon of
+              Just kind =>
+                if isUniverseTerm kind then OkC
+                  (EApp (EVar "Base.Eff.handleWith" sp) [EVar "_" sp, EStr canon sp, EApp (EVar labelName sp) [EVar "_" sp] sp, EVar canon sp, EApp (EVar "Base.Eff.resFn" sp) [EVar resName sp] sp, comp, handleRetArg ret, opH] sp)
+                else tcErr1 sp (HandleFamilyUnsupported canon) canon
+              Nothing => tcErr1 sp (HandleFamilyUnsupported canon) canon
+    )
+    _ => icInternal "malformed handle marker"
+
 inferEFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Expr -> Check (Pair Term (Pair Value Ec))
 inferEFuel fuel globals ctx ec expr = if fuel <= 0 then icFuel "inference"
-else case performOperand expr of
-  Just (Pair op _) => Vuna.Compiler.Common.bind (inferEFuel (fuel - 1) globals ctx ec op) (\p => case p of
-    Pair _ (Pair opTy ec1) =>
-      Vuna.Compiler.Common.bind (performCallExpr globals ctx ec1 opTy op (exprSpan expr))
-        (\callExpr => inferEFuel (fuel - 1) globals ctx ec1 callExpr)
-  )
-  Nothing => case listLitElems expr of
-    Just elems =>
-      Vuna.Compiler.Common.bind (expandListLit ec listFamilyName elems (exprSpan expr))
-        (\e2 => inferEFuel (fuel - 1) globals ctx ec e2)
-    Nothing => inferEFuelCore fuel globals ctx ec expr
+else case handleOperand expr of
+  Just _ => Vuna.Compiler.Common.bind (handleCallExpr globals ec expr (exprSpan expr))
+    (\callExpr => inferEFuel (fuel - 1) globals ctx ec callExpr)
+  Nothing => case performOperand expr of
+    Just (Pair op _) => Vuna.Compiler.Common.bind (inferEFuel (fuel - 1) globals ctx ec op) (\p => case p of
+      Pair _ (Pair opTy ec1) =>
+        Vuna.Compiler.Common.bind (performCallExpr globals ctx ec1 opTy op (exprSpan expr))
+          (\callExpr => inferEFuel (fuel - 1) globals ctx ec1 callExpr)
+    )
+    Nothing => case listLitElems expr of
+      Just elems =>
+        Vuna.Compiler.Common.bind (expandListLit ec listFamilyName elems (exprSpan expr))
+          (\e2 => inferEFuel (fuel - 1) globals ctx ec e2)
+      Nothing => inferEFuelCore fuel globals ctx ec expr
 
 -- | 自动补注（M41 新增导出）：inferEFuelCore。
 inferEFuelCore : Int -> List (Pair String Term) -> Ctx -> Ec -> Expr -> Check (Pair Term (Pair Value Ec))
@@ -1266,14 +1366,18 @@ else case args of
 
 checkEFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Expr -> Value -> Check (Pair Term Ec)
 checkEFuel fuel globals ctx ec expr expected = if fuel <= 0 then icFuel "inference"
-else case performOperand expr of
-  Just _ => checkByInferFuel (fuel - 1) globals ctx ec expr expected
-  Nothing => case listLitElems expr of
-    Just elems =>
-      Vuna.Compiler.Common.bind
-        (expandListLit ec (listLitFamily ec (forceVal ec expected)) elems (exprSpan expr))
-        (\e2 => checkEFuel (fuel - 1) globals ctx ec e2 expected)
-    Nothing => checkEFuelNoRow fuel globals ctx ec expr expected
+else case handleOperand expr of
+  -- handle 标记必须先于 perform/EApp 分解拦截（否则标记名会被当普通变量解析）。
+  Just _ => Vuna.Compiler.Common.bind (handleCallExpr globals ec expr (exprSpan expr))
+    (\callExpr => checkEFuel (fuel - 1) globals ctx ec callExpr expected)
+  Nothing => case performOperand expr of
+    Just _ => checkByInferFuel (fuel - 1) globals ctx ec expr expected
+    Nothing => case listLitElems expr of
+      Just elems =>
+        Vuna.Compiler.Common.bind
+          (expandListLit ec (listLitFamily ec (forceVal ec expected)) elems (exprSpan expr))
+          (\e2 => checkEFuel (fuel - 1) globals ctx ec e2 expected)
+      Nothing => checkEFuelNoRow fuel globals ctx ec expr expected
 
 -- 字面量转换（FromString / FromInt）：期望类型不是内建字面量类型时，若期望类型上存在
 -- 对应 trait 的实例，就把字面量降级成 trait 方法应用（`fromString "s"` / `fromInt n`），
@@ -1607,14 +1711,26 @@ else case stripPisWithMetas 64 ctx ec piTy of
 -- | 与 inferEFuel 同形，但 EApp 会把期望结果类型作为 hint 传进推断入口。
 inferEFuelHint : Int -> List (Pair String Term) -> Ctx -> Ec -> Expr -> Value -> Check (Pair Term (Pair Value Ec))
 inferEFuelHint fuel globals ctx ec expr expected = if fuel <= 0 then icFuel "inference"
-else case performOperand expr of
-  -- perform 标记必须先于 EApp 分解拦截（否则会把标记名当普通变量解析）。
+else case handleOperand expr of
+  -- handle 标记必须先于 perform/EApp 分解拦截（否则标记名会被当普通变量解析）。
   Just _ => inferEFuel (fuel - 1) globals ctx ec expr
-  Nothing => case expr of
-    EApp fn args sp =>
-      inferAppFuel (fuel - 1) globals ctx ec fn args sp
-        (Just (Pair (length (ecPending ec)) expected))
-    _ => inferEFuel fuel globals ctx ec expr
+  Nothing => case performOperand expr of
+    -- perform 标记必须先于 EApp 分解拦截（否则会把标记名当普通变量解析）。
+    Just _ => inferEFuel (fuel - 1) globals ctx ec expr
+    Nothing => case expr of
+      EApp fn args sp =>
+        inferAppFuel (fuel - 1) globals ctx ec fn args sp
+          (Just (Pair (length (ecPending ec)) expected))
+      _ => inferEFuel fuel globals ctx ec expr
+  Just _ => inferEFuel (fuel - 1) globals ctx ec expr
+  Nothing => case performOperand expr of
+    -- perform 标记必须先于 EApp 分解拦截（否则会把标记名当普通变量解析）。
+    Just _ => inferEFuel (fuel - 1) globals ctx ec expr
+    Nothing => case expr of
+      EApp fn args sp =>
+        inferAppFuel (fuel - 1) globals ctx ec fn args sp
+          (Just (Pair (length (ecPending ec)) expected))
+      _ => inferEFuel fuel globals ctx ec expr
 
 -- ---------------------------------------------------------------
 -- F3-1：运行入口的未处理效应诊断

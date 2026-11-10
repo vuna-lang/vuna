@@ -1,0 +1,15 @@
+-- native-effects N1（提交 4b）负例：参数化 op 族（State/Reader/Exn）不在 handle 语法支持范围。
+import Base.Eff
+import Base.EffState
+import Base.List
+import Base.Monad
+import Base.Nat
+
+prog : Eff [State "counter" Nat] Nat
+prog = get "counter" Nat
+
+run : Eff (Cons "counter" (State "counter" Nat) Nil) Nat -> Nat
+run comp = runPure (handle comp {
+  Get k -> k 5
+  Put x k -> k 0
+  })

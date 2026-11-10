@@ -120,9 +120,14 @@ data TcErr : Nat -> Type where
   MainArity : String -> TcErr (Succ Zero)
   -- native-effects N1（ND9）：`perform` 找不到 res 族（`res<族短名>`）。
   EffResFamilyMissing : String -> TcErr (Succ Zero)
+  -- native-effects N1（提交 4b）：`handle` 的 op 族不满足降级协议（nullary op 族 +
+  -- `<Label> : String -> Type` + `res<Label> : Op -> Type`；State/Reader/Exn 等参数化族）。
+  HandleFamilyUnsupported : String -> TcErr (Succ Zero)
   -- arity 2
   AmbiguousCtor : String -> String -> TcErr (Succ (Succ Zero))
   AmbiguousInstance : String -> String -> TcErr (Succ (Succ Zero))
+  -- native-effects N1（提交 4b）：同一个 `handle` 块的 clause 构造子跨 op 族（ND10）。
+  HandleClauseFamilyMismatch : String -> String -> TcErr (Succ (Succ Zero))
   AppliedNotType : String -> TcErr (Succ Zero)
   CtorDoesNotReturn : String -> String -> TcErr (Succ (Succ Zero))
   CtorError : String -> String -> TcErr (Succ (Succ Zero))
@@ -227,8 +232,10 @@ tcCode (UnknownName _) = "TC_UnknownName"
 tcCode (UnsolvedHole _) = "TC_UnsolvedHole"
 tcCode (UnsolvedMetavarInfer _) = "TC_UnsolvedMetavarInfer"
 tcCode (EffResFamilyMissing _) = "TC_EffResFamilyMissing"
+tcCode (HandleFamilyUnsupported _) = "TC_HandleFamilyUnsupported"
 tcCode (AmbiguousCtor _ _) = "TC_AmbiguousCtor"
 tcCode (AmbiguousInstance _ _) = "TC_AmbiguousInstance"
+tcCode (HandleClauseFamilyMismatch _ _) = "TC_HandleClauseFamilyMismatch"
 tcCode (AppliedNotType _) = "TC_AppliedNotType"
 tcCode (CtorDoesNotReturn _ _) = "TC_CtorDoesNotReturn"
 tcCode (CtorError _ _) = "TC_CtorError"
@@ -332,9 +339,13 @@ tcTemplate (UnsolvedMetavarInfer _) =
   "cannot infer a type for this expression (unsolved metavariable ?<0>); add a type annotation"
 tcTemplate (EffResFamilyMissing _) =
   "cannot find the effect family members for <0> (expected a label type `<family>` and a result family `res<family>` in the same module as the op family)"
+tcTemplate (HandleFamilyUnsupported _) =
+  "handle syntax supports only effects whose op family is a plain type with `<Label> : String -> Type` and `res<Label> : Op -> Type`; <0> does not fit"
 tcTemplate (AmbiguousCtor _ _) =
   "ambiguous constructor <0> (candidates: <1>); add a type annotation or qualify it"
 tcTemplate (AmbiguousInstance _ _) = "ambiguous instance for <0> (candidates: <1>)"
+tcTemplate (HandleClauseFamilyMismatch _ _) =
+  "all handle clauses must use constructors of the same operation family (got <0> and <1>)"
 tcTemplate (AppliedNotType _) = "expected a type, but <0> applied to these arguments is not a type"
 tcTemplate (CtorDoesNotReturn _ _) = "constructor <0> does not return <1>"
 tcTemplate (CtorError _ _) = "constructor <0>: <1>"
@@ -490,8 +501,10 @@ tcChunk8 =
     TcEntry (tcCode (UnsolvedHole "")) (tcTemplate (UnsolvedHole "")) "未填的洞",
     TcEntry (tcCode (UnsolvedMetavarInfer "")) (tcTemplate (UnsolvedMetavarInfer "")) "无法推断类型（未解元变量）",
     TcEntry (tcCode (EffResFamilyMissing "")) (tcTemplate (EffResFamilyMissing "")) "找不到效应结果族",
+    TcEntry (tcCode (HandleFamilyUnsupported "")) (tcTemplate (HandleFamilyUnsupported "")) "handle 语法不支持该 op 族形状",
     TcEntry (tcCode (AmbiguousCtor "" "")) (tcTemplate (AmbiguousCtor "" "")) "构造子同名且无法按期望类型消歧",
     TcEntry (tcCode (AmbiguousInstance "" "")) (tcTemplate (AmbiguousInstance "" "")) "instance 歧义",
+    TcEntry (tcCode (HandleClauseFamilyMismatch "" "")) (tcTemplate (HandleClauseFamilyMismatch "" "")) "handle 子句构造子跨 op 族",
     TcEntry (tcCode (AppliedNotType "")) (tcTemplate (AppliedNotType "")) "应用结果不是类型",
     TcEntry (tcCode (CtorDoesNotReturn "" "")) (tcTemplate (CtorDoesNotReturn "" "")) "构造子结果族不符",
     TcEntry (tcCode (CtorError "" "")) (tcTemplate (CtorError "" "")) "构造子应用形态不合法"

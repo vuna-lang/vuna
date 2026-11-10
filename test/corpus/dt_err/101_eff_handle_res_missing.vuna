@@ -1,0 +1,18 @@
+-- native-effects N1（提交 4b）负例（ND9）：op 族没有同模块的 `res<族短名>` 结果族。
+import Base.Eff
+import Base.List
+import Base.Monad
+import Base.Nat
+
+data BoomOp : Type where
+  BoomIt : BoomOp
+
+data Boom : String -> Type where
+
+prog : Eff [Boom "main"] Nat
+prog = sendCore (Boom "main") "BoomOp" "main" BoomIt
+
+run : Eff (Cons "main" (Boom "main") Nil) Nat -> Nat
+run comp = runPure (handle comp {
+  BoomIt k -> k 5
+  })

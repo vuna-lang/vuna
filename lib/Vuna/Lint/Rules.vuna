@@ -1108,6 +1108,33 @@ else case maybeLane of
     in if not (isNilList lifted) then append lifted (liftFindings lines toks lane expr)
     else append (liftFindings lines toks lane expr) (walkExpr fuel lines toks expr)
 
+-- native-effects N1（提交 4b）：handle 标记载荷识别（编码见 `Frontend/Ast.handleSyntax`）。
+handlePartsOf : Expr -> Maybe (Pair Expr (Pair Expr Expr))
+handlePartsOf (EApp (EVar name _) ([comp, ret, opH]) _) =
+  if isHandleSyntax name then Just (Pair comp (Pair ret opH)) else Nothing
+handlePartsOf _ = Nothing
+
+-- 只遍历用户写的部分（comp / return 体 / op 子句体），不把合成 case 当 lane 来源。
+walkHandlePayload : Int -> List String -> List PTok -> Expr -> Expr -> Expr -> List Finding
+walkHandlePayload fuel lines toks comp ret opH = if fuel <= 0 then lintFuelExhausted "traversal"
+else
+  let
+    retFindings = case ret of
+      ELam _ body _ => walkExpr (fuel - 1) lines toks body
+      _ => []
+    opFindings = case opH of
+      ELam _ (ECase _ alts _) _ => walkHandleAlts (fuel - 1) lines toks alts
+      ELam _ body _ => walkExpr (fuel - 1) lines toks body
+      _ => []
+  in append (append (walkExpr (fuel - 1) lines toks comp) retFindings) opFindings
+
+walkHandleAlts : Int -> List String -> List PTok -> List (Pair Pat Expr) -> List Finding
+walkHandleAlts fuel lines toks alts = if fuel <= 0 then lintFuelExhausted "traversal"
+else case alts of
+  [] => []
+  (Pair _ body) :: rest =>
+    append (walkExpr (fuel - 1) lines toks body) (walkHandleAlts (fuel - 1) lines toks rest)
+
 walkExpr : Int -> List String -> List PTok -> Expr -> List Finding
 walkExpr fuel lines toks e = if fuel <= 0 then lintFuelExhausted "traversal"
 else case e of
@@ -1116,8 +1143,12 @@ else case e of
   EStr s sp => []
   EFloat raw sp => []
   ELam ps body sp => walkExpr (fuel - 1) lines toks body
-  EApp fn args sp =>
-    append (walkExpr (fuel - 1) lines toks fn) (walkExprs (fuel - 1) lines toks args)
+  -- native-effects N1（提交 4b）：`handle` 标记的载荷是 parser 合成的 λ + case；合成 case
+  -- 不能当 dispatch-lift 的 lane 来源，否则会给出改写子句头的错误建议。只遍历用户写的
+  -- comp、return 体和各 op 子句体。
+  EApp fn args sp => case handlePartsOf (EApp fn args sp) of
+    Just (Pair comp (Pair ret opH)) => walkHandlePayload (fuel - 1) lines toks comp ret opH
+    Nothing => append (walkExpr (fuel - 1) lines toks fn) (walkExprs (fuel - 1) lines toks args)
   EPi name implicit _ dom cod sp =>
     append (walkExpr (fuel - 1) lines toks dom) (walkExpr (fuel - 1) lines toks cod)
   ELet binds body recFlag sp =>

@@ -328,11 +328,17 @@ rowAtParts : Expr -> Maybe (Pair Expr Expr)
 rowAtParts (EApp (EVar name _) ([e, n]) _) = if isRowAtSyntax name then Just (Pair e n) else Nothing
 rowAtParts _ = Nothing
 
--- handle 子句模式：合成形态把续延名换成尾部通配，渲染回 `Ctor p1 .. pn k`。
+-- native-effects N1（提交 4b）：`handle` 标记回渲染。编码见 `Frontend/Ast.handleSyntax`：
+-- `EApp (EVar "@vuna@handle") [comp, ret, opH]`；ret 缺失时是哨兵。
+handleParts : Expr -> Maybe (Pair Expr (Pair Expr Expr))
+handleParts (EApp (EVar name _) ([comp, ret, opH]) _) =
+  if isHandleSyntax name then Just (Pair comp (Pair ret opH)) else Nothing
+handleParts _ = Nothing
+
+-- handle 子句模式：合成形态把续延 binder 拆成了 λ 的第二个参数，所以 alt 的 pattern
+-- 就是构造子的全部实参；这里逐项渲染，续延名由调用方另行拼上。
 renderHandlePats : Int -> List Pat -> String
-renderHandlePats fuel pats = case reverse pats of
-  _ :: rest => renderHandlePatsGo fuel (reverse rest)
-  [] => ""
+renderHandlePats fuel pats = renderHandlePatsGo fuel pats
 
 renderHandlePatsGo : Int -> List Pat -> String
 renderHandlePatsGo fuel [] = ""
@@ -423,21 +429,24 @@ else case e of
   ELam ps body sp => case inlinePrecGo (fuel - 1) env 0 body of
     Nothing => Nothing
     Just b => Just (wrapPrec (minPrec > 0) "\\${joinComma ps} => ${b}")
-  EApp fn args sp => case rowAtParts (EApp fn args sp) of
-    Just (Pair lbl nm) => case inlineExprGo (fuel - 1) env lbl of
-      Nothing => Nothing
-      Just ls => case rowAtNameText nm of
-        Just ns => Just "${ls}@${ns}"
+  EApp fn args sp => case handleParts (EApp fn args sp) of
+    -- handle 是块形态，永远不内联（交给 renderBlockGo）。
+    Just _ => Nothing
+    Nothing => case rowAtParts (EApp fn args sp) of
+      Just (Pair lbl nm) => case inlineExprGo (fuel - 1) env lbl of
         Nothing => Nothing
-    Nothing => case performOperand (EApp fn args sp) of
-      Just op => case inlineExprGo (fuel - 1) env op of
-        Nothing => Nothing
-        Just os => Just (wrapPrec (minPrec > 0) "perform ${os}")
-      Nothing => case listExprElems (EApp fn args sp) of
-        Just elems => case mapMaybeStrings (\x => inlineExprGo (fuel - 1) env x) elems of
+        Just ls => case rowAtNameText nm of
+          Just ns => Just "${ls}@${ns}"
           Nothing => Nothing
-          Just ss => Just "[${joinComma ss}]"
-        Nothing => inlineAppGo (fuel - 1) env minPrec fn args
+      Nothing => case performOperand (EApp fn args sp) of
+        Just op => case inlineExprGo (fuel - 1) env op of
+          Nothing => Nothing
+          Just os => Just (wrapPrec (minPrec > 0) "perform ${os}")
+        Nothing => case listExprElems (EApp fn args sp) of
+          Just elems => case mapMaybeStrings (\x => inlineExprGo (fuel - 1) env x) elems of
+            Nothing => Nothing
+            Just ss => Just "[${joinComma ss}]"
+          Nothing => inlineAppGo (fuel - 1) env minPrec fn args
   EPi name implicit qty dom cod sp => inlinePiGo (fuel - 1) env minPrec qty name implicit dom cod
   ELet binds body rec_ sp => Nothing
   ECase scrut alts sp => Nothing
@@ -669,9 +678,11 @@ else case e of
   ECase scrut alts sp => renderCaseGo (fuel - 1) env at lineInd scrut alts
   ELet binds body rec_ sp => renderLetGo (fuel - 1) env at lineInd binds body
   EIf c t el sp => renderIfGo (fuel - 1) env at lineInd c t el
-  EApp fn args sp => case performOperand (EApp fn args sp) of
-    Just op => prefixFirst "perform " (renderExprGo (fuel - 1) env at lineInd op)
-    Nothing => renderAppBlockGo (fuel - 1) env at lineInd fn args
+  EApp fn args sp => case handleParts (EApp fn args sp) of
+    Just (Pair comp (Pair ret opH)) => renderHandleGo (fuel - 1) env at lineInd comp ret opH
+    Nothing => case performOperand (EApp fn args sp) of
+      Just op => prefixFirst "perform " (renderExprGo (fuel - 1) env at lineInd op)
+      Nothing => renderAppBlockGo (fuel - 1) env at lineInd fn args
   EPi name implicit qty dom cod sp =>
     renderPiBlockGo (fuel - 1) env at lineInd qty implicit name dom cod
   ELam ps body sp =>

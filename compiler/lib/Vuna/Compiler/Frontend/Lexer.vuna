@@ -135,6 +135,7 @@ isKeyword s =
     || s == "deriving"
     || s == "do"
     || s == "perform"
+    || s == "handle"
     || s == "infixl"
     || s == "infixr"
     || s == "infix"
