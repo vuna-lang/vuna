@@ -1426,6 +1426,7 @@ dtCheckLibraryRecovering ctx names =
   Vuna.Compiler.Common.bind (dtLoadModulesParts ctx names)
     (\parts => recoverElab 8 (dtProjectDecls parts) [] [])
 
+-- | 去掉 ./ 前缀便于路径比较。
 normalizeDiagFile : String -> String
 normalizeDiagFile p =
   if startsWith "./" p then substring (natFromInt 2) (natFromInt (strLength p - 2)) p else p

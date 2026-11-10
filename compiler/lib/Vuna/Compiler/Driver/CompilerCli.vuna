@@ -810,6 +810,7 @@ checkPackageErr pkg e =
   else printDiagWithPrefix "[${packageName pkg}] " e
 
 -- | 包检查恢复入口：可执行包走入口文件，库包走 [export].modules。
+-- | 包检查恢复入口：可执行包走入口文件，库包走导出模块。
 packageRecover : Package -> Diagnostic -> Int
 packageRecover pkg e =
   if runIO (prim_fileExists (packageEntry pkg)) then packageRecoverExe pkg e
