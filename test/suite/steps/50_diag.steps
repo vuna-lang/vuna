@@ -171,3 +171,6 @@ run: "$VUNA" check -W corpus/dt_err/41b_redundant_literal.vuna --json 2>&1
 out-contains: remove redundant literal branch
 run: "$VUNA" check -W corpus/dt_err/41c_branch_after_catchall.vuna --json 2>&1
 out-contains: remove unreachable branch
+# LSP 诊断建议 quick fix 集成：冗余分支删除 + 未使用 binder 改名。
+run: sh corpus/lsp/quickfix.sh "$VUNA"
+out-contains: quickfix: ok
