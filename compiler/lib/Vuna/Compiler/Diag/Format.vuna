@@ -1,5 +1,5 @@
 -- | 诊断渲染：short（首行）/ human（源码片段 + notes）/ JSON。
-module Vuna.Compiler.Diag.Format (renderHuman, renderJson, renderJsonList, renderShort) where
+module Vuna.Compiler.Diag.Format (renderHuman, renderJson, renderJsonList, renderSarif, renderShort) where
 
 -- Vuna.Compiler.Diag.Format：诊断的唯一渲染层（诊断重设计 M5/M6）。
 --
@@ -15,6 +15,7 @@ import Vuna.Compiler.Source
 import Vuna.Compiler.Diag
 import Base.IO.Host
 import Base.Nat
+import Vuna.Compiler.Version
 
 -- ---------------------------------------------------------------
 -- 名称
@@ -268,3 +269,64 @@ renderJson d = jsonDiag d
 renderJsonList : List Diagnostic -> String
 renderJsonList ds =
   "{\"version\":1,\"tool\":\"vuna\",\"diagnostics\":[${join "," (map jsonDiag ds)}]}"
+
+-- ---------------------------------------------------------------
+-- SARIF 2.1.0（CI / 代码扫描消费）
+-- ---------------------------------------------------------------
+sarifLevel : Severity -> String
+sarifLevel SevError = "error"
+sarifLevel SevWarning = "warning"
+sarifLevel SevNote = "note"
+sarifLevel SevHelp = "note"
+
+sarifRuleId : Diagnostic -> String
+sarifRuleId d = if d.diagCode == "" then "vuna" else d.diagCode
+
+sarifRegion : Span -> String
+sarifRegion sp =
+  "{\"startLine\":${spanStartLine sp},\"startColumn\":${spanStartCol sp},\"endLine\":${spanEndLine sp},\"endColumn\":${spanEndCol sp}}"
+
+sarifLocation : String -> Span -> String
+sarifLocation file sp =
+  "{\"physicalLocation\":{\"artifactLocation\":{\"uri\":${jsonStr file}},\"region\":${sarifRegion sp}}}"
+
+sarifRelated : String -> Label -> String
+sarifRelated file l = case l.labelSpan of
+  Nothing => "{\"message\":{\"text\":${jsonStr l.labelText}}}"
+  Just sp => "{\"message\":{\"text\":${jsonStr l.labelText}},\"physicalLocation\":{\"artifactLocation\":{\"uri\":${jsonStr (spanFile sp)}},\"region\":${sarifRegion sp}}}"
+
+sarifResult : Diagnostic -> String
+sarifResult d =
+  let
+    primary = case primarySpan d.diagLabels of
+      Nothing => ""
+      Just sp => ",\"locations\":[${sarifLocation (spanFile sp) sp}]"
+    related = filter (\l => not (isPrimaryLabel l)) d.diagLabels
+    relJson = if length related == 0 then "" else ",\"relatedLocations\":[${join "," (map (sarifRelated (diagFileOf d)) related)}]"
+    notesText = join "\n" (map (\n => "note: ${n}") d.diagNotes)
+    msg = if notesText == "" then d.diagMessage else "${d.diagMessage}\n${notesText}"
+  in "{\"ruleId\":${jsonStr (sarifRuleId d)},\"level\":${jsonStr (sarifLevel d.diagSeverity)},\"message\":{\"text\":${jsonStr msg}}${primary}${relJson}}"
+
+isPrimaryLabel : Label -> Bool
+isPrimaryLabel l = case l.labelStyle of
+  LabelPrimary => True
+  _ => False
+
+-- 规则表：按 code 去重（首次出现的消息作为 shortDescription）。
+sarifRules : List Diagnostic -> String
+sarifRules ds = join "," (map ruleJson (uniqueCodes ds))
+
+uniqueCodes : List Diagnostic -> List String
+uniqueCodes ds = foldl (\acc => \d => if memCode (sarifRuleId d) acc then acc else append acc [sarifRuleId d]) [] ds
+
+memCode : String -> List String -> Bool
+memCode c [] = False
+memCode c (x :: xs) = if c == x then True else memCode c xs
+
+ruleJson : String -> String
+ruleJson code = "{\"id\":${jsonStr code},\"shortDescription\":{\"text\":${jsonStr code}}}"
+
+-- | SARIF 2.1.0 文档（所有诊断进一个 run）。
+renderSarif : List Diagnostic -> String
+renderSarif ds =
+  "{\"$schema\":\"https://json.schemastore.org/sarif-2.1.0.json\",\"version\":\"2.1.0\",\"runs\":[{\"tool\":{\"driver\":{\"name\":\"vuna\",\"version\":${jsonStr vunaVersion},\"rules\":[${sarifRules ds}]}},\"results\":[${join "," (map sarifResult ds)}]}]}"

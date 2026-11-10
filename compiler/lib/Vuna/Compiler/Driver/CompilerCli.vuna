@@ -44,6 +44,37 @@ runCompilerCli args = runCompilerCliFor "vuna-compiler" args
 diagFormatRef : IORef String
 diagFormatRef = runIO (newRef "short")
 
+record SarifBox where
+  sarifItems : List Diagnostic
+  sarifTag : Int
+
+sarifRef : IORef SarifBox
+sarifRef = runIO (newRef (SarifBox [] 0))
+
+resetSarif : Int -> Int
+resetSarif _ = runIO (writeRef sarifRef (SarifBox [] 0))
+
+collectSarif : Diagnostic -> Int
+collectSarif d = runIO (modifyRef sarifRef (\b => SarifBox (append b.sarifItems [d]) 0))
+
+diagExitFor : Diagnostic -> Int
+diagExitFor d = if d.diagInternal then 70
+else case d.diagSeverity of
+  SevError => 1
+  _ => 0
+
+flushSarif : Int -> Int
+flushSarif code =
+  let
+    fmt = diagFormatOf 0
+  in if fmt == "sarif" then
+    let
+      box = runIO (readRef sarifRef)
+      _ = runIO (prim_print (renderSarif box.sarifItems ++ "\n"))
+      _ = resetSarif 0
+    in code
+  else code
+
 denyWarningsRef : IORef Bool
 denyWarningsRef = runIO (newRef False)
 
@@ -95,9 +126,10 @@ runCompilerCliFor prog args =
       Just fmt => runIO (writeRef diagFormatRef fmt)
       Nothing => 0
     kept = stripDenyWarnings (firstOf stripped)
+    _ = resetSarif 0
     _ = runIO (writeRef denyWarningsRef (hasDenyWarnings args))
     _ = runIO (writeRef showWarningsRef (hasDenyWarnings args || hasShowWarnings args))
-  in if anyHelp kept then helpFor prog else runCompilerCliFor1 prog kept
+  in if anyHelp kept then helpFor prog else flushSarif (runCompilerCliFor1 prog kept)
 
 runCompilerCliFor1 : String -> List String -> Int
 runCompilerCliFor1 prog args = case args of
@@ -195,9 +227,22 @@ printDiagWithPrefix : String -> Diagnostic -> Int
 printDiagWithPrefix extra d =
   let
     fmt = diagFormatOf 0
-  in if fmt == "json" then printErrText (renderJson d ++ "\n")
-  else if fmt == "human" then printErrText (renderHuman d ++ "\n")
-  else printErrText (severityLabelOf d ++ ": " ++ extra ++ renderShort d ++ "\n")
+  in if fmt == "json" then
+    let
+      _ = printErrText (renderJson d ++ "\n")
+    in diagExitFor d
+  else if fmt == "human" then
+    let
+      _ = printErrText (renderHuman d ++ "\n")
+    in diagExitFor d
+  else if fmt == "sarif" then
+    let
+      _ = collectSarif d
+    in diagExitFor d
+  else
+    let
+      _ = printErrText (severityLabelOf d ++ ": " ++ extra ++ renderShort d ++ "\n")
+    in diagExitFor d
 
 printDiag : Diagnostic -> Int
 printDiag d = printDiagWithPrefix "" d
@@ -347,8 +392,8 @@ checkPackageSeq pkg code =
     c = case checkPackage pkg of
       ErrC e =>
         let
-          _ = printDiagWithPrefix "[${packageName pkg}] " e
-        in 1
+          failed = printDiagWithPrefix "[${packageName pkg}] " e
+        in failed
       OkC _ =>
         let
           ws = filter (ownedByPackage pkg) (takeWarnings 0)
