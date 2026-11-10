@@ -457,12 +457,13 @@ errorCase env c source expected wantInterp wantCheck wantCompile =
         (withEnvIface env (append [env.envVuna, "compile", diagSource, uniqueOutDir env "${c.caseId}-diag", "--json"] denyArgs))
       else runCmdMerged env "${c.caseId}-diag" env.envCwd c.caseTimeout
         (withEnvIface env (append [env.envVuna, "check", diagSource, "--json"] denyArgs))
-    actualDiag = trimNewlines (combinedOut diagRun)
+    actualDiag = normalizeDiagText env (trimNewlines (combinedOut diagRun))
     diagA = if env.envBlessDiag then
       let
         _ = runIO (writeFile diagPath "${actualDiag}\n")
       in []
-    else if pathExistsFile diagPath then [assertEq "diag json" (trimNewlines (runIO (readFile diagPath))) actualDiag]
+    else if pathExistsFile diagPath then [ assertEq "diag json" (normalizeDiagText env (trimNewlines (runIO (readFile diagPath)))) actualDiag
+    ]
     else []
   in finishCase c.caseId start (append interpA (append checkA (append compileA diagA)))
 
@@ -1679,3 +1680,41 @@ relativeTo base path =
   if startsWith "${base}/" path then substring (natFromInt (strLength base + 1)) (natFromInt (strLength path - strLength base - 1))
     path
   else path
+
+-- 文本替换（诊断 JSON 归一化用；Base.String 没有 replace）。
+replaceAllText : String -> String -> String -> String
+replaceAllText needle replacement haystack =
+  let
+    chars = strUnpack haystack
+  in strPack (reverse (replaceAllGo needle replacement chars [] chars))
+
+replaceAllGo : String -> String -> List Int -> List Int -> List Int -> List Int
+replaceAllGo needle replacement rest acc fuel = case fuel of
+  [] => acc
+  _ :: fs => replaceStep needle replacement rest acc fs
+
+replaceStep : String -> String -> List Int -> List Int -> List Int -> List Int
+replaceStep needle replacement rest acc fs = case rest of
+  [] => acc
+  c :: cs =>
+    if prefixOfInts (strUnpack needle) rest then replaceAllGo needle replacement (dropNInts (length (strUnpack needle)) rest)
+      (append (reverse (strUnpack replacement)) acc) fs
+    else replaceAllGo needle replacement cs (c :: acc) fs
+
+prefixOfInts : List Int -> List Int -> Bool
+prefixOfInts [] _ = True
+prefixOfInts _ [] = False
+prefixOfInts (a :: xs) (b :: ys) = if a == b then prefixOfInts xs ys else False
+
+dropNInts : Int -> List Int -> List Int
+dropNInts n xs = if n <= 0 then xs
+else case xs of
+  [] => []
+  _ :: rest => dropNInts (n - 1) rest
+
+-- 诊断 JSON 里的环境路径归一化（本地工作树 vs nix 构建目录）。
+normalizeDiagText : Env -> String -> String
+normalizeDiagText env text =
+  let
+    t1 = replaceAllText env.envBase "<BASE>" text
+  in replaceAllText env.envRoot "<ROOT>" t1
