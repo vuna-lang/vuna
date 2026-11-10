@@ -116,11 +116,15 @@ takeParseErrors : Int -> List Diagnostic
 takeParseErrors _ =
   let
     b = runIO (readRef parseErrorsRef)
+    _ = runIO (writeRef parseErrorsRef (ParseErrorsBox [] 0))
   in b.parseErrors
 
 -- | 查看解析阶段收集的诊断（不清空）。
 peekParseErrors : Int -> List Diagnostic
-peekParseErrors _ = takeParseErrors 0
+peekParseErrors _ =
+  let
+    b = runIO (readRef parseErrorsRef)
+  in b.parseErrors
 
 -- | 清空解析阶段收集的诊断。
 resetParseErrors : Int -> Int
