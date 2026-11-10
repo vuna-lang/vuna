@@ -83,7 +83,7 @@ compiler/lib/Vuna/Compiler/Diagnostics/Common.vuna: concatLists, diagBody, mkDia
 compiler/lib/Vuna/Compiler/Diagnostics/Ic.vuna: IcEntry(..), IcErr(..), icAll, icCode, icTemplate
 compiler/lib/Vuna/Compiler/Diagnostics/Pkg.vuna: PkgEntry(..), PkgErr(..), pkgAll, pkgAt0, pkgAt1, pkgAt2, pkgCode, pkgInvalid, pkgMsg, pkgNoLoc, pkgNoLoc1, pkgNoLoc2, pkgNoLoc3, pkgPath0, pkgPath1, pkgPath2, pkgTemplate
 compiler/lib/Vuna/Compiler/Diagnostics/Rn.vuna: RnEntry(..), RnErr(..), rnAll, rnAt0, rnAt1, rnAt2, rnCode, rnErr, rnMsg, rnNoLoc0, rnNoLoc1, rnNoLoc2, rnTemplate
-compiler/lib/Vuna/Compiler/Diagnostics/Sink.vuna: emitWarning, resetWarnings, takeWarnings
+compiler/lib/Vuna/Compiler/Diagnostics/Sink.vuna: emitWarning, markImportUsed, resetUsedImports, resetWarnings, takeUsedImports, takeWarnings
 compiler/lib/Vuna/Compiler/Diagnostics/Tc.vuna: TcEntry(..), TcErr(..), tcAll, tcCode, tcCoverageMissing, tcErr, tcErr0, tcErr0NoLoc, tcErr1, tcErr1NoLoc, tcErr2, tcErr2NoLoc, tcErr3, tcMsg, tcTemplate, tcTypeMismatch, tcTypeMismatchNoLoc
 compiler/lib/Vuna/Compiler/Diagnostics/Warning.vuna: WarnEntry(..), WarnErr(..), warnAll, warnAt0, warnAt1, warnCode, warnMsg, warnTemplate
 compiler/lib/Vuna/Compiler/Driver/Cache.vuna: CachedProgram(..), cachedClasses, cachedDatas, cachedDefs, cachedGlobals, cachedInsts, cachedOfProgram, cachedOfProgramWith, cachedProgramIssue, cachedProgramValid, shiftCachedProgram, summaryMetaSegment
