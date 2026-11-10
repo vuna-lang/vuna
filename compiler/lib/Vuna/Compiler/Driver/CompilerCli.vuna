@@ -807,10 +807,12 @@ checkPackageErr : Package -> Diagnostic -> Int
 checkPackageErr pkg e =
   if recoverEnabled pkg then packageRecover pkg e else printDiagWithPrefix "[${packageName pkg}] " e
 
+-- | 恢复模式是否可用（命令行开启且入口存在）。
 recoverEnabled : Package -> Bool
 recoverEnabled pkg =
   runIO (readRef continueOnErrorRef) && runIO (prim_fileExists (packageEntry pkg))
 
+-- | 包入口的恢复式检查（仅可执行包）。
 packageRecover : Package -> Diagnostic -> Int
 packageRecover pkg e = case dtCheckRecovering (packageContext pkg) (packageEntry pkg) of
   OkC ds =>
