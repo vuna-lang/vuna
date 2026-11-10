@@ -170,9 +170,11 @@ hasFormatFlag (arg :: rest) =
   if arg == "--json" || startsWith "--error-format" arg || startsWith "--message-format" arg then True
   else hasFormatFlag rest
 
+-- | 剥离并解析诊断格式参数。
 stripDiagFormat : List String -> Pair (List String) (Maybe String)
 stripDiagFormat args = stripDiagFormatGo args [] Nothing
 
+-- | 诊断格式参数扫描实现。
 stripDiagFormatGo : List String -> List String -> Maybe String -> Pair (List String) (Maybe String)
 stripDiagFormatGo [] acc found = Pair (reverse acc) found
 stripDiagFormatGo ("--json" :: rest) acc found = stripDiagFormatGo rest acc (Just "json")
@@ -186,6 +188,7 @@ stripDiagFormatGo (arg :: rest) acc found =
     (Just (substring (natFromInt 17) (natFromInt (strLength arg - 17)) arg))
   else stripDiagFormatGo rest (arg :: acc) found
 
+-- | 编译器 CLI 入口：剥离诊断参数后分发。
 runCompilerCliFor : String -> List String -> Int
 runCompilerCliFor prog args =
   let
@@ -204,18 +207,22 @@ runCompilerCliFor prog args =
   in if anyHelp kept then helpFor prog else flushSarif (runCompilerCliFor1 prog kept)
 
 -- 剥离 `--max-errors N`（写入全局上限；默认 0 = 不限）。
+-- | 诊断参数解析：十进制数字，失败用默认值。
 parseIntOr : String -> Int -> Int
 parseIntOr s fallback = parseIntChars (strUnpack s) 0 0 fallback
 
+-- | 十进制数字逐字符解析。
 parseIntChars : List Int -> Int -> Int -> Int -> Int
 parseIntChars [] acc count fallback = if count == 0 then fallback else acc
 parseIntChars (c :: cs) acc count fallback =
   if c >= 48 && c <= 57 then parseIntChars cs (acc * 10 + (c - 48)) (count + 1) fallback
   else if count == 0 then fallback else acc
 
+-- | 剥离并解析 --max-errors（写入全局上限）。
 stripMaxErrors : List String -> Pair (List String) Int
 stripMaxErrors args = stripMaxErrorsGo args [] 0
 
+-- | --max-errors 参数扫描实现。
 stripMaxErrorsGo : List String -> List String -> Int -> Pair (List String) Int
 stripMaxErrorsGo [] acc n = Pair (reverse acc) n
 stripMaxErrorsGo ("--max-errors" :: rest) acc n = case rest of
@@ -226,6 +233,7 @@ stripMaxErrorsGo (arg :: rest) acc n =
     (parseIntOr (substring (natFromInt 13) (natFromInt (strLength arg - 13)) arg) n)
   else stripMaxErrorsGo rest (arg :: acc) n
 
+-- | 编译器 CLI 子命令分发。
 runCompilerCliFor1 : String -> List String -> Int
 runCompilerCliFor1 prog args = case args of
   [] => usageErr prog
@@ -338,6 +346,7 @@ printDiagWithPrefix extra d =
       in diagExitFor e
 
 -- 单条诊断按当前格式输出并返回退出码。
+-- | 按当前格式输出单条诊断并返回退出码。
 emitDiag : String -> Diagnostic -> Int
 emitDiag extra d =
   let
@@ -359,6 +368,7 @@ emitDiag extra d =
       _ = printErrText (severityLabelOf d ++ ": " ++ extra ++ renderShort d ++ "\n")
     in diagExitFor d
 
+-- | 输出错误诊断并返回退出码。
 printDiag : Diagnostic -> Int
 printDiag d = printDiagWithPrefix "" d
 

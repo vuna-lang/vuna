@@ -106,18 +106,22 @@ record ParseErrorsBox where
 parseErrorsRef : IORef ParseErrorsBox
 parseErrorsRef = runIO (newRef (ParseErrorsBox [] 0))
 
+-- | 解析阶段记录一条非致命诊断。
 emitParseError : Diagnostic -> Int
 emitParseError d =
   runIO (modifyRef parseErrorsRef (\b => ParseErrorsBox (append b.parseErrors [d]) 0))
 
+-- | 取走解析阶段收集的诊断（不清空）。
 takeParseErrors : Int -> List Diagnostic
 takeParseErrors _ =
   let
     b = runIO (readRef parseErrorsRef)
   in b.parseErrors
 
+-- | 查看解析阶段收集的诊断（不清空）。
 peekParseErrors : Int -> List Diagnostic
 peekParseErrors _ = takeParseErrors 0
 
+-- | 清空解析阶段收集的诊断。
 resetParseErrors : Int -> Int
 resetParseErrors _ = runIO (writeRef parseErrorsRef (ParseErrorsBox [] 0))

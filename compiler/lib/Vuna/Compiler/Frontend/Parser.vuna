@@ -1137,6 +1137,7 @@ foldPCon sp [] = PCon listNilSyntax [] sp
 foldPCon sp (p :: rest) = PCon listConsSyntax [p, foldPCon sp rest] sp
 
 -- 文件加载专用：开启解析恢复（收集多个语法错误），调用范围外恢复短路。
+-- | 文件加载专用：开启解析恢复并收集多条语法错误。
 parseSourceRecovering : String -> String -> Check SourceFile
 parseSourceRecovering file source =
   Vuna.Compiler.Common.bind (lexSource source)
