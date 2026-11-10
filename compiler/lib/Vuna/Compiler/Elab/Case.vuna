@@ -598,8 +598,8 @@ missingCtors : Ctx -> Ec -> List Value -> List String -> List DtCtor -> List Str
 missingCtors ctx ec idxs written [] = []
 missingCtors ctx ec idxs written (ctor :: rest) =
   if memName (dtCtorName ctor) written then missingCtors ctx ec idxs written rest
-  else if branchReachable ctx ec idxs ctor then missingCtors ctx ec idxs written rest
-  else Base.List.Cons (ctorDisplayName (dtCtorName ctor)) (missingCtors ctx ec idxs written rest)
+  else if branchReachable ctx ec idxs ctor then Base.List.Cons (ctorDisplayName (dtCtorName ctor)) (missingCtors ctx ec idxs written rest)
+  else missingCtors ctx ec idxs written rest
 
 checkCaseDone : Ec -> Ctx -> DtData -> List Value -> List (Pair Pat Expr) -> Value -> Span -> Term -> List CaseAlt -> Check (Pair Term Ec)
 checkCaseDone ec ctx dd idxs alts expected sp scrutTerm altTerms =

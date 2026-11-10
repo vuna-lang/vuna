@@ -92,7 +92,7 @@ CLI 开关：`--error-format=short|human|json|sarif`、`--json`、`--message-for
 会把格式透传给成员包子进程；成员包错误带 `[包名]` 前缀。
 
 JSON 字段是机器契约：`code/severity/phase/category/message/labels[]/fields[]`；
-`fields` 目前包含 `expected`/`found`（类型不匹配）、`name`/`candidates`/`call`/`quantity`/
+`fields` 目前包含 `expected`/`found`（类型不匹配/解析期望）、`name`/`candidates`（覆盖性缺失构造子）、`effect`（未处理效应）、`note`（洞目标/元变量归属）、`call`/`quantity`/
 `effect`/`module`/`span`/`note` 的构造器，后续按语义族填充。
 
 ## 5.1 配置（`vuna.toml [diagnostics]`）
@@ -156,10 +156,10 @@ JSON 字段是机器契约：`code/severity/phase/category/message/labels[]/fiel
 | D7.4 类型不匹配 expected/found | 已落地（fields；双端 label 待补） |
 | D7.5 实例搜索 trace | 待办 |
 | D7.6 终止性 call matrix | 待办 |
-| D7.7 覆盖性缺失构造子标签 | 待办 |
+| D7.7 覆盖性缺失构造子标签 | 部分（全部缺失构造子进 `candidates` 字段；无 span 标签） |
 | D7.8 QTT 使用点 | 待办（需要 Core `TSp`） |
 | D7.9 文案规范/门禁 | 待办 |
-| D7.10 explanation/example/`explain` | 部分（模板+中文说明可用；example 待补） |
+| D7.10 explanation/example/`explain` | 部分（模板+中文说明可用；example 待补；元变量/洞已有 `name`/`note` 字段） |
 | 结构化夹具 + 每码覆盖门禁 | 部分（206 个 `.diag.json`；覆盖门禁 90/241，缺口 allowlist 逐码登记） |
 
 ## 10. 后续路线（按依赖排序）
