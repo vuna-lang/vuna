@@ -1,6 +1,7 @@
 module Vuna.Compiler.Frontend.Parser (parseExpressionSource, parseSource) where
 
 -- vuna 源码 parser：offside layout，返回 AST 与 imports。
+import Base.List
 import Vuna.Compiler.Common
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Frontend.Diagnostics
@@ -45,7 +46,7 @@ parseExportItemsFrom : Int -> PState -> Result (Pair (List ExportItem) PState)
 parseExportItemsFrom fuel st =
   if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
   else step (parseExportItem st)
-    (\item, st1 => if atSym st1 "," then step (parseExportItemsFrom (fuel - 1) (advance st1)) (\rest, st2 => Ok (Pair (item :: rest) st2)) else step (expectSym st1 ")") (\_, st2 => Ok (Pair [item] st2)))
+    (\item, st1 => if atSym st1 "," then step (parseExportItemsFrom (fuel - 1) (advance st1)) (\rest, st2 => Ok (Pair (Base.List.Cons item rest) st2)) else step (expectSym st1 ")") (\_, st2 => Ok (Pair [item] st2)))
 
 parseExportItem : PState -> Result (Pair ExportItem PState)
 parseExportItem st = case peekTok st of
@@ -78,7 +79,7 @@ parseImports : Int -> PState -> Result (Pair (List Import) PState)
 parseImports fuel st =
   if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
   else if atKw st "import" then step (parseImportSpec st)
-    (\imp, st1 => step (parseImports (fuel - 1) st1) (\rest, st2 => Ok (Pair (imp :: rest) st2)))
+    (\imp, st1 => step (parseImports (fuel - 1) st1) (\rest, st2 => Ok (Pair (Base.List.Cons imp rest) st2)))
   else Ok (Pair [] st)
 
 -- M31.2：`infixl` / `infixr` / `infix` 声明与顶层声明穿插收集（声明本身不进入 Decl，
@@ -89,9 +90,9 @@ else if isEof st then Ok (Pair (Pair (reverse fixAcc) (reverse declAcc)) st)
 else case peekPos st of
   Pos line col => if col == blockCol then step (parseFixityOrDecl st blockCol) (\p, st1 => case p of
     Pair fd dl => case fd of
-      Just f => parseDecls (fuel - 1) st1 blockCol (f :: fixAcc) declAcc
+      Just f => parseDecls (fuel - 1) st1 blockCol (Base.List.Cons f fixAcc) declAcc
       Nothing => case dl of
-        d :: _ => parseDecls (fuel - 1) st1 blockCol fixAcc (d :: declAcc)
+        d :: _ => parseDecls (fuel - 1) st1 blockCol fixAcc (Base.List.Cons d declAcc)
         [] => Err "DT: internal: parseFixityOrDecl returned nothing"
   )
   else psErr1 (ExpectedDeclAtColumn (strFromInt blockCol)) (strFromInt blockCol)
@@ -243,7 +244,7 @@ else if atKw st "in" then Ok (Pair [] st)
 else case peekPos st of
   Pos line col =>
     if col == bindCol then step (parseBindingItem (fuel - 1) st bindCol)
-      (\item, st1 => step (parseBindingItemsAt (fuel - 1) st1 bindCol) (\rest, st2 => Ok (Pair (item :: rest) st2)))
+      (\item, st1 => step (parseBindingItemsAt (fuel - 1) st1 bindCol) (\rest, st2 => Ok (Pair (Base.List.Cons item rest) st2)))
     else if col > bindCol then psErr0 UnexpectedIndentInBinding else Ok (Pair [] st)
 
 parseBindingItem : Int -> PState -> Int -> Result (Pair BindingItem PState)
@@ -281,7 +282,7 @@ bindingBindsGo : List BindingItem -> List (Pair String (Pair Expr Span)) -> List
 bindingBindsGo [] sigs bound acc = case firstDanglingSig (reverse sigs) bound of
   Nothing => Ok (reverse acc)
   Just (Pair name sp) => Err "${showSpanLoc sp}: ${psMsg (WhereSigNoDef name) [name]}"
-bindingBindsGo (item :: rest) sigs bound acc = case item of
+bindingBindsGo (Base.List.Cons item rest) sigs bound acc = case item of
   BISig name ty sp =>
     if memName name bound then Err "${showSpanLoc sp}: ${psMsg (WhereSigBeforeClause name) [name]}"
     else if hasBindingSig name sigs then Err "${showSpanLoc sp}: ${psMsg (WhereSigDuplicate name) [name]}"
@@ -300,12 +301,13 @@ bindingBindsGo (item :: rest) sigs bound acc = case item of
 -- 不合并，仍按旧的 `WhereSigMultiClause` 报错。
 localFunMerge : String -> Expr -> List (Pair Pat Expr) -> Maybe (List (Pair Pat Expr))
 localFunMerge name value ((Pair (PVar n nsp) (ELocalFun cs0 sp0)) :: rest) = if n == name then case value of
-  ELocalFun cs1 sp1 => Just (Pair (PVar n nsp) (ELocalFun (append cs0 cs1) sp0) :: rest)
+  ELocalFun cs1 sp1 =>
+    Just (Base.List.Cons (Pair (PVar n nsp) (ELocalFun (append cs0 cs1) sp0)) rest)
   _ => Nothing
 else Nothing
 localFunMerge name value ((Pair (PVar n nsp) (EAnn (ELocalFun cs0 sp0) ty annSp)) :: rest) = if n == name then case value of
   ELocalFun cs1 sp1 =>
-    Just (Pair (PVar n nsp) (EAnn (ELocalFun (append cs0 cs1) sp0) ty annSp) :: rest)
+    Just (Base.List.Cons (Pair (PVar n nsp) (EAnn (ELocalFun (append cs0 cs1) sp0) ty annSp)) rest)
   _ => Nothing
 else Nothing
 localFunMerge name value _ = Nothing
@@ -334,7 +336,7 @@ parseClausePatterns : Int -> PState -> Int -> Result (Pair (List Pat) PState)
 parseClausePatterns fuel st blockCol =
   if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
   else if startsPatternAtom st && canContinue st blockCol then step (parsePatternAtom (stateFuel st) st blockCol)
-    (\pat, st1 => step (parseClausePatterns (fuel - 1) st1 blockCol) (\rest, st2 => Ok (Pair (pat :: rest) st2)))
+    (\pat, st1 => step (parseClausePatterns (fuel - 1) st1 blockCol) (\rest, st2 => Ok (Pair (Base.List.Cons pat rest) st2)))
   else Ok (Pair [] st)
 
 -- M38：`lin data ...` / `lin record ...`。kwPos 指向 `linear`，声明 span 从这里开始。
@@ -383,10 +385,11 @@ else if isEof st then Ok (Pair [] st)
 else case peekPos st of
   Pos line col =>
     if col == fieldCol then step (expectIdent st)
-      (\name, st1 => step (expectSym st1 ":") (\_, st2 => step (parseExpr (stateFuel st2) st2 fieldCol 0) (\ty, st3 => step (rejectCtxSuffix st3) (\_, st3b => step (parseFieldList (fuel - 1) st3b fieldCol) (\rest, st4 => Ok (Pair (Field name ty (spanOf st st3) :: rest) st4))))))
+      (\name, st1 => step (expectSym st1 ":") (\_, st2 => step (parseExpr (stateFuel st2) st2 fieldCol 0) (\ty, st3 => step (rejectCtxSuffix st3) (\_, st3b => step (parseFieldList (fuel - 1) st3b fieldCol) (\rest, st4 => Ok (Pair (Base.List.Cons (Field name ty (spanOf st st3)) rest) st4))))))
     else if col > fieldCol then psErr0 UnexpectedIndentInRecord else Ok (Pair [] st)
 
 -- M42：`deriving via field (C...)` 的 `via`/`field` 是上下文标识符，不进关键字表。
+-- | 当前 token 是否是指定名字的标识符（`via`/`field` 等上下文关键字用）。
 atIdentName : PState -> String -> Bool
 atIdentName st name = case peekTok st of
   PTok (TIdent n) _ => n == name
@@ -400,6 +403,7 @@ parseDeriving st =
     (\_, st1 => if atIdentName st1 "via" then step (expectIdent st1) (\_, st2 => step (expectIdent st2) (\fld, st3 => if fld == "field" then parseDerivingParens True st3 else psErr1 (ExpectedToken "field") "field")) else parseDerivingParens False st1)
   else Ok (Pair (Pair [] False) st)
 
+-- | 解析 `deriving` 后的 `(TraitA, TraitB)` 括号列表；`via` 标志原样带回结果。
 parseDerivingParens : Bool -> PState -> Result (Pair (Pair (List String) Bool) PState)
 parseDerivingParens via st =
   step (expectSym st "(")
@@ -409,7 +413,7 @@ parseDerivingNames : Int -> PState -> Result (Pair (List String) PState)
 parseDerivingNames fuel st =
   if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
   else step (expectIdent st)
-    (\name, st1 => if atSym st1 "," then step (parseDerivingNames (fuel - 1) (advance st1)) (\rest, st2 => Ok (Pair (name :: rest) st2)) else step (expectSym st1 ")") (\_, st2 => Ok (Pair [name] st2)))
+    (\name, st1 => if atSym st1 "," then step (parseDerivingNames (fuel - 1) (advance st1)) (\rest, st2 => Ok (Pair (Base.List.Cons name rest) st2)) else step (expectSym st1 ")") (\_, st2 => Ok (Pair [name] st2)))
 
 -- trait 声明（M10.5）：`trait Name params where` + 缩进方法签名 `m : Ty`。
 -- 多参数 trait 参数可带显式 kind：`trait C (a : Type) (r : Row)`（裸参数仍支持）。
@@ -424,7 +428,7 @@ parseTraitParams fuel st = if fuel <= 0 then Err "DT: parser fuel exhausted (int
 else case peekTok st of
   PTok (TIdent name) _ =>
     step (parseTraitParams (fuel - 1) (advance st))
-      (\rest, st1 => Ok (Pair (TraitParam name Nothing :: rest) st1))
+      (\rest, st1 => Ok (Pair (Base.List.Cons (TraitParam name Nothing) rest) st1))
   PTok (TSym "(") _ =>
     step (expectSym st "(")
       (\_, st1 => step (parsePiNames (fuel - 1) st1) (\names, st2 => step (expectSym st2 ":") (\_, st3 => step (parseExpr (stateFuel st3) st3 0 0) (\kind, st4 => step (expectSym st4 ")") (\_, st5 => step (parseTraitParams (fuel - 1) st5) (\rest, st6 => Ok (Pair (append (map (\n => TraitParam n (Just kind)) names) rest) st6)))))))
@@ -442,7 +446,7 @@ else if isEof st then Ok (Pair [] st)
 else case peekPos st of
   Pos line col =>
     if col == methodCol then step (expectIdent st)
-      (\name, st1 => step (expectSym st1 ":") (\_, st2 => step (parseExpr (stateFuel st2) st2 methodCol 0) (\ty, st3 => step (rejectCtxSuffix st3) (\_, st3b => step (parseMethodSigList (fuel - 1) st3b methodCol) (\rest, st4 => Ok (Pair (TraitMethod name ty (spanOf st st3) :: rest) st4))))))
+      (\name, st1 => step (expectSym st1 ":") (\_, st2 => step (parseExpr (stateFuel st2) st2 methodCol 0) (\ty, st3 => step (rejectCtxSuffix st3) (\_, st3b => step (parseMethodSigList (fuel - 1) st3b methodCol) (\rest, st4 => Ok (Pair (Base.List.Cons (TraitMethod name ty (spanOf st st3)) rest) st4))))))
     else if col > methodCol then psErr0 UnexpectedIndentInTrait else Ok (Pair [] st)
 
 -- instance 声明（M10.5 / M29）：`instance [<ctx> ,... =>] Head where` + 缩进方法定义。
@@ -503,7 +507,7 @@ else if isEof st then Ok (Pair [] st)
 else case peekPos st of
   Pos line col =>
     if col == declCol then step (parseInstanceDecl st declCol)
-      (\decl, st1 => step (parseInstanceDeclList (fuel - 1) st1 declCol) (\rest, st2 => Ok (Pair (decl :: rest) st2)))
+      (\decl, st1 => step (parseInstanceDeclList (fuel - 1) st1 declCol) (\rest, st2 => Ok (Pair (Base.List.Cons decl rest) st2)))
     else if col > declCol then psErr0 UnexpectedIndentInInstance else Ok (Pair [] st)
 
 parseInstanceDecl : PState -> Int -> Result (Pair Decl PState)
@@ -519,7 +523,8 @@ parseParams : Int -> PState -> Result (Pair (List String) PState)
 parseParams fuel st = if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
 else case peekTok st of
   PTok (TIdent name) p =>
-    step (parseParams (fuel - 1) (advance st)) (\rest, st1 => Ok (Pair (name :: rest) st1))
+    step (parseParams (fuel - 1) (advance st))
+      (\rest, st1 => Ok (Pair (Base.List.Cons name rest) st1))
   _ => Ok (Pair [] st)
 
 parseCtors : PState -> Int -> Result (Pair (List Ctor) PState)
@@ -533,7 +538,7 @@ else if isEof st then Ok (Pair [] st)
 else case peekPos st of
   Pos line col =>
     if col == ctorCol then step (expectIdent st)
-      (\name, st1 => step (expectSym st1 ":") (\_, st2 => step (parseExpr (stateFuel st2) st2 ctorCol 0) (\ty, st3 => step (rejectCtxSuffix st3) (\_, st3b => step (parseCtorList (fuel - 1) st3b ctorCol) (\rest, st4 => Ok (Pair (Ctor name ty (countArrows ty) (spanOf st st3) :: rest) st4))))))
+      (\name, st1 => step (expectSym st1 ":") (\_, st2 => step (parseExpr (stateFuel st2) st2 ctorCol 0) (\ty, st3 => step (rejectCtxSuffix st3) (\_, st3b => step (parseCtorList (fuel - 1) st3b ctorCol) (\rest, st4 => Ok (Pair (Base.List.Cons (Ctor name ty (countArrows ty) (spanOf st st3)) rest) st4))))))
     else if col > ctorCol then psErr0 UnexpectedIndentInData else Ok (Pair [] st)
 
 parseExpr : Int -> PState -> Int -> Int -> Result (Pair Expr PState)
@@ -592,7 +597,7 @@ parseArgs : Int -> PState -> Int -> Result (Pair (List Expr) PState)
 parseArgs fuel st blockCol =
   if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
   else if startsAtom st && canContinue st blockCol then step (parseAtom (fuel - 1) st blockCol)
-    (\arg, st1 => step (parseArgs (fuel - 1) st1 blockCol) (\rest, st2 => Ok (Pair (arg :: rest) st2)))
+    (\arg, st1 => step (parseArgs (fuel - 1) st1 blockCol) (\rest, st2 => Ok (Pair (Base.List.Cons arg rest) st2)))
   else Ok (Pair [] st)
 
 parseAtom : Int -> PState -> Int -> Result (Pair Expr PState)
@@ -660,10 +665,11 @@ parseTemplateParts fuel file parts = if fuel <= 0 then Err "DT: parser fuel exha
 else case parts of
   [] => Ok []
   (TPText s) :: rest =>
-    Vuna.Compiler.Common.bind (parseTemplateParts (fuel - 1) file rest) (\ps => Ok (IPText s :: ps))
+    Vuna.Compiler.Common.bind (parseTemplateParts (fuel - 1) file rest)
+      (\ps => Ok (Base.List.Cons (IPText s) ps))
   (TPHole toks) :: rest =>
     Vuna.Compiler.Common.bind (parseTemplateHole (toksFuel toks) file toks)
-      (\e => Vuna.Compiler.Common.bind (parseTemplateParts (fuel - 1) file rest) (\ps => Ok (IPHole e :: ps)))
+      (\e => Vuna.Compiler.Common.bind (parseTemplateParts (fuel - 1) file rest) (\ps => Ok (Base.List.Cons (IPHole e) ps)))
 
 -- 一个插值洞：空 token → `TemplateHoleEmpty`；否则必须恰好解析成一个表达式。
 -- 前端诊断本来无位置，这里补上 `line:col:`（Loader 再补文件名），洞内错误才可定位。
@@ -674,8 +680,8 @@ else case toks of
   first :: _ =>
     let
       pos = first.ptokPos
-      sub = PState file toks pos (length toks)
-    in case parseExpr (fuel - 1) sub 0 0 of
+      subState = PState file toks pos (length toks)
+    in case parseExpr (fuel - 1) subState 0 0 of
       Err e => Err (holePosPrefix pos ++ e)
       Ok (Pair e st2) =>
         if isEof st2 then Ok e
@@ -755,7 +761,7 @@ parseRecordAssignList : Int -> PState -> Int -> Result (Pair (List (Pair String 
 parseRecordAssignList fuel st blockCol =
   if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
   else step (expectIdent st)
-    (\fname, st1 => step (expectSym st1 "=") (\_, st2 => step (parseExpr (fuel - 1) st2 blockCol 0) (\value, st3 => if atSym st3 "," then step (parseRecordAssignList (fuel - 1) (advance st3) blockCol) (\rest, st4 => Ok (Pair (Pair fname value :: rest) st4)) else step (expectSym st3 "}") (\_, st4 => Ok (Pair [Pair fname value] st4)))))
+    (\fname, st1 => step (expectSym st1 "=") (\_, st2 => step (parseExpr (fuel - 1) st2 blockCol 0) (\value, st3 => if atSym st3 "," then step (parseRecordAssignList (fuel - 1) (advance st3) blockCol) (\rest, st4 => Ok (Pair (Base.List.Cons (Pair fname value) rest) st4)) else step (expectSym st3 "}") (\_, st4 => Ok (Pair [Pair fname value] st4)))))
 
 parseListExpr : Int -> PState -> Int -> Result (Pair Expr PState)
 parseListExpr fuel st blockCol =
@@ -767,7 +773,7 @@ parseListExprElems : Int -> PState -> Int -> Result (Pair (List Expr) PState)
 parseListExprElems fuel st blockCol =
   if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
   else step (parseExpr (fuel - 1) st blockCol 0)
-    (\e, st1 => if atSym st1 "," then step (parseListExprElems (fuel - 1) (advance st1) blockCol) (\rest, st2 => Ok (Pair (e :: rest) st2)) else if atSym st1 "]" then Ok (Pair [e] (advance st1)) else psErr0 ExpectedCommaOrBracket)
+    (\e, st1 => if atSym st1 "," then step (parseListExprElems (fuel - 1) (advance st1) blockCol) (\rest, st2 => Ok (Pair (Base.List.Cons e rest) st2)) else if atSym st1 "]" then Ok (Pair [e] (advance st1)) else psErr0 ExpectedCommaOrBracket)
 
 -- | 自动补注（M41 新增导出）：foldCons。
 foldCons : Span -> List Expr -> Expr
@@ -828,7 +834,7 @@ else if isEof st then Ok (Pair [] st)
 else case peekPos st of
   Pos line col =>
     if col == altCol then step (parsePatternSingle (stateFuel st) st altCol)
-      (\pat, st1 => Vuna.Compiler.Common.bind (checkNoRepeatedBinders [pat]) (\_ => step (expectSym st1 "=>") (\_, st2 => step (parseExpr (fuel - 1) st2 altCol 0) (\body, st3 => step (parseAltList (fuel - 1) st3 altCol) (\rest, st4 => Ok (Pair (Pair pat body :: rest) st4))))))
+      (\pat, st1 => Vuna.Compiler.Common.bind (checkNoRepeatedBinders [pat]) (\_ => step (expectSym st1 "=>") (\_, st2 => step (parseExpr (fuel - 1) st2 altCol 0) (\body, st3 => step (parseAltList (fuel - 1) st3 altCol) (\rest, st4 => Ok (Pair (Base.List.Cons (Pair pat body) rest) st4))))))
     else Ok (Pair [] st)
 
 parseIf : Int -> PState -> Int -> Result (Pair Expr PState)
@@ -891,7 +897,7 @@ parseDoExprStmt fuel st stmtCol =
 -- 模式递归，通配与字面量不绑定（D40）。
 patBinderBindings : Pat -> List (Pair String Span)
 patBinderBindings (PVar name sp) = [Pair name sp]
-patBinderBindings (PAs name inner sp) = Pair name sp :: patBinderBindings inner
+patBinderBindings (PAs name inner sp) = Base.List.Cons (Pair name sp) (patBinderBindings inner)
 patBinderBindings (PCon cname pats sp) = concatMap patBinderBindings pats
 patBinderBindings (PRecord rname fields sp) =
   concatMap (\f => patBinderBindings (secondOf f)) fields
@@ -907,7 +913,8 @@ firstRepeatedBinding binds = firstRepeatedBindingGo binds []
 firstRepeatedBindingGo : List (Pair String Span) -> List String -> Maybe (Pair String Span)
 firstRepeatedBindingGo [] seen = Nothing
 firstRepeatedBindingGo ((Pair name sp) :: rest) seen =
-  if memName name seen then Just (Pair name sp) else firstRepeatedBindingGo rest (name :: seen)
+  if memName name seen then Just (Pair name sp)
+  else firstRepeatedBindingGo rest (Base.List.Cons name seen)
 
 -- | D40 非线性格检查：一个绑定作用域的模式列表里出现重复绑定名 → 在第二次出现处报
 -- 语法错误（带位置与名字）；合法时返回 Ok 0。
@@ -953,7 +960,7 @@ parseRecordPatternList fuel st blockCol =
   if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
   else if atSym st "}" then Ok (Pair [] (advance st))
   else step (parseRecordPatternField (fuel - 1) st blockCol)
-    (\f, st1 => if atSym st1 "," then step (parseRecordPatternList (fuel - 1) (advance st1) blockCol) (\rest, st2 => Ok (Pair (f :: rest) st2)) else step (expectSym st1 "}") (\_, st2 => Ok (Pair [f] st2)))
+    (\f, st1 => if atSym st1 "," then step (parseRecordPatternList (fuel - 1) (advance st1) blockCol) (\rest, st2 => Ok (Pair (Base.List.Cons f rest) st2)) else step (expectSym st1 "}") (\_, st2 => Ok (Pair [f] st2)))
 
 parseRecordPatternField : Int -> PState -> Int -> Result (Pair (Pair String Pat) PState)
 parseRecordPatternField fuel st blockCol = if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
@@ -971,7 +978,7 @@ parsePatternAtoms : Int -> PState -> Int -> Result (Pair (List Pat) PState)
 parsePatternAtoms fuel st blockCol =
   if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
   else if startsPatternAtom st && canContinue st blockCol then step (parsePatternAtom (fuel - 1) st blockCol)
-    (\pat, st1 => step (parsePatternAtoms (fuel - 1) st1 blockCol) (\rest, st2 => Ok (Pair (pat :: rest) st2)))
+    (\pat, st1 => step (parsePatternAtoms (fuel - 1) st1 blockCol) (\rest, st2 => Ok (Pair (Base.List.Cons pat rest) st2)))
   else Ok (Pair [] st)
 
 parsePatternAtom : Int -> PState -> Int -> Result (Pair Pat PState)
@@ -1035,7 +1042,7 @@ parseListPatternElems : Int -> PState -> Int -> Result (Pair (List Pat) PState)
 parseListPatternElems fuel st blockCol =
   if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
   else step (parsePatternSingle (fuel - 1) st blockCol)
-    (\pat, st1 => if atSym st1 "," then step (parseListPatternElems (fuel - 1) (advance st1) blockCol) (\rest, st2 => Ok (Pair (pat :: rest) st2)) else if atSym st1 "]" then Ok (Pair [pat] (advance st1)) else psErr0 ExpectedCommaOrBracket)
+    (\pat, st1 => if atSym st1 "," then step (parseListPatternElems (fuel - 1) (advance st1) blockCol) (\rest, st2 => Ok (Pair (Base.List.Cons pat rest) st2)) else if atSym st1 "]" then Ok (Pair [pat] (advance st1)) else psErr0 ExpectedCommaOrBracket)
 
 -- | 自动补注（M41 新增导出）：foldPCon。
 foldPCon : Span -> List Pat -> Pat

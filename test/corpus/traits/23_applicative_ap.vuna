@@ -1,0 +1,40 @@
+-- M43 W1：B42 修复后 `ap` 可以作为 Applicative 实例方法；`liftA2` 仍是显式方法
+-- （当前 codegen 的字典投影在 OCaml 侧无类型标注，泛型派生体会破坏
+-- `f a` / `f (a -> b)` 的类型关系，见 Base.Applicative 头注释）。本夹具验证两者
+-- 在自定义实例上语义一致：`ap (pure (\x => x + 1)) (Opt 2)` 与
+-- `liftA2 (\a, b => a + b) (Opt 1) (Opt 2)` 都是 `Opt 3`。
+import Prelude
+
+data Opt a : Type where
+  Opt : a -> Opt a
+  None : Opt a
+
+instance Applicative Opt where
+  pure x = Opt x
+  ap mf mx = case mf of
+    Opt g => case mx of
+      Opt b => Opt (g b)
+      None => None
+    None => None
+  liftA2 f ma mb = case ma of
+    Opt a => case mb of
+      Opt b => Opt (f a b)
+      None => None
+    None => None
+
+showOpt : Opt Int -> String
+showOpt o = case o of
+  Opt n => "Opt " ++ show n
+  None => "None"
+
+inc : Opt Int
+inc = ap (pure (\x => x + 1)) (Opt 2)
+
+sum2 : Opt Int
+sum2 = liftA2 (\a, b => a + b) (Opt 1) (Opt 2)
+
+none : Opt Int
+none = ap (pure (\x => x + 1)) None
+
+main : String
+main = showOpt inc ++ "/" ++ showOpt sum2 ++ "/" ++ showOpt none

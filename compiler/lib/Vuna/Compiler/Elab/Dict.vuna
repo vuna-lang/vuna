@@ -22,6 +22,7 @@ module Vuna.Compiler.Elab.Dict
   , isRigidDictArg
   , memberLookup
   , neutralHeadOrSelf
+  , numMethodOpName
   , resolveDictGoals
   , resolveRowGoalsCtx
   , searchInstanceIn
@@ -35,6 +36,7 @@ module Vuna.Compiler.Elab.Dict
 -- 延迟字典元变量的回填（resolveDictGoals）、运算符特化（==、<、&& 等降到内建/方法投影）。
 -- 这一层必须在 `Elab.Term` 之前：`inferArgs` 的隐式字典插入要调用它。
 -- 拆自 M24 的单一 `Elab.vuna`（按真实调用图切；门面仍是 `Vuna.Compiler.Elab`）。
+import Base.List
 import Vuna.Compiler.Common
 import Base.HashMap
 import Vuna.Compiler.Core
@@ -109,24 +111,29 @@ else
 -- ---------------------------------------------------------------
 -- M42：`deriving via field` 的字典委托（通用 GND：class 集合由底层实例决定）
 -- ---------------------------------------------------------------
+-- | 按类名在类表里查 DtClass；找不到返回 Nothing。
 findClass : String -> List DtClass -> Maybe DtClass
 findClass cn [] = Nothing
 findClass cn (c :: rest) = if dtClassName c == cn then Just c else findClass cn rest
 
+-- | 由类名求出它的字典类型族名（`Dict_<类>`）；类未声明时返回 Nothing。
 famOfClass : Ec -> String -> Maybe String
 famOfClass ec cn = case findClass cn (ecClasses ec) of
   Just c => Just (dictTypeName (dtClassName c))
   Nothing => Nothing
 
+-- | 判断类名列表里是否有某个类的字典族名等于给定族名。
 anyViaClassFam : Ec -> String -> List String -> Bool
 anyViaClassFam ec fam [] = False
 anyViaClassFam ec fam (cn :: rest) = case famOfClass ec cn of
   Just f => if f == fam then True else anyViaClassFam ec fam rest
   Nothing => anyViaClassFam ec fam rest
 
+-- | 判断数据族的 `deriving via field` 类集合是否允许给定字典族委托。
 viaAllowsFam : Ec -> DtData -> String -> Bool
 viaAllowsFam ec d fam = anyViaClassFam ec fam d.dtDataViaClasses
 
+-- | 把数据族的前 n 个参数 Pi 依次应用到实参上；参数不足或形状不符返回 Nothing。
 applyDataPis : Ec -> Int -> Value -> List Value -> Maybe Value
 applyDataPis ec n v args = if n <= 0 then Just v
 else case args of
@@ -135,6 +142,7 @@ else case args of
     VPi _ _ _ _ clo => applyDataPis ec (n - 1) (applyClosure clo a) rest
     _ => Nothing
 
+-- | 求 via 字段的类型：用族参数实例化构造子类型后，取紧接着的那个 Pi 域。
 viaFieldType : Ec -> DtData -> DtCtor -> List Value -> Maybe Value
 viaFieldType ec d c args = if length args /= length d.dtDataParams then Nothing
 else case applyDataPis ec (length d.dtDataParams) (eval [] (dtCtorType c)) args of
@@ -143,37 +151,45 @@ else case applyDataPis ec (length d.dtDataParams) (eval [] (dtCtorType c)) args 
     _ => Nothing
   Nothing => Nothing
 
+-- | 若值是指向某个全局包装族的应用，尝试解析它能提供的 via 字段类型。
 viaWrapperOf : Ec -> String -> Value -> Maybe Value
 viaWrapperOf ec fam arg = case forceVal ec arg of
   VNeutral (NGlobal w wargs) => viaWrapperData ec fam w wargs
   _ => Nothing
 
+-- | 在数据表里查包装族，并在它允许给定字典族时继续按形状取 via 字段类型。
 viaWrapperData : Ec -> String -> String -> List Value -> Maybe Value
 viaWrapperData ec fam w wargs = case findDtData w (ecDatas ec) of
   Nothing => Nothing
   Just d => if viaAllowsFam ec d fam then viaWrapperShape ec d wargs else Nothing
 
+-- | 对可去装箱的单构造子包装族，取唯一保留字段的域作为 via 字段类型。
 viaWrapperShape : Ec -> DtData -> List Value -> Maybe Value
 viaWrapperShape ec d wargs = if memName (dtDataName d) (unboxedFamilySet (ecDatas ec)) then case dtDataCtors d of
   [] => Nothing
   c :: _ => viaFieldType ec d c wargs
 else Nothing
 
+-- | 判断实参列表里是否有某个实参能为给定字典族提供 via 字段。
 anyViaWrapper : Ec -> String -> List Value -> Bool
 anyViaWrapper ec fam [] = False
 anyViaWrapper ec fam (a :: rest) = case viaWrapperOf ec fam a of
   Just _ => True
   Nothing => anyViaWrapper ec fam rest
 
+-- | 目标字典值是否有可用的 via 包装候选（用于实例搜索早退）。
 viaCandidateExists : Ec -> Value -> Bool
 viaCandidateExists ec dom = case forceVal ec dom of
   VNeutral (NGlobal fam args) => anyViaWrapper ec fam args
   _ => False
 
+-- | 把值列表第 i 个元素替换成新值（越界时原样返回已走过的前缀）。
 replaceAt : Int -> Value -> List Value -> List Value
 replaceAt i x [] = []
-replaceAt i x (a :: rest) = if i <= 0 then x :: rest else a :: replaceAt (i - 1) x rest
+replaceAt i x (a :: rest) =
+  if i <= 0 then Base.List.Cons x rest else Base.List.Cons a (replaceAt (i - 1) x rest)
 
+-- | 尝试用 `deriving via field` 委托求字典目标：找到包装候选后逐实参定位字段。
 tryViaDict : List (Pair String Term) -> Ctx -> Int -> Ec -> Value -> Span -> Result (Maybe (Pair Term Ec))
 tryViaDict globals ctx fuel ec dom sp = if fuel <= 0 then Ok Nothing
 else case forceVal ec dom of
@@ -182,6 +198,7 @@ else case forceVal ec dom of
     else Ok Nothing
   _ => Ok Nothing
 
+-- | 在目标实参里找可用的 via 包装；用替换后的字段类型重新搜索字典实例。
 tryViaArgs : List (Pair String Term) -> Ctx -> Int -> Ec -> Span -> String -> List Value -> Int -> Result (Maybe (Pair Term Ec))
 tryViaArgs globals ctx fuel ec sp fam args idx = if fuel <= 0 then Ok Nothing
 else case args of
@@ -197,6 +214,7 @@ else case args of
 -- 族名取 force 后的头部（`Dict_<类>`）；族名不确定时（未解元变量、非字典头）回落全表：
 -- 旧行为依赖 conv 在求解过程中把 dom 解成实例头，此时注册时未知的族不能替它收敛候选。
 -- 建桶用注册时的实例头族名（`instFamilyOf`），与这里取的值来自同一符号，故同族必同键。
+-- | 按目标字典族精确取实例桶；族名不确定（未解元变量或非字典头）时回落全表。
 searchCandidates : Ec -> Value -> List DtInst
 searchCandidates ec dom =
   let
@@ -206,12 +224,12 @@ searchCandidates ec dom =
 specificInstances : List DtInst -> List DtInst
 specificInstances [] = []
 specificInstances (i :: rest) =
-  if isBlanketInst i then specificInstances rest else i :: specificInstances rest
+  if isBlanketInst i then specificInstances rest else Base.List.Cons i (specificInstances rest)
 
 blanketInstances : List DtInst -> List DtInst
 blanketInstances [] = []
 blanketInstances (i :: rest) =
-  if isBlanketInst i then i :: blanketInstances rest else blanketInstances rest
+  if isBlanketInst i then Base.List.Cons i (blanketInstances rest) else blanketInstances rest
 
 finishInstanceSearch : Value -> Span -> List InstMatch -> Ec -> Result (Pair Term Ec)
 finishInstanceSearch dom sp [] ec = missingInstance ec dom sp
@@ -464,7 +482,8 @@ else case forceVal ec rVal of
     else case convEc ec depth eVal h of
       Ok ec1 => MemberFound (ctorValue ec1 hereCtorName [eVal, t]) ec1
       Err _ => case memberLookupRow (fuel - 1) depth ec eVal t of
-        MemberFound sub ec1 => MemberFound (ctorValue ec1 thereCtorName [eVal, h, t, sub]) ec1
+        MemberFound subProof ec1 =>
+          MemberFound (ctorValue ec1 thereCtorName [eVal, h, t, subProof]) ec1
         other => other
     _ => MemberStuck
   else MemberStuck
@@ -578,6 +597,7 @@ else case ecPending ec of
                   ec3 = ecRecordTried ec2 cid solsTried
                 in ecPutPending ec3 (append (ecPending ec3) [kept])
 
+-- | 尝试求解一条延迟约束：行成员走 memberLookup，字典目标走实例搜索并回填元变量。
 tryResolveDictGoal : List (Pair String Term) -> Ec -> Constraint -> Value -> Maybe Ec
 tryResolveDictGoal globals ec (Constraint cid kind m dom cspan cdepth) forced = if isMemberDomain ec dom then case memberLookup 64 0 ec dom of
   MemberFound proof ec2 => case solveRowMeta ec2 m proof of
@@ -827,6 +847,19 @@ isCmpMethod ec name =
     || name == ">"
     || name == ">="
 
+-- D23 Stage1：`Base.Num.add/sub/mul/div` 的方法投影（四则运算符的方法形态）。
+-- 与 `isEqMethod` / `isCmpMethod` 同一套「从类表取投影名」判定，不硬编码模块前缀。
+-- 返回规范运算符名（`+` / `-` / `*` / `/`）：Stage 2 把 `+` 别名到 `add` 后，精化器的
+-- 算术特化靠它把方法投影映射回内建原语名；泛型 `Num a =>` 代码在具体类型未知时由
+-- 调用方回落到普通 trait 应用。
+-- | 把 `Base.Num` 的方法投影映射回规范运算符名（`+` / `-` / `*` / `/`）；不是 Num 方法时返回 `Nothing`。
+numMethodOpName : Ec -> String -> Maybe String
+numMethodOpName ec name =
+  if classHasProjection "Num" "add" name ec then Just "+"
+  else if classHasProjection "Num" "sub" name ec then Just "-"
+  else if classHasProjection "Num" "mul" name ec then Just "*"
+  else if classHasProjection "Num" "div" name ec then Just "/" else Nothing
+
 -- 方法投影的**短名**（`Base.Eq.eq` → `eq`）：特化只按短名选 runtime 函数。
 methodShortOf : String -> String
 methodShortOf name = secondOf (splitLastDot (splitOnDot name))
@@ -1004,9 +1037,11 @@ firstUnsolvedDictGoalGo ec ((Constraint cid kind m dom cspan cdepth) :: rest) = 
 -- C5：第一条未解约束的延迟点 span（只用于给诊断加位置；与 `firstUnsolved*` 选中
 -- 的第一条未解约束一致：都按 pending 顺序扫描、跳过已解 meta）。
 -- D51②：按目标类别精确取第一条未解约束的 span（与 `firstUnsolved*` 选中同一条）。
+-- | 第一条未解 Interp 目标的延迟点 span（按 pending 顺序扫描，跳过已解 meta）。
 firstUnsolvedInterpGoalSpan : Ec -> Maybe Span
 firstUnsolvedInterpGoalSpan ec = firstUnsolvedInterpSpanGo ec (ecPending ec)
 
+-- | firstUnsolvedInterpGoalSpan 的递归实现：只保留 Interp 类目标的 span。
 firstUnsolvedInterpSpanGo : Ec -> List Constraint -> Maybe Span
 firstUnsolvedInterpSpanGo ec [] = Nothing
 firstUnsolvedInterpSpanGo ec ((Constraint cid kind m dom cspan cdepth) :: rest) = case metaLookup m (ecSolTbl ec) of
@@ -1017,9 +1052,11 @@ firstUnsolvedInterpSpanGo ec ((Constraint cid kind m dom cspan cdepth) :: rest) 
     in if valueDictFamily forced == dictTypeName interpTypeName then cspan
     else firstUnsolvedInterpSpanGo ec rest
 
+-- | 第一条未解行成员目标的延迟点 span（按 pending 顺序扫描，跳过已解 meta）。
 firstUnsolvedMemberGoalSpan : Ec -> Maybe Span
 firstUnsolvedMemberGoalSpan ec = firstUnsolvedMemberSpanGo ec (ecPending ec)
 
+-- | firstUnsolvedMemberGoalSpan 的递归实现：只保留行成员目标的 span。
 firstUnsolvedMemberSpanGo : Ec -> List Constraint -> Maybe Span
 firstUnsolvedMemberSpanGo ec [] = Nothing
 firstUnsolvedMemberSpanGo ec ((Constraint cid kind m dom cspan cdepth) :: rest) = if isMemberDomain ec dom then case metaLookup m (ecSolTbl ec) of
@@ -1027,9 +1064,11 @@ firstUnsolvedMemberSpanGo ec ((Constraint cid kind m dom cspan cdepth) :: rest) 
   Just _ => firstUnsolvedMemberSpanGo ec rest
 else firstUnsolvedMemberSpanGo ec rest
 
+-- | 第一条未解普通字典目标的延迟点 span（跳过 Interp、行成员、含未解 meta 与刚性参数的目标）。
 firstUnsolvedDictGoalSpan : Ec -> Maybe Span
 firstUnsolvedDictGoalSpan ec = firstUnsolvedDictSpanGo ec (ecPending ec)
 
+-- | firstUnsolvedDictGoalSpan 的递归实现，按与 firstUnsolvedDictGoal 相同的类别过滤。
 firstUnsolvedDictSpanGo : Ec -> List Constraint -> Maybe Span
 firstUnsolvedDictSpanGo ec [] = Nothing
 firstUnsolvedDictSpanGo ec ((Constraint cid kind m dom cspan cdepth) :: rest) = case metaLookup m (ecSolTbl ec) of

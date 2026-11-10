@@ -21,6 +21,7 @@ import Base.IORef
 import Base.Monad
 import Base.Ord
 import Base.Result
+import Base.Num
 
 -- | 单线程协作式互斥锁：内部是取值 0/1 的 `IORef`（构造器不导出）。
 data Mutex : Type where

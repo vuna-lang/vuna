@@ -417,14 +417,14 @@ and v_Vuna_dCompiler_dFrontend_dParser_dparseTemplateParts = (fun fuel file part
 )) parts)))
 and v_Vuna_dCompiler_dFrontend_dParser_dparseTemplateHole = (fun fuel file toks -> (if (fuel <= 0) then (Base_dResult.C_Base_dResult_dResult_Err ("DT: parser fuel exhausted (internal: parser made no progress)")) else (match toks with
   | Base_dList.C_Base_dList_dList_Nil -> (Vuna_dCompiler_dFrontend_dDiagnostics.v_Vuna_dCompiler_dFrontend_dDiagnostics_dpsErr0 Vuna_dCompiler_dFrontend_dDiagnostics.C_Vuna_dCompiler_dFrontend_dDiagnostics_dPsDiag_TemplateHoleEmpty)
-  | Base_dList.C_Base_dList_dList_Cons (dtb__200, dtb__201) -> ((fun pos -> ((fun sub -> ((fun nd_uscrut8 -> (match nd_uscrut8 with
+  | Base_dList.C_Base_dList_dList_Cons (dtb__200, dtb__201) -> ((fun pos -> ((fun subState -> ((fun nd_uscrut8 -> (match nd_uscrut8 with
   | Base_dResult.C_Base_dResult_dResult_Ok (dtb__202) -> (match dtb__202 with
   | Base_dPair.C_Base_dPair_dPair_Pair (dtb__203, dtb__204) -> (if (Vuna_dCompiler_dFrontend_dParser_dSupport.v_Vuna_dCompiler_dFrontend_dParser_dSupport_disEof dtb__204) then (Base_dResult.C_Base_dResult_dResult_Ok (dtb__203)) else (Base_dResult.C_Base_dResult_dResult_Err (((v_Vuna_dCompiler_dFrontend_dParser_dholePosPrefix pos) ^ "[PS_ExpectedEndOfExpr] expected end of expression"))))
   | _ -> failwith "DT: impossible branch"
 )
   | Base_dResult.C_Base_dResult_dResult_Err (dtb__205) -> (Base_dResult.C_Base_dResult_dResult_Err (((v_Vuna_dCompiler_dFrontend_dParser_dholePosPrefix pos) ^ dtb__205)))
   | _ -> failwith "DT: impossible branch"
-)) ((((v_Vuna_dCompiler_dFrontend_dParser_dparseExpr (fuel - 1)) sub) 0) 0))) (Vuna_dCompiler_dFrontend_dParser_dSupport.C_Vuna_dCompiler_dFrontend_dParser_dSupport_dPState_PState (file, toks, pos, (Base_dList.v_Base_dList_dlength toks))))) (match dtb__200 with
+)) ((((v_Vuna_dCompiler_dFrontend_dParser_dparseExpr (fuel - 1)) subState) 0) 0))) (Vuna_dCompiler_dFrontend_dParser_dSupport.C_Vuna_dCompiler_dFrontend_dParser_dSupport_dPState_PState (file, toks, pos, (Base_dList.v_Base_dList_dlength toks))))) (match dtb__200 with
   | Vuna_dCompiler_dFrontend_dLexer.C_Vuna_dCompiler_dFrontend_dLexer_dPTok_PTok (dtb__206, dtb__207) -> dtb__207
   | _ -> failwith "DT: impossible branch"
 ))

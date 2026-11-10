@@ -1,4 +1,6 @@
 open Vuna_runtime
+let v_Num_uBase_uNat_uNat = (Base_dNum.C_Dict_uBase_dNum_dNum_Num ((fun x y -> (bi_natAdd x y)), (fun x y -> (bi_natSub x y)), (fun x y -> (bi_natMul x y)), (fun x y -> (bi_natDiv x y))))
+
 let v_Monoid_uBase_uNat_uNat = (Base_dMonoid.C_Dict_uBase_dMonoid_dMonoid_Monoid (0))
 
 let v_Base_dNat_dplus = (fun _uarity0 _uarity1 -> (bi_natAdd _uarity0 _uarity1))
@@ -8,8 +10,6 @@ let v_Semigroup_uBase_uNat_uNat = (Base_dMonoid.C_Dict_uBase_dMonoid_dSemigroup_
 let v_Base_dNat_dminus = (fun _uarity0 _uarity1 -> (bi_natSub _uarity0 _uarity1))
 
 let v_Base_dNat_dmult = (fun _uarity0 _uarity1 -> (bi_natMul _uarity0 _uarity1))
-
-let v_Base_dNat_ddiv = (fun _uarity0 _uarity1 -> (bi_natDiv _uarity0 _uarity1))
 
 let v_Base_dNat_dtoInt = (fun _uarity0 -> _uarity0)
 

@@ -1,8 +1,8 @@
-add : Int -> Int -> Int
-add x y = x + y
+addFn : Int -> Int -> Int
+addFn x y = x + y
 
 inc : Int -> Int
-inc = \x => add 1 x
+inc = \x => addFn 1 x
 
 main : Int
 main = inc 41

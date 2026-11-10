@@ -29,6 +29,7 @@ module Vuna.Compiler.Driver.Owner
 import Vuna.Compiler.Common
 import Vuna.Compiler.Elab
 import Vuna.Compiler.Frontend.Ast
+import Vuna.Compiler.Intrinsics
 import Base.HashMap
 
 splitNoSpan : Span
@@ -84,9 +85,9 @@ splitInstanceOwnerOf owner (DRecord dname params fields derivings viaField lin s
 splitInstanceOwnerOf owner _ = []
 
 hasFieldRecordTypeExpr : String -> List String -> Expr
-hasFieldRecordTypeExpr dname params = case params of
-  [] => EVar dname splitNoSpan
-  _ => EApp (EVar dname splitNoSpan) (map (\p => EVar p splitNoSpan) params) splitNoSpan
+hasFieldRecordTypeExpr dname [] = EVar dname splitNoSpan
+hasFieldRecordTypeExpr dname params =
+  EApp (EVar dname splitNoSpan) (map (\p => EVar p splitNoSpan) params) splitNoSpan
 
 hasFieldOwnerOf : String -> String -> List String -> Field -> Pair String String
 hasFieldOwnerOf owner dname params f =
@@ -185,11 +186,18 @@ splitDataOwnerOf meta d = case Base.HashMap.lookup (dtDataName d) meta.smDataOwn
     if containsDot (dtDataName d) then knownModuleOrErr meta.smKnownModules "data" (dtDataName d)
     else Err "DT split: cannot determine module for data `${dtDataName d}`"
 
+-- D17：Elab 收尾合成的内部名字（`@vuna@` 前缀，如 `@vuna@main_show`）不属于任何源
+-- 模块、也没有模块前缀；它们由入口收尾阶段产生，归入口单元 `Main`。
+-- 只放行这一族名字：普通无前缀定义仍按「无法确定模块」报错（不静默归到入口）。
+isSyntheticInternalName : String -> Bool
+isSyntheticInternalName name = name == mainShowDefName || startsWith "@vuna@" name
+
 splitDefOwnerOf : SplitMeta -> String -> Result String
 splitDefOwnerOf meta name = case Base.HashMap.lookup name meta.smDefOwnerT of
   Just o => Ok o
   Nothing =>
     if containsDot name then knownModuleOrErr meta.smKnownModules "definition" name
+    else if isSyntheticInternalName name then Ok entryOwner
     else Err "DT split: cannot determine module for definition `${name}`"
 
 nameOwnerPairsOfDefs : SplitMeta -> List DtDef -> Result (List (Pair String String))

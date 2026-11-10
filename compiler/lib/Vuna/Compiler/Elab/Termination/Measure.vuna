@@ -38,6 +38,7 @@ module Vuna.Compiler.Elab.Termination.Measure
   , hasWeakCycleGo
   , isDescent
   , isMapLike
+  , isSubOpName
   , joinComma
   , lookupGroup
   , markInvalid
@@ -570,8 +571,14 @@ posVarIn x p caller facts region = memName x region || posHasTbl caller p facts
 
 arithRel : Int -> Expr -> List (Pair String (Pair Int (Pair Int (List Int)))) -> String -> HashMap String (List Int) -> List String -> Maybe Int
 arithRel p (EApp (EVar op osp) args sp) sizes caller facts region =
-  if op == "-" then arithMinus p args sizes caller facts region else Nothing
+  if isSubOpName op then arithMinus p args sizes caller facts region else Nothing
 arithRel p _ sizes caller facts region = Nothing
+
+-- D23：`-` 在 Stage2b 起是 `Base.Num.sub` 的方法别名（Loader 在名字解析前替换），
+-- 终止性检查里「fuel 递减」只看减法语义，因此两种写法都认。
+-- | `-` 的两种写法：内建运算符名与 `Base.Num.sub` 方法投影（D23 别名替换后）。
+isSubOpName : String -> Bool
+isSubOpName op = op == "-" || op == "Base.Num.sub"
 
 arithMinus : Int -> List Expr -> List (Pair String (Pair Int (Pair Int (List Int)))) -> String -> HashMap String (List Int) -> List String -> Maybe Int
 arithMinus p ([base, EInt k ksp]) sizes caller facts region =

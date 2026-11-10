@@ -1,0 +1,10 @@
+-- B43：推断位（无期望类型）不再默认 Base.List。`Nil` 在 List 与 Row 都有同名构造子
+-- （两族都已 import），多候选必须报 TC_AmbiguousCtor，由用户补期望类型消歧。
+import Base.Eff
+import Base.List
+
+bad : Int
+bad = let xs = Nil in 0
+
+main : Int
+main = 0

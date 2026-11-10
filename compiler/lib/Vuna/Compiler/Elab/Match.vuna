@@ -15,6 +15,7 @@ module Vuna.Compiler.Elab.Match (allVarPats, multiToCaseExpr, multiToExpr) where
 -- （见 `subNamesFor`），否则层间同名会让外层 rename 抓到内层 binder。嵌套的矩阵降级
 -- （内层 source case 各自降级）之间靠调用方传入的位置名区分（`checkCaseMatrixFuel` 用
 -- 上下文深度做前缀）。
+import Base.List
 import Vuna.Compiler.Common
 import Vuna.Compiler.Diagnostics
 import Vuna.Compiler.Frontend.Ast
@@ -363,7 +364,7 @@ else
     branchPats = map (\n => PVar n (Span "" 0 0 0 0)) freshSubs
     expanded = clausesForCtor cname branchPats pos clauses
   in Vuna.Compiler.Common.bind (buildColumnExpr table expanded subParams (fuel - 1))
-    (\bodyExpr => Vuna.Compiler.Common.bind (ctorAltListGo table clauses rest pos restParams (fuel - 1)) (\tail => Ok (Pair (PCon cname branchPats (Span "" 0 0 0 0)) bodyExpr :: tail)))
+    (\bodyExpr => Vuna.Compiler.Common.bind (ctorAltListGo table clauses rest pos restParams (fuel - 1)) (\tail => Ok (Base.List.Cons (Pair (PCon cname branchPats (Span "" 0 0 0 0)) bodyExpr) tail)))
 
 -- 该构造子在本列各 clause 里的子模式个数（取第一个匹配 clause 的长度）。
 ctorSubPatCount : List (Pair (List Pat) Expr) -> String -> Int
@@ -398,7 +399,8 @@ ctorHeads (c :: rest) = case c of
 
 addNameDistinct : String -> List String -> List String
 addNameDistinct name [] = [name]
-addNameDistinct name (x :: rest) = if x == name then x :: rest else x :: addNameDistinct name rest
+addNameDistinct name (x :: rest) =
+  if x == name then Base.List.Cons x rest else Base.List.Cons x (addNameDistinct name rest)
 
 -- 该构造子分支的「匹配子句」：PCon 子句保留其子模式；变量/通配子句分发进该分支，
 -- 用分支的新鲜子名（`freshSubs`）占位、并把体里的变量引用改写成该列 scrutinee（`pos`），
@@ -408,7 +410,7 @@ clausesForCtor cname freshSubs pos [] = []
 clausesForCtor cname freshSubs pos (c :: rest) = case c of
   Pair (p :: ps) body => case p of
     PCon cn subpats psp =>
-      if cn == cname then Pair (append subpats ps) body :: clausesForCtor cname freshSubs pos rest
+      if cn == cname then Base.List.Cons (Pair (append subpats ps) body) (clausesForCtor cname freshSubs pos rest)
       else clausesForCtor cname freshSubs pos rest
     PVar nm psp =>
       Pair (append freshSubs ps) (renameExpr nm pos body) :: clausesForCtor cname freshSubs pos rest
@@ -419,7 +421,8 @@ clausesForCtor cname freshSubs pos (c :: rest) = case c of
 filterFallback : List (Pair (List Pat) Expr) -> List (Pair (List Pat) Expr)
 filterFallback [] = []
 filterFallback (c :: rest) = case c of
-  Pair (p :: ps) body => if isVarPatD p then c :: filterFallback rest else filterFallback rest
+  Pair (p :: ps) body =>
+    if isVarPatD p then Base.List.Cons c (filterFallback rest) else filterFallback rest
   Pair [] body => filterFallback rest
 
 -- 兜底分支：变量/通配 head 的 clause 在**这一列**被通配吃掉，体里对该变量的引用

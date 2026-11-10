@@ -1,0 +1,7 @@
+-- D17：非内建 `main` 类型没有 `Show` 实例 → 精化期 TC_NoInstanceFound
+-- （替代旧实现到 codegen 阶段才报 `CG_MainReturnType` 的行为；该错误码已随 D17 删除）。
+data NoShow : Type where
+  MkNoShow : NoShow
+
+main : NoShow
+main = MkNoShow

@@ -27,7 +27,6 @@ module Vuna.Compiler.Elab.Case
   , isRigidVal
   , nestedInPat
   , occursLevel
-  , occursLevelClo
   , occursLevelList
   , patIrrefutable
   , patsAllIrrefutable
@@ -38,6 +37,7 @@ module Vuna.Compiler.Elab.Case
   , unifyIdx
   , unifyIdxConv
   , unifyIdxList
+  , unifyIdxListSized
   , unifyIdxRigid
   , wildArgs
   ) where
@@ -52,12 +52,14 @@ module Vuna.Compiler.Elab.Case
 -- 与写出一个分支（elabConAlt）都跑同一套「索引合一 + 上下文空族」判定；上下文空族又
 -- 统一落到 `allCtorsUnsatisfiable`（`isEmptyFamilyValue` 的唯一实现）。三条精化路径
 -- （直接 / 去重降级 / 嵌套模式折叠）也收敛成「先降级成模式矩阵，或直接走规范形」。
+import Base.List
 import Vuna.Compiler.Common
 import Vuna.Compiler.Core
 import Vuna.Compiler.Diagnostics
 import Vuna.Compiler.Elab.Meta
 import Vuna.Compiler.Elab.Types
 import Vuna.Compiler.Frontend.Ast
+import Vuna.Compiler.Intrinsics
 
 -- ---------------------------------------------------------------
 -- M14：索引合一（unifyIdx）
@@ -82,6 +84,83 @@ unifyIdxListGo ec acc depth fuel (x :: xs) (y :: ys) =
     (\acc2 => unifyIdxList ec acc2 depth (fuel - 1) xs ys)
 unifyIdxListGo ec acc depth fuel _ _ = unifyErr
 
+-- ---------------------------------------------------------------
+-- D24：索引合一入口的 fuel 派生
+-- ---------------------------------------------------------------
+-- Vec 字面量把长度索引展开成 `Succ` 链；入口固定 512 对 ≥64 层的索引不够（逐层
+-- unifyIdx 大约消耗 4 步）。入口按两侧值里的 Nat 链前缀深度派生燃料（上限 `idxFuelMax`
+-- 防失控输入）。**只动入口**：递归路径仍按递减 fuel 走，`unifyIdxList` 的 SCT 终止性
+-- 证明不受影响。
+unifyIdxListSized : Ec -> List (Pair Int Value) -> Int -> List Value -> List Value -> Result (List (Pair Int Value))
+unifyIdxListSized ec acc depth xs ys = unifyIdxList ec acc depth (idxFuelFor xs ys) xs ys
+
+idxFuelFor : List Value -> List Value -> Int
+idxFuelFor xs ys =
+  let
+    need = 512 + 4 * (idxNatDepthOfList xs + idxNatDepthOfList ys)
+  in if need > idxFuelMax then idxFuelMax else need
+
+idxFuelMax : Int
+idxFuelMax = 1000000
+
+idxNatDepthOfList : List Value -> Int
+idxNatDepthOfList [] = 0
+idxNatDepthOfList (v :: rest) =
+  let
+    d = idxNatDepthNear v
+    r = idxNatDepthOfList rest
+  in if d >= r then d else r
+
+-- 浅探：根值或直接参数 / 脊实参里的 Nat 链前缀深度（失败形态是 `Vec (Succ^k Zero) a`，
+-- 索引链在直接参数里）。
+idxNatDepthNear : Value -> Int
+idxNatDepthNear v = if idxIsNatHead v then idxNatPrefixDepth v
+else case v of
+  VCon c args => idxNatDepthOfList args
+  VNeutral n => case n of
+    NGlobal g sp => idxNatDepthOfList sp
+    NVar name lvl sp => idxNatDepthOfList sp
+  VApp f a => if idxIsNatHead a then idxNatPrefixDepth a else 0
+  _ => 0
+
+idxIsNatHead : Value -> Bool
+idxIsNatHead (VCon c _) = idxIsNatCtor c
+idxIsNatHead (VNeutral n) = case n of
+  NGlobal c _ => idxIsNatCtor c
+  _ => False
+idxIsNatHead (VApp f a) = idxIsNatHead f
+idxIsNatHead _ = False
+
+idxIsNatCtor : String -> Bool
+idxIsNatCtor c = c == natZeroCtor || c == natSuccCtor
+
+-- Nat 链前缀深度 = 前导 `Succ` 层数（不要求以 `Zero` 收尾）。
+idxNatPrefixDepth : Value -> Int
+idxNatPrefixDepth v = idxNatPrefixGo 100000 v
+
+idxNatPrefixGo : Int -> Value -> Int
+idxNatPrefixGo fuel v = if fuel <= 0 then 100000
+else case v of
+  VCon c args => if c == natSuccCtor then case args of
+    [a] => 1 + idxNatPrefixGo (fuel - 1) a
+    _ => 0
+  else 0
+  VNeutral n => case n of
+    NGlobal c sp => if c == natSuccCtor then case sp of
+      [a] => 1 + idxNatPrefixGo (fuel - 1) a
+      _ => 0
+    else 0
+    _ => 0
+  VApp f a => if idxIsNatSuccHead f then 1 + idxNatPrefixGo (fuel - 1) a else 0
+  _ => 0
+
+idxIsNatSuccHead : Value -> Bool
+idxIsNatSuccHead (VCon c _) = c == natSuccCtor
+idxIsNatSuccHead (VNeutral n) = case n of
+  NGlobal c _ => c == natSuccCtor
+  _ => False
+idxIsNatSuccHead _ = False
+
 -- | 自动补注（M41 新增导出）：unifyIdx。
 unifyIdx : Ec -> List (Pair Int Value) -> Int -> Int -> Value -> Value -> Result (List (Pair Int Value))
 unifyIdx ec acc depth fuel a b = if fuel <= 0 then Err (tcMsg IndexFuel [])
@@ -93,37 +172,68 @@ else
     VNeutral (NVar an al []) => case b2 of
       VNeutral (NVar bn bl []) =>
         if al == bl then Ok acc
-        else if al < bl then if occursLevel bl a2 then unifyErr else Ok (Pair bl a2 :: acc)
-        else if occursLevel al b2 then unifyErr else Ok (Pair al b2 :: acc)
-      _ => if occursLevel al b2 then unifyErr else Ok (Pair al b2 :: acc)
+        else if al < bl then if occursLevel occursFuel depth bl a2 then unifyErr
+        else Ok (Base.List.Cons (Pair bl a2) acc)
+        else if occursLevel occursFuel depth al b2 then unifyErr
+        else Ok (Base.List.Cons (Pair al b2) acc)
+      _ =>
+        if occursLevel occursFuel depth al b2 then unifyErr
+        else Ok (Base.List.Cons (Pair al b2) acc)
     _ => case b2 of
-      VNeutral (NVar bn bl []) => if occursLevel bl a2 then unifyErr else Ok (Pair bl a2 :: acc)
+      VNeutral (NVar bn bl []) =>
+        if occursLevel occursFuel depth bl a2 then unifyErr
+        else Ok (Base.List.Cons (Pair bl a2) acc)
       _ => unifyIdxRigid ec acc depth (fuel - 1) a2 b2
 
 -- occurs check：精化成自己会导致无限链。
-occursLevel : Int -> Value -> Bool
-occursLevel lvl (VNeutral n) = case n of
-  NVar name l sp => l == lvl || occursLevelList lvl sp
-  NGlobal g sp => occursLevelList lvl sp
-occursLevel lvl (VPi name implicit rig dom clo) = occursLevel lvl dom || occursLevelClo lvl clo
-occursLevel lvl (VLam name rig clo) = occursLevelClo lvl clo
-occursLevel lvl (VMeta m sp) = occursLevelList lvl sp
-occursLevel lvl (VCon c args) = occursLevelList lvl args
-occursLevel lvl (VApp f a) = occursLevel lvl f || occursLevel lvl a
-occursLevel lvl (VCase scrut alts) = occursLevel lvl scrut
-occursLevel lvl (VIf c th el) = occursLevel lvl c || occursLevel lvl th || occursLevel lvl el
-occursLevel lvl (VType l) = False
-occursLevel lvl (VInt n) = False
-occursLevel lvl (VStr s) = False
-occursLevel lvl (VFloat raw) = False
-occursLevel lvl (VBool b) = False
+-- `depth` 是当前上下文深度：Pi/Lam 的闭包必须用**新鲜变量**实例化后扫描，不能扫
+-- `Closure.env`——env 里恰好包含被合一分支的局部 ctx（例如 `Wrap (Int -> Int)` 的构造子
+-- tele 变量被精化成捕获局部变量的 Pi），按 env 扫会把「引用了分支作用域内的变量」误判成
+-- 「引用了 lvl」，于是索引合一失败、合法分支被报 `TC_ImpossibleBranchIndex`（B42）。
+-- 实例化变量用 `_occurs` 这个名字 + 不与 `lvl` 相同的 level（见 occursFreshLevel）。
+-- 扫描带 fuel：实例化闭包后递归不再沿值结构下降（SCT 无法证明终止），用递减 fuel 兜底；
+-- true 才是真 occurs，fuel 耗尽的 False 只会因为值异常巨大而发生（实际扫描深度 = 值大小）。
+occursLevel : Int -> Int -> Int -> Value -> Bool
+occursLevel fuel depth lvl v = if fuel <= 0 then False
+else case v of
+  VNeutral n => case n of
+    NVar name l sp => l == lvl || occursLevelList (fuel - 1) depth lvl sp
+    NGlobal g sp => occursLevelList (fuel - 1) depth lvl sp
+  VPi name implicit rig dom clo =>
+    occursLevel (fuel - 1) depth lvl dom
+      || occursLevel (fuel - 1) depth lvl (applyClosure clo (VNeutral (NVar "_occurs" (occursFreshLevel depth lvl) [])))
+  VLam name rig clo =>
+    occursLevel (fuel - 1) depth lvl
+      (applyClosure clo (VNeutral (NVar "_occurs" (occursFreshLevel depth lvl) [])))
+  VMeta m sp => occursLevelList (fuel - 1) depth lvl sp
+  VCon c args => occursLevelList (fuel - 1) depth lvl args
+  VApp f a => occursLevel (fuel - 1) depth lvl f || occursLevel (fuel - 1) depth lvl a
+  VCase scrut alts => occursLevel (fuel - 1) depth lvl scrut
+  VIf c th el =>
+    occursLevel (fuel - 1) depth lvl c
+      || occursLevel (fuel - 1) depth lvl th
+      || occursLevel (fuel - 1) depth lvl el
+  VType l => False
+  VInt n => False
+  VStr s => False
+  VFloat raw => False
+  VBool b => False
 
-occursLevelList : Int -> List Value -> Bool
-occursLevelList lvl [] = False
-occursLevelList lvl (v :: rest) = occursLevel lvl v || occursLevelList lvl rest
+-- 实例化 Pi/Lam 用的新鲜变量 level：正常情况下就是 ctx depth（与更内层的 ctx 变量区分）；
+-- 但 unify 的「新鲜 tele 变量」也从 depth 起编号，`lvl` 可能恰好等于 depth——那时用 depth
+-- 会把新鲜变量自己当成 occurs（误判），退一格用 lvl + 1。
+occursFreshLevel : Int -> Int -> Int
+occursFreshLevel depth lvl = if depth == lvl then lvl + 1 else depth
 
-occursLevelClo : Int -> Closure -> Bool
-occursLevelClo lvl (Closure env body) = occursLevelList lvl env
+occursLevelList : Int -> Int -> Int -> List Value -> Bool
+occursLevelList fuel depth lvl [] = False
+occursLevelList fuel depth lvl (v :: rest) =
+  occursLevel (fuel - 1) depth lvl v || occursLevelList (fuel - 1) depth lvl rest
+
+-- occurs 扫描的 fuel 余量：值可能很大（Nat 字面量索引展开成链），给足上限；真正的递归
+-- 深度由值的大小决定，不会到满额。
+occursFuel : Int
+occursFuel = 1000000
 
 -- 刚性位置：构造子/中性头按结构递归，其余回落到 conv 的相等性判定。
 unifyIdxRigid : Ec -> List (Pair Int Value) -> Int -> Int -> Value -> Value -> Result (List (Pair Int Value))
@@ -187,7 +297,7 @@ branchVerdict : Ctx -> Ec -> List Value -> DtCtor -> BranchVerdict
 branchVerdict ctx ec idxs ctor = case bindCtorTele ctx (dtCtorType ctor) (wildArgs (ctorExplicitArity (dtCtorType ctor))) of
   Err e => BranchOk
   Ok (Pair branchCtx (Pair binders leftover)) => if nonEmpty leftover then BranchOk
-  else case unifyIdxList ec [] (ctxDepth branchCtx) defaultFuel (ctorResultValsIn branchCtx ctor) (map (\v => refineValue [] defaultFuel v) idxs) of
+  else case unifyIdxListSized ec [] (ctxDepth branchCtx) (ctorResultValsIn branchCtx ctor) (map (\v => refineValue [] defaultFuel v) idxs) of
     Err e => BranchImpossibleIndex
     Ok refs => branchAfterUnify ec branchCtx refs
 
@@ -195,7 +305,7 @@ branchReachable : Ctx -> Ec -> List Value -> DtCtor -> Bool
 branchReachable ctx ec idxs ctor = branchIsReachable (branchVerdict ctx ec idxs ctor)
 
 wildArgs : Int -> List Pat
-wildArgs n = if n <= 0 then [] else PWild (Span "" 0 0 0 0) :: wildArgs (n - 1)
+wildArgs n = if n <= 0 then [] else Base.List.Cons (PWild (Span "" 0 0 0 0)) (wildArgs (n - 1))
 
 -- 构造子类型的显式 binder 个数 = case 分支要写的模式个数（隐式 binder 由 bindCtorTele 自理）。
 ctorExplicitArity : Term -> Int
@@ -246,7 +356,7 @@ allCtorsUnsatisfiable ec dd idxs depth = allCtorsUnsatisfiableGo ec (dtDataCtors
 
 allCtorsUnsatisfiableGo : Ec -> List DtCtor -> List Value -> Int -> Bool
 allCtorsUnsatisfiableGo ec [] idxs depth = True
-allCtorsUnsatisfiableGo ec (ctor :: rest) idxs depth = case unifyIdxList ec [] depth defaultFuel (ctorResultVals ctor depth) idxs of
+allCtorsUnsatisfiableGo ec (ctor :: rest) idxs depth = case unifyIdxListSized ec [] depth (ctorResultVals ctor depth) idxs of
   Ok refs => False
   Err e => allCtorsUnsatisfiableGo ec rest idxs depth
 
@@ -317,7 +427,8 @@ ctorValueIn ctx c =
 
 teleValsFrom : Int -> Int -> List Value
 teleValsFrom low k =
-  if k <= 0 then [] else VNeutral (NVar "_tele" low []) :: teleValsFrom (low + 1) (k - 1)
+  if k <= 0 then []
+  else Base.List.Cons (VNeutral (NVar "_tele" low [])) (teleValsFrom (low + 1) (k - 1))
 
 -- M24.5：**scrutinee 反射**。旧实现只把构造子的结果**索引**与 scrutinee 的索引合一，
 -- 于是 `case n of ...`（n 是裸 Nat 形参、族没有索引）或「包装族」上完全拿不到等式，

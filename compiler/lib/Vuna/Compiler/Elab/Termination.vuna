@@ -2,6 +2,7 @@ module Vuna.Compiler.Elab.Termination (checkTerminationDecls, checkTerminationDe
 
 -- Vuna.Compiler.Elab.Termination：DT 终止性检查入口（M16 → M25.2a → M25.2b → M25.2c）。
 -- 判据细节见 `.Measure`（size/R2/投影/关系/弱环）与 `.Scc`（size-change）。
+import Base.List
 import Vuna.Compiler.Common
 import Base.HashMap
 import Vuna.Compiler.Diagnostics
@@ -89,12 +90,13 @@ addSrcs src (dst :: ds) t =
     cur = case Base.HashMap.lookup dst t of
       Just xs => xs
       Nothing => []
-  in addSrcs src ds (Base.HashMap.insert dst (src :: cur) t)
+  in addSrcs src ds (Base.HashMap.insert dst (Base.List.Cons src cur) t)
 
 replacePair : String -> List String -> List (Pair String (List String)) -> List (Pair String (List String))
 replacePair n v [] = []
 replacePair n v ((Pair k xs) :: rest) =
-  if k == n then Pair n v :: rest else Pair k xs :: replacePair n v rest
+  if k == n then Base.List.Cons (Pair n v) rest
+  else Base.List.Cons (Pair k xs) (replacePair n v rest)
 
 addEdge : String -> String -> List (Pair String (List String)) -> List (Pair String (List String))
 -- 注意：这里**不做 dedup**。每个新边都对已累积的依赖表 dedup 是 O(k²)（高扇入

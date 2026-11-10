@@ -3,8 +3,8 @@ data Color : Type where
   Red : Color
   Blue : Color
 
-add : Int -> Int -> Int
-add x y = x + y
+addInt : Int -> Int -> Int
+addInt x y = x + y
 
 pick : Color -> Int
 pick Red = 1

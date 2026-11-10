@@ -1,0 +1,19 @@
+-- D24：类型索引 ≥20 的 Nat 字面量不再撞 conv 固定 fuel。
+--
+-- `Vec 32 Int` 的索引在类型层展开成 32 层 Succ 链；`w = v` 要 conv 两条索引链，
+-- 旧实现逐层比较（每层约 3–4 步 fuel）在固定 64 处报 `DT: internal: conv fuel exhausted`。
+import Base.Nat
+import Base.Vec
+
+v : Vec 32 Int
+v = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32
+]
+
+w : Vec 32 Int
+w = v
+
+idx : Nat
+idx = 32
+
+main : Int
+main = toInt (vlen w) + toInt idx

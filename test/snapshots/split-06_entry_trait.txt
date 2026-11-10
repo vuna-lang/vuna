@@ -3,6 +3,7 @@
 Base_dApplicative.ml
 Base_dBool.ml
 Base_dEq.ml
+Base_dFloat.ml
 Base_dFoldable.ml
 Base_dFromInt.ml
 Base_dFromString.ml
@@ -14,6 +15,7 @@ Base_dMaybe.ml
 Base_dMonad.ml
 Base_dMonoid.ml
 Base_dNat.ml
+Base_dNum.ml
 Base_dOrd.ml
 Base_dPair.ml
 Base_dResult.ml
@@ -29,7 +31,6 @@ build.sh
 # names（每个 .ml 的 ^type t_ / ^let v_，排序）
 
 == Base_dApplicative.ml
-let v_Base_dApplicative_d_uapply
 let v_Base_dApplicative_dap
 let v_Base_dApplicative_dliftA2
 let v_Base_dApplicative_dpure
@@ -47,6 +48,18 @@ let v_Show_uBase_uBool_uBool
 let v_Base_dEq_deq
 let v_Base_dEq_dneq
 let v_Eq_uBase_uBool_uBool
+
+== Base_dFloat.ml
+let v_Base_dFloat_dabs
+let v_Base_dFloat_dfloatToInt
+let v_Base_dFloat_dfromFloat
+let v_Base_dFloat_dintToFloat
+let v_Base_dFloat_dsqrt
+let v_Eq_uFloat
+let v_FromFloat_uFloat
+let v_Num_uFloat
+let v_Ord_uFloat
+let v_Show_uFloat
 
 == Base_dFoldable.ml
 let v_Base_dFoldable_dfold
@@ -68,6 +81,7 @@ let v_Base_dHashable_dhashStr
 == Base_dInt.ml
 let v_Eq_uInt
 let v_Hashable_uInt
+let v_Num_uInt
 let v_Ord_uInt
 let v_Show_uInt
 
@@ -114,7 +128,6 @@ let v_Base_dMonoid_dmappend
 let v_Base_dMonoid_dmempty
 
 == Base_dNat.ml
-let v_Base_dNat_ddiv
 let v_Base_dNat_dfromInt
 let v_Base_dNat_dfromIntMaybe
 let v_Base_dNat_disZero
@@ -126,9 +139,16 @@ let v_Base_dNat_dtoInt
 let v_Eq_uBase_uNat_uNat
 let v_Hashable_uBase_uNat_uNat
 let v_Monoid_uBase_uNat_uNat
+let v_Num_uBase_uNat_uNat
 let v_Ord_uBase_uNat_uNat
 let v_Semigroup_uBase_uNat_uNat
 let v_Show_uBase_uNat_uNat
+
+== Base_dNum.ml
+let v_Base_dNum_dadd
+let v_Base_dNum_ddiv
+let v_Base_dNum_dmul
+let v_Base_dNum_dsub
 
 == Base_dOrd.ml
 let v_Base_dOrd_dcompare

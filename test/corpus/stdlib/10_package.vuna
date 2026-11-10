@@ -10,7 +10,7 @@ sum (Cons x xs) = x + sum xs
 
 result : String
 result =
-  let xs = fmap (\x => x + 1) (Cons 1 (Cons 2 Nil))
+  let xs = fmap (\x => x + 1) [1, 2]
   in bool "False" "True" (mem 2 xs) ++ "/"
        ++ strFromInt (sum (mergeSort (Cons 3 (Cons 1 (Cons 2 Nil))))) ++ "/"
        ++ join "-" (map (\x => strFromInt x) xs) ++ "/"

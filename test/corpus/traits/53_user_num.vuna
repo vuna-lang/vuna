@@ -1,0 +1,37 @@
+-- D23：用户类型实现 `Num`（+ `FromInt`）后，`+ - * /` 就是 `Num` 方法的别名，
+-- 字面量经 `FromInt` 在期望类型位置降级（`1 + 2 : MyNum` 不写显式转换）。
+import Prelude
+
+data MyNum : Type where
+  MkMyNum : Int -> MyNum
+
+instance FromInt MyNum where
+  fromInt n = MkMyNum n
+
+instance Num MyNum where
+  add (MkMyNum a) (MkMyNum b) = MkMyNum (a + b)
+  sub (MkMyNum a) (MkMyNum b) = MkMyNum (a - b)
+  mul (MkMyNum a) (MkMyNum b) = MkMyNum (a * b)
+  div (MkMyNum a) (MkMyNum b) = MkMyNum (a / b)
+
+toInt : MyNum -> Int
+toInt (MkMyNum n) = n
+
+addLit : MyNum
+addLit = 1 + 2
+
+subLit : MyNum
+subLit = 10 - 3
+
+mulLit : MyNum
+mulLit = 4 * 5
+
+divLit : MyNum
+divLit = 9 / 2
+
+main : String
+main =
+  strFromInt (toInt addLit) ++ "/"
+    ++ strFromInt (toInt subLit) ++ "/"
+    ++ strFromInt (toInt mulLit) ++ "/"
+    ++ strFromInt (toInt divLit)

@@ -58,7 +58,7 @@ rotation 是**按需**事件；`seed-selfhost` 在 seed 落后时只输出滞后
   自然失败，从而强制 rotation（fixed point 是安全网，不另设同步检查）；
 - **修改现有语义**：旧 seed 会按旧语义翻译新编译器，可能产生语义偏差；先以旧语义可正确
   编译的形式落地 → rotation → 再让源码依赖新语义；
-- **发布前**：未来发布流程必须 rotation 并跑完整 `nix flake check`；
+- **发布前**：发布流程必须 rotation 并跑完整 `nix flake check`；
 - 日常新增 / 修改功能、只改 `lib/`、`app/`、`test/` 等工具链 / 夹具时，都不需要 rotation。
 
 取舍：信任锚点因此可能落后于源码。这是明确接受的代价，换来的是不再为每次 `compiler/`
@@ -117,7 +117,7 @@ fixed point → 全部通过后才替换 `seed/` 并写入 `nix/seed-rotation.tx
 
 1. **当前 seed 必须能编译当前源码**——`checks.seed-selfhost` 守；不要求与源码逐字节同步；
 2. **stage1 == stage2**（文件集逐字节），即 fixed point；每次 CI 与 rotation 后都检查；
-3. **`seed/` 只含 compiler 包入口闭包**：工具链（fmt/lint/repl/doc/test/lsp/index）与未来的
+3. **`seed/` 只含 compiler 包入口闭包**：工具链（fmt/lint/repl/doc/test/lsp/index）与
    package manager 都不进 TCB；
 4. 编译器自检：当前编译器必须能类型检查自己的源码（`checks.vuna-typecheck`，`vuna check .`
    走 DT）；
@@ -132,7 +132,7 @@ fixed point → 全部通过后才替换 `seed/` 并写入 `nix/seed-rotation.tx
 - 包在 `vuna.toml` 的 `[capabilities] effects` 里声明 `console` / `fs` / `process` / `env` /
   `clock` / `unsafe` 的任意子集（合法名与放行判定在 `Vuna.Compiler.Intrinsics` +
   `Loader.Resolve.checkEffectsBuiltins`；未知 / 重复能力名直接报错）；
-- 效果原语只有 `prim_*` 名并返回 `IO` 动作（M31）；`IO` 是内建效应类型（M37，无构造器），
+- 效果原语只有 `prim_*` 名并返回 `IO` 动作；`IO` 是内建效应类型（无构造器），
   每个内建的能力位、签名与 runtime 名同源在 `Vuna.Compiler.Intrinsics`。未声明能力的包
   只能经 `Base.IO` 使用效果；声明了能力的包可直接用 `prim_*`（不需要 import `Base.IO`）；
 - 仓库内三个包的能力声明见各自 `vuna.toml`：根包与 `vuna-compiler` 五个能力，`vuna-base`
@@ -183,4 +183,4 @@ flag 统一为 `-g -w -a+39 -warn-error +39`（warning 39 = unused rec，设 war
 - 内建声明面、原语语义与效应能力：[primitives.md](primitives.md)
 - 子系统数据流与改动定位：[architecture.md](../architecture.md)
 - 测试与 CI 门槛：[testing.md](testing.md)
-- 路线图与开放债务：[roadmap.md](../roadmap.md)、[debt.md](debt.md)
+- 开放债务：[debt.md](debt.md)

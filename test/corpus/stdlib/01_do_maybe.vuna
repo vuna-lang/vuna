@@ -8,8 +8,8 @@ showMaybe m =
     Nothing => "Nothing"
     Just n => "Just " ++ strFromInt n
 
-add : Maybe Int
-add = do
+sumDo : Maybe Int
+sumDo = do
   x <- Just 1
   y <- Just 2
   pure (x + y)
@@ -21,4 +21,4 @@ bail = do
   pure (x + y)
 
 main : String
-main = showMaybe add ++ "/" ++ showMaybe bail
+main = showMaybe sumDo ++ "/" ++ showMaybe bail

@@ -41,6 +41,7 @@ module Vuna.Compiler.Loader.Modules
 import Vuna.Compiler.Loader.Diagnostics
 import Vuna.Compiler.Common
 import Base.HashMap
+import Base.List
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Frontend.Lexer
 import Base.Eq
@@ -197,7 +198,8 @@ validateImports label imports =
 openModuleNames : List Import -> List String
 openModuleNames [] = []
 openModuleNames (imp :: rest) =
-  if imp.importIsQualified then openModuleNames rest else importName imp :: openModuleNames rest
+  if imp.importIsQualified then openModuleNames rest
+  else Base.List.Cons (importName imp) (openModuleNames rest)
 
 findImportPrefix : List Import -> String -> Maybe String
 findImportPrefix [] prefix = Nothing
@@ -254,7 +256,8 @@ findExportCtors entries name = filterCtors name entries
 filterCtors : String -> List ExportEntry -> List ExportEntry
 filterCtors name [] = []
 filterCtors name (e :: rest) =
-  if e.kind == "ctor" && e.public == name then e :: filterCtors name rest else filterCtors name rest
+  if e.kind == "ctor" && e.public == name then Base.List.Cons e (filterCtors name rest)
+  else filterCtors name rest
 
 findExportType : List ExportEntry -> String -> Maybe ExportEntry
 findExportType entries name = lookupExport ["type"] name entries
@@ -264,7 +267,7 @@ modulesExportingValueFrom modules [] name = Ok []
 modulesExportingValueFrom modules (m :: rest) name = Vuna.Compiler.Common.bind (exportsOf modules m) (\es => case findExportValue es name of
   Just e =>
     Vuna.Compiler.Common.bind (modulesExportingValueFrom modules rest name)
-      (\more => Ok (Pair m e :: more))
+      (\more => Ok (Base.List.Cons (Pair m e) more))
   Nothing => modulesExportingValueFrom modules rest name
 )
 
@@ -288,7 +291,7 @@ modulesExportingTypeFrom modules [] name = Ok []
 modulesExportingTypeFrom modules (m :: rest) name = Vuna.Compiler.Common.bind (exportsOf modules m) (\es => case findExportType es name of
   Just e =>
     Vuna.Compiler.Common.bind (modulesExportingTypeFrom modules rest name)
-      (\more => Ok (Pair m e :: more))
+      (\more => Ok (Base.List.Cons (Pair m e) more))
   Nothing => modulesExportingTypeFrom modules rest name
 )
 

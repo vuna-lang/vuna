@@ -18,6 +18,7 @@ module Base.EffConsole
 -- `runIOAnswer` 的 IO-backed handler。
 import Base.Eff
 import Base.IO.Host
+import Base.Nat
 import Base.Monad
 
 -- 标签类型：只做行索引，没有运行时构造子。
@@ -29,13 +30,14 @@ data ConsoleOp : Type where
   Print : String -> ConsoleOp
   EPrint : String -> ConsoleOp
 
--- | 操作的结果类型族：`Print` / `EPrint` 都返回 `Int`（写入字节数）。
+-- | 操作的结果类型族：`Print` 返回写入字节数（`Nat`，D25）；`EPrint` 仍返回 `Int`
+-- （`prim_eprint` 本轮未迁移）。
 resConsole : ConsoleOp -> Type
-resConsole (Print s) = Int
+resConsole (Print s) = Nat
 resConsole (EPrint s) = Int
 
--- | 通过命名实例 `n` 发送 `Print`；行里需要 `Member (Console n) r` 证明（由精化器按行结构构造）。
-consolePrint : (n : String) -> String -> {r : Row} -> {w : Member (Console n) r} -> Eff r Int
+-- | 通过命名实例 `n` 发送 `Print`；返回写入字节数（`Nat`）。行里需要 `Member (Console n) r` 证明（由精化器按行结构构造）。
+consolePrint : (n : String) -> String -> {r : Row} -> {w : Member (Console n) r} -> Eff r Nat
 consolePrint n s = sendCore (Console n) "console" n (Print s)
 
 -- | 通过命名实例 `n` 发送 `EPrint`（stderr）；其余同 `consolePrint`。

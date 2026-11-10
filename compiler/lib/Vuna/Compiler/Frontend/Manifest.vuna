@@ -84,6 +84,7 @@ stringListField path section key entries = case lookupEntry section key entries 
   Just value =>
     Err "${fieldLoc path section key entries}expected an array of strings for \"${key}\""
 
+-- | 读 `[section] key` 的布尔值：缺省返回 `Nothing`，类型不符报带位置的行号错误。
 boolField : String -> List String -> String -> List TomlEntry -> Result (Maybe Bool)
 boolField path section key entries = case lookupEntry section key entries of
   Nothing => Ok Nothing
@@ -94,6 +95,7 @@ orEmptyList : Maybe (List a) -> List a
 orEmptyList Nothing = []
 orEmptyList (Just xs) = xs
 
+-- | `Maybe Bool` 的缺省取值：`Nothing` 视为 `False`。
 orFalse : Maybe Bool -> Bool
 orFalse Nothing = False
 orFalse (Just b) = b

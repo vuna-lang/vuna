@@ -1,0 +1,29 @@
+-- D24：大 Nat 字面量（300 / 1000）不再撞固定 fuel。
+--
+-- 字面量在 Core 里展开成 `Zero` / `Succ` 链；擦除检查 / capture check / 求值路径过去
+-- 按固定 fuel 遍历，`n = 300` 直接报 `DT: internal: erasure fuel exhausted`（interp 的
+-- 求值器还会在第 64 层链静默截断）。这里同时覆盖：链折回、Nat 字面量模式、`show` /
+-- `toInt` / `<` 的运行时表示（OCaml int）。
+import Base.Nat
+import Base.String
+
+n : Nat
+n = 300
+
+m : Nat
+m = 1000
+
+pick : Nat -> Int
+pick k = case k of
+  300 => 1
+  1000 => 2
+  _ => 3
+
+bigShow : String
+bigShow = show n ++ "/" ++ show m
+
+nGreater : Bool
+nGreater = n < m
+
+main : Int
+main = toInt n + toInt m + pick n + pick m + (if nGreater then 10 else 0)

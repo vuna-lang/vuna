@@ -1,0 +1,30 @@
+module Base.Num (Num(..)) where
+
+-- Base.Num：数值算术 trait（D23）。`+ - * /` 是 `Num` 方法 `add` / `sub` / `mul` / `div`
+-- 的别名；算术不再绑定到 `Int` 内建值，用户类型可以实现自己的 `Num` 实例。实例跟类型
+-- 模块走：`Int` 在 `Base.Int`、`Nat` 在 `Base.Nat`、`Float` 在 `Base.Float`。
+--
+-- 精化器认 `Base.Num` 的方法投影并映射回内建原语（`Elab/Term/Impl` 的
+-- `arithOpNameOf`）：具体类型是 Int/Nat/Float 时降级成 `bi_*` / `nat*`，因此实例体
+-- `add x y = x + y` 不会自递归；其它类型回落到普通 trait 方法应用（`Num a =>` 泛型代码）。
+--
+-- 语义边界：`Nat` 的 `sub` / `div` 沿用 Nat 既有算术语义（`sub` 截断到 0、`div` 向下
+-- 取整），与 `Int` 的环绕减法 / 向零截断不同；codegen 仍特化到 `natSub` / `natDiv`。
+--
+-- 本模块是叶模块（不 import 任何模块）：`+ - * /` 的 fixity 与别名声明都在这里，
+-- `import Base.Num`（或经 Prelude 自动导入）即对用户可见。
+infixl 6 + = add
+infixl 6 - = sub
+infixl 7 * = mul
+infixl 7 / = div
+
+-- | 数值算术 trait：`add` / `sub` / `mul` / `div` 对应 `+` / `-` / `*` / `/`（后者是这些方法的中缀别名）。
+trait Num a where
+  -- | 加法（`+`）。
+  add : a -> a -> a
+  -- | 减法（`-`）。
+  sub : a -> a -> a
+  -- | 乘法（`*`）。
+  mul : a -> a -> a
+  -- | 除法（`/`）。
+  div : a -> a -> a

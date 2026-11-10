@@ -4,7 +4,7 @@ vuna 是一个函数式编程语言，本仓库是它的编译器与工具链。
 
 > **vuna 尚未发布任何版本**：没有外部用户、下游生态与历史包袱，全部源码都在本仓库内，
 > **任何设计、接口、命令、实现、哲学都允许被推翻**。终态是**单一依赖类型路径**（唯一
-> 检查器与 codegen），见 [docs/roadmap.md](docs/roadmap.md)。
+> 检查器与 codegen）。
 
 编译器完全用 vuna 自己写：编译器包 `compiler/`（`vuna-compiler`，模块 `Vuna.Compiler.*`）
 + 根包 `vuna`（产品 CLI 与工具链 fmt/lint/repl/doc/test/lsp）+ 成员包 `base/`（`vuna-base`）。
@@ -146,10 +146,10 @@ manifest，不向上找。命令语义与包格式
 | [docs/reference/type-system.md](docs/reference/type-system.md) | 类型系统：宇宙/kind、索引归纳族、依赖匹配、相等证据、擦除、终止性 |
 | [docs/reference/qtt.md](docs/reference/qtt.md) | QTT：quantity 0/1/ω、用量检查、线性数据/记录、线性 ST 子集 |
 | [docs/reference/records-traits.md](docs/reference/records-traits.md) | 记录、trait / 实例 / `deriving`、`do` / Monad / IO |
-| [docs/reference/effects.md](docs/reference/effects.md) | 效应：IO 内建效应类型、MonadIO + StateT/ReaderT/ErrorT、ST/region、运行时效应（行/命名/一次性续延）与 F3 路线 |
+| [docs/reference/effects.md](docs/reference/effects.md) | 效应：IO 内建效应类型、MonadIO + StateT/ReaderT/ErrorT、ST/region、运行时效应（行/命名/一次性续延） |
 | [docs/reference/stdlib.md](docs/reference/stdlib.md) | 标准库 `vuna-base` 模块清单与 `Prelude` 自动导入 |
 | [docs/reference/operators.md](docs/reference/operators.md) | 运算符=方法别名、`Eq`/`Ord` 真源、实例落点规则 |
-| [docs/reference/floats.md](docs/reference/floats.md) | `Float` 原语、字面量转换 trait（FromString/FromInt/FromFloat）、`deriving`、bootstrap 边界与 interp 限制 |
+| [docs/reference/floats.md](docs/reference/floats.md) | `Float` 原语、字面量转换 trait（FromString/FromInt/FromFloat）、`deriving`、Prelude/产物影响与 interp 限制 |
 | [docs/reference/primitives.md](docs/reference/primitives.md) | 内建/原语唯一声明面、Int/String/IO 语义、效应能力（`[capabilities]`） |
 | [docs/reference/packages.md](docs/reference/packages.md) | `vuna.toml` 包格式、workspace / 依赖 DAG、工具链命令一览 |
 | [docs/reference/core.md](docs/reference/core.md) | Core TT / NbE / 合一 / 精化器 / 擦除 / codegen 护栏的实现参考 |
@@ -161,11 +161,10 @@ manifest，不向上找。命令语义与包格式
 | [docs/reference/bootstrap.md](docs/reference/bootstrap.md) | 种子策略、rotation 流程、fixed point、TCB 边界 |
 | [docs/reference/testing.md](docs/reference/testing.md) | 测试体系、corpus 分类、nix checks 清单、性能基准 |
 | [docs/reference/lint.md](docs/reference/lint.md) | lint 规则（AST 驱动、`--fix` 与门禁） |
-| [docs/reference/debt.md](docs/reference/debt.md) | 仍未关闭的债务、缺陷与未实现能力（按语言 / 工具分组，带证据与归属） |
-| [docs/roadmap.md](docs/roadmap.md) | 当前基线、终态方向、下一阶段与不排期轨道（F1–F4） |
+| [docs/reference/debt.md](docs/reference/debt.md) | 仍未关闭的债务、缺陷与未实现能力（按语言 / 工具分组，带证据） |
 
 文档分层规则：README 只保留定位/上手/目录/硬约束/导航；细节在 `docs/reference/`；
-roadmap 只保留当前基线与未来方向，里程碑历史在 git 历史；已知边界并入各主题参考页
+历史与里程碑在 git 历史；已知边界并入各主题参考页
 （见上表），未关闭的缺陷与缺口归 `debt.md`。
 
 ## 许可

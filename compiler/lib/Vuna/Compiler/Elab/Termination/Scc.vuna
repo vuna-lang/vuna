@@ -446,7 +446,7 @@ siteFuelStrict callerFuel site = case nthExpr site.siteArgs 0 of
   Nothing => Nothing
   Just a => case a of
     EVar n sp => if n == callerFuel then Just False else Nothing
-    EApp (EVar op osp) xs sp => if op == "-" then case xs of
+    EApp (EVar op osp) xs sp => if isSubOpName op then case xs of
       [EVar n nsp, EInt k ksp] =>
         if n == callerFuel then if k > 0 then Just True else Nothing else Nothing
       _ => Nothing

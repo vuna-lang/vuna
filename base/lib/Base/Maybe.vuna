@@ -56,6 +56,11 @@ instance Monad Maybe where
 
 instance Applicative Maybe where
   pure x = Just x
+  ap mf mx = case mf of
+    Nothing => Nothing
+    Just g => case mx of
+      Nothing => Nothing
+      Just b => Just (g b)
   liftA2 f ma mb = case ma of
     Nothing => Nothing
     Just a => case mb of

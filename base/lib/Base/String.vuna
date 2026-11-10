@@ -44,6 +44,7 @@ import Base.Nat
 -- M36 跟进：模板字符串降级引用 Base.Interp.interp（split 依赖需要显式 import）。
 import Base.Interp
 import Base.Monoid
+import Base.Num
 
 -- `++` 的 fixity 声明（字符串拼接是内建值）。
 infixr 5 ++

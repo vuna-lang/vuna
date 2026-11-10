@@ -1,7 +1,7 @@
 open Vuna_runtime
 let v_Base_dIO_dHost_drunIO = (fun _uarity1 -> ((fun io -> io 0) _uarity1))
 
-let v_Base_dIO_dHost_dprint = (fun _uarity0 -> ((fun dtio_0 -> fun (_ : int) -> dtp_print dtio_0) _uarity0))
+let v_Base_dIO_dHost_dprint = (fun s -> (((Base_dMonad.v_Base_dMonad_dfmap Base_dIO.v_Functor_uIO) bi_natFromInt) ((fun dtio_0 -> fun (_ : int) -> dtp_print dtio_0) s)))
 
 let v_Base_dIO_dHost_deprint = (fun _uarity0 -> ((fun dtio_0 -> fun (_ : int) -> (fun s -> prerr_string s; flush stderr; String.length s) dtio_0) _uarity0))
 
@@ -9,7 +9,7 @@ let v_Base_dIO_dHost_dprintln = (fun s -> (v_Base_dIO_dHost_dprint (s ^ "\n")))
 
 let v_Base_dIO_dHost_dreadFile = (fun _uarity0 -> ((fun dtio_0 -> fun (_ : int) -> dtp_readFile dtio_0) _uarity0))
 
-let v_Base_dIO_dHost_dwriteFile = (fun _uarity0 _uarity1 -> (((fun dtio_0 dtio_1 -> fun (_ : int) -> dtp_writeFile dtio_0 dtio_1) _uarity0) _uarity1))
+let v_Base_dIO_dHost_dwriteFile = (fun path s -> (((Base_dMonad.v_Base_dMonad_dfmap Base_dIO.v_Functor_uIO) bi_natFromInt) (((fun dtio_0 dtio_1 -> fun (_ : int) -> dtp_writeFile dtio_0 dtio_1) path) s)))
 
 let v_Base_dIO_dHost_dreadLine = (fun (_ : int) -> (dtp_readLine ()))
 

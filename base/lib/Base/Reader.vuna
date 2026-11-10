@@ -21,6 +21,7 @@ instance Monad (Reader e) where
 
 instance Applicative (Reader e) where
   pure a = Reader (\e => a)
+  ap mf mx = Reader (\e => (mf.readerRun e) (mx.readerRun e))
   liftA2 f ra rb = Reader (\e => f (ra.readerRun e) (rb.readerRun e))
 
 -- | 取当前环境（结果与环境相同）。

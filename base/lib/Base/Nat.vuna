@@ -1,4 +1,4 @@
-module Base.Nat (Nat(..), div, fromInt, fromIntMaybe, isZero, minus, mult, plus, pred, toInt) where
+module Base.Nat (Nat(..), fromInt, fromIntMaybe, isZero, minus, mult, plus, pred, toInt) where
 
 -- Base.Nat：非负整数。
 --
@@ -9,15 +9,16 @@ module Base.Nat (Nat(..), div, fromInt, fromIntMaybe, isZero, minus, mult, plus,
 -- 算术语义（与 `Vuna.Compiler.Intrinsics` 的 bi_nat* / Core.Eval 的 interp 实现一致）：
 --   * `plus` / `mult` 饱和到 max_int；
 --   * `minus` 截断到 0（不会产生负数）；
---   * `div` 向下取整；除零与 Int `/` 同样在运行期 `Failure "division by zero"`。
+--   * `Num.div`（`/`）向下取整；除零与 Int `/` 同样在运行期 `Failure "division by zero"`。
 -- `toInt` 是无损提升（运行时恒等）；`fromInt` 有损（负数 clamp 成 0），需要区分时用
--- `fromIntMaybe`。`+ - * /` 在 Nat 上下文由精化器特化，直接走同一组原语。
+-- `fromIntMaybe`。`+ - * /` 在 Nat 上下文由精化器按 `Num` 方法特化（D23），直接走同一组原语。
 import Base.Bool
 import Base.Eq
 import Base.Int
 import Base.Monoid
 import Base.Maybe
 import Base.Hashable
+import Base.Num
 import Base.Ord
 import Base.Show
 
@@ -37,10 +38,6 @@ minus = natSub
 -- | 乘法，结果饱和到 max_int。
 mult : Nat -> Nat -> Nat
 mult = natMul
-
--- | 向下取整除法；除零与 Int 的 `/` 一样在运行期抛 `Failure division by zero`。
-div : Nat -> Nat -> Nat
-div = natDiv
 
 -- | 无损提升到 `Int`（运行时恒等）。
 toInt : Nat -> Int
@@ -71,6 +68,15 @@ instance Ord Nat where
   le x y = toInt x <= toInt y
   gt x y = toInt x > toInt y
   ge x y = toInt x >= toInt y
+
+-- D23 Stage1：`Num` 实例，语义沿用 Nat 既有算术（`sub` 截断到 0、`div` 向下取整）。
+-- 方法体写内建运算符，由精化器特化成 `natAdd` / `natSub` / `natMul` / `natDiv`；
+-- Stage 2 把 `+` 别名到 `add` 后，特化认 `Base.Num` 方法投影，仍然走原语（不自递归）。
+instance Num Nat where
+  add x y = x + y
+  sub x y = x - y
+  mul x y = x * y
+  div x y = x / y
 
 instance Show Nat where
   show n = strFromInt (toInt n)

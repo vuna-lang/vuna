@@ -23,6 +23,11 @@ r1 = [Fetch]
 r2 : Row
 r2 = [Fetch, Log]
 
+-- B43：`::` 是 `Cons` 的中缀别名（fixity 来自 Base.List）；在期望 Row 的位置由期望
+-- 类型消歧到 Row.Cons（不再默认 List.Cons），非 Row 位置才是 List。
+r3 : Row
+r3 = Fetch :: Nil
+
 r0 : Row
 r0 = []
 

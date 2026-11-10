@@ -10,7 +10,7 @@ quantity / 线性规则见 [qtt.md](qtt.md)（quantity 与擦除口径以该页�
 ## 宇宙与 kind
 
 - **严格分层、非累积**：`Type i : Type (i+1)`；Pi formation 取 `max(i, j)`；
-  `Type i` 与 `Type j`（`i ≠ j`）**不相等**；没有一般 subtyping / cumulativity（唯一的隐式提升是 M34.7 的 Nat → Int，见下），
+  `Type i` 与 `Type j`（`i ≠ j`）**不相等**；没有一般 subtyping / cumulativity（唯一的隐式提升是 Nat → Int，见下），
   `Type : Type` 被拒绝。唯一的层级流动是显式写更小的宇宙：`Type 0` 可以赋给
   `Type 1` 的签名（因为 `Type 0` 的类型就是 `Type 1`），反过来不行。
 - **data kind**：`data F : <kind>` 的 kind 必须是「Pi 链 → `Type l`」，`l ≥ 0`；
@@ -27,7 +27,7 @@ quantity / 线性规则见 [qtt.md](qtt.md)（quantity 与擦除口径以该页�
 - 实现：`Elab/Meta.kindWellFormed`（kind 形状 / 层级）、`Elab/Data.elabCtor` +
   `checkCtorFieldSorts`（字段层级）。
 
-## Nat → Int 隐式提升（M34.7）
+## Nat → Int 隐式提升
 
 - `Nat` 是 `Int` 的数值子集；精化器只在**检查点**（函数实参、返回、构造子字段、`if`
   分支汇合、`==`/比较、算术特化）把 `Nat` 项包装成 `natToInt` 当 `Int` 用。运行时
@@ -54,8 +54,8 @@ quantity / 线性规则见 [qtt.md](qtt.md)（quantity 与擦除口径以该页�
   （String 索引）都可用；字面量按值参与索引相等（`Core/Eval.valueEqFuel` 的 `VStr`
   分支与 `Core/Conv` 的字符串比较）。
 - **元变量求解**：局部变量 spine 优先走 Miller pattern（提取成 λ 抽象）；Miller pattern
-  之外保留 M13 的「头一致就提取」近似（`Core/Conv.solveMetaHoLegacyFuel`），能提取就
-  提取，提取不到才报 `TC_CannotSolveHigherOrder`。完整高阶合一是研究储备（debt B07）。
+  之外保留「头一致就提取」近似（`Core/Conv.solveMetaHoLegacyFuel`），能提取就
+  提取，提取不到才报 `TC_CannotSolveHigherOrder`。完整高阶合一未实现（debt B07）。
 - 族的类型级应用（`Vec n a`）保持中性（`TGlobal` / `NGlobal` spine），只在 unification
   时按定义性相等比较，不做类型级求值。
 - 没有内置的归纳相等族 `Eq`（DT 用来做证明的 `data Eq`）；`Base.Eq` 是 trait。`Nat` / `Vec` /
@@ -100,8 +100,8 @@ quantity / 线性规则见 [qtt.md](qtt.md)（quantity 与擦除口径以该页�
   具体类型没有实例、函数类型相等、`Eq` 类不在作用域，都在 `check` 期报错
   （`TC_NoInstanceFound` / `TC_EqRequiresEvidence`）。**没有泛型结构比较兜底**，
   interp 与编译产物也没有第二套相等算法。
-- **运算符是方法别名（M31.1）**：`==` / `/=` / `<` / `<=` / `>` / `>=` 不是独立的语义
-  入口，Loader 把它们解析成 `eq` / `neq` / `lt` / `le` / `gt` / `ge`（M31.2 起统一在
+- **运算符是方法别名**：`==` / `/=` / `<` / `<=` / `>` / `>=` 不是独立的语义
+  入口，Loader 把它们解析成 `eq` / `neq` / `lt` / `le` / `gt` / `ge`（统一在
   `Loader.Fixity` 的重排与别名表里）。`a == b`、`eq a b`、``a `eq` b`` 是同一个调用；
   Elab 的特化按「`Eq` / `Ord` 方法投影的饱和应用」判定（`Elab.Dict.isEqMethod` /
   `isCmpMethod`），不按运算符名。运算符不产生新的运行时名字。实例落点规则见
@@ -133,10 +133,10 @@ quantity / 线性规则见 [qtt.md](qtt.md)（quantity 与擦除口径以该页�
   `cong ... Succ ...`、裸构造子当值传递后再应用都可用。
 - **Tarski 式存在式**：依赖索引取值用运行时类型码 `Ty` + 指标族 `Tm : Ty -> Type` +
   存在式 `Some` 表达，让 `Ctx n -> Fin n -> Some` 这类 lookup 写成普通函数（构造存在式
-  的值时给出类型码与指标）。泛型 Σ 的值级构造（字段类型依赖运行时值）归 F4
-  （[roadmap.md](../roadmap.md) / [debt.md](debt.md)）。
+  的值时给出类型码与指标）。泛型 Σ 的值级构造（字段类型依赖运行时值）未实现
+  （[debt.md](debt.md)）。
 - **空族判定**：索引含中性项时无法证明族为空，判据保守判「可能非空」（细节见
-  「依赖模式匹配与 case」）；隐式模式 `{p}` 与 `auto` / 隐式等式搜索归 F4。
+  「依赖模式匹配与 case」）；隐式模式 `{p}` 与 `auto` / 隐式等式搜索未实现。
 
 ## 擦除与运行时表示
 
@@ -153,14 +153,14 @@ quantity / 线性规则见 [qtt.md](qtt.md)（quantity 与擦除口径以该页�
   rig 只由精化决定，codegen 不再推导。
 - **类型族**（结果以 `Type` 收尾的 Pi 链，如 `sel : Nat -> Type`）整体擦除，不生成运行时
   定义；在运行时定义里把擦除参数当值用报错。
-- **擦除依赖类型的运行时表示（M39，D27 表示轴）**：类型族应用出现在**运行时位置**时
+- **擦除依赖类型的运行时表示（D27 表示轴）**：类型族应用出现在**运行时位置**时
   （典型是续延的参数类型 `res op -> ans`），OCaml 侧无法命名该类型，按「不透明擦除值」
   处理：data 构造子字段渲染成 `Obj.t`，构造子实参插 `Obj.magic`，binder 的每个使用点
   插隐藏 cast `prim_erase`（求值期恒等消去）。判据与 codegen 同源（`valueOpaqueScoped`）：
   不可表示的全局类型头，或 kind 的 Pi 链含非宇宙域的**类型族参数**（`res : f -> Type`）；
   普通类型构造子参数（`m : Type -> Type`）与数据族的索引值实参不算。细节与边界见
   [effects.md](effects.md) §5。
-- **零成本表示（M42）**：擦除后**恰好一个运行时字段**的单构造子族（`record` 或
+- **零成本表示**：擦除后**恰好一个运行时字段**的单构造子族（`record` 或
   `data`）在 OCaml 侧不再有包装变体，而是字段类型的类型别名（`type t_UserId = int`）。
   判据只看构造子形状（`ctorKeepFlags`）：单构造子、单保留字段、字段类型可表示（函数 / Pi 与不透明 / 未知名字段保持装箱，避免 OCaml 值限制与不可命名）、候选间无递归环、排除 `Bool` / `Nat` / 内建特殊族；类型参数
   个数无关。构造应用变成恒等，构造子 `case` 变成 `let` 绑定；不改变类型检查、`deriving`
@@ -174,7 +174,7 @@ quantity / 线性规则见 [qtt.md](qtt.md)（quantity 与擦除口径以该页�
 ## 定义与终止性
 
 - 顶层定义必须有类型签名（缺签名报 `[TC_ExpectedSignature] expected a type signature for <name>`）；签名里的
-  自由小写名量化为隐式类型参数（量化 banned 集按模块作用域计算）。M32 起签名可带 trait
+  自由小写名量化为隐式类型参数（量化 banned 集按模块作用域计算）。签名可带 trait
   约束 `C a =>`：`a` 照常量化，约束另外生成隐式字典参数（`{_ctx0 : Dict_C a}`，插在类型
   参数之后、显式参数之前）；只出现在约束里的变量也参与量化。定义子句参数少于签名时按
   剩余 Pi 链 **η 展开**；多于签名报 `TC_DefMoreParams`。
@@ -190,7 +190,7 @@ quantity / 线性规则见 [qtt.md](qtt.md)（quantity 与擦除口径以该页�
 - **零参顶层定义求值一次**：生成 `let v_x = body`；递归组里的零参非构造子 RHS 报
   `CG_RecursiveValueDefinition`。
 - **`main`**：`check` 不要求 `main`，`compile` / `build` 要求；`main` 可为
-  `Int` / `Nat` / `String` / `Bool` 或 `IO a`（`IO` 是内建效应类型，M37）。
+  `Int` / `Nat` / `String` / `Bool` 或 `IO a`（`IO` 是内建效应类型）。
   `vuna interp` 是纯核心求值，只展示 `Int` / `Nat` / `String` / `Bool`，任何
   `main : IO a` 一律明确报错。
 - 洞 `_` / 命名洞 `?name` 未解时报 `TC_UnsolvedHole`（带位置与目标类型，命名洞带洞名）；
@@ -223,4 +223,4 @@ quantity / 线性规则见 [qtt.md](qtt.md)（quantity 与擦除口径以该页�
 - 记录、trait / 实例 / `deriving`、`do` / Monad：[records-traits.md](records-traits.md)
 - Core 表示、NbE、合一、精化器、擦除 codegen 不变量：[core.md](core.md)
 - 原语身份、Int / String 语义、效果能力：[primitives.md](primitives.md)
-- 未关闭的债务与未来能力归属：[debt.md](debt.md)、[roadmap.md](../roadmap.md)
+- 未关闭的债务：[debt.md](debt.md)

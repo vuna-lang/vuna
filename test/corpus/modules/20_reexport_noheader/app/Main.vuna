@@ -4,4 +4,4 @@ toInt : Facade.Color -> Int
 toInt c = Facade.pick c
 
 main : Int
-main = Facade.add 10 (Facade.triple 10) + toInt Facade.Blue
+main = Facade.addInt 10 (Facade.triple 10) + toInt Facade.Blue

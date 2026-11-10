@@ -39,12 +39,12 @@ import Base.Result
 import Base.String
 
 -- | 编译器内部的 `Result` 绑定（固定类型）：与 `Base.Result` 的 `Monad` 实例 `bind` 同义。
--- 编译器源码用限定名 `Vuna.Compiler.Common.bind` 调用（推断位置的 bind 链没有期望类型，trait 方法会引入
--- 字典 meta；固定类型没有该问题）。这是内部实现细节，不是 base 公开 API；见 debt D46。
+-- 编译器源码用限定名 `Vuna.Compiler.Common.bind` 调用——这是内部实现选择：固定结果类型让
+-- 推断位置的大 bind 链不引入 Monad 字典 meta，减少精化成本；不是兼容层，也不是语言面 API。
+-- （S2 的期望结果类型定向已让 trait `bind` 在 check 方向可用；编译器内部仍按需选固定类型。）
 bind : Result a -> (a -> Result b) -> Result b
-bind r k = case r of
-  Ok x => k x
-  Err e => Err e
+bind (Ok x) k = k x
+bind (Err e) k = Err e
 
 -- | 源码位置：行、列，均从 1 开始。
 record Pos where
@@ -115,6 +115,7 @@ splitCharsOn sep (c :: rest) acc seg =
   if c == sep then splitCharsOn sep rest (strPack (reverse seg) :: acc) []
   else splitCharsOn sep rest acc (c :: seg)
 
+-- | 把字符流按 `.` 切成段列表：`splitOnDot` 内部的展开实现，空段也保留。
 splitCharsOnDot : List Int -> List String -> List Int -> List String
 splitCharsOnDot [] acc seg = reverse (strPack (reverse seg) :: acc)
 splitCharsOnDot (c :: rest) acc seg =

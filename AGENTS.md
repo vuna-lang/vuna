@@ -5,17 +5,21 @@
 ## 项目前提：没有兼容义务
 
 **vuna 尚未发布任何版本**：没有外部用户、下游生态与历史包袱，全部源码都在本仓库内。
-因此**任何设计、接口、命令、实现、哲学都允许被推翻**（包括本文件与 roadmap 已写下的
+因此**任何设计、接口、命令、实现、哲学都允许被推翻**（包括本文件写下的
 决策）；「保留兼容层」「以后可能有人依赖」不构成保留理由——评估一个遗留物只看一条：
 **它在终态里还成立吗**。推翻旧决策时在提交信息与对应主题页说明，不静默改写；已完成阶段
 与历史细节在 git 历史。当前路线：**单一 DT 路径**（唯一检查器与 codegen）。
+
+当前基线一句话：自举链（`seed/` → rotation → stage1 == stage2）与全工具链都已工作，
+编译器自身用 vuna 写成；性能读数见 [performance.md](docs/reference/performance.md)，
+未关闭的债务见 [debt.md](docs/reference/debt.md)。
 
 ## 阅读顺序
 
 1. `AGENTS.md`（本文件）——不变量、纪律、常用命令；
 2. [`docs/architecture.md`](docs/architecture.md)——子系统地图：哪条链路、入口符号、连带改动、测试标签；
 3. 需要时再下钻：[`docs/reference/`](docs/reference/)（类型系统 / Core / 编译器 / 包 / 工具 / 测试参考页）、
-   [roadmap](docs/roadmap.md)、[debt](docs/reference/debt.md)。
+   [debt](docs/reference/debt.md)。
 
 **定位符号**用 `vuna map --find` / `--impact` / `vuna api`（规程见 repo-navigation 技能）；**不要做的事**：通读全仓、读 `seed/` 或 `docs/api.html`（生成物）。
 
@@ -35,15 +39,15 @@
 1. **当前 seed 必须能编译当前源码**（rotation 按需，触发条件见 bootstrap.md）——`seed/` 是提交入库的信任锚点；
 2. **seed rotation 后 stage1 == stage2**（文件集逐字节一致，fixed point）；
 3. **`seed/` 只含 compiler 包入口闭包**（`compiler/app/Main.vuna` 的 import 闭包）；
-4. **工具链不进 TCB**：`fmt`/`lint`/`repl`/`doc`/`test`/`Index`/`LSP`（以及未来的
-   package manager）永不进入 seed 闭包；黑名单见 `nix/tcb-forbidden.txt`；
+4. **工具链不进 TCB**：`fmt`/`lint`/`repl`/`doc`/`test`/`Index`/`LSP`（以及 package
+   manager）永不进入 seed 闭包；黑名单见 `nix/tcb-forbidden.txt`；
 5. **IO 是内建效应类型**：动作由 `prim_pureIO`/`prim_bindIO` 构造，只在 `main`（`v_main 0`）
    或 `runIO`/`prim_runIO`（需 `unsafe`）执行；效果原语 `prim_*` 需 `[capabilities] effects`；
-   **特权边界（F3 P2a）**：`[capabilities]`/`[trust]` 与宿主层模块 `Base.IO.Host` 只允许
+   **特权边界**：`[capabilities]`/`[trust]` 与宿主层模块 `Base.IO.Host` 只允许
    `[package] privileged = true` 的包；用户包/ad-hoc 只能经 `Eff` + handler（见
-   [plans/effects-in-types.md](docs/plans/effects-in-types.md)）；
+   [effects.md](docs/reference/effects.md) §8.6）；
    **用户面效果只经 `Eff`**：运行入口只接受行已处理干净的动作（`runIOEff : Eff [] a -> IO a`，
-   入口处未处理效应是类型错误，见 [plans/effects-in-types.md](docs/plans/effects-in-types.md)）；
+   入口处未处理效应是类型错误，见 [effects.md](docs/reference/effects.md) §8.4/§8.6）；
 6. **唯一路径**：语言夹具、`vuna interp`、包构建与 seed 全部走 DT（精化 + 擦除
    codegen，`vuna check .` 也是 DT 自检）；没有可切换的检查器，也没有第二套 codegen；
 7. 编译器自检通过：`vuna check .` 必须能检查自身源码（`checks.vuna-typecheck`）。
@@ -67,7 +71,7 @@
   `liftA2` / `ap` / `foldMap` / `mapM`（`pure` 在 `Base.Applicative`，`Base.Monad` 重导出），
   不新增 `pureX` / `bindX` / `andThen` 这类重复入口；例外（ST 线性 bind、编译器内部
   `Vuna.Compiler.Common.bind`（限定名调用））与长 do 链性能边界见 `docs/reference/records-traits.md`、
-  [effects.md](docs/reference/effects.md) §8.4 与 debt D46/D48。
+  [effects.md](docs/reference/effects.md) §8.4 与各主题页的已知边界。
 - **探索完必须落盘**：数据流 / 不变量 / 边界写进 `docs/` 并接进导航，别只留在会话里；**git 线性历史**：优先 ff-only merge / rebase / cherry-pick / 挤压提交
 
 ## 常用命令速查
@@ -120,7 +124,7 @@ build，`dist/` 提交）；`nix/` = 构建图 + rotate/metrics/bench；`docs/` 
 - 仓库探索（按场景选工具、探索后落盘）：技能 `.agents/skills/repo-navigation/SKILL.md`
 - 自举与种子：[bootstrap.md](docs/reference/bootstrap.md)；测试与 CI：[testing.md](docs/reference/testing.md)；
   性能：[performance.md](docs/reference/performance.md)
-- 债务 / 能力缺口与路线图：[debt.md](docs/reference/debt.md)（只含开放项）、[docs/roadmap.md](docs/roadmap.md)（基线、终态、下一阶段、F1–F4）
+- 债务 / 能力缺口：[debt.md](docs/reference/debt.md)（只含开放项，带证据）
 
 > 文档分层规则：`README.md` 只保留定位/上手/目录/硬约束/导航；细节在 `docs/reference/`；
-> roadmap 只保留当前基线与未来方向；已完成阶段 / 已落地决策 / 历史在 git 历史。
+> 已完成阶段 / 已落地决策 / 历史在 git 历史。

@@ -712,8 +712,9 @@ filterCases opts cases = filter (caseMatches opts) cases
 -- ---------------------------------------------------------------
 -- 打印与汇总
 -- ---------------------------------------------------------------
+-- D25：`print` 返回 `Nat`（字节数）；工具链这里仍按 Int 使用（丢弃/比较都按 Int）。
 printLine : String -> Int
-printLine s = runIO (print "${s}\n")
+printLine s = runIO (fmap natToInt (print "${s}\n"))
 
 statusLine : Bool -> CaseResult -> String
 statusLine verbose r =

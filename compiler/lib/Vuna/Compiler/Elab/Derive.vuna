@@ -19,6 +19,7 @@ module Vuna.Compiler.Elab.Derive (expandDerivings, instHead) where
 --   Show：`show (C x1 ..) = "(" ++ "C" ++ " " ++ show x1 ++ .. ++ ")"`；零参 ⇒ `"C"`。
 --   Eq  ：`eq (C x1 ..) (C y1 ..) = x1 == y1 && ..`；不同构造子 ⇒ `False`。
 --   Ord ：先按**声明顺序**比构造子索引，同构造子再逐字段比。
+import Base.List
 import Vuna.Compiler.Common
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Diagnostics
@@ -72,7 +73,8 @@ derivingsForGo dname params ctors (t :: rest) sp acc =
 deriveCtxParams : List String -> List Ctor -> List String
 deriveCtxParams [] ctors = []
 deriveCtxParams (p :: rest) ctors =
-  if anyCtorMentions p ctors then p :: deriveCtxParams rest ctors else deriveCtxParams rest ctors
+  if anyCtorMentions p ctors then Base.List.Cons p (deriveCtxParams rest ctors)
+  else deriveCtxParams rest ctors
 
 anyCtorMentions : String -> List Ctor -> Bool
 anyCtorMentions p [] = False
@@ -141,6 +143,8 @@ deriveInstance dname params ctors tn sp =
 -- DData，因此这里同时接受手写 data 的箭头链（`EApp (EVar "->")`）与记录降级的 `EPi` 链。
 -- 生成 `instance C T where fromX sx = C sx`：不递归调用 trait，因此没有自引用/终止性风险；
 -- 跨类型转换（如字段是 Email 而不是 String）需要手写 instance。
+-- | 字面量转换派生（`FromString`/`FromInt`/`FromFloat`）：要求「单构造子、单字段、
+-- 字段类型就是目标内建类型」，生成 `instance C T where fromX sx = C sx`。
 deriveWrapper : String -> String -> String -> List Ctor -> Expr -> Span -> Result Decl
 deriveWrapper tn methodName wantTy [] hd sp =
   Err
@@ -151,6 +155,8 @@ deriveWrapper tn methodName wantTy (c :: rest) hd sp = case rest of
     Err
       "${showSpanLoc sp}: cannot derive ${traitShortName tn}: type must have exactly one constructor"
 
+-- | `deriveWrapper` 的单构造子分支：校验构造子 arity 为 1、字段类型等于目标类型名，
+-- 然后生成转发到构造子的实例方法。
 deriveWrapperCtor : String -> String -> String -> Ctor -> Expr -> Span -> Result Decl
 deriveWrapperCtor tn methodName wantTy (Ctor cn ty ar cnsp) hd sp = if ar == 1 then case deriveFieldTypes ty of
   dom :: rest => case rest of
@@ -167,11 +173,13 @@ deriveWrapperCtor tn methodName wantTy (Ctor cn ty ar cnsp) hd sp = if ar == 1 t
       "${showSpanLoc sp}: cannot derive ${traitShortName tn}: constructor must have exactly one field"
 else Err "${showSpanLoc sp}: cannot derive ${traitShortName tn}: constructor must have exactly one field"
 
+-- | 把箭头链（`EApp (EVar "->")` 或 `EPi`）拆成字段类型列表：依次取出域类型。
 deriveFieldTypes : Expr -> List Expr
-deriveFieldTypes (EApp (EVar "->" _) ([dom, cod]) _) = dom :: deriveFieldTypes cod
+deriveFieldTypes (EApp (EVar "->" _) ([dom, cod]) _) = Base.List.Cons dom (deriveFieldTypes cod)
 deriveFieldTypes (EPi _ _ _ dom cod _) = dom :: deriveFieldTypes cod
 deriveFieldTypes _ = []
 
+-- | 取表达式形态的类型名（`EVar` 或 `EApp` 的头部名），其它形态返回 `"?"`。
 deriveFieldTypeName : Expr -> String
 deriveFieldTypeName (EVar n sp) = n
 deriveFieldTypeName (EApp (EVar n sp) args sp2) = n
@@ -338,7 +346,7 @@ varNamesAt prefix i n = varNamesAtGo (n - i) prefix n
 varNamesAtGo : Int -> String -> Int -> List String
 varNamesAtGo remaining prefix n =
   if remaining <= 0 then []
-  else (prefix ++ strFromInt (n - remaining)) :: varNamesAtGo (remaining - 1) prefix n
+  else Base.List.Cons (prefix ++ strFromInt (n - remaining)) (varNamesAtGo (remaining - 1) prefix n)
 
 -- `gt sx sy = lt sy sx`；`ge sx sy = le sy sx`（都用已生成的 `lt` / `le`）。
 gtBody : String -> Span -> Expr

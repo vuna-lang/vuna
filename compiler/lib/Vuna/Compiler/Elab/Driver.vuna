@@ -41,6 +41,7 @@ module Vuna.Compiler.Elab.Driver
 -- Vuna.Compiler.Elab.Driver：精化入口与程序组装：签名 → data/trait/instance → 定义体 → zonk/终止性检查 → DtProgram；
 -- 以及目标（goal）收集与未解元变量的诊断（zonkGoal/goalsOfProgram/elabProgram*）。
 -- 拆自 M24 的单一 `Elab.vuna`（按真实调用图切；门面仍是 `Vuna.Compiler.Elab`）。
+import Base.List
 import Vuna.Compiler.Common
 import Base.HashMap
 import Vuna.Compiler.Debug
@@ -174,7 +175,9 @@ declaredDictBindersGo : Ec -> Ctx -> Term -> List DeclDictBinder -> List DeclDic
 declaredDictBindersGo ec ctx (TPi n True rig dom cod) acc =
   let
     domVal = eval (ctxEnv ctx) dom
-    acc2 = if isDictDomain ec domVal then DeclDictBinder n (ctxDepth ctx) domVal :: acc else acc
+    acc2 =
+      if isDictDomain ec domVal then Base.List.Cons (DeclDictBinder n (ctxDepth ctx) domVal) acc
+      else acc
   in declaredDictBindersGo ec (ctxBindValue n domVal ctx) cod acc2
 declaredDictBindersGo ec ctx _ acc = reverse acc
 
@@ -565,7 +568,7 @@ zipKeptArgs : List (Pair String Rig) -> List (Pair Term Rig) -> List Term
 zipKeptArgs [] args = map (\p => firstOf p) args
 zipKeptArgs (b :: bs) [] = []
 zipKeptArgs (b :: bs) ((Pair a rig) :: rest) =
-  if rigIsErased (secondOf b) then zipKeptArgs bs rest else a :: zipKeptArgs bs rest
+  if rigIsErased (secondOf b) then zipKeptArgs bs rest else Base.List.Cons a (zipKeptArgs bs rest)
 
 -- | 自动补注（M41 新增导出）：replListNilName。
 replListNilName : String
@@ -590,69 +593,13 @@ dtEvalExprIn : DtProgram -> Expr -> Result String
 dtEvalExprIn prog expr =
   Vuna.Compiler.Common.bind (dtEvalExprInInfo prog expr) (\p => Ok (firstOf p))
 
--- REPL/表达式求值的浮点 guard：AST 里出现浮点字面量或浮点内建引用就直接拒绝
--- （核心求值器不能算浮点）。只查表达式本身，不扫全程序——`import Base` 的程序仍可
--- 正常求值（见 docs/reference/floats.md）。
-exprHasFloat : Expr -> Bool
-exprHasFloat (EFloat raw sp) = True
-exprHasFloat (EVar n sp) = memName n floatIntrinsicNames
-exprHasFloat (EInt n sp) = False
-exprHasFloat (EStr s sp) = False
-exprHasFloat (ELam ps b sp) = exprHasFloat b
-exprHasFloat (EApp f args sp) = exprHasFloat f || anyExprHasFloat args
-exprHasFloat (EPi n i q d c sp) = exprHasFloat d || exprHasFloat c
-exprHasFloat (ELet binds body rec_ sp) = anyBindHasFloat binds || exprHasFloat body
-exprHasFloat (ELocalFun clauses sp) = anyClauseHasFloat clauses
-exprHasFloat (ECase scrut alts sp) = exprHasFloat scrut || anyBindHasFloat alts
-exprHasFloat (EIf c t el sp) = exprHasFloat c || exprHasFloat t || exprHasFloat el
-exprHasFloat (EField base f sp) = exprHasFloat base
-exprHasFloat (ERecord rn fields sp) = anyNamedHasFloat fields
-exprHasFloat (ERecUpdate base fields sp) = exprHasFloat base || anyNamedHasFloat fields
-exprHasFloat (EDo stmts sp) = anyDoHasFloat stmts
-exprHasFloat (EParen inner sp) = exprHasFloat inner
-exprHasFloat (EInfix op l r sp) = exprHasFloat l || exprHasFloat r
-exprHasFloat (EBacktick op l r sp) = exprHasFloat l || exprHasFloat r
-exprHasFloat (ESectOp op sp) = False
-exprHasFloat (ESectL op rhs sp) = exprHasFloat rhs
-exprHasFloat (ESectR lhs op sp) = exprHasFloat lhs
-exprHasFloat (EAnn v ty sp) = exprHasFloat v || exprHasFloat ty
-exprHasFloat (EInterp multi parts sp) = anyInterpHasFloat parts
-
-anyExprHasFloat : List Expr -> Bool
-anyExprHasFloat [] = False
-anyExprHasFloat (x :: rest) = exprHasFloat x || anyExprHasFloat rest
-
-anyBindHasFloat : List (Pair Pat Expr) -> Bool
-anyBindHasFloat [] = False
-anyBindHasFloat ((Pair p v) :: rest) = exprHasFloat v || anyBindHasFloat rest
-
-anyNamedHasFloat : List (Pair String Expr) -> Bool
-anyNamedHasFloat [] = False
-anyNamedHasFloat ((Pair n v) :: rest) = exprHasFloat v || anyNamedHasFloat rest
-
-anyClauseHasFloat : List (Pair (List Pat) Expr) -> Bool
-anyClauseHasFloat [] = False
-anyClauseHasFloat ((Pair ps body) :: rest) = exprHasFloat body || anyClauseHasFloat rest
-
-anyDoHasFloat : List DoStmt -> Bool
-anyDoHasFloat [] = False
-anyDoHasFloat ((DBind p v sp) :: rest) = exprHasFloat v || anyDoHasFloat rest
-anyDoHasFloat ((DExpr v sp) :: rest) = exprHasFloat v || anyDoHasFloat rest
-
-anyInterpHasFloat : List InterpPart -> Bool
-anyInterpHasFloat [] = False
-anyInterpHasFloat (part :: rest) = case part of
-  IPText t => anyInterpHasFloat rest
-  IPHole e => exprHasFloat e || anyInterpHasFloat rest
-
--- REPL/表达式求值的浮点 guard：拒绝后不再进入核心求值器（核心求值器不能算浮点）。
+-- B44：核心求值器支持浮点，REPL/表达式求值不再有「出现浮点就拒绝」的 guard。
+-- | 在程序环境里精化并求值一条表达式；默认（非 strict）入口返回纯值文本。
 dtEvalExprInInfo : DtProgram -> Expr -> Result (Pair String String)
-dtEvalExprInInfo prog expr =
-  if exprHasFloat expr then Err
-    "vuna interp: Float is not supported by the interpreter (use vuna compile / vuna run; see docs/reference/floats.md)"
-  else dtEvalExprInInfoCore prog expr
+dtEvalExprInInfo prog expr = dtEvalExprInInfoCore prog expr
 
 -- M30 · REPL：同时返回值文本与 zonk 后的类型文本（类型决定是否走效果执行）。
+-- | 在程序环境里精化并求值一条表达式，同时返回结果文本与 zonk 后的类型文本。
 dtEvalExprInInfoCore : DtProgram -> Expr -> Result (Pair String String)
 dtEvalExprInInfoCore prog expr = case prog of
   DtProgram datas defs goals sols globals insts classes next defvals depths =>
@@ -688,6 +635,7 @@ dtEvalExprInInfoCore prog expr = case prog of
     )
 
 -- 导入 Base.Record 的模块：为当前模块的 record 字段追加 HasField 实例。
+-- | 判断声明列表里是否出现 `HasField` trait 声明（全名或短名）。
 hasHasFieldDecls : List Decl -> Bool
 hasHasFieldDecls [] = False
 hasHasFieldDecls (d :: rest) = case d of
@@ -696,16 +644,19 @@ hasHasFieldDecls (d :: rest) = case d of
     else hasHasFieldDecls rest
   _ => hasHasFieldDecls rest
 
+-- | 只保留短名（非限定名）的记录声明，避免为依赖包的记录重复生成实例。
 shortRecordInfos : List RecordInfo -> List RecordInfo
 shortRecordInfos [] = []
 shortRecordInfos (r :: rest) =
-  if baseNameOf r.recordInfoName == r.recordInfoName then r :: shortRecordInfos rest
+  if baseNameOf r.recordInfoName == r.recordInfoName then Base.List.Cons r (shortRecordInfos rest)
   else shortRecordInfos rest
 
+-- | 从声明里抽取记录信息，为当前模块的记录字段生成 `HasField` 实例。
 hasFieldInstancesOfDecls : List Decl -> List Decl
 hasFieldInstancesOfDecls decls =
   recordHasFieldInstances (shortRecordInfos (firstOf (recordsOfDecls (\n => n) decls)))
 
+-- | 判断声明列表里是否已有显式的 `HasField` 实例（有则不再自动生成）。
 hasExplicitHasFieldInstance : List Decl -> Bool
 hasExplicitHasFieldInstance [] = False
 hasExplicitHasFieldInstance (d :: rest) = case d of
@@ -716,6 +667,7 @@ hasExplicitHasFieldInstance (d :: rest) = case d of
     _ => hasExplicitHasFieldInstance rest
   _ => hasExplicitHasFieldInstance rest
 
+-- | 按需为当前模块的记录字段追加 `HasField` 实例：已有显式实例则跳过，`getField` 或 `HasField` 可见时才生成。
 maybeAddHasFieldInstances : List (Pair String Term) -> List Decl -> List Decl
 maybeAddHasFieldInstances globals decls = if hasExplicitHasFieldInstance decls then decls
 else case globalLookup "Base.Record.getField" globals of
@@ -832,6 +784,103 @@ in Vuna.Compiler.Common.bind (elabDatas (collectDataDecls decls []) startGlobals
 )
 )
 
+-- ---------------------------------------------------------------
+-- D17：非内建 `main` 类型的 Show 展示定义
+-- ---------------------------------------------------------------
+-- `main` 的展示过去只支持 Int/Nat/String/Bool/Float（codegen 的 main 钩子按内建名
+-- 选展示函数，其它类型在 codegen 阶段报错）。D17 起：main 的结果类型（`IO a` 先
+-- 剥掉 IO）不是内建类型时，在收尾阶段合成
+--   `@vuna@main_show : T -> String`
+--   `@vuna@main_show = \x => show T dict x`
+-- （`dict` 是收尾时现搜的 `Show T` 实例）。codegen 的 main 钩子与 interp 的 main 展示
+-- 都引用这条定义；找不到 `Show T` 实例在精化期报 `TC_NoInstanceFound`（替代旧实现里
+-- 到 codegen 阶段才报 `CG_MainReturnType` 的行为，该错误码已删除）。
+findDefByName : String -> List DtDef -> Maybe DtDef
+findDefByName name [] = Nothing
+findDefByName name (d :: rest) = if dtDefName d == name then Just d else findDefByName name rest
+
+-- `IO a` 去掉 IO 后的 `a`（不是 IO 则原样；与 codegen 的 `ioResultTy` 同一形态）。
+mainShowInnerTy : Term -> Term
+mainShowInnerTy (TApp fn arg rig) = case fn of
+  TGlobal g => if g == ioFamilyName then arg else TApp fn arg rig
+  _ => TApp fn arg rig
+mainShowInnerTy t = t
+
+-- main 结果类型是否是内建展示类型（与 Codegen.Term.mainShowForName 的集合一致）。
+mainShowBuiltinTy : Value -> Bool
+mainShowBuiltinTy (VNeutral n) = case n of
+  NGlobal g [] =>
+    g == intTypeName
+      || g == natTypeName
+      || g == strTypeName
+      || g == boolTypeName
+      || g == floatTypeName
+  _ => False
+mainShowBuiltinTy _ = False
+
+-- main 不能带显式/隐式参数：入口 `main` 是零参的；结果类型（拆掉 `IO` 之后）出现
+-- 函数类型就说明 main 带参数，这是 arity 错误、不是 `Show` 缺失。
+mainHasParams : Term -> Bool
+mainHasParams (TPi _ _ _ _ _) = True
+mainHasParams _ = False
+
+-- | `TC_MainArity`：main 带参数。`main : Int -> Int` 与 `main : IO (Int -> Int)` 都命中
+-- （`mainShowInnerTy` 先剥 IO，再看内层类型）。
+mainArityErr : Span -> Term -> Result a
+mainArityErr sp ty =
+  let
+    st = showTerm ty
+  in tcErr1 sp (MainArity st) st
+
+-- 收尾阶段合成 `@vuna@main_show`；main 不存在或是内建/无参数判断由 caller 处理。
+synthMainShow : Ec -> List (Pair String Term) -> List DtDef -> Result (List DtDef)
+synthMainShow ec globals defs = case findDefByName "main" defs of
+  Nothing => Ok defs
+  Just mainDef =>
+    let
+      sp = case dtDefSpan mainDef of
+        Just s => s
+        Nothing => Span "" 0 0 0 0
+      inner = mainShowInnerTy (dtDefType mainDef)
+    in if mainHasParams inner then mainArityErr sp inner
+    else synthMainShowInner ec globals defs sp inner
+
+synthMainShowInner : Ec -> List (Pair String Term) -> List DtDef -> Span -> Term -> Result (List DtDef)
+synthMainShowInner ec globals defs sp inner =
+  let
+    bodies = Base.HashMap.fromList (concatMap (\d => case dtDefBody d of
+      Just b => [Pair (dtDefName d) b]
+      Nothing => []
+    ) defs
+    )
+    tyVal = force bodies (ecSolsP ec) defaultFuel (eval [] inner)
+  in if mainShowBuiltinTy tyVal then Ok defs else synthMainShowGo ec globals defs sp tyVal
+
+synthMainShowGo : Ec -> List (Pair String Term) -> List DtDef -> Span -> Value -> Result (List DtDef)
+synthMainShowGo ec globals defs sp tyVal = case findClassByShortName "Show" (ecClasses ec) of
+  Nothing => mainShowMissing sp tyVal
+  Just cls =>
+    let
+      mname = classMethodProjection cls.dtClassMethods "show"
+      dictTy = VNeutral (NGlobal (dictTypeName (dtClassName cls)) [tyVal])
+    in case searchInstanceIn globals emptyCtx ec dictTy sp of
+      Err e => mainShowMissing sp tyVal
+      Ok (Pair dictTerm _) =>
+        let
+          tyTerm = quote 0 tyVal
+          body =
+            TLam "x" Rig1
+              (TApp (TApp (TApp (TGlobal mname) tyTerm Rig0) dictTerm RigOmega) (TVar "x" 0) Rig1)
+          def =
+            DtDef mainShowDefName (TPi "x" False Rig1 tyTerm (TGlobal strTypeName)) body (Just sp)
+        in Ok (rezonkDefs ec (append defs [def]))
+
+mainShowMissing : Span -> Value -> Result a
+mainShowMissing sp tyVal =
+  let
+    st = showTerm (quote 0 tyVal)
+  in tcErr1 sp (NoInstanceFound st) st
+
 -- 严格收尾：与原来的「未解元变量 / 用量 / 终止性」校验逐字一致，成功才产出 DtProgram。
 finishCore : List Decl -> List Decl -> ElabCore -> Result DtProgram
 finishCore termAux decls core =
@@ -861,7 +910,8 @@ finishCore termAux decls core =
         Nothing =>
           let
             extra = extraDefsOf globals ec4 projSpans (append instDefs defs)
-            allDefs = rezonkDefs ec4 (append instDefs (append extra defs))
+            allDefs0 = rezonkDefs ec4 (append instDefs (append extra defs))
+          in Vuna.Compiler.Common.bind (synthMainShow ec4 globals allDefs0) (\allDefs => let
             -- bodies 阶段不再逐定义重建 globals（O(n²)）；这里用最终定义集一次性把签名类型
             -- 换成提升后的类型（O(n)）。
             defsTblOut =
@@ -876,6 +926,7 @@ finishCore termAux decls core =
             _ = stamp "termination-done"
           in Ok
             (DtProgram datas1 allDefs (ecGoals ec4) (ecSols ec4) globalsOut (ecInsts ec4) (ecClasses ec4) (ecNext ec4) (ecDefVals ec4) (Base.HashMap.toList (ecDepthTbl ec4)))
+          )
           )
           )
 

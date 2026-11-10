@@ -24,9 +24,11 @@ module Vuna.Compiler.Codegen.Erase
 --   - de Bruijn 作用域护栏与 OCaml 名字单射性护栏；
 --   - 运行时依赖图与 SCC 分组（决定 `let` / `let rec ... and ...` 的生成顺序）。
 -- 纯分析，不产生 OCaml 文本。
+import Base.List
 import Vuna.Compiler.Common
 import Base.HashMap
 import Vuna.Compiler.Core
+import Vuna.Compiler.Core.Term
 import Vuna.Compiler.Diagnostics
 import Vuna.Compiler.Elab
 import Vuna.Compiler.Codegen.Decl
@@ -67,7 +69,7 @@ isAxiomDef d = not (dtDefHasBody d)
 axiomNamesOf : List DtDef -> List String
 axiomNamesOf [] = []
 axiomNamesOf (d :: rest) =
-  if isAxiomDef d then dtDefName d :: axiomNamesOf rest else axiomNamesOf rest
+  if isAxiomDef d then Base.List.Cons (dtDefName d) (axiomNamesOf rest) else axiomNamesOf rest
 
 isTypeLevelDef : HashMap String Term -> DtDef -> Bool
 isTypeLevelDef tbl d = isTypeForming (force tbl solsEmpty defaultFuel (eval [] (dtDefType d)))
@@ -228,7 +230,8 @@ termDepsAltsFuel fuel runtimeNames acc (alt :: rest) =
 
 addName : String -> List String -> List String
 addName name [] = [name]
-addName name (x :: rest) = if x == name then x :: rest else x :: addName name rest
+addName name (x :: rest) =
+  if x == name then Base.List.Cons x rest else Base.List.Cons x (addName name rest)
 
 runtimeNamesOf : List DtDef -> List String
 runtimeNamesOf [] = []
@@ -257,7 +260,7 @@ addDependents src (m :: rest) t =
     cur = case Base.HashMap.lookup m t of
       Just xs => xs
       Nothing => []
-  in addDependents src rest (Base.HashMap.insert m (src :: cur) t)
+  in addDependents src rest (Base.HashMap.insert m (Base.List.Cons src cur) t)
 
 reverseAdjTbl : List (Pair String (List String)) -> HashMap String (List String)
 reverseAdjTbl [] = Base.HashMap.fromList []
@@ -283,7 +286,7 @@ dfsPost adjT n visited order = dfsPostFuel 100000 adjT n visited order
 dfsPostFuel : Int -> HashMap String (List String) -> String -> HashMap String Bool -> List String -> Pair (HashMap String Bool) (List String)
 dfsPostFuel fuel adjT n visited order = if fuel <= 0 then Pair visited order
 else case foldNeighborsPostFuel (fuel - 1) adjT (neighborsOf adjT n) visited order of
-  Pair visited2 order2 => Pair visited2 (n :: order2)
+  Pair visited2 order2 => Pair visited2 (Base.List.Cons n order2)
 
 postOrder : HashMap String (List String) -> List String -> HashMap String Bool -> List String -> Pair (HashMap String Bool) (List String)
 postOrder adjT [] visited order = Pair visited order
@@ -308,7 +311,7 @@ dfsCollect adjT n visited comp = dfsCollectFuel 100000 adjT n visited comp
 dfsCollectFuel : Int -> HashMap String (List String) -> String -> HashMap String Bool -> List String -> Pair (HashMap String Bool) (List String)
 dfsCollectFuel fuel adjT n visited comp = if fuel <= 0 then Pair visited comp
 else case foldNeighborsCollectFuel (fuel - 1) adjT (neighborsOf adjT n) visited comp of
-  Pair visited2 comp2 => Pair visited2 (n :: comp2)
+  Pair visited2 comp2 => Pair visited2 (Base.List.Cons n comp2)
 
 collectComps : HashMap String (List String) -> List String -> HashMap String Bool -> List (List String) -> List (List String)
 collectComps adjT [] visited comps = comps
@@ -334,7 +337,9 @@ groupsFromCompsGo : HashMap String (List String) -> List String -> List String -
 groupsFromCompsGo compTbl allNames [] emitted = []
 groupsFromCompsGo compTbl allNames (n :: rest) emitted = if Base.HashMap.member n emitted then groupsFromCompsGo compTbl allNames rest emitted
 else case Base.HashMap.lookup n compTbl of
-  Just g => groupOf allNames g :: groupsFromCompsGo compTbl allNames rest (addAllNames g emitted)
+  Just g =>
+    Base.List.Cons (groupOf allNames g)
+      (groupsFromCompsGo compTbl allNames rest (addAllNames g emitted))
   Nothing => groupsFromCompsGo compTbl allNames rest emitted
 
 -- 单成员分量（大程序里占绝对多数）直接返回，免掉对全程序名字的一次 filter；
@@ -350,7 +355,8 @@ groupOf allNames g =
 
 filterNames : (String -> Bool) -> List String -> List String
 filterNames pred [] = []
-filterNames pred (n :: rest) = if pred n then n :: filterNames pred rest else filterNames pred rest
+filterNames pred (n :: rest) =
+  if pred n then Base.List.Cons n (filterNames pred rest) else filterNames pred rest
 
 notIn : String -> List String -> Bool
 notIn name names = not (memName name names)
@@ -359,7 +365,7 @@ uniqueNames : List String -> List String
 uniqueNames [] = []
 uniqueNames (name :: rest) =
   if name == "" then uniqueNames rest
-  else if memName name rest then uniqueNames rest else name :: uniqueNames rest
+  else if memName name rest then uniqueNames rest else Base.List.Cons name (uniqueNames rest)
 
 groupDeps : HashMap String (List String) -> List String -> List String
 groupDeps adjT group =
@@ -396,7 +402,7 @@ else case remaining of
     Nothing => cgErr0 DependencyCycle
     Just (Pair g rest) =>
       Vuna.Compiler.Common.bind (orderGroupsAccFuel (fuel - 1) adjT rest (addAllNames g emitted))
-        (\tail => Ok (g :: tail))
+        (\tail => Ok (Base.List.Cons g tail))
 
 -- 运行时定义的依赖邻接表（只保留运行时会用到的 TGlobal 边）。
 -- 入参只会有体定义（axiom 已被分区到类型级）；无体项按空依赖处理。
@@ -523,10 +529,34 @@ termDepsAlts : HashMap String Bool -> List String -> List CaseAlt -> List String
 termDepsAlts a1 a2 a3 = termDepsAltsFuel 100000 a1 a2 a3
 
 checkErasure : List String -> List (Pair String Rig) -> Term -> Result Int
-checkErasure a1 a2 a3 = checkErasureFuel 512 a1 a2 a3
+checkErasure typeNames binders t = case natChainValue t of
+  -- D24：`Zero` / `Succ` 字面量链只由运行时构造子组成，没有类型级引用；入口 O(1) 折回，
+  -- 不再按链长消耗 fuel（`n = 1000` 曾经在第 512 个链节点假报 erasure fuel exhausted）。
+  Just _ => Ok 0
+  Nothing => checkErasureFuel (erasureFuelFor (termSize t)) typeNames binders t
+
+-- | 擦除检查的 fuel 派生（D24）：固定 512 对深项不够，按项节点数放大（每节点最多几步
+-- 递归）；上限 `erasureFuelMax` 防失控输入。Nat 字面量链已在入口折回，不依赖这条。
+erasureFuelFor : Int -> Int
+erasureFuelFor size =
+  let
+    scaled = 512 + 4 * size
+  in if scaled > erasureFuelMax then erasureFuelMax else scaled
+
+erasureFuelMax : Int
+erasureFuelMax = 1000000
+
+erasureFuelForArgs : List (Pair Term Rig) -> Int
+erasureFuelForArgs [] = 0
+erasureFuelForArgs ((Pair a _) :: rest) = termSize a + erasureFuelForArgs rest
 
 checkConArgsErasure : List String -> List (Pair String Rig) -> List (Pair Term Rig) -> Result Int
-checkConArgsErasure a1 a2 a3 = checkConArgsErasureFuel 512 a1 a2 a3
+checkConArgsErasure a1 a2 a3 =
+  checkConArgsErasureFuel (erasureFuelFor (erasureFuelForArgs a3)) a1 a2 a3
 
 checkAltErasure : List String -> List (Pair String Rig) -> List CaseAlt -> Result Int
-checkAltErasure a1 a2 a3 = checkAltErasureFuel 512 a1 a2 a3
+checkAltErasure a1 a2 a3 = checkAltErasureFuel (erasureFuelFor (erasureFuelForAlts a3)) a1 a2 a3
+
+erasureFuelForAlts : List CaseAlt -> Int
+erasureFuelForAlts [] = 0
+erasureFuelForAlts (alt :: rest) = termSize (caseAltBody alt) + erasureFuelForAlts rest

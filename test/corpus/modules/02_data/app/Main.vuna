@@ -1,4 +1,4 @@
 import Vuna.List
 
 main : Int
-main = Vuna.List.sumList (Vuna.List.Cons 1 (Vuna.List.Cons 2 (Vuna.List.Cons 3 Vuna.List.Nil)))
+main = Vuna.List.firstList (Vuna.List.Cons 1 (Vuna.List.Cons 2 (Vuna.List.Cons 3 Vuna.List.Nil)))

@@ -20,7 +20,7 @@
   展开的规则。例：`String -> Eff [Fetch] String`。构造数据时优先写 `[..]`：
   `vuna lint --fix` 的 `list-literal` 规则会把表达式/类型位置的闭合 `::` / `Cons` 链
   与裸 `Nil` 归一为列表字面量；模式匹配里的 `::` / `Cons` 保持原样。
-- **模板字符串与多行字面量**（M36）："hi ${name}" 插值、"""...""" 多行（内容逐字，
+- **模板字符串与多行字面量**："hi ${name}" 插值、"""...""" 多行（内容逐字，
   只丢开引号后的一个换行）；洞降级成 `Base.Interp.interp` 调用，转换语义由 `Interp`
   实例决定。规则、转义 `\$`、边界见 [templates.md](templates.md)；
 - **运算符 = 有 fixity 的普通名字**：`a op b` 与 `op a b` 同义，`` a `f` b `` 与 `f a b` 同义，
@@ -34,7 +34,7 @@
   `Dict_C Field`；class 集合是开放的，由底层类型有没有该实例决定，不限于 Show/Eq/Ord。
   `record` 在精化前降级为单构造器 `data`。详细语法、记录更新 / 模式与委托边界见
   [records-traits.md](records-traits.md)；
-- **自动去装箱**（M42）：单字段 record / 单构造器单运行时字段的 data 在 codegen 中表示为
+- **自动去装箱**：单字段 record / 单构造器单运行时字段的 data 在 codegen 中表示为
   字段类型的 OCaml 类型别名（没有构造子、没有变体）；这是声明级表示选择，不改变类型检查
   与 `deriving` 语义。判据与边界见 [records-traits.md](records-traits.md) §零成本表示；
 - layout：offside 规则；顶层声明、`data` 构造器块、`case` 分支、`let` 绑定按块列对齐，
@@ -47,7 +47,7 @@
   `&& ||`、`++`、`strFromInt` / `strUnpack` / `strPack` /
   `strLength` / `strConcatMany` / `strSubstTemplate` / `strHash` / `strAt` / `strShow`、
   `timeUs`。宽度、编码、转义与 interp 边界见 [primitives.md](primitives.md)；
-- **运算符 = 方法别名（M31.1–M31.3）**：`==` / `/=` / `<` / `<=` / `>` / `>=` 不是内建值，
+- **运算符 = 方法别名**：`==` / `/=` / `<` / `<=` / `>` / `>=` 不是内建值，
   而是 `Base.Eq` / `Base.Ord` 的方法（`eq` / `neq` / `lt` / `le` / `gt` / `ge`）的
   **别名**（fixity 与别名由库模块里的 `infixl ... = ...` 声明提供，`Loader.Fixity` 在重排时
   替换）。`a == b` 与 `eq a b` 同义，Int / String 上由内建实例特化，其它类型走 `Eq` / `Ord`
@@ -60,7 +60,7 @@
   一致）；
 - `where` 子句：函数体后可跟缩进的 `where` 块；绑定块（`let` 与 `where` 同一套模型）是
   **顺序作用域 + 可选签名**，其中 `where` 块要求每个绑定写显式签名；见下节；
-- 类型身份：`Int` / `String` 是语言 primitive 类型；`IO` 是语言内建效应类型（M37，
+- 类型身份：`Int` / `String` 是语言 primitive 类型；`IO` 是语言内建效应类型（
   kind `Type -> Type`，无构造器）；`Bool` / `List` / `Nat` 是 base 的普通 `data` 声明
   （canonical 身份 `Base.Bool.Bool` / `Base.List.List` / `Base.Nat.Nat`，经自动注入的
   `Prelude` 可见）。用户写同名 `data` 是普通声明，不与 canonical 冲突（`IO` 例外：
@@ -170,7 +170,7 @@ idT x = x
   有定义体（`[TC_AxiomWithDefinition]`），也不能重复声明；
 - `axiom` 是保留关键字；当前编译器自身不用 axiom（旧 seed 必须能编译新源码）。
 
-## 签名的 trait 约束（M32）
+## 签名的 trait 约束
 
 顶层签名可写约束前缀（`f : Eq a, Show a => a -> String`）；语义、绑定顺序、诊断与边界见
 [records-traits.md](records-traits.md)。约束只允许在顶层签名上，其它位置写 `=>` 报
@@ -186,7 +186,7 @@ vuna/base/compiler 三包源码统一按当前语言能力书写，新增/修改
 
 - **签名不写可量化的类型参数**：自由小写名由精化器量化为隐式参数（`vhead : Vec n a -> a`
   等价 `{a : Type} -> ...`）；纯索引写 `{n : Nat} ->`，子句与调用点不再手写该参数；
-- **trait 约束显式**：泛型函数依赖 Eq/Ord/Show 字典时在顶层签名写 `Eq a =>`（M32 形态），
+- **trait 约束显式**：泛型函数依赖 Eq/Ord/Show 字典时在顶层签名写 `Eq a =>`，
   不依赖 body 里 `==` 的隐式字典提升；
 - **Bool 不做字面量搬运**：`if c then True else False` 写 `c`，`if c then e else False` 写
   `c && e`，`not (a == b)` 写 `a /= b`；单簇 helper 用 `Base.Bool.not`，不再自建；

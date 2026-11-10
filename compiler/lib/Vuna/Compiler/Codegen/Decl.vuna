@@ -616,6 +616,8 @@ genCtorDecl qc levels table datas c =
     (\p => Ok (ctorDeclText (ctorOcamlName (dtCtorFamily c) (dtCtorName c)) (firstOf p)))
 
 -- 去装箱族：只声明透明类型别名，不生成变体/构造子。
+-- | 去装箱族的 data 声明：只把该族声明成透明类型别名（`type T = 字段类型`），
+-- 不生成变体与构造子，因此要求恰好一个保留字段。
 genUnboxedDataDecl : QualCtx -> List Int -> List (Pair String (List Int)) -> List DtData -> DtData -> DtCtor -> Int -> Result String
 genUnboxedDataDecl qc levels table datas d c idx = Vuna.Compiler.Common.bind (ctorFieldTexts qc levels table datas (ctorKeepFlags c) (ctorOpaqueFlagsOf datas c) (dtCtorTelescope c) 0 (eval [] (dtCtorType c)) (length levels)) (\p => case firstOf p of
   text :: rest => case rest of

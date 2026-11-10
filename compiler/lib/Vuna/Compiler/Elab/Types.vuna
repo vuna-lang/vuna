@@ -197,6 +197,7 @@ dtDataCtors (DtData name params ctors kind viaClasses lin) = ctors
 dtDataKind : DtData -> Term
 dtDataKind (DtData name params ctors kind viaClasses lin) = kind
 
+-- | 取出 `deriving via field` 声明的类名列表（canonical 名；空表示普通 data）。
 dtDataViaClasses : DtData -> List String
 dtDataViaClasses (DtData name params ctors kind viaClasses lin) = viaClasses
 
@@ -236,6 +237,7 @@ dtInstName (DtInst name tele ctxE head) = name
 
 -- 把一个项拆成「全局头 + 带 multiplicity 的实参表」（`Dict_C a` ⇒ `(Dict_C, [a])`）。
 -- 非全局头（元变量/局部变量/lambda/…）返回 Nothing。实例头识别、族名提取共用它。
+-- | 把项拆成「全局头 + 带 multiplicity 的实参表」（如 `Dict_C a` 拆成 `(Dict_C, [a])`）；头不是全局名时返回 Nothing。
 flattenTaggedApp : Term -> Maybe (Pair String (List (Pair Term Rig)))
 flattenTaggedApp (TApp f a rig) = case flattenTaggedApp f of
   Just (Pair g args) => Just (Pair g (append args [Pair a rig]))
@@ -250,24 +252,29 @@ flattenTaggedApp _ = Nothing
 -- 索引不一致只影响速度（候选少了会少找到实例——所以 `ecInstsAudit` 在 debug 下自检），
 -- 语义真相始终是 `instsList`。字段与构造器不导出：外部只能经 `instStoreEmpty` /
 -- `instStoreOf` / `instStorePush` 维护，经 `ecInsts`（全表）/ `ecInstsFamily`（族桶）读。
+-- | 实例登记表：按登记序排列的权威实例列表，加上按实例头族名（`Dict_<类>`）分桶的派生索引。
 record InstStore where
   instsList : List DtInst
   instsByFamily : HashMap String (List DtInst)
 
 -- 实例头的族名（`Dict_<类>` 全局名）；头不是全局应用时返回空串（理论上实例头都合法）。
+-- | 实例头的字典族名（`Dict_<类>` 全局名）；头不是全局应用时返回空串。
 instFamilyOf : DtInst -> String
 instFamilyOf i = case flattenTaggedApp i.dtInstHead of
   Just (Pair g args) => g
   Nothing => ""
 
+-- | 空实例登记表：权威列表与族索引都为空。
 instStoreEmpty : InstStore
 instStoreEmpty = InstStore [] (Base.HashMap.fromList [])
 
 -- 按登记序建表（`ecAddInstRaw` 每次 push；总量 ≪ 100，逐步 push 的 O(n²) 可忽略）。
+-- | 按登记序由实例列表构建登记表（逐个 push，实例总量很小）。
 instStoreOf : List DtInst -> InstStore
 instStoreOf [] = instStoreEmpty
 instStoreOf (i :: rest) = instStorePush (instStoreOf rest) i
 
+-- | 把一个实例追加到权威列表末尾，同时追加进它所属头族的桶。
 instStorePush : InstStore -> DtInst -> InstStore
 instStorePush store i =
   let
@@ -279,6 +286,7 @@ instStorePush store i =
     (Base.HashMap.insert fam (append bucket [i]) store.instsByFamily)
 
 -- 精确族桶（不回落全表；未知族 = 空表）。
+-- | 精确取某个头族的实例桶；未知族返回空表（不回落全表）。
 instStoreFamily : InstStore -> String -> List DtInst
 instStoreFamily store fam = case Base.HashMap.lookup fam store.instsByFamily of
   Just b => b
@@ -290,10 +298,12 @@ instStoreFamily store fam = case Base.HashMap.lookup fam store.instsByFamily of
 -- S4：统一约束存储。`Constraint` 同时承载字典目标与行成员目标（kind 区分），带稳定 id、
 -- 延迟点 span 与创建深度（诊断/作用域检查用；C3 起由延迟点填）。`csPending` 保持旧
 -- 旧 `ecDictGoals` 的列表顺序语义（尾部 append、旋转），`csNextId` 只用于分配 id。
+-- | 延迟约束的类别：`CkDict` 是字典目标，`CkRow` 是行成员（效应）目标。
 data ConstraintKind : Type where
   CkDict : ConstraintKind
   CkRow : ConstraintKind
 
+-- | 一条延迟约束：稳定 id、类别、待解元变量、目标域值、延迟点 span 与创建深度。
 record Constraint where
   conId : Int
   conKind : ConstraintKind
@@ -302,6 +312,7 @@ record Constraint where
   conSpan : Maybe Span
   conDepth : Int
 
+-- | 统一约束存储：待处理约束列表（保持旧字典目标的顺序语义）、下一个 id、id 到尝试 epoch 的记录。
 record ConstraintStore where
   csPending : List Constraint
   csNextId : Int
@@ -309,6 +320,7 @@ record ConstraintStore where
   -- 目标在 program-level 每轮被跳过（仍留在 pending 里，供定义收尾 lift 用）。
   csTried : List (Pair Int Int)
 
+-- | 空约束存储：无待处理约束、id 从 0 开始、无已尝试记录。
 csEmpty : ConstraintStore
 csEmpty = ConstraintStore [] 0 []
 
@@ -407,6 +419,7 @@ ecInsts (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl s
   insts.instsList
 
 -- S5a：实例表的**族桶**读入口（精确匹配，`fam` 未知 = 空表）。
+-- | 读取实例表中某个头族的实例桶（精确匹配；未知族返回空表）。
 ecInstsFamily : Ec -> String -> List DtInst
 ecInstsFamily (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals haslin) fam =
   instStoreFamily insts fam
@@ -416,6 +429,7 @@ ecInstsFamily (Ec next sols defs datas depths goals insts classes dgoals deftbl 
 --   1) 所有桶的条目总数 == 权威表长度（没漏、没重）；
 --   2) 每个桶逐项等于「按该族过滤权威表」的结果（桶内容与族键一致，且桶内保序）。
 -- 用实例名序列比较（`DtInst` 没有 Eq 实例；实例名唯一）。
+-- | 自检实例表索引：所有桶的条目总数等于权威表长度，且每个桶与按该族过滤权威表的结果逐项一致。
 ecInstsAudit : Ec -> Bool
 ecInstsAudit (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals haslin) =
   let
@@ -423,16 +437,19 @@ ecInstsAudit (Ec next sols defs datas depths goals insts classes dgoals deftbl g
     list = insts.instsList
   in bucketCount pairs == length list && allBucketsMatch list pairs
 
+-- | 统计所有族桶里实例条目的总数。
 bucketCount : List (Pair String (List DtInst)) -> Int
 bucketCount [] = 0
 bucketCount (p :: rest) = length (secondOf p) + bucketCount rest
 
+-- | 校验每个族桶的实例名序列等于权威表按该族过滤后的序列（桶内保序、不漏不重）。
 allBucketsMatch : List DtInst -> List (Pair String (List DtInst)) -> Bool
 allBucketsMatch list [] = True
 allBucketsMatch list ((Pair fam bucket) :: rest) =
   instNamesEq (map dtInstName bucket) (map dtInstName (filter (\i => instFamilyOf i == fam) list))
     && allBucketsMatch list rest
 
+-- | 逐项比较两个实例名列表是否相等。
 instNamesEq : List String -> List String -> Bool
 instNamesEq [] [] = True
 instNamesEq [] (b :: brest) = False
@@ -466,23 +483,28 @@ ecAddClass (Ec next sols defs datas depths goals insts classes dgoals deftbl gtb
     gcomp ctbl ctortbl defvals haslin
 
 -- S4：约束存储读写（所有入口直接使用）。
+-- | 读取当前统一约束存储。
 ecConstraints : Ec -> ConstraintStore
 ecConstraints (Ec next sols defs datas depths goals insts classes cons deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals haslin) =
   cons
 
+-- | 写回统一约束存储。
 ecPutConstraints : Ec -> ConstraintStore -> Ec
 ecPutConstraints (Ec next sols defs datas depths goals insts classes cons deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals haslin) cons2 =
   Ec next sols defs datas depths goals insts classes cons2 deftbl gtbl soltbl dptbl gcomp ctbl
     ctortbl defvals haslin
 
+-- | 取约束存储里的待处理约束列表（维持原有顺序）。
 ecPending : Ec -> List Constraint
 ecPending ec = case ecConstraints ec of
   ConstraintStore pending next tried => pending
 
+-- | 替换待处理约束列表，保留下一个 id 与已尝试记录。
 ecPutPending : Ec -> List Constraint -> Ec
 ecPutPending ec pending2 = case ecConstraints ec of
   ConstraintStore pending next tried => ecPutConstraints ec (ConstraintStore pending2 next tried)
 
+-- | 分配新 id 并把一条约束追加到待处理列表末尾。
 ecAddConstraint : Ec -> ConstraintKind -> Int -> Value -> Maybe Span -> Int -> Ec
 ecAddConstraint ec kind meta dom span depth = case ecConstraints ec of
   ConstraintStore pending next tried =>
@@ -490,19 +512,23 @@ ecAddConstraint ec kind meta dom span depth = case ecConstraints ec of
       (ConstraintStore (append pending [Constraint next kind meta dom span depth]) (next + 1) tried)
 
 -- C4：已尝试记录（epoch = 解表长度）。
+-- | 查某个约束上次尝试时的 epoch（解表长度）；没试过返回 Nothing。
 ecTriedAt : Ec -> Int -> Maybe Int
 ecTriedAt ec cid = case ecConstraints ec of
   ConstraintStore pending next tried => assocIntLookup cid tried
 
+-- | 记录某个约束在给定 epoch 的尝试（epoch 通常是当时的解表长度）。
 ecRecordTried : Ec -> Int -> Int -> Ec
 ecRecordTried ec cid epoch = case ecConstraints ec of
   ConstraintStore pending next tried =>
     ecPutConstraints ec (ConstraintStore pending next (assocIntSet cid epoch tried))
 
+-- | 在整数键关联表里查值；未命中返回 Nothing。
 assocIntLookup : Int -> List (Pair Int Int) -> Maybe Int
 assocIntLookup cid [] = Nothing
 assocIntLookup cid ((Pair k v) :: rest) = if k == cid then Just v else assocIntLookup cid rest
 
+-- | 在整数键关联表里插入或覆盖值，返回新表。
 assocIntSet : Int -> Int -> List (Pair Int Int) -> List (Pair Int Int)
 assocIntSet cid v [] = [Pair cid v]
 assocIntSet cid v ((Pair k w) :: rest) =

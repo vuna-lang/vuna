@@ -13,6 +13,7 @@ module Base
   , module Base.Monad
   , module Base.Monoid
   , module Base.Nat
+  , module Base.Num
   , module Base.Ord
   , module Base.Pair
   , module Base.Result
@@ -39,6 +40,8 @@ import Base.Float
 import Base.Hashable
 import Base.List
 import Base.Monoid
+-- D23：算术运算符 `+ - * /` 是 `Num` 方法的别名（fixity/别名真源在 Base.Num）。
+import Base.Num
 import Base.Maybe
 import Base.Nat
 import Base.Result

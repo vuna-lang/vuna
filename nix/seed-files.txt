@@ -2,6 +2,7 @@ Base_dApplicative.ml
 Base_dArray.ml
 Base_dBool.ml
 Base_dEq.ml
+Base_dFloat.ml
 Base_dFoldable.ml
 Base_dFromInt.ml
 Base_dFromString.ml
@@ -16,6 +17,7 @@ Base_dMaybe.ml
 Base_dMonad.ml
 Base_dMonoid.ml
 Base_dNat.ml
+Base_dNum.ml
 Base_dOrd.ml
 Base_dPair.ml
 Base_dResult.ml

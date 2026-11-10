@@ -49,6 +49,7 @@ module Vuna.Compiler.Core.Term
   , levelZero
   , metaLookup
   , metaLookupList
+  , natChainValue
   , not
   , rigAdd
   , rigExact
@@ -86,6 +87,7 @@ module Vuna.Compiler.Core.Term
   , termGlobalNames
   , termHasUnsolvedMeta
   , termReachesFloat
+  , termSize
   , termUsesFloat
   , typeLevelOf
   ) where
@@ -102,6 +104,7 @@ module Vuna.Compiler.Core.Term
 -- M24 后维护（源码重组）：从原 1227 行 Core.vuna 拆出；本模块是 Core 的叶子，只依赖 Common。
 import Vuna.Compiler.Common
 import Base.HashMap
+import Vuna.Compiler.Intrinsics
 
 -- ---------------------------------------------------------------
 -- M18.6：表示层定型（QTT 预留）
@@ -279,6 +282,85 @@ defaultFuel : Int
 defaultFuel = 512
 
 -- ---------------------------------------------------------------
+-- D24：Nat 字面量链的表示与项规模
+-- ---------------------------------------------------------------
+--
+-- 字面量在精化期展开成 `Zero` / `Succ` 链（`Elab/Term/Impl.natLitTerm`），Core 里没有
+-- 惰性 `TNat`。链是普通构造子应用，任何**逐节点**的遍历（擦除检查 / conv / capture
+-- check）成本都随字面量大小线性增长，固定 fuel 因此会在「值 ≥256 / 索引 ≥20」时假报
+-- `DT: internal: ... fuel exhausted`（D24）。这里提供两个纯数据 helper：
+--   * `natChainValue`：把链 O(1) 折回整数（等价判定与燃料派生用）；
+--   * `termSize`：项节点数（把固定 fuel 改成按项规模派生时用）。
+-- 链折回的整数上限与运行时 Nat 饱和上限一致（OCaml 63 位 int 的 max_int）。
+natChainMax : Int
+natChainMax = 4611686018427387903
+
+-- | Nat 字面量链折回整数：`Zero` / `Succ` 构造子（`TCon`、`TGlobal` 形态，允许
+-- `TApp` 嵌套的应用脊）折成 `Maybe Int`，非链形态或部分应用返回 `Nothing`。
+-- 超过 `natChainMax` 时与运行时 Nat 一样饱和；链深超过内部上限返回 `Nothing`
+-- （防失控输入，正常源码字面量远小于该上限）。
+natChainValue : Term -> Maybe Int
+natChainValue t = natChainGo 1000000 t
+
+natChainGo : Int -> Term -> Maybe Int
+natChainGo fuel t = if fuel <= 0 then Nothing
+else case flattenTermApp t of
+  Pair head args => case head of
+    TCon c cargs => natChainArgs (fuel - 1) c (append cargs args)
+    TGlobal c => natChainArgs (fuel - 1) c args
+    _ => Nothing
+
+natChainArgs : Int -> String -> List (Pair Term Rig) -> Maybe Int
+natChainArgs fuel c args = if c == natZeroCtor then case args of
+  [] => Just 0
+  _ => Nothing
+else if c == natSuccCtor then case args of
+  [Pair a _] => case natChainGo fuel a of
+    Just n => Just (natChainNext n)
+    Nothing => Nothing
+  _ => Nothing
+else Nothing
+
+-- 饱和 +1（与 `Core.Eval.natSatAdd` / codegen 的 nat 折回一致）。
+natChainNext : Int -> Int
+natChainNext n = if n >= natChainMax then natChainMax else n + 1
+
+-- 应用脊展平：`TApp (TApp f a) b` → `(f, [a, b])`（累积参数，保持线性）。
+flattenTermApp : Term -> Pair Term (List (Pair Term Rig))
+flattenTermApp t = flattenTermAppGo t []
+
+flattenTermAppGo : Term -> List (Pair Term Rig) -> Pair Term (List (Pair Term Rig))
+flattenTermAppGo (TApp f a rig) acc = flattenTermAppGo f (Pair a rig :: acc)
+flattenTermAppGo t acc = Pair t acc
+
+-- | 项的节点数（`TVar` / 字面量 / binder 各计 1，case 只数 scrutinee 与分支体）。
+-- 用一个线性遍历把「固定 fuel」换成「按项规模派生 + 显式上限」，深项不再假报
+-- fuel 耗尽；调用方各自再套上限防 DoS。
+termSize : Term -> Int
+termSize (TVar _ _) = 1
+termSize (TMeta _) = 1
+termSize (TGlobal _) = 1
+termSize (TType _) = 1
+termSize (TPi _ _ _ dom cod) = 1 + termSize dom + termSize cod
+termSize (TLam _ _ body) = 1 + termSize body
+termSize (TApp f a _) = 1 + termSize f + termSize a
+termSize (TCon _ args) = 1 + termSizeArgs args
+termSize (TCase scrut alts) = 1 + termSize scrut + termSizeAlts alts
+termSize (TInt _) = 1
+termSize (TStr _) = 1
+termSize (TFloat _) = 1
+termSize (TBool _) = 1
+termSize (TIf c th el) = 1 + termSize c + termSize th + termSize el
+
+termSizeArgs : List (Pair Term Rig) -> Int
+termSizeArgs [] = 0
+termSizeArgs ((Pair a _) :: rest) = termSize a + termSizeArgs rest
+
+termSizeAlts : List CaseAlt -> Int
+termSizeAlts [] = 0
+termSizeAlts (alt :: rest) = termSize (caseAltBody alt) + termSizeAlts rest
+
+-- ---------------------------------------------------------------
 -- 元变量 / 定义表（M14：解是 level 形态的 Value，可以提到当前上下文里的局部变量）
 -- ---------------------------------------------------------------
 -- 热路径入口：查解表的 HashMap Int 索引（O(1)、无 strFromInt 分配）。
@@ -394,10 +476,12 @@ termUsesFloat names (TBool b) = False
 termUsesFloat names (TIf c th el) =
   termUsesFloat names c || termUsesFloat names th || termUsesFloat names el
 
+-- | 实参列表里是否有任一表达式用到浮点（`termUsesFloat` 的列表版）。
 anyArgUsesFloat : List String -> List (Pair Term Rig) -> Bool
 anyArgUsesFloat names [] = False
 anyArgUsesFloat names ((Pair a rig) :: rest) = termUsesFloat names a || anyArgUsesFloat names rest
 
+-- | case 分支体列表里是否有任一用到浮点（`termUsesFloat` 的列表版）。
 anyAltUsesFloat : List String -> List CaseAlt -> Bool
 anyAltUsesFloat names [] = False
 anyAltUsesFloat names (a :: rest) =
@@ -429,6 +513,8 @@ termGlobalNames (TIf c th el) =
 termReachesFloat : List (Pair String Term) -> List String -> Term -> Bool
 termReachesFloat defs names t = reachesTermsFuel 4096 defs names [t]
 
+-- | 可达性扫描的工作列表步进：命中浮点即真，否则把该项引用的全局定义体加入待查
+-- 列表继续；fuel 耗尽返回假，环由 fuel 兜底。
 reachesTermsFuel : Int -> List (Pair String Term) -> List String -> List Term -> Bool
 reachesTermsFuel fuel defs names [] = False
 reachesTermsFuel fuel defs names (t :: rest) =
@@ -437,12 +523,14 @@ reachesTermsFuel fuel defs names (t :: rest) =
   else reachesTermsFuel (fuel - 1) defs names (append rest (bodyTermsOf defs (termGlobalNames t)))
 
 -- 全局名 → 有体定义的体（未知/axiom 跳过）。
+-- | 把全局名列表解析成有体定义的定义体列表（未知/无体公理跳过）。
 bodyTermsOf : List (Pair String Term) -> List String -> List Term
 bodyTermsOf defs [] = []
 bodyTermsOf defs (n :: rest) = case lookupPair n defs of
   Just body => body :: bodyTermsOf defs rest
   Nothing => bodyTermsOf defs rest
 
+-- | 在 (名字, 项) 关联表里按名字查第一个匹配项，找不到返回 `Nothing`。
 lookupPair : String -> List (Pair String Term) -> Maybe Term
 lookupPair name [] = Nothing
 lookupPair name ((Pair n v) :: rest) = if n == name then Just v else lookupPair name rest

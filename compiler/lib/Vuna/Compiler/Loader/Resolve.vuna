@@ -12,6 +12,7 @@ module Vuna.Compiler.Loader.Resolve
 -- 的名字；同时负责 DT prelude 名字放行、effectful 内建的包级限制（原
 -- `Vuna.Compiler.Loader.Builtins` 的 `builtinArity` 已按源码重组计划合并进来）。
 -- 导出表计算、加载流程与 flatten 在 `Loader.Flatten`。
+import Base.List
 import Vuna.Compiler.Frontend.Diagnostics
 import Vuna.Compiler.Common
 import Base.HashMap
@@ -147,7 +148,8 @@ localCtorTarget prefix ns name = case localCtorTargets prefix ns name of
 -- | 自动补注（M41 新增导出）：dedupeTargets。
 dedupeTargets : List String -> List String
 dedupeTargets [] = []
-dedupeTargets (t :: rest) = if memName t rest then dedupeTargets rest else t :: dedupeTargets rest
+dedupeTargets (t :: rest) =
+  if memName t rest then dedupeTargets rest else Base.List.Cons t (dedupeTargets rest)
 
 -- 从 (module, ExportEntry) 取 target（lambda 里直接字段访问在 vuna 里不可用）。
 -- | 自动补注（M41 新增导出）：pairExportTarget。
@@ -347,11 +349,11 @@ foldFieldChain base (f :: rest) sp = foldFieldChain (EField base f sp) rest sp
 
 takeSegs : Int -> List a -> List a
 takeSegs n [] = []
-takeSegs n (x :: rest) = if n <= 0 then [] else x :: takeSegs (n - 1) rest
+takeSegs n (x :: rest) = if n <= 0 then [] else Base.List.Cons x (takeSegs (n - 1) rest)
 
 dropSegs : Int -> List a -> List a
 dropSegs n [] = []
-dropSegs n (x :: rest) = if n <= 0 then x :: rest else dropSegs (n - 1) rest
+dropSegs n (x :: rest) = if n <= 0 then Base.List.Cons x rest else dropSegs (n - 1) rest
 
 resolveQualifiedPath : List Module -> String -> List Import -> List String -> Int -> Span -> Result (Maybe Expr)
 resolveQualifiedPath modules label imports segs n sp = if n < 1 then Ok Nothing
@@ -452,7 +454,7 @@ else case pat of
     Vuna.Compiler.Common.bind (checkBinder label name) (\_ => Ok (Pair (PVar name sp) [name]))
   PAs name inner sp =>
     Vuna.Compiler.Common.bind (resolvePattern (fuel - 1) modules label prefix ns imports inner)
-      (\p => Ok (Pair (PAs name (firstOf p) sp) (name :: secondOf p)))
+      (\p => Ok (Pair (PAs name (firstOf p) sp) (Base.List.Cons name (secondOf p))))
   PInt n sp => Ok (Pair (PInt n sp) [])
   PStr s sp => Ok (Pair (PStr s sp) [])
   PCon name pats sp =>
@@ -497,7 +499,7 @@ resolveLocalPats fuel modules label prefix ns imports [] =
 resolveLocalPats fuel modules label prefix ns imports (pat :: rest) = if fuel <= 0 then Err "DT: resolve fuel exhausted (internal: resolver made no progress)"
 else Vuna.Compiler.Common.bind (resolvePattern (fuel - 1) modules label prefix ns imports pat) (\p => case p of
   Pair pat2 bound => Vuna.Compiler.Common.bind (resolveLocalPats (fuel - 1) modules label prefix ns imports rest) (\r => case r of
-    Pair rest2 restBound => Ok (Pair (pat2 :: rest2) (append bound restBound))
+    Pair rest2 restBound => Ok (Pair (Base.List.Cons pat2 rest2) (append bound restBound))
   )
 )
 
@@ -515,7 +517,7 @@ else case binds of
       (\b => Ok (Pair [] b))
   (Pair pat value) :: rest => Vuna.Compiler.Common.bind (resolveExpr (fuel - 1) modules label prefix ns imports scope value) (\value2 => Vuna.Compiler.Common.bind (resolvePattern resolveFuelBound modules label prefix ns imports pat) (\p => case p of
     Pair pat2 bound => Vuna.Compiler.Common.bind (resolveLetSeq (fuel - 1) modules label prefix ns imports (append bound scope) rest body) (\r => case r of
-      Pair binds2 body2 => Ok (Pair (Pair pat2 value2 :: binds2) body2)
+      Pair binds2 body2 => Ok (Pair (Base.List.Cons (Pair pat2 value2) binds2) body2)
     )
   )
   )
@@ -536,7 +538,7 @@ collectRecBinds : List Module -> String -> String -> Namespaces -> List Import -
 collectRecBinds modules label prefix ns imports [] = Ok (Pair [] [])
 collectRecBinds modules label prefix ns imports ((Pair pat value) :: rest) = Vuna.Compiler.Common.bind (resolvePattern resolveFuelBound modules label prefix ns imports pat) (\pr => case pr of
   Pair pat2 bound => Vuna.Compiler.Common.bind (collectRecBinds modules label prefix ns imports rest) (\r => case r of
-    Pair names tail => Ok (Pair (append bound names) (Pair pat2 value :: tail))
+    Pair names tail => Ok (Pair (append bound names) (Base.List.Cons (Pair pat2 value) tail))
   )
 )
 
@@ -547,7 +549,7 @@ resolveRecValues fuel modules label prefix ns imports scope [] =
 resolveRecValues fuel modules label prefix ns imports scope ((Pair pat value) :: rest) =
   if fuel <= 0 then Err "DT: resolve fuel exhausted (internal: resolver made no progress)"
   else Vuna.Compiler.Common.bind (resolveExpr (fuel - 1) modules label prefix ns imports scope value)
-    (\value2 => Vuna.Compiler.Common.bind (resolveRecValues (fuel - 1) modules label prefix ns imports scope rest) (\tail => Ok (Pair pat value2 :: tail)))
+    (\value2 => Vuna.Compiler.Common.bind (resolveRecValues (fuel - 1) modules label prefix ns imports scope rest) (\tail => Ok (Base.List.Cons (Pair pat value2) tail)))
 
 -- M36：模板字符串降级（rename 之后、Elab 之前）。
 --
@@ -567,9 +569,10 @@ lowerTemplate sp parts = case templateChunks sp parts of
 templateChunks : Span -> List InterpPart -> List Expr
 templateChunks sp [] = []
 templateChunks sp ((IPText s) :: rest) =
-  if s == "" then templateChunks sp rest else EStr s sp :: templateChunks sp rest
+  if s == "" then templateChunks sp rest else Base.List.Cons (EStr s sp) (templateChunks sp rest)
 templateChunks sp ((IPHole e) :: rest) =
-  EApp (EVar interpMethodName (exprSpan e)) [e] (exprSpan e) :: templateChunks sp rest
+  Base.List.Cons (EApp (EVar interpMethodName (exprSpan e)) [e] (exprSpan e))
+    (templateChunks sp rest)
 
 concatLeft : Span -> Expr -> List Expr -> Expr
 concatLeft sp acc [] = acc
@@ -578,6 +581,7 @@ concatLeft sp acc (e :: rest) = concatLeft sp (EApp (EVar "++" sp) [acc, e] sp) 
 -- F3 B：release 构建拒绝 debug-only 构造（`assert` / `todo`）。局部同名 binder 由
 -- scope 放行（`resolveGlobal` 对局部名返回原名）；顶层同名定义会 mangle 成
 -- `Module.name`，不会命中这个检查。
+-- | release 构建里拒绝 debug-only 构造（`assert`/`todo`）；局部同名 binder 由 scope 放行。
 checkDebugConstruct : Span -> String -> String -> List String -> Result Expr
 checkDebugConstruct sp name resolved scope =
   if releaseOn then if isDebugOnlyName resolved then if memName name scope then Ok (EVar resolved sp)
@@ -666,10 +670,10 @@ else case parts of
   (IPText s) :: rest =>
     Vuna.Compiler.Common.bind
       (resolveInterpParts (fuel - 1) modules label prefix ns imports scope rest)
-      (\ps => Ok (IPText s :: ps))
+      (\ps => Ok (Base.List.Cons (IPText s) ps))
   (IPHole e) :: rest =>
     Vuna.Compiler.Common.bind (resolveExpr (fuel - 1) modules label prefix ns imports scope e)
-      (\e2 => Vuna.Compiler.Common.bind (resolveInterpParts (fuel - 1) modules label prefix ns imports scope rest) (\ps => Ok (IPHole e2 :: ps)))
+      (\e2 => Vuna.Compiler.Common.bind (resolveInterpParts (fuel - 1) modules label prefix ns imports scope rest) (\ps => Ok (Base.List.Cons (IPHole e2) ps)))
 
 -- do（M11）在这里降级成 bind 的普通应用，后续类型检查与 codegen 无需认识 do。
 -- 最后一条裸表达式即块结果（`do e` = `e`）；裸语句用 `bind e (\_ -> rest)` 顺序化。
@@ -679,6 +683,7 @@ else case parts of
 -- 链、再交给 `resolveExpr` 解析，于是链上每个 `bind` 都在各自的 lambda 作用域里重新解析：
 -- 块里出现名为 `bind` 的 do-binder 时，后续步骤的 bind 会被错误地解析到该 binder。
 -- 现在降级与解析合并成一次遍历，链头直接使用块作用域解析好的名字。
+-- | 把 do 块降级成 bind 应用：空块报错，单条裸表达式即块结果，其余走 `resolveDoChain`。
 resolveDo : Int -> List Module -> String -> String -> Namespaces -> List Import -> List String -> List DoStmt -> Result Expr
 resolveDo fuel modules label prefix ns imports scope stmts = if fuel <= 0 then Err "DT: resolve fuel exhausted (internal: resolver made no progress)"
 else case stmts of
@@ -690,6 +695,7 @@ else case stmts of
 
 -- 块作用域里的 `bind`：唯一真源是普通名字解析（局部 trait 方法 / import 的值 / 外层局部
 -- 绑定都可能命中），支持「本地自定义 `trait Monad`」的夹具。
+-- | 在块作用域里解析 `bind` 一次（局部 trait 方法 / import / 外层绑定都可能命中）。
 resolveDoBind : List Module -> String -> String -> Namespaces -> List Import -> List String -> Result String
 resolveDoBind modules label prefix ns imports scope =
   resolveGlobal modules label prefix ns imports scope "bind"
@@ -702,6 +708,8 @@ resolveDoBind modules label prefix ns imports scope =
 -- `doIgnoreSyntaxName`）。标记只由 Loader 在 rename 后产生，用户源码写不出来；Elab 据此把
 -- 整块按「一个 monad / 一个字典」精化（`Elab.Term.Impl` 的 do 链解释），不认识的形状则
 -- 剥标记回退成普通 bind 应用——与 S3a 的语义完全一致。
+-- | 非末条语句的链式降级：逐条解析语句，按 `@vuna@do@bind@...` / `@vuna@do@ignore@...`
+-- 内部标记构造 bind 应用（do-binder 对后续语句可见）。
 resolveDoChain : Int -> List Module -> String -> String -> Namespaces -> List Import -> List String -> String -> List DoStmt -> Result Expr
 resolveDoChain fuel modules label prefix ns imports scope bindName stmts = if fuel <= 0 then Err "DT: resolve fuel exhausted (internal: resolver made no progress)"
 else case stmts of
@@ -1339,4 +1347,5 @@ ctorPairTargets modules [] = []
 ctorPairTargets modules ((Pair m e) :: rest) =
   let
     isCtor = e.kind == "ctor" || isDataOrRecordCtorTarget modules e.target
-  in if isCtor then e.target :: ctorPairTargets modules rest else ctorPairTargets modules rest
+  in if isCtor then Base.List.Cons e.target (ctorPairTargets modules rest)
+  else ctorPairTargets modules rest

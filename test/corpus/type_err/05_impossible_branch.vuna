@@ -1,0 +1,17 @@
+-- B42 反例：occurs check 修正后，真正被索引排除的分支仍必须报不可达
+-- （`Fin Zero` 没有构造子，`FZ` 要求 `Fin (Succ n)`）。
+data Nat : Type where
+  Zero : Nat
+  Succ : Nat -> Nat
+
+data Fin : Nat -> Type where
+  FZ : {n : Nat} -> Fin (Succ n)
+  FS : {n : Nat} -> Fin n -> Fin (Succ n)
+
+bad : Fin Zero -> Int
+bad x = case x of
+  FZ => 1
+  FS k => 2
+
+main : Int
+main = 0

@@ -17,6 +17,7 @@ module Vuna.Cli (runCli) where
 --     `prim_isDirectory`、读不存在文件）漏给用户；
 --   - 所有用户给的路径先判存在/目录再读盘（`readText` / `requireExists` /
 --     `requireDirectory`）。
+import Base.List
 import Vuna.Compiler.Common
 import Vuna.Compiler.Packages.Pkg
 import Vuna.Compiler.Driver.CompilerCli
@@ -47,8 +48,8 @@ import qualified Vuna.Lint
 import Base.IO.Host
 -- W10 收尾：产品 CLI 的 console 路径迁到效应标签（`Base.EffConsole`）。入口仍是
 -- `main : IO Int`（IO 是运行时基座/逃逸口）；只有 `consoleLine` 这一条真实路径
--- 经标签 + IO-backed handler 输出，作为工具链逐步迁移的样板（边界见
--- docs/reference/effects-layers.md §8.6 与 debt D43）。
+-- 经标签 + IO-backed handler 输出，作为工具链的一条真实迁移样板（边界见
+-- docs/reference/effects-layers.md §8.6）。
 import Base.Eff
 import Base.EffConsole
 
@@ -92,7 +93,7 @@ stripDebugFlags : List String -> List String
 stripDebugFlags [] = []
 stripDebugFlags (a :: rest) =
   if a == "--debug-perf" || a == "--release" then stripDebugFlags rest
-  else a :: stripDebugFlags rest
+  else Base.List.Cons a (stripDebugFlags rest)
 
 runCli : List String -> Int
 runCli args = if anyHelp (helpSurface args) then help 0 else runCli1 (stripDebugFlags args)
@@ -102,7 +103,7 @@ runCli args = if anyHelp (helpSurface args) then help 0 else runCli1 (stripDebug
 helpSurface : List String -> List String
 helpSurface [] = []
 helpSurface ("--" :: rest) = []
-helpSurface (arg :: rest) = arg :: helpSurface rest
+helpSurface (arg :: rest) = Base.List.Cons arg (helpSurface rest)
 
 -- 编译器命令在 CompilerCli 里实现；`seed` 已删除，仍分发给 CompilerCli 是为了统一
 -- 给出迁移提示（`build --out OUT [DIR]` / `compile DIR OUT`）。

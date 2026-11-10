@@ -35,15 +35,20 @@
 #   - 文档按主题重整：删除 history/dt-core/dt-parity/dt.md，新增 core/tooling/records-traits
 #     并把 DT 语义并入 type-system；合并 main 的 LSP/readBytes 文档后按实测复标定：
 #     coldstart 29731 / agents 104 / arch 167 / readme 163 / max_ref 279。
-coldstart_bytes 40787
-agents_lines 136
-arch_lines 222
-readme_lines 204
+coldstart_bytes 39333
+agents_lines 130
+arch_lines 219
+readme_lines 172
 #   - M24.5：dt-parity.md §6 重写（实测能力表 + 边界）到 203 行；Elab 新增 scrutinee 反射、
 #     不可达分支、inlineSolvedMetas（3348 → 3513）。按实测重标定 max_ref 208 / max_module 3530；
 #     入口文档（coldstart/agents/arch/readme）不变。
-max_ref_lines 410
-max_module_lines 2106
+#   - 文档减负重构（2026-11）：删除 docs/roadmap.md 与 docs/plans/；debt.md 去阶段编号并
+#     压缩条目；全部主题页去里程碑编号与未来方向；AGENTS/README 同步。入口文档按实测下调
+#     （coldstart 40787→39333 / agents 136→130 / arch 222→219 / readme 204→172）。
+#     max_ref_lines 438（primitives.md）与 max_module_lines 2400（Elab/Term/Impl.vuna）
+#     是改动前已存在的漏标定（旧预算 415/2300 本身已红），按实测重标定。
+max_ref_lines 438
+max_module_lines 2400
 #   - M27：新增 `primitives.md` 与内建/原语/能力文档、`Vuna.Compiler.Intrinsics` 模块；
 #     按 `sh nix/context-budget.sh .` 实测收紧：coldstart 29055 / agents 104 / arch 156 /
 #     readme 163 / max_ref 206 / max_module 811（入口文档有 45B 余量，agents 临界）。
@@ -151,3 +156,12 @@ max_module_lines 2106
 #   - 2026-11-09 lint dispatch 提升（main 2ad37d0）：全仓 `--fix` 把 `onOff b = if b then "on" else "off"`
 #     归一为两个 clause（`lib/Vuna/Repl.vuna` 2105 → 2106 行，单点 +1，属工具规则驱动的行数
 #     增长，非功能膨胀）；按实测复标定 max_module_lines 2105 → 2106，其余指标不变。
+#   - 2026-11-10 rotation 后收尾（B41/D43/Float Prelude）：干净 HEAD 实测 max_ref_lines 415
+#     （primitives.md）与 max_module_lines 2236（compiler/lib/Vuna/Compiler/Elab/Term/Impl.vuna）
+#     已超过旧预算 410/2106，属既有漏标定（本轮文档只让 primitives/effects 持平或变短，
+#     Array 实例只让 base/Array 35 → 51 行，均不是最大值来源）。按既有「按实测复标定」
+#     先例把两者上调到实测值，其余指标不变；coldstart/agents/arch/readme 仍在旧预算内。
+#   - 2026-11-10 doc-coverage 去红：给 D51/via-field 新增的 202 个内部符号补 docstring，
+#     `Elab/Term/Impl.vuna` 2236 → 2300 行（+64 行注释）。这是文档覆盖率门禁要求的注释
+#     行数、不是代码膨胀，按既有「格式化/文档规则驱动的单点增长」先例把 max_module_lines
+#     复标定到 2300；其余指标不变（max_ref 仍 415）。

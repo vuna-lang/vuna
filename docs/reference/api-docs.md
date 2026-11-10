@@ -47,7 +47,7 @@ data Wrap a : Type where
   尾随 doc 写在目标的下一行——fmt 会把单独成行的注释统一挂到下一个条目作为前置注释，那种
   写法在 fmt 后归属会变，因此不纳入语义。同一目标同时有前置与尾随 doc 时**前置优先**。
 - 模块文档写在 `module` 头之前；尾随形式不参与模块文档。
-- M40：模块文档也用于 LSP hover——模块名（`import` / 导出项 `module B` / 模块头 / 限定名前缀）
+- 模块文档也用于 LSP hover——模块名（`import` / 导出项 `module B` / 模块头 / 限定名前缀）
   hover 时在 `module <全名>` 之后显示该模块的 docstring；被 import 的模块读盘取 docstring。
 - 孤儿 doc、缩进错误、普通注释都忽略（不报错）。
 - 私有名（`_` 前缀）不进入文档与 `--check`，但仍在 `vuna map` / `vuna api` 索引里。
@@ -118,7 +118,7 @@ vuna search [--type|--name|--doc] [--module PFX] [--limit N] [--json] <query...>
 - 小写自由名与 `_` → 变量；大写 / `Type` → 构造子；
 - 用索引里 data/record/trait 的短名 → 全名做类型名归一（只有唯一短名时）。
 
-类型文本的列表语法（M41）：`Vuna.Sig` 把 parser 的保留名 `@vuna@list@nil` /
+类型文本的列表语法：`Vuna.Sig` 把 parser 的保留名 `@vuna@list@nil` /
 `@vuna@list@cons` 还原成 `[]` / `[a, b]`；`a :: b` 仍打印为中缀（闭合 `::` 链**不**改写成
 `[...]`，保持 `symType` 的 parse 级形状与查询拼写一致）。因此 api/doc/search/hover 不再
 出现保留名或前缀形式 `(:: a b)`；源码侧的归一由 `vuna lint --fix` 的 `list-literal` 负责。

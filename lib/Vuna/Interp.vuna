@@ -13,7 +13,7 @@ module Vuna.Interp
 --
 -- M23 起 `vuna interp` 的语义是**精化后的核心求值**：按包上下文（最近 vuna.toml
 -- 的依赖闭包；无 manifest 时 base-only）加载，经 DT 精化器检查，再用 Core 的 NbE 求
--- `main` 的值。「不检查直接执行」的调试语义已取消（roadmap 决策变更）；因此子句元数、
+-- `main` 的值。「不检查直接执行」的调试语义已取消；因此子句元数、
 -- 类型、覆盖性等错误都在求值前报出，错误位置与 `check` 一致。
 --
 -- M26：入口吃 `PackageContext`（不再有环境根 / `List Root`）；调用方（CLI / REPL /

@@ -12,6 +12,7 @@ import Base.Maybe
 import Base.Monad
 import Base.Ord
 import Base.Result
+import Base.Num
 
 -- | 单实例、无界、单线程的 cooperative channel：内部是装 `List a` 的 `IORef`（构造器不导出）。
 data Channel a : Type where

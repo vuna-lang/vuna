@@ -22,6 +22,7 @@ module Vuna.Compiler.Loader.Flatten
 -- M26：入口统一吃 `PackageContext`（最近 manifest 的包 + 依赖闭包 roots）；旧的
 -- 旧的历史顺序拼接/flatten 死路径已删除，DT 精化由 `Driver.Dt` 按
 -- 「依赖序列 + 入口声明」拼接。
+import Base.List
 import Base.IO.Host
 import Vuna.Compiler.CacheFormat
 import Vuna.Compiler.Loader.Diagnostics
@@ -219,7 +220,7 @@ findOwnCtorNames name (d :: rest) = case d of
     append (map (\c => Pair dname (ctorName c)) (filter (\c => ctorName c == name) ctors))
       (findOwnCtorNames name rest)
   DRecord dname params fields derivings viaField lin sp =>
-    if dname == name then Pair dname dname :: findOwnCtorNames name rest
+    if dname == name then Base.List.Cons (Pair dname dname) (findOwnCtorNames name rest)
     else findOwnCtorNames name rest
   DTrait tname params methods sp =>
     append
@@ -232,8 +233,9 @@ ownCtorEntries : String -> String -> List String -> List ExportEntry
 ownCtorEntries prefix dname [] = []
 ownCtorEntries prefix dname (cname :: rest) =
   if isPrivateName cname then ownCtorEntries prefix dname rest
-  else ExportEntry { kind = "ctor", public = cname, target = mangle prefix cname, parent = mangle prefix dname }
-    :: ownCtorEntries prefix dname rest
+  else Base.List.Cons
+    ExportEntry { kind = "ctor", public = cname, target = mangle prefix cname, parent = mangle prefix dname }
+    (ownCtorEntries prefix dname rest)
 
 -- M41：data 构造子的 canonical target 是 `Module.Data.Ctor`。
 -- | 自动补注（M41 新增导出）：ownDataCtorEntries。
@@ -241,8 +243,9 @@ ownDataCtorEntries : String -> String -> List String -> List ExportEntry
 ownDataCtorEntries prefix dname [] = []
 ownDataCtorEntries prefix dname (cname :: rest) =
   if isPrivateName cname then ownDataCtorEntries prefix dname rest
-  else ExportEntry { kind = "ctor", public = cname, target = ctorCanonical prefix dname cname, parent = mangle prefix dname }
-    :: ownDataCtorEntries prefix dname rest
+  else Base.List.Cons
+    ExportEntry { kind = "ctor", public = cname, target = ctorCanonical prefix dname cname, parent = mangle prefix dname }
+    (ownDataCtorEntries prefix dname rest)
 
 -- 本地类型名的完整导出条目（type + 其构造子/方法），供 `T(..)` 导出使用。
 -- | 自动补注（M41 新增导出）：ownTypeEntries。
@@ -251,15 +254,15 @@ ownTypeEntries prefix [] name = Nothing
 ownTypeEntries prefix (d :: rest) name = case d of
   DData dname params kind ctors derivings viaField lin sp =>
     if dname == name then Just
-      (ExportEntry { kind = "type", public = dname, target = mangle prefix dname, parent = "" } :: ownDataCtorEntries prefix dname (map ctorName ctors))
+      (Base.List.Cons ExportEntry { kind = "type", public = dname, target = mangle prefix dname, parent = "" } (ownDataCtorEntries prefix dname (map ctorName ctors)))
     else ownTypeEntries prefix rest name
   DRecord dname params fields derivings viaField lin sp =>
     if dname == name then Just
-      (ExportEntry { kind = "type", public = dname, target = mangle prefix dname, parent = "" } :: ownCtorEntries prefix dname [dname])
+      (Base.List.Cons ExportEntry { kind = "type", public = dname, target = mangle prefix dname, parent = "" } (ownCtorEntries prefix dname [dname]))
     else ownTypeEntries prefix rest name
   DTrait tname params methods sp =>
     if tname == name then Just
-      (ExportEntry { kind = "type", public = tname, target = mangle prefix tname, parent = "" } :: ownCtorEntries prefix tname (map traitMethodName methods))
+      (Base.List.Cons ExportEntry { kind = "type", public = tname, target = mangle prefix tname, parent = "" } (ownCtorEntries prefix tname (map traitMethodName methods)))
     else ownTypeEntries prefix rest name
   _ => ownTypeEntries prefix rest name
 
@@ -268,23 +271,26 @@ ownTypeEntries prefix (d :: rest) name = case d of
 ctorEntriesOfType : String -> List ExportEntry -> List ExportEntry
 ctorEntriesOfType typeTarget [] = []
 ctorEntriesOfType typeTarget (e :: rest) =
-  if e.kind == "ctor" && e.parent == typeTarget then e :: ctorEntriesOfType typeTarget rest
+  if e.kind == "ctor" && e.parent == typeTarget then Base.List.Cons e (ctorEntriesOfType typeTarget rest)
   else ctorEntriesOfType typeTarget rest
 
 declImplicitExports : String -> Decl -> List ExportEntry
 declImplicitExports prefix d = case d of
   DData dname params kind ctors derivings viaField lin sp =>
     if isPrivateName dname then []
-    else ExportEntry { kind = "type", public = dname, target = mangle prefix dname, parent = "" }
-      :: ownDataCtorEntries prefix dname (map ctorName ctors)
+    else Base.List.Cons
+      ExportEntry { kind = "type", public = dname, target = mangle prefix dname, parent = "" }
+      (ownDataCtorEntries prefix dname (map ctorName ctors))
   DRecord dname params fields derivings viaField lin sp =>
     if isPrivateName dname then []
-    else ExportEntry { kind = "type", public = dname, target = mangle prefix dname, parent = "" }
-      :: ownCtorEntries prefix dname [dname]
+    else Base.List.Cons
+      ExportEntry { kind = "type", public = dname, target = mangle prefix dname, parent = "" }
+      (ownCtorEntries prefix dname [dname])
   DTrait tname params methods sp =>
     if isPrivateName tname then []
-    else ExportEntry { kind = "type", public = tname, target = mangle prefix tname, parent = "" }
-      :: ownCtorEntries prefix tname (map traitMethodName methods)
+    else Base.List.Cons
+      ExportEntry { kind = "type", public = tname, target = mangle prefix tname, parent = "" }
+      (ownCtorEntries prefix tname (map traitMethodName methods))
   -- M29-T2b：命名实例已删除，实例不出现在导出表（字典按实例表注册）。
   DInstance ctxE head methods sp => []
   DSig name ctx ty sp =>
@@ -448,7 +454,7 @@ exportTypeAll modules prefix decls imports name sp = case splitLastDot (splitOnD
         in let
           tgt = (secondOf p).target
         in Vuna.Compiler.Common.bind (exportsOf modules m)
-          (\es => Ok (ExportEntry { kind = "type", public = name, target = tgt, parent = "" } :: ctorEntriesOfType tgt es))
+          (\es => Ok (Base.List.Cons ExportEntry { kind = "type", public = name, target = tgt, parent = "" } (ctorEntriesOfType tgt es)))
         )
       )
     _ =>
@@ -459,7 +465,7 @@ exportTypeAll modules prefix decls imports name sp = case splitLastDot (splitOnD
         Just m => Vuna.Compiler.Common.bind (exportsOf modules m) (\es => case findExportType es base of
           Just e =>
             Ok
-              (ExportEntry { kind = "type", public = base, target = e.target, parent = "" } :: ctorEntriesOfType e.target es)
+              (Base.List.Cons ExportEntry { kind = "type", public = base, target = e.target, parent = "" } (ctorEntriesOfType e.target es))
           Nothing => Err "${prefix}: ${showSpanLoc sp}: type ${base} is not exported by ${m}"
         )
 
@@ -597,6 +603,7 @@ implicitPreludeDeps importerPkg deps =
     "ambiguous implicit Prelude (found in: ${joinArrows (map (\c => rootName (secondOf c)) deps)})"
 
 -- F3 P2：按包名查模块根的 `[package] privileged`；找不到按非特权处理。
+-- | 按包名查模块根的 `[package] privileged`；找不到按非特权处理。
 rootPrivilegedOf : List Root -> String -> Bool
 rootPrivilegedOf [] name = False
 rootPrivilegedOf (root :: rest) name =
@@ -605,10 +612,12 @@ rootPrivilegedOf (root :: rest) name =
 -- F3 P2：该模块是否属于某个包的 `[privileged] modules`（宿主层模块）。
 -- F3 P2：importing 包是否特权。entry（ad-hoc）包的包名为 ""，不在 roots 里，
 -- 用 selfPriv（来自 PackageContext.contextPrivileged）。
+-- | importing 包是否特权：按包名查 roots，entry（ad-hoc，包名为空）用 `selfPriv`。
 importerPrivileged : List Root -> Bool -> String -> Bool
 importerPrivileged roots selfPriv importerPkg =
   if rootPrivilegedOf roots importerPkg then True else if importerPkg == "" then selfPriv else False
 
+-- | 该模块名是否属于某个包的 `[privileged] modules`（宿主层模块）。
 hostModuleIn : List Root -> String -> Bool
 hostModuleIn [] name = False
 hostModuleIn (root :: rest) name =
@@ -640,7 +649,7 @@ else case findModule modules name of
       visible =
         dedupeFixities (append fixities (visibleFixitiesOf modules2 (append imports implicit)))
     in Ok
-      (Module name (rootName root) imports implicit decls exports (rootCapabilities root) (rootTrustUnsafe root) visible :: modules2)
+      (Base.List.Cons (Module name (rootName root) imports implicit decls exports (rootCapabilities root) (rootTrustUnsafe root) visible) modules2)
     )
     )
     )
@@ -764,9 +773,9 @@ resolveModulesKeep : List String -> List Module -> Result (List Module)
 resolveModulesKeep keep [] = Ok []
 resolveModulesKeep keep ((Module name pkg imports implicit decls exports mcaps mtrust fixities) :: rest) =
   if memName name keep then Vuna.Compiler.Common.bind (resolveModulesKeep keep rest)
-    (\d2 => Ok (Module name pkg imports implicit decls exports mcaps mtrust fixities :: d2))
+    (\d2 => Ok (Base.List.Cons (Module name pkg imports implicit decls exports mcaps mtrust fixities) d2))
   else Vuna.Compiler.Common.bind (reorderProgram (tableOf fixities) decls)
-    (\decls2 => Vuna.Compiler.Common.bind (Vuna.Compiler.Common.bind (resolveProgram (Module name pkg imports implicit decls2 exports mcaps mtrust fixities :: rest) name name (namespacesOf decls2) (append imports implicit) decls2) (\d => checkEffectsBuiltins name pkg mcaps mtrust d)) (\d1 => Vuna.Compiler.Common.bind (resolveModulesKeep keep rest) (\d2 => Ok (Module name pkg imports implicit d1 exports mcaps mtrust fixities :: d2))))
+    (\decls2 => Vuna.Compiler.Common.bind (Vuna.Compiler.Common.bind (resolveProgram (Module name pkg imports implicit decls2 exports mcaps mtrust fixities :: rest) name name (namespacesOf decls2) (append imports implicit) decls2) (\d => checkEffectsBuiltins name pkg mcaps mtrust d)) (\d1 => Vuna.Compiler.Common.bind (resolveModulesKeep keep rest) (\d2 => Ok (Base.List.Cons (Module name pkg imports implicit d1 exports mcaps mtrust fixities) d2))))
 
 dropPastSlash : List Int -> List Int
 dropPastSlash [] = []

@@ -12,16 +12,13 @@ module Base.Int () where
 -- 因此不会自递归。
 import Base.Eq
 import Base.Hashable
+import Base.Num
 import Base.Ord
 -- B24：`Show` 实例跟类型模块走（Int 是 primitive，无 data 声明）。
 import Base.Show
 
--- 数值运算符的 fixity 声明在本模块（`+` 等是 Int 内建值，不是 trait 方法）。
-infixl 6 +
-infixl 6 -
-infixl 7 *
-infixl 7 /
-
+-- 数值运算符 `+ - * /` 的 fixity 与 `Num` 方法别名在 `Base.Num`（D23）；本模块
+-- import 它既为了 `Num Int` 实例，也为了让运算符在实例体与用户代码里可见。
 instance Eq Int where
   eq x y = x == y
   neq x y = x /= y
@@ -31,6 +28,14 @@ instance Ord Int where
   le x y = x <= y
   gt x y = x > y
   ge x y = x >= y
+
+-- D23 Stage1：`Num` 实例。方法体写内建运算符，由精化器特化成 `bi_*_int` 原语；
+-- Stage 2 把 `+` 别名到 `add` 后，特化认 `Base.Num` 方法投影，仍然走原语（不自递归）。
+instance Num Int where
+  add x y = x + y
+  sub x y = x - y
+  mul x y = x * y
+  div x y = x / y
 
 -- B24：`Int` 的展示走内建 `strFromInt`（primitive 类型没有构造子可模式匹配）。
 instance Show Int where

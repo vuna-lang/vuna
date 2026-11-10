@@ -64,7 +64,7 @@ compile = true
 run = true
 compare_interp = false
 tags = ["dt", "io"]
-# 精化器性能回归（D48 / D46 / S1–S4）：只跑 `vuna check`，不编译不运行；
+# 精化器性能回归（S1–S4）：只跑 `vuna check`，不编译不运行；
 # 单 case 超时 15s，长 do / 长 >>= 链超时即失败（期望实现把耗时压到线性）。
 [family.elab_perf]
 section = "34"

@@ -6,14 +6,14 @@ toInt n = case n of
   Zero => 0
   Succ k => 1 + toInt k
 
-sub : Nat -> Nat -> Nat
-sub a b = a - b
+subN : Nat -> Nat -> Nat
+subN a b = a - b
 
-mul : Nat -> Nat -> Nat
-mul a b = a * b
+mulN : Nat -> Nat -> Nat
+mulN a b = a * b
 
-div : Nat -> Nat -> Nat
-div a b = a / b
+divN : Nat -> Nat -> Nat
+divN a b = a / b
 
 main : Int
-main = toInt (sub 2 5) + toInt (mul 6 7) + toInt (div 7 2)
+main = toInt (subN 2 5) + toInt (mulN 6 7) + toInt (divN 7 2)

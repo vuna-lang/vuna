@@ -159,12 +159,12 @@ family discovery 对目录里每个夹具要求 `.out`/`.err` 或目录型 `expe
   default；`14_constrained_instance`（`instance Eq a => Eq (Box a)` +
   `mem (Box 1) [...]`）、`15_parametric_deriving`（参数化 `deriving (Show, Eq, Ord)`）、`27_deriving_hashable`（`deriving (Eq, Hashable)`，data + 记录）、
   `16_eq_ord_alias`（`==` / `eq`、`<` / `lt` 走同一路径，Int/String 特化 + Bool 实例）、
-  `17`–`22`（M32 显式签名约束：单 / 多约束、结构化 `Eq (Box a)`、高阶 kind `Monad m`、
+  `17`–`22`（显式签名约束：单 / 多约束、结构化 `Eq (Box a)`、高阶 kind `Monad m`、
   约束函数互调、未使用约束））；
   命名实例特性不存在。错误例 90–95、98 要求错误片段、非 0 退出、不写
   输出（重复实例 / 相干性、head 不符、缺 / 未知方法、显式只写 `Trait` 不写 `(..)`；
-  `90_orphan_default` 实际覆盖重复实例，孤儿规则表述已随 M31.1 删除，见 B23）；
-  `99_explicit_*`（M32 约束负例：未知接口、非单参数应用、kind 不符、where / trait 方法
+  `90_orphan_default` 实际覆盖重复实例，孤儿规则已删除，见 debt）；
+  `99_explicit_*`（约束负例：未知接口、非单参数应用、kind 不符、where / trait 方法
   位置不支持）。
   `96_named_instance_removed` / `97_instance_sel_removed` 是 `as` / `@` 语法的解析负例；
 - `corpus/monad/`：`do` / `>>=` / `>>` 在 Maybe/List 上的正例，含高阶 kind 泛型
@@ -202,7 +202,7 @@ family discovery 对目录里每个夹具要求 `.out`/`.err` 或目录型 `expe
   `checks.vuna-lint` 对全部包源码要求零 finding；
 - `corpus/lsp/smoke.sh`：`vuna lsp` 的 JSON-RPC 冒烟。走包上下文（含 import 的文件真正
   类型检查），覆盖两模块临时包、formatting、documentSymbol、definition、references、
-  completion、workspace symbol、lint 诊断、URI `%XX` 与退出码；M40 起还覆盖模块名
+  completion、workspace symbol、lint 诊断、URI `%XX` 与退出码；还覆盖模块名
   hover/definition（含模块 docstring）、局部绑定 hover/definition（语法级类型/值、遮蔽）、
   未解 `_` 洞的目标+上下文与命名洞 `?name` 的名字/目标/range；边界见
   [tooling.md](tooling.md) §2；
@@ -246,9 +246,9 @@ family discovery 对目录里每个夹具要求 `.out`/`.err` 或目录型 `expe
 - `vuna-fmt`：workspace 全包与 `examples/`；
 - `vuna-package`：`examples/multi` 的 build/test/fmt/doc + 根包构建；
 - `vuna-compiler-perf`：冷/热 `check .` 比例 + 包内增量的 clean/parse 语义断言 + REPL
-  默认走接口路径（M34.6）；
+  默认走接口路径；
 - `vuna-compiler-growth`：合成 500/1000/2000/4000 同形定义，相邻档墙钟比 ≤2.3（增长率
-  门槛，跨机器有效；M34.6）；
+  门槛，跨机器有效）；
 - `vuna-metrics`：冻结夹具（`test/corpus/codegen`）的 codegen 产物对
   `nix/codegen.baseline` 的精确基线；种子尺寸不设门槛（见 [compiler.md](compiler.md)
   §codegen 夹具基线）；
@@ -276,8 +276,9 @@ VUNA=$PWD/result-vuna/bin/vuna VUNA_SEED=$PWD/result-seed/bin/vuna-seed \
   vuna test --suite test/suite.toml --jobs auto
 ```
 
-**`result*` 可能过期**：out-link 只是手工指到某次构建，源码 / seed 变了不会自动更新。跑
-测试或基准前先重建对应的 `nix build ... --out-link`（开放债务 E03）。
+**`result*` 可能过期**：out-link 只是手工指到某次构建，源码 / seed 变了不会自动更新。需要
+确定的产物路径时用 `nix build --print-out-paths --no-link .#vuna`（不建软链），或先重建对应的
+`nix build ... --out-link`（见下方「Nix 命令与本地开发」）。
 
 `devShells.default` = `ocaml`/`ocamlopt` + `vuna-seed`；`devShells.ocaml` 只有工具链，种子
 重建或损坏时用它。stage 1 的 `vuna` 不进任何 devShell，避免种子失效时连 shell 都进不去；

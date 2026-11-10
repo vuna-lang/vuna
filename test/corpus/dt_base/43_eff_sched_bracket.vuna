@@ -14,7 +14,7 @@ spin (_ :: rest) = do
 
 task : Eff [] Int
 task =
-  bracket (liftIOEff (println "acquire")) (\_ => liftIOEff (println "release"))
+  bracket (liftIOEff (println "acquire")) (\_ => liftIOEff (fmap natToInt (println "release")))
     (\_ => spin [0, 0, 0, 0, 0])
 
 prog : Eff [] (Result Int)

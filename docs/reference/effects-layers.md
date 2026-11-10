@@ -1,7 +1,7 @@
 # Layer 2/3：高阶/作用域、线性续延、调度器与 IO 标签
 
-> 本文是 [effects.md](effects.md) §8.5/§8.6 的展开页：W6 高阶 scoped handler、
-> W7 线性续延/一次性闭包/`bracket`（含 abort cleanup）、W9 单线程调度器、W10 IO 标签迁移。Layer 1
+> 本文是 [effects.md](effects.md) §8.5/§8.6 的展开页：高阶 scoped handler、
+> 线性续延/一次性闭包/`bracket`（含 abort cleanup）、单线程调度器、IO 标签迁移。Layer 1
 > 核心（行/`Eff`/`Member`/运行时）见 [effects.md](effects.md) §8。
 
 ### 8.5 Layer 2/3（已落地的最小实现）
@@ -15,7 +15,7 @@
   因此嵌套 catch 的 fallback 抛错可被外层 catch 捕获。
 - 夹具 `dt_base/20_eff_local`（877）、`21_eff_catch`（4207）。
 
-**W6 高阶操作 / scoped handler**：
+**高阶操作 / scoped handler**：
 
 - `Base.EffExn`：`ExnOp.Try` 携带一个 `Eff` 子计算；`handleExn` 的 op handler 用
   `runEff (runExn sub)` 在**嵌套 handler** 下运行子计算，外层运行时 handler 继续处理
@@ -30,13 +30,13 @@
   `Domain`；`async : Eff Nil a -> IO (Task a)` 要求任务体行已处理干净（效果在任务内
   处理），`await` join 对应 Domain 并返回值。运行时 `dtp_async_fork`/`dtp_async_await`
   （句柄表）；隐藏 intrinsic `prim_asyncFork`/`prim_asyncAwait`。夹具
-  `dt_base/22_eff_async`（42）。它**不是** W9 的调度器实现：不参与结构化作用域，
-  只允许 main 域调用。W10/W11 视迁移情况决定保留或删除。
+  `dt_base/22_eff_async`（42）。它**不是**调度器的实现：不参与结构化作用域，
+  只允许 main 域调用。视迁移情况决定保留或删除。
 
 - 负例 `dt_err/71_catch_row_mismatch`、`72_local_row_mismatch`、`73_async_row_not_nil`：
   catch/local 要求行首是对应效应，async 只接受 `Eff Nil`。
 
-**W9 单线程 fiber 调度器（`Base.EffSched`）**：
+**单线程 fiber 调度器（`Base.EffSched`）**：
 
 表示与运行模型：
 
@@ -76,12 +76,12 @@ API（`base/lib/Base/EffSched.vuna`）：
   恢复并收到取消状态（`yieldNow` 返回 1、`awaitTask` 返回 `Err "cancelled"`），
   任务可跑清理后返回；未开始的任务直接取消（不执行）。取消后有 **64 步清理宽限**，
   超时后调度器硬中止该纤程（丢弃续延）。取消是**协作**语义：任务自己决定在哪些
-  检查点查询取消状态并清理。bracket 与取消组合：任务在挂起点恢复后 use 正常返回时，库层 `bracket` 在带内执行 release（夹具 `dt_base/43`）；硬中止路径由调度器尽力执行 W7 cleanup 栈（无 handler 栈，只能无效应清理）。
+  检查点查询取消状态并清理。bracket 与取消组合：任务在挂起点恢复后 use 正常返回时，库层 `bracket` 在带内执行 release（夹具 `dt_base/43`）；硬中止路径由调度器尽力执行 cleanup 栈（无 handler 栈，只能无效应清理）。
 - **结构化**：`withScope` 在 body 返回后等待 scope 内任务全部结束；
   子任务失败会取消同范围其余任务并把首个失败消息记为 scope 失败。`scopeWait` 本身只
   保证「全部结束」——子任务的取消/失败结果用 `awaitTask` 观察（`withScope` 会把未观察
   到的 scope 失败作为 `Err` 返回，避免监督信息被吞掉）。
-- **超时**：W9 的超时是**调度器逻辑步数**（循环迭代次数；不依赖真实时钟/sleep）。
+- **超时**：超时是**调度器逻辑步数**（循环迭代次数；不依赖真实时钟/sleep）。
   `withScopeTimeout n` 表示「开始等待后的 n 个调度步内清空」；预算耗尽 → 取消范围 →
   子任务清理 → 返回 `Err "timeout"`。
 - **任务行限制**：任务体必须是 `Eff Nil a`（任务内用户效应必须由任务自己的 handler
@@ -112,19 +112,19 @@ API（`base/lib/Base/EffSched.vuna`）：
 - `dt_base/36_eff_sched_channel`：生产者-消费者；`Base.EffChannel` 的 `send`/`recvWait`
   用 `yieldNow` 忙等轮询（无阻塞原语），fork 的 producer 在父纤程 yield 时入队，输出 42。
 
-**边界（W9 之后仍开放）**：Mutex/Semaphore/Channel 都是 cooperative 忙等实现（无阻塞原语）；
+**边界（仍开放）**：Mutex/Semaphore/Channel 都是 cooperative 忙等实现（无阻塞原语）；
 线性 TaskLin 只保证 handle 恰好一次 await/cancel，不保证资源释放；effect-aware 并发：新增 `forkTaskWith` 用显式 handler 把 effectful task 收成 Nil
 再 fork（handler 状态为任务局部）；仍无法继承父 fiber 的动态 handler 栈（D44）；
 取消只在挂起点生效，硬中止会丢弃未执行清理的纤程；`withScope` 的 body 若以非返回方式
 中止（abort/未捕获运行时异常），scope 的等待不会执行，残留任务由 `dtp_sched_main` 在
-main 结束时统一取消清理（最外层兜底）；跨域 handler / Domain 并行不在 W9 范围；
+main 结束时统一取消清理（最外层兜底）；跨域 handler / Domain 并行不在范围；
 `Base.EffAsync`（Domain）与新的调度器互不集成。
 
-### 8.6 W10：IO 标签迁移（库层 + 一条工具链真实路径）
+### 8.6 IO 标签迁移（库层 + 一条工具链真实路径）
 
 前提（计划 §2.3）：`IO` 保留为**运行时基座/逃逸口**（FFI、`main`、`unsafe`、未标签化
-原语）；用户面 API 迁到效应标签，handler 内部用 `Base.IO` / `prim_*` 实现。W10 在**库层**
-完成这层迁移；W10 收尾（`w10-io2`）补齐了原生 sleep 原语、fs 命名实例、可控 `Exit` 与
+原语）；用户面 API 迁到效应标签，handler 内部用 `Base.IO` / `prim_*` 实现。迁移在**库层**
+完成；后续补齐了原生 sleep 原语、fs 命名实例、可控 `Exit` 与
 一条工具链真实路径。`IO` 内建代数、main 执行边界与编译器的 IO 类型都不变。
 
 | 模块 | 标签（行条目） | 操作 | 真实 handler | mock 方式 |
@@ -133,7 +133,7 @@ main 结束时统一取消清理（最外层兜底）；跨域 handler / Domain 
 | `Base.EffClock` | `Clock n`（如 `"mock"`/`"real"`） | `Now`（微秒）/`SleepMicros Int` | `handleClockIO` → `Base.IO.Host.nowMicros` + **原生 `prim_sleep`** | 固定时间戳 / 忽略 sleep |
 | `Base.EffEnv` | `Env n`（如 `"mock"`/`"real"`） | `GetEnv String`/`GetCwd`/`ExecPath` | `handleEnvIO` → `Base.IO.getEnv`/`getCwd`/`execPath` | 固定字符串 |
 | `Base.EffProcess` | `Process n`（如 `"mock"`/`"real"`） | `Args`/`Exit Int`/`RunIn String (List String)` | `handleProcessIO`（真实退出）/ `handleProcessIOWith`（自定义 onExit）/ `handleProcessIOObserved`（观察退出码） | 自定义 `handleProcess`（`Exit c` 作为操作结果） |
-| `Base.EffFs` | `Fs n`（如 `"mock"`/`"real"`，W10 收尾起命名实例） | `ReadFile`/`WriteFile`/`WriteFileAtomic`/`ReadDir`/`IsDirectory`/`MakeDir`/`RemoveFile`/`FileExists`/`FileMtime`/`FileSize` | `handleFsIO n` → `Base.IO`/`prim_*` | 自定义 `handleFs n`（纯 answer 内存表） |
+| `Base.EffFs` | `Fs n`（如 `"mock"`/`"real"`，命名实例） | `ReadFile`/`WriteFile`/`WriteFileAtomic`/`ReadDir`/`IsDirectory`/`MakeDir`/`RemoveFile`/`FileExists`/`FileMtime`/`FileSize` | `handleFsIO n` → `Base.IO`/`prim_*` | 自定义 `handleFs n`（纯 answer 内存表） |
 
 - **命名实例**：console/clock/env/process/fs 的标签都带 String 实例名参数（`Fs n`），
   行里 `Fs "mock"` 与 `Fs "real"` 是不同条目，因此同一个程序可以同时装 mock 与真实
@@ -142,11 +142,11 @@ main 结束时统一取消清理（最外层兜底）；跨域 handler / Domain 
   （`fsReadFile n path`、`handleFsIO n`），夹具 `dt_base/18`/`29`/`40` 已更新。
 - **IO-backed handler 的形态**：`handleXIO` 接受行首为对应标签的 `Eff (Cons e r) a`，
   返回 `Eff r (IO a)`，由 `runIOAnswer` 执行（真实 handler 的 op 解释返回 `IO` 动作）。
-- **原生 sleep（W10 收尾）**：新增编译器原语 `prim_sleep : Int -> IO Int`（微秒；运行时
+- **原生 sleep**：编译器原语 `prim_sleep : Int -> IO Int`（微秒；运行时
   `dtp_sleep` 用 `Unix.sleepf`，阻塞睡眠；能力 `clock`；`OpNone`，interp 不归约）。
   `Base.EffClock` 的 `SleepMicros` 与 `Base.IO.Host.sleepMicros` 都已改用 `prim_sleep`
-  （`spinMicros` 已删除；seed 已 rotation，旧 seed 认识 `prim_sleep`）。
-- **可控 `Exit`（W10 收尾）**：`handleProcessIO` 保留真实语义（`onExit = exit`，调用即
+  （`spinMicros` 已删除；当前 seed 认识 `prim_sleep`）。
+- **可控 `Exit`**：`handleProcessIO` 保留真实语义（`onExit = exit`，调用即
   结束进程）；`handleProcessIOWith n onExit` 让调用方替换退出行为，`handleProcessIOObserved n`
   是现成实例：`Exit c` 不退出、把 `c` 交给续延，程序继续执行。mock handler 本来就能
   观察 `Exit`。真实路径的夹具（`dt_base/30`）仍只覆盖 `Args`/`RunIn`，避免测试进程退出；
@@ -154,12 +154,12 @@ main 结束时统一取消清理（最外层兜底）；跨域 handler / Domain 
 - **fs mock/real 并存**：`dt_base/40` 用同一个 `prog n` 在 `Fs "mock"`（纯 answer mock：固定
   内容/大小）与 `Fs "real"`（真实 IO handler，真实目录读写）下各跑一次，mock 与 real handler
   在同一程序里并存。
-- **工具链真实路径（W10 收尾）**：`lib/Vuna/Cli.vuna` 的 `vuna version` 输出改走
+- **工具链真实路径**：`lib/Vuna/Cli.vuna` 的 `vuna version` 输出改走
   console 标签——`consoleLine` 用 `consolePrint "vuna"` + `handleConsoleIO "vuna"` + `runIOAnswer`，
   只在最外层 `runIO`（工具链入口仍是 `main : IO Int`）。这是工具链逐步迁移的样板，不是
   全量迁移（`lib/` 其余模块仍直接用 `Base.IO` / `runIO`）。**编译器级强制不可行**的
   具体位置：`Loader.Resolve.checkEffectsBuiltins` 只做**包级**能力声明检查（manifest），
-  类型系统没有类型级能力行（F3），`IO`/`Base.IO`/`prim_*` 在任何包内都可用；编译器自身
+  类型系统没有类型级能力行，`IO`/`Base.IO`/`prim_*` 在任何包内都可用；编译器自身
   也在 seed 闭包里必须使用 IO（`Base.IO`、`Codegen`）。**最小下一步**：在 `vuna lint`
   增加一条模块级规则（如禁止 `lib/Vuna/**` 新增直接 `prim_*`/`Base.IO` 使用，白名单
   `Vuna.Cli.consoleLine` 一类的迁移点），而不是改类型检查器。
@@ -181,9 +181,12 @@ main 结束时统一取消清理（最外层兜底）；跨域 handler / Domain 
 - **能力**：`base` 的 `[capabilities] effects` 增加 `env`/`clock`（真实 handler 需要），
   仍是包级权限声明，不是类型级能力行。`Test/corpus` 单文件夹具包仍**不声明**能力，
   直接原语探针放在 `packages/` 里（沿用既有约定）。
-- **边界**（见 debt D43）：
-  - **库层迁移**：没有编译器强制「只能用标签」；`IO`、`Base.IO`、`prim_*` 仍可被包直接
-    使用；工具链只迁了一条真实路径（`vuna version`），编译器不迁移；
+- **边界**（D43 已由 P2 特权边界收口）：
+  - **用户面**：非特权包不能 import `Base.IO.Host`、不能直调 `prim_*`、不能声明
+    `[capabilities]`/`[trust]`；`Base.IO` 只留 IO 代数与实例（P2a/P2c）。
+  - **特权层**：`vuna-base` 真实 handler、`vuna-compiler` 与根工具链保留 Host/原语；
+    工具链只迁了一条真实 console 路径（`vuna version`），编译器不迁移（终态决策）。
   - **`Exit` 的真实语义保留**：`handleProcessIO` 仍会结束进程；「不退出」只在 mock /
     `onExit` 参数 / `handleProcessIOObserved` 下成立；
-  - 未处理效应诊断仍是通用异常文本；行擦除、运行时字符串 key 等既有边界不变。
+  - 入口未处理效应是类型错误（`TC_UnhandledEffects`）；运行时 `unhandled effect` 兜底
+    仍服务特权/内部路径；行擦除、运行时字符串 key 等既有边界不变。

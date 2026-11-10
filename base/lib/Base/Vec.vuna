@@ -14,6 +14,7 @@ import Base.String
 import Base.Pair
 import Base.Maybe
 import Base.List
+import Base.Num
 
 -- | 长度索引向量：`Vec n a` 的索引 `n : Nat` 在类型层锁定元素个数，构造子 `Nil` / `Cons` 与索引同构；`a` / `n` 皆是 Rig0，运行时擦除。索引在前、值类型在末位（与 `Eff r a` / `Error e a` 一致）。
 data Vec : Nat -> Type -> Type where

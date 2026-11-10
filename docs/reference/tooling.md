@@ -7,14 +7,14 @@
 
 ## 1. `vuna goal`：洞目标与上下文
 
-DT 里 `_` 是匿名洞，`?name` 是命名洞（M40；`?` 与标识符紧邻）。`vuna goal` 列出文件里
+DT 里 `_` 是匿名洞，`?name` 是命名洞（`?` 与标识符紧邻）。`vuna goal` 列出文件里
 每个洞的位置、目标类型与上下文：
 
 ```console
 $ vuna goal test/corpus/dt/15_goal.vuna
 test/corpus/dt/15_goal.vuna:7:11: goal Type
 
-$ vuna goal Holes.vuna        # 未解洞同样列出（M40 起容错查询）
+$ vuna goal Holes.vuna        # 未解洞同样列出（容错查询）
 Holes.vuna:6:6: goal Int
   m : Int
   n : Int
@@ -29,7 +29,7 @@ Named.vuna:6:6: goal ?goal : Int
 - 目标类型是精化后 zonk（代入已解元变量）再打印的。
 - 上下文是洞建立时精化上下文快照里的**全部可见绑定**（名字 : 类型，最内层在前）。
 - 若文件里没有洞，输出 `<file>: no holes`。
-- M40：所有记录的洞都会列出（已解 / 未解都算 goal）。**未解洞不再让 `goal` 直接失败**：
+- 所有记录的洞都会列出（已解 / 未解都算 goal）。**未解洞不让 `goal` 直接失败**：
   查询走容错入口 `goalsOfProgramTolerant`；`check` / `compile` / `build` 仍在严格收尾处报
   `TC_UnsolvedHole`（命名洞的诊断带洞名）。精化中途有硬错误（未绑定名 / 类型不匹配等）时
   仍返回错误。
@@ -127,11 +127,11 @@ search` 无命中为 1（用法 / 查询解析 / 非 workspace 仍为 2）；`vu
 | `TC_NotInductiveFamily` | 精化 | 对非归纳族做 case |
 | `TC_UnknownConstructorInCase` | 精化 | 分支构造子不属于该族 |
 | `TC_CtorDoesNotReturn` | 精化 | 构造子结果族不符 |
+| `TC_MainArity` | 精化 | `main` 带参数（入口必须零参） |
 | `CG_TypeLevelBindingRuntime` | codegen | 运行时用到被擦除绑定 |
 | `CG_TypeUsedAtRuntime` | codegen | 运行时出现类型项 |
 | `CG_AxiomAtRuntime` | codegen | 运行时使用 axiom |
 | `CG_InterpCannotExecuteEffects` | codegen | `vuna interp` 遇到 `main : IO a` |
-| `CG_MainReturnType` | codegen | `main` 返回类型不支持 |
 
 ## 4. `vuna run` 与 REPL 调试命令
 
@@ -332,14 +332,16 @@ dedent，开引号后的首个换行由 lexer 丢弃、渲染时按需补回）�
 
 ## 6. 尚未实现（工具链自身缺口）
 
-- `rewrite` / `with` 等证明工程 ergonomics：研究储备，未排期。
+- `rewrite` / `with` 等证明工程 ergonomics：未实现。
 - **语义索引**：Index 仍是 parse 级（签名必填 ⇒ 语法索引即语义面，不另建语义索引）。
 - LSP codeAction 的剩余缺口：case split 枚举非索引 `data` 与 record（单构造器 record 模式），
   不覆盖索引族（parse 级拿不到索引约束）与不透明 `axiom`；构造子是 parse 级解析（依赖模块
   读盘）；`fix all` 的 command 形式依赖客户端支持 `workspace/applyEdit`；rename 由
   `textDocument/rename` 提供（解析级，见 lsp.md）（见 [debt.md](debt.md) C38）。
-- **REPL server**：无请求取消/超时、无并发连接、无断线重连；阶段 1 不执行 `:!` 与效果
-  表达式；没有 HTTP/TLS（端点只有 loopback TCP / Unix socket；见 debt D36）。
+- **REPL server（非目标，不是待修债务）**：无请求取消/超时、无并发连接、无断线重连；阶段 1
+  不执行 `:!` 与效果表达式；没有 HTTP/TLS（端点只有 loopback TCP / Unix socket）。单会话
+  状态机本质串行，超时/取消需要可中断求值原语；安全模型只允许 loopback，故不做并发连接与
+  外部网络协议。
 
-阶段与债务归属见 [roadmap.md](../roadmap.md) / [debt.md](debt.md)；测试入口见
+开放债务见 [debt.md](debt.md)；测试入口见
 [testing.md](testing.md)。

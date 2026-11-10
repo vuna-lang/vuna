@@ -169,6 +169,7 @@ Base.Maybe  base/lib/Base/Maybe.vuna
 Base.Monad  base/lib/Base/Monad.vuna
 Base.Monoid  base/lib/Base/Monoid.vuna
 Base.Nat  base/lib/Base/Nat.vuna
+Base.Num  base/lib/Base/Num.vuna
 Base.Ord  base/lib/Base/Ord.vuna
 Base.Pair  base/lib/Base/Pair.vuna
 Base.Reader  base/lib/Base/Reader.vuna
@@ -303,6 +304,7 @@ Base.Maybe  ./lib/Base/Maybe.vuna
 Base.Monad  ./lib/Base/Monad.vuna
 Base.Monoid  ./lib/Base/Monoid.vuna
 Base.Nat  ./lib/Base/Nat.vuna
+Base.Num  ./lib/Base/Num.vuna
 Base.Ord  ./lib/Base/Ord.vuna
 Base.Pair  ./lib/Base/Pair.vuna
 Base.Reader  ./lib/Base/Reader.vuna

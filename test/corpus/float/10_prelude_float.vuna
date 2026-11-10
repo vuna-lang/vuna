@@ -1,0 +1,25 @@
+-- Base.Float 随 Prelude 导出：Show/Eq/Ord、转换 helper、FromFloat + deriving 无需 import。
+data Meters : Type where
+  MkMeters : Float -> Meters
+deriving (FromFloat, Eq, Show)
+
+meters : Meters
+meters = 2.5
+
+main : String
+main =
+  show 1.5
+    ++ "/"
+    ++ (if 1.5 == 1.5 then "eq" else "ne")
+    ++ "/"
+    ++ (if 1.5 < 2.5 then "lt" else "ge")
+    ++ "/"
+    ++ show (abs 1.5)
+    ++ "/"
+    ++ show (sqrt 4.0)
+    ++ "/"
+    ++ show (intToFloat 3)
+    ++ "/"
+    ++ show (floatToInt 3.9)
+    ++ "/"
+    ++ show meters

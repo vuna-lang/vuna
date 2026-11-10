@@ -2,9 +2,9 @@ open Vuna_runtime
 type t_Vuna_dCompiler_dCommon_dPos = C_Vuna_dCompiler_dCommon_dPos_Pos of (int) * (int)
 and t_Vuna_dCompiler_dCommon_dSpan = C_Vuna_dCompiler_dCommon_dSpan_Span of (string) * (int) * (int) * (int) * (int)
 
-let v_Vuna_dCompiler_dCommon_dbind = (fun r k -> (match r with
-  | Base_dResult.C_Base_dResult_dResult_Ok (dtb__0) -> (k dtb__0)
-  | Base_dResult.C_Base_dResult_dResult_Err (dtb__1) -> (Base_dResult.C_Base_dResult_dResult_Err (dtb__1))
+let v_Vuna_dCompiler_dCommon_dbind = (fun mc0 mc1 -> (match mc0 with
+  | Base_dResult.C_Base_dResult_dResult_Err (dtb__0) -> (Base_dResult.C_Base_dResult_dResult_Err (dtb__0))
+  | Base_dResult.C_Base_dResult_dResult_Ok (dtb__1) -> (mc1 dtb__1)
   | _ -> failwith "DT: impossible branch"
 ))
 

@@ -13,11 +13,10 @@ module Base.EffClock
 --
 -- 标签 `Clock n` 是命名实例；操作 `Now`（微秒时间戳）与 `SleepMicros`
 -- （睡 n 微秒）。真实 handler 用 `Base.IO.nowMicros` 与编译器原生原语 `prim_sleep`
--- 实现（W10 收尾：阻塞睡眠，不再是 `Base.IO.sleepMicros` 的忙等）。
+-- 实现（W10 收尾：阻塞睡眠，不是忙等）。
 --
--- 边界：`Base.IO` 在 seed 闭包内，旧 seed 不认识 `prim_sleep`，因此 `Base.IO.sleepMicros`
--- 仍保留忙等实现，切换需先 seed rotation（见 debt D43）；`Base.EffClock` 不在 seed
--- 闭包内，真实 handler 已走原生原语。
+-- 边界：`Base.EffClock` 与 `Base.IO.Host.sleepMicros` 都已使用原生 `prim_sleep`；
+-- 不存在忙等回退（`spinMicros` 已删除）。
 import Base.Eff
 import Base.IO.Host
 import Base.Monad

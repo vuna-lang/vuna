@@ -2,16 +2,16 @@ module Base.Float (FromFloat(..), abs, floatToInt, intToFloat, sqrt) where
 
 -- Base.Float：`Float` primitive 类型的宿主模块（实例 + 字面量转换 trait + 转换 helper）。
 --
--- 运行时表示是 OCaml IEEE-754 double（编译器内建；没有 data 声明）。本模块**刻意不在
--- `Prelude` 里**：`Float` 语法进入 Prelude 闭包会让 pre-rotation 的旧 seed 无法编译
--- 编译器（bootstrap 约束，见 docs/reference/floats.md）。因此：
+-- 运行时表示是 OCaml IEEE-754 double（编译器内建；没有 data 声明）。本模块自
+-- 2026-11 rotation 起**随 `Prelude` 自动导出**：`FromFloat`、转换 helper 与
+-- `Eq` / `Ord` / `Show Float` 实例都不需要显式 import（显式 import 仍允许）。
 --
---   * Float 字面量、`+ - * /`、比较、`==`、`main : Float`、模板插值都**不需要** import；
---   * 但 `show` / `Eq` / `Ord` 字典、转换 helper、`FromFloat` 字面量转换、`deriving
---     (FromFloat)` 需要 `import Base.Float`（实例全局可见，加载即参与实例搜索）。
---
--- 将来做一次 seed rotation 后，可以把本模块提升进 Prelude（debt 记录）。
+-- 代价：Prelude 闭包包含本模块，`Codegen.Split` 按全部定义扫描浮点用法，因此所有
+-- 程序的 `Vuna_runtime.ml` 都会带浮点 helper（原先「no-float 程序逐字节不变」不再
+-- 成立）；`Driver/Dt.programUsesFloat` 仍按 main 可达性判定，纯程序的 `vuna interp`
+-- 不受影响。细节与 interp 限制见 docs/reference/floats.md。
 import Base.Eq
+import Base.Num
 import Base.Ord
 import Base.Show
 
@@ -33,6 +33,14 @@ instance Ord Float where
   le x y = x <= y
   gt x y = x > y
   ge x y = x >= y
+
+-- D23 Stage1：`Num` 实例。方法体写内建运算符，由精化器特化成 `bi_*_float`；
+-- Stage 2 把 `+` 别名到 `add` 后，特化认 `Base.Num` 方法投影，仍然走原语（不自递归）。
+instance Num Float where
+  add x y = x + y
+  sub x y = x - y
+  mul x y = x * y
+  div x y = x / y
 
 -- 与 runtime 展示共用同一实现（`string_of_float`）。
 instance Show Float where

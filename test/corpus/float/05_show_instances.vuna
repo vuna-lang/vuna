@@ -1,8 +1,3 @@
--- Base.Float 提供 Show/Eq/Ord 实例（显式 import；字面量/算术本身不需要）。
-import Base.Float
-
+-- Base.Float 随 Prelude 导出：Show/Eq/Ord 实例无需 import（字面量/算术也不需要）。
 main : String
-main =
-  show 1.5
-    ++ (if 1.5 == 1.5 then "/eq" else "/ne")
-    ++ (if 1.5 < 2.5 then "/lt" else "/ge")
+main = show 1.5 ++ (if 1.5 == 1.5 then "/eq" else "/ne") ++ (if 1.5 < 2.5 then "/lt" else "/ge")

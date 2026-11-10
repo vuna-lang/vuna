@@ -55,26 +55,29 @@ runIO : IO a -> a
 runIO = prim_runIO
 
 -- 效果 API：直接别名到 IO 化的原语（M31）。
--- | 向 stdout 写字符串并 flush（不自动换行），返回写入的字节数。
-print : String -> IO Int
-print = prim_print
+-- | 向 stdout 写字符串并 flush（不自动换行），返回写入的字节数（`Nat`，D25）。
+-- 低层 `prim_print` 仍是 `IO Int`（内部字节计数保留 Int，避免 seed 自举死锁，
+-- 见 primitives.md §3.1），所以这里用 `natFromInt` 在边界把它变成 `Nat`。
+print : String -> IO Nat
+print s = fmap natFromInt (prim_print s)
 
 -- 写 stderr（W10：console 效应标签的真实 handler 用；与 print 对称）。
 -- | 向 stderr 写字符串（不自动换行），返回写入的字节数；与 `print` 对称。
 eprint : String -> IO Int
 eprint = prim_eprint
 
--- | 向 stdout 写字符串并补 `\n`。
-println : String -> IO Int
+-- | 向 stdout 写字符串并补 `\n`（返回写入的字节数，`Nat`）。
+println : String -> IO Nat
 println s = print "${s}\n"
 
 -- | 把整个文件读成字符串（按字节，不做编码转换）；IO 失败抛宿主异常。
 readFile : String -> IO String
 readFile = prim_readFile
 
--- | 把整串二进制写入文件，返回写入字节数；IO 失败抛宿主异常。
-writeFile : String -> String -> IO Int
-writeFile = prim_writeFile
+-- | 把整串二进制写入文件，返回写入字节数（`Nat`，D25）；IO 失败抛宿主异常。
+-- 低层 `prim_writeFile` 仍是 `IO Int`（原因同 `print`），边界处 `natFromInt`。
+writeFile : String -> String -> IO Nat
+writeFile path s = fmap natFromInt (prim_writeFile path s)
 
 -- | 从 stdin 读一行；EOF 返回空串（与空行不可区分）。
 readLine : IO String

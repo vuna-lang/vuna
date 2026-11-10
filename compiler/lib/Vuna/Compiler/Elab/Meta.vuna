@@ -105,6 +105,7 @@ module Vuna.Compiler.Elab.Meta
 -- 全局签名表与 UTC 收集、dt data/ctor 查找、telescope 与结果 spine 计算、已解元变量内联、
 -- 擦除判据（binderRig / isIndexDomain 等）、以及 trait/instance 的命名辅助。
 -- 拆自 M24 的单一 `Elab.vuna`（按真实调用图切；门面仍是 `Vuna.Compiler.Elab`）。
+import Base.List
 import Vuna.Compiler.Common
 import Base.HashMap
 import Vuna.Compiler.Debug
@@ -142,7 +143,7 @@ instantiateNullaryCtorFuel fuel ec ctx v = if fuel <= 0 then Ok (Pair v (Pair []
 else case forceVal ec v of
   VPi _ True _ dom clo => if isImplicitDomain ctx ec dom then case newMeta ctx ec of
     Pair metaTerm ec1 => Vuna.Compiler.Common.bind (instantiateNullaryCtorFuel (fuel - 1) ec1 ctx (applyClosure clo (eval (ctxEnv ctx) metaTerm))) (\p => case p of
-      Pair ty (Pair metas ec2) => Ok (Pair ty (Pair (metaTerm :: metas) ec2))
+      Pair ty (Pair metas ec2) => Ok (Pair ty (Pair (Base.List.Cons metaTerm metas) ec2))
     )
   else Ok (Pair v (Pair [] ec))
   _ => Ok (Pair v (Pair [] ec))
@@ -498,20 +499,13 @@ resolveOverCtorGo ec sp (Just fam) short targets = case candidatesInFamily ec (J
     tcErr2 sp (AmbiguousCtor short (overCandidatesText targets)) short (overCandidatesText targets)
 
 -- | 自动补注（M41 新增导出）：defaultOrOver。
+-- B43：推断位（无期望类型）**不再**默认到 List 族——`Nil` / `Fs :: Nil` 这类在 `List a`
+-- 与其他族都有同名构造子时，猜 List 会把错误藏到后面（或静默选错族）；多候选一律报
+-- `TC_AmbiguousCtor`，由用户补期望类型消歧。单候选可直接选。
 defaultOrOver : Ec -> Span -> String -> List String -> Result String
-defaultOrOver ec sp short targets = case listCtorTarget ec targets of
-  Just t => Ok t
-  Nothing => case targets of
-    [t] => Ok t
-    _ =>
-      tcErr2 sp (AmbiguousCtor short (overCandidatesText targets)) short
-        (overCandidatesText targets)
-
--- | 自动补注（M41 新增导出）：listCtorTarget。
-listCtorTarget : Ec -> List String -> Maybe String
-listCtorTarget ec [] = Nothing
-listCtorTarget ec (t :: rest) =
-  if ctorFamilyIs ec t listFamilyName then Just t else listCtorTarget ec rest
+defaultOrOver ec sp short ([t]) = Ok t
+defaultOrOver ec sp short targets =
+  tcErr2 sp (AmbiguousCtor short (overCandidatesText targets)) short (overCandidatesText targets)
 
 -- 类型头的签名项：数据族以 `DtData.dtDataKind` 为准。globals 是 name→Term 单表，
 -- 同模块同名值定义（`data T` 与 `T : Int`）会覆盖族的 kind；B18 起类型位置不再受
@@ -629,10 +623,15 @@ hasOutOfScopeVarAlts : List CaseAlt -> Bool
 hasOutOfScopeVarAlts [] = False
 hasOutOfScopeVarAlts ((CaseAlt n bs b) :: rest) = hasOutOfScopeVar b || hasOutOfScopeVarAlts rest
 
--- 族的 kind 里的参数个数，补成隐式 `EPi`。
+-- 族的 kind 里的**参数**（前导的宇宙域 binder，`data Foo a : ...` 的 a）补成隐式 `EPi`，
+-- 遇到第一个非宇宙域 binder（索引：`Nat` / `Row` / `a -> Type`）即停。
+-- 不能把 kind 的**每个** binder 都补成 `{_ : Type}`（旧实现）：`data Eff : Row -> Type ->
+-- Type` 没有参数，它的 binder 全是索引，旧实现会给构造子凭空加一个域为 `Type` 的隐式
+-- binder，字段宇宙层级检查报「sorts into Type 1, above the family level」（D45 的回归）。
 prependFamParams : Term -> Expr -> Span -> Expr
-prependFamParams (TPi n implicit rigB dom cod) tyExpr sp =
-  EPi n True Nothing (EVar "Type" sp) (prependFamParams cod tyExpr sp) sp
+prependFamParams (TPi n implicit rigB dom cod) tyExpr sp = case dom of
+  TType l => EPi n True Nothing (EVar "Type" sp) (prependFamParams cod tyExpr sp) sp
+  _ => tyExpr
 prependFamParams _ tyExpr sp = tyExpr
 
 -- 剥掉外层 Pi（`resultSpine` 需要看返回类型）。
@@ -951,7 +950,7 @@ else case v of
       headOpaque g || valueOpaqueTypeSpine fuel outerNVar headOpaque depth famLevels sp
   VPi name implicit rig dom clo =>
     let
-      fam2 = if isFamilyKindValue dom then depth :: famLevels else famLevels
+      fam2 = if isFamilyKindValue dom then Base.List.Cons depth famLevels else famLevels
     in valueOpaqueGo (fuel - 1) outerNVar headOpaque depth famLevels dom
       || valueOpaqueGo (fuel - 1) outerNVar headOpaque (depth + 1) fam2 (applyClosure clo (VNeutral (NVar name depth [])))
   -- 类型族展开后卡住的形态（VCase/VIf 悬挂在中性值上）、以及不可能出现在类型位置
@@ -1240,13 +1239,21 @@ foldAppTerms fn [] = fn
 foldAppTerms fn ((Pair arg erased) :: rest) = foldAppTerms (TApp fn arg erased) rest
 
 -- 构造子类型是否已**显式写出**族参数 binder。
--- 判据是「首个 EPi 的 binder 有名字」（显式 `(a : Type) ->` 或隐式 `{a : Type} ->`）：
--- 这类构造子自己绑定了族参数，不能再前置一份（否则出现重复 binder，codegen 的
--- 运行时类型参数表与构造子 telescope 对不上）。record 降级生成的构造子类型用
--- 匿名显式 `EPi "_" False` 写字段，因此仍要走 `prependFamParams`。
+-- 判据是「首个 binder 有名字且域是宇宙」：`(a : Type) ->` / `{a : Type} ->` 这类构造子
+-- 自己绑定了族参数，不能再前置一份（否则重复 binder，codegen 的运行时类型参数表与
+-- 构造子 telescope 对不上）。不能只看「binder 有名字」：`MkBox : (1 x : a) -> Box a`
+-- 的首个 binder 是**字段** x（域是族参数 a），D45 曾因此误判并把 `{a : Type}` 跳过，
+-- 报 `TC_UnknownName a`。record 降级生成的构造子类型用匿名显式 `EPi "_" False` 写字段，
+-- 因此仍要走 `prependFamParams`。
 hasFamParams : Expr -> Bool
-hasFamParams (EPi n implicit _ dom cod sp) = n /= "_"
+hasFamParams (EPi n implicit _ dom cod sp) = n /= "_" && isSortExpr dom
 hasFamParams _ = False
+
+-- 语法层的宇宙判定：`Type` / `Type 1`（`Type` 的层级是应用实参）。
+isSortExpr : Expr -> Bool
+isSortExpr (EVar "Type" sp) = True
+isSortExpr (EApp (EVar "Type" sp) args sp2) = True
+isSortExpr _ = False
 
 -- 模块限定名的最后一段（`Base.Monad.fmap` → `fmap`）。
 baseNameOf : String -> String

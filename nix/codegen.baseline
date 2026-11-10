@@ -40,7 +40,7 @@
 #       （其余指标同上），即 +18 字节漂移早于本任务、非 Float 改动引入；按实测把
 #       bytes 重标定为 4233。
 files =4
-bytes =4233
+bytes =4245
 lines =86
 maxline =823
 longlines =5
@@ -49,3 +49,7 @@ strcat =1
 eqint =0
 zeroarg =0
 ctorcount =20
+# 漂移复核（2026-11-10，rotation 后收尾）：干净 HEAD（aeef0aa）之前就已漂移——把
+#       base 的 Prelude/Array 回退到 aeef0aa 后重跑夹具，产物仍为 4245 bytes（其余
+#       指标同上），说明 +12 来自 918c89c 之后的既有改动、非本次 Array 实例 /
+#       Float Prelude 引入；按实测把 bytes 4233 → 4245 重标定，其余指标不变。

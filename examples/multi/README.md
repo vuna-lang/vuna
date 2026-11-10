@@ -1,4 +1,4 @@
-# 多包示例（M11.5 / M24）
+# 多包示例
 
 workspace 根 `vuna.toml` 同时是包（`multi`，可执行入口 `app/Main.vuna`），
 成员包 `greet` 通过 `[export]` 公开 `Greet` / `Greet.Internal`；根包在

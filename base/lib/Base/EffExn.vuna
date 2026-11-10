@@ -17,6 +17,7 @@ import Base.Eff
 import Base.Monad
 import Base.Ord
 import Base.Result
+import Base.Num
 
 -- | exn 效应的标签类型 `Exn n`：只做行索引，没有运行时构造子。
 data Exn : String -> Type where
@@ -48,7 +49,7 @@ exnOpH : (fuel : Int) -> (n : String) -> {r : Row} -> {a : Type} -> (o : ExnOp n
 exnOpH fuel n op k = if fuel <= 0 then Err "exn: fuel exhausted"
 else case op of
   ThrowExn _ s => Err s
-  Try _ sub => k (runEff (runExnFuel (fuel - 1) n sub))
+  Try _ subComp => k (runEff (runExnFuel (fuel - 1) n subComp))
 
 -- | 内部：带 fuel 的 `runExn` 实现；fuel 耗尽返回 `Err exn: fuel exhausted`（防无限嵌套）。
 runExnFuel : (fuel : Int) -> (n : String) -> {a : Type} -> {r : Row} -> Eff (Base.Eff.Cons (Exn n) r) a -> Eff r (Result a)

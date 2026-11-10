@@ -53,6 +53,7 @@ module Vuna.Compiler.Intrinsics
   , listConsCtor
   , listFamilyName
   , listNilCtor
+  , mainShowDefName
   , natSuccCtor
   , natTypeName
   , natZeroCtor
@@ -258,6 +259,12 @@ primRunIOName = "prim_runIO"
 primEraseName : String
 primEraseName = "prim_erase"
 
+-- | 非内建 `main` 类型的 Show 展示定义名（D17）：Elab 收尾合成
+-- `@vuna@main_show : T -> String`，codegen 的 main 钩子与 interp 的 main 展示按它取用；
+-- 名字里的 `@` 不在用户标识符语法里，不会与用户定义冲突。
+mainShowDefName : String
+mainShowDefName = "@vuna@main_show"
+
 -- ---------------------------------------------------------------
 -- 调试构造（F3 B）：语言级 debug 名字
 -- ---------------------------------------------------------------
@@ -386,6 +393,22 @@ data IntrinsicOp : Type where
   OpNatDiv : IntrinsicOp
   OpNatToInt : IntrinsicOp
   OpNatFromInt : IntrinsicOp
+  -- Float 的纯原语（IEEE-754 double；与编译产物的 OCaml 运算符同语义）。
+  OpAddF : IntrinsicOp
+  OpSubF : IntrinsicOp
+  OpMulF : IntrinsicOp
+  OpDivF : IntrinsicOp
+  OpEqF : IntrinsicOp
+  OpNeqF : IntrinsicOp
+  OpLtF : IntrinsicOp
+  OpLeF : IntrinsicOp
+  OpGtF : IntrinsicOp
+  OpGeF : IntrinsicOp
+  OpFloatAbs : IntrinsicOp
+  OpFloatSqrt : IntrinsicOp
+  OpStrFromFloat : IntrinsicOp
+  OpFloatFromInt : IntrinsicOp
+  OpIntFromFloat : IntrinsicOp
   -- 表现层 cast（`prim_erase`）：运行时不产生任何操作，归约成唯一实参本身。
   -- interp / 定义性相等都必须看穿它（否则 cast 会改变归约结果）。
   OpIdentity : IntrinsicOp
@@ -588,8 +611,8 @@ baseIntrinsics : List Intrinsic
 -- IO 代数（M37 / C1 过渡）：`IO` 是编译器内建效应类型，构造/绑定/执行是内建原语。
 -- 这里的 runtime 文本是**内建模式**（IO = 裸 thunk `int -> 'a`）的实现；
 -- M38：运行时诊断原语。`prim_eprint` 写 stderr 并 flush（报告器/调试输出用）；
--- `prim_fail` 抛 Failure（报告器把它渲染成 "vuna: runtime error: ..."）。两者先只
--- 进 Intrinsics 表（base 源码在 seed rotation 之后才会使用它们）。
+-- `prim_fail` 抛 Failure（报告器把它渲染成 "vuna: runtime error: ..."）。`prim_eprint`
+-- 已被 `Base.IO.Host.eprint` 使用；`prim_fail` 供工具链的 fuel 耗尽路径使用。
 -- 内部 cast（`visible = False`）：只由精化器插入，runtime 是 OCaml 的 `%identity`；
 -- 运行时位置的不透明擦除依赖值靠它进出（见 docs/reference/effects.md §5/§6）。
 -- 运行时续延（Layer 1）：一次性 effect handler。两者都要求 `unsafe` 能力，
@@ -601,14 +624,15 @@ baseIntrinsics : List Intrinsic
 -- 与 effect 原语一样可见但要求 `unsafe` 能力：只有声明了 unsafe 的包（base）能直调。
 -- 原生睡眠（W10 收尾）：微秒；真实实现是 `Unix.sleepf`（阻塞，非忙等）。
 -- 能力 `clock`（与 timeUs 同族）；interp 不归约（OpNone），效果程序只 compile+run。
--- 注意：`Base.IO` 在 seed 闭包内，旧 seed 不认识它，因此库层切换见 debt D43；
--- 不在 seed 闭包内的 `Base.EffClock` 真实 handler 已直接使用它。
+-- `Base.EffClock` 与 `Base.IO.Host.sleepMicros` 都已直接使用它（`spinMicros` 已删除）。
 -- F3 B：语言级调试构造（无能力位；assert/todo 由 Resolve 在 release 构建拒绝）。
+-- D23：`+ - * /` 只作为 codegen / interp 的映射目标（源码里的 `+` 等已由 Loader
+-- 换成 `Base.Num` 的方法别名，精化期再特化回这四个内建），因此不再对用户源码可见。
 baseIntrinsics =
-  [ Intrinsic "+" (IFun IInt (IFun IInt IInt)) OpAdd Nothing "bi_add" True,
-    Intrinsic "-" (IFun IInt (IFun IInt IInt)) OpSub Nothing "bi_sub" True,
-    Intrinsic "*" (IFun IInt (IFun IInt IInt)) OpMul Nothing "bi_mul" True,
-    Intrinsic "/" (IFun IInt (IFun IInt IInt)) OpDiv Nothing "bi_div" True,
+  [ Intrinsic "+" (IFun IInt (IFun IInt IInt)) OpAdd Nothing "bi_add" False,
+    Intrinsic "-" (IFun IInt (IFun IInt IInt)) OpSub Nothing "bi_sub" False,
+    Intrinsic "*" (IFun IInt (IFun IInt IInt)) OpMul Nothing "bi_mul" False,
+    Intrinsic "/" (IFun IInt (IFun IInt IInt)) OpDiv Nothing "bi_div" False,
     Intrinsic "++" (IFun IStr (IFun IStr IStr)) OpConcat Nothing "bi_concat" True,
     Intrinsic "&&" (IFun IBool (IFun IBool IBool)) OpAnd Nothing "bi_and" True,
     Intrinsic "||" (IFun IBool (IFun IBool IBool)) OpOr Nothing "bi_or" True,
@@ -725,21 +749,21 @@ baseIntrinsics =
 -- bootstrap 说明；顺序上追加在基础表之后。
 floatIntrinsics : List Intrinsic
 floatIntrinsics =
-  [ Intrinsic "strFromFloat" (IFun IFloat IStr) OpNone Nothing "string_of_float" True,
-    Intrinsic "floatFromInt" (IFun IInt IFloat) OpNone Nothing "float_of_int" True,
-    Intrinsic "intFromFloat" (IFun IFloat IInt) OpNone Nothing "int_of_float" True,
-    Intrinsic "floatAbs" (IFun IFloat IFloat) OpNone Nothing "abs_float" True,
-    Intrinsic "floatSqrt" (IFun IFloat IFloat) OpNone Nothing "sqrt" True,
-    Intrinsic "bi_add_float" (IFun IFloat (IFun IFloat IFloat)) OpNone Nothing "bi_add_float" False,
-    Intrinsic "bi_sub_float" (IFun IFloat (IFun IFloat IFloat)) OpNone Nothing "bi_sub_float" False,
-    Intrinsic "bi_mul_float" (IFun IFloat (IFun IFloat IFloat)) OpNone Nothing "bi_mul_float" False,
-    Intrinsic "bi_div_float" (IFun IFloat (IFun IFloat IFloat)) OpNone Nothing "bi_div_float" False,
-    Intrinsic "bi_eq_float" (IFun IFloat (IFun IFloat IBool)) OpNone Nothing "bi_eq_float" False,
-    Intrinsic "bi_neq_float" (IFun IFloat (IFun IFloat IBool)) OpNone Nothing "bi_neq_float" False,
-    Intrinsic "bi_lt_float" (IFun IFloat (IFun IFloat IBool)) OpNone Nothing "bi_lt_float" False,
-    Intrinsic "bi_le_float" (IFun IFloat (IFun IFloat IBool)) OpNone Nothing "bi_le_float" False,
-    Intrinsic "bi_gt_float" (IFun IFloat (IFun IFloat IBool)) OpNone Nothing "bi_gt_float" False,
-    Intrinsic "bi_ge_float" (IFun IFloat (IFun IFloat IBool)) OpNone Nothing "bi_ge_float" False
+  [ Intrinsic "strFromFloat" (IFun IFloat IStr) OpStrFromFloat Nothing "string_of_float" True,
+    Intrinsic "floatFromInt" (IFun IInt IFloat) OpFloatFromInt Nothing "float_of_int" True,
+    Intrinsic "intFromFloat" (IFun IFloat IInt) OpIntFromFloat Nothing "int_of_float" True,
+    Intrinsic "floatAbs" (IFun IFloat IFloat) OpFloatAbs Nothing "abs_float" True,
+    Intrinsic "floatSqrt" (IFun IFloat IFloat) OpFloatSqrt Nothing "sqrt" True,
+    Intrinsic "bi_add_float" (IFun IFloat (IFun IFloat IFloat)) OpAddF Nothing "bi_add_float" False,
+    Intrinsic "bi_sub_float" (IFun IFloat (IFun IFloat IFloat)) OpSubF Nothing "bi_sub_float" False,
+    Intrinsic "bi_mul_float" (IFun IFloat (IFun IFloat IFloat)) OpMulF Nothing "bi_mul_float" False,
+    Intrinsic "bi_div_float" (IFun IFloat (IFun IFloat IFloat)) OpDivF Nothing "bi_div_float" False,
+    Intrinsic "bi_eq_float" (IFun IFloat (IFun IFloat IBool)) OpEqF Nothing "bi_eq_float" False,
+    Intrinsic "bi_neq_float" (IFun IFloat (IFun IFloat IBool)) OpNeqF Nothing "bi_neq_float" False,
+    Intrinsic "bi_lt_float" (IFun IFloat (IFun IFloat IBool)) OpLtF Nothing "bi_lt_float" False,
+    Intrinsic "bi_le_float" (IFun IFloat (IFun IFloat IBool)) OpLeF Nothing "bi_le_float" False,
+    Intrinsic "bi_gt_float" (IFun IFloat (IFun IFloat IBool)) OpGtF Nothing "bi_gt_float" False,
+    Intrinsic "bi_ge_float" (IFun IFloat (IFun IFloat IBool)) OpGeF Nothing "bi_ge_float" False
   ]
 
 -- | 所有内建声明：基础表 + 浮点表。

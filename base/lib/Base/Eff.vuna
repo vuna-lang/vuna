@@ -74,6 +74,10 @@ instance Monad (Eff r) where
 
 instance Applicative (Eff r) where
   pure x = MkEff (\_ => x)
+  ap mf mx = MkEff (\u => case mf of
+    MkEff fg => case mx of
+      MkEff fb => fg u (fb u)
+  )
   liftA2 f ma mb = MkEff (\u => case ma of
     MkEff fa => case mb of
       MkEff fb => f (fa u) (fb u)

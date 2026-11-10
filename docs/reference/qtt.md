@@ -131,8 +131,8 @@ mk t = mkContI (\x => useToken t + x)   -- 捕获 t；rig-1 实参位置 → 允
 - 0 binder 的 λ 形参、应用实参、构造子字段、case binder 都不进入运行时表示；1/ω 保留。
 - codegen 的 `rigIsErased` 是唯一读取点；`Codegen/Erase` 的运行时使用检查保留为第二道
   防御。`(0 p : Int)` 在生成的 OCaml 中不应出现对应参数。
-- `TPi` 类型层项不参与用量；把值类型写成 0 现在是显式、可检查的擦除手段（旧 M16 的
-  索引擦除诊断仍保留为提示）。
+- `TPi` 类型层项不参与用量；把值类型写成 0 现在是显式、可检查的擦除手段（索引擦除
+  诊断仍保留为提示）。
 
 ## 8. 线性 ST 子集
 
@@ -156,7 +156,7 @@ mk t = mkContI (\x => useToken t + x)   -- 捕获 t；rig-1 实参位置 → 允
   嵌套/curried 线性闭包、`if`/`case` 里的捕获一律拒绝。
 - 用量检查把 let 的 RHS 按单次求值计（应用 rig=1），线性值经 let 传递不再误报；
   但推断位置把线性值传给通用运算符/trait 方法仍被拒（形参默认 ω；期望类型触发
-  `bi_add` 等特化才通过），见 debt D45。
+  `bi_add` 等特化才通过），见 debt D22（multiplicity 多态）。
 - 线性 IO 世界令牌 / per-module `unsafe` 未做（debt D28）。
 - 运行时不做所有权检查；线性是静态纪律（线性值仍可经非线性 data 的字段被复制，
   见 D42）。

@@ -7,4 +7,4 @@ main : IO Int
 main = do
   _ <- print "START-A\n"
   _ <- sleepMicros 3000000
-  print "END-A\n"
+  fmap natToInt (print "END-A\n")

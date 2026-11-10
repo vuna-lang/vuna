@@ -1,0 +1,9 @@
+-- D17：`main : IO T` 且 `T` 非内建：main 钩子先剥掉 IO 拿到 `T`，再用 `Show T` 投影展示。
+import Base.IO
+record Point where
+  x : Int
+  y : Int
+deriving (Show)
+
+main : IO Point
+main = pure (Point { x = 1, y = 2 })

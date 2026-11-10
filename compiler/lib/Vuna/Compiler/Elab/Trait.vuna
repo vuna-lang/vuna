@@ -66,6 +66,7 @@ module Vuna.Compiler.Elab.Trait
 
 -- Vuna.Compiler.Elab.Trait：trait/instance 声明与派生：类参数 kind、方法投影、实例头检查、
 -- 实例方法体、字典提升、实例体批量调度、定义参数模式绑定与 `elabFunDef`；拆自 M24 的 `Elab.vuna`。
+import Base.List
 import Vuna.Compiler.Common
 import Base.HashMap
 import Vuna.Compiler.Debug
@@ -155,7 +156,13 @@ elabTraitFinal globals ec tname paramNames methods methodsP pKinds fieldTys =
         (foldParamPis paramsKinds (TType levelZero)) [] False
     projs = methodProjections tname paramNames pKinds methodsP fieldTys
     projSpans = map (\m => Pair (traitMethodName m) (traitMethodSpan m)) methods
-    projBodies = projectionDefs tname (length paramNames) methodsP fieldTys (length methods)
+    -- D27：字段（方法类型）在运行时不可表示 ⇒ 该方法的投影体里字典字段的使用要包 cast。
+    -- 判定与 codegen 的字段 opaque 标志同源（`Elab.Meta.isOpaqueRuntimeTyIn`），上下文是
+    -- 类参数 telescope（字段类型的自由变量正好是这些类参数）。
+    fieldCtx = bindClassParams paramsKinds emptyCtx
+    opaqueFields = map (\t => isOpaqueRuntimeTyIn ec fieldCtx (eval (ctxEnv fieldCtx) t)) fieldTys
+    projBodies =
+      projectionDefsOpaque opaqueFields tname (length paramNames) methodsP fieldTys (length methods)
     cls = DtClass tname paramNames projs fieldTys
     ec2 = ecAddClass (ecAddData ec dd) cls
     ec3 = foldlAddDef ec2 projBodies
@@ -180,13 +187,13 @@ traitParamKinds globals ec ((TraitParam pname pkind) :: rest) methods = case pki
 traitKindExplicit : List (Pair String Term) -> Ec -> Expr -> List TraitParam -> List (Pair String Expr) -> Result (Pair (List Term) Ec)
 traitKindExplicit globals ec kexpr rest methods = Vuna.Compiler.Common.bind (checkType globals emptyCtx ec kexpr) (\pk => case pk of
   Pair kterm (Pair _ ec1) => Vuna.Compiler.Common.bind (traitParamKinds globals ec1 rest methods) (\pr => case pr of
-    Pair ks ec2 => Ok (Pair (kterm :: ks) ec2)
+    Pair ks ec2 => Ok (Pair (Base.List.Cons kterm ks) ec2)
   )
 )
 
 traitKindInfer : List (Pair String Term) -> Ec -> String -> List TraitParam -> List (Pair String Expr) -> Result (Pair (List Term) Ec)
 traitKindInfer globals ec pname rest methods = Vuna.Compiler.Common.bind (traitParamKinds globals ec rest methods) (\pr => case pr of
-  Pair ks ec2 => Ok (Pair (classParamKindOf pname methods :: ks) ec2)
+  Pair ks ec2 => Ok (Pair (Base.List.Cons (classParamKindOf pname methods) ks) ec2)
 )
 
 -- 类参数 binder 的 Pi 链（外到内 = 声明顺序）。binder 是隐式擦除的（字典的类参数）。
@@ -241,13 +248,22 @@ methodProjType tname params pKinds methodTy =
 -- 实参——两侧都跳过，才能与由 `checkDef` 生成的实例方法体（同样按 rig 跳过擦除位）严格对齐。
 projectionBody : String -> Int -> List Rig -> Int -> Int -> Term
 projectionBody ctor fieldIdx rigs nFields nParams =
+  projectionBodyOpaque False ctor fieldIdx rigs nFields nParams
+
+-- D27：字典字段（= 方法类型）在运行时不可表示时，字典构造子的字段在 OCaml 里被渲染成
+-- 不透明值（`Obj.t`）。源码 case 由 `Elab.Term.Impl.opaqueBranchIndices` 给分支 binder 的
+-- 每个使用点包表现层 cast；而这里生成的 `TCase` 不经过精化，所以字段变量的使用要自己包
+-- `prim_erase`，否则 OCaml 侧会对 `Obj.t` 直接应用（`This is not a function`）。
+projectionBodyOpaque : Bool -> String -> Int -> List Rig -> Int -> Int -> Term
+projectionBodyOpaque fieldOpaque ctor fieldIdx rigs nFields nParams =
   let
     arity = length rigs
     -- scrutinee 在分支绑定子之外求值，所以只跨过方法参数（_d=ar；参数 binder 在 _d 之外）。
     dictIdx = arity
     fieldVar = TVar (fieldVarName fieldIdx) (nFields - 1 - fieldIdx)
     argPairs = methodArgTerms rigs nFields
-    applied = foldAppTerms fieldVar argPairs
+    applied0 = foldAppTerms fieldVar argPairs
+    applied = if fieldOpaque then wrapOpaqueUses [nFields - 1 - fieldIdx] applied0 else applied0
     binders = fieldBinderNames nFields
     alt = CaseAlt ctor binders applied
     caseTerm = TCase (TVar "_d" dictIdx) [alt]
@@ -270,14 +286,27 @@ explicitPiArity _ = 0
 -- 投影定义表：每个方法一条 `m = <投影定义体>`。
 projectionDefs : String -> Int -> List (Pair String Expr) -> List Term -> Int -> List (Pair String Term)
 projectionDefs tname nParams methods fieldTys nFields =
-  projectionDefsGo (dictCtorName tname) nParams methods fieldTys 0 nFields
+  projectionDefsOpaque (map (\_ => False) fieldTys) tname nParams methods fieldTys nFields
+
+-- D27：按 `opaqueFields`（与方法同序）决定每个投影体是否给字典字段变量包 cast。
+projectionDefsOpaque : List Bool -> String -> Int -> List (Pair String Expr) -> List Term -> Int -> List (Pair String Term)
+projectionDefsOpaque flags tname nParams methods fieldTys nFields =
+  projectionDefsOpaqueGo flags (dictCtorName tname) nParams methods fieldTys 0 nFields
+
+projectionDefsOpaqueGo : List Bool -> String -> Int -> List (Pair String Expr) -> List Term -> Int -> Int -> List (Pair String Term)
+projectionDefsOpaqueGo flags ctor nParams [] fieldTys idx nFields = []
+projectionDefsOpaqueGo flags ctor nParams (m :: rest) [] idx nFields = []
+projectionDefsOpaqueGo flags ctor nParams ((Pair mname mexpr) :: rest) (t :: rest2) idx nFields =
+  Pair mname (projectionBodyOpaque (flagAt idx flags) ctor idx (methodArgRigsOf binderRig t) nFields nParams)
+    :: projectionDefsOpaqueGo flags ctor nParams rest rest2 (idx + 1) nFields
+
+flagAt : Int -> List Bool -> Bool
+flagAt i [] = False
+flagAt i (b :: rest) = if i <= 0 then b else flagAt (i - 1) rest
 
 projectionDefsGo : String -> Int -> List (Pair String Expr) -> List Term -> Int -> Int -> List (Pair String Term)
-projectionDefsGo ctor nParams [] fieldTys idx nFields = []
-projectionDefsGo ctor nParams (m :: rest) [] idx nFields = []
-projectionDefsGo ctor nParams ((Pair mname mexpr) :: rest) (t :: rest2) idx nFields =
-  Pair mname (projectionBody ctor idx (methodArgRigsOf binderRig t) nFields nParams)
-    :: projectionDefsGo ctor nParams rest rest2 (idx + 1) nFields
+projectionDefsGo ctor nParams methods fieldTys idx nFields =
+  projectionDefsOpaqueGo (map (\_ => False) fieldTys) ctor nParams methods fieldTys idx nFields
 
 -- B23：实例落点静态检查（孤儿实例）。
 --
@@ -407,7 +436,7 @@ constraintPartsOf : Span -> List Expr -> Result (List (Pair String (List Expr)))
 constraintPartsOf sp [] = Ok []
 constraintPartsOf sp (e :: rest) = case instanceConstraintParts e of
   Nothing => tcErr0 sp ConstraintNotDict
-  Just p => Vuna.Compiler.Common.bind (constraintPartsOf sp rest) (\ps => Ok (p :: ps))
+  Just p => Vuna.Compiler.Common.bind (constraintPartsOf sp rest) (\ps => Ok (Base.List.Cons p ps))
 
 -- 约束 `C a1 .. an`：类名 + 全部头实参（N>=1 参数 trait 的签名约束与实例 ctx 共用）。
 instanceConstraintParts : Expr -> Maybe (Pair String (List Expr))
@@ -503,7 +532,7 @@ checkArgsAtKinds : List (Pair String Term) -> Ctx -> Ec -> List Expr -> List Val
 checkArgsAtKinds globals ctx ec [] [] sp = Ok (Pair [] ec)
 checkArgsAtKinds globals ctx ec (a :: arest) (k :: ks) sp = Vuna.Compiler.Common.bind (checkTypeAtKind globals ctx ec a k sp) (\q => case q of
   Pair t ec1 => Vuna.Compiler.Common.bind (checkArgsAtKinds globals ctx ec1 arest ks sp) (\r => case r of
-    Pair ts ec2 => Ok (Pair (t :: ts) ec2)
+    Pair ts ec2 => Ok (Pair (Base.List.Cons t ts) ec2)
   )
 )
 checkArgsAtKinds globals ctx ec _ _ sp = tcErr0 sp InstanceHeadNotApp
@@ -576,7 +605,8 @@ bareTeleSeeds : List Expr -> List Value -> List (Pair String Term)
 bareTeleSeeds [] kinds = []
 bareTeleSeeds (e :: rest) (k :: ks) = case e of
   EVar n sp =>
-    if isLowerStart n then Pair n (quote 0 k) :: bareTeleSeeds rest ks else bareTeleSeeds rest ks
+    if isLowerStart n then Base.List.Cons (Pair n (quote 0 k)) (bareTeleSeeds rest ks)
+    else bareTeleSeeds rest ks
   _ => bareTeleSeeds rest ks
 bareTeleSeeds _ _ = []
 
@@ -616,12 +646,13 @@ exprFreeLower _ = []
 
 uniqNames : List String -> List String
 uniqNames [] = []
-uniqNames (n :: rest) = if memName n rest then uniqNames rest else n :: uniqNames rest
+uniqNames (n :: rest) = if memName n rest then uniqNames rest else Base.List.Cons n (uniqNames rest)
 
 keepOutBanned : HashMap String Bool -> List String -> List String
 keepOutBanned tbl [] = []
 keepOutBanned tbl (n :: rest) =
-  if Base.HashMap.member n tbl then keepOutBanned tbl rest else n :: keepOutBanned tbl rest
+  if Base.HashMap.member n tbl then keepOutBanned tbl rest
+  else Base.List.Cons n (keepOutBanned tbl rest)
 
 -- tele 的局部上下文（声明顺序绑定；`TVar 0` = 最内层 tele）。
 instanceTeleCtx : List (Pair String Term) -> Ctx
@@ -647,7 +678,7 @@ elabConstraintDomains classes globals ctx ((Pair cname argExprs) :: rest) sp ec 
       in if length kindVals /= length argExprs then tcErr0 sp ConstraintNotDict
       else Vuna.Compiler.Common.bind (checkArgsAtKinds globals ctx ec argExprs kindVals sp) (\q => case q of
         Pair argTerms ec1 => Vuna.Compiler.Common.bind (elabConstraintDomains classes globals ctx rest sp ec1) (\r => case r of
-          Pair tvs ec2 => Ok (Pair (ctorResultType cls argTerms :: tvs) ec2)
+          Pair tvs ec2 => Ok (Pair (Base.List.Cons (ctorResultType cls argTerms) tvs) ec2)
         )
       )
 
@@ -982,8 +1013,8 @@ freeDictGoalsGo ec (g :: rest) acc = case g of
 addDictGoalGroup : Ec -> Int -> Value -> List DictGoalGroup -> List DictGoalGroup
 addDictGoalGroup ec m dom [] = [DictGoalGroup m dom []]
 addDictGoalGroup ec m dom ((DictGoalGroup rep repDom extras) :: rest) =
-  if domainsEqual ec repDom dom then DictGoalGroup rep repDom (m :: extras) :: rest
-  else DictGoalGroup rep repDom extras :: addDictGoalGroup ec m dom rest
+  if domainsEqual ec repDom dom then Base.List.Cons (DictGoalGroup rep repDom (m :: extras)) rest
+  else Base.List.Cons (DictGoalGroup rep repDom extras) (addDictGoalGroup ec m dom rest)
 
 domainsEqual : Ec -> Value -> Value -> Bool
 domainsEqual ec a b = case conv (ecDefTbl ec) (ecSolsP ec) 0 a b of
@@ -1122,7 +1153,8 @@ insertArgAt n x xs = append (append (take n xs) [x]) (drop n xs)
 replaceGlobalType : String -> Term -> List (Pair String Term) -> List (Pair String Term)
 replaceGlobalType name ty [] = []
 replaceGlobalType name ty (p :: rest) =
-  if firstOf p == name then Pair name ty :: rest else p :: replaceGlobalType name ty rest
+  if firstOf p == name then Base.List.Cons (Pair name ty) rest
+  else Base.List.Cons p (replaceGlobalType name ty rest)
 
 -- M15：批量注册实例。
 foldlAddInst : Ec -> List DtInst -> Ec

@@ -37,6 +37,11 @@ instance Monad Result where
 
 instance Applicative Result where
   pure = Ok
+  ap mf mx = case mf of
+    Ok g => case mx of
+      Ok b => Ok (g b)
+      Err e => Err e
+    Err e => Err e
   liftA2 f (Ok x) (Ok y) = Ok (f x y)
   liftA2 f (Err e) _ = Err e
   liftA2 f _ (Err e) = Err e

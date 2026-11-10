@@ -27,6 +27,7 @@ module Vuna.Compiler.Elab.Data
 -- Vuna.Compiler.Elab.Data：data 声明与构造子/索引擦除：elabCtor/elabDataHead/elabDataHeads/elabDataBodies/elabDatas，
 -- 以及按「索引是否在字段类型里被使用」计算的擦除掩码（eraseIndexMask/indexErasureCandidates）。
 -- 拆自 M24 的单一 `Elab.vuna`（按真实调用图切；门面仍是 `Vuna.Compiler.Elab`）。
+import Base.List
 import Vuna.Compiler.Common
 import Vuna.Compiler.Core
 import Vuna.Compiler.Diagnostics
@@ -67,7 +68,7 @@ elabCtors : List (Pair String Term) -> String -> Int -> Level -> Ec -> List Ctor
 elabCtors globals fam arity famLevel ec [] = Ok (Pair [] ec)
 elabCtors globals fam arity famLevel ec (c :: rest) = Vuna.Compiler.Common.bind (elabCtor globals fam arity famLevel ec c) (\p => case p of
   Pair dc ec1 => Vuna.Compiler.Common.bind (elabCtors globals fam arity famLevel ec1 rest) (\q => case q of
-    Pair dcs ec2 => Ok (Pair (dc :: dcs) ec2)
+    Pair dcs ec2 => Ok (Pair (Base.List.Cons dc dcs) ec2)
   )
 )
 
@@ -223,6 +224,8 @@ allIn [] actual = True
 allIn (e :: rest) actual = memName e actual && allIn rest actual
 
 -- M42：via-field 必须落到自动去装箱的单字段包装上（data / record 同等）。
+-- | 遍历 data 声明，校验带 `deriving via` 的声明确实是自动去装箱的单字段包装；
+-- 违规报 `DerivingViaUnboxedRequired`。
 checkViaDataDecls : List (Pair Decl Span) -> List DtData -> Result Int
 checkViaDataDecls [] datas = Ok 0
 checkViaDataDecls ((Pair d sp) :: rest) datas = case d of
@@ -234,6 +237,7 @@ checkViaDataDecls ((Pair d sp) :: rest) datas = case d of
 
 -- via 的字段必须是构造子 telescope 中紧跟族参数的第一个字段：
 -- 字典委托按 `field : F params` 替换类参数，不处理前面还有擦除字段的依赖类型。
+-- | via 是否可用：该 data 属去装箱族，且唯一保留字段紧跟族参数（下标等于参数个数）。
 viaShapeOk : String -> List DtData -> Bool
 viaShapeOk dname datas = if memName dname (unboxedFamilySet datas) then case lookupUnboxedInfo dname (unboxedInfoOf datas) of
   Just (Pair c idx) => case findDtData dname datas of
@@ -333,4 +337,4 @@ candidateNames : List (Pair String Rig) -> List Bool -> List String
 candidateNames [] ms = []
 candidateNames (p :: rest) [] = []
 candidateNames ((Pair n e) :: rest) (m :: ms) =
-  if m then n :: candidateNames rest ms else candidateNames rest ms
+  if m then Base.List.Cons n (candidateNames rest ms) else candidateNames rest ms

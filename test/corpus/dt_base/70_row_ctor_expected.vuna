@@ -1,0 +1,20 @@
+-- B43：推断位不再默认 Base.List——同名构造子（Row 的 `Nil` / `Cons` 与 List 的
+-- `Nil` / `Cons`）必须由期望类型消歧。这里两种形态都用期望 `Row` 固定到 Row 族：
+-- 顶层签名的 RHS 与 `let` 的签名绑定；`[...]` 行糖仍按期望 Row 展开。
+import Base.Eff
+import Base.List
+
+data Fs : Type where
+
+r1 : Row
+r1 = Fs :: Nil
+
+r2 : Row
+r2 =
+  let
+    rr : Row
+    rr = Fs :: Nil
+  in rr
+
+main : Int
+main = 42

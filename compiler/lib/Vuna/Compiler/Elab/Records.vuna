@@ -126,18 +126,22 @@ recordArrowType (f :: fs) ret sp =
   EPi (fieldBinderName (fieldName f)) False Nothing (fieldType f) (recordArrowType fs ret sp) sp
 
 -- 字段 binder 名带内部前缀：字段类型表达式不能把前序字段名解析成 binder。
+-- | 记录字段 binder 的内部前缀：避免字段类型表达式把前序字段名解析成 binder。
 fieldBinderPrefix : String
 fieldBinderPrefix = "@vuna@record@field@"
 
+-- | 给记录字段名加上内部前缀，生成构造子类型的 binder 名。
 fieldBinderName : String -> String
 fieldBinderName fname = "${fieldBinderPrefix}${fname}"
 
 -- 记录构造子类型显式带族参数（`elabCtor` 用首 binder 名判断，字段 binder 已不是 `_`）。
+-- | 把记录族参数包成显式 Pi（implicit=True），供构造子类型使用。
 recordParamPis : List String -> Expr -> Span -> Expr
 recordParamPis [] ret sp = ret
 recordParamPis (p :: rest) ret sp =
   EPi p True Nothing (EVar "Type" sp) (recordParamPis rest ret sp) sp
 
+-- | 组装记录构造子的完整类型：族参数 Pi + 字段箭头 + 返回记录类型。
 recordCtorType : List String -> List Field -> Expr -> Span -> Expr
 recordCtorType params fields ret sp = recordParamPis params (recordArrowType fields ret sp) sp
 
@@ -374,32 +378,39 @@ fieldAccessPats fname ((Pair f alt) :: rest) =
   (if f == fname then PVar f (exprSpan alt) else PWild (exprSpan alt)) :: fieldAccessPats fname rest
 
 -- HasField 实例：为当前模块的 record 字段生成 `instance HasField (Field "f") R T`。
+-- | 为一批记录的每个字段生成 `HasField` 实例声明。
 recordHasFieldInstances : List RecordInfo -> List Decl
 recordHasFieldInstances [] = []
 recordHasFieldInstances (r :: rest) =
   append (recordHasFieldInstancesOf r) (recordHasFieldInstances rest)
 
+-- | 为单个记录的所有字段生成 `HasField` 实例声明。
 recordHasFieldInstancesOf : RecordInfo -> List Decl
 recordHasFieldInstancesOf (RecordInfo rname params fields derivings derivingVia ctor) =
   recordHasFieldInstancesGo rname params ctor (length fields) fields 0
 
+-- | 逐字段生成 `HasField` 实例的递归辅助（带字段下标）。
 recordHasFieldInstancesGo : String -> List String -> String -> Int -> List (Pair String Expr) -> Int -> List Decl
 recordHasFieldInstancesGo rname params ctor n [] i = []
 recordHasFieldInstancesGo rname params ctor n ((Pair fname fty) :: rest) i =
   hasFieldInstanceDecl rname params ctor n i fname fty
     :: recordHasFieldInstancesGo rname params ctor n rest (i + 1)
 
+-- | `HasField` 实例模式里第 i 个字段绑定变量的名字。
 recordInstanceVar : Int -> String
 recordInstanceVar i = "@vuna@record@hf${i}"
 
+-- | 生成 n 个字段绑定模式（变量名由 recordInstanceVar 给出）。
 recordInstancePats : Int -> Span -> List Pat
 recordInstancePats n sp = recordInstancePatsFrom 0 n sp
 
+-- | recordInstancePats 的递归实现：从下标 i 开始生成剩余 remaining 个模式。
 recordInstancePatsFrom : Int -> Int -> Span -> List Pat
 recordInstancePatsFrom i remaining sp =
   if remaining <= 0 then []
   else PVar (recordInstanceVar i) sp :: recordInstancePatsFrom (i + 1) (remaining - 1) sp
 
+-- | 构造单条 `instance HasField (Field "f") R T` 声明：模式绑定第 fi 个字段并返回它。
 hasFieldInstanceDecl : String -> List String -> String -> Int -> Int -> String -> Expr -> Decl
 hasFieldInstanceDecl rname params ctor n fi fname fty =
   let

@@ -1,1 +1,1 @@
-main must return Int, Nat, String or Bool
+main must not take parameters

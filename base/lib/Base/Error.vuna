@@ -35,6 +35,11 @@ instance Monad (Error e) where
 
 instance Applicative (Error e) where
   pure a = MkOk a
+  ap mf mx = case mf of
+    MkOk g => case mx of
+      MkOk b => MkOk (g b)
+      MkErr e => MkErr e
+    MkErr e => MkErr e
   liftA2 f (MkOk a) (MkOk b) = MkOk (f a b)
   liftA2 f (MkErr e) _ = MkErr e
   liftA2 f _ (MkErr e) = MkErr e

@@ -152,7 +152,7 @@ getCreated p = p.created
 
 - `Field` 是**类型级**标签（`Field "id"`，见 `Base.Field`）；`HasField (l : Type) (a : Type) (t : Type)` 是
   trait，方法 `getField : a -> t`。标签做成类型 `Field "id"` 而不是 `String` 值索引：
-  隐式参数不能是 `String` 值（M15），类型级标签可以正常参与字典匹配。
+  隐式参数不能是 `String` 值，类型级标签可以正常参与字典匹配。
 - 编译器为导入了 `Base.Record` 的模块中的 record 字段自动生成实例；显式 `instance HasField ...` 也可用，两者混用时自动生成会跳过。
 - 具体 record 的 `p.f` 仍是内联投影（零字典）；只有 base 类型是刚性类型变量时，`p.f`
   使用签名里的 `HasField` 约束字典（调用点由自动生成或显式实例填充）。
@@ -182,12 +182,13 @@ main = pretty Red ++ "/" ++ show Red
 ```
 
 - **trait 支持 N>=1 个参数**：字典类型是 `Dict_C p1 .. pn`，构造子字段仍是方法；
-  默认方法、父类、关联类型归 F4（[roadmap.md](../roadmap.md)）。
+  默认方法、父类、关联类型未实现（见 [debt.md](debt.md)）。
   每个参数的 kind 可显式写：`trait C (a : Type) (r : Row) where ...`；未写时从方法签名
-  推断（参数被应用 k 次即 `Type -> ... -> Type`，否则 `Type`；显式 kind 里的中缀如 `Type -> Type` 也会被 Loader 重排，M41）。空参数表报
+  推断（参数被应用 k 次即 `Type -> ... -> Type`，否则 `Type`；显式 kind 里的中缀如 `Type -> Type` 也会被 Loader 重排）。空参数表报
   `[TC_InterfaceNoParam]`。非 Type 类参数（如 `Row`）的实例搜索已支持；但**头可合一的重叠实例
   仍被 coherence 拒绝**（`Member e (Cons e r)` 与 `Member e r => Member e (Cons x r)`），
-  因此 trait 版 `Member e r` 仍不可用（见 debt D39）。
+  因此 trait 版 `Member e r` 不可用。**这不是待修债务**：行成员约束用 Type-1 归纳族
+  `Base.Eff.Member` 实现（精化器按行结构构造 `Here`/`There`），不需要 trait 重叠实例。
   实例头的 tele 变量 kind 按实参推断：裸变量取对应类参数的 kind，嵌套变量从
   构造子的参数 kind 反推（`instance Pretty (T n)` 配 `T : N -> Type` ⇒ `n : N`，
   `instance Monad (Eff r)` 配 `Eff : Row -> Type -> Type` ⇒ `r : Row`）；
@@ -209,7 +210,7 @@ main = pretty Red ++ "/" ++ show Red
 - **实例按 head 全局唯一**：同一 head 的重复 / 重叠实例报 `duplicate instance` /
   `overlapping instance`（含 `deriving` 生成的实例）。**没有命名实例**：不存在
   `instance C T as name` 或 `@name` 选择，相干性只靠「同一 head 唯一」。
-- **blanket 实例是 fallback（M36）**：head 实参是裸类参数（全部 tele 都是类参数）的实例
+- **blanket 实例是 fallback**：head 实参是裸类参数（全部 tele 都是类参数）的实例
   是兜底，例如 base 的 `instance Show a => Interp a`；搜索分两阶段——具体实例先匹配，匹配
   不到才试 blanket。**具体实例覆盖 blanket**（`instance Interp String` 赢过 blanket），
   具体实例之间仍禁止重叠；两个 blanket 仍报 `TC_DuplicateInstance`（见 [templates.md](templates.md)）。
@@ -235,12 +236,12 @@ main = pretty Red ++ "/" ++ show Red
 - **参数化 `deriving (Show, Eq, Ord, Hashable)`**：按 data 的每个类型参数生成 ctx（形态是约束
   实例 `instance Eq a => Eq (F a)`）；`Show` 要求字段可 show。`mem (Box 1) [...]`
   这类需要 `Dict_Eq (Box Int)` 的用法因此可用。
-- **顶层函数签名也可以写约束（M32）**：`f : Eq a, Show a => a -> String`。约束是定义体的
+- **顶层函数签名也可以写约束**：`f : Eq a, Show a => a -> String`。约束是定义体的
   字典假设（隐式字典参数，`Rig` 是 `RigOmega`，运行时保留），body 的方法调用优先命中
   它；调用点仍按实例搜索补字典。
-  不写约束的形态仍按推断提升（`{a} -> {d : Dict_Eq a} -> ...`）；三包源码自本轮起
+  不写约束的形态仍按推断提升（`{a} -> {d : Dict_Eq a} -> ...`）；三包源码
   统一写显式约束，不再依赖该旧形态。语法与边界见 [language.md](language.md) §签名的 trait 约束。
-- **`Show` / `Eq` / `Ord` 是库里的普通 trait（M31.1 起声明与实例分离）**：声明在
+- **`Show` / `Eq` / `Ord` 是库里的普通 trait（声明与实例分离）**：声明在
   `Base.Show` / `Base.Eq` / `Base.Ord`；实例按**落点规则**分布：`Int` → `Base.Int`、
   `String` 的 Eq/Ord → `Base.String`、`Show String` → `Base.Show`、`Show Bool` →
   `Base.Bool`、`Eq/Ord Bool` → `Base.Eq` / `Base.Ord`；容器 `Show` 实例在各自类型模块。
@@ -262,7 +263,7 @@ main = pretty Red ++ "/" ++ show Red
   搜索。
 - 相等 / 比较的规则（证据驱动、无泛型兜底）见 [type-system.md](type-system.md)。
 
-### 签名的 trait 约束（M32）
+### 签名的 trait 约束
 
 顶层签名可以写约束前缀（逗号分隔，与 instance 头 ctx 同一套语法）：
 
@@ -278,7 +279,7 @@ describe x y = if x == y then show x else show x ++ "/" ++ show y
   参数（与不写约束的签名同一条推断路径，`mem : a -> L a -> Bool` 因此不变）。
 - 调用点没有新语法：类型实参由统一解出，字典实参按实例搜索填充。
 - 只支持顶层签名：`where` / `let`、`axiom`、trait 方法、构造子 / 记录字段写 `=>` 报
-  `[PS_ConstraintUnsupportedHere]`（trait 方法约束是父类语义，归 F4）。未声明接口头报
+  `[PS_ConstraintUnsupportedHere]`（trait 方法约束是父类语义，未实现）。未声明接口头报
   `unknown interface <name>`；实参个数与 trait 参数个数不符报 `[TC_ConstraintNotDict]`；
   kind 不符报 `[TC_TypeMismatch]`。
 
@@ -287,8 +288,8 @@ describe x y = if x == y then show x else show x ++ "/" ++ show y
 checking 位置的 `"..."` / `42` / `1.5` 在期望类型不是对应内建类型（`String` / `Int` /
 `Float`；`Nat` 字面量仍展开成 `Zero`/`Succ` 链）时，会搜索 `FromString` / `FromInt` /
 `FromFloat` 实例，命中就把字面量降级成 `fromString "..."` / `fromInt 42` /
-`fromFloat 1.5`（找不到则回退，报通常的类型错误）。三者都是单方法 trait；`FromString` /
-`FromInt` 在 `Prelude`，`FromFloat` 在 `Base.Float`（需要 `import Base.Float`）。
+`fromFloat 1.5`（找不到则回退，报通常的类型错误）。三者都是单方法 trait，且都随
+`Prelude` 自动可见（`FromFloat` 由 `Base.Float` 导出）。
 
 ```vuna
 data Email : Type where
@@ -341,16 +342,20 @@ main = case (MkEmail "x@y") of MkEmail s => s
   `fmap` / `liftA2` / `ap` / `foldMap` / `mapM`，不再提供 `pureX` / `bindX` / `andThen` 这类重复入口
   （`Base.Result.andThen`/`mapResult`、`Base.Maybe.mapJust`、`Base.List.flatMap` 均已删除）。
   例外：`Base.ST` 因线性 bind 不声明 `Monad` 实例，保留 `bindST` / `bindST1` / `pureST` / `fmapST`；
-  编译器内部 `Vuna.Compiler.Common.bind` 是固定类型的 `Result` 绑定别名（限定名调用，
-  不是 base 公开 API；D46 已删除 `andThen`）。`Eff` 的 `do` 已全面可用；长 do 链的精化指数
-  已由 S1 的单趟字典求解消除（20 步约 100ms）。S2 的期望类型定向与 S3b 的 do 块单 monad
-  均已落地。
-### Applicative / Foldable / Traversable / Monoid / Hashable（M41）
+  编译器内部 `Vuna.Compiler.Common.bind` 是固定类型的 `Result` 绑定（限定名调用，
+  不是 base 公开 API；`andThen` 已删除，固定类型是内部实现选择）。`Eff` 的 `do` 已全面可用；长 do 链的精化指数
+  已由单趟字典求解消除（20 步约 100ms）；期望类型定向与 do 块单 monad 均已落地。
+### Applicative / Foldable / Traversable / Monoid / Hashable
 
-- `Applicative`：`pure : a -> f a`、`liftA2 : (a -> b -> c) -> f a -> f b -> f c`；
-  `ap : Applicative f => f (a -> b) -> f a -> f b` 是派生函数（当前精化器对实例方法签名
-  里 `f (a -> b)` 的实例体误报 `TC_ImpossibleBranchIndex`，故最小方法用 `liftA2`）。
-  `Base.Monad` 重导出 `Base.Applicative`，`import Base.Monad` 仍能看到 `pure`。
+- `Applicative`：三个方法 `pure : a -> f a`、`ap : f (a -> b) -> f a -> f b`、
+  `liftA2 : (a -> b -> c) -> f a -> f b -> f c`，实例全部显式实现（vuna 无 default
+  method）。B42 修复后实例方法体可以直接对 `f (a -> b)` 做 `case` / pattern match
+  （此前误报 `TC_ImpossibleBranchIndex`，最小方法被迫用 `liftA2`、`ap` 只能派生）。
+  `liftA2` 仍**不**作派生顶层函数：当前 codegen 的字典投影在 OCaml 侧没有类型标注
+  （`dliftA2` 会被推断成 `('a, 'b -> 'c, 'c -> 'd -> 'c) t_Dict -> 'b -> 'd -> 'd -> 'c`
+  这类签名），`pure` 的返回与 `ap` 的首参被错误统一，派生体在调用点直接 OCaml 类型错误；
+  等投影带类型标注后再考虑。
+  `Base.Monad` 重导出 `Base.Applicative`，`import Base.Monad` 仍能看到 `pure` / `ap` / `liftA2`。
 - `Semigroup`（`mappend`）/ `Monoid`（`mempty`）：无父类，泛型代码同时写
   `Monoid m, Semigroup m =>`；方法名避开 `List.append` / `Map.empty`。
 - `Foldable`（方法 `fold`）+ 顶层 `foldMap : Foldable t, Monoid m, Semigroup m => ...`；

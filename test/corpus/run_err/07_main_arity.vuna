@@ -1,2 +1,4 @@
+-- D17：`main` 带参数是 arity 错误（入口必须零参，`TC_MainArity`）。
+-- `main : IO (Int -> Int)` 先剥 IO、内层仍是函数类型，同样命中该诊断（不另设夹具）。
 main : Int -> Int
 main x = x

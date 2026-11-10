@@ -36,6 +36,7 @@ intTy = TGlobal intTypeName
 strTy : Term
 strTy = TGlobal strTypeName
 
+-- | 内建 `Float` 类型名对应的核心项（`TGlobal floatTypeName`）。
 floatTy : Term
 floatTy = TGlobal floatTypeName
 

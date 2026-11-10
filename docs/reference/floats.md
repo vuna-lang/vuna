@@ -30,32 +30,39 @@ token 并报语法错误。
 * **没有隐式 Int↔Float 转换**：`1 + 1.5` 是类型错误。显式转换：
 
 ```vuna
-import Base.Float
-
 floatFromInt : Int -> Float     -- 见 Base.Float.intToFloat（更可读的别名）
 intFromFloat : Float -> Int     -- 向零截断
 ```
 
-`Base.Float` 还提供 `abs`、`sqrt`、`intToFloat`、`floatToInt`，以及 `Eq` / `Ord` / `Show`
-实例（`show` 输出 OCaml `string_of_float` 的十进制形式）。**注意 `Base.Float` 不在
-`Prelude`**（见「bootstrap 边界」）：`Show` / `Eq` / `Ord` 字典、转换 helper 与
-`FromFloat` 字面量转换需要显式 `import Base.Float`；字面量、算术、比较、`main : Float`
-和模板插值不需要。
+`Base.Float` 随 `Prelude` 自动导出（2026-11 rotation 后提升）：`abs`、`sqrt`、
+`intToFloat`、`floatToInt`、`FromFloat` 字面量转换与 `Eq` / `Ord` / `Show` 实例都不需要
+import（显式 `import Base.Float` 仍允许）。`show` 输出 OCaml `string_of_float` 的十进制
+形式。代价见「Prelude 与产物影响」。
 
 `main : Float` 的展示函数是 `string_of_float`；模板插值 `${1.5}` 直接走 `strFromFloat`，
 不需要 `Show` 实例。
 
-### interp / REPL 限制
+### interp / REPL
 
-核心求值器**不支持浮点**：`vuna interp`、REPL 求值与 `:type` 遇到浮点程序/表达式会明确
-报错：
+核心求值器**支持浮点**（B44 起）：`vuna interp` 与 REPL 求值按 IEEE-754 double 归约
+全部浮点原语（`+ - * /`、`< <= > >=`、`==`、`/=`、`abs` / `sqrt` → `floatAbs` /
+`floatSqrt`、`strFromFloat` / `floatFromInt` / `intFromFloat`），语义与编译产物一致
+（除零得 `infinity`、`0.0 / 0.0` 得 `nan`、`nan == nan` 为 False、`+0.0 == -0.0` 为
+True）。`VFloat` 的载荷是 `string_of_float` 的规范文本（字面量在求值入口规范化），
+因此 interp 展示、定义性相等与编译产物三处同文本：
 
 ```console
-error: vuna interp: Float is not supported by the interpreter (use vuna compile / vuna run; ...)
+vuna> 1.5 + 2.25
+3.75
+vuna> 2.0
+2.
+vuna> 1.0 / 0.0
+inf
 ```
 
-Float 程序请用 `vuna compile` + `vuna run`（测试夹具用 `.nointerp` 标记）。这是**已知
-缺口**（debt 记录），不是最终形态。
+`main : Float` 的 interp 展示同样用规范文本（与编译路径的 `string_of_float` 一致）。
+REPL 的 `:type` 仍只做类型检查，不等价于求值。**类型表达式里的浮点字面量仍被拒绝**
+（类型语法不接受 `Float` 字面量，见负例 `09_float_in_type`）。
 
 ## 字面量转换 trait
 
@@ -80,7 +87,7 @@ trait FromInt a where
   fromInt : Int -> a
 instance FromInt Int where fromInt n = n
 
--- Base.Float（需要 import Base.Float）
+-- Base.Float（Prelude 导出）
 trait FromFloat a where
   fromFloat : Float -> a
 instance FromFloat Float where fromFloat x = x
@@ -118,24 +125,25 @@ main = case (MkEmail "x@y") of
 问题）。多构造子、多字段、字段类型不匹配都会给出可解释错误；跨类型语义（如字段是
 `Email` 而不是 `String`）需要手写实例。
 
-## bootstrap 边界（为什么 Base.Float 不在 Prelude）
+## Prelude 与产物影响
 
-当前 seed 还是 rotation 之前的旧编译器：它不认识 `Float` 语法/内建。如果 `Prelude`
-（在 seed 闭包里）导入 `Base.Float` 或出现浮点字面量，**当前 seed 就无法编译当前源码**，
-违反硬不变量。因此：
+`Base.Float` 自 2026-11 的 rotation 起进入 `Prelude`（`module Base.Float` + `import
+Base.Float`）。Float 语法/类型/运算符/`main` 支持一直在编译器里，不需要库导入；进
+Prelude 的是 trait、实例与 helper。取舍：
 
-* `Float` 的语法/类型/运算符/`main` 支持在编译器里，不需要库导入；
-* `Base.Float`（trait/实例/helper）**不**被 `Prelude` 导入，只由用户显式 `import`；
-* `Intrinsics` 里浮点内建单独成表（`floatIntrinsics`），且 `Vuna_runtime.ml` 只在程序
-  （含依赖）真的用到浮点时追加浮点 helper——no-float 程序的生成结果与之前**逐字节一致**
-  （seed 固定点/模块缓存不受影响）。
-
-将来做一次 seed rotation 后，可以把 `Base.Float` 提升进 `Prelude` 并按 favourite 的
-`deriving` 清单扩展；在此之前，`FromString` / `FromInt` 已在 Prelude（它们不引入
-`Float`，旧 seed 可以编译）。
+* `FromFloat`、`abs` / `sqrt` / `intToFloat` / `floatToInt` 与 `Show/Eq/Ord Float`
+  随 Prelude 自动可见；`deriving (Show, Eq, Ord)` 的包装类型字段是 Float 时也不需要
+  额外 import。
+* 代价：Prelude 闭包包含 `Base.Float`，`Codegen.Split` 按**全部定义**扫描浮点用法，
+  因此所有程序的 `Vuna_runtime.ml` 都会追加浮点 helper；原先把 Float 当 opt-in 时的
+  「no-float 程序逐字节一致」不再成立（seed 固定点/模块缓存仍由 rotation 保证）。
+* `Driver/Dt.programUsesFloat` / `Elab/Driver.exprHasFloat` 这两个「interp 见浮点就拒绝」
+  的 guard 已随 B44 删除；interp / REPL 直接按 `Core/Eval` 的浮点归约求值。
+* `Intrinsics` 里浮点内建单独成表（`floatIntrinsics`），不改变 Int/String 原语面。
 
 ## 测试
 
 `test/corpus/float`（`[family.float]`，章节 60）覆盖字面量/算术、比较/相等、转换、
-模板插值、`Show/Eq/Ord` 实例、`FromFloat` + `deriving`、`main : Float` 与两条负例
-（隐式混用、类型表达式里的浮点字面量）。浮点夹具都带 `.nointerp`。
+模板插值、`Show/Eq/Ord` 实例、`FromFloat` + `deriving`、`main : Float`、Prelude 默认
+可见性（`10_prelude_float`）与两条负例（隐式混用、类型表达式里的浮点字面量）。B44 起
+浮点夹具不再带 `.nointerp`：interp 与 run 都与同一份 golden 逐字节比较。

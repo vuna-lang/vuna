@@ -137,7 +137,7 @@ let v_Base_dList_dconcatMap = (fun f xs -> (((v_Base_dList_dconcatMapGo f) xs) C
 
 let v_Monad_uBase_uList_uList = (Base_dMonad.C_Dict_uBase_dMonad_dMonad_Monad ((fun xs f -> ((v_Base_dList_dconcatMap f) xs))))
 
-let v_Applicative_uBase_uList_uList = (Base_dApplicative.C_Dict_uBase_dApplicative_dApplicative_Applicative ((fun x -> (C_Base_dList_dList_Cons (x, C_Base_dList_dList_Nil))), (fun f xs ys -> ((v_Base_dList_dconcatMap (fun a -> ((v_Base_dList_dmap (fun b -> ((f a) b))) ys))) xs))))
+let v_Applicative_uBase_uList_uList = (Base_dApplicative.C_Dict_uBase_dApplicative_dApplicative_Applicative ((fun x -> (C_Base_dList_dList_Cons (x, C_Base_dList_dList_Nil))), (fun mf mx -> ((v_Base_dList_dconcatMap (fun g -> ((v_Base_dList_dmap g) mx))) mf)), (fun f xs ys -> ((v_Base_dList_dconcatMap (fun a -> ((v_Base_dList_dmap (fun b -> ((f a) b))) ys))) xs))))
 
 let rec v_Base_dList_dmem = (fun _uctx0 mc0 mc1 -> (match mc1 with
   | C_Base_dList_dList_Cons (dtb__30, dtb__31) -> (if (((Base_dEq.v_Base_dEq_deq _uctx0) mc0) dtb__30) then true else (((v_Base_dList_dmem _uctx0) mc0) dtb__31))

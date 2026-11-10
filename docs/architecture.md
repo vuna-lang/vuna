@@ -55,7 +55,7 @@ import 子模块并选择性重导出（对外名字面不变），实现只在�
 上下文（最近 manifest，无则 base-only），flatten / 精化 / 逐模块 codegen 与包内模块完全
 相同——没有第二套加载语义。
 
-**运行时错误报告（M38）**：`Vuna_runtime.ml` 由 `Codegen.Term.dtRuntimeWith` 生成 =
+**运行时错误报告**：`Vuna_runtime.ml` 由 `Codegen.Term.dtRuntimeWith` 生成 =
 运行时常量 + `dt_def_locs`（定义位置表：mangled 值名 → `定义名 (相对路径:行)`，路径按
 `PackageContext` 的模块根/包目录归一）+ `dt_report_exn`（未捕获异常报告器）。
 `Codegen.Assembly` 的 main 钩子在入口动作外包 `try`；入口零参 `main` 的初始化期绑定也套
@@ -82,7 +82,7 @@ Elab/codegen 看不到模板）。fmt/lint/index/doc 只 parse，仍按 `EInterp
 
 **擦除 / 合一 / 定义形式**：擦除只有单一判据链（`Elab.Meta.isTypeDomain` →
 `binderRig` → `Core.rigOfBinder`，读取侧统一 `Core.rigIsErased`）；运行时类型不可命名时
-（卡住的类型族应用）另走「不透明擦除值 + 恒等 cast」表示（M39，见 [effects.md](reference/effects.md) §5）；元变量求解在
+（卡住的类型族应用）另走「不透明擦除值 + 恒等 cast」表示（见 [effects.md](reference/effects.md) §5）；元变量求解在
 `Core.Conv.solveMeta`（created-depth 随 `Sols` 就地检查，非空 spine 走 Miller pattern）；
 已解元变量进项只经 `Elab.Meta.zonkTerm`；`axiom` 是无体擦除定义（`DtAxiom`，运行时使用由
 `Codegen.Erase.checkNoAxiomRuntime` 拒绝），定义参数少于签名时按剩余 Pi η 展开。细节见
@@ -99,7 +99,7 @@ Elab/codegen 看不到模板）。fmt/lint/index/doc 只 parse，仍按 `EInterp
 data（`Base.Bool.Bool` / `Base.List.List` / `Base.Nat.Nat`），不按短名。
 
 擦除检查由 `Codegen.Assembly.checkDtProgram` 负责（判据 `Core.rigIsErased`）；不透明字段
-走后端表示（判据 `Codegen.Decl.ctorOpaqueFlagsOf`，M39）。`vuna interp`
+走后端表示（判据 `Codegen.Decl.ctorOpaqueFlagsOf`）。`vuna interp`
 走同一精化链后由 `Driver.Dt.dtEvalFile` 求 `main`（纯求值：只展示 `Int`/`String`/`Bool`，
 任何 `main : IO a` 报错并提示 `compile`）。
 
@@ -159,7 +159,8 @@ vuna.toml → Frontend.{Toml.parseToml, Manifest.parseManifest/validateManifest}
   共用这一层，传输与退出策略由各自传入。
 - 网络原语：`net` 能力（`prim_netListen/Accept/Recv/Send/Close/Port/Connect`，
   句柄是 Int、运行时映射 `Unix.file_descr`），见 [primitives.md](reference/primitives.md) §7。
-  当前已落地 loopback TCP 与 Unix domain socket（异步/取消/TLS 未做，见 debt D36）。
+  当前已落地 loopback TCP 与 Unix domain socket（异步/取消/TLS/HTTP 为非目标，见
+  [tooling.md](reference/tooling.md) §5）。
 - **运行时效应（Layer 1–3，`runtime-effects` 分支）**：`prim_effectPerform` / `prim_effectHandle`
   （`unsafe`）把 OCaml 5 一次性续延接入 `Base.Eff`（开放行 + 命名实例 + 一阶效应）；
   `Vuna_runtime` 声明通用 `Perform (key, name, payload)`（key/name 都是 String），handler 按 key/name 过滤并
@@ -174,7 +175,7 @@ vuna.toml → Frontend.{Toml.parseToml, Manifest.parseManifest/validateManifest}
   `nix/tcb-forbidden.txt` 黑名单）；效应边界是 manifest 显式能力
   （`[capabilities].effects` ∈ console/fs/process/env/clock/net/unsafe），
   `checkEffectsBuiltins` 按 `Intrinsics` 能力位检查；原语返回 `IO` 动作（只在 `main` 执行，
-  M37 起钩子是 `v_main 0`），未声明能力的包只能经 `Base.IO`，`runIO`/`prim_runIO` 需
+  钩子是 `v_main 0`），未声明能力的包只能经 `Base.IO`，`runIO`/`prim_runIO` 需
   `unsafe`；`base` 自身声明 `unsafe`（`Base.IO.runIO` 别名与 `Base.ST.runST`，见
   [effects.md](reference/effects.md)）。
 

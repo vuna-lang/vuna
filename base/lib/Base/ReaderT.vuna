@@ -33,6 +33,7 @@ instance Monad (ReaderT e) where
 
 instance Applicative (ReaderT e) where
   pure a = ReaderT (\_ => pure a)
+  ap mf mx = ReaderT (\e => mf.readerTRun e >>= (\g => mx.readerTRun e >>= (\b => pure (g b))))
   liftA2 f ra rb =
     ReaderT (\e => ra.readerTRun e >>= (\a => rb.readerTRun e >>= (\b => pure (f a b))))
 

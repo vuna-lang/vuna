@@ -11,8 +11,10 @@ module Vuna.Compiler.Elab.Usage (checkDefUsage, checkProgramUsage, isTypeForming
 -- 分支时向量头部就是新 binder；退出时检查并 drop。这样 de Bruijn 搬运由结构遍历本身完成。
 --
 -- 类型级定义的 body 是类型，不参与用量检查（由 `isTypeForming` 判定）。
+import Base.List
 import Vuna.Compiler.Common
 import Vuna.Compiler.Core
+import Vuna.Compiler.Core.Term
 import Vuna.Compiler.Diagnostics
 import Vuna.Compiler.Elab.Meta
 import Vuna.Compiler.Elab.Types
@@ -35,13 +37,14 @@ else case v of
 -- ---------------------------------------------------------------
 -- 与 context 等长；index 0 是最内层 binder。`Rig0` 表示该 binder 未被使用。
 uZeroOf : Int -> List Rig
-uZeroOf n = if n <= 0 then [] else Rig0 :: uZeroOf (n - 1)
+uZeroOf n = if n <= 0 then [] else Base.List.Cons Rig0 (uZeroOf (n - 1))
 
 uVarAt : Int -> Int -> List Rig
 uVarAt depth i = if i < 0 || i >= depth then uZeroOf depth else uVarAtGo depth i
 
 uVarAtGo : Int -> Int -> List Rig
-uVarAtGo n i = if n <= 0 then [] else (if i == 0 then Rig1 else Rig0) :: uVarAtGo (n - 1) (i - 1)
+uVarAtGo n i =
+  if n <= 0 then [] else Base.List.Cons (if i == 0 then Rig1 else Rig0) (uVarAtGo (n - 1) (i - 1))
 
 uAdd : List Rig -> List Rig -> List Rig
 uAdd [] ys = ys
@@ -104,7 +107,7 @@ checkTerm sp env t = case t of
   TPi name implicit rig dom cod => Ok (uZeroOf (natToInt (length env)))
   TLam name rig body =>
     let
-      env2 = Pair name rig :: env
+      env2 = Base.List.Cons (Pair name rig) env
     in Vuna.Compiler.Common.bind (checkTerm sp env2 body) (\u => checkLamBinder sp name rig u)
   TApp f a rig =>
     Vuna.Compiler.Common.bind (checkTerm sp env f)
@@ -180,7 +183,19 @@ checkDefUsage msp name body =
 -- 其余位置（定义体返回值、rig-ω 实参/字段、`if`/`case` 的普通位置）一律拒绝。
 -- 这是保守但可靠的近似：完整的多重性多态/依赖 multiplicity 未做（qtt.md §9）。
 capCheck : Ec -> Span -> Term -> Bool -> Result Int
-capCheck ec sp t allowed = capCheckFuel 2048 ec sp t allowed
+capCheck ec sp t allowed = capCheckFuel (capCheckFuelFor t) ec sp t allowed
+
+-- | capture check 的 fuel 派生（D24）：固定 2048 对含深 Nat 链/大项的体不够（字面量
+-- 展开成链后逐节点遍历）。按项节点数放大（每节点最多几步递归），上限 `capCheckFuelMax`
+-- 防失控输入。
+capCheckFuelFor : Term -> Int
+capCheckFuelFor t =
+  let
+    scaled = 1024 + 4 * termSize t
+  in if scaled > capCheckFuelMax then capCheckFuelMax else scaled
+
+capCheckFuelMax : Int
+capCheckFuelMax = 1000000
 
 capCheckFuel : Int -> Ec -> Span -> Term -> Bool -> Result Int
 capCheckFuel fuel ec sp t allowed = if fuel <= 0 then Err "DT: internal: capture check fuel exhausted"

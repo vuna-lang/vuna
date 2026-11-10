@@ -20,17 +20,20 @@
 
 ## 2. 身份与常量
 
-- **`Int` / `String` 是语言 primitive 类型**（`Intrinsics.typeIntrinsicNames = [Int, String]`）：
-  prelude 直接提供 `Int : Type` / `String : Type`；入口 / 未限定名处的 `data Int` /
-  `data String` 报 `CannotRedefineBuiltin`（模块内声明会 mangle 成 `M.Int`，属于不同符号）。
-  M31.1 起它们的 **Eq / Ord 实例宿主模块**是 `Base.Int` / `Base.String`（实例跟类型模块走；
-  primitive 无构造子，实例体走 Int/String 内建特化）。类型身份仍由本文件的内建表提供，
-  `Base.Int` 不声明类型。实例落点规则见 [operators.md](operators.md)。
-- **比较/相等运算符不是内建值（M31.1）**：`==` `/=` `<` `<=` `>` `>=` 是 `Base.Eq` /
+- **`Int` / `String` / `Float` 是语言 primitive 类型**（`Intrinsics.typeIntrinsicNames =
+  [Int, String, Float]`）：prelude 直接提供对应 `Type`；入口 / 未限定名处的 `data Int` /
+  `data String` / `data Float` 报 `CannotRedefineBuiltin`（模块内声明会 mangle 成 `M.Int`，
+  属于不同符号）。它们的 **Eq / Ord / Show 实例宿主模块**是 `Base.Int` /
+  `Base.String` / `Base.Float`（实例跟类型模块走；primitive 无构造子，实例体走内建特化）。
+  类型身份仍由本文件的内建表提供，`Base.Int` 不声明类型。**这是设计选择而非欠账**：把
+  `Int`/`String`/`Float` 上移成源码 `primitive type` 声明需要两阶段 bootstrap、改大量身份
+  比较与 `Base` 叶模块拆分，功能零增益；用户自定义 primitive 类型的需求归受限 FFI（D21）。
+  实例落点规则见 [operators.md](operators.md)。
+- **比较/相等运算符不是内建值**：`==` `/=` `<` `<=` `>` `>=` 是 `Base.Eq` /
   `Base.Ord` 方法（`eq` / `neq` / `lt` / `le` / `gt` / `ge`）的解析期别名；Int/String 上的
   `bi_eq_int` / `bi_eq_str` / `bi_*_int` / `bi_*_generic` 是这两个类的**内建实例实现**
   （不是运算符的独立语义）。详见 [operators.md](operators.md)。
-- **`IO` 是语言内建效应类型**（M37），`Bool` / `List` / `Nat` 是 base 的普通 `data` 声明：
+- **`IO` 是语言内建效应类型**，`Bool` / `List` / `Nat` 是 base 的普通 `data` 声明：
   内建类型按名字恒可见；base 的族身份是完整符号而不是短名：
 
   | 声明 | canonical 符号 | 来源 | 常量 |
@@ -60,7 +63,9 @@
 - 表示：宿主 OCaml `int`，**固定 63 位**：`max_int = 4611686018427387903`、
   `min_int = -4611686018427387904`。类型层没有宽度 / 区间信息，`Int` 就是 `Type`。
 - 算术：`+` `-` `*` 在溢出时按**二进制补码回绕**（`max_int + 1 = min_int`），不报错、
-  不饱和、不提升为大整数。**无大整数计划**。
+  不饱和、不提升为大整数。**无大整数计划**。D23 起 `+ - * /` 是 `Base.Num` 方法
+  （`add` / `sub` / `mul` / `div`）的中缀别名，Int 实例的方法体由精化器特化回
+  `bi_*` 内建原语；下面的数值语义不变。
 - `/`：整数除法向零截断；`a / 0` 在产物运行期抛宿主 `Failure "division by zero"`
   （runtime `bi_div` 显式检查），未捕获时由运行时报告器输出 `vuna: runtime error: ...` 并以 2
   退出；`min_int / -1` 回绕成 `min_int`，不报错。
@@ -68,7 +73,7 @@
   没有一元负号，负数写 `0 - n`；`min_int` 的绝对值超出可表示字面量，写 `0 - 4611686018427387903 - 1`。
 - 比较：`==` `/=` `<` `<=` `>` `>=` 返回 canonical `Bool`。
 
-## 3.1 Nat（M34.7）
+## 3.1 Nat
 
 - **身份**：`Base.Nat.Nat` 是 canonical data（固定 `Zero` / `Succ`），类型层仍是普通归纳族；
   运行时表示是 OCaml `int`，值域 `0..max_int`（4611686018427387903）：`Zero = 0`、
@@ -85,8 +90,14 @@
   `Base.Nat.fromInt`（负数 clamp 0，有损）/ `fromIntMaybe`。混合算术的结果由操作数决定：
   两侧 Nat（或 Nat 与字面量）→ Nat；出现真正的 `Int` → `Int`（Nat 侧经 `natToInt` 提升）。
   低层原语（`strLength` / `arrayLength` 等）仍是 Int，Base 负责暴露 Nat 度量。
-- **算术特化不是通用重载**：`+ - * /` 仍是内建运算符，只在 `Int` / `Nat` 上按期望类型或
-  实参类型特化；不向用户自定义数值类型开放重载。
+- **算术 = `Num` 方法（D23）**：`+ - * /` 是 `Base.Num` 方法 `add` / `sub` / `mul` / `div`
+  的中缀别名；`Int` / `Nat` / `Float` 实例由精化器按期望类型/实参类型特化回内建原语，
+  其它类型走普通 trait 方法应用。用户类型实现 `Num`（并配 `FromInt` 收字面量）即可重载
+  四则（`1 + 2 : MyNum`），见 [operators.md](operators.md)「`Num` 的唯一真源」。
+- **度量返回 Nat（D25）**：`prim_print` / `prim_writeFile` / `prim_fileSize` 的签名是
+  `… -> IO Nat`（宿主面 `Base.IO.Host.print` / `writeFile` / `fileSize` 也是 `IO Nat`）；
+  `prim_eprint` / `prim_writeFileAtomic` 与编译器内部计数器（level/meta/fuel/span/arity、
+  字节计数中间量）保留 `Int`。
 - **展示**：`main : Nat` 与 interp 都输出十进制。
 
 ## 4. String
@@ -102,7 +113,7 @@
 - 比较：`==` / `/=` 按字节相等（`bi_eq_str` / `bi_neq_str`）；`<` `<=` `>` `>=` 走泛型
   `compare`（OCaml 字符串字节序）。
 - 源码字面量转义（`Lexer.lexStringToken` / `decodeEscape`）：`\n` `\t` `\r` `\"` `\\` `\'`、
-  M36 新增 `\$`（字面 `${`）；其它 `\x` 报 `UnknownEscape`；单行字面量不能跨行，多行用
+  `\$`（字面 `${`）；其它 `\x` 报 `UnknownEscape`；单行字面量不能跨行，多行用
   `"""..."""`（构造与边界见 [templates.md](templates.md)）。
 - 展示 / 转义统一走 `strShow`（§5），没有第二套实现。
 
@@ -114,14 +125,25 @@
 
 - `Base.Show` 的 `String` 实例委托给它：`show s = strShow s`，因此 `show` 与
   `main : String` 的展示一致。
-- `main` 展示钩子（`Codegen.Term.mainShowForName`）：`Int` / `Nat` → `string_of_int`、
-  `String` → `strShow`、`Bool` → `dt_show_bool`（输出 `True` / `False`）。
-- **展示类型固定为这四类**：`interp`（`Driver.Dt.evalDtMain`）与编译产物
-  （`Codegen.Term.mainShowForName`）都支持 `Int` / `Nat` / `String` / `Bool`；其它类型
-  （data / record / 函数等）在 `interp` 报 `[CG_MainNotValue] main does not reduce to a
-  value`，在产物侧报 `[CG_MainReturnType]`。
+- `main` 展示钩子（`Codegen.Term.mainShow`）：`Int` / `Nat` → `string_of_int`、
+  `String` → `dt_show_string`（即 `strShow`）、`Bool` → `dt_show_bool`（输出 `True` /
+  `False`）、`Float` → `string_of_float`。
+- **其它类型走 `Show` 实例**（D17）：精化收尾（`Elab.Driver.finishCore`）对非内建的结果
+  类型（`main : IO a` 先剥掉 IO 取 `a`）搜索 `Dict_Show a`，合成
+  `@vuna@main_show : a -> String`（body 是方法投影 `\x -> show {a} {dict} x`）。
+  `mainShow` 对它回退到这条定义名；interp（`Driver.Dt.evalDtMainCore`）对 main 值应用
+  同一份定义后打印。找不到实例在**精化期**报
+  `[TC_NoInstanceFound] no instance found for <T>`（旧的 `[CG_MainReturnType]` 已随 D17
+  删除，不再产生；`@vuna@main_show` 在 split 归属里固定归入口单元 `Main`）。
+- **`vuna test` 的 main 判据不变**：`lib/Vuna/TestRunner.dtMainKind` 仍只认
+  `Int` / `Nat` / `String` / `Bool`（按返回 0/空串/True 判通过）与 `IO a`（退出码 0）；
+  其它类型报 `unsupported test main type`。D17 只负责**展示**，不改变测试通过判据——
+  需要按 `Show` 类型写「纯测试」暂时只能显式转成 `String` 判定。
 - interp 展示（`Core.Eval.showValue`，字符串走 `Core.Term.showCoreString`）与 `strShow`
-  同规则、逐字节一致，因此 `main : String` 在 interp 与产物中输出相同。
+  同规则、逐字节一致，因此 `main : String` 在 interp 与产物中输出相同。非内建类型经
+  `@vuna@main_show` 得到的是 `String`，两侧都直接 `print_endline`（**不加引号**）。
+- `main : IO a` 的 interp 仍是一律报错（纯核心求值器不执行效果，夹具用 `.nointerp`）；
+  产物侧先执行 IO 动作，再按上面的规则展示结果。
 - `Show Bool` 库实例用 `if` 输出 `True` / `False`，与 `dt_show_bool` 同语义。
 
 ## 6. 其它纯原语
@@ -131,7 +153,7 @@
 | `strFromInt` | `Int -> String` | 十进制，负数带 `-`（OCaml `string_of_int`） |
 | `strHash` | `String -> Int` | 固定 1024 桶：`h` 初值 0，逐字节 `h = (h*33 + byte) mod 1024`，结果 0..1023 |
 | `strAt` | `String -> Int -> Int` | 见 §4（越界 `-1`） |
-| `strSubstring` | `Int -> Int -> String -> String` | 字节切片（M33 W4）：start/len 按字节 clamp——负 start 视为 0、负 len 视为 0、越界截断到末尾；与 `Base.String.substring` 同语义 |
+| `strSubstring` | `Int -> Int -> String -> String` | 字节切片：start/len 按字节 clamp——负 start 视为 0、负 len 视为 0、越界截断到末尾；与 `Base.String.substring` 同语义 |
 | `strConcatMany` | `List String -> String` | 一次性拼接（OCaml `String.concat ""`） |
 | `strSubstTemplate` | `String -> List String -> String` | `<N>` 占位符按序号替换；非数字 `<`、越界序号原样保留（`Base.Vec.substTemplate`） |
 | `timeUs` | `IO Int` | 微秒时间戳（`Unix.gettimeofday`）；效果原语，能力 `clock` |
@@ -139,7 +161,7 @@
 
 `strHash` 的 interp 实现（`Core.Eval.strHashOf`）与 runtime `dtp_strHash` 是同一公式。
 
-## 6.1 容器与可变数据原语（M33 W3）
+## 6.1 容器与可变数据原语
 
 **内建类型构造子**（名字恒可见，与 `Int` / `String` 一样不能被用户重定义；参数个数唯一
 真源是 `Intrinsics.typeIntrinsicArities`，OCaml 表示的渲染在 `Codegen.Decl`）：
@@ -183,12 +205,12 @@
 - 越界行为：`arrayGet` / `MArray.read` 越界是宿主 `Invalid_argument`（不是 `strAt` 的
   -1 哨兵，也没有语言层诊断）；`Array.set` 先 `Array.copy`，原数组不变。
 - 可变数据的安全边界是 **IO 隔离**：`IORef` / `MArray` / `Buffer` 的句柄只能在 `IO` 动作里
-  使用；`runIO` 是 main 外的逃逸口、需要 `unsafe`。**ST/region（M35.1）**：`Base.ST` 的
-  `Ref` / `SArray` 只在 `ST r` 里使用且不能逃出 `runST`；M38 起它们是 linear record（句柄恰好一次），
+  使用；`runIO` 是 main 外的逃逸口、需要 `unsafe`。**ST/region**：`Base.ST` 的
+  `Ref` / `SArray` 只在 `ST r` 里使用且不能逃出 `runST`；它们是 linear record（句柄恰好一次），
   `ST` 动作本身仍可复制；仍无依赖 multiplicity / 线性箭头（
   多用未禁止，见 [effects.md](effects.md)）。
 
-## 7. 效果原语、IO 动作与能力（M31/M37）
+## 7. 效果原语、IO 动作与能力
 
 **IO 类型**：`IO` 是语言内建效应类型（kind `Type -> Type`，运行时裸 thunk
 `int -> 'a`，无构造器，见 §2）。它的代数也是内建原语：
@@ -203,20 +225,21 @@
 | `prim_cleanupPush` / `prim_cleanupPop` | `(Int -> Int) -> Int` / `Int -> Int` | W7：bracket cleanup 栈登记/弹出（`dtp_cleanup_*`）；能力 `unsafe`，仅 `Base.Eff.bracket` 使用 |
 | `prim_asyncFork` / `prim_asyncAwait` | `{a : Type} -> (Int -> a) -> IO Int` / `{a : Type} -> Int -> a` | L3：OCaml 5 `Domain` fork/await（`Base.EffAsync`）；main 域、一次性 |
 
-`Base.IO` 把 `runIO` / `print` / … 暴露为别名，并提供 `Functor` / `Monad IO` 实例；
-`IO` 类型本身恒可见（不需要 import）。它不导出 `bindIO` / `pureIO` / `fmapIO` 这样的名字：
-动作组合统一走 `Functor` / `Applicative` / `Monad` 实例（`fmap` / `bind` / `pure` / `liftA2`、`>>=`、`do`）。
-W10 起它还暴露标签化效应 handler 需要的别名：`eprint`、`getEnv` / `getCwd` / `execPath`
-（env）、`nowMicros`（= `timeUs`）与 `sleepMicros`。W10 收尾新增了原生睡眠原语
-`prim_sleep : Int -> IO Int`（微秒；`Unix.sleepf`；能力 `clock`），`Base.EffClock`
-的真实 handler 已直接使用它。`Base.IO.Host.sleepMicros` 仍是 `nowMicros` 忙等：`Base.IO`
-在 seed 闭包内，旧 seed 不认识新内建，切换需先 seed rotation（边界见
-[effects.md](effects.md) §8.6、debt D43）。
+`Base.IO` 只保留 IO 的公开代数（`Functor` / `Applicative` / `Monad IO` 实例）；`runIO` /
+`print` / … 这类宿主别名在特权模块 `Base.IO.Host`（只有 `[package] privileged = true` 的包
+可 import）。`IO` 类型本身恒可见（不需要 import）。不导出 `bindIO` / `pureIO` / `fmapIO`
+这样的名字：动作组合统一走 `Functor` / `Applicative` / `Monad` 实例（`fmap` / `bind` /
+`pure` / `liftA2`、`>>=`、`do`）。W10 起 Host 还暴露标签化效应 handler 需要的别名：
+`eprint`、`getEnv` / `getCwd` / `execPath`（env）、`nowMicros`（= `timeUs`）与
+`sleepMicros`。W10 收尾新增了原生睡眠原语 `prim_sleep : Int -> IO Int`（微秒；
+`Unix.sleepf`；能力 `clock`）：`Base.EffClock` 的真实 handler 与 `Base.IO.Host.sleepMicros`
+都已直接使用它（`spinMicros` 已删除；边界见 [effects.md](effects.md) §8.6）。
 
-**效果原语类型**：全部效果原语返回 `IO` 动作，而不是「立刻算完的值」：`prim_print : String -> IO Int`、
+**效果原语类型**：全部效果原语返回 `IO` 动作，而不是「立刻算完的值」：`prim_print : String -> IO Nat`（D25）、
 `prim_readFile : String -> IO String`、`prim_readLine : IO String`、
 `prim_readDir : String -> IO (List String)`、`prim_isDirectory` / `prim_fileExists : String -> IO Bool`、
-`prim_makeDir` / `prim_removeFile` / `prim_fileMtime` / `prim_fileSize : String -> IO Int`、
+`prim_makeDir` / `prim_removeFile` / `prim_fileMtime : String -> IO Int`、
+`prim_fileSize : String -> IO Nat`（D25）、`prim_writeFile : String -> String -> IO Nat`（D25）、
 `prim_getArgs : IO (List String)`、`prim_getenv : String -> IO String`、
 `prim_getcwd` / `prim_execPath : IO String`、`prim_exit : Int -> IO Int`（执行即退出、不返回）、
 `prim_runIn : String -> List String -> IO Int`、`prim_spawn : List String -> IO Int`、
@@ -225,7 +248,7 @@ W10 起它还暴露标签化效应 handler 需要的别名：`eprint`、`getEnv`
 
 纯 `main` 直接调用效果原语是类型错误（`TC_TypeMismatch`）：效果只能出现在 `IO` 动作里。
 
-M38 新增两条调试/诊断原语；F3 B 起调试构造是**语言级内建**（见
+两条调试/诊断原语；调试构造是**语言级内建**（见
 [debugging.md](debugging.md) §3）：
 
 - `dbg : String -> a -> a`（**无能力**）：求值期把消息 + 换行写 stderr 后返回第二个实参；
@@ -238,7 +261,7 @@ M38 新增两条调试/诊断原语；F3 B 起调试构造是**语言级内建**
 `assert` / `todo` 在 release 构建（`--release` / `VUNA_RELEASE=1`）里由 `Loader.Resolve`
 拒绝（`TC_DebugConstructInRelease`）；`dbg` 在两种构建都可用。
 
-M35.3 新增 `net` 能力与 7 条 socket 原语（工具链 server 与测试用；用户代码同样按能力直调）：
+`net` 能力与 7 条 socket 原语（工具链 server 与测试用；用户代码同样按能力直调）：
 
 - `prim_netListen : String -> IO Int`：绑定并监听，返回 listener 句柄。地址是
   `tcp:HOST:PORT`（HOST 只接受数字 IPv4；`PORT=0` 取临时端口）或 `unix:PATH`；
@@ -309,8 +332,8 @@ M35.3 新增 `net` 能力与 7 条 socket 原语（工具链 server 与测试用
 
 | 原语 | runtime 契约 |
 | --- | --- |
-| `prim_print` | 写 stdout 并 flush，返回**字节数** |
-| `prim_writeFile` | 二进制写整串，返回**字节数**；IO 失败抛宿主异常 |
+| `prim_print` | 写 stdout 并 flush，返回**字节数**（签名 `IO Nat`，D25） |
+| `prim_writeFile` | 二进制写整串，返回**字节数**（签名 `IO Nat`，D25）；IO 失败抛宿主异常 |
 | `prim_writeFileAtomic` | 同 `prim_writeFile`，但写 `<path>.<pid>.tmp` 后 `Sys.rename` 原子替换：并发读者只会看到完整旧内容或完整新内容（workspace 并行 check 的子进程共享缓存目录，必须原子写） |
 | `prim_readFile` | 读整个文件为字节串；IO 失败抛宿主异常 |
 | `prim_readLine` | 读一行；EOF 返回 `""`（与空行不可区分） |
@@ -319,7 +342,7 @@ M35.3 新增 `net` 能力与 7 条 socket 原语（工具链 server 与测试用
 | `prim_makeDir` / `prim_removeFile` | **幂等**：已存在 / 不存在时直接返回 `0` |
 | `prim_fileExists` | 路径不存在时为 `False` |
 | `prim_isDirectory` | 普通路径检查；**不存在**的路径抛宿主异常（`Sys_error` → `failwith`） |
-| `prim_fileMtime` / `prim_fileSize` | 秒级 mtime / 字节数；取不到时**静默返回 0** |
+| `prim_fileMtime` / `prim_fileSize` | 秒级 mtime / 字节数；取不到时**静默返回 0**（`prim_fileMtime` 仍是 `Int`，`prim_fileSize` 是 `Nat`，D25） |
 | `prim_getenv` | 变量未设置或为空串都返回 `""`（两者不可区分） |
 | `prim_getcwd` | 失败时返回 `"."` |
 | `prim_execPath` | 先读 `/proc/self/exe`（**Linux 假设**），失败回落 `Sys.executable_name` |
@@ -374,7 +397,7 @@ M35.3 新增 `net` 能力与 7 条 socket 原语（工具链 server 与测试用
   ``[CG_ListBridgeRequired] builtin `<name>` requires the canonical `Base.List.List` declaration ...``。
 - 相关夹具带 `.nointerp` 标记，只做 `compile` + 运行产物。
 
-## 10. 受限 FFI（M33 W5）
+## 10. 受限 FFI
 
 语法（顶层声明，任意模块；入口与库模块一致）：
 

@@ -50,6 +50,9 @@ instance Monad (StateT s) where
 
 instance Applicative (StateT s) where
   pure a = StateT (\s => pure (Pair a s))
+  ap mf mx =
+    StateT
+      (\s => mf.stateTRun s >>= (\pg => mx.stateTRun (secondOf pg) >>= (\pb => pure (Pair ((firstOf pg) (firstOf pb)) (secondOf pb)))))
   liftA2 f sa sb =
     StateT
       (\s => sa.stateTRun s >>= (\pa => sb.stateTRun (secondOf pa) >>= (\pb => pure (Pair (f (firstOf pa) (firstOf pb)) (secondOf pb)))))

@@ -98,7 +98,7 @@ $TMPDIR/vuna-cache/<hashText(textHash(包名))>/split-units/e-<entryId>/<unit>.u
 $TMPDIR/vuna-cache/ast/<key>                                                       # parse 结果缓存（schema 7）
 ```
 
-**载荷 framing（M34.6，C32 最小硬化）**：除 iface 文件自己的
+**载荷 framing（C32 最小硬化）**：除 iface 文件自己的
 `vuna-iface-file 1|schema|compiler|\n` 头外，split/check/ast/unit 载荷统一用
 `CacheFormat`：`magic|tag|len|strHash 校验和\n` + payload。读侧先做**头行前缀扫描 + 长度
 校验**（不做整段 `strUnpack`，否则命中路径会从 ~80ms 抬到 1.1s），不合法 ⇒ 视为 miss、
@@ -128,7 +128,7 @@ symlink）镜像：换 checkout / 移动目录只是 miss（回退全量），�
 check 失败；`VUNA_DEBUG_PERF=1` 等价于 `--debug-perf`（给 `vuna-compiler` 这类不经过
 `Vuna.Cli` 的入口用）。写侧 `ifaceOfPackage` 对 DtProgram 只做**一遍** owner 分桶
 （`ProgParts`），coverage 用 `HashMap`；整包 sols 表只建一次供逐模块 zonk 复用——iface
-阶段因此从 ~1.44s 降到 ~0.22s（M34.6）。
+阶段因此从 ~1.44s 降到 ~0.22s。
 
 `VUNA_CACHE_MTIME=1` 开 mtime+size 快路径：记录/当前 mtime 距 **now** <5s 的文件回落内容
 哈希（同秒同大小编辑必失效），更老的文件才用 mtime+size。默认路径仍是内容哈希；实测快路径
@@ -165,7 +165,7 @@ import 闭包需要的模块接口」作为预置模块交给 Loader（`dtCheckS
 先只读依赖包的 `.vuna-iface`（校验 schema/编译器指纹/包名/源哈希），按 entry（含隐式 Prelude）
 的 import 闭包算出需要哪些模块，再只 unmarshal 这些文件；仍按 `miDepHashes` 链校验。
 
-**闭包完整性（M34.6）**：闭包起算集并入**同包模块自己的 import**（本包 manifest 的
+**闭包完整性**：闭包起算集并入**同包模块自己的 import**（本包 manifest 的
 `meImports`）；`Dt` 侧安全阀在加载后发现任一依赖模块缺 artifact 时整条回退全量（宁可慢，
 不静默给假 `TC_UnknownName`）。REPL 路径同时补回依赖 datas/defs 并精化同包源码模块 decls。
 
@@ -175,18 +175,20 @@ import 闭包需要的模块接口」作为预置模块交给 Loader（`dtCheckS
 （merge 写、原子写；写回失败不影响诊断）。没有 iface / 脏依赖 / buffer 与磁盘不一致时
 自动回退全量。
 
-**会话缓存（M34.6 5c）**：`LspState`/`ReplState` 持有 `DiagCache`：包上下文、依赖 ifaces、
+**会话缓存**：`LspState`/`ReplState` 持有 `DiagCache`：包上下文、依赖 ifaces、
 prepared termAux、起始 Ec、干净模块、fixity env 与校验面（编译器指纹 + 包名 + 闭包源 /
 manifest 的 mtime+size；安全窗内回读内容哈希）。无 watcher ⇒ 每请求惰性 stat 校验，外部
 改任意依赖文件后下一次请求必然失效重建（测试 §44l 覆盖）。实测本仓库（16 核）：
 
 - LSP 单次编辑：compiler 最大文件 ~0.12s、根包普通文件 ~0.02s（会话热）；同内容重复请求
   0–5ms；首次请求（建会话 + 首轮增量）~1.1–1.5s；
-- REPL：轻量求值 ~30ms；重 import（4 次求值）~4.2s（M34.6 起点 ~6.1s）。
+- REPL：轻量求值 ~30ms；重 import（4 次求值）~4.2s。
 
-**单模块写回的已知边界**：LSP-only 冷启动写回的单模块 `miIfaceHash` 与随后整包 check 的
-值可能略有差异（增量上下文擦除位残 meta 不同）。写侧有「manifest 已有同源接口则不重写」
-守卫，热会话零抖动；LSP-only 写回后首次整包 check 会重写该模块及其依赖者一次（保守、自愈）。
+**单模块写回的已知边界（已接受，不再是债务）**：LSP-only 冷启动写回的单模块 `miIfaceHash`
+与随后整包 check 的值可能略有差异（增量上下文擦除位残 meta 不同）。写侧有「manifest 已有
+同源接口则不重写」守卫，热会话零抖动；LSP-only 写回后首次整包 check 会重写该模块及其依赖者
+一次（保守、自愈）。强制整包重写的代价高于收益，因此按「接受自愈」处理；接口摘要仍剩的
+唯一缺口是擦除位置残留未解 meta 的包段重编号（见 debt C37）。
 
 ## codegen 单元级缓存（S5/S7，默认开启）
 
@@ -234,7 +236,7 @@ load 之后按闭包过滤模块表：起点 = entry 的全部 imports（含隐�
   Marshal**（非自描述格式；同长同校验和的构造性损坏仍可能让 `Marshal.from_string` 抛异常）。
   把 `ModuleIface`/`CachedProgram`/`SplitFile` 换成显式编码格式（C32 的完整形态）是后续项。
 - **依赖可见性已收敛（S6）**：摘要路径 load 后按 entry/本包 import 闭包过滤模块表，未
-  materialize 的依赖模块不提供实例/类，等价于全量路径（测试 §44i）；模块签名隔离归 F1。
+  materialize 的依赖模块不提供实例/类，等价于全量路径（测试 §44i）。
 - **默认 iface 落在源树里**：`*.iface` / `.vuna-iface` 已在 `.gitignore`（Nix dirty-tree
   source 不会收进 store），工具链遍历只认 `.vuna` 扩展，不受影响；需要批量清理时用
   `vuna clean-iface [DIR]`。模块删除/改名后的孤儿 `.iface` 不会被自动 GC（读侧只看
@@ -245,7 +247,7 @@ load 之后按闭包过滤模块表：起点 = entry 的全部 imports（含隐�
 - **擦除位残 meta** 仍靠包段重编号；彻底方案是精化收尾消 meta。
 - 接口多存 `miDecls`（见上），文件比 TTC 的「只存编译后定义」更接近源码体积；后续可换更
   紧凑的终止性/record 上下文表示。
-- **`defVals` 不再参与记忆化**（M34.6 删除）；`DtProgram.dtProgDefVals` 字段保留为空表，
+- **`defVals` 不参与记忆化**；`DtProgram.dtProgDefVals` 字段保留为空表，
   后续清理 schema 时可一并删。
 
 ## 相关阅读
@@ -253,4 +255,4 @@ load 之后按闭包过滤模块表：起点 = entry 的全部 imports（含隐�
 - 包级摘要与 codegen：[compiler.md](compiler.md)
 - 性能读数与基准：[performance.md](performance.md)
 - 测试口径（§44 摘要路径）：[testing.md](testing.md)
-- 债务与路线图：[debt.md](debt.md)、[roadmap.md](../roadmap.md)
+- 开放债务：[debt.md](debt.md)

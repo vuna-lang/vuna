@@ -52,6 +52,7 @@ module Vuna.Compiler.Elab.Term.Impl
   ) where
 
 -- Vuna.Compiler.Elab.Term.Impl（M25.2c 拆分）：项检查的 fuel 版实现（组内互递归只经 *Fuel 名）。
+import Base.List
 import Vuna.Compiler.Common
 import Vuna.Compiler.Core
 import Vuna.Compiler.Diagnostics
@@ -78,7 +79,7 @@ opaqueBranchIndices ec ctx n tele = opaqueBranchIndicesGo ec ctx n tele 0
 opaqueBranchIndicesGo : Ec -> Ctx -> Int -> List (Pair String Rig) -> Int -> List Int
 opaqueBranchIndicesGo ec ctx n [] j = []
 opaqueBranchIndicesGo ec ctx n (binder :: rest) j =
-  if branchBinderOpaque ec ctx (n - 1 - j) then n - 1 - j :: opaqueBranchIndicesGo ec ctx n rest (j + 1)
+  if branchBinderOpaque ec ctx (n - 1 - j) then Base.List.Cons (n - 1 - j) (opaqueBranchIndicesGo ec ctx n rest (j + 1))
   else opaqueBranchIndicesGo ec ctx n rest (j + 1)
 
 branchBinderOpaque : Ec -> Ctx -> Int -> Bool
@@ -101,7 +102,7 @@ else case findCtorIn cname (dtDataCtors dd) of
       (ctorDisplayName cname) (dtDataName dd)
   Just ctor => Vuna.Compiler.Common.bind (bindCtorTele ctx (dtCtorType ctor) args) (\p => case p of
     Pair branchCtx (Pair binders leftover) => if nonEmpty leftover then tcErr1 psp (BranchTooManyArgs (ctorDisplayName cname)) (ctorDisplayName cname)
-    else Vuna.Compiler.Common.bind (unifyIdxList ec [] (ctxDepth branchCtx) defaultFuel (ctorResultValsIn branchCtx ctor) (map (\v => refineValue [] defaultFuel v) idxs)) (\refsIdx => case branchAfterUnify ec branchCtx refsIdx of
+    else Vuna.Compiler.Common.bind (unifyIdxListSized ec [] (ctxDepth branchCtx) (ctorResultValsIn branchCtx ctor) (map (\v => refineValue [] defaultFuel v) idxs)) (\refsIdx => case branchAfterUnify ec branchCtx refsIdx of
       BranchImpossibleIndex => tcErr0 psp ImpossibleBranchIndex
       BranchImpossibleEmptyCtx => tcErr0 psp ImpossibleBranchEmptyCtx
       BranchOk => Vuna.Compiler.Common.bind (reflectScrutinee ec (ctxDepth branchCtx) refsIdx (ctorValueIn branchCtx ctor) scrutVal) (\refs2 => let
@@ -418,6 +419,7 @@ else if doMarkerHead expr then case decodeDoBlock expr of
   Nothing => inferEFuelCorePlain fuel globals ctx ec expr
 else inferEFuelCorePlain fuel globals ctx ec expr
 
+-- | 推断模式的形状分派核心：跳过列表字面量与 do 标记链后按表达式构造分派。
 inferEFuelCorePlain : Int -> List (Pair String Term) -> Ctx -> Ec -> Expr -> Result (Pair Term (Pair Value Ec))
 inferEFuelCorePlain fuel globals ctx ec expr = if fuel <= 0 then Err "DT: internal: inference fuel exhausted"
 else case expr of
@@ -472,6 +474,7 @@ else case expr of
 -- 前缀（字段类型不能把前序字段名当 binder）。访问/更新留在精化期：先推断 base 类型，
 -- 用单构造子 data 的 telescope 定位字段，再复用 case 分支精化（bindCtorTele 负责隐式
 -- 参数、索引合一与 M39 不透明字段的 cast）。
+-- | 把类型值解析成单构造子 record（数据族、构造子、索引实参）；否则 Nothing。
 recordTypeOf : Ec -> Value -> Maybe (Pair DtData (Pair DtCtor (List Value)))
 recordTypeOf ec ty = case forceVal ec ty of
   VNeutral (NGlobal g sp) => case dtDataLookup g (ecDatas ec) of
@@ -481,28 +484,34 @@ recordTypeOf ec ty = case forceVal ec ty of
     Nothing => Nothing
   _ => Nothing
 
+-- | record 投影/更新生成的字段 binder 名（`@vuna@record@field@` 前缀 + 序号）。
 recordFieldVarName : Int -> String
 recordFieldVarName i = "@vuna@record@proj${strFromInt i}"
 
+-- | 从列表取第 n 个元素（0 起），n < 0 或越界时返回 Nothing。
 listNthGo : Int -> List a -> Maybe a
 listNthGo n [] = Nothing
 listNthGo n (x :: rest) = if n <= 0 then Just x else listNthGo (n - 1) rest
 
+-- | 取列表第 n 个元素（0 起）；listNthGo 的公开入口。
 listNth : Int -> List a -> Maybe a
 listNth n xs = listNthGo n xs
 
 -- 构造子 telescope 里**字段**域项（跳过 arity 个族参数）。
+-- | 遍历构造子 telescope，跳过 arity 个族参数后按顺序收集字段域项（逆序累积）。
 ctorFieldDomainsGo : Int -> Term -> List Term -> List Term
 ctorFieldDomainsGo arity (TPi name implicit rig dom cod) acc =
   if arity > 0 then ctorFieldDomainsGo (arity - 1) cod acc
   else ctorFieldDomainsGo 0 cod (dom :: acc)
 ctorFieldDomainsGo arity ty acc = reverse acc
 
+-- | 返回构造子 telescope 中字段部分的域项列表（跳过前 arity 个族参数）。
 ctorFieldDomains : Int -> Term -> List Term
 ctorFieldDomains arity ty = ctorFieldDomainsGo arity ty []
 
 -- 第 fi 个字段在**外层上下文**里的类型：字段域在 telescope 上下文（参数 + 前序字段）
 -- 上求值；record 不支持字段间依赖，前序字段用中性占位值（依赖字段会在这里失配并报错）。
+-- | 求第 fi 个字段在外层上下文的类型：前序字段用中性占位值代入。
 recordFieldTypeAt : Int -> Int -> List Value -> DtCtor -> Maybe Value
 recordFieldTypeAt arity fi params ctor = case listNth fi (ctorFieldDomains arity (dtCtorType ctor)) of
   Nothing => Nothing
@@ -513,52 +522,62 @@ recordFieldTypeAt arity fi params ctor = case listNth fi (ctorFieldDomains arity
       env = append (reverse before) (reverse params)
     in Just (eval env dom)
 
+-- | 为 record 的 n 个字段生成 PVar 模式列表（binder 名由 recordFieldVarName 给出）。
 recordFieldPats : Int -> Span -> List Pat
 recordFieldPats n sp = recordFieldPatsFrom 0 n sp
 
+-- | 从序号 i 起生成剩余 remaining 个字段的 PVar 模式。
 recordFieldPatsFrom : Int -> Int -> Span -> List Pat
 recordFieldPatsFrom i remaining sp =
   if remaining <= 0 then []
-  else PVar (recordFieldVarName i) sp :: recordFieldPatsFrom (i + 1) (remaining - 1) sp
+  else Base.List.Cons (PVar (recordFieldVarName i) sp) (recordFieldPatsFrom (i + 1) (remaining - 1) sp)
 
+-- | 在构造子 telescope 的字段部分按字段名查找，返回字段序号与字段总数。
 recordFieldLookup : String -> Int -> DtCtor -> Maybe (Pair Int Int)
 recordFieldLookup fname arity ctor =
   let
     tele = drop arity (dtCtorTelescope ctor)
   in recordFieldLookupGo fname tele 0 (length tele)
 
+-- | 顺序比较 telescope 字段 binder 的 `@vuna@record@field@` 名，命中返回 (序号, 总数)。
 recordFieldLookupGo : String -> List (Pair String Rig) -> Int -> Int -> Maybe (Pair Int Int)
 recordFieldLookupGo fname [] i n = Nothing
 recordFieldLookupGo fname ((Pair bname rig) :: rest) i n =
   if bname == fieldBinderName fname then Just (Pair i n)
   else recordFieldLookupGo fname rest (i + 1) n
 
+-- | 逐个检查更新字段是否属于该 record，返回第一个未知字段名。
 recordUpdateUnknownGo : Int -> DtCtor -> List (Pair String Expr) -> Maybe String
 recordUpdateUnknownGo arity ctor [] = Nothing
 recordUpdateUnknownGo arity ctor ((Pair fname e) :: rest) = case recordFieldLookup fname arity ctor of
   Nothing => Just fname
   Just _ => recordUpdateUnknownGo arity ctor rest
 
+-- | 报告第一个不属于该 record 的更新字段名；全部已知则返回 Nothing。
 recordUpdateUnknown : Int -> DtCtor -> List (Pair String Expr) -> Maybe String
 recordUpdateUnknown arity ctor fields = recordUpdateUnknownGo arity ctor fields
 
+-- | 在更新字段表里按 record 字段 binder 名查找对应的新值表达式。
 recordUpdateValueFor : String -> List (Pair String Expr) -> Maybe Expr
 recordUpdateValueFor bname [] = Nothing
 recordUpdateValueFor bname ((Pair fname e) :: rest) =
   if fieldBinderName fname == bname then Just e else recordUpdateValueFor bname rest
 
+-- | 生成更新后构造子的第 i 个实参：提供新值就用它，否则引用原字段 binder。
 recordUpdateArg : Int -> Pair String Rig -> List (Pair String Expr) -> Span -> Expr
 recordUpdateArg i bname provided sp = case recordUpdateValueFor (firstOf bname) provided of
   Just e => e
   Nothing => EVar (recordFieldVarName i) sp
 
+-- | 按 telescope 顺序生成全部字段的更新实参，未提供的字段沿用原 binder。
 recordUpdateArgs : Int -> List (Pair String Rig) -> List (Pair String Expr) -> Span -> List Expr
-recordUpdateArgs i tele provided sp = case tele of
-  [] => []
-  b :: rest => recordUpdateArg i b provided sp :: recordUpdateArgs (i + 1) rest provided sp
+recordUpdateArgs i [] provided sp = []
+recordUpdateArgs i (b :: rest) provided sp =
+  recordUpdateArg i b provided sp :: recordUpdateArgs (i + 1) rest provided sp
 
 -- 访问/更新的解析计划：纯解析（只查 data/字段，不递归回精化器），避免把额外 helper
 -- 拉进 SCT 递归组；组里只多 elabEFieldFuel / elabERecUpdateFuel 两个入口。
+-- | 字段访问解析结果：数据族、构造子、索引、字段序号与字段类型。
 record FieldAccessPlan where
   planData : DtData
   planCtor : DtCtor
@@ -567,6 +586,7 @@ record FieldAccessPlan where
   planFieldCount : Int
   planType : Value
 
+-- | record 更新解析结果：数据族、构造子、索引、字段数与重建构造子的实参。
 record UpdateAccessPlan where
   upData : DtData
   upCtor : DtCtor
@@ -574,6 +594,7 @@ record UpdateAccessPlan where
   upFieldCount : Int
   upBodyArgs : List Expr
 
+-- | 解析字段访问：校验 base 是单构造子 record，定位字段并求出字段类型。
 recordFieldPlan : Ec -> Value -> String -> Span -> Result FieldAccessPlan
 recordFieldPlan ec baseTy fname sp = case recordTypeOf ec baseTy of
   Nothing => errAt sp "cannot resolve record type for field ${fname}; add a type signature"
@@ -586,6 +607,7 @@ recordFieldPlan ec baseTy fname sp = case recordTypeOf ec baseTy of
         Nothing => errAt sp "record field type is not representable"
         Just fieldTy => Ok (FieldAccessPlan dd ctor idxs fi nFields fieldTy)
 
+-- | 解析 record 更新：校验字段都存在，并为重建构造子生成逐字段实参。
 recordUpdatePlan : Ec -> Value -> List (Pair String Expr) -> Span -> Result UpdateAccessPlan
 recordUpdatePlan ec baseTy fields sp = case recordTypeOf ec baseTy of
   Nothing => errAt sp "cannot resolve record type for update; add a type signature"
@@ -600,14 +622,17 @@ recordUpdatePlan ec baseTy fields sp = case recordTypeOf ec baseTy of
           bodyArgs = recordUpdateArgs 0 tele fields sp
         in Ok (UpdateAccessPlan dd ctor idxs (length tele) bodyArgs)
 
+-- | `Base.Record.HasField` 字典族的 canonical 名，供上下文查找字段约束使用。
 hasFieldDictName : String
 hasFieldDictName = dictTypeName "Base.Record.HasField"
 
 -- 在局部上下文里找签名约束提供的 HasField 字典（`{d : Dict_HasField (MkField "f") a t}`）。
 -- 类参数顺序固定为 f / a / t；标签按 Field 构造子里的 String 比较。
+-- | 在局部上下文里找签名约束提供的 HasField 字典，返回字典项与统一后的字段类型。
 ctxHasFieldDict : Ctx -> Ec -> String -> Value -> Maybe (Pair Term (Pair Value Ec))
 ctxHasFieldDict ctx ec fname baseTy = ctxHasFieldDictGo ctx.ctxItems 0 ctx ec fname baseTy
 
+-- | 逐项扫描上下文：匹配 HasField 的字段标签并统一 base 类型，命中即返回。
 ctxHasFieldDictGo : List (Pair String Term) -> Int -> Ctx -> Ec -> String -> Value -> Maybe (Pair Term (Pair Value Ec))
 ctxHasFieldDictGo [] idx ctx ec fname baseTy = Nothing
 ctxHasFieldDictGo ((Pair name ty) :: rest) idx ctx ec fname baseTy = case forceVal ec (varTypeValue ctx idx ty) of
@@ -628,6 +653,7 @@ ctxHasFieldDictGo ((Pair name ty) :: rest) idx ctx ec fname baseTy = case forceV
 
 -- base 类型不是具体 record 时的字段访问：用签名里的 HasField 约束字典。
 -- 具体 record 走 RecordAccessPlan（零字典）；这里只处理刚性/未解类型。
+-- | base 非具体 record 时的字段访问：用上下文里的 HasField 约束字典投影字段。
 hasFieldAccessFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Term -> Value -> String -> Span -> Result (Pair Term (Pair Value Ec))
 hasFieldAccessFuel fuel globals ctx ec baseTerm baseTy fname sp = case forceVal ec baseTy of
   VNeutral (NGlobal g sp2) => errAt sp "type ${g} is not a record"
@@ -645,6 +671,7 @@ hasFieldAccessFuel fuel globals ctx ec baseTerm baseTy fname sp = case forceVal 
             baseTerm RigOmega
       in Ok (Pair proj (Pair fieldTy ec2))
 
+-- | 精化字段访问：base 是具体 record 时按构造子 case 投影，否则回退到 HasField 字典。
 elabEFieldFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Expr -> String -> Span -> Result (Pair Term (Pair Value Ec))
 elabEFieldFuel fuel globals ctx ec base fname sp = if fuel <= 0 then Err "DT: internal: inference fuel exhausted"
 else Vuna.Compiler.Common.bind (inferEFuel (fuel - 1) globals ctx ec base) (\pb => case pb of
@@ -656,6 +683,7 @@ else Vuna.Compiler.Common.bind (inferEFuel (fuel - 1) globals ctx ec base) (\pb 
     Nothing => hasFieldAccessFuel (fuel - 1) globals ctx ec1 baseTerm baseTy fname sp
 )
 
+-- | 精化 record 更新：把 base 解构成构造子、逐字段换值后重建，结果仍是原 record 类型。
 elabERecUpdateFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Expr -> List (Pair String Expr) -> Span -> Result (Pair Term (Pair Value Ec))
 elabERecUpdateFuel fuel globals ctx ec base fields sp = if fuel <= 0 then Err "DT: internal: inference fuel exhausted"
 else case fields of
@@ -708,6 +736,28 @@ else Vuna.Compiler.Common.bind (checkTypeFuel (fuel - 1) globals ctx ec dom) (\p
     )
 )
 
+-- D23：期望结果类型已知（S2 hint）且名字是 `Base.Num` 方法投影、期望类型又不是内建
+-- Int/Nat/Float 时，跳过运算符特化、直接走带 hint 的通用推断：hint 先解出类参数与
+-- 结果类型，实参（字面量）随后按该类型 check（可经 FromInt 降级）。否则运算符特化会
+-- 先把字面量推成 Int，`1 + 2 : MyNum` 会报 expected MyNum got Int。
+-- | 检查/推断方向的跳过判据：`name` 是 `Base.Num` 方法投影、期望类型是**刚性非内建**类型。
+-- 期望是元变量（未知）时不跳过：那属于推断位置，保留旧的「先推断实参、Nat/Int 混合提升」
+-- 行为（如 `length xs + maxIntList ys`：Nat + Int → Int）。
+skipArithSpecForExpected : Ec -> String -> Value -> Bool
+skipArithSpecForExpected ec name expected = case numMethodOpName ec name of
+  Just _ => if isIntTy ec expected then False
+  else if isNatTy ec expected then False
+  else if isFloatTy ec expected then False
+  else case forceVal ec expected of
+    VMeta _ _ => False
+    _ => True
+  Nothing => False
+
+-- | S2 `hint` 版本的跳过判据（hint 里带期望结果类型）。
+skipArithSpecForHint : Ec -> String -> Maybe (Pair Int Value) -> Bool
+skipArithSpecForHint ec name Nothing = False
+skipArithSpecForHint ec name (Just p) = skipArithSpecForExpected ec name (secondOf p)
+
 -- 应用：逐个消费显式实参，遇到隐式 Pi 先插入元变量。
 inferAppFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Expr -> List Expr -> Span -> Maybe (Pair Int Value) -> Result (Pair Term (Pair Value Ec))
 inferAppFuel fuel globals ctx ec fn args sp hint = if fuel <= 0 then Err "DT: internal: inference fuel exhausted"
@@ -738,7 +788,11 @@ else case fn of
         Nothing => case globalsLookup name globals ec of
           -- M23：推断位置也要走 `==` / `/=` / 比较运算符的特化，否则 term 里留下裸
           -- `==`（codegen 默认映射成 bi_eq_int，字符串比较会生成类型错误的 OCaml）。
-          Just tyTerm => Vuna.Compiler.Common.bind (specializeOpAppFuel (fuel - 1) globals ctx ec name args sp) (\mspec => case mspec of
+          Just tyTerm => if skipArithSpecForHint ec name hint then Vuna.Compiler.Common.bind (inferArgsFuel (fuel - 1) globals ctx ec (eval [] tyTerm) args sp hint) (\pa => case pa of
+            Pair argTerms (Pair resTy ec2) =>
+              Ok (Pair (ctorAppTerm (ecDatas ec2) (TGlobal name) argTerms) (Pair resTy ec2))
+          )
+          else Vuna.Compiler.Common.bind (specializeOpAppFuel (fuel - 1) globals ctx ec name args sp) (\mspec => case mspec of
             Just pair => Ok pair
             Nothing => Vuna.Compiler.Common.bind (inferArgsFuel (fuel - 1) globals ctx ec (eval [] tyTerm) args sp hint) (\pa => case pa of
               Pair argTerms (Pair resTy ec2) =>
@@ -846,7 +900,7 @@ else
           ty2 = applyClosure clo (evalCtx ctx instTerm)
         in Vuna.Compiler.Common.bind (inferArgsGo (fuel - 1) globals ctx ec1 ty2 args sp hint) (\q => case q of
           Pair argTerms (Pair resTy ec2) =>
-            Ok (Pair (Pair instTerm RigOmega :: argTerms) (Pair resTy ec2))
+            Ok (Pair (Base.List.Cons (Pair instTerm RigOmega) argTerms) (Pair resTy ec2))
         )
       Err e =>
         if hasUnsolvedMetaValue (ecSolsP ec0) (forceVal ec0 dom) then deferDictBinderFuel (fuel - 1) globals ctx ec0 dom clo args sp hint
@@ -856,7 +910,8 @@ else
     else if isMemberDomain ec dom then case memberLookup 64 (ctxDepth ctx) ec dom of
       MemberFound proof ec1 => Vuna.Compiler.Common.bind (inferArgsGo (fuel - 1) globals ctx ec1 (applyClosure clo proof) args sp hint) (\p => case p of
         Pair argTerms (Pair resTy ec2) =>
-          Ok (Pair (Pair (quote (ctxDepth ctx) proof) Rig0 :: argTerms) (Pair resTy ec2))
+          Ok
+            (Pair (Base.List.Cons (Pair (quote (ctxDepth ctx) proof) Rig0) argTerms) (Pair resTy ec2))
       )
       MemberAbsent => tcErr1 sp (NoInstanceFound "row membership") "row membership"
       MemberStuck =>
@@ -868,12 +923,12 @@ else
               ec2 = ecAddConstraint ec1 CkRow m dom (Just sp) (ctxDepth ctx)
             in Vuna.Compiler.Common.bind (inferArgsGo (fuel - 1) globals ctx ec2 (applyClosure clo (eval (ctxEnv ctx) metaTerm)) args sp hint) (\p => case p of
               Pair argTerms (Pair resTy ec3) =>
-                Ok (Pair (Pair metaTerm Rig0 :: argTerms) (Pair resTy ec3))
+                Ok (Pair (Base.List.Cons (Pair metaTerm Rig0) argTerms) (Pair resTy ec3))
             )
     else if isImplicitDomain ctx ec dom then case newMeta ctx ec of
       Pair metaTerm ec1 => Vuna.Compiler.Common.bind (inferArgsGo (fuel - 1) globals ctx ec1 (applyClosure clo (eval (ctxEnv ctx) metaTerm)) args sp hint) (\p => case p of
         Pair argTerms (Pair resTy ec2) =>
-          Ok (Pair (Pair metaTerm Rig0 :: argTerms) (Pair resTy ec2))
+          Ok (Pair (Base.List.Cons (Pair metaTerm Rig0) argTerms) (Pair resTy ec2))
       )
     else tcErr0 sp ImplicitParamKind
     else case args of
@@ -888,7 +943,7 @@ else
         in Vuna.Compiler.Common.bind (rigForLinearDomain ec0 sp name rig dom) (\argRig => Vuna.Compiler.Common.bind (expandArgListLit ec0 dom a) (\a2 => Vuna.Compiler.Common.bind (checkEFuel (fuel - 1) globals ctx ec0 a2 dom) (\p => case p of
           Pair aTerm ec1 => Vuna.Compiler.Common.bind (inferArgsGo (fuel - 1) globals ctx ec1 (applyClosure clo (evalCtx ctx aTerm)) rest sp Nothing) (\q => case q of
             Pair argTerms (Pair resTy ec2) =>
-              Ok (Pair (Pair aTerm argRig :: argTerms) (Pair resTy ec2))
+              Ok (Pair (Base.List.Cons (Pair aTerm argRig) argTerms) (Pair resTy ec2))
           )
         )
         )
@@ -905,7 +960,7 @@ else
   in case newMeta ctx ec of
     Pair metaTerm ec1 => Vuna.Compiler.Common.bind (inferArgsGo (fuel - 1) globals ctx (ecAddConstraint ec1 CkDict m (forceVal ec1 dom) (Just sp) (ctxDepth ctx)) (applyClosure clo (eval (ctxEnv ctx) metaTerm)) args sp hint) (\p => case p of
       Pair argTerms (Pair resTy ec2) =>
-        Ok (Pair (Pair metaTerm RigOmega :: argTerms) (Pair resTy ec2))
+        Ok (Pair (Base.List.Cons (Pair metaTerm RigOmega) argTerms) (Pair resTy ec2))
     )
 
 -- 用后续显式实参约束 `Dict_C ?a` 里的类参数。M22：先取字典族的**类参数 kind**，
@@ -969,6 +1024,7 @@ intTyValue = VNeutral (NGlobal intTypeName [])
 natTyValue : Value
 natTyValue = VNeutral (NGlobal natTypeName [])
 
+-- | Float 类型作为 Value 的表示（中性全局 `Float` 零实参）。
 floatTyValue : Value
 floatTyValue = VNeutral (NGlobal floatTypeName [])
 
@@ -982,6 +1038,7 @@ isNatTy ec v = case forceVal ec v of
   VNeutral (NGlobal g []) => g == natTypeName
   _ => False
 
+-- | 判断值是否是内建 Float 类型。
 isFloatTy : Ec -> Value -> Bool
 isFloatTy ec v = case forceVal ec v of
   VNeutral (NGlobal g []) => g == floatTypeName
@@ -1000,8 +1057,19 @@ coerceNatOperands ec aTy bTy aTerm bTerm =
   else if isIntTy ec aTy && isNatTy ec bTy then Just (Pair (Pair aTy intTyValue) (Pair aTerm (natToIntTerm bTerm)))
   else Nothing
 
-isArithOpName : String -> Bool
-isArithOpName name = name == "+" || name == "-" || name == "*" || name == "/"
+-- D23 Stage1：算术运算符名。Stage 1 仍走内建 `+ - * /`；同时认 `Base.Num` 的
+-- 方法投影（`add/sub/mul/div`），映射回规范运算符名后复用同一套特化——这样 Stage 2
+-- 把 `+` 别名到 `add` 后，实例体 `add x y = x + y` 仍降级成内建原语，不会退化成
+-- （自递归的）普通字典方法调用。具体类型不是 Int/Nat/Float 时特化返回 Nothing，
+-- 调用方回落到普通 trait 应用（泛型 `Num a =>` 代码走这条）。
+-- 只有限定名（方法投影 `Base.Num.add`，含 `.`）才需要查类表；裸运算符名在上面直接
+-- 返回，避免给每个普通应用都加 4 次类表扫描。
+arithOpNameOf : Ec -> String -> Maybe String
+arithOpNameOf ec "+" = Just "+"
+arithOpNameOf ec "-" = Just "-"
+arithOpNameOf ec "*" = Just "*"
+arithOpNameOf ec "/" = Just "/"
+arithOpNameOf ec name = if containsDot name then numMethodOpName ec name else Nothing
 
 arithNatName : String -> String
 arithNatName "+" = "natAdd"
@@ -1016,9 +1084,11 @@ natApp2 : String -> Term -> Term -> Term
 natApp2 name a b = TApp (TApp (TGlobal (arithNatName name)) a Rig1) b Rig1
 
 -- 浮点算术：特化到内部 `bi_*_float`（与 Int / Nat 同一条精化期降级路径）。
+-- | 把浮点二元运算构造成内部原语应用 `bi_*_float`。
 floatApp2 : String -> Term -> Term -> Term
 floatApp2 name a b = TApp (TApp (TGlobal (arithFloatName name)) a Rig1) b Rig1
 
+-- | 浮点算术运算符到内部原语名的映射（`+` `-` `*` `/`）。
 arithFloatName : String -> String
 arithFloatName "+" = "bi_add_float"
 arithFloatName "-" = "bi_sub_float"
@@ -1031,52 +1101,66 @@ isEIntExpr _ = Nothing
 
 -- check 模式的算术：期望类型直接决定结果域；期望 Nat 时实参也按 Nat 检查（字面量因此
 -- 能写字面量），期望 Int 时 Nat 实参经隐式提升。
+-- | 算术特化的 check 入口：先把 `Base.Num` 方法投影规范化成运算符名，再交给具体类型分支。
 specializeArithCheckFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> String -> List Expr -> Value -> Span -> Result (Maybe (Pair Term Ec))
 specializeArithCheckFuel fuel globals ctx ec name args expected sp = if fuel <= 0 then Err "DT: internal: inference fuel exhausted"
-else if isArithOpName name then case args of
+else case arithOpNameOf ec name of
+  Just op => specializeArithCheckOpFuel (fuel - 1) globals ctx ec op args expected sp
+  Nothing => Ok Nothing
+
+-- | check 方向的算术特化（`op` 已是规范运算符名）：期望类型决定结果域。
+specializeArithCheckOpFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> String -> List Expr -> Value -> Span -> Result (Maybe (Pair Term Ec))
+specializeArithCheckOpFuel fuel globals ctx ec op args expected sp = if fuel <= 0 then Err "DT: internal: inference fuel exhausted"
+else case args of
   [a, b] => if isNatTy ec expected then Vuna.Compiler.Common.bind (checkEFuel (fuel - 1) globals ctx ec a natTyValue) (\pa => case pa of
     Pair aTerm ec1 => Vuna.Compiler.Common.bind (checkEFuel (fuel - 1) globals ctx ec1 b natTyValue) (\pb => case pb of
-      Pair bTerm ec2 => Ok (Just (Pair (natApp2 name aTerm bTerm) ec2))
+      Pair bTerm ec2 => Ok (Just (Pair (natApp2 op aTerm bTerm) ec2))
     )
   )
   else if isIntTy ec expected then Vuna.Compiler.Common.bind (checkEFuel (fuel - 1) globals ctx ec a intTyValue) (\pa => case pa of
     Pair aTerm ec1 => Vuna.Compiler.Common.bind (checkEFuel (fuel - 1) globals ctx ec1 b intTyValue) (\pb => case pb of
-      Pair bTerm ec2 => Ok (Just (Pair (intApp2 name aTerm bTerm) ec2))
+      Pair bTerm ec2 => Ok (Just (Pair (intApp2 op aTerm bTerm) ec2))
     )
   )
   else if isFloatTy ec expected then Vuna.Compiler.Common.bind (checkEFuel (fuel - 1) globals ctx ec a floatTyValue) (\pa => case pa of
     Pair aTerm ec1 => Vuna.Compiler.Common.bind (checkEFuel (fuel - 1) globals ctx ec1 b floatTyValue) (\pb => case pb of
-      Pair bTerm ec2 => Ok (Just (Pair (floatApp2 name aTerm bTerm) ec2))
+      Pair bTerm ec2 => Ok (Just (Pair (floatApp2 op aTerm bTerm) ec2))
     )
   )
   else Ok Nothing
   _ => Ok Nothing
-else Ok Nothing
 
 -- infer 模式的算术：两侧都 Nat（或 Nat + 整数字面量）→ Nat；任一真正 Int → Int（Nat 提升）。
+-- | 算术特化的 infer 入口：先把 `Base.Num` 方法投影规范化成运算符名，再交给具体类型分支。
 specializeArithAppFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> String -> List Expr -> Span -> Result (Maybe (Pair Term (Pair Value Ec)))
 specializeArithAppFuel fuel globals ctx ec name args sp = if fuel <= 0 then Err "DT: internal: inference fuel exhausted"
-else if isArithOpName name then case args of
+else case arithOpNameOf ec name of
+  Just op => specializeArithAppOpFuel (fuel - 1) globals ctx ec op args sp
+  Nothing => Ok Nothing
+
+-- | infer 方向的算术特化（`op` 已是规范运算符名）：按实参类型决定结果域与 Nat 提升。
+specializeArithAppOpFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> String -> List Expr -> Span -> Result (Maybe (Pair Term (Pair Value Ec)))
+specializeArithAppOpFuel fuel globals ctx ec op args sp = if fuel <= 0 then Err "DT: internal: inference fuel exhausted"
+else case args of
   [a, b] => Vuna.Compiler.Common.bind (inferEFuel (fuel - 1) globals ctx ec a) (\pa => case pa of
     Pair aTerm (Pair aTy ec1) => Vuna.Compiler.Common.bind (inferEFuel (fuel - 1) globals ctx ec1 b) (\pb => case pb of
-      Pair bTerm (Pair bTy ec2) => if isNatTy ec2 aTy && isNatTy ec2 bTy then Ok (Just (Pair (natApp2 name aTerm bTerm) (Pair natTyValue ec2)))
-      else if isIntTy ec2 aTy && isIntTy ec2 bTy then Ok (Just (Pair (intApp2 name aTerm bTerm) (Pair intTyValue ec2)))
-      else if isFloatTy ec2 aTy && isFloatTy ec2 bTy then Ok (Just (Pair (floatApp2 name aTerm bTerm) (Pair floatTyValue ec2)))
+      Pair bTerm (Pair bTy ec2) => if isNatTy ec2 aTy && isNatTy ec2 bTy then Ok (Just (Pair (natApp2 op aTerm bTerm) (Pair natTyValue ec2)))
+      else if isIntTy ec2 aTy && isIntTy ec2 bTy then Ok (Just (Pair (intApp2 op aTerm bTerm) (Pair intTyValue ec2)))
+      else if isFloatTy ec2 aTy && isFloatTy ec2 bTy then Ok (Just (Pair (floatApp2 op aTerm bTerm) (Pair floatTyValue ec2)))
       else if isNatTy ec2 aTy && isIntTy ec2 bTy then case isEIntExpr b of
         Just n =>
           Vuna.Compiler.Common.bind (natLitResult (exprSpan b) n)
-            (\bNat => Ok (Just (Pair (natApp2 name aTerm bNat) (Pair natTyValue ec2))))
-        Nothing => Ok (Just (Pair (intApp2 name (natToIntTerm aTerm) bTerm) (Pair intTyValue ec2)))
+            (\bNat => Ok (Just (Pair (natApp2 op aTerm bNat) (Pair natTyValue ec2))))
+        Nothing => Ok (Just (Pair (intApp2 op (natToIntTerm aTerm) bTerm) (Pair intTyValue ec2)))
       else if isIntTy ec2 aTy && isNatTy ec2 bTy then case isEIntExpr a of
         Just n =>
           Vuna.Compiler.Common.bind (natLitResult (exprSpan a) n)
-            (\aNat => Ok (Just (Pair (natApp2 name aNat bTerm) (Pair natTyValue ec2))))
-        Nothing => Ok (Just (Pair (intApp2 name aTerm (natToIntTerm bTerm)) (Pair intTyValue ec2)))
+            (\aNat => Ok (Just (Pair (natApp2 op aNat bTerm) (Pair natTyValue ec2))))
+        Nothing => Ok (Just (Pair (intApp2 op aTerm (natToIntTerm bTerm)) (Pair intTyValue ec2)))
       else Ok Nothing
     )
   )
   _ => Ok Nothing
-else Ok Nothing
 
 checkEFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Expr -> Value -> Result (Pair Term Ec)
 checkEFuel fuel globals ctx ec expr expected = if fuel <= 0 then Err "DT: internal: inference fuel exhausted"
@@ -1092,6 +1176,7 @@ else case listLitElems expr of
 -- 交给现有 `EApp` 精化处理隐式类参、字典 binder 与延迟字典目标；搜索失败返回 Nothing，
 -- 调用方回退到原推断路径（诊断不变）。探针与随后降级各查一次实例，只有非内建期望类型
 -- 位置会走到。
+-- | 把内建字面量降级成 FromString / FromInt 等方法应用；无实例时返回 Nothing。
 literalTraitLower : List (Pair String Term) -> Ctx -> Ec -> String -> String -> Expr -> Value -> Span -> Maybe (Pair Expr Ec)
 literalTraitLower globals ctx ec traitName methodName lit expected sp =
   let
@@ -1110,6 +1195,7 @@ else if doMarkerHead expr then case decodeDoBlock expr of
   Nothing => checkEFuelNoRowPlain fuel globals ctx ec expr expected
 else checkEFuelNoRowPlain fuel globals ctx ec expr expected
 
+-- | check 模式的形状分派核心：处理洞、字面量、λ、应用与 let 等，不再试 do 标记链。
 checkEFuelNoRowPlain : Int -> List (Pair String Term) -> Ctx -> Ec -> Expr -> Value -> Result (Pair Term Ec)
 checkEFuelNoRowPlain fuel globals ctx ec expr expected = if fuel <= 0 then Err "DT: internal: inference fuel exhausted"
 else case expr of
@@ -1368,6 +1454,7 @@ else Vuna.Compiler.Common.bind (inferEFuel (fuel - 1) globals ctx ec value) (\pv
 -- S2：期望结果类型 hint。把剩余 Pi 链的每个 binder 用刚性占位变量实例化，取“残余结果
 -- 类型”；占位变量 level 从 depth 起递增，若结果引用它们（levelEscapes depth 0 res），
 -- 说明结果依赖显式实参，不能提前解字典类参数，调用方跳过。
+-- | 用新鲜元变量逐个实例化 Pi 链，返回残余结果类型；供字典类参数提前求解使用。
 stripPisWithMetas : Int -> Ctx -> Ec -> Value -> Result (Pair Value Ec)
 stripPisWithMetas fuel ctx ec v = if fuel <= 0 then Err "DT: internal: inference fuel exhausted"
 else case forceVal ec v of
@@ -1376,11 +1463,16 @@ else case forceVal ec v of
       stripPisWithMetas (fuel - 1) ctx ec1 (applyClosure clo (eval (ctxEnv ctx) metaTerm))
   _ => Ok (Pair v ec)
 
+-- | 判断值的头部是否是元变量（含裸元变量与带实参元变量）：S2 的期望结果类型 hint
+-- 可以靠 conv 继续求解它。D23 起用户类型算术 `1 + 2 : MyNum` 的残余结果就是**裸**元变量
+-- （`add : a -> a -> a` 的结果没有 spine）；旧实现只认带 spine 的元变量，会跳过 hint，
+-- 让实参先被推断成 Int。裸元变量同样能靠后续 conv 求解，一并接受。
 isMetaHeadedValue : Ec -> Value -> Bool
 isMetaHeadedValue ec v = case forceVal ec v of
-  VMeta _ (_ :: _) => True
+  VMeta _ _ => True
   _ => False
 
+-- | 判断值的头部是否是刚性构造（全局、变量或构造子），即不是元变量。
 isRigidHeadValue : Ec -> Value -> Bool
 isRigidHeadValue ec v = case forceVal ec v of
   VNeutral (NGlobal _ _) => True
@@ -1391,6 +1483,8 @@ isRigidHeadValue ec v = case forceVal ec v of
 -- 只在“前导隐式前缀新增了延迟约束 + 残余结果 meta 头 + 期望刚性头”时，先把剩余显式
 -- binder 用**新鲜 meta** 实例化取残余结果，再 conv 期望类型；成功就把这次 early solve
 -- 带回（`?m`/`?b` 同时解出），失败丢弃整份快照，调用方照常检查实参。
+-- | 用期望结果类型提前解出延迟的字典约束：需要时用新鲜 meta 实例化剩余显式 binder，
+-- 只有 conv 成功才带回解，失败返回 Nothing。
 tryUseHint : Int -> Ctx -> Value -> Ec -> Value -> Maybe Ec
 tryUseHint goals0 ctx expected ec piTy = if length (ecPending ec) <= goals0 then Nothing
 else case stripPisWithMetas 64 ctx ec piTy of
@@ -1406,6 +1500,7 @@ else case stripPisWithMetas 64 ctx ec piTy of
 
 -- 与 inferEFuel 同形，只对 EApp 把期望结果类型传进 inferAppFuel（其余形状走旧路径）。
 -- 不复制 inferAppFuel 的 ctor/over-ctor/运算符分派，避免绕过分派导致的燃料问题。
+-- | 与 inferEFuel 同形，但 EApp 会把期望结果类型作为 hint 传进推断入口。
 inferEFuelHint : Int -> List (Pair String Term) -> Ctx -> Ec -> Expr -> Value -> Result (Pair Term (Pair Value Ec))
 inferEFuelHint fuel globals ctx ec expr expected = if fuel <= 0 then Err "DT: internal: inference fuel exhausted"
 else case expr of
@@ -1419,10 +1514,17 @@ else case expr of
 -- 期望类型是 `Eff [] a`、实际类型是 `Eff r a`（r 为具体非空行）时，报
 -- `TC_UnhandledEffects` 并列出标签，而不是裸的 `TC_TypeMismatch`。
 -- 触发位置不限于 `runPure`/`runIOEff`/`runIOAnswer`：任何要求 Nil 行的期望都适用。
+-- | 从 `Eff row a` 值里取出 (row, a)；不是 Eff 应用返回 Nothing。
+effRowAndResult : Value -> Maybe (Pair Value Value)
+effRowAndResult (VNeutral (NGlobal g (r :: a :: _))) =
+  if g == effTypeName then Just (Pair r a) else Nothing
+effRowAndResult _ = Nothing
+
 -- | 从 `Eff row a` 值里取出 row；不是 Eff 应用返回 Nothing。
 effRowOfValue : Value -> Maybe Value
-effRowOfValue (VNeutral (NGlobal g (r :: _ :: _))) = if g == effTypeName then Just r else Nothing
-effRowOfValue _ = Nothing
+effRowOfValue v = case effRowAndResult v of
+  Just p => Just (firstOf p)
+  Nothing => Nothing
 
 -- | 行是否为 `Nil`（强归约后）。
 isNilRowValue : Ec -> Value -> Bool
@@ -1438,7 +1540,7 @@ else case forceVal ec row of
   else if consName == effRowConsCtor then case cargs of
     h :: t :: _ => if hasUnsolvedMetaValue (ecSolsP ec) h then Nothing
     else case rowEffectLabels (fuel - 1) ec t of
-      Just labels => Just (showValue h :: labels)
+      Just labels => Just (Base.List.Cons (showValue h) labels)
       Nothing => Nothing
     _ => Nothing
   else Nothing
@@ -1462,6 +1564,40 @@ unhandledEffectLabel ec expected actual = case effRowOfValue (forceVal ec expect
       Nothing => Nothing
   else Nothing
 
+-- D51：自动 Effect 行 lift。conv 失配时若「期望 = `Eff (Cons e tail) a`」且「实际的行与
+-- tail 相等」，就用 `Base.Eff.weaken` 把实际动作提升到更大的行（运行时是恒等，只是类型
+-- 层面的行扩宽）。**不调用 `checkEFuel`**（只构造项，避免与 checkByInferFuel 形成 SCT
+-- 互递归）；weaken 不在作用域时不触发，由调用方回退旧诊断（`TC_UnhandledEffects` 或
+-- 普通 mismatch）。期望是 `Eff []` 时也不触发：那是未处理效应，必须报 `TC_UnhandledEffects`。
+-- | D51 自动行 lift：`actual : Eff r a` 遇到期望 `Eff (Cons e r) a` 时返回插入
+-- `Base.Eff.weaken` 的项与 conv 解出的 Ec；条件不满足 / weaken 不可见 / 期望为空行时
+-- 返回 Nothing。
+tryEffLift : Ctx -> List (Pair String Term) -> Ec -> Value -> Value -> Term -> Maybe (Pair Term Ec)
+tryEffLift ctx globals ec expected actual term = case globalsLookup "Base.Eff.weaken" globals ec of
+  Nothing => Nothing
+  Just _ =>
+    let
+      d = ctxDepth ctx
+    in case effRowAndResult (forceVal ec expected) of
+      Nothing => Nothing
+      Just p => case forceVal ec (firstOf p) of
+        VCon consName (eV :: tailV :: _) => if consName /= effRowConsCtor then Nothing
+        else
+          let
+            tailF = forceVal ec tailV
+          in if hasUnsolvedMetaValue (ecSolsP ec) tailF then Nothing
+          else case effRowOfValue (forceVal ec actual) of
+            -- 期望的尾行必须已经具体：尾行是未解元变量时不做 lift——否则 conv 会把它解成
+            -- 「实际行」，把真正的行不匹配（如 handler 实例名 `Fs "mock"` vs 程序 `Fs
+            -- "real"`）伪装成合法 lift，错误被推迟到入口才暴露（dt_err/78 回归）。
+            Nothing => Nothing
+            Just actualRow => case convEc ec d actualRow tailF of
+              Err _ => Nothing
+              Ok ec2 =>
+                Just
+                  (Pair (TApp (TApp (TApp (TApp (TGlobal "Base.Eff.weaken") (quote d eV) Rig0) (quote d tailF) Rig0) (quote d (secondOf p)) Rig0) term RigOmega) ec2)
+        _ => Nothing
+
 checkByInferFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Expr -> Value -> Result (Pair Term Ec)
 checkByInferFuel fuel globals ctx ec expr expected = if fuel <= 0 then Err "DT: internal: inference fuel exhausted"
 else case inferEFuelHint (fuel - 1) globals ctx ec expr expected of
@@ -1469,9 +1605,11 @@ else case inferEFuelHint (fuel - 1) globals ctx ec expr expected of
   Ok (Pair term (Pair actual ec1)) => case coerceTerm ec1 expected actual term of
     Just coerced => Ok (Pair coerced (resolveDictGoals globals ec1))
     Nothing => case convEc ec1 (ctxDepth ctx) expected actual of
-      Err e => case unhandledEffectLabel ec1 expected actual of
-        Just labels => tcErr1 (exprSpan expr) (UnhandledEffects labels) labels
-        Nothing => Err "${showSpanLoc (exprSpan expr)}: ${e}"
+      Err e => case tryEffLift ctx globals ec1 expected actual term of
+        Just p => Ok (Pair (firstOf p) (resolveDictGoals globals (secondOf p)))
+        Nothing => case unhandledEffectLabel ec1 expected actual of
+          Just labels => tcErr1 (exprSpan expr) (UnhandledEffects labels) labels
+          Nothing => Err "${showSpanLoc (exprSpan expr)}: ${e}"
       Ok ec2 => Ok (Pair term (resolveDictGoals globals ec2))
 
 checkLamFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> List String -> Expr -> Value -> Span -> Result (Pair Term Ec)
@@ -1729,6 +1867,7 @@ else case args of
 strFromIntTerm : Term -> Term
 strFromIntTerm t = TApp (TGlobal "strFromInt") t Rig1
 
+-- | 构造内部 `strFromFloat` 应用项，Float 插值降级时使用。
 strFromFloatTerm : Term -> Term
 strFromFloatTerm t = TApp (TGlobal "strFromFloat") t Rig1
 
@@ -1765,7 +1904,8 @@ checkAppGeneralFuel fuel globals ctx ec fn args expected sp = if fuel <= 0 then 
 else case fn of
   EVar name vsp => Vuna.Compiler.Common.bind (specializeArithCheckFuel (fuel - 1) globals ctx ec name args expected sp) (\arith => case arith of
     Just (Pair term ec2) => Ok (Pair term ec2)
-    Nothing => Vuna.Compiler.Common.bind (specializeOpAppFuel (fuel - 1) globals ctx ec name args sp) (\mspec => case mspec of
+    Nothing => if skipArithSpecForExpected ec name expected then checkByInferFuel (fuel - 1) globals ctx ec (EApp fn args sp) expected
+    else Vuna.Compiler.Common.bind (specializeOpAppFuel (fuel - 1) globals ctx ec name args sp) (\mspec => case mspec of
       Just (Pair term (Pair termTy ec1)) => case coerceTerm ec1 expected termTy term of
         Just coerced => Ok (Pair coerced ec1)
         Nothing =>
@@ -1831,7 +1971,7 @@ takeRigs n bs = takeRigsGo n bs
 
 takeRigsGo : Int -> List (Pair String Rig) -> List Rig
 takeRigsGo n [] = []
-takeRigsGo n (b :: bs) = if n <= 0 then [] else secondOf b :: takeRigsGo (n - 1) bs
+takeRigsGo n (b :: bs) = if n <= 0 then [] else Base.List.Cons (secondOf b) (takeRigsGo (n - 1) bs)
 
 ctorFamilyArgs : Ec -> Ctx -> DtCtor -> Value -> Maybe (Pair (List (Pair Term Rig)) (Pair Value Ec))
 ctorFamilyArgs ec ctx ctor expected =
@@ -1905,7 +2045,7 @@ resolvePatArgsFuel (Succ k) ec ctx ty args = case args of
       in if implicit then resolvePatArgsFuel k ec ctx2 ty2 (a :: rest)
       else Vuna.Compiler.Common.bind (resolveOverPatFuel k ec ctx dom a) (\p => case p of
         Pair a2 ec1 => Vuna.Compiler.Common.bind (resolvePatArgsFuel k ec1 ctx2 ty2 rest) (\q => case q of
-          Pair rest2 ec2 => Ok (Pair (a2 :: rest2) ec2)
+          Pair rest2 ec2 => Ok (Pair (Base.List.Cons a2 rest2) ec2)
         )
       )
     _ => Ok (Pair args ec)
@@ -1921,7 +2061,7 @@ resolveOverAltsGo (Succ k) ec ctx ty alts = case alts of
   [] => Ok (Pair [] ec)
   (Pair pat body) :: rest => Vuna.Compiler.Common.bind (resolveOverPatFuel (natFromInt 512) ec ctx ty pat) (\p => case p of
     Pair pat2 ec1 => Vuna.Compiler.Common.bind (resolveOverAltsGo k ec1 ctx ty rest) (\q => case q of
-      Pair rest2 ec2 => Ok (Pair (Pair pat2 body :: rest2) ec2)
+      Pair rest2 ec2 => Ok (Pair (Base.List.Cons (Pair pat2 body) rest2) ec2)
     )
   )
 
@@ -1938,7 +2078,7 @@ resolveOverFunPatsGo (Succ k) ec ctx ty clauses = case clauses of
   [] => Ok (Pair [] ec)
   (Pair pats body) :: rest => Vuna.Compiler.Common.bind (resolveClausePatsFuel (natFromInt 512) ec ctx ty pats) (\q => case q of
     Pair pats2 ec1 => Vuna.Compiler.Common.bind (resolveOverFunPatsGo k ec1 ctx ty rest) (\r => case r of
-      Pair rest2 ec2 => Ok (Pair (Pair pats2 body :: rest2) ec2)
+      Pair rest2 ec2 => Ok (Pair (Base.List.Cons (Pair pats2 body) rest2) ec2)
     )
   )
 
@@ -1956,7 +2096,7 @@ resolveClausePatsFuel (Succ k) ec ctx ty pats = case pats of
       in if implicit then resolveClausePatsFuel k ec ctx2 ty2 (p :: rest)
       else Vuna.Compiler.Common.bind (resolveOverPatFuel k ec ctx dom p) (\q => case q of
         Pair p2 ec1 => Vuna.Compiler.Common.bind (resolveClausePatsFuel k ec1 ctx2 ty2 rest) (\r => case r of
-          Pair rest2 ec2 => Ok (Pair (p2 :: rest2) ec2)
+          Pair rest2 ec2 => Ok (Pair (Base.List.Cons p2 rest2) ec2)
         )
       )
     _ => Ok (Pair pats ec)
@@ -2002,6 +2142,7 @@ else case dtCtorLookupEc ec name of
 -- 形状不认识（bind 不是全局 / 签名不是 `{m}{Monad m}{a}{b} -> m a -> (a -> m b) -> m b` /
 -- 链形状不符）⇒ 把标记链重建为普通 bind 链交给既有路径，语义与 S3a 逐字一致。
 -- 标记头：`EApp (EVar <do marker>) _ _`。
+-- | 判断表达式头部是否是 do 块标记（`@vuna@do@bind` / `@vuna@do@ignore`）应用。
 doMarkerHead : Expr -> Bool
 doMarkerHead (EApp (EVar name sp) args asp) = case doSyntaxCanonical name of
   Just _ => True
@@ -2009,10 +2150,12 @@ doMarkerHead (EApp (EVar name sp) args asp) = case doSyntaxCanonical name of
 doMarkerHead _ = False
 
 -- 链上的一个非末条语句：binder 名 + 语句表达式 + 语句 span。
+-- | do 链上的一个非末条语句：binder 名、语句表达式与其 span。
 data DoChainStep : Type where
   DoChainStep : String -> Expr -> Span -> DoChainStep
 
 -- 拆出来的 do 块：bind canonical 名 + 语句序列 + 末条表达式 + 块 span（= 首条语句 span）。
+-- | 从标记链拆出的 do 块：canonical bind 名、语句序列、末条表达式与块 span。
 record DoChain where
   doChainCanonical : String
   doChainSteps : List DoChainStep
@@ -2021,6 +2164,7 @@ record DoChain where
 
 -- 逐层拆链：每层是 `EApp (EVar <marker> sp) [stmt, ELam [binder] tail _] sp`；
 -- 遇到非标记表达式就是末条语句。链上的 canonical 必须一致。
+-- | 逐层拆开 do 标记链收集非末条语句；链上 canonical 必须一致，否则返回 Nothing。
 decodeDoChain : Int -> String -> List DoChainStep -> Expr -> Maybe (Pair (List DoChainStep) Expr)
 decodeDoChain fuel canonical acc expr = if fuel <= 0 then Nothing
 else case expr of
@@ -2033,6 +2177,7 @@ else case expr of
       _ => Nothing
   _ => Just (Pair (reverse acc) expr)
 
+-- | 把整个表达式解析成 DoChain；头部不是 do 标记或链形状不合法时返回 Nothing。
 decodeDoBlock : Expr -> Maybe DoChain
 decodeDoBlock (expr@(EApp (EVar name sp) args asp)) = case doSyntaxCanonical name of
   Just canonical => case decodeDoChain 4096 canonical [] expr of
@@ -2042,23 +2187,27 @@ decodeDoBlock (expr@(EApp (EVar name sp) args asp)) = case doSyntaxCanonical nam
 decodeDoBlock _ = Nothing
 
 -- 回退：把标记链重建为普通 bind 链（与 S3a 产出的 AST 相同），交给既有精化路径。
+-- | 把语句序列重建成普通 bind 链：do 标记替换成 canonical bind 名。
 doChainBuild : String -> List DoChainStep -> Expr -> Span -> Expr
 doChainBuild canonical [] last lastSp = last
 doChainBuild canonical ((DoChainStep binder e sp) :: rest) last lastSp =
   EApp (EVar canonical sp) [e, ELam [binder] (doChainBuild canonical rest last lastSp) sp] sp
 
+-- | 把 DoChain 重建为普通 bind 链表达式，交给既有精化路径。
 doChainFallback : DoChain -> Expr
 doChainFallback chain =
   doChainBuild chain.doChainCanonical chain.doChainSteps chain.doChainLast chain.doChainSpan
 
 -- 期望类型拆 `m a`：force 后是中性应用且 spine 非空 ⇒ (头应用 m, 末实参 a)。
 -- 只认中性头；meta 头/其它形状交给共享 meta 路径。
+-- | 把中性应用 spine 拆成「头应用 m」与「末实参 a」；空 spine 返回 Nothing。
 splitDoSpine : Value -> List Value -> Maybe (Pair Value Value)
 splitDoSpine head [] = Nothing
 splitDoSpine head (x :: rest) = case splitDoSpine (applyValue head x) rest of
   Nothing => Just (Pair head x)
   Just p => Just p
 
+-- | 尝试把期望类型拆成 `m a`；头部不是中性应用（含 meta 头）时返回 Nothing。
 splitDoExpected : Ec -> Value -> Maybe (Pair Value Value)
 splitDoExpected ec expected = case forceVal ec expected of
   VNeutral n => case n of
@@ -2069,9 +2218,12 @@ splitDoExpected ec expected = case forceVal ec expected of
 -- bind 投影签名的唯一可接受形状：
 --   {m} -> {Dict_C m} -> {a} -> {b} -> m a -> (a -> m b) -> m b
 -- 返回显式实参 rig、λ 位置 rig、以及 `a -> m b` 里 λ binder 的 rig。
+-- | bind 可接受签名里抽出的三个 rig：显式实参、λ 位置与 λ binder。
 data DoBindShape : Type where
   DoBindShape : Rig -> Rig -> Rig -> DoBindShape
 
+-- | 匹配 bind 签名 `{m}{Dict}{a}{b} -> m a -> (a -> m b) -> m b`，
+-- 返回显式实参、λ 位置与 λ binder 的 rig；形状不符返回 Nothing。
 bindShapeOf : Term -> Maybe DoBindShape
 bindShapeOf (TPi _ True _ _ (TPi _ True _ (TApp (TGlobal g) (TVar _ imD) _) (TPi _ True _ _ (TPi _ True _ _ (TPi _ False rigE (TApp (TVar _ imE) (TVar _ iaE) _) (TPi _ False rigL (TPi _ False rigInner (TVar _ iaL) (TApp (TVar _ imM) (TVar _ ibL) _)) (TApp (TVar _ imR) (TVar _ ibR) _))))))) =
   if imD == 0 && imE == 3 && imM == 5 && imR == 5 then if iaE == 1 && iaL == 2 && ibL == 2 && ibR == 2 then Just (DoBindShape rigE rigL rigInner)
@@ -2081,6 +2233,7 @@ bindShapeOf (TPi _ True _ _ (TPi _ True _ (TApp (TGlobal g) (TVar _ imD) _) (TPi
 bindShapeOf _ = Nothing
 
 -- 块头的全局查找：局部 binder 遮蔽 / 不是全局 ⇒ 交给回退路径（局部 bind 的形状不受支持）。
+-- | 查块头 bind 的全局项与类型；被局部 binder 遮蔽或不是全局时返回 Nothing。
 doBindHeadOf : List (Pair String Term) -> Ctx -> Ec -> String -> Maybe (Pair Term Term)
 doBindHeadOf globals ctx ec bindName = case ctxLookup bindName ctx of
   Just _ => Nothing
@@ -2089,6 +2242,7 @@ doBindHeadOf globals ctx ec bindName = case ctxLookup bindName ctx of
     Nothing => Nothing
 
 -- 静态形状检查（不改 Ec）：head 项 + bind 签名项 + 形状。
+-- | 静态检查 do 块头（不改 Ec）：返回 bind 头项、签名项与抽出的 DoBindShape。
 doBlockShapeOf : List (Pair String Term) -> Ctx -> Ec -> String -> Maybe (Pair Term (Pair Term DoBindShape))
 doBlockShapeOf globals ctx ec bindName = case doBindHeadOf globals ctx ec bindName of
   Nothing => Nothing
@@ -2098,6 +2252,7 @@ doBlockShapeOf globals ctx ec bindName = case doBindHeadOf globals ctx ec bindNa
 
 -- 字典：整块只建一次。已知 m 且类参数无未解 meta 时直接搜实例；否则延迟成
 -- meta + 一个 Constraint（CkDict）（与 inferArgsGo 的延迟分支同一语义）。
+-- | 为 do 块建延迟字典目标：新鲜 meta 加一条 CkDict 约束，整块共用。
 doDictDefer : Ctx -> Ec -> Value -> Span -> Result (Pair Term Ec)
 doDictDefer ctx ec dom sp =
   let
@@ -2106,6 +2261,7 @@ doDictDefer ctx ec dom sp =
     Pair metaTerm ec1 =>
       Ok (Pair metaTerm (ecAddConstraint ec1 CkDict m (forceVal ec1 dom) (Just sp) (ctxDepth ctx)))
 
+-- | 取得 do 块的字典项：类参数已确定时搜索实例，否则延迟成 meta + 约束。
 doDictStep : Int -> List (Pair String Term) -> Ctx -> Ec -> Span -> Value -> Result (Pair Term Ec)
 doDictStep fuel globals ctx ec sp dom = if fuel <= 0 then Err "DT: internal: inference fuel exhausted"
 else if dictArgUnsolvedMeta ec dom then doDictDefer ctx ec dom sp
@@ -2117,6 +2273,7 @@ else case searchInstanceIn globals ctx ec (forceVal ec dom) sp of
 
 -- do 块的共享解释计划：bind canonical 名、head 项、共享 m（项/值）、块结果类型 a、字典项、
 -- 三个 rig、以及字典步之后的 Ec。
+-- | do 块的共享解释计划：bind 名、头项、共享 m/a、字典项、三个 rig 与新 Ec。
 record DoPlan where
   planBind : String
   planHead : Term
@@ -2130,6 +2287,7 @@ record DoPlan where
   planEc : Ec
 
 -- 在形状已通过的前提下，应用 m 取字典域并决定字典项。只在完全成功时修改 Ec。
+-- | 签名形状已通过后，应用 m 得到字典域并求字典项；只有完全成功才推进 Ec。
 planDoBlock : Int -> List (Pair String Term) -> Ctx -> Ec -> Span -> String -> Term -> Term -> DoBindShape -> Value -> Value -> Result (Maybe DoPlan)
 planDoBlock fuel globals ctx ec sp bindName headTerm bindTyTerm shape mVal aVal = if fuel <= 0 then Err "DT: internal: inference fuel exhausted"
 else case shape of
@@ -2147,6 +2305,8 @@ else case shape of
 -- 组装一个 bind 应用：与旧降级逐项一致（隐式 m/dict/a/b、显式 e/λ 的 rig、λ binder 名）。
 -- `ecLinear` 是 λ 入口的 Ec（线性捕获判据与 checkLamFuel 同点采样），`ecPaper` 是体精化后的
 -- Ec（不透明运行时类型的域判据用解完的 Ec）。
+-- | 组装 bind 应用：隐式 m/字典/a/b、显式 e/λ 的 rig 与 binder 名，
+-- 并对不透明运行时类型的 binder 做擦除包装。
 doBindAppTerm : Ec -> Ec -> Ctx -> Span -> DoPlan -> String -> Value -> Term -> Rig -> Rig -> Term -> Term
 doBindAppTerm ecLinear ecPaper ctx sp plan binder aVal eTerm argRig lamRig inner =
   let
@@ -2169,6 +2329,7 @@ doBindAppTerm ecLinear ecPaper ctx sp plan binder aVal eTerm argRig lamRig inner
 
 -- 逐条语句的检查与链装配：`bind e_i (\binder -> <后缀>)`。后缀的 monad 与结果类型整块共享
 -- （`planAVal`），所以每个 bind 的 b 实参都直接用块结果类型 a。
+-- | 逐条检查 do 语句并装配 bind 链：所有语句共享整块的 monad、字典与结果类型。
 elabDoChain : Int -> List (Pair String Term) -> Ctx -> Ec -> DoPlan -> List DoChainStep -> Expr -> Result (Pair Term Ec)
 elabDoChain fuel globals ctx ec plan steps last = if fuel <= 0 then Err "DT: internal: inference fuel exhausted"
 else case steps of
@@ -2189,6 +2350,8 @@ else case steps of
       )
 
 -- check 方向的 do 块解释：期望能拆 `m a` 就直接用，否则建共享 m/a meta 并在收尾与期望统一。
+-- | check 方向的 do 块解释：期望可拆 `m a` 时直接复用，否则建共享 m/a meta，
+-- 收尾再把 `m a` 与期望统一。
 checkDoBlockFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> DoChain -> Value -> Result (Maybe (Pair Term Ec))
 checkDoBlockFuel fuel globals ctx ec chain expected = if fuel <= 0 then Err "DT: internal: inference fuel exhausted"
 else case doBlockShapeOf globals ctx ec chain.doChainCanonical of
@@ -2217,6 +2380,7 @@ else case doBlockShapeOf globals ctx ec chain.doChainCanonical of
           )
 
 -- infer 方向的 do 块解释：没有期望类型，共享 m/a 都建 meta，结果类型 `m a` 交给外层统一。
+-- | infer 方向的 do 块解释：共享 m/a 先建 meta，结果 `m a` 交给外层统一。
 inferDoBlockFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> DoChain -> Result (Maybe (Pair Term (Pair Value Ec)))
 inferDoBlockFuel fuel globals ctx ec chain = if fuel <= 0 then Err "DT: internal: inference fuel exhausted"
 else case doBlockShapeOf globals ctx ec chain.doChainCanonical of

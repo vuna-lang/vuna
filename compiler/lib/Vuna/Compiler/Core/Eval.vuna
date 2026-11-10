@@ -76,7 +76,21 @@ lookupEnv i [] = Nothing
 lookupEnv i (v :: rest) = if i <= 0 then Just v else lookupEnv (i - 1) rest
 
 eval : List Value -> Term -> Value
-eval env t = evalFuel 128 env t
+eval env t = evalFuel (evalFuelFor t) env t
+
+-- | 求值 fuel 派生（D24）：固定 128 对深 Nat 链不够——字面量展开成 `Zero`/`Succ` 链后
+-- 每层约消耗 2 步燃料，≥64 层的字面量（如 `n = 300`）会在结构递归中途耗尽，而
+-- `evalFuel` 的兜底是**静默**返回 `VType 0`，interp 因此报 `CG_MainNotValue`。
+-- 求值不展开定义（delta 在 `force` 里，另有燃料），本函数是纯结构递归，燃料只是兜底；
+-- 按项节点数派生（每节点最多几步），上限 `evalFuelMax` 防失控输入。
+evalFuelFor : Term -> Int
+evalFuelFor t =
+  let
+    need = 128 + 4 * termSize t
+  in if need > evalFuelMax then evalFuelMax else need
+
+evalFuelMax : Int
+evalFuelMax = 1000000
 
 evalFuel : Int -> List Value -> Term -> Value
 evalFuel fuel env t = if fuel <= 0 then VType levelZero
@@ -95,7 +109,8 @@ else case t of
   TCase scrut alts => evalCaseFuel (fuel - 1) (evalFuel (fuel - 1) env scrut) (evalAlts env alts)
   TInt n => VInt n
   TStr s => VStr s
-  TFloat raw => VFloat raw
+  -- B44：VFloat 载荷统一为 string_of_float 规范文本（定义性相等与展示一致）。
+  TFloat raw => VFloat (showFloatRaw raw)
   TBool b => VBool b
   TIf c th el =>
     evalIf (evalFuel (fuel - 1) env c) (evalFuel (fuel - 1) env th) (evalFuel (fuel - 1) env el)
@@ -273,6 +288,68 @@ else Nothing
 
 asNat : Value -> Maybe Int
 asNat v = natValueToInt v
+
+-- ---------------------------------------------------------------
+-- Float（B44）：`VFloat` 载荷保持字符串，但**一律**是宿主 `string_of_float` 的规范
+-- 文本（字面量在 `eval` 入口规范化），这样定义性相等（`fastSame` 比字符串）、quote /
+-- 展示与编译产物三处天然一致。求值器自身没有宿主浮点类型可用，语义靠编译器的 `Float`
+-- 类型 + 内建原语（`floatFromInt`/`strFromFloat`/`/` 等）在编译期完成，因此与
+-- `ocamlopt` 产物逐位一致。
+-- | 浮点规范文本 → 宿主 `Float`。解析只覆盖源码浮点字面量语法 `digits.digits`
+-- （`Lexer` 的且唯一文法；规范化后仍可能带 `e` 指数？不会：string_of_float 产出
+-- `digits.digits`/`infinity`/`nan`，这里对后两者返回 0 并由调用方语义兜底）。
+floatOfRaw : String -> Float
+floatOfRaw raw = case splitOnChar 46 raw of
+  [ip, fp] => floatFromInt (digitsOf "${ip}${fp}") / floatFromInt (pow10Of (strLength fp))
+  _ => floatFromInt (digitsOf raw)
+
+-- | 十进制数字串 → Int（源码字面量只含 ASCII 数字；非数字按 0 处理）。
+digitsOf : String -> Int
+digitsOf s = digitsOfChars (strUnpack s) 0
+
+digitsOfChars : List Int -> Int -> Int
+digitsOfChars [] acc = acc
+digitsOfChars (c :: rest) acc =
+  if c >= 48 && c <= 57 then digitsOfChars rest (acc * 10 + (c - 48)) else digitsOfChars rest acc
+
+-- | 10^n（n 超过 18 位时按饱和处理：这种字面量远超 double 有效精度，交给规范化把
+-- 值拍成 infinity/大数，语义仍与编译产物一致）。
+pow10Of : Int -> Int
+pow10Of n = if n <= 0 then 1 else if n > 18 then 1000000000000000000 else pow10Of (n - 1) * 10
+
+-- | 规范化：宿主 Float → `string_of_float` 文本（与编译产物的 `%g` 类展示一致）。
+showFloatOf : Float -> String
+showFloatOf x = strFromFloat x
+
+-- | 浮点字面量原文 → 规范文本（`VFloat` 载荷的唯一形态）。
+showFloatRaw : String -> String
+showFloatRaw raw = showFloatOf (floatOfRaw raw)
+
+asFloat : Value -> Maybe Float
+asFloat (VFloat raw) = Just (floatOfRaw raw)
+asFloat _ = Nothing
+
+floatPrim1 : List Value -> (Float -> Float) -> Maybe Value
+floatPrim1 ([a]) f = case asFloat a of
+  Just x => Just (VFloat (showFloatOf (f x)))
+  Nothing => Nothing
+floatPrim1 _ = Nothing
+
+floatPrim2 : List Value -> (Float -> Float -> Float) -> Maybe Value
+floatPrim2 ([a, b]) f = case asFloat a of
+  Just x => case asFloat b of
+    Just y => Just (VFloat (showFloatOf (f x y)))
+    Nothing => Nothing
+  Nothing => Nothing
+floatPrim2 _ = Nothing
+
+floatBool2 : List Value -> (Float -> Float -> Bool) -> Maybe Value
+floatBool2 ([a, b]) f = case asFloat a of
+  Just x => case asFloat b of
+    Just y => Just (VBool (f x y))
+    Nothing => Nothing
+  Nothing => Nothing
+floatBool2 _ = Nothing
 
 asStr : Value -> Maybe String
 asStr (VStr s) = Just s
@@ -490,6 +567,26 @@ else case findIntrinsic g of
     OpNatDiv => natPrim2Div sp
     OpNatToInt => natPrim1 sp (\n => VInt n)
     OpNatFromInt => intPrim1 sp (\n => natValue (natClamp n))
+    -- B44：浮点原语（IEEE-754 double，与编译产物的 OCaml 运算符/比较同语义）。
+    OpAddF => floatPrim2 sp (\a, b => a + b)
+    OpSubF => floatPrim2 sp (\a, b => a - b)
+    OpMulF => floatPrim2 sp (\a, b => a * b)
+    OpDivF => floatPrim2 sp (\a, b => a / b)
+    OpEqF => floatBool2 sp (\a, b => a == b)
+    OpNeqF => floatBool2 sp (\a, b => a /= b)
+    OpLtF => floatBool2 sp (\a, b => a < b)
+    OpLeF => floatBool2 sp (\a, b => a <= b)
+    OpGtF => floatBool2 sp (\a, b => a > b)
+    OpGeF => floatBool2 sp (\a, b => a >= b)
+    OpFloatAbs => floatPrim1 sp floatAbs
+    OpFloatSqrt => floatPrim1 sp floatSqrt
+    OpStrFromFloat => case sp of
+      [VFloat raw] => Just (VStr (showFloatRaw raw))
+      _ => Nothing
+    OpFloatFromInt => intPrim1 sp (\n => VFloat (showFloatOf (floatFromInt n)))
+    OpIntFromFloat => case sp of
+      [VFloat raw] => Just (VInt (intFromFloat (floatOfRaw raw)))
+      _ => Nothing
     -- interp 边界（显式分类，见 docs/reference/primitives.md）：List 桥接依赖 base 的
     -- `Base.List.List` 构造子表示，核心求值器无法安全构造；除零/运行期失败同理。
     OpStrUnpack => Nothing

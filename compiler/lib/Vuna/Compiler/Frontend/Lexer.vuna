@@ -32,6 +32,7 @@ module Vuna.Compiler.Frontend.Lexer
 --     位置仍是绝对源码位置）——parser 直接拿这段 token 解析成表达式，无需二次词法。
 -- 洞内注释（`--` / `{- -}`）随洞 token 一起被 `skipTrivia` 跳过：插值洞里的注释
 -- **不进入 AST**（fmt 会丢失它们），这是已知边界，见 docs/reference/templates.md。
+import Base.List
 import Vuna.Compiler.Common
 import Vuna.Compiler.Frontend.Diagnostics
 
@@ -197,6 +198,7 @@ else Ok (Pair acc (Chars (c :: rest) p))
 -- ---------------------------------------------------------------
 -- 先看数字串后面是否是「`.` + 数字」，是才走浮点扫描；否则保持旧的整数扫描
 -- （含 `LX_IntLiteralOutOfRange` 语义）。这样普通整数路径没有额外分配。
+-- | 数字串后面是否紧跟「`.` + 数字」：是则整段按浮点字面量扫描，否则走整数路径。
 digitRunIsFloat : Chars -> Bool
 digitRunIsFloat (Chars [] p) = False
 digitRunIsFloat (Chars (c :: rest) p) = if isDigit c then digitRunIsFloat (Chars rest (advanceChar c p))
@@ -206,6 +208,7 @@ else if c == 46 then case rest of
 else False
 
 -- 收集 `digits '.' digits` 的原始文本（首字符已消费，acc 是逆序的数字字符）。
+-- | 收集浮点字面量 `digits . digits` 的原始文本；遇到 `.` 后交给 `collectFrac`。
 collectFloat : Chars -> List Int -> Pair String Chars
 collectFloat (Chars [] p) acc = Pair (strPack (reverse acc)) (Chars [] p)
 collectFloat (Chars (c :: rest) p) acc =
@@ -213,6 +216,7 @@ collectFloat (Chars (c :: rest) p) acc =
   else if c == 46 then collectFrac (Chars rest (advanceChar c p)) (c :: acc)
   else Pair (strPack (reverse acc)) (Chars (c :: rest) p)
 
+-- | 收集浮点字面量的小数部分（`.` 已消费），遇到非数字即停止。
 collectFrac : Chars -> List Int -> Pair String Chars
 collectFrac (Chars [] p) acc = Pair (strPack (reverse acc)) (Chars [] p)
 collectFrac (Chars (c :: rest) p) acc =
@@ -414,7 +418,7 @@ trimTrailingSpace s = strPack (reverse (dropTrailingSpace (reverse (strUnpack s)
 dropTrailingSpace : List Int -> List Int
 dropTrailingSpace [] = []
 dropTrailingSpace (c :: rest) =
-  if c == 32 || c == 9 || c == 13 then dropTrailingSpace rest else c :: rest
+  if c == 32 || c == 9 || c == 13 then dropTrailingSpace rest else Base.List.Cons c rest
 
 -- 行注释正文：从 `--` 之后扫到行尾（不消费换行）；endP 是最后一个正文字符位置。
 collectLineBody : Chars -> List Int -> Pos -> Pair String (Pair Chars Pos)

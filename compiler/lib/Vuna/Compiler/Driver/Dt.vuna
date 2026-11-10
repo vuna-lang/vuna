@@ -40,6 +40,7 @@ module Vuna.Compiler.Driver.Dt
 -- base-only）；旧环境根 / 单文件原始模式的 `dtCheckFile` / `dtCompileFile` 已删除。
 -- 唯一 codegen 入口是 `dtSplitProject`（逐模块 split 输出模型）；DT 精化器按
 -- **整程序**精化，模块边界对精化不构成约束。
+import Base.List
 import Vuna.Compiler.Common
 import Base.HashMap
 import Vuna.Compiler.Debug
@@ -189,7 +190,7 @@ dtCheckSource ctx label source =
 missingDepModules : String -> List Module -> List String -> List String
 missingDepModules pkg [] _ = []
 missingDepModules pkg (m :: rest) ifaceNames =
-  if modulePackageOf m /= pkg && memName (moduleNameOf m) ifaceNames == False then moduleNameOf m :: missingDepModules pkg rest ifaceNames
+  if modulePackageOf m /= pkg && memName (moduleNameOf m) ifaceNames == False then Base.List.Cons (moduleNameOf m) (missingDepModules pkg rest ifaceNames)
   else missingDepModules pkg rest ifaceNames
 
 dtCheckSourceWithIfaces : PackageContext -> String -> String -> List ModuleIface -> Result (List String)
@@ -339,7 +340,8 @@ aritiesOf : List String -> List Decl -> Result (List (Pair String Int))
 aritiesOf [] decls = Ok []
 aritiesOf (t :: rest) decls = case findArity t decls of
   Nothing => Err ("自动签名: 找不到定义 " ++ t ++ "（需要 DFun）")
-  Just n => Vuna.Compiler.Common.bind (aritiesOf rest decls) (\more => Ok (Pair t n :: more))
+  Just n =>
+    Vuna.Compiler.Common.bind (aritiesOf rest decls) (\more => Ok (Base.List.Cons (Pair t n) more))
 
 findArity : String -> List Decl -> Maybe Int
 findArity name [] = Nothing
@@ -379,7 +381,7 @@ inferEachType (t :: rest) prog ec taken = case findDtDef t (dtProgDefs prog) of
   Nothing => Err ("自动签名: 精化结果里找不到定义 " ++ t)
   Just def =>
     Vuna.Compiler.Common.bind (generalizeSignature (zonkTerm ec 0 (dtDefType def)) taken)
-      (\sigText => Vuna.Compiler.Common.bind (inferEachType rest prog ec taken) (\more => Ok (Pair t sigText :: more)))
+      (\sigText => Vuna.Compiler.Common.bind (inferEachType rest prog ec taken) (\more => Ok (Base.List.Cons (Pair t sigText) more)))
 
 findDtDef : String -> List DtDef -> Maybe DtDef
 findDtDef name [] = Nothing
@@ -471,7 +473,8 @@ metaIdsOfAlt (CaseAlt _ _ body) = metaIdsOf body
 
 dedupInts : List Int -> List Int
 dedupInts [] = []
-dedupInts (x :: rest) = if memMetaId x rest then dedupInts rest else x :: dedupInts rest
+dedupInts (x :: rest) =
+  if memMetaId x rest then dedupInts rest else Base.List.Cons x (dedupInts rest)
 
 -- 某个元变量在类型项里被应用的最大元数（决定泛化后的 kind）。
 maxMetaArity : Int -> Term -> Int
@@ -562,29 +565,19 @@ splitReplExpr decls = case reverse decls of
     else Err "DT: internal: REPL expression definition is not last"
   _ => Err "DT: internal: REPL expression was not parsed as a definition"
 
--- 程序（main 可达定义）是否真的用到浮点：不能只看“程序里有没有 Base.Float 定义”，
--- 否则 `import Base` 的正常程序会被误拒；用可达性扫描（见 docs/reference/floats.md）。
-programUsesFloat : DtProgram -> Bool
-programUsesFloat program = case findMainDef (dtProgDefs program) of
-  Nothing => False
-  Just d => termUsesFloat [floatTypeName] (dtDefType d) || (case dtDefBody d of
-    Nothing => False
-    Just body => termReachesFloat (defTableOf (dtProgDefs program)) floatIntrinsicNames body
-  )
-
--- interp 的浮点 guard：核心求值器不能算浮点，先拒绝再求值。
+-- B44：核心求值器支持浮点（`Float` 原语按 IEEE-754 double 归约，见 `Core/Eval`），
+-- interp 不再需要「程序用到浮点就拒绝」的 guard。
 evalDtMain : DtProgram -> Result String
-evalDtMain program =
-  if programUsesFloat program then Err
-    "vuna interp: Float is not supported by the interpreter (use vuna compile / vuna run; see docs/reference/floats.md)"
-  else evalDtMainCore program
+evalDtMain program = evalDtMainCore program
 
--- 核心求值器对 `main` 的求值边界（M23 终态契约）：
---   - 纯 `main : Int/String/Bool`：核心求值并展示值；
+-- 核心求值器对 `main` 的求值边界（M23 终态契约，B44 起含 Float）：
+--   - 纯 `main : Int/Nat/String/Bool/Float`：核心求值并展示值（Float 用
+--     `string_of_float` 规范文本，与产物一致）；
 --   - `main : IO a`：**一律报错**。核心求值器是纯的、不执行效果；即使动作结果不依赖
 --     效果（`do prim_print "hi"; pure 7`），效果也会被静默丢弃——误导用户。所以不做
 --     「尝试归约、卡住才报错」这种不可靠的判定。效果程序只走 compile + 运行
 --     （夹具用 `.nointerp` 标记）。IO 的识别按 main 的**类型**（M37 起是内建类型名 `IO`）。
+-- | 核心求值器对 `main` 的求值边界：纯 Int/String/Bool/Nat/Float 归约并展示，`IO a` 一律报错。
 evalDtMainCore : DtProgram -> Result String
 evalDtMainCore program = case findMainDef (dtProgDefs program) of
   Nothing => cgErr0 NoMain
@@ -599,10 +592,21 @@ evalDtMainCore program = case findMainDef (dtProgDefs program) of
       VInt n => Ok (strFromInt n)
       VStr s => Ok (showValue mainVal)
       VBool b => Ok (showValue mainVal)
+      VFloat raw => Ok raw
       VCon c args => case natValueToInt mainVal of
         Just n => Ok (strFromInt n)
-        Nothing => cgErr0 MainNotValue
-      _ => cgErr0 MainNotValue
+        Nothing => interpMainShow table sols mainVal
+      _ => interpMainShow table sols mainVal
+
+-- D17：非内建 main 类型的展示。Elab 收尾已合成 `@vuna@main_show : T -> String`
+-- （`Elab.Driver.synthMainShow`），这里对 main 值应用它并打印结果字符串；与编译产物的
+-- main 钩子走同一展示（Show 字典投影）。
+interpMainShow : List (Pair String Term) -> Sols -> Value -> Result String
+interpMainShow table sols mainVal = case normalize (Base.HashMap.fromList table) sols defaultFuel (VNeutral (NGlobal mainShowDefName [mainVal])) of
+  -- 与非内建 main 的编译路径一致：main 钩子直接 `print_endline (show T x)`（不加引号），
+  -- 所以 interp 也返回 raw 文本（内建 String main 仍走 dt_show_string 的加引号形态）。
+  VStr s => Ok s
+  _ => cgErr0 MainNotValue
 
 -- main 的类型是不是内建 `IO a`（M37：canonical 身份就是源级名 `IO`）。
 isIOType : Term -> Bool
@@ -716,7 +720,8 @@ dedupDefBodies ds = bodyPairs (dedupDefs ds)
 dedupDefs : List DtDef -> List DtDef
 dedupDefs [] = []
 dedupDefs (d :: rest) =
-  if memName (dtDefName d) (map dtDefName rest) then dedupDefs rest else d :: dedupDefs rest
+  if memName (dtDefName d) (map dtDefName rest) then dedupDefs rest
+  else Base.List.Cons d (dedupDefs rest)
 
 bodyPairs : List DtDef -> List (Pair String Term)
 bodyPairs [] = []
@@ -727,23 +732,26 @@ bodyPairs (d :: rest) = case dtDefBody d of
 dedupDatas : List DtData -> List DtData
 dedupDatas [] = []
 dedupDatas (d :: rest) =
-  if memName (dtDataName d) (map dtDataName rest) then dedupDatas rest else d :: dedupDatas rest
+  if memName (dtDataName d) (map dtDataName rest) then dedupDatas rest
+  else Base.List.Cons d (dedupDatas rest)
 
 dedupInsts : List DtInst -> List DtInst
 dedupInsts [] = []
 dedupInsts (i :: rest) =
-  if memName (dtInstName i) (map dtInstName rest) then dedupInsts rest else i :: dedupInsts rest
+  if memName (dtInstName i) (map dtInstName rest) then dedupInsts rest
+  else Base.List.Cons i (dedupInsts rest)
 
 dedupClasses : List DtClass -> List DtClass
 dedupClasses [] = []
 dedupClasses (c :: rest) =
   if memName (dtClassName c) (map dtClassName rest) then dedupClasses rest
-  else c :: dedupClasses rest
+  else Base.List.Cons c (dedupClasses rest)
 
 dedupGlobals : List (Pair String Term) -> List (Pair String Term)
 dedupGlobals [] = []
 dedupGlobals (g :: rest) =
-  if memName (firstOf g) (map firstOf rest) then dedupGlobals rest else g :: dedupGlobals rest
+  if memName (firstOf g) (map firstOf rest) then dedupGlobals rest
+  else Base.List.Cons g (dedupGlobals rest)
 
 -- ---------------------------------------------------------------
 -- M34.5（S2）：依赖接口加载（TTC 的 module 复用）
@@ -979,7 +987,7 @@ topoVisit : Int -> List Module -> String -> List String -> List Module -> Pair (
 topoVisit fuel mods name visited acc = if fuel <= 0 then Pair visited acc
 else if memName name visited then Pair visited acc
 else case findModuleNamed mods name of
-  Nothing => Pair (name :: visited) acc
+  Nothing => Pair (Base.List.Cons name visited) acc
   Just m =>
     let
       step = topoVisitAll (fuel - 1) mods (topoDepsOf mods m) (name :: visited) acc

@@ -18,12 +18,14 @@ module Vuna.Compiler.Core.Conv
 -- 返回更新后的元变量解表。M28：空 spine 就地检查作用域；非空 spine 走 Miller pattern
 -- unification（局部中性变量 spine → λ 抽象）；非 pattern 形状明确报错。
 -- M24 后维护（源码重组）：从原 Core.vuna 拆出；依赖 Core.Term（表示层）与 Core.Eval（force/quote/show）。
+import Base.List
 import Vuna.Compiler.Common
 import Base.HashMap
 import Vuna.Compiler.Core.Term
 import Vuna.Compiler.Core.Eval
 import Vuna.Compiler.Diagnostics
 import Vuna.Compiler.Debug
+import Vuna.Compiler.Intrinsics
 
 -- ---------------------------------------------------------------
 -- 定义性相等（beta + delta + eta）与一阶元变量求解
@@ -53,12 +55,187 @@ fastSame a b = case a of
     VBool j => if i then j else not j
     _ => False
   VNeutral n1 => case b of
-    VNeutral n2 => sameNeutralAtom n1 n2
+    VNeutral n2 =>
+      if isNatLikeValue a && isNatLikeValue b then sameNatValue a b else sameNeutralAtom n1 n2
     _ => False
   VCon c1 args1 => case b of
-    VCon c2 args2 => c1 == c2 && isNilList args1 && isNilList args2
+    VCon c2 args2 =>
+      if c1 == c2 && isNilList args1 && isNilList args2 then True
+      else if isNatCtorName c1 && isNatCtorName c2 then sameNatValue a b else False
+    _ => False
+  VApp f1 x1 => case b of
+    VApp f2 x2 => if isNatLikeValue a && isNatLikeValue b then sameNatValue a b else False
     _ => False
   _ => False
+
+-- ---------------------------------------------------------------
+-- D24：Nat 字面量链的判等与 fuel 派生
+-- ---------------------------------------------------------------
+-- 字面量在精化期展开成 `Zero` / `Succ` 链（`Elab/Term/Impl.natLitTerm`），Core 里没有
+-- 惰性 `TNat`。链在 Value 层有三种可能形态：饱和的 `VCon`（求值后的字面量形态）、
+-- `VNeutral NGlobal` 脊（引用构造子名的项）、以及 `VApp (VCon Succ []) x`（非饱和
+-- 构造子被应用）。逐层比较会线性消耗 conv fuel，深索引（≥20）就会假报
+-- `conv fuel exhausted`（D24），所以这里：
+--   * 能折回整数的链按整数 O(链深) 判等 / 不等；
+--   * 折不动的链（未解 meta / 中性尾巴）在逐层比较前按前缀深度一次性补足 fuel。
+isNatCtorName : String -> Bool
+isNatCtorName c = c == natZeroCtor || c == natSuccCtor
+
+-- 链折回的整数上限与运行时 Nat 饱和上限一致（OCaml 63 位 int 的 max_int）。
+natChainMaxValue : Int
+natChainMaxValue = 4611686018427387903
+
+natChainNextValue : Int -> Int
+natChainNextValue n = if n >= natChainMaxValue then natChainMaxValue else n + 1
+
+-- 值形态的 Nat 链折回整数：饱和构造子、`NGlobal` 脊、以及 `VApp` 形态的 `Succ` 部分
+-- 应用；折不动（未解 meta / 中性尾巴 / 非链 / 部分应用）返回 `Nothing`。
+natFoldValue : Value -> Maybe Int
+natFoldValue v = natFoldGo 1000000 v
+
+natFoldGo : Int -> Value -> Maybe Int
+natFoldGo fuel v = if fuel <= 0 then Nothing
+else case v of
+  VCon c args => natFoldArgs (fuel - 1) c args
+  VNeutral n => case n of
+    NGlobal c sp => natFoldArgs (fuel - 1) c sp
+    _ => Nothing
+  VApp f a => natFoldApplied (fuel - 1) f a
+  _ => Nothing
+
+natFoldArgs : Int -> String -> List Value -> Maybe Int
+natFoldArgs fuel c args = if c == natZeroCtor then case args of
+  [] => Just 0
+  _ => Nothing
+else if c == natSuccCtor then case args of
+  [a] => natFoldSucc fuel a
+  _ => Nothing
+else Nothing
+
+natFoldApplied : Int -> Value -> Value -> Maybe Int
+natFoldApplied fuel (VCon c []) a = if c == natSuccCtor then natFoldSucc fuel a else Nothing
+natFoldApplied fuel (VNeutral n) a = case n of
+  NGlobal c [] => if c == natSuccCtor then natFoldSucc fuel a else Nothing
+  _ => Nothing
+natFoldApplied fuel f a = Nothing
+
+natFoldSucc : Int -> Value -> Maybe Int
+natFoldSucc fuel a = case natFoldGo fuel a of
+  Just n => Just (natChainNextValue n)
+  Nothing => Nothing
+
+sameNatValue : Value -> Value -> Bool
+sameNatValue a b = case natFoldValue a of
+  Just n => case natFoldValue b of
+    Just m => n == m
+    Nothing => False
+  Nothing => False
+
+-- Nat 链的根形态判定（只查头部，O(1)）：用于在热路径上决定是否走上面的折回。
+isNatLikeValue : Value -> Bool
+isNatLikeValue (VCon c _) = isNatCtorName c
+isNatLikeValue (VNeutral n) = case n of
+  NGlobal c _ => isNatCtorName c
+  _ => False
+isNatLikeValue (VApp f a) = isNatLikeHead f
+isNatLikeValue _ = False
+
+isNatLikeHead : Value -> Bool
+isNatLikeHead (VCon c _) = c == natSuccCtor
+isNatLikeHead (VNeutral n) = case n of
+  NGlobal c _ => c == natSuccCtor
+  _ => False
+isNatLikeHead _ = False
+
+-- Nat 链前缀深度 = 前导 `Succ` 层数（不要求以 `Zero` 收尾，覆盖三种形态）。
+natPrefixDepth : Value -> Int
+natPrefixDepth v = natPrefixGo 100000 v
+
+natPrefixGo : Int -> Value -> Int
+natPrefixGo fuel v = if fuel <= 0 then 100000
+else case v of
+  VCon c args => if c == natSuccCtor then case args of
+    [a] => 1 + natPrefixGo (fuel - 1) a
+    _ => 0
+  else 0
+  VNeutral n => case n of
+    NGlobal c sp => if c == natSuccCtor then case sp of
+      [a] => 1 + natPrefixGo (fuel - 1) a
+      _ => 0
+    else 0
+    _ => 0
+  VApp f a => if isNatLikeHead f then 1 + natPrefixGo (fuel - 1) a else 0
+  _ => 0
+
+-- ---------------------------------------------------------------
+-- D24：conv fuel 派生（按值里的 Nat 链规模）
+-- ---------------------------------------------------------------
+-- 固定 64 对「字面量展开成的深 Nat 链」不够：链每层要走 convFuel → convBoth →
+-- convValueLists 几步，类型索引 ≥20 就会假报 `conv fuel exhausted`。这里只对
+-- **Nat 根值**按链深放大（非 Nat 值仍是 64，热路径成本不变）；上限 `convFuelMax`
+-- 防失控输入。
+-- 浅探：Nat 链深度取「根值」或「直接参数 / 脊实参」里的最大前缀深度。
+-- 失败形态 `Vec (Succ^k Zero) Int` 的根不是 Nat，但索引链就在直接参数里；入口燃料
+-- 必须覆盖索引链的逐层比较（每层约 3–4 fuel，系数 4 足够）。
+convNatNear : Value -> Int
+convNatNear v = if isNatLikeValue v then natPrefixDepth v
+else case v of
+  VCon c args => natPrefixMax args
+  VNeutral n => case n of
+    NGlobal g sp => natPrefixMax sp
+    NVar name lvl sp => natPrefixMax sp
+  VApp f a => if isNatLikeValue a then natPrefixDepth a else 0
+  _ => 0
+
+natPrefixMax : List Value -> Int
+natPrefixMax [] = 0
+natPrefixMax (v :: rest) =
+  let
+    d = if isNatLikeValue v then natPrefixDepth v else 0
+    r = natPrefixMax rest
+  in if d >= r then d else r
+
+convFuelFor : Value -> Value -> Int
+convFuelFor a b =
+  let
+    d = convNatNear a
+    d2 = convNatNear b
+  in convNatFuel (if d >= d2 then d else d2)
+
+convFuelMax : Int
+convFuelMax = 100000
+
+convNatFuel : Int -> Int
+convNatFuel depth = if depth > 24984 then convFuelMax else 64 + 4 * depth
+
+-- Nat 构造子应对：两边都能折成整数时按整数判等 / 不等（O(链深)，不再逐层消耗 fuel）；
+-- 折不动（meta / 中性尾巴）才回落到逐层比较，并在回落点补足 fuel。
+convNatChains : HashMap String Term -> Sols -> Int -> Value -> Value -> List Value -> List Value -> Int -> Result Sols
+convNatChains defs sols depth a b args args2 fuel = case natFoldValue a of
+  Just n => case natFoldValue b of
+    Just m => if n == m then Ok sols else mismatchAt depth a b
+    Nothing => convValueListsFuel (fuel - 1) defs sols depth args args2
+  Nothing => convValueListsFuel (fuel - 1) defs sols depth args args2
+
+-- 中性脊形态的 Nat 链判等（与 `convNatChains` 同一规则，回落到 `convNeutralFuel`）。
+convNatNeutral : Int -> HashMap String Term -> Sols -> Int -> Neutral -> Neutral -> Value -> Value -> Result Sols
+convNatNeutral fuel defs sols depth n1 n2 a b = case natFoldValue a of
+  Just x => case natFoldValue b of
+    Just y => if x == y then Ok sols else mismatchAt depth a b
+    Nothing => convNeutralFuel (fuel - 1) defs sols depth n1 n2 a b
+  Nothing => convNeutralFuel (fuel - 1) defs sols depth n1 n2 a b
+
+-- `VApp` 形态的 Nat 链判等：折不动时回落到逐分量比较（同样补足 fuel）。
+convNatApplied : Int -> HashMap String Term -> Sols -> Int -> Value -> Value -> Value -> Value -> Value -> Value -> Result Sols
+convNatApplied fuel defs sols depth f x f2 x2 a b = case natFoldValue a of
+  Just n => case natFoldValue b of
+    Just m => if n == m then Ok sols else mismatchAt depth a b
+    Nothing =>
+      Vuna.Compiler.Common.bind (convFuel (fuel - 1) defs sols depth f f2)
+        (\sols2 => convFuel (fuel - 1) defs sols2 depth x x2)
+  Nothing =>
+    Vuna.Compiler.Common.bind (convFuel (fuel - 1) defs sols depth f f2)
+      (\sols2 => convFuel (fuel - 1) defs sols2 depth x x2)
 
 isNilList : List a -> Bool
 isNilList [] = True
@@ -105,7 +282,9 @@ else case a of
       in convFuel (fuel - 1) defs sols (depth + 1) (applyClosure clo v) (applyClosure clo2 v)
     _ => etaRightFuel (fuel - 1) defs sols depth name clo b
   VNeutral n => case b of
-    VNeutral n2 => convNeutralFuel (fuel - 1) defs sols depth n n2 a b
+    VNeutral n2 =>
+      if isNatLikeValue a && isNatLikeValue b then convNatNeutral fuel defs sols depth n n2 a b
+      else convNeutralFuel (fuel - 1) defs sols depth n n2 a b
     VLam name2 rig2 clo2 => etaLeftFuel (fuel - 1) defs sols depth a name2 clo2
     _ => mismatchAt depth a b
   VInt n => case b of
@@ -122,11 +301,13 @@ else case a of
     _ => mismatchAt depth a b
   VCon c args => case b of
     VCon c2 args2 =>
-      if c == c2 then convValueListsFuel (fuel - 1) defs sols depth args args2
+      if c == c2 then if isNatCtorName c then convNatChains defs sols depth a b args args2 fuel
+      else convValueListsFuel (fuel - 1) defs sols depth args args2
       else mismatchAt depth a b
     _ => mismatchAt depth a b
   VApp f x => case b of
-    VApp f2 x2 =>
+    VApp f2 x2 => if isNatLikeValue a && isNatLikeValue b then convNatApplied fuel defs sols depth f x f2 x2 a b
+    else
       let
         _ =
           if debugOn then note "vapp: ${showValue a} <> ${showValue b} | x=${showValue x} x2=${showValue x2}"
@@ -289,7 +470,8 @@ patternSpineOf [] = Just []
 patternSpineOf (v :: rest) = case v of
   VNeutral n => case n of
     NVar name level sp => if isNilSpine sp then case patternSpineOf rest of
-      Just more => if memLevel level more then Nothing else Just (Pair name level :: more)
+      Just more =>
+        if memLevel level more then Nothing else Just (Base.List.Cons (Pair name level) more)
       Nothing => Nothing
     else Nothing
     _ => Nothing
@@ -360,7 +542,7 @@ else
   let
     level = depth - 1
     lvl = if level < created then level else 0
-  in VNeutral (NVar "_" lvl []) :: patternEnv created (depth - 1)
+  in Base.List.Cons (VNeutral (NVar "_" lvl [])) (patternEnv created (depth - 1))
 
 patternSolution : List (Pair String Int) -> Int -> Int -> Term -> Value
 patternSolution [] created depth body = VType levelZero
@@ -391,7 +573,7 @@ splitAtVals : Int -> List Value -> Pair (List Value) (List Value)
 splitAtVals 0 xs = Pair [] xs
 splitAtVals n [] = Pair [] []
 splitAtVals n (x :: xs) = case splitAtVals (n - 1) xs of
-  Pair a b => Pair (x :: a) b
+  Pair a b => Pair (Base.List.Cons x a) b
 
 solveMetaHoLegacyFuel : Int -> HashMap String Term -> Sols -> Int -> Int -> List Value -> Value -> Result Sols
 solveMetaHoLegacyFuel fuel defs sols depth m sp rhs = if fuel <= 0 then Err "DT: internal: conv fuel exhausted"
@@ -464,11 +646,11 @@ conv a1 a2 a3 a4 a5 = if debugOn then
     _ =
       note
         "conv-in: ${showTerm (quote a3 a4)} <> ${showTerm (quote a3 a5)} |v: ${showValueAt a3 a4} <> ${showValueAt a3 a5} @${a3}"
-  in convFuel 64 a1 a2 a3 a4 a5
-else convFuel 64 a1 a2 a3 a4 a5
+  in convFuel (convFuelFor a4 a5) a1 a2 a3 a4 a5
+else convFuel (convFuelFor a4 a5) a1 a2 a3 a4 a5
 
 convBoth : HashMap String Term -> Sols -> Int -> Value -> Value -> Result Sols
-convBoth a1 a2 a3 a4 a5 = convBothFuel 64 a1 a2 a3 a4 a5
+convBoth a1 a2 a3 a4 a5 = convBothFuel (convFuelFor a4 a5) a1 a2 a3 a4 a5
 
 convCaseAlts : HashMap String Term -> Sols -> Int -> List VCaseAlt -> List VCaseAlt -> Result Sols
 convCaseAlts a1 a2 a3 a4 a5 = convCaseAltsFuel 64 a1 a2 a3 a4 a5

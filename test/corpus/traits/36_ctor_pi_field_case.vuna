@@ -1,0 +1,12 @@
+-- B42：构造子 telescope 变量被索引合一精化成捕获局部 ctx 的 `VPi` 后，occurs check
+-- 不能只扫 `Closure.env`（env 里恰好有分支作用域内同 level 的变量，会把「捕获局部
+-- 变量」误判成「出现被精化的 level」）。这里 scrutinee 的索引是 `Int -> Int`（Pi 形），
+-- 构造子字段 `g` 的类型也是 `Int -> Int`：合法分支曾报 TC_ImpossibleBranchIndex。
+data Wrap : Type -> Type where
+  MkWrap : {a : Type} -> a -> Wrap a
+
+applyWrap : Wrap (Int -> Int) -> Int
+applyWrap w = case w of MkWrap g => g 20
+
+main : Int
+main = applyWrap (MkWrap (\n => n + 22))

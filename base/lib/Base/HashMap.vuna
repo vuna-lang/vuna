@@ -36,6 +36,7 @@ import Base.Ord
 import Base.Pair
 import Base.Show
 import Base.String
+import Base.Num
 
 -- | 键泛型的持久哈希映射：1024 桶（两层 32 叉 `Array`）结构；构造器不导出。空表用 `[||]` 表示（non-expansive、可泛化），首次 `insert` 才分配 32×32 桶。
 record HashMap k v where

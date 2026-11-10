@@ -62,7 +62,8 @@ check_contains "repl v2 :typeinfo implicit header" "$repl_v2_typeinfo" "隐式�
 check_contains "repl v2 :typeinfo implicit binder" "$repl_v2_typeinfo" "{t0 : Type}"
 check_contains "repl v2 :typeinfo explicit line" "$repl_v2_typeinfo" "id : t0 -> t0"
 check_contains "repl v2 :ti alias" "$repl_v2_typeinfo" "id : t0 -> t0"
-check_contains "repl v2 :type bare operator" "$repl_v2_typeinfo" "+ : Int -> Int -> Int"
+# D23：`+` 是 Base.Num.add 的方法别名，`:type` 显示 Num 约束（不再是 Int 内建值）。
+check_contains "repl v2 :type bare operator" "$repl_v2_typeinfo" "+ : {a : Type} -> (Dict_Base.Num.Num a) -> a -> a -> a"
 check_contains "repl v2 :type do-derived hint" "$repl_v2_typeinfo" "do 派生"
 check_contains "repl v2 :typeinfo docstring" "$repl_v2_typeinfo" "可选值"
 repl_v2_typeinfo_usage=$(printf ':typeinfo\n:q\n' | "$VUNA" repl 2>&1)

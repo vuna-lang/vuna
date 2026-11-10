@@ -87,7 +87,7 @@
   `Module` / `Project` 都携带能力，`Loader.Resolve.checkEffectsBuiltins` 按
   `Vuna.Compiler.Intrinsics` 里每个内建声明的能力位检查。**没有按包名 / 路由的 allowlist**，
   能力声明不可由调用参数伪造；检查覆盖整个源文件（包括未求值的定义），不只看 `main`。
-- F3 P2 起能力声明是**特权包专属**：`[capabilities]` / `[trust]` 只能出现在
+- 能力声明是**特权包专属**：`[capabilities]` / `[trust]` 只能出现在
   `[package] privileged = true` 的 manifest（`vuna-base` / `vuna-compiler` / 根包；测试夹具包
   按需标记）；用户包/ad-hoc 声明即 manifest 错误。宿主层模块由特权包在
   `[privileged] modules = ["Base.IO.Host"]` 里声明（base 的清单），非特权包 import 即

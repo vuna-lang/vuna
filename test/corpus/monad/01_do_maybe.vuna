@@ -12,8 +12,8 @@ instance Monad Maybe where
     Just x => f x
   pure x = Just x
 
-add : Maybe Int
-add = do
+sumDo : Maybe Int
+sumDo = do
   x <- Just 1
   y <- Just 2
   pure (x + y)
@@ -29,4 +29,4 @@ showMaybe m = case m of
   Just n => "Just " ++ strFromInt n
 
 main : String
-main = showMaybe add ++ "/" ++ showMaybe bail
+main = showMaybe sumDo ++ "/" ++ showMaybe bail

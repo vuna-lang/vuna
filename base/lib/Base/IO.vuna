@@ -25,4 +25,5 @@ instance Monad IO where
 
 instance Applicative IO where
   pure x = prim_pureIO x
+  ap mf mx = prim_bindIO mf (\g => prim_bindIO mx (\b => prim_pureIO (g b)))
   liftA2 f ma mb = prim_bindIO ma (\a => prim_bindIO mb (\b => prim_pureIO (f a b)))

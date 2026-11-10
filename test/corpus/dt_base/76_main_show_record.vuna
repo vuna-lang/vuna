@@ -1,0 +1,9 @@
+-- D17：`main` 可以是任意带 `Show` 实例的类型：展示走 `Show` 字典投影
+-- （Elab 收尾合成 `@vuna@main_show : T -> String`），编译产物与 interp 文本一致。
+record Point where
+  x : Int
+  y : Int
+deriving (Show)
+
+main : Point
+main = Point { x = 3, y = 4 }

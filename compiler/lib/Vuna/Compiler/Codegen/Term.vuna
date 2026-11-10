@@ -18,6 +18,7 @@ module Vuna.Compiler.Codegen.Term
 -- case 分支绑定按构造子形状（keep flags）校验后进入 binder 环境。`dtRuntime`
 -- 是产物开头的 OCaml 帮助函数（bi_* / show / dtp_*），`dtListBridge` 只在程序声明了
 -- List 族时生成 int list ↔ 变体族的桥接。
+import Base.List
 import Vuna.Compiler.Common
 import Base.HashMap
 import Vuna.Compiler.Core
@@ -1417,7 +1418,7 @@ genInlineArgsFuel fuel st binders ((Pair arg rig) :: rest) = if fuel <= 0 then E
 else if rigIsErased rig then Err "DT: internal: erased argument in inlined builtin application"
 else Vuna.Compiler.Common.bind (genTermFuel (fuel - 1) st binders arg) (\p => case p of
   Pair text st2 => Vuna.Compiler.Common.bind (genInlineArgsFuel (fuel - 1) st2 binders rest) (\q => case q of
-    Pair texts st3 => Ok (Pair (text :: texts) st3)
+    Pair texts st3 => Ok (Pair (Base.List.Cons text texts) st3)
   )
 )
 
@@ -1433,7 +1434,7 @@ genConcatPartTexts fuel st binders [] =
 genConcatPartTexts fuel st binders (t :: rest) = if fuel <= 0 then Err "DT: internal: codegen fuel exhausted"
 else Vuna.Compiler.Common.bind (genTermFuel (fuel - 1) st binders t) (\p => case p of
   Pair text st2 => Vuna.Compiler.Common.bind (genConcatPartTexts (fuel - 1) st2 binders rest) (\q => case q of
-    Pair texts st3 => Ok (Pair (text :: texts) st3)
+    Pair texts st3 => Ok (Pair (Base.List.Cons text texts) st3)
   )
 )
 
@@ -1457,7 +1458,8 @@ alignCtorArgs label (keep :: flags) [] =
   else alignCtorArgs label flags []
 alignCtorArgs label (keep :: flags) ((Pair arg rig) :: rest) =
   if keep then if rigIsErased rig then Err "DT: internal: constructor ${label}: runtime field marked erased"
-  else Vuna.Compiler.Common.bind (alignCtorArgs label flags rest) (\ts => Ok (Pair arg rig :: ts))
+  else Vuna.Compiler.Common.bind (alignCtorArgs label flags rest)
+    (\ts => Ok (Base.List.Cons (Pair arg rig) ts))
   else if rigIsErased rig then alignCtorArgs label flags rest
   else alignCtorArgs label flags (Pair arg rig :: rest)
 
@@ -1469,7 +1471,7 @@ genConArgsFuel fuel st binders [] (_ :: _) =
 genConArgsFuel fuel st binders (opq :: opqs) ((Pair arg rig) :: rest) = if fuel <= 0 then Err "DT: internal: codegen fuel exhausted"
 else Vuna.Compiler.Common.bind (genTermFuel (fuel - 1) st binders arg) (\p => case p of
   Pair text st2 => Vuna.Compiler.Common.bind (genConArgsFuel (fuel - 1) st2 binders opqs rest) (\q => case q of
-    Pair texts st3 => Ok (Pair (ctorArgText opq text :: texts) st3)
+    Pair texts st3 => Ok (Pair (Base.List.Cons (ctorArgText opq text) texts) st3)
   )
 )
 
@@ -1527,6 +1529,8 @@ else case lookupPair c st.gsCtors of
       )
       )
 
+-- | 构造子应用的收尾：去装箱族转交 `genUnboxedConAppFinish`，其余按族取 OCaml 构造子
+-- 引用并拼上实参文本，返回表达式与更新后的生成状态。
 genConAppFinish : GenSt -> String -> String -> List Bool -> List Bool -> List String -> Result (Pair String GenSt)
 genConAppFinish st family c flags opqs argTexts = if memName family st.gsUnboxed then genUnboxedConAppFinish st flags opqs argTexts
 else
@@ -1534,6 +1538,8 @@ else
     r = genCtorRef st family c
   in Ok (Pair (conAppText (firstOf r) argTexts) (secondOf r))
 
+-- | 去装箱构造子的应用收尾：要求恰好一个运行时实参，按构造子的 opaque 标志把实参
+-- 包成 `ctorArgText`（不需要 OCaml 变体构造）。
 genUnboxedConAppFinish : GenSt -> List Bool -> List Bool -> List String -> Result (Pair String GenSt)
 genUnboxedConAppFinish st flags opqs [] =
   Err "DT: internal: unboxed constructor application has no runtime argument"
@@ -1554,6 +1560,8 @@ armPatternText cname [] = cname
 armPatternText cname pats = "${cname} (${joinWith ", " pats})"
 
 -- 去装箱族的 case：单构造子 + 单运行时字段，等价于 `let` 绑定字段。
+-- | 若整个 case 可降级成 `let`，返回它的首分支：首分支构造子已知且属去装箱族，
+-- 其余分支全是 catch-all（去装箱族只有一个构造子）。
 unboxedCaseAlt : GenSt -> List CaseAlt -> Maybe CaseAlt
 unboxedCaseAlt st [] = Nothing
 unboxedCaseAlt st (alt :: rest) = case caseAltName alt of
@@ -1565,40 +1573,48 @@ unboxedCaseAlt st (alt :: rest) = case caseAltName alt of
     Nothing => Nothing
 
 -- unboxed 族只有一个构造子：构造子分支之后的 catch-all 分支不可达，可安全丢弃。
+-- | 分支列表是否全部是 catch-all（无构造子名）；空列表视为真。
 allCatchAll : List CaseAlt -> Bool
 allCatchAll [] = True
 allCatchAll (alt :: rest) = if caseAltName alt == "" then allCatchAll rest else False
 
+-- | 去装箱 case 的降级入口：取出分支的构造子名后交给 `genUnboxedCaseByName`。
 genUnboxedCaseFuel : Int -> GenSt -> List (Pair String Rig) -> Term -> CaseAlt -> Result (Pair String GenSt)
 genUnboxedCaseFuel fuel st outer scrut alt = if fuel <= 0 then Err "DT: internal: codegen fuel exhausted"
 else case caseAltName alt of
   "" => Err "DT: internal: unboxed case arm has no constructor"
   name => genUnboxedCaseByName (fuel - 1) st outer name scrut alt
 
+-- | 查构造子的运行时字段形状（keep/opaque 标志），再转交 `genUnboxedCaseWithFlags`。
 genUnboxedCaseByName : Int -> GenSt -> List (Pair String Rig) -> String -> Term -> CaseAlt -> Result (Pair String GenSt)
 genUnboxedCaseByName fuel st outer name scrut alt = if fuel <= 0 then Err "DT: internal: codegen fuel exhausted"
 else case lookupPair name st.gsCtorShapes of
   Nothing => Err "DT: internal: no shape for constructor ${name}"
   Just flags => genUnboxedCaseWithFlags (fuel - 1) st outer name scrut alt flags
 
+-- | 先生成 scrutinee 的 OCaml 文本，再带着它转交 `genUnboxedCaseWithScrut`。
 genUnboxedCaseWithFlags : Int -> GenSt -> List (Pair String Rig) -> String -> Term -> CaseAlt -> List Bool -> Result (Pair String GenSt)
 genUnboxedCaseWithFlags fuel st outer name scrut alt flags = if fuel <= 0 then Err "DT: internal: codegen fuel exhausted"
 else Vuna.Compiler.Common.bind (genTermFuel (fuel - 1) st outer scrut) (\p => case p of
   Pair scrutText st1 => genUnboxedCaseWithScrut (fuel - 1) st1 outer name alt flags scrutText
 )
 
+-- | 按构造子的字段标志为分支 binder 建 AltEnv（擦除字段丢弃），再生成分支体
+-- 并组装成 `let`。
 genUnboxedCaseWithScrut : Int -> GenSt -> List (Pair String Rig) -> String -> CaseAlt -> List Bool -> String -> Result (Pair String GenSt)
 genUnboxedCaseWithScrut fuel st outer name alt flags scrutText =
   if fuel <= 0 then Err "DT: internal: codegen fuel exhausted"
   else Vuna.Compiler.Common.bind (altEnvChecked st name outer (caseAltBinders alt) flags)
     (\bound => genUnboxedCaseWithBound (fuel - 1) st name alt bound scrutText)
 
+-- | 在已绑定的 AltEnv 下生成分支体文本，交给 `unboxedCaseLet` 拼成 `let` 表达式。
 genUnboxedCaseWithBound : Int -> GenSt -> String -> CaseAlt -> AltEnv -> String -> Result (Pair String GenSt)
 genUnboxedCaseWithBound fuel st name alt bound scrutText = if fuel <= 0 then Err "DT: internal: codegen fuel exhausted"
 else Vuna.Compiler.Common.bind (genTermFuel (fuel - 1) (aeSt bound) (aeEnv bound) (caseAltBody alt)) (\p => case p of
   Pair bodyText st2 => unboxedCaseLet scrutText bound bodyText st2
 )
 
+-- | 把分支体包成 `let <binder> = <scrut> in <body>`；无运行时 binder 时用 `_`。
 unboxedCaseLet : String -> AltEnv -> String -> GenSt -> Result (Pair String GenSt)
 unboxedCaseLet scrutText bound bodyText st2 = case aePats bound of
   [] => Ok (Pair "(let _ = ${scrutText} in ${bodyText})" st2)
@@ -1741,6 +1757,8 @@ else case unboxedCaseAlt st alts of
   Just alt => genUnboxedCaseFuel (fuel - 1) st binders scrut alt
   Nothing => genGenericCaseFuel (fuel - 1) st binders scrut alts
 
+-- | 通用 case 降级：生成 scrutinee 与各分支的 `match` 臂；没有 catch-all 时补一条
+-- `| _ -> failwith` 兜底，保证 OCaml match 完整。
 genGenericCaseFuel : Int -> GenSt -> List (Pair String Rig) -> Term -> List CaseAlt -> Result (Pair String GenSt)
 genGenericCaseFuel fuel st binders scrut alts = if fuel <= 0 then Err "DT: internal: codegen fuel exhausted"
 else Vuna.Compiler.Common.bind (genTermFuel (fuel - 1) st binders scrut) (\p => case p of
@@ -1828,7 +1846,7 @@ genGroupBodies : GenSt -> Bool -> List DtDef -> Result (Pair (List String) GenSt
 genGroupBodies st isRec [] = Ok (Pair [] st)
 genGroupBodies st isRec (d :: rest) = Vuna.Compiler.Common.bind (genGroupDef st isRec d) (\p => case p of
   Pair def st2 => Vuna.Compiler.Common.bind (genGroupBodies st2 isRec rest) (\q => case q of
-    Pair defs st3 => Ok (Pair (def :: defs) st3)
+    Pair defs st3 => Ok (Pair (Base.List.Cons def defs) st3)
   )
 )
 
@@ -1879,18 +1897,19 @@ genGroups : HashMap String (List String) -> GenSt -> List (List DtDef) -> Result
 genGroups adj st [] = Ok (Pair [] st)
 genGroups adj st (g :: rest) = Vuna.Compiler.Common.bind (genGroup adj st g) (\p => case p of
   Pair text st2 => Vuna.Compiler.Common.bind (genGroups adj st2 rest) (\q => case q of
-    Pair texts st3 => Ok (Pair (text :: texts) st3)
+    Pair texts st3 => Ok (Pair (Base.List.Cons text texts) st3)
   )
 )
 
--- main 的展示方式（类型 force 后必须是 Int/String/Bool）。
--- 按 canonical 符号识别：Int / String 是 primitive 类型，Bool 是 `Base.Bool.Bool`。
+-- main 的展示方式：内建类型用 runtime 展示函数；其它类型用 Elab 收尾合成的
+-- `@vuna@main_show : T -> String`（D17，见 `Elab.Driver.synthMainShow`）。
+-- 按 canonical 符号识别：Int / String / Float 是 primitive 类型，Bool / Nat 是 base 的 data。
 mainShow : List (Pair String Term) -> Term -> Result (Pair String String)
 mainShow table tyTerm = case force (Base.HashMap.fromList table) solsEmpty defaultFuel (eval [] tyTerm) of
   VNeutral n => case n of
     NGlobal g [] => mainShowForName g
-    _ => mainShowErr
-  _ => mainShowErr
+    _ => mainShowSynth
+  _ => mainShowSynth
 
 -- 把 `IO a` 拆成内层类型 `a`；不是 **base 的 canonical IO** 则 Nothing（M27：完整符号身份）。
 ioResultTy : Term -> Maybe Term
@@ -1905,10 +1924,11 @@ mainShowForName g =
   else if g == natTypeName then Ok (Pair "string_of_int" "int")
   else if g == strTypeName then Ok (Pair "dt_show_string" "string")
   else if g == floatTypeName then Ok (Pair "string_of_float" "float")
-  else if g == boolTypeName then Ok (Pair "dt_show_bool" "bool") else mainShowErr
+  else if g == boolTypeName then Ok (Pair "dt_show_bool" "bool") else mainShowSynth
 
-mainShowErr : Result (Pair String String)
-mainShowErr = cgErr0 MainReturnType
+-- 非内建类型：Elab 已保证合成定义存在（缺 `Show T` 在精化期报 TC 诊断）。
+mainShowSynth : Result (Pair String String)
+mainShowSynth = Ok (Pair (valueName mainShowDefName) "show")
 
 -- main 钩子：`mainExpr` 是运行时求 main 值的表达式（普通 main 直接是 `v_main`；
 -- main : IO a 则是 `v_main 0`），按类型 `tyTerm` 选展示函数。

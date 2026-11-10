@@ -1,0 +1,10 @@
+-- B41：Array 的 Show / Eq 实例（落点 Base.Array；实例体经 toList 复用 List）。
+import Base.Array
+
+main : String
+main =
+  let
+    a = Base.Array.fromList [1, 2, 3]
+    b = Base.Array.fromList [1, 2, 3]
+    c = Base.Array.fromList [1, 2, 4]
+  in show a ++ (if a == b then "/eq" else "/ne") ++ (if a == c then "/eq" else "/ne")

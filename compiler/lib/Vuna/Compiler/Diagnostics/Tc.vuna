@@ -124,6 +124,8 @@ data TcErr : Nat -> Type where
   UnhandledEffects : String -> TcErr (Succ Zero)
   -- F3 B：release 构建里的 debug-only 构造（assert / todo）。
   DebugConstructInRelease : String -> TcErr (Succ Zero)
+  -- D17：入口 `main` 不能带参数（结果类型拆掉 `IO` 后是函数类型即 arity 错误）。
+  MainArity : String -> TcErr (Succ Zero)
   -- arity 2
   AmbiguousCtor : String -> String -> TcErr (Succ (Succ Zero))
   AmbiguousInstance : String -> String -> TcErr (Succ (Succ Zero))
@@ -208,6 +210,7 @@ tcCode (LinearTopLevel _) = "TC_LinearTopLevel"
 tcCode (LinearCaptureEscapes _) = "TC_LinearCaptureEscapes"
 tcCode (UnhandledEffects _) = "TC_UnhandledEffects"
 tcCode (DebugConstructInRelease _) = "TC_DebugConstructInRelease"
+tcCode (MainArity _) = "TC_MainArity"
 tcCode (TypeMismatchCaseVars _) = "TC_TypeMismatchCaseVars"
 tcCode (DuplicateInstance _) = "TC_DuplicateInstance"
 tcCode (InstanceContextMissing _) = "TC_InstanceContextMissing"
@@ -376,6 +379,7 @@ tcTemplate (UnhandledEffects _) =
   "row must be Nil here, but the action still has unhandled effect(s): <0>; handle them first"
 tcTemplate (DebugConstructInRelease _) =
   "`<0>` is only available in debug builds; remove it before a release build (--release)"
+tcTemplate (MainArity _) = "main must not take parameters (got <0>)"
 
 -- ---------------------------------------------------------------
 -- 文档遍历源（同构 List；`gen-errors` 遍历渲染；不承载 arity——arity 在构造子类型里）
@@ -535,10 +539,12 @@ tcChunk11 =
     TcEntry (tcCode (LinearCaptureEscapes "")) (tcTemplate (LinearCaptureEscapes "")) "λ 捕获线性值并可能逃逸"
   ]
 
+-- | 效果与调试构造相关的诊断条目（效果行未处理、release 里的 debug-only 构造）。
 tcChunk12 : List TcEntry
 tcChunk12 =
   [ TcEntry (tcCode (UnhandledEffects "")) (tcTemplate (UnhandledEffects "")) "效果运行入口仍有未处理效应（行必须为 Nil）",
-    TcEntry (tcCode (DebugConstructInRelease "")) (tcTemplate (DebugConstructInRelease "")) "release 构建里使用 assert / todo 等 debug-only 构造"
+    TcEntry (tcCode (DebugConstructInRelease "")) (tcTemplate (DebugConstructInRelease "")) "release 构建里使用 assert / todo 等 debug-only 构造",
+    TcEntry (tcCode (MainArity "")) (tcTemplate (MainArity "")) "main 带参数（入口必须零参）"
   ]
 
 tcAll : List TcEntry

@@ -1,0 +1,14 @@
+-- D45：参数化 data 的构造子首字段用 named / linear binder（`(1 x : a)`）时，
+-- `hasFamParams` 不能把字段 binder 误当「族参数已写」——族参数 `{a : Type}` 仍要
+-- 由 `prependFamParams` 前置（否则 `a` 未知，报 TC_UnknownName）。
+data Box a : Type where
+  MkBox : (1 x : a) -> Box a
+
+mk : Int -> Box Int
+mk n = MkBox n
+
+unbox : Box Int -> Int
+unbox b = case b of MkBox x => x
+
+main : Int
+main = unbox (mk 42)

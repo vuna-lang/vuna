@@ -30,7 +30,6 @@ data CgErr : Nat -> Type where
   DependencyCycle : CgErr Zero
   InterpCannotExecuteEffects : CgErr Zero
   MainNotValue : CgErr Zero
-  MainReturnType : CgErr Zero
   NoMain : CgErr Zero
   TypeUsedAtRuntime : CgErr Zero
   -- arity 1
@@ -45,7 +44,6 @@ cgCode : {n : Nat} -> CgErr n -> String
 cgCode DependencyCycle = "CG_DependencyCycle"
 cgCode InterpCannotExecuteEffects = "CG_InterpCannotExecuteEffects"
 cgCode MainNotValue = "CG_MainNotValue"
-cgCode MainReturnType = "CG_MainReturnType"
 cgCode NoMain = "CG_NoMain"
 cgCode TypeUsedAtRuntime = "CG_TypeUsedAtRuntime"
 cgCode (AxiomAtRuntime _) = "CG_AxiomAtRuntime"
@@ -60,7 +58,6 @@ cgTemplate DependencyCycle = "dependency cycle between runtime definitions"
 cgTemplate InterpCannotExecuteEffects =
   "interp cannot execute effects (main : IO a); compile and run the program instead"
 cgTemplate MainNotValue = "main does not reduce to a value"
-cgTemplate MainReturnType = "main must return Int, Nat, String or Bool"
 cgTemplate NoMain = "no main definition"
 cgTemplate TypeUsedAtRuntime = "a type is used at runtime (M13 limitation)"
 cgTemplate (AxiomAtRuntime _) =
@@ -86,7 +83,6 @@ cgChunk0 =
   [ CgEntry (cgCode DependencyCycle) (cgTemplate DependencyCycle) "运行时定义间依赖成环",
     CgEntry (cgCode InterpCannotExecuteEffects) (cgTemplate InterpCannotExecuteEffects) "interp 不能执行效果",
     CgEntry (cgCode MainNotValue) (cgTemplate MainNotValue) "main 未归约到值",
-    CgEntry (cgCode MainReturnType) (cgTemplate MainReturnType) "main 返回类型受限",
     CgEntry (cgCode NoMain) (cgTemplate NoMain) "入口缺少 main 定义",
     CgEntry (cgCode TypeUsedAtRuntime) (cgTemplate TypeUsedAtRuntime) "类型被运行时使用（M13 限制）",
     CgEntry (cgCode (AxiomAtRuntime "")) (cgTemplate (AxiomAtRuntime "")) "axiom 被运行时使用（它没有运行时定义体）",

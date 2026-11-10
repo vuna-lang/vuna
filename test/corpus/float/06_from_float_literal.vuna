@@ -1,6 +1,4 @@
--- FromFloat：单字段包装类型可用字面量 + deriving。
-import Base.Float
-
+-- FromFloat（随 Prelude 导出）：单字段包装类型可用字面量 + deriving。
 data Money : Type where
   MkMoney : Float -> Money
 deriving (FromFloat)

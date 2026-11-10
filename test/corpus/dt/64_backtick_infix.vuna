@@ -1,12 +1,12 @@
 -- M31.3：反引号中缀 `` a `f` b `` ≡ `f a b`。名字是普通函数；fixity 按名字查表，
--- 没有声明时按 Haskell 约定 9 左结合（`1 `add` 2 `add` 3` = `(1+2)+3`）。
-add : Int -> Int -> Int
-add x y = x + y
+-- 没有声明时按 Haskell 约定 9 左结合（`1 `addFn` 2 `addFn` 3` = `(1+2)+3`）。
+addFn : Int -> Int -> Int
+addFn x y = x + y
 
-sub : Int -> Int -> Int
-sub x y = x - y
+subFn : Int -> Int -> Int
+subFn x y = x - y
 
--- 括号里的反引号链与普通中缀混用：`1 `add` 2 + 3` 在同一棵链里按优先级重排
+-- 括号里的反引号链与普通中缀混用：`1 `addFn` 2 + 3` 在同一棵链里按优先级重排
 -- （反引号无声明 → 9 左，高于 `+` 的 6）。
 main : Int
-main = (3 `add` 4) + (1 `add` 2 `add` 3) + (10 `sub` 3) + (1 `add` 2 + 3)
+main = (3 `addFn` 4) + (1 `addFn` 2 `addFn` 3) + (10 `subFn` 3) + (1 `addFn` 2 + 3)

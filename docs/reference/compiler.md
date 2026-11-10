@@ -23,7 +23,7 @@
 | `Intrinsics` | **内建声明唯一真源**：名字/签名形状（`IType`）/arity/归约标签（`IntrinsicOp`）/能力（`Capability`）/runtime 名/用户可见性；内置身份按声明 symbol（`IO` 内建；`Base.Bool.Bool` / `Base.List.List` / `Base.Nat.Nat`） | `findIntrinsic`、`intrinsicRuntime`、`intrinsicCapability`、`parseCapability` |
 | `Frontend.Ast` | 语法类型与 AST helper（`Expr`/`Decl`/`Pat`/`Ctor`/`Import`/`ModDecl`/`TraitMethod`） | `clausesFor`、`funArity`、`declNames` |
 | `Frontend.Lexer` | 字符游标、token 与位置；注释单独 lex 出来供 formatter 使用 | `lexSource`、`lexComments` |
-| `Frontend.Parser` | offside layout parser → AST + imports；`where` 块与绑定签名行；方法签名带 span；M32 起顶层签名可带约束 ctx（`C a =>`） | `parseSource`、`parseExpressionSource` |
+| `Frontend.Parser` | offside layout parser → AST + imports；`where` 块与绑定签名行；方法签名带 span；顶层签名可带约束 ctx（`C a =>`） | `parseSource`、`parseExpressionSource` |
 | `Frontend.Toml` | TOML 子集解析器 | `parseToml`、`lookupEntry` |
 | `Frontend.Manifest` | `vuna.toml` 的语义模型与结构校验（`[package]` 只有 `name`；不做 I/O） | `parseManifest`、`validateManifest` |
 | `Packages.Pkg` | 包 / workspace 解析层：manifest 图、依赖 DAG、**每个文件的包上下文**（最近 manifest + 依赖闭包）、base 定位（不碰 Loader / CLI） | `loadPackage`、`workspacePackages`、`contextForFile`、`contextForDir`、`locateBase` |
@@ -36,16 +36,16 @@
 | `Core.Eval` | beta 求值、delta 展开、prelude 原语归约、深度正规化与 quote | `eval`、`force`、`applyClosure`、`normalize`、`quote` |
 | `Core.Conv` | 定义性相等（beta + delta + eta）与元变量求解（Miller pattern + 创建深度就地检查；非 pattern 报 `TC_CannotSolveHigherOrder`） | `conv`、`convBoth`、`solveMeta` |
 | `Elab`（门面） | DT 精化器稳定入口；按 `Elab.*` 前缀选择重导出 `Types`/`Meta`/`Data`/`Trait`/`Driver` 的公开名 | `Elab.Driver.elabProgramFull`、`goalsOfProgram` |
-| `Elab.Sig` | 签名工具：trait 类参数 kind 推断 + 顶层签名自由名量化（M32：约束 ctx 与类型一起参与自由名扫描与 kind 推断）；量化 banned 集按模块作用域计算，`qualifiedBannedTbl` 一次建表 + per-sig O(1) 查 | `quantifyTopSig`、`quantifyTopSigCtxCached`、`qualifiedBannedTbl`、`classParamKind` |
+| `Elab.Sig` | 签名工具：trait 类参数 kind 推断 + 顶层签名自由名量化（约束 ctx 与类型一起参与自由名扫描与 kind 推断）；量化 banned 集按模块作用域计算，`qualifiedBannedTbl` 一次建表 + per-sig O(1) 查 | `quantifyTopSig`、`quantifyTopSigCtxCached`、`qualifiedBannedTbl`、`classParamKind` |
 | `Elab.Types` | Elab 的数据定义与共享状态：`DtDef`/`DtAxiom`/`DtCtor`/`DtData`/`DtGoal`/`DtClass`/`DtInst`/`DtProgram` 与 `Ctx`；`Ec` 带 ctor/defVal 索引缓存，`DtProgram` 带 `defVals`。**`Ec.deftbl` 的语义是「名字 → 定义体」**（delta 展开的唯一来源） | `dtDataName`、`dtDefType`、`dtDefBody`、`dtProgDefs`、`dtProgDefVals` |
 | `Elab.Meta` | 共享工具层：值/构造子引用、`convEc`、元变量创建深度与统一 `zonkTerm`、擦除判据（`isTypeDomain`/`binderRig`）、命名空间查询（`typeLookup`/`valueLookup`）、canonical Bool 的 `TBool` 表示 | `convEc`、`zonkTerm`、`binderRig`、`typeLookup`、`dictTypeName` |
 | `Elab.Case` | case 规范形：索引合一（`unifyIdx`）、scrutinee 反射、单一可达性判据（`BranchVerdict`/`allCtorsUnsatisfiable`）、空族与冗余/不可达诊断 | `unifyIdx`、`reflectScrutinee`、`checkCoverage`、`isEmptyFamilyValue` |
 | `Elab.Dict` | 字典编码的表示与实例搜索：字典类型/实例头识别、`conv` 头匹配、实例搜索（递归解 ctx / 约束实例）、`==`/比较运算符特化（Int/String 内建或 Eq/Ord 字典；无泛型结构比较兜底） | `searchInstance`、`dictFamilyNameOf`、`cmpRuntimeName`、`deferEqDict` |
 | `Elab.Term` | 项的双向检查（与 case 规则互递归的核心）：`inferE`/`checkE`/应用/隐式插入/类型检查 | `inferE`、`checkE`、`checkApp`、`checkType` |
 | `Elab.Data` | `data` 声明与构造子/索引擦除：`elabCtor`、`elabDataHead(s)`、`elabDataBodies`、擦除候选；校验 kind 结果层级与构造子字段 sort | `elabDatas`、`ctorFieldTerms`、`checkCtorFieldSorts` |
-| `Elab.Trait` | trait/instance 声明与实例体：类参数 kind、方法投影、实例头检查（重复/相干性；无命名实例、支持约束实例 ctx）、方法体精化；M32 起实例 ctx 与顶层签名 ctx 共用 `elabConstraintDomains`（含类参数 kind 校验），隐式字典 binder 按 RigΩ 绑定（运行时保留、可多次使用）；方法签名带 span，实例名=单类前缀+完整 head 名 | `checkInstanceHeads`、`elabInstanceBodies`、`elabConstraintDomains`、`instanceName` |
+| `Elab.Trait` | trait/instance 声明与实例体：类参数 kind、方法投影、实例头检查（重复/相干性；无命名实例、支持约束实例 ctx）、方法体精化；实例 ctx 与顶层签名 ctx 共用 `elabConstraintDomains`（含类参数 kind 校验），隐式字典 binder 按 RigΩ 绑定（运行时保留、可多次使用）；方法签名带 span，实例名=单类前缀+完整 head 名 | `checkInstanceHeads`、`elabInstanceBodies`、`elabConstraintDomains`、`instanceName` |
 | `Elab.InstName` | 实例名生成规则（单类前缀 + 完整 head 名）的唯一实现 | `instanceName` |
-| `Elab.Driver` | 精化入口与程序组装：签名（M32：约束 ctx → 隐式字典 binder）→ data/trait/instance → 定义体（声明的字典目标先解到 ctx binder，剩余才提升）→ zonk/终止性检查 → `DtProgram`；洞目标（含洞名）。M40 把「到定义体/实例体完成」的 `ElabCore` 与严格收尾拆开：`goalsOfProgramTolerant` 只读 core 的 goals，未解洞也能给目标+上下文（供 `vuna goal` / LSP）。接口摘要路径用 `elabProgramFullWithAux`（起始 Ec 由依赖摘要注入；termAux 只喂终止性分析） | `Elab.Driver.elabProgramFull`、`elabProgramFullWithAux`、`goalsOfProgram`、`goalsOfProgramTolerant`、`dtEvalExprIn` |
+| `Elab.Driver` | 精化入口与程序组装：签名（约束 ctx → 隐式字典 binder）→ data/trait/instance → 定义体（声明的字典目标先解到 ctx binder，剩余才提升）→ zonk/终止性检查 → `DtProgram`；洞目标（含洞名）。`goalsOfProgramTolerant` 与严格收尾拆开：只读 core 的 goals，未解洞也能给目标+上下文（供 `vuna goal` / LSP）。接口摘要路径用 `elabProgramFullWithAux`（起始 Ec 由依赖摘要注入；termAux 只喂终止性分析） | `Elab.Driver.elabProgramFull`、`elabProgramFullWithAux`、`goalsOfProgram`、`goalsOfProgramTolerant`、`dtEvalExprIn` |
 | `Elab.Termination` | 终止性检查：调用图 + SCC，结构下降/守卫 Int 判据（无包级豁免）。`checkTerminationDeclsWith` 允许把依赖包声明只作为 SCT 上下文、只报告本包函数的失败 | `checkTerminationDecls`、`checkTerminationDeclsWith` |
 | `Elab.Prelude` | 把 `Intrinsics` 表翻译成 DT prelude globals（签名）；没有第二份名字/签名表 | `preludeGlobals`、`builtinTyName`、`cmpBuiltinTyName` |
 | `Elab.Match` | 多 clause 模式矩阵降级：构造子列 → `case`、字面量列 → `if` 链（纯 Ast→Ast） | `multiToExpr`、`buildColumnExpr` |
@@ -54,7 +54,7 @@
 | `Codegen`（门面） | DT 擦除 codegen 的稳定入口；重导出 `Codegen.Assembly` 与 `Codegen.Split` | `checkDtProgram`、`generateDtSplitProgram` |
 | `Codegen.Decl` | OCaml 名字编码（sanitize/前缀/保留字）+ 跨单元引用限定（`Unit.name`）+ 变体类型声明；构造子字段形状 keep flags 与不透明字段 flags（`ctorOpaqueFlagsOf`）的实际消费点；内置身份按完整符号（canonical Bool 族不进运行时变体） | `ctorOcamlName`、`qualValueText`、`qualCtorText`、`qualTypeText`、`genTypeDecls`、`ctorKeepFlags`、`ctorOpaqueFlagsOf` |
 | `Codegen.Erase` | 擦除检查、de Bruijn 作用域/名字护栏、依赖分析与 SCC 分组；axiom 强制进类型级分区，运行时使用报 `CG_AxiomAtRuntime` | `checkAllErasure`、`checkAllDefScopes`、`ensureUniqueOcamlNames`、`checkNoAxiomRuntime` |
-| `Codegen.Term` | 项 → OCaml（擦除驱动）+ DT 运行时前缀（`bi_*`、`dtp_*`、IO 桥接）+ M38 定义位置表/异常报告器；全局名 → runtime 映射消费 `Intrinsics` | `dtRuntime`、`dtRuntimeWith`、`dtDefLocTable`、`genDtHook`、`genGroups` |
+| `Codegen.Term` | 项 → OCaml（擦除驱动）+ DT 运行时前缀（`bi_*`、`dtp_*`、IO 桥接）+ 定义位置表/异常报告器；全局名 → runtime 映射消费 `Intrinsics` | `dtRuntime`、`dtRuntimeWith`、`dtDefLocTable`、`genDtHook`、`genGroups` |
 | `Codegen.Assembly` | 同一份 `DtProgram` 的装配与检查入口 | `prepareDtProgram`、`genUnitText`、`mainHook`、`checkDtProgram` |
 | `Codegen.Split` | **唯一** codegen 生成器：逐模块 split 的声明归属表与分文件装配 | `generateDtSplitProgram` |
 | `Driver.Split` | 输出文件模型与构建脚本生成：`SplitFile`、依赖序、按内容哈希增量的 `build.sh` | `SplitFile`、`buildScript`、`writeSplitFiles`、`writeSplitFilesIfChanged` |
@@ -124,9 +124,9 @@ elab 状态**（没有跨包 `sols` / `next` / dict goals）。
 
 粒度分两层：
 
-- **包级摘要**（M34.5 起）：`Driver.Cache.CachedProgram`，一个包一份 datas / defs / globals /
+- **包级摘要**：`Driver.Cache.CachedProgram`，一个包一份 datas / defs / globals /
   insts / classes；
-- **模块级接口**（M34.5 S1/S2/S3）：`Driver.Iface.ModuleIface`，每模块一个
+- **模块级接口**：`Driver.Iface.ModuleIface`，每模块一个
   `<源文件相对路径>.iface`（默认就在源文件旁，与源码同布局）+ 包级 `.vuna-iface`
   （S3；写侧只重写接口哈希变化的模块），依赖侧按模块装载、逐项校验。`VUNA_IFACE_DIR`
   可把整棵树镜像到外部根。设计、字段、失效判定见 [cache.md](cache.md)。
@@ -196,7 +196,7 @@ fixities / imports / capabilities、`miSource`、`miIfaceHash`、`miDepHashes`�
 构造变体。`Base.Nat.Nat` 同样不进运行时变体：零/后继、字面量与 `case` 降成 OCaml `int`
 与 `if`/`let`（`Codegen.Decl.runtimeDatas` 过滤族；`Codegen.Term` 折叠 Succ 链、降级 Nat case），
 算术走 `bi_nat*`。运行时表示由 `Core.rigIsErased` 判定（0 擦除，1/ω 保留）；
-**例外（M39 / D27）**：运行时类型在 OCaml 里不可命名时（卡住的类型族应用，如 `res op`）
+**例外（D27）**：运行时类型在 OCaml 里不可命名时（卡住的类型族应用，如 `res op`）
 整个字段用不透明值 `Obj.t`、构造子实参插 `Obj.magic`（判据 `ctorOpaqueFlagsOf`）；表达式
 位置的 binder 使用由精化器插隐藏 cast `prim_erase`（求值期恒等消去）。见
 [effects.md](effects.md) §5。`Elab.Usage` 另做整程序用量检查（QTT 0/1/ω，见
@@ -232,8 +232,8 @@ fixities / imports / capabilities、`miSource`、`miIfaceHash`、`miDepHashes`�
 
 1. `Vuna_runtime.ml`：`dtRuntimeWith`（`Codegen.Term`）= 运行时常量 + `dt_def_locs`
    定义位置表（mangled 值名 → `定义名 (相对路径:行)`，路径已按模块根/包目录归一，
-   保证同输入产物与 rotation 的确定性）+ `dt_report_exn` 未捕获异常报告器（M38，
-   见 [debugging.md](debugging.md)）；
+   保证同输入产物与 rotation 的确定性）+ `dt_report_exn` 未捕获异常报告器
+   （见 [debugging.md](debugging.md)）；
 2. 每个源码模块一个 `<Module>.ml`（OCaml 编译单元名 = 模块名点转 `_d`，如
    `Vuna_dCompiler_dFrontend_dParser.ml`；拓扑序）。文件头**只** `open Vuna_runtime`，
    没有 open 链；跨单元引用（值 `v_*` / 构造子 `C_*` / 类型 `t_*`）一律渲染成 OCaml
@@ -241,7 +241,7 @@ fixities / imports / capabilities、`miSource`、`miIfaceHash`、`miDepHashes`�
    `Base_dList.C_Base_dList_dList_Cons`），同单元内仍是裸名；`List` 桥接放在声明 `List`
    族的模块文件里；
 3. `Main.ml`：entry decls 的 datas + defs + `main` 钩子（入口文件里的 `data` 也必须发进来）；
-   首行是 `Printexc.record_backtrace` 序言，钩子在 `try` 内执行入口动作（M38）；
+   首行是 `Printexc.record_backtrace` 序言，钩子在 `try` 内执行入口动作；
 4. `build.sh`：不在生成器内，由 `Driver.Compile.compileToDir` 用 `Driver.Split.buildScript`
    写盘；`vuna build` 随后执行它。
 
@@ -264,7 +264,7 @@ fixities / imports / capabilities、`miSource`、`miIfaceHash`、`miDepHashes`�
 `checkResolvedModules`、entryDecls 与归属校验、`ensureUniqueOcamlNames`）见
 [core.md](core.md) §7。
 
-**零成本表示（M42）**：`Codegen.Decl.genTypeDeclsWith` 对单构造子单运行时字段的族生成
+**零成本表示**：`Codegen.Decl.genTypeDeclsWith` 对单构造子单运行时字段的族生成
 OCaml 类型别名而不是变体（如 `type t_UserId = int`、`and t_Wrap = int`；字段不透明 /
 函数 / 未知名字段保持装箱，类型参数与别名实参按字段实际引用的参数渲染）。对应的构造子
 应用在 `Codegen.Term` 里生成恒等（`MkWrap 1` → `1`），构造子 `case` 生成 `let` 绑定

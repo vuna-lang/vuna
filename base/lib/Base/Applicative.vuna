@@ -1,28 +1,33 @@
-module Base.Applicative (Applicative(..), ap) where
+module Base.Applicative (Applicative(..)) where
 
--- Base.Applicative：`Applicative` trait（`pure` / `liftA2`）与派生 `ap`。
+-- Base.Applicative：`Applicative` trait（`pure` / `ap` / `liftA2` 三个方法）。
 --
 -- M41 起 `pure` 从 `Base.Monad` 移到本模块：`do` 只依赖 `bind`，而 `pure` 是
 -- Applicative 的能力。`Base.Monad` 为方便用户重导出本模块（`import Base.Monad`
--- 仍能看到 `pure` / `liftA2` / `ap`）。
+-- 仍能看到 `pure` / `ap` / `liftA2`）。
 --
--- 最小定义用 `liftA2` 而不是 `ap`：当前精化器对实例方法签名里「高阶类参数套函数
--- 类型」`f (a -> b)` 的实例体误报 `TC_ImpossibleBranchIndex`（见 debt）；`liftA2`
--- 的函数参数不在 `f` 之下，实例体可以正常写。`ap` 用 `liftA2` 派生，语义等价。
+-- M43 W1（B42 修复）起 `ap : f (a -> b) -> f a -> f b` **可以**作为实例方法：
+-- 精化器现在能检查实例方法签名里「高阶类参数套函数类型」的实例体（`case` 不再
+-- 误报 `TC_ImpossibleBranchIndex`）。
+--
+-- `liftA2` 仍是 **trait 方法**，不是由 `ap` 派生的顶层函数。原因在 codegen：字典
+-- 投影在生成的 OCaml 里是无类型标注的元组字段，OCaml 侧推断出
+-- `val dliftA2 : ('a, 'b -> 'c, 'c -> 'd -> 'c) t_Dict -> 'b -> 'd -> 'd -> 'c`
+-- 这类签名——`pure` 的返回类型与 `ap` 的首参被错误统一；派生体
+-- `liftA2 f x y = ap (ap (pure f) x) y` 会在调用点直接 OCaml 类型错误
+-- （`Base_dMaybe.ml` 的 Traversable `mapM` 首当其冲：`Error: This expression
+-- should not be a function, the expected type is 'a t_Base_dMaybe`）。等字典/投影
+-- 带上类型标注、能在 OCaml 侧恢复 `f a` / `f (a -> b)` 的关系后，再考虑把
+-- `liftA2` 改回派生。
 --
 -- 没有父类（`Functor` / `Monad` 不自动提供 Applicative 实例）：每个 monad 类型
--- 需要同时声明 `Functor` / `Applicative` / `Monad` 三个实例。
--- | 应用函子 trait：`pure` 提升纯值，`liftA2` 在动作上应用二元函数（`ap` 由 `liftA2` 派生）。
+-- 需要同时声明 `Functor` / `Applicative` / `Monad` 三个实例，并显式实现本 trait
+-- 的三个方法。
+-- | 应用函子 trait：`pure` 提升纯值，`ap` 在动作上应用函数，`liftA2` 在动作上应用二元函数。
 trait Applicative f where
   -- | 把纯值提升为动作。
   pure : a -> f a
-  -- | 提升二元函数并在两个动作上应用。
+  -- | 应用动作里的函数：把 `f (a -> b)` 应用到 `f a` 得到 `f b`。
+  ap : f (a -> b) -> f a -> f b
+  -- | 提升二元函数并在两个动作上应用（由各实例显式实现；不作派生，见文件头注释）。
   liftA2 : (a -> b -> c) -> f a -> f b -> f c
-
--- | `ap` 的内部辅助：给 `liftA2` 一个多态函数参数，使 lambda 参数类型可推断。
-_apply : (a -> b) -> a -> b
-_apply f x = f x
-
--- | 应用动作里的函数：`ap f x = liftA2 (\g, y => g y) f x` 的等价形式（经 `_apply` 让推断稳定）。
-ap : Applicative f => f (a -> b) -> f a -> f b
-ap mf mx = liftA2 _apply mf mx
