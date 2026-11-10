@@ -74,13 +74,15 @@ $ vuna search --type "a -> a"
 | `CG_` | Codegen / Driver / Dt 诊断 | `Diagnostics/Cg.vuna` |
 | `LX_` | 词法诊断 | `Frontend/Diagnostics.vuna` |
 | `PS_` | 语法诊断 | 同上 |
+| `RN_` | 名字解析（import/export/限定名/构造子/类型名） | `Diagnostics/Rn.vuna` |
 | `LD_` | Loader / 包 / 能力诊断 | `Loader/Diagnostics.vuna` |
+| `IC_` | 编译器内部错误（不变量/燃料耗尽；internal compiler error，exit 2） | `Diagnostics/Ic.vuna` |
 | `LN_` | lint 规则 | `lib/Vuna/Lint/Diagnostics.vuna` |
 | `FX_` | 错误修复规则（从可修复 `LN_` 推导，`FX_` + 规则名去 `-`） | `lib/Vuna/Lint/Diagnostics.vuna` |
 
-约定：符号**语义稳定、只增不删**；同语义消息**共享**一个符号；**一个码只承载一种语义**。
+约定：符号**语义稳定**；同语义消息**共享**一个符号；**一个码只承载一种语义**。预发布阶段允许删除/重命名码（同步目录与夹具）。
 
-不分配符号的三类（仍走裸字符串）：`DT: internal:`（编译器内部不变量）、**错误包装器**
+内部不变量已收进 `IC_`（`icFuel`/`icInternal`）；**工具/构建/清单错误**仍用 `err`（phase = Tool，exit 2，不进目录）。**错误包装器**
 （给下层错误加上下文，如 `in \`<def>\`: <inner>`、`json: <inner>`）、**工具链 CLI 错误**
 （`no such symbol` / `file not found` / `json: ...` 等，不属编译器诊断）。
 

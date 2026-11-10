@@ -333,4 +333,20 @@ in
     ];
     script = ./vscode-ext.sh;
   };
+
+  # 诊断门禁：compiler 内源码诊断必须走域码（TC_/CG_/RN_/LD_/IC_...）；位置渲染只在
+  # Diag.Format/Source。工具/构建/清单错误（exit 2）是显式白名单。
+  diag-raw = mkCheck {
+    name = "vuna-diag-raw";
+    srcs = [
+      ../../compiler
+      ../../lib
+      ../../nix/checks/diag-raw.sh
+    ];
+    nativeBuildInputs = [
+      pkgs.bash
+      pkgs.coreutils
+    ];
+    script = ./diag-raw.sh;
+  };
 }

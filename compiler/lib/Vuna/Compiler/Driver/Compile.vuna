@@ -1354,14 +1354,14 @@ ifaceHashOfName (m :: rest) name =
 
 ifaceSelfTest : String -> List ModuleIface -> Check Int
 ifaceSelfTest dir modules = case readPackageIface dir ifaceCompilerTag of
-  Nothing => err "iface selftest: written iface cannot be read back"
-  Just pi2 => if not (packageIfaceValid pi2) then err "iface selftest: package iface invalid"
-  else if pi2.piCompiler /= ifaceCompilerTag then err "iface selftest: compiler tag mismatch"
-  else if pi2.piSchema /= ifaceSchemaTag then err "iface selftest: schema mismatch"
-  else if length pi2.piModules /= length modules then err "iface selftest: module count mismatch"
-  else if not (sameNameSet (moduleNamesOf pi2.piModules) (moduleNamesOf modules)) then err "iface selftest: module name set mismatch"
-  else if not (sameIfaceHashes pi2.piModules modules) then err "iface selftest: iface hash mismatch"
-  else if not (allSelfHashesOk pi2.piModules) then err "iface selftest: payload hash mismatch"
+  Nothing => icInternal "iface selftest: written iface cannot be read back"
+  Just pi2 => if not (packageIfaceValid pi2) then icInternal "iface selftest: package iface invalid"
+  else if pi2.piCompiler /= ifaceCompilerTag then icInternal "iface selftest: compiler tag mismatch"
+  else if pi2.piSchema /= ifaceSchemaTag then icInternal "iface selftest: schema mismatch"
+  else if length pi2.piModules /= length modules then icInternal "iface selftest: module count mismatch"
+  else if not (sameNameSet (moduleNamesOf pi2.piModules) (moduleNamesOf modules)) then icInternal "iface selftest: module name set mismatch"
+  else if not (sameIfaceHashes pi2.piModules modules) then icInternal "iface selftest: iface hash mismatch"
+  else if not (allSelfHashesOk pi2.piModules) then icInternal "iface selftest: payload hash mismatch"
   else
     let
       _ = note "iface-selftest=ok modules=${length modules}"

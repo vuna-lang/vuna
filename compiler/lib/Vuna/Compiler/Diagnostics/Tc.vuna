@@ -10,6 +10,7 @@ module Vuna.Compiler.Diagnostics.Tc
   , tcErr1NoLoc
   , tcErr2
   , tcErr2NoLoc
+  , tcErr3
   , tcMsg
   , tcTemplate
   , tcTypeMismatch
@@ -149,6 +150,14 @@ data TcErr : Nat -> Type where
   DerivingViaUnboxedRequired : TcErr Zero
   -- R1（records-v2）：`transparent record` 声明不满足「擦除后恰好一个运行时字段」（含递归）。
   ReprTransparentInvalid : TcErr Zero
+  RecordDuplicateField : TcErr Zero
+  RecordMissingField : String -> TcErr (Succ Zero)
+  RecordUnknownField : String -> TcErr (Succ Zero)
+  UnknownRecord : String -> TcErr (Succ Zero)
+  DeriveCtorFieldCount : String -> TcErr (Succ Zero)
+  DeriveFieldType : String -> String -> String -> TcErr (Succ (Succ (Succ Zero)))
+  DeriveSingleCtor : String -> TcErr (Succ Zero)
+  DeriveUnsupportedKind : String -> TcErr (Succ Zero)
 
 -- ---------------------------------------------------------------
 -- code 派生（唯一真源；`gen-errors` 与 throw 都用它）
@@ -257,6 +266,14 @@ tcCode (TypeMismatchCaseBranch _ _) = "TC_TypeMismatchCaseBranch"
 tcCode (WhereNeedsSig _ _) = "TC_WhereNeedsSig"
 tcCode DerivingViaUnboxedRequired = "TC_DerivingViaUnboxedRequired"
 tcCode ReprTransparentInvalid = "TC_ReprTransparentInvalid"
+tcCode RecordDuplicateField = "TC_RecordDuplicateField"
+tcCode (RecordMissingField _) = "TC_RecordMissingField"
+tcCode (RecordUnknownField _) = "TC_RecordUnknownField"
+tcCode (UnknownRecord _) = "TC_UnknownRecord"
+tcCode (DeriveCtorFieldCount _) = "TC_DeriveCtorFieldCount"
+tcCode (DeriveFieldType _ _ _) = "TC_DeriveFieldType"
+tcCode (DeriveSingleCtor _) = "TC_DeriveSingleCtor"
+tcCode (DeriveUnsupportedKind _) = "TC_DeriveUnsupportedKind"
 
 -- ---------------------------------------------------------------
 -- 模板（构造子 payload，占位符 `<0>`/`<1>`；已去掉旧 `DT: ` 前缀）
@@ -373,6 +390,15 @@ tcTemplate DerivingViaUnboxedRequired =
   "deriving via field requires a zero-cost single-field wrapper (auto-unboxed)"
 tcTemplate ReprTransparentInvalid =
   "declared transparent requires exactly one non-recursive runtime field"
+tcTemplate RecordDuplicateField = "duplicate field"
+tcTemplate (RecordMissingField _) = "missing field <0>"
+tcTemplate (RecordUnknownField _) = "unknown field <0>"
+tcTemplate (UnknownRecord _) = "unknown record: <0>"
+tcTemplate (DeriveCtorFieldCount _) = "cannot derive <0>: constructor must have exactly one field"
+tcTemplate (DeriveFieldType _ _ _) = "cannot derive <0>: field type must be <1> (got <2>)"
+tcTemplate (DeriveSingleCtor _) = "cannot derive <0>: type must have exactly one constructor"
+tcTemplate (DeriveUnsupportedKind _) =
+  "cannot derive `<0>` (supported: Show, Eq, Ord, Hashable, FromString, FromInt, FromFloat)"
 tcTemplate (LinearUnused _) =
   "linear binder `<0>` must be used exactly once at runtime, but it is never used"
 tcTemplate (LinearOverused _) =
@@ -537,7 +563,15 @@ tcChunk10 : List TcEntry
 tcChunk10 =
   [ TcEntry (tcCode (WhereNeedsSig "" "")) (tcTemplate (WhereNeedsSig "" "")) "where 绑定缺类型签名",
     TcEntry (tcCode DerivingViaUnboxedRequired) (tcTemplate DerivingViaUnboxedRequired) "deriving via field 需要自动去装箱的单字段包装",
-    TcEntry (tcCode ReprTransparentInvalid) (tcTemplate ReprTransparentInvalid) "transparent record 要求擦除后恰好一个（非递归）运行时字段"
+    TcEntry (tcCode ReprTransparentInvalid) (tcTemplate ReprTransparentInvalid) "transparent record 要求擦除后恰好一个（非递归）运行时字段",
+    TcEntry (tcCode RecordDuplicateField) (tcTemplate RecordDuplicateField) "record 字段重复",
+    TcEntry (tcCode (RecordMissingField "")) (tcTemplate (RecordMissingField "")) "record 缺字段",
+    TcEntry (tcCode (RecordUnknownField "")) (tcTemplate (RecordUnknownField "")) "record 未知字段",
+    TcEntry (tcCode (UnknownRecord "")) (tcTemplate (UnknownRecord "")) "未知 record",
+    TcEntry (tcCode (DeriveCtorFieldCount "")) (tcTemplate (DeriveCtorFieldCount "")) "deriving 需要单字段构造子",
+    TcEntry (tcCode (DeriveFieldType "" "" "")) (tcTemplate (DeriveFieldType "" "" "")) "deriving 字段类型不符",
+    TcEntry (tcCode (DeriveSingleCtor "")) (tcTemplate (DeriveSingleCtor "")) "deriving 需要单构造子",
+    TcEntry (tcCode (DeriveUnsupportedKind "")) (tcTemplate (DeriveUnsupportedKind "")) "不支持该 deriving 类型"
   ]
 
 tcChunk11 : List TcEntry
@@ -619,3 +653,6 @@ tcTypeMismatchNoLoc : String -> String -> Check a
 tcTypeMismatchNoLoc expected found =
   ErrC
     (withField (FieldFound found) (withField (FieldExpected expected) (tcMsg (TypeMismatch expected found) [expected, found])))
+
+tcErr3 : Span -> TcErr (Succ (Succ (Succ Zero))) -> String -> String -> String -> Check a
+tcErr3 sp e a0 a1 a2 = tcErr sp e [a0, a1, a2]

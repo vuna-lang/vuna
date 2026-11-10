@@ -1,0 +1,177 @@
+-- | RN_ 域：名字解析（import/export/限定名/构造子/类型名）诊断。
+module Vuna.Compiler.Diagnostics.Rn
+  ( RnEntry(..)
+  , RnErr(..)
+  , rnAll
+  , rnAt0
+  , rnAt1
+  , rnAt2
+  , rnCode
+  , rnErr
+  , rnMsg
+  , rnNoLoc0
+  , rnNoLoc1
+  , rnNoLoc2
+  , rnTemplate
+  ) where
+
+-- Vuna.Compiler.Diagnostics.Rn：名字解析阶段（phase = Resolve，category = Names）。
+--
+-- 这些错误发生在 import/export/限定名/构造子解析，语义是「名字不可用/不唯一」，
+-- 与模块图加载（LD_）和类型检查（TC_）分开。消息体与旧实现逐字一致（旧 label 前缀
+-- 由 span/上下文承载，不再拼进消息）。
+import Vuna.Compiler.Common
+import Vuna.Compiler.Diagnostics.Common
+import Base.Nat
+import Base.Vec
+
+data RnErr : Nat -> Type where
+  -- arity 0
+  DuplicateImport : RnErr Zero
+  InstanceBodyForm : RnErr Zero
+  -- arity 1
+  AmbiguousConstructorExport : String -> RnErr (Succ Zero)
+  AmbiguousModule : String -> String -> RnErr (Succ (Succ Zero))
+  CannotExportUnknownName : String -> RnErr (Succ Zero)
+  DuplicateExport : String -> RnErr (Succ Zero)
+  DuplicateModuleAlias : String -> RnErr (Succ Zero)
+  InvalidDottedName : String -> RnErr (Succ Zero)
+  InvalidModuleAlias : String -> RnErr (Succ Zero)
+  InvalidTopLevelName : String -> RnErr (Succ Zero)
+  InvalidTypeExpression : String -> RnErr (Succ Zero)
+  InvalidVariableName : String -> RnErr (Succ Zero)
+  ModuleAliasConflict : String -> RnErr (Succ Zero)
+  ModuleNameMismatch : String -> RnErr (Succ Zero)
+  ModuleNotImported : String -> RnErr (Succ Zero)
+  TypeHasNoConstructor : String -> String -> RnErr (Succ (Succ Zero))
+  UnknownConstructor : String -> RnErr (Succ Zero)
+  UnknownInterface : String -> RnErr (Succ Zero)
+  UnknownType : String -> RnErr (Succ Zero)
+  UnknownCapability : String -> String -> RnErr (Succ (Succ Zero))
+  -- arity 2
+  AmbiguousConstructor : String -> String -> RnErr (Succ (Succ Zero))
+  AmbiguousConstructorInExport : String -> String -> RnErr (Succ (Succ Zero))
+  ConstructorNotExported : String -> String -> RnErr (Succ (Succ Zero))
+  TypeNotExported : String -> String -> RnErr (Succ (Succ Zero))
+  UnknownKind : String -> String -> RnErr (Succ (Succ Zero))
+  ValueNotExported : String -> String -> RnErr (Succ (Succ Zero))
+
+rnCode : {n : Nat} -> RnErr n -> String
+rnCode DuplicateImport = "RN_DuplicateImport"
+rnCode InstanceBodyForm = "RN_InstanceBodyForm"
+rnCode (AmbiguousConstructorExport _) = "RN_AmbiguousConstructorExport"
+rnCode (AmbiguousModule _ _) = "RN_AmbiguousModule"
+rnCode (CannotExportUnknownName _) = "RN_CannotExportUnknownName"
+rnCode (DuplicateExport _) = "RN_DuplicateExport"
+rnCode (DuplicateModuleAlias _) = "RN_DuplicateModuleAlias"
+rnCode (InvalidDottedName _) = "RN_InvalidDottedName"
+rnCode (InvalidModuleAlias _) = "RN_InvalidModuleAlias"
+rnCode (InvalidTopLevelName _) = "RN_InvalidTopLevelName"
+rnCode (InvalidTypeExpression _) = "RN_InvalidTypeExpression"
+rnCode (InvalidVariableName _) = "RN_InvalidVariableName"
+rnCode (ModuleAliasConflict _) = "RN_ModuleAliasConflict"
+rnCode (ModuleNameMismatch _) = "RN_ModuleNameMismatch"
+rnCode (ModuleNotImported _) = "RN_ModuleNotImported"
+rnCode (TypeHasNoConstructor _ _) = "RN_TypeHasNoConstructor"
+rnCode (UnknownConstructor _) = "RN_UnknownConstructor"
+rnCode (UnknownInterface _) = "RN_UnknownInterface"
+rnCode (UnknownType _) = "RN_UnknownType"
+rnCode (UnknownCapability _ _) = "RN_UnknownCapability"
+rnCode (AmbiguousConstructor _ _) = "RN_AmbiguousConstructor"
+rnCode (AmbiguousConstructorInExport _ _) = "RN_AmbiguousConstructorInExport"
+rnCode (ConstructorNotExported _ _) = "RN_ConstructorNotExported"
+rnCode (TypeNotExported _ _) = "RN_TypeNotExported"
+rnCode (UnknownKind _ _) = "RN_UnknownKind"
+rnCode (ValueNotExported _ _) = "RN_ValueNotExported"
+
+rnTemplate : {n : Nat} -> RnErr n -> String
+rnTemplate DuplicateImport = "duplicate import"
+rnTemplate InstanceBodyForm = "instance body may only contain method signatures/definitions"
+rnTemplate (AmbiguousConstructorExport _) =
+  "ambiguous constructor export <0> (write T(..) or qualify it)"
+rnTemplate (AmbiguousModule _ _) = "ambiguous module <0> (found in: <1>)"
+rnTemplate (CannotExportUnknownName _) = "cannot export unknown name <0>"
+rnTemplate (DuplicateExport _) = "duplicate export <0>"
+rnTemplate (DuplicateModuleAlias _) = "duplicate module alias <0>"
+rnTemplate (InvalidDottedName _) = "invalid dotted name <0>"
+rnTemplate (InvalidModuleAlias _) = "invalid module alias <0>"
+rnTemplate (InvalidTopLevelName _) = "invalid top-level name <0>"
+rnTemplate (InvalidTypeExpression _) = "invalid type expression (<0>)"
+rnTemplate (InvalidVariableName _) = "invalid variable name <0>"
+rnTemplate (ModuleAliasConflict _) = "module alias <0> conflicts with an imported module"
+rnTemplate (ModuleNameMismatch _) = "module name mismatch: source declares <0>"
+rnTemplate (ModuleNotImported _) = "module <0> is not imported"
+rnTemplate (TypeHasNoConstructor _ _) = "type <0> has no constructor <1>"
+rnTemplate (UnknownConstructor _) = "unknown constructor <0>"
+rnTemplate (UnknownInterface _) = "unknown interface <0>"
+rnTemplate (UnknownType _) = "unknown type <0>"
+rnTemplate (UnknownCapability _ _) = "unknown capability \"<0>\" (known: <1>)"
+rnTemplate (AmbiguousConstructor _ _) = "ambiguous constructor <0> (qualify it as <1>)"
+rnTemplate (AmbiguousConstructorInExport _ _) =
+  "ambiguous constructor <0> in <1>; export T(..) instead"
+rnTemplate (ConstructorNotExported _ _) = "constructor <0> is not exported by <1>"
+rnTemplate (TypeNotExported _ _) = "type <0> is not exported by <1>"
+rnTemplate (UnknownKind _ _) = "unknown <0> <1>"
+rnTemplate (ValueNotExported _ _) = "<0> is not exported by <1>"
+
+rnMsg : {n : Nat} -> RnErr n -> Vec n String -> Diagnostic
+rnMsg e args = diagNoLoc SevError PhResolve CatNames (rnCode e) (diagBody (rnTemplate e) args)
+
+rnErr : Span -> {n : Nat} -> RnErr n -> Vec n String -> Check a
+rnErr sp e args = ErrC (withLabel (Label (Just sp) "" LabelPrimary Nothing) (rnMsg e args))
+
+rnNoLoc : {n : Nat} -> RnErr n -> Vec n String -> Check a
+rnNoLoc e args = ErrC (rnMsg e args)
+
+rnAt0 : Span -> RnErr Zero -> Check a
+rnAt0 sp e = rnErr sp e []
+
+rnAt1 : Span -> RnErr (Succ Zero) -> String -> Check a
+rnAt1 sp e a0 = rnErr sp e [a0]
+
+rnAt2 : Span -> RnErr (Succ (Succ Zero)) -> String -> String -> Check a
+rnAt2 sp e a0 a1 = rnErr sp e [a0, a1]
+
+rnNoLoc0 : RnErr Zero -> Check a
+rnNoLoc0 e = rnNoLoc e []
+
+rnNoLoc1 : RnErr (Succ Zero) -> String -> Check a
+rnNoLoc1 e a0 = rnNoLoc e [a0]
+
+rnNoLoc2 : RnErr (Succ (Succ Zero)) -> String -> String -> Check a
+rnNoLoc2 e a0 a1 = rnNoLoc e [a0, a1]
+
+record RnEntry where
+  rnEntryCode : String
+  rnEntryTemplate : String
+  rnEntryDesc : String
+
+rnAll : List RnEntry
+rnAll =
+  [ RnEntry (rnCode DuplicateImport) (rnTemplate DuplicateImport) "重复 import",
+    RnEntry (rnCode InstanceBodyForm) (rnTemplate InstanceBodyForm) "instance 体只允许方法签名/定义",
+    RnEntry (rnCode (AmbiguousConstructorExport "")) (rnTemplate (AmbiguousConstructorExport "")) "导出的构造子歧义",
+    RnEntry (rnCode (AmbiguousModule "" "")) (rnTemplate (AmbiguousModule "" "")) "模块名歧义",
+    RnEntry (rnCode (CannotExportUnknownName "")) (rnTemplate (CannotExportUnknownName "")) "导出未知名",
+    RnEntry (rnCode (DuplicateExport "")) (rnTemplate (DuplicateExport "")) "重复导出",
+    RnEntry (rnCode (DuplicateModuleAlias "")) (rnTemplate (DuplicateModuleAlias "")) "重复模块别名",
+    RnEntry (rnCode (InvalidDottedName "")) (rnTemplate (InvalidDottedName "")) "非法限定名",
+    RnEntry (rnCode (InvalidModuleAlias "")) (rnTemplate (InvalidModuleAlias "")) "非法模块别名",
+    RnEntry (rnCode (InvalidTopLevelName "")) (rnTemplate (InvalidTopLevelName "")) "非法顶层名",
+    RnEntry (rnCode (InvalidTypeExpression "")) (rnTemplate (InvalidTypeExpression "")) "非法类型表达式",
+    RnEntry (rnCode (InvalidVariableName "")) (rnTemplate (InvalidVariableName "")) "非法变量名",
+    RnEntry (rnCode (ModuleAliasConflict "")) (rnTemplate (ModuleAliasConflict "")) "模块别名与 import 冲突",
+    RnEntry (rnCode (ModuleNameMismatch "")) (rnTemplate (ModuleNameMismatch "")) "模块名不匹配",
+    RnEntry (rnCode (ModuleNotImported "")) (rnTemplate (ModuleNotImported "")) "模块未被 import",
+    RnEntry (rnCode (TypeHasNoConstructor "" "")) (rnTemplate (TypeHasNoConstructor "" "")) "类型没有该构造子",
+    RnEntry (rnCode (UnknownConstructor "")) (rnTemplate (UnknownConstructor "")) "未知构造子",
+    RnEntry (rnCode (UnknownInterface "")) (rnTemplate (UnknownInterface "")) "未知接口",
+    RnEntry (rnCode (UnknownType "")) (rnTemplate (UnknownType "")) "未知类型",
+    RnEntry (rnCode (UnknownCapability "" "")) (rnTemplate (UnknownCapability "" "")) "未知能力",
+    RnEntry (rnCode (AmbiguousConstructor "" "")) (rnTemplate (AmbiguousConstructor "" "")) "构造子歧义",
+    RnEntry (rnCode (AmbiguousConstructorInExport "" "")) (rnTemplate (AmbiguousConstructorInExport "" "")) "导出中构造子歧义",
+    RnEntry (rnCode (ConstructorNotExported "" "")) (rnTemplate (ConstructorNotExported "" "")) "构造子未被导出",
+    RnEntry (rnCode (TypeNotExported "" "")) (rnTemplate (TypeNotExported "" "")) "类型未被导出",
+    RnEntry (rnCode (UnknownKind "" "")) (rnTemplate (UnknownKind "" "")) "未知名字种类",
+    RnEntry (rnCode (ValueNotExported "" "")) (rnTemplate (ValueNotExported "" "")) "值未被导出"
+  ]

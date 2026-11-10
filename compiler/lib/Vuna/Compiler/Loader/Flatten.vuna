@@ -27,6 +27,7 @@ import Base.IO.Host
 import Vuna.Compiler.CacheFormat
 import Vuna.Compiler.Loader.Diagnostics
 import Vuna.Compiler.Common
+import Vuna.Compiler.Diagnostics.Rn
 import Base.HashMap
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Frontend.Parser
@@ -380,7 +381,7 @@ ownOrImportedValueRef modules prefix decls imports name = case findOwnFn name de
 ownOrImportedValueRef2 : List Module -> String -> List Decl -> List Import -> String -> Check (Maybe ExportRef)
 ownOrImportedValueRef2 modules prefix decls imports name = case ownCtorEntriesNamed prefix name decls of
   [e] => OkC (Just (ExportRef "ctor" e.target e.parent))
-  _ :: _ :: _ => err "${prefix}: ambiguous constructor export ${name} (write T(..) or qualify it)"
+  _ :: _ :: _ => rnNoLoc1 (AmbiguousConstructorExport name) name
   [] => Vuna.Compiler.Common.bind (modulesExportingValue modules imports name) (\pairs => case pairs of
     [] => OkC Nothing
     _ => Vuna.Compiler.Common.bind (unifyEntryPairs prefix "name" name pairs) (\p => let
@@ -413,7 +414,7 @@ exportBare modules prefix decls imports name sp = case splitLastDot (splitOnDot 
     [] => if isPrivateName name then ErrC (privateExportMsg prefix sp name)
     else Vuna.Compiler.Common.bind (ownOrImportedTypeRef modules prefix decls imports name) (\tr => Vuna.Compiler.Common.bind (ownOrImportedValueRef modules prefix decls imports name) (\vr => case tr of
       Nothing => case vr of
-        Nothing => err "${prefix}: ${showSpanLoc sp}: cannot export unknown name ${name}"
+        Nothing => rnAt1 sp (CannotExportUnknownName name) name
         Just _ => OkC (refEntryList name vr)
       Just _ => case vr of
         Nothing => OkC (refEntryList name tr)
@@ -426,12 +427,12 @@ exportBare modules prefix decls imports name sp = case splitLastDot (splitOnDot 
       let
         mprefix = joinDots revPrefix
       in case findImportPrefix imports mprefix of
-        Nothing => err "${prefix}: ${showSpanLoc sp}: module ${mprefix} is not imported"
+        Nothing => rnAt1 sp (ModuleNotImported mprefix) mprefix
         Just m => exportSelective modules prefix m base name sp
 
 -- | 自动补注（M41 新增导出）：exportSelective。
 exportSelective : List Module -> String -> String -> String -> String -> Span -> Check (List ExportEntry)
-exportSelective modules prefix m base name sp = Vuna.Compiler.Common.bind (exportsOf modules m) (\es => if length (findExportCtors es base) > 1 then err "${prefix}: ${showSpanLoc sp}: ambiguous constructor ${base} in ${m}; export T(..) instead"
+exportSelective modules prefix m base name sp = Vuna.Compiler.Common.bind (exportsOf modules m) (\es => if length (findExportCtors es base) > 1 then rnAt2 sp (AmbiguousConstructorInExport base m) base m
 else case findExportValue es base of
   Just e => case findExportType es base of
     Just te =>
@@ -441,7 +442,7 @@ else case findExportValue es base of
       OkC [ExportEntry { kind = e.kind, public = base, target = e.target, parent = e.parent }]
   Nothing => case findExportType es base of
     Just te => OkC [ExportEntry { kind = "type", public = base, target = te.target, parent = "" }]
-    Nothing => err "${prefix}: ${showSpanLoc sp}: cannot export unknown name ${name}"
+    Nothing => rnAt1 sp (CannotExportUnknownName name) name
 )
 
 exportTypeAll : List Module -> String -> List Decl -> List Import -> String -> Span -> Check (List ExportEntry)
@@ -451,7 +452,7 @@ exportTypeAll modules prefix decls imports name sp = case splitLastDot (splitOnD
     else case ownTypeEntries prefix decls name of
       Just entries => OkC entries
       Nothing => Vuna.Compiler.Common.bind (modulesExportingType modules imports name) (\pairs => case pairs of
-        [] => err "${prefix}: ${showSpanLoc sp}: cannot export unknown name ${name}"
+        [] => rnAt1 sp (CannotExportUnknownName name) name
         _ => Vuna.Compiler.Common.bind (unifyEntryPairs prefix "type" name pairs) (\p => let
           m = firstOf p
         in let
@@ -464,17 +465,17 @@ exportTypeAll modules prefix decls imports name sp = case splitLastDot (splitOnD
       let
         mprefix = joinDots revPrefix
       in case findImportPrefix imports mprefix of
-        Nothing => err "${prefix}: ${showSpanLoc sp}: module ${mprefix} is not imported"
+        Nothing => rnAt1 sp (ModuleNotImported mprefix) mprefix
         Just m => Vuna.Compiler.Common.bind (exportsOf modules m) (\es => case findExportType es base of
           Just e =>
             OkC
               (Base.List.Cons ExportEntry { kind = "type", public = base, target = e.target, parent = "" } (ctorEntriesOfType e.target es))
-          Nothing => err "${prefix}: ${showSpanLoc sp}: type ${base} is not exported by ${m}"
+          Nothing => rnAt2 sp (TypeNotExported base m) base m
         )
 
 exportItemEntries : List Module -> String -> List Decl -> List Import -> ExportItem -> Check (List ExportEntry)
 exportItemEntries modules prefix decls imports (XModule name sp) = case findImportPrefix imports name of
-  Nothing => err "${prefix}: ${showSpanLoc sp}: module ${name} is not imported"
+  Nothing => rnAt1 sp (ModuleNotImported name) name
   Just m => exportsOf modules m
 exportItemEntries modules prefix decls imports (XTypeAll name sp) =
   exportTypeAll modules prefix decls imports name sp
@@ -518,7 +519,7 @@ dedupeByFullKey (e :: rest) seen acc =
 checkExportDuplicates : String -> List ExportEntry -> Check (List a)
 checkExportDuplicates prefix [] = OkC []
 checkExportDuplicates prefix (e :: rest) =
-  if hasConflictingExport e rest then err "${prefix}: duplicate export ${e.public}"
+  if hasConflictingExport e rest then rnNoLoc1 (DuplicateExport e.public) e.public
   else checkExportDuplicates prefix rest
 
 -- 显式导出列表里「同一个名字写了两遍」是错误（`module M (foo, foo)`）；
@@ -549,7 +550,7 @@ exportItemName (XModule n sp) = n
 
 checkExportItems : String -> List ExportItem -> Check Int
 checkExportItems prefix items = case duplicateExportItem items of
-  Just n => err "${prefix}: duplicate export ${n}"
+  Just n => rnNoLoc1 (DuplicateExport n) n
   Nothing => OkC 0
 
 explicitExports : List Module -> String -> List Decl -> List Import -> List ExportItem -> Check (List ExportEntry)
@@ -569,8 +570,7 @@ exportItemsAll modules prefix decls imports (item :: rest) =
 validateModuleHeader : String -> Maybe ModDecl -> Check (List a)
 validateModuleHeader label Nothing = OkC []
 validateModuleHeader label (Just (ModDecl declared hasList items sp)) =
-  if declared == label then OkC []
-  else err "${label}: ${showSpanLoc sp}: module name mismatch: source declares ${declared}"
+  if declared == label then OkC [] else rnAt1 sp (ModuleNameMismatch declared) declared
 
 computeExports : List Module -> String -> Maybe ModDecl -> List Import -> List Decl -> Check (List ExportEntry)
 computeExports modules prefix Nothing imports decls = OkC (implicitExports prefix decls)

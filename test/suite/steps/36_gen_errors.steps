@@ -8,6 +8,8 @@ file-contains: $TMPDIR/errroot/docs/.generated/errors.md ## 代码生成（CG_�
 file-contains: $TMPDIR/errroot/docs/.generated/errors.md ## Lint 规则（LN_）
 file-contains: $TMPDIR/errroot/docs/.generated/errors.md ## 修复规则（FX_）
 file-contains: $TMPDIR/errroot/docs/.generated/errors.md ## 内部错误（IC_）
+file-contains: $TMPDIR/errroot/docs/.generated/errors.md ## 名字解析（RN_）
+file-contains: $TMPDIR/errroot/docs/.generated/errors.md RN_UnknownType
 file-contains: $TMPDIR/errroot/docs/.generated/errors.md IC_FuelExhausted
 file-contains: $TMPDIR/errroot/docs/.generated/errors.md TC_NotExhaustive
 file-contains: $TMPDIR/errroot/docs/.generated/errors.md CG_NoMain

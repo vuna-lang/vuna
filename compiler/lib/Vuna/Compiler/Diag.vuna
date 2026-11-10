@@ -23,6 +23,7 @@ module Vuna.Compiler.Diag
   , err
   , icFuel
   , icInternal
+  , onErrDiag
   , rawAt
   , rawNoLoc
   , withContext
@@ -376,3 +377,8 @@ icInternal : String -> Check a
 icInternal what =
   ErrC
     (markInternal "invariant" what (diagNoLoc SevError PhInternal CatInternal "IC_InvariantViolated" "internal invariant violated: ${what}"))
+
+-- | 在 `Check` 的 ErrC 载荷上做变换（保留 OkC 与错误语义）。
+onErrDiag : (Diagnostic -> Diagnostic) -> Check a -> Check a
+onErrDiag f (ErrC d) = ErrC (f d)
+onErrDiag f (OkC x) = OkC x

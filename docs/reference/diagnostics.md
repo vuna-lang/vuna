@@ -113,6 +113,8 @@ JSON 字段是机器契约：`code/severity/phase/category/message/labels[]/fiel
 
 - `test/corpus/lsp/smoke.sh`：结构化诊断 smoke（0-based range、UTF-16、全部诊断、
   quick fix、relatedInformation）。
+- `nix/checks/diag-raw.sh`：compiler 内源码诊断不得走裸 `err`（工具/构建/清单白名单），
+  `showSpanLoc` 只能出现在渲染器/目标消息组装处。
 - 232 个 `.err` 夹具仍按**首行文本**断言（short 视图兼容）；迁移到 `.diag.json`
   结构化快照是后续工作。
 - `vuna check .`（旧/新编译器）、全量 suite、`nix build .#vuna-seed` 必须通过。
@@ -124,7 +126,7 @@ JSON 字段是机器契约：`code/severity/phase/category/message/labels[]/fiel
 | D1 三通道（源码/工具/内部） | 已落地（phase Tool/Internal + ICE 信息） |
 | D2 `Diagnostic` 全字段 | 已落地 |
 | D3 位置契约（end span、UTF-16、显式 NoLoc） | 已落地（span 填充仍在补齐） |
-| D4 码域（RN_/PKG_ 独立域、死码清理） | 部分（RN_/PKG_ 未拆；12 个死码待删） |
+| D4 码域（RN_/PKG_ 独立域、死码清理） | 部分（`RN_` 已落地；`PKG_` 未拆；死码待删） |
 | D5 目录单一真源 + 生成枚举/文档 | 部分（条目仍是手写；`explain`/`gen-errors` 已同源） |
 | D6 渲染/LSP/CLI | 已落地 short/human/JSON + LSP 结构化；SARIF/i18n 待办 |
 | D7.1 多错误 + Cascade | 待办（当前仍首错短路） |
@@ -141,7 +143,7 @@ JSON 字段是机器契约：`code/severity/phase/category/message/labels[]/fiel
 
 ## 10. 后续路线（按依赖排序）
 
-1. **错误分类**：把 compiler 内剩余 `err "` 全部换成域码（`RN_`/`PKG_`/`LD_`/`CG_`），
+1. **错误分类**：`RN_` 与 `TC_` 记录/派生已落地；剩余 `err "` 只剩工具/构建/清单白名单（`CompilerCli`/`Compile`/`Pkg`/`Dt`/`Manifest`），下一步拆 `PKG_` 并清空白名单。
    删 `rawAt`/`rawNoLoc`；CI 门禁「compiler 内无 `err "`」。
 2. **目录元数据**：条目补 severity/phase/category/explanation/example；`gen-errors`
    输出这些字段；每码至少一个结构化夹具。

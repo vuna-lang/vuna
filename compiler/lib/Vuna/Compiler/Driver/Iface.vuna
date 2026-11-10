@@ -680,7 +680,7 @@ firstCoverageIssue oi ourNames inherited ifaces prog =
 -- 增量（S4）需要时再补。
 coverageResult : OwnerIndex -> List String -> List String -> List ModuleIface -> DtProgram -> Check (List ModuleIface)
 coverageResult oi ourNames inherited ifaces prog = case firstCoverageIssue oi ourNames inherited ifaces prog of
-  Just issue => err "iface: ${issue}"
+  Just issue => icInternal "iface: ${issue}"
   Nothing => OkC ifaces
 
 ifaceOfPackage : String -> List (Pair String SourceInfo) -> List (Pair String Int) -> List String -> List ModuleIface -> List Module -> List Decl -> DtProgram -> Check (List ModuleIface)
@@ -742,7 +742,7 @@ ifaceOfModule pkg si knownDeps inherited clean modules entryDecls prog name =
     parts = progPartsOf oi prog
     ourNames = map moduleNameOf ourModules
   in case findNamedModule ourModules name of
-    Nothing => err "iface: module ${name} is not part of the checked package"
+    Nothing => icInternal "iface: module ${name} is not part of the checked package"
     Just m =>
       let
         mi0 = mkIfaceBase pkg parts prog [Pair name si] [] m
@@ -753,7 +753,7 @@ ifaceOfModule pkg si knownDeps inherited clean modules entryDecls prog name =
           Nothing => mi
           Just decls => setPrepared decls mi
       in if moduleCoverageOk oi inherited name prog miP then OkC miP
-      else err "iface: module ${name} has uncovered artifacts"
+      else icInternal "iface: module ${name} has uncovered artifacts"
 
 -- 包接口自检：schema/编译器指纹由读侧校验；这里只检查模块集合非空 + 摘要闭合。
 packageIfaceValid : PackageIface -> Bool

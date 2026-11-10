@@ -40,6 +40,7 @@ module Vuna.Compiler.Loader.Modules
 -- 导出表计算、加载流程与 flatten 在 Flatten；门面 `Vuna.Compiler.Loader` 保持原 API。
 import Vuna.Compiler.Loader.Diagnostics
 import Vuna.Compiler.Common
+import Vuna.Compiler.Diagnostics.Rn
 import Base.HashMap
 import Base.List
 import Vuna.Compiler.Frontend.Ast
@@ -184,15 +185,15 @@ importAliases (imp :: rest) = case imp.importAlias of
 checkImportAliases : String -> List String -> List (Pair String String) -> Check (List a)
 checkImportAliases label moduleNames [] = OkC []
 checkImportAliases label moduleNames ((Pair alias m) :: rest) =
-  if validSegment alias then if memName alias (map firstOf rest) then err "${label}: duplicate module alias ${alias}"
+  if validSegment alias then if memName alias (map firstOf rest) then rnNoLoc1 (DuplicateModuleAlias alias) alias
   else if memName alias moduleNames then if alias == m then checkImportAliases label moduleNames rest
-  else err "${label}: module alias ${alias} conflicts with an imported module"
+  else rnNoLoc1 (ModuleAliasConflict alias) alias
   else checkImportAliases label moduleNames rest
-  else err "${label}: invalid module alias ${alias}"
+  else rnNoLoc1 (InvalidModuleAlias alias) alias
 
 validateImports : String -> List Import -> Check (List a)
 validateImports label imports =
-  if hasDuplicateName (importModuleNames imports) then err "${label}: duplicate import"
+  if hasDuplicateName (importModuleNames imports) then rnNoLoc0 DuplicateImport
   else checkImportAliases label (importModuleNames imports) (importAliases imports)
 
 openModuleNames : List Import -> List String
@@ -305,7 +306,7 @@ sameTargetRest e [] = True
 sameTargetRest e ((Pair m e2) :: rest) = e.target == e2.target && sameTargetRest e rest
 
 unifyEntryPairs : String -> String -> String -> List (Pair String ExportEntry) -> Check (Pair String ExportEntry)
-unifyEntryPairs label kindLabel name [] = err "${label}: unknown ${kindLabel} ${name}"
+unifyEntryPairs label kindLabel name [] = rnNoLoc2 (UnknownKind kindLabel name) kindLabel name
 unifyEntryPairs label kindLabel name (p :: rest) =
   if sameTargetRest (secondOf p) rest then OkC p
   else err
@@ -343,7 +344,8 @@ findModuleFile roots name importerPkg = case collectModuleFiles roots name impor
       pkgs => ldErr2 (ModuleNotExported name (_joinNames hidden)) name (_joinNames hidden)
     [only] => OkC only
     candidates =>
-      err "ambiguous module ${name} (found in: ${_joinNames (map candidateDir allowed)})"
+      rnNoLoc2 (AmbiguousModule name (_joinNames (map candidateDir allowed))) name
+        (_joinNames (map candidateDir allowed))
 
 findModule : List Module -> String -> Maybe Module
 findModule [] name = Nothing

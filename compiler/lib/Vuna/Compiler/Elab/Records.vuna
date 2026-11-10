@@ -24,6 +24,8 @@ module Vuna.Compiler.Elab.Records
 -- `RecordFieldMeta` 的（名字 / 类型 / 声明序号）三元组；`RecordMeta` 是跨包的
 -- 结构化字段表，进 iface（`miRecords`）。降级本身仍是 AST → AST，不依赖检查器状态。
 import Vuna.Compiler.Common
+import Vuna.Compiler.Diagnostics.Tc
+import Vuna.Compiler.Diagnostics.Common
 import Vuna.Compiler.Frontend.Ast
 
 -- | R2：一条 record 字段的结构化元数据。`recordFieldIndex` 是声明序号（也是降级后
@@ -76,13 +78,13 @@ hasDuplicateFieldNames ((Pair n e) :: rest) = case lookupProvided n rest of
   Nothing => hasDuplicateFieldNames rest
 
 missingFieldMsg : Span -> String -> Diagnostic
-missingFieldMsg sp fname = diagAt sp SevError PhElab CatRecords "" "missing field ${fname}"
+missingFieldMsg sp fname = withDiagSpan sp (tcMsg (RecordMissingField fname) [fname])
 
 unknownFieldMsg : Span -> String -> Diagnostic
-unknownFieldMsg sp fname = diagAt sp SevError PhElab CatRecords "" "unknown field ${fname}"
+unknownFieldMsg sp fname = withDiagSpan sp (tcMsg (RecordUnknownField fname) [fname])
 
 duplicateFieldMsg : Span -> Diagnostic
-duplicateFieldMsg sp = diagAt sp SevError PhElab CatRecords "" "duplicate field"
+duplicateFieldMsg sp = withDiagSpan sp (tcMsg RecordDuplicateField [])
 
 hasUnknownFields : List String -> List (Pair String a) -> Bool
 hasUnknownFields fieldNames [] = False
@@ -190,7 +192,7 @@ else case pat of
       (Vuna.Compiler.Common.traverse (\x => desugarPatternFuel (fuel - 1) records x) pats)
       (\ps => OkC (PCon name ps sp))
   PRecord name fields sp => case lookupRecord name records of
-    Nothing => err "${showSpanLoc sp}: unknown record: ${name}"
+    Nothing => tcErr1 sp (UnknownRecord name) name
     Just r =>
       if hasDuplicateFieldNames fields then ErrC (duplicateFieldMsg sp)
       else if hasUnknownFields (recordFieldNames r.recordMetaFields) fields then ErrC (firstUnknownFieldMsg sp (recordFieldNames r.recordMetaFields) fields)
@@ -242,7 +244,7 @@ else case e of
     Vuna.Compiler.Common.bind (desugarExprFuel (fuel - 1) records base)
       (\b => OkC (EField b fname sp))
   ERecord name fields sp => case lookupRecord name records of
-    Nothing => err "${showSpanLoc sp}: unknown record: ${name}"
+    Nothing => tcErr1 sp (UnknownRecord name) name
     Just r =>
       if hasDuplicateFieldNames fields then ErrC (duplicateFieldMsg sp)
       else if hasUnknownFields (recordFieldNames r.recordMetaFields) fields then ErrC (firstUnknownFieldMsg sp (recordFieldNames r.recordMetaFields) fields)

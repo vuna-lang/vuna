@@ -15,6 +15,7 @@ module Vuna.Compiler.Loader.Resolve
 import Base.List
 import Vuna.Compiler.Frontend.Diagnostics
 import Vuna.Compiler.Common
+import Vuna.Compiler.Diagnostics.Rn
 import Base.HashMap
 import Vuna.Compiler.Diagnostics
 import Vuna.Compiler.Debug
@@ -187,7 +188,7 @@ resolveQualified modules label imports name = case splitLastDot (splitOnDot name
     let
       prefix = joinDots revPrefix
     in case findImportPrefix imports prefix of
-      Nothing => err "${label}: module ${prefix} is not imported"
+      Nothing => rnNoLoc1 (ModuleNotImported prefix) prefix
       Just m => Vuna.Compiler.Common.bind (exportsOf modules m) (\es => case findExportValue es base of
         Just e => OkC e.target
         Nothing => case findExportCtor es base of
@@ -196,7 +197,7 @@ resolveQualified modules label imports name = case splitLastDot (splitOnDot name
           -- （显式 `(a : Type)` 实参），排在值 / 构造子之后。
           Nothing => case findExportType es base of
             Just e => OkC e.target
-            Nothing => err "${label}: ${base} is not exported by ${m}"
+            Nothing => rnNoLoc2 (ValueNotExported base m) base m
       )
 
 -- M41：`Family.Ctor` / `Module.Data.Ctor`：前缀先按类型命名空间解析，再在族里找短名。
@@ -245,7 +246,7 @@ else if isIntrinsicTypeName name then OkC name
 else if name == "Type" || name == "->" then OkC name
 else if containsDot name then resolveDottedTypeTargetOnly modules label imports name
 else Vuna.Compiler.Common.bind (modulesExportingType modules imports name) (\pairs => case pairs of
-  [] => err "${label}: unknown type ${name}"
+  [] => rnNoLoc1 (UnknownType name) name
   _ =>
     Vuna.Compiler.Common.bind (unifyEntryPairs label "type" name pairs)
       (\p => OkC (secondOf p).target)
@@ -258,12 +259,12 @@ resolveDottedTypeTargetOnly modules label imports name = case splitLastDot (spli
     let
       typePrefix = joinDots revPrefix
     in case findImportPrefix imports typePrefix of
-      Nothing => err "${label}: module ${typePrefix} is not imported"
+      Nothing => rnNoLoc1 (ModuleNotImported typePrefix) typePrefix
       Just m => Vuna.Compiler.Common.bind (exportsOf modules m) (\es => case findExportType es base of
         Just e => OkC e.target
         Nothing => case findExportValue es base of
           Just e => OkC e.target
-          Nothing => err "${label}: type ${base} is not exported by ${m}"
+          Nothing => rnNoLoc2 (TypeNotExported base m) base m
       )
 
 -- | 自动补注（M41 新增导出）：resolveFamilyQualifiedCtor。
@@ -274,7 +275,7 @@ resolveFamilyQualifiedCtor modules label prefix ns imports name = case splitLast
       famName = joinDots revPrefix
     in Vuna.Compiler.Common.bind (resolveTypeTarget modules label prefix ns imports famName) (\famTarget => case ctorTargetInFamily modules prefix ns famTarget base of
       Just t => OkC t
-      Nothing => err "${label}: type ${famName} has no constructor ${base}"
+      Nothing => rnNoLoc2 (TypeHasNoConstructor famName base) famName base
     )
 
 -- 模块限定名里的构造子条目可能有多个同名（不同族）；这时必须用 Family.Ctor 消歧。
@@ -284,7 +285,7 @@ exportTarget e = e.target
 
 -- | 自动补注（M41 新增导出）：uniqueCtorTarget。
 uniqueCtorTarget : String -> String -> List ExportEntry -> Check String
-uniqueCtorTarget label name [] = err "${label}: unknown constructor ${name}"
+uniqueCtorTarget label name [] = rnNoLoc1 (UnknownConstructor name) name
 uniqueCtorTarget label name (e :: rest) =
   if allSameTarget (map exportTarget (e :: rest)) then OkC (exportTarget e)
   else OkC (overCtorName name (dedupeTargets (map exportTarget (e :: rest))))
@@ -308,7 +309,7 @@ resolveCtorDotted modules label prefix ns imports name = case splitLastDot (spli
       prefixName = joinDots revPrefix
     in case findImportPrefix imports prefixName of
       Just m => Vuna.Compiler.Common.bind (exportsOf modules m) (\es => case findExportCtors es base of
-        [] => err "${label}: ${base} is not exported by ${m}"
+        [] => rnNoLoc2 (ValueNotExported base m) base m
         entries => uniqueCtorTarget label base entries
       )
       Nothing => resolveFamilyQualifiedCtor modules label prefix ns imports name
@@ -320,17 +321,17 @@ resolveQualifiedCtor modules label imports name = case splitLastDot (splitOnDot 
     let
       prefix = joinDots revPrefix
     in case findImportPrefix imports prefix of
-      Nothing => err "${label}: module ${prefix} is not imported"
+      Nothing => rnNoLoc1 (ModuleNotImported prefix) prefix
       Just m => Vuna.Compiler.Common.bind (exportsOf modules m) (\es => case findExportCtor es base of
         Just e => OkC e.target
-        Nothing => err "${label}: constructor ${base} is not exported by ${m}"
+        Nothing => rnNoLoc2 (ConstructorNotExported base m) base m
       )
 
 -- 带点表达式的解析（M10.5）：先按「最长可解析模块前缀」尝试限定名/限定值+字段链，
 -- 否则按「变量/顶层名 + 字段链」处理。`p.x`、`M.point.x`、`Vuna.Compiler.Frontend.Parser.parseSource` 都走这里。
 resolveDottedExpr : List Module -> String -> String -> Namespaces -> List Import -> List String -> String -> Span -> Check Expr
 resolveDottedExpr modules label prefix ns imports scope name sp = case splitOnDot name of
-  [] => err "${label}: invalid dotted name ${name}"
+  [] => rnNoLoc1 (InvalidDottedName name) name
   head :: rest => if memName head scope then OkC (foldFieldChain (EVar head sp) rest sp)
   else Vuna.Compiler.Common.bind (resolveQualifiedPath modules label imports (splitOnDot name) (length (splitOnDot name)) sp) (\q => case q of
     Just e => OkC e
@@ -338,7 +339,7 @@ resolveDottedExpr modules label prefix ns imports scope name sp = case splitOnDo
     else if isBuiltinName head then OkC (foldFieldChain (EVar head sp) rest sp)
     else if startsUpperName head then case resolveCtorDotted modules label prefix ns imports name of
       OkC t => OkC (EVar t sp)
-      ErrC _ => err "${label}: module ${head} is not imported"
+      ErrC _ => rnNoLoc1 (ModuleNotImported head) head
     else Vuna.Compiler.Common.bind (resolveGlobal modules label prefix ns imports scope head)
       (\n => OkC (foldFieldChain (EVar n sp) rest sp))
   )
@@ -365,10 +366,10 @@ else case findImportPrefix imports (joinDots (takeSegs (n - 1) segs)) of
         Just e => OkC (Just (EVar e.target sp))
         Nothing => case findExportType es member of
           Just e => OkC (Just (EVar e.target sp))
-          Nothing => err "${label}: ${member} is not exported by ${m}"
+          Nothing => rnNoLoc2 (ValueNotExported member m) member m
     member :: rest => case findExportValue es member of
       Just e => OkC (Just (foldFieldChain (EVar e.target sp) rest sp))
-      Nothing => err "${label}: ${member} is not exported by ${m}"
+      Nothing => rnNoLoc2 (ValueNotExported member m) member m
     [] => OkC Nothing
   )
   Nothing => resolveQualifiedPath modules label imports segs (n - 1) sp
@@ -427,7 +428,8 @@ else Vuna.Compiler.Common.bind (ctorCandidates modules prefix ns imports name) (
   [] => if Base.HashMap.member name ns.nsCtorSet then OkC (mangle prefix name)
   else if isIntrinsicName name then OkC name
   else Vuna.Compiler.Common.bind (modulesExportingCtor modules imports name) (\pairs => case pairs of
-    [] => err "${label}: unknown constructor ${name}${suggest name ns.nsCtors}"
+    [] =>
+      onErrDiag (appendMessage (suggest name ns.nsCtors)) (rnNoLoc1 (UnknownConstructor name) name)
     _ => OkC (pickCtorOrOver name (dedupeTargets (map pairExportTarget pairs)))
   )
   _ => OkC (pickCtorOrOver name cands)
@@ -435,12 +437,12 @@ else Vuna.Compiler.Common.bind (ctorCandidates modules prefix ns imports name) (
 
 checkBinder : String -> String -> Check String
 checkBinder label name =
-  if containsDot name then err "${label}: invalid variable name ${name}" else OkC name
+  if containsDot name then rnNoLoc1 (InvalidVariableName name) name else OkC name
 
 checkTopName : String -> String -> Check String
 checkTopName label name =
-  if name == "_" then err "${label}: invalid top-level name _ (bare _ is reserved)"
-  else if containsDot name then err "${label}: invalid top-level name ${name}" else OkC name
+  if name == "_" then rnNoLoc1 (InvalidTopLevelName "_") "_"
+  else if containsDot name then rnNoLoc1 (InvalidTopLevelName name) name else OkC name
 
 resolveTopName : String -> String -> String -> Check String
 resolveTopName label prefix name =
@@ -600,14 +602,13 @@ else case expr of
       (\n => checkDebugConstruct sp name n scope)
   -- M31.2：`EInfix` / `EParen` 是 parser 的中间产物，正常路径在 Loader 重排里已消除；
   -- 走到这里说明重排漏了（internal error，不静默透传）。
-  EInfix op lhs rhs sp => err "${label}: DT: internal: unreordered infix operator ${op}"
+  EInfix op lhs rhs sp => icInternal "unreordered infix operator ${op}"
   -- M31.3：同上——反引号中缀与 section 也必须在 Loader.Fixity 重排里消除（严格执行
   -- 契约「rename 后不存在」），走到这里说明重排漏了，显式 internal error 不静默透传。
-  EBacktick name lhs rhs sp =>
-    err "${label}: DT: internal: unreordered backtick infix operator ${name}"
-  ESectOp op sp => err "${label}: DT: internal: unreordered operator section (${op})"
-  ESectL op rhs sp => err "${label}: DT: internal: unreordered left operator section (${op})"
-  ESectR lhs op sp => err "${label}: DT: internal: unreordered right operator section (${op})"
+  EBacktick name lhs rhs sp => icInternal "unreordered backtick infix operator ${name}"
+  ESectOp op sp => icInternal "unreordered operator section (${op})"
+  ESectL op rhs sp => icInternal "unreordered left operator section (${op})"
+  ESectR lhs op sp => icInternal "unreordered right operator section (${op})"
   EParen inner sp => resolveExpr (fuel - 1) modules label prefix ns imports scope inner
   EInt n sp => OkC (EInt n sp)
   EStr s sp => OkC (EStr s sp)
@@ -772,7 +773,7 @@ localCtorResult : String -> String -> Namespaces -> String -> Check (Maybe Strin
 localCtorResult label prefix ns name = case localCtorTargets prefix ns name of
   [t] => OkC (Just t)
   [] => OkC Nothing
-  _ => err "${label}: ambiguous constructor ${name} (qualify it as Data.${name})"
+  _ => rnNoLoc2 (AmbiguousConstructor name "Data.${name}") name "Data.${name}"
 
 -- | 自动补注（M41 新增导出）：resolveLowerTypeName。
 resolveLowerTypeName : List Module -> String -> String -> Namespaces -> List Import -> String -> Check String
@@ -824,13 +825,13 @@ resolveDottedTypeName modules label prefix ns imports name = case splitLastDot (
     in case findImportPrefix imports typePrefix of
       Nothing => case resolveFamilyQualifiedCtor modules label prefix ns imports name of
         OkC t => OkC t
-        ErrC _ => err "${label}: module ${typePrefix} is not imported"
+        ErrC _ => rnNoLoc1 (ModuleNotImported typePrefix) typePrefix
       Just m => Vuna.Compiler.Common.bind (exportsOf modules m) (\es => case findExportType es base of
         Just e => OkC e.target
         -- M28：类型位置的值（axiom / 类型层 def）在限定名下也可用；是否为合法类型由 Elab 判定。
         Nothing => case findExportValue es base of
           Just e => OkC e.target
-          Nothing => err "${label}: type ${base} is not exported by ${m}"
+          Nothing => rnNoLoc2 (TypeNotExported base m) base m
       )
 
 -- M32：约束项（签名 ctx / 实例 ctx）的接口名单独报错。`C a` 的 `C` 未绑定时若直接走
@@ -839,7 +840,7 @@ resolveDottedTypeName modules label prefix ns imports name = case splitLastDot (
 resolveConstraintExpr : List Module -> String -> String -> Namespaces -> List Import -> Expr -> Check Expr
 resolveConstraintExpr modules label prefix ns imports cx = case constraintHeadOf cx of
   Just n => case resolveTypeName modules label prefix ns imports n of
-    ErrC _ => err "${label}: unknown interface ${n}"
+    ErrC _ => rnNoLoc1 (UnknownInterface n) n
     OkC _ => resolveTypeExpr resolveFuelBound modules label prefix ns imports cx
   Nothing => resolveTypeExpr resolveFuelBound modules label prefix ns imports cx
 
@@ -877,7 +878,7 @@ else case ty of
     Vuna.Compiler.Common.bind
       (resolveTypeExprScoped (fuel - 1) modules label prefix ns imports bound dom)
       (\dom2 => Vuna.Compiler.Common.bind (resolveTypeExprScoped (fuel - 1) modules label prefix ns imports (name :: bound) cod) (\cod2 => OkC (EPi name implicit qty dom2 cod2 sp)))
-  _ => err "${label}: invalid type expression (${tyShape ty})"
+  _ => rnNoLoc1 (InvalidTypeExpression (tyShape ty)) (tyShape ty)
 
 resolveTypeTopName : String -> String -> String -> Check String
 resolveTypeTopName label prefix name =
@@ -935,8 +936,7 @@ resolveInstanceMethod modules label prefix ns imports (DSig name ctx ty sp) =
 resolveInstanceMethod modules label prefix ns imports (DFun name pats body sp) =
   Vuna.Compiler.Common.bind (checkTopName label name)
     (\_ => Vuna.Compiler.Common.bind (Vuna.Compiler.Common.traverse (resolvePattern resolveFuelBound modules label prefix ns imports) pats) (\parts => Vuna.Compiler.Common.bind (resolveExpr resolveFuelBound modules label prefix ns imports (concatMap secondOf parts) body) (\b => OkC (DFun name (map firstOf parts) b sp))))
-resolveInstanceMethod modules label prefix ns imports _ =
-  err "${label}: instance body may only contain method signatures/definitions"
+resolveInstanceMethod modules label prefix ns imports _ = rnNoLoc0 InstanceBodyForm
 
 resolveProgram : List Module -> String -> String -> Namespaces -> List Import -> List Decl -> Check (List Decl)
 resolveProgram modules label prefix ns imports decls =
@@ -963,7 +963,7 @@ resolveModules (modules@((Module name mpkg imports imps decls exports mcaps mtru
 -- ---------------------------------------------------------------
 capabilityError : String -> String -> Check a
 capabilityError label name =
-  err "${label}: unknown capability \"${name}\" (known: ${join ", " capabilityNames})"
+  rnNoLoc2 (UnknownCapability name (join ", " capabilityNames)) name (join ", " capabilityNames)
 
 checkCapabilities : String -> List String -> Check Int
 checkCapabilities label [] = OkC 0

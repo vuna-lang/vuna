@@ -134,9 +134,7 @@ deriveInstance dname params ctors tn sp =
     "FromString" => deriveWrapper tn "fromString" "String" ctors hd sp
     "FromInt" => deriveWrapper tn "fromInt" "Int" ctors hd sp
     "FromFloat" => deriveWrapper tn "fromFloat" "Float" ctors hd sp
-    kind =>
-      err
-        "${showSpanLoc sp}: cannot derive `${kind}` (supported: Show, Eq, Ord, Hashable, FromString, FromInt, FromFloat)"
+    kind => tcErr1 sp (DeriveUnsupportedKind kind) kind
 
 -- 字面量转换派生（FromString / FromInt / FromFloat）：只接受「一个构造子、一个字段、
 -- 字段声明类型就是对应内建类型」的包装类型。记录在 prepareDecls 已降级成单构造子
@@ -147,13 +145,10 @@ deriveInstance dname params ctors tn sp =
 -- 字段类型就是目标内建类型」，生成 `instance C T where fromX sx = C sx`。
 deriveWrapper : String -> String -> String -> List Ctor -> Expr -> Span -> Check Decl
 deriveWrapper tn methodName wantTy [] hd sp =
-  err
-    "${showSpanLoc sp}: cannot derive ${traitShortName tn}: type must have exactly one constructor"
+  tcErr1 sp (DeriveSingleCtor (traitShortName tn)) (traitShortName tn)
 deriveWrapper tn methodName wantTy (c :: rest) hd sp = case rest of
   [] => deriveWrapperCtor tn methodName wantTy c hd sp
-  _ =>
-    err
-      "${showSpanLoc sp}: cannot derive ${traitShortName tn}: type must have exactly one constructor"
+  _ => tcErr1 sp (DeriveSingleCtor (traitShortName tn)) (traitShortName tn)
 
 -- | `deriveWrapper` 的单构造子分支：校验构造子 arity 为 1、字段类型等于目标类型名，
 -- 然后生成转发到构造子的实例方法。
@@ -163,15 +158,11 @@ deriveWrapperCtor tn methodName wantTy (Ctor cn ty ar cnsp) hd sp = if ar == 1 t
     [] =>
       if deriveFieldTypeName dom == wantTy then OkC
         (DInstance [] hd [DFun methodName [PVar "sx" sp] (EApp (EVar cn sp) [EVar "sx" sp] sp) sp] sp)
-      else err
-        "${showSpanLoc sp}: cannot derive ${traitShortName tn}: field type must be ${wantTy} (got ${deriveFieldTypeName dom})"
-    _ =>
-      err
-        "${showSpanLoc sp}: cannot derive ${traitShortName tn}: constructor must have exactly one field"
-  [] =>
-    err
-      "${showSpanLoc sp}: cannot derive ${traitShortName tn}: constructor must have exactly one field"
-else err "${showSpanLoc sp}: cannot derive ${traitShortName tn}: constructor must have exactly one field"
+      else tcErr3 sp (DeriveFieldType (traitShortName tn) wantTy (deriveFieldTypeName dom))
+        (traitShortName tn) wantTy (deriveFieldTypeName dom)
+    _ => tcErr1 sp (DeriveCtorFieldCount (traitShortName tn)) (traitShortName tn)
+  [] => tcErr1 sp (DeriveCtorFieldCount (traitShortName tn)) (traitShortName tn)
+else tcErr1 sp (DeriveCtorFieldCount (traitShortName tn)) (traitShortName tn)
 
 -- | 把箭头链（`EApp (EVar "->")` 或 `EPi`）拆成字段类型列表：依次取出域类型。
 deriveFieldTypes : Expr -> List Expr
