@@ -3,6 +3,7 @@ module Vuna.Compiler.Diagnostics.Tc
   , TcErr(..)
   , tcAll
   , tcCode
+  , tcCoverageMissing
   , tcErr
   , tcErr0
   , tcErr0NoLoc
@@ -619,3 +620,11 @@ tcTypeMismatchNoLoc expected found =
 
 tcErr3 : Span -> TcErr (Succ (Succ (Succ Zero))) -> String -> String -> String -> Check a
 tcErr3 sp e a0 a1 a2 = tcErr sp e [a0, a1, a2]
+
+-- | 覆盖性：把所有不可达/未覆盖的构造子一次性列出（每个构造子进 `fields.candidates`）。
+tcCoverageMissing : Span -> List String -> Check a
+tcCoverageMissing sp names =
+  let
+    joined = join ", " names
+    cands = map (\n => Candidate n Nothing (Just "not covered by any branch")) names
+  in ErrC (withField (FieldCandidates cands) (withDiagSpan sp (tcMsg (NotExhaustive joined) [joined])))

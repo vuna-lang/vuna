@@ -589,11 +589,17 @@ checkCoverage ctx ec dd idxs alts sp =
   checkCovered ctx ec dd idxs (altNames alts) alts sp (dtDataCtors dd)
 
 checkCovered : Ctx -> Ec -> DtData -> List Value -> List String -> List (Pair Pat Expr) -> Span -> List DtCtor -> Check Int
-checkCovered ctx ec dd idxs written alts sp [] = OkC 0
-checkCovered ctx ec dd idxs written alts sp (ctor :: rest) =
-  if memName (dtCtorName ctor) written then checkCovered ctx ec dd idxs written alts sp rest
-  else if branchReachable ctx ec idxs ctor then tcErr1 sp (NotExhaustive (ctorDisplayName (dtCtorName ctor))) (ctorDisplayName (dtCtorName ctor))
-  else checkCovered ctx ec dd idxs written alts sp rest
+checkCovered ctx ec dd idxs written alts sp ctors =
+  let
+    missing = missingCtors ctx ec idxs written ctors
+  in if length missing == 0 then OkC 0 else tcCoverageMissing sp missing
+
+missingCtors : Ctx -> Ec -> List Value -> List String -> List DtCtor -> List String
+missingCtors ctx ec idxs written [] = []
+missingCtors ctx ec idxs written (ctor :: rest) =
+  if memName (dtCtorName ctor) written then missingCtors ctx ec idxs written rest
+  else if branchReachable ctx ec idxs ctor then missingCtors ctx ec idxs written rest
+  else Base.List.Cons (ctorDisplayName (dtCtorName ctor)) (missingCtors ctx ec idxs written rest)
 
 checkCaseDone : Ec -> Ctx -> DtData -> List Value -> List (Pair Pat Expr) -> Value -> Span -> Term -> List CaseAlt -> Check (Pair Term Ec)
 checkCaseDone ec ctx dd idxs alts expected sp scrutTerm altTerms =

@@ -293,7 +293,9 @@ lexErr : {n : Nat} -> LexDiag n -> Vec n String -> Check a
 lexErr e args = ErrC (lexMsg e args)
 
 psErr : {n : Nat} -> PsDiag n -> Vec n String -> Check a
-psErr e args = ErrC (psMsg e args)
+psErr e args = case e of
+  ExpectedToken s => ErrC (withField (FieldExpected s) (psMsg e args))
+  _ => ErrC (psMsg e args)
 
 -- | 自动补注（M41 新增导出）：lexErr0。
 lexErr0 : LexDiag Zero -> Check a
