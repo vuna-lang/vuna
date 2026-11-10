@@ -938,7 +938,8 @@ resolveInstanceMethod modules label prefix ns imports (DSig name ctx ty sp) =
 resolveInstanceMethod modules label prefix ns imports (DFun name pats body sp) =
   Vuna.Compiler.Common.bind (checkTopName label name)
     (\_ => Vuna.Compiler.Common.bind (Vuna.Compiler.Common.traverse (resolvePattern resolveFuelBound modules label prefix ns imports) pats) (\parts => Vuna.Compiler.Common.bind (resolveExpr resolveFuelBound modules label prefix ns imports (concatMap secondOf parts) body) (\b => OkC (DFun name (map firstOf parts) b sp))))
-resolveInstanceMethod modules label prefix ns imports _ = icInternal "unexpected instance body declaration"
+resolveInstanceMethod modules label prefix ns imports _ =
+  icInternal "unexpected instance body declaration"
 
 resolveProgram : List Module -> String -> String -> Namespaces -> List Import -> List Decl -> Check (List Decl)
 resolveProgram modules label prefix ns imports decls =
