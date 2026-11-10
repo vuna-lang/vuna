@@ -41,6 +41,7 @@ CLI 子进程各自带独立 `TMPDIR`/`VUNA_IFACE_DIR`，避免并行时写同�
 | `<base>.run.err` | 产物运行期错误片段；退出码断言非 0 |
 | `<base>.run.exit` | 期望退出码（n=0 断言恰好 0；n>0 断言恰好 n） |
 | `<base>.out` | **共享** golden：interp 与 compile+run 都开，断言输出一致 |
+| `<base>.diag.json` | **结构化诊断期望**（`check --json` 聚合文档）；存在时逐字断言；`--bless-diag` 生成 |
 
 矛盾组合显式失败（CBroken），不静默跳过：golden（`.out`/`.interp.out`/`.run.out`）与
 error（`.check.err`/…）并存、`.check.err` 与 `.interp.err` 并存、`.run.out` 与
@@ -155,6 +156,7 @@ end:
 vuna test --suite test/suite.toml --changed HEAD   # 仅跑 git diff 影响到的 case
 vuna test --suite test/suite.toml --last-failed    # 重跑上次失败
 vuna test --suite test/suite.toml --bless          # 更新 golden .out（只写 golden）
+vuna test --suite test/suite.toml --bless-diag     # 生成/更新 .diag.json 结构化诊断期望
 vuna test --suite test/suite.toml --watch          # 改文件后自动重跑
 vuna test --suite test/suite.toml --audit          # 孤儿 fixture 审计
 vuna test --suite test/suite.toml --timings        # 最慢 10 个 case
@@ -167,6 +169,8 @@ vuna test --suite test/suite.toml --cache-dir DIR   # 覆盖本地结果缓存�
 - `--last-failed`：失败 case id 写到 `.local/test-suite/last-failed`，重跑时按 id 过滤；
   空结果不会清空已有失败列表。
 - `--bless`：golden 失败时把实际输出写回对应 `.out`，并打印 `blessed`；不处理 `.check.err`/`.compile.err`。
+- `--bless-diag`：负例 case 用 `check/compile --json` 的实际聚合文档写回 `.diag.json`（源码路径相对 cwd，机器无关）。
+- `nix/checks/diag-coverage.sh`：`vuna explain --list` 与全部 `.diag.json` 的码集合对比；缺口必须在 `nix/diag-coverage-allow.txt`，覆盖数不得低于 `nix/diag-coverage.min`。
 - `--watch`：首次跑完后每 500ms 比较 suite/corpus/工具链源码 mtime，变化即重跑。
 - `--cache-dir DIR`：覆盖 `.local/test-cache`；worker 继承同一目录。
 - `--strict-skips`：`--fail-fast` 跳过的 case 计为失败（CI 使用）。

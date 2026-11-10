@@ -121,8 +121,10 @@ JSON 字段是机器契约：`code/severity/phase/category/message/labels[]/fiel
   quick fix、relatedInformation）。
 - `nix/checks/diag-raw.sh`：compiler 内源码/清单诊断不得走裸 `err`（工具/构建白名单：`CompilerCli`/`Compile`/`Dt`），
   `showSpanLoc` 只能出现在渲染器/目标消息组装处。
-- 232 个 `.err` 夹具仍按**首行文本**断言（short 视图兼容）；迁移到 `.diag.json`
-  结构化快照是后续工作。
+- 负例夹具双轨：206 个 `.diag.json` 结构化期望（`--json` 聚合文档，`--bless-diag` 生成）
+  与原有 `.err` 首行片段断言并存；`--bless-diag` 在 runner 内写盘（worker 透传）。
+- `nix/checks/diag-coverage.sh`：目录码 vs 结构化夹具覆盖门禁（allowlist 记录缺口、
+  基线 `nix/diag-coverage.min` 防回退；当前 89/232，缺口已在 allowlist 逐码登记）。
 - `vuna check .`（旧/新编译器）、全量 suite、`nix build .#vuna-seed` 必须通过。
 
 ## 9. 迁移状态（对照完整设计）
@@ -145,7 +147,7 @@ JSON 字段是机器契约：`code/severity/phase/category/message/labels[]/fiel
 | D7.8 QTT 使用点 | 待办（需要 Core `TSp`） |
 | D7.9 文案规范/门禁 | 待办 |
 | D7.10 explanation/example/`explain` | 部分（模板+中文说明可用；example 待补） |
-| 结构化夹具 + 每码覆盖门禁 | 待办 |
+| 结构化夹具 + 每码覆盖门禁 | 部分（206 个 `.diag.json`；覆盖门禁 89/232，缺口 allowlist 逐码登记） |
 
 ## 10. 后续路线（按依赖排序）
 
@@ -160,7 +162,7 @@ JSON 字段是机器契约：`code/severity/phase/category/message/labels[]/fiel
 5. **语义质量**：实例搜索树、终止性 call matrix、覆盖性缺失构造子标签、QTT 使用点
    （Core `TSp` + 使用日志）、统一建议引擎（编辑距离 + Fix）。
 6. **消费端**：i18n、`vuna.toml [diagnostics]`、LSP pull diagnostics / quick fix 扩展（SARIF 与 ICE 退出码已落地）。
-7. **夹具迁移**：232 个 `.err` → `.diag.json`，`--bless` 流程；渲染 golden。
+7. **夹具迁移**：`.diag.json` + `--bless-diag` 已落地（206 份）；继续补 allowlist 中 143 个码的结构化夹具，渲染 golden。
 
 ## 11. 边界
 
