@@ -26,8 +26,6 @@ PS_WhereArgsNotSimple
 RN_AmbiguousConstructor
 RN_AmbiguousConstructorExport
 RN_AmbiguousConstructorInExport
-RN_AmbiguousModule
-RN_AmbiguousPrelude
 RN_ConstructorNotExported
 RN_InstanceBodyForm
 RN_InvalidDottedName

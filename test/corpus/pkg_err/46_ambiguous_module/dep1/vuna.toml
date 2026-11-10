@@ -1,0 +1,4 @@
+[package]
+name = "dep1"
+[export]
+modules = ["M"]

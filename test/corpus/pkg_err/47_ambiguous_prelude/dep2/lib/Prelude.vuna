@@ -1,0 +1,4 @@
+module Prelude where
+
+p2 : Int
+p2 = 2

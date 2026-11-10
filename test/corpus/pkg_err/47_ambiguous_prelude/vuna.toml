@@ -1,0 +1,7 @@
+[package]
+name = "p"
+[export]
+modules = ["Main"]
+[dependencies]
+dep1 = "./dep1"
+dep2 = "./dep2"

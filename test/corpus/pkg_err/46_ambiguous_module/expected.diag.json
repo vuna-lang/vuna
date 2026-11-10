@@ -1,0 +1,1 @@
+{"version":1,"tool":"vuna","diagnostics":[{"code":"RN_AmbiguousModule","severity":"error","phase":"resolve","category":"names","message":"ambiguous module M (found in: dep1/lib, dep2/lib)","labels":[],"fields":[],"trace":[],"notes":[],"suggestions":[],"origin":{"kind":"direct"},"internal":false,"ice":null}]}
