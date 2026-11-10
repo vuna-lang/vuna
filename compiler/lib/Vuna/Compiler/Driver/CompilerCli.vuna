@@ -372,6 +372,7 @@ emitDiag extra d =
 printDiag : Diagnostic -> Int
 printDiag d = printDiagWithPrefix "" d
 
+-- | 诊断输出辅助：printErr。
 printErr : String -> Int
 printErr e = printErrText "error: ${e}\n"
 
