@@ -1,4 +1,8 @@
-module Vuna.Compiler.Frontend.Parser (parseExpressionSource, parseSource) where
+module Vuna.Compiler.Frontend.Parser
+  ( parseExpressionSource
+  , parseSource
+  , parseSourceRecovering
+  ) where
 
 -- vuna 源码 parser：offside layout，返回 AST 与 imports。
 import Base.List
@@ -7,11 +11,12 @@ import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Frontend.Diagnostics
 import Vuna.Compiler.Frontend.Lexer
 import Vuna.Compiler.Frontend.Parser.Support
+import Vuna.Compiler.Diagnostics.Sink
 
 parseSource : String -> String -> Check SourceFile
 parseSource file source =
   Vuna.Compiler.Common.bind (lexSource source)
-    (\toks => Vuna.Compiler.Common.bind (parseSourceFile (PState file toks (Pos 1 0) (length toks))) (\p => OkC (firstOf p)))
+    (\toks => Vuna.Compiler.Common.bind (parseSourceFile False (PState file toks (Pos 1 0) (length toks))) (\p => OkC (firstOf p)))
 
 -- 单表达式解析（REPL / 工具用）：整段输入必须恰好是一个表达式。
 parseExpressionSource : String -> Check Expr
@@ -20,10 +25,10 @@ parseExpressionSource source =
     (\toks => Vuna.Compiler.Common.step (parseExpr (stateFuel (PState "<expr>" toks (Pos 1 0) (length toks))) (PState "<expr>" toks (Pos 1 0) (length toks)) 0 0) (\e, st => if isEof st then OkC e else psErr0 ExpectedEndOfExpr))
 
 -- 可选模块头（M10）：`module M (导出项, ...) where`；列表省略 = 导出全部。
-parseSourceFile : PState -> Check (Pair SourceFile PState)
-parseSourceFile st = Vuna.Compiler.Common.step (parseModDecl st) (\hdr, st1 => Vuna.Compiler.Common.step (parseImports (stateFuel st1) st1) (\imports, st2 => if isEof st2 then OkC (Pair (SourceFile hdr imports [] []) st2)
+parseSourceFile : Bool -> PState -> Check (Pair SourceFile PState)
+parseSourceFile recover st = Vuna.Compiler.Common.step (parseModDecl st) (\hdr, st1 => Vuna.Compiler.Common.step (parseImports (stateFuel st1) st1) (\imports, st2 => if isEof st2 then OkC (Pair (SourceFile hdr imports [] []) st2)
 else case peekPos st2 of
-  Pos line col => Vuna.Compiler.Common.step (parseDecls (stateFuel st2) st2 col [] []) (\p, st3 => case p of
+  Pos line col => Vuna.Compiler.Common.step (parseDecls recover (stateFuel st2) st2 col [] []) (\p, st3 => case p of
     Pair fixities decls =>
       if isEof st3 then OkC (Pair (SourceFile hdr imports fixities decls) st3)
       else psErr0 ExpectedEndOfInput
@@ -84,18 +89,44 @@ parseImports fuel st =
 
 -- M31.2：`infixl` / `infixr` / `infix` 声明与顶层声明穿插收集（声明本身不进入 Decl，
 -- 由 Loader 在中缀重排时消费；见 `SourceFile.fixities`）。
-parseDecls : Int -> PState -> Int -> List FixityDecl -> List Decl -> Check (Pair (Pair (List FixityDecl) (List Decl)) PState)
-parseDecls fuel st blockCol fixAcc declAcc = if fuel <= 0 then icFuel "parser"
+parseDecls : Bool -> Int -> PState -> Int -> List FixityDecl -> List Decl -> Check (Pair (Pair (List FixityDecl) (List Decl)) PState)
+parseDecls recover fuel st blockCol fixAcc declAcc = if fuel <= 0 then icFuel "parser"
 else if isEof st then OkC (Pair (Pair (reverse fixAcc) (reverse declAcc)) st)
 else case peekPos st of
-  Pos line col => if col == blockCol then Vuna.Compiler.Common.step (parseFixityOrDecl st blockCol) (\p, st1 => case p of
-    Pair fd dl => case fd of
-      Just f => parseDecls (fuel - 1) st1 blockCol (Base.List.Cons f fixAcc) declAcc
-      Nothing => case dl of
-        d :: _ => parseDecls (fuel - 1) st1 blockCol fixAcc (Base.List.Cons d declAcc)
-        [] => icInternal "parseFixityOrDecl returned nothing"
-  )
+  Pos line col => if col == blockCol then case parseFixityOrDecl st blockCol of
+    ErrC e =>
+      if recover then
+        let
+          _ = emitParseError e
+          st2 = recoverDecl st blockCol
+        in parseDecls True (fuel - 1) st2 blockCol fixAcc declAcc
+      else ErrC e
+    OkC p =>
+      let
+        payload = firstOf p
+        st1 = secondOf p
+        fd = firstOf payload
+        dl = secondOf payload
+      in case fd of
+        Just f => parseDecls recover (fuel - 1) st1 blockCol (Base.List.Cons f fixAcc) declAcc
+        Nothing => case dl of
+          d :: _ => parseDecls recover (fuel - 1) st1 blockCol fixAcc (Base.List.Cons d declAcc)
+          [] => icInternal "parseFixityOrDecl returned nothing"
   else psErr1 (ExpectedDeclAtColumn (strFromInt blockCol)) (strFromInt blockCol)
+
+-- 解析恢复：跳过一个坏声明，停在下一个「与块首同列」的 token（无则到 EOF）。
+recoverDecl : PState -> Int -> PState
+recoverDecl (PState file toks last count) blockCol =
+  let
+    rest = skipToDeclLine toks blockCol
+  in PState file rest last (length rest)
+
+skipToDeclLine : List PTok -> Int -> List PTok
+skipToDeclLine toks blockCol = case toks of
+  [] => []
+  _ :: rest => case rest of
+    [] => []
+    t :: _ => if posCol t.ptokPos == blockCol then rest else skipToDeclLine rest blockCol
 
 -- 一条顶层声明：fixity 声明（返回 Just）或普通 Decl（返回单元素列表）。
 parseFixityOrDecl : PState -> Int -> Check (Pair (Pair (Maybe FixityDecl) (List Decl)) PState)
@@ -1103,3 +1134,9 @@ parseListPatternElems fuel st blockCol =
 foldPCon : Span -> List Pat -> Pat
 foldPCon sp [] = PCon listNilSyntax [] sp
 foldPCon sp (p :: rest) = PCon listConsSyntax [p, foldPCon sp rest] sp
+
+-- 文件加载专用：开启解析恢复（收集多个语法错误），调用范围外恢复短路。
+parseSourceRecovering : String -> String -> Check SourceFile
+parseSourceRecovering file source =
+  Vuna.Compiler.Common.bind (lexSource source)
+    (\toks => Vuna.Compiler.Common.bind (parseSourceFile True (PState file toks (Pos 1 0) (length toks))) (\p => OkC (firstOf p)))

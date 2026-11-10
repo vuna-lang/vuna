@@ -91,3 +91,14 @@ out-contains: module `Base.List` is imported but never used
 run: sh -c 'printf "import Base.List as L\n\nmain : Int\nmain = L.length [1,2]\n" > "$TMPDIR/m38-impok.vuna"'
 run: "$VUNA" check -W "$TMPDIR/m38-impok.vuna" 2>&1
 out-not-contains: UN_UnusedImport
+# 解析错误累积：多个语法错误一次报出；--max-errors 截断（short 与 JSON 一致）。
+run: sh -c 'printf "main : Int\nmain = case 1 of\n2 => 0\n\nf : Int\nf = let in 0\n\ng : Int\ng = do\n" > "$TMPDIR/m39-multi.vuna"'
+run: "$VUNA" check "$TMPDIR/m39-multi.vuna" 2>&1
+exit: 1
+out-contains: PS_CaseAltNotIndented
+out-contains: PS_ExpectedLetBinding
+out-contains: PS_DoBlockNeedsStatement
+run: sh -c '"$VUNA" check "$TMPDIR/m39-multi.vuna" --max-errors 2 2>&1 | grep -c "^error"'
+out-contains: 2
+run: sh -c '"$VUNA" check "$TMPDIR/m39-multi.vuna" --max-errors 2 --json 2>&1 | grep -o "\"code\"" | wc -l'
+out-contains: 2

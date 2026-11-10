@@ -1,9 +1,13 @@
 -- | 诊断告警收集器：编译器在纯检查过程中发射 warning，驱动层在检查结束后取走。
 module Vuna.Compiler.Diagnostics.Sink
-  ( emitWarning
+  ( emitParseError
+  , emitWarning
   , markImportUsed
+  , peekParseErrors
+  , resetParseErrors
   , resetUsedImports
   , resetWarnings
+  , takeParseErrors
   , takeUsedImports
   , takeWarnings
   ) where
@@ -37,6 +41,7 @@ resetWarnings _ =
   let
     _ = runIO (writeRef warningsRef (WarnBox [] 0))
     _ = runIO (writeRef usedImportsRef (UsedImportsBox [] 0))
+    _ = runIO (writeRef parseErrorsRef (ParseErrorsBox [] 0))
   in 0
 
 -- | 追加一条 warning；返回 0 便于放在 let 链里。
@@ -92,3 +97,28 @@ takeUsedImports _ =
 -- | 清空 import 使用集合（按检查单元/模块重置）。
 resetUsedImports : Int -> Int
 resetUsedImports _ = runIO (writeRef usedImportsRef (UsedImportsBox [] 0))
+
+-- 解析阶段的非致命诊断（parser 恢复后收集；CLI 一次性打印全部）。
+record ParseErrorsBox where
+  parseErrors : List Diagnostic
+  parseErrorsTag : Int
+
+parseErrorsRef : IORef ParseErrorsBox
+parseErrorsRef = runIO (newRef (ParseErrorsBox [] 0))
+
+emitParseError : Diagnostic -> Int
+emitParseError d =
+  runIO (modifyRef parseErrorsRef (\b => ParseErrorsBox (append b.parseErrors [d]) 0))
+
+takeParseErrors : Int -> List Diagnostic
+takeParseErrors _ =
+  let
+    b = runIO (readRef parseErrorsRef)
+  in b.parseErrors
+
+peekParseErrors : Int -> List Diagnostic
+peekParseErrors _ = takeParseErrors 0
+
+resetParseErrors : Int -> Int
+resetParseErrors _ = runIO (writeRef parseErrorsRef (ParseErrorsBox [] 0))
+

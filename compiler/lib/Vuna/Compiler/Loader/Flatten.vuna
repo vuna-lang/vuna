@@ -144,11 +144,23 @@ parseFileWithPath path src =
 -- 路径开头（parser 侧带 span 的诊断，如 `[PS_RepeatedPatternBinder]`）时不再重复加，
 -- 保持 CLI 首行的 `<file>:<line>:<col>: <消息>` 契约（DiagRender 才能追加源码片段）。
 parseAndStoreAt : String -> String -> String -> Check SourceFile
-parseAndStoreAt cpath path src = case parseSource path src of
-  ErrC e =>
-    ErrC
-      (if startsWith "${path}:" (diagText e) then e else withLabel (Label Nothing path LabelContext Nothing) e)
-  OkC parsed => OkC (storeAstCache cpath src parsed)
+parseAndStoreAt cpath path src =
+  let
+    _ = resetParseErrors 0
+  in case parseSourceRecovering path src of
+    ErrC e => ErrC (attachParsePath path e)
+    OkC parsed =>
+      let
+        errs = peekParseErrors 0
+      in case errs of
+        [] => OkC (storeAstCache cpath src parsed)
+        e :: _ => ErrC (attachParsePath path e)
+
+-- 解析错误统一加 `<path>: ` 前缀（parser 诊断本身无位置）。
+attachParsePath : String -> Diagnostic -> Diagnostic
+attachParsePath path e =
+  if startsWith "${path}:" (diagText e) then e
+  else withLabel (Label Nothing path LabelContext Nothing) e
 
 visibleFixitiesOf : List Module -> List Import -> List FixityDecl
 visibleFixitiesOf modules imports = concatMap (\imp => case findModule modules (importName imp) of

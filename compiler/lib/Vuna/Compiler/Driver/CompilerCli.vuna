@@ -190,16 +190,40 @@ runCompilerCliFor : String -> List String -> Int
 runCompilerCliFor prog args =
   let
     stripped = stripDiagFormat args
+    strippedMax = stripMaxErrors (firstOf stripped)
     _ = case secondOf stripped of
       Just fmt => runIO (writeRef diagFormatRef fmt)
       Nothing => 0
-    kept = stripDenyWarnings (firstOf stripped)
+    kept = stripDenyWarnings (firstOf strippedMax)
+    _ = if secondOf strippedMax > 0 then runIO (writeRef maxErrorsRef (secondOf strippedMax)) else 0
     _ = resetSarif 0
     _ = runIO (writeRef denyWarningsRef (hasDenyWarnings args))
     _ = runIO (writeRef showWarningsRef (hasDenyWarnings args || hasShowWarnings args))
     _ = runIO (writeRef formatExplicitRef (hasFormatFlag args))
     _ = runIO (writeRef warningsExplicitRef (hasDenyWarnings args || hasShowWarnings args))
   in if anyHelp kept then helpFor prog else flushSarif (runCompilerCliFor1 prog kept)
+
+-- 剥离 `--max-errors N`（写入全局上限；默认 0 = 不限）。
+parseIntOr : String -> Int -> Int
+parseIntOr s fallback = parseIntChars (strUnpack s) 0 0 fallback
+
+parseIntChars : List Int -> Int -> Int -> Int -> Int
+parseIntChars [] acc count fallback = if count == 0 then fallback else acc
+parseIntChars (c :: cs) acc count fallback =
+  if c >= 48 && c <= 57 then parseIntChars cs (acc * 10 + (c - 48)) (count + 1) fallback
+  else if count == 0 then fallback else acc
+stripMaxErrors : List String -> Pair (List String) Int
+stripMaxErrors args = stripMaxErrorsGo args [] 0
+
+stripMaxErrorsGo : List String -> List String -> Int -> Pair (List String) Int
+stripMaxErrorsGo [] acc n = Pair (reverse acc) n
+stripMaxErrorsGo ("--max-errors" :: rest) acc n = case rest of
+  v :: more => stripMaxErrorsGo more acc (parseIntOr v n)
+  [] => Pair (reverse acc) n
+stripMaxErrorsGo (arg :: rest) acc n =
+  if startsWith "--max-errors=" arg then
+    stripMaxErrorsGo rest acc (parseIntOr (substring (natFromInt 13) (natFromInt (strLength arg - 13)) arg) n)
+  else stripMaxErrorsGo rest (arg :: acc) n
 
 runCompilerCliFor1 : String -> List String -> Int
 runCompilerCliFor1 prog args = case args of
@@ -302,6 +326,19 @@ severityLabelOf d = case d.diagSeverity of
 
 printDiagWithPrefix : String -> Diagnostic -> Int
 printDiagWithPrefix extra d =
+  let
+    errs = takeParseErrors 0
+  in case errs of
+    [] => emitDiag extra d
+    e :: _ =>
+      let
+        shown = takeDiags (maxErrorsOf 0) errs
+        _ = map (emitDiag extra) shown
+      in diagExitFor e
+
+-- 单条诊断按当前格式输出并返回退出码。
+emitDiag : String -> Diagnostic -> Int
+emitDiag extra d =
   let
     fmt = diagFormatOf 0
   in if fmt == "json" then
