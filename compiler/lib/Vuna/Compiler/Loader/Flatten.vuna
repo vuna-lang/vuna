@@ -844,5 +844,11 @@ warnImportsList (imp :: rest) used =
   let
     _ =
       if memName imp.importName used then 0
-      else warnAt1 imp.importSpan (UnusedImport imp.importName) imp.importName
+      else warnAt1Mod
+        (\d => withSuggestion (Suggestion "remove unused import ${imp.importName}" MachineApplicable [DiagEdit (importRemovalSpan imp.importSpan) ""]) d)
+        imp.importSpan (UnusedImport imp.importName) imp.importName
   in warnImportsList rest used
+
+-- 整行删除 import 的编辑 span：从行首到下一行行首（含换行）。
+importRemovalSpan : Span -> Span
+importRemovalSpan sp = Span (spanFile sp) (spanStartLine sp) 1 (spanStartLine sp + 1) 1
