@@ -32,7 +32,6 @@ data LdDiag : Nat -> Type where
   ModuleHeaderInEntryFile : String -> LdDiag (Succ Zero)
   HostModulePrivileged : String -> LdDiag (Succ Zero)
   ModuleHeaderInEntrySource : String -> LdDiag (Succ Zero)
-  UnknownFixity : String -> LdDiag (Succ Zero)
   -- arity 2
   ModuleNotFound : String -> String -> LdDiag (Succ (Succ Zero))
   ModuleNotExported : String -> String -> LdDiag (Succ (Succ Zero))
@@ -44,7 +43,6 @@ ldCode (InvalidModuleName _) = "LD_InvalidModuleName"
 ldCode (HostModulePrivileged _) = "LD_HostModulePrivileged"
 ldCode (ModuleHeaderInEntryFile _) = "LD_ModuleHeaderInEntryFile"
 ldCode (ModuleHeaderInEntrySource _) = "LD_ModuleHeaderInEntrySource"
-ldCode (UnknownFixity _) = "LD_UnknownFixity"
 ldCode (ModuleNotFound _ _) = "LD_ModuleNotFound"
 ldCode (ModuleNotExported _ _) = "LD_ModuleNotExported"
 
@@ -56,8 +54,6 @@ ldTemplate (HostModulePrivileged _) =
   "module <0> is a privileged host module; only [package] privileged = true packages may import it"
 ldTemplate (ModuleHeaderInEntryFile _) = "module header is not allowed in entry file (<0>)"
 ldTemplate (ModuleHeaderInEntrySource _) = "module header is not allowed in entry source (<0>)"
-ldTemplate (UnknownFixity _) =
-  "unknown fixity for operator <0> (declare it with infixl/infixr/infix)"
 ldTemplate (ModuleNotFound _ _) = "module <0> not found (roots: <1>)"
 ldTemplate (ModuleNotExported _ _) = "module <0> is not exported by package <1>"
 
@@ -74,7 +70,6 @@ ldAll =
     LdEntry (ldCode (HostModulePrivileged "")) (ldTemplate (HostModulePrivileged "")) "宿主层模块只允许特权包 import",
     LdEntry (ldCode (ModuleHeaderInEntryFile "")) (ldTemplate (ModuleHeaderInEntryFile "")) "入口文件不允许模块头",
     LdEntry (ldCode (ModuleHeaderInEntrySource "")) (ldTemplate (ModuleHeaderInEntrySource "")) "入口源码不允许模块头",
-    LdEntry (ldCode (UnknownFixity "")) (ldTemplate (UnknownFixity "")) "未知运算符 fixity",
     LdEntry (ldCode (ModuleNotFound "" "")) (ldTemplate (ModuleNotFound "" "")) "模块未找到",
     LdEntry (ldCode (ModuleNotExported "" "")) (ldTemplate (ModuleNotExported "" "")) "模块未被包导出"
   ]

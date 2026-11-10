@@ -332,7 +332,7 @@ resolveQualifiedCtor modules label imports name = case splitLastDot (splitOnDot 
 -- 否则按「变量/顶层名 + 字段链」处理。`p.x`、`M.point.x`、`Vuna.Compiler.Frontend.Parser.parseSource` 都走这里。
 resolveDottedExpr : List Module -> String -> String -> Namespaces -> List Import -> List String -> String -> Span -> Check Expr
 resolveDottedExpr modules label prefix ns imports scope name sp = case splitOnDot name of
-  [] => rnNoLoc1 (InvalidDottedName name) name
+  [] => icInternal "empty dotted name"
   head :: rest => if memName head scope then OkC (foldFieldChain (EVar head sp) rest sp)
   else Vuna.Compiler.Common.bind (resolveQualifiedPath modules label imports (splitOnDot name) (length (splitOnDot name)) sp) (\q => case q of
     Just e => OkC e
@@ -938,7 +938,7 @@ resolveInstanceMethod modules label prefix ns imports (DSig name ctx ty sp) =
 resolveInstanceMethod modules label prefix ns imports (DFun name pats body sp) =
   Vuna.Compiler.Common.bind (checkTopName label name)
     (\_ => Vuna.Compiler.Common.bind (Vuna.Compiler.Common.traverse (resolvePattern resolveFuelBound modules label prefix ns imports) pats) (\parts => Vuna.Compiler.Common.bind (resolveExpr resolveFuelBound modules label prefix ns imports (concatMap secondOf parts) body) (\b => OkC (DFun name (map firstOf parts) b sp))))
-resolveInstanceMethod modules label prefix ns imports _ = rnNoLoc0 InstanceBodyForm
+resolveInstanceMethod modules label prefix ns imports _ = icInternal "unexpected instance body declaration"
 
 resolveProgram : List Module -> String -> String -> Namespaces -> List Import -> List Decl -> Check (List Decl)
 resolveProgram modules label prefix ns imports decls =

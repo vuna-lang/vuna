@@ -29,14 +29,12 @@ import Base.Vec
 data RnErr : Nat -> Type where
   -- arity 0
   DuplicateImport : RnErr Zero
-  InstanceBodyForm : RnErr Zero
   -- arity 1
   AmbiguousConstructorExport : String -> RnErr (Succ Zero)
   AmbiguousModule : String -> String -> RnErr (Succ (Succ Zero))
   CannotExportUnknownName : String -> RnErr (Succ Zero)
   DuplicateExport : String -> RnErr (Succ Zero)
   DuplicateModuleAlias : String -> RnErr (Succ Zero)
-  InvalidDottedName : String -> RnErr (Succ Zero)
   InvalidModuleAlias : String -> RnErr (Succ Zero)
   InvalidTopLevelName : String -> RnErr (Succ Zero)
   InvalidTypeExpression : String -> RnErr (Succ Zero)
@@ -63,13 +61,11 @@ data RnErr : Nat -> Type where
 -- | 诊断域实现：Vuna.Compiler.Diagnostics.Rn.rnCode（目录/模板见 diagnostics.md）。
 rnCode : {n : Nat} -> RnErr n -> String
 rnCode DuplicateImport = "RN_DuplicateImport"
-rnCode InstanceBodyForm = "RN_InstanceBodyForm"
 rnCode (AmbiguousConstructorExport _) = "RN_AmbiguousConstructorExport"
 rnCode (AmbiguousModule _ _) = "RN_AmbiguousModule"
 rnCode (CannotExportUnknownName _) = "RN_CannotExportUnknownName"
 rnCode (DuplicateExport _) = "RN_DuplicateExport"
 rnCode (DuplicateModuleAlias _) = "RN_DuplicateModuleAlias"
-rnCode (InvalidDottedName _) = "RN_InvalidDottedName"
 rnCode (InvalidModuleAlias _) = "RN_InvalidModuleAlias"
 rnCode (InvalidTopLevelName _) = "RN_InvalidTopLevelName"
 rnCode (InvalidTypeExpression _) = "RN_InvalidTypeExpression"
@@ -95,14 +91,12 @@ rnCode (ValueNotExported _ _) = "RN_ValueNotExported"
 -- | 诊断域实现：Vuna.Compiler.Diagnostics.Rn.rnTemplate（目录/模板见 diagnostics.md）。
 rnTemplate : {n : Nat} -> RnErr n -> String
 rnTemplate DuplicateImport = "duplicate import"
-rnTemplate InstanceBodyForm = "instance body may only contain method signatures/definitions"
 rnTemplate (AmbiguousConstructorExport _) =
   "ambiguous constructor export <0> (write T(..) or qualify it)"
 rnTemplate (AmbiguousModule _ _) = "ambiguous module <0> (found in: <1>)"
 rnTemplate (CannotExportUnknownName _) = "cannot export unknown name <0>"
 rnTemplate (DuplicateExport _) = "duplicate export <0>"
 rnTemplate (DuplicateModuleAlias _) = "duplicate module alias <0>"
-rnTemplate (InvalidDottedName _) = "invalid dotted name <0>"
 rnTemplate (InvalidModuleAlias _) = "invalid module alias <0>"
 rnTemplate (InvalidTopLevelName _) = "invalid top-level name <0>"
 rnTemplate (InvalidTypeExpression _) = "invalid type expression (<0>)"
@@ -173,13 +167,11 @@ record RnEntry where
 rnAll : List RnEntry
 rnAll =
   [ RnEntry (rnCode DuplicateImport) (rnTemplate DuplicateImport) "重复 import",
-    RnEntry (rnCode InstanceBodyForm) (rnTemplate InstanceBodyForm) "instance 体只允许方法签名/定义",
     RnEntry (rnCode (AmbiguousConstructorExport "")) (rnTemplate (AmbiguousConstructorExport "")) "导出的构造子歧义",
     RnEntry (rnCode (AmbiguousModule "" "")) (rnTemplate (AmbiguousModule "" "")) "模块名歧义",
     RnEntry (rnCode (CannotExportUnknownName "")) (rnTemplate (CannotExportUnknownName "")) "导出未知名",
     RnEntry (rnCode (DuplicateExport "")) (rnTemplate (DuplicateExport "")) "重复导出",
     RnEntry (rnCode (DuplicateModuleAlias "")) (rnTemplate (DuplicateModuleAlias "")) "重复模块别名",
-    RnEntry (rnCode (InvalidDottedName "")) (rnTemplate (InvalidDottedName "")) "非法限定名",
     RnEntry (rnCode (InvalidModuleAlias "")) (rnTemplate (InvalidModuleAlias "")) "非法模块别名",
     RnEntry (rnCode (InvalidTopLevelName "")) (rnTemplate (InvalidTopLevelName "")) "非法顶层名",
     RnEntry (rnCode (InvalidTypeExpression "")) (rnTemplate (InvalidTypeExpression "")) "非法类型表达式",

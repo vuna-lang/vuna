@@ -75,8 +75,8 @@ data PsDiag : Nat -> Type where
   DoBlockNeedsStatement : PsDiag Zero
   DoStatementNotIndented : PsDiag Zero
   ExpectedCommaOrBracket : PsDiag Zero
-  ExpectedEndOfExpr : PsDiag Zero
   ExpectedEndOfInput : PsDiag Zero
+  ExpectedEndOfExpr : PsDiag Zero
   ExpectedExportItem : PsDiag Zero
   ExpectedExpression : PsDiag Zero
   ExpectedIdentifier : PsDiag Zero
@@ -101,10 +101,8 @@ data PsDiag : Nat -> Type where
   UnexpectedIndentInInstance : PsDiag Zero
   UnexpectedIndentInRecord : PsDiag Zero
   UnexpectedIndentInTrait : PsDiag Zero
-  UnexpectedIndentInWhere : PsDiag Zero
   -- M28：`let` / `where` 共用绑定块，缩进越界用统一诊断。
   UnexpectedIndentInBinding : PsDiag Zero
-  WhereArgsNotSimple : PsDiag Zero
   -- M31.2：`infix*` 声明的优先级必须是 0–9 的十进制字面量。
   ExpectedFixityLevel : PsDiag Zero
   FixityLevelRange : PsDiag Zero
@@ -128,8 +126,8 @@ psCode DoBindPattern = "PS_DoBindPattern"
 psCode DoBlockNeedsStatement = "PS_DoBlockNeedsStatement"
 psCode DoStatementNotIndented = "PS_DoStatementNotIndented"
 psCode ExpectedCommaOrBracket = "PS_ExpectedCommaOrBracket"
-psCode ExpectedEndOfExpr = "PS_ExpectedEndOfExpr"
 psCode ExpectedEndOfInput = "PS_ExpectedEndOfInput"
+psCode ExpectedEndOfExpr = "PS_ExpectedEndOfExpr"
 psCode ExpectedExportItem = "PS_ExpectedExportItem"
 psCode ExpectedExpression = "PS_ExpectedExpression"
 psCode ExpectedIdentifier = "PS_ExpectedIdentifier"
@@ -151,9 +149,7 @@ psCode UnexpectedIndentInDo = "PS_UnexpectedIndentInDo"
 psCode UnexpectedIndentInInstance = "PS_UnexpectedIndentInInstance"
 psCode UnexpectedIndentInRecord = "PS_UnexpectedIndentInRecord"
 psCode UnexpectedIndentInTrait = "PS_UnexpectedIndentInTrait"
-psCode UnexpectedIndentInWhere = "PS_UnexpectedIndentInWhere"
 psCode UnexpectedIndentInBinding = "PS_UnexpectedIndentInBinding"
-psCode WhereArgsNotSimple = "PS_WhereArgsNotSimple"
 psCode ExpectedFixityLevel = "PS_ExpectedFixityLevel"
 psCode FixityLevelRange = "PS_FixityLevelRange"
 psCode ConstraintUnsupportedHere = "PS_ConstraintUnsupportedHere"
@@ -172,8 +168,8 @@ psTemplate DoBindPattern = "do bind pattern must be a variable or _"
 psTemplate DoBlockNeedsStatement = "do block needs at least one statement"
 psTemplate DoStatementNotIndented = "do block statement is not indented enough"
 psTemplate ExpectedCommaOrBracket = "expected , or ]"
-psTemplate ExpectedEndOfExpr = "expected end of expression"
 psTemplate ExpectedEndOfInput = "expected end of input"
+psTemplate ExpectedEndOfExpr = "expected end of expression"
 psTemplate ExpectedExportItem = "expected an export item"
 psTemplate ExpectedExpression = "expected expression"
 psTemplate ExpectedIdentifier = "expected identifier"
@@ -196,9 +192,7 @@ psTemplate UnexpectedIndentInDo = "unexpected indentation in do block"
 psTemplate UnexpectedIndentInInstance = "unexpected indentation in instance block"
 psTemplate UnexpectedIndentInRecord = "unexpected indentation in record block"
 psTemplate UnexpectedIndentInTrait = "unexpected indentation in trait block"
-psTemplate UnexpectedIndentInWhere = "unexpected indentation in where block"
 psTemplate UnexpectedIndentInBinding = "unexpected indentation in a let/where binding block"
-psTemplate WhereArgsNotSimple = "binding function arguments must be simple names"
 psTemplate ExpectedFixityLevel = "expected a fixity level (0-9)"
 psTemplate FixityLevelRange = "fixity level must be between 0 and 9"
 psTemplate ConstraintUnsupportedHere =
@@ -243,8 +237,8 @@ psAll =
     PsEntry (psCode DoBlockNeedsStatement) (psTemplate DoBlockNeedsStatement) "do 块至少一条语句",
     PsEntry (psCode DoStatementNotIndented) (psTemplate DoStatementNotIndented) "do 语句缩进不足",
     PsEntry (psCode ExpectedCommaOrBracket) (psTemplate ExpectedCommaOrBracket) "期望 , 或 ]",
-    PsEntry (psCode ExpectedEndOfExpr) (psTemplate ExpectedEndOfExpr) "表达式后有多余内容",
     PsEntry (psCode ExpectedEndOfInput) (psTemplate ExpectedEndOfInput) "输入后有多余内容",
+    PsEntry (psCode ExpectedEndOfExpr) (psTemplate ExpectedEndOfExpr) "表达式后有多余内容",
     PsEntry (psCode ExpectedExportItem) (psTemplate ExpectedExportItem) "期望导出项",
     PsEntry (psCode ExpectedExpression) (psTemplate ExpectedExpression) "期望表达式",
     PsEntry (psCode ExpectedIdentifier) (psTemplate ExpectedIdentifier) "期望标识符",
@@ -266,9 +260,7 @@ psAll =
     PsEntry (psCode UnexpectedIndentInInstance) (psTemplate UnexpectedIndentInInstance) "instance 块缩进意外",
     PsEntry (psCode UnexpectedIndentInRecord) (psTemplate UnexpectedIndentInRecord) "record 块缩进意外",
     PsEntry (psCode UnexpectedIndentInTrait) (psTemplate UnexpectedIndentInTrait) "trait 块缩进意外",
-    PsEntry (psCode UnexpectedIndentInWhere) (psTemplate UnexpectedIndentInWhere) "where 块缩进意外",
     PsEntry (psCode UnexpectedIndentInBinding) (psTemplate UnexpectedIndentInBinding) "let/where 绑定块缩进意外",
-    PsEntry (psCode WhereArgsNotSimple) (psTemplate WhereArgsNotSimple) "绑定函数实参必须是简单名",
     PsEntry (psCode (ExpectedDeclAtColumn "")) (psTemplate (ExpectedDeclAtColumn "")) "该列期望一个声明",
     PsEntry (psCode (ExpectedToken "")) (psTemplate (ExpectedToken "")) "期望指定符号/关键字",
     PsEntry (psCode (WhereSigBeforeClause "")) (psTemplate (WhereSigBeforeClause "")) "绑定签名必须先于子句",
