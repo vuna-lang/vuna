@@ -47,17 +47,27 @@ diagFormatRef = runIO (newRef "short")
 denyWarningsRef : IORef Bool
 denyWarningsRef = runIO (newRef False)
 
+showWarningsRef : IORef Bool
+showWarningsRef = runIO (newRef False)
+
 denyWarningsOn : Int -> Bool
 denyWarningsOn _ = runIO (readRef denyWarningsRef)
+
+showWarningsOn : Int -> Bool
+showWarningsOn _ = runIO (readRef showWarningsRef)
 
 stripDenyWarnings : List String -> List String
 stripDenyWarnings [] = []
 stripDenyWarnings (arg :: rest) =
-  if arg == "--deny-warnings" then stripDenyWarnings rest else arg :: stripDenyWarnings rest
+  if arg == "--deny-warnings" || arg == "--warnings" || arg == "-W" then stripDenyWarnings rest else arg :: stripDenyWarnings rest
 
 hasDenyWarnings : List String -> Bool
 hasDenyWarnings [] = False
 hasDenyWarnings (arg :: rest) = if arg == "--deny-warnings" then True else hasDenyWarnings rest
+
+hasShowWarnings : List String -> Bool
+hasShowWarnings [] = False
+hasShowWarnings (arg :: rest) = if arg == "--warnings" || arg == "-W" then True else hasShowWarnings rest
 
 stripDiagFormat : List String -> Pair (List String) (Maybe String)
 stripDiagFormat args = stripDiagFormatGo args [] Nothing
@@ -84,6 +94,7 @@ runCompilerCliFor prog args =
       Nothing => 0
     kept = stripDenyWarnings (firstOf stripped)
     _ = runIO (writeRef denyWarningsRef (hasDenyWarnings args))
+    _ = runIO (writeRef showWarningsRef (hasDenyWarnings args || hasShowWarnings args))
   in if anyHelp kept then helpFor prog else runCompilerCliFor1 prog kept
 
 runCompilerCliFor1 : String -> List String -> Int
@@ -304,7 +315,8 @@ checkSpawnArgs dir =
     fmt = diagFormatOf 0
   in let
     base = if fmt == "short" then ["check", dir] else ["check", "--error-format", fmt, dir]
-  in if denyWarningsOn 0 then append base ["--deny-warnings"] else base
+    base2 = if showWarningsOn 0 then append base ["--warnings"] else base
+  in if denyWarningsOn 0 then append base2 ["--deny-warnings"] else base2
 
 checkPackages : List Package -> Int -> Int
 checkPackages [] code = code
@@ -338,7 +350,8 @@ checkPackageSeq pkg code =
       OkC _ =>
         let
           ws = filter (ownedByPackage pkg) (takeWarnings 0)
-          _ = printDiagList "[${packageName pkg}] " ws
+          shown = if showWarningsOn 0 || denyWarningsOn 0 then ws else []
+          _ = printDiagList "[${packageName pkg}] " shown
           failed = if denyWarningsOn 0 && length ws > 0 then 1 else 0
         in failed
   in if c > code then c else code
@@ -355,7 +368,8 @@ checkFileEntry path = case contextForFile path of
     OkC _ =>
       let
         ws = filter (ownedByFile path) (takeWarnings 0)
-        _ = printDiagList "" ws
+        shown = if showWarningsOn 0 || denyWarningsOn 0 then ws else []
+        _ = printDiagList "" shown
       in if denyWarningsOn 0 && length ws > 0 then 1 else 0
 
 -- ---------------------------------------------------------------
