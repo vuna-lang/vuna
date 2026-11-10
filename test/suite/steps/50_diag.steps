@@ -102,3 +102,11 @@ run: sh -c '"$VUNA" check "$TMPDIR/m39-multi.vuna" --max-errors 2 2>&1 | grep -c
 out-contains: 2
 run: sh -c '"$VUNA" check "$TMPDIR/m39-multi.vuna" --max-errors 2 --json 2>&1 | grep -o "\"code\"" | wc -l'
 out-contains: 2
+# explain 元数据：severity/phase/category 与诊断目录同源。
+run: "$VUNA" explain TC_TypeMismatch
+out-contains: severity: error
+out-contains: phase: elab
+out-contains: category: types
+run: "$VUNA" explain UN_UnusedBinder
+out-contains: severity: warning
+out-contains: phase: usage

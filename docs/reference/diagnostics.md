@@ -148,7 +148,7 @@ JSON 字段是机器契约：`code/severity/phase/category/message/labels[]/fiel
 | D2 `Diagnostic` 全字段 | 已落地 |
 | D3 位置契约（end span、UTF-16、显式 NoLoc） | 已落地（span 填充仍在补齐） |
 | D4 码域（RN_/PKG_ 独立域、死码清理） | 已落地（`RN_` 27 码、`PKG_` 27 码；9 个不再触发的 TC 死码已删除） |
-| D5 目录单一真源 + 生成枚举/文档 | 部分（条目仍是手写；`explain`/`gen-errors` 已同源） |
+| D5 目录单一真源 + 生成枚举/文档 | 部分（条目仍是手写；`explain`/`gen-errors` 已同源；`explain` 现输出 severity/phase/category 元数据） |
 | D6 渲染/LSP/CLI | 已落地 short/human/JSON/SARIF + LSP push/pull + `[diagnostics]` 配置；i18n 待办 |
 | D7.1 多错误 + Cascade | 部分（parser 顶层 resync：多个语法错误一次报出，`--max-errors` 截断且作用于 short/JSON/SARIF；elab 逐 decl 恢复 + Cascade 待办） |
 | D7.2 warnings（未使用/冗余/不可达） | 部分（`UN_UnusedBinder`/`UN_ShadowedBinder`/`UN_RedundantCtorBranch`/`UN_RedundantLiteralBranch`/`UN_BranchAfterCatchAll`/`UN_UnusedImport`（限定/别名 import）已落地；`-W`/`--deny-warnings` 已接；未使用定义、open import 追踪待办） |
@@ -159,7 +159,7 @@ JSON 字段是机器契约：`code/severity/phase/category/message/labels[]/fiel
 | D7.7 覆盖性缺失构造子标签 | 部分（全部缺失构造子进 `candidates` 字段；无 span 标签） |
 | D7.8 QTT 使用点 | 待办（需要 Core `TSp`） |
 | D7.9 文案规范/门禁 | 待办 |
-| D7.10 explanation/example/`explain` | 部分（模板+中文说明可用；example 待补；元变量/洞已有 `name`/`note` 字段） |
+| D7.10 explanation/example/`explain` | 部分（模板+中文说明+severity/phase/category 元数据可用；example 待补；元变量/洞已有 `name`/`note` 字段） |
 | 结构化夹具 + 每码覆盖门禁 | 部分（206 个 `.diag.json`；覆盖门禁 156/240，缺口 allowlist 逐码登记） |
 
 ## 10. 后续路线（按依赖排序）

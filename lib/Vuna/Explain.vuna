@@ -70,6 +70,9 @@ printInfo i =
     _ = runIO (prim_print "${i.infoCode}\n")
     _ = runIO (prim_print "  message: ${i.infoTemplate}\n")
     _ = runIO (prim_print "  meaning: ${i.infoDesc}\n")
+    _ = runIO (prim_print "  severity: ${diagSeverityOf (codeDomain i.infoCode)}\n")
+    _ = runIO (prim_print "  phase: ${diagPhaseOf (codeDomain i.infoCode)}\n")
+    _ = runIO (prim_print "  category: ${diagCategoryOf (codeDomain i.infoCode)}\n")
   in 0
 
 listInfos : List Info -> String -> Int
@@ -101,3 +104,45 @@ explainArgs args = case args of
 
 runExplain : List String -> Int
 runExplain args = explainArgs args
+
+-- 目录元数据：severity/phase/category 由码域推导（稳定映射，不另建真源）。
+codeDomain : String -> String
+codeDomain code = case split "_" code of
+  [] => code
+  d :: _ => d
+
+diagPhaseOf : String -> String
+diagPhaseOf d = case d of
+  "LX" => "lex"
+  "PS" => "parse"
+  "RN" => "resolve"
+  "LD" => "load"
+  "PKG" => "package"
+  "TC" => "elab"
+  "CG" => "codegen"
+  "IC" => "internal"
+  "UN" => "usage"
+  "LN" => "lint"
+  "FX" => "effect"
+  _ => "tool"
+
+diagCategoryOf : String -> String
+diagCategoryOf d = case d of
+  "LX" => "syntax"
+  "PS" => "syntax"
+  "RN" => "resolve"
+  "LD" => "package"
+  "PKG" => "package"
+  "TC" => "types"
+  "CG" => "codegen"
+  "IC" => "internal"
+  "UN" => "quantity"
+  "LN" => "style"
+  "FX" => "effects"
+  _ => "tool"
+
+diagSeverityOf : String -> String
+diagSeverityOf d = if d == "UN" || d == "LN" then "warning" else "error"
+
+codeOfDomain : String -> String
+codeOfDomain code = codeDomain code
