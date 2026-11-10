@@ -212,3 +212,7 @@ run: sh -c 'd="$TMPDIR/m49-lib"; rm -rf "$d"; mkdir -p "$d/lib"; printf "[packag
 exit: 1
 out-contains: lib/A.vuna
 out-contains: lib/B.vuna
+# 级联来源在 SARIF 也机器可读。
+run: sh -c 'printf "a : Int\na = \"x\"\n\nb : Int\nb = a\n\nmain : Int\nmain = b\n" > "$TMPDIR/m50-cascade.vuna"; "$VUNA" check "$TMPDIR/m50-cascade.vuna" --continue-on-error --error-format sarif 2>&1'
+exit: 1
+out-contains: "vuna.origin":"cascade"

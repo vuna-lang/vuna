@@ -169,7 +169,7 @@ diagnosticJson label lines d =
       Nothing => lspRange 0 0 0 0
       Just sp => labelRangeJson lines sp
     related = concatMap (labelRelatedJson label lines) d.diagLabels
-    fieldData = map fieldJson d.diagFields
+    fieldData = append (map fieldJson d.diagFields) (originFields d)
     base =
       [ Pair "range" range,
         Pair "severity" (JNum (lspSeverityOf d.diagSeverity)),
@@ -489,3 +489,8 @@ lspWarnable d = d.diagCode /= "UN_UnusedImport"
 warnAllowed : Bool -> Diagnostic -> Bool
 warnAllowed True d = True
 warnAllowed False d = lspWarnable d
+
+originFields : Diagnostic -> List Json
+originFields d = case d.diagOrigin of
+  OriginDirect => []
+  OriginCascade _ => [JObj [Pair "kind" (JStr "origin"), Pair "value" (JStr "cascade")]]

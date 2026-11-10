@@ -334,7 +334,7 @@ sarifResult d =
       else ",\"relatedLocations\":[${join "," (map (sarifRelated (diagFileOf d)) related)}]"
     notesText = join "\n" (map (\n => "note: ${n}") d.diagNotes)
     msg = if notesText == "" then d.diagMessage else "${d.diagMessage}\n${notesText}"
-  in "{\"ruleId\":${jsonStr (sarifRuleId d)},\"level\":${jsonStr (sarifLevel d.diagSeverity)},\"message\":{\"text\":${jsonStr msg}}${primary}${relJson}}"
+  in "{\"ruleId\":${jsonStr (sarifRuleId d)},\"level\":${jsonStr (sarifLevel d.diagSeverity)},\"message\":{\"text\":${jsonStr msg}}${primary}${relJson},\"properties\":{\"vuna.origin\":${jsonStr (originName d.diagOrigin)}}}"
 
 isPrimaryLabel : Label -> Bool
 isPrimaryLabel l = case l.labelStyle of
