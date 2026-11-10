@@ -199,7 +199,8 @@ runCompilerCliFor prog args =
       Nothing => 0
     kept = stripDenyWarnings (firstOf strippedMax)
     _ = setDiagLang (secondOf strippedLang)
-    _ = if secondOf strippedLang == "en" then 0
+    _ =
+      if secondOf strippedLang == "en" then 0
       else if secondOf stripped == Nothing then runIO (writeRef diagFormatRef "human") else 0
     _ = if secondOf strippedMax > 0 then runIO (writeRef maxErrorsRef (secondOf strippedMax)) else 0
     _ = resetSarif 0
