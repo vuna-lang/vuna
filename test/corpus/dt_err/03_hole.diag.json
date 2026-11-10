@@ -1,0 +1,1 @@
+{"version":1,"tool":"vuna","diagnostics":[{"code":"TC_UnsolvedHole","severity":"error","phase":"elab","category":"types","message":"unsolved hole corpus/dt_err/03_hole.vuna:2:7 with goal Int","labels":[],"fields":[],"trace":[],"notes":[],"suggestions":[],"origin":{"kind":"direct"},"internal":false,"ice":null}]}

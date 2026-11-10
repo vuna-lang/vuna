@@ -446,12 +446,13 @@ errorCase env c source expected wantInterp wantCheck wantCompile =
       ]
     else []
     diagPath = diagExpectedOf expected
+    diagSource = relativeTo env.envCwd source
     diagRun = if wantCompile then
       runCmdMerged env "${c.caseId}-diag" env.envCwd c.caseTimeout
-        (withEnvIface env [env.envVuna, "compile", source, uniqueOutDir env "${c.caseId}-diag", "--json"])
+        (withEnvIface env [env.envVuna, "compile", diagSource, uniqueOutDir env "${c.caseId}-diag", "--json"])
       else
         runCmdMerged env "${c.caseId}-diag" env.envCwd c.caseTimeout
-          (withEnvIface env [env.envVuna, "check", source, "--json"])
+          (withEnvIface env [env.envVuna, "check", diagSource, "--json"])
     actualDiag = trimNewlines (combinedOut diagRun)
     diagA = if pathExistsFile diagPath then
         [assertEq "diag json" (trimNewlines (runIO (readFile diagPath))) actualDiag]
@@ -1229,7 +1230,7 @@ else
       Nothing => []
     flagArgs =
       append (if opts.suiteFailFast then ["--fail-fast"] else [])
-        (append (if opts.suiteJSON then ["--quiet"] else []) (append (if opts.suiteNoCache then ["--no-cache"] else []) (append (if opts.suiteLastFailed then ["--last-failed"] else []) (append (if opts.suiteBless then ["--bless"] else []) (append cacheArgs changedArgs)))))
+        (append (if opts.suiteJSON then ["--quiet"] else []) (append (if opts.suiteNoCache then ["--no-cache"] else []) (append (if opts.suiteLastFailed then ["--last-failed"] else []) (append (if opts.suiteBless then ["--bless"] else []) (append (if opts.suiteBlessDiag then ["--bless-diag"] else []) (append cacheArgs changedArgs))))))
     args =
       append ["test", "--suite", opts.suitePath, "--worker", workerArg, "--results-dir", resultsDir]
         (append filters flagArgs)
@@ -1668,3 +1669,10 @@ indexedCases cases index count =
 -- 全局下标 i 属于 worker index：i mod count == index。
 matchesIndex : Int -> Int -> Pair Int Case -> Bool
 matchesIndex index count (Pair i _) = if count <= 0 then False else i - i / count * count == index
+
+-- 把绝对源码路径转成相对 cwd 的路径（.diag.json 不写机器相关前缀）。
+relativeTo : String -> String -> String
+relativeTo base path =
+  if startsWith "${base}/" path then
+    substring (natFromInt (strLength base + 1)) (natFromInt (strLength path - strLength base - 1)) path
+  else path
