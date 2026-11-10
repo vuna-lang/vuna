@@ -112,37 +112,34 @@ codeDomain code = case split "_" code of
   d :: _ => d
 
 diagPhaseOf : String -> String
-diagPhaseOf d = case d of
-  "LX" => "lex"
-  "PS" => "parse"
-  "RN" => "resolve"
-  "LD" => "load"
-  "PKG" => "package"
-  "TC" => "elab"
-  "CG" => "codegen"
-  "IC" => "internal"
-  "UN" => "usage"
-  "LN" => "lint"
-  "FX" => "effect"
-  _ => "tool"
+diagPhaseOf "LX" = "lex"
+diagPhaseOf "PS" = "parse"
+diagPhaseOf "RN" = "resolve"
+diagPhaseOf "LD" = "load"
+diagPhaseOf "PKG" = "package"
+diagPhaseOf "TC" = "elab"
+diagPhaseOf "CG" = "codegen"
+diagPhaseOf "IC" = "internal"
+diagPhaseOf "UN" = "usage"
+diagPhaseOf "LN" = "lint"
+diagPhaseOf "FX" = "effect"
+diagPhaseOf _ = "tool"
 
 diagCategoryOf : String -> String
-diagCategoryOf d = case d of
-  "LX" => "syntax"
-  "PS" => "syntax"
-  "RN" => "resolve"
-  "LD" => "package"
-  "PKG" => "package"
-  "TC" => "types"
-  "CG" => "codegen"
-  "IC" => "internal"
-  "UN" => "quantity"
-  "LN" => "style"
-  "FX" => "effects"
-  _ => "tool"
+diagCategoryOf "LX" = "syntax"
+diagCategoryOf "PS" = "syntax"
+diagCategoryOf "RN" = "resolve"
+diagCategoryOf "LD" = "package"
+diagCategoryOf "PKG" = "package"
+diagCategoryOf "TC" = "types"
+diagCategoryOf "CG" = "codegen"
+diagCategoryOf "IC" = "internal"
+diagCategoryOf "UN" = "quantity"
+diagCategoryOf "LN" = "style"
+diagCategoryOf "FX" = "effects"
+diagCategoryOf _ = "tool"
 
 diagSeverityOf : String -> String
-diagSeverityOf d = if d == "UN" || d == "LN" then "warning" else "error"
-
-codeOfDomain : String -> String
-codeOfDomain code = codeDomain code
+diagSeverityOf "UN" = "warning"
+diagSeverityOf "LN" = "warning"
+diagSeverityOf _ = "error"
