@@ -1323,6 +1323,7 @@ dtCheckRecovering : PackageContext -> String -> Check (List Diagnostic)
 dtCheckRecovering ctx entry =
   Vuna.Compiler.Common.bind (dtLoad ctx entry) (\decls => recoverElab 8 decls [])
 
+-- | 恢复式精化循环：失败后移除相关声明继续。
 recoverElab : Int -> List Decl -> List Diagnostic -> Check (List Diagnostic)
 recoverElab fuel decls errs = if fuel <= 0 then OkC (reverse errs)
 else case elabProgram decls of
@@ -1340,20 +1341,25 @@ else case elabProgram decls of
     in if length decls2 == length decls then OkC (reverse (Base.List.Cons d errs))
     else recoverElab (fuel - 1) decls2 (Base.List.Cons d errs)
 
+-- | 诊断主 label 的起始行（无位置返回 Nothing）。
 diagPrimaryLine : Diagnostic -> Maybe Int
 diagPrimaryLine d = primaryLineOf d.diagLabels
 
+-- | 从 label 列表取主 label 起始行。
 primaryLineOf : List Label -> Maybe Int
 primaryLineOf [] = Nothing
 primaryLineOf ((Label (Just sp) _ LabelPrimary _) :: _) = Just (spanStartLine sp)
 primaryLineOf (_ :: rest) = primaryLineOf rest
 
+-- | span 是否覆盖某行。
 spanContainsLine : Span -> Int -> Bool
 spanContainsLine sp line = spanStartLine sp <= line && line <= spanEndLine sp
 
+-- | 声明是否包含待移除的名字。
 declDropped : List String -> Decl -> Bool
 declDropped names d = anyNameIn (declNames d) names
 
+-- | 名字列表是否有交集。
 anyNameIn : List String -> List String -> Bool
 anyNameIn [] names = False
 anyNameIn (n :: rest) names = if memName n names then True else anyNameIn rest names
