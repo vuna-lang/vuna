@@ -1,0 +1,91 @@
+-- | vuna explain：按错误码查询目录条目（消息模板 + 说明）。
+module Vuna.Explain (runExplain) where
+
+-- Vuna.Explain：`vuna explain CODE` / `vuna explain --list`。
+--
+-- 数据源就是各域的枚举条目（`tcAll`/`cgAll`/`lexAll`/`psAll`/`ldAll`/`icAll`/`lintAll`），
+-- 不再维护第二份错误码文档；字段与 `vuna gen-errors` 同源。
+import Base.List
+import Base.String
+import Vuna.Compiler.Common
+import Vuna.Compiler.Diagnostics
+import Vuna.Compiler.Frontend.Diagnostics
+import Vuna.Compiler.Loader.Diagnostics
+import Vuna.Lint.Diagnostics
+import Base.IO.Host
+
+record Info where
+  infoCode : String
+  infoTemplate : String
+  infoDesc : String
+
+tcInfo : TcEntry -> Info
+tcInfo e = Info e.tcEntryCode e.tcEntryTemplate e.tcEntryDesc
+
+cgInfo : CgEntry -> Info
+cgInfo e = Info e.cgEntryCode e.cgEntryTemplate e.cgEntryDesc
+
+icInfo : IcEntry -> Info
+icInfo e = Info e.icEntryCode e.icEntryTemplate e.icEntryDesc
+
+lexInfo : LexEntry -> Info
+lexInfo e = Info e.lexEntryCode e.lexEntryTemplate e.lexEntryDesc
+
+psInfo : PsEntry -> Info
+psInfo e = Info e.psEntryCode e.psEntryTemplate e.psEntryDesc
+
+ldInfo : LdEntry -> Info
+ldInfo e = Info e.ldEntryCode e.ldEntryTemplate e.ldEntryDesc
+
+lintInfo : LintEntry -> Info
+lintInfo e = Info e.lintEntryCode e.lintEntryRule e.lintEntryDesc
+
+allInfos : List Info
+allInfos =
+  append (map tcInfo tcAll)
+    (append (map cgInfo cgAll) (append (map icInfo icAll) (append (map lexInfo lexAll) (append (map psInfo psAll) (append (map ldInfo ldAll) (map lintInfo lintAll))))))
+
+findInfo : String -> List Info -> Maybe Info
+findInfo code [] = Nothing
+findInfo code (i :: rest) = if i.infoCode == code then Just i else findInfo code rest
+
+matchesPrefix : String -> String -> Bool
+matchesPrefix prefix code = startsWith prefix code
+
+printInfo : Info -> Int
+printInfo i =
+  let
+    _ = runIO (prim_print "${i.infoCode}\n")
+    _ = runIO (prim_print "  message: ${i.infoTemplate}\n")
+    _ = runIO (prim_print "  meaning: ${i.infoDesc}\n")
+  in 0
+
+listInfos : List Info -> String -> Int
+listInfos [] prefix = 0
+listInfos (i :: rest) prefix =
+  let
+    _ =
+      if prefix == "" || matchesPrefix prefix i.infoCode then runIO (prim_print "${i.infoCode}  ${i.infoDesc}\n")
+      else 0
+  in listInfos rest prefix
+
+explainArgs : List String -> Int
+explainArgs args = case args of
+  [] =>
+    let
+      _ = runIO (prim_print "usage: vuna explain <CODE> | vuna explain --list [PREFIX]\n")
+    in 2
+  "--list" :: rest => case rest of
+    [] => listInfos allInfos ""
+    prefix :: _ => listInfos allInfos prefix
+  code :: _ => case findInfo code allInfos of
+    Nothing =>
+      let
+        _ =
+          runIO
+            (prim_print "error: unknown diagnostic code `${code}` (try `vuna explain --list`)\n")
+      in 2
+    Just i => printInfo i
+
+runExplain : List String -> Int
+runExplain args = explainArgs args

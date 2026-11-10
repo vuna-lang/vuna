@@ -12,6 +12,8 @@ module Vuna.Compiler.Diagnostics.Tc
   , tcErr2NoLoc
   , tcMsg
   , tcTemplate
+  , tcTypeMismatch
+  , tcTypeMismatchNoLoc
   ) where
 
 -- Vuna.Compiler.Diagnostics.Tc：TC_ 域（精化 / 终止性 / 覆盖性诊断）。
@@ -604,3 +606,16 @@ tcErr1NoLoc e a0 = ErrC (tcMsg e [a0])
 -- | 自动补注（M41 新增导出）：tcErr2NoLoc。
 tcErr2NoLoc : TcErr (Succ (Succ Zero)) -> String -> String -> Check a
 tcErr2NoLoc e a0 a1 = ErrC (tcMsg e [a0, a1])
+
+-- ---------------------------------------------------------------
+-- 类型不匹配：code + expected/found 机器可读字段（LSP/JSON 不解析散文）。
+-- ---------------------------------------------------------------
+tcTypeMismatch : Span -> String -> String -> Check a
+tcTypeMismatch sp expected found =
+  ErrC
+    (withField (FieldFound found) (withField (FieldExpected expected) (withDiagSpan sp (tcMsg (TypeMismatch expected found) [expected, found]))))
+
+tcTypeMismatchNoLoc : String -> String -> Check a
+tcTypeMismatchNoLoc expected found =
+  ErrC
+    (withField (FieldFound found) (withField (FieldExpected expected) (tcMsg (TypeMismatch expected found) [expected, found])))

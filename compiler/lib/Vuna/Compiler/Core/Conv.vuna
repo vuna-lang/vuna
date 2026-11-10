@@ -406,7 +406,7 @@ mismatchAt depth a b =
   let
     sa = showValueAt depth a
     sb = showValueAt depth b
-  in tcErr2NoLoc (TypeMismatch sa sb) sa sb
+  in tcTypeMismatchNoLoc sa sb
 
 -- ---------------------------------------------------------------
 -- 元变量求解（M28：Miller pattern unification）

@@ -1893,9 +1893,7 @@ checkTypeAtKind globals ctx ec expr expected sp = case forceVal ec expected of
       Just kindTerm => Vuna.Compiler.Common.bind (inferArgsFuel 256 globals ctx ec (eval [] kindTerm) args sp Nothing) (\pa => case pa of
         Pair argTerms (Pair resTy ec1) => case convEc ec1 (ctxDepth ctx) expected resTy of
           OkC ec2 => OkC (Pair (foldAppTerms (TGlobal name) argTerms) ec2)
-          ErrC e =>
-            tcErr2 sp (TypeMismatch (showValue expected) (showValue resTy)) (showValue expected)
-              (showValue resTy)
+          ErrC e => tcTypeMismatch sp (showValue expected) (showValue resTy)
       )
     else checkEFuel 256 globals ctx ec expr expected
     _ => checkEFuel 256 globals ctx ec expr expected

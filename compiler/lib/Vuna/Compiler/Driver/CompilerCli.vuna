@@ -151,6 +151,17 @@ printErrText e =
     _ = runIO (prim_print (renderCliDiagnostic e))
   in 1
 
+diagFormatName : String
+diagFormatName = runIO (readRef diagFormatRef)
+
+printDiagWithPrefix : String -> Diagnostic -> Int
+printDiagWithPrefix prefix d =
+  let
+    fmt = diagFormatName
+  in if fmt == "json" then printErrText (renderJson d ++ "\n")
+  else if fmt == "human" then printErrText (renderHuman d ++ "\n")
+  else printErrText (prefix ++ renderShort d ++ "\n")
+
 printDiag : Diagnostic -> Int
 printDiag d =
   let
@@ -262,6 +273,12 @@ checkPkgDir dir = case workspacePackages dir of
 -- 串行）。根包目录就是 workspace 根，spawn 它会再展开整个 workspace ⇒ 递归，所以按
 -- `workspacePackages <dir>` 是否返回多包区分根 / 成员；单包目录的子进程只查自己。
 -- 子进程继承 stdout/stderr（错误可能交错），退出码按失败汇总。
+checkSpawnArgs : String -> List String
+checkSpawnArgs dir =
+  let
+    fmt = diagFormatName
+  in if fmt == "short" then ["check", dir] else ["check", "--error-format", fmt, dir]
+
 checkPackages : List Package -> Int -> Int
 checkPackages [] code = code
 checkPackages ([pkg]) code = checkPackageSeq pkg code
@@ -269,7 +286,7 @@ checkPackages pkgs code =
   let
     members = filter (\pkg => not (isWorkspaceRoot pkg)) pkgs
     roots = filter (\pkg => isWorkspaceRoot pkg) pkgs
-    started = map (\pkg => Pair pkg (runIO (prim_spawn ["check", packageDir pkg]))) members
+    started = map (\pkg => Pair pkg (runIO (prim_spawn (checkSpawnArgs (packageDir pkg))))) members
     code1 = checkRootsSeq roots code
     codes = map (\pr => runIO (prim_wait (secondOf pr))) started
   in countFailures code1 codes
@@ -289,7 +306,7 @@ checkPackageSeq pkg code =
     c = case checkPackage pkg of
       ErrC e =>
         let
-          _ = runIO (prim_print "${renderWithPrefix "error: [${packageName pkg}] " (diagText e)}\n")
+          _ = printDiagWithPrefix "error: [${packageName pkg}] " e
         in 1
       OkC warnings => printWarnings warnings
   in if c > code then c else code
