@@ -69,11 +69,14 @@ else case us of
 -- 声明与实测是否相符；不符时给 TC 诊断。返回的 Int 只是占位（错误已短路）。
 checkBinderRig : Span -> String -> Rig -> Rig -> Check Int
 checkBinderRig sp name Rig0 used =
-  if isRigZero used then OkC 0 else tcErr1 sp (ErasedBinderUsed name) name
+  if isRigZero used then OkC 0
+  else onErrDiag (\d => withField (FieldQuantity name 0 1) d) (tcErr1 sp (ErasedBinderUsed name) name)
 checkBinderRig sp name Rig1 used = case used of
-  Rig0 => tcErr1 sp (LinearUnused name) name
+  Rig0 =>
+    onErrDiag (\d => withField (FieldQuantity name 1 0) d) (tcErr1 sp (LinearUnused name) name)
   Rig1 => OkC 0
-  RigOmega => tcErr1 sp (LinearOverused name) name
+  RigOmega =>
+    onErrDiag (\d => withField (FieldQuantity name 1 2) d) (tcErr1 sp (LinearOverused name) name)
 checkBinderRig sp name RigOmega used = OkC 0
 
 -- 进入一个 binder：body usage 的头部就是它；检查后 drop。
