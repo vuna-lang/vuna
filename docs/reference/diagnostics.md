@@ -152,7 +152,7 @@ JSON 字段是机器契约：`code/severity/phase/category/message/labels[]/fiel
 | D4 码域（RN_/PKG_ 独立域、死码清理） | 已落地（`RN_` 23 码、`PKG_` 27 码；已删除 9 个 TC + 4 RN + 2 PS + 1 LD 无发射点死码） |
 | D5 目录单一真源 + 生成枚举/文档 | 部分（条目仍是手写；`explain`/`gen-errors` 同源，`gen-errors` 同时生成 `errors.md` 与目录 JSON `errors.json`（均内嵌每码 `example` 夹具路径）；两者都输出 severity/phase/category 元数据） |
 | D6 渲染/LSP/CLI | 已落地 short/human/JSON/SARIF + LSP push/pull + `[diagnostics]` 配置；human 视图展示 fields/trace/suggestions（与 JSON 同源）；SARIF rules 带目录 shortDescription/help/defaultConfiguration/tags；i18n 部分（`--lang zh` 与 `[diagnostics] lang` 的 human 消息本地化 + `= message:` 英文原文附注；机器格式保持英文） |
-| D7.1 多错误 + Cascade | 部分（parser 顶层 resync + `--max-errors`；elab 新增 `--continue-on-error` best-effort：文件入口逐次移除失败声明后继续，最多 8 条；依赖被移除声明的错误标 `origin=cascade`；包/模块路径与完整 Cascade 分类待补） |
+| D7.1 多错误 + Cascade | 部分（parser 顶层 resync + `--max-errors`；elab 新增 `--continue-on-error` best-effort：文件入口与可执行包 app/Main.vuna 逐次移除失败声明后继续，最多 8 条；依赖被移除声明的错误标 `origin=cascade`（human 显示 best-effort note）；`--max-errors` 同时约束恢复结果；库包/模块级恢复与完整 Cascade 分类待补） |
 | D7.2 warnings（未使用/冗余/不可达） | 已落地（`UN_UnusedBinder`/`UN_ShadowedBinder`/`UN_RedundantCtorBranch`/`UN_RedundantLiteralBranch`/`UN_BranchAfterCatchAll`/`UN_UnusedImport`（限定/别名/open import 统一追踪）/`UN_UnusedDefinition`；`-W`/`--deny-warnings` 已接） |
 | D7.3 建议引擎 + Fix | 部分（`Candidate`/`Suggestion` 模型就绪；`UN_UnusedBinder`/`UN_UnusedDefinition`/`UN_UnusedImport`/`UN_Redundant*`/`UN_BranchAfterCatchAll` 附 machine-applicable 编辑；LSP codeAction 应用诊断 suggestions，并有 `test/corpus/lsp/quickfix.sh` 集成测试；更多码待接） |
 | D7.4 类型不匹配 expected/found | 已落地（fields + PhUnify trace 帧 expected/found；双端 label 待补） |

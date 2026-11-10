@@ -190,3 +190,16 @@ out-contains: "kind":"cascade"
 run: sh -c 'printf "a : Int\na = \"x\"\n\nb : Int\nb = \"y\"\n\nmain : Int\nmain = 0\n" > "$TMPDIR/m46-indep.vuna"; "$VUNA" check "$TMPDIR/m46-indep.vuna" --continue-on-error --json 2>&1'
 exit: 1
 out-not-contains: "kind":"cascade"
+# 恢复路径：包入口同样支持 --continue-on-error；--max-errors 约束恢复结果。
+run: sh -c 'd="$TMPDIR/m47-pkg"; rm -rf "$d"; mkdir -p "$d/app"; printf "[package]\nname = \"m47\"\n" > "$d/vuna.toml"; printf "a : Int\na = \"x\"\n\nb : Int\nb = \"y\"\n\nmain : Int\nmain = 0\n" > "$d/app/Main.vuna"; cd "$d" && "$VUNA" check . --continue-on-error --json 2>&1'
+exit: 1
+out-contains: "line":2
+out-contains: "line":5
+run: sh -c 'd="$TMPDIR/m47-pkg2"; rm -rf "$d"; mkdir -p "$d/app"; printf "[package]\nname = \"m47b\"\n" > "$d/vuna.toml"; printf "a : Int\na = \"x\"\n\nb : Int\nb = \"y\"\n\nmain : Int\nmain = 0\n" > "$d/app/Main.vuna"; cd "$d" && "$VUNA" check . --continue-on-error --max-errors 1 --json 2>&1'
+exit: 1
+out-contains: "line":2
+out-not-contains: "line":5
+# human 视图显示级联 note。
+run: sh -c 'printf "a : Int\na = \"x\"\n\nb : Int\nb = a\n\nmain : Int\nmain = b\n" > "$TMPDIR/m47-dep.vuna"; "$VUNA" check "$TMPDIR/m47-dep.vuna" --continue-on-error --error-format human 2>&1'
+exit: 1
+out-contains: best-effort: may be a cascade
