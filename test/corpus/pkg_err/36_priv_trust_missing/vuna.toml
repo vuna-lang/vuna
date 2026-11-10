@@ -1,0 +1,9 @@
+[package]
+name = "p"
+privileged = true
+[capabilities]
+effects = ["unsafe"]
+[trust]
+unsafe = ["Base.IO.Host.runIO"]
+[export]
+modules = ["Main"]

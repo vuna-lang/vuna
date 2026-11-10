@@ -1,0 +1,6 @@
+[package]
+name = "p"
+[nonsense]
+x = 1
+[export]
+modules = ["Main"]

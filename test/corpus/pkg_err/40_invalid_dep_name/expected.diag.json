@@ -1,0 +1,1 @@
+{"version":1,"tool":"vuna","diagnostics":[{"code":"PKG_Invalid","severity":"error","phase":"load","category":"package","message":"pkg: dependency wrong expects package name wrong but found right","labels":[],"fields":[],"trace":[],"notes":[],"suggestions":[],"origin":{"kind":"direct"},"internal":false,"ice":null}]}

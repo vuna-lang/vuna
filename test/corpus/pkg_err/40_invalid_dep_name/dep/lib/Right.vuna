@@ -1,0 +1,4 @@
+module Right where
+
+right : Int
+right = 1

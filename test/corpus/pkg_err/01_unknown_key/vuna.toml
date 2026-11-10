@@ -1,0 +1,5 @@
+[package]
+name = "p"
+bogus = 1
+[export]
+modules = ["Main"]

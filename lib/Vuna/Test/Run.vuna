@@ -414,6 +414,10 @@ errorCase env c source expected wantInterp wantCheck wantCompile =
     denyPath =
       if startsWith "/" baseName then "${baseName}.deny" else "${env.envCwd}/${baseName}.deny"
     denyArgs = if pathExistsFile denyPath then ["--deny-warnings"] else []
+    pkgRoot = pkgRootOf (Vuna.Cli.Args.parentOf source) 8
+    pkgMode = not (pkgRoot == "")
+    caseCwd = if pkgMode then pkgRoot else env.envCwd
+    target = if pkgMode then "." else source
     compileFragment =
       if pathExistsFile compileErrPath then trimNewlines (runIO (readFile compileErrPath))
       else if pathExistsFile legacyCerrPath then trimNewlines (runIO (readFile legacyCerrPath))
@@ -430,8 +434,8 @@ errorCase env c source expected wantInterp wantCheck wantCompile =
     checkA = if wantCheck then
       let
         r =
-          runCmdMerged env "${c.caseId}-check" env.envCwd c.caseTimeout
-            (withEnvIface env (append [env.envVuna, "check", source] denyArgs))
+          runCmdMerged env "${c.caseId}-check" caseCwd c.caseTimeout
+            (withEnvIface env (append [env.envVuna, "check", target] denyArgs))
       in [ assertContains "check fragment" (combinedOut r) fragment,
         assertExitNonZero "check exit" r.cmdCode
       ]
@@ -441,21 +445,22 @@ errorCase env c source expected wantInterp wantCheck wantCompile =
     compileA = if wantCompile then
       let
         r =
-          runCmdMerged env "${c.caseId}-compile" env.envCwd c.caseTimeout
-            (withEnvIface env (append [env.envVuna, "compile", source, outdir] denyArgs))
+          runCmdMerged env "${c.caseId}-compile" caseCwd c.caseTimeout
+            (withEnvIface env (append [env.envVuna, "compile", target, outdir] denyArgs))
       in [ assertContains "compile fragment" (combinedOut r) compileFragment,
         assertExitNonZero "compile exit" r.cmdCode,
         assertAbsent "compile no output dir" outdir
       ]
     else []
     diagPath = diagExpectedOf expected
-    diagSource = relativeTo env.envCwd source
+    diagSource = if pkgMode then "." else relativeTo env.envCwd source
+    diagCwd = caseCwd
     diagRun =
-      if wantCheck then runCmdMerged env "${c.caseId}-diag" env.envCwd c.caseTimeout
+      if wantCheck then runCmdMerged env "${c.caseId}-diag" diagCwd c.caseTimeout
         (withEnvIface env (append [env.envVuna, "check", diagSource, "--json"] denyArgs))
-      else if wantCompile then runCmdMerged env "${c.caseId}-diag" env.envCwd c.caseTimeout
+      else if wantCompile then runCmdMerged env "${c.caseId}-diag" diagCwd c.caseTimeout
         (withEnvIface env (append [env.envVuna, "compile", diagSource, uniqueOutDir env "${c.caseId}-diag", "--json"] denyArgs))
-      else runCmdMerged env "${c.caseId}-diag" env.envCwd c.caseTimeout
+      else runCmdMerged env "${c.caseId}-diag" diagCwd c.caseTimeout
         (withEnvIface env (append [env.envVuna, "check", diagSource, "--json"] denyArgs))
     actualDiag = normalizeDiagText env (trimNewlines (combinedOut diagRun))
     diagA = if env.envBlessDiag then
@@ -1716,3 +1721,10 @@ normalizeDiagText env text =
   let
     t1 = replaceAllText env.envBase "<BASE>" text
   in replaceAllText env.envRoot "<ROOT>" t1
+
+-- 含 `.package-dir` 标记的目录型夹具：以包根为 cwd 跑 `vuna check .`。
+pkgRootOf : String -> Int -> String
+pkgRootOf dir fuel =
+  if fuel <= 0 then ""
+  else if pathExistsFile "${dir}/.package-dir" then dir
+  else pkgRootOf (Vuna.Cli.Args.parentOf dir) (fuel - 1)

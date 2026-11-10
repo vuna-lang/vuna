@@ -1,0 +1,6 @@
+[package]
+name = "p"
+[diagnostics]
+max-errors = "x"
+[export]
+modules = ["Main"]

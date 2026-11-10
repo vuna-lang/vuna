@@ -1,0 +1,5 @@
+[package]
+name = "p"
+no-base = true
+[export]
+modules = ["Main"]

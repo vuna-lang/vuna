@@ -168,6 +168,17 @@ dir = "test/corpus/err"
 compile = false
 tags = ["parse", "error"]
 
+[family.pkg_err]
+section = "36"
+dir = "test/corpus/pkg_err"
+entry = "lib/Main.vuna"
+check = true
+compile = false
+interp = false
+run = false
+compare_interp = false
+tags = ["pkg", "error"]
+
 [family.run_err]
 section = "5"
 dir = "test/corpus/run_err"

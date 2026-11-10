@@ -1,0 +1,6 @@
+[package]
+name = "p"
+[trust]
+unsafe = ["Base.IO.Host.runIO"]
+[export]
+modules = ["Main"]

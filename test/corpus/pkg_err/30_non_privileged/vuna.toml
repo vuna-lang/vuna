@@ -1,0 +1,6 @@
+[package]
+name = "p"
+[capabilities]
+effects = ["fs"]
+[export]
+modules = ["Main"]

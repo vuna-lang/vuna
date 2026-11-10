@@ -1,0 +1,6 @@
+[package]
+name = "p"
+[trust]
+points = ["x"]
+[export]
+modules = ["Main"]

@@ -1,0 +1,7 @@
+[package]
+name = "p"
+[dependencies]
+a = "x"
+a = "y"
+[export]
+modules = ["Main"]

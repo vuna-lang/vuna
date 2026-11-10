@@ -1,0 +1,6 @@
+[package]
+name = "p"
+[diagnostics]
+format = "xml"
+[export]
+modules = ["Main"]

@@ -1,0 +1,4 @@
+[package]
+name = "bad name"
+[export]
+modules = ["Main"]

@@ -1,0 +1,6 @@
+[package]
+name = "p"
+[diagnostics]
+warnings = "yes"
+[export]
+modules = ["Main"]

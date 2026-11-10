@@ -1,0 +1,7 @@
+[package]
+name = "p"
+[trust]
+unsafe = true
+points = [""]
+[export]
+modules = ["Main"]
