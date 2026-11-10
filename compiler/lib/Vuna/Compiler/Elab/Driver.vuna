@@ -987,7 +987,8 @@ unsolvedMessage ec m = case findGoal m (ecGoals ec) of
       spot = if g.dtGoalName == "" then loc else "${g.dtGoalName} (${loc})"
       goalTy = showValueAt (ctxDepthOf g) g.dtGoalType
       detail = "${spot} with goal ${goalTy}"
-    in withField (FieldNote "goal: ${goalTy}") (tcMsg (UnsolvedHole detail) [detail])
+    in withField (FieldSpan "goal" g.dtGoalSpan)
+      (withField (FieldNote "goal: ${goalTy}") (tcMsg (UnsolvedHole detail) [detail]))
   Nothing =>
     let
       num = strFromInt m

@@ -1723,7 +1723,8 @@ else case inferEFuelHint (fuel - 1) globals ctx ec expr expected of
         Just p => OkC (Pair (firstOf p) (resolveDictGoals globals (secondOf p)))
         Nothing => case unhandledEffectLabel ec1 expected actual of
           Just labels =>
-            onErrDiag (withField (FieldEffect labels))
+            onErrDiag
+              (\d => withField (FieldEffect "actual: ${showValue actual}") (withField (FieldEffect "expected: ${showValue expected}") (withField (FieldEffect labels) d)))
               (tcErr1 (exprSpan expr) (UnhandledEffects labels) labels)
           Nothing => ErrC (withFallbackSpan (exprSpan expr) e)
       OkC ec2 => OkC (Pair term (resolveDictGoals globals ec2))

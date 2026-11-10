@@ -59,7 +59,24 @@ if [ -n "$stale" ]; then
   exit 1
 fi
 
-catalog_n=$(wc -l < "$tmp/catalog.txt" | tr -d ' ')
+unreachfile=nix/diag-unreachable.txt
+if [ -f "$unreachfile" ]; then
+  awk '!/^#/ && NF { print $1 }' "$unreachfile" | sort -u > "$tmp/unreachable.txt"
+  missing_reason=$(comm -23 "$tmp/allow.txt" "$tmp/unreachable.txt")
+  if [ -n "$missing_reason" ]; then
+    echo "diag-coverage: allowlisted codes missing unreachable-audit reason (add to $unreachfile):" >&2
+    printf "%s\n" "$missing_reason" >&2
+    exit 1
+  fi
+  stale_reason=$(comm -13 "$tmp/allow.txt" "$tmp/unreachable.txt")
+  if [ -n "$stale_reason" ]; then
+    echo "diag-coverage: unreachable-audit entries no longer allowlisted (remove from $unreachfile):" >&2
+    printf "%s\n" "$stale_reason" >&2
+    exit 1
+  fi
+fi
+
+catalog_n=$(wc -l < "$tmp/catalog.txt" | tr -d " ")
 covered_n=$(wc -l < "$tmp/covered.txt" | tr -d ' ')
 minfile=nix/diag-coverage.min
 min=0

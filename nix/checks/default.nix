@@ -341,6 +341,7 @@ in
       ../../nix/checks/diag-coverage.sh
       ../../nix/diag-coverage-allow.txt
       ../../nix/diag-coverage.min
+      ../../nix/diag-unreachable.txt
     ];
     env = {
       VUNA = "${vuna}/bin/vuna";

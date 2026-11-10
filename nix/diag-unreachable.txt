@@ -1,0 +1,56 @@
+# 不可达/内部不变量诊断码审计：allowlist 中的每个码必须在此登记原因。
+# 格式：CODE<TAB>reason；由 `nix/checks/diag-coverage.sh` 校验与 allowlist 双向一致。
+#
+# 登记口径：这些码只在编译器内部不变量被破坏、或只能由环境/构造 AST 触发时出现；
+# 源码夹具无法合法触发。若未来出现可达路径，必须补夹具并同时删除这里与 allowlist。
+CG_DependencyCycle	仅 codegen/compile 内部校验路径；check 与源码夹具不触发
+CG_InterpCannotExecuteEffects	仅 codegen/compile 内部校验路径；check 与源码夹具不触发
+CG_ListBridgeRequired	仅 codegen/compile 内部校验路径；check 与源码夹具不触发
+CG_MainNotValue	仅 codegen/compile 内部校验路径；check 与源码夹具不触发
+CG_RecursiveValueDefinition	仅 codegen/compile 内部校验路径；check 与源码夹具不触发
+CG_TypeLevelBindingRuntime	仅 codegen/compile 内部校验路径；check 与源码夹具不触发
+CG_TypeUsedAtRuntime	仅 codegen/compile 内部校验路径；check 与源码夹具不触发
+CG_UnsolvedMetavarRuntime	仅 codegen/compile 内部校验路径；check 与源码夹具不触发
+IC_FuelExhausted	内部不变量/fuel 耗尽；需构造极端 Core 程序
+IC_InvariantViolated	内部不变量/fuel 耗尽；需构造极端 Core 程序
+LD_EntryFileNotFound	加载器内部防御路径（REPL/源码字符串入口）
+LD_ModuleHeaderInEntrySource	加载器内部防御路径（REPL/源码字符串入口）
+PKG_DuplicateDependency	需要环境（base 路径/TOML 语法）或包图内部状态
+PKG_EmptyDependencyName	需要环境（base 路径/TOML 语法）或包图内部状态
+PKG_MissingBase	需要环境（base 路径/TOML 语法）或包图内部状态
+PKG_NoManifestUpward	需要环境（base 路径/TOML 语法）或包图内部状态
+PS_ExpectedEndOfInput	解析器防御路径；正常源码不可达
+RN_AmbiguousConstructor	需要构造未归一 AST/模块图内部状态
+RN_AmbiguousConstructorInExport	需要构造未归一 AST/模块图内部状态
+TC_AmbiguousInstance	精化/Core 内部不变量防御（Conv/Meta/Index/Pattern fuel 等）；合法源码不可构造
+TC_AppliedNotType	精化/Core 内部不变量防御（Conv/Meta/Index/Pattern fuel 等）；合法源码不可构造
+TC_CannotSolveHigherOrder	精化/Core 内部不变量防御（Conv/Meta/Index/Pattern fuel 等）；合法源码不可构造
+TC_CannotSolveMetavar	精化/Core 内部不变量防御（Conv/Meta/Index/Pattern fuel 等）；合法源码不可构造
+TC_CannotSolveOccurs	精化/Core 内部不变量防御（Conv/Meta/Index/Pattern fuel 等）；合法源码不可构造
+TC_CtorWrongIndices	精化/Core 内部不变量防御（Conv/Meta/Index/Pattern fuel 等）；合法源码不可构造
+TC_DebugConstructInRelease	精化/Core 内部不变量防御（Conv/Meta/Index/Pattern fuel 等）；合法源码不可构造
+TC_DefParamsMustBeVars	精化/Core 内部不变量防御（Conv/Meta/Index/Pattern fuel 等）；合法源码不可构造
+TC_DoUnsupported	精化/Core 内部不变量防御（Conv/Meta/Index/Pattern fuel 等）；合法源码不可构造
+TC_EqRequiresEvidence	精化/Core 内部不变量防御（Conv/Meta/Index/Pattern fuel 等）；合法源码不可构造
+TC_FfiTypeUnsupported	精化/Core 内部不变量防御（Conv/Meta/Index/Pattern fuel 等）；合法源码不可构造
+TC_FunctionNoClauses	精化/Core 内部不变量防御（Conv/Meta/Index/Pattern fuel 等）；合法源码不可构造
+TC_HoleNoExpectedType	精化/Core 内部不变量防御（Conv/Meta/Index/Pattern fuel 等）；合法源码不可构造
+TC_IndexFuel	精化/Core 内部不变量防御（Conv/Meta/Index/Pattern fuel 等）；合法源码不可构造
+TC_InvalidArrowType	精化/Core 内部不变量防御（Conv/Meta/Index/Pattern fuel 等）；合法源码不可构造
+TC_NatLiteralOutOfRange	精化/Core 内部不变量防御（Conv/Meta/Index/Pattern fuel 等）；合法源码不可构造
+TC_NestedPatterns	精化/Core 内部不变量防御（Conv/Meta/Index/Pattern fuel 等）；合法源码不可构造
+TC_NotInductiveFamily	精化/Core 内部不变量防御（Conv/Meta/Index/Pattern fuel 等）；合法源码不可构造
+TC_NotTraitMethod	精化/Core 内部不变量防御（Conv/Meta/Index/Pattern fuel 等）；合法源码不可构造
+TC_OpNotDefinedFor	精化/Core 内部不变量防御（Conv/Meta/Index/Pattern fuel 等）；合法源码不可构造
+TC_OpOnlyIntString	精化/Core 内部不变量防御（Conv/Meta/Index/Pattern fuel 等）；合法源码不可构造
+TC_PatternFuel	精化/Core 内部不变量防御（Conv/Meta/Index/Pattern fuel 等）；合法源码不可构造
+TC_RecordsUnsupported	精化/Core 内部不变量防御（Conv/Meta/Index/Pattern fuel 等）；合法源码不可构造
+TC_TypeMismatchCaseBranch	精化/Core 内部不变量防御（Conv/Meta/Index/Pattern fuel 等）；合法源码不可构造
+TC_TypeMismatchCaseCount	精化/Core 内部不变量防御（Conv/Meta/Index/Pattern fuel 等）；合法源码不可构造
+TC_TypeMismatchCaseVars	精化/Core 内部不变量防御（Conv/Meta/Index/Pattern fuel 等）；合法源码不可构造
+TC_TypeMismatchCtorArity	精化/Core 内部不变量防御（Conv/Meta/Index/Pattern fuel 等）；合法源码不可构造
+TC_UniverseLevelNonNegative	精化/Core 内部不变量防御（Conv/Meta/Index/Pattern fuel 等）；合法源码不可构造
+TC_UnknownName	精化/Core 内部不变量防御（Conv/Meta/Index/Pattern fuel 等）；合法源码不可构造
+TC_UnknownRecord	精化/Core 内部不变量防御（Conv/Meta/Index/Pattern fuel 等）；合法源码不可构造
+TC_UnsolvedMetavar	精化/Core 内部不变量防御（Conv/Meta/Index/Pattern fuel 等）；合法源码不可构造
+TC_UnsolvedMetavarInfer	精化/Core 内部不变量防御（Conv/Meta/Index/Pattern fuel 等）；合法源码不可构造
