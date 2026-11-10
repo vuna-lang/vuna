@@ -114,7 +114,8 @@ out-contains: phase: usage
 run: sh -c 'printf "main : Int\nmain = \"x\"\n" > "$TMPDIR/m40-i18n.vuna"'
 run: "$VUNA" check "$TMPDIR/m40-i18n.vuna" --lang zh 2>&1
 exit: 1
-out-contains: 说明: 类型不匹配
+out-contains: [TC_TypeMismatch]: 类型不匹配
+out-contains: = message: type mismatch
 run: "$VUNA" check "$TMPDIR/m40-i18n.vuna" --json --lang zh 2>&1
 exit: 1
 out-not-contains: 说明:
@@ -122,7 +123,8 @@ out-not-contains: 说明:
 run: sh -c 'd="$TMPDIR/m41-langpkg"; rm -rf "$d"; mkdir -p "$d/app"; printf "[package]\nname = \"m41-langpkg\"\n[diagnostics]\nlang = \"zh\"\n" > "$d/vuna.toml"; printf "main : Int\nmain = \"x\"\n" > "$d/app/Main.vuna"'
 run: sh -c 'cd "$TMPDIR/m41-langpkg" && "$VUNA" check . 2>&1'
 exit: 1
-out-contains: 说明: 类型不匹配
+out-contains: [TC_TypeMismatch]: 类型不匹配
+out-contains: = message: type mismatch
 # explain example：从 corpus 结构化夹具反查示例文件。
 run: "$VUNA" explain TC_TypeMismatch
 out-contains: example: corpus/

@@ -147,10 +147,18 @@ renderSnippet sp =
   else ""
 
 -- 头部：`error[CODE]: 消息`（无 code 时 `error: 消息`）。
+localizedMessage : Diagnostic -> String
+localizedMessage d = if diagLang 0 == "zh" then case Vuna.Compiler.Diagnostics.diagDescOf d.diagCode of
+  Just s => s
+  Nothing => d.diagMessage
+else d.diagMessage
+
 headerOf : Diagnostic -> String
 headerOf d =
-  if d.diagCode == "" then "${severityName d.diagSeverity}: ${d.diagMessage}"
-  else "${severityName d.diagSeverity}[${d.diagCode}]: ${d.diagMessage}"
+  let
+    msg = localizedMessage d
+  in if d.diagCode == "" then "${severityName d.diagSeverity}: ${msg}"
+  else "${severityName d.diagSeverity}[${d.diagCode}]: ${msg}"
 
 renderHuman : Diagnostic -> String
 renderHuman d =
@@ -163,11 +171,13 @@ renderHuman d =
     labelNote = if ptext == "" then "" else "  = note: ${ptext}"
     notes = join "\n" (map (\n => "  = note: ${n}") d.diagNotes)
     descLine = diagDescLine d
+    origLine = if localizedMessage d == d.diagMessage then "" else "  = message: ${d.diagMessage}"
     fieldBlock = join "\n" (map fieldLine d.diagFields)
     traceBlock = join "\n" (traceLines 0 d.diagTrace)
     helpBlock = join "\n" (map suggestionLine d.diagSuggestions)
     block =
-      join "\n" [headerOf d, snippet, labelNote, notes, fieldBlock, traceBlock, helpBlock, descLine]
+      join "\n"
+        [headerOf d, snippet, labelNote, origLine, notes, fieldBlock, traceBlock, helpBlock, descLine]
   in trim block
 
 -- ---------------------------------------------------------------
@@ -369,10 +379,7 @@ diagLang _ = runIO (readRef langRef)
 
 -- | human 中文说明行。
 diagDescLine : Diagnostic -> String
-diagDescLine d = if diagLang 0 == "zh" then case Vuna.Compiler.Diagnostics.diagDescOf d.diagCode of
-  Just s => "  = 说明: ${s}"
-  Nothing => ""
-else ""
+diagDescLine d = ""
 
 -- ---------------------------------------------------------------
 -- human 视图的语义字段/轨迹/建议（与 JSON 同源，不反解析）
