@@ -842,12 +842,7 @@ warnImportsList : List Import -> List String -> Int
 warnImportsList [] used = 0
 warnImportsList (imp :: rest) used =
   let
-    warnable = imp.importIsQualified || (case imp.importAlias of
-      Just _ => True
-      Nothing => False
-    )
     _ =
-      if not warnable then 0
-      else if memName imp.importName used then 0
+      if memName imp.importName used then 0
       else warnAt1 imp.importSpan (UnusedImport imp.importName) imp.importName
   in warnImportsList rest used
