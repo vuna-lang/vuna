@@ -159,7 +159,7 @@ JSON 字段是机器契约：`code/severity/phase/category/message/labels[]/fiel
 | D7.6 终止性 call matrix | 部分（`TC_CannotProveTermination` 附 `fields.call` 边：caller/callee/relation；逐参数矩阵与完整调用点待补） |
 | D7.7 覆盖性缺失构造子标签 | 部分（全部缺失构造子进 `candidates` 字段；无 span 标签） |
 | D7.8 QTT 使用点 | 部分（线性/擦除错误附 `fields.quantity`：name/declared/observed；逐使用点 span 待 Core `TSp`） |
-| D7.9 文案规范/门禁 | 待办 |
+| D7.9 文案规范/门禁 | 已落地（`nix/checks/diag-style.sh`：句号/大小写/空白/占位符；专有名词例外逐码 allowlist） |
 | D7.10 explanation/example/`explain` | 部分（模板+中文说明+severity/phase/category 元数据+`example:` 夹具路径可用；元变量/洞已有 `name`/`note` 字段） |
 | 结构化夹具 + 每码覆盖门禁 | 部分（210 个 `.diag.json`；覆盖门禁 177/241，缺口 allowlist 逐码登记） |
 

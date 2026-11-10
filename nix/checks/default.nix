@@ -354,6 +354,24 @@ in
   };
 
 
+  # 诊断文案规范门禁（D7.9）：消息模板风格统一（句号/大小写/空白/占位符）。
+  diag-style = mkCheck {
+    name = "vuna-diag-style";
+    srcs = [
+      ../../nix/checks/diag-style.sh
+      ../../nix/diag-style-allow.txt
+    ];
+    env = {
+      VUNA = "${vuna}/bin/vuna";
+    };
+    nativeBuildInputs = [
+      pkgs.bash
+      pkgs.coreutils
+      pkgs.gnugrep
+    ];
+    script = ./diag-style.sh;
+  };
+
   # 诊断门禁：compiler 内源码诊断必须走域码（TC_/CG_/RN_/LD_/IC_...）；位置渲染只在
   # Diag.Format/Source。工具/构建/清单错误（exit 2）是显式白名单。
   diag-raw = mkCheck {
