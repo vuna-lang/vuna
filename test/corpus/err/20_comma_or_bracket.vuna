@@ -1,0 +1,2 @@
+f : List Int -> Int
+f [1, 2 3] = 0

@@ -1,0 +1,6 @@
+f : Int
+f = g
+  where
+    g : Int
+    g : Int
+    g = 1

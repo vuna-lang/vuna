@@ -1,0 +1,6 @@
+record P where
+  x : Int
+  y : Int
+
+f : P -> Int
+f (P { x = 1, 2 }) = 0

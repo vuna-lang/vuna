@@ -1,0 +1,11 @@
+trait T a where
+  m : a
+
+data X : Type where
+  X : X
+
+instance T X where
+  1 = 2
+
+main : Int
+main = 0

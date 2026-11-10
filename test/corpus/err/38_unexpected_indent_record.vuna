@@ -1,0 +1,3 @@
+record P where
+  x : Int
+    y : Int

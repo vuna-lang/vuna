@@ -1,0 +1,3 @@
+trait T a where
+  m : a
+    n : a

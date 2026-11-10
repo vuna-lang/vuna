@@ -1,0 +1,6 @@
+instance Show Int where
+  show x = "x"
+    show2 y = "y"
+
+main : Int
+main = 0

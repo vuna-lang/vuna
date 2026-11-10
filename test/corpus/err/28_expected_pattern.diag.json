@@ -1,0 +1,1 @@
+{"version":1,"tool":"vuna","diagnostics":[{"code":"PS_ExpectedPattern","severity":"error","phase":"parse","category":"syntax","message":"expected pattern","labels":[{"span":null,"style":"context","text":"corpus/err/28_expected_pattern.vuna","provenance":null}],"fields":[],"trace":[],"notes":[],"suggestions":[],"origin":{"kind":"direct"},"internal":false,"ice":null}]}

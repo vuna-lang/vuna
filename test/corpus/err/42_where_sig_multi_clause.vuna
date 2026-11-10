@@ -1,0 +1,8 @@
+f : Int
+f = g
+  where
+    g : Int -> Int
+    g 0 = 0
+    h : Int
+    h = 1
+    g n = n

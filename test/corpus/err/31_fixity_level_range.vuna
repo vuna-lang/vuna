@@ -1,0 +1,4 @@
+infixl 10 +
+
+main : Int
+main = 0
