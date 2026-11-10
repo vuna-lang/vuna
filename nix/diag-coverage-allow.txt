@@ -146,7 +146,9 @@ TC_UnknownName
 TC_UnknownRecord
 TC_UnsolvedMetavar
 TC_UnsolvedMetavarInfer
-UN_RedundantBranch
+UN_BranchAfterCatchAll
+UN_RedundantCtorBranch
+UN_RedundantLiteralBranch
 UN_ShadowedBinder
 UN_UnusedBinder
 UN_UnusedDefinition
