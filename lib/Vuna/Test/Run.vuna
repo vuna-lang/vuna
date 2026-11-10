@@ -449,12 +449,15 @@ errorCase env c source expected wantInterp wantCheck wantCompile =
     else []
     diagPath = diagExpectedOf expected
     diagSource = relativeTo env.envCwd source
-    diagRun = if wantCompile then
+    diagRun = if wantCheck then
       runCmdMerged env "${c.caseId}-diag" env.envCwd c.caseTimeout
-        (withEnvIface env [env.envVuna, "compile", diagSource, uniqueOutDir env "${c.caseId}-diag", "--json"])
+        (withEnvIface env (append [env.envVuna, "check", diagSource, "--json"] denyArgs))
+      else if wantCompile then
+        runCmdMerged env "${c.caseId}-diag" env.envCwd c.caseTimeout
+          (withEnvIface env (append [env.envVuna, "compile", diagSource, uniqueOutDir env "${c.caseId}-diag", "--json"] denyArgs))
       else
         runCmdMerged env "${c.caseId}-diag" env.envCwd c.caseTimeout
-          (withEnvIface env [env.envVuna, "check", diagSource, "--json"])
+          (withEnvIface env (append [env.envVuna, "check", diagSource, "--json"] denyArgs))
     actualDiag = trimNewlines (combinedOut diagRun)
     diagA = if env.envBlessDiag then
         let
