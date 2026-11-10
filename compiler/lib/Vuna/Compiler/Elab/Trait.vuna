@@ -152,7 +152,7 @@ elabTraitFinal globals ec tname paramNames methods methodsP pKinds fieldTys =
     ctorTy = foldParamPis paramsKinds (foldPiFieldTys fieldTys dapp)
     tele = teleOfType ctorTy
     dd =
-      DtData dname tele [DtCtor cname dname tele ctorTy]
+      DtData dname tele [DtCtor cname dname tele ctorTy Nothing]
         (foldParamPis paramsKinds (TType levelZero)) [] False ReprAuto []
     projs = methodProjections tname paramNames pKinds methodsP fieldTys
     projSpans = map (\m => Pair (traitMethodName m) (traitMethodSpan m)) methods

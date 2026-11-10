@@ -216,7 +216,7 @@ maybeJsonSpan (Just sp) = jsonSpan sp
 
 jsonCandidate : Candidate -> String
 jsonCandidate c =
-  "{\"text\":${jsonStr c.candidateText},\"reason\":${maybeJsonString c.candidateReason}}"
+  "{\"text\":${jsonStr c.candidateText},\"span\":${maybeJsonSpan c.candidateSpan},\"reason\":${maybeJsonString c.candidateReason}}"
 
 maybeJsonString : Maybe String -> String
 maybeJsonString Nothing = "null"

@@ -68,7 +68,7 @@ fixDef tbl (DtAxiom n ty sp) = DtAxiom n (fixTerm tbl 0 ty) sp
 fixDef tbl (DtExtern n ty c sp) = DtExtern n (fixTerm tbl 0 ty) c sp
 
 fixCtor : HashMap Int Value -> DtCtor -> DtCtor
-fixCtor tbl (DtCtor n fam tele ty) = DtCtor n fam tele (fixTerm tbl 0 ty)
+fixCtor tbl (DtCtor n fam tele ty sp) = DtCtor n fam tele (fixTerm tbl 0 ty) sp
 
 fixData : HashMap Int Value -> DtData -> DtData
 
@@ -342,7 +342,7 @@ shiftDef off (DtAxiom n ty sp) = DtAxiom n (shiftTerm off ty) sp
 shiftDef off (DtExtern n ty c sp) = DtExtern n (shiftTerm off ty) c sp
 
 shiftCtor : Int -> DtCtor -> DtCtor
-shiftCtor off (DtCtor n fam tele ty) = DtCtor n fam tele (shiftTerm off ty)
+shiftCtor off (DtCtor n fam tele ty sp) = DtCtor n fam tele (shiftTerm off ty) sp
 
 shiftData : Int -> DtData -> DtData
 

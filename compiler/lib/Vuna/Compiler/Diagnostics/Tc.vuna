@@ -612,9 +612,13 @@ tcErr3 sp e a0 a1 a2 = tcErr sp e [a0, a1, a2]
 
 -- | 覆盖性：把所有不可达/未覆盖的构造子一次性列出（每个构造子进 `fields.candidates`）。
 -- | 诊断构造辅助：tcCoverageMissing（code/template 见本模块目录）。
-tcCoverageMissing : Span -> List String -> Check a
-tcCoverageMissing sp names =
+tcCoverageMissing : Span -> List (Pair String (Maybe Span)) -> Check a
+tcCoverageMissing sp ctors =
   let
-    joined = join ", " names
-    cands = map (\n => Candidate n Nothing (Just "not covered by any branch")) names
+    joined = join ", " (map firstOf ctors)
+    cands = map coverageCandidate ctors
   in ErrC (withField (FieldCandidates cands) (withDiagSpan sp (tcMsg (NotExhaustive joined) [joined])))
+
+-- 单个缺失构造子 → 候选（带声明 span）。
+coverageCandidate : Pair String (Maybe Span) -> Candidate
+coverageCandidate (Pair n msp) = Candidate n msp (Just "not covered by any branch")

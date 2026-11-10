@@ -62,7 +62,7 @@ elabCtor globals fam arity famLevel ec c = case c of
             else if length args /= arity then tcErr2 csp (CtorWrongIndices (ctorDisplayName cname) fam) (ctorDisplayName cname) fam
             else Vuna.Compiler.Common.bind
               (checkCtorFieldSorts globals emptyCtx ec1 arity famLevel cname csp (countTelePis tyTerm) tyExpr2)
-              (\_ => OkC (Pair (DtCtor cname fam (teleOfType tyTerm) tyTerm) ec1))
+              (\_ => OkC (Pair (DtCtor cname fam (teleOfType tyTerm) tyTerm (Just csp)) ec1))
     )
 
 elabCtors : List (Pair String Term) -> String -> Int -> Level -> Ec -> List Ctor -> Check (Pair (List DtCtor) Ec)

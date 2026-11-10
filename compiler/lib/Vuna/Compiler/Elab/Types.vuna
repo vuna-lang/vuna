@@ -167,18 +167,19 @@ record DtCtor where
   dtCtorFamily : String
   dtCtorTelescope : List (Pair String Rig)
   dtCtorType : Term
+  dtCtorSpan : Maybe Span
 
 dtCtorName : DtCtor -> String
-dtCtorName (DtCtor name family tele ty) = name
+dtCtorName (DtCtor name family tele ty sp) = name
 
 dtCtorFamily : DtCtor -> String
-dtCtorFamily (DtCtor name family tele ty) = family
+dtCtorFamily (DtCtor name family tele ty sp) = family
 
 dtCtorTelescope : DtCtor -> List (Pair String Rig)
-dtCtorTelescope (DtCtor name family tele ty) = tele
+dtCtorTelescope (DtCtor name family tele ty sp) = tele
 
 dtCtorType : DtCtor -> Term
-dtCtorType (DtCtor name family tele ty) = ty
+dtCtorType (DtCtor name family tele ty sp) = ty
 
 -- | R2（records-v2）：一条 record 字段的 Core 元数据（名字 / 声明序号 / 字段类型）。
 -- `dtFieldType` 处在**外层上下文**（只剩族参数）里：构造子 telescope 的字段域已按

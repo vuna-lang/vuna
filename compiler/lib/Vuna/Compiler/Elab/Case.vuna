@@ -604,11 +604,12 @@ checkCovered ctx ec dd idxs written alts sp ctors =
     missing = missingCtors ctx ec idxs written ctors
   in if length missing == 0 then OkC 0 else tcCoverageMissing sp missing
 
-missingCtors : Ctx -> Ec -> List Value -> List String -> List DtCtor -> List String
+missingCtors : Ctx -> Ec -> List Value -> List String -> List DtCtor -> List (Pair String (Maybe Span))
 missingCtors ctx ec idxs written [] = []
 missingCtors ctx ec idxs written (ctor :: rest) =
   if memName (dtCtorName ctor) written then missingCtors ctx ec idxs written rest
-  else if branchReachable ctx ec idxs ctor then Base.List.Cons (ctorDisplayName (dtCtorName ctor)) (missingCtors ctx ec idxs written rest)
+  else if branchReachable ctx ec idxs ctor then Base.List.Cons (Pair (ctorDisplayName (dtCtorName ctor)) ctor.dtCtorSpan)
+    (missingCtors ctx ec idxs written rest)
   else missingCtors ctx ec idxs written rest
 
 checkCaseDone : Ec -> Ctx -> DtData -> List Value -> List (Pair Pat Expr) -> Value -> Span -> Term -> List CaseAlt -> Check (Pair Term Ec)
