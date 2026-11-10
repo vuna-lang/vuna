@@ -21,7 +21,6 @@ modules = [
   "Vuna.Compiler.Diagnostics.Pkg",
   "Vuna.Compiler.Diagnostics.Sink",
   "Vuna.Compiler.Diagnostics.Warning",
-  "Vuna.Compiler.Diagnostics.Meta",
   "Vuna.Compiler.Intrinsics",
   "Vuna.Compiler.Version",
   "Vuna.Compiler.Frontend.Diagnostics",
