@@ -18,7 +18,6 @@ PKG_MissingBase
 PKG_NoManifestUpward
 PS_ExpectedEndOfInput
 RN_AmbiguousConstructor
-RN_AmbiguousConstructorExport
 RN_AmbiguousConstructorInExport
 RN_ConstructorNotExported
 RN_UnknownKind
