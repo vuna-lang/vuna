@@ -124,17 +124,15 @@ findDiagExample fuel dir code =
   else firstJustExamples (map (oneEntry (fuel - 1) dir code) (runIO (prim_readDir dir)))
 
 oneEntry : Int -> String -> String -> String -> Maybe String
-oneEntry fuel dir code name =
-  if name == "." || name == ".." || name == ".git" || name == ".local" then Nothing
-  else
-    let
-      path = "${dir}/${name}"
-    in if pathExistsDir path then findDiagExample fuel path code
-    else if endsWith ".diag.json" name && pathExistsFile path then
-      if contains "\"code\":\"${code}\"" (runIO (prim_readFile path)) then Just path else Nothing
-    else Nothing
+oneEntry fuel dir code name = if name == "." || name == ".." || name == ".git" || name == ".local" then Nothing
+else
+  let
+    path = "${dir}/${name}"
+  in if pathExistsDir path then findDiagExample fuel path code
+  else if endsWith ".diag.json" name && pathExistsFile path then if contains "\"code\":\"${code}\"" (runIO (prim_readFile path)) then Just path else Nothing
+  else Nothing
 
 firstJustExamples : List (Maybe String) -> Maybe String
 firstJustExamples [] = Nothing
-firstJustExamples (Just x :: rest) = Just x
+firstJustExamples ((Just x) :: rest) = Just x
 firstJustExamples (Nothing :: rest) = firstJustExamples rest
