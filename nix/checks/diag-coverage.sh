@@ -7,7 +7,8 @@
 #   - 夹具：test/corpus/**/*.diag.json（`vuna test --suite ... --bless-diag` 生成）
 set -eu
 
-root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd) || exit 1
+# mkCheck 以「仓库根布局」为 cwd 执行脚本（源码已复制到当前目录）。
+root=$(pwd)
 cd "$root"
 
 : "${VUNA:?VUNA must point to the vuna binary}"
