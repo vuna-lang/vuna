@@ -172,9 +172,11 @@ diagnosticJson label lines d =
         Pair "message" (JStr (messageWithExtras d))
       ]
     withCode = if d.diagCode == "" then base else append base [Pair "code" (JStr d.diagCode)]
+    tags = lspTagsOf d.diagCode
+    withTags = if length tags == 0 then withCode else append withCode [Pair "tags" (JArr tags)]
     withRelated =
-      if length related == 0 then withCode
-      else append withCode [Pair "relatedInformation" (JArr related)]
+      if length related == 0 then withTags
+      else append withTags [Pair "relatedInformation" (JArr related)]
     withData =
       if length fieldData == 0 then withRelated
       else append withRelated [Pair "data" (JArr fieldData)]
@@ -460,3 +462,9 @@ diagReportJson uri text diags =
   let
     lines0 = lines text
   in JObj [Pair "kind" (JStr "full"), Pair "items" (JArr (map (diagnosticJson uri lines0) diags))]
+
+-- 告警的 LSP tags：未使用/冗余/不可达 → `1`（Unnecessary）。
+lspTagsOf : String -> List Json
+lspTagsOf code =
+  if startsWith "UN_Unused" code || startsWith "UN_Redundant" code || code == "UN_BranchAfterCatchAll" then [JNum 1]
+  else []
