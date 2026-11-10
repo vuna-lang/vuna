@@ -179,6 +179,14 @@ run = false
 compare_interp = false
 tags = ["pkg", "error"]
 
+[family.warn_err]
+section = "38"
+dir = "test/corpus/warn_err"
+interp = false
+compile = false
+check = true
+tags = ["warning", "error"]
+
 [family.run_err]
 section = "5"
 dir = "test/corpus/run_err"

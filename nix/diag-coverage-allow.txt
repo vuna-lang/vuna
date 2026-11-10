@@ -11,9 +11,7 @@ CG_UnsolvedMetavarRuntime
 IC_FuelExhausted
 IC_InvariantViolated
 LD_EntryFileNotFound
-LD_HostModulePrivileged
 LD_ModuleHeaderInEntrySource
-LD_ModuleNotExported
 LD_UnknownFixity
 LN_DispatchLift
 LN_ListLiteral
@@ -26,7 +24,6 @@ PKG_NoManifestUpward
 PS_ExpectedEndOfInput
 PS_UnexpectedIndentInWhere
 PS_WhereArgsNotSimple
-PS_WhereSigNoDef
 RN_AmbiguousConstructor
 RN_AmbiguousConstructorExport
 RN_AmbiguousConstructorInExport
@@ -73,4 +70,3 @@ TC_UnknownName
 TC_UnknownRecord
 TC_UnsolvedMetavar
 TC_UnsolvedMetavarInfer
-UN_UnusedDefinition

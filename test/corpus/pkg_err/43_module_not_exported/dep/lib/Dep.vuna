@@ -1,0 +1,4 @@
+module Dep where
+
+d : Int
+d = 1

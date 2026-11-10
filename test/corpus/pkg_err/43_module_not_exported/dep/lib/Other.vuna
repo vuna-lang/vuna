@@ -1,0 +1,4 @@
+module Other where
+
+o : Int
+o = 1

@@ -1,0 +1,6 @@
+[package]
+name = "p"
+[export]
+modules = ["Main"]
+[dependencies]
+vuna-base = "../../../../base"

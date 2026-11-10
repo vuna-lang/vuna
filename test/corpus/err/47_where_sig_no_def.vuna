@@ -1,0 +1,4 @@
+f : Int
+f = g
+  where
+    g : Int

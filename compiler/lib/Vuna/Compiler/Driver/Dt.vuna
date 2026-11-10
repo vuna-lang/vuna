@@ -46,6 +46,7 @@ import Vuna.Compiler.Common
 import Base.HashMap
 import Vuna.Compiler.Debug
 import Vuna.Compiler.Diagnostics
+import Vuna.Compiler.Diagnostics.Warning
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Frontend.Parser
 import Vuna.Compiler.Packages.Pkg
@@ -113,6 +114,8 @@ in Vuna.Compiler.Common.bind (elabProgram decls) (\program => let
   _ = stamp "elab-done"
 in Vuna.Compiler.Common.bind (checkDtProgram program) (\_ => let
   _ = stamp "codegen-check-done"
+in let
+  _ = warnUnusedDefsIn (secondOf program)
 in OkC []
 )
 )
@@ -1272,3 +1275,34 @@ dtSplitProjectParts ctx entry printResult = Vuna.Compiler.Common.bind (dtLoadPar
 in Vuna.Compiler.Common.bind (elabProgramFull allDecls)
   (\prog => Vuna.Compiler.Common.bind (splitGenerateCached ctx entry modules (map (\m => Pair (moduleNameOf m) (moduleDeclsOf m)) modules) (firstOf parts) prog printResult) (\files => OkC (Pair files (CheckedPackage prog (secondOf parts) (firstOf parts) []))))
 )
+
+-- ---------------------------------------------------------------
+-- UN_UnusedDefinition：入口检查完成后，未被任何定义体/类型引用的定义告警。
+-- 只对入口路径启用（库包导出面未知，避免误报）；`main` / `_` 前缀 / `$` 内部名跳过。
+-- ---------------------------------------------------------------
+warnUnusedDefsIn : List DtDef -> Int
+warnUnusedDefsIn defs =
+  let
+    used = concatMap dtDefGlobalNames defs
+  in warnUnusedDefsGo defs used
+
+-- 定义出现的外部名字（body + type；Maybe 为空则跳过）。
+dtDefGlobalNames : DtDef -> List String
+dtDefGlobalNames d = append (maybeTermGlobals (dtDefBody d)) (termGlobalNames (dtDefType d))
+
+maybeTermGlobals : Maybe Term -> List String
+maybeTermGlobals Nothing = []
+maybeTermGlobals (Just t) = termGlobalNames t
+
+warnUnusedDefsGo : List DtDef -> List String -> Int
+warnUnusedDefsGo [] used = 0
+warnUnusedDefsGo (d :: rest) used =
+  let
+    name = dtDefName d
+    skip = name == "main" || startsWith "_" name || startsWith "$" name
+    _ = if skip then 0
+      else if memName name used then 0
+      else case dtDefSpan d of
+        Just sp => warnAt1 sp (UnusedDefinition name) name
+        Nothing => 0
+  in warnUnusedDefsGo rest used

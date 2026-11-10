@@ -1,0 +1,6 @@
+-- warning：定义未被任何 body/type 引用（UN_UnusedDefinition；.deny 下按失败断言）
+unused : Int
+unused = 1
+
+main : Int
+main = 0
