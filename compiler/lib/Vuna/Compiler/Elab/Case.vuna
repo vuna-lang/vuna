@@ -627,10 +627,12 @@ checkCaseDone ec ctx dd idxs alts expected sp scrutTerm altTerms =
     (\_ => OkC (Pair (TCase scrutTerm altTerms) ec))
 
 -- 冗余分支的整块删除 span：从分支起始行行首到分支体结束行的下一行行首。
+-- | 分支整块删除的行范围（行首到下一行行首）。
 branchRemovalSpan : Span -> Expr -> Span
 branchRemovalSpan patSpan body =
   Span (spanFile patSpan) (spanStartLine patSpan) 1 (spanEndLine (exprSpan body) + 1) 1
 
+-- | 给冗余分支告警附加删除建议。
 removeBranchSuggest : String -> Span -> Expr -> Diagnostic -> Diagnostic
 removeBranchSuggest title patSpan body d =
   withSuggestion (Suggestion title MachineApplicable [DiagEdit (branchRemovalSpan patSpan body) ""])
