@@ -1280,6 +1280,7 @@ in Vuna.Compiler.Common.bind (elabProgramFull allDecls)
 -- UN_UnusedDefinition：入口检查完成后，未被任何定义体/类型引用的定义告警。
 -- 只对入口路径启用（库包导出面未知，避免误报）；`main` / `_` 前缀 / `$` 内部名跳过。
 -- ---------------------------------------------------------------
+-- | 入口检查后对未引用定义发 UN_UnusedDefinition 告警。
 warnUnusedDefsIn : List DtDef -> Int
 warnUnusedDefsIn defs =
   let
@@ -1287,13 +1288,16 @@ warnUnusedDefsIn defs =
   in warnUnusedDefsGo defs used
 
 -- 定义出现的外部名字（body + type；Maybe 为空则跳过）。
+-- | 定义体/类型里引用的外部名字。
 dtDefGlobalNames : DtDef -> List String
 dtDefGlobalNames d = append (maybeTermGlobals (dtDefBody d)) (termGlobalNames (dtDefType d))
 
+-- | Maybe 项的全局名集合（空则空集）。
 maybeTermGlobals : Maybe Term -> List String
 maybeTermGlobals Nothing = []
 maybeTermGlobals (Just t) = termGlobalNames t
 
+-- | 未使用定义扫描实现。
 warnUnusedDefsGo : List DtDef -> List String -> Int
 warnUnusedDefsGo [] used = 0
 warnUnusedDefsGo (d :: rest) used =
@@ -1301,8 +1305,8 @@ warnUnusedDefsGo (d :: rest) used =
     name = dtDefName d
     skip = name == "main" || startsWith "_" name || startsWith "$" name
     _ = if skip then 0
-      else if memName name used then 0
-      else case dtDefSpan d of
-        Just sp => warnAt1 sp (UnusedDefinition name) name
-        Nothing => 0
+    else if memName name used then 0
+    else case dtDefSpan d of
+      Just sp => warnAt1 sp (UnusedDefinition name) name
+      Nothing => 0
   in warnUnusedDefsGo rest used
