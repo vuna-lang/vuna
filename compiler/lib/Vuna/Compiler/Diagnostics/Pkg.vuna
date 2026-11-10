@@ -10,6 +10,9 @@ module Vuna.Compiler.Diagnostics.Pkg
   , pkgInvalid
   , pkgMsg
   , pkgNoLoc
+  , pkgNoLoc1
+  , pkgNoLoc2
+  , pkgNoLoc3
   , pkgPath0
   , pkgPath1
   , pkgPath2
@@ -43,18 +46,25 @@ data PkgErr : Nat -> Type where
   EmptyDependencyPath : String -> PkgErr (Succ Zero)
   ExpectedBool : String -> PkgErr (Succ Zero)
   ExpectedString : String -> PkgErr (Succ Zero)
+  ExpectedInt : String -> PkgErr (Succ Zero)
+  InvalidDiagFormat : String -> PkgErr (Succ Zero)
+  InvalidDiagMaxErrors : String -> PkgErr (Succ Zero)
   ExpectedStringArray : String -> PkgErr (Succ Zero)
   Invalid : String -> PkgErr (Succ Zero)
   InvalidExportModule : String -> PkgErr (Succ Zero)
   InvalidPackageName : String -> PkgErr (Succ Zero)
   InvalidTrustPoint : String -> PkgErr (Succ Zero)
   MissingManifest : String -> PkgErr (Succ Zero)
+  MissingBase : String -> PkgErr (Succ Zero)
+  LibraryWithoutEntry : String -> PkgErr (Succ Zero)
   NoManifestUpward : String -> PkgErr (Succ Zero)
   TomlSyntax : String -> PkgErr (Succ Zero)
   UnexpectedTopLevelKey : String -> PkgErr (Succ Zero)
   UnknownSection : String -> PkgErr (Succ Zero)
   -- arity 2
   UnknownKey : String -> String -> PkgErr (Succ (Succ Zero))
+  TrustPointMissing : String -> String -> PkgErr (Succ (Succ Zero))
+  EffectCapabilityRequired : String -> String -> String -> PkgErr (Succ (Succ (Succ Zero)))
 
 pkgCode : {n : Nat} -> PkgErr n -> String
 pkgCode EmptyCapability = "PKG_EmptyCapability"
@@ -72,17 +82,24 @@ pkgCode (DuplicateTrustPoint _) = "PKG_DuplicateTrustPoint"
 pkgCode (EmptyDependencyPath _) = "PKG_EmptyDependencyPath"
 pkgCode (ExpectedBool _) = "PKG_ExpectedBool"
 pkgCode (ExpectedString _) = "PKG_ExpectedString"
+pkgCode (ExpectedInt _) = "PKG_ExpectedInt"
+pkgCode (InvalidDiagFormat _) = "PKG_InvalidDiagFormat"
+pkgCode (InvalidDiagMaxErrors _) = "PKG_InvalidDiagMaxErrors"
 pkgCode (ExpectedStringArray _) = "PKG_ExpectedStringArray"
 pkgCode (Invalid _) = "PKG_Invalid"
 pkgCode (InvalidExportModule _) = "PKG_InvalidExportModule"
 pkgCode (InvalidPackageName _) = "PKG_InvalidPackageName"
 pkgCode (InvalidTrustPoint _) = "PKG_InvalidTrustPoint"
 pkgCode (MissingManifest _) = "PKG_MissingManifest"
+pkgCode (MissingBase _) = "PKG_MissingBase"
+pkgCode (LibraryWithoutEntry _) = "PKG_LibraryWithoutEntry"
 pkgCode (NoManifestUpward _) = "PKG_NoManifestUpward"
 pkgCode (TomlSyntax _) = "PKG_TomlSyntax"
 pkgCode (UnexpectedTopLevelKey _) = "PKG_UnexpectedTopLevelKey"
 pkgCode (UnknownSection _) = "PKG_UnknownSection"
 pkgCode (UnknownKey _ _) = "PKG_UnknownKey"
+pkgCode (TrustPointMissing _ _) = "PKG_TrustPointMissing"
+pkgCode (EffectCapabilityRequired _ _ _) = "PKG_EffectCapabilityRequired"
 
 pkgTemplate : {n : Nat} -> PkgErr n -> String
 pkgTemplate EmptyCapability = "capability name must not be empty"
@@ -102,6 +119,11 @@ pkgTemplate (DuplicateTrustPoint _) = "duplicate trust point \"<0>\""
 pkgTemplate (EmptyDependencyPath _) = "dependency \"<0>\" path must not be empty"
 pkgTemplate (ExpectedBool _) = "expected a boolean for \"<0>\""
 pkgTemplate (ExpectedString _) = "expected a string for \"<0>\""
+pkgTemplate (ExpectedInt _) = "expected an integer for \"<0>\""
+pkgTemplate (InvalidDiagFormat _) =
+  "invalid [diagnostics] format \"<0>\" (expected short|human|json|sarif)"
+pkgTemplate (InvalidDiagMaxErrors _) =
+  "invalid [diagnostics] max-errors \"<0>\" (expected a positive integer)"
 pkgTemplate (ExpectedStringArray _) = "expected an array of strings for \"<0>\""
 pkgTemplate (Invalid _) = "<0>"
 pkgTemplate (InvalidExportModule _) =
@@ -111,11 +133,19 @@ pkgTemplate (InvalidPackageName _) =
 pkgTemplate (InvalidTrustPoint _) =
   "invalid trust point \"<0>\" (expected a qualified definition name such as \"Base.IO.runIO\")"
 pkgTemplate (MissingManifest _) = "missing vuna.toml in <0>"
+pkgTemplate (MissingBase _) =
+  "pkg: cannot locate vuna-base (tried: <0>); set VUNA_BASE to a directory containing vuna.toml"
+pkgTemplate (LibraryWithoutEntry _) =
+  "check: library package <0> has no app/Main.vuna (executable) and no [export].modules (library)"
 pkgTemplate (NoManifestUpward _) = "no vuna.toml found from <0> (searched upward)"
 pkgTemplate (TomlSyntax _) = "<0>"
 pkgTemplate (UnexpectedTopLevelKey _) = "unexpected top-level key \"<0>\""
 pkgTemplate (UnknownSection _) = "unknown section [<0>]"
 pkgTemplate (UnknownKey _ _) = "unknown key \"<0>\" in [<1>]"
+pkgTemplate (TrustPointMissing _ _) =
+  "trust point \"<1>\" is not a definition of this package; [trust] unsafe may only list real definitions (Module.def)"
+pkgTemplate (EffectCapabilityRequired _ _ _) =
+  "effectful builtin `<0>` requires capability `<1>` in <2> (declare [capabilities] effects = [\"<1>\"] or use Base.IO / typed effects)"
 
 pkgMsg : {n : Nat} -> PkgErr n -> Vec n String -> Diagnostic
 pkgMsg e args = diagNoLoc SevError PhLoad CatPackage (pkgCode e) (diagBody (pkgTemplate e) args)
@@ -135,6 +165,12 @@ pkgPath path e args = pkgAt path 1 e args
 
 pkgNoLoc : {n : Nat} -> PkgErr n -> Vec n String -> Check a
 pkgNoLoc e args = ErrC (pkgMsg e args)
+
+pkgNoLoc1 : PkgErr (Succ Zero) -> String -> Check a
+pkgNoLoc1 e a0 = pkgNoLoc e [a0]
+
+pkgNoLoc2 : PkgErr (Succ (Succ Zero)) -> String -> String -> Check a
+pkgNoLoc2 e a0 a1 = pkgNoLoc e [a0, a1]
 
 pkgAt0 : String -> Int -> PkgErr Zero -> Check a
 pkgAt0 path line e = pkgAt path line e []
@@ -179,15 +215,25 @@ pkgAll =
     PkgEntry (pkgCode (EmptyDependencyPath "")) (pkgTemplate (EmptyDependencyPath "")) "依赖路径为空",
     PkgEntry (pkgCode (ExpectedBool "")) (pkgTemplate (ExpectedBool "")) "布尔字段类型错误",
     PkgEntry (pkgCode (ExpectedString "")) (pkgTemplate (ExpectedString "")) "字符串字段类型错误",
+    PkgEntry (pkgCode (ExpectedInt "")) (pkgTemplate (ExpectedInt "")) "整数字段类型错误",
+    PkgEntry (pkgCode (InvalidDiagFormat "")) (pkgTemplate (InvalidDiagFormat "")) "非法诊断格式",
+    PkgEntry (pkgCode (InvalidDiagMaxErrors "")) (pkgTemplate (InvalidDiagMaxErrors "")) "非法 max-errors",
     PkgEntry (pkgCode (ExpectedStringArray "")) (pkgTemplate (ExpectedStringArray "")) "字符串数组字段类型错误",
     PkgEntry (pkgCode (Invalid "")) (pkgTemplate (Invalid "")) "通用清单/包图错误",
     PkgEntry (pkgCode (InvalidExportModule "")) (pkgTemplate (InvalidExportModule "")) "非法导出模块名",
     PkgEntry (pkgCode (InvalidPackageName "")) (pkgTemplate (InvalidPackageName "")) "非法包名",
     PkgEntry (pkgCode (InvalidTrustPoint "")) (pkgTemplate (InvalidTrustPoint "")) "非法信任点名",
     PkgEntry (pkgCode (MissingManifest "")) (pkgTemplate (MissingManifest "")) "找不到 vuna.toml",
+    PkgEntry (pkgCode (MissingBase "")) (pkgTemplate (MissingBase "")) "找不到 vuna-base",
+    PkgEntry (pkgCode (LibraryWithoutEntry "")) (pkgTemplate (LibraryWithoutEntry "")) "库包缺入口/导出",
     PkgEntry (pkgCode (NoManifestUpward "")) (pkgTemplate (NoManifestUpward "")) "向上找不到 vuna.toml",
     PkgEntry (pkgCode (TomlSyntax "")) (pkgTemplate (TomlSyntax "")) "vuna.toml 语法错误",
     PkgEntry (pkgCode (UnexpectedTopLevelKey "")) (pkgTemplate (UnexpectedTopLevelKey "")) "顶层未知 key",
     PkgEntry (pkgCode (UnknownSection "")) (pkgTemplate (UnknownSection "")) "未知 section",
-    PkgEntry (pkgCode (UnknownKey "" "")) (pkgTemplate (UnknownKey "" "")) "section 内未知 key"
+    PkgEntry (pkgCode (UnknownKey "" "")) (pkgTemplate (UnknownKey "" "")) "section 内未知 key",
+    PkgEntry (pkgCode (TrustPointMissing "" "")) (pkgTemplate (TrustPointMissing "" "")) "trust point 不是本包定义",
+    PkgEntry (pkgCode (EffectCapabilityRequired "" "" "")) (pkgTemplate (EffectCapabilityRequired "" "" "")) "effectful builtin 缺能力声明"
   ]
+
+pkgNoLoc3 : {n : Nat} -> PkgErr (Succ (Succ (Succ Zero))) -> String -> String -> String -> Check a
+pkgNoLoc3 e a0 a1 a2 = pkgNoLoc e [a0, a1, a2]

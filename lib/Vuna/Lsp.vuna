@@ -162,7 +162,7 @@ textForUri uri st = case docLookup uri st.stateDocs of
 serverCapabilities : Json
 serverCapabilities =
   JObj
-    [Pair "textDocumentSync" (JObj [Pair "openClose" (JBool True), Pair "change" (JNum syncKindFull)]), Pair "completionProvider" (JObj [Pair "triggerCharacters" (JArr [JStr "."]), Pair "resolveProvider" (JBool False)]), Pair "definitionProvider" (JBool True), Pair "referencesProvider" (JBool True), Pair "renameProvider" (JObj [Pair "prepareProvider" (JBool True)]), Pair "documentSymbolProvider" (JBool True), Pair "documentFormattingProvider" (JBool True), Pair "workspaceSymbolProvider" (JBool True), Pair "hoverProvider" (JBool True), Pair "codeActionProvider" (JObj [Pair "codeActionKinds" (JArr [JStr "quickfix", JStr "refactor.rewrite"])]), Pair "executeCommandProvider" (JObj [Pair "commands" (JArr [JStr fixAllLintCommand])])]
+    [Pair "textDocumentSync" (JObj [Pair "openClose" (JBool True), Pair "change" (JNum syncKindFull)]), Pair "completionProvider" (JObj [Pair "triggerCharacters" (JArr [JStr "."]), Pair "resolveProvider" (JBool False)]), Pair "definitionProvider" (JBool True), Pair "referencesProvider" (JBool True), Pair "renameProvider" (JObj [Pair "prepareProvider" (JBool True)]), Pair "documentSymbolProvider" (JBool True), Pair "documentFormattingProvider" (JBool True), Pair "workspaceSymbolProvider" (JBool True), Pair "hoverProvider" (JBool True), Pair "codeActionProvider" (JObj [Pair "codeActionKinds" (JArr [JStr "quickfix", JStr "refactor.rewrite"])]), Pair "executeCommandProvider" (JObj [Pair "commands" (JArr [JStr fixAllLintCommand])]), Pair "diagnosticProvider" (JObj [Pair "interleaved" (JBool False), Pair "workspaceDiagnostics" (JBool False)])]
 
 -- ---------------------------------------------------------------
 -- 请求分发
@@ -259,6 +259,18 @@ handleDidClose msg state =
   in Pair False (Pair (setDocs docs state) [publishDiagnosticsEmpty uri 0])
 
 -- hover：洞目标（包上下文）→ 模块引用/局部绑定（parse 级）→ 标识符签名/注释。
+-- pull diagnostics（LSP 3.17）：与 push 同一条诊断链，返回完整报告；不额外发布通知。
+handlePullDiagnostics : Json -> LspState -> Pair Bool (Pair LspState (List Json))
+handlePullDiagnostics msg state =
+  let
+    params = paramsOf msg
+    uri = uriOfParams params
+    text = textForUri uri state
+    result = diagnosticsForCached state.stateDiagSession uri text
+    labeled = secondOf result
+    state1 = setDiagSession (firstOf result) state
+  in Pair False (Pair state1 [responseOk (idOf msg) (diagReportJson uri text (secondOf labeled))])
+
 handleHover : Json -> LspState -> Pair Bool (Pair LspState (List Json))
 handleHover msg state =
   let
@@ -467,6 +479,7 @@ dispatch "exit" msg state = Pair True (Pair state [])
 dispatch "textDocument/didOpen" msg state = handleDidOpen msg state
 dispatch "textDocument/didChange" msg state = handleDidChange msg state
 dispatch "textDocument/didClose" msg state = handleDidClose msg state
+dispatch "textDocument/diagnostic" msg state = handlePullDiagnostics msg state
 dispatch "textDocument/hover" msg state = handleHover msg state
 dispatch "textDocument/completion" msg state = handleCompletion msg state
 dispatch "textDocument/definition" msg state = handleDefinition msg state

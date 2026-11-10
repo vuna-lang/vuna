@@ -63,3 +63,23 @@ out-contains: "version":"2.1.0"
 out-contains: "ruleId":"TC_TypeMismatch"
 out-contains: "level":"error"
 out-contains: "startLine":2
+# vuna.toml [diagnostics]：format / warnings / max-errors（命令行 flag 优先）。
+run: sh -c 'd="$TMPDIR/m38-cfgfmt"; rm -rf "$d"; mkdir -p "$d/lib"; printf "[package]\nname = \"cfgfmt\"\n[export]\nmodules = [\"Main\"]\n\n[diagnostics]\nformat = \"json\"\n" > "$d/vuna.toml"; printf "module Main where\n\nmain : Int\nmain = \"x\"\n" > "$d/lib/Main.vuna"'
+run: "$VUNA" check "$TMPDIR/m38-cfgfmt" 2>&1
+exit: 1
+out-contains: "version":1
+out-contains: "code":"TC_TypeMismatch"
+# 显式 flag 覆盖配置。
+run: "$VUNA" check "$TMPDIR/m38-cfgfmt" --error-format=short 2>&1
+exit: 1
+out-contains: [TC_TypeMismatch]
+out-not-contains: "version":1
+# warnings = true 打开告警。
+run: sh -c 'd="$TMPDIR/m38-cfgwarn"; rm -rf "$d"; mkdir -p "$d/lib"; printf "[package]\nname = \"cfgwarn\"\n[export]\nmodules = [\"Main\"]\n\n[diagnostics]\nwarnings = true\n" > "$d/vuna.toml"; printf "module Main where\n\nf : Int -> Int\nf x = 1\n\nmain : Int\nmain = f 1\n" > "$d/lib/Main.vuna"'
+run: "$VUNA" check "$TMPDIR/m38-cfgwarn" 2>&1
+out-contains: [UN_UnusedBinder]
+# 非法 format 是清单诊断。
+run: sh -c 'd="$TMPDIR/m38-cfgbad"; rm -rf "$d"; mkdir -p "$d/lib"; printf "[package]\nname = \"cfgbad\"\n\n[diagnostics]\nformat = \"xml\"\n" > "$d/vuna.toml"; printf "module Main where\n\nmain : Int\nmain = 1\n" > "$d/lib/Main.vuna"'
+run: "$VUNA" check "$TMPDIR/m38-cfgbad" 2>&1
+exit: 1
+out-contains: [PKG_InvalidDiagFormat]

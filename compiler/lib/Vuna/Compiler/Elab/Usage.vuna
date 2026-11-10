@@ -98,9 +98,10 @@ checkAltBindersGo sp ((Pair name rig) :: rest) us = case us of
   [] => icInternal "usage vector lost case binder"
   used :: more =>
     let
-      _ = if name /= "_" && memName name (map (\p => firstOf p) (rest)) then warnAt1 sp (ShadowedBinder name) name else 0
-    in
-    let
+      _ =
+        if name /= "_" && memName name (map (\p => firstOf p) rest) then warnAt1 sp (ShadowedBinder name) name
+        else 0
+    in let
       _ = if isRigZero used && not (startsWith "_" name) then case rig of
         RigOmega => warnAt1 sp (UnusedBinder name) name
         _ => 0
@@ -121,7 +122,9 @@ checkTerm sp env t = case t of
   TPi name implicit rig dom cod => OkC (uZeroOf (natToInt (length env)))
   TLam name rig body =>
     let
-      _ = if name /= "_" && memName name (map (\p => firstOf p) env) then warnAt1 sp (ShadowedBinder name) name else 0
+      _ =
+        if name /= "_" && memName name (map (\p => firstOf p) env) then warnAt1 sp (ShadowedBinder name) name
+        else 0
       env2 = Base.List.Cons (Pair name rig) env
     in Vuna.Compiler.Common.bind (checkTerm sp env2 body) (\u => checkLamBinder sp name rig u)
   TApp f a rig =>

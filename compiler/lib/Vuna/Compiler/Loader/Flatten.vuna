@@ -603,8 +603,8 @@ implicitPreludeDeps : String -> List (Pair String Root) -> Check (List Import)
 implicitPreludeDeps importerPkg [] = OkC []
 implicitPreludeDeps importerPkg ([_]) = OkC [Import "Prelude" False Nothing (Span "" 0 0 0 0)]
 implicitPreludeDeps importerPkg deps =
-  err
-    "ambiguous implicit Prelude (found in: ${joinArrows (map (\c => rootName (secondOf c)) deps)})"
+  rnNoLoc1 (AmbiguousPrelude (joinArrows (map (\c => rootName (secondOf c)) deps)))
+    (joinArrows (map (\c => rootName (secondOf c)) deps))
 
 -- F3 P2：按包名查模块根的 `[package] privileged`；找不到按非特权处理。
 -- | 按包名查模块根的 `[package] privileged`；找不到按非特权处理。
@@ -678,13 +678,13 @@ loadProjectWithPreloaded ctx entry preloaded =
   let
     _ = resetWarnings 0
   in if runIO (prim_fileExists entry) then Vuna.Compiler.Common.bind (parseFileWithPath entry (runIO (prim_readFile entry))) (\src => case src of
-  SourceFile hdr imports fixities decls => case hdr of
-    Just (ModDecl dname hasList items sp) => ldErr1 (ModuleHeaderInEntryFile entry) entry
-    Nothing =>
-      Vuna.Compiler.Common.bind (validateImports "<entry>" imports)
-        (\_ => Vuna.Compiler.Common.bind (implicitPrelude (contextRoots ctx) (contextPackageName ctx) "" imports) (\implicit => Vuna.Compiler.Common.bind (loadAll 1048576 (contextRoots ctx) (contextPrivileged ctx) (contextPackageName ctx) preloaded [] (append imports implicit)) (\modules => OkC (Project decls imports implicit modules (contextPackageName ctx) (contextCapabilities ctx) (contextTrustUnsafe ctx) False fixities))))
-)
-else ldErr1 (EntryFileNotFound entry) entry
+    SourceFile hdr imports fixities decls => case hdr of
+      Just (ModDecl dname hasList items sp) => ldErr1 (ModuleHeaderInEntryFile entry) entry
+      Nothing =>
+        Vuna.Compiler.Common.bind (validateImports "<entry>" imports)
+          (\_ => Vuna.Compiler.Common.bind (implicitPrelude (contextRoots ctx) (contextPackageName ctx) "" imports) (\implicit => Vuna.Compiler.Common.bind (loadAll 1048576 (contextRoots ctx) (contextPrivileged ctx) (contextPackageName ctx) preloaded [] (append imports implicit)) (\modules => OkC (Project decls imports implicit modules (contextPackageName ctx) (contextCapabilities ctx) (contextTrustUnsafe ctx) False fixities))))
+  )
+  else ldErr1 (EntryFileNotFound entry) entry
 
 -- 库包入口：不带 app/Main.vuna 的包，以 [export].modules 作为根模块集合。
 loadProjectModules : PackageContext -> List String -> Check Project
@@ -710,12 +710,12 @@ loadProjectSourceWithPreloaded ctx label source preloaded =
   let
     _ = resetWarnings 0
   in Vuna.Compiler.Common.bind (parseFileWithPath label source) (\src => case src of
-  SourceFile hdr imports fixities decls => case hdr of
-    Just (ModDecl dname hasList items sp) => ldErr1 (ModuleHeaderInEntrySource label) label
-    Nothing =>
-      Vuna.Compiler.Common.bind (validateImports "<entry>" imports)
-        (\_ => Vuna.Compiler.Common.bind (implicitPrelude (contextRoots ctx) (contextPackageName ctx) "" imports) (\implicit => Vuna.Compiler.Common.bind (loadAll 1048576 (contextRoots ctx) (contextPrivileged ctx) (contextPackageName ctx) preloaded [] (append imports implicit)) (\modules => OkC (Project decls imports implicit modules (contextPackageName ctx) (contextCapabilities ctx) (contextTrustUnsafe ctx) False fixities))))
-)
+    SourceFile hdr imports fixities decls => case hdr of
+      Just (ModDecl dname hasList items sp) => ldErr1 (ModuleHeaderInEntrySource label) label
+      Nothing =>
+        Vuna.Compiler.Common.bind (validateImports "<entry>" imports)
+          (\_ => Vuna.Compiler.Common.bind (implicitPrelude (contextRoots ctx) (contextPackageName ctx) "" imports) (\implicit => Vuna.Compiler.Common.bind (loadAll 1048576 (contextRoots ctx) (contextPrivileged ctx) (contextPackageName ctx) preloaded [] (append imports implicit)) (\modules => OkC (Project decls imports implicit modules (contextPackageName ctx) (contextCapabilities ctx) (contextTrustUnsafe ctx) False fixities))))
+  )
 
 -- 以**源码字符串**给出一个**库模块**（M30 · LSP）：源码允许带 `module ... where`
 -- 头（LSP 打开 lib/ 下的文件时就是这种形态）。模块头存在时，按 import 闭包加载后
@@ -731,18 +731,18 @@ loadModuleSourceWithPreloaded ctx label source preloaded =
   let
     _ = resetWarnings 0
   in Vuna.Compiler.Common.bind (parseFileWithPath label source) (\src => case src of
-  SourceFile hdr imports fixities decls => case hdr of
-    Nothing => loadProjectSourceWithPreloaded ctx label source preloaded
-    Just (ModDecl name hasList items sp) => Vuna.Compiler.Common.bind (validateImports name imports) (\_ => Vuna.Compiler.Common.bind (implicitPrelude (contextRoots ctx) (contextPackageName ctx) name imports) (\implicit => Vuna.Compiler.Common.bind (loadAll 1048576 (contextRoots ctx) (contextPrivileged ctx) (contextPackageName ctx) preloaded [] (append imports implicit)) (\modules => Vuna.Compiler.Common.bind (computeExports modules name hdr imports decls) (\exports => let
-      visible =
-        dedupeFixities (append fixities (visibleFixitiesOf modules (append imports implicit)))
-    in OkC
-      (Project [] imports implicit (Module name (contextPackageName ctx) imports implicit decls exports (contextCapabilities ctx) (contextTrustUnsafe ctx) visible :: modules) (contextPackageName ctx) (contextCapabilities ctx) (contextTrustUnsafe ctx) False [])
-    )
-    )
-    )
-    )
-)
+    SourceFile hdr imports fixities decls => case hdr of
+      Nothing => loadProjectSourceWithPreloaded ctx label source preloaded
+      Just (ModDecl name hasList items sp) => Vuna.Compiler.Common.bind (validateImports name imports) (\_ => Vuna.Compiler.Common.bind (implicitPrelude (contextRoots ctx) (contextPackageName ctx) name imports) (\implicit => Vuna.Compiler.Common.bind (loadAll 1048576 (contextRoots ctx) (contextPrivileged ctx) (contextPackageName ctx) preloaded [] (append imports implicit)) (\modules => Vuna.Compiler.Common.bind (computeExports modules name hdr imports decls) (\exports => let
+        visible =
+          dedupeFixities (append fixities (visibleFixitiesOf modules (append imports implicit)))
+      in OkC
+        (Project [] imports implicit (Module name (contextPackageName ctx) imports implicit decls exports (contextCapabilities ctx) (contextTrustUnsafe ctx) visible :: modules) (contextPackageName ctx) (contextCapabilities ctx) (contextTrustUnsafe ctx) False [])
+      )
+      )
+      )
+      )
+  )
 
 -- M31.3（B27）：fmt 用的「程序级 fixity」——本文件的 `infix*` 声明（在前，本地优先）
 -- ++ import 闭包可见的声明（Module 里已含各自的 import 闭包）。只 parse + 加载模块图，

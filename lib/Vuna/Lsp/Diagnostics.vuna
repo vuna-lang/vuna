@@ -1,6 +1,8 @@
 module Vuna.Lsp.Diagnostics
   ( DiagCache
   , contextForDoc
+  , diagReportJson
+  , diagnosticsForCached
   , findingDiagJson
   , publishDiagnosticsCached
   , publishDiagnosticsEmpty
@@ -397,7 +399,8 @@ diagnosticsForCached cache uri text = case contextForDoc uri of
             Just
               (DiagCache c.dcLabel c.dcKey c.dcCtx c.dcTool c.dcClean c.dcBuiltSec c.dcStats c.dcAux (firstOf linted))
           Nothing => Nothing
-      in Pair cache3 (Pair label (append (secondOf checked) (append (secondOf linted) (filter (diagOwns label) (takeWarnings 0)))))
+      in Pair cache3
+        (Pair label (append (secondOf checked) (append (secondOf linted) (filter (diagOwns label) (takeWarnings 0)))))
 
 publishDiagnostics : String -> Int -> String -> List Diagnostic -> Json
 publishDiagnostics uri version text diags =
@@ -450,3 +453,12 @@ writeBackModule session label text checked (Just name) = if diskMatches label te
 else session
 
 -- 单文件增量精化（会话可用）：依赖接口 + 本包干净模块预置，只精化当前 buffer。
+-- ---------------------------------------------------------------
+-- Pull diagnostics（LSP 3.17 textDocument/diagnostic）
+-- ---------------------------------------------------------------
+-- | 一次 pull 的完整报告（kind=full）。items 与 push 的 diagnostics 字段同构。
+diagReportJson : String -> String -> List Diagnostic -> Json
+diagReportJson uri text diags =
+  let
+    lines0 = lines text
+  in JObj [Pair "kind" (JStr "full"), Pair "items" (JArr (map (diagnosticJson uri lines0) diags))]

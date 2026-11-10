@@ -8,6 +8,7 @@ module Vuna.Compiler.Packages.Pkg
   , contextForDir
   , contextForFile
   , contextPackageName
+  , contextPackageOf
   , contextPrivileged
   , contextRoots
   , contextTrustUnsafe
@@ -132,6 +133,9 @@ contextRoots : PackageContext -> List Root
 contextRoots (PackageContext dir pkg roots name caps trust priv) = roots
 
 -- 上下文包名：base-only（ad-hoc）为空串；Loader 用它判同包可见性与效果内建。
+contextPackageOf : PackageContext -> Maybe Package
+contextPackageOf ctx = ctx.contextPackage
+
 contextPackageName : PackageContext -> String
 contextPackageName (PackageContext dir pkg roots name caps trust priv) = name
 
@@ -449,9 +453,7 @@ baseCandidates exeDir =
   ]
 
 baseNotFound : List String -> Check a
-baseNotFound tried =
-  err
-    "pkg: cannot locate vuna-base (tried: ${joinPathsText tried}); set VUNA_BASE to a directory containing vuna.toml"
+baseNotFound tried = pkgNoLoc1 (MissingBase (joinPathsText tried)) (joinPathsText tried)
 
 firstExistingBase : List String -> List String -> Check String
 firstExistingBase original [] = baseNotFound original

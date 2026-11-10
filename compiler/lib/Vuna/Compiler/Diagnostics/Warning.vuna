@@ -45,11 +45,13 @@ warnTemplate (UnusedImport _) = "module `<0>` is imported but never used"
 warnTemplate (ShadowedBinder _) = "binder `<0>` shadows an outer binder"
 
 warnMsg : {n : Nat} -> WarnErr n -> Vec n String -> Diagnostic
-warnMsg e args = diagNoLoc SevWarning PhUsage CatQuantity (warnCode e) (diagBody (warnTemplate e) args)
+warnMsg e args =
+  diagNoLoc SevWarning PhUsage CatQuantity (warnCode e) (diagBody (warnTemplate e) args)
 
 -- | 在 span 上发一条 warning（进 Sink，不影响 Check 结果）。
 warnAt : Span -> {n : Nat} -> WarnErr n -> Vec n String -> Int
-warnAt sp e args = emitWarning (withLabel (Label (Just sp) "" LabelPrimary Nothing) (warnMsg e args))
+warnAt sp e args =
+  emitWarning (withLabel (Label (Just sp) "" LabelPrimary Nothing) (warnMsg e args))
 
 warnAt0 : Span -> WarnErr Zero -> Int
 warnAt0 sp e = warnAt sp e []

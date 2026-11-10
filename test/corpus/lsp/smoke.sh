@@ -255,6 +255,7 @@ cat >"$tmp/in.jsonl" <<JSONL
 {"jsonrpc":"2.0","id":8,"method":"workspace/symbol","params":{"query":"depHelper"}}
 {"jsonrpc":"2.0","id":9,"method":"textDocument/unknownMethod","params":{"textDocument":{"uri":"$main_uri"}}}
 {"jsonrpc":"2.0","id":10,"method":"shutdown","params":null}
+{"jsonrpc":"2.0","id":11,"method":"textDocument/diagnostic","params":{"textDocument":{"uri":"$linty_uri"}}}
 {"jsonrpc":"2.0","method":"exit","params":null}
 JSONL
 
@@ -284,7 +285,7 @@ frames=$(grep -c '^Content-Length: ' "$tmp/frames.txt" 2>/dev/null || echo 0)
 # 服务端实际发出的帧：8 条 publishDiagnostics（didOpen×7 + didChange×1）+
 # 10 个响应（initialize/hover/formatting/documentSymbol/definition/references/
 # completion/workspace-symbol/未知方法错误/shutdown）= 18。
-check_eq "帧数（8 通知 + 10 响应）" "18" "$frames"
+check_eq "帧数（8 通知 + 10 响应 + 1 pull）" "19" "$frames"
 
 # 每帧正文长度必须与 Content-Length 一致，且 header 与正文之间必须是空行。
 if LC_ALL=C awk '
@@ -326,6 +327,7 @@ check_contains "initialize 声明 documentFormattingProvider" "$init" '"document
 check_contains "initialize 声明 workspaceSymbolProvider" "$init" '"workspaceSymbolProvider":true'
 check_contains "initialize 声明 codeActionProvider(codeActionKinds=[quickfix,refactor.rewrite])" "$init" '"codeActionProvider":{"codeActionKinds":["quickfix","refactor.rewrite"]}'
 check_contains "initialize 声明 executeCommandProvider(vuna.fixAllLint)" "$init" '"executeCommandProvider":{"commands":["vuna.fixAllLint"]}'
+check_contains "initialize 声明 diagnosticProvider(pull)" "$init" '"diagnosticProvider"'
 
 # ---- 2) 含 import 的模块类型错误诊断（不再跳过）+ 0-based 范围 ----
 diag_open=$(frame_at 2)
@@ -410,7 +412,14 @@ check_contains "未知方法错误码 -32601" "$unknown" '-32601'
 # ---- 14) shutdown ----
 shutdown_frame=$(frame_at 18)
 check_contains "shutdown 返回 result:null" "$shutdown_frame" '"result":null'
-check_contains "最后一帧是 shutdown 响应" "$shutdown_frame" '"id":10'
+check_contains "shutdown 响应 id 10" "$shutdown_frame" '"id":10'
+
+# ---- 14b) pull diagnostics（LSP 3.17）：full report，与 push 同源 ----
+pull_frame=$(frame_at 19)
+check_contains "pull 回 id 11" "$pull_frame" '"id":11'
+check_contains "pull kind=full" "$pull_frame" '"kind":"full"'
+check_contains "pull items 带诊断 code" "$pull_frame" '"code":"LN_LiteralIfChain"'
+check_contains "pull 带 0-based range" "$pull_frame" '"range":{"start":{"line":'
 
 # ---- 15) 帧分隔符兼容：只用 LF（`\n\n`）的 header 也必须能解析 ----
 # 规范写的是 `\r\n`，但部分客户端/手写测试用纯 `\n`。回归点：空行在行式读入

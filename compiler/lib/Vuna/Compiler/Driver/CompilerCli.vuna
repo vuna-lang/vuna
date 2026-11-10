@@ -68,9 +68,9 @@ flushSarif code =
   let
     fmt = diagFormatOf 0
     box = runIO (readRef sarifRef)
-    _ = if fmt == "sarif" then runIO (prim_print (renderSarif box.sarifItems ++ "\n"))
-      else if fmt == "json" then runIO (prim_print (renderJsonList box.sarifItems ++ "\n"))
-      else 0
+    _ =
+      if fmt == "sarif" then runIO (prim_print (renderSarif box.sarifItems ++ "\n"))
+      else if fmt == "json" then runIO (prim_print (renderJsonList box.sarifItems ++ "\n")) else 0
     _ = resetSarif 0
   in code
 
@@ -79,6 +79,45 @@ denyWarningsRef = runIO (newRef False)
 
 showWarningsRef : IORef Bool
 showWarningsRef = runIO (newRef False)
+
+formatExplicitRef : IORef Bool
+formatExplicitRef = runIO (newRef False)
+
+warningsExplicitRef : IORef Bool
+warningsExplicitRef = runIO (newRef False)
+
+maxErrorsRef : IORef Int
+maxErrorsRef = runIO (newRef 0)
+
+maxErrorsOf : Int -> Int
+maxErrorsOf _ = runIO (readRef maxErrorsRef)
+
+-- 应用 vuna.toml [diagnostics]（命令行显式 flag 优先）。
+applyDiagConfig : Maybe Package -> Int
+applyDiagConfig mp = case mp of
+  Nothing => 0
+  Just pkg =>
+    let
+      m = pkg.packageManifest
+      _ = if not (runIO (readRef formatExplicitRef)) then case m.manifestDiagFormat of
+        Just f => runIO (writeRef diagFormatRef f)
+        Nothing => 0
+      else 0
+      _ = if not (runIO (readRef warningsExplicitRef)) then case m.manifestDiagWarnings of
+        Just b => runIO (writeRef showWarningsRef b)
+        Nothing => 0
+      else 0
+      _ = case m.manifestDiagMaxErrors of
+        Just n => runIO (writeRef maxErrorsRef n)
+        Nothing => 0
+    in 0
+
+takeDiags : Int -> List Diagnostic -> List Diagnostic
+takeDiags n ds = if n <= 0 then ds else takeDiagsGo n ds
+
+takeDiagsGo : Int -> List Diagnostic -> List Diagnostic
+takeDiagsGo n [] = []
+takeDiagsGo n (d :: rest) = if n <= 0 then [] else d :: takeDiagsGo (n - 1) rest
 
 denyWarningsOn : Int -> Bool
 denyWarningsOn _ = runIO (readRef denyWarningsRef)
@@ -100,6 +139,12 @@ hasShowWarnings : List String -> Bool
 hasShowWarnings [] = False
 hasShowWarnings (arg :: rest) =
   if arg == "--warnings" || arg == "-W" then True else hasShowWarnings rest
+
+hasFormatFlag : List String -> Bool
+hasFormatFlag [] = False
+hasFormatFlag (arg :: rest) =
+  if arg == "--json" || startsWith "--error-format" arg || startsWith "--message-format" arg then True
+  else hasFormatFlag rest
 
 stripDiagFormat : List String -> Pair (List String) (Maybe String)
 stripDiagFormat args = stripDiagFormatGo args [] Nothing
@@ -128,6 +173,8 @@ runCompilerCliFor prog args =
     _ = resetSarif 0
     _ = runIO (writeRef denyWarningsRef (hasDenyWarnings args))
     _ = runIO (writeRef showWarningsRef (hasDenyWarnings args || hasShowWarnings args))
+    _ = runIO (writeRef formatExplicitRef (hasFormatFlag args))
+    _ = runIO (writeRef warningsExplicitRef (hasDenyWarnings args || hasShowWarnings args))
   in if anyHelp kept then helpFor prog else flushSarif (runCompilerCliFor1 prog kept)
 
 runCompilerCliFor1 : String -> List String -> Int
@@ -252,7 +299,7 @@ printErr e = printErrText "error: ${e}\n"
 printDiagList : String -> List Diagnostic -> Int
 printDiagList extra ds =
   let
-    _ = map (printDiagWithPrefix extra) ds
+    _ = map (printDiagWithPrefix extra) (takeDiags (maxErrorsOf 0) ds)
   in 0
 
 printWarnings : List String -> Int
@@ -388,6 +435,7 @@ checkRootsSeq (pkg :: rest) code = checkRootsSeq rest (checkPackageSeq pkg code)
 checkPackageSeq : Package -> Int -> Int
 checkPackageSeq pkg code =
   let
+    _ = applyDiagConfig (Just pkg)
     c = case checkPackage pkg of
       ErrC e =>
         let
@@ -409,14 +457,17 @@ countFailures acc (c :: rest) = if c == 0 then countFailures acc rest else count
 checkFileEntry : String -> Int
 checkFileEntry path = case contextForFile path of
   ErrC e => printDiag e
-  OkC ctx => case dtCheck ctx path of
-    ErrC e => printDiag e
-    OkC _ =>
-      let
-        ws = filter (ownedByFile path) (takeWarnings 0)
-        shown = if showWarningsOn 0 || denyWarningsOn 0 then ws else []
-        _ = printDiagList "" shown
-      in if denyWarningsOn 0 && length ws > 0 then 1 else 0
+  OkC ctx =>
+    let
+      _ = applyDiagConfig (contextPackageOf ctx)
+    in case dtCheck ctx path of
+      ErrC e => printDiag e
+      OkC _ =>
+        let
+          ws = filter (ownedByFile path) (takeWarnings 0)
+          shown = if showWarningsOn 0 || denyWarningsOn 0 then ws else []
+          _ = printDiagList "" shown
+        in if denyWarningsOn 0 && length ws > 0 then 1 else 0
 
 -- ---------------------------------------------------------------
 -- build：包级逐模块 codegen 到 DIR（默认 <PKG-DIR>/.output），再跑 build.sh 链接到

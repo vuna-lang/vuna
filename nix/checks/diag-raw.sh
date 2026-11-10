@@ -3,11 +3,9 @@
 #
 # 允许的残留（纯工具/构建错误，exit 2，无源码 span）：
 #   CompilerCli.vuna / Compile.vuna / Dt.vuna
-# 其它 compiler 模块出现 `err "` 或 `err (` 即失败：新增诊断必须走域码
-# （TC_/CG_/RN_/LD_/IC_/PKG_...），位置放 Label。
 set -eu
 
-root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd) || exit 1
+root=$(pwd)
 cd "$root"
 
 allowed='CompilerCli\.vuna|Compile\.vuna|Dt\.vuna'
@@ -23,6 +21,16 @@ bad2=$(grep -rnE 'err \(' --include='*.vuna' compiler/lib 2>/dev/null | grep -Ev
 if [ -n "$bad2" ]; then
   echo "diag-raw: compiler diagnostics must be coded (use a domain code):" >&2
   printf '%s\n' "$bad2" >&2
+  exit 1
+fi
+
+# 多行形态：`err` 单独一行、字符串在下一行（grep -A1 的输出形如 file-line-content）。
+bad3=$(grep -rn -A1 -E '^[[:space:]]*err$' --include='*.vuna' compiler/lib 2>/dev/null \
+  | grep -E '^[^:]+-[0-9]+-[[:space:]]*"' \
+  | grep -Ev "/(${allowed})\\.vuna-" || true)
+if [ -n "$bad3" ]; then
+  echo "diag-raw: compiler diagnostics must be coded (multi-line err):" >&2
+  printf '%s\n' "$bad3" >&2
   exit 1
 fi
 

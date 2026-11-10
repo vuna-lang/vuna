@@ -48,6 +48,8 @@ data RnErr : Nat -> Type where
   UnknownInterface : String -> RnErr (Succ Zero)
   UnknownType : String -> RnErr (Succ Zero)
   UnknownFixity : String -> RnErr (Succ Zero)
+  UnknownVariable : String -> RnErr (Succ Zero)
+  AmbiguousPrelude : String -> RnErr (Succ Zero)
   UnknownCapability : String -> String -> RnErr (Succ (Succ Zero))
   -- arity 2
   AmbiguousConstructor : String -> String -> RnErr (Succ (Succ Zero))
@@ -78,6 +80,8 @@ rnCode (UnknownConstructor _) = "RN_UnknownConstructor"
 rnCode (UnknownInterface _) = "RN_UnknownInterface"
 rnCode (UnknownType _) = "RN_UnknownType"
 rnCode (UnknownFixity _) = "RN_UnknownFixity"
+rnCode (UnknownVariable _) = "RN_UnknownVariable"
+rnCode (AmbiguousPrelude _) = "RN_AmbiguousPrelude"
 rnCode (UnknownCapability _ _) = "RN_UnknownCapability"
 rnCode (AmbiguousConstructor _ _) = "RN_AmbiguousConstructor"
 rnCode (AmbiguousConstructorInExport _ _) = "RN_AmbiguousConstructorInExport"
@@ -107,7 +111,10 @@ rnTemplate (TypeHasNoConstructor _ _) = "type <0> has no constructor <1>"
 rnTemplate (UnknownConstructor _) = "unknown constructor <0>"
 rnTemplate (UnknownInterface _) = "unknown interface <0>"
 rnTemplate (UnknownType _) = "unknown type <0>"
-rnTemplate (UnknownFixity _) = "unknown fixity for operator <0> (declare it with infixl/infixr/infix)"
+rnTemplate (UnknownFixity _) =
+  "unknown fixity for operator <0> (declare it with infixl/infixr/infix)"
+rnTemplate (UnknownVariable _) = "unbound variable <0>"
+rnTemplate (AmbiguousPrelude _) = "ambiguous implicit Prelude (found in: <0>)"
 rnTemplate (UnknownCapability _ _) = "unknown capability \"<0>\" (known: <1>)"
 rnTemplate (AmbiguousConstructor _ _) = "ambiguous constructor <0> (qualify it as <1>)"
 rnTemplate (AmbiguousConstructorInExport _ _) =
@@ -171,6 +178,8 @@ rnAll =
     RnEntry (rnCode (UnknownInterface "")) (rnTemplate (UnknownInterface "")) "未知接口",
     RnEntry (rnCode (UnknownType "")) (rnTemplate (UnknownType "")) "未知类型",
     RnEntry (rnCode (UnknownFixity "")) (rnTemplate (UnknownFixity "")) "未知运算符 fixity",
+    RnEntry (rnCode (UnknownVariable "")) (rnTemplate (UnknownVariable "")) "未绑定变量",
+    RnEntry (rnCode (AmbiguousPrelude "")) (rnTemplate (AmbiguousPrelude "")) "隐式 Prelude 歧义",
     RnEntry (rnCode (UnknownCapability "" "")) (rnTemplate (UnknownCapability "" "")) "未知能力",
     RnEntry (rnCode (AmbiguousConstructor "" "")) (rnTemplate (AmbiguousConstructor "" "")) "构造子歧义",
     RnEntry (rnCode (AmbiguousConstructorInExport "" "")) (rnTemplate (AmbiguousConstructorInExport "" "")) "导出中构造子歧义",

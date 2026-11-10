@@ -19,7 +19,6 @@ module Vuna.Compiler.Diag
   , appendMessage
   , diagAt
   , diagFileOf
-  , sameDiag
   , diagNoLoc
   , diagText
   , err
@@ -28,6 +27,7 @@ module Vuna.Compiler.Diag
   , onErrDiag
   , rawAt
   , rawNoLoc
+  , sameDiag
   , withContext
   , withFallbackSpan
   , withField
@@ -410,11 +410,16 @@ sameSeverity _ _ = False
 -- | 两条诊断是否「同一位置 + 同一码 + 同一消息」（去重用；忽略字段/建议）。
 sameDiag : Diagnostic -> Diagnostic -> Bool
 sameDiag a b =
-  a.diagCode == b.diagCode && a.diagMessage == b.diagMessage && sameSeverity a.diagSeverity b.diagSeverity
+  a.diagCode == b.diagCode
+    && a.diagMessage == b.diagMessage
+    && sameSeverity a.diagSeverity b.diagSeverity
     && labelSpanOf a.diagLabels == labelSpanOf b.diagLabels
 
 labelSpanOf : List Label -> List (Pair String (Pair Int (Pair Int Int)))
 labelSpanOf [] = []
-labelSpanOf (Label msp _ _ _ :: rest) = case msp of
+labelSpanOf ((Label msp _ _ _) :: rest) = case msp of
   Nothing => Base.List.Cons (Pair "" (Pair 0 (Pair 0 0))) (labelSpanOf rest)
-  Just sp => Base.List.Cons (Pair (spanFile sp) (Pair (spanStartLine sp) (Pair (spanStartCol sp) (spanEndLine sp)))) (labelSpanOf rest)
+  Just sp =>
+    Base.List.Cons
+      (Pair (spanFile sp) (Pair (spanStartLine sp) (Pair (spanStartCol sp) (spanEndLine sp))))
+      (labelSpanOf rest)

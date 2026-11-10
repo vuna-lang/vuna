@@ -42,6 +42,10 @@ record Manifest where
   -- 可以声明，只有特权包可以 import。例如 base 声明 `["Base.IO.Host"]`。
   manifestHostModules : List String
   manifestPath : String
+  -- | `[diagnostics]`：渲染格式 / warnings 开关 / max-errors（可选；命令行 flag 优先）。
+  manifestDiagFormat : Maybe String
+  manifestDiagWarnings : Maybe Bool
+  manifestDiagMaxErrors : Maybe Int
 
 -- M27：manifest 的 `[capabilities].effects` 声明；空列表表示该包没有直接使用
 -- effectful 内建的能力（只能经 Base.IO）。
@@ -90,6 +94,12 @@ stringListField path section key entries = case lookupEntry section key entries 
   Just value => pkgAt1 path (fieldLine path section key entries) (ExpectedStringArray key) key
 
 -- | 读 `[section] key` 的布尔值：缺省返回 `Nothing`，类型不符报带位置的行号错误。
+intField : String -> List String -> String -> List TomlEntry -> Check (Maybe Int)
+intField path section key entries = case lookupEntry section key entries of
+  Nothing => OkC Nothing
+  Just (TInt n) => OkC (Just n)
+  Just value => pkgAt1 path (fieldLine path section key entries) (ExpectedInt key) key
+
 boolField : String -> List String -> String -> List TomlEntry -> Check (Maybe Bool)
 boolField path section key entries = case lookupEntry section key entries of
   Nothing => OkC Nothing
@@ -118,6 +128,8 @@ checkOneEntry path (TomlEntry section key value line) =
   else if sameSection section ["trust"] then if key == "unsafe" then OkC 0 else pkgAt2 path line (UnknownKey key "trust") key "trust"
   else if sameSection section ["privileged"] then if key == "modules" then OkC 0
   else pkgAt2 path line (UnknownKey key "privileged") key "privileged"
+  else if sameSection section ["diagnostics"] then if key == "format" || key == "warnings" || key == "max-errors" then OkC 0
+  else pkgAt2 path line (UnknownKey key "diagnostics") key "diagnostics"
   else if sameSection section ["dependencies"] then OkC 0
   else pkgAt1 path line (UnknownSection (joinDots section)) (joinDots section)
 
@@ -137,10 +149,21 @@ collectDependenciesAcc path ((TomlEntry section key value line) :: rest) acc = i
   _ => pkgAt1 path line (DependencyPathNotString key) key
 else collectDependenciesAcc path rest acc
 
+validateDiagFormat : String -> Maybe String -> Check Int
+validateDiagFormat path Nothing = OkC 0
+validateDiagFormat path (Just f) =
+  if f == "short" || f == "human" || f == "json" || f == "sarif" then OkC 0
+  else pkgPath1 path (InvalidDiagFormat f) f
+
+validateDiagMax : String -> Maybe Int -> Check Int
+validateDiagMax path Nothing = OkC 0
+validateDiagMax path (Just n) =
+  if n >= 1 then OkC 0 else pkgPath1 path (InvalidDiagMaxErrors "${n}") "${n}"
+
 buildManifest : String -> List TomlEntry -> Check Manifest
 buildManifest path entries =
   Vuna.Compiler.Common.bind (checkEntries path entries)
-    (\checked => Vuna.Compiler.Common.bind (stringField path ["package"] "name" entries) (\name => Vuna.Compiler.Common.bind (stringListField path ["workspace"] "members" entries) (\members => Vuna.Compiler.Common.bind (stringListField path ["export"] "modules" entries) (\exports => Vuna.Compiler.Common.bind (collectDependencies path entries) (\deps => Vuna.Compiler.Common.bind (stringListField path ["capabilities"] "effects" entries) (\caps => Vuna.Compiler.Common.bind (stringListField path ["trust"] "unsafe" entries) (\trust => Vuna.Compiler.Common.bind (boolField path ["package"] "privileged" entries) (\privileged => Vuna.Compiler.Common.bind (stringListField path ["privileged"] "modules" entries) (\hosts => OkC (Manifest name (orEmptyList members) exports deps (orEmptyList caps) trust (orFalse privileged) (orEmptyList hosts) path))))))))))
+    (\checked => Vuna.Compiler.Common.bind (stringField path ["package"] "name" entries) (\name => Vuna.Compiler.Common.bind (stringListField path ["workspace"] "members" entries) (\members => Vuna.Compiler.Common.bind (stringListField path ["export"] "modules" entries) (\exports => Vuna.Compiler.Common.bind (collectDependencies path entries) (\deps => Vuna.Compiler.Common.bind (stringListField path ["capabilities"] "effects" entries) (\caps => Vuna.Compiler.Common.bind (stringListField path ["trust"] "unsafe" entries) (\trust => Vuna.Compiler.Common.bind (boolField path ["package"] "privileged" entries) (\privileged => Vuna.Compiler.Common.bind (stringListField path ["privileged"] "modules" entries) (\hosts => Vuna.Compiler.Common.bind (stringField path ["diagnostics"] "format" entries) (\diagFmt => Vuna.Compiler.Common.bind (boolField path ["diagnostics"] "warnings" entries) (\diagWarns => Vuna.Compiler.Common.bind (intField path ["diagnostics"] "max-errors" entries) (\diagMax => Vuna.Compiler.Common.bind (validateDiagFormat path diagFmt) (\_ => Vuna.Compiler.Common.bind (validateDiagMax path diagMax) (\_ => OkC (Manifest name (orEmptyList members) exports deps (orEmptyList caps) trust (orFalse privileged) (orEmptyList hosts) path diagFmt diagWarns diagMax)))))))))))))))
 
 parseManifest : String -> String -> Check Manifest
 parseManifest path contents =
@@ -249,9 +272,9 @@ validatePrivilege path False [] Nothing [] = OkC 0
 validatePrivilege path False _ _ _ = pkgPath0 path NonPrivileged
 
 validateManifest : Manifest -> Check Manifest
-validateManifest (Manifest name members exports deps caps trust privileged hosts path) =
+validateManifest (Manifest name members exports deps caps trust privileged hosts path diagFmt diagWarns diagMax) =
   Vuna.Compiler.Common.bind (validateName path name)
-    (\okName => Vuna.Compiler.Common.bind (validateMembers path members) (\okMembers => Vuna.Compiler.Common.bind (validateExports path exports) (\okExports => Vuna.Compiler.Common.bind (validateDependencies path deps) (\okDeps => Vuna.Compiler.Common.bind (validateCapabilities path caps) (\okCaps => Vuna.Compiler.Common.bind (validateTrust path caps trust) (\okTrust => Vuna.Compiler.Common.bind (validatePrivilege path privileged caps trust hosts) (\okPriv => OkC (Manifest name members exports deps caps trust privileged hosts path))))))))
+    (\okName => Vuna.Compiler.Common.bind (validateMembers path members) (\okMembers => Vuna.Compiler.Common.bind (validateExports path exports) (\okExports => Vuna.Compiler.Common.bind (validateDependencies path deps) (\okDeps => Vuna.Compiler.Common.bind (validateCapabilities path caps) (\okCaps => Vuna.Compiler.Common.bind (validateTrust path caps trust) (\okTrust => Vuna.Compiler.Common.bind (validatePrivilege path privileged caps trust hosts) (\okPriv => OkC (Manifest name members exports deps caps trust privileged hosts path diagFmt diagWarns diagMax))))))))
 
 -- manifest 所在目录：`a/b/vuna.toml` -> `a/b`；没有目录成分 -> "."。
 manifestDir : String -> String

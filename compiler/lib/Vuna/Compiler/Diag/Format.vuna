@@ -1,5 +1,11 @@
 -- | 诊断渲染：short（首行）/ human（源码片段 + notes）/ JSON。
-module Vuna.Compiler.Diag.Format (renderHuman, renderJson, renderJsonList, renderSarif, renderShort) where
+module Vuna.Compiler.Diag.Format
+  ( renderHuman
+  , renderJson
+  , renderJsonList
+  , renderSarif
+  , renderShort
+  ) where
 
 -- Vuna.Compiler.Diag.Format：诊断的唯一渲染层（诊断重设计 M5/M6）。
 --
@@ -293,7 +299,8 @@ sarifLocation file sp =
 sarifRelated : String -> Label -> String
 sarifRelated file l = case l.labelSpan of
   Nothing => "{\"message\":{\"text\":${jsonStr l.labelText}}}"
-  Just sp => "{\"message\":{\"text\":${jsonStr l.labelText}},\"physicalLocation\":{\"artifactLocation\":{\"uri\":${jsonStr (spanFile sp)}},\"region\":${sarifRegion sp}}}"
+  Just sp =>
+    "{\"message\":{\"text\":${jsonStr l.labelText}},\"physicalLocation\":{\"artifactLocation\":{\"uri\":${jsonStr (spanFile sp)}},\"region\":${sarifRegion sp}}}"
 
 sarifResult : Diagnostic -> String
 sarifResult d =
@@ -302,7 +309,9 @@ sarifResult d =
       Nothing => ""
       Just sp => ",\"locations\":[${sarifLocation (spanFile sp) sp}]"
     related = filter (\l => not (isPrimaryLabel l)) d.diagLabels
-    relJson = if length related == 0 then "" else ",\"relatedLocations\":[${join "," (map (sarifRelated (diagFileOf d)) related)}]"
+    relJson =
+      if length related == 0 then ""
+      else ",\"relatedLocations\":[${join "," (map (sarifRelated (diagFileOf d)) related)}]"
     notesText = join "\n" (map (\n => "note: ${n}") d.diagNotes)
     msg = if notesText == "" then d.diagMessage else "${d.diagMessage}\n${notesText}"
   in "{\"ruleId\":${jsonStr (sarifRuleId d)},\"level\":${jsonStr (sarifLevel d.diagSeverity)},\"message\":{\"text\":${jsonStr msg}}${primary}${relJson}}"
@@ -317,7 +326,9 @@ sarifRules : List Diagnostic -> String
 sarifRules ds = join "," (map ruleJson (uniqueCodes ds))
 
 uniqueCodes : List Diagnostic -> List String
-uniqueCodes ds = foldl (\acc => \d => if memCode (sarifRuleId d) acc then acc else append acc [sarifRuleId d]) [] ds
+uniqueCodes ds =
+  foldl (\acc => \d => if memCode (sarifRuleId d) acc then acc else append acc [sarifRuleId d]) []
+    ds
 
 memCode : String -> List String -> Bool
 memCode c [] = False

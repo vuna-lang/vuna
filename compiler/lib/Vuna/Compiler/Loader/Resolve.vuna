@@ -16,6 +16,7 @@ import Base.List
 import Vuna.Compiler.Frontend.Diagnostics
 import Vuna.Compiler.Common
 import Vuna.Compiler.Diagnostics.Rn
+import Vuna.Compiler.Diagnostics.Pkg
 import Base.HashMap
 import Vuna.Compiler.Diagnostics
 import Vuna.Compiler.Debug
@@ -396,8 +397,9 @@ else case localCtorTargets prefix ns name of
         [] => if Base.HashMap.member name ns.nsTypeSet then OkC (mangle prefix name)
         else Vuna.Compiler.Common.bind (modulesExportingType modules imports name) (\tpairs => case tpairs of
           [] =>
-            err
-              "${label}: unbound variable ${name}${suggest name (append ns.nsValues (append ns.nsCtors (append ns.nsTypes scope)))}${traitImportHint name}"
+            onErrDiag
+              (appendMessage "${suggest name (append ns.nsValues (append ns.nsCtors (append ns.nsTypes scope)))}")
+              (onErrDiag (appendMessage (traitImportHint name)) (rnNoLoc1 (UnknownVariable name) name))
           _ =>
             Vuna.Compiler.Common.bind (unifyEntryPairs label "name" name tpairs)
               (\p => OkC (secondOf p).target)
@@ -1266,9 +1268,7 @@ trustPointModulePrefix t = case splitLastDot (splitOnDot t) of
 
 -- | 信任点的「不是本包真实定义」错误（完整 / 部分加载共用文案）。
 trustPointMissing : String -> String -> Check a
-trustPointMissing pkg t =
-  err
-    "${pkg}: trust point \"${t}\" is not a definition of this package; [trust] unsafe may only list real definitions (Module.def)"
+trustPointMissing pkg t = pkgNoLoc2 (TrustPointMissing pkg t) pkg t
 
 -- | 完整加载（库包 check/build）时的逐项校验：每项必须落在已知定义名集合里。
 checkTrustListFull : String -> List String -> List String -> Check Int
@@ -1313,8 +1313,8 @@ checkModuleEffects label pkg caps decls = case effDecls decls of
   else case findIntrinsic name of
     Just i => case intrinsicCapability i of
       Just c =>
-        err
-          "${label}: effectful builtin `${name}` requires capability `${capabilityName c}` in ${packageLabelForEffects pkg} (declare [capabilities] effects = [\"${capabilityName c}\"] or use Base.IO / typed effects)"
+        pkgNoLoc3 (EffectCapabilityRequired name (capabilityName c) (packageLabelForEffects pkg))
+          name (capabilityName c) (packageLabelForEffects pkg)
       Nothing => OkC 0
     Nothing => OkC 0
 

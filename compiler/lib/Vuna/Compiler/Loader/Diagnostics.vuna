@@ -56,7 +56,8 @@ ldTemplate (HostModulePrivileged _) =
   "module <0> is a privileged host module; only [package] privileged = true packages may import it"
 ldTemplate (ModuleHeaderInEntryFile _) = "module header is not allowed in entry file (<0>)"
 ldTemplate (ModuleHeaderInEntrySource _) = "module header is not allowed in entry source (<0>)"
-ldTemplate (UnknownFixity _) = "unknown fixity for operator <0> (declare it with infixl/infixr/infix)"
+ldTemplate (UnknownFixity _) =
+  "unknown fixity for operator <0> (declare it with infixl/infixr/infix)"
 ldTemplate (ModuleNotFound _ _) = "module <0> not found (roots: <1>)"
 ldTemplate (ModuleNotExported _ _) = "module <0> is not exported by package <1>"
 
