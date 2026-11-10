@@ -337,7 +337,7 @@ checkPackageSeq pkg code =
         in 1
       OkC _ =>
         let
-          ws = takeWarnings 0
+          ws = filter (ownedByPackage pkg) (takeWarnings 0)
           _ = printDiagList "[${packageName pkg}] " ws
           failed = if denyWarningsOn 0 && length ws > 0 then 1 else 0
         in failed
@@ -354,7 +354,7 @@ checkFileEntry path = case contextForFile path of
     ErrC e => printDiag e
     OkC _ =>
       let
-        ws = takeWarnings 0
+        ws = filter (ownedByFile path) (takeWarnings 0)
         _ = printDiagList "" ws
       in if denyWarningsOn 0 && length ws > 0 then 1 else 0
 
@@ -475,3 +475,20 @@ buildLinked ctx entry outDir name =
         _ = writeBuildMeta outDir ctx entry True
         _ = runIO (prim_print "built ${outDir}/bin/${name}\n")
       in 0
+
+-- ---------------------------------------------------------------
+-- warning 归属：只显示当前检查单元自己的文件（依赖包的 warning 不重复刷屏）。
+-- ---------------------------------------------------------------
+stripDotSlash : String -> String
+stripDotSlash s = if startsWith "./" s then substring (natFromInt 2) (natFromInt (strLength s - 2)) s else s
+
+ownedByFile : String -> Diagnostic -> Bool
+ownedByFile path d = stripDotSlash (diagFileOf d) == stripDotSlash path
+
+ownedByPackage : Package -> Diagnostic -> Bool
+ownedByPackage pkg d =
+  let
+    dir = stripDotSlash (packageDir pkg)
+    file = stripDotSlash (diagFileOf d)
+    prefix = if dir == "." || dir == "" then "" else "${dir}/"
+  in startsWith "${prefix}lib/" file || startsWith "${prefix}app/" file || startsWith "${prefix}test/" file
