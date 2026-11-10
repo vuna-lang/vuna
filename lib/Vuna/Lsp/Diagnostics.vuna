@@ -3,6 +3,7 @@ module Vuna.Lsp.Diagnostics
   , contextForDoc
   , diagReportJson
   , diagnosticsForCached
+  , diagnosticsForSuggestions
   , findingDiagJson
   , publishDiagnosticsCached
   , publishDiagnosticsEmpty
@@ -384,7 +385,14 @@ checkDiagnostics cache label ctx text modName imports =
         Nothing => checkFullWith (Just s) ctx label text modName
 
 diagnosticsForCached : Maybe DiagCache -> String -> String -> Pair (Maybe DiagCache) (Pair String (List Diagnostic))
-diagnosticsForCached cache uri text = case contextForDoc uri of
+diagnosticsForCached = diagnosticsForCachedWith False
+
+-- 代码动作路径：包含 `UN_UnusedImport`（编辑器侧虽不回放其诊断，但仍可给出删除 import 的修复）。
+diagnosticsForSuggestions : Maybe DiagCache -> String -> String -> Pair (Maybe DiagCache) (Pair String (List Diagnostic))
+diagnosticsForSuggestions = diagnosticsForCachedWith True
+
+diagnosticsForCachedWith : Bool -> Maybe DiagCache -> String -> String -> Pair (Maybe DiagCache) (Pair String (List Diagnostic))
+diagnosticsForCachedWith includeUnused cache uri text = case contextForDoc uri of
   ErrC e => Pair cache (Pair "" [e])
   OkC (Pair label ctx) => case parseSource label text of
     ErrC e => Pair cache (Pair label [e])
@@ -404,7 +412,7 @@ diagnosticsForCached cache uri text = case contextForDoc uri of
               (DiagCache c.dcLabel c.dcKey c.dcCtx c.dcTool c.dcClean c.dcBuiltSec c.dcStats c.dcAux (firstOf linted))
           Nothing => Nothing
       in Pair cache3
-        (Pair label (append (secondOf checked) (append (secondOf linted) (filter (diagOwns label) (filter lspWarnable (takeWarnings 0))))))
+        (Pair label (append (secondOf checked) (append (secondOf linted) (filter (diagOwns label) (filter (warnAllowed includeUnused) (takeWarnings 0))))))
 
 publishDiagnostics : String -> Int -> String -> List Diagnostic -> Json
 publishDiagnostics uri version text diags =
@@ -477,3 +485,7 @@ lspTagsOf code =
 -- 故 publish 链路不回放该告警（CLI 全量检查仍报告）。
 lspWarnable : Diagnostic -> Bool
 lspWarnable d = d.diagCode /= "UN_UnusedImport"
+
+warnAllowed : Bool -> Diagnostic -> Bool
+warnAllowed True d = True
+warnAllowed False d = lspWarnable d

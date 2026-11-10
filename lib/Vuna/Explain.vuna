@@ -89,22 +89,33 @@ listInfos (i :: rest) prefix =
   in listInfos rest prefix
 
 explainArgs : List String -> Int
-explainArgs args = case args of
+explainArgs args = case stripExplainJson args of
+  Pair rest json => explainArgsJson rest json
+
+explainArgsJson : List String -> Bool -> Int
+explainArgsJson args json = case args of
   [] =>
     let
-      _ = runIO (prim_print "usage: vuna explain <CODE> | vuna explain --list [PREFIX]\n")
+      _ = runIO (prim_print "usage: vuna explain <CODE> | vuna explain --list [PREFIX] [--json]\n")
     in 2
   "--list" :: rest => case rest of
-    [] => listInfos allInfos ""
-    prefix :: _ => listInfos allInfos prefix
+    [] => if json then listInfosJson allInfos "" else listInfos allInfos ""
+    prefix :: _ => if json then listInfosJson allInfos prefix else listInfos allInfos prefix
   code :: _ => case findInfo code allInfos of
     Nothing =>
       let
         _ =
-          runIO
+          if json then runIO (prim_print "{\"error\":\"unknown diagnostic code\",\"code\":${jsonQuote code}}\n")
+          else runIO
             (prim_print "error: unknown diagnostic code `${code}` (try `vuna explain --list`)\n")
       in 2
-    Just i => printInfo i
+    Just i => if json then printInfoJson i else printInfo i
+
+stripExplainJson : List String -> Pair (List String) Bool
+stripExplainJson [] = Pair [] False
+stripExplainJson ("--json" :: rest) = Pair (firstOf (stripExplainJson rest)) True
+stripExplainJson (arg :: rest) =
+  Pair (Base.List.Cons arg (firstOf (stripExplainJson rest))) (secondOf (stripExplainJson rest))
 
 runExplain : List String -> Int
 runExplain args = explainArgs args
@@ -136,3 +147,51 @@ firstJustExamples : List (Maybe String) -> Maybe String
 firstJustExamples [] = Nothing
 firstJustExamples ((Just x) :: rest) = Just x
 firstJustExamples (Nothing :: rest) = firstJustExamples rest
+
+-- JSON 输出（`vuna explain --json` / `--list --json`）；本地转义，不依赖 Vuna.Json
+-- （避免把 Explain 加进 Json 的依赖扇出）。
+printInfoJson : Info -> Int
+printInfoJson i =
+  let
+    _ = runIO (prim_print (infoJson i ++ "\n"))
+  in 0
+
+infoJson : Info -> String
+infoJson i =
+  "{"
+    ++ join "," [field "code" (jsonQuote i.infoCode), field "message" (jsonQuote i.infoTemplate), field "meaning" (jsonQuote i.infoDesc), field "severity" (jsonQuote (diagSeverityOf (codeDomain i.infoCode))), field "phase" (jsonQuote (diagPhaseOf (codeDomain i.infoCode))), field "category" (jsonQuote (diagCategoryOf (codeDomain i.infoCode))), field "example" (maybeJsonString (exampleOf i.infoCode))]
+    ++ "}"
+
+field : String -> String -> String
+field k v = "\"${k}\":${v}"
+
+maybeJsonString : Maybe String -> String
+maybeJsonString Nothing = "null"
+maybeJsonString (Just s) = jsonQuote s
+
+jsonQuote : String -> String
+jsonQuote s = "\"" ++ join "" (map jsonEsc (strUnpack s)) ++ "\""
+
+jsonEsc : Int -> String
+jsonEsc c =
+  if c == 34 then "\\\""
+  else if c == 92 then "\\\\"
+  else if c == 10 then "\\n"
+  else if c == 13 then "\\r"
+  else if c == 9 then "\\t" else if c < 32 then "\\u00" ++ hexPair c else strPack [c]
+
+hexPair : Int -> String
+hexPair c = strPack [hexDigit (c / 16), hexDigit (c - c / 16 * 16)]
+
+hexDigit : Int -> Int
+hexDigit n = if n < 10 then 48 + n else 87 + n
+
+listInfosJson : List Info -> String -> Int
+listInfosJson infos prefix =
+  let
+    selected = filter (matchesInfoPrefix prefix) infos
+    _ = runIO (prim_print ("{\"codes\":[" ++ join "," (map infoJson selected) ++ "]}\n"))
+  in 0
+
+matchesInfoPrefix : String -> Info -> Bool
+matchesInfoPrefix prefix i = prefix == "" || matchesPrefix prefix i.infoCode

@@ -147,3 +147,14 @@ out-contains: = trace[unify]:
 run: "$VUNA" check corpus/dt_err/28_multi_clause_coverage.vuna --error-format human 2>&1
 exit: 1
 out-contains: = candidates: Nat.Succ
+# explain --json：目录条目机器可读（含 example 夹具路径）。
+run: "$VUNA" explain --json TC_TypeMismatch
+out-contains: "code":"TC_TypeMismatch"
+out-contains: "meaning":"类型不匹配"
+out-contains: "phase":"elab"
+out-contains: "example":
+run: "$VUNA" explain --list --json
+out-contains: "codes":[
+run: "$VUNA" explain --json NOPE_Code
+exit: 2
+out-contains: unknown diagnostic code

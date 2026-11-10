@@ -988,7 +988,7 @@ workspaceSymbols (Just idx) query =
 diagnosticSuggestionActions : String -> String -> Int -> Int -> List Json
 diagnosticSuggestionActions uri text reqStart reqEnd =
   let
-    diags = secondOf (secondOf (diagnosticsForCached Nothing uri text))
+    diags = secondOf (secondOf (diagnosticsForSuggestions Nothing uri text))
   in concatMap (diagSuggestionActions uri reqStart reqEnd) diags
 
 diagSuggestionActions : String -> Int -> Int -> Diagnostic -> List Json
