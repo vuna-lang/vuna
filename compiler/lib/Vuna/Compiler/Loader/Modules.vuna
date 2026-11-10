@@ -321,7 +321,7 @@ sameTargetRest e [] = True
 sameTargetRest e ((Pair m e2) :: rest) = e.target == e2.target && sameTargetRest e rest
 
 unifyEntryPairs : String -> String -> String -> List (Pair String ExportEntry) -> Check (Pair String ExportEntry)
-unifyEntryPairs label kindLabel name [] = rnNoLoc2 (UnknownKind kindLabel name) kindLabel name
+unifyEntryPairs label kindLabel name [] = icInternal "unifyEntryPairs: empty candidates"
 unifyEntryPairs label kindLabel name (p :: rest) =
   if sameTargetRest (secondOf p) rest then OkC p
   else err

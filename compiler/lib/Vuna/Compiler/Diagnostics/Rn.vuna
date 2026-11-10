@@ -53,9 +53,7 @@ data RnErr : Nat -> Type where
   -- arity 2
   AmbiguousConstructor : String -> String -> RnErr (Succ (Succ Zero))
   AmbiguousConstructorInExport : String -> String -> RnErr (Succ (Succ Zero))
-  ConstructorNotExported : String -> String -> RnErr (Succ (Succ Zero))
   TypeNotExported : String -> String -> RnErr (Succ (Succ Zero))
-  UnknownKind : String -> String -> RnErr (Succ (Succ Zero))
   ValueNotExported : String -> String -> RnErr (Succ (Succ Zero))
 
 -- | 诊断域实现：Vuna.Compiler.Diagnostics.Rn.rnCode（目录/模板见 diagnostics.md）。
@@ -83,9 +81,7 @@ rnCode (AmbiguousPrelude _) = "RN_AmbiguousPrelude"
 rnCode (UnknownCapability _ _) = "RN_UnknownCapability"
 rnCode (AmbiguousConstructor _ _) = "RN_AmbiguousConstructor"
 rnCode (AmbiguousConstructorInExport _ _) = "RN_AmbiguousConstructorInExport"
-rnCode (ConstructorNotExported _ _) = "RN_ConstructorNotExported"
 rnCode (TypeNotExported _ _) = "RN_TypeNotExported"
-rnCode (UnknownKind _ _) = "RN_UnknownKind"
 rnCode (ValueNotExported _ _) = "RN_ValueNotExported"
 
 -- | 诊断域实现：Vuna.Compiler.Diagnostics.Rn.rnTemplate（目录/模板见 diagnostics.md）。
@@ -116,9 +112,7 @@ rnTemplate (UnknownCapability _ _) = "unknown capability \"<0>\" (known: <1>)"
 rnTemplate (AmbiguousConstructor _ _) = "ambiguous constructor <0> (qualify it as <1>)"
 rnTemplate (AmbiguousConstructorInExport _ _) =
   "ambiguous constructor <0> in <1>; export T(..) instead"
-rnTemplate (ConstructorNotExported _ _) = "constructor <0> is not exported by <1>"
 rnTemplate (TypeNotExported _ _) = "type <0> is not exported by <1>"
-rnTemplate (UnknownKind _ _) = "unknown <0> <1>"
 rnTemplate (ValueNotExported _ _) = "<0> is not exported by <1>"
 
 -- | 诊断域实现：Vuna.Compiler.Diagnostics.Rn.rnMsg（目录/模板见 diagnostics.md）。
@@ -189,8 +183,6 @@ rnAll =
     RnEntry (rnCode (UnknownCapability "" "")) (rnTemplate (UnknownCapability "" "")) "未知能力",
     RnEntry (rnCode (AmbiguousConstructor "" "")) (rnTemplate (AmbiguousConstructor "" "")) "构造子歧义",
     RnEntry (rnCode (AmbiguousConstructorInExport "" "")) (rnTemplate (AmbiguousConstructorInExport "" "")) "导出中构造子歧义",
-    RnEntry (rnCode (ConstructorNotExported "" "")) (rnTemplate (ConstructorNotExported "" "")) "构造子未被导出",
     RnEntry (rnCode (TypeNotExported "" "")) (rnTemplate (TypeNotExported "" "")) "类型未被导出",
-    RnEntry (rnCode (UnknownKind "" "")) (rnTemplate (UnknownKind "" "")) "未知名字种类",
     RnEntry (rnCode (ValueNotExported "" "")) (rnTemplate (ValueNotExported "" "")) "值未被导出"
   ]

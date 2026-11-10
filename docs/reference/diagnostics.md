@@ -138,7 +138,7 @@ JSON 字段是机器契约：`code/severity/phase/category/message/labels[]/fiel
 - 负例夹具双轨：210 个 `.diag.json` 结构化期望（`--json` 聚合文档，`--bless-diag` 生成）
   与原有 `.err` 首行片段断言并存；`--bless-diag` 在 runner 内写盘（worker 透传）。
 - `nix/checks/diag-coverage.sh`：目录码 vs 结构化夹具覆盖门禁（allowlist 记录缺口、
-  基线 `nix/diag-coverage.min` 防回退；当前 182/236，缺口已在 allowlist 逐码登记）。
+  基线 `nix/diag-coverage.min` 防回退；当前 182/234，缺口已在 allowlist 逐码登记）。
 - `vuna check .`（旧/新编译器）、全量 suite、`nix build .#vuna-seed` 必须通过。
 
 ## 9. 迁移状态（对照完整设计）
@@ -148,7 +148,7 @@ JSON 字段是机器契约：`code/severity/phase/category/message/labels[]/fiel
 | D1 三通道（源码/工具/内部） | 已落地（phase Tool/Internal + ICE 信息） |
 | D2 `Diagnostic` 全字段 | 已落地 |
 | D3 位置契约（end span、UTF-16、显式 NoLoc） | 已落地（span 填充仍在补齐） |
-| D4 码域（RN_/PKG_ 独立域、死码清理） | 已落地（`RN_` 25 码、`PKG_` 27 码；已删除 9 个 TC + 2 RN + 2 PS + 1 LD 无发射点死码） |
+| D4 码域（RN_/PKG_ 独立域、死码清理） | 已落地（`RN_` 23 码、`PKG_` 27 码；已删除 9 个 TC + 4 RN + 2 PS + 1 LD 无发射点死码） |
 | D5 目录单一真源 + 生成枚举/文档 | 部分（条目仍是手写；`explain`/`gen-errors` 同源，`gen-errors` 同时生成 `errors.md` 与目录 JSON `errors.json`；两者都输出 severity/phase/category 元数据） |
 | D6 渲染/LSP/CLI | 已落地 short/human/JSON/SARIF + LSP push/pull + `[diagnostics]` 配置；human 视图展示 fields/trace/suggestions（与 JSON 同源）；SARIF rules 带目录 shortDescription/help/defaultConfiguration/tags；i18n 部分（`--lang zh` 与 `[diagnostics] lang` 的 human 消息本地化 + `= message:` 英文原文附注；机器格式保持英文） |
 | D7.1 多错误 + Cascade | 部分（parser 顶层 resync：多个语法错误一次报出，`--max-errors` 截断且作用于 short/JSON/SARIF；elab 逐 decl 恢复 + Cascade 待办） |
@@ -161,7 +161,7 @@ JSON 字段是机器契约：`code/severity/phase/category/message/labels[]/fiel
 | D7.8 QTT 使用点 | 部分（线性/擦除错误附 `fields.quantity`：name/declared/observed；逐使用点 span 待 Core `TSp`） |
 | D7.9 文案规范/门禁 | 已落地（`nix/checks/diag-style.sh`：句号/大小写/空白/占位符；专有名词例外逐码 allowlist） |
 | D7.10 explanation/example/`explain` | 部分（模板+中文说明+severity/phase/category 元数据+`example:` 夹具路径可用；元变量/洞已有 `name`/`note` 字段） |
-| 结构化夹具 + 每码覆盖门禁 | 部分（210 个 `.diag.json`；覆盖门禁 182/236，缺口 allowlist 逐码登记） |
+| 结构化夹具 + 每码覆盖门禁 | 部分（210 个 `.diag.json`；覆盖门禁 182/234，缺口 allowlist 逐码登记） |
 
 ## 10. 后续路线（按依赖排序）
 

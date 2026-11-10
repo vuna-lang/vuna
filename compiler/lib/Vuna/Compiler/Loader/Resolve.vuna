@@ -315,19 +315,6 @@ resolveCtorDotted modules label prefix ns imports name = case splitLastDot (spli
       )
       Nothing => resolveFamilyQualifiedCtor modules label prefix ns imports name
 
--- 模式里的限定名只认构造器：`M.foo`（foo 是函数）必须报错，不能按值解析成构造器。
-resolveQualifiedCtor : List Module -> String -> List Import -> String -> Check String
-resolveQualifiedCtor modules label imports name = case splitLastDot (splitOnDot name) of
-  Pair revPrefix base =>
-    let
-      prefix = joinDots revPrefix
-    in case findImportPrefix imports prefix of
-      Nothing => rnNoLoc1 (ModuleNotImported prefix) prefix
-      Just m => Vuna.Compiler.Common.bind (exportsOf modules m) (\es => case findExportCtor es base of
-        Just e => OkC e.target
-        Nothing => rnNoLoc2 (ConstructorNotExported base m) base m
-      )
-
 -- 带点表达式的解析（M10.5）：先按「最长可解析模块前缀」尝试限定名/限定值+字段链，
 -- 否则按「变量/顶层名 + 字段链」处理。`p.x`、`M.point.x`、`Vuna.Compiler.Frontend.Parser.parseSource` 都走这里。
 resolveDottedExpr : List Module -> String -> String -> Namespaces -> List Import -> List String -> String -> Span -> Check Expr
