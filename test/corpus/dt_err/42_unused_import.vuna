@@ -1,0 +1,8 @@
+-- warning：别名 import 未使用（UN_UnusedImport；.deny 下按失败断言）
+import Base.List as L
+
+f : Int
+f = 1
+
+main : Int
+main = 0

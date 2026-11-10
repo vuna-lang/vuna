@@ -1,5 +1,12 @@
 -- | 诊断告警收集器：编译器在纯检查过程中发射 warning，驱动层在检查结束后取走。
-module Vuna.Compiler.Diagnostics.Sink (emitWarning, resetWarnings, takeWarnings) where
+module Vuna.Compiler.Diagnostics.Sink
+  ( emitWarning
+  , markImportUsed
+  , resetUsedImports
+  , resetWarnings
+  , takeUsedImports
+  , takeWarnings
+  ) where
 
 -- Vuna.Compiler.Diagnostics.Sink：warning 的进程内收集点。
 --
@@ -24,7 +31,11 @@ warningsRef = runIO (newRef (WarnBox [] 0))
 
 -- | 清空收集器（检查入口调用）。返回 0 便于放在 let 链里。
 resetWarnings : Int -> Int
-resetWarnings _ = runIO (writeRef warningsRef (WarnBox [] 0))
+resetWarnings _ =
+  let
+    _ = runIO (writeRef warningsRef (WarnBox [] 0))
+    _ = runIO (writeRef usedImportsRef (UsedImportsBox [] 0))
+  in 0
 
 -- | 追加一条 warning；返回 0 便于放在 let 链里。
 emitWarning : Diagnostic -> Int
@@ -45,3 +56,30 @@ containsDiag d (x :: xs) = if sameDiag d x then True else containsDiag d xs
 dedupeWarnings : List Diagnostic -> List Diagnostic
 dedupeWarnings ds =
   reverse (foldl (\acc => \d => if containsDiag d acc then acc else d :: acc) [] ds)
+
+-- 本次检查中用到的 import（模块名）：unused-import warning 的数据源。
+record UsedImportsBox where
+  usedImportNames : List String
+  usedImportTag : Int
+
+usedImportsRef : IORef UsedImportsBox
+usedImportsRef = runIO (newRef (UsedImportsBox [] 0))
+
+memUsedImport : String -> List String -> Bool
+memUsedImport n [] = False
+memUsedImport n (x :: xs) = if n == x then True else memUsedImport n xs
+
+markImportUsed : String -> Int
+markImportUsed name =
+  runIO
+    (modifyRef usedImportsRef (\b => if memUsedImport name b.usedImportNames then b else UsedImportsBox (append b.usedImportNames [name]) 0))
+
+takeUsedImports : Int -> List String
+takeUsedImports _ =
+  let
+    b = runIO (readRef usedImportsRef)
+  in b.usedImportNames
+
+-- | 清空 import 使用集合（按检查单元/模块重置）。
+resetUsedImports : Int -> Int
+resetUsedImports _ = runIO (writeRef usedImportsRef (UsedImportsBox [] 0))

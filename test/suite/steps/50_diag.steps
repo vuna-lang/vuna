@@ -83,3 +83,11 @@ run: sh -c 'd="$TMPDIR/m38-cfgbad"; rm -rf "$d"; mkdir -p "$d/lib"; printf "[pac
 run: "$VUNA" check "$TMPDIR/m38-cfgbad" 2>&1
 exit: 1
 out-contains: [PKG_InvalidDiagFormat]
+# unused import warning：-W 显示；实际使用的 import 不报。
+run: sh -c 'printf "import Base.List as L\n\nmain : Int\nmain = 1\n" > "$TMPDIR/m38-impbad.vuna"'
+run: "$VUNA" check -W "$TMPDIR/m38-impbad.vuna" 2>&1
+out-contains: [UN_UnusedImport]
+out-contains: module `Base.List` is imported but never used
+run: sh -c 'printf "import Base.List as L\n\nmain : Int\nmain = L.length [1,2]\n" > "$TMPDIR/m38-impok.vuna"'
+run: "$VUNA" check -W "$TMPDIR/m38-impok.vuna" 2>&1
+out-not-contains: UN_UnusedImport
