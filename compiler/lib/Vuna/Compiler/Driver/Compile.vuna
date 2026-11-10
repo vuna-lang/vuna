@@ -1057,18 +1057,32 @@ depEnvText dep =
 -- 哈希未变）。同包依赖若是脏模块或新模块，则本模块也判脏（接口哈希可能变），不做乐观
 -- 复用；脏性沿 import 边自然传播（干净表里查不到 ⇒ 脏）。
 -- ---------------------------------------------------------------
-ownCleanModules : PackageContext -> List (Pair String Int) -> Maybe (List ModuleIface)
-ownCleanModules ctx depTbl = case readPackageIface (ifaceDirOf ctx) ifaceCompilerTag of
-  Nothing => Nothing
-  Just pi => if pi.piSchema /= ifaceSchemaTag || pi.piCompiler /= ifaceCompilerTag || pi.piPackage /= contextPackageName ctx then Nothing
+-- 与 `ownCleanModules` 同一次读取，同时回报「旧整包接口是否可完整读回」（写侧信任旧
+-- manifest 做按模块跳过的前提）：check/build 的写前校验已经解码过整包接口，写回时复用
+-- 这次结果，不再把同样的 65 个模块文件读 + unmarshal 第二遍。
+ownCleanInfo : PackageContext -> List (Pair String Int) -> Pair Bool (Maybe (List ModuleIface))
+ownCleanInfo ctx depTbl = case readPackageIface (ifaceDirOf ctx) ifaceCompilerTag of
+  Nothing => Pair False Nothing
+  Just pi => if pi.piSchema /= ifaceSchemaTag || pi.piCompiler /= ifaceCompilerTag || pi.piPackage /= contextPackageName ctx then Pair True Nothing
   else if pi.piEnv /= packageEnvHash ctx then
     let
       _ = note "iface-reject=own-env ${contextPackageName ctx}"
-    in Nothing
+    in Pair True Nothing
   else
     let
       clean = firstOf (cleanModulesGo (ownOrigins ctx) (ownSourceInfos ctx) depTbl pi.piModules [])
-    in if length clean == 0 then Nothing else Just clean
+    in Pair True (if length clean == 0 then Nothing else Just clean)
+
+ownCleanModules : PackageContext -> List (Pair String Int) -> Maybe (List ModuleIface)
+ownCleanModules ctx depTbl = secondOf (ownCleanInfo ctx depTbl)
+
+-- 工具路径（LSP 冷启动写单模块接口）复用的干净模块：记录原样写回，避免用增量路径缺失的
+-- 整包 sols 重算导致擦除位残 meta 的 zonk 结果漂移。命令行 check/build 走
+-- writeIfaceShadow 的同一次 `ownCleanInfo` 读取，不经过这里。
+cleanIfacesOrEmpty : PackageContext -> List ModuleIface
+cleanIfacesOrEmpty ctx = case ownCleanModules ctx (depIfaceHashTable ctx) of
+  Just clean => clean
+  Nothing => []
 
 -- manifest 条目的产物来源表（模块名 → "pkg" / "tool"）。命令行 check/build 只信任
 -- 整包产物：LSP/REPL 单模块写回的接口可能来自部分上下文，源哈希看不见它的漂移。
@@ -1262,13 +1276,6 @@ ownSourceInfos ctx =
     (\root => map (\p => Pair (moduleNameOfPath (rootDir root) p) (SourceInfo p (textHash (runIO (prim_readFile p))) (runIO (prim_fileMtime p)) (runIO (prim_fileSize p)))) (collectVunaMeta 1048576 (rootDir root)))
     (filter (\r => rootName r == contextPackageName ctx) (contextRoots ctx))
 
--- 写接口时复用的干净模块（包内增量 S4）：记录原样写回，避免用增量路径缺失的整包
--- sols 重算导致擦除位残 meta 的 zonk 结果漂移。
-cleanIfacesOrEmpty : PackageContext -> List ModuleIface
-cleanIfacesOrEmpty ctx = case ownCleanModules ctx (depIfaceHashTable ctx) of
-  Just clean => clean
-  Nothing => []
-
 -- | 干净模块的 `miSource` 来自磁盘 manifest（可能是上一次以相对/绝对不同写法 check 时写入的
 -- 路径）。接口文件路径按「包目录 + 当前源路径」推导，复用时必须换成本次上下文的路径，
 -- 否则相对/绝对入口交替会算出空路径而整包跳过写（§57c 覆盖）。
@@ -1287,7 +1294,11 @@ else
   let
     _ = stamp "iface-shadow-start"
     sources = ownSourceInfos ctx
-    clean = resyncCleanSources sources (cleanIfacesOrEmpty ctx)
+    info = ownCleanInfo ctx (depIfaceHashTable ctx)
+    clean = resyncCleanSources sources (case secondOf info of
+      Just c => c
+      Nothing => []
+    )
   in case ifaceOfPackage (contextPackageName ctx) sources (depIfaceHashTable ctx) checked.checkedInherited clean checked.checkedModules checked.checkedEntryDecls checked.checkedProgram of
     Err e => if ifaceSelfTestRequested then Err e
     else
@@ -1297,14 +1308,15 @@ else
     Ok modules =>
       let
         _ = stamp "iface-compute-done"
-      in writeIfaceNow ctx modules
+      in writeIfaceNow (firstOf info) ctx modules
 
 -- 真正写接口：入口-only 包（没有 lib 模块）不写（没有可复用的模块接口；写空包只会让
 -- 消费者读到 invalid 接口）。per-module 文件只重写接口哈希变化的模块，manifest 最后写。
 -- 目标目录不可写（Nix store / 只读 checkout / `VUNA_IFACE_DIR` 指到只读树）时静默降级：
--- 不写、exit code 不变，读侧照旧（没有接口就回退全量）。
-writeIfaceNow : PackageContext -> List ModuleIface -> Result Int
-writeIfaceNow ctx modules = if length modules == 0 then
+-- 不写、exit code 不变，读侧照旧（没有接口就回退全量）。`oldReadable` 来自写前那次
+-- 整包接口读取，避免写回时再解码一遍所有模块文件。
+writeIfaceNow : Bool -> PackageContext -> List ModuleIface -> Result Int
+writeIfaceNow oldReadable ctx modules = if length modules == 0 then
   let
     _ = note "iface-reject=empty-package iface-skip empty-package"
   in Ok 0
@@ -1324,7 +1336,7 @@ else
     let
       n =
         withIfaceLock ctx
-          (\_ => writePackageIface dir ifaceCompilerTag (contextPackageName ctx) pkgDir (packageEnvHash ctx) modules)
+          (\_ => writePackageIface oldReadable dir ifaceCompilerTag (contextPackageName ctx) pkgDir (packageEnvHash ctx) modules)
       _ = note "iface-write=${n}/${length modules}"
       _ = stamp "iface-write-done"
       _ = if ifaceMirrorMode then gcIfaceOrphans dir pkgDir modules else 0

@@ -176,6 +176,25 @@ in
     script = ./compiler-growth.sh;
   };
 
+  # 包路径**增量** check 的增长率门槛：单文件探针走全量精化，覆盖不到包级增量收尾
+  # （globals 去重 / 写接口 / 终止性 own 判定）的 O(n²) 回归。
+  vuna-compiler-growth-incremental = mkCheck {
+    name = "vuna-compiler-growth-incremental";
+    srcs = [
+      ../../base
+      ../../nix/checks/compiler-growth-pkg.sh
+      ../../vuna.toml
+    ];
+    env = {
+      VUNA = "${vuna}/bin/vuna";
+    };
+    nativeBuildInputs = [
+      pkgs.bash
+      pkgs.coreutils
+    ];
+    script = ./compiler-growth-pkg.sh;
+  };
+
   vuna-typecheck = mkCheck {
     name = "vuna-typecheck";
     srcs = [

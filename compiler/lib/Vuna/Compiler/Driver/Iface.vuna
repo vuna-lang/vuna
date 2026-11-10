@@ -248,6 +248,9 @@ hashTerm t = hashTextStrong (prim_marshal t)
 -- （例如 globals 由「干净模块产物 + 本次精化产物」拼接），接口哈希不能因此漂移。
 -- M34.6：键只算一次（旧实现每次比较都重算 `key y`；nameKey 是 6 lane strHash +
 -- 字符串拼接，globals 排序上占接口阶段 ~270ms）。排序判据与旧实现逐项相同。
+-- 已知边界：插入排序是 O(d²)，单模块 d 很大（数千项）时接口阶段退化成 N²；但真实包
+-- 是「多模块、每模块几十项」，逐项哈希（去排序）会因每项 Marshal/分配放大而拖慢冷构建
+-- （实测见 docs/reference/performance.md §4.7），故保留本口径。
 insertByKey : Int -> a -> List (Pair Int a) -> List (Pair Int a)
 insertByKey k x [] = [Pair k x]
 insertByKey k x ((Pair ky y) :: rest) =
@@ -1018,17 +1021,18 @@ writeModuleIfaceMerge dir compiler pkg pkgDir env origin mi =
       _ = writeManifest dir compiler (PackageManifest ifaceSchema compiler pkg env merged)
     in 1
 
-writePackageIface : String -> String -> String -> String -> Int -> List ModuleIface -> Int
-writePackageIface dir compiler pkg pkgDir env modules =
+-- | 写接口：`oldReadable` 由调用方从**刚刚做过的那次整包接口读取**带下来（check/build 的
+-- 写前校验已经完整解码过一遍），避免这里再读 + 解码一遍所有模块文件。
+writePackageIface : Bool -> String -> String -> String -> String -> Int -> List ModuleIface -> Int
+writePackageIface oldReadable dir compiler pkg pkgDir env modules =
   let
     -- 只有「整包接口可完整读回」时才信任旧 manifest 做按模块跳过；损坏/缺文件的旧接口
     -- 会让读侧回退全量，这里必须强制全量重写，否则损坏文件永远不被覆盖。
     -- 条目取磁盘原始值（保留 `meOrigin`）：工具写回的条目即使内容未变也要改标 `pkg`。
-    oldEntries = case readPackageIface dir compiler of
-      Just _ => case readManifest dir compiler of
-        Just mf => pmModulesOf mf
-        Nothing => []
+    oldEntries = if oldReadable then case readManifest dir compiler of
+      Just mf => pmModulesOf mf
       Nothing => []
+    else []
     written = writeModules dir compiler pkgDir "pkg" oldEntries modules
     mf = PackageManifest ifaceSchema compiler pkg env (map (manifestEntryOf pkgDir) modules)
     _ = writeManifest dir compiler mf

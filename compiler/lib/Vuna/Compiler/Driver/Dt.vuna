@@ -713,16 +713,28 @@ cleanStartNext cps =
     m = maxMetaCps cps
   in if m < 0 then 0 else m + 1
 
+-- 名字去重（后出现者胜、保序）：旧实现对每个元素重建 `map key rest` 再线性扫，
+-- 整表 O(n²)（增量 check/build 收尾的 globals 表可达上万项；实测 16k 项 17.6s）。
+-- 这里从右往左一次走完，用 `HashMap String Bool` 记已见名 ⇒ O(n)。
+-- 语义与原实现逐项一致：同名只保留**最后一次**出现，其余元素相对顺序不变。
+dedupKeepLast : (a -> String) -> List a -> List a
+dedupKeepLast key xs = dedupKeepLastGo key (reverse xs) (Base.HashMap.fromList []) []
+
+dedupKeepLastGo : (a -> String) -> List a -> HashMap String Bool -> List a -> List a
+dedupKeepLastGo key [] seen acc = acc
+dedupKeepLastGo key (x :: rest) seen acc =
+  let
+    k = key x
+  in if Base.HashMap.member k seen then dedupKeepLastGo key rest seen acc
+  else dedupKeepLastGo key rest (Base.HashMap.insert k True seen) (x :: acc)
+
 -- 定义体表（delta 展开的唯一来源）：只取有体的 `DtDef`（axiom / extern 跳过）；
 -- 依赖包之间的共享声明按名字去重（后出现者胜，与 datas/insts/classes 一致）。
 dedupDefBodies : List DtDef -> List (Pair String Term)
 dedupDefBodies ds = bodyPairs (dedupDefs ds)
 
 dedupDefs : List DtDef -> List DtDef
-dedupDefs [] = []
-dedupDefs (d :: rest) =
-  if memName (dtDefName d) (map dtDefName rest) then dedupDefs rest
-  else Base.List.Cons d (dedupDefs rest)
+dedupDefs ds = dedupKeepLast dtDefName ds
 
 bodyPairs : List DtDef -> List (Pair String Term)
 bodyPairs [] = []
@@ -731,28 +743,16 @@ bodyPairs (d :: rest) = case dtDefBody d of
   Nothing => bodyPairs rest
 
 dedupDatas : List DtData -> List DtData
-dedupDatas [] = []
-dedupDatas (d :: rest) =
-  if memName (dtDataName d) (map dtDataName rest) then dedupDatas rest
-  else Base.List.Cons d (dedupDatas rest)
+dedupDatas ds = dedupKeepLast dtDataName ds
 
 dedupInsts : List DtInst -> List DtInst
-dedupInsts [] = []
-dedupInsts (i :: rest) =
-  if memName (dtInstName i) (map dtInstName rest) then dedupInsts rest
-  else Base.List.Cons i (dedupInsts rest)
+dedupInsts ds = dedupKeepLast dtInstName ds
 
 dedupClasses : List DtClass -> List DtClass
-dedupClasses [] = []
-dedupClasses (c :: rest) =
-  if memName (dtClassName c) (map dtClassName rest) then dedupClasses rest
-  else Base.List.Cons c (dedupClasses rest)
+dedupClasses ds = dedupKeepLast dtClassName ds
 
 dedupGlobals : List (Pair String Term) -> List (Pair String Term)
-dedupGlobals [] = []
-dedupGlobals (g :: rest) =
-  if memName (firstOf g) (map firstOf rest) then dedupGlobals rest
-  else Base.List.Cons g (dedupGlobals rest)
+dedupGlobals gs = dedupKeepLast (\g => firstOf g) gs
 
 -- ---------------------------------------------------------------
 -- M34.5（S2）：依赖接口加载（TTC 的 module 复用）

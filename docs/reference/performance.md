@@ -14,14 +14,14 @@
 
 | 命令 | 当前 |
 | --- | --- |
-| `check base` | ~0.12 s |
-| `check compiler` | ~2.2 s |
-| `check .` | ~3.3 s（workspace 检查所有成员） |
-| `build --no-compile`（workspace） | ~5.4 s |
-| `build .`（含链接；单元缓存默认开） | ~6.6 s |
-| `fmt --check`（全仓） | ~0.55 s |
-| `map`（热缓存命中） | ~0.5 s |
-| `map` 冷启动全量重建 | ~0.7–0.9 s（索引缓存失效后整仓重扫；C34 的 O(n²) 已修） |
+| `check base` | ~0.1 s |
+| `check compiler` | ~0.79 s |
+| `check .` | ~1.43 s（workspace 检查所有成员） |
+| `build --no-compile`（workspace） | ~5.2 s |
+| `build .`（含链接；单元缓存默认开） | ~7 s（其中 ocamlopt/链接 ~28 s CPU，16 路并行） |
+| `fmt --check`（全仓） | ~0.80 s |
+| `map`（热缓存命中） | ~0.75 s |
+| `map` 冷启动全量重建 | ~1.07 s（索引缓存失效后整仓重扫；C34 的 O(n²) 已修） |
 | `lint` / `doc` / `api` / `gen-errors` | 均 <1 s |
 | LSP 单次编辑（会话热，重文件） | ~0.12 s（compiler 最大文件）/ ~0.02 s（根包普通文件） |
 | LSP 首次请求（建会话 + 首轮增量） | ~1.1–1.5 s |
@@ -30,6 +30,37 @@
 更早的读数在 git 历史；当前读数须与
 [`bench/compiler-baseline.txt`](../../bench/compiler-baseline.txt) 的
 同机口径比较；跨机器只比 §5 的增长率。
+
+### 2026-11：包级增量收尾的三处 O(n²)（已修）
+
+同一 worktree、同一 HEAD、同机 A/B（独立进程；check/build 用 `bench/compiler.sh` 口径，
+`--runs 2` 取中位；冷构建用仓库副本 + 独立空 TMPDIR）：
+
+| 命令 | 修前 | 修后 | 变化 |
+| --- | --- | --- | --- |
+| `check compiler` | 2242 ms | 785 ms | -65% |
+| `check .` | 3711 ms | 1430 ms | -61% |
+| `build compiler --no-compile` | 3261 ms | 1769 ms | -46% |
+| `build . --no-compile`（workspace，bench build-all） | 8793 ms | 5186 ms | -41% |
+| 增量 `build --package vuna .`（接口热） | 5.62 s | 3.53 s | -37% |
+| 冷 `build --package vuna .`（全新副本，codegen） | 8.53 s | 8.21 s | -4% |
+
+三处根因都是「按名字线性扫全表」的 O(n²)，且都在**包级增量收尾**（单文件探针测不到，
+见 §5 的新门槛）：
+
+1. **`Dt.dedupGlobals` 及同族去重**：`memName (key x) (map key rest)` 对每个元素重建剩余
+   表；增量收尾的 globals 表达上万项（16k 项实测 17.6 s）。改为从右往左一次走 +
+   `HashMap String Bool` 记已见名（保持 last-wins 与「最后一次出现」的相对顺序）⇒ O(n)：
+   `check compiler` 的收尾段（`termination-done → cg-partition-done`）872 → 2.4 ms。
+2. **`Elab.Termination.anyOwn`**：每个 SCC 用 `memName` 线性扫 `own`（n 个单点 SCC
+   ⇒ n²/2 次比较；16k 项 1313 ms）。改为入口建一次 `HashMap.ofNames own`、逐 SCC
+   `member` ⇒ 冷构建 termination 566 → 299 ms，合成 16k 档约 1313 → 25 ms。
+3. **写接口把包接口读两遍**：`Driver.Compile` 的 check 前段已为干净模块判定读过整包接口，
+   `writeIfaceShadow` 又读一遍，`writePackageIface` 再读一遍解码全部模块文件。合并为一次
+   `ownCleanInfo` 读取（同时给出 clean 与「旧接口可读」标志），把标志传给
+   `writePackageIface` ⇒ `check compiler` 的 iface-write 244 → 16 ms。
+
+冷构建（全量精化 + codegen + ocamlopt）不走增量收尾，收益主要来自 (2) 与 (3)，见上表。
 
 容器改造（私有 `HashTbl` → `Base.HashMap`；元变量解表合并为 `HashMap Int`）的实测对比：
 同一 worktree、同一份源码、独立进程各 3 次取中位数（本机绝对值与上表历史读数不可直接
@@ -70,6 +101,8 @@ vuna check compiler --debug-perf
 `if debugOn then note (...) else 0`。`stamp` 自身已判 `debugOn`。逐条目打点用 `stampSample`
 避免打点成为主成本；单次 <50 µs 的条目用差值不可靠，判断趋势请用「同形规模的合成探针」
 对比总时间。关闭开关时：`stamp` 只判一次全局 Bool，`stampSample` 多一次字符串哈希。
+另注意**冷 build 的 DEBUG 输出量**：全量精化会逐条打印 conv 诊断（约 15 万行），实测让
+冷 build 墙钟膨胀 ~60%——阶段比例可用，绝对读数必须用无 `--debug-perf` 口径（§7）。
 
 ## 3. 查找表：泛型 `Base.HashMap k v`
 
@@ -100,43 +133,67 @@ HashMap.fromList / insert / insertAll / lookup / member / toList / size / ofName
 
 ## 4. 仍然存在的热点
 
-`check compiler` ~2.2 s 的构成（`--debug-perf`，典型量级）：
+`check compiler` ~0.79 s 的构成（`--debug-perf`，典型量级）：**iface 影子写是当前最大
+单项**（compute ~300 ms + write ~16 ms ≈ 40%），其余是 load/parse 前缀；收尾段已从
+872 ms 降到 2.4 ms（§1）。
 
-1. **`elabFunDef`（逐定义精化）仍是最大单项**：~0.9 s/3000 def，集中在 `conv`/`force`/
-   `infer` 的项重算与分配（`Term/Impl`、`Core/Eval|Conv`）。每 def 的
-   `defVals` 记忆化（安全前置检查比命中收益更贵，A/B -2~3%）；更深的共享需要参数相关
-   记忆化，未做。
-2. **load/parse 前缀 ~0.5 s**（冷 TMPDIR 含 AST cache 写 ~0.35 s；`astStrongHash` 已改单次
-   遍历）。解析本身是真实工作量。
-3. **codegen 自检 ~0.3 s**（`check` 总是跑擦除/名字/构造子护栏）；`groupRuntimeDefs` 已
-   表化，`dtDefLocTable` 的右嵌套 `++` 已改 `strConcatMany`（O(n²)→线性，build 侧 -0.34 s）。
-4. **iface 影子写 ~0.22 s**：`ifaceOfPackage` 已单遍按 owner 分桶、排序键只算一次、
-   coverage 用 `HashMap`；剩余是逐模块 `cachedOfProgram` zonk（整包 sols 只建一次）与写盘
-   ~45 ms。
-5. **`genGroups` ~0.17 s**：OCaml 文本生成，没有一眼可去的 O(n²)；codegen 并行的
-   **逐单元可并部分只有 ~7–8%**，fork+序列化 DtProgram 的净收益 ~6–7%（已用 spike 量化，
-   不做；`build.sh` 的层内并行已覆盖链接侧）。
-6. **分配**：冷 `check compiler` minor_words ≈1.1e9、根包子进程 ≈1.55e9；
-   elab 占分配 ~92%，活数据仅 ~2.5MB，瓶颈是 `quote`/`zonk`/`applySpine`
-   的瞬时 churn，不是表示重复。hash-consing 需要全局 intern 表、改变 Marshal 布局、与
-   纯精化/元变量/摘要三处不变量冲突，spike 结论：收益 2–4%，不做。
-7. 已关闭的历史热点（不要重复排查）：`Elab.Usage` 全程序扫描（实测 10–13 ms，无门槛）、
-   实例体/方法子句查找（13.5 ms）、`refsOfDef`（12–16 ms）、签名 banned 集、ctor/解表
-   索引、`unsolvedFrom` 全解表扫描。
+1. **iface 影子写 ~0.32 s**：`ownSourceInfos`（逐源文件内容哈希）+ `ifaceOfPackage`
+   （逐模块 `cachedOfProgram` zonk 与 7 张表的规范化哈希）。写回侧已合并为单次读取
+   （§1 第 3 条）。接口哈希的「排序规范化」仍是插入排序 O(d²)，单模块数千项时会退化
+   （见 §9「已量化否决」）。
+2. **load/parse 前缀 ~0.5–1.1 s**（冷 TMPDIR 含 AST cache 写；`check compiler` 的闭包
+   要解析 65 个模块）。解析本身是真实工作量。
+3. **冷 build 的 elab bodies**：`build --package vuna .` 的 6159 def 约 3.1 s
+   （`--debug-perf` 口径），集中在 `conv`/`force`/`infer` 的项重算与分配
+   （`Term/Impl`、`Core/Eval|Conv`）。每 def 的 `defVals` 记忆化（安全前置检查比命中收益
+   更贵，A/B -2~3%）；更深的共享需要参数相关记忆化，未做。
+4. **冷 build 的 load/parse ~2.6 s + codegen split ~1.2–1.5 s**（`cg-groups` SCC ~0.27 s、
+   `cg-erasure` ~0.10 s、逐单元 typedecls/genGroups ~0.5–1 s）。`groupRuntimeDefs` 已表化，
+   `dtDefLocTable` 的右嵌套 `++` 已改 `strConcatMany`。
+5. **终止性 ~0.3 s（冷 build）**：`anyOwn` 的 O(n²) 已修；剩余是逐组 measure/SCT 与
+   usage/callGraph 的真实工作。
+6. **`genGroups`**：OCaml 文本生成，没有一眼可去的 O(n²)；codegen 并行的**逐单元可并
+   部分只有 ~7–8%**，fork+序列化 DtProgram 的净收益 ~6–7%（已用 spike 量化，不做；
+   `build.sh` 的层内并行已覆盖链接侧）。
+7. **分配**：冷 `check compiler` minor_words ≈1.1e9、根包子进程 ≈1.55e9；elab 占分配
+   ~92%，活数据仅 ~2.5MB，瓶颈是 `quote`/`zonk`/`applySpine` 的瞬时 churn，不是表示重复。
+   hash-consing 需要全局 intern 表、改变 Marshal 布局、与纯精化/元变量/摘要三处不变量
+   冲突，spike 结论：收益 2–4%，不做。
+8. 已关闭的历史热点（不要重复排查）：**`Dt.dedup*` 的 O(n²)、`Termination.anyOwn` 的
+   O(n²)、写接口的包接口双读**（2026-11，见 §1）；`Elab.Usage` 全程序扫描（实测
+   10–13 ms）、实例体/方法子句查找（13.5 ms）、`refsOfDef`（12–16 ms）、签名 banned 集、
+   ctor/解表索引、`unsolvedFrom` 全解表扫描。
 
 ## 5. 增长率（合成包）
+
+### 5.1 单文件 `check`（全量精化路径）
 
 同一形状定义（`fi : Int` / `fi = i`，包上下文只依赖 `vuna-base`）随定义数 n 的墙钟
 （`nix/checks/compiler-growth.sh` 口径：每档独立进程 + 独立空 TMPDIR，2 次取小）：
 
 | n | 现在 | 现在 / 翻倍 |
 | --- | --- | --- |
-| 500 | 74 ms | — |
-| 1000 | 100 ms | 1.35× |
-| 2000 | 140 ms | 1.40× |
-| 4000 | 233 ms | 1.66× |
+| 500 | 109 ms | — |
+| 1000 | 114 ms | 1.45× |
+| 2000 | 133 ms | 1.17× |
+| 4000 | 167 ms | 1.26× |
 
 `vuna-compiler-growth` 门槛按每翻倍 ≤2.3× 卡回归。
+
+### 5.2 包路径增量 `check`（增量收尾路径）
+
+合成「可执行包」（`lib/Mod.vuna` N 个同形 def + `app/Main.vuna`），每档先冷跑一次建接口，
+再以独立进程、独立空 TMPDIR 计时第二次（走 `dtFinishPackageScoped` 增量收尾）：
+
+| n | 现在 | 现在 / 翻倍 | 修前（同探针） |
+| --- | --- | --- | --- |
+| 1000 | 150 ms | — | 264 ms |
+| 2000 | 164 ms | 1.09× | 557 ms（2.11×） |
+| 4000 | 231 ms | 1.41× | 1596 ms（2.87×） |
+| 8000 | 415 ms | 1.80× | — |
+
+修前 N=4000 档就超过 `vuna-compiler-growth-incremental` 的每翻倍 ≤2.6× 门槛（该门槛
+故意比单文件 2.3× 宽：增量路径有与 N 无关的固定成本，小 N 噪声更大）。
 
 ## 6. `check base` 的阶段构成
 
@@ -163,6 +220,13 @@ defs / globals / sols 三张索引表。要继续压，先看 bodies（逐定义
   看起来像「固定 45s 的神秘成本」。
 - 只有包上下文一条加载路径；单文件夹具也按最近 manifest 解析，不存在「单文件 vs 包」两套
   读数。
+- **机器可能被其他负载占用**（loadavg 波动时 wall 不可比）：A/B 在同一时间窗交替跑，记录
+  `time` 的 user+sys（单进程口径不受其他负载影响）；wall 只在机器空闲时引用。
+- **包级增量路径要先把依赖包接口落盘**（`vuna check <dep>`，见 `compiler-growth-pkg.sh`）：
+  否则探针每档都因「依赖接口缺失」走全量路径，测的就不是增量收尾。
+- `--debug-perf` 在**冷 build** 上会逐条打印 conv 诊断（约 15 万行；`note` 的参数字符串是
+  严格求值的，与开关无关），实测让冷 build 墙钟膨胀 ~60%：定位用阶段**比例**，绝对读数
+  一律用无 debug 口径；单次 <50 µs 的条目仍需「同形规模合成探针」对比总时间。
 - 用 `OCAMLRUNPARAM=s=...` 快速判断 GC 敏感性（注意：产物里 `Gc.set` 会覆盖环境变量，要
   比较不同 minor heap 大小得改代码重建）。
 - 阶段定位优先用 `stamp`；per-def / 热路径趋势用 `stampSample`；不要用「等大 case 跑完」
@@ -224,28 +288,40 @@ golden 一致，再 warmup + 多次取中位数；RSS 用 GNU time 的 max RSS�
 `sh bench/compiler.sh`（仓库根；`--runs N` / `--check` / `--save-baseline` / `--alloc`）测
 编译器 / 工具链自身墙钟。基线 `bench/compiler-baseline.txt`（机器相关，只做同机回归对比）；
 `--check` 超过 `--threshold`%（默认 20）打 WARN、超过 `--fail-threshold`%（默认 50）exit 1。
-跨机器/跨输入规模的可比口径是 `nix/checks/compiler-growth.sh` 的增长率门槛（§5）。
+跨机器/跨输入规模的可比口径是 `nix/checks/compiler-growth.sh`（单文件全量路径）与
+`nix/checks/compiler-growth-pkg.sh`（包路径增量收尾）的增长率门槛（§5）。
 
-当前读数（本机 16 核，`--runs 3` 中位数）：
+当前读数（本机 16 核，`--runs 3` 中位数；2026-11 重新标定，基线已更新）：
 
 | benchmark | 当前 ms |
 | --- | --- |
-| check-all | 3305 |
-| check-compiler | 2229 |
-| check-warm | 36 |
-| build-all | 5455 |
-| build-compiler | 2387 |
-| build-warm | 32 |
-| map-cold | 691 |
-| map-hot | 510 |
-| fmt-check | 546 |
+| check-all | 1430 |
+| check-compiler | 785 |
+| check-warm | 50 |
+| build-all | 5186 |
+| build-compiler | 1769 |
+| build-warm | 41 |
+| map-cold | 1072 |
+| map-hot | 747 |
+| fmt-check | 802 |
+
+`map-cold` / `fmt-check` 相对旧基线（691 / 546）的上涨来自 HEAD 源码增长与仓内路径差异，
+与 2026-11 的修复无关（同一棵树、base/final 两个二进制的 A/B 读数一致），本轮未处理。
 
 **CI 门槛**：`bench/compiler.sh --check` 硬失败阈值；`vuna-compiler-growth`
-（合成 500/1000/2000/4000，每翻倍 ≤2.3×）；`vuna-compiler-perf` 含包内增量语义断言
-（clean≥10、parse≤20）与 REPL 默认走接口路径的断言。
+（合成 500/1000/2000/4000 单文件，每翻倍 ≤2.3×）；`vuna-compiler-growth-incremental`
+（合成可执行包 1000/2000/4000/8000，**增量路径**，每翻倍 ≤2.6×）；`vuna-compiler-perf`
+含包内增量语义断言（clean≥10、parse≤20）与 REPL 默认走接口路径的断言。
 
 **已量化否决的候选**（数据见 git 与 `_scratch` 探针，不要重复开题）：
 
+- **iface 哈希去排序（顺序无关折叠）**：把 `hashDefs`/`hashExports`/… 的「按名字插入
+  排序 + 整表 Marshal + 6-lane 强哈希」改成逐项哈希的交换律折叠（双 lane Σh/Σh²）。
+  合成单模块 16k 项档 iface-compute 3.77 s → ~1.0 s，但真实包是「多模块、每模块几十项」：
+  逐项 Marshal 的分配放大让 `check compiler` 的 iface-compute 119 → 318 ms（逐项强哈希）
+  或冷 build 的 iface 阶段 90 → 518 ms（逐项单 lane），冷 build 反而 +4%。故保留插入排序
+  口径，把「单模块数千项」记为已知边界（§4.1），由
+  `vuna-compiler-growth-incremental` 兜住增量收尾的回归。
 - codegen 并发生成：可并行的逐单元生成本身只占冷 build ~7–8%，fork+序列化 DtProgram 的
   净收益 ~6–7%，不做；`build.sh` 的层内并行已覆盖链接侧。
 - hash-consing：Term 加 hash 字段要改 4 个 cache schema，Value 是 closure 不可 intern，

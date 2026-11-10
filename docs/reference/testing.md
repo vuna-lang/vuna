@@ -349,9 +349,10 @@ interp / compile 文案不同时用 `.compile.err`。
 
 ## Nix checks 清单
 
-`nix flake check` 实测 **16 项**：3 个 package 构建（`vuna` / `vuna-compiler` /
-`vuna-seed`）+ 13 个 check 语义项（`context-budget`、`doc-coverage`、`seed-selfhost`、
-`vuna-compiler-growth`、`vuna-compiler-perf`、`vuna-fmt`、`vuna-index`、`vuna-lint`、
+`nix flake check` 实测 **17 项**：3 个 package 构建（`vuna` / `vuna-compiler` /
+`vuna-seed`）+ 14 个 check 语义项（`context-budget`、`doc-coverage`、`seed-selfhost`、
+`vuna-compiler-growth`、`vuna-compiler-growth-incremental`、`vuna-compiler-perf`、
+`vuna-fmt`、`vuna-index`、`vuna-lint`、
 `vuna-metrics`、`vuna-package`、`vuna-tests`、`vuna-typecheck`、`vscode-ext`；主体是
 `nix/checks/<name>.sh`）。语义项：
 
@@ -365,6 +366,10 @@ interp / compile 文案不同时用 `.compile.err`。
   默认走接口路径；
 - `vuna-compiler-growth`：合成 500/1000/2000/4000 同形定义，相邻档墙钟比 ≤2.3（增长率
   门槛，跨机器有效）；
+- `vuna-compiler-growth-incremental`：合成可执行包（N 个同形 def + `app/Main.vuna`），
+  先落依赖接口、再以独立进程计时**第二次 check**（包路径增量收尾），1000/2000/4000/8000
+  相邻档 ≤2.6；单文件探针走全量精化，覆盖不到 `dedup*`/`anyOwn`/写接口这类收尾热点
+  （见 [performance.md](performance.md) §5.2）；
 - `vuna-metrics`：冻结夹具（`test/corpus/codegen`）的 codegen 产物对
   `nix/codegen.baseline` 的精确基线；种子尺寸不设门槛（见 [compiler.md](compiler.md)
   §codegen 夹具基线）；

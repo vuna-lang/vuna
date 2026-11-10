@@ -542,10 +542,16 @@ let v_Vuna_dCompiler_dDriver_dIface_dwriteModuleIfaceMerge = (fun dir compiler p
   | _ -> failwith "DT: impossible branch"
 )))) (v_Vuna_dCompiler_dDriver_dIface_dmeFileOfEntry entry))) (((v_Vuna_dCompiler_dDriver_dIface_dmanifestEntryOfWith origin) pkgDir) mi)))
 
+let v_Vuna_dCompiler_dDriver_dIface_dwritePackageIface = (fun oldReadable dir compiler pkg pkgDir env modules -> ((fun oldEntries -> ((fun written -> ((fun mf -> ((fun _u -> written) (((v_Vuna_dCompiler_dDriver_dIface_dwriteManifest dir) compiler) mf))) { f_Vuna_dCompiler_dDriver_dIface_dPackageManifest_pmSchema = v_Vuna_dCompiler_dDriver_dIface_difaceSchema; f_Vuna_dCompiler_dDriver_dIface_dPackageManifest_pmCompiler = compiler; f_Vuna_dCompiler_dDriver_dIface_dPackageManifest_pmPackage = pkg; f_Vuna_dCompiler_dDriver_dIface_dPackageManifest_pmEnv = env; f_Vuna_dCompiler_dDriver_dIface_dPackageManifest_pmModules = ((Base_dList.v_Base_dList_dmap (v_Vuna_dCompiler_dDriver_dIface_dmanifestEntryOf pkgDir)) modules) })) ((((((v_Vuna_dCompiler_dDriver_dIface_dwriteModules dir) compiler) pkgDir) "pkg") oldEntries) modules))) (if oldReadable then (match ((v_Vuna_dCompiler_dDriver_dIface_dreadManifest dir) compiler) with
+  | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__184) -> (v_Vuna_dCompiler_dDriver_dIface_dpmModulesOf dtb__184)
+  | Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing -> Base_dList.C_Base_dList_dList_Nil
+  | _ -> failwith "DT: impossible branch"
+) else Base_dList.C_Base_dList_dList_Nil)))
+
 let v_Vuna_dCompiler_dDriver_dIface_difaceFileTokenOk = (fun e -> (if v_Vuna_dCompiler_dDriver_dIface_difaceMirrorMode then ((Base_dString.v_Base_dString_dendsWith (String.concat "" ["-"; (v_Vuna_dCompiler_dDriver_dIface_difaceHashToken (v_Vuna_dCompiler_dDriver_dIface_dmeIfaceHashOfEntry e)); ".iface"])) (v_Vuna_dCompiler_dDriver_dIface_dmeFileOfEntry e)) else true))
 
 let v_Vuna_dCompiler_dDriver_dIface_dreadModuleFileRaw = (fun dir compiler e -> ((fun path -> (if (Base_dIO_dHost.v_Base_dIO_dHost_drunIO ((fun dtio_0 -> fun (_ : int) -> dtp_fileExists dtio_0) path)) then ((fun raw -> ((fun payload -> (match payload with
-  | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__184) -> ((fun m -> (if (if ((v_Vuna_dCompiler_dDriver_dIface_dmiNameOf m) = (e).f_Vuna_dCompiler_dDriver_dIface_dManifestEntry_meName) then ((v_Vuna_dCompiler_dDriver_dIface_dmiIfaceHashOf m) = (e).f_Vuna_dCompiler_dDriver_dIface_dManifestEntry_meIfaceHash) else false) then (Base_dMaybe.C_Base_dMaybe_dMaybe_Just (m)) else Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing)) (dtp_unmarshal dtb__184))
+  | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__185) -> ((fun m -> (if (if ((v_Vuna_dCompiler_dDriver_dIface_dmiNameOf m) = (e).f_Vuna_dCompiler_dDriver_dIface_dManifestEntry_meName) then ((v_Vuna_dCompiler_dDriver_dIface_dmiIfaceHashOf m) = (e).f_Vuna_dCompiler_dDriver_dIface_dManifestEntry_meIfaceHash) else false) then (Base_dMaybe.C_Base_dMaybe_dMaybe_Just (m)) else Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing)) (dtp_unmarshal dtb__185))
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing -> Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing
   | _ -> failwith "DT: impossible branch"
 )) ((v_Vuna_dCompiler_dDriver_dIface_ddecodeIfaceFile compiler) raw))) (Base_dIO_dHost.v_Base_dIO_dHost_drunIO ((fun dtio_0 -> fun (_ : int) -> dtp_readFile dtio_0) path))) else Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing)) ((v_Vuna_dCompiler_dDriver_dIface_dmodulePathOf dir) (v_Vuna_dCompiler_dDriver_dIface_dmeFileOfEntry e))))
@@ -553,9 +559,9 @@ let v_Vuna_dCompiler_dDriver_dIface_dreadModuleFileRaw = (fun dir compiler e -> 
 let v_Vuna_dCompiler_dDriver_dIface_dreadModuleFile = (fun dir compiler e -> (if (Base_dBool.v_Base_dBool_dnot (v_Vuna_dCompiler_dDriver_dIface_dvalidIfaceRelPath (v_Vuna_dCompiler_dDriver_dIface_dmeFileOfEntry e))) then Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing else (if (Base_dBool.v_Base_dBool_dnot (v_Vuna_dCompiler_dDriver_dIface_difaceFileTokenOk e)) then Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing else (((v_Vuna_dCompiler_dDriver_dIface_dreadModuleFileRaw dir) compiler) e))))
 
 let rec v_Vuna_dCompiler_dDriver_dIface_dreadModuleFiles = (fun mc0 mc1 mc2 -> (match mc2 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__185, dtb__186) -> (match (((v_Vuna_dCompiler_dDriver_dIface_dreadModuleFile mc0) mc1) dtb__185) with
-  | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__187) -> (match (((v_Vuna_dCompiler_dDriver_dIface_dreadModuleFiles mc0) mc1) dtb__186) with
-  | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__188) -> (Base_dMaybe.C_Base_dMaybe_dMaybe_Just ((Base_dList.C_Base_dList_dList_Cons (dtb__187, dtb__188))))
+  | Base_dList.C_Base_dList_dList_Cons (dtb__186, dtb__187) -> (match (((v_Vuna_dCompiler_dDriver_dIface_dreadModuleFile mc0) mc1) dtb__186) with
+  | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__188) -> (match (((v_Vuna_dCompiler_dDriver_dIface_dreadModuleFiles mc0) mc1) dtb__187) with
+  | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__189) -> (Base_dMaybe.C_Base_dMaybe_dMaybe_Just ((Base_dList.C_Base_dList_dList_Cons (dtb__188, dtb__189))))
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing -> Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing
   | _ -> failwith "DT: impossible branch"
 )
@@ -567,21 +573,11 @@ let rec v_Vuna_dCompiler_dDriver_dIface_dreadModuleFiles = (fun mc0 mc1 mc2 -> (
 ))
 
 let v_Vuna_dCompiler_dDriver_dIface_dreadPackageIface = (fun dir compiler -> (match ((v_Vuna_dCompiler_dDriver_dIface_dreadManifest dir) compiler) with
-  | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__189) -> (if (if ((dtb__189).f_Vuna_dCompiler_dDriver_dIface_dPackageManifest_pmSchema = v_Vuna_dCompiler_dDriver_dIface_difaceSchema) then ((dtb__189).f_Vuna_dCompiler_dDriver_dIface_dPackageManifest_pmCompiler = compiler) else false) then (match (((v_Vuna_dCompiler_dDriver_dIface_dreadModuleFiles dir) compiler) (dtb__189).f_Vuna_dCompiler_dDriver_dIface_dPackageManifest_pmModules) with
-  | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__190) -> (Base_dMaybe.C_Base_dMaybe_dMaybe_Just ({ f_Vuna_dCompiler_dDriver_dIface_dPackageIface_piSchema = (dtb__189).f_Vuna_dCompiler_dDriver_dIface_dPackageManifest_pmSchema; f_Vuna_dCompiler_dDriver_dIface_dPackageIface_piCompiler = (dtb__189).f_Vuna_dCompiler_dDriver_dIface_dPackageManifest_pmCompiler; f_Vuna_dCompiler_dDriver_dIface_dPackageIface_piPackage = (dtb__189).f_Vuna_dCompiler_dDriver_dIface_dPackageManifest_pmPackage; f_Vuna_dCompiler_dDriver_dIface_dPackageIface_piEnv = (dtb__189).f_Vuna_dCompiler_dDriver_dIface_dPackageManifest_pmEnv; f_Vuna_dCompiler_dDriver_dIface_dPackageIface_piModules = dtb__190 }))
+  | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__190) -> (if (if ((dtb__190).f_Vuna_dCompiler_dDriver_dIface_dPackageManifest_pmSchema = v_Vuna_dCompiler_dDriver_dIface_difaceSchema) then ((dtb__190).f_Vuna_dCompiler_dDriver_dIface_dPackageManifest_pmCompiler = compiler) else false) then (match (((v_Vuna_dCompiler_dDriver_dIface_dreadModuleFiles dir) compiler) (dtb__190).f_Vuna_dCompiler_dDriver_dIface_dPackageManifest_pmModules) with
+  | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__191) -> (Base_dMaybe.C_Base_dMaybe_dMaybe_Just ({ f_Vuna_dCompiler_dDriver_dIface_dPackageIface_piSchema = (dtb__190).f_Vuna_dCompiler_dDriver_dIface_dPackageManifest_pmSchema; f_Vuna_dCompiler_dDriver_dIface_dPackageIface_piCompiler = (dtb__190).f_Vuna_dCompiler_dDriver_dIface_dPackageManifest_pmCompiler; f_Vuna_dCompiler_dDriver_dIface_dPackageIface_piPackage = (dtb__190).f_Vuna_dCompiler_dDriver_dIface_dPackageManifest_pmPackage; f_Vuna_dCompiler_dDriver_dIface_dPackageIface_piEnv = (dtb__190).f_Vuna_dCompiler_dDriver_dIface_dPackageManifest_pmEnv; f_Vuna_dCompiler_dDriver_dIface_dPackageIface_piModules = dtb__191 }))
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing -> Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing
   | _ -> failwith "DT: impossible branch"
 ) else Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing)
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing -> Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing
   | _ -> failwith "DT: impossible branch"
 ))
-
-let v_Vuna_dCompiler_dDriver_dIface_dwritePackageIface = (fun dir compiler pkg pkgDir env modules -> ((fun oldEntries -> ((fun written -> ((fun mf -> ((fun _u -> written) (((v_Vuna_dCompiler_dDriver_dIface_dwriteManifest dir) compiler) mf))) { f_Vuna_dCompiler_dDriver_dIface_dPackageManifest_pmSchema = v_Vuna_dCompiler_dDriver_dIface_difaceSchema; f_Vuna_dCompiler_dDriver_dIface_dPackageManifest_pmCompiler = compiler; f_Vuna_dCompiler_dDriver_dIface_dPackageManifest_pmPackage = pkg; f_Vuna_dCompiler_dDriver_dIface_dPackageManifest_pmEnv = env; f_Vuna_dCompiler_dDriver_dIface_dPackageManifest_pmModules = ((Base_dList.v_Base_dList_dmap (v_Vuna_dCompiler_dDriver_dIface_dmanifestEntryOf pkgDir)) modules) })) ((((((v_Vuna_dCompiler_dDriver_dIface_dwriteModules dir) compiler) pkgDir) "pkg") oldEntries) modules))) (match ((v_Vuna_dCompiler_dDriver_dIface_dreadPackageIface dir) compiler) with
-  | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__191) -> (match ((v_Vuna_dCompiler_dDriver_dIface_dreadManifest dir) compiler) with
-  | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__192) -> (v_Vuna_dCompiler_dDriver_dIface_dpmModulesOf dtb__192)
-  | Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing -> Base_dList.C_Base_dList_dList_Nil
-  | _ -> failwith "DT: impossible branch"
-)
-  | Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing -> Base_dList.C_Base_dList_dList_Nil
-  | _ -> failwith "DT: impossible branch"
-)))

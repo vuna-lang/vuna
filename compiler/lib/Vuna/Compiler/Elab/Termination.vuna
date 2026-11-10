@@ -419,19 +419,21 @@ checkTerminationDeclsWith own decls =
     rgT = reverseAdjOf g
     callerNames = filter (\n => notEmpty (adjOf n gT)) nodes
     facts = computePosFactsWork nodes defTbl rgT 1024 [] callerNames
+    -- O(n²)→O(n)：own 只建一次哈希表，逐 SCC 的 own 判定从线性扫改成 O(1) 查表。
+    ownTbl = Base.HashMap.ofNames own
     _ = stamp "term-facts"
     fuel = graphFuel g nodes
     post = postOrder gT g nodes
     comps = sccOf post fuel rgT (Base.HashMap.fromList []) []
-  in checkSccsWith own (reverse comps) defTbl ctors projs gT facts
+  in checkSccsWith ownTbl (reverse comps) defTbl ctors projs gT facts
 
-anyOwn : List String -> List String -> Bool
-anyOwn own [] = False
-anyOwn own (n :: rest) = if memName n own then True else anyOwn own rest
+anyOwnTbl : HashMap String Bool -> List String -> Bool
+anyOwnTbl ownTbl [] = False
+anyOwnTbl ownTbl (n :: rest) = if Base.HashMap.member n ownTbl then True else anyOwnTbl ownTbl rest
 
-checkSccsWith : List String -> List (List String) -> HashMap String (List (Pair (List Pat) Expr)) -> List String -> List (Pair String (List Int)) -> HashMap String (List String) -> List (Pair String Int) -> Result Int
-checkSccsWith own [] defTbl ctors projs g facts = Ok 0
-checkSccsWith own (comp :: rest) defTbl ctors projs g facts =
-  if anyOwn own comp then Vuna.Compiler.Common.bind (checkComp comp defTbl ctors projs g facts)
-    (\n => Vuna.Compiler.Common.bind (checkSccsWith own rest defTbl ctors projs g facts) (\m => Ok (n + m)))
-  else checkSccsWith own rest defTbl ctors projs g facts
+checkSccsWith : HashMap String Bool -> List (List String) -> HashMap String (List (Pair (List Pat) Expr)) -> List String -> List (Pair String (List Int)) -> HashMap String (List String) -> List (Pair String Int) -> Result Int
+checkSccsWith ownTbl [] defTbl ctors projs g facts = Ok 0
+checkSccsWith ownTbl (comp :: rest) defTbl ctors projs g facts =
+  if anyOwnTbl ownTbl comp then Vuna.Compiler.Common.bind (checkComp comp defTbl ctors projs g facts)
+    (\n => Vuna.Compiler.Common.bind (checkSccsWith ownTbl rest defTbl ctors projs g facts) (\m => Ok (n + m)))
+  else checkSccsWith ownTbl rest defTbl ctors projs g facts

@@ -46,12 +46,20 @@ Dt.check（全量或摘要路径）→ CheckedPackage = { DtProgram, modules, en
         （归属表来自 Driver.Owner：声明名 / 实例名 / 派生实例 / trait 投影 / Dict_）
       → 逐模块 hashOfParts（exports / capabilities / imports / fixities / record 头 /
         datas / defs / globals / insts / classes；不含 span / 源路径）→ miIfaceHash
+        （哈希规范化用「按名字排序后整表 Marshal + 6-lane 强哈希」；排序是插入排序
+        O(d²)，单模块数千项时是已知边界——逐项哈希的交换律折叠实测在真实包上更贵，
+        见 [performance.md](performance.md) §4/§9）
       → 逐模块 miDepHashes（直接 import 的接口哈希；包内模块边算边进表）
       → 包级 PackageManifest（schema / compiler / package / **pmEnv** / modules）→ 原子写
         `.vuna-iface`（包级锁内：`$TMPDIR/vuna-cache/<pkgHash>/iface.lock`，60s 过期可在
         崩溃后抢占；拿不到锁 ⇒ 跳过本次写入，只读降级）
   → 覆盖性检查：本包模块拥有的 artifact 必须全部进摘要（归属漏项 ⇒ 不写，回退下次）
 ```
+
+**写侧复用读侧结果**：check 前段判「干净模块」时已经完整读过一次本包 `.vuna-iface`
+（`ownCleanInfo`，同时返回 clean 列表与「旧接口可读」标志）；`writeIfaceShadow` 复用同一份
+结果，`writePackageIface` 拿标志决定是否信任旧 manifest 做按模块跳过，不再把整包接口
+解码第二/第三遍（2026-11：`check compiler` 的 iface-write 244 → 16 ms）。
 
 ### 读侧（依赖接口可用时）
 
