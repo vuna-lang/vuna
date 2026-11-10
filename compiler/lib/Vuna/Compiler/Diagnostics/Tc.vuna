@@ -619,6 +619,6 @@ tcCoverageMissing sp ctors =
     cands = map coverageCandidate ctors
   in ErrC (withField (FieldCandidates cands) (withDiagSpan sp (tcMsg (NotExhaustive joined) [joined])))
 
--- 单个缺失构造子 → 候选（带声明 span）。
+-- | 单个缺失构造子 → 候选（带声明 span）。
 coverageCandidate : Pair String (Maybe Span) -> Candidate
 coverageCandidate (Pair n msp) = Candidate n msp (Just "not covered by any branch")
