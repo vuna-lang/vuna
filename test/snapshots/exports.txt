@@ -170,7 +170,7 @@ lib/Vuna/Lint/Fix.vuna: fixLoop
 lib/Vuna/Lint/Rules.vuna: Edit(..), Finding(..), isNilList, joinLines, lintSourceWith, splitLines
 lib/Vuna/Lsp.vuna: runLsp, runLspTool
 lib/Vuna/Lsp/Bindings.vuna: bindingDefinitionAt, bindingHoverAt, bindingRenameOccurrences, localBindingAtSf, moduleSourceIn
-lib/Vuna/Lsp/Diagnostics.vuna: DiagCache, contextForDoc, diagReportJson, diagnosticsForCached, findingDiagJson, publishDiagnosticsCached, publishDiagnosticsEmpty, publishDiagnosticsFor
+lib/Vuna/Lsp/Diagnostics.vuna: DiagCache, contextForDoc, diagReportJson, diagnosticsForCached, diagnosticsForSuggestions, findingDiagJson, publishDiagnosticsCached, publishDiagnosticsEmpty, publishDiagnosticsFor
 lib/Vuna/Lsp/Protocol.vuna: allDigits, clampInt, contentLengthOf, decodeUri, digitsToInt, dirOfPath, errInvalidParams, errMethodNotFound, fileNameOf, findNamePos, findSubstring, flushLogLines, idOf, isEmptyList, isPrefixChars, lastElem, lastSegment, lineText, logLine, lspRange, notify, nthCode, paramsOf, parentDir, pathToUri, qualPrefixLen, readChunk, responseErr, responseOk, sendFrame, spanContainsPos, spanRange, splitHeaderBlock, stripTrailingDots, tokenAtCursor, wordPrefixLen
 lib/Vuna/Lsp/Query.vuna: codeActionsFor, completionItems, definitionResult, documentSymbols, fixAllLintCommand, fixAllLintWorkspaceEdit, formattingEdits, holeHoverAt, referencesResult, symbolHoverResult, workspaceRoot, workspaceSymbols
 lib/Vuna/Lsp/Rename.vuna: prepareRenameAt, renameAt

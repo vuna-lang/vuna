@@ -173,12 +173,12 @@ jsonQuote : String -> String
 jsonQuote s = "\"" ++ join "" (map jsonEsc (strUnpack s)) ++ "\""
 
 jsonEsc : Int -> String
-jsonEsc c =
-  if c == 34 then "\\\""
-  else if c == 92 then "\\\\"
-  else if c == 10 then "\\n"
-  else if c == 13 then "\\r"
-  else if c == 9 then "\\t" else if c < 32 then "\\u00" ++ hexPair c else strPack [c]
+jsonEsc 34 = "\\\""
+jsonEsc 92 = "\\\\"
+jsonEsc 10 = "\\n"
+jsonEsc 13 = "\\r"
+jsonEsc 9 = "\\t"
+jsonEsc c = if c < 32 then "\\u00" ++ hexPair c else strPack [c]
 
 hexPair : Int -> String
 hexPair c = strPack [hexDigit (c / 16), hexDigit (c - c / 16 * 16)]
