@@ -411,6 +411,8 @@ errorCase env c source expected wantInterp wantCheck wantCompile =
       if endsWith ".vuna" source then substring 0 (byteLength source - 5) source else source
     compileErrPath = "${baseName}.compile.err"
     legacyCerrPath = "${baseName}.cerr"
+    denyPath = ".deny"
+    denyArgs = if pathExistsFile denyPath then ["--deny-warnings"] else []
     compileFragment =
       if pathExistsFile compileErrPath then trimNewlines (runIO (readFile compileErrPath))
       else if pathExistsFile legacyCerrPath then trimNewlines (runIO (readFile legacyCerrPath))
@@ -419,7 +421,7 @@ errorCase env c source expected wantInterp wantCheck wantCompile =
       let
         r =
           runCmdMerged env "${c.caseId}-interp" env.envCwd c.caseTimeout
-            (withEnvIface env [env.envVuna, "interp", source])
+            (withEnvIface env (append [env.envVuna, "interp", source] denyArgs))
       in [ assertContains "interp fragment" (combinedOut r) fragment,
         assertExitNonZero "interp exit" r.cmdCode
       ]
@@ -428,7 +430,7 @@ errorCase env c source expected wantInterp wantCheck wantCompile =
       let
         r =
           runCmdMerged env "${c.caseId}-check" env.envCwd c.caseTimeout
-            (withEnvIface env [env.envVuna, "check", source])
+            (withEnvIface env (append [env.envVuna, "check", source] denyArgs))
       in [ assertContains "check fragment" (combinedOut r) fragment,
         assertExitNonZero "check exit" r.cmdCode
       ]
@@ -439,7 +441,7 @@ errorCase env c source expected wantInterp wantCheck wantCompile =
       let
         r =
           runCmdMerged env "${c.caseId}-compile" env.envCwd c.caseTimeout
-            (withEnvIface env [env.envVuna, "compile", source, outdir])
+            (withEnvIface env (append [env.envVuna, "compile", source, outdir] denyArgs))
       in [ assertContains "compile fragment" (combinedOut r) compileFragment,
         assertExitNonZero "compile exit" r.cmdCode,
         assertAbsent "compile no output dir" outdir
