@@ -43,6 +43,7 @@ module Vuna.Compiler.Driver.Dt
 -- 唯一 codegen 入口是 `dtSplitProject`（逐模块 split 输出模型）；DT 精化器按
 -- **整程序**精化，模块边界对精化不构成约束。
 import Base.List
+import Base.String
 import Vuna.Compiler.Common
 import Base.HashMap
 import Vuna.Compiler.Debug
@@ -1323,25 +1324,23 @@ warnUnusedDefsGo (d :: rest) used =
 -- | 诊断/告警实现：dtCheckRecovering（详见 diagnostics.md）。
 dtCheckRecovering : PackageContext -> String -> Check (List Diagnostic)
 dtCheckRecovering ctx entry =
-  Vuna.Compiler.Common.bind (dtLoad ctx entry) (\decls => recoverElab 8 decls [])
+  Vuna.Compiler.Common.bind (dtLoad ctx entry) (\decls => recoverElab 8 decls [] [])
 
 -- | 恢复式精化循环：失败后移除相关声明继续。
-recoverElab : Int -> List Decl -> List Diagnostic -> Check (List Diagnostic)
-recoverElab fuel decls errs = if fuel <= 0 then OkC (reverse errs)
+recoverElab : Int -> List Decl -> List String -> List Diagnostic -> Check (List Diagnostic)
+recoverElab fuel decls removed errs = if fuel <= 0 then OkC (reverse errs)
 else case elabProgram decls of
   OkC _ => OkC (reverse errs)
   ErrC d =>
     let
-      decls2 = case diagPrimaryLine d of
-        Nothing => decls
+      d2 = markCascade removed d
+      names = case diagPrimaryLine d of
+        Nothing => []
         Just line =>
-          let
-            names =
-              concatMap (\x => if spanContainsLine (declSpan x) line then declNames x else []) decls
-            drops = declDropped names
-          in filter (\x => not (drops x)) decls
-    in if length decls2 == length decls then OkC (reverse (Base.List.Cons d errs))
-    else recoverElab (fuel - 1) decls2 (Base.List.Cons d errs)
+          concatMap (\x => if spanContainsLine (declSpan x) line then declNames x else []) decls
+      decls2 = filter (\x => not (declDropped names x)) decls
+    in if length decls2 == length decls then OkC (reverse (Base.List.Cons d2 errs))
+    else recoverElab (fuel - 1) decls2 (append removed names) (Base.List.Cons d2 errs)
 
 -- | 诊断主 label 的起始行（无位置返回 Nothing）。
 diagPrimaryLine : Diagnostic -> Maybe Int
@@ -1365,3 +1364,34 @@ declDropped names d = anyNameIn (declNames d) names
 anyNameIn : List String -> List String -> Bool
 anyNameIn [] names = False
 anyNameIn (n :: rest) names = if memName n names then True else anyNameIn rest names
+
+-- | 若诊断文本提到已移除声明名，标记为级联（best-effort 恢复的已知副作用）。
+markCascade : List String -> Diagnostic -> Diagnostic
+markCascade [] d = d
+markCascade removed d =
+  if mentionedAny removed d.diagMessage then withOrigin (OriginCascade Nothing)
+    (withField (FieldNote "best-effort: may be a cascade from an earlier removed declaration") d)
+  else d
+
+mentionedAny : List String -> String -> Bool
+mentionedAny names msg = anyWordIn names (wordsOf msg)
+
+anyWordIn : List String -> List String -> Bool
+anyWordIn [] words = False
+anyWordIn (n :: rest) words = if memName n words then True else anyWordIn rest words
+
+wordsOf : String -> List String
+wordsOf s = wordsGo (strUnpack s) [] []
+
+wordsGo : List Int -> List Int -> List String -> List String
+wordsGo [] cur acc = reverse (flushWord cur acc)
+wordsGo (c :: rest) cur acc =
+  if isIdentChar c then wordsGo rest (Base.List.Cons c cur) acc
+  else wordsGo rest [] (flushWord cur acc)
+
+flushWord : List Int -> List String -> List String
+flushWord [] acc = acc
+flushWord cur acc = Base.List.Cons (strPack (reverse cur)) acc
+
+isIdentChar : Int -> Bool
+isIdentChar c = c >= 48 && c <= 57 || c >= 65 && c <= 90 || c >= 97 && c <= 122 || c == 95

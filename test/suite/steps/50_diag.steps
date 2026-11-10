@@ -183,3 +183,10 @@ run: sh -c 'printf "a : Int\na = \"x\"\n\nb : Int\nb = \"y\"\n\nmain : Int\nmain
 exit: 1
 out-contains: "line":2
 out-not-contains: "line":5
+# 恢复路径的级联检测：依赖被移除声明的错误标 origin=cascade；独立错误保持 direct。
+run: sh -c 'printf "a : Int\na = \"x\"\n\nb : Int\nb = a\n\nmain : Int\nmain = b\n" > "$TMPDIR/m46-dep.vuna"; "$VUNA" check "$TMPDIR/m46-dep.vuna" --continue-on-error --json 2>&1'
+exit: 1
+out-contains: "kind":"cascade"
+run: sh -c 'printf "a : Int\na = \"x\"\n\nb : Int\nb = \"y\"\n\nmain : Int\nmain = 0\n" > "$TMPDIR/m46-indep.vuna"; "$VUNA" check "$TMPDIR/m46-indep.vuna" --continue-on-error --json 2>&1'
+exit: 1
+out-not-contains: "kind":"cascade"
