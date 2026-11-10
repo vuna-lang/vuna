@@ -323,6 +323,7 @@ groupMessage comp =
 cannotProveMsg : List String -> Diagnostic
 cannotProveMsg comp = cannotProveMsgEdges comp []
 
+-- | 终止性失败诊断（附调用边）。
 cannotProveMsgEdges : List String -> List (Pair (Pair String String) Int) -> Diagnostic
 cannotProveMsgEdges comp edges =
   let
@@ -330,6 +331,7 @@ cannotProveMsgEdges comp edges =
     base = tcMsg (CannotProveTermination desc) [desc]
   in applyCallFields edges base
 
+-- | 把调用边逐条挂到诊断 fields.call。
 applyCallFields : List (Pair (Pair String String) Int) -> Diagnostic -> Diagnostic
 applyCallFields [] d = d
 applyCallFields ((Pair (Pair caller callee) _) :: rest) d =
