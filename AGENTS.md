@@ -115,6 +115,7 @@ build，`dist/` 提交）；`nix/` = 构建图 + rotate/metrics/bench；`docs/` 
   [primitives.md](docs/reference/primitives.md)（内建/原语/能力）、
   [operators.md](docs/reference/operators.md)（运算符=方法别名、实例落点规则）
 - 编译器实现：[compiler.md](docs/reference/compiler.md)（模块与输出模型、接口摘要）、
+  [diagnostics.md](docs/reference/diagnostics.md)（诊断模型/错误码/渲染/LSP/迁移状态）、
   [core.md](docs/reference/core.md)（Core TT / NbE / 精化器）；
   模块级缓存：[cache.md](docs/reference/cache.md)（TTC 式接口、失效判定、已知边界）
 - 工具链（`goal` / LSP / `doc` / `search` / 错误码；`vuna gen-errors` 生成

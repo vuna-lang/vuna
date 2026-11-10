@@ -62,6 +62,9 @@ $ vuna search --type "a -> a"
 
 ## 3. 错误码体系
 
+> 诊断的数据模型、结构化通道、渲染视图、LSP 映射与迁移状态见
+> [diagnostics.md](diagnostics.md)；本节只保留 CLI 侧的码/退出码语义。
+
 诊断输出带**错误码**：Elab/Codegen 为 `文件:行:列: [CODE] 消息`（Codegen 无位置则无
 `行:列:`），lint 为 `路径:行:列: [CODE] 规则: 消息`。域前缀：
 

@@ -1,0 +1,162 @@
+# 诊断系统（Diagnostic）
+
+本文是诊断系统的**唯一参考页**：数据模型、结果通道、位置契约、错误码域、渲染视图、
+LSP 映射、错误码目录、测试与迁移状态。工具链命令语义（退出码、`vuna explain` 等）在
+[tooling.md](tooling.md)；实现模块在 [compiler.md](compiler.md)。
+
+> 当前处于**诊断重设计迁移中**：结构化通道与三个渲染视图已落地；错误码分类、
+> warnings、多错误累积、目录元数据生成仍在推进。每一节的「状态」标注了已落地/待办。
+
+## 1. 设计目标
+
+1. 诊断从产生到消费都是**结构化值**（`Diagnostic`），字符串只在最终渲染器出现。
+2. 位置只放在 `Label` 里（起止 span）；禁止在错误路径拼 `file:line:col`。
+3. 每条用户可见诊断有**稳定错误码**、严重度、阶段、分类、机器可读字段。
+4. 一个结果通道：`Vuna.Compiler.Diag` 的 `Check a = OkC a | ErrC Diagnostic`。
+5. 三个消费视图（CLI short/human、JSON、LSP）同源；任何下游不再反解析文本。
+
+## 2. 数据模型
+
+实现：`compiler/lib/Vuna/Compiler/Diag.vuna`（模型 + 结果通道）、
+`compiler/lib/Vuna/Compiler/Source.vuna`（`Pos`/`Span`/路径工具）。
+
+```text
+Severity = SevError | SevWarning | SevNote | SevHelp
+Phase    = Lex Parse Resolve Load Elab Unify Coverage Termination Usage
+         | Codegen Package Driver Tool Internal
+Category = Syntax Names Types Universes Coverage Termination Quantity Effects
+         | Records Traits Codegen Package Tool Internal
+
+Label      = { span : Maybe Span, text, style : Primary|Secondary|Context, provenance : Maybe Span }
+DiagEdit   = { span, newText }
+Suggestion = { title, applicability, edits }
+Candidate  = { text, span, reason }
+CallInfo   = { callee, arg, relation, span }
+TraceFrame = { phase, text, span, children }
+IceInfo    = { phase, function, invariant, fingerprint, hint }
+Diagnostic = { id, severity, phase, category, code, message, labels, fields, trace,
+               notes, suggestions, origin(Direct|Cascade), children, internal, ice }
+```
+
+- **位置**：行/列 1-based；列 = **UTF-8 字节**（与 lexer 的 `advanceChar` 一致）。
+  LSP 适配器用 buffer 文本把字节列换算成 0-based UTF-16 code units。
+- **无位置**必须显式：不给 label，不能「忘记带」。
+- **文本兼容层**：`diagText` 渲染 `file:line:col: [CODE] 消息`（short 视图），迁移期
+  仍被部分工具用作字符串出口；新代码不得使用它构造/解析诊断。
+
+## 3. 结果通道与迁移
+
+- `Vuna.Compiler.Common` 重导出 `Source` + `Diag`；`Err` 载荷是 `Diagnostic`。
+- `Common.bind/step/traverse` 固定作用于 `Check`（`compiler/lib/Vuna/Compiler/Common.vuna`）；
+  `OkC/ErrC` 构造子避免与 `Prelude` 的 `Base.Result` 冲突。
+- `Base.Result`（字符串错误）只留给 `base/` 标准库内部；compiler 与根工具链统一 `Check`。
+- 迁移期构造函数：
+  - `err : String -> Check a`：工具错误（phase = Tool，无码）；根工具链 CLI 错误用它。
+  - `rawAt` / `rawNoLoc`：尚未分类的源码裸消息（迁移完成后删除）。
+  - `icFuel` / `icInternal`：编译器内部错误（phase = Internal，`diagInternal = True`）。
+- **状态**：结构化通道已落地（compiler 内 `err "` 由初版 421 处降到约 100 处，剩余为
+  待分类的用户可见错误）；`rawAt` 仍有 Elab 记录诊断等少量调用点。
+
+## 4. 错误码域
+
+| 域 | 含义 | 真源 |
+| --- | --- | --- |
+| `LX_` | 词法 | `Frontend/Diagnostics.vuna` |
+| `PS_` | 语法 | 同上 |
+| `LD_` | 模块/包加载 | `Loader/Diagnostics.vuna` |
+| `TC_` | 精化/覆盖性/终止性/用量 | `Diagnostics/Tc.vuna` |
+| `CG_` | codegen/驱动 | `Diagnostics/Cg.vuna` |
+| `IC_` | 编译器内部错误 | `Diagnostics/Ic.vuna` |
+| `LN_`/`FX_` | lint 规则/修复 | `lib/Vuna/Lint/Diagnostics.vuna` |
+
+约定：符号语义稳定；一个码一种语义。`vuna explain CODE` 与 `vuna gen-errors` 都从这些
+枚举条目读取（不维护第二份列表）。
+
+## 5. 渲染视图
+
+实现：`compiler/lib/Vuna/Compiler/Diag/Format.vuna`。
+
+| 视图 | 入口 | 形态 |
+| --- | --- | --- |
+| short | `renderShort` / `diagText` | `file:line:col: [CODE] 消息`（过渡期/编辑器/grep） |
+| human | `renderHuman` | `error[CODE]: 消息` + `--> file:line:col` + 源码行 + 插入符 + notes |
+| JSON | `renderJsonList` | `{version,tool,diagnostics[]}`，含 labels/fields/trace/notes/suggestions/origin/internal/ice |
+
+CLI 开关：`--error-format=short|human|json`、`--json`、`--message-format=...`；包级 check
+会把格式透传给成员包子进程；成员包错误带 `[包名]` 前缀。
+
+JSON 字段是机器契约：`code/severity/phase/category/message/labels[]/fields[]`；
+`fields` 目前包含 `expected`/`found`（类型不匹配）、`name`/`candidates`/`call`/`quantity`/
+`effect`/`module`/`span`/`note` 的构造器，后续按语义族填充。
+
+## 6. LSP 映射
+
+实现：`lib/Vuna/Lsp/Diagnostics.vuna`。
+
+- 直接消费 `Diagnostic`：不再从文本扫位置；依赖文件诊断按 span 文件过滤。
+- range 用完整 span（起止），UTF-16 换算；无位置诊断落到 0:0。
+- 所有错误都发布（编译器 + lint 合并）；lint `Finding` 转成同一 `Diagnostic`。
+- `relatedInformation` 来自 secondary/context 标签；`data` 来自 `diagFields`；
+  `code` 直接给客户端；消息追加 notes/suggestions。
+- lint quick fix 的内嵌诊断与发布诊断字段集合一致。
+
+## 7. 退出码
+
+| 码 | 含义 |
+| --- | --- |
+| 0 | 成功 |
+| 1 | 源码诊断错误 |
+| 2 | 用法/工具错误；内部编译器错误（ICE） |
+| 70 | 预留给 ICE 的独立退出码（尚未启用；当前 ICE 走 2 + `internal compiler error` 文案） |
+
+## 8. 测试与门禁（当前）
+
+- `test/corpus/lsp/smoke.sh`：结构化诊断 smoke（0-based range、UTF-16、全部诊断、
+  quick fix、relatedInformation）。
+- 232 个 `.err` 夹具仍按**首行文本**断言（short 视图兼容）；迁移到 `.diag.json`
+  结构化快照是后续工作。
+- `vuna check .`（旧/新编译器）、全量 suite、`nix build .#vuna-seed` 必须通过。
+
+## 9. 迁移状态（对照完整设计）
+
+| 项 | 状态 |
+| --- | --- |
+| D1 三通道（源码/工具/内部） | 已落地（phase Tool/Internal + ICE 信息） |
+| D2 `Diagnostic` 全字段 | 已落地 |
+| D3 位置契约（end span、UTF-16、显式 NoLoc） | 已落地（span 填充仍在补齐） |
+| D4 码域（RN_/PKG_ 独立域、死码清理） | 部分（RN_/PKG_ 未拆；12 个死码待删） |
+| D5 目录单一真源 + 生成枚举/文档 | 部分（条目仍是手写；`explain`/`gen-errors` 已同源） |
+| D6 渲染/LSP/CLI | 已落地 short/human/JSON + LSP 结构化；SARIF/i18n 待办 |
+| D7.1 多错误 + Cascade | 待办（当前仍首错短路） |
+| D7.2 warnings（未使用/冗余/不可达） | 待办 |
+| D7.3 建议引擎 + Fix | 部分（`Candidate`/`Suggestion` 模型就绪；自动候选未接） |
+| D7.4 类型不匹配 expected/found | 已落地（fields；双端 label 待补） |
+| D7.5 实例搜索 trace | 待办 |
+| D7.6 终止性 call matrix | 待办 |
+| D7.7 覆盖性缺失构造子标签 | 待办 |
+| D7.8 QTT 使用点 | 待办（需要 Core `TSp`） |
+| D7.9 文案规范/门禁 | 待办 |
+| D7.10 explanation/example/`explain` | 部分（模板+中文说明可用；example 待补） |
+| 结构化夹具 + 每码覆盖门禁 | 待办 |
+
+## 10. 后续路线（按依赖排序）
+
+1. **错误分类**：把 compiler 内剩余 `err "` 全部换成域码（`RN_`/`PKG_`/`LD_`/`CG_`），
+   删 `rawAt`/`rawNoLoc`；CI 门禁「compiler 内无 `err "`」。
+2. **目录元数据**：条目补 severity/phase/category/explanation/example；`gen-errors`
+   输出这些字段；每码至少一个结构化夹具。
+3. **warnings**：冗余/不可达分支改判 warning；未使用 binder/import；`-W` 组与
+   `--deny-warnings`。
+4. **多错误**：`Elab.Driver` 逐 decl 恢复（失败名字集合 + Cascade）；parser 顶层 resync；
+   排序/去重/上限。
+5. **语义质量**：实例搜索树、终止性 call matrix、覆盖性缺失构造子标签、QTT 使用点
+   （Core `TSp` + 使用日志）、统一建议引擎（编辑距离 + Fix）。
+6. **消费端**：SARIF、i18n、`vuna.toml [diagnostics]`、ICE 独立退出码、LSP pull diagnostics。
+7. **夹具迁移**：232 个 `.err` → `.diag.json`，`--bless` 流程；渲染 golden。
+
+## 11. 边界
+
+- 列单位是 UTF-8 字节（不是码点）；渲染宽字符按字节/显示字符混合处理，LSP 边界换算
+  UTF-16。
+- `base/` 标准库仍用 `Base.Result`（字符串错误）；不要把 `Check` 扩散进 base。
+- 诊断文本英文、文档中文；不做 i18n 之前，消息不保证本地化。

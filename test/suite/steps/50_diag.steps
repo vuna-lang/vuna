@@ -13,3 +13,24 @@ run: "$VUNA" check "$TMPDIR/m38-no-such-entry.vuna" 2>&1
 exit: 1
 out-contains: no such file
 out-not-contains: -->
+# 结构化输出：--json 给出 code/severity/phase + 机器字段（expected/found）。
+run: "$VUNA" check "$TMPDIR/m38-diag-pkg" --json 2>&1
+exit: 1
+out-contains: "code":"TC_TypeMismatch"
+out-contains: "severity":"error"
+out-contains: "phase":"elab"
+out-contains: "kind":"expected"
+out-contains: "kind":"found"
+# human：rustc 风格首行 + 片段。
+run: "$VUNA" check "$TMPDIR/m38-diag-pkg" --error-format=human 2>&1
+exit: 1
+out-contains: error[TC_TypeMismatch]:
+out-contains: -->
+# explain：码目录查询（未知码 exit 2）。
+run: "$VUNA" explain TC_TypeMismatch
+exit: 0
+out-contains: TC_TypeMismatch
+out-contains: type mismatch
+run: sh -c '"$VUNA" explain NOPE 2>&1'
+exit: 2
+out-contains: unknown diagnostic code

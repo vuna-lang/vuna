@@ -12,7 +12,9 @@
 ```text
 compiler/lib/Vuna/Compiler/   （64 个模块：60 个导出 + 4 个内部模块；目录即层：
                                 Frontend → Packages → Loader → Core → Elab → Codegen → Driver）
-├─ Common.vuna                公共门面（Base 类型 + Pos/Span/诊断）
+├─ Source.vuna                底层位置/路径工具（Pos/Span，无 Result）
+├─ Diag.vuna                  结构化诊断模型 + Check 结果通道（ErrC Diagnostic）
+├─ Common.vuna                编译器门面（Source + Diag；bind/step/traverse）
 ├─ Intrinsics.vuna            内建声明唯一真源（名字/签名/arity/能力/runtime/可见性）
 ├─ Frontend/                  Ast Lexer Parser Parser/Support Toml Manifest   词法 / 语法 / vuna.toml
 ├─ Packages/                  Pkg                              包图与模块根
@@ -114,7 +116,8 @@ data（`Base.Bool.Bool` / `Base.List.List` / `Base.Nat.Nat`），不按短名。
 **通常连带改动**：语法 = `Frontend.{Lexer,Parser,Ast}` + `Fmt` + `Elab.Term` / `Elab.Match` +
 `Codegen`；名字解析 = `Loader.{Modules,Resolve,Flatten}`；类型规则 = `Elab.*` +
 `Elab.{Records,Derive}` + `Codegen`；split = `Codegen.Split` + `Driver.Split`；诊断 =
-`Frontend.Ast` / `Common` + 各阶段 `Result` 错误 + golden。测试标签：第 1–11、13–27、30、34 段
+`Diag` / `Source` + 各阶段 `Diagnostic` + golden（模型与迁移见
+[diagnostics.md](reference/diagnostics.md)）。测试标签：第 1–11、13–27、30、34 段
 （见 [testing.md](reference/testing.md)）；包构建 / split 见第 28/29/33/34 段；快照与上下文回归见第 38/39 段。
 
 ## 2. 包与 workspace
@@ -151,7 +154,8 @@ vuna.toml → Frontend.{Toml.parseToml, Manifest.parseManifest/validateManifest}
   `Vuna.Run.runRun`（`vuna run`）、`Vuna.TestRunner.runTests`（`TestOpts`：filter/list/verbose/
   fail-fast）、`Vuna.Doc.runDoc`（docstring -> 单文件 HTML；`Vuna.Doc.{Comments,Model,Prose,Html,Run}`）、
   `Vuna.Search.runSearch`、`Vuna.Files.collectVunaFiles`；fmt/lint 见 `Fmt.formatSourceWith` /
-  `Lint.runLint`；CLI 诊断片段见 `Driver/DiagRender`；API 文档与检索见
+  `Lint.runLint`；诊断渲染（short/human/JSON）见 `Diag.Format`（模型见
+  [diagnostics.md](reference/diagnostics.md)）；API 文档与检索见
   [api-docs.md](reference/api-docs.md)，调试工作流见 [debugging.md](reference/debugging.md)。
 - 进程执行只在 `Driver.CompilerCli.runIn`（`prim_runIn`，需要 `process`；工具链经 `runIO`）。
 - **stdio / socket server 公共层**（工具链，不进 seed）：`Vuna.Json.Frame`（字节级

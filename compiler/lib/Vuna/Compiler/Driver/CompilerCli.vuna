@@ -151,13 +151,13 @@ printErrText e =
     _ = runIO (prim_print (renderCliDiagnostic e))
   in 1
 
-diagFormatName : String
-diagFormatName = runIO (readRef diagFormatRef)
+diagFormatOf : Int -> String
+diagFormatOf _ = runIO (readRef diagFormatRef)
 
 printDiagWithPrefix : String -> Diagnostic -> Int
 printDiagWithPrefix prefix d =
   let
-    fmt = diagFormatName
+    fmt = diagFormatOf 0
   in if fmt == "json" then printErrText (renderJson d ++ "\n")
   else if fmt == "human" then printErrText (renderHuman d ++ "\n")
   else printErrText (prefix ++ renderShort d ++ "\n")
@@ -276,7 +276,7 @@ checkPkgDir dir = case workspacePackages dir of
 checkSpawnArgs : String -> List String
 checkSpawnArgs dir =
   let
-    fmt = diagFormatName
+    fmt = diagFormatOf 0
   in if fmt == "short" then ["check", dir] else ["check", "--error-format", fmt, dir]
 
 checkPackages : List Package -> Int -> Int

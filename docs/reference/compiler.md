@@ -17,8 +17,11 @@
 
 | 模块 | 职责 | 关键入口 |
 | --- | --- | --- |
-| `Common` | 编译器门面：整模块重导出 `Base.Pair`/`Bool`/`List`/`Maybe`/`Result`/`String`，并保留 `Pos`/`Span`、模块路径与诊断工具 | `showSpanLoc`、`suggest`、`splitPath` |
-| `Diagnostics`（门面） | 错误码体系入口：整模块重导出 `Diagnostics.Tc`/`Cg`/`Common` 与 `Base.Nat`/`Vec`，调用点名字集合不变 | `tcErr0`、`cgErr0`、`tcAll`、`cgAll` |
+| `Source` | 底层位置/路径层（无 `Result`）：`Pos`/`Span`、路径拼接、近似名建议 | `showSpanLoc`、`suggest`、`splitPath` |
+| `Diag` | 结构化诊断模型（severity/phase/category/label/field/trace/ICE）与结果通道 `Check`（`ErrC Diagnostic`）；`diagText` 是过渡期 short 渲染 | `Check`、`Diagnostic`、`diagText`、`icFuel`、`withFallbackSpan` |
+| `Diag.Format` | 诊断渲染唯一入口：short/human/JSON | `renderShort`、`renderHuman`、`renderJsonList` |
+| `Common` | 编译器门面：重导出 `Source` + `Diag`，并保留固定类型的 `bind`/`step`/`traverse` | `bind`、`showSpanLoc`、`suggest`、`splitPath` |
+| `Diagnostics`（门面） | 错误码体系入口：重导出 `Diagnostics.Tc`/`Cg`/`Ic`/`Common` 与 `Base.Nat`/`Vec` | `tcErr0`、`cgErr0`、`icFuel`、`tcAll`、`cgAll` |
 | `Diagnostics.Tc` / `Cg` | `TcErr : Nat -> Type` / `CgErr : Nat -> Type` 域枚举（构造子携带模板、arity 由索引锁定）；`tcAll`/`cgAll` 按 arity 分块（避免单行巨表） | `tcCode`、`tcTemplate`、`cgCode`、`cgTemplate` |
 | `Intrinsics` | **内建声明唯一真源**：名字/签名形状（`IType`）/arity/归约标签（`IntrinsicOp`）/能力（`Capability`）/runtime 名/用户可见性；内置身份按声明 symbol（`IO` 内建；`Base.Bool.Bool` / `Base.List.List` / `Base.Nat.Nat`） | `findIntrinsic`、`intrinsicRuntime`、`intrinsicCapability`、`parseCapability` |
 | `Frontend.Ast` | 语法类型与 AST helper（`Expr`/`Decl`/`Pat`/`Ctor`/`Import`/`ModDecl`/`TraitMethod`） | `clausesFor`、`funArity`、`declNames` |
