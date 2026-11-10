@@ -806,19 +806,24 @@ stripContinueGo (arg :: rest) acc found = stripContinueGo rest (arg :: acc) foun
 
 checkPackageErr : Package -> Diagnostic -> Int
 checkPackageErr pkg e =
-  if recoverEnabled pkg then packageRecover pkg e else printDiagWithPrefix "[${packageName pkg}] " e
+  if recoverEnabled pkg then packageRecoverExe pkg e
+  else printDiagWithPrefix "[${packageName pkg}] " e
 
 -- | 恢复模式是否可用（命令行开启且入口存在）。
 recoverEnabled : Package -> Bool
 recoverEnabled pkg =
   runIO (readRef continueOnErrorRef) && runIO (prim_fileExists (packageEntry pkg))
 
--- | 包入口的恢复式检查（仅可执行包）。
-packageRecover : Package -> Diagnostic -> Int
-packageRecover pkg e = case dtCheckRecovering (packageContext pkg) (packageEntry pkg) of
-  OkC ds =>
-    let
-      shown = takeDiags (runIO (readRef maxErrorsRef)) ds
-      _ = printDiagList "[${packageName pkg}] " shown
-    in if length shown == 0 then printDiagWithPrefix "[${packageName pkg}] " e else 1
+-- | 可执行包入口的恢复式检查。
+packageRecoverExe : Package -> Diagnostic -> Int
+packageRecoverExe pkg e = case dtCheckRecovering (packageContext pkg) (packageEntry pkg) of
+  OkC ds => printRecovered pkg e ds
   ErrC e2 => printDiagWithPrefix "[${packageName pkg}] " e2
+
+-- | 打印恢复出的诊断并返回退出码。
+printRecovered : Package -> Diagnostic -> List Diagnostic -> Int
+printRecovered pkg e ds =
+  let
+    shown = takeDiags (runIO (readRef maxErrorsRef)) ds
+    _ = printDiagList "[${packageName pkg}] " shown
+  in if length shown == 0 then printDiagWithPrefix "[${packageName pkg}] " e else 1

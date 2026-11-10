@@ -1334,10 +1334,9 @@ else case elabProgram decls of
   ErrC d =>
     let
       d2 = markCascade removed d
-      names = case diagPrimaryLine d of
+      names = case primarySpanOf d.diagLabels of
         Nothing => []
-        Just line =>
-          concatMap (\x => if spanContainsLine (declSpan x) line then declNames x else []) decls
+        Just sp => concatMap (\x => if declMatchesDiag sp x then declNames x else []) decls
       decls2 = filter (\x => not (declDropped names x)) decls
     in if length decls2 == length decls then OkC (reverse (Base.List.Cons d2 errs))
     else recoverElab (fuel - 1) decls2 (append removed names) (Base.List.Cons d2 errs)
@@ -1345,6 +1344,20 @@ else case elabProgram decls of
 -- | 诊断主 label 的起始行（无位置返回 Nothing）。
 diagPrimaryLine : Diagnostic -> Maybe Int
 diagPrimaryLine d = primaryLineOf d.diagLabels
+
+-- | 诊断主 label 的 span（无位置返回 Nothing）。
+primarySpanOf : List Label -> Maybe Span
+primarySpanOf [] = Nothing
+primarySpanOf ((Label (Just sp) _ LabelPrimary _) :: _) = Just sp
+primarySpanOf (_ :: rest) = primarySpanOf rest
+
+-- | 声明是否与诊断位置（文件 + 行）匹配。
+declMatchesDiag : Span -> Decl -> Bool
+declMatchesDiag sp x =
+  let
+    dsp = declSpan x
+    sameFile = spanFile dsp == "" || spanFile sp == "" || spanFile dsp == spanFile sp
+  in sameFile && spanContainsLine dsp (spanStartLine sp)
 
 -- | 从 label 列表取主 label 起始行。
 primaryLineOf : List Label -> Maybe Int
