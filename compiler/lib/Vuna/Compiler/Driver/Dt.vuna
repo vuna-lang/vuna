@@ -1366,6 +1366,7 @@ anyNameIn [] names = False
 anyNameIn (n :: rest) names = if memName n names then True else anyNameIn rest names
 
 -- | 若诊断文本提到已移除声明名，标记为级联（best-effort 恢复的已知副作用）。
+-- | 级联标记：诊断提到被移除声明名时标 origin=cascade。
 markCascade : List String -> Diagnostic -> Diagnostic
 markCascade [] d = d
 markCascade removed d =
@@ -1373,25 +1374,31 @@ markCascade removed d =
     (withField (FieldNote "best-effort: may be a cascade from an earlier removed declaration") d)
   else d
 
+-- | 诊断消息是否按单词命中任一名字。
 mentionedAny : List String -> String -> Bool
 mentionedAny names msg = anyWordIn names (wordsOf msg)
 
+-- | 名字列表与单词列表是否有交集。
 anyWordIn : List String -> List String -> Bool
 anyWordIn [] words = False
 anyWordIn (n :: rest) words = if memName n words then True else anyWordIn rest words
 
+-- | 按标识符字符切词。
 wordsOf : String -> List String
 wordsOf s = wordsGo (strUnpack s) [] []
 
+-- | 切词循环。
 wordsGo : List Int -> List Int -> List String -> List String
 wordsGo [] cur acc = reverse (flushWord cur acc)
 wordsGo (c :: rest) cur acc =
   if isIdentChar c then wordsGo rest (Base.List.Cons c cur) acc
   else wordsGo rest [] (flushWord cur acc)
 
+-- | 把当前词刷入累积列表。
 flushWord : List Int -> List String -> List String
 flushWord [] acc = acc
 flushWord cur acc = Base.List.Cons (strPack (reverse cur)) acc
 
+-- | 标识符字符判定。
 isIdentChar : Int -> Bool
 isIdentChar c = c >= 48 && c <= 57 || c >= 65 && c <= 90 || c >= 97 && c <= 122 || c == 95
