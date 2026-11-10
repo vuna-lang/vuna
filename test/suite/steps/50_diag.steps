@@ -123,3 +123,6 @@ run: sh -c 'd="$TMPDIR/m41-langpkg"; rm -rf "$d"; mkdir -p "$d/app"; printf "[pa
 run: sh -c 'cd "$TMPDIR/m41-langpkg" && "$VUNA" check . 2>&1'
 exit: 1
 out-contains: 说明: 类型不匹配
+# explain example：从 corpus 结构化夹具反查示例文件。
+run: "$VUNA" explain TC_TypeMismatch
+out-contains: example: corpus/
