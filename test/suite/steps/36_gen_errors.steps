@@ -20,3 +20,8 @@ run: sh -c 'cp "$TMPDIR/errroot/docs/.generated/errors.md" "$TMPDIR/errs1.md"'
 run: "$VUNA" gen-errors "$TMPDIR/errroot" >/dev/null 2>&1
 read: $TMPDIR/errroot/docs/.generated/errors.md
 out-equals-file: $TMPDIR/errs1.md
+# 目录 JSON：与 errors.md 同源生成，含 code/severity/phase/category/message/desc。
+file-contains: $TMPDIR/errroot/docs/.generated/errors.json "version":1
+file-contains: $TMPDIR/errroot/docs/.generated/errors.json "code":"TC_NotExhaustive"
+file-contains: $TMPDIR/errroot/docs/.generated/errors.json "phase":"elab"
+file-contains: $TMPDIR/errroot/docs/.generated/errors.json "desc":"类型不匹配"

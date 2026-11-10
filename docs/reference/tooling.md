@@ -94,7 +94,9 @@ $ vuna search --type "a -> a"
 `psErr0/1` 抛出。
 
 **完整清单**由 `vuna gen-errors [ROOT]` 遍历上述枚举表生成到
-`ROOT/docs/.generated/errors.md`（默认 ROOT=`.`）。生成物 gitignored、**勿手改**；重跑幂等。
+`ROOT/docs/.generated/errors.md` 与同源目录 JSON `ROOT/docs/.generated/errors.json`
+（code/severity/phase/category/message/desc；默认 ROOT=`.`）。生成物 gitignored、
+**勿手改**；重跑幂等。
 
 ### 退出码
 

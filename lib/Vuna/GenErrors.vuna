@@ -18,6 +18,7 @@ import Vuna.Compiler.Diagnostics.Warning
 import Vuna.Compiler.Frontend.Diagnostics
 import Vuna.Compiler.Loader.Diagnostics
 import Vuna.Files
+import Vuna.Json
 import Vuna.Lint.Diagnostics
 import Base.List
 import Base.String
@@ -79,8 +80,10 @@ runGenErrors root = case requireDirectory root of
   OkC _ =>
     let
       outPath = "${root}/docs/.generated/errors.md"
+      jsonPath = "${root}/docs/.generated/errors.json"
       _ = ensureDirPath (parentOf outPath)
       _ = runIO (prim_writeFile outPath (renderDoc allEntries))
+      _ = runIO (prim_writeFile jsonPath (renderCatalogJson allEntries))
       _ = runIO (prim_print "wrote ${outPath} (${length allEntries} codes)\n")
     in 0
 
@@ -191,3 +194,13 @@ fixEntries entries = map fxOf (filter entryFixable (filter (isDomain "LN_") entr
 fxOf : Entry -> Entry
 fxOf e =
   Entry "FX_${join "" (split "-" e.entryRule)}" e.entryMsg e.entryEdit e.entryRule e.entryEdit True
+
+-- 目录 JSON：与 errors.md 同源（生成物，供工具/编辑器消费）。
+renderCatalogJson : List Entry -> String
+renderCatalogJson entries =
+  renderJson (JObj [Pair "version" (JNum 1), Pair "codes" (JArr (map entryJson entries))])
+
+entryJson : Entry -> Json
+entryJson e =
+  JObj
+    [Pair "code" (JStr e.entryCode), Pair "severity" (JStr (diagSeverityOf (codeDomain e.entryCode))), Pair "phase" (JStr (diagPhaseOf (codeDomain e.entryCode))), Pair "category" (JStr (diagCategoryOf (codeDomain e.entryCode))), Pair "message" (JStr e.entryMsg), Pair "desc" (JStr e.entryDesc), Pair "rule" (JStr e.entryRule), Pair "edit" (JStr e.entryEdit), Pair "fixable" (JBool e.entryFixable)]
