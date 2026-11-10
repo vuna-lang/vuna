@@ -67,13 +67,12 @@ flushSarif : Int -> Int
 flushSarif code =
   let
     fmt = diagFormatOf 0
-  in if fmt == "sarif" then
-    let
-      box = runIO (readRef sarifRef)
-      _ = runIO (prim_print (renderSarif box.sarifItems ++ "\n"))
-      _ = resetSarif 0
-    in code
-  else code
+    box = runIO (readRef sarifRef)
+    _ = if fmt == "sarif" then runIO (prim_print (renderSarif box.sarifItems ++ "\n"))
+      else if fmt == "json" then runIO (prim_print (renderJsonList box.sarifItems ++ "\n"))
+      else 0
+    _ = resetSarif 0
+  in code
 
 denyWarningsRef : IORef Bool
 denyWarningsRef = runIO (newRef False)
@@ -229,7 +228,7 @@ printDiagWithPrefix extra d =
     fmt = diagFormatOf 0
   in if fmt == "json" then
     let
-      _ = printErrText (renderJson d ++ "\n")
+      _ = collectSarif d
     in diagExitFor d
   else if fmt == "human" then
     let

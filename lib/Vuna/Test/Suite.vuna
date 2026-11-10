@@ -39,6 +39,7 @@ record SuiteOpts where
   suiteNoCache : Bool
   suiteLastFailed : Bool
   suiteBless : Bool
+  suiteBlessDiag : Bool
   suiteChanged : Maybe String
   suiteCacheDir : Maybe String
   suiteWatch : Bool

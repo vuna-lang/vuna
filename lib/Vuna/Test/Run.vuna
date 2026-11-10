@@ -37,6 +37,7 @@ record Env where
   envCacheEnabled : Bool
   envBaseHash : Int
   envBless : Bool
+  envBlessDiag : Bool
   envWorker : Bool
   -- 增量构建桶（跨 run 持久；见 buildCacheDir）。
   envBuildDir : String
@@ -392,6 +393,15 @@ goldenCase env c source expected wantInterp wantCheck wantCompile wantRun wantCo
     in CaseResult c.caseId "blessed" base.resChecks 0 base.resChecks base.resMs ["blessed ${expected}"]
   else base
 
+-- 结构化诊断期望文件：与 `.check.err` 同目录的 `.diag.json`（`--json` 聚合文档）。
+diagExpectedOf : String -> String
+diagExpectedOf expected =
+  if endsWith "expected.check.err" expected then "${Vuna.Cli.Args.parentOf expected}/expected.diag.json"
+  else if endsWith "expected.err" expected then "${Vuna.Cli.Args.parentOf expected}/expected.diag.json"
+  else if endsWith ".check.err" expected then "${substring 0 (byteLength expected - 10) expected}.diag.json"
+  else if endsWith ".err" expected then "${substring 0 (byteLength expected - 4) expected}.diag.json"
+  else "${expected}.diag.json"
+
 errorCase : Env -> Case -> String -> String -> Bool -> Bool -> Bool -> CaseResult
 errorCase env c source expected wantInterp wantCheck wantCompile =
   let
@@ -435,7 +445,22 @@ errorCase env c source expected wantInterp wantCheck wantCompile =
         assertAbsent "compile no output dir" outdir
       ]
     else []
-  in finishCase c.caseId start (append interpA (append checkA compileA))
+    diagPath = diagExpectedOf expected
+    diagRun = if wantCompile then
+      runCmdMerged env "${c.caseId}-diag" env.envCwd c.caseTimeout
+        (withEnvIface env [env.envVuna, "compile", source, uniqueOutDir env "${c.caseId}-diag", "--json"])
+      else
+        runCmdMerged env "${c.caseId}-diag" env.envCwd c.caseTimeout
+          (withEnvIface env [env.envVuna, "check", source, "--json"])
+    actualDiag = trimNewlines (combinedOut diagRun)
+    diagA = if pathExistsFile diagPath then
+        [assertEq "diag json" (trimNewlines (runIO (readFile diagPath))) actualDiag]
+      else if env.envBlessDiag then
+        let
+          _ = runIO (writeFile diagPath "${actualDiag}\n")
+        in []
+      else []
+  in finishCase c.caseId start (append interpA (append checkA (append compileA diagA)))
 
 -- ---------------------------------------------------------------
 -- 小工具
@@ -1466,7 +1491,7 @@ auditOrphans suite =
   let
     root = suite.suiteRoot
     env =
-      Env root "${root}/test" "/tmp" "" "" "${root}/base" "ocamlopt" "" "" False 0 False False
+      Env root "${root}/test" "/tmp" "" "" "${root}/base" "ocamlopt" "" "" False 0 False False False
         "/tmp/vuna-build" (runIO (newRef (sessionNew "/tmp/iface-session")))
     cases = discoverCases suite
     texts = claimTextPairs cases
@@ -1518,7 +1543,7 @@ familyOrphans suite =
   let
     root = suite.suiteRoot
     env =
-      Env root "${root}/test" "/tmp" "" "" "${root}/base" "ocamlopt" "" "" False 0 False False
+      Env root "${root}/test" "/tmp" "" "" "${root}/base" "ocamlopt" "" "" False 0 False False False
         "/tmp/vuna-build" (runIO (newRef (sessionNew "/tmp/iface-session")))
     cases = discoverCases suite
     fixtures = concatMap (familyFixtures root) suite.suiteFamilies
@@ -1605,7 +1630,7 @@ runSuiteOnce opts suite =
     -- 跨 run 的构建桶：base 的 .cmx 只编译一次，后续 run 直接命中 stamp。
     buildDir = "${cacheDir}/build/${scope}-${strOfInt toolCompilerFingerprint}-${strOfInt baseHash}"
     _ = if pathExistsDir cacheDir then 0 else ensureDirPath cacheDir
-    env = Env root "${root}/test" tmp (runIO execPath) (envOr "VUNA_SEED" "vuna-seed") baseDir (envOr "OCAMLOPT" "ocamlopt") helper cacheDir (not opts.suiteNoCache && not opts.suiteBless) baseHash opts.suiteBless (case opts.suiteWorker of
+    env = Env root "${root}/test" tmp (runIO execPath) (envOr "VUNA_SEED" "vuna-seed") baseDir (envOr "OCAMLOPT" "ocamlopt") helper cacheDir (not opts.suiteNoCache && not opts.suiteBless && not opts.suiteBlessDiag) baseHash opts.suiteBless opts.suiteBlessDiag (case opts.suiteWorker of
       Just _ => True
       Nothing => False
     ) buildDir (runIO (newRef (sessionNew "${tmp}/iface-session")))
