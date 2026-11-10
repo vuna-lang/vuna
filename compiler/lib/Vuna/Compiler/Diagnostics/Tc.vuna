@@ -598,13 +598,13 @@ tcErr2NoLoc e a0 a1 = ErrC (tcMsg e [a0, a1])
 tcTypeMismatch : Span -> String -> String -> Check a
 tcTypeMismatch sp expected found =
   ErrC
-    (withField (FieldFound found) (withField (FieldExpected expected) (withDiagSpan sp (tcMsg (TypeMismatch expected found) [expected, found]))))
+    (withField (FieldFound found) (withField (FieldExpected expected) (withDiagSpan sp (withTrace (TraceFrame PhUnify "unify: expected ${expected}" Nothing []) (withTrace (TraceFrame PhUnify "unify: found ${found}" Nothing []) (tcMsg (TypeMismatch expected found) [expected, found]))))))
 
 -- | 诊断构造辅助：tcTypeMismatchNoLoc（code/template 见本模块目录）。
 tcTypeMismatchNoLoc : String -> String -> Check a
 tcTypeMismatchNoLoc expected found =
   ErrC
-    (withField (FieldFound found) (withField (FieldExpected expected) (tcMsg (TypeMismatch expected found) [expected, found])))
+    (withField (FieldFound found) (withField (FieldExpected expected) (withTrace (TraceFrame PhUnify "unify: expected ${expected}" Nothing []) (withTrace (TraceFrame PhUnify "unify: found ${found}" Nothing []) (tcMsg (TypeMismatch expected found) [expected, found])))))
 
 -- | 诊断构造辅助：tcErr3（code/template 见本模块目录）。
 tcErr3 : Span -> TcErr (Succ (Succ (Succ Zero))) -> String -> String -> String -> Check a
