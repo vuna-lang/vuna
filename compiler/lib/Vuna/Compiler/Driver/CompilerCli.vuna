@@ -806,19 +806,28 @@ stripContinueGo (arg :: rest) acc found = stripContinueGo rest (arg :: acc) foun
 
 checkPackageErr : Package -> Diagnostic -> Int
 checkPackageErr pkg e =
-  if recoverEnabled pkg then packageRecoverExe pkg e
+  if runIO (readRef continueOnErrorRef) then packageRecover pkg e
   else printDiagWithPrefix "[${packageName pkg}] " e
 
--- | 恢复模式是否可用（命令行开启且入口存在）。
-recoverEnabled : Package -> Bool
-recoverEnabled pkg =
-  runIO (readRef continueOnErrorRef) && runIO (prim_fileExists (packageEntry pkg))
+-- | 包检查恢复入口：可执行包走入口文件，库包走 [export].modules。
+packageRecover : Package -> Diagnostic -> Int
+packageRecover pkg e =
+  if runIO (prim_fileExists (packageEntry pkg)) then packageRecoverExe pkg e
+  else packageRecoverLib pkg e
 
 -- | 可执行包入口的恢复式检查。
 packageRecoverExe : Package -> Diagnostic -> Int
 packageRecoverExe pkg e = case dtCheckRecovering (packageContext pkg) (packageEntry pkg) of
   OkC ds => printRecovered pkg e ds
   ErrC e2 => printDiagWithPrefix "[${packageName pkg}] " e2
+
+-- | 库包（[export].modules）的恢复式检查。
+packageRecoverLib : Package -> Diagnostic -> Int
+packageRecoverLib pkg e = case packageExports pkg of
+  Just names => case dtCheckLibraryRecovering (packageContext pkg) names of
+    OkC ds => printRecovered pkg e ds
+    ErrC e2 => printDiagWithPrefix "[${packageName pkg}] " e2
+  Nothing => printDiagWithPrefix "[${packageName pkg}] " e
 
 -- | 打印恢复出的诊断并返回退出码。
 printRecovered : Package -> Diagnostic -> List Diagnostic -> Int

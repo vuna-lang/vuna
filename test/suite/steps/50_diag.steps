@@ -207,3 +207,8 @@ out-contains: best-effort: may be a cascade
 run: "$VUNA" check corpus/dt_err/25_no_instance.vuna --json 2>&1
 exit: 1
 out-contains: "text":"Name_A","span":{"file"
+# 库包（[export].modules）恢复：两个模块各自的独立错误都被收集。
+run: sh -c 'd="$TMPDIR/m49-lib"; rm -rf "$d"; mkdir -p "$d/lib"; printf "[package]\nname = \"m49\"\n[export]\nmodules = [\"A\", \"B\"]\n" > "$d/vuna.toml"; printf "module A where\n\na : Int\na = \"x\"\n" > "$d/lib/A.vuna"; printf "module B where\n\nb : Int\nb = \"y\"\n" > "$d/lib/B.vuna"; cd "$d" && "$VUNA" check . --continue-on-error --json 2>&1'
+exit: 1
+out-contains: lib/A.vuna
+out-contains: lib/B.vuna

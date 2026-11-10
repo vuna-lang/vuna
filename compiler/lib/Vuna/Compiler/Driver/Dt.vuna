@@ -6,6 +6,7 @@ module Vuna.Compiler.Driver.Dt
   , dtCheck
   , dtCheckLibraryPackageIncrementalParts
   , dtCheckLibraryPackageWithIfacesParts
+  , dtCheckLibraryRecovering
   , dtCheckLibraryWithProgramParts
   , dtCheckPackageIncrementalParts
   , dtCheckPackageWithIfacesParts
@@ -1356,7 +1357,10 @@ declMatchesDiag : Span -> Decl -> Bool
 declMatchesDiag sp x =
   let
     dsp = declSpan x
-    sameFile = spanFile dsp == "" || spanFile sp == "" || spanFile dsp == spanFile sp
+    sameFile =
+      spanFile dsp == ""
+        || spanFile sp == ""
+        || normalizeDiagFile (spanFile dsp) == normalizeDiagFile (spanFile sp)
   in sameFile && spanContainsLine dsp (spanStartLine sp)
 
 -- | 从 label 列表取主 label 起始行。
@@ -1415,3 +1419,13 @@ flushWord cur acc = Base.List.Cons (strPack (reverse cur)) acc
 -- | 标识符字符判定。
 isIdentChar : Int -> Bool
 isIdentChar c = c >= 48 && c <= 57 || c >= 65 && c <= 90 || c >= 97 && c <= 122 || c == 95
+
+-- | 库包（[export].modules）的恢复式检查：加载模块后对汇总声明做逐声明恢复。
+dtCheckLibraryRecovering : PackageContext -> List String -> Check (List Diagnostic)
+dtCheckLibraryRecovering ctx names =
+  Vuna.Compiler.Common.bind (dtLoadModulesParts ctx names)
+    (\parts => recoverElab 8 (dtProjectDecls parts) [] [])
+
+normalizeDiagFile : String -> String
+normalizeDiagFile p =
+  if startsWith "./" p then substring (natFromInt 2) (natFromInt (strLength p - 2)) p else p
