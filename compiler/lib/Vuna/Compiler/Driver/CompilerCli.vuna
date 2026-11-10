@@ -127,10 +127,10 @@ applyDiagConfig (Just pkg) =
         let
           _ = setDiagLang l
           _ = if l == "en" then 0
-            else if not (runIO (readRef formatExplicitRef)) then case m.manifestDiagFormat of
-              Nothing => runIO (writeRef diagFormatRef "human")
-              Just _ => 0
-            else 0
+          else if not (runIO (readRef formatExplicitRef)) then case m.manifestDiagFormat of
+            Nothing => runIO (writeRef diagFormatRef "human")
+            Just _ => 0
+          else 0
         in 0
       Nothing => 0
     else 0
@@ -764,6 +764,7 @@ stripLangGo (arg :: rest) acc lang =
 langExplicitRef : IORef Bool
 langExplicitRef = runIO (newRef False)
 
+-- | 参数里是否显式给了 --lang。
 hasLangFlag : List String -> Bool
 hasLangFlag [] = False
 hasLangFlag (arg :: rest) =
