@@ -121,4 +121,3 @@ peekParseErrors _ = takeParseErrors 0
 
 resetParseErrors : Int -> Int
 resetParseErrors _ = runIO (writeRef parseErrorsRef (ParseErrorsBox [] 0))
-

@@ -94,13 +94,12 @@ parseDecls recover fuel st blockCol fixAcc declAcc = if fuel <= 0 then icFuel "p
 else if isEof st then OkC (Pair (Pair (reverse fixAcc) (reverse declAcc)) st)
 else case peekPos st of
   Pos line col => if col == blockCol then case parseFixityOrDecl st blockCol of
-    ErrC e =>
-      if recover then
-        let
-          _ = emitParseError e
-          st2 = recoverDecl st blockCol
-        in parseDecls True (fuel - 1) st2 blockCol fixAcc declAcc
-      else ErrC e
+    ErrC e => if recover then
+      let
+        _ = emitParseError e
+        st2 = recoverDecl st blockCol
+      in parseDecls True (fuel - 1) st2 blockCol fixAcc declAcc
+    else ErrC e
     OkC p =>
       let
         payload = firstOf p
@@ -122,11 +121,13 @@ recoverDecl (PState file toks last count) blockCol =
   in PState file rest last (length rest)
 
 skipToDeclLine : List PTok -> Int -> List PTok
-skipToDeclLine toks blockCol = case toks of
-  [] => []
-  _ :: rest => case rest of
-    [] => []
-    t :: _ => if posCol t.ptokPos == blockCol then rest else skipToDeclLine rest blockCol
+skipToDeclLine [] blockCol = []
+skipToDeclLine (_ :: rest) blockCol = skipFrom rest blockCol
+
+skipFrom : List PTok -> Int -> List PTok
+skipFrom [] blockCol = []
+skipFrom (t :: rest) blockCol =
+  if posCol t.ptokPos == blockCol then Base.List.Cons t rest else skipToDeclLine rest blockCol
 
 -- 一条顶层声明：fixity 声明（返回 Just）或普通 Decl（返回单元素列表）。
 parseFixityOrDecl : PState -> Int -> Check (Pair (Pair (Maybe FixityDecl) (List Decl)) PState)
