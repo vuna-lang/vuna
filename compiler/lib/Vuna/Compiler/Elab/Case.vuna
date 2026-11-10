@@ -513,18 +513,24 @@ checkCaseAltsGo prevs alts = case alts of
   (Pair pat body) :: rest => case pat of
     PCon cname args psp => if ctorHeadCovered cname prevs then
       let
-        _ = warnAt1 psp (WarnRedundantCtorBranch cname) cname
+        _ =
+          warnAt1Mod (removeBranchSuggest "remove redundant constructor branch" psp body) psp
+            (WarnRedundantCtorBranch cname) cname
       in checkCaseAltsGo (Pair pat body :: prevs) rest
     else checkCaseAltsGo (Pair pat body :: prevs) rest
     -- as-pattern：覆盖性按内层模式判定（`x@pat` 与 `pat` 的头部相同）。
     PInt n psp => if litHeadCovered pat prevs then
       let
-        _ = warnAt1 psp (WarnRedundantLiteralBranch (litLabel pat)) (litLabel pat)
+        _ =
+          warnAt1Mod (removeBranchSuggest "remove redundant literal branch" psp body) psp
+            (WarnRedundantLiteralBranch (litLabel pat)) (litLabel pat)
       in checkCaseAltsGo (Pair pat body :: prevs) rest
     else checkCaseAltsGo (Pair pat body :: prevs) rest
     PStr s psp => if litHeadCovered pat prevs then
       let
-        _ = warnAt1 psp (WarnRedundantLiteralBranch (litLabel pat)) (litLabel pat)
+        _ =
+          warnAt1Mod (removeBranchSuggest "remove redundant literal branch" psp body) psp
+            (WarnRedundantLiteralBranch (litLabel pat)) (litLabel pat)
       in checkCaseAltsGo (Pair pat body :: prevs) rest
     else checkCaseAltsGo (Pair pat body :: prevs) rest
     PAs name inner psp => checkCaseAltsGo (Pair pat body :: prevs) rest
@@ -538,7 +544,9 @@ checkCatchAll : List (Pair Pat Expr) -> Pair Pat Expr -> List (Pair Pat Expr) ->
 checkCatchAll prevs alt [] sp = OkC 0
 checkCatchAll prevs alt rest sp = if hasLitHead rest then
   let
-    _ = warnAt0 sp WarnBranchAfterCatchAll
+    _ =
+      warnAt0Mod (removeBranchSuggest "remove unreachable branch" sp (secondOf alt)) sp
+        WarnBranchAfterCatchAll
   in OkC 0
 else tcErr0 sp CatchAllNotLast
 
@@ -617,3 +625,13 @@ checkCaseDone ec ctx dd idxs alts expected sp scrutTerm altTerms =
   if hasCatchAll alts then OkC (Pair (TCase scrutTerm altTerms) ec)
   else Vuna.Compiler.Common.bind (checkCoverage ctx ec dd idxs alts sp)
     (\_ => OkC (Pair (TCase scrutTerm altTerms) ec))
+
+-- 冗余分支的整块删除 span：从分支起始行行首到分支体结束行的下一行行首。
+branchRemovalSpan : Span -> Expr -> Span
+branchRemovalSpan patSpan body =
+  Span (spanFile patSpan) (spanStartLine patSpan) 1 (spanEndLine (exprSpan body) + 1) 1
+
+removeBranchSuggest : String -> Span -> Expr -> Diagnostic -> Diagnostic
+removeBranchSuggest title patSpan body d =
+  withSuggestion (Suggestion title MachineApplicable [DiagEdit (branchRemovalSpan patSpan body) ""])
+    d

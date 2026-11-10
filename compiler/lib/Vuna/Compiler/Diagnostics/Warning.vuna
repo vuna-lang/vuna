@@ -4,6 +4,7 @@ module Vuna.Compiler.Diagnostics.Warning
   , WarnErr(..)
   , warnAll
   , warnAt0
+  , warnAt0Mod
   , warnAt1
   , warnAt1Mod
   , warnCode
@@ -96,3 +97,8 @@ warnAll =
 warnAt1Mod : (Diagnostic -> Diagnostic) -> Span -> WarnErr (Succ Zero) -> String -> Int
 warnAt1Mod f sp e a0 =
   emitWarning (f (withLabel (Label (Just sp) "" LabelPrimary Nothing) (warnMsg e [a0])))
+
+-- | 诊断域实现：带后处理（如附加 suggestion）的 arity-0 告警。
+warnAt0Mod : (Diagnostic -> Diagnostic) -> Span -> WarnErr Zero -> Int
+warnAt0Mod f sp e =
+  emitWarning (f (withLabel (Label (Just sp) "" LabelPrimary Nothing) (warnMsg e [])))

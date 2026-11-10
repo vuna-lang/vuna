@@ -154,7 +154,7 @@ JSON 字段是机器契约：`code/severity/phase/category/message/labels[]/fiel
 | D6 渲染/LSP/CLI | 已落地 short/human/JSON/SARIF + LSP push/pull + `[diagnostics]` 配置；human 视图展示 fields/trace/suggestions（与 JSON 同源）；SARIF rules 带目录 shortDescription/help/defaultConfiguration/tags；i18n 部分（`--lang zh` 与 `[diagnostics] lang` 的 human 消息本地化 + `= message:` 英文原文附注；机器格式保持英文） |
 | D7.1 多错误 + Cascade | 部分（parser 顶层 resync：多个语法错误一次报出，`--max-errors` 截断且作用于 short/JSON/SARIF；elab 逐 decl 恢复 + Cascade 待办） |
 | D7.2 warnings（未使用/冗余/不可达） | 已落地（`UN_UnusedBinder`/`UN_ShadowedBinder`/`UN_RedundantCtorBranch`/`UN_RedundantLiteralBranch`/`UN_BranchAfterCatchAll`/`UN_UnusedImport`（限定/别名/open import 统一追踪）/`UN_UnusedDefinition`；`-W`/`--deny-warnings` 已接） |
-| D7.3 建议引擎 + Fix | 部分（`Candidate`/`Suggestion` 模型就绪；`UN_UnusedBinder`/`UN_UnusedDefinition`/`UN_UnusedImport` 附 machine-applicable 编辑；LSP codeAction 已应用诊断 suggestions；更多码待接） |
+| D7.3 建议引擎 + Fix | 部分（`Candidate`/`Suggestion` 模型就绪；`UN_UnusedBinder`/`UN_UnusedDefinition`/`UN_UnusedImport`/`UN_Redundant*`/`UN_BranchAfterCatchAll` 附 machine-applicable 编辑；LSP codeAction 已应用诊断 suggestions；更多码待接） |
 | D7.4 类型不匹配 expected/found | 已落地（fields + PhUnify trace 帧 expected/found；双端 label 待补） |
 | D7.5 实例搜索 trace | 部分（`TC_NoInstanceFound` 附失败目标族桶的候选实例 `fields.candidates`；完整搜索树/拒绝原因仍待补） |
 | D7.6 终止性 call matrix | 部分（`TC_CannotProveTermination` 附 `fields.call` 边：caller/callee/relation；逐参数矩阵与完整调用点待补） |

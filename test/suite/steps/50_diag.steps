@@ -164,3 +164,10 @@ exit: 1
 out-contains: UN_UnusedBinder
 run: sh -c 'd="$TMPDIR/m44-denycfg-clean"; rm -rf "$d"; mkdir -p "$d/lib"; printf "[package]\nname = \"m44b\"\n[export]\nmodules = [\"Main\"]\n\n[diagnostics]\ndeny-warnings = true\n" > "$d/vuna.toml"; printf "module Main where\n\nmain : Int\nmain = 0\n" > "$d/lib/Main.vuna"; cd "$d" && "$VUNA" check . >/dev/null 2>&1'
 exit: 0
+# 冗余/不可达分支：删除分支的 machine-applicable 建议（JSON 可见；LSP 走同一 suggestions）。
+run: "$VUNA" check -W corpus/dt_err/41_redundant_ctor_branch.vuna --json 2>&1
+out-contains: remove redundant constructor branch
+run: "$VUNA" check -W corpus/dt_err/41b_redundant_literal.vuna --json 2>&1
+out-contains: remove redundant literal branch
+run: "$VUNA" check -W corpus/dt_err/41c_branch_after_catchall.vuna --json 2>&1
+out-contains: remove unreachable branch
