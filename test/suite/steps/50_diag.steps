@@ -110,3 +110,11 @@ out-contains: category: types
 run: "$VUNA" explain UN_UnusedBinder
 out-contains: severity: warning
 out-contains: phase: usage
+# i18n：--lang zh 默认切到 human 并追加中文目录说明；默认 en 不变。
+run: sh -c 'printf "main : Int\nmain = \"x\"\n" > "$TMPDIR/m40-i18n.vuna"'
+run: "$VUNA" check "$TMPDIR/m40-i18n.vuna" --lang zh 2>&1
+exit: 1
+out-contains: 说明: 类型不匹配
+run: "$VUNA" check "$TMPDIR/m40-i18n.vuna" --json --lang zh 2>&1
+exit: 1
+out-not-contains: 说明:

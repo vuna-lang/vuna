@@ -5,6 +5,7 @@ module Vuna.Compiler.Diag.Format
   , renderJsonList
   , renderSarif
   , renderShort
+  , setDiagLang
   ) where
 
 -- Vuna.Compiler.Diag.Format：诊断的唯一渲染层（诊断重设计 M5/M6）。
@@ -20,6 +21,8 @@ module Vuna.Compiler.Diag.Format
 import Vuna.Compiler.Source
 import Vuna.Compiler.Diag
 import Base.IO.Host
+import Base.IORef
+import qualified Vuna.Compiler.Diagnostics
 import Base.Nat
 import Vuna.Compiler.Version
 
@@ -158,7 +161,8 @@ renderHuman d =
       Nothing => ""
     labelNote = if ptext == "" then "" else "  = note: ${ptext}"
     notes = join "\n" (map (\n => "  = note: ${n}") d.diagNotes)
-    block = join "\n" [headerOf d, snippet, labelNote, notes]
+    descLine = diagDescLine d
+    block = join "\n" [headerOf d, snippet, labelNote, notes, descLine]
   in trim block
 
 -- ---------------------------------------------------------------
@@ -342,3 +346,22 @@ ruleJson code = "{\"id\":${jsonStr code},\"shortDescription\":{\"text\":${jsonSt
 renderSarif : List Diagnostic -> String
 renderSarif ds =
   "{\"$schema\":\"https://json.schemastore.org/sarif-2.1.0.json\",\"version\":\"2.1.0\",\"runs\":[{\"tool\":{\"driver\":{\"name\":\"vuna\",\"version\":${jsonStr vunaVersion},\"rules\":[${sarifRules ds}]}},\"results\":[${join "," (map sarifResult ds)}]}]}"
+
+-- ---------------------------------------------------------------
+-- i18n：当前仅 human 视图在 zh 下追加目录说明（JSON/short 保持机器稳定）。
+-- ---------------------------------------------------------------
+langRef : IORef String
+langRef = runIO (newRef "en")
+
+-- | 设置渲染语言（`en` / `zh`；默认 en）。
+setDiagLang : String -> Int
+setDiagLang lang = runIO (writeRef langRef lang)
+
+diagLang : Int -> String
+diagLang _ = runIO (readRef langRef)
+
+diagDescLine : Diagnostic -> String
+diagDescLine d = if diagLang 0 == "zh" then case Vuna.Compiler.Diagnostics.diagDescOf d.diagCode of
+  Just s => "  = 说明: ${s}"
+  Nothing => ""
+else ""

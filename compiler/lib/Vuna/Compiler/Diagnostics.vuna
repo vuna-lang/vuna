@@ -1,6 +1,7 @@
 module Vuna.Compiler.Diagnostics
   ( codeDomain
   , diagCategoryOf
+  , diagDescOf
   , diagPhaseOf
   , diagSeverityOf
   , module Base.Nat
@@ -44,6 +45,11 @@ import Vuna.Compiler.Common
 import Base.Nat
 import Base.String
 import Base.Vec
+import Vuna.Compiler.Diagnostics.Rn
+import Vuna.Compiler.Diagnostics.Pkg
+import Vuna.Compiler.Diagnostics.Warning
+import Vuna.Compiler.Frontend.Diagnostics
+import Vuna.Compiler.Loader.Diagnostics
 import Vuna.Compiler.Diagnostics.Cg as Cg
 import Vuna.Compiler.Diagnostics.Ic as Ic
 import Vuna.Compiler.Diagnostics.Tc as Tc
@@ -92,3 +98,53 @@ diagSeverityOf : String -> String
 diagSeverityOf "UN" = "warning"
 diagSeverityOf "LN" = "warning"
 diagSeverityOf _ = "error"
+
+-- | 码 → 目录说明（中文；human 渲染在 `--lang zh` 时展示）。LN_ 说明在 lint 目录，
+-- 编译器内部不可见，返回 Nothing。
+diagDescOf : String -> Maybe String
+diagDescOf code = lookupDesc code allDescPairs
+
+tcDescPairs : List TcEntry -> List (Pair String String)
+tcDescPairs [] = []
+tcDescPairs (e :: rest) = Pair e.tcEntryCode e.tcEntryDesc :: tcDescPairs rest
+
+cgDescPairs : List CgEntry -> List (Pair String String)
+cgDescPairs [] = []
+cgDescPairs (e :: rest) = Pair e.cgEntryCode e.cgEntryDesc :: cgDescPairs rest
+
+icDescPairs : List IcEntry -> List (Pair String String)
+icDescPairs [] = []
+icDescPairs (e :: rest) = Pair e.icEntryCode e.icEntryDesc :: icDescPairs rest
+
+lexDescPairs : List LexEntry -> List (Pair String String)
+lexDescPairs [] = []
+lexDescPairs (e :: rest) = Pair e.lexEntryCode e.lexEntryDesc :: lexDescPairs rest
+
+psDescPairs : List PsEntry -> List (Pair String String)
+psDescPairs [] = []
+psDescPairs (e :: rest) = Pair e.psEntryCode e.psEntryDesc :: psDescPairs rest
+
+rnDescPairs : List RnEntry -> List (Pair String String)
+rnDescPairs [] = []
+rnDescPairs (e :: rest) = Pair e.rnEntryCode e.rnEntryDesc :: rnDescPairs rest
+
+pkgDescPairs : List PkgEntry -> List (Pair String String)
+pkgDescPairs [] = []
+pkgDescPairs (e :: rest) = Pair e.pkgEntryCode e.pkgEntryDesc :: pkgDescPairs rest
+
+warnDescPairs : List WarnEntry -> List (Pair String String)
+warnDescPairs [] = []
+warnDescPairs (e :: rest) = Pair e.warnEntryCode e.warnEntryDesc :: warnDescPairs rest
+
+ldDescPairs : List LdEntry -> List (Pair String String)
+ldDescPairs [] = []
+ldDescPairs (e :: rest) = Pair e.ldEntryCode e.ldEntryDesc :: ldDescPairs rest
+
+allDescPairs : List (Pair String String)
+allDescPairs =
+  append (tcDescPairs tcAll)
+    (append (cgDescPairs cgAll) (append (icDescPairs icAll) (append (lexDescPairs lexAll) (append (psDescPairs psAll) (append (rnDescPairs rnAll) (append (pkgDescPairs pkgAll) (append (warnDescPairs warnAll) (ldDescPairs ldAll))))))))
+
+lookupDesc : String -> List (Pair String String) -> Maybe String
+lookupDesc code [] = Nothing
+lookupDesc code ((Pair c d) :: rest) = if c == code then Just d else lookupDesc code rest

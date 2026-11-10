@@ -11,7 +11,6 @@ module Vuna.Compiler.Driver.CompilerCli
 -- M26：包上下文统一——`compile` 与 `build` 都产**目录**（split + build.sh），
 -- 不再有 seed 子命令、split 开关与环境根 flag（移除时给出可操作提示）。
 -- 工具命令（lint / interp / test / fmt / repl / doc）在 Vuna.Cli。
--- compiler/app/Main.vuna 的入口闭包就是 seed 闭包。
 import Vuna.Compiler.Common
 import Vuna.Compiler.Diagnostics.Sink
 import Vuna.Compiler.Packages.Pkg
@@ -193,11 +192,15 @@ runCompilerCliFor : String -> List String -> Int
 runCompilerCliFor prog args =
   let
     stripped = stripDiagFormat args
-    strippedMax = stripMaxErrors (firstOf stripped)
+    strippedLang = stripLang (firstOf stripped)
+    strippedMax = stripMaxErrors (firstOf strippedLang)
     _ = case secondOf stripped of
       Just fmt => runIO (writeRef diagFormatRef fmt)
       Nothing => 0
     kept = stripDenyWarnings (firstOf strippedMax)
+    _ = setDiagLang (secondOf strippedLang)
+    _ = if secondOf strippedLang == "en" then 0
+      else if secondOf stripped == Nothing then runIO (writeRef diagFormatRef "human") else 0
     _ = if secondOf strippedMax > 0 then runIO (writeRef maxErrorsRef (secondOf strippedMax)) else 0
     _ = resetSarif 0
     _ = runIO (writeRef denyWarningsRef (hasDenyWarnings args))
@@ -727,3 +730,16 @@ finishWarningsDir dir code =
       _ = runIO (prim_runIn "/" ["rm", "-rf", dir])
     in 1
   else code
+
+-- 剥离 `--lang zh`（human 说明语言；默认 en）。
+stripLang : List String -> Pair (List String) String
+stripLang args = stripLangGo args [] "en"
+
+stripLangGo : List String -> List String -> String -> Pair (List String) String
+stripLangGo [] acc lang = Pair (reverse acc) lang
+stripLangGo ("--lang" :: rest) acc lang = case rest of
+  v :: more => stripLangGo more acc v
+  [] => Pair (reverse acc) lang
+stripLangGo (arg :: rest) acc lang =
+  if startsWith "--lang=" arg then stripLangGo rest acc (substring (natFromInt 7) (natFromInt (strLength arg - 7)) arg)
+  else stripLangGo rest (arg :: acc) lang

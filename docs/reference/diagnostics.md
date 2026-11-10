@@ -88,7 +88,7 @@ Diagnostic = { id, severity, phase, category, code, message, labels, fields, tra
 | JSON | `renderJsonList` | `{version,tool,diagnostics[]}`，含 labels/fields/trace/notes/suggestions/origin/internal/ice |
 | SARIF | `renderSarif` | SARIF 2.1.0 单 run：ruleId/level/message/locations/relatedLocations |
 
-CLI 开关：`--error-format=short|human|json|sarif`、`--json`、`--message-format=...`；包级 check
+CLI 开关：`--error-format=short|human|json|sarif`、`--json`、`--message-format=...`、`--lang en|zh`（zh 时 human 追加目录中文说明并默认切 human）；包级 check
 会把格式透传给成员包子进程；成员包错误带 `[包名]` 前缀。
 
 JSON 字段是机器契约：`code/severity/phase/category/message/labels[]/fields[]`；
@@ -149,7 +149,7 @@ JSON 字段是机器契约：`code/severity/phase/category/message/labels[]/fiel
 | D3 位置契约（end span、UTF-16、显式 NoLoc） | 已落地（span 填充仍在补齐） |
 | D4 码域（RN_/PKG_ 独立域、死码清理） | 已落地（`RN_` 27 码、`PKG_` 27 码；9 个不再触发的 TC 死码已删除） |
 | D5 目录单一真源 + 生成枚举/文档 | 部分（条目仍是手写；`explain`/`gen-errors` 已同源；两者都输出 severity/phase/category 元数据（`Vuna.Compiler.Diagnostics.Meta` 单点映射）） |
-| D6 渲染/LSP/CLI | 已落地 short/human/JSON/SARIF + LSP push/pull + `[diagnostics]` 配置；i18n 待办 |
+| D6 渲染/LSP/CLI | 已落地 short/human/JSON/SARIF + LSP push/pull + `[diagnostics]` 配置；i18n 部分（`--lang zh` 的 human 中文说明；机器格式保持英文） |
 | D7.1 多错误 + Cascade | 部分（parser 顶层 resync：多个语法错误一次报出，`--max-errors` 截断且作用于 short/JSON/SARIF；elab 逐 decl 恢复 + Cascade 待办） |
 | D7.2 warnings（未使用/冗余/不可达） | 部分（`UN_UnusedBinder`/`UN_ShadowedBinder`/`UN_RedundantCtorBranch`/`UN_RedundantLiteralBranch`/`UN_BranchAfterCatchAll`/`UN_UnusedImport`（限定/别名 import）已落地；`-W`/`--deny-warnings` 已接；未使用定义、open import 追踪待办） |
 | D7.3 建议引擎 + Fix | 部分（`Candidate`/`Suggestion` 模型就绪；自动候选未接） |
@@ -182,4 +182,4 @@ JSON 字段是机器契约：`code/severity/phase/category/message/labels[]/fiel
 - 列单位是 UTF-8 字节（不是码点）；渲染宽字符按字节/显示字符混合处理，LSP 边界换算
   UTF-16。
 - `base/` 标准库仍用 `Base.Result`（字符串错误）；不要把 `Check` 扩散进 base。
-- 诊断文本英文、文档中文；不做 i18n 之前，消息不保证本地化。
+- 消息模板为英文（机器格式稳定）；`--lang zh` 的 human 视图追加目录中文说明（`[diagnostics]` 的 lang 尚未接入）。
