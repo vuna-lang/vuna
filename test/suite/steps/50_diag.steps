@@ -133,3 +133,13 @@ out-not-contains: UN_UnusedImport
 run: sh -c 'd="$TMPDIR/m42-open-unused"; rm -rf "$d"; mkdir -p "$d/lib"; printf "[package]\nname = \"m42b\"\n[export]\nmodules = [\"Main\", \"M\"]\n" > "$d/vuna.toml"; printf "module M where\n\nhelper : Int\nhelper = 1\n" > "$d/lib/M.vuna"; printf "module Main where\n\nimport M\n\nmain : Int\nmain = 0\n" > "$d/lib/Main.vuna"; cd "$d" && "$VUNA" check -W . --json 2>&1'
 exit: 0
 out-contains: UN_UnusedImport
+# human 视图展示机器字段/轨迹/建议（与 JSON 同源）。
+run: sh -c 'printf "main : Int\nmain = \"x\"\n" > "$TMPDIR/m43-fields.vuna"'
+run: "$VUNA" check "$TMPDIR/m43-fields.vuna" --error-format human 2>&1
+exit: 1
+out-contains: = expected: Int
+out-contains: = found: String
+out-contains: = trace[unify]:
+run: "$VUNA" check corpus/dt_err/28_multi_clause_coverage.vuna --error-format human 2>&1
+exit: 1
+out-contains: = candidates: Nat.Succ

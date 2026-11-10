@@ -24,6 +24,7 @@ import Base.IO.Host
 import Base.IORef
 import qualified Vuna.Compiler.Diagnostics
 import Base.Nat
+import Base.String
 import Vuna.Compiler.Version
 
 -- ---------------------------------------------------------------
@@ -162,7 +163,11 @@ renderHuman d =
     labelNote = if ptext == "" then "" else "  = note: ${ptext}"
     notes = join "\n" (map (\n => "  = note: ${n}") d.diagNotes)
     descLine = diagDescLine d
-    block = join "\n" [headerOf d, snippet, labelNote, notes, descLine]
+    fieldBlock = join "\n" (map fieldLine d.diagFields)
+    traceBlock = join "\n" (traceLines 0 d.diagTrace)
+    helpBlock = join "\n" (map suggestionLine d.diagSuggestions)
+    block =
+      join "\n" [headerOf d, snippet, labelNote, notes, fieldBlock, traceBlock, helpBlock, descLine]
   in trim block
 
 -- ---------------------------------------------------------------
@@ -368,3 +373,36 @@ diagDescLine d = if diagLang 0 == "zh" then case Vuna.Compiler.Diagnostics.diagD
   Just s => "  = 说明: ${s}"
   Nothing => ""
 else ""
+
+-- ---------------------------------------------------------------
+-- human 视图的语义字段/轨迹/建议（与 JSON 同源，不反解析）
+-- ---------------------------------------------------------------
+fieldLine : DiagField -> String
+fieldLine (FieldExpected s) = "  = expected: ${s}"
+fieldLine (FieldFound s) = "  = found: ${s}"
+fieldLine (FieldName s) = "  = name: ${s}"
+fieldLine (FieldCandidates cs) = "  = candidates: ${join ", " (map candidateTextOf (take 8 cs))}"
+fieldLine (FieldCall c) = "  = call: ${c.callCallee} <- ${c.callArg} (${c.callRelation})"
+fieldLine (FieldQuantity n declared observed) =
+  "  = quantity: ${n} (declared ${showInt declared}, observed ${showInt observed})"
+fieldLine (FieldEffect s) = "  = effect: ${s}"
+fieldLine (FieldModule s) = "  = module: ${s}"
+fieldLine (FieldSpan s sp) = "  = span: ${s} at ${showSpanLoc sp}"
+fieldLine (FieldNote s) = "  = note: ${s}"
+
+traceLines : Int -> List TraceFrame -> List String
+traceLines depth [] = []
+traceLines depth (t :: rest) =
+  append ["  = trace[${phaseName t.tracePhase}]: ${t.traceText}"] (traceLines depth rest)
+
+indent : Int -> String
+indent n = if n <= 0 then "" else "  " ++ indent (n - 1)
+
+suggestionLine : Suggestion -> String
+suggestionLine s = "  = help: ${s.suggestionTitle} (${applicabilityName s.suggestionApplicability})"
+
+showInt : Int -> String
+showInt n = strFromInt n
+
+candidateTextOf : Candidate -> String
+candidateTextOf c = c.candidateText
