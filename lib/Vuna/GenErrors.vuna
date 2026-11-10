@@ -212,14 +212,17 @@ field k v = " \"${k}\":${jsonQuote v} "
 jsonQuote : String -> String
 jsonQuote s = "\"" ++ join "" (map jsonEscapeChar (strUnpack s)) ++ "\""
 
+jsonEscapes : List (Pair Int String)
+jsonEscapes = [Pair 34 "\\\"", Pair 92 "\\\\", Pair 10 "\\n", Pair 13 "\\r", Pair 9 "\\t"]
+
 jsonEscapeChar : Int -> String
-jsonEscapeChar c = case c of
-  34 => "\\\""
-  92 => "\\\\"
-  10 => "\\n"
-  13 => "\\r"
-  9 => "\\t"
-  _ => if c < 32 then "\\u00" ++ hexPair c else strPack [c]
+jsonEscapeChar c = case lookupEscape c jsonEscapes of
+  Just s => s
+  Nothing => if c < 32 then "\\u00" ++ hexPair c else strPack [c]
+
+lookupEscape : Int -> List (Pair Int String) -> Maybe String
+lookupEscape c [] = Nothing
+lookupEscape c ((Pair k v) :: rest) = if c == k then Just v else lookupEscape c rest
 
 hexPair : Int -> String
 hexPair c = strPack [hexDigit (c / 16), hexDigit (c - c / 16 * 16)]
