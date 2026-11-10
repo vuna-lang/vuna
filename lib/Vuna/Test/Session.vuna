@@ -1,0 +1,118 @@
+module Vuna.Test.Session (Session, sessionCheck, sessionInterp, sessionNew) where
+
+-- Vuna.Test.Session：测试 runner 的**进程内精化会话**（每个 worker 进程一个）。
+--
+-- 背景：`vuna check/interp` 每次都要重新精化整棵 base 闭包（~150ms：instheads +
+-- bodies + instbodies）。测试 suite 的几百个夹具共享同一个 base ⇒ 这部分是完全
+-- 重复的工作。本模块把依赖包（base）的模块接口缓存进会话，用例只精化自己的入口
+-- 声明，与 LSP 的诊断会话（`Lsp/Diagnostics.buildSession`）同一条增量路径。
+--
+-- 关键约束（为什么不做成「无限乐观」）：
+--   * 接口必须能读到且与本进程编译器 tag 一致；缺失/失效就返回 Nothing，调用方
+--     回退 CLI 子进程——语义与诊断文本都不变，只是慢；
+--   * 增量路径自检 `applied = False` 时同样回退（安全阀，见 Dt.dtCheckSourceIncremental）；
+--   * 会话状态是**每 worker 进程**的（IORef 由 Env 持有），不跨进程共享。
+--
+-- 会话只服务「正例」（golden 的 check/interp 断言）；负例仍走 CLI，保证 `.check.err`
+-- / `.compile.err` 片段与退出码语义完全一致。
+import Base.IO.Host
+import Base.IORef
+import Vuna.Compiler.Common
+import Vuna.Compiler.Driver.Compile
+import Vuna.Compiler.Driver.Dt
+import Vuna.Compiler.Driver.Iface
+import Vuna.Compiler.Packages.Pkg
+import Vuna.Compiler.Version
+import Vuna.Files
+
+record Session where
+  sesRoot : String -- 接口镜像根（`${envTmp}/iface`；空 = 不镜像，读源码旁）
+  sesDir : String -- 当前依赖接口目录 key（base 绝对目录；空 = 尚未建立）
+  sesIfaces : List ModuleIface
+  sesAux : Maybe AuxCache -- check 路径的 termAux 预处理缓存
+  sesEvalAux : Maybe AuxCache -- interp 路径的缓存
+
+sessionNew : String -> Session
+sessionNew ifaceRoot = Session ifaceRoot "" [] Nothing Nothing
+
+-- 逃生开关：`VUNA_TEST_NO_SESSION=1` 强制回退 CLI 子进程（A/B 排查用）。
+sessionDisabled : Bool
+sessionDisabled = runIO (prim_getenv "VUNA_TEST_NO_SESSION") == "1"
+
+-- 与 `Compile.ifaceCompilerTag` 同口径：版本 + 编译器二进制指纹。
+ifaceTag : String
+ifaceTag = "${vunaVersion}/${strFromInt toolCompilerFingerprint}"
+
+dropLeadingSlash : String -> String
+dropLeadingSlash s = if startsWith "/" s then substring 1 (byteLength s) s else s
+
+-- 与 `Compile.ifaceBaseOf` 同一规则：设了镜像根时按包绝对目录镜像，否则接口与
+-- 源码同目录。runner 给子进程设的镜像根是 `${envTmp}/iface`（与这里同一个）。
+baseIfaceDir : String -> String -> String
+baseIfaceDir ifaceRoot baseDir =
+  if ifaceRoot == "" then baseDir else "${ifaceRoot}/${dropLeadingSlash baseDir}"
+
+-- 读 base 包接口（`readPackageIface` 内部已校验 schema 与编译器 tag）。
+readBaseIfaces : String -> String -> Maybe (List ModuleIface)
+readBaseIfaces ifaceRoot baseDir = case readPackageIface (baseIfaceDir ifaceRoot baseDir) ifaceTag of
+  Nothing => Nothing
+  Just pi => Just pi.piModules
+
+-- 会话可用性：命中缓存 → 直接用；否则读一次接口并写回（读失败 ⇒ Nothing）。
+ensureSession : IORef Session -> String -> Maybe (List ModuleIface)
+ensureSession ref baseDir =
+  let
+    s = runIO (readRef ref)
+  in if s.sesDir == baseDir && length s.sesIfaces > 0 then Just s.sesIfaces
+  else case readBaseIfaces s.sesRoot baseDir of
+    Nothing => Nothing
+    Just ifaces => if length ifaces == 0 then Nothing
+    else
+      let
+        _ = runIO (writeRef ref (Session s.sesRoot baseDir ifaces s.sesAux s.sesEvalAux))
+      in Just ifaces
+
+-- check：Just (0, "") = 通过；Just (1, 诊断) = 失败；Nothing = 会话不可用（回退 CLI）。
+sessionCheck : IORef Session -> String -> String -> Maybe (Pair Int String)
+sessionCheck ref baseDir source = if sessionDisabled then Nothing
+else case ensureSession ref baseDir of
+  Nothing => Nothing
+  Just ifaces => case contextForFile source of
+    Err _ => Nothing
+    Ok ctx => sessionCheckIn ref baseDir ctx ifaces source
+
+sessionCheckIn : IORef Session -> String -> PackageContext -> List ModuleIface -> String -> Maybe (Pair Int String)
+sessionCheckIn ref baseDir ctx ifaces source =
+  let
+    text = runIO (readFile source)
+    s = runIO (readRef ref)
+  in case dtCheckSourceIncremental ctx source text ifaces [] s.sesAux False of
+    Err e => Just (Pair 1 e)
+    Ok (Pair applied (Pair _ aux)) => if not applied then Nothing
+    else
+      let
+        _ = runIO (writeRef ref (Session s.sesRoot baseDir ifaces aux s.sesEvalAux))
+      in Just (Pair 0 "")
+
+-- interp：Just (0, 输出) = 求值成功（与 CLI 打印的 trim 后文本一致）；
+-- Just (1, 诊断) = 精化失败；Nothing = 会话不可用（回退 CLI）。
+sessionInterp : IORef Session -> String -> String -> Maybe (Pair Int String)
+sessionInterp ref baseDir source = if sessionDisabled then Nothing
+else case ensureSession ref baseDir of
+  Nothing => Nothing
+  Just ifaces => case contextForFile source of
+    Err _ => Nothing
+    Ok ctx => sessionInterpIn ref baseDir ctx ifaces source
+
+sessionInterpIn : IORef Session -> String -> PackageContext -> List ModuleIface -> String -> Maybe (Pair Int String)
+sessionInterpIn ref baseDir ctx ifaces source =
+  let
+    text = runIO (readFile source)
+    s = runIO (readRef ref)
+  in case dtEvalSourceIncremental ctx source text ifaces s.sesEvalAux of
+    Err e => Just (Pair 1 e)
+    Ok (Pair applied (Pair out aux)) => if not applied then Nothing
+    else
+      let
+        _ = runIO (writeRef ref (Session s.sesRoot baseDir ifaces s.sesAux aux))
+      in Just (Pair 0 out)

@@ -2,15 +2,18 @@
 set -u
 . "$(dirname "$0")/../lib/harness.sh"
 
-# 57) iface 布局（S8）：默认与源码同目录（`lib/Base/Int.vuna` 旁 `Int.iface` + 包级
-#     `.vuna-iface`）；`VUNA_IFACE_DIR` 覆盖时镜像到外部根，读侧两种布局都能消费。
+# 57) iface 布局（S8）：默认写在**构建产物目录** `<包目录>/.output/iface/<编译器指纹>/`
+#     （与 `.ml`/`.cmx` 同处，按指纹分桶避免 seed / 产品二进制 / 本地构建互相失效）；
+#     `VUNA_IFACE_DIR` 覆盖时镜像到外部根，读侧两种布局都能消费。
 iface_beside="$tmp/iface-beside"
 iface_beside_cache="$tmp/iface-beside-cache"
 cp -r "$VUNA_BASE" "$iface_beside"
 if ( unset VUNA_IFACE_DIR; TMPDIR="$iface_beside_cache" "$summ_vuna" check "$iface_beside" >/dev/null 2>&1 ); then
-  if [ -f "$iface_beside/lib/Base/Int.iface" ] && [ -f "$iface_beside/.vuna-iface" ]; then ok; else bad "iface beside source layout" "lib/Base/Int.iface + .vuna-iface" "missing under $iface_beside"; fi
+  iface_beside_int=$(find "$iface_beside/.output/iface" -name 'Int.iface' 2>/dev/null | head -1)
+  iface_beside_manifest=$(find "$iface_beside/.output/iface" -name '.vuna-iface' 2>/dev/null | head -1)
+  if [ -n "$iface_beside_int" ] && [ -n "$iface_beside_manifest" ]; then ok; else bad "iface under .output layout" ".output/iface/<tag>/lib/Base/Int.iface + .vuna-iface" "missing under $iface_beside/.output/iface"; fi
 else
-  bad "iface beside source check" "0" "check failed"
+  bad "iface under .output check" "0" "check failed"
 fi
 rm -rf "$iface_beside_cache"/vuna-cache/*/check
 iface_beside_log=$( unset VUNA_IFACE_DIR; TMPDIR="$iface_beside_cache" VUNA_IFACE_SELFTEST=1 "$summ_vuna" check "$iface_beside" --debug-perf 2>&1 )
@@ -24,7 +27,8 @@ iface_mirror_cache="$tmp/iface-mirror-cache"
 iface_mirror_base=$(mirror_under "$iface_mirror_root" "$VUNA_BASE")
 if TMPDIR="$iface_mirror_cache" VUNA_IFACE_DIR="$iface_mirror_root" "$summ_vuna" check "$VUNA_BASE" >/dev/null 2>&1 \
   && TMPDIR="$iface_mirror_cache" VUNA_IFACE_DIR="$iface_mirror_root" "$summ_vuna" check "$iface_mirror_pkg/dep" >/dev/null 2>&1; then
-  if [ -f "$iface_mirror_base/lib/Base/Int.iface" ] && [ -f "$iface_mirror_base/.vuna-iface" ]; then ok; else bad "iface mirror layout" "mirror lib/Base/Int.iface + .vuna-iface" "missing under $iface_mirror_base"; fi
+  iface_mirror_int=$(find "$iface_mirror_base/lib/Base" -name 'Int-*.iface' 2>/dev/null | head -1)
+  if [ -n "$iface_mirror_int" ] && [ -f "$iface_mirror_base/.vuna-iface" ]; then ok; else bad "iface mirror layout" "mirror lib/Base/Int-<hash>.iface + .vuna-iface" "missing under $iface_mirror_base"; fi
   iface_mirror_root_log=$(TMPDIR="$iface_mirror_cache" VUNA_IFACE_DIR="$iface_mirror_root" "$summ_vuna" check "$iface_mirror_pkg/root" --debug-perf 2>&1)
   check_contains "iface mirror dep consumed" "$iface_mirror_root_log" "cache-path=summary deps=2"
 else

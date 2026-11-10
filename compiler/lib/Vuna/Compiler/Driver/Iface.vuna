@@ -4,7 +4,9 @@ module Vuna.Compiler.Driver.Iface
   , PackageIface(..)
   , PackageManifest(..)
   , SourceInfo(..)
+  , hashOfIface
   , hashTextStrong
+  , ifaceMirrorMode
   , ifaceOfModule
   , ifaceOfPackage
   , ifaceRelPathOf
@@ -15,6 +17,7 @@ module Vuna.Compiler.Driver.Iface
   , meIfaceHashOfEntry
   , meImportsOfEntry
   , meNameOfEntry
+  , meOriginOfEntry
   , meSourceOfEntry
   , miCachedOf
   , miCapabilitiesOf
@@ -27,11 +30,13 @@ module Vuna.Compiler.Driver.Iface
   , miImportsOf
   , miNameOf
   , miPackageOf
+  , miPreparedOf
   , miSourceOf
   , moduleNamesOf
   , modulePathOf
   , packageIfaceValid
   , pmCompilerOf
+  , pmEnvOf
   , pmModulesOf
   , pmPackageOf
   , pmSchemaOf
@@ -63,9 +68,10 @@ module Vuna.Compiler.Driver.Iface
 --     `Codegen.*` 从 DtProgram 现生成）。
 --   - `miExports` / `miFixities` / imports / capabilities：加载器把依赖模块「当已加载模块」
 --     复用时需要的模块图数据（不读源码）。
---   - `miSource` / `miIfaceHash`：失效判定。`miIfaceHash` 只覆盖**接口面**（导出声明的
---     类型与体、data/ctor、实例、类、导出表、fixity、record 头），不含 span / 源路径，
---     因此实现变化（未导出体）与换行/路径变化不会误失效。
+--   - `miSource` / `miIfaceHash`：失效判定。`miIfaceHash` 覆盖**载荷全量语义面**
+--     （导出表、能力声明、imports、fixity、record 头、data/ctor、defs、globals、实例、
+--     类），只排除 span / 源路径，因此换行/注释/路径变化不会误失效；读方实际消费的任何
+--     字段都必须参与哈希，否则会出现「载荷变了、哈希没变」的陈旧复用（§44m/§44n）。
 --
 -- 物理布局（S3/S8）：接口文件与源码同布局 + 包级 `.vuna-iface`（模块名 → 相对路径 /
 -- 源信息 / 接口哈希）。默认接口文件就在源文件旁；`VUNA_IFACE_DIR` 覆盖时整体镜像到外部
@@ -79,6 +85,7 @@ import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Elab.Types
 import Vuna.Compiler.Elab.Prelude
 import Vuna.Compiler.Elab.Records
+import Vuna.Compiler.Elab.Derive
 import Vuna.Compiler.Driver.Cache
 import Vuna.Compiler.Debug
 import Vuna.Compiler.Driver.Owner
@@ -108,12 +115,20 @@ record ModuleIface where
   miExports : List ExportEntry
   miFixities : List FixityDecl
   miDecls : List Decl
+  -- 本模块 decls 的 prepared 形态（`prepareDeclsWith` + `expandDerivings` 之后），
+  -- 供包内增量的 `termAux` 直接拼接，免去每次 CLI 重跑干净模块的 record 降级 /
+  -- deriving 展开（那是「编辑一个模块后重建」的主要成本）。空表 = 无缓存/不完整，
+  -- 调用方回退 `dtPrepareTermAux`。有效性由模块自身的源哈希 + 依赖哈希链
+  -- （`miDepHashes`，clean 判定已包含）保证。
+  miPrepared : List Decl
   miCached : CachedProgram
 
 record PackageIface where
   piSchema : String
   piCompiler : String
   piPackage : String
+  -- 包级环境指纹（manifest 的 `pmEnv`）：包配置/依赖图变化时整包失效。
+  piEnv : Int
   piModules : List ModuleIface
 
 siPathOf : SourceInfo -> String
@@ -164,9 +179,34 @@ miFixitiesOf m = m.miFixities
 miDeclsOf : ModuleIface -> List Decl
 miDeclsOf m = m.miDecls
 
+miPreparedOf : ModuleIface -> List Decl
+miPreparedOf m = m.miPrepared
+
+-- 单模块的 prepared decls：aux = 同包其它模块的原始 decls + 入口声明。
+-- 只在整包写回（本包模块数 > 1）时计算：LSP/单模块写回只有部分上下文，算出的
+-- prepared 不完整 ⇒ 留空，让读侧回退整表 `dtPrepareTermAux`。
+preparedForModule : List Module -> List Decl -> String -> Maybe (List Decl)
+preparedForModule modules entryDecls name =
+  let
+    others = filter (\m => moduleNameOf m /= name) modules
+    own = concatMap (\m => if moduleNameOf m == name then moduleDeclsOf m else []) modules
+    auxDecls = append (concatMap moduleDeclsOf others) entryDecls
+  in if length modules <= 1 then Nothing
+  else case prepareDeclsWith auxDecls own of
+    Err _ => Nothing
+    Ok ds => case expandDerivings ds of
+      Err _ => Nothing
+      Ok ds2 => Just ds2
+
+setPrepared : List Decl -> ModuleIface -> ModuleIface
+setPrepared prepared mi =
+  ModuleIface mi.miName mi.miPackage mi.miSource mi.miIfaceHash mi.miDepHashes mi.miImports
+    mi.miImplicitImports mi.miCapabilities mi.miExports mi.miFixities mi.miDecls prepared
+    mi.miCached
+
 -- 接口格式版本：Marshal 布局或字段语义变化必须 bump（旧缓存自然失效）。
 ifaceSchema : String
-ifaceSchema = "vuna-iface 10"
+ifaceSchema = "vuna-iface 13"
 
 -- ---------------------------------------------------------------
 -- 哈希：接口哈希必须比 `strHash`（10 bit）强得多
@@ -308,6 +348,11 @@ exportKeyOf e = "${e.public}|${e.kind}|${e.target}"
 hashExports : List ExportEntry -> Int
 hashExports es = hashTextStrong (prim_marshal (sortByKey (\e => nameKey (exportKeyOf e)) es))
 
+-- 模块能力声明（`[capabilities]` 在模块头的可见面）：决定依赖方的特权检查，必须参与
+-- 接口哈希，否则升级/降级能力不会让依赖模块失效。
+hashCapabilities : List String -> Int
+hashCapabilities cs = hashTextStrong (prim_marshal (sortByKey (\s => hashTextStrong s) cs))
+
 -- fixity 带 span：只哈希语义字段（不因换行/路径变化失效）。
 fixityText : FixityDecl -> Int
 fixityText f = hashTextStrong "${f.fixityOp}|${f.fixityLevel}|${f.fixityAssoc}"
@@ -347,8 +392,8 @@ importNameText i = "${i.importName}|${importAliasText i}|${importQualifiedText i
 hashImports : List Import -> Int
 hashImports is = foldl (\acc, i => combineHash acc (hashTextStrong (importNameText i))) 0 is
 
-hashOfParts : String -> String -> List Import -> List Import -> List FixityDecl -> List Decl -> CachedProgram -> Int
-hashOfParts name pkg imports implicitImports fixities decls cp =
+hashOfParts : String -> String -> List Import -> List Import -> List FixityDecl -> List Decl -> List ExportEntry -> List String -> CachedProgram -> Int
+hashOfParts name pkg imports implicitImports fixities decls exports capabilities cp =
   let
     h0 = hashTextStrong "${name}|${pkg}"
     h1 = combineHash h0 (hashImports imports)
@@ -359,7 +404,17 @@ hashOfParts name pkg imports implicitImports fixities decls cp =
     h6 = combineHash h5 (hashDefs (cachedDefs cp))
     h7 = combineHash h6 (hashGlobals (cachedGlobals cp))
     h8 = combineHash h7 (hashInsts (cachedInsts cp))
-  in combineHash h8 (hashClasses (cachedClasses cp))
+    h9 = combineHash h8 (hashClasses (cachedClasses cp))
+    h10 = combineHash h9 (hashExports exports)
+  in combineHash h10 (hashCapabilities capabilities)
+
+-- 从已存载荷重算接口哈希（自证）：输入与写侧 `hashOfParts` 完全同源。用于发现
+-- 「载荷变了、`miIfaceHash` 没更新」的陈旧接口（`VUNA_IFACE_SELFTEST=1` 的读侧校验）。
+-- 成本 O(payload)，只放在自检/CI 路径，不进热路径。
+hashOfIface : ModuleIface -> Int
+hashOfIface m =
+  hashOfParts (miNameOf m) (miPackageOf m) (miImportsOf m) (miImplicitImportsOf m) (miFixitiesOf m)
+    (miDeclsOf m) (miExportsOf m) (miCapabilitiesOf m) (miCachedOf m)
 
 -- ---------------------------------------------------------------
 -- 归属索引（与 codegen 同一规则）：decl/data 表命中优先，带点名字回落模块前缀。
@@ -511,9 +566,9 @@ mkIfaceBase pkg parts prog sources clean m = case cleanIfaceOf clean (moduleName
       cp = cpOfModule parts prog name
       h =
         hashOfParts name pkg m.moduleImportsOf m.moduleImplicitImportsOf m.moduleFixitiesOf
-          m.moduleDeclsOf cp
+          m.moduleDeclsOf m.moduleExportsOf m.moduleCapabilities cp
     in ModuleIface name pkg (sourceOf sources name) h [] m.moduleImportsOf m.moduleImplicitImportsOf
-      m.moduleCapabilities m.moduleExportsOf m.moduleFixitiesOf m.moduleDeclsOf cp
+      m.moduleCapabilities m.moduleExportsOf m.moduleFixitiesOf m.moduleDeclsOf [] cp
 
 finishIface : List (Pair String Int) -> List ModuleIface -> Module -> ModuleIface -> ModuleIface
 finishIface tbl clean m mi = case cleanIfaceOf clean (miNameOf mi) of
@@ -521,7 +576,7 @@ finishIface tbl clean m mi = case cleanIfaceOf clean (miNameOf mi) of
   Nothing =>
     ModuleIface (miNameOf mi) (miPackageOf mi) (miSourceOf mi) (miIfaceHashOf mi)
       (depHashesOf tbl m) (miImportsOf mi) (miImplicitImportsOf mi) (miCapabilitiesOf mi)
-      (miExportsOf mi) (miFixitiesOf mi) (miDeclsOf mi) (miCachedOf mi)
+      (miExportsOf mi) (miFixitiesOf mi) (miDeclsOf mi) (miPreparedOf mi) (miCachedOf mi)
 
 ifacesGo : String -> ProgParts -> DtProgram -> List (Pair String SourceInfo) -> List (Pair String Int) -> List ModuleIface -> List Module -> Pair (List ModuleIface) (List (Pair String Int))
 ifacesGo pkg parts prog sources knownDeps clean modules =
@@ -671,7 +726,10 @@ ifaceOfModule pkg si knownDeps inherited clean modules entryDecls prog name =
         tbl =
           append knownDeps (map (\x => Pair (miNameOf x) (miIfaceHashOf x)) (append clean [mi0]))
         mi = finishIface tbl [] m mi0
-      in if moduleCoverageOk oi inherited name prog mi then Ok mi
+        miP = case preparedForModule ourModules entryDecls name of
+          Nothing => mi
+          Just decls => setPrepared decls mi
+      in if moduleCoverageOk oi inherited name prog miP then Ok miP
       else Err "iface: module ${name} has uncovered artifacts"
 
 -- 包接口自检：schema/编译器指纹由读侧校验；这里只检查模块集合非空 + 摘要闭合。
@@ -713,13 +771,30 @@ relUnder pkgDir path =
   else if startsWith "${pkg}/" p then strSubstring (strLength pkg + 1) (strLength p - strLength pkg - 1) p
   else ""
 
--- 接口文件相对路径：源相对路径把 `.vuna` 换成 `.iface`（与源码布局逐段一致）。
-ifaceRelPathOf : String -> SourceInfo -> String
-ifaceRelPathOf pkgDir si =
+-- 接口目录模式：`VUNA_IFACE_DIR` 非空 = 外部镜像根，用**内容寻址**文件名
+-- （`<stem>-<hash>.iface`），同一路径永远不可能承载两份不同内容；默认布局仍写源文件旁
+-- （命名 `<stem>.iface`，路径固定，读侧靠 `miName` + `miIfaceHash` 校验）。
+ifaceMirrorMode : Bool
+ifaceMirrorMode = runIO (prim_getenv "VUNA_IFACE_DIR") /= ""
+
+-- 内容寻址 token：非负、纯数字（文件名安全；与 Compile 的 `hashText` 同口径）。
+ifaceHashToken : Int -> String
+ifaceHashToken n =
+  let
+    m = 1000000007
+    r = n - n / m * m
+  in strFromInt (if r < 0 then r + m else r)
+
+-- 接口文件相对路径：源相对路径把 `.vuna` 换成 `.iface`（默认），镜像模式再插入内容哈希。
+ifaceRelPathOf : Int -> String -> SourceInfo -> String
+ifaceRelPathOf h pkgDir si =
   let
     rel = relUnder pkgDir (siPathOf si)
-  in if rel == "" then ""
-  else if endsWith ".vuna" rel then "${strSubstring 0 (strLength rel - 5) rel}.iface" else "${rel}.iface"
+    stem =
+      if rel == "" then ""
+      else if endsWith ".vuna" rel then strSubstring 0 (strLength rel - 5) rel else rel
+  in if stem == "" then ""
+  else if ifaceMirrorMode then "${stem}-${ifaceHashToken h}.iface" else "${stem}.iface"
 
 -- manifest 里的文件路径来自磁盘缓存（可能被篡改）：只接受相对路径、无 `..` 段、`.iface` 后缀。
 validIfaceRelPath : String -> Bool
@@ -739,44 +814,58 @@ record ManifestEntry where
   -- S7：直接 import 的模块名（含隐式 import）。manifest 自带 import 闭包，工具链可按需
   -- 只读需要的模块接口（不必先读全包文件）。
   meImports : List String
+  -- 产物来源：`"pkg"` = 整包 check/build 写入；`"tool"` = LSP/REPL 单模块写回。
+  -- 命令行 check/build 只信任 `"pkg"`（工具产物可能来自部分上下文的增量精化，
+  -- 哈希漂移不能靠源哈希发现）；工具链自己两者都接受（§44p）。
+  meOrigin : String
 
 record PackageManifest where
   pmSchema : String
   pmCompiler : String
   pmPackage : String
+  -- 包级环境指纹：自身 `vuna.toml` 内容 + 传递依赖（名字 / 目录 / toml 内容）+
+  -- 编译器标签。`[capabilities]` / `[trust]` / `[dependencies]` 等变化不体现在模块源
+  -- 文件哈希里，必须靠它整包判脏（§44o）。
+  pmEnv : Int
   pmModules : List ManifestEntry
 
 -- S7（manifest 访问器）：构造函数已导出；这里给 Compile 的按需读路径一套只读访问器，
 -- 避免跨模块直接依赖 record 投影语法。
 meNameOfEntry : ManifestEntry -> String
-meNameOfEntry (ManifestEntry n f s h d im) = n
+meNameOfEntry (ManifestEntry n f s h d im o) = n
 
 meFileOfEntry : ManifestEntry -> String
-meFileOfEntry (ManifestEntry n f s h d im) = f
+meFileOfEntry (ManifestEntry n f s h d im o) = f
 
 meSourceOfEntry : ManifestEntry -> SourceInfo
-meSourceOfEntry (ManifestEntry n f s h d im) = s
+meSourceOfEntry (ManifestEntry n f s h d im o) = s
 
 meIfaceHashOfEntry : ManifestEntry -> Int
-meIfaceHashOfEntry (ManifestEntry n f s h d im) = h
+meIfaceHashOfEntry (ManifestEntry n f s h d im o) = h
 
 meDepsOfEntry : ManifestEntry -> List (Pair String Int)
-meDepsOfEntry (ManifestEntry n f s h d im) = d
+meDepsOfEntry (ManifestEntry n f s h d im o) = d
 
 meImportsOfEntry : ManifestEntry -> List String
-meImportsOfEntry (ManifestEntry n f s h d im) = im
+meImportsOfEntry (ManifestEntry n f s h d im o) = im
+
+meOriginOfEntry : ManifestEntry -> String
+meOriginOfEntry (ManifestEntry n f s h d im o) = o
 
 pmSchemaOf : PackageManifest -> String
-pmSchemaOf (PackageManifest s c p ms) = s
+pmSchemaOf (PackageManifest s c p e ms) = s
 
 pmCompilerOf : PackageManifest -> String
-pmCompilerOf (PackageManifest s c p ms) = c
+pmCompilerOf (PackageManifest s c p e ms) = c
 
 pmPackageOf : PackageManifest -> String
-pmPackageOf (PackageManifest s c p ms) = p
+pmPackageOf (PackageManifest s c p e ms) = p
+
+pmEnvOf : PackageManifest -> Int
+pmEnvOf (PackageManifest s c p e ms) = e
 
 pmModulesOf : PackageManifest -> List ManifestEntry
-pmModulesOf (PackageManifest s c p ms) = ms
+pmModulesOf (PackageManifest s c p e ms) = ms
 
 manifestPathOf : String -> String
 manifestPathOf dir = "${dir}/${manifestFileName}"
@@ -828,11 +917,14 @@ writeManifest dir compiler mf =
   in if runIO (prim_fileExists path) then if runIO (prim_readFile path) == payload then 0 else runIO (prim_writeFileAtomic path payload)
   else runIO (prim_writeFileAtomic path payload)
 
+manifestEntryOfWith : String -> String -> ModuleIface -> ManifestEntry
+manifestEntryOfWith origin pkgDir m =
+  ManifestEntry (miNameOf m) (ifaceRelPathOf (miIfaceHashOf m) pkgDir (miSourceOf m)) (miSourceOf m)
+    (miIfaceHashOf m) (miDepHashesOf m)
+    (append (map importNameOf (miImportsOf m)) (map importNameOf (miImplicitImportsOf m))) origin
+
 manifestEntryOf : String -> ModuleIface -> ManifestEntry
-manifestEntryOf pkgDir m =
-  ManifestEntry (miNameOf m) (ifaceRelPathOf pkgDir (miSourceOf m)) (miSourceOf m) (miIfaceHashOf m)
-    (miDepHashesOf m)
-    (append (map importNameOf (miImportsOf m)) (map importNameOf (miImplicitImportsOf m)))
+manifestEntryOf = manifestEntryOfWith "pkg"
 
 oldEntryOf : List ManifestEntry -> String -> Maybe ManifestEntry
 oldEntryOf [] _ = Nothing
@@ -849,12 +941,12 @@ depListIn ((Pair n h) :: rest) ys = case lookupPair n ys of
 
 -- 写判定同时看「接口哈希」与「依赖哈希」：依赖哈希不进 `miIfaceHash`（与 TTC 一致），
 -- 但过期后必须重写文件，否则依赖者会永远被判定脏（每次重精化却写不出新依赖表）。
-writeModules : String -> String -> String -> List ManifestEntry -> List ModuleIface -> Int
-writeModules dir compiler pkgDir old [] = 0
-writeModules dir compiler pkgDir old (m :: rest) =
+writeModules : String -> String -> String -> String -> List ManifestEntry -> List ModuleIface -> Int
+writeModules dir compiler pkgDir origin old [] = 0
+writeModules dir compiler pkgDir origin old (m :: rest) =
   let
-    file = meFileOfEntry (manifestEntryOf pkgDir m)
-  in if file == "" then writeModules dir compiler pkgDir old rest
+    file = meFileOfEntry (manifestEntryOfWith origin pkgDir m)
+  in if file == "" then writeModules dir compiler pkgDir origin old rest
   else
     let
       path = modulePathOf dir file
@@ -862,6 +954,7 @@ writeModules dir compiler pkgDir old (m :: rest) =
         Just e =>
           e.meIfaceHash == miIfaceHashOf m
             && depListsSame e.meDeps (miDepHashesOf m)
+            && e.meOrigin == origin
             && runIO (prim_fileExists path)
         Nothing => False
       n = if unchanged then 0
@@ -869,7 +962,7 @@ writeModules dir compiler pkgDir old (m :: rest) =
         let
           _ = runIO (prim_writeFileAtomic path (encodeIfaceFile compiler (prim_marshal m)))
         in 1
-    in n + writeModules dir compiler pkgDir old rest
+    in n + writeModules dir compiler pkgDir origin old rest
 
 -- 单模块接口写回（M34.6 5a）：只重写 `mi` 对应的模块文件，并把 manifest 里的同名条目
 -- 替换/追加（**保留其余条目**，不整包重写）。manifest 最后原子写 = 提交点；读侧对旧条目
@@ -885,10 +978,10 @@ entryNameIn : List ManifestEntry -> String -> Bool
 entryNameIn [] _ = False
 entryNameIn (e :: rest) name = meNameOfEntry e == name || entryNameIn rest name
 
-writeModuleIfaceMerge : String -> String -> String -> String -> ModuleIface -> Int
-writeModuleIfaceMerge dir compiler pkg pkgDir mi =
+writeModuleIfaceMerge : String -> String -> String -> String -> Int -> String -> ModuleIface -> Int
+writeModuleIfaceMerge dir compiler pkg pkgDir env origin mi =
   let
-    entry = manifestEntryOf pkgDir mi
+    entry = manifestEntryOfWith origin pkgDir mi
     file = meFileOfEntry entry
   in if file == "" then 0
   else
@@ -902,25 +995,36 @@ writeModuleIfaceMerge dir compiler pkg pkgDir mi =
       _ =
         runIO
           (prim_writeFileAtomic (modulePathOf dir file) (encodeIfaceFile compiler (prim_marshal mi)))
-      _ = writeManifest dir compiler (PackageManifest ifaceSchema compiler pkg merged)
+      _ = writeManifest dir compiler (PackageManifest ifaceSchema compiler pkg env merged)
     in 1
 
-writePackageIface : String -> String -> String -> String -> List ModuleIface -> Int
-writePackageIface dir compiler pkg pkgDir modules =
+writePackageIface : String -> String -> String -> String -> Int -> List ModuleIface -> Int
+writePackageIface dir compiler pkg pkgDir env modules =
   let
     -- 只有「整包接口可完整读回」时才信任旧 manifest 做按模块跳过；损坏/缺文件的旧接口
     -- 会让读侧回退全量，这里必须强制全量重写，否则损坏文件永远不被覆盖。
+    -- 条目取磁盘原始值（保留 `meOrigin`）：工具写回的条目即使内容未变也要改标 `pkg`。
     oldEntries = case readPackageIface dir compiler of
-      Just pi => map (manifestEntryOf pkgDir) pi.piModules
+      Just _ => case readManifest dir compiler of
+        Just mf => pmModulesOf mf
+        Nothing => []
       Nothing => []
-    written = writeModules dir compiler pkgDir oldEntries modules
-    mf = PackageManifest ifaceSchema compiler pkg (map (manifestEntryOf pkgDir) modules)
+    written = writeModules dir compiler pkgDir "pkg" oldEntries modules
+    mf = PackageManifest ifaceSchema compiler pkg env (map (manifestEntryOf pkgDir) modules)
     _ = writeManifest dir compiler mf
   in written
 
+-- 镜像模式下条目文件名必须带**它自己的**接口哈希 token：防止「manifest 记录 A、文件
+-- 实际是 B 的内容」这类错位（默认布局没有 token，靠载荷内的 miName/miIfaceHash 校验）。
+ifaceFileTokenOk : ManifestEntry -> Bool
+ifaceFileTokenOk e =
+  if ifaceMirrorMode then endsWith "-${ifaceHashToken (meIfaceHashOfEntry e)}.iface" (meFileOfEntry e)
+  else True
+
 readModuleFile : String -> String -> ManifestEntry -> Maybe ModuleIface
 readModuleFile dir compiler e =
-  if not (validIfaceRelPath (meFileOfEntry e)) then Nothing else readModuleFileRaw dir compiler e
+  if not (validIfaceRelPath (meFileOfEntry e)) then Nothing
+  else if not (ifaceFileTokenOk e) then Nothing else readModuleFileRaw dir compiler e
 
 readModuleFileRaw : String -> String -> ManifestEntry -> Maybe ModuleIface
 readModuleFileRaw dir compiler e =
@@ -949,7 +1053,7 @@ readModuleFiles dir compiler (e :: rest) = case readModuleFile dir compiler e of
 readPackageIface : String -> String -> Maybe PackageIface
 readPackageIface dir compiler = case readManifest dir compiler of
   Just mf => if mf.pmSchema == ifaceSchema && mf.pmCompiler == compiler then case readModuleFiles dir compiler mf.pmModules of
-    Just modules => Just (PackageIface mf.pmSchema mf.pmCompiler mf.pmPackage modules)
+    Just modules => Just (PackageIface mf.pmSchema mf.pmCompiler mf.pmPackage mf.pmEnv modules)
     Nothing => Nothing
   else Nothing
   Nothing => Nothing

@@ -27,6 +27,7 @@ module Vuna.Compiler.Elab.Driver
   , goalsOfProgram
   , goalsOfProgramTolerant
   , hasFunClause
+  , maybeAddHasFieldInstances
   , metaOwnerHint
   , resolveDictGoalsFix
   , rezonkDefs

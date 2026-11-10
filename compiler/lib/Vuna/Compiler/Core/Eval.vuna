@@ -52,6 +52,7 @@ module Vuna.Compiler.Core.Eval
   , substSolvedMetasAt
   , substSolvedMetasAtGo
   , substSolvedMetasAtTbl
+  , valueEqFuel
   , varIndex
   ) where
 
@@ -515,23 +516,36 @@ valueListEqFuel fuel (a :: arest) (b :: brest) = case valueEqFuel fuel a b of
   Nothing => Nothing
 valueListEqFuel fuel _ _ = Just False
 
-rowRemReduce : HashMap String Term -> Sols -> Int -> Value -> Value -> Maybe Value
-rowRemReduce defs sols fuel e r = if fuel <= 0 then Nothing
+-- 命名行（native-effects ND1）：`rowRem n e r` 按 (名字, 标签) 双匹配删除条目。
+-- 名字或条目名字是未解 meta 时卡住（Nothing）：等名字槽求解后由 force/重推归约；
+-- 不做「只匹配标签」的贪婪删除，否则 `[ConsoleOp@mock, ConsoleOp@audit]` 会删错条目。
+rowRemReduce : HashMap String Term -> Sols -> Int -> Value -> Value -> Value -> Maybe Value
+rowRemReduce defs sols fuel n e r = if fuel <= 0 then Nothing
+else if hasUnsolvedMetaValue sols n then Nothing
 else case force defs sols (fuel - 1) r of
-  VCon consName (h :: t :: _) => if consName == effRowConsCtor then case valueEqFuel (fuel - 1) e h of
-    Just True => Just t
-    Just False => case rowRemReduce defs sols (fuel - 1) e t of
-      Just t2 => Just (VCon effRowConsCtor [h, t2])
+  VCon consName args => if consName == effRowNilCtor then Just (VCon effRowNilCtor [])
+  else if consName == effRowConsCtor then case args of
+    n1 :: h :: t :: _ => if hasUnsolvedMetaValue sols n1 then Nothing
+    else case valueEqFuel (fuel - 1) n n1 of
       Nothing => Nothing
-    Nothing => Nothing
+      Just False => case rowRemReduce defs sols (fuel - 1) n e t of
+        Just t2 => Just (VCon effRowConsCtor [n1, h, t2])
+        Nothing => Nothing
+      Just True => case valueEqFuel (fuel - 1) e h of
+        Just True => Just t
+        Just False => case rowRemReduce defs sols (fuel - 1) n e t of
+          Just t2 => Just (VCon effRowConsCtor [n1, h, t2])
+          Nothing => Nothing
+        Nothing => Nothing
+    _ => Nothing
   else Nothing
-  VCon nilName _ => if nilName == effRowNilCtor then Just (VCon effRowNilCtor []) else Nothing
   _ => Nothing
 
 primReduce : HashMap String Term -> Sols -> Int -> String -> List Value -> Maybe Value
 primReduce defs sols fuel g sp = if fuel <= 0 then Nothing
 else if g == effRowRemName then case sp of
-  e :: r :: _ => rowRemReduce defs sols (fuel - 1) e r
+  -- 命名行（ND1）：`rowRem n e r` 是唯一形状；单 Cons 分支（debt D53 规避）。
+  n :: e :: r :: _ => rowRemReduce defs sols (fuel - 1) n e r
   _ => Nothing
 else case findIntrinsic g of
   Just i => case i.intrinsicOp of

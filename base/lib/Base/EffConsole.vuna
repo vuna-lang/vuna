@@ -36,16 +36,16 @@ resConsole : ConsoleOp -> Type
 resConsole (Print s) = Nat
 resConsole (EPrint s) = Int
 
--- | 通过命名实例 `n` 发送 `Print`；返回写入字节数（`Nat`）。行里需要 `Member (Console n) r` 证明（由精化器按行结构构造）。
-consolePrint : (n : String) -> String -> {r : Row} -> {w : Member (Console n) r} -> Eff r Nat
+-- | 通过命名实例 `n` 发送 `Print`；返回写入字节数（`Nat`）。行里需要 `Member n (Console n) r` 证明（由精化器按行结构构造）。
+consolePrint : (n : String) -> String -> {r : Row} -> {w : Member n (Console n) r} -> Eff r Nat
 consolePrint n s = sendCore (Console n) "console" n (Print s)
 
 -- | 通过命名实例 `n` 发送 `EPrint`（stderr）；其余同 `consolePrint`。
-consoleEprint : (n : String) -> String -> {r : Row} -> {w : Member (Console n) r} -> Eff r Int
+consoleEprint : (n : String) -> String -> {r : Row} -> {w : Member n (Console n) r} -> Eff r Int
 consoleEprint n s = sendCore (Console n) "console" n (EPrint s)
 
 -- | 一阶 handler：`ret` 处理正常返回、`opH` 解释每个操作，结果行删除 `Console n`。`(key, name)` 与对应的 send 匹配。
-handleConsole : {a : Type} -> {b : Type} -> {r : Row} -> (n : String) -> {w : Member (Console n) r} -> (a -> b) -> ((o : ConsoleOp) -> (resConsole o -> b) -> b) -> Eff r a -> Eff (Base.Eff.rowRem (Console n) r) b
+handleConsole : {a : Type} -> {b : Type} -> {r : Row} -> (n : String) -> {w : Member n (Console n) r} -> (a -> b) -> ((o : ConsoleOp) -> (resConsole o -> b) -> b) -> Eff r a -> Eff (Base.Eff.rowRem n (Console n) r) b
 handleConsole n ret opH comp = handleCore (Console n) "console" n ret opH comp
 
 -- 真实 handler 的 op 解释：answer 里直接执行 IO 动作。
@@ -61,7 +61,7 @@ consoleOpHIO op k = case op of
 
 -- IO-backed handler：结果行删除 Console n，answer 是 IO 动作，可用 `runIOAnswer` 执行。
 -- | IO-backed handler：结果行删除 `Console n`，answer 是 IO 动作，可直接交给 `runIOAnswer` 执行。
-handleConsoleIO : {a : Type} -> {r : Row} -> (n : String) -> Eff (Base.Eff.Cons (Console n) r) a -> Eff r (IO a)
+handleConsoleIO : {a : Type} -> {r : Row} -> (n : String) -> Eff (Base.Eff.Cons n (Console n) r) a -> Eff r (IO a)
 handleConsoleIO n comp = handleConsole n (\a => pure a) consoleOpHIO comp
 
 -- | 单效应便捷入口（P3）：`handleConsoleIO n` + `runIOAnswer` 的组合。

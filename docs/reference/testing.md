@@ -26,24 +26,43 @@ vuna test --suite test/suite.toml --json          # 机器可读汇总
 `--jobs auto`（默认）= 探测到的全部可用核（`VUNA_TEST_JOBS` 可覆盖，`--jobs N` 显式）。
 CLI 子进程各自带独立 `TMPDIR`/`VUNA_IFACE_DIR`，避免并行时写同一份 iface/缓存。
 
+### 阶段矩阵：期望文件后缀
+
+夹具的阶段参与由**期望文件后缀**表达（`<base>.<stage>.<artifact>`），family 旗标只是
+各阶段的上限（关掉即不跑）。文件型夹具的 base 是 `*.vuna` 去掉扩展名；目录型夹具用
+`expected.*`：
+
+| 期望文件 | 语义 |
+| --- | --- |
+| `<base>.check.err` | check 必须 fail，诊断含该片段（裸 `.err` 是兼容形态） |
+| `<base>.interp.out` | 只跑 interp golden（无 compile/run） |
+| `<base>.interp.err` | interp 必须 fail（片段） |
+| `<base>.compile.err` | compile 必须 fail（片段；裸 `.cerr` 是兼容形态） |
+| `<base>.run.out` | 只做 compile+build+run golden（原 `.nointerp` 场景） |
+| `<base>.run.err` | 产物运行期错误片段；退出码断言非 0 |
+| `<base>.run.exit` | 期望退出码（n=0 断言恰好 0；n>0 断言恰好 n） |
+| `<base>.out` | **共享** golden：interp 与 compile+run 都开，断言输出一致 |
+
+矛盾组合显式失败（CBroken），不静默跳过：golden（`.out`/`.interp.out`/`.run.out`）与
+error（`.check.err`/…）并存、`.check.err` 与 `.interp.err` 并存、`.run.out` 与
+`.run.err`/`.run.exit` 并存、family 关掉某阶段但夹具带该阶段期望。无任何期望文件也是
+CBroken。原 `<base>.vuna.nointerp` 旁标记已删除——它的语义由「有 run 期望而无 interp
+期望」自然表达。
+
 ### case 类型与语义
 
 | kind | 语义 |
 | --- | --- |
-| `golden` | 可选 `interp` vs `.out`；`check` exit 0；`compile` + `build.sh` + 运行 vs `.out`；`interp == run`；`.nointerp` 只跑编译产物 |
-| `error` | `.err`（必要时 `.cerr`）片段；`interp/check/compile` 非 0、含片段、不写输出目录 |
+| `auto` | 按期望文件后缀推导 golden/error/runtime（见上表）；缺期望文件 CBroken |
+| `golden` / `error` | 与 auto 同一推导路径（kind 只剩语义提示） |
+| `check-ok` | 只跑 `vuna check`，必须 exit 0 |
+| `check-error` | check 必须 fail（片段） |
 | `CSection` | 执行 `test/suite/sections/NN.sh`；退出码 + 章节自己的 `N checks` 汇总 |
-| `CCheck` | 只跑 `vuna check` 的正/负例；负例比对 `.err` 片段 |
 | `CLint` | `vuna lint` 输出 vs `.out` + 期望退出码 |
 | `CFix` | `vuna lint --fix` 后内容 vs `.expected`，并验证幂等 |
-| `CRuntime` | 编译产物运行期错误：片段 + 非 0/指定退出码 |
+| `CRuntime` | compile+build+run：片段（可选）+ 退出码（`.run.err`/`.run.exit`） |
 | `CSeed` | 用 `VUNA_SEED` 编译运行，验证 seed 冒烟 |
-| `CNointerp` | 扫描带 `.nointerp` 标记的夹具，确认 `interp` 拒绝 |
-| `CBroken` | family/discovery 失败（缺 expected、目录不存在等），显式失败而不是静默跳过 |
-
-`[family.*]` 的 `kind = "auto"` 按磁盘上存在的 `<base>.out` / `<base>.err`（目录型是
-`expected.out` / `expected.err`）判定 golden/error；显式 `kind`/`expected` 可覆盖。
-family 的 `interp/check/compile/run/compare_interp` 是每类 case 的断言开关。
+| `CBroken` | discovery 失败（缺期望文件、矛盾组合、目录不存在等），显式失败而不是静默跳过 |
 
 ### 执行模型
 
@@ -69,6 +88,20 @@ family 的 `interp/check/compile/run/compare_interp` 是每类 case 的断言开
 - `test/run-tests.sh` 与 `nix/run-tests.sh` 已删除；旧章节脚本可在 `test/suite/sections/`
   查看，后续逐段转成 family/cli case。
 
+### iface 判据回归（§44m–§44p）
+
+摘要路径的正确性不再只靠「诊断逐字节一致」的间接证据，§44 另有一组针对判据本身的回归：
+
+| 断言 | 覆盖的判据 |
+| --- | --- |
+| §44m | `exports` 进 `miIfaceHash`：依赖隐藏调用方用到的导出名 ⇒ 依赖方判脏；摘要与全量给出同一诊断 |
+| §44n | `pmEnv` 包级环境指纹：改 `vuna.toml`（不进模块源哈希）⇒ `iface-reject=own-env`，重算后收敛 |
+| §44o | 镜像模式内容寻址 + 孤儿 GC：实现变化产生新 token 文件，旧 token 在 60s 窗口外被删 |
+| §44p | `meOrigin` 隔离：LSP 冷启动写回标 `tool`，命令行 check 拒绝（`iface-reject=tool-origin`），下一次整包写回归 `pkg` |
+
+基础开关：`VUNA_IFACE_AUDIT=1`（同一进程跑摘要 + 全量、逐字节比较、不一致即失败且不落盘）、
+`VUNA_IFACE_SELFTEST=1`（写侧读回 + `hashOfIface` 载荷自证）。CI 建议两者都开。
+
 ### 超时
 
 | 层 | 控制 | 默认 | 行为 |
@@ -93,16 +126,66 @@ vuna test --suite test/suite.toml --cache-dir DIR   # 覆盖本地结果缓存�
   夹具变更只跑对应 family case 与引用该目录的 section；无变更时不跑 case。
 - `--last-failed`：失败 case id 写到 `.local/test-suite/last-failed`，重跑时按 id 过滤；
   空结果不会清空已有失败列表。
-- `--bless`：golden 失败时把实际输出写回对应 `.out`，并打印 `blessed`；不处理 `.err`/`.cerr`。
+- `--bless`：golden 失败时把实际输出写回对应 `.out`，并打印 `blessed`；不处理 `.check.err`/`.compile.err`。
 - `--watch`：首次跑完后每 500ms 比较 suite/corpus/工具链源码 mtime，变化即重跑。
 - `--cache-dir DIR`：覆盖 `.local/test-cache`；worker 继承同一目录。
 - `--strict-skips`：`--fail-fast` 跳过的 case 计为失败（CI 使用）。
 - `--audit`：扫描 `test/corpus` 的 `.vuna`，未被 family case 或 section 脚本引用的夹具列出
   并 exit 1；`test/corpus/codegen` 是 metrics 固定输入，显式排除。
 
-family discovery 对目录里每个夹具要求 `.out`/`.err` 或目录型 `expected.*`；缺期望文件会
-生成 `CBroken` case 并失败（防改名/放错目录静默漏跑）。旧章节的
-`assert_min_section_checks` 仍在脚本里保留，等该段转声明式后由 case/断言计数替代。
+family discovery 对目录里每个夹具要求一个期望文件（阶段限定后缀或兼容裸后缀；目录型是
+`expected.*`）；缺期望文件或矛盾组合生成 `CBroken` case 并失败（防改名/放错目录静默
+漏跑）。
+
+**默认护栏**（不依赖 `--audit` 手动开关，跑 suite 就生效）：
+
+- `audit/orphans`：已声明 family 目录里的每个夹具必须与某个 case 的 source 精确对应，
+  否则注入一个失败 case。旧的 `--audit` 仍保留全 corpus 的宽松报告（section 脚本里
+  提到目录名就算认领），两者互不替代。
+- `audit/min-cases`：`[suite] min_cases = 600` 是 case 总数下限。整族从 `suite.toml`
+  消失时，孤儿审计连目录都看不到了，只有总数骤降能兜住这类「少跑 case 却全绿」。
+  新增夹具无需调整；批量删除夹具时同步下调。
+
+局部运行（`--only` / `--filter`）会把这两个审计 case 一起过滤掉，符合预期。
+
+### 进程内精化会话（golden 的 check / interp）
+
+golden 正例的 `check` / `interp` 断言走**进程内会话**（`lib/Vuna/Test/Session.vuna`）：
+
+- 每个 worker 启动时用 `vuna check <base>` 把 base 的模块接口灌进**会话专用**镜像
+  `${envTmp}/iface-session`（`vuna check` 会写接口，`compile`/单文件 `check` 不写）；
+- 会话持有 `List ModuleIface` + 增量精化的 `AuxCache`，每个夹具只精化自己的入口
+  （走 `Dt.dtCheckSourceIncremental` / `Dt.dtEvalSourceIncremental`，即 LSP 诊断的
+  同一条路径），不再重精化整棵 base；
+- **接口镜像与子进程隔离**：子进程仍用 `${envTmp}/iface`（通常为空 ⇒ 全量精化），
+  保证 `compile`/`build` 的语义与诊断顺序不受工具侧增量路径影响（增量路径与全量
+  在 `deriving via field` 上仍有差异，属已知边界）；
+- 接口缺失 / tag 不符 / 增量自检 `applied = False` ⇒ 回退 CLI 子进程，语义与
+  文本不变；`VUNA_TEST_NO_SESSION=1` 可强制回退（A/B 排查用）。
+
+收益：golden 的两个子进程（各 ~100ms：进程启动 + 重精化 base）变成进程内 ~10ms；
+全量 suite 约省 10%（实测 101s → 90s）。负例（`.check.err` / `.compile.err`）仍走
+CLI，保证片段匹配语义完全一致。
+
+### 增量构建桶（跨 run 持久）
+
+golden/runtime case 的 codegen 产物按「生成模块集」分桶（`set-<key>`），桶放在
+`--cache-dir`（默认 `.local/test-cache`）下的
+`build/<worker 作用域>-<编译器指纹>-<base 哈希>/`：
+
+- 同 run 内：只有 `Main.ml` 变化 ⇒ `build.sh` 内容哈希 stamp 只重编它 + 链接；
+- **跨 run**：base 的 25 个单元 `.cmx` 直接复用，本地重跑不再付「每 worker 首次
+  整棵 base 冷编译」；
+- 桶名含编译器指纹与 base 哈希，编译器/base 变了自动换桶（不会读到陈旧产物）；
+- 并发注意：两个 suite 同时用同一 worker 号会写同一桶（内容哈希 stamp 会退化为
+  重编，极端情况下互相踩写）；并发跑时给其中一个传 `--cache-dir` 隔离。
+
+实测（`--no-cache --jobs 8`，全量 4027 checks）：首次 122.7s，之后每次 93.6s
+（约 -24%）。`Compile.cacheBase` 另有 `VUNA_CACHE_DIR` 覆盖（默认
+`$TMPDIR/vuna-cache`），供 CI 显式指定 split/unit 缓存位置；runner 不设置它——
+实测把 split 缓存塞进同一桶会因首次填充变慢。
+旧章节的 `assert_min_section_checks` 仍在脚本里保留，等该段转声明式后由
+case/断言计数替代。
 
 ## corpus 的包上下文与 `VUNA_BASE`
 
@@ -128,17 +211,13 @@ family discovery 对目录里每个夹具要求 `.out`/`.err` 或目录型 `expe
 ## corpus 分类
 
 语言夹具只走 DT：`interp`（DT 精化 + 核心求值）、`check`、`compile` + ocamlopt。
-`<base>.vuna.nointerp` 标记跳过 interp 对拍，只做 `compile` + 运行，用于效果程序
-（`main : IO a`）与核心求值器不可归约的夹具（`strUnpack` / `strPack` / `strConcatMany` /
-`strSubstTemplate`；这些内建的 interp 不归约是显式分类）。当前 `.nointerp` 包括 `dt/34`、
-`dt/35`、`dt/56`、`dt_base/01`–`03`/`06`/`09`/`10`、`dt_base/16`–`18`、`dt_base/20`–`38`
-（效果、W9 调度器、W10 标签与收尾）、`run/10`/`16`/`17`、`stdlib/03`/`07`/`09`/`10`。
-第 43 段对每个标记夹具跑一次 `interp`，断言**非 0（明确拒绝：效果不可执行或不归约为
-值）**；`.nocompile` 死标记已从 runner 删除。负例 `.err` 是稳定诊断子串，interp / compile
-文案不同时用 `.cerr`。
+「只 compile+run、不做 interp 对拍」的夹具（效果程序 `main : IO a`，以及核心求值器不可
+归约的夹具：`strUnpack` / `strPack` / `strConcatMany` / `strSubstTemplate`）用
+`<base>.run.out` 表达（原 `.nointerp` 旁标记已删除）。负例 `.check.err` 是稳定诊断子串，
+interp / compile 文案不同时用 `.compile.err`。
 
 - `corpus/run/*.vuna`：`interp` 输出 vs `.out` golden；`compile` → ocamlopt → 运行再比对；
-  `.nointerp`（`10_string_pack`、`16_file_exists`、`17_file_meta`）只跑后者；
+  `.run.out`（`10_string_pack`、`16_file_exists`、`17_file_meta`）只做 compile+run；
   `18_int_overflow` / `19_string_utf8` / `20_str_hash` 是纯值语义 golden；
 - `corpus/modules/` 01–31 正例：跨模块函数 / 数据 / 嵌套 import 的 `interp` 与 `compile`
   结果（原“多根”夹具已迁移为**同包多模块**夹具，Helper 在 `lib/`；不再有“多根”概念）；
@@ -171,7 +250,7 @@ family discovery 对目录里每个夹具要求 `.out`/`.err` 或目录型 `expe
   `bindPair : m a -> m b -> m (Pair a b)`；`04_kind_generic`（多隐式参数字典）check /
   interp / compile+运行三路全过；错误例覆盖 kind 不符、无 Monad、do 结尾 / 绑定模式非法；
 - `corpus/stdlib/`：`Base.*` 与 do/IO 正例、错误例；效果夹具 `03_do_io`、`09_io`、
-  `10_package` 与 `strUnpack`/`strPack` 的 `07_string` 带 `.nointerp`；另有
+  `10_package` 与 `strUnpack`/`strPack` 的 `07_string` 用 `.run.out`；另有
   `test/corpus/fmt/check.sh` 覆盖格式化 golden、注释保留、行宽折行、模块头导出列表排序、
   `where` 签名行与幂等；
 - `corpus/packages/`：`build` / `test` 的 workspace 正例与缺依赖、依赖环、隐藏模块错误例；
@@ -187,7 +266,7 @@ family discovery 对目录里每个夹具要求 `.out`/`.err` 或目录型 `expe
 - `corpus/err/`、`corpus/run_err/`：解析 / 求值错误片段；`run_err` 的 `.err` 是 DT 诊断
   子串（非穷尽、if 条件类型、参数过多、clause 数不匹配、let 绑定模式等），
   `03_div_zero` 是产物运行期负例（运行断言 `division by zero`），`07_main_arity` 用
-  `.cerr` 区分 compile 文案；
+  `.compile.err` 区分 compile 文案；
 - `corpus/type_ok`、`corpus/type_err`、`corpus/type_modules/`、`corpus/typed_ok`：语言夹具，
   走 `check` / `compile` + 运行断言；`typed_ok/06_where_fwd`、`07_where_mutual`、
   `08_where_self` 是 where 签名正例（局部辅助函数 / 顶层递归），fmt 黄金例见
@@ -208,7 +287,7 @@ family discovery 对目录里每个夹具要求 `.out`/`.err` 或目录型 `expe
   [tooling.md](tooling.md) §2；
 - `corpus/dt/*` 正例：索引族 / 依赖匹配 / 擦除 / 相等与证明 / case 矩阵 / axiom / η /
   命名空间等（清单见目录）。`54_user_bool_data`、`55_user_io_data`、`56_user_list_data`
-  （`.nointerp`）覆盖用户本地 `data Bool`/`IO`/`List` 与 canonical `Base.*` 身份并存；
+  （`.run.out`）覆盖用户本地 `data Bool`/`IO`/`List` 与 canonical `Base.*` 身份并存；
   `57_universe`、`58_case_matrix`/`58b_case_absurd`、`59_axiom`/`59_eta`/`59_let_where`、
   `60_erasure_unify`、`61_namespace_dual`、`60_ctor_eta`、`61_implicit_values`、
   `62_sigma_basic`、`63_dep_lookup` 覆盖现行类型规则。`corpus/dt_err/*` 是对应负例

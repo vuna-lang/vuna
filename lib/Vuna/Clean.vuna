@@ -46,7 +46,6 @@ skipCleanDir : String -> Bool
 skipCleanDir name =
   name == ".git"
     || name == ".direnv"
-    || name == ".output"
     || name == "node_modules"
     || name == "_scratch"
     || name == ".vscode"

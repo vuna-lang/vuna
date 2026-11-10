@@ -49,7 +49,7 @@ _scratch/
 
 .local/
 .vscode/
-
+.codebuddy/
 # vuna 生成物（package / 工具链输出）
 docs/api.html
 # 由 `vuna gen-errors` 生成的错误码文档（生成物，勿提交）

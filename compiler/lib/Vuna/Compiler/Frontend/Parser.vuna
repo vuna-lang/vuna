@@ -576,6 +576,7 @@ else case peekTok st of
   PTok (TKw "case") p => parseCase (fuel - 1) st blockCol
   PTok (TKw "if") p => parseIf (fuel - 1) st blockCol
   PTok (TKw "do") p => parseDo (fuel - 1) st blockCol
+  PTok (TKw "perform") p => parsePerform (fuel - 1) st blockCol
   _ => parseApplication (fuel - 1) st blockCol
 
 parseApplication : Int -> PState -> Int -> Result (Pair Expr PState)
@@ -836,6 +837,14 @@ else case peekPos st of
     if col == altCol then step (parsePatternSingle (stateFuel st) st altCol)
       (\pat, st1 => Vuna.Compiler.Common.bind (checkNoRepeatedBinders [pat]) (\_ => step (expectSym st1 "=>") (\_, st2 => step (parseExpr (fuel - 1) st2 altCol 0) (\body, st3 => step (parseAltList (fuel - 1) st3 altCol) (\rest, st4 => Ok (Pair (Base.List.Cons (Pair pat body) rest) st4))))))
     else Ok (Pair [] st)
+
+-- `perform <expr>`（native-effects N1 / ND12）：保留名单实参应用；Elab 侧按 op 族
+-- 推导 key / 实例名 / res 族后降级到 `Base.Eff.performCore`，不新增 AST 构造子。
+parsePerform : Int -> PState -> Int -> Result (Pair Expr PState)
+parsePerform fuel st blockCol =
+  if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
+  else step (expectKw st "perform")
+    (\_, st1 => step (parseApplication (fuel - 1) st1 blockCol) (\operand, st2 => Ok (Pair (EApp (EVar performSyntax (spanOf st st2)) [operand] (spanOf st st2)) st2)))
 
 parseIf : Int -> PState -> Int -> Result (Pair Expr PState)
 parseIf fuel st blockCol =

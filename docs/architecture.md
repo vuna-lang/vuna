@@ -4,7 +4,8 @@
 职责见 [compiler.md](reference/compiler.md)，Core / 精化器见 [core.md](reference/core.md)，
 语义见 [language.md](reference/language.md) / [type-system.md](reference/type-system.md) / [qtt.md](reference/qtt.md)，
 自举 / 内建原语能力见 [bootstrap.md](reference/bootstrap.md) / [primitives.md](reference/primitives.md)，
-模块级接口缓存见 [cache.md](reference/cache.md)。
+模块级接口缓存见 [cache.md](reference/cache.md)（失效判据 / 包级环境指纹 / 工具产物来源 /
+镜像内容寻址；排障用 `VUNA_IFACE_AUDIT=1`，CI 建议加 `VUNA_IFACE_SELFTEST=1`）。
 
 ## 仓库分层
 

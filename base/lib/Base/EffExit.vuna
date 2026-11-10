@@ -20,11 +20,11 @@ resExit : ExitOp -> Type
 resExit (ExitWith _) = Int
 
 -- | 通过命名实例退出进程（原语类型 `Int -> IO Int`，执行即退出、不返回）。
-exitWith : (n : String) -> Int -> {r : Row} -> {w : Member (Exit n) r} -> Eff r Int
+exitWith : (n : String) -> Int -> {r : Row} -> {w : Member n (Exit n) r} -> Eff r Int
 exitWith n code = sendCore (Exit n) "exit" n (ExitWith code)
 
 -- | 一阶 handler：结果行删除 `Exit n`。
-handleExit : {a : Type} -> {b : Type} -> {r : Row} -> (n : String) -> {w : Member (Exit n) r} -> (a -> b) -> ((o : ExitOp) -> (resExit o -> b) -> b) -> Eff r a -> Eff (Base.Eff.rowRem (Exit n) r) b
+handleExit : {a : Type} -> {b : Type} -> {r : Row} -> (n : String) -> {w : Member n (Exit n) r} -> (a -> b) -> ((o : ExitOp) -> (resExit o -> b) -> b) -> Eff r a -> Eff (Base.Eff.rowRem n (Exit n) r) b
 handleExit n ret opH comp = handleCore (Exit n) "exit" n ret opH comp
 
 -- | 真实 handler 的操作解释：执行 `exit code`；`k 0` 不可达，只为类型闭合。
@@ -35,7 +35,7 @@ exitOpHIO op k = case op of
     k 0
 
 -- | IO-backed handler：结果行删除 `Exit n`，answer 是 IO 动作，可交给 `runIOAnswer`。
-handleExitIO : {a : Type} -> {r : Row} -> (n : String) -> Eff (Base.Eff.Cons (Exit n) r) a -> Eff r (IO a)
+handleExitIO : {a : Type} -> {r : Row} -> (n : String) -> Eff (Base.Eff.Cons n (Exit n) r) a -> Eff r (IO a)
 handleExitIO n comp = handleExit n (\a => pure a) exitOpHIO comp
 
 -- | 单效应便捷入口（P3）：`handleExitIO n` + `runIOAnswer` 的组合。

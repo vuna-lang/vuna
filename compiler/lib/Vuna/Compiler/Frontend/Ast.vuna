@@ -92,12 +92,14 @@ module Vuna.Compiler.Frontend.Ast
   , isListConsSyntax
   , isListNilSyntax
   , isOverCtorName
+  , isPerformSyntax
   , listConsSyntax
   , listNilSyntax
   , overCtorName
   , overCtorShort
   , overCtorTargets
   , patSpan
+  , performSyntax
   , qtyIsZero
   , topNames
   , traitMethodName
@@ -549,6 +551,18 @@ isListConsSyntax name = name == listConsSyntax
 -- Elab 可以把整块按「一个 monad / 一个字典」精化，而不必逐个节点重新做名字解析。不认识
 -- 标记的精化器（以及任何形状不符/回退路径）可以剥掉标记、用 canonical 名还原成普通
 -- `bind` 应用——语义与今天的降级逐字一致。
+-- native-effects N1（ND12）：`perform <op>` 的保留名编码。parser 产出
+-- `EApp (EVar "@vuna@perform") [op]`；Elab 按 op 族推导 key（族规范名）、实例名
+-- （行解 / 默认名）与 res 族（`res<族短名>`），再降级到 `Base.Eff.performCore`。
+-- 用户源码写不出 `@vuna@` 开头的标识符，所以标记不会与用户名字冲突。
+-- | 自动补注（N1 新增导出）：performSyntax。
+performSyntax : String
+performSyntax = "@vuna@perform"
+
+-- | 自动补注（N1 新增导出）：isPerformSyntax。
+isPerformSyntax : String -> Bool
+isPerformSyntax name = name == performSyntax
+
 -- | 自动补注（S3 新增导出）：doBindSyntaxPrefix。
 doBindSyntaxPrefix : String
 doBindSyntaxPrefix = "@vuna@do@bind@"

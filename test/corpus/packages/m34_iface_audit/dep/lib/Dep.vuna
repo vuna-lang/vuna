@@ -1,0 +1,9 @@
+module Dep (foo, bar) where
+
+-- iface 判据回归夹具（依赖侧）：导出列表翻转不改变实现体，是实现层之外的语义面。
+-- `miIfaceHash` 必须覆盖 exports，否则依赖方不会判脏（§44m）。
+foo : Int
+foo = 1
+
+bar : Int
+bar = 2

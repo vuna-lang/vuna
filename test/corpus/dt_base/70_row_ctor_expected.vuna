@@ -7,13 +7,13 @@ import Base.List
 data Fs : Type where
 
 r1 : Row
-r1 = Fs :: Nil
+r1 = Cons "main" Fs []
 
 r2 : Row
 r2 =
   let
     rr : Row
-    rr = Fs :: Nil
+    rr = Cons "main" Fs []
   in rr
 
 main : Int

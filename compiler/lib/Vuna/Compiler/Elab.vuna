@@ -17,6 +17,7 @@ module Vuna.Compiler.Elab
   , Driver.elabProgramGoWithAux
   , Driver.goalsOfProgram
   , Driver.goalsOfProgramTolerant
+  , Driver.maybeAddHasFieldInstances
   , InstName.derivedInstName
   , InstName.instanceName
   , Meta.dictCtorName

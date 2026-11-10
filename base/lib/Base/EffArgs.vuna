@@ -29,11 +29,11 @@ resArgs : ArgsOp -> Type
 resArgs GetArgs = List String
 
 -- | 通过命名实例取命令行参数。
-argsGetArgs : (n : String) -> {r : Row} -> {w : Member (Args n) r} -> Eff r (List String)
+argsGetArgs : (n : String) -> {r : Row} -> {w : Member n (Args n) r} -> Eff r (List String)
 argsGetArgs n = sendCore (Args n) "args" n GetArgs
 
 -- | 一阶 handler：`ret` / `opH` 由调用方给出，结果行删除 `Args n`。
-handleArgs : {a : Type} -> {b : Type} -> {r : Row} -> (n : String) -> {w : Member (Args n) r} -> (a -> b) -> ((o : ArgsOp) -> (resArgs o -> b) -> b) -> Eff r a -> Eff (Base.Eff.rowRem (Args n) r) b
+handleArgs : {a : Type} -> {b : Type} -> {r : Row} -> (n : String) -> {w : Member n (Args n) r} -> (a -> b) -> ((o : ArgsOp) -> (resArgs o -> b) -> b) -> Eff r a -> Eff (Base.Eff.rowRem n (Args n) r) b
 handleArgs n ret opH comp = handleCore (Args n) "args" n ret opH comp
 
 -- | 真实 handler 的操作解释：取 `Base.IO.Host.getArgs` 后继续。
@@ -44,7 +44,7 @@ argsOpHIO op k = case op of
     k xs
 
 -- | IO-backed handler：结果行删除 `Args n`，answer 是 IO 动作，可交给 `runIOAnswer`。
-handleArgsIO : {a : Type} -> {r : Row} -> (n : String) -> Eff (Base.Eff.Cons (Args n) r) a -> Eff r (IO a)
+handleArgsIO : {a : Type} -> {r : Row} -> (n : String) -> Eff (Base.Eff.Cons n (Args n) r) a -> Eff r (IO a)
 handleArgsIO n comp = handleArgs n (\a => pure a) argsOpHIO comp
 
 -- | 单效应便捷入口（P3）：`handleArgsIO n` + `runIOAnswer` 的组合。

@@ -1,0 +1,11 @@
+-- native-effects N1 负例（ND9）：op 族没有同名模块的 `res<族短名>` 结果族。
+import Base.Eff
+
+data BoomOp : Type where
+  Boom : BoomOp
+
+bad : Eff [] Int
+bad = perform Boom
+
+main : Int
+main = 0

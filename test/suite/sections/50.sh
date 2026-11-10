@@ -41,7 +41,9 @@ else
   incr_log=$(TMPDIR="$incr_cache" "$summ_vuna" check "$incr_base" --debug-perf 2>&1)
   incr_code=$?
   check_eq "summary incremental check exit" "0" "$incr_code"
-  incr_total=$(find "$(iface_mirror_dir "$incr_base")" -name "*.iface" 2>/dev/null | wc -l)
+  # 内容寻址下同一模块可能同时存在新旧两个 token 文件（GC 有 60s 保守窗），
+  # 模块总数用写侧 note `iface-write=N/M` 的分母（M）而不是目录里的文件数。
+  incr_total=$(printf %s "$incr_log" | grep -o 'iface-write=[0-9]*/[0-9]*' | head -1 | cut -d/ -f2)
   incr_clean=$(printf %s "$incr_log" | sed -n "s/.*cache-own-clean=\([0-9][0-9]*\).*/\1/p")
   if [ -n "$incr_clean" ] && [ "$incr_total" -gt 0 ] && [ "$incr_clean" -lt "$incr_total" ]; then ok; else bad "summary incremental reuses clean modules" "0 < clean < $incr_total" "clean=$incr_clean total=$incr_total"; fi
   incr_parse=$(printf %s "$incr_log" | grep -c "parse-module=Base\." || true)

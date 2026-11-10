@@ -21,6 +21,7 @@ module Vuna.Compiler.Driver.Dt
   , dtEvalExprWithAuxCache
   , dtEvalExprWithIfaces
   , dtEvalFile
+  , dtEvalSourceIncremental
   , dtGoalsSource
   , dtGoalsSourceTolerant
   , dtInferDefTypes
@@ -815,8 +816,12 @@ dtAuxForTermination (d :: rest) = case d of
   _ => d :: dtAuxForTermination rest
 
 dtElabFullWithPrepared : Ec -> List (Pair String Term) -> List Decl -> List Decl -> List Decl -> Result DtProgram
+-- 与全量路径（`Elab.Driver.elabProgramFullWithAux`）对齐：记录字段的 `HasField`
+-- 自动实例也必须在增量路径上生成，否则 `getField` 在 LSP / 测试会话里会假报
+-- `TC_NoInstanceFound`（夹具 18/records_files/10_has_field 就是这条用例）。
 dtElabFullWithPrepared startEc startGlobals termAux preparedAux decls =
-  Vuna.Compiler.Common.bind (prepareDeclsWith termAux decls)
+  Vuna.Compiler.Common.bind
+    (prepareDeclsWith termAux (maybeAddHasFieldInstances startGlobals decls))
     (\ds => Vuna.Compiler.Common.bind (expandDerivings ds) (\ds2 => elabProgramGoWithAux startEc startGlobals (dtAuxForTermination preparedAux) ds2))
 
 -- 工具链增量会话缓存（M34.6 5a/5b）：一次请求的**固定开销**按 iface 集合缓存。
@@ -876,15 +881,23 @@ dtIncrementalCheckedCore ctx parts depIfaces cleanIfaces cache needPackage =
     start = case hit of
       Just c => c.auxCacheStart
       Nothing => depStartOfAt (cleanStartNext cleanCps) (append depCps cleanCps)
+    -- termAux 的 prepared 形态优先取接口里持久化的版本（每个模块自己一份，写侧算好）：
+    -- 「编辑一个模块」只让该模块脏，其余干净模块的 prepared 仍有效 ⇒ 不必对整表重跑
+    -- record 降级 / deriving 展开（这是编辑后重建的主要成本）。任一参与模块缺
+    -- prepared（旧 schema / LSP 单模块写回）就整体回退 `dtPrepareTermAux`。
+    ifacePrepared = concatMap miPreparedOf (append depIfaces cleanIfaces)
+    missingPrepared = filter (\mi => length (miPreparedOf mi) == 0) (append depIfaces cleanIfaces)
     prepared = case hit of
       Just c => Ok c.auxCacheDecls
-      Nothing => dtPrepareTermAux termAux
+      Nothing =>
+        if length ifacePrepared > 0 && length missingPrepared == 0 then Ok ifacePrepared
+        else dtPrepareTermAux termAux
     startGlobals = secondOf start
     startEc = firstOf start
   in Vuna.Compiler.Common.bind prepared (\preparedAux => let
     next = if cacheable then Just (AuxCache key preparedAux start depCps cleanCps) else Nothing
   in Vuna.Compiler.Common.bind (dtElabFullWithPrepared startEc startGlobals termAux preparedAux decls)
-    (\prog => if needPackage then dtFinishPackage depCps cleanCps prog parts next else dtFinishScoped depCps cleanCps prog next)
+    (\prog => if needPackage then dtFinishPackageScoped depCps cleanCps prog parts next else dtFinishScoped depCps cleanCps prog next)
   )
 
 -- 需要整包产物（写接口 / build）：组装 DtProgram + 整包 codegen 检查（与旧行为一致）。
@@ -900,6 +913,27 @@ dtFinishPackage depCps cleanCps prog parts next =
         (dtProgInsts prog) (dtProgClasses prog) prog.dtProgNext prog.dtProgDefVals prog.dtProgDepths
     checked = CheckedPackage assembled (secondOf parts) (firstOf parts) (cachedNamesOf depCps)
   in Vuna.Compiler.Common.bind (checkDtProgram (Pair (dtProgDatas assembled) (dtProgDefs assembled)))
+    (\_ => Ok (Pair (Just checked) next))
+
+-- 增量路径的整包组装：产物照常组装（写 iface 需要 per-module 的 cp/parts），但
+-- codegen 检查只跑**本次新精化**的 datas/defs（`dtCheckScoped`）——干净模块在它们
+-- 自己的接口写回时就跑过整包检查，依赖包同理。整包 `checkDtProgram` 会把这 65 个
+-- 模块再检查一遍（编辑一个模块后 1.4s 里的大头），对增量路径是纯重复。
+dtFinishPackageScoped : List CachedProgram -> List CachedProgram -> DtProgram -> Pair (List Decl) (List Module) -> Maybe AuxCache -> Result (Pair (Maybe CheckedPackage) (Maybe AuxCache))
+dtFinishPackageScoped depCps cleanCps prog parts next =
+  let
+    assembled =
+      DtProgram
+        (append (concatMap cachedDatas depCps) (append (concatMap cachedDatas cleanCps) (dtProgDatas prog)))
+        (append (concatMap cachedDefs depCps) (append (concatMap cachedDefs cleanCps) (dtProgDefs prog)))
+        (dtProgGoals prog) (dtProgSols prog)
+        (dedupGlobals (append (concatMap cachedGlobals cleanCps) (dtProgGlobals prog)))
+        (dtProgInsts prog) (dtProgClasses prog) prog.dtProgNext prog.dtProgDefVals prog.dtProgDepths
+    checked = CheckedPackage assembled (secondOf parts) (firstOf parts) (cachedNamesOf depCps)
+    allDatas =
+      append (concatMap cachedDatas depCps)
+        (append (concatMap cachedDatas cleanCps) (dtProgDatas prog))
+  in Vuna.Compiler.Common.bind (dtCheckScoped allDatas (dtProgDatas prog) (dtProgDefs prog))
     (\_ => Ok (Pair (Just checked) next))
 
 -- 工具链诊断：只对本次新精化的 datas/defs 跑检查链（组装省掉），返回无 CheckedPackage。
@@ -952,6 +986,18 @@ dtCheckSourceIncremental ctx label source depIfaces cleanIfaces cache needPackag
       else Vuna.Compiler.Common.bind (resolveProjectKeeping (preloadKeepOf allIfaces mods) filtered)
         (\parts => Vuna.Compiler.Common.bind (dtIncrementalCheckedCore ctx parts (materializedDeps pkgName parts depIfaces) (materializedOwn pkgName parts cleanIfaces) cache needPackage) (\r => Ok (Pair True r)))
   )
+
+-- M44：会话化 interp。与 `dtCheckSourceIncremental` 同一条增量路径（依赖包 / 干净
+-- 同包模块以接口预置，只精化当前入口），但需要整包组装后的 `CheckedPackage`——依赖
+-- 模块的 defs 要在场，`evalDtMain` 才能归约跨模块调用（`needPackage = True`）。
+-- 第一分量沿用后者的语义：False = 本路径不适用（调用方回退全量）。
+dtEvalSourceIncremental : PackageContext -> String -> String -> List ModuleIface -> Maybe AuxCache -> Result (Pair Bool (Pair String (Maybe AuxCache)))
+dtEvalSourceIncremental ctx label source depIfaces cache = Vuna.Compiler.Common.bind (dtCheckSourceIncremental ctx label source depIfaces [] cache True) (\r => case secondOf r of
+  Pair (Just checked) aux =>
+    Vuna.Compiler.Common.bind (evalDtMain checked.checkedProgram)
+      (\out => Ok (Pair (firstOf r) (Pair out aux)))
+  Pair Nothing aux => Ok (Pair (firstOf r) (Pair "" aux))
+)
 
 -- 全量 checked（无 iface / 安全阀回退时用）：与 `dtCheckSource` 同一条加载/精化路径，
 -- 但保留 CheckedPackage（LSP 冷启动写回单模块接口用）。

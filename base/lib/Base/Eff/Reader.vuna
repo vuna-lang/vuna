@@ -28,8 +28,8 @@ data ReaderOp : Type -> Type where
 resReader : (s : Type) -> ReaderOp s -> Type
 resReader s Ask = s
 
--- | 通过命名实例读环境；行里需要 `Member (Reader n s) r` 证明。
-ask : (n : String) -> (s : Type) -> {r : Row} -> {w : Member (Reader n s) r} -> Eff r s
+-- | 通过命名实例读环境；行里需要 `Member n (Reader n s) r` 证明。
+ask : (n : String) -> (s : Type) -> {r : Row} -> {w : Member n (Reader n s) r} -> Eff r s
 ask n s = sendCore (Reader n s) "reader" n Ask
 
 -- | 内部：`local` 的操作解释——`Ask` 返回 `f env`（即在修改后的环境下读）。
@@ -38,20 +38,20 @@ readerLocalOp env f op k = case op of
   Ask => k (f env)
 
 -- | 内部：用给定 env 安装一个只对 `comp` 生效的 handler（`weaken` 把结果行放回原行）。
-localWith : (n : String) -> (s : Type) -> {a : Type} -> {r : Row} -> (s -> s) -> (env : s) -> Eff (Cons (Reader n s) r) a -> Eff (Cons (Reader n s) r) a
-localWith n s f env comp = weaken (handleReader n s (\a => a) (readerLocalOp env f) comp)
+localWith : (n : String) -> (s : Type) -> {a : Type} -> {r : Row} -> (s -> s) -> (env : s) -> Eff (Cons n (Reader n s) r) a -> Eff (Cons n (Reader n s) r) a
+localWith n s f env comp = weaken n (handleReader n s (\a => a) (readerLocalOp env f) comp)
 
 -- | 在 `f` 修改后的环境下运行 `comp`：先 `ask` 取当前 env，再装作用域 handler；改写不逃逸该动作。
-local : (n : String) -> (s : Type) -> {a : Type} -> {r : Row} -> (s -> s) -> Eff (Cons (Reader n s) r) a -> Eff (Cons (Reader n s) r) a
+local : (n : String) -> (s : Type) -> {a : Type} -> {r : Row} -> (s -> s) -> Eff (Cons n (Reader n s) r) a -> Eff (Cons n (Reader n s) r) a
 local n s f comp = do
   env <- ask n s
   localWith n s f env comp
 
 -- | 一阶 handler：`ret` / `opH` 由调用方给出，结果行删除 `Reader n s`。
-handleReader : {a : Type} -> {b : Type} -> {r : Row} -> (n : String) -> (s : Type) -> {w : Member (Reader n s) r} -> (a -> b) -> ((o : ReaderOp s) -> (resReader s o -> b) -> b) -> Eff r a -> Eff (Base.Eff.rowRem (Reader n s) r) b
+handleReader : {a : Type} -> {b : Type} -> {r : Row} -> (n : String) -> (s : Type) -> {w : Member n (Reader n s) r} -> (a -> b) -> ((o : ReaderOp s) -> (resReader s o -> b) -> b) -> Eff r a -> Eff (Base.Eff.rowRem n (Reader n s) r) b
 handleReader n s ret opH comp = handleCore (Reader n s) "reader" n ret opH comp
 
 -- W7：线性 handler 版本；续延参数是 quantity 1 的 Cont，resume 两次会被用量检查拒绝。
 -- | 线性 handler 版：`opH` 的续延是 quantity 1 的 `Cont`，resume 两次会被用量检查拒绝（W7）。
-handleReaderLin : {a : Type} -> {b : Type} -> {r : Row} -> (n : String) -> (s : Type) -> {w : Member (Reader n s) r} -> (a -> b) -> ((o : ReaderOp s) -> (1 k : Cont (resReader s o) b) -> b) -> Eff r a -> Eff (Base.Eff.rowRem (Reader n s) r) b
+handleReaderLin : {a : Type} -> {b : Type} -> {r : Row} -> (n : String) -> (s : Type) -> {w : Member n (Reader n s) r} -> (a -> b) -> ((o : ReaderOp s) -> (1 k : Cont (resReader s o) b) -> b) -> Eff r a -> Eff (Base.Eff.rowRem n (Reader n s) r) b
 handleReaderLin n s ret opH comp = handleCoreLin (Reader n s) "reader" n ret opH comp

@@ -1,0 +1,1 @@
+:8:7: [TC_EffResFamilyMissing] cannot find the effect family members for BoomOp (expected a label type `<family>` and a result family `res<family>` in the same module as the op family)

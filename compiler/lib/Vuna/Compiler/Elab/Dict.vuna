@@ -449,15 +449,25 @@ data MemberLookup : Type where
   MemberFound : Value -> Ec -> MemberLookup
   MemberAbsent : MemberLookup
   MemberStuck : MemberLookup
+  -- 命名行（ND6）：标签候选 ≥2，推迟到最终化报 TC_AmbiguousInstance；携带候选文本。
+  MemberAmbiguous : List String -> MemberLookup
 
 isMemberDomain : Ec -> Value -> Bool
 isMemberDomain ec dom = case quote 0 dom of
-  TApp (TApp (TGlobal g) _ _) _ _ => g == memberDomName
+  -- 命名行（ND1）：`Member n e r`（实例名、标签、行）。
+  TApp (TApp (TApp (TGlobal g) _ _) _ _) _ _ => g == memberDomName
   _ => False
 
-memberSpine : Value -> Maybe (Pair Value Value)
-memberSpine (VNeutral (NGlobal g sp)) = if g == memberDomName then case sp of
-  e :: r :: _ => Just (Pair e r)
+-- Member 约束的域形状：3 索引（实例名、标签、行）。
+data MemberDom : Type where
+  MemberDom3 : Value -> Value -> Value -> MemberDom
+
+memberSpine : Value -> Maybe MemberDom
+memberSpine (VNeutral (NGlobal g sp)) = if g == memberDomName then case length sp of
+  -- 3 索引用单 Cons 分支，规避旧编译器在深/浅多 Cons 分支回退时的变量串位（debt D53）。
+  3 => case sp of
+    n :: e :: r :: _ => Just (MemberDom3 n e r)
+    _ => Nothing
   _ => Nothing
 else Nothing
 memberSpine _ = Nothing
@@ -471,23 +481,95 @@ memberLookup : Int -> Int -> Ec -> Value -> MemberLookup
 memberLookup fuel depth ec dom = if fuel <= 0 then MemberStuck
 else case memberSpine dom of
   Nothing => MemberStuck
-  Just (Pair eVal rVal) => memberLookupRow fuel depth ec eVal rVal
+  Just (MemberDom3 nVal eVal rVal) => memberLookupRow fuel depth ec nVal eVal rVal
 
-memberLookupRow : Int -> Int -> Ec -> Value -> Value -> MemberLookup
-memberLookupRow fuel depth ec eVal rVal = if fuel <= 0 then MemberStuck
-else case forceVal ec rVal of
+-- ---------------------------------------------------------------
+-- 命名行（native-effects ND1/ND6/ND7）：`Member ?n e r` 的名字槽求解
+-- ---------------------------------------------------------------
+-- 标签候选扫描（纯比较，不提交 meta 解）：数标签与 eF 结构相等的条目。
+-- 返回 (候选文本, 是否到达具体行尾 Nil)。开放行（尾部是刚性行变量）时收束为
+-- (已扫到的候选, False)——尾部内容不可知，但具体前缀里的候选仍足以构造
+-- Here/There 证明；未解 meta 行返回 Nothing（推迟，不猜）。
+namedRowScan : Int -> Sols -> Ec -> Value -> Value -> Maybe (Pair (List String) Bool)
+namedRowScan fuel sols ec eF rF = if fuel <= 0 then Nothing
+else case forceVal ec rF of
+  VCon cname cargs => if cname == effRowNilCtor then Just (Pair [] True)
+  else if cname == effRowConsCtor then case cargs of
+    n1 :: h :: t :: _ => if hasUnsolvedMetaValue sols h then Nothing
+    else case valueEqFuel 64 eF h of
+      Nothing => Nothing
+      Just False => namedRowScan (fuel - 1) sols ec eF t
+      Just True => case namedRowScan (fuel - 1) sols ec eF t of
+        Nothing => Nothing
+        Just (Pair cands closed) => Just (Pair (Base.List.Cons (showValue h) cands) closed)
+    _ => Nothing
+  else Nothing
+  VNeutral _ => Just (Pair [] False)
+  _ => Nothing
+
+-- 证明构造：行条目按 (名字, 标签) 双匹配推进；名字槽用 convEc 合一（ND6：目标名是
+-- meta → 解为条目名；条目名是 meta → 两侧合一；两者刚性 → 必须相等）。名字刚性且
+-- 头部名字不等时继续往尾部找（There），不贪婪地卡在 Here。
+memberLookupRowUnique : Int -> Int -> Ec -> Value -> Value -> Value -> MemberLookup
+memberLookupRowUnique fuel depth ec nF eF rF = if fuel <= 0 then MemberStuck
+else case forceVal ec rF of
   VCon cname cargs => if cname == effRowNilCtor then MemberAbsent
   else if cname == effRowConsCtor then case cargs of
-    h :: t :: _ => if hasUnsolvedMetaValue (ecSolsP ec) eVal || hasUnsolvedMetaValue (ecSolsP ec) h then MemberStuck
-    else case convEc ec depth eVal h of
-      Ok ec1 => MemberFound (ctorValue ec1 hereCtorName [eVal, t]) ec1
-      Err _ => case memberLookupRow (fuel - 1) depth ec eVal t of
+    n1 :: h :: t :: _ => case valueEqFuel 64 eF h of
+      Nothing => MemberStuck
+      Just False => case memberLookupRowUnique (fuel - 1) depth ec nF eF t of
         MemberFound subProof ec1 =>
-          MemberFound (ctorValue ec1 thereCtorName [eVal, h, t, subProof]) ec1
+          MemberFound (ctorValue ec1 thereCtorName [nF, eF, n1, h, t, subProof]) ec1
         other => other
+      Just True => case convEc ec depth nF n1 of
+        Ok ec1 => MemberFound (ctorValue ec1 hereCtorName [nF, eF, t]) ec1
+        Err _ => case memberLookupRowUnique (fuel - 1) depth ec nF eF t of
+          MemberFound subProof ec1 =>
+            MemberFound (ctorValue ec1 thereCtorName [nF, eF, n1, h, t, subProof]) ec1
+          other => other
     _ => MemberStuck
   else MemberStuck
   _ => MemberStuck
+
+-- 标签里带未解 meta 时的线性合一匹配（perform 语法：标签 = `Xxx ?n`，名字与标签共用
+-- 同一个 meta）。逐条 convEc 试标签：成功即在这一条上再 conv 名字；失败跳过（不提交）。
+-- 遇到未知尾部即卡住（推迟，不猜）。
+memberLookupRowGreedy : Int -> Int -> Ec -> Value -> Value -> Value -> MemberLookup
+memberLookupRowGreedy fuel depth ec nF eF rF = if fuel <= 0 then MemberStuck
+else case forceVal ec rF of
+  VCon cname cargs => if cname == effRowNilCtor then MemberAbsent
+  else if cname == effRowConsCtor then case cargs of
+    n1 :: h :: t :: _ => case convEc ec depth eF h of
+      Err _ => memberLookupRowGreedy (fuel - 1) depth ec nF eF t
+      Ok ec1 => case convEc ec1 depth nF n1 of
+        Ok ec2 => MemberFound (ctorValue ec2 hereCtorName [nF, eF, t]) ec2
+        Err _ => memberLookupRowGreedy (fuel - 1) depth ec nF eF t
+    _ => MemberStuck
+  else MemberStuck
+  _ => MemberStuck
+
+-- 命名行求解入口（`Member n e r`，ND6 全扫描、拒绝贪婪 Here）：
+--   0 候选 + 具体行尾 → 缺效应；0 候选 + 开放尾 → 推迟；
+--   ≥2 候选且名字未定 → MemberAmbiguous（最终化报 TC_AmbiguousInstance）；
+--   其余（含名字刚性可消歧、开放行前缀候选）→ 名字合一 + Here/There 证明构造。
+memberLookupRow : Int -> Int -> Ec -> Value -> Value -> Value -> MemberLookup
+memberLookupRow fuel depth ec nVal eVal rVal = if fuel <= 0 then MemberStuck
+else
+  let
+    nF = forceVal ec nVal
+    eF = forceVal ec eVal
+    sols = ecSolsP ec
+  in if hasUnsolvedMetaValue sols eF then memberLookupRowGreedy fuel depth ec nF eF rVal
+  else case namedRowScan 64 sols ec eF rVal of
+    -- 标签含未解 meta（perform 语法的 `Xxx ?n`，名字与标签共用同一个 meta）：全扫描无法
+    -- 做结构计数，改走线性合一匹配（conv 成功即命中，失败跳过）。
+    -- 目标名字是未解 meta 不是卡点：唯一标签候选下 conv 把它解为条目名（D6/D7）。
+    Nothing => MemberStuck
+    Just (Pair cands closed) => case cands of
+      [] => if closed then MemberAbsent else MemberStuck
+      _ =>
+        if length cands >= 2 && hasUnsolvedMetaValue sols nF then MemberAmbiguous cands
+        else memberLookupRowUnique (fuel - 1) depth ec nF eF rVal
 
 -- 在局部上下文里找同类型的隐式证明 binder（wrapper 体里 `{w : Member e r}`）。
 ctxMemberProofTermGo : List (Pair String Term) -> Int -> String -> Maybe Term
@@ -526,6 +608,10 @@ resolveRowGoalsCtxGo globals ctx sp ((c@(Constraint cid kind m dom cspan cdepth)
       Ok ec3 => resolveRowGoalsCtxGo globals ctx sp rest ec3 kept
       Err e => Err e
     MemberAbsent => tcErr1 sp (NoInstanceFound "row membership") "row membership"
+    -- 命名行（ND5）：同标签多实例且名字未定 → 显式歧义诊断，不再间接退化为缺实例。
+    MemberAmbiguous cands =>
+      tcErr2 sp (AmbiguousInstance "effect instance" (join ", " cands)) "effect instance"
+        (join ", " cands)
     MemberStuck => case ctxMemberProofTerm ctx ec dom of
       Just proofTerm => case solveRowMeta ec m (eval (ctxEnv ctx) proofTerm) of
         Ok ec2 => resolveRowGoalsCtxGo globals ctx sp rest ec2 kept
@@ -604,6 +690,7 @@ tryResolveDictGoal globals ec (Constraint cid kind m dom cspan cdepth) forced = 
     Ok ec3 => Just ec3
     Err e => Nothing
   MemberAbsent => Nothing
+  MemberAmbiguous _ => Nothing
   MemberStuck => Nothing
 else case dictClassArgs ec forced of
   [] => Nothing

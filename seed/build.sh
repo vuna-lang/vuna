@@ -1,6 +1,6 @@
 #!/bin/sh
 # 由 vuna 生成：分离编译构建脚本（C35：按直接依赖分层并行 + 内容哈希增量）。用法: ./build.sh [OUT]
-# 干净构建：一次 ocamlopt 编译全部 .mli/.ml 并链接；
+# 干净构建且 JOBS<=1：一次 ocamlopt 编译全部 .mli/.ml 并链接；
 # 增量构建：每单元 .ml/.mli 与直接依赖 .stamp 的内容哈希写 $base.stamp，命中即跳过；
 # 同层单元互不依赖：多单元层用后台任务并行编译，层间用 wait 串行。
 set -eu
@@ -8,6 +8,15 @@ cd "$(dirname "$0")"
 OUT=${1:-program}
 FLAGS="-g -w -a+39 -warn-error +39"
 MODULES="Vuna_runtime Vuna_dCompiler_dCodegen Base_dMonad Base_dEq Base_dApplicative Base_dFromInt Vuna_dCompiler_dCore Base_dFromString Vuna_dCompiler_dVersion Base_dTraversable Base_dNum Prelude Base_dMonoid Vuna_dCompiler_dDiagnostics Base_dHashable Vuna_dCompiler_dLoader Vuna_dCompiler_dElab Base_dShow Base_dInterp Base_dIO Base_dFoldable Base_dBool Base_dOrd Base_dPair Base_dFloat Base_dInt Base_dUnit Base_dMaybe Base_dNat Base_dList Base_dResult Base_dArray Base_dString Base_dVec Base_dIO_dHost Vuna_dCompiler_dCacheFormat Vuna_dCompiler_dDebug Vuna_dCompiler_dCommon Vuna_dCompiler_dDriver_dDiagRender Vuna_dCompiler_dFrontend_dDiagnostics Base_dHashMap Vuna_dCompiler_dLoader_dDiagnostics Vuna_dCompiler_dFrontend_dToml Vuna_dCompiler_dDriver_dPerfCache Vuna_dCompiler_dDriver_dSplit Vuna_dCompiler_dFrontend_dAst Vuna_dCompiler_dFrontend_dLexer Vuna_dCompiler_dDiagnostics_dCommon Vuna_dCompiler_dIntrinsics Vuna_dCompiler_dFrontend_dParser_dSupport Vuna_dCompiler_dElab_dDerive Vuna_dCompiler_dLoader_dFixity Vuna_dCompiler_dDiagnostics_dTc Vuna_dCompiler_dElab_dTermination_dMeasure Vuna_dCompiler_dDiagnostics_dCg Vuna_dCompiler_dElab_dRecords Vuna_dCompiler_dFrontend_dManifest Vuna_dCompiler_dCore_dTerm Vuna_dCompiler_dCore_dEval Vuna_dCompiler_dElab_dMatch Vuna_dCompiler_dElab_dTermination_dScc Vuna_dCompiler_dFrontend_dParser Vuna_dCompiler_dElab_dPrelude Vuna_dCompiler_dPackages_dPkg Vuna_dCompiler_dElab_dTermination Vuna_dCompiler_dElab_dTypes Vuna_dCompiler_dElab_dSig Vuna_dCompiler_dLoader_dModules Vuna_dCompiler_dCore_dConv Vuna_dCompiler_dElab_dRepresentation Vuna_dCompiler_dLoader_dResolve Vuna_dCompiler_dElab_dMeta Vuna_dCompiler_dElab_dUsage Vuna_dCompiler_dElab_dInstName Vuna_dCompiler_dDriver_dCache Vuna_dCompiler_dElab_dCase Vuna_dCompiler_dElab_dTerm_dSupport Vuna_dCompiler_dCodegen_dDecl Vuna_dCompiler_dElab_dDict Vuna_dCompiler_dLoader_dFlatten Vuna_dCompiler_dElab_dInstCoherence Vuna_dCompiler_dElab_dTerm_dImpl Vuna_dCompiler_dCodegen_dErase Vuna_dCompiler_dDriver_dOwner Vuna_dCompiler_dDriver_dIface Vuna_dCompiler_dElab_dTerm Vuna_dCompiler_dCodegen_dTerm Vuna_dCompiler_dElab_dData Vuna_dCompiler_dCodegen_dAssembly Vuna_dCompiler_dElab_dTrait Vuna_dCompiler_dElab_dDriver Vuna_dCompiler_dCodegen_dSplit Vuna_dCompiler_dDriver_dDt Vuna_dCompiler_dDriver_dCompile Vuna_dCompiler_dDriver_dCompilerCli Main "
+JOBS=${VUNA_BUILD_JOBS:-}
+if [ -z "$JOBS" ]; then
+  JOBS=$(nproc 2>/dev/null || echo 1)
+  case "${NIX_BUILD_CORES:-}" in
+    ''|*[!0-9]*) ;;
+    0) ;;
+    *) JOBS=$NIX_BUILD_CORES ;;
+  esac
+fi
 C_MODULES=""
 C_OBJS=""
 if [ -n "$C_MODULES" ]; then
@@ -29,7 +38,7 @@ clean=1
 for m in $MODULES; do
   if [ -f "$m.cmx" ]; then clean=0; fi
 done
-if [ "$clean" -eq 1 ]; then
+if [ "$clean" -eq 1 ] && [ "$JOBS" -le 1 ]; then
   SOURCES=""
   for m in $MODULES; do
     if [ -f "$m.mli" ]; then SOURCES="$SOURCES $m.mli"; fi
@@ -117,10 +126,10 @@ if [ "$clean" -eq 1 ]; then
   printf '%s' "$(stamp_want Vuna_dCompiler_dElab_dDict Base_dPair Vuna_dCompiler_dCore_dEval Base_dResult Vuna_dCompiler_dDiagnostics_dTc Vuna_dCompiler_dElab_dTypes Vuna_dCompiler_dDebug Base_dString Vuna_dCompiler_dCommon Base_dList Base_dMaybe Vuna_runtime Vuna_dCompiler_dElab_dPrelude Vuna_dCompiler_dElab_dRepresentation Base_dBool Vuna_dCompiler_dIntrinsics Vuna_dCompiler_dElab_dMeta Vuna_dCompiler_dCore_dConv Base_dHashMap Vuna_dCompiler_dCore_dTerm)" > "Vuna_dCompiler_dElab_dDict.stamp"
   printf '%s' "$(stamp_want Vuna_dCompiler_dLoader_dFlatten Base_dPair Vuna_dCompiler_dLoader_dFixity Base_dResult Vuna_dCompiler_dCacheFormat Vuna_dCompiler_dDebug Base_dString Vuna_dCompiler_dCommon Base_dList Vuna_dCompiler_dFrontend_dAst Base_dMaybe Vuna_runtime Vuna_dCompiler_dLoader_dModules Vuna_dCompiler_dFrontend_dParser Base_dIO_dHost Base_dBool Vuna_dCompiler_dLoader_dResolve Vuna_dCompiler_dPackages_dPkg Base_dHashMap Vuna_dCompiler_dLoader_dDiagnostics)" > "Vuna_dCompiler_dLoader_dFlatten.stamp"
   printf '%s' "$(stamp_want Vuna_dCompiler_dElab_dInstCoherence Base_dPair Vuna_dCompiler_dCore_dEval Base_dResult Vuna_dCompiler_dElab_dTypes Base_dList Base_dMaybe Vuna_runtime Vuna_dCompiler_dElab_dDict Vuna_dCompiler_dElab_dMeta Vuna_dCompiler_dCore_dConv Vuna_dCompiler_dCore_dTerm)" > "Vuna_dCompiler_dElab_dInstCoherence.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dElab_dTerm_dImpl Base_dPair Vuna_dCompiler_dCore_dEval Base_dResult Base_dEq Vuna_dCompiler_dDiagnostics_dTc Vuna_dCompiler_dElab_dTypes Vuna_dCompiler_dElab_dMatch Base_dString Vuna_dCompiler_dCommon Base_dList Vuna_dCompiler_dFrontend_dAst Base_dMaybe Vuna_runtime Vuna_dCompiler_dElab_dCase Vuna_dCompiler_dElab_dTerm_dSupport Vuna_dCompiler_dElab_dDict Base_dBool Vuna_dCompiler_dIntrinsics Vuna_dCompiler_dElab_dMeta Vuna_dCompiler_dCore_dConv Vuna_dCompiler_dElab_dRecords Vuna_dCompiler_dCore_dTerm)" > "Vuna_dCompiler_dElab_dTerm_dImpl.stamp"
+  printf '%s' "$(stamp_want Vuna_dCompiler_dElab_dTerm_dImpl Base_dPair Vuna_dCompiler_dCore_dEval Base_dNat Base_dResult Base_dEq Vuna_dCompiler_dDiagnostics_dTc Vuna_dCompiler_dElab_dTypes Vuna_dCompiler_dElab_dMatch Base_dString Vuna_dCompiler_dCommon Base_dList Vuna_dCompiler_dFrontend_dAst Base_dMaybe Vuna_runtime Vuna_dCompiler_dElab_dCase Vuna_dCompiler_dElab_dTerm_dSupport Vuna_dCompiler_dElab_dDict Base_dBool Vuna_dCompiler_dIntrinsics Vuna_dCompiler_dElab_dMeta Vuna_dCompiler_dCore_dConv Vuna_dCompiler_dElab_dRecords Vuna_dCompiler_dCore_dTerm)" > "Vuna_dCompiler_dElab_dTerm_dImpl.stamp"
   printf '%s' "$(stamp_want Vuna_dCompiler_dCodegen_dErase Vuna_dCompiler_dElab_dUsage Base_dPair Vuna_dCompiler_dCore_dEval Base_dResult Vuna_dCompiler_dElab_dTypes Base_dString Vuna_dCompiler_dCommon Base_dList Base_dMaybe Vuna_runtime Base_dVec Vuna_dCompiler_dCodegen_dDecl Vuna_dCompiler_dElab_dRepresentation Vuna_dCompiler_dDiagnostics_dCg Base_dBool Base_dHashMap Vuna_dCompiler_dCore_dTerm)" > "Vuna_dCompiler_dCodegen_dErase.stamp"
   printf '%s' "$(stamp_want Vuna_dCompiler_dDriver_dOwner Base_dPair Vuna_dCompiler_dElab_dInstName Vuna_dCompiler_dElab_dDerive Base_dResult Vuna_dCompiler_dElab_dTypes Base_dString Vuna_dCompiler_dCommon Base_dList Vuna_dCompiler_dFrontend_dAst Base_dMaybe Vuna_runtime Vuna_dCompiler_dIntrinsics Base_dHashMap)" > "Vuna_dCompiler_dDriver_dOwner.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dDriver_dIface Base_dPair Base_dInt Base_dResult Vuna_dCompiler_dElab_dTypes Vuna_dCompiler_dDriver_dCache Base_dString Vuna_dCompiler_dCommon Base_dList Vuna_dCompiler_dFrontend_dAst Base_dMaybe Vuna_runtime Vuna_dCompiler_dLoader_dModules Vuna_dCompiler_dDriver_dOwner Vuna_dCompiler_dElab_dPrelude Base_dNum Base_dIO_dHost Base_dBool Vuna_dCompiler_dPackages_dPkg Vuna_dCompiler_dElab_dRecords Base_dHashMap Vuna_dCompiler_dCore_dTerm)" > "Vuna_dCompiler_dDriver_dIface.stamp"
+  printf '%s' "$(stamp_want Vuna_dCompiler_dDriver_dIface Base_dPair Base_dInt Vuna_dCompiler_dElab_dDerive Base_dResult Vuna_dCompiler_dElab_dTypes Vuna_dCompiler_dDriver_dCache Base_dString Vuna_dCompiler_dCommon Base_dList Vuna_dCompiler_dFrontend_dAst Base_dMaybe Vuna_runtime Vuna_dCompiler_dLoader_dModules Vuna_dCompiler_dDriver_dOwner Vuna_dCompiler_dElab_dPrelude Base_dNum Base_dIO_dHost Base_dBool Vuna_dCompiler_dPackages_dPkg Vuna_dCompiler_dElab_dRecords Base_dHashMap Vuna_dCompiler_dCore_dTerm)" > "Vuna_dCompiler_dDriver_dIface.stamp"
   printf '%s' "$(stamp_want Vuna_dCompiler_dElab_dTerm Vuna_dCompiler_dElab_dTerm_dImpl Base_dMaybe Vuna_runtime)" > "Vuna_dCompiler_dElab_dTerm.stamp"
   printf '%s' "$(stamp_want Vuna_dCompiler_dCodegen_dTerm Base_dPair Vuna_dCompiler_dCore_dEval Base_dResult Vuna_dCompiler_dElab_dTypes Base_dString Vuna_dCompiler_dCommon Base_dList Base_dMaybe Vuna_runtime Vuna_dCompiler_dCodegen_dErase Base_dVec Vuna_dCompiler_dCodegen_dDecl Vuna_dCompiler_dElab_dRepresentation Vuna_dCompiler_dDiagnostics_dCg Vuna_dCompiler_dIntrinsics Base_dHashMap Vuna_dCompiler_dCore_dTerm)" > "Vuna_dCompiler_dCodegen_dTerm.stamp"
   printf '%s' "$(stamp_want Vuna_dCompiler_dElab_dData Base_dPair Base_dResult Vuna_dCompiler_dDiagnostics_dTc Vuna_dCompiler_dElab_dTypes Vuna_dCompiler_dElab_dTerm Vuna_dCompiler_dCommon Base_dList Vuna_dCompiler_dFrontend_dAst Base_dMaybe Vuna_runtime Vuna_dCompiler_dElab_dPrelude Vuna_dCompiler_dElab_dRepresentation Base_dBool Vuna_dCompiler_dIntrinsics Vuna_dCompiler_dElab_dMeta Vuna_dCompiler_dCore_dTerm)" > "Vuna_dCompiler_dElab_dData.stamp"
@@ -330,7 +339,7 @@ for p in $pids; do wait "$p" || exit 1; done
 pids=""
 compile_mod Vuna_dCompiler_dElab_dInstCoherence Base_dPair Vuna_dCompiler_dCore_dEval Base_dResult Vuna_dCompiler_dElab_dTypes Base_dList Base_dMaybe Vuna_runtime Vuna_dCompiler_dElab_dDict Vuna_dCompiler_dElab_dMeta Vuna_dCompiler_dCore_dConv Vuna_dCompiler_dCore_dTerm &
 pids="$pids $!"
-compile_mod Vuna_dCompiler_dElab_dTerm_dImpl Base_dPair Vuna_dCompiler_dCore_dEval Base_dResult Base_dEq Vuna_dCompiler_dDiagnostics_dTc Vuna_dCompiler_dElab_dTypes Vuna_dCompiler_dElab_dMatch Base_dString Vuna_dCompiler_dCommon Base_dList Vuna_dCompiler_dFrontend_dAst Base_dMaybe Vuna_runtime Vuna_dCompiler_dElab_dCase Vuna_dCompiler_dElab_dTerm_dSupport Vuna_dCompiler_dElab_dDict Base_dBool Vuna_dCompiler_dIntrinsics Vuna_dCompiler_dElab_dMeta Vuna_dCompiler_dCore_dConv Vuna_dCompiler_dElab_dRecords Vuna_dCompiler_dCore_dTerm &
+compile_mod Vuna_dCompiler_dElab_dTerm_dImpl Base_dPair Vuna_dCompiler_dCore_dEval Base_dNat Base_dResult Base_dEq Vuna_dCompiler_dDiagnostics_dTc Vuna_dCompiler_dElab_dTypes Vuna_dCompiler_dElab_dMatch Base_dString Vuna_dCompiler_dCommon Base_dList Vuna_dCompiler_dFrontend_dAst Base_dMaybe Vuna_runtime Vuna_dCompiler_dElab_dCase Vuna_dCompiler_dElab_dTerm_dSupport Vuna_dCompiler_dElab_dDict Base_dBool Vuna_dCompiler_dIntrinsics Vuna_dCompiler_dElab_dMeta Vuna_dCompiler_dCore_dConv Vuna_dCompiler_dElab_dRecords Vuna_dCompiler_dCore_dTerm &
 pids="$pids $!"
 compile_mod Vuna_dCompiler_dCodegen_dErase Vuna_dCompiler_dElab_dUsage Base_dPair Vuna_dCompiler_dCore_dEval Base_dResult Vuna_dCompiler_dElab_dTypes Base_dString Vuna_dCompiler_dCommon Base_dList Base_dMaybe Vuna_runtime Base_dVec Vuna_dCompiler_dCodegen_dDecl Vuna_dCompiler_dElab_dRepresentation Vuna_dCompiler_dDiagnostics_dCg Base_dBool Base_dHashMap Vuna_dCompiler_dCore_dTerm &
 pids="$pids $!"
@@ -338,7 +347,7 @@ compile_mod Vuna_dCompiler_dDriver_dOwner Base_dPair Vuna_dCompiler_dElab_dInstN
 pids="$pids $!"
 for p in $pids; do wait "$p" || exit 1; done
 pids=""
-compile_mod Vuna_dCompiler_dDriver_dIface Base_dPair Base_dInt Base_dResult Vuna_dCompiler_dElab_dTypes Vuna_dCompiler_dDriver_dCache Base_dString Vuna_dCompiler_dCommon Base_dList Vuna_dCompiler_dFrontend_dAst Base_dMaybe Vuna_runtime Vuna_dCompiler_dLoader_dModules Vuna_dCompiler_dDriver_dOwner Vuna_dCompiler_dElab_dPrelude Base_dNum Base_dIO_dHost Base_dBool Vuna_dCompiler_dPackages_dPkg Vuna_dCompiler_dElab_dRecords Base_dHashMap Vuna_dCompiler_dCore_dTerm &
+compile_mod Vuna_dCompiler_dDriver_dIface Base_dPair Base_dInt Vuna_dCompiler_dElab_dDerive Base_dResult Vuna_dCompiler_dElab_dTypes Vuna_dCompiler_dDriver_dCache Base_dString Vuna_dCompiler_dCommon Base_dList Vuna_dCompiler_dFrontend_dAst Base_dMaybe Vuna_runtime Vuna_dCompiler_dLoader_dModules Vuna_dCompiler_dDriver_dOwner Vuna_dCompiler_dElab_dPrelude Base_dNum Base_dIO_dHost Base_dBool Vuna_dCompiler_dPackages_dPkg Vuna_dCompiler_dElab_dRecords Base_dHashMap Vuna_dCompiler_dCore_dTerm &
 pids="$pids $!"
 compile_mod Vuna_dCompiler_dElab_dTerm Vuna_dCompiler_dElab_dTerm_dImpl Base_dMaybe Vuna_runtime &
 pids="$pids $!"

@@ -34,19 +34,19 @@ resEnv GetCwd = String
 resEnv ExecPath = String
 
 -- | 通过命名实例取环境变量；真实 handler 走 `Base.IO.getEnv`（未设置或为空串都返回空串）。
-envGetEnv : (n : String) -> String -> {r : Row} -> {w : Member (Env n) r} -> Eff r String
+envGetEnv : (n : String) -> String -> {r : Row} -> {w : Member n (Env n) r} -> Eff r String
 envGetEnv n k = sendCore (Env n) "env" n (GetEnv k)
 
 -- | 通过命名实例取当前工作目录。
-envGetCwd : (n : String) -> {r : Row} -> {w : Member (Env n) r} -> Eff r String
+envGetCwd : (n : String) -> {r : Row} -> {w : Member n (Env n) r} -> Eff r String
 envGetCwd n = sendCore (Env n) "env" n GetCwd
 
 -- | 通过命名实例取可执行文件路径。
-envExecPath : (n : String) -> {r : Row} -> {w : Member (Env n) r} -> Eff r String
+envExecPath : (n : String) -> {r : Row} -> {w : Member n (Env n) r} -> Eff r String
 envExecPath n = sendCore (Env n) "env" n ExecPath
 
 -- | 一阶 handler：`ret` / `opH` 由调用方给出，结果行删除 `Env n`。
-handleEnv : {a : Type} -> {b : Type} -> {r : Row} -> (n : String) -> {w : Member (Env n) r} -> (a -> b) -> ((o : EnvOp) -> (resEnv o -> b) -> b) -> Eff r a -> Eff (Base.Eff.rowRem (Env n) r) b
+handleEnv : {a : Type} -> {b : Type} -> {r : Row} -> (n : String) -> {w : Member n (Env n) r} -> (a -> b) -> ((o : EnvOp) -> (resEnv o -> b) -> b) -> Eff r a -> Eff (Base.Eff.rowRem n (Env n) r) b
 handleEnv n ret opH comp = handleCore (Env n) "env" n ret opH comp
 
 -- | 真实 handler 的操作解释：把三个操作映射到 `Base.IO` 的 `getEnv` / `getCwd` / `execPath`。
@@ -63,7 +63,7 @@ envOpHIO op k = case op of
     k v
 
 -- | IO-backed handler：结果行删除 `Env n`，answer 是 IO 动作，可交给 `runIOAnswer`。
-handleEnvIO : {a : Type} -> {r : Row} -> (n : String) -> Eff (Base.Eff.Cons (Env n) r) a -> Eff r (IO a)
+handleEnvIO : {a : Type} -> {r : Row} -> (n : String) -> Eff (Base.Eff.Cons n (Env n) r) a -> Eff r (IO a)
 handleEnvIO n comp = handleEnv n (\a => pure a) envOpHIO comp
 
 -- | 单效应便捷入口（P3）：`handleEnvIO n` + `runIOAnswer` 的组合。

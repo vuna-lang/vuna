@@ -107,6 +107,7 @@ isOpChar c =
 
 -- 关键字表（M28 增 `axiom`；M31.2 增 `infixl` / `infixr` / `infix`）。
 isKeyword : String -> Bool
+-- native-effects N1：`perform op`（ND12 保留名编码）。
 isKeyword s =
   s == "data"
     || s == "axiom"
@@ -130,6 +131,7 @@ isKeyword s =
     || s == "instance"
     || s == "deriving"
     || s == "do"
+    || s == "perform"
     || s == "infixl"
     || s == "infixr"
     || s == "infix"

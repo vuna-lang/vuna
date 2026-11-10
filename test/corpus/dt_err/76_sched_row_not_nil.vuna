@@ -2,10 +2,10 @@
 import Base.Eff
 import Base.EffSched
 
-prog : Eff (Cons Int Nil) Int
+prog : Eff (Cons "main" Int []) Int
 prog = pure 1
 
-bad : Eff Nil (Task Int)
+bad : Eff [] (Task Int)
 bad = do
   sc <- newScope
   forkTask sc prog

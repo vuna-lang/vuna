@@ -1,0 +1,9 @@
+[package]
+name = "iface-audit-mid"
+
+[export]
+modules = ["Mid"]
+
+[dependencies]
+dep = "../dep"
+vuna-base = "../../../../../base"

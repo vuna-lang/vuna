@@ -35,15 +35,15 @@ resClock Now = Int
 resClock (SleepMicros us) = Int
 
 -- | 通过命名实例读当前时间戳（微秒）。
-clockNow : (n : String) -> {r : Row} -> {w : Member (Clock n) r} -> Eff r Int
+clockNow : (n : String) -> {r : Row} -> {w : Member n (Clock n) r} -> Eff r Int
 clockNow n = sendCore (Clock n) "clock" n Now
 
 -- | 通过命名实例睡 `us` 微秒；真实 handler 走编译器原生 `prim_sleep`（阻塞睡眠，不是忙等）。
-clockSleepMicros : (n : String) -> Int -> {r : Row} -> {w : Member (Clock n) r} -> Eff r Int
+clockSleepMicros : (n : String) -> Int -> {r : Row} -> {w : Member n (Clock n) r} -> Eff r Int
 clockSleepMicros n us = sendCore (Clock n) "clock" n (SleepMicros us)
 
 -- | 一阶 handler：`ret` / `opH` 由调用方给出，结果行删除 `Clock n`。
-handleClock : {a : Type} -> {b : Type} -> {r : Row} -> (n : String) -> {w : Member (Clock n) r} -> (a -> b) -> ((o : ClockOp) -> (resClock o -> b) -> b) -> Eff r a -> Eff (Base.Eff.rowRem (Clock n) r) b
+handleClock : {a : Type} -> {b : Type} -> {r : Row} -> (n : String) -> {w : Member n (Clock n) r} -> (a -> b) -> ((o : ClockOp) -> (resClock o -> b) -> b) -> Eff r a -> Eff (Base.Eff.rowRem n (Clock n) r) b
 handleClock n ret opH comp = handleCore (Clock n) "clock" n ret opH comp
 
 -- | 真实 handler 的操作解释：`Now` 走 `timeUs`，`SleepMicros` 走 `prim_sleep`（阻塞睡眠）。
@@ -57,7 +57,7 @@ clockOpHIO op k = case op of
     k 0
 
 -- | IO-backed handler：结果行删除 `Clock n`，answer 是 IO 动作，可交给 `runIOAnswer`。
-handleClockIO : {a : Type} -> {r : Row} -> (n : String) -> Eff (Base.Eff.Cons (Clock n) r) a -> Eff r (IO a)
+handleClockIO : {a : Type} -> {r : Row} -> (n : String) -> Eff (Base.Eff.Cons n (Clock n) r) a -> Eff r (IO a)
 handleClockIO n comp = handleClock n (\a => pure a) clockOpHIO comp
 
 -- | 单效应便捷入口（P3）：`handleClockIO n` + `runIOAnswer` 的组合。

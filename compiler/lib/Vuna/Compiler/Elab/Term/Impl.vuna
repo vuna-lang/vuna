@@ -54,6 +54,7 @@ module Vuna.Compiler.Elab.Term.Impl
 -- Vuna.Compiler.Elab.Term.Impl（M25.2c 拆分）：项检查的 fuel 版实现（组内互递归只经 *Fuel 名）。
 import Base.List
 import Vuna.Compiler.Common
+import Base.Nat
 import Vuna.Compiler.Core
 import Vuna.Compiler.Diagnostics
 import Vuna.Compiler.Elab.Case
@@ -400,13 +401,77 @@ else case checkEFuel (fuel - 1) globals ctx ec c (VNeutral (NGlobal boolTypeName
 
 -- 变量解析顺序：局部上下文 → 本程序的数据构造子 → 全局签名。构造子必须排在全局之前：
 -- 本程序数据构造子（canonical Bool 的 `Base.Bool.True/False` 精化成 `TBool`）先于全局签名。
+-- ---------------------------------------------------------------
+-- native-effects N1：`perform <op>` 降级（ND8/ND9）
+-- ---------------------------------------------------------------
+-- 族约定：op 族 `M.XxxOp` ↔ 标签构造子 `M.Xxx`（过渡期 `String -> Type`，编译期补实例名）
+-- ↔ 结果族 `M.resXxx`（本提交只做存在性协议校验）；key = op 族规范名。
+-- 降级目标：`Base.Eff.performCore <n=洞> "<key>" (<M.Xxx> <n=洞>) <op>`；
+-- 名字洞由 `{w : Member n e r}` 隐式求解从行条目合一解出，行里没有该条目即缺实例错误。
+data PerfFamily : Type where
+  PerfFamily : String -> String -> String -> PerfFamily
+
+-- 短名：去掉 `Op` 后缀（`ConsoleOp` → `Console`）。
+perfShortOf : String -> Maybe String
+perfShortOf last = if endsWith "Op" last then
+  let
+    n = strLength last
+  in if n > 2 then Just (substring 0 (Base.Nat.fromInt (n - 2)) last) else Nothing
+else Nothing
+
+perfFamilyOfCanonical : String -> Maybe PerfFamily
+perfFamilyOfCanonical canon = case splitLastDot (splitOnDot canon) of
+  Pair parts last => case perfShortOf last of
+    Just short => Just (PerfFamily canon (joinDots parts) short)
+    Nothing => Nothing
+
+-- op 的类型值必须是 nullary 全局 data 类型（`Base.EffConsole.ConsoleOp`）。
+perfFamilyOfValue : Ec -> Value -> Maybe PerfFamily
+perfFamilyOfValue ec v = case forceVal ec v of
+  VNeutral (NGlobal g sp) => case sp of
+    [] => perfFamilyOfCanonical g
+    _ => Nothing
+  _ => Nothing
+
+-- `perform` 标记：`EApp (EVar @vuna@perform sp) [op] sp`。
+performOperand : Expr -> Maybe (Pair Expr Span)
+performOperand (EApp (EVar name sp) ([op]) asp) =
+  if isPerformSyntax name then Just (Pair op asp) else Nothing
+performOperand _ = Nothing
+
+qualifyShort : String -> String -> String
+qualifyShort mod short = if mod == "" then short else "${mod}.${short}"
+
+-- 由 op 的类型值构造降级调用表达式：`performCore <n=洞> "<key>" (<M.Xxx> <洞>) <op>`。
+-- 纯函数（不递归、不调精化器），避免把大段逻辑塞进 inferEFuel 体内。
+performCallExpr : List (Pair String Term) -> Ctx -> Ec -> Value -> Expr -> Span -> Result Expr
+performCallExpr globals ctx ec opTy op sp = case perfFamilyOfValue ec opTy of
+  Nothing => tcErr1 sp (EffResFamilyMissing (showValueAt 6 opTy)) (showValueAt 6 opTy)
+  Just (PerfFamily canon mod short) =>
+    let
+      labelName = qualifyShort mod short
+      resName = qualifyShort mod ("res" ++ short)
+    in case globalsLookup labelName globals ec of
+      Nothing => tcErr1 sp (EffResFamilyMissing canon) canon
+      Just _ => case globalsLookup resName globals ec of
+        Nothing => tcErr1 sp (EffResFamilyMissing canon) canon
+        Just _ =>
+          Ok
+            (EApp (EVar "Base.Eff.performCore" sp) [EVar "_" sp, EStr canon sp, EApp (EVar labelName sp) [EVar "_" sp] sp, op] sp)
+
 inferEFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Expr -> Result (Pair Term (Pair Value Ec))
 inferEFuel fuel globals ctx ec expr = if fuel <= 0 then Err "DT: internal: inference fuel exhausted"
-else case listLitElems expr of
-  Just elems =>
-    Vuna.Compiler.Common.bind (expandListLit ec listFamilyName elems (exprSpan expr))
-      (\e2 => inferEFuel (fuel - 1) globals ctx ec e2)
-  Nothing => inferEFuelCore fuel globals ctx ec expr
+else case performOperand expr of
+  Just (Pair op _) => Vuna.Compiler.Common.bind (inferEFuel (fuel - 1) globals ctx ec op) (\p => case p of
+    Pair _ (Pair opTy ec1) =>
+      Vuna.Compiler.Common.bind (performCallExpr globals ctx ec1 opTy op (exprSpan expr))
+        (\callExpr => inferEFuel (fuel - 1) globals ctx ec1 callExpr)
+  )
+  Nothing => case listLitElems expr of
+    Just elems =>
+      Vuna.Compiler.Common.bind (expandListLit ec listFamilyName elems (exprSpan expr))
+        (\e2 => inferEFuel (fuel - 1) globals ctx ec e2)
+    Nothing => inferEFuelCore fuel globals ctx ec expr
 
 -- | 自动补注（M41 新增导出）：inferEFuelCore。
 inferEFuelCore : Int -> List (Pair String Term) -> Ctx -> Ec -> Expr -> Result (Pair Term (Pair Value Ec))
@@ -867,9 +932,40 @@ expandListLitGo nilName consName (e :: rest) sp =
   Vuna.Compiler.Common.bind (expandListLitGo nilName consName rest sp)
     (\t => Ok (EApp (EVar consName sp) [e, t] sp))
 
+-- 命名行（ND3 过渡桥）：标签 `X "name" ...` 的首个 String 实参就是实例名。
+-- `[Console "real"]` → `Cons "real" (Console "real") Nil`，`[Console n]` → `Cons n (Console n) Nil`；
+-- 无该实参的裸标签（如 `Fetch`）→ `defaultInstance`。ND2 从标签移除 String 后，
+-- 本规则收敛为「裸标签 = 默认名」+ ND4 的 `@` 显式名糖。
+rowLitNameArg : Expr -> Maybe Expr
+rowLitNameArg (EApp f args _) = case rowLitNameArg f of
+  Just nExpr => Just nExpr
+  Nothing => case args of
+    a :: _ => case a of
+      EStr s _ => Just a
+      EVar nm _ => Just a
+      _ => Nothing
+    _ => Nothing
+rowLitNameArg _ = Nothing
+
+rowLitNameExpr : Expr -> Span -> Expr
+rowLitNameExpr e sp = case rowLitNameArg e of
+  Just nExpr => nExpr
+  Nothing => EStr effDefaultInstance sp
+
+expandRowListLitGo : String -> String -> List Expr -> Span -> Result Expr
+expandRowListLitGo nilName consName [] sp = Ok (EVar nilName sp)
+expandRowListLitGo nilName consName (e :: rest) sp =
+  Vuna.Compiler.Common.bind (expandRowListLitGo nilName consName rest sp)
+    (\t => Ok (EApp (EVar consName sp) [rowLitNameExpr e sp, e, t] sp))
+
 -- | 自动补注（M41 新增导出）：expandListLit。
 expandListLit : Ec -> String -> List Expr -> Span -> Result Expr
-expandListLit ec fam elems sp = case litFamilyCtor ec fam "Nil" of
+expandListLit ec fam elems sp = if fam == effRowFamilyName then case litFamilyCtor ec fam "Nil" of
+  Nothing => tcErr1 sp (UnknownName fam) fam
+  Just nilC => case litFamilyCtor ec fam "Cons" of
+    Nothing => tcErr1 sp (UnknownName fam) fam
+    Just consC => expandRowListLitGo (dtCtorName nilC) (dtCtorName consC) elems sp
+else case litFamilyCtor ec fam "Nil" of
   Nothing => tcErr1 sp (UnknownName fam) fam
   Just nilC => case litFamilyCtor ec fam "Cons" of
     Nothing => tcErr1 sp (UnknownName fam) fam
@@ -914,6 +1010,19 @@ else
             (Pair (Base.List.Cons (Pair (quote (ctxDepth ctx) proof) Rig0) argTerms) (Pair resTy ec2))
       )
       MemberAbsent => tcErr1 sp (NoInstanceFound "row membership") "row membership"
+      -- 命名行歧义（ND5）：这里先建 meta + 延迟约束；最终化在 resolveRowGoalsCtxGo
+      -- 报 TC_AmbiguousInstance（能拿到 span 与候选文本）。
+      MemberAmbiguous _ =>
+        let
+          m = ecNext ec
+        in case newMeta ctx ec of
+          Pair metaTerm ec1 =>
+            let
+              ec2 = ecAddConstraint ec1 CkRow m dom (Just sp) (ctxDepth ctx)
+            in Vuna.Compiler.Common.bind (inferArgsGo (fuel - 1) globals ctx ec2 (applyClosure clo (eval (ctxEnv ctx) metaTerm)) args sp hint) (\p => case p of
+              Pair argTerms (Pair resTy ec3) =>
+                Ok (Pair (Base.List.Cons (Pair metaTerm Rig0) argTerms) (Pair resTy ec3))
+            )
       MemberStuck =>
         let
           m = ecNext ec
@@ -1164,12 +1273,14 @@ else case args of
 
 checkEFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Expr -> Value -> Result (Pair Term Ec)
 checkEFuel fuel globals ctx ec expr expected = if fuel <= 0 then Err "DT: internal: inference fuel exhausted"
-else case listLitElems expr of
-  Just elems =>
-    Vuna.Compiler.Common.bind
-      (expandListLit ec (listLitFamily ec (forceVal ec expected)) elems (exprSpan expr))
-      (\e2 => checkEFuel (fuel - 1) globals ctx ec e2 expected)
-  Nothing => checkEFuelNoRow fuel globals ctx ec expr expected
+else case performOperand expr of
+  Just _ => checkByInferFuel (fuel - 1) globals ctx ec expr expected
+  Nothing => case listLitElems expr of
+    Just elems =>
+      Vuna.Compiler.Common.bind
+        (expandListLit ec (listLitFamily ec (forceVal ec expected)) elems (exprSpan expr))
+        (\e2 => checkEFuel (fuel - 1) globals ctx ec e2 expected)
+    Nothing => checkEFuelNoRow fuel globals ctx ec expr expected
 
 -- 字面量转换（FromString / FromInt）：期望类型不是内建字面量类型时，若期望类型上存在
 -- 对应 trait 的实例，就把字面量降级成 trait 方法应用（`fromString "s"` / `fromInt n`），
@@ -1503,10 +1614,14 @@ else case stripPisWithMetas 64 ctx ec piTy of
 -- | 与 inferEFuel 同形，但 EApp 会把期望结果类型作为 hint 传进推断入口。
 inferEFuelHint : Int -> List (Pair String Term) -> Ctx -> Ec -> Expr -> Value -> Result (Pair Term (Pair Value Ec))
 inferEFuelHint fuel globals ctx ec expr expected = if fuel <= 0 then Err "DT: internal: inference fuel exhausted"
-else case expr of
-  EApp fn args sp =>
-    inferAppFuel (fuel - 1) globals ctx ec fn args sp (Just (Pair (length (ecPending ec)) expected))
-  _ => inferEFuel fuel globals ctx ec expr
+else case performOperand expr of
+  -- perform 标记必须先于 EApp 分解拦截（否则会把标记名当普通变量解析）。
+  Just _ => inferEFuel (fuel - 1) globals ctx ec expr
+  Nothing => case expr of
+    EApp fn args sp =>
+      inferAppFuel (fuel - 1) globals ctx ec fn args sp
+        (Just (Pair (length (ecPending ec)) expected))
+    _ => inferEFuel fuel globals ctx ec expr
 
 -- ---------------------------------------------------------------
 -- F3-1：运行入口的未处理效应诊断
@@ -1532,17 +1647,24 @@ isNilRowValue ec v = case forceVal ec v of
   VCon n _ => n == effRowNilCtor
   _ => False
 
+-- | 命名行条目的 (名字, (标签, 尾行))：`Cons n e t`（3 实参）。不是行条目返回 Nothing。
+-- 单个 Cons 分支：规避旧编译器在深/浅两个 Cons 分支回退时的变量串位（debt D53）。
+effConsLabelTail : Value -> Maybe (Pair Value (Pair Value Value))
+effConsLabelTail (VCon consName (n :: e :: t :: _)) =
+  if consName == effRowConsCtor then Just (Pair n (Pair e t)) else Nothing
+effConsLabelTail _ = Nothing
+
 -- | 具体行里的标签列表；遇到未解元变量/未知形态返回 Nothing（不猜）。
 rowEffectLabels : Int -> Ec -> Value -> Maybe (List String)
 rowEffectLabels fuel ec row = if fuel <= 0 then Nothing
 else case forceVal ec row of
   VCon consName cargs => if consName == effRowNilCtor then Just []
-  else if consName == effRowConsCtor then case cargs of
-    h :: t :: _ => if hasUnsolvedMetaValue (ecSolsP ec) h then Nothing
+  else if consName == effRowConsCtor then case effConsLabelTail (VCon consName cargs) of
+    Just (Pair _ (Pair h t)) => if hasUnsolvedMetaValue (ecSolsP ec) h then Nothing
     else case rowEffectLabels (fuel - 1) ec t of
       Just labels => Just (Base.List.Cons (showValue h) labels)
       Nothing => Nothing
-    _ => Nothing
+    Nothing => Nothing
   else Nothing
   _ => Nothing
 
@@ -1580,9 +1702,9 @@ tryEffLift ctx globals ec expected actual term = case globalsLookup "Base.Eff.we
       d = ctxDepth ctx
     in case effRowAndResult (forceVal ec expected) of
       Nothing => Nothing
-      Just p => case forceVal ec (firstOf p) of
-        VCon consName (eV :: tailV :: _) => if consName /= effRowConsCtor then Nothing
-        else
+      Just p => case effConsLabelTail (forceVal ec (firstOf p)) of
+        Nothing => Nothing
+        Just (Pair nV (Pair eV tailV)) =>
           let
             tailF = forceVal ec tailV
           in if hasUnsolvedMetaValue (ecSolsP ec) tailF then Nothing
@@ -1595,8 +1717,7 @@ tryEffLift ctx globals ec expected actual term = case globalsLookup "Base.Eff.we
               Err _ => Nothing
               Ok ec2 =>
                 Just
-                  (Pair (TApp (TApp (TApp (TApp (TGlobal "Base.Eff.weaken") (quote d eV) Rig0) (quote d tailF) Rig0) (quote d (secondOf p)) Rig0) term RigOmega) ec2)
-        _ => Nothing
+                  (Pair (TApp (TApp (TApp (TApp (TApp (TGlobal "Base.Eff.weaken") (quote d nV) Rig0) (quote d eV) Rig0) (quote d tailF) Rig0) (quote d (secondOf p)) Rig0) term RigOmega) ec2)
 
 checkByInferFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Expr -> Value -> Result (Pair Term Ec)
 checkByInferFuel fuel globals ctx ec expr expected = if fuel <= 0 then Err "DT: internal: inference fuel exhausted"

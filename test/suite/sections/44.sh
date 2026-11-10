@@ -85,4 +85,98 @@ else
 fi
 
 
+# 44m) 导出面翻转（依赖隐藏调用方用到的名字）：`miIfaceHash` 覆盖 exports 后，依赖方必须
+#      判脏；摘要路径与全量路径给出**同一**诊断（旧行为：摘要复用干净模块而漏报）。
+audit_pkg=corpus/packages/m34_iface_audit
+audit_dir="$tmp/iface-audit-pkg"
+audit_cache="$tmp/iface-audit-cache"
+rm -rf "$audit_dir"
+mkdir -p "$audit_cache"
+cp -R "$audit_pkg" "$audit_dir"
+for audit_mf in "$audit_dir"/*/vuna.toml; do
+  sed "s#vuna-base = \"[^\"]*\"#vuna-base = \"$VUNA_BASE\"#" "$audit_mf" >"$audit_mf.tmp" && mv "$audit_mf.tmp" "$audit_mf"
+done
+if TMPDIR="$audit_cache" "$summ_vuna" check "$audit_dir/dep" >/dev/null 2>&1 \
+  && TMPDIR="$audit_cache" "$summ_vuna" check "$audit_dir/mid" >/dev/null 2>&1; then
+  ok
+else
+  bad "iface audit warmup" "0" "dep/mid check failed"
+fi
+audit_dep_src="$audit_dir/dep/lib/Dep.vuna"
+cp "$audit_dep_src" "$tmp/audit-dep-orig.vuna"
+printf '%s\n' 'module Dep (bar) where' '' 'foo : Int' 'foo = 1' '' 'bar : Int' 'bar = 2' >"$audit_dep_src"
+find "$audit_cache"/vuna-cache -name check -type d -prune -exec rm -rf {} + 2>/dev/null || true
+TMPDIR="$audit_cache" "$summ_vuna" check "$audit_dir/dep" >/dev/null 2>&1
+find "$audit_cache"/vuna-cache -name check -type d -prune -exec rm -rf {} + 2>/dev/null || true
+audit_sum=$(TMPDIR="$audit_cache" "$summ_vuna" check "$audit_dir/mid" 2>&1)
+audit_sum_code=$?
+find "$audit_cache"/vuna-cache -name check -type d -prune -exec rm -rf {} + 2>/dev/null || true
+audit_full=$(TMPDIR="$audit_cache" VUNA_ELAB_FULL=1 "$summ_vuna" check "$audit_dir/mid" 2>&1)
+audit_full_code=$?
+audit_sum_diag=$(printf '%s\n' "$audit_sum" | grep -vE '^(DEBUG|PERF) ' || true)
+audit_full_diag=$(printf '%s\n' "$audit_full" | grep -vE '^(DEBUG|PERF) ' || true)
+check_eq "iface export flip summary rejects" "1" "$audit_sum_code"
+check_eq "iface export flip full rejects" "1" "$audit_full_code"
+check_eq "iface export flip same diagnostic" "$audit_full_diag" "$audit_sum_diag"
+find "$audit_cache"/vuna-cache -name check -type d -prune -exec rm -rf {} + 2>/dev/null || true
+audit_log=$(TMPDIR="$audit_cache" VUNA_IFACE_AUDIT=1 "$summ_vuna" check "$audit_dir/mid" 2>&1)
+case "$audit_log" in
+  *iface-audit-mismatch*) bad "iface audit consistency" "no mismatch" "$(printf '%s' "$audit_log" | tail -2)" ;;
+  *) ok ;;
+esac
+cp "$tmp/audit-dep-orig.vuna" "$audit_dep_src"
+
+# 44n) 包配置指纹（`pmEnv`）：改 `vuna.toml`（不进模块源哈希）必须让本包接口判脏，
+#      重算后收敛。
+TMPDIR="$audit_cache" "$summ_vuna" check "$audit_dir/dep" >/dev/null 2>&1
+TMPDIR="$audit_cache" "$summ_vuna" check "$audit_dir/mid" >/dev/null 2>&1
+printf '\n# env fingerprint probe\n' >>"$audit_dir/mid/vuna.toml"
+find "$audit_cache"/vuna-cache -name check -type d -prune -exec rm -rf {} + 2>/dev/null || true
+audit_env_log=$(TMPDIR="$audit_cache" "$summ_vuna" check "$audit_dir/mid" --debug-perf 2>&1)
+check_contains "iface env change rejects own iface" "$audit_env_log" "iface-reject=own-env"
+find "$audit_cache"/vuna-cache -name check -type d -prune -exec rm -rf {} + 2>/dev/null || true
+audit_env_log2=$(TMPDIR="$audit_cache" "$summ_vuna" check "$audit_dir/mid" --debug-perf 2>&1)
+check_contains "iface env change converges" "$audit_env_log2" "iface-write=0/"
+
+# 44o) 镜像模式内容寻址：文件名含接口哈希；实现变化产生新 token 文件，旧 token 在
+#      60s 窗口外由孤儿 GC 清理。
+audit_mirror=$(iface_mirror_dir "$audit_dir/dep")
+if find "$audit_mirror" -name 'Dep-*.iface' 2>/dev/null | grep -q .; then ok; else bad "iface content-addressed name" "Dep-<hash>.iface" "missing under $audit_mirror"; fi
+find "$audit_mirror" -name '*.iface' -exec touch -d '2020-01-01 00:00:00' {} + 2>/dev/null || true
+printf '%s\n' 'module Dep (foo, bar) where' '' 'foo : Int' 'foo = 2' '' 'bar : Int' 'bar = 2' >"$audit_dir/dep/lib/Dep.vuna"
+find "$audit_cache"/vuna-cache -name check -type d -prune -exec rm -rf {} + 2>/dev/null || true
+TMPDIR="$audit_cache" "$summ_vuna" check "$audit_dir/dep" >/dev/null 2>&1
+check_eq "iface orphan gc keeps one token" "1" "$(find "$audit_mirror" -name 'Dep-*.iface' | wc -l)"
+
+# 44p) LSP 单模块写回标记为 `tool`：命令行 check 不复用它；下一次整包写回归为 `pkg`。
+lsp_pkg="$audit_dir/mid"
+lsp_cache="$tmp/iface-origin-cache"
+mkdir -p "$lsp_cache"
+TMPDIR="$lsp_cache" "$summ_vuna" check "$audit_dir/dep" >/dev/null 2>&1
+TMPDIR="$lsp_cache" "$summ_vuna" check "$lsp_pkg" >/dev/null 2>&1
+# 清掉本包接口 ⇒ LSP 走冷启动写回分支（`toolWriteModuleIfaceCold`），产物必须标 tool。
+rm -rf "$(iface_mirror_dir "$lsp_pkg")"
+lsp_src="$lsp_pkg/lib/Mid.vuna"
+lsp_text=$(cat "$lsp_src" | sed 's/\\/\\\\/g; s/"/\\"/g' | awk '{ if (NR > 1) printf "\\n"; printf "%s", $0 }')
+printf '%s\n' \
+  "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"rootUri\":\"file://$lsp_pkg\",\"capabilities\":{}}}" \
+  '{"jsonrpc":"2.0","method":"initialized","params":{}}' \
+  "{\"jsonrpc\":\"2.0\",\"method\":\"textDocument/didOpen\",\"params\":{\"textDocument\":{\"uri\":\"file://$lsp_src\",\"languageId\":\"vuna\",\"version\":1,\"text\":\"$lsp_text\"}}}" \
+  '{"jsonrpc":"2.0","id":2,"method":"shutdown"}' \
+  '{"jsonrpc":"2.0","method":"exit"}' >"$tmp/lsp-origin.jsonl"
+LC_ALL=C awk '{ printf "Content-Length: %d\r\n\r\n%s", length($0), $0 }' "$tmp/lsp-origin.jsonl" >"$tmp/lsp-origin.frames"
+if TMPDIR="$lsp_cache" "$summ_vuna" lsp <"$tmp/lsp-origin.frames" >/dev/null 2>&1; then
+  lsp_mf=$(iface_mirror_dir "$lsp_pkg")/.vuna-iface
+  lsp_origin=$(LC_ALL=C grep -ao 'tool' "$lsp_mf" 2>/dev/null | wc -l)
+  if [ "${lsp_origin:-0}" -ge 1 ]; then ok; else bad "iface tool origin written" "tool entry" "no tool origin in $lsp_mf"; fi
+  find "$lsp_cache"/vuna-cache -name check -type d -prune -exec rm -rf {} + 2>/dev/null || true
+  lsp_check=$(TMPDIR="$lsp_cache" "$summ_vuna" check "$lsp_pkg" --debug-perf 2>&1)
+  check_contains "iface tool origin rejected by check" "$lsp_check" "iface-reject=tool-origin"
+  find "$lsp_cache"/vuna-cache -name check -type d -prune -exec rm -rf {} + 2>/dev/null || true
+  lsp_check2=$(TMPDIR="$lsp_cache" "$summ_vuna" check "$lsp_pkg" --debug-perf 2>&1)
+  check_contains "iface tool origin rewritten as pkg" "$lsp_check2" "iface-write=0/"
+else
+  bad "iface lsp session" "0" "vuna lsp exited non-zero"
+fi
+
 finish

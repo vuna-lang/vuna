@@ -24,7 +24,7 @@ throw : (n : String) -> String -> {a : Type} -> {r : Row} -> Eff r a
 throw n msg = sendCore (Error n) "error" n (Throw msg)
 
 -- | 一阶 handler：`ret` / `opH` 由调用方给出，结果行删除 `Error n`。
-handleError : {a : Type} -> {b : Type} -> {r : Row} -> (n : String) -> (a -> b) -> ((o : ErrorOp) -> (resError o -> b) -> b) -> Eff r a -> Eff (Base.Eff.rowRem (Error n) r) b
+handleError : {a : Type} -> {b : Type} -> {r : Row} -> (n : String) -> (a -> b) -> ((o : ErrorOp) -> (resError o -> b) -> b) -> Eff r a -> Eff (Base.Eff.rowRem n (Error n) r) b
 handleError n ret opH comp = handleCore (Error n) "error" n ret opH comp
 
 -- | 内部：默认 `ret`——成功值包装成 `Ok`。
@@ -37,17 +37,17 @@ errorOpH op k = case op of
   Throw s => Err s
 
 -- | 内部：`catch` 的续段——`Ok a` 原样返回，`Err s` 交给 fallback。
-catchResult : (n : String) -> {a : Type} -> {r : Row} -> (String -> Eff (Base.Eff.Cons (Error n) r) a) -> Result a -> Eff (Base.Eff.Cons (Error n) r) a
+catchResult : (n : String) -> {a : Type} -> {r : Row} -> (String -> Eff (Base.Eff.Cons n (Error n) r) a) -> Result a -> Eff (Base.Eff.Cons n (Error n) r) a
 catchResult n fallback res = case res of
   Ok a => pure a
   Err s => fallback s
 
 -- | 把 `Error n` 收成 `Result`：`Ok a` / `Err msg`；结果行删除 `Error n`。
-runError : (n : String) -> {a : Type} -> {r : Row} -> Eff (Base.Eff.Cons (Error n) r) a -> Eff r (Result a)
+runError : (n : String) -> {a : Type} -> {r : Row} -> Eff (Base.Eff.Cons n (Error n) r) a -> Eff r (Result a)
 runError n comp = handleError n errorRet errorOpH comp
 
 -- | 作用域 catch：在 `comp` 内安装临时 handler；Throw 截获后丢弃续延、在 handler 之外执行 `fallback`，成功时原样返回。
-catch : (n : String) -> {a : Type} -> {r : Row} -> Eff (Base.Eff.Cons (Error n) r) a -> (String -> Eff (Base.Eff.Cons (Error n) r) a) -> Eff (Base.Eff.Cons (Error n) r) a
+catch : (n : String) -> {a : Type} -> {r : Row} -> Eff (Base.Eff.Cons n (Error n) r) a -> (String -> Eff (Base.Eff.Cons n (Error n) r) a) -> Eff (Base.Eff.Cons n (Error n) r) a
 catch n comp fallback = do
-  res <- weaken (handleError n errorRet errorOpH comp)
+  res <- weaken n (handleError n errorRet errorOpH comp)
   catchResult n fallback res

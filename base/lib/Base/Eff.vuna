@@ -4,11 +4,13 @@ module Base.Eff
   , Member(..)
   , Row(..)
   , bracket
+  , defaultInstance
   , effPrim
   , finally
   , handleCore
   , handleCoreLin
   , mkCont
+  , performCore
   , resumeCont
   , rowRem
   , runEff
@@ -40,20 +42,26 @@ import Base.Monad
 -- | 开放世界的效应行（Type-1 数据）：`Nil` 是空行，`Cons` 是 `Type` 标签 + 尾行。行只是擦除索引，运行时靠 `send` / `handle` 的 (key, name) 找 handler。
 data Row : Type 1 where
   Nil : Row
-  Cons : Type -> Row -> Row
+  -- 命名行（native-effects ND1）：`n` 是实例名（String 值），`e` 是效应标签类型。
+  Cons : String -> Type -> Row -> Row
 
--- 行成员证明（W3）：归纳族，`Here` 在头部命中，`There` 跳过头部。
--- 隐式参数 `{w : Member e r}` 由精化器按行结构构造证明（见 effects.md §8）。
--- | 行成员证明 `Member e r`（Type-1 归纳族）：`Here` 在头部命中，`There` 跳过头部；隐式参数由精化器按行结构构造。
-data Member : Type -> Row -> Type 1 where
-  Here : {e : Type} -> {r : Row} -> Member e (Cons e r)
-  There : {e : Type} -> {x : Type} -> {r : Row} -> Member e r -> Member e (Cons x r)
+-- 行成员证明（W3 / ND1）：归纳族，名字与标签同时匹配才算 `Here`；`There` 跳过头部。
+-- 隐式参数 `{w : Member n e r}` 由精化器按 (名字, 标签) 结构构造证明。
+-- | 行成员证明 `Member n e r`（Type-1 归纳族）：`Here` 在头部同时命中名字与标签，`There` 跳过头部。
+data Member : String -> Type -> Row -> Type 1 where
+  Here : {n : String} -> {e : Type} -> {r : Row} -> Member n e (Cons n e r)
+  There : {n : String} -> {e : Type} -> {m : String} -> {x : Type} -> {r : Row} -> Member n e r -> Member n e (Cons m x r)
 
 -- 行删除：从 r 中去掉标签 e（保留顺序）；handler 的结果行。
 -- 注意：不是类型族——类型族的重复变量模式（`Cons e r`）不会强制相等；
 -- 这里由编译器按标签类型值结构相等归约（Core.Eval.rowRemReduce）。
 -- | 从行 `r` 中删除标签 `e` 并保留顺序（handler 的结果行）。它不是类型族：由编译器按标签类型的值结构相等归约（`Core.Eval.rowRemReduce`）。
-axiom rowRem : Type -> Row -> Row
+axiom rowRem : String -> Type -> Row -> Row
+
+-- 默认实例名（命名行 ND3 / native-effects ND3）：裸标签条目 = `Cons "main" e Nil`；
+-- 行语法糖与最终化兜底共用（编译器侧镜像 `Intrinsics.effDefaultInstance`）。
+defaultInstance : String
+defaultInstance = "main"
 
 -- Eff 的内部 dummy 参数（不是世界令牌；只为 thunk 延迟执行）。
 -- | `Eff` 内部的 dummy 参数类型（**不是**世界令牌，只为 thunk 延迟执行）。
@@ -92,8 +100,12 @@ effPrim f = MkEff (\_ => f 0)
 
 -- 行扩宽：动作在更大的行里仍可执行（不安装/不删除 handler；运行时无操作）。
 -- | 行扩宽：动作在更大的行 `Cons e r` 下仍可执行（不安装也不删除 handler，运行时无操作）。
-weaken : {e : Type} -> {r : Row} -> {a : Type} -> Eff r a -> Eff (Cons e r) a
-weaken (MkEff f) = MkEff f
+-- 名字必须是显式参数：M15 拒绝值类型的隐式 binder（`{n : String}`）；标 `(0 n)` 让它
+-- 与隐式参数一样在 codegen 擦除（只作类型索引，运行时不需要），自动 lift 生成的
+-- Rig0 实参与之一致。
+weaken : (0 n : String) -> {e : Type} -> {r : Row} -> {a : Type} -> Eff r a -> Eff (Cons n e r) a
+weaken n comp = case comp of
+  MkEff f => MkEff f
 
 -- | 内部：取出 Eff 动作的底层 thunk 并应用 dummy 参数（`runPure` / `runEff` 共用）。
 runThunk : {r : Row} -> {a : Type} -> Eff r a -> EffUnit -> a
@@ -126,9 +138,17 @@ runEff e = runThunk e MkEffUnit
 sendCore : (e : Type) -> {r : Row} -> {op : Type} -> {x : Type} -> (key : String) -> (name : String) -> (o : op) -> Eff r x
 sendCore e key name o = MkEff (\_ => prim_effectPerform key name o)
 
+-- native-effects N1：`perform <op>` 的降级目标（ND8/ND9）。名字、key、标签、res 族
+-- 都由编译器按 op 族推导：key = op 族规范名；标签 = 族短名应用实例名；res = `res<短名>`。
+-- 名字是运行时路由值，`{w : Member n e r}` 让行里必须存在该 (名字, 标签) 条目。
+-- 结果元素类型 `{x}` 由上下文定（ND9 的 res 族精确化留待后续：类型级显式参数按语言
+-- 规则必须是隐式/擦除，`res` 目前只作族存在性协议校验）。
+performCore : (n : String) -> (key : String) -> (e : Type) -> {r : Row} -> {w : Member n e r} -> {op : Type} -> {x : Type} -> (o : op) -> Eff r x
+performCore n key e o = sendCore e key n o
+
 -- 核心 handler：ret 处理正常返回，opH 处理每个操作；结果行删除 e。
 -- | 核心 handler：`ret` 处理正常返回，`opH` 处理每个操作，结果行删除 `e`（`rowRem e r`）；(key, name) 必须与 `sendCore` 匹配。
-handleCore : (e : Type) -> {r : Row} -> {op : Type} -> {a : Type} -> {b : Type} -> {h : Type} -> (key : String) -> (name : String) -> (a -> b) -> h -> Eff r a -> Eff (rowRem e r) b
+handleCore : (e : Type) -> {r : Row} -> {op : Type} -> {a : Type} -> {b : Type} -> {h : Type} -> (key : String) -> (name : String) -> (a -> b) -> h -> Eff r a -> Eff (rowRem name e r) b
 handleCore e key name ret opH comp = MkEff (prim_effectHandle key name ret opH (runThunk comp))
 
 -- 执行「answer 本身是 IO 动作」的程序（IO-backed handler 的入口）。
@@ -150,7 +170,7 @@ contAdapter : {op : Type} -> {res : op -> Type} -> {b : Type} -> ((o : op) -> (1
 contAdapter opH o k = opH o (MkCont k)
 
 -- | 线性版核心 handler：`opH` 接收线性 `Cont (res o) b`（一次性续延），其余同 `handleCore`；供需要线性续延的效应使用。
-handleCoreLin : (e : Type) -> {r : Row} -> {op : Type} -> {a : Type} -> {b : Type} -> {res : op -> Type} -> (key : String) -> (name : String) -> (a -> b) -> ((o : op) -> (1 k : Cont (res o) b) -> b) -> Eff r a -> Eff (rowRem e r) b
+handleCoreLin : (e : Type) -> {r : Row} -> {op : Type} -> {a : Type} -> {b : Type} -> {res : op -> Type} -> (key : String) -> (name : String) -> (a -> b) -> ((o : op) -> (1 k : Cont (res o) b) -> b) -> Eff r a -> Eff (rowRem name e r) b
 handleCoreLin e key name ret opH comp = handleCore e key name ret (contAdapter opH) comp
 
 -- ---------------------------------------------------------------

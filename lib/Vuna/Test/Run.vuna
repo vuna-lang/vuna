@@ -16,10 +16,12 @@ import Vuna.Compiler.Common
 import Vuna.Compiler.Driver.Compile
 import Vuna.Compiler.Driver.Iface
 import qualified Vuna.Cli.Args
+import Vuna.Test.Session
 import Vuna.Test.Suite
 import Vuna.Files
 import Vuna.Json
 import Base.IO.Host
+import Base.IORef
 
 -- 执行环境。
 record Env where
@@ -36,6 +38,11 @@ record Env where
   envBaseHash : Int
   envBless : Bool
   envWorker : Bool
+  -- 增量构建桶（跨 run 持久；见 buildCacheDir）。
+  envBuildDir : String
+  -- 进程内精化会话（per worker）：base 依赖接口 + 增量精化的 termAux 缓存。
+  -- 命中时 golden 的 check/interp 不再 spawn CLI（~200ms → ~10ms），未命中回退子进程。
+  envSession : IORef Session
 
 -- 一次子进程调用：退出码 + 分离的 stdout/stderr + 是否被 timeout 杀掉。
 record CmdResult where
@@ -235,64 +242,118 @@ finishCase id start assertions =
 -- ---------------------------------------------------------------
 -- golden / error case
 -- ---------------------------------------------------------------
+-- 预热依赖接口镜像：`vuna check <base>` 会把 base 的模块接口写进 `VUNA_IFACE_DIR`
+-- （单文件 check/compile 不写）。会话初始化据此把「每次重精化整棵 base」降到
+-- 「读接口 + 只精化入口」。失败只降级（会话回退 CLI），不影响用例结果。
+-- 注意：预热写的是**会话专用**镜像（`iface-session`），不是子进程用的 `iface`
+-- 镜像——子进程必须保持「无接口 ⇒ 全量精化」的既有行为，否则工具侧增量路径的
+-- 差异（例如 deriving via field 的判定）会被带进用例语义。
+warmIfaces : Env -> Int
+warmIfaces env =
+  (runCmdMerged env "iface-warmup" env.envCwd 300 (withEnvIfaceAt env "${env.envTmp}/iface-session" [env.envVuna, "check", env.envBase])).cmdCode
+
 uniqueOutDir : Env -> String -> String
 uniqueOutDir env id = "${env.envTmp}/out-${safeName id}"
 
 removeTree : String -> Int
 removeTree path = runIO (prim_runIn "/" ["rm", "-rf", path])
 
+-- ---------------------------------------------------------------
+-- 增量构建缓存：按「生成模块集」复用 ocamlopt 产物
+-- ---------------------------------------------------------------
+-- 每个 case 的 codegen 都产出「整棵 base + 自己的 Main.ml」；base 部分对同一模块集
+-- 逐字节一致，但旧实现每个 case 用独立目录 ⇒ 每次从零 ocamlopt 编译 ~25 个单元
+-- （~650ms）。这里先 codegen 到 case 私有 staging，再按 staging 里的模块集取
+-- **每 worker 共享**的构建目录，整份拷进去后跑 build.sh：内容哈希 stamp 让 base 单元
+-- 全部命中，只重编 Main.ml 并链接（~250ms）。模块集相同的 case 互相加速，模块集变
+-- 化才付一次冷编译；worker 内 case 串行执行，目录无并发写。
+-- key 用「名字哈希之和」：与 readDir 顺序无关；万一碰撞，build.sh 的 clean 检测会
+-- 退回全量重建（只是慢，不会错）。
+buildSetKey : List String -> String
+buildSetKey names = strOfInt (nonNegTotal (map hashTextStrong names))
+
+nonNegTotal : List Int -> Int
+nonNegTotal [] = 0
+nonNegTotal (h :: rest) =
+  let
+    v = if h < 0 then 0 - h else h
+  in v + nonNegTotal rest
+
+-- 共享构建目录的 key：staging 里的产物名集合（Main.ml 每 case 不同，不参与）。
+-- 目录在 `--cache-dir`（默认 `.local/test-cache`）下按「worker 作用域 + 编译器指纹 +
+-- base 哈希」分桶 ⇒ 跨 run 复用 base 的 .cmx：本地重跑不再冷编译整棵 base。
+-- 注意：两个 suite 同时用同一 worker 号会写同一桶（内容哈希 stamp 会退化为重编，
+-- 极端情况下互相踩写）；并发跑时给其中一个传 `--cache-dir` 隔离。
+buildCacheDir : Env -> String -> String
+buildCacheDir env staging = "${env.envBuildDir}/set-${buildSetKey (runIO (readDir staging))}"
+
+-- 把 staging 整份同步进共享目录（base 的 .ml 内容不变 ⇒ stamp 命中；Main.ml 换成
+-- 本 case 的）。
+syncBuildDir : String -> String -> Int
+syncBuildDir staging dir =
+  let
+    _ = ensureDirPath dir
+  in runIO (prim_runIn "/" ["cp", "-a", "${staging}/.", "${dir}/"])
+
+-- 会话优先的 check / interp 探针：命中时零子进程（~200ms → ~10ms），语义等价
+-- （check = 退出码，interp = trim 后输出文本）。会话不可用/安全阀不适用时回退 CLI，
+-- 保证诊断文本与 `.check.err` 片段匹配仍走原来的路径。
+probeInterp : Env -> Case -> String -> CmdResult
+probeInterp env c source = case sessionInterp env.envSession env.envBase source of
+  Just (Pair code out) => CmdResult code out "" False
+  Nothing =>
+    runCmdMerged env "${c.caseId}-interp" env.envCwd c.caseTimeout
+      (withEnvIface env [env.envVuna, "interp", source])
+
+probeCheck : Env -> Case -> String -> CmdResult
+probeCheck env c source = case sessionCheck env.envSession env.envBase source of
+  Just (Pair code out) => CmdResult code out "" False
+  Nothing =>
+    runCmdMerged env "${c.caseId}-check" env.envCwd c.caseTimeout
+      (withEnvIface env [env.envVuna, "check", source])
+
 goldenCase : Env -> Case -> String -> String -> Bool -> Bool -> Bool -> Bool -> Bool -> CaseResult
 goldenCase env c source expected wantInterp wantCheck wantCompile wantRun wantCompare =
   let
     start = runIO nowMicros
     expectedText = trimNewlines (runIO (readFile expected))
-    nointerp = pathExistsFile "${source}.nointerp"
-    interpOn = wantInterp && not nointerp
-    interpR =
-      if interpOn then runCmdMerged env "${c.caseId}-interp" env.envCwd c.caseTimeout
-        (withEnvIface env [env.envVuna, "interp", source])
-      else CmdResult 1 "" "" False
+    interpOn = wantInterp
+    interpR = if interpOn then probeInterp env c source else CmdResult 1 "" "" False
     interpText = if interpOn then trimNewlines (combinedOut interpR) else ""
     interpA = if interpOn then [assertEq "interp" expectedText interpText] else []
-    checkA = if wantCheck then
-      let
-        r =
-          runCmdMerged env "${c.caseId}-check" env.envCwd c.caseTimeout
-            (withEnvIface env [env.envVuna, "check", source])
-      in [assertExit "check exit" r.cmdCode]
-    else []
-    outdir = uniqueOutDir env c.caseId
-    _ = removeTree outdir
+    checkA = if wantCheck then [assertExit "check exit" (probeCheck env c source).cmdCode] else []
+    staging = "${env.envTmp}/stage-${safeName c.caseId}"
     compileR =
       if wantCompile then runCmdMerged env "${c.caseId}-compile" env.envCwd c.caseTimeout
-        (withEnvIface env [env.envVuna, "compile", source, outdir])
+        (withEnvIface env [env.envVuna, "compile", source, staging])
       else CmdResult 1 "" "" False
     compileA =
       if wantCompile then [ assertExit "compile exit" compileR.cmdCode,
         assertSilent "compile silent" (combinedOut compileR)
       ]
       else []
+    outdir = if wantCompile && compileR.cmdCode == 0 then buildCacheDir env staging else staging
+    syncA =
+      if wantCompile && compileR.cmdCode == 0 then [assertExit "cache sync" (syncBuildDir staging outdir)]
+      else []
     buildR =
       if wantCompile && compileR.cmdCode == 0 then runCmdMerged env "${c.caseId}-build" outdir c.caseTimeout ["sh", "build.sh", "prog"]
       else CmdResult 1 "" "" False
     buildA =
       if wantCompile && compileR.cmdCode == 0 then [assertExit "build exit" buildR.cmdCode] else []
+    runOk = wantRun && wantCompile && compileR.cmdCode == 0 && buildR.cmdCode == 0
     runR =
-      if wantRun && wantCompile && compileR.cmdCode == 0 && buildR.cmdCode == 0 then runCmdMerged env "${c.caseId}-run" env.envCwd c.caseTimeout ["${outdir}/prog"]
+      if runOk then runCmdMerged env "${c.caseId}-run" env.envCwd c.caseTimeout ["${outdir}/prog"]
       else CmdResult 1 "" "" False
-    runA =
-      if wantRun && wantCompile && compileR.cmdCode == 0 && buildR.cmdCode == 0 then [assertEq "run" expectedText (trimNewlines (combinedOut runR))]
-      else []
+    runA = if runOk then [assertEq "run" expectedText (trimNewlines (combinedOut runR))] else []
     compareA =
-      if wantCompare && interpOn && wantRun && compileR.cmdCode == 0 && buildR.cmdCode == 0 then [assertEq "interp == run" interpText (trimNewlines (combinedOut runR))]
+      if wantCompare && interpOn && runOk then [assertEq "interp == run" interpText (trimNewlines (combinedOut runR))]
       else []
   in let
     base =
       finishCase c.caseId start
-        (append interpA (append checkA (append compileA (append buildA (append runA compareA)))))
-    actualForBless =
-      if wantRun && compileR.cmdCode == 0 && buildR.cmdCode == 0 then trimNewlines (combinedOut runR)
-      else interpText
+        (append interpA (append checkA (append compileA (append syncA (append buildA (append runA compareA))))))
+    actualForBless = if runOk then trimNewlines (combinedOut runR) else interpText
   in if env.envBless && base.resFail > 0 then
     let
       _ = runIO (writeFile expected "${actualForBless}\n")
@@ -304,11 +365,14 @@ errorCase env c source expected wantInterp wantCheck wantCompile =
   let
     start = runIO nowMicros
     fragment = trimNewlines (runIO (readFile expected))
-    cerrPath =
-      if endsWith ".vuna" source then "${substring 0 (byteLength source - 5) source}.cerr"
-      else "${source}.cerr"
+    baseName =
+      if endsWith ".vuna" source then substring 0 (byteLength source - 5) source else source
+    compileErrPath = "${baseName}.compile.err"
+    legacyCerrPath = "${baseName}.cerr"
     compileFragment =
-      if pathExistsFile cerrPath then trimNewlines (runIO (readFile cerrPath)) else fragment
+      if pathExistsFile compileErrPath then trimNewlines (runIO (readFile compileErrPath))
+      else if pathExistsFile legacyCerrPath then trimNewlines (runIO (readFile legacyCerrPath))
+      else fragment
     interpA = if wantInterp then
       let
         r =
@@ -589,50 +653,39 @@ fixCase env c source expected =
     idemA = assertEq "fix idempotent" once twice
   in finishCase c.caseId start [fixA, idemA]
 
+-- 产物运行期 case。expectedExit 语义：0 = 断言非 0（无显式退出码的遗留行为）；
+-- 256 = 断言恰好 0（`.run.exit` 内容为 0，哨兵超出真实退出码 0–255 范围）；
+-- n > 0（< 256）= 断言恰好 n。expectedErr 缺失（只有 `.run.exit`）时跳过片段断言。
 runtimeCase : Env -> Case -> String -> String -> Int -> CaseResult
 runtimeCase env c source expectedErr expectedExit =
   let
     start = runIO nowMicros
-    fragment = trimNewlines (runIO (readFile expectedErr))
-    outdir = uniqueOutDir env c.caseId
-    _ = removeTree outdir
+    fragmentText = readMaybeFile expectedErr
+    fragment = trimNewlines fragmentText
+    staging = "${env.envTmp}/stage-${safeName c.caseId}"
     comp =
       runCmdMerged env "${c.caseId}-compile" env.envCwd c.caseTimeout
-        (withEnvIface env [env.envVuna, "compile", source, outdir])
+        (withEnvIface env [env.envVuna, "compile", source, staging])
+    outdir = if comp.cmdCode == 0 then buildCacheDir env staging else staging
+    _ = if comp.cmdCode == 0 then syncBuildDir staging outdir else 0
     buildA = if comp.cmdCode == 0 then
       let
         b = runCmdMerged env "${c.caseId}-build" outdir c.caseTimeout ["sh", "build.sh", "prog"]
       in if b.cmdCode == 0 then
         let
           r = runCmdMerged env "${c.caseId}-run" env.envCwd c.caseTimeout ["${outdir}/prog"]
+          fragmentA =
+            if fragmentText == "" then []
+            else [assertContains "runtime fragment" (combinedOut r) fragment]
           exitA =
             if expectedExit == 0 then assertExitNonZero "runtime exit" r.cmdCode
+            else if expectedExit == 256 then assertExit "runtime exit 0" r.cmdCode
             else Assertion "runtime exit" (r.cmdCode == expectedExit)
               "expected exit ${strOfInt expectedExit}, got ${strOfInt r.cmdCode}"
-        in [assertContains "runtime fragment" (combinedOut r) fragment, exitA]
+        in append fragmentA [exitA]
       else [assertExit "build exit" b.cmdCode]
     else [assertExit "compile exit" comp.cmdCode]
   in finishCase c.caseId start buildA
-
-nointerpAsserts : Env -> String -> List Assertion
-nointerpAsserts env source =
-  let
-    r =
-      runCmdMerged env "nointerp-${safeName source}" env.envCwd 300
-        (withEnvIface env [env.envVuna, "interp", source])
-  in [assertExitNonZero "interp rejects ${source}" r.cmdCode]
-
-hasNointerpMarker : String -> Bool
-hasNointerpMarker source = pathExistsFile "${source}.nointerp"
-
-nointerpCase : Env -> Case -> CaseResult
-nointerpCase env c =
-  let
-    start = runIO nowMicros
-    files = filter hasNointerpMarker (collectVunaFiles "${env.envRoot}/test/corpus")
-    countA = Assertion "nointerp markers" (listLength files > 0) "no .vuna.nointerp markers found"
-    asserts = concatMap (nointerpAsserts env) files
-  in finishCase c.caseId start (countA :: asserts)
 
 seedCase : Env -> Case -> String -> String -> CaseResult
 seedCase env c source expected =
@@ -668,7 +721,6 @@ runCaseGo env c = case c.caseKind of
   CLint source expected => lintCase env c source expected
   CFix source expected => fixCase env c source expected
   CRuntime source expected exitCode => runtimeCase env c source expected exitCode
-  CNointerp => nointerpCase env c
   CSeed source expected => seedCase env c source expected
   CSection script => sectionCase env c script
   CBroken msg =>
@@ -1084,7 +1136,6 @@ casePaths env c = case c.caseKind of
   CRuntime source expected _ => [stripRoot env source, stripRoot env expected]
   CSeed source expected => [stripRoot env source, stripRoot env expected]
   CSection script => [stripRoot env script]
-  CNointerp => []
   CBroken _ => []
 
 caseAffected : Env -> List String -> Case -> Bool
@@ -1096,7 +1147,6 @@ else case c.caseKind of
       corpusChanges = filter (\p => startsWith "test/corpus/" p) changed
     in any (\p => contains (corpusDirPrefix p) text) corpusChanges
       || any (\p => contains (stripRoot env script) p) changed
-  CNointerp => any (\p => startsWith "test/corpus/" p) changed
   _ =>
     let
       paths = casePaths env c
@@ -1159,16 +1209,86 @@ printOrphans (rel :: rest) =
 auditPathIgnored : String -> Bool
 auditPathIgnored path = contains "/test/corpus/codegen/" path
 
-auditSuite : SuiteOpts -> Suite -> Int
-auditSuite opts suite =
+-- 全量 corpus 里没有被任何 case / section 脚本认领的夹具。family 配置漏掉一整族
+-- （或期望文件改错名）时 suite 会「少跑 case 却依然全绿」——这个结果是默认护栏的
+-- 输入，不依赖 `--audit` 手动开关。
+auditOrphans : Suite -> List String
+auditOrphans suite =
   let
     root = suite.suiteRoot
-    env = Env root "${root}/test" "/tmp" "" "" "${root}/base" "ocamlopt" "" "" False 0 False False
+    env =
+      Env root "${root}/test" "/tmp" "" "" "${root}/base" "ocamlopt" "" "" False 0 False False
+        "/tmp/vuna-build" (runIO (newRef (sessionNew "/tmp/iface-session")))
     cases = discoverCases suite
     texts = sectionTextPairs cases
     fixtures =
       filter (\path => not (auditPathIgnored path)) (collectVunaFiles "${root}/test/corpus")
-    unclaimed = filter (\path => not (auditClaimed env cases texts (stripRoot env path))) fixtures
+  in filter (\path => not (auditClaimed env cases texts (stripRoot env path))) fixtures
+
+takeFirst : Int -> List a -> List a
+takeFirst n xs = if n <= 0 then []
+else case xs of
+  [] => []
+  x :: rest => x :: takeFirst (n - 1) rest
+
+-- family 声明的目录里应该被 case 认领的夹具（rel 路径）。文件型 = 顶层
+-- `*.vuna`（跳过 `_` 辅助模块）；目录型 = 每个子目录的 entry。section 专属目录
+-- （dt_pkg / dt_ad_hoc 等）不在 family 里，不参与精确审计。
+isFixtureFile : String -> Bool
+isFixtureFile name = endsWith ".vuna" name && not (startsWith "_" name)
+
+fixtureTopOf : String -> String -> List String
+fixtureTopOf familyDir name = ["${familyDir}/${name}"]
+
+fixtureEntryOf : String -> String -> String -> String -> List String
+fixtureEntryOf dir familyDir entry name =
+  if pathExistsFile "${dir}/${name}/${entry}" then ["${familyDir}/${name}/${entry}"] else []
+
+familyFixtures : String -> Family -> List String
+familyFixtures root family =
+  let
+    dir = "${root}/${family.familyDir}"
+  in if not (pathExistsDir dir) then []
+  else
+    let
+      names = runIO (readDir dir)
+    in case family.familyEntry of
+      Just entry => concatMap (fixtureEntryOf dir family.familyDir entry) names
+      Nothing => concatMap (fixtureTopOf family.familyDir) (filter isFixtureFile names)
+
+noSectionTexts : List (Pair String String)
+noSectionTexts = []
+
+familyOrphan : Env -> List Case -> String -> Bool
+familyOrphan env cases rel = not (auditClaimed env cases noSectionTexts rel)
+
+-- 精确护栏：不用 section 脚本文本做模糊认领（旧 audit 只要脚本里提到目录名就
+-- 算认领，整个 family 从 suite.toml 消失时也报 0 orphan）。
+familyOrphans : Suite -> List String
+familyOrphans suite =
+  let
+    root = suite.suiteRoot
+    env =
+      Env root "${root}/test" "/tmp" "" "" "${root}/base" "ocamlopt" "" "" False 0 False False
+        "/tmp/vuna-build" (runIO (newRef (sessionNew "/tmp/iface-session")))
+    cases = discoverCases suite
+    fixtures = concatMap (familyFixtures root) suite.suiteFamilies
+  in filter (familyOrphan env cases) fixtures
+
+commaJoin : List String -> String
+commaJoin xs = join ", " xs
+
+-- 孤儿存在 ⇒ 注入一个显式失败 case（worker 分片会把它派给某一个 worker 跑一次）。
+auditCases : List String -> List Case
+auditCases [] = []
+auditCases paths =
+  [ Case "audit/orphans" "audit" ["audit"] (CBroken "${strOfInt (listLength paths)} orphan fixture(s): ${commaJoin (takeFirst 12 paths)}") 0
+  ]
+
+auditSuite : SuiteOpts -> Suite -> Int
+auditSuite opts suite =
+  let
+    unclaimed = auditOrphans suite
     _ = printOrphans unclaimed
     _ = printLine "audit: ${strOfInt (listLength unclaimed)} orphan fixture(s)"
   in case unclaimed of
@@ -1229,13 +1349,29 @@ runSuiteOnce opts suite =
     cacheDir = case opts.suiteCacheDir of
       Just dir => if startsWith "/" dir then dir else "${root}/${dir}"
       Nothing => cacheDir0
-    _ =
-      if opts.suiteNoCache then 0 else if pathExistsDir cacheDir then 0 else ensureDirPath cacheDir
-    env = Env root "${root}/test" tmp (runIO execPath) (envOr "VUNA_SEED" "vuna-seed") baseDir (envOr "OCAMLOPT" "ocamlopt") helper cacheDir (not opts.suiteNoCache && not opts.suiteBless) (hashTree baseDir) opts.suiteBless (case opts.suiteWorker of
+    baseHash = hashTree baseDir
+    scope = case opts.suiteWorker of
+      Just (Pair i _) => "w${strOfInt i}"
+      Nothing => "single"
+    -- 跨 run 的构建桶：base 的 .cmx 只编译一次，后续 run 直接命中 stamp。
+    buildDir = "${cacheDir}/build/${scope}-${strOfInt toolCompilerFingerprint}-${strOfInt baseHash}"
+    _ = if pathExistsDir cacheDir then 0 else ensureDirPath cacheDir
+    env = Env root "${root}/test" tmp (runIO execPath) (envOr "VUNA_SEED" "vuna-seed") baseDir (envOr "OCAMLOPT" "ocamlopt") helper cacheDir (not opts.suiteNoCache && not opts.suiteBless) baseHash opts.suiteBless (case opts.suiteWorker of
       Just _ => True
       Nothing => False
-    )
-    cases0 = filterCases opts (discoverCases suite)
+    ) buildDir (runIO (newRef (sessionNew "${tmp}/iface-session")))
+    -- 两层默认护栏（局部 --only/--filter 时被过滤掉，符合预期）：
+    --   ① 已声明 family 目录里的孤儿夹具（精确 source 认领）；
+    --   ② case 总数下限——整族从 suite.toml 消失时，①会连目录一起看不到。
+    discovered = discoverCases suite
+    minCase =
+      if suite.suiteMinCases > 0 && listLength discovered < suite.suiteMinCases then [ Case "audit/min-cases" "audit" ["audit"] (CBroken "only ${strOfInt (listLength discovered)} case(s) discovered, suite.toml requires >= ${strOfInt suite.suiteMinCases}") 0
+      ]
+      else []
+    cases0 =
+      filterCases opts (append (append discovered (auditCases (familyOrphans suite))) minCase)
+    -- 预热依赖接口（仅真正跑 case 时）：会话据此命中增量路径。
+    _ = if opts.suiteListOnly then 0 else warmIfaces env
     cases1 = case opts.suiteChanged of
       Just rev => changedFilter env rev cases0
       Nothing => cases0

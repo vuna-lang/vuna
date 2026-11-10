@@ -1,0 +1,10 @@
+-- native-effects N1 负例：`perform` 在空行里做，行里没有该 (名字, 标签) 条目 → 缺实例。
+import Base.Eff
+import Base.EffConsole
+import Base.Nat
+
+bad : Eff [] Nat
+bad = perform (Print "x")
+
+main : Int
+main = 0

@@ -1,0 +1,8 @@
+[package]
+name = "dep"
+
+[export]
+modules = ["Dep"]
+
+[dependencies]
+vuna-base = "../../../../../base"

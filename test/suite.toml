@@ -1,181 +1,125 @@
 # vuna 原生测试 suite。schema 与语义见 docs/reference/testing.md。
 #
-# `[family.*]` 按目录约定展开成 golden/error case；旧 shell 章节（迁移期）由
-# test/suite/sections/*.sh 自动发现，不需要在这里声明。
+# 阶段矩阵由夹具期望文件的阶段限定后缀表达（`<base>.<stage>.<artifact>`，如
+# `01.check.err` / `01.interp.out` / `01.run.out`）；裸 `.out`（interp+run 共享
+# golden）与裸 `.err`（check 负例）是兼容形态。family 旗标只是各阶段的上限。
+# 旧 shell 章节（迁移期）由 test/suite/sections/*.sh 自动发现，不需要在这里声明。
 
 [suite]
 name = "vuna"
 jobs = 0          # 0 = auto（探测全部可用核）
 timeout = 300
+min_cases = 600    # case 数下限：整族从配置消失时显式失败（当前 633）
 
-[family.run]
-section = "1"
-dir = "test/corpus/run"
-kind = "auto"
-interp = true
-check = false
-compile = true
-run = true
-compare_interp = true
-tags = ["run"]
-
+# --- golden（interp + check + compile + run + 互证）---
 [family.dt]
 section = "34"
 dir = "test/corpus/dt"
-kind = "golden"
-expected = "out"
-interp = true
 check = true
-compile = true
-run = true
-compare_interp = true
 tags = ["dt"]
 
 [family.dt_err]
 section = "34"
 dir = "test/corpus/dt_err"
-kind = "error"
-expected = "err"
 interp = false
 check = true
-compile = true
 tags = ["dt", "error"]
 
 [family.dt_base]
 section = "34"
 dir = "test/corpus/dt_base"
-kind = "golden"
-expected = "out"
-interp = true
 check = true
-compile = true
-run = true
-compare_interp = true
 tags = ["dt", "base"]
 
+# 只做 compile + run（原 `.nointerp` 夹具：效果程序 / 不可归约内建）。
 [family.dt_io]
 section = "34"
 dir = "test/corpus/dt_io"
-kind = "golden"
-expected = "out"
 interp = false
 check = true
-compile = true
-run = true
 compare_interp = false
 tags = ["dt", "io"]
+
 # 精化器性能回归（S1–S4）：只跑 `vuna check`，不编译不运行；
 # 单 case 超时 15s，长 do / 长 >>= 链超时即失败（期望实现把耗时压到线性）。
 [family.elab_perf]
 section = "34"
 dir = "test/corpus/elab_perf"
 kind = "check-ok"
-check = true
-compile = false
-run = false
-interp = false
 timeout = 15
 tags = ["dt", "perf"]
 
-# 目录型夹具：auto 按子目录里的 expected.out / expected.err 判定 golden/error。
+[family.run]
+section = "1"
+dir = "test/corpus/run"
+check = false
+tags = ["run"]
+
 [family.modules]
 section = "2"
 dir = "test/corpus/modules"
-kind = "auto"
 entry = "app/Main.vuna"
-interp = true
 check = false
-compile = true
-run = true
-compare_interp = true
 tags = ["modules"]
 
 [family.records_files]
 section = "18"
 dir = "test/corpus/records"
-kind = "auto"
-interp = true
 check = false
-compile = true
-run = true
-compare_interp = true
 tags = ["records"]
 
 [family.records_dirs]
 section = "20"
 dir = "test/corpus/records"
-kind = "auto"
 entry = "app/Main.vuna"
-interp = true
 check = false
-compile = true
-run = true
-compare_interp = true
 tags = ["records"]
 
 [family.traits_files]
 section = "22"
 dir = "test/corpus/traits"
-kind = "auto"
-interp = true
 check = false
-compile = true
-run = true
-compare_interp = true
 tags = ["traits"]
 
 [family.traits_dirs]
 section = "24"
 dir = "test/corpus/traits"
-kind = "auto"
 entry = "app/Main.vuna"
-interp = true
 check = false
-compile = true
-run = true
-compare_interp = true
 tags = ["traits"]
 
 [family.monad]
 section = "26"
 dir = "test/corpus/monad"
-kind = "auto"
-interp = true
 check = true
-compile = true
-run = true
-compare_interp = true
 tags = ["monad"]
 
 [family.stdlib]
 section = "27"
 dir = "test/corpus/stdlib"
-kind = "auto"
-interp = true
 check = false
-compile = true
-run = true
-compare_interp = true
 tags = ["stdlib"]
 
+[family.float]
+section = "60"
+dir = "test/corpus/float"
+check = true
+tags = ["float"]
+
+# --- check 为主（interp 不支持 / 无 golden）---
 [family.type_ok]
 section = "7"
 dir = "test/corpus/type_ok"
-kind = "auto"
 interp = false
 check = true
-compile = true
-run = true
 compare_interp = false
 tags = ["types"]
 
 [family.type_err]
 section = "8"
 dir = "test/corpus/type_err"
-kind = "auto"
 interp = false
 check = true
-compile = true
 run = false
 compare_interp = false
 tags = ["types", "error"]
@@ -183,27 +127,21 @@ tags = ["types", "error"]
 [family.typed_ok]
 section = "11"
 dir = "test/corpus/typed_ok"
-kind = "auto"
 interp = false
 check = true
-compile = true
-run = true
 compare_interp = false
 tags = ["types"]
 
 [family.type_modules]
 section = "9"
 dir = "test/corpus/type_modules"
-kind = "auto"
 entry = "app/Main.vuna"
 interp = false
 check = true
-compile = true
-run = true
 compare_interp = false
 tags = ["types", "modules"]
 
-# 只跑 check 的夹具（终止性 / 解析错误）。
+# 只跑 check 的夹具（终止性）。
 [family.term]
 section = "37"
 dir = "test/corpus/term"
@@ -216,16 +154,20 @@ dir = "test/corpus/term_err"
 kind = "check-error"
 tags = ["term", "error"]
 
+# --- error（解析 / 求值负例）---
 [family.err]
 section = "4"
 dir = "test/corpus/err"
-kind = "error"
-expected = "err"
-interp = true
-check = false
 compile = false
 tags = ["parse", "error"]
 
+[family.run_err]
+section = "5"
+dir = "test/corpus/run_err"
+check = false
+tags = ["run", "error"]
+
+# --- 工具链（lint / fix）---
 [family.lint]
 section = "15"
 dir = "test/corpus/lint"
@@ -237,33 +179,3 @@ section = "16"
 dir = "test/corpus/fix"
 kind = "fix"
 tags = ["lint", "fix"]
-
-[family.run_err]
-section = "5"
-dir = "test/corpus/run_err"
-kind = "error"
-expected = "err"
-interp = true
-check = false
-compile = true
-exclude = ["03_div_zero", "04_unhandled_effect"]
-tags = ["run", "error"]
-
-[family.run_err_runtime]
-section = "6"
-dir = "test/corpus/run_err"
-kind = "runtime-error"
-expected = "err"
-include = ["03_div_zero", "04_unhandled_effect"]
-tags = ["run", "runtime-error"]
-
-[family.float]
-section = "60"
-dir = "test/corpus/float"
-kind = "auto"
-interp = true
-check = true
-compile = true
-run = true
-compare_interp = false
-tags = ["float"]

@@ -91,6 +91,8 @@ let v_Vuna_dCompiler_dIntrinsics_deffMemberThereCtor = "Base.Eff.Member.There"
 
 let v_Vuna_dCompiler_dIntrinsics_deffTypeName = "Base.Eff.Eff"
 
+let v_Vuna_dCompiler_dIntrinsics_deffDefaultInstance = "main"
+
 let v_Vuna_dCompiler_dIntrinsics_dhostUnsafeExecutorName = "Base.IO.Host.runIO"
 
 let v_Vuna_dCompiler_dIntrinsics_dintrinsicName = (fun mc0 -> (match mc0 with

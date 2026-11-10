@@ -104,6 +104,7 @@ module Vuna.Compiler.Core
   , termReachesFloat
   , termUsesFloat
   , typeLevelOf
+  , valueEqFuel
   ) where
 
 -- Vuna.Compiler.Core：M13 的 core 类型论表示、NbE 求值与定义性相等（门面）。

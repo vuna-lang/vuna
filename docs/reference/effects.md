@@ -385,3 +385,5 @@ fork/await/yield/cancel/结构化 scope；W10 console/clock/env/process/fs 标�
 - 自举与 rotation：[bootstrap.md](bootstrap.md)；测试标签：[testing.md](testing.md)
 
 - Layer 2/3 展开：[effects-layers.md](effects-layers.md)
+- Native effects（效应系统内建化：perform/handle 语法、效应行求解内建、双形状过渡与
+  实施状态）：[native-effects.md](native-effects.md)

@@ -108,13 +108,15 @@ maxInt a b = if a > b then a else b
 -- 构建脚本；graph 是 (单元名, 直接依赖单元名) 的拓扑序（依赖在前，链接顺序即 graph 顺序）。
 -- M33 W5：cFiles 是包根 `ffi/*.c` 复制到 OUTDIR 后的相对路径（如 `ffi/add.c`），
 -- 由 ocamlopt 编译成 .o 并参与链接；空列表时行为与旧版一致。
--- 干净构建（没有 .cmx，例如 Nix 构建 seed / stage1）走一次 ocamlopt 调用，
--- 避免几十次进程启动；已有 .cmx 时按**内容哈希**（.ml/.mli + 直接依赖 .stamp）
--- 逐层增量编译：单单元层前台调用，多单元层 `&` 并行 + 逐个 `wait` 收尾。
+-- 并行度由 `$JOBS` 决定（`VUNA_BUILD_JOBS` > `NIX_BUILD_CORES` > `nproc`）：
+--   * 干净构建（没有 .cmx，例如 Nix 构建 seed / stage1）**且 JOBS ≤ 1**：一次 ocamlopt
+--     调用，避免几十次进程启动（单核下分层并行的进程/IO 开销反而更慢）；
+--   * 其余情况（干净 + 多核，或已有 .cmx 的增量）：按**内容哈希**（.ml/.mli + 直接依赖
+--     .stamp）逐单元编译，单单元层前台、多单元层 `&` 并行 + 逐个 `wait` 收尾。
 buildScript : List (Pair String (List String)) -> List String -> String
 buildScript graph cFiles = """#!/bin/sh
 # 由 vuna 生成：分离编译构建脚本（C35：按直接依赖分层并行 + 内容哈希增量）。用法: ./build.sh [OUT]
-# 干净构建：一次 ocamlopt 编译全部 .mli/.ml 并链接；
+# 干净构建且 JOBS<=1：一次 ocamlopt 编译全部 .mli/.ml 并链接；
 # 增量构建：每单元 .ml/.mli 与直接依赖 .stamp 的内容哈希写 $base.stamp，命中即跳过；
 # 同层单元互不依赖：多单元层用后台任务并行编译，层间用 wait 串行。
 set -eu
@@ -122,6 +124,15 @@ cd \"$(dirname \"$0\")\"
 OUT=\${1:-program}
 FLAGS=\"-g -w -a+39 -warn-error +39\"
 MODULES=\"${spaceJoin (graphUnits graph)}\"
+JOBS=\${VUNA_BUILD_JOBS:-}
+if [ -z \"$JOBS\" ]; then
+  JOBS=$(nproc 2>/dev/null || echo 1)
+  case \"\${NIX_BUILD_CORES:-}\" in
+    ''|*[!0-9]*) ;;
+    0) ;;
+    *) JOBS=$NIX_BUILD_CORES ;;
+  esac
+fi
 C_MODULES=\"${spaceJoin cFiles}\"
 C_OBJS=\"\"
 if [ -n \"$C_MODULES\" ]; then
@@ -143,7 +154,7 @@ clean=1
 for m in $MODULES; do
   if [ -f \"$m.cmx\" ]; then clean=0; fi
 done
-if [ \"$clean\" -eq 1 ]; then
+if [ \"$clean\" -eq 1 ] && [ \"$JOBS\" -le 1 ]; then
   SOURCES=\"\"
   for m in $MODULES; do
     if [ -f \"$m.mli\" ]; then SOURCES=\"$SOURCES $m.mli\"; fi
