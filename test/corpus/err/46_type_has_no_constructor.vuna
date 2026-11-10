@@ -1,0 +1,5 @@
+data X : Type where
+  A : X
+
+f : X -> Int
+f X.B = 0

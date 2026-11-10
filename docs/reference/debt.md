@@ -37,7 +37,7 @@
 | C32 | 缓存载荷保留 OCaml Marshal（决策）；check 缓存命中路径仍写入 1–4MB `CachedProgram` 载荷（写放大）；校验和只有 10-bit `strHash`，碰撞面未收紧（iface 侧已由 schema/`pmEnv`/内容寻址文件名/`hashOfIface` 自证叠加防护，其余载荷仍只有 framing） | `Vuna.Compiler.CacheFormat`、`Driver/Compile`、`Driver/Iface`；[cache.md](cache.md) | 后续 |
 | C37 | 擦除位置残留未解 meta 仍靠包段 `(idx+1)<<30` 重编号（LSP 单模块写回与整包 check 的哈希差异已由 `meOrigin` 结构性隔离，不再需要「首次整包自愈」） | `Driver/Dt`（`shiftCachedProgram`）；[cache.md](cache.md) | 后续 |
 | C47 | `miDecls` 的接口哈希只覆盖 record 头：record 字段类型 / 模式形状等语义细节变化可能不使依赖方判脏（通常伴随 defs/globals 变化而被覆盖，但不是判据保证）；彻底方案是对 `Decl` 做去 span 的语义哈希 | `Driver/Iface.hashOfParts`（`hashRecords`）、`Driver/Iface.hashOfIface`；[cache.md](cache.md) | 后续 |
-| C48 | 诊断重设计未完成：warnings 仅 binder 未使用/遮蔽两类、多错误仍首错短路、结构化夹具覆盖 150/240（剩余在 allowlist）、QTT/实例/终止性/元变量轨迹未接、i18n 未做、目录缺 severity/example 元数据 | `test/corpus/**/*.diag.json`；`nix/diag-coverage-allow.txt`；[diagnostics.md](diagnostics.md) §9 | 后续 |
+| C48 | 诊断重设计未完成：warnings 仅 binder 未使用/遮蔽两类、多错误仍首错短路、结构化夹具覆盖 156/240（剩余在 allowlist）、QTT/实例/终止性/元变量轨迹未接、i18n 未做、目录缺 severity/example 元数据 | `test/corpus/**/*.diag.json`；`nix/diag-coverage-allow.txt`；[diagnostics.md](diagnostics.md) §9 | 后续 |
 | C38 | LSP case split：不检查依赖模块导出面；构造子 / record 解析是 parse 级；每请求重跑容错精化（无进程内缓存）；洞在类型位置仍可能生成非法 `case`；索引族 case split 需要精化器暴露可达构造子（研究，非债务） | `lib/Vuna/Lsp/Query.caseSplitActions`、`lib/Vuna/Lsp/Bindings`；`test/corpus/lsp/smoke.sh`；[lsp.md](lsp.md) | 后续 |
 | C45 | LSP 缺局部绑定推断类型：λ / `as` / 记录 pun 等无语法标注的 binder 只能给文本推导位置/类型；同名 `?name` 不共享求解 | `lib/Vuna/Lsp/Bindings.vuna`、`Elab/Driver.goalsOfProgramTolerant`；[lsp.md](lsp.md) | 后续 |
 | C46 | `vuna test` 的 main 通过判据只认 `Int`/`Nat`/`String`/`Bool` 与 `IO a`（退出码 0），其它类型报错 | `lib/Vuna/Test/Run.vuna`（`dtMainKind`）；[primitives.md](primitives.md) §5 | 后续 |

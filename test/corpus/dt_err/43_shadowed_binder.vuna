@@ -1,0 +1,8 @@
+-- warning：内层 let 遮蔽外层 binder（UN_ShadowedBinder；.deny 下按失败断言）
+f : Int -> Int
+f x = let
+  x = 1
+  in x
+
+main : Int
+main = f 0

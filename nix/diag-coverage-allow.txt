@@ -33,13 +33,8 @@ RN_AmbiguousConstructorInExport
 RN_AmbiguousModule
 RN_AmbiguousPrelude
 RN_ConstructorNotExported
-RN_DuplicateImport
 RN_InstanceBodyForm
 RN_InvalidDottedName
-RN_InvalidModuleAlias
-RN_InvalidVariableName
-RN_TypeHasNoConstructor
-RN_UnknownCapability
 RN_UnknownKind
 RN_UnknownType
 TC_AmbiguousInstance
@@ -88,5 +83,4 @@ TC_UnknownName
 TC_UnknownRecord
 TC_UnsolvedMetavar
 TC_UnsolvedMetavarInfer
-UN_ShadowedBinder
 UN_UnusedDefinition
