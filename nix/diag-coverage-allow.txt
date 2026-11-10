@@ -13,9 +13,6 @@ IC_InvariantViolated
 LD_EntryFileNotFound
 LD_ModuleHeaderInEntrySource
 LD_UnknownFixity
-LN_DispatchLift
-LN_ListLiteral
-LN_LiteralIfChain
 PKG_DuplicateDependency
 PKG_EmptyDependencyName
 PKG_MissingBase

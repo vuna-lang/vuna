@@ -5,6 +5,8 @@
 # 数据源：
 #   - 目录：`vuna explain --list`（与 `gen-errors` 同源）
 #   - 夹具：test/corpus/**/*.diag.json（`vuna test --suite ... --bless-diag` 生成）
+#   - lint 规则夹具：test/corpus/lint/*.out（LN_ 码在 lint 输出里逐条断言；
+#     本门禁只要求「每个码至少有一个夹具」，不限定载体）
 set -eu
 
 # mkCheck 以「仓库根布局」为 cwd 执行脚本（源码已复制到当前目录）。
@@ -21,6 +23,11 @@ grep -E '^[A-Z][A-Za-z0-9]*_[A-Za-z0-9]+' "$tmp/codes.txt" | awk '{print $1}' | 
 
 grep -rho '"code":"[A-Z][A-Za-z0-9]*_[A-Za-z0-9]*"' test/corpus --include='*.diag.json' \
   | sed -E 's/.*"code":"([^"]+)"/\1/' | sort -u > "$tmp/covered.txt" || true
+
+# lint 规则夹具：从 `[LN_xxx]` 前缀提取码（不加会让 LN_ 规则被误判成缺口）。
+grep -rho '\[LN_[A-Za-z0-9]*\]' test/corpus/lint --include='*.out' 2>/dev/null \
+  | sed -E 's/^\[([^]]+)\]$/\1/' >> "$tmp/covered.txt" || true
+sort -u -o "$tmp/covered.txt" "$tmp/covered.txt"
 
 allowfile=nix/diag-coverage-allow.txt
 if [ -f "$allowfile" ]; then
