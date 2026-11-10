@@ -155,7 +155,7 @@ JSON 字段是机器契约：`code/severity/phase/category/message/labels[]/fiel
 | D7.2 warnings（未使用/冗余/不可达） | 部分（`UN_UnusedBinder`/`UN_ShadowedBinder`/`UN_RedundantCtorBranch`/`UN_RedundantLiteralBranch`/`UN_BranchAfterCatchAll`/`UN_UnusedImport`（限定/别名 import）已落地；`-W`/`--deny-warnings` 已接；未使用定义、open import 追踪待办） |
 | D7.3 建议引擎 + Fix | 部分（`Candidate`/`Suggestion` 模型就绪；自动候选未接） |
 | D7.4 类型不匹配 expected/found | 已落地（fields + PhUnify trace 帧 expected/found；双端 label 待补） |
-| D7.5 实例搜索 trace | 待办 |
+| D7.5 实例搜索 trace | 部分（`TC_NoInstanceFound` 附失败目标族桶的候选实例 `fields.candidates`；完整搜索树/拒绝原因仍待补） |
 | D7.6 终止性 call matrix | 待办 |
 | D7.7 覆盖性缺失构造子标签 | 部分（全部缺失构造子进 `candidates` 字段；无 span 标签） |
 | D7.8 QTT 使用点 | 待办（需要 Core `TSp`） |

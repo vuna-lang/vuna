@@ -914,9 +914,16 @@ finishCore termAux decls core =
         -- C42：延迟字典目标里「类参数已解出但实例搜索失败」的，优先报缺实例——
         -- 否则用户只看到 unsolved metavariable，不知道缺的是哪个实例。
         Just m => case firstUnsolvedDictGoal ec4 of
-          Just sd => case firstUnsolvedDictGoalSpan ec4 of
-            Just sp => tcErr1 sp (NoInstanceFound sd) sd
-            Nothing => tcErr1NoLoc (NoInstanceFound sd) sd
+          Just sd =>
+            let
+              cands = dictCandidatesOf ec4 sd
+            in case firstUnsolvedDictGoalSpan ec4 of
+              Just sp =>
+                onErrDiag (\d => withField (FieldCandidates cands) d)
+                  (tcErr1 sp (NoInstanceFound sd) sd)
+              Nothing =>
+                onErrDiag (\d => withField (FieldCandidates cands) d)
+                  (tcErr1NoLoc (NoInstanceFound sd) sd)
           Nothing => ErrC (unsolvedMessage ec4 m)
         Nothing =>
           let
@@ -1139,3 +1146,27 @@ addInstsEc ec (i :: rest) = addInstsEc (ecAddInst ec i) rest
 addClassesEc : Ec -> List DtClass -> Ec
 addClassesEc ec [] = ec
 addClassesEc ec (c :: rest) = addClassesEc (ecAddClass ec c) rest
+
+-- 实例搜索树（部分）：从 `(Dict_Class Arg)` 文本取族名，列出该族桶里的候选实例。
+dictCandidatesOf : Ec -> String -> List Candidate
+dictCandidatesOf ec shown =
+  let
+    fam = dictFamilyOfShown shown
+    insts = if fam == "" then ecInsts ec else ecInstsFamily ec fam
+  in map
+    (\i => Candidate (dtInstName i) Nothing (Just "instance family matched but this goal did not"))
+    insts
+
+dictFamilyOfShown : String -> String
+dictFamilyOfShown s =
+  let
+    cs = strUnpack s
+    body = case cs of
+      c :: rest => if c == 40 then rest else cs
+      [] => []
+  in strPack (takeWhileDictChar body [])
+
+takeWhileDictChar : List Int -> List Int -> List Int
+takeWhileDictChar [] acc = reverse acc
+takeWhileDictChar (c :: rest) acc =
+  if c == 32 || c == 41 then reverse acc else takeWhileDictChar rest (c :: acc)
