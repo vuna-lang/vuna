@@ -105,6 +105,7 @@ JSON 字段是机器契约：`code/severity/phase/category/message/labels[]/fiel
 | `warnings` | bool | 是否默认显示 `UN_` 告警（等价 `-W`；`--deny-warnings` 仍提升退出码） |
 | `max-errors` | 正整数 | 一次检查最多显示/序列化多少条诊断（0 或缺省 = 不限） |
 | `lang` | `en`/`zh` | human 视图语言；`zh` 追加目录中文说明并默认切 human（命令行 `--lang` 优先） |
+| `deny-warnings` | bool | 等价 `--deny-warnings`：warning 提升为失败（命令行显式 flag 优先；为 true 时同时显示 warning） |
 
 非法值是该清单的结构诊断（`PKG_InvalidDiagFormat` / `PKG_InvalidDiagMaxErrors`）；未知 key 报 `PKG_UnknownKey`。
 

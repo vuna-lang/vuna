@@ -158,3 +158,9 @@ out-contains: "codes":[
 run: "$VUNA" explain --json NOPE_Code
 exit: 2
 out-contains: unknown diagnostic code
+# [diagnostics].deny-warnings：manifest 配置把 warning 提升为失败（显式 CLI 优先）。
+run: sh -c 'd="$TMPDIR/m44-denycfg"; rm -rf "$d"; mkdir -p "$d/lib"; printf "[package]\nname = \"m44\"\n[export]\nmodules = [\"Main\"]\n\n[diagnostics]\ndeny-warnings = true\n" > "$d/vuna.toml"; printf "module Main where\n\nf : Int -> Int\nf x = 1\n" > "$d/lib/Main.vuna"; cd "$d" && "$VUNA" check . 2>&1'
+exit: 1
+out-contains: UN_UnusedBinder
+run: sh -c 'd="$TMPDIR/m44-denycfg-clean"; rm -rf "$d"; mkdir -p "$d/lib"; printf "[package]\nname = \"m44b\"\n[export]\nmodules = [\"Main\"]\n\n[diagnostics]\ndeny-warnings = true\n" > "$d/vuna.toml"; printf "module Main where\n\nmain : Int\nmain = 0\n" > "$d/lib/Main.vuna"; cd "$d" && "$VUNA" check . >/dev/null 2>&1'
+exit: 0

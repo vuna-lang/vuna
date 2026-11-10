@@ -134,6 +134,14 @@ applyDiagConfig (Just pkg) =
         in 0
       Nothing => 0
     else 0
+    _ = if not (runIO (readRef denyExplicitRef)) then case m.manifestDiagDenyWarnings of
+      Just b =>
+        let
+          _ = runIO (writeRef denyWarningsRef b)
+          _ = if b then runIO (writeRef showWarningsRef True) else 0
+        in 0
+      Nothing => 0
+    else 0
     _ = case m.manifestDiagMaxErrors of
       Just n => runIO (writeRef maxErrorsRef n)
       Nothing => 0
@@ -220,6 +228,7 @@ runCompilerCliFor prog args =
     _ = runIO (writeRef showWarningsRef (hasDenyWarnings args || hasShowWarnings args))
     _ = runIO (writeRef formatExplicitRef (hasFormatFlag args))
     _ = runIO (writeRef langExplicitRef (hasLangFlag args))
+    _ = runIO (writeRef denyExplicitRef (hasDenyWarnings args))
     _ = runIO (writeRef warningsExplicitRef (hasDenyWarnings args || hasShowWarnings args))
   in if anyHelp kept then helpFor prog else flushSarif (runCompilerCliFor1 prog kept)
 
@@ -769,3 +778,7 @@ hasLangFlag : List String -> Bool
 hasLangFlag [] = False
 hasLangFlag (arg :: rest) =
   if arg == "--lang" || startsWith "--lang=" arg then True else hasLangFlag rest
+
+-- | `--deny-warnings` 是否由命令行显式给出（显式优先于 manifest）。
+denyExplicitRef : IORef Bool
+denyExplicitRef = runIO (newRef False)
