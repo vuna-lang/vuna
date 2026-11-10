@@ -1148,6 +1148,7 @@ addClassesEc ec [] = ec
 addClassesEc ec (c :: rest) = addClassesEc (ecAddClass ec c) rest
 
 -- 实例搜索树（部分）：从 `(Dict_Class Arg)` 文本取族名，列出该族桶里的候选实例。
+-- | 失败目标族桶里的候选实例（诊断用）。
 dictCandidatesOf : Ec -> String -> List Candidate
 dictCandidatesOf ec shown =
   let
@@ -1157,6 +1158,7 @@ dictCandidatesOf ec shown =
     (\i => Candidate (dtInstName i) Nothing (Just "instance family matched but this goal did not"))
     insts
 
+-- | 从 (Dict_Class Arg) 文本取族名。
 dictFamilyOfShown : String -> String
 dictFamilyOfShown s =
   let
@@ -1166,6 +1168,7 @@ dictFamilyOfShown s =
       [] => []
   in strPack (takeWhileDictChar body [])
 
+-- | 取到空格/右括号为止的字符。
 takeWhileDictChar : List Int -> List Int -> List Int
 takeWhileDictChar [] acc = reverse acc
 takeWhileDictChar (c :: rest) acc =
