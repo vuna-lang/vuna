@@ -49,6 +49,7 @@ module Vuna.Compiler.Packages.Pkg
 -- M27：`Root` / `PackageContext` 携带 manifest 的 `[capabilities].effects` 能力声明
 -- （只是数据通路；合法能力名与放行判定由 Loader 消费）。
 import Vuna.Compiler.Common
+import Vuna.Compiler.Diagnostics.Pkg
 import Vuna.Compiler.Frontend.Manifest
 import Base.IO.Host
 
@@ -218,11 +219,11 @@ joinPathsText (path :: rest) = "${path}, ${joinPathsText rest}"
 -- path 是 vuna.toml 的路径；缺失时报 `pkg: missing vuna.toml in <目录>`。
 loadManifestAt : String -> Check Manifest
 loadManifestAt path = if runIO (prim_fileExists path) then case parseManifest path (runIO (prim_readFile path)) of
-  ErrC e => err "pkg: ${diagText e}"
+  ErrC e => ErrC e
   OkC manifest => case validateManifest manifest of
-    ErrC e => err "pkg: ${diagText e}"
+    ErrC e => ErrC e
     OkC validated => OkC validated
-else err "pkg: missing vuna.toml in ${normalizeDir (manifestDir path)}"
+else pkgPath1 path (MissingManifest (normalizeDir (manifestDir path))) (normalizeDir (manifestDir path))
 
 manifestNameString : Manifest -> String
 manifestNameString manifest = case manifest.manifestName of
@@ -273,7 +274,7 @@ loadPackageWalk fuel stack depName dir = if fuel <= 0 then icFuel "pkg"
 else
   let
     normalized = normalizeDir dir
-  in if memStackDir normalized stack then err (cycleMessage normalized depName stack)
+  in if memStackDir normalized stack then pkgInvalid (cycleMessage normalized depName stack)
   else case loadManifestAt "${normalized}/vuna.toml" of
     ErrC e => ErrC e
     OkC manifest =>
@@ -282,7 +283,7 @@ else
       in if dependencyNameOk depName name then case loadDependencyList (fuel - 1) (Pair normalized name :: stack) normalized manifest.manifestDependencies of
         ErrC e => ErrC e
         OkC dependencies => OkC (Package manifest dependencies normalized)
-      else err (mismatchMessage depName name)
+      else pkgInvalid (mismatchMessage depName name)
 
 -- ---------------------------------------------------------------- 包名唯一性（M24.7）
 -- 包名不是纯标签，它参与两项语义判定：
@@ -430,7 +431,7 @@ findManifestDirMaybe startDir =
 findManifestDir : String -> Check String
 findManifestDir startDir = case findManifestDirMaybe startDir of
   Just dir => OkC dir
-  Nothing => err "pkg: no vuna.toml found from ${normalizeDir startDir} (searched upward)"
+  Nothing => pkgNoLoc (NoManifestUpward (normalizeDir startDir)) [normalizeDir startDir]
 
 -- ---------------------------------------------------------------- base 定位（M26）
 -- base 只由两处决定：`VUNA_BASE`（显式覆盖，相对路径按 cwd 归一），或可执行文件

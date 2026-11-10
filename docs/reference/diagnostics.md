@@ -54,9 +54,9 @@ Diagnostic = { id, severity, phase, category, code, message, labels, fields, tra
   - `err : String -> Check a`：工具错误（phase = Tool，无码）；根工具链 CLI 错误用它。
   - `rawAt` / `rawNoLoc`：尚未分类的源码裸消息（迁移完成后删除）。
   - `icFuel` / `icInternal`：编译器内部错误（phase = Internal，`diagInternal = True`）。
-- **状态**：结构化通道已落地。compiler 内 `err "` 由初版 421 处降到 **15 处**，且只剩
-  工具/构建/清单白名单（`CompilerCli`/`Compile`/`Pkg`/`Dt`/`Manifest`，exit 2、无源码 span）；
-  源码诊断已全部走域码（TC_/CG_/RN_/LD_/IC_）。`rawAt` 只剩 `Elab/Types.errAt` 的
+- **状态**：结构化通道已落地。compiler 内裸 `err` 由初版 421 处降到 **10 处**，且只剩
+  工具/构建白名单（`CompilerCli`/`Compile`/`Dt`，exit 2、无源码 span）；
+  源码与清单诊断已全部走域码（TC_/CG_/RN_/PKG_/LD_/IC_）。`rawAt` 只剩 `Elab/Types.errAt` 的
   记录/派生兜底路径。
 
 ## 4. 错误码域
@@ -65,6 +65,8 @@ Diagnostic = { id, severity, phase, category, code, message, labels, fields, tra
 | --- | --- | --- |
 | `LX_` | 词法 | `Frontend/Diagnostics.vuna` |
 | `PS_` | 语法 | 同上 |
+| `RN_` | 名字解析（import/export/限定名/构造子） | `Diagnostics/Rn.vuna` |
+| `PKG_` | `vuna.toml` 清单/包图 | `Diagnostics/Pkg.vuna` |
 | `LD_` | 模块/包加载 | `Loader/Diagnostics.vuna` |
 | `TC_` | 精化/覆盖性/终止性/用量 | `Diagnostics/Tc.vuna` |
 | `CG_` | codegen/驱动 | `Diagnostics/Cg.vuna` |
@@ -115,7 +117,7 @@ JSON 字段是机器契约：`code/severity/phase/category/message/labels[]/fiel
 
 - `test/corpus/lsp/smoke.sh`：结构化诊断 smoke（0-based range、UTF-16、全部诊断、
   quick fix、relatedInformation）。
-- `nix/checks/diag-raw.sh`：compiler 内源码诊断不得走裸 `err`（工具/构建/清单白名单），
+- `nix/checks/diag-raw.sh`：compiler 内源码/清单诊断不得走裸 `err`（工具/构建白名单：`CompilerCli`/`Compile`/`Dt`），
   `showSpanLoc` 只能出现在渲染器/目标消息组装处。
 - 232 个 `.err` 夹具仍按**首行文本**断言（short 视图兼容）；迁移到 `.diag.json`
   结构化快照是后续工作。
@@ -128,7 +130,7 @@ JSON 字段是机器契约：`code/severity/phase/category/message/labels[]/fiel
 | D1 三通道（源码/工具/内部） | 已落地（phase Tool/Internal + ICE 信息） |
 | D2 `Diagnostic` 全字段 | 已落地 |
 | D3 位置契约（end span、UTF-16、显式 NoLoc） | 已落地（span 填充仍在补齐） |
-| D4 码域（RN_/PKG_ 独立域、死码清理） | 部分（`RN_` 已落地 26 码；`PKG_` 未拆；死码待删） |
+| D4 码域（RN_/PKG_ 独立域、死码清理） | 已落地（`RN_` 27 码、`PKG_` 27 码；9 个不再触发的 TC 死码已删除） |
 | D5 目录单一真源 + 生成枚举/文档 | 部分（条目仍是手写；`explain`/`gen-errors` 已同源） |
 | D6 渲染/LSP/CLI | 已落地 short/human/JSON + LSP 结构化；SARIF/i18n 待办 |
 | D7.1 多错误 + Cascade | 待办（当前仍首错短路） |
@@ -145,7 +147,7 @@ JSON 字段是机器契约：`code/severity/phase/category/message/labels[]/fiel
 
 ## 10. 后续路线（按依赖排序）
 
-1. **错误分类**：`RN_` 与 `TC_` 记录/派生已落地；剩余 `err "` 只剩工具/构建/清单白名单（`CompilerCli`/`Compile`/`Pkg`/`Dt`/`Manifest`），下一步拆 `PKG_` 并清空白名单。
+1. **错误分类**：源码/清单诊断已全部走域码；裸 `err` 只剩纯工具/构建错误白名单（`CompilerCli`/`Compile`/`Dt`），由 `nix/checks/diag-raw.sh` 守住。下一步清理死码与补齐目录元数据。
    删 `rawAt`/`rawNoLoc`；CI 门禁「compiler 内无 `err "`」。
 2. **目录元数据**：条目补 severity/phase/category/explanation/example；`gen-errors`
    输出这些字段；每码至少一个结构化夹具。

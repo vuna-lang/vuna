@@ -13,6 +13,7 @@ import Vuna.Cli.Args
 import Vuna.Compiler.Common
 import Vuna.Compiler.Diagnostics
 import Vuna.Compiler.Diagnostics.Rn
+import Vuna.Compiler.Diagnostics.Pkg
 import Vuna.Compiler.Frontend.Diagnostics
 import Vuna.Compiler.Loader.Diagnostics
 import Vuna.Files
@@ -54,6 +55,9 @@ psEntryToEntry e = Entry e.psEntryCode e.psEntryTemplate e.psEntryDesc "" "" Fal
 icEntryToEntry : IcEntry -> Entry
 icEntryToEntry e = Entry e.icEntryCode e.icEntryTemplate e.icEntryDesc "" "" False
 
+pkgEntryToEntry : PkgEntry -> Entry
+pkgEntryToEntry e = Entry e.pkgEntryCode e.pkgEntryTemplate e.pkgEntryDesc "" "" False
+
 rnEntryToEntry : RnEntry -> Entry
 rnEntryToEntry e = Entry e.rnEntryCode e.rnEntryTemplate e.rnEntryDesc "" "" False
 
@@ -63,7 +67,7 @@ ldEntryToEntry e = Entry e.ldEntryCode e.ldEntryTemplate e.ldEntryDesc "" "" Fal
 allEntries : List Entry
 allEntries =
   append (map tcEntryToEntry tcAll)
-    (append (map cgEntryToEntry cgAll) (append (map lintEntryToEntry lintAll) (append (map lexEntryToEntry lexAll) (append (map psEntryToEntry psAll) (append (map icEntryToEntry icAll) (append (map rnEntryToEntry rnAll) (map ldEntryToEntry ldAll)))))))
+    (append (map cgEntryToEntry cgAll) (append (map lintEntryToEntry lintAll) (append (map lexEntryToEntry lexAll) (append (map psEntryToEntry psAll) (append (map icEntryToEntry icAll) (append (map rnEntryToEntry rnAll) (append (map pkgEntryToEntry pkgAll) (map ldEntryToEntry ldAll))))))))
 
 runGenErrors : String -> Int
 runGenErrors root = case requireDirectory root of
@@ -95,6 +99,7 @@ renderDoc entries =
     lds = filter (isDomain "LD_") entries
     ics = filter (isDomain "IC_") entries
     rns = filter (isDomain "RN_") entries
+    pkgs = filter (isDomain "PKG_") entries
     lns = filter (isDomain "LN_") entries
     fxs = fixEntries entries
   in """# vuna 错误码
@@ -104,7 +109,7 @@ renderDoc entries =
 `Vuna.Lint.Diagnostics` 的 `lintAll`）生成；**勿手改**（生成物，不纳入 git）。
 
 约定：运行诊断输出 `[CODE] 消息`；符号语义稳定、只增不删；
-域前缀 TC_/CG_/LX_/PS_/RN_/LD_/IC_/LN_/FX_。
+域前缀 TC_/CG_/LX_/PS_/RN_/PKG_/LD_/IC_/LN_/FX_。
 模板中 `<0>`/`<1>` 是插值占位符，arity 由枚举构造子的类型索引在编译期锁定。
 
 ## 类型检查 / 精化（TC_）
@@ -122,6 +127,9 @@ ${renderTable pss}
 ## 名字解析（RN_）
 
 ${renderTable rns}
+## 包清单（PKG_）
+
+${renderTable pkgs}
 ## 模块加载（LD_）
 
 ${renderTable lds}

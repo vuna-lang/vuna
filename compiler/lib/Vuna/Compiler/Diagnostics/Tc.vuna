@@ -43,38 +43,31 @@ data TcErr : Nat -> Type where
   CatchAllNotLast : TcErr Zero
   ClauseTooManyPatterns : TcErr Zero
   DataKindArrows : TcErr Zero
-  DefFewerParams : TcErr Zero
   DefMoreParams : TcErr Zero
   DefParamsMustBeVars : TcErr Zero
   DoUnsupported : TcErr Zero
-  DuplicateCtorInCase : TcErr Zero
   FunctionNoClauses : TcErr Zero
   HoleNoExpectedType : TcErr Zero
   ImplicitParamKind : TcErr Zero
   ImpossibleBranchEmptyCtx : TcErr Zero
   ImpossibleBranchIndex : TcErr Zero
   IndexFuel : TcErr Zero
-  InstanceAnnotationWrongUse : TcErr Zero
   InstanceHeadNotApp : TcErr Zero
   ConstraintNotDict : TcErr Zero
   InstanceMissingMethod : TcErr Zero
   OrphanInstance : TcErr Zero
-  InterfaceOneParam : TcErr Zero
   InterfaceNoParam : TcErr Zero
   IntStringCaseNeedsFallback : TcErr Zero
   IntStringCaseRestriction : TcErr Zero
   InvalidArrowType : TcErr Zero
   LambdaNoSignature : TcErr Zero
   LambdaTooManyParams : TcErr Zero
-  LetBindingPattern : TcErr Zero
   NestedPatterns : TcErr Zero
   NatLiteralOutOfRange : TcErr Zero
   NotInductiveFamily : TcErr Zero
   OnlyCtorPatterns : TcErr Zero
   PatternFuel : TcErr Zero
-  RecordFieldAccessUnsupported : TcErr Zero
   RecordsUnsupported : TcErr Zero
-  RecordUpdateUnsupported : TcErr Zero
   TooManyArgs : TcErr Zero
   TypeLevelArg : TcErr Zero
   TypeMismatchCaseCount : TcErr Zero
@@ -98,7 +91,6 @@ data TcErr : Nat -> Type where
   -- M33 W5：extern 签名超出受限 FFI 子集（基本类型 + 简单 Array）。
   FfiTypeUnsupported : String -> TcErr (Succ Zero)
   EqRequiresEvidence : String -> TcErr (Succ Zero)
-  InstanceNotTrait : String -> TcErr (Succ Zero)
   InstanceUnknownMethod : String -> TcErr (Succ Zero)
   NeedsTwoArgs : String -> TcErr (Succ Zero)
   NoInstanceFound : String -> TcErr (Succ Zero)
@@ -110,7 +102,6 @@ data TcErr : Nat -> Type where
   SignatureNoDef : String -> TcErr (Succ Zero)
   UnknownInterface : String -> TcErr (Succ Zero)
   UnknownName : String -> TcErr (Succ Zero)
-  UnknownNamedInstance : String -> TcErr (Succ Zero)
   UnsolvedHole : String -> TcErr (Succ Zero)
   UnsolvedMetavarInfer : String -> TcErr (Succ Zero)
   -- M38（QTT）：用量检查。
@@ -170,22 +161,18 @@ tcCode CaseBranchTooFewArgs = "TC_CaseBranchTooFewArgs"
 tcCode CatchAllNotLast = "TC_CatchAllNotLast"
 tcCode ClauseTooManyPatterns = "TC_ClauseTooManyPatterns"
 tcCode DataKindArrows = "TC_DataKindArrows"
-tcCode DefFewerParams = "TC_DefFewerParams"
 tcCode DefMoreParams = "TC_DefMoreParams"
 tcCode DefParamsMustBeVars = "TC_DefParamsMustBeVars"
 tcCode DoUnsupported = "TC_DoUnsupported"
-tcCode DuplicateCtorInCase = "TC_DuplicateCtorInCase"
 tcCode FunctionNoClauses = "TC_FunctionNoClauses"
 tcCode HoleNoExpectedType = "TC_HoleNoExpectedType"
 tcCode ImplicitParamKind = "TC_ImplicitParamKind"
 tcCode ImpossibleBranchEmptyCtx = "TC_ImpossibleBranchEmptyCtx"
 tcCode ImpossibleBranchIndex = "TC_ImpossibleBranchIndex"
 tcCode IndexFuel = "TC_IndexFuel"
-tcCode InstanceAnnotationWrongUse = "TC_InstanceAnnotationWrongUse"
 tcCode InstanceHeadNotApp = "TC_InstanceHeadNotApp"
 tcCode ConstraintNotDict = "TC_ConstraintNotDict"
 tcCode InstanceMissingMethod = "TC_InstanceMissingMethod"
-tcCode InterfaceOneParam = "TC_InterfaceOneParam"
 tcCode OrphanInstance = "TC_OrphanInstance"
 tcCode InterfaceNoParam = "TC_InterfaceNoParam"
 tcCode IntStringCaseNeedsFallback = "TC_IntStringCaseNeedsFallback"
@@ -193,15 +180,12 @@ tcCode IntStringCaseRestriction = "TC_IntStringCaseRestriction"
 tcCode InvalidArrowType = "TC_InvalidArrowType"
 tcCode LambdaNoSignature = "TC_LambdaNoSignature"
 tcCode LambdaTooManyParams = "TC_LambdaTooManyParams"
-tcCode LetBindingPattern = "TC_LetBindingPattern"
 tcCode NestedPatterns = "TC_NestedPatterns"
 tcCode NatLiteralOutOfRange = "TC_NatLiteralOutOfRange"
 tcCode NotInductiveFamily = "TC_NotInductiveFamily"
 tcCode OnlyCtorPatterns = "TC_OnlyCtorPatterns"
 tcCode PatternFuel = "TC_PatternFuel"
-tcCode RecordFieldAccessUnsupported = "TC_RecordFieldAccessUnsupported"
 tcCode RecordsUnsupported = "TC_RecordsUnsupported"
-tcCode RecordUpdateUnsupported = "TC_RecordUpdateUnsupported"
 tcCode TooManyArgs = "TC_TooManyArgs"
 tcCode TypeLevelArg = "TC_TypeLevelArg"
 tcCode TypeMismatchCaseCount = "TC_TypeMismatchCaseCount"
@@ -235,7 +219,6 @@ tcCode (ExpectedSignature _) = "TC_ExpectedSignature"
 tcCode (ExpectedType _) = "TC_ExpectedType"
 tcCode (FfiTypeUnsupported _) = "TC_FfiTypeUnsupported"
 tcCode (EqRequiresEvidence _) = "TC_EqRequiresEvidence"
-tcCode (InstanceNotTrait _) = "TC_InstanceNotTrait"
 tcCode (InstanceUnknownMethod _) = "TC_InstanceUnknownMethod"
 tcCode (NeedsTwoArgs _) = "TC_NeedsTwoArgs"
 tcCode (NoInstanceFound _) = "TC_NoInstanceFound"
@@ -246,7 +229,6 @@ tcCode (RedundantLiteralBranch _) = "TC_RedundantLiteralBranch"
 tcCode (SignatureNoDef _) = "TC_SignatureNoDef"
 tcCode (UnknownInterface _) = "TC_UnknownInterface"
 tcCode (UnknownName _) = "TC_UnknownName"
-tcCode (UnknownNamedInstance _) = "TC_UnknownNamedInstance"
 tcCode (UnsolvedHole _) = "TC_UnsolvedHole"
 tcCode (UnsolvedMetavarInfer _) = "TC_UnsolvedMetavarInfer"
 tcCode (EffResFamilyMissing _) = "TC_EffResFamilyMissing"
@@ -287,11 +269,9 @@ tcTemplate CatchAllNotLast = "the catch-all branch must be the last one"
 tcTemplate ClauseTooManyPatterns = "clause has more patterns than the function arity"
 tcTemplate DataKindArrows =
   "the kind of a data declaration must be a chain of arrows ending in Type"
-tcTemplate DefFewerParams = "definition has fewer parameters than its signature"
 tcTemplate DefMoreParams = "definition has more parameters than its signature"
 tcTemplate DefParamsMustBeVars = "definition parameters must be variables (M13)"
 tcTemplate DoUnsupported = "do blocks are not supported yet (M19)"
-tcTemplate DuplicateCtorInCase = "duplicate constructor in case"
 tcTemplate FunctionNoClauses = "function has no clauses"
 tcTemplate HoleNoExpectedType = "cannot infer the type of a hole; give it an expected type"
 tcTemplate ImplicitParamKind = "implicit parameters must be types or inductive families (M15)"
@@ -299,15 +279,12 @@ tcTemplate ImpossibleBranchEmptyCtx =
   "this branch is impossible (its context contains an empty inductive family)"
 tcTemplate ImpossibleBranchIndex = "this branch is impossible (index constraints are unsatisfiable)"
 tcTemplate IndexFuel = "index unification ran out of reduction fuel"
-tcTemplate InstanceAnnotationWrongUse =
-  "@instance can only be used with a trait method (write `method @instance`)"
 tcTemplate InstanceHeadNotApp = "instance head must be an interface application (e.g. Show Int)"
 tcTemplate ConstraintNotDict =
   "constraint must be an interface application (e.g. Eq a, Convert a b)"
 tcTemplate InstanceMissingMethod = "instance is missing an implementation for an interface method"
 tcTemplate OrphanInstance =
   "instance is orphan: declare it in the module that defines the trait or the head type"
-tcTemplate InterfaceOneParam = "interfaces must have exactly one parameter (M15 limitation)"
 tcTemplate InterfaceNoParam = "interfaces must have at least one parameter"
 tcTemplate IntStringCaseNeedsFallback =
   "case on Int / String / Nat needs a variable or wildcard branch as fallback (M19)"
@@ -316,15 +293,12 @@ tcTemplate IntStringCaseRestriction =
 tcTemplate InvalidArrowType = "invalid arrow type"
 tcTemplate LambdaNoSignature = "cannot infer the type of a lambda; add a signature"
 tcTemplate LambdaTooManyParams = "lambda has more parameters than the expected function type"
-tcTemplate LetBindingPattern = "let bindings must be simple names or wildcards (M19)"
 tcTemplate NestedPatterns = "nested patterns must be constructor patterns (M19)"
 tcTemplate NatLiteralOutOfRange = "Nat literal is out of range (max is 4611686018427387903)"
 tcTemplate NotInductiveFamily = "case scrutinee is not an inductive family"
 tcTemplate OnlyCtorPatterns = "only constructor patterns are supported in case (M14)"
 tcTemplate PatternFuel = "pattern matrix recursion ran out of fuel"
-tcTemplate RecordFieldAccessUnsupported = "record field access is not supported yet (M15)"
 tcTemplate RecordsUnsupported = "records are not supported yet (M15)"
-tcTemplate RecordUpdateUnsupported = "record update is not supported yet (M15)"
 tcTemplate TooManyArgs = "too many arguments (not a function)"
 tcTemplate TypeLevelArg = "Type needs exactly one non-negative level (or none)"
 tcTemplate TypeMismatchCaseCount = "type mismatch: case branches differ in number"
@@ -350,7 +324,6 @@ tcTemplate (ExpectedType _) = "expected a type, but this expression has type <0>
 tcTemplate (FfiTypeUnsupported _) = "extern type is outside the supported FFI subset: <0>"
 tcTemplate (EqRequiresEvidence _) =
   "cannot use == or /= on values of type <0>: provide an Eq instance (or derive Eq); the Eq trait must be in scope"
-tcTemplate (InstanceNotTrait _) = "instance <0> is not an instance of a trait"
 tcTemplate (InstanceUnknownMethod _) = "instance has unknown method <0>"
 tcTemplate (NeedsTwoArgs _) = "`<0>` needs exactly two arguments"
 tcTemplate (NoInstanceFound _) = "no instance found for <0>"
@@ -364,7 +337,6 @@ tcTemplate (RedundantLiteralBranch lit) =
 tcTemplate (SignatureNoDef _) = "signature for <0> has no definition"
 tcTemplate (UnknownInterface _) = "unknown interface <0> in instance head or constraint"
 tcTemplate (UnknownName _) = "unknown name <0>"
-tcTemplate (UnknownNamedInstance _) = "unknown named instance <0>"
 tcTemplate (UnsolvedHole _) = "unsolved hole <0>"
 tcTemplate (UnsolvedMetavarInfer _) =
   "cannot infer a type for this expression (unsolved metavariable ?<0>); add a type annotation"
@@ -440,8 +412,7 @@ tcChunk0 =
     TcEntry (tcCode CaseBranchTooFewArgs) (tcTemplate CaseBranchTooFewArgs) "case 分支实参少于构造子字段",
     TcEntry (tcCode CatchAllNotLast) (tcTemplate CatchAllNotLast) "兜底分支必须在最后",
     TcEntry (tcCode ClauseTooManyPatterns) (tcTemplate ClauseTooManyPatterns) "子句模式多于函数元数",
-    TcEntry (tcCode DataKindArrows) (tcTemplate DataKindArrows) "data 的 kind 必须是箭头链",
-    TcEntry (tcCode DefFewerParams) (tcTemplate DefFewerParams) "定义实参少于签名（M28 起按 η 展开补 λ；保留码但不再触发）"
+    TcEntry (tcCode DataKindArrows) (tcTemplate DataKindArrows) "data 的 kind 必须是箭头链"
   ]
 
 tcChunk1 : List TcEntry
@@ -449,7 +420,6 @@ tcChunk1 =
   [ TcEntry (tcCode DefMoreParams) (tcTemplate DefMoreParams) "定义实参多于签名",
     TcEntry (tcCode DefParamsMustBeVars) (tcTemplate DefParamsMustBeVars) "定义参数必须是变量",
     TcEntry (tcCode DoUnsupported) (tcTemplate DoUnsupported) "do 块尚不支持",
-    TcEntry (tcCode DuplicateCtorInCase) (tcTemplate DuplicateCtorInCase) "case 里重复的构造子",
     TcEntry (tcCode FunctionNoClauses) (tcTemplate FunctionNoClauses) "函数没有子句",
     TcEntry (tcCode HoleNoExpectedType) (tcTemplate HoleNoExpectedType) "洞缺少期望类型",
     TcEntry (tcCode ImplicitParamKind) (tcTemplate ImplicitParamKind) "隐式参数必须是类型",
@@ -460,12 +430,10 @@ tcChunk2 : List TcEntry
 tcChunk2 =
   [ TcEntry (tcCode ImpossibleBranchIndex) (tcTemplate ImpossibleBranchIndex) "索引约束不可满足，分支不可达",
     TcEntry (tcCode IndexFuel) (tcTemplate IndexFuel) "索引归一化耗尽归约燃料",
-    TcEntry (tcCode InstanceAnnotationWrongUse) (tcTemplate InstanceAnnotationWrongUse) "@instance 只能用于 trait 方法",
     TcEntry (tcCode InstanceHeadNotApp) (tcTemplate InstanceHeadNotApp) "instance 头必须是接口应用",
     TcEntry (tcCode ConstraintNotDict) (tcTemplate ConstraintNotDict) "约束必须是 trait 应用",
     TcEntry (tcCode InstanceMissingMethod) (tcTemplate InstanceMissingMethod) "instance 缺方法实现",
     TcEntry (tcCode OrphanInstance) (tcTemplate OrphanInstance) "实例既不在 trait 也不在 head 类型的定义模块",
-    TcEntry (tcCode InterfaceOneParam) (tcTemplate InterfaceOneParam) "接口必须恰好一个参数",
     TcEntry (tcCode InterfaceNoParam) (tcTemplate InterfaceNoParam) "接口至少一个参数",
     TcEntry (tcCode IntStringCaseNeedsFallback) (tcTemplate IntStringCaseNeedsFallback) "Int/String 的 case 需要兜底分支"
   ]
@@ -476,7 +444,6 @@ tcChunk3 =
     TcEntry (tcCode InvalidArrowType) (tcTemplate InvalidArrowType) "非法箭头类型",
     TcEntry (tcCode LambdaNoSignature) (tcTemplate LambdaNoSignature) "lambda 缺签名",
     TcEntry (tcCode LambdaTooManyParams) (tcTemplate LambdaTooManyParams) "lambda 参数多于期望函数类型",
-    TcEntry (tcCode LetBindingPattern) (tcTemplate LetBindingPattern) "let 绑定必须是简单名或通配",
     TcEntry (tcCode NatLiteralOutOfRange) (tcTemplate NatLiteralOutOfRange) "Nat 字面量超出范围",
     TcEntry (tcCode NestedPatterns) (tcTemplate NestedPatterns) "嵌套模式必须是构造子模式",
     TcEntry (tcCode NotInductiveFamily) (tcTemplate NotInductiveFamily) "case 被检查项不是归纳族",
@@ -486,9 +453,7 @@ tcChunk3 =
 tcChunk4 : List TcEntry
 tcChunk4 =
   [ TcEntry (tcCode PatternFuel) (tcTemplate PatternFuel) "模式矩阵递归耗尽燃料",
-    TcEntry (tcCode RecordFieldAccessUnsupported) (tcTemplate RecordFieldAccessUnsupported) "record 字段访问尚不支持",
     TcEntry (tcCode RecordsUnsupported) (tcTemplate RecordsUnsupported) "record 尚不支持",
-    TcEntry (tcCode RecordUpdateUnsupported) (tcTemplate RecordUpdateUnsupported) "record 更新尚不支持",
     TcEntry (tcCode TooManyArgs) (tcTemplate TooManyArgs) "实参过多（不是函数）",
     TcEntry (tcCode TypeLevelArg) (tcTemplate TypeLevelArg) "Type 的层级参数不合法",
     TcEntry (tcCode TypeMismatchCaseCount) (tcTemplate TypeMismatchCaseCount) "case 分支数量不同",
@@ -516,8 +481,7 @@ tcChunk6 =
     TcEntry (tcCode (ExpectedSignature "")) (tcTemplate (ExpectedSignature "")) "缺少类型签名",
     TcEntry (tcCode (ExpectedType "")) (tcTemplate (ExpectedType "")) "期望类型",
     TcEntry (tcCode (FfiTypeUnsupported "")) (tcTemplate (FfiTypeUnsupported "")) "extern 类型超出受限 FFI 子集",
-    TcEntry (tcCode (EqRequiresEvidence "")) (tcTemplate (EqRequiresEvidence "")) "相等需要 Eq 证据（无泛型兜底）",
-    TcEntry (tcCode (InstanceNotTrait "")) (tcTemplate (InstanceNotTrait "")) "instance 不属于 trait"
+    TcEntry (tcCode (EqRequiresEvidence "")) (tcTemplate (EqRequiresEvidence "")) "相等需要 Eq 证据（无泛型兜底）"
   ]
 
 tcChunk7 : List TcEntry
@@ -536,7 +500,6 @@ tcChunk7 =
 tcChunk8 : List TcEntry
 tcChunk8 =
   [ TcEntry (tcCode (UnknownName "")) (tcTemplate (UnknownName "")) "引用了未绑定的名字",
-    TcEntry (tcCode (UnknownNamedInstance "")) (tcTemplate (UnknownNamedInstance "")) "未知命名 instance",
     TcEntry (tcCode (UnsolvedHole "")) (tcTemplate (UnsolvedHole "")) "未填的洞",
     TcEntry (tcCode (UnsolvedMetavarInfer "")) (tcTemplate (UnsolvedMetavarInfer "")) "无法推断类型（未解元变量）",
     TcEntry (tcCode (EffResFamilyMissing "")) (tcTemplate (EffResFamilyMissing "")) "找不到效应结果族",

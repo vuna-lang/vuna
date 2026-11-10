@@ -75,6 +75,7 @@ $ vuna search --type "a -> a"
 | `LX_` | 词法诊断 | `Frontend/Diagnostics.vuna` |
 | `PS_` | 语法诊断 | 同上 |
 | `RN_` | 名字解析（import/export/限定名/构造子/类型名） | `Diagnostics/Rn.vuna` |
+| `PKG_` | `vuna.toml` 清单解析/校验、包图 | `Diagnostics/Pkg.vuna` |
 | `LD_` | Loader / 包 / 能力诊断 | `Loader/Diagnostics.vuna` |
 | `IC_` | 编译器内部错误（不变量/燃料耗尽；internal compiler error，exit 2） | `Diagnostics/Ic.vuna` |
 | `LN_` | lint 规则 | `lib/Vuna/Lint/Diagnostics.vuna` |

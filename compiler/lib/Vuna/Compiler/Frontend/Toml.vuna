@@ -15,6 +15,7 @@ module Vuna.Compiler.Frontend.Toml
 -- 重复 key、重复 section、语法错误返回带行号的错误：
 -- parseToml 的错误形如 `line 3: ...`，parseTomlAt 的错误形如 `path:3: ...`。
 import Vuna.Compiler.Common
+import Vuna.Compiler.Diagnostics.Pkg
 
 data TomlValue : Type where
   TStr : String -> TomlValue
@@ -94,7 +95,7 @@ locPrefix : String -> Int -> String
 locPrefix path line = if path == "" then "line ${line}: " else "${path}:${line}: "
 
 failAt : String -> Int -> String -> Check a
-failAt path line msg = err (locPrefix path line ++ msg)
+failAt path line msg = pkgAt1 path line (TomlSyntax msg) msg
 
 -- 跳过空格/制表符。
 -- 直接对 `TomlCursor` 的结构做递归（不经过 advanceCursor），终止性检查才能看到下降。

@@ -34,3 +34,10 @@ out-contains: type mismatch
 run: sh -c '"$VUNA" explain NOPE 2>&1'
 exit: 2
 out-contains: unknown diagnostic code
+# 清单诊断：vuna.toml 未知 key 是有码、带行号的诊断。
+run: sh -c 'd="$TMPDIR/m38-manifest"; rm -rf "$d"; mkdir -p "$d/app"; printf "[package]\nname = \"m38-manifest\"\nversion = \"1\"\n" > "$d/vuna.toml"; printf "main : Int\nmain = 1\n" > "$d/app/Main.vuna"'
+run: "$VUNA" check "$TMPDIR/m38-manifest" 2>&1
+exit: 1
+out-contains: [PKG_UnknownKey]
+out-contains: unknown key "version" in [package]
+out-contains: vuna.toml:3:1

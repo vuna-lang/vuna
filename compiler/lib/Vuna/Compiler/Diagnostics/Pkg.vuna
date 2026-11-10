@@ -1,0 +1,193 @@
+-- | PKG_ 域：`vuna.toml` 清单解析/结构校验/包图诊断。
+module Vuna.Compiler.Diagnostics.Pkg
+  ( PkgEntry(..)
+  , PkgErr(..)
+  , pkgAll
+  , pkgAt0
+  , pkgAt1
+  , pkgAt2
+  , pkgCode
+  , pkgInvalid
+  , pkgMsg
+  , pkgNoLoc
+  , pkgPath0
+  , pkgPath1
+  , pkgPath2
+  , pkgTemplate
+  ) where
+
+-- Vuna.Compiler.Diagnostics.Pkg：包清单与包图（phase = Load，category = Package）。
+--
+-- 位置来自 `vuna.toml` 的行号（列未知，统一取 1）；纯结构校验错误只有文件没有行。
+-- 消息体与旧 `atLine/manifestErr` 输出一致（路径/行号搬到 Label，不再拼进消息）。
+import Vuna.Compiler.Common
+import Vuna.Compiler.Diagnostics.Common
+import Base.Nat
+import Base.Vec
+
+data PkgErr : Nat -> Type where
+  -- arity 0
+  EmptyCapability : PkgErr Zero
+  EmptyDependencyName : PkgErr Zero
+  EmptyMember : PkgErr Zero
+  EmptyPackageName : PkgErr Zero
+  EmptyTrustPoint : PkgErr Zero
+  MissingPackageName : PkgErr Zero
+  NonPrivileged : PkgErr Zero
+  TrustNeedsUnsafe : PkgErr Zero
+  -- arity 1
+  DependencyPathNotString : String -> PkgErr (Succ Zero)
+  DuplicateCapability : String -> PkgErr (Succ Zero)
+  DuplicateDependency : String -> PkgErr (Succ Zero)
+  DuplicateTrustPoint : String -> PkgErr (Succ Zero)
+  EmptyDependencyPath : String -> PkgErr (Succ Zero)
+  ExpectedBool : String -> PkgErr (Succ Zero)
+  ExpectedString : String -> PkgErr (Succ Zero)
+  ExpectedStringArray : String -> PkgErr (Succ Zero)
+  Invalid : String -> PkgErr (Succ Zero)
+  InvalidExportModule : String -> PkgErr (Succ Zero)
+  InvalidPackageName : String -> PkgErr (Succ Zero)
+  InvalidTrustPoint : String -> PkgErr (Succ Zero)
+  MissingManifest : String -> PkgErr (Succ Zero)
+  NoManifestUpward : String -> PkgErr (Succ Zero)
+  TomlSyntax : String -> PkgErr (Succ Zero)
+  UnexpectedTopLevelKey : String -> PkgErr (Succ Zero)
+  UnknownSection : String -> PkgErr (Succ Zero)
+  -- arity 2
+  UnknownKey : String -> String -> PkgErr (Succ (Succ Zero))
+
+pkgCode : {n : Nat} -> PkgErr n -> String
+pkgCode EmptyCapability = "PKG_EmptyCapability"
+pkgCode EmptyDependencyName = "PKG_EmptyDependencyName"
+pkgCode EmptyMember = "PKG_EmptyMember"
+pkgCode EmptyPackageName = "PKG_EmptyPackageName"
+pkgCode EmptyTrustPoint = "PKG_EmptyTrustPoint"
+pkgCode MissingPackageName = "PKG_MissingPackageName"
+pkgCode NonPrivileged = "PKG_NonPrivileged"
+pkgCode TrustNeedsUnsafe = "PKG_TrustNeedsUnsafe"
+pkgCode (DependencyPathNotString _) = "PKG_DependencyPathNotString"
+pkgCode (DuplicateCapability _) = "PKG_DuplicateCapability"
+pkgCode (DuplicateDependency _) = "PKG_DuplicateDependency"
+pkgCode (DuplicateTrustPoint _) = "PKG_DuplicateTrustPoint"
+pkgCode (EmptyDependencyPath _) = "PKG_EmptyDependencyPath"
+pkgCode (ExpectedBool _) = "PKG_ExpectedBool"
+pkgCode (ExpectedString _) = "PKG_ExpectedString"
+pkgCode (ExpectedStringArray _) = "PKG_ExpectedStringArray"
+pkgCode (Invalid _) = "PKG_Invalid"
+pkgCode (InvalidExportModule _) = "PKG_InvalidExportModule"
+pkgCode (InvalidPackageName _) = "PKG_InvalidPackageName"
+pkgCode (InvalidTrustPoint _) = "PKG_InvalidTrustPoint"
+pkgCode (MissingManifest _) = "PKG_MissingManifest"
+pkgCode (NoManifestUpward _) = "PKG_NoManifestUpward"
+pkgCode (TomlSyntax _) = "PKG_TomlSyntax"
+pkgCode (UnexpectedTopLevelKey _) = "PKG_UnexpectedTopLevelKey"
+pkgCode (UnknownSection _) = "PKG_UnknownSection"
+pkgCode (UnknownKey _ _) = "PKG_UnknownKey"
+
+pkgTemplate : {n : Nat} -> PkgErr n -> String
+pkgTemplate EmptyCapability = "capability name must not be empty"
+pkgTemplate EmptyDependencyName = "dependency name must not be empty"
+pkgTemplate EmptyMember = "workspace member must not be empty"
+pkgTemplate EmptyPackageName = "package name must not be empty"
+pkgTemplate EmptyTrustPoint = "trust point name must not be empty"
+pkgTemplate MissingPackageName = "missing [package] name"
+pkgTemplate NonPrivileged =
+  "non-privileged package declares [capabilities]/[trust]/[privileged]; only [package] privileged = true packages may declare capabilities, trust points or host-layer modules (user code should use Base.Eff.* handlers)"
+pkgTemplate TrustNeedsUnsafe =
+  "[trust] unsafe requires capability \"unsafe\" in [capabilities] effects"
+pkgTemplate (DependencyPathNotString _) = "dependency \"<0>\" must have a string relative path"
+pkgTemplate (DuplicateCapability _) = "duplicate capability \"<0>\""
+pkgTemplate (DuplicateDependency _) = "duplicate dependency \"<0>\""
+pkgTemplate (DuplicateTrustPoint _) = "duplicate trust point \"<0>\""
+pkgTemplate (EmptyDependencyPath _) = "dependency \"<0>\" path must not be empty"
+pkgTemplate (ExpectedBool _) = "expected a boolean for \"<0>\""
+pkgTemplate (ExpectedString _) = "expected a string for \"<0>\""
+pkgTemplate (ExpectedStringArray _) = "expected an array of strings for \"<0>\""
+pkgTemplate (Invalid _) = "<0>"
+pkgTemplate (InvalidExportModule _) =
+  "invalid export module \"<0>\" (segments must match [A-Z][A-Za-z0-9_]*)"
+pkgTemplate (InvalidPackageName _) =
+  "invalid package name \"<0>\" (allowed characters: a-z, 0-9, '-')"
+pkgTemplate (InvalidTrustPoint _) =
+  "invalid trust point \"<0>\" (expected a qualified definition name such as \"Base.IO.runIO\")"
+pkgTemplate (MissingManifest _) = "missing vuna.toml in <0>"
+pkgTemplate (NoManifestUpward _) = "no vuna.toml found from <0> (searched upward)"
+pkgTemplate (TomlSyntax _) = "<0>"
+pkgTemplate (UnexpectedTopLevelKey _) = "unexpected top-level key \"<0>\""
+pkgTemplate (UnknownSection _) = "unknown section [<0>]"
+pkgTemplate (UnknownKey _ _) = "unknown key \"<0>\" in [<1>]"
+
+pkgMsg : {n : Nat} -> PkgErr n -> Vec n String -> Diagnostic
+pkgMsg e args = diagNoLoc SevError PhLoad CatPackage (pkgCode e) (diagBody (pkgTemplate e) args)
+
+pkgSpan : String -> Int -> Maybe Span
+pkgSpan path line = if path == "" then Nothing else Just (Span path line 1 line 1)
+
+atSpan : Maybe Span -> Diagnostic -> Diagnostic
+atSpan Nothing d = d
+atSpan (Just sp) d = withLabel (Label (Just sp) "" LabelPrimary Nothing) d
+
+pkgAt : String -> Int -> {n : Nat} -> PkgErr n -> Vec n String -> Check a
+pkgAt path line e args = ErrC (atSpan (pkgSpan path line) (pkgMsg e args))
+
+pkgPath : String -> {n : Nat} -> PkgErr n -> Vec n String -> Check a
+pkgPath path e args = pkgAt path 1 e args
+
+pkgNoLoc : {n : Nat} -> PkgErr n -> Vec n String -> Check a
+pkgNoLoc e args = ErrC (pkgMsg e args)
+
+pkgAt0 : String -> Int -> PkgErr Zero -> Check a
+pkgAt0 path line e = pkgAt path line e []
+
+pkgAt1 : String -> Int -> PkgErr (Succ Zero) -> String -> Check a
+pkgAt1 path line e a0 = pkgAt path line e [a0]
+
+pkgAt2 : String -> Int -> PkgErr (Succ (Succ Zero)) -> String -> String -> Check a
+pkgAt2 path line e a0 a1 = pkgAt path line e [a0, a1]
+
+pkgPath0 : String -> PkgErr Zero -> Check a
+pkgPath0 path e = pkgPath path e []
+
+pkgPath1 : String -> PkgErr (Succ Zero) -> String -> Check a
+pkgPath1 path e a0 = pkgPath path e [a0]
+
+pkgPath2 : String -> PkgErr (Succ (Succ Zero)) -> String -> String -> Check a
+pkgPath2 path e a0 a1 = pkgPath path e [a0, a1]
+
+pkgInvalid : String -> Check a
+pkgInvalid msg = pkgNoLoc (Invalid msg) [msg]
+
+record PkgEntry where
+  pkgEntryCode : String
+  pkgEntryTemplate : String
+  pkgEntryDesc : String
+
+pkgAll : List PkgEntry
+pkgAll =
+  [ PkgEntry (pkgCode EmptyCapability) (pkgTemplate EmptyCapability) "能力名为空",
+    PkgEntry (pkgCode EmptyDependencyName) (pkgTemplate EmptyDependencyName) "依赖名为空",
+    PkgEntry (pkgCode EmptyMember) (pkgTemplate EmptyMember) "workspace 成员名为空",
+    PkgEntry (pkgCode EmptyPackageName) (pkgTemplate EmptyPackageName) "包名为空",
+    PkgEntry (pkgCode EmptyTrustPoint) (pkgTemplate EmptyTrustPoint) "信任点名为空",
+    PkgEntry (pkgCode MissingPackageName) (pkgTemplate MissingPackageName) "缺 [package] name",
+    PkgEntry (pkgCode NonPrivileged) (pkgTemplate NonPrivileged) "非特权包声明特权能力",
+    PkgEntry (pkgCode TrustNeedsUnsafe) (pkgTemplate TrustNeedsUnsafe) "[trust] 需要 unsafe 能力",
+    PkgEntry (pkgCode (DependencyPathNotString "")) (pkgTemplate (DependencyPathNotString "")) "依赖路径必须是字符串",
+    PkgEntry (pkgCode (DuplicateCapability "")) (pkgTemplate (DuplicateCapability "")) "重复能力名",
+    PkgEntry (pkgCode (DuplicateDependency "")) (pkgTemplate (DuplicateDependency "")) "重复依赖",
+    PkgEntry (pkgCode (DuplicateTrustPoint "")) (pkgTemplate (DuplicateTrustPoint "")) "重复信任点",
+    PkgEntry (pkgCode (EmptyDependencyPath "")) (pkgTemplate (EmptyDependencyPath "")) "依赖路径为空",
+    PkgEntry (pkgCode (ExpectedBool "")) (pkgTemplate (ExpectedBool "")) "布尔字段类型错误",
+    PkgEntry (pkgCode (ExpectedString "")) (pkgTemplate (ExpectedString "")) "字符串字段类型错误",
+    PkgEntry (pkgCode (ExpectedStringArray "")) (pkgTemplate (ExpectedStringArray "")) "字符串数组字段类型错误",
+    PkgEntry (pkgCode (Invalid "")) (pkgTemplate (Invalid "")) "通用清单/包图错误",
+    PkgEntry (pkgCode (InvalidExportModule "")) (pkgTemplate (InvalidExportModule "")) "非法导出模块名",
+    PkgEntry (pkgCode (InvalidPackageName "")) (pkgTemplate (InvalidPackageName "")) "非法包名",
+    PkgEntry (pkgCode (InvalidTrustPoint "")) (pkgTemplate (InvalidTrustPoint "")) "非法信任点名",
+    PkgEntry (pkgCode (MissingManifest "")) (pkgTemplate (MissingManifest "")) "找不到 vuna.toml",
+    PkgEntry (pkgCode (NoManifestUpward "")) (pkgTemplate (NoManifestUpward "")) "向上找不到 vuna.toml",
+    PkgEntry (pkgCode (TomlSyntax "")) (pkgTemplate (TomlSyntax "")) "vuna.toml 语法错误",
+    PkgEntry (pkgCode (UnexpectedTopLevelKey "")) (pkgTemplate (UnexpectedTopLevelKey "")) "顶层未知 key",
+    PkgEntry (pkgCode (UnknownSection "")) (pkgTemplate (UnknownSection "")) "未知 section",
+    PkgEntry (pkgCode (UnknownKey "" "")) (pkgTemplate (UnknownKey "" "")) "section 内未知 key"
+  ]
