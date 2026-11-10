@@ -283,6 +283,7 @@ printVersion _ =
     _ = runIO (prim_print "vuna-compiler ${vunaVersion}\n")
   in 0
 
+-- | 参数里是否含 -h/--help。
 anyHelp : List String -> Bool
 anyHelp [] = False
 anyHelp (arg :: rest) = if arg == "-h" || arg == "--help" then True else anyHelp rest
