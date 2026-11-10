@@ -19,7 +19,6 @@ LN_LiteralIfChain
 PKG_DuplicateDependency
 PKG_EmptyDependencyName
 PKG_MissingBase
-PKG_MissingManifest
 PKG_NoManifestUpward
 PS_ExpectedEndOfInput
 PS_UnexpectedIndentInWhere
