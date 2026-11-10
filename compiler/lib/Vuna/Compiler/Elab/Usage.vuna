@@ -309,6 +309,7 @@ defSpanOf d = case dtDefSpan d of
   Nothing => Span "" 0 0 0 0
 
 -- 未使用 binder → `_<name>` 的 machine-applicable 改名建议（无引用，改名安全）。
+-- | 未使用 binder 告警（附改名建议）。
 warnUnusedBinder : Span -> String -> Int
 warnUnusedBinder sp name =
   warnAt1Mod
