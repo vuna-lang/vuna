@@ -35,10 +35,10 @@
 #   - 文档按主题重整：删除 history/dt-core/dt-parity/dt.md，新增 core/tooling/records-traits
 #     并把 DT 语义并入 type-system；合并 main 的 LSP/readBytes 文档后按实测复标定：
 #     coldstart 29731 / agents 104 / arch 167 / readme 163 / max_ref 279。
-coldstart_bytes 39486
-agents_lines 130
-arch_lines 220
-readme_lines 172
+coldstart_bytes 40118
+agents_lines 131
+arch_lines 224
+readme_lines 173
 #   - M24.5：dt-parity.md §6 重写（实测能力表 + 边界）到 203 行；Elab 新增 scrutinee 反射、
 #     不可达分支、inlineSolvedMetas（3348 → 3513）。按实测重标定 max_ref 208 / max_module 3530；
 #     入口文档（coldstart/agents/arch/readme）不变。
@@ -48,7 +48,7 @@ readme_lines 172
 #     max_ref_lines 438（primitives.md）与 max_module_lines 2400（Elab/Term/Impl.vuna）
 #     是改动前已存在的漏标定（旧预算 415/2300 本身已红），按实测重标定。
 max_ref_lines 438
-max_module_lines 2515
+max_module_lines 2516
 #   - M27：新增 `primitives.md` 与内建/原语/能力文档、`Vuna.Compiler.Intrinsics` 模块；
 #     按 `sh nix/context-budget.sh .` 实测收紧：coldstart 29055 / agents 104 / arch 156 /
 #     readme 163 / max_ref 206 / max_module 811（入口文档有 45B 余量，agents 临界）。
@@ -181,3 +181,8 @@ max_module_lines 2515
 #   - 2026-11-10 records-v2 R3（TRecUpd 增量）：`Impl.vuna` 2495 → 2497（+2 行构造原语）。
 #   - 2026-11-10 R4 rebase 到 main 0d9c7d1：main 实测 max_module 2515（Impl.vuna，effects N1 4a）
 #     已超旧预算 2497，属 main 漂移；按实测复标定。
+#   - 2026-11-10 诊断重设计（diag-system）：新增 diagnostics.md 并接进 AGENTS/README/
+#     architecture/compiler/tooling 导航；入口文档实测 coldstart 40118 / agents 131 /
+#     arch 224 / readme 173（均超旧预算，属本特性文档增长）；`Elab/Term/Impl.vuna` 增加
+#     效应标签字段与元变量/洞字段后 2515 → 2516 行（特性增长）。按 `sh nix/context-budget.sh .`
+#     实测复标定以上五项；max_ref 不变。后续诊断文档压缩时按 ratchet 再下调。
