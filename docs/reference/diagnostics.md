@@ -54,8 +54,10 @@ Diagnostic = { id, severity, phase, category, code, message, labels, fields, tra
   - `err : String -> Check a`：工具错误（phase = Tool，无码）；根工具链 CLI 错误用它。
   - `rawAt` / `rawNoLoc`：尚未分类的源码裸消息（迁移完成后删除）。
   - `icFuel` / `icInternal`：编译器内部错误（phase = Internal，`diagInternal = True`）。
-- **状态**：结构化通道已落地（compiler 内 `err "` 由初版 421 处降到约 100 处，剩余为
-  待分类的用户可见错误）；`rawAt` 仍有 Elab 记录诊断等少量调用点。
+- **状态**：结构化通道已落地。compiler 内 `err "` 由初版 421 处降到 **15 处**，且只剩
+  工具/构建/清单白名单（`CompilerCli`/`Compile`/`Pkg`/`Dt`/`Manifest`，exit 2、无源码 span）；
+  源码诊断已全部走域码（TC_/CG_/RN_/LD_/IC_）。`rawAt` 只剩 `Elab/Types.errAt` 的
+  记录/派生兜底路径。
 
 ## 4. 错误码域
 
@@ -126,7 +128,7 @@ JSON 字段是机器契约：`code/severity/phase/category/message/labels[]/fiel
 | D1 三通道（源码/工具/内部） | 已落地（phase Tool/Internal + ICE 信息） |
 | D2 `Diagnostic` 全字段 | 已落地 |
 | D3 位置契约（end span、UTF-16、显式 NoLoc） | 已落地（span 填充仍在补齐） |
-| D4 码域（RN_/PKG_ 独立域、死码清理） | 部分（`RN_` 已落地；`PKG_` 未拆；死码待删） |
+| D4 码域（RN_/PKG_ 独立域、死码清理） | 部分（`RN_` 已落地 26 码；`PKG_` 未拆；死码待删） |
 | D5 目录单一真源 + 生成枚举/文档 | 部分（条目仍是手写；`explain`/`gen-errors` 已同源） |
 | D6 渲染/LSP/CLI | 已落地 short/human/JSON + LSP 结构化；SARIF/i18n 待办 |
 | D7.1 多错误 + Cascade | 待办（当前仍首错短路） |
