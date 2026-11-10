@@ -18,7 +18,6 @@ import Vuna.Compiler.Diagnostics.Warning
 import Vuna.Compiler.Frontend.Diagnostics
 import Vuna.Compiler.Loader.Diagnostics
 import Vuna.Files
-import Vuna.Json
 import Vuna.Lint.Diagnostics
 import Base.List
 import Base.String
@@ -195,12 +194,35 @@ fxOf : Entry -> Entry
 fxOf e =
   Entry "FX_${join "" (split "-" e.entryRule)}" e.entryMsg e.entryEdit e.entryRule e.entryEdit True
 
--- 目录 JSON：与 errors.md 同源（生成物，供工具/编辑器消费）。
+-- 目录 JSON：与 errors.md 同源（生成物，供工具/编辑器消费）。自带最小转义，
+-- 刻意不依赖 Vuna.Json（避免把 GenErrors 加进 Json 的依赖扇出）。
 renderCatalogJson : List Entry -> String
 renderCatalogJson entries =
-  renderJson (JObj [Pair "version" (JNum 1), Pair "codes" (JArr (map entryJson entries))])
+  "{\"version\":1,\"codes\":[" ++ join "," (map entryJsonText entries) ++ "]}"
 
-entryJson : Entry -> Json
-entryJson e =
-  JObj
-    [Pair "code" (JStr e.entryCode), Pair "severity" (JStr (diagSeverityOf (codeDomain e.entryCode))), Pair "phase" (JStr (diagPhaseOf (codeDomain e.entryCode))), Pair "category" (JStr (diagCategoryOf (codeDomain e.entryCode))), Pair "message" (JStr e.entryMsg), Pair "desc" (JStr e.entryDesc), Pair "rule" (JStr e.entryRule), Pair "edit" (JStr e.entryEdit), Pair "fixable" (JBool e.entryFixable)]
+entryJsonText : Entry -> String
+entryJsonText e =
+  "{"
+    ++ join "," [field "code" e.entryCode, field "severity" (diagSeverityOf (codeDomain e.entryCode)), field "phase" (diagPhaseOf (codeDomain e.entryCode)), field "category" (diagCategoryOf (codeDomain e.entryCode)), field "message" e.entryMsg, field "desc" e.entryDesc, field "rule" e.entryRule, field "edit" e.entryEdit, " \"fixable\":" ++ (if e.entryFixable then "true" else "false") ++ " "]
+    ++ "}"
+
+field : String -> String -> String
+field k v = " \"${k}\":${jsonQuote v} "
+
+jsonQuote : String -> String
+jsonQuote s = "\"" ++ join "" (map jsonEscapeChar (strUnpack s)) ++ "\""
+
+jsonEscapeChar : Int -> String
+jsonEscapeChar c = case c of
+  34 => "\\\""
+  92 => "\\\\"
+  10 => "\\n"
+  13 => "\\r"
+  9 => "\\t"
+  _ => if c < 32 then "\\u00" ++ hexPair c else strPack [c]
+
+hexPair : Int -> String
+hexPair c = strPack [hexDigit (c / 16), hexDigit (c - c / 16 * 16)]
+
+hexDigit : Int -> Int
+hexDigit n = if n < 10 then 48 + n else 87 + n
