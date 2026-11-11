@@ -391,7 +391,7 @@ main = case (MkEmail "x@y") of MkEmail s => s
   声明期报错。没有父类：`Monad` 不自动提供 `Applicative`，每个 monad 类型要写全三个实例。
 - **`IO`** 是 `base/lib/Base/Host.vuna` 的抽象类型（构造器私有）；组合统一用
   `Functor` / `Applicative` / `Monad` trait 的 `fmap` / `bind` / `pure` / `liftA2`、`>>=` 与 `do`。IO 动作只在 `main`
-  执行；`Base.Host.runIO` 是唯一的 main 外入口、需要能力 `unsafe`（工具链与 `Base.ST` 用）。
+  执行；`runPure` 是唯一的 main 外入口、需要能力 `unsafe`（工具链与 `Base.ST` 用）。
   参数化效应 monad（`Base.State` / `Base.Reader` / `Base.Error`）与 ST 见
   [effects.md](effects.md)。
 - **库内组合约定**：类型已有实例时，组合统一写 `do` / `>>=` / `>>` / `bind` / `pure` /

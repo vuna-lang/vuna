@@ -162,7 +162,7 @@ vuna.toml → Frontend.{Toml.parseToml, Manifest.parseManifest/validateManifest}
   `Lint.runLint`；诊断渲染（short/human/JSON）见 `Diag.Format`（模型见
   [diagnostics.md](reference/diagnostics.md)）；API 文档与检索见
   [api-docs.md](reference/api-docs.md)，调试工作流见 [debugging.md](reference/debugging.md)。
-- 进程执行只在 `Driver.CompilerCli.runIn`（`prim_runIn`，需要 `process`；工具链经 `runIO`）。
+- 进程执行只在 `Driver.CompilerCli.runIn`（`prim_runIn`，需要 `process`；工具链经 `runPure`）。
 - **stdio / socket server 公共层**（工具链，不进 seed）：`Vuna.Json.Frame`（字节级
   `Content-Length` 帧 + 16 MiB 上界）、`Vuna.Json.Rpc`（JSON-RPC 信封与错误码）、
   `Vuna.Json.Server.serveConnection`（读帧 → 分发 → 发帧的连接循环）；LSP 与 REPL server
@@ -185,8 +185,8 @@ vuna.toml → Frontend.{Toml.parseToml, Manifest.parseManifest/validateManifest}
   `nix/tcb-forbidden.txt` 黑名单）；效应边界是 manifest 显式能力
   （`[capabilities].effects` ∈ console/fs/process/env/clock/net/unsafe），
   `checkEffectsBuiltins` 按 `Intrinsics` 能力位检查；原语返回 `IO` 动作（只在 `main` 执行，
-  钩子是 `v_main 0`），未声明能力的包只能经 `Base.Host`，`runIO`/`prim_runIO` 需
-  `unsafe`；`base` 自身声明 `unsafe`（`Base.Host.runIO` 别名与 `Base.ST.runST`，见
+  钩子是 `v_main 0`），未声明能力的包只能经 `Base.Host`，`runPure`/`prim_schedNewScope` 需
+  `unsafe`；`base` 自身声明 `unsafe`（`runPure` 别名与 `Base.ST.runST`，见
   [effects.md](reference/effects.md)）。
 
 ## 4. LSP 与索引（工具链侧，不进 seed）

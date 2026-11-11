@@ -24,10 +24,10 @@
 | `Base.Hashable` | 通用哈希 trait：`hash : a -> Int`、`hashStr`（String 的 0..1023 哈希）、`hashCombine`；`String`/`Int`/`Bool`/`Nat`/`Unit`/`List`/`Maybe`/`Pair`/`Result`/`Ordering` 实例，用户类型可 `deriving (Hashable)` |
 | `Base.Bits` | 位运算命名库 + 32-bit 固定宽度包装：`band` / `bor` / `bxor` / `bnot` / `shl` / `shr`（63-bit 语义，移位越界 = 0）+ `mask8` / `mask32` / `shl32` / `shr32` / `add32` / `rotr32` / `rol32`；SHA-256 / 编码类算法使用 |
 | `Base.Array` | 不可变数组（内建类型构造子 `Array`；`fromList` / `toList` / `length` / `get` / `set` / `make`，长度与下标是 `Nat`；`set` 返回新数组） |
-| `Base.IORef` | 可变引用（`newRef` / `readRef` / `writeRef` / `modifyRef`，公开操作返回 `Eff []`；实现层仍是 IO 槽，过渡期） |
-| `Base.MArray` | 可变数组（`new` / `read` / `write` / `length`，公开操作返回 `Eff []`；实现层仍是 IO 槽，过渡期） |
+| `Base.IORef` | 可变引用（`newRef` / `readRef` / `writeRef` / `modifyRef`，公开操作与实现都是 `Eff []`） |
+| `Base.MArray` | 可变数组（`new` / `read` / `write` / `length`，公开操作与实现都是 `Eff []`） |
 | `Base.Buffer` | 可变字符串缓冲（`new` / `push` / `contents` / `length`，全部 `Eff []`；D23 把 `add` 改名为 `push`，避免与 `Num.add` 方法短名冲突） |
-| `Base.ST` | region 隔离的局部可变数据（改建在 IO 上）：`ST r a`（包 `IO a`）+ `runST`（显式 region binder，句柄不逃逸）+ `Ref r a` / `SArray r a` + 显式组合子 `bindST` / `bindST1` / `pureST` / `fmapST`；`Ref`/`SArray` 为 linear record（消费式 API，结果记录 `RefPair` 等），`bindST1` 线程化线性结果；不声明 `Functor`/`Monad` 实例，`runST` 入口经 `Base.Host.runIO` 桥执行一次 |
+| `Base.ST` | region 隔离的局部可变数据（Eff 派生）：`ST r a`（包 `Eff [] a`）+ `runST`（显式 region binder，句柄不逃逸）+ `Ref r a` / `SArray r a` + 显式组合子 `bindST` / `bindST1` / `pureST` / `fmapST`；`Ref`/`SArray` 为 linear record（消费式 API，结果记录 `RefPair` 等），`bindST1`（`prim_eff_bind1`）线程化线性结果；不声明 `Functor`/`Monad` 实例，`runST` 入口执行一次 `runPure` |
 | `Base.State` / `Base.Reader` / `Base.Error` | 库级效应 monad：纯函数表示 + `Functor`/`Applicative`/`Monad` 实例（`do` 可用）；`State` 是 `s -> Pair a s`、`Reader` 是 `e -> a`、`Error` 是泛型 `Ok`/`Err` 和；handler 是 `runState` / `evalState` / `execState`、`runReader` / `ask` / `local`、`runError` / `throwError` / `catchError`。通用运行时效应见 `Base.Eff`（[effects.md](effects.md) §8） |
 | `Base.Nat` | 非负整数（`Zero` / `Succ`）；运行时是 OCaml `int`。`plus` / `minus` / `mult` / `toInt` / `fromInt` / `fromIntMaybe` / `pred` / `isZero` + `Num`（除法经 `Num.div` / `/`）+ `Eq` / `Ord` / `Show` / `Hashable` / `Semigroup` / `Monoid` 实例 |
 | `Base.Num` | 数值算术 trait（D23）：`add` / `sub` / `mul` / `div`；`+` / `-` / `*` / `/` 是它们的中缀别名（fixity 与别名声明在本模块）。`Int` / `Nat` / `Float` 实例在类型模块并由精化器特化回内建原语；用户类型实现 `Num`（配 `FromInt`）即可重载四则（见 [operators.md](operators.md)） |
@@ -45,8 +45,8 @@
 | `Base.Float` | `Float` primitive 类型模块（**随 `Prelude` 自动导出**，2026-11 rotation 后提升）：`FromFloat` trait + `abs` / `sqrt` / `intToFloat` / `floatToInt` + `Eq` / `Ord` / `Show` / `Num` 实例；字面量、算术/比较、`main : Float`、模板插值本来就不需要 import。Prelude 闭包包含本模块后，所有程序的 runtime 都带浮点 helper（[floats.md](floats.md)） |
 | `Base.FromString` / `Base.FromInt` | 字面量转换 trait（`fromString` / `fromInt`）与 `String` / `Int` 恒等实例；`Prelude` 导出，`deriving (FromString)` / `(FromInt)` 为单字段包装类型自动派生（见 [floats.md](floats.md)） |
 | `Base.Bool` | `Bool` 类型与逻辑 helper + `Show` / `Hashable` 实例（`if` 输出 `True` / `False`）；`Eq` / `Ord` 实例因 Bool 是方法返回类型随 trait 留在 `Base.Eq` / `Base.Ord` |
-| `Base.Host` | **特权宿主层**（原 `Base.IO.Host`）：Eff 别名（`print`/`println`/`readFile`/`writeFile`/`getArgs`/`exit`/`runIn`/`writeFileAtomic` 与 env/clock 等，走 `prim_eff_*`，度量用 `Eff [] Nat`，`eprint` 仍 `Int`）+ 实现层 IO 桥 `runIO : IO a -> a`（`runPure ∘ deferIO`，信任点，门控在 `Loader.Resolve`）；re-export `Base.Eff` 的 `Eff`/`runPure`/`joinEff`/`raise`/`runEff`/`deferIO`；只有 `[package] privileged = true` 的包可 import |
-| `Base.Eff` | 通用运行时效应核心（Layer 1）：开放行 `Row`、抽象动作 `Eff`（无世界令牌）、`Member` 行成员证明/`rowRem`、`weaken`、线性 `Cont`/`resumeCont`/`handleCoreLin`、内建 `Functor`/`Applicative`/`Monad (Eff r)`（`do`/`>>=`；不提供 `bindEff`/`pureEff`）、`sendCore`/`handleCore`、`runPure`/`joinEff`/`raise`/`deferIO`（`runPure`/`joinEff` 要求行已处理干净，入口处未处理效应是类型错误）；OCaml 5 一次性续延；见 [effects.md](effects.md) §8 |
+| `Base.Host` | **特权宿主层**（原 `Base.IO.Host`）：Eff 别名（`print`/`println`/`readFile`/`writeFile`/`getArgs`/`exit`/`runIn`/`writeFileAtomic` 与 env/clock 等，走 `prim_eff_*`，度量用 `Eff [] Nat`，`eprint` 仍 `Int`）+ 实现层没有 IO 桥（`IO` 已删除）；re-export `Base.Eff` 的 `Eff`/`runPure`/`joinEff`/`raise`/`runEff`；只有 `[package] privileged = true` 的包可 import |
+| `Base.Eff` | 通用运行时效应核心（Layer 1）：开放行 `Row`、抽象动作 `Eff`（无世界令牌）、`Member` 行成员证明/`rowRem`、`weaken`、线性 `Cont`/`resumeCont`/`handleCoreLin`、内建 `Functor`/`Applicative`/`Monad (Eff r)`（`do`/`>>=`；不提供 `bindEff`/`pureEff`）、`sendCore`/`handleCore`、`runPure`/`joinEff`/`raise`（`runPure`/`joinEff` 要求行已处理干净，入口处未处理效应是类型错误）；OCaml 5 一次性续延；见 [effects.md](effects.md) §8 |
 | `Base.Eff.Reader` | 命名 Reader 实例（`Reader n s` + `Ask`，`n` 是 String 实例名）：`ask`/`handleReader`/`handleReaderLin`/`local`（L2 作用域） |
 | `Base.EffState` | 命名 State 实例（`State n s` + `Get`/`Put`）：`get`/`put`/`handleState`（answer `s -> Pair a s` 线程状态） |
 | `Base.EffFs` | IO-backed Fs 效应（完整 fs 面；命名实例 `Fs n`，如 `"mock"`/`"real"`）：`ReadFile`/`WriteFile`/`WriteFileAtomic`/`ReadDir`/`IsDirectory`/`MakeDir`/`RemoveFile`/`FileExists`/`FileMtime`/`FileSize` + `fsReadFile n`/`fsWriteFile n`/…/`handleFs n`/`handleFsHost n`；`WriteFile` / `FileSize` 的结果是 `Nat`（`WriteFileAtomic` 仍 `Int`）；handler 用 `Base.Host` 实现；mock（纯 answer）与 real handler 可并存（`dt_base/37`） |
@@ -177,9 +177,8 @@ module Base.Error (Error, catchError, ok, runError, throwError) where
   `arrayToList`）经 List 桥接 helper（`dtp_unpack` / `dtp_pack` / `dtp_listOf` 等）落地，
   桥接只为 canonical `Base.List.List` 生成；包内没有该族时 codegen 报
   `CG_ListBridgeRequired`。`Prelude` 自动注入 `Base.List`，所以正常上下文里总可用。
-- **`Eff` 是用户面唯一动作类型**：`Base.Eff` 的装箱 data（行擦除索引），运行时是
-  一次性续延 + handler 路由；入口 `main : Eff [] a`，执行 `runPure`。`IO` 只作为
-  宿主层内部过渡（`Base.Host` / `deferIO` / `runIO` 桥），细节见
+- **`Eff` 是唯一动作类型**：`Base.Eff` 的装箱 data（行擦除索引），运行时是一次性续延 +
+  handler 路由；入口 `main : Eff [] a`，执行 `runPure`。`IO` 类型与模块已删除，细节见
   [effects.md](effects.md) §2。
 - **`Show` / `Eq` / `Ord` / `Hashable` 在库（声明与实例分离）**：`Base.Show` / `Base.Eq` /
   `Base.Ord` / `Base.Hashable` 承载 trait 声明；实例按**落点规则**分布（见 [operators.md](operators.md)）：
@@ -199,11 +198,9 @@ module Base.Error (Error, catchError, ok, runError, throwError) where
   形态声明。字符串展示只有一个实现 `strShow`——`Base.Show` 的 `String` 实例是
   `show s = strShow s`，库不再另写一套转义；`Show Bool` 用 `if` 输出 `True` / `False`；
   `Eq Bool` / `Ord Bool` 用模式匹配穷尽（不依赖 `==` / `<`，避免实例体自引用）。
-- **效果原语有双表**：`prim_eff_*`（`Eff []`，`Base.Host` 用户面）与 IO 版 `prim_*`
-  （过渡期，bootstrap 与仍走 IO 的工具链源码）；`Base.Host` 做 Nat 归一化并声明
+- **效果原语单表**：`prim_eff_*`（`Eff []`，`Base.Host` 用户面）；`Base.Host` 做 Nat 归一化并声明
   `[capabilities].effects = ["console", "fs", "process", ...]`；动作只在 `main` 执行
-  （钩子 `dtp_sched_main (fun () -> runPure v_main)`），`runIO` 桥（需 `unsafe`）是唯一
-  main 外入口。能力是**权限声明**，不是检查豁免（`Loader.Resolve.checkEffectsBuiltins`）。
+  （钩子 `dtp_sched_main (fun () -> runPure v_main)`）；`runPure` 是唯一 main 执行入口。能力是**权限声明**，不是检查豁免（`Loader.Resolve.checkEffectsBuiltins`）。
   声明了能力的包可以直接用 `prim_eff_*` 而不 import `Base.Host`（用户面应经 `Eff` + handler）。
 - **ad-hoc 单文件与包内模块一致**：`Prelude` 自动注入，`Show` / `Eq` / `Ord` 及其实例开箱
   可用；诊断在缺少显式 import 时仍会提示加对应 import。ad-hoc 文件没有能力，效果只能经

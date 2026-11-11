@@ -103,8 +103,8 @@
 
 - `[trust] unsafe = ["Module.def", ...]` 是**定义级**信任声明：声明该 section 的包进入
   **严格模式**——只有列表里的定义可以**直接**引用 `unsafe` 门控目标（`intrinsicCapability`
-  为 `unsafe` 的内建 `prim_runIO` / `prim_effectPerform` / `prim_effectHandle` /
-  `prim_cleanup*` / `prim_sched*`，以及 `Base.Host.runIO` 别名）。其它定义（同包所有模块 +
+  为 `unsafe` 的内建 `prim_schedNewScope` / `prim_effectPerform` / `prim_effectHandle` /
+  `prim_cleanup*` / `prim_sched*`，以及 `runPure` 别名）。其它定义（同包所有模块 +
   入口文件）直调即被 `Loader.Resolve` 拒绝，错误给出定义全限定名、触发的内建名与修复写法。
 - 检查是**逐定义**的：`DFun` body 与 instance 方法体里**直接出现**目标名字才需要信任点；
   只经信任入口间接调用的传递调用者不需要列。新增直接使用点必须同时更新清单。
@@ -116,7 +116,7 @@
   见 `base/vuna.toml`，夹具 `test/corpus/packages/12_trust_points/`）。
 
 - 本仓库声明：根包 `vuna` 与 `vuna-compiler` 声明全部六个能力（含 `unsafe`；工具链在
-  main 之外用 `runIO`，没有 `[trust]`，保持包级门控）；`vuna-base` 声明
+  main 之外用 `runPure`，没有 `[trust]`，保持包级门控）；`vuna-base` 声明
   `console` / `fs` / `process` / `env` / `clock` / `unsafe`，并用 `[trust] unsafe` 收紧
   `unsafe` 的直接使用点。无 manifest 的 ad-hoc 文件没有能力，直接调用 effectful 内建即被拒。
 
@@ -169,7 +169,7 @@ modules = [
 # D28：定义级信任点（opt-in 严格模式）。unsafe 的直接使用点必须显式列出。
 [trust]
 unsafe = [
-  "Base.Host.runIO",
+  "runPure",
   "Base.ST.runST",
   "Base.Eff.bracket",
   # …完整清单见 base/vuna.toml
@@ -179,7 +179,7 @@ unsafe = [
 （`vuna-base` 不在 `[dependencies]` 里依赖别的包；上例的 `[dependencies]` 段从略。
 `vuna-base` 的 `[capabilities] effects` 列
 `["console", "fs", "process", "env", "clock", "unsafe"]`：`Base.Host` 封装了这些能力对应的
-`prim_*`；`unsafe` 的直接使用点（`runIO` 执行入口、`Base.Eff` 运行时续延、`Base.EffSched`
+`prim_*`；`unsafe` 的直接使用点（`runPure` 执行入口、`Base.Eff` 运行时续延、`Base.EffSched`
 调度器原语等）逐条列在 `[trust] unsafe` 里，见
 [effects.md](effects.md) 与 `base/vuna.toml`。）
 

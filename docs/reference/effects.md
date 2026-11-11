@@ -1,14 +1,11 @@
-# 效应：Eff 统一动作、handler 与宿主层
+| `Base.EffFs` | 宿主-backed Fs 效应# 效应：Eff 统一动作、handler 与宿主层
 
 **现状**：用户面唯一动作类型是 `Eff r a`（`Base.Eff`，构造子不导出；`MkEff` 是内部表示），
-入口是 `main : Eff [] a`（行必须为 `Nil`），执行入口是 `Base.Eff.runPure`。`IO` 已从用户面
-删除：`Base.IO` 模块不存在，用户包/ad-hoc/夹具不再能写 `main : Eff []`，也没有 `runPure` /
-`joinEff`。过渡期仍保留的 IO 只在**特权宿主层内部**（M4 债务）：`Base.Host`
-（原 `Base.Host`）的别名与 `IORef`/`MArray`/`Buffer`/`ST` 内部仍返回 IO，经
-`Base.Host.runIO = runPure ∘ deferIO` 执行；宿主原语是双表过渡——`prim_eff_*`（`Eff []`）
-与 IO 版 `prim_*` 并存，前者在 `Base.Host` 里做 Int/Nat 归一化，后者服务 bootstrap 与
-仍走 IO 的工具链源码。所有 IO-backed handler 的 answer 改为 `Eff []`，入口组合改成
-`runX = joinEff (handleXHost …)`。
+入口是 `main : Eff [] a`（行必须为 `Nil`），执行入口是 `Base.Eff.runPure`。`IO` 类型与
+`Base.IO` 模块均已删除：没有 `main : IO`、没有 `runIO`/`runIOEff`/`runIOAnswer`，也没有 IO
+原语表。宿主原语只剩 `prim_eff_*`（`Eff []`）；`Base.Host` 是特权别名层（做 Int/Nat 归一化），
+所有宿主 handler 的 answer 是 `Eff []`，入口组合是 `runX = joinEff (handleXHost …)`。用户面
+执行一个已处理干净的动作用 `runPure`；`ST`/`IORef`/`MArray`/`Buffer` 的实现也全部是 `Eff []`。
 
 运行时效应核心已落地（§8）：OCaml 5 一次性 delimited continuations + 开放行 + 命名实例 +
 一阶效应（`Base.Eff` / Reader / State / Fs / Console / Clock / Env / Process / Stdin /
@@ -20,8 +17,8 @@ Args / Exit）；`Member` 行约束、`local`/`catch`/scoped `Exn`、线性续�
 
 ## 1. 范围
 
-- **本页覆盖**：`Eff` 统一动作的表示/执行、handler 与 `Eff []` answer、`Base.Host` 宿主层与
-  过渡期 IO 桥、ST/region 的可变数据、base 的 `unsafe` 信任点、通用 Eff 的边界。
+- **本页覆盖**：`Eff` 统一动作的表示/执行、handler 与 `Eff []` answer、`Base.Host` 宿主层、
+  ST/region 的可变数据、base 的 `unsafe` 信任点、通用 Eff 的边界。
 - **不覆盖**：原语/能力的逐条语义（[primitives.md](primitives.md) §7）；纯效应 monad
   （`Base.State` / `Reader` / `Error`，它们不碰宿主，见 [stdlib.md](stdlib.md)）；
   并行/多核与 Domain 内存模型（只有单线程调度器，见 §8.5）；完整 QTT。
@@ -51,13 +48,12 @@ Args / Exit）；`Member` 行约束、`local`/`catch`/scoped `Exn`、线性续�
 | 用户面 | `Eff r a` + `Base.Eff.*` 标签/handler | 用户包与 ad-hoc 的唯一动作类型；`main : Eff [] a` |
 | handler 层 | `handleXHost` → `Eff r (Eff [] a)`，`runX = joinEff …` | IO-backed handler 的 answer 是已处理干净的 `Eff []` 动作；`joinEff` 展平 |
 | 宿主别名层 | `Base.Host`（privileged） | Eff 别名走 `prim_eff_*`；`[package] privileged = true` 才可 import；能力/信任门控不变 |
-| 内部 IO 桥 | `Base.Eff.deferIO` / `Base.Host.runIO`；IO 版 `prim_*`、`IORef`/`MArray`/`Buffer`/`ST` 内部 | **过渡期**：`deferIO : IO a -> Eff [] a`（动作执行时才应用世界令牌）；`runIO : IO a -> a = runPure ∘ deferIO`；M4 完成后删除 |
 
 - **代数**：`Monad (Eff r)` / `Applicative` / `Functor` 实例已内建；用户用 `pure` / `do` /
   `>>=` / `fmap`，不再有 `prim_pureIO` / `prim_bindIO` 这类用户可见构造入口。
 - **`unsafe` 的定义级信任点（D28）**：包在 manifest 声明 `[trust] unsafe = ["Module.def", ...]`
   后进入严格模式：只有列出的定义可以**直接**引用 `unsafe` 门控目标（CapUnsafe 内建、
-  `Base.Host.runIO` 桥）；`Loader.Resolve` 逐定义扫描，错误给出定义全限定名、触发内建名与
+  `Base.Eff` 的运行时效应核心）；`Loader.Resolve` 逐定义扫描，错误给出定义全限定名、触发内建名与
   修复写法。未声明 `[trust]` 的包保持包级门控。base 是当前唯一 opt-in 方，清单即安全审计面
   （`base/vuna.toml`；机制见 [packages.md](packages.md) §效应能力）。
 - **能力边界**：效果原语只有 `prim_*` / `prim_eff_*` 名；`[capabilities]` / `[trust]` 只允许
@@ -74,19 +70,19 @@ Args / Exit）；`Member` 行约束、`local`/`catch`/scoped `Exn`、线性续�
 `Base.EffError`（+ `Base.EffExn`），并发改用 `Base.EffSched`。旧实现的树形语义与边界见
 git 历史；QTT 的 `D32`（transformer 无法泛化到任意 monad）随实现删除而关闭。
 
-## 4. `Base.ST`：IO 派生的 region 效应
+## 4. `Base.ST`：Eff 派生的 region 效应
 
-- `ST r a` = 单构造子 data（运行时 `IO a` 的 thunk）；`r` 是 region 索引（类型级、擦除）。
+- `ST r a` = 单构造子 data（运行时 `Eff [] a`）；`r` 是 region 索引（类型级、擦除）。
 - `Ref`/`SArray` 是 **linear record**：读/写/释放消费句柄并返回新句柄；
   线性结果用 `bindST1` 线程化（QTT 规则见 [qtt.md](qtt.md)）。
 - `Ref r a` / `SArray r a` 是 region 句柄，字段不导出，只能由 ST 动作创建。
 - 安全规则不变：`runST : ((r : Type) -> ST r a) -> a`；region 由调用方显式 binder 进入，
   库外不可命名；句柄不能逃逸（负例 `test/corpus/dt_err/56_st_escape.vuna`）。
-- 操作直接构造 IO 动作（`newRef` / `readRef` / …），`runST` 在入口执行**一次**
-  `runIO`；region 内没有其它特权执行点。
+- 操作直接构造 `Eff []` 动作（`newRef` / `readRef` / …），`runST` 在入口执行**一次**
+  `runPure`；线性 continuation 经 `prim_eff_bind1`（`bindST1`）线程化；region 内没有其它执行点。
 - 不声明 `Functor/Monad (ST r)`（region 的显式 binder 与字典提升顺序冲突，见 §2.2
   old note），region 多态代码用 `bindST` / `pureST` / `fmapST`。
-- 当前边界：`ST` 动作本身沿用 IO 的可复制语义（无线性箭头在动作内部线程化线性值）；
+- 当前边界：`ST` 动作本身可复制（无线性箭头在动作内部线程化线性值）；
   `Ref`/`SArray` 的“恰好一次”已由 QTT 类型化（D22）。
 
 ## 5. D27 表示轴：不透明擦除值（已落地的最小实现）
@@ -112,7 +108,7 @@ CPS `Eff` 已经可 `check` + `compile` + 运行，且 interp 与产物逐字节
 
 **判据（elab 与 codegen 同源，`Elab.Meta.valueOpaqueScoped`）**：运行时类型不可命名 ⇔
 类型头不可表示：
-- 全局类型头既不是数据族、也不是 `Int` / `String` / `IO` / `Array` / `IORef` /
+- 全局类型头既不是数据族、也不是 `Int` / `String` / `Array` / `IORef` /
   `MArray` / `Buffer`（即类型族定义 / axiom / 未知全局）；
 - 或**类型族参数**：kind 的 Pi 链里出现非宇宙域（`res : f -> Type`；`m : Type -> Type`
   这类普通类型构造子参数**不算**，所以字典方法字段 / base 泛型代码不受影响）；
@@ -142,12 +138,11 @@ CPS `Eff` 已经可 `check` + `compile` + 运行，且 interp 与产物逐字节
 
 1. **Eff 是唯一动作类型 + 内建代数**：`pure`/`do`/`>>=` 来自 `Functor`/`Applicative`/`Monad (Eff r)` 实例；
    用户面不再有 `prim_pureIO`/`prim_bindIO`；`joinEff` 展平 handler answer，`runPure` 执行。
-   过渡期 IO 桥（`Base.Host.runIO` / `Base.Eff.deferIO`）只服务实现层，M4 删除。
 2. **handler 是解释器**：`runPure` / `runConsole` / `runFs` / `runST`
    是唯一执行入口；没有「隐式生效的 handler 栈」。
-3. **可变数据两条边界**：`IORef` / `MArray` / `Buffer` 的公开操作已返回 `Eff []`（实现层仍用 IO 槽，过渡期）；
+3. **可变数据两条边界**：`IORef` / `MArray` / `Buffer` 的公开操作与实现都是 `Eff []`；
    `Ref` / `SArray` 只能在 `ST r` 里用，且不能逃出 `runST`。两者表示同构、类型隔离。
-4. **能力是权限层，不是类型豁免**：`runIO` / `prim_runIO` 使用点必须声明 `unsafe`；
+4. **能力是权限层，不是类型豁免**：`prim_effectPerform` / `prim_effectHandle` / cleanup/sched 使用点必须声明 `unsafe`；
    base 因此声明 `unsafe`，并用 `[trust] unsafe` 把直接使用点收敛到定义级（D28，opt-in
    严格模式；清单见 `base/vuna.toml`，机制见 [packages.md](packages.md) §效应能力）。
 5. **效应组合显式**：transformer 的 handler 必须显式调用；没有自动 lift 到任意深度。
@@ -158,7 +153,6 @@ CPS `Eff` 已经可 `check` + `compile` + 运行，且 interp 与产物逐字节
    `applyValueFuel` 的恒等消去），对定义性相等 / 正规化 / interp 不可见；用量检查里
    cast 应用记 `Rig1`，不放大线性值的使用。
 
-__EFF_SECTION__
 ## 8. 运行时效应核心
 
 **OCaml 5 运行时续延 +
@@ -216,7 +210,7 @@ __EFF_SECTION__
 
 | 模块 | 内容 |
 | --- | --- |
-| `Base.Eff` | `Row(..)`、`Eff`、`Member(..)`/`rowRem`、内建 `Functor`/`Applicative`/`Monad (Eff r)`（`do`/`>>=`/`>>`，不提供 `bindEff`/`pureEff`）、`sendCore`/`handleCore`/`handleCoreLin`、`handleWith`/`handleWithAt` + `ResFn(..)`/`resFn`/`resOf`（`handle` 语法的两个降级目标：handler 类型显式、结果族作擦除量；行首条目版用于 comp 行未具体化）、`Cont`/`mkCont`/`resumeCont`、`bracket`/`finally`、`weaken`、`joinEff`/`raise`、`deferIO`、`runPure` |
+| `Base.Eff` | `Row(..)`、`Eff`、`Member(..)`/`rowRem`、内建 `Functor`/`Applicative`/`Monad (Eff r)`（`do`/`>>=`/`>>`，不提供 `bindEff`/`pureEff`）、`sendCore`/`handleCore`/`handleCoreLin`、`handleWith`/`handleWithAt` + `ResFn(..)`/`resFn`/`resOf`（`handle` 语法的两个降级目标：handler 类型显式、结果族作擦除量；行首条目版用于 comp 行未具体化）、`Cont`/`mkCont`/`resumeCont`、`bracket`/`finally`、`weaken`、`joinEff`/`raise`、`runPure` |
 | `Base.Eff.Reader` | `Reader n s` + `Ask`；`ask`/`handleReader`；`n` 是 String 实例名（`Reader "counter" Int`） |
 | `Base.EffState` | `State n s` + `Get`/`Put`；`get`/`put`/`handleState`（answer `s -> Pair a s` 线程状态） |
 | `Base.EffFs` | IO-backed Fs 效应（完整 fs 面；**命名实例** `Fs n`，如 `Fs "mock"`/`Fs "real"`）：`ReadFile`/`WriteFile`/`WriteFileAtomic`/`ReadDir`/`IsDirectory`/`MakeDir`/`RemoveFile`/`FileExists`/`FileMtime`/`FileSize` + `resFs`；`fsReadFile n`/`fsWriteFile n`/…/`handleFs n`（泛型）/`handleFsHost n`（IO-backed answer `Eff []`，`runFs = joinEff ∘ handleFsHost`）；handler 用 `Base.Host` 实现。mock/real 可并存（`dt_base/40`） |
@@ -228,7 +222,7 @@ __EFF_SECTION__
 | `Base.EffExn` | W6 高阶 scoped Error：`Try` 携带子计算；`tryWith`/`runExn`/`catchExn`/`bracketExn` |
 | `Base.EffMutex` | W9 Mutex/Semaphore（IORef + yield 忙等）：`acquire`/`release`/`semWait`/`semSignal` |
 | `Base.EffChannel` | W9 cooperative Channel：`send`/`tryRecv`/`recvWait` |
-| `Base.EffSched` | W9 单线程 fiber 调度器（L3）：`Task`/`Scope`/`TaskLin` + `forkTask`/`forkTaskWith`/`forkTaskLin`/`awaitTask`/`awaitTaskLin`/`yieldNow`/`cancelTask`/`cancelTaskLin`/`cancelScope`/`scopeWait`/`scopeWaitTimeout`/`withScope`/`withScopeTimeout`/`isCancelled`/`liftIOEff`；任务行 `Nil`，超时按逻辑步数 |
+| `Base.EffSched` | W9 单线程 fiber 调度器（L3）：`Task`/`Scope`/`TaskLin` + `forkTask`/`forkTaskWith`/`forkTaskLin`/`awaitTask`/`awaitTaskLin`/`yieldNow`/`cancelTask`/`cancelTaskLin`/`cancelScope`/`scopeWait`/`scopeWaitTimeout`/`withScope`/`withScopeTimeout`/`isCancelled`/`raise`；任务行 `Nil`，超时按逻辑步数 |
 
 夹具：`dt_base/16`（两个 Reader 实例嵌套 handler）、`17`（State 状态线程）、
 `18`（IO-backed Fs 真实读写，实例名 `"real"`）、`20–21`（local/catch）、`23`

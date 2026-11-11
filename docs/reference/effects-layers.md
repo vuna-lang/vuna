@@ -150,8 +150,8 @@ main 结束时统一取消清理（最外层兜底）；跨域 handler / Domain 
   在同一程序里并存。
 - **工具链真实路径**：`lib/Vuna/Cli.vuna` 的 `vuna version` 输出改走
   console 标签——`consoleLine` 用 `consolePrint "vuna"` + `handleConsoleHost "vuna"` + `joinEff`，
-  只在最外层 `runIO`（工具链入口仍是 `main : Eff [] Int`）。这是工具链逐步迁移的样板，不是
-  全量迁移（`lib/` 其余模块仍直接用 `Base.Host` / `runIO`）。**编译器级强制不可行**的
+  只在最外层 `runPure`（工具链入口仍是 `main : Eff [] Int`）。这是工具链逐步迁移的样板，不是
+  全量迁移（`lib/` 其余模块仍直接用 `Base.Host` / `runPure`）。**编译器级强制不可行**的
   具体位置：`Loader.Resolve.checkEffectsBuiltins` 只做**包级**能力声明检查（manifest），
   类型系统没有类型级能力行，`IO`/`Base.Host`/`prim_*` 在任何包内都可用；编译器自身
   也在 seed 闭包里必须使用 IO（`Base.Host`、`Codegen`）。**最小下一步**：在 `vuna lint`

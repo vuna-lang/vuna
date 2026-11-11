@@ -212,7 +212,7 @@ meta → 报未解，不发明行。**禁止贪婪 Here**：名字槽受限统�
 - 宿主 op 类型（`ConsoleOp` 等的宿主分支）构造器不导出：用户能 `perform`、能写 mock
   handler，但**不能**在无 handler 情况下构造宿主动作——权威边界从 `unsafe`/`privileged`
   收缩为"宿主 op 构造器不导出"。
-- `Base.Host`、`prim_runIO` 保留为特权逃生口；`runPure` 收缩为内部。
+- `Base.Host`、`prim_schedNewScope` 保留为特权逃生口；`runPure` 收缩为内部。
 - `IO` 类型仍内建保留（`Base.Host` / `ST` / `IORef` 等宿主面不动，另行评估是否全部改写为
   宿主 op——倾向是，但放 N2 尾部）。
 

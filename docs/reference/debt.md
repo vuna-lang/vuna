@@ -52,7 +52,7 @@
 
 | ID | 仍未成立的事实 | 证据 | 归属 |
 | --- | --- | --- | --- |
-| D59 | 用户面 IO 已删除（入口 `main : Eff [] a`、`runPure`、`Base.IO` 模块不存在、IO-backed handler answer 为 `Eff []` + `joinEff`），但 **IO 仍作为特权实现层类型存在**：`Base.Host` 的 Eff 别名走 `prim_eff_*`，IO 版 `prim_*` 是 bootstrap 过渡表；`IORef`/`MArray`/`Buffer`/`ST` 内部仍是 IO 槽，`deferIO`/`Base.Host.runIO` 是唯一桥；编译器/工具链源码仍用 `runPure (...)`/`runIO (...)` 隐藏 IO，`Vuna.Compiler.*` 尚未改成显式 `Eff`/`EffCheck` 外壳 | `base/lib/Base/Host.vuna`、`base/lib/Base/Eff.vuna`（`deferIO`/`runIO`）、`compiler/lib/Vuna/Compiler/Intrinsics.vuna`（双表）、`compiler/lib/**` 的 `runPure (` 调用；[effects.md](effects.md) §2、[primitives.md](primitives.md) §7 | M4：`EffCheck` + 纯核心外壳后删 IO 类型/IO 表与 `deferIO`/`runIO` |
+| D59 | 动作类型已统一为 `Eff`：入口 `main : Eff [] a`、`runPure`、handler answer `Eff []` + `joinEff`、`ST`/`IORef`/`MArray`/`Buffer` 全 `Eff`，内建 `IO` 类型与 IO 原语表已删除，宿主层只剩 `prim_eff_*` + `Base.Host` 归一化。**剩余问题**：编译器/工具链源码仍用 `runPure (...)` 在纯签名里隐藏 Eff 执行（`compiler/lib` + `lib` 约 500 处），效果边界不可见；包级 ambient state（Sink/MetaSpans/Usage/CLI opts）尚未清理 | `compiler/lib/**` 与 `lib/**` 的 `runPure (` 调用；`Diagnostics/Sink.vuna`、`Elab/MetaSpans.vuna`、`Elab/Usage.vuna`、`Driver/CompilerCli.vuna`；`nix/check-eff-boundary.sh` + `nix/eff-boundary.allowlist`（43 文件基线） | M4 剩余：`EffCheck`（`Vuna.Compiler.Common`）+ 纯核心外壳、效果签名显式化、ambient state 删除、`nix` 边界守卫 |
 
 ## 相关阅读
 

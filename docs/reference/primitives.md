@@ -15,7 +15,7 @@
 | primitive 类型 | `Int` / `String`：没有 `data` 声明，表示与字面量由编译器提供 |
 | intrinsic | `Intrinsics.allIntrinsics` 的一条：名字、签名形状（`IType`）、interp 归约标签（`IntrinsicOp`）、所需能力、runtime 表达式、是否对源码可见 |
 | runtime helper | 生成产物 `Vuna_runtime.ml` 里的 OCaml 函数（`bi_*` / `dtp_*` / `dt_show_string`）；`bi_*` 不对用户源码可见 |
-| 效果原语 | 带能力（`intrinsicCapability = Just c`）的 intrinsic：只有 `prim_*` 名，外加 `timeUs` |
+| 效果原语 | 带能力（`intrinsicCapability = Just c`）的 intrinsic：只有 `prim_eff_*` 名，外加 `effTimeUs` |
 | 能力（capability） | manifest `[capabilities].effects` 的显式声明，决定该包能否**直接**调用效果原语 |
 
 ## 2. 身份与常量
@@ -33,7 +33,7 @@
   `Base.Ord` 方法（`eq` / `neq` / `lt` / `le` / `gt` / `ge`）的解析期别名；Int/String 上的
   `bi_eq_int` / `bi_eq_str` / `bi_*_int` / `bi_*_generic` 是这两个类的**内建实例实现**
   （不是运算符的独立语义）。详见 [operators.md](operators.md)。
-- **`Eff` 是用户面动作类型；`IO` 是过渡期的内建宿主类型**，`Bool` / `List` / `Nat` 是 base 的
+- **`Eff` 是唯一动作类型**（`IO` 已删除），`Bool` / `List` / `Nat` 是 base 的
   普通 `data` 声明：
   内建类型按名字恒可见；base 的族身份是完整符号而不是短名：
 
@@ -46,21 +46,18 @@
 
 - `Eff`（`Base.Eff.Eff`）：`Row -> Type -> Type` 的 base data，装箱表示 `MkEff`（不导出）；
   行是擦除索引。入口 `main : Eff [] a`，执行 `runPure`（[effects.md](effects.md) §2）。
-- `IO`（过渡期）：kind `Type -> Type`，运行时裸 thunk `int -> 'a`，没有构造器；canonical 名
-  仍是源级 `IO`（`Intrinsics.ioTypeName` / `ioFamilyName`），只服务 `Base.Host` 与工具链内部
-  实现，用户面不应再出现；M4 前后删除。
+- `IO` 类型与 IO 原语表已从编译器删除（无 prelude 类型、无 `prim_*` IO 变体）；动作只经 `Eff`。
+  因此 `data IO` 现在只是用户自己的普通 data（`IO` 不再在禁止重定义名单里）。
 
 - `True` / `False` 精化为核心 `TBool`，codegen 的运行时表示是 OCaml `bool`：canonical Bool
   族**不生成变体声明**（`Codegen.Decl.runtimeDatas` 按 `boolTypeName` 过滤）。
 - **没有短名 / `lastName` 判定，也没有「全局构造子放行」**：`True` / `False` / `Cons` /
   `Nil` 与其他构造子一样经 import 的导出表解析（`Prelude` 自动注入 `Base.Bool` /
   `Base.List`，所以裸名可用）。类型位置按 `resolveTypeName` 判定：`Int` / `String` /
-  `IO` / `Type` / `->` 是内建，其余（含 `Bool`）查导出表。
+  `Type` / `->` 等是内建，其余（含 `Bool`）查导出表。
 - 用户写的 `data Bool` / `data List` 是**普通 data**、不与 canonical 冲突：模块内名字被
   mangle 成 `<Module>.Bool`；入口文件（不做 mangle）里声明 `data Bool` 时族名就是
-  `Bool`，与 `Base.Bool.Bool` 是两个族。**`IO` 例外**：它是内建类型名，ad-hoc 入口再写
-  `data IO` 报 `TC_CannotRedefineBuiltin`；模块内 `data IO` 仍按 mangle 成为
-  `<Module>.IO`（与 `data Bool` 同规则）。`if` / 字面量 `case` 等只认 canonical。
+  `Bool`，与 `Base.Bool.Bool` 是两个族。`if` / 字面量 `case` 等只认 canonical。
 
 ## 3. Int
 
@@ -113,7 +110,7 @@
   其它类型走普通 trait 方法应用。用户类型实现 `Num`（并配 `FromInt` 收字面量）即可重载
   四则（`1 + 2 : MyNum`），见 [operators.md](operators.md)「`Num` 的唯一真源」。
 - **度量返回 Nat（D25）**：`prim_print` / `prim_writeFile` / `prim_fileSize` 的签名是
-  `… -> Eff [] Nat`（宿主面 `Base.Host.print` / `writeFile` / `fileSize` 在边界转 `Nat`；实现层 `prim_*` 仍 `IO Nat`）；
+  `… -> Eff [] Nat`（宿主面 `Base.Host.print` / `writeFile` / `fileSize` 在边界转 `Nat`；实现层 `prim_eff_*` 仍是 `Eff [] Int`）；
   `prim_eprint` / `prim_writeFileAtomic` 与编译器内部计数器（level/meta/fuel/span/arity、
   字节计数中间量）保留 `Int`。
 - **展示**：`main : Nat` 与 interp 都输出十进制。
@@ -174,8 +171,8 @@
 | `strSubstring` | `Int -> Int -> String -> String` | 字节切片：start/len 按字节 clamp——负 start 视为 0、负 len 视为 0、越界截断到末尾；与 `Base.String.substring` 同语义 |
 | `strConcatMany` | `List String -> String` | 一次性拼接（OCaml `String.concat ""`） |
 | `strSubstTemplate` | `String -> List String -> String` | `<N>` 占位符按序号替换；非数字 `<`、越界序号原样保留（`Base.Vec.substTemplate`） |
-| `timeUs` | `IO Int` | 微秒时间戳（`Unix.gettimeofday`）；效果原语，能力 `clock` |
-| `prim_sleep` | `Int -> IO Int` | 阻塞睡眠 n 微秒（runtime `dtp_sleep` = `Unix.sleepf`；n <= 0 立即返回 0）；效果原语，能力 `clock`；interp 不归约 |
+| `effTimeUs` | `Eff [] Int` | 微秒时间戳（`Unix.gettimeofday`）；效果原语，能力 `clock` |
+| `prim_eff_sleep` | `Int -> Eff [] Int` | 阻塞睡眠 n 微秒（runtime `dtp_sleep` = `Unix.sleepf`；n <= 0 立即返回 0）；效果原语，能力 `clock`；interp 不归约 |
 
 `strHash` 的 interp 实现（`Core.Eval.strHashOf`）与 runtime `dtp_strHash` 是同一公式。
 
@@ -205,51 +202,47 @@
 | `arrayFromList` | `List a -> Array a` | `Array.of_list`（经 List 桥接 `dtp_ocamlOf`） |
 | `arrayToList` | `Array a -> List a` | `Array.to_list`（经 `dtp_listOf`） |
 
-**可变数据原语**（双表：`prim_eff_*` 返回 `Eff []`，IO 版 `prim_*` 是过渡；无能力：不触碰外部世界；`Base.IORef` / `Base.MArray` / `Base.Buffer` 的公开操作返回 `Eff []`）：
+**可变数据原语**（`prim_eff_*` 返回 `Eff []`；无能力：不触碰外部世界；`Base.IORef` / `Base.MArray` / `Base.Buffer` 的公开操作返回 `Eff []`）：
 
 | 原语 | 签名 | runtime |
 | --- | --- | --- |
-| `prim_newRef` / `prim_readRef` / `prim_writeRef` | `a -> IO (IORef a)` / `IORef a -> IO a` / `IORef a -> a -> IO Int` | `ref` / `!` / `:=` |
-| `prim_newMArray` / `prim_readMArray` / `prim_writeMArray` / `prim_mArrayLength` | `Int -> a -> IO (MArray a)` / `MArray a -> Int -> IO a` / `MArray a -> Int -> a -> IO Int` / `MArray a -> IO Int` | `Array.make` / `Array.get` / `Array.set` / `Array.length` |
-| `prim_newBuffer` / `prim_bufferAdd` / `prim_bufferContents` / `prim_bufferLength` | `IO Buffer` / `Buffer -> String -> IO Int` / `Buffer -> IO String` / `Buffer -> IO Int` | `Buffer.create` / `add_string` / `contents` / `length` |
+| `prim_eff_newRef` / `prim_eff_readRef` / `prim_eff_writeRef` | `a -> Eff [] (IORef a)` / `IORef a -> Eff [] a` / `IORef a -> a -> Eff [] Int` | `ref` / `!` / `:=` |
+| `prim_eff_newMArray` / `prim_eff_readMArray` / `prim_eff_writeMArray` / `prim_eff_mArrayLength` | `Int -> a -> Eff [] (MArray a)` / `MArray a -> Int -> Eff [] a` / `MArray a -> Int -> a -> Eff [] Int` / `MArray a -> Eff [] Int` | `Array.make` / `Array.get` / `Array.set` / `Array.length` |
+| `prim_eff_newBuffer` / `prim_eff_bufferAdd` / `prim_eff_bufferContents` / `prim_eff_bufferLength` | `Eff [] Buffer` / `Buffer -> String -> Eff [] Int` / `Buffer -> Eff [] String` / `Buffer -> Eff [] Int` | `Buffer.create` / `add_string` / `contents` / `length` |
 
-- 效果原语的 runtime 表达仍是「立即算完的 OCaml 表达式」，由 `ioPrimThunkText` 按 arity
-  包成 thunk（`fun args -> fun (_ : int) -> rt args`；零参 `fun (_ : int) -> rt`）。
+- 效果原语的 runtime 表达仍是「立即算完的 OCaml 表达式」，由 `effThunkText` 按 arity
+  包成 `MkEff` thunk（`fun args -> fun (_ : int) -> rt args`；零参 `fun (_ : int) -> rt`）。
   零参 `prim_newBuffer` 是动作**值**。
 - `arrayFromList` / `arrayToList` 依赖 canonical `Base.List.List` 桥接（`needsListBridge`）；
   完整的桥接清单与缺失时的诊断见 §9。
 - **interp 不归约**全部容器原语（`OpNone`）：夹具带 `.nointerp`，只 compile + 运行。
 - 越界行为：`arrayGet` / `MArray.read` 越界是宿主 `Invalid_argument`（不是 `strAt` 的
   -1 哨兵，也没有语言层诊断）；`Array.set` 先 `Array.copy`，原数组不变。
-- 可变数据的安全边界在过渡期仍是**实现层 IO 槽**：`IORef` / `MArray` / `Buffer` 的公开操作
-  返回 `Eff []`，实现层用 `Base.Host.runIO` 桥；`runIO` 是 main 外的逃逸口、需要 `unsafe`。**ST/region**：`Base.ST` 的
+- 可变数据的安全边界：`IORef` / `MArray` / `Buffer` 的公开操作与实现都返回 `Eff []`。**ST/region**：`Base.ST` 的
   `Ref` / `SArray` 只在 `ST r` 里使用且不能逃出 `runST`；它们是 linear record（句柄恰好一次），
   `ST` 动作本身仍可复制；仍无依赖 multiplicity / 线性箭头（
   多用未禁止，见 [effects.md](effects.md)）。
 
 ## 7. 效果原语、Eff 动作与能力
 
-**动作类型**：用户面唯一动作类型是 `Eff r a`（`Base.Eff`，装箱 data；行是擦除索引），
-入口 `main : Eff [] a`，执行 `Base.Eff.runPure`。`IO` 不再是用户面类型；它只作为特权宿主层
-内部类型留在过渡期（`Base.Host` / `deferIO` / `runIO` 桥，M4 删除）。
+**动作类型**：唯一动作类型是 `Eff r a`（`Base.Eff`，装箱 data；行是擦除索引），入口
+`main : Eff [] a`，执行 `Base.Eff.runPure`。`IO` 类型/表已删除，不再有 IO 桥。
 
-**宿主原语是双表过渡**（bootstrap 需要）：
+**宿主原语单表**：
 
 | 表 | 名字 | 类型 | 用途 |
 | --- | --- | --- | --- |
-| Eff 表 | `prim_eff_*`（如 `prim_eff_print`、`prim_eff_readFile`、`effTimeUs`） | 返回 `Eff [] a` | `Base.Host` 的 Eff 别名、用户面（特权层） |
-| IO 表（过渡） | `prim_*`（如 `prim_print`、`prim_readFile`、`timeUs`） | 返回 `IO a` | 旧 bootstrap 与仍走 IO 的工具链源码 |
+| Eff 表 | `prim_eff_*`（如 `prim_eff_print`、`prim_eff_readFile`、`effTimeUs`） | 返回 `Eff [] a` | `Base.Host` 的 Eff 别名、特权层 |
 
-两表语义相同、运行时文本相同；Eff 表在 codegen 里包成 `MkEff (fun _ -> rt args)`。
-`Base.Host` 在 Eff 别名上做 Int/Nat 归一化（`print`/`writeFile`/`fileSize`/`readBytes`
-等），并保留实现层 IO 桥 `runIO : IO a -> a`（`unsafe` 信任点）。
+原语在 codegen 里包成 `MkEff (fun _ -> rt args)`；`Base.Host` 在 Eff 别名上做 Int/Nat 归一化
+（`print`/`writeFile`/`fileSize`/`readBytes` 等）。
 
 **Eff 代数不是原语**：`pure` / `>>=` / `do` / `fmap` 来自 `Functor`/`Applicative`/`Monad (Eff r)`
 实例（`Base.Eff` 内建）；`runPure` / `joinEff` / `raise` / `weaken` 是 `Base.Eff` 的库函数。
 `prim_effectPerform` / `prim_effectHandle` / `prim_cleanupPush` / `prim_cleanupPop` 仍是
 `unsafe` 门控的运行时效应核心，只由 `Base.Eff` 包装使用（D28 信任点）。
 
-**效果原语类型**（Eff 表；IO 表同形但返回 `IO a`）：`prim_eff_print : String -> Eff [] Int`
+**效果原语类型**（`prim_eff_*`，全部返回 `Eff []`）：`prim_eff_print : String -> Eff [] Int`
 （`Base.Host.print` 在边界转 `Nat`）、`prim_eff_readFile : String -> Eff [] String`、
 `prim_eff_readLine : Eff [] String`、`prim_eff_readDir : String -> Eff [] (List String)`、
 `prim_eff_isDirectory` / `prim_eff_fileExists : String -> Eff [] Bool`、
@@ -263,7 +256,7 @@
 `prim_eff_sleep : Int -> Eff [] Int`（阻塞 us 微秒）、`effTimeUs : Eff [] Int`。
 零参原语因此是**真正的动作值**：引用不执行、也不重新求值。
 
-纯 `main` 直接调用效果原语是类型错误（`TC_TypeMismatch`）：效果只能出现在 `Eff`/`IO` 动作里。
+纯 `main` 直接调用效果原语是类型错误（`TC_TypeMismatch`）：效果只能出现在 `Eff` 动作里。
 
 两条调试/诊断原语；调试构造是**语言级内建**（见
 [debugging.md](debugging.md) §3）：
@@ -271,8 +264,8 @@
 - `dbg : String -> a -> a`（**无能力**）：求值期把消息 + 换行写 stderr 后返回第二个实参；
 - `assert : Bool -> String -> a -> a`（**无能力**、debug-only）：失败抛 `Failure`；
 - `todo : String -> a`（**无能力**、debug-only）：以 `TODO: <msg>` 抛 `Failure`；
-- `prim_eprint : String -> IO Int`（能力 `console`）：写 stderr 并 flush，返回写入字节数；
-- `prim_fail : String -> a`（**无能力**、不在 `IO` 里）：抛 `Failure <msg>` 的底值，
+- `prim_eff_eprint : String -> Eff [] Int`（能力 `console`）：写 stderr 并 flush，返回写入字节数；
+- `prim_fail : String -> a`（**无能力**、不在动作里）：抛 `Failure <msg>` 的底值，
   由生成的运行时报告器渲染成 `vuna: runtime error: ...` 并 exit 2。
 
 `assert` / `todo` 在 release 构建（`--release` / `VUNA_RELEASE=1`）里由 `Loader.Resolve`
@@ -290,22 +283,18 @@
 - `prim_netClose : Int -> IO Int`：关闭句柄（幂等）；
 - `prim_netConnect : String -> IO Int`：客户端连接（`vuna repl --client` 与测试夹具用）。
 
-`net` 是**权限**不是豁免：未声明时报 `` effectful builtin `prim_netListen` requires capability
+`net` 是**权限**不是豁免：未声明时报 `` effectful builtin `prim_eff_netListen` requires capability
 `net` ``。句柄是小整数，运行时映射到 `Unix.file_descr` 表，**不引入新的语言类型**；
 无 DNS / TLS / 异步 / 超时（`accept`/`recv` 阻塞，见 §8）。
 
-**名字面**：效果原语只保留 `prim_*` 名。用户有两条合法用法：
+**名字面**：效果原语只保留 `prim_eff_*` 名。用户有两条合法用法：
 
-1. `import Base.Host`，使用返回 `IO` 动作的 API（`print` / `readFile` / …——它们是 `prim_*` 的**别名**）；
-2. 在 `vuna.toml` 声明所需能力后**直接**调用 `prim_*`，同样得到 `IO` 动作。IO 升格后
-   不再要求 `import Base.Host`（类型是内建的），只是没有别名与实例可用。
+1. `import Base.Host`，使用返回 `Eff []` 的 API（`print` / `readFile` / …——它们是 `prim_eff_*` 的**别名**）；
+2. 在 `vuna.toml` 声明所需能力后**直接**调用 `prim_eff_*`，得到 `Eff []` 动作（不需要 alias）。
 
-**执行入口**：动作只在 `main` 处由运行时执行；`main : Eff [] a` 的产物钩子是 `v_main 0`，
-`main : Eff [] a` 的产物钩子先经合成的 `@vuna@main_run`（`Base.Eff.runPure`）再执行。
-`Base.Host.runIO : IO a -> a`（= `prim_runIO`）是唯一的「main 之外执行」入口，要求能力
-`unsafe`（工具链特权）：未声明时报
-`` `runIO` executes IO outside main; requires capability `unsafe` ... ``；`runIO` 每次调用
-都重新执行动作（动作值可复用、效果不缓存）。
+**执行入口**：动作只在 `main` 处由运行时执行；`main : Eff [] a` 的产物钩子是
+`dtp_sched_main (fun () -> Base.Eff.runPure v_main)`。没有 main 之外的通用执行入口：
+需要重复执行的部分用 handler 显式解释。
 
 **内部 cast（不可见）**：`prim_erase` 是隐藏 intrinsic（`visible = False`），只由精化器在
 「运行时类型不可命名」的 binder 使用点插入；签名 `{a} -> a -> a`、runtime `Obj.magic`、
@@ -314,13 +303,13 @@
 
 | 能力 | 原语 / 入口 |
 | --- | --- |
-| `console` | `prim_print`、`prim_readLine`、`prim_readBytes` |
-| `fs` | `prim_readFile`、`prim_writeFile`、`prim_writeFileAtomic`、`prim_readDir`、`prim_isDirectory`、`prim_makeDir`、`prim_removeFile`、`prim_fileExists`、`prim_fileMtime`、`prim_fileSize` |
-| `process` | `prim_getArgs`、`prim_exit`、`prim_runIn`、`prim_spawn`、`prim_wait` |
-| `env` | `prim_getenv`、`prim_getcwd`、`prim_execPath` |
-| `clock` | `timeUs`、`prim_sleep` |
-| `net` | `prim_netListen`、`prim_netPort`、`prim_netAccept`、`prim_netRecv`、`prim_netSend`、`prim_netClose`、`prim_netConnect` |
-| `unsafe` | `prim_runIO`（= `Base.Host.runIO`：在 main 之外执行 IO 动作）；`prim_effectPerform` / `prim_effectHandle` / `prim_cleanupPush` / `prim_cleanupPop`（运行时续延与 bracket cleanup，仅 Base.Eff）；base 用 `[trust] unsafe` 显式列出直接使用点（D28 定义级信任，见 packages.md） |
+| `console` | `prim_eff_print`、`prim_eff_eprint`、`prim_eff_readLine`、`prim_eff_readBytes` |
+| `fs` | `prim_eff_readFile`、`prim_eff_writeFile`、`prim_eff_writeFileAtomic`、`prim_eff_readDir`、`prim_eff_isDirectory`、`prim_eff_makeDir`、`prim_eff_removeFile`、`prim_eff_fileExists`、`prim_eff_fileMtime`、`prim_eff_fileSize` |
+| `process` | `prim_eff_getArgs`、`prim_eff_exit`、`prim_eff_runIn`、`prim_eff_spawn`、`prim_eff_wait` |
+| `env` | `prim_eff_getenv`、`prim_eff_getcwd`、`prim_eff_execPath` |
+| `clock` | `effTimeUs`、`prim_eff_sleep` |
+| `net` | `prim_eff_netListen`、`prim_eff_netPort`、`prim_eff_netAccept`、`prim_eff_netRecv`、`prim_eff_netSend`、`prim_eff_netClose`、`prim_eff_netConnect` |
+| `unsafe` | `prim_effectPerform` / `prim_effectHandle` / `prim_cleanupPush` / `prim_cleanupPop`（运行时续延与 bracket cleanup，仅 Base.Eff）；base 用 `[trust] unsafe` 显式列出直接使用点（D28 定义级信任，见 packages.md） |
 
 - 声明面：manifest `[capabilities] effects = ["console", "fs", ...]`，按**包**声明
   （`Frontend.Manifest.manifestCapabilities`）；无 manifest 的 ad-hoc 文件没有能力。
@@ -342,13 +331,13 @@
 
 产物固定包含一个 `Vuna_runtime.ml`（`Codegen.Term.dtRuntime`），**无条件**内嵌 Unix：
 
-- `Unix.stat`（`prim_fileMtime` / `prim_fileSize`）、`Unix.gettimeofday`（`timeUs`）、
-  `Unix.sleepf`（`prim_sleep`）、
-  `Unix.readlink "/proc/self/exe"`（`prim_execPath`）；`build.sh` 无条件
+- `Unix.stat`（`prim_eff_fileMtime` / `prim_eff_fileSize`）、`Unix.gettimeofday`（`effTimeUs`）、
+  `Unix.sleepf`（`prim_eff_sleep`）、
+  `Unix.readlink "/proc/self/exe"`（`prim_eff_execPath`）；`build.sh` 无条件
   `-I +unix ... unix.cmxa`。因此任何产物都依赖 OCaml 的 unix 库。
 - 启动时设置 GC（`minor_heap_size` 16MB、`space_overhead` 200）。
 
-两表 runtime 契约相同：下表写 IO 版名字，Eff 版 `prim_eff_*` 用同一 runtime 文本（codegen 仅多包一层 `MkEff`）。
+下表 runtime 契约使用 `prim_eff_*` 名字（codegen 包一层 `MkEff`）。
 
 | 原语 | runtime 契约 |
 | --- | --- |
@@ -372,23 +361,21 @@
 | `prim_runIn` | 在给定目录执行 `sh` 命令并返回退出码，执行后恢复原 cwd |
 | `prim_spawn` | 异步启动子进程（argv 列表，继承 stdin/stdout/stderr），返回 pid |
 | `prim_wait` | 等待子进程并返回退出码（signal/stopped 归 1） |
-| `prim_netListen` | 绑定并监听：`tcp:HOST:PORT`（`SO_REUSEADDR`，backlog 8）或 `unix:PATH`（bind 前删除已存在的路径，开发工具惯例）；返回句柄表下标；失败 `failwith "net: ..."` |
-| `prim_netPort` | `getsockname` 的端口（TCP）；unix socket 返回 0 |
-| `prim_netAccept` | 阻塞接受一个连接，返回新句柄 |
-| `prim_netRecv` | 阻塞 `Unix.read`：有数据即返回（可能少于 n），对端关闭返回 `""` |
-| `prim_netSend` | 循环写完整串（处理部分写）；对端关闭时报 `net: send: connection closed` |
-| `prim_netClose` | 关闭 fd 并从句柄表移除（幂等） |
-| `prim_netConnect` | 客户端 `Unix.connect`（`tcp:`/`unix:` 同一套地址语法） |
+| `prim_eff_netListen` | 绑定并监听：`tcp:HOST:PORT`（`SO_REUSEADDR`，backlog 8）或 `unix:PATH`（bind 前删除已存在的路径，开发工具惯例）；返回句柄表下标；失败 `failwith "net: ..."` |
+| `prim_eff_netPort` | `getsockname` 的端口（TCP）；unix socket 返回 0 |
+| `prim_eff_netAccept` | 阻塞接受一个连接，返回新句柄 |
+| `prim_eff_netRecv` | 阻塞 `Unix.read`：有数据即返回（可能少于 n），对端关闭返回 `""` |
+| `prim_eff_netSend` | 循环写完整串（处理部分写）；对端关闭时报 `net: send: connection closed` |
+| `prim_eff_netClose` | 关闭 fd 并从句柄表移除（幂等） |
+| `prim_eff_netConnect` | 客户端 `Unix.connect`（`tcp:`/`unix:` 同一套地址语法） |
 
 效果原语的 runtime 表（`dtp_*`）仍是**立即执行**的 OCaml 函数；生成器
-（`Codegen.Term.ioPrimText`）按 `Intrinsic` 的 arity 把它们包成 **thunk 动作值**，例如
-`prim_getcwd` → `(fun (_ : int) -> dtp_getcwd ())`、`prim_print` →
-`(fun s -> fun (_ : int) -> dtp_print s)`。IO 代数原语（`prim_pureIO` / `prim_bindIO`）
-由 `ioAlgebraText` 单独生成（runtime 本身就是动作值）；`prim_runIO` →
-`(fun io -> io 0)`。世界令牌标注 `int` 是必须的（否则 OCaml 值限制留下弱类型变量）。
-因此零参原语（`prim_getArgs` / `prim_readLine` / `prim_getcwd` / `prim_execPath` /
-`timeUs`）是动作**值**：引用不执行、不重新求值；需要快照 / 执行时显式
-`let t = runIO timeUs` 或在 `do` 里 `<-`。
+（`Codegen.Term.effPrimText`）按 `Intrinsic` 的 arity 把它们包成 `MkEff` 动作值，例如
+`prim_eff_getcwd` → `(MkEff (fun (_ : EffUnit) -> dtp_getcwd ()))`、`prim_eff_print` →
+`(fun s -> MkEff (fun (_ : EffUnit) -> dtp_print s))`。`prim_eff_bind1`（线性绑定）由
+`effLinearBindText` 单独生成（装箱 `MkEff` 的 match）。因此零参原语（`prim_eff_getArgs` /
+`prim_eff_readLine` / `prim_eff_getcwd` / `effTimeUs`）是动作**值**：引用不执行、不重新求值；
+需要快照 / 执行时显式 `let t = runPure effTimeUs` 或在 `do` 里 `<-`。
 
 ## 9. interp 归约边界
 
@@ -404,7 +391,7 @@
 | `strFromInt` / `strLength` / `strHash` / `strAt` / `strSubstring` / `strShow` | 是 | 与 runtime **同语义同公式** |
 | `natAdd` / `natSub` / `natMul` / `natDiv` / `natToInt` / `natFromInt` | 是 | 与 runtime 同饱和 / 截断语义 |
 | `strUnpack` / `strPack` / `strConcatMany` / `strSubstTemplate` | **否** | 结果依赖 `Base.List.List` 的构造子表示（List 桥接），核心求值器不构造该表示 |
-| 全部 `OpNone` 原语：效果原语（`prim_*` / `timeUs`）、IO 代数、容器原语、`prim_marshal` / `prim_unmarshal`、`prim_fail` | **否** | 纯求值器不执行效果 / 不构造内建容器表示 |
+| 全部 `OpNone` 原语：效果原语（`prim_eff_*`）、容器原语、`prim_marshal` / `prim_unmarshal`、`prim_fail` | **否** | 纯求值器不执行效果 / 不构造内建容器表示 |
 | `a / 0` | **否** | 核心求值器表达不了运行期异常；显式分类，不返回 0 |
 
 - 不可归约时 `main` 报 `[CG_MainNotValue] main does not reduce to a value`。
