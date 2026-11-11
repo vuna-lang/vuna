@@ -1,4 +1,10 @@
-module Vuna.Compiler.CacheFormat (frameDecode, frameEncode, frameMagic, readFramed) where
+module Vuna.Compiler.CacheFormat
+  ( frameDecode
+  , frameEncode
+  , frameMagic
+  , readFramed
+  , readFramedEff
+  ) where
 
 -- Vuna.Compiler.CacheFormat：磁盘缓存的**统一 framing**（C32 最小硬化）。
 --
@@ -91,7 +97,15 @@ frameDecode tag raw = case frameSplit raw of
 
 -- 读 + 校验一步（文件不存在/读失败之外的损坏都由 framing 拒绝）。调用方拿到 Just 的
 -- 字节后才可以 unmarshal（或仅确认存在）。
+-- | 显式效果版：读 + 校验（调用方在 Eff 上下文使用；D59/M4）。
+readFramedEff : String -> String -> Eff [] (Maybe String)
+readFramedEff tag path = do
+  exists <- prim_eff_fileExists path
+  if exists then do
+    raw <- prim_eff_readFile path
+    pure (frameDecode tag raw)
+  else pure Nothing
+
+-- 过渡包装：旧纯 API（M4 迁移期；调用方逐个改用 `readFramedEff` 后删除）。
 readFramed : String -> String -> Maybe String
-readFramed tag path =
-  if runPure (prim_eff_fileExists path) then frameDecode tag (runPure (prim_eff_readFile path))
-  else Nothing
+readFramed tag path = runPure (readFramedEff tag path)

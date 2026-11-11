@@ -1,6 +1,8 @@
 -- | 编译器门面：源码位置 + 结构化诊断结果通道（`Check`/`OkC`/`ErrC`/`bind`/`step`/`traverse`）。
 module Vuna.Compiler.Common
-  ( bind
+  ( EffCheck(..)
+  , bind
+  , runEffCheck
   , step
   , traverse
   , module Vuna.Compiler.Diag
@@ -18,12 +20,34 @@ module Vuna.Compiler.Common
 -- **不再重导出 `Base.Check`**；仍需要字符串错误的代码应显式 import `Base.Check`。
 import Vuna.Compiler.Source
 import Vuna.Compiler.Diag
+import Base.Eff
+import Base.Monad
 
 -- | 编译器内部的 `Check` 绑定（固定类型）：与 `Base.Check` 的 `Monad` 实例 `bind` 同义，
 -- 错误载荷是新诊断模型。限定名调用 `Vuna.Compiler.Common.bind` 保持不变。
 bind : Check a -> (a -> Check b) -> Check b
 bind (OkC x) k = k x
 bind (ErrC e) k = ErrC e
+
+-- | 显式效果外壳（M4）：`EffCheck a` 是 `Eff [] a` 的 record 包装，给 shell 层用；
+-- 纯核心继续用 `Check`，不引入效果。
+record EffCheck a where
+  effCheckRun : Eff [] a
+
+-- | 取出底层 `Eff [] a`（在 `main`/CLI 边界执行一次）。
+runEffCheck : EffCheck a -> Eff [] a
+runEffCheck m = m.effCheckRun
+
+instance Functor EffCheck where
+  fmap f m = EffCheck (fmap f m.effCheckRun)
+
+instance Applicative EffCheck where
+  pure x = EffCheck (pure x)
+  ap mf mx = EffCheck (ap mf.effCheckRun mx.effCheckRun)
+  liftA2 f ma mb = EffCheck (liftA2 f ma.effCheckRun mb.effCheckRun)
+
+instance Monad EffCheck where
+  bind m k = EffCheck (Base.Monad.bind m.effCheckRun (\x => (k x).effCheckRun))
 
 -- | 处理 `Check (Pair a b)` 的双参数绑定（状态传递用）。
 step : Check (Pair a b) -> (a -> b -> Check c) -> Check c
