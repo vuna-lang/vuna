@@ -15,14 +15,12 @@ compiler/lib/Vuna/Compiler/Loader/Flatten.vuna 5
 compiler/lib/Vuna/Compiler/Loader/Modules.vuna 1
 compiler/lib/Vuna/Compiler/Packages/Pkg.vuna 4
 lib/Vuna/Cli/Args.vuna 6
-lib/Vuna/Cli.vuna 28
-lib/Vuna/Doc/Run.vuna 7
+lib/Vuna/Cli.vuna 30
 lib/Vuna/Files.vuna 6
 lib/Vuna/Index/Scan.vuna 21
 lib/Vuna/Interp.vuna 11
 lib/Vuna/Json/Frame.vuna 1
 lib/Vuna/Json/Server.vuna 2
-lib/Vuna/Lint.vuna 10
 lib/Vuna/Lsp/Bindings.vuna 3
 lib/Vuna/Lsp/Diagnostics.vuna 2
 lib/Vuna/Lsp/Protocol.vuna 1

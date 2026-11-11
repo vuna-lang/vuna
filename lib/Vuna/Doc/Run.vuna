@@ -14,7 +14,7 @@ import Vuna.Doc.Model
 import Vuna.Files
 import Base.Host
 
-runDoc : List String -> Int
+runDoc : List String -> Eff [] Int
 runDoc args = case parseToolArgs "vuna doc" [BoolFlag "check", ValueFlag "package"] args of
   ErrC e => docError (diagText e)
   OkC parsed => case parsed.positionals of
@@ -42,18 +42,20 @@ scopeName (DocScope dir name exports) = name
 scopeExports : DocScope -> Maybe (List String)
 scopeExports (DocScope dir name exports) = exports
 
-docRun : String -> String -> Bool -> Maybe String -> Int
+docRun : String -> String -> Bool -> Maybe String -> Eff [] Int
 docRun dir out check pkgFilter = case requireDirectory dir of
   ErrC e => docError (diagText e)
-  OkC _ => case scopesFor dir pkgFilter of
-    ErrC e => docError (diagText e)
-    OkC [] => docError "no such package: ${maybeText pkgFilter}"
-    OkC scopes => case filesForScopes scopes of
+  OkC _ => do
+    sc <- scopesFor dir pkgFilter
+    case sc of
       ErrC e => docError (diagText e)
-      OkC files => if length (filesOf files) == 0 then docError "no vuna sources found under ${dir}; pass a package or source directory"
-      else case buildBook scopes files of
+      OkC [] => docError "no such package: ${maybeText pkgFilter}"
+      OkC scopes => case filesForScopes scopes of
         ErrC e => docError (diagText e)
-        OkC book => if check then runCheck book else writeHtml out book
+        OkC files => if length (filesOf files) == 0 then docError "no vuna sources found under ${dir}; pass a package or source directory"
+        else case buildBook scopes files of
+          ErrC e => docError (diagText e)
+          OkC book => if check then runCheck book else writeHtml out book
 
 -- 每个 scope 的源文件（与 scope 一一对应；顺序稳定）。
 filesForScopes : List DocScope -> Check (List (Pair DocScope (List String)))
@@ -111,14 +113,13 @@ findDocModule name (m :: rest) = if moduleName m == name then Just m else findDo
 -- ---------------------------------------------------------------
 -- 包发现
 -- ---------------------------------------------------------------
-scopesFor : String -> Maybe String -> Check (List DocScope)
-scopesFor dir pkgFilter = if runPure (prim_eff_fileExists "${dir}/vuna.toml") then case workspacePackages dir of
-  ErrC e => ErrC e
-  OkC packages =>
-    let
-      scopes = mapToScopes packages
-    in OkC (filterScopes pkgFilter scopes)
-else OkC (filterScopes pkgFilter [DocScope dir "" Nothing])
+scopesFor : String -> Maybe String -> Eff [] (Check (List DocScope))
+scopesFor dir pkgFilter = do
+  hasManifest <- prim_eff_fileExists "${dir}/vuna.toml"
+  if hasManifest then case workspacePackages dir of
+    ErrC e => pure (ErrC e)
+    OkC packages => pure (OkC (filterScopes pkgFilter (mapToScopes packages)))
+  else pure (OkC (filterScopes pkgFilter [DocScope dir "" Nothing]))
 
 mapToScopes : List Package -> List DocScope
 mapToScopes [] = []
@@ -132,26 +133,20 @@ filterScopes (Just name) scopes = filter (\s => scopeName s == name) scopes
 -- ---------------------------------------------------------------
 -- --check
 -- ---------------------------------------------------------------
-runCheck : DocBook -> Int
-runCheck book =
-  let
-    missing = missingDocs book
-  in if length missing == 0 then
-    let
-      _ = runPure (prim_eff_print "docstrings ok (${length (bookModules book)} modules)\n")
-    in 0
-  else
-    let
-      _ = printMissing missing
-      _ = runPure (prim_eff_print "${length missing} missing docstring(s)\n")
-    in 1
+runCheck : DocBook -> Eff [] Int
+runCheck book = if length (missingDocs book) == 0 then do
+  _ <- prim_eff_print "docstrings ok (${length (bookModules book)} modules)\n"
+  pure 0
+else do
+  _ <- printMissing (missingDocs book)
+  _ <- prim_eff_print "${length (missingDocs book)} missing docstring(s)\n"
+  pure 1
 
-printMissing : List String -> Int
-printMissing [] = 0
-printMissing (line :: rest) =
-  let
-    _ = runPure (prim_eff_print "${line}\n")
-  in printMissing rest
+printMissing : List String -> Eff [] Int
+printMissing [] = pure 0
+printMissing (line :: rest) = do
+  _ <- prim_eff_print "${line}\n"
+  printMissing rest
 
 missingDocs : DocBook -> List String
 missingDocs book = concatMap missingInModule (bookModules book)
@@ -167,20 +162,20 @@ missingInItem m item =
 -- ---------------------------------------------------------------
 -- 写出
 -- ---------------------------------------------------------------
-writeHtml : String -> DocBook -> Int
+writeHtml : String -> DocBook -> Eff [] Int
 writeHtml out book =
   let
     content = renderPage book
-    _ = ensureDirPath (parentOf out)
-    _ = runPure (prim_eff_writeFile out content)
-    _ = runPure (prim_eff_print "wrote ${out} (${length (bookModules book)} modules)\n")
-  in 0
+  in do
+    _ <- pure (ensureDirPath (parentOf out))
+    _ <- prim_eff_writeFile out content
+    _ <- prim_eff_print "wrote ${out} (${length (bookModules book)} modules)\n"
+    pure 0
 
-docError : String -> Int
-docError e =
-  let
-    _ = runPure (prim_eff_print "error: ${e}\n")
-  in 2
+docError : String -> Eff [] Int
+docError e = do
+  _ <- prim_eff_print "error: ${e}\n"
+  pure 2
 
 maybeText : Maybe String -> String
 maybeText Nothing = "(none)"
