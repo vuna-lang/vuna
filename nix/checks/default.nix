@@ -99,6 +99,8 @@ in
       ../../lib
       ../../compiler
       ../../app
+      # steps 用例直接跑仓库的 examples（如 64_infra 跑 examples/infra）。
+      ../../examples
       ../../vuna.toml
     ];
     env = {
