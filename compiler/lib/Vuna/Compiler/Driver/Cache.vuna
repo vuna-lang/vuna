@@ -9,6 +9,9 @@ module Vuna.Compiler.Driver.Cache
   , cachedOfProgramWith
   , cachedProgramIssue
   , cachedProgramValid
+  , decCachedProgram
+  , decCachedProgramComplete
+  , encCachedProgram
   , shiftCachedProgram
   , summaryMetaSegment
   ) where
@@ -28,6 +31,9 @@ module Vuna.Compiler.Driver.Cache
 -- delta 展开的唯一来源）、globals（签名面）、insts（tele / 约束 / 头）、classes。
 -- 依赖闭包由调用方逐包读取并在 `depStartOf` 去重合并。
 import Vuna.Compiler.Common
+import Vuna.Compiler.Canonical.Bytes
+import Vuna.Compiler.Canonical.CoreTerm
+import Vuna.Compiler.Canonical.Elab
 import Base.HashMap
 import Vuna.Compiler.Core
 import Vuna.Compiler.Core.Term
@@ -368,3 +374,37 @@ shiftCachedProgram off (CachedProgram datas defs globals insts classes) =
   CachedProgram (map (shiftData off) datas) (map (shiftDef off) defs)
     (map (\p => Pair (firstOf p) (shiftTerm off (secondOf p))) globals) (map (shiftInst off) insts)
     (map (shiftClass off) classes)
+
+-- ---------------------------------------------------------------
+-- 载荷编码（CachedProgram 落盘 / 载荷自描述，D-Q2）
+-- ---------------------------------------------------------------
+-- 与 `Canonical.Elab` 的 iface 哈希输入同格式：`DtData`/`DtDef`/`DtInst`/`DtClass`
+-- 逐个走 `Canonical.Elab` 的编码器（span 丢弃），`globals` 用 `(名字, 项)` 对。
+-- 读侧用同一批解码器还原；span 只能还原成 `Nothing`（不影响消费方：codegen 的位置表
+-- 由 `Codecgen.Term.dtDefLocTable` 从 span 生成，这里只服务「同输入曾成功」的判定与
+-- 增量精化的起点，不产出用户可见位置）。
+--
+-- | `CachedProgram` 的规范编码。
+encCachedProgram : CachedProgram -> List String -> List String
+encCachedProgram cp acc =
+  encList encDtData cp.cachedDatas
+    (encList encDtDef cp.cachedDefs (encList encGlobalPair cp.cachedGlobals (encList encDtInst cp.cachedInsts (encList encDtClass cp.cachedClasses acc))))
+
+encGlobalPair : Pair String Term -> List String -> List String
+encGlobalPair (Pair n t) acc = encStr n (encTerm t acc)
+
+-- | 解析 `CachedProgram`（整串入口：要求恰好消费完）。
+decCachedProgramComplete : String -> Maybe CachedProgram
+decCachedProgramComplete s = case decCachedProgram (strLength s) (curOf s) of
+  Nothing => Nothing
+  Just (Pair cp rest) => if curAtEnd rest then Just cp else Nothing
+
+decCachedProgram : Int -> Cur -> Maybe (Pair CachedProgram Cur)
+decCachedProgram fuel c =
+  thenPair (decList decDtData (fuel - 1) c)
+    (\datas, b1 => thenPair (decList decDtDef (fuel - 1) b1) (\defs, b2 => thenPair (decList decGlobalPair (fuel - 1) b2) (\globals, b3 => thenPair (decList decDtInst (fuel - 1) b3) (\insts, b4 => thenPair (decList decDtClass (fuel - 1) b4) (\classes, b5 => Just (Pair (CachedProgram datas defs globals insts classes) b5))))))
+
+decGlobalPair : Int -> Cur -> Maybe (Pair (Pair String Term) Cur)
+decGlobalPair fuel c =
+  thenPair (decStr (fuel - 1) c)
+    (\n, b1 => thenPair (decTerm (fuel - 1) b1) (\t, b2 => Just (Pair (Pair n t) b2)))

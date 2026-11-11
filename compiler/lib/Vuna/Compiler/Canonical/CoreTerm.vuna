@@ -111,7 +111,7 @@ encTermBytes t = encTop encTerm t
 -- ---------------------------------------------------------------
 -- | 解析 multiplicity：tag 0/1/2。
 -- | 解析 multiplicity：tag 0/1/2。
-decRig : Int -> List Int -> Maybe (Pair Rig (List Int))
+decRig : Int -> Cur -> Maybe (Pair Rig Cur)
 decRig fuel bytes = if fuel <= 0 then Nothing
 else case decTag fuel bytes of
   Nothing => Nothing
@@ -122,7 +122,7 @@ else case decTag fuel bytes of
     _ => Nothing
 
 -- | 解析带 multiplicity 的实参：项 + multiplicity。
-decArg : Int -> List Int -> Maybe (Pair (Pair Term Rig) (List Int))
+decArg : Int -> Cur -> Maybe (Pair (Pair Term Rig) Cur)
 decArg fuel bytes = if fuel <= 0 then Nothing
 else case decTerm (fuel - 1) bytes of
   Nothing => Nothing
@@ -131,7 +131,7 @@ else case decTerm (fuel - 1) bytes of
     Just (Pair r b2) => Just (Pair (Pair t r) b2)
 
 -- | 解析 `(名字, multiplicity)` binder。
-decBinder : Int -> List Int -> Maybe (Pair (Pair String Rig) (List Int))
+decBinder : Int -> Cur -> Maybe (Pair (Pair String Rig) Cur)
 decBinder fuel bytes = if fuel <= 0 then Nothing
 else case decStr (fuel - 1) bytes of
   Nothing => Nothing
@@ -140,7 +140,7 @@ else case decStr (fuel - 1) bytes of
     Just (Pair r b2) => Just (Pair (Pair n r) b2)
 
 -- | 解析 case 分支。
-decAlt : Int -> List Int -> Maybe (Pair CaseAlt (List Int))
+decAlt : Int -> Cur -> Maybe (Pair CaseAlt Cur)
 decAlt fuel bytes = if fuel <= 0 then Nothing
 else case decStr (fuel - 1) bytes of
   Nothing => Nothing
@@ -151,7 +151,7 @@ else case decStr (fuel - 1) bytes of
       Just (Pair body b3) => Just (Pair (CaseAlt n bs body) b3)
 
 -- | 解析 Core 项（tag 必须与 `encTerm` 一致；燃料按剩余字节上界递减）。
-decTerm : Int -> List Int -> Maybe (Pair Term (List Int))
+decTerm : Int -> Cur -> Maybe (Pair Term Cur)
 decTerm fuel bytes = if fuel <= 0 then Nothing
 else case decTag fuel bytes of
   Nothing => Nothing
@@ -260,6 +260,6 @@ else case decTag fuel bytes of
 
 -- | 解析整串（要求恰好消费完）：roundtrip 测试入口。
 decTermComplete : String -> Maybe Term
-decTermComplete s = case decTerm (strLength s) (strUnpack s) of
+decTermComplete s = case decTerm (strLength s) (curOf s) of
   Nothing => Nothing
-  Just (Pair t rest) => if lenOf rest == 0 then Just t else Nothing
+  Just (Pair t rest) => if curAtEnd rest then Just t else Nothing

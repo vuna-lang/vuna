@@ -75,7 +75,9 @@ toolUsageLines prog = """  ${prog} lint [--fix] <file.vuna>...
       名称 / docstring / 类型检索（类型检索为 parse 级）
   ${prog} gen-errors [ROOT]  从枚举真源生成错误码文档（ROOT 必须是已存在目录；输出 ROOT/docs/.generated/errors.md）
   ${prog} explain <CODE> | --list [PREFIX]  查询错误码目录（消息模板 + 说明）
-  ${prog} clean-iface [--dry-run] [DIR]         删除 DIR 下的 vuna iface 缓存文件（默认 `.`；不碰源码）
+  ${prog} clean [--iface] [--store] [--all] [--dry-run] [DIR]
+      清理缓存：iface = 树内 *.iface/.vuna-iface；store = \${TMPDIR}/vuna-cache（或 $VUNA_CACHE_DIR）
+      不带 flag 时两者都清；--dry-run 只报数量
   ${prog} map [--modules]                      模块总览（索引缓存在 .local/index/，自动新鲜度判定）
   ${prog} map --find <Module.name>             定位符号：定义位置 + 引用者 + 建议测试
   ${prog} map --impact <Module.name>           改动影响面：受影响模块 + 测试标签
@@ -127,7 +129,7 @@ runCli1 args = case args of
     "search" => Vuna.Search.runSearch rest
     "gen-errors" => genErrorsArgs rest
     "explain" => Vuna.Explain.runExplain rest
-    "clean-iface" => Vuna.Clean.runCleanIface rest
+    "clean" => Vuna.Clean.runClean rest
     "map" => mapArgs rest
     "api" => apiArgs rest
     "lsp" => Vuna.Lsp.runLspTool rest

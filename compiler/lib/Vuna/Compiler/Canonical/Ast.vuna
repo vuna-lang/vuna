@@ -8,26 +8,32 @@ module Vuna.Compiler.Canonical.Ast
   , decDeclsComplete
   , decDoStmt
   , decDoStmtComplete
+  , decExportItem
   , decExpr
   , decExprComplete
   , decField
   , decFieldComplete
   , decInterpPart
   , decInterpPartComplete
+  , decModDecl
   , decPat
   , decPatComplete
   , decQty
   , decQtyComplete
   , decReprTier
   , decReprTierComplete
+  , decSourceFileComplete
   , decTraitMethod
   , decTraitMethodComplete
   , decTraitParam
   , decTraitParamComplete
   , encDecl
   , encDecls
+  , encExportItem
   , encExpr
+  , encModDecl
   , encPat
+  , encSourceFile
   ) where
 
 -- Vuna.Compiler.Canonical.Ast：语法层 AST 的规范字节格式（C32 内容寻址的哈希输入侧）。
@@ -314,7 +320,7 @@ encDecl (DInstance ctxE head methods _) acc =
 -- 解码（roundtrip 自检用；要求恰好消费完）
 -- ---------------------------------------------------------------
 -- | 解析 quantity：tag 0/1。
-decQty : Int -> List Int -> Maybe (Pair Qty (List Int))
+decQty : Int -> Cur -> Maybe (Pair Qty Cur)
 decQty fuel bytes = if fuel <= 0 then Nothing
 else case decTag fuel bytes of
   Nothing => Nothing
@@ -324,7 +330,7 @@ else case decTag fuel bytes of
     _ => Nothing
 
 -- | 解析记录表示档位：tag 0/1/2。
-decReprTier : Int -> List Int -> Maybe (Pair ReprTier (List Int))
+decReprTier : Int -> Cur -> Maybe (Pair ReprTier Cur)
 decReprTier fuel bytes = if fuel <= 0 then Nothing
 else case decTag fuel bytes of
   Nothing => Nothing
@@ -335,15 +341,15 @@ else case decTag fuel bytes of
     _ => Nothing
 
 -- | 解析可选 quantity。
-decMaybeQty : Int -> List Int -> Maybe (Pair (Maybe Qty) (List Int))
+decMaybeQty : Int -> Cur -> Maybe (Pair (Maybe Qty) Cur)
 decMaybeQty fuel bytes = decMaybe decQty fuel bytes
 
 -- | 解析可选表达式。
-decMaybeExpr : Int -> List Int -> Maybe (Pair (Maybe Expr) (List Int))
+decMaybeExpr : Int -> Cur -> Maybe (Pair (Maybe Expr) Cur)
 decMaybeExpr fuel bytes = decMaybe decExpr fuel bytes
 
 -- | 解析 `InterpPart`：tag 必须与 `encInterpPart` 一致。
-decInterpPart : Int -> List Int -> Maybe (Pair InterpPart (List Int))
+decInterpPart : Int -> Cur -> Maybe (Pair InterpPart Cur)
 decInterpPart fuel bytes = if fuel <= 0 then Nothing
 else case decTag fuel bytes of
   Nothing => Nothing
@@ -357,7 +363,7 @@ else case decTag fuel bytes of
     _ => Nothing
 
 -- | 解析 `Pat`：tag 必须与 `encPat` 一致。
-decPat : Int -> List Int -> Maybe (Pair Pat (List Int))
+decPat : Int -> Cur -> Maybe (Pair Pat Cur)
 decPat fuel bytes = if fuel <= 0 then Nothing
 else case decTag fuel bytes of
   Nothing => Nothing
@@ -390,7 +396,7 @@ else case decTag fuel bytes of
     _ => Nothing
 
 -- | 解析 `DoStmt`：tag 必须与 `encDoStmt` 一致。
-decDoStmt : Int -> List Int -> Maybe (Pair DoStmt (List Int))
+decDoStmt : Int -> Cur -> Maybe (Pair DoStmt Cur)
 decDoStmt fuel bytes = if fuel <= 0 then Nothing
 else case decTag fuel bytes of
   Nothing => Nothing
@@ -406,7 +412,7 @@ else case decTag fuel bytes of
     _ => Nothing
 
 -- | 解析 `Expr`：tag 必须与 `encExpr` 一致。
-decExpr : Int -> List Int -> Maybe (Pair Expr (List Int))
+decExpr : Int -> Cur -> Maybe (Pair Expr Cur)
 decExpr fuel bytes = if fuel <= 0 then Nothing
 else case decTag fuel bytes of
   Nothing => Nothing
@@ -527,7 +533,7 @@ else case decTag fuel bytes of
     _ => Nothing
 
 -- | 解析 `Ctor`：tag 必须与 `encCtor` 一致。
-decCtor : Int -> List Int -> Maybe (Pair Ctor (List Int))
+decCtor : Int -> Cur -> Maybe (Pair Ctor Cur)
 decCtor fuel bytes = if fuel <= 0 then Nothing
 else case decTag fuel bytes of
   Nothing => Nothing
@@ -542,7 +548,7 @@ else case decTag fuel bytes of
     _ => Nothing
 
 -- | 解析 `Field`：tag 必须与 `encField` 一致。
-decField : Int -> List Int -> Maybe (Pair Field (List Int))
+decField : Int -> Cur -> Maybe (Pair Field Cur)
 decField fuel bytes = if fuel <= 0 then Nothing
 else case decTag fuel bytes of
   Nothing => Nothing
@@ -555,7 +561,7 @@ else case decTag fuel bytes of
     _ => Nothing
 
 -- | 解析 `TraitParam`：tag 必须与 `encTraitParam` 一致。
-decTraitParam : Int -> List Int -> Maybe (Pair TraitParam (List Int))
+decTraitParam : Int -> Cur -> Maybe (Pair TraitParam Cur)
 decTraitParam fuel bytes = if fuel <= 0 then Nothing
 else case decTag fuel bytes of
   Nothing => Nothing
@@ -568,7 +574,7 @@ else case decTag fuel bytes of
     _ => Nothing
 
 -- | 解析 `TraitMethod`：tag 必须与 `encTraitMethod` 一致。
-decTraitMethod : Int -> List Int -> Maybe (Pair TraitMethod (List Int))
+decTraitMethod : Int -> Cur -> Maybe (Pair TraitMethod Cur)
 decTraitMethod fuel bytes = if fuel <= 0 then Nothing
 else case decTag fuel bytes of
   Nothing => Nothing
@@ -581,7 +587,7 @@ else case decTag fuel bytes of
     _ => Nothing
 
 -- | 解析 `Decl`：tag 必须与 `encDecl` 一致。
-decDecl : Int -> List Int -> Maybe (Pair Decl (List Int))
+decDecl : Int -> Cur -> Maybe (Pair Decl Cur)
 decDecl fuel bytes = if fuel <= 0 then Nothing
 else case decTag fuel bytes of
   Nothing => Nothing
@@ -661,7 +667,7 @@ else case decTag fuel bytes of
     _ => Nothing
 
 -- | 解析 `(模式, 表达式)`（`ELet` 绑定 / `ECase` 分支的元素）。
-decPatExpr : Int -> List Int -> Maybe (Pair (Pair Pat Expr) (List Int))
+decPatExpr : Int -> Cur -> Maybe (Pair (Pair Pat Expr) Cur)
 decPatExpr fuel bytes = if fuel <= 0 then Nothing
 else case decPat (fuel - 1) bytes of
   Nothing => Nothing
@@ -670,7 +676,7 @@ else case decPat (fuel - 1) bytes of
     Just (Pair e b2) => Just (Pair (Pair p e) b2)
 
 -- | 解析局部函数子句（参数模式表 + body）。
-decClause : Int -> List Int -> Maybe (Pair (Pair (List Pat) Expr) (List Int))
+decClause : Int -> Cur -> Maybe (Pair (Pair (List Pat) Expr) Cur)
 decClause fuel bytes = if fuel <= 0 then Nothing
 else case decPatList (fuel - 1) bytes of
   Nothing => Nothing
@@ -679,7 +685,7 @@ else case decPatList (fuel - 1) bytes of
     Just (Pair body b2) => Just (Pair (Pair ps body) b2)
 
 -- | 解析 `(字段名, 表达式)`。
-decStrExpr : Int -> List Int -> Maybe (Pair (Pair String Expr) (List Int))
+decStrExpr : Int -> Cur -> Maybe (Pair (Pair String Expr) Cur)
 decStrExpr fuel bytes = if fuel <= 0 then Nothing
 else case decStr (fuel - 1) bytes of
   Nothing => Nothing
@@ -688,7 +694,7 @@ else case decStr (fuel - 1) bytes of
     Just (Pair e b2) => Just (Pair (Pair n e) b2)
 
 -- | 解析 `(字段名, 模式)`。
-decStrPat : Int -> List Int -> Maybe (Pair (Pair String Pat) (List Int))
+decStrPat : Int -> Cur -> Maybe (Pair (Pair String Pat) Cur)
 decStrPat fuel bytes = if fuel <= 0 then Nothing
 else case decStr (fuel - 1) bytes of
   Nothing => Nothing
@@ -698,20 +704,21 @@ else case decStr (fuel - 1) bytes of
 
 -- | 解析列表头 `[<n>:`（`Bytes.decNumStop` 是私有的；这里只服务本模块的三个递归
 -- 列表）。返回元素个数 + 剩余字节。
-decListHead : Int -> List Int -> Maybe (Pair Int (List Int))
-decListHead fuel bytes = if fuel <= 0 then Nothing
-else case bytes of
-  [] => Nothing
-  c :: rest => if c == 91 then decListDigits (fuel - 1) 0 rest else Nothing
+decListHead : Int -> Cur -> Maybe (Pair Int Cur)
+decListHead fuel c = if fuel <= 0 then Nothing
+else case curChar c of
+  Just 91 => decListDigits (fuel - 1) 0 (curSkip c)
+  _ => Nothing
 
 -- | 列表头里的十进制数字，读到 `:`（58）为止。
-decListDigits : Int -> Int -> List Int -> Maybe (Pair Int (List Int))
-decListDigits fuel acc bytes = if fuel <= 0 then Nothing
-else case bytes of
-  [] => Nothing
-  c :: rest =>
-    if c == 58 then Just (Pair acc rest)
-    else if c >= 48 && c <= 57 then decListDigits (fuel - 1) (acc * 10 + (c - 48)) rest else Nothing
+decListDigits : Int -> Int -> Cur -> Maybe (Pair Int Cur)
+decListDigits fuel acc c = if fuel <= 0 then Nothing
+else case curChar c of
+  Nothing => Nothing
+  Just b =>
+    if b == 58 then Just (Pair acc (curSkip c))
+    else if b >= 48 && b <= 57 then decListDigits (fuel - 1) (acc * 10 + (b - 48)) (curSkip c)
+    else Nothing
 
 -- 三个递归列表（Expr / Pat / Decl）的解析器不复用 `Bytes.decList`：元素函数是同一
 -- 递归组内的 `decExpr` / `decPat` / `decDecl`，作为 `decList` 的裸实参时 SCT 只看到
@@ -719,14 +726,14 @@ else case bytes of
 -- （每个子调用 `(fuel - 1)`），检查器能逐跳看到下降。
 --
 -- | 解析表达式表（`EApp` 实参 / `DSig` 约束 / `DInstance` 上下文）。
-decExprList : Int -> List Int -> Maybe (Pair (List Expr) (List Int))
+decExprList : Int -> Cur -> Maybe (Pair (List Expr) Cur)
 decExprList fuel bytes = if fuel <= 0 then Nothing
 else case decListHead fuel bytes of
   Nothing => Nothing
   Just (Pair n b1) => decExprListItems (fuel - 1) n b1 []
 
 -- | 表达式表的解析循环（元素数 + fuel 双重递减）。
-decExprListItems : Int -> Int -> List Int -> List Expr -> Maybe (Pair (List Expr) (List Int))
+decExprListItems : Int -> Int -> Cur -> List Expr -> Maybe (Pair (List Expr) Cur)
 decExprListItems fuel n bytes acc = if fuel <= 0 then Nothing
 else if n <= 0 then Just (Pair (reverse acc) bytes)
 else case decExpr (fuel - 1) bytes of
@@ -734,14 +741,14 @@ else case decExpr (fuel - 1) bytes of
   Just (Pair x b1) => decExprListItems (fuel - 1) (n - 1) b1 (x :: acc)
 
 -- | 解析模式表（`PCon` 实参 / `DFun` 参数）。
-decPatList : Int -> List Int -> Maybe (Pair (List Pat) (List Int))
+decPatList : Int -> Cur -> Maybe (Pair (List Pat) Cur)
 decPatList fuel bytes = if fuel <= 0 then Nothing
 else case decListHead fuel bytes of
   Nothing => Nothing
   Just (Pair n b1) => decPatListItems (fuel - 1) n b1 []
 
 -- | 模式表的解析循环（元素数 + fuel 双重递减）。
-decPatListItems : Int -> Int -> List Int -> List Pat -> Maybe (Pair (List Pat) (List Int))
+decPatListItems : Int -> Int -> Cur -> List Pat -> Maybe (Pair (List Pat) Cur)
 decPatListItems fuel n bytes acc = if fuel <= 0 then Nothing
 else if n <= 0 then Just (Pair (reverse acc) bytes)
 else case decPat (fuel - 1) bytes of
@@ -749,14 +756,14 @@ else case decPat (fuel - 1) bytes of
   Just (Pair x b1) => decPatListItems (fuel - 1) (n - 1) b1 (x :: acc)
 
 -- | 解析声明表（`DInstance` 的方法；也是顶层 `decDecls`）。
-decDecls : Int -> List Int -> Maybe (Pair (List Decl) (List Int))
+decDecls : Int -> Cur -> Maybe (Pair (List Decl) Cur)
 decDecls fuel bytes = if fuel <= 0 then Nothing
 else case decListHead fuel bytes of
   Nothing => Nothing
   Just (Pair n b1) => decDeclsItems (fuel - 1) n b1 []
 
 -- | 声明表的解析循环（元素数 + fuel 双重递减）。
-decDeclsItems : Int -> Int -> List Int -> List Decl -> Maybe (Pair (List Decl) (List Int))
+decDeclsItems : Int -> Int -> Cur -> List Decl -> Maybe (Pair (List Decl) Cur)
 decDeclsItems fuel n bytes acc = if fuel <= 0 then Nothing
 else if n <= 0 then Just (Pair (reverse acc) bytes)
 else case decDecl (fuel - 1) bytes of
@@ -765,72 +772,148 @@ else case decDecl (fuel - 1) bytes of
 
 -- | 整串解析 `Pat`：用串长当 fuel，并要求恰好消费完。
 decPatComplete : String -> Maybe Pat
-decPatComplete s = case decPat (strLength s) (strUnpack s) of
+decPatComplete s = case decPat (strLength s) (curOf s) of
   Nothing => Nothing
-  Just (Pair v rest) => if lenOf rest == 0 then Just v else Nothing
+  Just (Pair v rest) => if curAtEnd rest then Just v else Nothing
 
 -- | 整串解析 `Expr`：用串长当 fuel，并要求恰好消费完。
 decExprComplete : String -> Maybe Expr
-decExprComplete s = case decExpr (strLength s) (strUnpack s) of
+decExprComplete s = case decExpr (strLength s) (curOf s) of
   Nothing => Nothing
-  Just (Pair v rest) => if lenOf rest == 0 then Just v else Nothing
+  Just (Pair v rest) => if curAtEnd rest then Just v else Nothing
 
 -- | 整串解析 `Decl`：用串长当 fuel，并要求恰好消费完。
 decDeclComplete : String -> Maybe Decl
-decDeclComplete s = case decDecl (strLength s) (strUnpack s) of
+decDeclComplete s = case decDecl (strLength s) (curOf s) of
   Nothing => Nothing
-  Just (Pair v rest) => if lenOf rest == 0 then Just v else Nothing
+  Just (Pair v rest) => if curAtEnd rest then Just v else Nothing
 
 -- | 整串解析 `Qty`：用串长当 fuel，并要求恰好消费完。
 decQtyComplete : String -> Maybe Qty
-decQtyComplete s = case decQty (strLength s) (strUnpack s) of
+decQtyComplete s = case decQty (strLength s) (curOf s) of
   Nothing => Nothing
-  Just (Pair v rest) => if lenOf rest == 0 then Just v else Nothing
+  Just (Pair v rest) => if curAtEnd rest then Just v else Nothing
 
 -- | 整串解析 `ReprTier`：用串长当 fuel，并要求恰好消费完。
 decReprTierComplete : String -> Maybe ReprTier
-decReprTierComplete s = case decReprTier (strLength s) (strUnpack s) of
+decReprTierComplete s = case decReprTier (strLength s) (curOf s) of
   Nothing => Nothing
-  Just (Pair v rest) => if lenOf rest == 0 then Just v else Nothing
+  Just (Pair v rest) => if curAtEnd rest then Just v else Nothing
 
 -- | 整串解析 `InterpPart`：用串长当 fuel，并要求恰好消费完。
 decInterpPartComplete : String -> Maybe InterpPart
-decInterpPartComplete s = case decInterpPart (strLength s) (strUnpack s) of
+decInterpPartComplete s = case decInterpPart (strLength s) (curOf s) of
   Nothing => Nothing
-  Just (Pair v rest) => if lenOf rest == 0 then Just v else Nothing
+  Just (Pair v rest) => if curAtEnd rest then Just v else Nothing
 
 -- | 整串解析 `DoStmt`：用串长当 fuel，并要求恰好消费完。
 decDoStmtComplete : String -> Maybe DoStmt
-decDoStmtComplete s = case decDoStmt (strLength s) (strUnpack s) of
+decDoStmtComplete s = case decDoStmt (strLength s) (curOf s) of
   Nothing => Nothing
-  Just (Pair v rest) => if lenOf rest == 0 then Just v else Nothing
+  Just (Pair v rest) => if curAtEnd rest then Just v else Nothing
 
 -- | 整串解析 `Ctor`：用串长当 fuel，并要求恰好消费完。
 decCtorComplete : String -> Maybe Ctor
-decCtorComplete s = case decCtor (strLength s) (strUnpack s) of
+decCtorComplete s = case decCtor (strLength s) (curOf s) of
   Nothing => Nothing
-  Just (Pair v rest) => if lenOf rest == 0 then Just v else Nothing
+  Just (Pair v rest) => if curAtEnd rest then Just v else Nothing
 
 -- | 整串解析 `Field`：用串长当 fuel，并要求恰好消费完。
 decFieldComplete : String -> Maybe Field
-decFieldComplete s = case decField (strLength s) (strUnpack s) of
+decFieldComplete s = case decField (strLength s) (curOf s) of
   Nothing => Nothing
-  Just (Pair v rest) => if lenOf rest == 0 then Just v else Nothing
+  Just (Pair v rest) => if curAtEnd rest then Just v else Nothing
 
 -- | 整串解析 `TraitParam`：用串长当 fuel，并要求恰好消费完。
 decTraitParamComplete : String -> Maybe TraitParam
-decTraitParamComplete s = case decTraitParam (strLength s) (strUnpack s) of
+decTraitParamComplete s = case decTraitParam (strLength s) (curOf s) of
   Nothing => Nothing
-  Just (Pair v rest) => if lenOf rest == 0 then Just v else Nothing
+  Just (Pair v rest) => if curAtEnd rest then Just v else Nothing
 
 -- | 整串解析 `TraitMethod`：用串长当 fuel，并要求恰好消费完。
 decTraitMethodComplete : String -> Maybe TraitMethod
-decTraitMethodComplete s = case decTraitMethod (strLength s) (strUnpack s) of
+decTraitMethodComplete s = case decTraitMethod (strLength s) (curOf s) of
   Nothing => Nothing
-  Just (Pair v rest) => if lenOf rest == 0 then Just v else Nothing
+  Just (Pair v rest) => if curAtEnd rest then Just v else Nothing
 
 -- | 整串解析声明表（`decDecls` 的 roundtrip 入口）。
 decDeclsComplete : String -> Maybe (List Decl)
-decDeclsComplete s = case decDecls (strLength s) (strUnpack s) of
+decDeclsComplete s = case decDecls (strLength s) (curOf s) of
   Nothing => Nothing
-  Just (Pair v rest) => if lenOf rest == 0 then Just v else Nothing
+  Just (Pair v rest) => if curAtEnd rest then Just v else Nothing
+
+-- ---------------------------------------------------------------
+-- 载荷层：整文件 `SourceFile`（AST 缓存条目）
+-- ---------------------------------------------------------------
+-- 这是 **load 阶段的 parse 产物**，不是哈希输入：AST 缓存 key 已经是对「路径 + 源文本」
+-- 的内容地址（见 `Loader.Flatten.astKeyOf`），载荷只需自描述、可无损还原。
+-- span 仍不参与（`dec*` 只能还原 `noSpan`）：缓存命中路径的诊断位置由
+-- `Loader.Flatten` 的 parse 侧 span 恢复策略处理，与 hash 输入口径一致，
+-- 不会出现「缓存命中 ⇒ 诊断位置变了」的二义性（见 docs/reference/cache.md）。
+--
+-- | `ExportItem`：模块头的一条导出项（`XBare` / `XTypeAll` / `XModule`）。
+encExportItem : ExportItem -> List String -> List String
+encExportItem (XBare name _) acc = encTag 0 (encStr name acc)
+encExportItem (XTypeAll name _) acc = encTag 1 (encStr name acc)
+encExportItem (XModule name _) acc = encTag 2 (encStr name acc)
+
+-- | `ModDecl`：模块名 / 是否有显式导出表 / 导出项 / span（丢弃）。
+encModDecl : ModDecl -> List String -> List String
+encModDecl m acc =
+  encStr m.modDeclName
+    (encBool m.modDeclHasExportList (encList encExportItem m.modDeclExportItems acc))
+
+-- | `SourceFile`：可选模块头 / imports / fixity / 顶层声明。
+encSourceFile : SourceFile -> List String -> List String
+encSourceFile f acc =
+  encMaybe encModDecl f.sourceFileModDecl
+    (encList encImportLike f.sourceFileImports (encList encFixityLike f.sourceFileFixities (encList encDecl f.sourceFileDecls acc)))
+
+-- `Import` / `FixityDecl` 的编码原本在 `Canonical.Elab`（iface 哈希输入）。这里不能
+-- import `Canonical.Elab`（它会 import 本模块，成环），所以载荷层自带同格式编码器：
+-- 两种口径必须逐字节一致，`examples/infra` 的 §64 断言两者输出相等。
+encImportLike : Import -> List String -> List String
+encImportLike i acc =
+  encStr i.importName (encBool i.importIsQualified (encMaybe encStr i.importAlias acc))
+
+encFixityLike : FixityDecl -> List String -> List String
+encFixityLike f acc =
+  encStr f.fixityOp
+    (encInt f.fixityLevel (encInt f.fixityAssoc (encMaybe encStr f.fixityTarget acc)))
+
+-- | 解析 `ExportItem`（tag 0/1/2）。
+decExportItem : Int -> Cur -> Maybe (Pair ExportItem Cur)
+decExportItem fuel c = if fuel <= 0 then Nothing
+else thenPair (decTag fuel c) (\tag, b1 => case tag of
+  0 => thenPair (decStr (fuel - 1) b1) (\n, b2 => Just (Pair (XBare n noSpan) b2))
+  1 => thenPair (decStr (fuel - 1) b1) (\n, b2 => Just (Pair (XTypeAll n noSpan) b2))
+  2 => thenPair (decStr (fuel - 1) b1) (\n, b2 => Just (Pair (XModule n noSpan) b2))
+  _ => Nothing
+)
+
+-- | 解析 `ModDecl`。
+decModDecl : Int -> Cur -> Maybe (Pair ModDecl Cur)
+decModDecl fuel c =
+  thenPair (decStr (fuel - 1) c)
+    (\name, b1 => thenPair (decBool (fuel - 1) b1) (\hasList, b2 => thenPair (decList decExportItem (fuel - 1) b2) (\items, b3 => Just (Pair (ModDecl name hasList items noSpan) b3))))
+
+decImportLike : Int -> Cur -> Maybe (Pair Import Cur)
+decImportLike fuel c =
+  thenPair (decStr (fuel - 1) c)
+    (\name, b1 => thenPair (decBool (fuel - 1) b1) (\qual, b2 => thenPair (decMaybe decStr (fuel - 1) b2) (\alias, b3 => Just (Pair (Import name qual alias noSpan) b3))))
+
+decFixityLike : Int -> Cur -> Maybe (Pair FixityDecl Cur)
+decFixityLike fuel c =
+  thenPair (decStr (fuel - 1) c)
+    (\op, b1 => thenPair (decInt (fuel - 1) b1) (\level, b2 => thenPair (decInt (fuel - 1) b2) (\assoc, b3 => thenPair (decMaybe decStr (fuel - 1) b3) (\target, b4 => Just (Pair (FixityDecl op level assoc target noSpan) b4)))))
+
+-- | 整串解析 `SourceFile`（AST 缓存载荷入口）：要求恰好消费完。
+decSourceFileComplete : String -> Maybe SourceFile
+decSourceFileComplete s = case decSourceFileGo (strLength s) (curOf s) of
+  Nothing => Nothing
+  Just (Pair v rest) => if curAtEnd rest then Just v else Nothing
+
+decSourceFileGo : Int -> Cur -> Maybe (Pair SourceFile Cur)
+decSourceFileGo fuel c =
+  thenPair (decMaybe decModDecl (fuel - 1) c)
+    (\modDecl, b1 => thenPair (decList decImportLike (fuel - 1) b1) (\imports, b2 => thenPair (decList decFixityLike (fuel - 1) b2) (\fixities, b3 => thenPair (decList decDecl (fuel - 1) b3) (\decls, b4 => Just (Pair (SourceFile modDecl imports fixities decls) b4)))))

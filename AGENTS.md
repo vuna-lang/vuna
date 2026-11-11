@@ -91,7 +91,7 @@ vuna check .                         # 包级类型检查（自检）；vuna bui
 vuna fmt --check <PATH>...           # 格式化检查（省略 PATH = workspace 各包 lib/app/test）；vuna lint <file>...
 vuna doc [--check] [--package NAME] [DIR [OUT]]  # 生成单文件交互 HTML API 文档（默认 DIR/docs/api.html）
 vuna gen-errors [ROOT]               # 从枚举真源生成错误码文档（默认 ROOT/docs/.generated/errors.md）
-vuna clean-iface [--dry-run] [DIR]   # 批量删除 iface 缓存（默认源码旁生成：*.iface / .vuna-iface；DIR 默认 .）
+vuna clean [--iface] [--store] [--all] [--dry-run] [DIR]  # 清理缓存：iface（树内 *.iface/.vuna-iface）/ store（$TMPDIR/vuna-cache）
 vuna interp <file.vuna>              # DT 精化 + 核心求值（纯；只展示 Int/Nat/String/Bool）
 vuna test [DIR] [--list|--filter PAT|--verbose|--fail-fast|--jobs N]  # 包内测试（--jobs N 文件级并行）；默认输出不变
 vuna run [DIR] [--package NAME] [--no-build] [-- ARGS...]    # 增量 build + 执行入口（透传参数/退出码）

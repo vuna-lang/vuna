@@ -641,8 +641,6 @@ baseIntrinsics =
     Intrinsic "strHash" (IFun IStr IInt) OpStrHash Nothing "dtp_strHash" True,
     Intrinsic "strAt" (IFun IStr (IFun IInt IInt)) OpStrAt Nothing "dtp_strAt" True,
     Intrinsic "strSubstring" (IFun IInt (IFun IInt (IFun IStr IStr))) OpStrSubstring Nothing "dtp_substring" True,
-    Intrinsic "prim_marshal" (IPi "a" (IFun (IVar "a") IStr)) OpNone Nothing "dtp_marshal" True,
-    Intrinsic "prim_unmarshal" (IPi "a" (IFun IStr (IVar "a"))) OpNone Nothing "dtp_unmarshal" True,
     Intrinsic "strShow" (IFun IStr IStr) OpStrShow Nothing "dt_show_string" True,
     Intrinsic primEraseName (IPi "a" (IFun (IVar "a") (IVar "a"))) OpIdentity Nothing "Obj.magic" False,
     Intrinsic "natAdd" (IFun INat (IFun INat INat)) OpNatAdd Nothing "bi_natAdd" True,

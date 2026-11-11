@@ -1,5 +1,6 @@
 module Vuna.Compiler.Driver.PerfCache
   ( unitCacheBucketGc
+  , unitCacheCodec
   , unitCacheDir
   , unitCacheEntryDir
   , unitCacheEntryKeyOf
@@ -17,43 +18,35 @@ module Vuna.Compiler.Driver.PerfCache
 -- 文本，不重新跑 codegen。key 由调用方（`Driver.Dt`）算好：单元名 + 声明/import 内容
 -- + 传递依赖单元 key + printResult。
 --
--- 文件 = 统一 framing（magic|tag|长度|校验和，见 `CacheFormat`）+ Marshal 的 `SplitFile`；
--- 头/tag/校验和不符即视为未命中（编译器或格式变化后旧缓存自然失效；坏文件回退重算）。
+-- 文件 = `Store` framing + `SplitFile` 的**显式规范编码**（codec `split-file 1`，
+-- 见 `Driver.Split.encSplitFile`）。tag 里带编译器 tag（schema + 版本 + 二进制指纹）：
+-- 编译器或格式变化后旧缓存自然失效；framing/内容地址不符即未命中，坏文件回退重算，
+-- 不会把任意字节喂给解码器。
 -- 产物放 `<cacheBase>/<pkg>/split-units/e-<entry 桶>/`，构建前先做**桶间 GC**（只留当前
 -- entry）与**桶内 GC**（只留本次单元 key 集合对应的文件，见 `unitCacheBucketGc`）。
 --
 -- M4（效果显式化）：目录遍历 / 读文件 / 写文件 / 建目录 / 删除 / 环境与二进制指纹全部
 -- 显式在 `Eff []` 里（本模块自身不再用 `runPure` 隐藏执行）；纯数据逻辑（路径 / 哈希 /
 -- 文件名 / 桶 key）保持纯函数。
-import Vuna.Compiler.CacheFormat
+import Vuna.Compiler.Canonical.Bytes
 import Vuna.Compiler.Common
-import Vuna.Compiler.Hash
 import Vuna.Compiler.Driver.Split
+import Vuna.Compiler.Fingerprint
+import Vuna.Compiler.Store
 import Vuna.Compiler.Version
 import Base.Host
 
 unitCacheSchema : String
-unitCacheSchema = "vuna-unit-cache 1"
+unitCacheSchema = "vuna-unit-cache 2"
 
--- 编译器二进制指纹（缓存 key 必须含它：单元产物随编译器语义变化）。
--- 与 `Driver.Compile.compilerFingerprint` 同口径：用**可执行文件自身**的路径 + 大小 +
--- mtime，而不是 `prim_eff_getArgs` 的第一个用户参数。旧实现把子命令名（如 `test`）当路径：
--- 只要 cwd 里有同名文件/目录（包根的 `test/` 就是最常见的情况），`prim_eff_readFile` 会去读
--- 目录并抛 `Failure("readFile: ...")`——`vuna test` 在包根直接崩溃即此。
-binaryFingerprint : Eff [] Int
-binaryFingerprint = do
-  exe <- prim_eff_execPath
-  size <- prim_eff_fileSize exe
-  mtime <- prim_eff_fileMtime exe
-  pure (if size > 0 then textHashOf "${exe}:${size}:${mtime}" else textHashOf vunaVersion)
-
-textHashOf : String -> Int
-textHashOf s = Vuna.Compiler.Hash.contentKey s
+-- | 单元缓存载荷的编码版本（`Store` 的 codec 段）。
+unitCacheCodec : String
+unitCacheCodec = "split-file 1"
 
 unitCacheTag : Eff [] String
 unitCacheTag = do
-  fp <- binaryFingerprint
-  pure "${unitCacheSchema}/${vunaVersion}/${fp}"
+  tag <- compilerTagEff
+  pure "${unitCacheSchema}/${tag}"
 
 cacheBaseOf : Eff [] String
 cacheBaseOf = do
@@ -103,7 +96,7 @@ unitCacheEntryKeyOf keys = case lookupPair "__entry__" keys of
 
 unitCacheGc : String -> String -> Eff [] Int
 unitCacheGc base keepDir = do
-  _ <- ensureDirPath base
+  _ <- storeEnsureDirEff base
   names <- prim_eff_readDir base
   gcEntries base keepDir names
 
@@ -140,7 +133,7 @@ dropFiles dir (f :: rest) = do
 -- key 的传递依赖链保证「依赖接口变化 ⇒ 依赖者 key 变化」，旧 key 文件不再可能被命中。
 unitCacheBucketGc : String -> List String -> Eff [] Int
 unitCacheBucketGc dir keepNames = do
-  _ <- ensureDirPath dir
+  _ <- storeEnsureDirEff dir
   names <- prim_eff_readDir dir
   bucketGcGo dir keepNames names
 
@@ -161,44 +154,14 @@ bucketGcGo dir keepNames (f :: rest) =
 unitCacheRead : String -> String -> String -> Eff [] (Maybe SplitFile)
 unitCacheRead dir name key = do
   tag <- unitCacheTag
-  payload <- readFramedEff tag (unitCachePath dir name key)
+  payload <- storeReadEff tag unitCacheCodec (unitCachePath dir name key)
   pure (case payload of
-    Just bytes => Just (prim_unmarshal bytes)
+    Just bytes => decSplitFileComplete bytes
     Nothing => Nothing
   )
 
 unitCacheWrite : String -> String -> String -> SplitFile -> Eff [] Int
 unitCacheWrite dir name key sf = do
-  _ <- ensureDirPath dir
+  _ <- storeEnsureDirEff dir
   tag <- unitCacheTag
-  prim_eff_writeFileAtomic (unitCachePath dir name key) (frameEncode tag (prim_marshal sf))
-
-ensureDirPath : String -> Eff [] Int
-ensureDirPath path = ensureDirPathFuel 64 path
-
-ensureDirPathFuel : Int -> String -> Eff [] Int
-ensureDirPathFuel fuel path = if fuel <= 0 then pure 0
-else if path == "" || path == "/" || path == "." then pure 0
-else do
-  let
-    parent = parentOf path
-  in do
-    _ <- if parent == path then pure 0 else ensureDirPathFuel (fuel - 1) parent
-    exists <- prim_eff_fileExists path
-    if exists then pure 0 else prim_eff_makeDir path
-
-parentOf : String -> String
-parentOf path =
-  let
-    chars = reverse (strUnpack path)
-    after = dropPastSlash chars
-  in if length after == length chars then "."
-  else
-    let
-      p = strPack (reverse after)
-    in if p == "" then if startsWith "/" path then "/" else "."
-    else if startsWith "/" path && not (startsWith "/" p) then "/${p}" else p
-
-dropPastSlash : List Int -> List Int
-dropPastSlash [] = []
-dropPastSlash (c :: rest) = if c == 47 then rest else dropPastSlash rest
+  storeWriteEff tag unitCacheCodec (unitCachePath dir name key) (encTop encSplitFile sf)

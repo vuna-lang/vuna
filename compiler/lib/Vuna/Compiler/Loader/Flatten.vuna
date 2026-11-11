@@ -24,7 +24,10 @@ module Vuna.Compiler.Loader.Flatten
 -- 「依赖序列 + 入口声明」拼接。
 import Base.List
 import Base.Host
-import Vuna.Compiler.CacheFormat
+import Vuna.Compiler.Canonical.Ast
+import Vuna.Compiler.Canonical.Bytes
+import Vuna.Compiler.Fingerprint
+import Vuna.Compiler.Store
 import Vuna.Compiler.Loader.Diagnostics
 import Vuna.Compiler.Common
 import Vuna.Compiler.Hash
@@ -49,14 +52,28 @@ import Vuna.Compiler.Packages.Pkg
 -- key 的**强度**必须够：内建 `strHash` 只有 10 bit（运行时 `land 1023`），初版把两路
 -- 10-bit + 长度拼起来，实测在测试套件里发生跨文件命中（其它文件的 AST 被当作
 -- `corpus/term/05_multi_clause.vuna` 的入口，报 `LD_ModuleHeaderInEntryFile`）。
--- 现在 key = SHA-256（64 位十六进制，见 `astKeyOf`）；payload 还带源文本做回读校验
--- （见下）：**改 `Frontend.Ast` 的 Marshal 布局时必须 bump `astCacheSchema`**
--- （否则旧缓存会被按新布局 `prim_unmarshal`）。模板字面量（M36）新增 AST 构造子，schema 4 → 5。
--- M34.6：载荷套上统一 framing（CacheFormat）；**同时 bump schema 6 → 7**——AST key 不含
--- 编译器指纹，若不 bump，旧二进制（seed / 旧 stage1）会按裸 Marshal 读新格式条目而崩溃。
--- bump 后新旧二进制各用各的 key 空间，互不读取。
+-- 现在 key = SHA-256（64 位十六进制），见 `astKeyOf`。
+--
+-- C32 / C48 收口（本次）：
+--   * 载荷不再是 `prim_marshal`：走 `Canonical.Ast.encSourceFile` 的显式规范编码
+--     （codec `ast-source 1`）+ `Store` framing；读侧必须通过全部校验才解码，坏字节
+--     不会再喂给 Marshal（语言里没有 try/catch，旧实现会直接崩进程）；
+--   * payload 里**不再带源文本**回读校验：key 已是对「路径 + 源文本 + 编译器 tag」的
+--     内容地址，framing 头里另带载荷内容地址——同字节同地址，回读比较只是冗余拷贝
+--     （旧 136 KB 缓存里近 100% 是源文本副本）；
+--   * key 里**并入编译器 tag**（关闭 C48）：换编译器后旧 AST 不再被读，不必靠
+--     schema bump + 二进制换代兜底。
+--
+-- 注意：AST 条目只服务「parse 结果复用」，**不参与接口哈希**；span 不进入编码，命中
+-- 路径拿到的 `SourceFile` 的 span 是 `noSpan`。这与接口哈希口径一致，且需要位置信息的
+-- 消费者（诊断 / codegen 位置表）用的是 `SourceInfo` / `DtDef` 自己的 span，不是 AST
+-- 缓存条目。
 astCacheSchema : String
-astCacheSchema = "vuna-ast-cache 7"
+astCacheSchema = "vuna-ast-cache 8"
+
+-- | AST 载荷编码版本（`Store` 的 codec 段）。
+astCacheCodec : String
+astCacheCodec = "ast-source 1"
 
 -- M4（效果显式化）：AST 缓存目录/读写、模块文件探测与读盘都是宿主动作，显式在
 -- `Eff []` 里；导出表计算、flatten 与 resolve 保持纯函数。
@@ -65,86 +82,52 @@ astCacheDir = do
   base <- prim_eff_getenv "TMPDIR"
   pure "${if base == "" then "/tmp" else base}/vuna-cache/ast"
 
-astKeyOf : String -> String -> String
-astKeyOf path src = Vuna.Compiler.Hash.contentAddress "${astCacheSchema}\t${path}\t${src}"
+-- | AST 条目的 key：schema + 编译器 tag + 路径 + 源文本的内容地址（C48）。
+astKeyOf : String -> String -> String -> String
+astKeyOf tag path src =
+  Vuna.Compiler.Hash.contentAddress "${astCacheSchema}\t${tag}\t${path}\t${src}"
 
--- key = SHA-256（64 位十六进制）而不是早期的 ~50-bit lane 折叠：内建 `strHash` 只有
--- 10 bit，初版把两路 10-bit + 长度拼起来，实测测试套件里发生跨文件命中（别的文件的 AST
--- 被当作某入口文件，报 `LD_ModuleHeaderInEntryFile`）。payload 还带源文本做回读校验
--- （见下）：key 即使碰撞也不会把别的文件的 AST 当成本文件。
--- **改 `Frontend.Ast` 的 Marshal 布局时必须 bump `astCacheSchema`**（否则旧缓存会被按
--- 新布局 `prim_unmarshal`；AST key 目前仍不含编译器指纹，见 debt C48 —— 布局变化靠
--- schema bump 与二进制换代兜底）。
--- 缓存**回读校验**：payload 带原始源文本，命中时逐字节比较——key 即使碰撞也不会把
--- 别的文件的 AST 当成本文件；不匹配就重新 parse 并覆盖该条目（只损失这一条缓存）。
-data AstCacheEntry : Type where
-  AstCacheEntry : String -> SourceFile -> AstCacheEntry
-
-astCacheSource : AstCacheEntry -> String
-astCacheSource (AstCacheEntry src file) = src
-
-astCacheFile : AstCacheEntry -> SourceFile
-astCacheFile (AstCacheEntry src file) = file
-
--- 缓存条目读写（C32 最小硬化）：载荷统一 framing（magic/schema/长度/校验和）。读侧
--- 截断/篡改/旧格式 ⇒ Nothing ⇒ 重新 parse 并覆盖条目；只有通过 framing 校验的字节才
--- 交给 `prim_unmarshal`（坏文件不再让 Marshal 抛异常/解出错类型）。命中仍逐字节比较
--- 源文本（key 碰撞保护）。
-readAstCache : String -> Eff [] (Maybe AstCacheEntry)
-readAstCache cpath = do
-  framed <- readFramedEff astCacheSchema cpath
-  pure (case framed of
-    Just payload => Just (prim_unmarshal payload)
+-- | 读 AST 缓存：`Store` framing 全量校验通过才解码；任何不符 ⇒ `Nothing`（重新 parse）。
+readAstCache : String -> String -> String -> Eff [] (Maybe SourceFile)
+readAstCache tag codec cpath = do
+  payload <- storeReadEff "${astCacheSchema}/${tag}" codec cpath
+  pure (case payload of
     Nothing => Nothing
+    Just bytes => decSourceFileComplete bytes
   )
 
-storeAstCache : String -> String -> SourceFile -> Eff [] SourceFile
-storeAstCache cpath src parsed = do
+-- | 写 AST 缓存（目录先建好；原子写由 `Store` 负责）。
+storeAstCache : String -> String -> String -> SourceFile -> Eff [] SourceFile
+storeAstCache tag cpath codec parsed = do
   astDir <- astCacheDir
-  _ <- ensureDirPath astDir
-  _ <-
-    prim_eff_writeFileAtomic cpath
-      (frameEncode astCacheSchema (prim_marshal (AstCacheEntry src parsed)))
+  _ <- storeEnsureDirEff astDir
+  _ <- storeWriteEff "${astCacheSchema}/${tag}" codec cpath (encTop encSourceFile parsed)
   pure parsed
-
-ensureDirPath : String -> Eff [] Int
-ensureDirPath path = ensureDirPathFuel 256 path
-
-ensureDirPathFuel : Int -> String -> Eff [] Int
-ensureDirPathFuel fuel path = if fuel <= 0 then pure 0
-else if path == "" || path == "." || path == "/" then pure 0
-else do
-  exists <- prim_eff_fileExists path
-  if exists then pure 0
-  else do
-    _ <- ensureDirPathFuel (fuel - 1) (parentOfPath path)
-    prim_eff_makeDir path
 
 parseFileWithPath : String -> String -> Eff [] (Check SourceFile)
 parseFileWithPath path src = do
   astDir <- astCacheDir
+  tag <- compilerTagEff
   let
-    cpath = "${astDir}/${astKeyOf path src}"
+    cpath = "${astDir}/${astKeyOf tag path src}"
   in do
-    cached <- readAstCache cpath
+    cached <- readAstCache tag astCacheCodec cpath
     case cached of
-      Just entry =>
-        if astCacheSource entry == src then pure (OkC (astCacheFile entry))
-        else parseAndStoreAt cpath path src
-      Nothing => parseAndStoreAt cpath path src
+      Just file => pure (OkC file)
+      Nothing => parseAndStoreAt tag astCacheCodec cpath path src
 
 -- 解析错误统一加 `<path>: ` 前缀（parser 诊断本身无位置）；例外：诊断首行已经以本文件
 -- 路径开头（parser 侧带 span 的诊断，如 `[PS_RepeatedPatternBinder]`）时不再重复加，
 -- 保持 CLI 首行的 `<file>:<line>:<col>: <消息>` 契约（DiagRender 才能追加源码片段）。
-parseAndStoreAt : String -> String -> String -> Eff [] (Check SourceFile)
-parseAndStoreAt cpath path src = case parseSourceRecovering path src of
+parseAndStoreAt : String -> String -> String -> String -> String -> Eff [] (Check SourceFile)
+parseAndStoreAt tag codec cpath path src = case parseSourceRecovering path src of
   ErrC e => pure (ErrC (attachParsePath path e))
   OkC p =>
     let
       parsed = firstOf p
       errs = secondOf p
     in case errs of
-      [] => fmap OkC (storeAstCache cpath src parsed)
+      [] => fmap OkC (storeAstCache tag cpath codec parsed)
       -- 恢复期收集到的多条诊断挂在首条错误上（批量错误通道）；首条保持无位置，
       -- 与旧 CLI 的「原样打印解析诊断」逐字一致（--short/--json/--sarif 不受路径前缀影响）。
       e :: rest => pure (ErrC (withChildren rest e))
@@ -897,23 +880,6 @@ resolveModulesKeep keep ((Module name pkg imports implicit decls exports mcaps m
     (\p2 => OkC (Pair (Base.List.Cons (Module name pkg imports implicit decls exports mcaps mtrust fixities reexports) (firstOf p2)) (secondOf p2)))
   else Vuna.Compiler.Common.bind (reorderProgram (tableOf fixities) decls)
     (\decls2 => Vuna.Compiler.Common.bind (resolveProgram (Module name pkg imports implicit decls2 exports mcaps mtrust fixities reexports :: rest) name name (namespacesOf decls2) (append imports implicit) decls2) (\d => Vuna.Compiler.Common.bind (checkEffectsBuiltins name pkg mcaps mtrust d) (\d1 => Vuna.Compiler.Common.bind (unusedImportWarnings (Module name pkg imports implicit decls2 exports mcaps mtrust fixities reexports :: rest) imports d1 decls2 reexports) (\warns => Vuna.Compiler.Common.bind (resolveModulesKeep keep rest) (\p2 => OkC (Pair (Base.List.Cons (Module name pkg imports implicit d1 exports mcaps mtrust fixities reexports) (firstOf p2)) (append warns (secondOf p2))))))))
-
-dropPastSlash : List Int -> List Int
-dropPastSlash [] = []
-dropPastSlash (c :: rest) = if c == 47 then rest else dropPastSlash rest
-
-parentOfPath : String -> String
-parentOfPath path =
-  let
-    chars = strUnpack path
-    rev = reverse chars
-    after = dropPastSlash rev
-  in if length after == length rev then "."
-  else
-    let
-      parent = strPack (reverse after)
-    in if parent == "" then if startsWith "/" path then "/" else "."
-    else if startsWith "/" path && not (startsWith "/" parent) then "/${parent}" else parent
 
 -- ---------------------------------------------------------------
 -- unused import warning：显式 import 未在所属检查单元里被引用。

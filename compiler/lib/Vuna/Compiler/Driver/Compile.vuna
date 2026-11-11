@@ -47,7 +47,9 @@ module Vuna.Compiler.Driver.Compile
 import Vuna.Compiler.Common
 import Vuna.Compiler.Hash
 import Vuna.Compiler.Diagnostics.Pkg
-import Vuna.Compiler.CacheFormat
+import Vuna.Compiler.Canonical.Bytes
+import Vuna.Compiler.Fingerprint
+import Vuna.Compiler.Store
 import Vuna.Compiler.Packages.Pkg
 import Vuna.Compiler.Driver.Dt
 import Vuna.Compiler.Debug
@@ -165,10 +167,11 @@ compileToDirNormal : PackageContext -> String -> Bool -> String -> Eff [] (Check
 compileToDirNormal ctx entry printResult outDir = do
   key <- splitCacheKey ctx entry printResult
   path <- splitCachePath ctx key
+  tag <- splitCacheTag
   let
     _ = stamp "split-cache-key-done"
   in do
-    files <- readSplitCache path
+    files <- readSplitCache tag path
     case files of
       Just cached => do
         let
@@ -183,7 +186,7 @@ compileToDirNormal ctx entry printResult outDir = do
         summary <- summarySplitParts ctx entry printResult
         case summary of
           ErrC e => pure (ErrC e)
-          OkC p => finishBuild ctx outDir path (firstOf p) (secondOf p)
+          OkC p => finishBuild ctx outDir tag path (firstOf p) (secondOf p)
 
 -- 审计（`VUNA_IFACE_AUDIT=1`）：同一进程分别走摘要路径与全量路径，codegen 产物逐字节比较；
 -- 一致才按摘要结果落盘，不一致报 `iface-audit-mismatch` 且**不写任何缓存/接口**
@@ -192,6 +195,7 @@ auditCompile : PackageContext -> String -> Bool -> String -> Eff [] (Check (Pair
 auditCompile ctx entry printResult outDir = do
   key <- splitCacheKey ctx entry printResult
   path <- splitCachePath ctx key
+  tag <- splitCacheTag
   summary <- summarySplitParts ctx entry printResult
   full <- dtSplitProjectParts ctx entry printResult
   let
@@ -203,17 +207,17 @@ auditCompile ctx entry printResult outDir = do
       ErrC e => pure (ErrC e)
       OkC _ => case summary of
         ErrC e => pure (ErrC e)
-        OkC p => finishBuild ctx outDir path (firstOf p) (secondOf p)
+        OkC p => finishBuild ctx outDir tag path (firstOf p) (secondOf p)
 
 -- 写产物 + 写 split 缓存 + 影子写模块接口（构建成功同样要产出接口，否则只 build 的工程
 -- 永远无法给下游提供接口）。
-finishBuild : PackageContext -> String -> String -> List SplitFile -> CheckedPackage -> Eff [] (Check (Pair Int (List Diagnostic)))
-finishBuild ctx outDir cachePath files checked = do
+finishBuild : PackageContext -> String -> String -> String -> List SplitFile -> CheckedPackage -> Eff [] (Check (Pair Int (List Diagnostic)))
+finishBuild ctx outDir tag cachePath files checked = do
   n <- writeCompiled ctx outDir files
   case n of
     ErrC e => pure (ErrC e)
     OkC count => do
-      _ <- writeSplitCache ctx cachePath files
+      _ <- writeSplitCache ctx tag cachePath files
       shadow <- writeIfaceShadow ctx checked
       case shadow of
         ErrC e => pure (ErrC e)
@@ -302,11 +306,7 @@ textHash s = Vuna.Compiler.Hash.contentKey s
 -- `vuna test` 在包根直接崩溃即此。store 路径 + size + mtime 足以区分重新构建的编译器。
 -- M4：env/stat 是宿主动作，显式 `Eff []`（原先在模块初始化时用 `runPure` 取一次）。
 compilerFingerprint : Eff [] Int
-compilerFingerprint = do
-  exe <- prim_eff_execPath
-  size <- prim_eff_fileSize exe
-  mtime <- prim_eff_fileMtime exe
-  pure (if size > 0 then textHash "${exe}:${size}:${mtime}" else textHash vunaVersion)
+compilerFingerprint = compilerFingerprintEff
 
 -- M34.5：缓存根（TMPDIR 可写；Nix 构建的源树只读，缓存放临时目录 ⇒ 构建内不命中，
 -- 无害；本地开发同机 TMPDIR 持久 ⇒ 命中）。按包路径哈希隔离项目。
@@ -482,12 +482,18 @@ runBuildScript dir out name = do
 -- 典型的「依赖包全部缓存命中」场景：重复 `vuna check .` / 多包 workspace / LSP 重启。
 -- ---------------------------------------------------------------
 checkCacheSchema : String
-checkCacheSchema = "vuna-check-cache 7"
+checkCacheSchema = "vuna-check-cache 8"
 
--- 载荷 framing 的 tag（C32）：schema + 编译器版本。路径 key 已含编译器指纹，这里再校验
--- 一次，保证「文件与 tag 错配」也不会被当成有效缓存（统一 framing 见 `CacheFormat`）。
-checkCacheTag : String
-checkCacheTag = "${checkCacheSchema}/${vunaVersion}"
+-- 载荷 codec（C32 收口后的 check 条目只是个 marker，见 `checkCacheHit`）。
+checkCacheCodec : String
+checkCacheCodec = "check-marker 1"
+
+-- 载荷 framing 的 tag（C32）：schema + 编译器 tag。路径 key 已含编译器指纹，这里再校验
+-- 一次，保证「文件与 tag 错配」也不会被当成有效缓存（framing 见 `Store`）。
+checkCacheTag : Eff [] String
+checkCacheTag = do
+  tag <- compilerTagEff
+  pure "${checkCacheSchema}/${tag}"
 
 checkCacheDir : PackageContext -> Eff [] String
 checkCacheDir ctx = do
@@ -1194,13 +1200,17 @@ entryHashOfEntries (e :: rest) name =
 toolCompilerFingerprint : Eff [] Int
 toolCompilerFingerprint = compilerFingerprint
 
--- 命中判定不只看文件存在：framing（magic/tag/长度/校验和）校验失败（截断/篡改/旧格式）
--- 即视为未命中 ⇒ 重算并覆盖。check 缓存载荷在命中路径上**不 unmarshal**（只需要确认
--- 「同输入下曾经成功」），所以损坏不会崩；但必须回退重算，而不是静默当成功。
+-- 命中判定不只看文件存在：framing（magic/tag/codec/长度/内容地址）任何一项不符
+-- （截断/篡改/旧格式）即视为未命中 ⇒ 重算并覆盖。
+--
+-- C32 收口：载荷是**空 marker**。旧实现把整个 `CachedProgram`（compiler 包 3.7-5.2 MB）
+-- 写进 check 缓存，而命中路径从不读它——纯写放大；它承载的信息已由 iface（`ModuleIface`）
+-- 承担。现在只记「同 key 下曾经成功」，0 字节载荷，framing 校验通过即命中。
 checkCacheHit : String -> Eff [] Bool
 checkCacheHit path = do
-  framed <- readFramedEff checkCacheTag path
-  pure (case framed of
+  tag <- checkCacheTag
+  payload <- storeReadEff tag checkCacheCodec path
+  pure (case payload of
     Just _ => True
     Nothing => False
   )
@@ -1301,7 +1311,9 @@ checkSignatureOf (OkC _) = "ok\n"
 checkSignatureOf (ErrC e) = "err\n${diagText e}"
 
 splitSignatureOf : Check (Pair (List SplitFile) CheckedPackage) -> String
-splitSignatureOf (OkC p) = "ok\n${prim_marshal (firstOf p)}"
+-- 审计签名：只用于「摘要路径与全量路径产物是否一致」的比较，不进缓存。
+-- 用规范编码（C32：不再 `prim_marshal`）——同一 SplitFile 列表编码逐字节稳定。
+splitSignatureOf (OkC p) = "ok\n" ++ encTop encSplitFiles (firstOf p)
 splitSignatureOf (ErrC e) = "err\n${diagText e}"
 
 joinLines : List String -> String
@@ -1473,9 +1485,7 @@ ifaceSchemaTag : String
 ifaceSchemaTag = ifaceSchema
 
 ifaceCompilerTag : Eff [] String
-ifaceCompilerTag = do
-  fp <- compilerFingerprint
-  pure "${vunaVersion}/${fp}"
+ifaceCompilerTag = compilerTagEff
 
 -- | iface 目录：默认与源码同布局（`<包目录>/lib/.../X.vuna` → 同目录 `X.iface`）；
 -- `VUNA_IFACE_DIR` 非空时整体镜像到该根（`<根>/<包绝对目录>/lib/.../X.iface`），便于
@@ -1752,7 +1762,10 @@ ifaceSelfTest dir modules = do
   pi2 <- readPackageIface dir tag
   case pi2 of
     Nothing => pure (icInternal "iface selftest: written iface cannot be read back")
-    Just p => if not (packageIfaceValid p) then pure (icInternal "iface selftest: package iface invalid")
+    Just p => if not (packageIfaceValid p) then do
+      let
+        _ = note "iface-invalid=${firstInvalidModule p}"
+      in pure (icInternal "iface selftest: package iface invalid")
     else if p.piCompiler /= tag then pure (icInternal "iface selftest: compiler tag mismatch")
     else if p.piSchema /= ifaceSchemaTag then pure (icInternal "iface selftest: schema mismatch")
     else if length p.piModules /= length modules then pure (icInternal "iface selftest: module count mismatch")
@@ -1785,10 +1798,9 @@ checkAndCache ctx path checked = do
     ErrC e => pure (ErrC e)
     OkC pr => do
       dir <- checkCacheDir ctx
-      _ <- ensureDirPath dir
-      _ <-
-        prim_eff_writeFileAtomic path
-          (frameEncode checkCacheTag (prim_marshal (cachedOfProgram (secondOf pr).checkedProgram)))
+      _ <- storeEnsureDirEff dir
+      tag <- checkCacheTag
+      _ <- storeWriteEff tag checkCacheCodec path ""
       shadow <- writeIfaceShadow ctx (secondOf pr)
       case shadow of
         ErrC e => pure (ErrC e)
@@ -1871,10 +1883,16 @@ auditCheckLib wantWarnings ctx names path = do
 -- C35：SplitFile 增加 splitDeps 字段（形状变了），schema 升到 2，旧缓存自然失效。
 -- ---------------------------------------------------------------
 splitCacheSchema : String
-splitCacheSchema = "vuna-split-cache 3"
+splitCacheSchema = "vuna-split-cache 4"
 
-splitCacheTag : String
-splitCacheTag = "${splitCacheSchema}/${vunaVersion}"
+-- | split 缓存载荷的编码版本（`Store` 的 codec 段）。
+splitCacheCodec : String
+splitCacheCodec = "split-files 1"
+
+splitCacheTag : Eff [] String
+splitCacheTag = do
+  tag <- compilerTagEff
+  pure "${splitCacheSchema}/${tag}"
 
 splitCacheDir : PackageContext -> Eff [] String
 splitCacheDir ctx = do
@@ -1899,18 +1917,31 @@ splitCacheKey ctx entry printResult = do
   in do
     pure "${hashText srcHash}-${hashText depsHash}-${hashText (verHash + prHash)}"
 
--- 读侧先过 framing（magic/tag/长度/校验和）；校验失败（截断/篡改/旧格式）⇒ Nothing
--- ⇒ 调用方重算并覆盖。只有校验通过的载荷才交给 unmarshal（坏字节不喂给 Marshal）。
-readSplitCache : String -> Eff [] (Maybe (List SplitFile))
-readSplitCache path = do
-  payload <- readFramedEff splitCacheTag path
+-- 读侧过 `Store` framing（magic/tag/codec/长度/载荷内容地址）+ 规范解码；任何一项
+-- 不符（截断/篡改/旧格式）⇒ Nothing ⇒ 调用方重算并覆盖。
+readSplitCache : String -> String -> Eff [] (Maybe (List SplitFile))
+readSplitCache tag path = do
+  payload <- storeReadEff tag splitCacheCodec path
   pure (case payload of
-    Just bytes => Just (prim_unmarshal bytes)
+    Just bytes => decSplitFilesComplete bytes
     Nothing => Nothing
   )
 
-writeSplitCache : PackageContext -> String -> List SplitFile -> Eff [] Int
-writeSplitCache ctx path files = do
+writeSplitCache : PackageContext -> String -> String -> List SplitFile -> Eff [] Int
+writeSplitCache ctx tag path files = do
   dir <- splitCacheDir ctx
-  _ <- ensureDirPath dir
-  prim_eff_writeFileAtomic path (frameEncode splitCacheTag (prim_marshal files))
+  _ <- storeEnsureDirEff dir
+  storeWriteEff tag splitCacheCodec path (encTop encSplitFiles files)
+
+-- 自检辅助：找出第一个 `cachedProgramValid` 不过的模块名（空 = 全部有效）。
+firstInvalidModule : PackageIface -> String
+firstInvalidModule p = firstInvalidGo (pmModulesOfIface p)
+
+pmModulesOfIface : PackageIface -> List ModuleIface
+pmModulesOfIface p = p.piModules
+
+firstInvalidGo : List ModuleIface -> String
+firstInvalidGo [] = ""
+firstInvalidGo (m :: rest) =
+  if cachedProgramValid (miCachedOf m) then firstInvalidGo rest
+  else "${miNameOf m}:${cachedProgramIssue (miCachedOf m)}"

@@ -1,24 +1,41 @@
-# 52) C32 最小硬化：check / split / ast 缓存载荷统一 framing（magic|tag|长度|校验和）。
-#     截断（长度不符）、篡改（校验和不符）都必须被读侧拒绝 ⇒ 回退重算、不崩，且缓存文件
-#     被重写成合法 framing。单字节篡改用 dd 打在载荷中部（不是头部，避免只靠 magic 就过）。
+# 52) C32 收口：所有缓存载荷统一 `Store` framing
+#     `vuna-cache-frame 2|tag|codec|len|内容地址\n<payload>`，载荷是显式规范编码（不再是
+#     OCaml Marshal）。截断（len 不符）、篡改（内容地址不符）、codec/tag 不符都必须被读侧
+#     拒绝 ⇒ 回退重算、不崩，且缓存文件被重写成合法 framing。
+#     单字节篡改用 dd 打在载荷中部（不是头部，避免只靠 magic 就过）。
 #     夹具 corpus/packages/m34_summary 复制到 $TMPDIR（不改工作树），副本内所有
 #     vuna.toml 的 `vuna-base =` 行重写为 $VUNA_BASE。
 run: sh -c 'rm -rf "$TMPDIR/c32-pkg" "$TMPDIR/c32-cache" "$TMPDIR/c32-clean" "$TMPDIR/c32-out2"; cp -r corpus/packages/m34_summary "$TMPDIR/c32-pkg"; for mf in "$TMPDIR/c32-pkg"/*/vuna.toml; do sed -i "s|^vuna-base = .*|vuna-base = \"$VUNA_BASE\"|" "$mf"; done; TMPDIR="$TMPDIR/c32-cache" "$VUNA" build --no-compile --out "$TMPDIR/c32-clean" "$TMPDIR/c32-pkg/root" >/dev/null 2>&1'
-run: sh -c 'split=$(find "$TMPDIR/c32-cache"/vuna-cache -path "*split*" -type f 2>/dev/null | head -1); [ -n "$split" ] && printf "%s" "$split" > "$TMPDIR/c32-split-path"'
-# 52a) 截断：头行完整、载荷少一截（长度校验必须拒绝）⇒ 重建成功、产物一致、缓存重写成合法 framing。
+run: sh -c 'split=$(find "$TMPDIR/c32-cache"/vuna-cache -path "*/split/*" -type f 2>/dev/null | head -1); [ -n "$split" ] && printf "%s" "$split" > "$TMPDIR/c32-split-path"'
+# 52a) framing 头：magic 是 v2，tag 带 split schema 4，codec 段是显式声明的编码族。
+run: sh -c 'split=$(cat "$TMPDIR/c32-split-path"); head -c 18 "$split"'
+out-equals: vuna-cache-frame 2
+run: sh -c 'split=$(cat "$TMPDIR/c32-split-path"); head -1 "$split" | cut -d"|" -f2 | cut -d"/" -f1'
+out-equals: vuna-split-cache 4
+run: sh -c 'split=$(cat "$TMPDIR/c32-split-path"); head -1 "$split" | cut -d"|" -f3'
+out-equals: split-files 1
+# 52b) 截断：头行完整、载荷少一截（len/内容地址校验必须拒绝）⇒ 重建成功、产物一致。
 run: sh -c 'split=$(cat "$TMPDIR/c32-split-path"); head -c 4096 "$split" > "$split.part"; mv "$split.part" "$split"; TMPDIR="$TMPDIR/c32-cache" "$VUNA" build --no-compile --out "$TMPDIR/c32-out2" "$TMPDIR/c32-pkg/root" >/dev/null 2>&1'
 run: diff -r "$TMPDIR/c32-clean" "$TMPDIR/c32-out2"
-run: sh -c 'split=$(cat "$TMPDIR/c32-split-path"); head -c 18 "$split"'
-out-equals: vuna-cache-frame 1
-# 52b) 篡改：在载荷中部改一个字节（长度不变，校验和必须拒绝）⇒ 重建成功、产物一致。
+# 52c) 篡改：在载荷中部改一个字节（长度不变，内容地址必须拒绝）⇒ 重建成功、产物一致。
 run: sh -c 'split=$(cat "$TMPDIR/c32-split-path"); off=$(( $(stat -c %s "$split") / 2 )); printf "X" | dd of="$split" bs=1 seek="$off" conv=notrunc 2>/dev/null; TMPDIR="$TMPDIR/c32-cache" "$VUNA" build --no-compile --out "$TMPDIR/c32-out2" "$TMPDIR/c32-pkg/root" >/dev/null 2>&1'
 run: diff -r "$TMPDIR/c32-clean" "$TMPDIR/c32-out2"
-# 52c) check 缓存：全部截断后必须视为未命中（重算并覆盖），不能静默当成功。
+run: sh -c 'split=$(cat "$TMPDIR/c32-split-path"); head -c 18 "$split"'
+out-equals: vuna-cache-frame 2
+# 52d) check 缓存：marker 载荷（0 字节）全部截断后必须视为未命中（重算并覆盖），不能静默当成功。
 run: sh -c 'rm -rf "$TMPDIR/c32-check-cache"; TMPDIR="$TMPDIR/c32-check-cache" "$VUNA" check "$TMPDIR/c32-pkg/dep" >/dev/null 2>&1; TMPDIR="$TMPDIR/c32-check-cache" "$VUNA" check "$TMPDIR/c32-pkg/root" >/dev/null 2>&1'
-run: sh -c 'for f in $(find "$TMPDIR/c32-check-cache"/vuna-cache -path "*/check/*" -type f 2>/dev/null); do head -c 200 "$f" > "$f.part"; mv "$f.part" "$f"; done; TMPDIR="$TMPDIR/c32-check-cache" VUNA_DEBUG_PERF=1 "$VUNA" check "$TMPDIR/c32-pkg/root" 2>&1 | tee "$TMPDIR/c32-check.log"'
+run: sh -c 'for f in $(find "$TMPDIR/c32-check-cache"/vuna-cache -path "*/check/*" -type f 2>/dev/null); do head -c 40 "$f" > "$f.part"; mv "$f.part" "$f"; done; TMPDIR="$TMPDIR/c32-check-cache" VUNA_DEBUG_PERF=1 "$VUNA" check "$TMPDIR/c32-pkg/root" 2>&1 | tee "$TMPDIR/c32-check.log"'
 out-contains: cache-path=
-run: sh -c 'ok=1; for f in $(find "$TMPDIR/c32-check-cache"/vuna-cache -path "*/check/*" -type f 2>/dev/null); do [ "$(head -c 18 "$f")" = "vuna-cache-frame 1" ] || ok=0; done; [ "$ok" -eq 1 ]'
-# 52d) AST 缓存：全部截断后照常 parse 并重写（原实现会 Marshal.from_string 崩溃）。
+run: sh -c 'ok=1; for f in $(find "$TMPDIR/c32-check-cache"/vuna-cache -path "*/check/*" -type f 2>/dev/null); do [ "$(head -c 18 "$f")" = "vuna-cache-frame 2" ] || ok=0; done; [ "$ok" -eq 1 ]'
+# check marker 载荷 0 字节：framing 头声明 len=0、codec=check-marker 1（写放大关闭的直接断言）。
+run: sh -c 'for f in $(find "$TMPDIR/c32-check-cache"/vuna-cache -path "*/check/*" -type f 2>/dev/null); do [ "$(head -1 "$f" | cut -d"|" -f3)" = "check-marker 1" ] || exit 1; [ "$(head -1 "$f" | cut -d"|" -f4)" = "0" ] || exit 1; done'
+exit: 0
+# 52e) AST 缓存：全部截断后照常 parse 并重写（旧实现会 Marshal.from_string 崩溃）。
 run: sh -c 'rm -rf "$TMPDIR/c32-ast-cache"; TMPDIR="$TMPDIR/c32-ast-cache" "$VUNA" check "$TMPDIR/c32-pkg/root" >/dev/null 2>&1; TMPDIR="$TMPDIR/c32-ast-cache" "$VUNA" check "$TMPDIR/c32-pkg/root" >/dev/null 2>&1; list=$(find "$TMPDIR/c32-ast-cache/vuna-cache/ast" -type f 2>/dev/null); [ -n "$list" ] || exit 1; printf "%s\n" "$list" | wc -l | tr -d " " > "$TMPDIR/c32-ast-count"; for f in $list; do head -c 8 "$f" > "$f.part"; mv "$f.part" "$f"; done; rm -rf "$TMPDIR/c32-ast-cache"/vuna-cache/*/check'
 run: sh -c 'TMPDIR="$TMPDIR/c32-ast-cache" "$VUNA" check "$TMPDIR/c32-pkg/root" >/dev/null 2>&1'
-run: sh -c 'n=$(cat "$TMPDIR/c32-ast-count"); framed=0; for f in $(find "$TMPDIR/c32-ast-cache/vuna-cache/ast" -type f 2>/dev/null); do [ "$(head -c 18 "$f")" = "vuna-cache-frame 1" ] && framed=$((framed + 1)); done; [ "$framed" -eq "$n" ]'
+run: sh -c 'n=$(cat "$TMPDIR/c32-ast-count"); framed=0; for f in $(find "$TMPDIR/c32-ast-cache/vuna-cache/ast" -type f 2>/dev/null); do [ "$(head -c 18 "$f")" = "vuna-cache-frame 2" ] && framed=$((framed + 1)); done; [ "$framed" -eq "$n" ]'
+# 52f) codec 不符：把某个 AST 条目的 codec 改成别的名字（tag/len/内容地址都不动）
+#      ⇒ 读侧必须拒绝、重新 parse 并重写同一个文件（路径 = key，内容寻址）。
+run: sh -c 'f=$(find "$TMPDIR/c32-ast-cache/vuna-cache/ast" -type f | head -1); printf "%s" "$f" > "$TMPDIR/c32-codec-path"; sed -i "1s/|ast-source 1|/|bogus-codec 9|/" "$f"; rm -rf "$TMPDIR/c32-ast-cache"/vuna-cache/*/check; TMPDIR="$TMPDIR/c32-ast-cache" "$VUNA" check "$TMPDIR/c32-pkg/root" >/dev/null 2>&1'
+run: sh -c 'f=$(cat "$TMPDIR/c32-codec-path"); head -1 "$f" | cut -d"|" -f3'
+out-equals: ast-source 1

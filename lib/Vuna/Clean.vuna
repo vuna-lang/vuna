@@ -1,37 +1,82 @@
-module Vuna.Clean (runCleanIface) where
+module Vuna.Clean (runClean) where
 
--- Vuna.Clean：批量删除 iface 缓存文件（`vuna clean-iface [--dry-run] [DIR]`）。
+-- Vuna.Clean：缓存清理（`vuna clean [--iface] [--store] [--all] [--dry-run] [DIR]`）。
 --
--- iface 默认与源码同目录（`lib/Base/Int.vuna` 旁就是 `Int.iface`）+ 包级 `.vuna-iface`；
--- `VUNA_IFACE_DIR` 模式下在外部镜像根。清理按**文件名**识别、不读文件内容：
---   - `*.iface`（模块接口）
---   - `.vuna-iface`（包级 manifest）
---   - `*.iface.*.tmp`（`prim_eff_writeFileAtomic` 崩溃残留）
--- 这样既不会把宿主异常漏给用户，也不会误删 `.vuna` 源码；`.iface` 扩展是 vuna 保留名。
-import Vuna.Compiler.Common
+-- 收口前有两个入口（`clean-iface` 清树内 iface；`$TMPDIR/vuna-cache` 只能手删）。
+-- C32 收口后所有缓存载荷统一由 `Vuna.Compiler.Store` 承载，清理也统一：
+--   --iface  树内接口缓存（`*.iface` / `.vuna-iface` / 原子写残留 `*.iface.*.tmp`）
+--   --store  `Vuna.Compiler.Store` 的缓存根（`$VUNA_CACHE_DIR` 或 `$TMPDIR/vuna-cache`）
+--   --all    两者都清（默认即 --all，与旧 `clean-iface` 的「至少做点事」行为一致）
+-- `DIR` 只对 `--iface` 有意义（默认 `.`）；`--store` 的根由环境决定，不接受 DIR。
+--
+-- 识别按**文件名 / 目录布局**，不读内容：既不把宿主异常漏给用户，也不会误删 `.vuna`
+-- 源码（`.iface` 扩展是 vuna 保留名，`vuna-cache` 根由 store 独占）。
 import Vuna.Cli.Args
+import Vuna.Compiler.Common
+import Vuna.Compiler.Store
 import Base.Host
 
-runCleanIface : List String -> Eff [] Int
-runCleanIface args = case parseToolArgs "vuna clean-iface" [BoolFlag "dry-run"] args of
+runClean : List String -> Eff [] Int
+runClean args = case parseToolArgs "vuna clean" [BoolFlag "dry-run", BoolFlag "iface", BoolFlag "store", BoolFlag "all"] args of
   ErrC e => cleanError (diagText e)
-  OkC parsed => case parsed.positionals of
-    [] => cleanAt "." (flagSet parsed "dry-run")
-    [dir] => cleanAt dir (flagSet parsed "dry-run")
-    _ => cleanError "too many arguments; expected at most one directory"
+  OkC parsed =>
+    let
+      dry = flagSet parsed "dry-run"
+      anyFlag = flagSet parsed "iface" || flagSet parsed "store" || flagSet parsed "all"
+      wantIface = flagSet parsed "iface" || flagSet parsed "all" || not anyFlag
+      wantStore = flagSet parsed "store" || flagSet parsed "all" || not anyFlag
+    in case parsed.positionals of
+      [] => ifaceThenStore wantIface wantStore dry "."
+      [dir] =>
+        if wantStore && not wantIface then cleanError "vuna clean --store takes no directory"
+        else ifaceThenStore wantIface wantStore dry dir
+      _ => cleanError "too many arguments; expected at most one directory"
 
-cleanAt : String -> Bool -> Eff [] Int
-cleanAt dir dry = do
+ifaceThenStore : Bool -> Bool -> Bool -> String -> Eff [] Int
+ifaceThenStore wantIface wantStore dry dir = do
+  code <- if wantIface then cleanIfaceAt dir dry else pure 0
+  if code /= 0 then pure code else if wantStore then cleanStore dry else pure 0
+
+cleanIfaceAt : String -> Bool -> Eff [] Int
+cleanIfaceAt dir dry = do
   dirR <- requireDirectory dir
   case dirR of
     ErrC e => cleanError (diagText e)
     OkC _ => do
       all <- walkFiles 1048576 dir
-      _ <- if dry then pure 0 else removeEach (filter isIfaceFile all)
-      _ <-
-        prim_eff_print
-          (if length (filter isIfaceFile all) == 0 then "clean-iface: no iface files under ${dir}\n" else if dry then "clean-iface: would remove ${strFromInt (length (filter isIfaceFile all))} file(s) under ${dir}\n" else "clean-iface: removed ${strFromInt (length (filter isIfaceFile all))} file(s) under ${dir}\n")
+      let
+        targets = filter isIfaceFile all
+        n = length targets
+      in do
+        _ <- if dry then pure 0 else removeEach targets
+        _ <- prim_eff_print "clean-iface: ${ifaceVerb dry} ${strFromInt n} file(s) under ${dir}\n"
+        pure 0
+
+cleanStore : Bool -> Eff [] Int
+cleanStore dry = do
+  root <- storeCacheBaseEff
+  exists <- prim_eff_fileExists root
+  isDir <- if exists then prim_eff_isDirectory root else pure False
+  if not (exists && isDir) then do
+    _ <- prim_eff_print "clean-store: no cache store to remove\n"
+    pure 0
+  else do
+    all <- walkFiles 1048576 root
+    let
+      n = length all
+    in do
+      _ <- if dry then pure 0 else removeEach all
+      _ <- prim_eff_print "clean-store: ${storeVerb dry} ${strFromInt n} file(s) under ${root}\n"
       pure 0
+
+-- 自底向上删空目录（`prim_eff` 没有 rmdir；空目录留着会让 `find` 结果不直观）。
+ifaceVerb : Bool -> String
+ifaceVerb True = "would remove"
+ifaceVerb False = "removed"
+
+storeVerb : Bool -> String
+storeVerb True = "would remove"
+storeVerb False = "removed"
 
 removeEach : List String -> Eff [] Int
 removeEach [] = pure 0

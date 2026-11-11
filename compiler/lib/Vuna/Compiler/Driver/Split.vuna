@@ -2,6 +2,10 @@ module Vuna.Compiler.Driver.Split
   ( SplitFile(..)
   , buildScript
   , canonicalTopo
+  , decSplitFileComplete
+  , decSplitFilesComplete
+  , encSplitFile
+  , encSplitFiles
   , splitGraph
   , splitLayers
   , writeSplitFiles
@@ -20,6 +24,7 @@ module Vuna.Compiler.Driver.Split
 --     同产物，不依赖 mtime），改一个单元只重编它的直接/传递依赖者；
 --   - 最后按依赖拓扑序链接成可执行文件。
 -- 构建脚本只用 POSIX sh + ocamlopt，可在 Nix 沙箱内复现。
+import Vuna.Compiler.Canonical.Bytes
 import Vuna.Compiler.Common
 import Vuna.Compiler.Hash
 import Base.HashMap
@@ -332,3 +337,37 @@ insertDep x (y :: rest) =
 
 normalizeFileDeps : SplitFile -> SplitFile
 normalizeFileDeps f = SplitFile (splitName f) (splitText f) (sortDepsByTie (splitDeps f))
+
+-- ---------------------------------------------------------------
+-- 载荷编码（split 缓存 / 单元缓存共用，C32 收口）
+-- ---------------------------------------------------------------
+-- `SplitFile` 是 codegen 的输出模型（文件名 + 文本 + 直接依赖单元名）。落盘走这里，
+-- 不再是 `prim_marshal`：文本本身就是产物，显式编码后逐字节稳定，且能被 `Store` 的
+-- 内容地址覆盖。
+--
+-- | `SplitFile` 的规范编码：名字 / 文本 / 依赖表。
+encSplitFile : SplitFile -> List String -> List String
+encSplitFile f acc = encStr f.splitName (encStr f.splitText (encList encStr f.splitDeps acc))
+
+decSplitFile : Int -> Cur -> Maybe (Pair SplitFile Cur)
+decSplitFile fuel c = do
+  p1 <- decStr (fuel - 1) c
+  p2 <- decStr (fuel - 1) (secondOf p1)
+  p3 <- decList decStr (fuel - 1) (secondOf p2)
+  pure (Pair (SplitFile (firstOf p1) (firstOf p2) (firstOf p3)) (secondOf p3))
+
+-- | `List SplitFile` 的规范编码（split 缓存载荷）。
+encSplitFiles : List SplitFile -> List String -> List String
+encSplitFiles fs acc = encList encSplitFile fs acc
+
+-- | 整串解析 `List SplitFile`（split 缓存载荷入口）。
+decSplitFilesComplete : String -> Maybe (List SplitFile)
+decSplitFilesComplete s = case decList decSplitFile (strLength s) (curOf s) of
+  Nothing => Nothing
+  Just (Pair fs rest) => if curAtEnd rest then Just fs else Nothing
+
+-- | 整串解析单个 `SplitFile`（单元缓存载荷入口）。
+decSplitFileComplete : String -> Maybe SplitFile
+decSplitFileComplete s = case decSplitFile (strLength s) (curOf s) of
+  Nothing => Nothing
+  Just (Pair f rest) => if curAtEnd rest then Just f else Nothing

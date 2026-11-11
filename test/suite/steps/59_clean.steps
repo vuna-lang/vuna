@@ -1,0 +1,47 @@
+# 59) `vuna clean`：统一缓存清理入口（C32 收口后 iface 与 store 都归它管）。
+#     --iface 删树内 `*.iface` / `.vuna-iface` / `*.iface.*.tmp`，不动源码与其他文件；
+#     --store 删 store 根（$VUNA_CACHE_DIR 或 $TMPDIR/vuna-cache）下的全部缓存文件；
+#     不带 flag 时两者都清；--dry-run 只报数量；不存在的路目录 exit 2（只针对 --iface）。
+#     在 $TMPDIR 的 base 副本上验证（unset VUNA_IFACE_DIR，让 iface 写在源码旁）。
+run: cp -R "$VUNA_BASE" "$TMPDIR/clean-pkg"
+exit: 0
+run: unset VUNA_IFACE_DIR; TMPDIR="$TMPDIR/clean-cache" "$VUNA" check "$TMPDIR/clean-pkg" 2>&1
+exit: 0
+run: printf 'user note\n' >"$TMPDIR/clean-pkg/keep.txt"
+exit: 0
+run: find "$TMPDIR/clean-pkg" -name '*.iface' | wc -l | tr -d ' ' >"$TMPDIR/iface-before.count"; n=$(cat "$TMPDIR/iface-before.count"); [ "$n" -gt 0 ]
+exit: 0
+run: unset VUNA_IFACE_DIR; TMPDIR="$TMPDIR/clean-cache" "$VUNA" clean --iface --dry-run "$TMPDIR/clean-pkg" 2>&1
+exit: 0
+out-contains: would remove
+run: find "$TMPDIR/clean-pkg" -name '*.iface' | wc -l | tr -d ' '
+out-equals-file: $TMPDIR/iface-before.count
+run: unset VUNA_IFACE_DIR; "$VUNA" clean --iface "$TMPDIR/clean-pkg" 2>&1
+exit: 0
+out-contains: removed
+run: find "$TMPDIR/clean-pkg" -name '*.iface' | wc -l | tr -d ' '
+out-equals: 0
+run: find "$TMPDIR/clean-pkg" -maxdepth 1 -name '.vuna-iface' | wc -l | tr -d ' '
+out-equals: 0
+file-exists: $TMPDIR/clean-pkg/keep.txt
+run: unset VUNA_IFACE_DIR; "$VUNA" clean --iface "$TMPDIR/clean-pkg" 2>&1
+exit: 0
+out-contains: removed 0 file(s)
+run: unset VUNA_IFACE_DIR; "$VUNA" clean --iface "$TMPDIR/no-such-clean-dir" 2>&1
+exit: 2
+out-contains: no such directory
+# --store：先造出缓存（check 会写 check marker + ast 条目），再清空。
+run: TMPDIR="$TMPDIR/clean-cache" "$VUNA" check "$TMPDIR/clean-pkg" 2>&1
+exit: 0
+run: find "$TMPDIR/clean-cache/vuna-cache" -type f 2>/dev/null | wc -l | tr -d ' ' >"$TMPDIR/store-before.count"; n=$(cat "$TMPDIR/store-before.count"); [ "$n" -gt 0 ]
+exit: 0
+run: TMPDIR="$TMPDIR/clean-cache" "$VUNA" clean --store --dry-run 2>&1
+exit: 0
+out-contains: would remove
+run: find "$TMPDIR/clean-cache/vuna-cache" -type f 2>/dev/null | wc -l | tr -d ' '
+out-equals-file: $TMPDIR/store-before.count
+run: TMPDIR="$TMPDIR/clean-cache" "$VUNA" clean --store 2>&1
+exit: 0
+out-contains: removed
+run: find "$TMPDIR/clean-cache/vuna-cache" -type f 2>/dev/null | wc -l | tr -d ' '
+out-equals: 0

@@ -28,7 +28,7 @@ VUNA=${1:-./result/bin/vuna}
 [ -d compiler ] || { echo "seed-rotate: 找不到 compiler/（seed 来源必须是 compiler 包）" >&2; exit 1; }
 # 源码旁 .iface 缓存可能来自不同编译器版本：先清理，否则两遍生成走不同路径，
 # fixed point 会假失败（见 C32/M4 收口时的实测）。
-"$VUNA" clean-iface >/dev/null 2>&1 || true
+"$VUNA" clean --iface >/dev/null 2>&1 || true
 
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/vuna-seed-rotate.XXXXXX") || exit 1
 # 分级替换用的临时名：复制到 seed.new.$$ 后再 rename，失败时用 seed.old.$$ 回滚。
