@@ -622,11 +622,12 @@ argRel p args sizes ctors projs caller facts region = case nthExpr args p of
   Nothing => Nothing
   Just a => relOfArg p a sizes ctors projs caller facts region
 
-markInvalid : Pair Bool (List (Pair (Pair String String) Int)) -> Pair Bool (List (Pair (Pair String String) Int))
+markInvalid : Pair Bool (List (Pair (Pair (Pair String String) Int) Span)) -> Pair Bool (List (Pair (Pair (Pair String String) Int) Span))
 markInvalid acc = Pair False (secondOf acc)
 
-addEdgeMode : String -> String -> Int -> Pair Bool (List (Pair (Pair String String) Int)) -> Pair Bool (List (Pair (Pair String String) Int))
-addEdgeMode caller callee m acc = Pair (firstOf acc) (Pair (Pair caller callee) m :: secondOf acc)
+addEdgeMode : String -> String -> Int -> Span -> Pair Bool (List (Pair (Pair (Pair String String) Int) Span)) -> Pair Bool (List (Pair (Pair (Pair String String) Int) Span))
+addEdgeMode caller callee m sp acc =
+  Pair (firstOf acc) (Pair (Pair (Pair caller callee) m) sp :: secondOf acc)
 
 groupHead : List String -> Expr -> Maybe String
 groupHead comp (EVar n sp) = if memName n comp then Just n else Nothing
@@ -654,37 +655,37 @@ extendElemSizes sizes (EVar n sp) v = case sizeOfVarStrict n sizes of
   Nothing => sizes
 extendElemSizes sizes _ v = sizes
 
-edgeStrict : String -> String -> List (Pair (Pair String String) Int) -> Bool
+edgeStrict : String -> String -> List (Pair (Pair (Pair String String) Int) Span) -> Bool
 edgeStrict f g edges = edgeStrictGo f g edges False True
 
-edgeStrictGo : String -> String -> List (Pair (Pair String String) Int) -> Bool -> Bool -> Bool
+edgeStrictGo : String -> String -> List (Pair (Pair (Pair String String) Int) Span) -> Bool -> Bool -> Bool
 edgeStrictGo f g [] seen acc = seen && acc
-edgeStrictGo f g ((Pair (Pair cf cg) m) :: rest) seen acc =
+edgeStrictGo f g ((Pair (Pair (Pair cf cg) m) sp) :: rest) seen acc =
   if cf == f then if cg == g then edgeStrictGo f g rest True (if m == 0 then False else acc)
   else edgeStrictGo f g rest seen acc
   else edgeStrictGo f g rest seen acc
 
-edgeTargets : String -> List (Pair (Pair String String) Int) -> List String
+edgeTargets : String -> List (Pair (Pair (Pair String String) Int) Span) -> List String
 edgeTargets f edges = dedup (edgeTargetsGo f edges)
 
-edgeTargetsGo : String -> List (Pair (Pair String String) Int) -> List String
+edgeTargetsGo : String -> List (Pair (Pair (Pair String String) Int) Span) -> List String
 edgeTargetsGo f [] = []
-edgeTargetsGo f ((Pair (Pair cf cg) m) :: rest) =
+edgeTargetsGo f ((Pair (Pair (Pair cf cg) m) sp) :: rest) =
   if cf == f then cg :: edgeTargetsGo f rest else edgeTargetsGo f rest
 
 -- 弱边邻接：组内边里「存在非严格调用点」的那些目标。
-weakAdj : List String -> List (Pair (Pair String String) Int) -> String -> List String
+weakAdj : List String -> List (Pair (Pair (Pair String String) Int) Span) -> String -> List String
 weakAdj comp edges f = weakAdjGo comp edges f (edgeTargets f edges)
 
-weakAdjGo : List String -> List (Pair (Pair String String) Int) -> String -> List String -> List String
+weakAdjGo : List String -> List (Pair (Pair (Pair String String) Int) Span) -> String -> List String -> List String
 weakAdjGo comp edges f [] = []
 weakAdjGo comp edges f (g :: rest) =
   if edgeStrict f g edges then weakAdjGo comp edges f rest else g :: weakAdjGo comp edges f rest
 
-weakReach : List String -> List (Pair (Pair String String) Int) -> String -> List String -> List String -> Bool
+weakReach : List String -> List (Pair (Pair (Pair String String) Int) Span) -> String -> List String -> List String -> Bool
 weakReach comp edges start frontier visited = weakReachFuel 100000 comp edges start frontier visited
 
-weakReachFuel : Int -> List String -> List (Pair (Pair String String) Int) -> String -> List String -> List String -> Bool
+weakReachFuel : Int -> List String -> List (Pair (Pair (Pair String String) Int) Span) -> String -> List String -> List String -> Bool
 weakReachFuel fuel comp edges start frontier visited = if fuel <= 0 then False
 else case frontier of
   [] => False
@@ -693,10 +694,10 @@ else case frontier of
     else if memName n visited then weakReachFuel (fuel - 1) comp edges start rest visited
     else weakReachFuel (fuel - 1) comp edges start (append rest (weakAdj comp edges n)) (n :: visited)
 
-hasWeakCycle : List String -> List (Pair (Pair String String) Int) -> Bool
+hasWeakCycle : List String -> List (Pair (Pair (Pair String String) Int) Span) -> Bool
 hasWeakCycle comp edges = hasWeakCycleGo comp edges comp
 
-hasWeakCycleGo : List String -> List (Pair (Pair String String) Int) -> List String -> Bool
+hasWeakCycleGo : List String -> List (Pair (Pair (Pair String String) Int) Span) -> List String -> Bool
 hasWeakCycleGo comp edges [] = False
 hasWeakCycleGo comp edges (f :: rest) =
   weakReach comp edges f (weakAdj comp edges f) [f] || hasWeakCycleGo comp edges rest

@@ -244,7 +244,7 @@ jsonField (FieldName s) = "{\"kind\":\"name\",\"value\":${jsonStr s}}"
 jsonField (FieldCandidates cs) =
   "{\"kind\":\"candidates\",\"value\":[${join "," (map jsonCandidate cs)}]}"
 jsonField (FieldCall c) =
-  "{\"kind\":\"call\",\"value\":{\"callee\":${jsonStr c.callCallee},\"arg\":${jsonStr c.callArg},\"relation\":${jsonStr c.callRelation}}}"
+  "{\"kind\":\"call\",\"value\":{\"callee\":${jsonStr c.callCallee},\"arg\":${jsonStr c.callArg},\"relation\":${jsonStr c.callRelation},\"span\":${maybeJsonSpan c.callSpan}}}"
 jsonField (FieldQuantity name declared observed) =
   "{\"kind\":\"quantity\",\"value\":{\"name\":${jsonStr name},\"declared\":${declared},\"observed\":${observed}}}"
 jsonField (FieldEffect s) = "{\"kind\":\"effect\",\"value\":${jsonStr s}}"
@@ -402,7 +402,8 @@ fieldLine (FieldExpected s) = "  = expected: ${s}"
 fieldLine (FieldFound s) = "  = found: ${s}"
 fieldLine (FieldName s) = "  = name: ${s}"
 fieldLine (FieldCandidates cs) = "  = candidates: ${join ", " (map candidateTextOf (take 8 cs))}"
-fieldLine (FieldCall c) = "  = call: ${c.callCallee} <- ${c.callArg} (${c.callRelation})"
+fieldLine (FieldCall c) =
+  "  = call: ${c.callCallee} <- ${c.callArg} (${c.callRelation})" ++ callSpanSuffix c.callSpan
 fieldLine (FieldQuantity n declared observed) =
   "  = quantity: ${n} (declared ${showInt declared}, observed ${showInt observed})"
 fieldLine (FieldEffect s) = "  = effect: ${s}"
@@ -426,3 +427,7 @@ showInt n = strFromInt n
 
 candidateTextOf : Candidate -> String
 candidateTextOf c = c.candidateText
+
+callSpanSuffix : Maybe Span -> String
+callSpanSuffix Nothing = ""
+callSpanSuffix (Just sp) = " at ${sp.spanFile}:${strFromInt sp.spanStartLine}"

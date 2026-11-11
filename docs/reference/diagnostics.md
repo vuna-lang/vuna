@@ -154,10 +154,10 @@ JSON 字段是机器契约：`code/severity/phase/category/message/labels[]/fiel
 | D6 渲染/LSP/CLI | 已落地 short/human/JSON/SARIF + LSP push/pull + `[diagnostics]` 配置；human 视图展示 fields/trace/suggestions（与 JSON 同源）；SARIF rules 带目录 shortDescription/help/defaultConfiguration/tags；i18n 部分（`--lang zh` 与 `[diagnostics] lang` 的 human 消息本地化 + `= message:` 英文原文附注；机器格式保持英文） |
 | D7.1 多错误 + Cascade | 部分（parser 顶层 resync + `--max-errors`；elab 新增 `--continue-on-error` best-effort：文件入口、可执行包 app/Main.vuna 与库包 [export].modules 逐次移除失败声明后继续，最多 8 条；依赖被移除声明的错误标 `origin=cascade`（human 显示 best-effort note；JSON/SARIF/LSP data 也带来源）；`--max-errors` 同时约束恢复结果；库包/模块级恢复与完整 Cascade 分类待补） |
 | D7.2 warnings（未使用/冗余/不可达） | 已落地（`UN_UnusedBinder`/`UN_ShadowedBinder`/`UN_RedundantCtorBranch`/`UN_RedundantLiteralBranch`/`UN_BranchAfterCatchAll`/`UN_UnusedImport`（限定/别名/open import 统一追踪）/`UN_UnusedDefinition`；`-W`/`--deny-warnings` 已接） |
-| D7.3 建议引擎 + Fix | 部分（`Candidate`/`Suggestion` 模型就绪；`UN_UnusedBinder`/`UN_UnusedDefinition`/`UN_UnusedImport`/`UN_Redundant*`/`UN_BranchAfterCatchAll` 附 machine-applicable 编辑；LSP codeAction 应用诊断 suggestions，并有 `test/corpus/lsp/quickfix.sh` 集成测试；更多码待接） |
+| D7.3 建议引擎 + Fix | 已落地（`Candidate`/`Suggestion` 模型；所有可安全自动修复的 warning 附 machine-applicable 编辑（unused binder/definition/import、冗余构造子/字面量分支、catch-all 后分支）；LSP codeAction 应用诊断 suggestions，`test/corpus/lsp/quickfix.sh` 集成测试） |
 | D7.4 类型不匹配 expected/found | 已落地（fields + PhUnify trace 帧 expected/found；双端 label 待补） |
-| D7.5 实例搜索 trace | 部分（`TC_NoInstanceFound` 附失败目标族桶的候选实例 `fields.candidates`，每个候选带 instance 声明 span；完整搜索树/逐候选拒绝原因仍待补） |
-| D7.6 终止性 call matrix | 部分（`TC_CannotProveTermination` 附 `fields.call` 边：caller/callee/relation；逐参数矩阵与完整调用点待补） |
+| D7.5 实例搜索 trace | 已落地（`TC_NoInstanceFound` 附失败目标族桶的候选实例 `fields.candidates`，每个候选带 instance 声明 span 与拒绝原因「实例头 vs 目标」） |
+| D7.6 终止性 call matrix | 已落地（`TC_CannotProveTermination` 附 `fields.call` 边：caller/callee/参数位置/调用点 span；human 行尾显示文件:行号） |
 | D7.7 覆盖性缺失构造子标签 | 已落地（缺失构造子进 `fields.candidates`，每个候选带构造子声明 `span`；JSON/SARIF/LSP（含 diag fields 的 candidates.span）可跳转） |
 | D7.8 QTT 使用点 | 部分（线性/擦除错误附 `fields.quantity`：name/declared/observed；逐使用点 span 待 Core `TSp`） |
 | D7.9 文案规范/门禁 | 已落地（`nix/checks/diag-style.sh`：句号/大小写/空白/占位符；专有名词例外逐码 allowlist） |

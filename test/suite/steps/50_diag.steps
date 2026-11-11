@@ -216,3 +216,12 @@ out-contains: lib/B.vuna
 run: sh -c 'printf "a : Int\na = \"x\"\n\nb : Int\nb = a\n\nmain : Int\nmain = b\n" > "$TMPDIR/m50-cascade.vuna"; "$VUNA" check "$TMPDIR/m50-cascade.vuna" --continue-on-error --error-format sarif 2>&1'
 exit: 1
 out-contains: "vuna.origin":"cascade"
+# 实例搜索候选拒绝原因包含实例头与目标对照。
+run: "$VUNA" check corpus/dt_err/25_no_instance.vuna --json 2>&1
+exit: 1
+out-contains: "reason":"instance head
+# 终止性 call matrix：每条调用边带参数位置 + 调用点 span。
+run: "$VUNA" check corpus/dt_err/16_nonterm.vuna --json 2>&1
+exit: 1
+out-contains: "arg":"call at argument position
+out-contains: "kind":"call"

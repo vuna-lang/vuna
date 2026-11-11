@@ -454,16 +454,16 @@ siteFuelStrict callerFuel site = case nthExpr site.siteArgs 0 of
     else Nothing
     _ => Nothing
 
-fuelEdgesOf : List String -> HashMap String (List (Pair (List Pat) Expr)) -> List Site -> List (Pair (Pair String String) Int)
+fuelEdgesOf : List String -> HashMap String (List (Pair (List Pat) Expr)) -> List Site -> List (Pair (Pair (Pair String String) Int) Span)
 fuelEdgesOf comp defTbl sites = fuelEdgesGo comp defTbl sites True []
 
-fuelEdgesGo : List String -> HashMap String (List (Pair (List Pat) Expr)) -> List Site -> Bool -> List (Pair (Pair String String) Int) -> List (Pair (Pair String String) Int)
+fuelEdgesGo : List String -> HashMap String (List (Pair (List Pat) Expr)) -> List Site -> Bool -> List (Pair (Pair (Pair String String) Int) Span) -> List (Pair (Pair (Pair String String) Int) Span)
 fuelEdgesGo comp defTbl [] ok acc = acc
 fuelEdgesGo comp defTbl (s :: rest) ok acc = case siteFuelStrict (firstParamOf s.siteCaller defTbl) s of
   Nothing => fuelEdgesGo comp defTbl rest False acc
   Just strict =>
     fuelEdgesGo comp defTbl rest ok
-      (Pair (Pair s.siteCaller s.siteCallee) (if strict then 1 else 0) :: acc)
+      (Pair (Pair (Pair s.siteCaller s.siteCallee) (if strict then 1 else 0)) (Span "" 0 0 0 0) :: acc)
 
 fuelMembersGuarded : List String -> HashMap String (List (Pair (List Pat) Expr)) -> Bool
 fuelMembersGuarded [] defTbl = True
@@ -478,7 +478,10 @@ tryFuelThread comp defTbl ctors projs facts msg =
   let
     sites = siteCollect comp ctors projs defTbl facts
     edges = fuelEdgesOf comp defTbl sites
-    strictCount = length (filterModes (map secondOf edges))
+    strictCount = length (filterModes (map edgeModeOf edges))
   in if strictCount > 0 then if fuelMembersGuarded comp defTbl then if hasWeakCycle comp edges then ErrC msg else OkC 0
   else ErrC msg
   else ErrC msg
+
+edgeModeOf : Pair (Pair (Pair String String) Int) Span -> Int
+edgeModeOf (Pair (Pair (Pair caller callee) mode) sp) = mode

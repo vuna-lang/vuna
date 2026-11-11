@@ -1155,9 +1155,12 @@ dictCandidatesOf ec shown =
   let
     fam = dictFamilyOfShown shown
     insts = if fam == "" then ecInsts ec else ecInstsFamily ec fam
-  in map
-    (\i => Candidate (dtInstName i) i.dtInstSpan (Just "instance family matched but this goal did not"))
-    insts
+  in map (instCandidate shown) insts
+
+instCandidate : String -> DtInst -> Candidate
+instCandidate shown i =
+  Candidate (dtInstName i) i.dtInstSpan
+    (Just "instance head ${showTerm i.dtInstHead} does not match goal ${shown}")
 
 -- | 从 (Dict_Class Arg) 文本取族名。
 dictFamilyOfShown : String -> String
