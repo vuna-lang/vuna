@@ -8,5 +8,5 @@ import Base.Host
 main : Eff [] Int
 main = do
   args <- getArgs
-  code <- pure (runCli args)
+  code <- runCli args
   exit code
