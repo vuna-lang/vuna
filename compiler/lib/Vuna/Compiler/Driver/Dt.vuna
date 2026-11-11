@@ -8,6 +8,7 @@ module Vuna.Compiler.Driver.Dt
   , dtCheckLibraryPackageWithIfacesParts
   , dtCheckLibraryRecovering
   , dtCheckLibraryWithProgramParts
+  , dtCheckModuleFile
   , dtCheckPackageIncrementalParts
   , dtCheckPackageWithIfacesParts
   , dtCheckRecovering
@@ -24,6 +25,7 @@ module Vuna.Compiler.Driver.Dt
   , dtEvalExprWithIfaces
   , dtEvalFile
   , dtEvalSourceIncremental
+  , dtFileHasModuleHeader
   , dtGoalsSource
   , dtGoalsSourceTolerant
   , dtInferDefTypes
@@ -148,6 +150,23 @@ in OkC (Pair [] (CheckedPackage program (secondOf parts) (firstOf parts) []))
 -- | 入口文件检查。
 dtCheck : PackageContext -> String -> Check (List String)
 dtCheck ctx entry = dtCheckDecls (dtLoad ctx entry)
+
+-- M45：单文件检查的两个入口（`vuna check <file.vuna>`）。
+--
+-- 带 `module` 头的文件按**库模块**语义检查：与 LSP 打开同包库文件走同一条
+-- `loadModuleSource` + `elabProgramFull` + `checkDtProgram` 链（含用量/遮蔽告警），
+-- 但**不**跑 `warnUnusedDefsIn`（库包导出面未知，会把导出函数全报成未使用），
+-- 也不写 iface / check 缓存。无头文件仍走入口语义（`dtCheck`）。
+dtFileHasModuleHeader : String -> Bool
+dtFileHasModuleHeader path = case parseFileWithPath path (runIO (prim_readFile path)) of
+  OkC (SourceFile (Just _) _ _ _) => True
+  _ => False
+
+-- | 按库模块检查单个文件（调用方已确认带 `module` 头）。
+dtCheckModuleFile : PackageContext -> String -> Check (List String)
+dtCheckModuleFile ctx path =
+  Vuna.Compiler.Common.bind (dtCheckSourceChecked ctx path (runIO (prim_readFile path)))
+    (\_ => OkC [])
 
 -- 核心求值器：精化后用 NbE + delta 求 main 的值并 show（与 codegen 结果对照）。
 dtEvalFile : PackageContext -> String -> Check String

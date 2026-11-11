@@ -31,9 +31,9 @@ Content-Length: <字节数>\r\n
 | --- | --- |
 | `initialize` | capabilities：Full 同步、hover、completion（`.` 触发）、definition、references、documentSymbol、documentFormatting、workspaceSymbol、codeAction（`quickfix` + `refactor.rewrite`）、rename（`prepareProvider: true`）、executeCommand（`vuna.fixAllLint`）、diagnosticProvider（pull）；`serverInfo` |
 | `initialized` | 通知，无响应 |
-| `textDocument/didOpen` / `didChange` / `didClose` | 内存维护打开文档表（Full 同步） |
-| `textDocument/publishDiagnostics` | 包上下文解析 / DT 精化 / 覆盖性诊断 + lint 诊断 |
-| `textDocument/diagnostic` | **pull diagnostics**（LSP 3.17）：`{kind:"full", items:[...]}`，与 push 同一条诊断链与 JSON 字段；不额外发通知 |
+| `textDocument/didOpen` / `didChange` / `didClose` | 内存维护打开文档表（Full 同步）；声明 pull 能力的客户端只更新文档表，不触发 push |
+| `textDocument/publishDiagnostics` | 包上下文解析 / DT 精化 / 覆盖性诊断 + lint 诊断（**仅**未声明 pull 能力的客户端；声明了 pull 的客户端只走 `textDocument/diagnostic`，否则客户端 push/pull 两个诊断集合会让同一条诊断显示两遍） |
+| `textDocument/diagnostic` | **pull diagnostics**（LSP 3.17）：`{kind:"full", items:[...]}`，与 push 同一条诊断链与 JSON 字段；不额外发通知。pull 客户端（`initialize.params.capabilities.textDocument.diagnostic` 为对象）的唯一诊断通道 |
 | `textDocument/hover` | 洞（`_` / `?name`）的目标类型与上下文（容错查询；文本里没有洞 token 时跳过精化）→ 模块引用（`import` / 导出项 `module B` / 模块头 / 限定名前缀；带模块 docstring）→ 局部绑定（参数 / λ / `let` / `where` / `case` / `do` / `as` / 模式；语法级类型与值）→ 标识符签名 + `-- |` docstring（多行保留）。普通注释不进入 hover。`range` 落在**光标 token** 上（不是符号定义位置）——客户端用它判断 hover 何时失效 |
 | `textDocument/formatting` | `Vuna.Fmt.formatSourceWith` 全文替换 TextEdit（fixity 取程序级可见闭包）（解析失败返回空） |
 | `textDocument/documentSymbol` | AST 声明树（data/record/trait 带子节点） |
@@ -86,7 +86,15 @@ Content-Length: <字节数>\r\n
 
 - **走与 CLI 相同的包上下文**（`Pkg.contextForFile`）：有 `module` 头的文件用
   `Loader.loadModuleSource`（模块按库模块加载），无头的入口文件用 `loadProjectSource`；
-  随后 `Dt.dtCheckSource` 做 `elabProgramFull`。**含 `import` 的文件同样做类型检查**。
+  随后 `Dt.dtCheckSourceIncremental`（会话/接口可用时）或 `Dt.dtCheckSourceChecked`
+  做精化与 codegen 检查。**含 `import` 的文件同样做类型检查**。
+- **push / pull 按客户端能力二选一**：`initialize` 里客户端声明
+  `capabilities.textDocument.diagnostic` 时服务器只响应 `textDocument/diagnostic`，
+  didOpen/didChange/didClose 不发 `publishDiagnostics`；未声明的客户端（含
+  `capabilities: {}` 的冒烟脚本）继续走 push。`serverCapabilities` 始终声明
+  `diagnosticProvider`（客户端据此决定用哪条通道）。回归测试：
+  `test/suite/steps/64_lsp_pull.steps`（pull 客户端 0 条 push）与
+  `test/suite/steps/44l1_lsp_inc.steps`（push 客户端）。
 - 错误串 `<file>:<line>:<col>: message` 转成 LSP 的 0-based range；依赖模块的错误按
   `spanFile` 过滤（只发当前文件），无位置的错误归当前文件。
 - lint findings 合并进同一 `publishDiagnostics`：severity 2、`code` 为 `LN_*` 规则码、

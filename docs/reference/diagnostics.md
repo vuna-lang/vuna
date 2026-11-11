@@ -77,6 +77,12 @@ Diagnostic = { id, severity, phase, category, code, message, labels, fields, tra
 约定：符号语义稳定；一个码一种语义。`vuna explain CODE` 与 `vuna gen-errors` 都从这些
 枚举条目读取（不维护第二份列表）。
 
+告警语义：`UN_ShadowedBinder` 只比较**运行时** binder（`Rig ≠ 0`）。`Rig0` 的隐式类型 /
+索引 binder（`f : a -> a` 里自动量化的 `a`、实例方法签名里的 `a`/`b`/`c`、`{n : Nat}`）
+由精化器在体前插成擦除 λ，源码里没有用户可见的外层 binder，因此 `f a = a`、`Applicative`
+实例的 `\a => \b =>` 不误报；显式 `0 x` binder 与它们同等对待。`UN_UnusedDefinition`
+只在入口路径检查（库包导出面未知，避免误报）。
+
 ## 5. 渲染视图
 
 实现：`compiler/lib/Vuna/Compiler/Diag/Format.vuna`。
@@ -88,8 +94,13 @@ Diagnostic = { id, severity, phase, category, code, message, labels, fields, tra
 | JSON | `renderJsonList` | `{version,tool,diagnostics[]}`，含 labels/fields/trace/notes/suggestions/origin/internal/ice |
 | SARIF | `renderSarif` | SARIF 2.1.0 单 run：ruleId/level/message/locations/relatedLocations |
 
-CLI 开关：`--error-format=short|human|json|sarif`、`--json`、`--message-format=...`、`--lang en|zh`（zh 时 human 消息本地化）、`--continue-on-error`（elab best-effort 多错误，仅文件入口）；包级 check
+CLI 开关：`--error-format=short|human|json|sarif`、`--json`、`--message-format=...`、`--lang en|zh`（zh 时 human 消息本地化）、`--continue-on-error`（elab best-effort 多错误，仅**入口文件**；带 `module` 头的库模块单文件检查只报首错）；包级 check
 会把格式透传给成员包子进程；成员包错误带 `[包名]` 前缀。
+
+`vuna check <file.vuna>` 支持两类文件：无 `module` 头的入口文件（旧语义，含
+`--continue-on-error` 恢复）；带 `module` 头的库模块（按 `Pkg.contextForFile` 的包上下文
+单模块精化，与编辑器打开该文件同一条链，告警只报本文件；包入口文件仍按入口报
+`LD_ModuleHeaderInEntryFile`，与包级 check 一致）。
 
 JSON 字段是机器契约：`code/severity/phase/category/message/labels[]/fields[]`；
 `fields` 目前包含 `expected`/`found`（类型不匹配/解析期望）、`name`/`candidates`（覆盖性缺失构造子）、`effect`（未处理效应）、`note`（洞目标/元变量归属）、`call`/`quantity`/
@@ -120,6 +131,9 @@ JSON 字段是机器契约：`code/severity/phase/category/message/labels[]/fiel
   `code` 直接给客户端；消息追加 notes/suggestions。
 - lint quick fix 的内嵌诊断与发布诊断字段集合一致；诊断自带 `suggestions`（如未使用 binder/定义）也生成 quick fix CodeAction（应用其 `DiagEdit`）。
 - **pull**：`textDocument/diagnostic` 回 `{kind:"full", items:[...]}`（与 push 同一诊断链/JSON 字段），initialize 声明 `diagnosticProvider`。
+- **push / pull 二选一**：客户端在 `initialize` 声明 `capabilities.textDocument.diagnostic`
+  时服务器只走 pull（不再发 `publishDiagnostics`），否则走 push。两套同时用会让
+  vscode-languageclient 的 push / pull 诊断集合各显示一份同一诊断（Problems 面板重复）。
 
 ## 7. 退出码
 

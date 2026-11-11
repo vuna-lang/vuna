@@ -1,0 +1,19 @@
+# 64) LSP push/pull 能力协商：声明 pull 能力的客户端只走 pull。
+#     服务器对这类客户端不再发 textDocument/publishDiagnostics —— vscode-languageclient
+#     会为 push / pull 各建一个诊断集合，两套同时用会让 Problems 面板里同一条诊断出现
+#     两遍（M45 回归点）。空 capabilities 的 push 路径由 44l1 与 corpus/lsp/smoke.sh 覆盖。
+run: mkdir -p "$TMPDIR/lsp-pull/lib"
+run: printf '[package]\nname = "lsp-pull"\n\n[dependencies]\nvuna-base = "%s"\n' "$VUNA_BASE" > "$TMPDIR/lsp-pull/vuna.toml"
+run: printf 'module APull where\n\nvalue : Bool\nvalue = 1\n' > "$TMPDIR/lsp-pull/lib/APull.vuna"
+run: "$VUNA" check "$VUNA_BASE"
+# 一次性把帧批式喂给 LSP：initialize（声明 pull）→ initialized → didOpen → pull → exit。
+run: d="$TMPDIR/lsp-pull"; log="$TMPDIR/lsp-pull.log"; esc() { sed -e 's/$/\\n/' "$1" | tr -d '\n'; }; fr() { printf 'Content-Length: %s\r\n\r\n%s' "$(printf '%s' "$1" | wc -c)" "$1"; }; uri="file://$d/lib/APull.vuna"; init=$(printf '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"processId":null,"rootUri":"file://%s","capabilities":{"textDocument":{"diagnostic":{}}}}}' "$d"); open=$(printf '{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"%s","languageId":"vuna","version":1,"text":"%s"}}}' "$uri" "$(esc "$d/lib/APull.vuna")"); pull=$(printf '{"jsonrpc":"2.0","id":7,"method":"textDocument/diagnostic","params":{"textDocument":{"uri":"%s"}}}' "$uri"); { fr "$init"; fr '{"jsonrpc":"2.0","method":"initialized","params":{}}'; fr "$open"; fr "$pull"; sleep 0.5; fr '{"jsonrpc":"2.0","id":9,"method":"shutdown","params":null}'; fr '{"jsonrpc":"2.0","method":"exit","params":null}'; } | ( cd "$d" && "$VUNA" lsp >"$log" 2>/dev/null )
+exit: 0
+# 能力仍声明 pull（客户端据此注册 pull），pull 报告与 push 同构。
+read: $TMPDIR/lsp-pull.log
+out-contains: "diagnosticProvider"
+out-contains: "id":7
+out-contains: "kind":"full"
+out-contains: TC_TypeMismatch
+# 关键断言：pull 客户端收到 0 条 push 通知（否则 Problems 面板会显示两份）。
+out-not-contains: "method":"textDocument/publishDiagnostics"

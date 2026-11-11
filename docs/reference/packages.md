@@ -35,8 +35,11 @@
   - `vuna compile [--no-print] (<entry.vuna> | <package-dir>) OUTDIR`：DT 精化 → 擦除型
     OCaml，**逐模块**写到 OUTDIR（`Vuna_runtime.ml` + 各模块 + `Main.ml` + `build.sh`），
     成功静默；OUTDIR 必填；
-  - `vuna check (<entry.vuna> | <package-dir>)`：类型检查（不生成代码）；目录是 workspace
-    根时**逐个检查所有成员**（成员错误不再被根 check 忽略）；
+  - `vuna check (<file.vuna> | <package-dir>)`：类型检查（不生成代码）；目录是 workspace
+    根时**逐个检查所有成员**（成员错误不再被根 check 忽略）；文件带 `module` 头时按包上下文
+    做**单库模块检查**（与编辑器打开该文件同一条链，告警只报本文件；包入口 `app/Main.vuna`
+    仍按入口报 `LD_ModuleHeaderInEntryFile`），无头时按入口文件检查（`--continue-on-error`
+    的恢复只支持入口）；
   - `vuna build [--no-compile] [--out DIR] [--package NAME] [PKG-DIR]`：默认输出到
     `<PKG-DIR>/.output`（PKG-DIR 缺省 `.`，`--out` 覆盖）；目录是 workspace 根时构建所有
     **可执行**成员（库成员只检查并打印 `skipped (library)`），`--out DIR` 时按
@@ -208,7 +211,7 @@ unsafe = [
 | 命令 | 说明 |
 | --- | --- |
 | `vuna compile [--no-print] (<entry.vuna> \| <package-dir>) OUTDIR` | 逐模块 codegen 写到目录（唯一输出模型；成功静默） |
-| `vuna check (<entry.vuna> \| <package-dir>)` | 类型检查（workspace 根检查所有成员；不生成代码） |
+| `vuna check (<file.vuna> \| <package-dir>)` | 类型检查（workspace 根检查所有成员；单文件带 `module` 头 = 库模块检查；不生成代码） |
 | `vuna build [--no-compile] [--out DIR] [--package NAME] [PKG-DIR]` | 逐模块 codegen（默认 `<PKG-DIR>/.output`）+ 执行 `build.sh` → `DIR/bin/<包名>`；workspace 根建所有可执行成员 |
 | `vuna lint [--fix] <file.vuna>...` | 风格检查与自动修复 |
 | `vuna interp <file.vuna>` | DT 精化 + 核心求值（纯；只展示 `Int`/`String`/`Bool`） |

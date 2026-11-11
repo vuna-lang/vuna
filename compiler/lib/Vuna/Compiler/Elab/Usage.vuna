@@ -95,6 +95,17 @@ checkLamBinder sp name rig (used :: rest) =
     else 0
   in Vuna.Compiler.Common.bind (checkBinderRig sp name rig used) (\_ => OkC rest)
 
+-- 外层 env 里是否有同名、且**参与运行时**的 binder 吗（UN_ShadowedBinder 的比较对象）。
+--
+-- Rig0 的 binder 是擦除的：隐式类型/索引 binder（`f : a -> a` 的 `a`、实例方法签名里
+-- 自动量化的 `a`/`b`/`c`、`{n : Nat}`）由精化器在体前插成 `TLam Rig0`，源码里没有可供
+-- 用户引用的「外层 binder」。它们与体内同名参数相撞属于正常写法（`f a = a`、`Applicative`
+-- 实例的 `ap`/`liftA2`），不算遮蔽；只有两个运行时 binder 重名才告警。
+shadowedByRuntime : String -> List (Pair String Rig) -> Bool
+shadowedByRuntime name [] = False
+shadowedByRuntime name ((Pair n rig) :: rest) =
+  if isRigZero rig then shadowedByRuntime name rest else n == name || shadowedByRuntime name rest
+
 -- case 分支：binders 是 telescope 顺序（第一个字段最外），body usage 的前 k 项按
 -- 逆序对应它们（index 0 = 最后一个字段）。检查完整体 drop。
 checkAltBinders : Span -> List (Pair String Rig) -> List Rig -> Check (List Rig)
@@ -107,7 +118,7 @@ checkAltBindersGo sp ((Pair name rig) :: rest) us = case us of
   used :: more =>
     let
       _ =
-        if name /= "_" && memName name (map (\p => firstOf p) rest) then warnAt1 sp (ShadowedBinder name) name
+        if name /= "_" && shadowedByRuntime name rest then warnAt1 sp (ShadowedBinder name) name
         else 0
     in let
       _ = if isRigZero used && not (startsWith "_" name) then case rig of
@@ -134,7 +145,7 @@ checkTerm sp env t = case t of
   TLam name rig body =>
     let
       _ =
-        if name /= "_" && memName name (map (\p => firstOf p) env) then warnAt1 sp (ShadowedBinder name) name
+        if name /= "_" && shadowedByRuntime name env then warnAt1 sp (ShadowedBinder name) name
         else 0
       env2 = Base.List.Cons (Pair name rig) env
     in Vuna.Compiler.Common.bind (checkTerm sp env2 body) (\u => checkLamBinder sp name rig u)

@@ -237,3 +237,32 @@ out-contains: "localizedMessage":
 run: "$VUNA" check corpus/dt_err/03_hole.vuna --json 2>&1
 exit: 1
 out-contains: "kind":"span","name":"created"
+# M45：签名里自动量化的隐式类型变量不是用户可见 binder —— `f a = a` 与实例方法体内的
+# `\a => \b =>` 不报 UN_ShadowedBinder（镜像 base/lib/Base/IO.vuna 的 Applicative 实例）。
+run: sh -c 'printf "f : a -> a\nf a = a\n\nmain : Int\nmain = f 1\n" > "$TMPDIR/m45-generic-shadow.vuna"'
+run: "$VUNA" check -W "$TMPDIR/m45-generic-shadow.vuna" 2>&1
+out-not-contains: UN_ShadowedBinder
+run: sh -c 'd="$TMPDIR/m45-inst-shadow.vuna"; printf "%s\n" "trait T f where" "  m3 : (a -> b -> c) -> f a -> f b -> f c" "" "instance T IO where" "  m3 f ma mb = prim_bindIO ma (\a => prim_bindIO mb (\b => prim_pureIO (f a b)))" "" "main : Int" "main = 0" > "$d"'
+run: "$VUNA" check -W "$TMPDIR/m45-inst-shadow.vuna" 2>&1
+out-not-contains: UN_ShadowedBinder
+# 对照：两个运行时 binder 真遮蔽仍然告警（corpus/dt_err/43_shadowed_binder 也覆盖）。
+run: sh -c 'printf "f : Int -> Int\nf x = let\n  x = 1\n  in x\n\nmain : Int\nmain = f 0\n" > "$TMPDIR/m45-real-shadow.vuna"'
+run: "$VUNA" check -W "$TMPDIR/m45-real-shadow.vuna" 2>&1
+out-contains: [UN_ShadowedBinder]
+# M45：单文件 check 支持带 module 头的库模块（不再报 LD_ModuleHeaderInEntryFile）；
+# A 的真实遮蔽告警只报本文件，B 的类型错误定位到 B。
+run: sh -c 'd="$TMPDIR/m45-mod-file"; rm -rf "$d"; mkdir -p "$d/lib"; printf "[package]\nname = \"m45-mod-file\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "module A where\n\na : Int -> Int\na x = let\n  x = 1\n  in x\n" > "$d/lib/A.vuna"; printf "module B where\n\nb : Int\nb = \"boom\"\n" > "$d/lib/B.vuna"'
+run: "$VUNA" check "$TMPDIR/m45-mod-file/lib/A.vuna" 2>&1
+exit: 0
+out-not-contains: LD_ModuleHeaderInEntryFile
+run: "$VUNA" check -W "$TMPDIR/m45-mod-file/lib/A.vuna" 2>&1
+out-contains: [UN_ShadowedBinder]
+out-not-contains: LD_ModuleHeaderInEntryFile
+run: "$VUNA" check "$TMPDIR/m45-mod-file/lib/B.vuna" 2>&1
+exit: 1
+out-contains: lib/B.vuna:4
+out-contains: TC_TypeMismatch
+out-not-contains: LD_ModuleHeaderInEntryFile
+run: "$VUNA" check "$TMPDIR/m45-mod-file/lib/B.vuna" --continue-on-error 2>&1
+exit: 1
+out-not-contains: LD_ModuleHeaderInEntryFile

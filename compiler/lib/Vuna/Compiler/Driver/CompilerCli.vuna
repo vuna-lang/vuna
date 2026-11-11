@@ -26,11 +26,12 @@ import Base.Nat
 -- | CLI 辅助：compilerUsageLines（参数/退出码约定见 tooling.md）。
 compilerUsageLines : String -> String
 compilerUsageLines prog = """  ${prog} compile [--no-print] [--release] (<entry.vuna> | <package-dir>) <out-dir>
-  ${prog} check [--release] [--continue-on-error] (<entry.vuna> | <package-dir>)
+  ${prog} check [--release] [--continue-on-error] (<file.vuna> | <package-dir>)
+  <file.vuna>                   带 module 头 → 按库模块检查（包上下文）；无头 → 入口文件
   ${prog} build [--release] [--no-compile] [--out DIR] [--package NAME] [DIR]
   --no-print                    compile 生成的程序不打印 main 结果（默认打印）
   --release                     release 构建：拒绝 assert / todo 等 debug 专用构造
-  --continue-on-error           best-effort 多错误：逐次移除失败声明后继续（仅文件入口）
+  --continue-on-error           best-effort 多错误：逐次移除失败声明后继续（仅入口文件）
   ${prog} version, --version          显示版本
   ${prog} help, -h
 """
@@ -580,21 +581,48 @@ checkFileEntry path = case contextForFile path of
   OkC ctx =>
     let
       _ = applyDiagConfig (contextPackageOf ctx)
-    in case dtCheck ctx path of
-      ErrC e => if runIO (readRef continueOnErrorRef) then case dtCheckRecovering ctx path of
-        OkC ds =>
-          let
-            shown = takeDiags (runIO (readRef maxErrorsRef)) ds
-            _ = printDiagList "" shown
-          in if length shown == 0 then printDiag e else 1
-        ErrC e2 => printDiag e
-      else printDiag e
-      OkC _ =>
-        let
-          ws = filter (ownedByFile path) (takeWarnings 0)
-          shown = if showWarningsOn 0 || denyWarningsOn 0 then ws else []
-          _ = printDiagList "" shown
-        in if denyWarningsOn 0 && length ws > 0 then 1 else 0
+    in if isModuleFileEntry ctx path then checkModuleFileEntry ctx path else checkEntryFile ctx path
+
+-- M45：带 `module` 头、且**不是**当前包入口的文件按库模块检查。包入口保持入口语义
+-- （它的 module 头仍报 `LD_ModuleHeaderInEntryFile`，与包级 check 一致）；无头文件走入口。
+isModuleFileEntry : PackageContext -> String -> Bool
+isModuleFileEntry ctx path =
+  if isPackageEntryPath ctx path then False else dtFileHasModuleHeader path
+
+isPackageEntryPath : PackageContext -> String -> Bool
+isPackageEntryPath ctx path = case contextPackageOf ctx of
+  Nothing => False
+  Just pkg => stripDotSlash (absolutePath path) == stripDotSlash (packageEntry pkg)
+
+-- 单文件库模块检查：错误直接上报（`--continue-on-error` 的恢复只支持入口文件）；
+-- 成功时只打印/统计本文件的告警（依赖模块不刷屏）。
+checkModuleFileEntry : PackageContext -> String -> Int
+checkModuleFileEntry ctx path = case dtCheckModuleFile ctx path of
+  ErrC e => printDiag e
+  OkC _ =>
+    let
+      ws = filter (ownedByFile path) (takeWarnings 0)
+      shown = if showWarningsOn 0 || denyWarningsOn 0 then ws else []
+      _ = printDiagList "" shown
+    in if denyWarningsOn 0 && length ws > 0 then 1 else 0
+
+-- 入口文件检查（无 module 头；唯一支持 `--continue-on-error` 恢复的路径）。
+checkEntryFile : PackageContext -> String -> Int
+checkEntryFile ctx path = case dtCheck ctx path of
+  ErrC e => if runIO (readRef continueOnErrorRef) then case dtCheckRecovering ctx path of
+    OkC ds =>
+      let
+        shown = takeDiags (runIO (readRef maxErrorsRef)) ds
+        _ = printDiagList "" shown
+      in if length shown == 0 then printDiag e else 1
+    ErrC e2 => printDiag e
+  else printDiag e
+  OkC _ =>
+    let
+      ws = filter (ownedByFile path) (takeWarnings 0)
+      shown = if showWarningsOn 0 || denyWarningsOn 0 then ws else []
+      _ = printDiagList "" shown
+    in if denyWarningsOn 0 && length ws > 0 then 1 else 0
 
 -- ---------------------------------------------------------------
 -- build：包级逐模块 codegen 到 DIR（默认 <PKG-DIR>/.output），再跑 build.sh 链接到

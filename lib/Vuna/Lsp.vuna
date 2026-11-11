@@ -78,6 +78,10 @@ docRemove uri (x :: rest) = if x.docUri == uri then docRemove uri rest else x ::
 record LspState where
   stateDocs : List Doc
   stateShutdown : Bool
+  -- 客户端在 initialize 里声明了 `textDocument.diagnostic`（pull 能力）。为 True 时服务器
+  -- 只响应 pull 请求、不再 push：vscode-languageclient 会为 push / pull 各建一个诊断集合，
+  -- 两套同时用会让 Problems 面板里每条诊断出现两遍。
+  stateClientPull : Bool
   stateIndex : Maybe Index
   stateIndexTried : Bool
   stateRootHint : Maybe String
@@ -86,47 +90,51 @@ record LspState where
   stateDiagSession : Maybe DiagCache
 
 setDocs : List Doc -> LspState -> LspState
-setDocs docs (LspState _ s idx tried hint logs dc dsess) =
-  LspState docs s idx tried hint logs dc dsess
+setDocs docs (LspState _ s pull idx tried hint logs dc dsess) =
+  LspState docs s pull idx tried hint logs dc dsess
 
 setShutdown : Bool -> LspState -> LspState
-setShutdown s (LspState docs _ idx tried hint logs dc dsess) =
-  LspState docs s idx tried hint logs dc dsess
+setShutdown s (LspState docs _ pull idx tried hint logs dc dsess) =
+  LspState docs s pull idx tried hint logs dc dsess
+
+setClientPull : Bool -> LspState -> LspState
+setClientPull pull (LspState docs s _ idx tried hint logs dc dsess) =
+  LspState docs s pull idx tried hint logs dc dsess
 
 setIndex : Maybe Index -> LspState -> LspState
-setIndex idx (LspState docs s _ tried hint logs dc dsess) =
-  LspState docs s idx tried hint logs dc dsess
+setIndex idx (LspState docs s pull _ tried hint logs dc dsess) =
+  LspState docs s pull idx tried hint logs dc dsess
 
 setIndexTried : Bool -> LspState -> LspState
-setIndexTried tried (LspState docs s idx _ hint logs dc dsess) =
-  LspState docs s idx tried hint logs dc dsess
+setIndexTried tried (LspState docs s pull idx _ hint logs dc dsess) =
+  LspState docs s pull idx tried hint logs dc dsess
 
 setRootHintIfEmpty : String -> LspState -> LspState
-setRootHintIfEmpty hint (LspState docs s idx tried (existing@(Just prev)) logs dc dsess) =
-  LspState docs s idx tried existing logs dc dsess
-setRootHintIfEmpty hint (LspState docs s idx tried Nothing logs dc dsess) =
-  LspState docs s idx tried (Just hint) logs dc dsess
+setRootHintIfEmpty hint (LspState docs s pull idx tried (existing@(Just prev)) logs dc dsess) =
+  LspState docs s pull idx tried existing logs dc dsess
+setRootHintIfEmpty hint (LspState docs s pull idx tried Nothing logs dc dsess) =
+  LspState docs s pull idx tried (Just hint) logs dc dsess
 
 setDiagCache : List (Pair Int Json) -> LspState -> LspState
-setDiagCache dc (LspState docs s idx tried hint logs _ dsess) =
-  LspState docs s idx tried hint logs dc dsess
+setDiagCache dc (LspState docs s pull idx tried hint logs _ dsess) =
+  LspState docs s pull idx tried hint logs dc dsess
 
 setDiagSession : Maybe DiagCache -> LspState -> LspState
-setDiagSession dsess (LspState docs s idx tried hint logs dc _) =
-  LspState docs s idx tried hint logs dc dsess
+setDiagSession dsess (LspState docs s pull idx tried hint logs dc _) =
+  LspState docs s pull idx tried hint logs dc dsess
 
 -- M34.4：LSP 进程内诊断帧缓存（上限 32 条，前插）。
 pushDiag : Int -> Json -> LspState -> LspState
-pushDiag key frame (LspState docs s idx tried hint logs dc dsess) =
-  LspState docs s idx tried hint logs (truncateCache 32 (Pair key frame :: dc)) dsess
+pushDiag key frame (LspState docs s pull idx tried hint logs dc dsess) =
+  LspState docs s pull idx tried hint logs (truncateCache 32 (Pair key frame :: dc)) dsess
 
 truncateCache : Int -> List a -> List a
 truncateCache n [] = []
 truncateCache n (x :: rest) = if n <= 0 then [] else x :: truncateCache (n - 1) rest
 
 logTo : String -> LspState -> LspState
-logTo line (LspState docs s idx tried hint logs dc dsess) =
-  LspState docs s idx tried hint (line :: logs) dc dsess
+logTo line (LspState docs s pull idx tried hint logs dc dsess) =
+  LspState docs s pull idx tried hint (line :: logs) dc dsess
 
 -- 退出时一次写出（内存累积的日志，见 Protocol.flushLogLines）。
 flushLogs : LspState -> Int
@@ -201,8 +209,15 @@ initializeResult msg =
   responseOk (idOf msg)
     (JObj [Pair "capabilities" serverCapabilities, Pair "serverInfo" (JObj [Pair "name" (JStr lspServerName), Pair "version" (JStr lspServerVersion)])])
 
+-- 客户端是否在 initialize 声明了 pull 诊断能力（`textDocument.diagnostic` 为能力对象）。
+-- 声明了 ⇒ 只走 pull（服务器不再 push，避免客户端把同一诊断显示两份）；没声明 ⇒ push。
+clientSupportsPull : Json -> Bool
+clientSupportsPull msg = case jsonGetIn ["params", "capabilities", "textDocument", "diagnostic"] msg of
+  Just (JObj _) => True
+  _ => False
+
 -- didOpen：登记文档并推诊断（M34.4：同一 uri + 文本内容的诊断帧进程内缓存，重复请求
--- 不重复精化）。
+-- 不重复精化）。声明 pull 能力的客户端不 push（见 stateClientPull）。
 handleDidOpen : Json -> LspState -> Pair Bool (Pair LspState (List Json))
 handleDidOpen msg state =
   let
@@ -211,10 +226,13 @@ handleDidOpen msg state =
     version = versionOfParams params
     text = textOfParams params
     docs = docSet (Doc uri version text) state.stateDocs
-    pair = diagnoseCached uri version text state
-  in Pair False (Pair (setRootHintIfEmpty uri (setDocs docs (firstOf pair))) [secondOf pair])
+  in if state.stateClientPull then Pair False (Pair (setRootHintIfEmpty uri (setDocs docs state)) [])
+  else
+    let
+      pair = diagnoseCached uri version text state
+    in Pair False (Pair (setRootHintIfEmpty uri (setDocs docs (firstOf pair))) [secondOf pair])
 
--- didChange（Full 同步）：覆盖全文并重推诊断。
+-- didChange（Full 同步）：覆盖全文并重推诊断（pull 客户端只更新文档表）。
 handleDidChange : Json -> LspState -> Pair Bool (Pair LspState (List Json))
 handleDidChange msg state =
   let
@@ -228,8 +246,11 @@ handleDidChange msg state =
       Just v => v
     text = changedText params
     docs = docSet (Doc uri version text) state.stateDocs
-    pair = diagnoseCached uri version text state
-  in Pair False (Pair (setDocs docs (firstOf pair)) [secondOf pair])
+  in if state.stateClientPull then Pair False (Pair (setDocs docs state) [])
+  else
+    let
+      pair = diagnoseCached uri version text state
+    in Pair False (Pair (setDocs docs (firstOf pair)) [secondOf pair])
 
 -- M34.4：诊断帧缓存查询（key = uri + 文本内容哈希；未命中才跑完整精化并写缓存）。
 diagnoseCached : String -> Int -> String -> LspState -> Pair LspState Json
@@ -249,14 +270,15 @@ lookupDiag : Int -> List (Pair Int Json) -> Maybe Json
 lookupDiag key [] = Nothing
 lookupDiag key ((Pair k v) :: rest) = if k == key then Just v else lookupDiag key rest
 
--- didClose：移除文档并清空诊断。
+-- didClose：移除文档；push 模式清空诊断（pull 客户端由客户端侧自行清理）。
 handleDidClose : Json -> LspState -> Pair Bool (Pair LspState (List Json))
 handleDidClose msg state =
   let
     params = paramsOf msg
     uri = uriOfParams params
     docs = docRemove uri state.stateDocs
-  in Pair False (Pair (setDocs docs state) [publishDiagnosticsEmpty uri 0])
+  in if state.stateClientPull then Pair False (Pair (setDocs docs state) [])
+  else Pair False (Pair (setDocs docs state) [publishDiagnosticsEmpty uri 0])
 
 -- hover：洞目标（包上下文）→ 模块引用/局部绑定（parse 级）→ 标识符签名/注释。
 -- pull diagnostics（LSP 3.17）：与 push 同一条诊断链，返回完整报告；不额外发布通知。
@@ -471,7 +493,8 @@ handleFrame msg state = case jsonGet "method" msg of
     Just methodName => dispatch methodName msg state
 
 dispatch : String -> Json -> LspState -> Pair Bool (Pair LspState (List Json))
-dispatch "initialize" msg state = Pair False (Pair state [initializeResult msg])
+dispatch "initialize" msg state =
+  Pair False (Pair (setClientPull (clientSupportsPull msg) state) [initializeResult msg])
 dispatch "initialized" msg state = Pair False (Pair state [])
 dispatch "shutdown" msg state =
   Pair False (Pair (setShutdown True state) [responseOk (idOf msg) JNull])
@@ -539,7 +562,7 @@ runLsp _ =
   let
     outcome =
       serveConnection readChunk writeStdout lspWarn handleFrame
-        (logTo "starting" (LspState [] False Nothing False Nothing [] [] Nothing))
+        (logTo "starting" (LspState [] False False Nothing False Nothing [] [] Nothing))
     exit = firstOf outcome
     state = secondOf outcome
   in case exit of
