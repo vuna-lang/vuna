@@ -76,19 +76,19 @@ let rec v_Vuna_dCompiler_dDriver_dDiagRender_dlineAt = (fun mc0 mc1 -> (match mc
 
 let v_Vuna_dCompiler_dDriver_dDiagRender_dstripCr = (fun s -> (if ((Base_dString.v_Base_dString_dendsWith "\r") s) then (((Base_dString.v_Base_dString_dsubstring 0) (bi_natFromInt ((bi_strLength s) - 1))) s) else s))
 
-let rec v_Vuna_dCompiler_dDriver_dDiagRender_dfirstReadableLoc = (fun mc0 -> (match mc0 with
+let rec v_Vuna_dCompiler_dDriver_dDiagRender_dfirstReadableLocEff = (fun mc0 -> (match mc0 with
   | Base_dList.C_Base_dList_dList_Cons (dtb__18, dtb__19) -> (match dtb__18 with
   | { Base_dPair.f_Base_dPair_dPair_first = dtb__20; Base_dPair.f_Base_dPair_dPair_second = dtb__21 } -> (match dtb__21 with
-  | { Base_dPair.f_Base_dPair_dPair_first = dtb__22; Base_dPair.f_Base_dPair_dPair_second = dtb__23 } -> (if (dtb__22 < 1) then (v_Vuna_dCompiler_dDriver_dDiagRender_dfirstReadableLoc dtb__19) else (if (Base_dEff.v_Base_dEff_drunPure (Base_dHost.v_Base_dHost_dfileExists dtb__20)) then (if (Base_dEff.v_Base_dEff_drunPure (Base_dHost.v_Base_dHost_disDirectory dtb__20)) then (v_Vuna_dCompiler_dDriver_dDiagRender_dfirstReadableLoc dtb__19) else ((fun srcLines -> (match ((v_Vuna_dCompiler_dDriver_dDiagRender_dlineAt srcLines) dtb__22) with
-  | Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing -> (v_Vuna_dCompiler_dDriver_dDiagRender_dfirstReadableLoc dtb__19)
-  | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__24) -> (Base_dMaybe.C_Base_dMaybe_dMaybe_Just ({ Base_dPair.f_Base_dPair_dPair_first = dtb__20; Base_dPair.f_Base_dPair_dPair_second = { Base_dPair.f_Base_dPair_dPair_first = dtb__22; Base_dPair.f_Base_dPair_dPair_second = { Base_dPair.f_Base_dPair_dPair_first = dtb__23; Base_dPair.f_Base_dPair_dPair_second = (v_Vuna_dCompiler_dDriver_dDiagRender_dstripCr dtb__24) } } }))
+  | { Base_dPair.f_Base_dPair_dPair_first = dtb__22; Base_dPair.f_Base_dPair_dPair_second = dtb__23 } -> (if (dtb__22 < 1) then (v_Vuna_dCompiler_dDriver_dDiagRender_dfirstReadableLocEff dtb__19) else (((Base_dMonad.v_Base_dMonad_dbind Base_dEff.v_Monad_uBase_uEff_uEff_ur) (Base_dHost.v_Base_dHost_dfileExists dtb__20)) (fun exists -> (if exists then (((Base_dMonad.v_Base_dMonad_dbind Base_dEff.v_Monad_uBase_uEff_uEff_ur) (Base_dHost.v_Base_dHost_disDirectory dtb__20)) (fun isDir -> (if isDir then (v_Vuna_dCompiler_dDriver_dDiagRender_dfirstReadableLocEff dtb__19) else (((Base_dMonad.v_Base_dMonad_dbind Base_dEff.v_Monad_uBase_uEff_uEff_ur) (Base_dHost.v_Base_dHost_dreadFile dtb__20)) (fun raw -> (match ((v_Vuna_dCompiler_dDriver_dDiagRender_dlineAt (Base_dString.v_Base_dString_dlines raw)) dtb__22) with
+  | Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing -> (v_Vuna_dCompiler_dDriver_dDiagRender_dfirstReadableLocEff dtb__19)
+  | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__24) -> ((Base_dApplicative.v_Base_dApplicative_dpure Base_dEff.v_Applicative_uBase_uEff_uEff_ur) (Base_dMaybe.C_Base_dMaybe_dMaybe_Just ({ Base_dPair.f_Base_dPair_dPair_first = dtb__20; Base_dPair.f_Base_dPair_dPair_second = { Base_dPair.f_Base_dPair_dPair_first = dtb__22; Base_dPair.f_Base_dPair_dPair_second = { Base_dPair.f_Base_dPair_dPair_first = dtb__23; Base_dPair.f_Base_dPair_dPair_second = (v_Vuna_dCompiler_dDriver_dDiagRender_dstripCr dtb__24) } } })))
   | _ -> failwith "DT: impossible branch"
-)) (Base_dString.v_Base_dString_dlines (Base_dEff.v_Base_dEff_drunPure (Base_dHost.v_Base_dHost_dreadFile dtb__20))))) else (v_Vuna_dCompiler_dDriver_dDiagRender_dfirstReadableLoc dtb__19)))
-  | _ -> failwith "DT: impossible branch"
-)
+)))))) else (v_Vuna_dCompiler_dDriver_dDiagRender_dfirstReadableLocEff dtb__19)))))
   | _ -> failwith "DT: impossible branch"
 )
-  | Base_dList.C_Base_dList_dList_Nil -> Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing
+  | _ -> failwith "DT: impossible branch"
+)
+  | Base_dList.C_Base_dList_dList_Nil -> ((Base_dApplicative.v_Base_dApplicative_dpure Base_dEff.v_Applicative_uBase_uEff_uEff_ur) Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing)
   | _ -> failwith "DT: impossible branch"
 ))
 
@@ -124,23 +124,23 @@ let v_Vuna_dCompiler_dDriver_dDiagRender_dcaretRow = (fun width start carets -> 
 
 let v_Vuna_dCompiler_dDriver_dDiagRender_dsnippetBlock = (fun file line col srcLine -> ((fun display -> ((fun width -> ((fun start -> ((fun carets -> ((Base_dString.v_Base_dString_djoin "\n") (Base_dList.C_Base_dList_dList_Cons ((String.concat "" ["  --> "; file; ":"; (bi_strFromInt line); ":"; (bi_strFromInt col)]), (Base_dList.C_Base_dList_dList_Cons ((v_Vuna_dCompiler_dDriver_dDiagRender_dgutter width), (Base_dList.C_Base_dList_dList_Cons ((((v_Vuna_dCompiler_dDriver_dDiagRender_dnumberRow width) line) display), (Base_dList.C_Base_dList_dList_Cons ((((v_Vuna_dCompiler_dDriver_dDiagRender_dcaretRow width) start) carets), Base_dList.C_Base_dList_dList_Nil)))))))))) ((v_Vuna_dCompiler_dDriver_dDiagRender_dcaretWidth (Base_dList.dtp_unpack display)) start))) ((v_Vuna_dCompiler_dDriver_dDiagRender_dcaretStart display) col))) (bi_strLength (bi_strFromInt line)))) (v_Vuna_dCompiler_dDriver_dDiagRender_ddisplayLine srcLine)))
 
-let v_Vuna_dCompiler_dDriver_dDiagRender_drenderBody = (fun msg -> ((fun nd_uscrut1 -> (match nd_uscrut1 with
+let v_Vuna_dCompiler_dDriver_dDiagRender_drenderBodyEff = (fun msg -> (((Base_dMonad.v_Base_dMonad_dbind Base_dEff.v_Monad_uBase_uEff_uEff_ur) (v_Vuna_dCompiler_dDriver_dDiagRender_dfirstReadableLocEff (v_Vuna_dCompiler_dDriver_dDiagRender_dlocCandidates msg))) (fun found -> ((fun nd_uscrut2 -> (match nd_uscrut2 with
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__31) -> (match dtb__31 with
   | { Base_dPair.f_Base_dPair_dPair_first = dtb__32; Base_dPair.f_Base_dPair_dPair_second = dtb__33 } -> (match dtb__33 with
   | { Base_dPair.f_Base_dPair_dPair_first = dtb__34; Base_dPair.f_Base_dPair_dPair_second = dtb__35 } -> (match dtb__35 with
-  | { Base_dPair.f_Base_dPair_dPair_first = dtb__36; Base_dPair.f_Base_dPair_dPair_second = dtb__37 } -> (String.concat "" [msg; "\n"; ((((v_Vuna_dCompiler_dDriver_dDiagRender_dsnippetBlock dtb__32) dtb__34) dtb__36) dtb__37)])
+  | { Base_dPair.f_Base_dPair_dPair_first = dtb__36; Base_dPair.f_Base_dPair_dPair_second = dtb__37 } -> ((Base_dApplicative.v_Base_dApplicative_dpure Base_dEff.v_Applicative_uBase_uEff_uEff_ur) (String.concat "" [msg; "\n"; ((((v_Vuna_dCompiler_dDriver_dDiagRender_dsnippetBlock dtb__32) dtb__34) dtb__36) dtb__37)]))
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
 )
-  | Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing -> msg
+  | Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing -> ((Base_dApplicative.v_Base_dApplicative_dpure Base_dEff.v_Applicative_uBase_uEff_uEff_ur) msg)
   | _ -> failwith "DT: impossible branch"
-)) (v_Vuna_dCompiler_dDriver_dDiagRender_dfirstReadableLoc (v_Vuna_dCompiler_dDriver_dDiagRender_dlocCandidates msg))))
+)) found))))
 
-let v_Vuna_dCompiler_dDriver_dDiagRender_drenderBodyWithNewline = (fun body -> ((fun trailing -> ((fun core -> (if ((Base_dString.v_Base_dString_dcontains "\n") core) then body else ((fun rendered -> (if trailing then (rendered ^ "\n") else rendered)) (v_Vuna_dCompiler_dDriver_dDiagRender_drenderBody core)))) (if trailing then (((Base_dString.v_Base_dString_dsubstring 0) (bi_natFromInt ((bi_strLength body) - 1))) body) else body))) ((Base_dString.v_Base_dString_dendsWith "\n") body)))
+let v_Vuna_dCompiler_dDriver_dDiagRender_drenderBodyWithNewlineEff = (fun body -> ((fun trailing -> ((fun core -> (if ((Base_dString.v_Base_dString_dcontains "\n") core) then ((Base_dApplicative.v_Base_dApplicative_dpure Base_dEff.v_Applicative_uBase_uEff_uEff_ur) body) else (((Base_dMonad.v_Base_dMonad_dbind Base_dEff.v_Monad_uBase_uEff_uEff_ur) (v_Vuna_dCompiler_dDriver_dDiagRender_drenderBodyEff core)) (fun rendered -> ((Base_dApplicative.v_Base_dApplicative_dpure Base_dEff.v_Applicative_uBase_uEff_uEff_ur) (if trailing then (rendered ^ "\n") else rendered)))))) (if trailing then (((Base_dString.v_Base_dString_dsubstring 0) (bi_natFromInt ((bi_strLength body) - 1))) body) else body))) ((Base_dString.v_Base_dString_dendsWith "\n") body)))
 
-let v_Vuna_dCompiler_dDriver_dDiagRender_drenderCliDiagnostic = (fun s -> ((fun pp -> ((fun pk -> (String.concat "" [(Base_dPair.v_Base_dPair_dfirstOf pp); (Base_dPair.v_Base_dPair_dfirstOf pk); (v_Vuna_dCompiler_dDriver_dDiagRender_drenderBodyWithNewline (Base_dPair.v_Base_dPair_dsecondOf pk))])) (v_Vuna_dCompiler_dDriver_dDiagRender_dsplitPkg (Base_dPair.v_Base_dPair_dsecondOf pp)))) (v_Vuna_dCompiler_dDriver_dDiagRender_dsplitCliPrefix s)))
+let v_Vuna_dCompiler_dDriver_dDiagRender_drenderCliDiagnosticEff = (fun s -> ((fun pp -> ((fun pk -> (((Base_dMonad.v_Base_dMonad_dbind Base_dEff.v_Monad_uBase_uEff_uEff_ur) (v_Vuna_dCompiler_dDriver_dDiagRender_drenderBodyWithNewlineEff (Base_dPair.v_Base_dPair_dsecondOf pk))) (fun body -> ((Base_dApplicative.v_Base_dApplicative_dpure Base_dEff.v_Applicative_uBase_uEff_uEff_ur) (String.concat "" [(Base_dPair.v_Base_dPair_dfirstOf pp); (Base_dPair.v_Base_dPair_dfirstOf pk); body]))))) (v_Vuna_dCompiler_dDriver_dDiagRender_dsplitPkg (Base_dPair.v_Base_dPair_dsecondOf pp)))) (v_Vuna_dCompiler_dDriver_dDiagRender_dsplitCliPrefix s)))
 
-let v_Vuna_dCompiler_dDriver_dDiagRender_drenderWithPrefix = (fun prefix msg -> ((fun pk -> (String.concat "" [prefix; (Base_dPair.v_Base_dPair_dfirstOf pk); (v_Vuna_dCompiler_dDriver_dDiagRender_drenderBodyWithNewline (Base_dPair.v_Base_dPair_dsecondOf pk))])) (v_Vuna_dCompiler_dDriver_dDiagRender_dsplitPkg msg)))
+let v_Vuna_dCompiler_dDriver_dDiagRender_drenderWithPrefixEff = (fun prefix msg -> ((fun pk -> (((Base_dMonad.v_Base_dMonad_dbind Base_dEff.v_Monad_uBase_uEff_uEff_ur) (v_Vuna_dCompiler_dDriver_dDiagRender_drenderBodyWithNewlineEff (Base_dPair.v_Base_dPair_dsecondOf pk))) (fun body -> ((Base_dApplicative.v_Base_dApplicative_dpure Base_dEff.v_Applicative_uBase_uEff_uEff_ur) (String.concat "" [prefix; (Base_dPair.v_Base_dPair_dfirstOf pk); body]))))) (v_Vuna_dCompiler_dDriver_dDiagRender_dsplitPkg msg)))

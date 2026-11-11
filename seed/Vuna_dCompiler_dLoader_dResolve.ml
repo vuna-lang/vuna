@@ -463,12 +463,8 @@ let rec v_Vuna_dCompiler_dLoader_dResolve_dfirstEffect = (fun mc0 -> (match mc0 
   | _ -> failwith "DT: impossible branch"
 ))
 
-let v_Vuna_dCompiler_dLoader_dResolve_dunsafeExecutorName = Vuna_dCompiler_dIntrinsics.v_Vuna_dCompiler_dIntrinsics_dhostUnsafeExecutorName
-
-let v_Vuna_dCompiler_dLoader_dResolve_disUnsafeExecutor = (fun name -> (name = v_Vuna_dCompiler_dLoader_dResolve_dunsafeExecutorName))
-
 let rec v_Vuna_dCompiler_dLoader_dResolve_deffExpr = (fun e -> (match e with
-  | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_EVar (dtb__190, dtb__191) -> (if (if (v_Vuna_dCompiler_dLoader_dResolve_disEffectfulBuiltin dtb__190) then true else (v_Vuna_dCompiler_dLoader_dResolve_disUnsafeExecutor dtb__190)) then (Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__190)) else Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing)
+  | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_EVar (dtb__190, dtb__191) -> (if (v_Vuna_dCompiler_dLoader_dResolve_disEffectfulBuiltin dtb__190) then (Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__190)) else Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing)
   | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_EInt (dtb__192, dtb__193) -> Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing
   | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_EStr (dtb__194, dtb__195) -> Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing
   | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_EFloat (dtb__196, dtb__197) -> Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing
@@ -567,7 +563,7 @@ let v_Vuna_dCompiler_dLoader_dResolve_disUnsafeCapability = (fun mc0 -> (match m
   | _ -> false
 ))
 
-let v_Vuna_dCompiler_dLoader_dResolve_disUnsafeGatedName = (fun name -> (if (v_Vuna_dCompiler_dLoader_dResolve_disUnsafeExecutor name) then true else (match (Vuna_dCompiler_dIntrinsics.v_Vuna_dCompiler_dIntrinsics_dfindIntrinsic name) with
+let v_Vuna_dCompiler_dLoader_dResolve_disUnsafeGatedName = (fun name -> (match (Vuna_dCompiler_dIntrinsics.v_Vuna_dCompiler_dIntrinsics_dfindIntrinsic name) with
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__301) -> (match (Vuna_dCompiler_dIntrinsics.v_Vuna_dCompiler_dIntrinsics_dintrinsicCapability dtb__301) with
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__302) -> (v_Vuna_dCompiler_dLoader_dResolve_disUnsafeCapability dtb__302)
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing -> false
@@ -575,7 +571,7 @@ let v_Vuna_dCompiler_dLoader_dResolve_disUnsafeGatedName = (fun name -> (if (v_V
 )
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing -> false
   | _ -> failwith "DT: impossible branch"
-)))
+))
 
 let rec v_Vuna_dCompiler_dLoader_dResolve_dunsafeExpr = (fun mc0 -> (match mc0 with
   | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_EAnn (dtb__303, dtb__304, dtb__305) -> (v_Vuna_dCompiler_dLoader_dResolve_dunsafeExpr dtb__303)
@@ -748,7 +744,7 @@ let v_Vuna_dCompiler_dLoader_dResolve_dcheckDefinitionTrust = (fun mc0 mc1 mc2 m
 
 let v_Vuna_dCompiler_dLoader_dResolve_dcheckModuleEffects = (fun label pkg caps decls -> (match (v_Vuna_dCompiler_dLoader_dResolve_deffDecls decls) with
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing -> (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC (0))
-  | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__440) -> (if (v_Vuna_dCompiler_dLoader_dResolve_disUnsafeExecutor dtb__440) then (if ((Base_dList.v_Base_dList_dmemName "unsafe") caps) then (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC (0)) else (Vuna_dCompiler_dDiag.v_Vuna_dCompiler_dDiag_derr (String.concat "" [label; ": `runPure` executes IO outside main; requires capability `unsafe` in "; (v_Vuna_dCompiler_dLoader_dResolve_dpackageLabelForEffects pkg); " (declare [capabilities] effects = [\"unsafe\"])"]))) else (if ((v_Vuna_dCompiler_dLoader_dResolve_dallowsEffect caps) dtb__440) then (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC (0)) else (match (Vuna_dCompiler_dIntrinsics.v_Vuna_dCompiler_dIntrinsics_dfindIntrinsic dtb__440) with
+  | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__440) -> (if ((v_Vuna_dCompiler_dLoader_dResolve_dallowsEffect caps) dtb__440) then (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC (0)) else (match (Vuna_dCompiler_dIntrinsics.v_Vuna_dCompiler_dIntrinsics_dfindIntrinsic dtb__440) with
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__441) -> (match (Vuna_dCompiler_dIntrinsics.v_Vuna_dCompiler_dIntrinsics_dintrinsicCapability dtb__441) with
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__442) -> ((((Vuna_dCompiler_dDiagnostics_dPkg.v_Vuna_dCompiler_dDiagnostics_dPkg_dpkgNoLoc3 (Vuna_dCompiler_dDiagnostics_dPkg.C_Vuna_dCompiler_dDiagnostics_dPkg_dPkgErr_EffectCapabilityRequired (dtb__440, (Vuna_dCompiler_dIntrinsics.v_Vuna_dCompiler_dIntrinsics_dcapabilityName dtb__442), (v_Vuna_dCompiler_dLoader_dResolve_dpackageLabelForEffects pkg)))) dtb__440) (Vuna_dCompiler_dIntrinsics.v_Vuna_dCompiler_dIntrinsics_dcapabilityName dtb__442)) (v_Vuna_dCompiler_dLoader_dResolve_dpackageLabelForEffects pkg))
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing -> (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC (0))
@@ -756,7 +752,7 @@ let v_Vuna_dCompiler_dLoader_dResolve_dcheckModuleEffects = (fun label pkg caps 
 )
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing -> (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC (0))
   | _ -> failwith "DT: impossible branch"
-)))
+))
   | _ -> failwith "DT: impossible branch"
 ))
 

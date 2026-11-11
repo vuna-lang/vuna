@@ -1,11 +1,5 @@
 open Vuna_runtime
-type t_Vuna_dCompiler_dElab_dMetaSpans_dMetaSpanBox = { f_Vuna_dCompiler_dElab_dMetaSpans_dMetaSpanBox_metaSpanItems : (int, Vuna_dCompiler_dSource.t_Vuna_dCompiler_dSource_dSpan) Base_dPair.t_Base_dPair_dPair Base_dList.t_Base_dList_dList; f_Vuna_dCompiler_dElab_dMetaSpans_dMetaSpanBox_metaSpanTag : int }
-
-let v_Vuna_dCompiler_dElab_dMetaSpans_dmetaSpanRef = (Base_dEff.v_Base_dEff_drunPure (Base_dIORef.v_Base_dIORef_dnewRef { f_Vuna_dCompiler_dElab_dMetaSpans_dMetaSpanBox_metaSpanItems = Base_dList.C_Base_dList_dList_Nil; f_Vuna_dCompiler_dElab_dMetaSpans_dMetaSpanBox_metaSpanTag = 0 }))
-
-let v_Vuna_dCompiler_dElab_dMetaSpans_dresetMetaSpans = (fun _u -> (Base_dEff.v_Base_dEff_drunPure ((Base_dIORef.v_Base_dIORef_dwriteRef v_Vuna_dCompiler_dElab_dMetaSpans_dmetaSpanRef) { f_Vuna_dCompiler_dElab_dMetaSpans_dMetaSpanBox_metaSpanItems = Base_dList.C_Base_dList_dList_Nil; f_Vuna_dCompiler_dElab_dMetaSpans_dMetaSpanBox_metaSpanTag = 0 })))
-
-let v_Vuna_dCompiler_dElab_dMetaSpans_drecordMetaSpan = (fun m sp -> ((fun box -> (Base_dEff.v_Base_dEff_drunPure ((Base_dIORef.v_Base_dIORef_dwriteRef v_Vuna_dCompiler_dElab_dMetaSpans_dmetaSpanRef) { f_Vuna_dCompiler_dElab_dMetaSpans_dMetaSpanBox_metaSpanItems = (Base_dList.C_Base_dList_dList_Cons ({ Base_dPair.f_Base_dPair_dPair_first = m; Base_dPair.f_Base_dPair_dPair_second = sp }, (box).f_Vuna_dCompiler_dElab_dMetaSpans_dMetaSpanBox_metaSpanItems)); f_Vuna_dCompiler_dElab_dMetaSpans_dMetaSpanBox_metaSpanTag = (box).f_Vuna_dCompiler_dElab_dMetaSpans_dMetaSpanBox_metaSpanTag }))) (Base_dEff.v_Base_dEff_drunPure (Base_dIORef.v_Base_dIORef_dreadRef v_Vuna_dCompiler_dElab_dMetaSpans_dmetaSpanRef))))
+let v_Vuna_dCompiler_dElab_dMetaSpans_drecordMetaSpan = (fun ec m sp -> ((Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_decPutMetaSpans ec) (Base_dList.C_Base_dList_dList_Cons ({ Base_dPair.f_Base_dPair_dPair_first = m; Base_dPair.f_Base_dPair_dPair_second = sp }, (Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_decMetaSpans ec)))))
 
 let rec v_Vuna_dCompiler_dElab_dMetaSpans_dlookupMeta = (fun mc0 mc1 -> (match mc1 with
   | Base_dList.C_Base_dList_dList_Cons (dtb__0, dtb__1) -> (match dtb__0 with
@@ -16,4 +10,8 @@ let rec v_Vuna_dCompiler_dElab_dMetaSpans_dlookupMeta = (fun mc0 mc1 -> (match m
   | _ -> failwith "DT: impossible branch"
 ))
 
-let v_Vuna_dCompiler_dElab_dMetaSpans_dmetaSpanOf = (fun m -> ((v_Vuna_dCompiler_dElab_dMetaSpans_dlookupMeta m) ((Base_dEff.v_Base_dEff_drunPure (Base_dIORef.v_Base_dIORef_dreadRef v_Vuna_dCompiler_dElab_dMetaSpans_dmetaSpanRef))).f_Vuna_dCompiler_dElab_dMetaSpans_dMetaSpanBox_metaSpanItems))
+let v_Vuna_dCompiler_dElab_dMetaSpans_dmetaSpanOf = (fun ec m -> ((v_Vuna_dCompiler_dElab_dMetaSpans_dlookupMeta m) (Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_decMetaSpans ec)))
+
+let v_Vuna_dCompiler_dElab_dMetaSpans_dnewMetaAt = (fun sp ctx ec -> ((fun p -> { Base_dPair.f_Base_dPair_dPair_first = (Base_dPair.v_Base_dPair_dfirstOf p); Base_dPair.f_Base_dPair_dPair_second = (((v_Vuna_dCompiler_dElab_dMetaSpans_drecordMetaSpan (Base_dPair.v_Base_dPair_dsecondOf p)) (Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_decNext ec)) sp) }) ((Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_dnewMeta ctx) ec)))
+
+let v_Vuna_dCompiler_dElab_dMetaSpans_dnewHoleMeta = (fun ctx ec sp ty name -> ((fun m -> ((fun p -> ((fun ec1 -> { Base_dPair.f_Base_dPair_dPair_first = (Base_dPair.v_Base_dPair_dfirstOf p); Base_dPair.f_Base_dPair_dPair_second = (((v_Vuna_dCompiler_dElab_dMetaSpans_drecordMetaSpan ec1) m) sp) }) ((Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_decAddGoal (Base_dPair.v_Base_dPair_dsecondOf p)) { Vuna_dCompiler_dElab_dTypes.f_Vuna_dCompiler_dElab_dTypes_dDtGoal_dtGoalMeta = m; Vuna_dCompiler_dElab_dTypes.f_Vuna_dCompiler_dElab_dTypes_dDtGoal_dtGoalSpan = sp; Vuna_dCompiler_dElab_dTypes.f_Vuna_dCompiler_dElab_dTypes_dDtGoal_dtGoalType = ty; Vuna_dCompiler_dElab_dTypes.f_Vuna_dCompiler_dElab_dTypes_dDtGoal_dtGoalCtx = (ctx).Vuna_dCompiler_dElab_dTypes.f_Vuna_dCompiler_dElab_dTypes_dCtx_ctxItems; Vuna_dCompiler_dElab_dTypes.f_Vuna_dCompiler_dElab_dTypes_dDtGoal_dtGoalName = name }))) ((Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_dnewMeta ctx) ec))) (Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_decNext ec)))

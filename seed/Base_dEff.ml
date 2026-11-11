@@ -33,7 +33,7 @@ let v_Applicative_uBase_uEff_uEff_ur = (Base_dApplicative.C_Dict_uBase_dApplicat
   | _ -> failwith "DT: impossible branch"
 )))))))
 
-let v_Base_dEff_ddefaultInstance = "main"
+let v_Base_dEff_ddefaultInstance = "default"
 
 let v_Base_dEff_deffPrim = (fun f -> (C_Base_dEff_dEff_MkEff ((fun _u -> (f 0)))))
 
@@ -48,8 +48,6 @@ let v_Base_dEff_drunThunk = (fun e _uarity3 -> ((match e with
 ) _uarity3))
 
 let v_Base_dEff_drunPure = (fun e -> ((v_Base_dEff_drunThunk e) C_Base_dEff_dEffUnit_MkEffUnit))
-
-let v_Base_dEff_ddeferIO = (fun io -> (C_Base_dEff_dEff_MkEff ((fun _u -> ((fun io -> io 0) io)))))
 
 let v_Base_dEff_drunEff = (fun e -> ((v_Base_dEff_drunThunk e) C_Base_dEff_dEffUnit_MkEffUnit))
 

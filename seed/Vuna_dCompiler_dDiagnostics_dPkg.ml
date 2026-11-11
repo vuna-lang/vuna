@@ -41,7 +41,7 @@ let v_Vuna_dCompiler_dDiagnostics_dPkg_dpkgCode = (fun mc0 -> (match mc0 with
 ))
 
 let v_Vuna_dCompiler_dDiagnostics_dPkg_dpkgTemplate = (fun mc0 -> (match mc0 with
-  | C_Vuna_dCompiler_dDiagnostics_dPkg_dPkgErr_EffectCapabilityRequired (dtb__30, dtb__31, dtb__32) -> "effectful builtin `<0>` requires capability `<1>` in <2> (declare [capabilities] effects = [\"<1>\"] or use Base.IO / typed effects)"
+  | C_Vuna_dCompiler_dDiagnostics_dPkg_dPkgErr_EffectCapabilityRequired (dtb__30, dtb__31, dtb__32) -> "effectful builtin `<0>` requires capability `<1>` in <2> (declare [capabilities] effects = [\"<1>\"] or use Base.Eff / typed effects)"
   | C_Vuna_dCompiler_dDiagnostics_dPkg_dPkgErr_TrustPointMissing (dtb__33, dtb__34) -> "trust point \"<1>\" is not a definition of this package; [trust] unsafe may only list real definitions (Module.def)"
   | C_Vuna_dCompiler_dDiagnostics_dPkg_dPkgErr_UnknownKey (dtb__35, dtb__36) -> "unknown key \"<0>\" in [<1>]"
   | C_Vuna_dCompiler_dDiagnostics_dPkg_dPkgErr_UnknownSection (dtb__37) -> "unknown section [<0>]"
@@ -51,7 +51,7 @@ let v_Vuna_dCompiler_dDiagnostics_dPkg_dpkgTemplate = (fun mc0 -> (match mc0 wit
   | C_Vuna_dCompiler_dDiagnostics_dPkg_dPkgErr_LibraryWithoutEntry (dtb__41) -> "check: library package <0> has no app/Main.vuna (executable) and no [export].modules (library)"
   | C_Vuna_dCompiler_dDiagnostics_dPkg_dPkgErr_MissingBase (dtb__42) -> "pkg: cannot locate vuna-base (tried: <0>); set VUNA_BASE to a directory containing vuna.toml"
   | C_Vuna_dCompiler_dDiagnostics_dPkg_dPkgErr_MissingManifest (dtb__43) -> "missing vuna.toml in <0>"
-  | C_Vuna_dCompiler_dDiagnostics_dPkg_dPkgErr_InvalidTrustPoint (dtb__44) -> "invalid trust point \"<0>\" (expected a qualified definition name such as \"Base.IO.runPure\")"
+  | C_Vuna_dCompiler_dDiagnostics_dPkg_dPkgErr_InvalidTrustPoint (dtb__44) -> "invalid trust point \"<0>\" (expected a qualified definition name such as \"Base.Eff.runPure\")"
   | C_Vuna_dCompiler_dDiagnostics_dPkg_dPkgErr_InvalidPackageName (dtb__45) -> "invalid package name \"<0>\" (allowed characters: a-z, 0-9, '-')"
   | C_Vuna_dCompiler_dDiagnostics_dPkg_dPkgErr_InvalidExportModule (dtb__46) -> "invalid export module \"<0>\" (segments must match [A-Z][A-Za-z0-9_]*)"
   | C_Vuna_dCompiler_dDiagnostics_dPkg_dPkgErr_Invalid (dtb__47) -> "<0>"

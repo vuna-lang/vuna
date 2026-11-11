@@ -27,7 +27,7 @@ let v_Vuna_dCompiler_dDiagnostics_dCg_dcgTemplate = (fun mc0 -> (match mc0 with
   | C_Vuna_dCompiler_dDiagnostics_dCg_dCgErr_TypeUsedAtRuntime -> "a type is used at runtime (M13 limitation)"
   | C_Vuna_dCompiler_dDiagnostics_dCg_dCgErr_NoMain -> "no main definition"
   | C_Vuna_dCompiler_dDiagnostics_dCg_dCgErr_MainNotValue -> "main does not reduce to a value"
-  | C_Vuna_dCompiler_dDiagnostics_dCg_dCgErr_InterpCannotExecuteEffects -> "interp cannot execute effects (main : IO a / Eff [] a); compile and run the program instead"
+  | C_Vuna_dCompiler_dDiagnostics_dCg_dCgErr_InterpCannotExecuteEffects -> "interp cannot execute effects (main : Eff [] a); compile and run the program instead"
   | C_Vuna_dCompiler_dDiagnostics_dCg_dCgErr_DependencyCycle -> "dependency cycle between runtime definitions"
   | _ -> failwith "DT: impossible branch"
 ))

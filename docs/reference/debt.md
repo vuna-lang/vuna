@@ -54,7 +54,6 @@
 
 | ID | 仍未成立的事实 | 证据 | 归属 |
 | --- | --- | --- | --- |
-| D59 | 动作类型已统一为 `Eff`：入口 `main : Eff [] a`、`runPure`、handler answer `Eff []` + `joinEff`、`ST`/`IORef`/`MArray`/`Buffer` 全 `Eff`，内建 `IO` 类型与 IO 原语表已删除，宿主层只剩 `prim_eff_*` + `Base.Host` 归一化。M4 已落地 `EffCheck`（`Vuna.Compiler.Common`）、`DiagRender` Eff API、`CacheFormat.readFramedEff`、`CliOpts` 显式参数（无 IORef）、compiler CLI / LSP / `Diag.Format` 全量显式 Eff。**剩余问题**：`compiler/lib` + `lib` 仍有 13 处 `runPure (...)`（仅 2 文件）；ambient state 已全部清理（Sink 的 warning/parse-error/used-import 三表已改为 `Ec`/返回值显式通道）；`Cli.Args`/`Files` 仍是纯 API | `nix/eff-boundary.allowlist`（基线 0；sanctioned 例外 1 文件） | M4 已完成（D59 待 rotation 与 flake check 验收后关闭） |
 
 ## 相关阅读
 

@@ -17,27 +17,35 @@ let v_Vuna_dCompiler_dDriver_dSplit_dsplitDeps = (fun mc0 -> (match mc0 with
 ))
 
 let rec v_Vuna_dCompiler_dDriver_dSplit_dwriteSplitFiles = (fun mc0 mc1 -> (match mc1 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__9, dtb__10) -> ((Vuna_dCompiler_dCommon.v_Vuna_dCompiler_dCommon_dbind ((v_Vuna_dCompiler_dDriver_dSplit_dwriteSplitFiles mc0) dtb__10)) (fun n -> ((fun _u -> (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC ((n + 1)))) (Base_dEff.v_Base_dEff_drunPure (((fun dtio_0 dtio_1 -> Base_dEff.C_Base_dEff_dEff_MkEff (fun (_ : Base_dEff.t_Base_dEff_dEffUnit) -> dtp_writeFile dtio_0 dtio_1)) (String.concat "" [mc0; "/"; (v_Vuna_dCompiler_dDriver_dSplit_dsplitName dtb__9)])) (v_Vuna_dCompiler_dDriver_dSplit_dsplitText dtb__9))))))
-  | Base_dList.C_Base_dList_dList_Nil -> (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC (0))
+  | Base_dList.C_Base_dList_dList_Cons (dtb__9, dtb__10) -> (((Base_dMonad.v_Base_dMonad_dbind Base_dEff.v_Monad_uBase_uEff_uEff_ur) ((v_Vuna_dCompiler_dDriver_dSplit_dwriteSplitFiles mc0) dtb__10)) (fun restR -> (match restR with
+  | Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_ErrC (dtb__11) -> ((Base_dApplicative.v_Base_dApplicative_dpure Base_dEff.v_Applicative_uBase_uEff_uEff_ur) (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_ErrC (dtb__11)))
+  | Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC (dtb__12) -> (((Base_dMonad.v_Base_dMonad_dbind Base_dEff.v_Monad_uBase_uEff_uEff_ur) (((fun dtio_0 dtio_1 -> Base_dEff.C_Base_dEff_dEff_MkEff (fun (_ : Base_dEff.t_Base_dEff_dEffUnit) -> dtp_writeFile dtio_0 dtio_1)) (String.concat "" [mc0; "/"; (v_Vuna_dCompiler_dDriver_dSplit_dsplitName dtb__9)])) (v_Vuna_dCompiler_dDriver_dSplit_dsplitText dtb__9))) (fun _u -> ((Base_dApplicative.v_Base_dApplicative_dpure Base_dEff.v_Applicative_uBase_uEff_uEff_ur) (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC ((dtb__12 + 1))))))
+  | _ -> failwith "DT: impossible branch"
+)))
+  | Base_dList.C_Base_dList_dList_Nil -> ((Base_dApplicative.v_Base_dApplicative_dpure Base_dEff.v_Applicative_uBase_uEff_uEff_ur) (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC (0)))
   | _ -> failwith "DT: impossible branch"
 ))
 
 let rec v_Vuna_dCompiler_dDriver_dSplit_dwriteSplitFilesIfChanged = (fun mc0 mc1 -> (match mc1 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__11, dtb__12) -> ((Vuna_dCompiler_dCommon.v_Vuna_dCompiler_dCommon_dbind ((v_Vuna_dCompiler_dDriver_dSplit_dwriteSplitFilesIfChanged mc0) dtb__12)) (fun n -> ((fun path -> ((fun text -> ((fun same -> ((fun _u -> (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC ((n + 1)))) (if same then 0 else (Base_dEff.v_Base_dEff_drunPure (((fun dtio_0 dtio_1 -> Base_dEff.C_Base_dEff_dEff_MkEff (fun (_ : Base_dEff.t_Base_dEff_dEffUnit) -> dtp_writeFile dtio_0 dtio_1)) path) text))))) (if (Base_dEff.v_Base_dEff_drunPure ((fun dtio_0 -> Base_dEff.C_Base_dEff_dEff_MkEff (fun (_ : Base_dEff.t_Base_dEff_dEffUnit) -> dtp_fileExists dtio_0)) path)) then ((Base_dEff.v_Base_dEff_drunPure ((fun dtio_0 -> Base_dEff.C_Base_dEff_dEff_MkEff (fun (_ : Base_dEff.t_Base_dEff_dEffUnit) -> dtp_readFile dtio_0)) path)) = text) else false))) (v_Vuna_dCompiler_dDriver_dSplit_dsplitText dtb__11))) (String.concat "" [mc0; "/"; (v_Vuna_dCompiler_dDriver_dSplit_dsplitName dtb__11)]))))
-  | Base_dList.C_Base_dList_dList_Nil -> (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC (0))
+  | Base_dList.C_Base_dList_dList_Cons (dtb__13, dtb__14) -> (((Base_dMonad.v_Base_dMonad_dbind Base_dEff.v_Monad_uBase_uEff_uEff_ur) ((v_Vuna_dCompiler_dDriver_dSplit_dwriteSplitFilesIfChanged mc0) dtb__14)) (fun restR -> (match restR with
+  | Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_ErrC (dtb__15) -> ((Base_dApplicative.v_Base_dApplicative_dpure Base_dEff.v_Applicative_uBase_uEff_uEff_ur) (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_ErrC (dtb__15)))
+  | Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC (dtb__16) -> ((fun path -> ((fun text -> (((Base_dMonad.v_Base_dMonad_dbind Base_dEff.v_Monad_uBase_uEff_uEff_ur) ((fun dtio_0 -> Base_dEff.C_Base_dEff_dEff_MkEff (fun (_ : Base_dEff.t_Base_dEff_dEffUnit) -> dtp_fileExists dtio_0)) path)) (fun exists -> (if exists then (((Base_dMonad.v_Base_dMonad_dbind Base_dEff.v_Monad_uBase_uEff_uEff_ur) ((fun dtio_0 -> Base_dEff.C_Base_dEff_dEff_MkEff (fun (_ : Base_dEff.t_Base_dEff_dEffUnit) -> dtp_readFile dtio_0)) path)) (fun old -> (if (old = text) then ((Base_dApplicative.v_Base_dApplicative_dpure Base_dEff.v_Applicative_uBase_uEff_uEff_ur) (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC ((dtb__16 + 1)))) else (((Base_dMonad.v_Base_dMonad_dbind Base_dEff.v_Monad_uBase_uEff_uEff_ur) (((fun dtio_0 dtio_1 -> Base_dEff.C_Base_dEff_dEff_MkEff (fun (_ : Base_dEff.t_Base_dEff_dEffUnit) -> dtp_writeFile dtio_0 dtio_1)) path) text)) (fun _u -> ((Base_dApplicative.v_Base_dApplicative_dpure Base_dEff.v_Applicative_uBase_uEff_uEff_ur) (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC ((dtb__16 + 1))))))))) else (((Base_dMonad.v_Base_dMonad_dbind Base_dEff.v_Monad_uBase_uEff_uEff_ur) (((fun dtio_0 dtio_1 -> Base_dEff.C_Base_dEff_dEff_MkEff (fun (_ : Base_dEff.t_Base_dEff_dEffUnit) -> dtp_writeFile dtio_0 dtio_1)) path) text)) (fun _u -> ((Base_dApplicative.v_Base_dApplicative_dpure Base_dEff.v_Applicative_uBase_uEff_uEff_ur) (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC ((dtb__16 + 1)))))))))) (v_Vuna_dCompiler_dDriver_dSplit_dsplitText dtb__13))) (String.concat "" [mc0; "/"; (v_Vuna_dCompiler_dDriver_dSplit_dsplitName dtb__13)]))
+  | _ -> failwith "DT: impossible branch"
+)))
+  | Base_dList.C_Base_dList_dList_Nil -> ((Base_dApplicative.v_Base_dApplicative_dpure Base_dEff.v_Applicative_uBase_uEff_uEff_ur) (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC (0)))
   | _ -> failwith "DT: impossible branch"
 ))
 
 let v_Vuna_dCompiler_dDriver_dSplit_dstripMl = (fun name -> (((Base_dString.v_Base_dString_dsubstring 0) (bi_natSub (Base_dString.v_Base_dString_dbyteLength name) 3)) name))
 
 let rec v_Vuna_dCompiler_dDriver_dSplit_dsplitGraph = (fun mc0 -> (match mc0 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__13, dtb__14) -> ((fun name -> (if ((Base_dString.v_Base_dString_dendsWith ".ml") name) then (Base_dList.C_Base_dList_dList_Cons ({ Base_dPair.f_Base_dPair_dPair_first = (v_Vuna_dCompiler_dDriver_dSplit_dstripMl name); Base_dPair.f_Base_dPair_dPair_second = (v_Vuna_dCompiler_dDriver_dSplit_dsplitDeps dtb__13) }, (v_Vuna_dCompiler_dDriver_dSplit_dsplitGraph dtb__14))) else (v_Vuna_dCompiler_dDriver_dSplit_dsplitGraph dtb__14))) (v_Vuna_dCompiler_dDriver_dSplit_dsplitName dtb__13))
+  | Base_dList.C_Base_dList_dList_Cons (dtb__17, dtb__18) -> ((fun name -> (if ((Base_dString.v_Base_dString_dendsWith ".ml") name) then (Base_dList.C_Base_dList_dList_Cons ({ Base_dPair.f_Base_dPair_dPair_first = (v_Vuna_dCompiler_dDriver_dSplit_dstripMl name); Base_dPair.f_Base_dPair_dPair_second = (v_Vuna_dCompiler_dDriver_dSplit_dsplitDeps dtb__17) }, (v_Vuna_dCompiler_dDriver_dSplit_dsplitGraph dtb__18))) else (v_Vuna_dCompiler_dDriver_dSplit_dsplitGraph dtb__18))) (v_Vuna_dCompiler_dDriver_dSplit_dsplitName dtb__17))
   | Base_dList.C_Base_dList_dList_Nil -> Base_dList.C_Base_dList_dList_Nil
   | _ -> failwith "DT: impossible branch"
 ))
 
 let v_Vuna_dCompiler_dDriver_dSplit_ddepthOfUnit = (fun depths unit -> (match ((((Base_dHashMap.v_Base_dHashMap_dlookup Base_dString.v_Hashable_uString) Base_dString.v_Eq_uString) unit) depths) with
-  | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__15) -> dtb__15
+  | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__19) -> dtb__19
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing -> 0
   | _ -> failwith "DT: impossible branch"
 ))
@@ -45,14 +53,14 @@ let v_Vuna_dCompiler_dDriver_dSplit_ddepthOfUnit = (fun depths unit -> (match ((
 let v_Vuna_dCompiler_dDriver_dSplit_dmaxInt = (fun a b -> (if (a > b) then a else b))
 
 let rec v_Vuna_dCompiler_dDriver_dSplit_ddepthOfDeps = (fun mc0 mc1 -> (match mc1 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__16, dtb__17) -> ((v_Vuna_dCompiler_dDriver_dSplit_dmaxInt (((v_Vuna_dCompiler_dDriver_dSplit_ddepthOfUnit mc0) dtb__16) + 1)) ((v_Vuna_dCompiler_dDriver_dSplit_ddepthOfDeps mc0) dtb__17))
+  | Base_dList.C_Base_dList_dList_Cons (dtb__20, dtb__21) -> ((v_Vuna_dCompiler_dDriver_dSplit_dmaxInt (((v_Vuna_dCompiler_dDriver_dSplit_ddepthOfUnit mc0) dtb__20) + 1)) ((v_Vuna_dCompiler_dDriver_dSplit_ddepthOfDeps mc0) dtb__21))
   | Base_dList.C_Base_dList_dList_Nil -> 0
   | _ -> failwith "DT: impossible branch"
 ))
 
 let rec v_Vuna_dCompiler_dDriver_dSplit_dsplitDepths = (fun mc0 mc1 -> (match mc0 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__18, dtb__19) -> (match dtb__18 with
-  | { Base_dPair.f_Base_dPair_dPair_first = dtb__20; Base_dPair.f_Base_dPair_dPair_second = dtb__21 } -> ((v_Vuna_dCompiler_dDriver_dSplit_dsplitDepths dtb__19) ((((Base_dHashMap.v_Base_dHashMap_dinsert Base_dString.v_Hashable_uString) dtb__20) ((v_Vuna_dCompiler_dDriver_dSplit_ddepthOfDeps mc1) dtb__21)) mc1))
+  | Base_dList.C_Base_dList_dList_Cons (dtb__22, dtb__23) -> (match dtb__22 with
+  | { Base_dPair.f_Base_dPair_dPair_first = dtb__24; Base_dPair.f_Base_dPair_dPair_second = dtb__25 } -> ((v_Vuna_dCompiler_dDriver_dSplit_dsplitDepths dtb__23) ((((Base_dHashMap.v_Base_dHashMap_dinsert Base_dString.v_Hashable_uString) dtb__24) ((v_Vuna_dCompiler_dDriver_dSplit_ddepthOfDeps mc1) dtb__25)) mc1))
   | _ -> failwith "DT: impossible branch"
 )
   | Base_dList.C_Base_dList_dList_Nil -> mc1
@@ -60,8 +68,8 @@ let rec v_Vuna_dCompiler_dDriver_dSplit_dsplitDepths = (fun mc0 mc1 -> (match mc
 ))
 
 let rec v_Vuna_dCompiler_dDriver_dSplit_dgraphMaxDepth = (fun mc0 mc1 mc2 -> (match mc0 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__22, dtb__23) -> (match dtb__22 with
-  | { Base_dPair.f_Base_dPair_dPair_first = dtb__24; Base_dPair.f_Base_dPair_dPair_second = dtb__25 } -> (((v_Vuna_dCompiler_dDriver_dSplit_dgraphMaxDepth dtb__23) mc1) ((v_Vuna_dCompiler_dDriver_dSplit_dmaxInt mc2) ((v_Vuna_dCompiler_dDriver_dSplit_ddepthOfUnit mc1) dtb__24)))
+  | Base_dList.C_Base_dList_dList_Cons (dtb__26, dtb__27) -> (match dtb__26 with
+  | { Base_dPair.f_Base_dPair_dPair_first = dtb__28; Base_dPair.f_Base_dPair_dPair_second = dtb__29 } -> (((v_Vuna_dCompiler_dDriver_dSplit_dgraphMaxDepth dtb__27) mc1) ((v_Vuna_dCompiler_dDriver_dSplit_dmaxInt mc2) ((v_Vuna_dCompiler_dDriver_dSplit_ddepthOfUnit mc1) dtb__28)))
   | _ -> failwith "DT: impossible branch"
 )
   | Base_dList.C_Base_dList_dList_Nil -> mc2
@@ -74,38 +82,38 @@ let v_Vuna_dCompiler_dDriver_dSplit_dsplitLayers = (fun mc0 -> (match mc0 with
 ))
 
 let rec v_Vuna_dCompiler_dDriver_dSplit_dgraphUnits = (fun mc0 -> (match mc0 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__26, dtb__27) -> (Base_dList.C_Base_dList_dList_Cons ((Base_dPair.v_Base_dPair_dfirstOf dtb__26), (v_Vuna_dCompiler_dDriver_dSplit_dgraphUnits dtb__27)))
+  | Base_dList.C_Base_dList_dList_Cons (dtb__30, dtb__31) -> (Base_dList.C_Base_dList_dList_Cons ((Base_dPair.v_Base_dPair_dfirstOf dtb__30), (v_Vuna_dCompiler_dDriver_dSplit_dgraphUnits dtb__31)))
   | Base_dList.C_Base_dList_dList_Nil -> Base_dList.C_Base_dList_dList_Nil
   | _ -> failwith "DT: impossible branch"
 ))
 
 let rec v_Vuna_dCompiler_dDriver_dSplit_dspaceJoin = (fun mc0 -> (match mc0 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__28, dtb__29) -> (String.concat "" [dtb__28; " "; (v_Vuna_dCompiler_dDriver_dSplit_dspaceJoin dtb__29)])
+  | Base_dList.C_Base_dList_dList_Cons (dtb__32, dtb__33) -> (String.concat "" [dtb__32; " "; (v_Vuna_dCompiler_dDriver_dSplit_dspaceJoin dtb__33)])
   | Base_dList.C_Base_dList_dList_Nil -> ""
   | _ -> failwith "DT: impossible branch"
 ))
 
 let rec v_Vuna_dCompiler_dDriver_dSplit_ddepsSuffix = (fun mc0 -> (match mc0 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__30, dtb__31) -> (String.concat "" [" "; dtb__30; (v_Vuna_dCompiler_dDriver_dSplit_ddepsSuffix dtb__31)])
+  | Base_dList.C_Base_dList_dList_Cons (dtb__34, dtb__35) -> (String.concat "" [" "; dtb__34; (v_Vuna_dCompiler_dDriver_dSplit_ddepsSuffix dtb__35)])
   | Base_dList.C_Base_dList_dList_Nil -> ""
   | _ -> failwith "DT: impossible branch"
 ))
 
 let rec v_Vuna_dCompiler_dDriver_dSplit_dstampWrites = (fun mc0 -> (match mc0 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__32, dtb__33) -> (String.concat "" ["  printf '%s' \"$(stamp_want "; (Base_dPair.v_Base_dPair_dfirstOf dtb__32); (v_Vuna_dCompiler_dDriver_dSplit_ddepsSuffix (Base_dPair.v_Base_dPair_dsecondOf dtb__32)); ")\" > \""; (Base_dPair.v_Base_dPair_dfirstOf dtb__32); ".stamp\"\n"; (v_Vuna_dCompiler_dDriver_dSplit_dstampWrites dtb__33)])
+  | Base_dList.C_Base_dList_dList_Cons (dtb__36, dtb__37) -> (String.concat "" ["  printf '%s' \"$(stamp_want "; (Base_dPair.v_Base_dPair_dfirstOf dtb__36); (v_Vuna_dCompiler_dDriver_dSplit_ddepsSuffix (Base_dPair.v_Base_dPair_dsecondOf dtb__36)); ")\" > \""; (Base_dPair.v_Base_dPair_dfirstOf dtb__36); ".stamp\"\n"; (v_Vuna_dCompiler_dDriver_dSplit_dstampWrites dtb__37)])
   | Base_dList.C_Base_dList_dList_Nil -> ""
   | _ -> failwith "DT: impossible branch"
 ))
 
 let rec v_Vuna_dCompiler_dDriver_dSplit_dbgCalls = (fun mc0 -> (match mc0 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__34, dtb__35) -> (String.concat "" ["compile_mod "; (Base_dPair.v_Base_dPair_dfirstOf dtb__34); (v_Vuna_dCompiler_dDriver_dSplit_ddepsSuffix (Base_dPair.v_Base_dPair_dsecondOf dtb__34)); " &\npids=\"$pids $!\"\n"; (v_Vuna_dCompiler_dDriver_dSplit_dbgCalls dtb__35)])
+  | Base_dList.C_Base_dList_dList_Cons (dtb__38, dtb__39) -> (String.concat "" ["compile_mod "; (Base_dPair.v_Base_dPair_dfirstOf dtb__38); (v_Vuna_dCompiler_dDriver_dSplit_ddepsSuffix (Base_dPair.v_Base_dPair_dsecondOf dtb__38)); " &\npids=\"$pids $!\"\n"; (v_Vuna_dCompiler_dDriver_dSplit_dbgCalls dtb__39)])
   | Base_dList.C_Base_dList_dList_Nil -> ""
   | _ -> failwith "DT: impossible branch"
 ))
 
 let v_Vuna_dCompiler_dDriver_dSplit_dlayerCalls = (fun mc0 -> (match mc0 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__36, dtb__37) -> (match dtb__37 with
-  | Base_dList.C_Base_dList_dList_Nil -> (String.concat "" ["compile_mod "; (Base_dPair.v_Base_dPair_dfirstOf dtb__36); (v_Vuna_dCompiler_dDriver_dSplit_ddepsSuffix (Base_dPair.v_Base_dPair_dsecondOf dtb__36)); "\n"])
+  | Base_dList.C_Base_dList_dList_Cons (dtb__40, dtb__41) -> (match dtb__41 with
+  | Base_dList.C_Base_dList_dList_Nil -> (String.concat "" ["compile_mod "; (Base_dPair.v_Base_dPair_dfirstOf dtb__40); (v_Vuna_dCompiler_dDriver_dSplit_ddepsSuffix (Base_dPair.v_Base_dPair_dsecondOf dtb__40)); "\n"])
   | _ -> (String.concat "" ["pids=\"\"\n"; (v_Vuna_dCompiler_dDriver_dSplit_dbgCalls mc0); "for p in $pids; do wait \"$p\" || exit 1; done\n"])
 )
   | Base_dList.C_Base_dList_dList_Nil -> ""
@@ -113,15 +121,15 @@ let v_Vuna_dCompiler_dDriver_dSplit_dlayerCalls = (fun mc0 -> (match mc0 with
 ))
 
 let rec v_Vuna_dCompiler_dDriver_dSplit_dlayerScripts = (fun mc0 -> (match mc0 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__38, dtb__39) -> ((v_Vuna_dCompiler_dDriver_dSplit_dlayerCalls dtb__38) ^ (v_Vuna_dCompiler_dDriver_dSplit_dlayerScripts dtb__39))
+  | Base_dList.C_Base_dList_dList_Cons (dtb__42, dtb__43) -> ((v_Vuna_dCompiler_dDriver_dSplit_dlayerCalls dtb__42) ^ (v_Vuna_dCompiler_dDriver_dSplit_dlayerScripts dtb__43))
   | Base_dList.C_Base_dList_dList_Nil -> ""
   | _ -> failwith "DT: impossible branch"
 ))
 
 let rec v_Vuna_dCompiler_dDriver_dSplit_djoinCmxs = (fun mc0 -> (match mc0 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__40, dtb__41) -> (match dtb__41 with
-  | Base_dList.C_Base_dList_dList_Nil -> (dtb__40 ^ ".cmx")
-  | _ -> (String.concat "" [dtb__40; ".cmx "; (v_Vuna_dCompiler_dDriver_dSplit_djoinCmxs dtb__41)])
+  | Base_dList.C_Base_dList_dList_Cons (dtb__44, dtb__45) -> (match dtb__45 with
+  | Base_dList.C_Base_dList_dList_Nil -> (dtb__44 ^ ".cmx")
+  | _ -> (String.concat "" [dtb__44; ".cmx "; (v_Vuna_dCompiler_dDriver_dSplit_djoinCmxs dtb__45)])
 )
   | Base_dList.C_Base_dList_dList_Nil -> ""
   | _ -> failwith "DT: impossible branch"
@@ -129,22 +137,22 @@ let rec v_Vuna_dCompiler_dDriver_dSplit_djoinCmxs = (fun mc0 -> (match mc0 with
 
 let v_Vuna_dCompiler_dDriver_dSplit_dbuildScript = (fun graph cFiles -> (String.concat "" ["#!/bin/sh\n# \231\148\177 vuna \231\148\159\230\136\144\239\188\154\229\136\134\231\166\187\231\188\150\232\175\145\230\158\132\229\187\186\232\132\154\230\156\172\239\188\136C35\239\188\154\230\140\137\231\155\180\230\142\165\228\190\157\232\181\150\229\136\134\229\177\130\229\185\182\232\161\140 + \229\134\133\229\174\185\229\147\136\229\184\140\229\162\158\233\135\143\239\188\137\227\128\130\231\148\168\230\179\149: ./build.sh [OUT]\n# \229\185\178\229\135\128\230\158\132\229\187\186\228\184\148 JOBS<=1\239\188\154\228\184\128\230\172\161 ocamlopt \231\188\150\232\175\145\229\133\168\233\131\168 .mli/.ml \229\185\182\233\147\190\230\142\165\239\188\155\n# \229\162\158\233\135\143\230\158\132\229\187\186\239\188\154\230\175\143\229\141\149\229\133\131 .ml/.mli \228\184\142\231\155\180\230\142\165\228\190\157\232\181\150 .stamp \231\154\132\229\134\133\229\174\185\229\147\136\229\184\140\229\134\153 $base.stamp\239\188\140\229\145\189\228\184\173\229\141\179\232\183\179\232\191\135\239\188\155\n# \229\144\140\229\177\130\229\141\149\229\133\131\228\186\146\228\184\141\228\190\157\232\181\150\239\188\154\229\164\154\229\141\149\229\133\131\229\177\130\231\148\168\229\144\142\229\143\176\228\187\187\229\138\161\229\185\182\232\161\140\231\188\150\232\175\145\239\188\140\229\177\130\233\151\180\231\148\168 wait \228\184\178\232\161\140\227\128\130\nset -eu\ncd \"$(dirname \"$0\")\"\nOUT=${1:-program}\nFLAGS=\"-g -w -a+39 -warn-error +39\"\nMODULES=\""; (v_Vuna_dCompiler_dDriver_dSplit_dspaceJoin (v_Vuna_dCompiler_dDriver_dSplit_dgraphUnits graph)); "\"\nJOBS=${VUNA_BUILD_JOBS:-}\nif [ -z \"$JOBS\" ]; then\n  JOBS=$(nproc 2>/dev/null || echo 1)\n  case \"${NIX_BUILD_CORES:-}\" in\n    ''|*[!0-9]*) ;;\n    0) ;;\n    *) JOBS=$NIX_BUILD_CORES ;;\n  esac\nfi\nC_MODULES=\""; (v_Vuna_dCompiler_dDriver_dSplit_dspaceJoin cFiles); "\"\nC_OBJS=\"\"\nif [ -n \"$C_MODULES\" ]; then\n  for c in $C_MODULES; do ocamlopt -I +unix -c \"$c\"; b=${c##*/}; C_OBJS=\"$C_OBJS ${b%.c}.o\"; done\nfi\nhash_of() {\n  for f in \"$@\"; do\n    if [ -f \"$f\" ]; then cat \"$f\"; else printf '%s' '-'; fi\n  done | sha256sum | awk '{print $1}'\n}\nstamp_want() {\n  base=$1\n  shift\n  deps=\"\"\n  for d in \"$@\"; do deps=\"$deps $d.stamp\"; done\n  hash_of \"$base.ml\" \"$base.mli\" $deps\n}\nclean=1\nfor m in $MODULES; do\n  if [ -f \"$m.cmx\" ]; then clean=0; fi\ndone\nif [ \"$clean\" -eq 1 ] && [ \"$JOBS\" -le 1 ]; then\n  SOURCES=\"\"\n  for m in $MODULES; do\n    if [ -f \"$m.mli\" ]; then SOURCES=\"$SOURCES $m.mli\"; fi\n    SOURCES=\"$SOURCES $m.ml\"\n  done\n  ocamlopt $FLAGS -I +unix -o \"$OUT\" unix.cmxa $SOURCES $C_OBJS\n"; (v_Vuna_dCompiler_dDriver_dSplit_dstampWrites graph); "  echo \"built $OUT\"\n  exit 0\nfi\ncompile_mod() {\n  base=$1\n  shift\n  want=$(stamp_want \"$base\" \"$@\")\n  if [ -f \"$base.cmx\" ] && [ -f \"$base.stamp\" ] && [ \"$(cat \"$base.stamp\")\" = \"$want\" ]; then return 0; fi\n  echo \"compile $base\"\n  if [ -f \"$base.mli\" ]; then ocamlopt $FLAGS -I +unix -c \"$base.mli\"; fi\n  ocamlopt $FLAGS -I +unix -c \"$base.ml\"\n  printf '%s' \"$want\" > \"$base.stamp\"\n}\n"; (v_Vuna_dCompiler_dDriver_dSplit_dlayerScripts (v_Vuna_dCompiler_dDriver_dSplit_dsplitLayers graph)); "ocamlopt $FLAGS -I +unix -o \"$OUT\" unix.cmxa "; (v_Vuna_dCompiler_dDriver_dSplit_djoinCmxs (v_Vuna_dCompiler_dDriver_dSplit_dgraphUnits graph)); " $C_OBJS\necho \"built $OUT\"\n"]))
 
-let v_Vuna_dCompiler_dDriver_dSplit_dunitTieKey = (fun name -> (((dtp_strHash name) * 1000003) + (dtp_strHash ("t:" ^ name))))
+let v_Vuna_dCompiler_dDriver_dSplit_dunitTieKey = (fun name -> (Vuna_dCompiler_dHash.v_Vuna_dCompiler_dHash_dcontentKey ("t:" ^ name)))
 
 let rec v_Vuna_dCompiler_dDriver_dSplit_dfindFileNamed = (fun mc0 mc1 -> (match mc0 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__42, dtb__43) -> (if ((v_Vuna_dCompiler_dDriver_dSplit_dsplitName dtb__42) = (mc1 ^ ".ml")) then (Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__42)) else ((v_Vuna_dCompiler_dDriver_dSplit_dfindFileNamed dtb__43) mc1))
+  | Base_dList.C_Base_dList_dList_Cons (dtb__46, dtb__47) -> (if ((v_Vuna_dCompiler_dDriver_dSplit_dsplitName dtb__46) = (mc1 ^ ".ml")) then (Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__46)) else ((v_Vuna_dCompiler_dDriver_dSplit_dfindFileNamed dtb__47) mc1))
   | Base_dList.C_Base_dList_dList_Nil -> Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing
   | _ -> failwith "DT: impossible branch"
 ))
 
 let rec v_Vuna_dCompiler_dDriver_dSplit_dunitDepthLookup = (fun mc0 mc1 -> (match mc0 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__44, dtb__45) -> (if ((Base_dPair.v_Base_dPair_dfirstOf dtb__44) = mc1) then (Base_dPair.v_Base_dPair_dsecondOf dtb__44) else ((v_Vuna_dCompiler_dDriver_dSplit_dunitDepthLookup dtb__45) mc1))
+  | Base_dList.C_Base_dList_dList_Cons (dtb__48, dtb__49) -> (if ((Base_dPair.v_Base_dPair_dfirstOf dtb__48) = mc1) then (Base_dPair.v_Base_dPair_dsecondOf dtb__48) else ((v_Vuna_dCompiler_dDriver_dSplit_dunitDepthLookup dtb__49) mc1))
   | Base_dList.C_Base_dList_dList_Nil -> 0
   | _ -> failwith "DT: impossible branch"
 ))
 
 let rec v_Vuna_dCompiler_dDriver_dSplit_dmaxDepth = (fun mc0 mc1 -> (match mc1 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__46, dtb__47) -> ((fun dd -> ((fun mm -> (if (dd > mm) then dd else mm)) ((v_Vuna_dCompiler_dDriver_dSplit_dmaxDepth mc0) dtb__47))) ((v_Vuna_dCompiler_dDriver_dSplit_dunitDepthLookup mc0) dtb__46))
+  | Base_dList.C_Base_dList_dList_Cons (dtb__50, dtb__51) -> ((fun dd -> ((fun mm -> (if (dd > mm) then dd else mm)) ((v_Vuna_dCompiler_dDriver_dSplit_dmaxDepth mc0) dtb__51))) ((v_Vuna_dCompiler_dDriver_dSplit_dunitDepthLookup mc0) dtb__50))
   | Base_dList.C_Base_dList_dList_Nil -> (0 - 1)
   | _ -> failwith "DT: impossible branch"
 ))
@@ -152,14 +160,14 @@ let rec v_Vuna_dCompiler_dDriver_dSplit_dmaxDepth = (fun mc0 mc1 -> (match mc1 w
 let v_Vuna_dCompiler_dDriver_dSplit_dstepDepthEntry = (fun memo p -> ((fun md -> { Base_dPair.f_Base_dPair_dPair_first = (Base_dPair.v_Base_dPair_dfirstOf p); Base_dPair.f_Base_dPair_dPair_second = (if (md < 0) then 0 else (md + 1)) }) ((v_Vuna_dCompiler_dDriver_dSplit_dmaxDepth memo) (Base_dPair.v_Base_dPair_dsecondOf p))))
 
 let rec v_Vuna_dCompiler_dDriver_dSplit_dstepDepths = (fun mc0 mc1 -> (match mc1 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__48, dtb__49) -> (Base_dList.C_Base_dList_dList_Cons (((v_Vuna_dCompiler_dDriver_dSplit_dstepDepthEntry mc0) dtb__48), ((v_Vuna_dCompiler_dDriver_dSplit_dstepDepths mc0) dtb__49)))
+  | Base_dList.C_Base_dList_dList_Cons (dtb__52, dtb__53) -> (Base_dList.C_Base_dList_dList_Cons (((v_Vuna_dCompiler_dDriver_dSplit_dstepDepthEntry mc0) dtb__52), ((v_Vuna_dCompiler_dDriver_dSplit_dstepDepths mc0) dtb__53)))
   | Base_dList.C_Base_dList_dList_Nil -> Base_dList.C_Base_dList_dList_Nil
   | _ -> failwith "DT: impossible branch"
 ))
 
 let rec v_Vuna_dCompiler_dDriver_dSplit_dallDepthIn = (fun mc0 mc1 -> (match mc0 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__50, dtb__51) -> (match dtb__50 with
-  | { Base_dPair.f_Base_dPair_dPair_first = dtb__52; Base_dPair.f_Base_dPair_dPair_second = dtb__53 } -> (if (((v_Vuna_dCompiler_dDriver_dSplit_dunitDepthLookup mc1) dtb__52) = dtb__53) then ((v_Vuna_dCompiler_dDriver_dSplit_dallDepthIn dtb__51) mc1) else false)
+  | Base_dList.C_Base_dList_dList_Cons (dtb__54, dtb__55) -> (match dtb__54 with
+  | { Base_dPair.f_Base_dPair_dPair_first = dtb__56; Base_dPair.f_Base_dPair_dPair_second = dtb__57 } -> (if (((v_Vuna_dCompiler_dDriver_dSplit_dunitDepthLookup mc1) dtb__56) = dtb__57) then ((v_Vuna_dCompiler_dDriver_dSplit_dallDepthIn dtb__55) mc1) else false)
   | _ -> failwith "DT: impossible branch"
 )
   | Base_dList.C_Base_dList_dList_Nil -> true
@@ -173,21 +181,21 @@ let rec v_Vuna_dCompiler_dDriver_dSplit_dfixDepths = (fun fuel graph memo -> (if
 let v_Vuna_dCompiler_dDriver_dSplit_ddepthEntryLess = (fun a b -> (if ((Base_dPair.v_Base_dPair_dsecondOf a) <> (Base_dPair.v_Base_dPair_dsecondOf b)) then ((Base_dPair.v_Base_dPair_dsecondOf a) < (Base_dPair.v_Base_dPair_dsecondOf b)) else ((v_Vuna_dCompiler_dDriver_dSplit_dunitTieKey (Base_dPair.v_Base_dPair_dfirstOf a)) <= (v_Vuna_dCompiler_dDriver_dSplit_dunitTieKey (Base_dPair.v_Base_dPair_dfirstOf b)))))
 
 let rec v_Vuna_dCompiler_dDriver_dSplit_dinsertDepthEntry = (fun mc0 mc1 -> (match mc1 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__54, dtb__55) -> (if ((v_Vuna_dCompiler_dDriver_dSplit_ddepthEntryLess mc0) dtb__54) then (Base_dList.C_Base_dList_dList_Cons (mc0, (Base_dList.C_Base_dList_dList_Cons (dtb__54, dtb__55)))) else (Base_dList.C_Base_dList_dList_Cons (dtb__54, ((v_Vuna_dCompiler_dDriver_dSplit_dinsertDepthEntry mc0) dtb__55))))
+  | Base_dList.C_Base_dList_dList_Cons (dtb__58, dtb__59) -> (if ((v_Vuna_dCompiler_dDriver_dSplit_ddepthEntryLess mc0) dtb__58) then (Base_dList.C_Base_dList_dList_Cons (mc0, (Base_dList.C_Base_dList_dList_Cons (dtb__58, dtb__59)))) else (Base_dList.C_Base_dList_dList_Cons (dtb__58, ((v_Vuna_dCompiler_dDriver_dSplit_dinsertDepthEntry mc0) dtb__59))))
   | Base_dList.C_Base_dList_dList_Nil -> (Base_dList.C_Base_dList_dList_Cons (mc0, Base_dList.C_Base_dList_dList_Nil))
   | _ -> failwith "DT: impossible branch"
 ))
 
 let rec v_Vuna_dCompiler_dDriver_dSplit_dsortDepthEntries = (fun mc0 -> (match mc0 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__56, dtb__57) -> ((v_Vuna_dCompiler_dDriver_dSplit_dinsertDepthEntry dtb__56) (v_Vuna_dCompiler_dDriver_dSplit_dsortDepthEntries dtb__57))
+  | Base_dList.C_Base_dList_dList_Cons (dtb__60, dtb__61) -> ((v_Vuna_dCompiler_dDriver_dSplit_dinsertDepthEntry dtb__60) (v_Vuna_dCompiler_dDriver_dSplit_dsortDepthEntries dtb__61))
   | Base_dList.C_Base_dList_dList_Nil -> Base_dList.C_Base_dList_dList_Nil
   | _ -> failwith "DT: impossible branch"
 ))
 
 let rec v_Vuna_dCompiler_dDriver_dSplit_dfilesOfDepthEntries = (fun mc0 mc1 -> (match mc1 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__58, dtb__59) -> (match ((v_Vuna_dCompiler_dDriver_dSplit_dfindFileNamed mc0) (Base_dPair.v_Base_dPair_dfirstOf dtb__58)) with
-  | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__60) -> (Base_dList.C_Base_dList_dList_Cons (dtb__60, ((v_Vuna_dCompiler_dDriver_dSplit_dfilesOfDepthEntries mc0) dtb__59)))
-  | Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing -> ((v_Vuna_dCompiler_dDriver_dSplit_dfilesOfDepthEntries mc0) dtb__59)
+  | Base_dList.C_Base_dList_dList_Cons (dtb__62, dtb__63) -> (match ((v_Vuna_dCompiler_dDriver_dSplit_dfindFileNamed mc0) (Base_dPair.v_Base_dPair_dfirstOf dtb__62)) with
+  | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__64) -> (Base_dList.C_Base_dList_dList_Cons (dtb__64, ((v_Vuna_dCompiler_dDriver_dSplit_dfilesOfDepthEntries mc0) dtb__63)))
+  | Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing -> ((v_Vuna_dCompiler_dDriver_dSplit_dfilesOfDepthEntries mc0) dtb__63)
   | _ -> failwith "DT: impossible branch"
 )
   | Base_dList.C_Base_dList_dList_Nil -> Base_dList.C_Base_dList_dList_Nil
@@ -197,13 +205,13 @@ let rec v_Vuna_dCompiler_dDriver_dSplit_dfilesOfDepthEntries = (fun mc0 mc1 -> (
 let v_Vuna_dCompiler_dDriver_dSplit_dgraphName = (fun p -> (Base_dPair.v_Base_dPair_dfirstOf p))
 
 let rec v_Vuna_dCompiler_dDriver_dSplit_dinsertDep = (fun mc0 mc1 -> (match mc1 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__61, dtb__62) -> (if ((v_Vuna_dCompiler_dDriver_dSplit_dunitTieKey mc0) <= (v_Vuna_dCompiler_dDriver_dSplit_dunitTieKey dtb__61)) then (Base_dList.C_Base_dList_dList_Cons (mc0, (Base_dList.C_Base_dList_dList_Cons (dtb__61, dtb__62)))) else (Base_dList.C_Base_dList_dList_Cons (dtb__61, ((v_Vuna_dCompiler_dDriver_dSplit_dinsertDep mc0) dtb__62))))
+  | Base_dList.C_Base_dList_dList_Cons (dtb__65, dtb__66) -> (if ((v_Vuna_dCompiler_dDriver_dSplit_dunitTieKey mc0) <= (v_Vuna_dCompiler_dDriver_dSplit_dunitTieKey dtb__65)) then (Base_dList.C_Base_dList_dList_Cons (mc0, (Base_dList.C_Base_dList_dList_Cons (dtb__65, dtb__66)))) else (Base_dList.C_Base_dList_dList_Cons (dtb__65, ((v_Vuna_dCompiler_dDriver_dSplit_dinsertDep mc0) dtb__66))))
   | Base_dList.C_Base_dList_dList_Nil -> (Base_dList.C_Base_dList_dList_Cons (mc0, Base_dList.C_Base_dList_dList_Nil))
   | _ -> failwith "DT: impossible branch"
 ))
 
 let rec v_Vuna_dCompiler_dDriver_dSplit_dsortDepsByTie = (fun mc0 -> (match mc0 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__63, dtb__64) -> ((v_Vuna_dCompiler_dDriver_dSplit_dinsertDep dtb__63) (v_Vuna_dCompiler_dDriver_dSplit_dsortDepsByTie dtb__64))
+  | Base_dList.C_Base_dList_dList_Cons (dtb__67, dtb__68) -> ((v_Vuna_dCompiler_dDriver_dSplit_dinsertDep dtb__67) (v_Vuna_dCompiler_dDriver_dSplit_dsortDepsByTie dtb__68))
   | Base_dList.C_Base_dList_dList_Nil -> Base_dList.C_Base_dList_dList_Nil
   | _ -> failwith "DT: impossible branch"
 ))

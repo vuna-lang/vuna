@@ -3,8 +3,6 @@ let v_Base_dHost_dprint = (fun s -> (((Base_dMonad.v_Base_dMonad_dfmap Base_dEff
 
 let v_Base_dHost_deprint = (fun _uarity0 -> ((fun dtio_0 -> Base_dEff.C_Base_dEff_dEff_MkEff (fun (_ : Base_dEff.t_Base_dEff_dEffUnit) -> (fun s -> prerr_string s; flush stderr; String.length s) dtio_0)) _uarity0))
 
-let v_Base_dHost_drunIO = (fun io -> (Base_dEff.v_Base_dEff_drunPure (Base_dEff.v_Base_dEff_ddeferIO io)))
-
 let v_Base_dHost_dprintln = (fun s -> (v_Base_dHost_dprint (s ^ "\n")))
 
 let v_Base_dHost_dreadFile = (fun _uarity0 -> ((fun dtio_0 -> Base_dEff.C_Base_dEff_dEff_MkEff (fun (_ : Base_dEff.t_Base_dEff_dEffUnit) -> dtp_readFile dtio_0)) _uarity0))

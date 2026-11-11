@@ -11,7 +11,6 @@ Base_dFromString.ml
 Base_dHashMap.ml
 Base_dHashable.ml
 Base_dHost.ml
-Base_dIORef.ml
 Base_dInt.ml
 Base_dInterp.ml
 Base_dList.ml
@@ -31,6 +30,10 @@ Base_dVec.ml
 Main.ml
 Prelude.ml
 Vuna_dCompiler_dCacheFormat.ml
+Vuna_dCompiler_dCanonical_dAst.ml
+Vuna_dCompiler_dCanonical_dBytes.ml
+Vuna_dCompiler_dCanonical_dCoreTerm.ml
+Vuna_dCompiler_dCanonical_dElab.ml
 Vuna_dCompiler_dCodegen.ml
 Vuna_dCompiler_dCodegen_dAssembly.ml
 Vuna_dCompiler_dCodegen_dDecl.ml
