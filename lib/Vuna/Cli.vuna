@@ -247,10 +247,16 @@ suiteRun parsed suitePath = case parsed.positionals of
       ErrC e => toolError (diagText e)
       OkC timeout => case suiteWorkerOf parsed of
         ErrC e => toolError (diagText e)
-        OkC worker => case parseSuiteFile suitePath of
-          ErrC e => toolError (diagText e)
-          OkC suite => runSuite (suiteOptsOf parsed jobs timeout worker suitePath) suite
+        OkC worker => runPure (runSuiteFile parsed jobs timeout worker suitePath)
   _ => usageError 0
+
+-- suite 文件解析 + 执行都是显式 `Eff []`；Cli 本轮不迁移，用一处 runPure 过渡包装。
+runSuiteFile : Parsed -> Int -> Int -> Maybe (Pair Int Int) -> String -> Eff [] Int
+runSuiteFile parsed jobs timeout worker suitePath = do
+  loaded <- parseSuiteFile suitePath
+  case loaded of
+    ErrC e => pure (toolError (diagText e))
+    OkC suite => runSuite (suiteOptsOf parsed jobs timeout worker suitePath) suite
 
 suiteOptsOf : Parsed -> Int -> Int -> Maybe (Pair Int Int) -> String -> SuiteOpts
 suiteOptsOf parsed jobs timeout worker suitePath =
