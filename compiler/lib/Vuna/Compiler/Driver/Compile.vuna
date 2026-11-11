@@ -56,11 +56,14 @@ import Base.IO.Host
 
 -- 包级 check：可执行包检查 app/Main.vuna；库包检查 [export].modules。
 -- M34.5：结果走磁盘缓存（key = 闭包源哈希 + 依赖哈希 + manifest + 版本）。
-checkPackage : Package -> Check (List String)
-checkPackage pkg = if runIO (prim_fileExists (packageEntry pkg)) then checkCachedExe (packageContext pkg) (packageEntry pkg)
+-- M45：`wantWarnings` = 调用方要 warning（`-W` / `--deny-warnings`）。warning 不持久化，
+-- 缓存命中/干净模块复用都会跳过精化、丢掉 warning，所以这里跳过 check 缓存并强制本包
+-- 模块重算（依赖仍走接口摘要，不重算依赖包）。
+checkPackage : Bool -> Package -> Check (List String)
+checkPackage wantWarnings pkg = if runIO (prim_fileExists (packageEntry pkg)) then checkCachedExe wantWarnings (packageContext pkg) (packageEntry pkg)
 else case packageExports pkg of
   Nothing => pkgNoLoc1 (LibraryWithoutEntry (packageName pkg)) (packageName pkg)
-  Just names => checkCachedLib (packageContext pkg) names
+  Just names => checkCachedLib wantWarnings (packageContext pkg) names
 
 -- 逐级创建目录（prim_makeDir 只建一层；`--out a/b` 的父目录可能不存在）。
 -- 递归沿 `parentOfPath` 上升，不是结构下降，用显式 fuel 守卫（路径深度上限）。
@@ -935,25 +938,27 @@ checkCacheHit path = case readFramed checkCacheTag path of
   Just _ => True
   Nothing => False
 
-checkCachedExe : PackageContext -> String -> Check (List String)
-checkCachedExe ctx entry =
+checkCachedExe : Bool -> PackageContext -> String -> Check (List String)
+checkCachedExe wantWarnings ctx entry =
   let
     key = checkCacheKeyExe ctx entry
     path = checkCachePath ctx key
-  in if checkCacheHit path && not ifaceAuditRequested then OkC [] else checkUncachedExe ctx entry path
+  in if not wantWarnings && checkCacheHit path && not ifaceAuditRequested then OkC []
+  else checkUncachedExe wantWarnings ctx entry path
 
 -- 缓存未命中时的精化入口：默认「依赖接口摘要齐全 ⇒ 摘要路径，否则全量」。
 -- 摘要路径返回 `Err` 时**直接上报**（不回退——回退会吞掉本包真实错误）。
 -- `VUNA_ELAB_FULL=1` 强制全量：排障/A-B 对拍用（测试里对两份诊断逐字节比较）。
-checkUncachedExe : PackageContext -> String -> String -> Check (List String)
-checkUncachedExe ctx entry path =
+checkUncachedExe : Bool -> PackageContext -> String -> String -> Check (List String)
+checkUncachedExe wantWarnings ctx entry path =
   if elabFullRequested then fullCheckExe ctx entry path
-  else if ifaceAuditRequested then auditCheckExe ctx entry path
-  else checkAndCache ctx path (summaryCheckExeParts ctx entry)
+  else if ifaceAuditRequested then auditCheckExe wantWarnings ctx entry path
+  else checkAndCache ctx path (summaryCheckExeParts wantWarnings ctx entry)
 
 -- 摘要路径（**不落盘**）：接口不可用 ⇒ 全量（与旧行为一致，只是不再直接写缓存）。
-summaryCheckExeParts : PackageContext -> String -> Check (Pair (List String) CheckedPackage)
-summaryCheckExeParts ctx entry = case depIfacesOf ctx of
+-- wantWarnings 时 clean 列表清空 ⇒ 本包模块全部重算（warning 不在缓存里）。
+summaryCheckExeParts : Bool -> PackageContext -> String -> Check (Pair (List String) CheckedPackage)
+summaryCheckExeParts wantWarnings ctx entry = case depIfacesOf ctx of
   Nothing =>
     let
       _ = note "cache-path=full"
@@ -961,9 +966,10 @@ summaryCheckExeParts ctx entry = case depIfacesOf ctx of
   Just ifaces => case ownCleanModules ctx (depIfaceHashTable ctx) of
     Just clean =>
       let
+        clean2 = if wantWarnings then [] else clean
         _ = note "cache-path=summary deps=${depPackageCount ctx}"
-        _ = note "cache-own-clean=${length clean}"
-      in dtCheckPackageIncrementalParts ctx entry ifaces clean
+        _ = note "cache-own-clean=${length clean2}"
+      in dtCheckPackageIncrementalParts ctx entry ifaces clean2
     Nothing =>
       let
         _ = note "cache-path=summary deps=${depPackageCount ctx}"
@@ -977,10 +983,10 @@ fullCheckExe ctx entry path =
 
 -- 审计（`VUNA_IFACE_AUDIT=1`）：摘要路径 vs 全量路径的诊断逐字节对拍。一致才按摘要结果
 -- 落盘；不一致报 `iface-audit-mismatch` 并**不写缓存/接口**。
-auditCheckExe : PackageContext -> String -> String -> Check (List String)
-auditCheckExe ctx entry path =
+auditCheckExe : Bool -> PackageContext -> String -> String -> Check (List String)
+auditCheckExe wantWarnings ctx entry path =
   let
-    summary = summaryCheckExeParts ctx entry
+    summary = summaryCheckExeParts wantWarnings ctx entry
     full = dtCheckWithProgramParts ctx entry
     _ = note "iface-audit subject=check entry=${entry}"
   in Vuna.Compiler.Common.bind
@@ -1388,21 +1394,22 @@ checkAndCache ctx path checked = Vuna.Compiler.Common.bind checked (\r => let
 in Vuna.Compiler.Common.bind (writeIfaceShadow ctx (secondOf r)) (\_ => OkC (firstOf r))
 )
 
-checkCachedLib : PackageContext -> List String -> Check (List String)
-checkCachedLib ctx names =
+checkCachedLib : Bool -> PackageContext -> List String -> Check (List String)
+checkCachedLib wantWarnings ctx names =
   let
     key = checkCacheKeyLib ctx names
     path = checkCachePath ctx key
-  in if checkCacheHit path && not ifaceAuditRequested then OkC [] else checkUncachedLib ctx names path
+  in if not wantWarnings && checkCacheHit path && not ifaceAuditRequested then OkC []
+  else checkUncachedLib wantWarnings ctx names path
 
-checkUncachedLib : PackageContext -> List String -> String -> Check (List String)
-checkUncachedLib ctx names path =
+checkUncachedLib : Bool -> PackageContext -> List String -> String -> Check (List String)
+checkUncachedLib wantWarnings ctx names path =
   if elabFullRequested then fullCheckLib ctx names path
-  else if ifaceAuditRequested then auditCheckLib ctx names path
-  else checkAndCache ctx path (summaryCheckLibParts ctx names)
+  else if ifaceAuditRequested then auditCheckLib wantWarnings ctx names path
+  else checkAndCache ctx path (summaryCheckLibParts wantWarnings ctx names)
 
-summaryCheckLibParts : PackageContext -> List String -> Check (Pair (List String) CheckedPackage)
-summaryCheckLibParts ctx names = case depIfacesOf ctx of
+summaryCheckLibParts : Bool -> PackageContext -> List String -> Check (Pair (List String) CheckedPackage)
+summaryCheckLibParts wantWarnings ctx names = case depIfacesOf ctx of
   Nothing =>
     let
       _ = note "cache-path=full"
@@ -1410,9 +1417,10 @@ summaryCheckLibParts ctx names = case depIfacesOf ctx of
   Just ifaces => case ownCleanModules ctx (depIfaceHashTable ctx) of
     Just clean =>
       let
+        clean2 = if wantWarnings then [] else clean
         _ = note "cache-path=summary deps=${depPackageCount ctx}"
-        _ = note "cache-own-clean=${length clean}"
-      in dtCheckLibraryPackageIncrementalParts ctx names ifaces clean
+        _ = note "cache-own-clean=${length clean2}"
+      in dtCheckLibraryPackageIncrementalParts ctx names ifaces clean2
     Nothing =>
       let
         _ = note "cache-path=summary deps=${depPackageCount ctx}"
@@ -1424,10 +1432,10 @@ fullCheckLib ctx names path =
     _ = note "cache-path=full"
   in checkAndCache ctx path (dtCheckLibraryWithProgramParts ctx names)
 
-auditCheckLib : PackageContext -> List String -> String -> Check (List String)
-auditCheckLib ctx names path =
+auditCheckLib : Bool -> PackageContext -> List String -> String -> Check (List String)
+auditCheckLib wantWarnings ctx names path =
   let
-    summary = summaryCheckLibParts ctx names
+    summary = summaryCheckLibParts wantWarnings ctx names
     full = dtCheckLibraryWithProgramParts ctx names
     subject = joinLines names
     _ = note "iface-audit subject=check-lib entry=${subject}"

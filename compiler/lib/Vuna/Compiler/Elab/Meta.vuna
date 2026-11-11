@@ -724,8 +724,10 @@ methodArgLams [] i body = body
 methodArgLams (rig :: rest) i body = TLam "x${i}" rig (methodArgLams rest (i + 1) body)
 
 -- 方法显式参数的 multiplicity 表：逐 binder 按域判断（域是宇宙 ⇒ Rig0 擦除）。
+-- M45：字典字段 binder 用 `_` 前缀（编译器生成的内部 binder，不参与 UN_UnusedBinder /
+-- UN_ShadowedBinder 告警；OCaml 侧也按「可能未用」抑制 unused 警告）。
 fieldVarName : Int -> String
-fieldVarName i = "f${i}"
+fieldVarName i = "_f${i}"
 
 fieldBinderNames : Int -> List (Pair String Rig)
 fieldBinderNames n = fieldBinderGo n 0 []

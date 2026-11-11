@@ -1,0 +1,48 @@
+# 65) M45 warning 通道修复回归：
+#   A) C49：模块头 `module X` 重导出的 import 不再报 UN_UnusedImport（含 alias 与直接名），
+#      真正未使用的 import 仍然报。
+#   B) C48：warning 不持久化 —— 热缓存（check 结果缓存 + 干净模块复用）下 `-W` 仍必须
+#      完整报 warning，`--deny-warnings` 仍必须把退出码提升为 1；普通 check 仍走缓存。
+#   C) 编译器生成的内部 binder（do 忽略 binder、字典字段 binder）不参与 UN_ 告警。
+
+# ---- A) 重导出 import 追踪 ----
+run: mkdir -p "$TMPDIR/warn-reexp/lib"
+run: printf '[package]\nname = "warn-reexp"\n[export]\nmodules = ["Direct", "Facade", "Other"]\n\n[dependencies]\nvuna-base = "%s"\n' "$VUNA_BASE" > "$TMPDIR/warn-reexp/vuna.toml"
+run: printf 'module App (thing) where\n\nthing : Int\nthing = 41\n' > "$TMPDIR/warn-reexp/lib/App.vuna"
+run: printf 'module Facade (module A) where\n\nimport App as A\n' > "$TMPDIR/warn-reexp/lib/Facade.vuna"
+run: printf 'module Direct (module App) where\n\nimport App\n' > "$TMPDIR/warn-reexp/lib/Direct.vuna"
+run: printf 'module Other where\n\nimport App\n\nother : Int\nother = 1\n' > "$TMPDIR/warn-reexp/lib/Other.vuna"
+run: "$VUNA" check -W "$TMPDIR/warn-reexp" 2>&1
+out-contains: lib/Other.vuna:3:8
+out-contains: [UN_UnusedImport]
+out-not-contains: lib/Facade.vuna
+out-not-contains: lib/Direct.vuna
+
+# ---- B) 热缓存下 warning 不丢 ----
+run: mkdir -p "$TMPDIR/warn-cache/lib"
+run: printf '[package]\nname = "warn-cache"\n[export]\nmodules = ["A", "DoOk", "TraitTwo", "UserWarn"]\n\n[dependencies]\nvuna-base = "%s"\n' "$VUNA_BASE" > "$TMPDIR/warn-cache/vuna.toml"
+run: printf 'module A where\n\na : Int -> Int\na x = let\n  x = 1\n  in x\n' > "$TMPDIR/warn-cache/lib/A.vuna"
+run: printf 'module DoOk where\n\nimport Base.IO\n\ngen : IO Int\ngen = do\n  _ <- prim_pureIO 1\n  prim_pureIO 2\n' > "$TMPDIR/warn-cache/lib/DoOk.vuna"
+run: printf 'module TraitTwo where\n\ntrait Two f where\n  m1 : a -> f a\n  m2 : a -> f a\n' > "$TMPDIR/warn-cache/lib/TraitTwo.vuna"
+run: printf 'module UserWarn where\n\nu : Int -> Int\nu x = 1\n' > "$TMPDIR/warn-cache/lib/UserWarn.vuna"
+# 冷跑：建 check 缓存 + 模块接口。
+run: "$VUNA" check -W "$TMPDIR/warn-cache" 2>&1
+out-contains: [UN_ShadowedBinder]
+out-contains: binder `x` is never used
+# 生成 binder 不参与告警：do 忽略 binder / 字典字段 binder。
+out-not-contains: vuna_do_ignore
+out-not-contains: binder `f0`
+out-not-contains: binder `_f0`
+# 热跑：同一份冷跑结果缓存/干净模块都在，warning 仍必须完整出现。
+run: "$VUNA" check -W "$TMPDIR/warn-cache" 2>&1
+out-contains: [UN_ShadowedBinder]
+out-contains: binder `x` is never used
+out-not-contains: vuna_do_ignore
+# --deny-warnings 在热缓存下仍把退出码提升为 1。
+run: "$VUNA" check --deny-warnings "$TMPDIR/warn-cache" 2>&1
+exit: 1
+out-contains: [UN_ShadowedBinder]
+# 普通 check 仍可命中缓存并成功（warning 不显示、退出 0）。
+run: "$VUNA" check "$TMPDIR/warn-cache" 2>&1
+exit: 0
+out-not-contains: UN_

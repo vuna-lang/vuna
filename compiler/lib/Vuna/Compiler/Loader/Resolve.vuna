@@ -705,13 +705,13 @@ else case stmts of
   [DExpr e sp] => resolveExpr (fuel - 1) modules label prefix ns imports scope e
   (DExpr e sp) :: rest =>
     Vuna.Compiler.Common.bind (resolveExpr (fuel - 1) modules label prefix ns imports scope e)
-      (\e2 => Vuna.Compiler.Common.bind (resolveDoChain (fuel - 1) modules label prefix ns imports scope bindName rest) (\tail => OkC (EApp (EVar (doIgnoreSyntaxName bindName) sp) [e2, ELam ["vuna_do_ignore"] tail sp] sp)))
+      (\e2 => Vuna.Compiler.Common.bind (resolveDoChain (fuel - 1) modules label prefix ns imports scope bindName rest) (\tail => OkC (EApp (EVar (doIgnoreSyntaxName bindName) sp) [e2, ELam ["_"] tail sp] sp)))
   (DBind (PVar name psp) e sp) :: rest =>
     Vuna.Compiler.Common.bind (resolveExpr (fuel - 1) modules label prefix ns imports scope e)
       (\e2 => Vuna.Compiler.Common.bind (resolveDoChain (fuel - 1) modules label prefix ns imports (name :: scope) bindName rest) (\tail => OkC (EApp (EVar (doBindSyntaxName bindName) sp) [e2, ELam [name] tail sp] sp)))
   (DBind (PWild psp) e sp) :: rest =>
     Vuna.Compiler.Common.bind (resolveExpr (fuel - 1) modules label prefix ns imports scope e)
-      (\e2 => Vuna.Compiler.Common.bind (resolveDoChain (fuel - 1) modules label prefix ns imports scope bindName rest) (\tail => OkC (EApp (EVar (doIgnoreSyntaxName bindName) sp) [e2, ELam ["vuna_do_ignore"] tail sp] sp)))
+      (\e2 => Vuna.Compiler.Common.bind (resolveDoChain (fuel - 1) modules label prefix ns imports scope bindName rest) (\tail => OkC (EApp (EVar (doIgnoreSyntaxName bindName) sp) [e2, ELam ["_"] tail sp] sp)))
   (DBind pat e sp) :: rest => psErr0 DoBindPattern
 
 resolveFieldValue : Int -> List Module -> String -> String -> Namespaces -> List Import -> List String -> Pair String Expr -> Check (Pair String Expr)
@@ -941,7 +941,7 @@ resolveEntry modules entryPkg entryCaps entryTrust imports decls =
 
 resolveModules : List Module -> Check (List Decl)
 resolveModules [] = OkC []
-resolveModules (modules@((Module name mpkg imports imps decls exports mcaps mtrust fx) :: rest)) =
+resolveModules (modules@((Module name mpkg imports imps decls exports mcaps mtrust fx _) :: rest)) =
   Vuna.Compiler.Common.bind
     (Vuna.Compiler.Common.bind (resolveProgram modules name name (namespacesOf decls) (append imports imps) decls) (\d => checkEffectsBuiltins name mpkg mcaps mtrust d))
     (\d1 => Vuna.Compiler.Common.bind (resolveModules rest) (\d2 => OkC (append d1 d2)))

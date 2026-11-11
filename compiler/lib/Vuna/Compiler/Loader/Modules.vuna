@@ -11,6 +11,7 @@ module Vuna.Compiler.Loader.Modules
   , findExportCtors
   , findExportType
   , findExportValue
+  , findImportModule
   , findImportPrefix
   , findModule
   , findModuleFile
@@ -24,10 +25,13 @@ module Vuna.Compiler.Loader.Modules
   , moduleFixitiesOf
   , moduleNameOf
   , modulePackageOf
+  , moduleReexportsOf
   , modulesExportingCtor
   , modulesExportingType
   , modulesExportingValue
   , projectEntryAllImports
+  , reexportedImportNames
+  , reexportedImportNamesOfHeader
   , unifyEntryPairs
   , validModuleName
   , validateImports
@@ -65,6 +69,10 @@ record Module where
   -- | D28：本模块所属包的 `[trust] unsafe` 信任点（Nothing = 非严格模式，不做定义级检查）。
   moduleTrustUnsafe : Maybe (List String)
   moduleFixitiesOf : List FixityDecl
+  -- | M45：模块头导出列表里 `module X` 重导出的 import 名（`import X` / `import X as Y`
+  -- 统一成 `X`）。resolve 期把它们并入 used-import 集合，`UN_UnusedImport` 才不会把
+  -- 「只用于重导出」的 import 报成未使用（used-set 在加载期标记、resolve 期被重置）。
+  moduleReexportsOf : List String
 
 -- 已加载项目：入口声明/import + 依赖模块列表（M12 分离编译用；保持 flatten 前的形态）。
 -- entryPkg 用于按包限制 effectful 内建（M12.6：普通包只能通过 Base.IO 使用效果）。
@@ -85,19 +93,23 @@ record Project where
   projectEntryFixities : List FixityDecl
 
 moduleNameOf : Module -> String
-moduleNameOf (Module n p is imps ds es cs ts fx) = n
+moduleNameOf (Module n p is imps ds es cs ts fx _) = n
 
 modulePackageOf : Module -> String
-modulePackageOf (Module n p is imps ds es cs ts fx) = p
+modulePackageOf (Module n p is imps ds es cs ts fx _) = p
 
 moduleAllImportsOf : Module -> List Import
-moduleAllImportsOf (Module n p is imps ds es cs ts fx) = append is imps
+moduleAllImportsOf (Module n p is imps ds es cs ts fx _) = append is imps
 
 moduleDeclsOf : Module -> List Decl
-moduleDeclsOf (Module n p is imps ds es cs ts fx) = ds
+moduleDeclsOf (Module n p is imps ds es cs ts fx _) = ds
 
 moduleFixitiesOf : Module -> List FixityDecl
-moduleFixitiesOf (Module n p is imps ds es cs ts fx) = fx
+moduleFixitiesOf (Module n p is imps ds es cs ts fx _) = fx
+
+-- | M45：模块重导出的 import 名（见 Module 字段注释）。
+moduleReexportsOf : Module -> List String
+moduleReexportsOf (Module n p is imps ds es cs ts fx reexports) = reexports
 
 projectEntryAllImports : Project -> List Import
 projectEntryAllImports (Project ds is imps ms pkg pcaps ptrust complete fx) = append is imps
@@ -203,19 +215,41 @@ openModuleNames (imp :: rest) =
   if imp.importIsQualified then openModuleNames rest
   else Base.List.Cons (importName imp) (openModuleNames rest)
 
-findImportPrefix : List Import -> String -> Maybe String
-findImportPrefix [] prefix = Nothing
-findImportPrefix (imp :: rest) prefix = if importName imp == prefix then
-  let
-    _ = markImportUsed (importName imp)
-  in Just (importName imp)
+-- 纯查找（不标记 used）：`import X` 或 `import X as Y` 里 `name` 对应的 import 模块名。
+findImportModule : List Import -> String -> Maybe String
+findImportModule [] _ = Nothing
+findImportModule (imp :: rest) name = if importName imp == name then Just (importName imp)
 else case imp.importAlias of
-  Just alias => if alias == prefix then
+  Just alias => if alias == name then Just (importName imp) else findImportModule rest name
+  Nothing => findImportModule rest name
+
+findImportPrefix : List Import -> String -> Maybe String
+findImportPrefix imports prefix = case findImportModule imports prefix of
+  Nothing => Nothing
+  Just m =>
     let
-      _ = markImportUsed (importName imp)
-    in Just (importName imp)
-  else findImportPrefix rest prefix
-  Nothing => findImportPrefix rest prefix
+      _ = markImportUsed m
+    in Just m
+
+-- 模块头导出列表里 `module X` 对应的 import 名（去重、保持出现顺序）。加载期算好放进
+-- `Module.moduleReexportsOf`，resolve 期并入 used-import 集合（M45）。
+reexportedImportNames : List Import -> List ExportItem -> List String
+reexportedImportNames imports items = reexportedImportNamesGo imports items []
+
+reexportedImportNamesGo : List Import -> List ExportItem -> List String -> List String
+reexportedImportNamesGo imports [] acc = Base.List.reverse acc
+reexportedImportNamesGo imports ((XModule name _) :: rest) acc = case findImportModule imports name of
+  Nothing => reexportedImportNamesGo imports rest acc
+  Just m =>
+    if memName m acc then reexportedImportNamesGo imports rest acc
+    else reexportedImportNamesGo imports rest (Base.List.Cons m acc)
+reexportedImportNamesGo imports (_ :: rest) acc = reexportedImportNamesGo imports rest acc
+
+-- | 有显式导出列表时才算重导出；无 module 头 / 隐式导出 = []。
+reexportedImportNamesOfHeader : List Import -> Maybe ModDecl -> List String
+reexportedImportNamesOfHeader imports (Just (ModDecl _ True items _)) =
+  reexportedImportNames imports items
+reexportedImportNamesOfHeader imports _ = []
 
 _joinNames : List String -> String
 _joinNames [] = ""
@@ -232,7 +266,7 @@ missingModule name =
 
 moduleDecls : List Module -> String -> Check (List Decl)
 moduleDecls modules name = case findModule modules name of
-  Just (Module mname mpkg imports imps decls exports mcaps mtrust fx) => OkC decls
+  Just (Module mname mpkg imports imps decls exports mcaps mtrust fx _) => OkC decls
   Nothing => missingModule name
 
 moduleCtors : List Module -> String -> Check (List String)
@@ -241,7 +275,7 @@ moduleCtors modules name =
 
 exportsOf : List Module -> String -> Check (List ExportEntry)
 exportsOf modules name = case findModule modules name of
-  Just (Module mname mpkg imports imps decls exports mcaps mtrust fx) => OkC exports
+  Just (Module mname mpkg imports imps decls exports mcaps mtrust fx _) => OkC exports
   Nothing => missingModule name
 
 -- 按命名空间查公开名：kinds 是允许的 kind 列表（val / ctor / type）。
@@ -364,8 +398,8 @@ findModuleFile roots name importerPkg = case collectModuleFiles roots name impor
 
 findModule : List Module -> String -> Maybe Module
 findModule [] name = Nothing
-findModule ((Module mname mpkg imports imps decls exports mcaps mtrust fx) :: rest) name =
-  if mname == name then Just (Module mname mpkg imports imps decls exports mcaps mtrust fx)
+findModule ((Module mname mpkg imports imps decls exports mcaps mtrust fx reexports) :: rest) name =
+  if mname == name then Just (Module mname mpkg imports imps decls exports mcaps mtrust fx reexports)
   else findModule rest name
 
 -- M41：target 是否是某个 data/record 的构造子（用于把 trait method 从“构造子重载候选”

@@ -362,7 +362,8 @@ isRecordTarget modules decls prefix target = case splitLastDot (splitOnDot targe
       m = joinDots revPrefix
     in if m == prefix then isRecordDecl base decls
     else case findModule modules m of
-      Just (Module mname mpkg mimports mimps dcs exports mcaps mtrust mfx) => isRecordDecl base dcs
+      Just (Module mname mpkg mimports mimps dcs exports mcaps mtrust mfx _) =>
+        isRecordDecl base dcs
       Nothing => False
 
 isRecordDecl : String -> List Decl -> Bool
@@ -666,7 +667,7 @@ else case findModule modules name of
       visible =
         dedupeFixities (append fixities (visibleFixitiesOf modules2 (append imports implicit)))
     in OkC
-      (Base.List.Cons (Module name (rootName root) imports implicit decls exports (rootCapabilities root) (rootTrustUnsafe root) visible) modules2)
+      (Base.List.Cons (Module name (rootName root) imports implicit decls exports (rootCapabilities root) (rootTrustUnsafe root) visible (reexportedImportNamesOfHeader imports hdr)) modules2)
     )
     )
     )
@@ -750,7 +751,7 @@ loadModuleSourceWithPreloaded ctx label source preloaded =
         visible =
           dedupeFixities (append fixities (visibleFixitiesOf modules (append imports implicit)))
       in OkC
-        (Project [] imports implicit (Module name (contextPackageName ctx) imports implicit decls exports (contextCapabilities ctx) (contextTrustUnsafe ctx) visible :: modules) (contextPackageName ctx) (contextCapabilities ctx) (contextTrustUnsafe ctx) False [])
+        (Project [] imports implicit (Module name (contextPackageName ctx) imports implicit decls exports (contextCapabilities ctx) (contextTrustUnsafe ctx) visible (reexportedImportNames imports items) :: modules) (contextPackageName ctx) (contextCapabilities ctx) (contextTrustUnsafe ctx) False [])
       )
       )
       )
@@ -804,15 +805,16 @@ resolveProjectKeeping keep (Project decls imports implicit modules entryPkg entr
 
 resolveModulesKeep : List String -> List Module -> Check (List Module)
 resolveModulesKeep keep [] = OkC []
-resolveModulesKeep keep ((Module name pkg imports implicit decls exports mcaps mtrust fixities) :: rest) = if memName name keep then Vuna.Compiler.Common.bind (resolveModulesKeep keep rest)
-  (\d2 => OkC (Base.List.Cons (Module name pkg imports implicit decls exports mcaps mtrust fixities) d2))
+resolveModulesKeep keep ((Module name pkg imports implicit decls exports mcaps mtrust fixities reexports) :: rest) = if memName name keep then Vuna.Compiler.Common.bind (resolveModulesKeep keep rest)
+  (\d2 => OkC (Base.List.Cons (Module name pkg imports implicit decls exports mcaps mtrust fixities reexports) d2))
 else
   let
     _ = resetUsedImports 0
-  in Vuna.Compiler.Common.bind (reorderProgram (tableOf fixities) decls) (\decls2 => Vuna.Compiler.Common.bind (resolveProgram (Module name pkg imports implicit decls2 exports mcaps mtrust fixities :: rest) name name (namespacesOf decls2) (append imports implicit) decls2) (\d => Vuna.Compiler.Common.bind (checkEffectsBuiltins name pkg mcaps mtrust d) (\d1 => let
-    _ = warnImportsList imports (takeUsedImports 0)
+  in Vuna.Compiler.Common.bind (reorderProgram (tableOf fixities) decls) (\decls2 => Vuna.Compiler.Common.bind (resolveProgram (Module name pkg imports implicit decls2 exports mcaps mtrust fixities reexports :: rest) name name (namespacesOf decls2) (append imports implicit) decls2) (\d => Vuna.Compiler.Common.bind (checkEffectsBuiltins name pkg mcaps mtrust d) (\d1 => let
+    -- M45：`module X` 重导出使用的 import 在加载期标记、被上面的 reset 清掉，这里补回。
+    _ = warnImportsList imports (append (takeUsedImports 0) reexports)
   in Vuna.Compiler.Common.bind (resolveModulesKeep keep rest)
-    (\d2 => OkC (Base.List.Cons (Module name pkg imports implicit d1 exports mcaps mtrust fixities) d2))
+    (\d2 => OkC (Base.List.Cons (Module name pkg imports implicit d1 exports mcaps mtrust fixities reexports) d2))
   )
   )
   )

@@ -81,7 +81,11 @@ Diagnostic = { id, severity, phase, category, code, message, labels, fields, tra
 索引 binder（`f : a -> a` 里自动量化的 `a`、实例方法签名里的 `a`/`b`/`c`、`{n : Nat}`）
 由精化器在体前插成擦除 λ，源码里没有用户可见的外层 binder，因此 `f a = a`、`Applicative`
 实例的 `\a => \b =>` 不误报；显式 `0 x` binder 与它们同等对待。`UN_UnusedDefinition`
-只在入口路径检查（库包导出面未知，避免误报）。
+只在入口路径检查（库包导出面未知，避免误报）。编译器生成的内部 binder（do 忽略 binder
+命名 `_`、trait 字典字段 `_f<n>`）同样不参与 `UN_UnusedBinder` / `UN_ShadowedBinder`。
+`UN_UnusedImport` 按「名字解析实际使用 + 模块头 `module X` 重导出」两路追踪（alias 归一到
+import 名）；warning 不写入 iface / check 结果缓存，`-W` / `--deny-warnings` 会强制本包
+模块重新精化以避免漏报（见 [tooling.md](tooling.md) 退出码一节）。
 
 ## 5. 渲染视图
 
@@ -167,7 +171,7 @@ JSON 字段是机器契约：`code/severity/phase/category/message/labels[]/fiel
 | D5 目录单一真源 + 生成枚举/文档 | 已落地（枚举构造子锁定码/arity；描述/中文/示例表与枚举同模块维护并由 `gen-errors` 生成 `errors.md`+`errors.json`（含 example）；`explain` 同源；LSP data 附 `catalog` 提示） |
 | D6 渲染/LSP/CLI | 已落地 short/human/JSON/SARIF + LSP push/pull + `[diagnostics]` 配置；human 视图展示 fields/trace/suggestions（与 JSON 同源）；SARIF rules 带目录 shortDescription/help/defaultConfiguration/tags；i18n 已落地（`--lang zh` 与 `[diagnostics] lang` 的 human 消息本地化 + `= message:` 英文原文；机器 JSON 保留英文 `message` 并附 `localizedMessage`） |
 | D7.1 多错误 + Cascade | 已落地（parser 顶层 resync；elab `--continue-on-error` best-effort：文件入口/可执行包/库包逐次移除失败声明，最多 8 条；依赖被移除声明的错误标 `origin=cascade`（human note；JSON/SARIF/LSP data 同源）；`--max-errors` 同时约束恢复结果） |
-| D7.2 warnings（未使用/冗余/不可达） | 已落地（`UN_UnusedBinder`/`UN_ShadowedBinder`/`UN_RedundantCtorBranch`/`UN_RedundantLiteralBranch`/`UN_BranchAfterCatchAll`/`UN_UnusedImport`（限定/别名/open import 统一追踪）/`UN_UnusedDefinition`；`-W`/`--deny-warnings` 已接） |
+| D7.2 warnings（未使用/冗余/不可达） | 已落地（`UN_UnusedBinder`/`UN_ShadowedBinder`/`UN_RedundantCtorBranch`/`UN_RedundantLiteralBranch`/`UN_BranchAfterCatchAll`/`UN_UnusedImport`（限定/别名/open import/`module X` 重导出统一追踪）/`UN_UnusedDefinition`；`-W`/`--deny-warnings` 已接且绕过 check 缓存/干净模块复用以保证不漏报） |
 | D7.3 建议引擎 + Fix | 已落地（`Candidate`/`Suggestion` 模型；所有可安全自动修复的 warning 附 machine-applicable 编辑（unused binder/definition/import、冗余构造子/字面量分支、catch-all 后分支）；LSP codeAction 应用诊断 suggestions，`test/corpus/lsp/quickfix.sh` 集成测试） |
 | D7.4 类型不匹配 expected/found | 已落地（fields expected/found + PhUnify trace 帧；期望类型无源 span，以 fields 而非双端 label 表达） |
 | D7.5 实例搜索 trace | 已落地（`TC_NoInstanceFound` 附失败目标族桶的候选实例 `fields.candidates`，每个候选带 instance 声明 span 与拒绝原因「实例头 vs 目标」） |

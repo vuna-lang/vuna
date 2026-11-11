@@ -1181,7 +1181,7 @@ moduleOfIface : ModuleIface -> Module
 -- 不会再走定义级信任检查（写接口的包在 check/build 时已校验过）。
 moduleOfIface mi =
   Module (miNameOf mi) (miPackageOf mi) (miImportsOf mi) (miImplicitImportsOf mi) (miDeclsOf mi)
-    (miExportsOf mi) (miCapabilitiesOf mi) Nothing (miFixitiesOf mi)
+    (miExportsOf mi) (miCapabilitiesOf mi) Nothing (miFixitiesOf mi) []
 
 -- ---------------------------------------------------------------
 -- M34.5（S6）：依赖可见性收敛。全量路径只加载 entry/本包模块的 **import 闭包**；

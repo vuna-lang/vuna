@@ -108,7 +108,7 @@ CLI 统一使用 0 / 1 / 2 三档：
 | 1 | 源码 / 诊断错误 | `check` / `compile` / `build` 的一切失败（解析、精化、覆盖性、终止性、codegen，以及入口路径不存在；**解析错误也是 1**）；`lint` 有 finding；`fmt --check` 有需重排文件；`doc --check` 缺 docstring；`test` 有失败 |
 | 2 | 用法 / 工具错误 | 未知命令或 flag、缺值、参数个数不对；工具命令的 IO / 上下文错误（`lint` / `fmt` / `interp` / `test` / `goal` / `doc` 的路径不存在、非 workspace、包或依赖加载失败、取不到程序级 fixity 上下文） |
 
-约定之外：`vuna check` 的 warning（`UN_` 域）默认静默：`-W`/`--warnings` 打开显示，`--deny-warnings` 显示并把退出码提升为 1（源码检查本身仍成功）。warning 只报当前检查单元自己的文件（依赖包不重复刷屏）。**warning 不进入 iface / check 结果缓存**：命中缓存的包级检查（以及只复用干净模块的摘要路径）不会重放 warning，热缓存下 `-W` 可能静默、`--deny-warnings` 可能误过；需要可靠告警时用 `VUNA_ELAB_FULL=1` 强制全量（见 [debt.md](debt.md) C48）。
+约定之外：`vuna check` 的 warning（`UN_` 域）默认静默：`-W`/`--warnings` 打开显示，`--deny-warnings` 显示并把退出码提升为 1（源码检查本身仍成功）。warning 只报当前检查单元自己的文件（依赖包不重复刷屏）。**warning 不持久化**，所以 `-W` / `--deny-warnings`（以及 manifest `[diagnostics] warnings/deny-warnings`）会跳过 check 结果缓存、并让**本包**模块全部重新精化（依赖包仍复用接口摘要）——热缓存下告警仍然完整，代价是该次 check 从「缓存命中 ~ms」回到「本包精化秒级」。普通 `vuna check` 仍走缓存/干净模块（不显示 warning）。
 
 约定之外：`vuna interp` 把任何检查 / 求值失败报成 2（输出以 `error:` 开头）；`vuna
 search` 无命中为 1（用法 / 查询解析 / 非 workspace 仍为 2）；`vuna run` 透传子进程退出

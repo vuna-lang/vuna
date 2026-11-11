@@ -139,6 +139,12 @@ $TMPDIR/vuna-cache/<hashText(textHash(包名))>/split-units/e-<entryId>/<unit>.u
 $TMPDIR/vuna-cache/ast/<key>                                                       # parse 结果缓存（schema 7）
 ```
 
+check 结果缓存只记录「同输入下曾经成功」，**不含 warning**；请求告警
+（`-W` / `--deny-warnings` / manifest `[diagnostics] warnings`）时 `checkPackage` 跳过
+check 缓存、并把摘要路径的「干净本包模块」表清空（本包模块全部重新精化，依赖包仍从接口
+预置），因此该次 check 不是 27ms 的命中路径，而是「摘要路径 + 本包重算」。普通 check
+不受影响。
+
 **载荷 framing（C32 最小硬化）**：除 iface 文件自己的
 `vuna-iface-file 1|schema|compiler|\n` 头外，split/check/ast/unit 载荷统一用
 `CacheFormat`：`magic|tag|len|strHash 校验和\n` + payload。读侧先做**头行前缀扫描 + 长度

@@ -560,7 +560,10 @@ checkPackageSeq : Package -> Int -> Int
 checkPackageSeq pkg code =
   let
     _ = applyDiagConfig (Just pkg)
-    c = case checkPackage pkg of
+    -- M45：warning 需要本包模块重新精化（warning 不持久化）；-W / --deny-warnings 时
+    -- 跳过 check 缓存与干净模块复用（依赖仍走接口摘要）。
+    wantWarnings = showWarningsOn 0 || denyWarningsOn 0
+    c = case checkPackage wantWarnings pkg of
       ErrC e => checkPackageErr pkg e
       OkC _ =>
         let
@@ -717,7 +720,7 @@ buildOne noCompile multiOut outM pkg =
     else case compileToDir ctx entry True outDir of
       ErrC e => printDiag e
       OkC _ => buildLinked ctx entry outDir name
-  else case checkPackage pkg of
+  else case checkPackage False pkg of
     ErrC e => printDiag e
     OkC warnings =>
       let

@@ -104,7 +104,7 @@ fixityOf t c = case lookupFixity t c.chainOp of
 -- 供 fmt 打印（普通运算符仍是 `EApp (EVar op)`，fmt 按 fixity 打回中缀）。
 infixTerm : FixityTable -> ChainOp -> Expr -> Expr -> Span -> Expr
 infixTerm t c lhs rhs sp =
-  if renameMode t then if c.chainOp == ">>" then EApp (EVar "bind" sp) [lhs, ELam ["vuna_seq_ignore"] rhs sp] sp
+  if renameMode t then if c.chainOp == ">>" then EApp (EVar "bind" sp) [lhs, ELam ["_"] rhs sp] sp
   else EApp (EVar (aliasOf t c.chainOp) sp) [lhs, rhs] sp
   else if c.chainIsBacktick then EBacktick c.chainOp lhs rhs sp
   else EApp (EVar c.chainOp sp) [lhs, rhs] sp
