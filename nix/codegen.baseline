@@ -40,7 +40,7 @@
 #       （其余指标同上），即 +18 字节漂移早于本任务、非 Float 改动引入；按实测把
 #       bytes 重标定为 4233。
 files =4
-bytes =4097
+bytes =4083
 lines =80
 maxline =823
 longlines =5
@@ -57,3 +57,6 @@ ctorcount =17
 #       record（`type t_Point = { f_Point_x; f_Point_y }`），构造/模式/投影/更新都走
 #       record 语法。夹具的 Point 臂因此少一个变体构造子与 match（ctorcount 20 → 17），
 #       产物变短（bytes 4245 → 4097、lines 86 → 80），maxline/longlines 不变。
+# 漂移重标定（2026-11-11，位运算原语 + SHA-256/Bits 合并后）：夹具源码与口径未变，
+#       产物 bytes 4097 → 4083（其余指标不变；dd65112 的 Codegen.Term/Intrinsics 改动
+#       是唯一触到 codegen 的提交）。按实测精确基线重标定。
