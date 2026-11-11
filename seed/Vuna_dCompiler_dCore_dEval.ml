@@ -788,6 +788,12 @@ and v_Vuna_dCompiler_dCore_dEval_dprimReduce = (fun defs sols fuel g sp -> (if (
 )
   | _ -> Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing
 )) sp)
+  | Vuna_dCompiler_dIntrinsics.C_Vuna_dCompiler_dIntrinsics_dIntrinsicOp_OpBitAnd -> Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing
+  | Vuna_dCompiler_dIntrinsics.C_Vuna_dCompiler_dIntrinsics_dIntrinsicOp_OpBitOr -> Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing
+  | Vuna_dCompiler_dIntrinsics.C_Vuna_dCompiler_dIntrinsics_dIntrinsicOp_OpBitXor -> Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing
+  | Vuna_dCompiler_dIntrinsics.C_Vuna_dCompiler_dIntrinsics_dIntrinsicOp_OpBitNot -> Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing
+  | Vuna_dCompiler_dIntrinsics.C_Vuna_dCompiler_dIntrinsics_dIntrinsicOp_OpBitShl -> Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing
+  | Vuna_dCompiler_dIntrinsics.C_Vuna_dCompiler_dIntrinsics_dIntrinsicOp_OpBitShr -> Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing
   | Vuna_dCompiler_dIntrinsics.C_Vuna_dCompiler_dIntrinsics_dIntrinsicOp_OpNone -> Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing
   | _ -> failwith "DT: impossible branch"
 )

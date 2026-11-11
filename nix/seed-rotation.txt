@@ -1,8 +1,8 @@
 # 由 nix/seed-rotate.sh 生成。记录 seed/ 对应（rotation 时）的源码状态。
 # 仅供审计与滞后报告；CI 不因 seed 落后于源码而失败。
-rotated_at=2026-11-11T02:09:12Z
-source_digest=sha256:985e44a2e99889afd3020bb93f5e9d41daaea1a320a85c826602472ce941c598
-source_files=138
+rotated_at=2026-11-11T03:27:07Z
+source_digest=sha256:2db456ece42673b5e4f7927ba2679016c657088413326cfa2bf77f1bde5c20c9
+source_files=142
 seed_ml=106
 seed_files=107
-git_commit=fc3b091885bf2468c4adea823beaf8a5a32f36e0
+git_commit=dd651127e3d5b7df895642255459e6e755f00b7d
