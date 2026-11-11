@@ -296,7 +296,7 @@ isCleanModule : DiagCache -> String -> Bool
 isCleanModule session name = memName name (map miNameOf session.dcClean)
 
 -- Maybe Int 与「当前磁盘内容哈希」相等吗（无条目 = 需要写）。
-entryHashMatches : Maybe Int -> Int -> Bool
+entryHashMatches : Maybe String -> String -> Bool
 entryHashMatches Nothing _ = False
 entryHashMatches (Just h) x = h == x
 

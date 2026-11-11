@@ -35,6 +35,25 @@
 AST 上；Idris2 的对应阶段吃编译后的 case tree。vuna 的等价物就是 resolved 子句，因此把
 它作为接口的一部分（也顺带让依赖模块的 record 头 / 终止性上下文可用）。
 
+## 哈希格式（D5）
+
+- **内容摘要 = SHA-256**（`Iface.shaText`，64 位小写十六进制）。`ifaceHashVersion` 参与
+  哈希输入：摘要算法或分片编码变化时递增，旧接口自然换代（与 `ifaceSchema` 分工：
+  schema 管载荷布局，版本管摘要算法）。
+- **`miIfaceHash` 是 Merkle 摘要**：导出面 / 能力 / imports / fixity / record 头 /
+  datas / defs / globals / insts / classes 各段先规范化（按名字排序、去 span / 路径）
+  再各自摘要，最后 `digestParts`（长度前缀拼接）做一次 SHA-256。
+- **MB 级 Marshal 载荷段**（datas / defs / globals / insts / classes / exports）先做
+  4-lane 63-bit wrapping 多项式**预哈希**折叠（零分配），再对折叠串做 SHA-256。原因：
+  对这些段逐字节跑 SHA 会把 iface 阶段变成 check 的新热点（实测 check-all +1.1 s）；
+  预哈希是非密码学函数（与 `CacheFormat` 同一威胁模型：无对手、只防意外碰撞），
+  顶层摘要仍是 SHA-256。
+- **源内容哈希 `siHash` 同一函数**（预哈希 + SHA-256），与 `miIfaceHash` 共用一套规范。
+- **依赖链自愈**：`miDepHashes` 记录写接口时各依赖模块的摘要；依赖接口不可得时记哨兵
+  `depMissingHash`。带哨兵的接口**判脏并重写**（workspace 并行检查下依赖可能后写，
+  必须先保守重算一次），链校验跳过哨兵项。
+- 已知边界：载荷编码仍是 OCaml Marshal（canonical Core encoding 属 C32）。
+
 ## 数据流
 
 ### 写侧（一次成功的 check / build）
@@ -46,9 +65,9 @@ Dt.check（全量或摘要路径）→ CheckedPackage = { DtProgram, modules, en
         （归属表来自 Driver.Owner：声明名 / 实例名 / 派生实例 / trait 投影 / Dict_）
       → 逐模块 hashOfParts（exports / capabilities / imports / fixities / record 头 /
         datas / defs / globals / insts / classes；不含 span / 源路径）→ miIfaceHash
-        （哈希规范化用「按名字排序后整表 Marshal + 6-lane 强哈希」；排序是插入排序
-        O(d²)，单模块数千项时是已知边界——逐项哈希的交换律折叠实测在真实包上更贵，
-        见 [performance.md](performance.md) §4/§9）
+        （内容摘要 = **SHA-256**（`Iface.shaText`）；各段仍按名字排序后整表 Marshal 取字节，
+        排序是插入排序 O(d²)，单模块数千项时是已知边界——逐项哈希的交换律折叠实测在真实包上
+        更贵，见 [performance.md](performance.md) §4/§9）
       → 逐模块 miDepHashes（直接 import 的接口哈希；包内模块边算边进表）
       → 包级 PackageManifest（schema / compiler / package / **pmEnv** / modules）→ 原子写
         `.vuna-iface`（包级锁内：`$TMPDIR/vuna-cache/<pkgHash>/iface.lock`，60s 过期可在

@@ -495,14 +495,18 @@ depIfacesGo roots (p :: rest) acc = case depIfaceOf p of
 
 -- 来源校验：接口记录的每个模块源信息 = 当前文件（默认内容哈希；`VUNA_CACHE_MTIME=1` 时
 -- mtime+size 相同且落在安全窗外即视为未变，否则回落内容哈希）。反过来当前目录里的模块
--- 集合必须与接口模块集合一致（新增/删除模块都要回退，否则接口会缺件/带陈旧模块）。
+-- 判据：接口记录的每个模块，其源文件必须仍然存在且内容未变。
+-- **不做**「磁盘模块集合 == 接口模块集合」的相等比较：可执行包的接口只覆盖入口
+-- import 闭包，磁盘上允许存在未被引用的模块（它们不参与编译，也不该进接口；
+-- §64 起基础设施模块已入口导入，但工具包 / 本地夹具仍可能带未引用模块）。
+-- 集合变化由其它判据覆盖：新增并 import 的模块会改使用者源码哈希、`[export]` 变化会改
+-- `pmEnv`、删除文件会让下面的 entry 查找直接失败。
 depIfaceSourcesValid : List Root -> Package -> PackageIface -> Bool
 depIfaceSourcesValid roots p pi =
   let
     pkgRoots = filter (\r => rootName r == packageName p) roots
     walked = sourcePathMapOfRoots pkgRoots
-  in sameNameSet (map firstOf walked) (moduleNamesOf pi.piModules)
-    && allModuleSourcesValid pi.piModules walked
+  in allModuleSourcesValid pi.piModules walked
 
 sourcePathMapOfRoots : List Root -> List (Pair String String)
 sourcePathMapOfRoots roots =
@@ -529,8 +533,8 @@ sourceInfoUnchanged path si = if mtimeFastPath then
     m = runIO (prim_fileMtime path)
     sz = runIO (prim_fileSize path)
   in if m == siMtimeOf si && sz == siSizeOf si && m + mtimeSafetyWindowSec < toolNowSec then True
-  else textHash (runIO (prim_readFile path)) == siHashOf si
-else textHash (runIO (prim_readFile path)) == siHashOf si
+  else payloadDigest (runIO (prim_readFile path)) == siHashOf si
+else payloadDigest (runIO (prim_readFile path)) == siHashOf si
 
 -- 可选快路径（默认关闭；`VUNA_CACHE_MTIME=1` 打开）：mtime + size 相同且 mtime 落在安全窗
 -- 外即跳过读文件算哈希。实测缓存命中路径收益 <1%（check/build 的缓存 key 本来就要读全部
@@ -547,13 +551,16 @@ depIfaceChainValid ifaces =
     tbl = map (\m => Pair (miNameOf m) (miIfaceHashOf m)) ifaces
   in depHashesAllOk tbl ifaces
 
-depHashesAllOk : List (Pair String Int) -> List ModuleIface -> Bool
+depHashesAllOk : List (Pair String String) -> List ModuleIface -> Bool
 depHashesAllOk tbl [] = True
 depHashesAllOk tbl (m :: rest) = depHashListOk tbl (miDepHashesOf m) && depHashesAllOk tbl rest
 
-depHashListOk : List (Pair String Int) -> List (Pair String Int) -> Bool
+depHashListOk : List (Pair String String) -> List (Pair String String) -> Bool
 depHashListOk tbl [] = True
-depHashListOk tbl ((Pair name h) :: rest) = case lookupPair name tbl of
+depHashListOk tbl ((Pair name h) :: rest) = if h == depMissingHash then depHashListOk tbl rest
+else case lookupPair name tbl of
+  -- 哨兵（写接口时依赖接口不可得）不参与链校验：那份接口随后会被判脏并按真实依赖重写
+  -- （见 `hasMissingDep` 在 clean/write 判定里的使用）。
   Just h2 => h2 == h && depHashListOk tbl rest
   Nothing => False
 
@@ -597,7 +604,7 @@ manifestSourcesValid roots p mf =
     pkgRoots = filter (\r => rootName r == packageName p) roots
     walked = sourcePathMapOfRoots pkgRoots
     entries = pmModulesOf mf
-  in sameNameSet (map firstOf walked) (map meNameOfEntry entries) && allEntriesValid entries walked
+  in allEntriesValid entries walked
 
 allEntriesValid : List ManifestEntry -> List (Pair String String) -> Bool
 allEntriesValid [] _ = True
@@ -749,17 +756,17 @@ baseDepIfacesOf ctx = case ctx.contextPackage of
 -- `tcDepTable`：依赖模块名 → (接口目录, manifest 条目)，buffer 改 import 时重算闭包用。
 record ToolContext where
   tcDepIfaces : List ModuleIface
-  tcDepHashes : List (Pair String Int)
+  tcDepHashes : List (Pair String String)
   tcOwnManifest : Maybe PackageManifest
   tcNeeded : List String
   tcStats : List SourceInfo
   tcDepTable : List (Pair String (Pair String ManifestEntry))
 
 -- 依赖 manifest 的条目 → 接口哈希表（不读模块文件）。
-manifestHashTable : List (Pair String PackageManifest) -> List (Pair String Int)
+manifestHashTable : List (Pair String PackageManifest) -> List (Pair String String)
 manifestHashTable mans = concatMap tableOfManifest mans
 
-tableOfManifest : Pair String PackageManifest -> List (Pair String Int)
+tableOfManifest : Pair String PackageManifest -> List (Pair String String)
 tableOfManifest (Pair dir mf) =
   map (\e => Pair (meNameOfEntry e) (meIfaceHashOfEntry e)) (pmModulesOf mf)
 
@@ -769,14 +776,14 @@ statsOfManifest (Pair dir mf) =
   append (map meSourceOfEntry (pmModulesOf mf)) [sourceInfoForPath (manifestPathOf dir)]
 
 -- 内容哈希（与缓存 key / 接口源信息同一函数）：工具链侧比较 buffer 与磁盘内容用。
-toolTextHash : String -> Int
-toolTextHash = textHash
+toolTextHash : String -> String
+toolTextHash = payloadDigest
 
 sourceInfoForPath : String -> SourceInfo
 sourceInfoForPath path =
   let
     raw = runIO (prim_readFile path)
-  in SourceInfo path (textHash raw) (runIO (prim_fileMtime path)) (runIO (prim_fileSize path))
+  in SourceInfo path (payloadDigest raw) (runIO (prim_fileMtime path)) (runIO (prim_fileSize path))
 
 toolNowSec : Int
 toolNowSec = runIO timeUs / 1000000
@@ -794,7 +801,7 @@ sourceFresh builtSec si =
       m = runIO (prim_fileMtime path)
       sz = runIO (prim_fileSize path)
     in if m == siMtimeOf si && sz == siSizeOf si && siMtimeOf si + mtimeSafetyWindowSec <= builtSec then True
-    else textHash (runIO (prim_readFile path)) == siHashOf si
+    else payloadDigest (runIO (prim_readFile path)) == siHashOf si
 
 toolSessionFresh : Int -> List SourceInfo -> Bool
 toolSessionFresh builtSec [] = True
@@ -864,13 +871,13 @@ filterOwnEntries needed exclude (e :: rest) =
     )
   in if keep then e :: filterOwnEntries needed exclude rest else filterOwnEntries needed exclude rest
 
-toolCleanGo : Int -> List (Pair String Int) -> List ModuleIface -> List ModuleIface -> List ModuleIface
+toolCleanGo : Int -> List (Pair String String) -> List ModuleIface -> List ModuleIface -> List ModuleIface
 toolCleanGo builtSec depTbl [] cleanRev = reverse cleanRev
 toolCleanGo builtSec depTbl (m :: rest) cleanRev =
   let
     selfOk = payloadSelfOk m
     _ = if selfOk then 0 else note "iface-reject=self-hash ${miNameOf m}"
-  in if sourceFresh builtSec (miSourceOf m) && cachedProgramValid (miCachedOf m) && selfOk && moduleDepsOk depTbl cleanRev (miDepHashesOf m) then toolCleanGo builtSec depTbl rest (m :: cleanRev)
+  in if sourceFresh builtSec (miSourceOf m) && cachedProgramValid (miCachedOf m) && selfOk && not (hasMissingDep (miDepHashesOf m)) && moduleDepsOk depTbl cleanRev (miDepHashesOf m) then toolCleanGo builtSec depTbl rest (m :: cleanRev)
   else toolCleanGo builtSec depTbl rest cleanRev
 
 -- 单模块接口写回（M34.6 5a）：LSP 每次成功请求后只写「当前模块」的接口（合并进本包
@@ -916,12 +923,12 @@ toolHasOwnManifest ctx = case toolOwnManifest ctx of
   Nothing => False
 
 -- 本包 manifest 里某模块记录的源内容哈希（判断「磁盘内容已检查过」⇒ 不必重写接口）。
-toolOwnEntrySourceHash : ToolContext -> String -> Maybe Int
+toolOwnEntrySourceHash : ToolContext -> String -> Maybe String
 toolOwnEntrySourceHash tool name = case tool.tcOwnManifest of
   Just mf => entryHashOfEntries (pmModulesOf mf) name
   Nothing => Nothing
 
-entryHashOfEntries : List ManifestEntry -> String -> Maybe Int
+entryHashOfEntries : List ManifestEntry -> String -> Maybe String
 entryHashOfEntries [] name = Nothing
 entryHashOfEntries (e :: rest) name =
   if meNameOfEntry e == name then Just (siHashOf (meSourceOfEntry e))
@@ -1024,12 +1031,12 @@ auditCompare subject at s f =
   else err
     "iface-audit-mismatch subject=${subject} at=${at} summary=${textHash s}/${strLength s} full=${textHash f}/${strLength f}"
 
-depIfaceHashTable : PackageContext -> List (Pair String Int)
+depIfaceHashTable : PackageContext -> List (Pair String String)
 depIfaceHashTable ctx = case ctx.contextPackage of
   Nothing => []
   Just pkg => concatMap hashTableOf (secondOf (collectDepPackages [] pkg.packageDependencies))
 
-hashTableOf : Package -> List (Pair String Int)
+hashTableOf : Package -> List (Pair String String)
 hashTableOf dep = case depIfaceOf dep of
   Just pi => map (\m => Pair (miNameOf m) (miIfaceHashOf m)) pi.piModules
   Nothing => []
@@ -1065,7 +1072,7 @@ depEnvText dep =
 -- 与 `ownCleanModules` 同一次读取，同时回报「旧整包接口是否可完整读回」（写侧信任旧
 -- manifest 做按模块跳过的前提）：check/build 的写前校验已经解码过整包接口，写回时复用
 -- 这次结果，不再把同样的 65 个模块文件读 + unmarshal 第二遍。
-ownCleanInfo : PackageContext -> List (Pair String Int) -> Pair Bool (Maybe (List ModuleIface))
+ownCleanInfo : PackageContext -> List (Pair String String) -> Pair Bool (Maybe (List ModuleIface))
 ownCleanInfo ctx depTbl = case readPackageIface (ifaceDirOf ctx) ifaceCompilerTag of
   Nothing => Pair False Nothing
   Just pi => if pi.piSchema /= ifaceSchemaTag || pi.piCompiler /= ifaceCompilerTag || pi.piPackage /= contextPackageName ctx then Pair True Nothing
@@ -1078,7 +1085,7 @@ ownCleanInfo ctx depTbl = case readPackageIface (ifaceDirOf ctx) ifaceCompilerTa
       clean = firstOf (cleanModulesGo (ownOrigins ctx) (ownSourceInfos ctx) depTbl pi.piModules [])
     in Pair True (if length clean == 0 then Nothing else Just clean)
 
-ownCleanModules : PackageContext -> List (Pair String Int) -> Maybe (List ModuleIface)
+ownCleanModules : PackageContext -> List (Pair String String) -> Maybe (List ModuleIface)
 ownCleanModules ctx depTbl = secondOf (ownCleanInfo ctx depTbl)
 
 -- 工具路径（LSP 冷启动写单模块接口）复用的干净模块：记录原样写回，避免用增量路径缺失的
@@ -1096,7 +1103,7 @@ ownOrigins ctx = case readManifest (ifaceDirOf ctx) ifaceCompilerTag of
   Just mf => map (\e => Pair (meNameOfEntry e) (meOriginOfEntry e)) (pmModulesOf mf)
   Nothing => []
 
-cleanModulesGo : List (Pair String String) -> List (Pair String SourceInfo) -> List (Pair String Int) -> List ModuleIface -> List ModuleIface -> Pair (List ModuleIface) (List String)
+cleanModulesGo : List (Pair String String) -> List (Pair String SourceInfo) -> List (Pair String String) -> List ModuleIface -> List ModuleIface -> Pair (List ModuleIface) (List String)
 cleanModulesGo origins sources depTbl [] cleanRev = Pair (reverse cleanRev) []
 cleanModulesGo origins sources depTbl (m :: rest) cleanRev =
   let
@@ -1114,6 +1121,7 @@ cleanModulesGo origins sources depTbl (m :: rest) cleanRev =
         && sameSource
         && cachedProgramValid (miCachedOf m)
         && selfOk
+        && not (hasMissingDep (miDepHashesOf m))
         && moduleDepsOk depTbl cleanRev (miDepHashesOf m)
   in if keep then cleanModulesGo origins sources depTbl rest (m :: cleanRev)
   else cleanModulesGo origins sources depTbl rest cleanRev
@@ -1124,16 +1132,16 @@ cleanModulesGo origins sources depTbl (m :: rest) cleanRev =
 payloadSelfOk : ModuleIface -> Bool
 payloadSelfOk m = if ifaceSelfTestRequested then hashOfIface m == miIfaceHashOf m else True
 
-moduleDepsOk : List (Pair String Int) -> List ModuleIface -> List (Pair String Int) -> Bool
+moduleDepsOk : List (Pair String String) -> List ModuleIface -> List (Pair String String) -> Bool
 moduleDepsOk depTbl cleanRev [] = True
-moduleDepsOk depTbl cleanRev ((Pair name h) :: rest) = if h == 0 - 1 then moduleDepsOk depTbl cleanRev rest
+moduleDepsOk depTbl cleanRev ((Pair name h) :: rest) = if h == depMissingHash then moduleDepsOk depTbl cleanRev rest
 else case lookupPair name depTbl of
   Just h2 => h2 == h && moduleDepsOk depTbl cleanRev rest
   Nothing => case cleanHashOf cleanRev name of
     Just h2 => h2 == h && moduleDepsOk depTbl cleanRev rest
     Nothing => False
 
-cleanHashOf : List ModuleIface -> String -> Maybe Int
+cleanHashOf : List ModuleIface -> String -> Maybe String
 cleanHashOf [] _ = Nothing
 cleanHashOf (m :: rest) name =
   if miNameOf m == name then Just (miIfaceHashOf m) else cleanHashOf rest name
@@ -1278,7 +1286,7 @@ gcIfaceGo keep (p :: rest) =
 ownSourceInfos : PackageContext -> List (Pair String SourceInfo)
 ownSourceInfos ctx =
   concatMap
-    (\root => map (\p => Pair (moduleNameOfPath (rootDir root) p) (SourceInfo p (textHash (runIO (prim_readFile p))) (runIO (prim_fileMtime p)) (runIO (prim_fileSize p)))) (collectVunaMeta 1048576 (rootDir root)))
+    (\root => map (\p => Pair (moduleNameOfPath (rootDir root) p) (SourceInfo p (payloadDigest (runIO (prim_readFile p))) (runIO (prim_fileMtime p)) (runIO (prim_fileSize p)))) (collectVunaMeta 1048576 (rootDir root)))
     (filter (\r => rootName r == contextPackageName ctx) (contextRoots ctx))
 
 -- | 干净模块的 `miSource` 来自磁盘 manifest（可能是上一次以相对/绝对不同写法 check 时写入的
@@ -1352,7 +1360,7 @@ else
 ifaceSelfTestRequested : Bool
 ifaceSelfTestRequested = runIO (prim_getenv "VUNA_IFACE_SELFTEST") == "1"
 
-ifaceHashOfName : List ModuleIface -> String -> Maybe Int
+ifaceHashOfName : List ModuleIface -> String -> Maybe String
 ifaceHashOfName [] _ = Nothing
 ifaceHashOfName (m :: rest) name =
   if miNameOf m == name then Just (miIfaceHashOf m) else ifaceHashOfName rest name

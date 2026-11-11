@@ -4,6 +4,8 @@ module Vuna.Compiler.Driver.Iface
   , PackageIface(..)
   , PackageManifest(..)
   , SourceInfo(..)
+  , depMissingHash
+  , hasMissingDep
   , hashOfIface
   , hashTextStrong
   , ifaceMirrorMode
@@ -36,6 +38,7 @@ module Vuna.Compiler.Driver.Iface
   , moduleNamesOf
   , modulePathOf
   , packageIfaceValid
+  , payloadDigest
   , pmCompilerOf
   , pmEnvOf
   , pmModulesOf
@@ -44,6 +47,7 @@ module Vuna.Compiler.Driver.Iface
   , readManifest
   , readModuleFile
   , readPackageIface
+  , shaText
   , siHashOf
   , siMtimeOf
   , siPathOf
@@ -73,6 +77,7 @@ module Vuna.Compiler.Driver.Iface
 --     （导出表、能力声明、imports、fixity、record 头、data/ctor、defs、globals、实例、
 --     类），只排除 span / 源路径，因此换行/注释/路径变化不会误失效；读方实际消费的任何
 --     字段都必须参与哈希，否则会出现「载荷变了、哈希没变」的陈旧复用（§44m/§44n）。
+--     摘要算法是 **SHA-256**（`shaText`，D5）；`siHash` 是源内容摘要，同一函数。
 --
 -- 物理布局（S3/S8）：接口文件与源码同布局 + 包级 `.vuna-iface`（模块名 → 相对路径 /
 -- 源信息 / 接口哈希）。默认接口文件就在源文件旁；`VUNA_IFACE_DIR` 覆盖时整体镜像到外部
@@ -80,6 +85,7 @@ module Vuna.Compiler.Driver.Iface
 -- 再逐模块读文件并校验。文件格式仍是 Marshal，schema 见 `ifaceSchema`
 -- （布局/字段语义变化必须 bump）。
 import Vuna.Compiler.Common
+import Vuna.Compiler.Hash
 import Base.HashMap
 import Vuna.Compiler.Core
 import Vuna.Compiler.Frontend.Ast
@@ -98,7 +104,7 @@ import Base.IO.Host
 -- 会失效，回退全量）；mtime/size 是可选快路径（`VUNA_CACHE_MTIME=1`），默认仍用内容哈希。
 record SourceInfo where
   siPath : String
-  siHash : Int
+  siHash : String
   siMtime : Int
   siSize : Int
 
@@ -106,10 +112,11 @@ record ModuleIface where
   miName : String
   miPackage : String
   miSource : SourceInfo
-  miIfaceHash : Int
+  miIfaceHash : String
   -- 直接 import 的模块接口哈希（含同包模块与隐式 import）：TTC 的 `importHashes`。
-  -- 依赖接口变化会通过它使本模块失效；`-1` = 写接口时该依赖接口不可得（哨兵，永不失配）。
-  miDepHashes : List (Pair String Int)
+  -- 依赖接口变化会通过它使本模块失效；`depMissingHash` = 写接口时该依赖接口不可得
+  -- （哨兵，永不失配任何真实哈希）。
+  miDepHashes : List (Pair String String)
   miImports : List Import
   miImplicitImports : List Import
   miCapabilities : List String
@@ -138,7 +145,7 @@ record PackageIface where
 siPathOf : SourceInfo -> String
 siPathOf s = s.siPath
 
-siHashOf : SourceInfo -> Int
+siHashOf : SourceInfo -> String
 siHashOf s = s.siHash
 
 siMtimeOf : SourceInfo -> Int
@@ -156,10 +163,10 @@ miPackageOf m = m.miPackage
 miCachedOf : ModuleIface -> CachedProgram
 miCachedOf m = m.miCached
 
-miIfaceHashOf : ModuleIface -> Int
+miIfaceHashOf : ModuleIface -> String
 miIfaceHashOf m = m.miIfaceHash
 
-miDepHashesOf : ModuleIface -> List (Pair String Int)
+miDepHashesOf : ModuleIface -> List (Pair String String)
 miDepHashesOf m = m.miDepHashes
 
 miSourceOf : ModuleIface -> SourceInfo
@@ -218,15 +225,23 @@ setPrepared prepared mi =
 -- R3：Term/Value 新增 TProj/VProj 构造子，Marshal 布局变化 ⇒ 15。
 -- R4（records-v2）：DtData 新增 `dtDataIsRecord`，`miPrepared` 中的 DRecord 保留（不再
 -- 降级成 DData），布局与语义变化 ⇒ 17。`Term` 新增 `TRecord` 类型前导 ⇒ 18。
+-- D5：接口哈希改为 SHA-256（`shaText` 内容摘要），`SourceInfo.siHash` / `miIfaceHash` /
+-- `miDepHashes` 由 Int 变 String ⇒ Marshal 布局变化 ⇒ 19。
 ifaceSchema : String
-ifaceSchema = "vuna-iface 18"
+ifaceSchema = "vuna-iface 19"
+
+-- | 接口哈希的**算法格式版本**：参与哈希输入（与 `ifaceSchema` 独立——schema 管载荷
+-- 布局，本版本管摘要算法/分片编码；换算法时旧哈希自然换代）。
+ifaceHashVersion : String
+ifaceHashVersion = "vuna-iface-hash 3 (sha256 + prehash)"
 
 -- ---------------------------------------------------------------
 -- 哈希：接口哈希必须比 `strHash`（10 bit）强得多
 -- ---------------------------------------------------------------
 -- `strHash` 是 0..1023 的 10 bit 哈希；接口哈希用它单发会在几百个模块上有可观测的碰撞
--- 概率，碰撞会直接导致「错误复用」。这里用 6 条不同盐的 lane 折叠，约 60 bit，且实现
--- 不依赖新原语（后续可换 63-bit intrinsic，见债务项）。
+-- 概率，碰撞会直接导致「错误复用」。历史实现是 6 条盐 lane 折叠（约 60 bit）；D5 起
+-- 接口哈希改用 SHA-256（`shaText`），`hashTextStrong` 只保留给**非 iface** 的排序键与
+-- 工具缓存（Repl / Test / codegen unit key）。
 strongSalts : List String
 strongSalts =
   [ "vuna-iface-0:",
@@ -240,11 +255,29 @@ strongSalts =
 hashTextStrong : String -> Int
 hashTextStrong s = foldl (\acc, salt => acc * 1000003 + strHash (salt ++ s)) 0 strongSalts
 
-combineHash : Int -> Int -> Int
-combineHash a b = a * 1000003 + b
+-- | 内容摘要（SHA-256，64 位小写十六进制）。接口哈希用它替换旧的 6-lane strHash 折叠
+-- （后者只有约 60 bit，碰撞面在几百模块规模上不可忽略）。
+shaText : String -> String
+shaText s = Vuna.Compiler.Hash.digestHex (Vuna.Compiler.Hash.digestOfString s)
 
-hashTerm : Term -> Int
-hashTerm t = hashTextStrong (prim_marshal t)
+-- | 大载荷段（Marshal 字节）的内容摘要：先 4-lane 预哈希折叠，再做 SHA-256。
+payloadDigest : String -> String
+payloadDigest s = shaText (Vuna.Compiler.Hash.prehashOfString s)
+
+-- | 可解析分片：长度前缀，保证多段拼接无歧义。
+partOf : String -> String
+partOf s = "${strLength s}:${s}"
+
+-- | 多个规范分片 → 一个内容摘要。
+digestParts : List String -> String
+digestParts ps = shaText (strConcatMany (map partOf ps))
+
+-- | 依赖接口不可得时的哨兵（永不失配任何真实哈希）。
+depMissingHash : String
+depMissingHash = "missing"
+
+hashTerm : Term -> String
+hashTerm t = payloadDigest (prim_marshal t)
 
 -- 哈希前按名字规范化顺序：同一集合在「全量 / 增量」两条路径上的列表顺序可能不同
 -- （例如 globals 由「干净模块产物 + 本次精化产物」拼接），接口哈希不能因此漂移。
@@ -350,39 +383,39 @@ canonMaybe Nothing = Nothing
 defView : DtDef -> Pair String (Pair Term (Maybe Term))
 defView d = Pair (dtDefName d) (Pair (canonTermTop (dtDefType d)) (canonMaybe (dtDefBody d)))
 
-hashDefs : List DtDef -> Int
-hashDefs ds = hashTextStrong (prim_marshal (sortByKey (\p => nameKey (firstOf p)) (map defView ds)))
+hashDefs : List DtDef -> String
+hashDefs ds = payloadDigest (prim_marshal (sortByKey (\p => nameKey (firstOf p)) (map defView ds)))
 
 -- 数据族 + 构造子 / 实例 / 类 / globals / 导出表：闭合项，无 span / 无路径，整体 Marshal。
-hashDatas : List DtData -> Int
-hashDatas ds = hashTextStrong (prim_marshal (sortByKey (\d => nameKey (dtDataName d)) ds))
+hashDatas : List DtData -> String
+hashDatas ds = payloadDigest (prim_marshal (sortByKey (\d => nameKey (dtDataName d)) ds))
 
-hashInsts : List DtInst -> Int
-hashInsts is = hashTextStrong (prim_marshal (sortByKey (\i => nameKey (dtInstName i)) is))
+hashInsts : List DtInst -> String
+hashInsts is = payloadDigest (prim_marshal (sortByKey (\i => nameKey (dtInstName i)) is))
 
-hashClasses : List DtClass -> Int
-hashClasses cs = hashTextStrong (prim_marshal (sortByKey (\c => nameKey (dtClassName c)) cs))
+hashClasses : List DtClass -> String
+hashClasses cs = payloadDigest (prim_marshal (sortByKey (\c => nameKey (dtClassName c)) cs))
 
-hashGlobals : List (Pair String Term) -> Int
-hashGlobals gs = hashTextStrong (prim_marshal (sortByKey (\p => nameKey (firstOf p)) gs))
+hashGlobals : List (Pair String Term) -> String
+hashGlobals gs = payloadDigest (prim_marshal (sortByKey (\p => nameKey (firstOf p)) gs))
 
 exportKeyOf : ExportEntry -> String
 exportKeyOf e = "${e.public}|${e.kind}|${e.target}"
 
-hashExports : List ExportEntry -> Int
-hashExports es = hashTextStrong (prim_marshal (sortByKey (\e => nameKey (exportKeyOf e)) es))
+hashExports : List ExportEntry -> String
+hashExports es = payloadDigest (prim_marshal (sortByKey (\e => nameKey (exportKeyOf e)) es))
 
 -- 模块能力声明（`[capabilities]` 在模块头的可见面）：决定依赖方的特权检查，必须参与
 -- 接口哈希，否则升级/降级能力不会让依赖模块失效。
-hashCapabilities : List String -> Int
-hashCapabilities cs = hashTextStrong (prim_marshal (sortByKey (\s => hashTextStrong s) cs))
+hashCapabilities : List String -> String
+hashCapabilities cs = digestParts (sortByKey (\s => hashTextStrong s) cs)
 
 -- fixity 带 span：只哈希语义字段（不因换行/路径变化失效）。
-fixityText : FixityDecl -> Int
-fixityText f = hashTextStrong "${f.fixityOp}|${f.fixityLevel}|${f.fixityAssoc}"
+fixityKeyText : FixityDecl -> String
+fixityKeyText f = "${f.fixityOp}|${f.fixityLevel}|${f.fixityAssoc}"
 
-hashFixities : List FixityDecl -> Int
-hashFixities fs = foldl (\acc, f => combineHash acc (fixityText f)) 0 fs
+hashFixities : List FixityDecl -> String
+hashFixities fs = digestParts (map fixityKeyText fs)
 
 -- record 头：语法降级只看（名字、参数、字段名 + 序号、deriving、构造子名、档位、
 -- 线性标记），字段类型不参与（字段类型已由 `hashDatas` 的 DtData Marshal 覆盖）。
@@ -390,14 +423,13 @@ hashFixities fs = foldl (\acc, f => combineHash acc (fixityText f)) 0 fs
 fieldKeyText : RecordFieldMeta -> String
 fieldKeyText (RecordFieldMeta fname fty i) = "${fname}:${i}"
 
-recordHash : RecordMeta -> Int
-recordHash r =
-  hashTextStrong
-    "${r.recordMetaName}|${joinStrings r.recordMetaParams}|${joinStrings (map fieldKeyText r.recordMetaFields)}|${joinStrings r.recordMetaDerivings}|${if r.recordMetaDerivingVia then "1" else "0"}|${reprPrefix r.recordMetaRepr}|${r.recordMetaCtor}|${if r.recordMetaLinear then "1" else "0"}"
+recordKeyText : RecordMeta -> String
+recordKeyText r =
+  "${r.recordMetaName}|${joinStrings r.recordMetaParams}|${joinStrings (map fieldKeyText r.recordMetaFields)}|${joinStrings r.recordMetaDerivings}|${if r.recordMetaDerivingVia then "1" else "0"}|${reprPrefix r.recordMetaRepr}|${r.recordMetaCtor}|${if r.recordMetaLinear then "1" else "0"}"
 
 -- | R2：哈希结构化字段表（进 `miRecords` 的同一份数据）。
-hashRecords : List RecordMeta -> Int
-hashRecords recs = foldl (\acc, r => combineHash acc (recordHash r)) 0 recs
+hashRecords : List RecordMeta -> String
+hashRecords recs = digestParts (map recordKeyText recs)
 
 joinStrings : List String -> String
 joinStrings [] = ""
@@ -416,29 +448,18 @@ importQualifiedText i = if i.importIsQualified then "q" else "u"
 importNameText : Import -> String
 importNameText i = "${i.importName}|${importAliasText i}|${importQualifiedText i}"
 
-hashImports : List Import -> Int
-hashImports is = foldl (\acc, i => combineHash acc (hashTextStrong (importNameText i))) 0 is
+hashImports : List Import -> String
+hashImports is = digestParts (map importNameText is)
 
-hashOfParts : String -> String -> List Import -> List Import -> List FixityDecl -> List RecordMeta -> List ExportEntry -> List String -> CachedProgram -> Int
+hashOfParts : String -> String -> List Import -> List Import -> List FixityDecl -> List RecordMeta -> List ExportEntry -> List String -> CachedProgram -> String
 hashOfParts name pkg imports implicitImports fixities records exports capabilities cp =
-  let
-    h0 = hashTextStrong "${name}|${pkg}"
-    h1 = combineHash h0 (hashImports imports)
-    h2 = combineHash h1 (hashImports implicitImports)
-    h3 = combineHash h2 (hashFixities fixities)
-    h4 = combineHash h3 (hashRecords records)
-    h5 = combineHash h4 (hashDatas (cachedDatas cp))
-    h6 = combineHash h5 (hashDefs (cachedDefs cp))
-    h7 = combineHash h6 (hashGlobals (cachedGlobals cp))
-    h8 = combineHash h7 (hashInsts (cachedInsts cp))
-    h9 = combineHash h8 (hashClasses (cachedClasses cp))
-    h10 = combineHash h9 (hashExports exports)
-  in combineHash h10 (hashCapabilities capabilities)
+  digestParts
+    [ifaceHashVersion, name, pkg, hashImports imports, hashImports implicitImports, hashFixities fixities, hashRecords records, hashDatas (cachedDatas cp), hashDefs (cachedDefs cp), hashGlobals (cachedGlobals cp), hashInsts (cachedInsts cp), hashClasses (cachedClasses cp), hashExports exports, hashCapabilities capabilities]
 
 -- 从已存载荷重算接口哈希（自证）：输入与写侧 `hashOfParts` 完全同源。用于发现
 -- 「载荷变了、`miIfaceHash` 没更新」的陈旧接口（`VUNA_IFACE_SELFTEST=1` 的读侧校验）。
 -- 成本 O(payload)，只放在自检/CI 路径，不进热路径。
-hashOfIface : ModuleIface -> Int
+hashOfIface : ModuleIface -> String
 hashOfIface m =
   hashOfParts (miNameOf m) (miPackageOf m) (miImportsOf m) (miImplicitImportsOf m) (miFixitiesOf m)
     (miRecordsOf m) (miExportsOf m) (miCapabilitiesOf m) (miCachedOf m)
@@ -558,7 +579,7 @@ cpOfModule parts prog mod =
   in cachedOfProgramWith parts.ppSols slice
 
 sourceOf : List (Pair String SourceInfo) -> String -> SourceInfo
-sourceOf [] _ = SourceInfo "" 0 0 0
+sourceOf [] _ = SourceInfo "" "" 0 0
 sourceOf ((Pair n s) :: rest) name = if n == name then s else sourceOf rest name
 
 importNameOf : Import -> String
@@ -567,12 +588,18 @@ importNameOf = importName
 importNamesOfModule : Module -> List String
 importNamesOfModule m = map importNameOf (append m.moduleImportsOf m.moduleImplicitImportsOf)
 
-hashOfImportName : List (Pair String Int) -> String -> Int
+-- | 依赖哈希表里是否还有"写接口时不可得"的哨兵：有则说明这份接口是在依赖接口缺失时
+-- 写下的，读侧不能信任它的依赖链（要重算并重写，见 Compile 的 clean 判定）。
+hasMissingDep : List (Pair String String) -> Bool
+hasMissingDep [] = False
+hasMissingDep ((Pair _ h) :: rest) = h == depMissingHash || hasMissingDep rest
+
+hashOfImportName : List (Pair String String) -> String -> String
 hashOfImportName tbl name = case lookupPair name tbl of
   Just h => h
-  Nothing => 0 - 1
+  Nothing => depMissingHash
 
-depHashesOf : List (Pair String Int) -> Module -> List (Pair String Int)
+depHashesOf : List (Pair String String) -> Module -> List (Pair String String)
 depHashesOf tbl m = map (\n => Pair n (hashOfImportName tbl n)) (importNamesOfModule m)
 
 cleanIfaceOf : List ModuleIface -> String -> Maybe ModuleIface
@@ -598,7 +625,7 @@ mkIfaceBase pkg parts prog sources clean m = case cleanIfaceOf clean (moduleName
     in ModuleIface name pkg (sourceOf sources name) h [] m.moduleImportsOf m.moduleImplicitImportsOf
       m.moduleCapabilities m.moduleExportsOf m.moduleFixitiesOf m.moduleDeclsOf records [] cp
 
-finishIface : List (Pair String Int) -> List ModuleIface -> Module -> ModuleIface -> ModuleIface
+finishIface : List (Pair String String) -> List ModuleIface -> Module -> ModuleIface -> ModuleIface
 finishIface tbl clean m mi = case cleanIfaceOf clean (miNameOf mi) of
   Just old => old
   Nothing =>
@@ -607,7 +634,7 @@ finishIface tbl clean m mi = case cleanIfaceOf clean (miNameOf mi) of
       (miExportsOf mi) (miFixitiesOf mi) (miDeclsOf mi) (miRecordsOf mi) (miPreparedOf mi)
       (miCachedOf mi)
 
-ifacesGo : String -> ProgParts -> DtProgram -> List (Pair String SourceInfo) -> List (Pair String Int) -> List ModuleIface -> List Module -> Pair (List ModuleIface) (List (Pair String Int))
+ifacesGo : String -> ProgParts -> DtProgram -> List (Pair String SourceInfo) -> List (Pair String String) -> List ModuleIface -> List Module -> Pair (List ModuleIface) (List (Pair String String))
 ifacesGo pkg parts prog sources knownDeps clean modules =
   let
     built = map (\m => Pair m (mkIfaceBase pkg parts prog sources clean m)) modules
@@ -689,7 +716,7 @@ coverageResult oi ourNames inherited ifaces prog = case firstCoverageIssue oi ou
   Just issue => icInternal "iface: ${issue}"
   Nothing => OkC ifaces
 
-ifaceOfPackage : String -> List (Pair String SourceInfo) -> List (Pair String Int) -> List String -> List ModuleIface -> List Module -> List Decl -> DtProgram -> Check (List ModuleIface)
+ifaceOfPackage : String -> List (Pair String SourceInfo) -> List (Pair String String) -> List String -> List ModuleIface -> List Module -> List Decl -> DtProgram -> Check (List ModuleIface)
 ifaceOfPackage pkg sources knownDeps inherited clean modules entryDecls prog =
   let
     ourModules = reverse (filter (\m => modulePackageOf m == pkg) modules)
@@ -738,7 +765,7 @@ allOwnedPresent oi inherited name (a :: rest) present =
   in if skip then allOwnedPresent oi inherited name rest present
   else memName a present && allOwnedPresent oi inherited name rest present
 
-ifaceOfModule : String -> SourceInfo -> List (Pair String Int) -> List String -> List ModuleIface -> List Module -> List Decl -> DtProgram -> String -> Check ModuleIface
+ifaceOfModule : String -> SourceInfo -> List (Pair String String) -> List String -> List ModuleIface -> List Module -> List Decl -> DtProgram -> String -> Check ModuleIface
 ifaceOfModule pkg si knownDeps inherited clean modules entryDecls prog name =
   let
     ourModules = reverse (filter (\m => modulePackageOf m == pkg) modules)
@@ -806,16 +833,12 @@ relUnder pkgDir path =
 ifaceMirrorMode : Bool
 ifaceMirrorMode = runIO (prim_getenv "VUNA_IFACE_DIR") /= ""
 
--- 内容寻址 token：非负、纯数字（文件名安全；与 Compile 的 `hashText` 同口径）。
-ifaceHashToken : Int -> String
-ifaceHashToken n =
-  let
-    m = 1000000007
-    r = n - n / m * m
-  in strFromInt (if r < 0 then r + m else r)
+-- 内容寻址 token：SHA-256 十六进制前 16 位（文件名安全、可读；64 bit 足够区分）。
+ifaceHashToken : String -> String
+ifaceHashToken h = strSubstring 0 16 h
 
 -- 接口文件相对路径：源相对路径把 `.vuna` 换成 `.iface`（默认），镜像模式再插入内容哈希。
-ifaceRelPathOf : Int -> String -> SourceInfo -> String
+ifaceRelPathOf : String -> String -> SourceInfo -> String
 ifaceRelPathOf h pkgDir si =
   let
     rel = relUnder pkgDir (siPathOf si)
@@ -838,8 +861,8 @@ record ManifestEntry where
   meName : String
   meFile : String
   meSource : SourceInfo
-  meIfaceHash : Int
-  meDeps : List (Pair String Int)
+  meIfaceHash : String
+  meDeps : List (Pair String String)
   -- S7：直接 import 的模块名（含隐式 import）。manifest 自带 import 闭包，工具链可按需
   -- 只读需要的模块接口（不必先读全包文件）。
   meImports : List String
@@ -869,10 +892,10 @@ meFileOfEntry (ManifestEntry n f s h d im o) = f
 meSourceOfEntry : ManifestEntry -> SourceInfo
 meSourceOfEntry (ManifestEntry n f s h d im o) = s
 
-meIfaceHashOfEntry : ManifestEntry -> Int
+meIfaceHashOfEntry : ManifestEntry -> String
 meIfaceHashOfEntry (ManifestEntry n f s h d im o) = h
 
-meDepsOfEntry : ManifestEntry -> List (Pair String Int)
+meDepsOfEntry : ManifestEntry -> List (Pair String String)
 meDepsOfEntry (ManifestEntry n f s h d im o) = d
 
 meImportsOfEntry : ManifestEntry -> List String
@@ -959,10 +982,10 @@ oldEntryOf : List ManifestEntry -> String -> Maybe ManifestEntry
 oldEntryOf [] _ = Nothing
 oldEntryOf (e :: rest) name = if e.meName == name then Just e else oldEntryOf rest name
 
-depListsSame : List (Pair String Int) -> List (Pair String Int) -> Bool
+depListsSame : List (Pair String String) -> List (Pair String String) -> Bool
 depListsSame a b = length a == length b && depListIn a b && depListIn b a
 
-depListIn : List (Pair String Int) -> List (Pair String Int) -> Bool
+depListIn : List (Pair String String) -> List (Pair String String) -> Bool
 depListIn [] _ = True
 depListIn ((Pair n h) :: rest) ys = case lookupPair n ys of
   Just h2 => h2 == h && depListIn rest ys
