@@ -65,6 +65,7 @@ import Vuna.Compiler.Elab.Case
 import Vuna.Compiler.Elab.Dict
 import Vuna.Compiler.Elab.Match
 import Vuna.Compiler.Elab.Meta
+import Vuna.Compiler.Elab.MetaSpans
 import Vuna.Compiler.Elab.Prelude
 import Vuna.Compiler.Elab.Records
 import Vuna.Compiler.Intrinsics

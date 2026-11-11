@@ -1,6 +1,4 @@
 compiler/lib/Vuna/Compiler/Debug.vuna 4
 compiler/lib/Vuna/Compiler/Diagnostics/Sink.vuna 17
-compiler/lib/Vuna/Compiler/Elab/MetaSpans.vuna 5
-compiler/lib/Vuna/Compiler/Elab/Usage.vuna 5
 lib/Vuna/Cli/Args.vuna 9
 lib/Vuna/Files.vuna 6

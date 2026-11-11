@@ -1,37 +1,45 @@
 -- | 元变量创建点登记：`newMetaAt` 在创建元变量时记录源 span，诊断按 id 反查。
-module Vuna.Compiler.Elab.MetaSpans (metaSpanOf, recordMetaSpan, resetMetaSpans) where
+module Vuna.Compiler.Elab.MetaSpans (metaSpanOf, newHoleMeta, newMetaAt, recordMetaSpan) where
 
--- Vuna.Compiler.Elab.MetaSpans：元变量 → 创建点 span 的进程内登记表。
+-- Vuna.Compiler.Elab.MetaSpans：元变量 → 创建点 span 的显式状态（存在 `Ec.ecMetaSpans`）。
 --
--- 约束与 Diagnostics.Sink 相同：单线程检查路径；id 在每个 Ec 内唯一，新创建覆盖旧
--- id（避免跨请求残留）；未登记的元变量（纯合成项）返回 Nothing，诊断不伪造位置。
-import Base.Host
-import Base.IORef
+-- 约束：id 在每个 Ec 内唯一，新创建覆盖旧 id（前插 + 查首个匹配）；未登记的元变量
+-- （纯合成项）返回 Nothing，诊断不伪造位置。
+--
+-- 依赖方向：`Ec` 定义在 `Elab.Types`（叶子模块），本模块在它之上做纯状态操作，
+-- 因此不再有进程内可变登记表；调用方通过 Ec 把登记表穿起来。
+import Base.List
+import Base.Pair
 import Vuna.Compiler.Common
+import Vuna.Compiler.Core
+import Vuna.Compiler.Elab.Types
 
-record MetaSpanBox where
-  metaSpanItems : List (Pair Int Span)
-  metaSpanTag : Int
-
-metaSpanRef : IORef MetaSpanBox
-metaSpanRef = runPure (newRef (MetaSpanBox [] 0))
-
--- | 清空登记表（测试/长驻进程入口可选调用）。
-resetMetaSpans : Int -> Int
-resetMetaSpans _ = runPure (writeRef metaSpanRef (MetaSpanBox [] 0))
-
--- | 记录元变量创建点（同 id 覆盖）。
-recordMetaSpan : Int -> Span -> Int
-recordMetaSpan m sp =
-  let
-    box = runPure (readRef metaSpanRef)
-  in runPure (writeRef metaSpanRef (MetaSpanBox (Pair m sp :: box.metaSpanItems) box.metaSpanTag))
+-- | 记录元变量创建点（同 id 覆盖：新记录前插，查找取首个匹配）。
+recordMetaSpan : Ec -> Int -> Span -> Ec
+recordMetaSpan ec m sp = ecPutMetaSpans ec (Pair m sp :: ecMetaSpans ec)
 
 -- | 按元变量 id 查创建点。
-metaSpanOf : Int -> Maybe Span
-metaSpanOf m = lookupMeta m (runPure (readRef metaSpanRef)).metaSpanItems
+metaSpanOf : Ec -> Int -> Maybe Span
+metaSpanOf ec m = lookupMeta m (ecMetaSpans ec)
 
 -- | 线性查表（后创建覆盖先创建）。
 lookupMeta : Int -> List (Pair Int Span) -> Maybe Span
 lookupMeta m [] = Nothing
 lookupMeta m ((Pair k sp) :: rest) = if k == m then Just sp else lookupMeta m rest
+
+-- | 新建元变量并登记创建点（诊断可反查「在哪个源码构造创建」）。
+newMetaAt : Span -> Ctx -> Ec -> Pair Term Ec
+newMetaAt sp ctx ec =
+  let
+    p = newMeta ctx ec
+  in Pair (firstOf p) (recordMetaSpan (secondOf p) (ecNext ec) sp)
+
+-- M15：新建一个「洞」元变量：除创建深度外还记下目标类型与上下文快照（供 goal 显示）。
+-- M40：`name` 是洞的显示名（`_` 传 `""`，`?name` 传 `"?name"`）。
+newHoleMeta : Ctx -> Ec -> Span -> Value -> String -> Pair Term Ec
+newHoleMeta ctx ec sp ty name =
+  let
+    m = ecNext ec
+    p = newMeta ctx ec
+    ec1 = ecAddGoal (secondOf p) (DtGoal m sp ty ctx.ctxItems name)
+  in Pair (firstOf p) (recordMetaSpan ec1 m sp)

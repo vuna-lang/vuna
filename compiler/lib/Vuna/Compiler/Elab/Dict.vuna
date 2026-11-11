@@ -45,6 +45,7 @@ import Vuna.Compiler.Core.Term
 import Vuna.Compiler.Diagnostics
 import Vuna.Compiler.Debug
 import Vuna.Compiler.Elab.Meta
+import Vuna.Compiler.Elab.MetaSpans
 import Vuna.Compiler.Elab.Representation
 import Vuna.Compiler.Elab.Prelude
 import Vuna.Compiler.Elab.Sig

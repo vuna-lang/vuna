@@ -19,8 +19,6 @@ import Vuna.Compiler.Diagnostics
 import Vuna.Compiler.Elab.Meta
 import Vuna.Compiler.Elab.Types
 import Vuna.Compiler.Diagnostics.Warning
-import Base.IORef
-import Base.Host
 
 -- 类型级定义的判据：定义**类型** force 后以宇宙收尾（`Type` 或 `... -> Type` 的 Pi 链）。
 -- M38 从 Codegen/Erase 上移到 Elab，成为用量检查与 codegen 分区的共同真源。
@@ -69,31 +67,32 @@ else case us of
   _ :: rest => uDrop (n - 1) rest
 
 -- 声明与实测是否相符；不符时给 TC 诊断。返回的 Int 只是占位（错误已短路）。
-checkBinderRig : Span -> String -> Rig -> Rig -> Check Int
-checkBinderRig sp name Rig0 used =
+-- `ec` 是当前显式状态：使用点登记在 `Ec.ecUseSpans` 上，诊断在此就地取。
+checkBinderRig : Ec -> Span -> String -> Rig -> Rig -> Check Int
+checkBinderRig ec sp name Rig0 used =
   if isRigZero used then OkC 0
-  else onErrDiag (\d => withUseFields name (withField (FieldQuantity name 0 1) d))
+  else onErrDiag (\d => withUseFields ec name (withField (FieldQuantity name 0 1) d))
     (tcErr1 sp (ErasedBinderUsed name) name)
-checkBinderRig sp name Rig1 used = case used of
+checkBinderRig ec sp name Rig1 used = case used of
   Rig0 =>
-    onErrDiag (\d => withUseFields name (withField (FieldQuantity name 1 0) d))
+    onErrDiag (\d => withUseFields ec name (withField (FieldQuantity name 1 0) d))
       (tcErr1 sp (LinearUnused name) name)
   Rig1 => OkC 0
   RigOmega =>
-    onErrDiag (\d => withUseFields name (withField (FieldQuantity name 1 2) d))
+    onErrDiag (\d => withUseFields ec name (withField (FieldQuantity name 1 2) d))
       (tcErr1 sp (LinearOverused name) name)
-checkBinderRig sp name RigOmega used = OkC 0
+checkBinderRig ec sp name RigOmega used = OkC 0
 
 -- 进入一个 binder：body usage 的头部就是它；检查后 drop。
-checkLamBinder : Span -> String -> Rig -> List Rig -> Check (List Rig)
-checkLamBinder sp name rig [] = icInternal "usage vector lost lambda binder"
-checkLamBinder sp name rig (used :: rest) =
+checkLamBinder : Ec -> Span -> String -> Rig -> List Rig -> Check (List Rig)
+checkLamBinder ec sp name rig [] = icInternal "usage vector lost lambda binder"
+checkLamBinder ec sp name rig (used :: rest) =
   let
     _ = if isRigZero used && not (startsWith "_" name) then case rig of
       RigOmega => warnUnusedBinder sp name
       _ => 0
     else 0
-  in Vuna.Compiler.Common.bind (checkBinderRig sp name rig used) (\_ => OkC rest)
+  in Vuna.Compiler.Common.bind (checkBinderRig ec sp name rig used) (\_ => OkC rest)
 
 -- 外层 env 里是否有同名、且**参与运行时**的 binder 吗（UN_ShadowedBinder 的比较对象）。
 --
@@ -108,12 +107,12 @@ shadowedByRuntime name ((Pair n rig) :: rest) =
 
 -- case 分支：binders 是 telescope 顺序（第一个字段最外），body usage 的前 k 项按
 -- 逆序对应它们（index 0 = 最后一个字段）。检查完整体 drop。
-checkAltBinders : Span -> List (Pair String Rig) -> List Rig -> Check (List Rig)
-checkAltBinders sp binders us = checkAltBindersGo sp (reverse binders) us
+checkAltBinders : Ec -> Span -> List (Pair String Rig) -> List Rig -> Check (List Rig)
+checkAltBinders ec sp binders us = checkAltBindersGo ec sp (reverse binders) us
 
-checkAltBindersGo : Span -> List (Pair String Rig) -> List Rig -> Check (List Rig)
-checkAltBindersGo sp [] us = OkC us
-checkAltBindersGo sp ((Pair name rig) :: rest) us = case us of
+checkAltBindersGo : Ec -> Span -> List (Pair String Rig) -> List Rig -> Check (List Rig)
+checkAltBindersGo ec sp [] us = OkC us
+checkAltBindersGo ec sp ((Pair name rig) :: rest) us = case us of
   [] => icInternal "usage vector lost case binder"
   used :: more =>
     let
@@ -125,74 +124,76 @@ checkAltBindersGo sp ((Pair name rig) :: rest) us = case us of
         RigOmega => warnUnusedBinder sp name
         _ => 0
       else 0
-    in Vuna.Compiler.Common.bind (checkBinderRig sp name rig used)
-      (\_ => checkAltBindersGo sp rest more)
+    in Vuna.Compiler.Common.bind (checkBinderRig ec sp name rig used)
+      (\_ => checkAltBindersGo ec sp rest more)
 
 -- ---------------------------------------------------------------
--- 项遍历
+-- 项遍历（显式线程 `Ec`：使用点登记进 `ecUseSpans`，诊断就地取用）
 -- ---------------------------------------------------------------
-checkTerm : Span -> List (Pair String Rig) -> Term -> Check (List Rig)
-checkTerm sp env t = case t of
+checkTerm : Ec -> Span -> List (Pair String Rig) -> Term -> Check (Pair (List Rig) Ec)
+checkTerm ec sp env t = case t of
   TVar name i usp =>
     let
-      _ = if usp.spanStartLine == 0 then 0 else recordUseSpan name usp
-    in OkC (uVarAt (natToInt (length env)) i)
-  TMeta m => OkC (uZeroOf (natToInt (length env)))
-  TGlobal g => OkC (uZeroOf (natToInt (length env)))
-  TType l => OkC (uZeroOf (natToInt (length env)))
+      ec2 = if usp.spanStartLine == 0 then ec else recordUseSpan ec name usp
+    in OkC (Pair (uVarAt (natToInt (length env)) i) ec2)
+  TMeta m => OkC (Pair (uZeroOf (natToInt (length env))) ec)
+  TGlobal g => OkC (Pair (uZeroOf (natToInt (length env))) ec)
+  TType l => OkC (Pair (uZeroOf (natToInt (length env))) ec)
   -- 类型：0-fragment，里面的 binder 不产生运行时用量。
-  TPi name implicit rig dom cod => OkC (uZeroOf (natToInt (length env)))
+  TPi name implicit rig dom cod => OkC (Pair (uZeroOf (natToInt (length env))) ec)
   TLam name rig body =>
     let
       _ =
         if name /= "_" && shadowedByRuntime name env then warnAt1 sp (ShadowedBinder name) name
         else 0
       env2 = Base.List.Cons (Pair name rig) env
-    in Vuna.Compiler.Common.bind (checkTerm sp env2 body) (\u => checkLamBinder sp name rig u)
+    in Vuna.Compiler.Common.step (checkTerm ec sp env2 body)
+      (\u => \ec2 => Vuna.Compiler.Common.bind (checkLamBinder ec2 sp name rig u) (\rest => OkC (Pair rest ec2)))
   TApp f a rig =>
-    Vuna.Compiler.Common.bind (checkTerm sp env f)
-      (\uf => if isRigZero rig then OkC uf else Vuna.Compiler.Common.bind (checkTerm sp env a) (\ua => OkC (uAdd uf (uScale rig ua))))
-  TCon c args => checkArgs sp env args
-  TMk c args => checkArgs sp env args
-  TRecord c args => checkArgs sp env args
-  TProj base c tele i fi => checkTerm sp env base
+    Vuna.Compiler.Common.step (checkTerm ec sp env f)
+      (\uf => \ec1 => if isRigZero rig then OkC (Pair uf ec1) else Vuna.Compiler.Common.step (checkTerm ec1 sp env a) (\ua => \ec2 => OkC (Pair (uAdd uf (uScale rig ua)) ec2)))
+  TCon c args => checkArgs ec sp env args
+  TMk c args => checkArgs ec sp env args
+  TRecord c args => checkArgs ec sp env args
+  TProj base c tele i fi => checkTerm ec sp env base
   TRecUpd base c tele idxs body =>
-    Vuna.Compiler.Common.bind (checkTerm sp env base)
-      (\ub => Vuna.Compiler.Common.bind (checkTerm sp (append (reverse tele) env) body) (\ua => OkC (uAdd ub ua)))
+    Vuna.Compiler.Common.step (checkTerm ec sp env base)
+      (\ub => \ec1 => Vuna.Compiler.Common.step (checkTerm ec1 sp (append (reverse tele) env) body) (\ua => \ec2 => OkC (Pair (uAdd ub ua) ec2)))
   TCase scrut alts =>
-    Vuna.Compiler.Common.bind (checkTerm sp env scrut)
-      (\us => Vuna.Compiler.Common.bind (checkAlts sp env alts) (\ua => OkC (uAdd us ua)))
+    Vuna.Compiler.Common.step (checkTerm ec sp env scrut)
+      (\us => \ec1 => Vuna.Compiler.Common.step (checkAlts ec1 sp env alts) (\ua => \ec2 => OkC (Pair (uAdd us ua) ec2)))
   TIf c th el =>
-    Vuna.Compiler.Common.bind (checkTerm sp env c)
-      (\uc => Vuna.Compiler.Common.bind (checkTerm sp env th) (\ut => Vuna.Compiler.Common.bind (checkTerm sp env el) (\ue => OkC (uAdd uc (uJoin ut ue)))))
-  TInt n => OkC (uZeroOf (natToInt (length env)))
-  TStr s => OkC (uZeroOf (natToInt (length env)))
-  TFloat raw => OkC (uZeroOf (natToInt (length env)))
-  TBool b => OkC (uZeroOf (natToInt (length env)))
+    Vuna.Compiler.Common.step (checkTerm ec sp env c)
+      (\uc => \ec1 => Vuna.Compiler.Common.step (checkTerm ec1 sp env th) (\ut => \ec2 => Vuna.Compiler.Common.step (checkTerm ec2 sp env el) (\ue => \ec3 => OkC (Pair (uAdd uc (uJoin ut ue)) ec3))))
+  TInt n => OkC (Pair (uZeroOf (natToInt (length env))) ec)
+  TStr s => OkC (Pair (uZeroOf (natToInt (length env))) ec)
+  TFloat raw => OkC (Pair (uZeroOf (natToInt (length env))) ec)
+  TBool b => OkC (Pair (uZeroOf (natToInt (length env))) ec)
 
-checkArgs : Span -> List (Pair String Rig) -> List (Pair Term Rig) -> Check (List Rig)
-checkArgs sp env args = checkArgsGo sp env args (uZeroOf (natToInt (length env)))
+checkArgs : Ec -> Span -> List (Pair String Rig) -> List (Pair Term Rig) -> Check (Pair (List Rig) Ec)
+checkArgs ec sp env args = checkArgsGo ec sp env args (uZeroOf (natToInt (length env)))
 
-checkArgsGo : Span -> List (Pair String Rig) -> List (Pair Term Rig) -> List Rig -> Check (List Rig)
-checkArgsGo sp env [] acc = OkC acc
-checkArgsGo sp env ((Pair arg rig) :: rest) acc =
-  if isRigZero rig then checkArgsGo sp env rest acc
-  else Vuna.Compiler.Common.bind (checkTerm sp env arg)
-    (\ua => checkArgsGo sp env rest (uAdd acc (uScale rig ua)))
+checkArgsGo : Ec -> Span -> List (Pair String Rig) -> List (Pair Term Rig) -> List Rig -> Check (Pair (List Rig) Ec)
+checkArgsGo ec sp env [] acc = OkC (Pair acc ec)
+checkArgsGo ec sp env ((Pair arg rig) :: rest) acc =
+  if isRigZero rig then checkArgsGo ec sp env rest acc
+  else Vuna.Compiler.Common.step (checkTerm ec sp env arg)
+    (\ua => \ec1 => checkArgsGo ec1 sp env rest (uAdd acc (uScale rig ua)))
 
-checkAlts : Span -> List (Pair String Rig) -> List CaseAlt -> Check (List Rig)
-checkAlts sp env alts = checkAltsGo sp env alts Nothing
+checkAlts : Ec -> Span -> List (Pair String Rig) -> List CaseAlt -> Check (Pair (List Rig) Ec)
+checkAlts ec sp env alts = checkAltsGo ec sp env alts Nothing
 
-checkAltsGo : Span -> List (Pair String Rig) -> List CaseAlt -> Maybe (List Rig) -> Check (List Rig)
-checkAltsGo sp env [] acc = OkC (case acc of
+checkAltsGo : Ec -> Span -> List (Pair String Rig) -> List CaseAlt -> Maybe (List Rig) -> Check (Pair (List Rig) Ec)
+checkAltsGo ec sp env [] acc = OkC (Pair (case acc of
   Just u => u
   Nothing => uZeroOf (natToInt (length env))
+) ec
 )
-checkAltsGo sp env ((CaseAlt cname binders body) :: rest) acc =
+checkAltsGo ec sp env ((CaseAlt cname binders body) :: rest) acc =
   let
     env2 = append (reverse binders) env
     k = natToInt (length binders)
-  in Vuna.Compiler.Common.bind (checkTerm sp env2 body) (\u => Vuna.Compiler.Common.bind (checkAltBinders sp binders u) (\outer => checkAltsGo sp env rest (Just (case acc of
+  in Vuna.Compiler.Common.step (checkTerm ec sp env2 body) (\u => \ec1 => Vuna.Compiler.Common.bind (checkAltBinders ec1 sp binders u) (\outer => checkAltsGo ec1 sp env rest (Just (case acc of
     Just prev => uJoin prev outer
     Nothing => outer
   )
@@ -206,16 +207,15 @@ isRigZero Rig0 = True
 isRigZero _ = False
 
 -- 顶层入口：body 是闭项；遍历后应无残留用量（有残留说明存在未绑定变量，作用域护栏会
--- 在 codegen 侧再查；这里只保证不静默）。
-checkDefUsage : Maybe Span -> String -> Term -> Check Int
-checkDefUsage msp name body =
+-- 在 codegen 侧再查；这里只保证不静默）。进入前清空使用点登记（每个定义体一份）。
+checkDefUsage : Ec -> Maybe Span -> String -> Term -> Check Ec
+checkDefUsage ec msp name body =
   let
     sp = case msp of
       Just s => s
       Nothing => Span "" 0 0 0 0
-  in let
-    _ = resetUseSpans 0
-  in Vuna.Compiler.Common.bind (checkTerm sp [] body) (\rest => OkC (natToInt (length rest)))
+    ec0 = resetUseSpans ec
+  in Vuna.Compiler.Common.step (checkTerm ec0 sp [] body) (\_rest => \ec1 => OkC ec1)
 
 -- ---------------------------------------------------------------
 -- W7：线性捕获的「立即消费」规则
@@ -312,19 +312,20 @@ isTypeLevelDef : Ec -> DtDef -> Bool
 isTypeLevelDef ec d =
   isTypeForming (force (ecDefTbl ec) (ecSolsP ec) defaultFuel (eval [] (dtDefType d)))
 
--- 程序级入口：只检查有体的运行时定义（类型级定义跳过）。
-checkProgramUsage : Ec -> List DtDef -> Check Int
-checkProgramUsage ec defs = checkProgramUsageGo ec defs 0
+-- 程序级入口：只检查有体的运行时定义（类型级定义跳过）。使用点状态在 Ec 上线程，
+-- 返回收尾后的 Ec（调用方把它接回主状态）。
+checkProgramUsage : Ec -> List DtDef -> Check Ec
+checkProgramUsage ec defs = checkProgramUsageGo ec defs
 
-checkProgramUsageGo : Ec -> List DtDef -> Int -> Check Int
-checkProgramUsageGo ec [] n = OkC n
-checkProgramUsageGo ec (d :: rest) n = if isTypeLevelDef ec d then checkProgramUsageGo ec rest n
+checkProgramUsageGo : Ec -> List DtDef -> Check Ec
+checkProgramUsageGo ec [] = OkC ec
+checkProgramUsageGo ec (d :: rest) = if isTypeLevelDef ec d then checkProgramUsageGo ec rest
 else if isLinearType ec (eval [] (dtDefType d)) then tcErr1 (defSpanOf d) (LinearTopLevel (dtDefName d)) (dtDefName d)
 else case dtDefBody d of
-  Nothing => checkProgramUsageGo ec rest n
+  Nothing => checkProgramUsageGo ec rest
   Just body =>
     Vuna.Compiler.Common.bind (checkDefCapture ec d body)
-      (\_ => Vuna.Compiler.Common.bind (checkDefUsage (dtDefSpan d) (dtDefName d) body) (\_ => checkProgramUsageGo ec rest (n + 1)))
+      (\_ => Vuna.Compiler.Common.bind (checkDefUsage ec (dtDefSpan d) (dtDefName d) body) (\ec2 => checkProgramUsageGo ec2 rest))
 
 defSpanOf : DtDef -> Span
 defSpanOf d = case dtDefSpan d of
@@ -340,38 +341,24 @@ warnUnusedBinder sp name =
     sp (UnusedBinder name) name
 
 -- ---------------------------------------------------------------
--- QTT 使用点：Core `TVar` 现在携带源 span；检查期记录到进程内盒子，
+-- QTT 使用点：Core `TVar` 现在携带源 span；检查期记录到 `Ec.ecUseSpans`，
 -- 报告线性/擦除错误时逐条挂 `fields.span name=use`。
 -- ---------------------------------------------------------------
--- | QTT 使用点收集盒。
-record UseBox where
-  useItems : List (Pair String Span)
-  useTag : Int
-
--- | 进程内 QTT 使用点收集引用。
-useSpansRef : IORef UseBox
-useSpansRef = runPure (newRef (UseBox [] 0))
-
 -- | 清空 QTT 使用点（每个定义体检查前调用）。
-resetUseSpans : Int -> Int
-resetUseSpans _ = runPure (writeRef useSpansRef (UseBox [] 0))
+resetUseSpans : Ec -> Ec
+resetUseSpans ec = ecPutUseSpans ec []
 
--- | 记录一次变量使用点。
-recordUseSpan : String -> Span -> Int
-recordUseSpan name sp =
-  let
-    box = runPure (readRef useSpansRef)
-    _ = runPure (writeRef useSpansRef (UseBox (Pair name sp :: box.useItems) box.useTag))
-  in 0
+-- | 记录一次变量使用点（新记录前插；`usesOf` 还原出现顺序）。
+recordUseSpan : Ec -> String -> Span -> Ec
+recordUseSpan ec name sp = ecPutUseSpans ec (Pair name sp :: ecUseSpans ec)
 
 -- | 取某名字的全部使用点（按出现顺序）。
-usesOf : String -> List Span
-usesOf name =
-  reverse (map secondOf (filter (\p => firstOf p == name) (runPure (readRef useSpansRef)).useItems))
+usesOf : Ec -> String -> List Span
+usesOf ec name = reverse (map secondOf (filter (\p => firstOf p == name) (ecUseSpans ec)))
 
 -- | 把某名字的使用点挂成 fields.span。
-withUseFields : String -> Diagnostic -> Diagnostic
-withUseFields name d = withUseSpans (usesOf name) d
+withUseFields : Ec -> String -> Diagnostic -> Diagnostic
+withUseFields ec name d = withUseSpans (usesOf ec name) d
 
 -- | 把一组 span 逐条挂成 fields.span。
 withUseSpans : List Span -> Diagnostic -> Diagnostic

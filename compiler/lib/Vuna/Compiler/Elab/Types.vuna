@@ -71,6 +71,7 @@ module Vuna.Compiler.Elab.Types
   , ecInsts
   , ecInstsAudit
   , ecInstsFamily
+  , ecMetaSpans
   , ecNext
   , ecPending
   , ecPutClausesTbl
@@ -79,15 +80,18 @@ module Vuna.Compiler.Elab.Types
   , ecPutDefTbl
   , ecPutDefVals
   , ecPutGlobalsTbl
+  , ecPutMetaSpans
   , ecPutNext
   , ecPutPending
   , ecPutSols
+  , ecPutUseSpans
   , ecRecordTried
   , ecSetGlobalsComplete
   , ecSolTbl
   , ecSols
   , ecSolsP
   , ecTriedAt
+  , ecUseSpans
   , emptyCtx
   , errAt
   , evalCtx
@@ -98,9 +102,7 @@ module Vuna.Compiler.Elab.Types
   , instStoreEmpty
   , instStoreOf
   , instStorePush
-  , newHoleMeta
   , newMeta
-  , newMetaAt
   , refineLookup
   , refineValue
   , solsToTbl
@@ -116,7 +118,6 @@ import Base.HashMap
 import Vuna.Compiler.Debug
 import Vuna.Compiler.Core
 import Vuna.Compiler.Frontend.Ast
-import Vuna.Compiler.Elab.MetaSpans
 
 -- 一个 DT 定义：名字、类型项、体项（均为闭项；体带擦除标志）。
 -- M28：`DtAxiom` 是**无体/不透明**的顶层（`axiom name : Ty`）：它只有类型，没有
@@ -390,75 +391,78 @@ record Ec where
   ecDefVals : HashMap String Value
   -- M38：是否含线性数据族（O(1) 早退，避免每个 Pi 都线性扫 ecdatas）。
   ecHasLinear : Bool
+  -- M4：元变量创建点 / QTT 使用点登记表（显式状态，替代进程内 IORef）。
+  ecMetaSpans : List (Pair Int Span)
+  ecUseSpans : List (Pair String Span)
 
 ecNext : Ec -> Int
 
 ecPutNext : Ec -> Int -> Ec
-ecPutNext (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals haslin) n =
+ecPutNext (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals haslin mspans uspans) n =
   Ec n sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl
-    defvals haslin
+    defvals haslin mspans uspans
 
 ecPutClausesTbl : Ec -> HashMap String (List (Pair (List Pat) Expr)) -> Ec
-ecPutClausesTbl (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals haslin) ctbl2 =
+ecPutClausesTbl (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals haslin mspans uspans) ctbl2 =
   Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl2
-    ctortbl defvals haslin
+    ctortbl defvals haslin mspans uspans
 
-ecNext (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals haslin) =
+ecNext (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals haslin mspans uspans) =
   next
 
 ecSols : Ec -> List (Pair Int Value)
-ecSols (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals haslin) =
+ecSols (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals haslin mspans uspans) =
   sols
 
 ecDefs : Ec -> List (Pair String Term)
 -- 内部按「新定义前插」存放（ecAddDef O(1)），读出时还原源顺序。
-ecDefs (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals haslin) =
+ecDefs (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals haslin mspans uspans) =
   reverse defs
 
 -- 定义体的哈希索引：`force` 的 delta 展开用它查「这个全局名有没有定义体」。
 ecDefTbl : Ec -> HashMap String Term
-ecDefTbl (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals haslin) =
+ecDefTbl (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals haslin mspans uspans) =
   deftbl
 
 -- 全局签名（含构造子/族名）的哈希索引：正文类型检查的热路径用它替代线性扫 globals。
 -- 在 `elabBodies` 之前用当时的 globals 建一次；正文期间每精化一个定义就插入它的类型。
 ecGlobalsTbl : Ec -> HashMap String Term
-ecGlobalsTbl (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals haslin) =
+ecGlobalsTbl (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals haslin mspans uspans) =
   gtbl
 
 ecPutGlobalsTbl : Ec -> HashMap String Term -> Ec
-ecPutGlobalsTbl (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals haslin) gtbl2 =
+ecPutGlobalsTbl (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals haslin mspans uspans) gtbl2 =
   Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl2 soltbl dptbl gcomp ctbl
-    ctortbl defvals haslin
+    ctortbl defvals haslin mspans uspans
 
 ecDatas : Ec -> List DtData
-ecDatas (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals haslin) =
+ecDatas (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals haslin mspans uspans) =
   datas
 
 ecDepthTbl : Ec -> HashMap Int Int
-ecDepthTbl (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals haslin) =
+ecDepthTbl (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals haslin mspans uspans) =
   dptbl
 
 -- 全局表是否已完整建立（bodies 阶段开始前由 elabProgramGo 置 True）。完整时
 -- globalsLookup 未命中即可返回 Nothing：省掉「线性扫全 globals」的回落
 -- （实测 16k 次/单次 check、每次扫 ~2500 项；未命中的都是数据族名）。
 ecSetGlobalsComplete : Ec -> Bool -> Ec
-ecSetGlobalsComplete (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals haslin) g =
+ecSetGlobalsComplete (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals haslin mspans uspans) g =
   Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl g ctbl ctortbl
-    defvals haslin
+    defvals haslin mspans uspans
 
 ecGoals : Ec -> List DtGoal
-ecGoals (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals haslin) =
+ecGoals (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals haslin mspans uspans) =
   goals
 
 ecInsts : Ec -> List DtInst
-ecInsts (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals haslin) =
+ecInsts (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals haslin mspans uspans) =
   insts.instsList
 
 -- S5a：实例表的**族桶**读入口（精确匹配，`fam` 未知 = 空表）。
 -- | 读取实例表中某个头族的实例桶（精确匹配；未知族返回空表）。
 ecInstsFamily : Ec -> String -> List DtInst
-ecInstsFamily (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals haslin) fam =
+ecInstsFamily (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals haslin mspans uspans) fam =
   instStoreFamily insts fam
 
 -- S5a：索引自检（**只**在 `--debug-perf` 下由 `Elab.Driver` 调用；调用方负责先判
@@ -468,7 +472,7 @@ ecInstsFamily (Ec next sols defs datas depths goals insts classes dgoals deftbl 
 -- 用实例名序列比较（`DtInst` 没有 Eq 实例；实例名唯一）。
 -- | 自检实例表索引：所有桶的条目总数等于权威表长度，且每个桶与按该族过滤权威表的结果逐项一致。
 ecInstsAudit : Ec -> Bool
-ecInstsAudit (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals haslin) =
+ecInstsAudit (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals haslin mspans uspans) =
   let
     pairs = Base.HashMap.toList insts.instsByFamily
     list = insts.instsList
@@ -494,13 +498,13 @@ instNamesEq (a :: arest) [] = False
 instNamesEq (a :: arest) (b :: brest) = a == b && instNamesEq arest brest
 
 ecClasses : Ec -> List DtClass
-ecClasses (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals haslin) =
+ecClasses (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals haslin mspans uspans) =
   classes
 
 ecAddGoal : Ec -> DtGoal -> Ec
-ecAddGoal (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals haslin) g =
+ecAddGoal (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals haslin mspans uspans) g =
   Ec next sols defs datas depths (append goals [g]) insts classes dgoals deftbl gtbl soltbl dptbl
-    gcomp ctbl ctortbl defvals haslin
+    gcomp ctbl ctortbl defvals haslin mspans uspans
 
 ecAddInst : Ec -> DtInst -> Ec
 ecAddInst ec i = if hasInstName (dtInstName i) (ecInsts ec) then ec else ecAddInstRaw ec i
@@ -510,26 +514,26 @@ hasInstName name [] = False
 hasInstName name (i :: rest) = dtInstName i == name || hasInstName name rest
 
 ecAddInstRaw : Ec -> DtInst -> Ec
-ecAddInstRaw (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals haslin) i =
+ecAddInstRaw (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals haslin mspans uspans) i =
   Ec next sols defs datas depths goals (instStorePush insts i) classes dgoals deftbl gtbl soltbl
-    dptbl gcomp ctbl ctortbl defvals haslin
+    dptbl gcomp ctbl ctortbl defvals haslin mspans uspans
 
 ecAddClass : Ec -> DtClass -> Ec
-ecAddClass (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals haslin) c =
+ecAddClass (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals haslin mspans uspans) c =
   Ec next sols defs datas depths goals insts (append classes [c]) dgoals deftbl gtbl soltbl dptbl
-    gcomp ctbl ctortbl defvals haslin
+    gcomp ctbl ctortbl defvals haslin mspans uspans
 
 -- S4：约束存储读写（所有入口直接使用）。
 -- | 读取当前统一约束存储。
 ecConstraints : Ec -> ConstraintStore
-ecConstraints (Ec next sols defs datas depths goals insts classes cons deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals haslin) =
+ecConstraints (Ec next sols defs datas depths goals insts classes cons deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals haslin mspans uspans) =
   cons
 
 -- | 写回统一约束存储。
 ecPutConstraints : Ec -> ConstraintStore -> Ec
-ecPutConstraints (Ec next sols defs datas depths goals insts classes cons deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals haslin) cons2 =
+ecPutConstraints (Ec next sols defs datas depths goals insts classes cons deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals haslin mspans uspans) cons2 =
   Ec next sols defs datas depths goals insts classes cons2 deftbl gtbl soltbl dptbl gcomp ctbl
-    ctortbl defvals haslin
+    ctortbl defvals haslin mspans uspans
 
 -- | 取约束存储里的待处理约束列表（维持原有顺序）。
 ecPending : Ec -> List Constraint
@@ -575,12 +579,12 @@ ecEmpty : Ec
 ecEmpty =
   Ec 0 [] [] [] [] [] instStoreEmpty [] csEmpty (Base.HashMap.fromList [])
     (Base.HashMap.fromList []) (Base.HashMap.fromList []) (Base.HashMap.fromList []) False
-    (Base.HashMap.fromList []) (Base.HashMap.fromList []) (Base.HashMap.fromList []) False
+    (Base.HashMap.fromList []) (Base.HashMap.fromList []) (Base.HashMap.fromList []) False [] []
 
 -- 解表的哈希索引（键 = 元变量编号的十进制串）：`substDictTerm`/`rezonkDefs` 会对每个
 -- 定义体的每个元变量查解，关联表是 O(#解) 一次；索引把它降到 O(1)。
 ecSolTbl : Ec -> HashMap Int Value
-ecSolTbl (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals haslin) =
+ecSolTbl (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals haslin mspans uspans) =
   soltbl
 
 ecPutSols : Ec -> List (Pair Int Value) -> Ec
@@ -597,9 +601,9 @@ ecPutSols ec sols2 =
   in ecPutSolsRaw ec sols2 soltbl2
 
 ecPutSolsRaw : Ec -> List (Pair Int Value) -> HashMap Int Value -> Ec
-ecPutSolsRaw (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals haslin) sols2 soltbl2 =
+ecPutSolsRaw (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals haslin mspans uspans) sols2 soltbl2 =
   Ec next sols2 defs datas depths goals insts classes dgoals deftbl gtbl soltbl2 dptbl gcomp ctbl
-    ctortbl defvals haslin
+    ctortbl defvals haslin mspans uspans
 
 -- 新解是前插的：旧表头编号之前的条目就是本次新增的解。
 solsDelta : List (Pair Int Value) -> List (Pair Int Value) -> List (Pair Int Value)
@@ -620,19 +624,19 @@ memDataNameIn name (d :: rest) = if dtDataName d == name then True else memDataN
 -- `TGlobal T`（类型位置，本应是族）delta 展开成值定义体，`T` 就退化成了值类型。
 -- 定义体仍进 `ecDefs`（codegen 照常产出 `v_T`），只是不做定义性展开。
 ecAddDef : Ec -> Pair String Term -> Ec
-ecAddDef (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals haslin) d =
+ecAddDef (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals haslin mspans uspans) d =
   let
     delta =
       if memDataNameIn (firstOf d) datas then deftbl
       else Base.HashMap.insert (firstOf d) (secondOf d) deftbl
   in Ec next sols (d :: defs) datas depths goals insts classes dgoals delta gtbl soltbl dptbl gcomp
-    ctbl ctortbl defvals haslin
+    ctbl ctortbl defvals haslin mspans uspans
 
 ecAddData : Ec -> DtData -> Ec
-ecAddData (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals haslin) d =
+ecAddData (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals haslin mspans uspans) d =
   Ec next sols defs (append datas [d]) depths goals insts classes dgoals deftbl gtbl soltbl dptbl
     gcomp ctbl (Base.HashMap.insertAll (dataCtorPairs d) ctortbl) defvals
-    (if dtDataLinear d then True else haslin)
+    (if dtDataLinear d then True else haslin) mspans uspans
 
 -- 构造子索引：名字 → DtCtor（唯一真相仍是 `ecDatas`；表只是可重建缓存）。
 ctorTblOfDatas : List DtData -> HashMap String DtCtor
@@ -643,27 +647,50 @@ dataCtorPairs : DtData -> List (Pair String DtCtor)
 dataCtorPairs d = map (\c => Pair (dtCtorName c) c) (dtDataCtors d)
 
 ecPutCtorTbl : Ec -> HashMap String DtCtor -> Ec
-ecPutCtorTbl (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals haslin) ctortbl2 =
+ecPutCtorTbl (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals haslin mspans uspans) ctortbl2 =
   Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl
-    ctortbl2 defvals haslin
+    ctortbl2 defvals haslin mspans uspans
 
 -- 定义体求值结果的共享缓存（键 = 全局名）。`force` 先查它，再回落 defs 表。
 ecDefVals : Ec -> HashMap String Value
-ecDefVals (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals haslin) =
+ecDefVals (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals haslin mspans uspans) =
   defvals
 
 ecHasLinear : Ec -> Bool
-ecHasLinear (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals haslin) =
+ecHasLinear (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals haslin mspans uspans) =
   haslin
+
+-- M4：元变量创建点登记表的读写（纯状态；调用方通过 Ec 线程）。
+-- | 读取元变量创建点登记表。
+ecMetaSpans : Ec -> List (Pair Int Span)
+ecMetaSpans (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals haslin mspans uspans) =
+  mspans
+
+-- | 写回元变量创建点登记表。
+ecPutMetaSpans : Ec -> List (Pair Int Span) -> Ec
+ecPutMetaSpans (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals haslin mspans uspans) mspans2 =
+  Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl
+    ctortbl defvals haslin mspans2 uspans
+
+-- | 读取 QTT 使用点登记表（新记录在前）。
+ecUseSpans : Ec -> List (Pair String Span)
+ecUseSpans (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals haslin mspans uspans) =
+  uspans
+
+-- | 写回 QTT 使用点登记表。
+ecPutUseSpans : Ec -> List (Pair String Span) -> Ec
+ecPutUseSpans (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals haslin mspans uspans) uspans2 =
+  Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl
+    ctortbl defvals haslin mspans uspans2
 
 datasHaveLinear : List DtData -> Bool
 datasHaveLinear [] = False
 datasHaveLinear (d :: rest) = dtDataLinear d || datasHaveLinear rest
 
 ecPutDefVals : Ec -> HashMap String Value -> Ec
-ecPutDefVals (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals haslin) defvals2 =
+ecPutDefVals (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals haslin mspans uspans) defvals2 =
   Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl
-    ctortbl defvals2 haslin
+    ctortbl defvals2 haslin mspans uspans
 
 -- 局部上下文：最近绑定的在前（名字 + 类型项；类型项在当前上下文里有效）。
 -- refinements 是 M14 的索引精化：level ↦ Value（level 形态，可提到更新的 binder，无需 de Bruijn
@@ -750,27 +777,9 @@ errAt sp msg = rawAt sp msg
 
 -- M15：新建元变量并记录创建深度（求解时的作用域检查用）。
 newMeta : Ctx -> Ec -> Pair Term Ec
-newMeta ctx (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals haslin) =
+newMeta ctx (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals haslin mspans uspans) =
   Pair (TMeta next)
-    (Ec (next + 1) sols defs datas (Pair next (ctxDepth ctx) :: depths) goals insts classes dgoals deftbl gtbl soltbl (Base.HashMap.insert next (ctxDepth ctx) dptbl) gcomp ctbl ctortbl defvals haslin)
-
--- | 新建元变量并登记创建点（诊断可反查「在哪个源码构造创建」）。
-newMetaAt : Span -> Ctx -> Ec -> Pair Term Ec
-newMetaAt sp ctx ec =
-  let
-    p = newMeta ctx ec
-    _ = recordMetaSpan (ecNext ec) sp
-  in p
-
--- M15：新建一个「洞」元变量：除创建深度外还记下目标类型与上下文快照（供 goal 显示）。
--- M40：`name` 是洞的显示名（`_` 传 `""`，`?name` 传 `"?name"`）。
-newHoleMeta : Ctx -> Ec -> Span -> Value -> String -> Pair Term Ec
-newHoleMeta ctx (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals haslin) sp ty name =
-  let
-    goal = DtGoal next sp ty ctx.ctxItems name
-    _ = recordMetaSpan next sp
-  in Pair (TMeta next)
-    (Ec (next + 1) sols defs datas (Pair next (ctxDepth ctx) :: depths) (append goals [goal]) insts classes dgoals deftbl gtbl soltbl (Base.HashMap.insert next (ctxDepth ctx) dptbl) gcomp ctbl ctortbl defvals haslin)
+    (Ec (next + 1) sols defs datas (Pair next (ctxDepth ctx) :: depths) goals insts classes dgoals deftbl gtbl soltbl (Base.HashMap.insert next (ctxDepth ctx) dptbl) gcomp ctbl ctortbl defvals haslin mspans uspans)
 
 forceVal : Ec -> Value -> Value
 forceVal ec v = force (ecDefTbl ec) (ecSolsP ec) defaultFuel v
@@ -818,6 +827,6 @@ solsToTbl : List (Pair Int Value) -> HashMap Int Value
 solsToTbl sols = Base.HashMap.insertAll sols (Base.HashMap.fromList [])
 
 ecPutDefTbl : Ec -> HashMap String Term -> Ec
-ecPutDefTbl (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals haslin) deftbl2 =
+ecPutDefTbl (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals haslin mspans uspans) deftbl2 =
   Ec next sols defs datas depths goals insts classes dgoals deftbl2 gtbl soltbl dptbl gcomp ctbl
-    ctortbl defvals haslin
+    ctortbl defvals haslin mspans uspans
