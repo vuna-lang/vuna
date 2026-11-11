@@ -108,8 +108,8 @@ genUnitText (UnitParts fragments bodies st deps) =
   strConcatMany (append fragments [joinWith "\n\n" bodies])
 
 -- main 输出钩子的唯一实现（原 Program.generateDtProgram 与 Split.splitMainHook 合并）。
--- 返回的文本以换行开头，调用方直接接在正文之后；`main : IO a` 时先跑 IO 动作。
--- 第二个分量是 main 钩子引用到的依赖单元（IO 构造子所属单元，C35）。
+-- 返回的文本以换行开头，调用方直接接在正文之后；动作 main（IO / Eff []）先跑动作。
+-- 第二个分量是 main 钩子引用到的依赖单元（C35）。
 mainHook : QualCtx -> Pair (List DtData) (List DtDef) -> List DtDef -> Bool -> Check (Pair String (List String))
 mainHook qc program runtimeDefs printResult = case findDtDef "main" runtimeDefs of
   Nothing => cgErr0 NoMain
@@ -117,12 +117,13 @@ mainHook qc program runtimeDefs printResult = case findDtDef "main" runtimeDefs 
     let
       table = defTable (secondOf program)
       mainRef = valueName "main"
-    in case ioResultTy (dtDefType mainDef) of
-      Just innerTy =>
+    in case actionResultTy (dtDefType mainDef) of
+      Just p =>
         let
-          p = ioRunText qc program mainRef
-        in Vuna.Compiler.Common.bind (genDtHook "" table innerTy (firstOf p) printResult)
-          (\hook => OkC (Pair hook (hookDeps (secondOf p))))
+          innerTy = secondOf p
+          runText = actionRunText qc program mainRef (firstOf p)
+        in Vuna.Compiler.Common.bind (genDtHook "" table innerTy (firstOf runText) printResult)
+          (\hook => OkC (Pair hook (hookDeps (secondOf runText))))
       Nothing =>
         Vuna.Compiler.Common.bind (genDtHook "" table (dtDefType mainDef) mainRef printResult)
           (\hook => OkC (Pair hook []))

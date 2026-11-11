@@ -26,12 +26,6 @@
 
 **Layer 3（并发/async）**：
 
-- `Base.EffAsync`（legacy，最小 Domain 实现）：`Task`/`async`/`await`，基于 OCaml 5
-  `Domain`；`async : Eff Nil a -> IO (Task a)` 要求任务体行已处理干净（效果在任务内
-  处理），`await` join 对应 Domain 并返回值。运行时 `dtp_async_fork`/`dtp_async_await`
-  （句柄表）；隐藏 intrinsic `prim_asyncFork`/`prim_asyncAwait`。夹具
-  `dt_base/22_eff_async`（42）。它**不是**调度器的实现：不参与结构化作用域，
-  只允许 main 域调用。视迁移情况决定保留或删除。
 
 - 负例 `dt_err/71_catch_row_mismatch`、`72_local_row_mismatch`、`73_async_row_not_nil`：
   catch/local 要求行首是对应效应，async 只接受 `Eff Nil`。
@@ -118,7 +112,7 @@ API（`base/lib/Base/EffSched.vuna`）：
 取消只在挂起点生效，硬中止会丢弃未执行清理的纤程；`withScope` 的 body 若以非返回方式
 中止（abort/未捕获运行时异常），scope 的等待不会执行，残留任务由 `dtp_sched_main` 在
 main 结束时统一取消清理（最外层兜底）；跨域 handler / Domain 并行不在范围；
-`Base.EffAsync`（Domain）与新的调度器互不集成。
+历史 Domain 实现（`Base.EffAsync`）已删除，调度器是唯一并发路径。
 
 ### 8.6 IO 标签迁移（库层 + 一条工具链真实路径）
 

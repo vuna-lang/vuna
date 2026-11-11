@@ -2,7 +2,6 @@
 
 **现状**：`IO` 是**编译器内建效应类型**（kind `Type -> Type`，运行时裸 thunk `int -> 'a`，
 无构造器），构造/绑定/执行是内建代数 `prim_pureIO` / `prim_bindIO` / `prim_runIO`。在此之上：
-`Base.Effect.MonadIO` + `StateT` / `ReaderT` / `ErrorT`（以 IO 为基座的效应栈），
 `Base.ST` 包 `IO`。D27 的「表示轴」（§5）让异构结果类型的
 CPS `Eff`（`res op` 在运行时位置不可命名）可编译并运行。运行时效应核心已落地（§8）：
 OCaml 5 一次性 delimited continuations + 开放行 + 命名实例 + 一阶效应（`Base.Eff` / Reader /
@@ -17,7 +16,7 @@ IO 标签迁移也已在库层落地（§8.6）：`Base.EffFs` 扩到完整 fs �
 
 ## 1. 范围
 
-- **本页覆盖**：IO 的内建化与其代数、`MonadIO` 与 IO 基座 transformer、ST/region 的可变
+- **本页覆盖**：IO 的内建化与其代数、ST/region 的可变
   数据、base 的 `unsafe` 信任点、通用 Eff 的表示与边界。
 - **不覆盖**：原语/能力的逐条语义（[primitives.md](primitives.md) §7）；纯效应 monad
   （`Base.State` / `Reader` / `Error`，它们不碰 IO，见 [stdlib.md](stdlib.md)）；
@@ -73,45 +72,12 @@ IO 标签迁移也已在库层落地（§8.6）：`Base.EffFs` 扩到完整 fs �
   不能 import `Base.IO.Host`，也不能直调 `prim_*`。用户面宿主效应经 `Base.Eff.*` 标签 +
   handler 表达，运行入口 `runIOEff : Eff [] a -> IO a`；`Base.IO.Host` 的别名只服务特权层。
 
-## 3. 效应栈：IO 作为基座
+## 3. 历史效应栈（已删除）
 
-### 3.1 `MonadIO`
-
-```vuna
-trait MonadIO m where
-  liftIO : IO a -> m a
-
-instance MonadIO IO where
-  liftIO io = io
-```
-
-`MonadIO` 是「该 monad 能承载 IO 动作」的接口；`Base.Effect` 导出它，`Base` 门面重导出
-（`Prelude` **不**自动注入，效果面仍显式 import）。
-
-### 3.2 transformer（以 IO 为基座）
-
-| 模块 | 表示 | handler | 实例 |
-| --- | --- | --- | --- |
-| `Base.StateT` | `record StateT s a where stateTRun : s -> IO (Pair a s)` | `runStateT` / `evalStateT` / `execStateT` | `Functor` / `Monad` / `MonadIO (StateT s)` |
-| `Base.ReaderT` | `record ReaderT e a where readerTRun : e -> IO a` | `runReaderT`；`ask` / `local` | `Functor` / `Monad` / `MonadIO (ReaderT e)` |
-| `Base.ErrorT` | `record ErrorT e a where errorTRun : IO (Error e a)` | `runErrorT`；`throwError` / `catchError` | `Functor` / `Monad` / `MonadIO (ErrorT e)` |
-
-- 三者都在 `do` 块里与 `liftIO` 组合；handler 返回 `IO …`，由 `main`/`runIO` 执行。
-- **边界（已登记 debt D32）**：transformer 固定以 IO 为基座，不是
-  `StateT s m a` 式的任意 monad 泛化。原因：vuna 的 record 参数统一按 `Type` kind 降级，
-  且顶层签名里的自由隐式变量 kind 仍从「被应用次数」推断、不会从构造子 kind 反推
-  （实例 tele 已改为从实参的构造子 kind 反推，但那只覆盖实例头；trait 类参数
-  本身仍写不出 `Type -> … -> Type` 以外的 kind）。泛化需要先做
-  「隐式参数 / record 参数 kind 从构造子 kind 推断」的编译器改进。
-- **没有效应多态类**：trait 无父类 / 关联类型（多参数 trait 已支持；父类未实现），所以没有
-  `MonadState s m` / `MonadReader e m` 这类类；效应多态代码用具体 transformer +
-  显式签名约束。`MonadIO` 也没有 `Monad` 父类：`do` 仍需要单独的 `Monad` 字典。
-
-### 3.3 与纯效应 monad 的关系
-
-`Base.State` / `Base.Reader` / `Base.Error` 仍是**纯函数表示**（§stdlib.md），`vuna
-interp` 能直接归约；它们是「不需要 IO 的状态/环境/错误」。要在一个程序里同时做 IO 与
-这些效应，用 §3.2 的 IO 基座 transformer（或把纯 monad 嵌在 IO 动作的返回值里）。
+`Base.Effect`（`MonadIO`）、`Base.StateT` / `Base.ReaderT` / `Base.ErrorT` 与
+`Base.EffAsync` 已删除：状态 / 环境 / 错误改用 `Base.EffState` / `Base.Eff.Reader` /
+`Base.EffError`（+ `Base.EffExn`），并发改用 `Base.EffSched`。旧实现的树形语义与边界见
+git 历史；QTT 的 `D32`（transformer 无法泛化到任意 monad）随实现删除而关闭。
 
 ## 4. `Base.ST`：IO 派生的 region 效应
 
@@ -181,7 +147,7 @@ CPS `Eff` 已经可 `check` + `compile` + 运行，且 interp 与产物逐字节
 
 1. **IO 是内建效应类型 + 内建代数**：`prim_pureIO` / `prim_bindIO` / `prim_runIO`；
    `Base.IO` 只做公面与实例，没有第二套构造/绑定实现。
-2. **handler 是解释器**：`runIO` / `runStateT` / `runReaderT` / `runErrorT` / `runST`
+2. **handler 是解释器**：`runPure` / `runConsole` / `runFs` / `runST`
    是唯一执行入口；没有「隐式生效的 handler 栈」。
 3. **可变数据两条边界**：`IORef` / `MArray` / `Buffer` 只能在 `IO` 动作里用；
    `Ref` / `SArray` 只能在 `ST r` 里用，且不能逃出 `runST`。两者表示同构、类型隔离。
@@ -266,7 +232,6 @@ __EFF_SECTION__
 | `Base.EffExn` | W6 高阶 scoped Error：`Try` 携带子计算；`tryWith`/`runExn`/`catchExn`/`bracketExn` |
 | `Base.EffMutex` | W9 Mutex/Semaphore（IORef + yield 忙等）：`acquire`/`release`/`semWait`/`semSignal` |
 | `Base.EffChannel` | W9 cooperative Channel：`send`/`tryRecv`/`recvWait` |
-| `Base.EffAsync` | 最小并发（L3，**legacy**）：`Task`/`async`/`await`，基于 OCaml 5 `Domain`；任务行 `Nil`（调度器取代其定位，见 §8.5） |
 | `Base.EffSched` | W9 单线程 fiber 调度器（L3）：`Task`/`Scope`/`TaskLin` + `forkTask`/`forkTaskWith`/`forkTaskLin`/`awaitTask`/`awaitTaskLin`/`yieldNow`/`cancelTask`/`cancelTaskLin`/`cancelScope`/`scopeWait`/`scopeWaitTimeout`/`withScope`/`withScopeTimeout`/`isCancelled`/`liftIOEff`；任务行 `Nil`，超时按逻辑步数 |
 
 夹具：`dt_base/16`（两个 Reader 实例嵌套 handler）、`17`（State 状态线程）、
@@ -313,7 +278,7 @@ process 可控 Exit）、`42–44`（通用 bracket abort cleanup、调度器 br
   cleanup 栈覆盖**任意效应 abort**（handler 丢弃续延），见 §8.5 与 effects-layers.md。
 - **并发/async**：W9 单线程调度器已落地（`Base.EffSched`，见 §8.5）：协作式
   `forkTask`/`awaitTask`/`yieldNow`、取消（含清理宽限）、结构化 `withScope`、步数超时；
-  并行/多核（Domain）仍不是本层目标。旧的 `Base.EffAsync`（Domain）保留但不算 W9。
+  并行/多核（Domain）仍不是本层目标；旧 Domain 实现（`Base.EffAsync`）已删除。
 - **未处理效应诊断**：入口已在类型层收紧——`runIOEff : Eff [] a -> IO a`；
   `runPure`/
   `runIOAnswer` 本就要求 `Nil`，因此入口处的未处理效应是**类型错误**，并报专门的
@@ -366,7 +331,7 @@ fork/await/yield/cancel/结构化 scope；W10 console/clock/env/process/fs 标�
 | D32 | transformer 无任意 monad 泛化（隐式参数 kind 推断缺口，§3.2） | 后续 |
 | D37 | 运行时效应的剩余缺口：高阶 scoped handler、线性续延/一次性闭包/`bracket`（含 abort cleanup）、单线程调度器、未处理效应诊断均已落地；Layer 3 扩展见 D41/D44 | `Base/Eff*`；§8.4 | 后续 |
 | D41 | 已落地面：scoped handler、线性续延/一次性闭包/通用 `bracket`（abort cleanup）、`Base.EffSched`（单线程调度器，含 Mutex/Channel/线性 TaskLin/forkTaskWith）；剩余：Domain 并行、父 fiber handler 继承 | §8.5；D44 | 后续 |
-| D44 | 调度器边界：取消只在挂起点生效、清理有 64 步宽限后硬中止；Task/Scope legacy 可复制；TaskLin 恰好一次 await/cancel；Mutex/Semaphore/Channel 均为 cooperative 忙等；超时是逻辑步数；任务体只能 `Eff Nil a`（forkTaskWith 显式 handler，但无法继承父 fiber handler 栈）；`Base.EffAsync`（Domain）与调度器互不集成 | `Base.EffSched`、`Codegen/Term.vuna`（`dtSchedRuntime`）、`Intrinsics.vuna`（`prim_sched*`） | 后续 |
+| D44 | 调度器边界：取消只在挂起点生效、清理有 64 步宽限后硬中止；Task/Scope legacy 可复制；TaskLin 恰好一次 await/cancel；Mutex/Semaphore/Channel 均为 cooperative 忙等；超时是逻辑步数；任务体只能 `Eff Nil a`（forkTaskWith 显式 handler，但无法继承父 fiber handler 栈） | `Base.EffSched`、`Codegen/Term.vuna`（`dtSchedRuntime`）、`Intrinsics.vuna`（`prim_sched*`） | 后续 |
 
 ## 10. 非目标（明确不做）
 

@@ -17,7 +17,7 @@ N1 语法面收口；实施记录与过渡决策见 §3.4 / §9。
    `liftIO` / `runIOEff` / `runIOAnswer` / `runPure` 四个方向；特权边界（`privileged` /
    `[trust]` / `unsafe`）只管 IO 轨。
 2. **三重表示**：同一抽象三副面孔——纯 monad（`Base.State`/`Reader`/`Error`）、
-   IO 基座 transformer（`StateT`/`ReaderT`/`ErrorT` + `MonadIO`）、效应行（`Base.Eff.*`）。
+   效应行（`Base.Eff.*`）与宿主 handler（历史 transformer/`MonadIO` 已删除）。
    库 API 与文档面被乘三倍。
 3. **协议蔓延**：`Row`/`Member`/`rowRem` 名义是库、实为语言机制。编译器已介入
    `Intrinsics.vuna` 效果协议常量（8 个，L311–340）、`Core/Eval.rowRemReduce`（公理归约）、
@@ -67,7 +67,7 @@ main : Eff [] Nat
 | 纯效应 | `Base.State`/`Reader`/`Error` 三轨并存 | mock handler 一种写法；interp 可执行（N3） |
 | 一次性续延 | 运行时异常兜底（resume 两次抛 `Continuation_already_resumed`） | QTT 线性续延类型化（N3/N4） |
 | `res op` 擦除 hack | `Obj.t` + 恒等 cast（D27 残留） | 消失：续延只在运行时，不出现在用户 OCaml 类型里 |
-| 三重表示 | 纯 monad / transformer / 效应行 | 收敛为 handler 一种；`StateT`/`ReaderT`/`ErrorT`/`MonadIO` 删除（N3） |
+| 三重表示（历史） | 纯 monad / transformer / 效应行 | 已收敛：transformer/`MonadIO` 已删除，只剩 handler 一种 |
 
 **决策 D-All**（原命名行计划 D1–D9 吸收 + 新增）：
 
@@ -218,8 +218,7 @@ meta → 报未解，不发明行。**禁止贪婪 Here**：名字槽受限统�
 
 ## 5. N3：表示收敛
 
-- 删 `Base.State`/`Base.Reader`/`Base.Error`（纯函数表示）与 `StateT`/`ReaderT`/`ErrorT`/
-  `MonadIO`：State/Reader/Exn 只剩 handler 一种写法。
+- `Base.State`/`Base.Reader`/`Base.Error` 纯表示已随 transformer 一并删除：State/Reader/Exn 只剩 handler 一种写法。
 - **interp 升级**：纯 handler（不触宿主 op）在 NbE 内执行（delimited continuation 的
   NbE 实现）；`vuna interp` 可跑 mock 效应程序，mock/real 对拍变成 interp vs 产物。
 - **QTT 线性续延**：`k : res o -{rows}-> ans` 标 linear；resume 两次从运行时异常变编译错误。

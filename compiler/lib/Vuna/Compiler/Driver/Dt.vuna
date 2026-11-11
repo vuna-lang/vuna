@@ -564,7 +564,8 @@ dtGoalsSourceTolerant ctx label source =
 dtMainKind : PackageContext -> String -> Check String
 dtMainKind ctx entry = Vuna.Compiler.Common.bind (dtLoad ctx entry) (\decls => Vuna.Compiler.Common.bind (elabProgram decls) (\p => case findMainDef (secondOf p) of
   Nothing => cgErr0 NoMain
-  Just mainDef => if isIOType (dtDefType mainDef) then OkC "IO"
+  Just mainDef => if mainActionKind (dtDefType mainDef) == "IO" then OkC "IO"
+  else if mainActionKind (dtDefType mainDef) == "Eff" then OkC "Eff"
   else case force (Base.HashMap.fromList (defTableOf (secondOf p))) solsEmpty defaultFuel (eval [] (dtDefType mainDef)) of
     VNeutral n => case n of
       NGlobal g sp => case sp of
@@ -615,7 +616,7 @@ evalDtMainCore program = case findMainDef (dtProgDefs program) of
       sols = solsPutDefVals solsEmpty program.dtProgDefVals
       mainVal =
         normalize (Base.HashMap.fromList table) sols defaultFuel (VNeutral (NGlobal "main" []))
-    in if isIOType (dtDefType mainDef) then cgErr0 InterpCannotExecuteEffects
+    in if not (mainActionKind (dtDefType mainDef) == "") then cgErr0 InterpCannotExecuteEffects
     else case mainVal of
       VInt n => OkC (strFromInt n)
       VStr s => OkC (showValue mainVal)
@@ -636,11 +637,21 @@ interpMainShow table sols mainVal = case normalize (Base.HashMap.fromList table)
   VStr s => OkC s
   _ => cgErr0 MainNotValue
 
--- main 的类型是不是内建 `IO a`（M37：canonical 身份就是源级名 `IO`）。
-isIOType : Term -> Bool
-isIOType (TApp fn _ _) = isIOType fn
-isIOType (TGlobal g) = g == ioFamilyName
-isIOType _ = False
+-- main 的动作层类别："IO"（宿主过渡入口）/ "Eff"（行已处理干净的 Eff 入口）/ ""（纯 main）。
+mainActionKind : Term -> String
+mainActionKind (TApp (TApp fn row _) _ _) = case fn of
+  TGlobal g => if g == effTypeName then if isNilRowTermDt row then "Eff" else "" else ""
+  _ => ""
+mainActionKind (TApp fn _ _) = case fn of
+  TGlobal g => if g == ioFamilyName then "IO" else ""
+  _ => ""
+mainActionKind _ = ""
+
+-- | `Base.Eff.Row.Nil` 的语法形态（与 Elab/codegen 同形）。
+isNilRowTermDt : Term -> Bool
+isNilRowTermDt (TGlobal g) = g == effRowNilCtor
+isNilRowTermDt (TCon g []) = g == effRowNilCtor
+isNilRowTermDt _ = False
 
 findMainDef : List DtDef -> Maybe DtDef
 findMainDef [] = Nothing

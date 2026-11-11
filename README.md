@@ -147,7 +147,7 @@ manifest，不向上找。命令语义与包格式
 | [docs/reference/type-system.md](docs/reference/type-system.md) | 类型系统：宇宙/kind、索引归纳族、依赖匹配、相等证据、擦除、终止性 |
 | [docs/reference/qtt.md](docs/reference/qtt.md) | QTT：quantity 0/1/ω、用量检查、线性数据/记录、线性 ST 子集 |
 | [docs/reference/records-traits.md](docs/reference/records-traits.md) | 记录、trait / 实例 / `deriving`、`do` / Monad / IO |
-| [docs/reference/effects.md](docs/reference/effects.md) | 效应：IO 内建效应类型、MonadIO + StateT/ReaderT/ErrorT、ST/region、运行时效应（行/命名/一次性续延） |
+| [docs/reference/effects.md](docs/reference/effects.md) | 效应：IO 内建效应类型、Eff 行/命名/一次性续延、ST/region、宿主 handler |
 | [docs/reference/stdlib.md](docs/reference/stdlib.md) | 标准库 `vuna-base` 模块清单与 `Prelude` 自动导入 |
 | [docs/reference/operators.md](docs/reference/operators.md) | 运算符=方法别名、`Eq`/`Ord` 真源、实例落点规则 |
 | [docs/reference/floats.md](docs/reference/floats.md) | `Float` 原语、字面量转换 trait（FromString/FromInt/FromFloat）、`deriving`、Prelude/产物影响与 interp 限制 |

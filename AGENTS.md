@@ -41,8 +41,10 @@
 3. **`seed/` 只含 compiler 包入口闭包**（`compiler/app/Main.vuna` 的 import 闭包）；
 4. **工具链不进 TCB**：`fmt`/`lint`/`repl`/`doc`/`test`/`Index`/`LSP`（以及 package
    manager）永不进入 seed 闭包；黑名单见 `nix/tcb-forbidden.txt`；
-5. **IO 是内建效应类型**：动作由 `prim_pureIO`/`prim_bindIO` 构造，只在 `main`（`v_main 0`）
-   或 `runIO`/`prim_runIO`（需 `unsafe`）执行；效果原语 `prim_*` 需 `[capabilities] effects`；
+5. **动作入口与宿主层**：用户面入口是 `main : Eff [] a`（行必须 Nil，入口处未处理效应是
+   类型错误）；`main : IO a` 只服务宿主程序（编译器/工具链，仍在迁移）。`IO` 是内建
+   效应类型，动作由 `prim_pureIO`/`prim_bindIO` 构造，在 `main`（`v_main 0`）或
+   `runIO`/`prim_runIO`（需 `unsafe`）执行；效果原语 `prim_*` 需 `[capabilities] effects`；
    **特权边界**：`[capabilities]`/`[trust]` 与宿主层模块 `Base.IO.Host` 只允许
    `[package] privileged = true` 的包；用户包/ad-hoc 只能经 `Eff` + handler（见
    [effects.md](docs/reference/effects.md) §8.6）；

@@ -1,0 +1,5 @@
+# 40) `main : Eff [] a` 入口：`vuna interp` 是纯核心求值器，拒绝执行动作 main。
+#     产物路径（compile+run）由 dt_io/07_eff_main 覆盖。
+run: "$VUNA" interp corpus/packages/13_eff_main/app/Main.vuna 2>&1
+exit: nonzero
+out-contains: interp cannot execute effects

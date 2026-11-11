@@ -156,8 +156,8 @@ search` 无命中为 1（用法 / 查询解析 / 非 workspace 仍为 2）；`vu
 `Vuna.Run.runRun`。
 
 `vuna interp <file.vuna>` 走同一条 DT 精化后再做**纯核心求值**，不执行效果：任何
-`main : IO a` 一律报 `[CG_InterpCannotExecuteEffects]`，消息是
-`interp cannot execute effects (main : IO a); compile and run the program instead`
+`main : IO a` / `main : Eff [] a` 一律报 `[CG_InterpCannotExecuteEffects]`，消息是
+`interp cannot execute effects (main : IO a / Eff [] a); compile and run the program instead`
 （exit 2）；纯 `main` 只展示 `Int` / `Nat` / `String` / `Bool`，需要效果或其它展示时用
 `compile` + 运行产物。
 

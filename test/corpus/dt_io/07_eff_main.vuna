@@ -1,0 +1,23 @@
+-- Q2：`main : Eff [] a` 入口（行已处理干净的动作）；纯 handler 在入口前把行消掉。
+import Base.Eff
+import Base.EffState
+import Base.Pair
+
+prog : Eff [State "n" Int] Int
+prog = do
+  x <- get "n" Int
+  _ <- put "n" Int (x + 1)
+  get "n" Int
+
+ret : Int -> Int -> Pair Int Int
+ret a s = Pair a s
+
+opH : (o : StateOp Int) -> (Base.EffState.resState Int o -> Int -> Pair Int Int) -> Int -> Pair Int Int
+opH op k s = case op of
+  Get => k s s
+  Put x => k 0 x
+
+main : Eff [] Int
+main = pure (case runPure (handleState "n" Int ret opH prog) 41 of
+  Pair a s => a + s
+)

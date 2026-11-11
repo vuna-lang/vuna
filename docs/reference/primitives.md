@@ -237,7 +237,6 @@
 | `prim_effectPerform` | `{a b : Type} -> String -> String -> a -> b` | 运行时 effect perform（OCaml 5 `Effect.perform`）；能力 `unsafe`，仅 `Base.Eff` 包装使用 |
 | `prim_effectHandle` | `{u a b ret h : Type} -> String -> String -> ret -> h -> (u -> a) -> (u -> b)` | 安装一次性 handler（`Effect.Deep.match_with`；按 key/name 过滤；退出时执行该 handler extent 内残留的 bracket cleanup）；能力 `unsafe` |
 | `prim_cleanupPush` / `prim_cleanupPop` | `(Int -> Int) -> Int` / `Int -> Int` | W7：bracket cleanup 栈登记/弹出（`dtp_cleanup_*`）；能力 `unsafe`，仅 `Base.Eff.bracket` 使用 |
-| `prim_asyncFork` / `prim_asyncAwait` | `{a : Type} -> (Int -> a) -> IO Int` / `{a : Type} -> Int -> a` | L3：OCaml 5 `Domain` fork/await（`Base.EffAsync`）；main 域、一次性 |
 
 `Base.IO` 只保留 IO 的公开代数（`Functor` / `Applicative` / `Monad IO` 实例）；`runIO` /
 `print` / … 这类宿主别名在特权模块 `Base.IO.Host`（只有 `[package] privileged = true` 的包
@@ -297,7 +296,8 @@
 2. 在 `vuna.toml` 声明所需能力后**直接**调用 `prim_*`，同样得到 `IO` 动作。IO 升格后
    不再要求 `import Base.IO`（类型是内建的），只是没有别名与实例可用。
 
-**执行入口**：动作只在 `main` 处由运行时执行；`main : IO a` 的产物钩子是 `v_main 0`。
+**执行入口**：动作只在 `main` 处由运行时执行；`main : IO a` 的产物钩子是 `v_main 0`，
+`main : Eff [] a` 的产物钩子先经合成的 `@vuna@main_run`（`Base.Eff.runPure`）再执行。
 `Base.IO.Host.runIO : IO a -> a`（= `prim_runIO`）是唯一的「main 之外执行」入口，要求能力
 `unsafe`（工具链特权）：未声明时报
 `` `runIO` executes IO outside main; requires capability `unsafe` ... ``；`runIO` 每次调用
@@ -402,8 +402,8 @@
 | `a / 0` | **否** | 核心求值器表达不了运行期异常；显式分类，不返回 0 |
 
 - 不可归约时 `main` 报 `[CG_MainNotValue] main does not reduce to a value`。
-- `main : IO a` 一律报
-  `error: [CG_InterpCannotExecuteEffects] interp cannot execute effects (main : IO a); compile and run the program instead`
+- `main : IO a` / `main : Eff [] a` 一律报
+  `error: [CG_InterpCannotExecuteEffects] interp cannot execute effects (main : IO a / Eff [] a); compile and run the program instead`
   （退出码 2；无 `DT:` 前缀），不做「纯动作求值、效果丢弃」。
 - **List 桥接**：codegen 把返回或接收 `List` 的 10 个原语映射到桥接 helper（`dtp_unpack` /
   `dtp_pack` / `dtp_concatMany` / `dtp_substTemplate` / `dtp_listOf` / `dtp_ocamlOf`）：

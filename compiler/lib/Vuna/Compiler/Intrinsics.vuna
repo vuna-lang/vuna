@@ -23,6 +23,7 @@ module Vuna.Compiler.Intrinsics
   , effRowFamilyName
   , effRowNilCtor
   , effRowRemName
+  , effRunName
   , effTypeName
   , findIntrinsic
   , floatIntrinsicNames
@@ -54,6 +55,7 @@ module Vuna.Compiler.Intrinsics
   , listConsCtor
   , listFamilyName
   , listNilCtor
+  , mainRunDefName
   , mainShowDefName
   , natSuccCtor
   , natTypeName
@@ -265,6 +267,15 @@ primEraseName = "prim_erase"
 -- 名字里的 `@` 不在用户标识符语法里，不会与用户定义冲突。
 mainShowDefName : String
 mainShowDefName = "@vuna@main_show"
+
+-- | `main : Eff [] a` 的执行定义名：Elab 收尾合成 `@vuna@main_run : Eff [] T -> T`，
+-- codegen 的 main 钩子按它包一层（body 是 `Base.Eff.runPure`）。
+mainRunDefName : String
+mainRunDefName = "@vuna@main_run"
+
+-- | 关闭动作入口（`Base.Eff.runPure : Eff [] a -> a`）的 canonical 名（协议常量）。
+effRunName : String
+effRunName = "Base.Eff.runPure"
 
 -- ---------------------------------------------------------------
 -- 调试构造（F3 B）：语言级 debug 名字

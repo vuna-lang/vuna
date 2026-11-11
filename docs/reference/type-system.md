@@ -41,7 +41,7 @@ quantity / 线性规则见 [qtt.md](qtt.md)（quantity 与擦除口径以该页�
   参数 / 索引个数（arity）**，域依次对应族应用的位置；`data Vec : Nat -> Type -> Type`
   就是 `Vec n a`。族参数不写圆括号，构造子用**完整 telescope** 重新绑定：前 `arity`
   个 binder 对应族参数 / 索引，其余是字段，结果索引写在类型里。
-- **族的参数顺序约定：值类型放最后**（`Vec n a` / `Eff r a` / `Error e a` / `StateT s a`）：
+- **族的参数顺序约定：值类型放最后**（`Vec n a` / `Eff r a` / `Error e a` / `EffState.State n s`）：
   前面位置是参数 / 索引 / 上下文。除了与 base 其它族同序，硬理由是 trait 高阶实例只按
   **最后一个类型参数**匹配——`Functor f` / `Monad m` 要求 `f : Type -> Type`，所以
   `instance Functor (Vec n)` 只有在 `data Vec : Nat -> Type -> Type` 时成立

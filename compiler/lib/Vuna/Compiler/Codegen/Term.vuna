@@ -1,5 +1,7 @@
 module Vuna.Compiler.Codegen.Term
   ( GenSt(..)
+  , actionResultTy
+  , actionRunText
   , dtDefLocTable
   , dtListBridge
   , dtRuntime
@@ -7,8 +9,6 @@ module Vuna.Compiler.Codegen.Term
   , findListFamilyData
   , genDtHook
   , genGroups
-  , ioResultTy
-  , ioRunText
   , mkGenSt
   ) where
 
@@ -2090,12 +2090,24 @@ mainShow table tyTerm = case force (Base.HashMap.fromList table) solsEmpty defau
     _ => mainShowSynth
   _ => mainShowSynth
 
--- 把 `IO a` 拆成内层类型 `a`；不是 **base 的 canonical IO** 则 Nothing（M27：完整符号身份）。
-ioResultTy : Term -> Maybe Term
-ioResultTy (TApp fn arg _) = case fn of
-  TGlobal g => if g == ioFamilyName then Just arg else Nothing
+-- 拆 main 的动作层：返回 ('io' | 'eff', 内层类型)。
+-- Eff 只接受行已经是 Nil 的入口（Elab 的入口检查保证；这里再判一次形态）。
+actionResultTy : Term -> Maybe (Pair String Term)
+actionResultTy (TApp (TApp fn row _) arg _) = case fn of
+  TGlobal g =>
+    if g == effTypeName then if isNilRowTermCodegen row then Just (Pair "eff" arg) else Nothing
+    else Nothing
   _ => Nothing
-ioResultTy _ = Nothing
+actionResultTy (TApp fn arg _) = case fn of
+  TGlobal g => if g == ioFamilyName then Just (Pair "io" arg) else Nothing
+  _ => Nothing
+actionResultTy _ = Nothing
+
+-- | codegen 侧判 `Base.Eff.Row.Nil`（与 Elab 的 isNilRowTerm 同形）。
+isNilRowTermCodegen : Term -> Bool
+isNilRowTermCodegen (TGlobal g) = g == effRowNilCtor
+isNilRowTermCodegen (TCon g []) = g == effRowNilCtor
+isNilRowTermCodegen _ = False
 
 mainShowForName : String -> Check (Pair String String)
 mainShowForName g =
@@ -2128,11 +2140,13 @@ genDtHook bodyText table tyTerm mainExpr printResult = Vuna.Compiler.Common.bind
     in OkC "${bodyText}\n${hook}"
 )
 
--- `main : IO a` 的执行：IO = 裸 thunk，直接对世界令牌 0 应用（无构造子 / 无跨单元依赖）。
+-- 动作 main 的执行表达式：
 -- W9：main 动作作为纤程 0 交给调度器（`dtp_sched_main`）：这样 main 里的
 -- `yieldNow`/`awaitTask` 也能挂起；没有任务的普通程序只是多一层 match_with。
-ioRunText : QualCtx -> Pair (List DtData) (List DtDef) -> String -> Pair String String
-ioRunText qc program mainRef = Pair "dtp_sched_main (fun () -> ${mainRef} 0)" ""
+actionRunText : QualCtx -> Pair (List DtData) (List DtDef) -> String -> String -> Pair String String
+actionRunText qc program mainRef kind =
+  if kind == "eff" then Pair "dtp_sched_main (fun () -> ${valueName mainRunDefName} ${mainRef})" ""
+  else Pair "dtp_sched_main (fun () -> ${mainRef} 0)" ""
 
 genTerm : GenSt -> List (Pair String Rig) -> Term -> Check (Pair String GenSt)
 genTerm a1 a2 a3 = genTermFuel 512 a1 a2 a3

@@ -1,0 +1,5 @@
+-- Q2：`main : Eff [] a` 的内层类型不能是函数（入口是零参的）。
+import Base.Eff
+
+main : Eff [] (Int -> Int)
+main = pure (\x => x)

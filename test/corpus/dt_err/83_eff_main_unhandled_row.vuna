@@ -1,0 +1,6 @@
+-- Q2：入口只接受行已处理干净的动作；`main : Eff [State "n" Int] Int` 是类型错误。
+import Base.Eff
+import Base.EffState
+
+main : Eff [State "n" Int] Int
+main = get "n" Int

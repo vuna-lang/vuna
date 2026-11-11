@@ -26,6 +26,7 @@ module Vuna.Compiler.Elab.Term.Impl
   , constrainDictDomFuel
   , constrainDictDomGoKFuel
   , deferDictBinderFuel
+  , effRowOfValue
   , elabCaseAltsFuel
   , elabCatchAllFuel
   , elabConAltFuel
@@ -43,8 +44,11 @@ module Vuna.Compiler.Elab.Term.Impl
   , inferLetGoFuel
   , inferLetIgnoredFuel
   , inferPiFuel
+  , isNilRowValue
+  , joinEffectLabels
   , litAltStepFuel
   , resolveOverFunPats
+  , rowEffectLabels
   , specializeBoolAppFuel
   , specializeCmpAppFuel
   , specializeEqAppFuel

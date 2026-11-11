@@ -146,7 +146,6 @@ Base.Buffer  base/lib/Base/Buffer.vuna
 Base.Eff.Reader  base/lib/Base/Eff/Reader.vuna
 Base.Eff  base/lib/Base/Eff.vuna
 Base.EffArgs  base/lib/Base/EffArgs.vuna
-Base.EffAsync  base/lib/Base/EffAsync.vuna
 Base.EffChannel  base/lib/Base/EffChannel.vuna
 Base.EffClock  base/lib/Base/EffClock.vuna
 Base.EffConsole  base/lib/Base/EffConsole.vuna
@@ -160,10 +159,8 @@ Base.EffProcess  base/lib/Base/EffProcess.vuna
 Base.EffSched  base/lib/Base/EffSched.vuna
 Base.EffState  base/lib/Base/EffState.vuna
 Base.EffStdin  base/lib/Base/EffStdin.vuna
-Base.Effect  base/lib/Base/Effect.vuna
 Base.Eq  base/lib/Base/Eq.vuna
 Base.Error  base/lib/Base/Error.vuna
-Base.ErrorT  base/lib/Base/ErrorT.vuna
 Base.Field  base/lib/Base/Field.vuna
 Base.Float  base/lib/Base/Float.vuna
 Base.Foldable  base/lib/Base/Foldable.vuna
@@ -188,14 +185,12 @@ Base.Num  base/lib/Base/Num.vuna
 Base.Ord  base/lib/Base/Ord.vuna
 Base.Pair  base/lib/Base/Pair.vuna
 Base.Reader  base/lib/Base/Reader.vuna
-Base.ReaderT  base/lib/Base/ReaderT.vuna
 Base.Record  base/lib/Base/Record.vuna
 Base.Result  base/lib/Base/Result.vuna
 Base.ST  base/lib/Base/ST.vuna
 Base.Show  base/lib/Base/Show.vuna
 Base.Sort  base/lib/Base/Sort.vuna
 Base.State  base/lib/Base/State.vuna
-Base.StateT  base/lib/Base/StateT.vuna
 Base.String  base/lib/Base/String.vuna
 Base.Traversable  base/lib/Base/Traversable.vuna
 Base.Unit  base/lib/Base/Unit.vuna
@@ -294,7 +289,6 @@ Base.Buffer  ./lib/Base/Buffer.vuna
 Base.Eff.Reader  ./lib/Base/Eff/Reader.vuna
 Base.Eff  ./lib/Base/Eff.vuna
 Base.EffArgs  ./lib/Base/EffArgs.vuna
-Base.EffAsync  ./lib/Base/EffAsync.vuna
 Base.EffChannel  ./lib/Base/EffChannel.vuna
 Base.EffClock  ./lib/Base/EffClock.vuna
 Base.EffConsole  ./lib/Base/EffConsole.vuna
@@ -308,10 +302,8 @@ Base.EffProcess  ./lib/Base/EffProcess.vuna
 Base.EffSched  ./lib/Base/EffSched.vuna
 Base.EffState  ./lib/Base/EffState.vuna
 Base.EffStdin  ./lib/Base/EffStdin.vuna
-Base.Effect  ./lib/Base/Effect.vuna
 Base.Eq  ./lib/Base/Eq.vuna
 Base.Error  ./lib/Base/Error.vuna
-Base.ErrorT  ./lib/Base/ErrorT.vuna
 Base.Field  ./lib/Base/Field.vuna
 Base.Float  ./lib/Base/Float.vuna
 Base.Foldable  ./lib/Base/Foldable.vuna
@@ -336,14 +328,12 @@ Base.Num  ./lib/Base/Num.vuna
 Base.Ord  ./lib/Base/Ord.vuna
 Base.Pair  ./lib/Base/Pair.vuna
 Base.Reader  ./lib/Base/Reader.vuna
-Base.ReaderT  ./lib/Base/ReaderT.vuna
 Base.Record  ./lib/Base/Record.vuna
 Base.Result  ./lib/Base/Result.vuna
 Base.ST  ./lib/Base/ST.vuna
 Base.Show  ./lib/Base/Show.vuna
 Base.Sort  ./lib/Base/Sort.vuna
 Base.State  ./lib/Base/State.vuna
-Base.StateT  ./lib/Base/StateT.vuna
 Base.String  ./lib/Base/String.vuna
 Base.Traversable  ./lib/Base/Traversable.vuna
 Base.Unit  ./lib/Base/Unit.vuna

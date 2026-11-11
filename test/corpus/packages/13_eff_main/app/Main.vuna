@@ -1,0 +1,5 @@
+-- `main : Eff [] a` 入口（纯动作）：interp 拒绝执行，产物正常执行。
+import Base.Eff
+
+main : Eff [] Int
+main = pure 7

@@ -55,6 +55,7 @@ import Vuna.Compiler.Elab.Meta
 import Vuna.Compiler.Elab.Prelude
 import Vuna.Compiler.Elab.Records
 import Vuna.Compiler.Elab.Term
+import Vuna.Compiler.Elab.Term.Impl
 import Vuna.Compiler.Elab.Termination
 import Vuna.Compiler.Elab.Trait
 import Vuna.Compiler.Elab.Usage
@@ -812,12 +813,44 @@ findDefByName : String -> List DtDef -> Maybe DtDef
 findDefByName name [] = Nothing
 findDefByName name (d :: rest) = if dtDefName d == name then Just d else findDefByName name rest
 
--- `IO a` 去掉 IO 后的 `a`（不是 IO 则原样；与 codegen 的 `ioResultTy` 同一形态）。
-mainShowInnerTy : Term -> Term
-mainShowInnerTy (TApp fn arg rig) = case fn of
-  TGlobal g => if g == ioFamilyName then arg else TApp fn arg rig
-  _ => TApp fn arg rig
-mainShowInnerTy t = t
+-- main 结果类型拆掉动作层后的内层类型。动作层有两种：
+--   * `IO a`（宿主程序过渡期入口，M37 内建）；
+--   * `Eff [] a`（用户面入口；行必须已经是 Nil，否则入口检查报 TC_UnhandledEffects）。
+-- 返回 ("io"/"eff"/"other", 内层类型)；非动作 main 的内层就是它自己。
+mainActionOf : Term -> Pair String Term
+mainActionOf ty = case ty of
+  TApp (TApp fn row _) arg _ => case fn of
+    TGlobal g =>
+      if g == effTypeName then if isNilRowTerm row then Pair "eff" arg else Pair "other" ty
+      else Pair "other" ty
+    _ => Pair "other" ty
+  TApp fn arg _ => case fn of
+    TGlobal g => if g == ioFamilyName then Pair "io" arg else Pair "other" ty
+    _ => Pair "other" ty
+  _ => Pair "other" ty
+
+-- | 行项是否是 `Eff []`（语法上的 `Base.Eff.Row.Nil`）。
+isNilRowTerm : Term -> Bool
+isNilRowTerm (TGlobal g) = g == effRowNilCtor
+isNilRowTerm (TCon g []) = g == effRowNilCtor
+isNilRowTerm _ = False
+
+-- | 入口行检查：`main : Eff [] a` 之外的 Eff 行必须是 Nil；否则报未处理效应。
+mainEntryRowCheck : Ec -> List (Pair String Term) -> Span -> Term -> Check Int
+mainEntryRowCheck ec bodies sp ty = case ty of
+  TApp (TApp fn row _) _ _ => case fn of
+    TGlobal g => if g == effTypeName then
+      let
+        rowV = force (Base.HashMap.fromList bodies) (ecSolsP ec) defaultFuel (eval [] row)
+      in if isNilRowValue ec rowV then OkC 0
+      else case rowEffectLabels 64 ec rowV of
+        Just labels =>
+          if labels == [] then OkC 0
+          else tcErr1 sp (UnhandledEffects (joinEffectLabels labels)) (joinEffectLabels labels)
+        Nothing => tcErr1 sp (UnhandledEffects (showTerm row)) (showTerm row)
+    else OkC 0
+    _ => OkC 0
+  _ => OkC 0
 
 -- main 结果类型是否是内建展示类型（与 Codegen.Term.mainShowForName 的集合一致）。
 mainShowBuiltinTy : Value -> Bool
@@ -831,21 +864,22 @@ mainShowBuiltinTy (VNeutral n) = case n of
   _ => False
 mainShowBuiltinTy _ = False
 
--- main 不能带显式/隐式参数：入口 `main` 是零参的；结果类型（拆掉 `IO` 之后）出现
+-- main 不能带显式/隐式参数：入口 `main` 是零参的；结果类型（拆掉动作层之后）出现
 -- 函数类型就说明 main 带参数，这是 arity 错误、不是 `Show` 缺失。
 mainHasParams : Term -> Bool
 mainHasParams (TPi _ _ _ _ _) = True
 mainHasParams _ = False
 
--- | `TC_MainArity`：main 带参数。`main : Int -> Int` 与 `main : IO (Int -> Int)` 都命中
--- （`mainShowInnerTy` 先剥 IO，再看内层类型）。
+-- | `TC_MainArity`：main 带参数。`main : Int -> Int` 与 `main : Eff [] (Int -> Int)` 都命中
+-- （`mainActionOf` 先剥动作层，再看内层类型）。
 mainArityErr : Span -> Term -> Check a
 mainArityErr sp ty =
   let
     st = showTerm ty
   in tcErr1 sp (MainArity st) st
 
--- 收尾阶段合成 `@vuna@main_show`；main 不存在或是内建/无参数判断由 caller 处理。
+-- 收尾阶段合成 `@vuna@main_show`（以及 `Eff []` main 的 `@vuna@main_run`）；
+-- main 不存在、入口行、参数与 Show 的判断都在这里。
 synthMainShow : Ec -> List (Pair String Term) -> List DtDef -> Check (List DtDef)
 synthMainShow ec globals defs = case findDefByName "main" defs of
   Nothing => OkC defs
@@ -854,20 +888,39 @@ synthMainShow ec globals defs = case findDefByName "main" defs of
       sp = case dtDefSpan mainDef of
         Just s => s
         Nothing => Span "" 0 0 0 0
-      inner = mainShowInnerTy (dtDefType mainDef)
+      ty = dtDefType mainDef
+      bodies = matchedBodies defs
+      p = mainActionOf ty
+      inner = secondOf p
+      kind = firstOf p
     in if mainHasParams inner then mainArityErr sp inner
-    else synthMainShowInner ec globals defs sp inner
+    else Vuna.Compiler.Common.bind (mainEntryRowCheck ec bodies sp ty)
+      (\_ => synthMainShowInner ec globals defs bodies sp inner kind)
 
-synthMainShowInner : Ec -> List (Pair String Term) -> List DtDef -> Span -> Term -> Check (List DtDef)
-synthMainShowInner ec globals defs sp inner =
+-- 定义名 → 体的表（入口行检查与 Show 合成共用一次构造）。
+matchedBodies : List DtDef -> List (Pair String Term)
+matchedBodies defs = concatMap (\d => case dtDefBody d of
+  Just b => [Pair (dtDefName d) b]
+  Nothing => []
+) defs
+
+synthMainShowInner : Ec -> List (Pair String Term) -> List DtDef -> List (Pair String Term) -> Span -> Term -> String -> Check (List DtDef)
+synthMainShowInner ec globals defs bodies sp inner kind =
   let
-    bodies = Base.HashMap.fromList (concatMap (\d => case dtDefBody d of
-      Just b => [Pair (dtDefName d) b]
-      Nothing => []
-    ) defs
-    )
-    tyVal = force bodies (ecSolsP ec) defaultFuel (eval [] inner)
-  in if mainShowBuiltinTy tyVal then OkC defs else synthMainShowGo ec globals defs sp tyVal
+    tyVal = force (Base.HashMap.fromList bodies) (ecSolsP ec) defaultFuel (eval [] inner)
+    tyTerm = quote 0 tyVal
+    withRun = if kind == "eff" then append defs [mainRunDef tyTerm sp] else defs
+  in if mainShowBuiltinTy tyVal then OkC withRun else synthMainShowGo ec globals withRun sp tyVal
+
+-- `main : Eff [] T` 的执行定义：`@vuna@main_run : Eff [] T -> T`，body `\x => runPure x`。
+-- hook 只引用这条同单元定义，不需要跨单元依赖（与 `@vuna@main_show` 同一模式）。
+mainRunDef : Term -> Span -> DtDef
+mainRunDef tyTerm sp =
+  let
+    sp0 = Span "" 0 0 0 0
+    dom = TApp (TApp (TGlobal effTypeName) (TGlobal effRowNilCtor) Rig0) tyTerm Rig0
+    body = TLam "x" Rig1 (TApp (TApp (TGlobal effRunName) tyTerm Rig0) (TVar "x" 0 sp0) Rig1)
+  in DtDef mainRunDefName (TPi "x" False Rig1 dom tyTerm) body (Just sp)
 
 synthMainShowGo : Ec -> List (Pair String Term) -> List DtDef -> Span -> Value -> Check (List DtDef)
 synthMainShowGo ec globals defs sp tyVal = case findClassByShortName "Show" (ecClasses ec) of
