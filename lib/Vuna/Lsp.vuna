@@ -37,6 +37,7 @@ import Vuna.Lsp.Diagnostics
 import Vuna.Lsp.Protocol
 import Vuna.Lsp.Query
 import Vuna.Lsp.Rename
+import Base.Host
 
 -- ---------------------------------------------------------------
 -- 常量
@@ -533,8 +534,8 @@ dispatch methodName msg state =
 -- `Vuna.Json.Server.serveConnection` 提供；LSP 只保留**退出策略**：
 -- stdin EOF / 传输层致命错误算异常断开（flush 日志后退 1），
 -- 收到 shutdown 之后的 exit 退 0。
-writeStdout : String -> IO Int
-writeStdout s = prim_print s
+writeStdout : String -> Eff [] Int
+writeStdout s = prim_eff_print s
 
 -- 传输告警：LSP 的既有策略是丢帧 + 写日志（不回错误帧）。
 lspWarn : String -> LspState -> Pair LspState (List Json)

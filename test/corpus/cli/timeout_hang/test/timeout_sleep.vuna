@@ -4,5 +4,5 @@
 import Base.Eff
 import Base.EffClock
 
-main : IO Int
+main : Eff [] Int
 main = runClock "real" (clockSleepMicros "real" 30000000)

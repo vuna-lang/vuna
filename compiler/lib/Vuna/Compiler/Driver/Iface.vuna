@@ -98,7 +98,7 @@ import Vuna.Compiler.Debug
 import Vuna.Compiler.Driver.Owner
 import Vuna.Compiler.Loader.Modules
 import Vuna.Compiler.Packages.Pkg
-import Base.IO.Host
+import Base.Host
 
 -- 源信息：模块名 → (绝对路径, 内容哈希, mtime, size)。路径只用于本机校验（换 checkout
 -- 会失效，回退全量）；mtime/size 是可选快路径（`VUNA_CACHE_MTIME=1`），默认仍用内容哈希。
@@ -831,7 +831,7 @@ relUnder pkgDir path =
 -- （`<stem>-<hash>.iface`），同一路径永远不可能承载两份不同内容；默认布局仍写源文件旁
 -- （命名 `<stem>.iface`，路径固定，读侧靠 `miName` + `miIfaceHash` 校验）。
 ifaceMirrorMode : Bool
-ifaceMirrorMode = runIO (prim_getenv "VUNA_IFACE_DIR") /= ""
+ifaceMirrorMode = runPure (prim_eff_getenv "VUNA_IFACE_DIR") /= ""
 
 -- 内容寻址 token：SHA-256 十六进制前 16 位（文件名安全、可读；64 bit 足够区分）。
 ifaceHashToken : String -> String
@@ -951,9 +951,9 @@ decodeIfaceFile compiler raw = case breakAtNewline (strUnpack raw) [] of
   Nothing => Nothing
 
 readManifest : String -> String -> Maybe PackageManifest
-readManifest dir compiler = if runIO (prim_fileExists (manifestPathOf dir)) then
+readManifest dir compiler = if runPure (prim_eff_fileExists (manifestPathOf dir)) then
   let
-    raw = runIO (prim_readFile (manifestPathOf dir))
+    raw = runPure (prim_eff_readFile (manifestPathOf dir))
   in case decodeIfaceFile compiler raw of
     Just payload => Just (prim_unmarshal payload)
     Nothing => Nothing
@@ -966,8 +966,9 @@ writeManifest dir compiler mf =
   let
     path = manifestPathOf dir
     payload = encodeIfaceFile compiler (prim_marshal mf)
-  in if runIO (prim_fileExists path) then if runIO (prim_readFile path) == payload then 0 else runIO (prim_writeFileAtomic path payload)
-  else runIO (prim_writeFileAtomic path payload)
+  in if runPure (prim_eff_fileExists path) then if runPure (prim_eff_readFile path) == payload then 0
+  else runPure (prim_eff_writeFileAtomic path payload)
+  else runPure (prim_eff_writeFileAtomic path payload)
 
 manifestEntryOfWith : String -> String -> ModuleIface -> ManifestEntry
 manifestEntryOfWith origin pkgDir m =
@@ -1007,12 +1008,12 @@ writeModules dir compiler pkgDir origin old (m :: rest) =
           e.meIfaceHash == miIfaceHashOf m
             && depListsSame e.meDeps (miDepHashesOf m)
             && e.meOrigin == origin
-            && runIO (prim_fileExists path)
+            && runPure (prim_eff_fileExists path)
         Nothing => False
       n = if unchanged then 0
       else
         let
-          _ = runIO (prim_writeFileAtomic path (encodeIfaceFile compiler (prim_marshal m)))
+          _ = runPure (prim_eff_writeFileAtomic path (encodeIfaceFile compiler (prim_marshal m)))
         in 1
     in n + writeModules dir compiler pkgDir origin old rest
 
@@ -1045,8 +1046,8 @@ writeModuleIfaceMerge dir compiler pkg pkgDir env origin mi =
         Nothing => []
       merged = replaceManifestEntry old entry
       _ =
-        runIO
-          (prim_writeFileAtomic (modulePathOf dir file) (encodeIfaceFile compiler (prim_marshal mi)))
+        runPure
+          (prim_eff_writeFileAtomic (modulePathOf dir file) (encodeIfaceFile compiler (prim_marshal mi)))
       _ = writeManifest dir compiler (PackageManifest ifaceSchema compiler pkg env merged)
     in 1
 
@@ -1083,9 +1084,9 @@ readModuleFileRaw : String -> String -> ManifestEntry -> Maybe ModuleIface
 readModuleFileRaw dir compiler e =
   let
     path = modulePathOf dir (meFileOfEntry e)
-  in if runIO (prim_fileExists path) then
+  in if runPure (prim_eff_fileExists path) then
     let
-      raw = runIO (prim_readFile path)
+      raw = runPure (prim_eff_readFile path)
       payload = decodeIfaceFile compiler raw
     in case payload of
       Just bytes =>

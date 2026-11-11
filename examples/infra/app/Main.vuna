@@ -1,5 +1,5 @@
 import Base.Bits
-import Base.IO.Host
+import Base.Host
 import Base.List
 import Base.Pair
 import Base.String
@@ -24,7 +24,7 @@ f : Float
 f = 1.5
 """
 
-main : IO Int
+main : Eff [] Int
 main = do
   _ <- println ("hash-empty " ++ digestHex (digestOfString ""))
   _ <- println ("hash-abc " ++ digestHex (digestOfString "abc"))

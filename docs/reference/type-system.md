@@ -192,7 +192,7 @@ quantity / 线性规则见 [qtt.md](qtt.md)（quantity 与擦除口径以该页�
 - **`main`**：`check` 不要求 `main`，`compile` / `build` 要求；`main` 可为
   `Int` / `Nat` / `String` / `Bool` 或 `IO a`（`IO` 是内建效应类型）。
   `vuna interp` 是纯核心求值，只展示 `Int` / `Nat` / `String` / `Bool`，任何
-  `main : IO a` 一律明确报错。
+  `main : Eff [] a` 一律明确报错。
 - 洞 `_` / 命名洞 `?name` 未解时报 `TC_UnsolvedHole`（带位置与目标类型，命名洞带洞名）；
   `vuna goal` 与 LSP hover 用**容错**目标查询（`goalsOfProgramTolerant` / `dtGoalsSourceTolerant`），
   所以未解的洞也能列出目标与上下文（[tooling.md](tooling.md)）。

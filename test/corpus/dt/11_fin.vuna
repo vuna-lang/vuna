@@ -12,12 +12,10 @@ data Vec : Type -> Nat -> Type where
   VCons : (a : Type) -> (n : Nat) -> a -> Vec a n -> Vec a (Succ n)
 
 at : (a : Type) -> (m : Nat) -> Vec a (Succ m) -> Fin (Succ m) -> a
-at a m xs i =
-  case xs of
-    VCons b k y ys =>
-      case i of
-        FZero j => y
-        FSucc j h => y
+at a m xs i = case xs of
+  VCons b k y ys => case i of
+    FZero j => y
+    FSucc j h => y
 
 main : Int
 main = at Int Zero (VCons Int Zero 7 (VNil Int)) (FZero Zero)

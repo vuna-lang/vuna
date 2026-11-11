@@ -1,47 +1,47 @@
 -- M21：`Base.IO` 的公开 API 在 DT 下全部可用（类型面）。效果不在这条夹具里执行
 -- （纯核心求值器不跑效果），运行时效果见 corpus/dt_io/。
-import Base.IO.Host
+import Base.Host
 import Base.List
 import Base.Nat
 
-readProbe : IO String
+readProbe : Eff [] String
 readProbe = readFile "x"
 
-writeProbe : IO Nat
+writeProbe : Eff [] Nat
 writeProbe = writeFile "x" "y"
 
-lineProbe : IO String
+lineProbe : Eff [] String
 lineProbe = readLine
 
-dirProbe : IO (List String)
+dirProbe : Eff [] (List String)
 dirProbe = readDir "."
 
-isDirProbe : IO Bool
+isDirProbe : Eff [] Bool
 isDirProbe = isDirectory "."
 
-makeDirProbe : IO Int
+makeDirProbe : Eff [] Int
 makeDirProbe = makeDir "x"
 
-removeProbe : IO Int
+removeProbe : Eff [] Int
 removeProbe = removeFile "x"
 
-existsProbe : IO Bool
+existsProbe : Eff [] Bool
 existsProbe = fileExists "x"
 
-mtimeProbe : IO Int
+mtimeProbe : Eff [] Int
 mtimeProbe = fileTimeProbe
 
-fileTimeProbe : IO Int
+fileTimeProbe : Eff [] Int
 fileTimeProbe = fileMtime "x"
 
-sizeProbe : IO Nat
+sizeProbe : Eff [] Nat
 sizeProbe = fileSize "x"
 
-argsProbe : IO (List String)
+argsProbe : Eff [] (List String)
 argsProbe = getArgs
 
-exitProbe : IO Int
+exitProbe : Eff [] Int
 exitProbe = exit 0
 
-main : IO Int
+main : Eff [] Int
 main = pure 0

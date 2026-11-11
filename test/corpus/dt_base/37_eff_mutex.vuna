@@ -2,7 +2,7 @@
 import Base.Eff
 import Base.EffMutex
 import Base.EffSched
-import Base.IO.Host
+import Base.Host
 import Base.IORef
 import Base.Result
 
@@ -11,27 +11,25 @@ inc m ctr = do
   r <- acquire m
   case r of
     Ok _ => do
-      v <- liftIOEff (readRef ctr)
-      _ <- liftIOEff (writeRef ctr (v + 1))
+      v <- raise (readRef ctr)
+      _ <- raise (writeRef ctr (v + 1))
       release m
     Err _ => pure 0
 
 prog : Eff [] (Result Int)
-prog =
-  withScope
-    (\sc => do
-      m <- newMutex
-      ctr <- liftIOEff (newRef 0)
-      _ <- forkTask sc (inc m ctr)
-      _ <- forkTask sc (inc m ctr)
-      _ <- scopeWait sc
-      n <- liftIOEff (readRef ctr)
-      pure (Ok n)
-    )
+prog = withScope (\sc => do
+  m <- newMutex
+  ctr <- raise (newRef 0)
+  _ <- forkTask sc (inc m ctr)
+  _ <- forkTask sc (inc m ctr)
+  _ <- scopeWait sc
+  n <- raise (readRef ctr)
+  pure (Ok n)
+)
 
-main : IO Int
+main : Eff [] Int
 main = do
-  r <- runIOEff prog
+  r <- prog
   case r of
     Ok n => pure n
     Err _ => pure 0

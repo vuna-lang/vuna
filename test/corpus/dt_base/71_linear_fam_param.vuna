@@ -8,7 +8,8 @@ mk : Int -> Box Int
 mk n = MkBox n
 
 unbox : Box Int -> Int
-unbox b = case b of MkBox x => x
+unbox b = case b of
+  MkBox x => x
 
 main : Int
 main = unbox (mk 42)

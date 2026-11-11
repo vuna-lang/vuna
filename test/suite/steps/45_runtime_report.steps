@@ -10,7 +10,7 @@ out-contains: vuna: runtime error: division by zero
 out-contains:   at main (
 out-contains: app/Main.vuna:
 out-not-contains: Fatal error
-run: sh -c 'printf "import Base.IO.Host\n\nmain : IO Int\nmain = do\n  println \"m38-start\"\n  exit (10 / 0)\n" >"$TMPDIR/m38-rt/app/Main.vuna"'
+run: sh -c 'printf "import Base.Host\n\nmain : Eff [] Int\nmain = do\n  println \"m38-start\"\n  exit (10 / 0)\n" >"$TMPDIR/m38-rt/app/Main.vuna"'
 run: "$VUNA" build "$TMPDIR/m38-rt" 2>&1
 run: "$TMPDIR/m38-rt/.output/bin/m38-rt" 2>&1
 exit: 2

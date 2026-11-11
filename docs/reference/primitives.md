@@ -33,7 +33,8 @@
   `Base.Ord` 方法（`eq` / `neq` / `lt` / `le` / `gt` / `ge`）的解析期别名；Int/String 上的
   `bi_eq_int` / `bi_eq_str` / `bi_*_int` / `bi_*_generic` 是这两个类的**内建实例实现**
   （不是运算符的独立语义）。详见 [operators.md](operators.md)。
-- **`IO` 是语言内建效应类型**，`Bool` / `List` / `Nat` 是 base 的普通 `data` 声明：
+- **`Eff` 是用户面动作类型；`IO` 是过渡期的内建宿主类型**，`Bool` / `List` / `Nat` 是 base 的
+  普通 `data` 声明：
   内建类型按名字恒可见；base 的族身份是完整符号而不是短名：
 
   | 声明 | canonical 符号 | 来源 | 常量 |
@@ -43,8 +44,11 @@
   | `List` | `Base.List.List`（`Cons` / `Nil` 同理） | `Base.List` | `listFamilyName` / `listConsCtor` / `listNilCtor` |
   | `Nat` | `Base.Nat.Nat`（`Zero` / `Succ` 同理） | `Base.Nat` | `natTypeName` / `natZeroCtor` / `natSuccCtor` |
 
-- `IO`：kind `Type -> Type`，运行时裸 thunk `int -> 'a`，没有构造器；canonical 身份就是
-  源级名 `IO`（`Intrinsics.ioTypeName` / `ioFamilyName`）。`MkIO` 已删除。
+- `Eff`（`Base.Eff.Eff`）：`Row -> Type -> Type` 的 base data，装箱表示 `MkEff`（不导出）；
+  行是擦除索引。入口 `main : Eff [] a`，执行 `runPure`（[effects.md](effects.md) §2）。
+- `IO`（过渡期）：kind `Type -> Type`，运行时裸 thunk `int -> 'a`，没有构造器；canonical 名
+  仍是源级 `IO`（`Intrinsics.ioTypeName` / `ioFamilyName`），只服务 `Base.Host` 与工具链内部
+  实现，用户面不应再出现；M4 前后删除。
 
 - `True` / `False` 精化为核心 `TBool`，codegen 的运行时表示是 OCaml `bool`：canonical Bool
   族**不生成变体声明**（`Codegen.Decl.runtimeDatas` 按 `boolTypeName` 过滤）。
@@ -109,7 +113,7 @@
   其它类型走普通 trait 方法应用。用户类型实现 `Num`（并配 `FromInt` 收字面量）即可重载
   四则（`1 + 2 : MyNum`），见 [operators.md](operators.md)「`Num` 的唯一真源」。
 - **度量返回 Nat（D25）**：`prim_print` / `prim_writeFile` / `prim_fileSize` 的签名是
-  `… -> IO Nat`（宿主面 `Base.IO.Host.print` / `writeFile` / `fileSize` 也是 `IO Nat`）；
+  `… -> Eff [] Nat`（宿主面 `Base.Host.print` / `writeFile` / `fileSize` 在边界转 `Nat`；实现层 `prim_*` 仍 `IO Nat`）；
   `prim_eprint` / `prim_writeFileAtomic` 与编译器内部计数器（level/meta/fuel/span/arity、
   字节计数中间量）保留 `Int`。
 - **展示**：`main : Nat` 与 interp 都输出十进制。
@@ -143,21 +147,21 @@
   `String` → `dt_show_string`（即 `strShow`）、`Bool` → `dt_show_bool`（输出 `True` /
   `False`）、`Float` → `string_of_float`。
 - **其它类型走 `Show` 实例**（D17）：精化收尾（`Elab.Driver.finishCore`）对非内建的结果
-  类型（`main : IO a` 先剥掉 IO 取 `a`）搜索 `Dict_Show a`，合成
+  类型（`main : Eff [] a` 先剥掉动作层取 `a`）搜索 `Dict_Show a`，合成
   `@vuna@main_show : a -> String`（body 是方法投影 `\x -> show {a} {dict} x`）。
   `mainShow` 对它回退到这条定义名；interp（`Driver.Dt.evalDtMainCore`）对 main 值应用
   同一份定义后打印。找不到实例在**精化期**报
   `[TC_NoInstanceFound] no instance found for <T>`（旧的 `[CG_MainReturnType]` 已随 D17
   删除，不再产生；`@vuna@main_show` 在 split 归属里固定归入口单元 `Main`）。
 - **`vuna test` 的 main 判据不变**：`lib/Vuna/TestRunner.dtMainKind` 仍只认
-  `Int` / `Nat` / `String` / `Bool`（按返回 0/空串/True 判通过）与 `IO a`（退出码 0）；
+  `Int` / `Nat` / `String` / `Bool`（按返回 0/空串/True 判通过）与动作入口（退出码 0）；
   其它类型报 `unsupported test main type`。D17 只负责**展示**，不改变测试通过判据——
   需要按 `Show` 类型写「纯测试」暂时只能显式转成 `String` 判定。
 - interp 展示（`Core.Eval.showValue`，字符串走 `Core.Term.showCoreString`）与 `strShow`
   同规则、逐字节一致，因此 `main : String` 在 interp 与产物中输出相同。非内建类型经
   `@vuna@main_show` 得到的是 `String`，两侧都直接 `print_endline`（**不加引号**）。
-- `main : IO a` 的 interp 仍是一律报错（纯核心求值器不执行效果，夹具用 `.nointerp`）；
-  产物侧先执行 IO 动作，再按上面的规则展示结果。
+- `main : Eff [] a` 的 interp 仍是一律报错（纯核心求值器不执行效果，夹具用 `.nointerp`）；
+  产物侧先执行动作（`runPure`），再按上面的规则展示结果。
 - `Show Bool` 库实例用 `if` 输出 `True` / `False`，与 `dt_show_bool` 同语义。
 
 ## 6. 其它纯原语
@@ -201,8 +205,7 @@
 | `arrayFromList` | `List a -> Array a` | `Array.of_list`（经 List 桥接 `dtp_ocamlOf`） |
 | `arrayToList` | `Array a -> List a` | `Array.to_list`（经 `dtp_listOf`） |
 
-**IO 原语**（返回 `IO` 动作，无能力：不触碰外部世界；经 `Base.IORef` / `Base.MArray` /
-`Base.Buffer` 使用）：
+**可变数据原语**（双表：`prim_eff_*` 返回 `Eff []`，IO 版 `prim_*` 是过渡；无能力：不触碰外部世界；`Base.IORef` / `Base.MArray` / `Base.Buffer` 的公开操作返回 `Eff []`）：
 
 | 原语 | 签名 | runtime |
 | --- | --- | --- |
@@ -218,48 +221,49 @@
 - **interp 不归约**全部容器原语（`OpNone`）：夹具带 `.nointerp`，只 compile + 运行。
 - 越界行为：`arrayGet` / `MArray.read` 越界是宿主 `Invalid_argument`（不是 `strAt` 的
   -1 哨兵，也没有语言层诊断）；`Array.set` 先 `Array.copy`，原数组不变。
-- 可变数据的安全边界是 **IO 隔离**：`IORef` / `MArray` / `Buffer` 的句柄只能在 `IO` 动作里
-  使用；`runIO` 是 main 外的逃逸口、需要 `unsafe`。**ST/region**：`Base.ST` 的
+- 可变数据的安全边界在过渡期仍是**实现层 IO 槽**：`IORef` / `MArray` / `Buffer` 的公开操作
+  返回 `Eff []`，实现层用 `Base.Host.runIO` 桥；`runIO` 是 main 外的逃逸口、需要 `unsafe`。**ST/region**：`Base.ST` 的
   `Ref` / `SArray` 只在 `ST r` 里使用且不能逃出 `runST`；它们是 linear record（句柄恰好一次），
   `ST` 动作本身仍可复制；仍无依赖 multiplicity / 线性箭头（
   多用未禁止，见 [effects.md](effects.md)）。
 
-## 7. 效果原语、IO 动作与能力
+## 7. 效果原语、Eff 动作与能力
 
-**IO 类型**：`IO` 是语言内建效应类型（kind `Type -> Type`，运行时裸 thunk
-`int -> 'a`，无构造器，见 §2）。它的代数也是内建原语：
+**动作类型**：用户面唯一动作类型是 `Eff r a`（`Base.Eff`，装箱 data；行是擦除索引），
+入口 `main : Eff [] a`，执行 `Base.Eff.runPure`。`IO` 不再是用户面类型；它只作为特权宿主层
+内部类型留在过渡期（`Base.Host` / `deferIO` / `runIO` 桥，M4 删除）。
 
-| 原语 | 签名 | 说明 |
-| --- | --- | --- |
-| `prim_pureIO` | `{a : Type} -> a -> IO a` | 构造动作 |
-| `prim_bindIO` | `{a b : Type} -> IO a -> (a -> IO b) -> IO b` | 串行绑定 |
-| `prim_runIO` | `{a : Type} -> IO a -> a` | main 外唯一执行入口；能力 `unsafe` |
-| `prim_effectPerform` | `{a b : Type} -> String -> String -> a -> b` | 运行时 effect perform（OCaml 5 `Effect.perform`）；能力 `unsafe`，仅 `Base.Eff` 包装使用 |
-| `prim_effectHandle` | `{u a b ret h : Type} -> String -> String -> ret -> h -> (u -> a) -> (u -> b)` | 安装一次性 handler（`Effect.Deep.match_with`；按 key/name 过滤；退出时执行该 handler extent 内残留的 bracket cleanup）；能力 `unsafe` |
-| `prim_cleanupPush` / `prim_cleanupPop` | `(Int -> Int) -> Int` / `Int -> Int` | W7：bracket cleanup 栈登记/弹出（`dtp_cleanup_*`）；能力 `unsafe`，仅 `Base.Eff.bracket` 使用 |
+**宿主原语是双表过渡**（bootstrap 需要）：
 
-`Base.IO` 只保留 IO 的公开代数（`Functor` / `Applicative` / `Monad IO` 实例）；`runIO` /
-`print` / … 这类宿主别名在特权模块 `Base.IO.Host`（只有 `[package] privileged = true` 的包
-可 import）。`IO` 类型本身恒可见（不需要 import）。不导出 `bindIO` / `pureIO` / `fmapIO`
-这样的名字：动作组合统一走 `Functor` / `Applicative` / `Monad` 实例（`fmap` / `bind` /
-`pure` / `liftA2`、`>>=`、`do`）。W10 起 Host 还暴露标签化效应 handler 需要的别名：
-`eprint`、`getEnv` / `getCwd` / `execPath`（env）、`nowMicros`（= `timeUs`）与
-`sleepMicros`。W10 收尾新增了原生睡眠原语 `prim_sleep : Int -> IO Int`（微秒；
-`Unix.sleepf`；能力 `clock`）：`Base.EffClock` 的真实 handler 与 `Base.IO.Host.sleepMicros`
-都已直接使用它（`spinMicros` 已删除；边界见 [effects.md](effects.md) §8.6）。
+| 表 | 名字 | 类型 | 用途 |
+| --- | --- | --- | --- |
+| Eff 表 | `prim_eff_*`（如 `prim_eff_print`、`prim_eff_readFile`、`effTimeUs`） | 返回 `Eff [] a` | `Base.Host` 的 Eff 别名、用户面（特权层） |
+| IO 表（过渡） | `prim_*`（如 `prim_print`、`prim_readFile`、`timeUs`） | 返回 `IO a` | 旧 bootstrap 与仍走 IO 的工具链源码 |
 
-**效果原语类型**：全部效果原语返回 `IO` 动作，而不是「立刻算完的值」：`prim_print : String -> IO Nat`（D25）、
-`prim_readFile : String -> IO String`、`prim_readLine : IO String`、
-`prim_readDir : String -> IO (List String)`、`prim_isDirectory` / `prim_fileExists : String -> IO Bool`、
-`prim_makeDir` / `prim_removeFile` / `prim_fileMtime : String -> IO Int`、
-`prim_fileSize : String -> IO Nat`（D25）、`prim_writeFile : String -> String -> IO Nat`（D25）、
-`prim_getArgs : IO (List String)`、`prim_getenv : String -> IO String`、
-`prim_getcwd` / `prim_execPath : IO String`、`prim_exit : Int -> IO Int`（执行即退出、不返回）、
-`prim_runIn : String -> List String -> IO Int`、`prim_spawn : List String -> IO Int`、
-`prim_wait : Int -> IO Int`、`prim_readBytes : Int -> IO String`、
-`prim_sleep : Int -> IO Int`（阻塞 us 微秒）、`timeUs : IO Int`。零参原语因此是**真正的值**（动作值）：引用不执行、也不重新求值。
+两表语义相同、运行时文本相同；Eff 表在 codegen 里包成 `MkEff (fun _ -> rt args)`。
+`Base.Host` 在 Eff 别名上做 Int/Nat 归一化（`print`/`writeFile`/`fileSize`/`readBytes`
+等），并保留实现层 IO 桥 `runIO : IO a -> a`（`unsafe` 信任点）。
 
-纯 `main` 直接调用效果原语是类型错误（`TC_TypeMismatch`）：效果只能出现在 `IO` 动作里。
+**Eff 代数不是原语**：`pure` / `>>=` / `do` / `fmap` 来自 `Functor`/`Applicative`/`Monad (Eff r)`
+实例（`Base.Eff` 内建）；`runPure` / `joinEff` / `raise` / `weaken` 是 `Base.Eff` 的库函数。
+`prim_effectPerform` / `prim_effectHandle` / `prim_cleanupPush` / `prim_cleanupPop` 仍是
+`unsafe` 门控的运行时效应核心，只由 `Base.Eff` 包装使用（D28 信任点）。
+
+**效果原语类型**（Eff 表；IO 表同形但返回 `IO a`）：`prim_eff_print : String -> Eff [] Int`
+（`Base.Host.print` 在边界转 `Nat`）、`prim_eff_readFile : String -> Eff [] String`、
+`prim_eff_readLine : Eff [] String`、`prim_eff_readDir : String -> Eff [] (List String)`、
+`prim_eff_isDirectory` / `prim_eff_fileExists : String -> Eff [] Bool`、
+`prim_eff_makeDir` / `prim_eff_removeFile` / `prim_eff_fileMtime : String -> Eff [] Int`、
+`prim_eff_fileSize : String -> Eff [] Int`、`prim_eff_writeFile : String -> String -> Eff [] Int`、
+`prim_eff_getArgs : Eff [] (List String)`、`prim_eff_getenv : String -> Eff [] String`、
+`prim_eff_getcwd` / `prim_eff_execPath : Eff [] String`、
+`prim_eff_exit : Int -> Eff [] Int`（执行即退出、不返回）、
+`prim_eff_runIn : String -> List String -> Eff [] Int`、`prim_eff_spawn : List String -> Eff [] Int`、
+`prim_eff_wait : Int -> Eff [] Int`、`prim_eff_readBytes : Int -> Eff [] String`、
+`prim_eff_sleep : Int -> Eff [] Int`（阻塞 us 微秒）、`effTimeUs : Eff [] Int`。
+零参原语因此是**真正的动作值**：引用不执行、也不重新求值。
+
+纯 `main` 直接调用效果原语是类型错误（`TC_TypeMismatch`）：效果只能出现在 `Eff`/`IO` 动作里。
 
 两条调试/诊断原语；调试构造是**语言级内建**（见
 [debugging.md](debugging.md) §3）：
@@ -292,13 +296,13 @@
 
 **名字面**：效果原语只保留 `prim_*` 名。用户有两条合法用法：
 
-1. `import Base.IO`，使用返回 `IO` 动作的 API（`print` / `readFile` / …——它们是 `prim_*` 的**别名**）；
+1. `import Base.Host`，使用返回 `IO` 动作的 API（`print` / `readFile` / …——它们是 `prim_*` 的**别名**）；
 2. 在 `vuna.toml` 声明所需能力后**直接**调用 `prim_*`，同样得到 `IO` 动作。IO 升格后
-   不再要求 `import Base.IO`（类型是内建的），只是没有别名与实例可用。
+   不再要求 `import Base.Host`（类型是内建的），只是没有别名与实例可用。
 
-**执行入口**：动作只在 `main` 处由运行时执行；`main : IO a` 的产物钩子是 `v_main 0`，
+**执行入口**：动作只在 `main` 处由运行时执行；`main : Eff [] a` 的产物钩子是 `v_main 0`，
 `main : Eff [] a` 的产物钩子先经合成的 `@vuna@main_run`（`Base.Eff.runPure`）再执行。
-`Base.IO.Host.runIO : IO a -> a`（= `prim_runIO`）是唯一的「main 之外执行」入口，要求能力
+`Base.Host.runIO : IO a -> a`（= `prim_runIO`）是唯一的「main 之外执行」入口，要求能力
 `unsafe`（工具链特权）：未声明时报
 `` `runIO` executes IO outside main; requires capability `unsafe` ... ``；`runIO` 每次调用
 都重新执行动作（动作值可复用、效果不缓存）。
@@ -316,7 +320,7 @@
 | `env` | `prim_getenv`、`prim_getcwd`、`prim_execPath` |
 | `clock` | `timeUs`、`prim_sleep` |
 | `net` | `prim_netListen`、`prim_netPort`、`prim_netAccept`、`prim_netRecv`、`prim_netSend`、`prim_netClose`、`prim_netConnect` |
-| `unsafe` | `prim_runIO`（= `Base.IO.Host.runIO`：在 main 之外执行 IO 动作）；`prim_effectPerform` / `prim_effectHandle` / `prim_cleanupPush` / `prim_cleanupPop`（运行时续延与 bracket cleanup，仅 Base.Eff）；base 用 `[trust] unsafe` 显式列出直接使用点（D28 定义级信任，见 packages.md） |
+| `unsafe` | `prim_runIO`（= `Base.Host.runIO`：在 main 之外执行 IO 动作）；`prim_effectPerform` / `prim_effectHandle` / `prim_cleanupPush` / `prim_cleanupPop`（运行时续延与 bracket cleanup，仅 Base.Eff）；base 用 `[trust] unsafe` 显式列出直接使用点（D28 定义级信任，见 packages.md） |
 
 - 声明面：manifest `[capabilities] effects = ["console", "fs", ...]`，按**包**声明
   （`Frontend.Manifest.manifestCapabilities`）；无 manifest 的 ad-hoc 文件没有能力。
@@ -325,7 +329,7 @@
 - 未知能力名报 `unknown capability "<name>" (known: console, fs, process, env, clock, unsafe, net)`
   （`Loader.Resolve.checkCapabilities`）。
 - 用到但未声明报
-  `` effectful builtin `<name>` requires capability `<cap>` in <package> (declare [capabilities] effects = ["<cap>"] or use Base.IO) ``
+  `` effectful builtin `<name>` requires capability `<cap>` in <package> (declare [capabilities] effects = ["<cap>"] or use Base.Eff/Base.Host) ``
   （`Loader.Resolve.checkEffectsBuiltins`）。
 - **这是权限声明，不是检查豁免**：能力不改变类型检查、擦除或 codegen 语义，只决定能否在
   源码里直接引用效果原语 / `runIO`；没有按包名字符串判定的 allowlist。声明 `[trust] unsafe`
@@ -343,6 +347,8 @@
   `Unix.readlink "/proc/self/exe"`（`prim_execPath`）；`build.sh` 无条件
   `-I +unix ... unix.cmxa`。因此任何产物都依赖 OCaml 的 unix 库。
 - 启动时设置 GC（`minor_heap_size` 16MB、`space_overhead` 200）。
+
+两表 runtime 契约相同：下表写 IO 版名字，Eff 版 `prim_eff_*` 用同一 runtime 文本（codegen 仅多包一层 `MkEff`）。
 
 | 原语 | runtime 契约 |
 | --- | --- |
@@ -402,8 +408,8 @@
 | `a / 0` | **否** | 核心求值器表达不了运行期异常；显式分类，不返回 0 |
 
 - 不可归约时 `main` 报 `[CG_MainNotValue] main does not reduce to a value`。
-- `main : IO a` / `main : Eff [] a` 一律报
-  `error: [CG_InterpCannotExecuteEffects] interp cannot execute effects (main : IO a / Eff [] a); compile and run the program instead`
+- `main : Eff [] a` / `main : Eff [] a` 一律报
+  `error: [CG_InterpCannotExecuteEffects] interp cannot execute effects (main : Eff [] a / Eff [] a); compile and run the program instead`
   （退出码 2；无 `DT:` 前缀），不做「纯动作求值、效果丢弃」。
 - **List 桥接**：codegen 把返回或接收 `List` 的 10 个原语映射到桥接 helper（`dtp_unpack` /
   `dtp_pack` / `dtp_concatMany` / `dtp_substTemplate` / `dtp_listOf` / `dtp_ocamlOf`）：

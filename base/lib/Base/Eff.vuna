@@ -6,21 +6,22 @@ module Base.Eff
   , Row(..)
   , bracket
   , defaultInstance
+  , deferIO
   , effPrim
   , finally
   , handleCore
   , handleCoreLin
   , handleWith
   , handleWithAt
+  , joinEff
   , mkCont
   , performCore
+  , raise
   , resFn
   , resOf
   , resumeCont
   , rowRem
   , runEff
-  , runIOAnswer
-  , runIOEff
   , runPure
   , sendCore
   , weaken
@@ -79,6 +80,11 @@ data Eff : Row -> Type -> Type where
   MkEff : {r : Row} -> {a : Type} -> (EffUnit -> a) -> Eff r a
 
 -- `Eff r` 的 Monad 实例：构造/组合的唯一入口（不再提供 `pureEff` / `bindEff` 专用组合子）。
+instance Functor (Eff r) where
+  fmap f e = MkEff (\u => case e of
+    MkEff g => f (g u)
+  )
+
 instance Monad (Eff r) where
   bind e k = MkEff (\u => case e of
     MkEff f => case k (f u) of
@@ -117,25 +123,34 @@ runThunk : {r : Row} -> {a : Type} -> Eff r a -> EffUnit -> a
 runThunk e = case e of
   MkEff f => f
 
--- 运行一个「行已被处理干净」的动作（Nil）；有未处理效应时由运行时报告。
+-- 运行一个「行已被处理干净」的动作（Nil）。行只描述用户效应；宿主原语是特权层构造的
+-- 叶子（`Base.Host`），因此这里执行的动作可能包含宿主操作——语义是「无未处理行效应」，
+-- 不是「无副作用」。
 -- | 运行行已处理干净（`Nil`）的动作；仍有未处理效应时由运行时报告。
 runPure : {a : Type} -> Eff [] a -> a
 runPure e = runThunk e MkEffUnit
 
--- 运行「行已被处理干净」的动作：把动作放进 IO 世界执行。
--- 行必须为 `Nil`（F3-1）：入口处未处理效应是**类型错误**，不再等运行时报告；
--- 未处理的行要先用 handler 消掉。用 bindIO 延迟到动作执行时再求值，避免构造期就 perform。
--- | 运行行已处理干净（`Nil`）的动作并把结果放回 IO 世界；入口处未处理效应是类型错误（`Eff []`），用 bindIO 延迟到执行时求值。
-runIOEff : {a : Type} -> Eff [] a -> IO a
-runIOEff e = prim_bindIO (prim_pureIO 0) (\_ => prim_pureIO (runEff e))
+-- 把宿主动作（IO thunk）延迟进 Eff：只有特权层能构造 IO 动作（Host/内部可变 API），
+-- 这个桥供实现层把动作交给 Eff 执行（ST/内部工具）；运行时只是把 IO thunk 应用一次。
+-- | 把 IO 动作延迟进 `Eff []`（实现层桥：只在动作被执行时应用世界令牌）。
+deferIO : {a : Type} -> IO a -> Eff [] a
+deferIO io = MkEff (\_ => prim_runIO io)
 
 -- 仅供作用域 handler 实现内部使用（W6）：在嵌套 handler 下运行子计算，外层运行时
--- handler 继续处理 r。普通用户用 runPure/runIOEff。
--- 仅供作用域 handler 实现内部使用（W6）：在嵌套 handler 下运行子计算，外层运行时
--- handler 继续处理 r。普通用户用 runPure/runIOEff。
--- | 仅供作用域 handler 实现内部使用（W6）：在嵌套 handler 下运行子计算，外层运行时 handler 继续处理行 `r`；普通用户用 `runPure` / `runIOEff`。
+-- handler 继续处理 r。普通用户用 runPure。
+-- | 仅供作用域 handler 实现内部使用（W6）：在嵌套 handler 下运行子计算，外层运行时 handler 继续处理行 `r`；普通用户用 `runPure`。
 runEff : {r : Row} -> {a : Type} -> Eff r a -> a
 runEff e = runThunk e MkEffUnit
+
+-- 展平 handler 的 answer：IO-backed handler 的 `runX = joinEff (handleXHost …)`。
+-- | 展平 `Eff r (Eff [] a)`：外层按 r 解释，内层在结果位置执行。
+joinEff : {r : Row} -> {a : Type} -> Eff r (Eff [] a) -> Eff r a
+joinEff m = m >>= (\inner => pure (runPure inner))
+
+-- 行扩宽（任意目标行）：`Eff [] a` 是每个行的子行，运行时恒等。
+-- | 把行已处理干净的动作放进任意行：`Eff [] a -> Eff r a`（运行时恒等；行只是擦除索引）。
+raise : {r : Row} -> {a : Type} -> Eff [] a -> Eff r a
+raise (MkEff f) = MkEff f
 
 -- 核心发送：e 是标签类型；key/name 是运行时实例标识；op 是运行时值。
 -- `e` 是显式类型参数（宇宙域，恒擦除）；op 是运行时值。
@@ -155,11 +170,6 @@ performCore n key e o = sendCore e key n o
 -- | 核心 handler：`ret` 处理正常返回，`opH` 处理每个操作，结果行删除 `e`（`rowRem e r`）；(key, name) 必须与 `sendCore` 匹配。
 handleCore : (e : Type) -> {r : Row} -> {op : Type} -> {a : Type} -> {b : Type} -> {h : Type} -> (key : String) -> (name : String) -> (a -> b) -> h -> Eff r a -> Eff (rowRem name e r) b
 handleCore e key name ret opH comp = MkEff (prim_effectHandle key name ret opH (runThunk comp))
-
--- 执行「answer 本身是 IO 动作」的程序（IO-backed handler 的入口）。
--- | 执行「结果本身是 IO 动作」的程序（IO-backed handler 的入口）：先 `runEff` 求值，再由 `prim_runIO` 执行得到的 IO 动作。
-runIOAnswer : {a : Type} -> Eff [] (IO a) -> IO a
-runIOAnswer e = prim_bindIO (prim_pureIO 0) (\_ => prim_pureIO (prim_runIO (runEff e)))
 
 -- | 线性 continuation（本阶段的一次性闭包类型）：`Cont a b` 由 `MkCont` 包装限量为 1 的函数，只能被消费一次。
 linear data Cont a b : Type where

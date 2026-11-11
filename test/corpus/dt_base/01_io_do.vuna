@@ -1,8 +1,8 @@
 -- M21：`import Base.IO` 即可用 `do` / `bind` / `pure` / `fmap`（Functor / Monad
 -- 由 Base.IO 重导出，Loader 的 T(..) 重导出规则同时带出方法投影）。
-import Base.IO
+import Base.Host
 
-main : IO Int
+main : Eff [] Int
 main = do
   x <- pure 41
   pure (x + 1)

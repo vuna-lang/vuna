@@ -6,12 +6,10 @@ import Base.Result
 import Base.Pair
 
 prog : Eff [Exn "main", State "counter" Int] Int
-prog =
-  bracketExn "main" (pure 0) (\_ => put "counter" Int 99)
-    (\_ => do
-      _ <- throwExn "main" "boom"
-      pure 1
-    )
+prog = bracketExn "main" (pure 0) (\_ => put "counter" Int 99) (\_ => do
+  _ <- throwExn "main" "boom"
+  pure 1
+)
 
 ret : Base.Result.Result Int -> Int -> Pair (Base.Result.Result Int) Int
 ret a s = Pair a s

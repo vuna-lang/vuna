@@ -2,7 +2,7 @@
 -- 失败消息经 awaitTask 的 Err 返回；body 返回 Err 后 withScope 先取消再等干净。
 import Base.Eff
 import Base.EffSched
-import Base.IO.Host
+import Base.Host
 import Base.Result
 
 bad : Eff [] Int
@@ -13,37 +13,35 @@ bad = do
 work : List Int -> Eff [] Int
 work [] = pure 0
 work (_ :: rest) = do
-  _ <- liftIOEff (println "tick")
+  _ <- raise (println "tick")
   st <- yieldNow
   if st <= 0 then work rest
   else do
-    _ <- liftIOEff (println "sibling-cleanup")
+    _ <- raise (println "sibling-cleanup")
     pure 9
 
 prog : Eff [] (Result Int)
-prog =
-  withScope
-    (\sc => do
-      tb <- forkTask sc bad
-      tg <- forkTask sc (work [0, 0, 0])
-      _ <- yieldNow
-      rb <- awaitTask tb
-      case rb of
-        Ok _ => pure (Ok 0)
-        Err e => do
-          _ <- liftIOEff (println e)
-          _ <- scopeWait sc
-          rw <- awaitTask tg
-          case rw of
-            Ok _ => pure (Err e)
-            Err e2 => do
-              _ <- liftIOEff (println e2)
-              pure (Err e)
-    )
+prog = withScope (\sc => do
+  tb <- forkTask sc bad
+  tg <- forkTask sc (work [0, 0, 0])
+  _ <- yieldNow
+  rb <- awaitTask tb
+  case rb of
+    Ok _ => pure (Ok 0)
+    Err e => do
+      _ <- raise (println e)
+      _ <- scopeWait sc
+      rw <- awaitTask tg
+      case rw of
+        Ok _ => pure (Err e)
+        Err e2 => do
+          _ <- raise (println e2)
+          pure (Err e)
+)
 
-main : IO Int
+main : Eff [] Int
 main = do
-  r <- runIOEff prog
+  r <- prog
   case r of
     Ok n => pure n
     Err _ => pure 2

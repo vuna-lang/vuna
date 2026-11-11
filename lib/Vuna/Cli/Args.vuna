@@ -28,12 +28,12 @@ module Vuna.Cli.Args
 --   - `--with-comments` 这类只属于工具命令的已删 flag 在工具侧 hint 表里；
 --     其余已删 flag 回落编译器包 `removedFlagHint`（唯一真源，不复制文案）。
 --
--- 读盘守卫：内建 `prim_isDirectory` 对不存在的路径会抛宿主异常，所以所有来自
--- 用户的路径都必须先 `prim_fileExists` 再 `prim_isDirectory`；`readText` /
+-- 读盘守卫：内建 `prim_eff_isDirectory` 对不存在的路径会抛宿主异常，所以所有来自
+-- 用户的路径都必须先 `prim_eff_fileExists` 再 `prim_eff_isDirectory`；`readText` /
 -- `requireExists` / `requireDirectory` 是唯一入口。
 import Vuna.Compiler.Common
 import Vuna.Compiler.Driver.CompilerCli
-import Base.IO.Host
+import Base.Host
 
 -- ---------------------------------------------------------------
 -- 参数说明表
@@ -176,27 +176,28 @@ argErrText cmd (DuplicateFlag flag) = "duplicate flag: ${flag}"
 argErrText cmd (MissingValue flag) = "flag requires a value: ${flag}"
 
 -- ---------------------------------------------------------------
--- 读盘守卫（禁止在不存在路径上调 prim_isDirectory）
+-- 读盘守卫（禁止在不存在路径上调 prim_eff_isDirectory）
 -- ---------------------------------------------------------------
 -- 读一个文本文件：先判存在、再判目录，最后才读。
 readText : String -> Check String
 readText path =
-  if runIO (prim_fileExists path) then if runIO (prim_isDirectory path) then err "is a directory: ${path}"
-  else OkC (runIO (prim_readFile path))
+  if runPure (prim_eff_fileExists path) then if runPure (prim_eff_isDirectory path) then err "is a directory: ${path}"
+  else OkC (runPure (prim_eff_readFile path))
   else err "no such file: ${path}"
 
 -- 要求路径存在（文件或目录均可）。
 requireExists : String -> Check Int
-requireExists path = if runIO (prim_fileExists path) then OkC 0 else err "no such file: ${path}"
+requireExists path =
+  if runPure (prim_eff_fileExists path) then OkC 0 else err "no such file: ${path}"
 
 -- 要求路径存在且是目录。
 requireDirectory : String -> Check Int
 requireDirectory path =
-  if runIO (prim_fileExists path) then if runIO (prim_isDirectory path) then OkC 0 else err "not a directory: ${path}"
+  if runPure (prim_eff_fileExists path) then if runPure (prim_eff_isDirectory path) then OkC 0 else err "not a directory: ${path}"
   else err "no such directory: ${path}"
 
 -- ---------------------------------------------------------------
--- 目录创建（prim_makeDir 只建一层）
+-- 目录创建（prim_eff_makeDir 只建一层）
 -- ---------------------------------------------------------------
 parentOf : String -> String
 parentOf path =
@@ -223,7 +224,7 @@ joinSlashPartsGo [] = ""
 joinSlashPartsGo ([part]) = part
 joinSlashPartsGo (part :: rest) = "${part}/${joinSlashPartsGo rest}"
 
--- 递归创建所有缺失的父目录；已存在返回 0。`prim_makeDir` 对已存在路径返回 0。
+-- 递归创建所有缺失的父目录；已存在返回 0。`prim_eff_makeDir` 对已存在路径返回 0。
 -- 递归不沿输入结构下降（parentOf 返回 String），用显式 fuel（字节长度上界）守卫。
 ensureDirPath : String -> Int
 ensureDirPath path = ensureDirPathGo (strLength path + 2) path
@@ -235,7 +236,7 @@ else if pathExistsDirSafe path then 0
 else
   let
     _ = ensureDirPathGo (fuel - 1) (parentOf path)
-  in if pathExistsDirSafe path then 0 else runIO (prim_makeDir path)
+  in if pathExistsDirSafe path then 0 else runPure (prim_eff_makeDir path)
 
 pathExistsDirSafe : String -> Bool
-pathExistsDirSafe path = runIO (prim_fileExists path) && runIO (prim_isDirectory path)
+pathExistsDirSafe path = runPure (prim_eff_fileExists path) && runPure (prim_eff_isDirectory path)

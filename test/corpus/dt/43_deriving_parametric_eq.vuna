@@ -9,4 +9,4 @@ data Maybe2 a : Type where
 deriving (Eq)
 
 main : Int
-main = if (Just2 1 == Just2 1) && (Nothing2 /= Just2 2) then 42 else 0
+main = if Just2 1 == Just2 1 && Nothing2 /= Just2 2 then 42 else 0

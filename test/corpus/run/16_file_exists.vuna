@@ -8,5 +8,5 @@ prog = do
   nope <- fsFileExists "real" "/vuna/definitely-not-a-file-xyz"
   pure (if root then (if nope then 0 else 42) else 0)
 
-main : IO Int
+main : Eff [] Int
 main = runFs "real" prog

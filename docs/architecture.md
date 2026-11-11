@@ -109,7 +109,7 @@ data（`Base.Bool.Bool` / `Base.List.List` / `Base.Nat.Nat`），不按短名。
 擦除检查由 `Codegen.Assembly.checkDtProgram` 负责（判据 `Core.rigIsErased`）；不透明字段
 走后端表示（判据 `Codegen.Decl.ctorOpaqueFlagsOf`）。`vuna interp`
 走同一精化链后由 `Driver.Dt.dtEvalFile` 求 `main`（纯求值：只展示 `Int`/`String`/`Bool`，
-任何 `main : IO a` 报错并提示 `compile`）。
+任何 `main : Eff [] a` 报错并提示 `compile`）。
 
 **入口符号**：`Driver.Dt.dtCheck` / `dtCheckWithProgramParts` / `dtCheckPackageWithIfacesParts` / `dtSplitProjectParts` / `dtEvalFile` /
 `dtEvalExpr`；`Loader.Flatten.loadProject*` / `resolveProject`；`Elab.Driver.elabProgramFull`
@@ -185,8 +185,8 @@ vuna.toml → Frontend.{Toml.parseToml, Manifest.parseManifest/validateManifest}
   `nix/tcb-forbidden.txt` 黑名单）；效应边界是 manifest 显式能力
   （`[capabilities].effects` ∈ console/fs/process/env/clock/net/unsafe），
   `checkEffectsBuiltins` 按 `Intrinsics` 能力位检查；原语返回 `IO` 动作（只在 `main` 执行，
-  钩子是 `v_main 0`），未声明能力的包只能经 `Base.IO`，`runIO`/`prim_runIO` 需
-  `unsafe`；`base` 自身声明 `unsafe`（`Base.IO.runIO` 别名与 `Base.ST.runST`，见
+  钩子是 `v_main 0`），未声明能力的包只能经 `Base.Host`，`runIO`/`prim_runIO` 需
+  `unsafe`；`base` 自身声明 `unsafe`（`Base.Host.runIO` 别名与 `Base.ST.runST`，见
   [effects.md](reference/effects.md)）。
 
 ## 4. LSP 与索引（工具链侧，不进 seed）

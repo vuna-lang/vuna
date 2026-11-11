@@ -14,5 +14,5 @@ prog = do
            else 3)
         else 4)
 
-main : IO Int
+main : Eff [] Int
 main = runFs "real" prog

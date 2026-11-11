@@ -41,15 +41,17 @@
 3. **`seed/` 只含 compiler 包入口闭包**（`compiler/app/Main.vuna` 的 import 闭包）；
 4. **工具链不进 TCB**：`fmt`/`lint`/`repl`/`doc`/`test`/`Index`/`LSP`（以及 package
    manager）永不进入 seed 闭包；黑名单见 `nix/tcb-forbidden.txt`；
-5. **动作入口与宿主层**：用户面入口是 `main : Eff [] a`（行必须 Nil，入口处未处理效应是
-   类型错误）；`main : IO a` 只服务宿主程序（编译器/工具链，仍在迁移）。`IO` 是内建
-   效应类型，动作由 `prim_pureIO`/`prim_bindIO` 构造，在 `main`（`v_main 0`）或
-   `runIO`/`prim_runIO`（需 `unsafe`）执行；效果原语 `prim_*` 需 `[capabilities] effects`；
-   **特权边界**：`[capabilities]`/`[trust]` 与宿主层模块 `Base.IO.Host` 只允许
-   `[package] privileged = true` 的包；用户包/ad-hoc 只能经 `Eff` + handler（见
-   [effects.md](docs/reference/effects.md) §8.6）；
-   **用户面效果只经 `Eff`**：运行入口只接受行已处理干净的动作（`runIOEff : Eff [] a -> IO a`，
-   入口处未处理效应是类型错误，见 [effects.md](docs/reference/effects.md) §8.4/§8.6）；
+5. **动作入口与宿主层**：用户面（夹具 / 用户包 / ad-hoc）唯一动作类型是 `Eff r a`，入口是
+   `main : Eff [] a`（行必须 Nil，入口处未处理效应是类型错误），执行入口是
+   `Base.Eff.runPure : Eff [] a -> a`。`IO` 已从用户面删除（`Base.IO` 模块不存在）；它只作为
+   **特权宿主层内部类型**保留在过渡期：`Base.Host`（原 `Base.IO.Host`）的别名与内部可变
+   API 仍是 IO，编译器/工具链经 `Base.Host.runIO` 桥（`runPure ∘ deferIO`）执行；
+   `Base.Host` 的 Eff 别名走 `prim_eff_*`（与 IO 版 `prim_*` 并存的过渡表，Bootstrap 用），
+   `Base.Eff.deferIO`/`Base.Host.runIO` 是仅有的 IO→Eff 桥。**特权边界**：
+   `[capabilities]`/`[trust]` 与宿主层模块 `Base.Host` 只允许 `[package] privileged = true`
+   的包；用户包/ad-hoc 只能经 `Eff` + handler（见 [effects.md](docs/reference/effects.md) §8.6）。
+   M4 债务：编译器/工具链源码仍以便利函数签名隐藏 IO（`runPure (...)`），要改成显式
+   `Eff`/`EffCheck` 外壳后才删除最后的内建 `IO` 类型与 `prim_*` IO 表。
 6. **唯一路径**：语言夹具、`vuna interp`、包构建与 seed 全部走 DT（精化 + 擦除
    codegen，`vuna check .` 也是 DT 自检）；没有可切换的检查器，也没有第二套 codegen；
 7. 编译器自检通过：`vuna check .` 必须能检查自身源码（`checks.vuna-typecheck`）。

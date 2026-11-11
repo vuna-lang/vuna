@@ -9,5 +9,5 @@ prog = do
   _ <- consolePrint "real" "dobind:"
   pure x
 
-main : IO Int
+main : Eff [] Int
 main = runConsole "real" prog

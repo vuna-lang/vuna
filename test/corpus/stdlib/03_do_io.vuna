@@ -1,4 +1,4 @@
--- stdlib：do 在 Eff 上（含 `_ <-` 丢弃结果）；main : IO Int 由运行器执行。
+-- stdlib：do 在 Eff 上（含 `_ <-` 丢弃结果）；main : Eff [] Int 由运行器执行。
 -- P2c：用户面经 Eff + Console handler（runConsole）。
 import Base.Eff
 import Base.EffConsole
@@ -9,5 +9,5 @@ program = do
   n <- pure 3
   pure n
 
-main : IO Int
+main : Eff [] Int
 main = runConsole "real" program

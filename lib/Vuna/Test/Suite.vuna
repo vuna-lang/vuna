@@ -14,12 +14,12 @@ module Vuna.Test.Suite
 --     手写一段 TOML；
 --   * `[suite]` 只放全局默认（jobs/timeout/name）。
 --
--- 本模块不做执行；只做「文件/TOML -> List Case」的纯数据转换（读盘经 runIO）。
+-- 本模块不做执行；只做「文件/TOML -> List Case」的纯数据转换（读盘经 runPure）。
 import Vuna.Compiler.Common
 import Vuna.Compiler.Frontend.Toml
 import Vuna.Files
 import Vuna.Cli.Args
-import Base.IO.Host
+import Base.Host
 
 -- `vuna test --suite` 的选项。jobs = 0 表示 auto（由 runner 探测全部可用核）。
 record SuiteOpts where
@@ -100,7 +100,7 @@ record Case where
 -- ---------------------------------------------------------------
 readTextFile : String -> Check String
 readTextFile path =
-  if pathExistsFile path then if pathExistsDir path then err "is a directory: ${path}" else OkC (runIO (readFile path))
+  if pathExistsFile path then if pathExistsDir path then err "is a directory: ${path}" else OkC (runPure (readFile path))
   else err "no such file: ${path}"
 
 -- suite 文件在 <root>/test/suite.toml；root = 上两级。
@@ -330,7 +330,7 @@ parseWant base =
 
 -- `.run.exit` 的期望退出码（十进制；空/非数字视为 0）。
 readExitCode : String -> Int
-readExitCode path = parseExitDigits (strUnpack (trim (runIO (readFile path)))) 0 0
+readExitCode path = parseExitDigits (strUnpack (trim (runPure (readFile path)))) 0 0
 
 parseExitDigits : List Int -> Int -> Int -> Int
 parseExitDigits [] acc seen = if seen == 0 then 0 else acc
@@ -408,7 +408,7 @@ discoverDirFamily suite family entry =
   let
     dir = "${suite.suiteRoot}/${family.familyDir}"
   in if not (pathExistsDir dir) then [brokenFamilyCase family "family dir not found: ${dir}"]
-  else concatMap (oneDir family dir entry) (runIO (readDir dir))
+  else concatMap (oneDir family dir entry) (runPure (readDir dir))
 
 oneDir : Family -> String -> String -> String -> List Case
 oneDir family dir entry name =
@@ -429,7 +429,7 @@ discoverFileFamily suite family =
   let
     dir = "${suite.suiteRoot}/${family.familyDir}"
   in if not (pathExistsDir dir) then [brokenFamilyCase family "family dir not found: ${dir}"]
-  else concatMap (oneFile family dir) (runIO (readDir dir))
+  else concatMap (oneFile family dir) (runPure (readDir dir))
 
 matchesExclude : Family -> String -> Bool
 matchesExclude family name = matchesAnyExclude family.familyExclude name
@@ -500,7 +500,7 @@ discoverStepsFamily suite family =
       id = "${family.familySection}/${family.familyName}/${rel}"
     in [Case id family.familySection family.familyTags (CSteps "${dir}/${name}") family.familyTimeout]
   else []
-  ) (runIO (readDir dir))
+  ) (runPure (readDir dir))
 
 discoverFamily : Suite -> Family -> List Case
 discoverFamily suite family = if family.familyKind == "steps" then discoverStepsFamily suite family
@@ -514,7 +514,7 @@ else case family.familyEntry of
 parseSuiteFile : String -> Check Suite
 parseSuiteFile path =
   let
-    absPath = if startsWith "/" path then path else "${runIO getCwd}/${path}"
+    absPath = if startsWith "/" path then path else "${runPure getCwd}/${path}"
   in case readTextFile absPath of
     ErrC e => ErrC e
     OkC contents => case parseTomlAt absPath contents of

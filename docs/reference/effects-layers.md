@@ -20,7 +20,7 @@
 - `Base.EffExn`：`ExnOp.Try` 携带一个 `Eff` 子计算；`handleExn` 的 op handler 用
   `runEff (runExn sub)` 在**嵌套 handler** 下运行子计算，外层运行时 handler 继续处理
   子计算里的其它效应；`catchExn` 在 `tryWith` 上组合。
-- `runEff` 是信任边界内的作用域运行入口（任意行）；普通用户用 `runPure`/`runIOEff`——两者都只接受行已处理干净的动作（`Eff []`，入口处未处理效应是类型错误）。
+- `runEff` 是信任边界内的作用域运行入口（任意行）；普通用户用 `runPure`/`runPure`——两者都只接受行已处理干净的动作（`Eff []`，入口处未处理效应是类型错误）。
 - 夹具 `dt_base/23_eff_scoped`（107：子计算里的 Reader 由外层 handler 处理）；
   负例 `dt_err/74_try_row_mismatch`（`tryWith` 要求行首 `Exn n`）。
 
@@ -117,31 +117,31 @@ main 结束时统一取消清理（最外层兜底）；跨域 handler / Domain 
 ### 8.6 IO 标签迁移（库层 + 一条工具链真实路径）
 
 前提（计划 §2.3）：`IO` 保留为**运行时基座/逃逸口**（FFI、`main`、`unsafe`、未标签化
-原语）；用户面 API 迁到效应标签，handler 内部用 `Base.IO` / `prim_*` 实现。迁移在**库层**
+原语）；用户面 API 迁到效应标签，handler 内部用 `Base.Host` / `prim_*` 实现。迁移在**库层**
 完成；后续补齐了原生 sleep 原语、fs 命名实例、可控 `Exit` 与
 一条工具链真实路径。`IO` 内建代数、main 执行边界与编译器的 IO 类型都不变。
 
 | 模块 | 标签（行条目） | 操作 | 真实 handler | mock 方式 |
 | --- | --- | --- | --- | --- |
-| `Base.EffConsole` | `Console n`（`n` 是 String 实例名，如 `"mock"`/`"real"`） | `Print String` / `EPrint String` | `handleConsoleIO` → `Base.IO.Host.print`/`eprint` | 自定义 `handleConsole`（如收集日志） |
-| `Base.EffClock` | `Clock n`（如 `"mock"`/`"real"`） | `Now`（微秒）/`SleepMicros Int` | `handleClockIO` → `Base.IO.Host.nowMicros` + **原生 `prim_sleep`** | 固定时间戳 / 忽略 sleep |
-| `Base.EffEnv` | `Env n`（如 `"mock"`/`"real"`） | `GetEnv String`/`GetCwd`/`ExecPath` | `handleEnvIO` → `Base.IO.getEnv`/`getCwd`/`execPath` | 固定字符串 |
-| `Base.EffProcess` | `Process n`（如 `"mock"`/`"real"`） | `Args`/`Exit Int`/`RunIn String (List String)` | `handleProcessIO`（真实退出）/ `handleProcessIOWith`（自定义 onExit）/ `handleProcessIOObserved`（观察退出码） | 自定义 `handleProcess`（`Exit c` 作为操作结果） |
-| `Base.EffFs` | `Fs n`（如 `"mock"`/`"real"`，命名实例） | `ReadFile`/`WriteFile`/`WriteFileAtomic`/`ReadDir`/`IsDirectory`/`MakeDir`/`RemoveFile`/`FileExists`/`FileMtime`/`FileSize` | `handleFsIO n` → `Base.IO`/`prim_*` | 自定义 `handleFs n`（纯 answer 内存表） |
+| `Base.EffConsole` | `Console n`（`n` 是 String 实例名，如 `"mock"`/`"real"`） | `Print String` / `EPrint String` | `handleConsoleHost` → `Base.Host.print`/`eprint` | 自定义 `handleConsole`（如收集日志） |
+| `Base.EffClock` | `Clock n`（如 `"mock"`/`"real"`） | `Now`（微秒）/`SleepMicros Int` | `handleClockHost` → `Base.Host.nowMicros` + **原生 `prim_sleep`** | 固定时间戳 / 忽略 sleep |
+| `Base.EffEnv` | `Env n`（如 `"mock"`/`"real"`） | `GetEnv String`/`GetCwd`/`ExecPath` | `handleEnvHost` → `Base.Host.getEnv`/`getCwd`/`execPath` | 固定字符串 |
+| `Base.EffProcess` | `Process n`（如 `"mock"`/`"real"`） | `Args`/`Exit Int`/`RunIn String (List String)` | `handleProcessHost`（真实退出）/ `handleProcessHostWith`（自定义 onExit）/ `handleProcessHostObserved`（观察退出码） | 自定义 `handleProcess`（`Exit c` 作为操作结果） |
+| `Base.EffFs` | `Fs n`（如 `"mock"`/`"real"`，命名实例） | `ReadFile`/`WriteFile`/`WriteFileAtomic`/`ReadDir`/`IsDirectory`/`MakeDir`/`RemoveFile`/`FileExists`/`FileMtime`/`FileSize` | `handleFsHost n` → `Base.Host`/`prim_*` | 自定义 `handleFs n`（纯 answer 内存表） |
 
 - **命名实例**：console/clock/env/process/fs 的标签都带 String 实例名参数（`Fs n`），
   行里 `Fs "mock"` 与 `Fs "real"` 是不同条目，因此同一个程序可以同时装 mock 与真实
   handler（或两个 mock）；send/handler 用同一对 `(key, name)` 字符串。实例名由使用方
   自选，同一效应族同时安装的实例名必须互不相同。fs 的早期单实例 API 已迁移
-  （`fsReadFile n path`、`handleFsIO n`），夹具 `dt_base/18`/`29`/`40` 已更新。
-- **IO-backed handler 的形态**：`handleXIO` 接受行首为对应标签的 `Eff (Cons e r) a`，
-  返回 `Eff r (IO a)`，由 `runIOAnswer` 执行（真实 handler 的 op 解释返回 `IO` 动作）。
+  （`fsReadFile n path`、`handleFsHost n`），夹具 `dt_base/18`/`29`/`40` 已更新。
+- **IO-backed handler 的形态**：`handleXHost` 接受行首为对应标签的 `Eff (Cons e r) a`，
+  返回 `Eff r (IO a)`，由 `joinEff` 执行（真实 handler 的 op 解释返回 `IO` 动作）。
 - **原生 sleep**：编译器原语 `prim_sleep : Int -> IO Int`（微秒；运行时
   `dtp_sleep` 用 `Unix.sleepf`，阻塞睡眠；能力 `clock`；`OpNone`，interp 不归约）。
-  `Base.EffClock` 的 `SleepMicros` 与 `Base.IO.Host.sleepMicros` 都已改用 `prim_sleep`
+  `Base.EffClock` 的 `SleepMicros` 与 `Base.Host.sleepMicros` 都已改用 `prim_sleep`
   （`spinMicros` 已删除；当前 seed 认识 `prim_sleep`）。
-- **可控 `Exit`**：`handleProcessIO` 保留真实语义（`onExit = exit`，调用即
-  结束进程）；`handleProcessIOWith n onExit` 让调用方替换退出行为，`handleProcessIOObserved n`
+- **可控 `Exit`**：`handleProcessHost` 保留真实语义（`onExit = exit`，调用即
+  结束进程）；`handleProcessHostWith n onExit` 让调用方替换退出行为，`handleProcessHostObserved n`
   是现成实例：`Exit c` 不退出、把 `c` 交给续延，程序继续执行。mock handler 本来就能
   观察 `Exit`。真实路径的夹具（`dt_base/30`）仍只覆盖 `Args`/`RunIn`，避免测试进程退出；
   观察路径见 `dt_base/41`。
@@ -149,13 +149,13 @@ main 结束时统一取消清理（最外层兜底）；跨域 handler / Domain 
   内容/大小）与 `Fs "real"`（真实 IO handler，真实目录读写）下各跑一次，mock 与 real handler
   在同一程序里并存。
 - **工具链真实路径**：`lib/Vuna/Cli.vuna` 的 `vuna version` 输出改走
-  console 标签——`consoleLine` 用 `consolePrint "vuna"` + `handleConsoleIO "vuna"` + `runIOAnswer`，
-  只在最外层 `runIO`（工具链入口仍是 `main : IO Int`）。这是工具链逐步迁移的样板，不是
-  全量迁移（`lib/` 其余模块仍直接用 `Base.IO` / `runIO`）。**编译器级强制不可行**的
+  console 标签——`consoleLine` 用 `consolePrint "vuna"` + `handleConsoleHost "vuna"` + `joinEff`，
+  只在最外层 `runIO`（工具链入口仍是 `main : Eff [] Int`）。这是工具链逐步迁移的样板，不是
+  全量迁移（`lib/` 其余模块仍直接用 `Base.Host` / `runIO`）。**编译器级强制不可行**的
   具体位置：`Loader.Resolve.checkEffectsBuiltins` 只做**包级**能力声明检查（manifest），
-  类型系统没有类型级能力行，`IO`/`Base.IO`/`prim_*` 在任何包内都可用；编译器自身
-  也在 seed 闭包里必须使用 IO（`Base.IO`、`Codegen`）。**最小下一步**：在 `vuna lint`
-  增加一条模块级规则（如禁止 `lib/Vuna/**` 新增直接 `prim_*`/`Base.IO` 使用，白名单
+  类型系统没有类型级能力行，`IO`/`Base.Host`/`prim_*` 在任何包内都可用；编译器自身
+  也在 seed 闭包里必须使用 IO（`Base.Host`、`Codegen`）。**最小下一步**：在 `vuna lint`
+  增加一条模块级规则（如禁止 `lib/Vuna/**` 新增直接 `prim_*`/`Base.Host` 使用，白名单
   `Vuna.Cli.consoleLine` 一类的迁移点），而不是改类型检查器。
 - **对拍夹具**（`.nointerp`，只 check + compile + run）：
   - `dt_base/26_eff_console`：同一 `prog n` 在 `Console "mock"`（mock，纯 answer 收集日志）
@@ -163,7 +163,7 @@ main 结束时统一取消清理（最外层兜底）；跨域 handler / Domain 
   - `dt_base/27_eff_clock`：mock 固定时间 → elapsed 0；real 断言 sleep 后时间推进
     （真实 handler 现在走 `prim_sleep`）；
   - `dt_base/28_eff_env`：mock 与 real 对「缺失变量为空 / cwd 非空 / execPath 非空」打分；
-  - `dt_base/29_eff_fs_ext`：真实 fs 读写 + 原子写 + 元数据 + 目录 + 删除（`handleFsIO "real"`）；
+  - `dt_base/29_eff_fs_ext`：真实 fs 读写 + 原子写 + 元数据 + 目录 + 删除（`handleFsHost "real"`）；
   - `dt_base/30_eff_process`：mock 固定 args/退出码；real 用 `prim_getArgs`（不含 argv[0]）
     与 `prim_runIn "true"`；
   - `dt_base/40_eff_fs_named`：fs 命名实例 mock（`"mock"`）/ real（`"real"`）并存对拍；
@@ -176,11 +176,11 @@ main 结束时统一取消清理（最外层兜底）；跨域 handler / Domain 
   仍是包级权限声明，不是类型级能力行。`Test/corpus` 单文件夹具包仍**不声明**能力，
   直接原语探针放在 `packages/` 里（沿用既有约定）。
 - **边界**（D43 已由 P2 特权边界收口）：
-  - **用户面**：非特权包不能 import `Base.IO.Host`、不能直调 `prim_*`、不能声明
-    `[capabilities]`/`[trust]`；`Base.IO` 只留 IO 代数与实例（P2a/P2c）。
+  - **用户面**：非特权包不能 import `Base.Host`、不能直调 `prim_*`、不能声明
+    `[capabilities]`/`[trust]`；`Base.Host` 只留 IO 代数与实例（P2a/P2c）。
   - **特权层**：`vuna-base` 真实 handler、`vuna-compiler` 与根工具链保留 Host/原语；
     工具链只迁了一条真实 console 路径（`vuna version`），编译器不迁移（终态决策）。
-  - **`Exit` 的真实语义保留**：`handleProcessIO` 仍会结束进程；「不退出」只在 mock /
-    `onExit` 参数 / `handleProcessIOObserved` 下成立；
+  - **`Exit` 的真实语义保留**：`handleProcessHost` 仍会结束进程；「不退出」只在 mock /
+    `onExit` 参数 / `handleProcessHostObserved` 下成立；
   - 入口未处理效应是类型错误（`TC_UnhandledEffects`）；运行时 `unhandled effect` 兜底
     仍服务特权/内部路径；行擦除、运行时字符串 key 等既有边界不变。

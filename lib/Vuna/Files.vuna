@@ -7,14 +7,14 @@ module Vuna.Files
   ) where
 
 -- Vuna.Files：目录遍历工具（fmt / doc / test / Index 共用）。
--- 只依赖 prim_readDir / prim_isDirectory / prim_fileExists 内建；prim_readDir 返回字典序，遍历顺序确定。
+-- 只依赖 prim_eff_readDir / prim_eff_isDirectory / prim_eff_fileExists 内建；prim_eff_readDir 返回字典序，遍历顺序确定。
 -- 路径拆分（splitPath / baseName）在 Vuna.Compiler.Common，供编译器驱动与工具共用。
 --
--- 注意：内建 `prim_isDirectory` 对**不存在的路径**会抛异常（会直接终止进程），
+-- 注意：内建 `prim_eff_isDirectory` 对**不存在的路径**会抛异常（会直接终止进程），
 -- 所以任何来自用户输入的路径都必须先用 `pathExistsDir` 判存在，
--- 不要直接调用 `prim_isDirectory`。
+-- 不要直接调用 `prim_eff_isDirectory`。
 import Vuna.Compiler.Common
-import Base.IO.Host
+import Base.Host
 
 -- C41：工具链 fuel 耗尽不是「空结果」，而是内部不变量被破坏；与编译器一致硬失败。
 toolFuelExhausted : String -> a
@@ -46,7 +46,8 @@ collectVunaFiles dir = collectVunaFilesGo 1048576 dir
 collectVunaFilesGo : Int -> String -> List String
 collectVunaFilesGo fuel dir =
   if fuel <= 0 then toolFuelExhausted "directory walk"
-  else if pathExistsDir dir then concatMap (walkVunaGo (fuel - 1) dir) (runIO (prim_readDir dir)) else []
+  else if pathExistsDir dir then concatMap (walkVunaGo (fuel - 1) dir) (runPure (prim_eff_readDir dir))
+  else []
 
 walkVunaGo : Int -> String -> String -> List String
 walkVunaGo fuel dir name = if fuel <= 0 then toolFuelExhausted "directory walk"
@@ -67,7 +68,8 @@ collectSourceFiles dir = collectSourceFilesGo 1048576 dir
 collectSourceFilesGo : Int -> String -> List String
 collectSourceFilesGo fuel dir =
   if fuel <= 0 then toolFuelExhausted "directory walk"
-  else if pathExistsDir dir then concatMap (walkAnyGo (fuel - 1) dir) (runIO (prim_readDir dir)) else []
+  else if pathExistsDir dir then concatMap (walkAnyGo (fuel - 1) dir) (runPure (prim_eff_readDir dir))
+  else []
 
 walkAnyGo : Int -> String -> String -> List String
 walkAnyGo fuel dir name = if fuel <= 0 then toolFuelExhausted "directory walk"
@@ -82,10 +84,10 @@ else case name of
 
 -- 安全的目录判定：不存在返回 False，而不是抛异常。
 pathExistsDir : String -> Bool
-pathExistsDir path = pathExistsFile path && runIO (prim_isDirectory path)
+pathExistsDir path = pathExistsFile path && runPure (prim_eff_isDirectory path)
 
 pathExistsFile : String -> Bool
-pathExistsFile path = runIO (prim_fileExists path)
+pathExistsFile path = runPure (prim_eff_fileExists path)
 
 -- ---------------------------------------------------------------
 -- 诊断码 → 示例夹具（`explain`/`gen-errors` 共用；生成物不参与门禁）
@@ -102,7 +104,7 @@ findDiagExample : Int -> String -> String -> Maybe String
 findDiagExample fuel dir code =
   if fuel <= 0 then Nothing
   else if not (pathExistsDir dir) then Nothing
-  else firstJustExamples (map (oneEntry (fuel - 1) dir code) (runIO (prim_readDir dir)))
+  else firstJustExamples (map (oneEntry (fuel - 1) dir code) (runPure (prim_eff_readDir dir)))
 
 oneEntry : Int -> String -> String -> String -> Maybe String
 oneEntry fuel dir code name = if name == "." || name == ".." || name == ".git" || name == ".local" then Nothing
@@ -110,7 +112,7 @@ else
   let
     path = "${dir}/${name}"
   in if pathExistsDir path then findDiagExample fuel path code
-  else if endsWith ".diag.json" name && pathExistsFile path then if contains "\"code\":\"${code}\"" (runIO (prim_readFile path)) then Just path else Nothing
+  else if endsWith ".diag.json" name && pathExistsFile path then if contains "\"code\":\"${code}\"" (runPure (prim_eff_readFile path)) then Just path else Nothing
   else Nothing
 
 firstJustExamples : List (Maybe String) -> Maybe String

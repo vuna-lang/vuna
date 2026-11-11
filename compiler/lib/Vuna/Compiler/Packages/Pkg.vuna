@@ -38,7 +38,7 @@ module Vuna.Compiler.Packages.Pkg
 -- Vuna.Compiler.Packages.Pkg：M11.5 包 / workspace 解析层（不碰 Loader / CLI）。
 -- 每个包 = 带 vuna.toml 的目录；workspace 根同时是子包（Cargo 风格：
 -- 根 vuna.toml 同时含 [workspace] 与 [package]）。
--- 本模块用内建 prim_readFile / prim_fileExists 读盘，不做 realpath：路径只做 lexical
+-- 本模块用内建 prim_eff_readFile / prim_eff_fileExists 读盘，不做 realpath：路径只做 lexical
 -- 规范化（合并 "//"、消去 "."、".."），循环检测与去重用规范化后的目录字符串。
 -- 包内目录约定：lib/、app/、test/；入口固定 app/Main.vuna。
 --
@@ -52,7 +52,7 @@ module Vuna.Compiler.Packages.Pkg
 import Vuna.Compiler.Common
 import Vuna.Compiler.Diagnostics.Pkg
 import Vuna.Compiler.Frontend.Manifest
-import Base.IO.Host
+import Base.Host
 
 -- 模块根：目录、包名、可选导出模块列表、能力列表（M27：该包 manifest 的
 -- `[capabilities].effects`）、信任点（D28：该包 manifest 的 `[trust] unsafe`）。
@@ -222,7 +222,7 @@ joinPathsText (path :: rest) = "${path}, ${joinPathsText rest}"
 -- ---------------------------------------------------------------- manifest
 -- path 是 vuna.toml 的路径；缺失时报 `pkg: missing vuna.toml in <目录>`。
 loadManifestAt : String -> Check Manifest
-loadManifestAt path = if runIO (prim_fileExists path) then case parseManifest path (runIO (prim_readFile path)) of
+loadManifestAt path = if runPure (prim_eff_fileExists path) then case parseManifest path (runPure (prim_eff_readFile path)) of
   ErrC e => ErrC e
   OkC manifest => case validateManifest manifest of
     ErrC e => ErrC e
@@ -411,7 +411,7 @@ packageContext package =
 findManifestUpMaybe : Int -> String -> Maybe String
 findManifestUpMaybe fuel dir =
   if fuel <= 0 then Nothing
-  else if runIO (prim_fileExists "${dir}/vuna.toml") then Just dir
+  else if runPure (prim_eff_fileExists "${dir}/vuna.toml") then Just dir
   else findManifestUpMaybeStep (fuel - 1) dir (manifestDir dir)
 
 findManifestUpMaybeStep : Int -> String -> String -> Maybe String
@@ -442,7 +442,7 @@ findManifestDir startDir = case findManifestDirMaybe startDir of
 -- 相对布局（<exeDir>/base、../base、../../base、../../../base）。候选目录必须含
 -- vuna.toml；都不成立时报错并列出尝试路径 + `VUNA_BASE` 提示。
 hasManifest : String -> Bool
-hasManifest dir = runIO (prim_fileExists "${dir}/vuna.toml")
+hasManifest dir = runPure (prim_eff_fileExists "${dir}/vuna.toml")
 
 baseCandidates : String -> List String
 baseCandidates exeDir =
@@ -465,7 +465,7 @@ firstExistingBase original (dir :: rest) =
 locateBase : Int -> Check String
 locateBase _ =
   let
-    env = runIO (prim_getenv "VUNA_BASE")
+    env = runPure (prim_eff_getenv "VUNA_BASE")
   in if env == "" then
     let
       candidates = baseCandidates (manifestDir (absolutePath (runIO prim_execPath)))

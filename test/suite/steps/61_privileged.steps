@@ -1,8 +1,8 @@
 # 61) F3 P2：特权边界。
-#   - 非特权包不能 import 宿主层模块 Base.IO.Host（LD_HostModulePrivileged）；
+#   - 非特权包不能 import 宿主层模块 Base.Host（LD_HostModulePrivileged）；
 #   - 非特权包不能声明 [capabilities]/[trust]（manifest 校验）；
 #   - 特权包（[package] privileged = true）可以 import/宿主调用。
-run: P="$TMPDIR/p61"; rm -rf "$P"; mkdir -p "$P/np-host/app" "$P/np-caps/app" "$P/priv-host/app"; printf '[package]\nname = "np-host"\n\n[dependencies]\nvuna-base = "%s"\n' "$VUNA_BASE" >"$P/np-host/vuna.toml"; printf 'import Base.IO.Host\n\nmain : IO Int\nmain = exit 0\n' >"$P/np-host/app/Main.vuna"; printf '[package]\nname = "np-caps"\n\n[capabilities]\neffects = ["console"]\n\n[dependencies]\nvuna-base = "%s"\n' "$VUNA_BASE" >"$P/np-caps/vuna.toml"; printf 'main : Int\nmain = 1\n' >"$P/np-caps/app/Main.vuna"; printf '[package]\nname = "priv-host"\nprivileged = true\n\n[capabilities]\neffects = ["console", "unsafe"]\n\n[dependencies]\nvuna-base = "%s"\n' "$VUNA_BASE" >"$P/priv-host/vuna.toml"; printf 'import Base.IO.Host\n\nmain : IO Int\nmain = exit 0\n' >"$P/priv-host/app/Main.vuna"; printf 'import Base.IO.Host\n\nmain : Int\nmain = 1\n' >"$P/adhoc.vuna"; printf '[package]\nname = "np-decl"\n\n[privileged]\nmodules = ["Base.IO.Host"]\n\n[dependencies]\nvuna-base = "%s"\n' "$VUNA_BASE" >"$P/np-decl.toml.tmp"; mkdir -p "$P/np-decl/app"; mv "$P/np-decl.toml.tmp" "$P/np-decl/vuna.toml"; printf 'main : Int\nmain = 1\n' >"$P/np-decl/app/Main.vuna"
+run: P="$TMPDIR/p61"; rm -rf "$P"; mkdir -p "$P/np-host/app" "$P/np-caps/app" "$P/priv-host/app"; printf '[package]\nname = "np-host"\n\n[dependencies]\nvuna-base = "%s"\n' "$VUNA_BASE" >"$P/np-host/vuna.toml"; printf 'import Base.Host\n\nmain : Eff [] Int\nmain = exit 0\n' >"$P/np-host/app/Main.vuna"; printf '[package]\nname = "np-caps"\n\n[capabilities]\neffects = ["console"]\n\n[dependencies]\nvuna-base = "%s"\n' "$VUNA_BASE" >"$P/np-caps/vuna.toml"; printf 'main : Int\nmain = 1\n' >"$P/np-caps/app/Main.vuna"; printf '[package]\nname = "priv-host"\nprivileged = true\n\n[capabilities]\neffects = ["console", "unsafe"]\n\n[dependencies]\nvuna-base = "%s"\n' "$VUNA_BASE" >"$P/priv-host/vuna.toml"; printf 'import Base.Host\n\nmain : Eff [] Int\nmain = exit 0\n' >"$P/priv-host/app/Main.vuna"; printf 'import Base.Host\n\nmain : Int\nmain = 1\n' >"$P/adhoc.vuna"; printf '[package]\nname = "np-decl"\n\n[privileged]\nmodules = ["Base.Host"]\n\n[dependencies]\nvuna-base = "%s"\n' "$VUNA_BASE" >"$P/np-decl.toml.tmp"; mkdir -p "$P/np-decl/app"; mv "$P/np-decl.toml.tmp" "$P/np-decl/vuna.toml"; printf 'main : Int\nmain = 1\n' >"$P/np-decl/app/Main.vuna"
 run: "$VUNA" check "$TMPDIR/p61/np-host/app/Main.vuna" 2>&1
 exit: 1
 out-contains: LD_HostModulePrivileged
@@ -14,9 +14,9 @@ run: "$VUNA" check "$TMPDIR/p61/adhoc.vuna" 2>&1
 exit: 1
 out-contains: LD_HostModulePrivileged
 # REPL：默认非特权（import Host 被拒），--privileged 显式放行。
-run: cd "$TMPDIR/p61" && printf 'import Base.IO.Host\nprint "hi"\n:q\n' | "$VUNA" repl 2>&1
+run: cd "$TMPDIR/p61" && printf 'import Base.Host\nprint "hi"\n:q\n' | "$VUNA" repl 2>&1
 out-contains: LD_HostModulePrivileged
-run: cd "$TMPDIR/p61" && printf 'import Base.IO.Host\nprint "hi"\n:q\n' | "$VUNA" repl --privileged 2>&1
+run: cd "$TMPDIR/p61" && printf 'import Base.Host\nprint "hi"\n:q\n' | "$VUNA" repl --privileged 2>&1
 out-not-contains: LD_HostModulePrivileged
 # 非特权包声明 [privileged] modules 也报错。
 run: "$VUNA" check "$TMPDIR/p61/np-decl/app/Main.vuna" 2>&1

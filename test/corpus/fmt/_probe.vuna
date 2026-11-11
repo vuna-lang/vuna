@@ -1,6 +1,6 @@
 -- fmt 测试探针：读文件 → formatSourceWith（M31.3：带程序级 fixity）；mode: fmt/check/write。
 -- 由 check.sh 用当前编译器编译（不是测试输入，文件名以下划线开头）。
--- main : IO Int，由运行时执行；效果只经 Base.IO。
+-- main : Eff [] Int，由运行时执行；效果只经 Base.IO。
 --
 -- 探针包在 check.sh 里按**真实依赖布局**构造（base 是依赖包），所以 fixity 上下文应能
 -- 正常加载；加载失败或未知运算符是硬错误，不再静默降级（格式化器宁可拒绝也不改语义）。
@@ -10,14 +10,14 @@ import Vuna.FixityEnv
 import Vuna.Fmt
 import Vuna.Compiler.Frontend.Parser
 import Base.Monad
-import Base.IO.Host
+import Base.Host
 
-main : IO Int
+main : Eff [] Int
 main = do
   args <- getArgs
   run args
 
-run : List String -> IO Int
+run : List String -> Eff [] Int
 run args =
   case args of
     Cons "fmt" (Cons path Nil) => runFmt path
@@ -27,7 +27,7 @@ run args =
       _ <- print "usage: probe (fmt|check|write) file [out]\n"
       pure 2
 
-fail : String -> String -> IO Int
+fail : String -> String -> Eff [] Int
 fail path msg = do
   _ <- print (path ++ ": " ++ msg ++ "\n")
   pure 1
@@ -36,7 +36,7 @@ fail path msg = do
 fixitiesFor : String -> String -> Check (List FixityDecl)
 fixitiesFor path source = secondOf (fixitiesForFile emptyFixityEnv path source)
 
-runFmt : String -> IO Int
+runFmt : String -> Eff [] Int
 runFmt path = do
   source <- readFile path
   case fixitiesFor path source of
@@ -47,7 +47,7 @@ runFmt path = do
         _ <- print out
         pure 0
 
-runCheck : String -> IO Int
+runCheck : String -> Eff [] Int
 runCheck path = do
   source <- readFile path
   case fixitiesFor path source of
@@ -64,7 +64,7 @@ runCheck path = do
               if out1 == out2 then pure 0
               else fail path ("not idempotent\n--- first ---\n" ++ out1 ++ "--- second ---\n" ++ out2)
 
-runWrite : String -> String -> IO Int
+runWrite : String -> String -> Eff [] Int
 runWrite path out = do
   source <- readFile path
   case fixitiesFor path source of

@@ -53,7 +53,7 @@
   替换）。`a == b` 与 `eq a b` 同义，Int / String 上由内建实例特化，其它类型走 `Eq` / `Ord`
   字典。trait 声明与实例的落点规则见 [operators.md](operators.md)；
 - 效果原语**只有 `prim_*` 名**（`prim_print` / `prim_readFile` / `prim_getArgs` /
-  `prim_getenv` / …）：用户经 `Base.IO` 的 IO 动作使用，或在 `vuna.toml` 用
+  `prim_getenv` / …）：用户经 `Base.Host` 的 IO 动作使用，或在 `vuna.toml` 用
   `[capabilities].effects` 声明能力后直接调用；见 [primitives.md](primitives.md) 的
   效果原语与能力一节；
 - `&&` / `||` 短路求值：先求左操作数，左侧能决定结果时不求值右侧（核心求值器与 codegen

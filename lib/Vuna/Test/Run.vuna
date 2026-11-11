@@ -8,7 +8,7 @@ module Vuna.Test.Run (runSuite) where
 --
 -- 并行模型：父进程按 `--jobs` spawn N 个自身（隐藏 `--worker i/N`），worker 按
 -- `index mod N` 静态分片；每个 case 写一份 TSV 到临时 results 目录，父进程按序
--- 读回。这样避开 `prim_wait` 只能等指定 pid 的队首阻塞，也避免父进程收集海量输出。
+-- 读回。这样避开 `prim_eff_wait` 只能等指定 pid 的队首阻塞，也避免父进程收集海量输出。
 --
 -- 子进程输出捕获不新增编译器原语：把一段固定的 shell helper 写进临时目录，由
 -- helper 做 `timeout ... >out 2>err`，Vuna 侧只读文件 + 退出码。
@@ -20,7 +20,7 @@ import Vuna.Test.Session
 import Vuna.Test.Suite
 import Vuna.Files
 import Vuna.Json
-import Base.IO.Host
+import Base.Host
 import Base.IORef
 
 -- 执行环境。
@@ -72,7 +72,7 @@ record CaseResult where
 -- 小工具
 -- ---------------------------------------------------------------
 envVar : String -> String
-envVar name = runIO (getEnv name)
+envVar name = runPure (getEnv name)
 
 envOr : String -> String -> String
 envOr name fallback =
@@ -158,7 +158,7 @@ else
 makeTempRoot : String -> String
 makeTempRoot tag =
   let
-    stamp = strOfInt (runIO nowMicros)
+    stamp = strOfInt (runPure nowMicros)
   in freshTempRoot 1000 "${tempBase}/vuna-suite-${stamp}-${safeName tag}"
 
 helperScript : String
@@ -169,16 +169,16 @@ writeHelper : String -> String
 writeHelper tmp =
   let
     path = "${tmp}/run-capture.sh"
-    _ = runIO (writeFile path helperScript)
+    _ = runPure (writeFile path helperScript)
   in path
 
 -- ---------------------------------------------------------------
 -- 子进程
 -- ---------------------------------------------------------------
 readMaybeFile : String -> String
-readMaybeFile path = if pathExistsFile path then runIO (readFile path) else ""
+readMaybeFile path = if pathExistsFile path then runPure (readFile path) else ""
 
--- 运行 argv（cwd 由 prim_runIn 控制），timeout 秒级；返回退出码与分离输出。
+-- 运行 argv（cwd 由 prim_eff_runIn 控制），timeout 秒级；返回退出码与分离输出。
 runCmdWith : Bool -> Env -> String -> String -> Int -> List String -> CmdResult
 runCmdWith merge env tag cwd secs argv =
   let
@@ -187,7 +187,7 @@ runCmdWith merge env tag cwd secs argv =
     fullArgv =
       append ["sh", env.envHelper, strOfInt secs, outPath, errPath, "-", if merge then "1" else "0"]
         argv
-    code = runIO (prim_runIn cwd fullArgv)
+    code = runPure (prim_eff_runIn cwd fullArgv)
     out = readMaybeFile outPath
     err = readMaybeFile errPath
   in CmdResult code out err (code == 124 || code == 137)
@@ -268,7 +268,7 @@ finishCase : String -> Int -> List Assertion -> CaseResult
 finishCase id start assertions =
   let
     failed = countFail assertions
-    ms = (runIO nowMicros - start) / 1000
+    ms = (runPure nowMicros - start) / 1000
   in CaseResult id (if failed == 0 then "pass" else "fail") (countPass assertions) failed
     (countPass assertions + failed) ms (failMessages assertions)
 
@@ -289,7 +289,7 @@ uniqueOutDir : Env -> String -> String
 uniqueOutDir env id = "${env.envTmp}/out-${safeName id}"
 
 removeTree : String -> Int
-removeTree path = runIO (prim_runIn "/" ["rm", "-rf", path])
+removeTree path = runPure (prim_eff_runIn "/" ["rm", "-rf", path])
 
 -- ---------------------------------------------------------------
 -- 增量构建缓存：按「生成模块集」复用 ocamlopt 产物
@@ -318,7 +318,7 @@ nonNegTotal (h :: rest) =
 -- 注意：两个 suite 同时用同一 worker 号会写同一桶（内容哈希 stamp 会退化为重编，
 -- 极端情况下互相踩写）；并发跑时给其中一个传 `--cache-dir` 隔离。
 buildCacheDir : Env -> String -> String
-buildCacheDir env staging = "${env.envBuildDir}/set-${buildSetKey (runIO (readDir staging))}"
+buildCacheDir env staging = "${env.envBuildDir}/set-${buildSetKey (runPure (readDir staging))}"
 
 -- 把 staging 整份同步进共享目录（base 的 .ml 内容不变 ⇒ stamp 命中；Main.ml 换成
 -- 本 case 的）。
@@ -326,7 +326,7 @@ syncBuildDir : String -> String -> Int
 syncBuildDir staging dir =
   let
     _ = ensureDirPath dir
-  in runIO (prim_runIn "/" ["cp", "-a", "${staging}/.", "${dir}/"])
+  in runPure (prim_eff_runIn "/" ["cp", "-a", "${staging}/.", "${dir}/"])
 
 -- 会话优先的 check / interp 探针：命中时零子进程（~200ms → ~10ms），语义等价
 -- （check = 退出码，interp = trim 后输出文本）。会话不可用/安全阀不适用时回退 CLI，
@@ -348,8 +348,8 @@ probeCheck env c source = case sessionCheck env.envSession env.envBase source of
 goldenCase : Env -> Case -> String -> String -> Bool -> Bool -> Bool -> Bool -> Bool -> CaseResult
 goldenCase env c source expected wantInterp wantCheck wantCompile wantRun wantCompare =
   let
-    start = runIO nowMicros
-    expectedText = trimNewlines (runIO (readFile expected))
+    start = runPure nowMicros
+    expectedText = trimNewlines (runPure (readFile expected))
     interpOn = wantInterp
     interpR = if interpOn then probeInterp env c source else CmdResult 1 "" "" False
     interpText = if interpOn then trimNewlines (combinedOut interpR) else ""
@@ -389,7 +389,7 @@ goldenCase env c source expected wantInterp wantCheck wantCompile wantRun wantCo
     actualForBless = if runOk then trimNewlines (combinedOut runR) else interpText
   in if env.envBless && base.resFail > 0 then
     let
-      _ = runIO (writeFile expected "${actualForBless}\n")
+      _ = runPure (writeFile expected "${actualForBless}\n")
     in CaseResult c.caseId "blessed" base.resChecks 0 base.resChecks base.resMs ["blessed ${expected}"]
   else base
 
@@ -405,8 +405,8 @@ diagExpectedOf expected =
 errorCase : Env -> Case -> String -> String -> Bool -> Bool -> Bool -> CaseResult
 errorCase env c source expected wantInterp wantCheck wantCompile =
   let
-    start = runIO nowMicros
-    fragment = trimNewlines (runIO (readFile expected))
+    start = runPure nowMicros
+    fragment = trimNewlines (runPure (readFile expected))
     baseName =
       if endsWith ".vuna" source then substring 0 (byteLength source - 5) source else source
     compileErrPath = "${baseName}.compile.err"
@@ -419,8 +419,8 @@ errorCase env c source expected wantInterp wantCheck wantCompile =
     caseCwd = if pkgMode then pkgRoot else env.envCwd
     target = if pkgMode then "." else source
     compileFragment =
-      if pathExistsFile compileErrPath then trimNewlines (runIO (readFile compileErrPath))
-      else if pathExistsFile legacyCerrPath then trimNewlines (runIO (readFile legacyCerrPath))
+      if pathExistsFile compileErrPath then trimNewlines (runPure (readFile compileErrPath))
+      else if pathExistsFile legacyCerrPath then trimNewlines (runPure (readFile legacyCerrPath))
       else fragment
     interpA = if wantInterp then
       let
@@ -465,9 +465,9 @@ errorCase env c source expected wantInterp wantCheck wantCompile =
     actualDiag = normalizeDiagText env (trimNewlines (combinedOut diagRun))
     diagA = if env.envBlessDiag then
       let
-        _ = runIO (writeFile diagPath "${actualDiag}\n")
+        _ = runPure (writeFile diagPath "${actualDiag}\n")
       in []
-    else if pathExistsFile diagPath then [ assertEq "diag json" (normalizeDiagText env (trimNewlines (runIO (readFile diagPath)))) actualDiag
+    else if pathExistsFile diagPath then [ assertEq "diag json" (normalizeDiagText env (trimNewlines (runPure (readFile diagPath)))) actualDiag
     ]
     else []
   in finishCase c.caseId start (append interpA (append checkA (append compileA diagA)))
@@ -493,7 +493,7 @@ parseDigits (c :: rest) acc count =
 -- 只缓存 golden/error case 的成功结果。key 含编译器指纹、base 源码树哈希、source/
 -- expected 内容（目录型再加整个夹具目录的 .vuna 树）。section/脚本一律不缓存。
 hashFileText : String -> String
-hashFileText path = if pathExistsFile path then runIO (readFile path) else ""
+hashFileText path = if pathExistsFile path then runPure (readFile path) else ""
 
 hashFiles : Int -> List String -> Int
 hashFiles acc [] = acc
@@ -509,8 +509,8 @@ caseTreeHash c source expected = if contains "/app/" source then
   in hashTree root * 1000003 + hashTextStrong (hashFileText expected)
 else
   let
-    stamp = runIO (fileMtime source)
-    size = runIO (fileSize source)
+    stamp = runPure (fileMtime source)
+    size = runPure (fileSize source)
   in hashTextStrong
     "${hashFileText source}|${hashFileText expected}|${strOfInt stamp}|${strOfInt size}"
 
@@ -542,7 +542,7 @@ lastFailedIds env =
   let
     path = lastFailedPath env
   in if not (pathExistsFile path) then []
-  else filter (\line => line /= "") (lines (runIO (readFile path)))
+  else filter (\line => line /= "") (lines (runPure (readFile path)))
 
 filterLastFailed : Env -> List Case -> List Case
 filterLastFailed env cases =
@@ -557,7 +557,7 @@ recordLastFailed env results =
     _ = ensureDirPath (lastFailedDir env)
     failed = filter isFailed results
     text = join "\n" (map resIdOf failed)
-  in runIO (writeFile (lastFailedPath env) text)
+  in runPure (writeFile (lastFailedPath env) text)
 
 caseIdIn : List String -> Case -> Bool
 caseIdIn ids c = memName c.caseId ids
@@ -576,7 +576,7 @@ readCached env c =
     in if not (pathExistsFile path) then Nothing
     else
       let
-        checks = fromMaybe 0 (parseLeadingInt (trim (runIO (readFile path))))
+        checks = fromMaybe 0 (parseLeadingInt (trim (runPure (readFile path))))
       in Just (CaseResult c.caseId "cached" checks 0 checks 0 [])
 
 writeCached : Env -> Case -> CaseResult -> Int
@@ -584,7 +584,7 @@ writeCached env c r =
   let
     key = cacheKey env c
   in if key == 0 || r.resStatus /= "pass" then 0
-  else runIO (writeFile (cachePath env key) "${strOfInt r.resChecks}\n")
+  else runPure (writeFile (cachePath env key) "${strOfInt r.resChecks}\n")
 
 runCase : Env -> Case -> CaseResult
 runCase env c =
@@ -602,7 +602,7 @@ runCase env c =
 checkCase : Env -> Case -> String -> Bool -> String -> CaseResult
 checkCase env c source expectPass expectedErr =
   let
-    start = runIO nowMicros
+    start = runPure nowMicros
     r =
       runCmdMerged env "${c.caseId}-check" env.envCwd c.caseTimeout
         (withEnvIface env [env.envVuna, "check", source])
@@ -628,9 +628,9 @@ relativeTestPath env source =
 
 lintCase env c source expected =
   let
-    start = runIO nowMicros
+    start = runPure nowMicros
     lintPath = relativeTestPath env source
-    expectedText = trimNewlines (runIO (readFile expected))
+    expectedText = trimNewlines (runPure (readFile expected))
     r =
       runCmdMerged env "${c.caseId}-lint" env.envCwd c.caseTimeout
         (withEnvIface env [env.envVuna, "lint", lintPath])
@@ -644,18 +644,18 @@ lintCase env c source expected =
 fixCase : Env -> Case -> String -> String -> CaseResult
 fixCase env c source expected =
   let
-    start = runIO nowMicros
-    expectedText = trimNewlines (runIO (readFile expected))
+    start = runPure nowMicros
+    expectedText = trimNewlines (runPure (readFile expected))
     work = "${env.envTmp}/fix-${safeName c.caseId}.vuna"
-    _ = runIO (writeFile work (runIO (readFile source)))
+    _ = runPure (writeFile work (runPure (readFile source)))
     r1 =
       runCmdMerged env "${c.caseId}-fix1" env.envCwd c.caseTimeout
         (withEnvIface env [env.envVuna, "lint", "--fix", work])
-    once = trimNewlines (runIO (readFile work))
+    once = trimNewlines (runPure (readFile work))
     r2 =
       runCmdMerged env "${c.caseId}-fix2" env.envCwd c.caseTimeout
         (withEnvIface env [env.envVuna, "lint", "--fix", work])
-    twice = trimNewlines (runIO (readFile work))
+    twice = trimNewlines (runPure (readFile work))
     fixA = assertEq "fix" expectedText once
     idemA = assertEq "fix idempotent" once twice
   in finishCase c.caseId start [fixA, idemA]
@@ -666,7 +666,7 @@ fixCase env c source expected =
 runtimeCase : Env -> Case -> String -> String -> Int -> CaseResult
 runtimeCase env c source expectedErr expectedExit =
   let
-    start = runIO nowMicros
+    start = runPure nowMicros
     fragmentText = readMaybeFile expectedErr
     fragment = trimNewlines fragmentText
     staging = "${env.envTmp}/stage-${safeName c.caseId}"
@@ -1003,10 +1003,10 @@ else
 stepsCase : Env -> Case -> String -> CaseResult
 stepsCase env c path =
   let
-    start = runIO nowMicros
+    start = runPure nowMicros
     caseTmp = "${env.envTmp}/c-${strOfInt (hashTextStrong c.caseId)}"
     _ = ensureDirPath caseTmp
-    text = if pathExistsFile path then runIO (readFile path) else ""
+    text = if pathExistsFile path then runPure (readFile path) else ""
   in case parseStepsV2 text of
     SpErr msg =>
       finishCase c.caseId start [Assertion "steps" False "parse error in ${path}: ${msg}"]
@@ -1020,8 +1020,8 @@ stepsCase env c path =
 seedCase : Env -> Case -> String -> String -> CaseResult
 seedCase env c source expected =
   let
-    start = runIO nowMicros
-    expectedText = trimNewlines (runIO (readFile expected))
+    start = runPure nowMicros
+    expectedText = trimNewlines (runPure (readFile expected))
     outdir = uniqueOutDir env c.caseId
     _ = removeTree outdir
     ifaceDir = "${outdir}-iface"
@@ -1055,7 +1055,7 @@ runCaseGo env c = case c.caseKind of
   CSteps path => stepsCase env c path
   CBroken msg =>
     let
-      start = runIO nowMicros
+      start = runPure nowMicros
     in finishCase c.caseId start [Assertion "case" False msg]
 
 -- ---------------------------------------------------------------
@@ -1096,7 +1096,7 @@ filterCases opts cases = filter (caseMatches opts) cases
 -- ---------------------------------------------------------------
 -- D25：`print` 返回 `Nat`（字节数）；工具链这里仍按 Int 使用（丢弃/比较都按 Int）。
 printLine : String -> Int
-printLine s = runIO (fmap natToInt (print "${s}\n"))
+printLine s = runPure (fmap natToInt (print "${s}\n"))
 
 statusLine : Bool -> CaseResult -> String
 statusLine verbose r =
@@ -1154,7 +1154,7 @@ writeResultFile dir index r =
     path = "${dir}/${strOfInt index}.tsv"
     line =
       "${r.resId}\t${r.resStatus}\t${strOfInt r.resPass}\t${strOfInt r.resFail}\t${strOfInt r.resChecks}\t${strOfInt r.resMs}\n"
-  in runIO (writeFile path line)
+  in runPure (writeFile path line)
 
 runCasesIndexed : Env -> Bool -> Bool -> Bool -> String -> List (Pair Int Case) -> List CaseResult
 runCasesIndexed env verbose failFast quiet resultsDir indexed =
@@ -1218,7 +1218,7 @@ waitPids : List Int -> Int
 waitPids [] = 0
 waitPids (pid :: rest) =
   let
-    code = runIO (prim_wait pid)
+    code = runPure (prim_eff_wait pid)
     last = waitPids rest
   in if code /= 0 then 1 else last
 
@@ -1243,7 +1243,7 @@ else
     args =
       append ["test", "--suite", opts.suitePath, "--worker", workerArg, "--results-dir", resultsDir]
         (append filters flagArgs)
-    pid = runIO (prim_spawn args)
+    pid = runPure (prim_eff_spawn args)
   in spawnWorkers env opts resultsDir jobs (fuel - 1) (index + 1) (pid :: pids)
 
 readResultFile : String -> Int -> Maybe CaseResult
@@ -1253,7 +1253,7 @@ readResultFile dir index =
   in if not (pathExistsFile path) then Nothing
   else
     let
-      text = trimNewlines (runIO (readFile path))
+      text = trimNewlines (runPure (readFile path))
       fields = split "\t" text
     in case fields of
       [id, status, pass, fail, checks, ms] =>
@@ -1422,7 +1422,7 @@ casePaths env c = case c.caseKind of
 claimTextTouches : Env -> String -> List String -> Bool
 claimTextTouches env path changed =
   let
-    text = runIO (readFile path)
+    text = runPure (readFile path)
     corpusChanges = filter (\p => startsWith "test/corpus/" p) changed
   in any (\p => contains (corpusDirPrefix p) text) corpusChanges
     || any (\p => contains (stripRoot env path) p) changed
@@ -1469,7 +1469,7 @@ rootOfPath path =
 claimTextPairs : List Case -> List (Pair String String)
 claimTextPairs [] = []
 claimTextPairs (c :: rest) = case c.caseKind of
-  CSteps path => Pair path (runIO (readFile path)) :: claimTextPairs rest
+  CSteps path => Pair path (runPure (readFile path)) :: claimTextPairs rest
   _ => claimTextPairs rest
 
 anyText : List (Pair String String) -> String -> Bool
@@ -1502,7 +1502,7 @@ auditOrphans suite =
     root = suite.suiteRoot
     env =
       Env root "${root}/test" "/tmp" "" "" "${root}/base" "ocamlopt" "" "" False 0 False False False
-        "/tmp/vuna-build" (runIO (newRef (sessionNew "/tmp/iface-session")))
+        "/tmp/vuna-build" (runPure (newRef (sessionNew "/tmp/iface-session")))
     cases = discoverCases suite
     texts = claimTextPairs cases
     fixtures =
@@ -1535,7 +1535,7 @@ familyFixtures root family =
   in if not (pathExistsDir dir) then []
   else
     let
-      names = runIO (readDir dir)
+      names = runPure (readDir dir)
     in case family.familyEntry of
       Just entry => concatMap (fixtureEntryOf dir family.familyDir entry) names
       Nothing => concatMap (fixtureTopOf family.familyDir) (filter isFixtureFile names)
@@ -1554,7 +1554,7 @@ familyOrphans suite =
     root = suite.suiteRoot
     env =
       Env root "${root}/test" "/tmp" "" "" "${root}/base" "ocamlopt" "" "" False 0 False False False
-        "/tmp/vuna-build" (runIO (newRef (sessionNew "/tmp/iface-session")))
+        "/tmp/vuna-build" (runPure (newRef (sessionNew "/tmp/iface-session")))
     cases = discoverCases suite
     fixtures = concatMap (familyFixtures root) suite.suiteFamilies
   in filter (familyOrphan env cases) fixtures
@@ -1583,7 +1583,7 @@ maxMtime : Int -> List String -> Int
 maxMtime acc [] = acc
 maxMtime acc (path :: rest) =
   let
-    m = runIO (fileMtime path)
+    m = runPure (fileMtime path)
   in maxMtime (if m > acc then m else acc) rest
 
 watchSnapshot : String -> Int
@@ -1599,7 +1599,7 @@ watchLoop : Int -> SuiteOpts -> Suite -> Int -> Int -> Int
 watchLoop fuel opts suite last rc = if fuel <= 0 then rc
 else
   let
-    _ = runIO (sleepMicros 500000)
+    _ = runPure (sleepMicros 500000)
     now = watchSnapshot suite.suiteRoot
   in if now /= last then
     let
@@ -1640,10 +1640,10 @@ runSuiteOnce opts suite =
     -- 跨 run 的构建桶：base 的 .cmx 只编译一次，后续 run 直接命中 stamp。
     buildDir = "${cacheDir}/build/${scope}-${strOfInt toolCompilerFingerprint}-${strOfInt baseHash}"
     _ = if pathExistsDir cacheDir then 0 else ensureDirPath cacheDir
-    env = Env root "${root}/test" tmp (runIO execPath) (envOr "VUNA_SEED" "vuna-seed") baseDir (envOr "OCAMLOPT" "ocamlopt") helper cacheDir (not opts.suiteNoCache && not opts.suiteBless && not opts.suiteBlessDiag) baseHash opts.suiteBless opts.suiteBlessDiag (case opts.suiteWorker of
+    env = Env root "${root}/test" tmp (runPure execPath) (envOr "VUNA_SEED" "vuna-seed") baseDir (envOr "OCAMLOPT" "ocamlopt") helper cacheDir (not opts.suiteNoCache && not opts.suiteBless && not opts.suiteBlessDiag) baseHash opts.suiteBless opts.suiteBlessDiag (case opts.suiteWorker of
       Just _ => True
       Nothing => False
-    ) buildDir (runIO (newRef (sessionNew "${tmp}/iface-session")))
+    ) buildDir (runPure (newRef (sessionNew "${tmp}/iface-session")))
     -- 两层默认护栏（局部 --only/--filter 时被过滤掉，符合预期）：
     --   ① 已声明 family 目录里的孤儿夹具（精确 source 认领）；
     --   ② case 总数下限——整族从 suite.toml 消失时，①会连目录一起看不到。
@@ -1664,7 +1664,7 @@ runSuiteOnce opts suite =
     else case opts.suiteWorker of
       Just (Pair index count) => runWorker env opts cases index count
       Nothing => runParent env opts suite cases
-    _ = runIO (prim_runIn "/" ["rm", "-rf", tmp])
+    _ = runPure (prim_eff_runIn "/" ["rm", "-rf", tmp])
   in result
 
 -- 给每个 case 配全局下标：`zip cases [0..n-1]`，再按 worker index 过滤。

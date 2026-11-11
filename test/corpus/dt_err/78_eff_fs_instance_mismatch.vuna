@@ -6,5 +6,5 @@ import Base.EffFs
 prog : Eff [Fs "real"] String
 prog = fsReadFile "real" "/tmp/vuna_w10_fs_err.txt"
 
-main : IO Int
-main = prim_bindIO (runIOAnswer (handleFsIO "mock" prog)) (\_ => prim_pureIO 0)
+main : Eff [] Int
+main = joinEff (handleFsHost "mock" prog)

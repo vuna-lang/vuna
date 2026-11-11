@@ -5,24 +5,25 @@ module Base.Buffer (contents, length, new, push) where
 -- 所有操作都是 IO 动作。用于多次追加后一次性取串，避免 `++` 链的 O(n²) 拷贝；
 -- W4 之后的字符串构建器 / IO 组合子会以它为底层。
 -- 追加字节数与当前长度都是 **Nat**（底层原语仍是 Int）。
+import Base.Eff
 import Base.Monad
-import Base.IO.Host
+import Base.Host
 import Base.Nat
 
 -- | 创建空的可变字符串缓冲区（IO 动作）。
-new : IO Buffer
-new = prim_newBuffer
+new : Eff [] Buffer
+new = prim_eff_newBuffer
 
 -- | 把字符串 `s` 追加到缓冲区，返回追加的字节数（`Nat`）。
 -- D23 起叫 `push` 而不是 `add`：`add` 已是 `Base.Num` 的方法短名，`+` 的别名会经它
 -- 解析，同名值导出会让 `import Base.Buffer` 的模块里 `+` 误绑到本函数。
-push : Buffer -> String -> IO Nat
-push b s = fmap natFromInt (prim_bufferAdd b s)
+push : Buffer -> String -> Eff [] Nat
+push b s = fmap natFromInt (prim_eff_bufferAdd b s)
 
 -- | 取出缓冲区当前内容为 `String`（不消耗缓冲区，可继续追加）。
-contents : Buffer -> IO String
-contents b = prim_bufferContents b
+contents : Buffer -> Eff [] String
+contents b = prim_eff_bufferContents b
 
 -- | 缓冲区当前字符长度（`Nat`）。
-length : Buffer -> IO Nat
-length b = fmap natFromInt (prim_bufferLength b)
+length : Buffer -> Eff [] Nat
+length b = fmap natFromInt (prim_eff_bufferLength b)

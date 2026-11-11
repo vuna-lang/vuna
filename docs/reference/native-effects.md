@@ -14,7 +14,7 @@ N1 语法面收口；实施记录与过渡决策见 §3.4 / §9。
 四个根因（证据见 [effects.md](effects.md)）：
 
 1. **双轨制**：`IO`（内建效应类型，特权基座）与 `Eff`（用户面库级效应）平行，渡口
-   `liftIO` / `runIOEff` / `runIOAnswer` / `runPure` 四个方向；特权边界（`privileged` /
+   `liftIO` / `runPure` / `joinEff` / `runPure` 四个方向；特权边界（`privileged` /
    `[trust]` / `unsafe`）只管 IO 轨。
 2. **三重表示**：同一抽象三副面孔——纯 monad（`Base.State`/`Reader`/`Error`）、
    效应行（`Base.Eff.*`）与宿主 handler（历史 transformer/`MonadIO` 已删除）。
@@ -164,7 +164,7 @@ meta → 报未解，不发明行。**禁止贪婪 Here**：名字槽受限统�
 | `Diagnostics/{Tc,Frontend/Diagnostics}.vuna` | `TC_AmbiguousInstance`、`TC_EffResFamilyMissing`（ND9）、`TC_HandleClauseFamilyMismatch`（ND10）、`TC_HandleFamilyUnsupported`（族形状）；PS 侧 `PS_Handle{NeedsOpClause,ClauseNotIndented,ClauseNeedsCtor,ContinuationNameMismatch,ReturnMisplaced}` |
 | `Base.Eff`（base 包，不进 seed） | `defaultInstance`、`Row.Cons`/`Member` 3 参、`ResFn(..)`/`resFn`/`resOf`/`handleWith`/`handleWithAt`（handler 类型显式、`rf` 擦除量、`{w : Member n e r}` 置尾；行首条目版把条目放在 comp 的行首、结果行即剩余行）、12 个效应模块去 `String` 参数 |
 
-不改：`Eff` 本体、`runPure`/`runIOEff`/`runIOAnswer`、`prim_effectPerform`/`prim_effectHandle`
+不改：`Eff` 本体、`runPure`/`runPure`/`joinEff`、`prim_effectPerform`/`prim_effectHandle`
 语义、`Codegen/Term.dtPrimRuntime` 的运行时块、`Eff` 的私有 `MkEff` 表示。
 
 ### 3.4 Bootstrap（每步验收：`./result/bin/vuna check .` + 小范围 `vuna test`）
@@ -207,13 +207,13 @@ meta → 报未解，不发明行。**禁止贪婪 Here**：名字槽受限统�
 
 ## 4. N2：IO 降级
 
-- `main : Eff [] a`（替代 `main : IO a`）；运行时 main 钩子预装宿主 handler（print/fs/
+- `main : Eff [] a`（替代 `main : Eff [] a`）；运行时 main 钩子预装宿主 handler（print/fs/
   clock/env/process 的 handler 在特权层由 runtime 直接提供）。
 - 宿主 op 类型（`ConsoleOp` 等的宿主分支）构造器不导出：用户能 `perform`、能写 mock
   handler，但**不能**在无 handler 情况下构造宿主动作——权威边界从 `unsafe`/`privileged`
   收缩为"宿主 op 构造器不导出"。
-- `Base.IO.Host`、`prim_runIO` 保留为特权逃生口；`runIOEff` 收缩为内部。
-- `IO` 类型仍内建保留（`Base.IO` / `ST` / `IORef` 等宿主面不动，另行评估是否全部改写为
+- `Base.Host`、`prim_runIO` 保留为特权逃生口；`runPure` 收缩为内部。
+- `IO` 类型仍内建保留（`Base.Host` / `ST` / `IORef` 等宿主面不动，另行评估是否全部改写为
   宿主 op——倾向是，但放 N2 尾部）。
 
 ## 5. N3：表示收敛

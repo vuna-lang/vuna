@@ -21,12 +21,12 @@
 | D27 | 精化期未解 meta 按「可表示」处理会漏插 cast（终解后才知道类型不可表示） | `Elab/Meta.vuna` 的未解 meta 判据；[effects.md](effects.md) §5 | 后续 |
 | D28 | 定义级信任点只对 opt-in 包生效（base 已 opt-in；root 与 compiler 仍只有包级 `unsafe` 门控）；入口 / REPL / LSP 等部分加载场景只校验已加载模块的信任项 | `Frontend/Manifest.manifestTrustUnsafe`、`Loader/Resolve.checkTrustPoints`；夹具 `packages/12_trust_points`；[packages.md](packages.md) | 后续 |
 | D32 | 顶层签名的自由隐式变量 kind 只按应用次数推断（不从构造子 kind 反推）；头可合一的重叠实例被拒 | `Elab/Sig.quantifyTopKinds`、`Elab/Trait.{instanceTeleMetas,classParamKindOf}` | 后续 |
-| D37 | `runEff` 内部信任入口仍接受任意行；运行时 `unhandled effect` 兜底仍服务特权/内部路径 | `base/lib/Base/Eff.vuna`（`runIOEff`）；`compiler/lib/Vuna/Compiler/Elab/Term/Impl.vuna`（`unhandledEffectLabel`）；[effects.md](effects.md) §8.4/§8.6 | 后续 |
+| D37 | `runEff` 内部信任入口仍接受任意行；运行时 `unhandled effect` 兜底仍服务特权/内部路径 | `base/lib/Base/Eff.vuna`（`runPure`）；`compiler/lib/Vuna/Compiler/Elab/Term/Impl.vuna`（`unhandledEffectLabel`）；[effects.md](effects.md) §8.4/§8.6 | 后续 |
 | D41 | 无 Domain 并行、父 fiber handler 继承 | `Base.EffSched`；[effects.md](effects.md) §8.5 | 后续 |
 | D42 | 无通用线性箭头类型 / multiplicity 多态；`bracket` 的 cleanup 只能访问外层 handler、自身异常被吞、调度器硬中止路径无 handler 栈；线性值可经非线性 data 字段被复制 | `Base.Eff`（`Cont`/`bracket`/`finally`）、`Intrinsics.vuna`（`prim_cleanupPush/Pop`）；[effects-layers.md](effects-layers.md) | 后续 |
 | D44 | 协作式取消只在挂起点生效；超时硬中止丢弃续延、未执行的清理不跑；超时是逻辑步数（无真实时钟）；任务体只能 `Eff Nil a`、无法继承父 handler 栈；Mutex/Semaphore/Channel 是忙等实现 | `Base.EffSched`；`compiler/lib/Vuna/Compiler/Codegen/Term.vuna`（`dtSchedRuntime`）；[effects.md](effects.md) §8.5 | 后续 |
 | D49 | 特权包内效应检查是「每模块第一个 effectful builtin」的清单信号，非逐次授权 | `compiler/lib/Vuna/Compiler/Loader/Resolve.vuna`（`checkModuleEffects`）；[packages.md](packages.md)「效应能力」 | 后续 |
-| D50 | 特权残留：`packages/11_run_args` 仍特权——缺「任意行位 IO handler + 多层 IO 展平」组合子 | `base/lib/Base/EffConsole.vuna`（`handleConsoleIO` 强绑行首）、`Base/Eff.vuna`（无 `joinIO`）；[effects.md](effects.md) §8.6 | 后续 |
+| D50 | 特权残留：`packages/11_run_args` 仍特权——缺「任意行位 IO handler + 多层 IO 展平」组合子 | `base/lib/Base/EffConsole.vuna`（`handleConsoleHost` 强绑行首）、`Base/Eff.vuna`（无 `joinIO`）；[effects.md](effects.md) §8.6 | 后续 |
 | D52 | 生成的字典/方法投影无类型标注：OCaml 侧会把 `f a` 与 `f (a -> b)` 错误统一（`Applicative.liftA2` 从 `ap` 派生即失败），只能逐实例手写；codegen 加类型标注后才能恢复派生 | `compiler/lib/Vuna/Compiler/Codegen/{Decl,Term}.vuna` | 后续 |
 | D53 | 同一 `case` 里深度不同的两个 `Cons` 分支：深分支部分匹配失败回退到浅分支时，浅分支变量错误绑到深分支的部分绑定；`fmt` 把 `a :: b :: []` 改写成 `[a, b]` 后还会误报 `TC_RedundantCtorBranch` | 最小复现：`pickA : List (List Int) -> Nat; pickA sp = case sp of n :: e :: r :: _ => 0 \| e :: r :: _ => length e \| _ => 99`，对 `[[7], [8,9]]` 编译运行得 `2`（正确 `1`）；`vuna interp` 不复现，是 codegen 匹配器；规避见 `Core/Eval.rowRemReduceDispatch` 注释、[native-effects.md](native-effects.md) §9 | 后续 |
 | D54 | `handle`/`perform` 语法支持一阶 op 族（参数化族 State/Reader 的 `k = 1` 也行，按标签/结果族 arity 校验）；**作用域/高阶 op 族 Exn**（`ExnOp : String -> Row -> Type -> Type`，标签 arity 1、res 族名 `exnRes` 不合 `<res><族>` 约定）仍只能手写 handler（`TC_HandleFamilyUnsupported`）。真正的修复要等 N3 的效应表示收敛（op 携带 Row/子计算需要高阶效应类型） | `compiler/lib/Vuna/Compiler/Elab/Term/Impl.vuna`（`handleFamilyArityOf`/`handleOpArity`/`handleCallExprWith`）、`base/lib/Base/Eff.vuna`（`handleWith`/`handleWithAt`）；夹具 `dt_err/100_eff_handle_family_unsupported`；[native-effects.md](native-effects.md) §9 | 后续（N3） |
@@ -47,6 +47,12 @@
 | D30 | docstring 覆盖未全仓化：`vuna doc --check` 受管辖包仍是 compiler+base，root `lib/`、`app/` 未被收集；门禁是 ratchet 而非零缺失；多页 HTML 与零缺失不计划（内部符号为主、单文件可直接打开） | `lib/Vuna/Doc/*`、`nix/doc-coverage.sh`；[api-docs.md](api-docs.md) | 后续（多页/零缺失不计划） |
 | D33 | 运行时错误只有定义级位置：无表达式级 span、局部变量值、断点（无 DAP）；`ocamlopt` 单元内联会把抛错点归到调用者帧；非入口单元顶层初始化的异常不在捕获范围 | `Codegen/Term`（`dtDefLocTable` / `dtRuntimeWith`）；[debugging.md](debugging.md) §2 | 后续 |
 | D35 | REPL 的 resize 重绘靠空闲轮询（tty 关闭退化为空闲轮询，接受为限制）；Index 只覆盖 workspace 源码（外部依赖模块只能 `:load` 不能 `:browse`） | `lib/Vuna/Repl/Edit.vuna`、`lib/Vuna/Index/*`；[tooling.md](tooling.md) §4 | 后续 |
+
+## 效应统一（Eff 已贯通，IO 仅剩过渡）
+
+| ID | 仍未成立的事实 | 证据 | 归属 |
+| --- | --- | --- | --- |
+| D59 | 用户面 IO 已删除（入口 `main : Eff [] a`、`runPure`、`Base.IO` 模块不存在、IO-backed handler answer 为 `Eff []` + `joinEff`），但 **IO 仍作为特权实现层类型存在**：`Base.Host` 的 Eff 别名走 `prim_eff_*`，IO 版 `prim_*` 是 bootstrap 过渡表；`IORef`/`MArray`/`Buffer`/`ST` 内部仍是 IO 槽，`deferIO`/`Base.Host.runIO` 是唯一桥；编译器/工具链源码仍用 `runPure (...)`/`runIO (...)` 隐藏 IO，`Vuna.Compiler.*` 尚未改成显式 `Eff`/`EffCheck` 外壳 | `base/lib/Base/Host.vuna`、`base/lib/Base/Eff.vuna`（`deferIO`/`runIO`）、`compiler/lib/Vuna/Compiler/Intrinsics.vuna`（双表）、`compiler/lib/**` 的 `runPure (` 调用；[effects.md](effects.md) §2、[primitives.md](primitives.md) §7 | M4：`EffCheck` + 纯核心外壳后删 IO 类型/IO 表与 `deferIO`/`runIO` |
 
 ## 相关阅读
 

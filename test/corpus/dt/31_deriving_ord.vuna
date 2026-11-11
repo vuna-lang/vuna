@@ -16,11 +16,11 @@ check b = if b then 1 else 0
 
 main : Int
 main =
-  check (lt Low Mid)
-    + check (lt Mid High)
-    + check (le Low Low)
-    + check (gt High Low)
-    + check (ge High High)
-    + check (lt (MkRated 1) (MkRated 2))
-    + check (le (MkRated 2) (MkRated 2))
+  check (Low < Mid)
+    + check (Mid < High)
+    + check (Low <= Low)
+    + check (High > Low)
+    + check (High >= High)
+    + check (MkRated 1 < MkRated 2)
+    + check (MkRated 2 <= MkRated 2)
     + check (show (MkRated 7) == "(MkRated 7)")

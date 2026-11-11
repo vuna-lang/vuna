@@ -1,6 +1,6 @@
 -- D28 负例：严格模式下入口定义直调 `runIO`。入口定义没有全限定名，不能列为信任点，
 -- 必须把直接使用点移进库模块。
-import Base.IO.Host
+import Base.Host
 
 main : Int
 main = runIO (prim_pureIO 0)

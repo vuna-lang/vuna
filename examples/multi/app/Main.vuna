@@ -1,11 +1,11 @@
 import Greet
 import Base.List
 import Base.Monad
-import Base.IO.Host
+import Base.Host
 
 -- DT 的 build 会先执行 IO 效果、再打印 main 的返回值；do 块末用 `exit 0` 结束，
 -- 让示例的输出只含业务内容（不依赖「是否打印返回值」这一 CLI 细节）。
-main : IO Int
+main : Eff [] Int
 main = do
   _ <- print (greeting 3 ++ "|" ++ showNames (names 2))
   exit 0

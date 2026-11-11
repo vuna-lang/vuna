@@ -13,4 +13,4 @@ getWrap w = case w of
   MkWrap n => n
 
 main : Int
-main = getUser (UserId { uid = 40 }) + getWrap (MkWrap 2)
+main = getUser UserId { uid = 40 } + getWrap (MkWrap 2)

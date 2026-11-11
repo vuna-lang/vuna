@@ -55,7 +55,7 @@ import Vuna.Compiler.Common
 import Vuna.Json
 import Vuna.Json.Frame
 import Vuna.Json.Rpc
-import Base.IO.Host
+import Base.Host
 
 -- 小工具
 -- ---------------------------------------------------------------
@@ -265,11 +265,12 @@ else case remaining of
         if hit >= 0 then Just (Pair lineNo (hit + from0 + 1))
         else scanNameLines (lineNo + 1) False firstCol lastLine rest name
 
--- 日志行前缀；退出时一次写出（`prim_writeFile "/dev/stderr"` 每次打开都会截断，
+-- 日志行前缀；退出时一次写出（`prim_eff_writeFile "/dev/stderr"` 每次打开都会截断，
 -- 逐行写会把前面的行冲掉，所以内存累积、退出时 join 一次）。
 logLine : String -> String
 logLine s = "[vuna-lsp] ${s}\n"
 
 flushLogLines : List String -> Int
 flushLogLines [] = 0
-flushLogLines logs = runIO (prim_writeFile "/dev/stderr" (join "" (map logLine (reverse logs))))
+flushLogLines logs =
+  runPure (prim_eff_writeFile "/dev/stderr" (join "" (map logLine (reverse logs))))

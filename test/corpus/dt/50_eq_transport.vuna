@@ -42,7 +42,7 @@ vhead n xs = case xs of
   VCons y ys => y
 
 one : Vec Int (Succ Zero)
-one = VCons 9 (VNil)
+one = VCons 9 VNil
 
 main : Int
 main = vhead Zero (castLen (Succ Zero) (roundTrip (Succ Zero)) one)

@@ -1,0 +1,168 @@
+module Base.Host
+  ( Eff
+  , deferIO
+  , eprint
+  , execPath
+  , exit
+  , fileExists
+  , fileMtime
+  , fileSize
+  , getArgs
+  , getCwd
+  , getEnv
+  , isDirectory
+  , joinEff
+  , makeDir
+  , nowMicros
+  , print
+  , println
+  , raise
+  , readBytes
+  , readDir
+  , readFile
+  , readLine
+  , removeFile
+  , runEff
+  , runIO
+  , runIn
+  , runPure
+  , sleepMicros
+  , writeFile
+  , writeFileAtomic
+  , module Base.Monad
+  ) where
+
+-- Base.Host：**宿主层**（F3 P2）。只有 `[package] privileged = true` 的包可以 import
+-- 本模块（`Loader.Flatten` 按 `[package] privileged` 拒绝非特权 import，错误码
+-- `LD_HostModulePrivileged`）。
+--
+-- 这里放宿主别名（console/fs/process/env/clock 的 `prim_eff_*` 包装）：base 的真实
+-- handler（`Base.EffConsole` / `Base.EffFs` / …）、`Base.ST`、`Base.IORef` 等实现层，
+-- 以及编译器与根包工具链。所有别名返回 `Eff [] a`：宿主原语只是行已处理干净的叶子，
+-- 用户面仍经 `Base.Eff.*` 标签 + handler。
+--
+-- 用户面（无特权包 / ad-hoc）只有 `Base.Eff` 的 `Eff` 代数/实例 + handler；运行入口
+-- `main : Eff [] a`。宿主 IO 动作只由特权层构造（能力边界在构造侧）。
+--
+-- 别名保留（不直接暴露 `prim_eff_*`）的理由：在边界统一做 Int/Nat 归一化（D25）、
+-- 行尾/换行、`sleepMicros` 守卫，并作为 D28 `[trust] unsafe` 的审计面。
+import Base.Eff
+import Base.List
+import Base.Bool
+import Base.Applicative
+import Base.Monad
+-- sleepMicros 用 `<=` / `>=`（Ord 方法别名）。
+import Base.Ord
+-- 模板字符串与 `++` 降级依赖 Base.Interp / Base.String。
+import Base.Interp
+import Base.String
+import Base.Nat
+
+-- 效果 API：直接别名到 Eff 化的宿主原语。
+-- | 向 stdout 写字符串并 flush（不自动换行），返回写入的字节数（`Nat`，D25）。
+-- 低层 `prim_eff_print` 仍是 `Eff [] Int`（内部字节计数保留 Int，避免 seed 自举死锁，
+-- 见 primitives.md §3.1），所以这里用 `natFromInt` 在边界把它变成 `Nat`。
+print : String -> Eff [] Nat
+print s = fmap natFromInt (prim_eff_print s)
+
+-- 写 stderr（W10：console 效应标签的真实 handler 用；与 print 对称）。
+-- | 向 stderr 写字符串（不自动换行），返回写入的字节数；与 `print` 对称。
+eprint : String -> Eff [] Int
+eprint = prim_eff_eprint
+
+-- 实现层桥：执行一个 IO 动作（ST 内部、过渡期工具链）；等价于 `runPure (deferIO io)`。
+-- 用户面不应出现（IO 只由特权层构造）。
+-- | 实现层 IO 桥：`runPure (deferIO io)`（privileged 内部使用）。
+runIO : {a : Type} -> IO a -> a
+runIO io = runPure (deferIO io)
+
+-- | 向 stdout 写字符串并补 `\n`（返回写入的字节数，`Nat`）。
+println : String -> Eff [] Nat
+println s = print "${s}\n"
+
+-- | 把整个文件读成字符串（按字节，不做编码转换）；IO 失败抛宿主异常。
+readFile : String -> Eff [] String
+readFile = prim_eff_readFile
+
+-- | 把整串二进制写入文件，返回写入字节数（`Nat`，D25）；IO 失败抛宿主异常。
+-- 低层 `prim_eff_writeFile` 仍是 `Eff [] Int`（原因同 `print`），边界处 `natFromInt`。
+writeFile : String -> String -> Eff [] Nat
+writeFile path s = fmap natFromInt (prim_eff_writeFile path s)
+
+-- | 原子写（写临时文件后 rename）：并发读者只会看到完整旧内容或完整新内容。
+writeFileAtomic : String -> String -> Eff [] Int
+writeFileAtomic = prim_eff_writeFileAtomic
+
+-- | 从 stdin 读一行；EOF 返回空串（与空行不可区分）。
+readLine : Eff [] String
+readLine = prim_eff_readLine
+
+-- 字节级读取（LSP 帧）：最多读 n 字节；n 是度量 → Nat。
+-- | 最多读 `n` 个字节并返回字符串（LSP 帧读取用）；有数据就立即返回（可能少于 n），EOF 返回空串。
+readBytes : Nat -> Eff [] String
+readBytes n = prim_eff_readBytes (natToInt n)
+
+-- | 列出目录项，按字符串排序；目录不存在 / 不可读时抛宿主异常。
+readDir : String -> Eff [] (List String)
+readDir = prim_eff_readDir
+
+-- | 路径是否为目录；**不存在**的路径抛宿主异常（`Sys_error` → `failwith`）。
+isDirectory : String -> Eff [] Bool
+isDirectory = prim_eff_isDirectory
+
+-- | 创建目录，返回底层 `Int` 结果；幂等（已存在返回 `0`）。
+makeDir : String -> Eff [] Int
+makeDir = prim_eff_makeDir
+
+-- | 删除文件，返回底层 `Int` 结果；幂等（不存在返回 `0`）。
+removeFile : String -> Eff [] Int
+removeFile = prim_eff_removeFile
+
+-- | 路径是否存在（不存在为 `False`，不抛异常）。
+fileExists : String -> Eff [] Bool
+fileExists = prim_eff_fileExists
+
+-- 文件元数据（工具链）：秒级 mtime 与字节数；路径不存在时都返回 0。
+-- 供索引器判断「源码是否变化」，避免每次重算内容摘要。
+-- | 文件 mtime（秒级）；取不到（含文件不存在）时静默返回 0。供索引器判断源码是否变化。
+fileMtime : String -> Eff [] Int
+fileMtime = prim_eff_fileMtime
+
+-- | 文件字节数（`Nat`）；取不到（含文件不存在）时静默返回 0。
+fileSize : String -> Eff [] Nat
+fileSize path = fmap natFromInt (prim_eff_fileSize path)
+
+-- | 命令行参数（不含 `argv[0]`）。
+getArgs : Eff [] (List String)
+getArgs = prim_eff_getArgs
+
+-- 环境（W10：env 效应标签的真实 handler 用）。getEnv 对不存在的变量返回 ""。
+-- | 读环境变量；未设置或为空串都返回 `""`（两者不可区分）。
+getEnv : String -> Eff [] String
+getEnv = prim_eff_getenv
+
+-- | 当前工作目录；失败时返回 `"."`。
+getCwd : Eff [] String
+getCwd = prim_eff_getcwd
+
+-- | 当前可执行文件路径：先读 `/proc/self/exe`（Linux 假设），失败回落 `Sys.executable_name`。
+execPath : Eff [] String
+execPath = prim_eff_execPath
+
+-- | 以给定状态码立即退出进程（原语类型 `Int -> Eff [] Int`，执行即退出、不返回）。
+exit : Int -> Eff [] Int
+exit = prim_eff_exit
+
+-- | 在目录 `dir` 下运行命令，返回退出码（原语类型 `String -> List String -> Eff [] Int`）。
+runIn : String -> List String -> Eff [] Int
+runIn = prim_eff_runIn
+
+-- 时钟（W10：clock 效应标签的真实 handler 用）。nowMicros 是微秒时间戳；
+-- sleepMicros 走编译器原生 `prim_eff_sleep`（`Unix.sleepf`），阻塞睡眠。
+-- | 当前时间戳（微秒，`Unix.gettimeofday`）。
+nowMicros : Eff [] Int
+nowMicros = effTimeUs
+
+-- | 阻塞睡眠 `us` 微秒（真实睡眠，非忙等）；`us <= 0` 时立即返回 `0`。
+sleepMicros : Int -> Eff [] Int
+sleepMicros us = if us <= 0 then pure 0 else prim_eff_sleep us

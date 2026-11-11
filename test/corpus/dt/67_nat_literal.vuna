@@ -14,11 +14,11 @@ unbox : Box -> Nat
 unbox (MkBox n) = n
 
 v3 : Vec 3 Int
-v3 = Cons 1 (Cons 2 (Cons 3 Nil))
+v3 = 1 :: 2 :: 3 :: []
 
 vsum : Vec 3 Int -> Int
 vsum xs = case xs of
-  Cons a (Cons b (Cons c Nil)) => a + b + c
+  [a, b, c] => a + b + c
 
 main : Int
 main = toInt (unbox (MkBox 3)) + vsum v3

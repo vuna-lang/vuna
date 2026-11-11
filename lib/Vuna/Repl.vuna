@@ -25,7 +25,7 @@ module Vuna.Repl
 --   * 重定义（同名 DFun）移除旧块后重新推断；`:delete NAME` 删除 REPL 内定义；
 --     `:load` 文件来源的块拒绝重定义/删除（改文件后 `:reload`）。
 --
--- 输入：非 tty 走 `prim_readLine`（与旧版语义一致，管道测试不感知行编辑）；tty 且
+-- 输入：非 tty 走 `prim_eff_readLine`（与旧版语义一致，管道测试不感知行编辑）；tty 且
 -- `:set editing` 未关闭时走 `Vuna.Repl.Edit`（原始模式行编辑、方向键、Ctrl-R、括号粘贴、
 -- resize 重绘；历史文件的单行/多行单元编码在 `Vuna.Repl.History`）。
 --
@@ -72,7 +72,7 @@ import Vuna.Repl.Term
 import Vuna.Search.Query
 import Vuna.Search.Run
 import Vuna.Search.Types
-import Base.IO.Host
+import Base.Host
 import Base.IORef
 
 replTempFile : String
@@ -125,7 +125,7 @@ record ReplSettings where
 
 -- 输出汇（server 模式的核心）：交互式 REPL 写 stdout；`vuna repl --listen` / `--server`
 -- 把同一份 step 函数的输出收集进 IORef，再作为一帧 JSON-RPC 响应回给客户端。
--- 约束：`Vuna.Repl` 内除 `replEmit` / `replEmitErr` 外**不得直接 `prim_print`**。
+-- 约束：`Vuna.Repl` 内除 `replEmit` / `replEmitErr` 外**不得直接 `prim_eff_print`**。
 data ReplSink : Type where
   SinkStdout : ReplSink
   -- 普通输出 / 错误输出（两个独立通道，服务端分别映射到 result.output / result.error）。
@@ -301,13 +301,13 @@ c : ReplState -> String -> String -> String
 c st code s = if st.stateSettings.settingColorOn then ansi code s else s
 
 isTTY : Int -> Bool
-isTTY _ = runIO (prim_runIn "." ["sh", "-c", "test -t 0 && test -t 1"]) == 0
+isTTY _ = runPure (prim_eff_runIn "." ["sh", "-c", "test -t 0 && test -t 1"]) == 0
 
 autoColorOk : Int -> Bool
 autoColorOk _ =
   let
-    noColor = runIO (prim_getenv "NO_COLOR")
-    term = runIO (prim_getenv "TERM")
+    noColor = runPure (prim_eff_getenv "NO_COLOR")
+    term = runPure (prim_eff_getenv "TERM")
   in noColor == "" && term /= "dumb"
 
 -- mode：0 auto / 1 on / 2 off。
@@ -327,24 +327,24 @@ defaultSettings tty = ReplSettings False False 0 0 defaultPrompt tty (resolveCol
 -- 打印 helper
 -- ---------------------------------------------------------------
 -- 唯一输出出口：交互式写 stdout；server 模式追加到 capture 缓冲。
--- 返回写入的字节数（与 `prim_print` 一致，供 `printImplicitParts` 这类累加用法）。
+-- 返回写入的字节数（与 `prim_eff_print` 一致，供 `printImplicitParts` 这类累加用法）。
 replEmit : ReplState -> String -> Int
 replEmit st s = case st.stateSink of
-  SinkStdout => runIO (prim_print s)
+  SinkStdout => runPure (prim_eff_print s)
   SinkCapture outRef _ =>
     let
-      cur = runIO (readRef outRef)
-      _ = runIO (writeRef outRef (cur ++ s))
+      cur = runPure (readRef outRef)
+      _ = runPure (writeRef outRef (cur ++ s))
     in strLength s
 
 -- 错误通道（server 模式单独收集；`ok` = 该通道为空）。
 replEmitErr : ReplState -> String -> Int
 replEmitErr st s = case st.stateSink of
-  SinkStdout => runIO (prim_print s)
+  SinkStdout => runPure (prim_eff_print s)
   SinkCapture _ errRef =>
     let
-      cur = runIO (readRef errRef)
-      _ = runIO (writeRef errRef (cur ++ s))
+      cur = runPure (readRef errRef)
+      _ = runPure (writeRef errRef (cur ++ s))
     in strLength s
 
 -- capture 汇（server 模式）：子进程类效果（`:!` / 效果表达式）在阶段 1 拒绝执行。
@@ -387,10 +387,10 @@ replOutputDrain st = case st.stateSink of
   SinkStdout => Pair "" ""
   SinkCapture outRef errRef =>
     let
-      out = runIO (readRef outRef)
-      err = runIO (readRef errRef)
-      _ = runIO (writeRef outRef "")
-      _ = runIO (writeRef errRef "")
+      out = runPure (readRef outRef)
+      err = runPure (readRef errRef)
+      _ = runPure (writeRef outRef "")
+      _ = runPure (writeRef errRef "")
     in Pair out err
 
 -- 还有未完成的输入（续行 pending 或 `:{` 块未闭合）？
@@ -494,15 +494,15 @@ bufferSigNames st = dedupStrs (concatMap blockSignsOf st.stateDefs)
 historyFilePath : Int -> String
 historyFilePath _ =
   let
-    env = runIO (prim_getenv "VUNA_REPL_HISTORY")
+    env = runPure (prim_eff_getenv "VUNA_REPL_HISTORY")
   in if env /= "" then env
   else
     let
-      xdg = runIO (prim_getenv "XDG_STATE_HOME")
+      xdg = runPure (prim_eff_getenv "XDG_STATE_HOME")
     in if xdg /= "" then "${xdg}/vuna/repl_history"
     else
       let
-        home = runIO (prim_getenv "HOME")
+        home = runPure (prim_eff_getenv "HOME")
       in if home == "" then "" else "${home}/.vuna_repl_history"
 
 -- 读历史文件：v2（有头，`\n` 转义）或旧 v1（纯文本一行一条）由 History 判别。
@@ -521,14 +521,14 @@ persistHistory st unit = if st.stateHistoryFile == "" then 0
 else
   let
     dir = parentOf st.stateHistoryFile
-    _ = runIO (prim_runIn "." ["mkdir", "-p", dir])
-    writable = runIO (prim_runIn "." ["sh", "-c", "test -w ${shellQuote dir}"]) == 0
+    _ = runPure (prim_eff_runIn "." ["mkdir", "-p", dir])
+    writable = runPure (prim_eff_runIn "." ["sh", "-c", "test -w ${shellQuote dir}"]) == 0
   in if not writable then 0
   else
     let
       old = historyEntriesOf st.stateHistoryFile
       lines2 = trimHistory (appendLast old unit)
-    in runIO (prim_writeFileAtomic st.stateHistoryFile (renderHistoryFile lines2))
+    in runPure (prim_eff_writeFileAtomic st.stateHistoryFile (renderHistoryFile lines2))
 
 -- 提交一个完整输入单元：记入内存历史（连续重复去重）并持久化（多行单元编码后仍是一行）。
 remember : ReplState -> String -> ReplState
@@ -569,10 +569,10 @@ readInputPlain st =
   let
     _ = replEmit st (promptRendered st)
   in let
-    raw = runIO prim_readLine
+    raw = runPure prim_eff_readLine
   in if trim raw == "" then
     let
-      next = runIO prim_readLine
+      next = runPure prim_eff_readLine
     in if next == "" then ReadEof else ReadBlankLine next
   else ReadLine raw
 
@@ -908,7 +908,7 @@ evalExprInfoRebuild st program expr = case replToolSession st.stateCtx program o
 evalText : ReplState -> String -> ReplOutcome
 evalText st text =
   let
-    start = runIO timeUs
+    start = runPure effTimeUs
   in case parseExpressionSource text of
     ErrC e =>
       let
@@ -944,7 +944,7 @@ printTypeLine st ty =
 printTiming : ReplState -> Int -> Int
 printTiming st start = if st.stateSettings.settingTiming then
   let
-    us = runIO timeUs
+    us = runPure effTimeUs
     delta = imax 0 (us - start)
     ms = delta / 1000
     text = if ms <= 0 then "<1 ms" else "${ms} ms"
@@ -993,20 +993,30 @@ hasUnsolvedMeta tyText = contains "?" tyText
 -- 重复（重复 import 是硬错误）。
 ioTypeImports : ReplState -> String -> String
 ioTypeImports st tyText =
-  if contains "Base.Nat." tyText then if contains "import Base.Nat" (bufferProgram st) then "" else "import Base.Nat\n"
-  else ""
+  let
+    prog = bufferProgram st
+    effImp =
+      if contains "Base.Eff." tyText && not (contains "import Base.Eff" prog) then "import Base.Eff\n"
+      else ""
+    natImp =
+      if contains "Base.Nat." tyText && not (contains "import Base.Nat" prog) then "import Base.Nat\n"
+      else ""
+  in effImp ++ natImp
 
 hasMainDef : String -> Bool
 hasMainDef program = case parseSource replTempFile program of
   ErrC e => False
   OkC (SourceFile _ _ _ decls) => memName "main" (topNames decls)
 
--- 顶层类型文本是 canonical `IO a` 吗？`showTypeSig` 把 TApp 渲染成 `(Base.IO.IO Int)`。
+-- 顶层类型文本是 canonical 动作类型吗？`showTypeSig` 把 `Eff [] a` 渲染成
+-- `(Base.Eff.Eff (Base.Eff.Row.Nil) Int)`；过渡期仍接受 `IO a`。
 isIOTypeText : String -> Bool
 isIOTypeText tyText =
   let
     t = trim tyText
-  in startsWith "(Base.IO.IO " t
+  in startsWith "((Base.Eff.Eff Base.Eff.Row.Nil) " t
+    || startsWith "(Base.Eff.Eff Base.Eff.Row.Nil) " t
+    || startsWith "(Base.IO.IO " t
     || startsWith "Base.IO.IO " t
     || startsWith "(IO " t
     || t == "Base.IO.IO"
@@ -1024,7 +1034,14 @@ ioPrintResult tyText = case ioInnerType (trim tyText) of
 
 ioInnerType : String -> Maybe String
 ioInnerType t =
-  if startsWith "(Base.IO.IO " t then Just
+  let
+    effHead = "((Base.Eff.Eff Base.Eff.Row.Nil) "
+    effHeadBare = "(Base.Eff.Eff Base.Eff.Row.Nil) "
+  in if startsWith effHead t then Just
+    (stripTrailingParen (trim (substring (byteLength effHead) (byteLength t - byteLength effHead) t)))
+  else if startsWith effHeadBare t then Just
+    (stripTrailingParen (trim (substring (byteLength effHeadBare) (byteLength t - byteLength effHeadBare) t)))
+  else if startsWith "(Base.IO.IO " t then Just
     (stripTrailingParen (trim (substring (byteLength "(Base.IO.IO ") (byteLength t - byteLength "(Base.IO.IO ") t)))
   else if startsWith "Base.IO.IO " t then Just
     (stripTrailingParen (trim (substring (byteLength "Base.IO.IO ") (byteLength t - byteLength "Base.IO.IO ") t)))
@@ -1465,7 +1482,7 @@ abandonNow st =
 -- ---------------------------------------------------------------
 loadStep : ReplState -> String -> ReplOutcome
 loadStep st arg = if arg == "" then commandUsage st ":load"
-else if runIO (prim_fileExists arg) then if runIO (prim_isDirectory arg) then loadDirStep st arg else loadFileStep st "已加载" arg
+else if runPure (prim_eff_fileExists arg) then if runPure (prim_eff_isDirectory arg) then loadDirStep st arg else loadFileStep st "已加载" arg
 else if isModuleNameStr arg then loadModuleStep st arg "已导入模块"
 else
   let
@@ -1595,7 +1612,7 @@ ensureIndex st = case st.stateBrowseIndex of
               ErrC e => ErrC e
               OkC idx =>
                 let
-                  builtSec = runIO timeUs / 1000000
+                  builtSec = runPure effTimeUs / 1000000
                 in OkC (Pair idx (withIndexSession st idx (indexStatsOf builtSec dir) builtSec dir))
 
 browseStep : ReplState -> String -> ReplOutcome
@@ -1954,7 +1971,7 @@ else if captureMode st then
   in ReplContinue st
 else
   let
-    code = runIO (prim_runIn "." ["sh", "-c", cmd])
+    code = runPure (prim_eff_runIn "." ["sh", "-c", cmd])
   in if code == 0 then ReplContinue st
   else
     let

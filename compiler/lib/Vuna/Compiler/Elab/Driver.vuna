@@ -909,18 +909,7 @@ synthMainShowInner ec globals defs bodies sp inner kind =
   let
     tyVal = force (Base.HashMap.fromList bodies) (ecSolsP ec) defaultFuel (eval [] inner)
     tyTerm = quote 0 tyVal
-    withRun = if kind == "eff" then append defs [mainRunDef tyTerm sp] else defs
-  in if mainShowBuiltinTy tyVal then OkC withRun else synthMainShowGo ec globals withRun sp tyVal
-
--- `main : Eff [] T` 的执行定义：`@vuna@main_run : Eff [] T -> T`，body `\x => runPure x`。
--- hook 只引用这条同单元定义，不需要跨单元依赖（与 `@vuna@main_show` 同一模式）。
-mainRunDef : Term -> Span -> DtDef
-mainRunDef tyTerm sp =
-  let
-    sp0 = Span "" 0 0 0 0
-    dom = TApp (TApp (TGlobal effTypeName) (TGlobal effRowNilCtor) Rig0) tyTerm Rig0
-    body = TLam "x" Rig1 (TApp (TApp (TGlobal effRunName) tyTerm Rig0) (TVar "x" 0 sp0) Rig1)
-  in DtDef mainRunDefName (TPi "x" False Rig1 dom tyTerm) body (Just sp)
+  in if mainShowBuiltinTy tyVal then OkC defs else synthMainShowGo ec globals defs sp tyVal
 
 synthMainShowGo : Ec -> List (Pair String Term) -> List DtDef -> Span -> Value -> Check (List DtDef)
 synthMainShowGo ec globals defs sp tyVal = case findClassByShortName "Show" (ecClasses ec) of

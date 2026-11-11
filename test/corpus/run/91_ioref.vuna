@@ -1,8 +1,8 @@
-import Base.IO
+import Base.Host
 -- M33 W3：IO 内的 IORef（newRef / writeRef / readRef）。
 import Base.IORef
 
-main : IO Int
+main : Eff [] Int
 main = do
   r <- newRef 10
   _ <- writeRef r 32

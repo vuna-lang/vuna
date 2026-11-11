@@ -21,5 +21,5 @@ prog = do
   _ <- consolePrint "real" "p"
   pure result
 
-main : IO String
+main : Eff [] String
 main = runConsole "real" prog

@@ -36,7 +36,7 @@ import Vuna.Index
 import Vuna.Json
 import Vuna.Lsp.Bindings
 import Vuna.Lsp.Protocol
-import Base.IO.Host
+import Base.Host
 
 -- ---------------------------------------------------------------
 -- 数据与常量
@@ -249,10 +249,10 @@ loadIndexTarget uri bufText bufSf idx sym tokInfo = case moduleInfoOf idx (symMo
   Nothing => Nothing
   Just mi => if symModule sym == currentModuleNameOf bufSf then Just (Pair (RenameTarget (symName sym) (symKind sym) (symModule sym) uri bufText bufSf) tokInfo)
   else if modPath mi == "" then Nothing
-  else if not (runIO (prim_fileExists (modPath mi))) then Nothing
+  else if not (runPure (prim_eff_fileExists (modPath mi))) then Nothing
   else
     let
-      source = runIO (prim_readFile (modPath mi))
+      source = runPure (prim_eff_readFile (modPath mi))
     in case parseSource (modPath mi) source of
       ErrC e => Nothing
       OkC sf2 =>
@@ -589,10 +589,10 @@ crossModuleUseRefs : Index -> RenameTarget -> String -> List EditRef
 crossModuleUseRefs idx target modName = case moduleInfoOf idx modName of
   Nothing => []
   Just mi => if modPath mi == "" then []
-  else if not (runIO (prim_fileExists (modPath mi))) then []
+  else if not (runPure (prim_eff_fileExists (modPath mi))) then []
   else
     let
-      source = runIO (prim_readFile (modPath mi))
+      source = runPure (prim_eff_readFile (modPath mi))
     in case parseSource (modPath mi) source of
       ErrC e => []
       OkC sf =>

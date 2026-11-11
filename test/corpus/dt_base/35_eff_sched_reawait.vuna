@@ -2,7 +2,7 @@
 -- 对已完成任务 cancelTask 是 no-op（不算错误）。
 import Base.Eff
 import Base.EffSched
-import Base.IO.Host
+import Base.Host
 import Base.Result
 
 sumThree : Result Int -> Result Int -> Result Int -> Result Int
@@ -10,20 +10,18 @@ sumThree (Ok a) (Ok b) (Ok c) = Ok (a + b + c)
 sumThree _ _ _ = Ok 0
 
 prog : Eff [] (Result Int)
-prog =
-  withScope
-    (\sc => do
-      ta <- forkTask sc (pure 11)
-      r1 <- awaitTask ta
-      r2 <- awaitTask ta
-      _ <- cancelTask ta
-      r3 <- awaitTask ta
-      pure (sumThree r1 r2 r3)
-    )
+prog = withScope (\sc => do
+  ta <- forkTask sc (pure 11)
+  r1 <- awaitTask ta
+  r2 <- awaitTask ta
+  _ <- cancelTask ta
+  r3 <- awaitTask ta
+  pure (sumThree r1 r2 r3)
+)
 
-main : IO Int
+main : Eff [] Int
 main = do
-  r <- runIOEff prog
+  r <- prog
   case r of
     Ok n => pure n
     Err _ => pure 0

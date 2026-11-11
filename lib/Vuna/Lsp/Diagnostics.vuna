@@ -45,7 +45,7 @@ import Vuna.FixityEnv
 import Vuna.Json
 import Vuna.Lint.Rules
 import Vuna.Lsp.Protocol
-import Base.IO.Host
+import Base.Host
 
 -- DiagnosticSeverity：1 = Error、2 = Warning、3 = Information、4 = Hint
 severityError : Int
@@ -289,8 +289,8 @@ diagsOfCheck label (ErrC e) = if diagOwns label e then [e] else []
 -- buffer == 磁盘吗？单模块写回的前置条件（否则写下的 SourceInfo 与磁盘不符，读侧会判脏）。
 diskMatches : String -> String -> Bool
 diskMatches label text =
-  if runIO (prim_fileExists label) == False then False
-  else toolTextHash (runIO (prim_readFile label)) == toolTextHash text
+  if runPure (prim_eff_fileExists label) == False then False
+  else toolTextHash (runPure (prim_eff_readFile label)) == toolTextHash text
 
 isCleanModule : DiagCache -> String -> Bool
 isCleanModule session name = memName name (map miNameOf session.dcClean)

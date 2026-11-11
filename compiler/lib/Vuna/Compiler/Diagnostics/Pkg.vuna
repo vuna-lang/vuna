@@ -137,7 +137,7 @@ pkgTemplate (InvalidExportModule _) =
 pkgTemplate (InvalidPackageName _) =
   "invalid package name \"<0>\" (allowed characters: a-z, 0-9, '-')"
 pkgTemplate (InvalidTrustPoint _) =
-  "invalid trust point \"<0>\" (expected a qualified definition name such as \"Base.IO.runIO\")"
+  "invalid trust point \"<0>\" (expected a qualified definition name such as \"Base.IO.runPure\")"
 pkgTemplate (MissingManifest _) = "missing vuna.toml in <0>"
 pkgTemplate (MissingBase _) =
   "pkg: cannot locate vuna-base (tried: <0>); set VUNA_BASE to a directory containing vuna.toml"

@@ -35,7 +35,7 @@ module Vuna.TestRunner (TestOpts(..), runTests) where
 --   N>1 时每个测试文件一个子进程：spawn 当前可执行文件的隐藏模式
 --   `test <包目录> --only-file <文件名> --jobs 1`（`--verbose` 时追加 `--verbose`）；
 --   子进程继承 stdout/stderr，**行内容完整但行与行之间可能交错**。父进程用
---   `prim_wait` 收退出码、按文件计 pass/fail，汇总行与串行逐字一致。`--fail-fast`
+--   `prim_eff_wait` 收退出码、按文件计 pass/fail，汇总行与串行逐字一致。`--fail-fast`
 --   在并行下只停止启动新文件，已在跑的文件等完（汇总只统计已跑文件）；`--verbose`
 --   的每文件耗时由子进程自己测量并打印在行尾，父进程照旧打印 `total:`。workspace
 --   聚合仍是各包串行（包内文件并行）。`--only-file` 只给子进程用：只跑一个文件、
@@ -46,7 +46,7 @@ import Vuna.Compiler.Driver.Dt
 import Vuna.Compiler.Driver.Compile
 import Vuna.Files
 import Vuna.Interp
-import Base.IO.Host
+import Base.Host
 
 -- `vuna test` 的选项；默认构造值（空过滤 + 全 False + jobs=1 + 无 only-file）等价于
 -- M30 的固定行为。
@@ -76,16 +76,16 @@ runTests opts pkg = case opts.testOnlyFile of
   Just name => runOnlyFile opts pkg name
   Nothing =>
     let
-      start = runIO timeUs
+      start = runPure effTimeUs
       code = runTestsGo opts pkg
-      _ = if opts.testVerbose then runIO (prim_print "total: ${elapsedMs start}ms\n") else 0
+      _ = if opts.testVerbose then runPure (prim_eff_print "total: ${elapsedMs start}ms\n") else 0
     in code
 
 runTestsGo : TestOpts -> Package -> Int
 runTestsGo opts pkg = case workspacePackages (packageDir pkg) of
   ErrC e =>
     let
-      _ = runIO (prim_print "error: ${diagText e}\n")
+      _ = runPure (prim_eff_print "error: ${diagText e}\n")
     in 2
   OkC pkgs => if length pkgs <= 1 then runPackageTests opts pkg else runWorkspaceTests opts pkgs
 
@@ -101,13 +101,13 @@ runPackageTests opts pkg =
       files = filteredTestFiles opts (packageName pkg) testDir
     in if opts.testListOnly then
       let
-        _ = map (\file => runIO (prim_print "${file}\n")) files
+        _ = map (\file => runPure (prim_eff_print "${file}\n")) files
       in 0
     else case runPackageTestGroup opts pkg testDir files of
       Tally _ fail _ => if fail == 0 then 0 else 1
   else
     let
-      _ = runIO (prim_print "error: test directory not found: ${testDir}\n")
+      _ = runPure (prim_eff_print "error: test directory not found: ${testDir}\n")
     in 2
 
 -- ---------------------------------------------------------------
@@ -122,16 +122,16 @@ runOnlyFile opts pkg name =
   in if pathExistsDir testDir then
     let
       path = "${testDir}/${name}"
-      t0 = runIO timeUs
+      t0 = runPure effTimeUs
       outcome = runOneTest (packageContext pkg) path name
-      us = runIO timeUs - t0
+      us = runPure effTimeUs - t0
       _ = printOutcome opts name outcome us
     in case outcome of
       TestPassed => 0
       TestFailed _ => 1
   else
     let
-      _ = runIO (prim_print "error: test directory not found: ${testDir}\n")
+      _ = runPure (prim_eff_print "error: test directory not found: ${testDir}\n")
     in 2
 
 -- 一个包的一组测试文件：jobs=1 用串行的 in-process 路径（行为逐字不变），
@@ -149,7 +149,7 @@ runWorkspaceTests : TestOpts -> List Package -> Int
 runWorkspaceTests opts pkgs = if opts.testListOnly then runWorkspaceList opts pkgs
 else
   let
-    _ = runIO (prim_print "workspace: ${length pkgs} package(s)\n")
+    _ = runPure (prim_eff_print "workspace: ${length pkgs} package(s)\n")
   in runWorkspaceGo opts pkgs 0 0
 
 runWorkspaceList : TestOpts -> List Package -> Int
@@ -165,8 +165,8 @@ runWorkspaceList opts (pkg :: rest) =
     in if filterActive opts && length files == 0 then runWorkspaceList opts rest
     else
       let
-        _ = runIO (prim_print "-- ${label} --\n")
-        _ = map (\file => runIO (prim_print "${file}\n")) files
+        _ = runPure (prim_eff_print "-- ${label} --\n")
+        _ = map (\file => runPure (prim_eff_print "${file}\n")) files
       in runWorkspaceList opts rest
 
 runWorkspaceGo : TestOpts -> List Package -> Int -> Int -> Int
@@ -181,20 +181,20 @@ runWorkspaceGo opts (pkg :: rest) pass fail =
     in if filterActive opts && length files == 0 then runWorkspaceGo opts rest pass fail
     else
       let
-        _ = runIO (prim_print "-- ${label} --\n")
+        _ = runPure (prim_eff_print "-- ${label} --\n")
       in case runPackageTestGroup opts pkg testDir files of
         Tally p f True => workspaceFinish (pass + p) (fail + f)
         Tally p f False => runWorkspaceGo opts rest (pass + p) (fail + f)
   else
     let
-      _ = runIO (prim_print "-- ${label} -- (no test directory)\n")
+      _ = runPure (prim_eff_print "-- ${label} -- (no test directory)\n")
     in runWorkspaceGo opts rest pass fail
 
 -- workspace 总汇总 + 退出码（0 全通过 / 1 有失败）。
 workspaceFinish : Int -> Int -> Int
 workspaceFinish pass fail =
   let
-    _ = runIO (prim_print "\nworkspace: ${pass} passed, ${fail} failed\n")
+    _ = runPure (prim_eff_print "\nworkspace: ${pass} passed, ${fail} failed\n")
   in if fail == 0 then 0 else 1
 
 -- 包名可能为空（只用于展示，不参与语义）。
@@ -219,7 +219,7 @@ filterActive opts = case opts.testFilter of
 filteredTestFiles : TestOpts -> String -> String -> List String
 filteredTestFiles opts pkgName dir =
   filter (\file => matchesFilter opts.testFilter pkgName file)
-    (testFiles (runIO (prim_readDir dir)))
+    (testFiles (runPure (prim_eff_readDir dir)))
 
 -- 多值 OR：无过滤 = 全部匹配；有过滤 = 任一 PAT 命中 `<包名>/<文件名>` 或 `<文件名>`
 -- 即匹配。注意「无过滤」与「OR 的终止」必须是两个不同的基例：若把 `[] => True`
@@ -240,20 +240,20 @@ matchesAnyFilter (pat :: rest) pkgName file =
 runTestFiles : TestOpts -> PackageContext -> String -> List String -> Int -> Int -> Tally
 runTestFiles opts ctx dir [] pass fail =
   let
-    _ = runIO (prim_print "\n${pass} passed, ${fail} failed\n")
+    _ = runPure (prim_eff_print "\n${pass} passed, ${fail} failed\n")
   in Tally pass fail False
 runTestFiles opts ctx dir (name :: rest) pass fail =
   let
     path = "${dir}/${name}"
-    t0 = runIO timeUs
+    t0 = runPure effTimeUs
     outcome = runOneTest ctx path name
-    us = runIO timeUs - t0
+    us = runPure effTimeUs - t0
     _ = printOutcome opts name outcome us
   in case outcome of
     TestPassed => runTestFiles opts ctx dir rest (pass + 1) fail
     TestFailed _ => if opts.testFailFast then
       let
-        _ = runIO (prim_print "\n${pass} passed, ${fail + 1} failed\n")
+        _ = runPure (prim_eff_print "\n${pass} passed, ${fail + 1} failed\n")
       in Tally pass (fail + 1) True
     else runTestFiles opts ctx dir rest pass (fail + 1)
 
@@ -263,11 +263,11 @@ runTestFiles opts ctx dir (name :: rest) pass fail =
 -- 每个测试文件一个子进程：spawn 当前可执行文件的隐藏模式
 -- `test <包目录> --only-file <文件名> --jobs 1`（父进程 --verbose 时追加 --verbose）。
 -- 子进程继承 stdin/stdout/stderr，因此 `ok`/`FAIL` 行与测试自身的输出**可能交错**
--- （`prim_print` 每次 flush，单行内容完整；行序不保证）。父进程不打印每文件结果行，
--- 只用 `prim_wait` 收退出码、按文件计 pass/fail；汇总行与串行逐字一致。
+-- （`prim_eff_print` 每次 flush，单行内容完整；行序不保证）。父进程不打印每文件结果行，
+-- 只用 `prim_eff_wait` 收退出码、按文件计 pass/fail；汇总行与串行逐字一致。
 --
 -- 调度：running 按启动顺序排队；窗口满（jobs 个在跑）时等**队首**退出再启动下一个。
--- 因为 `prim_wait` 只能等指定 pid，失败检测发生在队首被 wait 时——并行下 fail-fast
+-- 因为 `prim_eff_wait` 只能等指定 pid，失败检测发生在队首被 wait 时——并行下 fail-fast
 -- 保证「失败后不再启动新文件」，但不保证在窗口里其它文件失败时立即停（它们要等
 -- 排到队首才被 wait 到）；已在跑的文件总是等完并计入汇总。
 --
@@ -285,13 +285,13 @@ else case pending of
   name :: rest => if stopped then finishRunning opts running pass fail stopped
   else if length running < opts.testJobs then
     let
-      pid = runIO (prim_spawn (spawnTestArgs opts pkgDir name))
+      pid = runPure (prim_eff_spawn (spawnTestArgs opts pkgDir name))
     in runParallel (fuel - 1) opts pkgDir dir rest (append running [Pair pid name]) pass fail False
   else case running of
     [] => finishRunning opts [] pass fail stopped
     (Pair pid _) :: more =>
       let
-        code = runIO (prim_wait pid)
+        code = runPure (prim_eff_wait pid)
         pass1 = if code == 0 then pass + 1 else pass
         fail1 = if code == 0 then fail else fail + 1
         stopped1 = opts.testFailFast && code /= 0
@@ -301,11 +301,11 @@ else case pending of
 finishRunning : TestOpts -> List (Pair Int String) -> Int -> Int -> Bool -> Tally
 finishRunning opts [] pass fail stopped =
   let
-    _ = runIO (prim_print "\n${pass} passed, ${fail} failed\n")
+    _ = runPure (prim_eff_print "\n${pass} passed, ${fail} failed\n")
   in Tally pass fail stopped
 finishRunning opts ((Pair pid _) :: rest) pass fail stopped =
   let
-    code = runIO (prim_wait pid)
+    code = runPure (prim_eff_wait pid)
     pass1 = if code == 0 then pass + 1 else pass
     fail1 = if code == 0 then fail else fail + 1
     stopped1 = stopped || opts.testFailFast && code /= 0
@@ -321,15 +321,16 @@ spawnTestArgs opts pkgDir name =
 
 -- 单测结果行：默认与 M30 逐字一致；--verbose 时行尾追加耗时。
 printOutcome : TestOpts -> String -> TestOutcome -> Int -> Int
-printOutcome opts name TestPassed us = runIO (prim_print "ok   ${name}${timingText opts us}\n")
+printOutcome opts name TestPassed us =
+  runPure (prim_eff_print "ok   ${name}${timingText opts us}\n")
 printOutcome opts name (TestFailed message) us =
-  runIO (prim_print "FAIL ${name}: ${message}${timingText opts us}\n")
+  runPure (prim_eff_print "FAIL ${name}: ${message}${timingText opts us}\n")
 
 timingText : TestOpts -> Int -> String
 timingText opts us = if opts.testVerbose then " (${us / 1000}ms)" else ""
 
 elapsedMs : Int -> Int
-elapsedMs start = (runIO timeUs - start) / 1000
+elapsedMs start = (runPure effTimeUs - start) / 1000
 
 -- 单个测试：按 main 的返回类别选执行路径。
 runOneTest : PackageContext -> String -> String -> TestOutcome
@@ -364,7 +365,7 @@ runIOTest ctx path name =
 runIOTestLegacy : PackageContext -> String -> String -> TestOutcome
 runIOTestLegacy ctx path name =
   let
-    source = runIO (prim_readFile path)
+    source = runPure (prim_eff_readFile path)
   in case runEffectProgram ctx source False of
     ErrC e => TestFailed (diagText e)
     OkC 0 => TestPassed
@@ -380,7 +381,7 @@ data CmdOutcome : Type where
 
 -- 单测超时秒数：未设置/空 → 120；0 关闭；非数字 → 120（不静默放大）。
 testTimeoutSecs : Int -> Int
-testTimeoutSecs _ = case parseNat (runIO (prim_getenv "VUNA_TEST_TIMEOUT")) of
+testTimeoutSecs _ = case parseNat (runPure (prim_eff_getenv "VUNA_TEST_TIMEOUT")) of
   Nothing => 120
   Just n => n
 
@@ -394,13 +395,14 @@ parseDigits (c :: rest) acc =
 
 -- `timeout`（coreutils）在 PATH 里吗？不在时优雅降级为旧路径（不算 FAIL）。
 hasTimeoutCmd : Int -> Bool
-hasTimeoutCmd _ = runIO (prim_runIn "." ["sh", "-c", "command -v timeout >/dev/null 2>&1"]) == 0
+hasTimeoutCmd _ =
+  runPure (prim_eff_runIn "." ["sh", "-c", "command -v timeout >/dev/null 2>&1"]) == 0
 
 -- 临时目录根：`$TMPDIR`（去尾部 `/`），没有就用 `/tmp`。
 tempBase : Int -> String
 tempBase _ =
   let
-    env = runIO (prim_getenv "TMPDIR")
+    env = runPure (prim_eff_getenv "TMPDIR")
   in if env == "" then "/tmp"
   else if endsWith "/" env then substring 0 (byteLength env - 1) env else env
 
@@ -411,7 +413,7 @@ freshTempDir fuel base = if fuel <= 0 then base
 else
   let
     dir = "${base}-${fuel}"
-  in if runIO (prim_fileExists dir) then freshTempDir (fuel - 1) base else dir
+  in if runPure (prim_eff_fileExists dir) then freshTempDir (fuel - 1) base else dir
 
 -- 在 dir 里跑命令；超时（TERM，5s 后 KILL）返回 CmdTimedOut。
 -- GNU timeout 的超时退出码是 124（-k 兜底杀掉时 137）；命令自身恰好以这两个码退出
@@ -419,7 +421,8 @@ else
 runTimedCmd : String -> List String -> Int -> CmdOutcome
 runTimedCmd dir argv secs =
   let
-    code = runIO (prim_runIn dir (append ["timeout", "-s", "TERM", "-k", "5", "${secs}s"] argv))
+    code =
+      runPure (prim_eff_runIn dir (append ["timeout", "-s", "TERM", "-k", "5", "${secs}s"] argv))
   in if code == 124 || code == 137 then CmdTimedOut else CmdDone code
 
 -- 有超时的 IO 测试：临时目录里编译测试入口（printResult=False，只看退出码），
@@ -429,12 +432,12 @@ runTimedCmd dir argv secs =
 runIOTestTimed : PackageContext -> String -> String -> Int -> TestOutcome
 runIOTestTimed ctx path name secs =
   let
-    dir = freshTempDir 1000 "${tempBase 0}/vuna-test-${runIO timeUs}-${name}"
+    dir = freshTempDir 1000 "${tempBase 0}/vuna-test-${runPure effTimeUs}-${name}"
   in case compileToDir ctx path False dir of
     ErrC e => ioCleanup dir (TestFailed (diagText e))
     OkC _ =>
       let
-        _ = runIO (prim_makeDir "${dir}/bin")
+        _ = runPure (prim_eff_makeDir "${dir}/bin")
       in case runTimedCmd dir ["sh", "build.sh", "bin/vuna-test"] secs of
         CmdTimedOut => ioCleanup dir (TestFailed "timed out after ${secs}s (build)")
         CmdDone code => if code /= 0 then ioCleanup dir
@@ -448,5 +451,5 @@ runIOTestTimed ctx path name secs =
 ioCleanup : String -> TestOutcome -> TestOutcome
 ioCleanup dir outcome =
   let
-    _ = runIO (prim_runIn "/" ["rm", "-rf", dir])
+    _ = runPure (prim_eff_runIn "/" ["rm", "-rf", dir])
   in outcome

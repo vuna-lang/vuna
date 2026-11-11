@@ -26,7 +26,7 @@ import Vuna.Json.Frame
 import Vuna.Json.Rpc
 import Vuna.Json.Server
 import Vuna.Repl
-import Base.IO.Host
+import Base.Host
 import Base.IORef
 
 -- 地址校验（CLI 层）：只接受本机端点。
@@ -41,7 +41,7 @@ checkReplAddr addr =
 serverLog : String -> ReplState -> ReplState
 serverLog m st =
   let
-    _ = runIO (prim_eprint "[vuna-repl-server] ${m}\n")
+    _ = runPure (prim_eff_eprint "[vuna-repl-server] ${m}\n")
   in st
 
 -- 传输告警：写 stderr 日志，并回 `-32700` 让客户端不会空等（LSP 的策略是丢帧不回）。
@@ -125,7 +125,7 @@ handleRequest msg st = case methodOf msg of
 listeningText : String -> Int -> String
 listeningText addr h =
   let
-    port = runIO (prim_netPort h)
+    port = runPure (prim_eff_netPort h)
   in if endsWith ":0" addr then "${substring 0 (natFromInt (strLength addr - 1)) addr}${strFromInt port}"
   else addr
 
@@ -133,24 +133,25 @@ unixPathOf : String -> String
 unixPathOf addr = substring (natFromInt 5) (natFromInt (strLength addr - 5)) addr
 
 cleanupAddr : String -> Int
-cleanupAddr addr = if startsWith "unix:" addr then runIO (prim_removeFile (unixPathOf addr)) else 0
+cleanupAddr addr =
+  if startsWith "unix:" addr then runPure (prim_eff_removeFile (unixPathOf addr)) else 0
 
 -- CLI 入口：起 session → listen → 打印就绪行 → accept 循环（每个连接一个会话切片）。
 runReplServer : PackageContext -> ReplStart -> String -> Int
 runReplServer ctx start addr =
   let
-    outRef = runIO (newRef "")
-    errRef = runIO (newRef "")
+    outRef = runPure (newRef "")
+    errRef = runPure (newRef "")
     sink = SinkCapture outRef errRef
   in case startReplSession ctx start sink of
     ErrC e =>
       let
-        _ = runIO (prim_eprint "[vuna-repl-server] ${diagText e}\n")
+        _ = runPure (prim_eff_eprint "[vuna-repl-server] ${diagText e}\n")
       in 2
     OkC (Pair st0 _) =>
       let
-        h = runIO (prim_netListen addr)
-        _ = runIO (prim_print "listening ${listeningText addr h}\n")
+        h = runPure (prim_eff_netListen addr)
+        _ = runPure (prim_eff_print "listening ${listeningText addr h}\n")
       in acceptLoop serverFuelBound addr h st0
 
 -- 连接循环是无限状态机：显式 fuel 守卫（1G 个连接）。
@@ -161,17 +162,17 @@ acceptLoop : Int -> String -> Int -> ReplState -> Int
 acceptLoop fuel addr h st = if fuel <= 0 then 0
 else
   let
-    conn = runIO (prim_netAccept h)
+    conn = runPure (prim_eff_netAccept h)
     outcome =
-      serveConnection (\n => prim_netRecv conn n) (\s => prim_netSend conn s) replWarn handleRequest
-        st
+      serveConnection (\n => prim_eff_netRecv conn n) (\s => prim_eff_netSend conn s) replWarn
+        handleRequest st
     exit = firstOf outcome
     st2 = secondOf outcome
-    _ = runIO (prim_netClose conn)
+    _ = runPure (prim_eff_netClose conn)
   in case exit of
     ExitRequested =>
       let
-        _ = runIO (prim_netClose h)
+        _ = runPure (prim_eff_netClose h)
         _ = cleanupAddr addr
       in 0
     ExitClosed => acceptLoop (fuel - 1) addr h st2

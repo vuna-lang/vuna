@@ -58,7 +58,6 @@ module Vuna.Compiler.Intrinsics
   , listConsCtor
   , listFamilyName
   , listNilCtor
-  , mainRunDefName
   , mainShowDefName
   , natSuccCtor
   , natTypeName
@@ -112,7 +111,7 @@ data Capability : Type where
   CapProcess : Capability
   CapEnv : Capability
   CapClock : Capability
-  -- 允许在 main 之外执行 IO 动作（`Base.IO.runIO`；工具链特权，M31）。
+  -- 允许在 main 之外执行 IO 动作（`Base.IO.runPure`；工具链特权，M31）。
   CapUnsafe : Capability
   -- 网络（loopback TCP / Unix domain socket；工具链 server 模式用）。
   CapNetwork : Capability
@@ -274,11 +273,6 @@ primEraseName = "prim_erase"
 mainShowDefName : String
 mainShowDefName = "@vuna@main_show"
 
--- | `main : Eff [] a` 的执行定义名：Elab 收尾合成 `@vuna@main_run : Eff [] T -> T`，
--- codegen 的 main 钩子按它包一层（body 是 `Base.Eff.runPure`）。
-mainRunDefName : String
-mainRunDefName = "@vuna@main_run"
-
 -- | 关闭动作入口（`Base.Eff.runPure : Eff [] a -> a`）的 canonical 名（协议常量）。
 effRunName : String
 effRunName = "Base.Eff.runPure"
@@ -374,9 +368,9 @@ effDefaultInstance = "main"
 -- ---------------------------------------------------------------
 -- 特权边界（F3 P2）：宿主层模块与执行入口
 -- ---------------------------------------------------------------
--- | `unsafe` 定义级信任点名单里登记的执行入口别名（`runIO = prim_runIO`）。
+-- | `unsafe` 定义级信任点名单里登记的执行入口别名（`runPure = prim_runIO`）。
 hostUnsafeExecutorName : String
-hostUnsafeExecutorName = "Base.IO.Host.runIO"
+hostUnsafeExecutorName = "Base.Host.runIO"
 
 -- | prelude 类型层名字：primitive 类型 + 内建类型构造子 + 内建效应类型 IO
 -- （禁止重定义 + Loader 放行）。
@@ -462,7 +456,7 @@ data IntrinsicOp : Type where
 -- 是否对用户源码可见（False = 只供 codegen 映射的内部名）。
 -- | 内建声明：名字、签名形状、interp 归约标签、所需能力、runtime 表达式、可见性。
 record Intrinsic where
-  -- | 内建的源码名字（如 `+`、`strFromInt`、`prim_print`）。
+  -- | 内建的源码名字（如 `+`、`strFromInt`、`prim_eff_print`）。
   intrinsicName : String
   -- | 签名形状（`IType`）。
   intrinsicSignature : IType
@@ -663,9 +657,9 @@ baseIntrinsics : List Intrinsic
 -- 语义：add/mul 饱和到 max_int，sub 截断到 0，div 除零与 Int 同文案失败。
 -- IO 代数（M37 / C1 过渡）：`IO` 是编译器内建效应类型，构造/绑定/执行是内建原语。
 -- 这里的 runtime 文本是**内建模式**（IO = 裸 thunk `int -> 'a`）的实现；
--- M38：运行时诊断原语。`prim_eprint` 写 stderr 并 flush（报告器/调试输出用）；
--- `prim_fail` 抛 Failure（报告器把它渲染成 "vuna: runtime error: ..."）。`prim_eprint`
--- 已被 `Base.IO.Host.eprint` 使用；`prim_fail` 供工具链的 fuel 耗尽路径使用。
+-- M38：运行时诊断原语。`prim_eff_eprint` 写 stderr 并 flush（报告器/调试输出用）；
+-- `prim_fail` 抛 Failure（报告器把它渲染成 "vuna: runtime error: ..."）。`prim_eff_eprint`
+-- 已被 `Base.Host.eprint` 使用；`prim_fail` 供工具链的 fuel 耗尽路径使用。
 -- 内部 cast（`visible = False`）：只由精化器插入，runtime 是 OCaml 的 `%identity`；
 -- 运行时位置的不透明擦除依赖值靠它进出（见 docs/reference/effects.md §5/§6）。
 -- 运行时续延（Layer 1）：一次性 effect handler。两者都要求 `unsafe` 能力，
@@ -676,8 +670,8 @@ baseIntrinsics : List Intrinsic
 -- W9：单线程 fiber 调度器原语（Base.EffSched 的信任边界；runtime = dtp_sched_*）。
 -- 与 effect 原语一样可见但要求 `unsafe` 能力：只有声明了 unsafe 的包（base）能直调。
 -- 原生睡眠（W10 收尾）：微秒；真实实现是 `Unix.sleepf`（阻塞，非忙等）。
--- 能力 `clock`（与 timeUs 同族）；interp 不归约（OpNone），效果程序只 compile+run。
--- `Base.EffClock` 与 `Base.IO.Host.sleepMicros` 都已直接使用它（`spinMicros` 已删除）。
+-- 能力 `clock`（与 effTimeUs 同族）；interp 不归约（OpNone），效果程序只 compile+run。
+-- `Base.EffClock` 与 `Base.Host.sleepMicros` 都已直接使用它（`spinMicros` 已删除）。
 -- F3 B：语言级调试构造（无能力位；assert/todo 由 Resolve 在 release 构建拒绝）。
 -- D23：`+ - * /` 只作为 codegen / interp 的映射目标（源码里的 `+` 等已由 Loader
 -- 换成 `Base.Num` 的方法别名，精化期再特化回这四个内建），因此不再对用户源码可见。

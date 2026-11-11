@@ -3,7 +3,7 @@
 -- （open-row + Monad 字典 meta 未从期望类型早解）；拆分后语义/操作顺序不变。
 import Base.Eff
 import Base.EffFs
-import Base.IO.Host
+import Base.Host
 
 dir : String
 dir = "/tmp/vuna_w10_fs"
@@ -36,7 +36,8 @@ inspectFs written = do
   files <- fsReadDir "real" dir
   _ <- fsRemoveFile "real" pathA
   exists2 <- fsFileExists "real" pathA
-  pure (strFromInt written ++ ":" ++ content ++ ":" ++ strFromInt size ++ ":" ++ strFromInt (b2i isdir) ++ ":" ++ join "," files ++ ":" ++ strFromInt (b2i exists2))
+  pure
+    (strFromInt written ++ ":" ++ content ++ ":" ++ strFromInt size ++ ":" ++ strFromInt (b2i isdir) ++ ":" ++ join "," files ++ ":" ++ strFromInt (b2i exists2))
 
 prog : Eff [Fs "real"] String
 prog = do
@@ -44,7 +45,8 @@ prog = do
   result <- inspectFs written
   pure result
 
-main : IO Int
-main =
-  prim_bindIO (runIOAnswer (handleFsIO "real" prog))
-    (\summary => prim_bindIO (print (summary ++ "\n")) (\_ => prim_pureIO 0))
+main : Eff [] Int
+main = do
+  summary <- runFs "real" prog
+  _ <- print (summary ++ "\n")
+  pure 0

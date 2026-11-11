@@ -8,7 +8,7 @@ swap : Pair a b -> Pair b a
 swap p = Pair { fst = p.snd, snd = p.fst }
 
 r : Pair Int Int
-r = swap (Pair { fst = 1, snd = 41 })
+r = swap Pair { fst = 1, snd = 41 }
 
 main : Int
 main = r.fst + r.snd

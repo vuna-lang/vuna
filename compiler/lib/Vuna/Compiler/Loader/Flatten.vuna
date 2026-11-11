@@ -23,7 +23,7 @@ module Vuna.Compiler.Loader.Flatten
 -- 旧的历史顺序拼接/flatten 死路径已删除，DT 精化由 `Driver.Dt` 按
 -- 「依赖序列 + 入口声明」拼接。
 import Base.List
-import Base.IO.Host
+import Base.Host
 import Vuna.Compiler.CacheFormat
 import Vuna.Compiler.Loader.Diagnostics
 import Vuna.Compiler.Common
@@ -60,7 +60,7 @@ astCacheSchema = "vuna-ast-cache 7"
 astCacheDir : String
 astCacheDir =
   let
-    base = runIO (prim_getenv "TMPDIR")
+    base = runPure (prim_eff_getenv "TMPDIR")
   in "${if base == "" then "/tmp" else base}/vuna-cache/ast"
 
 astKeyOf : String -> String -> String
@@ -114,8 +114,8 @@ storeAstCache cpath src parsed =
   let
     _ = ensureDirPath astCacheDir
     _ =
-      runIO
-        (prim_writeFileAtomic cpath (frameEncode astCacheSchema (prim_marshal (AstCacheEntry src parsed))))
+      runPure
+        (prim_eff_writeFileAtomic cpath (frameEncode astCacheSchema (prim_marshal (AstCacheEntry src parsed))))
   in parsed
 
 ensureDirPath : String -> Int
@@ -124,11 +124,11 @@ ensureDirPath path = ensureDirPathFuel 256 path
 ensureDirPathFuel : Int -> String -> Int
 ensureDirPathFuel fuel path = if fuel <= 0 then 0
 else if path == "" || path == "." || path == "/" then 0
-else if runIO (prim_fileExists path) then 0
+else if runPure (prim_eff_fileExists path) then 0
 else
   let
     _ = ensureDirPathFuel (fuel - 1) (parentOfPath path)
-  in runIO (prim_makeDir path)
+  in runPure (prim_eff_makeDir path)
 
 parseFileWithPath : String -> String -> Check SourceFile
 parseFileWithPath path src =
@@ -662,7 +662,7 @@ else case findModule modules name of
   in let
     root = secondOf found
     _ = note "parse-module=${name}"
-  in Vuna.Compiler.Common.bind (parseFileWithPath path (runIO (prim_readFile path))) (\src => case src of
+  in Vuna.Compiler.Common.bind (parseFileWithPath path (runPure (prim_eff_readFile path))) (\src => case src of
     SourceFile hdr imports fixities decls => Vuna.Compiler.Common.bind (validateModuleHeader name hdr) (\_ => Vuna.Compiler.Common.bind (validateImports name imports) (\_ => Vuna.Compiler.Common.bind (implicitPrelude roots (rootName root) name imports) (\implicit => Vuna.Compiler.Common.bind (loadAll (fuel - 1) roots selfPriv (rootName root) modules (name :: stack) (append imports implicit)) (\modules2 => Vuna.Compiler.Common.bind (computeExports modules2 name hdr imports decls) (\exports => let
       visible =
         dedupeFixities (append fixities (visibleFixitiesOf modules2 (append imports implicit)))
@@ -691,7 +691,7 @@ loadProjectWithPreloaded : PackageContext -> String -> List Module -> Check Proj
 loadProjectWithPreloaded ctx entry preloaded =
   let
     _ = resetWarnings 0
-  in if runIO (prim_fileExists entry) then Vuna.Compiler.Common.bind (parseFileWithPath entry (runIO (prim_readFile entry))) (\src => case src of
+  in if runPure (prim_eff_fileExists entry) then Vuna.Compiler.Common.bind (parseFileWithPath entry (runPure (prim_eff_readFile entry))) (\src => case src of
     SourceFile hdr imports fixities decls => case hdr of
       Just (ModDecl dname hasList items sp) => ldErr1 (ModuleHeaderInEntryFile entry) entry
       Nothing =>

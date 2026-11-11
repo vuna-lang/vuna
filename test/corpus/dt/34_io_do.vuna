@@ -1,8 +1,8 @@
 -- M37：IO 是内建效应类型（没有构造器）；do 块由 loader 降级到 bind/pure，
 -- 实例来自 Base.IO，main 钩子是 `v_main 0`。
-import Base.IO
+import Base.Host
 
-main : IO Int
+main : Eff [] Int
 main = do
   x <- pure 41
   pure (x + 1)

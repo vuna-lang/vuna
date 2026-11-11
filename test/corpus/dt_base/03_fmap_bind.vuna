@@ -1,5 +1,5 @@
 -- M21：Functor / Monad 方法投影经 import Base.IO 可见（fmap / bind / pure）。
-import Base.IO
+import Base.Host
 
-main : IO Int
+main : Eff [] Int
 main = fmap (\x => x + 1) (pure 41) >>= (\y => pure y)

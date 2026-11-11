@@ -3,7 +3,7 @@
 -- mock 的 WriteFile/ReadFile 是固定答案（与 clock/env mock 同一风格）。
 import Base.Eff
 import Base.EffFs
-import Base.IO.Host
+import Base.Host
 import Base.List
 
 dir : String
@@ -42,7 +42,9 @@ mopH op k = case op of
   FileMtime p => k 0
   FileSize p => k 42
 
-main : IO Int
-main =
-  prim_bindIO (print ("mock " ++ runPure (handleFs "mock" mret mopH (prog "mock")) ++ "\n"))
-    (\_ => prim_bindIO (runIOAnswer (handleFsIO "real" (prog "real"))) (\real => prim_bindIO (print ("real " ++ real ++ "\n")) (\_ => prim_pureIO 0)))
+main : Eff [] Int
+main = do
+  _ <- print ("mock " ++ runPure (handleFs "mock" mret mopH (prog "mock")) ++ "\n")
+  real <- runFs "real" (prog "real")
+  _ <- print ("real " ++ real ++ "\n")
+  pure 0

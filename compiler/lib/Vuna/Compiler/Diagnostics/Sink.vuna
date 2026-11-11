@@ -19,7 +19,7 @@ module Vuna.Compiler.Diagnostics.Sink
 --   * 只有**单线程**检查路径使用（`vuna check`/LSP 单请求；包级并行用子进程隔离）；
 --   * 每个检查入口（loader）开始时 `resetWarnings`，结束后消费方 `takeWarnings`；
 --   * 不跨请求保留状态。
-import Base.IO.Host
+import Base.Host
 import Base.IORef
 import Base.List
 import Vuna.Compiler.Common
@@ -33,27 +33,27 @@ record WarnBox where
 
 -- | 诊断域实现：Vuna.Compiler.Diagnostics.Sink.warningsRef（目录/模板见 diagnostics.md）。
 warningsRef : IORef WarnBox
-warningsRef = runIO (newRef (WarnBox [] 0))
+warningsRef = runPure (newRef (WarnBox [] 0))
 
 -- | 清空收集器（检查入口调用）。返回 0 便于放在 let 链里。
 resetWarnings : Int -> Int
 resetWarnings _ =
   let
-    _ = runIO (writeRef warningsRef (WarnBox [] 0))
-    _ = runIO (writeRef usedImportsRef (UsedImportsBox [] 0))
-    _ = runIO (writeRef parseErrorsRef (ParseErrorsBox [] 0))
+    _ = runPure (writeRef warningsRef (WarnBox [] 0))
+    _ = runPure (writeRef usedImportsRef (UsedImportsBox [] 0))
+    _ = runPure (writeRef parseErrorsRef (ParseErrorsBox [] 0))
   in 0
 
 -- | 追加一条 warning；返回 0 便于放在 let 链里。
 emitWarning : Diagnostic -> Int
-emitWarning d = runIO (modifyRef warningsRef (\b => WarnBox (append b.warnBoxItems [d]) 0))
+emitWarning d = runPure (modifyRef warningsRef (\b => WarnBox (append b.warnBoxItems [d]) 0))
 
 -- | 取走当前全部 warning（读取后清空，避免下一次检查串扰）。
 takeWarnings : Int -> List Diagnostic
 takeWarnings _ =
   let
-    b = runIO (readRef warningsRef)
-    _ = runIO (writeRef warningsRef (WarnBox [] 0))
+    b = runPure (readRef warningsRef)
+    _ = runPure (writeRef warningsRef (WarnBox [] 0))
   in dedupeWarnings b.warnBoxItems
 
 -- | 诊断域实现：Vuna.Compiler.Diagnostics.Sink.containsDiag（目录/模板见 diagnostics.md）。
@@ -74,7 +74,7 @@ record UsedImportsBox where
 
 -- | 诊断域实现：Vuna.Compiler.Diagnostics.Sink.usedImportsRef（目录/模板见 diagnostics.md）。
 usedImportsRef : IORef UsedImportsBox
-usedImportsRef = runIO (newRef (UsedImportsBox [] 0))
+usedImportsRef = runPure (newRef (UsedImportsBox [] 0))
 
 -- | 诊断域实现：Vuna.Compiler.Diagnostics.Sink.memUsedImport（目录/模板见 diagnostics.md）。
 memUsedImport : String -> List String -> Bool
@@ -84,19 +84,19 @@ memUsedImport n (x :: xs) = if n == x then True else memUsedImport n xs
 -- | 诊断域实现：Vuna.Compiler.Diagnostics.Sink.markImportUsed（目录/模板见 diagnostics.md）。
 markImportUsed : String -> Int
 markImportUsed name =
-  runIO
+  runPure
     (modifyRef usedImportsRef (\b => if memUsedImport name b.usedImportNames then b else UsedImportsBox (append b.usedImportNames [name]) 0))
 
 -- | 诊断域实现：Vuna.Compiler.Diagnostics.Sink.takeUsedImports（目录/模板见 diagnostics.md）。
 takeUsedImports : Int -> List String
 takeUsedImports _ =
   let
-    b = runIO (readRef usedImportsRef)
+    b = runPure (readRef usedImportsRef)
   in b.usedImportNames
 
 -- | 清空 import 使用集合（按检查单元/模块重置）。
 resetUsedImports : Int -> Int
-resetUsedImports _ = runIO (writeRef usedImportsRef (UsedImportsBox [] 0))
+resetUsedImports _ = runPure (writeRef usedImportsRef (UsedImportsBox [] 0))
 
 -- 解析阶段的非致命诊断（parser 恢复后收集；CLI 一次性打印全部）。
 record ParseErrorsBox where
@@ -104,28 +104,28 @@ record ParseErrorsBox where
   parseErrorsTag : Int
 
 parseErrorsRef : IORef ParseErrorsBox
-parseErrorsRef = runIO (newRef (ParseErrorsBox [] 0))
+parseErrorsRef = runPure (newRef (ParseErrorsBox [] 0))
 
 -- | 解析阶段记录一条非致命诊断。
 emitParseError : Diagnostic -> Int
 emitParseError d =
-  runIO (modifyRef parseErrorsRef (\b => ParseErrorsBox (append b.parseErrors [d]) 0))
+  runPure (modifyRef parseErrorsRef (\b => ParseErrorsBox (append b.parseErrors [d]) 0))
 
 -- | 取走解析阶段收集的诊断（不清空）。
 takeParseErrors : Int -> List Diagnostic
 takeParseErrors _ =
   let
-    b = runIO (readRef parseErrorsRef)
-    _ = runIO (writeRef parseErrorsRef (ParseErrorsBox [] 0))
+    b = runPure (readRef parseErrorsRef)
+    _ = runPure (writeRef parseErrorsRef (ParseErrorsBox [] 0))
   in b.parseErrors
 
 -- | 查看解析阶段收集的诊断（不清空）。
 peekParseErrors : Int -> List Diagnostic
 peekParseErrors _ =
   let
-    b = runIO (readRef parseErrorsRef)
+    b = runPure (readRef parseErrorsRef)
   in b.parseErrors
 
 -- | 清空解析阶段收集的诊断。
 resetParseErrors : Int -> Int
-resetParseErrors _ = runIO (writeRef parseErrorsRef (ParseErrorsBox [] 0))
+resetParseErrors _ = runPure (writeRef parseErrorsRef (ParseErrorsBox [] 0))

@@ -20,7 +20,7 @@ module Vuna.Interp
 -- test runner）负责从文件、cwd 或包构造上下文。
 --
 -- 求值是**纯**的：不执行效果。`main : IO a` 只对纯动作（例如 `pure n`）能求出值；
--- 真正带 `prim_print` / 文件效果的 `main` 请用 `compile` + 运行产物（见 docs/reference/primitives.md 的 interp 归约边界）。
+-- 真正带 `prim_eff_print` / 文件效果的 `main` 请用 `compile` + 运行产物（见 docs/reference/primitives.md 的 interp 归约边界）。
 -- 该模块只被 CLI / REPL / test runner 使用，不属于编译器 seed 闭包。
 --
 -- M30：新增两条工具链能力（仍然不属于编译器 seed 闭包）：
@@ -32,7 +32,7 @@ import Vuna.Compiler.Common
 import Vuna.Compiler.Packages.Pkg
 import Vuna.Compiler.Driver.Dt
 import Vuna.Compiler.Driver.Compile
-import Base.IO.Host
+import Base.Host
 
 interpretFile : PackageContext -> String -> String
 interpretFile ctx entry = case dtEvalFile ctx entry of
@@ -84,7 +84,7 @@ checkProgram ctx program = dtCheckSource ctx "<repl>" program
 -- 效果程序执行（REPL 的 IO 表达式 + `vuna test` 的 IO 测试）
 --
 -- 临时包布局（每次执行一个，结束后 `rm -rf` 清理）：
---   <TMPDIR>/vuna-effect-<timeUs>/
+--   <TMPDIR>/vuna-effect-<effTimeUs>/
 --     vuna.toml          -- 包名固定 vuna-effect；[dependencies] 复用调用方上下文的
 --                           依赖根（绝对路径）；[capabilities].effects 复制调用方本包
 --                           的能力声明（否则入口里的 prim_* 会被能力检查拒绝）
@@ -105,7 +105,7 @@ effectBinaryName = "vuna-effect"
 tempBase : Int -> String
 tempBase _ =
   let
-    env = runIO (prim_getenv "TMPDIR")
+    env = runPure (prim_eff_getenv "TMPDIR")
   in if env == "" then "/tmp"
   else if endsWith "/" env then substring 0 (byteLength env - 1) env else env
 
@@ -119,7 +119,7 @@ pickTempDir base [] = base
 pickTempDir base (n :: rest) =
   let
     candidate = if n == 0 then base else "${base}-${n}"
-  in if runIO (prim_fileExists candidate) then pickTempDir base rest else candidate
+  in if runPure (prim_eff_fileExists candidate) then pickTempDir base rest else candidate
 
 -- 上下文依赖根 → 临时包的 [dependencies] 条目（包名 → 包目录）。
 -- base-only 上下文（包名为空）只有 base 一个根，必须全部带上；普通上下文跳过第一个
@@ -139,7 +139,7 @@ rootPackageDir dir = if endsWith "/lib" dir then substring 0 (byteLength dir - 4
 
 -- 依赖路径必须是绝对路径（临时包不在调用方的工作目录下，相对路径会解析错）。
 absoluteDir : String -> String
-absoluteDir dir = if startsWith "/" dir then dir else "${runIO prim_getcwd}/${dir}"
+absoluteDir dir = if startsWith "/" dir then dir else "${runPure prim_eff_getcwd}/${dir}"
 
 tomlQuote : String -> String
 tomlQuote s = "\"${tomlEscaped (strUnpack s)}\""
@@ -181,7 +181,8 @@ ${depsSection (effectDeps ctx)}${capsSection (contextCapabilities ctx)}"""
 
 -- `ocamlopt` 是否在 PATH 里（链接阶段需要）。探针的 stdout/stderr 全部丢弃。
 hasOcamlopt : Int -> Bool
-hasOcamlopt _ = runIO (prim_runIn "." ["sh", "-c", "command -v ocamlopt >/dev/null 2>&1"]) == 0
+hasOcamlopt _ =
+  runPure (prim_eff_runIn "." ["sh", "-c", "command -v ocamlopt >/dev/null 2>&1"]) == 0
 
 noOcamloptMessage : String
 noOcamloptMessage =
@@ -190,13 +191,13 @@ noOcamloptMessage =
 cleanupTemp : String -> Int -> Int
 cleanupTemp dir code =
   let
-    _ = runIO (prim_runIn "/" ["rm", "-rf", dir])
+    _ = runPure (prim_eff_runIn "/" ["rm", "-rf", dir])
   in code
 
 cleanupErr : String -> String -> Check Int
 cleanupErr dir e =
   let
-    _ = runIO (prim_runIn "/" ["rm", "-rf", dir])
+    _ = runPure (prim_eff_runIn "/" ["rm", "-rf", dir])
   in err e
 
 -- 把带 main 的入口源码编译成临时包里的可执行文件并运行，返回进程退出码。
@@ -205,21 +206,22 @@ cleanupErr dir e =
 runEffectProgram : PackageContext -> String -> Bool -> Check Int
 runEffectProgram ctx source printResult =
   let
-    dir = freshTempDir "${tempBase 0}/vuna-effect-${runIO timeUs}"
+    dir = freshTempDir "${tempBase 0}/vuna-effect-${runPure effTimeUs}"
     entry = "${dir}/app/Main.vuna"
     outDir = "${dir}/.output"
-    _ = runIO (prim_makeDir dir)
-    _ = runIO (prim_makeDir "${dir}/app")
-    _ = runIO (prim_writeFile "${dir}/vuna.toml" (effectManifest ctx))
-    _ = runIO (prim_writeFile entry source)
+    _ = runPure (prim_eff_makeDir dir)
+    _ = runPure (prim_eff_makeDir "${dir}/app")
+    _ = runPure (prim_eff_writeFile "${dir}/vuna.toml" (effectManifest ctx))
+    _ = runPure (prim_eff_writeFile entry source)
   in case contextForDir dir of
     ErrC e => cleanupErr dir (diagText e)
     OkC ctxTmp => case compileToDir ctxTmp entry printResult outDir of
       ErrC e => cleanupErr dir (diagText e)
       OkC _ =>
         let
-          _ = runIO (prim_makeDir "${outDir}/bin")
+          _ = runPure (prim_eff_makeDir "${outDir}/bin")
         in if hasOcamlopt 0 then case runBuildScript outDir "bin/${effectBinaryName}" effectBinaryName of
           ErrC e => cleanupErr dir (diagText e)
-          OkC _ => OkC (cleanupTemp dir (runIO (prim_runIn outDir ["bin/${effectBinaryName}"])))
+          OkC _ =>
+            OkC (cleanupTemp dir (runPure (prim_eff_runIn outDir ["bin/${effectBinaryName}"])))
         else cleanupErr dir noOcamloptMessage

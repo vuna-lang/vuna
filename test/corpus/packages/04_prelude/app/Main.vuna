@@ -8,5 +8,5 @@ prog = do
   _ <- consolePrint "real" (join "-" (map strFromInt (map (\x => x + 1) [1, 2])))
   pure 0
 
-main : IO Int
+main : Eff [] Int
 main = runConsole "real" prog

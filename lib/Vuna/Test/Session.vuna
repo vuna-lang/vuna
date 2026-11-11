@@ -15,7 +15,7 @@ module Vuna.Test.Session (Session, sessionCheck, sessionInterp, sessionNew) wher
 --
 -- 会话只服务「正例」（golden 的 check/interp 断言）；负例仍走 CLI，保证 `.check.err`
 -- / `.compile.err` 片段与退出码语义完全一致。
-import Base.IO.Host
+import Base.Host
 import Base.IORef
 import Vuna.Compiler.Common
 import Vuna.Compiler.Driver.Compile
@@ -37,7 +37,7 @@ sessionNew ifaceRoot = Session ifaceRoot "" [] Nothing Nothing
 
 -- 逃生开关：`VUNA_TEST_NO_SESSION=1` 强制回退 CLI 子进程（A/B 排查用）。
 sessionDisabled : Bool
-sessionDisabled = runIO (prim_getenv "VUNA_TEST_NO_SESSION") == "1"
+sessionDisabled = runPure (prim_eff_getenv "VUNA_TEST_NO_SESSION") == "1"
 
 -- 与 `Compile.ifaceCompilerTag` 同口径：版本 + 编译器二进制指纹。
 ifaceTag : String
@@ -62,14 +62,14 @@ readBaseIfaces ifaceRoot baseDir = case readPackageIface (baseIfaceDir ifaceRoot
 ensureSession : IORef Session -> String -> Maybe (List ModuleIface)
 ensureSession ref baseDir =
   let
-    s = runIO (readRef ref)
+    s = runPure (readRef ref)
   in if s.sesDir == baseDir && length s.sesIfaces > 0 then Just s.sesIfaces
   else case readBaseIfaces s.sesRoot baseDir of
     Nothing => Nothing
     Just ifaces => if length ifaces == 0 then Nothing
     else
       let
-        _ = runIO (writeRef ref (Session s.sesRoot baseDir ifaces s.sesAux s.sesEvalAux))
+        _ = runPure (writeRef ref (Session s.sesRoot baseDir ifaces s.sesAux s.sesEvalAux))
       in Just ifaces
 
 -- check：Just (0, "") = 通过；Just (1, 诊断) = 失败；Nothing = 会话不可用（回退 CLI）。
@@ -84,14 +84,14 @@ else case ensureSession ref baseDir of
 sessionCheckIn : IORef Session -> String -> PackageContext -> List ModuleIface -> String -> Maybe (Pair Int String)
 sessionCheckIn ref baseDir ctx ifaces source =
   let
-    text = runIO (readFile source)
-    s = runIO (readRef ref)
+    text = runPure (readFile source)
+    s = runPure (readRef ref)
   in case dtCheckSourceIncremental ctx source text ifaces [] s.sesAux False of
     ErrC e => Just (Pair 1 (diagText e))
     OkC (Pair applied (Pair _ aux)) => if not applied then Nothing
     else
       let
-        _ = runIO (writeRef ref (Session s.sesRoot baseDir ifaces aux s.sesEvalAux))
+        _ = runPure (writeRef ref (Session s.sesRoot baseDir ifaces aux s.sesEvalAux))
       in Just (Pair 0 "")
 
 -- interp：Just (0, 输出) = 求值成功（与 CLI 打印的 trim 后文本一致）；
@@ -107,12 +107,12 @@ else case ensureSession ref baseDir of
 sessionInterpIn : IORef Session -> String -> PackageContext -> List ModuleIface -> String -> Maybe (Pair Int String)
 sessionInterpIn ref baseDir ctx ifaces source =
   let
-    text = runIO (readFile source)
-    s = runIO (readRef ref)
+    text = runPure (readFile source)
+    s = runPure (readRef ref)
   in case dtEvalSourceIncremental ctx source text ifaces s.sesEvalAux of
     ErrC e => Just (Pair 1 (diagText e))
     OkC (Pair applied (Pair out aux)) => if not applied then Nothing
     else
       let
-        _ = runIO (writeRef ref (Session s.sesRoot baseDir ifaces s.sesAux aux))
+        _ = runPure (writeRef ref (Session s.sesRoot baseDir ifaces s.sesAux aux))
       in Just (Pair 0 out)

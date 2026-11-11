@@ -4,7 +4,6 @@ f : Int -> Int
 f x = g x where
   h : Int -> Int
   h y = y * 2
-
   g : Int -> Int
   g y = h y + 1
 
@@ -14,7 +13,6 @@ withSig =
   let
     k : Int
     k = 3
-
     addK : Int -> Int
     addK x = k + x
   in addK 4

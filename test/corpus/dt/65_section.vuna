@@ -29,8 +29,8 @@ xs = (::) 7 [8, 9]
 
 consHead : Int
 consHead = case xs of
-  Cons x rest => x
-  Nil => 0
+  x :: rest => x
+  [] => 0
 
 main : Int
-main = addTwo + leftAdd + rightAdd + consHead + (if eqTrue then 0 else 100) + (2 * (3 + 4))
+main = addTwo + leftAdd + rightAdd + consHead + (if eqTrue then 0 else 100) + 2 * (3 + 4)

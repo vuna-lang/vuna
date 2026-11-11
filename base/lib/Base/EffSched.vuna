@@ -11,7 +11,6 @@ module Base.EffSched
   , forkTaskLin
   , forkTaskWith
   , isCancelled
-  , liftIOEff
   , newScope
   , scopeWait
   , scopeWaitTimeout
@@ -47,7 +46,7 @@ module Base.EffSched
 --   * 超时是**逻辑步数**（调度器步进次数）：`withScopeTimeout n` 在 n 步后取消范围
 --     并返回 `Err "timeout"`（不要求真实 sleep / 时钟）。
 import Base.Eff
-import Base.IO.Host
+import Base.Host
 import Base.Monad
 import Base.Ord
 import Base.Result
@@ -77,11 +76,6 @@ yieldNow = effPrim (\_ => prim_schedYield 0)
 -- | 查询当前纤程是否被请求取消（0/1）。
 isCancelled : {r : Row} -> Eff r Int
 isCancelled = effPrim (\_ => prim_schedIsCancelled 0)
-
--- | 在纤程里执行一个 IO 动作（打印/文件等）。信任边界：内部用 `runIO`；
--- 任务体是 `Eff Nil a`，需要 IO 副作用时经此进入（任务之间仍单线程）。
-liftIOEff : {r : Row} -> {a : Type} -> IO a -> Eff r a
-liftIOEff act = effPrim (\_ => runIO act)
 
 -- | 新建一个作用域（一般经 withScope/withScopeTimeout 使用）。
 newScope : {r : Row} -> Eff r Scope

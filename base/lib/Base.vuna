@@ -5,7 +5,6 @@ module Base
   , module Base.Float
   , module Base.Foldable
   , module Base.Hashable
-  , module Base.IO
   , module Base.Interp
   , module Base.List
   , module Base.Map
@@ -51,4 +50,3 @@ import Base.Traversable
 import Base.Unit
 import Base.Map
 import Base.Monad
-import Base.IO

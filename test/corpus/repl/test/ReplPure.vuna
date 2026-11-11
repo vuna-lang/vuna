@@ -5,5 +5,5 @@ import Base.Eff
 import Base.EffExit
 import ReplGapsPure
 
-main : IO Int
+main : Eff [] Int
 main = runExit "real" (if checks == 0 then pure 0 else exitWith "real" 1)

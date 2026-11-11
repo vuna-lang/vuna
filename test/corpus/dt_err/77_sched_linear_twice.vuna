@@ -8,5 +8,5 @@ bad t = do
   _ <- awaitTaskLin t
   cancelTaskLin t
 
-main : IO Int
+main : Eff [] Int
 main = pure 0

@@ -20,7 +20,7 @@ import Vuna.Compiler.Elab.Meta
 import Vuna.Compiler.Elab.Types
 import Vuna.Compiler.Diagnostics.Warning
 import Base.IORef
-import Base.IO.Host
+import Base.Host
 
 -- 类型级定义的判据：定义**类型** force 后以宇宙收尾（`Type` 或 `... -> Type` 的 Pi 链）。
 -- M38 从 Codegen/Erase 上移到 Elab，成为用量检查与 codegen 分区的共同真源。
@@ -350,24 +350,24 @@ record UseBox where
 
 -- | 进程内 QTT 使用点收集引用。
 useSpansRef : IORef UseBox
-useSpansRef = runIO (newRef (UseBox [] 0))
+useSpansRef = runPure (newRef (UseBox [] 0))
 
 -- | 清空 QTT 使用点（每个定义体检查前调用）。
 resetUseSpans : Int -> Int
-resetUseSpans _ = runIO (writeRef useSpansRef (UseBox [] 0))
+resetUseSpans _ = runPure (writeRef useSpansRef (UseBox [] 0))
 
 -- | 记录一次变量使用点。
 recordUseSpan : String -> Span -> Int
 recordUseSpan name sp =
   let
-    box = runIO (readRef useSpansRef)
-    _ = runIO (writeRef useSpansRef (UseBox (Pair name sp :: box.useItems) box.useTag))
+    box = runPure (readRef useSpansRef)
+    _ = runPure (writeRef useSpansRef (UseBox (Pair name sp :: box.useItems) box.useTag))
   in 0
 
 -- | 取某名字的全部使用点（按出现顺序）。
 usesOf : String -> List Span
 usesOf name =
-  reverse (map secondOf (filter (\p => firstOf p == name) (runIO (readRef useSpansRef)).useItems))
+  reverse (map secondOf (filter (\p => firstOf p == name) (runPure (readRef useSpansRef)).useItems))
 
 -- | 把某名字的使用点挂成 fields.span。
 withUseFields : String -> Diagnostic -> Diagnostic

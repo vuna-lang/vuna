@@ -245,7 +245,7 @@ golden/runtime case 的 codegen 产物按「生成模块集」分桶（`set-<key
   获得 base；
 - 两类上下文都**自动注入 `Prelude`**，因此夹具需要 `show` / `==` / 比较 / `deriving` 时
   直接可用；显式 `import Prelude` 仍合法；
-- 夹具 manifest 都**不声明 `[capabilities]`**：corpus 代码只能经 `Base.IO` 使用效果；能力
+- 夹具 manifest 都**不声明 `[capabilities]`**：corpus 代码只能经 `Base.Host` 使用效果；能力
   正 / 反例在 `packages/{07_effect_capability, 96_effect_no_capability,
   97_unknown_capability}`；
 - `test/corpus/fmt/check.sh` 与主 runner 用同一套约定（`VUNA_BASE` + 目录化 compile），
@@ -254,7 +254,7 @@ golden/runtime case 的 codegen 产物按「生成模块集」分桶（`set-<key
 ## corpus 分类
 
 语言夹具只走 DT：`interp`（DT 精化 + 核心求值）、`check`、`compile` + ocamlopt。
-「只 compile+run、不做 interp 对拍」的夹具（效果程序 `main : IO a`，以及核心求值器不可
+「只 compile+run、不做 interp 对拍」的夹具（效果程序 `main : Eff [] a`，以及核心求值器不可
 归约的夹具：`strUnpack` / `strPack` / `strConcatMany` / `strSubstTemplate`）用
 `<base>.run.out` 表达（原 `.nointerp` 旁标记已删除）。负例 `.check.err` 是稳定诊断子串，
 interp / compile 文案不同时用 `.compile.err`。

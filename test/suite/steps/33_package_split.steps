@@ -43,7 +43,7 @@ read: $TMPDIR/split-01_workspace/Main.ml
 out-contains: Vuna_dHello.v_Vuna_dHello_dhello
 out-contains: Dep.v_Dep_ddepText
 out-contains: Dep.C_Dep_dDepTag_DepTagA
-out-contains: v_main 0
+out-contains: dtp_sched_main
 run: grep -hoE '[A-Z][A-Za-z0-9_]*\.C_[A-Za-z0-9_]+' "$TMPDIR/split-01_workspace"/*.ml | sed -n '1,3p'
 out-contains: .C_
 run: sh -c '! grep -qE "(^|[^A-Za-z0-9_.])v_Vuna_dHello_dhello" "$TMPDIR/split-01_workspace/Main.ml"'

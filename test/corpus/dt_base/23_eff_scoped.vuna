@@ -28,4 +28,5 @@ main = runPure (handleReader "counter" Int (\a => a) opH (do
   case res of
     Ok n => pure n
     Err _ => pure 0
-))
+)
+)

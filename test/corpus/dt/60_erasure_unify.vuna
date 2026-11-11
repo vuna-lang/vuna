@@ -30,7 +30,7 @@ unbox b = case b of
   MkBox a x => x
 
 onlyJust : Maybe Int -> Int
-onlyJust m = fromMaybe 0 (m >>= \x => Just (x + 1))
+onlyJust m = fromMaybe 0 (m >>= (\x => Just (x + 1)))
 
 main : Int
 main = unbox (applyType Box Int (MkBox Int (onlyJust (Just 40))))

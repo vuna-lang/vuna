@@ -2,13 +2,13 @@
 -- `throw` 被作用域 `catch` 恢复；结果用 `Result` 观察。
 import Base.Eff
 import Base.EffError
-import Base.IO.Host
+import Base.Host
 import Base.Result
 
 prog : Eff [Error "e"] Int
 prog = throw "e" "boom"
 
-main : IO Int
+main : Eff [] Int
 main = do
   _ <- print "error\n"
   r <- pure (runPure (runError "e" (catch "e" prog (\msg => pure 7))))

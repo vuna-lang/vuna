@@ -11,7 +11,7 @@ import Vuna.Cli.Args
 import Vuna.FixityEnv
 import Vuna.Lint.Fix
 import Vuna.Lint.Rules
-import Base.IO.Host
+import Base.Host
 
 printFinding : String -> Bool -> Finding -> Int
 printFinding path fixMode f =
@@ -20,7 +20,7 @@ printFinding path fixMode f =
     text =
       "${path}:${f.findingLine}:${f.findingCol}: [${f.findingCode}] ${f.findingRule}: ${f.findingMessage}${suffix}\n"
   in let
-    _ = runIO (prim_print text)
+    _ = runPure (prim_eff_print text)
   in 0
 
 printFindings : String -> Bool -> List Finding -> Int
@@ -37,7 +37,7 @@ lintUsage = "usage: vuna lint [--fix] <file.vuna>...\n"
 lintUsageError : Int -> Int
 lintUsageError _ =
   let
-    _ = runIO (prim_print lintUsage)
+    _ = runPure (prim_eff_print lintUsage)
   in 2
 
 reportFindings : String -> Bool -> List Finding -> Int
@@ -50,27 +50,27 @@ fixReport : String -> String -> List Finding -> List FixityDecl -> Int
 fixReport path source findings programFixities = case fixLoop programFixities source findings 8 0 of
   ErrC e =>
     let
-      _ = runIO (prim_print "${path}: error: ${diagText e}\n")
+      _ = runPure (prim_eff_print "${path}: error: ${diagText e}\n")
     in 2
   OkC (Pair count newSource) => if count == 0 then reportFindings path True findings
   else
     let
-      _ = runIO (prim_writeFile path newSource)
+      _ = runPure (prim_eff_writeFile path newSource)
     in case lintSourceWith programFixities newSource of
       ErrC e =>
         let
-          _ = runIO (prim_print "${path}: error: ${diagText e}\n")
+          _ = runPure (prim_eff_print "${path}: error: ${diagText e}\n")
         in 2
       OkC remaining =>
         let
-          _ = runIO (prim_print "${path}: fixed ${count} finding(s)\n")
+          _ = runPure (prim_eff_print "${path}: fixed ${count} finding(s)\n")
         in reportFindings path True remaining
 
 lintExisting : Bool -> String -> String -> List FixityDecl -> Int
 lintExisting doFix path source programFixities = case lintSourceWith programFixities source of
   ErrC e =>
     let
-      _ = runIO (prim_print "${path}: error: ${diagText e}\n")
+      _ = runPure (prim_eff_print "${path}: error: ${diagText e}\n")
     in 2
   OkC findings =>
     if doFix then fixReport path source findings programFixities
@@ -82,7 +82,7 @@ lintOne : Bool -> FixityEnv -> String -> Pair FixityEnv Int
 lintOne doFix env path = case readText path of
   ErrC e =>
     let
-      _ = runIO (prim_print "error: ${diagText e}\n")
+      _ = runPure (prim_eff_print "error: ${diagText e}\n")
     in Pair env 2
   OkC source =>
     let
@@ -91,7 +91,8 @@ lintOne doFix env path = case readText path of
     in case secondOf looked of
       ErrC e =>
         let
-          _ = runIO (prim_print "${path}: cannot load package fixity context: ${diagText e}\n")
+          _ =
+            runPure (prim_eff_print "${path}: cannot load package fixity context: ${diagText e}\n")
         in Pair env2 2
       OkC programFixities => Pair env2 (lintExisting doFix path source programFixities)
 
@@ -109,7 +110,7 @@ runLint : List String -> Int
 runLint args = case parseToolArgs "vuna lint" [BoolFlag "fix"] args of
   ErrC e =>
     let
-      _ = runIO (prim_print "error: ${diagText e}\n")
+      _ = runPure (prim_eff_print "error: ${diagText e}\n")
     in 2
   OkC parsed => case parsed.positionals of
     [] => lintUsageError 0

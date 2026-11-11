@@ -5,11 +5,11 @@ module Vuna.Compiler.Debug (debugOn, note, noteInt, releaseOn, sampleKey, stamp,
 -- 开关：`vuna ... --debug-perf`（任意子命令后加；`Vuna.Cli.runCli` 先剥掉再分发），
 -- 或环境变量 `VUNA_DEBUG_PERF=1`（`vuna-compiler` 等不经过 `Vuna.Cli` 参数解析的入口用）。
 -- 打开后输出两类行：
---   `PERF <label> <us>`   内建 `timeUs` 的微秒时间戳（`Unix.gettimeofday`）。相邻两行
+--   `PERF <label> <us>`   内建 `effTimeUs` 的微秒时间戳（`Unix.gettimeofday`）。相邻两行
 --                         相减即阶段耗时；打点本身 ~1µs，所以可以逐定义、逐阶段打点
 --                         （旧实现 shell `date` 要 5ms，只能 1/64 采样）；
 --   `DEBUG <text>`        任意诊断文本（表规模等）。
--- 关闭时每次调用只花一次 `prim_getArgs`（微秒级），可长期留在生产代码里。
+-- 关闭时每次调用只花一次 `prim_eff_getArgs`（微秒级），可长期留在生产代码里。
 --
 -- 纪律：vuna 的参数是**严格求值**的，`note ("x=" ++ showTerm t)` 在 debug 关闭时也会先
 -- 拼好字符串（`showTerm` 可能极贵，甚至扫全表）。诊断构造必须写成
@@ -18,24 +18,24 @@ module Vuna.Compiler.Debug (debugOn, note, noteInt, releaseOn, sampleKey, stamp,
 import Vuna.Compiler.Common
 import Base.HashMap
 import Base.Hashable
-import Base.IO.Host
+import Base.Host
 
 args : List String
 args = runIO prim_getArgs
 
 debugOn : Bool
-debugOn = memName "--debug-perf" args || runIO (prim_getenv "VUNA_DEBUG_PERF") == "1"
+debugOn = memName "--debug-perf" args || runPure (prim_eff_getenv "VUNA_DEBUG_PERF") == "1"
 
 -- | release 构建开关：`--release`（任意位置；`Vuna.Cli` 先剥掉再分发）或环境变量
 -- `VUNA_RELEASE=1`。release 下 `assert` / `todo` 这类**只在 debug 模式有意义**的
 -- 调试构造被 `Loader.Resolve` 拒绝（见 docs/reference/debugging.md §3）。
 releaseOn : Bool
-releaseOn = memName "--release" args || runIO (prim_getenv "VUNA_RELEASE") == "1"
+releaseOn = memName "--release" args || runPure (prim_eff_getenv "VUNA_RELEASE") == "1"
 
 note : String -> Int
 note msg = if debugOn then
   let
-    _ = runIO (prim_print "DEBUG ${msg}\n")
+    _ = runPure (prim_eff_print "DEBUG ${msg}\n")
   in 0
 else 0
 
@@ -45,7 +45,7 @@ noteInt label n = note "${label}=${n}"
 stampNow : String -> Int
 stampNow label =
   let
-    _ = runIO (prim_print "PERF ${label} ${runIO timeUs}\n")
+    _ = runPure (prim_eff_print "PERF ${label} ${runIO timeUs}\n")
   in 0
 
 stamp : String -> Int

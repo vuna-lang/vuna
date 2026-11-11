@@ -2,7 +2,7 @@ module Main where
 
 echoIt : Int
 echoIt = let
-  _ = prim_print "x"
+  _ = prim_eff_print "x"
   in 0
 
 main : Int

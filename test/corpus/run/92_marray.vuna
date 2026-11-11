@@ -1,8 +1,8 @@
-import Base.IO
+import Base.Host
 -- M33 W3：IO 内的可变数组 MArray（new / write / read / length）。
 import Base.MArray
 
-main : IO Int
+main : Eff [] Int
 main = do
   a <- new 3 0
   _ <- write a 0 7

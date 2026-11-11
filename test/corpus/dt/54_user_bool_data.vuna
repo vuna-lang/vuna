@@ -12,4 +12,4 @@ neg b = case b of
   No => Yes
 
 main : Int
-main = if (neg Yes == No) then 1 else 2
+main = if neg Yes == No then 1 else 2

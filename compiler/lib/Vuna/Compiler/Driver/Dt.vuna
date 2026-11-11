@@ -70,7 +70,7 @@ import Vuna.Compiler.Codegen.Decl
 import Vuna.Compiler.Driver.Cache
 import Vuna.Compiler.Driver.Iface
 import Vuna.Compiler.Driver.PerfCache
-import Base.IO.Host
+import Base.Host
 import Vuna.Compiler.Driver.Split
 
 -- M34.5 模块级接口（S1）：一次成功 check 的**完整输入面**。接口摘要要按模块归属切
@@ -158,14 +158,14 @@ dtCheck ctx entry = dtCheckDecls (dtLoad ctx entry)
 -- 但**不**跑 `warnUnusedDefsIn`（库包导出面未知，会把导出函数全报成未使用），
 -- 也不写 iface / check 缓存。无头文件仍走入口语义（`dtCheck`）。
 dtFileHasModuleHeader : String -> Bool
-dtFileHasModuleHeader path = case parseFileWithPath path (runIO (prim_readFile path)) of
+dtFileHasModuleHeader path = case parseFileWithPath path (runPure (prim_eff_readFile path)) of
   OkC (SourceFile (Just _) _ _ _) => True
   _ => False
 
 -- | 按库模块检查单个文件（调用方已确认带 `module` 头）。
 dtCheckModuleFile : PackageContext -> String -> Check (List String)
 dtCheckModuleFile ctx path =
-  Vuna.Compiler.Common.bind (dtCheckSourceChecked ctx path (runIO (prim_readFile path)))
+  Vuna.Compiler.Common.bind (dtCheckSourceChecked ctx path (runPure (prim_eff_readFile path)))
     (\_ => OkC [])
 
 -- 核心求值器：精化后用 NbE + delta 求 main 的值并 show（与 codegen 结果对照）。
@@ -603,7 +603,7 @@ evalDtMain program = evalDtMainCore program
 --   - 纯 `main : Int/Nat/String/Bool/Float`：核心求值并展示值（Float 用
 --     `string_of_float` 规范文本，与产物一致）；
 --   - `main : IO a`：**一律报错**。核心求值器是纯的、不执行效果；即使动作结果不依赖
---     效果（`do prim_print "hi"; pure 7`），效果也会被静默丢弃——误导用户。所以不做
+--     效果（`do prim_eff_print "hi"; pure 7`），效果也会被静默丢弃——误导用户。所以不做
 --     「尝试归约、卡住才报错」这种不可靠的判定。效果程序只走 compile + 运行
 --     （夹具用 `.nointerp` 标记）。IO 的识别按 main 的**类型**（M37 起是内建类型名 `IO`）。
 -- | 核心求值器对 `main` 的求值边界：纯 Int/String/Bool/Nat/Float 归约并展示，`IO a` 一律报错。
@@ -1152,7 +1152,7 @@ unitCacheStore dir keys name sf = case lookupPair name keys of
 -- 含模块声明 Marshal 哈希（span 里的源路径也在内）+ 传递依赖单元 key + printResult，
 -- 文件头 tag 含 schema/版本/编译器二进制指纹；坏文件由 framing 拒绝重算。
 unitCacheEnabled : Bool
-unitCacheEnabled = runIO (prim_getenv "VUNA_UNIT_CACHE") /= "0"
+unitCacheEnabled = runPure (prim_eff_getenv "VUNA_UNIT_CACHE") /= "0"
 
 splitGenerateCached : PackageContext -> String -> List Module -> List (Pair String (List Decl)) -> List Decl -> DtProgram -> Bool -> Check (List SplitFile)
 splitGenerateCached ctx entry modules moduleParts entryDecls prog printResult =

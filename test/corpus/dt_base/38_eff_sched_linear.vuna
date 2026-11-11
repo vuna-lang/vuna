@@ -9,9 +9,9 @@ prog = withScope (\sc => do
   pure r
 )
 
-main : IO Int
+main : Eff [] Int
 main = do
-  r <- runIOEff prog
+  r <- prog
   case r of
     Ok n => pure n
     Err _ => pure 0

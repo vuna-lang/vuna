@@ -2,30 +2,29 @@
 -- 预算耗尽先取消范围（子任务在挂起点清理），再返回 Err "timeout"。
 import Base.Eff
 import Base.EffSched
-import Base.IO.Host
+import Base.Host
 import Base.Result
 
 tick : List Int -> Eff [] Int
 tick [] = pure 0
 tick (_ :: rest) = do
-  _ <- liftIOEff (println "tick")
+  _ <- raise (println "tick")
   st <- yieldNow
-  if st <= 0 then tick rest else do
-    _ <- liftIOEff (println "cleanup")
+  if st <= 0 then tick rest
+  else do
+    _ <- raise (println "cleanup")
     pure 1
 
 prog : Eff [] (Result Int)
-prog =
-  withScopeTimeout 4
-    (\sc => do
-      _ <- forkTask sc (tick [0, 0, 0, 0, 0, 0, 0, 0])
-      _ <- liftIOEff (println "body-done")
-      pure (Ok 0)
-    )
+prog = withScopeTimeout 4 (\sc => do
+  _ <- forkTask sc (tick [0, 0, 0, 0, 0, 0, 0, 0])
+  _ <- raise (println "body-done")
+  pure (Ok 0)
+)
 
-main : IO Int
+main : Eff [] Int
 main = do
-  r <- runIOEff prog
+  r <- prog
   case r of
     Ok n => pure n
     Err _ => pure 7

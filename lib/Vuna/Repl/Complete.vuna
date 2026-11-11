@@ -17,7 +17,7 @@ module Vuna.Repl.Complete (argCompletions, argKindOf, moduleNameOf, splitLastSla
 -- `test/corpus/repl/app/Main.vuna` 直接单测；多匹配补最长公共前缀、唯一匹配直接补全的语义由
 -- `Vuna.Repl.Edit` 保持（本模块只给候选池）。
 import Vuna.Compiler.Common
-import Base.IO.Host
+import Base.Host
 
 -- ---------------------------------------------------------------
 -- 参数位判定（纯）
@@ -114,11 +114,11 @@ dropSuffix suffix s =
   if endsWith suffix s then substring 0 (byteLength s - byteLength suffix) s else s
 
 safeReadDir : String -> List String
-safeReadDir dir = if dirExists dir then runIO (prim_readDir dir) else []
+safeReadDir dir = if dirExists dir then runPure (prim_eff_readDir dir) else []
 
--- prim_isDirectory 对不存在的路径会抛宿主异常，必须先判存在（与 Cli.Args 的约定一致）。
+-- prim_eff_isDirectory 对不存在的路径会抛宿主异常，必须先判存在（与 Cli.Args 的约定一致）。
 dirExists : String -> Bool
-dirExists path = runIO (prim_fileExists path) && runIO (prim_isDirectory path)
+dirExists path = runPure (prim_eff_fileExists path) && runPure (prim_eff_isDirectory path)
 
 -- ---------------------------------------------------------------
 -- 文件路径候选

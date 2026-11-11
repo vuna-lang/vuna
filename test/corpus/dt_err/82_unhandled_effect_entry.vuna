@@ -6,5 +6,5 @@ import Base.EffState
 prog : Eff [State "n" Int] Int
 prog = get "n" Int
 
-main : IO Int
-main = prim_bindIO (runIOEff prog) (\_ => prim_pureIO 0)
+main : Eff [State "n" Int] Int
+main = prog

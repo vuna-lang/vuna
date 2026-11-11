@@ -97,9 +97,9 @@ ${dtPrimRuntime}"""
 
 -- M21：effectful 内建（`prim_*`）的 DT 运行时实现。
 -- 签名在 `Vuna.Compiler.Intrinsics`（唯一真源），这里补 OCaml 侧实现（对应
--- `intrinsicRuntime` 字段）；`prim_getArgs` / `prim_readLine` 在 Base.IO 里是**值**，
+-- `intrinsicRuntime` 字段）；`prim_eff_getArgs` / `prim_eff_readLine` 在 Base.IO 里是**值**，
 -- 所以在引用点展开成 `dtp_*(()`，与 Codegen 的既有处理一致（每次求值都重新读）。
--- `prim_readBytes` 是**函数**（`Int -> String`）：最多读 n 字节、有数据就立即返回
+-- `prim_eff_readBytes` 是**函数**（`Int -> String`）：最多读 n 字节、有数据就立即返回
 -- （可能少于 n），EOF 返回 `""`——LSP 的帧循环靠它精确读 Content-Length 字节。
 dtPrimRuntime : String
 dtPrimRuntime = ("""type _ Effect.t += Perform : string * string * Obj.t -> Obj.t Effect.t
@@ -984,7 +984,7 @@ else case lookupPair name st.gsCtors of
 
 -- M37：效果原语的 runtime 是「立刻算完的表达式」；IO 是内建效应类型（运行时 = 裸
 -- thunk `int -> 'a`），所以按 arity 包成 `fun args -> fun _ -> rt args`，由 main 钩子
--- 或 `runIO` 执行。`prim_getArgs` / `prim_readDir` 一类返回 `List` 的原语，其 runtime
+-- 或 `runPure` 执行。`prim_eff_getArgs` / `prim_eff_readDir` 一类返回 `List` 的原语，其 runtime
 -- 文本里内嵌 List 桥接 helper 调用（`dtp_listOf`），仍要按声明 List 族的单元限定。
 ioPrimText : GenSt -> String -> Intrinsic -> Check (Pair String GenSt)
 ioPrimText st name i = if needsListBridge i then
@@ -1011,11 +1011,11 @@ effThunkText : String -> String -> String -> Int -> String
 effThunkText ctor unitTy rt arity =
   let
     argText = joinWith " " (takeNames arity ioParamNames)
-  in if arity == 0 then "${ctor} (fun (_ : ${unitTy}) -> ${rt})"
+  in if arity == 0 then "(${ctor} (fun (_ : ${unitTy}) -> ${rt}))"
   else "(fun ${argText} -> ${ctor} (fun (_ : ${unitTy}) -> ${rt} ${argText}))"
 
--- 内建模式的 thunk 包装：`prim_print` → `(fun s -> fun (_ : int) -> dtp_print s)`；
--- 零参 `prim_getArgs` → `(fun (_ : int) -> (dtp_listOf (dtp_getArgs ())))`。
+-- 内建模式的 thunk 包装：`prim_eff_print` → `(fun s -> fun (_ : int) -> dtp_print s)`；
+-- 零参 `prim_eff_getArgs` → `(fun (_ : int) -> (dtp_listOf (dtp_getArgs ())))`。
 -- token 必须标注 `int`：否则 OCaml 把世界令牌推成弱类型变量（`'_weak -> a`），
 -- 部分应用的动作值（`readFile "x"`）会因值限制报 non-generalizable。
 ioPrimThunkText : String -> Int -> String
@@ -1036,7 +1036,7 @@ ioAlgebraIntrinsicText name =
   else if name == primBindIOName || name == primBindIO1Name then "(fun io k -> fun (w : int) -> k (io w) w)"
   else "(fun io -> io 0)"
 
--- 原语最多 2 个运行时参数（`prim_writeFile` / `prim_runIn`）；表比实际用到的长，
+-- 原语最多 2 个运行时参数（`prim_eff_writeFile` / `prim_eff_runIn`）；表比实际用到的长，
 -- `takeNames` 按 arity 截断（结构递归在表尾上，终止性检查可见）。
 ioParamNames : List String
 ioParamNames = ["dtio_0", "dtio_1", "dtio_2", "dtio_3"]
@@ -2166,9 +2166,11 @@ genDtHook bodyText table tyTerm mainExpr printResult = Vuna.Compiler.Common.bind
 -- W9：main 动作作为纤程 0 交给调度器（`dtp_sched_main`）：这样 main 里的
 -- `yieldNow`/`awaitTask` 也能挂起；没有任务的普通程序只是多一层 match_with。
 actionRunText : QualCtx -> Pair (List DtData) (List DtDef) -> String -> String -> Pair String String
-actionRunText qc program mainRef kind =
-  if kind == "eff" then Pair "dtp_sched_main (fun () -> ${valueName mainRunDefName} ${mainRef})" ""
-  else Pair "dtp_sched_main (fun () -> ${mainRef} 0)" ""
+actionRunText qc program mainRef kind = if kind == "eff" then
+  let
+    runRef = qualValueText qc effRunName
+  in Pair "dtp_sched_main (fun () -> ${firstOf runRef} ${mainRef})" (secondOf runRef)
+else Pair "dtp_sched_main (fun () -> ${mainRef} 0)" ""
 
 genTerm : GenSt -> List (Pair String Rig) -> Term -> Check (Pair String GenSt)
 genTerm a1 a2 a3 = genTermFuel 512 a1 a2 a3

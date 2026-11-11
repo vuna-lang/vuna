@@ -1,4 +1,4 @@
 -- M23：`&&` / `||` 短路降级（`if` 语义）。右侧的 1/0 不被求值；核心求值器的除法
 -- 在除数为 0 时不归约，因此这里若短路失效会直接变成 "main does not reduce"。
 main : Int
-main = if (1 == 0) && (1 / 0 == 0) then 0 else (if (1 == 1) || (1 / 0 == 0) then 42 else 1)
+main = if 1 == 0 && 1 / 0 == 0 then 0 else if 1 == 1 || 1 / 0 == 0 then 42 else 1

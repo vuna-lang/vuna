@@ -144,7 +144,7 @@ search` 无命中为 1（用法 / 查询解析 / 非 workspace 仍为 2）；`vu
 | `CG_TypeLevelBindingRuntime` | codegen | 运行时用到被擦除绑定 |
 | `CG_TypeUsedAtRuntime` | codegen | 运行时出现类型项 |
 | `CG_AxiomAtRuntime` | codegen | 运行时使用 axiom |
-| `CG_InterpCannotExecuteEffects` | codegen | `vuna interp` 遇到 `main : IO a` |
+| `CG_InterpCannotExecuteEffects` | codegen | `vuna interp` 遇到 `main : Eff [] a` |
 
 ## 4. `vuna run` 与 REPL 调试命令
 
@@ -156,8 +156,8 @@ search` 无命中为 1（用法 / 查询解析 / 非 workspace 仍为 2）；`vu
 `Vuna.Run.runRun`。
 
 `vuna interp <file.vuna>` 走同一条 DT 精化后再做**纯核心求值**，不执行效果：任何
-`main : IO a` / `main : Eff [] a` 一律报 `[CG_InterpCannotExecuteEffects]`，消息是
-`interp cannot execute effects (main : IO a / Eff [] a); compile and run the program instead`
+`main : Eff [] a` / `main : Eff [] a` 一律报 `[CG_InterpCannotExecuteEffects]`，消息是
+`interp cannot execute effects (main : Eff [] a / Eff [] a); compile and run the program instead`
 （exit 2）；纯 `main` 只展示 `Int` / `Nat` / `String` / `Bool`，需要效果或其它展示时用
 `compile` + 运行产物。
 
@@ -306,7 +306,7 @@ printf '%s' '{"jsonrpc":"2.0","id":2,"method":"shutdown"}' | vuna repl --client 
 `--client` 一发一收后立即断开，因此多次调用天然串行。阻塞的 `accept`/`recv` **无超时**，
 客户端崩溃会随连接关闭自动恢复，但**不要**在同一会话上并发发请求。
 
-**阶段 1 限制**：server 模式下 `:!` 与效果表达式（`main : IO a` 临时编译运行）**拒绝执行**
+**阶段 1 限制**：server 模式下 `:!` 与效果表达式（`main : Eff [] a` 临时编译运行）**拒绝执行**
 （子进程会写真实 stdout，污染协议通道）；需要跑程序时用 `vuna run` / `vuna build` 后直接
 执行产物。`vuna test` 的 IO 测试路径不受影响。
 

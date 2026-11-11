@@ -5,7 +5,6 @@
 -- 左/右 section 展开成 lambda：DT 精化在推断位置不接受无签名 lambda，按真实用法传给
 -- 带函数签名的参数（检查模式）。
 infixl 6 <+>
-
 infixr 5 <++>
 
 applyTo : (Int -> Int) -> Int

@@ -20,7 +20,7 @@ module Vuna.Compiler.Diag.Format
 -- 行/列；LSP 适配器负责转 UTF-16。
 import Vuna.Compiler.Source
 import Vuna.Compiler.Diag
-import Base.IO.Host
+import Base.Host
 import Base.IORef
 import qualified Vuna.Compiler.Diagnostics
 import Base.Nat
@@ -143,7 +143,8 @@ snippetOf sp text =
 -- 文件可读才渲染片段（失败静默退回无片段）。
 renderSnippet : Span -> String
 renderSnippet sp =
-  if runIO (fileExists (spanFile sp)) then if runIO (isDirectory (spanFile sp)) then "" else snippetOf sp (runIO (readFile (spanFile sp)))
+  if runPure (fileExists (spanFile sp)) then if runPure (isDirectory (spanFile sp)) then ""
+  else snippetOf sp (runPure (readFile (spanFile sp)))
   else ""
 
 -- 头部：`error[CODE]: 消息`（无 code 时 `error: 消息`）。
@@ -380,15 +381,15 @@ renderSarif ds =
 -- ---------------------------------------------------------------
 -- | 渲染语言状态。
 langRef : IORef String
-langRef = runIO (newRef "en")
+langRef = runPure (newRef "en")
 
 -- | 设置渲染语言（`en` / `zh`；默认 en）。
 setDiagLang : String -> Int
-setDiagLang lang = runIO (writeRef langRef lang)
+setDiagLang lang = runPure (writeRef langRef lang)
 
 -- | 当前渲染语言。
 diagLang : Int -> String
-diagLang _ = runIO (readRef langRef)
+diagLang _ = runPure (readRef langRef)
 
 -- | human 中文说明行。
 diagDescLine : Diagnostic -> String

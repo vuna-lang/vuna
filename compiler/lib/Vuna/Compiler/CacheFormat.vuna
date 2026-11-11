@@ -24,7 +24,7 @@ module Vuna.Compiler.CacheFormat (frameDecode, frameEncode, frameMagic, readFram
 -- 代价：读侧多一遍 `strHash`（本机实测 ~1.2ms/MB）。分裂/检查缓存 1–4MB ⇒ +1–5ms，
 -- 相比省掉的 load/resolve/elab/codegen 可忽略；换来的是坏缓存不再崩溃、自动重算。
 import Vuna.Compiler.Common
-import Base.IO.Host
+import Base.Host
 
 frameMagic : String
 frameMagic = "vuna-cache-frame 1"
@@ -93,4 +93,5 @@ frameDecode tag raw = case frameSplit raw of
 -- 字节后才可以 unmarshal（或仅确认存在）。
 readFramed : String -> String -> Maybe String
 readFramed tag path =
-  if runIO (prim_fileExists path) then frameDecode tag (runIO (prim_readFile path)) else Nothing
+  if runPure (prim_eff_fileExists path) then frameDecode tag (runPure (prim_eff_readFile path))
+  else Nothing

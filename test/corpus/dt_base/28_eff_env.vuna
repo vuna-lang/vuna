@@ -2,7 +2,7 @@
 -- 各跑一次；两边都断言「缺失变量为空 / cwd 非空 / execPath 非空」。
 import Base.Eff
 import Base.EffEnv
-import Base.IO.Host
+import Base.Host
 
 prog : (n : String) -> Eff [Env n] Int
 prog n = do
@@ -20,8 +20,10 @@ mopH op k = case op of
   GetCwd => k "/mock/cwd"
   ExecPath => k "/mock/exe"
 
-main : IO Int
+main : Eff [] Int
 main = case runPure (handleEnv "mock" mret mopH (prog "mock")) of
-  mockScore =>
-    prim_bindIO (print ("mock " ++ strFromInt mockScore ++ "\n"))
-      (\_ => prim_bindIO (runIOAnswer (handleEnvIO "real" (prog "real"))) (\realScore => prim_bindIO (print ("real " ++ strFromInt realScore ++ "\n")) (\_ => prim_pureIO 0)))
+  mockScore => do
+    _ <- print ("mock " ++ strFromInt mockScore ++ "\n")
+    realScore <- runEnv "real" (prog "real")
+    _ <- print ("real " ++ strFromInt realScore ++ "\n")
+    pure 0

@@ -38,7 +38,8 @@ len [] = 0
 len (x :: xs) = 1 + len xs
 
 main : Int
-main = toInt (addNat (Succ (Succ Zero)) (Succ Zero))
-     + firstOf (MkPair 40 2)
-     + secondOf (MkPair 40 2)
-     + len (zipD (Cons 1 (Cons 2 Nil)) (Cons 3 (Cons 4 Nil)))
+main =
+  toInt (addNat (Succ (Succ Zero)) (Succ Zero))
+    + firstOf (MkPair 40 2)
+    + secondOf (MkPair 40 2)
+    + len (zipD (1 :: 2 :: []) (3 :: 4 :: []))

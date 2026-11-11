@@ -4,23 +4,24 @@ module Base.IORef (modifyRef, newRef, readRef, writeRef) where
 --
 -- 所有操作都是 IO 动作：效果只在 `main`（或 `Base.IO.runIO`，需 `unsafe`）执行。
 -- `modifyRef` 读-改-写一次完成，避免调用方手写 do 时的中间绑定。
+import Base.Eff
 import Base.Monad
-import Base.IO.Host
+import Base.Host
 
 -- | 创建初值为 `x` 的新引用（IO 动作）。
-newRef : a -> IO (IORef a)
-newRef x = prim_newRef x
+newRef : a -> Eff [] (IORef a)
+newRef x = prim_eff_newRef x
 
 -- | 读取引用当前值。
-readRef : IORef a -> IO a
-readRef r = prim_readRef r
+readRef : IORef a -> Eff [] a
+readRef r = prim_eff_readRef r
 
 -- | 写入新值，返回底层原语的 `Int` 结果（写入本身无有意义的返回值，通常忽略）。
-writeRef : IORef a -> a -> IO Int
-writeRef r v = prim_writeRef r v
+writeRef : IORef a -> a -> Eff [] Int
+writeRef r v = prim_eff_writeRef r v
 
 -- | 读-改-写一次完成：读到当前值、应用 `f` 后写回，返回写入原语的 `Int` 结果。
-modifyRef : IORef a -> (a -> a) -> IO Int
+modifyRef : IORef a -> (a -> a) -> Eff [] Int
 modifyRef r f = do
   x <- readRef r
   writeRef r (f x)

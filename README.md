@@ -32,11 +32,11 @@ EOF
 ./result/bin/vuna compile hello.vuna hello-out   # 逐模块 .ml + build.sh 写到 hello-out/
 sh hello-out/build.sh hello && ./hello-out/hello # -> 7
 
-# 包模式：入口 main : IO a，构建产出 DIR/bin/<包名>
+# 包模式：入口 main : Eff [] a，构建产出 DIR/bin/<包名>
 ./result/bin/vuna build examples/multi         # 现成的多包示例（根包 + greet + base 依赖）
 examples/multi/.output/bin/multi               # -> hi hi hi|n2 n1（--out 可覆盖输出目录）
 ./result/bin/vuna check examples/multi         # 包级类型检查
-./result/bin/vuna test examples/multi          # 纯 String/Int/Bool 走 interp；main : IO ... 走 compile+运行
+./result/bin/vuna test examples/multi          # 纯 String/Int/Bool 走 interp；main : Eff [] ... 走 compile+运行
 
 # 测试 / 格式化 / 文档
 nix run .#vuna-run-tests                            # 原生 suite（vuna test --suite test/suite.toml）
@@ -46,7 +46,7 @@ nix run .#vuna-run-tests -- --list                  # 列出章节/case（--only
 ./result/bin/vuna doc                          # 生成 docs/api.html（gitignored）
 ```
 
-自己新建包：`vuna.toml` + `app/Main.vuna`，入口 `main : IO a`，效果 API 来自 `Base.IO`。
+自己新建包：`vuna.toml` + `app/Main.vuna`，入口 `main : Eff [] a`，效果 API 来自 `Base.Eff`（特权宿主别名在 `Base.Host`）。
 格式见 [packages.md](docs/reference/packages.md)，示例见 `examples/multi/`。
 
 编译器选取：优先本地 `./result/bin/vuna`；否则 `nix run vuna -- <subcommand>`（注册表别名）。
@@ -88,7 +88,7 @@ vuna help, -h
 fork `vuna-compiler`）；`vuna build` 在 codegen 后执行生成的 `build.sh`（经受限进程执行内建
 `prim_runIn` 调 `ocamlopt`）产出 `DIR/bin/<包名>`，无额外运行时依赖。`vuna interp` 是
 **DT 精化 + 核心求值**：先按 DT 检查再求 `main` 的值，只展示 `Int`/`String`/`Bool`；任何
-`main : IO a` 一律明确报错（核心求值器不执行效果），请改用 `compile` + 运行产物。
+`main : Eff [] a` 一律明确报错（核心求值器不执行效果），请改用 `compile` + 运行产物。
 
 **包上下文是唯一的加载语义**：每个源文件向上找最近的 `vuna.toml`（该包 + 依赖闭包解析
 import）；无 manifest 时只有 base 上下文（`VUNA_BASE` 覆盖，否则按可执行文件相对布局
@@ -104,7 +104,7 @@ manifest，不向上找。命令语义与包格式
 ├── compiler/  # 编译器包 vuna-compiler（seed 唯一来源）：app/Main.vuna + lib/Vuna/Compiler/
 ├── base/      # 成员包 vuna-base：lib/Base.*、Prelude.vuna
 ├── lib/       # 产品 CLI 包 vuna 的模块根（工具链 Vuna.*）
-├── app/       # 产品 CLI 入口 main : IO Int
+├── app/       # 产品 CLI 入口 main : Eff [] Int
 ├── seed/      # compiler 闭包的多文件自举信任锚点（生成物，禁止手改）
 ├── test/      # suite.toml + suite/（原生 runner）+ corpus/ 夹具
 ├── examples/  # 多包示例
@@ -127,7 +127,7 @@ manifest，不向上找。命令语义与包格式
 2. **`seed/` 只含 compiler 包入口闭包**：工具链不进 TCB（`nix/tcb-forbidden.txt`）；
 3. **效果原语返回 `IO` 动作**：包在 `[capabilities] effects` 声明
    `console`/`fs`/`process`/`env`/`clock`/`unsafe` 后才能直接调用 effectful `prim_*`，
-   否则经 `Base.IO`；动作只在 `main` 执行（`Intrinsics` + `checkEffectsBuiltins`，没有包名
+   否则经 `Base.Eff` + handler（宿主层 `Base.Host` 不可 import）；动作只在 `main` 执行（`Intrinsics` + `checkEffectsBuiltins`，没有包名
    allowlist）；
 4. **唯一路径**：语言夹具、`vuna interp`、包构建与 seed 全部走 DT；没有第二套
    checker/codegen；

@@ -6,7 +6,7 @@ run: sh -c 'cp -R corpus/test-m30 "$TMPDIR/test-m30"; find "$TMPDIR/test-m30" -n
 run: sh -c 'printf "f : Int -> Int\nf x =\n  x + 1\n\nf 41\n:q\n" | "$VUNA" repl 2>&1'
 out-contains: 42
 # REPL：IO 表达式走临时包编译+运行（效果输出直接到终端）。
-run: sh -c 'printf "import Base.IO.Host\nprint \"hi\"\n:q\n" | "$VUNA" repl --privileged 2>&1'
+run: sh -c 'printf "import Base.Host\nprint \"hi\"\n:q\n" | "$VUNA" repl --privileged 2>&1'
 out-contains: hi
 # REPL：不完整输入 + 空行 → 报错丢弃但继续。
 run: sh -c 'printf "x =\n\n:q\n" | "$VUNA" repl 2>&1'

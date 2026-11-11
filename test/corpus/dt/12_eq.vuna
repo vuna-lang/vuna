@@ -3,14 +3,12 @@ data Eq : Type -> Type -> Type where
   Refl : (a : Type) -> Eq a a
 
 sym : (a : Type) -> (b : Type) -> Eq a b -> Eq b a
-sym a b e =
-  case e of
-    Refl c => Refl c
+sym a b e = case e of
+  Refl c => Refl c
 
 trans : (a : Type) -> (b : Type) -> (c : Type) -> Eq a b -> Eq b c -> Eq a c
-trans a b c e1 e2 =
-  case e1 of
-    Refl d => e2
+trans a b c e1 e2 = case e1 of
+  Refl d => e2
 
 n : Int
 n = 7

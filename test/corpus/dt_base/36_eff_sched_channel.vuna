@@ -6,17 +6,15 @@ import Base.EffSched
 import Base.Result
 
 prog : Eff [] (Result Int)
-prog =
-  withScope
-    (\sc => do
-      ch <- newChannelInt
-      _ <- forkTask sc (send ch 42)
-      recvWait 64 ch
-    )
+prog = withScope (\sc => do
+  ch <- newChannelInt
+  _ <- forkTask sc (send ch 42)
+  recvWait 64 ch
+)
 
-main : IO Int
+main : Eff [] Int
 main = do
-  r <- runIOEff prog
+  r <- prog
   case r of
     Ok n => pure n
     Err _ => pure 0

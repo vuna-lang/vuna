@@ -10,7 +10,7 @@ module Vuna.Repl.Client (runReplClient) where
 -- 退出码：收到响应 0；连接失败（宿主异常，运行时报 `net: connect: ...`）或响应不完整 2。
 import Vuna.Compiler.Common
 import Vuna.Json.Frame
-import Base.IO.Host
+import Base.Host
 
 clientChunkSize : Int
 clientChunkSize = 65536
@@ -24,7 +24,7 @@ readStdinAll : String -> Int -> String
 readStdinAll acc fuel = if fuel <= 0 then acc
 else
   let
-    chunk = runIO (prim_readBytes clientChunkSize)
+    chunk = runPure (prim_eff_readBytes clientChunkSize)
   in if chunk == "" then acc else readStdinAll (acc ++ chunk) (fuel - 1)
 
 -- 从连接读一帧的 body（只处理一个响应；多余字节丢弃）。
@@ -35,30 +35,30 @@ else case splitHeaderBlock buf of
     Just len => if strLength rest >= len then Just (substring 0 (natFromInt len) rest)
     else
       let
-        chunk = runIO (prim_netRecv conn clientChunkSize)
+        chunk = runPure (prim_eff_netRecv conn clientChunkSize)
       in if chunk == "" then Nothing else readOneFrame conn (rest ++ chunk) (fuel - 1)
     Nothing => Nothing
   Nothing =>
     let
-      chunk = runIO (prim_netRecv conn clientChunkSize)
+      chunk = runPure (prim_eff_netRecv conn clientChunkSize)
     in if chunk == "" then Nothing else readOneFrame conn (buf ++ chunk) (fuel - 1)
 
 runReplClient : String -> Int
 runReplClient addr =
   let
     body = readStdinAll "" clientFuelBound
-    conn = runIO (prim_netConnect addr)
-    _ = runIO (prim_netSend conn (renderFrameBody body))
+    conn = runPure (prim_eff_netConnect addr)
+    _ = runPure (prim_eff_netSend conn (renderFrameBody body))
     resp = readOneFrame conn "" clientFuelBound
-    _ = runIO (prim_netClose conn)
+    _ = runPure (prim_eff_netClose conn)
   in case resp of
     Nothing =>
       let
         _ =
-          runIO
-            (prim_eprint "[vuna-repl-client] ${addr}: 响应不完整（连接中断或协议错误）\n")
+          runPure
+            (prim_eff_eprint "[vuna-repl-client] ${addr}: 响应不完整（连接中断或协议错误）\n")
       in 2
     Just body2 =>
       let
-        _ = runIO (prim_print "${body2}\n")
+        _ = runPure (prim_eff_print "${body2}\n")
       in 0

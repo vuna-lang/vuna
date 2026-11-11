@@ -134,11 +134,11 @@ fixed point → 全部通过后才替换 `seed/` 并写入 `nix/seed-rotation.tx
   `Loader.Resolve.checkEffectsBuiltins`；未知 / 重复能力名直接报错）；
 - 效果原语只有 `prim_*` 名并返回 `IO` 动作；`IO` 是内建效应类型（无构造器），
   每个内建的能力位、签名与 runtime 名同源在 `Vuna.Compiler.Intrinsics`。未声明能力的包
-  只能经 `Base.IO` 使用效果；声明了能力的包可直接用 `prim_*`（不需要 import `Base.IO`）；
+  只能经 `Base.Host` 使用效果；声明了能力的包可直接用 `prim_*`（不需要 import `Base.Host`）；
 - 仓库内三个包的能力声明见各自 `vuna.toml`：根包与 `vuna-compiler` 五个能力，`vuna-base`
-  声明 `console` / `fs` / `process`（`Base.IO` 的封装面）+ `unsafe`（`Base.IO.Host.runIO` 与
+  声明 `console` / `fs` / `process`（`Base.Host` 的封装面）+ `unsafe`（`Base.Host.runIO` 与
   `Base.ST.runST` 的信任点）；`test/corpus` 与夹具 manifest
-  不声明能力，只能经 `Base.IO`；
+  不声明能力，只能经 `Base.Host`；
 - 能力随包上下文传递（`PackageContext` / `Root` / `Module` / `Project`），无 manifest 的
   ad-hoc 文件没有能力；
 - base 定位用的 `prim_getenv` / `prim_getcwd` / `prim_execPath` 需要 `env` 能力，与其它

@@ -10,4 +10,4 @@ data Color : Type where
 deriving (Show)
 
 main : String
-main = show (Pair2 { first = 1, second = Red })
+main = show Pair2 { first = 1, second = Red }

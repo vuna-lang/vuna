@@ -3,7 +3,7 @@
 -- pop + release（不是硬中止路径；硬中止只有尽力清理，见 effects-layers.md）。
 import Base.Eff
 import Base.EffSched
-import Base.IO.Host
+import Base.Host
 import Base.Result
 
 spin : List Int -> Eff [] Int
@@ -14,26 +14,24 @@ spin (_ :: rest) = do
 
 task : Eff [] Int
 task =
-  bracket (liftIOEff (println "acquire")) (\_ => liftIOEff (fmap natToInt (println "release")))
+  bracket (raise (println "acquire")) (\_ => raise (fmap natToInt (println "release")))
     (\_ => spin [0, 0, 0, 0, 0])
 
 prog : Eff [] (Result Int)
-prog =
-  withScope
-    (\sc => do
-      w <- forkTask sc task
-      _ <- yieldNow
-      _ <- cancelScope sc
-      _ <- scopeWait sc
-      rw <- awaitTask w
-      case rw of
-        Ok n => pure (Ok n)
-        Err _ => pure (Ok 3)
-    )
+prog = withScope (\sc => do
+  w <- forkTask sc task
+  _ <- yieldNow
+  _ <- cancelScope sc
+  _ <- scopeWait sc
+  rw <- awaitTask w
+  case rw of
+    Ok n => pure (Ok n)
+    Err _ => pure (Ok 3)
+)
 
-main : IO Int
+main : Eff [] Int
 main = do
-  r <- runIOEff prog
+  r <- prog
   case r of
     Ok n => pure n
     Err _ => pure 0

@@ -15,10 +15,10 @@ out-contains: 已删除 x
 out-contains: unbound variable x
 run: printf ':{\n  x = 1 + 1\n  f y = x + y\n:}\nf 40\n:q\n' | "$VUNA" repl 2>&1
 out-contains: 42
-run: printf 'x = 1\nf y = x + y\n:defs\n:imports\nimport Base.IO\n:imports\n:q\n' | "$VUNA" repl 2>&1
+run: printf 'x = 1\nf y = x + y\n:defs\n:imports\nimport Base.Eff\n:imports\n:q\n' | "$VUNA" repl 2>&1
 out-contains: x : Int
 out-contains: f : Int -> Int
-out-contains: import Base.IO
+out-contains: import Base.Eff
 # B1 回归：显式隐式 binder 不再被重复量化；B3 回归：类型文本 zonk。
 run: printf 'm : {a : Type} -> a -> a\nm x = x\n:type m\n:type [1, 2, 3]\nid z = z\n:type id 1\n:q\n' | "$VUNA" repl 2>&1
 out-contains: m : {a : Type} -> a -> a

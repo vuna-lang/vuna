@@ -9,5 +9,5 @@ prog = do
   _ <- consolePrint "real" (strFromInt (total [1, 2, 3] + firstOr (Just 10)))
   pure 0
 
-main : IO Int
+main : Eff [] Int
 main = runConsole "real" prog

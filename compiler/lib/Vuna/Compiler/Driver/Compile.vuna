@@ -52,7 +52,7 @@ import Vuna.Compiler.Driver.Split
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Loader
 import Vuna.Compiler.Version
-import Base.IO.Host
+import Base.Host
 
 -- 包级 check：可执行包检查 app/Main.vuna；库包检查 [export].modules。
 -- M34.5：结果走磁盘缓存（key = 闭包源哈希 + 依赖哈希 + manifest + 版本）。
@@ -60,12 +60,12 @@ import Base.IO.Host
 -- 缓存命中/干净模块复用都会跳过精化、丢掉 warning，所以这里跳过 check 缓存并强制本包
 -- 模块重算（依赖仍走接口摘要，不重算依赖包）。
 checkPackage : Bool -> Package -> Check (List String)
-checkPackage wantWarnings pkg = if runIO (prim_fileExists (packageEntry pkg)) then checkCachedExe wantWarnings (packageContext pkg) (packageEntry pkg)
+checkPackage wantWarnings pkg = if runPure (prim_eff_fileExists (packageEntry pkg)) then checkCachedExe wantWarnings (packageContext pkg) (packageEntry pkg)
 else case packageExports pkg of
   Nothing => pkgNoLoc1 (LibraryWithoutEntry (packageName pkg)) (packageName pkg)
   Just names => checkCachedLib wantWarnings (packageContext pkg) names
 
--- 逐级创建目录（prim_makeDir 只建一层；`--out a/b` 的父目录可能不存在）。
+-- 逐级创建目录（prim_eff_makeDir 只建一层；`--out a/b` 的父目录可能不存在）。
 -- 递归沿 `parentOfPath` 上升，不是结构下降，用显式 fuel 守卫（路径深度上限）。
 ensureDirPath : String -> Int
 ensureDirPath path = ensureDirPathFuel 256 path
@@ -73,11 +73,11 @@ ensureDirPath path = ensureDirPathFuel 256 path
 ensureDirPathFuel : Int -> String -> Int
 ensureDirPathFuel fuel path = if fuel <= 0 then 0
 else if path == "" || path == "." || path == "/" then 0
-else if runIO (prim_fileExists path) then 0
+else if runPure (prim_eff_fileExists path) then 0
 else
   let
     _ = ensureDirPathFuel (fuel - 1) (parentOfPath path)
-  in runIO (prim_makeDir path)
+  in runPure (prim_eff_makeDir path)
 
 -- 去掉最后一段（`a/b/c` -> `a/b`；无 `/` -> "."；绝对路径的父仍绝对）。
 -- 先 reverse，跳过第一个 `/` 后剩下的字符再 reverse 回来。
@@ -167,7 +167,7 @@ writeCompiled ctx outDir files =
     graph = splitGraph (canonicalTopo files)
     _ = stamp "split-graph-done"
     cFiles = copyFfiFiles (contextDir ctx) outDir
-    _ = runIO (prim_writeFile "${outDir}/build.sh" (buildScript graph cFiles))
+    _ = runPure (prim_eff_writeFile "${outDir}/build.sh" (buildScript graph cFiles))
     _ = stamp "build-script-done"
   in OkC n
   )
@@ -178,14 +178,14 @@ copyFfiFiles : String -> String -> List String
 copyFfiFiles ctxDir outDir =
   let
     ffiDir = "${ctxDir}/ffi"
-    exists = runIO (prim_fileExists ffiDir) && runIO (prim_isDirectory ffiDir)
+    exists = runPure (prim_eff_fileExists ffiDir) && runPure (prim_eff_isDirectory ffiDir)
   in if exists then
     let
-      cs = filter (\n => endsWith ".c" n) (runIO (prim_readDir ffiDir))
+      cs = filter (\n => endsWith ".c" n) (runPure (prim_eff_readDir ffiDir))
       _ = ensureDirPath "${outDir}/ffi"
       _ =
         map
-          (\n => runIO (prim_writeFile "${outDir}/ffi/${n}" (runIO (prim_readFile "${ffiDir}/${n}"))))
+          (\n => runPure (prim_eff_writeFile "${outDir}/ffi/${n}" (runPure (prim_eff_readFile "${ffiDir}/${n}"))))
           cs
     in map (\n => "ffi/${n}") cs
   else []
@@ -215,16 +215,16 @@ textHash : String -> Int
 textHash s = strHash s * 1000003 + strHash "m30:${s}" + strLength s
 
 -- M34.5：编译器二进制指纹（缓存 key 必须含它：check/codegen 语义随编译器变化）。
--- M38：用**可执行文件自身**的路径 + 大小 + mtime，而不是 `prim_getArgs` 的第一个用户参数。
+-- M38：用**可执行文件自身**的路径 + 大小 + mtime，而不是 `prim_eff_getArgs` 的第一个用户参数。
 -- 旧实现把子命令名（如 `test`）当路径：只要 cwd 里恰好有同名文件/目录（包根的 `test/`
--- 就是最常见的情况），`prim_readFile` 会去读目录并抛 `Failure("readFile: ...")`——
+-- 就是最常见的情况），`prim_eff_readFile` 会去读目录并抛 `Failure("readFile: ...")`——
 -- `vuna test` 在包根直接崩溃即此。store 路径 + size + mtime 足以区分重新构建的编译器。
 compilerFingerprint : Int
 compilerFingerprint =
   let
     exe = runIO prim_execPath
-    size = runIO (prim_fileSize exe)
-    mtime = runIO (prim_fileMtime exe)
+    size = runPure (prim_eff_fileSize exe)
+    mtime = runPure (prim_eff_fileMtime exe)
   in if size > 0 then textHash "${exe}:${size}:${mtime}" else textHash vunaVersion
 
 -- M34.5：缓存根（TMPDIR 可写；Nix 构建的源树只读，缓存放临时目录 ⇒ 构建内不命中，
@@ -234,8 +234,8 @@ cacheBase =
   let
     -- `VUNA_CACHE_DIR` 覆盖（跨 run 复用 split / unit 缓存；测试 runner 按 worker
     -- 作用域 + 编译器指纹分桶，避免并发写冲突）。缺省仍是 `$TMPDIR/vuna-cache`。
-    override = runIO (prim_getenv "VUNA_CACHE_DIR")
-    tmp = runIO (prim_getenv "TMPDIR")
+    override = runPure (prim_eff_getenv "VUNA_CACHE_DIR")
+    tmp = runPure (prim_eff_getenv "TMPDIR")
   in if override /= "" then override else "${if tmp == "" then "/tmp" else tmp}/vuna-cache"
 
 -- 目录遍历（模块根内的 .vuna；与 Vuna.Files 的跳过规则一致，但 compiler 包不能
@@ -255,7 +255,7 @@ skipMetaDir name =
 collectVunaMeta : Int -> String -> List String
 collectVunaMeta fuel dir =
   if fuel <= 0 then []
-  else if runIO (prim_fileExists dir) && runIO (prim_isDirectory dir) then concatMap (walkVunaMeta (fuel - 1) dir) (runIO (prim_readDir dir))
+  else if runPure (prim_eff_fileExists dir) && runPure (prim_eff_isDirectory dir) then concatMap (walkVunaMeta (fuel - 1) dir) (runPure (prim_eff_readDir dir))
   else []
 
 walkVunaMeta : Int -> String -> String -> List String
@@ -267,7 +267,7 @@ else case name of
   else
     let
       path = "${dir}/${name}"
-    in if runIO (prim_fileExists path) && runIO (prim_isDirectory path) then collectVunaMeta (fuel - 1) path
+    in if runPure (prim_eff_fileExists path) && runPure (prim_eff_isDirectory path) then collectVunaMeta (fuel - 1) path
     else if endsWith ".vuna" name then [path] else []
 
 dropPrefixMeta : String -> String -> String
@@ -290,7 +290,7 @@ moduleNameOfPath rootPath path =
 
 rootSources : Root -> List (Pair String Int)
 rootSources root =
-  map (\p => Pair (moduleNameOfPath (rootDir root) p) (textHash (runIO (prim_readFile p))))
+  map (\p => Pair (moduleNameOfPath (rootDir root) p) (textHash (runPure (prim_eff_readFile p))))
     (collectVunaMeta 1048576 (rootDir root))
 
 rootHash : Root -> Int
@@ -302,7 +302,7 @@ closureHashOf ((Pair name h) :: rest) acc = closureHashOf rest (acc * 1000003 + 
 
 -- 入口文件 + 所有模块根的源码（模块名 → 哈希）。
 entrySource : String -> Pair String Int
-entrySource entry = Pair "<entry>" (textHash (runIO (prim_readFile entry)))
+entrySource entry = Pair "<entry>" (textHash (runPure (prim_eff_readFile entry)))
 
 contextSources : PackageContext -> String -> List (Pair String Int)
 contextSources ctx entry = append (concatMap rootSources (contextRoots ctx)) [entrySource entry]
@@ -335,7 +335,7 @@ buildMetaText ctx entry linked =
   let
     sources = contextSources ctx entry
     deps = dependencyHashes ctx
-    manifestHash = textHash (runIO (prim_readFile "${contextDir ctx}/vuna.toml"))
+    manifestHash = textHash (runPure (prim_eff_readFile "${contextDir ctx}/vuna.toml"))
     entryName = lastSegment entry
     linkedText = if linked then "true" else "false"
   in "{\"schema\":${metaSchema},\"compiler\":\"${vunaVersion}\",\"package\":\"${contextPackageName ctx}\",\"entry\":\"${entryName}\",\"linked\":${linkedText},\"closure\":${closureHashOf sources 0},\"manifest\":${manifestHash},\"sources\":[${joinJsonList (map metaPairText sources)}],\"dependencies\":[${joinJsonList (map metaPairText deps)}]}\n"
@@ -345,14 +345,14 @@ metaPathOf outDir = "${outDir}/${metaFileName}"
 
 writeBuildMeta : String -> PackageContext -> String -> Bool -> Int
 writeBuildMeta outDir ctx entry linked =
-  runIO (prim_writeFile (metaPathOf outDir) (buildMetaText ctx entry linked))
+  runPure (prim_eff_writeFile (metaPathOf outDir) (buildMetaText ctx entry linked))
 
 -- 同哈希跳过：meta 内容与期望（linked=true）完全一致，且产物二进制存在。
 metaUpToDate : String -> PackageContext -> String -> String -> Bool
 metaUpToDate outDir ctx entry binPath =
   let
     path = metaPathOf outDir
-  in if runIO (prim_fileExists path) && runIO (prim_fileExists binPath) then runIO (prim_readFile path) == buildMetaText ctx entry True
+  in if runPure (prim_eff_fileExists path) && runPure (prim_eff_fileExists binPath) then runPure (prim_eff_readFile path) == buildMetaText ctx entry True
   else False
 
 -- 在 dir 里跑生成的 build.sh：`sh build.sh <out>`（out 相对 dir，例如 "bin/<pkg>"）。
@@ -360,7 +360,7 @@ metaUpToDate outDir ctx entry binPath =
 runBuildScript : String -> String -> String -> Check Int
 runBuildScript dir out name =
   let
-    code = runIO (prim_runIn dir ["sh", "build.sh", out])
+    code = runPure (prim_eff_runIn dir ["sh", "build.sh", out])
   in if code == 0 then OkC 0
   else err "build: ${name}: `sh build.sh ${out}` failed in ${dir} (exit ${code})"
 
@@ -394,7 +394,7 @@ checkCacheKeyExe ctx entry =
   let
     srcHash = closureHashOf (contextSources ctx entry) 0
     depsHash = closureHashOf (dependencyHashes ctx) 0
-    manHash = textHash (runIO (prim_readFile "${contextDir ctx}/vuna.toml"))
+    manHash = textHash (runPure (prim_eff_readFile "${contextDir ctx}/vuna.toml"))
     verHash = textHash (checkCacheSchema ++ vunaVersion) + compilerFingerprint
   in "${hashText srcHash}-${hashText depsHash}-${hashText manHash}-${hashText verHash}"
 
@@ -403,7 +403,7 @@ checkCacheKeyLib ctx names =
   let
     srcHash = closureHashOf (concatMap rootSources (contextRoots ctx)) 0
     depsHash = closureHashOf (dependencyHashes ctx) 0
-    manHash = textHash (runIO (prim_readFile "${contextDir ctx}/vuna.toml"))
+    manHash = textHash (runPure (prim_eff_readFile "${contextDir ctx}/vuna.toml"))
     namesHash = textHash (join "\t" names)
     verHash = textHash (checkCacheSchema ++ vunaVersion) + compilerFingerprint
   in "${hashText srcHash}-${hashText depsHash}-${hashText manHash}-${hashText namesHash}-${hashText verHash}"
@@ -520,7 +520,7 @@ allModuleSourcesValid (m :: rest) paths = case lookupPair (miNameOf m) paths of
   Just path => sourceInfoUnchanged path (miSourceOf m) && allModuleSourcesValid rest paths
   Nothing => False
 
--- mtime 秒精度的安全窗：`prim_fileMtime` 只有秒级分辨率，同秒内改内容且大小不变的编辑
+-- mtime 秒精度的安全窗：`prim_eff_fileMtime` 只有秒级分辨率，同秒内改内容且大小不变的编辑
 -- 用 mtime+size 不可分辨。mtime 距当前不足该窗口的文件一律回落内容哈希（近期编辑不走
 -- 快路径）；窗口外可安全信任 mtime+size（写侧记录的是当时的内容哈希，记录后至少过了
 -- 窗口才可能被信任）。窗口同样用于工具链会话的 `sourceFresh`。
@@ -530,18 +530,18 @@ mtimeSafetyWindowSec = 5
 sourceInfoUnchanged : String -> SourceInfo -> Bool
 sourceInfoUnchanged path si = if mtimeFastPath then
   let
-    m = runIO (prim_fileMtime path)
-    sz = runIO (prim_fileSize path)
+    m = runPure (prim_eff_fileMtime path)
+    sz = runPure (prim_eff_fileSize path)
   in if m == siMtimeOf si && sz == siSizeOf si && m + mtimeSafetyWindowSec < toolNowSec then True
-  else payloadDigest (runIO (prim_readFile path)) == siHashOf si
-else payloadDigest (runIO (prim_readFile path)) == siHashOf si
+  else payloadDigest (runPure (prim_eff_readFile path)) == siHashOf si
+else payloadDigest (runPure (prim_eff_readFile path)) == siHashOf si
 
 -- 可选快路径（默认关闭；`VUNA_CACHE_MTIME=1` 打开）：mtime + size 相同且 mtime 落在安全窗
 -- 外即跳过读文件算哈希。实测缓存命中路径收益 <1%（check/build 的缓存 key 本来就要读全部
 -- 源文件算哈希），未达默认开启门槛（5%），见 docs/reference/cache.md。
 -- 快路径默认关闭 ⇒ 正确性默认由内容哈希保证；打开后靠 mtimeSafetyWindowSec 兜住同秒编辑。
 mtimeFastPath : Bool
-mtimeFastPath = runIO (prim_getenv "VUNA_CACHE_MTIME") == "1"
+mtimeFastPath = runPure (prim_eff_getenv "VUNA_CACHE_MTIME") == "1"
 
 -- 依赖接口哈希链：每个模块记录的 import 接口哈希必须等于当前闭包里同名模块的哈希。
 -- 这是「依赖接口变化 ⇒ 依赖者失效」的判据（TTC 的 `importHashes`）。
@@ -680,7 +680,7 @@ toolImportNamesOf ctx current imports = case implicitPrelude (contextRoots ctx) 
 -- 它们却没有 artifact 注入 ⇒ 假 `TC_UnknownName`）。同包模块名/import 从本包 manifest 取
 -- （`check`/`build` 会写）；没有本包 manifest 或闭包仍不完整时，`Dt` 侧安全阀回退全量。
 toolEnabled : Bool
-toolEnabled = runIO (prim_getenv "VUNA_IFACE_TOOL") /= "0"
+toolEnabled = runPure (prim_eff_getenv "VUNA_IFACE_TOOL") /= "0"
 
 toolOwnManifest : PackageContext -> Maybe PackageManifest
 toolOwnManifest ctx = if contextPackageName ctx == "" then Nothing
@@ -782,8 +782,9 @@ toolTextHash = payloadDigest
 sourceInfoForPath : String -> SourceInfo
 sourceInfoForPath path =
   let
-    raw = runIO (prim_readFile path)
-  in SourceInfo path (payloadDigest raw) (runIO (prim_fileMtime path)) (runIO (prim_fileSize path))
+    raw = runPure (prim_eff_readFile path)
+  in SourceInfo path (payloadDigest raw) (runPure (prim_eff_fileMtime path))
+    (runPure (prim_eff_fileSize path))
 
 toolNowSec : Int
 toolNowSec = runIO timeUs / 1000000
@@ -795,13 +796,13 @@ sourceFresh : Int -> SourceInfo -> Bool
 sourceFresh builtSec si =
   let
     path = siPathOf si
-  in if runIO (prim_fileExists path) == False then False
+  in if runPure (prim_eff_fileExists path) == False then False
   else
     let
-      m = runIO (prim_fileMtime path)
-      sz = runIO (prim_fileSize path)
+      m = runPure (prim_eff_fileMtime path)
+      sz = runPure (prim_eff_fileSize path)
     in if m == siMtimeOf si && sz == siSizeOf si && siMtimeOf si + mtimeSafetyWindowSec <= builtSec then True
-    else payloadDigest (runIO (prim_readFile path)) == siHashOf si
+    else payloadDigest (runPure (prim_eff_readFile path)) == siHashOf si
 
 toolSessionFresh : Int -> List SourceInfo -> Bool
 toolSessionFresh builtSec [] = True
@@ -1002,12 +1003,12 @@ auditCheckExe wantWarnings ctx entry path =
 
 -- `VUNA_ELAB_FULL=1`：强制全量精化（接口摘要路径的排障开关；默认关闭）。
 elabFullRequested : Bool
-elabFullRequested = runIO (prim_getenv "VUNA_ELAB_FULL") == "1"
+elabFullRequested = runPure (prim_eff_getenv "VUNA_ELAB_FULL") == "1"
 
 -- `VUNA_IFACE_AUDIT=1`：排障/CI 开关——摘要路径与全量路径在同一进程各跑一次并逐字节比较
 -- 诊断/产物；不一致即失败且不写缓存。默认关闭（双倍精化，不适合热路径）。
 ifaceAuditRequested : Bool
-ifaceAuditRequested = runIO (prim_getenv "VUNA_IFACE_AUDIT") == "1"
+ifaceAuditRequested = runPure (prim_eff_getenv "VUNA_IFACE_AUDIT") == "1"
 
 -- 诊断签名：`Ok`/`Err` 都参与比较（顺序敏感，逐字节）。
 -- 直接按构造子在 clause 头分派（dispatch-lift），避免再嵌一层 case。
@@ -1047,7 +1048,7 @@ hashTableOf dep = case depIfaceOf dep of
 packageEnvHash : PackageContext -> Int
 packageEnvHash ctx =
   let
-    own = textHash (runIO (prim_readFile "${contextDir ctx}/vuna.toml"))
+    own = textHash (runPure (prim_eff_readFile "${contextDir ctx}/vuna.toml"))
     deps = case ctx.contextPackage of
       Nothing => []
       Just pkg => secondOf (collectDepPackages [] pkg.packageDependencies)
@@ -1059,7 +1060,7 @@ depEnvText : Package -> String
 depEnvText dep =
   let
     dir = normalizeDir (absolutePath (packageDir dep))
-  in "${packageName dep}|${dir}|${textHash (runIO (prim_readFile "${dir}/vuna.toml"))}"
+  in "${packageName dep}|${dir}|${textHash (runPure (prim_eff_readFile "${dir}/vuna.toml"))}"
 
 -- ---------------------------------------------------------------
 -- M34.5（S4）：包内逐模块增量的脏/净判定
@@ -1162,7 +1163,7 @@ ifaceCompilerTag = "${vunaVersion}/${compilerFingerprint}"
 ifaceRootOverride : String
 ifaceRootOverride =
   let
-    v = runIO (prim_getenv "VUNA_IFACE_DIR")
+    v = runPure (prim_eff_getenv "VUNA_IFACE_DIR")
   in if v == "" then "" else normalizeDir (absolutePath v)
 
 -- | 去掉路径前导 "/"，用于把包绝对目录拼到镜像根下。
@@ -1184,12 +1185,12 @@ ifaceDirOf ctx = ifaceBaseOf (contextDir ctx)
 
 -- | 接口写权限探测（默认布局写在源树里；Nix 构建的源树只读）。一次 `sh`：`mkdir -p` 建目录
 -- （对已存在目录是 no-op）+ 逐目录 `test -w`；返回 True = 可写。失败只降级不写，绝不把
--- `prim_writeFileAtomic` 的宿主异常漏给 check。
+-- `prim_eff_writeFileAtomic` 的宿主异常漏给 check。
 ifaceDirsWritable : List String -> Bool
 ifaceDirsWritable dirs =
   let
     script = "mkdir -p \"$@\" && for d in \"$@\"; do test -w \"$d\" || exit 1; done"
-    code = runIO (prim_runIn "." (append ["sh", "-c", script, "sh"] dirs))
+    code = runPure (prim_eff_runIn "." (append ["sh", "-c", script, "sh"] dirs))
   in code == 0
 
 -- | 写入前准备目录并确认可写：manifest 所在目录 + 每个接口文件的父目录。
@@ -1217,22 +1218,22 @@ ifaceLockPath : PackageContext -> String
 ifaceLockPath ctx = "${cacheBase}/${hashText (textHash (contextPackageName ctx))}/iface.lock"
 
 ifaceLockFresh : String -> Bool
-ifaceLockFresh path = runIO (prim_fileMtime path) + 60 > toolNowSec
+ifaceLockFresh path = runPure (prim_eff_fileMtime path) + 60 > toolNowSec
 
 acquireIfaceLock : String -> Bool
 acquireIfaceLock path =
   let
-    _ = runIO (prim_runIn "." ["mkdir", "-p", parentOfPath path])
-    made = runIO (prim_runIn "." ["mkdir", path]) == 0
+    _ = runPure (prim_eff_runIn "." ["mkdir", "-p", parentOfPath path])
+    made = runPure (prim_eff_runIn "." ["mkdir", path]) == 0
   in if made then True
   else if ifaceLockFresh path then False
   else
     let
-      _ = runIO (prim_runIn "." ["rm", "-rf", path])
-    in runIO (prim_runIn "." ["mkdir", path]) == 0
+      _ = runPure (prim_eff_runIn "." ["rm", "-rf", path])
+    in runPure (prim_eff_runIn "." ["mkdir", path]) == 0
 
 releaseIfaceLock : String -> Int
-releaseIfaceLock path = runIO (prim_runIn "." ["rm", "-rf", path])
+releaseIfaceLock path = runPure (prim_eff_runIn "." ["rm", "-rf", path])
 
 withIfaceLock : PackageContext -> (Int -> Int) -> Int
 withIfaceLock ctx f =
@@ -1255,7 +1256,7 @@ withIfaceLock ctx f =
 collectIfaceFiles : Int -> String -> List String
 collectIfaceFiles fuel dir =
   if fuel <= 0 then []
-  else if runIO (prim_fileExists dir) && runIO (prim_isDirectory dir) then concatMap (walkIfaceFiles (fuel - 1) dir) (runIO (prim_readDir dir))
+  else if runPure (prim_eff_fileExists dir) && runPure (prim_eff_isDirectory dir) then concatMap (walkIfaceFiles (fuel - 1) dir) (runPure (prim_eff_readDir dir))
   else []
 
 walkIfaceFiles : Int -> String -> String -> List String
@@ -1264,7 +1265,7 @@ else if name == "." || name == ".." then []
 else
   let
     path = "${dir}/${name}"
-  in if runIO (prim_fileExists path) && runIO (prim_isDirectory path) then collectIfaceFiles (fuel - 1) path
+  in if runPure (prim_eff_fileExists path) && runPure (prim_eff_isDirectory path) then collectIfaceFiles (fuel - 1) path
   else if endsWith ".iface" name && not (startsWith ".vuna" name) then [path] else []
 
 gcIfaceOrphans : String -> String -> List ModuleIface -> Int
@@ -1279,14 +1280,14 @@ gcIfaceGo keep [] = 0
 gcIfaceGo keep (p :: rest) =
   let
     referenced = memName p keep
-    old = runIO (prim_fileMtime p) + 60 < toolNowSec
-    removed = if referenced || not old then 0 else runIO (prim_removeFile p)
+    old = runPure (prim_eff_fileMtime p) + 60 < toolNowSec
+    removed = if referenced || not old then 0 else runPure (prim_eff_removeFile p)
   in removed + gcIfaceGo keep rest
 
 ownSourceInfos : PackageContext -> List (Pair String SourceInfo)
 ownSourceInfos ctx =
   concatMap
-    (\root => map (\p => Pair (moduleNameOfPath (rootDir root) p) (SourceInfo p (payloadDigest (runIO (prim_readFile p))) (runIO (prim_fileMtime p)) (runIO (prim_fileSize p)))) (collectVunaMeta 1048576 (rootDir root)))
+    (\root => map (\p => Pair (moduleNameOfPath (rootDir root) p) (SourceInfo p (payloadDigest (runPure (prim_eff_readFile p))) (runPure (prim_eff_fileMtime p)) (runPure (prim_eff_fileSize p)))) (collectVunaMeta 1048576 (rootDir root)))
     (filter (\r => rootName r == contextPackageName ctx) (contextRoots ctx))
 
 -- | 干净模块的 `miSource` 来自磁盘 manifest（可能是上一次以相对/绝对不同写法 check 时写入的
@@ -1358,7 +1359,7 @@ else
 -- 影子写的自检（`VUNA_IFACE_SELFTEST=1`）：读回 + 包接口校验 + 模块名集合/接口哈希一致。
 -- 失败让 check 失败（宁可暴露，不静默写坏缓存）。
 ifaceSelfTestRequested : Bool
-ifaceSelfTestRequested = runIO (prim_getenv "VUNA_IFACE_SELFTEST") == "1"
+ifaceSelfTestRequested = runPure (prim_eff_getenv "VUNA_IFACE_SELFTEST") == "1"
 
 ifaceHashOfName : List ModuleIface -> String -> Maybe String
 ifaceHashOfName [] _ = Nothing
@@ -1397,8 +1398,8 @@ checkAndCache : PackageContext -> String -> Check (Pair (List String) CheckedPac
 checkAndCache ctx path checked = Vuna.Compiler.Common.bind checked (\r => let
   _ = ensureDirPath (checkCacheDir ctx)
   _ =
-    runIO
-      (prim_writeFileAtomic path (frameEncode checkCacheTag (prim_marshal (cachedOfProgram (secondOf r).checkedProgram))))
+    runPure
+      (prim_eff_writeFileAtomic path (frameEncode checkCacheTag (prim_marshal (cachedOfProgram (secondOf r).checkedProgram))))
 in Vuna.Compiler.Common.bind (writeIfaceShadow ctx (secondOf r)) (\_ => OkC (firstOf r))
 )
 
@@ -1490,4 +1491,4 @@ writeSplitCache : PackageContext -> String -> List SplitFile -> Int
 writeSplitCache ctx path files =
   let
     _ = ensureDirPath (splitCacheDir ctx)
-  in runIO (prim_writeFileAtomic path (frameEncode splitCacheTag (prim_marshal files)))
+  in runPure (prim_eff_writeFileAtomic path (frameEncode splitCacheTag (prim_marshal files)))

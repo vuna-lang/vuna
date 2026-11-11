@@ -5,7 +5,7 @@ module Base.EffEnv
   , envGetCwd
   , envGetEnv
   , handleEnv
-  , handleEnvIO
+  , handleEnvHost
   , resEnv
   , runEnv
   ) where
@@ -15,7 +15,7 @@ module Base.EffEnv
 -- 标签 `Env n` 是命名实例；操作 GetEnv / GetCwd / ExecPath 都返回 String。
 -- 真实 handler 用 `Base.IO` 的 `getEnv` / `getCwd` / `execPath` 实现。
 import Base.Eff
-import Base.IO.Host
+import Base.Host
 import Base.Monad
 
 -- | env 效应的标签类型 `Env n`：只做行索引，没有运行时构造子。
@@ -50,7 +50,7 @@ handleEnv : {a : Type} -> {b : Type} -> {r : Row} -> (n : String) -> {w : Member
 handleEnv n ret opH comp = handleCore (Env n) "env" n ret opH comp
 
 -- | 真实 handler 的操作解释：把三个操作映射到 `Base.IO` 的 `getEnv` / `getCwd` / `execPath`。
-envOpHIO : {a : Type} -> (o : EnvOp) -> (resEnv o -> IO a) -> IO a
+envOpHIO : {a : Type} -> (o : EnvOp) -> (resEnv o -> Eff [] a) -> Eff [] a
 envOpHIO op k = case op of
   GetEnv name => do
     v <- getEnv name
@@ -63,9 +63,9 @@ envOpHIO op k = case op of
     k v
 
 -- | IO-backed handler：结果行删除 `Env n`，answer 是 IO 动作，可交给 `runIOAnswer`。
-handleEnvIO : {a : Type} -> {r : Row} -> (n : String) -> Eff (Base.Eff.Cons n (Env n) r) a -> Eff r (IO a)
-handleEnvIO n comp = handleEnv n (\a => pure a) envOpHIO comp
+handleEnvHost : {a : Type} -> {r : Row} -> (n : String) -> Eff (Base.Eff.Cons n (Env n) r) a -> Eff r (Eff [] a)
+handleEnvHost n comp = handleEnv n (\a => pure a) envOpHIO comp
 
--- | 单效应便捷入口（P3）：`handleEnvIO n` + `runIOAnswer` 的组合。
-runEnv : {a : Type} -> (n : String) -> Eff [Env n] a -> IO a
-runEnv n comp = runIOAnswer (handleEnvIO n comp)
+-- | 单效应便捷入口（P3）：`handleEnvHost n` + `runIOAnswer` 的组合。
+runEnv : {a : Type} -> (n : String) -> Eff [Env n] a -> Eff [] a
+runEnv n comp = joinEff (handleEnvHost n comp)

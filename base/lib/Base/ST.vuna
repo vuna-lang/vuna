@@ -40,9 +40,23 @@ module Base.ST
 -- 执行：`runST` 在入口用一次 `runIO`；`ST r a` 运行时是 `IO a` 的单构造子 data。
 -- 低层 `IORef` / `MArray` 仍是非线性内建类型，但字段不导出；用户只能经这里的线性包装
 -- 使用（信任点在 `Base.ST`）。
-import Base.IO.Host
+import Base.Monad
+import Base.Host
 import Base.Int
 import Base.Nat
+
+-- 内部 IO 基座保留最小 Functor 实例（ST 动作内部用 fmap 组合 IO 原语；
+-- 用户面已统一到 Eff，IO 只是特权实现层，不再有公开代数模块）。
+instance Functor IO where
+  fmap f io = prim_bindIO io (\x => prim_pureIO (f x))
+
+instance Monad IO where
+  bind io k = prim_bindIO io k
+
+instance Applicative IO where
+  pure x = prim_pureIO x
+  ap mf mx = prim_bindIO mf (\g => prim_bindIO mx (\b => prim_pureIO (g b)))
+  liftA2 f ma mb = prim_bindIO ma (\a => prim_bindIO mb (\b => prim_pureIO (f a b)))
 
 -- | region 内的线性可变引用句柄（linear record，内部包 `IORef`）；必须恰好消费一次（读 / 写 / 释放都消费并返回新句柄），不能逃出 `runST`。
 linear record Ref r a where

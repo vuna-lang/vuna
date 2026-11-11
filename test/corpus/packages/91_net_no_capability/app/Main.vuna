@@ -1,3 +1,5 @@
 -- M35.3：未声明 [capabilities].effects = ["net"] 时，直接引用 net 原语必须报能力错误。
-main : IO Int
-main = prim_netListen "unix:/tmp/vuna-net-no-cap.sock"
+import Base.Eff
+
+main : Eff [] Int
+main = prim_eff_netListen "unix:/tmp/vuna-net-no-cap.sock"

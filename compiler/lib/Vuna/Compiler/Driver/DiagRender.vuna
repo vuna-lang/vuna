@@ -20,7 +20,7 @@ module Vuna.Compiler.Driver.DiagRender (renderCliDiagnostic, renderWithPrefix) w
 -- 但 compiler 包不能 import lib，故在本模块内独立实现；file 可含 ':'，也可能带
 -- `Vuna.Compiler.X: ` / `[CG_X] ` 之类的前置标签，故对候选做宽松归一化后再读文件。
 import Vuna.Compiler.Common
-import Base.IO.Host
+import Base.Host
 
 -- ---------------------------------------------------------------
 -- 字符与文本小工具
@@ -136,10 +136,10 @@ stripCr s = if endsWith "\r" s then substring 0 (natFromInt (strLength s - 1)) s
 firstReadableLoc : List (Pair String (Pair Int Int)) -> Maybe (Pair String (Pair Int (Pair Int String)))
 firstReadableLoc [] = Nothing
 firstReadableLoc ((Pair file (Pair line col)) :: rest) = if line < 1 then firstReadableLoc rest
-else if runIO (fileExists file) then if runIO (isDirectory file) then firstReadableLoc rest
+else if runPure (fileExists file) then if runPure (isDirectory file) then firstReadableLoc rest
 else
   let
-    srcLines = lines (runIO (readFile file))
+    srcLines = lines (runPure (readFile file))
   in case lineAt srcLines line of
     Nothing => firstReadableLoc rest
     Just rawLine => Just (Pair file (Pair line (Pair col (stripCr rawLine))))

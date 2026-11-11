@@ -1,8 +1,8 @@
-import Base.IO
+import Base.Host
 -- M33 W3：Buffer（new / push / contents / length）。
 import Base.Buffer
 
-main : IO Int
+main : Eff [] Int
 main = do
   b <- new
   _ <- push b "hello"

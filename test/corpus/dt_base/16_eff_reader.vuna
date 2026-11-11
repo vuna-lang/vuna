@@ -17,4 +17,5 @@ op2 op k = case op of
   Ask => k 4
 
 main : Int
-main = runPure (handleReader "counter" Int (\a => a) op1 (handleReader "config" Int (\a => a) op2 prog))
+main =
+  runPure (handleReader "counter" Int (\a => a) op1 (handleReader "config" Int (\a => a) op2 prog))

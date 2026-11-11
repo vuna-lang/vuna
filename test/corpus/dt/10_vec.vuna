@@ -8,20 +8,17 @@ data Vec : Type -> Nat -> Type where
   VCons : (a : Type) -> (n : Nat) -> a -> Vec a n -> Vec a (Succ n)
 
 vhead : (a : Type) -> (n : Nat) -> Vec a (Succ n) -> a
-vhead a n xs =
-  case xs of
-    VCons b m y ys => y
+vhead a n xs = case xs of
+  VCons b m y ys => y
 
 vtail : (a : Type) -> (n : Nat) -> Vec a (Succ n) -> Vec a n
-vtail a n xs =
-  case xs of
-    VCons b m y ys => ys
+vtail a n xs = case xs of
+  VCons b m y ys => ys
 
 vlen : (a : Type) -> (n : Nat) -> Vec a n -> Int
-vlen a n xs =
-  case xs of
-    VNil b => 0
-    VCons b m y ys => 1 + vlen b m ys
+vlen a n xs = case xs of
+  VNil b => 0
+  VCons b m y ys => 1 + vlen b m ys
 
 pair : Vec Int (Succ (Succ Zero))
 pair = VCons Int (Succ Zero) 1 (VCons Int Zero 2 (VNil Int))

@@ -17,9 +17,9 @@ prog = withScope (\sc => do
   awaitTask t
 )
 
-main : IO Int
+main : Eff [] Int
 main = do
-  r <- runIOEff prog
+  r <- prog
   case r of
     Ok n => pure n
     Err _ => pure 0

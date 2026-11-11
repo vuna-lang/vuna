@@ -49,7 +49,7 @@ vuna: runtime error: division by zero
 - 位置是**定义级**（span 起点行），不是表达式级；路径归一成模块根/包目录下的相对路径
   （`Base/Show.vuna:42`、`app/Main.vuna:2`），保证同一输入的产物与 seed rotation 可复现。
 - 纯 `main`（零参值绑定）在**模块初始化期**求值，早于 main 钩子：`Main.ml` 第一行
-  开启回栈、并给入口 main 的绑定套同一个报告器；`main : IO a` 的 thunk 在钩子的
+  开启回栈、并给入口 main 的绑定套同一个报告器；`main : Eff [] a` 的 thunk 在钩子的
   `try` 内执行。
 - 回栈记录由生成代码 `Printexc.record_backtrace true` 打开；`build.sh` 本就带 `-g`
   （见 [compiler.md](compiler.md) 的输出模型）。

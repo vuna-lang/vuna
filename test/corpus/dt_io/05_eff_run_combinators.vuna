@@ -1,4 +1,4 @@
--- P3：单效应便捷入口 `runConsole` = `handleConsoleIO` + `runIOAnswer`。
+-- P3：单效应便捷入口 `runConsole` = `handleConsoleHost` + `runIOAnswer`。
 -- 用户面只经 `Eff` + handler，不需要 import 宿主层。
 import Base.Eff
 import Base.EffConsole
@@ -8,5 +8,5 @@ prog = do
   _ <- consolePrint "real" "hi"
   pure 7
 
-main : IO Int
+main : Eff [] Int
 main = runConsole "real" prog

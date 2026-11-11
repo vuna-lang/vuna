@@ -5,7 +5,7 @@ module Vuna.Compiler.Elab.MetaSpans (metaSpanOf, recordMetaSpan, resetMetaSpans)
 --
 -- 约束与 Diagnostics.Sink 相同：单线程检查路径；id 在每个 Ec 内唯一，新创建覆盖旧
 -- id（避免跨请求残留）；未登记的元变量（纯合成项）返回 Nothing，诊断不伪造位置。
-import Base.IO.Host
+import Base.Host
 import Base.IORef
 import Vuna.Compiler.Common
 
@@ -14,22 +14,22 @@ record MetaSpanBox where
   metaSpanTag : Int
 
 metaSpanRef : IORef MetaSpanBox
-metaSpanRef = runIO (newRef (MetaSpanBox [] 0))
+metaSpanRef = runPure (newRef (MetaSpanBox [] 0))
 
 -- | 清空登记表（测试/长驻进程入口可选调用）。
 resetMetaSpans : Int -> Int
-resetMetaSpans _ = runIO (writeRef metaSpanRef (MetaSpanBox [] 0))
+resetMetaSpans _ = runPure (writeRef metaSpanRef (MetaSpanBox [] 0))
 
 -- | 记录元变量创建点（同 id 覆盖）。
 recordMetaSpan : Int -> Span -> Int
 recordMetaSpan m sp =
   let
-    box = runIO (readRef metaSpanRef)
-  in runIO (writeRef metaSpanRef (MetaSpanBox (Pair m sp :: box.metaSpanItems) box.metaSpanTag))
+    box = runPure (readRef metaSpanRef)
+  in runPure (writeRef metaSpanRef (MetaSpanBox (Pair m sp :: box.metaSpanItems) box.metaSpanTag))
 
 -- | 按元变量 id 查创建点。
 metaSpanOf : Int -> Maybe Span
-metaSpanOf m = lookupMeta m (runIO (readRef metaSpanRef)).metaSpanItems
+metaSpanOf m = lookupMeta m (runPure (readRef metaSpanRef)).metaSpanItems
 
 -- | 线性查表（后创建覆盖先创建）。
 lookupMeta : Int -> List (Pair Int Span) -> Maybe Span

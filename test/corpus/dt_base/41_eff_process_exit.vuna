@@ -1,9 +1,9 @@
 -- W10 收尾：process 的 `Exit` 可控——mock handler（"mock"）与可选参数 handler
--- （"observed" 的 `handleProcessIOObserved`）都能观察退出码并继续执行；真实路径
--- （`handleProcessIO` 的 `prim_exit`）保留，但本夹具不触发它（否则测试进程退出）。
+-- （"observed" 的 `handleProcessHostObserved`）都能观察退出码并继续执行；真实路径
+-- （`handleProcessHost` 的 `prim_eff_exit`）保留，但本夹具不触发它（否则测试进程退出）。
 import Base.Eff
 import Base.EffProcess
-import Base.IO.Host
+import Base.Host
 import Base.List
 
 prog : (n : String) -> Eff [Process n] Int
@@ -20,8 +20,10 @@ mopH op k = case op of
   Exit c => k c
   RunIn dir args => k 0
 
-main : IO Int
-main =
-  prim_bindIO
-    (print ("mock " ++ strFromInt (runPure (handleProcess "mock" mret mopH (prog "mock"))) ++ "\n"))
-    (\_ => prim_bindIO (runIOAnswer (handleProcessIOObserved "observed" (prog "observed"))) (\observed => prim_bindIO (print ("observed " ++ strFromInt observed ++ "\n")) (\_ => prim_pureIO 0)))
+main : Eff [] Int
+main = do
+  _ <-
+    print ("mock " ++ strFromInt (runPure (handleProcess "mock" mret mopH (prog "mock"))) ++ "\n")
+  observed <- joinEff (handleProcessHostObserved "observed" (prog "observed"))
+  _ <- print ("observed " ++ strFromInt observed ++ "\n")
+  pure 0

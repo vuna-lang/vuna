@@ -16,13 +16,13 @@ v : Vec 3 Int
 v = [1, 2, 3]
 
 vsum : Vec 3 Int -> Int
-vsum [a, b, c] = a + b + c
+vsum ([a, b, c]) = a + b + c
 
 ml : MyList Int
 ml = [7, 8]
 
 mlsum : MyList Int -> Int
-mlsum [a, b] = a + b
+mlsum ([a, b]) = a + b
 mlsum _ = 0
 
 r : Row

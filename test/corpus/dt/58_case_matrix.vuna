@@ -37,4 +37,9 @@ boolToInt b = case b of
   False => 9
 
 main : Int
-main = unwrap (MyJust (MyMaybe Int) (MyJust Int 5)) + justInt (MyJust Int 0) + justInt (MyJust Int 7) + classify 0 + boolToInt False
+main =
+  unwrap (MyJust (MyMaybe Int) (MyJust Int 5))
+    + justInt (MyJust Int 0)
+    + justInt (MyJust Int 7)
+    + classify 0
+    + boolToInt False

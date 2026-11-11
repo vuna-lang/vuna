@@ -4,15 +4,15 @@ module Effects where
 -- M31 的 ioPrim 包装路径）与零参定义（zeroarg 应为 0）。
 -- program / probe 不被求值，只要求它们进入 codegen 产物，覆盖 IO 动作的生成形状。
 import Base.Monad
-import Base.IO.Host
+import Base.Host
 
-program : IO Int
+program : Eff [] Int
 program = do
   _ <- print "codegen"
   pure 0
 
-probe : IO Int
-probe = prim_print "codegen"
+probe : Eff [] Int
+probe = prim_eff_print "codegen"
 
 marker : Int
 marker = 0

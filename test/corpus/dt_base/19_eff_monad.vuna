@@ -16,7 +16,7 @@ progSeq : Eff [] Int
 progSeq = pure 100 >> pure 200
 
 progFn : Eff [] Int
-progFn = bind (pure 7) (\x => pure (x + 1))
+progFn = pure 7 >>= (\x => pure (x + 1))
 
 total : Eff [] Int
 total = do

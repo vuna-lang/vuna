@@ -1,9 +1,9 @@
--- D25：宿主度量返回 `Nat`（`prim_print` / `prim_writeFile` / `prim_fileSize` → `INat`）。
+-- D25：宿主度量返回 `Nat`（`prim_eff_print` / `prim_eff_writeFile` / `prim_eff_fileSize` → `INat`）。
 -- 验证 Host 的 `IO Nat` 签名、`Nat` 算术与 main 展示。
-import Base.IO.Host
+import Base.Host
 import Base.Nat
 
-main : IO Nat
+main : Eff [] Nat
 main = do
   written <- writeFile "/tmp/vuna_d25_measure.txt" "hello"
   size <- fileSize "/tmp/vuna_d25_measure.txt"

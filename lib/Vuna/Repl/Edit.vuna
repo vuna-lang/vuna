@@ -2,7 +2,7 @@ module Vuna.Repl.Edit (EditConfig(..), EditOutcome(..), editLine, terminalWidth)
 
 -- Vuna.Repl.Edit：REPL 行编辑器（工具链；不进 seed 闭包）。
 --
--- 终端能力全部来自 `Vuna.Repl.Term`（stty + prim_readBytes），因此不需要给编译器加
+-- 终端能力全部来自 `Vuna.Repl.Term`（stty + prim_eff_readBytes），因此不需要给编译器加
 -- 终端原语。支持：
 --   * 左/右移动、Home/End、Backspace/Delete（按 UTF-8 码点边界）；
 --   * ↑/↓ 历史；Ctrl-R 反向增量历史搜索（Enter 接受、Esc/Ctrl-C 取消）；
@@ -22,7 +22,7 @@ import Vuna.Compiler.Common
 import Vuna.Repl.Complete
 import Vuna.Repl.Paste
 import Vuna.Repl.Term
-import Base.IO.Host
+import Base.Host
 
 record EditConfig where
   editPrompt : String
@@ -103,7 +103,7 @@ editLine cfg =
       _ = termReadTimeout 0
       _ = redraw cfg cfg.editWidth st0
       -- fuel 上限：空闲 tick 也扣 1，1e7 tick ≈ 11.6 天（远超一次交互会话）。
-      -- 边界：timed read 的**超时与 EOF 都返回 -1**（`prim_readBytes` 无法区分），本编辑器
+      -- 边界：timed read 的**超时与 EOF 都返回 -1**（`prim_eff_readBytes` 无法区分），本编辑器
       -- 一律当 KIdle——所以 tty 关闭/EOF 会退化成空闲轮询，耗尽 fuel 后以 ECancel 结束
       -- （≈11.6 天）；正常退出靠 Ctrl-D（空行）或 `:quit`，不依赖 EOF 判定。
       result = editLoop 10000000 cfg cfg.editWidth 0 st0

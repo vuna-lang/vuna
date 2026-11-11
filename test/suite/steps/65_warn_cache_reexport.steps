@@ -22,7 +22,7 @@ out-not-contains: lib/Direct.vuna
 run: mkdir -p "$TMPDIR/warn-cache/lib"
 run: printf '[package]\nname = "warn-cache"\n[export]\nmodules = ["A", "DoOk", "TraitTwo", "UserWarn"]\n\n[dependencies]\nvuna-base = "%s"\n' "$VUNA_BASE" > "$TMPDIR/warn-cache/vuna.toml"
 run: printf 'module A where\n\na : Int -> Int\na x = let\n  x = 1\n  in x\n' > "$TMPDIR/warn-cache/lib/A.vuna"
-run: printf 'module DoOk where\n\nimport Base.IO\n\ngen : IO Int\ngen = do\n  _ <- prim_pureIO 1\n  prim_pureIO 2\n' > "$TMPDIR/warn-cache/lib/DoOk.vuna"
+run: printf 'module DoOk where\n\nimport Base.Eff\nimport Base.Monad\n\ngen : Eff [] Int\ngen = do\n  _ <- pure 1\n  pure 2\n' > "$TMPDIR/warn-cache/lib/DoOk.vuna"
 run: printf 'module TraitTwo where\n\ntrait Two f where\n  m1 : a -> f a\n  m2 : a -> f a\n' > "$TMPDIR/warn-cache/lib/TraitTwo.vuna"
 run: printf 'module UserWarn where\n\nu : Int -> Int\nu x = 1\n' > "$TMPDIR/warn-cache/lib/UserWarn.vuna"
 # 冷跑：建 check 缓存 + 模块接口。

@@ -1,76 +1,71 @@
-# 效应：IO 内建效应类型、效应栈与通用 Eff 的边界
+# 效应：Eff 统一动作、handler 与宿主层
 
-**现状**：`IO` 是**编译器内建效应类型**（kind `Type -> Type`，运行时裸 thunk `int -> 'a`，
-无构造器），构造/绑定/执行是内建代数 `prim_pureIO` / `prim_bindIO` / `prim_runIO`。在此之上：
-`Base.ST` 包 `IO`。D27 的「表示轴」（§5）让异构结果类型的
-CPS `Eff`（`res op` 在运行时位置不可命名）可编译并运行。运行时效应核心已落地（§8）：
-OCaml 5 一次性 delimited continuations + 开放行 + 命名实例 + 一阶效应（`Base.Eff` / Reader /
-State / Fs）；`Member` 行约束、`local`/`catch`/scoped `Exn`、线性续延与
-一次性闭包（`mkCont`/`resumeCont`）、通用 `bracket`（含非 `Exn` abort cleanup）、
-单线程 fiber 调度器（`Base.EffSched`：`forkTask`/`awaitTask`/
-`yieldNow`/`cancelTask`/`cancelScope`/结构化 `withScope` + 步数超时）均已落地；
-IO 标签迁移也已在库层落地（§8.6）：`Base.EffFs` 扩到完整 fs 面，新增
-`Base.EffConsole`/`EffClock`/`EffEnv`/`EffProcess`（命名实例 + IO-backed handler）；
-`IO` 仍保留为运行时基座/逃逸口。学习路径：想用现有
-效应写程序看 §2–§4；想知道 `Eff` 表示层怎么打通读 §5；想看运行时效应核心读 §8。
+**现状**：用户面唯一动作类型是 `Eff r a`（`Base.Eff`，构造子不导出；`MkEff` 是内部表示），
+入口是 `main : Eff [] a`（行必须为 `Nil`），执行入口是 `Base.Eff.runPure`。`IO` 已从用户面
+删除：`Base.IO` 模块不存在，用户包/ad-hoc/夹具不再能写 `main : Eff []`，也没有 `runPure` /
+`joinEff`。过渡期仍保留的 IO 只在**特权宿主层内部**（M4 债务）：`Base.Host`
+（原 `Base.Host`）的别名与 `IORef`/`MArray`/`Buffer`/`ST` 内部仍返回 IO，经
+`Base.Host.runIO = runPure ∘ deferIO` 执行；宿主原语是双表过渡——`prim_eff_*`（`Eff []`）
+与 IO 版 `prim_*` 并存，前者在 `Base.Host` 里做 Int/Nat 归一化，后者服务 bootstrap 与
+仍走 IO 的工具链源码。所有 IO-backed handler 的 answer 改为 `Eff []`，入口组合改成
+`runX = joinEff (handleXHost …)`。
+
+运行时效应核心已落地（§8）：OCaml 5 一次性 delimited continuations + 开放行 + 命名实例 +
+一阶效应（`Base.Eff` / Reader / State / Fs / Console / Clock / Env / Process / Stdin /
+Args / Exit）；`Member` 行约束、`local`/`catch`/scoped `Exn`、线性续延与一次性闭包
+（`mkCont`/`resumeCont`）、通用 `bracket`（含非 `Exn` abort cleanup）、单线程 fiber
+调度器（`Base.EffSched`：`forkTask`/`awaitTask`/`yieldNow`/`cancelTask`/`cancelScope`/
+结构化 `withScope` + 步数超时）均已落地。学习路径：写程序看 §2–§4；表示层看 §5；
+运行时核心看 §8。
 
 ## 1. 范围
 
-- **本页覆盖**：IO 的内建化与其代数、ST/region 的可变
-  数据、base 的 `unsafe` 信任点、通用 Eff 的表示与边界。
+- **本页覆盖**：`Eff` 统一动作的表示/执行、handler 与 `Eff []` answer、`Base.Host` 宿主层与
+  过渡期 IO 桥、ST/region 的可变数据、base 的 `unsafe` 信任点、通用 Eff 的边界。
 - **不覆盖**：原语/能力的逐条语义（[primitives.md](primitives.md) §7）；纯效应 monad
-  （`Base.State` / `Reader` / `Error`，它们不碰 IO，见 [stdlib.md](stdlib.md)）；
+  （`Base.State` / `Reader` / `Error`，它们不碰宿主，见 [stdlib.md](stdlib.md)）；
   并行/多核与 Domain 内存模型（只有单线程调度器，见 §8.5）；完整 QTT。
 
-## 2. IO 是内建效应类型
+## 2. 动作类型与宿主层（当前实现）
 
 ### 2.1 身份与表示
 
 | 项 | 值 |
 | --- | --- |
-| 类型名 | `IO`（与 `Int` / `String` 同级的语言内建类型，恒可见） |
-| kind | `Type -> Type`；参数是**类型层 binder**，`Rig0` 擦除——`a` 只出现在 OCaml 类型位置 `int -> 'a`，不产生运行时字段 |
-| 运行时表示 | 裸 thunk `int -> 'a`（`int` 是世界令牌，`main` 用 `0`） |
-| 构造器 | **没有**；`MkIO` 已删除 |
+| 用户面动作类型 | `Eff : Row -> Type -> Type`（`Base.Eff` 的 data；行是 Type-1 擦除索引） |
+| 表示 | 装箱 data：`MkEff : (EffUnit -> a) -> Eff r a`；`MkEff` 不导出，用户经 `pure`/`do`/`>>=`/handler 构造与消解 |
+| main 入口 | `main : Eff [] a`；钩子 `dtp_sched_main (fun () -> Base.Eff.runPure v_main)` |
+| 执行 | `runPure : Eff [] a -> a`（行必须 Nil；运行时 `runThunk` 应用 dummy 令牌） |
+| 行 | `Row` / `Cons` / `Nil` + `Member`；handler 用 `rowRem` 删行，运行时按 `(key, name)` 路由 |
 
-- `Intrinsics.ioFamilyName = ioTypeName = "IO"`；`IIO` 的签名形状映射到 `TGlobal "IO"`。
-- `IO` 在 prelude 类型层放行、并进「禁止重定义」名单：ad-hoc 入口写 `data IO` 报
-  `TC_CannotRedefineBuiltin`。模块内写 `data IO` 与 `data Bool` 同规则（mangle 成
-  `<Module>.IO`，是该模块自己的类型，不遮蔽内建 `IO`）。
-- `Base.IO` **不再声明** `IO`，只导出 API 与实例；`IO` 类型本身无需 import。
-- 类型渲染：`IO a` → `(int -> a)`。世界令牌必须显式标注 `int`（`fun (_ : int) -> …`），
-  否则 OCaml 值限制会把动作值推成不可泛化的弱类型变量。
+- `main : Eff [] a` 的**行检查在类型期**：entry 处仍有未处理行报
+  `TC_UnhandledEffects`；`vuna interp` 遇到动作入口报
+  `[CG_InterpCannotExecuteEffects]`（纯核心求值器只跑纯 main）。
+- `Eff []` 不表示「无副作用」：它表示「无未处理的行效应」；特权宿主层构造的叶子里可以
+  有真实 IO。副作用边界由能力/特权层把关，不由 `Eff []` 把关。
 
-### 2.2 代数与执行
+### 2.2 四层边界（当前）
 
-| 原语 | 签名 | 说明 |
+| 层 | 类型/入口 | 说明 |
 | --- | --- | --- |
-| `prim_pureIO` | `{a : Type} -> a -> IO a` | 构造动作（忽略令牌） |
-| `prim_bindIO` | `{a b : Type} -> IO a -> (a -> IO b) -> IO b` | 串行动作，令牌贯穿 |
-| `prim_runIO` | `{a : Type} -> IO a -> a` | 唯一 main 外执行入口，需能力 `unsafe` |
+| 用户面 | `Eff r a` + `Base.Eff.*` 标签/handler | 用户包与 ad-hoc 的唯一动作类型；`main : Eff [] a` |
+| handler 层 | `handleXHost` → `Eff r (Eff [] a)`，`runX = joinEff …` | IO-backed handler 的 answer 是已处理干净的 `Eff []` 动作；`joinEff` 展平 |
+| 宿主别名层 | `Base.Host`（privileged） | Eff 别名走 `prim_eff_*`；`[package] privileged = true` 才可 import；能力/信任门控不变 |
+| 内部 IO 桥 | `Base.Eff.deferIO` / `Base.Host.runIO`；IO 版 `prim_*`、`IORef`/`MArray`/`Buffer`/`ST` 内部 | **过渡期**：`deferIO : IO a -> Eff [] a`（动作执行时才应用世界令牌）；`runIO : IO a -> a = runPure ∘ deferIO`；M4 完成后删除 |
 
-- `Base.IO` 是**公开代数**：只导出 `Functor` / `Applicative` / `Monad IO` 实例（经
-  `prim_pureIO` / `prim_bindIO`），宿主别名与 `runIO = prim_runIO` 在**特权模块**
-  `Base.IO.Host`（`[package] privileged = true` 的包才可 import；用户面用 `Eff` + handler）。
+- **代数**：`Monad (Eff r)` / `Applicative` / `Functor` 实例已内建；用户用 `pure` / `do` /
+  `>>=` / `fmap`，不再有 `prim_pureIO` / `prim_bindIO` 这类用户可见构造入口。
 - **`unsafe` 的定义级信任点（D28）**：包在 manifest 声明 `[trust] unsafe = ["Module.def", ...]`
-  后进入严格模式：只有列出的定义可以**直接**引用 `unsafe` 门控目标（CapUnsafe 内建或
-  `Base.IO.Host.runIO` 别名）；`Loader.Resolve` 逐定义扫描，错误给出定义全限定名、触发内建名与
+  后进入严格模式：只有列出的定义可以**直接**引用 `unsafe` 门控目标（CapUnsafe 内建、
+  `Base.Host.runIO` 桥）；`Loader.Resolve` 逐定义扫描，错误给出定义全限定名、触发内建名与
   修复写法。未声明 `[trust]` 的包保持包级门控。base 是当前唯一 opt-in 方，清单即安全审计面
   （`base/vuna.toml`；机制见 [packages.md](packages.md) §效应能力）。
-- **执行边界不变**：动作只在 `main` 由运行时执行；`main : IO a` 的产物钩子是
-  `v_main 0`（不再 match 构造子）。`runIO` 与直接引用 `prim_runIO` 都受 `unsafe` 门控。
-- `vuna interp` 是纯核心求值器：遇到 `main : IO a` 一律报
-  `[CG_InterpCannotExecuteEffects]`，既不执行也不丢弃效果（逐条归约边界见
-  [primitives.md](primitives.md) §9）；效果程序只走 `compile` + 运行产物。
-- 没有异常 / handler 层：语言没有 `try` / `catch`、没有 effect handler；未捕获的宿主异常
-  由生成的 main 钩子统一报告为 `vuna: runtime error: ...` + 位置帧 + exit 2（见
-  [debugging.md](debugging.md)）。`dbg` / `dbgShow` / `assert` / `todo` 是**语言级调试
-  构造**，不构成效应系统的一部分：没有类型 / 能力 / `[trust]` 参与，`assert` / `todo`
-  只在 debug 构建存在（release 由 `Loader.Resolve` 拒绝）。
-- **能力边界**：效果原语只有 `prim_*` 名；`[capabilities]` / `[trust]` 只允许
+- **能力边界**：效果原语只有 `prim_*` / `prim_eff_*` 名；`[capabilities]` / `[trust]` 只允许
   `[package] privileged = true` 的包声明（用户包/ad-hoc 声明即 manifest 错误），非特权包
-  不能 import `Base.IO.Host`，也不能直调 `prim_*`。用户面宿主效应经 `Base.Eff.*` 标签 +
-  handler 表达，运行入口 `runIOEff : Eff [] a -> IO a`；`Base.IO.Host` 的别名只服务特权层。
+  不能 import `Base.Host`，也不能直调 `prim_*`。用户面宿主效应经 `Base.Eff.*` 标签 + handler。
+- **错误报告**：没有异常 / handler 层之外的语言级异常；未捕获的宿主异常由生成的 main 钩子
+  统一报告为 `vuna: runtime error: ...` + 位置帧 + exit 2（见 [debugging.md](debugging.md)）。
+  `dbg` / `dbgShow` / `assert` / `todo` 是语言级调试构造，不参与效应系统。
 
 ## 3. 历史效应栈（已删除）
 
@@ -145,11 +140,12 @@ CPS `Eff` 已经可 `check` + `compile` + 运行，且 interp 与产物逐字节
 
 ## 7. 设计规则（已实现部分）
 
-1. **IO 是内建效应类型 + 内建代数**：`prim_pureIO` / `prim_bindIO` / `prim_runIO`；
-   `Base.IO` 只做公面与实例，没有第二套构造/绑定实现。
+1. **Eff 是唯一动作类型 + 内建代数**：`pure`/`do`/`>>=` 来自 `Functor`/`Applicative`/`Monad (Eff r)` 实例；
+   用户面不再有 `prim_pureIO`/`prim_bindIO`；`joinEff` 展平 handler answer，`runPure` 执行。
+   过渡期 IO 桥（`Base.Host.runIO` / `Base.Eff.deferIO`）只服务实现层，M4 删除。
 2. **handler 是解释器**：`runPure` / `runConsole` / `runFs` / `runST`
    是唯一执行入口；没有「隐式生效的 handler 栈」。
-3. **可变数据两条边界**：`IORef` / `MArray` / `Buffer` 只能在 `IO` 动作里用；
+3. **可变数据两条边界**：`IORef` / `MArray` / `Buffer` 的公开操作已返回 `Eff []`（实现层仍用 IO 槽，过渡期）；
    `Ref` / `SArray` 只能在 `ST r` 里用，且不能逃出 `runST`。两者表示同构、类型隔离。
 4. **能力是权限层，不是类型豁免**：`runIO` / `prim_runIO` 使用点必须声明 `unsafe`；
    base 因此声明 `unsafe`，并用 `[trust] unsafe` 把直接使用点收敛到定义级（D28，opt-in
@@ -220,14 +216,14 @@ __EFF_SECTION__
 
 | 模块 | 内容 |
 | --- | --- |
-| `Base.Eff` | `Row(..)`、`Eff`、`Member(..)`/`rowRem`、内建 `Functor`/`Applicative`/`Monad (Eff r)`（`do`/`>>=`/`>>`，不提供 `bindEff`/`pureEff`）、`sendCore`/`handleCore`/`handleCoreLin`、`handleWith`/`handleWithAt` + `ResFn(..)`/`resFn`/`resOf`（`handle` 语法的两个降级目标：handler 类型显式、结果族作擦除量；行首条目版用于 comp 行未具体化）、`Cont`/`mkCont`/`resumeCont`、`bracket`/`finally`、`weaken`、`runPure`/`runIOEff`/`runIOAnswer` |
+| `Base.Eff` | `Row(..)`、`Eff`、`Member(..)`/`rowRem`、内建 `Functor`/`Applicative`/`Monad (Eff r)`（`do`/`>>=`/`>>`，不提供 `bindEff`/`pureEff`）、`sendCore`/`handleCore`/`handleCoreLin`、`handleWith`/`handleWithAt` + `ResFn(..)`/`resFn`/`resOf`（`handle` 语法的两个降级目标：handler 类型显式、结果族作擦除量；行首条目版用于 comp 行未具体化）、`Cont`/`mkCont`/`resumeCont`、`bracket`/`finally`、`weaken`、`joinEff`/`raise`、`deferIO`、`runPure` |
 | `Base.Eff.Reader` | `Reader n s` + `Ask`；`ask`/`handleReader`；`n` 是 String 实例名（`Reader "counter" Int`） |
 | `Base.EffState` | `State n s` + `Get`/`Put`；`get`/`put`/`handleState`（answer `s -> Pair a s` 线程状态） |
-| `Base.EffFs` | IO-backed Fs 效应（完整 fs 面；**命名实例** `Fs n`，如 `Fs "mock"`/`Fs "real"`）：`ReadFile`/`WriteFile`/`WriteFileAtomic`/`ReadDir`/`IsDirectory`/`MakeDir`/`RemoveFile`/`FileExists`/`FileMtime`/`FileSize` + `resFs`；`fsReadFile n`/`fsWriteFile n`/…/`handleFs n`（泛型）/`handleFsIO n`（IO-backed，可直接 `runIOAnswer`）；handler 用 `Base.IO` 实现。mock/real 可并存（`dt_base/40`） |
-| `Base.EffConsole` | W10 console 标签（命名实例，如 `"mock"`/`"real"`）：`Print`/`EPrint`；`consolePrint`/`consoleEprint`/`handleConsole`/`handleConsoleIO`（真实 handler 用 `Base.IO.Host.print`/`eprint`） |
-| `Base.EffClock` | W10 clock 标签（命名实例，如 `"mock"`/`"real"`）：`Now`（微秒时间戳）/`SleepMicros`；`clockNow`/`clockSleepMicros`/`handleClock`/`handleClockIO`（真实 handler 用 `Base.IO.Host.nowMicros` 与编译器原生 `prim_sleep`） |
-| `Base.EffEnv` | W10 env 标签（命名实例，如 `"mock"`/`"real"`）：`GetEnv`/`GetCwd`/`ExecPath`；`envGetEnv`/`envGetCwd`/`envExecPath`/`handleEnv`/`handleEnvIO`（真实 handler 用 `Base.IO.getEnv`/`getCwd`/`execPath`） |
-| `Base.EffProcess` | W10 process 标签（命名实例，如 `"mock"`/`"real"`）：`Args`/`Exit`/`RunIn`；`processArgs`/`processExit`/`processRunIn`/`handleProcess`/`handleProcessIO`（真实 handler 用 `prim_getArgs`/`prim_exit`/`prim_runIn`）/`handleProcessIOWith`（自定义 `onExit`）/`handleProcessIOObserved`（`Exit` 可观察、不退出） |
+| `Base.EffFs` | IO-backed Fs 效应（完整 fs 面；**命名实例** `Fs n`，如 `Fs "mock"`/`Fs "real"`）：`ReadFile`/`WriteFile`/`WriteFileAtomic`/`ReadDir`/`IsDirectory`/`MakeDir`/`RemoveFile`/`FileExists`/`FileMtime`/`FileSize` + `resFs`；`fsReadFile n`/`fsWriteFile n`/…/`handleFs n`（泛型）/`handleFsHost n`（IO-backed answer `Eff []`，`runFs = joinEff ∘ handleFsHost`）；handler 用 `Base.Host` 实现。mock/real 可并存（`dt_base/40`） |
+| `Base.EffConsole` | W10 console 标签（命名实例，如 `"mock"`/`"real"`）：`Print`/`EPrint`；`consolePrint`/`consoleEprint`/`handleConsole`/`handleConsoleHost`（真实 handler 用 `Base.Host.print`/`eprint`） |
+| `Base.EffClock` | W10 clock 标签（命名实例，如 `"mock"`/`"real"`）：`Now`（微秒时间戳）/`SleepMicros`；`clockNow`/`clockSleepMicros`/`handleClock`/`handleClockHost`（真实 handler 用 `Base.Host.nowMicros` 与编译器原生 `prim_sleep`） |
+| `Base.EffEnv` | W10 env 标签（命名实例，如 `"mock"`/`"real"`）：`GetEnv`/`GetCwd`/`ExecPath`；`envGetEnv`/`envGetCwd`/`envExecPath`/`handleEnv`/`handleEnvHost`（真实 handler 用 `Base.Host.getEnv`/`getCwd`/`execPath`） |
+| `Base.EffProcess` | W10 process 标签（命名实例，如 `"mock"`/`"real"`）：`Args`/`Exit`/`RunIn`；`processArgs`/`processExit`/`processRunIn`/`handleProcess`/`handleProcessHost`（真实 handler 用 `prim_getArgs`/`prim_exit`/`prim_runIn`）/`handleProcessHostWith`（自定义 `onExit`）/`handleProcessHostObserved`（`Exit` 可观察、不退出） |
 | `Base.EffError` | `Error`/`ErrorOp` + `throw`/`handleError`/`runError`/`catch`（L2 作用域 catch） |
 | `Base.EffExn` | W6 高阶 scoped Error：`Try` 携带子计算；`tryWith`/`runExn`/`catchExn`/`bracketExn` |
 | `Base.EffMutex` | W9 Mutex/Semaphore（IORef + yield 忙等）：`acquire`/`release`/`semWait`/`semSignal` |
@@ -279,9 +275,8 @@ process 可控 Exit）、`42–44`（通用 bracket abort cleanup、调度器 br
 - **并发/async**：W9 单线程调度器已落地（`Base.EffSched`，见 §8.5）：协作式
   `forkTask`/`awaitTask`/`yieldNow`、取消（含清理宽限）、结构化 `withScope`、步数超时；
   并行/多核（Domain）仍不是本层目标；旧 Domain 实现（`Base.EffAsync`）已删除。
-- **未处理效应诊断**：入口已在类型层收紧——`runIOEff : Eff [] a -> IO a`；
-  `runPure`/
-  `runIOAnswer` 本就要求 `Nil`，因此入口处的未处理效应是**类型错误**，并报专门的
+- **未处理效应诊断**：入口已在类型层收紧——`runPure : Eff [] a -> a`；
+  `load` 处 `joinEff`/`runPure` 要求行 `Nil`，因此入口处的未处理效应是**类型错误**，并报专门的
   `TC_UnhandledEffects`（列出具体标签，P1c；负例 `dt_err/82_unhandled_effect_entry`）。
   运行时兜底仍保留：main 钩子识别 `Effect.Unhandled (Perform (key,name,_))`，报告
   `unhandled effect key (instance name)`（`name` 是 String 实例名；`test/corpus/run_err/04_unhandled_effect`）；任务内
@@ -306,12 +301,12 @@ fork/await/yield/cancel/结构化 scope；W10 console/clock/env/process/fs 标�
   `Base.Eff.{Row,Nil,Cons,Member,Here,There,rowRem}` 硬编码名字，集中到
   `Vuna.Compiler.Intrinsics` 的效果协议常量（`effRowFamilyName` 等）；行删除归约与
   `Member` 证明构造只引用常量。
-- **入口收紧**：`runIOEff : Eff [] a -> IO a`——入口处的未处理效应是类型错误
+- **入口收紧**：`runPure : Eff [] a -> a`（行必须 `Nil`）——入口处的未处理效应是类型错误
   （负例 `dt_err/82_unhandled_effect_entry`），运行时 `unhandled effect` 兜底只服务
   特权/内部路径。
 - **专门诊断（P1c）**：`Elab/Term/Impl.checkByInferFuel` 在「期望行 `Nil`、实际行具体
   非空」时改报 `TC_UnhandledEffects` 并列出标签；不再只是裸 `TC_TypeMismatch`。
-- **特权边界**：`[capabilities]`/`[trust]` 与宿主层 `Base.IO.Host` 只允许
+- **特权边界**：`[capabilities]`/`[trust]` 与宿主层 `Base.Host` 只允许
   `[package] privileged = true` 的包；特权模块由 manifest 声明；REPL 默认非特权
   （显式 `--privileged`）；用户面与夹具已迁到 `Eff` + handler。
 - **单效应组合子与自动 lift**：`runConsole`/`runFs`/`runEnv`/`runClock`/`runProcess`

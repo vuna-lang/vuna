@@ -4,7 +4,7 @@ module Base.EffConsole
   , consoleEprint
   , consolePrint
   , handleConsole
-  , handleConsoleIO
+  , handleConsoleHost
   , resConsole
   , runConsole
   ) where
@@ -14,10 +14,10 @@ module Base.EffConsole
 -- 标签 `Console n` 是命名实例（与 State/Reader 同构，n 是 String 实例名）：同一程序
 -- 里可以同时安装多个 console handler（例如 "mock" = 收集器、"real" = 真实
 -- stdout/stderr），行里按实例名区分。操作只有 Print / EPrint；handler 用 `Base.IO` 的
--- `print` / `eprint` 实现真实语义，`handleConsoleIO` 是可直接交给
+-- `print` / `eprint` 实现真实语义，`handleConsoleHost` 是可直接交给
 -- `runIOAnswer` 的 IO-backed handler。
 import Base.Eff
-import Base.IO.Host
+import Base.Host
 import Base.Nat
 import Base.Monad
 
@@ -31,7 +31,7 @@ data ConsoleOp : Type where
   EPrint : String -> ConsoleOp
 
 -- | 操作的结果类型族：`Print` 返回写入字节数（`Nat`，D25）；`EPrint` 仍返回 `Int`
--- （`prim_eprint` 本轮未迁移）。
+-- （`prim_eff_eprint` 本轮未迁移）。
 resConsole : ConsoleOp -> Type
 resConsole (Print s) = Nat
 resConsole (EPrint s) = Int
@@ -50,7 +50,7 @@ handleConsole n ret opH comp = handleCore (Console n) "console" n ret opH comp
 
 -- 真实 handler 的 op 解释：answer 里直接执行 IO 动作。
 -- | 真实 handler 的操作解释：在续延前执行 `Base.IO` 的 `print` / `eprint`（answer 是 IO 动作）。
-consoleOpHIO : {a : Type} -> (o : ConsoleOp) -> (resConsole o -> IO a) -> IO a
+consoleOpHIO : {a : Type} -> (o : ConsoleOp) -> (resConsole o -> Eff [] a) -> Eff [] a
 consoleOpHIO op k = case op of
   Print s => do
     r <- print s
@@ -61,9 +61,9 @@ consoleOpHIO op k = case op of
 
 -- IO-backed handler：结果行删除 Console n，answer 是 IO 动作，可用 `runIOAnswer` 执行。
 -- | IO-backed handler：结果行删除 `Console n`，answer 是 IO 动作，可直接交给 `runIOAnswer` 执行。
-handleConsoleIO : {a : Type} -> {r : Row} -> (n : String) -> Eff (Base.Eff.Cons n (Console n) r) a -> Eff r (IO a)
-handleConsoleIO n comp = handleConsole n (\a => pure a) consoleOpHIO comp
+handleConsoleHost : {a : Type} -> {r : Row} -> (n : String) -> Eff (Base.Eff.Cons n (Console n) r) a -> Eff r (Eff [] a)
+handleConsoleHost n comp = handleConsole n (\a => pure a) consoleOpHIO comp
 
--- | 单效应便捷入口（P3）：`handleConsoleIO n` + `runIOAnswer` 的组合。
-runConsole : {a : Type} -> (n : String) -> Eff [Console n] a -> IO a
-runConsole n comp = runIOAnswer (handleConsoleIO n comp)
+-- | 单效应便捷入口（P3）：`handleConsoleHost n` + `runIOAnswer` 的组合。
+runConsole : {a : Type} -> (n : String) -> Eff [Console n] a -> Eff [] a
+runConsole n comp = joinEff (handleConsoleHost n comp)

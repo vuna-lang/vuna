@@ -25,22 +25,22 @@ import Vuna.Compiler.CacheFormat
 import Vuna.Compiler.Common
 import Vuna.Compiler.Driver.Split
 import Vuna.Compiler.Version
-import Base.IO.Host
+import Base.Host
 
 unitCacheSchema : String
 unitCacheSchema = "vuna-unit-cache 1"
 
 -- 编译器二进制指纹（缓存 key 必须含它：单元产物随编译器语义变化）。
 -- 与 `Driver.Compile.compilerFingerprint` 同口径：用**可执行文件自身**的路径 + 大小 +
--- mtime，而不是 `prim_getArgs` 的第一个用户参数。旧实现把子命令名（如 `test`）当路径：
--- 只要 cwd 里有同名文件/目录（包根的 `test/` 就是最常见的情况），`prim_readFile` 会去读
+-- mtime，而不是 `prim_eff_getArgs` 的第一个用户参数。旧实现把子命令名（如 `test`）当路径：
+-- 只要 cwd 里有同名文件/目录（包根的 `test/` 就是最常见的情况），`prim_eff_readFile` 会去读
 -- 目录并抛 `Failure("readFile: ...")`——`vuna test` 在包根直接崩溃即此。
 binaryFingerprint : Int
 binaryFingerprint =
   let
     exe = runIO prim_execPath
-    size = runIO (prim_fileSize exe)
-    mtime = runIO (prim_fileMtime exe)
+    size = runPure (prim_eff_fileSize exe)
+    mtime = runPure (prim_eff_fileMtime exe)
   in if size > 0 then textHashOf "${exe}:${size}:${mtime}" else textHashOf vunaVersion
 
 textHashOf : String -> Int
@@ -50,7 +50,7 @@ unitCacheTag : String
 unitCacheTag = "${unitCacheSchema}/${vunaVersion}/${binaryFingerprint}"
 
 cacheBaseOf : String
-cacheBaseOf = case runIO (prim_getenv "TMPDIR") of
+cacheBaseOf = case runPure (prim_eff_getenv "TMPDIR") of
   "" => "/tmp"
   t => t
 
@@ -94,7 +94,7 @@ unitCacheGc : String -> String -> Int
 unitCacheGc base keepDir =
   let
     _ = ensureDirPath base
-  in gcEntries base keepDir (runIO (prim_readDir base))
+  in gcEntries base keepDir (runPure (prim_eff_readDir base))
 
 gcEntries : String -> String -> List String -> Int
 gcEntries base keepDir [] = 0
@@ -102,23 +102,23 @@ gcEntries base keepDir (n :: rest) =
   let
     path = "${base}/${n}"
   in if path == keepDir then gcEntries base keepDir rest
-  else if runIO (prim_isDirectory path) then
+  else if runPure (prim_eff_isDirectory path) then
     let
       _ = dropDirFiles path
     in gcEntries base keepDir rest
   else
     let
-      _ = runIO (prim_removeFile path)
+      _ = runPure (prim_eff_removeFile path)
     in gcEntries base keepDir rest
 
 dropDirFiles : String -> Int
-dropDirFiles dir = dropFiles dir (runIO (prim_readDir dir))
+dropDirFiles dir = dropFiles dir (runPure (prim_eff_readDir dir))
 
 dropFiles : String -> List String -> Int
 dropFiles dir [] = 0
 dropFiles dir (f :: rest) =
   let
-    _ = runIO (prim_removeFile "${dir}/${f}")
+    _ = runPure (prim_eff_removeFile "${dir}/${f}")
   in dropFiles dir rest
 
 -- M34.6（S7 补完）：**桶内 GC**。同一 entry 桶只清「本次构建仍会引用」的 unit 文件之外
@@ -130,7 +130,7 @@ unitCacheBucketGc : String -> List String -> Int
 unitCacheBucketGc dir keepNames =
   let
     _ = ensureDirPath dir
-  in bucketGcGo dir keepNames (runIO (prim_readDir dir))
+  in bucketGcGo dir keepNames (runPure (prim_eff_readDir dir))
 
 bucketGcGo : String -> List String -> List String -> Int
 bucketGcGo dir keepNames [] = 0
@@ -138,10 +138,10 @@ bucketGcGo dir keepNames (f :: rest) =
   let
     path = "${dir}/${f}"
   in if memName f keepNames then bucketGcGo dir keepNames rest
-  else if runIO (prim_fileExists path) && runIO (prim_isDirectory path) then bucketGcGo dir keepNames rest
+  else if runPure (prim_eff_fileExists path) && runPure (prim_eff_isDirectory path) then bucketGcGo dir keepNames rest
   else
     let
-      _ = runIO (prim_removeFile path)
+      _ = runPure (prim_eff_removeFile path)
     in bucketGcGo dir keepNames rest
 
 unitCacheRead : String -> String -> String -> Maybe SplitFile
@@ -153,8 +153,8 @@ unitCacheWrite : String -> String -> String -> SplitFile -> Int
 unitCacheWrite dir name key sf =
   let
     _ = ensureDirPath dir
-  in runIO
-    (prim_writeFileAtomic (unitCachePath dir name key) (frameEncode unitCacheTag (prim_marshal sf)))
+  in runPure
+    (prim_eff_writeFileAtomic (unitCachePath dir name key) (frameEncode unitCacheTag (prim_marshal sf)))
 
 ensureDirPath : String -> Int
 ensureDirPath path = ensureDirPathFuel 64 path
@@ -168,7 +168,7 @@ else
   else
     let
       _ = if parent == path then 0 else ensureDirPathFuel (fuel - 1) parent
-    in if runIO (prim_fileExists path) then 0 else runIO (prim_makeDir path)
+    in if runPure (prim_eff_fileExists path) then 0 else runPure (prim_eff_makeDir path)
 
 parentOf : String -> String
 parentOf path =

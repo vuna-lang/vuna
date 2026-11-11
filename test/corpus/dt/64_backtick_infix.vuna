@@ -9,4 +9,4 @@ subFn x y = x - y
 -- 括号里的反引号链与普通中缀混用：`1 `addFn` 2 + 3` 在同一棵链里按优先级重排
 -- （反引号无声明 → 9 左，高于 `+` 的 6）。
 main : Int
-main = (3 `addFn` 4) + (1 `addFn` 2 `addFn` 3) + (10 `subFn` 3) + (1 `addFn` 2 + 3)
+main = 3 `addFn` 4 + 1 `addFn` 2 `addFn` 3 + 10 `subFn` 3 + (1 `addFn` 2 + 3)

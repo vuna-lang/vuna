@@ -1,5 +1,5 @@
 -- M21：DT 产物真正执行 Base.IO 的效果；P2c 起用户面经 Eff + handler，
--- `runConsole` = handleConsoleIO + runIOAnswer。输出见同名 .out。
+-- `runConsole` = handleConsoleHost + runIOAnswer。输出见同名 .out。
 import Base.Eff
 import Base.EffConsole
 
@@ -8,5 +8,5 @@ prog = do
   _ <- consolePrint "real" "hello"
   pure 7
 
-main : IO Int
+main : Eff [] Int
 main = runConsole "real" prog

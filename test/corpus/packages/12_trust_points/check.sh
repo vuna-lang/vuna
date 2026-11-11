@@ -47,7 +47,7 @@ check_eq "trust positive output" "" "$out"
 out=$("$VUNA" check "$here/neg_untrusted" 2>&1)
 check_eq "untrusted definition exit" "1" "$?"
 check_contains "untrusted definition message name" "$out" "TrustLib.probeAlias"
-check_contains "untrusted definition message trigger" "$out" "Base.IO.Host.runIO"
+check_contains "untrusted definition message trigger" "$out" "Base.Host.runIO"
 check_contains "untrusted definition message fix" "$out" "is not a trust point"
 
 # 2b) 负例：未列入信任点的定义直调 `prim_runIO` 内建。

@@ -389,9 +389,9 @@ main = case (MkEmail "x@y") of MkEmail s => s
   kind `* -> *`：trait 声明的类型参数可以当类型构造器应用（`m a`），实例 head 是
   类型构造器本身（`instance Monad Maybe`），kind 不符（如 `instance Monad Int`）在
   声明期报错。没有父类：`Monad` 不自动提供 `Applicative`，每个 monad 类型要写全三个实例。
-- **`IO`** 是 `base/lib/Base/IO.vuna` 的抽象类型（构造器私有）；组合统一用
+- **`IO`** 是 `base/lib/Base/Host.vuna` 的抽象类型（构造器私有）；组合统一用
   `Functor` / `Applicative` / `Monad` trait 的 `fmap` / `bind` / `pure` / `liftA2`、`>>=` 与 `do`。IO 动作只在 `main`
-  执行；`Base.IO.Host.runIO` 是唯一的 main 外入口、需要能力 `unsafe`（工具链与 `Base.ST` 用）。
+  执行；`Base.Host.runIO` 是唯一的 main 外入口、需要能力 `unsafe`（工具链与 `Base.ST` 用）。
   参数化效应 monad（`Base.State` / `Base.Reader` / `Base.Error`）与 ST 见
   [effects.md](effects.md)。
 - **库内组合约定**：类型已有实例时，组合统一写 `do` / `>>=` / `>>` / `bind` / `pure` /
@@ -425,11 +425,11 @@ main = case (MkEmail "x@y") of MkEmail s => s
 - 效果 API 直接返回 IO：`print` / `println` / `readFile` / `writeFile` / `readLine` /
   `readDir` / `isDirectory` / `makeDir` / `removeFile` / `fileExists` / `getArgs` /
   `exit`（例如 `getArgs : IO (List String)`、`print : String -> IO Int`）；内部用
-  不导出的 `prim_*` 原语。普通包只能经 `Base.IO` 使用效果；要在源码里直接调用
+  不导出的 `prim_*` 原语。普通包只能经 `Base.Host` 使用效果；要在源码里直接调用
   `prim_*`，必须在 `vuna.toml` 声明 `[capabilities] effects`（见
   [primitives.md](primitives.md)）。
-- 可执行包 / `vuna build` 要求 `main : IO a`；`vuna interp` 是纯核心求值，任何
-  `main : IO a` 一律报错。`vuna test` 的纯 `String` / `Int` / `Bool` 测试走核心求值，
-  `main : IO ...` 走 compile + 运行；REPL 的 IO 表达式经临时包 compile + 运行。
+- 可执行包 / `vuna build` 要求 `main : Eff [] a`；`vuna interp` 是纯核心求值，任何
+  `main : Eff [] a` 一律报错。`vuna test` 的纯 `String` / `Int` / `Bool` 测试走核心求值，
+  `main : Eff [] ...` 走 compile + 运行；REPL 的 IO 表达式经临时包 compile + 运行。
 - 实现：`Elab/Dict`、`Elab/Trait`、`Elab/Derive`；record 精化与字典编码在
   [core.md](core.md)。

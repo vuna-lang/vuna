@@ -2,7 +2,7 @@
 -- W10 收尾：`Fs` 是命名实例，操作与 handler 显式带实例名（本夹具用 "real"）。
 import Base.Eff
 import Base.EffFs
-import Base.IO.Host
+import Base.Host
 import Base.Nat
 
 prog : Eff [Fs "real"] Int
@@ -11,14 +11,18 @@ prog = do
   s <- fsReadFile "real" "/tmp/vuna_eff_fs.txt"
   pure (toInt (byteLength s))
 
-ret : Int -> IO Int
-ret a = prim_pureIO a
+ret : Int -> Eff [] Int
+ret a = pure a
 
-opH : (o : FsOp) -> (Base.EffFs.resFs o -> IO Int) -> IO Int
+opH : (o : FsOp) -> (Base.EffFs.resFs o -> Eff [] Int) -> Eff [] Int
 opH op k = case op of
-  ReadFile p => prim_bindIO (readFile p) (\s => k s)
-  WriteFile p s => prim_bindIO (writeFile p s) (\n => k n)
+  ReadFile p => do
+    s <- readFile p
+    k s
+  WriteFile p s => do
+    n <- writeFile p s
+    k n
   _ => prim_fail "unexpected fs op in 18_eff_fs_io"
 
-main : IO Int
-main = runIOAnswer (handleFs "real" ret opH prog)
+main : Eff [] Int
+main = joinEff (handleFs "real" ret opH prog)
