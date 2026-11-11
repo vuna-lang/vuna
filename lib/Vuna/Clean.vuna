@@ -12,7 +12,7 @@ import Vuna.Compiler.Common
 import Vuna.Cli.Args
 import Base.Host
 
-runCleanIface : List String -> Int
+runCleanIface : List String -> Eff [] Int
 runCleanIface args = case parseToolArgs "vuna clean-iface" [BoolFlag "dry-run"] args of
   ErrC e => cleanError (diagText e)
   OkC parsed => case parsed.positionals of
@@ -20,26 +20,27 @@ runCleanIface args = case parseToolArgs "vuna clean-iface" [BoolFlag "dry-run"] 
     [dir] => cleanAt dir (flagSet parsed "dry-run")
     _ => cleanError "too many arguments; expected at most one directory"
 
-cleanAt : String -> Bool -> Int
+cleanAt : String -> Bool -> Eff [] Int
 cleanAt dir dry = case requireDirectory dir of
   ErrC e => cleanError (diagText e)
-  OkC _ =>
-    let
-      files = filter isIfaceFile (walkFiles 1048576 dir)
-      count = length files
-      _ = if dry then 0 else foldl (\acc, f => acc + runPure (prim_eff_removeFile f)) 0 files
-      message =
-        if count == 0 then "clean-iface: no iface files under ${dir}\n"
-        else if dry then "clean-iface: would remove ${strFromInt count} file(s) under ${dir}\n"
-        else "clean-iface: removed ${strFromInt count} file(s) under ${dir}\n"
-      _ = runPure (prim_eff_print message)
-    in 0
+  OkC _ => do
+    all <- walkFiles 1048576 dir
+    _ <- if dry then pure 0 else removeEach (filter isIfaceFile all)
+    _ <-
+      prim_eff_print
+        (if length (filter isIfaceFile all) == 0 then "clean-iface: no iface files under ${dir}\n" else if dry then "clean-iface: would remove ${strFromInt (length (filter isIfaceFile all))} file(s) under ${dir}\n" else "clean-iface: removed ${strFromInt (length (filter isIfaceFile all))} file(s) under ${dir}\n")
+    pure 0
 
-cleanError : String -> Int
-cleanError e =
-  let
-    _ = runPure (prim_eff_print "error: ${e}\n")
-  in 2
+removeEach : List String -> Eff [] Int
+removeEach [] = pure 0
+removeEach (f :: rest) = do
+  _ <- prim_eff_removeFile f
+  removeEach rest
+
+cleanError : String -> Eff [] Int
+cleanError e = do
+  _ <- prim_eff_print "error: ${e}\n"
+  pure 2
 
 -- 与工作树其他遍历一致的跳过规则：`.local` 不跳过（`VUNA_IFACE_DIR=.local/iface` 时要能清到）。
 skipCleanDir : String -> Bool
@@ -55,23 +56,36 @@ skipCleanDir name =
     || startsWith "result-" name
 
 -- 目录树是文件系统图（符号链接可成环），用显式 fuel 守卫。
-walkFiles : Int -> String -> List String
-walkFiles fuel dir =
-  if fuel <= 0 then []
-  else if runPure (prim_eff_fileExists dir) && runPure (prim_eff_isDirectory dir) then concatMap (walkGo (fuel - 1) dir) (runPure (prim_eff_readDir dir))
-  else []
+walkFiles : Int -> String -> Eff [] (List String)
+walkFiles fuel dir = if fuel <= 0 then pure []
+else do
+  exists <- prim_eff_fileExists dir
+  isDir <- prim_eff_isDirectory dir
+  if exists && isDir then do
+    names <- prim_eff_readDir dir
+    concatMapEff (walkGo (fuel - 1) dir) names
+  else pure []
 
-walkGo : Int -> String -> String -> List String
-walkGo fuel dir name = if fuel <= 0 then []
+concatMapEff : (a -> Eff [] (List b)) -> List a -> Eff [] (List b)
+concatMapEff f [] = pure []
+concatMapEff f (x :: rest) = do
+  xs <- f x
+  ys <- concatMapEff f rest
+  pure (append xs ys)
+
+walkGo : Int -> String -> String -> Eff [] (List String)
+walkGo fuel dir name = if fuel <= 0 then pure []
 else case name of
-  "." => []
-  ".." => []
-  _ => if skipCleanDir name then []
+  "." => pure []
+  ".." => pure []
+  _ => if skipCleanDir name then pure []
   else
     let
       path = "${dir}/${name}"
-    in if runPure (prim_eff_fileExists path) && runPure (prim_eff_isDirectory path) then walkFiles (fuel - 1) path
-    else [path]
+    in do
+      exists <- prim_eff_fileExists path
+      isDir <- prim_eff_isDirectory path
+      if exists && isDir then walkFiles (fuel - 1) path else pure [path]
 
 isIfaceFile : String -> Bool
 isIfaceFile path =
