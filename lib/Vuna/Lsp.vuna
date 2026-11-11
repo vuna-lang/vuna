@@ -142,22 +142,24 @@ flushLogs : LspState -> Int
 flushLogs st = flushLogLines st.stateLogs
 
 -- 首次需要索引时构建；失败一次后不再重试（避免每个请求都全量扫描磁盘）。
-ensureIndex : String -> LspState -> Pair LspState (Maybe Index)
+ensureIndex : String -> LspState -> Eff [] (Pair LspState (Maybe Index))
 ensureIndex uri st = case st.stateIndex of
-  Just idx => Pair st (Just idx)
-  Nothing => if st.stateIndexTried then Pair st Nothing
+  Just idx => pure (Pair st (Just idx))
+  Nothing => if st.stateIndexTried then pure (Pair st Nothing)
   else
     let
       root = workspaceRoot uri
-    in case runPure (loadOrBuild root) of
-      OkC idx =>
-        let
-          st1 = logTo "index ready: ${root}" (setIndexTried True (setIndex (Just idx) st))
-        in Pair st1 (Just idx)
-      ErrC e =>
-        let
-          st1 = logTo "index unavailable: ${diagText e}" (setIndexTried True st)
-        in Pair st1 Nothing
+    in do
+      r <- loadOrBuild root
+      case r of
+        OkC idx =>
+          let
+            st1 = logTo "index ready: ${root}" (setIndexTried True (setIndex (Just idx) st))
+          in pure (Pair st1 (Just idx))
+        ErrC e =>
+          let
+            st1 = logTo "index unavailable: ${diagText e}" (setIndexTried True st)
+          in pure (Pair st1 Nothing)
 
 -- 打开的文档文本（未打开 → ""）。
 textForUri : String -> LspState -> String
@@ -219,7 +221,7 @@ clientSupportsPull msg = case jsonGetIn ["params", "capabilities", "textDocument
 
 -- didOpen：登记文档并推诊断（M34.4：同一 uri + 文本内容的诊断帧进程内缓存，重复请求
 -- 不重复精化）。声明 pull 能力的客户端不 push（见 stateClientPull）。
-handleDidOpen : Json -> LspState -> Pair Bool (Pair LspState (List Json))
+handleDidOpen : Json -> LspState -> Eff [] (Pair Bool (Pair LspState (List Json)))
 handleDidOpen msg state =
   let
     params = paramsOf msg
@@ -227,14 +229,13 @@ handleDidOpen msg state =
     version = versionOfParams params
     text = textOfParams params
     docs = docSet (Doc uri version text) state.stateDocs
-  in if state.stateClientPull then Pair False (Pair (setRootHintIfEmpty uri (setDocs docs state)) [])
-  else
-    let
-      pair = diagnoseCached uri version text state
-    in Pair False (Pair (setRootHintIfEmpty uri (setDocs docs (firstOf pair))) [secondOf pair])
+  in if state.stateClientPull then pure (Pair False (Pair (setRootHintIfEmpty uri (setDocs docs state)) []))
+  else do
+    pair <- diagnoseCached uri version text state
+    pure (Pair False (Pair (setRootHintIfEmpty uri (setDocs docs (firstOf pair))) [secondOf pair]))
 
 -- didChange（Full 同步）：覆盖全文并重推诊断（pull 客户端只更新文档表）。
-handleDidChange : Json -> LspState -> Pair Bool (Pair LspState (List Json))
+handleDidChange : Json -> LspState -> Eff [] (Pair Bool (Pair LspState (List Json)))
 handleDidChange msg state =
   let
     params = paramsOf msg
@@ -247,25 +248,24 @@ handleDidChange msg state =
       Just v => v
     text = changedText params
     docs = docSet (Doc uri version text) state.stateDocs
-  in if state.stateClientPull then Pair False (Pair (setDocs docs state) [])
-  else
-    let
-      pair = diagnoseCached uri version text state
-    in Pair False (Pair (setDocs docs (firstOf pair)) [secondOf pair])
+  in if state.stateClientPull then pure (Pair False (Pair (setDocs docs state) []))
+  else do
+    pair <- diagnoseCached uri version text state
+    pure (Pair False (Pair (setDocs docs (firstOf pair)) [secondOf pair]))
 
 -- M34.4：诊断帧缓存查询（key = uri + 文本内容哈希；未命中才跑完整精化并写缓存）。
-diagnoseCached : String -> Int -> String -> LspState -> Pair LspState Json
+diagnoseCached : String -> Int -> String -> LspState -> Eff [] (Pair LspState Json)
 diagnoseCached uri version text state =
   let
     key = strHash uri * 1000003 + strHash text
   in case lookupDiag key state.stateDiagCache of
-    Just frame => Pair state frame
-    Nothing =>
+    Just frame => pure (Pair state frame)
+    Nothing => do
+      result <- publishDiagnosticsCached state.stateDiagSession uri version text
       let
-        result = publishDiagnosticsCached state.stateDiagSession uri version text
         frame = secondOf result
         state1 = pushDiag key frame (setDiagSession (firstOf result) state)
-      in Pair state1 frame
+      in pure (Pair state1 frame)
 
 lookupDiag : Int -> List (Pair Int Json) -> Maybe Json
 lookupDiag key [] = Nothing
@@ -283,18 +283,21 @@ handleDidClose msg state =
 
 -- hover：洞目标（包上下文）→ 模块引用/局部绑定（parse 级）→ 标识符签名/注释。
 -- pull diagnostics（LSP 3.17）：与 push 同一条诊断链，返回完整报告；不额外发布通知。
-handlePullDiagnostics : Json -> LspState -> Pair Bool (Pair LspState (List Json))
+handlePullDiagnostics : Json -> LspState -> Eff [] (Pair Bool (Pair LspState (List Json)))
 handlePullDiagnostics msg state =
   let
     params = paramsOf msg
     uri = uriOfParams params
     text = textForUri uri state
-    result = diagnosticsForCached state.stateDiagSession uri text
-    labeled = secondOf result
-    state1 = setDiagSession (firstOf result) state
-  in Pair False (Pair state1 [responseOk (idOf msg) (diagReportJson uri text (secondOf labeled))])
+  in do
+    result <- diagnosticsForCached state.stateDiagSession uri text
+    let
+      labeled = secondOf result
+      state1 = setDiagSession (firstOf result) state
+    in pure
+      (Pair False (Pair state1 [responseOk (idOf msg) (diagReportJson uri text (secondOf labeled))]))
 
-handleHover : Json -> LspState -> Pair Bool (Pair LspState (List Json))
+handleHover : Json -> LspState -> Eff [] (Pair Bool (Pair LspState (List Json)))
 handleHover msg state =
   let
     params = paramsOf msg
@@ -303,15 +306,18 @@ handleHover msg state =
     col = colOfParams params + 1
     text = textForUri uri state
   in case holeHoverAt uri line col text of
-    Just hover => Pair False (Pair state [responseOk (idOf msg) hover])
-    Nothing => case bindingHoverAt uri line col text of
-      Just hover => Pair False (Pair state [responseOk (idOf msg) hover])
-      Nothing =>
-        let
-          indexPair = ensureIndex uri state
-          state1 = firstOf indexPair
-          midx = secondOf indexPair
-        in Pair False (Pair state1 [responseOk (idOf msg) (symbolHoverResult uri line col text midx)])
+    Just hover => pure (Pair False (Pair state [responseOk (idOf msg) hover]))
+    Nothing => do
+      bindHover <- bindingHoverAt uri line col text
+      case bindHover of
+        Just hover => pure (Pair False (Pair state [responseOk (idOf msg) hover]))
+        Nothing => do
+          indexPair <- ensureIndex uri state
+          let
+            state1 = firstOf indexPair
+            midx = secondOf indexPair
+          in pure
+            (Pair False (Pair state1 [responseOk (idOf msg) (symbolHoverResult uri line col text midx)]))
 
 -- formatting：formatSourceWith 成功且内容变化 ⇒ 全文 TextEdit；否则 []（M31.3：程序级 fixity）。
 handleFormatting : Json -> LspState -> Pair Bool (Pair LspState (List Json))
@@ -339,7 +345,7 @@ onlyKindsOf params = case jsonGetIn ["context", "only"] params >>= jsonAsArr of
   Just kinds => Just (mapMaybe jsonAsStr kinds)
 
 -- codeAction：当前缓冲 → lint quick fix / fix all command / 洞 case split（纯查询）。
-handleCodeAction : Json -> LspState -> Pair Bool (Pair LspState (List Json))
+handleCodeAction : Json -> LspState -> Eff [] (Pair Bool (Pair LspState (List Json)))
 handleCodeAction msg state =
   let
     params = paramsOf msg
@@ -349,8 +355,9 @@ handleCodeAction msg state =
     startCol = rangeCharOf "start" params + 1
     endLine = rangeLineOf "end" params + 1
     endCol = rangeCharOf "end" params + 1
-    actions = codeActionsFor uri text startLine startCol endLine endCol (onlyKindsOf params)
-  in Pair False (Pair state [responseOk (idOf msg) (JArr actions)])
+  in do
+    actions <- codeActionsFor uri text startLine startCol endLine endCol (onlyKindsOf params)
+    pure (Pair False (Pair state [responseOk (idOf msg) (JArr actions)]))
 
 -- ---------------------------------------------------------------
 -- workspace/executeCommand（C38：fix all 的 command 形式）
@@ -399,7 +406,7 @@ handleDocumentSymbol msg state =
   in Pair False (Pair state [responseOk (idOf msg) (JArr (documentSymbols uri text))])
 
 -- definition：模块引用/局部绑定（parse 级）→ Index 符号 → 同文件兜底。
-handleDefinition : Json -> LspState -> Pair Bool (Pair LspState (List Json))
+handleDefinition : Json -> LspState -> Eff [] (Pair Bool (Pair LspState (List Json)))
 handleDefinition msg state =
   let
     params = paramsOf msg
@@ -407,17 +414,20 @@ handleDefinition msg state =
     line = lineOfParams params + 1
     col = colOfParams params + 1
     text = textForUri uri state
-  in case bindingDefinitionAt uri line col text of
-    Just loc => Pair False (Pair state [responseOk (idOf msg) loc])
-    Nothing =>
-      let
-        indexPair = ensureIndex uri state
-        state1 = firstOf indexPair
-        midx = secondOf indexPair
-      in Pair False (Pair state1 [responseOk (idOf msg) (definitionResult uri line col text midx)])
+  in do
+    bindLoc <- bindingDefinitionAt uri line col text
+    case bindLoc of
+      Just loc => pure (Pair False (Pair state [responseOk (idOf msg) loc]))
+      Nothing => do
+        indexPair <- ensureIndex uri state
+        let
+          state1 = firstOf indexPair
+          midx = secondOf indexPair
+        in pure
+          (Pair False (Pair state1 [responseOk (idOf msg) (definitionResult uri line col text midx)]))
 
 -- references：定义位置 + Index refs 的出现位置。
-handleReferences : Json -> LspState -> Pair Bool (Pair LspState (List Json))
+handleReferences : Json -> LspState -> Eff [] (Pair Bool (Pair LspState (List Json)))
 handleReferences msg state =
   let
     params = paramsOf msg
@@ -425,13 +435,16 @@ handleReferences msg state =
     line = lineOfParams params + 1
     col = colOfParams params + 1
     text = textForUri uri state
-    indexPair = ensureIndex uri state
-    state1 = firstOf indexPair
-    midx = secondOf indexPair
-  in Pair False (Pair state1 [responseOk (idOf msg) (JArr (referencesResult uri line col text midx))])
+  in do
+    indexPair <- ensureIndex uri state
+    let
+      state1 = firstOf indexPair
+      midx = secondOf indexPair
+    in pure
+      (Pair False (Pair state1 [responseOk (idOf msg) (JArr (referencesResult uri line col text midx))]))
 
 -- prepareRename：光标 token 的范围 + 占位名（无法改名 → null）。
-handlePrepareRename : Json -> LspState -> Pair Bool (Pair LspState (List Json))
+handlePrepareRename : Json -> LspState -> Eff [] (Pair Bool (Pair LspState (List Json)))
 handlePrepareRename msg state =
   let
     params = paramsOf msg
@@ -439,13 +452,17 @@ handlePrepareRename msg state =
     line = lineOfParams params + 1
     col = colOfParams params + 1
     text = textForUri uri state
-    indexPair = ensureIndex uri state
-    state1 = firstOf indexPair
-    midx = secondOf indexPair
-  in Pair False (Pair state1 [responseOk (idOf msg) (prepareRenameAt uri line col text midx)])
+  in do
+    indexPair <- ensureIndex uri state
+    let
+      state1 = firstOf indexPair
+      midx = secondOf indexPair
+    in do
+      json <- prepareRenameAt uri line col text midx
+      pure (Pair False (Pair state1 [responseOk (idOf msg) json]))
 
 -- rename：局部绑定只改当前文档；顶层符号额外改目标模块与 import 它的模块。
-handleRename : Json -> LspState -> Pair Bool (Pair LspState (List Json))
+handleRename : Json -> LspState -> Eff [] (Pair Bool (Pair LspState (List Json)))
 handleRename msg state =
   let
     params = paramsOf msg
@@ -454,13 +471,17 @@ handleRename msg state =
     col = colOfParams params + 1
     newName = fromMaybe "" (jsonGet "newName" params >>= jsonAsStr)
     text = textForUri uri state
-    indexPair = ensureIndex uri state
-    state1 = firstOf indexPair
-    midx = secondOf indexPair
-  in Pair False (Pair state1 [responseOk (idOf msg) (renameAt uri line col text newName midx)])
+  in do
+    indexPair <- ensureIndex uri state
+    let
+      state1 = firstOf indexPair
+      midx = secondOf indexPair
+    in do
+      json <- renameAt uri line col text newName midx
+      pure (Pair False (Pair state1 [responseOk (idOf msg) json]))
 
 -- completion：关键字 + 当前缓冲顶层名 + Index 符号；`.` 后按模块过滤。
-handleCompletion : Json -> LspState -> Pair Bool (Pair LspState (List Json))
+handleCompletion : Json -> LspState -> Eff [] (Pair Bool (Pair LspState (List Json)))
 handleCompletion msg state =
   let
     params = paramsOf msg
@@ -468,41 +489,46 @@ handleCompletion msg state =
     line = lineOfParams params
     col = colOfParams params
     text = textForUri uri state
-    indexPair = ensureIndex uri state
-    state1 = firstOf indexPair
-    midx = secondOf indexPair
-  in Pair False (Pair state1 [responseOk (idOf msg) (JArr (completionItems text line col midx))])
+  in do
+    indexPair <- ensureIndex uri state
+    let
+      state1 = firstOf indexPair
+      midx = secondOf indexPair
+    in pure
+      (Pair False (Pair state1 [responseOk (idOf msg) (JArr (completionItems text line col midx))]))
 
 -- workspace/symbol：Index 过滤（空 query = 全部，上限 200）。
-handleWorkspaceSymbol : Json -> LspState -> Pair Bool (Pair LspState (List Json))
+handleWorkspaceSymbol : Json -> LspState -> Eff [] (Pair Bool (Pair LspState (List Json)))
 handleWorkspaceSymbol msg state =
   let
     params = paramsOf msg
     query = fromMaybe "" (jsonGet "query" params >>= jsonAsStr)
     hint = fromMaybe "" state.stateRootHint
-    indexPair = ensureIndex hint state
-    state1 = firstOf indexPair
-    midx = secondOf indexPair
-  in Pair False (Pair state1 [responseOk (idOf msg) (JArr (workspaceSymbols midx query))])
+  in do
+    indexPair <- ensureIndex hint state
+    let
+      state1 = firstOf indexPair
+      midx = secondOf indexPair
+    in pure (Pair False (Pair state1 [responseOk (idOf msg) (JArr (workspaceSymbols midx query))]))
 
 -- 处理一帧。返回 (是否退出, 新状态, 待发送帧)。
-handleFrame : Json -> LspState -> Pair Bool (Pair LspState (List Json))
+handleFrame : Json -> LspState -> Eff [] (Pair Bool (Pair LspState (List Json)))
 handleFrame msg state = case jsonGet "method" msg of
-  Nothing => Pair False (Pair state []) -- 客户端对我们请求的响应：忽略
+  Nothing => pure (Pair False (Pair state [])) -- 客户端对我们请求的响应：忽略
   Just m => case jsonAsStr m of
-    Nothing => Pair False (Pair state [])
+    Nothing => pure (Pair False (Pair state []))
     Just methodName => dispatch methodName msg state
 
-dispatch : String -> Json -> LspState -> Pair Bool (Pair LspState (List Json))
+dispatch : String -> Json -> LspState -> Eff [] (Pair Bool (Pair LspState (List Json)))
 dispatch "initialize" msg state =
-  Pair False (Pair (setClientPull (clientSupportsPull msg) state) [initializeResult msg])
-dispatch "initialized" msg state = Pair False (Pair state [])
+  pure (Pair False (Pair (setClientPull (clientSupportsPull msg) state) [initializeResult msg]))
+dispatch "initialized" msg state = pure (Pair False (Pair state []))
 dispatch "shutdown" msg state =
-  Pair False (Pair (setShutdown True state) [responseOk (idOf msg) JNull])
-dispatch "exit" msg state = Pair True (Pair state [])
+  pure (Pair False (Pair (setShutdown True state) [responseOk (idOf msg) JNull]))
+dispatch "exit" msg state = pure (Pair True (Pair state []))
 dispatch "textDocument/didOpen" msg state = handleDidOpen msg state
 dispatch "textDocument/didChange" msg state = handleDidChange msg state
-dispatch "textDocument/didClose" msg state = handleDidClose msg state
+dispatch "textDocument/didClose" msg state = pure (handleDidClose msg state)
 dispatch "textDocument/diagnostic" msg state = handlePullDiagnostics msg state
 dispatch "textDocument/hover" msg state = handleHover msg state
 dispatch "textDocument/completion" msg state = handleCompletion msg state
@@ -510,22 +536,22 @@ dispatch "textDocument/definition" msg state = handleDefinition msg state
 dispatch "textDocument/references" msg state = handleReferences msg state
 dispatch "textDocument/prepareRename" msg state = handlePrepareRename msg state
 dispatch "textDocument/rename" msg state = handleRename msg state
-dispatch "textDocument/documentSymbol" msg state = handleDocumentSymbol msg state
-dispatch "textDocument/formatting" msg state = handleFormatting msg state
+dispatch "textDocument/documentSymbol" msg state = pure (handleDocumentSymbol msg state)
+dispatch "textDocument/formatting" msg state = pure (handleFormatting msg state)
 dispatch "textDocument/codeAction" msg state = handleCodeAction msg state
-dispatch "workspace/executeCommand" msg state = handleExecuteCommand msg state
+dispatch "workspace/executeCommand" msg state = pure (handleExecuteCommand msg state)
 dispatch "workspace/symbol" msg state = handleWorkspaceSymbol msg state
 -- 客户端能力注册（vscode-languageclient 的 fileEvents 等）：服务器不消费这些注册，
 -- 但必须回成功，否则客户端会把「注册失败」当成错误刷日志。
 dispatch "client/registerCapability" msg state =
-  Pair False (Pair state [responseOk (idOf msg) JNull])
+  pure (Pair False (Pair state [responseOk (idOf msg) JNull]))
 dispatch "client/unregisterCapability" msg state =
-  Pair False (Pair state [responseOk (idOf msg) JNull])
-dispatch "$/cancelRequest" msg state = Pair False (Pair state [])
+  pure (Pair False (Pair state [responseOk (idOf msg) JNull]))
+dispatch "$/cancelRequest" msg state = pure (Pair False (Pair state []))
 dispatch methodName msg state =
-  if startsWith "$/" methodName then Pair False (Pair state [])
-  else Pair False
-    (Pair state [responseErr (idOf msg) errMethodNotFound "method not found: ${methodName}"])
+  if startsWith "$/" methodName then pure (Pair False (Pair state []))
+  else pure
+    (Pair False (Pair state [responseErr (idOf msg) errMethodNotFound "method not found: ${methodName}"]))
 
 -- ---------------------------------------------------------------
 -- 主循环
@@ -558,19 +584,21 @@ abnormalExit state =
 
 -- A05：零参顶层定义在模块初始化时求值，所以「动作」必须函数化。
 -- runLsp 是读 stdin 的 LSP 帧循环：若留成零参值，任何子命令启动都会跑它。
-runLsp : Int -> Int
-runLsp _ =
+-- M4：整个入口显式 `Eff []`（帧处理/诊断/索引都已在 Eff 里），由 CLI 运行时执行。
+runLsp : Int -> Eff [] Int
+runLsp _ = do
+  outcome <-
+    serveConnection readChunk writeStdout (\m => \s => pure (lspWarn m s))
+      (\m => \s => handleFrame m s)
+      (logTo "starting" (LspState [] False False Nothing False Nothing [] [] Nothing))
   let
-    outcome =
-      runPure
-        (serveConnection readChunk writeStdout (\m => \s => pure (lspWarn m s)) (\m => \s => pure (handleFrame m s)) (logTo "starting" (LspState [] False False Nothing False Nothing [] [] Nothing)))
     exit = firstOf outcome
     state = secondOf outcome
   in case exit of
-    ExitRequested => exitCodeOf state
-    ExitClosed => abnormalExit state
-    ExitFatal msg => abnormalExit (logTo msg state)
+    ExitRequested => pure (exitCodeOf state)
+    ExitClosed => pure (abnormalExit state)
+    ExitFatal msg => pure (abnormalExit (logTo msg state))
 
 -- CLI 入口：与其它工具命令一致，返回退出码（由 Vuna.Cli 插入分发）。
-runLspTool : List String -> Int
+runLspTool : List String -> Eff [] Int
 runLspTool args = runLsp 0

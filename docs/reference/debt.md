@@ -53,7 +53,7 @@
 
 | ID | 仍未成立的事实 | 证据 | 归属 |
 | --- | --- | --- | --- |
-| D59 | 动作类型已统一为 `Eff`：入口 `main : Eff [] a`、`runPure`、handler answer `Eff []` + `joinEff`、`ST`/`IORef`/`MArray`/`Buffer` 全 `Eff`，内建 `IO` 类型与 IO 原语表已删除，宿主层只剩 `prim_eff_*` + `Base.Host` 归一化。M4 已落地 `EffCheck`（`Vuna.Compiler.Common`）、`DiagRender` 显式 Eff API、`CacheFormat.readFramedEff`、CompilerCli 选项收拢为单一 `CliOpts`、compiler CLI 全量显式 Eff（`runCompilerCliFor : … -> Eff [] Int`，runPure 40→0，`CliOpts` 已改为显式参数（无 IORef））。**剩余问题**：`compiler/lib` + `lib` 仍有 108 处 `runPure (...)`；ambient state（Sink/MetaSpans/Usage、Diag.Format 语言全局）尚未清理 | `nix/eff-boundary.allowlist`（108 点基线）；`compiler/lib/**` + `lib/**` 的 `runPure (`；`Diagnostics/Sink.vuna`、`Elab/MetaSpans.vuna`、`Elab/Usage.vuna`、`Driver/CompilerCli.vuna`（`optsRef`） | M4 剩余：`lib/**` 与 `compiler/lib/**` 其余「纯签名内隐藏执行」点改为显式 `Eff`/`EffCheck` → 删除 ambient state 与全部过渡包装 → 基线清零（守卫已作为 `checks.eff-boundary` 接入 `nix flake check`） |
+| D59 | 动作类型已统一为 `Eff`：入口 `main : Eff [] a`、`runPure`、handler answer `Eff []` + `joinEff`、`ST`/`IORef`/`MArray`/`Buffer` 全 `Eff`，内建 `IO` 类型与 IO 原语表已删除，宿主层只剩 `prim_eff_*` + `Base.Host` 归一化。M4 已落地 `EffCheck`（`Vuna.Compiler.Common`）、`DiagRender` 显式 Eff API、`CacheFormat.readFramedEff`、CompilerCli 选项收拢为单一 `CliOpts`、compiler CLI 全量显式 Eff（`runCompilerCliFor : … -> Eff [] Int`，runPure 40→0，`CliOpts` 已改为显式参数（无 IORef））。**剩余问题**：`compiler/lib` + `lib` 仍有 82 处 `runPure (...)`；ambient state（Sink/MetaSpans/Usage）尚未清理 | `nix/eff-boundary.allowlist`（82 点基线）；`compiler/lib/**` + `lib/**` 的 `runPure (`；`Diagnostics/Sink.vuna`、`Elab/MetaSpans.vuna`、`Elab/Usage.vuna`、| M4 剩余：`lib/**` 与 `compiler/lib/**` 其余「纯签名内隐藏执行」点改为显式 `Eff`/`EffCheck` → 删除 ambient state 与全部过渡包装 → 基线清零（守卫已作为 `checks.eff-boundary` 接入 `nix flake check`） |
 
 ## 相关阅读
 

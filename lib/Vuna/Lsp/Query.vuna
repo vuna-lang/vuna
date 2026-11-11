@@ -51,6 +51,7 @@ import Vuna.Lint.Rules
 import Vuna.Lsp.Bindings
 import Vuna.Lsp.Diagnostics
 import Vuna.Lsp.Protocol
+import Base.Host
 
 -- 结果上限：避免病态索引/大文件把单帧撑爆。
 maxCompletions : Int
@@ -297,18 +298,22 @@ formattingFixities uri text =
 -- `context.only`（Maybe：Nothing = 客户端不限制、Just [] = 明确不要任何 kind）：
 --   - quickfix 动作只在未限制或含 `quickfix` 时给；
 --   - case split 动作只在未限制或含 `refactor` / `refactor.rewrite` 时给。
-codeActionsFor : String -> String -> Int -> Int -> Int -> Int -> Maybe (List String) -> List Json
+codeActionsFor : String -> String -> Int -> Int -> Int -> Int -> Maybe (List String) -> Eff [] (List Json)
 codeActionsFor uri text reqStart reqStartCol reqEnd reqEndCol only = case contextForDoc uri of
-  ErrC e => []
+  ErrC e => pure []
   OkC (Pair label ctx) => case fixitiesForFile emptyFixityEnv label text of
-    Pair _ (ErrC e) => []
+    Pair _ (ErrC e) => pure []
     Pair _ (OkC programFixities) => case lintSourceWith programFixities text of
-      ErrC e => []
-      OkC findings =>
+      ErrC e => pure []
+      OkC findings => do
+        rawSplits <-
+          if refactorAllowed only then caseSplitActions uri label ctx text reqStart reqStartCol reqEnd reqEndCol
+          else pure []
+        diagActions <-
+          if quickfixAllowed only then diagnosticSuggestionActions uri text reqStart reqEnd
+          else pure []
         let
-          splits =
-            take maxCodeActions
-              (if refactorAllowed only then caseSplitActions uri label ctx text reqStart reqStartCol reqEnd reqEndCol else [])
+          splits = take maxCodeActions rawSplits
           fixable =
             if quickfixAllowed only then filter (editTouches reqStart reqEnd) findings else []
           singles = mapMaybe (findingQuickFix uri) fixable
@@ -319,12 +324,9 @@ codeActionsFor uri text reqStart reqStartCol reqEnd reqEndCol only = case contex
           singles2 = take (if isEmptyList fixAll then budget else maxOf 0 (budget - 1)) singles
           -- fix all 需要一格；case split 已占满上限时不再追加（总数仍 ≤ maxCodeActions）。
           fixAll2 = if isEmptyList fixAll || budget <= 0 then [] else fixAll
-          diagActions =
-            if quickfixAllowed only then diagnosticSuggestionActions uri text reqStart reqEnd
-            else []
           used = length splits + length singles2 + length fixAll2
           diagActions2 = take (maxOf 0 (maxCodeActions - used)) diagActions
-        in append splits (append singles2 (append fixAll2 diagActions2))
+        in pure (append splits (append singles2 (append fixAll2 diagActions2)))
 
 onlyKindsAllow : String -> Maybe (List String) -> Bool
 onlyKindsAllow kind Nothing = True
@@ -490,59 +492,92 @@ firstMaybe (x :: rest) = case x of
   Just v => Just v
   Nothing => firstMaybe rest
 
-moduleSplitIn : List Root -> String -> String -> Maybe SplitTy
-moduleSplitIn roots modName tyName = case moduleSourceIn roots modName of
-  Nothing => Nothing
-  Just src => case parseSource "<case-split>" src of
-    ErrC e => Nothing
-    OkC dep => findSplitIn dep.sourceFileDecls tyName
+-- Eff 版的 firstMaybe：按顺序执行，命中即停。
+firstMaybeEff : List (Eff [] (Maybe a)) -> Eff [] (Maybe a)
+firstMaybeEff [] = pure Nothing
+firstMaybeEff (x :: rest) = do
+  v <- x
+  case v of
+    Just found => pure (Just found)
+    Nothing => firstMaybeEff rest
 
-exportedSplit : List Root -> String -> ExportItem -> Maybe SplitTy
+-- 顺序执行每个元素的效果并拼接结果（列表顺序与纯 concatMap 一致）。
+concatMapEff : (a -> Eff [] (List b)) -> List a -> Eff [] (List b)
+concatMapEff f [] = pure []
+concatMapEff f (x :: rest) = do
+  xs <- f x
+  ys <- concatMapEff f rest
+  pure (append xs ys)
+
+moduleSplitIn : List Root -> String -> String -> Eff [] (Maybe SplitTy)
+moduleSplitIn roots modName tyName = do
+  src <- moduleSourceIn roots modName
+  case src of
+    Nothing => pure Nothing
+    Just source => case parseSource "<case-split>" source of
+      ErrC e => pure Nothing
+      OkC dep => pure (findSplitIn dep.sourceFileDecls tyName)
+
+exportedSplit : List Root -> String -> ExportItem -> Eff [] (Maybe SplitTy)
 exportedSplit roots tyName (XModule name sp) = moduleSplitIn roots name tyName
-exportedSplit roots tyName item = Nothing
+exportedSplit roots tyName item = pure Nothing
 
 -- 未限定类型名：本模块 → Prelude 的整模块重导出 → 各 open/qualified import 的模块。
-preludeSplit : List Root -> String -> Maybe SplitTy
-preludeSplit roots tyName = case moduleSourceIn roots "Prelude" of
-  Nothing => Nothing
-  Just src => case parseSource "<prelude>" src of
-    ErrC e => Nothing
-    OkC sf => case sf.sourceFileModDecl of
-      Nothing => Nothing
-      Just m => firstMaybe (map (exportedSplit roots tyName) m.modDeclExportItems)
+preludeSplit : List Root -> String -> Eff [] (Maybe SplitTy)
+preludeSplit roots tyName = do
+  src <- moduleSourceIn roots "Prelude"
+  case src of
+    Nothing => pure Nothing
+    Just source => case parseSource "<prelude>" source of
+      ErrC e => pure Nothing
+      OkC sf => case sf.sourceFileModDecl of
+        Nothing => pure Nothing
+        Just m => firstMaybeEff (map (exportedSplit roots tyName) m.modDeclExportItems)
 
-importSplit : List Root -> String -> Import -> Maybe SplitTy
+importSplit : List Root -> String -> Import -> Eff [] (Maybe SplitTy)
 importSplit roots tyName imp = moduleSplitIn roots imp.importName tyName
 
-importedSplit : List Root -> String -> List Import -> Maybe SplitTy
-importedSplit roots tyName imports = firstMaybe (map (importSplit roots tyName) imports)
+importedSplit : List Root -> String -> List Import -> Eff [] (Maybe SplitTy)
+importedSplit roots tyName imports = firstMaybeEff (map (importSplit roots tyName) imports)
 
-resolveUnqualifiedSplit : SourceFile -> List Root -> String -> Maybe (Pair String SplitTy)
+resolveUnqualifiedSplit : SourceFile -> List Root -> String -> Eff [] (Maybe (Pair String SplitTy))
 resolveUnqualifiedSplit sf roots tyName = case findSplitIn sf.sourceFileDecls tyName of
-  Just split => Just (Pair "" split)
-  Nothing => case preludeSplit roots tyName of
-    Just split => Just (Pair "" split)
-    Nothing => case importedSplit roots tyName sf.sourceFileImports of
-      Just split => Just (Pair "" split)
-      Nothing => Nothing
+  Just split => pure (Just (Pair "" split))
+  Nothing => do
+    prelude <- preludeSplit roots tyName
+    case prelude of
+      Just split => pure (Just (Pair "" split))
+      Nothing => do
+        imported <- importedSplit roots tyName sf.sourceFileImports
+        pure (case imported of
+          Just split => Just (Pair "" split)
+          Nothing => Nothing
+        )
 
 -- 洞上下文里的类型文本 → (类型所在模块名, 可 split 的声明)。模块名 "" = 当前缓冲 /
 -- 经 Prelude 重导出（分支写短名）。
 -- 边界：类型文本是精化器 show 出来的**规范全名**（`Dep.Point` / `B.Local`），所以
 -- `import ... as` 的模块别名不会出现在这里；也没有类型别名声明可展开（见 lsp.md）。
-resolveTypeSplit : SourceFile -> List Root -> String -> String -> Maybe (Pair String SplitTy)
+tagSplit : String -> Maybe SplitTy -> Maybe (Pair String SplitTy)
+tagSplit modName split = case split of
+  Just cs => Just (Pair modName cs)
+  Nothing => Nothing
+
+resolveTypeSplit : SourceFile -> List Root -> String -> String -> Eff [] (Maybe (Pair String SplitTy))
 resolveTypeSplit sf roots curMod tyText = case parseExpressionSource tyText of
-  ErrC e => Nothing
+  ErrC e => pure Nothing
   OkC ty => case typeHeadName ty of
-    Nothing => Nothing
+    Nothing => pure Nothing
     Just head =>
       let
         split = splitLastDot (splitOnDot head)
         modName = joinDots (firstOf split)
         tyName = secondOf split
       in if modName == "" then resolveUnqualifiedSplit sf roots tyName
-      else if modName == curMod then fmap (\cs => Pair curMod cs) (findSplitIn sf.sourceFileDecls tyName)
-      else fmap (\cs => Pair modName cs) (moduleSplitIn roots modName tyName)
+      else if modName == curMod then pure (tagSplit curMod (findSplitIn sf.sourceFileDecls tyName))
+      else do
+        found <- moduleSplitIn roots modName tyName
+        pure (tagSplit modName found)
 
 -- 构造子的模式参数个数：显式 `->` / `(a : Type) ->`（EPi implicit = False）才占通配；
 -- 隐式 `{a : Type} ->`（EPi implicit = True）由调用点推断，不进模式。
@@ -570,14 +605,16 @@ exportModuleName (XModule name sp) = Just name
 exportModuleName item = Nothing
 
 -- Prelude 的整模块重导出面（`module Base.Bool` 等）：这些模块的短名在任意模块里可见。
-preludeReexportModules : List Root -> List String
-preludeReexportModules roots = case moduleSourceIn roots "Prelude" of
-  Nothing => []
-  Just src => case parseSource "<prelude>" src of
-    ErrC e => []
-    OkC sf => case sf.sourceFileModDecl of
-      Nothing => []
-      Just m => mapMaybe exportModuleName m.modDeclExportItems
+preludeReexportModules : List Root -> Eff [] (List String)
+preludeReexportModules roots = do
+  src <- moduleSourceIn roots "Prelude"
+  case src of
+    Nothing => pure []
+    Just source => case parseSource "<prelude>" source of
+      ErrC e => pure []
+      OkC sf => case sf.sourceFileModDecl of
+        Nothing => pure []
+        Just m => pure (mapMaybe exportModuleName m.modDeclExportItems)
 
 typePatternPrefix : SourceFile -> List String -> String -> Maybe String
 typePatternPrefix sf preludeModules modName = if modName == "" then Just ""
@@ -622,37 +659,41 @@ splitActionJson uri line startCol endCol title newText =
     [Pair "title" (JStr title), Pair "kind" (JStr "refactor.rewrite"), Pair "edit" (JObj [Pair "changes" (JObj [Pair uri (JArr [textEditJson (lspRange line startCol line endCol) newText])])])]
 
 -- 一个 binder → 最多一条 action（类型解析不到 / 构造子名不在作用域就 0 条）。
-binderSplitAction : String -> String -> SourceFile -> List Root -> List String -> DtGoalInfo -> Pair String String -> List Json
-binderSplitAction uri text sf roots preludeModules g (Pair name tyText) = case resolveTypeSplit sf roots (currentModuleName sf.sourceFileDecls sf.sourceFileModDecl) tyText of
-  Nothing => []
-  Just (Pair modName split) =>
-    let
-      sp = g.dtGoalInfoSpan
-      line = spanStartLine sp
-      startCol = spanStartCol sp
-      endCol = maxOf sp.spanEndCol (startCol + 1)
-      baseIndent = leadingSpaces (lineText text line)
-    in case typePatternPrefix sf preludeModules modName of
-      Nothing => []
-      Just prefix =>
-        [ splitActionJson uri line startCol endCol "case split on ${name}" (caseSplitNewText baseIndent name prefix split)
-        ]
+binderSplitAction : String -> String -> SourceFile -> List Root -> List String -> DtGoalInfo -> Pair String String -> Eff [] (List Json)
+binderSplitAction uri text sf roots preludeModules g (Pair name tyText) = do
+  resolved <-
+    resolveTypeSplit sf roots (currentModuleName sf.sourceFileDecls sf.sourceFileModDecl) tyText
+  case resolved of
+    Nothing => pure []
+    Just (Pair modName split) =>
+      let
+        sp = g.dtGoalInfoSpan
+        line = spanStartLine sp
+        startCol = spanStartCol sp
+        endCol = maxOf sp.spanEndCol (startCol + 1)
+        baseIndent = leadingSpaces (lineText text line)
+      in case typePatternPrefix sf preludeModules modName of
+        Nothing => pure []
+        Just prefix =>
+          pure
+            [splitActionJson uri line startCol endCol "case split on ${name}" (caseSplitNewText baseIndent name prefix split)]
 
-ctxSplitActions : String -> String -> SourceFile -> List Root -> List String -> DtGoalInfo -> List Json
+ctxSplitActions : String -> String -> SourceFile -> List Root -> List String -> DtGoalInfo -> Eff [] (List Json)
 ctxSplitActions uri text sf roots preludeModules g =
-  concatMap (binderSplitAction uri text sf roots preludeModules g) g.dtGoalInfoCtx
+  concatMapEff (binderSplitAction uri text sf roots preludeModules g) g.dtGoalInfoCtx
 
 -- 入口：请求 range → 洞 → 上下文里的可分裂 binder（不命中返回 []）。
-caseSplitActions : String -> String -> PackageContext -> String -> Int -> Int -> Int -> Int -> List Json
-caseSplitActions uri label ctx text sl sc el ec = if not (rangeTouchesHole text sl sc el ec) then []
+caseSplitActions : String -> String -> PackageContext -> String -> Int -> Int -> Int -> Int -> Eff [] (List Json)
+caseSplitActions uri label ctx text sl sc el ec = if not (rangeTouchesHole text sl sc el ec) then pure []
 else case dtGoalsSourceTolerant ctx label text of
-  ErrC e => []
+  ErrC e => pure []
   OkC gs => case goalAtRange sl sc el ec gs of
-    Nothing => []
+    Nothing => pure []
     Just g => case parseSource "<lsp>" text of
-      ErrC e => []
-      OkC sf =>
-        ctxSplitActions uri text sf (contextRoots ctx) (preludeReexportModules (contextRoots ctx)) g
+      ErrC e => pure []
+      OkC sf => do
+        preludeModules <- preludeReexportModules (contextRoots ctx)
+        ctxSplitActions uri text sf (contextRoots ctx) preludeModules g
 
 -- Index：惰性加载（首次 definition/references/completion/workspaceSymbol 时）
 -- ---------------------------------------------------------------
@@ -985,11 +1026,12 @@ workspaceSymbols (Just idx) query =
 
 -- ---------------------------------------------------------------
 -- 诊断自带的 suggestion（如 UN_UnusedDefinition 的删除编辑）→ quick fix CodeAction。
-diagnosticSuggestionActions : String -> String -> Int -> Int -> List Json
-diagnosticSuggestionActions uri text reqStart reqEnd =
+diagnosticSuggestionActions : String -> String -> Int -> Int -> Eff [] (List Json)
+diagnosticSuggestionActions uri text reqStart reqEnd = do
+  result <- diagnosticsForSuggestions Nothing uri text
   let
-    diags = secondOf (secondOf (diagnosticsForSuggestions Nothing uri text))
-  in concatMap (diagSuggestionActions uri reqStart reqEnd) diags
+    diags = secondOf (secondOf result)
+  in pure (concatMap (diagSuggestionActions uri reqStart reqEnd) diags)
 
 diagSuggestionActions : String -> Int -> Int -> Diagnostic -> List Json
 diagSuggestionActions uri reqStart reqEnd d =

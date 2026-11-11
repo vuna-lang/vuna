@@ -62,6 +62,15 @@ firstJust (x :: rest) = case x of
   Just v => Just v
   Nothing => firstJust rest
 
+-- Eff 版的 firstJust：按顺序执行，命中即停（后续动作构造但不执行）。
+firstJustEff : List (Eff [] (Maybe a)) -> Eff [] (Maybe a)
+firstJustEff [] = pure Nothing
+firstJustEff (x :: rest) = do
+  v <- x
+  case v of
+    Just found => pure (Just found)
+    Nothing => firstJustEff rest
+
 lookupPair : String -> List (Pair String String) -> Maybe String
 lookupPair key [] = Nothing
 lookupPair key ((Pair k v) :: rest) = if k == key then Just v else lookupPair key rest
@@ -98,27 +107,31 @@ record WalkEnv where
 -- ---------------------------------------------------------------
 -- 入口
 -- ---------------------------------------------------------------
-bindingHoverAt : String -> Int -> Int -> String -> Maybe Json
+bindingHoverAt : String -> Int -> Int -> String -> Eff [] (Maybe Json)
 bindingHoverAt uri line col text = case parseSource "<lsp>" text of
-  ErrC e => Nothing
+  ErrC e => pure Nothing
   OkC sf => case tokenAtCursor text line col of
-    Nothing => Nothing
-    Just (Pair tokStart token) => case moduleRefAt uri line col text sf tokStart token of
-      Just ref => Just (moduleHoverJson ref line tokStart token)
-      Nothing => case localBindAt line col text sf tokStart token of
-        Nothing => Nothing
-        Just lb => Just (localHoverJson lb line tokStart token)
+    Nothing => pure Nothing
+    Just (Pair tokStart token) => do
+      mref <- moduleRefAt uri line col text sf tokStart token
+      case mref of
+        Just ref => pure (Just (moduleHoverJson ref line tokStart token))
+        Nothing => case localBindAt line col text sf tokStart token of
+          Nothing => pure Nothing
+          Just lb => pure (Just (localHoverJson lb line tokStart token))
 
-bindingDefinitionAt : String -> Int -> Int -> String -> Maybe Json
+bindingDefinitionAt : String -> Int -> Int -> String -> Eff [] (Maybe Json)
 bindingDefinitionAt uri line col text = case parseSource "<lsp>" text of
-  ErrC e => Nothing
+  ErrC e => pure Nothing
   OkC sf => case tokenAtCursor text line col of
-    Nothing => Nothing
-    Just (Pair tokStart token) => case moduleRefAt uri line col text sf tokStart token of
-      Just ref => moduleLocationJson ref
-      Nothing => case localBindAt line col text sf tokStart token of
-        Nothing => Nothing
-        Just lb => Just (JArr [JObj [Pair "uri" (JStr uri), Pair "range" (localRange lb)]])
+    Nothing => pure Nothing
+    Just (Pair tokStart token) => do
+      mref <- moduleRefAt uri line col text sf tokStart token
+      case mref of
+        Just ref => pure (moduleLocationJson ref)
+        Nothing => case localBindAt line col text sf tokStart token of
+          Nothing => pure Nothing
+          Just lb => pure (Just (JArr [JObj [Pair "uri" (JStr uri), Pair "range" (localRange lb)]]))
 
 -- ---------------------------------------------------------------
 -- rename（C38）：局部绑定的身份与全部出现位置
@@ -210,11 +223,15 @@ modulePathOf uri name = case contextForDoc uri of
 -- 模块名 → 源文本：按包上下文的模块根探测（`probeRoots`），找不到 / 读失败 → Nothing。
 -- 调用方（LSP case split）持有一份 `PackageContext`，直接用它的 roots，避免每个 binder
 -- 都重算一次上下文；依赖模块每次读盘（与模块 hover 同口径，未保存改动不反映）。
-moduleSourceIn : List Root -> String -> Maybe String
+moduleSourceIn : List Root -> String -> Eff [] (Maybe String)
 moduleSourceIn roots name = case probeRoots roots name of
-  "" => Nothing
-  path =>
-    if runPure (prim_eff_fileExists path) then Just (runPure (prim_eff_readFile path)) else Nothing
+  "" => pure Nothing
+  path => do
+    exists <- prim_eff_fileExists path
+    if exists then do
+      source <- prim_eff_readFile path
+      pure (Just source)
+    else pure Nothing
 
 moduleDocOf : SourceFile -> String -> String
 moduleDocOf sf text = case lexComments text of
@@ -229,84 +246,93 @@ moduleHeaderPos sf lines name = case sf.sourceFileModDecl of
     Just (Pair l c) => Pair l c
 
 -- 目标文件（或当前缓冲）的 docstring 与 module 头名字位置。
-moduleFileInfo : Bool -> String -> String -> String -> Pair String (Pair Int Int)
+moduleFileInfo : Bool -> String -> String -> String -> Eff [] (Pair String (Pair Int Int))
 moduleFileInfo isSelf text path name = if isSelf then
   let
     sf = case parseSource "<lsp>" text of
       ErrC e => SourceFile Nothing [] [] []
       OkC parsed => parsed
-  in Pair (moduleDocOf sf text) (moduleHeaderPos sf (split "\n" text) name)
-else if path == "" then Pair "" (Pair 1 1)
-else if runPure (prim_eff_fileExists path) then
-  let
-    source = runPure (prim_eff_readFile path)
-    sf = case parseSource path source of
-      ErrC e => SourceFile Nothing [] [] []
-      OkC parsed => parsed
-  in Pair (moduleDocOf sf source) (moduleHeaderPos sf (split "\n" source) name)
-else Pair "" (Pair 1 1)
+  in pure (Pair (moduleDocOf sf text) (moduleHeaderPos sf (split "\n" text) name))
+else if path == "" then pure (Pair "" (Pair 1 1))
+else do
+  exists <- prim_eff_fileExists path
+  if exists then do
+    source <- prim_eff_readFile path
+    let
+      sf = case parseSource path source of
+        ErrC e => SourceFile Nothing [] [] []
+        OkC parsed => parsed
+    in pure (Pair (moduleDocOf sf source) (moduleHeaderPos sf (split "\n" source) name))
+  else pure (Pair "" (Pair 1 1))
 
-mkModuleRef : String -> String -> SourceFile -> String -> ModuleRef
+mkModuleRef : String -> String -> SourceFile -> String -> Eff [] ModuleRef
 mkModuleRef uri text sf name =
   let
     selfName = currentModuleNameOfSf sf
     isSelf = selfName /= "" && name == selfName
     path = if isSelf then decodeUri uri else modulePathOf uri name
-    info = moduleFileInfo isSelf text path name
-    infoDoc = firstOf info
-    infoPos = secondOf info
-    uriOut = if isSelf then uri else if path == "" then "" else pathToUri path
-  in ModuleRef name path infoDoc (firstOf infoPos) (secondOf infoPos) uriOut
+  in do
+    info <- moduleFileInfo isSelf text path name
+    let
+      infoDoc = firstOf info
+      infoPos = secondOf info
+      uriOut = if isSelf then uri else if path == "" then "" else pathToUri path
+    in pure (ModuleRef name path infoDoc (firstOf infoPos) (secondOf infoPos) uriOut)
 
 -- import 行：模块名或 alias。alias 用整词查找（短 alias 可能是模块名的子串）。
-importModuleRef : String -> Int -> String -> SourceFile -> Int -> String -> Maybe ModuleRef
+importModuleRef : String -> Int -> String -> SourceFile -> Int -> String -> Eff [] (Maybe ModuleRef)
 importModuleRef uri line text sf tokStart token =
-  firstJust (map (importMatch uri line text sf tokStart token) sf.sourceFileImports)
+  firstJustEff (map (importMatch uri line text sf tokStart token) sf.sourceFileImports)
 
-importMatch : String -> Int -> String -> SourceFile -> Int -> String -> Import -> Maybe ModuleRef
+importMatch : String -> Int -> String -> SourceFile -> Int -> String -> Import -> Eff [] (Maybe ModuleRef)
 importMatch uri line text sf tokStart token imp =
   let
     lines = split "\n" text
-  in if not (spanContainsPos imp.importSpan line tokStart) then Nothing
+  in if not (spanContainsPos imp.importSpan line tokStart) then pure Nothing
   else case findNamePos lines imp.importSpan imp.importName of
-    Just (Pair nl nc) => if nl == line && nc == tokStart && token == imp.importName then Just (mkModuleRef uri text sf imp.importName)
+    Just (Pair nl nc) => if nl == line && nc == tokStart && token == imp.importName then do
+      ref <- mkModuleRef uri text sf imp.importName
+      pure (Just ref)
     else case imp.importAlias of
-      Nothing => Nothing
+      Nothing => pure Nothing
       Just alias => case findWordFromPos lines nl (nc + strLength imp.importName) (spanEndLine imp.importSpan) alias of
-        Just (Pair al ac) =>
-          if al == line && ac == tokStart && token == alias then Just (mkModuleRef uri text sf imp.importName)
-          else Nothing
-        Nothing => Nothing
-    Nothing => Nothing
+        Just (Pair al ac) => if al == line && ac == tokStart && token == alias then do
+          ref <- mkModuleRef uri text sf imp.importName
+          pure (Just ref)
+        else pure Nothing
+        Nothing => pure Nothing
+    Nothing => pure Nothing
 
 -- 导出项 `module B`（B 可以是全名或 alias）。`B.name` 走限定名前缀兜底。
-exportModuleRef : String -> Int -> String -> SourceFile -> Int -> String -> Maybe ModuleRef
+exportModuleRef : String -> Int -> String -> SourceFile -> Int -> String -> Eff [] (Maybe ModuleRef)
 exportModuleRef uri line text sf tokStart token = case sf.sourceFileModDecl of
-  Nothing => Nothing
+  Nothing => pure Nothing
   Just m =>
     let
       lines = split "\n" text
-    in firstJust (map (exportItemMatch uri line text sf tokStart token lines) m.modDeclExportItems)
+    in firstJustEff (map (exportItemMatch uri line text sf tokStart token lines) m.modDeclExportItems)
 
-exportItemMatch : String -> Int -> String -> SourceFile -> Int -> String -> List String -> ExportItem -> Maybe ModuleRef
+exportItemMatch : String -> Int -> String -> SourceFile -> Int -> String -> List String -> ExportItem -> Eff [] (Maybe ModuleRef)
 exportItemMatch uri line text sf tokStart token lines (XModule name sp) = case findNamePos lines sp name of
-  Just (Pair nl nc) =>
-    if nl == line && nc == tokStart && token == name then Just (mkModuleRef uri text sf (resolveModuleName sf.sourceFileImports name))
-    else Nothing
-  Nothing => Nothing
-exportItemMatch uri line text sf tokStart token lines item = Nothing
+  Just (Pair nl nc) => if nl == line && nc == tokStart && token == name then do
+    ref <- mkModuleRef uri text sf (resolveModuleName sf.sourceFileImports name)
+    pure (Just ref)
+  else pure Nothing
+  Nothing => pure Nothing
+exportItemMatch uri line text sf tokStart token lines item = pure Nothing
 
-headerModuleRef : String -> Int -> String -> SourceFile -> Int -> String -> Maybe ModuleRef
+headerModuleRef : String -> Int -> String -> SourceFile -> Int -> String -> Eff [] (Maybe ModuleRef)
 headerModuleRef uri line text sf tokStart token = case sf.sourceFileModDecl of
-  Nothing => Nothing
+  Nothing => pure Nothing
   Just m =>
     let
       lines = split "\n" text
     in case findNamePos lines m.modDeclSpan m.modDeclName of
-      Just (Pair nl nc) =>
-        if nl == line && nc == tokStart && token == m.modDeclName then Just (mkModuleRef uri text sf m.modDeclName)
-        else Nothing
-      Nothing => Nothing
+      Just (Pair nl nc) => if nl == line && nc == tokStart && token == m.modDeclName then do
+        ref <- mkModuleRef uri text sf m.modDeclName
+        pure (Just ref)
+      else pure Nothing
+      Nothing => pure Nothing
 
 -- token 的模块前缀候选（不含完整 token，按由短到长）：`A.B.c` → A, A.B。
 prefixCandidates : String -> List String
@@ -325,26 +351,35 @@ knownModule : String -> String -> Bool
 knownModule uri name = if name == "" then False else modulePathOf uri name /= ""
 
 -- 限定名里的模块前缀：`Base.List.map` 光标在 `List` ⇒ `Base.List`；在 `map` ⇒ 不命中。
-qualifiedRef : String -> Int -> Int -> String -> SourceFile -> Int -> String -> Maybe ModuleRef
+qualifiedRef : String -> Int -> Int -> String -> SourceFile -> Int -> String -> Eff [] (Maybe ModuleRef)
 qualifiedRef uri line col text sf tokStart token =
-  firstJust (map (tryPrefix uri line col text sf tokStart token) (prefixCandidates token))
+  firstJustEff (map (tryPrefix uri line col text sf tokStart token) (prefixCandidates token))
 
-tryPrefix : String -> Int -> Int -> String -> SourceFile -> Int -> String -> String -> Maybe ModuleRef
-tryPrefix uri line col text sf tokStart token prefix = if not (upperStart prefix) then Nothing
-else if col > tokStart + strLength prefix then Nothing
+tryPrefix : String -> Int -> Int -> String -> SourceFile -> Int -> String -> String -> Eff [] (Maybe ModuleRef)
+tryPrefix uri line col text sf tokStart token prefix = if not (upperStart prefix) then pure Nothing
+else if col > tokStart + strLength prefix then pure Nothing
 else
   let
     name = resolveModuleName sf.sourceFileImports prefix
-  in if knownModule uri name then Just (mkModuleRef uri text sf name) else Nothing
+  in if knownModule uri name then do
+    ref <- mkModuleRef uri text sf name
+    pure (Just ref)
+  else pure Nothing
 
-moduleRefAt : String -> Int -> Int -> String -> SourceFile -> Int -> String -> Maybe ModuleRef
-moduleRefAt uri line col text sf tokStart token = case importModuleRef uri line text sf tokStart token of
-  Just ref => Just ref
-  Nothing => case exportModuleRef uri line text sf tokStart token of
-    Just ref => Just ref
-    Nothing => case headerModuleRef uri line text sf tokStart token of
-      Just ref => Just ref
-      Nothing => qualifiedRef uri line col text sf tokStart token
+moduleRefAt : String -> Int -> Int -> String -> SourceFile -> Int -> String -> Eff [] (Maybe ModuleRef)
+moduleRefAt uri line col text sf tokStart token = do
+  imported <- importModuleRef uri line text sf tokStart token
+  case imported of
+    Just ref => pure (Just ref)
+    Nothing => do
+      exported <- exportModuleRef uri line text sf tokStart token
+      case exported of
+        Just ref => pure (Just ref)
+        Nothing => do
+          headerRef <- headerModuleRef uri line text sf tokStart token
+          case headerRef of
+            Just ref => pure (Just ref)
+            Nothing => qualifiedRef uri line col text sf tokStart token
 
 -- 模块 hover：docstring 追加在 `module <全名>` 代码块之后。
 moduleHoverBody : ModuleRef -> String

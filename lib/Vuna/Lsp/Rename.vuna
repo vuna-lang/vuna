@@ -100,6 +100,14 @@ firstJust (x :: rest) = case x of
   Just v => Just v
   Nothing => firstJust rest
 
+-- 顺序执行每个元素的效果并拼接结果（列表顺序与纯 concatMap 一致）。
+concatMapEff : (a -> Eff [] (List b)) -> List a -> Eff [] (List b)
+concatMapEff f [] = pure []
+concatMapEff f (x :: rest) = do
+  xs <- f x
+  ys <- concatMapEff f rest
+  pure (append xs ys)
+
 distinctStrings : List String -> List String
 distinctStrings xs = foldl distinctStep [] xs
 
@@ -244,29 +252,31 @@ pickIndexSymbol curModule idx syms =
       [] => Nothing
 
 -- 目标模块源码（当前缓冲或磁盘上的目标模块）。
-loadIndexTarget : String -> String -> SourceFile -> Index -> Sym -> Pair Int String -> Maybe (Pair RenameTarget (Pair Int String))
+loadIndexTarget : String -> String -> SourceFile -> Index -> Sym -> Pair Int String -> Eff [] (Maybe (Pair RenameTarget (Pair Int String)))
 loadIndexTarget uri bufText bufSf idx sym tokInfo = case moduleInfoOf idx (symModule sym) of
-  Nothing => Nothing
-  Just mi => if symModule sym == currentModuleNameOf bufSf then Just (Pair (RenameTarget (symName sym) (symKind sym) (symModule sym) uri bufText bufSf) tokInfo)
-  else if modPath mi == "" then Nothing
-  else if not (runPure (prim_eff_fileExists (modPath mi))) then Nothing
-  else
-    let
-      source = runPure (prim_eff_readFile (modPath mi))
-    in case parseSource (modPath mi) source of
-      ErrC e => Nothing
-      OkC sf2 =>
-        Just
-          (Pair (RenameTarget (symName sym) (symKind sym) (symModule sym) (pathToUri (modPath mi)) source sf2) tokInfo)
+  Nothing => pure Nothing
+  Just mi => if symModule sym == currentModuleNameOf bufSf then pure
+    (Just (Pair (RenameTarget (symName sym) (symKind sym) (symModule sym) uri bufText bufSf) tokInfo))
+  else if modPath mi == "" then pure Nothing
+  else do
+    exists <- prim_eff_fileExists (modPath mi)
+    if exists then do
+      source <- prim_eff_readFile (modPath mi)
+      case parseSource (modPath mi) source of
+        ErrC e => pure Nothing
+        OkC sf2 =>
+          pure
+            (Just (Pair (RenameTarget (symName sym) (symKind sym) (symModule sym) (pathToUri (modPath mi)) source sf2) tokInfo))
+    else pure Nothing
 
 -- 光标位置 → rename 目标 + 光标 token 的名字区间信息（nameStart, name）。
 -- 顺序：局部绑定 → 当前缓冲顶层声明 → Index 符号（拒绝 base 标准库）。
-resolveTarget : String -> Int -> Int -> String -> Maybe Index -> Maybe (Pair RenameTarget (Pair Int String))
+resolveTarget : String -> Int -> Int -> String -> Maybe Index -> Eff [] (Maybe (Pair RenameTarget (Pair Int String)))
 resolveTarget uri line col text midx = case parseSource "<lsp>" text of
-  ErrC e => Nothing
+  ErrC e => pure Nothing
   OkC sf => case tokenAtCursor text line col of
-    Nothing => Nothing
-    Just (Pair tokStart token) => if namedHoleBefore text line tokStart then Nothing
+    Nothing => pure Nothing
+    Just (Pair tokStart token) => if namedHoleBefore text line tokStart then pure Nothing
     else
       let
         name = lastSegment token
@@ -274,15 +284,15 @@ resolveTarget uri line col text midx = case parseSource "<lsp>" text of
         curModule = currentModuleNameOf sf
         tokInfo = Pair nameStart name
       in case localBindingAtSf sf text line col of
-        Just binder => Just (Pair (RenameTarget name "local" curModule uri text sf) tokInfo)
+        Just binder => pure (Just (Pair (RenameTarget name "local" curModule uri text sf) tokInfo))
         Nothing => case bufferTargetKind name sf.sourceFileDecls of
-          Just kind => Just (Pair (RenameTarget name kind curModule uri text sf) tokInfo)
+          Just kind => pure (Just (Pair (RenameTarget name kind curModule uri text sf) tokInfo))
           Nothing => case midx of
-            Nothing => Nothing
+            Nothing => pure Nothing
             Just idx => case findSymbol idx token of
-              ErrC e => Nothing
+              ErrC e => pure Nothing
               OkC syms => case pickIndexSymbol curModule idx syms of
-                Nothing => Nothing
+                Nothing => pure Nothing
                 Just sym => loadIndexTarget uri text sf idx sym tokInfo
 
 -- ---------------------------------------------------------------
@@ -585,30 +595,31 @@ memberNamed name (DRecord n params fields derivings viaField repr lin sp) =
   anyFieldNamed name fields
 memberNamed name d = False
 
-crossModuleUseRefs : Index -> RenameTarget -> String -> List EditRef
+crossModuleUseRefs : Index -> RenameTarget -> String -> Eff [] (List EditRef)
 crossModuleUseRefs idx target modName = case moduleInfoOf idx modName of
-  Nothing => []
-  Just mi => if modPath mi == "" then []
-  else if not (runPure (prim_eff_fileExists (modPath mi))) then []
-  else
-    let
-      source = runPure (prim_eff_readFile (modPath mi))
-    in case parseSource (modPath mi) source of
-      ErrC e => []
-      OkC sf =>
-        if not (importsModule target.rtModule sf) then []
-        else if declaresName target.rtName sf.sourceFileDecls then []
-        else useRefs (pathToUri (modPath mi)) source sf target.rtName target.rtKind
+  Nothing => pure []
+  Just mi => if modPath mi == "" then pure []
+  else do
+    exists <- prim_eff_fileExists (modPath mi)
+    if exists then do
+      source <- prim_eff_readFile (modPath mi)
+      case parseSource (modPath mi) source of
+        ErrC e => pure []
+        OkC sf =>
+          if not (importsModule target.rtModule sf) then pure []
+          else if declaresName target.rtName sf.sourceFileDecls then pure []
+          else pure (useRefs (pathToUri (modPath mi)) source sf target.rtName target.rtKind)
+    else pure []
 
-crossModuleRefs : Index -> RenameTarget -> String -> String -> List EditRef
-crossModuleRefs idx target curUri curText = if target.rtModule == "" then []
+crossModuleRefs : Index -> RenameTarget -> String -> String -> Eff [] (List EditRef)
+crossModuleRefs idx target curUri curText = if target.rtModule == "" then pure []
 else
   let
     refs = filter (refNameMatches target) idx.indexRefs
     curModule = moduleNameOfText curText
     candidates =
       filter (\m => m /= target.rtModule && m /= curModule) (distinctStrings (map refModule refs))
-  in concatMap (crossModuleUseRefs idx target) candidates
+  in concatMapEff (crossModuleUseRefs idx target) candidates
 
 -- 目标名或目标模块名出现（后者覆盖 `Dep.name` 这类限定使用：Scan 对 `Dep.name`
 -- 记一条 refName = "Dep.name" 的引用，名字是整段合成的标识符）。
@@ -699,44 +710,48 @@ else case strUnpack name of
 -- 入口
 -- ---------------------------------------------------------------
 -- prepareRename：只回光标 token 的范围 + 占位名；无法改名回 null。
-prepareRenameAt : String -> Int -> Int -> String -> Maybe Index -> Json
-prepareRenameAt uri line col text midx = case resolveTarget uri line col text midx of
-  Nothing => JNull
-  Just (Pair target tokInfo) =>
-    let
-      name = secondOf tokInfo
-      nameStart = firstOf tokInfo
-    in JObj
-      [Pair "range" (lspRange line nameStart line (nameStart + strLength name)), Pair "placeholder" (JStr name)]
+prepareRenameAt : String -> Int -> Int -> String -> Maybe Index -> Eff [] Json
+prepareRenameAt uri line col text midx = do
+  targetM <- resolveTarget uri line col text midx
+  case targetM of
+    Nothing => pure JNull
+    Just (Pair target tokInfo) =>
+      let
+        name = secondOf tokInfo
+        nameStart = firstOf tokInfo
+      in pure
+        (JObj [Pair "range" (lspRange line nameStart line (nameStart + strLength name)), Pair "placeholder" (JStr name)])
 
 -- rename：局部绑定 → 当前文档；顶层符号 → 当前文档 + 目标模块 + 跨文件候选模块。
-renameAt : String -> Int -> Int -> String -> String -> Maybe Index -> Json
-renameAt uri line col text newName midx = if not (validNewName newName) then JNull
-else case resolveTarget uri line col text midx of
-  Nothing => JNull
-  Just (Pair target tokInfo) => if newName == target.rtName then JNull
-  else
-    let
-      edits =
-        if target.rtKind == "local" then localEdits uri line col text
+renameAt : String -> Int -> Int -> String -> String -> Maybe Index -> Eff [] Json
+renameAt uri line col text newName midx = if not (validNewName newName) then pure JNull
+else do
+  targetM <- resolveTarget uri line col text midx
+  case targetM of
+    Nothing => pure JNull
+    Just (Pair target tokInfo) => if newName == target.rtName then pure JNull
+    else do
+      edits <-
+        if target.rtKind == "local" then pure (localEdits uri line col text)
         else symbolEdits uri text target midx
-    in if isEmpty edits then JNull else workspaceEdit (take maxRenameEdits edits) target.rtName newName
+      pure
+        (if isEmpty edits then JNull else workspaceEdit (take maxRenameEdits edits) target.rtName newName)
 
 localEdits : String -> Int -> Int -> String -> List EditRef
 localEdits uri line col text = case bindingRenameOccurrences line col text of
   Nothing => []
   Just positions => map (\pos => EditRef uri (firstOf pos) (secondOf pos)) positions
 
-symbolEdits : String -> String -> RenameTarget -> Maybe Index -> List EditRef
-symbolEdits uri curText target midx =
+symbolEdits : String -> String -> RenameTarget -> Maybe Index -> Eff [] (List EditRef)
+symbolEdits uri curText target midx = do
+  crossRefs <- case midx of
+    Nothing => pure []
+    Just idx => crossModuleRefs idx target uri curText
   let
     declRefs = declEditRefs target
     targetUses = useRefs target.rtUri target.rtText target.rtSf target.rtName target.rtKind
     curUses = if uri == target.rtUri then [] else currentUseRefs uri curText target
-    crossRefs = case midx of
-      Nothing => []
-      Just idx => crossModuleRefs idx target uri curText
-  in dedupeEdits (append declRefs (append targetUses (append curUses crossRefs)))
+  in pure (dedupeEdits (append declRefs (append targetUses (append curUses crossRefs))))
 
 currentUseRefs : String -> String -> RenameTarget -> List EditRef
 currentUseRefs uri text target = case parseSource "<lsp>" text of

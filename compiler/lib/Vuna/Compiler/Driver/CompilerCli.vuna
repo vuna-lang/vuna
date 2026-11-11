@@ -94,17 +94,13 @@ flushSarif code o =
     _ <- prim_eff_print (renderSarif shown ++ "\n")
     pure code
   else if o.optDiagFormat == "json" then do
-    _ <- prim_eff_print (renderJsonList shown ++ "\n")
+    _ <- prim_eff_print (renderJsonList o.optDiagLang shown ++ "\n")
     pure code
   else pure code
 
 -- 应用 vuna.toml [diagnostics]（命令行显式 flag 优先），返回合并后的 opts。
 applyDiagConfig : Maybe Package -> CliOpts -> CliOpts
-applyDiagConfig m o =
-  let
-    o1 = applyManifestOpts m o
-    _ = setDiagLang o1.optDiagLang
-  in o1
+applyDiagConfig m o = applyManifestOpts m o
 
 applyManifestOpts : Maybe Package -> CliOpts -> CliOpts
 applyManifestOpts Nothing o = o
@@ -206,7 +202,6 @@ runCompilerCliFor prog args =
         (hasDenyWarnings args || hasShowWarnings args) (hasFormatFlag args)
         (hasDenyWarnings args || hasShowWarnings args) (hasDenyWarnings args) (secondOf strippedMax)
         (secondOf strippedContinue) []
-    _ = setDiagLang detectedLang
   in if anyHelp (firstOf strippedContinue) then helpFor prog
   else do
     r <- runCompilerCliFor1 prog (firstOf strippedContinue) opts
@@ -334,7 +329,8 @@ severityLabelOf d = case d.diagSeverity of
 emitDiag : CliOpts -> String -> Diagnostic -> Eff [] (Pair Int CliOpts)
 emitDiag o extra d = if o.optDiagFormat == "json" then pure (Pair (diagExitFor d) (collectSarifIn o d))
 else if o.optDiagFormat == "human" then do
-  _ <- printErrText (renderHuman d ++ "\n")
+  msg <- renderHuman o.optDiagLang d
+  _ <- printErrText (msg ++ "\n")
   pure (Pair (diagExitFor d) o)
 else if o.optDiagFormat == "sarif" then pure (Pair (diagExitFor d) (collectSarifIn o d))
 else do

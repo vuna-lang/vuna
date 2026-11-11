@@ -164,7 +164,7 @@ vuna.toml → Frontend.{Toml.parseToml, Manifest.parseManifest/validateManifest}
   [diagnostics.md](reference/diagnostics.md)）；M4 效果显式化：`lib` 与 compiler 壳层都已显式
   `Eff`——`runCompilerCliFor : … -> Eff [] Int`，`lib/Vuna/Cli.vuna` / `Run.vuna` 与两个
   `app/Main.vuna` 直接 bind；`Driver/CompilerCli` 的打印/诊断/子进程/recovery 全部显式，
-  仅余 `CliOpts` ambient 存储（`optsRef`）待下一轮清。
+  `CliOpts` 已是显式参数；`Diag.Format` 语言也改为显式 `lang` 参数。
   API 文档与检索见
   [api-docs.md](reference/api-docs.md)，调试工作流见 [debugging.md](reference/debugging.md)。
 - 进程执行只在 `Driver.CompilerCli.runIn`（`prim_runIn`，需要 `process`；工具链经 `runPure`）。
