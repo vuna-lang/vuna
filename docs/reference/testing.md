@@ -141,7 +141,8 @@ end:
 | §44p | `meOrigin` 隔离：LSP 冷启动写回标 `tool`，命令行 check 拒绝（`iface-reject=tool-origin`），下一次整包写回归 `pkg` |
 
 基础开关：`VUNA_IFACE_AUDIT=1`（同一进程跑摘要 + 全量、逐字节比较、不一致即失败且不落盘）、
-`VUNA_IFACE_SELFTEST=1`（写侧读回 + `hashOfIface` 载荷自证）。CI 建议两者都开。
+`VUNA_IFACE_SELFTEST=1`（写侧读回 + `hashOfIface` 载荷自证）。两者建议**分别**开启：
+同时开启在冷缓存上有已知误报（debt C49）。
 
 ### 超时
 
