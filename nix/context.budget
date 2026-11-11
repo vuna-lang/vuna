@@ -35,10 +35,10 @@
 #   - 文档按主题重整：删除 history/dt-core/dt-parity/dt.md，新增 core/tooling/records-traits
 #     并把 DT 语义并入 type-system；合并 main 的 LSP/readBytes 文档后按实测复标定：
 #     coldstart 29731 / agents 104 / arch 167 / readme 163 / max_ref 279。
-coldstart_bytes 40118
-agents_lines 131
-arch_lines 224
-readme_lines 173
+coldstart_bytes 40541
+agents_lines 133
+arch_lines 227
+readme_lines 174
 #   - M24.5：dt-parity.md §6 重写（实测能力表 + 边界）到 203 行；Elab 新增 scrutinee 反射、
 #     不可达分支、inlineSolvedMetas（3348 → 3513）。按实测重标定 max_ref 208 / max_module 3530；
 #     入口文档（coldstart/agents/arch/readme）不变。
@@ -202,3 +202,7 @@ max_module_lines 2709
 #     与 record 判定分支，2633 → 2709 行（纯特性增长，非格式化）；按 `sh
 #     nix/context-budget.sh .` 实测复标定 max_module_lines 2694 → 2709。入口文档按实测
 #     压缩回旧预算（architecture 的一行改写）。
+#   - 2026-11-11 终态架构页（`docs/architecture-target.md`）接入 AGENTS/README/architecture
+#     导航：入口文档实测 coldstart 40541 / agents 133 / arch 227 / readme 174（本特性文档
+#     增长）；按 `sh nix/context-budget.sh .` 实测复标定以上四项，max_ref 438 /
+#     max_module 2709 不变。
