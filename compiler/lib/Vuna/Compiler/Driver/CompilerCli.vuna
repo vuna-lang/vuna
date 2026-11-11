@@ -14,9 +14,9 @@ module Vuna.Compiler.Driver.CompilerCli
 --
 -- M4（效果显式化）：命令分发后的执行、打印/诊断/警告、workspace 并行 spawn/wait、
 -- recovery 路径全部显式在 `Eff []` 里（这些路径不再用 `runPure` 隐藏执行）；纯逻辑
--- （参数解析、help/usage 文本、路径判断、诊断文本拼装）保持纯函数。仍然保留的
--- 过渡点是 `CliOpts` 的 ambient 存储（`optsRef` + optsOf/putOpts/modifyOpts），
--- 下一轮改成显式参数后清掉。
+-- （参数解析、help/usage 文本、路径判断、诊断文本拼装）保持纯函数。`CliOpts` 也没有
+-- ambient 存储：入口构造一次后作为显式参数沿命令链传递，需要写回的地方（manifest
+-- 诊断配置、sarif/json 收集）返回更新后的 `CliOpts`（`Pair Int CliOpts`）。
 import Vuna.Compiler.Common
 import Vuna.Compiler.Diagnostics.Sink
 import Vuna.Compiler.Packages.Pkg
@@ -26,7 +26,6 @@ import Vuna.Compiler.Driver.Dt
 import Vuna.Compiler.Version
 import Vuna.Compiler.Diag.Format
 import Base.Host
-import Base.IORef
 import Base.Nat
 
 -- | CLI 辅助：compilerUsageLines（参数/退出码约定见 tooling.md）。
@@ -53,21 +52,11 @@ mapEff f (x :: rest) = do
   ys <- mapEff f rest
   pure (y :: ys)
 
--- 效果辅助：从尾到头对每个元素执行动作（丢弃返回值）。旧代码里的 `_ = map f xs`
--- 依赖 `f x :: map f rest` 的右侧优先求值，副作用顺序是从尾到头；打印/收集诊断要
--- 保持这个顺序逐字不变。
-forEachEffRev : (a -> Eff [] b) -> List a -> Eff [] Int
-forEachEffRev f [] = pure 0
-forEachEffRev f (x :: rest) = do
-  _ <- forEachEffRev f rest
-  _ <- f x
-  pure 0
-
 -- | CLI 辅助：runCompilerCli（参数/退出码约定见 tooling.md）。
 runCompilerCli : List String -> Eff [] Int
 runCompilerCli args = runCompilerCliFor "vuna-compiler" args
 
--- CLI 选项集中状态（M4 过渡第一步）：先合并为单个 CliOpts 记录（下轮改成显式参数）。
+-- CLI 选项集中状态：入口构造一次，命令链显式传递（M4：不再有 ambient 存储）。
 record CliOpts where
   optDiagFormat : String
   optDiagLang : String
@@ -84,23 +73,11 @@ record CliOpts where
 defaultCliOpts : CliOpts
 defaultCliOpts = CliOpts "short" "en" False False False False False False 0 False []
 
-optsRef : IORef CliOpts
-optsRef = runPure (newRef defaultCliOpts)
-
-optsOf : Int -> CliOpts
-optsOf _ = runPure (readRef optsRef)
-
-putOpts : CliOpts -> Int
-putOpts o = runPure (writeRef optsRef o)
-
-modifyOpts : (CliOpts -> CliOpts) -> Int
-modifyOpts f = runPure (modifyRef optsRef f)
-
-resetSarif : Int -> Int
-resetSarif _ = modifyOpts (\o => { o | optSarifItems = [] })
-
-collectSarif : Diagnostic -> Int
-collectSarif d = modifyOpts (\o => { o | optSarifItems = append o.optSarifItems [d] })
+-- 显式 state 辅助：把不改 opts 的动作结果带回（退出码 + 当前 CliOpts）。
+withOpts : CliOpts -> Eff [] Int -> Eff [] (Pair Int CliOpts)
+withOpts o m = do
+  code <- m
+  pure (Pair code o)
 
 diagExitFor : Diagnostic -> Int
 diagExitFor d = if d.diagInternal then 70
@@ -108,45 +85,26 @@ else case d.diagSeverity of
   SevError => 1
   _ => 0
 
-flushSarif : Int -> Eff [] Int
-flushSarif code =
+-- 按当前格式输出收集到的 sarif/json 诊断；返回原退出码。
+flushSarif : Int -> CliOpts -> Eff [] Int
+flushSarif code o =
   let
-    fmt = diagFormatOf 0
-    shown = takeDiags (maxErrorsOf 0) (optsOf 0).optSarifItems
-  in if fmt == "sarif" then do
+    shown = takeDiags o.optMaxErrors o.optSarifItems
+  in if o.optDiagFormat == "sarif" then do
     _ <- prim_eff_print (renderSarif shown ++ "\n")
-    finishSarif code
-  else if fmt == "json" then do
+    pure code
+  else if o.optDiagFormat == "json" then do
     _ <- prim_eff_print (renderJsonList shown ++ "\n")
-    finishSarif code
-  else finishSarif code
+    pure code
+  else pure code
 
--- SARIF 收尾：清空已收集的诊断并返回原退出码。
-finishSarif : Int -> Eff [] Int
-finishSarif code =
+-- 应用 vuna.toml [diagnostics]（命令行显式 flag 优先），返回合并后的 opts。
+applyDiagConfig : Maybe Package -> CliOpts -> CliOpts
+applyDiagConfig m o =
   let
-    _ = resetSarif 0
-  in pure code
-
-diagFormatOf : Int -> String
-diagFormatOf _ = (optsOf 0).optDiagFormat
-
-maxErrorsOf : Int -> Int
-maxErrorsOf _ = (optsOf 0).optMaxErrors
-
-denyWarningsOn : Int -> Bool
-denyWarningsOn _ = (optsOf 0).optDenyWarnings
-
-showWarningsOn : Int -> Bool
-showWarningsOn _ = (optsOf 0).optShowWarnings
-
--- 应用 vuna.toml [diagnostics]（命令行显式 flag 优先）。
-applyDiagConfig : Maybe Package -> Int
-applyDiagConfig m =
-  let
-    o = applyManifestOpts m (optsOf 0)
-    _ = setDiagLang o.optDiagLang
-  in putOpts o
+    o1 = applyManifestOpts m o
+    _ = setDiagLang o1.optDiagLang
+  in o1
 
 applyManifestOpts : Maybe Package -> CliOpts -> CliOpts
 applyManifestOpts Nothing o = o
@@ -248,12 +206,11 @@ runCompilerCliFor prog args =
         (hasDenyWarnings args || hasShowWarnings args) (hasFormatFlag args)
         (hasDenyWarnings args || hasShowWarnings args) (hasDenyWarnings args) (secondOf strippedMax)
         (secondOf strippedContinue) []
-    _ = putOpts opts
     _ = setDiagLang detectedLang
   in if anyHelp (firstOf strippedContinue) then helpFor prog
   else do
-    code <- runCompilerCliFor1 prog (firstOf strippedContinue)
-    flushSarif code
+    r <- runCompilerCliFor1 prog (firstOf strippedContinue) opts
+    flushSarif (firstOf r) (secondOf r)
 
 -- 剥离 `--max-errors N`（写入全局上限；默认 0 = 不限）。
 -- | 诊断参数解析：十进制数字，失败用默认值。
@@ -283,18 +240,21 @@ stripMaxErrorsGo (arg :: rest) acc n =
   else stripMaxErrorsGo rest (arg :: acc) n
 
 -- | 编译器 CLI 子命令分发。
-runCompilerCliFor1 : String -> List String -> Eff [] Int
-runCompilerCliFor1 prog args = case args of
-  [] => usageErr prog
+runCompilerCliFor1 : String -> List String -> CliOpts -> Eff [] (Pair Int CliOpts)
+runCompilerCliFor1 prog args o = case args of
+  [] => withOpts o (usageErr prog)
   arg :: rest => case arg of
-    "compile" => compileArgs prog rest
-    "check" => checkArgs prog rest
-    "build" => buildArgs prog rest
-    "version" => printVersion 0
-    "--version" => printVersion 0
-    "seed" => removedCommand prog "seed" "use `build --out OUT [DIR]` or `compile DIR OUT`"
-    "help" => helpFor prog
-    _ => if startsWith "-" arg then removedFlag prog arg else unknownCommand prog arg
+    "compile" => compileArgs prog rest o
+    "check" => checkArgs prog rest o
+    "build" => buildArgs prog rest o
+    "version" => withOpts o (printVersion 0)
+    "--version" => withOpts o (printVersion 0)
+    "seed" =>
+      withOpts o (removedCommand prog "seed" "use `build --out OUT [DIR]` or `compile DIR OUT`")
+    "help" => withOpts o (helpFor prog)
+    _ =>
+      if startsWith "-" arg then withOpts o (removedFlag prog arg)
+      else withOpts o (unknownCommand prog arg)
 
 printVersion : Int -> Eff [] Int
 printVersion _ = do
@@ -370,56 +330,60 @@ severityLabelOf d = case d.diagSeverity of
   SevNote => "note"
   SevHelp => "help"
 
-printDiagWithPrefix : String -> Diagnostic -> Eff [] Int
-printDiagWithPrefix extra d =
+-- 单条诊断按当前格式输出并返回退出码；json/sarif 时把诊断收集进 opts（显式写回）。
+emitDiag : CliOpts -> String -> Diagnostic -> Eff [] (Pair Int CliOpts)
+emitDiag o extra d = if o.optDiagFormat == "json" then pure (Pair (diagExitFor d) (collectSarifIn o d))
+else if o.optDiagFormat == "human" then do
+  _ <- printErrText (renderHuman d ++ "\n")
+  pure (Pair (diagExitFor d) o)
+else if o.optDiagFormat == "sarif" then pure (Pair (diagExitFor d) (collectSarifIn o d))
+else do
+  _ <- printErrText (severityLabelOf d ++ ": " ++ extra ++ renderShort d ++ "\n")
+  pure (Pair (diagExitFor d) o)
+
+-- sarif/json 诊断收集（写回 CliOpts，显式 state 传递）。
+collectSarifIn : CliOpts -> Diagnostic -> CliOpts
+collectSarifIn o d = { o | optSarifItems = append o.optSarifItems [d] }
+
+-- 从尾到头逐条输出诊断（丢弃退出码），累积更新后的 opts。旧代码里的
+-- `_ = map f xs` 依赖 `f x :: map f rest` 的右侧优先求值，打印/收集顺序是从尾到头；
+-- 这里保持逐字不变。
+emitDiagRevSeq : CliOpts -> String -> List Diagnostic -> Eff [] CliOpts
+emitDiagRevSeq o extra [] = pure o
+emitDiagRevSeq o extra (d :: rest) = do
+  o1 <- emitDiagRevSeq o extra rest
+  r <- emitDiag o1 extra d
+  pure (secondOf r)
+
+printDiagWithPrefix : CliOpts -> String -> Diagnostic -> Eff [] (Pair Int CliOpts)
+printDiagWithPrefix o extra d =
   let
     errs = takeParseErrors 0
   in case errs of
-    [] => emitDiag extra d
+    [] => emitDiag o extra d
     e :: _ =>
       let
-        shown = takeDiags (maxErrorsOf 0) errs
+        shown = takeDiags o.optMaxErrors errs
       in do
-        _ <- forEachEffRev (emitDiag extra) shown
-        pure (diagExitFor e)
-
--- 单条诊断按当前格式输出并返回退出码。
--- | 按当前格式输出单条诊断并返回退出码。
-emitDiag : String -> Diagnostic -> Eff [] Int
-emitDiag extra d =
-  let
-    fmt = diagFormatOf 0
-  in if fmt == "json" then
-    let
-      _ = collectSarif d
-    in pure (diagExitFor d)
-  else if fmt == "human" then do
-    _ <- printErrText (renderHuman d ++ "\n")
-    pure (diagExitFor d)
-  else if fmt == "sarif" then
-    let
-      _ = collectSarif d
-    in pure (diagExitFor d)
-  else do
-    _ <- printErrText (severityLabelOf d ++ ": " ++ extra ++ renderShort d ++ "\n")
-    pure (diagExitFor d)
+        o1 <- emitDiagRevSeq o extra shown
+        pure (Pair (diagExitFor e) o1)
 
 -- | 输出错误诊断并返回退出码。
-printDiag : Diagnostic -> Eff [] Int
-printDiag d = printDiagWithPrefix "" d
+printDiag : CliOpts -> Diagnostic -> Eff [] (Pair Int CliOpts)
+printDiag o d = printDiagWithPrefix o "" d
 
 -- | 诊断输出辅助：printErr。
 printErr : String -> Eff [] Int
 printErr e = printErrText "error: ${e}\n"
 
 -- | 诊断/告警实现：printDiagList（详见 diagnostics.md）。
-printDiagList : String -> List Diagnostic -> Eff [] Int
-printDiagList extra ds =
+printDiagList : CliOpts -> String -> List Diagnostic -> Eff [] (Pair Int CliOpts)
+printDiagList o extra ds =
   let
-    shown = takeDiags (maxErrorsOf 0) ds
+    shown = takeDiags o.optMaxErrors ds
   in do
-    _ <- forEachEffRev (printDiagWithPrefix extra) shown
-    pure 0
+    o1 <- emitDiagRevSeq o extra shown
+    pure (Pair 0 o1)
 
 printWarnings : List String -> Eff [] Int
 printWarnings [] = pure 0
@@ -461,87 +425,87 @@ executablePackageAt label dir = case loadPackage dir of
 -- 或包目录入口（可执行包），逐模块写出到 OUTDIR；成功静默。
 -- ---------------------------------------------------------------
 -- | CLI 辅助：compileArgs（参数/退出码约定见 tooling.md）。
-compileArgs : String -> List String -> Eff [] Int
-compileArgs prog args = compileParse prog True Nothing Nothing args
+compileArgs : String -> List String -> CliOpts -> Eff [] (Pair Int CliOpts)
+compileArgs prog args o = compileParse prog True Nothing Nothing args o
 
-compileParse : String -> Bool -> Maybe String -> Maybe String -> List String -> Eff [] Int
-compileParse prog printResult entry outDir args = case args of
-  [] => compileFinish prog printResult entry outDir
-  "--no-print" :: rest => compileParse prog False entry outDir rest
-  "--release" :: rest => compileParse prog printResult entry outDir rest
-  arg :: rest => if startsWith "-" arg then removedFlag prog arg
+compileParse : String -> Bool -> Maybe String -> Maybe String -> List String -> CliOpts -> Eff [] (Pair Int CliOpts)
+compileParse prog printResult entry outDir args o = case args of
+  [] => compileFinish prog printResult entry outDir o
+  "--no-print" :: rest => compileParse prog False entry outDir rest o
+  "--release" :: rest => compileParse prog printResult entry outDir rest o
+  arg :: rest => if startsWith "-" arg then withOpts o (removedFlag prog arg)
   else case entry of
-    Nothing => compileParse prog printResult (Just arg) outDir rest
+    Nothing => compileParse prog printResult (Just arg) outDir rest o
     Just _ => case outDir of
-      Nothing => compileParse prog printResult entry (Just arg) rest
-      Just _ => usageErr prog
+      Nothing => compileParse prog printResult entry (Just arg) rest o
+      Just _ => withOpts o (usageErr prog)
 
-compileFinish : String -> Bool -> Maybe String -> Maybe String -> Eff [] Int
-compileFinish prog printResult Nothing outDir = usageErr prog
-compileFinish prog printResult (Just e) outDir = case outDir of
-  Nothing => usageErr prog
-  Just out => compileRun printResult e out
+compileFinish : String -> Bool -> Maybe String -> Maybe String -> CliOpts -> Eff [] (Pair Int CliOpts)
+compileFinish prog printResult Nothing outDir o = withOpts o (usageErr prog)
+compileFinish prog printResult (Just e) outDir o = case outDir of
+  Nothing => withOpts o (usageErr prog)
+  Just out => compileRun printResult e out o
 
-compileRun : Bool -> String -> String -> Eff [] Int
-compileRun printResult entry outDir = do
+compileRun : Bool -> String -> String -> CliOpts -> Eff [] (Pair Int CliOpts)
+compileRun printResult entry outDir o = do
   exists <- prim_eff_fileExists entry
   if exists then do
     isDir <- prim_eff_isDirectory entry
-    if isDir then compilePkgDir printResult entry outDir
-    else compileFileEntry printResult entry outDir
-  else dtPathErr entry
+    if isDir then compilePkgDir printResult entry outDir o
+    else compileFileEntry printResult entry outDir o
+  else withOpts o (dtPathErr entry)
 
-compileFileEntry : Bool -> String -> String -> Eff [] Int
-compileFileEntry printResult entry outDir = case contextForFile entry of
-  ErrC e => printDiag e
+compileFileEntry : Bool -> String -> String -> CliOpts -> Eff [] (Pair Int CliOpts)
+compileFileEntry printResult entry outDir o = case contextForFile entry of
+  ErrC e => printDiag o e
   OkC ctx =>
     let
-      _ = applyDiagConfig (contextPackageOf ctx)
+      o1 = applyDiagConfig (contextPackageOf ctx) o
     in do
       r <- compileToDir ctx entry printResult outDir
       case r of
-        ErrC e => printDiag e
-        OkC _ => finishWarningsDir outDir 0
+        ErrC e => printDiag o1 e
+        OkC _ => finishWarningsDir o1 outDir 0
 
-compilePkgDir : Bool -> String -> String -> Eff [] Int
-compilePkgDir printResult dir outDir = do
+compilePkgDir : Bool -> String -> String -> CliOpts -> Eff [] (Pair Int CliOpts)
+compilePkgDir printResult dir outDir o = do
   pkgR <- executablePackage "compile" dir
   case pkgR of
-    ErrC e => printDiag e
+    ErrC e => printDiag o e
     OkC pkg =>
       let
-        _ = applyDiagConfig (Just pkg)
+        o1 = applyDiagConfig (Just pkg) o
       in do
         r <- compileToDir (packageContext pkg) (packageEntry pkg) printResult outDir
         case r of
-          ErrC e => printDiag e
-          OkC _ => finishWarningsDir outDir 0
+          ErrC e => printDiag o1 e
+          OkC _ => finishWarningsDir o1 outDir 0
 
 -- ---------------------------------------------------------------
 -- check：文件入口（包上下文）或包目录（可执行包 check 入口；库包 check [export].modules）
 -- ---------------------------------------------------------------
 -- | CLI 辅助：checkArgs（参数/退出码约定见 tooling.md）。
-checkArgs : String -> List String -> Eff [] Int
-checkArgs prog [] = usageErr prog
-checkArgs prog ("--release" :: rest) = checkArgs prog rest
-checkArgs prog (arg :: rest) = if startsWith "-" arg then removedFlag prog arg
+checkArgs : String -> List String -> CliOpts -> Eff [] (Pair Int CliOpts)
+checkArgs prog [] o = withOpts o (usageErr prog)
+checkArgs prog ("--release" :: rest) o = checkArgs prog rest o
+checkArgs prog (arg :: rest) o = if startsWith "-" arg then withOpts o (removedFlag prog arg)
 else case rest of
-  [] => checkEmit arg
-  _ => usageErr prog
+  [] => checkEmit arg o
+  _ => withOpts o (usageErr prog)
 
 -- | CLI 辅助：checkEmit（参数/退出码约定见 tooling.md）。
-checkEmit : String -> Eff [] Int
-checkEmit path = do
+checkEmit : String -> CliOpts -> Eff [] (Pair Int CliOpts)
+checkEmit path o = do
   exists <- prim_eff_fileExists path
   if exists then do
     isDir <- prim_eff_isDirectory path
-    if isDir then checkPkgDir path else checkFileEntry path
-  else dtPathErr path
+    if isDir then checkPkgDir path o else checkFileEntry path o
+  else withOpts o (dtPathErr path)
 
-checkPkgDir : String -> Eff [] Int
-checkPkgDir dir = case workspacePackages dir of
-  ErrC e => printDiag e
-  OkC pkgs => checkPackages pkgs 0
+checkPkgDir : String -> CliOpts -> Eff [] (Pair Int CliOpts)
+checkPkgDir dir o = case workspacePackages dir of
+  ErrC e => printDiag o e
+  OkC pkgs => checkPackages pkgs 0 o
 
 -- M30：workspace 是检查单元——根包 + [workspace].members 逐个检查，成员错误不再被
 -- 根 check 忽略。错误带 `[包名]` 前缀；全部跑完再汇总退出码。
@@ -550,78 +514,79 @@ checkPkgDir dir = case workspacePackages dir of
 -- `workspacePackages <dir>` 是否返回多包区分根 / 成员；单包目录的子进程只查自己。
 -- 子进程继承 stdout/stderr（错误可能交错），退出码按失败汇总。
 -- | CLI 辅助：checkSpawnArgs（参数/退出码约定见 tooling.md）。
-checkSpawnArgs : String -> List String
-checkSpawnArgs dir =
+checkSpawnArgs : CliOpts -> String -> List String
+checkSpawnArgs o dir =
   let
-    fmt = diagFormatOf 0
-  in let
-    base = if fmt == "short" then ["check", dir] else ["check", "--error-format", fmt, dir]
-    base2 = if showWarningsOn 0 then append base ["--warnings"] else base
-  in if denyWarningsOn 0 then append base2 ["--deny-warnings"] else base2
+    base =
+      if o.optDiagFormat == "short" then ["check", dir]
+      else ["check", "--error-format", o.optDiagFormat, dir]
+    base2 = if o.optShowWarnings then append base ["--warnings"] else base
+  in if o.optDenyWarnings then append base2 ["--deny-warnings"] else base2
 
-checkPackages : List Package -> Int -> Eff [] Int
-checkPackages [] code = pure code
-checkPackages ([pkg]) code = checkPackageSeq pkg code
-checkPackages pkgs code =
+checkPackages : List Package -> Int -> CliOpts -> Eff [] (Pair Int CliOpts)
+checkPackages [] code o = pure (Pair code o)
+checkPackages ([pkg]) code o = checkPackageSeq pkg code o
+checkPackages pkgs code o =
   let
     members = filter (\pkg => not (isWorkspaceRoot pkg)) pkgs
     roots = filter (\pkg => isWorkspaceRoot pkg) pkgs
   in do
     started <- mapEff (\pkg => do
-      pid <- prim_eff_spawn (checkSpawnArgs (packageDir pkg))
+      pid <- prim_eff_spawn (checkSpawnArgs o (packageDir pkg))
       pure (Pair pkg pid)
     ) members
-    code1 <- checkRootsSeq roots code
+    r1 <- checkRootsSeq roots code o
     codes <- mapEff (\pr => prim_eff_wait (secondOf pr)) started
-    pure (countFailures code1 codes)
+    pure (Pair (countFailures (firstOf r1) codes) (secondOf r1))
 
 isWorkspaceRoot : Package -> Bool
 isWorkspaceRoot pkg = case workspacePackages (packageDir pkg) of
   OkC ps => length ps > 1
   ErrC e => False
 
-checkRootsSeq : List Package -> Int -> Eff [] Int
-checkRootsSeq [] code = pure code
-checkRootsSeq (pkg :: rest) code = do
-  c <- checkPackageSeq pkg code
-  checkRootsSeq rest c
+checkRootsSeq : List Package -> Int -> CliOpts -> Eff [] (Pair Int CliOpts)
+checkRootsSeq [] code o = pure (Pair code o)
+checkRootsSeq (pkg :: rest) code o = do
+  r <- checkPackageSeq pkg code o
+  checkRootsSeq rest (firstOf r) (secondOf r)
 
-checkPackageSeq : Package -> Int -> Eff [] Int
-checkPackageSeq pkg code =
+checkPackageSeq : Package -> Int -> CliOpts -> Eff [] (Pair Int CliOpts)
+checkPackageSeq pkg code o =
   let
-    _ = applyDiagConfig (Just pkg)
+    o1 = applyDiagConfig (Just pkg) o
     -- M45：warning 需要本包模块重新精化（warning 不持久化）；-W / --deny-warnings 时
     -- 跳过 check 缓存与干净模块复用（依赖仍走接口摘要）。
-    wantWarnings = showWarningsOn 0 || denyWarningsOn 0
+    wantWarnings = o1.optShowWarnings || o1.optDenyWarnings
   in do
-    c <- checkPackageCode pkg wantWarnings
-    pure (if c > code then c else code)
+    r <- checkPackageCode pkg wantWarnings o1
+    pure (Pair (if firstOf r > code then firstOf r else code) (secondOf r))
 
-checkPackageCode : Package -> Bool -> Eff [] Int
-checkPackageCode pkg wantWarnings = do
+checkPackageCode : Package -> Bool -> CliOpts -> Eff [] (Pair Int CliOpts)
+checkPackageCode pkg wantWarnings o = do
   r <- checkPackage wantWarnings pkg
   case r of
-    ErrC e => checkPackageErr pkg e
+    ErrC e => checkPackageErr pkg e o
     OkC _ =>
       let
         ws = filter (ownedByPackage pkg) (takeWarnings 0)
-        shown = if showWarningsOn 0 || denyWarningsOn 0 then ws else []
-        failed = if denyWarningsOn 0 && length ws > 0 then 1 else 0
+        shown = if o.optShowWarnings || o.optDenyWarnings then ws else []
+        failed = if o.optDenyWarnings && length ws > 0 then 1 else 0
       in do
-        _ <- printDiagList "[${packageName pkg}] " shown
-        pure failed
+        r1 <- printDiagList o "[${packageName pkg}] " shown
+        pure (Pair failed (secondOf r1))
 
 countFailures : Int -> List Int -> Int
 countFailures acc [] = acc
 countFailures acc (c :: rest) = if c == 0 then countFailures acc rest else countFailures 1 rest
 
-checkFileEntry : String -> Eff [] Int
-checkFileEntry path = case contextForFile path of
-  ErrC e => printDiag e
+checkFileEntry : String -> CliOpts -> Eff [] (Pair Int CliOpts)
+checkFileEntry path o = case contextForFile path of
+  ErrC e => printDiag o e
   OkC ctx =>
     let
-      _ = applyDiagConfig (contextPackageOf ctx)
-    in if isModuleFileEntry ctx path then checkModuleFileEntry ctx path else checkEntryFile ctx path
+      o1 = applyDiagConfig (contextPackageOf ctx) o
+    in if isModuleFileEntry ctx path then checkModuleFileEntry ctx path o1
+    else checkEntryFile ctx path o1
 
 -- M45：带 `module` 头、且**不是**当前包入口的文件按库模块检查。包入口保持入口语义
 -- （它的 module 头仍报 `LD_ModuleHeaderInEntryFile`，与包级 check 一致）；无头文件走入口。
@@ -636,36 +601,36 @@ isPackageEntryPath ctx path = case contextPackageOf ctx of
 
 -- 单文件库模块检查：错误直接上报（`--continue-on-error` 的恢复只支持入口文件）；
 -- 成功时只打印/统计本文件的告警（依赖模块不刷屏）。
-checkModuleFileEntry : PackageContext -> String -> Eff [] Int
-checkModuleFileEntry ctx path = case dtCheckModuleFile ctx path of
-  ErrC e => printDiag e
+checkModuleFileEntry : PackageContext -> String -> CliOpts -> Eff [] (Pair Int CliOpts)
+checkModuleFileEntry ctx path o = case dtCheckModuleFile ctx path of
+  ErrC e => printDiag o e
   OkC _ =>
     let
       ws = filter (ownedByFile path) (takeWarnings 0)
-      shown = if showWarningsOn 0 || denyWarningsOn 0 then ws else []
+      shown = if o.optShowWarnings || o.optDenyWarnings then ws else []
     in do
-      _ <- printDiagList "" shown
-      pure (if denyWarningsOn 0 && length ws > 0 then 1 else 0)
+      r <- printDiagList o "" shown
+      pure (Pair (if o.optDenyWarnings && length ws > 0 then 1 else 0) (secondOf r))
 
 -- 入口文件检查（无 module 头；唯一支持 `--continue-on-error` 恢复的路径）。
-checkEntryFile : PackageContext -> String -> Eff [] Int
-checkEntryFile ctx path = case dtCheck ctx path of
-  ErrC e => if (optsOf 0).optContinueOnError then case dtCheckRecovering ctx path of
+checkEntryFile : PackageContext -> String -> CliOpts -> Eff [] (Pair Int CliOpts)
+checkEntryFile ctx path o = case dtCheck ctx path of
+  ErrC e => if o.optContinueOnError then case dtCheckRecovering ctx path of
     OkC ds =>
       let
-        shown = takeDiags (optsOf 0).optMaxErrors ds
+        shown = takeDiags o.optMaxErrors ds
       in do
-        _ <- printDiagList "" shown
-        if length shown == 0 then printDiag e else pure 1
-    ErrC e2 => printDiag e
-  else printDiag e
+        r <- printDiagList o "" shown
+        if length shown == 0 then printDiag (secondOf r) e else pure (Pair 1 (secondOf r))
+    ErrC e2 => printDiag o e
+  else printDiag o e
   OkC _ =>
     let
       ws = filter (ownedByFile path) (takeWarnings 0)
-      shown = if showWarningsOn 0 || denyWarningsOn 0 then ws else []
+      shown = if o.optShowWarnings || o.optDenyWarnings then ws else []
     in do
-      _ <- printDiagList "" shown
-      pure (if denyWarningsOn 0 && length ws > 0 then 1 else 0)
+      r <- printDiagList o "" shown
+      pure (Pair (if o.optDenyWarnings && length ws > 0 then 1 else 0) (secondOf r))
 
 -- ---------------------------------------------------------------
 -- build：包级逐模块 codegen 到 DIR（默认 <PKG-DIR>/.output），再跑 build.sh 链接到
@@ -675,40 +640,40 @@ checkEntryFile ctx path = case dtCheck ctx path of
 -- build meta（同哈希跳过）见 Vuna.Compiler.Driver.Compile。
 -- ---------------------------------------------------------------
 -- | CLI 辅助：buildArgs（参数/退出码约定见 tooling.md）。
-buildArgs : String -> List String -> Eff [] Int
-buildArgs prog args = buildParse prog False Nothing Nothing Nothing args
+buildArgs : String -> List String -> CliOpts -> Eff [] (Pair Int CliOpts)
+buildArgs prog args o = buildParse prog False Nothing Nothing Nothing args o
 
-buildParse : String -> Bool -> Maybe String -> Maybe String -> Maybe String -> List String -> Eff [] Int
-buildParse prog noCompile out dir pkg args = case args of
-  [] => buildRun noCompile (defaultDir dir) out pkg
-  "--no-compile" :: rest => buildParse prog True out dir pkg rest
-  "--release" :: rest => buildParse prog noCompile out dir pkg rest
+buildParse : String -> Bool -> Maybe String -> Maybe String -> Maybe String -> List String -> CliOpts -> Eff [] (Pair Int CliOpts)
+buildParse prog noCompile out dir pkg args o = case args of
+  [] => buildRun noCompile (defaultDir dir) out pkg o
+  "--no-compile" :: rest => buildParse prog True out dir pkg rest o
+  "--release" :: rest => buildParse prog noCompile out dir pkg rest o
   "--out" :: rest => case rest of
-    outDir :: more => if startsWith "-" outDir then removedFlag prog outDir
+    outDir :: more => if startsWith "-" outDir then withOpts o (removedFlag prog outDir)
     else case out of
-      Nothing => buildParse prog noCompile (Just outDir) dir pkg more
-      Just _ => usageErr prog
-    [] => usageErr prog
+      Nothing => buildParse prog noCompile (Just outDir) dir pkg more o
+      Just _ => withOpts o (usageErr prog)
+    [] => withOpts o (usageErr prog)
   "--package" :: rest => case rest of
-    name :: more => if startsWith "-" name then removedFlag prog name
+    name :: more => if startsWith "-" name then withOpts o (removedFlag prog name)
     else case pkg of
-      Nothing => buildParse prog noCompile out dir (Just name) more
-      Just _ => usageErr prog
-    [] => usageErr prog
-  arg :: rest => if startsWith "-" arg then removedFlag prog arg
+      Nothing => buildParse prog noCompile out dir (Just name) more o
+      Just _ => withOpts o (usageErr prog)
+    [] => withOpts o (usageErr prog)
+  arg :: rest => if startsWith "-" arg then withOpts o (removedFlag prog arg)
   else case dir of
-    Nothing => buildParse prog noCompile out (Just arg) pkg rest
-    Just _ => usageErr prog
+    Nothing => buildParse prog noCompile out (Just arg) pkg rest o
+    Just _ => withOpts o (usageErr prog)
 
-buildRun : Bool -> String -> Maybe String -> Maybe String -> Eff [] Int
-buildRun noCompile dir outM pkgM = case workspacePackages dir of
-  ErrC e => printDiag e
+buildRun : Bool -> String -> Maybe String -> Maybe String -> CliOpts -> Eff [] (Pair Int CliOpts)
+buildRun noCompile dir outM pkgM o = case workspacePackages dir of
+  ErrC e => printDiag o e
   OkC pkgs => do
     libOnly <- isSingleLibraryPackage pkgs
-    if libOnly then printErr (libraryOnlyMessage pkgs)
+    if libOnly then withOpts o (printErr (libraryOnlyMessage pkgs))
     else case selectBuildTargets pkgM pkgs of
-      ErrC e => printDiag e
-      OkC targets => buildTargets noCompile (length pkgs > 1) outM targets 0
+      ErrC e => printDiag o e
+      OkC targets => buildTargets noCompile (length pkgs > 1) outM targets 0 o
 
 -- 单包目录且是库包（没有 app/Main.vuna）→ build 必须报错（不是静默 skip）。
 -- workspace 根里的库成员仍走 skip（构建单元覆盖全部可执行成员）。
@@ -735,17 +700,17 @@ findPackageByName name (pkg :: rest) =
   if packageName pkg == name then Just pkg else findPackageByName name rest
 
 -- | CLI 辅助：buildTargets（参数/退出码约定见 tooling.md）。
-buildTargets : Bool -> Bool -> Maybe String -> List Package -> Int -> Eff [] Int
-buildTargets noCompile multiOut outM [] code = pure code
-buildTargets noCompile multiOut outM (pkg :: rest) code = do
-  c <- buildOne noCompile multiOut outM pkg
+buildTargets : Bool -> Bool -> Maybe String -> List Package -> Int -> CliOpts -> Eff [] (Pair Int CliOpts)
+buildTargets noCompile multiOut outM [] code o = pure (Pair code o)
+buildTargets noCompile multiOut outM (pkg :: rest) code o = do
+  r <- buildOne noCompile multiOut outM pkg o
   let
-    next = if c > code then c else code
-  in buildTargets noCompile multiOut outM rest next
+    next = if firstOf r > code then firstOf r else code
+  in buildTargets noCompile multiOut outM rest next (secondOf r)
 
 -- 单包：可执行包 build；库包只 check（workspace 构建单元覆盖所有成员）。
-buildOne : Bool -> Bool -> Maybe String -> Package -> Eff [] Int
-buildOne noCompile multiOut outM pkg =
+buildOne : Bool -> Bool -> Maybe String -> Package -> CliOpts -> Eff [] (Pair Int CliOpts)
+buildOne noCompile multiOut outM pkg o =
   let
     name = packageName pkg
     outDir = case outM of
@@ -758,45 +723,45 @@ buildOne noCompile multiOut outM pkg =
       let
         ctx = packageContext pkg
         binPath = "${outDir}/bin/${name}"
-      in if noCompile then compileCodegen ctx entry outDir
+      in if noCompile then compileCodegen ctx entry outDir o
       else do
         fresh <- metaUpToDate outDir ctx entry binPath
         if fresh then do
           _ <- prim_eff_print "up to date: ${binPath}\n"
-          pure 0
+          pure (Pair 0 o)
         else do
           r <- compileToDir ctx entry True outDir
           case r of
-            ErrC e => printDiag e
-            OkC _ => buildLinked ctx entry outDir name
+            ErrC e => printDiag o e
+            OkC _ => buildLinked ctx entry outDir name o
     else do
       r <- checkPackage False pkg
       case r of
-        ErrC e => printDiag e
+        ErrC e => printDiag o e
         OkC warnings => do
           _ <- printWarnings warnings
           _ <- prim_eff_print "skipped (library): ${name} -> ${outDir}\n"
-          pure 0
+          pure (Pair 0 o)
 
-compileCodegen : PackageContext -> String -> String -> Eff [] Int
-compileCodegen ctx entry outDir = do
+compileCodegen : PackageContext -> String -> String -> CliOpts -> Eff [] (Pair Int CliOpts)
+compileCodegen ctx entry outDir o = do
   r <- compileToDir ctx entry True outDir
   case r of
-    ErrC e => printDiag e
-    OkC _ => pure 0
+    ErrC e => printDiag o e
+    OkC _ => pure (Pair 0 o)
 
 -- 链接：先建 bin/（build.sh 的 -o bin/<pkg> 需要父目录存在），再跑 build.sh；
 -- 链接成功后写 build-meta.json（同哈希跳过在 buildOne 入口判定）。
-buildLinked : PackageContext -> String -> String -> String -> Eff [] Int
-buildLinked ctx entry outDir name = do
+buildLinked : PackageContext -> String -> String -> String -> CliOpts -> Eff [] (Pair Int CliOpts)
+buildLinked ctx entry outDir name o = do
   _ <- ensureDirPath "${outDir}/bin"
   r <- runBuildScript outDir "bin/${name}" name
   case r of
-    ErrC e => printDiag e
+    ErrC e => printDiag o e
     OkC _ => do
       _ <- writeBuildMeta outDir ctx entry True
       _ <- prim_eff_print "built ${outDir}/bin/${name}\n"
-      pure 0
+      pure (Pair 0 o)
 
 -- ---------------------------------------------------------------
 -- warning 归属：只显示当前检查单元自己的文件（依赖包的 warning 不重复刷屏）。
@@ -823,28 +788,28 @@ ownedByPackage pkg d =
 
 -- compile/build 成功路径的 warning 消费（默认静默；-W 显示；--deny-warnings 提升退出码）。
 -- | 诊断/告警实现：finishWarnings（详见 diagnostics.md）。
-finishWarnings : Int -> Eff [] Int
-finishWarnings code =
+finishWarnings : Int -> CliOpts -> Eff [] (Pair Int CliOpts)
+finishWarnings code o =
   let
     ws = takeWarnings 0
-    shown = if showWarningsOn 0 || denyWarningsOn 0 then ws else []
+    shown = if o.optShowWarnings || o.optDenyWarnings then ws else []
   in do
-    _ <- printDiagList "" shown
-    pure (if denyWarningsOn 0 && length ws > 0 then 1 else code)
+    r <- printDiagList o "" shown
+    pure (Pair (if o.optDenyWarnings && length ws > 0 then 1 else code) (secondOf r))
 
 -- 与 finishWarnings 相同，但失败时删除已生成的输出目录（编译失败不留产物）。
 -- | 诊断/告警实现：finishWarningsDir（详见 diagnostics.md）。
-finishWarningsDir : String -> Int -> Eff [] Int
-finishWarningsDir dir code =
+finishWarningsDir : CliOpts -> String -> Int -> Eff [] (Pair Int CliOpts)
+finishWarningsDir o dir code =
   let
     ws = takeWarnings 0
-    shown = if showWarningsOn 0 || denyWarningsOn 0 then ws else []
+    shown = if o.optShowWarnings || o.optDenyWarnings then ws else []
   in do
-    _ <- printDiagList "" shown
-    if denyWarningsOn 0 && length ws > 0 then do
+    r <- printDiagList o "" shown
+    if o.optDenyWarnings && length ws > 0 then do
       _ <- prim_eff_runIn "/" ["rm", "-rf", dir]
-      pure 1
-    else pure code
+      pure (Pair 1 (secondOf r))
+    else pure (Pair code (secondOf r))
 
 -- 剥离 `--lang zh`（human 说明语言；默认 en）。
 -- | 剥离 --lang 参数。
@@ -875,37 +840,38 @@ stripContinueGo [] acc found = Pair (reverse acc) found
 stripContinueGo ("--continue-on-error" :: rest) acc found = stripContinueGo rest acc True
 stripContinueGo (arg :: rest) acc found = stripContinueGo rest (arg :: acc) found
 
-checkPackageErr : Package -> Diagnostic -> Eff [] Int
-checkPackageErr pkg e =
-  if (optsOf 0).optContinueOnError then packageRecover pkg e
-  else printDiagWithPrefix "[${packageName pkg}] " e
+checkPackageErr : Package -> Diagnostic -> CliOpts -> Eff [] (Pair Int CliOpts)
+checkPackageErr pkg e o =
+  if o.optContinueOnError then packageRecover pkg e o
+  else printDiagWithPrefix o "[${packageName pkg}] " e
 
 -- | 包检查恢复入口：可执行包走入口文件，库包走 [export].modules。
 -- | 包检查恢复入口：可执行包走入口文件，库包走导出模块。
-packageRecover : Package -> Diagnostic -> Eff [] Int
-packageRecover pkg e = do
+packageRecover : Package -> Diagnostic -> CliOpts -> Eff [] (Pair Int CliOpts)
+packageRecover pkg e o = do
   exists <- prim_eff_fileExists (packageEntry pkg)
-  if exists then packageRecoverExe pkg e else packageRecoverLib pkg e
+  if exists then packageRecoverExe pkg e o else packageRecoverLib pkg e o
 
 -- | 可执行包入口的恢复式检查。
-packageRecoverExe : Package -> Diagnostic -> Eff [] Int
-packageRecoverExe pkg e = case dtCheckRecovering (packageContext pkg) (packageEntry pkg) of
-  OkC ds => printRecovered pkg e ds
-  ErrC e2 => printDiagWithPrefix "[${packageName pkg}] " e2
+packageRecoverExe : Package -> Diagnostic -> CliOpts -> Eff [] (Pair Int CliOpts)
+packageRecoverExe pkg e o = case dtCheckRecovering (packageContext pkg) (packageEntry pkg) of
+  OkC ds => printRecovered pkg e ds o
+  ErrC e2 => printDiagWithPrefix o "[${packageName pkg}] " e2
 
 -- | 库包（[export].modules）的恢复式检查。
-packageRecoverLib : Package -> Diagnostic -> Eff [] Int
-packageRecoverLib pkg e = case packageExports pkg of
+packageRecoverLib : Package -> Diagnostic -> CliOpts -> Eff [] (Pair Int CliOpts)
+packageRecoverLib pkg e o = case packageExports pkg of
   Just names => case dtCheckLibraryRecovering (packageContext pkg) names of
-    OkC ds => printRecovered pkg e ds
-    ErrC e2 => printDiagWithPrefix "[${packageName pkg}] " e2
-  Nothing => printDiagWithPrefix "[${packageName pkg}] " e
+    OkC ds => printRecovered pkg e ds o
+    ErrC e2 => printDiagWithPrefix o "[${packageName pkg}] " e2
+  Nothing => printDiagWithPrefix o "[${packageName pkg}] " e
 
 -- | 打印恢复出的诊断并返回退出码。
-printRecovered : Package -> Diagnostic -> List Diagnostic -> Eff [] Int
-printRecovered pkg e ds =
+printRecovered : Package -> Diagnostic -> List Diagnostic -> CliOpts -> Eff [] (Pair Int CliOpts)
+printRecovered pkg e ds o =
   let
-    shown = takeDiags (optsOf 0).optMaxErrors ds
+    shown = takeDiags o.optMaxErrors ds
   in do
-    _ <- printDiagList "[${packageName pkg}] " shown
-    if length shown == 0 then printDiagWithPrefix "[${packageName pkg}] " e else pure 1
+    r <- printDiagList o "[${packageName pkg}] " shown
+    if length shown == 0 then printDiagWithPrefix (secondOf r) "[${packageName pkg}] " e
+    else pure (Pair 1 (secondOf r))
