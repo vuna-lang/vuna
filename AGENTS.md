@@ -106,6 +106,8 @@ build，`dist/` 提交）；`nix/` = 构建图 + rotate/metrics/bench；`docs/` 
 ## 文档导航
 
 - 子系统地图、改动定位：[`docs/architecture.md`](docs/architecture.md)
+- 终态方向、不变量与非目标：[`docs/architecture-target.md`](docs/architecture-target.md)
+  （判断"某需求该不该进核心"先读它；现状见 architecture.md）
 - 语言与类型：[language.md](docs/reference/language.md)（语法/模块）、
   [type-system.md](docs/reference/type-system.md)（宇宙/索引族/依赖匹配/相等/擦除）、
   [qtt.md](docs/reference/qtt.md)（quantity/用量检查/线性数据）、

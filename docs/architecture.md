@@ -7,6 +7,9 @@
 模块级接口缓存见 [cache.md](reference/cache.md)（失效判据 / 包级环境指纹 / 工具产物来源 /
 镜像内容寻址；排障用 `VUNA_IFACE_AUDIT=1`，CI 建议加 `VUNA_IFACE_SELFTEST=1`）。
 
+> 本页是**现状**地图；终态方向、不变量与非目标见
+> [architecture-target.md](architecture-target.md)。
+
 ## 仓库分层
 
 ```text
