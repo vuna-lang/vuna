@@ -52,7 +52,7 @@
 
 | ID | 仍未成立的事实 | 证据 | 归属 |
 | --- | --- | --- | --- |
-| D59 | 动作类型已统一为 `Eff`：入口 `main : Eff [] a`、`runPure`、handler answer `Eff []` + `joinEff`、`ST`/`IORef`/`MArray`/`Buffer` 全 `Eff`，内建 `IO` 类型与 IO 原语表已删除，宿主层只剩 `prim_eff_*` + `Base.Host` 归一化。**剩余问题**：编译器/工具链源码仍用 `runPure (...)` 在纯签名里隐藏 Eff 执行（`compiler/lib` + `lib` 约 500 处），效果边界不可见；包级 ambient state（Sink/MetaSpans/Usage/CLI opts）尚未清理 | `compiler/lib/**` 与 `lib/**` 的 `runPure (` 调用；`Diagnostics/Sink.vuna`、`Elab/MetaSpans.vuna`、`Elab/Usage.vuna`、`Driver/CompilerCli.vuna`；`nix/check-eff-boundary.sh` + `nix/eff-boundary.allowlist`（43 文件基线） | M4 剩余：`EffCheck`（`Vuna.Compiler.Common`）+ 纯核心外壳、效果签名显式化、ambient state 删除、`nix` 边界守卫 |
+| D59 | 动作类型已统一为 `Eff`：入口 `main : Eff [] a`、`runPure`、handler answer `Eff []` + `joinEff`、`ST`/`IORef`/`MArray`/`Buffer` 全 `Eff`，内建 `IO` 类型与 IO 原语表已删除，宿主层只剩 `prim_eff_*` + `Base.Host` 归一化。M4 已落地 `EffCheck`（`Vuna.Compiler.Common`）、`DiagRender` 显式 Eff API、`CacheFormat.readFramedEff`、CompilerCli 选项收拢为单一 `CliOpts`（runPure 64→26）。**剩余问题**：`compiler/lib` + `lib` 仍有 415 处 `runPure (...)`；**迁移顺序已被依赖方向锁定**：`lib/Vuna/Cli.vuna`/`Run.vuna` 把 `runCompilerCliFor : … -> Int` 当纯库调用，所以必须先迁移 `lib` 工具链并让这些调用点 bind，才能把 compiler CLI/Driver 的公开入口改成 Eff；ambient state（Sink/MetaSpans/Usage）尚未清理 | `nix/eff-boundary.allowlist`（415 点基线）；`lib/Vuna/Cli.vuna` / `lib/Vuna/Run.vuna` 的 `runCompilerCliFor` 调用；`compiler/lib/**` + `lib/**` 的 `runPure (`；`Diagnostics/Sink.vuna`、`Elab/MetaSpans.vuna`、`Elab/Usage.vuna` | M4 剩余：先迁移 `lib/**`（自底向上，app/Main 收口）→ 再迁移 `compiler/lib/**`（Compile/Loader/CLI）→ 删除 ambient state 与全部过渡包装 → 基线清零、守卫接 CI |
 
 ## 相关阅读
 

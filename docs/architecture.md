@@ -160,7 +160,11 @@ vuna.toml → Frontend.{Toml.parseToml, Manifest.parseManifest/validateManifest}
   fail-fast）、`Vuna.Doc.runDoc`（docstring -> 单文件 HTML；`Vuna.Doc.{Comments,Model,Prose,Html,Run}`）、
   `Vuna.Search.runSearch`、`Vuna.Files.collectVunaFiles`；fmt/lint 见 `Fmt.formatSourceWith` /
   `Lint.runLint`；诊断渲染（short/human/JSON）见 `Diag.Format`（模型见
-  [diagnostics.md](reference/diagnostics.md)）；API 文档与检索见
+  [diagnostics.md](reference/diagnostics.md)）；M4 效果显式化顺序：`lib` 先、`compiler` 后——
+  `lib/Vuna/Cli.vuna` / `Run.vuna` 把 `runCompilerCliFor : … -> Int` 当纯库函数调用，
+  所以在 `lib` 工具链改成显式 `Eff` 之前，compiler 的 CLI / Driver 公开签名不能先动；
+  反过来，`lib` 顶层 `app/Main.vuna` 只依赖 `lib` 内部，可先自底向上迁移，再回到 compiler 壳层。
+  API 文档与检索见
   [api-docs.md](reference/api-docs.md)，调试工作流见 [debugging.md](reference/debugging.md)。
 - 进程执行只在 `Driver.CompilerCli.runIn`（`prim_runIn`，需要 `process`；工具链经 `runPure`）。
 - **stdio / socket server 公共层**（工具链，不进 seed）：`Vuna.Json.Frame`（字节级
