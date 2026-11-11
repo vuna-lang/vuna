@@ -1,0 +1,89 @@
+import Base.IO.Host
+import Base.List
+import Base.Pair
+import Base.String
+import Vuna.Compiler.Frontend.Cst
+import Vuna.Compiler.Hash
+import Vuna.Compiler.Query
+
+-- 基础设施三件套自检：内容寻址摘要、无损 CST roundtrip、查询图 early cutoff。
+-- 逐行输出由 test/suite/steps/64_infra.steps 断言；任何一项失败都会让 steps 失败。
+-- CST 夹具：覆盖行注释、嵌套块注释、单行字符串（含转义）、模板字面量原文、
+-- 浮点字面量与缩进。`\$` 是 `$` 的转义，避免外层模板字符串把它当插值。
+sample : String
+sample = """module Demo (x) where
+
+-- 行注释
+{- 块注释 {- 嵌套 -} -}
+greet : String
+greet = \"hi \${name}\"
+x : Int
+x = 42
+f : Float
+f = 1.5
+"""
+
+main : IO Int
+main = do
+  _ <- println ("hash-empty " ++ digestHex (digestOfString ""))
+  _ <- println ("hash-abc " ++ digestHex (digestOfString "abc"))
+  _ <- println ("enc-int-42 " ++ joinInts (encInt 42))
+  _ <- println ("cst-sample " ++ verdict (roundtripOk sample))
+  src <- getEnv "INFRA_SRC"
+  pathOk <- fileExists src
+  raw <- if pathOk then readFile src else pure ""
+  _ <- println ("cst-file " ++ (if pathOk then verdict (roundtripOk raw) else "skip"))
+  _ <- println ("query1 " ++ showTrace (secondOf run1))
+  _ <- println ("query2 " ++ showTrace (secondOf run2))
+  _ <- println ("query3 " ++ showTrace (secondOf run3))
+  exit 0
+
+-- | 用逗号连接整数列表（编码结果的可读形态）。
+joinInts : List Int -> String
+joinInts xs = join "," (map strFromInt xs)
+
+-- | Bool → 断言片段。
+verdict : Bool -> String
+verdict True = "ok"
+verdict False = "fail"
+
+-- | trace 列表 → 输出片段。
+showTrace : List String -> String
+showTrace ts = join "," ts
+
+-- | 取列表里的整数（`QInt` 之外一律 0；自检程序不做错误处理）。
+intOf : List QVal -> Int
+intOf [] = 0
+intOf ((QInt n) :: _) = n
+intOf (_ :: rest) = intOf rest
+
+-- 三次运行的查询图场景：源节点按**输入内容**作 key（`src#<seed>`，内容寻址），
+-- half 是 src/2（会吸收输入差异），label 依赖 half。seed 4 → 5 时 src 是新的 key
+-- （必须 miss），但 half 的值不变 ⇒ cutoff，label 的依赖摘要未变 ⇒ 仍命中。
+run1 : Pair Db (List String)
+run1 = runAll 4 dbEmpty
+
+run2 : Pair Db (List String)
+run2 = runAll 4 (firstOf run1)
+
+run3 : Pair Db (List String)
+run3 = runAll 5 (firstOf run2)
+
+-- | 一次完整的三层查询，返回本次新增的 trace。
+runAll : Int -> Db -> Pair Db (List String)
+runAll seed db0 =
+  let
+    srcKey = "src#" ++ strFromInt seed
+    p1 = query db0 srcKey [] (\depVals => QInt seed)
+    db1 = firstOf p1
+    p2 = query db1 "half" [srcKey] (\depVals => QInt (intOf depVals / 2))
+    db2 = firstOf p2
+    p3 = query db2 "label" ["half"] (\depVals => QStr ("half=" ++ strFromInt (intOf depVals)))
+    db3 = firstOf p3
+    n0 = lenInt (dbTrace db0)
+  in Pair db3 (drop n0 (dbTrace db3))
+
+-- | 列表长度（`Base.List.length` 返回 `Nat`；这里需要 `Int` 做偏移）。
+lenInt : List String -> Int
+lenInt [] = 0
+lenInt (_ :: rest) = 1 + lenInt rest

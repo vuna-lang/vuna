@@ -11,7 +11,7 @@
 （fmt/lint/repl/doc/test/lsp）在根包 `lib/`，不在闭包里。
 代码按**目录即层**组织：Frontend → Packages → Loader → Core → Elab → Codegen → Driver，
 同层模块可互相 import，上层只能依赖下层。每层 `X.vuna` 是**门面**：只 import 子模块并选择性
-重导出，实现与数据定义都在 `X/` 的叶子模块。全包 **64 个模块**（60 个导出 + 内部
+重导出，实现与数据定义都在 `X/` 的叶子模块。全包 **67 个模块**（63 个导出 + 内部
 `Debug` / `CacheFormat` / `Driver.Iface` / `Driver.Owner`）；目标每模块 ≤~800 行
 （`Codegen.Term` / `Driver.Dt` / `Elab.Trait` 等已超目标，约 1.1–1.2k 行）。
 
@@ -24,8 +24,11 @@
 | `Diagnostics`（门面） | 错误码体系入口：重导出 `Diagnostics.Tc`/`Cg`/`Ic`/`Common` 与 `Base.Nat`/`Vec` | `tcErr0`、`cgErr0`、`icFuel`、`tcAll`、`cgAll` |
 | `Diagnostics.Tc` / `Cg` | `TcErr : Nat -> Type` / `CgErr : Nat -> Type` 域枚举（构造子携带模板、arity 由索引锁定）；`tcAll`/`cgAll` 按 arity 分块（避免单行巨表） | `tcCode`、`tcTemplate`、`cgCode`、`cgTemplate` |
 | `Intrinsics` | **内建声明唯一真源**：名字/签名形状（`IType`）/arity/归约标签（`IntrinsicOp`）/能力（`Capability`）/runtime 名/用户可见性；内置身份按声明 symbol（`IO` 内建；`Base.Bool.Bool` / `Base.List.List` / `Base.Nat.Nat`） | `findIntrinsic`、`intrinsicRuntime`、`intrinsicCapability`、`parseCapability` |
+| `Hash` | 内容寻址原语（v0）：确定性编码（符号 + 8 字节幅值 / 长度前缀列表 / 标签）+ 8 lane Mersenne-31 摘要（248 bit，只用算术、跨平台确定）；换 SHA-256 只需递增 `hashVersion` | `digestOfString`、`digestHex`、`encInt`、`encString`、`encList` |
+| `Query` | 查询图骨架：按 key 记忆化、依赖摘要快照、early cutoff（重算后摘要不变则下游仍命中）、可观测 trace；并行 / 取消留给后续 | `query`、`dbEmpty`、`dbTrace`、`digestOfVal` |
 | `Frontend.Ast` | 语法类型与 AST helper（`Expr`/`Decl`/`Pat`/`Ctor`/`Import`/`ModDecl`/`TraitMethod`） | `clausesFor`、`funArity`、`declNames` |
 | `Frontend.Lexer` | 字符游标、token 与位置；注释单独 lex 出来供 formatter 使用 | `lexSource`、`lexComments` |
+| `Frontend.Cst` | 无损 CST 词法层：token 携带前置 trivia（空白 / 行注释 / 块注释）与 span，`renderCst` 逐字节还原源码；宏 / 格式化 / LSP 的 span 映射基础 | `lexCst`、`renderCst`、`roundtripOk` |
 | `Frontend.Parser` | offside layout parser → AST + imports；`where` 块与绑定签名行；方法签名带 span；顶层签名可带约束 ctx（`C a =>`） | `parseSource`、`parseExpressionSource` |
 | `Frontend.Toml` | TOML 子集解析器 | `parseToml`、`lookupEntry` |
 | `Frontend.Manifest` | `vuna.toml` 的语义模型与结构校验（`[package]` 只有 `name`；不做 I/O） | `parseManifest`、`validateManifest` |
@@ -69,7 +72,7 @@
 | `Driver.CompilerCli` | 编译器自己的 CLI（`vuna-compiler`）；含受限进程执行入口 `runIn`；workspace check/build 单元、`build --package`、`version` | `runCompilerCli`、`compilerUsageLines`、`runIn` |
 | `Version` | 版本号唯一真源；产品 CLI / `vuna-compiler` / build meta / VSCode 探测共用 | `vunaVersion` |
 
-`compiler/vuna.toml` 的 `[export]` 列出全部 60 个导出模块（内部 `Debug` / `CacheFormat` /
+`compiler/vuna.toml` 的 `[export]` 列出全部 63 个导出模块（内部 `Debug` / `CacheFormat` /
 `Driver.Iface` / `Driver.Owner` 不在内）；`[capabilities] effects` 声明六个能力（编译器直接
 使用 `prim_*`）。工具链模块不在此包。
 

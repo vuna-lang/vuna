@@ -1,0 +1,19 @@
+# 64) 基础设施三件套的验收：内容寻址摘要（Hash）/ 无损 CST 词法层（Frontend.Cst）/
+#     查询图骨架（Query，含 early cutoff）。夹具是 examples/infra（依赖 ../../compiler）。
+#     先预热 compiler 包接口（VUNA_IFACE_DIR 由 suite runner 设为 case 私有目录）。
+run: "$VUNA" check "$VUNA_SUITE_ROOT/compiler"
+exit: 0
+run: INFRA_SRC="$VUNA_SUITE_ROOT/compiler/lib/Vuna/Compiler/Hash.vuna" "$VUNA" run "$VUNA_SUITE_ROOT/examples/infra"
+exit: 0
+# 内容寻址摘要：空串 / "abc" 的固定向量（Hash.vuna 的算法是全平台的确定性契约）。
+out-contains: hash-empty 7a8685331ea05cdf36b1975142ba348a5acb6efc7ee546a722ff1e532f07bb8c
+out-contains: hash-abc 2f90b61c00450fa31b828fcc116a3e17742829c06680e0847b72e76f473a8093
+# canonical encoding：42 = 符号字节 0 + 8 字节大端。
+out-contains: enc-int-42 0,0,0,0,0,0,0,0,42
+# 无损 CST：字符串夹具 + 真实源码文件（Hash.vuna）都必须逐字节 roundtrip。
+out-contains: cst-sample ok
+out-contains: cst-file ok
+# 查询图：首次全 miss；重复 run 全 hit；seed 4→5 时 half 吸收差异（cutoff）而 label 仍命中。
+out-contains: query1 miss src#4,miss half,miss label
+out-contains: query2 hit src#4,hit half,hit label
+out-contains: query3 miss src#5,cutoff half,hit label

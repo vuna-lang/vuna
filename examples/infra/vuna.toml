@@ -1,0 +1,13 @@
+# 基础设施三件套的验收包：内容寻址摘要 / 无损 CST / 查询图骨架。
+# 依赖 worktree 内的 compiler 包（三个模块都是它的导出模块）。
+[package]
+name = "infra"
+privileged = true
+
+[dependencies]
+vuna-compiler = "../../compiler"
+vuna-base = "../../base"
+
+# 自检程序：console 打印断言、fs/env 读自身源码做 CST roundtrip。
+[capabilities]
+effects = ["console", "fs", "env", "unsafe"]

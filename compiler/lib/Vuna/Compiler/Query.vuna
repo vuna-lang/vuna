@@ -1,0 +1,179 @@
+-- | 查询图骨架：按 key 记忆化、记录依赖、early cutoff、可观测 trace。
+module Vuna.Compiler.Query (Db, QVal(..), dbEmpty, dbTrace, digestOfVal, query) where
+
+-- Vuna.Compiler.Query：最小查询图引擎（骨架）。
+--
+-- 这是查询图骨架：一个 key = 一个缓存单元 = 一个可观测单元。每次 `query` 只做四步：
+--   1. 从 db 里对各 dep 取**当前**值与摘要（快照，按调用方给的顺序）；
+--   2. 与旧 entry 记录的依赖摘要逐项比较：完全一致即命中，**不调用** compute；
+--   3. 否则调用 compute；新值摘要与旧值相同即 early cutoff（只更新依赖快照，
+--      值/摘要保持不变，因此下游对它的命中判据不受无关重算影响）；
+--   4. 记一行 trace：`hit <key>` / `cutoff <key>` / `miss <key>`，按发生顺序可由
+--      `dbTrace` 读出。
+--
+-- 刻意的边界：只做**串行、单 key、显式 Db 传递**；并行、取消与增量重算调度留给后续。
+-- entry 是纯数据（依赖快照 + 值摘要 + 值），本模块没有 effect、没有 IO。
+--
+-- 调用方约定：`deps` 已按拓扑序求过值且都在 db 里；`compute` 是纯函数。
+-- 违反约定（dep 缺失）时该 dep 以 `QStr <dep-key>` 占位参与计算——不崩、也不会
+-- 被误当成命中（下次该 dep 的真实摘要不同，必然走 miss 重算）。
+import Base.HashMap
+import Base.List
+import Base.Maybe
+import Base.Pair
+import Base.String
+import Vuna.Compiler.Hash
+
+-- | 查询值：骨架只支持少量可比较形态（字符串 / 整数 / 字符串列表）。
+data QVal : Type where
+  -- | 字符串值。
+  QStr : String -> QVal
+  -- | 整数值。
+  QInt : Int -> QVal
+  -- | 字符串列表值。
+  QList : List String -> QVal
+
+-- | 一个 key 的缓存条目：依赖快照（dep key + 当时的摘要）、值摘要、值。
+record Entry where
+  entryDeps : List (Pair String String)
+  entryDigest : String
+  entryVal : QVal
+
+-- | 查询图状态：key → entry 的记忆化表，加上按发生顺序排列（读侧 reverse）的 trace。
+record Db where
+  dbEntryMap : HashMap String Entry
+  dbTraceLines : List String
+
+-- | 一个依赖的当前快照：dep key、当前摘要、当前值。
+record DepSnap where
+  dsKey : String
+  dsDigest : String
+  dsValue : QVal
+
+-- | 空查询图：无缓存、无 trace。
+dbEmpty : Db
+dbEmpty = Db (Base.HashMap.fromList []) []
+
+-- | 按**发生顺序**返回 trace 行（`hit <key>` / `cutoff <key>` / `miss <key>`）。
+dbTrace : Db -> List String
+dbTrace db = reverse db.dbTraceLines
+
+-- | 把一个 dep 的当前状态拍成快照；dep 不在 db 里时用 `QStr key` 占位（见模块头约定）。
+snapDep : Db -> String -> DepSnap
+snapDep db key = case Base.HashMap.lookup key db.dbEntryMap of
+  Just e => DepSnap key e.entryDigest e.entryVal
+  Nothing => DepSnap key (digestOfVal (QStr key)) (QStr key)
+
+-- | 按调用方给出的 dep 顺序取快照。
+snapDeps : Db -> List String -> List DepSnap
+snapDeps db [] = []
+snapDeps db (key :: rest) = snapDep db key :: snapDeps db rest
+
+-- | 快照里的值。
+depSnapValue : DepSnap -> QVal
+depSnapValue s = s.dsValue
+
+-- | 快照 → 写进 entry 的依赖摘要对（顺序保留）。
+depPairs : List DepSnap -> List (Pair String String)
+depPairs [] = []
+depPairs (s :: rest) = Pair s.dsKey s.dsDigest :: depPairs rest
+
+-- | 依赖快照的逐项比较：key 与摘要都相同才算一致（顺序敏感）。
+sameDeps : List (Pair String String) -> List (Pair String String) -> Bool
+sameDeps [] [] = True
+sameDeps [] (_ :: _) = False
+sameDeps (_ :: _) [] = False
+sameDeps (p :: ps) (q :: qs) = firstOf p == firstOf q && secondOf p == secondOf q && sameDeps ps qs
+
+-- | 把 QVal 渲染成规范、单射的文本（`digestOfVal` 的输入）。
+--
+-- 每个构造子带标签，字符串用「字节长度:内容」前缀编码 ⇒ 不同值不会渲染成同一串，
+-- 因此摘要相同的实际内容也相同（cutoff 判据成立）。字段之间不需要分隔符：
+-- 长度前缀本身可解析。
+showQVal : QVal -> String
+showQVal (QStr s) = "str:${lenPrefixed s}"
+showQVal (QInt n) = "int:${strFromInt n}"
+showQVal (QList xs) = "list:${lenInt xs}:${strConcatMany (map lenPrefixed xs)}"
+
+-- | 列表长度（`Int`）；`Base.List.length` 返回 `Nat`，编码需要 `Int`。
+lenInt : List a -> Int
+lenInt [] = 0
+lenInt (_ :: rest) = 1 + lenInt rest
+
+-- | 「字节长度:内容」前缀编码（可解析的字符串原子）。
+lenPrefixed : String -> String
+lenPrefixed s = "${strLength s}:${s}"
+
+-- | 值的摘要（64 位十六进制）：复用 `Vuna.Compiler.Hash` 的内容寻址原语。
+digestOfVal : QVal -> String
+digestOfVal v = Vuna.Compiler.Hash.digestHex (Vuna.Compiler.Hash.digestOfString (showQVal v))
+
+-- | 拼一条 trace（前插，读侧在 `dbTrace` 统一 reverse，保持追加 O(1)）。
+dbNote : Db -> String -> Db
+dbNote db line = Db db.dbEntryMap (line :: db.dbTraceLines)
+
+-- | 执行一次查询：命中则直接返回旧值；否则重算并按摘要判 cutoff / miss 写回。
+--
+-- 参数：`db` 当前图状态；`key` 本次缓存单元；`deps` 依赖 key 列表（调用方保证已按
+-- 拓扑序求值）；`compute` 依赖值 → 值。
+-- 返回：新图状态与本次的值（cutoff 时返回新算出的值，其摘要与旧值相同）。
+-- trace：`hit <key>`（依赖摘要全一致）/ `cutoff <key>`（重算后摘要不变）/
+-- `miss <key>`（重算并写入新 entry）。
+query : Db -> String -> List String -> (List QVal -> QVal) -> Pair Db QVal
+query db key deps compute =
+  let
+    snaps = snapDeps db deps
+    values = map depSnapValue snaps
+    recorded = depPairs snaps
+  in case Base.HashMap.lookup key db.dbEntryMap of
+    Nothing => recompute db key recorded values compute
+    Just old =>
+      if sameDeps old.entryDeps recorded then Pair (dbNote db "hit ${key}") old.entryVal
+      else recomputeAgainst db key old recorded values compute
+
+-- | 无旧 entry 时的重算（miss）。
+recompute : Db -> String -> List (Pair String String) -> List QVal -> (List QVal -> QVal) -> Pair Db QVal
+recompute db key recorded values compute =
+  let
+    fresh = compute values
+  in Pair
+    (Db (Base.HashMap.insert key (Entry recorded (digestOfVal fresh) fresh) db.dbEntryMap) ("miss ${key}" :: db.dbTraceLines))
+    fresh
+
+-- | 有旧 entry 但依赖变了：重算后比摘要判 cutoff / miss。
+recomputeAgainst : Db -> String -> Entry -> List (Pair String String) -> List QVal -> (List QVal -> QVal) -> Pair Db QVal
+recomputeAgainst db key old recorded values compute =
+  let
+    fresh = compute values
+    freshDigest = digestOfVal fresh
+  in if old.entryDigest == freshDigest then Pair
+    (Db (Base.HashMap.insert key (Entry recorded old.entryDigest old.entryVal) db.dbEntryMap) ("cutoff ${key}" :: db.dbTraceLines))
+    fresh
+  else Pair
+    (Db (Base.HashMap.insert key (Entry recorded freshDigest fresh) db.dbEntryMap) ("miss ${key}" :: db.dbTraceLines))
+    fresh
+
+-- ---------------------------------------------------------------
+-- 手工验证步骤（本仓库没有单测框架，`vuna check compiler` 只保证类型/终止性；
+-- 集成测试由 Lead 补）：
+--
+--   1) 度量：第二步必须**重算**（例如让 compute 计数或打印）。在 REPL 里：
+--        vuna repl compiler
+--        > import Vuna.Compiler.Query
+--        > db0 = dbEmpty
+--        > (db1, v1) = query db0 "a" [] (\_ => QInt 1)
+--        预期 dbTrace db1 == ["miss a"]（首次无 entry）
+--   2) 命中：同一 key、同一依赖再查一次 → compute **不**被调用：
+--        > (db2, v2) = query db1 "a" [] (\_ => QInt 1)
+--        预期 dbTrace db2 == ["miss a", "hit a"]，v2 == QInt 1
+--   3) cutoff：改「输入」但输出不变（例如 key "b" 依赖 "a"，compute 恒返回 QInt 7）：
+--        > (db3, _) = query db2 "b" ["a"] (\_ => QInt 7)   -- miss b
+--        > (db4, _) = query db3 "b" ["a"] (\_ => QInt 7)   -- hit b
+--        把 "a" 的值改成 QInt 2（走一次 query 产生 miss a），再查 "b"：
+--        > (db5, _) = query db4 "b" ["a"] (\_ => QInt 7)
+--        预期 trace 尾部 == ["miss b", "miss a", "cutoff b"]：
+--        "b" 重算了但摘要仍相同 ⇒ 下游对 "b" 的依赖快照不变，后续仍可 hit b。
+--   4) miss：让 "b" 的 compute 依赖输入值（例如 \vs => vs 的第一个值），
+--        改 "a" 的值后重查 "b" ⇒ 摘要变化，trace 尾部出现 "miss b"。
+--   5) 命中语义的边界：dep 列表顺序不同 ⇒ 视为不同依赖（sameDeps 顺序敏感）。
+-- ---------------------------------------------------------------

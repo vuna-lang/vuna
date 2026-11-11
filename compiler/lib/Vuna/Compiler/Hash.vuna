@@ -1,0 +1,132 @@
+-- | 内容寻址原语（v0）：确定性编码 + 248-bit 摘要。
+module Vuna.Compiler.Hash
+  ( Digest(..)
+  , digestHex
+  , digestLanes
+  , digestOfBytes
+  , digestOfString
+  , encInt
+  , encList
+  , encString
+  , encTag
+  , hashVersion
+  ) where
+
+-- Vuna.Compiler.Hash：内容寻址的**格式层**（不含查询/缓存策略）。
+--
+-- 用途：缓存键、包身份（Merkle 根）、产物地址。不用于任何安全用途。
+--
+-- 为什么不是 SHA-256：编译器的整数原语只有 `+ - * /` 与比较（没有位运算），
+-- 因此 v0 用 8 条 lane 的 Mersenne-31 多项式摘要（248 bit）：每个 lane 的 h 恒
+-- 小于 2^31，乘数小于 2^7，中间值 < 2^38，63-bit Int 不溢出、跨平台确定。
+-- 将来补上位运算原语后，换算法只需递增 `hashVersion`（缓存键自动失效）。
+--
+-- 编码约定（canonical encoding，只依赖语义内容）：
+--   * `encInt`    = 符号字节（0 非负 / 1 负）+ 8 字节大端幅值；
+--   * `encString` = 长度 + UTF-8 字节；
+--   * `encList`   = 长度 + 逐项编码；
+--   * `encTag`    = 和类型构造子序号。
+-- 编码**不含**名字、位置、顺序：调用方负责先规范化（排序/去 span），
+-- 这是 `docs/architecture-target.md` D5 的"内容哈希"。
+import Base.List
+import Base.String
+
+-- | 摘要格式版本；算法或编码变化时递增（缓存键因此失效）。
+hashVersion : Int
+hashVersion = 1
+
+-- | 8 lane 摘要，每个 lane ∈ [0, 2147483647)。
+record Digest where
+  digestLanes : List Int
+
+-- | 取摘要的 8 条 lane。
+digestLanes : Digest -> List Int
+digestLanes (Digest lanes) = lanes
+
+-- | Mersenne 素数 2^31-1：lane 的模数。
+mersenne : Int
+mersenne = 2147483647
+
+-- | 每条 lane 的多项式底：小素数、两两不同，乘积远小于 2^31。
+laneBases : List Int
+laneBases = [31, 37, 41, 43, 47, 53, 59, 61]
+
+-- | 取模（语言没有 `mod` 运算符；x >= 0 时「减商乘」即 x mod m）。
+modOf : Int -> Int -> Int
+modOf x m = x - x / m * m
+
+-- | 单条 lane：滚动多项式 + 长度终混。
+laneOf : Int -> List Int -> Int -> Int
+laneOf base bytes n =
+  let
+    h0 = foldl (\h, b => modOf (h * base + b + 1) mersenne) base bytes
+    h1 = modOf (h0 * 1000003 + n + 1) mersenne
+  in modOf (h1 * 65599 + base) mersenne
+
+-- | 字节序列（每项 0..255）→ 摘要。
+digestOfBytes : List Int -> Digest
+digestOfBytes bytes = Digest (map (\base => laneOf base bytes (lenInt bytes)) laneBases)
+
+-- | 字符串 → 摘要（按 UTF-8 字节；`strUnpack` 的每一项即一个字节码）。
+digestOfString : String -> Digest
+digestOfString s = digestOfBytes (strUnpack s)
+
+-- | 渲染成小写十六进制：每条 lane 8 位，共 64 位。
+digestHex : Digest -> String
+digestHex (Digest lanes) = strConcatMany (map hex8 lanes)
+
+-- | 一个 lane 的 8 位十六进制（16^7 … 16^0）。
+hex8 : Int -> String
+hex8 v =
+  strConcatMany
+    [hexDigit (digitAt v 268435456), hexDigit (digitAt v 16777216), hexDigit (digitAt v 1048576), hexDigit (digitAt v 65536), hexDigit (digitAt v 4096), hexDigit (digitAt v 256), hexDigit (digitAt v 16), hexDigit (digitAt v 1)]
+
+-- | 取第 p 位（十六进制位）：`v / p` 的个位即该位。
+digitAt : Int -> Int -> Int
+digitAt v p = modOf (v / p) 16
+
+-- | 十六进制数字 → 字符（0-9 → '0'-'9'；10-15 → 'a'-'f'）。
+hexDigit : Int -> String
+hexDigit d = if d < 10 then strFromInt d else strPack [87 + d]
+
+-- | 编码整数：符号字节 + 8 字节大端幅值（幅值 < 2^63，8 字节足够）。
+encInt : Int -> List Int
+encInt v =
+  let
+    neg = v < 0
+    n = if neg then 0 - v else v
+    sign = if neg then [1] else [0]
+  in append sign (byte8 n)
+
+-- | 8 字节大端（2^56 … 2^0）；n 必须为非负且 < 2^63。
+byte8 : Int -> List Int
+byte8 n =
+  [ modOf (n / 72057594037927936) 256,
+    modOf (n / 281474976710656) 256,
+    modOf (n / 1099511627776) 256,
+    modOf (n / 4294967296) 256,
+    modOf (n / 16777216) 256,
+    modOf (n / 65536) 256,
+    modOf (n / 256) 256,
+    modOf n 256
+  ]
+
+-- | 编码字符串：长度 + 字节。
+encString : String -> List Int
+encString s =
+  let
+    bytes = strUnpack s
+  in append (encInt (lenInt bytes)) bytes
+
+-- | 编码列表：长度 + 逐项编码（`f` 是元素的规范编码）。
+encList : (a -> List Int) -> List a -> List Int
+encList f xs = append (encInt (lenInt xs)) (concatMap f xs)
+
+-- | 编码和类型标签（构造子序号，从 0 开始）。
+encTag : Int -> List Int
+encTag = encInt
+
+-- | 列表长度（`Base.List.length` 返回 `Nat`；编码需要 `Int`）。
+lenInt : List a -> Int
+lenInt [] = 0
+lenInt (_ :: rest) = 1 + lenInt rest

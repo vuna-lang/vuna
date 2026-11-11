@@ -1,0 +1,301 @@
+-- | 无损 CST 词法层：把源码切成携带前置 trivia 的 token 流，`renderCst` 可逐字节还原。
+module Vuna.Compiler.Frontend.Cst
+  ( CstToken(..)
+  , Trivia(..)
+  , TriviaKind(..)
+  , lexCst
+  , renderCst
+  , roundtripOk
+  ) where
+
+-- Vuna.Compiler.Frontend.Cst：**无损**词法层（token 流 + trivia），不做语法分析。
+--
+-- 为什么需要它（宏/工具的 span 来源）：parser 只把 span 写进 AST，注释与原始空白
+-- 在 parser 里被丢弃；格式化器、LSP（语义高亮 / 增量重解析）、重构与**宏展开**都需要
+-- 「源码原文 + 每个 token 的精确 span + 注释归属」。把这些信息在词法层一次性物化成
+-- CST（token 携带其前置 trivia），工具侧就不必再从字节偏移反推文本，宏也能直接拿
+-- 原始片段做 span 映射。本模块只做词法：token 流 + trivia 已足够还原源码，不建树。
+--
+-- **核心不变量**：对任意 `lexSource` 成功的源码 s，`renderCst (lexCst s) == s`，
+-- 即「所有 trivia 文本按顺序拼接 + 所有 token 原文拼接 == s」。为守住它：
+--   * token 文本一律取**源码原文**，不用解码值（`TInt` 贪心重扫数字，`007` 的
+--     解码值 `7` 与原文不等；字符串重扫原始字面量以保留转义；模板由 token 自带的
+--     `endPos`（结束引号位置）定界）；
+--   * token 之间的字节 = 「上一 token 结束偏移 → 当前 token 起始偏移」的**全部字节**，
+--     按 `lexComments` 的 span 顺序切成注释项，剩下的每一段都是空白项；
+--   * `TEof` 是最后一个 token（原文为空串），它把文件末尾的 trivia 也收进 `cstLeading`。
+--
+-- 位置约定与 lexer 一致：行、列从 1 开始，列 = UTF-8 字节（`strUnpack` 给字节）。
+-- 本模块的 span 文件字段统一为 `""`，由调用方在需要时注入真实路径。
+import Base.Bool
+import Base.List
+import Base.Maybe
+import Base.Pair
+import Base.String
+import Vuna.Compiler.Common
+import Vuna.Compiler.Frontend.Lexer
+
+-- | trivia 的种类：空白、行注释、块注释。
+data TriviaKind : Type where
+  -- | 空白（空格 / tab / 换行 / 回车）。
+  TrivSpace : TriviaKind
+  -- | `--` 行注释（不含行尾换行）。
+  TrivLineComment : TriviaKind
+  -- | `{- ... -}` 块注释（可嵌套）。
+  TrivBlockComment : TriviaKind
+
+-- | 一段 trivia：种类 + 源码原文 + span。
+record Trivia where
+  -- | trivia 的种类。
+  triviaKind : TriviaKind
+  -- | 该 trivia 在源码里的原始文本（逐字节）。
+  triviaText : String
+  -- | 该 trivia 的 span（文件字段为 `""`）。
+  triviaSpan : Span
+
+-- | 一个 CST token：形态 tag + 源码原文 + span + 前置 trivia。
+record CstToken where
+  -- | token 形态：`ident` / `kw` / `int` / `float` / `str` / `tmpl` / `sym` / `eof`。
+  cstTag : String
+  -- | 该 token 在源码里的原始文本（逐字节）。
+  cstText : String
+  -- | token 的 span（文件字段为 `""`；结束位置 = 起点 + 文本长度）。
+  cstSpan : Span
+  -- | token 之前、上一个 token 之后的 trivia（源码顺序）。
+  cstLeading : List Trivia
+
+-- ---------------------------------------------------------------
+-- 行表与偏移/位置换算
+-- ---------------------------------------------------------------
+-- | 把源码按 `\n` 切成行表；`split` 保留末尾空行，故行数 = 换行数 + 1。
+rowList : String -> List String
+rowList source = split "\n" source
+
+-- | 由 (行, 列) 算字节偏移：前面各行的字节数 + 每行一个换行，再加列偏移。
+-- | 行/列从 1 开始；列是 UTF-8 字节，所以行宽直接用 `strLength`。
+byteOffset : List String -> Int -> Int -> Int
+byteOffset rows line col = byteOffsetGo rows 1 line 0 + (col - 1)
+
+-- | `byteOffset` 的行前缀累加循环：`i` 是当前行号（从 1 开始），`target` 是目标行号。
+byteOffsetGo : List String -> Int -> Int -> Int -> Int
+byteOffsetGo [] _ _ acc = acc
+byteOffsetGo (row :: rest) i target acc =
+  if i >= target then acc else byteOffsetGo rest (i + 1) target (acc + strLength row + 1)
+
+-- | 由字节偏移反求位置。`off` 是字节下标；`off == strLength source` 得到尾后位置。
+-- | 换行字节自身的位置是 `(行, 行宽 + 1)`（与 lexer 的 `advanceChar` 一致）。
+posAtOffset : List String -> Int -> Pos
+posAtOffset rows off = posAtGo rows off 1 0
+
+-- | `posAtOffset` 的扫描循环：`line` 当前行号，`base` 当前行首偏移。
+posAtGo : List String -> Int -> Int -> Int -> Pos
+posAtGo [] _ _ _ = Pos 1 1
+posAtGo (row :: rest) off line base =
+  let
+    w = strLength row
+  in if off <= base + w then Pos line (off - base + 1) else posAtGo rest off (line + 1) (base + w + 1)
+
+-- | 由偏移区间 `[from, to)` 造 span：`from` 的位置做起点，`to` 的位置做终点（尾后）。
+spanOfRange : List String -> Int -> Int -> Span
+spanOfRange rows from to =
+  let
+    p = posAtOffset rows from
+  in let
+    q = posAtOffset rows to
+  in Span "" (posLine p) (posCol p) (posLine q) (posCol q)
+
+-- | 由起始位置与尾后偏移造 token span（模板的换行自然推进结束行列）。
+spanOfToken : List String -> Pos -> Int -> Span
+spanOfToken rows startPos endOff =
+  let
+    end = posAtOffset rows endOff
+  in Span "" (posLine startPos) (posCol startPos) (posLine end) (posCol end)
+
+-- ---------------------------------------------------------------
+-- token 原文（贪心 extent）
+-- ---------------------------------------------------------------
+-- | 从 `start` 到 `limit` 的字节列表；`limit` 是下一 token 的起始偏移（贪心扫描止步）。
+segmentChars : String -> Int -> Int -> List Int
+segmentChars source start limit =
+  if limit <= start then [] else strUnpack (strSubstring start (limit - start) source)
+
+-- | `TInt` 的原文：从起始偏移贪心扫数字。不走解码值（`007` 会与原文不等）。
+greedyDigits : List Int -> List Int
+greedyDigits [] = []
+greedyDigits (c :: rest) = if isDigit c then c :: greedyDigits rest else []
+
+-- | 单行字符串字面量的原文：首字节是开引号，直接保留。
+rawStringText : List Int -> List Int
+rawStringText [] = []
+rawStringText (c :: rest) = c :: rawStringBody rest
+
+-- | 字符串正文：`\` 后的下一字节整体复制（转义），未转义的 `"` 是结束引号（含在文本里）。
+rawStringBody : List Int -> List Int
+rawStringBody [] = []
+rawStringBody (92 :: rest) = 92 :: rawStringEscape rest
+rawStringBody (34 :: _) = [34]
+rawStringBody (c :: rest) = c :: rawStringBody rest
+
+-- | 转义：反斜杠后的字节无条件复制，然后回到正文。
+rawStringEscape : List Int -> List Int
+rawStringEscape [] = []
+rawStringEscape (c :: rest) = c :: rawStringBody rest
+
+-- | 模板字面量的原文：起点是开引号，终点由 token 自带的 `endPos`（结束引号位置）+1
+-- | 得到尾后偏移。多行 `"""` 的文本里含换行，原样切片即可。
+templateText : String -> List String -> Int -> Pos -> String
+templateText source rows start endPos =
+  let
+    afterEnd = byteOffset rows (posLine endPos) (posCol endPos) + 1
+  in if afterEnd <= start then "" else strSubstring start (afterEnd - start) source
+
+-- | token 形态 tag（`TEof` 是空串原文）。
+tokTag : Tok -> String
+tokTag (TIdent _) = "ident"
+tokTag (TKw _) = "kw"
+tokTag (TInt _) = "int"
+tokTag (TFloat _) = "float"
+tokTag (TStr _) = "str"
+tokTag (TTmpl _ _ _) = "tmpl"
+tokTag (TSym _) = "sym"
+tokTag TEof = "eof"
+
+-- | 一个 token 的源码原文。`limit` 是下一 token 的起始偏移，供 `TInt` / `TStr`
+-- | 的贪心扫描止步（求和后总量受源码长度约束，不会反复扫描整份源码）。
+tokSourceText : String -> List String -> Int -> Int -> Tok -> String
+tokSourceText source rows start limit (TIdent s) = s
+tokSourceText source rows start limit (TKw s) = s
+tokSourceText source rows start limit (TSym s) = s
+tokSourceText source rows start limit (TFloat s) = s
+tokSourceText source rows start limit (TInt _) =
+  strPack (greedyDigits (segmentChars source start limit))
+tokSourceText source rows start limit (TStr _) =
+  strPack (rawStringText (segmentChars source start limit))
+tokSourceText source rows start limit (TTmpl _ _ endPos) = templateText source rows start endPos
+tokSourceText source rows start limit TEof = ""
+
+-- ---------------------------------------------------------------
+-- trivia 切分
+-- ---------------------------------------------------------------
+-- | 注释的预计算区间（避免 trivia 切分时反复从 span 反算行表）。
+-- | `tcommStart` 含首字符，`tcommEnd` 是尾后偏移。
+record TrivComment where
+  tcommKind : CKind
+  tcommSpan : Span
+  tcommStart : Int
+  tcommEnd : Int
+
+-- | `Comment` → 预计算区间。span 的终点是最后一个正文字符（含），故 +1 得尾后偏移。
+toTrivComment : List String -> Comment -> TrivComment
+toTrivComment rows (Comment kind text sp) =
+  TrivComment kind sp (byteOffset rows (spanStartLine sp) (spanStartCol sp))
+    (byteOffset rows (spanEndLine sp) (spanEndCol sp) + 1)
+
+-- | 空白 trivia：区间非空时一项。span 用区间起止位置。
+spaceTrivia : List String -> String -> Int -> Int -> List Trivia
+spaceTrivia rows source from to =
+  if to <= from then []
+  else [Trivia TrivSpace (strSubstring from (to - from) source) (spanOfRange rows from to)]
+
+-- | `CKind` → `TriviaKind`。
+commentTriviaKind : CKind -> TriviaKind
+commentTriviaKind CLine = TrivLineComment
+commentTriviaKind CBlock = TrivBlockComment
+
+-- | 注释 trivia：文本取源码 `[start, end)` 原文（`commentText` 被 trim 过，不能用），
+-- | span 直接用 `lexComments` 给出的那份。
+commentTrivia : String -> TrivComment -> Trivia
+commentTrivia source tc =
+  let
+    start = tc.tcommStart
+  in Trivia (commentTriviaKind tc.tcommKind) (strSubstring start (tc.tcommEnd - start) source)
+    tc.tcommSpan
+
+-- | 把 `[from, to)` 切成 trivia 列表：注释（`lexComments` 源码顺序）之间是空白。
+gapTrivia : String -> List String -> Int -> Int -> List TrivComment -> List Trivia
+gapTrivia source rows from to [] = spaceTrivia rows source from to
+gapTrivia source rows from to (c :: rest) =
+  append (spaceTrivia rows source from c.tcommStart)
+    (append [commentTrivia source c] (gapTrivia source rows c.tcommEnd to rest))
+
+-- | 取起始偏移严格小于 `bound` 的注释前缀，其余留给后续 token。
+takeCommentsBefore : Int -> List TrivComment -> Pair (List TrivComment) (List TrivComment)
+takeCommentsBefore bound [] = Pair [] []
+takeCommentsBefore bound (c :: rest) = if c.tcommStart < bound then
+  let
+    taken = takeCommentsBefore bound rest
+  in Pair (c :: firstOf taken) (secondOf taken)
+else Pair [] (c :: rest)
+
+-- | 丢弃落在上一 token 内部的注释（保守过滤；`lexComments` 本就不报告模板洞内注释）。
+commentStartsAtOrAfter : Int -> TrivComment -> Bool
+commentStartsAtOrAfter bound c = c.tcommStart >= bound
+
+-- ---------------------------------------------------------------
+-- 组装 token 流
+-- ---------------------------------------------------------------
+-- | 由位置取 token 起始偏移。
+tokStartOffset : List String -> PTok -> Int
+tokStartOffset rows t = byteOffset rows (posLine t.ptokPos) (posCol t.ptokPos)
+
+-- | 当前 token 的原文扫描上界：下一 token 的起始偏移；最后一个 token 取源码长度。
+tokLimit : String -> List String -> List PTok -> Int
+tokLimit source rows (next :: _) = tokStartOffset rows next
+tokLimit source rows [] = strLength source
+
+-- | 单个 token 的 CST 节点 + 尾后偏移。`prevEnd` 是上一 token 的结束偏移，
+-- | `comments` 是本 gap 内（上一 token 之后、本 token 之前）的注释。
+tokenNode : String -> List String -> Int -> Int -> List TrivComment -> PTok -> List PTok -> Pair CstToken Int
+tokenNode source rows prevEnd start comments t rest =
+  let
+    text = tokSourceText source rows start (tokLimit source rows rest) t.ptokTok
+  in let
+    endOff = start + strLength text
+  in Pair
+    (CstToken (tokTag t.ptokTok) text (spanOfToken rows t.ptokPos endOff) (gapTrivia source rows prevEnd start comments))
+    endOff
+
+-- | 逐个 token 组装：文本/span/前置 trivia，并把注释游标与 `prevEnd` 传给下一个 token。
+buildTokens : String -> List String -> List TrivComment -> Int -> List PTok -> List CstToken
+buildTokens source rows comments prevEnd [] = []
+buildTokens source rows comments prevEnd (t :: rest) =
+  let
+    start = tokStartOffset rows t
+  in let
+    before = takeCommentsBefore start comments
+  in let
+    live = filter (commentStartsAtOrAfter prevEnd) (firstOf before)
+  in let
+    node = tokenNode source rows prevEnd start live t rest
+  in firstOf node :: buildTokens source rows (secondOf before) (secondOf node) rest
+
+-- | 把源码切成无损 token 流（每个 token 带前置 trivia）；编译器 lexer 拒绝源码
+-- （词法错误）时返回 `Nothing`。
+lexCst : String -> Maybe (List CstToken)
+lexCst source = case lexSource source of
+  ErrC _ => Nothing
+  OkC toks =>
+    let
+      rows = rowList source
+    in case lexComments source of
+      ErrC _ => Nothing
+      OkC comments =>
+        Just (buildTokens source rows (map (\c => toTrivComment rows c) comments) 0 toks)
+
+-- | 取 trivia 的原文（`renderCst` 用；具名函数而非 lambda，字段投影需要已知的记录类型）。
+triviaTextOf : Trivia -> String
+triviaTextOf tr = tr.triviaText
+
+-- | 单个 token 的渲染片段：前置 trivia 原文 + token 原文。
+renderParts : CstToken -> List String
+renderParts t = append (map triviaTextOf t.cstLeading) [t.cstText]
+
+-- | 把 token 流逐字节还原成源码。
+renderCst : List CstToken -> String
+renderCst toks = strConcatMany (concatMap renderParts toks)
+
+-- | `renderCst (lexCst s)` 是否逐字节等于 `s`；词法失败时为 `False`。
+roundtripOk : String -> Bool
+roundtripOk s = case lexCst s of
+  Nothing => False
+  Just toks => renderCst toks == s

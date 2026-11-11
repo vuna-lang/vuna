@@ -13,13 +13,15 @@
 ## 仓库分层
 
 ```text
-compiler/lib/Vuna/Compiler/   （64 个模块：60 个导出 + 4 个内部模块；目录即层：
+compiler/lib/Vuna/Compiler/   （67 个模块：63 个导出 + 4 个内部模块；目录即层：
                                 Frontend → Packages → Loader → Core → Elab → Codegen → Driver）
 ├─ Source.vuna                底层位置/路径工具（Pos/Span，无 Result）
 ├─ Diag.vuna                  结构化诊断模型 + Check 结果通道（ErrC Diagnostic）
 ├─ Common.vuna                编译器门面（Source + Diag；bind/step/traverse）
 ├─ Intrinsics.vuna            内建声明唯一真源（名字/签名/arity/能力/runtime/可见性）
-├─ Frontend/                  Ast Lexer Parser Parser/Support Toml Manifest   词法 / 语法 / vuna.toml
+├─ Hash.vuna                  内容寻址原语：确定性编码 + 248-bit 摘要（v0）
+├─ Query.vuna                 查询图骨架：记忆化 / 依赖快照 / early cutoff / trace
+├─ Frontend/                  Ast Lexer Parser Cst Parser/Support Toml Manifest  词法（含无损 CST）/ 语法 / vuna.toml
 ├─ Packages/                  Pkg                              包图与模块根
 ├─ Loader.vuna + Loader/      Modules Resolve Flatten          模块图 / 名字解析 / flatten
 ├─ Core.vuna + Core/          Term Eval Conv                   Core TT / NbE / 定义性相等

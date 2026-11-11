@@ -118,12 +118,14 @@ Vuna.Compiler.Elab.Types  compiler/lib/Vuna/Compiler/Elab/Types.vuna
 Vuna.Compiler.Elab.Usage  compiler/lib/Vuna/Compiler/Elab/Usage.vuna
 Vuna.Compiler.Elab  compiler/lib/Vuna/Compiler/Elab.vuna
 Vuna.Compiler.Frontend.Ast  compiler/lib/Vuna/Compiler/Frontend/Ast.vuna
+Vuna.Compiler.Frontend.Cst  compiler/lib/Vuna/Compiler/Frontend/Cst.vuna
 Vuna.Compiler.Frontend.Diagnostics  compiler/lib/Vuna/Compiler/Frontend/Diagnostics.vuna
 Vuna.Compiler.Frontend.Lexer  compiler/lib/Vuna/Compiler/Frontend/Lexer.vuna
 Vuna.Compiler.Frontend.Manifest  compiler/lib/Vuna/Compiler/Frontend/Manifest.vuna
 Vuna.Compiler.Frontend.Parser.Support  compiler/lib/Vuna/Compiler/Frontend/Parser/Support.vuna
 Vuna.Compiler.Frontend.Parser  compiler/lib/Vuna/Compiler/Frontend/Parser.vuna
 Vuna.Compiler.Frontend.Toml  compiler/lib/Vuna/Compiler/Frontend/Toml.vuna
+Vuna.Compiler.Hash  compiler/lib/Vuna/Compiler/Hash.vuna
 Vuna.Compiler.Intrinsics  compiler/lib/Vuna/Compiler/Intrinsics.vuna
 Vuna.Compiler.Loader.Diagnostics  compiler/lib/Vuna/Compiler/Loader/Diagnostics.vuna
 Vuna.Compiler.Loader.Fixity  compiler/lib/Vuna/Compiler/Loader/Fixity.vuna
@@ -132,6 +134,7 @@ Vuna.Compiler.Loader.Modules  compiler/lib/Vuna/Compiler/Loader/Modules.vuna
 Vuna.Compiler.Loader.Resolve  compiler/lib/Vuna/Compiler/Loader/Resolve.vuna
 Vuna.Compiler.Loader  compiler/lib/Vuna/Compiler/Loader.vuna
 Vuna.Compiler.Packages.Pkg  compiler/lib/Vuna/Compiler/Packages/Pkg.vuna
+Vuna.Compiler.Query  compiler/lib/Vuna/Compiler/Query.vuna
 Vuna.Compiler.Source  compiler/lib/Vuna/Compiler/Source.vuna
 Vuna.Compiler.Version  compiler/lib/Vuna/Compiler/Version.vuna
 app.Main  compiler/app/Main.vuna
@@ -259,12 +262,14 @@ Vuna.Compiler.Elab.Types  ./lib/Vuna/Compiler/Elab/Types.vuna
 Vuna.Compiler.Elab.Usage  ./lib/Vuna/Compiler/Elab/Usage.vuna
 Vuna.Compiler.Elab  ./lib/Vuna/Compiler/Elab.vuna
 Vuna.Compiler.Frontend.Ast  ./lib/Vuna/Compiler/Frontend/Ast.vuna
+Vuna.Compiler.Frontend.Cst  ./lib/Vuna/Compiler/Frontend/Cst.vuna
 Vuna.Compiler.Frontend.Diagnostics  ./lib/Vuna/Compiler/Frontend/Diagnostics.vuna
 Vuna.Compiler.Frontend.Lexer  ./lib/Vuna/Compiler/Frontend/Lexer.vuna
 Vuna.Compiler.Frontend.Manifest  ./lib/Vuna/Compiler/Frontend/Manifest.vuna
 Vuna.Compiler.Frontend.Parser.Support  ./lib/Vuna/Compiler/Frontend/Parser/Support.vuna
 Vuna.Compiler.Frontend.Parser  ./lib/Vuna/Compiler/Frontend/Parser.vuna
 Vuna.Compiler.Frontend.Toml  ./lib/Vuna/Compiler/Frontend/Toml.vuna
+Vuna.Compiler.Hash  ./lib/Vuna/Compiler/Hash.vuna
 Vuna.Compiler.Intrinsics  ./lib/Vuna/Compiler/Intrinsics.vuna
 Vuna.Compiler.Loader.Diagnostics  ./lib/Vuna/Compiler/Loader/Diagnostics.vuna
 Vuna.Compiler.Loader.Fixity  ./lib/Vuna/Compiler/Loader/Fixity.vuna
@@ -273,6 +278,7 @@ Vuna.Compiler.Loader.Modules  ./lib/Vuna/Compiler/Loader/Modules.vuna
 Vuna.Compiler.Loader.Resolve  ./lib/Vuna/Compiler/Loader/Resolve.vuna
 Vuna.Compiler.Loader  ./lib/Vuna/Compiler/Loader.vuna
 Vuna.Compiler.Packages.Pkg  ./lib/Vuna/Compiler/Packages/Pkg.vuna
+Vuna.Compiler.Query  ./lib/Vuna/Compiler/Query.vuna
 Vuna.Compiler.Source  ./lib/Vuna/Compiler/Source.vuna
 Vuna.Compiler.Version  ./lib/Vuna/Compiler/Version.vuna
 app.Main  ./app/Main.vuna
