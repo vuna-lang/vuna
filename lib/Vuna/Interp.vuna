@@ -42,7 +42,7 @@ interpretFile ctx entry = case dtEvalFile ctx entry of
 -- REPL 用：program（imports + 定义，定义必须已写签名）与表达式都在内存里求值，
 -- 不需要临时文件；表达式类型由 DT 精化器推断，值用 showValue 展示。
 interpretExpr : PackageContext -> String -> String -> String
-interpretExpr ctx program expr = case depIfacesForToolProgram ctx program of
+interpretExpr ctx program expr = case runPure (depIfacesForToolProgram ctx program) of
   Just ifaces => case dtEvalExprWithIfaces ctx program expr ifaces of
     ErrC e => "error: ${diagText e}"
     OkC output => output
@@ -55,12 +55,12 @@ interpretExpr ctx program expr = case depIfacesForToolProgram ctx program of
 -- M34.6（5b）：REPL 会话复用 termAux（依赖包 decls）的 record/deriving 预处理结果。
 -- 缓存 key 由接口哈希决定（REPL 的依赖接口不变时一直命中），失败路径不缓存。
 evalExprInfoWithAux : PackageContext -> String -> String -> Maybe AuxCache -> Check (Pair (Pair String String) (Maybe AuxCache))
-evalExprInfoWithAux ctx program expr aux = case depIfacesForToolProgram ctx program of
+evalExprInfoWithAux ctx program expr aux = case runPure (depIfacesForToolProgram ctx program) of
   Just ifaces => dtEvalExprInfoWithAuxCache ctx program expr ifaces aux
   Nothing => dtEvalExprInfo ctx program expr >>= (\info => OkC (Pair info aux))
 
 evalExprInfo : PackageContext -> String -> String -> Check (Pair String String)
-evalExprInfo ctx program expr = case depIfacesForToolProgram ctx program of
+evalExprInfo ctx program expr = case runPure (depIfacesForToolProgram ctx program) of
   Just ifaces => dtEvalExprInfoWithIfaces ctx program expr ifaces
   Nothing => dtEvalExprInfo ctx program expr
 
@@ -228,15 +228,19 @@ runEffectProgram ctx source printResult = do
   _ <- prim_eff_writeFile "${dir}/app/Main.vuna" source
   case contextForDir dir of
     ErrC e => cleanupErr dir (diagText e)
-    OkC ctxTmp => case compileToDir ctxTmp "${dir}/app/Main.vuna" printResult "${dir}/.output" of
-      ErrC e => cleanupErr dir (diagText e)
-      OkC _ => do
-        _ <- prim_eff_makeDir "${dir}/.output/bin"
-        has <- hasOcamlopt 0
-        if has then case runBuildScript "${dir}/.output" "bin/${effectBinaryName}" effectBinaryName of
-          ErrC e => cleanupErr dir (diagText e)
-          OkC _ => do
-            code <- prim_eff_runIn "${dir}/.output" ["bin/${effectBinaryName}"]
-            c <- cleanupTemp dir code
-            pure (OkC c)
-        else cleanupErr dir noOcamloptMessage
+    OkC ctxTmp => do
+      compiled <- compileToDir ctxTmp "${dir}/app/Main.vuna" printResult "${dir}/.output"
+      case compiled of
+        ErrC e => cleanupErr dir (diagText e)
+        OkC _ => do
+          _ <- prim_eff_makeDir "${dir}/.output/bin"
+          has <- hasOcamlopt 0
+          if has then do
+            built <- runBuildScript "${dir}/.output" "bin/${effectBinaryName}" effectBinaryName
+            case built of
+              ErrC e => cleanupErr dir (diagText e)
+              OkC _ => do
+                code <- prim_eff_runIn "${dir}/.output" ["bin/${effectBinaryName}"]
+                c <- cleanupTemp dir code
+                pure (OkC c)
+          else cleanupErr dir noOcamloptMessage

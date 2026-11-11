@@ -215,7 +215,8 @@ record DiagCache where
 
 -- 缓存 key：编译器二进制指纹 + 包名（包上下文/依赖图变化由 stats 面兜住）。
 ctxKeyOf : PackageContext -> Int
-ctxKeyOf ctx = toolCompilerFingerprint * 1000003 + hashTextStrong "lsp|${contextPackageName ctx}"
+ctxKeyOf ctx =
+  runPure toolCompilerFingerprint * 1000003 + hashTextStrong "lsp|${contextPackageName ctx}"
 
 -- 本包模块名集合（来自 manifest）。
 ownNamesOfTool : ToolContext -> List String
@@ -239,19 +240,19 @@ neededInClosure closure (n :: rest) = memName n closure && neededInClosure closu
 cacheFresh : Maybe DiagCache -> String -> PackageContext -> Bool
 cacheFresh Nothing label ctx = False
 cacheFresh (Just c) label ctx =
-  c.dcLabel == label && c.dcKey == ctxKeyOf ctx && toolSessionFresh c.dcBuiltSec c.dcStats
+  c.dcLabel == label && c.dcKey == ctxKeyOf ctx && runPure (toolSessionFresh c.dcBuiltSec c.dcStats)
 
 -- 建立会话：工具接口（依赖闭包 / 依赖哈希 / 本包 manifest）+ 本包干净模块 + 校验面。
 -- 返回 Nothing = 当前没有可校验的工具接口（每请求走全量）。
 buildSession : PackageContext -> String -> String -> Maybe String -> Maybe DiagCache
-buildSession ctx label text modName = case depIfacesForToolSourceDetailed ctx label text of
+buildSession ctx label text modName = case runPure (depIfacesForToolSourceDetailed ctx label text) of
   Nothing => Nothing
   Just tool =>
     let
-      builtSec = toolNowSec
+      builtSec = runPure toolNowSec
       ownNeeded = ownNeededOf tool tool.tcNeeded
-      clean = toolCleanOwnModules ctx tool builtSec modName ownNeeded
-      stats = append tool.tcStats [sourceInfoForPath "${contextDir ctx}/vuna.toml"]
+      clean = runPure (toolCleanOwnModules ctx tool builtSec modName ownNeeded)
+      stats = append tool.tcStats [runPure (sourceInfoForPath "${contextDir ctx}/vuna.toml")]
     in Just
       (DiagCache label (ctxKeyOf ctx) ctx (Just tool) clean builtSec stats Nothing emptyFixityEnv)
 
@@ -336,7 +337,8 @@ checkFullWith cache ctx label text modName = case dtCheckSourceChecked ctx label
       session = case cache of
         Just c => c
         Nothing =>
-          DiagCache label (ctxKeyOf ctx) ctx Nothing [] toolNowSec [] Nothing emptyFixityEnv
+          DiagCache label (ctxKeyOf ctx) ctx Nothing [] (runPure toolNowSec) [] Nothing
+            emptyFixityEnv
       session2 = writeBackModule session label text checkedPkg modName
       keep = case cache of
         Just _ => Just session2
@@ -447,15 +449,15 @@ writeBackModule : DiagCache -> String -> String -> CheckedPackage -> Maybe Strin
 writeBackModule session label text checked Nothing = session
 writeBackModule session label text checked (Just name) = if diskMatches label text then
   let
-    si = sourceInfoForPath label
+    si = runPure (sourceInfoForPath label)
     cleanForWrite = filter (\mi => miNameOf mi /= name) session.dcClean
     attempt = case session.dcTool of
       Just tool =>
         if entryHashMatches (toolOwnEntrySourceHash tool name) (siHashOf si) then Nothing
-        else Just (toolWriteModuleIface session.dcCtx tool cleanForWrite checked name si)
+        else Just (runPure (toolWriteModuleIface session.dcCtx tool cleanForWrite checked name si))
       Nothing =>
-        if toolHasOwnManifest session.dcCtx then Nothing
-        else Just (toolWriteModuleIfaceCold session.dcCtx checked name si)
+        if runPure (toolHasOwnManifest session.dcCtx) then Nothing
+        else Just (runPure (toolWriteModuleIfaceCold session.dcCtx checked name si))
   in case attempt of
     Nothing => session
     Just (ErrC _) => session

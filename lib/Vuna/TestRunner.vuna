@@ -410,7 +410,8 @@ runIOTestTimed ctx path name secs = do
   base <- tempBase 0
   now <- effTimeUs
   dir <- freshTempDir 1000 "${base}/vuna-test-${now}-${name}"
-  case compileToDir ctx path False dir of
+  compiled <- compileToDir ctx path False dir
+  case compiled of
     ErrC e => ioCleanup dir (TestFailed (diagText e))
     OkC _ => do
       _ <- prim_eff_makeDir "${dir}/bin"

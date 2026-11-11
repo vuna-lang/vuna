@@ -43,7 +43,7 @@ sessionDisabled = do
 
 -- 与 `Compile.ifaceCompilerTag` 同口径：版本 + 编译器二进制指纹。
 ifaceTag : String
-ifaceTag = "${vunaVersion}/${strFromInt toolCompilerFingerprint}"
+ifaceTag = "${vunaVersion}/${strFromInt (runPure toolCompilerFingerprint)}"
 
 dropLeadingSlash : String -> String
 dropLeadingSlash s = if startsWith "/" s then substring 1 (byteLength s) s else s
@@ -56,7 +56,7 @@ baseIfaceDir ifaceRoot baseDir =
 
 -- 读 base 包接口（`readPackageIface` 内部已校验 schema 与编译器 tag）。
 readBaseIfaces : String -> String -> Maybe (List ModuleIface)
-readBaseIfaces ifaceRoot baseDir = case readPackageIface (baseIfaceDir ifaceRoot baseDir) ifaceTag of
+readBaseIfaces ifaceRoot baseDir = case runPure (readPackageIface (baseIfaceDir ifaceRoot baseDir) ifaceTag) of
   Nothing => Nothing
   Just pi => Just pi.piModules
 

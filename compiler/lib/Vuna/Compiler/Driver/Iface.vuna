@@ -84,6 +84,10 @@ module Vuna.Compiler.Driver.Iface
 -- 根。写侧只重写接口哈希变化的模块，manifest 最后原子写（提交点）；读侧先读 manifest
 -- 再逐模块读文件并校验。文件格式仍是 Marshal，schema 见 `ifaceSchema`
 -- （布局/字段语义变化必须 bump）。
+--
+-- M4（效果显式化）：manifest / 模块文件的读、写、存在性探测与 `VUNA_IFACE_DIR` 环境
+-- 读取全部显式在 `Eff []` 里；纯构造（接口哈希、覆盖性检查、布局计算）保持纯函数。
+-- 调用方（Compile 是 Eff，过渡期的 Dt/Lsp 等纯调用方用一处 `runPure` 包装）。
 import Vuna.Compiler.Common
 import Vuna.Compiler.Hash
 import Base.HashMap
@@ -830,23 +834,26 @@ relUnder pkgDir path =
 -- 接口目录模式：`VUNA_IFACE_DIR` 非空 = 外部镜像根，用**内容寻址**文件名
 -- （`<stem>-<hash>.iface`），同一路径永远不可能承载两份不同内容；默认布局仍写源文件旁
 -- （命名 `<stem>.iface`，路径固定，读侧靠 `miName` + `miIfaceHash` 校验）。
-ifaceMirrorMode : Bool
-ifaceMirrorMode = runPure (prim_eff_getenv "VUNA_IFACE_DIR") /= ""
+ifaceMirrorMode : Eff [] Bool
+ifaceMirrorMode = do
+  dir <- prim_eff_getenv "VUNA_IFACE_DIR"
+  pure (dir /= "")
 
 -- 内容寻址 token：SHA-256 十六进制前 16 位（文件名安全、可读；64 bit 足够区分）。
 ifaceHashToken : String -> String
 ifaceHashToken h = strSubstring 0 16 h
 
 -- 接口文件相对路径：源相对路径把 `.vuna` 换成 `.iface`（默认），镜像模式再插入内容哈希。
-ifaceRelPathOf : String -> String -> SourceInfo -> String
-ifaceRelPathOf h pkgDir si =
+ifaceRelPathOf : String -> String -> SourceInfo -> Eff [] String
+ifaceRelPathOf h pkgDir si = do
+  mirror <- ifaceMirrorMode
   let
     rel = relUnder pkgDir (siPathOf si)
     stem =
       if rel == "" then ""
       else if endsWith ".vuna" rel then strSubstring 0 (strLength rel - 5) rel else rel
-  in if stem == "" then ""
-  else if ifaceMirrorMode then "${stem}-${ifaceHashToken h}.iface" else "${stem}.iface"
+  in pure
+    (if stem == "" then "" else if mirror then "${stem}-${ifaceHashToken h}.iface" else "${stem}.iface")
 
 -- manifest 里的文件路径来自磁盘缓存（可能被篡改）：只接受相对路径、无 `..` 段、`.iface` 后缀。
 validIfaceRelPath : String -> Bool
@@ -950,33 +957,41 @@ decodeIfaceFile compiler raw = case breakAtNewline (strUnpack raw) [] of
     else Nothing
   Nothing => Nothing
 
-readManifest : String -> String -> Maybe PackageManifest
-readManifest dir compiler = if runPure (prim_eff_fileExists (manifestPathOf dir)) then
+readManifest : String -> String -> Eff [] (Maybe PackageManifest)
+readManifest dir compiler = do
   let
-    raw = runPure (prim_eff_readFile (manifestPathOf dir))
-  in case decodeIfaceFile compiler raw of
-    Just payload => Just (prim_unmarshal payload)
-    Nothing => Nothing
-else Nothing
+    path = manifestPathOf dir
+  in do
+    exists <- prim_eff_fileExists path
+    if exists then do
+      raw <- prim_eff_readFile path
+      pure (case decodeIfaceFile compiler raw of
+        Just payload => Just (prim_unmarshal payload)
+        Nothing => Nothing
+      )
+    else pure Nothing
 
 -- manifest 写去抖：内容逐字节相同就跳过。默认布局的 manifest 在源树里，避免每次 check
 -- 都改 dotfile 的 mtime（工具会话按内容哈希判定是否变化，但工作树 mtime 抖动没必要）。
-writeManifest : String -> String -> PackageManifest -> Int
-writeManifest dir compiler mf =
+writeManifest : String -> String -> PackageManifest -> Eff [] Int
+writeManifest dir compiler mf = do
   let
     path = manifestPathOf dir
     payload = encodeIfaceFile compiler (prim_marshal mf)
-  in if runPure (prim_eff_fileExists path) then if runPure (prim_eff_readFile path) == payload then 0
-  else runPure (prim_eff_writeFileAtomic path payload)
-  else runPure (prim_eff_writeFileAtomic path payload)
+  in do
+    exists <- prim_eff_fileExists path
+    if exists then do
+      raw <- prim_eff_readFile path
+      if raw == payload then pure 0 else prim_eff_writeFileAtomic path payload
+    else prim_eff_writeFileAtomic path payload
 
-manifestEntryOfWith : String -> String -> ModuleIface -> ManifestEntry
-manifestEntryOfWith origin pkgDir m =
-  ManifestEntry (miNameOf m) (ifaceRelPathOf (miIfaceHashOf m) pkgDir (miSourceOf m)) (miSourceOf m)
-    (miIfaceHashOf m) (miDepHashesOf m)
-    (append (map importNameOf (miImportsOf m)) (map importNameOf (miImplicitImportsOf m))) origin
+manifestEntryOfWith : String -> String -> ModuleIface -> Eff [] ManifestEntry
+manifestEntryOfWith origin pkgDir m = do
+  file <- ifaceRelPathOf (miIfaceHashOf m) pkgDir (miSourceOf m)
+  pure
+    (ManifestEntry (miNameOf m) file (miSourceOf m) (miIfaceHashOf m) (miDepHashesOf m) (append (map importNameOf (miImportsOf m)) (map importNameOf (miImplicitImportsOf m))) origin)
 
-manifestEntryOf : String -> ModuleIface -> ManifestEntry
+manifestEntryOf : String -> ModuleIface -> Eff [] ManifestEntry
 manifestEntryOf = manifestEntryOfWith "pkg"
 
 oldEntryOf : List ManifestEntry -> String -> Maybe ManifestEntry
@@ -992,30 +1007,38 @@ depListIn ((Pair n h) :: rest) ys = case lookupPair n ys of
   Just h2 => h2 == h && depListIn rest ys
   Nothing => False
 
+-- 效果列表遍历（本模块自用；顺序与纯 `map` 一致）。
+mapEff : (a -> Eff [] b) -> List a -> Eff [] (List b)
+mapEff f [] = pure []
+mapEff f (x :: rest) = do
+  y <- f x
+  ys <- mapEff f rest
+  pure (y :: ys)
+
 -- 写判定同时看「接口哈希」与「依赖哈希」：依赖哈希不进 `miIfaceHash`（与 TTC 一致），
 -- 但过期后必须重写文件，否则依赖者会永远被判定脏（每次重精化却写不出新依赖表）。
-writeModules : String -> String -> String -> String -> List ManifestEntry -> List ModuleIface -> Int
-writeModules dir compiler pkgDir origin old [] = 0
-writeModules dir compiler pkgDir origin old (m :: rest) =
+writeModules : String -> String -> String -> String -> List ManifestEntry -> List ModuleIface -> Eff [] Int
+writeModules dir compiler pkgDir origin old [] = pure 0
+writeModules dir compiler pkgDir origin old (m :: rest) = do
+  entry <- manifestEntryOfWith origin pkgDir m
   let
-    file = meFileOfEntry (manifestEntryOfWith origin pkgDir m)
-  in if file == "" then writeModules dir compiler pkgDir origin old rest
-  else
-    let
-      path = modulePathOf dir file
-      unchanged = case oldEntryOf old (miNameOf m) of
-        Just e =>
-          e.meIfaceHash == miIfaceHashOf m
-            && depListsSame e.meDeps (miDepHashesOf m)
-            && e.meOrigin == origin
-            && runPure (prim_eff_fileExists path)
-        Nothing => False
-      n = if unchanged then 0
-      else
-        let
-          _ = runPure (prim_eff_writeFileAtomic path (encodeIfaceFile compiler (prim_marshal m)))
-        in 1
-    in n + writeModules dir compiler pkgDir origin old rest
+    file = meFileOfEntry entry
+  in do
+    if file == "" then writeModules dir compiler pkgDir origin old rest
+    else do
+      let
+        path = modulePathOf dir file
+      in do
+        unchanged <- case oldEntryOf old (miNameOf m) of
+          Just e =>
+            if e.meIfaceHash == miIfaceHashOf m && depListsSame e.meDeps (miDepHashesOf m) && e.meOrigin == origin then prim_eff_fileExists path
+            else pure False
+          Nothing => pure False
+        if unchanged then writeModules dir compiler pkgDir origin old rest
+        else do
+          _ <- prim_eff_writeFileAtomic path (encodeIfaceFile compiler (prim_marshal m))
+          n <- writeModules dir compiler pkgDir origin old rest
+          pure (1 + n)
 
 -- 单模块接口写回（M34.6 5a）：只重写 `mi` 对应的模块文件，并把 manifest 里的同名条目
 -- 替换/追加（**保留其余条目**，不整包重写）。manifest 最后原子写 = 提交点；读侧对旧条目
@@ -1031,83 +1054,101 @@ entryNameIn : List ManifestEntry -> String -> Bool
 entryNameIn [] _ = False
 entryNameIn (e :: rest) name = meNameOfEntry e == name || entryNameIn rest name
 
-writeModuleIfaceMerge : String -> String -> String -> String -> Int -> String -> ModuleIface -> Int
-writeModuleIfaceMerge dir compiler pkg pkgDir env origin mi =
+writeModuleIfaceMerge : String -> String -> String -> String -> Int -> String -> ModuleIface -> Eff [] Int
+writeModuleIfaceMerge dir compiler pkg pkgDir env origin mi = do
+  entry <- manifestEntryOfWith origin pkgDir mi
   let
-    entry = manifestEntryOfWith origin pkgDir mi
     file = meFileOfEntry entry
-  in if file == "" then 0
-  else
-    let
-      old = case readManifest dir compiler of
-        Just mf =>
-          if pmSchemaOf mf == ifaceSchema && pmCompilerOf mf == compiler && pmPackageOf mf == pkg then pmModulesOf mf
-          else []
-        Nothing => []
-      merged = replaceManifestEntry old entry
-      _ =
-        runPure
-          (prim_eff_writeFileAtomic (modulePathOf dir file) (encodeIfaceFile compiler (prim_marshal mi)))
-      _ = writeManifest dir compiler (PackageManifest ifaceSchema compiler pkg env merged)
-    in 1
+  in do
+    if file == "" then pure 0
+    else do
+      mf <- readManifest dir compiler
+      let
+        old = case mf of
+          Just m =>
+            if pmSchemaOf m == ifaceSchema && pmCompilerOf m == compiler && pmPackageOf m == pkg then pmModulesOf m
+            else []
+          Nothing => []
+        merged = replaceManifestEntry old entry
+      in do
+        _ <-
+          prim_eff_writeFileAtomic (modulePathOf dir file)
+            (encodeIfaceFile compiler (prim_marshal mi))
+        _ <- writeManifest dir compiler (PackageManifest ifaceSchema compiler pkg env merged)
+        pure 1
 
 -- | 写接口：`oldReadable` 由调用方从**刚刚做过的那次整包接口读取**带下来（check/build 的
 -- 写前校验已经完整解码过一遍），避免这里再读 + 解码一遍所有模块文件。
-writePackageIface : Bool -> String -> String -> String -> String -> Int -> List ModuleIface -> Int
-writePackageIface oldReadable dir compiler pkg pkgDir env modules =
-  let
-    -- 只有「整包接口可完整读回」时才信任旧 manifest 做按模块跳过；损坏/缺文件的旧接口
-    -- 会让读侧回退全量，这里必须强制全量重写，否则损坏文件永远不被覆盖。
-    -- 条目取磁盘原始值（保留 `meOrigin`）：工具写回的条目即使内容未变也要改标 `pkg`。
-    oldEntries = if oldReadable then case readManifest dir compiler of
-      Just mf => pmModulesOf mf
+writePackageIface : Bool -> String -> String -> String -> String -> Int -> List ModuleIface -> Eff [] Int
+writePackageIface oldReadable dir compiler pkg pkgDir env modules = do
+  -- 只有「整包接口可完整读回」时才信任旧 manifest 做按模块跳过；损坏/缺文件的旧接口
+  -- 会让读侧回退全量，这里必须强制全量重写，否则损坏文件永远不被覆盖。
+  -- 条目取磁盘原始值（保留 `meOrigin`）：工具写回的条目即使内容未变也要改标 `pkg`。
+  oldEntries <- if oldReadable then do
+    mf <- readManifest dir compiler
+    pure (case mf of
+      Just m => pmModulesOf m
       Nothing => []
-    else []
-    written = writeModules dir compiler pkgDir "pkg" oldEntries modules
-    mf = PackageManifest ifaceSchema compiler pkg env (map (manifestEntryOf pkgDir) modules)
-    _ = writeManifest dir compiler mf
-  in written
+    )
+  else pure []
+  written <- writeModules dir compiler pkgDir "pkg" oldEntries modules
+  entries <- mapEff (manifestEntryOf pkgDir) modules
+  _ <- writeManifest dir compiler (PackageManifest ifaceSchema compiler pkg env entries)
+  pure written
 
 -- 镜像模式下条目文件名必须带**它自己的**接口哈希 token：防止「manifest 记录 A、文件
 -- 实际是 B 的内容」这类错位（默认布局没有 token，靠载荷内的 miName/miIfaceHash 校验）。
-ifaceFileTokenOk : ManifestEntry -> Bool
-ifaceFileTokenOk e =
-  if ifaceMirrorMode then endsWith "-${ifaceHashToken (meIfaceHashOfEntry e)}.iface" (meFileOfEntry e)
-  else True
+ifaceFileTokenOk : ManifestEntry -> Eff [] Bool
+ifaceFileTokenOk e = do
+  mirror <- ifaceMirrorMode
+  if mirror then pure (endsWith "-${ifaceHashToken (meIfaceHashOfEntry e)}.iface" (meFileOfEntry e))
+  else pure True
 
-readModuleFile : String -> String -> ManifestEntry -> Maybe ModuleIface
-readModuleFile dir compiler e =
-  if not (validIfaceRelPath (meFileOfEntry e)) then Nothing
-  else if not (ifaceFileTokenOk e) then Nothing else readModuleFileRaw dir compiler e
+readModuleFile : String -> String -> ManifestEntry -> Eff [] (Maybe ModuleIface)
+readModuleFile dir compiler e = if not (validIfaceRelPath (meFileOfEntry e)) then pure Nothing
+else do
+  tokenOk <- ifaceFileTokenOk e
+  if not tokenOk then pure Nothing else readModuleFileRaw dir compiler e
 
-readModuleFileRaw : String -> String -> ManifestEntry -> Maybe ModuleIface
-readModuleFileRaw dir compiler e =
+readModuleFileRaw : String -> String -> ManifestEntry -> Eff [] (Maybe ModuleIface)
+readModuleFileRaw dir compiler e = do
   let
     path = modulePathOf dir (meFileOfEntry e)
-  in if runPure (prim_eff_fileExists path) then
-    let
-      raw = runPure (prim_eff_readFile path)
-      payload = decodeIfaceFile compiler raw
-    in case payload of
-      Just bytes =>
-        let
-          m = prim_unmarshal bytes
-        in if miNameOf m == e.meName && miIfaceHashOf m == e.meIfaceHash then Just m else Nothing
-      Nothing => Nothing
-  else Nothing
+  in do
+    exists <- prim_eff_fileExists path
+    if exists then do
+      raw <- prim_eff_readFile path
+      pure (case decodeIfaceFile compiler raw of
+        Just bytes =>
+          let
+            m = prim_unmarshal bytes
+          in if miNameOf m == e.meName && miIfaceHashOf m == e.meIfaceHash then Just m else Nothing
+        Nothing => Nothing
+      )
+    else pure Nothing
 
-readModuleFiles : String -> String -> List ManifestEntry -> Maybe (List ModuleIface)
-readModuleFiles dir compiler [] = Just []
-readModuleFiles dir compiler (e :: rest) = case readModuleFile dir compiler e of
-  Just m => case readModuleFiles dir compiler rest of
-    Just tail => Just (m :: tail)
-    Nothing => Nothing
-  Nothing => Nothing
+readModuleFiles : String -> String -> List ManifestEntry -> Eff [] (Maybe (List ModuleIface))
+readModuleFiles dir compiler [] = pure (Just [])
+readModuleFiles dir compiler (e :: rest) = do
+  m <- readModuleFile dir compiler e
+  case m of
+    Nothing => pure Nothing
+    Just mi => do
+      tail <- readModuleFiles dir compiler rest
+      pure (case tail of
+        Just tailIface => Just (mi :: tailIface)
+        Nothing => Nothing
+      )
 
-readPackageIface : String -> String -> Maybe PackageIface
-readPackageIface dir compiler = case readManifest dir compiler of
-  Just mf => if mf.pmSchema == ifaceSchema && mf.pmCompiler == compiler then case readModuleFiles dir compiler mf.pmModules of
-    Just modules => Just (PackageIface mf.pmSchema mf.pmCompiler mf.pmPackage mf.pmEnv modules)
-    Nothing => Nothing
-  else Nothing
-  Nothing => Nothing
+readPackageIface : String -> String -> Eff [] (Maybe PackageIface)
+readPackageIface dir compiler = do
+  mf <- readManifest dir compiler
+  case mf of
+    Nothing => pure Nothing
+    Just m => if m.pmSchema == ifaceSchema && m.pmCompiler == compiler then do
+      modules <- readModuleFiles dir compiler m.pmModules
+      pure (case modules of
+        Just ms => Just (PackageIface m.pmSchema m.pmCompiler m.pmPackage m.pmEnv ms)
+        Nothing => Nothing
+      )
+    else pure Nothing

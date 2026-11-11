@@ -463,7 +463,7 @@ compileFileEntry printResult entry outDir = case contextForFile entry of
   OkC ctx =>
     let
       _ = applyDiagConfig (contextPackageOf ctx)
-    in case compileToDir ctx entry printResult outDir of
+    in case runPure (compileToDir ctx entry printResult outDir) of
       ErrC e => printDiag e
       OkC _ => finishWarningsDir outDir 0
 
@@ -473,7 +473,7 @@ compilePkgDir printResult dir outDir = case executablePackage "compile" dir of
   OkC pkg =>
     let
       _ = applyDiagConfig (Just pkg)
-    in case compileToDir (packageContext pkg) (packageEntry pkg) printResult outDir of
+    in case runPure (compileToDir (packageContext pkg) (packageEntry pkg) printResult outDir) of
       ErrC e => printDiag e
       OkC _ => finishWarningsDir outDir 0
 
@@ -545,7 +545,7 @@ checkPackageSeq pkg code =
     -- M45：warning 需要本包模块重新精化（warning 不持久化）；-W / --deny-warnings 时
     -- 跳过 check 缓存与干净模块复用（依赖仍走接口摘要）。
     wantWarnings = showWarningsOn 0 || denyWarningsOn 0
-    c = case checkPackage wantWarnings pkg of
+    c = case runPure (checkPackage wantWarnings pkg) of
       ErrC e => checkPackageErr pkg e
       OkC _ =>
         let
@@ -695,14 +695,14 @@ buildOne noCompile multiOut outM pkg =
       ctx = packageContext pkg
       binPath = "${outDir}/bin/${name}"
     in if noCompile then compileCodegen ctx entry outDir
-    else if metaUpToDate outDir ctx entry binPath then
+    else if runPure (metaUpToDate outDir ctx entry binPath) then
       let
         _ = runPure (prim_eff_print "up to date: ${binPath}\n")
       in 0
-    else case compileToDir ctx entry True outDir of
+    else case runPure (compileToDir ctx entry True outDir) of
       ErrC e => printDiag e
       OkC _ => buildLinked ctx entry outDir name
-  else case checkPackage False pkg of
+  else case runPure (checkPackage False pkg) of
     ErrC e => printDiag e
     OkC warnings =>
       let
@@ -711,7 +711,7 @@ buildOne noCompile multiOut outM pkg =
       in 0
 
 compileCodegen : PackageContext -> String -> String -> Int
-compileCodegen ctx entry outDir = case compileToDir ctx entry True outDir of
+compileCodegen ctx entry outDir = case runPure (compileToDir ctx entry True outDir) of
   ErrC e => printDiag e
   OkC _ => 0
 
@@ -720,12 +720,12 @@ compileCodegen ctx entry outDir = case compileToDir ctx entry True outDir of
 buildLinked : PackageContext -> String -> String -> String -> Int
 buildLinked ctx entry outDir name =
   let
-    _ = ensureDirPath "${outDir}/bin"
-  in case runBuildScript outDir "bin/${name}" name of
+    _ = runPure (ensureDirPath "${outDir}/bin")
+  in case runPure (runBuildScript outDir "bin/${name}" name) of
     ErrC e => printDiag e
     OkC _ =>
       let
-        _ = writeBuildMeta outDir ctx entry True
+        _ = runPure (writeBuildMeta outDir ctx entry True)
         _ = runPure (prim_eff_print "built ${outDir}/bin/${name}\n")
       in 0
 

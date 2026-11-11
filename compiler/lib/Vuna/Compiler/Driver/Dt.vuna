@@ -1127,9 +1127,11 @@ unitKeysOf modules entryDecls printResult =
         (hashTextStrong "e|${entryHash}|${if printResult then "print" else "noprint"}|${concatKeys (map pairKeyValue modKeys)}")
   in Pair "__entry__" entryKey :: modKeys
 
+-- M4：PerfCache 的磁盘层是显式 `Eff []`；本模块（尚未迁移的纯调用方）在调用处用
+-- 一处 `runPure` 过渡执行（见 docs/reference/effects.md §8.6 的过渡策略）。
 unitCacheLookup : String -> List (Pair String String) -> String -> Maybe SplitFile
 unitCacheLookup dir keys name = case lookupPair name keys of
-  Just k => case unitCacheRead dir name k of
+  Just k => case runPure (unitCacheRead dir name k) of
     Just sf =>
       let
         _ = note "unit-cache-hit ${name}"
@@ -1139,7 +1141,7 @@ unitCacheLookup dir keys name = case lookupPair name keys of
 
 unitCacheStore : String -> List (Pair String String) -> String -> SplitFile -> Int
 unitCacheStore dir keys name sf = case lookupPair name keys of
-  Just k => unitCacheWrite dir name k sf
+  Just k => runPure (unitCacheWrite dir name k sf)
   Nothing => 0
 
 -- M34.6：**默认开启**（`VUNA_UNIT_CACHE=0` opt-out）。同机 A/B（预热后改入口再
@@ -1155,14 +1157,14 @@ splitGenerateCached ctx entry modules moduleParts entryDecls prog printResult =
   let
     pkg = contextPackageName ctx
     keys = unitKeysOf modules entryDecls printResult
-    base = unitCacheDir pkg
+    base = runPure (unitCacheDir pkg)
     bucketKey = "${pkg}|${entry}"
     dir = unitCacheEntryDir base bucketKey
     -- 桶内 GC 的保留集合 = 本次构建全部单元 key 算出的文件名（入口也在 keys 里）：即将
     -- 命中的单元一定在集合内，同一入口反复编辑累积的旧 key 文件才被清掉。
     keepNames = map (\p => unitCacheFileName (firstOf p) (secondOf p)) keys
-    _ = if unitCacheEnabled && pkg /= "" then unitCacheGc base dir else 0
-    _ = if unitCacheEnabled && pkg /= "" then unitCacheBucketGc dir keepNames else 0
+    _ = if unitCacheEnabled && pkg /= "" then runPure (unitCacheGc base dir) else 0
+    _ = if unitCacheEnabled && pkg /= "" then runPure (unitCacheBucketGc dir keepNames) else 0
     roots = map rootDir (contextRoots ctx)
     cdir = contextDir ctx
   in if pkg == "" || not unitCacheEnabled then generateDtSplitProgram moduleParts entryDecls prog printResult roots cdir

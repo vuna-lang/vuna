@@ -174,19 +174,18 @@ manifestFreeBase value =
     Just dir => dir
     Nothing => primary
 
-freshTempRoot : Int -> String -> String
-freshTempRoot fuel candidate = if fuel <= 0 then candidate
+freshTempRoot : Int -> String -> Eff [] String
+freshTempRoot fuel candidate = if fuel <= 0 then pure candidate
 else if pathExistsFile candidate then freshTempRoot (fuel - 1) "${candidate}-${strOfInt fuel}"
-else
-  let
-    _ = ensureDirPath candidate
-  in candidate
+else do
+  _ <- ensureDirPath candidate
+  pure candidate
 
 makeTempRoot : String -> Eff [] String
 makeTempRoot tag = do
   base <- tempBase 0
   stamp <- nowMicros
-  pure (freshTempRoot 1000 "${base}/vuna-suite-${strOfInt stamp}-${safeName tag}")
+  freshTempRoot 1000 "${base}/vuna-suite-${strOfInt stamp}-${safeName tag}"
 
 helperScript : String
 helperScript =
@@ -356,10 +355,9 @@ buildCacheDir env staging = do
 -- 把 staging 整份同步进共享目录（base 的 .ml 内容不变 ⇒ stamp 命中；Main.ml 换成
 -- 本 case 的）。
 syncBuildDir : String -> String -> Eff [] Int
-syncBuildDir staging dir =
-  let
-    _ = ensureDirPath dir
-  in prim_eff_runIn "/" ["cp", "-a", "${staging}/.", "${dir}/"]
+syncBuildDir staging dir = do
+  _ <- ensureDirPath dir
+  prim_eff_runIn "/" ["cp", "-a", "${staging}/.", "${dir}/"]
 
 -- 会话优先的 check / interp 探针：命中时零子进程（~200ms → ~10ms），语义等价
 -- （check = 退出码，interp = trim 后输出文本）。会话不可用/安全阀不适用时回退 CLI，
@@ -574,8 +572,9 @@ else case c.caseKind of
 caseKeyOf : Env -> Case -> String -> String -> Eff [] Int
 caseKeyOf env c source expected = do
   treeHash <- caseTreeHash c source expected
+  fp <- toolCompilerFingerprint
   pure
-    (hashTextStrong "${strOfInt toolCompilerFingerprint}|${strOfInt env.envBaseHash}|${c.caseId}|${strOfInt treeHash}")
+    (hashTextStrong "${strOfInt fp}|${strOfInt env.envBaseHash}|${c.caseId}|${strOfInt treeHash}")
 
 cachePath : Env -> Int -> String
 cachePath env key = "${env.envCacheDir}/${strOfInt key}.cache"
@@ -607,10 +606,11 @@ recordLastFailed : Env -> List CaseResult -> Eff [] Int
 recordLastFailed env [] = pure 0
 recordLastFailed env results =
   let
-    _ = ensureDirPath (lastFailedDir env)
     failed = filter isFailed results
     text = join "\n" (map resIdOf failed)
-  in fmap natToInt (writeFile (lastFailedPath env) text)
+  in do
+    _ <- ensureDirPath (lastFailedDir env)
+    fmap natToInt (writeFile (lastFailedPath env) text)
 
 caseIdIn : List String -> Case -> Bool
 caseIdIn ids c = memName c.caseId ids
@@ -1075,7 +1075,7 @@ stepsCase env c path =
     caseTmp = stepsTmpDir env c
   in do
     start <- nowMicros
-    _ <- pure (ensureDirPath caseTmp)
+    _ <- ensureDirPath caseTmp
     text <- if pathExistsFile path then readFile path else pure ""
     case parseStepsV2 text of
       SpErr msg =>
@@ -1097,7 +1097,7 @@ seedCase env c source expected =
     expectedText <- fmap trimNewlines (readFile expected)
     _ <- removeTree outdir
     _ <- removeTree ifaceDir
-    _ <- pure (ensureDirPath ifaceDir)
+    _ <- ensureDirPath ifaceDir
     comp <-
       runCmdMerged env "${c.caseId}-compile" env.envCwd c.caseTimeout
         (withEnvIfaceAt env ifaceDir [env.envSeed, "compile", source, outdir])
@@ -1208,8 +1208,9 @@ summarize results =
   else "${strOfInt checks} checks, ${strOfInt badCases} failed case(s)"
 
 printCompiler : Env -> Eff [] Int
-printCompiler env =
-  printLine "compiler: ${env.envVuna} (fingerprint ${strOfInt toolCompilerFingerprint})"
+printCompiler env = do
+  fp <- toolCompilerFingerprint
+  printLine "compiler: ${env.envVuna} (fingerprint ${strOfInt fp})"
 
 -- ---------------------------------------------------------------
 -- 顺序执行 + worker
@@ -1250,8 +1251,8 @@ runWorker env opts cases index count =
     resultsDir = case opts.suiteResultsDir of
       Just d => d
       Nothing => "${env.envTmp}/results"
-    _ = ensureDirPath resultsDir
   in do
+    _ <- ensureDirPath resultsDir
     results <-
       runCasesIndexed env opts.suiteVerbose opts.suiteFailFast opts.suiteQuiet resultsDir indexed
     pure (if listLength (filter isFailed results) == 0 then 0 else 1)
@@ -1377,12 +1378,13 @@ runParent env opts suite cases = do
     resultsDir = case opts.suiteResultsDir of
       Just d => d
       Nothing => "${env.envTmp}/results"
-    _ = ensureDirPath resultsDir
   in if effective <= 1 then do
+    _ <- ensureDirPath resultsDir
     results <-
       runCasesIndexed env opts.suiteVerbose opts.suiteFailFast opts.suiteJSON resultsDir indexed
     finishResults env opts results
   else do
+    _ <- ensureDirPath resultsDir
     pids <- spawnWorkers env opts resultsDir effective (effective + 1) 0 []
     _ <- waitPids pids
     results <- collectResults resultsDir n
@@ -1712,13 +1714,13 @@ runSuiteOnce opts suite =
     helper <- writeHelper tmp
     baseDir <- envOr "VUNA_BASE" "${root}/base"
     baseHash <- hashTree baseDir
-    _ <- pure (if pathExistsDir cacheDir then 0 else ensureDirPath cacheDir)
+    _ <- if pathExistsDir cacheDir then pure 0 else ensureDirPath cacheDir
     vuna <- execPath
     vunaSeed <- envOr "VUNA_SEED" "vuna-seed"
     ocamlopt <- envOr "OCAMLOPT" "ocamlopt"
     -- 跨 run 的构建桶：base 的 .cmx 只编译一次，后续 run 直接命中 stamp。
-    buildDir <-
-      pure "${cacheDir}/build/${scope}-${strOfInt toolCompilerFingerprint}-${strOfInt baseHash}"
+    buildFp <- toolCompilerFingerprint
+    buildDir <- pure "${cacheDir}/build/${scope}-${strOfInt buildFp}-${strOfInt baseHash}"
     ref <- newRef (sessionNew "${tmp}/iface-session")
     discovered <- discoverCases suite
     orphans <- familyOrphans suite

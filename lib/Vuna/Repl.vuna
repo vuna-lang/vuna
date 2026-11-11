@@ -849,14 +849,15 @@ sigLine p = "${firstOf p} : ${secondOf p}\n"
 -- ---------------------------------------------------------------
 replSessionKey : PackageContext -> Int
 replSessionKey ctx =
-  toolCompilerFingerprint * 1000003
+  runPure toolCompilerFingerprint * 1000003
     + hashTextStrong "repl|${contextPackageName ctx}|${contextDir ctx}"
 
 replToolSession : PackageContext -> String -> Maybe ReplToolSession
-replToolSession ctx program = case depIfacesForToolSourceDetailed ctx "<repl>" program of
+replToolSession ctx program = case runPure (depIfacesForToolSourceDetailed ctx "<repl>" program) of
   Nothing => Nothing
   Just tool =>
-    Just (ReplToolSession tool (replSessionKey ctx) (contextDir ctx) toolNowSec tool.tcStats)
+    Just
+      (ReplToolSession tool (replSessionKey ctx) (contextDir ctx) (runPure toolNowSec) tool.tcStats)
 
 -- buffer 当前的 import 闭包还在会话建立时的闭包里吗？新增 import ⇒ 闭包扩大 ⇒ 必须重建。
 -- 沿用建会话时的闭包算法（隐式 Prelude 一并算进 `needed`），因此 buffer 只加定义不加
@@ -882,7 +883,7 @@ sessionUsable st program = case st.stateToolSession of
   Just session =>
     session.sessionKey == replSessionKey st.stateCtx
       && session.sessionDir == contextDir st.stateCtx
-      && toolSessionFresh session.sessionBuiltSec session.sessionStats
+      && runPure (toolSessionFresh session.sessionBuiltSec session.sessionStats)
       && sessionClosureOk st.stateCtx session program
 
 -- 会话可用就复用依赖接口；否则（一次）重建；都不可能时（base-only / 依赖接口不全）走
