@@ -10,9 +10,8 @@ Base_dFromInt.ml
 Base_dFromString.ml
 Base_dHashMap.ml
 Base_dHashable.ml
-Base_dIO.ml
+Base_dHost.ml
 Base_dIORef.ml
-Base_dIO_dHost.ml
 Base_dInt.ml
 Base_dInterp.ml
 Base_dList.ml

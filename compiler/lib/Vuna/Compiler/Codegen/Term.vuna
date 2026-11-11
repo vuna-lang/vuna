@@ -1014,6 +1014,20 @@ effThunkText ctor unitTy rt arity =
   in if arity == 0 then "(${ctor} (fun (_ : ${unitTy}) -> ${rt}))"
   else "(fun ${argText} -> ${ctor} (fun (_ : ${unitTy}) -> ${rt} ${argText}))"
 
+-- Eff 版线性绑定：装箱 Eff 的 match 实现（ST 的 bindST1 用）。
+-- `(fun m k -> MkEff (fun u -> match m with MkEff f -> match k (f u) with MkEff g -> g u))`
+effLinearBindText : GenSt -> Check (Pair String GenSt)
+effLinearBindText st =
+  let
+    ctorP = genCtorRef st effTypeName effMkCtor
+    st1 = secondOf ctorP
+    unitP = qualTypeText st1.gsQual effUnitTypeName
+    st2 = gsAddDep st1 (secondOf unitP)
+    ctor = firstOf ctorP
+    unitTy = firstOf unitP
+  in OkC
+    (Pair "(fun m k -> ${ctor} (fun (u : ${unitTy}) -> match m with ${ctor} f -> (match k (f u) with ${ctor} g -> g u)))" st2)
+
 -- 内建模式的 thunk 包装：`prim_eff_print` → `(fun s -> fun (_ : int) -> dtp_print s)`；
 -- 零参 `prim_eff_getArgs` → `(fun (_ : int) -> (dtp_listOf (dtp_getArgs ())))`。
 -- token 必须标注 `int`：否则 OCaml 把世界令牌推成弱类型变量（`'_weak -> a`），

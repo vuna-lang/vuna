@@ -68,6 +68,7 @@ module Vuna.Compiler.Intrinsics
   , preludeValueNames
   , primBindIO1Name
   , primBindIOName
+  , primEffBind1Name
   , primEraseName
   , primPureIOName
   , primRunIOName
@@ -256,6 +257,11 @@ primBindIOName = "prim_bindIO"
 -- | IO 代数「线性绑定」原语的名字（continuation binder 为 1，M38）。
 primBindIO1Name : String
 primBindIO1Name = "prim_bindIO1"
+
+-- | Eff 版线性绑定（bootstrap 过渡表；ST 的 bindST1 用）：`Eff [] a` 的线性 continuation。
+-- runtime 由 codegen 专门生成（装箱 `MkEff` 的 match），不能复用 eager 包装。
+primEffBind1Name : String
+primEffBind1Name = "prim_eff_bind1"
 
 -- | IO 代数「执行」原语的名字（需 `unsafe` 能力，在 `main` 之外跑动作）。
 primRunIOName : String
@@ -823,7 +829,8 @@ floatIntrinsics =
 -- 留在旧 seed 的 fuel 内（同 `floatIntrinsics`；迁移完成后删除 IO 表/本表并改名）。
 effIntrinsics : List Intrinsic
 effIntrinsics =
-  [ Intrinsic "effTimeUs" (IEff IInt) OpNone (Just CapClock) "(dtp_timeUs ())" True,
+  [ Intrinsic primEffBind1Name (IPi "a" (IPi "b" (IFun1 (IEff (IVar "a")) (IFun1 (IFun1 (IVar "a") (IEff (IVar "b"))) (IEff (IVar "b")))))) OpNone Nothing "" True,
+    Intrinsic "effTimeUs" (IEff IInt) OpNone (Just CapClock) "(dtp_timeUs ())" True,
     Intrinsic "prim_eff_sleep" (IFun IInt (IEff IInt)) OpNone (Just CapClock) "dtp_sleep" True,
     Intrinsic "prim_eff_newRef" (IPi "a" (IFun (IVar "a") (IEff (IRef (IVar "a"))))) OpNone Nothing "(fun x -> ref x)" True,
     Intrinsic "prim_eff_readRef" (IPi "a" (IFun (IRef (IVar "a")) (IEff (IVar "a")))) OpNone Nothing "(fun r -> !r)" True,

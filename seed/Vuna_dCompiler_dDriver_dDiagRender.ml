@@ -79,11 +79,11 @@ let v_Vuna_dCompiler_dDriver_dDiagRender_dstripCr = (fun s -> (if ((Base_dString
 let rec v_Vuna_dCompiler_dDriver_dDiagRender_dfirstReadableLoc = (fun mc0 -> (match mc0 with
   | Base_dList.C_Base_dList_dList_Cons (dtb__18, dtb__19) -> (match dtb__18 with
   | { Base_dPair.f_Base_dPair_dPair_first = dtb__20; Base_dPair.f_Base_dPair_dPair_second = dtb__21 } -> (match dtb__21 with
-  | { Base_dPair.f_Base_dPair_dPair_first = dtb__22; Base_dPair.f_Base_dPair_dPair_second = dtb__23 } -> (if (dtb__22 < 1) then (v_Vuna_dCompiler_dDriver_dDiagRender_dfirstReadableLoc dtb__19) else (if (Base_dIO_dHost.v_Base_dIO_dHost_drunIO (Base_dIO_dHost.v_Base_dIO_dHost_dfileExists dtb__20)) then (if (Base_dIO_dHost.v_Base_dIO_dHost_drunIO (Base_dIO_dHost.v_Base_dIO_dHost_disDirectory dtb__20)) then (v_Vuna_dCompiler_dDriver_dDiagRender_dfirstReadableLoc dtb__19) else ((fun srcLines -> (match ((v_Vuna_dCompiler_dDriver_dDiagRender_dlineAt srcLines) dtb__22) with
+  | { Base_dPair.f_Base_dPair_dPair_first = dtb__22; Base_dPair.f_Base_dPair_dPair_second = dtb__23 } -> (if (dtb__22 < 1) then (v_Vuna_dCompiler_dDriver_dDiagRender_dfirstReadableLoc dtb__19) else (if (Base_dEff.v_Base_dEff_drunPure (Base_dHost.v_Base_dHost_dfileExists dtb__20)) then (if (Base_dEff.v_Base_dEff_drunPure (Base_dHost.v_Base_dHost_disDirectory dtb__20)) then (v_Vuna_dCompiler_dDriver_dDiagRender_dfirstReadableLoc dtb__19) else ((fun srcLines -> (match ((v_Vuna_dCompiler_dDriver_dDiagRender_dlineAt srcLines) dtb__22) with
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing -> (v_Vuna_dCompiler_dDriver_dDiagRender_dfirstReadableLoc dtb__19)
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__24) -> (Base_dMaybe.C_Base_dMaybe_dMaybe_Just ({ Base_dPair.f_Base_dPair_dPair_first = dtb__20; Base_dPair.f_Base_dPair_dPair_second = { Base_dPair.f_Base_dPair_dPair_first = dtb__22; Base_dPair.f_Base_dPair_dPair_second = { Base_dPair.f_Base_dPair_dPair_first = dtb__23; Base_dPair.f_Base_dPair_dPair_second = (v_Vuna_dCompiler_dDriver_dDiagRender_dstripCr dtb__24) } } }))
   | _ -> failwith "DT: impossible branch"
-)) (Base_dString.v_Base_dString_dlines (Base_dIO_dHost.v_Base_dIO_dHost_drunIO (Base_dIO_dHost.v_Base_dIO_dHost_dreadFile dtb__20))))) else (v_Vuna_dCompiler_dDriver_dDiagRender_dfirstReadableLoc dtb__19)))
+)) (Base_dString.v_Base_dString_dlines (Base_dEff.v_Base_dEff_drunPure (Base_dHost.v_Base_dHost_dreadFile dtb__20))))) else (v_Vuna_dCompiler_dDriver_dDiagRender_dfirstReadableLoc dtb__19)))
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
