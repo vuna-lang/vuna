@@ -50,8 +50,8 @@ quantity / 线性规则见 [qtt.md](qtt.md)（quantity 与擦除口径以该页�
   （`{n : Nat}`）由调用点或期望类型反推。推断仍是一阶的：没有期望类型、又需要解出
   带局部变量的解时可能报 `TC_UnsolvedMetavar`。
 - **类型表达式里的字面量**：`Loader.Resolve` 只放行 `Int` 与 `String` 字面量，其余字面量
-  报 `invalid type expression`。所以 `Vec 3 a`（Int 索引）与 `Reader "books" Int`
-  （String 索引）都可用；字面量按值参与索引相等（`Core/Eval.valueEqFuel` 的 `VStr`
+  报 `invalid type expression`。所以 `Vec 3 a`（Int 索引）与用户 data 的 String 索引
+  （如 `Box "books"`）都可用；字面量按值参与索引相等（`Core/Eval.valueEqFuel` 的 `VStr`
   分支与 `Core/Conv` 的字符串比较）。
 - **元变量求解**：局部变量 spine 优先走 Miller pattern（提取成 λ 抽象）；Miller pattern
   之外保留「头一致就提取」近似（`Core/Conv.solveMetaHoLegacyFuel`），能提取就

@@ -161,26 +161,25 @@ CPS `Eff` 已经可 `check` + `compile` + 运行，且 interp 与产物逐字节
 
 ### 8.1 表示
 
-- `Row` 是 Type-1 数据，存放**效应标签类型**（`Cons : Type -> Row -> Row`）；
+- `Row` 是 Type-1 数据，存放**效应标签类型**（`Cons : String -> Type -> Row -> Row`：实例名 + 标签 + 尾行）；
 - **列表字面量通用展开**：parser 把 `[]` / `[e1, e2]` 解析成保留名
   `@vuna@list@nil` / `@vuna@list@cons`（不是构造子名字解析）；精化器按**期望族**的短名
   `Nil`/`Cons` 展开，期望族未知时默认 `Base.List.List`。因此在**期望 kind 为 `Row`** 的
-  位置 `[Fetch]` 展开为 `Base.Eff.Row.Cons Fetch Base.Eff.Row.Nil`，`[]` 展开为
+  位置 `[Fetch]` 展开为 `Cons "default" Fetch Nil`（裸标签补默认名），`[]` 展开为
   `Base.Eff.Row.Nil`；`Vec n a` / 用户自定义的 `Nil`/`Cons` 族同样适用。模式
   `[]` / `[a, b]` 按 scrutinee 族逐层展开（`Elab/Term/Impl` 的
   `listLitElems`/`expandListLit` 与模式解析器），parser/AST 不需要区分类型/项位置。
   夹具 `dt_base/45_eff_row_sugar`、`dt_base/54_list_literal_families`。
   行只是擦除索引，不进入运行时值。
-- 标签是用户/库声明的数据类型（如 `Reader "counter" Int`、`State "counter" Int`、`Fs "real"`），
-  没有闭合的 `data EffectLabel`；新增效应/实例不需要改中央表。
-- **实例名是 String**：命名实例的标签第一个参数就是实例名字符串（`Reader n s` 的 `n`），
-  行里 `Reader "counter" Int` 与 `Reader "config" Int` 是不同条目。String 字面量因此可以
-  出现在类型表达式里（与 `Vec 3 a` 的 Int 字面量同规则，见 language.md）；运行时按
-  `(key, name)` 的字符串相等找 handler。库不定义任何固定实例名枚举，使用方自选名字
-  （同一效应族同时安装的实例名必须互不相同）。
+- **标签 = op 族应用**（D2）：`ConsoleOp`、`StateOp Nat`、`ReaderOp Int`、`FsOp`…；
+  没有闭合的 `data EffectLabel`，新增效应不需要改中央表。`Exn` 是无参标记类型。
+- **实例名是 Row 里的 String**：行条目 `Cons "counter" (ReaderOp Int) rest`；
+  运行时按 `(key, name)` 的字符串相等找 handler。库不定义固定实例名枚举，使用方自选名字
+  （同一效应族同时安装的实例名必须互不相同）。裸标签 = 默认名 `"default"`；显式名用
+  `[Op]` 或 `Cons n Op r`。
 - `Eff r a` 构造子不导出；内部是私有 dummy thunk（`EffUnit -> a`），
   **没有世界令牌**；dummy 只为延迟执行。
-- `Member e r` 是 Type-1 归纳族（`Here`/`There`），effect wrapper 用隐式证明参数；
+- `Member n e r` 是 Type-1 归纳族（`Here`/`There`），effect wrapper 用隐式证明参数；
   精化器按行结构构造证明（定义级 ctx 收尾）。
 - `rowRem : Type -> Row -> Row` 去掉一个标签；它不是类型族，由编译器按标签类型值
   结构相等归约（重复绑定名/非线性格不受支持：parser 直接报 `PS_RepeatedPatternBinder`，
@@ -211,15 +210,15 @@ CPS `Eff` 已经可 `check` + `compile` + 运行，且 interp 与产物逐字节
 | 模块 | 内容 |
 | --- | --- |
 | `Base.Eff` | `Row(..)`、`Eff`、`Member(..)`/`rowRem`、内建 `Functor`/`Applicative`/`Monad (Eff r)`（`do`/`>>=`/`>>`，不提供 `bindEff`/`pureEff`）、`sendCore`/`handleCore`/`handleCoreLin`、`handleWith`/`handleWithAt` + `ResFn(..)`/`resFn`/`resOf`（`handle` 语法的两个降级目标：handler 类型显式、结果族作擦除量；行首条目版用于 comp 行未具体化）、`Cont`/`mkCont`/`resumeCont`、`bracket`/`finally`、`weaken`、`joinEff`/`raise`、`runPure` |
-| `Base.Eff.Reader` | `Reader n s` + `Ask`；`ask`/`handleReader`；`n` 是 String 实例名（`Reader "counter" Int`） |
-| `Base.EffState` | `State n s` + `Get`/`Put`；`get`/`put`/`handleState`（answer `s -> Pair a s` 线程状态） |
-| `Base.EffFs` | IO-backed Fs 效应（完整 fs 面；**命名实例** `Fs n`，如 `Fs "mock"`/`Fs "real"`）：`ReadFile`/`WriteFile`/`WriteFileAtomic`/`ReadDir`/`IsDirectory`/`MakeDir`/`RemoveFile`/`FileExists`/`FileMtime`/`FileSize` + `resFs`；`fsReadFile n`/`fsWriteFile n`/…/`handleFs n`（泛型）/`handleFsHost n`（IO-backed answer `Eff []`，`runFs = joinEff ∘ handleFsHost`）；handler 用 `Base.Host` 实现。mock/real 可并存（`dt_base/40`） |
-| `Base.EffConsole` | W10 console 标签（命名实例，如 `"mock"`/`"real"`）：`Print`/`EPrint`；`consolePrint`/`consoleEprint`/`handleConsole`/`handleConsoleHost`（真实 handler 用 `Base.Host.print`/`eprint`） |
-| `Base.EffClock` | W10 clock 标签（命名实例，如 `"mock"`/`"real"`）：`Now`（微秒时间戳）/`SleepMicros`；`clockNow`/`clockSleepMicros`/`handleClock`/`handleClockHost`（真实 handler 用 `Base.Host.nowMicros` 与编译器原生 `prim_sleep`） |
-| `Base.EffEnv` | W10 env 标签（命名实例，如 `"mock"`/`"real"`）：`GetEnv`/`GetCwd`/`ExecPath`；`envGetEnv`/`envGetCwd`/`envExecPath`/`handleEnv`/`handleEnvHost`（真实 handler 用 `Base.Host.getEnv`/`getCwd`/`execPath`） |
-| `Base.EffProcess` | W10 process 标签（命名实例，如 `"mock"`/`"real"`）：`Args`/`Exit`/`RunIn`；`processArgs`/`processExit`/`processRunIn`/`handleProcess`/`handleProcessHost`（真实 handler 用 `prim_getArgs`/`prim_exit`/`prim_runIn`）/`handleProcessHostWith`（自定义 `onExit`）/`handleProcessHostObserved`（`Exit` 可观察、不退出） |
-| `Base.EffError` | `Error`/`ErrorOp` + `throw`/`handleError`/`runError`/`catch`（L2 作用域 catch） |
-| `Base.EffExn` | W6 高阶 scoped Error：`Try` 携带子计算；`tryWith`/`runExn`/`catchExn`/`bracketExn` |
+| `Base.Eff.Reader` | `ReaderOp s` + `Ask`；`ask`/`handleReader`；实例名在行条目（`Cons "counter" (ReaderOp Int) r`） |
+| `Base.EffState` | `StateOp s` + `Get`/`Put`；`get`/`put`/`handleState`（answer `s -> Pair a s` 线程状态） |
+| `Base.EffFs` | IO-backed Fs 效应（完整 fs 面；标签 `FsOp`，实例名在行条目，如 `Cons "real" FsOp r`）：`ReadFile`/`WriteFile`/`WriteFileAtomic`/`ReadDir`/`IsDirectory`/`MakeDir`/`RemoveFile`/`FileExists`/`FileMtime`/`FileSize` + `resFs`；`fsReadFile n`/`fsWriteFile n`/…/`handleFs n`（泛型）/`handleFsHost n`（IO-backed answer `Eff []`，`runFs = joinEff ∘ handleFsHost`）；handler 用 `Base.Host` 实现。mock/real 可并存（`dt_base/40`） |
+| `Base.EffConsole` | W10 console 标签 `ConsoleOp`（实例名在行条目，如 `ConsoleOp@mock`/`ConsoleOp@real`）：`Print`/`EPrint`；`consolePrint`/`consoleEprint`/`handleConsole`/`handleConsoleHost`（真实 handler 用 `Base.Host.print`/`eprint`） |
+| `Base.EffClock` | W10 clock 标签 `ClockOp`：`Now`（微秒时间戳）/`SleepMicros`；`clockNow`/`clockSleepMicros`/`handleClock`/`handleClockHost`（真实 handler 用 `Base.Host.nowMicros` 与编译器原生 `prim_sleep`） |
+| `Base.EffEnv` | W10 env 标签 `EnvOp`：`GetEnv`/`GetCwd`/`ExecPath`；`envGetEnv`/`envGetCwd`/`envExecPath`/`handleEnv`/`handleEnvHost`（真实 handler 用 `Base.Host.getEnv`/`getCwd`/`execPath`） |
+| `Base.EffProcess` | W10 process 标签 `ProcessOp`：`Args`/`Exit`/`RunIn`；`processArgs`/`processExit`/`processRunIn`/`handleProcess`/`handleProcessHost`（真实 handler 用 `prim_getArgs`/`prim_exit`/`prim_runIn`）/`handleProcessHostWith`（自定义 `onExit`）/`handleProcessHostObserved`（`Exit` 可观察、不退出） |
+| `Base.EffError` | `ErrorOp` + `throw`/`handleError`/`runError`/`catch`（L2 作用域 catch） |
+| `Base.EffExn` | W6 高阶 scoped Error：标签为无参标记 `Exn`，`ExnOp` 的 `Try` 携带子计算；`tryWith`/`runExn`/`catchExn`/`bracketExn` |
 | `Base.EffMutex` | W9 Mutex/Semaphore（IORef + yield 忙等）：`acquire`/`release`/`semWait`/`semSignal` |
 | `Base.EffChannel` | W9 cooperative Channel：`send`/`tryRecv`/`recvWait` |
 | `Base.EffSched` | W9 单线程 fiber 调度器（L3）：`Task`/`Scope`/`TaskLin` + `forkTask`/`forkTaskWith`/`forkTaskLin`/`awaitTask`/`awaitTaskLin`/`yieldNow`/`cancelTask`/`cancelTaskLin`/`cancelScope`/`scopeWait`/`scopeWaitTimeout`/`withScope`/`withScopeTimeout`/`isCancelled`/`raise`；任务行 `Nil`，超时按逻辑步数 |
@@ -235,7 +234,7 @@ process 可控 Exit）、`42–44`（通用 bracket abort cleanup、调度器 br
 ### 8.4 已知边界（下一步）
 
 - **W3 行成员约束已落地**：`Base.Eff.Member` 是 Type-1 归纳族，effect wrapper 带隐式
-  `{w : Member e r}`；精化器在应用处按行结构构造 `Here`/`There`，无法当场判定的目标
+  `{w : Member n e r}`；精化器在应用处按行结构构造 `Here`/`There`，无法当场判定的目标
   延迟到**定义体结束**、用定义级 ctx 收尾（可命中 wrapper 的局部证明 binder），缺效应
   报 `TC_NoInstanceFound`（负例 `dt_err/70_effect_missing`）。
   不走 trait 重叠实例（trait 版 `Member` 需要头可合一的重叠实例，已决定不计划；

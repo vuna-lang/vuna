@@ -12,12 +12,13 @@
   `case ... of`、`let ... in`（绑定块可选签名行）、lambda、`if then else`、`do` 块、
   整数 / 字符串 / 浮点字面量（`digits.digits`；见 [floats.md](floats.md)）、`[..]` 与 `x :: xs` 列表糖、中缀 / 反引号中缀 / section / 用户符号名运算符；
 - **类型表达式里的字面量**：签名、族 kind、构造子索引里可以用 `Int` / `String` 字面量
-  （`Vec 3 a`、`Reader "books" Int`）；只放行这两种（其它字面量，包括浮点，报
+  （`Vec 3 a`、用户 data 的 String 索引如 `Box "books"`）；只放行这两种（其它字面量，包括浮点，报
   `invalid type expression`）。规则见 [type-system.md](type-system.md)。
 - **列表字面量（运行时效应用法）**：`[Fetch]` / `[Fetch, Log]` / `[]` 在**期望 kind
-  为 `Row`** 的位置分别展开为 `Base.Eff.Row.Cons Fetch Nil` /
-  `Cons Fetch (Cons Log Nil)` / `Nil`；普通列表字面量（期望 `List a`）走同一套按族
-  展开的规则。例：`String -> Eff [Fetch] String`。构造数据时优先写 `[..]`：
+  为 `Row`** 的位置分别展开为 `Cons "default" Fetch Nil` /
+  `Cons "default" Fetch (Cons "default" Log Nil)` / `Nil`；`[ConsoleOp@audit]` /
+  `[StateOp Nat@counter]` 用 `@` 指定实例名。普通列表字面量（期望 `List a`）走同一套
+  按族展开的规则。例：`String -> Eff [Fetch] String`。构造数据时优先写 `[..]`：
   `vuna lint --fix` 的 `list-literal` 规则会把表达式/类型位置的闭合 `::` / `Cons` 链
   与裸 `Nil` 归一为列表字面量；模式匹配里的 `::` / `Cons` 保持原样。
 - **模板字符串与多行字面量**："hi ${name}" 插值、"""...""" 多行（内容逐字，
