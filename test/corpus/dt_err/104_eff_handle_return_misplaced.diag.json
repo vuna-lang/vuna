@@ -1,0 +1,1 @@
+{"version":1,"tool":"vuna","diagnostics":[{"code":"PS_HandleReturnMisplaced","severity":"error","phase":"parse","category":"syntax","message":"handle return clause must be the first clause and appear at most once","labels":[],"fields":[],"trace":[],"notes":[],"suggestions":[],"origin":{"kind":"direct"},"internal":false,"ice":null}]}

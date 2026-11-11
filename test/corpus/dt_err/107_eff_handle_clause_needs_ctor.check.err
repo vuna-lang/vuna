@@ -1,0 +1,1 @@
+[PS_HandleClauseNeedsCtor] handle operation clause must be `Ctor pats k` (a constructor pattern followed by the continuation binder)
