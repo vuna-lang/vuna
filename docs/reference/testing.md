@@ -366,6 +366,11 @@ interp / compile 文案不同时用 `.compile.err`。
   行为抽查与 seed 滞后报告（不阻塞）；
 - `vuna-tests`：沙箱跑 `vuna test --suite test/suite.toml`（`--jobs auto --no-cache`）；
 - `vuna-typecheck` / `vuna-lint`：`vuna check .` 自检、lint 零 finding；
+- **`check` 的覆盖边界**：`vuna check <pkg>` 只检查**该包入口的 import 闭包**——可执行包
+  （有 `app/Main.vuna`）检查入口闭包，库包以 `[export].modules` 为根。因此可执行包里
+  **未被入口引用的新模块不会被 `check` 覆盖**（`compiler/` 新增但未进 `app/Main.vuna`
+  闭包的模块就属于这类，`vuna check compiler` 仍 exit 0）。这类模块要有自己的门禁：
+  被验收包（如 `examples/infra`）引用并走 build/run，或用 `vuna repl` 的 `:load` 精化；
 - `vuna-fmt`：workspace 全包与 `examples/`；
 - `vuna-package`：`examples/multi` 的 build/test/fmt/doc + 根包构建；
 - `vuna-compiler-perf`：冷/热 `check .` 比例 + 包内增量的 clean/parse 语义断言 + REPL
