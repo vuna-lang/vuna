@@ -61,6 +61,11 @@ Vuna.Test.Suite  ./lib/Vuna/Test/Suite.vuna
 Vuna.TestRunner  ./lib/Vuna/TestRunner.vuna
 app.Main  ./app/Main.vuna
 Vuna.Compiler.CacheFormat  compiler/lib/Vuna/Compiler/CacheFormat.vuna
+Vuna.Compiler.Canonical.Ast  compiler/lib/Vuna/Compiler/Canonical/Ast.vuna
+Vuna.Compiler.Canonical.Bytes  compiler/lib/Vuna/Compiler/Canonical/Bytes.vuna
+Vuna.Compiler.Canonical.CoreTerm  compiler/lib/Vuna/Compiler/Canonical/CoreTerm.vuna
+Vuna.Compiler.Canonical.Elab  compiler/lib/Vuna/Compiler/Canonical/Elab.vuna
+Vuna.Compiler.Canonical  compiler/lib/Vuna/Compiler/Canonical.vuna
 Vuna.Compiler.Codegen.Assembly  compiler/lib/Vuna/Compiler/Codegen/Assembly.vuna
 Vuna.Compiler.Codegen.Decl  compiler/lib/Vuna/Compiler/Codegen/Decl.vuna
 Vuna.Compiler.Codegen.Erase  compiler/lib/Vuna/Compiler/Codegen/Erase.vuna
@@ -200,6 +205,11 @@ Prelude  base/lib/Prelude.vuna
 
 ## compiler（vuna-compiler）
 Vuna.Compiler.CacheFormat  ./lib/Vuna/Compiler/CacheFormat.vuna
+Vuna.Compiler.Canonical.Ast  ./lib/Vuna/Compiler/Canonical/Ast.vuna
+Vuna.Compiler.Canonical.Bytes  ./lib/Vuna/Compiler/Canonical/Bytes.vuna
+Vuna.Compiler.Canonical.CoreTerm  ./lib/Vuna/Compiler/Canonical/CoreTerm.vuna
+Vuna.Compiler.Canonical.Elab  ./lib/Vuna/Compiler/Canonical/Elab.vuna
+Vuna.Compiler.Canonical  ./lib/Vuna/Compiler/Canonical.vuna
 Vuna.Compiler.Codegen.Assembly  ./lib/Vuna/Compiler/Codegen/Assembly.vuna
 Vuna.Compiler.Codegen.Decl  ./lib/Vuna/Compiler/Codegen/Decl.vuna
 Vuna.Compiler.Codegen.Erase  ./lib/Vuna/Compiler/Codegen/Erase.vuna

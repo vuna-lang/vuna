@@ -45,6 +45,7 @@ module Vuna.Compiler.Driver.Compile
 -- 缓存键计算/AST 变换）保持纯函数；仍在迁移中的下挂模块（`Driver.Split`、`Driver.Dt`、
 -- `Packages.Pkg` 的磁盘层）由各自模块按过渡策略在内部收口，这里直接调用。
 import Vuna.Compiler.Common
+import Vuna.Compiler.Hash
 import Vuna.Compiler.Diagnostics.Pkg
 import Vuna.Compiler.CacheFormat
 import Vuna.Compiler.Packages.Pkg
@@ -278,9 +279,9 @@ metaSchema = 1
 metaFileName : String
 metaFileName = "build-meta.json"
 
--- 内容哈希：两个 30-bit 值 + 长度组合（与 Index 缓存同一思路；避免单哈希冲突）。
+-- 内容哈希：SHA-256 的 63-bit 派生键（替代旧的「strHash 10-bit + 长度」组合）。
 textHash : String -> Int
-textHash s = strHash s * 1000003 + strHash "m30:${s}" + strLength s
+textHash s = Vuna.Compiler.Hash.contentKey s
 
 -- M34.5：编译器二进制指纹（缓存 key 必须含它：check/codegen 语义随编译器变化）。
 -- M38：用**可执行文件自身**的路径 + 大小 + mtime，而不是 `prim_eff_getArgs` 的第一个用户参数。
@@ -487,7 +488,7 @@ checkCachePath ctx key = do
   pure "${dir}/${key}"
 
 hashText : Int -> String
-hashText n = strFromInt (n - n / 1000000007 * 1000000007)
+hashText n = strFromInt n
 
 checkCacheKeyExe : PackageContext -> String -> Eff [] String
 checkCacheKeyExe ctx entry = do

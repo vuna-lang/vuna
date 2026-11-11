@@ -14,7 +14,8 @@ out-contains: bits 192,255,240,-1,16,16,0,0
 # Base.Bits 的 32-bit 包装：rotr32 / add32 模 2^32 / mask32 / mask8 / rol32。
 out-contains: bitslib 2147483648,1,4294967295,255,2147483648
 # canonical encoding：42 = 符号字节 0 + 8 字节大端。
-out-contains: enc-int-42 0,0,0,0,0,0,0,0,42
+out-contains: canon-int-42 i42;
+out-contains: canon-str-abc s3:abc
 # 无损 CST：字符串夹具 + 真实源码文件（Hash.vuna）都必须逐字节 roundtrip。
 out-contains: cst-sample ok
 out-contains: cst-file ok
@@ -22,3 +23,10 @@ out-contains: cst-file ok
 out-contains: query1 miss src#4,miss half,miss label
 out-contains: query2 hit src#4,hit half,hit label
 out-contains: query3 miss src#5,cutoff half,hit label
+# 规范编码 roundtrip + span 不敏感 + 字段覆盖（C32 哈希输入侧，Canonical.*）
+out-contains: canon-term-rt ok
+out-contains: canon-decl-rt ok
+out-contains: canon-defs-rt ok
+out-contains: canon-span ok
+out-contains: canon-export-parent ok
+out-contains: canon-fixity-target ok

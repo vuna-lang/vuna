@@ -27,6 +27,7 @@ module Vuna.Compiler.Driver.PerfCache
 -- 文件名 / 桶 key）保持纯函数。
 import Vuna.Compiler.CacheFormat
 import Vuna.Compiler.Common
+import Vuna.Compiler.Hash
 import Vuna.Compiler.Driver.Split
 import Vuna.Compiler.Version
 import Base.Host
@@ -47,7 +48,7 @@ binaryFingerprint = do
   pure (if size > 0 then textHashOf "${exe}:${size}:${mtime}" else textHashOf vunaVersion)
 
 textHashOf : String -> Int
-textHashOf s = strHash s * 1000003 + strHash "unit:${s}" + strLength s
+textHashOf s = Vuna.Compiler.Hash.contentKey s
 
 unitCacheTag : Eff [] String
 unitCacheTag = do

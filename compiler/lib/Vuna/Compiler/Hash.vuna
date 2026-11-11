@@ -1,15 +1,14 @@
--- | 内容寻址原语（v2）：确定性编码 + SHA-256 摘要。
+-- | 内容寻址摘要原语：SHA-256 + 大输入内容键（预折叠）/ 内容地址。
 module Vuna.Compiler.Hash
   ( Digest(..)
+  , contentAddress
+  , contentKey
   , digestHex
+  , digestInt
+  , digestIntOf
   , digestLanes
   , digestOfBytes
   , digestOfString
-  , encInt
-  , encList
-  , encString
-  , encTag
-  , hashVersion
   , prehashOfString
   ) where
 
@@ -21,22 +20,12 @@ module Vuna.Compiler.Hash
 --   因此 OCaml 后端、将来的 wasm 后端与 `interp` 都能算出同一份内容地址——这是
 --   D2（两端语义一致）与 D5（内容寻址）共同要求的。
 -- * `Digest` 的 8 条 lane 就是 SHA-256 的 8 个 32-bit 大端字；`digestHex` 渲染成
---   标准的小写 64 位十六进制。
--- * 编码约定（canonical encoding，只依赖语义内容）：
---     - `encInt`    = 符号字节（0 非负 / 1 负）+ 8 字节大端幅值；
---     - `encString` = 长度 + UTF-8 字节；
---     - `encList`   = 长度 + 逐项编码；
---     - `encTag`    = 和类型构造子序号。
---   编码**不含**名字、位置、顺序：调用方负责先规范化（排序/去 span）。
--- * `hashVersion = 2`：v1 是 8 lane Mersenne-31（位运算原语落地前的过渡实现，
---   已被本版取代；缓存键随版本号自动失效）。
+--   标准的小写 64 位十六进制，`digestInt` 提供「必须落成 Int」位置的 63-bit 派生键。
+-- * 本模块只做**摘要与预哈希**；规范编码（自定界原子文法 + 解码器 roundtrip）在
+--   `Vuna.Compiler.Canonical`（D5：格式层，不随编译器/Marshal 漂移）。
 import Base.Bits
 import Base.List
 import Base.String
-
--- | 摘要格式版本；算法或编码变化时递增（缓存键因此失效）。
-hashVersion : Int
-hashVersion = 2
 
 -- | 8 个 32-bit 摘要字（大端序；即标准 SHA-256 的 64 位十六进制）。
 record Digest where
@@ -61,6 +50,32 @@ digestOfString s = Digest (sha256OfString s)
 -- | 渲染成小写十六进制：每条 lane 8 位，共 64 位。
 digestHex : Digest -> String
 digestHex (Digest lanes) = strConcatMany (map hex8 lanes)
+
+-- | 摘要 → 63-bit 派生键（`Int`）：8 条 lane 依次滚动折叠后掩到 `Int` 正区间。
+--
+-- 用途：必须落成 `Int` 的位置（排序键、缓存目录/文件名里的短 key、测试 runner 的
+-- 分桶）。它是 SHA-256 的派生量，碰撞面约 2^-62，取代旧的 10-bit `strHash` 折叠与
+-- 6-lane 盐（60-bit）实现；需要可移植/可展示的内容地址仍用 `digestHex`。
+digestInt : Digest -> Int
+digestInt (Digest lanes) = band (foldl (\h, lane => h * 1000003 + lane) 0 lanes) 4611686018427387903
+
+-- | 字符串 → 63-bit 派生键（`digestInt` 的便捷入口）；对整串跑 SHA-256，只适合短输入。
+digestIntOf : String -> Int
+digestIntOf s = digestInt (digestOfString s)
+
+-- | **内容键**（63-bit）`contentKey s = digestIntOf (prehashOfString s)`。
+--
+-- 用途：需要按内容判等/分桶的**大输入**（源文件、缓存 key 组合串）。先做 4-lane 63-bit
+-- 多项式预折叠（O(n) 低常数，与 `payloadDigest` 同一威胁模型：无对手、只防意外碰撞），
+-- 再对折叠串跑 SHA-256 并取 63-bit 派生键——因此**不再**对每个源文件逐字节跑语言内
+-- SHA（那会让 `check` 的缓存 key 计算从 ~20ms 抬到数百 ms）。
+contentKey : String -> Int
+contentKey s = digestIntOf (prehashOfString s)
+
+-- | **内容地址**（64 位十六进制）：`digestHex (digestOfString (prehashOfString s))`。
+-- 与 `contentKey` 同一折叠，输出可展示/可比较的地址（ast 缓存 key、内容寻址文件名）。
+contentAddress : String -> String
+contentAddress s = digestHex (digestOfString (prehashOfString s))
 
 -- ---------------------------------------------------------------
 -- SHA-256（FIPS 180-4）
@@ -359,43 +374,3 @@ digitAt v p = band (v / p) 15
 -- | 十六进制数字 → 字符（0-9 → '0'-'9'；10-15 → 'a'-'f'）。
 hexDigit : Int -> String
 hexDigit d = if d < 10 then strFromInt d else strPack [87 + d]
-
--- ---------------------------------------------------------------
--- 规范编码
--- ---------------------------------------------------------------
--- | 编码整数：符号字节 + 8 字节大端幅值。
-encInt : Int -> List Int
-encInt v =
-  let
-    neg = v < 0
-    n = if neg then 0 - v else v
-    sign = if neg then [1] else [0]
-  in append sign (byte8 n)
-
--- | 8 字节大端（2^56 … 2^0）。
-byte8 : Int -> List Int
-byte8 n =
-  [ band (shr n 56) 255,
-    band (shr n 48) 255,
-    band (shr n 40) 255,
-    band (shr n 32) 255,
-    band (shr n 24) 255,
-    band (shr n 16) 255,
-    band (shr n 8) 255,
-    band n 255
-  ]
-
--- | 编码字符串：长度 + 字节。
-encString : String -> List Int
-encString s =
-  let
-    bytes = strUnpack s
-  in append (encInt (lenInt bytes)) bytes
-
--- | 编码列表：长度 + 逐项编码（`f` 是元素的规范编码）。
-encList : (a -> List Int) -> List a -> List Int
-encList f xs = append (encInt (lenInt xs)) (concatMap f xs)
-
--- | 编码和类型标签（构造子序号，从 0 开始）。
-encTag : Int -> List Int
-encTag = encInt

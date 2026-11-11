@@ -1,0 +1,836 @@
+-- | Frontend AST（Expr / Pat / Decl 等）的规范字节编码与解析器。
+module Vuna.Compiler.Canonical.Ast
+  ( decCtor
+  , decCtorComplete
+  , decDecl
+  , decDeclComplete
+  , decDecls
+  , decDeclsComplete
+  , decDoStmt
+  , decDoStmtComplete
+  , decExpr
+  , decExprComplete
+  , decField
+  , decFieldComplete
+  , decInterpPart
+  , decInterpPartComplete
+  , decPat
+  , decPatComplete
+  , decQty
+  , decQtyComplete
+  , decReprTier
+  , decReprTierComplete
+  , decTraitMethod
+  , decTraitMethodComplete
+  , decTraitParam
+  , decTraitParamComplete
+  , encDecl
+  , encDecls
+  , encExpr
+  , encPat
+  ) where
+
+-- Vuna.Compiler.Canonical.Ast：语法层 AST 的规范字节格式（C32 内容寻址的哈希输入侧）。
+--
+-- 这个模块只负责「值 -> 字节」和「字节 -> 值」；调用方（iface / 缓存）先决定要哈希
+-- 哪些声明，再对 `Decl` / `Expr` 调 `encX`（顶层用 `Bytes.encTop` 收成单串）。
+--
+-- 为什么这个格式是规范的：
+--   * **span 一律不参与编码**。位置只影响诊断，不影响语义；移动代码、换行、改注释
+--     不应让依赖方判脏。`Expr` / `Pat` / `Decl` / `DoStmt` / `Ctor` / `Field` /
+--     `TraitMethod` 的 `Span` 字段全部丢弃，解码时只能还原成 `noSpan`
+--     （`Span "" 0 0 0 0`）——所以 roundtrip 的判据是「编码相同」
+--     （encode∘decode∘encode = encode），不是原值相等。
+--   * **tag = 构造子声明顺序**，从 0 开始，和 `Frontend.Ast` 的 `data` 声明逐行对应。
+--     新增构造子只能追加在末尾；插入会改变既有 tag 的含义，等于换格式。
+--   * **字段按声明顺序**写（记录与 data 构造子同规则），解码按同一顺序消费。
+--   * **自定界**：原子走 `Canonical.Bytes` 的文法（`#n;` / `i<n>;` /
+--     `s<n>:<bytes>` / `b0|b1` / `[n:<items>` / `0|1<item>`），串接无歧义，
+--     不同 AST 不会编码成同一串。
+--   * **可选字段与列表有显式形状**：`Maybe` 是 `0` / `1<值>`，列表是
+--     `[n:<元素…>`；`Nothing` 与「空列表」不会和别的形状混淆。
+--   * 编码器是累积器风格（`encX x acc` 把分片前插到 `acc`），不拷贝子分片；
+--     顶层一次 `strConcatMany`，整体 O(字节数)。
+--
+-- 注意（列表 / Maybe 的编码方向）：本模块的列表与 Maybe 编码器**没有**复用
+-- `Bytes.encList` / `Bytes.encMaybe`。那两个函数的累积器会把 `[n:` / `1` 写在
+-- 递归最内层，最终落在元素**之后**，与 `Bytes.decList` / `Bytes.decMaybe` 按前缀
+-- 读的文法相反。这里的前缀在处理完元素之后才 cons 到列表最前，和解析器严格对称。
+--
+-- 解码器吃字节流 `List Int` + 显式 fuel（剩余字节上界）：进入递归组的每个子解码
+-- 都传 `(fuel - 1)`，因此每次回到同一函数 fuel 严格下降。只在 roundtrip 自检 /
+-- 测试里用（生产写侧只编码）。`decXComplete` 用整串长度当 fuel，并要求恰好消费完，
+-- 是测试入口。
+import Base.Bool
+import Base.List
+import Base.Maybe
+import Base.Pair
+import Base.String
+import Vuna.Compiler.Canonical.Bytes
+import Vuna.Compiler.Frontend.Ast
+import Vuna.Compiler.Source
+
+-- | span 不参与编码：解码时只能还原空 span（与 `Canonical.Term.noSpan` 一致）。
+noSpan : Span
+noSpan = Span "" 0 0 0 0
+
+-- ---------------------------------------------------------------
+-- 编码（累积器风格：`encX x acc` 把 x 的分片前插到 acc）
+-- ---------------------------------------------------------------
+-- | 显式 quantity：`Q0` / `Q1`。
+encQty : Qty -> List String -> List String
+encQty Q0 acc = encTag 0 acc
+encQty Q1 acc = encTag 1 acc
+
+-- | 记录表示档位。
+encReprTier : ReprTier -> List String -> List String
+encReprTier ReprAuto acc = encTag 0 acc
+encReprTier ReprTransparent acc = encTag 1 acc
+encReprTier ReprOpaque acc = encTag 2 acc
+
+-- | 可选 quantity：`0` / `1<qty>`（前缀在值之前）。
+encMaybeQty : Maybe Qty -> List String -> List String
+encMaybeQty Nothing acc = "0" :: acc
+encMaybeQty (Just q) acc = "1" :: encQty q acc
+
+-- | 可选表达式：`0` / `1<expr>`（trait 参数的 kind）。
+encMaybeExpr : Maybe Expr -> List String -> List String
+encMaybeExpr Nothing acc = "0" :: acc
+encMaybeExpr (Just x) acc = "1" :: encExpr x acc
+
+-- 列表编码器：`[n:` 前缀 + 元素。前缀在元素之后才 cons 到最前；累积器只负责把
+-- 子分片前插，因此每个列表仍是 O(元素) 片段、最终一次拼接。元素编码直接写在专用
+-- `Go` 函数里（不把递归组内的函数当参数传给 `encList`，否则终止性检查看不到下降
+-- 参数）。
+--
+-- | 字符串表（data 参数、deriving、lambda binder 名）；元素不递归。
+encStrList : List String -> List String -> List String
+encStrList xs acc = "[${strFromInt (lenOf xs)}:" :: encStrListGo xs acc
+
+-- | 字符串表的递归主体（计数头由 `encStrList` 写）。
+encStrListGo : List String -> List String -> List String
+encStrListGo [] acc = acc
+encStrListGo (x :: rest) acc = encStr x (encStrListGo rest acc)
+
+-- | 表达式表（`EApp` 实参 / `DSig` 约束 / `DInstance` 上下文）。
+encExprList : List Expr -> List String -> List String
+encExprList xs acc = "[${strFromInt (lenOf xs)}:" :: encExprListGo xs acc
+
+-- | 表达式表的递归主体（计数头由 `encExprList` 写）。
+encExprListGo : List Expr -> List String -> List String
+encExprListGo [] acc = acc
+encExprListGo (x :: rest) acc = encExpr x (encExprListGo rest acc)
+
+-- | 模式表（`PCon` 实参 / `DFun` 参数）。
+encPatList : List Pat -> List String -> List String
+encPatList xs acc = "[${strFromInt (lenOf xs)}:" :: encPatListGo xs acc
+
+-- | 模式表的递归主体（计数头由 `encPatList` 写）。
+encPatListGo : List Pat -> List String -> List String
+encPatListGo [] acc = acc
+encPatListGo (x :: rest) acc = encPat x (encPatListGo rest acc)
+
+-- | `(模式, 表达式)` 表（`ELet` 绑定 / `ECase` 分支）。
+encPatExprList : List (Pair Pat Expr) -> List String -> List String
+encPatExprList xs acc = "[${strFromInt (lenOf xs)}:" :: encPatExprListGo xs acc
+
+-- | `(模式, 表达式)` 表的递归主体（计数头由 `encPatExprList` 写）。
+encPatExprListGo : List (Pair Pat Expr) -> List String -> List String
+encPatExprListGo [] acc = acc
+encPatExprListGo ((Pair p e) :: rest) acc = encPat p (encExpr e (encPatExprListGo rest acc))
+
+-- | 局部函数子句表（每项 = 参数模式表 + body）。
+encClauses : List (Pair (List Pat) Expr) -> List String -> List String
+encClauses xs acc = "[${strFromInt (lenOf xs)}:" :: encClausesGo xs acc
+
+-- | 局部函数子句表的递归主体（计数头由 `encClauses` 写）。
+encClausesGo : List (Pair (List Pat) Expr) -> List String -> List String
+encClausesGo [] acc = acc
+encClausesGo ((Pair ps body) :: rest) acc = encPatList ps (encExpr body (encClausesGo rest acc))
+
+-- | do 语句表。
+encStmtList : List DoStmt -> List String -> List String
+encStmtList xs acc = "[${strFromInt (lenOf xs)}:" :: encStmtListGo xs acc
+
+-- | do 语句表的递归主体（计数头由 `encStmtList` 写）。
+encStmtListGo : List DoStmt -> List String -> List String
+encStmtListGo [] acc = acc
+encStmtListGo (x :: rest) acc = encDoStmt x (encStmtListGo rest acc)
+
+-- | 模板字符串分段表。
+encPartList : List InterpPart -> List String -> List String
+encPartList xs acc = "[${strFromInt (lenOf xs)}:" :: encPartListGo xs acc
+
+-- | 模板分段表的递归主体（计数头由 `encPartList` 写）。
+encPartListGo : List InterpPart -> List String -> List String
+encPartListGo [] acc = acc
+encPartListGo (x :: rest) acc = encInterpPart x (encPartListGo rest acc)
+
+-- | `(字段名, 表达式)` 表（记录字面量 / 记录更新）。
+encStrExprList : List (Pair String Expr) -> List String -> List String
+encStrExprList xs acc = "[${strFromInt (lenOf xs)}:" :: encStrExprListGo xs acc
+
+-- | `(字段名, 表达式)` 表的递归主体（计数头由 `encStrExprList` 写）。
+encStrExprListGo : List (Pair String Expr) -> List String -> List String
+encStrExprListGo [] acc = acc
+encStrExprListGo ((Pair n e) :: rest) acc = encStr n (encExpr e (encStrExprListGo rest acc))
+
+-- | `(字段名, 模式)` 表（记录模式）。
+encStrPatList : List (Pair String Pat) -> List String -> List String
+encStrPatList xs acc = "[${strFromInt (lenOf xs)}:" :: encStrPatListGo xs acc
+
+-- | `(字段名, 模式)` 表的递归主体（计数头由 `encStrPatList` 写）。
+encStrPatListGo : List (Pair String Pat) -> List String -> List String
+encStrPatListGo [] acc = acc
+encStrPatListGo ((Pair n p) :: rest) acc = encStr n (encPat p (encStrPatListGo rest acc))
+
+-- | data 构造子表。
+encCtorList : List Ctor -> List String -> List String
+encCtorList xs acc = "[${strFromInt (lenOf xs)}:" :: encCtorListGo xs acc
+
+-- | 构造子表的递归主体（计数头由 `encCtorList` 写）。
+encCtorListGo : List Ctor -> List String -> List String
+encCtorListGo [] acc = acc
+encCtorListGo (x :: rest) acc = encCtor x (encCtorListGo rest acc)
+
+-- | 记录字段表。
+encFieldList : List Field -> List String -> List String
+encFieldList xs acc = "[${strFromInt (lenOf xs)}:" :: encFieldListGo xs acc
+
+-- | record 字段表的递归主体（计数头由 `encFieldList` 写）。
+encFieldListGo : List Field -> List String -> List String
+encFieldListGo [] acc = acc
+encFieldListGo (x :: rest) acc = encField x (encFieldListGo rest acc)
+
+-- | trait 参数表。
+encTraitParamList : List TraitParam -> List String -> List String
+encTraitParamList xs acc = "[${strFromInt (lenOf xs)}:" :: encTraitParamListGo xs acc
+
+-- | trait 参数表的递归主体（计数头由 `encTraitParamList` 写）。
+encTraitParamListGo : List TraitParam -> List String -> List String
+encTraitParamListGo [] acc = acc
+encTraitParamListGo (x :: rest) acc = encTraitParam x (encTraitParamListGo rest acc)
+
+-- | trait 方法签名表。
+encTraitMethodList : List TraitMethod -> List String -> List String
+encTraitMethodList xs acc = "[${strFromInt (lenOf xs)}:" :: encTraitMethodListGo xs acc
+
+-- | trait 方法表的递归主体（计数头由 `encTraitMethodList` 写）。
+encTraitMethodListGo : List TraitMethod -> List String -> List String
+encTraitMethodListGo [] acc = acc
+encTraitMethodListGo (x :: rest) acc = encTraitMethod x (encTraitMethodListGo rest acc)
+
+-- | 声明表（`DInstance` 的方法；也是顶层 `encDecls`）。
+encDecls : List Decl -> List String -> List String
+encDecls xs acc = "[${strFromInt (lenOf xs)}:" :: encDeclsGo xs acc
+
+-- | 声明表的递归主体（计数头由 `encDecls` 写）。
+encDeclsGo : List Decl -> List String -> List String
+encDeclsGo [] acc = acc
+encDeclsGo (x :: rest) acc = encDecl x (encDeclsGo rest acc)
+
+-- | `InterpPart` 的规范编码：模板字符串分段：文本段 / 洞（洞里的表达式递归编码）。
+encInterpPart : InterpPart -> List String -> List String
+encInterpPart (IPText s) acc = encTag 0 (encStr s acc)
+encInterpPart (IPHole expr) acc = encTag 1 (encExpr expr acc)
+
+-- | `Pat` 的规范编码：模式：`span` 丢弃。
+encPat : Pat -> List String -> List String
+encPat (PVar name _) acc = encTag 0 (encStr name acc)
+encPat (PAs name inner _) acc = encTag 1 (encStr name (encPat inner acc))
+encPat (PWild _) acc = encTag 2 acc
+encPat (PCon name pats _) acc = encTag 3 (encStr name (encPatList pats acc))
+encPat (PInt n _) acc = encTag 4 (encInt n acc)
+encPat (PStr s _) acc = encTag 5 (encStr s acc)
+encPat (PRecord name fields _) acc = encTag 6 (encStr name (encStrPatList fields acc))
+
+-- | `DoStmt` 的规范编码：do 语句：绑定 / 裸表达式；`span` 丢弃。
+encDoStmt : DoStmt -> List String -> List String
+encDoStmt (DBind pat expr _) acc = encTag 0 (encPat pat (encExpr expr acc))
+encDoStmt (DExpr expr _) acc = encTag 1 (encExpr expr acc)
+
+-- | `Expr` 的规范编码：表达式：tag 与 `Frontend.Ast` 的声明顺序一致（新增只能追加）；`span` 丢弃。
+encExpr : Expr -> List String -> List String
+encExpr (EVar name _) acc = encTag 0 (encStr name acc)
+encExpr (EInt n _) acc = encTag 1 (encInt n acc)
+encExpr (EStr s _) acc = encTag 2 (encStr s acc)
+encExpr (ELam names body _) acc = encTag 3 (encStrList names (encExpr body acc))
+encExpr (EApp fn args _) acc = encTag 4 (encExpr fn (encExprList args acc))
+encExpr (EPi name implicit qty dom cod _) acc =
+  encTag 5 (encStr name (encBool implicit (encMaybeQty qty (encExpr dom (encExpr cod acc)))))
+encExpr (ELet binds body recursive _) acc =
+  encTag 6 (encPatExprList binds (encExpr body (encBool recursive acc)))
+encExpr (ELocalFun clauses _) acc = encTag 7 (encClauses clauses acc)
+encExpr (ECase scrut alts _) acc = encTag 8 (encExpr scrut (encPatExprList alts acc))
+encExpr (EIf c t e _) acc = encTag 9 (encExpr c (encExpr t (encExpr e acc)))
+encExpr (EField base field _) acc = encTag 10 (encExpr base (encStr field acc))
+encExpr (ERecord name fields _) acc = encTag 11 (encStr name (encStrExprList fields acc))
+encExpr (ERecUpdate base fields _) acc = encTag 12 (encExpr base (encStrExprList fields acc))
+encExpr (EDo stmts _) acc = encTag 13 (encStmtList stmts acc)
+encExpr (EInfix op lhs rhs _) acc = encTag 14 (encStr op (encExpr lhs (encExpr rhs acc)))
+encExpr (EParen inner _) acc = encTag 15 (encExpr inner acc)
+encExpr (EBacktick name lhs rhs _) acc = encTag 16 (encStr name (encExpr lhs (encExpr rhs acc)))
+encExpr (ESectOp op _) acc = encTag 17 (encStr op acc)
+encExpr (ESectL op rhs _) acc = encTag 18 (encStr op (encExpr rhs acc))
+encExpr (ESectR lhs op _) acc = encTag 19 (encExpr lhs (encStr op acc))
+encExpr (EAnn inner ty _) acc = encTag 20 (encExpr inner (encExpr ty acc))
+encExpr (EInterp multi parts _) acc = encTag 21 (encBool multi (encPartList parts acc))
+encExpr (EFloat raw _) acc = encTag 22 (encStr raw acc)
+
+-- | `Ctor` 的规范编码：data 构造子：名字 / 类型 / arity；`span` 丢弃。
+encCtor : Ctor -> List String -> List String
+encCtor (Ctor name ty arity _) acc = encTag 0 (encStr name (encExpr ty (encInt arity acc)))
+
+-- | `Field` 的规范编码：记录字段：名字 / 类型；`span` 丢弃。
+encField : Field -> List String -> List String
+encField (Field name ty _) acc = encTag 0 (encStr name (encExpr ty acc))
+
+-- | `TraitParam` 的规范编码：trait 参数：名字 / 可选 kind（本身不带 span）。
+encTraitParam : TraitParam -> List String -> List String
+encTraitParam (TraitParam name kind) acc = encTag 0 (encStr name (encMaybeExpr kind acc))
+
+-- | `TraitMethod` 的规范编码：trait 方法签名：名字 / 类型；`span` 丢弃。
+encTraitMethod : TraitMethod -> List String -> List String
+encTraitMethod (TraitMethod name ty _) acc = encTag 0 (encStr name (encExpr ty acc))
+
+-- | `Decl` 的规范编码：顶层声明：tag 与 `Frontend.Ast` 的声明顺序一致；`span` 丢弃。
+encDecl : Decl -> List String -> List String
+encDecl (DData name params kind ctors derivings viaField repr lin _) acc =
+  encTag 0
+    (encStr name (encStrList params (encExpr kind (encCtorList ctors (encStrList derivings (encBool viaField (encReprTier repr (encBool lin acc))))))))
+encDecl (DAxiom name ty _) acc = encTag 1 (encStr name (encExpr ty acc))
+encDecl (DExtern name cName ty _) acc = encTag 2 (encStr name (encStr cName (encExpr ty acc)))
+encDecl (DSig name ctx ty _) acc = encTag 3 (encStr name (encExprList ctx (encExpr ty acc)))
+encDecl (DFun name pats body _) acc = encTag 4 (encStr name (encPatList pats (encExpr body acc)))
+encDecl (DRecord name params fields derivings viaField repr lin _) acc =
+  encTag 5
+    (encStr name (encStrList params (encFieldList fields (encStrList derivings (encBool viaField (encReprTier repr (encBool lin acc)))))))
+encDecl (DTrait name params methods _) acc =
+  encTag 6 (encStr name (encTraitParamList params (encTraitMethodList methods acc)))
+encDecl (DInstance ctxE head methods _) acc =
+  encTag 7 (encExprList ctxE (encExpr head (encDecls methods acc)))
+
+-- ---------------------------------------------------------------
+-- 解码（roundtrip 自检用；要求恰好消费完）
+-- ---------------------------------------------------------------
+-- | 解析 quantity：tag 0/1。
+decQty : Int -> List Int -> Maybe (Pair Qty (List Int))
+decQty fuel bytes = if fuel <= 0 then Nothing
+else case decTag fuel bytes of
+  Nothing => Nothing
+  Just (Pair tag b1) => case tag of
+    0 => Just (Pair Q0 b1)
+    1 => Just (Pair Q1 b1)
+    _ => Nothing
+
+-- | 解析记录表示档位：tag 0/1/2。
+decReprTier : Int -> List Int -> Maybe (Pair ReprTier (List Int))
+decReprTier fuel bytes = if fuel <= 0 then Nothing
+else case decTag fuel bytes of
+  Nothing => Nothing
+  Just (Pair tag b1) => case tag of
+    0 => Just (Pair ReprAuto b1)
+    1 => Just (Pair ReprTransparent b1)
+    2 => Just (Pair ReprOpaque b1)
+    _ => Nothing
+
+-- | 解析可选 quantity。
+decMaybeQty : Int -> List Int -> Maybe (Pair (Maybe Qty) (List Int))
+decMaybeQty fuel bytes = decMaybe decQty fuel bytes
+
+-- | 解析可选表达式。
+decMaybeExpr : Int -> List Int -> Maybe (Pair (Maybe Expr) (List Int))
+decMaybeExpr fuel bytes = decMaybe decExpr fuel bytes
+
+-- | 解析 `InterpPart`：tag 必须与 `encInterpPart` 一致。
+decInterpPart : Int -> List Int -> Maybe (Pair InterpPart (List Int))
+decInterpPart fuel bytes = if fuel <= 0 then Nothing
+else case decTag fuel bytes of
+  Nothing => Nothing
+  Just (Pair tag b1) => case tag of
+    0 => case decStr (fuel - 1) b1 of
+      Nothing => Nothing
+      Just (Pair v1 b2) => Just (Pair (IPText v1) b2)
+    1 => case decExpr (fuel - 1) b1 of
+      Nothing => Nothing
+      Just (Pair v1 b2) => Just (Pair (IPHole v1) b2)
+    _ => Nothing
+
+-- | 解析 `Pat`：tag 必须与 `encPat` 一致。
+decPat : Int -> List Int -> Maybe (Pair Pat (List Int))
+decPat fuel bytes = if fuel <= 0 then Nothing
+else case decTag fuel bytes of
+  Nothing => Nothing
+  Just (Pair tag b1) => case tag of
+    0 => case decStr (fuel - 1) b1 of
+      Nothing => Nothing
+      Just (Pair v1 b2) => Just (Pair (PVar v1 noSpan) b2)
+    1 => case decStr (fuel - 1) b1 of
+      Nothing => Nothing
+      Just (Pair v1 b2) => case decPat (fuel - 1) b2 of
+        Nothing => Nothing
+        Just (Pair v2 b3) => Just (Pair (PAs v1 v2 noSpan) b3)
+    2 => Just (Pair (PWild noSpan) b1)
+    3 => case decStr (fuel - 1) b1 of
+      Nothing => Nothing
+      Just (Pair v1 b2) => case decPatList (fuel - 1) b2 of
+        Nothing => Nothing
+        Just (Pair v2 b3) => Just (Pair (PCon v1 v2 noSpan) b3)
+    4 => case decInt (fuel - 1) b1 of
+      Nothing => Nothing
+      Just (Pair v1 b2) => Just (Pair (PInt v1 noSpan) b2)
+    5 => case decStr (fuel - 1) b1 of
+      Nothing => Nothing
+      Just (Pair v1 b2) => Just (Pair (PStr v1 noSpan) b2)
+    6 => case decStr (fuel - 1) b1 of
+      Nothing => Nothing
+      Just (Pair v1 b2) => case decList decStrPat (fuel - 1) b2 of
+        Nothing => Nothing
+        Just (Pair v2 b3) => Just (Pair (PRecord v1 v2 noSpan) b3)
+    _ => Nothing
+
+-- | 解析 `DoStmt`：tag 必须与 `encDoStmt` 一致。
+decDoStmt : Int -> List Int -> Maybe (Pair DoStmt (List Int))
+decDoStmt fuel bytes = if fuel <= 0 then Nothing
+else case decTag fuel bytes of
+  Nothing => Nothing
+  Just (Pair tag b1) => case tag of
+    0 => case decPat (fuel - 1) b1 of
+      Nothing => Nothing
+      Just (Pair v1 b2) => case decExpr (fuel - 1) b2 of
+        Nothing => Nothing
+        Just (Pair v2 b3) => Just (Pair (DBind v1 v2 noSpan) b3)
+    1 => case decExpr (fuel - 1) b1 of
+      Nothing => Nothing
+      Just (Pair v1 b2) => Just (Pair (DExpr v1 noSpan) b2)
+    _ => Nothing
+
+-- | 解析 `Expr`：tag 必须与 `encExpr` 一致。
+decExpr : Int -> List Int -> Maybe (Pair Expr (List Int))
+decExpr fuel bytes = if fuel <= 0 then Nothing
+else case decTag fuel bytes of
+  Nothing => Nothing
+  Just (Pair tag b1) => case tag of
+    0 => case decStr (fuel - 1) b1 of
+      Nothing => Nothing
+      Just (Pair v1 b2) => Just (Pair (EVar v1 noSpan) b2)
+    1 => case decInt (fuel - 1) b1 of
+      Nothing => Nothing
+      Just (Pair v1 b2) => Just (Pair (EInt v1 noSpan) b2)
+    2 => case decStr (fuel - 1) b1 of
+      Nothing => Nothing
+      Just (Pair v1 b2) => Just (Pair (EStr v1 noSpan) b2)
+    3 => case decList decStr (fuel - 1) b1 of
+      Nothing => Nothing
+      Just (Pair v1 b2) => case decExpr (fuel - 1) b2 of
+        Nothing => Nothing
+        Just (Pair v2 b3) => Just (Pair (ELam v1 v2 noSpan) b3)
+    4 => case decExpr (fuel - 1) b1 of
+      Nothing => Nothing
+      Just (Pair v1 b2) => case decExprList (fuel - 1) b2 of
+        Nothing => Nothing
+        Just (Pair v2 b3) => Just (Pair (EApp v1 v2 noSpan) b3)
+    5 => case decStr (fuel - 1) b1 of
+      Nothing => Nothing
+      Just (Pair v1 b2) => case decBool (fuel - 1) b2 of
+        Nothing => Nothing
+        Just (Pair v2 b3) => case decMaybe decQty (fuel - 1) b3 of
+          Nothing => Nothing
+          Just (Pair v3 b4) => case decExpr (fuel - 1) b4 of
+            Nothing => Nothing
+            Just (Pair v4 b5) => case decExpr (fuel - 1) b5 of
+              Nothing => Nothing
+              Just (Pair v5 b6) => Just (Pair (EPi v1 v2 v3 v4 v5 noSpan) b6)
+    6 => case decList decPatExpr (fuel - 1) b1 of
+      Nothing => Nothing
+      Just (Pair v1 b2) => case decExpr (fuel - 1) b2 of
+        Nothing => Nothing
+        Just (Pair v2 b3) => case decBool (fuel - 1) b3 of
+          Nothing => Nothing
+          Just (Pair v3 b4) => Just (Pair (ELet v1 v2 v3 noSpan) b4)
+    7 => case decList decClause (fuel - 1) b1 of
+      Nothing => Nothing
+      Just (Pair v1 b2) => Just (Pair (ELocalFun v1 noSpan) b2)
+    8 => case decExpr (fuel - 1) b1 of
+      Nothing => Nothing
+      Just (Pair v1 b2) => case decList decPatExpr (fuel - 1) b2 of
+        Nothing => Nothing
+        Just (Pair v2 b3) => Just (Pair (ECase v1 v2 noSpan) b3)
+    9 => case decExpr (fuel - 1) b1 of
+      Nothing => Nothing
+      Just (Pair v1 b2) => case decExpr (fuel - 1) b2 of
+        Nothing => Nothing
+        Just (Pair v2 b3) => case decExpr (fuel - 1) b3 of
+          Nothing => Nothing
+          Just (Pair v3 b4) => Just (Pair (EIf v1 v2 v3 noSpan) b4)
+    10 => case decExpr (fuel - 1) b1 of
+      Nothing => Nothing
+      Just (Pair v1 b2) => case decStr (fuel - 1) b2 of
+        Nothing => Nothing
+        Just (Pair v2 b3) => Just (Pair (EField v1 v2 noSpan) b3)
+    11 => case decStr (fuel - 1) b1 of
+      Nothing => Nothing
+      Just (Pair v1 b2) => case decList decStrExpr (fuel - 1) b2 of
+        Nothing => Nothing
+        Just (Pair v2 b3) => Just (Pair (ERecord v1 v2 noSpan) b3)
+    12 => case decExpr (fuel - 1) b1 of
+      Nothing => Nothing
+      Just (Pair v1 b2) => case decList decStrExpr (fuel - 1) b2 of
+        Nothing => Nothing
+        Just (Pair v2 b3) => Just (Pair (ERecUpdate v1 v2 noSpan) b3)
+    13 => case decList decDoStmt (fuel - 1) b1 of
+      Nothing => Nothing
+      Just (Pair v1 b2) => Just (Pair (EDo v1 noSpan) b2)
+    14 => case decStr (fuel - 1) b1 of
+      Nothing => Nothing
+      Just (Pair v1 b2) => case decExpr (fuel - 1) b2 of
+        Nothing => Nothing
+        Just (Pair v2 b3) => case decExpr (fuel - 1) b3 of
+          Nothing => Nothing
+          Just (Pair v3 b4) => Just (Pair (EInfix v1 v2 v3 noSpan) b4)
+    15 => case decExpr (fuel - 1) b1 of
+      Nothing => Nothing
+      Just (Pair v1 b2) => Just (Pair (EParen v1 noSpan) b2)
+    16 => case decStr (fuel - 1) b1 of
+      Nothing => Nothing
+      Just (Pair v1 b2) => case decExpr (fuel - 1) b2 of
+        Nothing => Nothing
+        Just (Pair v2 b3) => case decExpr (fuel - 1) b3 of
+          Nothing => Nothing
+          Just (Pair v3 b4) => Just (Pair (EBacktick v1 v2 v3 noSpan) b4)
+    17 => case decStr (fuel - 1) b1 of
+      Nothing => Nothing
+      Just (Pair v1 b2) => Just (Pair (ESectOp v1 noSpan) b2)
+    18 => case decStr (fuel - 1) b1 of
+      Nothing => Nothing
+      Just (Pair v1 b2) => case decExpr (fuel - 1) b2 of
+        Nothing => Nothing
+        Just (Pair v2 b3) => Just (Pair (ESectL v1 v2 noSpan) b3)
+    19 => case decExpr (fuel - 1) b1 of
+      Nothing => Nothing
+      Just (Pair v1 b2) => case decStr (fuel - 1) b2 of
+        Nothing => Nothing
+        Just (Pair v2 b3) => Just (Pair (ESectR v1 v2 noSpan) b3)
+    20 => case decExpr (fuel - 1) b1 of
+      Nothing => Nothing
+      Just (Pair v1 b2) => case decExpr (fuel - 1) b2 of
+        Nothing => Nothing
+        Just (Pair v2 b3) => Just (Pair (EAnn v1 v2 noSpan) b3)
+    21 => case decBool (fuel - 1) b1 of
+      Nothing => Nothing
+      Just (Pair v1 b2) => case decList decInterpPart (fuel - 1) b2 of
+        Nothing => Nothing
+        Just (Pair v2 b3) => Just (Pair (EInterp v1 v2 noSpan) b3)
+    22 => case decStr (fuel - 1) b1 of
+      Nothing => Nothing
+      Just (Pair v1 b2) => Just (Pair (EFloat v1 noSpan) b2)
+    _ => Nothing
+
+-- | 解析 `Ctor`：tag 必须与 `encCtor` 一致。
+decCtor : Int -> List Int -> Maybe (Pair Ctor (List Int))
+decCtor fuel bytes = if fuel <= 0 then Nothing
+else case decTag fuel bytes of
+  Nothing => Nothing
+  Just (Pair tag b1) => case tag of
+    0 => case decStr (fuel - 1) b1 of
+      Nothing => Nothing
+      Just (Pair v1 b2) => case decExpr (fuel - 1) b2 of
+        Nothing => Nothing
+        Just (Pair v2 b3) => case decInt (fuel - 1) b3 of
+          Nothing => Nothing
+          Just (Pair v3 b4) => Just (Pair (Ctor v1 v2 v3 noSpan) b4)
+    _ => Nothing
+
+-- | 解析 `Field`：tag 必须与 `encField` 一致。
+decField : Int -> List Int -> Maybe (Pair Field (List Int))
+decField fuel bytes = if fuel <= 0 then Nothing
+else case decTag fuel bytes of
+  Nothing => Nothing
+  Just (Pair tag b1) => case tag of
+    0 => case decStr (fuel - 1) b1 of
+      Nothing => Nothing
+      Just (Pair v1 b2) => case decExpr (fuel - 1) b2 of
+        Nothing => Nothing
+        Just (Pair v2 b3) => Just (Pair (Field v1 v2 noSpan) b3)
+    _ => Nothing
+
+-- | 解析 `TraitParam`：tag 必须与 `encTraitParam` 一致。
+decTraitParam : Int -> List Int -> Maybe (Pair TraitParam (List Int))
+decTraitParam fuel bytes = if fuel <= 0 then Nothing
+else case decTag fuel bytes of
+  Nothing => Nothing
+  Just (Pair tag b1) => case tag of
+    0 => case decStr (fuel - 1) b1 of
+      Nothing => Nothing
+      Just (Pair v1 b2) => case decMaybe decExpr (fuel - 1) b2 of
+        Nothing => Nothing
+        Just (Pair v2 b3) => Just (Pair (TraitParam v1 v2) b3)
+    _ => Nothing
+
+-- | 解析 `TraitMethod`：tag 必须与 `encTraitMethod` 一致。
+decTraitMethod : Int -> List Int -> Maybe (Pair TraitMethod (List Int))
+decTraitMethod fuel bytes = if fuel <= 0 then Nothing
+else case decTag fuel bytes of
+  Nothing => Nothing
+  Just (Pair tag b1) => case tag of
+    0 => case decStr (fuel - 1) b1 of
+      Nothing => Nothing
+      Just (Pair v1 b2) => case decExpr (fuel - 1) b2 of
+        Nothing => Nothing
+        Just (Pair v2 b3) => Just (Pair (TraitMethod v1 v2 noSpan) b3)
+    _ => Nothing
+
+-- | 解析 `Decl`：tag 必须与 `encDecl` 一致。
+decDecl : Int -> List Int -> Maybe (Pair Decl (List Int))
+decDecl fuel bytes = if fuel <= 0 then Nothing
+else case decTag fuel bytes of
+  Nothing => Nothing
+  Just (Pair tag b1) => case tag of
+    0 => case decStr (fuel - 1) b1 of
+      Nothing => Nothing
+      Just (Pair v1 b2) => case decList decStr (fuel - 1) b2 of
+        Nothing => Nothing
+        Just (Pair v2 b3) => case decExpr (fuel - 1) b3 of
+          Nothing => Nothing
+          Just (Pair v3 b4) => case decList decCtor (fuel - 1) b4 of
+            Nothing => Nothing
+            Just (Pair v4 b5) => case decList decStr (fuel - 1) b5 of
+              Nothing => Nothing
+              Just (Pair v5 b6) => case decBool (fuel - 1) b6 of
+                Nothing => Nothing
+                Just (Pair v6 b7) => case decReprTier (fuel - 1) b7 of
+                  Nothing => Nothing
+                  Just (Pair v7 b8) => case decBool (fuel - 1) b8 of
+                    Nothing => Nothing
+                    Just (Pair v8 b9) => Just (Pair (DData v1 v2 v3 v4 v5 v6 v7 v8 noSpan) b9)
+    1 => case decStr (fuel - 1) b1 of
+      Nothing => Nothing
+      Just (Pair v1 b2) => case decExpr (fuel - 1) b2 of
+        Nothing => Nothing
+        Just (Pair v2 b3) => Just (Pair (DAxiom v1 v2 noSpan) b3)
+    2 => case decStr (fuel - 1) b1 of
+      Nothing => Nothing
+      Just (Pair v1 b2) => case decStr (fuel - 1) b2 of
+        Nothing => Nothing
+        Just (Pair v2 b3) => case decExpr (fuel - 1) b3 of
+          Nothing => Nothing
+          Just (Pair v3 b4) => Just (Pair (DExtern v1 v2 v3 noSpan) b4)
+    3 => case decStr (fuel - 1) b1 of
+      Nothing => Nothing
+      Just (Pair v1 b2) => case decExprList (fuel - 1) b2 of
+        Nothing => Nothing
+        Just (Pair v2 b3) => case decExpr (fuel - 1) b3 of
+          Nothing => Nothing
+          Just (Pair v3 b4) => Just (Pair (DSig v1 v2 v3 noSpan) b4)
+    4 => case decStr (fuel - 1) b1 of
+      Nothing => Nothing
+      Just (Pair v1 b2) => case decPatList (fuel - 1) b2 of
+        Nothing => Nothing
+        Just (Pair v2 b3) => case decExpr (fuel - 1) b3 of
+          Nothing => Nothing
+          Just (Pair v3 b4) => Just (Pair (DFun v1 v2 v3 noSpan) b4)
+    5 => case decStr (fuel - 1) b1 of
+      Nothing => Nothing
+      Just (Pair v1 b2) => case decList decStr (fuel - 1) b2 of
+        Nothing => Nothing
+        Just (Pair v2 b3) => case decList decField (fuel - 1) b3 of
+          Nothing => Nothing
+          Just (Pair v3 b4) => case decList decStr (fuel - 1) b4 of
+            Nothing => Nothing
+            Just (Pair v4 b5) => case decBool (fuel - 1) b5 of
+              Nothing => Nothing
+              Just (Pair v5 b6) => case decReprTier (fuel - 1) b6 of
+                Nothing => Nothing
+                Just (Pair v6 b7) => case decBool (fuel - 1) b7 of
+                  Nothing => Nothing
+                  Just (Pair v7 b8) => Just (Pair (DRecord v1 v2 v3 v4 v5 v6 v7 noSpan) b8)
+    6 => case decStr (fuel - 1) b1 of
+      Nothing => Nothing
+      Just (Pair v1 b2) => case decList decTraitParam (fuel - 1) b2 of
+        Nothing => Nothing
+        Just (Pair v2 b3) => case decList decTraitMethod (fuel - 1) b3 of
+          Nothing => Nothing
+          Just (Pair v3 b4) => Just (Pair (DTrait v1 v2 v3 noSpan) b4)
+    7 => case decExprList (fuel - 1) b1 of
+      Nothing => Nothing
+      Just (Pair v1 b2) => case decExpr (fuel - 1) b2 of
+        Nothing => Nothing
+        Just (Pair v2 b3) => case decDecls (fuel - 1) b3 of
+          Nothing => Nothing
+          Just (Pair v3 b4) => Just (Pair (DInstance v1 v2 v3 noSpan) b4)
+    _ => Nothing
+
+-- | 解析 `(模式, 表达式)`（`ELet` 绑定 / `ECase` 分支的元素）。
+decPatExpr : Int -> List Int -> Maybe (Pair (Pair Pat Expr) (List Int))
+decPatExpr fuel bytes = if fuel <= 0 then Nothing
+else case decPat (fuel - 1) bytes of
+  Nothing => Nothing
+  Just (Pair p b1) => case decExpr (fuel - 1) b1 of
+    Nothing => Nothing
+    Just (Pair e b2) => Just (Pair (Pair p e) b2)
+
+-- | 解析局部函数子句（参数模式表 + body）。
+decClause : Int -> List Int -> Maybe (Pair (Pair (List Pat) Expr) (List Int))
+decClause fuel bytes = if fuel <= 0 then Nothing
+else case decPatList (fuel - 1) bytes of
+  Nothing => Nothing
+  Just (Pair ps b1) => case decExpr (fuel - 1) b1 of
+    Nothing => Nothing
+    Just (Pair body b2) => Just (Pair (Pair ps body) b2)
+
+-- | 解析 `(字段名, 表达式)`。
+decStrExpr : Int -> List Int -> Maybe (Pair (Pair String Expr) (List Int))
+decStrExpr fuel bytes = if fuel <= 0 then Nothing
+else case decStr (fuel - 1) bytes of
+  Nothing => Nothing
+  Just (Pair n b1) => case decExpr (fuel - 1) b1 of
+    Nothing => Nothing
+    Just (Pair e b2) => Just (Pair (Pair n e) b2)
+
+-- | 解析 `(字段名, 模式)`。
+decStrPat : Int -> List Int -> Maybe (Pair (Pair String Pat) (List Int))
+decStrPat fuel bytes = if fuel <= 0 then Nothing
+else case decStr (fuel - 1) bytes of
+  Nothing => Nothing
+  Just (Pair n b1) => case decPat (fuel - 1) b1 of
+    Nothing => Nothing
+    Just (Pair p b2) => Just (Pair (Pair n p) b2)
+
+-- | 解析列表头 `[<n>:`（`Bytes.decNumStop` 是私有的；这里只服务本模块的三个递归
+-- 列表）。返回元素个数 + 剩余字节。
+decListHead : Int -> List Int -> Maybe (Pair Int (List Int))
+decListHead fuel bytes = if fuel <= 0 then Nothing
+else case bytes of
+  [] => Nothing
+  c :: rest => if c == 91 then decListDigits (fuel - 1) 0 rest else Nothing
+
+-- | 列表头里的十进制数字，读到 `:`（58）为止。
+decListDigits : Int -> Int -> List Int -> Maybe (Pair Int (List Int))
+decListDigits fuel acc bytes = if fuel <= 0 then Nothing
+else case bytes of
+  [] => Nothing
+  c :: rest =>
+    if c == 58 then Just (Pair acc rest)
+    else if c >= 48 && c <= 57 then decListDigits (fuel - 1) (acc * 10 + (c - 48)) rest else Nothing
+
+-- 三个递归列表（Expr / Pat / Decl）的解析器不复用 `Bytes.decList`：元素函数是同一
+-- 递归组内的 `decExpr` / `decPat` / `decDecl`，作为 `decList` 的裸实参时 SCT 只看到
+-- 一条无参数的调用边，证不出「每次回到自己 fuel 都变小」。这里把 fuel 线程显式写出
+-- （每个子调用 `(fuel - 1)`），检查器能逐跳看到下降。
+--
+-- | 解析表达式表（`EApp` 实参 / `DSig` 约束 / `DInstance` 上下文）。
+decExprList : Int -> List Int -> Maybe (Pair (List Expr) (List Int))
+decExprList fuel bytes = if fuel <= 0 then Nothing
+else case decListHead fuel bytes of
+  Nothing => Nothing
+  Just (Pair n b1) => decExprListItems (fuel - 1) n b1 []
+
+-- | 表达式表的解析循环（元素数 + fuel 双重递减）。
+decExprListItems : Int -> Int -> List Int -> List Expr -> Maybe (Pair (List Expr) (List Int))
+decExprListItems fuel n bytes acc = if fuel <= 0 then Nothing
+else if n <= 0 then Just (Pair (reverse acc) bytes)
+else case decExpr (fuel - 1) bytes of
+  Nothing => Nothing
+  Just (Pair x b1) => decExprListItems (fuel - 1) (n - 1) b1 (x :: acc)
+
+-- | 解析模式表（`PCon` 实参 / `DFun` 参数）。
+decPatList : Int -> List Int -> Maybe (Pair (List Pat) (List Int))
+decPatList fuel bytes = if fuel <= 0 then Nothing
+else case decListHead fuel bytes of
+  Nothing => Nothing
+  Just (Pair n b1) => decPatListItems (fuel - 1) n b1 []
+
+-- | 模式表的解析循环（元素数 + fuel 双重递减）。
+decPatListItems : Int -> Int -> List Int -> List Pat -> Maybe (Pair (List Pat) (List Int))
+decPatListItems fuel n bytes acc = if fuel <= 0 then Nothing
+else if n <= 0 then Just (Pair (reverse acc) bytes)
+else case decPat (fuel - 1) bytes of
+  Nothing => Nothing
+  Just (Pair x b1) => decPatListItems (fuel - 1) (n - 1) b1 (x :: acc)
+
+-- | 解析声明表（`DInstance` 的方法；也是顶层 `decDecls`）。
+decDecls : Int -> List Int -> Maybe (Pair (List Decl) (List Int))
+decDecls fuel bytes = if fuel <= 0 then Nothing
+else case decListHead fuel bytes of
+  Nothing => Nothing
+  Just (Pair n b1) => decDeclsItems (fuel - 1) n b1 []
+
+-- | 声明表的解析循环（元素数 + fuel 双重递减）。
+decDeclsItems : Int -> Int -> List Int -> List Decl -> Maybe (Pair (List Decl) (List Int))
+decDeclsItems fuel n bytes acc = if fuel <= 0 then Nothing
+else if n <= 0 then Just (Pair (reverse acc) bytes)
+else case decDecl (fuel - 1) bytes of
+  Nothing => Nothing
+  Just (Pair x b1) => decDeclsItems (fuel - 1) (n - 1) b1 (x :: acc)
+
+-- | 整串解析 `Pat`：用串长当 fuel，并要求恰好消费完。
+decPatComplete : String -> Maybe Pat
+decPatComplete s = case decPat (strLength s) (strUnpack s) of
+  Nothing => Nothing
+  Just (Pair v rest) => if lenOf rest == 0 then Just v else Nothing
+
+-- | 整串解析 `Expr`：用串长当 fuel，并要求恰好消费完。
+decExprComplete : String -> Maybe Expr
+decExprComplete s = case decExpr (strLength s) (strUnpack s) of
+  Nothing => Nothing
+  Just (Pair v rest) => if lenOf rest == 0 then Just v else Nothing
+
+-- | 整串解析 `Decl`：用串长当 fuel，并要求恰好消费完。
+decDeclComplete : String -> Maybe Decl
+decDeclComplete s = case decDecl (strLength s) (strUnpack s) of
+  Nothing => Nothing
+  Just (Pair v rest) => if lenOf rest == 0 then Just v else Nothing
+
+-- | 整串解析 `Qty`：用串长当 fuel，并要求恰好消费完。
+decQtyComplete : String -> Maybe Qty
+decQtyComplete s = case decQty (strLength s) (strUnpack s) of
+  Nothing => Nothing
+  Just (Pair v rest) => if lenOf rest == 0 then Just v else Nothing
+
+-- | 整串解析 `ReprTier`：用串长当 fuel，并要求恰好消费完。
+decReprTierComplete : String -> Maybe ReprTier
+decReprTierComplete s = case decReprTier (strLength s) (strUnpack s) of
+  Nothing => Nothing
+  Just (Pair v rest) => if lenOf rest == 0 then Just v else Nothing
+
+-- | 整串解析 `InterpPart`：用串长当 fuel，并要求恰好消费完。
+decInterpPartComplete : String -> Maybe InterpPart
+decInterpPartComplete s = case decInterpPart (strLength s) (strUnpack s) of
+  Nothing => Nothing
+  Just (Pair v rest) => if lenOf rest == 0 then Just v else Nothing
+
+-- | 整串解析 `DoStmt`：用串长当 fuel，并要求恰好消费完。
+decDoStmtComplete : String -> Maybe DoStmt
+decDoStmtComplete s = case decDoStmt (strLength s) (strUnpack s) of
+  Nothing => Nothing
+  Just (Pair v rest) => if lenOf rest == 0 then Just v else Nothing
+
+-- | 整串解析 `Ctor`：用串长当 fuel，并要求恰好消费完。
+decCtorComplete : String -> Maybe Ctor
+decCtorComplete s = case decCtor (strLength s) (strUnpack s) of
+  Nothing => Nothing
+  Just (Pair v rest) => if lenOf rest == 0 then Just v else Nothing
+
+-- | 整串解析 `Field`：用串长当 fuel，并要求恰好消费完。
+decFieldComplete : String -> Maybe Field
+decFieldComplete s = case decField (strLength s) (strUnpack s) of
+  Nothing => Nothing
+  Just (Pair v rest) => if lenOf rest == 0 then Just v else Nothing
+
+-- | 整串解析 `TraitParam`：用串长当 fuel，并要求恰好消费完。
+decTraitParamComplete : String -> Maybe TraitParam
+decTraitParamComplete s = case decTraitParam (strLength s) (strUnpack s) of
+  Nothing => Nothing
+  Just (Pair v rest) => if lenOf rest == 0 then Just v else Nothing
+
+-- | 整串解析 `TraitMethod`：用串长当 fuel，并要求恰好消费完。
+decTraitMethodComplete : String -> Maybe TraitMethod
+decTraitMethodComplete s = case decTraitMethod (strLength s) (strUnpack s) of
+  Nothing => Nothing
+  Just (Pair v rest) => if lenOf rest == 0 then Just v else Nothing
+
+-- | 整串解析声明表（`decDecls` 的 roundtrip 入口）。
+decDeclsComplete : String -> Maybe (List Decl)
+decDeclsComplete s = case decDecls (strLength s) (strUnpack s) of
+  Nothing => Nothing
+  Just (Pair v rest) => if lenOf rest == 0 then Just v else Nothing

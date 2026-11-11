@@ -1,0 +1,265 @@
+-- | Core 项（`Term`）的规范编码 + 解析器（内容寻址的哈希输入格式）。
+module Vuna.Compiler.Canonical.CoreTerm
+  ( decRig
+  , decTerm
+  , decTermComplete
+  , encRig
+  , encTerm
+  , encTermBytes
+  ) where
+
+-- Vuna.Compiler.Canonical.CoreTerm：Core `Term` 的规范字节编码（C32 哈希输入侧）。
+--
+-- 关键规范化（这是换成显式编码的主要收益，见 docs/reference/cache.md）：
+--   * **span 不参与编码**：`TVar` 的位置只影响诊断，不影响语义；换行/移动代码不应让
+--     依赖方的接口哈希变化（旧 `prim_marshal` 路径把 `Span` 一起 Marshal 了）；
+--   * 构造子按固定 tag 编号，顺序 = `Core.Term` 的声明顺序（新增构造子必须追加）；
+--   * `TMeta` 的编号由调用方先规范化（`Driver/Iface` 的 `canonTermTop`），编码只写编号；
+--   * 编码是自定界的（`Canonical.Bytes` 的原子文法），因此不同项不会编码成同一串。
+--
+-- 解码器只为 roundtrip 自检/测试存在（生产写侧只编码）：`encode∘decode∘encode = encode`
+-- 是「编码确实无损且规范」的判据（span 已被有意丢弃，所以比较两边编码而不是原值）。
+import Base.Bool
+import Base.List
+import Base.Maybe
+import Base.Pair
+import Base.String
+import Vuna.Compiler.Canonical.Bytes
+import Vuna.Compiler.Core.Term
+import Vuna.Compiler.Source
+
+-- | 解码时给 `TVar` 的位置占位：span 不参与编码，所以解码只能还原空 span。
+noSpan : Span
+noSpan = Span "" 0 0 0 0
+
+-- ---------------------------------------------------------------
+-- 编码
+-- ---------------------------------------------------------------
+-- | multiplicity 的三档（`Rig0` / `Rig1` / `RigOmega`）。
+encRig : Rig -> List String -> List String
+encRig Rig0 acc = encTag 0 acc
+encRig Rig1 acc = encTag 1 acc
+encRig RigOmega acc = encTag 2 acc
+
+-- | 带 multiplicity 的实参（构造子/记录应用、`TApp`）。
+encArg : Pair Term Rig -> List String -> List String
+encArg (Pair t r) acc = encTerm t (encRig r acc)
+
+-- | 实参表（直接递归：SCT 要看到 `encArg` 的调用位于子项上，不能经高阶 `encList`）。
+encArgs : List (Pair Term Rig) -> List String -> List String
+encArgs xs acc = "[${strFromInt (lenOf xs)}:" :: encArgsGo xs acc
+
+-- | 实参表的递归主体（计数头由 `encArgs` 写；`acc` 是累积器）。
+encArgsGo : List (Pair Term Rig) -> List String -> List String
+encArgsGo [] acc = acc
+encArgsGo (x :: rest) acc = encArg x (encArgsGo rest acc)
+
+-- | `(名字, multiplicity)` binder（Pi 的 case-binder 表）。
+encBinder : Pair String Rig -> List String -> List String
+encBinder (Pair n r) acc = encStr n (encRig r acc)
+
+-- | binder 表（元素不递归到 Term，可以直接用 `encList`；保留专用入口以免改签名）。
+encBinders : List (Pair String Rig) -> List String -> List String
+encBinders bs acc = encList encBinder bs acc
+
+-- | case 分支：构造子名 + binder 表 + 体。
+encAlt : CaseAlt -> List String -> List String
+encAlt (CaseAlt n bs b) acc = encStr n (encBinders bs (encTerm b acc))
+
+-- | 分支表（直接递归，理由同 `encArgs`）。
+encAlts : List CaseAlt -> List String -> List String
+encAlts xs acc = "[${strFromInt (lenOf xs)}:" :: encAltsGo xs acc
+
+-- | 分支表的递归主体（计数头由 `encAlts` 写；`acc` 是累积器）。
+encAltsGo : List CaseAlt -> List String -> List String
+encAltsGo [] acc = acc
+encAltsGo (a :: rest) acc = encAlt a (encAltsGo rest acc)
+
+-- | 整数表（字段序号）。
+encInts : List Int -> List String -> List String
+encInts xs acc = encList encInt xs acc
+
+-- | Core 项的规范编码（accumulator 风格：不拷贝子分片）。
+encTerm : Term -> List String -> List String
+encTerm (TVar n i _) acc = encTag 0 (encStr n (encInt i acc))
+encTerm (TMeta m) acc = encTag 1 (encInt m acc)
+encTerm (TGlobal g) acc = encTag 2 (encStr g acc)
+encTerm (TType l) acc = encTag 3 (encInt (levelToInt l) acc)
+encTerm (TPi n i r d c) acc = encTag 4 (encStr n (encBool i (encRig r (encTerm d (encTerm c acc)))))
+encTerm (TLam n r b) acc = encTag 5 (encStr n (encRig r (encTerm b acc)))
+encTerm (TApp f a r) acc = encTag 6 (encTerm f (encTerm a (encRig r acc)))
+encTerm (TCon c args) acc = encTag 7 (encStr c (encArgs args acc))
+encTerm (TMk c args) acc = encTag 8 (encStr c (encArgs args acc))
+encTerm (TCase s alts) acc = encTag 9 (encTerm s (encAlts alts acc))
+encTerm (TProj b c tele idx n) acc =
+  encTag 10 (encTerm b (encStr c (encBinders tele (encInt idx (encInt n acc)))))
+encTerm (TRecUpd b c tele idxs body) acc =
+  encTag 11 (encTerm b (encStr c (encBinders tele (encInts idxs (encTerm body acc)))))
+encTerm (TInt n) acc = encTag 12 (encInt n acc)
+encTerm (TStr s) acc = encTag 13 (encStr s acc)
+encTerm (TBool b) acc = encTag 14 (encBool b acc)
+encTerm (TIf c t e) acc = encTag 15 (encTerm c (encTerm t (encTerm e acc)))
+encTerm (TFloat f) acc = encTag 16 (encStr f acc)
+encTerm (TRecord c args) acc = encTag 17 (encStr c (encArgs args acc))
+
+-- | 整项编码成一个字节串（供 SHA-256 直接取摘要）。
+encTermBytes : Term -> String
+encTermBytes t = encTop encTerm t
+
+-- ---------------------------------------------------------------
+-- 解码（roundtrip 自检用）
+-- ---------------------------------------------------------------
+-- | 解析 multiplicity：tag 0/1/2。
+-- | 解析 multiplicity：tag 0/1/2。
+decRig : Int -> List Int -> Maybe (Pair Rig (List Int))
+decRig fuel bytes = if fuel <= 0 then Nothing
+else case decTag fuel bytes of
+  Nothing => Nothing
+  Just (Pair tag b1) => case tag of
+    0 => Just (Pair Rig0 b1)
+    1 => Just (Pair Rig1 b1)
+    2 => Just (Pair RigOmega b1)
+    _ => Nothing
+
+-- | 解析带 multiplicity 的实参：项 + multiplicity。
+decArg : Int -> List Int -> Maybe (Pair (Pair Term Rig) (List Int))
+decArg fuel bytes = if fuel <= 0 then Nothing
+else case decTerm (fuel - 1) bytes of
+  Nothing => Nothing
+  Just (Pair t b1) => case decRig (fuel - 1) b1 of
+    Nothing => Nothing
+    Just (Pair r b2) => Just (Pair (Pair t r) b2)
+
+-- | 解析 `(名字, multiplicity)` binder。
+decBinder : Int -> List Int -> Maybe (Pair (Pair String Rig) (List Int))
+decBinder fuel bytes = if fuel <= 0 then Nothing
+else case decStr (fuel - 1) bytes of
+  Nothing => Nothing
+  Just (Pair n b1) => case decRig (fuel - 1) b1 of
+    Nothing => Nothing
+    Just (Pair r b2) => Just (Pair (Pair n r) b2)
+
+-- | 解析 case 分支。
+decAlt : Int -> List Int -> Maybe (Pair CaseAlt (List Int))
+decAlt fuel bytes = if fuel <= 0 then Nothing
+else case decStr (fuel - 1) bytes of
+  Nothing => Nothing
+  Just (Pair n b1) => case decList decBinder (fuel - 1) b1 of
+    Nothing => Nothing
+    Just (Pair bs b2) => case decTerm (fuel - 1) b2 of
+      Nothing => Nothing
+      Just (Pair body b3) => Just (Pair (CaseAlt n bs body) b3)
+
+-- | 解析 Core 项（tag 必须与 `encTerm` 一致；燃料按剩余字节上界递减）。
+decTerm : Int -> List Int -> Maybe (Pair Term (List Int))
+decTerm fuel bytes = if fuel <= 0 then Nothing
+else case decTag fuel bytes of
+  Nothing => Nothing
+  Just (Pair tag b1) => case tag of
+    0 => case decStr (fuel - 1) b1 of
+      Nothing => Nothing
+      Just (Pair n b2) => case decInt (fuel - 1) b2 of
+        Nothing => Nothing
+        Just (Pair i b3) => Just (Pair (TVar n i noSpan) b3)
+    1 => case decInt (fuel - 1) b1 of
+      Nothing => Nothing
+      Just (Pair m b2) => Just (Pair (TMeta m) b2)
+    2 => case decStr (fuel - 1) b1 of
+      Nothing => Nothing
+      Just (Pair g b2) => Just (Pair (TGlobal g) b2)
+    3 => case decInt (fuel - 1) b1 of
+      Nothing => Nothing
+      Just (Pair l b2) => Just (Pair (TType (levelOfInt l)) b2)
+    4 => case decStr (fuel - 1) b1 of
+      Nothing => Nothing
+      Just (Pair n b2) => case decBool (fuel - 1) b2 of
+        Nothing => Nothing
+        Just (Pair i b3) => case decRig (fuel - 1) b3 of
+          Nothing => Nothing
+          Just (Pair r b4) => case decTerm (fuel - 1) b4 of
+            Nothing => Nothing
+            Just (Pair d b5) => case decTerm (fuel - 1) b5 of
+              Nothing => Nothing
+              Just (Pair c b6) => Just (Pair (TPi n i r d c) b6)
+    5 => case decStr (fuel - 1) b1 of
+      Nothing => Nothing
+      Just (Pair n b2) => case decRig (fuel - 1) b2 of
+        Nothing => Nothing
+        Just (Pair r b3) => case decTerm (fuel - 1) b3 of
+          Nothing => Nothing
+          Just (Pair body b4) => Just (Pair (TLam n r body) b4)
+    6 => case decTerm (fuel - 1) b1 of
+      Nothing => Nothing
+      Just (Pair f b2) => case decTerm (fuel - 1) b2 of
+        Nothing => Nothing
+        Just (Pair a b3) => case decRig (fuel - 1) b3 of
+          Nothing => Nothing
+          Just (Pair r b4) => Just (Pair (TApp f a r) b4)
+    7 => case decStr (fuel - 1) b1 of
+      Nothing => Nothing
+      Just (Pair c b2) => case decList decArg (fuel - 1) b2 of
+        Nothing => Nothing
+        Just (Pair args b3) => Just (Pair (TCon c args) b3)
+    8 => case decStr (fuel - 1) b1 of
+      Nothing => Nothing
+      Just (Pair c b2) => case decList decArg (fuel - 1) b2 of
+        Nothing => Nothing
+        Just (Pair args b3) => Just (Pair (TMk c args) b3)
+    9 => case decTerm (fuel - 1) b1 of
+      Nothing => Nothing
+      Just (Pair scrut b2) => case decList decAlt (fuel - 1) b2 of
+        Nothing => Nothing
+        Just (Pair alts b3) => Just (Pair (TCase scrut alts) b3)
+    10 => case decTerm (fuel - 1) b1 of
+      Nothing => Nothing
+      Just (Pair base b2) => case decStr (fuel - 1) b2 of
+        Nothing => Nothing
+        Just (Pair c b3) => case decList decBinder (fuel - 1) b3 of
+          Nothing => Nothing
+          Just (Pair tele b4) => case decInt (fuel - 1) b4 of
+            Nothing => Nothing
+            Just (Pair idx b5) => case decInt (fuel - 1) b5 of
+              Nothing => Nothing
+              Just (Pair n b6) => Just (Pair (TProj base c tele idx n) b6)
+    11 => case decTerm (fuel - 1) b1 of
+      Nothing => Nothing
+      Just (Pair base b2) => case decStr (fuel - 1) b2 of
+        Nothing => Nothing
+        Just (Pair c b3) => case decList decBinder (fuel - 1) b3 of
+          Nothing => Nothing
+          Just (Pair tele b4) => case decList decInt (fuel - 1) b4 of
+            Nothing => Nothing
+            Just (Pair idxs b5) => case decTerm (fuel - 1) b5 of
+              Nothing => Nothing
+              Just (Pair body b6) => Just (Pair (TRecUpd base c tele idxs body) b6)
+    12 => case decInt (fuel - 1) b1 of
+      Nothing => Nothing
+      Just (Pair n b2) => Just (Pair (TInt n) b2)
+    13 => case decStr (fuel - 1) b1 of
+      Nothing => Nothing
+      Just (Pair s b2) => Just (Pair (TStr s) b2)
+    14 => case decBool (fuel - 1) b1 of
+      Nothing => Nothing
+      Just (Pair b b2) => Just (Pair (TBool b) b2)
+    15 => case decTerm (fuel - 1) b1 of
+      Nothing => Nothing
+      Just (Pair c b2) => case decTerm (fuel - 1) b2 of
+        Nothing => Nothing
+        Just (Pair t b3) => case decTerm (fuel - 1) b3 of
+          Nothing => Nothing
+          Just (Pair e b4) => Just (Pair (TIf c t e) b4)
+    16 => case decStr (fuel - 1) b1 of
+      Nothing => Nothing
+      Just (Pair f b2) => Just (Pair (TFloat f) b2)
+    17 => case decStr (fuel - 1) b1 of
+      Nothing => Nothing
+      Just (Pair c b2) => case decList decArg (fuel - 1) b2 of
+        Nothing => Nothing
+        Just (Pair args b3) => Just (Pair (TRecord c args) b3)
+    _ => Nothing
+
+-- | 解析整串（要求恰好消费完）：roundtrip 测试入口。
+decTermComplete : String -> Maybe Term
+decTermComplete s = case decTerm (strLength s) (strUnpack s) of
+  Nothing => Nothing
+  Just (Pair t rest) => if lenOf rest == 0 then Just t else Nothing

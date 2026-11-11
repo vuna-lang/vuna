@@ -48,6 +48,8 @@ module Vuna.Compiler.Driver.Dt
 import Base.List
 import Base.String
 import Vuna.Compiler.Common
+import Vuna.Compiler.Canonical.Ast
+import Vuna.Compiler.Canonical.Bytes
 import Base.HashMap
 import Vuna.Compiler.Debug
 import Vuna.Compiler.Diagnostics
@@ -1089,8 +1091,10 @@ topoModules mods = secondOf (topoVisitAll 8192 mods (map moduleNameOf mods) [] [
 -- 单元 key 的哈希链（与 build 系统同思路）：依赖接口变化沿链使依赖者失效，无关模块
 -- 变化不影响。生成命中缓存时直接复用 `SplitFile`，不再重跑该单元 codegen。
 -- M34.6：默认开启（见 `unitCacheEnabled`），桶内 GC 只保留本次 key 集合对应的文件。
-unitDeclsHash : Module -> Int
-unitDeclsHash m = hashTextStrong (prim_marshal (moduleDeclsOf m))
+-- | 模块声明的内容摘要：显式规范编码（span / 路径不参与 ⇒ 换行、移动代码不再让单元
+-- 缓存失效），不再 `prim_marshal`（C32 哈希输入侧的完整形态）。
+unitDeclsHash : Module -> String
+unitDeclsHash m = encTop encDecls (moduleDeclsOf m)
 
 pairKeyValue : Pair String String -> String
 pairKeyValue p = secondOf p
@@ -1111,7 +1115,7 @@ unitKeyOne : List (Pair String String) -> Module -> String
 unitKeyOne acc m =
   let
     deps = map (unitImportKey acc) (unitImportsOf m)
-  in strFromInt (hashTextStrong "u|${moduleNameOf m}|${unitDeclsHash m}|${concatKeys deps}")
+  in shaText "u|${moduleNameOf m}|${unitDeclsHash m}|${concatKeys deps}"
 
 unitKeysGo : List Module -> List (Pair String String) -> List (Pair String String)
 unitKeysGo [] acc = reverse acc
@@ -1121,10 +1125,10 @@ unitKeysOf : List Module -> List Decl -> Bool -> List (Pair String String)
 unitKeysOf modules entryDecls printResult =
   let
     modKeys = unitKeysGo modules []
-    entryHash = hashTextStrong (prim_marshal entryDecls)
+    entryHash = encTop encDecls entryDecls
     entryKey =
-      strFromInt
-        (hashTextStrong "e|${entryHash}|${if printResult then "print" else "noprint"}|${concatKeys (map pairKeyValue modKeys)}")
+      shaText
+        "e|${entryHash}|${if printResult then "print" else "noprint"}|${concatKeys (map pairKeyValue modKeys)}"
   in Pair "__entry__" entryKey :: modKeys
 
 -- M4：PerfCache 的磁盘层是显式 `Eff []`；本模块（尚未迁移的纯调用方）在调用处用

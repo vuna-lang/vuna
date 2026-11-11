@@ -316,9 +316,10 @@ golden 一致，再 warmup + 多次取中位数；RSS 用 GNU time 的 max RSS�
 **已量化否决的候选**（数据见 git 与 `_scratch` 探针，不要重复开题）：
 
 - **iface 哈希去排序（顺序无关折叠）**：把 `hashDefs`/`hashExports`/… 的「按名字插入
-  排序 + 整表 Marshal + 摘要」改成逐项哈希的交换律折叠（双 lane Σh/Σh²）。
-  （该实验的摘要口径是当时的 6-lane 强哈希；D5 起摘要换成 SHA-256，但「排序 + 逐表
-  Marshal」的结构不变，结论仍按此条记录。）
+  排序 + 整表编码 + 摘要」改成逐项哈希的交换律折叠（双 lane Σh/Σh²）。
+  （该实验的摘要是当时的 6-lane 强哈希，载荷是 Marshal；D5 起摘要换成 SHA-256、
+  C32 哈希输入侧收口后载荷换成 `Canonical` 显式编码，但「排序 + 整表编码」的结构不变，
+  结论仍按此条记录。）
   合成单模块 16k 项档 iface-compute 3.77 s → ~1.0 s，但真实包是「多模块、每模块几十项」：
   逐项 Marshal 的分配放大让 `check compiler` 的 iface-compute 119 → 318 ms（逐项强哈希）
   或冷 build 的 iface 阶段 90 → 518 ms（逐项单 lane），冷 build 反而 +4%。故保留插入排序

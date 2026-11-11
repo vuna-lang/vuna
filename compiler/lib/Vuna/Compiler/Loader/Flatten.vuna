@@ -27,6 +27,7 @@ import Base.Host
 import Vuna.Compiler.CacheFormat
 import Vuna.Compiler.Loader.Diagnostics
 import Vuna.Compiler.Common
+import Vuna.Compiler.Hash
 import Vuna.Compiler.Diagnostics.Sink
 import Vuna.Compiler.Diagnostics.Warning
 import Vuna.Compiler.Diagnostics.Rn
@@ -48,8 +49,8 @@ import Vuna.Compiler.Packages.Pkg
 -- key 的**强度**必须够：内建 `strHash` 只有 10 bit（运行时 `land 1023`），初版把两路
 -- 10-bit + 长度拼起来，实测在测试套件里发生跨文件命中（其它文件的 AST 被当作
 -- `corpus/term/05_multi_clause.vuna` 的入口，报 `LD_ModuleHeaderInEntryFile`）。
--- 这里用 5 条独立 lane 拼成 ~50 bit，并把 schema 版本拌进 key；payload 还带源文本做
--- 回读校验（见下）：**改 `Frontend.Ast` 的 Marshal 布局时必须 bump `astCacheSchema`**
+-- 现在 key = SHA-256（64 位十六进制，见 `astKeyOf`）；payload 还带源文本做回读校验
+-- （见下）：**改 `Frontend.Ast` 的 Marshal 布局时必须 bump `astCacheSchema`**
 -- （否则旧缓存会被按新布局 `prim_unmarshal`）。模板字面量（M36）新增 AST 构造子，schema 4 → 5。
 -- M34.6：载荷套上统一 framing（CacheFormat）；**同时 bump schema 6 → 7**——AST key 不含
 -- 编译器指纹，若不 bump，旧二进制（seed / 旧 stage1）会按裸 Marshal 读新格式条目而崩溃。
@@ -64,31 +65,15 @@ astCacheDir =
   in "${if base == "" then "/tmp" else base}/vuna-cache/ast"
 
 astKeyOf : String -> String -> String
-astKeyOf path src = strFromInt (astStrongHash "${astCacheSchema}\t${path}\t${src}")
+astKeyOf path src = Vuna.Compiler.Hash.contentAddress "${astCacheSchema}\t${path}\t${src}"
 
--- 5 条**独立** lane（不同乘子 + 不同素数模）拼成 ~50 bit。不能用
--- `strHash (salt ++ ":" ++ s)` 这类「加盐前缀」：内建 strHash 是
--- `h := (h*33 + c) land 1023` 的仿射迭代，换初值只会得到 h_k = A*k + const (mod 1024)，
--- 五条 lane 彼此完全相关（有效熵仍只有 ~10 bit + 长度，实测测试套件里 7x 夹具读到了
--- 15_private_implicit 的 AST，报出本不存在的 `module Priv not found`）。
--- M34.6：五条 lane **同时**推进（一次 strUnpack 遍历）。旧实现每条 lane 各走一遍
--- 字符表，冷路径 parse 前多花 ~21ms（83 文件实测 75 → 54ms）；取值与旧实现逐位相同
--- （缓存 key 不变）。
-astStrongHash : String -> Int
-astStrongHash s = astStrongHashGo (strUnpack s) 0 7 13 29 61
-
-astStrongHashGo : List Int -> Int -> Int -> Int -> Int -> Int -> Int
-astStrongHashGo [] a b c d e = a + b * 1024 + c * 1048576 + d * 1073741824 + e * 1099511627776
-astStrongHashGo (ch :: rest) a b c d e =
-  astStrongHashGo rest (astLaneStep a 33 1021 ch) (astLaneStep b 131 1019 ch)
-    (astLaneStep c 257 1013 ch) (astLaneStep d 65599 1009 ch) (astLaneStep e 16777619 997 ch)
-
-astLaneStep : Int -> Int -> Int -> Int -> Int
-astLaneStep acc mult modulus ch =
-  let
-    v = acc * mult + ch
-  in v - v / modulus * modulus
-
+-- key = SHA-256（64 位十六进制）而不是早期的 ~50-bit lane 折叠：内建 `strHash` 只有
+-- 10 bit，初版把两路 10-bit + 长度拼起来，实测测试套件里发生跨文件命中（别的文件的 AST
+-- 被当作某入口文件，报 `LD_ModuleHeaderInEntryFile`）。payload 还带源文本做回读校验
+-- （见下）：key 即使碰撞也不会把别的文件的 AST 当成本文件。
+-- **改 `Frontend.Ast` 的 Marshal 布局时必须 bump `astCacheSchema`**（否则旧缓存会被按
+-- 新布局 `prim_unmarshal`；AST key 目前仍不含编译器指纹，见 debt C48 —— 布局变化靠
+-- schema bump 与二进制换代兜底）。
 -- 缓存**回读校验**：payload 带原始源文本，命中时逐字节比较——key 即使碰撞也不会把
 -- 别的文件的 AST 当成本文件；不匹配就重新 parse 并覆盖该条目（只损失这一条缓存）。
 data AstCacheEntry : Type where

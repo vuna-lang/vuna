@@ -3,8 +3,14 @@ import Base.Host
 import Base.List
 import Base.Pair
 import Base.String
+import Vuna.Compiler.Canonical
+import Vuna.Compiler.Common
+import Vuna.Compiler.Core.Term
+import Vuna.Compiler.Elab.Types
+import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Frontend.Cst
 import Vuna.Compiler.Hash
+import Vuna.Compiler.Loader.Modules
 import Vuna.Compiler.Query
 
 -- 基础设施三件套自检：内容寻址摘要、无损 CST roundtrip、查询图 early cutoff。
@@ -35,7 +41,8 @@ main = do
   _ <-
     println
       ("bitslib " ++ joinInts [rotr32 1 1, add32 4294967295 2, mask32 (0 - 1), mask8 511, rol32 1 31])
-  _ <- println ("enc-int-42 " ++ joinInts (encInt 42))
+  _ <- println ("canon-int-42 " ++ encConcat (encInt 42 []))
+  _ <- println ("canon-str-abc " ++ encConcat (encStr "abc" []))
   _ <- println ("cst-sample " ++ verdict (roundtripOk sample))
   src <- getEnv "INFRA_SRC"
   pathOk <- fileExists src
@@ -44,6 +51,12 @@ main = do
   _ <- println ("query1 " ++ showTrace (secondOf run1))
   _ <- println ("query2 " ++ showTrace (secondOf run2))
   _ <- println ("query3 " ++ showTrace (secondOf run3))
+  _ <- println ("canon-term-rt " ++ verdict termFixturesRT)
+  _ <- println ("canon-decl-rt " ++ verdict (declsRT declFixtures))
+  _ <- println ("canon-defs-rt " ++ verdict defsRT)
+  _ <- println ("canon-span " ++ verdict spanInsensitive)
+  _ <- println ("canon-export-parent " ++ verdict parentCovered)
+  _ <- println ("canon-fixity-target " ++ verdict fixityCovered)
   exit 0
 
 -- | 用逗号连接整数列表（编码结果的可读形态）。
@@ -99,3 +112,108 @@ lenInt (_ :: rest) = 1 + lenInt rest
 -- | 80 个 'a'（跨两个 SHA-256 块，覆盖填充的 r > 56 分支）。
 repeatA : Int -> String
 repeatA n = join "" (map (\_ => "a") (range 0 n))
+
+-- ---------------------------------------------------------------
+-- 规范编码（`Vuna.Compiler.Canonical`）自检：roundtrip / span 不敏感 / 字段覆盖
+-- ---------------------------------------------------------------
+sp0 : Span
+sp0 = Span "" 0 0 0 0
+
+spA : Span
+spA = Span "a.vuna" 1 1 1 1
+
+spB : Span
+spB = Span "b.vuna" 42 7 42 8
+
+-- | 只差项内 span 的两个值必须编码成同一串：span 不参与内容寻址。
+spanTermA : Term
+spanTermA = TApp (TGlobal "f") (TVar "x" 0 spA) Rig1
+
+spanTermB : Term
+spanTermB = TApp (TGlobal "f") (TVar "x" 0 spB) Rig1
+
+spanInsensitive : Bool
+spanInsensitive = encTop encTerm spanTermA == encTop encTerm spanTermB
+
+-- | Core 项夹具：覆盖全部构造子（含 `TProj` / `TRecUpd` / `TRecord` / `TFloat`）。
+termFixtures : List Term
+termFixtures =
+  [ TVar "x" 3 spA,
+    TMeta 12,
+    TGlobal "Base.Int",
+    TType (levelOfInt 2),
+    TPi "a" True RigOmega (TType (levelOfInt 0)) (TLam "x" Rig1 (TVar "x" 0 spB)),
+    TApp (TGlobal "f") (TInt 7) Rig1,
+    TCon "Cons" [Pair (TInt 1) RigOmega, Pair (TStr "s") Rig1],
+    TMk "Point" [Pair (TInt 1) RigOmega],
+    TCase (TGlobal "n") [CaseAlt "Zero" [] (TInt 0), CaseAlt "Succ" [Pair "k" Rig1] (TVar "k" 0 sp0)],
+    TProj (TGlobal "p") "Point" [Pair "x" RigOmega] 0 2,
+    TRecUpd (TGlobal "p") "Point" [Pair "x" RigOmega] [0] (TInt 9),
+    TInt 42,
+    TStr "hello",
+    TBool True,
+    TIf (TBool False) (TInt 1) (TInt 2),
+    TFloat "1.5",
+    TRecord "Point" [Pair (TInt 1) RigOmega]
+  ]
+
+-- | 一次「编码 → 解码 → 重编码」是否逐字节一致（span 被有意丢弃，所以比较编码而非原值）。
+termRT : Term -> Bool
+termRT t = case decTermComplete (encTop encTerm t) of
+  Nothing => False
+  Just t2 => encTop encTerm t2 == encTop encTerm t
+
+termFixturesRT : Bool
+termFixturesRT = foldl (\acc, t => acc && termRT t) True termFixtures
+
+-- | Frontend AST 夹具：覆盖 Expr / Pat / Decl 的主要构造子（span 各不相同）。
+declFixtures : List Decl
+declFixtures =
+  [ DSig "f" [] (EApp (EVar "->" spA) [EVar "Int" spA, EVar "Int" spA] spA) spA,
+    DFun "f" [PVar "x" spB] (EApp (EVar "g" spA) [EVar "x" spA] spA) spA,
+    DData "Color" [] (EVar "Type" spA) [Ctor "Red" (EVar "Color" spA) 0 spA, Ctor "Green" (EVar "Color" spA) 0 spB] [] False ReprAuto False spA,
+    DRecord "Point" [] [Field "x" (EVar "Int" spA) spA, Field "y" (EVar "Int" spB) spB] [] False ReprAuto False spA,
+    DTrait "Show" [TraitParam "a" Nothing] [TraitMethod "show" (EVar "a" spA) spA] spB,
+    DInstance [] (EApp (EVar "Dict_Show" spA) [EVar "Color" spA] spA) [DFun "show" [PWild spA] (EStr "c" spA) spA] spA,
+    DAxiom "ax" (EVar "Int" spA) spA,
+    DExtern "ext" "c_ext" (EVar "Int" spA) spA,
+    DFun "exprs" [] exprFixture spA
+  ]
+
+-- | 一个把 `Expr` 构造子尽量铺开的函数体（不与 `Decl` 夹具重复计数）。
+exprFixture : Expr
+exprFixture =
+  ELet
+    [Pair (PVar "x" spA) (EInt 1 spA), Pair (PAs "y" (PCon "Just" [PInt 2 spB] spB) spB) (EFloat "1.5" spA)]
+    (EDo [DBind (PVar "z" spA) (EField (EVar "r" spA) "field" spA) spA, DBind (PRecord "Point" [Pair "x" (PVar "px" spA)] spA) (ERecord "Point" [Pair "x" (EInt 3 spA)] spA) spA, DExpr (EIf (EVar "True" spA) (ECase (EVar "z" spA) [Pair (PStr "s" spA) (EInt 0 spA)] spA) (EBacktick "add" (EInt 1 spA) (EInt 2 spA) spA) spA) spA, DExpr (ESectL "+" (EInt 4 spA) spA) spA] spA)
+    False spA
+
+declsRT : List Decl -> Bool
+declsRT ds = case decDeclsComplete (encTop encDecls ds) of
+  Nothing => False
+  Just ds2 => encTop encDecls ds2 == encTop encDecls ds
+
+-- | 精化产物夹具（`DtDef` 三类）。
+defFixtures : List DtDef
+defFixtures =
+  [ DtDef "f" (TPi "x" False RigOmega (TGlobal "Int") (TGlobal "Int")) (TInt 1) (Just spA),
+    DtAxiom "ax" (TGlobal "Int") (Just spB),
+    DtExtern "ext" (TGlobal "Int") "c_ext" Nothing
+  ]
+
+defsRT : Bool
+defsRT = case decDtDefsComplete (encTop encDtDefs defFixtures) of
+  Nothing => False
+  Just ds2 => encTop encDtDefs ds2 == encTop encDtDefs defFixtures
+
+-- | 导出条目的 `parent` 必须进哈希（旧实现漏了 → 依赖方可能不判脏）。
+parentCovered : Bool
+parentCovered =
+  not
+    (encTop encExportEntry (ExportEntry "ctor" "C" "M.C" "") == encTop encExportEntry (ExportEntry "ctor" "C" "M.C" "M.T"))
+
+-- | fixity 的别名目标必须进哈希（旧实现漏了）。
+fixityCovered : Bool
+fixityCovered =
+  not
+    (encTop encFixity (FixityDecl "::" 5 1 Nothing sp0) == encTop encFixity (FixityDecl "::" 5 1 (Just "Cons") sp0))

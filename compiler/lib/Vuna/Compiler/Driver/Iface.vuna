@@ -88,6 +88,10 @@ module Vuna.Compiler.Driver.Iface
 -- M4（效果显式化）：manifest / 模块文件的读、写、存在性探测与 `VUNA_IFACE_DIR` 环境
 -- 读取全部显式在 `Eff []` 里；纯构造（接口哈希、覆盖性检查、布局计算）保持纯函数。
 -- 调用方（Compile 是 Eff，过渡期的 Dt/Lsp 等纯调用方用一处 `runPure` 包装）。
+import Vuna.Compiler.Canonical.Ast
+import Vuna.Compiler.Canonical.Bytes
+import Vuna.Compiler.Canonical.CoreTerm
+import Vuna.Compiler.Canonical.Elab
 import Vuna.Compiler.Common
 import Vuna.Compiler.Hash
 import Base.HashMap
@@ -237,36 +241,27 @@ ifaceSchema = "vuna-iface 19"
 -- | 接口哈希的**算法格式版本**：参与哈希输入（与 `ifaceSchema` 独立——schema 管载荷
 -- 布局，本版本管摘要算法/分片编码；换算法时旧哈希自然换代）。
 ifaceHashVersion : String
-ifaceHashVersion = "vuna-iface-hash 3 (sha256 + prehash)"
+ifaceHashVersion = "vuna-iface-hash 4 (sha256 + canonical)"
 
 -- ---------------------------------------------------------------
 -- 哈希：接口哈希必须比 `strHash`（10 bit）强得多
 -- ---------------------------------------------------------------
 -- `strHash` 是 0..1023 的 10 bit 哈希；接口哈希用它单发会在几百个模块上有可观测的碰撞
--- 概率，碰撞会直接导致「错误复用」。历史实现是 6 条盐 lane 折叠（约 60 bit）；D5 起
--- 接口哈希改用 SHA-256（`shaText`），`hashTextStrong` 只保留给**非 iface** 的排序键与
--- 工具缓存（Repl / Test / codegen unit key）。
-strongSalts : List String
-strongSalts =
-  [ "vuna-iface-0:",
-    "vuna-iface-1:",
-    "vuna-iface-2:",
-    "vuna-iface-3:",
-    "vuna-iface-4:",
-    "vuna-iface-5:"
-  ]
-
+-- 概率，碰撞会直接导致「错误复用」。D5 起接口哈希改用 SHA-256（`shaText`）；
+-- `hashTextStrong` 是「必须落成 Int」位置（排序键 / 工具缓存 / codegen unit key）的统一
+-- 强哈希：SHA-256 的 63-bit 派生键（`Hash.contentKey`），不再是 6-lane 盐折叠。
 hashTextStrong : String -> Int
-hashTextStrong s = foldl (\acc, salt => acc * 1000003 + strHash (salt ++ s)) 0 strongSalts
+hashTextStrong s = Vuna.Compiler.Hash.contentKey s
 
 -- | 内容摘要（SHA-256，64 位小写十六进制）。接口哈希用它替换旧的 6-lane strHash 折叠
 -- （后者只有约 60 bit，碰撞面在几百模块规模上不可忽略）。
 shaText : String -> String
 shaText s = Vuna.Compiler.Hash.digestHex (Vuna.Compiler.Hash.digestOfString s)
 
--- | 大载荷段（Marshal 字节）的内容摘要：先 4-lane 预哈希折叠，再做 SHA-256。
+-- | 大载荷段（源文本 / 规范编码字节）的内容地址：先 4-lane 预哈希折叠，再做 SHA-256
+-- （与 `Hash.contentAddress` 同一函数）。
 payloadDigest : String -> String
-payloadDigest s = shaText (Vuna.Compiler.Hash.prehashOfString s)
+payloadDigest s = Vuna.Compiler.Hash.contentAddress s
 
 -- | 可解析分片：长度前缀，保证多段拼接无歧义。
 partOf : String -> String
@@ -280,30 +275,21 @@ digestParts ps = shaText (strConcatMany (map partOf ps))
 depMissingHash : String
 depMissingHash = "missing"
 
-hashTerm : Term -> String
-hashTerm t = payloadDigest (prim_marshal t)
+-- 哈希前按**语义键文本**规范化顺序（不再用哈希值当排序键）：同一集合在「全量 / 增量」
+-- 两条路径上的列表顺序可能不同（globals 由「干净模块产物 + 本次精化产物」拼接），
+-- 接口哈希不能因此漂移。按键文本排序是确定性的，也消除「两个名字哈希碰撞 ⇒ 顺序歧义」
+-- 这一类隐患。插入排序仍是 O(d²)（已知边界：真实包每模块几十项，见 performance.md）。
+insertByText : String -> a -> List (Pair String a) -> List (Pair String a)
+insertByText k x [] = [Pair k x]
+insertByText k x ((Pair ky y) :: rest) =
+  if k <= ky then Pair k x :: Pair ky y :: rest else Pair ky y :: insertByText k x rest
 
--- 哈希前按名字规范化顺序：同一集合在「全量 / 增量」两条路径上的列表顺序可能不同
--- （例如 globals 由「干净模块产物 + 本次精化产物」拼接），接口哈希不能因此漂移。
--- M34.6：键只算一次（旧实现每次比较都重算 `key y`；nameKey 是 6 lane strHash +
--- 字符串拼接，globals 排序上占接口阶段 ~270ms）。排序判据与旧实现逐项相同。
--- 已知边界：插入排序是 O(d²)，单模块 d 很大（数千项）时接口阶段退化成 N²；但真实包
--- 是「多模块、每模块几十项」，逐项哈希（去排序）会因每项 Marshal/分配放大而拖慢冷构建
--- （实测见 docs/reference/performance.md §4.7），故保留本口径。
-insertByKey : Int -> a -> List (Pair Int a) -> List (Pair Int a)
-insertByKey k x [] = [Pair k x]
-insertByKey k x ((Pair ky y) :: rest) =
-  if k <= ky then Pair k x :: Pair ky y :: rest else Pair ky y :: insertByKey k x rest
+sortTextPairs : List (Pair String a) -> List (Pair String a)
+sortTextPairs [] = []
+sortTextPairs ((Pair k x) :: rest) = insertByText k x (sortTextPairs rest)
 
-sortPairs : List (Pair Int a) -> List (Pair Int a)
-sortPairs [] = []
-sortPairs ((Pair k x) :: rest) = insertByKey k x (sortPairs rest)
-
-sortByKey : (a -> Int) -> List a -> List a
-sortByKey key xs = map secondOf (sortPairs (map (\x => Pair (key x) x) xs))
-
-nameKey : String -> Int
-nameKey n = hashTextStrong "name:${n}"
+sortByText : (a -> String) -> List a -> List a
+sortByText key xs = map secondOf (sortTextPairs (map (\x => Pair (key x) x) xs))
 
 -- C32 方向：接口哈希里的项要**规范化**。增量路径与全量路径的擦除位残 meta 编号不同
 -- （增量从干净模块 meta 之上开始编号），直接 Marshal 会让同一模块的哈希随路径漂移；
@@ -387,86 +373,74 @@ canonMaybe Nothing = Nothing
 defView : DtDef -> Pair String (Pair Term (Maybe Term))
 defView d = Pair (dtDefName d) (Pair (canonTermTop (dtDefType d)) (canonMaybe (dtDefBody d)))
 
-hashDefs : List DtDef -> String
-hashDefs ds = payloadDigest (prim_marshal (sortByKey (\p => nameKey (firstOf p)) (map defView ds)))
+-- ---------------------------------------------------------------
+-- 接口哈希的各段（C32 哈希输入侧：显式规范编码，不再 `prim_marshal`）
+-- ---------------------------------------------------------------
+-- 段输入先规范化顺序（`sortByText`），再由 `Canonical.*` 编码：span / 路径不参与，
+-- 读方消费的字段全部覆盖（含 `ExportEntry.parent`、fixity 别名目标、record 字段类型）。
+encDefView : Pair String (Pair Term (Maybe Term)) -> List String -> List String
+encDefView (Pair name (Pair ty body)) acc = encStr name (encTerm ty (encMaybe encTerm body acc))
 
--- 数据族 + 构造子 / 实例 / 类 / globals / 导出表：闭合项，无 span / 无路径，整体 Marshal。
+hashDefs : List DtDef -> String
+hashDefs ds =
+  payloadDigest (encTop (encList encDefView) (sortByText (\p => firstOf p) (map defView ds)))
+
+-- 数据族 + 构造子 / 实例 / 类 / globals / 导出表：闭合项，无 span / 无路径，显式编码。
 hashDatas : List DtData -> String
-hashDatas ds = payloadDigest (prim_marshal (sortByKey (\d => nameKey (dtDataName d)) ds))
+hashDatas ds = payloadDigest (encTop (encList encDtData) (sortByText (\d => dtDataName d) ds))
 
 hashInsts : List DtInst -> String
-hashInsts is = payloadDigest (prim_marshal (sortByKey (\i => nameKey (dtInstName i)) is))
+hashInsts is = payloadDigest (encTop (encList encDtInst) (sortByText (\i => dtInstName i) is))
 
 hashClasses : List DtClass -> String
-hashClasses cs = payloadDigest (prim_marshal (sortByKey (\c => nameKey (dtClassName c)) cs))
+hashClasses cs = payloadDigest (encTop (encList encDtClass) (sortByText (\c => dtClassName c) cs))
+
+-- | globals 的（名字, 项）对。
+encGlobal : Pair String Term -> List String -> List String
+encGlobal (Pair n t) acc = encStr n (encTerm t acc)
 
 hashGlobals : List (Pair String Term) -> String
-hashGlobals gs = payloadDigest (prim_marshal (sortByKey (\p => nameKey (firstOf p)) gs))
+hashGlobals gs = payloadDigest (encTop (encList encGlobal) (sortByText (\p => firstOf p) gs))
 
+-- 导出条目：ctor 条目的 `parent`（所属类型）也参与键与编码（旧版漏了 → §44m 类缺口）。
 exportKeyOf : ExportEntry -> String
-exportKeyOf e = "${e.public}|${e.kind}|${e.target}"
+exportKeyOf e = "${e.public}|${e.kind}|${e.target}|${e.parent}"
 
 hashExports : List ExportEntry -> String
-hashExports es = payloadDigest (prim_marshal (sortByKey (\e => nameKey (exportKeyOf e)) es))
+hashExports es = payloadDigest (encTop (encList encExportEntry) (sortByText exportKeyOf es))
 
 -- 模块能力声明（`[capabilities]` 在模块头的可见面）：决定依赖方的特权检查，必须参与
 -- 接口哈希，否则升级/降级能力不会让依赖模块失效。
 hashCapabilities : List String -> String
-hashCapabilities cs = digestParts (sortByKey (\s => hashTextStrong s) cs)
+hashCapabilities cs = payloadDigest (encTop (encList encStr) (sortByText (\s => s) cs))
 
--- fixity 带 span：只哈希语义字段（不因换行/路径变化失效）。
-fixityKeyText : FixityDecl -> String
-fixityKeyText f = "${f.fixityOp}|${f.fixityLevel}|${f.fixityAssoc}"
-
+-- fixity 带 span：编码器丢弃 span，只写操作符 / 级别 / 结合性 / 别名目标。
 hashFixities : List FixityDecl -> String
-hashFixities fs = digestParts (map fixityKeyText fs)
+hashFixities fs = payloadDigest (encTop (encList encFixity) fs)
 
--- record 头：语法降级只看（名字、参数、字段名 + 序号、deriving、构造子名、档位、
--- 线性标记），字段类型不参与（字段类型已由 `hashDatas` 的 DtData Marshal 覆盖）。
--- R2：哈希吃结构化 `RecordMeta`，字段名重排/改名/序号变化都会让依赖者失效。
-fieldKeyText : RecordFieldMeta -> String
-fieldKeyText (RecordFieldMeta fname fty i) = "${fname}:${i}"
-
-recordKeyText : RecordMeta -> String
-recordKeyText r =
-  "${r.recordMetaName}|${joinStrings r.recordMetaParams}|${joinStrings (map fieldKeyText r.recordMetaFields)}|${joinStrings r.recordMetaDerivings}|${if r.recordMetaDerivingVia then "1" else "0"}|${reprPrefix r.recordMetaRepr}|${r.recordMetaCtor}|${if r.recordMetaLinear then "1" else "0"}"
-
--- | R2：哈希结构化字段表（进 `miRecords` 的同一份数据）。
+-- record 头：结构化 `RecordMeta`（字段类型表达式也进编码，旧版只覆盖名字+序号 = C47 残余）。
 hashRecords : List RecordMeta -> String
-hashRecords recs = digestParts (map recordKeyText recs)
-
-joinStrings : List String -> String
-joinStrings [] = ""
-joinStrings ([x]) = x
-joinStrings (x :: rest) = "${x},${joinStrings rest}"
+hashRecords recs = payloadDigest (encTop (encList encRecordMeta) recs)
 
 -- 模块图数据（import 名 / alias / 限定标志；span 不参与）。
-importAliasText : Import -> String
-importAliasText i = case i.importAlias of
-  Just a => a
-  Nothing => ""
-
-importQualifiedText : Import -> String
-importQualifiedText i = if i.importIsQualified then "q" else "u"
-
-importNameText : Import -> String
-importNameText i = "${i.importName}|${importAliasText i}|${importQualifiedText i}"
-
 hashImports : List Import -> String
-hashImports is = digestParts (map importNameText is)
+hashImports is = payloadDigest (encTop (encList encImport) is)
 
-hashOfParts : String -> String -> List Import -> List Import -> List FixityDecl -> List RecordMeta -> List ExportEntry -> List String -> CachedProgram -> String
-hashOfParts name pkg imports implicitImports fixities records exports capabilities cp =
+-- | 已解析源码声明（`miDecls`）的内容摘要：显式规范编码（span / 路径不参与）。
+-- 旧实现完全不哈希 decls（只靠 record 头兜底），「模式形状/子句结构变了但 datas/defs
+-- 没变」会漏失效（C47）；这里把它作为独立段整段纳入。
+hashDecls : List Decl -> String
+hashDecls ds = payloadDigest (encTop encDecls ds)
+
+hashOfParts : String -> String -> List Import -> List Import -> List FixityDecl -> List RecordMeta -> List ExportEntry -> List String -> List Decl -> CachedProgram -> String
+hashOfParts name pkg imports implicitImports fixities records exports capabilities decls cp =
   digestParts
-    [ifaceHashVersion, name, pkg, hashImports imports, hashImports implicitImports, hashFixities fixities, hashRecords records, hashDatas (cachedDatas cp), hashDefs (cachedDefs cp), hashGlobals (cachedGlobals cp), hashInsts (cachedInsts cp), hashClasses (cachedClasses cp), hashExports exports, hashCapabilities capabilities]
+    [ifaceHashVersion, name, pkg, hashImports imports, hashImports implicitImports, hashFixities fixities, hashRecords records, hashDecls decls, hashDatas (cachedDatas cp), hashDefs (cachedDefs cp), hashGlobals (cachedGlobals cp), hashInsts (cachedInsts cp), hashClasses (cachedClasses cp), hashExports exports, hashCapabilities capabilities]
 
--- 从已存载荷重算接口哈希（自证）：输入与写侧 `hashOfParts` 完全同源。用于发现
--- 「载荷变了、`miIfaceHash` 没更新」的陈旧接口（`VUNA_IFACE_SELFTEST=1` 的读侧校验）。
--- 成本 O(payload)，只放在自检/CI 路径，不进热路径。
 hashOfIface : ModuleIface -> String
 hashOfIface m =
   hashOfParts (miNameOf m) (miPackageOf m) (miImportsOf m) (miImplicitImportsOf m) (miFixitiesOf m)
-    (miRecordsOf m) (miExportsOf m) (miCapabilitiesOf m) (miCachedOf m)
+    (miRecordsOf m) (miExportsOf m) (miCapabilitiesOf m) (miDeclsOf m) (miCachedOf m)
 
 -- ---------------------------------------------------------------
 -- 归属索引（与 codegen 同一规则）：decl/data 表命中优先，带点名字回落模块前缀。
@@ -625,7 +599,7 @@ mkIfaceBase pkg parts prog sources clean m = case cleanIfaceOf clean (moduleName
       records = recordsOfDecls m.moduleDeclsOf
       h =
         hashOfParts name pkg m.moduleImportsOf m.moduleImplicitImportsOf m.moduleFixitiesOf records
-          m.moduleExportsOf m.moduleCapabilities cp
+          m.moduleExportsOf m.moduleCapabilities m.moduleDeclsOf cp
     in ModuleIface name pkg (sourceOf sources name) h [] m.moduleImportsOf m.moduleImplicitImportsOf
       m.moduleCapabilities m.moduleExportsOf m.moduleFixitiesOf m.moduleDeclsOf records [] cp
 

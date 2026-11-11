@@ -1,0 +1,189 @@
+-- | 规范字节编码的原子层：自定界原子 + 对应的解析器（roundtrip 用）。
+module Vuna.Compiler.Canonical.Bytes
+  ( decBool
+  , decInt
+  , decList
+  , decMaybe
+  , decStr
+  , decTag
+  , encBool
+  , encConcat
+  , encInt
+  , encList
+  , encMaybe
+  , encStr
+  , encTag
+  , encTop
+  , lenOf
+  , thenPair
+  ) where
+
+-- Vuna.Compiler.Canonical.Bytes：内容寻址的**规范字节格式**（C32 哈希输入侧的完整形态）。
+--
+-- 编码目标：把语义值写成一串**自定界**字节，供 SHA-256 取摘要。与 `prim_marshal`
+-- 的区别（这正是 C32 的缺口）：
+--   * 显式：格式只由本模块定义，不随编译器/OCaml 运行时版本漂移；
+--   * 规范：调用方先去掉 span / 路径、按名字排序，编码本身不含任何位置信息；
+--   * 自定界：每个原子带类型前缀与长度，串接无歧义（`encConcat` 一次拼接）；
+--   * 可解析：每个原子都有对应 `dec*`，`enc`+`dec` 构成 roundtrip（见 examples/infra）。
+--
+-- 原子文法（字节）：
+--   tag     = '#' DEC ';'          int  = 'i' ['-'] DEC ';'
+--   string  = 's' DEC ':' BYTES     bool = 'b0' | 'b1'
+--   list    = '[' DEC ':' ITEM*     maybe = '0' | '1' ITEM
+--
+-- 编码器是**累积器（difference-list）风格**：`encX x acc` 把 x 的分片 cons 到 acc 上，
+-- 不拷贝子分片；顶层用 `encTop`/`encConcat` 一次 `strConcatMany`（单遍分配）。
+-- 因此整个值的编码是 O(字节数)，不会出现逐层 `++` 的 O(n²) 拷贝（MB 级载荷会直接
+-- 卡住 iface 阶段）。
+--
+-- 解析器吃 `List Int`（字节流）+ 显式 fuel（剩余字节上界）：每个原子至少消费 1 字节，
+-- 因此燃料递减可证终止（与 `shiftTermFuel`/`splitAcc` 同一「守卫 Int」惯例）。
+-- 解析只在 roundtrip 自检与测试里用；生产写侧只编码。
+import Base.Bool
+import Base.List
+import Base.Maybe
+import Base.Pair
+import Base.String
+
+-- | `List` 长度（`Base.List.length` 返回 `Nat`；编码要 `Int`）。
+lenOf : List a -> Int
+lenOf [] = 0
+lenOf (_ :: rest) = 1 + lenOf rest
+
+-- | 把分片列表拼成最终字节串（一次 `strConcatMany`）。
+encConcat : List String -> String
+encConcat parts = strConcatMany parts
+
+-- | 编码入口：`encTop f x` = 把 x 的完整编码拼成一个字符串。
+encTop : (a -> List String -> List String) -> a -> String
+encTop f x = encConcat (f x [])
+
+-- | 和类型构造子序号：`#<n>;`。
+encTag : Int -> List String -> List String
+encTag n acc = "#${strFromInt n};" :: acc
+
+-- | 整数：`i<十进制>;`（负数带前置 `-`；无前导零）。
+encInt : Int -> List String -> List String
+encInt n acc = "i${strFromInt n};" :: acc
+
+-- | 字符串：`s<字节长度>:<原始字节>`（长度是字节数，不是字符数）。
+encStr : String -> List String -> List String
+encStr s acc = "s${strFromInt (strLength s)}:" :: s :: acc
+
+-- | 布尔：`b1` / `b0`。
+encBool : Bool -> List String -> List String
+encBool True acc = "b1" :: acc
+encBool False acc = "b0" :: acc
+
+-- | 列表：`[<n>:<元素编码...>`（n = 元素个数）。
+encList : (a -> List String -> List String) -> List a -> List String -> List String
+encList f xs acc = "[${strFromInt (lenOf xs)}:" :: encListGo f xs acc
+
+-- | 列表元素：正序 cons 到 acc 上（递归吃 tail；编码本身不拷贝子分片）。
+encListGo : (a -> List String -> List String) -> List a -> List String -> List String
+encListGo f [] acc = acc
+encListGo f (x :: rest) acc = f x (encListGo f rest acc)
+
+-- | Maybe：`0` 表示 Nothing；`1<值编码>` 表示 Just。
+encMaybe : (a -> List String -> List String) -> Maybe a -> List String -> List String
+encMaybe f Nothing acc = "0" :: acc
+encMaybe f (Just x) acc = "1" :: f x acc
+
+-- | 解析一步的绑定：`thenPair (Just (Pair v rest)) k = k v rest`。
+thenPair : Maybe (Pair a (List Int)) -> (a -> List Int -> Maybe (Pair b (List Int))) -> Maybe (Pair b (List Int))
+thenPair Nothing k = Nothing
+thenPair (Just (Pair v rest)) k = k v rest
+
+-- | 字节是否为 ASCII 十进制数字（`0`..`9`）。
+isDigit : Int -> Bool
+isDigit c = c >= 48 && c <= 57
+
+-- | 读十进制数字直到 `stop` 字节（`:` = 58 / `;` = 59）。
+-- 返回累计值 + 剩余字节；遇见非数字或燃料耗尽返回 Nothing。
+decNumStop : Int -> Int -> Int -> List Int -> Maybe (Pair Int (List Int))
+decNumStop fuel stop acc bytes = if fuel <= 0 then Nothing
+else case bytes of
+  [] => Nothing
+  c :: rest =>
+    if c == stop then Just (Pair acc rest)
+    else if isDigit c then decNumStop (fuel - 1) stop (acc * 10 + (c - 48)) rest else Nothing
+
+-- | 取前 `n` 个字节（不足则原样返回；调用方用 `lenOf` 校验）。
+takeN : Int -> List Int -> List Int
+takeN n bytes = if n <= 0 then []
+else case bytes of
+  [] => []
+  c :: rest => c :: takeN (n - 1) rest
+
+-- | 丢掉前 `n` 个字节。
+dropN : Int -> List Int -> List Int
+dropN n bytes = if n <= 0 then bytes
+else case bytes of
+  [] => []
+  c :: rest => dropN (n - 1) rest
+
+-- | 解析 tag：`#<n>;`。
+decTag : Int -> List Int -> Maybe (Pair Int (List Int))
+decTag fuel bytes = if fuel <= 0 then Nothing
+else case bytes of
+  [] => Nothing
+  c :: rest => if c == 35 then decNumStop (fuel - 1) 59 0 rest else Nothing
+
+-- | 解析整数：`i[-]<n>;`。
+decInt : Int -> List Int -> Maybe (Pair Int (List Int))
+decInt fuel bytes = if fuel <= 0 then Nothing
+else case bytes of
+  [] => Nothing
+  c :: rest => if c == 105 then case rest of
+    45 :: r2 => thenPair (decNumStop (fuel - 1) 59 0 r2) (\n, b => Just (Pair (0 - n) b))
+    _ => thenPair (decNumStop (fuel - 1) 59 0 rest) (\n, b => Just (Pair n b))
+  else Nothing
+
+-- | 解析布尔：`b1` / `b0`。
+decBool : Int -> List Int -> Maybe (Pair Bool (List Int))
+decBool fuel bytes = if fuel <= 0 then Nothing
+else case bytes of
+  [] => Nothing
+  c :: rest => if c == 98 then case rest of
+    49 :: r2 => Just (Pair True r2)
+    48 :: r2 => Just (Pair False r2)
+    _ => Nothing
+  else Nothing
+
+-- | 解析字符串：`s<n>:<n 个字节>`（按字节取，不重新解码 UTF-8）。
+decStr : Int -> List Int -> Maybe (Pair String (List Int))
+decStr fuel bytes = if fuel <= 0 then Nothing
+else case bytes of
+  [] => Nothing
+  c :: rest => if c == 115 then thenPair (decNumStop (fuel - 1) 58 0 rest) (\n, b => let
+    taken = takeN n b
+  in if lenOf taken == n then Just (Pair (strPack taken) (dropN n b)) else Nothing
+  )
+  else Nothing
+
+-- | 解析列表：`[<n>:<n 个元素>`。
+decList : (Int -> List Int -> Maybe (Pair a (List Int))) -> Int -> List Int -> Maybe (Pair (List a) (List Int))
+decList fp fuel bytes = if fuel <= 0 then Nothing
+else case bytes of
+  [] => Nothing
+  c :: rest =>
+    if c == 91 then thenPair (decNumStop (fuel - 1) 58 0 rest) (\n, b => decItems fp n (fuel - 1) b [])
+    else Nothing
+
+-- | 列表元素的循环（`n` 个，fuel 每步递减）。
+decItems : (Int -> List Int -> Maybe (Pair a (List Int))) -> Int -> Int -> List Int -> List a -> Maybe (Pair (List a) (List Int))
+decItems fp n fuel bytes acc =
+  if n <= 0 then Just (Pair (reverse acc) bytes)
+  else if fuel <= 0 then Nothing
+  else thenPair (fp fuel bytes) (\x, b => decItems fp (n - 1) (fuel - 1) b (x :: acc))
+
+-- | 解析 Maybe：`0` = Nothing；`1<item>` = Just。
+decMaybe : (Int -> List Int -> Maybe (Pair a (List Int))) -> Int -> List Int -> Maybe (Pair (Maybe a) (List Int))
+decMaybe fp fuel bytes = if fuel <= 0 then Nothing
+else case bytes of
+  [] => Nothing
+  c :: rest => case c of
+    48 => Just (Pair Nothing rest)
+    49 => thenPair (fp (fuel - 1) rest) (\x, b => Just (Pair (Just x) b))
+    _ => Nothing

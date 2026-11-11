@@ -38,21 +38,41 @@ AST 上；Idris2 的对应阶段吃编译后的 case tree。vuna 的等价物就
 ## 哈希格式（D5）
 
 - **内容摘要 = SHA-256**（`Iface.shaText`，64 位小写十六进制）。`ifaceHashVersion` 参与
-  哈希输入：摘要算法或分片编码变化时递增，旧接口自然换代（与 `ifaceSchema` 分工：
-  schema 管载荷布局，版本管摘要算法）。
-- **`miIfaceHash` 是 Merkle 摘要**：导出面 / 能力 / imports / fixity / record 头 /
-  datas / defs / globals / insts / classes 各段先规范化（按名字排序、去 span / 路径）
-  再各自摘要，最后 `digestParts`（长度前缀拼接）做一次 SHA-256。
-- **MB 级 Marshal 载荷段**（datas / defs / globals / insts / classes / exports）先做
-  4-lane 63-bit wrapping 多项式**预哈希**折叠（零分配），再对折叠串做 SHA-256。原因：
-  对这些段逐字节跑 SHA 会把 iface 阶段变成 check 的新热点（实测 check-all +1.1 s）；
-  预哈希是非密码学函数（与 `CacheFormat` 同一威胁模型：无对手、只防意外碰撞），
-  顶层摘要仍是 SHA-256。
+  哈希输入：摘要算法、规范编码或段集合变化时递增，旧接口自然换代（与 `ifaceSchema`
+  分工：schema 管载荷布局，版本管摘要/编码口径）。
+- **哈希输入是显式规范编码，不再是 `prim_marshal`**（C32 的哈希输入侧，
+  `Vuna.Compiler.Canonical.{Bytes,Term,Ast,Elab}`）：原子文法 = `#tag;` / `i<n>;` /
+  `s<字节长>:<原始字节>` / `b0|b1` / `[<n>:…]` / `0|1…`，自定界、与编译器/OCaml 版本
+  无关。编码器是累积器（difference-list）风格，`strConcatMany` 一次拼接，整体 O(字节数)。
+- **span / 源路径不参与**：`Canonical.Term` 丢弃 `TVar` 的位置，`Canonical.Elab` 丢弃
+  ctor / inst / import / fixity 的 span。旧实现 Marshal 整个 `Term`/`DtCtor`/`DtInst`，
+  移动代码（行号变化）会让依赖方判脏——这是本版修复的实质缺陷。
+- **排序键改用语义键文本**（`sortByText`）：同一集合在「全量 / 增量」两条路径上的列表
+  顺序可能不同（globals 由干净模块产物 + 本次精化产物拼接），接口哈希不能因此漂移；
+  文本排序同时消除了「两个名字的哈希值碰撞 ⇒ 顺序歧义」这一类隐患。
+- **覆盖读方消费的全部字段**：导出表（含 `ExportEntry.parent`）、fixity（含别名目标
+  `fixityTarget`）、record 头（含字段类型表达式）、**`miDecls` 整段已解析声明**都进哈希。
+  旧实现漏了 parent、fixity 目标与 decls（C47）。
+- **`miIfaceHash` 是 Merkle 摘要**：各段编码后 `digestParts`（长度前缀拼接）做一次
+  SHA-256。MB 级段先 `prehashOfString` 折叠（4 lane 63-bit 多项式，非密码学）再 SHA-256，
+  避免逐字节 SHA 成为 check 的新热点（实测 check-all 会 +1.1 s）。
+- **版本分工**：`ifaceHashVersion` 管接口哈希的段集合与编码口径；`checkCacheSchema` /
+  `unitCacheSchema` / `astCacheSchema` 各自管对应缓存键的口径；二进制换代由
+  `ifaceCompilerTag`（版本 + 编译器指纹）与各 cache tag 兜底。任一变化都必须换代。
 - **源内容哈希 `siHash` 同一函数**（预哈希 + SHA-256），与 `miIfaceHash` 共用一套规范。
+- **大输入用内容键，不逐字节跑语言内 SHA**：`check` 的缓存 key 每轮要对全部源文件取
+  内容摘要（81 个模块 + 依赖闭包）。直接 `digestOfString`（语言内 SHA-256）会让 warm
+  `check compiler` 从 ~25ms 抬到 ~430ms；`Hash.contentKey` = **4-lane 63-bit 预折叠 +
+  SHA-256 折叠串 → 63-bit 派生键**（`Hash.contentAddress` 是同一折叠的十六进制地址），
+  实测 warm 回到 ~37ms、cold 6.7s（与 HEAD 基线 8.2s 同量级）。预哈希是非密码学函数
+  （与 `CacheFormat` 同一威胁模型），顶层摘要仍是 SHA-256。
+- **roundtrip 自证**：每个编码器都有对应 `dec*`，`examples/infra`（§64）断言
+  `encode (decode (encode v)) == encode v`，以及「只差 span 的两个值编码相同」。
 - **依赖链自愈**：`miDepHashes` 记录写接口时各依赖模块的摘要；依赖接口不可得时记哨兵
   `depMissingHash`。带哨兵的接口**判脏并重写**（workspace 并行检查下依赖可能后写，
   必须先保守重算一次），链校验跳过哨兵项。
-- 已知边界：载荷编码仍是 OCaml Marshal（canonical Core encoding 属 C32）。
+- 已知边界：**载荷存储**仍是 OCaml Marshal（C32 剩余：`ModuleIface`/`CachedProgram`/
+  `SplitFile` 的落盘编码，解码器只服务 roundtrip 自检）；哈希输入侧已完全显式。
 
 ## 数据流
 
@@ -64,10 +84,10 @@ Dt.check（全量或摘要路径）→ CheckedPackage = { DtProgram, modules, en
       ifaceOfPackage：按 Module 归属把 DtProgram 切成每模块 CachedProgram
         （归属表来自 Driver.Owner：声明名 / 实例名 / 派生实例 / trait 投影 / Dict_）
       → 逐模块 hashOfParts（exports / capabilities / imports / fixities / record 头 /
-        datas / defs / globals / insts / classes；不含 span / 源路径）→ miIfaceHash
-        （内容摘要 = **SHA-256**（`Iface.shaText`）；各段仍按名字排序后整表 Marshal 取字节，
-        排序是插入排序 O(d²)，单模块数千项时是已知边界——逐项哈希的交换律折叠实测在真实包上
-        更贵，见 [performance.md](performance.md) §4/§9）
+        miDecls / datas / defs / globals / insts / classes；不含 span / 源路径）→ miIfaceHash
+        （各段先按语义键文本排序，再由 `Canonical.*` 编码；内容摘要 = **SHA-256**
+        （`Iface.shaText`）；排序是插入排序 O(d²)，单模块数千项时是已知边界——逐项哈希的
+        交换律折叠实测在真实包上更贵，见 [performance.md](performance.md) §4/§9）
       → 逐模块 miDepHashes（直接 import 的接口哈希；包内模块边算边进表）
       → 包级 PackageManifest（schema / compiler / package / **pmEnv** / modules）→ 原子写
         `.vuna-iface`（包级锁内：`$TMPDIR/vuna-cache/<pkgHash>/iface.lock`，60s 过期可在
@@ -116,9 +136,11 @@ Driver.Compile.depIfacesOf
 2. **`deftbl` 只装定义体**：签名项进 deftbl 会让 `force` 把 `Int`/`String` 归约成 `Type`
    （C37 的 `Eq Type` 假歧义根因）。
 3. **接口哈希不含 span / 源路径，但必须覆盖读方消费的全部语义字段**：换行、注释、
-   checkout 路径变化不失效；exports、capabilities、imports、fixities、record 头、datas、
-   defs、globals、insts、classes 全部参与。历史缺口：`hashExports` 定义存在但从未接线，
-   导致依赖隐藏/新增导出时干净模块不判脏（§44m 回归）。
+   checkout 路径变化不失效；exports（含 parent）、capabilities、imports、fixities（含
+   别名目标）、record 头（含字段类型）、miDecls、datas、defs、globals、insts、classes
+   全部参与。历史缺口：`hashExports` 定义存在但从未接线（§44m 回归）；`ExportEntry.parent`、
+   `FixityDecl.fixityTarget`、record 字段类型与 `miDecls` 曾整段不进哈希（C47），现已由
+   规范编码补齐。
 4. **归属表必须覆盖全部 artifact**：写侧做覆盖性检查；漏项不写接口（安全阀）。
 5. **依赖接口哈希链必须闭合**：包内与跨包都按直接 import 校验；缺项（`-1` 哨兵）永不失配。
 6. **摘要路径的 `Err` 必须上报**：只有「接口不可用」才回退全量，本包真实错误不得被吞。
@@ -314,10 +336,11 @@ load 之后按闭包过滤模块表：起点 = entry 的全部 imports（含隐�
   字段访问与表示判定按同一份结论。布局与语义变化 ⇒ `vuna-iface 16 → 17`；`TRecord` 类型
   前导再 bump 到 18。
 - **序列化**：载荷已有 framing + 损坏回退 + schema/编译器指纹拒绝 + 内容寻址文件名
-  + `hashOfIface` 自证，但**仍是 OCaml Marshal**（非自描述格式；同长同校验和的构造性损坏
-  仍可能让 `Marshal.from_string` 抛异常；这种情况下读侧 `readModuleFileRaw` 的
-  `miName`/`miIfaceHash` 校验会拒绝，SELFTEST 下还会做载荷自证）。把
-  `ModuleIface`/`CachedProgram`/`SplitFile` 换成显式编码格式（C32 的完整形态）是后续项。
+  + `hashOfIface` 自证，但**落盘仍是 OCaml Marshal**（非自描述格式；同长同校验和的构造性
+  损坏仍可能让 `Marshal.from_string` 抛异常；读侧 `readModuleFileRaw` 的
+  `miName`/`miIfaceHash` 校验会拒绝，SELFTEST 下还会做载荷自证）。**哈希输入侧已换成
+  显式规范编码**（`Canonical.*`，C32 的哈希部分关闭）；把 `ModuleIface`/`CachedProgram`/
+  `SplitFile` 的**落盘编码**也换成同一格式（C32 剩余）是后续项。
 - **依赖可见性已收敛（S6）**：摘要路径 load 后按 entry/本包 import 闭包过滤模块表，未
   materialize 的依赖模块不提供实例/类，等价于全量路径（测试 §44i）。
 - **默认 iface 落在 `.output/iface/<编译器指纹>/`**（构建产物目录，gitignored）：与
@@ -326,9 +349,6 @@ load 之后按闭包过滤模块表：起点 = entry 的全部 imports（含隐�
   （已覆盖 `.output`）；指纹变化后旧桶不会被自动 GC，需要时手动清。默认布局（路径固定）
   的模块删除/改名孤儿不会被自动 GC（读侧只看 manifest，孤儿不参与）；镜像模式的内容寻址
   文件由写侧孤儿 GC（mtime > 60s 且未被 manifest 引用）清。
-- **`miDecls` 的哈希只覆盖 record 头**：字段类型、模式形状等语义细节仍可能变化而不进
-  `miIfaceHash`（它们通常伴随 defs/globals 变化，已被覆盖；但若只改 record 字段类型，
-  依赖方可能不判脏）。彻底方案是给 `Decl` 做去 span 的语义哈希（记录在 [debt.md](debt.md)）。
 - **判据维护成本**：新增接口字段时必须同时接进 `hashOfParts`（或在文档里写明为什么不需要），
   否则就是下一类「载荷变了、哈希没变」。`ifaceSchema` 的语义已扩为「字段布局 + 哈希输入
   集合」，两者任一变化都要 bump。
@@ -342,7 +362,7 @@ load 之后按闭包过滤模块表：起点 = entry 的全部 imports（含隐�
   「同一源码、`vuna check <单包>` 通过但 `vuna check .` 崩、或换个 TMPDIR 就好了」。
   规避：换二进制或改 AST 走 `TMPDIR=$(mktemp -d) vuna ...`（rotation 会同步 seed 与 vuna
   的布局，之后自然一致）。彻底修复 = 缓存键纳入编译器指纹（与 iface 的 `compilerTag`
-  同源）。
+  同源），见 debt C48。
 - **擦除位残 meta** 仍靠包段重编号；彻底方案是精化收尾消 meta。
 - 接口多存 `miDecls`（见上），文件比 TTC 的「只存编译后定义」更接近源码体积；后续可换更
   紧凑的终止性/record 上下文表示。

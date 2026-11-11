@@ -1,0 +1,289 @@
+-- | 精化产物 / 接口字段的规范编码（iface 哈希输入）。
+module Vuna.Compiler.Canonical.Elab
+  ( decDtClass
+  , decDtData
+  , decDtDef
+  , decDtDefs
+  , decDtDefsComplete
+  , decDtInst
+  , decExportEntries
+  , decExportEntry
+  , decFixities
+  , decFixity
+  , decImport
+  , decImports
+  , decRecordMeta
+  , decRecordMetas
+  , encDtClass
+  , encDtData
+  , encDtDef
+  , encDtDefs
+  , encDtInst
+  , encExportEntries
+  , encExportEntry
+  , encFixities
+  , encFixity
+  , encImport
+  , encImports
+  , encRecordMeta
+  , encRecordMetas
+  ) where
+
+-- Vuna.Compiler.Canonical.Elab：`Driver/Iface` 接口哈希的输入域（C32 哈希输入侧）。
+--
+-- 覆盖：`DtDef` / `DtData` / `DtInst` / `DtClass`（`Elab.Types`）、`RecordMeta`
+-- （`Elab.Records`）、`ExportEntry`（`Loader.Modules`）、`FixityDecl` / `Import`
+-- （`Frontend.Ast`）。全部走 `Canonical.Bytes` 的原子文法，不再 `prim_marshal`。
+--
+-- 相对旧实现（`prim_marshal`）的语义修正：
+--   * **span / 路径不参与编码**：`DtCtor`/`DtInst` 的 span、`Import`/`FixityDecl` 的 span
+--     都丢弃；换行、移动代码不再改变依赖方的接口哈希。
+--   * **覆盖读方真正消费的字段**：`ExportEntry.parent`（ctor 重导出保持源模块抽象性）
+--     与 `FixityDecl.fixityTarget`（`infixr 5 :: = Cons` 的别名目标）旧版没进哈希，
+--     属于 invariant「哈希必须覆盖读方消费的全部语义字段」的缺口，本版一并纳入。
+--   * `RecordMeta` 的字段**类型表达式**纳入编码（旧版只哈希名字+序号）：字段类型变化
+--     会让依赖方判脏，收窄 C47 的残余面。
+--
+-- 解码器只服务 roundtrip 自检/测试（`decXComplete` 入口）；生产写侧只编码。
+import Base.Bool
+import Base.List
+import Base.Maybe
+import Base.Pair
+import Base.String
+import Vuna.Compiler.Canonical.Ast
+import Vuna.Compiler.Canonical.Bytes
+import Vuna.Compiler.Canonical.CoreTerm
+import Vuna.Compiler.Core.Term
+import Vuna.Compiler.Elab.Records
+import Vuna.Compiler.Elab.Types
+import Vuna.Compiler.Frontend.Ast
+import Vuna.Compiler.Source
+import Vuna.Compiler.Loader.Modules
+
+-- ---------------------------------------------------------------
+-- 编码：精化产物
+-- | `DtCtor`：族名、binder 表、闭合类型（span 丢弃）。
+encDtCtor : DtCtor -> List String -> List String
+encDtCtor (DtCtor name family tele ty _) acc =
+  encStr name (encStr family (encList encBinder tele (encTerm ty acc)))
+
+-- | `DtFieldMeta`：字段名、声明序号、外层字段类型。
+encDtFieldMeta : DtFieldMeta -> List String -> List String
+encDtFieldMeta (DtFieldMeta name idx ty) acc = encStr name (encInt idx (encTerm ty acc))
+
+-- | `DtData`：名字 / 参数 / 构造子 / kind / via 类 / 线性 / 表示档位 / 字段表 / 是否 record。
+encDtData : DtData -> List String -> List String
+encDtData (DtData name params ctors kind viaClasses lin repr fields isRec) acc =
+  encStr name
+    (encList encBinder params (encList encDtCtor ctors (encTerm kind (encList encStr viaClasses (encBool lin (encReprTier repr (encList encDtFieldMeta fields (encBool isRec acc))))))))
+
+-- | `DtDef`：三类定义（有体 / axiom / extern），tag 0/1/2；span 丢弃。
+encDtDef : DtDef -> List String -> List String
+encDtDef (DtDef name ty body _) acc = encTag 0 (encStr name (encTerm ty (encTerm body acc)))
+encDtDef (DtAxiom name ty _) acc = encTag 1 (encStr name (encTerm ty acc))
+encDtDef (DtExtern name ty cName _) acc = encTag 2 (encStr name (encTerm ty (encStr cName acc)))
+
+-- | 定义表（iface 的 `cachedDefs`）：元素数 + 逐个编码。
+encDtDefs : List DtDef -> List String -> List String
+encDtDefs ds acc = encList encDtDef ds acc
+
+-- | `DtInst`：名字 / telescope / 约束上下文 / 头（span 丢弃）。
+encDtInst : DtInst -> List String -> List String
+encDtInst (DtInst name tele ctxE head _) acc =
+  encStr name (encList encTelePair tele (encList encTerm ctxE (encTerm head acc)))
+
+-- | `DtClass`：名字 / 参数名 / 方法投影 / 字段类型。
+encDtClass : DtClass -> List String -> List String
+encDtClass (DtClass name params projs fieldTys) acc =
+  encStr name (encList encStr params (encList encTelePair projs (encList encTerm fieldTys acc)))
+
+-- | 闭合项对（`(名字, 项)`）：实例 telescope / 类方法投影共用。
+encTelePair : Pair String Term -> List String -> List String
+encTelePair (Pair n t) acc = encStr n (encTerm t acc)
+
+-- | 带 multiplicity 的 binder（`DtCtor.telescope` / `DtData.params`）。
+encBinder : Pair String Rig -> List String -> List String
+encBinder (Pair n r) acc = encStr n (encRig r acc)
+
+-- | `Maybe Term`：`0` / `1<term>`。
+encMaybeTerm : Maybe Term -> List String -> List String
+encMaybeTerm m acc = encMaybe encTerm m acc
+
+-- | 表示档位：`ReprAuto`/`ReprTransparent`/`ReprOpaque` = tag 0/1/2。
+encReprTier : ReprTier -> List String -> List String
+encReprTier ReprAuto = encTag 0
+encReprTier ReprTransparent = encTag 1
+encReprTier ReprOpaque = encTag 2
+
+-- ---------------------------------------------------------------
+-- 编码：接口元数据
+-- ---------------------------------------------------------------
+-- | `ExportEntry`：kind / public / target / **parent**（ctor 所属类型，旧哈希漏了）。
+encExportEntry : ExportEntry -> List String -> List String
+encExportEntry e acc = encStr e.kind (encStr e.public (encStr e.target (encStr e.parent acc)))
+
+-- | 导出表（元素数 + 逐条）。
+encExportEntries : List ExportEntry -> List String -> List String
+encExportEntries es acc = encList encExportEntry es acc
+
+-- | `FixityDecl`：运算符 / 级别 / 结合性 / **别名目标**（span 丢弃）。
+encFixity : FixityDecl -> List String -> List String
+encFixity f acc =
+  encStr f.fixityOp
+    (encInt f.fixityLevel (encInt f.fixityAssoc (encMaybe encStr f.fixityTarget acc)))
+
+-- | fixity 表。
+encFixities : List FixityDecl -> List String -> List String
+encFixities fs acc = encList encFixity fs acc
+
+-- | `Import`：模块名 / 是否限定 / 别名（span 丢弃）。
+encImport : Import -> List String -> List String
+encImport i acc =
+  encStr i.importName (encBool i.importIsQualified (encMaybe encStr i.importAlias acc))
+
+-- | import 表。
+encImports : List Import -> List String -> List String
+encImports is acc = encList encImport is acc
+
+-- | record 字段元数据：字段名 / 声明序号 / **字段类型表达式**（旧哈希只取名字+序号）。
+encRecordFieldMeta : RecordFieldMeta -> List String -> List String
+encRecordFieldMeta f acc =
+  encStr f.recordFieldName (encInt f.recordFieldIndex (encExpr f.recordFieldType acc))
+
+-- | `RecordMeta`：名字 / 参数 / 字段表 / 派生 / via / 档位 / 合成构造子 / 线性。
+encRecordMeta : RecordMeta -> List String -> List String
+encRecordMeta r acc =
+  encStr r.recordMetaName
+    (encList encStr r.recordMetaParams (encList encRecordFieldMeta r.recordMetaFields (encList encStr r.recordMetaDerivings (encBool r.recordMetaDerivingVia (encReprTier r.recordMetaRepr (encStr r.recordMetaCtor (encBool r.recordMetaLinear [])))))))
+
+-- | record 头表。
+encRecordMetas : List RecordMeta -> List String -> List String
+encRecordMetas rs acc = encList encRecordMeta rs acc
+
+-- ---------------------------------------------------------------
+-- 解码（roundtrip 自检用）
+-- ---------------------------------------------------------------
+-- | 解析 `(名字, multiplicity)` binder（`DtCtor.telescope` / `DtData.params`）。
+decBinder : Int -> List Int -> Maybe (Pair (Pair String Rig) (List Int))
+decBinder fuel bytes =
+  if fuel <= 0 then Nothing
+  else thenPair (decStr (fuel - 1) bytes)
+    (\n, b1 => thenPair (decRig (fuel - 1) b1) (\r, b2 => Just (Pair (Pair n r) b2)))
+
+-- | 解析 `(名字, 项)` 对（实例 telescope / 类方法投影）。
+decTelePair : Int -> List Int -> Maybe (Pair (Pair String Term) (List Int))
+decTelePair fuel bytes =
+  thenPair (decStr (fuel - 1) bytes)
+    (\n, b1 => thenPair (decTerm (fuel - 1) b1) (\t, b2 => Just (Pair (Pair n t) b2)))
+
+-- | 解析表示档位 tag（0/1/2 = Auto/Transparent/Opaque）。
+decReprTier : Int -> List Int -> Maybe (Pair ReprTier (List Int))
+decReprTier fuel bytes = if fuel <= 0 then Nothing
+else thenPair (decTag fuel bytes) (\tag, b1 => case tag of
+  0 => Just (Pair ReprAuto b1)
+  1 => Just (Pair ReprTransparent b1)
+  2 => Just (Pair ReprOpaque b1)
+  _ => Nothing
+)
+
+-- | 解析 `DtCtor`。
+decDtCtor : Int -> List Int -> Maybe (Pair DtCtor (List Int))
+decDtCtor fuel bytes =
+  thenPair (decStr (fuel - 1) bytes)
+    (\name, b1 => thenPair (decStr (fuel - 1) b1) (\family, b2 => thenPair (decList decBinder (fuel - 1) b2) (\tele, b3 => thenPair (decTerm (fuel - 1) b3) (\ty, b4 => Just (Pair (DtCtor name family tele ty Nothing) b4)))))
+
+-- | 解析 `DtFieldMeta`。
+decDtFieldMeta : Int -> List Int -> Maybe (Pair DtFieldMeta (List Int))
+decDtFieldMeta fuel bytes =
+  thenPair (decStr (fuel - 1) bytes)
+    (\name, b1 => thenPair (decInt (fuel - 1) b1) (\idx, b2 => thenPair (decTerm (fuel - 1) b2) (\ty, b3 => Just (Pair (DtFieldMeta name idx ty) b3))))
+
+-- | 解析 `DtData`。
+decDtData : Int -> List Int -> Maybe (Pair DtData (List Int))
+decDtData fuel bytes =
+  thenPair (decStr (fuel - 1) bytes)
+    (\name, b1 => thenPair (decList decBinder (fuel - 1) b1) (\params, b2 => thenPair (decList decDtCtor (fuel - 1) b2) (\ctors, b3 => thenPair (decTerm (fuel - 1) b3) (\kind, b4 => thenPair (decList decStr (fuel - 1) b4) (\viaClasses, b5 => thenPair (decBool (fuel - 1) b5) (\lin, b6 => thenPair (decReprTier (fuel - 1) b6) (\repr, b7 => thenPair (decList decDtFieldMeta (fuel - 1) b7) (\fields, b8 => thenPair (decBool (fuel - 1) b8) (\isRec, b9 => Just (Pair (DtData name params ctors kind viaClasses lin repr fields isRec) b9))))))))))
+
+-- | 解析 `DtDef`（tag 0/1/2）。
+decDtDef : Int -> List Int -> Maybe (Pair DtDef (List Int))
+decDtDef fuel bytes = if fuel <= 0 then Nothing
+else thenPair (decTag fuel bytes) (\tag, b1 => case tag of
+  0 =>
+    thenPair (decStr (fuel - 1) b1)
+      (\name, b2 => thenPair (decTerm (fuel - 1) b2) (\ty, b3 => thenPair (decTerm (fuel - 1) b3) (\body, b4 => Just (Pair (DtDef name ty body Nothing) b4))))
+  1 =>
+    thenPair (decStr (fuel - 1) b1)
+      (\name, b2 => thenPair (decTerm (fuel - 1) b2) (\ty, b3 => Just (Pair (DtAxiom name ty Nothing) b3)))
+  2 =>
+    thenPair (decStr (fuel - 1) b1)
+      (\name, b2 => thenPair (decTerm (fuel - 1) b2) (\ty, b3 => thenPair (decStr (fuel - 1) b3) (\cName, b4 => Just (Pair (DtExtern name ty cName Nothing) b4))))
+  _ => Nothing
+)
+
+-- | 解析定义表。
+decDtDefs : Int -> List Int -> Maybe (Pair (List DtDef) (List Int))
+decDtDefs fuel bytes = if fuel <= 0 then Nothing else decList decDtDef fuel bytes
+
+-- | 解析 `DtInst`。
+decDtInst : Int -> List Int -> Maybe (Pair DtInst (List Int))
+decDtInst fuel bytes =
+  thenPair (decStr (fuel - 1) bytes)
+    (\name, b1 => thenPair (decList decTelePair (fuel - 1) b1) (\tele, b2 => thenPair (decList decTerm (fuel - 1) b2) (\ctxE, b3 => thenPair (decTerm (fuel - 1) b3) (\head, b4 => Just (Pair (DtInst name tele ctxE head Nothing) b4)))))
+
+-- | 解析 `DtClass`。
+decDtClass : Int -> List Int -> Maybe (Pair DtClass (List Int))
+decDtClass fuel bytes =
+  thenPair (decStr (fuel - 1) bytes)
+    (\name, b1 => thenPair (decList decStr (fuel - 1) b1) (\params, b2 => thenPair (decList decTelePair (fuel - 1) b2) (\projs, b3 => thenPair (decList decTerm (fuel - 1) b3) (\fieldTys, b4 => Just (Pair (DtClass name params projs fieldTys) b4)))))
+
+-- | 解析 `ExportEntry`。
+decExportEntry : Int -> List Int -> Maybe (Pair ExportEntry (List Int))
+decExportEntry fuel bytes =
+  thenPair (decStr (fuel - 1) bytes)
+    (\kind, b1 => thenPair (decStr (fuel - 1) b1) (\public, b2 => thenPair (decStr (fuel - 1) b2) (\target, b3 => thenPair (decStr (fuel - 1) b3) (\parent, b4 => Just (Pair (ExportEntry kind public target parent) b4)))))
+
+-- | 解析导出表。
+decExportEntries : Int -> List Int -> Maybe (Pair (List ExportEntry) (List Int))
+decExportEntries fuel bytes = if fuel <= 0 then Nothing else decList decExportEntry fuel bytes
+
+-- | 解析 `FixityDecl`。
+decFixity : Int -> List Int -> Maybe (Pair FixityDecl (List Int))
+decFixity fuel bytes =
+  thenPair (decStr (fuel - 1) bytes)
+    (\op, b1 => thenPair (decInt (fuel - 1) b1) (\level, b2 => thenPair (decInt (fuel - 1) b2) (\assoc, b3 => thenPair (decMaybe decStr (fuel - 1) b3) (\target, b4 => Just (Pair (FixityDecl op level assoc target (Span "" 0 0 0 0)) b4)))))
+
+-- | 解析 fixity 表。
+decFixities : Int -> List Int -> Maybe (Pair (List FixityDecl) (List Int))
+decFixities fuel bytes = if fuel <= 0 then Nothing else decList decFixity fuel bytes
+
+-- | 解析 `Import`。
+decImport : Int -> List Int -> Maybe (Pair Import (List Int))
+decImport fuel bytes =
+  thenPair (decStr (fuel - 1) bytes)
+    (\name, b1 => thenPair (decBool (fuel - 1) b1) (\q, b2 => thenPair (decMaybe decStr (fuel - 1) b2) (\alias, b3 => Just (Pair (Import name q alias (Span "" 0 0 0 0)) b3))))
+
+-- | 解析 import 表。
+decImports : Int -> List Int -> Maybe (Pair (List Import) (List Int))
+decImports fuel bytes = if fuel <= 0 then Nothing else decList decImport fuel bytes
+
+-- | 解析 record 字段元数据。
+decRecordFieldMeta : Int -> List Int -> Maybe (Pair RecordFieldMeta (List Int))
+decRecordFieldMeta fuel bytes =
+  thenPair (decStr (fuel - 1) bytes)
+    (\name, b1 => thenPair (decInt (fuel - 1) b1) (\idx, b2 => thenPair (decExpr (fuel - 1) b2) (\ty, b3 => Just (Pair (RecordFieldMeta name ty idx) b3))))
+
+-- | 解析 `RecordMeta`。
+decRecordMeta : Int -> List Int -> Maybe (Pair RecordMeta (List Int))
+decRecordMeta fuel bytes =
+  thenPair (decStr (fuel - 1) bytes)
+    (\name, b1 => thenPair (decList decStr (fuel - 1) b1) (\params, b2 => thenPair (decList decRecordFieldMeta (fuel - 1) b2) (\fields, b3 => thenPair (decList decStr (fuel - 1) b3) (\derivings, b4 => thenPair (decBool (fuel - 1) b4) (\via, b5 => thenPair (decReprTier (fuel - 1) b5) (\repr, b6 => thenPair (decStr (fuel - 1) b6) (\ctor, b7 => thenPair (decBool (fuel - 1) b7) (\lin, b8 => Just (Pair (RecordMeta name params fields derivings via repr ctor lin) b8)))))))))
+
+-- | 解析 record 头表。
+decRecordMetas : Int -> List Int -> Maybe (Pair (List RecordMeta) (List Int))
+decRecordMetas fuel bytes = if fuel <= 0 then Nothing else decList decRecordMeta fuel bytes
+
+-- | 定义表整串 roundtrip 入口。
+decDtDefsComplete : String -> Maybe (List DtDef)
+decDtDefsComplete s = case decDtDefs (strLength s) (strUnpack s) of
+  Nothing => Nothing
+  Just (Pair ds rest) => if lenOf rest == 0 then Just ds else Nothing

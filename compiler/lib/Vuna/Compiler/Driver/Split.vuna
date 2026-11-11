@@ -21,6 +21,7 @@ module Vuna.Compiler.Driver.Split
 --   - 最后按依赖拓扑序链接成可执行文件。
 -- 构建脚本只用 POSIX sh + ocamlopt，可在 Nix 沙箱内复现。
 import Vuna.Compiler.Common
+import Vuna.Compiler.Hash
 import Base.HashMap
 import Base.Host
 
@@ -226,7 +227,7 @@ joinCmxs (name :: rest) = "${name}.cmx ${joinCmxs rest}"
 -- 排序）。单元缓存复用旧 `SplitFile` 后列表顺序会随命中集合变化，build.sh 的层/顺序
 -- 不能因此漂移（否则增量/全量产物不一致）。深度用迭代松弛算（与列表顺序无关）。
 unitTieKey : String -> Int
-unitTieKey name = strHash name * 1000003 + strHash "t:${name}"
+unitTieKey name = Vuna.Compiler.Hash.contentKey "t:${name}"
 
 findFileNamed : List SplitFile -> String -> Maybe SplitFile
 findFileNamed [] _ = Nothing
