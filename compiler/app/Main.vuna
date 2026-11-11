@@ -1,6 +1,13 @@
 -- vuna-compiler：编译器 CLI 入口（seed 与 stage 1 编译器共用）。
 -- main : IO Int——由运行时执行；getArgs/exit 是 Base.IO 的 IO API。
 import Vuna.Compiler.Driver.CompilerCli
+-- 包接口面：下面三个基础设施模块不在编译器的运行路径上，但属于 compiler 包的导出面
+-- （工具链与 examples/infra 消费）。显式 import 让它们进入入口闭包：seed 与包 iface
+-- 都按入口闭包生成，iface 覆盖完整模块面后，根包 `check .` 才能走依赖 iface 的摘要/
+-- 增量路径（否则 vuna-compiler 依赖被判 invalid，只能回退 full）。
+import Vuna.Compiler.Frontend.Cst
+import Vuna.Compiler.Hash
+import Vuna.Compiler.Query
 import Base.Monad
 import Base.IO.Host
 
