@@ -58,11 +58,12 @@ import Vuna.Compiler.Packages.Pkg
 astCacheSchema : String
 astCacheSchema = "vuna-ast-cache 7"
 
-astCacheDir : String
-astCacheDir =
-  let
-    base = runPure (prim_eff_getenv "TMPDIR")
-  in "${if base == "" then "/tmp" else base}/vuna-cache/ast"
+-- M4（效果显式化）：AST 缓存目录/读写、模块文件探测与读盘都是宿主动作，显式在
+-- `Eff []` 里；导出表计算、flatten 与 resolve 保持纯函数。
+astCacheDir : Eff [] String
+astCacheDir = do
+  base <- prim_eff_getenv "TMPDIR"
+  pure "${if base == "" then "/tmp" else base}/vuna-cache/ast"
 
 astKeyOf : String -> String -> String
 astKeyOf path src = Vuna.Compiler.Hash.contentAddress "${astCacheSchema}\t${path}\t${src}"
@@ -89,57 +90,64 @@ astCacheFile (AstCacheEntry src file) = file
 -- 截断/篡改/旧格式 ⇒ Nothing ⇒ 重新 parse 并覆盖条目；只有通过 framing 校验的字节才
 -- 交给 `prim_unmarshal`（坏文件不再让 Marshal 抛异常/解出错类型）。命中仍逐字节比较
 -- 源文本（key 碰撞保护）。
-readAstCache : String -> Maybe AstCacheEntry
-readAstCache cpath = case readFramed astCacheSchema cpath of
-  Just payload => Just (prim_unmarshal payload)
-  Nothing => Nothing
+readAstCache : String -> Eff [] (Maybe AstCacheEntry)
+readAstCache cpath = do
+  framed <- readFramedEff astCacheSchema cpath
+  pure (case framed of
+    Just payload => Just (prim_unmarshal payload)
+    Nothing => Nothing
+  )
 
-storeAstCache : String -> String -> SourceFile -> SourceFile
-storeAstCache cpath src parsed =
-  let
-    _ = ensureDirPath astCacheDir
-    _ =
-      runPure
-        (prim_eff_writeFileAtomic cpath (frameEncode astCacheSchema (prim_marshal (AstCacheEntry src parsed))))
-  in parsed
+storeAstCache : String -> String -> SourceFile -> Eff [] SourceFile
+storeAstCache cpath src parsed = do
+  astDir <- astCacheDir
+  _ <- ensureDirPath astDir
+  _ <-
+    prim_eff_writeFileAtomic cpath
+      (frameEncode astCacheSchema (prim_marshal (AstCacheEntry src parsed)))
+  pure parsed
 
-ensureDirPath : String -> Int
+ensureDirPath : String -> Eff [] Int
 ensureDirPath path = ensureDirPathFuel 256 path
 
-ensureDirPathFuel : Int -> String -> Int
-ensureDirPathFuel fuel path = if fuel <= 0 then 0
-else if path == "" || path == "." || path == "/" then 0
-else if runPure (prim_eff_fileExists path) then 0
-else
-  let
-    _ = ensureDirPathFuel (fuel - 1) (parentOfPath path)
-  in runPure (prim_eff_makeDir path)
+ensureDirPathFuel : Int -> String -> Eff [] Int
+ensureDirPathFuel fuel path = if fuel <= 0 then pure 0
+else if path == "" || path == "." || path == "/" then pure 0
+else do
+  exists <- prim_eff_fileExists path
+  if exists then pure 0
+  else do
+    _ <- ensureDirPathFuel (fuel - 1) (parentOfPath path)
+    prim_eff_makeDir path
 
-parseFileWithPath : String -> String -> Check SourceFile
-parseFileWithPath path src =
+parseFileWithPath : String -> String -> Eff [] (Check SourceFile)
+parseFileWithPath path src = do
+  astDir <- astCacheDir
   let
-    cpath = "${astCacheDir}/${astKeyOf path src}"
-  in case readAstCache cpath of
-    Just entry =>
-      if astCacheSource entry == src then OkC (astCacheFile entry)
-      else parseAndStoreAt cpath path src
-    Nothing => parseAndStoreAt cpath path src
+    cpath = "${astDir}/${astKeyOf path src}"
+  in do
+    cached <- readAstCache cpath
+    case cached of
+      Just entry =>
+        if astCacheSource entry == src then pure (OkC (astCacheFile entry))
+        else parseAndStoreAt cpath path src
+      Nothing => parseAndStoreAt cpath path src
 
 -- 解析错误统一加 `<path>: ` 前缀（parser 诊断本身无位置）；例外：诊断首行已经以本文件
 -- 路径开头（parser 侧带 span 的诊断，如 `[PS_RepeatedPatternBinder]`）时不再重复加，
 -- 保持 CLI 首行的 `<file>:<line>:<col>: <消息>` 契约（DiagRender 才能追加源码片段）。
-parseAndStoreAt : String -> String -> String -> Check SourceFile
+parseAndStoreAt : String -> String -> String -> Eff [] (Check SourceFile)
 parseAndStoreAt cpath path src =
   let
     _ = resetParseErrors 0
   in case parseSourceRecovering path src of
-    ErrC e => ErrC (attachParsePath path e)
+    ErrC e => pure (ErrC (attachParsePath path e))
     OkC parsed =>
       let
         errs = peekParseErrors 0
       in case errs of
-        [] => OkC (storeAstCache cpath src parsed)
-        e :: _ => ErrC (attachParsePath path e)
+        [] => fmap OkC (storeAstCache cpath src parsed)
+        e :: _ => pure (ErrC (attachParsePath path e))
 
 -- 解析错误统一加 `<path>: ` 前缀（parser 诊断本身无位置）。
 attachParsePath : String -> Diagnostic -> Diagnostic
@@ -587,16 +595,19 @@ showCycle name stack = joinArrows (reverse (name :: stack))
 -- 的 Prelude 不算候选（`implicitPreludeDeps` 按包名过滤）。
 -- M26：ad-hoc（importerPkg==""）不再绕过——无 manifest 的单文件同样是包上下文
 -- （base-only），自动注入 base 的 Prelude；没有 base 依赖的包没有候选，于是不注入。
-implicitPrelude : List Root -> String -> String -> List Import -> Check (List Import)
+implicitPrelude : List Root -> String -> String -> List Import -> Eff [] (Check (List Import))
 implicitPrelude roots importerPkg currentName imports =
-  if currentName == "Prelude" then OkC []
-  else if memName "Prelude" (importModuleNames imports) then OkC []
+  if currentName == "Prelude" then pure (OkC [])
+  else if memName "Prelude" (importModuleNames imports) then pure (OkC [])
   else implicitPreludeFrom roots importerPkg
 
-implicitPreludeFrom : List Root -> String -> Check (List Import)
-implicitPreludeFrom roots importerPkg = case collectModuleFiles roots "Prelude" importerPkg [] [] of
-  Pair allowed hidden =>
-    implicitPreludeDeps importerPkg (filter (\c => rootName (secondOf c) /= importerPkg) allowed)
+implicitPreludeFrom : List Root -> String -> Eff [] (Check (List Import))
+implicitPreludeFrom roots importerPkg = do
+  collected <- collectModuleFiles roots "Prelude" importerPkg [] []
+  let
+    allowed = firstOf collected
+  in pure
+    (implicitPreludeDeps importerPkg (filter (\c => rootName (secondOf c) /= importerPkg) allowed))
 
 implicitPreludeDeps : String -> List (Pair String Root) -> Check (List Import)
 implicitPreludeDeps importerPkg [] = OkC []
@@ -626,122 +637,198 @@ hostModuleIn [] name = False
 hostModuleIn (root :: rest) name =
   if memName name (rootHostModules root) then True else hostModuleIn rest name
 
-loadAll : Int -> List Root -> Bool -> String -> List Module -> List String -> List Import -> Check (List Module)
-loadAll fuel roots selfPriv importerPkg modules stack imports = if fuel <= 0 then icFuel "loader"
+loadAll : Int -> List Root -> Bool -> String -> List Module -> List String -> List Import -> Eff [] (Check (List Module))
+loadAll fuel roots selfPriv importerPkg modules stack imports = if fuel <= 0 then pure (icFuel "loader")
 else case imports of
-  [] => OkC modules
-  imp :: rest =>
-    Vuna.Compiler.Common.bind
-      (loadModule (fuel - 1) roots selfPriv importerPkg modules stack (importName imp))
-      (\modules2 => loadAll (fuel - 1) roots selfPriv importerPkg modules2 stack rest)
+  [] => pure (OkC modules)
+  imp :: rest => do
+    modulesR <- loadModule (fuel - 1) roots selfPriv importerPkg modules stack (importName imp)
+    case modulesR of
+      ErrC e => pure (ErrC e)
+      OkC modules2 => loadAll (fuel - 1) roots selfPriv importerPkg modules2 stack rest
 
-loadModule : Int -> List Root -> Bool -> String -> List Module -> List String -> String -> Check (List Module)
-loadModule fuel roots selfPriv importerPkg modules stack name = if fuel <= 0 then icFuel "loader"
+loadModule : Int -> List Root -> Bool -> String -> List Module -> List String -> String -> Eff [] (Check (List Module))
+loadModule fuel roots selfPriv importerPkg modules stack name = if fuel <= 0 then pure (icFuel "loader")
 else case findModule modules name of
-  Just m => OkC modules
-  Nothing => if memName name stack then ldErr1 (ImportCycle (showCycle name stack)) (showCycle name stack)
-  else if hostModuleIn roots name && not (importerPrivileged roots selfPriv importerPkg) then ldErr1 (HostModulePrivileged name) name
-  else if validModuleName name then Vuna.Compiler.Common.bind (findModuleFile roots name importerPkg) (\found => let
-    -- F3 P2：宿主层模块只允许特权包 import（base 自己/compiler/根工具链）。
-    path = firstOf found
-  in let
-    root = secondOf found
-    _ = note "parse-module=${name}"
-  in Vuna.Compiler.Common.bind (parseFileWithPath path (runPure (prim_eff_readFile path))) (\src => case src of
-    SourceFile hdr imports fixities decls => Vuna.Compiler.Common.bind (validateModuleHeader name hdr) (\_ => Vuna.Compiler.Common.bind (validateImports name imports) (\_ => Vuna.Compiler.Common.bind (implicitPrelude roots (rootName root) name imports) (\implicit => Vuna.Compiler.Common.bind (loadAll (fuel - 1) roots selfPriv (rootName root) modules (name :: stack) (append imports implicit)) (\modules2 => Vuna.Compiler.Common.bind (computeExports modules2 name hdr imports decls) (\exports => let
-      visible =
-        dedupeFixities (append fixities (visibleFixitiesOf modules2 (append imports implicit)))
-    in OkC
-      (Base.List.Cons (Module name (rootName root) imports implicit decls exports (rootCapabilities root) (rootTrustUnsafe root) visible (reexportedImportNamesOfHeader imports hdr)) modules2)
-    )
-    )
-    )
-    )
-    )
-  )
-  )
-  else ldErr1 (InvalidModuleName name) name
+  Just m => pure (OkC modules)
+  Nothing => if memName name stack then pure (ldErr1 (ImportCycle (showCycle name stack)) (showCycle name stack))
+  else if hostModuleIn roots name && not (importerPrivileged roots selfPriv importerPkg) then pure (ldErr1 (HostModulePrivileged name) name)
+  else if validModuleName name then do
+    foundR <- findModuleFile roots name importerPkg
+    case foundR of
+      ErrC e => pure (ErrC e)
+      OkC found =>
+        let
+          -- F3 P2：宿主层模块只允许特权包 import（base 自己/compiler/根工具链）。
+          path = firstOf found
+          root = secondOf found
+          _ = note "parse-module=${name}"
+        in do
+          text <- prim_eff_readFile path
+          parsed <- parseFileWithPath path text
+          case parsed of
+            ErrC e => pure (ErrC e)
+            OkC (SourceFile hdr imports fixities decls) => case validateModuleHeader name hdr of
+              ErrC e => pure (ErrC e)
+              OkC _ => case validateImports name imports of
+                ErrC e => pure (ErrC e)
+                OkC _ => do
+                  implicitR <- implicitPrelude roots (rootName root) name imports
+                  case implicitR of
+                    ErrC e => pure (ErrC e)
+                    OkC implicit => do
+                      modulesR <-
+                        loadAll (fuel - 1) roots selfPriv (rootName root) modules (name :: stack)
+                          (append imports implicit)
+                      case modulesR of
+                        ErrC e => pure (ErrC e)
+                        OkC modules2 => case computeExports modules2 name hdr imports decls of
+                          ErrC e => pure (ErrC e)
+                          OkC exports =>
+                            let
+                              visible =
+                                dedupeFixities
+                                  (append fixities (visibleFixitiesOf modules2 (append imports implicit)))
+                            in pure
+                              (OkC (Base.List.Cons (Module name (rootName root) imports implicit decls exports (rootCapabilities root) (rootTrustUnsafe root) visible (reexportedImportNamesOfHeader imports hdr)) modules2))
+  else pure (ldErr1 (InvalidModuleName name) name)
 
 -- 包上下文入口：ctx 给出模块根（自己 lib 在最前 + 依赖闭包）与导入方包名
 -- （决定同包/跨包导出可见性与 manifest 能力声明）。
 -- loadProject 返回 flatten 前的形态（入口声明 + 依赖模块列表），供分离编译使用。
-loadProject : PackageContext -> String -> Check Project
+loadProject : PackageContext -> String -> Eff [] (Check Project)
 loadProject ctx entry = loadProjectWithPreloaded ctx entry []
 
 -- M34.5（S2）：接口模式加载。`preloaded` 是依赖包里**已解析**的模块（来自模块接口），
 -- 加载器把它们当「已加载模块」直接命中：不读源码、不 parse、不算导出表。本包模块与入口
 -- 仍按源码加载；模块表的顺序约定与 `loadAll` 一致（新加载模块前插，dependents-first），
 -- 所以调用方应把 `preloaded` 按 reverse(topo) 传入。
-loadProjectWithPreloaded : PackageContext -> String -> List Module -> Check Project
+loadProjectWithPreloaded : PackageContext -> String -> List Module -> Eff [] (Check Project)
 loadProjectWithPreloaded ctx entry preloaded =
   let
     _ = resetWarnings 0
-  in if runPure (prim_eff_fileExists entry) then Vuna.Compiler.Common.bind (parseFileWithPath entry (runPure (prim_eff_readFile entry))) (\src => case src of
-    SourceFile hdr imports fixities decls => case hdr of
-      Just (ModDecl dname hasList items sp) => ldErr1 (ModuleHeaderInEntryFile entry) entry
-      Nothing =>
-        Vuna.Compiler.Common.bind (validateImports "<entry>" imports)
-          (\_ => Vuna.Compiler.Common.bind (implicitPrelude (contextRoots ctx) (contextPackageName ctx) "" imports) (\implicit => Vuna.Compiler.Common.bind (loadAll 1048576 (contextRoots ctx) (contextPrivileged ctx) (contextPackageName ctx) preloaded [] (append imports implicit)) (\modules => OkC (Project decls imports implicit modules (contextPackageName ctx) (contextCapabilities ctx) (contextTrustUnsafe ctx) False fixities))))
-  )
-  else ldErr1 (EntryFileNotFound entry) entry
+  in do
+    exists <- prim_eff_fileExists entry
+    if exists then do
+      text <- prim_eff_readFile entry
+      parsed <- parseFileWithPath entry text
+      case parsed of
+        ErrC e => pure (ErrC e)
+        OkC (SourceFile hdr imports fixities decls) => case hdr of
+          Just (ModDecl dname hasList items sp) =>
+            pure (ldErr1 (ModuleHeaderInEntryFile entry) entry)
+          Nothing => case validateImports "<entry>" imports of
+            ErrC e => pure (ErrC e)
+            OkC _ => do
+              implicitR <- implicitPrelude (contextRoots ctx) (contextPackageName ctx) "" imports
+              case implicitR of
+                ErrC e => pure (ErrC e)
+                OkC implicit => do
+                  modulesR <-
+                    loadAll 1048576 (contextRoots ctx) (contextPrivileged ctx)
+                      (contextPackageName ctx) preloaded [] (append imports implicit)
+                  pure (case modulesR of
+                    ErrC e => ErrC e
+                    OkC modules =>
+                      OkC
+                        (Project decls imports implicit modules (contextPackageName ctx) (contextCapabilities ctx) (contextTrustUnsafe ctx) False fixities)
+                  )
+    else pure (ldErr1 (EntryFileNotFound entry) entry)
 
 -- 库包入口：不带 app/Main.vuna 的包，以 [export].modules 作为根模块集合。
-loadProjectModules : PackageContext -> List String -> Check Project
+loadProjectModules : PackageContext -> List String -> Eff [] (Check Project)
 loadProjectModules ctx names = loadProjectModulesWithPreloaded ctx names []
 
-loadProjectModulesWithPreloaded : PackageContext -> List String -> List Module -> Check Project
+loadProjectModulesWithPreloaded : PackageContext -> List String -> List Module -> Eff [] (Check Project)
 loadProjectModulesWithPreloaded ctx names preloaded =
   let
     _ = resetWarnings 0
     entryImports = map (\n => Import n False Nothing (Span "" 0 0 0 0)) names
-  in Vuna.Compiler.Common.bind
-    (loadAll 1048576 (contextRoots ctx) (contextPrivileged ctx) (contextPackageName ctx) preloaded [] entryImports)
-    (\modules => OkC (Project [] [] [] modules (contextPackageName ctx) (contextCapabilities ctx) (contextTrustUnsafe ctx) True []))
+  in do
+    modulesR <-
+      loadAll 1048576 (contextRoots ctx) (contextPrivileged ctx) (contextPackageName ctx) preloaded
+        [] entryImports
+    pure (case modulesR of
+      ErrC e => ErrC e
+      OkC modules =>
+        OkC
+          (Project [] [] [] modules (contextPackageName ctx) (contextCapabilities ctx) (contextTrustUnsafe ctx) True [])
+    )
 
 -- 入口以**源码字符串**给出（REPL 的表达式求值）：入口不落盘（import 仍按上下文的
 -- roots 从磁盘解析）；隐式 Prelude 与文件入口同规则（ad-hoc 单文件也自动注入）。
-loadProjectSource : PackageContext -> String -> String -> Check Project
+loadProjectSource : PackageContext -> String -> String -> Eff [] (Check Project)
 loadProjectSource ctx label source = loadProjectSourceWithPreloaded ctx label source []
 
 -- M34.5（LSP/REPL 消费接口）：入口以源码字符串给出，依赖包模块可预置（零 parse）。
-loadProjectSourceWithPreloaded : PackageContext -> String -> String -> List Module -> Check Project
+loadProjectSourceWithPreloaded : PackageContext -> String -> String -> List Module -> Eff [] (Check Project)
 loadProjectSourceWithPreloaded ctx label source preloaded =
   let
     _ = resetWarnings 0
-  in Vuna.Compiler.Common.bind (parseFileWithPath label source) (\src => case src of
-    SourceFile hdr imports fixities decls => case hdr of
-      Just (ModDecl dname hasList items sp) => ldErr1 (ModuleHeaderInEntrySource label) label
-      Nothing =>
-        Vuna.Compiler.Common.bind (validateImports "<entry>" imports)
-          (\_ => Vuna.Compiler.Common.bind (implicitPrelude (contextRoots ctx) (contextPackageName ctx) "" imports) (\implicit => Vuna.Compiler.Common.bind (loadAll 1048576 (contextRoots ctx) (contextPrivileged ctx) (contextPackageName ctx) preloaded [] (append imports implicit)) (\modules => OkC (Project decls imports implicit modules (contextPackageName ctx) (contextCapabilities ctx) (contextTrustUnsafe ctx) False fixities))))
-  )
+  in do
+    parsed <- parseFileWithPath label source
+    case parsed of
+      ErrC e => pure (ErrC e)
+      OkC (SourceFile hdr imports fixities decls) => case hdr of
+        Just (ModDecl dname hasList items sp) =>
+          pure (ldErr1 (ModuleHeaderInEntrySource label) label)
+        Nothing => case validateImports "<entry>" imports of
+          ErrC e => pure (ErrC e)
+          OkC _ => do
+            implicitR <- implicitPrelude (contextRoots ctx) (contextPackageName ctx) "" imports
+            case implicitR of
+              ErrC e => pure (ErrC e)
+              OkC implicit => do
+                modulesR <-
+                  loadAll 1048576 (contextRoots ctx) (contextPrivileged ctx)
+                    (contextPackageName ctx) preloaded [] (append imports implicit)
+                pure (case modulesR of
+                  ErrC e => ErrC e
+                  OkC modules =>
+                    OkC
+                      (Project decls imports implicit modules (contextPackageName ctx) (contextCapabilities ctx) (contextTrustUnsafe ctx) False fixities)
+                )
 
 -- 以**源码字符串**给出一个**库模块**（M30 · LSP）：源码允许带 `module ... where`
 -- 头（LSP 打开 lib/ 下的文件时就是这种形态）。模块头存在时，按 import 闭包加载后
 -- 把该模块本身作为合成的 `Module` 放进 Project，再交给 `resolveProject` 做名字解析；
 -- 无模块头时退化为入口语义（与 `loadProjectSource` 相同）。
 -- 入口声明保持为空：调用方（LSP）只需要逐模块已解析的声明。
-loadModuleSource : PackageContext -> String -> String -> Check Project
+loadModuleSource : PackageContext -> String -> String -> Eff [] (Check Project)
 loadModuleSource ctx label source = loadModuleSourceWithPreloaded ctx label source []
 
 -- M34.5（LSP）：依赖包模块可预置（来自接口的 `Module`），只 parse 当前文件与同包源码。
-loadModuleSourceWithPreloaded : PackageContext -> String -> String -> List Module -> Check Project
+loadModuleSourceWithPreloaded : PackageContext -> String -> String -> List Module -> Eff [] (Check Project)
 loadModuleSourceWithPreloaded ctx label source preloaded =
   let
     _ = resetWarnings 0
-  in Vuna.Compiler.Common.bind (parseFileWithPath label source) (\src => case src of
-    SourceFile hdr imports fixities decls => case hdr of
-      Nothing => loadProjectSourceWithPreloaded ctx label source preloaded
-      Just (ModDecl name hasList items sp) => Vuna.Compiler.Common.bind (validateImports name imports) (\_ => Vuna.Compiler.Common.bind (implicitPrelude (contextRoots ctx) (contextPackageName ctx) name imports) (\implicit => Vuna.Compiler.Common.bind (loadAll 1048576 (contextRoots ctx) (contextPrivileged ctx) (contextPackageName ctx) preloaded [] (append imports implicit)) (\modules => Vuna.Compiler.Common.bind (computeExports modules name hdr imports decls) (\exports => let
-        visible =
-          dedupeFixities (append fixities (visibleFixitiesOf modules (append imports implicit)))
-      in OkC
-        (Project [] imports implicit (Module name (contextPackageName ctx) imports implicit decls exports (contextCapabilities ctx) (contextTrustUnsafe ctx) visible (reexportedImportNames imports items) :: modules) (contextPackageName ctx) (contextCapabilities ctx) (contextTrustUnsafe ctx) False [])
-      )
-      )
-      )
-      )
-  )
+  in do
+    parsed <- parseFileWithPath label source
+    case parsed of
+      ErrC e => pure (ErrC e)
+      OkC (SourceFile hdr imports fixities decls) => case hdr of
+        Nothing => loadProjectSourceWithPreloaded ctx label source preloaded
+        Just (ModDecl name hasList items sp) => case validateImports name imports of
+          ErrC e => pure (ErrC e)
+          OkC _ => do
+            implicitR <- implicitPrelude (contextRoots ctx) (contextPackageName ctx) name imports
+            case implicitR of
+              ErrC e => pure (ErrC e)
+              OkC implicit => do
+                modulesR <-
+                  loadAll 1048576 (contextRoots ctx) (contextPrivileged ctx)
+                    (contextPackageName ctx) preloaded [] (append imports implicit)
+                case modulesR of
+                  ErrC e => pure (ErrC e)
+                  OkC modules => case computeExports modules name hdr imports decls of
+                    ErrC e => pure (ErrC e)
+                    OkC exports =>
+                      let
+                        visible =
+                          dedupeFixities
+                            (append fixities (visibleFixitiesOf modules (append imports implicit)))
+                      in pure
+                        (OkC (Project [] imports implicit (Module name (contextPackageName ctx) imports implicit decls exports (contextCapabilities ctx) (contextTrustUnsafe ctx) visible (reexportedImportNames imports items) :: modules) (contextPackageName ctx) (contextCapabilities ctx) (contextTrustUnsafe ctx) False []))
 
 -- M31.3（B27）：fmt 用的「程序级 fixity」——本文件的 `infix*` 声明（在前，本地优先）
 -- ++ import 闭包可见的声明（Module 里已含各自的 import 闭包）。只 parse + 加载模块图，
@@ -751,22 +838,54 @@ loadModuleSourceWithPreloaded ctx label source preloaded =
 -- 但 fixity **声明表必须按文件重算**（local + 该文件自己的 import 闭包）——不同文件的
 -- imports 不同，跨文件复用声明表会让 fmt 给 `::`/`+` 等打出错误的括号。
 -- 返回值同时带回更新后的模块表，供调用方继续复用。
--- 注意：本函数及其包装进 seed 闭包（compiler 包），保持小而纯。
-fixitiesForSourceIn : PackageContext -> List Module -> String -> String -> Check (Pair (List Module) (List FixityDecl))
-fixitiesForSourceIn ctx modules0 label source = Vuna.Compiler.Common.bind (parseFileWithPath label source) (\src => case src of
-  SourceFile hdr imports fixities decls => case hdr of
-    Nothing =>
-      Vuna.Compiler.Common.bind (validateImports label imports)
-        (\_ => Vuna.Compiler.Common.bind (implicitPrelude (contextRoots ctx) (contextPackageName ctx) "" imports) (\implicit => Vuna.Compiler.Common.bind (loadAll 1048576 (contextRoots ctx) (contextPrivileged ctx) (contextPackageName ctx) modules0 [] (append imports implicit)) (\modules => OkC (Pair modules (dedupeFixities (append fixities (visibleFixitiesOf modules (append imports implicit))))))))
-    Just (ModDecl name hasList items sp) =>
-      Vuna.Compiler.Common.bind (validateImports name imports)
-        (\_ => Vuna.Compiler.Common.bind (implicitPrelude (contextRoots ctx) (contextPackageName ctx) name imports) (\implicit => Vuna.Compiler.Common.bind (loadAll 1048576 (contextRoots ctx) (contextPrivileged ctx) (contextPackageName ctx) modules0 [] (append imports implicit)) (\modules => OkC (Pair modules (dedupeFixities (append fixities (visibleFixitiesOf modules (append imports implicit))))))))
-)
+-- M4：parse 读 AST 缓存 / 探测模块文件是宿主动作，外壳显式 `Eff []`；声明表计算保持纯。
+fixitiesForSourceIn : PackageContext -> List Module -> String -> String -> Eff [] (Check (Pair (List Module) (List FixityDecl)))
+fixitiesForSourceIn ctx modules0 label source = do
+  parsed <- parseFileWithPath label source
+  case parsed of
+    ErrC e => pure (ErrC e)
+    OkC (SourceFile hdr imports fixities decls) => case hdr of
+      Nothing => case validateImports label imports of
+        ErrC e => pure (ErrC e)
+        OkC _ => do
+          implicitR <- implicitPrelude (contextRoots ctx) (contextPackageName ctx) "" imports
+          case implicitR of
+            ErrC e => pure (ErrC e)
+            OkC implicit => do
+              modulesR <-
+                loadAll 1048576 (contextRoots ctx) (contextPrivileged ctx) (contextPackageName ctx)
+                  modules0 [] (append imports implicit)
+              pure (case modulesR of
+                ErrC e => ErrC e
+                OkC modules =>
+                  OkC
+                    (Pair modules (dedupeFixities (append fixities (visibleFixitiesOf modules (append imports implicit)))))
+              )
+      Just (ModDecl name hasList items sp) => case validateImports name imports of
+        ErrC e => pure (ErrC e)
+        OkC _ => do
+          implicitR <- implicitPrelude (contextRoots ctx) (contextPackageName ctx) name imports
+          case implicitR of
+            ErrC e => pure (ErrC e)
+            OkC implicit => do
+              modulesR <-
+                loadAll 1048576 (contextRoots ctx) (contextPrivileged ctx) (contextPackageName ctx)
+                  modules0 [] (append imports implicit)
+              pure (case modulesR of
+                ErrC e => ErrC e
+                OkC modules =>
+                  OkC
+                    (Pair modules (dedupeFixities (append fixities (visibleFixitiesOf modules (append imports implicit)))))
+              )
 
 -- 单文件便捷入口（LSP formatting / fmt 探针）：不跨调用复用模块表。
-fixitiesForSource : PackageContext -> String -> String -> Check (List FixityDecl)
-fixitiesForSource ctx label source =
-  Vuna.Compiler.Common.bind (fixitiesForSourceIn ctx [] label source) (\p => OkC (secondOf p))
+fixitiesForSource : PackageContext -> String -> String -> Eff [] (Check (List FixityDecl))
+fixitiesForSource ctx label source = do
+  pairR <- fixitiesForSourceIn ctx [] label source
+  pure (case pairR of
+    ErrC e => ErrC e
+    OkC p => OkC (secondOf p)
+  )
 
 -- 返回逐模块已解析（未 flatten）的声明，供 M12 分离编译使用。
 resolveProject : Project -> Check (Pair (List Decl) (List Module))

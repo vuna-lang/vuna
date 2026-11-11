@@ -157,9 +157,9 @@ summarySplitParts ctx entry printResult = do
           let
             _ = note "cache-own-clean=${length clean2}"
           in do
-            pure (dtSplitProjectIncremental ctx entry printResult ifaces clean2)
-        Nothing => pure (dtSplitProjectWithIfaces ctx entry printResult ifaces)
-    Nothing => pure (dtSplitProjectParts ctx entry printResult)
+            dtSplitProjectIncremental ctx entry printResult ifaces clean2
+        Nothing => dtSplitProjectWithIfaces ctx entry printResult ifaces
+    Nothing => dtSplitProjectParts ctx entry printResult
 
 compileToDirNormal : PackageContext -> String -> Bool -> String -> Eff [] (Check Int)
 compileToDirNormal ctx entry printResult outDir = do
@@ -189,8 +189,8 @@ auditCompile ctx entry printResult outDir = do
   key <- splitCacheKey ctx entry printResult
   path <- splitCachePath ctx key
   summary <- summarySplitParts ctx entry printResult
+  full <- dtSplitProjectParts ctx entry printResult
   let
-    full = dtSplitProjectParts ctx entry printResult
     _ = note "iface-audit subject=compile entry=${entry}"
   in do
     compared <-
@@ -222,7 +222,8 @@ writeCompiled ctx outDir files = do
   let
     _ = stamp "write-compiled-start"
   in do
-    case writeSplitFilesIfChanged outDir files of
+    written <- writeSplitFilesIfChanged outDir files
+    case written of
       ErrC e => pure (ErrC e)
       OkC n => do
         let
@@ -261,9 +262,11 @@ copyFfiFiles ctxDir outDir = do
 
 -- loadPackage + compileToDir：给定包目录的代码生成（seed rotation / 测试用）。
 buildSplit : String -> String -> Eff [] (Check Int)
-buildSplit dir outDir = case loadPackage dir of
-  ErrC e => pure (ErrC e)
-  OkC pkg => compileToDir (packageContext pkg) (packageEntry pkg) True outDir
+buildSplit dir outDir = do
+  pkgR <- loadPackage dir
+  case pkgR of
+    ErrC e => pure (ErrC e)
+    OkC pkg => compileToDir (packageContext pkg) (packageEntry pkg) True outDir
 
 -- ---------------------------------------------------------------
 -- M30：build meta（确定性、无绝对路径/时间戳）
@@ -825,17 +828,22 @@ toolChainValid ifaces =
 importNameStr : Import -> String
 importNameStr (Import n alias q sp) = n
 
-toolImportsOfSource : PackageContext -> String -> String -> List String
-toolImportsOfSource ctx label source = case parseFileWithPath label source of
-  ErrC _ => []
-  OkC (SourceFile hdr imports fixities decls) => case hdr of
-    Just (ModDecl dname _ _ _) => toolImportNamesOf ctx dname imports
-    Nothing => toolImportNamesOf ctx "" imports
+toolImportsOfSource : PackageContext -> String -> String -> Eff [] (List String)
+toolImportsOfSource ctx label source = do
+  parsed <- parseFileWithPath label source
+  case parsed of
+    ErrC _ => pure []
+    OkC (SourceFile hdr imports fixities decls) => case hdr of
+      Just (ModDecl dname _ _ _) => toolImportNamesOf ctx dname imports
+      Nothing => toolImportNamesOf ctx "" imports
 
-toolImportNamesOf : PackageContext -> String -> List Import -> List String
-toolImportNamesOf ctx current imports = case implicitPrelude (contextRoots ctx) (contextPackageName ctx) current imports of
-  ErrC _ => map importNameStr imports
-  OkC implicit => map importNameStr (append imports implicit)
+toolImportNamesOf : PackageContext -> String -> List Import -> Eff [] (List String)
+toolImportNamesOf ctx current imports = do
+  implicitR <- implicitPrelude (contextRoots ctx) (contextPackageName ctx) current imports
+  pure (case implicitR of
+    ErrC _ => map importNameStr imports
+    OkC implicit => map importNameStr (append imports implicit)
+  )
 
 -- 工具链消费：默认按源码 import 闭包按需读依赖接口；`VUNA_IFACE_TOOL=0` 关闭（排障/A-B）。
 -- M34.6：闭包必须含**同包模块的 import**——entry 直接 import 的模块可能再由同包模块
@@ -877,10 +885,11 @@ depIfacesForToolSource ctx label source = do
           Nothing => pure Nothing
           Just ownManifest => do
             ownDir <- ifaceDirOf ctx
+            importsOfSource <- toolImportsOfSource ctx label source
             let
               ownNames = map meNameOfEntry (pmModulesOf ownManifest)
               table = append (toolEntryTable mans2) (ownEntriesOf ownDir ownManifest)
-              needed = toolClosure table (toolImportsOfSource ctx label source)
+              needed = toolClosure table importsOfSource
               -- 同包模块从源码加载（不是接口），只有依赖包模块需要读接口。
               depNeeded = filter (\n => memName n ownNames == False) needed
             in do
@@ -1015,9 +1024,10 @@ toolContextTable ctx tool =
   in append tool.tcDepTable ownTable
 
 -- import 名 → 闭包（含同包 manifest 里的模块）；buffer 每次变化都按当前 imports 重算。
-toolNeededOfImports : PackageContext -> ToolContext -> String -> List Import -> List String
-toolNeededOfImports ctx tool currentName imports =
-  toolClosure (toolContextTable ctx tool) (toolImportNamesOf ctx currentName imports)
+toolNeededOfImports : PackageContext -> ToolContext -> String -> List Import -> Eff [] (List String)
+toolNeededOfImports ctx tool currentName imports = do
+  importNames <- toolImportNamesOf ctx currentName imports
+  pure (toolClosure (toolContextTable ctx tool) importNames)
 
 -- 惰性工具接口 + 会话上下文（M34.6 5a）：与 `depIfacesForToolSource` 同一套校验，
 -- 额外返回依赖哈希表 / 本包 manifest / 闭包 / 校验面。
@@ -1034,10 +1044,11 @@ depIfacesForToolSourceDetailed ctx label source = do
           Nothing => pure Nothing
           Just ownManifest => do
             ownDir <- ifaceDirOf ctx
+            importsOfSource <- toolImportsOfSource ctx label source
             let
               ownNames = map meNameOfEntry (pmModulesOf ownManifest)
               table = append (toolEntryTable mans2) (ownEntriesOf ownDir ownManifest)
-              needed = toolClosure table (toolImportsOfSource ctx label source)
+              needed = toolClosure table importsOfSource
               depNeeded = filter (\n => memName n ownNames == False) needed
             in do
               toolStats <- concatMapEff statsOfManifest mans2
@@ -1209,7 +1220,7 @@ checkUncachedExe wantWarnings ctx entry path = do
     if audit then auditCheckExe wantWarnings ctx entry path
     else do
       summary <- summaryCheckExeParts wantWarnings ctx entry
-      checkAndCache ctx path summary
+      checkAndCache ctx path (pure summary)
 
 -- 摘要路径（**不落盘**）：接口不可用 ⇒ 全量（与旧行为一致，只是不再直接写缓存）。
 -- wantWarnings 时 clean 列表清空 ⇒ 本包模块全部重算（warning 不在缓存里）。
@@ -1221,7 +1232,7 @@ summaryCheckExeParts wantWarnings ctx entry = do
       let
         _ = note "cache-path=full"
       in do
-        pure (dtCheckWithProgramParts ctx entry)
+        dtCheckWithProgramParts ctx entry
     Just ifaces => do
       depTbl <- depIfaceHashTable ctx
       clean <- ownCleanModules ctx depTbl
@@ -1232,12 +1243,12 @@ summaryCheckExeParts wantWarnings ctx entry = do
             _ = note "cache-path=summary deps=${depPackageCount ctx}"
             _ = note "cache-own-clean=${length cleanReal}"
           in do
-            pure (dtCheckPackageIncrementalParts ctx entry ifaces cleanReal)
+            dtCheckPackageIncrementalParts ctx entry ifaces cleanReal
         Nothing => do
           let
             _ = note "cache-path=summary deps=${depPackageCount ctx}"
           in do
-            pure (dtCheckPackageWithIfacesParts ctx entry ifaces)
+            dtCheckPackageWithIfacesParts ctx entry ifaces
 
 fullCheckExe : PackageContext -> String -> String -> Eff [] (Check (List String))
 fullCheckExe ctx entry path =
@@ -1250,14 +1261,14 @@ fullCheckExe ctx entry path =
 auditCheckExe : Bool -> PackageContext -> String -> String -> Eff [] (Check (List String))
 auditCheckExe wantWarnings ctx entry path = do
   summary <- summaryCheckExeParts wantWarnings ctx entry
+  full <- dtCheckWithProgramParts ctx entry
   let
-    full = dtCheckWithProgramParts ctx entry
     _ = note "iface-audit subject=check entry=${entry}"
   in do
     compared <- pure (auditCompare "check" entry (checkSignatureOf summary) (checkSignatureOf full))
     case compared of
       ErrC e => pure (ErrC e)
-      OkC _ => checkAndCache ctx path summary
+      OkC _ => checkAndCache ctx path (pure summary)
 
 -- `VUNA_ELAB_FULL=1`：强制全量精化（接口摘要路径的排障开关；默认关闭）。
 elabFullRequested : Eff [] Bool
@@ -1327,8 +1338,9 @@ packageEnvHash ctx = do
 -- 目录也参与：同名包换到另一棵树（worktree / 副本）必须整包判脏，不能共享接口。
 depEnvText : Package -> Eff [] String
 depEnvText dep = do
+  abs <- absolutePath (packageDir dep)
   let
-    dir = normalizeDir (absolutePath (packageDir dep))
+    dir = normalizeDir abs
   in do
     toml <- prim_eff_readFile "${dir}/vuna.toml"
     pure "${packageName dep}|${dir}|${textHash toml}"
@@ -1460,7 +1472,10 @@ ifaceCompilerTag = do
 ifaceRootOverride : Eff [] String
 ifaceRootOverride = do
   v <- prim_eff_getenv "VUNA_IFACE_DIR"
-  pure (if v == "" then "" else normalizeDir (absolutePath v))
+  if v == "" then pure ""
+  else do
+    abs <- absolutePath v
+    pure (normalizeDir abs)
 
 -- | 去掉路径前导 "/"，用于把包绝对目录拼到镜像根下。
 dropLeadingSlash : String -> String
@@ -1477,7 +1492,9 @@ ifaceBaseOf pkgDir = do
   if root == "" then do
     fp <- compilerFingerprint
     pure (normalizeDir "${pkgDir}/.output/iface/${strFromInt fp}")
-  else pure (normalizeDir "${root}/${dropLeadingSlash (absolutePath pkgDir)}")
+  else do
+    abs <- absolutePath pkgDir
+    pure (normalizeDir "${root}/${dropLeadingSlash abs}")
 
 ifaceDirOf : PackageContext -> Eff [] String
 ifaceDirOf ctx = ifaceBaseOf (contextDir ctx)
@@ -1750,19 +1767,21 @@ sameIfaceHashes (m :: rest) ys = case ifaceHashOfName ys (miNameOf m) of
 
 -- 写过缓存：检查成功才写；缓存内容对依赖方是接口摘要（读方校验），对本包是「同哈希跳过」标记
 -- （命中直接 Ok，不用重读内容——key 已含源哈希与编译器指纹）。
-checkAndCache : PackageContext -> String -> Check (Pair (List String) CheckedPackage) -> Eff [] (Check (List String))
-checkAndCache ctx path checked = case checked of
-  ErrC e => pure (ErrC e)
-  OkC pr => do
-    dir <- checkCacheDir ctx
-    _ <- ensureDirPath dir
-    _ <-
-      prim_eff_writeFileAtomic path
-        (frameEncode checkCacheTag (prim_marshal (cachedOfProgram (secondOf pr).checkedProgram)))
-    shadow <- writeIfaceShadow ctx (secondOf pr)
-    case shadow of
-      ErrC e => pure (ErrC e)
-      OkC _ => pure (OkC (firstOf pr))
+checkAndCache : PackageContext -> String -> Eff [] (Check (Pair (List String) CheckedPackage)) -> Eff [] (Check (List String))
+checkAndCache ctx path checked = do
+  checkedR <- checked
+  case checkedR of
+    ErrC e => pure (ErrC e)
+    OkC pr => do
+      dir <- checkCacheDir ctx
+      _ <- ensureDirPath dir
+      _ <-
+        prim_eff_writeFileAtomic path
+          (frameEncode checkCacheTag (prim_marshal (cachedOfProgram (secondOf pr).checkedProgram)))
+      shadow <- writeIfaceShadow ctx (secondOf pr)
+      case shadow of
+        ErrC e => pure (ErrC e)
+        OkC _ => pure (OkC (firstOf pr))
 
 checkCachedLib : Bool -> PackageContext -> List String -> Eff [] (Check (List String))
 checkCachedLib wantWarnings ctx names = do
@@ -1785,7 +1804,7 @@ checkUncachedLib wantWarnings ctx names path = do
     if audit then auditCheckLib wantWarnings ctx names path
     else do
       summary <- summaryCheckLibParts wantWarnings ctx names
-      checkAndCache ctx path summary
+      checkAndCache ctx path (pure summary)
 
 summaryCheckLibParts : Bool -> PackageContext -> List String -> Eff [] (Check (Pair (List String) CheckedPackage))
 summaryCheckLibParts wantWarnings ctx names = do
@@ -1795,7 +1814,7 @@ summaryCheckLibParts wantWarnings ctx names = do
       let
         _ = note "cache-path=full"
       in do
-        pure (dtCheckLibraryWithProgramParts ctx names)
+        dtCheckLibraryWithProgramParts ctx names
     Just ifaces => do
       depTbl <- depIfaceHashTable ctx
       clean <- ownCleanModules ctx depTbl
@@ -1806,12 +1825,12 @@ summaryCheckLibParts wantWarnings ctx names = do
             _ = note "cache-path=summary deps=${depPackageCount ctx}"
             _ = note "cache-own-clean=${length cleanReal}"
           in do
-            pure (dtCheckLibraryPackageIncrementalParts ctx names ifaces cleanReal)
+            dtCheckLibraryPackageIncrementalParts ctx names ifaces cleanReal
         Nothing => do
           let
             _ = note "cache-path=summary deps=${depPackageCount ctx}"
           in do
-            pure (dtCheckLibraryPackageWithIfacesParts ctx names ifaces)
+            dtCheckLibraryPackageWithIfacesParts ctx names ifaces
 
 fullCheckLib : PackageContext -> List String -> String -> Eff [] (Check (List String))
 fullCheckLib ctx names path =
@@ -1822,8 +1841,8 @@ fullCheckLib ctx names path =
 auditCheckLib : Bool -> PackageContext -> List String -> String -> Eff [] (Check (List String))
 auditCheckLib wantWarnings ctx names path = do
   summary <- summaryCheckLibParts wantWarnings ctx names
+  full <- dtCheckLibraryWithProgramParts ctx names
   let
-    full = dtCheckLibraryWithProgramParts ctx names
     subject = joinLines names
     _ = note "iface-audit subject=check-lib entry=${subject}"
   in do
@@ -1831,7 +1850,7 @@ auditCheckLib wantWarnings ctx names path = do
       pure (auditCompare "check-lib" subject (checkSignatureOf summary) (checkSignatureOf full))
     case compared of
       ErrC e => pure (ErrC e)
-      OkC _ => checkAndCache ctx path summary
+      OkC _ => checkAndCache ctx path (pure summary)
 
 -- M34.5：elab + codegen 产物缓存（`List SplitFile` 是纯数据，可 Marshal）
 --

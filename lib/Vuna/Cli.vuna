@@ -208,12 +208,12 @@ interpDirErr : String -> Eff [] Int
 interpDirErr path = toolError "interp takes a single file, not a package directory: ${path}"
 
 interpEmit : String -> Eff [] Int
-interpEmit path = case contextForFile path of
-  ErrC e => toolFailure (diagText e)
-  OkC ctx =>
-    let
-      output = interpretFile ctx path
-    in do
+interpEmit path = do
+  ctxR <- contextForFile path
+  case ctxR of
+    ErrC e => toolFailure (diagText e)
+    OkC ctx => do
+      output <- interpretFile ctx path
       _ <- prim_eff_print "${output}\n"
       pure (if startsWith "error:" output then 2 else 0)
 
@@ -324,9 +324,11 @@ testOptsOf parsed jobs =
 testRun : TestOpts -> String -> Eff [] Int
 testRun opts dir = case requireDirectory dir of
   ErrC e => toolError (diagText e)
-  OkC _ => case loadPackage dir of
-    ErrC e => toolFailure (diagText e)
-    OkC pkg => runTests opts pkg
+  OkC _ => do
+    pkgR <- loadPackage dir
+    case pkgR of
+      ErrC e => toolFailure (diagText e)
+      OkC pkg => runTests opts pkg
 
 -- ---------------------------------------------------------------
 -- fmt
@@ -353,17 +355,22 @@ fmtRun check paths = do
 -- 路径 `lib/app/test`（旧实现会在非包目录把 `lib` 当文件读而抛宿主异常）。
 -- A05：零参顶层定义在模块初始化时求值；这里是启动期读盘动作，必须函数化。
 fmtDefaultTargets : Int -> Eff [] (Check (List String))
-fmtDefaultTargets _ = case findManifestDirMaybe "." of
-  Nothing => do
-    cwd <- prim_eff_getcwd
-    pure (err "not inside a vuna workspace (no vuna.toml found from ${cwd}); pass PATH explicitly")
-  Just dir => case workspacePackages dir of
-    ErrC e => pure (ErrC e)
-    OkC pkgs =>
-      let
-        targets = existingTargets (concatMap packageTargets pkgs) []
-      in pure
-        (if length targets == 0 then err "no vuna sources found in workspace at ${dir} (looked for lib/, app/, test/ under each package); pass PATH explicitly" else OkC targets)
+fmtDefaultTargets _ = do
+  found <- findManifestDirMaybe "."
+  case found of
+    Nothing => do
+      cwd <- prim_eff_getcwd
+      pure
+        (err "not inside a vuna workspace (no vuna.toml found from ${cwd}); pass PATH explicitly")
+    Just dir => do
+      pkgsR <- workspacePackages dir
+      case pkgsR of
+        ErrC e => pure (ErrC e)
+        OkC pkgs =>
+          let
+            targets = existingTargets (concatMap packageTargets pkgs) []
+          in pure
+            (if length targets == 0 then err "no vuna sources found in workspace at ${dir} (looked for lib/, app/, test/ under each package); pass PATH explicitly" else OkC targets)
 
 packageTargets : Package -> List String
 packageTargets pkg = ["${packageDir pkg}/lib", "${packageDir pkg}/app", "${packageDir pkg}/test"]
@@ -387,9 +394,9 @@ fmtFiles check env [] changed = if check && changed > 0 then do
 else pure 0
 fmtFiles check env (path :: rest) changed = case readText path of
   ErrC e => toolError (diagText e)
-  OkC original =>
+  OkC original => do
+    looked <- fixitiesForFile env path original
     let
-      looked = fixitiesForFile env path original
       env2 = firstOf looked
     in case secondOf looked of
       ErrC e => toolError "${path}: cannot determine fixity context: ${diagText e}"
@@ -419,15 +426,15 @@ replArgs args = case parseToolArgs "vuna repl" [ValueFlag "listen", ValueFlag "c
           toolError "`--client` 不接受启动目标（它只做传输，不加载包上下文）"
     Nothing => case flagValue parsed "listen" of
       Just addr => case parsed.positionals of
-        [] =>
-          replServerWith addr StartNone
-            (maybePrivilegedCtx (flagSet parsed "privileged") (contextForDir "."))
+        [] => do
+          ctxR <- contextForDir "."
+          replServerWith addr StartNone (maybePrivilegedCtx (flagSet parsed "privileged") ctxR)
         [target] => replServerWithTarget addr target (flagSet parsed "privileged")
         _ => usageError 0
       Nothing => case parsed.positionals of
-        [] =>
-          replWith Nothing 0 StartNone
-            (maybePrivilegedCtx (flagSet parsed "privileged") (contextForDir "."))
+        [] => do
+          ctxR <- contextForDir "."
+          replWith Nothing 0 StartNone (maybePrivilegedCtx (flagSet parsed "privileged") ctxR)
         [target] => replTargetWith Nothing target (flagSet parsed "privileged")
         _ => usageError 0
 
@@ -449,10 +456,11 @@ replServerWithTarget addr target priv = case checkReplAddr addr of
   OkC _ => replTargetWith (Just addr) target priv
 
 replWith : Maybe String -> Int -> ReplStart -> Check PackageContext -> Eff [] Int
-replWith Nothing _ start (ErrC e) = toolFailure (diagText e)
-replWith Nothing _ start (OkC ctx) = runRepl ctx start
-replWith (Just addr) _ start (ErrC e) = toolFailure (diagText e)
-replWith (Just addr) _ start (OkC ctx) = runReplServer ctx start addr
+replWith listen _ start ctxRes = case ctxRes of
+  ErrC e => toolFailure (diagText e)
+  OkC ctx => case listen of
+    Nothing => runRepl ctx start
+    Just addr => runReplServer ctx start addr
 
 -- 启动目标：存在目录 → 该包上下文；存在文件 → 文件所在包上下文 + 启动加载；
 -- 不存在且像模块名 → cwd 上下文 + 启动导入；其它报可操作错误。
@@ -469,9 +477,15 @@ replTargetWith listen target priv = do
   exists <- prim_eff_fileExists target
   if exists then do
     isDir <- prim_eff_isDirectory target
-    if isDir then replWith listen 0 (StartDir target) (maybePrivilegedCtx priv (contextForDir target))
-    else replWith listen 0 (StartFile target) (maybePrivilegedCtx priv (contextForFile target))
-  else if isModuleNameStr target then replWith listen 0 (StartModule target) (maybePrivilegedCtx priv (contextForDir "."))
+    if isDir then do
+      ctxR <- contextForDir target
+      replWith listen 0 (StartDir target) (maybePrivilegedCtx priv ctxR)
+    else do
+      ctxR <- contextForFile target
+      replWith listen 0 (StartFile target) (maybePrivilegedCtx priv ctxR)
+  else if isModuleNameStr target then do
+    ctxR <- contextForDir "."
+    replWith listen 0 (StartModule target) (maybePrivilegedCtx priv ctxR)
   else toolFailure
     ("找不到文件或目录: " ++ target ++ "（vuna repl 接受 <FILE> | <DIR> | <Module.Name>）")
 
@@ -511,16 +525,18 @@ mapRun parsed = case flagValue parsed "find" of
 
 -- 非 workspace 是输入错误（exit 2），不再静默输出空索引。
 withIndex : (Index -> Eff [] Int) -> Eff [] Int
-withIndex f = case findManifestDirMaybe "." of
-  Nothing => do
-    cwd <- prim_eff_getcwd
-    toolError
-      "not inside a vuna workspace (no vuna.toml found from ${cwd}); run `vuna map` from a package or workspace root"
-  Just _ => do
-    built <- loadOrBuild "."
-    case built of
-      ErrC e => toolError (diagText e)
-      OkC index => f index
+withIndex f = do
+  found <- findManifestDirMaybe "."
+  case found of
+    Nothing => do
+      cwd <- prim_eff_getcwd
+      toolError
+        "not inside a vuna workspace (no vuna.toml found from ${cwd}); run `vuna map` from a package or workspace root"
+    Just _ => do
+      built <- loadOrBuild "."
+      case built of
+        ErrC e => toolError (diagText e)
+        OkC index => f index
 
 printOverview : Bool -> Eff [] Int
 printOverview modulesOnly = withIndex (\index => let
@@ -600,15 +616,17 @@ goalRun file = case readText file of
   ErrC e => toolError (diagText e)
   OkC source => case parseSource file source of
     ErrC e => toolFailure (diagText e)
-    OkC (SourceFile _ _ fx decls0) => case secondOf (fixitiesForFile emptyFixityEnv file source) of
-      ErrC e => toolFailure (diagText e)
-      OkC programFixities => case reorderProgram (tableOfKeepOps (append programFixities fx)) decls0 of
+    OkC (SourceFile _ _ fx decls0) => do
+      looked <- fixitiesForFile emptyFixityEnv file source
+      case secondOf looked of
         ErrC e => toolFailure (diagText e)
-        OkC decls => case goalsOfProgramTolerant decls of
+        OkC programFixities => case reorderProgram (tableOfKeepOps (append programFixities fx)) decls0 of
           ErrC e => toolFailure (diagText e)
-          OkC infos => do
-            _ <- prim_eff_print (goalHeader file (length infos) ++ renderGoals file infos)
-            pure 0
+          OkC decls => case goalsOfProgramTolerant decls of
+            ErrC e => toolFailure (diagText e)
+            OkC infos => do
+              _ <- prim_eff_print (goalHeader file (length infos) ++ renderGoals file infos)
+              pure 0
 
 renderGoals : String -> List DtGoalInfo -> String
 renderGoals file [] = ""

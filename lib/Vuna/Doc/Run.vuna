@@ -53,9 +53,11 @@ docRun dir out check pkgFilter = case requireDirectory dir of
       OkC scopes => case filesForScopes scopes of
         ErrC e => docError (diagText e)
         OkC files => if length (filesOf files) == 0 then docError "no vuna sources found under ${dir}; pass a package or source directory"
-        else case buildBook scopes files of
-          ErrC e => docError (diagText e)
-          OkC book => if check then runCheck book else writeHtml out book
+        else do
+          bookR <- buildBook scopes files
+          case bookR of
+            ErrC e => docError (diagText e)
+            OkC book => if check then runCheck book else writeHtml out book
 
 -- 每个 scope 的源文件（与 scope 一一对应；顺序稳定）。
 filesForScopes : List DocScope -> Check (List (Pair DocScope (List String)))
@@ -76,18 +78,20 @@ scopeSourceFiles s =
 filesOf : List (Pair DocScope (List String)) -> List String
 filesOf pairs = concatMap secondOf pairs
 
-buildBook : List DocScope -> List (Pair DocScope (List String)) -> Check DocBook
+buildBook : List DocScope -> List (Pair DocScope (List String)) -> Eff [] (Check DocBook)
 buildBook scopes files = buildBookGo scopes files []
 
-buildBookGo : List DocScope -> List (Pair DocScope (List String)) -> List DocModule -> Check DocBook
-buildBookGo [] files acc = OkC (DocBook (reverse acc))
+buildBookGo : List DocScope -> List (Pair DocScope (List String)) -> List DocModule -> Eff [] (Check DocBook)
+buildBookGo [] files acc = pure (OkC (DocBook (reverse acc)))
 buildBookGo (scope :: restScopes) files acc = case lookupScopeFiles scope files of
   Nothing => buildBookGo restScopes files acc
-  Just paths => case buildModules (scopeName scope) paths of
-    ErrC e => ErrC e
-    OkC modules0 => case selectModules (scopeExports scope) modules0 of
-      ErrC e => ErrC e
-      OkC modules1 => buildBookGo restScopes files (append modules1 acc)
+  Just paths => do
+    modulesR <- buildModules (scopeName scope) paths
+    case modulesR of
+      ErrC e => pure (ErrC e)
+      OkC modules0 => case selectModules (scopeExports scope) modules0 of
+        ErrC e => pure (ErrC e)
+        OkC modules1 => buildBookGo restScopes files (append modules1 acc)
 
 lookupScopeFiles : DocScope -> List (Pair DocScope (List String)) -> Maybe (List String)
 lookupScopeFiles scope [] = Nothing
@@ -116,9 +120,12 @@ findDocModule name (m :: rest) = if moduleName m == name then Just m else findDo
 scopesFor : String -> Maybe String -> Eff [] (Check (List DocScope))
 scopesFor dir pkgFilter = do
   hasManifest <- prim_eff_fileExists "${dir}/vuna.toml"
-  if hasManifest then case workspacePackages dir of
-    ErrC e => pure (ErrC e)
-    OkC packages => pure (OkC (filterScopes pkgFilter (mapToScopes packages)))
+  if hasManifest then do
+    packagesR <- workspacePackages dir
+    pure (case packagesR of
+      ErrC e => ErrC e
+      OkC packages => OkC (filterScopes pkgFilter (mapToScopes packages))
+    )
   else pure (OkC (filterScopes pkgFilter [DocScope dir "" Nothing]))
 
 mapToScopes : List Package -> List DocScope

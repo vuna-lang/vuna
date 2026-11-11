@@ -32,6 +32,7 @@ import Vuna.Doc.Comments
 import Vuna.Doc.Types
 import Vuna.FixityEnv
 import Vuna.Sig
+import Base.Host
 
 -- ---------------------------------------------------------------
 -- 数据模型
@@ -94,37 +95,45 @@ bookModules (DocBook modules) = modules
 -- 构建
 -- ---------------------------------------------------------------
 -- 包名 + 源文件列表 -> 模块列表（按输入文件顺序；调用方负责 [export] 过滤）。
-buildModules : String -> List String -> Check (List DocModule)
-buildModules pkg files = secondOf (buildModulesGo emptyFixityEnv pkg files [])
+buildModules : String -> List String -> Eff [] (Check (List DocModule))
+buildModules pkg files = do
+  built <- buildModulesGo emptyFixityEnv pkg files []
+  pure (secondOf built)
 
-buildModulesGo : FixityEnv -> String -> List String -> List DocModule -> Pair FixityEnv (Check (List DocModule))
-buildModulesGo env pkg [] acc = Pair env (OkC (reverse acc))
-buildModulesGo env pkg (path :: rest) acc = case buildModule env pkg path of
-  Pair env2 result => case result of
-    ErrC e => Pair env2 (ErrC e)
-    OkC module0 => buildModulesGo env2 pkg rest (module0 :: acc)
+buildModulesGo : FixityEnv -> String -> List String -> List DocModule -> Eff [] (Pair FixityEnv (Check (List DocModule)))
+buildModulesGo env pkg [] acc = pure (Pair env (OkC (reverse acc)))
+buildModulesGo env pkg (path :: rest) acc = do
+  stepped <- buildModule env pkg path
+  case stepped of
+    Pair env2 result => case result of
+      ErrC e => pure (Pair env2 (ErrC e))
+      OkC module0 => buildModulesGo env2 pkg rest (module0 :: acc)
 
-buildModule : FixityEnv -> String -> String -> Pair FixityEnv (Check DocModule)
+buildModule : FixityEnv -> String -> String -> Eff [] (Pair FixityEnv (Check DocModule))
 buildModule env pkg path = case readText path of
-  ErrC e => Pair env (ErrC e)
-  OkC source =>
-    let
-      looked = fixitiesForFile env path source
-      env2 = firstOf looked
-    in case secondOf looked of
-      ErrC e => Pair env2 (err "${path}: cannot load package fixity context: ${diagText e}")
-      OkC programFixities => case parseSource path source of
+  ErrC e => pure (Pair env (ErrC e))
+  OkC source => do
+    looked <- fixitiesForFile env path source
+    pure (buildModuleWith pkg path source looked)
+
+buildModuleWith : String -> String -> String -> Pair FixityEnv (Check (List FixityDecl)) -> Pair FixityEnv (Check DocModule)
+buildModuleWith pkg path source looked =
+  let
+    env2 = firstOf looked
+  in case secondOf looked of
+    ErrC e => Pair env2 (err "${path}: cannot load package fixity context: ${diagText e}")
+    OkC programFixities => case parseSource path source of
+      ErrC e => Pair env2 (err "${path}: ${diagText e}")
+      OkC (SourceFile hdr imports fx decls0) => case reorderProgram (tableOfKeepOps (append programFixities fx)) decls0 of
         ErrC e => Pair env2 (err "${path}: ${diagText e}")
-        OkC (SourceFile hdr imports fx decls0) => case reorderProgram (tableOfKeepOps (append programFixities fx)) decls0 of
-          ErrC e => Pair env2 (err "${path}: ${diagText e}")
-          OkC decls =>
-            let
-              comments = case lexComments source of
-                ErrC e => []
-                OkC cs => cs
-              table = docTableOf hdr decls comments
-            in Pair env2
-              (OkC (DocModule pkg (moduleNameOfPath path hdr) path (docTableModuleDoc table) (itemsOfDecls table decls)))
+        OkC decls =>
+          let
+            comments = case lexComments source of
+              ErrC e => []
+              OkC cs => cs
+            table = docTableOf hdr decls comments
+          in Pair env2
+            (OkC (DocModule pkg (moduleNameOfPath path hdr) path (docTableModuleDoc table) (itemsOfDecls table decls)))
 
 moduleNameOfPath : String -> Maybe ModDecl -> String
 moduleNameOfPath path (Just (ModDecl name hasList items sp)) = name

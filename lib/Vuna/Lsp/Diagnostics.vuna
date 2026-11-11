@@ -189,13 +189,28 @@ diagnosticJson label lines d =
 
 -- 包上下文：file:// URI → 路径 → `contextForFile`；非 file URI（或磁盘上不存在的
 -- 路径）退化到 cwd 的 `contextForDir "."`。失败由调用方转成 0:0 的 `pkg: ...` 诊断。
-contextForDoc : String -> Check (Pair String PackageContext)
+contextForDoc : String -> Eff [] (Check (Pair String PackageContext))
 contextForDoc uri =
   let
     path = decodeUri uri
-  in if path == "" then fmap (\ctx => Pair "" ctx) (contextForDir ".")
-  else if pathExistsFile path then fmap (\ctx => Pair path ctx) (contextForFile path)
-  else fmap (\ctx => Pair path ctx) (contextForDir ".")
+  in if path == "" then do
+    ctxR <- contextForDir "."
+    pure (case ctxR of
+      ErrC e => ErrC e
+      OkC ctx => OkC (Pair "" ctx)
+    )
+  else if pathExistsFile path then do
+    ctxR <- contextForFile path
+    pure (case ctxR of
+      ErrC e => ErrC e
+      OkC ctx => OkC (Pair path ctx)
+    )
+  else do
+    ctxR <- contextForDir "."
+    pure (case ctxR of
+      ErrC e => ErrC e
+      OkC ctx => OkC (Pair path ctx)
+    )
 
 -- ---------------------------------------------------------------
 -- 会话缓存（M34.6 5c）
@@ -269,19 +284,18 @@ usableSession cache ctx label text modName imports = do
   health <- case cache of
     Just c => do
       fresh <- cacheFresh (Just c) label ctx
-      if fresh then pure (sessionClosureOk c ctx modName imports) else pure Nothing
+      if fresh then sessionClosureOk c ctx modName imports else pure Nothing
     Nothing => pure Nothing
   case health of
     Just c => pure (Just c)
     Nothing => buildSession ctx label text modName
 
-sessionClosureOk : DiagCache -> PackageContext -> Maybe String -> List Import -> Maybe DiagCache
+sessionClosureOk : DiagCache -> PackageContext -> Maybe String -> List Import -> Eff [] (Maybe DiagCache)
 sessionClosureOk c ctx modName imports = case c.dcTool of
-  Nothing => Just c
-  Just tool =>
-    let
-      needed = toolNeededOfImports ctx tool (currentNameOf modName) imports
-    in if neededInClosure tool.tcNeeded needed then Just c else Nothing
+  Nothing => pure (Just c)
+  Just tool => do
+    needed <- toolNeededOfImports ctx tool (currentNameOf modName) imports
+    pure (if neededInClosure tool.tcNeeded needed then Just c else Nothing)
 
 currentNameOf : Maybe String -> String
 currentNameOf Nothing = ""
@@ -313,10 +327,10 @@ entryHashMatches (Just h) x = h == x
 
 -- 单文件增量精化（会话可用）：依赖接口 + 本包干净模块预置，只精化当前 buffer。
 -- 安全阀说「不适用」（Nothing）时回退全量。
-incrementalCheckedOf : DiagCache -> ToolContext -> String -> String -> Maybe String -> List Import -> Bool -> Check (Pair Bool (Pair (Maybe CheckedPackage) (Maybe AuxCache)))
-incrementalCheckedOf session tool label text modName imports needPkg =
+incrementalCheckedOf : DiagCache -> ToolContext -> String -> String -> Maybe String -> List Import -> Bool -> Eff [] (Check (Pair Bool (Pair (Maybe CheckedPackage) (Maybe AuxCache))))
+incrementalCheckedOf session tool label text modName imports needPkg = do
+  needed <- toolNeededOfImports session.dcCtx tool (currentNameOf modName) imports
   let
-    needed = toolNeededOfImports session.dcCtx tool (currentNameOf modName) imports
     cleanNeeded = filter (\mi => memName (miNameOf mi) (ownNeededOf tool needed)) session.dcClean
   in dtCheckSourceIncremental session.dcCtx label text tool.tcDepIfaces cleanNeeded session.dcAux
     needPkg
@@ -328,7 +342,8 @@ checkIncremental session label text modName imports = case session.dcTool of
     needPkg <- case modName of
       Just n => if isCleanModule session n then pure False else diskMatches label text
       Nothing => pure False
-    case incrementalCheckedOf session tool label text modName imports needPkg of
+    checkedR <- incrementalCheckedOf session tool label text modName imports needPkg
+    case checkedR of
       ErrC e => pure (Pair (Just session) (diagsOfCheck label (ErrC e)))
       OkC (Pair applied (Pair maybePkg maybeAux)) => if applied then
         let
@@ -352,26 +367,31 @@ sessionForFull Nothing ctx label = do
 
 -- 上下文的精简入口（`dtCheckSourceChecked` 需要 ctx）。
 checkFullWith : Maybe DiagCache -> PackageContext -> String -> String -> Maybe String -> Eff [] (Pair (Maybe DiagCache) (List Diagnostic))
-checkFullWith cache ctx label text modName = case dtCheckSourceChecked ctx label text of
-  ErrC e => pure (Pair cache (diagsOfCheck label (ErrC e)))
-  OkC (Pair _ checkedPkg) => do
-    session <- sessionForFull cache ctx label
-    session2 <- writeBackModule session label text checkedPkg modName
-    let
-      keep = case cache of
-        Just _ => Just session2
-        Nothing => Nothing
-    in pure (Pair keep [])
+checkFullWith cache ctx label text modName = do
+  checkedR <- dtCheckSourceChecked ctx label text
+  case checkedR of
+    ErrC e => pure (Pair cache (diagsOfCheck label (ErrC e)))
+    OkC (Pair _ checkedPkg) => do
+      session <- sessionForFull cache ctx label
+      session2 <- writeBackModule session label text checkedPkg modName
+      let
+        keep = case cache of
+          Just _ => Just session2
+          Nothing => Nothing
+      in pure (Pair keep [])
 
 -- ---------------------------------------------------------------
 -- lint（会话复用 fixity 模块图；外部文件变化会随会话重建清空）
 -- ---------------------------------------------------------------
-lintWithEnv : FixityEnv -> String -> String -> Pair FixityEnv (List Diagnostic)
-lintWithEnv env label text = case fixitiesForFile env label text of
-  Pair env2 (ErrC _) => Pair env2 []
-  Pair env2 (OkC fx) => Pair env2 (case lintSourceWith fx text of
-    ErrC _ => []
-    OkC findings => map findingToDiagnostic findings
+lintWithEnv : FixityEnv -> String -> String -> Eff [] (Pair FixityEnv (List Diagnostic))
+lintWithEnv env label text = do
+  looked <- fixitiesForFile env label text
+  pure (case looked of
+    Pair env2 (ErrC _) => Pair env2 []
+    Pair env2 (OkC fx) => Pair env2 (case lintSourceWith fx text of
+      ErrC _ => []
+      OkC findings => map findingToDiagnostic findings
+    )
   )
 
 -- lint finding 与编译器诊断共用同一个 `Diagnostic` 模型（phase = Tool，category = Tool）。
@@ -410,29 +430,33 @@ diagnosticsForSuggestions : Maybe DiagCache -> String -> String -> Eff [] (Pair 
 diagnosticsForSuggestions = diagnosticsForCachedWith True
 
 diagnosticsForCachedWith : Bool -> Maybe DiagCache -> String -> String -> Eff [] (Pair (Maybe DiagCache) (Pair String (List Diagnostic)))
-diagnosticsForCachedWith includeUnused cache uri text = case contextForDoc uri of
-  ErrC e => pure (Pair cache (Pair "" [e]))
-  OkC (Pair label ctx) => case parseSource label text of
-    ErrC e => pure (Pair cache (Pair label [e]))
-    OkC (SourceFile hdr imports fixities decls) =>
-      let
-        modName = case hdr of
-          Just (ModDecl n hasList items sp) => Just n
-          Nothing => Nothing
-      in do
-        checked <- checkDiagnostics cache label ctx text modName imports
+diagnosticsForCachedWith includeUnused cache uri text = do
+  ctxR <- contextForDoc uri
+  case ctxR of
+    ErrC e => pure (Pair cache (Pair "" [e]))
+    OkC (Pair label ctx) => case parseSource label text of
+      ErrC e => pure (Pair cache (Pair label [e]))
+      OkC (SourceFile hdr imports fixities decls) =>
         let
-          cache2 = firstOf checked
-          linted = case cache2 of
-            Just c => lintWithEnv c.dcFix label text
-            Nothing => lintWithEnv emptyFixityEnv label text
-          cache3 = case cache2 of
-            Just c =>
-              Just
-                (DiagCache c.dcLabel c.dcKey c.dcCtx c.dcTool c.dcClean c.dcBuiltSec c.dcStats c.dcAux (firstOf linted))
+          modName = case hdr of
+            Just (ModDecl n hasList items sp) => Just n
             Nothing => Nothing
-        in pure
-          (Pair cache3 (Pair label (append (secondOf checked) (append (secondOf linted) (filter (diagOwns label) (filter (warnAllowed includeUnused) (takeWarnings 0)))))))
+        in do
+          checked <- checkDiagnostics cache label ctx text modName imports
+          let
+            cache2 = firstOf checked
+          in do
+            linted <- case cache2 of
+              Just c => lintWithEnv c.dcFix label text
+              Nothing => lintWithEnv emptyFixityEnv label text
+            let
+              cache3 = case cache2 of
+                Just c =>
+                  Just
+                    (DiagCache c.dcLabel c.dcKey c.dcCtx c.dcTool c.dcClean c.dcBuiltSec c.dcStats c.dcAux (firstOf linted))
+                Nothing => Nothing
+            in pure
+              (Pair cache3 (Pair label (append (secondOf checked) (append (secondOf linted) (filter (diagOwns label) (filter (warnAllowed includeUnused) (takeWarnings 0)))))))
 
 publishDiagnostics : String -> Int -> String -> List Diagnostic -> Json
 publishDiagnostics uri version text diags =

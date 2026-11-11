@@ -194,12 +194,17 @@ packageSources dir = do
   appFiles <- if hasApp then collectVuna "${dir}/app" else pure []
   pure (append libFiles appFiles)
 
-packageDirs : String -> List (Pair String String)
-packageDirs repo = case findManifestDir repo of
-  ErrC e => [Pair repo ""]
-  OkC dir => case workspacePackages dir of
-    ErrC e => [Pair dir ""]
-    OkC pkgs => map (\p => Pair (packageDir p) (packageName p)) pkgs
+packageDirs : String -> Eff [] (List (Pair String String))
+packageDirs repo = do
+  found <- findManifestDir repo
+  case found of
+    ErrC e => pure [Pair repo ""]
+    OkC dir => do
+      pkgsR <- workspacePackages dir
+      pure (case pkgsR of
+        ErrC e => [Pair dir ""]
+        OkC pkgs => map (\p => Pair (packageDir p) (packageName p)) pkgs
+      )
 
 -- ---------------------------------------------------------------
 -- 符号抽取（v3：doc 来自 DocTable，普通注释不再进入 symDoc）
@@ -444,9 +449,9 @@ indexOne env dir pkgName path = do
 indexOneExisting : FixityEnv -> String -> String -> String -> Eff [] (Pair FixityEnv (Check Built))
 indexOneExisting env dir pkgName path = do
   source <- prim_eff_readFile path
+  looked <- fixitiesForFile env path source
   let
     bytes = strLength source
-    looked = fixitiesForFile env path source
     env2 = firstOf looked
   in case secondOf looked of
     ErrC e => pure (Pair env2 (err "${path}: cannot load package fixity context: ${diagText e}"))
@@ -514,7 +519,8 @@ collectAll env (root :: rest) acc = do
 -- 全量构建（parse 所有源码，不读写缓存）。
 buildIndex : String -> Eff [] (Check Index)
 buildIndex repo = do
-  stepped <- collectAll emptyFixityEnv (packageDirs repo) (Acc [] [] [] [])
+  dirs <- packageDirs repo
+  stepped <- collectAll emptyFixityEnv dirs (Acc [] [] [] [])
   let
     acc = secondOf stepped
   in pure
@@ -573,7 +579,9 @@ scanRoot root = do
   mapEff scanFile files
 
 scanSources : String -> Eff [] (List (Pair String (Pair Int String)))
-scanSources repo = concatMapEff scanRoot (packageDirs repo)
+scanSources repo = do
+  dirs <- packageDirs repo
+  concatMapEff scanRoot dirs
 
 manifestLine : Pair String (Pair Int String) -> String
 manifestLine entry = "${entryPath entry}\t${entryBytes entry}\t${entryHash entry}"
@@ -803,18 +811,20 @@ parseRefs (line :: rest) = case splitOnTab line of
 -- 带缓存的入口：manifest 完全一致则回读缓存，否则重建并写回。
 -- 非 workspace（向上找不到 vuna.toml）是**输入错误**，不再静默建空索引。
 loadOrBuild : String -> Eff [] (Check Index)
-loadOrBuild repo = case findManifestDirMaybe repo of
-  Nothing => do
-    cwd <- prim_eff_getcwd
-    pure (err "index: no vuna.toml found from ${cwd} (searched upward)")
-  Just manifestDir => do
-    entries <- scanSources repo
-    matched <- manifestMatches repo entries
-    if matched then do
-      _ <- cleanupStaleLock repo
-      idx <- loadIndexFromCache repo
-      pure (OkC idx)
-    else saveAndReturn repo entries
+loadOrBuild repo = do
+  found <- findManifestDirMaybe repo
+  case found of
+    Nothing => do
+      cwd <- prim_eff_getcwd
+      pure (err "index: no vuna.toml found from ${cwd} (searched upward)")
+    Just manifestDir => do
+      entries <- scanSources repo
+      matched <- manifestMatches repo entries
+      if matched then do
+        _ <- cleanupStaleLock repo
+        idx <- loadIndexFromCache repo
+        pure (OkC idx)
+      else saveAndReturn repo entries
 
 saveAndReturn : String -> List (Pair String (Pair Int String)) -> Eff [] (Check Index)
 saveAndReturn repo entries = do
@@ -874,7 +884,8 @@ record SourceStat where
 -- 建立快照：遍历目录拿到当前源文件集合，逐个 stat；窗口内文件额外读内容算哈希。
 indexStatsOf : Int -> String -> Eff [] (List SourceStat)
 indexStatsOf builtSec repo = do
-  sources <- concatMapEff packageSources (map firstOf (packageDirs repo))
+  dirs <- packageDirs repo
+  sources <- concatMapEff packageSources (map firstOf dirs)
   mapEff (sourceStatOf builtSec) sources
 
 -- mtime 距 `builtSec` 不足安全窗 ⇒ 内容哈希必须算（同秒同 size 的编辑 stat 不可分辨）；

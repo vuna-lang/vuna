@@ -314,7 +314,8 @@ removedFlag prog flag = case removedFlagHint flag of
 -- | CLI 辅助：printErrText（参数/退出码约定见 tooling.md）。
 printErrText : String -> Eff [] Int
 printErrText e = do
-  _ <- prim_eff_print (renderCliDiagnostic e)
+  rendered <- renderCliDiagnosticEff e
+  _ <- prim_eff_print rendered
   pure 1
 
 -- | 诊断/告警实现：severityLabelOf（详见 diagnostics.md）。
@@ -384,7 +385,8 @@ printDiagList o extra ds =
 printWarnings : List String -> Eff [] Int
 printWarnings [] = pure 0
 printWarnings (w :: rest) = do
-  _ <- prim_eff_print (renderCliDiagnostic "${w}\n")
+  rendered <- renderCliDiagnosticEff "${w}\n"
+  _ <- prim_eff_print rendered
   printWarnings rest
 
 defaultDir : Maybe String -> String
@@ -408,13 +410,15 @@ executablePackage label dir = do
   else pure (err "no such file or package directory: ${dir}")
 
 executablePackageAt : String -> String -> Eff [] (Check Package)
-executablePackageAt label dir = case loadPackage dir of
-  ErrC e => pure (ErrC e)
-  OkC pkg => do
-    exists <- prim_eff_fileExists (packageEntry pkg)
-    if exists then pure (OkC pkg)
-    else pure
-      (err "${label}: library package ${packageName pkg} has no app/Main.vuna (executable package required)")
+executablePackageAt label dir = do
+  pkgR <- loadPackage dir
+  case pkgR of
+    ErrC e => pure (ErrC e)
+    OkC pkg => do
+      exists <- prim_eff_fileExists (packageEntry pkg)
+      if exists then pure (OkC pkg)
+      else pure
+        (err "${label}: library package ${packageName pkg} has no app/Main.vuna (executable package required)")
 
 -- ---------------------------------------------------------------
 -- compile：文件入口（最近的 vuna.toml 包上下文 / 无 manifest 的 base-only）
@@ -452,16 +456,18 @@ compileRun printResult entry outDir o = do
   else withOpts o (dtPathErr entry)
 
 compileFileEntry : Bool -> String -> String -> CliOpts -> Eff [] (Pair Int CliOpts)
-compileFileEntry printResult entry outDir o = case contextForFile entry of
-  ErrC e => printDiag o e
-  OkC ctx =>
-    let
-      o1 = applyDiagConfig (contextPackageOf ctx) o
-    in do
-      r <- compileToDir ctx entry printResult outDir
-      case r of
-        ErrC e => printDiag o1 e
-        OkC _ => finishWarningsDir o1 outDir 0
+compileFileEntry printResult entry outDir o = do
+  ctxR <- contextForFile entry
+  case ctxR of
+    ErrC e => printDiag o e
+    OkC ctx =>
+      let
+        o1 = applyDiagConfig (contextPackageOf ctx) o
+      in do
+        r <- compileToDir ctx entry printResult outDir
+        case r of
+          ErrC e => printDiag o1 e
+          OkC _ => finishWarningsDir o1 outDir 0
 
 compilePkgDir : Bool -> String -> String -> CliOpts -> Eff [] (Pair Int CliOpts)
 compilePkgDir printResult dir outDir o = do
@@ -499,9 +505,11 @@ checkEmit path o = do
   else withOpts o (dtPathErr path)
 
 checkPkgDir : String -> CliOpts -> Eff [] (Pair Int CliOpts)
-checkPkgDir dir o = case workspacePackages dir of
-  ErrC e => printDiag o e
-  OkC pkgs => checkPackages pkgs 0 o
+checkPkgDir dir o = do
+  pkgsR <- workspacePackages dir
+  case pkgsR of
+    ErrC e => printDiag o e
+    OkC pkgs => checkPackages pkgs 0 o
 
 -- M30：workspace 是检查单元——根包 + [workspace].members 逐个检查，成员错误不再被
 -- 根 check 忽略。错误带 `[包名]` 前缀；全部跑完再汇总退出码。
@@ -522,10 +530,14 @@ checkSpawnArgs o dir =
 checkPackages : List Package -> Int -> CliOpts -> Eff [] (Pair Int CliOpts)
 checkPackages [] code o = pure (Pair code o)
 checkPackages ([pkg]) code o = checkPackageSeq pkg code o
-checkPackages pkgs code o =
+checkPackages pkgs code o = do
+  classified <- mapEff (\pkg => do
+    root <- isWorkspaceRoot pkg
+    pure (Pair pkg root)
+  ) pkgs
   let
-    members = filter (\pkg => not (isWorkspaceRoot pkg)) pkgs
-    roots = filter (\pkg => isWorkspaceRoot pkg) pkgs
+    members = map firstOf (filter (\p => not (secondOf p)) classified)
+    roots = map firstOf (filter (\p => secondOf p) classified)
   in do
     started <- mapEff (\pkg => do
       pid <- prim_eff_spawn (checkSpawnArgs o (packageDir pkg))
@@ -535,10 +547,13 @@ checkPackages pkgs code o =
     codes <- mapEff (\pr => prim_eff_wait (secondOf pr)) started
     pure (Pair (countFailures (firstOf r1) codes) (secondOf r1))
 
-isWorkspaceRoot : Package -> Bool
-isWorkspaceRoot pkg = case workspacePackages (packageDir pkg) of
-  OkC ps => length ps > 1
-  ErrC e => False
+isWorkspaceRoot : Package -> Eff [] Bool
+isWorkspaceRoot pkg = do
+  pkgsR <- workspacePackages (packageDir pkg)
+  pure (case pkgsR of
+    OkC ps => length ps > 1
+    ErrC e => False
+  )
 
 checkRootsSeq : List Package -> Int -> CliOpts -> Eff [] (Pair Int CliOpts)
 checkRootsSeq [] code o = pure (Pair code o)
@@ -576,57 +591,69 @@ countFailures acc [] = acc
 countFailures acc (c :: rest) = if c == 0 then countFailures acc rest else countFailures 1 rest
 
 checkFileEntry : String -> CliOpts -> Eff [] (Pair Int CliOpts)
-checkFileEntry path o = case contextForFile path of
-  ErrC e => printDiag o e
-  OkC ctx =>
-    let
-      o1 = applyDiagConfig (contextPackageOf ctx) o
-    in if isModuleFileEntry ctx path then checkModuleFileEntry ctx path o1
-    else checkEntryFile ctx path o1
+checkFileEntry path o = do
+  ctxR <- contextForFile path
+  case ctxR of
+    ErrC e => printDiag o e
+    OkC ctx =>
+      let
+        o1 = applyDiagConfig (contextPackageOf ctx) o
+      in do
+        moduleEntry <- isModuleFileEntry ctx path
+        if moduleEntry then checkModuleFileEntry ctx path o1 else checkEntryFile ctx path o1
 
 -- M45：带 `module` 头、且**不是**当前包入口的文件按库模块检查。包入口保持入口语义
 -- （它的 module 头仍报 `LD_ModuleHeaderInEntryFile`，与包级 check 一致）；无头文件走入口。
-isModuleFileEntry : PackageContext -> String -> Bool
-isModuleFileEntry ctx path =
-  if isPackageEntryPath ctx path then False else dtFileHasModuleHeader path
+isModuleFileEntry : PackageContext -> String -> Eff [] Bool
+isModuleFileEntry ctx path = do
+  pkgEntry <- isPackageEntryPath ctx path
+  if pkgEntry then pure False else dtFileHasModuleHeader path
 
-isPackageEntryPath : PackageContext -> String -> Bool
+isPackageEntryPath : PackageContext -> String -> Eff [] Bool
 isPackageEntryPath ctx path = case contextPackageOf ctx of
-  Nothing => False
-  Just pkg => stripDotSlash (absolutePath path) == stripDotSlash (packageEntry pkg)
+  Nothing => pure False
+  Just pkg => do
+    abs <- absolutePath path
+    pure (stripDotSlash abs == stripDotSlash (packageEntry pkg))
 
 -- 单文件库模块检查：错误直接上报（`--continue-on-error` 的恢复只支持入口文件）；
 -- 成功时只打印/统计本文件的告警（依赖模块不刷屏）。
 checkModuleFileEntry : PackageContext -> String -> CliOpts -> Eff [] (Pair Int CliOpts)
-checkModuleFileEntry ctx path o = case dtCheckModuleFile ctx path of
-  ErrC e => printDiag o e
-  OkC _ =>
-    let
-      ws = filter (ownedByFile path) (takeWarnings 0)
-      shown = if o.optShowWarnings || o.optDenyWarnings then ws else []
-    in do
-      r <- printDiagList o "" shown
-      pure (Pair (if o.optDenyWarnings && length ws > 0 then 1 else 0) (secondOf r))
+checkModuleFileEntry ctx path o = do
+  checked <- dtCheckModuleFile ctx path
+  case checked of
+    ErrC e => printDiag o e
+    OkC _ =>
+      let
+        ws = filter (ownedByFile path) (takeWarnings 0)
+        shown = if o.optShowWarnings || o.optDenyWarnings then ws else []
+      in do
+        r <- printDiagList o "" shown
+        pure (Pair (if o.optDenyWarnings && length ws > 0 then 1 else 0) (secondOf r))
 
 -- 入口文件检查（无 module 头；唯一支持 `--continue-on-error` 恢复的路径）。
 checkEntryFile : PackageContext -> String -> CliOpts -> Eff [] (Pair Int CliOpts)
-checkEntryFile ctx path o = case dtCheck ctx path of
-  ErrC e => if o.optContinueOnError then case dtCheckRecovering ctx path of
-    OkC ds =>
+checkEntryFile ctx path o = do
+  checked <- dtCheck ctx path
+  case checked of
+    ErrC e => if o.optContinueOnError then do
+      recovered <- dtCheckRecovering ctx path
+      case recovered of
+        OkC ds =>
+          let
+            shown = takeDiags o.optMaxErrors ds
+          in do
+            r <- printDiagList o "" shown
+            if length shown == 0 then printDiag (secondOf r) e else pure (Pair 1 (secondOf r))
+        ErrC e2 => printDiag o e
+    else printDiag o e
+    OkC _ =>
       let
-        shown = takeDiags o.optMaxErrors ds
+        ws = filter (ownedByFile path) (takeWarnings 0)
+        shown = if o.optShowWarnings || o.optDenyWarnings then ws else []
       in do
         r <- printDiagList o "" shown
-        if length shown == 0 then printDiag (secondOf r) e else pure (Pair 1 (secondOf r))
-    ErrC e2 => printDiag o e
-  else printDiag o e
-  OkC _ =>
-    let
-      ws = filter (ownedByFile path) (takeWarnings 0)
-      shown = if o.optShowWarnings || o.optDenyWarnings then ws else []
-    in do
-      r <- printDiagList o "" shown
-      pure (Pair (if o.optDenyWarnings && length ws > 0 then 1 else 0) (secondOf r))
+        pure (Pair (if o.optDenyWarnings && length ws > 0 then 1 else 0) (secondOf r))
 
 -- ---------------------------------------------------------------
 -- build：包级逐模块 codegen 到 DIR（默认 <PKG-DIR>/.output），再跑 build.sh 链接到
@@ -662,14 +689,16 @@ buildParse prog noCompile out dir pkg args o = case args of
     Just _ => withOpts o (usageErr prog)
 
 buildRun : Bool -> String -> Maybe String -> Maybe String -> CliOpts -> Eff [] (Pair Int CliOpts)
-buildRun noCompile dir outM pkgM o = case workspacePackages dir of
-  ErrC e => printDiag o e
-  OkC pkgs => do
-    libOnly <- isSingleLibraryPackage pkgs
-    if libOnly then withOpts o (printErr (libraryOnlyMessage pkgs))
-    else case selectBuildTargets pkgM pkgs of
-      ErrC e => printDiag o e
-      OkC targets => buildTargets noCompile (length pkgs > 1) outM targets 0 o
+buildRun noCompile dir outM pkgM o = do
+  pkgsR <- workspacePackages dir
+  case pkgsR of
+    ErrC e => printDiag o e
+    OkC pkgs => do
+      libOnly <- isSingleLibraryPackage pkgs
+      if libOnly then withOpts o (printErr (libraryOnlyMessage pkgs))
+      else case selectBuildTargets pkgM pkgs of
+        ErrC e => printDiag o e
+        OkC targets => buildTargets noCompile (length pkgs > 1) outM targets 0 o
 
 -- 单包目录且是库包（没有 app/Main.vuna）→ build 必须报错（不是静默 skip）。
 -- workspace 根里的库成员仍走 skip（构建单元覆盖全部可执行成员）。
@@ -850,16 +879,20 @@ packageRecover pkg e o = do
 
 -- | 可执行包入口的恢复式检查。
 packageRecoverExe : Package -> Diagnostic -> CliOpts -> Eff [] (Pair Int CliOpts)
-packageRecoverExe pkg e o = case dtCheckRecovering (packageContext pkg) (packageEntry pkg) of
-  OkC ds => printRecovered pkg e ds o
-  ErrC e2 => printDiagWithPrefix o "[${packageName pkg}] " e2
+packageRecoverExe pkg e o = do
+  recovered <- dtCheckRecovering (packageContext pkg) (packageEntry pkg)
+  case recovered of
+    OkC ds => printRecovered pkg e ds o
+    ErrC e2 => printDiagWithPrefix o "[${packageName pkg}] " e2
 
 -- | 库包（[export].modules）的恢复式检查。
 packageRecoverLib : Package -> Diagnostic -> CliOpts -> Eff [] (Pair Int CliOpts)
 packageRecoverLib pkg e o = case packageExports pkg of
-  Just names => case dtCheckLibraryRecovering (packageContext pkg) names of
-    OkC ds => printRecovered pkg e ds o
-    ErrC e2 => printDiagWithPrefix o "[${packageName pkg}] " e2
+  Just names => do
+    recovered <- dtCheckLibraryRecovering (packageContext pkg) names
+    case recovered of
+      OkC ds => printRecovered pkg e ds o
+      ErrC e2 => printDiagWithPrefix o "[${packageName pkg}] " e2
   Nothing => printDiagWithPrefix o "[${packageName pkg}] " e
 
 -- | 打印恢复出的诊断并返回退出码。

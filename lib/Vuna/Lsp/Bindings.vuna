@@ -215,10 +215,13 @@ probeRoots (root :: rest) name =
     path = "${rootDir root}/${join "/" (splitOnDot name)}.vuna"
   in if pathExistsFile path then path else probeRoots rest name
 
-modulePathOf : String -> String -> String
-modulePathOf uri name = case contextForDoc uri of
-  ErrC e => ""
-  OkC (Pair label ctx) => probeRoots (contextRoots ctx) name
+modulePathOf : String -> String -> Eff [] String
+modulePathOf uri name = do
+  ctxR <- contextForDoc uri
+  pure (case ctxR of
+    ErrC e => ""
+    OkC (Pair label ctx) => probeRoots (contextRoots ctx) name
+  )
 
 -- 模块名 → 源文本：按包上下文的模块根探测（`probeRoots`），找不到 / 读失败 → Nothing。
 -- 调用方（LSP case split）持有一份 `PackageContext`，直接用它的 roots，避免每个 binder
@@ -270,8 +273,8 @@ mkModuleRef uri text sf name =
   let
     selfName = currentModuleNameOfSf sf
     isSelf = selfName /= "" && name == selfName
-    path = if isSelf then decodeUri uri else modulePathOf uri name
   in do
+    path <- if isSelf then pure (decodeUri uri) else modulePathOf uri name
     info <- moduleFileInfo isSelf text path name
     let
       infoDoc = firstOf info
@@ -347,8 +350,11 @@ prefixGo (s :: rest) acc out =
     [] => reverse out
     _ => prefixGo rest p (p :: out)
 
-knownModule : String -> String -> Bool
-knownModule uri name = if name == "" then False else modulePathOf uri name /= ""
+knownModule : String -> String -> Eff [] Bool
+knownModule uri name = if name == "" then pure False
+else do
+  p <- modulePathOf uri name
+  pure (p /= "")
 
 -- 限定名里的模块前缀：`Base.List.map` 光标在 `List` ⇒ `Base.List`；在 `map` ⇒ 不命中。
 qualifiedRef : String -> Int -> Int -> String -> SourceFile -> Int -> String -> Eff [] (Maybe ModuleRef)
@@ -361,10 +367,12 @@ else if col > tokStart + strLength prefix then pure Nothing
 else
   let
     name = resolveModuleName sf.sourceFileImports prefix
-  in if knownModule uri name then do
-    ref <- mkModuleRef uri text sf name
-    pure (Just ref)
-  else pure Nothing
+  in do
+    known <- knownModule uri name
+    if known then do
+      ref <- mkModuleRef uri text sf name
+      pure (Just ref)
+    else pure Nothing
 
 moduleRefAt : String -> Int -> Int -> String -> SourceFile -> Int -> String -> Eff [] (Maybe ModuleRef)
 moduleRefAt uri line col text sf tokStart token = do

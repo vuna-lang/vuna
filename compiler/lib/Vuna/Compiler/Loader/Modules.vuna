@@ -370,14 +370,19 @@ rootAllows importerPkg root name = case root.rootExports of
   Nothing => True
   Just mods => rootName root == importerPkg || memName name mods
 
-collectModuleFiles : List Root -> String -> String -> List (Pair String Root) -> List String -> Pair (List (Pair String Root)) (List String)
-collectModuleFiles [] name importerPkg allowed hidden = Pair (reverse allowed) (reverse hidden)
+-- M4（效果显式化）：模块根候选的**存在性探测**是宿主动作，显式在 `Eff []` 里；
+-- 可见性判定与候选分类保持纯。
+collectModuleFiles : List Root -> String -> String -> List (Pair String Root) -> List String -> Eff [] (Pair (List (Pair String Root)) (List String))
+collectModuleFiles [] name importerPkg allowed hidden =
+  pure (Pair (reverse allowed) (reverse hidden))
 collectModuleFiles (root :: rest) name importerPkg allowed hidden =
   let
     path = modulePath root name
-  in if runPure (prim_eff_fileExists path) then if rootAllows importerPkg root name then collectModuleFiles rest name importerPkg (Pair path root :: allowed) hidden
-  else collectModuleFiles rest name importerPkg allowed (rootName root :: hidden)
-  else collectModuleFiles rest name importerPkg allowed hidden
+  in do
+    exists <- prim_eff_fileExists path
+    if exists then if rootAllows importerPkg root name then collectModuleFiles rest name importerPkg (Pair path root :: allowed) hidden
+    else collectModuleFiles rest name importerPkg allowed (rootName root :: hidden)
+    else collectModuleFiles rest name importerPkg allowed hidden
 
 _joinRootDirs : List Root -> String
 _joinRootDirs roots = _joinNames (map rootDir roots)
@@ -385,9 +390,13 @@ _joinRootDirs roots = _joinNames (map rootDir roots)
 candidateDir : Pair String Root -> String
 candidateDir candidate = rootDir (secondOf candidate)
 
-findModuleFile : List Root -> String -> String -> Check (Pair String Root)
-findModuleFile roots name importerPkg = case collectModuleFiles roots name importerPkg [] [] of
-  Pair allowed hidden => case allowed of
+findModuleFile : List Root -> String -> String -> Eff [] (Check (Pair String Root))
+findModuleFile roots name importerPkg = do
+  collected <- collectModuleFiles roots name importerPkg [] []
+  let
+    allowed = firstOf collected
+    hidden = secondOf collected
+  in pure (case allowed of
     [] => case hidden of
       [] => ldErr2 (ModuleNotFound name (_joinRootDirs roots)) name (_joinRootDirs roots)
       pkgs => ldErr2 (ModuleNotExported name (_joinNames hidden)) name (_joinNames hidden)
@@ -395,6 +404,7 @@ findModuleFile roots name importerPkg = case collectModuleFiles roots name impor
     candidates =>
       rnNoLoc2 (AmbiguousModule name (_joinNames (map candidateDir allowed))) name
         (_joinNames (map candidateDir allowed))
+  )
 
 findModule : List Module -> String -> Maybe Module
 findModule [] name = Nothing

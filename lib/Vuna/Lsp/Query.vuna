@@ -160,17 +160,23 @@ currentModuleNameOf text = case parseSource "<lsp>" text of
 -- 快速判据：文本里没有洞（`_` / `?name`）时直接跳过——否则每次 hover 都要跑一遍
 -- 整模块（含 import 闭包）的 DT 精化，大文件上是秒级开销。
 -- M40：用 tolerant 查询，**未解洞**也能拿到目标类型与上下文快照。
-holeHoverAt : String -> Int -> Int -> String -> Maybe Json
-holeHoverAt uri line col text = if hasHole text then holeHoverChecked uri line col text else Nothing
+holeHoverAt : String -> Int -> Int -> String -> Eff [] (Maybe Json)
+holeHoverAt uri line col text =
+  if hasHole text then holeHoverChecked uri line col text else pure Nothing
 
-holeHoverChecked : String -> Int -> Int -> String -> Maybe Json
-holeHoverChecked uri line col text = case contextForDoc uri of
-  ErrC e => Nothing
-  OkC (Pair label ctx) => case dtGoalsSourceTolerant ctx label text of
-    ErrC e => Nothing
-    OkC gs => case holeAt line col gs of
-      Nothing => Nothing
-      Just g => Just (holeHoverJson g)
+holeHoverChecked : String -> Int -> Int -> String -> Eff [] (Maybe Json)
+holeHoverChecked uri line col text = do
+  ctxR <- contextForDoc uri
+  case ctxR of
+    ErrC e => pure Nothing
+    OkC (Pair label ctx) => do
+      gsR <- dtGoalsSourceTolerant ctx label text
+      pure (case gsR of
+        ErrC e => Nothing
+        OkC gs => case holeAt line col gs of
+          Nothing => Nothing
+          Just g => Just (holeHoverJson g)
+      )
 
 -- 洞判定：`_` 是独立 token（左右都不是标识符/限定名的连接字符）；`?name` 是 `?` 紧邻标识符
 -- 起始字符（M40）。行首/行尾用哨兵 -1；字符串或注释里的洞字符会误判成「有洞」，只多跑一次
@@ -265,21 +271,26 @@ localRefLocation uri text line col =
 -- M31.3（B27）：fixity 是程序级的——与 CLI 同源，用 `Vuna.FixityEnv`（按文件目录缓存模块图，
 -- 声明表逐文件重算 local + import 闭包）。上下文/加载失败或未知运算符 ⇒ 返回空 edits
 -- （不让 LSP 请求失败，也不静默改语义）。
-formattingEdits : String -> String -> List Json
-formattingEdits uri text = case formattingFixities uri text of
-  ErrC e => []
-  OkC fixities => case formatSourceWith fixities text of
+formattingEdits : String -> String -> Eff [] (List Json)
+formattingEdits uri text = do
+  fxR <- formattingFixities uri text
+  pure (case fxR of
     ErrC e => []
-    OkC formatted =>
-      if formatted == text then []
-      else [JObj [Pair "range" (fullRange text), Pair "newText" (JStr formatted)]]
+    OkC fixities => case formatSourceWith fixities text of
+      ErrC e => []
+      OkC formatted =>
+        if formatted == text then []
+        else [JObj [Pair "range" (fullRange text), Pair "newText" (JStr formatted)]]
+  )
 
-formattingFixities : String -> String -> Check (List FixityDecl)
+formattingFixities : String -> String -> Eff [] (Check (List FixityDecl))
 formattingFixities uri text =
   let
     path = decodeUri uri
-  in if path == "" then err "empty document uri"
-  else secondOf (fixitiesForFile emptyFixityEnv path text)
+  in if path == "" then pure (err "empty document uri")
+  else do
+    looked <- fixitiesForFile emptyFixityEnv path text
+    pure (secondOf looked)
 
 -- ---------------------------------------------------------------
 -- codeAction：lint quick fix（M38 P1c）+ fix all 的 Command 形式 + 洞 case split（C38）
@@ -299,11 +310,19 @@ formattingFixities uri text =
 --   - quickfix 动作只在未限制或含 `quickfix` 时给；
 --   - case split 动作只在未限制或含 `refactor` / `refactor.rewrite` 时给。
 codeActionsFor : String -> String -> Int -> Int -> Int -> Int -> Maybe (List String) -> Eff [] (List Json)
-codeActionsFor uri text reqStart reqStartCol reqEnd reqEndCol only = case contextForDoc uri of
-  ErrC e => pure []
-  OkC (Pair label ctx) => case fixitiesForFile emptyFixityEnv label text of
-    Pair _ (ErrC e) => pure []
-    Pair _ (OkC programFixities) => case lintSourceWith programFixities text of
+codeActionsFor uri text reqStart reqStartCol reqEnd reqEndCol only = do
+  ctxR <- contextForDoc uri
+  case ctxR of
+    ErrC e => pure []
+    OkC (Pair label ctx) =>
+      codeActionsForCtx uri label ctx text reqStart reqStartCol reqEnd reqEndCol only
+
+codeActionsForCtx : String -> String -> PackageContext -> String -> Int -> Int -> Int -> Int -> Maybe (List String) -> Eff [] (List Json)
+codeActionsForCtx uri label ctx text reqStart reqStartCol reqEnd reqEndCol only = do
+  looked <- fixitiesForFile emptyFixityEnv label text
+  case secondOf looked of
+    ErrC e => pure []
+    OkC programFixities => case lintSourceWith programFixities text of
       ErrC e => pure []
       OkC findings => do
         rawSplits <-
@@ -391,18 +410,23 @@ fixAllActions uri programFixities text findings = case fixAllLintEdit programFix
 
 -- `workspace/executeCommand` 的 `vuna.fixAllLint`：按当前缓冲重算 lint + fixLoop，
 -- 返回 WorkspaceEdit（changes 按 uri 分组）；无改动 / 上下文不可用 → Nothing。
-fixAllLintWorkspaceEdit : String -> String -> Maybe Json
-fixAllLintWorkspaceEdit uri text = case contextForDoc uri of
-  ErrC e => Nothing
-  OkC (Pair label ctx) => case fixitiesForFile emptyFixityEnv label text of
-    Pair _ (ErrC e) => Nothing
-    Pair _ (OkC programFixities) => case lintSourceWith programFixities text of
-      ErrC e => Nothing
-      OkC findings => case fixAllLintEdit programFixities text findings of
-        Nothing => Nothing
-        Just newText =>
-          Just
-            (JObj [Pair "changes" (JObj [Pair uri (JArr [textEditJson (fullRange text) newText])])])
+fixAllLintWorkspaceEdit : String -> String -> Eff [] (Maybe Json)
+fixAllLintWorkspaceEdit uri text = do
+  ctxR <- contextForDoc uri
+  case ctxR of
+    ErrC e => pure Nothing
+    OkC (Pair label ctx) => do
+      looked <- fixitiesForFile emptyFixityEnv label text
+      pure (case secondOf looked of
+        ErrC e => Nothing
+        OkC programFixities => case lintSourceWith programFixities text of
+          ErrC e => Nothing
+          OkC findings => case fixAllLintEdit programFixities text findings of
+            Nothing => Nothing
+            Just newText =>
+              Just
+                (JObj [Pair "changes" (JObj [Pair uri (JArr [textEditJson (fullRange text) newText])])])
+      )
 
 -- ---------------------------------------------------------------
 -- case split（C38）：洞 → 上下文 binder 的 data 构造子 / record 分支
@@ -685,39 +709,48 @@ ctxSplitActions uri text sf roots preludeModules g =
 -- 入口：请求 range → 洞 → 上下文里的可分裂 binder（不命中返回 []）。
 caseSplitActions : String -> String -> PackageContext -> String -> Int -> Int -> Int -> Int -> Eff [] (List Json)
 caseSplitActions uri label ctx text sl sc el ec = if not (rangeTouchesHole text sl sc el ec) then pure []
-else case dtGoalsSourceTolerant ctx label text of
-  ErrC e => pure []
-  OkC gs => case goalAtRange sl sc el ec gs of
-    Nothing => pure []
-    Just g => case parseSource "<lsp>" text of
-      ErrC e => pure []
-      OkC sf => do
-        preludeModules <- preludeReexportModules (contextRoots ctx)
-        ctxSplitActions uri text sf (contextRoots ctx) preludeModules g
+else do
+  gsR <- dtGoalsSourceTolerant ctx label text
+  case gsR of
+    ErrC e => pure []
+    OkC gs => case goalAtRange sl sc el ec gs of
+      Nothing => pure []
+      Just g => case parseSource "<lsp>" text of
+        ErrC e => pure []
+        OkC sf => do
+          preludeModules <- preludeReexportModules (contextRoots ctx)
+          ctxSplitActions uri text sf (contextRoots ctx) preludeModules g
 
 -- Index：惰性加载（首次 definition/references/completion/workspaceSymbol 时）
 -- ---------------------------------------------------------------
 -- 工作区根：从文件所在目录向上取**最外层** manifest（workspace 根）。
-outermostManifest : Int -> String -> String
-outermostManifest fuel dir = if fuel <= 0 then dir
+outermostManifest : Int -> String -> Eff [] String
+outermostManifest fuel dir = if fuel <= 0 then pure dir
 else
   let
     parent = parentDir dir
-  in if parent == dir then dir
-  else case findManifestDirMaybe parent of
-    Nothing => dir
-    Just p => outermostManifest (fuel - 1) p
+  in if parent == dir then pure dir
+  else do
+    found <- findManifestDirMaybe parent
+    case found of
+      Nothing => pure dir
+      Just p => outermostManifest (fuel - 1) p
 
-workspaceRoot : String -> String
+workspaceRoot : String -> Eff [] String
 workspaceRoot uri =
   let
     path = decodeUri uri
     startDir = if path == "" then "." else dirOfPath path
-  in case findManifestDirMaybe startDir of
-    Nothing => case findManifestDirMaybe "." of
-      Nothing => "."
-      Just d => d
-    Just nearest => outermostManifest 64 nearest
+  in do
+    found <- findManifestDirMaybe startDir
+    case found of
+      Nothing => do
+        fallback <- findManifestDirMaybe "."
+        pure (case fallback of
+          Nothing => "."
+          Just d => d
+        )
+      Just nearest => outermostManifest 64 nearest
 
 modulePathOf : Index -> String -> Maybe String
 modulePathOf idx modNameQuery = case filter (\mi => modName mi == modNameQuery) (indexModules idx) of
@@ -829,14 +862,17 @@ declSymbolJson lines d =
   in symbolJson name (declSymbolKind d) (spanRange sp) (nameSelRange lines sp name)
     (declChildrenJson lines d)
 
-documentSymbols : String -> String -> List Json
+documentSymbols : String -> String -> Eff [] (List Json)
 documentSymbols uri text = case parseSource uri text of
-  ErrC e => []
-  OkC (SourceFile hdr imports fx decls0) => case formattingFixities uri text of
-    ErrC _ => []
-    OkC programFixities => case reorderProgram (tableOfKeepOps (append programFixities fx)) decls0 of
-      ErrC e => []
-      OkC decls => map (declSymbolJson (split "\n" text)) decls
+  ErrC e => pure []
+  OkC (SourceFile hdr imports fx decls0) => do
+    fxR <- formattingFixities uri text
+    pure (case fxR of
+      ErrC _ => []
+      OkC programFixities => case reorderProgram (tableOfKeepOps (append programFixities fx)) decls0 of
+        ErrC e => []
+        OkC decls => map (declSymbolJson (split "\n" text)) decls
+    )
 
 -- ---------------------------------------------------------------
 -- definition：位置 → token → Index → Location

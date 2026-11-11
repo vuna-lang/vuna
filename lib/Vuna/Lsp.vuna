@@ -138,7 +138,7 @@ logTo line (LspState docs s pull idx tried hint logs dc dsess) =
   LspState docs s pull idx tried hint (line :: logs) dc dsess
 
 -- 退出时一次写出（内存累积的日志，见 Protocol.flushLogLines）。
-flushLogs : LspState -> Int
+flushLogs : LspState -> Eff [] Int
 flushLogs st = flushLogLines st.stateLogs
 
 -- 首次需要索引时构建；失败一次后不再重试（避免每个请求都全量扫描磁盘）。
@@ -146,20 +146,18 @@ ensureIndex : String -> LspState -> Eff [] (Pair LspState (Maybe Index))
 ensureIndex uri st = case st.stateIndex of
   Just idx => pure (Pair st (Just idx))
   Nothing => if st.stateIndexTried then pure (Pair st Nothing)
-  else
-    let
-      root = workspaceRoot uri
-    in do
-      r <- loadOrBuild root
-      case r of
-        OkC idx =>
-          let
-            st1 = logTo "index ready: ${root}" (setIndexTried True (setIndex (Just idx) st))
-          in pure (Pair st1 (Just idx))
-        ErrC e =>
-          let
-            st1 = logTo "index unavailable: ${diagText e}" (setIndexTried True st)
-          in pure (Pair st1 Nothing)
+  else do
+    root <- workspaceRoot uri
+    r <- loadOrBuild root
+    case r of
+      OkC idx =>
+        let
+          st1 = logTo "index ready: ${root}" (setIndexTried True (setIndex (Just idx) st))
+        in pure (Pair st1 (Just idx))
+      ErrC e =>
+        let
+          st1 = logTo "index unavailable: ${diagText e}" (setIndexTried True st)
+        in pure (Pair st1 Nothing)
 
 -- 打开的文档文本（未打开 → ""）。
 textForUri : String -> LspState -> String
@@ -305,28 +303,32 @@ handleHover msg state =
     line = lineOfParams params + 1
     col = colOfParams params + 1
     text = textForUri uri state
-  in case holeHoverAt uri line col text of
-    Just hover => pure (Pair False (Pair state [responseOk (idOf msg) hover]))
-    Nothing => do
-      bindHover <- bindingHoverAt uri line col text
-      case bindHover of
-        Just hover => pure (Pair False (Pair state [responseOk (idOf msg) hover]))
-        Nothing => do
-          indexPair <- ensureIndex uri state
-          let
-            state1 = firstOf indexPair
-            midx = secondOf indexPair
-          in pure
-            (Pair False (Pair state1 [responseOk (idOf msg) (symbolHoverResult uri line col text midx)]))
+  in do
+    holeHover <- holeHoverAt uri line col text
+    case holeHover of
+      Just hover => pure (Pair False (Pair state [responseOk (idOf msg) hover]))
+      Nothing => do
+        bindHover <- bindingHoverAt uri line col text
+        case bindHover of
+          Just hover => pure (Pair False (Pair state [responseOk (idOf msg) hover]))
+          Nothing => do
+            indexPair <- ensureIndex uri state
+            let
+              state1 = firstOf indexPair
+              midx = secondOf indexPair
+            in pure
+              (Pair False (Pair state1 [responseOk (idOf msg) (symbolHoverResult uri line col text midx)]))
 
 -- formatting：formatSourceWith 成功且内容变化 ⇒ 全文 TextEdit；否则 []（M31.3：程序级 fixity）。
-handleFormatting : Json -> LspState -> Pair Bool (Pair LspState (List Json))
+handleFormatting : Json -> LspState -> Eff [] (Pair Bool (Pair LspState (List Json)))
 handleFormatting msg state =
   let
     params = paramsOf msg
     uri = uriOfParams params
     text = textForUri uri state
-  in Pair False (Pair state [responseOk (idOf msg) (JArr (formattingEdits uri text))])
+  in do
+    edits <- formattingEdits uri text
+    pure (Pair False (Pair state [responseOk (idOf msg) (JArr edits)]))
 
 -- ---------------------------------------------------------------
 -- codeAction（M38 P1c：lint quick fix；C38：洞 case split + fix all 的 Command 形式）
@@ -381,7 +383,7 @@ firstCommandArg [] = ""
 firstCommandArg (arg :: rest) = fromMaybe "" (jsonAsStr arg)
 
 -- 支持的 command：`vuna.fixAllLint`（arguments = [文档 uri]）。未知 command → -32602。
-handleExecuteCommand : Json -> LspState -> Pair Bool (Pair LspState (List Json))
+handleExecuteCommand : Json -> LspState -> Eff [] (Pair Bool (Pair LspState (List Json)))
 handleExecuteCommand msg state =
   let
     params = paramsOf msg
@@ -389,21 +391,26 @@ handleExecuteCommand msg state =
     args = fromMaybe [] (jsonGet "arguments" params >>= jsonAsArr)
     uri = firstCommandArg args
     text = textForUri uri state
-  in if command == fixAllLintCommand then case fixAllLintWorkspaceEdit uri text of
-    Nothing => Pair False (Pair state [responseOk (idOf msg) JNull])
-    Just edit =>
-      Pair False
-        (Pair state [applyEditFrame (applyEditRequestId uri text) edit, responseOk (idOf msg) JNull])
-  else Pair False (Pair state [responseErr (idOf msg) errInvalidParams "unknown command: ${command}"])
+  in if command == fixAllLintCommand then do
+    editR <- fixAllLintWorkspaceEdit uri text
+    case editR of
+      Nothing => pure (Pair False (Pair state [responseOk (idOf msg) JNull]))
+      Just edit =>
+        pure
+          (Pair False (Pair state [applyEditFrame (applyEditRequestId uri text) edit, responseOk (idOf msg) JNull]))
+  else pure
+    (Pair False (Pair state [responseErr (idOf msg) errInvalidParams "unknown command: ${command}"]))
 
 -- documentSymbol：当前缓冲的 AST 声明树（不要求磁盘上存在）。
-handleDocumentSymbol : Json -> LspState -> Pair Bool (Pair LspState (List Json))
+handleDocumentSymbol : Json -> LspState -> Eff [] (Pair Bool (Pair LspState (List Json)))
 handleDocumentSymbol msg state =
   let
     params = paramsOf msg
     uri = uriOfParams params
     text = textForUri uri state
-  in Pair False (Pair state [responseOk (idOf msg) (JArr (documentSymbols uri text))])
+  in do
+    symbols <- documentSymbols uri text
+    pure (Pair False (Pair state [responseOk (idOf msg) (JArr symbols)]))
 
 -- definition：模块引用/局部绑定（parse 级）→ Index 符号 → 同文件兜底。
 handleDefinition : Json -> LspState -> Eff [] (Pair Bool (Pair LspState (List Json)))
@@ -536,10 +543,10 @@ dispatch "textDocument/definition" msg state = handleDefinition msg state
 dispatch "textDocument/references" msg state = handleReferences msg state
 dispatch "textDocument/prepareRename" msg state = handlePrepareRename msg state
 dispatch "textDocument/rename" msg state = handleRename msg state
-dispatch "textDocument/documentSymbol" msg state = pure (handleDocumentSymbol msg state)
-dispatch "textDocument/formatting" msg state = pure (handleFormatting msg state)
+dispatch "textDocument/documentSymbol" msg state = handleDocumentSymbol msg state
+dispatch "textDocument/formatting" msg state = handleFormatting msg state
 dispatch "textDocument/codeAction" msg state = handleCodeAction msg state
-dispatch "workspace/executeCommand" msg state = pure (handleExecuteCommand msg state)
+dispatch "workspace/executeCommand" msg state = handleExecuteCommand msg state
 dispatch "workspace/symbol" msg state = handleWorkspaceSymbol msg state
 -- 客户端能力注册（vscode-languageclient 的 fileEvents 等）：服务器不消费这些注册，
 -- 但必须回成功，否则客户端会把「注册失败」当成错误刷日志。
@@ -568,19 +575,17 @@ lspWarn : String -> LspState -> Pair LspState (List Json)
 lspWarn m st = Pair (logTo m st) []
 
 -- exit 之前是否收到过 shutdown。
-exitCodeOf : LspState -> Int
-exitCodeOf state =
-  let
-    _ = flushLogs state
-  in if state.stateShutdown then 0 else 1
+exitCodeOf : LspState -> Eff [] Int
+exitCodeOf state = do
+  _ <- flushLogs state
+  pure (if state.stateShutdown then 0 else 1)
 
 -- 非正常结束（stdin EOF / 传输层致命错误）：flush 日志后一律退 1，
 -- 不能把 flushLogs 的「写入字节数」当退出码。
-abnormalExit : LspState -> Int
-abnormalExit state =
-  let
-    _ = flushLogs state
-  in 1
+abnormalExit : LspState -> Eff [] Int
+abnormalExit state = do
+  _ <- flushLogs state
+  pure 1
 
 -- A05：零参顶层定义在模块初始化时求值，所以「动作」必须函数化。
 -- runLsp 是读 stdin 的 LSP 帧循环：若留成零参值，任何子命令启动都会跑它。
@@ -595,9 +600,9 @@ runLsp _ = do
     exit = firstOf outcome
     state = secondOf outcome
   in case exit of
-    ExitRequested => pure (exitCodeOf state)
-    ExitClosed => pure (abnormalExit state)
-    ExitFatal msg => pure (abnormalExit (logTo msg state))
+    ExitRequested => exitCodeOf state
+    ExitClosed => abnormalExit state
+    ExitFatal msg => abnormalExit (logTo msg state)
 
 -- CLI 入口：与其它工具命令一致，返回退出码（由 Vuna.Cli 插入分发）。
 runLspTool : List String -> Eff [] Int

@@ -45,36 +45,43 @@ runRun args =
 runGo : Parsed -> List String -> String -> Eff [] Int
 runGo parsed passthrough dir = case requireDirectory dir of
   ErrC e => runError (diagText e)
-  OkC _ => case loadPackage dir of
-    ErrC e => runFailure (diagText e)
-    OkC rootPkg => case selectTarget parsed dir rootPkg of
-      ErrC e => runError (diagText e)
-      OkC target => runTarget parsed passthrough dir target
+  OkC _ => do
+    pkgR <- loadPackage dir
+    case pkgR of
+      ErrC e => runFailure (diagText e)
+      OkC rootPkg => do
+        targetR <- selectTarget parsed dir rootPkg
+        case targetR of
+          ErrC e => runError (diagText e)
+          OkC target => runTarget parsed passthrough dir target
 
 -- 目标包选择；workspace 成员列表来自 `workspacePackages`（与 build 同一真源）。
-selectTarget : Parsed -> String -> Package -> Check Package
+selectTarget : Parsed -> String -> Package -> Eff [] (Check Package)
 selectTarget parsed dir rootPkg = case rootPkg.packageManifest.manifestMembers of
   [] => case flagValue parsed "package" of
-    Nothing => OkC rootPkg
+    Nothing => pure (OkC rootPkg)
     Just name =>
-      if packageName rootPkg == name then OkC rootPkg
-      else err "no such package: ${name} (only package at ${dir} is ${packageLabel rootPkg})"
-  _ => case workspacePackages dir of
-    ErrC e => ErrC e
-    OkC pkgs => case flagValue parsed "package" of
-      Just name => case findPackageByName name pkgs of
-        Nothing => err "no such package in workspace: ${name}"
-        Just target => OkC target
-      Nothing => case rootExecutable rootPkg of
-        Just target => OkC target
-        Nothing => case filter isExecutable pkgs of
-          [only] => OkC only
-          [] =>
-            err
-              "no executable package in workspace ${dir} (packages need app/Main.vuna): ${packageLabels pkgs}"
-          many =>
-            err
-              "multiple executable packages in workspace ${dir}: ${packageLabels many}; choose one with --package"
+      if packageName rootPkg == name then pure (OkC rootPkg)
+      else pure (err "no such package: ${name} (only package at ${dir} is ${packageLabel rootPkg})")
+  _ => do
+    pkgsR <- workspacePackages dir
+    pure (case pkgsR of
+      ErrC e => ErrC e
+      OkC pkgs => case flagValue parsed "package" of
+        Just name => case findPackageByName name pkgs of
+          Nothing => err "no such package in workspace: ${name}"
+          Just target => OkC target
+        Nothing => case rootExecutable rootPkg of
+          Just target => OkC target
+          Nothing => case filter isExecutable pkgs of
+            [only] => OkC only
+            [] =>
+              err
+                "no executable package in workspace ${dir} (packages need app/Main.vuna): ${packageLabels pkgs}"
+            many =>
+              err
+                "multiple executable packages in workspace ${dir}: ${packageLabels many}; choose one with --package"
+    )
 
 rootExecutable : Package -> Maybe Package
 rootExecutable pkg = if isExecutable pkg then Just pkg else Nothing

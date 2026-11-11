@@ -1,10 +1,4 @@
-module Vuna.Compiler.CacheFormat
-  ( frameDecode
-  , frameEncode
-  , frameMagic
-  , readFramed
-  , readFramedEff
-  ) where
+module Vuna.Compiler.CacheFormat (frameDecode, frameEncode, frameMagic, readFramedEff) where
 
 -- Vuna.Compiler.CacheFormat：磁盘缓存的**统一 framing**（C32 最小硬化）。
 --
@@ -105,7 +99,3 @@ readFramedEff tag path = do
     raw <- prim_eff_readFile path
     pure (frameDecode tag raw)
   else pure Nothing
-
--- 过渡包装：旧纯 API（M4 迁移期；调用方逐个改用 `readFramedEff` 后删除）。
-readFramed : String -> String -> Maybe String
-readFramed tag path = runPure (readFramedEff tag path)

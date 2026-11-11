@@ -50,7 +50,7 @@
    `[package] privileged = true` 的包；用户包/ad-hoc 只能经 `Eff` + handler（见
    [effects.md](docs/reference/effects.md) §8.6）。
    **M4 剩余债务**：编译器/工具链源码仍用 `runPure (...)` 在纯签名里隐藏 Eff 执行
-   （`compiler/lib` + `lib` 约 82 处），要改成显式 `Eff`/`EffCheck` 外壳并加 `nix` 守卫。
+   （`compiler/lib` + `lib` 约 46 处），要改成显式 `Eff`/`EffCheck` 外壳并加 `nix` 守卫。
 6. **唯一路径**：语言夹具、`vuna interp`、包构建与 seed 全部走 DT（精化 + 擦除
    codegen，`vuna check .` 也是 DT 自检）；没有可切换的检查器，也没有第二套 codegen；
 7. 编译器自检通过：`vuna check .` 必须能检查自身源码（`checks.vuna-typecheck`）。

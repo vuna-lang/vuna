@@ -42,8 +42,10 @@ sessionDisabled = do
   pure (env == "1")
 
 -- 与 `Compile.ifaceCompilerTag` 同口径：版本 + 编译器二进制指纹。
-ifaceTag : String
-ifaceTag = "${vunaVersion}/${strFromInt (runPure toolCompilerFingerprint)}"
+ifaceTag : Eff [] String
+ifaceTag = do
+  fp <- toolCompilerFingerprint
+  pure "${vunaVersion}/${strFromInt fp}"
 
 dropLeadingSlash : String -> String
 dropLeadingSlash s = if startsWith "/" s then substring 1 (byteLength s) s else s
@@ -55,22 +57,28 @@ baseIfaceDir ifaceRoot baseDir =
   if ifaceRoot == "" then baseDir else "${ifaceRoot}/${dropLeadingSlash baseDir}"
 
 -- 读 base 包接口（`readPackageIface` 内部已校验 schema 与编译器 tag）。
-readBaseIfaces : String -> String -> Maybe (List ModuleIface)
-readBaseIfaces ifaceRoot baseDir = case runPure (readPackageIface (baseIfaceDir ifaceRoot baseDir) ifaceTag) of
-  Nothing => Nothing
-  Just pi => Just pi.piModules
+readBaseIfaces : String -> String -> Eff [] (Maybe (List ModuleIface))
+readBaseIfaces ifaceRoot baseDir = do
+  tag <- ifaceTag
+  pi <- readPackageIface (baseIfaceDir ifaceRoot baseDir) tag
+  pure (case pi of
+    Nothing => Nothing
+    Just p => Just p.piModules
+  )
 
 -- 会话可用性：命中缓存 → 直接用；否则读一次接口并写回（读失败 ⇒ Nothing）。
 ensureSession : IORef Session -> String -> Eff [] (Maybe (List ModuleIface))
 ensureSession ref baseDir = do
   s <- readRef ref
   if s.sesDir == baseDir && length s.sesIfaces > 0 then pure (Just s.sesIfaces)
-  else case readBaseIfaces s.sesRoot baseDir of
-    Nothing => pure Nothing
-    Just ifaces => if length ifaces == 0 then pure Nothing
-    else do
-      _ <- writeRef ref (Session s.sesRoot baseDir ifaces s.sesAux s.sesEvalAux)
-      pure (Just ifaces)
+  else do
+    ifacesR <- readBaseIfaces s.sesRoot baseDir
+    case ifacesR of
+      Nothing => pure Nothing
+      Just ifaces => if length ifaces == 0 then pure Nothing
+      else do
+        _ <- writeRef ref (Session s.sesRoot baseDir ifaces s.sesAux s.sesEvalAux)
+        pure (Just ifaces)
 
 -- check：Just (0, "") = 通过；Just (1, 诊断) = 失败；Nothing = 会话不可用（回退 CLI）。
 sessionCheck : IORef Session -> String -> String -> Eff [] (Maybe (Pair Int String))
@@ -81,15 +89,18 @@ sessionCheck ref baseDir source = do
     ses <- ensureSession ref baseDir
     case ses of
       Nothing => pure Nothing
-      Just ifaces => case contextForFile source of
-        ErrC _ => pure Nothing
-        OkC ctx => sessionCheckIn ref baseDir ctx ifaces source
+      Just ifaces => do
+        ctxR <- contextForFile source
+        case ctxR of
+          ErrC _ => pure Nothing
+          OkC ctx => sessionCheckIn ref baseDir ctx ifaces source
 
 sessionCheckIn : IORef Session -> String -> PackageContext -> List ModuleIface -> String -> Eff [] (Maybe (Pair Int String))
 sessionCheckIn ref baseDir ctx ifaces source = do
   text <- prim_eff_readFile source
   s <- readRef ref
-  case dtCheckSourceIncremental ctx source text ifaces [] s.sesAux False of
+  result <- dtCheckSourceIncremental ctx source text ifaces [] s.sesAux False
+  case result of
     ErrC e => pure (Just (Pair 1 (diagText e)))
     OkC (Pair applied (Pair _ aux)) => if not applied then pure Nothing
     else do
@@ -106,15 +117,18 @@ sessionInterp ref baseDir source = do
     ses <- ensureSession ref baseDir
     case ses of
       Nothing => pure Nothing
-      Just ifaces => case contextForFile source of
-        ErrC _ => pure Nothing
-        OkC ctx => sessionInterpIn ref baseDir ctx ifaces source
+      Just ifaces => do
+        ctxR <- contextForFile source
+        case ctxR of
+          ErrC _ => pure Nothing
+          OkC ctx => sessionInterpIn ref baseDir ctx ifaces source
 
 sessionInterpIn : IORef Session -> String -> PackageContext -> List ModuleIface -> String -> Eff [] (Maybe (Pair Int String))
 sessionInterpIn ref baseDir ctx ifaces source = do
   text <- prim_eff_readFile source
   s <- readRef ref
-  case dtEvalSourceIncremental ctx source text ifaces s.sesEvalAux of
+  result <- dtEvalSourceIncremental ctx source text ifaces s.sesEvalAux
+  case result of
     ErrC e => pure (Just (Pair 1 (diagText e)))
     OkC (Pair applied (Pair out aux)) => if not applied then pure Nothing
     else do

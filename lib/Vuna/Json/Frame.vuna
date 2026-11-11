@@ -7,7 +7,6 @@ module Vuna.Json.Frame
   , readChunk
   , renderFrame
   , renderFrameBody
-  , sendFrame
   , splitHeaderBlock
   ) where
 
@@ -43,17 +42,13 @@ maxFrameBytes = 16777216
 readChunk : Int -> Eff [] String
 readChunk n = prim_eff_readBytes n
 
--- 把一帧编码成字节串（纯函数；sendFrame 与 socket 传输共用）。
+-- 把一帧编码成字节串（纯函数；传输层与 socket 传输共用）。
 renderFrame : Json -> String
 renderFrame payload = renderFrameBody (renderJson payload)
 
 -- 同上，但 body 已经是编码好的 JSON 文本（`vuna repl --client` 直接透传 stdin 的 body）。
 renderFrameBody : String -> String
 renderFrameBody body = "Content-Length: ${strLength body}\r\n\r\n${body}"
-
--- 发送一帧到 stdout（LSP / stdio server）。
-sendFrame : Json -> Int
-sendFrame payload = runPure (prim_eff_print (renderFrame payload))
 
 -- 数字 / ASCII 小写工具（`Content-Length` 解析用；`allDigits` / `digitsToInt`
 -- 由 `Vuna.Lsp.Protocol` 重导出，保持既有调用点）。

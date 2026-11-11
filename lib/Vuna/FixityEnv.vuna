@@ -20,6 +20,7 @@ import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Loader.Flatten
 import Vuna.Compiler.Loader.Modules
 import Vuna.Compiler.Packages.Pkg
+import Base.Host
 
 -- 表示抽象：只有 emptyFixityEnv / fixitiesForFile 能构造与推进缓存。
 record FixityEnv where
@@ -51,22 +52,28 @@ cachePut key value entries = Pair key value :: cacheForget key entries
 
 -- 取一个文件的程序级 fixity：`Pair env' (Result (List FixityDecl))`。
 -- env' 带回推进后的缓存（即使本次失败，已成功的上下文缓存仍可复用）。
-fixitiesForFile : FixityEnv -> String -> String -> Pair FixityEnv (Check (List FixityDecl))
+-- M4：上下文解析 / 模块图加载是宿主动作，显式 `Eff []`；缓存推进仍是纯数据。
+fixitiesForFile : FixityEnv -> String -> String -> Eff [] (Pair FixityEnv (Check (List FixityDecl)))
 fixitiesForFile (FixityEnv ctxCache modCache) path source =
   let
     dir = dirKey path
-    ctxRes = case cacheLookup dir ctxCache of
-      Just ctx => OkC ctx
+  in do
+    ctxRes <- case cacheLookup dir ctxCache of
+      Just ctx => pure (OkC ctx)
       Nothing => contextForFile path
-  in case ctxRes of
-    ErrC e => Pair (FixityEnv ctxCache modCache) (ErrC e)
-    OkC ctx =>
-      let
-        ctxCache2 = cachePut dir ctx ctxCache
-        modKey = contextDir ctx
-        mods = case cacheLookup modKey modCache of
-          Just ms => ms
-          Nothing => []
-      in case fixitiesForSourceIn ctx mods path source of
-        ErrC e => Pair (FixityEnv ctxCache2 modCache) (ErrC e)
-        OkC (Pair mods2 fx) => Pair (FixityEnv ctxCache2 (cachePut modKey mods2 modCache)) (OkC fx)
+    case ctxRes of
+      ErrC e => pure (Pair (FixityEnv ctxCache modCache) (ErrC e))
+      OkC ctx =>
+        let
+          ctxCache2 = cachePut dir ctx ctxCache
+          modKey = contextDir ctx
+          mods = case cacheLookup modKey modCache of
+            Just ms => ms
+            Nothing => []
+        in do
+          fxR <- fixitiesForSourceIn ctx mods path source
+          pure (case fxR of
+            ErrC e => Pair (FixityEnv ctxCache2 modCache) (ErrC e)
+            OkC (Pair mods2 fx) =>
+              Pair (FixityEnv ctxCache2 (cachePut modKey mods2 modCache)) (OkC fx)
+          )

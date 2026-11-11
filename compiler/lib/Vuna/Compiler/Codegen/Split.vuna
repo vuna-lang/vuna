@@ -26,6 +26,7 @@ import Vuna.Compiler.Codegen.Erase
 import Vuna.Compiler.Codegen.Term
 import Vuna.Compiler.Core
 import Vuna.Compiler.Intrinsics
+import Base.Host
 
 splitUnitOfModule : String -> String
 splitUnitOfModule modName = sanitizeName modName
@@ -206,13 +207,15 @@ splitLocPath roots contextDir path =
 
 -- roots 是模块根目录（`PackageContext.contextRoots` 的 rootDir），contextDir 是包目录
 -- （`PackageContext.contextDir`）；生成位置表用它把 span 路径归一。
-noUnitLookup : String -> Maybe SplitFile
-noUnitLookup _ = Nothing
+noUnitLookup : String -> Eff [] (Maybe SplitFile)
+noUnitLookup _ = pure Nothing
 
-noUnitStore : String -> SplitFile -> Int
-noUnitStore _ _ = 0
+noUnitStore : String -> SplitFile -> Eff [] Int
+noUnitStore _ _ = pure 0
 
-generateDtSplitProgram : List (Pair String (List Decl)) -> List Decl -> DtProgram -> Bool -> List String -> String -> Check (List SplitFile)
+-- M4（效果显式化）：单元缓存的 lookup/store 是宿主动作，生成外壳显式在 `Eff []` 里；
+-- 纯生成逻辑（归属表、分文件、依赖序校验）保持纯函数。
+generateDtSplitProgram : List (Pair String (List Decl)) -> List Decl -> DtProgram -> Bool -> List String -> String -> Eff [] (Check (List SplitFile))
 generateDtSplitProgram modules entryDecls prog printResult roots contextDir =
   generateDtSplitProgramWith noUnitLookup noUnitStore modules entryDecls prog printResult roots
     contextDir
@@ -220,12 +223,6 @@ generateDtSplitProgram modules entryDecls prog printResult roots contextDir =
 -- M34.5（S5）：带**单元级缓存**的生成入口。`lookup` 按模块名（入口用 `__entry__`）
 -- 返回上次生成的 `SplitFile`（key 已由调用方算好，含依赖哈希链）；命中即跳过该单元的
 -- codegen，`store` 只对重新生成的单元调用。缓存读写留在 Driver 层（本模块不碰 IO）。
-storeModuleFile : (String -> SplitFile -> Int) -> String -> SplitFile -> SplitFile
-storeModuleFile store key sf =
-  let
-    _ = store key sf
-  in sf
-
 -- 程序（含依赖 defs）是否用到浮点：决定 `Vuna_runtime.ml` 是否追加浮点 helper。
 -- no-float（含 compiler 自身）输出与 Float 之前逐字节一致。
 -- | 遍历所有定义体，判断是否有定义用到浮点；结果决定 `Vuna_runtime.ml` 是否追加
@@ -236,7 +233,7 @@ anyDefUsesFloat (d :: rest) = case dtDefBody d of
   Nothing => anyDefUsesFloat rest
   Just body => termUsesFloat floatIntrinsicNames body || anyDefUsesFloat rest
 
-generateDtSplitProgramWith : (String -> Maybe SplitFile) -> (String -> SplitFile -> Int) -> List (Pair String (List Decl)) -> List Decl -> DtProgram -> Bool -> List String -> String -> Check (List SplitFile)
+generateDtSplitProgramWith : (String -> Eff [] (Maybe SplitFile)) -> (String -> SplitFile -> Eff [] Int) -> List (Pair String (List Decl)) -> List Decl -> DtProgram -> Bool -> List String -> String -> Eff [] (Check (List SplitFile))
 generateDtSplitProgramWith lookup store modules entryDecls prog printResult roots contextDir =
   let
     -- M34.6：把「精化完成 → prepare 开始」之间的构建独有开销分段（compiler 包约 0.4s，
@@ -251,18 +248,25 @@ generateDtSplitProgramWith lookup store modules entryDecls prog printResult root
     usesFloat = anyDefUsesFloat allDefs
     runtimeText = dtRuntimeWith locTbl usesFloat
     _ = stamp "cg-runtimeText-done"
-  in Vuna.Compiler.Common.bind (prepareDtProgram (Pair (dtProgDatas prog) allDefs)) (\p => case p of
-    Pair runtime groups =>
-      splitProgramFilesWith lookup store modules entryDecls printResult runtime allDatas allDefs
-        meta runtimeText
-  )
+  in case prepareDtProgram (Pair (dtProgDatas prog) allDefs) of
+    ErrC e => pure (ErrC e)
+    OkC p => case p of
+      Pair runtime groups =>
+        splitProgramFilesWith lookup store modules entryDecls printResult runtime allDatas allDefs
+          meta runtimeText
 
-splitProgramFilesWith : (String -> Maybe SplitFile) -> (String -> SplitFile -> Int) -> List (Pair String (List Decl)) -> List Decl -> Bool -> List DtDef -> List DtData -> List DtDef -> SplitMeta -> String -> Check (List SplitFile)
-splitProgramFilesWith lookup store modules entryDecls printResult runtime allDatas allDefs meta runtimeText =
-  Vuna.Compiler.Common.bind (checkResolvedModules meta modules entryDecls runtime allDatas)
-    (\_ => Vuna.Compiler.Common.bind (nameOwnerPairsOfDefs meta runtime) (\defPairs => Vuna.Compiler.Common.bind (nameOwnerPairsOfDatas meta allDatas) (\dataPairs => splitWithOwnersWith lookup store modules printResult runtime allDatas allDefs defPairs dataPairs runtimeText)))
+splitProgramFilesWith : (String -> Eff [] (Maybe SplitFile)) -> (String -> SplitFile -> Eff [] Int) -> List (Pair String (List Decl)) -> List Decl -> Bool -> List DtDef -> List DtData -> List DtDef -> SplitMeta -> String -> Eff [] (Check (List SplitFile))
+splitProgramFilesWith lookup store modules entryDecls printResult runtime allDatas allDefs meta runtimeText = case checkResolvedModules meta modules entryDecls runtime allDatas of
+  ErrC e => pure (ErrC e)
+  OkC _ => case nameOwnerPairsOfDefs meta runtime of
+    ErrC e => pure (ErrC e)
+    OkC defPairs => case nameOwnerPairsOfDatas meta allDatas of
+      ErrC e => pure (ErrC e)
+      OkC dataPairs =>
+        splitWithOwnersWith lookup store modules printResult runtime allDatas allDefs defPairs
+          dataPairs runtimeText
 
-splitWithOwnersWith : (String -> Maybe SplitFile) -> (String -> SplitFile -> Int) -> List (Pair String (List Decl)) -> Bool -> List DtDef -> List DtData -> List DtDef -> List (Pair String String) -> List (Pair String String) -> String -> Check (List SplitFile)
+splitWithOwnersWith : (String -> Eff [] (Maybe SplitFile)) -> (String -> SplitFile -> Eff [] Int) -> List (Pair String (List Decl)) -> Bool -> List DtDef -> List DtData -> List DtDef -> List (Pair String String) -> List (Pair String String) -> String -> Eff [] (Check (List SplitFile))
 splitWithOwnersWith lookup store modules printResult runtime allDatas allDefs defPairs dataPairs runtimeText =
   let
     defUnitT = unitTblOf (mapToUnit defPairs)
@@ -273,34 +277,77 @@ splitWithOwnersWith lookup store modules printResult runtime allDatas allDefs de
     ctx =
       SplitGenCtx (usedTableOf allDatas) allDatas runtime (ownerTblOf defPairs)
         (ownerTblOf dataPairs) defUnitT dataUnitT ordered
-  in Vuna.Compiler.Common.bind (splitModuleFilesWith lookup store ctx modules)
-    (\moduleFiles => Vuna.Compiler.Common.bind (splitMainFileWith lookup store ctx printResult) (\mainFile => OkC (SplitFile "Vuna_runtime.ml" runtimeText [] :: append moduleFiles [mainFile])))
+  in do
+    moduleFilesR <- splitModuleFilesWith lookup store ctx modules
+    case moduleFilesR of
+      ErrC e => pure (ErrC e)
+      OkC moduleFiles => do
+        mainFileR <- splitMainFileWith lookup store ctx printResult
+        pure (case mainFileR of
+          ErrC e => ErrC e
+          OkC mainFile =>
+            OkC (SplitFile "Vuna_runtime.ml" runtimeText [] :: append moduleFiles [mainFile])
+        )
 
-splitModuleFilesWith : (String -> Maybe SplitFile) -> (String -> SplitFile -> Int) -> SplitGenCtx -> List (Pair String (List Decl)) -> Check (List SplitFile)
-splitModuleFilesWith lookup store ctx [] = OkC []
+splitModuleFilesWith : (String -> Eff [] (Maybe SplitFile)) -> (String -> SplitFile -> Eff [] Int) -> SplitGenCtx -> List (Pair String (List Decl)) -> Eff [] (Check (List SplitFile))
+splitModuleFilesWith lookup store ctx [] = pure (OkC [])
 splitModuleFilesWith lookup store ctx ((Pair mname decls) :: rest) =
   let
     unit = splitUnitOfModule mname
-  in case lookup mname of
-    Just cached =>
-      Vuna.Compiler.Common.bind (splitModuleFilesWith lookup store ctx rest)
-        (\tail => OkC (cached :: tail))
+  in do
+    cached <- lookup mname
+    case cached of
+      Just cachedFile => do
+        tailR <- splitModuleFilesWith lookup store ctx rest
+        pure (case tailR of
+          ErrC e => ErrC e
+          OkC tail => OkC (cachedFile :: tail)
+        )
+      Nothing =>
+        let
+          unitDatas = datasInUnit ctx.sgcDataOwnerT mname ctx.sgcAllDatas
+          unitDefs = defsInUnit ctx.sgcDefOwnerT mname ctx.sgcAllDefs
+          qc = QualCtx unit ctx.sgcDefUnitT ctx.sgcDataUnitT
+        in case groupRuntimeDefs unitDefs of
+          ErrC e => pure (ErrC e)
+          OkC groups => case genUnitParts ctx.sgcUsedTbl qc ctx.sgcAllDatas unitDatas groups of
+            ErrC e => pure (ErrC e)
+            OkC parts => do
+              tailR <- splitModuleFilesWith lookup store ctx rest
+              case tailR of
+                ErrC e => pure (ErrC e)
+                OkC tail => case unitDepsOf ctx.sgcOrdered unit (unitPartsDeps parts) of
+                  ErrC e => pure (ErrC e)
+                  OkC deps =>
+                    let
+                      sf = SplitFile "${unit}.ml" "${genUnitText parts}\n" deps
+                    in do
+                      _ <- store mname sf
+                      pure (OkC (sf :: tail))
+
+splitMainFileWith : (String -> Eff [] (Maybe SplitFile)) -> (String -> SplitFile -> Eff [] Int) -> SplitGenCtx -> Bool -> Eff [] (Check SplitFile)
+splitMainFileWith lookup store ctx printResult = do
+  cached <- lookup "__entry__"
+  case cached of
+    Just cachedFile => pure (OkC cachedFile)
     Nothing =>
       let
-        unitDatas = datasInUnit ctx.sgcDataOwnerT mname ctx.sgcAllDatas
-        unitDefs = defsInUnit ctx.sgcDefOwnerT mname ctx.sgcAllDefs
-        qc = QualCtx unit ctx.sgcDefUnitT ctx.sgcDataUnitT
-      in Vuna.Compiler.Common.bind (groupRuntimeDefs unitDefs)
-        (\groups => Vuna.Compiler.Common.bind (genUnitParts ctx.sgcUsedTbl qc ctx.sgcAllDatas unitDatas groups) (\parts => Vuna.Compiler.Common.bind (splitModuleFilesWith lookup store ctx rest) (\tail => Vuna.Compiler.Common.bind (unitDepsOf ctx.sgcOrdered unit (unitPartsDeps parts)) (\deps => OkC (storeModuleFile store mname (SplitFile "${unit}.ml" "${genUnitText parts}\n" deps) :: tail)))))
-
-splitMainFileWith : (String -> Maybe SplitFile) -> (String -> SplitFile -> Int) -> SplitGenCtx -> Bool -> Check SplitFile
-splitMainFileWith lookup store ctx printResult = case lookup "__entry__" of
-  Just cached => OkC cached
-  Nothing =>
-    let
-      entryUnit = splitUnitOfModule entryOwner
-      entryDefs = defsInUnit ctx.sgcDefOwnerT entryOwner ctx.sgcAllDefs
-      entryDatas = datasInUnit ctx.sgcDataOwnerT entryOwner ctx.sgcAllDatas
-      qc = QualCtx entryUnit ctx.sgcDefUnitT ctx.sgcDataUnitT
-    in Vuna.Compiler.Common.bind (groupRuntimeDefs entryDefs)
-      (\groups => Vuna.Compiler.Common.bind (genUnitParts ctx.sgcUsedTbl qc ctx.sgcAllDatas entryDatas groups) (\parts => Vuna.Compiler.Common.bind (mainHook qc (Pair ctx.sgcAllDatas ctx.sgcAllDefs) ctx.sgcAllDefs printResult) (\hook => Vuna.Compiler.Common.bind (unitDepsOf ctx.sgcOrdered entryUnit (append (unitPartsDeps parts) (secondOf hook))) (\deps => OkC (storeModuleFile store "__entry__" (SplitFile "Main.ml" (mainInitPrologue ++ genUnitText parts ++ firstOf hook) deps))))))
+        entryUnit = splitUnitOfModule entryOwner
+        entryDefs = defsInUnit ctx.sgcDefOwnerT entryOwner ctx.sgcAllDefs
+        entryDatas = datasInUnit ctx.sgcDataOwnerT entryOwner ctx.sgcAllDatas
+        qc = QualCtx entryUnit ctx.sgcDefUnitT ctx.sgcDataUnitT
+      in case groupRuntimeDefs entryDefs of
+        ErrC e => pure (ErrC e)
+        OkC groups => case genUnitParts ctx.sgcUsedTbl qc ctx.sgcAllDatas entryDatas groups of
+          ErrC e => pure (ErrC e)
+          OkC parts => case mainHook qc (Pair ctx.sgcAllDatas ctx.sgcAllDefs) ctx.sgcAllDefs printResult of
+            ErrC e => pure (ErrC e)
+            OkC hook => case unitDepsOf ctx.sgcOrdered entryUnit (append (unitPartsDeps parts) (secondOf hook)) of
+              ErrC e => pure (ErrC e)
+              OkC deps =>
+                let
+                  sf =
+                    SplitFile "Main.ml" (mainInitPrologue ++ genUnitText parts ++ firstOf hook) deps
+                in do
+                  _ <- store "__entry__" sf
+                  pure (OkC sf)

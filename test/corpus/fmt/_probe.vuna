@@ -33,13 +33,16 @@ fail path msg = do
   pure 1
 
 -- 程序级 fixity：与 CLI 同源（Vuna.FixityEnv：按文件目录缓存模块图，声明表逐文件算）。
-fixitiesFor : String -> String -> Check (List FixityDecl)
-fixitiesFor path source = secondOf (fixitiesForFile emptyFixityEnv path source)
+fixitiesFor : String -> String -> Eff [] (Check (List FixityDecl))
+fixitiesFor path source = do
+  looked <- fixitiesForFile emptyFixityEnv path source
+  pure (secondOf looked)
 
 runFmt : String -> Eff [] Int
 runFmt path = do
   source <- readFile path
-  case fixitiesFor path source of
+  fxR <- fixitiesFor path source
+  case fxR of
     ErrC e => fail path (diagText e)
     OkC env => case formatSourceWith env source of
       ErrC e => fail path ("format error: " ++ diagText e)
@@ -50,24 +53,28 @@ runFmt path = do
 runCheck : String -> Eff [] Int
 runCheck path = do
   source <- readFile path
-  case fixitiesFor path source of
+  fxR <- fixitiesFor path source
+  case fxR of
     ErrC e => fail path (diagText e)
     OkC env => case formatSourceWith env source of
       ErrC e => fail path ("format error: " ++ diagText e)
       OkC out1 => case parseSource path out1 of
         ErrC e => fail path ("reparse error: " ++ diagText e)
-        OkC parsed => case fixitiesFor path out1 of
-          ErrC e => fail path (diagText e)
-          OkC env2 => case formatSourceWith env2 out1 of
-            ErrC e => fail path ("reformat error: " ++ diagText e)
-            OkC out2 =>
-              if out1 == out2 then pure 0
-              else fail path ("not idempotent\n--- first ---\n" ++ out1 ++ "--- second ---\n" ++ out2)
+        OkC parsed => do
+          fx2R <- fixitiesFor path out1
+          case fx2R of
+            ErrC e => fail path (diagText e)
+            OkC env2 => case formatSourceWith env2 out1 of
+              ErrC e => fail path ("reformat error: " ++ diagText e)
+              OkC out2 =>
+                if out1 == out2 then pure 0
+                else fail path ("not idempotent\n--- first ---\n" ++ out1 ++ "--- second ---\n" ++ out2)
 
 runWrite : String -> String -> Eff [] Int
 runWrite path out = do
   source <- readFile path
-  case fixitiesFor path source of
+  fxR <- fixitiesFor path source
+  case fxR of
     ErrC e => fail path (diagText e)
     OkC env => case formatSourceWith env source of
       ErrC e => fail path ("format error: " ++ diagText e)

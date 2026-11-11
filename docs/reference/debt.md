@@ -32,6 +32,7 @@
 | D54 | `handle`/`perform` 语法支持一阶 op 族（参数化族 State/Reader 的 `k = 1` 也行，按 op 族 kind 的宇宙域与 res 族 arity 校验）；**作用域/高阶 op 族 Exn**（`ExnOp` 的第一个显式参数域是 `Row` 而非宇宙、res 族名 `exnRes` 也不合 `<res><族>` 约定）仍只能手写 handler（`TC_HandleFamilyUnsupported`）。真正的修复要等 N3 的效应表示收敛（op 携带 Row/子计算需要高阶效应类型） | `compiler/lib/Vuna/Compiler/Elab/Term/Impl.vuna`（`handleFamilyArityOf`/`handleOpArity`/`handleCallExprWith`）、`base/lib/Base/Eff.vuna`（`handleWith`/`handleWithAt`）；夹具 `dt_err/100_eff_handle_family_unsupported`；[native-effects.md](native-effects.md) §9 | 后续（N3） |
 | D57 | `handle` 语法与 base 的手写 wrapper（`get`/`put`/`ask`/`runConsole`…）**key 不配对**：语法降级的 key 是 op 族规范名（ND8），wrapper 手写 `"state"`/`"console"` 等；过渡期语法程序只能用 `perform` 写、wrapper 程序只能手写 handler | `compiler/lib/Vuna/Compiler/Elab/Term/Impl.vuna`（`performCallExpr`/`handleCallExprWith`）、`base/lib/Base/Eff*.vuna`；[native-effects.md](native-effects.md) §9 第 5 条 | 后续（N2/N3 统一 key） |
 | D60 | `perform`/`handle` 语法没有显式实例名：多实例行上裸标签必然 `TC_AmbiguousInstance`，指定实例只能用带 `(n : String)` 的 wrapper（`consolePrint n`/`handleConsole n`）或 `sendCore`/`handleCore` | `compiler/lib/Vuna/Compiler/Elab/Term/Impl.vuna`（`performCallExpr`/`handleCall`）、`base/lib/Base/Eff*.vuna`；夹具 `dt_base/82`、`dt_err/108`、`dt_err/109`；[native-effects.md](native-effects.md) §9 | 后续（若多实例语法成为刚需，再加 `perform @name`） |
+| D61 | 高阶入口（如 `Bool -> Check PackageContext`）上使用 `pure (case ...)`/`fmap` 时，实例字典元变量可能被解成类型级名字（生成 `pure v_Int` 或 `CG_TypeLevelNameRuntime`） | M4 收尾时在 `lib/Vuna/Cli.vuna` 的 `maybePrivilegedCtx` 用显式 `case` 分支规避；未改 Elab/codegen | 后续若再遇，修字典解元或登记更精确限制 |
 
 ## 工具、构建与验证
 
@@ -53,7 +54,7 @@
 
 | ID | 仍未成立的事实 | 证据 | 归属 |
 | --- | --- | --- | --- |
-| D59 | 动作类型已统一为 `Eff`：入口 `main : Eff [] a`、`runPure`、handler answer `Eff []` + `joinEff`、`ST`/`IORef`/`MArray`/`Buffer` 全 `Eff`，内建 `IO` 类型与 IO 原语表已删除，宿主层只剩 `prim_eff_*` + `Base.Host` 归一化。M4 已落地 `EffCheck`（`Vuna.Compiler.Common`）、`DiagRender` 显式 Eff API、`CacheFormat.readFramedEff`、CompilerCli 选项收拢为单一 `CliOpts`、compiler CLI 全量显式 Eff（`runCompilerCliFor : … -> Eff [] Int`，runPure 40→0，`CliOpts` 已改为显式参数（无 IORef））。**剩余问题**：`compiler/lib` + `lib` 仍有 82 处 `runPure (...)`；ambient state（Sink/MetaSpans/Usage）尚未清理 | `nix/eff-boundary.allowlist`（82 点基线）；`compiler/lib/**` + `lib/**` 的 `runPure (`；`Diagnostics/Sink.vuna`、`Elab/MetaSpans.vuna`、`Elab/Usage.vuna`、| M4 剩余：`lib/**` 与 `compiler/lib/**` 其余「纯签名内隐藏执行」点改为显式 `Eff`/`EffCheck` → 删除 ambient state 与全部过渡包装 → 基线清零（守卫已作为 `checks.eff-boundary` 接入 `nix flake check`） |
+| D59 | 动作类型已统一为 `Eff`：入口 `main : Eff [] a`、`runPure`、handler answer `Eff []` + `joinEff`、`ST`/`IORef`/`MArray`/`Buffer` 全 `Eff`，内建 `IO` 类型与 IO 原语表已删除，宿主层只剩 `prim_eff_*` + `Base.Host` 归一化。M4 已落地 `EffCheck`（`Vuna.Compiler.Common`）、`DiagRender` Eff API、`CacheFormat.readFramedEff`、`CliOpts` 显式参数（无 IORef）、compiler CLI / LSP / `Diag.Format` 全量显式 Eff。**剩余问题**：`compiler/lib` + `lib` 仍有 46 处 `runPure (...)`（仅 6 文件）；ambient state（`Diagnostics/Sink`、`Elab/MetaSpans`、`Elab/Usage`）尚未清理；工具链 `Files`/`Cli.Args` 仍是纯 API | `nix/eff-boundary.allowlist`（46 点基线）：`Diagnostics/Sink.vuna` 17、`Cli/Args.vuna` 9、`Files.vuna` 6、`Elab/Usage.vuna` 5、`Elab/MetaSpans.vuna` 5、`Debug.vuna` 4 | M4 剩余：删除 Sink/MetaSpans/Usage ambient + `Cli.Args`/`Files`/`Debug` 收尾 → 基线清零 → rotation 与 `nix flake check` 全量验收 |
 
 ## 相关阅读
 

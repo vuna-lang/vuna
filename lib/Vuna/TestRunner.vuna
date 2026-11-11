@@ -89,11 +89,13 @@ elapsedMs start = do
   pure ((now - start) / 1000)
 
 runTestsGo : TestOpts -> Package -> Eff [] Int
-runTestsGo opts pkg = case workspacePackages (packageDir pkg) of
-  ErrC e => do
-    _ <- prim_eff_print "error: ${diagText e}\n"
-    pure 2
-  OkC pkgs => if length pkgs <= 1 then runPackageTests opts pkg else runWorkspaceTests opts pkgs
+runTestsGo opts pkg = do
+  pkgsR <- workspacePackages (packageDir pkg)
+  case pkgsR of
+    ErrC e => do
+      _ <- prim_eff_print "error: ${diagText e}\n"
+      pure 2
+    OkC pkgs => if length pkgs <= 1 then runPackageTests opts pkg else runWorkspaceTests opts pkgs
 
 -- 打印一组行（--list / 文件清单用）。
 printLines : List String -> Eff [] Int
@@ -311,17 +313,27 @@ timingText opts us = if opts.testVerbose then " (${us / 1000}ms)" else ""
 
 -- 单个测试：按 main 的返回类别选执行路径。
 runOneTest : PackageContext -> String -> String -> Eff [] TestOutcome
-runOneTest ctx path name = case dtMainKind ctx path of
-  ErrC e => pure (TestFailed (diagText e))
-  OkC kind => case kind of
-    "Eff" => runIOTest ctx path name
-    "String" => pure (pureTest name (interpretFile ctx path) "\"\"")
-    "Int" => pure (pureTest name (interpretFile ctx path) "0")
-    "Nat" => pure (pureTest name (interpretFile ctx path) "0")
-    "Bool" => pure (pureTest name (interpretFile ctx path) "True")
-    _ =>
-      pure
-        (TestFailed "unsupported test main type: ${kind} (expected `main : String` (empty = pass), `main : Int`/`Nat` (0 = pass), `main : Bool` (True = pass), `main : Eff [] a` (exit code 0 = pass))")
+runOneTest ctx path name = do
+  kindR <- dtMainKind ctx path
+  case kindR of
+    ErrC e => pure (TestFailed (diagText e))
+    OkC kind => case kind of
+      "Eff" => runIOTest ctx path name
+      "String" => do
+        output <- interpretFile ctx path
+        pure (pureTest name output "\"\"")
+      "Int" => do
+        output <- interpretFile ctx path
+        pure (pureTest name output "0")
+      "Nat" => do
+        output <- interpretFile ctx path
+        pure (pureTest name output "0")
+      "Bool" => do
+        output <- interpretFile ctx path
+        pure (pureTest name output "True")
+      _ =>
+        pure
+          (TestFailed "unsupported test main type: ${kind} (expected `main : String` (empty = pass), `main : Int`/`Nat` (0 = pass), `main : Bool` (True = pass), `main : Eff [] a` (exit code 0 = pass))")
 
 -- 纯测试：`interpretFile` 的核心求值结果与期望值逐字比较。
 pureTest : String -> String -> String -> TestOutcome

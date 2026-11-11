@@ -28,7 +28,6 @@ module Vuna.Lsp.Protocol
   , readChunk
   , responseErr
   , responseOk
-  , sendFrame
   , spanContainsPos
   , spanRange
   , splitHeaderBlock
@@ -270,7 +269,6 @@ else case remaining of
 logLine : String -> String
 logLine s = "[vuna-lsp] ${s}\n"
 
-flushLogLines : List String -> Int
-flushLogLines [] = 0
-flushLogLines logs =
-  runPure (prim_eff_writeFile "/dev/stderr" (join "" (map logLine (reverse logs))))
+flushLogLines : List String -> Eff [] Int
+flushLogLines [] = pure 0
+flushLogLines logs = prim_eff_writeFile "/dev/stderr" (join "" (map logLine (reverse logs)))

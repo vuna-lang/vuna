@@ -75,9 +75,9 @@ lintOne doFix env path = case readText path of
   ErrC e => do
     _ <- prim_eff_print "error: ${diagText e}\n"
     pure (Pair env 2)
-  OkC source =>
+  OkC source => do
+    looked <- fixitiesForFile env path source
     let
-      looked = fixitiesForFile env path source
       env2 = firstOf looked
     in case secondOf looked of
       ErrC e => do
