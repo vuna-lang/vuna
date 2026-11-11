@@ -37,6 +37,5 @@ lib/Vuna/Repl/Term.vuna 12
 lib/Vuna/Repl.vuna 21
 lib/Vuna/Run.vuna 4
 lib/Vuna/Search/Run.vuna 4
-lib/Vuna/Test/Run.vuna 42
-lib/Vuna/Test/Session.vuna 9
+lib/Vuna/Test/Run.vuna 44
 lib/Vuna/Test/Suite.vuna 5

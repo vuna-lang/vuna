@@ -36,8 +36,10 @@ sessionNew : String -> Session
 sessionNew ifaceRoot = Session ifaceRoot "" [] Nothing Nothing
 
 -- 逃生开关：`VUNA_TEST_NO_SESSION=1` 强制回退 CLI 子进程（A/B 排查用）。
-sessionDisabled : Bool
-sessionDisabled = runPure (prim_eff_getenv "VUNA_TEST_NO_SESSION") == "1"
+sessionDisabled : Eff [] Bool
+sessionDisabled = do
+  env <- prim_eff_getenv "VUNA_TEST_NO_SESSION"
+  pure (env == "1")
 
 -- 与 `Compile.ifaceCompilerTag` 同口径：版本 + 编译器二进制指纹。
 ifaceTag : String
@@ -59,60 +61,62 @@ readBaseIfaces ifaceRoot baseDir = case readPackageIface (baseIfaceDir ifaceRoot
   Just pi => Just pi.piModules
 
 -- 会话可用性：命中缓存 → 直接用；否则读一次接口并写回（读失败 ⇒ Nothing）。
-ensureSession : IORef Session -> String -> Maybe (List ModuleIface)
-ensureSession ref baseDir =
-  let
-    s = runPure (readRef ref)
-  in if s.sesDir == baseDir && length s.sesIfaces > 0 then Just s.sesIfaces
+ensureSession : IORef Session -> String -> Eff [] (Maybe (List ModuleIface))
+ensureSession ref baseDir = do
+  s <- readRef ref
+  if s.sesDir == baseDir && length s.sesIfaces > 0 then pure (Just s.sesIfaces)
   else case readBaseIfaces s.sesRoot baseDir of
-    Nothing => Nothing
-    Just ifaces => if length ifaces == 0 then Nothing
-    else
-      let
-        _ = runPure (writeRef ref (Session s.sesRoot baseDir ifaces s.sesAux s.sesEvalAux))
-      in Just ifaces
+    Nothing => pure Nothing
+    Just ifaces => if length ifaces == 0 then pure Nothing
+    else do
+      _ <- writeRef ref (Session s.sesRoot baseDir ifaces s.sesAux s.sesEvalAux)
+      pure (Just ifaces)
 
 -- check：Just (0, "") = 通过；Just (1, 诊断) = 失败；Nothing = 会话不可用（回退 CLI）。
-sessionCheck : IORef Session -> String -> String -> Maybe (Pair Int String)
-sessionCheck ref baseDir source = if sessionDisabled then Nothing
-else case ensureSession ref baseDir of
-  Nothing => Nothing
-  Just ifaces => case contextForFile source of
-    ErrC _ => Nothing
-    OkC ctx => sessionCheckIn ref baseDir ctx ifaces source
+sessionCheck : IORef Session -> String -> String -> Eff [] (Maybe (Pair Int String))
+sessionCheck ref baseDir source = do
+  disabled <- sessionDisabled
+  if disabled then pure Nothing
+  else do
+    ses <- ensureSession ref baseDir
+    case ses of
+      Nothing => pure Nothing
+      Just ifaces => case contextForFile source of
+        ErrC _ => pure Nothing
+        OkC ctx => sessionCheckIn ref baseDir ctx ifaces source
 
-sessionCheckIn : IORef Session -> String -> PackageContext -> List ModuleIface -> String -> Maybe (Pair Int String)
-sessionCheckIn ref baseDir ctx ifaces source =
-  let
-    text = runPure (readFile source)
-    s = runPure (readRef ref)
-  in case dtCheckSourceIncremental ctx source text ifaces [] s.sesAux False of
-    ErrC e => Just (Pair 1 (diagText e))
-    OkC (Pair applied (Pair _ aux)) => if not applied then Nothing
-    else
-      let
-        _ = runPure (writeRef ref (Session s.sesRoot baseDir ifaces aux s.sesEvalAux))
-      in Just (Pair 0 "")
+sessionCheckIn : IORef Session -> String -> PackageContext -> List ModuleIface -> String -> Eff [] (Maybe (Pair Int String))
+sessionCheckIn ref baseDir ctx ifaces source = do
+  text <- prim_eff_readFile source
+  s <- readRef ref
+  case dtCheckSourceIncremental ctx source text ifaces [] s.sesAux False of
+    ErrC e => pure (Just (Pair 1 (diagText e)))
+    OkC (Pair applied (Pair _ aux)) => if not applied then pure Nothing
+    else do
+      _ <- writeRef ref (Session s.sesRoot baseDir ifaces aux s.sesEvalAux)
+      pure (Just (Pair 0 ""))
 
 -- interp：Just (0, 输出) = 求值成功（与 CLI 打印的 trim 后文本一致）；
 -- Just (1, 诊断) = 精化失败；Nothing = 会话不可用（回退 CLI）。
-sessionInterp : IORef Session -> String -> String -> Maybe (Pair Int String)
-sessionInterp ref baseDir source = if sessionDisabled then Nothing
-else case ensureSession ref baseDir of
-  Nothing => Nothing
-  Just ifaces => case contextForFile source of
-    ErrC _ => Nothing
-    OkC ctx => sessionInterpIn ref baseDir ctx ifaces source
+sessionInterp : IORef Session -> String -> String -> Eff [] (Maybe (Pair Int String))
+sessionInterp ref baseDir source = do
+  disabled <- sessionDisabled
+  if disabled then pure Nothing
+  else do
+    ses <- ensureSession ref baseDir
+    case ses of
+      Nothing => pure Nothing
+      Just ifaces => case contextForFile source of
+        ErrC _ => pure Nothing
+        OkC ctx => sessionInterpIn ref baseDir ctx ifaces source
 
-sessionInterpIn : IORef Session -> String -> PackageContext -> List ModuleIface -> String -> Maybe (Pair Int String)
-sessionInterpIn ref baseDir ctx ifaces source =
-  let
-    text = runPure (readFile source)
-    s = runPure (readRef ref)
-  in case dtEvalSourceIncremental ctx source text ifaces s.sesEvalAux of
-    ErrC e => Just (Pair 1 (diagText e))
-    OkC (Pair applied (Pair out aux)) => if not applied then Nothing
-    else
-      let
-        _ = runPure (writeRef ref (Session s.sesRoot baseDir ifaces s.sesAux aux))
-      in Just (Pair 0 out)
+sessionInterpIn : IORef Session -> String -> PackageContext -> List ModuleIface -> String -> Eff [] (Maybe (Pair Int String))
+sessionInterpIn ref baseDir ctx ifaces source = do
+  text <- prim_eff_readFile source
+  s <- readRef ref
+  case dtEvalSourceIncremental ctx source text ifaces s.sesEvalAux of
+    ErrC e => pure (Just (Pair 1 (diagText e)))
+    OkC (Pair applied (Pair out aux)) => if not applied then pure Nothing
+    else do
+      _ <- writeRef ref (Session s.sesRoot baseDir ifaces s.sesAux aux)
+      pure (Just (Pair 0 out))

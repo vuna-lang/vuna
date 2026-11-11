@@ -332,14 +332,14 @@ syncBuildDir staging dir =
 -- （check = 退出码，interp = trim 后输出文本）。会话不可用/安全阀不适用时回退 CLI，
 -- 保证诊断文本与 `.check.err` 片段匹配仍走原来的路径。
 probeInterp : Env -> Case -> String -> CmdResult
-probeInterp env c source = case sessionInterp env.envSession env.envBase source of
+probeInterp env c source = case runPure (sessionInterp env.envSession env.envBase source) of
   Just (Pair code out) => CmdResult code out "" False
   Nothing =>
     runCmdMerged env "${c.caseId}-interp" env.envCwd c.caseTimeout
       (withEnvIface env [env.envVuna, "interp", source])
 
 probeCheck : Env -> Case -> String -> CmdResult
-probeCheck env c source = case sessionCheck env.envSession env.envBase source of
+probeCheck env c source = case runPure (sessionCheck env.envSession env.envBase source) of
   Just (Pair code out) => CmdResult code out "" False
   Nothing =>
     runCmdMerged env "${c.caseId}-check" env.envCwd c.caseTimeout
