@@ -73,7 +73,8 @@ printInfo i = do
   _ <- prim_eff_print "  severity: ${diagSeverityOf (codeDomain i.infoCode)}\n"
   _ <- prim_eff_print "  phase: ${diagPhaseOf (codeDomain i.infoCode)}\n"
   _ <- prim_eff_print "  category: ${diagCategoryOf (codeDomain i.infoCode)}\n"
-  case exampleOf i.infoCode of
+  example <- exampleOf i.infoCode
+  case example of
     Just p => do
       _ <- prim_eff_print "  example: ${p}\n"
       pure 0
@@ -120,14 +121,15 @@ runExplain args = explainArgs args
 -- （避免把 Explain 加进 Json 的依赖扇出）。
 printInfoJson : Info -> Eff [] Int
 printInfoJson i = do
-  _ <- prim_eff_print (infoJson i ++ "\n")
+  json <- infoJson i
+  _ <- prim_eff_print (json ++ "\n")
   pure 0
 
-infoJson : Info -> String
-infoJson i =
-  "{"
-    ++ join "," [field "code" (jsonQuote i.infoCode), field "message" (jsonQuote i.infoTemplate), field "meaning" (jsonQuote i.infoDesc), field "severity" (jsonQuote (diagSeverityOf (codeDomain i.infoCode))), field "phase" (jsonQuote (diagPhaseOf (codeDomain i.infoCode))), field "category" (jsonQuote (diagCategoryOf (codeDomain i.infoCode))), field "example" (maybeJsonString (exampleOf i.infoCode))]
-    ++ "}"
+infoJson : Info -> Eff [] String
+infoJson i = do
+  example <- exampleOf i.infoCode
+  pure
+    ("{" ++ join "," [field "code" (jsonQuote i.infoCode), field "message" (jsonQuote i.infoTemplate), field "meaning" (jsonQuote i.infoDesc), field "severity" (jsonQuote (diagSeverityOf (codeDomain i.infoCode))), field "phase" (jsonQuote (diagPhaseOf (codeDomain i.infoCode))), field "category" (jsonQuote (diagCategoryOf (codeDomain i.infoCode))), field "example" (maybeJsonString example)] ++ "}")
 
 field : String -> String -> String
 field k v = "\"${k}\":${v}"
@@ -153,11 +155,17 @@ hexPair c = strPack [hexDigit (c / 16), hexDigit (c - c / 16 * 16)]
 hexDigit : Int -> Int
 hexDigit n = if n < 10 then 48 + n else 87 + n
 
+mapEff : (a -> Eff [] b) -> List a -> Eff [] (List b)
+mapEff f [] = pure []
+mapEff f (x :: rest) = do
+  y <- f x
+  ys <- mapEff f rest
+  pure (y :: ys)
+
 listInfosJson : List Info -> String -> Eff [] Int
 listInfosJson infos prefix = do
-  _ <-
-    prim_eff_print
-      ("{\"codes\":[" ++ join "," (map infoJson (filter (matchesInfoPrefix prefix) infos)) ++ "]}\n")
+  rendered <- mapEff infoJson (filter (matchesInfoPrefix prefix) infos)
+  _ <- prim_eff_print ("{\"codes\":[" ++ join "," rendered ++ "]}\n")
   pure 0
 
 matchesInfoPrefix : String -> Info -> Bool

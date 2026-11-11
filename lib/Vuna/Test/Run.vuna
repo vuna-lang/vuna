@@ -142,44 +142,55 @@ filterEff pred (x :: rest) = do
 -- 若临时根落在包内（Nix 沙箱里 TMPDIR 可能就是工作树根），向上找 manifest 会命中仓库根包，
 -- 上下文语义被悄悄改写。策略：优先 TMPDIR，其次 /tmp；两者都在
 -- manifest 内时回落 TMPDIR（调用方自己的断言会暴露问题）。
-hasManifestAncestorFuel : Int -> String -> Bool
-hasManifestAncestorFuel fuel dir = if fuel <= 0 then False
-else if pathExistsFile "${dir}/vuna.toml" then True
-else
-  let
-    parent = Vuna.Cli.Args.parentOf dir
-  in if parent == dir then False else hasManifestAncestorFuel (fuel - 1) parent
+hasManifestAncestorFuel : Int -> String -> Eff [] Bool
+hasManifestAncestorFuel fuel dir = if fuel <= 0 then pure False
+else do
+  exists <- pathExistsFile "${dir}/vuna.toml"
+  if exists then pure True
+  else
+    let
+      parent = Vuna.Cli.Args.parentOf dir
+    in if parent == dir then pure False else hasManifestAncestorFuel (fuel - 1) parent
 
-hasManifestAncestor : String -> Bool
+hasManifestAncestor : String -> Eff [] Bool
 hasManifestAncestor dir = hasManifestAncestorFuel 64 dir
 
-firstManifestFree : List String -> Maybe String
-firstManifestFree [] = Nothing
-firstManifestFree (dir :: rest) =
-  if pathExistsDir dir && not (hasManifestAncestor dir) then Just dir else firstManifestFree rest
+firstManifestFree : List String -> Eff [] (Maybe String)
+firstManifestFree [] = pure Nothing
+firstManifestFree (dir :: rest) = do
+  isDir <- pathExistsDir dir
+  if isDir then do
+    hasAncestor <- hasManifestAncestor dir
+    if not hasAncestor then pure (Just dir) else firstManifestFree rest
+  else firstManifestFree rest
 
 tempBase : Int -> Eff [] String
 tempBase _ = do
   value <- envVar "TMPDIR"
-  pure (manifestFreeBase value)
+  manifestFreeBase value
 
--- 临时根选择（纯）：优先 TMPDIR，其次 /tmp；两者都在 manifest 内时回落 primary。
-manifestFreeBase : String -> String
+-- 临时根选择：优先 TMPDIR，其次 /tmp；两者都在 manifest 内时回落 primary。
+manifestFreeBase : String -> Eff [] String
 manifestFreeBase value =
   let
     primary =
       if value == "" then "/tmp"
       else if endsWith "/" value then substring 0 (byteLength value - 1) value else value
-  in case firstManifestFree [primary, "/tmp"] of
-    Just dir => dir
-    Nothing => primary
+  in do
+    found <- firstManifestFree [primary, "/tmp"]
+    pure (case found of
+      Just dir => dir
+      Nothing => primary
+    )
 
 freshTempRoot : Int -> String -> Eff [] String
 freshTempRoot fuel candidate = if fuel <= 0 then pure candidate
-else if pathExistsFile candidate then freshTempRoot (fuel - 1) "${candidate}-${strOfInt fuel}"
 else do
-  _ <- ensureDirPath candidate
-  pure candidate
+  exists <- pathExistsFile candidate
+  if exists then freshTempRoot (fuel - 1) "${candidate}-${strOfInt fuel}"
+  else do
+    _ <- ensureDirPath candidate
+    pure candidate
 
 makeTempRoot : String -> Eff [] String
 makeTempRoot tag = do
@@ -200,7 +211,9 @@ writeHelper tmp = do
 -- 子进程
 -- ---------------------------------------------------------------
 readMaybeFile : String -> Eff [] String
-readMaybeFile path = if pathExistsFile path then readFile path else pure ""
+readMaybeFile path = do
+  exists <- pathExistsFile path
+  if exists then readFile path else pure ""
 
 -- 运行 argv（cwd 由 prim_eff_runIn 控制），timeout 秒级；返回退出码与分离输出。
 runCmdWith : Bool -> Env -> String -> String -> Int -> List String -> Eff [] CmdResult
@@ -269,8 +282,10 @@ assertEq : String -> String -> String -> Assertion
 assertEq name expected actual =
   Assertion name (expected == actual) "expected:\n${expected}\nactual:\n${actual}"
 
-assertAbsent : String -> String -> Assertion
-assertAbsent name path = Assertion name (not (pathExistsFile path)) "should not exist: ${path}"
+assertAbsent : String -> String -> Eff [] Assertion
+assertAbsent name path = do
+  exists <- pathExistsFile path
+  pure (Assertion name (not exists) "should not exist: ${path}")
 
 assertSilent : String -> String -> Assertion
 assertSilent name out = Assertion name (out == "") "expected no output, got:\n${out}"
@@ -455,60 +470,67 @@ errorCase env c source expected wantInterp wantCheck wantCompile =
     legacyCerrPath = "${baseName}.cerr"
     denyPath =
       if startsWith "/" baseName then "${baseName}.deny" else "${env.envCwd}/${baseName}.deny"
-    denyArgs = if pathExistsFile denyPath then ["--deny-warnings"] else []
-    pkgRoot = pkgRootOf (Vuna.Cli.Args.parentOf source) 8
-    pkgMode = not (pkgRoot == "")
-    caseCwd = if pkgMode then pkgRoot else env.envCwd
-    target = if pkgMode then "." else source
     outdir = uniqueOutDir env c.caseId
     diagPath = diagExpectedOf expected
-    diagSource = if pkgMode then "." else relativeTo env.envCwd source
-    diagCwd = caseCwd
   in do
-    start <- nowMicros
-    fragment <- fmap trimNewlines (readFile expected)
-    compileFragment <-
-      if pathExistsFile compileErrPath then fmap trimNewlines (readFile compileErrPath)
-      else if pathExistsFile legacyCerrPath then fmap trimNewlines (readFile legacyCerrPath)
-      else pure fragment
-    interpA <- if wantInterp then do
-      r <-
-        runCmdMerged env "${c.caseId}-interp" env.envCwd c.caseTimeout
-          (withEnvIface env (append [env.envVuna, "interp", source] denyArgs))
-      pure
-        [assertContains "interp fragment" (combinedOut r) fragment, assertExitNonZero "interp exit" r.cmdCode]
-    else pure []
-    checkA <- if wantCheck then do
-      r <-
-        runCmdMerged env "${c.caseId}-check" caseCwd c.caseTimeout
-          (withEnvIface env (append [env.envVuna, "check", target] denyArgs))
-      pure
-        [assertContains "check fragment" (combinedOut r) fragment, assertExitNonZero "check exit" r.cmdCode]
-    else pure []
-    _ <- removeTree outdir
-    compileA <- if wantCompile then do
-      r <-
-        runCmdMerged env "${c.caseId}-compile" caseCwd c.caseTimeout
-          (withEnvIface env (append [env.envVuna, "compile", target, outdir] denyArgs))
-      pure
-        [assertContains "compile fragment" (combinedOut r) compileFragment, assertExitNonZero "compile exit" r.cmdCode, assertAbsent "compile no output dir" outdir]
-    else pure []
-    diagRun <-
-      if wantCheck then runCmdMerged env "${c.caseId}-diag" diagCwd c.caseTimeout
-        (withEnvIface env (append [env.envVuna, "check", diagSource, "--json"] denyArgs))
-      else if wantCompile then runCmdMerged env "${c.caseId}-diag" diagCwd c.caseTimeout
-        (withEnvIface env (append [env.envVuna, "compile", diagSource, uniqueOutDir env "${c.caseId}-diag", "--json"] denyArgs))
-      else runCmdMerged env "${c.caseId}-diag" diagCwd c.caseTimeout
-        (withEnvIface env (append [env.envVuna, "check", diagSource, "--json"] denyArgs))
-    actualDiag <- pure (normalizeDiagText env (trimNewlines (combinedOut diagRun)))
-    diagA <- if env.envBlessDiag then do
-      _ <- writeFile diagPath "${actualDiag}\n"
-      pure []
-    else if pathExistsFile diagPath then do
-      expectedDiag <- readFile diagPath
-      pure [assertEq "diag json" (normalizeDiagText env (trimNewlines expectedDiag)) actualDiag]
-    else pure []
-    finishCase c.caseId start (append interpA (append checkA (append compileA diagA)))
+    pkgRoot <- pkgRootOf (Vuna.Cli.Args.parentOf source) 8
+    denyExists <- pathExistsFile denyPath
+    let
+      denyArgs = if denyExists then ["--deny-warnings"] else []
+      pkgMode = not (pkgRoot == "")
+      caseCwd = if pkgMode then pkgRoot else env.envCwd
+      target = if pkgMode then "." else source
+      diagSource = if pkgMode then "." else relativeTo env.envCwd source
+      diagCwd = caseCwd
+    in do
+      start <- nowMicros
+      fragment <- fmap trimNewlines (readFile expected)
+      compileExists <- pathExistsFile compileErrPath
+      compileFragment <- if compileExists then fmap trimNewlines (readFile compileErrPath)
+      else do
+        legacyExists <- pathExistsFile legacyCerrPath
+        if legacyExists then fmap trimNewlines (readFile legacyCerrPath) else pure fragment
+      interpA <- if wantInterp then do
+        r <-
+          runCmdMerged env "${c.caseId}-interp" env.envCwd c.caseTimeout
+            (withEnvIface env (append [env.envVuna, "interp", source] denyArgs))
+        pure
+          [assertContains "interp fragment" (combinedOut r) fragment, assertExitNonZero "interp exit" r.cmdCode]
+      else pure []
+      checkA <- if wantCheck then do
+        r <-
+          runCmdMerged env "${c.caseId}-check" caseCwd c.caseTimeout
+            (withEnvIface env (append [env.envVuna, "check", target] denyArgs))
+        pure
+          [assertContains "check fragment" (combinedOut r) fragment, assertExitNonZero "check exit" r.cmdCode]
+      else pure []
+      _ <- removeTree outdir
+      compileA <- if wantCompile then do
+        r <-
+          runCmdMerged env "${c.caseId}-compile" caseCwd c.caseTimeout
+            (withEnvIface env (append [env.envVuna, "compile", target, outdir] denyArgs))
+        absent <- assertAbsent "compile no output dir" outdir
+        pure
+          [assertContains "compile fragment" (combinedOut r) compileFragment, assertExitNonZero "compile exit" r.cmdCode, absent]
+      else pure []
+      diagRun <-
+        if wantCheck then runCmdMerged env "${c.caseId}-diag" diagCwd c.caseTimeout
+          (withEnvIface env (append [env.envVuna, "check", diagSource, "--json"] denyArgs))
+        else if wantCompile then runCmdMerged env "${c.caseId}-diag" diagCwd c.caseTimeout
+          (withEnvIface env (append [env.envVuna, "compile", diagSource, uniqueOutDir env "${c.caseId}-diag", "--json"] denyArgs))
+        else runCmdMerged env "${c.caseId}-diag" diagCwd c.caseTimeout
+          (withEnvIface env (append [env.envVuna, "check", diagSource, "--json"] denyArgs))
+      actualDiag <- pure (normalizeDiagText env (trimNewlines (combinedOut diagRun)))
+      diagA <- if env.envBlessDiag then do
+        _ <- writeFile diagPath "${actualDiag}\n"
+        pure []
+      else do
+        hasDiag <- pathExistsFile diagPath
+        if hasDiag then do
+          expectedDiag <- readFile diagPath
+          pure [assertEq "diag json" (normalizeDiagText env (trimNewlines expectedDiag)) actualDiag]
+        else pure []
+      finishCase c.caseId start (append interpA (append checkA (append compileA diagA)))
 
 -- ---------------------------------------------------------------
 -- 小工具
@@ -531,7 +553,9 @@ parseDigits (c :: rest) acc count =
 -- 只缓存 golden/error case 的成功结果。key 含编译器指纹、base 源码树哈希、source/
 -- expected 内容（目录型再加整个夹具目录的 .vuna 树）。section/脚本一律不缓存。
 hashFileText : String -> Eff [] String
-hashFileText path = if pathExistsFile path then readFile path else pure ""
+hashFileText path = do
+  exists <- pathExistsFile path
+  if exists then readFile path else pure ""
 
 hashFiles : Int -> List String -> Eff [] Int
 hashFiles acc [] = pure acc
@@ -540,7 +564,9 @@ hashFiles acc (path :: rest) = do
   hashFiles (acc * 1000003 + hashTextStrong text) rest
 
 hashTree : String -> Eff [] Int
-hashTree dir = hashFiles 0 (collectVunaFiles dir)
+hashTree dir = do
+  files <- collectVunaFiles dir
+  hashFiles 0 files
 
 caseTreeHash : Case -> String -> String -> Eff [] Int
 caseTreeHash c source expected =
@@ -592,10 +618,12 @@ lastFailedIds : Env -> Eff [] (List String)
 lastFailedIds env =
   let
     path = lastFailedPath env
-  in if not (pathExistsFile path) then pure []
-  else do
-    text <- readFile path
-    pure (filter (\line => line /= "") (lines text))
+  in do
+    exists <- pathExistsFile path
+    if not exists then pure []
+    else do
+      text <- readFile path
+      pure (filter (\line => line /= "") (lines text))
 
 filterLastFailed : Env -> List Case -> Eff [] (List Case)
 filterLastFailed env cases = do
@@ -625,10 +653,12 @@ readCached env c = do
   else
     let
       path = cachePath env key
-    in if not (pathExistsFile path) then pure Nothing
-    else do
-      text <- readFile path
-      pure (Just (CaseResult c.caseId "cached" (cachedChecks text) 0 (cachedChecks text) 0 []))
+    in do
+      exists <- pathExistsFile path
+      if not exists then pure Nothing
+      else do
+        text <- readFile path
+        pure (Just (CaseResult c.caseId "cached" (cachedChecks text) 0 (cachedChecks text) 0 []))
 
 cachedChecks : String -> Int
 cachedChecks text = fromMaybe 0 (parseLeadingInt (trim text))
@@ -1008,8 +1038,16 @@ outAsserts env caseTmp out st = do
     pure (assertEq "out" (trimNewlines text) (trimNewlines out))
   ) st.stEqualsFile
   fileContainsA <- mapEff (fileContainsAssert env caseTmp) st.stFileContains
+  fileExistsA <- mapEff (\f => do
+    exists <- pathExistsFile (stepPath env caseTmp f)
+    pure (Assertion "file" exists "missing ${f}")
+  ) st.stFiles
+  fileAbsentA <- mapEff (\f => do
+    exists <- pathExistsFile (stepPath env caseTmp f)
+    pure (Assertion "file" (not exists) "should not exist: ${f}")
+  ) st.stAbsent
   pure
-    (append (map (\frag => assertContains "out" out frag) st.stContains) (append (map (\frag => Assertion "out" (not (contains frag out)) "unexpected fragment: ${frag}\nactual:\n${out}") st.stNotContains) (append (map (\want => assertEq "out" want (trimNewlines out)) st.stEquals) (append equalsFileA (append (map (\f => Assertion "file" (pathExistsFile (stepPath env caseTmp f)) "missing ${f}") st.stFiles) (append (map (\f => Assertion "file" (not (pathExistsFile (stepPath env caseTmp f))) "should not exist: ${f}") st.stAbsent) fileContainsA))))))
+    (append (map (\frag => assertContains "out" out frag) st.stContains) (append (map (\frag => Assertion "out" (not (contains frag out)) "unexpected fragment: ${frag}\nactual:\n${out}") st.stNotContains) (append (map (\want => assertEq "out" want (trimNewlines out)) st.stEquals) (append equalsFileA (append fileExistsA (append fileAbsentA fileContainsA))))))
 
 stepAssertsV2 : Env -> String -> Int -> Step -> Eff [] (List Assertion)
 stepAssertsV2 env caseTmp timeout st = if byteLength st.stRun > 0 then do
@@ -1020,14 +1058,12 @@ stepAssertsV2 env caseTmp timeout st = if byteLength st.stRun > 0 then do
 else if byteLength st.stRead > 0 then
   let
     resolved = stepPath env caseTmp st.stRead
-    exists = pathExistsFile resolved
-    missingA = if exists then [] else [Assertion "read" False "no such file: ${st.stRead}"]
-    codeA =
-      if byteLength st.stExit == 0 then [] else exitAsserts st.stExit (if exists then 0 else 1)
   in do
+    exists <- pathExistsFile resolved
     text <- if exists then readMaybeFile resolved else pure ""
     outA <- outAsserts env caseTmp text st
-    pure (append missingA (append codeA outA))
+    pure
+      (append (if exists then [] else [Assertion "read" False "no such file: ${st.stRead}"]) (append (if byteLength st.stExit == 0 then [] else exitAsserts st.stExit (if exists then 0 else 1)) outA))
 else pure []
 
 prefixAssertions : String -> List Assertion -> List Assertion
@@ -1076,7 +1112,8 @@ stepsCase env c path =
   in do
     start <- nowMicros
     _ <- ensureDirPath caseTmp
-    text <- if pathExistsFile path then readFile path else pure ""
+    hasPath <- pathExistsFile path
+    text <- if hasPath then readFile path else pure ""
     case parseStepsV2 text of
       SpErr msg =>
         finishCase c.caseId start [Assertion "steps" False "parse error in ${path}: ${msg}"]
@@ -1315,15 +1352,17 @@ readResultFile : String -> Int -> Eff [] (Maybe CaseResult)
 readResultFile dir index =
   let
     path = "${dir}/${strOfInt index}.tsv"
-  in if not (pathExistsFile path) then pure Nothing
-  else do
-    text <- readFile path
-    pure (case split "\t" (trimNewlines text) of
-      [id, status, pass, fail, checks, ms] =>
-        Just
-          (CaseResult id status (fromMaybe 0 (parseLeadingInt pass)) (fromMaybe 0 (parseLeadingInt fail)) (fromMaybe 0 (parseLeadingInt checks)) (fromMaybe 0 (parseLeadingInt ms)) [])
-      _ => Nothing
-    )
+  in do
+    exists <- pathExistsFile path
+    if not exists then pure Nothing
+    else do
+      text <- readFile path
+      pure (case split "\t" (trimNewlines text) of
+        [id, status, pass, fail, checks, ms] =>
+          Just
+            (CaseResult id status (fromMaybe 0 (parseLeadingInt pass)) (fromMaybe 0 (parseLeadingInt fail)) (fromMaybe 0 (parseLeadingInt checks)) (fromMaybe 0 (parseLeadingInt ms)) [])
+        _ => Nothing
+      )
 
 collectResults : String -> Int -> Eff [] (List CaseResult)
 collectResults dir count = collectResultsGo (count + 1) dir count 0 []
@@ -1571,9 +1610,8 @@ auditOrphans : Suite -> Eff [] (List String)
 auditOrphans suite =
   let
     root = suite.suiteRoot
-    fixtures =
-      filter (\path => not (auditPathIgnored path)) (collectVunaFiles "${root}/test/corpus")
   in do
+    allFixtures <- collectVunaFiles "${root}/test/corpus"
     ref <- newRef (sessionNew "/tmp/iface-session")
     cases <- discoverCases suite
     texts <- claimTextPairs cases
@@ -1581,6 +1619,7 @@ auditOrphans suite =
       env =
         Env root "${root}/test" "/tmp" "" "" "${root}/base" "ocamlopt" "" "" False 0 False False
           False "/tmp/vuna-build" ref
+      fixtures = filter (\path => not (auditPathIgnored path)) allFixtures
     in pure (filter (\path => not (auditClaimed env cases texts (stripRoot env path))) fixtures)
 
 takeFirst : Int -> List a -> List a
@@ -1598,21 +1637,23 @@ isFixtureFile name = endsWith ".vuna" name && not (startsWith "_" name)
 fixtureTopOf : String -> String -> List String
 fixtureTopOf familyDir name = ["${familyDir}/${name}"]
 
-fixtureEntryOf : String -> String -> String -> String -> List String
-fixtureEntryOf dir familyDir entry name =
-  if pathExistsFile "${dir}/${name}/${entry}" then ["${familyDir}/${name}/${entry}"] else []
+fixtureEntryOf : String -> String -> String -> String -> Eff [] (List String)
+fixtureEntryOf dir familyDir entry name = do
+  exists <- pathExistsFile "${dir}/${name}/${entry}"
+  pure (if exists then ["${familyDir}/${name}/${entry}"] else [])
 
 familyFixtures : String -> Family -> Eff [] (List String)
 familyFixtures root family =
   let
     dir = "${root}/${family.familyDir}"
-  in if not (pathExistsDir dir) then pure []
-  else do
-    names <- readDir dir
-    pure (case family.familyEntry of
-      Just entry => concatMap (fixtureEntryOf dir family.familyDir entry) names
-      Nothing => concatMap (fixtureTopOf family.familyDir) (filter isFixtureFile names)
-    )
+  in do
+    exists <- pathExistsDir dir
+    if not exists then pure []
+    else do
+      names <- readDir dir
+      case family.familyEntry of
+        Just entry => concatMapEff (fixtureEntryOf dir family.familyDir entry) names
+        Nothing => pure (concatMap (fixtureTopOf family.familyDir) (filter isFixtureFile names))
 
 noSectionTexts : List (Pair String String)
 noSectionTexts = []
@@ -1663,13 +1704,16 @@ maxMtime acc (path :: rest) = do
   maxMtime (if m > acc then m else acc) rest
 
 watchSnapshot : String -> Eff [] Int
-watchSnapshot root =
-  let
-    paths =
-      append (collectSourceFiles "${root}/test/corpus")
-        (append (collectSourceFiles "${root}/test/suite") (append (collectSourceFiles "${root}/lib") (append (collectSourceFiles "${root}/compiler") (append (collectSourceFiles "${root}/app") (collectSourceFiles "${root}/base")))))
-  in maxMtime 0
-    (append paths (filter (\path => pathExistsFile path) ["${root}/test/suite.toml", "${root}/vuna.toml"]))
+watchSnapshot root = do
+  corpusFiles <- collectSourceFiles "${root}/test/corpus"
+  suiteFiles <- collectSourceFiles "${root}/test/suite"
+  libFiles <- collectSourceFiles "${root}/lib"
+  compilerFiles <- collectSourceFiles "${root}/compiler"
+  appFiles <- collectSourceFiles "${root}/app"
+  baseFiles <- collectSourceFiles "${root}/base"
+  extra <- filterEff pathExistsFile ["${root}/test/suite.toml", "${root}/vuna.toml"]
+  maxMtime 0
+    (append corpusFiles (append suiteFiles (append libFiles (append compilerFiles (append appFiles (append baseFiles extra))))))
 
 watchLoop : Int -> SuiteOpts -> Suite -> Int -> Int -> Eff [] Int
 watchLoop fuel opts suite last rc = if fuel <= 0 then pure rc
@@ -1714,7 +1758,8 @@ runSuiteOnce opts suite =
     helper <- writeHelper tmp
     baseDir <- envOr "VUNA_BASE" "${root}/base"
     baseHash <- hashTree baseDir
-    _ <- if pathExistsDir cacheDir then pure 0 else ensureDirPath cacheDir
+    cacheExists <- pathExistsDir cacheDir
+    _ <- if cacheExists then pure 0 else ensureDirPath cacheDir
     vuna <- execPath
     vunaSeed <- envOr "VUNA_SEED" "vuna-seed"
     ocamlopt <- envOr "OCAMLOPT" "ocamlopt"
@@ -1807,8 +1852,8 @@ normalizeDiagText env text =
   in replaceAllText env.envRoot "<ROOT>" t1
 
 -- 含 `.package-dir` 标记的目录型夹具：以包根为 cwd 跑 `vuna check .`。
-pkgRootOf : String -> Int -> String
-pkgRootOf dir fuel =
-  if fuel <= 0 then ""
-  else if pathExistsFile "${dir}/.package-dir" then dir
-  else pkgRootOf (Vuna.Cli.Args.parentOf dir) (fuel - 1)
+pkgRootOf : String -> Int -> Eff [] String
+pkgRootOf dir fuel = if fuel <= 0 then pure ""
+else do
+  exists <- pathExistsFile "${dir}/.package-dir"
+  if exists then pure dir else pkgRootOf (Vuna.Cli.Args.parentOf dir) (fuel - 1)

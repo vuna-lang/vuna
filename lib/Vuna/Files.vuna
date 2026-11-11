@@ -13,12 +13,30 @@ module Vuna.Files
 -- 注意：内建 `prim_eff_isDirectory` 对**不存在的路径**会抛异常（会直接终止进程），
 -- 所以任何来自用户输入的路径都必须先用 `pathExistsDir` 判存在，
 -- 不要直接调用 `prim_eff_isDirectory`。
+--
+-- M4（效果显式化）：目录遍历、存在性判定与读文件全部显式在 `Eff []` 里，
+-- 纯过滤/路径/名称逻辑（`skipGenerated` 等）保持纯函数。
 import Vuna.Compiler.Common
 import Base.Host
 
 -- C41：工具链 fuel 耗尽不是「空结果」，而是内部不变量被破坏；与编译器一致硬失败。
 toolFuelExhausted : String -> a
 toolFuelExhausted what = prim_fail "vuna: internal: ${what} fuel exhausted"
+
+-- 效果列表遍历（本模块自用；顺序与纯 `map` / `concatMap` 一致）。
+mapEff : (a -> Eff [] b) -> List a -> Eff [] (List b)
+mapEff f [] = pure []
+mapEff f (x :: rest) = do
+  y <- f x
+  ys <- mapEff f rest
+  pure (y :: ys)
+
+concatMapEff : (a -> Eff [] (List b)) -> List a -> Eff [] (List b)
+concatMapEff f [] = pure []
+concatMapEff f (x :: rest) = do
+  xs <- f x
+  ys <- concatMapEff f rest
+  pure (append xs ys)
 
 -- 递归收集目录下所有 .vuna 文件（跳过 . / .. 与隐藏项）。
 -- 同时跳过生成物与本地缓存目录：它们可能包含符号链接 / 超大文件，
@@ -38,82 +56,108 @@ skipGenerated name =
     || name == "result"
     || name == "corpus"
 
-collectVunaFiles : String -> List String
+collectVunaFiles : String -> Eff [] (List String)
 collectVunaFiles dir = collectVunaFilesGo 1048576 dir
 
 -- 目录树是文件系统图（符号链接可成环），递归无法用结构下降证明；用显式 fuel 守卫。
 -- 每次进入下一层目录消耗 1，触底返回空列表（合法目录树远小于该上限）。
-collectVunaFilesGo : Int -> String -> List String
-collectVunaFilesGo fuel dir =
-  if fuel <= 0 then toolFuelExhausted "directory walk"
-  else if pathExistsDir dir then concatMap (walkVunaGo (fuel - 1) dir) (runPure (prim_eff_readDir dir))
-  else []
+collectVunaFilesGo : Int -> String -> Eff [] (List String)
+collectVunaFilesGo fuel dir = if fuel <= 0 then toolFuelExhausted "directory walk"
+else do
+  exists <- pathExistsDir dir
+  if exists then do
+    names <- prim_eff_readDir dir
+    concatMapEff (walkVunaGo (fuel - 1) dir) names
+  else pure []
 
-walkVunaGo : Int -> String -> String -> List String
+walkVunaGo : Int -> String -> String -> Eff [] (List String)
 walkVunaGo fuel dir name = if fuel <= 0 then toolFuelExhausted "directory walk"
 else case name of
-  "." => []
-  ".." => []
-  _ => if skipGenerated name then []
+  "." => pure []
+  ".." => pure []
+  _ => if skipGenerated name then pure []
   else
     let
       path = "${dir}/${name}"
-    in if pathExistsDir path then collectVunaFilesGo (fuel - 1) path
-    else if endsWith ".vuna" name then [path] else []
+    in do
+      exists <- pathExistsDir path
+      if exists then collectVunaFilesGo (fuel - 1) path
+      else pure (if endsWith ".vuna" name then [path] else [])
 
 -- 递归收集目录下所有非隐藏项（文件与目录），用于通用遍历。
-collectSourceFiles : String -> List String
+collectSourceFiles : String -> Eff [] (List String)
 collectSourceFiles dir = collectSourceFilesGo 1048576 dir
 
-collectSourceFilesGo : Int -> String -> List String
-collectSourceFilesGo fuel dir =
-  if fuel <= 0 then toolFuelExhausted "directory walk"
-  else if pathExistsDir dir then concatMap (walkAnyGo (fuel - 1) dir) (runPure (prim_eff_readDir dir))
-  else []
+collectSourceFilesGo : Int -> String -> Eff [] (List String)
+collectSourceFilesGo fuel dir = if fuel <= 0 then toolFuelExhausted "directory walk"
+else do
+  exists <- pathExistsDir dir
+  if exists then do
+    names <- prim_eff_readDir dir
+    concatMapEff (walkAnyGo (fuel - 1) dir) names
+  else pure []
 
-walkAnyGo : Int -> String -> String -> List String
+walkAnyGo : Int -> String -> String -> Eff [] (List String)
 walkAnyGo fuel dir name = if fuel <= 0 then toolFuelExhausted "directory walk"
 else case name of
-  "." => []
-  ".." => []
-  _ => if skipGenerated name then []
+  "." => pure []
+  ".." => pure []
+  _ => if skipGenerated name then pure []
   else
     let
       path = "${dir}/${name}"
-    in if pathExistsDir path then collectSourceFilesGo (fuel - 1) path else [path]
+    in do
+      exists <- pathExistsDir path
+      if exists then collectSourceFilesGo (fuel - 1) path else pure [path]
 
 -- 安全的目录判定：不存在返回 False，而不是抛异常。
-pathExistsDir : String -> Bool
-pathExistsDir path = pathExistsFile path && runPure (prim_eff_isDirectory path)
+pathExistsDir : String -> Eff [] Bool
+pathExistsDir path = do
+  exists <- pathExistsFile path
+  if exists then prim_eff_isDirectory path else pure False
 
-pathExistsFile : String -> Bool
-pathExistsFile path = runPure (prim_eff_fileExists path)
+pathExistsFile : String -> Eff [] Bool
+pathExistsFile path = prim_eff_fileExists path
 
 -- ---------------------------------------------------------------
 -- 诊断码 → 示例夹具（`explain`/`gen-errors` 共用；生成物不参与门禁）
 -- ---------------------------------------------------------------
 -- | 在 test/corpus（及 test/ 工作目录下的 corpus）找第一个包含该码的 `.diag.json`。
-exampleOf : String -> Maybe String
-exampleOf code = case findDiagExample 512 "test/corpus" code of
-  Just p => Just p
-  Nothing => case findDiagExample 512 "corpus" code of
-    Just p => Just p
-    Nothing => findDiagExample 512 "../test/corpus" code
+exampleOf : String -> Eff [] (Maybe String)
+exampleOf code = do
+  here <- findDiagExample 512 "test/corpus" code
+  case here of
+    Just p => pure (Just p)
+    Nothing => do
+      cwdHere <- findDiagExample 512 "corpus" code
+      case cwdHere of
+        Just p => pure (Just p)
+        Nothing => findDiagExample 512 "../test/corpus" code
 
-findDiagExample : Int -> String -> String -> Maybe String
-findDiagExample fuel dir code =
-  if fuel <= 0 then Nothing
-  else if not (pathExistsDir dir) then Nothing
-  else firstJustExamples (map (oneEntry (fuel - 1) dir code) (runPure (prim_eff_readDir dir)))
+findDiagExample : Int -> String -> String -> Eff [] (Maybe String)
+findDiagExample fuel dir code = if fuel <= 0 then pure Nothing
+else do
+  exists <- pathExistsDir dir
+  if not exists then pure Nothing
+  else do
+    names <- prim_eff_readDir dir
+    fmap firstJustExamples (mapEff (oneEntry (fuel - 1) dir code) names)
 
-oneEntry : Int -> String -> String -> String -> Maybe String
-oneEntry fuel dir code name = if name == "." || name == ".." || name == ".git" || name == ".local" then Nothing
+oneEntry : Int -> String -> String -> String -> Eff [] (Maybe String)
+oneEntry fuel dir code name = if name == "." || name == ".." || name == ".git" || name == ".local" then pure Nothing
 else
   let
     path = "${dir}/${name}"
-  in if pathExistsDir path then findDiagExample fuel path code
-  else if endsWith ".diag.json" name && pathExistsFile path then if contains "\"code\":\"${code}\"" (runPure (prim_eff_readFile path)) then Just path else Nothing
-  else Nothing
+  in do
+    exists <- pathExistsDir path
+    if exists then findDiagExample fuel path code
+    else if not (endsWith ".diag.json" name) then pure Nothing
+    else do
+      isFile <- pathExistsFile path
+      if isFile then do
+        text <- prim_eff_readFile path
+        pure (if contains "\"code\":\"${code}\"" text then Just path else Nothing)
+      else pure Nothing
 
 firstJustExamples : List (Maybe String) -> Maybe String
 firstJustExamples [] = Nothing

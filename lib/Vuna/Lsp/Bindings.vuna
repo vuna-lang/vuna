@@ -208,28 +208,30 @@ resolveModuleName imports name = case lookupPair name (aliasTable imports) of
   Just full => full
 
 -- 模块名 → 文件：本包根在前、依赖闭包在后（与 Loader 的可见性顺序一致）。
-probeRoots : List Root -> String -> String
-probeRoots [] name = ""
-probeRoots (root :: rest) name =
+probeRoots : List Root -> String -> Eff [] String
+probeRoots [] name = pure ""
+probeRoots (root :: rest) name = do
   let
     path = "${rootDir root}/${join "/" (splitOnDot name)}.vuna"
-  in if pathExistsFile path then path else probeRoots rest name
+  in do
+    exists <- pathExistsFile path
+    if exists then pure path else probeRoots rest name
 
 modulePathOf : String -> String -> Eff [] String
 modulePathOf uri name = do
   ctxR <- contextForDoc uri
-  pure (case ctxR of
-    ErrC e => ""
+  case ctxR of
+    ErrC e => pure ""
     OkC (Pair label ctx) => probeRoots (contextRoots ctx) name
-  )
 
 -- 模块名 → 源文本：按包上下文的模块根探测（`probeRoots`），找不到 / 读失败 → Nothing。
 -- 调用方（LSP case split）持有一份 `PackageContext`，直接用它的 roots，避免每个 binder
 -- 都重算一次上下文；依赖模块每次读盘（与模块 hover 同口径，未保存改动不反映）。
 moduleSourceIn : List Root -> String -> Eff [] (Maybe String)
-moduleSourceIn roots name = case probeRoots roots name of
-  "" => pure Nothing
-  path => do
+moduleSourceIn roots name = do
+  path <- probeRoots roots name
+  if path == "" then pure Nothing
+  else do
     exists <- prim_eff_fileExists path
     if exists then do
       source <- prim_eff_readFile path

@@ -50,29 +50,37 @@ docRun dir out check pkgFilter = case requireDirectory dir of
     case sc of
       ErrC e => docError (diagText e)
       OkC [] => docError "no such package: ${maybeText pkgFilter}"
-      OkC scopes => case filesForScopes scopes of
-        ErrC e => docError (diagText e)
-        OkC files => if length (filesOf files) == 0 then docError "no vuna sources found under ${dir}; pass a package or source directory"
-        else do
-          bookR <- buildBook scopes files
-          case bookR of
-            ErrC e => docError (diagText e)
-            OkC book => if check then runCheck book else writeHtml out book
+      OkC scopes => do
+        filesR <- filesForScopes scopes
+        case filesR of
+          ErrC e => docError (diagText e)
+          OkC files => if length (filesOf files) == 0 then docError "no vuna sources found under ${dir}; pass a package or source directory"
+          else do
+            bookR <- buildBook scopes files
+            case bookR of
+              ErrC e => docError (diagText e)
+              OkC book => if check then runCheck book else writeHtml out book
 
 -- 每个 scope 的源文件（与 scope 一一对应；顺序稳定）。
-filesForScopes : List DocScope -> Check (List (Pair DocScope (List String)))
+filesForScopes : List DocScope -> Eff [] (Check (List (Pair DocScope (List String))))
 filesForScopes scopes = traverseScopes scopes []
 
-traverseScopes : List DocScope -> List (Pair DocScope (List String)) -> Check (List (Pair DocScope (List String)))
-traverseScopes [] acc = OkC (reverse acc)
-traverseScopes (s :: rest) acc = traverseScopes rest (Pair s (scopeSourceFiles s) :: acc)
+traverseScopes : List DocScope -> List (Pair DocScope (List String)) -> Eff [] (Check (List (Pair DocScope (List String))))
+traverseScopes [] acc = pure (OkC (reverse acc))
+traverseScopes (s :: rest) acc = do
+  files <- scopeSourceFiles s
+  traverseScopes rest (Pair s files :: acc)
 
-scopeSourceFiles : DocScope -> List String
+scopeSourceFiles : DocScope -> Eff [] (List String)
 scopeSourceFiles s =
   let
     root = "${scopeDir s}/lib"
-  in if pathExistsDir root then collectVunaFiles root
-  else if pathExistsDir (scopeDir s) then collectVunaFiles (scopeDir s) else []
+  in do
+    hasLib <- pathExistsDir root
+    if hasLib then collectVunaFiles root
+    else do
+      hasDir <- pathExistsDir (scopeDir s)
+      if hasDir then collectVunaFiles (scopeDir s) else pure []
 
 -- 所有 scope 的源文件汇总（只用于空检查；真正构建按 scope 分组）。
 filesOf : List (Pair DocScope (List String)) -> List String

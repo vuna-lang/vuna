@@ -343,12 +343,16 @@ fmtRun check [] = do
   targets <- fmtDefaultTargets 0
   case targets of
     ErrC e => toolError (diagText e)
-    OkC paths => fmtFiles check emptyFixityEnv (concatMap expandPath paths) 0
+    OkC paths => do
+      expanded <- expandPaths paths
+      fmtFiles check emptyFixityEnv expanded 0
 fmtRun check paths = do
   missing <- firstMissingPath paths
   case missing of
     Just path => toolError "no such file: ${path}"
-    Nothing => fmtFiles check emptyFixityEnv (concatMap expandPath paths) 0
+    Nothing => do
+      expanded <- expandPaths paths
+      fmtFiles check emptyFixityEnv expanded 0
 
 -- 省略 PATH 时格式化 workspace 内所有包的 lib/app/test（拆包后 compiler/ 也在内）。
 -- 不是 workspace 或没有任何源码目录都是**输入错误**（exit 2），不再静默回退到相对
@@ -366,22 +370,31 @@ fmtDefaultTargets _ = do
       pkgsR <- workspacePackages dir
       case pkgsR of
         ErrC e => pure (ErrC e)
-        OkC pkgs =>
-          let
-            targets = existingTargets (concatMap packageTargets pkgs) []
-          in pure
+        OkC pkgs => do
+          targets <- existingTargets (concatMap packageTargets pkgs) []
+          pure
             (if length targets == 0 then err "no vuna sources found in workspace at ${dir} (looked for lib/, app/, test/ under each package); pass PATH explicitly" else OkC targets)
 
 packageTargets : Package -> List String
 packageTargets pkg = ["${packageDir pkg}/lib", "${packageDir pkg}/app", "${packageDir pkg}/test"]
 
-existingTargets : List String -> List String -> List String
-existingTargets [] acc = reverse acc
-existingTargets (path :: rest) acc =
-  if pathExistsDir path then existingTargets rest (path :: acc) else existingTargets rest acc
+existingTargets : List String -> List String -> Eff [] (List String)
+existingTargets [] acc = pure (reverse acc)
+existingTargets (path :: rest) acc = do
+  exists <- pathExistsDir path
+  if exists then existingTargets rest (path :: acc) else existingTargets rest acc
 
-expandPath : String -> List String
-expandPath path = if pathExistsDir path then collectVunaFiles path else [path]
+expandPaths : List String -> Eff [] (List String)
+expandPaths [] = pure []
+expandPaths (path :: rest) = do
+  here <- expandPath path
+  there <- expandPaths rest
+  pure (append here there)
+
+expandPath : String -> Eff [] (List String)
+expandPath path = do
+  exists <- pathExistsDir path
+  if exists then collectVunaFiles path else pure [path]
 
 -- M31.3（B27）：fmt 的 fixity 是**程序级**的（本文件 `infix*` 声明 + 该文件 import 闭包）。
 -- `Vuna.FixityEnv` 按文件目录缓存「按包上下文加载的模块图」（昂贵部分），声明表逐文件

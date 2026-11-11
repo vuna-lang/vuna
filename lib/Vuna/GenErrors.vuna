@@ -77,9 +77,11 @@ runGenErrors : String -> Eff [] Int
 runGenErrors root = case requireDirectory root of
   ErrC e => genErrorsError (diagText e)
   OkC _ => do
+    doc <- renderDoc allEntries
     _ <- pure (ensureDirPath (parentOf "${root}/docs/.generated/errors.md"))
-    _ <- prim_eff_writeFile "${root}/docs/.generated/errors.md" (renderDoc allEntries)
-    _ <- prim_eff_writeFile "${root}/docs/.generated/errors.json" (renderCatalogJson allEntries)
+    _ <- prim_eff_writeFile "${root}/docs/.generated/errors.md" doc
+    catalog <- renderCatalogJson allEntries
+    _ <- prim_eff_writeFile "${root}/docs/.generated/errors.json" catalog
     _ <- prim_eff_print "wrote ${root}/docs/.generated/errors.md (${length allEntries} codes)\n"
     pure 0
 
@@ -91,21 +93,20 @@ genErrorsError e = do
 -- ---------------------------------------------------------------
 -- 渲染
 -- ---------------------------------------------------------------
-renderDoc : List Entry -> String
-renderDoc entries =
-  let
-    tcs = filter (isDomain "TC_") entries
-    cgs = filter (isDomain "CG_") entries
-    lxs = filter (isDomain "LX_") entries
-    pss = filter (isDomain "PS_") entries
-    lds = filter (isDomain "LD_") entries
-    ics = filter (isDomain "IC_") entries
-    rns = filter (isDomain "RN_") entries
-    pkgs = filter (isDomain "PKG_") entries
-    uns = filter (isDomain "UN_") entries
-    lns = filter (isDomain "LN_") entries
-    fxs = fixEntries entries
-  in """# vuna 错误码
+renderDoc : List Entry -> Eff [] String
+renderDoc entries = do
+  tcs <- renderTable (filter (isDomain "TC_") entries)
+  cgs <- renderTable (filter (isDomain "CG_") entries)
+  lxs <- renderTable (filter (isDomain "LX_") entries)
+  pss <- renderTable (filter (isDomain "PS_") entries)
+  lds <- renderTable (filter (isDomain "LD_") entries)
+  ics <- renderTable (filter (isDomain "IC_") entries)
+  rns <- renderTable (filter (isDomain "RN_") entries)
+  pkgs <- renderTable (filter (isDomain "PKG_") entries)
+  uns <- renderTable (filter (isDomain "UN_") entries)
+  lns <- pure (renderLintTable (filter (isDomain "LN_") entries))
+  fxs <- pure (renderLintTable (fixEntries entries))
+  pure ("""# vuna 错误码
 
 由 `vuna gen-errors` 从枚举真源（`Vuna.Compiler.Diagnostics` 的 `tcAll`/`cgAll`、
 `Vuna.Compiler.Frontend.Diagnostics` 的 `lexAll`/`psAll`、`Vuna.Compiler.Loader.Diagnostics` 的 `ldAll`、
@@ -117,52 +118,58 @@ renderDoc entries =
 
 ## 类型检查 / 精化（TC_）
 
-${renderTable tcs}
+${tcs}
 ## 代码生成（CG_）
 
-${renderTable cgs}
+${cgs}
 ## 词法（LX_）
 
-${renderTable lxs}
+${lxs}
 ## 语法（PS_）
 
-${renderTable pss}
+${pss}
 ## 名字解析（RN_）
 
-${renderTable rns}
+${rns}
 ## 告警（UN_）
 
-${renderTable uns}
+${uns}
 ## 包清单（PKG_）
 
-${renderTable pkgs}
+${pkgs}
 ## 模块加载（LD_）
 
-${renderTable lds}
+${lds}
 ## 内部错误（IC_）
 
-${renderTable ics}
+${ics}
 ## Lint 规则（LN_）
 
-${renderLintTable lns}
+${lns}
 ## 修复规则（FX_）
 
-${renderLintTable fxs}
+${fxs}
 """
+  )
 
 isDomain : String -> Entry -> Bool
 isDomain dom e = startsWith dom e.entryCode
 
-renderTable : List Entry -> String
-renderTable [] = "（无）\n"
-renderTable entries = """| code | severity | phase | category | 消息 | 说明 | example |
+renderTable : List Entry -> Eff [] String
+renderTable [] = pure "（无）\n"
+renderTable entries = do
+  rows <- mapEff renderRow entries
+  pure ("""| code | severity | phase | category | 消息 | 说明 | example |
 | --- | --- | --- | --- | --- | --- | --- |
-${join "\n" (map renderRow entries)}
+${join "\n" rows}
 """
+  )
 
-renderRow : Entry -> String
-renderRow e =
-  "| ${e.entryCode} | ${diagSeverityOf (codeDomain e.entryCode)} | ${diagPhaseOf (codeDomain e.entryCode)} | ${diagCategoryOf (codeDomain e.entryCode)} | `${escapeMsg e.entryMsg}` | ${e.entryDesc} | ${exampleCell e.entryCode} |"
+renderRow : Entry -> Eff [] String
+renderRow e = do
+  example <- exampleCell e.entryCode
+  pure
+    "| ${e.entryCode} | ${diagSeverityOf (codeDomain e.entryCode)} | ${diagPhaseOf (codeDomain e.entryCode)} | ${diagCategoryOf (codeDomain e.entryCode)} | `${escapeMsg e.entryMsg}` | ${e.entryDesc} | ${example} |"
 
 renderLintTable : List Entry -> String
 renderLintTable [] = "（无）\n"
@@ -190,18 +197,26 @@ fxOf : Entry -> Entry
 fxOf e =
   Entry "FX_${join "" (split "-" e.entryRule)}" e.entryMsg e.entryEdit e.entryRule e.entryEdit True
 
+-- 效果列表遍历（本模块自用；顺序与纯 `map` 一致，示例夹具查找按此顺序发生）。
+mapEff : (a -> Eff [] b) -> List a -> Eff [] (List b)
+mapEff f [] = pure []
+mapEff f (x :: rest) = do
+  y <- f x
+  ys <- mapEff f rest
+  pure (y :: ys)
+
 -- 目录 JSON：与 errors.md 同源（生成物，供工具/编辑器消费）。自带最小转义，
 -- 刻意不依赖 Vuna.Json（避免把 GenErrors 加进 Json 的依赖扇出）。
-renderCatalogJson : List Entry -> String
-renderCatalogJson entries =
-  "{\"version\":1,\"codes\":[" ++ join "," (map entryJsonText entries) ++ "]}"
+renderCatalogJson : List Entry -> Eff [] String
+renderCatalogJson entries = do
+  texts <- mapEff entryJsonText entries
+  pure ("{\"version\":1,\"codes\":[" ++ join "," texts ++ "]}")
 
-entryJsonText : Entry -> String
-entryJsonText e =
-  "{"
-    ++ join "," [field "code" e.entryCode, field "severity" (diagSeverityOf (codeDomain e.entryCode)), field "phase" (diagPhaseOf (codeDomain e.entryCode)), field "category" (diagCategoryOf (codeDomain e.entryCode)), field "message" e.entryMsg, field "desc" e.entryDesc, field "rule" e.entryRule, field "edit" e.entryEdit, " \"fixable\":" ++ (if e.entryFixable then "true" else "false") ++ " "]
-    ++ exampleField e.entryCode
-    ++ "}"
+entryJsonText : Entry -> Eff [] String
+entryJsonText e = do
+  example <- exampleField e.entryCode
+  pure
+    ("{" ++ join "," [field "code" e.entryCode, field "severity" (diagSeverityOf (codeDomain e.entryCode)), field "phase" (diagPhaseOf (codeDomain e.entryCode)), field "category" (diagCategoryOf (codeDomain e.entryCode)), field "message" e.entryMsg, field "desc" e.entryDesc, field "rule" e.entryRule, field "edit" e.entryEdit, " \"fixable\":" ++ (if e.entryFixable then "true" else "false") ++ " "] ++ example ++ "}")
 
 field : String -> String -> String
 field k v = " \"${k}\":${jsonQuote v} "
@@ -227,17 +242,26 @@ hexPair c = strPack [hexDigit (c / 16), hexDigit (c - c / 16 * 16)]
 hexDigit : Int -> Int
 hexDigit n = if n < 10 then 48 + n else 87 + n
 
-exampleCell : String -> String
-exampleCell code = case exampleOf code of
-  Just p => p
-  Nothing => "—"
+exampleCell : String -> Eff [] String
+exampleCell code = do
+  found <- exampleOf code
+  pure (case found of
+    Just p => p
+    Nothing => "—"
+  )
 
-jsonExample : String -> String
-jsonExample code = case exampleOf code of
-  Just p => jsonQuote p
-  Nothing => "null"
+jsonExample : String -> Eff [] String
+jsonExample code = do
+  found <- exampleOf code
+  pure (case found of
+    Just p => jsonQuote p
+    Nothing => "null"
+  )
 
-exampleField : String -> String
-exampleField code = case exampleOf code of
-  Just p => "," ++ field "example" p
-  Nothing => ""
+exampleField : String -> Eff [] String
+exampleField code = do
+  found <- exampleOf code
+  pure (case found of
+    Just p => "," ++ field "example" p
+    Nothing => ""
+  )

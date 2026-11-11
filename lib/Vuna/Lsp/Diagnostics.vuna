@@ -199,18 +199,20 @@ contextForDoc uri =
       ErrC e => ErrC e
       OkC ctx => OkC (Pair "" ctx)
     )
-  else if pathExistsFile path then do
-    ctxR <- contextForFile path
-    pure (case ctxR of
-      ErrC e => ErrC e
-      OkC ctx => OkC (Pair path ctx)
-    )
   else do
-    ctxR <- contextForDir "."
-    pure (case ctxR of
-      ErrC e => ErrC e
-      OkC ctx => OkC (Pair path ctx)
-    )
+    exists <- pathExistsFile path
+    if exists then do
+      ctxR <- contextForFile path
+      pure (case ctxR of
+        ErrC e => ErrC e
+        OkC ctx => OkC (Pair path ctx)
+      )
+    else do
+      ctxR <- contextForDir "."
+      pure (case ctxR of
+        ErrC e => ErrC e
+        OkC ctx => OkC (Pair path ctx)
+      )
 
 -- ---------------------------------------------------------------
 -- 会话缓存（M34.6 5c）

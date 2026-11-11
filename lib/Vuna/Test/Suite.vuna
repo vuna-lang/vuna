@@ -108,8 +108,11 @@ concatMapEff f (x :: rest) = do
   pure (append xs ys)
 
 readTextFile : String -> Eff [] (Check String)
-readTextFile path =
-  if pathExistsFile path then if pathExistsDir path then pure (err "is a directory: ${path}") else fmap OkC (readFile path)
+readTextFile path = do
+  exists <- pathExistsFile path
+  if exists then do
+    isDir <- pathExistsDir path
+    if isDir then pure (err "is a directory: ${path}") else fmap OkC (readFile path)
   else pure (err "no such file: ${path}")
 
 -- suite 文件在 <root>/test/suite.toml；root = 上两级。
@@ -329,13 +332,17 @@ orOpt Nothing b = b
 
 -- 探测夹具 base 名下的全部期望文件：阶段限定后缀优先，裸 `.out`（interp+run
 -- 共享 golden，断言两者一致）与裸 `.err`（check 负例）是兼容形态。
-parseWant : String -> FixtureWant
-parseWant base =
-  FixtureWant (firstExisting ["${base}.check.err", "${base}.err"])
-    (firstExisting ["${base}.interp.out"]) (firstExisting ["${base}.interp.err"])
-    (firstExisting ["${base}.compile.err"]) (firstExisting ["${base}.run.out"])
-    (firstExisting ["${base}.run.err"]) (firstExisting ["${base}.run.exit"])
-    (firstExisting ["${base}.out"])
+parseWant : String -> Eff [] FixtureWant
+parseWant base = do
+  checkErr <- firstExisting ["${base}.check.err", "${base}.err"]
+  interpOut <- firstExisting ["${base}.interp.out"]
+  interpErr <- firstExisting ["${base}.interp.err"]
+  compileErr <- firstExisting ["${base}.compile.err"]
+  runOut <- firstExisting ["${base}.run.out"]
+  runErr <- firstExisting ["${base}.run.err"]
+  runExit <- firstExisting ["${base}.run.exit"]
+  sharedOut <- firstExisting ["${base}.out"]
+  pure (FixtureWant checkErr interpOut interpErr compileErr runOut runErr runExit sharedOut)
 
 -- `.run.exit` 的期望退出码（十进制；空/非数字视为 0）。
 readExitCode : String -> Eff [] Int
@@ -348,21 +355,22 @@ parseExitDigits (c :: rest) acc seen =
   else if seen == 0 then parseExitDigits rest acc 0 else acc
 
 -- 目录型夹具的期望文件（`expected.<stage>.<artifact>`；裸 `expected.out`/`expected.err` 兼容）。
-dirWant : String -> FixtureWant
-dirWant caseDir =
-  let
-    checkErr = firstExisting ["${caseDir}/expected.check.err", "${caseDir}/expected.err"]
-    interpOut = firstExisting ["${caseDir}/expected.interp.out"]
-    compileErr = firstExisting ["${caseDir}/expected.compile.err"]
-    runOut = firstExisting ["${caseDir}/expected.run.out"]
-    runErr = firstExisting ["${caseDir}/expected.run.err"]
-    runExit = firstExisting ["${caseDir}/expected.run.exit"]
-    sharedOut = firstExisting ["${caseDir}/expected.out"]
-  in FixtureWant checkErr interpOut Nothing compileErr runOut runErr runExit sharedOut
+dirWant : String -> Eff [] FixtureWant
+dirWant caseDir = do
+  checkErr <- firstExisting ["${caseDir}/expected.check.err", "${caseDir}/expected.err"]
+  interpOut <- firstExisting ["${caseDir}/expected.interp.out"]
+  compileErr <- firstExisting ["${caseDir}/expected.compile.err"]
+  runOut <- firstExisting ["${caseDir}/expected.run.out"]
+  runErr <- firstExisting ["${caseDir}/expected.run.err"]
+  runExit <- firstExisting ["${caseDir}/expected.run.exit"]
+  sharedOut <- firstExisting ["${caseDir}/expected.out"]
+  pure (FixtureWant checkErr interpOut Nothing compileErr runOut runErr runExit sharedOut)
 
-firstExisting : List String -> Maybe String
-firstExisting [] = Nothing
-firstExisting (p :: rest) = if pathExistsFile p then Just p else firstExisting rest
+firstExisting : List String -> Eff [] (Maybe String)
+firstExisting [] = pure Nothing
+firstExisting (p :: rest) = do
+  exists <- pathExistsFile p
+  if exists then pure (Just p) else firstExisting rest
 
 -- 从 want 推导 case。矛盾组合 / family 不允许的阶段显式 Err（→ CBroken）。
 -- `.run.exit` 的读取是建模期唯一的效果；读完后的判定保持纯。
@@ -413,18 +421,22 @@ wantCaseWith family source id want exitCode =
   else err "no expect file (need one of `.out` / `.check.err` / `.run.out` / …)"
 
 -- check 负例期望路径：阶段限定优先，裸 `.err` 兼容。
-expectPath : String -> String
-expectPath base = if pathExistsFile "${base}.check.err" then "${base}.check.err" else "${base}.err"
+expectPath : String -> Eff [] String
+expectPath base = do
+  exists <- pathExistsFile "${base}.check.err"
+  if exists then pure "${base}.check.err" else pure "${base}.err"
 
 -- 目录型 family：entry 配置时每个子目录一个 case。
 discoverDirFamily : Suite -> Family -> String -> Eff [] (List Case)
 discoverDirFamily suite family entry =
   let
     dir = "${suite.suiteRoot}/${family.familyDir}"
-  in if not (pathExistsDir dir) then pure [brokenFamilyCase family "family dir not found: ${dir}"]
-  else do
-    names <- readDir dir
-    concatMapEff (oneDir family dir entry) names
+  in do
+    exists <- pathExistsDir dir
+    if not exists then pure [brokenFamilyCase family "family dir not found: ${dir}"]
+    else do
+      names <- readDir dir
+      concatMapEff (oneDir family dir entry) names
 
 oneDir : Family -> String -> String -> String -> Eff [] (List Case)
 oneDir family dir entry name =
@@ -432,23 +444,29 @@ oneDir family dir entry name =
     caseDir = "${dir}/${name}"
     source = "${caseDir}/${entry}"
     id = "${family.familySection}/${family.familyName}/${name}"
-  in if pathExistsDir caseDir && pathExistsFile source then do
-    derived <- wantCase family source id (dirWant caseDir)
-    pure (case derived of
-      ErrC msg => [brokenFamilyCase family (diagText msg)]
-      OkC c => [c]
-    )
-  else pure []
+  in do
+    isDir <- pathExistsDir caseDir
+    isFile <- if isDir then pathExistsFile source else pure False
+    if isDir && isFile then do
+      want <- dirWant caseDir
+      derived <- wantCase family source id want
+      pure (case derived of
+        ErrC msg => [brokenFamilyCase family (diagText msg)]
+        OkC c => [c]
+      )
+    else pure []
 
 -- 文件型 family：每个 `*.vuna` 一个 case；auto 按磁盘上存在的 `.out`/`.err` 判定。
 discoverFileFamily : Suite -> Family -> Eff [] (List Case)
 discoverFileFamily suite family =
   let
     dir = "${suite.suiteRoot}/${family.familyDir}"
-  in if not (pathExistsDir dir) then pure [brokenFamilyCase family "family dir not found: ${dir}"]
-  else do
-    names <- readDir dir
-    concatMapEff (oneFile family dir) names
+  in do
+    exists <- pathExistsDir dir
+    if not exists then pure [brokenFamilyCase family "family dir not found: ${dir}"]
+    else do
+      names <- readDir dir
+      concatMapEff (oneFile family dir) names
 
 matchesExclude : Family -> String -> Bool
 matchesExclude family name = matchesAnyExclude family.familyExclude name
@@ -487,25 +505,31 @@ fileCase family source base rel =
   in if family.familyKind == "lint" then
     let
       expected = "${base}.out"
-    in if pathExistsFile expected then pure
-      (OkC (Case id family.familySection family.familyTags (CLint source expected) family.familyTimeout))
-    else pure (err "expected file not found: ${expected}")
+    in do
+      exists <- pathExistsFile expected
+      if exists then pure
+        (OkC (Case id family.familySection family.familyTags (CLint source expected) family.familyTimeout))
+      else pure (err "expected file not found: ${expected}")
   else if family.familyKind == "fix" then
     let
       expected = "${base}.expected"
-    in if pathExistsFile expected then pure
-      (OkC (Case id family.familySection family.familyTags (CFix source expected) family.familyTimeout))
-    else pure (err "expected file not found: ${expected}")
+    in do
+      exists <- pathExistsFile expected
+      if exists then pure
+        (OkC (Case id family.familySection family.familyTags (CFix source expected) family.familyTimeout))
+      else pure (err "expected file not found: ${expected}")
   else if family.familyKind == "steps" then pure (OkC (Case id family.familySection family.familyTags (CSteps source) family.familyTimeout))
   else if family.familyKind == "check-ok" then pure
     (OkC (Case id family.familySection family.familyTags (CCheck source True "") family.familyTimeout))
-  else if family.familyKind == "check-error" then
-    let
-      expected = expectPath base
-    in if pathExistsFile expected then pure
+  else if family.familyKind == "check-error" then do
+    expected <- expectPath base
+    exists <- pathExistsFile expected
+    if exists then pure
       (OkC (Case id family.familySection family.familyTags (CCheck source False expected) family.familyTimeout))
     else pure (err "expected file not found: ${expected}")
-  else wantCase family source id (parseWant base)
+  else do
+    want <- parseWant base
+    wantCase family source id want
 
 brokenFamilyCase : Family -> String -> Case
 brokenFamilyCase family msg =
@@ -517,18 +541,20 @@ discoverStepsFamily : Suite -> Family -> Eff [] (List Case)
 discoverStepsFamily suite family =
   let
     dir = "${suite.suiteRoot}/${family.familyDir}"
-  in if not (pathExistsDir dir) then pure [brokenFamilyCase family "family dir not found: ${dir}"]
-  else do
-    names <- readDir dir
-    pure (concatMap (\name => if endsWith ".steps" name then
-      let
-        rel = substring 0 (byteLength name - 6) name
-        id = "${family.familySection}/${family.familyName}/${rel}"
-      in [ Case id family.familySection family.familyTags (CSteps "${dir}/${name}") family.familyTimeout
-      ]
-    else []
-    ) names
-    )
+  in do
+    exists <- pathExistsDir dir
+    if not exists then pure [brokenFamilyCase family "family dir not found: ${dir}"]
+    else do
+      names <- readDir dir
+      pure (concatMap (\name => if endsWith ".steps" name then
+        let
+          rel = substring 0 (byteLength name - 6) name
+          id = "${family.familySection}/${family.familyName}/${rel}"
+        in [ Case id family.familySection family.familyTags (CSteps "${dir}/${name}") family.familyTimeout
+        ]
+      else []
+      ) names
+      )
 
 discoverFamily : Suite -> Family -> Eff [] (List Case)
 discoverFamily suite family = if family.familyKind == "steps" then discoverStepsFamily suite family
@@ -558,10 +584,11 @@ parseSuiteAt absPath = do
 discoverCases : Suite -> Eff [] (List Case)
 discoverCases suite =
   let
+    seedPath = "${suite.suiteRoot}/test/corpus/run/12_fact.vuna"
     seed =
-      if pathExistsFile "${suite.suiteRoot}/test/corpus/run/12_fact.vuna" then [ Case "13/seed" "13" ["seed"] (CSeed "${suite.suiteRoot}/test/corpus/run/12_fact.vuna" "${suite.suiteRoot}/test/corpus/run/12_fact.out") 900
+      [ Case "13/seed" "13" ["seed"] (CSeed seedPath "${suite.suiteRoot}/test/corpus/run/12_fact.out") 900
       ]
-      else []
   in do
     base <- concatMapEff (discoverFamily suite) suite.suiteFamilies
-    pure (append base seed)
+    hasSeed <- pathExistsFile seedPath
+    pure (append base (if hasSeed then seed else []))
