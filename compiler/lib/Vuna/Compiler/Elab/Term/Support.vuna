@@ -6,6 +6,7 @@ module Vuna.Compiler.Elab.Term.Support
   , instantiateAllImplicit
   , instantiateAllImplicitFuel
   , whereBindingName
+  , withEffectLabels
   ) where
 
 -- Vuna.Compiler.Elab.Term.Support（M25.2c 拆分）：Term 的非递归叶子 helper（无组内递归）。
@@ -78,3 +79,8 @@ checkWhereSigs (bind :: rest) = case secondOf bind of
 whereBindingName : Pat -> String
 whereBindingName (PVar name sp) = name
 whereBindingName _ = "_"
+
+-- | 逐条未处理 effect 挂 `unhandled:` 字段。
+withEffectLabels : List String -> Diagnostic -> Diagnostic
+withEffectLabels [] d = d
+withEffectLabels (l :: rest) d = withEffectLabels rest (withField (FieldEffect "unhandled: ${l}") d)

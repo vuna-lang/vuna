@@ -1723,11 +1723,9 @@ else case inferEFuelHint (fuel - 1) globals ctx ec expr expected of
         Just p => OkC (Pair (firstOf p) (resolveDictGoals globals (secondOf p)))
         Nothing => case unhandledEffectLabel ec1 expected actual of
           Just labels =>
-            let
-              joined = joinEffectLabels labels
-            in onErrDiag
+            onErrDiag
               (\d => withEffectLabels labels (withField (FieldEffect "actual: ${showValue actual}") (withField (FieldEffect "expected: ${showValue expected}") d)))
-              (tcErr1 (exprSpan expr) (UnhandledEffects joined) joined)
+              (tcErr1 (exprSpan expr) (UnhandledEffects (joinEffectLabels labels)) (joinEffectLabels labels))
           Nothing => ErrC (withFallbackSpan (exprSpan expr) e)
       OkC ec2 => OkC (Pair term (resolveDictGoals globals ec2))
 
@@ -2517,7 +2515,3 @@ else case doBlockShapeOf globals ctx ec chain.doChainCanonical of
             Pair term ec3 => OkC (Just (Pair term (Pair resultTy ec3)))
           )
         )
-
-withEffectLabels : List String -> Diagnostic -> Diagnostic
-withEffectLabels [] d = d
-withEffectLabels (l :: rest) d = withEffectLabels rest (withField (FieldEffect "unhandled: ${l}") d)
