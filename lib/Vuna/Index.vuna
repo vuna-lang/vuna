@@ -65,6 +65,11 @@ module Vuna.Index
 -- 查找与影响面在 Vuna.Index.Query，map/api 的文本渲染在 Vuna.Index.Render；
 -- 本模块只做门面重导出（对外导出集合见模块头；M30 增加 Ref/referencesAt/symbolAt，
 -- 删除 renderDocWithComments）。
+--
+-- M4（效果显式化）：扫描/构建/缓存/时钟/锁这些宿主动作不再藏在纯签名里——
+-- `loadOrBuild` / `buildIndex` / `indexStatsOf` 是 `Eff []` 入口（调用方在纯上下文里用
+-- 一处 `runPure` 过渡包装）；`indexStatsUnchanged` 只比较已取好的快照，保持纯。
+-- 数据模型、查找/影响面与文本渲染仍是纯函数。
 import Vuna.Index.Query
 import Vuna.Index.Render
 import Vuna.Index.Scan

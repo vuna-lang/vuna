@@ -519,7 +519,7 @@ withIndex f = case findManifestDirMaybe "." of
   Nothing =>
     toolError
       "not inside a vuna workspace (no vuna.toml found from ${runPure prim_eff_getcwd}); run `vuna map` from a package or workspace root"
-  Just _ => case loadOrBuild "." of
+  Just _ => case runPure (loadOrBuild ".") of
     ErrC e => toolError (diagText e)
     OkC index => f index
 

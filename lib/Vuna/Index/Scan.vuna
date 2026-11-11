@@ -27,6 +27,10 @@ module Vuna.Index.Scan
 --   - `cache.lock` 目录锁（`mkdir` 原子）：新鲜锁（<60s）说明另一进程正在写，本次
 --     只建内存索引、跳过写缓存；过期锁 `rm -rf` 后重试一次；结束时 rmdir；
 --   - 缓存不可写 / 写失败一律降级为纯内存索引（不报错）。
+--
+-- M4（效果显式化）：目录遍历、读文件、缓存写、锁与时钟全部显式在 `Eff []` 里，
+-- 不再用 `runPure` 在纯签名里隐藏执行。纯数据逻辑（路径/哈希/JSON 渲染/序列化解析）
+-- 保持纯函数；`indexStatsUnchanged` 只比较已取好的快照，也是纯的。
 import Vuna.Compiler.Common
 import Base.HashMap
 import Base.Hashable
@@ -119,6 +123,23 @@ unescapedChar 92 = 92
 unescapedChar c = c
 
 -- ---------------------------------------------------------------
+-- 效果列表遍历（本模块自用；顺序与纯 `map` / `concatMap` 一致）
+-- ---------------------------------------------------------------
+mapEff : (a -> Eff [] b) -> List a -> Eff [] (List b)
+mapEff f [] = pure []
+mapEff f (x :: rest) = do
+  y <- f x
+  ys <- mapEff f rest
+  pure (y :: ys)
+
+concatMapEff : (a -> Eff [] (List b)) -> List a -> Eff [] (List b)
+concatMapEff f [] = pure []
+concatMapEff f (x :: rest) = do
+  xs <- f x
+  ys <- concatMapEff f rest
+  pure (append xs ys)
+
+-- ---------------------------------------------------------------
 -- 目录遍历
 -- ---------------------------------------------------------------
 skipDir : String -> Bool
@@ -136,34 +157,42 @@ skipDir name =
     || name == "node_modules"
     || name == ".vscode"
 
-collectVuna : String -> List String
+collectVuna : String -> Eff [] (List String)
 collectVuna dir = collectVunaGo 1048576 dir
 
 -- 目录树递归（符号链接可成环）用显式 fuel 守卫；每次下钻一层消耗 1。
-collectVunaGo : Int -> String -> List String
-collectVunaGo fuel dir =
-  if fuel <= 0 then indexFuelExhausted "directory walk"
-  else concatMap (walkVunaGo (fuel - 1) dir) (runPure (prim_eff_readDir dir))
+collectVunaGo : Int -> String -> Eff [] (List String)
+collectVunaGo fuel dir = if fuel <= 0 then indexFuelExhausted "directory walk"
+else do
+  names <- prim_eff_readDir dir
+  concatMapEff (walkVunaGo (fuel - 1) dir) names
 
-walkVunaGo : Int -> String -> String -> List String
+walkVunaGo : Int -> String -> String -> Eff [] (List String)
 walkVunaGo fuel dir name = if fuel <= 0 then indexFuelExhausted "directory walk"
-else if skipDir name then []
+else if skipDir name then pure []
 else
   let
     path = "${dir}/${name}"
-  in if dirExists path then collectVunaGo (fuel - 1) path
-  else if endsWith ".vuna" name then [path] else []
+  in do
+    exists <- dirExists path
+    if exists then collectVunaGo (fuel - 1) path
+    else pure (if endsWith ".vuna" name then [path] else [])
 
 -- prim_eff_isDirectory 对不存在的路径会抛异常，必须先判存在。
-dirExists : String -> Bool
-dirExists path = runPure (prim_eff_fileExists path) && runPure (prim_eff_isDirectory path)
+dirExists : String -> Eff [] Bool
+dirExists path = do
+  exists <- prim_eff_fileExists path
+  if exists then prim_eff_isDirectory path else pure False
 
 -- 包的索引范围：<pkg>/lib 与 <pkg>/app（模块源码）。刻意不扫 test/ 与 examples/
 -- （夹具含故意不合法的语法，不是模块源码）。
-packageSources : String -> List String
-packageSources dir =
-  append (if dirExists "${dir}/lib" then collectVuna "${dir}/lib" else [])
-    (if dirExists "${dir}/app" then collectVuna "${dir}/app" else [])
+packageSources : String -> Eff [] (List String)
+packageSources dir = do
+  hasLib <- dirExists "${dir}/lib"
+  libFiles <- if hasLib then collectVuna "${dir}/lib" else pure []
+  hasApp <- dirExists "${dir}/app"
+  appFiles <- if hasApp then collectVuna "${dir}/app" else pure []
+  pure (append libFiles appFiles)
 
 packageDirs : String -> List (Pair String String)
 packageDirs repo = case findManifestDir repo of
@@ -406,27 +435,28 @@ record Built where
 
 -- 索引一个文件。parse/fixity 失败返回 Err（调用方转成 warning），不中断整体。
 -- 返回推进后的 `FixityEnv`：按目录复用包上下文与已加载模块图（见 Vuna.FixityEnv）。
-indexOne : FixityEnv -> String -> String -> String -> Pair FixityEnv (Check Built)
-indexOne env dir pkgName path =
-  if runPure (prim_eff_fileExists path) then indexOneExisting env dir pkgName path
-  else Pair env (err "${path}: no such file")
+indexOne : FixityEnv -> String -> String -> String -> Eff [] (Pair FixityEnv (Check Built))
+indexOne env dir pkgName path = do
+  exists <- prim_eff_fileExists path
+  if exists then indexOneExisting env dir pkgName path
+  else pure (Pair env (err "${path}: no such file"))
 
-indexOneExisting : FixityEnv -> String -> String -> String -> Pair FixityEnv (Check Built)
-indexOneExisting env dir pkgName path =
+indexOneExisting : FixityEnv -> String -> String -> String -> Eff [] (Pair FixityEnv (Check Built))
+indexOneExisting env dir pkgName path = do
+  source <- prim_eff_readFile path
   let
-    source = runPure (prim_eff_readFile path)
     bytes = strLength source
     looked = fixitiesForFile env path source
     env2 = firstOf looked
   in case secondOf looked of
-    ErrC e => Pair env2 (err "${path}: cannot load package fixity context: ${diagText e}")
+    ErrC e => pure (Pair env2 (err "${path}: cannot load package fixity context: ${diagText e}"))
     OkC programFixities => case parseSource path source of
-      ErrC e => Pair env2 (err "${path}: ${diagText e}")
+      ErrC e => pure (Pair env2 (err "${path}: ${diagText e}"))
       -- M31.3（B26/B27）：必须按**程序级** fixity 重排（本文件声明 ++ import 闭包，
       -- 本地优先）。只用本地声明会让用到 `+`/`==`/`::` 的文件报 unknown fixity，
       -- 然后被当错误跳过 → `vuna map` 静默漏模块。
       OkC (SourceFile srcHdr imports fx decls0) => case reorderProgram (tableOfKeepOps (append programFixities fx)) decls0 of
-        ErrC e => Pair env2 (err "${path}: ${diagText e}")
+        ErrC e => pure (Pair env2 (err "${path}: ${diagText e}"))
         OkC decls =>
           let
             sMod = moduleNameOf dir path srcHdr
@@ -437,7 +467,7 @@ indexOneExisting env dir pkgName path =
             info = ModuleInfo sMod pkgName path bytes (length decls)
             syms = symbolsOfModule sMod decls table
             refs = refsInDecls sMod decls
-          in Pair env2 (OkC (Built [info] syms refs))
+          in pure (Pair env2 (OkC (Built [info] syms refs)))
 
 record Acc where
   accModules : List ModuleInfo
@@ -450,42 +480,45 @@ prependRev : List a -> List a -> List a
 prependRev [] ys = ys
 prependRev (x :: rest) ys = prependRev rest (x :: ys)
 
-indexPackage : FixityEnv -> String -> String -> List String -> Acc -> Pair FixityEnv Acc
+indexPackage : FixityEnv -> String -> String -> List String -> Acc -> Eff [] (Pair FixityEnv Acc)
 indexPackage env dir pkgName files acc = foldFiles env dir pkgName files acc
 
-foldFiles : FixityEnv -> String -> String -> List String -> Acc -> Pair FixityEnv Acc
-foldFiles env dir pkgName [] acc = Pair env acc
-foldFiles env dir pkgName (path :: rest) acc =
-  let
-    stepped = indexFileInto env dir pkgName path acc
-  in foldFiles (firstOf stepped) dir pkgName rest (secondOf stepped)
+foldFiles : FixityEnv -> String -> String -> List String -> Acc -> Eff [] (Pair FixityEnv Acc)
+foldFiles env dir pkgName [] acc = pure (Pair env acc)
+foldFiles env dir pkgName (path :: rest) acc = do
+  stepped <- indexFileInto env dir pkgName path acc
+  foldFiles (firstOf stepped) dir pkgName rest (secondOf stepped)
 
-indexFileInto : FixityEnv -> String -> String -> String -> Acc -> Pair FixityEnv Acc
-indexFileInto env dir pkgName path acc = case indexOne env dir pkgName path of
-  Pair env2 result => case result of
-    ErrC e => Pair env2 (Acc acc.accModules acc.accSymbols acc.accRefs (e :: acc.accWarns))
+indexFileInto : FixityEnv -> String -> String -> String -> Acc -> Eff [] (Pair FixityEnv Acc)
+indexFileInto env dir pkgName path acc = do
+  stepped <- indexOne env dir pkgName path
+  case secondOf stepped of
+    ErrC e =>
+      pure
+        (Pair (firstOf stepped) (Acc acc.accModules acc.accSymbols acc.accRefs (e :: acc.accWarns)))
     OkC b =>
-      Pair env2
-        (Acc (prependRev b.builtModules acc.accModules) (prependRev b.builtSymbols acc.accSymbols) (prependRev b.builtRefs acc.accRefs) acc.accWarns)
+      pure
+        (Pair (firstOf stepped) (Acc (prependRev b.builtModules acc.accModules) (prependRev b.builtSymbols acc.accSymbols) (prependRev b.builtRefs acc.accRefs) acc.accWarns))
 
-collectAll : FixityEnv -> List (Pair String String) -> Acc -> Pair FixityEnv Acc
-collectAll env [] acc = Pair env acc
-collectAll env (root :: rest) acc =
+collectAll : FixityEnv -> List (Pair String String) -> Acc -> Eff [] (Pair FixityEnv Acc)
+collectAll env [] acc = pure (Pair env acc)
+collectAll env (root :: rest) acc = do
   let
     dir = firstOf root
     pkgName = secondOf root
-    files = packageSources dir
-    stepped = indexPackage env dir pkgName files acc
-  in collectAll (firstOf stepped) rest (secondOf stepped)
+  in do
+    files <- packageSources dir
+    stepped <- indexPackage env dir pkgName files acc
+    collectAll (firstOf stepped) rest (secondOf stepped)
 
 -- 全量构建（parse 所有源码，不读写缓存）。
-buildIndex : String -> Check Index
-buildIndex repo =
+buildIndex : String -> Eff [] (Check Index)
+buildIndex repo = do
+  stepped <- collectAll emptyFixityEnv (packageDirs repo) (Acc [] [] [] [])
   let
-    stepped = collectAll emptyFixityEnv (packageDirs repo) (Acc [] [] [] [])
     acc = secondOf stepped
-  in OkC
-    (Index (reverse acc.accModules) (dedupeSymbols (reverse acc.accSymbols)) (reverse acc.accRefs))
+  in pure
+    (OkC (Index (reverse acc.accModules) (dedupeSymbols (reverse acc.accSymbols)) (reverse acc.accRefs)))
 
 -- ---------------------------------------------------------------
 -- 缓存读写（v2：内容哈希）
@@ -524,21 +557,23 @@ entryHash : Pair String (Pair Int String) -> String
 entryHash entry = secondOf (secondOf entry)
 
 -- 磁盘上的当前文件元数据（path, bytes, hash）。读内容算哈希，不 parse。
-scanFile : String -> Pair String (Pair Int String)
-scanFile path =
-  if runPure (prim_eff_fileExists path) then scanFileExisting path else Pair path (Pair 0 "")
+scanFile : String -> Eff [] (Pair String (Pair Int String))
+scanFile path = do
+  exists <- prim_eff_fileExists path
+  if exists then scanFileExisting path else pure (Pair path (Pair 0 ""))
 
-scanFileExisting : String -> Pair String (Pair Int String)
-scanFileExisting path =
-  let
-    source = runPure (prim_eff_readFile path)
-  in Pair path (Pair (strLength source) (contentHash source))
+scanFileExisting : String -> Eff [] (Pair String (Pair Int String))
+scanFileExisting path = do
+  source <- prim_eff_readFile path
+  pure (Pair path (Pair (strLength source) (contentHash source)))
 
-scanRoot : Pair String String -> List (Pair String (Pair Int String))
-scanRoot root = map scanFile (packageSources (firstOf root))
+scanRoot : Pair String String -> Eff [] (List (Pair String (Pair Int String)))
+scanRoot root = do
+  files <- packageSources (firstOf root)
+  mapEff scanFile files
 
-scanSources : String -> List (Pair String (Pair Int String))
-scanSources repo = concatMap scanRoot (packageDirs repo)
+scanSources : String -> Eff [] (List (Pair String (Pair Int String)))
+scanSources repo = concatMapEff scanRoot (packageDirs repo)
 
 manifestLine : Pair String (Pair Int String) -> String
 manifestLine entry = "${entryPath entry}\t${entryBytes entry}\t${entryHash entry}"
@@ -577,17 +612,23 @@ parseManifestLine line = case splitOnTab line of
 manifestPath : String -> String
 manifestPath repo = "${cacheDir repo}/manifest.txt"
 
-readManifestEntries : String -> Maybe (List (Pair String (Pair Int String)))
-readManifestEntries repo =
+readManifestEntries : String -> Eff [] (Maybe (List (Pair String (Pair Int String))))
+readManifestEntries repo = do
   let
     path = manifestPath repo
-  in if runPure (prim_eff_fileExists path) then parseManifestV2 (runPure (prim_eff_readFile path))
-  else Nothing
+  in do
+    exists <- prim_eff_fileExists path
+    if exists then do
+      text <- prim_eff_readFile path
+      pure (parseManifestV2 text)
+    else pure Nothing
 
-manifestMatches : String -> List (Pair String (Pair Int String)) -> Bool
-manifestMatches repo entries = case readManifestEntries repo of
-  Just cached => manifestEntriesSame cached entries
-  Nothing => False
+manifestMatches : String -> List (Pair String (Pair Int String)) -> Eff [] Bool
+manifestMatches repo entries = do
+  cached <- readManifestEntries repo
+  case cached of
+    Just c => pure (manifestEntriesSame c entries)
+    Nothing => pure False
 
 -- ---------------------------------------------------------------
 -- 写缓存：逐级建目录 + 目录锁 + 原子替换
@@ -597,109 +638,128 @@ manifestMatches repo entries = case readManifestEntries repo of
 -- 索引本身仍然可用（本次调用已返回内存索引），只是下次会重建。
 -- 注意：两个进程可能同时首次建缓存目录，`prim_eff_makeDir`（Sys.mkdir + failwith）
 -- 在竞争时会对 EEXIST 抛宿主异常；用 `prim_eff_runIn mkdir`（返回码，不抛）保证并发安全。
-ensureCacheDir : String -> Int
-ensureCacheDir repo =
+ensureCacheDir : String -> Eff [] Int
+ensureCacheDir repo = do
   let
     local = "${repo}/.local"
-  in let
-    _ = if dirExists local then 0 else primRunMkdir repo ".local"
-  in if dirExists (cacheDir repo) then 0 else primRunMkdir repo ".local/index"
+  in do
+    localExists <- dirExists local
+    _ <- if localExists then pure 0 else primRunMkdir repo ".local"
+    cacheExists <- dirExists (cacheDir repo)
+    if cacheExists then pure 0 else primRunMkdir repo ".local/index"
 
-primRunMkdir : String -> String -> Int
-primRunMkdir repo name = runPure (prim_eff_runIn repo ["mkdir", name])
+primRunMkdir : String -> String -> Eff [] Int
+primRunMkdir repo name = prim_eff_runIn repo ["mkdir", name]
 
 -- 目录可写性探测（test -w 不写文件）：不可写时不做任何写缓存动作。
-writableDir : String -> Bool
-writableDir dir = runPure (prim_eff_runIn dir ["test", "-w", "."]) == 0
+writableDir : String -> Eff [] Bool
+writableDir dir = do
+  code <- prim_eff_runIn dir ["test", "-w", "."]
+  pure (code == 0)
 
 -- 锁年龄判定：`effTimeUs` 是时钟能力（vuna 根包 manifest 已声明 clock）。
-nowSeconds : Int -> Int
-nowSeconds _ = runPure effTimeUs / 1000000
+nowSeconds : Int -> Eff [] Int
+nowSeconds _ = do
+  us <- effTimeUs
+  pure (us / 1000000)
 
-lockIsFresh : Int -> String -> Bool
-lockIsFresh _ path =
+lockIsFresh : Int -> String -> Eff [] Bool
+lockIsFresh _ path = do
+  now <- nowSeconds 0
+  mtime <- prim_eff_fileMtime path
   let
-    age = nowSeconds 0 - runPure (prim_eff_fileMtime path)
-  in age >= 0 && age < 60
+    age = now - mtime
+  in pure (age >= 0 && age < 60)
 
 -- `mkdir` 是原子创建：返回 0 表示本进程拿到锁；非 0（已存在/不可写）表示放弃写缓存。
 -- 用 prim_eff_runIn 而不是 prim_eff_makeDir：后者在并发竞争（路径刚被另一进程创建）时
 -- 会抛宿主 failwith，而锁失败按约定必须静默降级。
-tryMkdirLock : String -> Bool
-tryMkdirLock repo = runPure (prim_eff_runIn (cacheDir repo) ["mkdir", "cache.lock"]) == 0
+tryMkdirLock : String -> Eff [] Bool
+tryMkdirLock repo = do
+  code <- prim_eff_runIn (cacheDir repo) ["mkdir", "cache.lock"]
+  pure (code == 0)
 
-acquireLock : String -> Bool
-acquireLock repo =
+acquireLock : String -> Eff [] Bool
+acquireLock repo = do
   let
     path = lockPath repo
-  in if dirExists path then if lockIsFresh 0 path then False
-  else
-    let
-      _ = runPure (prim_eff_runIn (cacheDir repo) ["rm", "-rf", "cache.lock"])
-    in tryMkdirLock repo
-  else tryMkdirLock repo
+  in do
+    exists <- dirExists path
+    if exists then do
+      fresh <- lockIsFresh 0 path
+      if fresh then pure False
+      else do
+        _ <- prim_eff_runIn (cacheDir repo) ["rm", "-rf", "cache.lock"]
+        tryMkdirLock repo
+    else tryMkdirLock repo
 
-releaseLock : String -> Int
-releaseLock repo = runPure (prim_eff_runIn (cacheDir repo) ["rm", "-rf", "cache.lock"])
+releaseLock : String -> Eff [] Int
+releaseLock repo = prim_eff_runIn (cacheDir repo) ["rm", "-rf", "cache.lock"]
 
 -- 过期残留锁清理：缓存命中时不会走 saveIndex，但上一次崩溃/并发留下的**过期**锁
 -- 必须清掉，否则它会在下一次缓存失效时让写缓存白等（<60s 新鲜锁仍尊重持有者）。
-cleanupStaleLock : String -> Int
-cleanupStaleLock repo =
+cleanupStaleLock : String -> Eff [] Int
+cleanupStaleLock repo = do
   let
     path = lockPath repo
-  in if dirExists path then if lockIsFresh 0 path then 0
-  else runPure (prim_eff_runIn (cacheDir repo) ["rm", "-rf", "cache.lock"])
-  else 0
+  in do
+    exists <- dirExists path
+    if exists then do
+      fresh <- lockIsFresh 0 path
+      if fresh then pure 0 else prim_eff_runIn (cacheDir repo) ["rm", "-rf", "cache.lock"]
+    else pure 0
 
 -- 每个缓存文件先写 `<name>.tmp`，再 `mv` 同目录原子替换（rename(2)）。
-writeAtomic : String -> String -> String -> Int
-writeAtomic repo name content =
+writeAtomic : String -> String -> String -> Eff [] Int
+writeAtomic repo name content = do
   let
     dir = cacheDir repo
     tmpName = "${name}.tmp"
-    _ = runPure (prim_eff_writeFile "${dir}/${tmpName}" content)
-  in runPure (prim_eff_runIn dir ["mv", tmpName, name])
+  in do
+    _ <- prim_eff_writeFile "${dir}/${tmpName}" content
+    prim_eff_runIn dir ["mv", tmpName, name]
 
 -- 数据文件先写、manifest 最后：manifest 存在即表示其余文件都已提交。
 -- 任一数据文件写失败都不写 manifest（降级为内存索引，下次重建）。
-writeCacheFiles : String -> List (Pair String (Pair Int String)) -> Index -> Int
-writeCacheFiles repo entries index =
-  let
-    modulesCode = writeAtomic repo "modules.txt" (modulesText index)
-  in if modulesCode /= 0 then 1
-  else
-    let
-      symbolsCode = writeAtomic repo "symbols.txt" (symbolsText index)
-    in if symbolsCode /= 0 then 1
-    else
-      let
-        refsCode = writeAtomic repo "refs.txt" (refsText index)
-      in if refsCode /= 0 then 1 else writeAtomic repo "manifest.txt" (manifestText entries)
+writeCacheFiles : String -> List (Pair String (Pair Int String)) -> Index -> Eff [] Int
+writeCacheFiles repo entries index = do
+  modulesCode <- writeAtomic repo "modules.txt" (modulesText index)
+  if modulesCode /= 0 then pure 1
+  else do
+    symbolsCode <- writeAtomic repo "symbols.txt" (symbolsText index)
+    if symbolsCode /= 0 then pure 1
+    else do
+      refsCode <- writeAtomic repo "refs.txt" (refsText index)
+      if refsCode /= 0 then pure 1 else writeAtomic repo "manifest.txt" (manifestText entries)
 
-saveIndex : String -> List (Pair String (Pair Int String)) -> Index -> Int
-saveIndex repo entries index =
-  let
-    _ = ensureCacheDir repo
-  in if dirExists (cacheDir repo) then if writableDir (cacheDir repo) then if acquireLock repo then
-    let
-      code = writeCacheFiles repo entries index
-    in let
-      _ = releaseLock repo
-    in code
-  else 0
-  else 0
-  else 0
+saveIndex : String -> List (Pair String (Pair Int String)) -> Index -> Eff [] Int
+saveIndex repo entries index = do
+  _ <- ensureCacheDir repo
+  cacheExists <- dirExists (cacheDir repo)
+  if cacheExists then do
+    writable <- writableDir (cacheDir repo)
+    if writable then do
+      locked <- acquireLock repo
+      if locked then do
+        code <- writeCacheFiles repo entries index
+        _ <- releaseLock repo
+        pure code
+      else pure 0
+    else pure 0
+  else pure 0
 
-loadIndexFromCache : String -> Index
-loadIndexFromCache repo =
-  Index (parseModules (parseLines (readOrEmpty (modulesPath repo))))
-    (parseSymbols (parseLines (readOrEmpty (symbolsPath repo))))
-    (parseRefs (parseLines (readOrEmpty (refsPath repo))))
+loadIndexFromCache : String -> Eff [] Index
+loadIndexFromCache repo = do
+  modulesRaw <- readOrEmpty (modulesPath repo)
+  symbolsRaw <- readOrEmpty (symbolsPath repo)
+  refsRaw <- readOrEmpty (refsPath repo)
+  pure
+    (Index (parseModules (parseLines modulesRaw)) (parseSymbols (parseLines symbolsRaw)) (parseRefs (parseLines refsRaw)))
 
-readOrEmpty : String -> String
-readOrEmpty path =
-  if runPure (prim_eff_fileExists path) then runPure (prim_eff_readFile path) else ""
+readOrEmpty : String -> Eff [] String
+readOrEmpty path = do
+  exists <- prim_eff_fileExists path
+  if exists then prim_eff_readFile path else pure ""
 
 parseLines : String -> List String
 parseLines text = filterNonEmpty (splitOnNewline text)
@@ -742,25 +802,28 @@ parseRefs (line :: rest) = case splitOnTab line of
 
 -- 带缓存的入口：manifest 完全一致则回读缓存，否则重建并写回。
 -- 非 workspace（向上找不到 vuna.toml）是**输入错误**，不再静默建空索引。
-loadOrBuild : String -> Check Index
+loadOrBuild : String -> Eff [] (Check Index)
 loadOrBuild repo = case findManifestDirMaybe repo of
-  Nothing => err "index: no vuna.toml found from ${runPure prim_eff_getcwd} (searched upward)"
-  Just manifestDir =>
-    let
-      entries = scanSources repo
-    in if manifestMatches repo entries then
-      let
-        _ = cleanupStaleLock repo
-      in OkC (loadIndexFromCache repo)
+  Nothing => do
+    cwd <- prim_eff_getcwd
+    pure (err "index: no vuna.toml found from ${cwd} (searched upward)")
+  Just manifestDir => do
+    entries <- scanSources repo
+    matched <- manifestMatches repo entries
+    if matched then do
+      _ <- cleanupStaleLock repo
+      idx <- loadIndexFromCache repo
+      pure (OkC idx)
     else saveAndReturn repo entries
 
-saveAndReturn : String -> List (Pair String (Pair Int String)) -> Check Index
-saveAndReturn repo entries = case buildIndex repo of
-  ErrC e => ErrC e
-  OkC index =>
-    let
-      _ = saveIndex repo entries index
-    in OkC index
+saveAndReturn : String -> List (Pair String (Pair Int String)) -> Eff [] (Check Index)
+saveAndReturn repo entries = do
+  built <- buildIndex repo
+  case built of
+    ErrC e => pure (ErrC e)
+    OkC index => do
+      _ <- saveIndex repo entries index
+      pure (OkC index)
 
 -- ---------------------------------------------------------------
 -- 序列化（写缓存用）
@@ -809,24 +872,25 @@ record SourceStat where
   ssHash : String
 
 -- 建立快照：遍历目录拿到当前源文件集合，逐个 stat；窗口内文件额外读内容算哈希。
-indexStatsOf : Int -> String -> List SourceStat
-indexStatsOf builtSec repo =
-  map (sourceStatOf builtSec) (concatMap packageSources (map firstOf (packageDirs repo)))
+indexStatsOf : Int -> String -> Eff [] (List SourceStat)
+indexStatsOf builtSec repo = do
+  sources <- concatMapEff packageSources (map firstOf (packageDirs repo))
+  mapEff (sourceStatOf builtSec) sources
 
 -- mtime 距 `builtSec` 不足安全窗 ⇒ 内容哈希必须算（同秒同 size 的编辑 stat 不可分辨）；
 -- 窗外的文件只 stat，哈希留空。快照与校验用同一条规则、同一个 `builtSec` ⇒ 同一文件要么
 -- 两侧都算哈希、要么两侧都不算，不会出现「一侧有哈希一侧没有」的假失配。
-sourceStatOf : Int -> String -> SourceStat
-sourceStatOf builtSec path = if runPure (prim_eff_fileExists path) then
-  let
-    bytes = runPure (prim_eff_fileSize path)
-    mtime = runPure (prim_eff_fileMtime path)
-  in if mtime + indexMtimeSafetyWindowSec > builtSec then
-    let
-      source = runPure (prim_eff_readFile path)
-    in SourceStat path (strLength source) mtime (contentHash source)
-  else SourceStat path bytes mtime ""
-else SourceStat path 0 0 ""
+sourceStatOf : Int -> String -> Eff [] SourceStat
+sourceStatOf builtSec path = do
+  exists <- prim_eff_fileExists path
+  if exists then do
+    bytes <- prim_eff_fileSize path
+    mtime <- prim_eff_fileMtime path
+    if mtime + indexMtimeSafetyWindowSec > builtSec then do
+      source <- prim_eff_readFile path
+      pure (SourceStat path (strLength source) mtime (contentHash source))
+    else pure (SourceStat path bytes mtime "")
+  else pure (SourceStat path 0 0 "")
 
 -- 快照校验：当前 stat 面与快照逐条一致（顺序无关，按 path 对齐；集合不同即失效）。
 indexStatsUnchanged : Int -> List SourceStat -> List SourceStat -> Bool

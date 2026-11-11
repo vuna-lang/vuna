@@ -149,7 +149,7 @@ ensureIndex uri st = case st.stateIndex of
   else
     let
       root = workspaceRoot uri
-    in case loadOrBuild root of
+    in case runPure (loadOrBuild root) of
       OkC idx =>
         let
           st1 = logTo "index ready: ${root}" (setIndexTried True (setIndex (Just idx) st))

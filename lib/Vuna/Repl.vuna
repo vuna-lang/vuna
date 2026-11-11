@@ -1575,7 +1575,7 @@ isWordChar c = c >= 48 && c <= 57 || c >= 65 && c <= 90 || c >= 97 && c <= 122 |
 replIndexCacheFresh : ReplIndexCache -> String -> Bool
 replIndexCacheFresh cache dir =
   cache.indexCacheDir == dir
-    && indexStatsUnchanged cache.indexCacheBuiltSec cache.indexCacheStats (indexStatsOf cache.indexCacheBuiltSec dir)
+    && indexStatsUnchanged cache.indexCacheBuiltSec cache.indexCacheStats (runPure (indexStatsOf cache.indexCacheBuiltSec dir))
 
 ensureIndex : ReplState -> Check (Pair Index ReplState)
 ensureIndex st = case st.stateBrowseIndex of
@@ -1598,12 +1598,13 @@ ensureIndex st = case st.stateBrowseIndex of
           Nothing =>
             let
               _ = replEmit st (c st "2" "正在构建源码索引…\n")
-            in case loadOrBuild dir of
+            in case runPure (loadOrBuild dir) of
               ErrC e => ErrC e
               OkC idx =>
                 let
                   builtSec = runPure effTimeUs / 1000000
-                in OkC (Pair idx (withIndexSession st idx (indexStatsOf builtSec dir) builtSec dir))
+                in OkC
+                  (Pair idx (withIndexSession st idx (runPure (indexStatsOf builtSec dir)) builtSec dir))
 
 browseStep : ReplState -> String -> ReplOutcome
 browseStep st arg = case ensureIndex st of

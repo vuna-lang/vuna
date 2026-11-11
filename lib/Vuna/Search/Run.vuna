@@ -29,9 +29,11 @@ runSearch args = case parseToolArgs "vuna search" [BoolFlag "type", BoolFlag "na
       ErrC e => toolError (diagText e)
       OkC mode => case limitOf parsed of
         ErrC e => toolError (diagText e)
-        OkC limit => case loadOrBuild "." of
-          ErrC e => toolError (diagText e)
-          OkC index => runOnIndex parsed mode query limit index
+        OkC limit => do
+          loaded <- loadOrBuild "."
+          case loaded of
+            ErrC e => toolError (diagText e)
+            OkC index => runOnIndex parsed mode query limit index
 
 runOnIndex : Parsed -> SearchMode -> String -> Int -> Index -> Eff [] Int
 runOnIndex parsed (mode@TypeMode) query limit index = case searchType index query of
