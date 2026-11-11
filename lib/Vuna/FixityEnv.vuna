@@ -14,6 +14,7 @@ module Vuna.FixityEnv (FixityEnv, emptyFixityEnv, fixitiesForFile) where
 -- 用本地表继续（那会退化成 unknown fixity 或错优先级）。
 --
 -- 本模块只属于工具链（fmt/lint/LSP），不进 seed 闭包。
+import Vuna.Cli.Args
 import Vuna.Compiler.Common
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Loader.Flatten
@@ -28,11 +29,13 @@ record FixityEnv where
 emptyFixityEnv : FixityEnv
 emptyFixityEnv = FixityEnv [] []
 
--- 缓存键：文件所在目录（无 `/` 时用 "."）。同一目录的文件共享上下文；
+-- 缓存键：文件所在**目录**（无 `/` 时用 "."）。同一目录的文件共享上下文；
 -- 相对/绝对路径写法不同只会造成一次缓存 miss，不影响正确性。
+-- 必须按**最后一个** `/` 拆：workspace 根包的一级目录恰好等于包目录，旧实现
+-- （取首个路径段）在嵌套包目录下会把不同包的文件并到同一个键，串用首个文件的包
+-- 上下文（examples/ 下出现第二个包时 `vuna fmt --check examples` 就报 LD_ModuleNotFound）。
 dirKey : String -> String
-dirKey path = case splitPath path of
-  Pair dir base => if dir == "" then "." else dir
+dirKey path = parentOf path
 
 cacheLookup : String -> List (Pair String a) -> Maybe a
 cacheLookup key [] = Nothing
