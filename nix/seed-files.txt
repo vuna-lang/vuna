@@ -9,6 +9,7 @@ Base_dFromString.ml
 Base_dHashMap.ml
 Base_dHashable.ml
 Base_dIO.ml
+Base_dIORef.ml
 Base_dIO_dHost.ml
 Base_dInt.ml
 Base_dInterp.ml
@@ -41,10 +42,17 @@ Vuna_dCompiler_dCore_dConv.ml
 Vuna_dCompiler_dCore_dEval.ml
 Vuna_dCompiler_dCore_dTerm.ml
 Vuna_dCompiler_dDebug.ml
+Vuna_dCompiler_dDiag.ml
+Vuna_dCompiler_dDiag_dFormat.ml
 Vuna_dCompiler_dDiagnostics.ml
 Vuna_dCompiler_dDiagnostics_dCg.ml
 Vuna_dCompiler_dDiagnostics_dCommon.ml
+Vuna_dCompiler_dDiagnostics_dIc.ml
+Vuna_dCompiler_dDiagnostics_dPkg.ml
+Vuna_dCompiler_dDiagnostics_dRn.ml
+Vuna_dCompiler_dDiagnostics_dSink.ml
 Vuna_dCompiler_dDiagnostics_dTc.ml
+Vuna_dCompiler_dDiagnostics_dWarning.ml
 Vuna_dCompiler_dDriver_dCache.ml
 Vuna_dCompiler_dDriver_dCompile.ml
 Vuna_dCompiler_dDriver_dCompilerCli.ml
@@ -64,6 +72,7 @@ Vuna_dCompiler_dElab_dInstCoherence.ml
 Vuna_dCompiler_dElab_dInstName.ml
 Vuna_dCompiler_dElab_dMatch.ml
 Vuna_dCompiler_dElab_dMeta.ml
+Vuna_dCompiler_dElab_dMetaSpans.ml
 Vuna_dCompiler_dElab_dPrelude.ml
 Vuna_dCompiler_dElab_dRecords.ml
 Vuna_dCompiler_dElab_dRepresentation.ml
@@ -92,6 +101,7 @@ Vuna_dCompiler_dLoader_dFlatten.ml
 Vuna_dCompiler_dLoader_dModules.ml
 Vuna_dCompiler_dLoader_dResolve.ml
 Vuna_dCompiler_dPackages_dPkg.ml
+Vuna_dCompiler_dSource.ml
 Vuna_dCompiler_dVersion.ml
 Vuna_runtime.ml
 build.sh

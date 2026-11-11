@@ -1,18 +1,14 @@
 open Vuna_runtime
-let v_Vuna_dCompiler_dDiagnostics_dCommon_ddiagMsg = (fun code template args -> (String.concat "" ["["; code; "] "; ((Base_dVec.v_Base_dVec_dsubstTemplate template) args)]))
+let v_Vuna_dCompiler_dDiagnostics_dCommon_ddiagBody = (fun template args -> ((Base_dVec.v_Base_dVec_dsubstTemplate template) args))
 
-let v_Vuna_dCompiler_dDiagnostics_dCommon_ddiagErr = (fun msg -> (Base_dResult.C_Base_dResult_dResult_Err (msg)))
+let v_Vuna_dCompiler_dDiagnostics_dCommon_dmkDiag = (fun sev phase cat code msg -> (((((Vuna_dCompiler_dDiag.v_Vuna_dCompiler_dDiag_ddiagNoLoc sev) phase) cat) code) msg))
 
-let v_Vuna_dCompiler_dDiagnostics_dCommon_ddiagErrAt = (fun sp msg -> (Base_dResult.C_Base_dResult_dResult_Err ((String.concat "" [(Vuna_dCompiler_dCommon.v_Vuna_dCompiler_dCommon_dshowSpanLoc sp); ": "; msg]))))
+let v_Vuna_dCompiler_dDiagnostics_dCommon_dwithDiagSpan = (fun sp d -> ((Vuna_dCompiler_dDiag.v_Vuna_dCompiler_dDiag_dwithLabel { Vuna_dCompiler_dDiag.f_Vuna_dCompiler_dDiag_dLabel_labelSpan = (Base_dMaybe.C_Base_dMaybe_dMaybe_Just (sp)); Vuna_dCompiler_dDiag.f_Vuna_dCompiler_dDiag_dLabel_labelText = ""; Vuna_dCompiler_dDiag.f_Vuna_dCompiler_dDiag_dLabel_labelStyle = Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dLabelStyle_LabelPrimary; Vuna_dCompiler_dDiag.f_Vuna_dCompiler_dDiag_dLabel_labelProvenance = Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing }) d))
 
-let v_Vuna_dCompiler_dDiagnostics_dCommon_ddiagDefLoc = (fun mc0 mc1 -> (match mc0 with
-  | Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing -> (String.concat "" ["in `"; mc1; "`: "])
-  | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__0) -> (String.concat "" [(Vuna_dCompiler_dCommon.v_Vuna_dCompiler_dCommon_dshowSpanLoc dtb__0); ": in `"; mc1; "`: "])
-  | _ -> failwith "DT: impossible branch"
-))
+let v_Vuna_dCompiler_dDiagnostics_dCommon_dwithDiagDef = (fun msp name d -> (((Vuna_dCompiler_dDiag.v_Vuna_dCompiler_dDiag_dwithContext msp) name) d))
 
 let rec v_Vuna_dCompiler_dDiagnostics_dCommon_dconcatLists = (fun mc0 -> (match mc0 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__1, dtb__2) -> ((Base_dList.v_Base_dList_dappend dtb__1) (v_Vuna_dCompiler_dDiagnostics_dCommon_dconcatLists dtb__2))
+  | Base_dList.C_Base_dList_dList_Cons (dtb__0, dtb__1) -> ((Base_dList.v_Base_dList_dappend dtb__0) (v_Vuna_dCompiler_dDiagnostics_dCommon_dconcatLists dtb__1))
   | Base_dList.C_Base_dList_dList_Nil -> Base_dList.C_Base_dList_dList_Nil
   | _ -> failwith "DT: impossible branch"
 ))

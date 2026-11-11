@@ -6,8 +6,8 @@ let rec v_Vuna_dCompiler_dElab_dInstCoherence_dteleAlphaEnvGo = (fun remaining i
 let v_Vuna_dCompiler_dElab_dInstCoherence_dteleAlphaEnv = (fun n -> ((v_Vuna_dCompiler_dElab_dInstCoherence_dteleAlphaEnvGo n) 0))
 
 let v_Vuna_dCompiler_dElab_dInstCoherence_dheadsAlphaEqual = (fun ec n a b -> (match (((((Vuna_dCompiler_dCore_dConv.v_Vuna_dCompiler_dCore_dConv_dconv (Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_decDefTbl ec)) (Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_decSolsP ec)) 0) ((Vuna_dCompiler_dCore_dEval.v_Vuna_dCompiler_dCore_dEval_deval (v_Vuna_dCompiler_dElab_dInstCoherence_dteleAlphaEnv n)) a)) ((Vuna_dCompiler_dCore_dEval.v_Vuna_dCompiler_dCore_dEval_deval (v_Vuna_dCompiler_dElab_dInstCoherence_dteleAlphaEnv n)) b)) with
-  | Base_dResult.C_Base_dResult_dResult_Ok (dtb__0) -> true
-  | Base_dResult.C_Base_dResult_dResult_Err (dtb__1) -> false
+  | Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC (dtb__0) -> true
+  | Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_ErrC (dtb__1) -> false
   | _ -> failwith "DT: impossible branch"
 ))
 
@@ -23,10 +23,10 @@ let rec v_Vuna_dCompiler_dElab_dInstCoherence_dteleGlobalEnvGo = (fun remaining 
 
 let v_Vuna_dCompiler_dElab_dInstCoherence_dteleGlobalEnv = (fun n -> ((v_Vuna_dCompiler_dElab_dInstCoherence_dteleGlobalEnvGo n) 0))
 
-let v_Vuna_dCompiler_dElab_dInstCoherence_dheadsOverlapOne = (fun ec teleA hA teleB hB -> (match (((Vuna_dCompiler_dElab_dDict.v_Vuna_dCompiler_dElab_dDict_dallocTeleMetas Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_demptyCtx) ec) teleA) with
+let v_Vuna_dCompiler_dElab_dInstCoherence_dheadsOverlapOne = (fun ec teleA hA teleB hB -> (match ((((Vuna_dCompiler_dElab_dDict.v_Vuna_dCompiler_dElab_dDict_dallocTeleMetas Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing) Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_demptyCtx) ec) teleA) with
   | { Base_dPair.f_Base_dPair_dPair_first = dtb__4; Base_dPair.f_Base_dPair_dPair_second = dtb__5 } -> ((fun envA -> ((fun envB -> (match (((((Vuna_dCompiler_dCore_dConv.v_Vuna_dCompiler_dCore_dConv_dconv (Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_decDefTbl dtb__5)) (Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_decSolsP dtb__5)) 0) ((Vuna_dCompiler_dCore_dEval.v_Vuna_dCompiler_dCore_dEval_deval envA) hA)) ((Vuna_dCompiler_dCore_dEval.v_Vuna_dCompiler_dCore_dEval_deval envB) hB)) with
-  | Base_dResult.C_Base_dResult_dResult_Ok (dtb__6) -> { Base_dPair.f_Base_dPair_dPair_first = true; Base_dPair.f_Base_dPair_dPair_second = ((Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_decPutSols dtb__5) (Vuna_dCompiler_dCore_dTerm.v_Vuna_dCompiler_dCore_dTerm_dsolsList dtb__6)) }
-  | Base_dResult.C_Base_dResult_dResult_Err (dtb__7) -> { Base_dPair.f_Base_dPair_dPair_first = false; Base_dPair.f_Base_dPair_dPair_second = dtb__5 }
+  | Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC (dtb__6) -> { Base_dPair.f_Base_dPair_dPair_first = true; Base_dPair.f_Base_dPair_dPair_second = ((Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_decPutSols dtb__5) (Vuna_dCompiler_dCore_dTerm.v_Vuna_dCompiler_dCore_dTerm_dsolsList dtb__6)) }
+  | Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_ErrC (dtb__7) -> { Base_dPair.f_Base_dPair_dPair_first = false; Base_dPair.f_Base_dPair_dPair_second = dtb__5 }
   | _ -> failwith "DT: impossible branch"
 )) (v_Vuna_dCompiler_dElab_dInstCoherence_dteleGlobalEnv (Base_dList.v_Base_dList_dlength teleB)))) ((Base_dList.v_Base_dList_dmap (fun m -> (Vuna_dCompiler_dCore_dTerm.C_Vuna_dCompiler_dCore_dTerm_dValue_VMeta (m, Base_dList.C_Base_dList_dList_Nil)))) dtb__4))
   | _ -> failwith "DT: impossible branch"

@@ -697,17 +697,19 @@ else case expr of
 -- ---------------------------------------------------------------
 -- 记录字段访问 / 更新（R2：按结构化字段表查表）
 -- ---------------------------------------------------------------
--- record 在 Elab.Records 降级成单构造子 data；字段身份由 `DtData.dtDataFields`
--- （名字 / 声明序号 / 外层字段类型）承载，不再从构造器 telescope 的 binder 名反推。
+-- R4（records-v2）：record 声明直接进精化器（不再降级成单构造子 data），record 身份
+-- 由 `DtData.dtDataIsRecord` 判定；字段身份仍由 `DtData.dtDataFields`
+-- （名字 / 声明序号 / 外层字段类型）承载。
 -- 访问/更新留在精化期：先推断 base 类型，用字段表定位字段，再复用 case 分支精化
 -- （bindCtorTele 负责隐式参数、索引合一与 M39 不透明字段的 cast）。
 -- | 把类型值解析成单构造子 record（数据族、构造子、索引实参）；否则 Nothing。
 recordTypeOf : Ec -> Value -> Maybe (Pair DtData (Pair DtCtor (List Value)))
 recordTypeOf ec ty = case forceVal ec ty of
   VNeutral (NGlobal g sp) => case dtDataLookup g (ecDatas ec) of
-    Just dd => case dtDataCtors dd of
+    Just dd => if dtDataIsRecord dd then case dtDataCtors dd of
       [c] => Just (Pair dd (Pair c sp))
       _ => Nothing
+    else Nothing
     Nothing => Nothing
   _ => Nothing
 
@@ -1962,6 +1964,18 @@ else
 -- 类型名——`inferVarRef` 在值位置优先构造子，所以 `T` 在类型位置若走推断会拿到构造子
 -- 类型。M28（B18）起这里**显式查类型命名空间**（`typeLookup`：数据族 + 字典族 +
 -- 类型层 def），不再把「全局项的 kind 是不是宇宙」当命名空间判据。
+-- | R4：类型命名空间里的族头：record 族用 `TRecord` 前导，其余仍是 `TGlobal`。
+typeHeadTerm : Ec -> String -> Term
+typeHeadTerm ec name = case dtDataLookup name (ecDatas ec) of
+  Just dd => if dtDataIsRecord dd then TRecord name [] else TGlobal name
+  Nothing => TGlobal name
+
+-- | R4：record 族的类型应用用 `TRecord`（带实参）；普通 data / 类型层 def 仍 `TApp` 链。
+typeAppTerm : Ec -> String -> List (Pair Term Rig) -> Term
+typeAppTerm ec name args = case dtDataLookup name (ecDatas ec) of
+  Just dd => if dtDataIsRecord dd then TRecord name args else foldAppTerms (TGlobal name) args
+  Nothing => foldAppTerms (TGlobal name) args
+
 checkTypeFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Expr -> Check (Pair Term (Pair Level Ec))
 checkTypeFuel fuel globals ctx ec expr = if fuel <= 0 then icFuel "inference"
 else case expr of
@@ -1969,7 +1983,7 @@ else case expr of
     Just _ => checkTypeInferFuel (fuel - 1) globals ctx ec expr
     Nothing => case typeLookup globals ec name of
       Just tyTerm => case typeLevelOf (forceVal ec (eval [] tyTerm)) of
-        Just lvl => OkC (Pair (TGlobal name) (Pair lvl ec))
+        Just lvl => OkC (Pair (typeHeadTerm ec name) (Pair lvl ec))
         Nothing => checkTypeInferFuel (fuel - 1) globals ctx ec expr
       Nothing => checkTypeInferFuel (fuel - 1) globals ctx ec expr
   -- 族应用在类型位置按该名字在类型命名空间里的 kind 应用（`Pair` 这类与族同名的构造子
@@ -2045,7 +2059,7 @@ else case typeHeadLookup globals ec name of
   Nothing => tcErr1 sp (UnknownName name) name
   Just tyTerm => Vuna.Compiler.Common.bind (inferArgsFuel (fuel - 1) globals ctx ec (eval [] tyTerm) args sp Nothing) (\pa => case pa of
     Pair argTerms (Pair resTy ec1) => case typeLevelOf (forceVal ec1 resTy) of
-      Just lvl => OkC (Pair (foldAppTerms (TGlobal name) argTerms) (Pair lvl ec1))
+      Just lvl => OkC (Pair (typeAppTerm ec1 name argTerms) (Pair lvl ec1))
       Nothing => tcErr1 sp (AppliedNotType name) name
   )
 
@@ -2066,13 +2080,13 @@ checkTypeAtKind globals ctx ec expr expected sp = case forceVal ec expected of
       Nothing => tcErr1 sp (UnknownName name) name
       Just kindTerm =>
         Vuna.Compiler.Common.bind (convEc ec (ctxDepth ctx) expected (eval [] kindTerm))
-          (\ec1 => OkC (Pair (TGlobal name) ec1))
+          (\ec1 => OkC (Pair (typeHeadTerm ec1 name) ec1))
     else checkEFuel 256 globals ctx ec expr expected
     EApp (EVar name _) args _ => if isTypeName globals ec name then case typeHeadLookup globals ec name of
       Nothing => tcErr1 sp (UnknownName name) name
       Just kindTerm => Vuna.Compiler.Common.bind (inferArgsFuel 256 globals ctx ec (eval [] kindTerm) args sp Nothing) (\pa => case pa of
         Pair argTerms (Pair resTy ec1) => case convEc ec1 (ctxDepth ctx) expected resTy of
-          OkC ec2 => OkC (Pair (foldAppTerms (TGlobal name) argTerms) ec2)
+          OkC ec2 => OkC (Pair (typeAppTerm ec2 name argTerms) ec2)
           ErrC e => tcTypeMismatch sp (showValue expected) (showValue resTy)
       )
     else checkEFuel 256 globals ctx ec expr expected
@@ -2232,6 +2246,7 @@ ctorResultArgs ty = secondOf (ctorSpineOfType ty)
 ctorSpineOfType : Term -> Pair String (List Term)
 ctorSpineOfType (TApp f a _) = case ctorSpineOfType f of
   Pair h args => Pair h (append args [a])
+ctorSpineOfType (TRecord name args) = Pair name (map firstOf args)
 ctorSpineOfType (TGlobal g) = Pair g []
 ctorSpineOfType _ = Pair "" []
 

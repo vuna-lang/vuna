@@ -446,6 +446,8 @@ termScopedTo created depth extra levels (TApp f a rig) =
   termScopedTo created depth extra levels f && termScopedTo created depth extra levels a
 termScopedTo created depth extra levels (TCon c args) = argsScopedTo created depth extra levels args
 termScopedTo created depth extra levels (TMk c args) = argsScopedTo created depth extra levels args
+termScopedTo created depth extra levels (TRecord c args) =
+  argsScopedTo created depth extra levels args
 termScopedTo created depth extra levels (TProj base c tele i fi) =
   termScopedTo created depth extra levels base
 termScopedTo created depth extra levels (TRecUpd base c tele idxs body) =

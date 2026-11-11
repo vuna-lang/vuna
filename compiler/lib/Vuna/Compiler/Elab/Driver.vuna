@@ -657,8 +657,7 @@ shortRecordMetas (r :: rest) =
 
 -- | 从声明里抽取记录信息，为当前模块的记录字段生成 `HasField` 实例。
 hasFieldInstancesOfDecls : List Decl -> List Decl
-hasFieldInstancesOfDecls decls =
-  recordHasFieldInstances (shortRecordMetas (firstOf (recordsOfDecls (\n => n) decls)))
+hasFieldInstancesOfDecls decls = recordHasFieldInstances (shortRecordMetas (recordsOfDecls decls))
 
 -- | 判断声明列表里是否已有显式的 `HasField` 实例（有则不再自动生成）。
 hasExplicitHasFieldInstance : List Decl -> Bool
@@ -1024,6 +1023,7 @@ termHasMeta m (TLam n rig body) = termHasMeta m body
 termHasMeta m (TApp f a rig) = termHasMeta m f || termHasMeta m a
 termHasMeta m (TCon c args) = anyArgHasMeta m args
 termHasMeta m (TMk c args) = anyArgHasMeta m args
+termHasMeta m (TRecord c args) = anyArgHasMeta m args
 termHasMeta m (TProj base c tele i fi) = termHasMeta m base
 termHasMeta m (TRecUpd base c tele idxs body) = termHasMeta m base || termHasMeta m body
 termHasMeta m (TCase scrut alts) = termHasMeta m scrut || anyAltHasMeta m alts
@@ -1053,6 +1053,7 @@ termHasAnyMeta (TLam n rig body) = termHasAnyMeta body
 termHasAnyMeta (TApp f a rig) = termHasAnyMeta f || termHasAnyMeta a
 termHasAnyMeta (TCon c args) = anyArgHasAnyMeta args
 termHasAnyMeta (TMk c args) = anyArgHasAnyMeta args
+termHasAnyMeta (TRecord c args) = anyArgHasAnyMeta args
 termHasAnyMeta (TProj base c tele i fi) = termHasAnyMeta base
 termHasAnyMeta (TRecUpd base c tele idxs body) = termHasAnyMeta base || termHasAnyMeta body
 termHasAnyMeta (TCase scrut alts) = termHasAnyMeta scrut || anyAltHasAnyMeta alts

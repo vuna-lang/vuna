@@ -216,8 +216,10 @@ setPrepared prepared mi =
 -- R1（records-v2）：DRecord/DData/DtData 增加 ReprTier 槽位，Marshal 布局变化 ⇒ bump。
 -- R2：ModuleIface.miRecords / DtData.dtDataFields 新增字段表，布局再变 ⇒ bump（13 → 14）。
 -- R3：Term/Value 新增 TProj/VProj 构造子，Marshal 布局变化 ⇒ 15。
+-- R4（records-v2）：DtData 新增 `dtDataIsRecord`，`miPrepared` 中的 DRecord 保留（不再
+-- 降级成 DData），布局与语义变化 ⇒ 17。`Term` 新增 `TRecord` 类型前导 ⇒ 18。
 ifaceSchema : String
-ifaceSchema = "vuna-iface 16"
+ifaceSchema = "vuna-iface 18"
 
 -- ---------------------------------------------------------------
 -- 哈希：接口哈希必须比 `strHash`（10 bit）强得多
@@ -303,6 +305,10 @@ canonTerm st (TMk c args) =
   let
     pr = canonArgs st args
   in Pair (TMk c (firstOf pr)) (secondOf pr)
+canonTerm st (TRecord c args) =
+  let
+    pr = canonArgs st args
+  in Pair (TRecord c (firstOf pr)) (secondOf pr)
 canonTerm st (TCase s alts) =
   let
     ps = canonTerm st s
@@ -585,7 +591,7 @@ mkIfaceBase pkg parts prog sources clean m = case cleanIfaceOf clean (moduleName
     let
       name = moduleNameOf m
       cp = cpOfModule parts prog name
-      records = firstOf (recordsOfDecls (\n => n) m.moduleDeclsOf)
+      records = recordsOfDecls m.moduleDeclsOf
       h =
         hashOfParts name pkg m.moduleImportsOf m.moduleImplicitImportsOf m.moduleFixitiesOf records
           m.moduleExportsOf m.moduleCapabilities cp

@@ -52,7 +52,7 @@
 | `Elab.Termination` | 终止性检查：调用图 + SCC，结构下降/守卫 Int 判据（无包级豁免）。`checkTerminationDeclsWith` 允许把依赖包声明只作为 SCT 上下文、只报告本包函数的失败 | `checkTerminationDecls`、`checkTerminationDeclsWith` |
 | `Elab.Prelude` | 把 `Intrinsics` 表翻译成 DT prelude globals（签名）；没有第二份名字/签名表 | `preludeGlobals`、`builtinTyName`、`cmpBuiltinTyName` |
 | `Elab.Match` | 多 clause 模式矩阵降级：构造子列 → `case`、字面量列 → `if` 链（纯 Ast→Ast） | `multiToExpr`、`buildColumnExpr` |
-| `Elab.Records` | `record` 的语法降级：记录 → 单构造器 `data`、字段访问/更新（纯 Ast→Ast） | `desugarRecords`、`RecordInfo` |
+| `Elab.Records` | `record` 的语法与结构化元数据：收集 `RecordMeta`、把 record 表达式/模式降级成**合成位置构造子**的引用（不再降级成 `DData`）；`prepareDecls*` 返回的 decls 保留 `DRecord` | `desugarRecords`、`recordsOfDecls`、`prepareDecls` |
 | `Elab.Derive` | `deriving (Show, Eq, Ord, Hashable)` 的实例生成（展开成等价 `instance`，交给既有实例精化；`Hashable` 的字段哈希用 `Base.Hashable.hashCombine`） | `expandDerivings` |
 | `Codegen`（门面） | DT 擦除 codegen 的稳定入口；重导出 `Codegen.Assembly` 与 `Codegen.Split` | `checkDtProgram`、`generateDtSplitProgram` |
 | `Codegen.Decl` | OCaml 名字编码（sanitize/前缀/保留字）+ 跨单元引用限定（`Unit.name`）+ 变体类型声明；构造子字段形状 keep flags 与不透明字段 flags（`ctorOpaqueFlagsOf`）的实际消费点；内置身份按完整符号（canonical Bool 族不进运行时变体） | `ctorOcamlName`、`qualValueText`、`qualCtorText`、`qualTypeText`、`genTypeDecls`、`ctorKeepFlags`、`ctorOpaqueFlagsOf` |
@@ -105,9 +105,9 @@
 - `Loader.Resolve` 的内建 arity/prelude 放行与效应能力检查、`Elab.Prelude` 的签名全部来自
   `Vuna.Compiler.Intrinsics`；能力按包 manifest 的 `[capabilities].effects` 判定，错误带
   `requires capability ...`；
-- `Elab.Driver.elabProgramFull` 做 DT 双向精化（记录/deriving 先由 `Elab.Records` /
-  `Elab.Derive` 降级，多 clause 由 `Elab.Match` 展开），产出 `DtProgram`（datas / defs /
-  classes / insts）；
+- `Elab.Driver.elabProgramFull` 做 DT 双向精化（record 声明由 `Elab.Data` 直接精化、
+  `deriving` 由 `Elab.Derive` 从字段表展开，多 clause 由 `Elab.Match` 展开），产出
+  `DtProgram`（datas / defs / classes / insts）；
 - `Codegen.Assembly` 对同一 `DtProgram` 装配运行时 / 模块 / `Main` 的 unit 计划与文本
   （`prepareDtProgram` / `genUnitText` / `mainHook`）；
 - `Codegen.Split.generateDtSplitProgram` 按 loader 模块序与声明归属切成逐模块 `SplitFile`
@@ -155,7 +155,7 @@ check / build pkg
 
 摘要字段（每包只存**自己的声明**，依赖闭包由读方逐包合并）：`datas`（kind + 构造子类型）、
 `defs`（type + body）、`globals`（签名面）、`insts`（tele / 约束 / 头）、`classes`（投影 /
-字段类型）、`miDecls`（已解析源码声明，供 record 降级与终止性 SCT 使用）、exports /
+字段类型）、`miDecls`（已解析源码声明，供 record 精化与终止性 SCT 使用）、exports /
 fixities / imports / capabilities、`miSource`、`miIfaceHash`、`miDepHashes`。
 
 ### 硬不变量
@@ -171,8 +171,8 @@ fixities / imports / capabilities、`miSource`、`miIfaceHash`、`miDepHashes`�
    否则吞掉本包真实错误）。安全阀宁可慢，不静默漏检。
 4. 精化器允许**擦除位置**的未解元变量：摘要里这类 meta 按包段 `(idx+1) << 30` 重编号，消费方
    当作新的未解元变量（只出现在不生成代码、不参与运行时比较的位置）。
-5. **record 降级需要依赖包的 record 头**：字段访问 / record 更新 / record 模式是语法降级
-   （`Elab.Records`），候选 record 来自**源码 decls**。接口路径把依赖模块的 `miDecls` 作为
+5. **record 精化需要依赖包的 record 头**：字段访问 / record 更新 / record 模式在语法降级里
+   依赖 `RecordMeta`，候选 record 来自**源码 decls**。接口路径把依赖模块的 `miDecls` 作为
    `termAux` 传入 `prepareDeclsWith`，只取 record 头参与降级、不精化它们——缺了它，依赖包
    类型上的字段访问会报 `unknown field`（如 `c.commentKind`）。
 6. **接口哈希链必须闭合**：`miIfaceHash` 覆盖导出面 + 导出定义体（不含 span / 源路径）；

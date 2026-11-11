@@ -623,14 +623,14 @@ genCtorDecl qc levels table datas c =
 
 -- R4（records-v2）：record 族的运行时表示是 OCaml record。
 -- | R4：record 族的 OCaml record 表示探测与标签命名。
--- 判定：带结构化字段表且单构造子（普通 data 的字段表为空）。
--- | R4：该族是否为 record（单构造子 + 非空字段表）。
+-- 判定：`dtDataIsRecord`（声明来源）且单构造子；零字段 record 仍判为 record，
+-- 但 `hasRecordRepr` 会因没有运行时字段而回落变体。
+-- | R4：该族是否为 record（声明来源 + 单构造子）。
 isRecordData : DtData -> Bool
-isRecordData d = case dtDataFields d of
-  [] => False
-  _ => case dtDataCtors d of
-    [_] => True
-    _ => False
+isRecordData d = if dtDataIsRecord d then case dtDataCtors d of
+  [_] => True
+  _ => False
+else False
 
 -- | R4：record 字段的 OCaml record label（按 record 名前缀，避免不同 record 间标签撞车）。
 recordFieldLabel : String -> String -> String

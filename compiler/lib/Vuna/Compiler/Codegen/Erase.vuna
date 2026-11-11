@@ -151,6 +151,8 @@ else case t of
   -- M14：构造子应用只看非擦除实参（擦除实参是族参数/索引，允许是类型项）。
   TCon c args => checkConArgsErasureFuel (fuel - 1) typeNames binders args
   TMk c args => checkConArgsErasureFuel (fuel - 1) typeNames binders args
+  -- R4：record 类型应用只出现在类型层，不参与运行时擦除检查。
+  TRecord name args => OkC 0
   -- M14：case 的分支把「完整 telescope（表面顺序）」压栈后再检查分支体。
   TProj base c tele i fi => checkErasureFuel (fuel - 1) typeNames binders base
   TRecUpd base c tele idxs body =>
@@ -206,6 +208,8 @@ else case t of
       else termDepsIntoFuel (fuel - 1) runtimeNames (termDepsIntoFuel (fuel - 1) runtimeNames acc f) a
   TCon c args => termDepsArgsFuel (fuel - 1) runtimeNames acc args
   TMk c args => termDepsArgsFuel (fuel - 1) runtimeNames acc args
+  -- R4：类型应用不产生运行时依赖。
+  TRecord name args => acc
   TProj base c tele i fi => termDepsIntoFuel (fuel - 1) runtimeNames acc base
   TRecUpd base c tele idxs body =>
     termDepsAltsFuel (fuel - 1) runtimeNames (termDepsIntoFuel (fuel - 1) runtimeNames acc base)
@@ -497,6 +501,7 @@ checkTermScopes depth (TApp f a rig) =
   Vuna.Compiler.Common.bind (checkTermScopes depth f) (\_ => checkTermScopes depth a)
 checkTermScopes depth (TCon c args) = checkTermScopesArgs depth args
 checkTermScopes depth (TMk c args) = checkTermScopesArgs depth args
+checkTermScopes depth (TRecord c args) = checkTermScopesArgs depth args
 checkTermScopes depth (TLam name rig body) = checkTermScopes (depth + 1) body
 checkTermScopes depth (TPi name implicit rig dom cod) =
   Vuna.Compiler.Common.bind (checkTermScopes depth dom) (\_ => checkTermScopes (depth + 1) cod)

@@ -84,6 +84,8 @@ termRepresentable datas (TPi name implicit rig dom cod) =
   termRepresentable datas dom && termRepresentable datas cod
 termRepresentable datas (TApp f a rig) = termAppHeadRepresentable datas f
 termRepresentable datas (TGlobal g) = knownTypeHead datas g
+-- R4：record 类型应用（`TRecord`）与 `TGlobal` 应用同判——看族头是否可命名。
+termRepresentable datas (TRecord name args) = knownTypeHead datas name
 termRepresentable datas (TVar name i _) = True
 termRepresentable datas t = False
 
@@ -124,9 +126,11 @@ reprIsOpaque _ = False
 
 -- R1：声明档位优先。`ReprOpaque` 永不去装箱；`ReprTransparent` 与 `ReprAuto` 共用同一
 -- 形状判据（R1 过渡：transparent 仍要求单保留字段 + 可表示；D52 落地后放开函数字段）。
--- | 判定单个数据族能否去装箱：特殊族、非单构造子、多保留字段、函数或未知名、递归候选都拒绝。
+-- | 判定单个数据族能否去装箱：特殊族、非 record、非单构造子、多保留字段、函数或
+-- 未知名、递归候选都拒绝。R4：自动去装箱只服务 `record`；普通 `data` 恒装箱。
 unboxedCandidateOfData : List DtData -> DtData -> List UnboxedCand
-unboxedCandidateOfData datas d = if isSpecialUnboxFamily (dtDataName d) then []
+unboxedCandidateOfData datas d = if not (dtDataIsRecord d) then []
+else if isSpecialUnboxFamily (dtDataName d) then []
 else if reprIsOpaque (dtDataRepr d) then []
 else case dtDataCtors d of
   [] => []

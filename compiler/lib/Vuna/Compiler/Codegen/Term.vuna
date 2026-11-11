@@ -1201,6 +1201,11 @@ else
     nm = "dtb__${fresh}"
   in altEnvKept (gsPutNext st (fresh + 1)) label (Pair nm Rig1 :: outer) rest (nm :: pats)
 
+-- | R4：把 `TRecord name args` 展开成等价 `TApp` 链（codegen 与改造前逐字节一致）。
+recordTermAsApp : Term -> List (Pair Term Rig) -> Term
+recordTermAsApp t [] = t
+recordTermAsApp t ((Pair a rig) :: rest) = recordTermAsApp (TApp t a rig) rest
+
 genTermFuel : Int -> GenSt -> List (Pair String Rig) -> Term -> Check (Pair String GenSt)
 genTermFuel fuel st binders t = if fuel <= 0 then icFuel "codegen"
 else case t of
@@ -1224,6 +1229,8 @@ else case t of
   TApp f a rig => genAppFuel (fuel - 1) st binders f a rig
   TCon c args => genConAppFuel (fuel - 1) st binders c args
   TMk c args => genConAppFuel (fuel - 1) st binders c args
+  -- R4：record 类型应用展开回 `TGlobal` 应用脊（产物与改造前逐字节一致）。
+  TRecord name args => genTermFuel (fuel - 1) st binders (recordTermAsApp (TGlobal name) args)
   TCase scrut alts => genCaseFuel (fuel - 1) st binders scrut alts
   -- R4：record 族的更新/投影直接用 OCaml record 语法；非 record 仍按 case 形状展开。
   TRecUpd base c tele idxs body => case lookupPair c st.gsRecordFields of

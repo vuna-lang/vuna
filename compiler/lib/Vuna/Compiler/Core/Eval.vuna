@@ -108,6 +108,8 @@ else case t of
   TApp f a rig => applyValueFuel (fuel - 1) (evalFuel (fuel - 1) env f) (evalFuel (fuel - 1) env a)
   TCon c args => VCon c (evalArgTermsFuel (fuel - 1) env args)
   TMk c args => VCon c (evalArgTermsFuel (fuel - 1) env args)
+  -- R4：record 类型应用按 `TGlobal name` 的应用脊求值（与 TApp 链归一）。
+  TRecord name args => VNeutral (NGlobal name (evalArgTermsFuel (fuel - 1) env args))
   TCase scrut alts => evalCaseFuel (fuel - 1) (evalFuel (fuel - 1) env scrut) (evalAlts env alts)
   TProj base c tele i fi => evalProjFuel (fuel - 1) (evalFuel (fuel - 1) env base) c tele i fi
   -- R3：记录更新原语的语义 = 单分支 case。
@@ -890,6 +892,8 @@ substSolvedMetas sols (TCon c args) =
   TCon c (map (\p => Pair (substSolvedMetas sols (firstOf p)) (secondOf p)) args)
 substSolvedMetas sols (TMk c args) =
   TMk c (map (\p => Pair (substSolvedMetas sols (firstOf p)) (secondOf p)) args)
+substSolvedMetas sols (TRecord c args) =
+  TRecord c (map (\p => Pair (substSolvedMetas sols (firstOf p)) (secondOf p)) args)
 substSolvedMetas sols (TProj base c tele i fi) = TProj (substSolvedMetas sols base) c tele i fi
 substSolvedMetas sols (TRecUpd base c tele idxs body) =
   TRecUpd (substSolvedMetas sols base) c tele idxs (substSolvedMetas sols body)
@@ -925,6 +929,8 @@ substSolvedMetasAtGo depth sols (TCon c args) =
   TCon c (map (\p => Pair (substSolvedMetasAtGo depth sols (firstOf p)) (secondOf p)) args)
 substSolvedMetasAtGo depth sols (TMk c args) =
   TMk c (map (\p => Pair (substSolvedMetasAtGo depth sols (firstOf p)) (secondOf p)) args)
+substSolvedMetasAtGo depth sols (TRecord c args) =
+  TRecord c (map (\p => Pair (substSolvedMetasAtGo depth sols (firstOf p)) (secondOf p)) args)
 substSolvedMetasAtGo depth sols (TProj base c tele i fi) =
   TProj (substSolvedMetasAtGo depth sols base) c tele i fi
 substSolvedMetasAtGo depth sols (TRecUpd base c tele idxs body) =

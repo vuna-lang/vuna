@@ -153,7 +153,7 @@ elabTraitFinal globals ec tname paramNames methods methodsP pKinds fieldTys =
     tele = teleOfType ctorTy
     dd =
       DtData dname tele [DtCtor cname dname tele ctorTy Nothing]
-        (foldParamPis paramsKinds (TType levelZero)) [] False ReprAuto []
+        (foldParamPis paramsKinds (TType levelZero)) [] False ReprAuto [] False
     projs = methodProjections tname paramNames pKinds methodsP fieldTys
     projSpans = map (\m => Pair (traitMethodName m) (traitMethodSpan m)) methods
     -- D27：字段（方法类型）在运行时不可表示 ⇒ 该方法的投影体里字典字段的使用要包 cast。
@@ -971,6 +971,8 @@ substMetaTermGo m rep depth (TCon c args) =
   TCon c (map (\p => Pair (substMetaTermGo m rep depth (firstOf p)) (secondOf p)) args)
 substMetaTermGo m rep depth (TMk c args) =
   TMk c (map (\p => Pair (substMetaTermGo m rep depth (firstOf p)) (secondOf p)) args)
+substMetaTermGo m rep depth (TRecord c args) =
+  TRecord c (map (\p => Pair (substMetaTermGo m rep depth (firstOf p)) (secondOf p)) args)
 substMetaTermGo m rep depth (TCase s alts) =
   TCase (substMetaTermGo m rep depth s) (map (\alt => substMetaTermAlt m rep depth alt) alts)
 substMetaTermGo m rep depth (TIf c th el) =
@@ -1118,6 +1120,9 @@ else case t of
       (map (\p => Pair (injectDictGoFuel (fuel - 1) defName dName appPos depth (firstOf p)) (secondOf p)) args)
   TMk c args =>
     TMk c
+      (map (\p => Pair (injectDictGoFuel (fuel - 1) defName dName appPos depth (firstOf p)) (secondOf p)) args)
+  TRecord name args =>
+    TRecord name
       (map (\p => Pair (injectDictGoFuel (fuel - 1) defName dName appPos depth (firstOf p)) (secondOf p)) args)
   TCase scrut alts =>
     TCase (injectDictGoFuel (fuel - 1) defName dName appPos depth scrut)

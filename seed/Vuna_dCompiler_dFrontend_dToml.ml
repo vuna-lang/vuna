@@ -48,7 +48,7 @@ let rec v_Vuna_dCompiler_dFrontend_dToml_dstripCR = (fun mc0 -> (match mc0 with
 
 let v_Vuna_dCompiler_dFrontend_dToml_dlocPrefix = (fun path line -> (if (path = "") then (String.concat "" ["line "; (bi_strFromInt line); ": "]) else (String.concat "" [path; ":"; (bi_strFromInt line); ": "])))
 
-let v_Vuna_dCompiler_dFrontend_dToml_dfailAt = (fun path line msg -> (Base_dResult.C_Base_dResult_dResult_Err ((((v_Vuna_dCompiler_dFrontend_dToml_dlocPrefix path) line) ^ msg))))
+let v_Vuna_dCompiler_dFrontend_dToml_dfailAt = (fun path line msg -> ((((Vuna_dCompiler_dDiagnostics_dPkg.v_Vuna_dCompiler_dDiagnostics_dPkg_dpkgAt1 path) line) (Vuna_dCompiler_dDiagnostics_dPkg.C_Vuna_dCompiler_dDiagnostics_dPkg_dPkgErr_TomlSyntax (msg))) msg))
 
 let rec v_Vuna_dCompiler_dFrontend_dToml_dskipBlank = (fun mc0 -> (match mc0 with
   | { f_Vuna_dCompiler_dFrontend_dToml_dTomlCursor_cursorChars = dtb__15; f_Vuna_dCompiler_dFrontend_dToml_dTomlCursor_cursorLine = dtb__16; f_Vuna_dCompiler_dFrontend_dToml_dTomlCursor_cursorCol = dtb__17 } -> (match dtb__15 with
@@ -91,18 +91,18 @@ let rec v_Vuna_dCompiler_dFrontend_dToml_dcollectBareKey = (fun mc0 mc1 -> (matc
 let v_Vuna_dCompiler_dFrontend_dToml_dparseBareKey = (fun path cs -> (match (cs).f_Vuna_dCompiler_dFrontend_dToml_dTomlCursor_cursorChars with
   | Base_dList.C_Base_dList_dList_Nil -> (((v_Vuna_dCompiler_dFrontend_dToml_dfailAt path) (cs).f_Vuna_dCompiler_dFrontend_dToml_dTomlCursor_cursorLine) "expected a key")
   | Base_dList.C_Base_dList_dList_Cons (dtb__35, dtb__36) -> (if (v_Vuna_dCompiler_dFrontend_dToml_disBareKeyChar dtb__35) then (match ((v_Vuna_dCompiler_dFrontend_dToml_dcollectBareKey cs) Base_dList.C_Base_dList_dList_Nil) with
-  | { Base_dPair.f_Base_dPair_dPair_first = dtb__37; Base_dPair.f_Base_dPair_dPair_second = dtb__38 } -> (Base_dResult.C_Base_dResult_dResult_Ok ({ Base_dPair.f_Base_dPair_dPair_first = dtb__37; Base_dPair.f_Base_dPair_dPair_second = dtb__38 }))
+  | { Base_dPair.f_Base_dPair_dPair_first = dtb__37; Base_dPair.f_Base_dPair_dPair_second = dtb__38 } -> (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC ({ Base_dPair.f_Base_dPair_dPair_first = dtb__37; Base_dPair.f_Base_dPair_dPair_second = dtb__38 }))
   | _ -> failwith "DT: impossible branch"
 ) else (((v_Vuna_dCompiler_dFrontend_dToml_dfailAt path) (cs).f_Vuna_dCompiler_dFrontend_dToml_dTomlCursor_cursorLine) "expected a key"))
   | _ -> failwith "DT: impossible branch"
 ))
 
-let rec v_Vuna_dCompiler_dFrontend_dToml_dparseStringChars = (fun fuel path startCs cs acc -> (if (fuel <= 0) then (Base_dResult.C_Base_dResult_dResult_Err ("DT: toml fuel exhausted (internal: toml parser made no progress)")) else (match (cs).f_Vuna_dCompiler_dFrontend_dToml_dTomlCursor_cursorChars with
+let rec v_Vuna_dCompiler_dFrontend_dToml_dparseStringChars = (fun fuel path startCs cs acc -> (if (fuel <= 0) then (Vuna_dCompiler_dDiag.v_Vuna_dCompiler_dDiag_dicFuel "toml") else (match (cs).f_Vuna_dCompiler_dFrontend_dToml_dTomlCursor_cursorChars with
   | Base_dList.C_Base_dList_dList_Nil -> (((v_Vuna_dCompiler_dFrontend_dToml_dfailAt path) (startCs).f_Vuna_dCompiler_dFrontend_dToml_dTomlCursor_cursorLine) "unterminated basic string")
-  | Base_dList.C_Base_dList_dList_Cons (dtb__39, dtb__40) -> (if (dtb__39 = 34) then (Base_dResult.C_Base_dResult_dResult_Ok ({ Base_dPair.f_Base_dPair_dPair_first = (Base_dList.dtp_pack (Base_dList.v_Base_dList_dreverse acc)); Base_dPair.f_Base_dPair_dPair_second = (v_Vuna_dCompiler_dFrontend_dToml_dadvanceCursor cs) })) else (if (dtb__39 = 10) then (((v_Vuna_dCompiler_dFrontend_dToml_dfailAt path) (startCs).f_Vuna_dCompiler_dFrontend_dToml_dTomlCursor_cursorLine) "unterminated basic string (newline in string)") else (if (dtb__39 = 92) then (((((v_Vuna_dCompiler_dFrontend_dToml_dparseStringEscape (fuel - 1)) path) startCs) (v_Vuna_dCompiler_dFrontend_dToml_dadvanceCursor cs)) acc) else (((((v_Vuna_dCompiler_dFrontend_dToml_dparseStringChars (fuel - 1)) path) startCs) (v_Vuna_dCompiler_dFrontend_dToml_dadvanceCursor cs)) (Base_dList.C_Base_dList_dList_Cons (dtb__39, acc))))))
+  | Base_dList.C_Base_dList_dList_Cons (dtb__39, dtb__40) -> (if (dtb__39 = 34) then (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC ({ Base_dPair.f_Base_dPair_dPair_first = (Base_dList.dtp_pack (Base_dList.v_Base_dList_dreverse acc)); Base_dPair.f_Base_dPair_dPair_second = (v_Vuna_dCompiler_dFrontend_dToml_dadvanceCursor cs) })) else (if (dtb__39 = 10) then (((v_Vuna_dCompiler_dFrontend_dToml_dfailAt path) (startCs).f_Vuna_dCompiler_dFrontend_dToml_dTomlCursor_cursorLine) "unterminated basic string (newline in string)") else (if (dtb__39 = 92) then (((((v_Vuna_dCompiler_dFrontend_dToml_dparseStringEscape (fuel - 1)) path) startCs) (v_Vuna_dCompiler_dFrontend_dToml_dadvanceCursor cs)) acc) else (((((v_Vuna_dCompiler_dFrontend_dToml_dparseStringChars (fuel - 1)) path) startCs) (v_Vuna_dCompiler_dFrontend_dToml_dadvanceCursor cs)) (Base_dList.C_Base_dList_dList_Cons (dtb__39, acc))))))
   | _ -> failwith "DT: impossible branch"
 )))
-and v_Vuna_dCompiler_dFrontend_dToml_dparseStringEscape = (fun fuel path startCs cs acc -> (if (fuel <= 0) then (Base_dResult.C_Base_dResult_dResult_Err ("DT: toml fuel exhausted (internal: toml parser made no progress)")) else (match (cs).f_Vuna_dCompiler_dFrontend_dToml_dTomlCursor_cursorChars with
+and v_Vuna_dCompiler_dFrontend_dToml_dparseStringEscape = (fun fuel path startCs cs acc -> (if (fuel <= 0) then (Vuna_dCompiler_dDiag.v_Vuna_dCompiler_dDiag_dicFuel "toml") else (match (cs).f_Vuna_dCompiler_dFrontend_dToml_dTomlCursor_cursorChars with
   | Base_dList.C_Base_dList_dList_Nil -> (((v_Vuna_dCompiler_dFrontend_dToml_dfailAt path) (startCs).f_Vuna_dCompiler_dFrontend_dToml_dTomlCursor_cursorLine) "unterminated escape sequence")
   | Base_dList.C_Base_dList_dList_Cons (dtb__41, dtb__42) -> (if (dtb__41 = 110) then (((((v_Vuna_dCompiler_dFrontend_dToml_dparseStringChars (fuel - 1)) path) startCs) (v_Vuna_dCompiler_dFrontend_dToml_dadvanceCursor cs)) (Base_dList.C_Base_dList_dList_Cons (10, acc))) else (if (dtb__41 = 116) then (((((v_Vuna_dCompiler_dFrontend_dToml_dparseStringChars (fuel - 1)) path) startCs) (v_Vuna_dCompiler_dFrontend_dToml_dadvanceCursor cs)) (Base_dList.C_Base_dList_dList_Cons (9, acc))) else (if (dtb__41 = 114) then (((((v_Vuna_dCompiler_dFrontend_dToml_dparseStringChars (fuel - 1)) path) startCs) (v_Vuna_dCompiler_dFrontend_dToml_dadvanceCursor cs)) (Base_dList.C_Base_dList_dList_Cons (13, acc))) else (if (dtb__41 = 98) then (((((v_Vuna_dCompiler_dFrontend_dToml_dparseStringChars (fuel - 1)) path) startCs) (v_Vuna_dCompiler_dFrontend_dToml_dadvanceCursor cs)) (Base_dList.C_Base_dList_dList_Cons (8, acc))) else (if (dtb__41 = 102) then (((((v_Vuna_dCompiler_dFrontend_dToml_dparseStringChars (fuel - 1)) path) startCs) (v_Vuna_dCompiler_dFrontend_dToml_dadvanceCursor cs)) (Base_dList.C_Base_dList_dList_Cons (12, acc))) else (if (dtb__41 = 34) then (((((v_Vuna_dCompiler_dFrontend_dToml_dparseStringChars (fuel - 1)) path) startCs) (v_Vuna_dCompiler_dFrontend_dToml_dadvanceCursor cs)) (Base_dList.C_Base_dList_dList_Cons (34, acc))) else (if (dtb__41 = 92) then (((((v_Vuna_dCompiler_dFrontend_dToml_dparseStringChars (fuel - 1)) path) startCs) (v_Vuna_dCompiler_dFrontend_dToml_dadvanceCursor cs)) (Base_dList.C_Base_dList_dList_Cons (92, acc))) else (((v_Vuna_dCompiler_dFrontend_dToml_dfailAt path) (cs).f_Vuna_dCompiler_dFrontend_dToml_dTomlCursor_cursorLine) ("unknown escape sequence \\" ^ (Base_dList.dtp_pack (Base_dList.C_Base_dList_dList_Cons (dtb__41, Base_dList.C_Base_dList_dList_Nil))))))))))))
   | _ -> failwith "DT: impossible branch"
@@ -117,12 +117,12 @@ let v_Vuna_dCompiler_dFrontend_dToml_dparseStringValue = (fun path cs -> (match 
 let v_Vuna_dCompiler_dFrontend_dToml_dmakeInteger = (fun mc0 mc1 -> (if mc1 then (0 - mc0) else mc0))
 
 let v_Vuna_dCompiler_dFrontend_dToml_dfinishInteger = (fun path startCs cs count acc negative -> (if (count = 0) then (((v_Vuna_dCompiler_dFrontend_dToml_dfailAt path) (startCs).f_Vuna_dCompiler_dFrontend_dToml_dTomlCursor_cursorLine) "expected digits for integer") else (match (cs).f_Vuna_dCompiler_dFrontend_dToml_dTomlCursor_cursorChars with
-  | Base_dList.C_Base_dList_dList_Nil -> (Base_dResult.C_Base_dResult_dResult_Ok ({ Base_dPair.f_Base_dPair_dPair_first = ((v_Vuna_dCompiler_dFrontend_dToml_dmakeInteger acc) negative); Base_dPair.f_Base_dPair_dPair_second = cs }))
-  | Base_dList.C_Base_dList_dList_Cons (dtb__45, dtb__46) -> (if (dtb__45 = 46) then (((v_Vuna_dCompiler_dFrontend_dToml_dfailAt path) (startCs).f_Vuna_dCompiler_dFrontend_dToml_dTomlCursor_cursorLine) "floating point numbers are not supported") else (if (v_Vuna_dCompiler_dFrontend_dToml_disBareKeyChar dtb__45) then (((v_Vuna_dCompiler_dFrontend_dToml_dfailAt path) (startCs).f_Vuna_dCompiler_dFrontend_dToml_dTomlCursor_cursorLine) "invalid integer literal") else (Base_dResult.C_Base_dResult_dResult_Ok ({ Base_dPair.f_Base_dPair_dPair_first = ((v_Vuna_dCompiler_dFrontend_dToml_dmakeInteger acc) negative); Base_dPair.f_Base_dPair_dPair_second = cs }))))
+  | Base_dList.C_Base_dList_dList_Nil -> (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC ({ Base_dPair.f_Base_dPair_dPair_first = ((v_Vuna_dCompiler_dFrontend_dToml_dmakeInteger acc) negative); Base_dPair.f_Base_dPair_dPair_second = cs }))
+  | Base_dList.C_Base_dList_dList_Cons (dtb__45, dtb__46) -> (if (dtb__45 = 46) then (((v_Vuna_dCompiler_dFrontend_dToml_dfailAt path) (startCs).f_Vuna_dCompiler_dFrontend_dToml_dTomlCursor_cursorLine) "floating point numbers are not supported") else (if (v_Vuna_dCompiler_dFrontend_dToml_disBareKeyChar dtb__45) then (((v_Vuna_dCompiler_dFrontend_dToml_dfailAt path) (startCs).f_Vuna_dCompiler_dFrontend_dToml_dTomlCursor_cursorLine) "invalid integer literal") else (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC ({ Base_dPair.f_Base_dPair_dPair_first = ((v_Vuna_dCompiler_dFrontend_dToml_dmakeInteger acc) negative); Base_dPair.f_Base_dPair_dPair_second = cs }))))
   | _ -> failwith "DT: impossible branch"
 )))
 
-let rec v_Vuna_dCompiler_dFrontend_dToml_dparseIntegerDigits = (fun fuel path startCs cs count acc negative -> (if (fuel <= 0) then (Base_dResult.C_Base_dResult_dResult_Err ("DT: toml fuel exhausted (internal: toml parser made no progress)")) else (match (cs).f_Vuna_dCompiler_dFrontend_dToml_dTomlCursor_cursorChars with
+let rec v_Vuna_dCompiler_dFrontend_dToml_dparseIntegerDigits = (fun fuel path startCs cs count acc negative -> (if (fuel <= 0) then (Vuna_dCompiler_dDiag.v_Vuna_dCompiler_dDiag_dicFuel "toml") else (match (cs).f_Vuna_dCompiler_dFrontend_dToml_dTomlCursor_cursorChars with
   | Base_dList.C_Base_dList_dList_Nil -> ((((((v_Vuna_dCompiler_dFrontend_dToml_dfinishInteger path) startCs) cs) count) acc) negative)
   | Base_dList.C_Base_dList_dList_Cons (dtb__47, dtb__48) -> (if (v_Vuna_dCompiler_dFrontend_dToml_disDigitChar dtb__47) then (((((((v_Vuna_dCompiler_dFrontend_dToml_dparseIntegerDigits (fuel - 1)) path) startCs) (v_Vuna_dCompiler_dFrontend_dToml_dadvanceCursor cs)) (count + 1)) ((acc * 10) + (dtb__47 - 48))) negative) else ((((((v_Vuna_dCompiler_dFrontend_dToml_dfinishInteger path) startCs) cs) count) acc) negative))
   | _ -> failwith "DT: impossible branch"
@@ -135,11 +135,11 @@ let v_Vuna_dCompiler_dFrontend_dToml_dparseInteger = (fun path cs -> (match (cs)
 ))
 
 let v_Vuna_dCompiler_dFrontend_dToml_dparseIntValue = (fun path cs -> ((fun nd_uscrut2 -> (match nd_uscrut2 with
-  | Base_dResult.C_Base_dResult_dResult_Ok (dtb__51) -> (match dtb__51 with
-  | { Base_dPair.f_Base_dPair_dPair_first = dtb__52; Base_dPair.f_Base_dPair_dPair_second = dtb__53 } -> (Base_dResult.C_Base_dResult_dResult_Ok ({ Base_dPair.f_Base_dPair_dPair_first = (C_Vuna_dCompiler_dFrontend_dToml_dTomlValue_TInt (dtb__52)); Base_dPair.f_Base_dPair_dPair_second = dtb__53 }))
+  | Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC (dtb__51) -> (match dtb__51 with
+  | { Base_dPair.f_Base_dPair_dPair_first = dtb__52; Base_dPair.f_Base_dPair_dPair_second = dtb__53 } -> (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC ({ Base_dPair.f_Base_dPair_dPair_first = (C_Vuna_dCompiler_dFrontend_dToml_dTomlValue_TInt (dtb__52)); Base_dPair.f_Base_dPair_dPair_second = dtb__53 }))
   | _ -> failwith "DT: impossible branch"
 )
-  | Base_dResult.C_Base_dResult_dResult_Err (dtb__54) -> (Base_dResult.C_Base_dResult_dResult_Err (dtb__54))
+  | Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_ErrC (dtb__54) -> (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_ErrC (dtb__54))
   | _ -> failwith "DT: impossible branch"
 )) ((v_Vuna_dCompiler_dFrontend_dToml_dparseInteger path) cs)))
 
@@ -166,27 +166,27 @@ let v_Vuna_dCompiler_dFrontend_dToml_dmatchWord = (fun word cs -> (match ((v_Vun
   | _ -> failwith "DT: impossible branch"
 ))
 
-let rec v_Vuna_dCompiler_dFrontend_dToml_dparseArrayItems = (fun fuel path cs acc -> (if (fuel <= 0) then (Base_dResult.C_Base_dResult_dResult_Err ("DT: toml fuel exhausted (internal: toml parser made no progress)")) else (match (v_Vuna_dCompiler_dFrontend_dToml_dskipGap cs) with
+let rec v_Vuna_dCompiler_dFrontend_dToml_dparseArrayItems = (fun fuel path cs acc -> (if (fuel <= 0) then (Vuna_dCompiler_dDiag.v_Vuna_dCompiler_dDiag_dicFuel "toml") else (match (v_Vuna_dCompiler_dFrontend_dToml_dskipGap cs) with
   | { f_Vuna_dCompiler_dFrontend_dToml_dTomlCursor_cursorChars = dtb__65; f_Vuna_dCompiler_dFrontend_dToml_dTomlCursor_cursorLine = dtb__66; f_Vuna_dCompiler_dFrontend_dToml_dTomlCursor_cursorCol = dtb__67 } -> (match dtb__65 with
   | Base_dList.C_Base_dList_dList_Nil -> (((v_Vuna_dCompiler_dFrontend_dToml_dfailAt path) dtb__66) "unterminated array")
-  | Base_dList.C_Base_dList_dList_Cons (dtb__68, dtb__69) -> (if (dtb__68 = 93) then (Base_dResult.C_Base_dResult_dResult_Ok ({ Base_dPair.f_Base_dPair_dPair_first = (C_Vuna_dCompiler_dFrontend_dToml_dTomlValue_TList ((Base_dList.v_Base_dList_dreverse acc))); Base_dPair.f_Base_dPair_dPair_second = (v_Vuna_dCompiler_dFrontend_dToml_dadvanceCursor { f_Vuna_dCompiler_dFrontend_dToml_dTomlCursor_cursorChars = dtb__65; f_Vuna_dCompiler_dFrontend_dToml_dTomlCursor_cursorLine = dtb__66; f_Vuna_dCompiler_dFrontend_dToml_dTomlCursor_cursorCol = dtb__67 }) })) else (if (dtb__68 = 34) then ((((v_Vuna_dCompiler_dFrontend_dToml_dparseArrayString (fuel - 1)) path) { f_Vuna_dCompiler_dFrontend_dToml_dTomlCursor_cursorChars = dtb__65; f_Vuna_dCompiler_dFrontend_dToml_dTomlCursor_cursorLine = dtb__66; f_Vuna_dCompiler_dFrontend_dToml_dTomlCursor_cursorCol = dtb__67 }) acc) else (((v_Vuna_dCompiler_dFrontend_dToml_dfailAt path) dtb__66) "expected a string in array")))
+  | Base_dList.C_Base_dList_dList_Cons (dtb__68, dtb__69) -> (if (dtb__68 = 93) then (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC ({ Base_dPair.f_Base_dPair_dPair_first = (C_Vuna_dCompiler_dFrontend_dToml_dTomlValue_TList ((Base_dList.v_Base_dList_dreverse acc))); Base_dPair.f_Base_dPair_dPair_second = (v_Vuna_dCompiler_dFrontend_dToml_dadvanceCursor { f_Vuna_dCompiler_dFrontend_dToml_dTomlCursor_cursorChars = dtb__65; f_Vuna_dCompiler_dFrontend_dToml_dTomlCursor_cursorLine = dtb__66; f_Vuna_dCompiler_dFrontend_dToml_dTomlCursor_cursorCol = dtb__67 }) })) else (if (dtb__68 = 34) then ((((v_Vuna_dCompiler_dFrontend_dToml_dparseArrayString (fuel - 1)) path) { f_Vuna_dCompiler_dFrontend_dToml_dTomlCursor_cursorChars = dtb__65; f_Vuna_dCompiler_dFrontend_dToml_dTomlCursor_cursorLine = dtb__66; f_Vuna_dCompiler_dFrontend_dToml_dTomlCursor_cursorCol = dtb__67 }) acc) else (((v_Vuna_dCompiler_dFrontend_dToml_dfailAt path) dtb__66) "expected a string in array")))
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
 )))
-and v_Vuna_dCompiler_dFrontend_dToml_dparseArrayString = (fun fuel path cs acc -> (if (fuel <= 0) then (Base_dResult.C_Base_dResult_dResult_Err ("DT: toml fuel exhausted (internal: toml parser made no progress)")) else ((fun nd_uscrut4 -> (match nd_uscrut4 with
-  | Base_dResult.C_Base_dResult_dResult_Ok (dtb__70) -> (match dtb__70 with
+and v_Vuna_dCompiler_dFrontend_dToml_dparseArrayString = (fun fuel path cs acc -> (if (fuel <= 0) then (Vuna_dCompiler_dDiag.v_Vuna_dCompiler_dDiag_dicFuel "toml") else ((fun nd_uscrut4 -> (match nd_uscrut4 with
+  | Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC (dtb__70) -> (match dtb__70 with
   | { Base_dPair.f_Base_dPair_dPair_first = dtb__71; Base_dPair.f_Base_dPair_dPair_second = dtb__72 } -> (match (v_Vuna_dCompiler_dFrontend_dToml_dskipGap dtb__72) with
   | { f_Vuna_dCompiler_dFrontend_dToml_dTomlCursor_cursorChars = dtb__73; f_Vuna_dCompiler_dFrontend_dToml_dTomlCursor_cursorLine = dtb__74; f_Vuna_dCompiler_dFrontend_dToml_dTomlCursor_cursorCol = dtb__75 } -> (match dtb__73 with
   | Base_dList.C_Base_dList_dList_Nil -> (((v_Vuna_dCompiler_dFrontend_dToml_dfailAt path) dtb__74) "unterminated array")
-  | Base_dList.C_Base_dList_dList_Cons (dtb__76, dtb__77) -> (if (dtb__76 = 44) then ((((v_Vuna_dCompiler_dFrontend_dToml_dparseArrayItems (fuel - 1)) path) (v_Vuna_dCompiler_dFrontend_dToml_dadvanceCursor { f_Vuna_dCompiler_dFrontend_dToml_dTomlCursor_cursorChars = dtb__73; f_Vuna_dCompiler_dFrontend_dToml_dTomlCursor_cursorLine = dtb__74; f_Vuna_dCompiler_dFrontend_dToml_dTomlCursor_cursorCol = dtb__75 })) (Base_dList.C_Base_dList_dList_Cons (dtb__71, acc))) else (if (dtb__76 = 93) then (Base_dResult.C_Base_dResult_dResult_Ok ({ Base_dPair.f_Base_dPair_dPair_first = (C_Vuna_dCompiler_dFrontend_dToml_dTomlValue_TList ((Base_dList.v_Base_dList_dreverse (Base_dList.C_Base_dList_dList_Cons (dtb__71, acc))))); Base_dPair.f_Base_dPair_dPair_second = (v_Vuna_dCompiler_dFrontend_dToml_dadvanceCursor { f_Vuna_dCompiler_dFrontend_dToml_dTomlCursor_cursorChars = dtb__73; f_Vuna_dCompiler_dFrontend_dToml_dTomlCursor_cursorLine = dtb__74; f_Vuna_dCompiler_dFrontend_dToml_dTomlCursor_cursorCol = dtb__75 }) })) else (((v_Vuna_dCompiler_dFrontend_dToml_dfailAt path) dtb__74) "expected ',' or ']' in array")))
+  | Base_dList.C_Base_dList_dList_Cons (dtb__76, dtb__77) -> (if (dtb__76 = 44) then ((((v_Vuna_dCompiler_dFrontend_dToml_dparseArrayItems (fuel - 1)) path) (v_Vuna_dCompiler_dFrontend_dToml_dadvanceCursor { f_Vuna_dCompiler_dFrontend_dToml_dTomlCursor_cursorChars = dtb__73; f_Vuna_dCompiler_dFrontend_dToml_dTomlCursor_cursorLine = dtb__74; f_Vuna_dCompiler_dFrontend_dToml_dTomlCursor_cursorCol = dtb__75 })) (Base_dList.C_Base_dList_dList_Cons (dtb__71, acc))) else (if (dtb__76 = 93) then (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC ({ Base_dPair.f_Base_dPair_dPair_first = (C_Vuna_dCompiler_dFrontend_dToml_dTomlValue_TList ((Base_dList.v_Base_dList_dreverse (Base_dList.C_Base_dList_dList_Cons (dtb__71, acc))))); Base_dPair.f_Base_dPair_dPair_second = (v_Vuna_dCompiler_dFrontend_dToml_dadvanceCursor { f_Vuna_dCompiler_dFrontend_dToml_dTomlCursor_cursorChars = dtb__73; f_Vuna_dCompiler_dFrontend_dToml_dTomlCursor_cursorLine = dtb__74; f_Vuna_dCompiler_dFrontend_dToml_dTomlCursor_cursorCol = dtb__75 }) })) else (((v_Vuna_dCompiler_dFrontend_dToml_dfailAt path) dtb__74) "expected ',' or ']' in array")))
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
 )
-  | Base_dResult.C_Base_dResult_dResult_Err (dtb__78) -> (Base_dResult.C_Base_dResult_dResult_Err (dtb__78))
+  | Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_ErrC (dtb__78) -> (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_ErrC (dtb__78))
   | _ -> failwith "DT: impossible branch"
 )) ((v_Vuna_dCompiler_dFrontend_dToml_dparseStringValue path) cs))))
 
@@ -199,16 +199,16 @@ let v_Vuna_dCompiler_dFrontend_dToml_dparseStringArray = (fun path cs -> (match 
 let v_Vuna_dCompiler_dFrontend_dToml_dparseValue = (fun path cs -> (match (cs).f_Vuna_dCompiler_dFrontend_dToml_dTomlCursor_cursorChars with
   | Base_dList.C_Base_dList_dList_Nil -> (((v_Vuna_dCompiler_dFrontend_dToml_dfailAt path) (cs).f_Vuna_dCompiler_dFrontend_dToml_dTomlCursor_cursorLine) "expected a value")
   | Base_dList.C_Base_dList_dList_Cons (dtb__81, dtb__82) -> (if (dtb__81 = 34) then ((fun nd_uscrut5 -> (match nd_uscrut5 with
-  | Base_dResult.C_Base_dResult_dResult_Ok (dtb__83) -> (match dtb__83 with
-  | { Base_dPair.f_Base_dPair_dPair_first = dtb__84; Base_dPair.f_Base_dPair_dPair_second = dtb__85 } -> (Base_dResult.C_Base_dResult_dResult_Ok ({ Base_dPair.f_Base_dPair_dPair_first = (C_Vuna_dCompiler_dFrontend_dToml_dTomlValue_TStr (dtb__84)); Base_dPair.f_Base_dPair_dPair_second = dtb__85 }))
+  | Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC (dtb__83) -> (match dtb__83 with
+  | { Base_dPair.f_Base_dPair_dPair_first = dtb__84; Base_dPair.f_Base_dPair_dPair_second = dtb__85 } -> (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC ({ Base_dPair.f_Base_dPair_dPair_first = (C_Vuna_dCompiler_dFrontend_dToml_dTomlValue_TStr (dtb__84)); Base_dPair.f_Base_dPair_dPair_second = dtb__85 }))
   | _ -> failwith "DT: impossible branch"
 )
-  | Base_dResult.C_Base_dResult_dResult_Err (dtb__86) -> (Base_dResult.C_Base_dResult_dResult_Err (dtb__86))
+  | Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_ErrC (dtb__86) -> (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_ErrC (dtb__86))
   | _ -> failwith "DT: impossible branch"
 )) ((v_Vuna_dCompiler_dFrontend_dToml_dparseStringValue path) cs)) else (if (dtb__81 = 91) then ((v_Vuna_dCompiler_dFrontend_dToml_dparseStringArray path) cs) else (if (dtb__81 = 45) then ((v_Vuna_dCompiler_dFrontend_dToml_dparseIntValue path) cs) else (if (v_Vuna_dCompiler_dFrontend_dToml_disDigitChar dtb__81) then ((v_Vuna_dCompiler_dFrontend_dToml_dparseIntValue path) cs) else (match ((v_Vuna_dCompiler_dFrontend_dToml_dmatchWord "true") cs) with
-  | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__87) -> (Base_dResult.C_Base_dResult_dResult_Ok ({ Base_dPair.f_Base_dPair_dPair_first = (C_Vuna_dCompiler_dFrontend_dToml_dTomlValue_TBool (true)); Base_dPair.f_Base_dPair_dPair_second = dtb__87 }))
+  | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__87) -> (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC ({ Base_dPair.f_Base_dPair_dPair_first = (C_Vuna_dCompiler_dFrontend_dToml_dTomlValue_TBool (true)); Base_dPair.f_Base_dPair_dPair_second = dtb__87 }))
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing -> (match ((v_Vuna_dCompiler_dFrontend_dToml_dmatchWord "false") cs) with
-  | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__88) -> (Base_dResult.C_Base_dResult_dResult_Ok ({ Base_dPair.f_Base_dPair_dPair_first = (C_Vuna_dCompiler_dFrontend_dToml_dTomlValue_TBool (false)); Base_dPair.f_Base_dPair_dPair_second = dtb__88 }))
+  | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__88) -> (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC ({ Base_dPair.f_Base_dPair_dPair_first = (C_Vuna_dCompiler_dFrontend_dToml_dTomlValue_TBool (false)); Base_dPair.f_Base_dPair_dPair_second = dtb__88 }))
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing -> (((v_Vuna_dCompiler_dFrontend_dToml_dfailAt path) (cs).f_Vuna_dCompiler_dFrontend_dToml_dTomlCursor_cursorLine) "expected a value")
   | _ -> failwith "DT: impossible branch"
 )
@@ -217,19 +217,19 @@ let v_Vuna_dCompiler_dFrontend_dToml_dparseValue = (fun path cs -> (match (cs).f
   | _ -> failwith "DT: impossible branch"
 ))
 
-let rec v_Vuna_dCompiler_dFrontend_dToml_dparseSectionSegments = (fun fuel path cs acc -> (if (fuel <= 0) then (Base_dResult.C_Base_dResult_dResult_Err ("DT: toml fuel exhausted (internal: toml parser made no progress)")) else ((fun nd_uscrut4 -> (match nd_uscrut4 with
-  | Base_dResult.C_Base_dResult_dResult_Ok (dtb__89) -> (match dtb__89 with
+let rec v_Vuna_dCompiler_dFrontend_dToml_dparseSectionSegments = (fun fuel path cs acc -> (if (fuel <= 0) then (Vuna_dCompiler_dDiag.v_Vuna_dCompiler_dDiag_dicFuel "toml") else ((fun nd_uscrut4 -> (match nd_uscrut4 with
+  | Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC (dtb__89) -> (match dtb__89 with
   | { Base_dPair.f_Base_dPair_dPair_first = dtb__90; Base_dPair.f_Base_dPair_dPair_second = dtb__91 } -> (match (v_Vuna_dCompiler_dFrontend_dToml_dskipBlank dtb__91) with
   | { f_Vuna_dCompiler_dFrontend_dToml_dTomlCursor_cursorChars = dtb__92; f_Vuna_dCompiler_dFrontend_dToml_dTomlCursor_cursorLine = dtb__93; f_Vuna_dCompiler_dFrontend_dToml_dTomlCursor_cursorCol = dtb__94 } -> (match dtb__92 with
   | Base_dList.C_Base_dList_dList_Nil -> (((v_Vuna_dCompiler_dFrontend_dToml_dfailAt path) dtb__93) "unterminated section header")
-  | Base_dList.C_Base_dList_dList_Cons (dtb__95, dtb__96) -> (if (dtb__95 = 46) then ((((v_Vuna_dCompiler_dFrontend_dToml_dparseSectionSegments (fuel - 1)) path) { f_Vuna_dCompiler_dFrontend_dToml_dTomlCursor_cursorChars = dtb__96; f_Vuna_dCompiler_dFrontend_dToml_dTomlCursor_cursorLine = dtb__93; f_Vuna_dCompiler_dFrontend_dToml_dTomlCursor_cursorCol = (dtb__94 + 1) }) (Base_dList.C_Base_dList_dList_Cons (dtb__90, acc))) else (if (dtb__95 = 93) then (Base_dResult.C_Base_dResult_dResult_Ok ({ Base_dPair.f_Base_dPair_dPair_first = (Base_dList.v_Base_dList_dreverse (Base_dList.C_Base_dList_dList_Cons (dtb__90, acc))); Base_dPair.f_Base_dPair_dPair_second = { f_Vuna_dCompiler_dFrontend_dToml_dTomlCursor_cursorChars = dtb__96; f_Vuna_dCompiler_dFrontend_dToml_dTomlCursor_cursorLine = dtb__93; f_Vuna_dCompiler_dFrontend_dToml_dTomlCursor_cursorCol = (dtb__94 + 1) } })) else (((v_Vuna_dCompiler_dFrontend_dToml_dfailAt path) dtb__93) "expected '.' or ']' in section header")))
+  | Base_dList.C_Base_dList_dList_Cons (dtb__95, dtb__96) -> (if (dtb__95 = 46) then ((((v_Vuna_dCompiler_dFrontend_dToml_dparseSectionSegments (fuel - 1)) path) { f_Vuna_dCompiler_dFrontend_dToml_dTomlCursor_cursorChars = dtb__96; f_Vuna_dCompiler_dFrontend_dToml_dTomlCursor_cursorLine = dtb__93; f_Vuna_dCompiler_dFrontend_dToml_dTomlCursor_cursorCol = (dtb__94 + 1) }) (Base_dList.C_Base_dList_dList_Cons (dtb__90, acc))) else (if (dtb__95 = 93) then (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC ({ Base_dPair.f_Base_dPair_dPair_first = (Base_dList.v_Base_dList_dreverse (Base_dList.C_Base_dList_dList_Cons (dtb__90, acc))); Base_dPair.f_Base_dPair_dPair_second = { f_Vuna_dCompiler_dFrontend_dToml_dTomlCursor_cursorChars = dtb__96; f_Vuna_dCompiler_dFrontend_dToml_dTomlCursor_cursorLine = dtb__93; f_Vuna_dCompiler_dFrontend_dToml_dTomlCursor_cursorCol = (dtb__94 + 1) } })) else (((v_Vuna_dCompiler_dFrontend_dToml_dfailAt path) dtb__93) "expected '.' or ']' in section header")))
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
 )
-  | Base_dResult.C_Base_dResult_dResult_Err (dtb__97) -> (Base_dResult.C_Base_dResult_dResult_Err (dtb__97))
+  | Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_ErrC (dtb__97) -> (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_ErrC (dtb__97))
   | _ -> failwith "DT: impossible branch"
 )) ((v_Vuna_dCompiler_dFrontend_dToml_dparseBareKey path) (v_Vuna_dCompiler_dFrontend_dToml_dskipBlank cs)))))
 
@@ -237,8 +237,8 @@ let v_Vuna_dCompiler_dFrontend_dToml_dparseSectionPath = (fun path cs -> ((((v_V
 
 let v_Vuna_dCompiler_dFrontend_dToml_dexpectEolAfterComment = (fun path cs -> (match (v_Vuna_dCompiler_dFrontend_dToml_dskipComment cs) with
   | { f_Vuna_dCompiler_dFrontend_dToml_dTomlCursor_cursorChars = dtb__98; f_Vuna_dCompiler_dFrontend_dToml_dTomlCursor_cursorLine = dtb__99; f_Vuna_dCompiler_dFrontend_dToml_dTomlCursor_cursorCol = dtb__100 } -> (match dtb__98 with
-  | Base_dList.C_Base_dList_dList_Nil -> (Base_dResult.C_Base_dResult_dResult_Ok ({ f_Vuna_dCompiler_dFrontend_dToml_dTomlCursor_cursorChars = dtb__98; f_Vuna_dCompiler_dFrontend_dToml_dTomlCursor_cursorLine = dtb__99; f_Vuna_dCompiler_dFrontend_dToml_dTomlCursor_cursorCol = dtb__100 }))
-  | Base_dList.C_Base_dList_dList_Cons (dtb__101, dtb__102) -> (if (dtb__101 = 10) then (Base_dResult.C_Base_dResult_dResult_Ok ({ f_Vuna_dCompiler_dFrontend_dToml_dTomlCursor_cursorChars = dtb__102; f_Vuna_dCompiler_dFrontend_dToml_dTomlCursor_cursorLine = (dtb__99 + 1); f_Vuna_dCompiler_dFrontend_dToml_dTomlCursor_cursorCol = 1 })) else (((v_Vuna_dCompiler_dFrontend_dToml_dfailAt path) dtb__99) "unexpected character after comment"))
+  | Base_dList.C_Base_dList_dList_Nil -> (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC ({ f_Vuna_dCompiler_dFrontend_dToml_dTomlCursor_cursorChars = dtb__98; f_Vuna_dCompiler_dFrontend_dToml_dTomlCursor_cursorLine = dtb__99; f_Vuna_dCompiler_dFrontend_dToml_dTomlCursor_cursorCol = dtb__100 }))
+  | Base_dList.C_Base_dList_dList_Cons (dtb__101, dtb__102) -> (if (dtb__101 = 10) then (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC ({ f_Vuna_dCompiler_dFrontend_dToml_dTomlCursor_cursorChars = dtb__102; f_Vuna_dCompiler_dFrontend_dToml_dTomlCursor_cursorLine = (dtb__99 + 1); f_Vuna_dCompiler_dFrontend_dToml_dTomlCursor_cursorCol = 1 })) else (((v_Vuna_dCompiler_dFrontend_dToml_dfailAt path) dtb__99) "unexpected character after comment"))
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
@@ -246,8 +246,8 @@ let v_Vuna_dCompiler_dFrontend_dToml_dexpectEolAfterComment = (fun path cs -> (m
 
 let v_Vuna_dCompiler_dFrontend_dToml_dexpectEol = (fun path cs -> (match (v_Vuna_dCompiler_dFrontend_dToml_dskipBlank cs) with
   | { f_Vuna_dCompiler_dFrontend_dToml_dTomlCursor_cursorChars = dtb__103; f_Vuna_dCompiler_dFrontend_dToml_dTomlCursor_cursorLine = dtb__104; f_Vuna_dCompiler_dFrontend_dToml_dTomlCursor_cursorCol = dtb__105 } -> (match dtb__103 with
-  | Base_dList.C_Base_dList_dList_Nil -> (Base_dResult.C_Base_dResult_dResult_Ok ({ f_Vuna_dCompiler_dFrontend_dToml_dTomlCursor_cursorChars = dtb__103; f_Vuna_dCompiler_dFrontend_dToml_dTomlCursor_cursorLine = dtb__104; f_Vuna_dCompiler_dFrontend_dToml_dTomlCursor_cursorCol = dtb__105 }))
-  | Base_dList.C_Base_dList_dList_Cons (dtb__106, dtb__107) -> (if (dtb__106 = 10) then (Base_dResult.C_Base_dResult_dResult_Ok ({ f_Vuna_dCompiler_dFrontend_dToml_dTomlCursor_cursorChars = dtb__107; f_Vuna_dCompiler_dFrontend_dToml_dTomlCursor_cursorLine = (dtb__104 + 1); f_Vuna_dCompiler_dFrontend_dToml_dTomlCursor_cursorCol = 1 })) else (if (dtb__106 = 35) then ((v_Vuna_dCompiler_dFrontend_dToml_dexpectEolAfterComment path) { f_Vuna_dCompiler_dFrontend_dToml_dTomlCursor_cursorChars = dtb__103; f_Vuna_dCompiler_dFrontend_dToml_dTomlCursor_cursorLine = dtb__104; f_Vuna_dCompiler_dFrontend_dToml_dTomlCursor_cursorCol = dtb__105 }) else (((v_Vuna_dCompiler_dFrontend_dToml_dfailAt path) (cs).f_Vuna_dCompiler_dFrontend_dToml_dTomlCursor_cursorLine) "unexpected character at end of line")))
+  | Base_dList.C_Base_dList_dList_Nil -> (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC ({ f_Vuna_dCompiler_dFrontend_dToml_dTomlCursor_cursorChars = dtb__103; f_Vuna_dCompiler_dFrontend_dToml_dTomlCursor_cursorLine = dtb__104; f_Vuna_dCompiler_dFrontend_dToml_dTomlCursor_cursorCol = dtb__105 }))
+  | Base_dList.C_Base_dList_dList_Cons (dtb__106, dtb__107) -> (if (dtb__106 = 10) then (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC ({ f_Vuna_dCompiler_dFrontend_dToml_dTomlCursor_cursorChars = dtb__107; f_Vuna_dCompiler_dFrontend_dToml_dTomlCursor_cursorLine = (dtb__104 + 1); f_Vuna_dCompiler_dFrontend_dToml_dTomlCursor_cursorCol = 1 })) else (if (dtb__106 = 35) then ((v_Vuna_dCompiler_dFrontend_dToml_dexpectEolAfterComment path) { f_Vuna_dCompiler_dFrontend_dToml_dTomlCursor_cursorChars = dtb__103; f_Vuna_dCompiler_dFrontend_dToml_dTomlCursor_cursorLine = dtb__104; f_Vuna_dCompiler_dFrontend_dToml_dTomlCursor_cursorCol = dtb__105 }) else (((v_Vuna_dCompiler_dFrontend_dToml_dfailAt path) (cs).f_Vuna_dCompiler_dFrontend_dToml_dTomlCursor_cursorLine) "unexpected character at end of line")))
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
@@ -272,7 +272,7 @@ let rec v_Vuna_dCompiler_dFrontend_dToml_dmemSectionPath = (fun _uctx0 mc0 mc1 -
 ))
 
 let v_Vuna_dCompiler_dFrontend_dToml_dsectionSuffix = (fun mc0 -> (match mc0 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__114, dtb__115) -> (String.concat "" [" in ["; (Vuna_dCompiler_dCommon.v_Vuna_dCompiler_dCommon_djoinDots mc0); "]"])
+  | Base_dList.C_Base_dList_dList_Cons (dtb__114, dtb__115) -> (String.concat "" [" in ["; (Vuna_dCompiler_dSource.v_Vuna_dCompiler_dSource_djoinDots mc0); "]"])
   | Base_dList.C_Base_dList_dList_Nil -> ""
   | _ -> failwith "DT: impossible branch"
 ))
@@ -286,20 +286,20 @@ let rec v_Vuna_dCompiler_dFrontend_dToml_dhasEntry = (fun mc0 mc1 mc2 -> (match 
   | _ -> failwith "DT: impossible branch"
 ))
 
-let rec v_Vuna_dCompiler_dFrontend_dToml_dparseEntryValue = (fun fuel path cs keyLine key section seen entries -> (if (fuel <= 0) then (Base_dResult.C_Base_dResult_dResult_Err ("DT: toml fuel exhausted (internal: toml parser made no progress)")) else ((fun nd_uscrut8 -> (match nd_uscrut8 with
-  | Base_dResult.C_Base_dResult_dResult_Ok (dtb__122) -> (match dtb__122 with
+let rec v_Vuna_dCompiler_dFrontend_dToml_dparseEntryValue = (fun fuel path cs keyLine key section seen entries -> (if (fuel <= 0) then (Vuna_dCompiler_dDiag.v_Vuna_dCompiler_dDiag_dicFuel "toml") else ((fun nd_uscrut8 -> (match nd_uscrut8 with
+  | Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC (dtb__122) -> (match dtb__122 with
   | { Base_dPair.f_Base_dPair_dPair_first = dtb__123; Base_dPair.f_Base_dPair_dPair_second = dtb__124 } -> (match ((v_Vuna_dCompiler_dFrontend_dToml_dexpectEol path) dtb__124) with
-  | Base_dResult.C_Base_dResult_dResult_Err (dtb__125) -> (Base_dResult.C_Base_dResult_dResult_Err (dtb__125))
-  | Base_dResult.C_Base_dResult_dResult_Ok (dtb__126) -> (if (((v_Vuna_dCompiler_dFrontend_dToml_dhasEntry section) key) entries) then (((v_Vuna_dCompiler_dFrontend_dToml_dfailAt path) keyLine) (String.concat "" ["duplicate key \""; key; "\""; (v_Vuna_dCompiler_dFrontend_dToml_dsectionSuffix section)])) else ((((((v_Vuna_dCompiler_dFrontend_dToml_dparseTomlLoop (fuel - 1)) path) dtb__126) section) seen) (Base_dList.C_Base_dList_dList_Cons ({ f_Vuna_dCompiler_dFrontend_dToml_dTomlEntry_tomlEntrySection = section; f_Vuna_dCompiler_dFrontend_dToml_dTomlEntry_tomlEntryKey = key; f_Vuna_dCompiler_dFrontend_dToml_dTomlEntry_tomlEntryValue = dtb__123; f_Vuna_dCompiler_dFrontend_dToml_dTomlEntry_tomlEntryLine = keyLine }, entries))))
+  | Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_ErrC (dtb__125) -> (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_ErrC (dtb__125))
+  | Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC (dtb__126) -> (if (((v_Vuna_dCompiler_dFrontend_dToml_dhasEntry section) key) entries) then (((v_Vuna_dCompiler_dFrontend_dToml_dfailAt path) keyLine) (String.concat "" ["duplicate key \""; key; "\""; (v_Vuna_dCompiler_dFrontend_dToml_dsectionSuffix section)])) else ((((((v_Vuna_dCompiler_dFrontend_dToml_dparseTomlLoop (fuel - 1)) path) dtb__126) section) seen) (Base_dList.C_Base_dList_dList_Cons ({ f_Vuna_dCompiler_dFrontend_dToml_dTomlEntry_tomlEntrySection = section; f_Vuna_dCompiler_dFrontend_dToml_dTomlEntry_tomlEntryKey = key; f_Vuna_dCompiler_dFrontend_dToml_dTomlEntry_tomlEntryValue = dtb__123; f_Vuna_dCompiler_dFrontend_dToml_dTomlEntry_tomlEntryLine = keyLine }, entries))))
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
 )
-  | Base_dResult.C_Base_dResult_dResult_Err (dtb__127) -> (Base_dResult.C_Base_dResult_dResult_Err (dtb__127))
+  | Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_ErrC (dtb__127) -> (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_ErrC (dtb__127))
   | _ -> failwith "DT: impossible branch"
 )) ((v_Vuna_dCompiler_dFrontend_dToml_dparseValue path) (v_Vuna_dCompiler_dFrontend_dToml_dskipBlank cs)))))
-and v_Vuna_dCompiler_dFrontend_dToml_dparseKeyLine = (fun fuel path cs section seen entries -> (if (fuel <= 0) then (Base_dResult.C_Base_dResult_dResult_Err ("DT: toml fuel exhausted (internal: toml parser made no progress)")) else ((fun nd_uscrut6 -> (match nd_uscrut6 with
-  | Base_dResult.C_Base_dResult_dResult_Ok (dtb__128) -> (match dtb__128 with
+and v_Vuna_dCompiler_dFrontend_dToml_dparseKeyLine = (fun fuel path cs section seen entries -> (if (fuel <= 0) then (Vuna_dCompiler_dDiag.v_Vuna_dCompiler_dDiag_dicFuel "toml") else ((fun nd_uscrut6 -> (match nd_uscrut6 with
+  | Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC (dtb__128) -> (match dtb__128 with
   | { Base_dPair.f_Base_dPair_dPair_first = dtb__129; Base_dPair.f_Base_dPair_dPair_second = dtb__130 } -> (match (v_Vuna_dCompiler_dFrontend_dToml_dskipBlank dtb__130) with
   | { f_Vuna_dCompiler_dFrontend_dToml_dTomlCursor_cursorChars = dtb__131; f_Vuna_dCompiler_dFrontend_dToml_dTomlCursor_cursorLine = dtb__132; f_Vuna_dCompiler_dFrontend_dToml_dTomlCursor_cursorCol = dtb__133 } -> (match dtb__131 with
   | Base_dList.C_Base_dList_dList_Nil -> (((v_Vuna_dCompiler_dFrontend_dToml_dfailAt path) (cs).f_Vuna_dCompiler_dFrontend_dToml_dTomlCursor_cursorLine) "expected '=' after key")
@@ -310,24 +310,24 @@ and v_Vuna_dCompiler_dFrontend_dToml_dparseKeyLine = (fun fuel path cs section s
 )
   | _ -> failwith "DT: impossible branch"
 )
-  | Base_dResult.C_Base_dResult_dResult_Err (dtb__136) -> (Base_dResult.C_Base_dResult_dResult_Err (dtb__136))
+  | Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_ErrC (dtb__136) -> (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_ErrC (dtb__136))
   | _ -> failwith "DT: impossible branch"
 )) ((v_Vuna_dCompiler_dFrontend_dToml_dparseBareKey path) cs))))
-and v_Vuna_dCompiler_dFrontend_dToml_dparseSectionLine = (fun fuel path cs section seen entries -> (if (fuel <= 0) then (Base_dResult.C_Base_dResult_dResult_Err ("DT: toml fuel exhausted (internal: toml parser made no progress)")) else ((fun nd_uscrut7 -> (match nd_uscrut7 with
-  | Base_dResult.C_Base_dResult_dResult_Ok (dtb__137) -> (match dtb__137 with
-  | { Base_dPair.f_Base_dPair_dPair_first = dtb__138; Base_dPair.f_Base_dPair_dPair_second = dtb__139 } -> (if (((v_Vuna_dCompiler_dFrontend_dToml_dmemSectionPath Base_dString.v_Eq_uString) dtb__138) seen) then (((v_Vuna_dCompiler_dFrontend_dToml_dfailAt path) (cs).f_Vuna_dCompiler_dFrontend_dToml_dTomlCursor_cursorLine) (String.concat "" ["duplicate section ["; (Vuna_dCompiler_dCommon.v_Vuna_dCompiler_dCommon_djoinDots dtb__138); "]"])) else (match ((v_Vuna_dCompiler_dFrontend_dToml_dexpectEol path) dtb__139) with
-  | Base_dResult.C_Base_dResult_dResult_Err (dtb__140) -> (Base_dResult.C_Base_dResult_dResult_Err (dtb__140))
-  | Base_dResult.C_Base_dResult_dResult_Ok (dtb__141) -> ((((((v_Vuna_dCompiler_dFrontend_dToml_dparseTomlLoop (fuel - 1)) path) dtb__141) dtb__138) (Base_dList.C_Base_dList_dList_Cons (dtb__138, seen))) entries)
+and v_Vuna_dCompiler_dFrontend_dToml_dparseSectionLine = (fun fuel path cs section seen entries -> (if (fuel <= 0) then (Vuna_dCompiler_dDiag.v_Vuna_dCompiler_dDiag_dicFuel "toml") else ((fun nd_uscrut7 -> (match nd_uscrut7 with
+  | Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC (dtb__137) -> (match dtb__137 with
+  | { Base_dPair.f_Base_dPair_dPair_first = dtb__138; Base_dPair.f_Base_dPair_dPair_second = dtb__139 } -> (if (((v_Vuna_dCompiler_dFrontend_dToml_dmemSectionPath Base_dString.v_Eq_uString) dtb__138) seen) then (((v_Vuna_dCompiler_dFrontend_dToml_dfailAt path) (cs).f_Vuna_dCompiler_dFrontend_dToml_dTomlCursor_cursorLine) (String.concat "" ["duplicate section ["; (Vuna_dCompiler_dSource.v_Vuna_dCompiler_dSource_djoinDots dtb__138); "]"])) else (match ((v_Vuna_dCompiler_dFrontend_dToml_dexpectEol path) dtb__139) with
+  | Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_ErrC (dtb__140) -> (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_ErrC (dtb__140))
+  | Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC (dtb__141) -> ((((((v_Vuna_dCompiler_dFrontend_dToml_dparseTomlLoop (fuel - 1)) path) dtb__141) dtb__138) (Base_dList.C_Base_dList_dList_Cons (dtb__138, seen))) entries)
   | _ -> failwith "DT: impossible branch"
 ))
   | _ -> failwith "DT: impossible branch"
 )
-  | Base_dResult.C_Base_dResult_dResult_Err (dtb__142) -> (Base_dResult.C_Base_dResult_dResult_Err (dtb__142))
+  | Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_ErrC (dtb__142) -> (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_ErrC (dtb__142))
   | _ -> failwith "DT: impossible branch"
 )) ((v_Vuna_dCompiler_dFrontend_dToml_dparseSectionPath path) (v_Vuna_dCompiler_dFrontend_dToml_dadvanceCursor cs)))))
-and v_Vuna_dCompiler_dFrontend_dToml_dparseTomlLoop = (fun fuel path cs section seen entries -> (if (fuel <= 0) then (Base_dResult.C_Base_dResult_dResult_Err ("DT: toml fuel exhausted (internal: toml parser made no progress)")) else ((((((v_Vuna_dCompiler_dFrontend_dToml_dparseTomlLoopAt (fuel - 1)) path) (v_Vuna_dCompiler_dFrontend_dToml_dskipGap cs)) section) seen) entries)))
-and v_Vuna_dCompiler_dFrontend_dToml_dparseTomlLoopAt = (fun fuel path cs section seen entries -> (if (fuel <= 0) then (Base_dResult.C_Base_dResult_dResult_Err ("DT: toml fuel exhausted (internal: toml parser made no progress)")) else (match (cs).f_Vuna_dCompiler_dFrontend_dToml_dTomlCursor_cursorChars with
-  | Base_dList.C_Base_dList_dList_Nil -> (Base_dResult.C_Base_dResult_dResult_Ok ((Base_dList.v_Base_dList_dreverse entries)))
+and v_Vuna_dCompiler_dFrontend_dToml_dparseTomlLoop = (fun fuel path cs section seen entries -> (if (fuel <= 0) then (Vuna_dCompiler_dDiag.v_Vuna_dCompiler_dDiag_dicFuel "toml") else ((((((v_Vuna_dCompiler_dFrontend_dToml_dparseTomlLoopAt (fuel - 1)) path) (v_Vuna_dCompiler_dFrontend_dToml_dskipGap cs)) section) seen) entries)))
+and v_Vuna_dCompiler_dFrontend_dToml_dparseTomlLoopAt = (fun fuel path cs section seen entries -> (if (fuel <= 0) then (Vuna_dCompiler_dDiag.v_Vuna_dCompiler_dDiag_dicFuel "toml") else (match (cs).f_Vuna_dCompiler_dFrontend_dToml_dTomlCursor_cursorChars with
+  | Base_dList.C_Base_dList_dList_Nil -> (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC ((Base_dList.v_Base_dList_dreverse entries)))
   | Base_dList.C_Base_dList_dList_Cons (dtb__143, dtb__144) -> (if (dtb__143 = 91) then ((((((v_Vuna_dCompiler_dFrontend_dToml_dparseSectionLine (fuel - 1)) path) cs) section) seen) entries) else ((((((v_Vuna_dCompiler_dFrontend_dToml_dparseKeyLine (fuel - 1)) path) cs) section) seen) entries))
   | _ -> failwith "DT: impossible branch"
 )))

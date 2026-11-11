@@ -11,18 +11,25 @@ module Vuna.Compiler.Elab.Records
   , missingFieldMsg
   , prepareDecls
   , prepareDeclsWith
-  , recordDeclToData
+  , recordArrowType
+  , recordCtorType
   , recordFieldPairs
   , recordHasFieldInstances
+  , recordParamPis
+  , recordRetType
   , recordsOfDecls
   , unknownFieldMsg
   ) where
 
--- Vuna.Compiler.Elab.Records：`record` 的**语法降级**（M19 提取成共享模块）。
+-- Vuna.Compiler.Elab.Records：`record` 的**语法**与结构化元数据（M19 提取成共享模块）。
 --
 -- R2（records-v2）：字段名不再是构造子 binder 名里编码的字符串，而是下面
 -- `RecordFieldMeta` 的（名字 / 类型 / 声明序号）三元组；`RecordMeta` 是跨包的
--- 结构化字段表，进 iface（`miRecords`）。降级本身仍是 AST → AST，不依赖检查器状态。
+-- 结构化字段表，进 iface（`miRecords`）。
+--
+-- R4（records-v2）：**DRecord 不再降级成 DData**。本模块只收集 `RecordMeta`，并把
+-- record 表达式/模式降级成对**合成位置构造子**的引用（构造子名 = record 名）；合成构造子
+-- 由 `Elab.Data.elabDataBodies` 在精化期直接建立（服务 TMk/eval/codegen）。
 import Vuna.Compiler.Common
 import Vuna.Compiler.Diagnostics.Tc
 import Vuna.Compiler.Diagnostics.Common
@@ -96,18 +103,14 @@ firstUnknownFieldMsg sp fieldNames [] = unknownFieldMsg sp ""
 firstUnknownFieldMsg sp fieldNames ((Pair n v) :: rest) =
   if memName n fieldNames then firstUnknownFieldMsg sp fieldNames rest else unknownFieldMsg sp n
 
--- 记录声明抽取：DRecord 记住 RecordMeta，并降级成单构造器 DData。
-recordsOfDecls : (String -> String) -> List Decl -> Pair (List RecordMeta) (List Decl)
-recordsOfDecls ctorOf [] = Pair [] []
-recordsOfDecls ctorOf (d :: rest) = case recordsOfDecls ctorOf rest of
-  Pair recs ds => case d of
-    DRecord dname params fields derivings viaField repr lin sp =>
-      let
-        meta =
-          RecordMeta dname params (recordFieldsOf fields 0) derivings viaField repr (ctorOf dname)
-            lin
-      in Pair (meta :: recs) (recordDeclToData d (ctorOf dname) repr :: ds)
-    _ => Pair recs (d :: ds)
+-- R4：收集 record 声明的结构化元数据（**不降级**；DRecord 原样留在 decls 里）。
+recordsOfDecls : List Decl -> List RecordMeta
+recordsOfDecls [] = []
+recordsOfDecls (d :: rest) = case d of
+  DRecord dname params fields derivings viaField repr lin sp =>
+    RecordMeta dname params (recordFieldsOf fields 0) derivings viaField repr (ctorName dname) lin
+      :: recordsOfDecls rest
+  _ => recordsOfDecls rest
 
 -- | R2：给字段表标注声明序号（字段名/类型的唯一真源）。
 recordFieldsOf : List Field -> Int -> List RecordFieldMeta
@@ -136,23 +139,15 @@ recordArrowTypeGo i (f :: fs) ret sp =
   EPi "@vuna@record@arg${i}" False Nothing (fieldType f) (recordArrowTypeGo (i + 1) fs ret sp) sp
 
 -- 记录构造子类型显式带族参数（`elabCtor` 用首 binder 名判断，字段 binder 已不是 `_`）。
--- | 把记录族参数包成显式 Pi（implicit=True），供构造子类型使用。
+-- | R4：把记录族参数包成显式 Pi（implicit=True），供精化期合成构造子/派生使用。
 recordParamPis : List String -> Expr -> Span -> Expr
 recordParamPis [] ret sp = ret
 recordParamPis (p :: rest) ret sp =
   EPi p True Nothing (EVar "Type" sp) (recordParamPis rest ret sp) sp
 
--- | 组装记录构造子的完整类型：族参数 Pi + 字段箭头 + 返回记录类型。
+-- | R4：组装记录合成构造子的完整类型：族参数 Pi + 字段箭头 + 返回记录类型。
 recordCtorType : List String -> List Field -> Expr -> Span -> Expr
 recordCtorType params fields ret sp = recordParamPis params (recordArrowType fields ret sp) sp
-
-recordDeclToData : Decl -> String -> ReprTier -> Decl
-recordDeclToData (DRecord dname params fields derivings viaField repr lin sp) ctor tier =
-  DData dname params (EVar "Type" sp)
-    [Ctor ctor (recordCtorType params fields (recordRetType dname params sp) sp) (length fields) sp]
-    derivings viaField tier lin sp
--- M23：DT 要求函数 clause 覆盖所有构造子（非 record 声明原样返回）。
-recordDeclToData d ctor tier = d
 
 -- 记录语法降级：构造 → 构造器应用；记录模式 → 构造器模式（按声明顺序补 PWild）。
 desugarRecords : List RecordMeta -> List Decl -> Check (List Decl)
@@ -361,21 +356,20 @@ hasFieldInstanceDecl rname params ctor n fi fname fty =
     meth = DFun "getField" [PVar "p" fsp] body fsp
   in DInstance [] head [meth] fsp
 
--- DT 的一步式入口：抽取 record 信息并完成全部降级。
+-- DT 的一步式入口：收集 record 元数据并完成 record 表达式/模式的语法降级。
 -- R2：同时返回本包/依赖包的 `RecordMeta` 表，供 `elabDatas` 把字段表写进 `DtData`。
+-- R4：返回的 decls **保留 DRecord**（不再降级成 DData）；依赖包的 record 头只贡献
+-- 元数据，供本包字段访问/更新/模式与 `HasField` 实例生成使用。
 prepareDecls : List Decl -> Check (Pair (List RecordMeta) (List Decl))
 prepareDecls decls0 = prepareDeclsWith [] decls0
 
--- M34.5 接口摘要路径：本包的 record 降级需要**依赖包 record 头**参与字段访问/record 更新/
--- 模式降级的消解（依赖包只提供语法头，不精化）；auxDecls 是依赖模块的原始 decls。
+-- M34.5 接口摘要路径：本包的 record 语法降级需要**依赖包 record 头**参与字段访问/
+-- record 更新/模式降级的消解（依赖包只提供语法头，不精化）；auxDecls 是依赖模块的原始 decls。
 prepareDeclsWith : List Decl -> List Decl -> Check (Pair (List RecordMeta) (List Decl))
 prepareDeclsWith auxDecls decls0 =
   let
-    auxSplit = recordsOfDecls ctorName auxDecls
-    split = recordsOfDecls ctorName decls0
-    records = append (firstOf auxSplit) (firstOf split)
-    decls = secondOf split
-  in Vuna.Compiler.Common.bind (desugarRecords records decls) (\ds => OkC (Pair records ds))
+    records = append (recordsOfDecls auxDecls) (recordsOfDecls decls0)
+  in Vuna.Compiler.Common.bind (desugarRecords records decls0) (\ds => OkC (Pair records ds))
 
 -- 记录的构造子名：记录名本身。
 -- M23：旧实现用 `Mk<R>` 前缀，避免「类型名与构造子同名」被当成「把类型当函数应用」。

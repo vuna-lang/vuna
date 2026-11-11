@@ -37,8 +37,9 @@ onlyX p = case p of
   因为无签名 lambda 没有参数类型推断、字段访问在其中不可类型化。
 - 导出遵循模块规则：`T` 只导出记录类型（构造器隐藏，跨模块不能构造 / 模式匹配，即
   抽象），`T(..)` 才公开记录构造器。
-- 实现上记录在精化前降级为单构造子 `data`（`Elab.Records`）；构造 / 模式匹配仍是构造器
-  应用，字段访问 / 更新在精化期按 base 类型生成内联 `case`，核心求值器与 codegen 行为一致。
+- 实现上 `DRecord` **不再降级成 `data`**：`Elab.Data` 直接精化 record 声明；内部仍保留
+  一个**合成位置构造子**（名字 = 记录名）服务 `TMk` / eval / codegen。构造 / 模式匹配在
+  语法降级后就是该构造子的应用，字段访问 / 更新在精化期按字段表生成 `TProj` / `TRecUpd`。
 - **R2 起字段身份是结构化元数据**（见下节）：构造子字段 binder 只带位置信息
   （`@vuna@record@arg<i>`），字段名 / 序号 / 类型由 `RecordMeta`（iface）与
   `DtData.dtDataFields`（Core）承载；精化期按表查字段，不再反推 binder 名。
@@ -50,21 +51,28 @@ onlyX p = case p of
 
 `record` 声明抽取成 `RecordMeta`（`Elab.Records`）：名字 / 参数 / 字段表
 （`RecordFieldMeta` = 名字 + 类型 + 声明序号）/ 派生 / 表示档位 / 构造子 / 线性标记。
-它进 `ModuleIface.miRecords`（`vuna-iface 12`），并参与 `miIfaceHash`：字段重排、改名、
+它进 `ModuleIface.miRecords`（`vuna-iface 18`），并参与 `miIfaceHash`：字段重排、改名、
 序号变化都会让依赖者失效；字段类型由 `hashDatas`（`DtData` 的 Marshal）覆盖。
 
-Core 侧每个 record 族的 `DtData.dtDataFields : List DtFieldMeta` 存（名字、序号、外层
-字段类型）；字段类型在精化 data 体时取构造子 telescope 的域项并用 `shift 0 (-i)` 去掉
-前序字段 binder 槽位，因此投影只需 `eval (reverse idxs) dtFieldType`——旧的
-`@vuna@record@dep` 中性占位值随之删除。`EField` / `ERecUpdate` 在精化期消歧后，解析计划
-`FieldAccessPlan` / `UpdateAccessPlan` 显式携带（记录名，字段序号 / 被改字段序号）标注，
-供 R3 的 `TProj` 原语直接消费；AST 形状保持不变（R2 是纯行为保持步骤）。
+Core 侧每个 record 族的 `DtData.dtDataIsRecord = True`（`data` / 字典族为 `False`），
+`DtData.dtDataFields : List DtFieldMeta` 存（名字、序号、外层字段类型）；字段类型在精化
+record 体时取合成构造子 telescope 的域项并用 `shift 0 (-i)` 去掉前序字段 binder 槽位，
+因此投影只需 `eval (reverse idxs) dtFieldType`——旧的 `@vuna@record@dep` 中性占位值随之
+删除。`EField` / `ERecUpdate` 在精化期消歧后，解析计划 `FieldAccessPlan` /
+`UpdateAccessPlan` 显式携带（记录名，字段序号 / 被改字段序号）标注，供 R3 的 `TProj`
+原语直接消费；AST 形状保持不变（R2 是纯行为保持步骤）。
 
 R3 起 Core 侧有记录原语（行为保持：codegen 展开回原 `case`/构造子，产物逐字节一致）：
 `TProj base ctor fieldTele absIdx fieldIdx`（字段访问，`VProj` 是卡住形态，`force` 会先
 force base 再取字段）、`TRecUpd base ctor fieldTele updatedIdxs rebuiltBody`（更新，语义 =
-单分支 `TCase`）、`TMk ctor args`（记录构造，语义 = `TCon`）。`TRecord` 类型前导留到
-record 不再是 `data` 的 R4。
+单分支 `TCase`）、`TMk ctor args`（记录构造，语义 = `TCon`）。
+
+R4 起 record 是一等声明：`Elab.Records.recordsOfDecls` 只收集 `RecordMeta`，`prepareDecls*`
+返回的 decls **保留 `DRecord`**；`Elab.Data.elabDataHead`/`elabDataBodies` 直接处理 record
+（kind 固定 `{params} -> Type`，body 阶段合成位置构造子 + 字段表）；`Elab.Derive` 直接从
+字段表展开 `deriving`。`TRecord name args` 是 record 类型应用的前导（语义 = `TGlobal name`
+的应用脊，只在精化期存在，codegen 展开回 `TApp` 链，产物逐字节一致）。`data` 不再有记录
+语义：自动去装箱、`deriving via field`、自动 `HasField` 都只服务 record。
 
 字段表随 `miCached.cachedDatas` 跨包流动（普通 `data` 为空表），所以抽象记录
 （`07_export_abstract`）仍能字段访问 / 更新；工具面（`vuna api` / LSP hover）后续按
@@ -79,7 +87,7 @@ record 不再是 `data` 的 R4。
 | 写法 | 档位 | 语义 |
 | --- | --- | --- |
 | `transparent record R where ...` | `ReprTransparent` | 透明别名：构造 / 投影是定义性恒等；**要求擦除后恰好一个运行时字段**，否则 `[TC_ReprTransparentInvalid]` |
-| `record R where ...`（无前缀） | `ReprAuto` | 未声明：回落到自动去装箱推断（R1 过渡档；终态删除推断） |
+| `record R where ...`（无前缀） | `ReprAuto` | 未声明：**仅 record** 回落到自动去装箱推断（`data` 恒装箱） |
 | `opaque record R where ...` | `ReprOpaque` | 强制装箱（FFI / ABI 稳定）：即使形状满足去装箱判据也保留运行时包装 |
 
 档位进 `DtData` 与 iface（`recordHash` 参与失效判定），下游包与 codegen 看到的是
@@ -87,7 +95,8 @@ record 不再是 `data` 的 R4。
 （`transparent data` 是语法错误）；`lin` 可与档位组合（`transparent lin record`）。
 
 `ReprAuto` 的推断判据（`Elab.Representation.unboxedCandidateOfData`，由擦除后的
-构造子形状决定，`ctorKeepFlags`）：
+构造子形状决定，`ctorKeepFlags`）**只对 record 生效**；普通 `data` 恒装箱，不再参与
+自动去装箱推断：
 
 1. 恰好一个构造子；
 2. 恰好一个**运行时保留**的字段（索引位 = 数据参数之后；类型参数、隐式参数、
@@ -118,14 +127,17 @@ getUser u = u.uid
 构造是 `{ f_Point_x = 1; f_Point_y = 2 }`、投影是 `p.f_Point_x`、更新是
 `{ p with f_Point_x = 40 }`、模式是 `{ f_Point_x = x; f_Point_y = y }`；跨单元时标签按
 `Unit.f_...` 限定。普通 `data` 仍是 OCaml 变体，两者可以共存；零运行时字段的 record
-（以及去装箱的单字段 record）沿用变体 / 类型别名。
+（以及去装箱的单字段 record）沿用变体 / 类型别名。**`data` 不再自动去装箱**：即使形状
+是单构造子单保留字段，也生成自己的 OCaml 变体（`type t_W = C_W_MkWrap of int`），不再是
+类型别名。
 判定是**声明级**的，不改变语义、类型检查或 `deriving` 的结果；它只改变运行时表示。
 
 ### `deriving via field`
 
-`record` 和 `data` 都可以写 `deriving via field (C1, C2, ...)`：合法性**只看声明档位**
+只有 `record` 可以写 `deriving via field (C1, C2, ...)`：合法性**只看声明档位**
 （R1）：`transparent` 直接成立；未声明（`ReprAuto`）按自动去装箱推断判定；
-`opaque` 恒为装箱，直接拒绝。实例不是逐方法生成的，而是在实例搜索期做 **字典委托**（GND）：
+`opaque` 恒为装箱，直接拒绝。`data` 已退役记录语义，写 `via field` 报
+`[TC_DerivingViaOnlyRecord]`。实例不是逐方法生成的，而是在实例搜索期做 **字典委托**（GND）：
 
 ```text
 搜索 Dict_C Wrapper
@@ -142,8 +154,8 @@ record UserId where
   uid : Int
 deriving via field (Show, Eq)
 
-data Wrap : Type where
-  MkWrap : Int -> Wrap
+record Wrap where
+  w : Int
 deriving via field (Show)
 
 trait Pretty a where
@@ -157,12 +169,13 @@ record Tagged where
 deriving via field (Pretty)
 
 main : String
-main = show (UserId { uid = 3 }) ++ "/" ++ show (MkWrap 5) ++ "/" ++ pretty (Tagged { tag = 7 })
+main = show (UserId { uid = 3 }) ++ "/" ++ show (Wrap { w = 5 }) ++ "/" ++ pretty (Tagged { tag = 7 })
 ```
 
-- `data` / `record` 同等；包装必须实际去装箱（`transparent` 声明，或未声明且形状满足
+- **只允许 record**：包装必须实际去装箱（`transparent` 声明，或未声明且形状满足
   单字段判据），否则报 `[TC_DerivingViaUnboxedRequired]`（多字段、多构造子、函数 / Pi 字段、
-  递归包装、未知名 / 不透明字段、`opaque` 声明都不满足）。
+  递归包装、未知名 / 不透明字段、`opaque` 声明都不满足）。`data` 写 `via field` 直接报
+  `[TC_DerivingViaOnlyRecord]`。
 - 委托是**表示级**的：只有 wrapper 与 field 运行时表示完全一致时才成立；当前这等价于
   自动去装箱判据。因此函数 / Pi 字段包装（`Eff` / `Reader` / 续延）暂时不能用
   `deriving via field`（它们保持装箱，见 debt D50）。
@@ -344,7 +357,7 @@ main = case (MkEmail "x@y") of MkEmail s => s
 ```
 
 `deriving` 只接受单构造子、单字段、字段类型正好是 `String` / `Int` / `Float` 的包装
-类型（记录降级后同样适用）；多构造子/多字段/字段不匹配都报可解释错误。跨类型语义需手写
+类型（record 由字段表判断）；多构造子/多字段/字段不匹配都报可解释错误。跨类型语义需手写
 实例。完整语义与 interp/REPL 限制见 [floats.md](floats.md)。
 
 ## do、Monad 与 Functor
@@ -418,5 +431,5 @@ main = case (MkEmail "x@y") of MkEmail s => s
 - 可执行包 / `vuna build` 要求 `main : IO a`；`vuna interp` 是纯核心求值，任何
   `main : IO a` 一律报错。`vuna test` 的纯 `String` / `Int` / `Bool` 测试走核心求值，
   `main : IO ...` 走 compile + 运行；REPL 的 IO 表达式经临时包 compile + 运行。
-- 实现：`Elab/Dict`、`Elab/Trait`、`Elab/Derive`；降级与字典编码在
+- 实现：`Elab/Dict`、`Elab/Trait`、`Elab/Derive`；record 精化与字典编码在
   [core.md](core.md)。

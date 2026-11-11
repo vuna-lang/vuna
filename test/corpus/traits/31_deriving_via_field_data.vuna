@@ -1,7 +1,8 @@
--- M42：`deriving via field` 现在也适用于 data；形状仍是单构造子单运行时字段。
+-- R4（records-v2）：`data` 已退役记录语义 ⇒ `deriving via field` 只允许 record。
+-- 这个夹具保留 data 写法，负例期望 `[TC_DerivingViaOnlyRecord]`。
 data Wrap : Type where
   MkWrap : Int -> Wrap
 deriving via field (Show, Eq)
 
 main : String
-main = show (MkWrap 5) ++ (if MkWrap 5 == MkWrap 5 then "/eq" else "/ne")
+main = show (MkWrap 5)

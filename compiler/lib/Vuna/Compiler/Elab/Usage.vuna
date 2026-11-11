@@ -143,6 +143,7 @@ checkTerm sp env t = case t of
       (\uf => if isRigZero rig then OkC uf else Vuna.Compiler.Common.bind (checkTerm sp env a) (\ua => OkC (uAdd uf (uScale rig ua))))
   TCon c args => checkArgs sp env args
   TMk c args => checkArgs sp env args
+  TRecord c args => checkArgs sp env args
   TProj base c tele i fi => checkTerm sp env base
   TRecUpd base c tele idxs body =>
     Vuna.Compiler.Common.bind (checkTerm sp env base)
@@ -255,6 +256,7 @@ else case t of
       (\_ => if isRigZero rig then capCheckFuel (fuel - 1) ec sp a False else capCheckFuel (fuel - 1) ec sp a (rigIsLinear rig))
   TCon c args => capArgsFuel fuel ec sp c args
   TMk c args => capArgsFuel fuel ec sp c args
+  TRecord c args => capArgsFuel fuel ec sp c args
   TIf c th el =>
     Vuna.Compiler.Common.bind (capCheckFuel (fuel - 1) ec sp c True)
       (\_ => Vuna.Compiler.Common.bind (capCheckFuel (fuel - 1) ec sp th allowed) (\_ => capCheckFuel (fuel - 1) ec sp el allowed))

@@ -40,6 +40,7 @@ module Vuna.Compiler.Elab
   , Types.dtCtorType
   , Types.dtDataCtors
   , Types.dtDataFields
+  , Types.dtDataIsRecord
   , Types.dtDataName
   , Types.dtDefBody
   , Types.dtDefExtern

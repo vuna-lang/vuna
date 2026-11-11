@@ -283,10 +283,11 @@ load 之后按闭包过滤模块表：起点 = entry 的全部 imports（含隐�
   不再读全部源码算内容哈希（~6ms vs ~0.6–1.0s）。
 - **快判**：默认内容哈希；`VUNA_CACHE_MTIME=1` 提供带 5s 安全窗的 mtime+size 快路径
   （可选、非默认；收益 <5%）。
-- **R2（records-v2）**：`miRecords : List RecordMeta` 是模块的**结构化字段表**
-  （名字 / 类型 / 声明序号 / 派生 / 表示档位），`miIfaceHash` 的 `hashRecords` 直接吃它；
-  `miCached.cachedDatas` 里的 `DtData.dtDataFields` 是 Core 侧等价表（跨包字段访问查表用）。
-  两处布局变化 ⇒ `vuna-iface 13 → 14`，旧缓存自然失效。
+- **R4（records-v2）**：`DtData` 增加 `dtDataIsRecord`（record 声明来源；`data`/字典族为
+  `False`），`miPrepared` 中的 decls **保留 `DRecord`**（不再降级成 `DData`），`miRecords`
+  仍是模块的结构化字段表。字段表 / 表示档位 / `dtDataIsRecord` 都进 `miCached`，跨包
+  字段访问与表示判定按同一份结论。布局与语义变化 ⇒ `vuna-iface 16 → 17`；`TRecord` 类型
+  前导再 bump 到 18。
 - **序列化**：载荷已有 framing + 损坏回退 + schema/编译器指纹拒绝 + 内容寻址文件名
   + `hashOfIface` 自证，但**仍是 OCaml Marshal**（非自描述格式；同长同校验和的构造性损坏
   仍可能让 `Marshal.from_string` 抛异常；这种情况下读侧 `readModuleFileRaw` 的

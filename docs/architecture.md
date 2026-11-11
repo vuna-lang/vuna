@@ -48,7 +48,7 @@ import 子模块并选择性重导出（对外名字面不变），实现只在�
  → Frontend.Parser.parseSource   （offside layout → AST + imports）
  → Packages.Pkg.contextForFile   （最近 vuna.toml + 依赖闭包 → PackageContext；无则 base-only）
  → Loader.Flatten.loadProject    （import 图 → 名字解析 → flatten；ad-hoc 自动注入 Prelude）
- → Elab.Driver.elabProgramFull   （Records/Derive 降级 → 精化；NbE / 索引合一 / 实例搜索）
+ → Elab.Driver.elabProgramFull   （Records/Derive 展开 → 精化；record 不再降级）
  → Codegen.Assembly              （DtProgram 的 unit 划分/文本/main 钩子）
  → Codegen.Split.generateDtSplitProgram  （唯一生成器：runtime + 各模块 + Main，带直接依赖）
  → sh build.sh                   （Driver.Split：层内并行；ocamlopt 链接）

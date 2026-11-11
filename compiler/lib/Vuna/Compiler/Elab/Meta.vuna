@@ -235,6 +235,8 @@ termMetasRuntime (TCon c args) =
   concatMap (\p => if rigIsErased (secondOf p) then [] else termMetasRuntime (firstOf p)) args
 termMetasRuntime (TMk c args) =
   concatMap (\p => if rigIsErased (secondOf p) then [] else termMetasRuntime (firstOf p)) args
+termMetasRuntime (TRecord c args) =
+  concatMap (\p => if rigIsErased (secondOf p) then [] else termMetasRuntime (firstOf p)) args
 termMetasRuntime (TProj base c tele i fi) = termMetasRuntime base
 termMetasRuntime (TRecUpd base c tele idxs body) =
   append (termMetasRuntime base) (termMetasRuntime body)
@@ -258,6 +260,7 @@ termMetasAll (TLam n rig body) = termMetasAll body
 termMetasAll (TApp f a rig) = append (termMetasAll f) (termMetasAll a)
 termMetasAll (TCon c args) = concatMap (\p => termMetasAll (firstOf p)) args
 termMetasAll (TMk c args) = concatMap (\p => termMetasAll (firstOf p)) args
+termMetasAll (TRecord c args) = concatMap (\p => termMetasAll (firstOf p)) args
 termMetasAll (TProj base c tele i fi) = termMetasAll base
 termMetasAll (TRecUpd base c tele idxs body) = append (termMetasAll base) (termMetasAll body)
 termMetasAll (TCase scrut alts) =
@@ -326,7 +329,7 @@ collectSigsInto banned preludeBanned seen acc (d :: rest) = case d of
   DData name params kind ctors derivings viaField repr lin sp =>
     collectSigsInto banned preludeBanned seen acc rest
   DRecord name params fields derivings viaField repr lin sp =>
-    errAt sp "DT: internal: record was not desugared"
+    collectSigsInto banned preludeBanned seen acc rest
   DTrait name params methods sp => collectSigsInto banned preludeBanned seen acc rest
   DInstance ctxE head methods sp => collectSigsInto banned preludeBanned seen acc rest
 
@@ -345,6 +348,9 @@ collectDataDecls [] acc = reverse acc
 collectDataDecls (d :: rest) acc = case d of
   DData dname params kind ctors derivings viaField repr lin sp =>
     collectDataDecls rest (Pair d sp :: acc)
+  -- R4：record 声明直接进 `elabDatas` 精化（不再先降级成 DData）。
+  DRecord dname params fields derivings viaField repr lin sp =>
+    collectDataDecls rest (Pair d sp :: acc)
   _ => collectDataDecls rest acc
 
 -- 绑到实际族上。
@@ -352,6 +358,7 @@ dataNamesOf : List Decl -> List String
 dataNamesOf [] = []
 dataNamesOf (d :: rest) = case d of
   DData dname params kind ctors derivings viaField repr lin sp => dname :: dataNamesOf rest
+  DRecord dname params fields derivings viaField repr lin sp => dname :: dataNamesOf rest
   _ => dataNamesOf rest
 
 nonEmpty : List a -> Bool
@@ -560,6 +567,7 @@ teleOf _ env = []
 spineOfType : Term -> Pair String (List Term)
 spineOfType (TApp f a erased) = case spineOfType f of
   Pair h args => Pair h (append args [a])
+spineOfType (TRecord name args) = Pair name (map firstOf args)
 spineOfType (TGlobal g) = Pair g []
 spineOfType _ = Pair "" []
 
@@ -1045,6 +1053,9 @@ else case t of
   TMk c args =>
     TMk c
       (map (\p => Pair (wrapOpaqueUsesFuel (fuel - 1) depth idxs (firstOf p)) (secondOf p)) args)
+  TRecord name args =>
+    TRecord name
+      (map (\p => Pair (wrapOpaqueUsesFuel (fuel - 1) depth idxs (firstOf p)) (secondOf p)) args)
   TProj base c tele i fi => TProj (wrapOpaqueUsesFuel (fuel - 1) depth idxs base) c tele i fi
   TRecUpd base c tele idxs2 body =>
     TRecUpd (wrapOpaqueUsesFuel (fuel - 1) depth idxs base) c tele idxs2
@@ -1220,11 +1231,10 @@ ctorAppTerm datas fn args = foldAppTerms fn args
 
 -- | R3：record 族的构造产出 `TMk` 原语（语义同 `TCon`，
 -- 多带记录身份供 R4 原语化）；普通 data 仍生成 `TCon`。
+-- R4：按 `dtDataIsRecord` 判定（零字段 record 也走 TMk）。
 mkCtorTerm : List DtData -> DtCtor -> String -> List (Pair Term Rig) -> Term
 mkCtorTerm datas ctor g args = case findDtData (dtCtorFamily ctor) datas of
-  Just dd => case dtDataFields dd of
-    [] => TCon g args
-    _ => TMk g args
+  Just dd => if dtDataIsRecord dd then TMk g args else TCon g args
   Nothing => TCon g args
 
 -- M29（B13/D12）：构造子**未饱和**引用/应用的 η 展开。

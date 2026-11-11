@@ -48,7 +48,7 @@ readme_lines 173
 #     max_ref_lines 438（primitives.md）与 max_module_lines 2400（Elab/Term/Impl.vuna）
 #     是改动前已存在的漏标定（旧预算 415/2300 本身已红），按实测重标定。
 max_ref_lines 438
-max_module_lines 2694
+max_module_lines 2709
 #   - M27：新增 `primitives.md` 与内建/原语/能力文档、`Vuna.Compiler.Intrinsics` 模块；
 #     按 `sh nix/context-budget.sh .` 实测收紧：coldstart 29055 / agents 104 / arch 156 /
 #     readme 163 / max_ref 206 / max_module 811（入口文档有 45B 余量，agents 临界）。
@@ -197,3 +197,8 @@ max_module_lines 2694
 #     `handleResFamilyOf`/`handleOpArity`/`handleKindArity`）+ 两版调用构造（`handleWith`/
 #     `handleWithAt`）+ check 失败重试；`perform` 与 `handle` 共用族推导。属有意特性增长
 #     （消掉 D54/D56），按实测复标定；入口文档与其它指标不变。
+#   - 2026-11-11 records-v2 R4（DRecord 一等化 + data 退役记录语义 + TRecord 前导）：
+#     `Elab/Term/Impl.vuna` 新增 `typeHeadTerm`/`typeAppTerm`（类型命名空间产出 TRecord）
+#     与 record 判定分支，2633 → 2709 行（纯特性增长，非格式化）；按 `sh
+#     nix/context-budget.sh .` 实测复标定 max_module_lines 2694 → 2709。入口文档按实测
+#     压缩回旧预算（architecture 的一行改写）。

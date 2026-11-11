@@ -24,6 +24,7 @@ module Vuna.Compiler.Core
   , TPi
   , TProj
   , TRecUpd
+  , TRecord
   , TStr
   , TType
   , TVar

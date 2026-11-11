@@ -23,6 +23,7 @@ import Base.List
 import Vuna.Compiler.Common
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Diagnostics
+import Vuna.Compiler.Elab.Records
 
 -- 类名最后一段：`Base.Show.Show` → `Show`；派生规则按它分派（找不到的类报不支持）。
 traitShortName : String -> String
@@ -55,7 +56,23 @@ collectDerivings (d :: rest) = case d of
     else if length derivings == 0 then collectDerivings rest
     else Vuna.Compiler.Common.bind (derivingsFor name params ctors derivings sp)
       (\insts => Vuna.Compiler.Common.bind (collectDerivings rest) (\more => OkC (append insts more)))
+  -- R4（records-v2）：record 不再降级成 DData，派生直接从字段表合成单构造子骨架。
+  DRecord name params fields derivings viaField repr lin sp =>
+    if viaField then collectDerivings rest
+    else if length derivings == 0 then collectDerivings rest
+    else Vuna.Compiler.Common.bind (recordDerivingsFor name params fields derivings sp)
+      (\insts => Vuna.Compiler.Common.bind (collectDerivings rest) (\more => OkC (append insts more)))
   _ => collectDerivings rest
+
+-- | R4：record 的派生骨架——字段箭头（不含族参数 Pi）+ 返回记录类型；构造子名 = record 名。
+recordCtorOf : String -> List String -> List Field -> Span -> Ctor
+recordCtorOf dname params fields sp =
+  Ctor dname (recordArrowType fields (recordRetType dname params sp) sp) (length fields) sp
+
+-- | R4：record 的 `deriving (...)` 展开成与 data 相同的实例规则（合成单构造子）。
+recordDerivingsFor : String -> List String -> List Field -> List String -> Span -> Check (List Decl)
+recordDerivingsFor dname params fields derivings sp =
+  derivingsFor dname params [recordCtorOf dname params fields sp] derivings sp
 
 derivingsFor : String -> List String -> List Ctor -> List String -> Span -> Check (List Decl)
 derivingsFor dname params ctors derivings sp = derivingsForGo dname params ctors derivings sp []

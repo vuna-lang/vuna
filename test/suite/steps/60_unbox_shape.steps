@@ -1,19 +1,22 @@
 # 60) M42：零成本表示（自动去装箱）与 `deriving via field` 的 codegen 形状。
+# R4（records-v2）：自动去装箱只服务 `record`；普通 `data` 恒为自己的 OCaml 变体，
+# `deriving via field` 也只允许 record。
 run: mkdir -p "$TMPDIR/unbox-shape"; printf 'record UserId where\n  uid : Int\nderiving (Show)\n\ndata Wrap : Type where\n  MkWrap : Int -> Wrap\n\ndata Tag a : Type where\n  MkTag : Int -> Tag a\n\nrecord Pair2 a b where\n  first : a\n  second : b\n\ngetUser : UserId -> Int\ngetUser u = u.uid\n\ngetWrap : Wrap -> Int\ngetWrap w = case w of\n  MkWrap n => n\n\nmain : Int\nmain = getUser (UserId { uid = 40 }) + getWrap (MkWrap 2)\n' >"$TMPDIR/unbox-shape/Main.vuna"
 run: "$VUNA" compile --no-print "$TMPDIR/unbox-shape/Main.vuna" "$TMPDIR/unbox-shape/out" >/dev/null 2>&1
 file-exists: $TMPDIR/unbox-shape/out/Main.ml
+# record（ReprAuto 推断）仍去装箱。
 file-contains: $TMPDIR/unbox-shape/out/Main.ml type t_UserId = int
-file-contains: $TMPDIR/unbox-shape/out/Main.ml and t_Wrap = int
-file-contains: $TMPDIR/unbox-shape/out/Main.ml and t_Tag = int
+# R4：data 单字段/单构造子不再去装箱，保持变体。
+file-contains: $TMPDIR/unbox-shape/out/Main.ml C_Wrap_MkWrap of (int)
+file-contains: $TMPDIR/unbox-shape/out/Main.ml C_Tag_MkTag of (int)
 file-contains: $TMPDIR/unbox-shape/out/Main.ml f_Pair2_first
 file-contains: $TMPDIR/unbox-shape/out/Main.ml f_Pair2_second
 
 read: $TMPDIR/unbox-shape/out/Main.ml
 out-not-contains: C_UserId
-out-not-contains: C_Wrap_MkWrap
-out-not-contains: match w with
+out-contains: C_Wrap_MkWrap
 out-not-contains: C_Pair2_Pair2
-# `deriving via field`：生成实例，但方法体委托到底层字段的实例。
+# `deriving via field`：生成实例，但方法体委托到底层字段的实例（record 仍合法）。
 run: printf 'record UserId where\n  uid : Int\nderiving via field (Show, Eq)\n\nu : UserId\nu = UserId { uid = 3 }\n\nmain : String\nmain = show u ++ (if u == u then "/eq" else "/ne")\n' >"$TMPDIR/unbox-shape/Deleg.vuna"
 run: "$VUNA" compile --no-print "$TMPDIR/unbox-shape/Deleg.vuna" "$TMPDIR/unbox-shape/deleg" >/dev/null 2>&1
 read: $TMPDIR/unbox-shape/deleg/Main.ml

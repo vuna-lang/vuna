@@ -31,6 +31,7 @@ module Vuna.Compiler.Elab.Types
   , dtCtorType
   , dtDataCtors
   , dtDataFields
+  , dtDataIsRecord
   , dtDataKind
   , dtDataLinear
   , dtDataName
@@ -205,31 +206,39 @@ record DtData where
   dtDataRepr : ReprTier
   -- R2：record 字段表（名字 → 序号 → 外层字段类型）；普通 data 为空表。
   dtDataFields : List DtFieldMeta
+  -- R4（records-v2）：该族是否由 `record` 声明。record 在 Core 仍带合成位置构造子
+  -- （服务 TMk/eval/codegen），但表示推断 / via-field / HasField / OCaml record 判定
+  -- 都按这个标记区分，不再靠 `dtDataFields` 非空猜（零字段 record 也有独立身份）。
+  dtDataIsRecord : Bool
 
 dtDataName : DtData -> String
-dtDataName (DtData name params ctors kind viaClasses lin repr fields) = name
+dtDataName (DtData name params ctors kind viaClasses lin repr fields isRec) = name
 
 dtDataCtors : DtData -> List DtCtor
-dtDataCtors (DtData name params ctors kind viaClasses lin repr fields) = ctors
+dtDataCtors (DtData name params ctors kind viaClasses lin repr fields isRec) = ctors
 
 dtDataKind : DtData -> Term
-dtDataKind (DtData name params ctors kind viaClasses lin repr fields) = kind
+dtDataKind (DtData name params ctors kind viaClasses lin repr fields isRec) = kind
 
 -- | 取出 `deriving via field` 声明的类名列表（canonical 名；空表示普通 data）。
 dtDataViaClasses : DtData -> List String
-dtDataViaClasses (DtData name params ctors kind viaClasses lin repr fields) = viaClasses
+dtDataViaClasses (DtData name params ctors kind viaClasses lin repr fields isRec) = viaClasses
 
 dtDataLinear : DtData -> Bool
 
 -- | R1（records-v2）：表示档位（`ReprAuto` = 未声明，回落自动去装箱推断；档位进 iface，下游与 FFI 可依赖）。
 dtDataRepr : DtData -> ReprTier
-dtDataRepr (DtData name params ctors kind viaClasses lin repr fields) = repr
+dtDataRepr (DtData name params ctors kind viaClasses lin repr fields isRec) = repr
 
 -- | R2：record 字段表（普通 data 为空）。进 iface（`miCached`），跨包字段访问据此查表。
 dtDataFields : DtData -> List DtFieldMeta
-dtDataFields (DtData name params ctors kind viaClasses lin repr fields) = fields
+dtDataFields (DtData name params ctors kind viaClasses lin repr fields isRec) = fields
 
-dtDataLinear (DtData name params ctors kind viaClasses lin repr fields) = lin
+-- | R4：该族是否由 `record` 声明（`data` 与字典族为 False）。
+dtDataIsRecord : DtData -> Bool
+dtDataIsRecord (DtData name params ctors kind viaClasses lin repr fields isRec) = isRec
+
+dtDataLinear (DtData name params ctors kind viaClasses lin repr fields isRec) = lin
 
 -- M15：一个洞的目标。编号、位置、目标类型（level 形态）、绑定时上下文快照。
 -- M40：`dtGoalName` 是洞的显示名（`_` = 匿名 → `""`；`?name` → `"?name"`）。

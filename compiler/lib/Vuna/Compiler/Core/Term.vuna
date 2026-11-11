@@ -238,6 +238,9 @@ data Term : Type where
   TIf : Term -> Term -> Term -> Term
   -- `Float` 字面量（放末尾保持既有 tag 顺序）。
   TFloat : String -> Term
+  -- R4（records-v2）：record 族的类型应用前导（记录名 + 实参）。语义 = `TGlobal name`
+  -- 的应用脊；只在精化期存在，codegen 展开回 `TApp` 链（产物逐字节一致）。
+  TRecord : String -> List (Pair Term Rig) -> Term
 
 -- case 分支：构造子名 + 绑定子（名字 / multiplicity）+ 体。
 record CaseAlt where
@@ -342,6 +345,7 @@ flattenTermApp t = flattenTermAppGo t []
 
 flattenTermAppGo : Term -> List (Pair Term Rig) -> Pair Term (List (Pair Term Rig))
 flattenTermAppGo (TApp f a rig) acc = flattenTermAppGo f (Pair a rig :: acc)
+flattenTermAppGo (TRecord name args) acc = Pair (TGlobal name) (append args acc)
 flattenTermAppGo t acc = Pair t acc
 
 -- | 项的节点数（`TVar` / 字面量 / binder 各计 1，case 只数 scrutinee 与分支体）。
@@ -357,6 +361,7 @@ termSize (TLam _ _ body) = 1 + termSize body
 termSize (TApp f a _) = 1 + termSize f + termSize a
 termSize (TCon _ args) = 1 + termSizeArgs args
 termSize (TMk _ args) = 1 + termSizeArgs args
+termSize (TRecord _ args) = 1 + termSizeArgs args
 termSize (TCase scrut alts) = 1 + termSize scrut + termSizeAlts alts
 termSize (TProj base c tele i fi) = 1 + termSize base
 termSize (TRecUpd base c tele idxs body) = 1 + termSize base + termSize body
@@ -453,6 +458,7 @@ termHasUnsolvedMeta sols (TLam name rig body) = termHasUnsolvedMeta sols body
 termHasUnsolvedMeta sols (TApp f a rig) = termHasUnsolvedMeta sols f || termHasUnsolvedMeta sols a
 termHasUnsolvedMeta sols (TCon c args) = termHasUnsolvedMetaArgs sols args
 termHasUnsolvedMeta sols (TMk c args) = termHasUnsolvedMetaArgs sols args
+termHasUnsolvedMeta sols (TRecord c args) = termHasUnsolvedMetaArgs sols args
 termHasUnsolvedMeta sols (TProj base c tele i fi) = termHasUnsolvedMeta sols base
 termHasUnsolvedMeta sols (TRecUpd base c tele idxs body) =
   termHasUnsolvedMeta sols base || termHasUnsolvedMeta sols body
@@ -488,6 +494,7 @@ termUsesFloat names (TLam n r b) = termUsesFloat names b
 termUsesFloat names (TApp f a r) = termUsesFloat names f || termUsesFloat names a
 termUsesFloat names (TCon c args) = anyArgUsesFloat names args
 termUsesFloat names (TMk c args) = anyArgUsesFloat names args
+termUsesFloat names (TRecord c args) = anyArgUsesFloat names args
 termUsesFloat names (TProj base c tele i fi) = termUsesFloat names base
 termUsesFloat names (TRecUpd base c tele idxs body) =
   termUsesFloat names base || termUsesFloat names body
@@ -521,6 +528,7 @@ termGlobalNames (TLam n r b) = termGlobalNames b
 termGlobalNames (TApp f a r) = append (termGlobalNames f) (termGlobalNames a)
 termGlobalNames (TCon c args) = concatMap (\p => termGlobalNames (firstOf p)) args
 termGlobalNames (TMk c args) = concatMap (\p => termGlobalNames (firstOf p)) args
+termGlobalNames (TRecord c args) = c :: concatMap (\p => termGlobalNames (firstOf p)) args
 termGlobalNames (TProj base c tele i fi) = termGlobalNames base
 termGlobalNames (TRecUpd base c tele idxs body) =
   append (termGlobalNames base) (termGlobalNames body)
@@ -576,6 +584,7 @@ hasFreeVar depth (TLam name rig body) = hasFreeVar (depth + 1) body
 hasFreeVar depth (TApp f a rig) = hasFreeVar depth f || hasFreeVar depth a
 hasFreeVar depth (TCon c args) = hasFreeVarArgs depth args
 hasFreeVar depth (TMk c args) = hasFreeVarArgs depth args
+hasFreeVar depth (TRecord c args) = hasFreeVarArgs depth args
 hasFreeVar depth (TProj base c tele i fi) = hasFreeVar depth base
 hasFreeVar depth (TRecUpd base c tele idxs body) =
   hasFreeVar depth base || hasFreeVar (depth + length tele) body
@@ -605,6 +614,7 @@ hasMeta m depth (TLam name rig body) = hasMeta m (depth + 1) body
 hasMeta m depth (TApp f a rig) = hasMeta m depth f || hasMeta m depth a
 hasMeta m depth (TCon c args) = hasMetaArgs m depth args
 hasMeta m depth (TMk c args) = hasMetaArgs m depth args
+hasMeta m depth (TRecord c args) = hasMetaArgs m depth args
 hasMeta m depth (TProj base c tele i fi) = hasMeta m depth base
 hasMeta m depth (TRecUpd base c tele idxs body) =
   hasMeta m depth base || hasMeta m (depth + length tele) body
@@ -639,6 +649,7 @@ shift depth amount (TLam name rig body) = TLam name rig (shift (depth + 1) amoun
 shift depth amount (TApp f a rig) = TApp (shift depth amount f) (shift depth amount a) rig
 shift depth amount (TCon c args) = TCon c (shiftArgs depth amount args)
 shift depth amount (TMk c args) = TMk c (shiftArgs depth amount args)
+shift depth amount (TRecord c args) = TRecord c (shiftArgs depth amount args)
 shift depth amount (TProj base c tele i fi) = TProj (shift depth amount base) c tele i fi
 shift depth amount (TRecUpd base c tele idxs body) =
   TRecUpd (shift depth amount base) c tele idxs (shift (depth + length tele) amount body)
@@ -678,6 +689,8 @@ substVarAt idx arg (TCon c cargs) =
   TCon c (map (\p => Pair (substVarAt idx arg (firstOf p)) (secondOf p)) cargs)
 substVarAt idx arg (TMk c cargs) =
   TMk c (map (\p => Pair (substVarAt idx arg (firstOf p)) (secondOf p)) cargs)
+substVarAt idx arg (TRecord c cargs) =
+  TRecord c (map (\p => Pair (substVarAt idx arg (firstOf p)) (secondOf p)) cargs)
 substVarAt idx arg (TProj base c tele i fi) = TProj (substVarAt idx arg base) c tele i fi
 substVarAt idx arg (TRecUpd base c tele idxs body) =
   TRecUpd (substVarAt idx arg base) c tele idxs (substVarAt (idx - length tele) arg body)
@@ -710,6 +723,8 @@ substMetaVarGo m name q depth (TCon c args) =
   TCon c (map (\p => Pair (substMetaVarGo m name q depth (firstOf p)) (secondOf p)) args)
 substMetaVarGo m name q depth (TMk c args) =
   TMk c (map (\p => Pair (substMetaVarGo m name q depth (firstOf p)) (secondOf p)) args)
+substMetaVarGo m name q depth (TRecord c args) =
+  TRecord c (map (\p => Pair (substMetaVarGo m name q depth (firstOf p)) (secondOf p)) args)
 substMetaVarGo m name q depth (TProj base c tele i fi) =
   TProj (substMetaVarGo m name q depth base) c tele i fi
 substMetaVarGo m name q depth (TCase s alts) =
@@ -771,6 +786,7 @@ hasFreeTermVar d (TLam n r b) = hasFreeTermVar (d + 1) b
 hasFreeTermVar d (TApp f a r) = hasFreeTermVar d f || hasFreeTermVar d a
 hasFreeTermVar d (TCon c args) = anyPairFree d args
 hasFreeTermVar d (TMk c args) = anyPairFree d args
+hasFreeTermVar d (TRecord c args) = anyPairFree d args
 hasFreeTermVar d (TProj base c tele i fi) = hasFreeTermVar d base
 hasFreeTermVar d (TRecUpd base c tele idxs body) = hasFreeTermVar d base || hasFreeTermVar d body
 hasFreeTermVar d (TCase s alts) = hasFreeTermVar d s || anyAltFree d alts
@@ -795,6 +811,7 @@ hasNegativeVar (TLam n r b) = hasNegativeVar b
 hasNegativeVar (TApp f a r) = hasNegativeVar f || hasNegativeVar a
 hasNegativeVar (TCon c args) = anyNegativeVarArgs args
 hasNegativeVar (TMk c args) = anyNegativeVarArgs args
+hasNegativeVar (TRecord c args) = anyNegativeVarArgs args
 hasNegativeVar (TProj base c tele i fi) = hasNegativeVar base
 hasNegativeVar (TRecUpd base c tele idxs body) = hasNegativeVar base || hasNegativeVar body
 hasNegativeVar (TCase s alts) = hasNegativeVar s || anyNegativeVarAlts alts
@@ -909,6 +926,7 @@ showTerm (TLam name rig body) = "\\${name} => ${showTerm body}"
 showTerm (TApp f a rig) = "(${showTerm f} ${showTerm a})"
 showTerm (TCon c args) = "(${c}${showArgTerms args})"
 showTerm (TMk c args) = "(${c}${showArgTerms args})"
+showTerm (TRecord name args) = recordAppShow name args
 showTerm (TProj base c tele i fi) = "${showTerm base}.${c}#${fi}"
 showTerm (TRecUpd base c tele idxs body) = "${showTerm base} with ${c} ${showTerm body}"
 showTerm (TCase scrut alts) = "case ${showTerm scrut} of ${showCoreAlts alts}"
@@ -930,6 +948,7 @@ showTypeSig (TPi name implicit rig dom cod) =
 showTypeSig (TCon c []) = c
 showTypeSig (TApp f a rig) = "(" ++ showSigParenIfPi f ++ " " ++ showSigParenIfPi a ++ ")"
 showTypeSig (TCon c args) = "(" ++ c ++ showSigArgs args ++ ")"
+showTypeSig (TRecord name args) = showSigAppText name args
 showTypeSig t = showTerm t
 
 showSigParenIfPi : Term -> String
@@ -943,6 +962,17 @@ showSigArgs ((Pair a rig) :: rest) = " " ++ showSigParenIfPi a ++ showSigArgs re
 showArgTerms : List (Pair Term Rig) -> String
 showArgTerms [] = ""
 showArgTerms ((Pair a rig) :: rest) = " ${showTerm a}${showArgTerms rest}"
+
+-- | R4：`TRecord name args` 的显示与等价 `TApp` 链一致（嵌套括号，诊断文案不变）。
+recordAppShow : String -> List (Pair Term Rig) -> String
+recordAppShow s [] = s
+recordAppShow s ((Pair a _) :: rest) = recordAppShow ("(" ++ s ++ " " ++ showTerm a ++ ")") rest
+
+-- | R4：`showTypeSig` 版本（实参按需补 Pi 括号，与 `TApp` 链一致）。
+showSigAppText : String -> List (Pair Term Rig) -> String
+showSigAppText s [] = s
+showSigAppText s ((Pair a _) :: rest) =
+  showSigAppText ("(" ++ s ++ " " ++ showSigParenIfPi a ++ ")") rest
 
 showCoreAlts : List CaseAlt -> String
 showCoreAlts [] = ""
