@@ -43,41 +43,53 @@ compilerUsage prog = "usage:\n${compilerUsageLines prog}"
 runCompilerCli : List String -> Int
 runCompilerCli args = runCompilerCliFor "vuna-compiler" args
 
--- --error-format=short|human|json（也接受 --json）在入口统一剥离并写进全局渲染模式。
--- | CLI 辅助：diagFormatRef（参数/退出码约定见 tooling.md）。
-diagFormatRef : IORef String
-diagFormatRef = runPure (newRef "short")
+-- CLI 选项集中状态（M4 过渡第一步）：先合并为单个 CliOpts 记录（下轮改成显式参数）。
+record CliOpts where
+  optDiagFormat : String
+  optDiagLang : String
+  optLangExplicit : Bool
+  optDenyWarnings : Bool
+  optShowWarnings : Bool
+  optFormatExplicit : Bool
+  optWarningsExplicit : Bool
+  optDenyExplicit : Bool
+  optMaxErrors : Int
+  optContinueOnError : Bool
+  optSarifItems : List Diagnostic
 
-record SarifBox where
-  sarifItems : List Diagnostic
-  sarifTag : Int
+defaultCliOpts : CliOpts
+defaultCliOpts = CliOpts "short" "en" False False False False False False 0 False []
 
--- | 诊断/告警实现：sarifRef（详见 diagnostics.md）。
-sarifRef : IORef SarifBox
-sarifRef = runPure (newRef (SarifBox [] 0))
+optsRef : IORef CliOpts
+optsRef = runPure (newRef defaultCliOpts)
 
--- | 诊断/告警实现：resetSarif（详见 diagnostics.md）。
+optsOf : Int -> CliOpts
+optsOf _ = runPure (readRef optsRef)
+
+putOpts : CliOpts -> Int
+putOpts o = runPure (writeRef optsRef o)
+
+modifyOpts : (CliOpts -> CliOpts) -> Int
+modifyOpts f = runPure (modifyRef optsRef f)
+
 resetSarif : Int -> Int
-resetSarif _ = runPure (writeRef sarifRef (SarifBox [] 0))
+resetSarif _ = modifyOpts (\o => { o | optSarifItems = [] })
 
--- | 诊断/告警实现：collectSarif（详见 diagnostics.md）。
 collectSarif : Diagnostic -> Int
-collectSarif d = runPure (modifyRef sarifRef (\b => SarifBox (append b.sarifItems [d]) 0))
+collectSarif d = modifyOpts (\o => { o | optSarifItems = append o.optSarifItems [d] })
 
--- | 诊断/告警实现：diagExitFor（详见 diagnostics.md）。
 diagExitFor : Diagnostic -> Int
 diagExitFor d = if d.diagInternal then 70
 else case d.diagSeverity of
   SevError => 1
   _ => 0
 
--- | 诊断/告警实现：flushSarif（详见 diagnostics.md）。
 flushSarif : Int -> Int
 flushSarif code =
   let
     fmt = diagFormatOf 0
-    box = runPure (readRef sarifRef)
-    shown = takeDiags (maxErrorsOf 0) box.sarifItems
+    o = optsOf 0
+    shown = takeDiags (maxErrorsOf 0) o.optSarifItems
     _ = case fmt of
       "sarif" => runPure (prim_eff_print (renderSarif shown ++ "\n"))
       "json" => runPure (prim_eff_print (renderJsonList shown ++ "\n"))
@@ -85,69 +97,55 @@ flushSarif code =
     _ = resetSarif 0
   in code
 
--- | 诊断/告警实现：denyWarningsRef（详见 diagnostics.md）。
-denyWarningsRef : IORef Bool
-denyWarningsRef = runPure (newRef False)
+diagFormatOf : Int -> String
+diagFormatOf _ = (optsOf 0).optDiagFormat
 
--- | 诊断/告警实现：showWarningsRef（详见 diagnostics.md）。
-showWarningsRef : IORef Bool
-showWarningsRef = runPure (newRef False)
-
--- | 诊断/告警实现：formatExplicitRef（详见 diagnostics.md）。
-formatExplicitRef : IORef Bool
-formatExplicitRef = runPure (newRef False)
-
--- | 诊断/告警实现：warningsExplicitRef（详见 diagnostics.md）。
-warningsExplicitRef : IORef Bool
-warningsExplicitRef = runPure (newRef False)
-
--- | 诊断/告警实现：maxErrorsRef（详见 diagnostics.md）。
-maxErrorsRef : IORef Int
-maxErrorsRef = runPure (newRef 0)
-
--- | 诊断/告警实现：maxErrorsOf（详见 diagnostics.md）。
 maxErrorsOf : Int -> Int
-maxErrorsOf _ = runPure (readRef maxErrorsRef)
+maxErrorsOf _ = (optsOf 0).optMaxErrors
+
+denyWarningsOn : Int -> Bool
+denyWarningsOn _ = (optsOf 0).optDenyWarnings
+
+showWarningsOn : Int -> Bool
+showWarningsOn _ = (optsOf 0).optShowWarnings
 
 -- 应用 vuna.toml [diagnostics]（命令行显式 flag 优先）。
--- | 诊断/告警实现：applyDiagConfig（详见 diagnostics.md）。
 applyDiagConfig : Maybe Package -> Int
-applyDiagConfig Nothing = 0
-applyDiagConfig (Just pkg) =
+applyDiagConfig m =
   let
-    m = pkg.packageManifest
-    _ = if not (runPure (readRef formatExplicitRef)) then case m.manifestDiagFormat of
-      Just f => runPure (writeRef diagFormatRef f)
-      Nothing => 0
-    else 0
-    _ = if not (runPure (readRef warningsExplicitRef)) then case m.manifestDiagWarnings of
-      Just b => runPure (writeRef showWarningsRef b)
-      Nothing => 0
-    else 0
-    _ = if not (runPure (readRef langExplicitRef)) then case m.manifestDiagLang of
-      Just l =>
-        let
-          _ = setDiagLang l
-          _ = if l == "en" then 0
-          else if not (runPure (readRef formatExplicitRef)) then case m.manifestDiagFormat of
-            Nothing => runPure (writeRef diagFormatRef "human")
-            Just _ => 0
-          else 0
-        in 0
-      Nothing => 0
-    else 0
-    _ = if not (runPure (readRef denyExplicitRef)) then case m.manifestDiagDenyWarnings of
-      Just b =>
-        let
-          _ = runPure (writeRef denyWarningsRef b)
-          _ = if b then runPure (writeRef showWarningsRef True) else 0
-        in 0
-      Nothing => 0
-    else 0
-    _ = case m.manifestDiagMaxErrors of
-      Just n => runPure (writeRef maxErrorsRef n)
-      Nothing => 0
-  in 0
+    o = applyManifestOpts m (optsOf 0)
+    _ = setDiagLang o.optDiagLang
+  in putOpts o
+
+applyManifestOpts : Maybe Package -> CliOpts -> CliOpts
+applyManifestOpts Nothing o = o
+applyManifestOpts (Just pkg) o =
+  let
+    man = pkg.packageManifest
+    fmt0 = case man.manifestDiagFormat of
+      Just f => f
+      Nothing => o.optDiagFormat
+    lang = if o.optLangExplicit then o.optDiagLang
+    else case man.manifestDiagLang of
+      Just l => l
+      Nothing => o.optDiagLang
+    fmt =
+      if o.optFormatExplicit then o.optDiagFormat
+      else if lang == "en" then fmt0 else if man.manifestDiagFormat == Nothing then "human" else fmt0
+    showW = if o.optWarningsExplicit then o.optShowWarnings
+    else case man.manifestDiagWarnings of
+      Just b => b
+      Nothing => o.optShowWarnings
+    deny = if o.optDenyExplicit then o.optDenyWarnings
+    else case man.manifestDiagDenyWarnings of
+      Just b => b
+      Nothing => o.optDenyWarnings
+    showW2 = if deny then True else showW
+    maxE = case man.manifestDiagMaxErrors of
+      Just n => n
+      Nothing => o.optMaxErrors
+  in CliOpts fmt lang o.optLangExplicit deny showW2 o.optFormatExplicit o.optWarningsExplicit
+    o.optDenyExplicit maxE o.optContinueOnError o.optSarifItems
 
 -- | 诊断/告警实现：takeDiags（详见 diagnostics.md）。
 takeDiags : Int -> List Diagnostic -> List Diagnostic
@@ -157,14 +155,6 @@ takeDiags n ds = if n <= 0 then ds else takeDiagsGo n ds
 takeDiagsGo : Int -> List Diagnostic -> List Diagnostic
 takeDiagsGo n [] = []
 takeDiagsGo n (d :: rest) = if n <= 0 then [] else d :: takeDiagsGo (n - 1) rest
-
--- | 诊断/告警实现：denyWarningsOn（详见 diagnostics.md）。
-denyWarningsOn : Int -> Bool
-denyWarningsOn _ = runPure (readRef denyWarningsRef)
-
--- | 诊断/告警实现：showWarningsOn（详见 diagnostics.md）。
-showWarningsOn : Int -> Bool
-showWarningsOn _ = runPure (readRef showWarningsRef)
 
 -- | 诊断/告警实现：stripDenyWarnings（详见 diagnostics.md）。
 stripDenyWarnings : List String -> List String
@@ -216,25 +206,19 @@ runCompilerCliFor prog args =
     stripped = stripDiagFormat args
     strippedLang = stripLang (firstOf stripped)
     strippedMax = stripMaxErrors (firstOf strippedLang)
-    _ = case secondOf stripped of
-      Just fmt => runPure (writeRef diagFormatRef fmt)
-      Nothing => 0
     kept = stripDenyWarnings (firstOf strippedMax)
     strippedContinue = stripContinueOnError kept
-    _ = setDiagLang (secondOf strippedLang)
-    _ =
-      if secondOf strippedLang == "en" then 0
-      else if secondOf stripped == Nothing then runPure (writeRef diagFormatRef "human") else 0
-    _ =
-      if secondOf strippedMax > 0 then runPure (writeRef maxErrorsRef (secondOf strippedMax)) else 0
-    _ = resetSarif 0
-    _ = runPure (writeRef denyWarningsRef (hasDenyWarnings args))
-    _ = runPure (writeRef showWarningsRef (hasDenyWarnings args || hasShowWarnings args))
-    _ = runPure (writeRef formatExplicitRef (hasFormatFlag args))
-    _ = runPure (writeRef langExplicitRef (hasLangFlag args))
-    _ = runPure (writeRef denyExplicitRef (hasDenyWarnings args))
-    _ = runPure (writeRef warningsExplicitRef (hasDenyWarnings args || hasShowWarnings args))
-    _ = runPure (writeRef continueOnErrorRef (secondOf strippedContinue))
+    detectedLang = secondOf strippedLang
+    fmt = case secondOf stripped of
+      Just f => f
+      Nothing => if detectedLang == "en" then "short" else "human"
+    opts =
+      CliOpts fmt detectedLang (hasLangFlag args) (hasDenyWarnings args)
+        (hasDenyWarnings args || hasShowWarnings args) (hasFormatFlag args)
+        (hasDenyWarnings args || hasShowWarnings args) (hasDenyWarnings args) (secondOf strippedMax)
+        (secondOf strippedContinue) []
+    _ = putOpts opts
+    _ = setDiagLang detectedLang
   in if anyHelp (firstOf strippedContinue) then helpFor prog
   else flushSarif (runCompilerCliFor1 prog (firstOf strippedContinue))
 
@@ -353,10 +337,6 @@ printErrText e =
   let
     _ = runPure (prim_eff_print (renderCliDiagnostic e))
   in 1
-
--- | 诊断/告警实现：diagFormatOf（详见 diagnostics.md）。
-diagFormatOf : Int -> String
-diagFormatOf _ = runPure (readRef diagFormatRef)
 
 -- | 诊断/告警实现：severityLabelOf（详见 diagnostics.md）。
 severityLabelOf : Diagnostic -> String
@@ -614,10 +594,10 @@ checkModuleFileEntry ctx path = case dtCheckModuleFile ctx path of
 -- 入口文件检查（无 module 头；唯一支持 `--continue-on-error` 恢复的路径）。
 checkEntryFile : PackageContext -> String -> Int
 checkEntryFile ctx path = case dtCheck ctx path of
-  ErrC e => if runPure (readRef continueOnErrorRef) then case dtCheckRecovering ctx path of
+  ErrC e => if (optsOf 0).optContinueOnError then case dtCheckRecovering ctx path of
     OkC ds =>
       let
-        shown = takeDiags (runPure (readRef maxErrorsRef)) ds
+        shown = takeDiags (optsOf 0).optMaxErrors ds
         _ = printDiagList "" shown
       in if length shown == 0 then printDiag e else 1
     ErrC e2 => printDiag e
@@ -811,23 +791,11 @@ stripLangGo (arg :: rest) acc lang =
   if startsWith "--lang=" arg then stripLangGo rest acc (substring (natFromInt 7) (natFromInt (strLength arg - 7)) arg)
   else stripLangGo rest (arg :: acc) lang
 
--- | 语言是否由命令行显式指定（显式 flag 优先于 manifest）。
-langExplicitRef : IORef Bool
-langExplicitRef = runPure (newRef False)
-
 -- | 参数里是否显式给了 --lang。
 hasLangFlag : List String -> Bool
 hasLangFlag [] = False
 hasLangFlag (arg :: rest) =
   if arg == "--lang" || startsWith "--lang=" arg then True else hasLangFlag rest
-
--- | `--deny-warnings` 是否由命令行显式给出（显式优先于 manifest）。
-denyExplicitRef : IORef Bool
-denyExplicitRef = runPure (newRef False)
-
--- | best-effort 多错误（elab 逐 decl 恢复）是否开启。
-continueOnErrorRef : IORef Bool
-continueOnErrorRef = runPure (newRef False)
 
 stripContinueOnError : List String -> Pair (List String) Bool
 stripContinueOnError args = stripContinueGo args [] False
@@ -839,7 +807,7 @@ stripContinueGo (arg :: rest) acc found = stripContinueGo rest (arg :: acc) foun
 
 checkPackageErr : Package -> Diagnostic -> Int
 checkPackageErr pkg e =
-  if runPure (readRef continueOnErrorRef) then packageRecover pkg e
+  if (optsOf 0).optContinueOnError then packageRecover pkg e
   else printDiagWithPrefix "[${packageName pkg}] " e
 
 -- | 包检查恢复入口：可执行包走入口文件，库包走 [export].modules。
@@ -867,6 +835,6 @@ packageRecoverLib pkg e = case packageExports pkg of
 printRecovered : Package -> Diagnostic -> List Diagnostic -> Int
 printRecovered pkg e ds =
   let
-    shown = takeDiags (runPure (readRef maxErrorsRef)) ds
+    shown = takeDiags (optsOf 0).optMaxErrors ds
     _ = printDiagList "[${packageName pkg}] " shown
   in if length shown == 0 then printDiagWithPrefix "[${packageName pkg}] " e else 1

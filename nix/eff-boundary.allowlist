@@ -2,7 +2,7 @@ compiler/lib/Vuna/Compiler/CacheFormat.vuna 1
 compiler/lib/Vuna/Compiler/Debug.vuna 4
 compiler/lib/Vuna/Compiler/Diag/Format.vuna 5
 compiler/lib/Vuna/Compiler/Diagnostics/Sink.vuna 16
-compiler/lib/Vuna/Compiler/Driver/CompilerCli.vuna 64
+compiler/lib/Vuna/Compiler/Driver/CompilerCli.vuna 26
 compiler/lib/Vuna/Compiler/Driver/Compile.vuna 53
 compiler/lib/Vuna/Compiler/Driver/DiagRender.vuna 2
 compiler/lib/Vuna/Compiler/Driver/Dt.vuna 3
