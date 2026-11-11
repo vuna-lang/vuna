@@ -59,6 +59,7 @@ import Vuna.Compiler.Elab.Termination
 import Vuna.Compiler.Elab.Trait
 import Vuna.Compiler.Elab.Usage
 import Vuna.Compiler.Elab.Types
+import Vuna.Compiler.Elab.MetaSpans
 import Vuna.Compiler.Intrinsics
 import Vuna.Compiler.Frontend.Ast
 
@@ -629,7 +630,9 @@ dtEvalExprInInfoCore prog expr = case prog of
             Just sp => tcErr1 sp (InterpNoInstance td) td
             Nothing => tcErr1NoLoc (InterpNoInstance td) td
           Nothing => case unsolvedFrom next (ecNext ec2) (ecSolTbl ec2) of
-            Just m => tcErr1 (exprSpan expr) (UnsolvedMetavarInfer (strFromInt m)) (strFromInt m)
+            Just m =>
+              onErrDiag (\d => withMetaCreated m d)
+                (tcErr1 (exprSpan expr) (UnsolvedMetavarInfer (strFromInt m)) (strFromInt m))
             Nothing => case normalize (Base.HashMap.fromList bodies) (ecSolsP ec2) defaultFuel (eval [] term) of
               VInt n => OkC (Pair (strFromInt n) tyText)
               v => OkC (Pair (showValueRepl datas ec2 v) tyText)
@@ -917,12 +920,15 @@ finishCore termAux decls core =
           Just sd =>
             let
               cands = dictCandidatesOf ec4 sd
+              createdOf = case firstUnsolvedDictGoalMeta ec4 of
+                Just gm => withMetaCreated gm
+                Nothing => withMetaCreated m
             in case firstUnsolvedDictGoalSpan ec4 of
               Just sp =>
-                onErrDiag (\d => withField (FieldCandidates cands) d)
+                onErrDiag (\d => createdOf (withField (FieldCandidates cands) d))
                   (tcErr1 sp (NoInstanceFound sd) sd)
               Nothing =>
-                onErrDiag (\d => withField (FieldCandidates cands) d)
+                onErrDiag (\d => createdOf (withField (FieldCandidates cands) d))
                   (tcErr1NoLoc (NoInstanceFound sd) sd)
           Nothing => ErrC (unsolvedMessage ec4 m)
         Nothing =>
@@ -987,14 +993,14 @@ unsolvedMessage ec m = case findGoal m (ecGoals ec) of
       spot = if g.dtGoalName == "" then loc else "${g.dtGoalName} (${loc})"
       goalTy = showValueAt (ctxDepthOf g) g.dtGoalType
       detail = "${spot} with goal ${goalTy}"
-    in withField (FieldSpan "goal" g.dtGoalSpan)
-      (withField (FieldNote "goal: ${goalTy}") (tcMsg (UnsolvedHole detail) [detail]))
+    in withMetaCreated g.dtGoalMeta
+      (withField (FieldSpan "goal" g.dtGoalSpan) (withField (FieldNote "goal: ${goalTy}") (tcMsg (UnsolvedHole detail) [detail])))
   Nothing =>
     let
       num = strFromInt m
       hint = metaOwnerHint ec m
-    in withField (FieldName num)
-      (withField (FieldNote hint) (tcMsg (UnsolvedMetavar num hint) [num, hint]))
+    in withMetaCreated m
+      (withField (FieldName num) (withField (FieldNote hint) (tcMsg (UnsolvedMetavar num hint) [num, hint])))
 
 -- 未解元变量的归属提示：扫已精化的定义体与类型，指出它出现在哪个定义里（否则只有 ?m，
 -- 在一个上万行的程序里无从定位）。
@@ -1178,3 +1184,10 @@ takeWhileDictChar : List Int -> List Int -> List Int
 takeWhileDictChar [] acc = reverse acc
 takeWhileDictChar (c :: rest) acc =
   if c == 32 || c == 41 then reverse acc else takeWhileDictChar rest (c :: acc)
+
+-- | 元变量创建点：有登记则附 `fields.span name=created` 与 note。
+withMetaCreated : Int -> Diagnostic -> Diagnostic
+withMetaCreated m d = case metaSpanOf m of
+  Nothing => d
+  Just sp =>
+    withField (FieldSpan "created" sp) (withField (FieldNote "metavariable created here") d)

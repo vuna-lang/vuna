@@ -233,3 +233,7 @@ out-contains: "kind":"span","name":"use"
 run: "$VUNA" check corpus/dt_err/02_conv.vuna --lang zh --json 2>&1
 exit: 1
 out-contains: "localizedMessage":
+# 元变量创建点：未填洞的诊断附 fields.span name=created（注册表按 meta id 反查）。
+run: "$VUNA" check corpus/dt_err/03_hole.vuna --json 2>&1
+exit: 1
+out-contains: "kind":"span","name":"created"

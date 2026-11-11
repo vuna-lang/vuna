@@ -91,7 +91,7 @@ headsOverlap ec tele1 h1 tele2 h2 = case tele1 of
   _ => headsOverlapOne ec tele1 h1 tele2 h2
 
 headsOverlapOne : Ec -> List (Pair String Term) -> Term -> List (Pair String Term) -> Term -> Pair Bool Ec
-headsOverlapOne ec teleA hA teleB hB = case allocTeleMetas emptyCtx ec teleA of
+headsOverlapOne ec teleA hA teleB hB = case allocTeleMetas Nothing emptyCtx ec teleA of
   Pair ids ec1 =>
     let
       envA = map (\m => VMeta m []) ids

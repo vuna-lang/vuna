@@ -553,6 +553,7 @@ tcAll =
 -- ---------------------------------------------------------------
 -- throw：构造结构化诊断（code/template 仍由本域枚举唯一持有）
 -- ---------------------------------------------------------------
+-- | 模板消息构造函数。
 tcMsg : {n : Nat} -> TcErr n -> Vec n String -> Diagnostic
 tcMsg e args = mkDiag SevError PhElab CatTypes (tcCode e) (diagBody (tcTemplate e) args)
 

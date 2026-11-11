@@ -9,6 +9,7 @@ module Vuna.Compiler.Elab.Dict
   , dictClassArg
   , dictClassArgs
   , firstUnsolvedDictGoal
+  , firstUnsolvedDictGoalMeta
   , firstUnsolvedDictGoalSpan
   , firstUnsolvedInterpGoal
   , firstUnsolvedInterpGoalSpan
@@ -355,7 +356,7 @@ matchInstances globals ctx fuel ec dom sp (i :: rest) acc = case tryMatchInst gl
 -- `TGlobal inst <typeArgs(Rig0)> <dictArgs(Rig1)>`。
 tryMatchInst : List (Pair String Term) -> Ctx -> Int -> Ec -> DtInst -> Value -> Span -> Maybe (Pair Term Ec)
 tryMatchInst globals ctx fuel ec inst dom sp = if fuel <= 0 then Nothing
-else case allocTeleMetas ctx ec inst.dtInstTele of
+else case allocTeleMetas inst.dtInstSpan ctx ec inst.dtInstTele of
   Pair metas ec1 =>
     let
       _ =
@@ -387,11 +388,15 @@ else case allocTeleMetas ctx ec inst.dtInstTele of
                 Just
                   (Pair (foldAppTerms (TGlobal (dtInstName inst)) (append teleArgs dictArgs)) ec3)
 
-allocTeleMetas : Ctx -> Ec -> List (Pair String Term) -> Pair (List Int) Ec
-allocTeleMetas ctx ec [] = Pair [] ec
-allocTeleMetas ctx ec (t :: rest) = case newMeta ctx ec of
-  Pair tm ec1 => case allocTeleMetas ctx ec1 rest of
+allocTeleMetas : Maybe Span -> Ctx -> Ec -> List (Pair String Term) -> Pair (List Int) Ec
+allocTeleMetas msp ctx ec [] = Pair [] ec
+allocTeleMetas msp ctx ec (t :: rest) = case allocMetaAt msp ctx ec of
+  Pair tm ec1 => case allocTeleMetas msp ctx ec1 rest of
     Pair ids ec2 => Pair (termMetaId tm :: ids) ec2
+
+allocMetaAt : Maybe Span -> Ctx -> Ec -> Pair Term Ec
+allocMetaAt Nothing ctx ec = newMeta ctx ec
+allocMetaAt (Just sp) ctx ec = newMetaAt sp ctx ec
 
 termMetaId : Term -> Int
 termMetaId (TMeta m) = m
@@ -1011,7 +1016,7 @@ deferEqDict : List (Pair String Term) -> Ctx -> String -> Term -> Term -> Term -
 deferEqDict globals ctx mname tyTerm aTerm bTerm sp dictTy ec =
   let
     m = ecNext ec
-  in case newMeta ctx ec of
+  in case newMetaAt sp ctx ec of
     Pair metaTerm ec1 =>
       OkC
         (Just (Pair (TApp (TApp (TApp (TApp (TGlobal mname) tyTerm Rig0) metaTerm RigOmega) aTerm Rig1) bTerm Rig1) (Pair (VNeutral (NGlobal boolTypeName [])) (ecAddConstraint ec1 CkDict m dictTy (Just sp) 0))))
@@ -1170,3 +1175,20 @@ firstUnsolvedDictSpanGo ec ((Constraint cid kind m dom cspan cdepth) :: rest) = 
     else if isMemberDomain ec forced then firstUnsolvedDictSpanGo ec rest
     else if anyUnsolvedMetaArg ec (dictClassArgs ec forced) then firstUnsolvedDictSpanGo ec rest
     else if isRigidDictArg ec forced then firstUnsolvedDictSpanGo ec rest else cspan
+
+-- | 第一条未解字典目标对应的元变量 id（供创建点溯源；与 `firstUnsolvedDictGoal` 同一条）。
+firstUnsolvedDictGoalMeta : Ec -> Maybe Int
+firstUnsolvedDictGoalMeta ec = firstUnsolvedDictGoalMetaGo ec (ecPending ec)
+
+-- | 扫描实现：跳过已解/非字典目标。
+firstUnsolvedDictGoalMetaGo : Ec -> List Constraint -> Maybe Int
+firstUnsolvedDictGoalMetaGo ec [] = Nothing
+firstUnsolvedDictGoalMetaGo ec ((Constraint cid kind m dom cspan cdepth) :: rest) = case metaLookup m (ecSolTbl ec) of
+  Just _ => firstUnsolvedDictGoalMetaGo ec rest
+  Nothing =>
+    let
+      forced = forceVal ec dom
+    in if valueDictFamily forced == dictTypeName interpTypeName then firstUnsolvedDictGoalMetaGo ec rest
+    else if isMemberDomain ec forced then firstUnsolvedDictGoalMetaGo ec rest
+    else if anyUnsolvedMetaArg ec (dictClassArgs ec forced) then firstUnsolvedDictGoalMetaGo ec rest
+    else if isRigidDictArg ec forced then firstUnsolvedDictGoalMetaGo ec rest else Just m

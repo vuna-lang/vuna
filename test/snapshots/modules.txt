@@ -102,6 +102,7 @@ Vuna.Compiler.Elab.InstCoherence  compiler/lib/Vuna/Compiler/Elab/InstCoherence.
 Vuna.Compiler.Elab.InstName  compiler/lib/Vuna/Compiler/Elab/InstName.vuna
 Vuna.Compiler.Elab.Match  compiler/lib/Vuna/Compiler/Elab/Match.vuna
 Vuna.Compiler.Elab.Meta  compiler/lib/Vuna/Compiler/Elab/Meta.vuna
+Vuna.Compiler.Elab.MetaSpans  compiler/lib/Vuna/Compiler/Elab/MetaSpans.vuna
 Vuna.Compiler.Elab.Prelude  compiler/lib/Vuna/Compiler/Elab/Prelude.vuna
 Vuna.Compiler.Elab.Records  compiler/lib/Vuna/Compiler/Elab/Records.vuna
 Vuna.Compiler.Elab.Representation  compiler/lib/Vuna/Compiler/Elab/Representation.vuna
@@ -242,6 +243,7 @@ Vuna.Compiler.Elab.InstCoherence  ./lib/Vuna/Compiler/Elab/InstCoherence.vuna
 Vuna.Compiler.Elab.InstName  ./lib/Vuna/Compiler/Elab/InstName.vuna
 Vuna.Compiler.Elab.Match  ./lib/Vuna/Compiler/Elab/Match.vuna
 Vuna.Compiler.Elab.Meta  ./lib/Vuna/Compiler/Elab/Meta.vuna
+Vuna.Compiler.Elab.MetaSpans  ./lib/Vuna/Compiler/Elab/MetaSpans.vuna
 Vuna.Compiler.Elab.Prelude  ./lib/Vuna/Compiler/Elab/Prelude.vuna
 Vuna.Compiler.Elab.Records  ./lib/Vuna/Compiler/Elab/Records.vuna
 Vuna.Compiler.Elab.Representation  ./lib/Vuna/Compiler/Elab/Representation.vuna

@@ -377,7 +377,7 @@ inferCaseEFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Expr -> List (Pa
 inferCaseEFuel fuel globals ctx ec scrut alts sp = if fuel <= 0 then icFuel "inference"
 else
   let
-    pmeta = newMeta ctx ec
+    pmeta = newMetaAt sp ctx ec
   in case pmeta of
     Pair metaTerm ec1 =>
       let
@@ -1008,7 +1008,7 @@ else
       MemberAmbiguous _ =>
         let
           m = ecNext ec
-        in case newMeta ctx ec of
+        in case newMetaAt sp ctx ec of
           Pair metaTerm ec1 =>
             let
               ec2 = ecAddConstraint ec1 CkRow m dom (Just sp) (ctxDepth ctx)
@@ -1019,7 +1019,7 @@ else
       MemberStuck =>
         let
           m = ecNext ec
-        in case newMeta ctx ec of
+        in case newMetaAt sp ctx ec of
           Pair metaTerm ec1 =>
             let
               ec2 = ecAddConstraint ec1 CkRow m dom (Just sp) (ctxDepth ctx)
@@ -1027,7 +1027,7 @@ else
               Pair argTerms (Pair resTy ec3) =>
                 OkC (Pair (Base.List.Cons (Pair metaTerm Rig0) argTerms) (Pair resTy ec3))
             )
-    else if isImplicitDomain ctx ec dom then case newMeta ctx ec of
+    else if isImplicitDomain ctx ec dom then case newMetaAt sp ctx ec of
       Pair metaTerm ec1 => Vuna.Compiler.Common.bind (inferArgsGo (fuel - 1) globals ctx ec1 (applyClosure clo (eval (ctxEnv ctx) metaTerm)) args sp hint) (\p => case p of
         Pair argTerms (Pair resTy ec2) =>
           OkC (Pair (Base.List.Cons (Pair metaTerm Rig0) argTerms) (Pair resTy ec2))
@@ -1059,7 +1059,7 @@ deferDictBinderFuel fuel globals ctx ec dom clo args sp hint = if fuel <= 0 then
 else
   let
     m = ecNext ec
-  in case newMeta ctx ec of
+  in case newMetaAt sp ctx ec of
     Pair metaTerm ec1 => Vuna.Compiler.Common.bind (inferArgsGo (fuel - 1) globals ctx (ecAddConstraint ec1 CkDict m (forceVal ec1 dom) (Just sp) (ctxDepth ctx)) (applyClosure clo (eval (ctxEnv ctx) metaTerm)) args sp hint) (\p => case p of
       Pair argTerms (Pair resTy ec2) =>
         OkC (Pair (Base.List.Cons (Pair metaTerm RigOmega) argTerms) (Pair resTy ec2))
@@ -1766,11 +1766,11 @@ else
     VMeta m [] =>
       let
         lvl = ctxDepth ctx
-      in case newMeta ctx ec of
+      in case newMetaAt sp ctx ec of
         Pair domTerm ec1 =>
           let
             domVal = evalCtx ctx domTerm
-          in case newMeta ctx ec1 of
+          in case newMetaAt sp ctx ec1 of
             Pair codTerm ec2 =>
               let
                 piVal = VPi "_" False RigOmega domVal (Closure [] codTerm)
@@ -2374,7 +2374,7 @@ doDictDefer : Ctx -> Ec -> Value -> Span -> Check (Pair Term Ec)
 doDictDefer ctx ec dom sp =
   let
     m = ecNext ec
-  in case newMeta ctx ec of
+  in case newMetaAt sp ctx ec of
     Pair metaTerm ec1 =>
       OkC (Pair metaTerm (ecAddConstraint ec1 CkDict m (forceVal ec1 dom) (Just sp) (ctxDepth ctx)))
 
@@ -2451,7 +2451,7 @@ elabDoChain : Int -> List (Pair String Term) -> Ctx -> Ec -> DoPlan -> List DoCh
 elabDoChain fuel globals ctx ec plan steps last = if fuel <= 0 then icFuel "inference"
 else case steps of
   [] => checkEFuel (fuel - 1) globals ctx ec last (applyValue plan.planMVal plan.planAVal)
-  (DoChainStep binder e sp) :: rest => case newMeta ctx ec of
+  (DoChainStep binder e sp) :: rest => case newMetaAt sp ctx ec of
     Pair aTerm ec1 =>
       let
         aVal = evalCtx ctx aTerm
@@ -2480,8 +2480,8 @@ else case doBlockShapeOf globals ctx ec chain.doChainCanonical of
         Pair term ec1 => OkC (Just (Pair term (resolveDictGoals globals ec1)))
       )
     )
-    Nothing => case newMeta ctx ec of
-      Pair mTerm ec1 => case newMeta ctx ec1 of
+    Nothing => case newMetaAt chain.doChainSpan ctx ec of
+      Pair mTerm ec1 => case newMetaAt chain.doChainSpan ctx ec1 of
         Pair aTerm ec2 =>
           let
             mVal = evalCtx ctx mTerm
@@ -2502,8 +2502,8 @@ inferDoBlockFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> DoChain -> Che
 inferDoBlockFuel fuel globals ctx ec chain = if fuel <= 0 then icFuel "inference"
 else case doBlockShapeOf globals ctx ec chain.doChainCanonical of
   Nothing => OkC Nothing
-  Just (Pair headTerm (Pair bindTyTerm shape)) => case newMeta ctx ec of
-    Pair mTerm ec1 => case newMeta ctx ec1 of
+  Just (Pair headTerm (Pair bindTyTerm shape)) => case newMetaAt chain.doChainSpan ctx ec of
+    Pair mTerm ec1 => case newMetaAt chain.doChainSpan ctx ec1 of
       Pair aTerm ec2 =>
         let
           mVal = evalCtx ctx mTerm

@@ -161,7 +161,7 @@ JSON 字段是机器契约：`code/severity/phase/category/message/labels[]/fiel
 | D7.7 覆盖性缺失构造子标签 | 已落地（缺失构造子进 `fields.candidates`，每个候选带构造子声明 `span`；JSON/SARIF/LSP（含 diag fields 的 candidates.span）可跳转） |
 | D7.8 QTT 使用点 | 已落地（Core `TVar` 携带源 span；线性/擦除错误附 `fields.quantity`：name/declared/observed，并逐使用点附 `fields.span name=use`；内部合成变量无源位置时不附） |
 | D7.9 文案规范/门禁 | 已落地（`nix/checks/diag-style.sh`：句号/大小写/空白/占位符；专有名词例外逐码 allowlist） |
-| D7.10 explanation/example/`explain` | 已落地（`explain` 文本/`--json`/`--list --json`，含模板/中文说明/severity/phase/category/example；元变量/洞带 `name`/note 与洞目标 span；非洞元变量的创建点因 Core 元变量无 span 以名称标识） |
+| D7.10 explanation/example/`explain` | 已落地（`explain` 文本/`--json`/`--list --json`，含模板/中文说明/severity/phase/category/example；元变量/洞带 `name`/note 与洞目标 span；`Elab/MetaSpans` 登记创建点，洞与可延迟字典元变量附 `fields.span name=created`，纯合成 meta 无源位置时不伪造） |
 | D7.11 效果行 | 已落地（`TC_UnhandledEffects` fields 含 expected/actual 行 + 每个未处理 effect 单独一条 `unhandled:` 行） |
 | 结构化夹具 + 每码覆盖门禁 | 已落地（210 个 `.diag.json`；覆盖门禁 183/234，51 个缺口 allowlist 且逐码在 `nix/diag-unreachable.txt` 审计） |
 
