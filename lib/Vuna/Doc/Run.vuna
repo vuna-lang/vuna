@@ -43,23 +43,25 @@ scopeExports : DocScope -> Maybe (List String)
 scopeExports (DocScope dir name exports) = exports
 
 docRun : String -> String -> Bool -> Maybe String -> Eff [] Int
-docRun dir out check pkgFilter = case requireDirectory dir of
-  ErrC e => docError (diagText e)
-  OkC _ => do
-    sc <- scopesFor dir pkgFilter
-    case sc of
-      ErrC e => docError (diagText e)
-      OkC [] => docError "no such package: ${maybeText pkgFilter}"
-      OkC scopes => do
-        filesR <- filesForScopes scopes
-        case filesR of
-          ErrC e => docError (diagText e)
-          OkC files => if length (filesOf files) == 0 then docError "no vuna sources found under ${dir}; pass a package or source directory"
-          else do
-            bookR <- buildBook scopes files
-            case bookR of
-              ErrC e => docError (diagText e)
-              OkC book => if check then runCheck book else writeHtml out book
+docRun dir out check pkgFilter = do
+  dirR <- requireDirectory dir
+  case dirR of
+    ErrC e => docError (diagText e)
+    OkC _ => do
+      sc <- scopesFor dir pkgFilter
+      case sc of
+        ErrC e => docError (diagText e)
+        OkC [] => docError "no such package: ${maybeText pkgFilter}"
+        OkC scopes => do
+          filesR <- filesForScopes scopes
+          case filesR of
+            ErrC e => docError (diagText e)
+            OkC files => if length (filesOf files) == 0 then docError "no vuna sources found under ${dir}; pass a package or source directory"
+            else do
+              bookR <- buildBook scopes files
+              case bookR of
+                ErrC e => docError (diagText e)
+                OkC book => if check then runCheck book else writeHtml out book
 
 -- 每个 scope 的源文件（与 scope 一一对应；顺序稳定）。
 filesForScopes : List DocScope -> Eff [] (Check (List (Pair DocScope (List String))))
@@ -182,7 +184,7 @@ writeHtml out book =
   let
     content = renderPage book
   in do
-    _ <- pure (ensureDirPath (parentOf out))
+    _ <- ensureDirPath (parentOf out)
     _ <- prim_eff_writeFile out content
     _ <- prim_eff_print "wrote ${out} (${length (bookModules book)} modules)\n"
     pure 0

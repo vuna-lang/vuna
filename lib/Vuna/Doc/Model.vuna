@@ -110,11 +110,13 @@ buildModulesGo env pkg (path :: rest) acc = do
       OkC module0 => buildModulesGo env2 pkg rest (module0 :: acc)
 
 buildModule : FixityEnv -> String -> String -> Eff [] (Pair FixityEnv (Check DocModule))
-buildModule env pkg path = case readText path of
-  ErrC e => pure (Pair env (ErrC e))
-  OkC source => do
-    looked <- fixitiesForFile env path source
-    pure (buildModuleWith pkg path source looked)
+buildModule env pkg path = do
+  textR <- readText path
+  case textR of
+    ErrC e => pure (Pair env (ErrC e))
+    OkC source => do
+      looked <- fixitiesForFile env path source
+      pure (buildModuleWith pkg path source looked)
 
 buildModuleWith : String -> String -> String -> Pair FixityEnv (Check (List FixityDecl)) -> Pair FixityEnv (Check DocModule)
 buildModuleWith pkg path source looked =

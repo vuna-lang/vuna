@@ -71,21 +71,23 @@ lintExisting doFix path source programFixities = case lintSourceWith programFixi
 -- 逐文件取程序级 fixity（`Vuna.FixityEnv` 按目录缓存模块图）；拿不到上下文是工具错误，
 -- 不静默按本地声明表继续（那会把 import 闭包里的运算符判成 unknown fixity）。
 lintOne : Bool -> FixityEnv -> String -> Eff [] (Pair FixityEnv Int)
-lintOne doFix env path = case readText path of
-  ErrC e => do
-    _ <- prim_eff_print "error: ${diagText e}\n"
-    pure (Pair env 2)
-  OkC source => do
-    looked <- fixitiesForFile env path source
-    let
-      env2 = firstOf looked
-    in case secondOf looked of
-      ErrC e => do
-        _ <- prim_eff_print "${path}: cannot load package fixity context: ${diagText e}\n"
-        pure (Pair env2 2)
-      OkC programFixities => do
-        code <- lintExisting doFix path source programFixities
-        pure (Pair env2 code)
+lintOne doFix env path = do
+  textR <- readText path
+  case textR of
+    ErrC e => do
+      _ <- prim_eff_print "error: ${diagText e}\n"
+      pure (Pair env 2)
+    OkC source => do
+      looked <- fixitiesForFile env path source
+      let
+        env2 = firstOf looked
+      in case secondOf looked of
+        ErrC e => do
+          _ <- prim_eff_print "${path}: cannot load package fixity context: ${diagText e}\n"
+          pure (Pair env2 2)
+        OkC programFixities => do
+          code <- lintExisting doFix path source programFixities
+          pure (Pair env2 code)
 
 lintFiles : Bool -> FixityEnv -> List String -> Eff [] Int
 lintFiles doFix env [] = pure 0

@@ -43,17 +43,19 @@ runRun args =
       _ => runError "usage: vuna run [--no-build] [--package NAME] [--out DIR] [DIR] [-- ARG]..."
 
 runGo : Parsed -> List String -> String -> Eff [] Int
-runGo parsed passthrough dir = case requireDirectory dir of
-  ErrC e => runError (diagText e)
-  OkC _ => do
-    pkgR <- loadPackage dir
-    case pkgR of
-      ErrC e => runFailure (diagText e)
-      OkC rootPkg => do
-        targetR <- selectTarget parsed dir rootPkg
-        case targetR of
-          ErrC e => runError (diagText e)
-          OkC target => runTarget parsed passthrough dir target
+runGo parsed passthrough dir = do
+  dirR <- requireDirectory dir
+  case dirR of
+    ErrC e => runError (diagText e)
+    OkC _ => do
+      pkgR <- loadPackage dir
+      case pkgR of
+        ErrC e => runFailure (diagText e)
+        OkC rootPkg => do
+          targetR <- selectTarget parsed dir rootPkg
+          case targetR of
+            ErrC e => runError (diagText e)
+            OkC target => runTarget parsed passthrough dir target
 
 -- 目标包选择；workspace 成员列表来自 `workspacePackages`（与 build 同一真源）。
 selectTarget : Parsed -> String -> Package -> Eff [] (Check Package)

@@ -21,15 +21,17 @@ runCleanIface args = case parseToolArgs "vuna clean-iface" [BoolFlag "dry-run"] 
     _ => cleanError "too many arguments; expected at most one directory"
 
 cleanAt : String -> Bool -> Eff [] Int
-cleanAt dir dry = case requireDirectory dir of
-  ErrC e => cleanError (diagText e)
-  OkC _ => do
-    all <- walkFiles 1048576 dir
-    _ <- if dry then pure 0 else removeEach (filter isIfaceFile all)
-    _ <-
-      prim_eff_print
-        (if length (filter isIfaceFile all) == 0 then "clean-iface: no iface files under ${dir}\n" else if dry then "clean-iface: would remove ${strFromInt (length (filter isIfaceFile all))} file(s) under ${dir}\n" else "clean-iface: removed ${strFromInt (length (filter isIfaceFile all))} file(s) under ${dir}\n")
-    pure 0
+cleanAt dir dry = do
+  dirR <- requireDirectory dir
+  case dirR of
+    ErrC e => cleanError (diagText e)
+    OkC _ => do
+      all <- walkFiles 1048576 dir
+      _ <- if dry then pure 0 else removeEach (filter isIfaceFile all)
+      _ <-
+        prim_eff_print
+          (if length (filter isIfaceFile all) == 0 then "clean-iface: no iface files under ${dir}\n" else if dry then "clean-iface: would remove ${strFromInt (length (filter isIfaceFile all))} file(s) under ${dir}\n" else "clean-iface: removed ${strFromInt (length (filter isIfaceFile all))} file(s) under ${dir}\n")
+      pure 0
 
 removeEach : List String -> Eff [] Int
 removeEach [] = pure 0

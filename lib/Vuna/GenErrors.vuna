@@ -74,16 +74,18 @@ allEntries =
     (append (map cgEntryToEntry cgAll) (append (map lintEntryToEntry lintAll) (append (map lexEntryToEntry lexAll) (append (map psEntryToEntry psAll) (append (map icEntryToEntry icAll) (append (map rnEntryToEntry rnAll) (append (map pkgEntryToEntry pkgAll) (append (map warnEntryToEntry warnAll) (map ldEntryToEntry ldAll)))))))))
 
 runGenErrors : String -> Eff [] Int
-runGenErrors root = case requireDirectory root of
-  ErrC e => genErrorsError (diagText e)
-  OkC _ => do
-    doc <- renderDoc allEntries
-    _ <- pure (ensureDirPath (parentOf "${root}/docs/.generated/errors.md"))
-    _ <- prim_eff_writeFile "${root}/docs/.generated/errors.md" doc
-    catalog <- renderCatalogJson allEntries
-    _ <- prim_eff_writeFile "${root}/docs/.generated/errors.json" catalog
-    _ <- prim_eff_print "wrote ${root}/docs/.generated/errors.md (${length allEntries} codes)\n"
-    pure 0
+runGenErrors root = do
+  rootR <- requireDirectory root
+  case rootR of
+    ErrC e => genErrorsError (diagText e)
+    OkC _ => do
+      doc <- renderDoc allEntries
+      _ <- ensureDirPath (parentOf "${root}/docs/.generated/errors.md")
+      _ <- prim_eff_writeFile "${root}/docs/.generated/errors.md" doc
+      catalog <- renderCatalogJson allEntries
+      _ <- prim_eff_writeFile "${root}/docs/.generated/errors.json" catalog
+      _ <- prim_eff_print "wrote ${root}/docs/.generated/errors.md (${length allEntries} codes)\n"
+      pure 0
 
 genErrorsError : String -> Eff [] Int
 genErrorsError e = do

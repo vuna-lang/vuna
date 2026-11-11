@@ -503,13 +503,19 @@ historyFilePath _ = do
       pure (if home == "" then "" else "${home}/.vuna_repl_history")
 
 -- 读历史文件：v2（有头，`\n` 转义）或旧 v1（纯文本一行一条）由 History 判别。
-historyEntriesOf : String -> List String
-historyEntriesOf path = case readText path of
-  ErrC e => []
-  OkC s => parseHistoryFile s
+historyEntriesOf : String -> Eff [] (List String)
+historyEntriesOf path = do
+  textR <- readText path
+  pure (case textR of
+    ErrC e => []
+    OkC s => parseHistoryFile s
+  )
 
-loadHistoryFrom : String -> List String
-loadHistoryFrom path = if path == "" then [] else takeLast replMaxHistory (historyEntriesOf path)
+loadHistoryFrom : String -> Eff [] (List String)
+loadHistoryFrom path = if path == "" then pure []
+else do
+  entries <- historyEntriesOf path
+  pure (takeLast replMaxHistory entries)
 
 -- 持久化：整份历史（旧条目 + 新单元）重写成 v2 格式；目录不存在时用 mkdir -p，父目录
 -- 不可写（沙箱 / 只读 HOME）时静默跳过。写失败不能把 REPL 拖崩，历史只是便利功能。
@@ -522,9 +528,9 @@ else
     _ <- prim_eff_runIn "." ["mkdir", "-p", dir]
     writable <- prim_eff_runIn "." ["sh", "-c", "test -w ${shellQuote dir}"]
     if writable /= 0 then pure 0
-    else
+    else do
+      old <- historyEntriesOf st.stateHistoryFile
       let
-        old = historyEntriesOf st.stateHistoryFile
         lines2 = trimHistory (appendLast old unit)
       in prim_eff_writeFileAtomic st.stateHistoryFile (renderHistoryFile lines2)
 
@@ -597,8 +603,9 @@ runRepl ctx start = do
   tty <- isTTY 0
   settings <- defaultSettings tty
   histFile <- historyFilePath 0
+  history <- loadHistoryFrom histFile
   let
-    st0 = initialState ctx settings (loadHistoryFrom histFile) histFile SinkStdout
+    st0 = initialState ctx settings history histFile SinkStdout
   in do
     _ <- replEmit st0 (bannerText st0)
     started <- applyStart st0 start
@@ -627,10 +634,12 @@ packageNameLabel st =
 applyStart : ReplState -> ReplStart -> Eff [] (Check (Pair ReplState String))
 applyStart st StartNone = pure (OkC (Pair st ""))
 applyStart st (StartDir dir) = pure (OkC (Pair st "包上下文: ${packageNameLabel st}"))
-applyStart st (StartFile path) = pure (case doLoadFile st path of
-  ErrC e => ErrC e
-  OkC p => OkC (Pair (secondOf p) "已加载 ${path}（${firstOf p} 个定义）")
-)
+applyStart st (StartFile path) = do
+  loaded <- doLoadFile st path
+  pure (case loaded of
+    ErrC e => ErrC e
+    OkC p => OkC (Pair (secondOf p) "已加载 ${path}（${firstOf p} 个定义）")
+  )
 applyStart st (StartModule m) = do
   loaded <- doLoadModule st m
   pure (case loaded of
@@ -1504,23 +1513,29 @@ else do
     pure (ReplContinue st)
 
 loadFileStep : ReplState -> String -> String -> Eff [] ReplOutcome
-loadFileStep st verb path = case doLoadFile st path of
-  ErrC e => do
-    _ <- printDiag st e
-    pure (ReplContinue st)
-  OkC (Pair n st2) => do
-    _ <- replEmit st2 "${verb} ${path}（${n} 个定义）\n"
-    pure (ReplContinue st2)
+loadFileStep st verb path = do
+  loaded <- doLoadFile st path
+  case loaded of
+    ErrC e => do
+      _ <- printDiag st e
+      pure (ReplContinue st)
+    OkC (Pair n st2) => do
+      _ <- replEmit st2 "${verb} ${path}（${n} 个定义）\n"
+      pure (ReplContinue st2)
 
-doLoadFile : ReplState -> String -> Check (Pair Int ReplState)
-doLoadFile st path = case readText path of
-  ErrC e => ErrC e
-  OkC source => case parseSource path source of
+doLoadFile : ReplState -> String -> Eff [] (Check (Pair Int ReplState))
+doLoadFile st path = do
+  textR <- readText path
+  pure (case textR of
     ErrC e => ErrC e
-    OkC (SourceFile (Just _) _ _ _) =>
-      err
-        "${path} 是模块文件（含 `module ... where` 头）；用 :load <模块名> 导入，或用 :browse <模块名> 查看接口"
-    OkC (SourceFile Nothing _ _ decls) => OkC (Pair (lenInt decls) (loadedFileState st path source))
+    OkC source => case parseSource path source of
+      ErrC e => ErrC e
+      OkC (SourceFile (Just _) _ _ _) =>
+        err
+          "${path} 是模块文件（含 `module ... where` 头）；用 :load <模块名> 导入，或用 :browse <模块名> 查看接口"
+      OkC (SourceFile Nothing _ _ decls) =>
+        OkC (Pair (lenInt decls) (loadedFileState st path source))
+  )
 
 loadModuleStep : ReplState -> String -> String -> Eff [] ReplOutcome
 loadModuleStep st m verb = do

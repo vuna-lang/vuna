@@ -68,9 +68,10 @@ termSaveState path = do
 
 -- `stty <saved>`：恢复终端；失败再试 `stty sane`。
 termRestoreState : String -> Eff [] Int
-termRestoreState path =
+termRestoreState path = do
+  textR <- readText path
   let
-    saved = case readText path of
+    saved = case textR of
       ErrC e => ""
       OkC s => trim s
   in do
@@ -107,8 +108,9 @@ termWidth _ = do
     path = "${base}.size"
   in do
     _ <- prim_eff_runIn "." ["sh", "-c", "stty size > ${shellQuote path}"]
+    textR <- readText path
     let
-      text = case readText path of
+      text = case textR of
         ErrC e => ""
         OkC s => trim s
       parts = filter (\p => p /= "") (split " " text)

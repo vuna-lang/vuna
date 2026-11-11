@@ -31,6 +31,8 @@ module Vuna.Cli.Args
 -- 读盘守卫：内建 `prim_eff_isDirectory` 对不存在的路径会抛宿主异常，所以所有来自
 -- 用户的路径都必须先 `prim_eff_fileExists` 再 `prim_eff_isDirectory`；`readText` /
 -- `requireExists` / `requireDirectory` 是唯一入口。
+-- M4：这些守卫与目录创建显式在 `Eff []` 里（错误仍用 `Check` 携带，文案不变）；
+-- 纯 flag 解析 API 保持纯函数。
 import Vuna.Compiler.Common
 import Vuna.Compiler.Driver.CompilerCli
 import Base.Host
@@ -179,22 +181,31 @@ argErrText cmd (MissingValue flag) = "flag requires a value: ${flag}"
 -- 读盘守卫（禁止在不存在路径上调 prim_eff_isDirectory）
 -- ---------------------------------------------------------------
 -- 读一个文本文件：先判存在、再判目录，最后才读。
-readText : String -> Check String
-readText path =
-  if runPure (prim_eff_fileExists path) then if runPure (prim_eff_isDirectory path) then err "is a directory: ${path}"
-  else OkC (runPure (prim_eff_readFile path))
-  else err "no such file: ${path}"
+readText : String -> Eff [] (Check String)
+readText path = do
+  exists <- prim_eff_fileExists path
+  if exists then do
+    isDir <- prim_eff_isDirectory path
+    if isDir then pure (err "is a directory: ${path}")
+    else do
+      content <- prim_eff_readFile path
+      pure (OkC content)
+  else pure (err "no such file: ${path}")
 
 -- 要求路径存在（文件或目录均可）。
-requireExists : String -> Check Int
-requireExists path =
-  if runPure (prim_eff_fileExists path) then OkC 0 else err "no such file: ${path}"
+requireExists : String -> Eff [] (Check Int)
+requireExists path = do
+  exists <- prim_eff_fileExists path
+  pure (if exists then OkC 0 else err "no such file: ${path}")
 
 -- 要求路径存在且是目录。
-requireDirectory : String -> Check Int
-requireDirectory path =
-  if runPure (prim_eff_fileExists path) then if runPure (prim_eff_isDirectory path) then OkC 0 else err "not a directory: ${path}"
-  else err "no such directory: ${path}"
+requireDirectory : String -> Eff [] (Check Int)
+requireDirectory path = do
+  exists <- prim_eff_fileExists path
+  if exists then do
+    isDir <- prim_eff_isDirectory path
+    pure (if isDir then OkC 0 else err "not a directory: ${path}")
+  else pure (err "no such directory: ${path}")
 
 -- ---------------------------------------------------------------
 -- 目录创建（prim_eff_makeDir 只建一层）
@@ -226,17 +237,21 @@ joinSlashPartsGo (part :: rest) = "${part}/${joinSlashPartsGo rest}"
 
 -- 递归创建所有缺失的父目录；已存在返回 0。`prim_eff_makeDir` 对已存在路径返回 0。
 -- 递归不沿输入结构下降（parentOf 返回 String），用显式 fuel（字节长度上界）守卫。
-ensureDirPath : String -> Int
+ensureDirPath : String -> Eff [] Int
 ensureDirPath path = ensureDirPathGo (strLength path + 2) path
 
-ensureDirPathGo : Int -> String -> Int
-ensureDirPathGo fuel path = if fuel <= 0 then 1
-else if path == "" || path == "." || path == "/" then 0
-else if pathExistsDirSafe path then 0
-else
-  let
-    _ = ensureDirPathGo (fuel - 1) (parentOf path)
-  in if pathExistsDirSafe path then 0 else runPure (prim_eff_makeDir path)
+ensureDirPathGo : Int -> String -> Eff [] Int
+ensureDirPathGo fuel path = if fuel <= 0 then pure 1
+else if path == "" || path == "." || path == "/" then pure 0
+else do
+  safe <- pathExistsDirSafe path
+  if safe then pure 0
+  else do
+    _ <- ensureDirPathGo (fuel - 1) (parentOf path)
+    safe2 <- pathExistsDirSafe path
+    if safe2 then pure 0 else prim_eff_makeDir path
 
-pathExistsDirSafe : String -> Bool
-pathExistsDirSafe path = runPure (prim_eff_fileExists path) && runPure (prim_eff_isDirectory path)
+pathExistsDirSafe : String -> Eff [] Bool
+pathExistsDirSafe path = do
+  exists <- prim_eff_fileExists path
+  if exists then prim_eff_isDirectory path else pure False

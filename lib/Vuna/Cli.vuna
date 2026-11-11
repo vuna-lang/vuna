@@ -198,11 +198,13 @@ interpArgs args = case parseToolArgs "vuna interp" [] args of
 
 -- interp 只接受单文件；包目录的入口是 check / compile。
 interpFile : String -> Eff [] Int
-interpFile path = case requireExists path of
-  ErrC e => toolError (diagText e)
-  OkC _ => do
-    isDir <- prim_eff_isDirectory path
-    if isDir then interpDirErr path else interpEmit path
+interpFile path = do
+  existsR <- requireExists path
+  case existsR of
+    ErrC e => toolError (diagText e)
+    OkC _ => do
+      isDir <- prim_eff_isDirectory path
+      if isDir then interpDirErr path else interpEmit path
 
 interpDirErr : String -> Eff [] Int
 interpDirErr path = toolError "interp takes a single file, not a package directory: ${path}"
@@ -322,13 +324,15 @@ testOptsOf parsed jobs =
     (flagValue parsed "only-file")
 
 testRun : TestOpts -> String -> Eff [] Int
-testRun opts dir = case requireDirectory dir of
-  ErrC e => toolError (diagText e)
-  OkC _ => do
-    pkgR <- loadPackage dir
-    case pkgR of
-      ErrC e => toolFailure (diagText e)
-      OkC pkg => runTests opts pkg
+testRun opts dir = do
+  dirR <- requireDirectory dir
+  case dirR of
+    ErrC e => toolError (diagText e)
+    OkC _ => do
+      pkgR <- loadPackage dir
+      case pkgR of
+        ErrC e => toolFailure (diagText e)
+        OkC pkg => runTests opts pkg
 
 -- ---------------------------------------------------------------
 -- fmt
@@ -405,24 +409,26 @@ fmtFiles check env [] changed = if check && changed > 0 then do
   _ <- prim_eff_print "${changed} file(s) need formatting\n"
   pure 1
 else pure 0
-fmtFiles check env (path :: rest) changed = case readText path of
-  ErrC e => toolError (diagText e)
-  OkC original => do
-    looked <- fixitiesForFile env path original
-    let
-      env2 = firstOf looked
-    in case secondOf looked of
-      ErrC e => toolError "${path}: cannot determine fixity context: ${diagText e}"
-      OkC fixities => case formatSourceWith fixities original of
-        ErrC e => toolError "${path}: ${diagText e}"
-        OkC formatted => if formatted == original then fmtFiles check env2 rest changed
-        else if check then do
-          _ <- prim_eff_print "would reformat: ${path}\n"
-          fmtFiles check env2 rest (changed + 1)
-        else do
-          _ <- prim_eff_writeFile path formatted
-          _ <- prim_eff_print "formatted ${path}\n"
-          fmtFiles check env2 rest (changed + 1)
+fmtFiles check env (path :: rest) changed = do
+  textR <- readText path
+  case textR of
+    ErrC e => toolError (diagText e)
+    OkC original => do
+      looked <- fixitiesForFile env path original
+      let
+        env2 = firstOf looked
+      in case secondOf looked of
+        ErrC e => toolError "${path}: cannot determine fixity context: ${diagText e}"
+        OkC fixities => case formatSourceWith fixities original of
+          ErrC e => toolError "${path}: ${diagText e}"
+          OkC formatted => if formatted == original then fmtFiles check env2 rest changed
+          else if check then do
+            _ <- prim_eff_print "would reformat: ${path}\n"
+            fmtFiles check env2 rest (changed + 1)
+          else do
+            _ <- prim_eff_writeFile path formatted
+            _ <- prim_eff_print "formatted ${path}\n"
+            fmtFiles check env2 rest (changed + 1)
 
 -- ---------------------------------------------------------------
 -- repl
@@ -625,21 +631,23 @@ goalArgs args = case parseToolArgs "vuna goal" [] args of
     _ => usageError 0
 
 goalRun : String -> Eff [] Int
-goalRun file = case readText file of
-  ErrC e => toolError (diagText e)
-  OkC source => case parseSource file source of
-    ErrC e => toolFailure (diagText e)
-    OkC (SourceFile _ _ fx decls0) => do
-      looked <- fixitiesForFile emptyFixityEnv file source
-      case secondOf looked of
-        ErrC e => toolFailure (diagText e)
-        OkC programFixities => case reorderProgram (tableOfKeepOps (append programFixities fx)) decls0 of
+goalRun file = do
+  textR <- readText file
+  case textR of
+    ErrC e => toolError (diagText e)
+    OkC source => case parseSource file source of
+      ErrC e => toolFailure (diagText e)
+      OkC (SourceFile _ _ fx decls0) => do
+        looked <- fixitiesForFile emptyFixityEnv file source
+        case secondOf looked of
           ErrC e => toolFailure (diagText e)
-          OkC decls => case goalsOfProgramTolerant decls of
+          OkC programFixities => case reorderProgram (tableOfKeepOps (append programFixities fx)) decls0 of
             ErrC e => toolFailure (diagText e)
-            OkC infos => do
-              _ <- prim_eff_print (goalHeader file (length infos) ++ renderGoals file infos)
-              pure 0
+            OkC decls => case goalsOfProgramTolerant decls of
+              ErrC e => toolFailure (diagText e)
+              OkC infos => do
+                _ <- prim_eff_print (goalHeader file (length infos) ++ renderGoals file infos)
+                pure 0
 
 renderGoals : String -> List DtGoalInfo -> String
 renderGoals file [] = ""
