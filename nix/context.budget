@@ -35,7 +35,7 @@
 #   - 文档按主题重整：删除 history/dt-core/dt-parity/dt.md，新增 core/tooling/records-traits
 #     并把 DT 语义并入 type-system；合并 main 的 LSP/readBytes 文档后按实测复标定：
 #     coldstart 29731 / agents 104 / arch 167 / readme 163 / max_ref 279。
-coldstart_bytes 40758
+coldstart_bytes 40776
 agents_lines 133
 arch_lines 229
 readme_lines 174
@@ -47,7 +47,7 @@ readme_lines 174
 #     （coldstart 40787→39333 / agents 136→130 / arch 222→219 / readme 204→172）。
 #     max_ref_lines 438（primitives.md）与 max_module_lines 2400（Elab/Term/Impl.vuna）
 #     是改动前已存在的漏标定（旧预算 415/2300 本身已红），按实测重标定。
-max_ref_lines 443
+max_ref_lines 454
 max_module_lines 2709
 #   - M27：新增 `primitives.md` 与内建/原语/能力文档、`Vuna.Compiler.Intrinsics` 模块；
 #     按 `sh nix/context-budget.sh .` 实测收紧：coldstart 29055 / agents 104 / arch 156 /
@@ -211,3 +211,7 @@ max_module_lines 2709
 #     coldstart 40541 → 40758）；`docs/testing.md` 记录 check 的覆盖边界（+5 行，
 #     max_ref 438 → 443）。按 `sh nix/context-budget.sh .` 实测复标定 coldstart / arch /
 #     max_ref；agents / readme / max_module 不变。
+#   - 2026-11-11 位运算原语 + Base.Bits + SHA-256 内容寻址（adcf35a）：`docs/architecture.md`
+#     的 D5 摘要改写（coldstart 40758 → 40776）、`docs/reference/primitives.md` 增加位运算
+#     语义（max_ref 443 → 454）。按 `sh nix/context-budget.sh .` 实测复标定；agents / arch /
+#     readme / max_module 不变（`Elab/Term/Impl.vuna` 仍是 2709）。
