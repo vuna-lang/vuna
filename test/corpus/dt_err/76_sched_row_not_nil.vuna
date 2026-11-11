@@ -2,7 +2,7 @@
 import Base.Eff
 import Base.EffSched
 
-prog : Eff (Cons "main" Int []) Int
+prog : Eff (Cons "default" Int []) Int
 prog = pure 1
 
 bad : Eff [] (Task Int)

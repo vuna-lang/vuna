@@ -5,9 +5,9 @@ import Base.EffState
 import Base.Result
 import Base.Pair
 
-prog : Eff [Exn "main", State "counter" Int] Int
-prog = bracketExn "main" (pure 0) (\_ => put "counter" Int 99) (\_ => do
-  _ <- throwExn "main" "boom"
+prog : Eff [Exn "default", State "counter" Int] Int
+prog = bracketExn "default" (pure 0) (\_ => put "counter" Int 99) (\_ => do
+  _ <- throwExn "default" "boom"
   pure 1
 )
 
@@ -20,7 +20,7 @@ opH op k s = case op of
   Put x => k 0 x
 
 run : Pair (Base.Result.Result Int) Int
-run = runPure (handleState "counter" Int ret opH (runExn "main" prog)) 3
+run = runPure (handleState "counter" Int ret opH (runExn "default" prog)) 3
 
 main : Int
 main = case run of

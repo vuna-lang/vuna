@@ -324,10 +324,10 @@ effUnitTypeName = "Base.Eff.EffUnit"
 effMkCtor : String
 effMkCtor = "Base.Eff.Eff.MkEff"
 
--- | 默认实例名（命名行 ND3）：裸标签条目 `Cons "main" e Nil` 与名字槽最终化兜底共用；
+-- | 默认实例名（命名行 ND3）：裸标签条目 `Cons "default" e Nil` 与名字槽最终化兜底共用；
 -- 单点定义在 `Base.Eff.defaultInstance`，此处是编译器侧的镜像常量。
 effDefaultInstance : String
-effDefaultInstance = "main"
+effDefaultInstance = "default"
 
 -- ---------------------------------------------------------------
 -- 特权边界（F3 P2）：宿主层模块与执行入口

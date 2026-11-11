@@ -10,21 +10,21 @@ data AbortE : Type where
 data AbortOp : Type where
   Abort : AbortOp
 
-abort : {r : Row} -> Eff (Cons "main" AbortE r) Int
-abort = sendCore AbortE "abort" "main" Abort
+abort : {r : Row} -> Eff (Cons "default" AbortE r) Int
+abort = sendCore AbortE "abort" "default" Abort
 
-handleAbort : {a : Type} -> {b : Type} -> {r : Row} -> (a -> b) -> ((o : AbortOp) -> (Int -> b) -> b) -> Eff (Cons "main" AbortE r) a -> Eff r b
-handleAbort ret opH comp = handleCore AbortE "abort" "main" ret opH comp
+handleAbort : {a : Type} -> {b : Type} -> {r : Row} -> (a -> b) -> ((o : AbortOp) -> (Int -> b) -> b) -> Eff (Cons "default" AbortE r) a -> Eff r b
+handleAbort ret opH comp = handleCore AbortE "abort" "default" ret opH comp
 
 abortH : (o : AbortOp) -> (Int -> Int) -> Int
 abortH Abort k = 7
 
 prog : Eff [AbortE, State "counter" Int] Int
-prog = bracket (weaken "main" (do
+prog = bracket (weaken "default" (do
   _ <- put "counter" Int 0
   pure 0
 )
-) (\_ => weaken "main" (put "counter" Int 42)) (\_ => do
+) (\_ => weaken "default" (put "counter" Int 42)) (\_ => do
   _ <- abort
   pure 1
 )

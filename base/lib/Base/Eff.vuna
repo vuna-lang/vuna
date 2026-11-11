@@ -63,10 +63,10 @@ data Member : String -> Type -> Row -> Type 1 where
 -- | 从行 `r` 中删除标签 `e` 并保留顺序（handler 的结果行）。它不是类型族：由编译器按标签类型的值结构相等归约（`Core.Eval.rowRemReduce`）。
 axiom rowRem : String -> Type -> Row -> Row
 
--- 默认实例名（命名行 ND3 / native-effects ND3）：裸标签条目 = `Cons "main" e Nil`；
+-- 默认实例名（命名行 ND3 / native-effects ND3）：裸标签条目 = `Cons "default" e Nil`；
 -- 行语法糖与最终化兜底共用（编译器侧镜像 `Intrinsics.effDefaultInstance`）。
 defaultInstance : String
-defaultInstance = "main"
+defaultInstance = "default"
 
 -- Eff 的内部 dummy 参数（不是世界令牌；只为 thunk 延迟执行）。
 -- | `Eff` 内部的 dummy 参数类型（**不是**世界令牌，只为 thunk 延迟执行）。

@@ -8,7 +8,7 @@ import Base.Result
 bad : Eff [] Int
 bad = do
   _ <- yieldNow
-  sendCore Int "boom" "main" 0
+  sendCore Int "boom" "default" 0
 
 work : List Int -> Eff [] Int
 work [] = pure 0

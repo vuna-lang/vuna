@@ -9,10 +9,10 @@ data BoomOp : Type where
 
 data Boom : String -> Type where
 
-prog : Eff [Boom "main"] Nat
-prog = sendCore (Boom "main") "BoomOp" "main" BoomIt
+prog : Eff [Boom "default"] Nat
+prog = sendCore (Boom "default") "BoomOp" "default" BoomIt
 
-run : Eff (Cons "main" (Boom "main") Nil) Nat -> Nat
+run : Eff (Cons "default" (Boom "default") Nil) Nat -> Nat
 run comp = runPure (handle comp {
   BoomIt k -> k 5
   })

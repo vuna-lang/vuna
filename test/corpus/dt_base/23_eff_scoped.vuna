@@ -5,11 +5,11 @@ import Base.Eff.Reader
 import Base.EffExn
 import Base.Result
 
-prog : Eff [Exn "main", Reader "counter" Int] Int
+prog : Eff [Exn "default", Reader "counter" Int] Int
 prog = do
-  res <- tryWith "main" (do
+  res <- tryWith "default" (do
     x <- ask "counter" Int
-    _ <- throwExn "main" "boom"
+    _ <- throwExn "default" "boom"
     pure x
   )
   case res of
@@ -24,7 +24,7 @@ opH op k = case op of
 
 main : Int
 main = runPure (handleReader "counter" Int (\a => a) opH (do
-  res <- runExn "main" prog
+  res <- runExn "default" prog
   case res of
     Ok n => pure n
     Err _ => pure 0

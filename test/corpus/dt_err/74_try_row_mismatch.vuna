@@ -4,7 +4,7 @@ import Base.EffExn
 import Base.Result
 
 bad : Eff [] (Result Int)
-bad = tryWith "main" (pure 1)
+bad = tryWith "default" (pure 1)
 
 main : Int
 main = 1

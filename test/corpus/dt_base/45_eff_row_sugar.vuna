@@ -1,5 +1,5 @@
 -- 行语法糖：`[Fetch]` / `[Fetch, Log]` / `[]` 在期望 Row 的位置展开为
--- Cons/Nil（命名行：裸标签补默认名 "main"）；普通列表字面量（List Int）不受影响。
+-- Cons/Nil（命名行：裸标签补默认名 "default"）；普通列表字面量（List Int）不受影响。
 import Base.Eff
 import Base.List
 import Base.String
@@ -14,8 +14,8 @@ data FetchOp : Type where
 resFetch : FetchOp -> Type
 resFetch (FetchUrl _) = String
 
-fetch : String -> {r : Row} -> {w : Member "main" Fetch r} -> Eff r String
-fetch url = sendCore Fetch "fetch" "main" (FetchUrl url)
+fetch : String -> {r : Row} -> {w : Member "default" Fetch r} -> Eff r String
+fetch url = sendCore Fetch "fetch" "default" (FetchUrl url)
 
 r1 : Row
 r1 = [Fetch]
@@ -24,9 +24,9 @@ r2 : Row
 r2 = [Fetch, Log]
 
 -- 命名行（ND1）：`Row.Cons` 需要 (名字, 标签, 尾行) 三个实参，`::` 中缀别名只适
--- 用于二参构造子，故这里直接写 `Cons "main" Fetch Nil`。
+-- 用于二参构造子，故这里直接写 `Cons "default" Fetch Nil`。
 r3 : Row
-r3 = Cons "main" Fetch []
+r3 = Cons "default" Fetch []
 
 r0 : Row
 r0 = []
@@ -37,8 +37,8 @@ xs = [1, 2, 3]
 getPage : String -> Eff [Fetch] String
 getPage url = fetch url
 
-handleFetch : {a : Type} -> {b : Type} -> {r : Row} -> (a -> b) -> ((o : FetchOp) -> (resFetch o -> b) -> b) -> Eff (Cons "main" Fetch r) a -> Eff r b
-handleFetch ret opH comp = handleCore Fetch "fetch" "main" ret opH comp
+handleFetch : {a : Type} -> {b : Type} -> {r : Row} -> (a -> b) -> ((o : FetchOp) -> (resFetch o -> b) -> b) -> Eff (Cons "default" Fetch r) a -> Eff r b
+handleFetch ret opH comp = handleCore Fetch "fetch" "default" ret opH comp
 
 opH : (o : FetchOp) -> (resFetch o -> String) -> String
 opH op k = case op of

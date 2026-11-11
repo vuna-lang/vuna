@@ -3,14 +3,15 @@ import Base.Eff
 import Base.EffError
 import Base.Result
 
-prog : Eff [Error "main"] Int
-prog = catch "main" (throw "main" "boom") (\_ => pure 42)
+prog : Eff [Error "default"] Int
+prog = catch "default" (throw "default" "boom") (\_ => pure 42)
 
-prog2 : Eff [Error "main"] Int
-prog2 = catch "main" (catch "main" (throw "main" "a") (\_ => throw "main" "b")) (\_ => pure 7)
+prog2 : Eff [Error "default"] Int
+prog2 =
+  catch "default" (catch "default" (throw "default" "a") (\_ => throw "default" "b")) (\_ => pure 7)
 
 main : Int
-main = case (runPure (runError "main" (do
+main = case (runPure (runError "default" (do
   a <- prog
   b <- prog2
   pure (a * 100 + b)
