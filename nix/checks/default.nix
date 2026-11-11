@@ -375,6 +375,23 @@ in
     script = ./diag-style.sh;
   };
 
+  # M4 守卫：隐藏效果调用点只降不增（基线 nix/eff-boundary.allowlist）。
+  eff-boundary = mkCheck {
+    name = "vuna-eff-boundary";
+    srcs = [
+      ../../compiler/lib
+      ../../lib
+      ../../nix/check-eff-boundary.sh
+      ../../nix/eff-boundary.allowlist
+    ];
+    nativeBuildInputs = [
+      pkgs.bash
+      pkgs.coreutils
+      pkgs.gnugrep
+    ];
+    script = ../../nix/check-eff-boundary.sh;
+  };
+
   # 诊断门禁：compiler 内源码诊断必须走域码（TC_/CG_/RN_/LD_/IC_...）；位置渲染只在
   # Diag.Format/Source。工具/构建/清单错误（exit 2）是显式白名单。
   diag-raw = mkCheck {

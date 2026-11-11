@@ -12,6 +12,7 @@
 # 用法：sh nix/check-eff-boundary.sh [--update]
 set -eu
 root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+if [ ! -d "$root/compiler/lib" ]; then root=$(pwd); fi
 allow="$root/nix/eff-boundary.allowlist"
 tmp="${TMPDIR:-/tmp}/eff-boundary.$$"
 trap 'rm -f "$tmp"' EXIT

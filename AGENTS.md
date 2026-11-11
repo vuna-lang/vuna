@@ -50,7 +50,7 @@
    `[package] privileged = true` 的包；用户包/ad-hoc 只能经 `Eff` + handler（见
    [effects.md](docs/reference/effects.md) §8.6）。
    **M4 剩余债务**：编译器/工具链源码仍用 `runPure (...)` 在纯签名里隐藏 Eff 执行
-   （`compiler/lib` + `lib` 约 500 处），要改成显式 `Eff`/`EffCheck` 外壳并加 `nix` 守卫。
+   （`compiler/lib` + `lib` 约 350 处），要改成显式 `Eff`/`EffCheck` 外壳并加 `nix` 守卫。
 6. **唯一路径**：语言夹具、`vuna interp`、包构建与 seed 全部走 DT（精化 + 擦除
    codegen，`vuna check .` 也是 DT 自检）；没有可切换的检查器，也没有第二套 codegen；
 7. 编译器自检通过：`vuna check .` 必须能检查自身源码（`checks.vuna-typecheck`）。
@@ -61,7 +61,7 @@
   （`sh nix/seed-rotate.sh ./result/bin/vuna`）。
 - **M4 迁移期守卫**：编译器/工具链在纯签名里执行宿主动作的遗留点由
   `sh nix/check-eff-boundary.sh` 以基线（`nix/eff-boundary.allowlist`）锁定：只允许减少、
-  不允许新增；迁移推进后跑 `--update` 更新基线，全部清空后删除脚本与基线。
+  不允许新增；迁移推进后跑 `--update` 更新基线；守卫已作为 `checks.eff-boundary` 接入 `nix flake check`，全部清空后删除脚本与基线。
 - 允许 `git add` / `git commit`；`git checkout` / `git reset` 会丢工作树改动，执行前先确认。
   提交信息沿用仓库风格（`type(scope): 描述`）。
 - **代码改动后跑 `vuna fmt <改动的文件/目录>`**：源码应与 fmt 输出一致（`--check` 省略
