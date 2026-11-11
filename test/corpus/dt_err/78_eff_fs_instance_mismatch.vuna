@@ -3,7 +3,7 @@
 import Base.Eff
 import Base.EffFs
 
-prog : Eff [Fs "real"] String
+prog : Eff [FsOp@real] String
 prog = fsReadFile "real" "/tmp/vuna_w10_fs_err.txt"
 
 main : Eff [] Int

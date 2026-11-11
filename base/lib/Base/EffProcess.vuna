@@ -1,6 +1,5 @@
 module Base.EffProcess
-  ( Process
-  , ProcessOp(..)
+  ( ProcessOp(..)
   , handleProcess
   , handleProcessHost
   , handleProcessHostObserved
@@ -14,7 +13,7 @@ module Base.EffProcess
 
 -- Base.EffProcess：一阶进程效应（W10 IO 标签迁移）。
 --
--- 标签 `Process n` 是命名实例；操作：
+-- 标签 `ProcessOp` 是命名实例；操作：
 --   * `Args`：取进程参数（`prim_eff_getArgs`，**不含** argv[0]）；
 --   * `Exit`：以状态码退出（`prim_eff_exit`，真实 handler 下不返回）；
 --   * `RunIn`：在目录 dir 下运行命令（`prim_eff_runIn`），返回退出码。
@@ -30,9 +29,6 @@ import Base.Host
 import Base.Monad
 import Base.List
 
--- | process 效应的标签类型 `Process n`：只做行索引，没有运行时构造子。
-data Process : String -> Type where
-
 -- | process 操作：`Args`（取进程参数）、`Exit c`（以状态码 c 退出）、`RunIn dir args`（在目录下运行命令）。
 data ProcessOp : Type where
   Args : ProcessOp
@@ -46,20 +42,20 @@ resProcess (Exit c) = Int
 resProcess (RunIn dir args) = Int
 
 -- | 通过命名实例取进程参数（`prim_eff_getArgs`，**不含** `argv[0]`）。
-processArgs : (n : String) -> {r : Row} -> {w : Member n (Process n) r} -> Eff r (List String)
-processArgs n = sendCore (Process n) "process" n Args
+processArgs : (n : String) -> {r : Row} -> {w : Member n ProcessOp r} -> Eff r (List String)
+processArgs n = sendCore ProcessOp "process" n Args
 
 -- | 通过命名实例以状态码 `c` 退出；真实 handler 下不返回。
-processExit : (n : String) -> Int -> {r : Row} -> {w : Member n (Process n) r} -> Eff r Int
-processExit n c = sendCore (Process n) "process" n (Exit c)
+processExit : (n : String) -> Int -> {r : Row} -> {w : Member n ProcessOp r} -> Eff r Int
+processExit n c = sendCore ProcessOp "process" n (Exit c)
 
 -- | 通过命名实例在目录 `dir` 下运行命令 `args`，返回退出码；执行后恢复原 cwd。
-processRunIn : (n : String) -> String -> List String -> {r : Row} -> {w : Member n (Process n) r} -> Eff r Int
-processRunIn n dir args = sendCore (Process n) "process" n (RunIn dir args)
+processRunIn : (n : String) -> String -> List String -> {r : Row} -> {w : Member n ProcessOp r} -> Eff r Int
+processRunIn n dir args = sendCore ProcessOp "process" n (RunIn dir args)
 
--- | 一阶 handler：`ret` / `opH` 由调用方给出，结果行删除 `Process n`。
-handleProcess : {a : Type} -> {b : Type} -> {r : Row} -> (n : String) -> {w : Member n (Process n) r} -> (a -> b) -> ((o : ProcessOp) -> (resProcess o -> b) -> b) -> Eff r a -> Eff (Base.Eff.rowRem n (Process n) r) b
-handleProcess n ret opH comp = handleCore (Process n) "process" n ret opH comp
+-- | 一阶 handler：`ret` / `opH` 由调用方给出，结果行删除 `ProcessOp`。
+handleProcess : {a : Type} -> {b : Type} -> {r : Row} -> (n : String) -> {w : Member n ProcessOp r} -> (a -> b) -> ((o : ProcessOp) -> (resProcess o -> b) -> b) -> Eff r a -> Eff (Base.Eff.rowRem n ProcessOp r) b
+handleProcess n ret opH comp = handleCore ProcessOp "process" n ret opH comp
 
 -- `onExit` 决定 `Exit c` 的语义：真实路径传 `exit`（进程结束、不返回），
 -- 观察路径传 `prim_pureIO`（把退出码交给续延，程序继续）。
@@ -76,20 +72,20 @@ processOpHIOWith onExit op k = case op of
     c <- prim_eff_runIn dir args
     k c
 
--- | IO-backed handler：由调用方传入 `onExit`，结果行删除 `Process n`，answer 是 IO 动作。
-handleProcessHostWith : {a : Type} -> {r : Row} -> (n : String) -> (Int -> Eff [] Int) -> Eff (Base.Eff.Cons n (Process n) r) a -> Eff r (Eff [] a)
+-- | IO-backed handler：由调用方传入 `onExit`，结果行删除 `ProcessOp`，answer 是 IO 动作。
+handleProcessHostWith : {a : Type} -> {r : Row} -> (n : String) -> (Int -> Eff [] Int) -> Eff (Base.Eff.Cons n ProcessOp r) a -> Eff r (Eff [] a)
 handleProcessHostWith n onExit comp = handleProcess n (\a => pure a) (processOpHIOWith onExit) comp
 
 -- 真实路径：`Exit` 调用 `prim_eff_exit`，进程立即退出、不返回。
 -- | 真实路径 handler：`Exit` 调 `prim_eff_exit`，进程立即退出、不返回。
-handleProcessHost : {a : Type} -> {r : Row} -> (n : String) -> Eff (Base.Eff.Cons n (Process n) r) a -> Eff r (Eff [] a)
+handleProcessHost : {a : Type} -> {r : Row} -> (n : String) -> Eff (Base.Eff.Cons n ProcessOp r) a -> Eff r (Eff [] a)
 handleProcessHost n comp = handleProcessHostWith n (\c => exit c) comp
 
 -- 观察路径：`Exit c` 不退出，退出码作为操作结果交还给程序。
 -- | 观察路径 handler：`Exit c` 不退出，把退出码作为操作结果交还给程序，程序继续执行。
-handleProcessHostObserved : {a : Type} -> {r : Row} -> (n : String) -> Eff (Base.Eff.Cons n (Process n) r) a -> Eff r (Eff [] a)
+handleProcessHostObserved : {a : Type} -> {r : Row} -> (n : String) -> Eff (Base.Eff.Cons n ProcessOp r) a -> Eff r (Eff [] a)
 handleProcessHostObserved n comp = handleProcessHostWith n (\c => pure c) comp
 
 -- | 单效应便捷入口（P3）：`handleProcessHost n` + `runIOAnswer` 的组合。
-runProcess : {a : Type} -> (n : String) -> Eff [Process n] a -> Eff [] a
+runProcess : {a : Type} -> (n : String) -> Eff (Cons n ProcessOp []) a -> Eff [] a
 runProcess n comp = joinEff (handleProcessHost n comp)

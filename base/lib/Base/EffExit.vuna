@@ -1,15 +1,12 @@
-module Base.EffExit (Exit, ExitOp(..), exitWith, handleExit, handleExitHost, resExit, runExit) where
+module Base.EffExit (ExitOp(..), exitWith, handleExit, handleExitHost, resExit, runExit) where
 
 -- Base.EffExit：一阶进程退出效应（P2c：补 exit 标签）。
 --
--- 标签 `Exit n` 是命名实例；操作只有 ExitWith（状态码）。真实 handler 调
+-- 标签 `ExitOp` 是命名实例；操作只有 ExitWith（状态码）。真实 handler 调
 -- `Base.Host.exit` 后不会返回，`k 0` 只是类型上的兜底。
 import Base.Eff
 import Base.Host
 import Base.Monad
-
--- | 退出效应的标签类型 `Exit n`：只做行索引，没有运行时构造子。
-data Exit : String -> Type where
 
 -- | 退出操作：`ExitWith` 带状态码。
 data ExitOp : Type where
@@ -20,12 +17,12 @@ resExit : ExitOp -> Type
 resExit (ExitWith _) = Int
 
 -- | 通过命名实例退出进程（原语类型 `Int -> IO Int`，执行即退出、不返回）。
-exitWith : (n : String) -> Int -> {r : Row} -> {w : Member n (Exit n) r} -> Eff r Int
-exitWith n code = sendCore (Exit n) "exit" n (ExitWith code)
+exitWith : (n : String) -> Int -> {r : Row} -> {w : Member n ExitOp r} -> Eff r Int
+exitWith n code = sendCore ExitOp "exit" n (ExitWith code)
 
--- | 一阶 handler：结果行删除 `Exit n`。
-handleExit : {a : Type} -> {b : Type} -> {r : Row} -> (n : String) -> {w : Member n (Exit n) r} -> (a -> b) -> ((o : ExitOp) -> (resExit o -> b) -> b) -> Eff r a -> Eff (Base.Eff.rowRem n (Exit n) r) b
-handleExit n ret opH comp = handleCore (Exit n) "exit" n ret opH comp
+-- | 一阶 handler：结果行删除 `ExitOp`。
+handleExit : {a : Type} -> {b : Type} -> {r : Row} -> (n : String) -> {w : Member n ExitOp r} -> (a -> b) -> ((o : ExitOp) -> (resExit o -> b) -> b) -> Eff r a -> Eff (Base.Eff.rowRem n ExitOp r) b
+handleExit n ret opH comp = handleCore ExitOp "exit" n ret opH comp
 
 -- | 真实 handler 的操作解释：执行 `exit code`；`k 0` 不可达，只为类型闭合。
 exitOpHIO : {a : Type} -> (o : ExitOp) -> (resExit o -> Eff [] a) -> Eff [] a
@@ -34,10 +31,10 @@ exitOpHIO op k = case op of
     _ <- exit code
     k 0
 
--- | IO-backed handler：结果行删除 `Exit n`，answer 是 IO 动作，可交给 `runIOAnswer`。
-handleExitHost : {a : Type} -> {r : Row} -> (n : String) -> Eff (Base.Eff.Cons n (Exit n) r) a -> Eff r (Eff [] a)
+-- | IO-backed handler：结果行删除 `ExitOp`，answer 是 IO 动作，可交给 `runIOAnswer`。
+handleExitHost : {a : Type} -> {r : Row} -> (n : String) -> Eff (Base.Eff.Cons n ExitOp r) a -> Eff r (Eff [] a)
 handleExitHost n comp = handleExit n (\a => pure a) exitOpHIO comp
 
 -- | 单效应便捷入口（P3）：`handleExitHost n` + `runIOAnswer` 的组合。
-runExit : {a : Type} -> (n : String) -> Eff [Exit n] a -> Eff [] a
+runExit : {a : Type} -> (n : String) -> Eff (Cons n ExitOp []) a -> Eff [] a
 runExit n comp = joinEff (handleExitHost n comp)

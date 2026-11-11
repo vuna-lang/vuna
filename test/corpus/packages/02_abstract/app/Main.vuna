@@ -3,7 +3,7 @@ import Base.Eff
 import Base.EffConsole
 
 -- P2c：宿主 console 走 Eff（runConsole）；main 返回 0，golden 含尾随 0。
-prog : Eff [Console "real"] Int
+prog : Eff [ConsoleOp@real] Int
 prog = do
   _ <- consolePrint "real" (strFromInt (boxValue (makeBox 42)))
   pure 0

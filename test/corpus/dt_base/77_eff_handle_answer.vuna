@@ -6,12 +6,12 @@ import Base.List
 import Base.Monad
 import Base.Nat
 
-prog : Eff [Console@audit] Nat
+prog : Eff [ConsoleOp@audit] Nat
 prog = do
   n <- perform Print "hello"
   pure (n + 1)
 
-runAnswer : Eff (Cons "audit" (Console "audit") []) Nat -> Nat
+runAnswer : Eff (Cons "audit" ConsoleOp []) Nat -> Nat
 runAnswer comp = runPure (runPure (handle comp {
   return x -> pure x
   Print s k -> k 5
@@ -20,7 +20,7 @@ runAnswer comp = runPure (runPure (handle comp {
 )
 )
 
-runAbort : Eff (Cons "audit" (Console "audit") []) Nat -> Nat
+runAbort : Eff (Cons "audit" ConsoleOp []) Nat -> Nat
 runAbort comp = runPure (handle comp {
   Print s _ -> 5
   EPrint s _ -> 7

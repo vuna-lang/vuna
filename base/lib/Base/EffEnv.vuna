@@ -1,6 +1,5 @@
 module Base.EffEnv
-  ( Env
-  , EnvOp(..)
+  ( EnvOp(..)
   , envExecPath
   , envGetCwd
   , envGetEnv
@@ -12,14 +11,11 @@ module Base.EffEnv
 
 -- Base.EffEnv：一阶环境效应（W10 IO 标签迁移）。
 --
--- 标签 `Env n` 是命名实例；操作 GetEnv / GetCwd / ExecPath 都返回 String。
+-- 标签 = `EnvOp`（实例名在行的 `Cons n EnvOp r` 条目里）；操作 GetEnv / GetCwd / ExecPath 都返回 String。
 -- 真实 handler 用 `Base.IO` 的 `getEnv` / `getCwd` / `execPath` 实现。
 import Base.Eff
 import Base.Host
 import Base.Monad
-
--- | env 效应的标签类型 `Env n`：只做行索引，没有运行时构造子。
-data Env : String -> Type where
 
 -- | env 操作：`GetEnv` 带变量名、`GetCwd`、`ExecPath`。
 data EnvOp : Type where
@@ -34,20 +30,20 @@ resEnv GetCwd = String
 resEnv ExecPath = String
 
 -- | 通过命名实例取环境变量；真实 handler 走 `Base.IO.getEnv`（未设置或为空串都返回空串）。
-envGetEnv : (n : String) -> String -> {r : Row} -> {w : Member n (Env n) r} -> Eff r String
-envGetEnv n k = sendCore (Env n) "env" n (GetEnv k)
+envGetEnv : (n : String) -> String -> {r : Row} -> {w : Member n EnvOp r} -> Eff r String
+envGetEnv n k = sendCore EnvOp "env" n (GetEnv k)
 
 -- | 通过命名实例取当前工作目录。
-envGetCwd : (n : String) -> {r : Row} -> {w : Member n (Env n) r} -> Eff r String
-envGetCwd n = sendCore (Env n) "env" n GetCwd
+envGetCwd : (n : String) -> {r : Row} -> {w : Member n EnvOp r} -> Eff r String
+envGetCwd n = sendCore EnvOp "env" n GetCwd
 
 -- | 通过命名实例取可执行文件路径。
-envExecPath : (n : String) -> {r : Row} -> {w : Member n (Env n) r} -> Eff r String
-envExecPath n = sendCore (Env n) "env" n ExecPath
+envExecPath : (n : String) -> {r : Row} -> {w : Member n EnvOp r} -> Eff r String
+envExecPath n = sendCore EnvOp "env" n ExecPath
 
--- | 一阶 handler：`ret` / `opH` 由调用方给出，结果行删除 `Env n`。
-handleEnv : {a : Type} -> {b : Type} -> {r : Row} -> (n : String) -> {w : Member n (Env n) r} -> (a -> b) -> ((o : EnvOp) -> (resEnv o -> b) -> b) -> Eff r a -> Eff (Base.Eff.rowRem n (Env n) r) b
-handleEnv n ret opH comp = handleCore (Env n) "env" n ret opH comp
+-- | 一阶 handler：`ret` / `opH` 由调用方给出，结果行删除 `EnvOp`。
+handleEnv : {a : Type} -> {b : Type} -> {r : Row} -> (n : String) -> {w : Member n EnvOp r} -> (a -> b) -> ((o : EnvOp) -> (resEnv o -> b) -> b) -> Eff r a -> Eff (Base.Eff.rowRem n EnvOp r) b
+handleEnv n ret opH comp = handleCore EnvOp "env" n ret opH comp
 
 -- | 真实 handler 的操作解释：把三个操作映射到 `Base.IO` 的 `getEnv` / `getCwd` / `execPath`。
 envOpHIO : {a : Type} -> (o : EnvOp) -> (resEnv o -> Eff [] a) -> Eff [] a
@@ -62,10 +58,10 @@ envOpHIO op k = case op of
     v <- execPath
     k v
 
--- | IO-backed handler：结果行删除 `Env n`，answer 是 IO 动作，可交给 `runIOAnswer`。
-handleEnvHost : {a : Type} -> {r : Row} -> (n : String) -> Eff (Base.Eff.Cons n (Env n) r) a -> Eff r (Eff [] a)
+-- | IO-backed handler：结果行删除 `EnvOp`，answer 是 IO 动作，可交给 `runIOAnswer`。
+handleEnvHost : {a : Type} -> {r : Row} -> (n : String) -> Eff (Base.Eff.Cons n EnvOp r) a -> Eff r (Eff [] a)
 handleEnvHost n comp = handleEnv n (\a => pure a) envOpHIO comp
 
 -- | 单效应便捷入口（P3）：`handleEnvHost n` + `runIOAnswer` 的组合。
-runEnv : {a : Type} -> (n : String) -> Eff [Env n] a -> Eff [] a
+runEnv : {a : Type} -> (n : String) -> Eff (Cons n EnvOp []) a -> Eff [] a
 runEnv n comp = joinEff (handleEnvHost n comp)

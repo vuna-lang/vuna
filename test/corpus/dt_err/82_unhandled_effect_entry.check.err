@@ -1,1 +1,1 @@
-[TC_UnhandledEffects] row must be Nil here, but the action still has unhandled effect(s): ((Base.EffState.State "n") Int); handle them first
+[TC_UnhandledEffects] row must be Nil here, but the action still has unhandled effect(s): StateOp Int@n; handle them first

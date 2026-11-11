@@ -2,7 +2,7 @@
 import Base.Eff
 import Base.Eff.Reader
 
-prog : Eff [Reader "counter" Int] Int
+prog : Eff [ReaderOp Int@counter] Int
 prog = do
   x <- ask "counter" Int
   y <- local "counter" Int (\v => v + 10) (ask "counter" Int)

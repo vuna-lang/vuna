@@ -1,6 +1,5 @@
 module Base.EffConsole
-  ( Console
-  , ConsoleOp(..)
+  ( ConsoleOp(..)
   , consoleEprint
   , consolePrint
   , handleConsole
@@ -11,7 +10,7 @@ module Base.EffConsole
 
 -- Base.EffConsole：一阶 console 效应（W10 IO 标签迁移）。
 --
--- 标签 `Console n` 是命名实例（与 State/Reader 同构，n 是 String 实例名）：同一程序
+-- 行标签 = `ConsoleOp`（D2），实例名在行的 `Cons n ConsoleOp r` 条目里：同一程序
 -- 里可以同时安装多个 console handler（例如 "mock" = 收集器、"real" = 真实
 -- stdout/stderr），行里按实例名区分。操作只有 Print / EPrint；handler 用 `Base.IO` 的
 -- `print` / `eprint` 实现真实语义，`handleConsoleHost` 是可直接交给
@@ -20,10 +19,6 @@ import Base.Eff
 import Base.Host
 import Base.Nat
 import Base.Monad
-
--- 标签类型：只做行索引，没有运行时构造子。
--- | console 效应的标签类型 `Console n`：只做行索引，没有运行时构造子。
-data Console : String -> Type where
 
 -- | console 操作：`Print` / `EPrint` 各带一个 `String`。
 data ConsoleOp : Type where
@@ -36,17 +31,17 @@ resConsole : ConsoleOp -> Type
 resConsole (Print s) = Nat
 resConsole (EPrint s) = Int
 
--- | 通过命名实例 `n` 发送 `Print`；返回写入字节数（`Nat`）。行里需要 `Member n (Console n) r` 证明（由精化器按行结构构造）。
-consolePrint : (n : String) -> String -> {r : Row} -> {w : Member n (Console n) r} -> Eff r Nat
-consolePrint n s = sendCore (Console n) "console" n (Print s)
+-- | 通过命名实例 `n` 发送 `Print`；返回写入字节数（`Nat`）。行里需要 `Member n ConsoleOp r` 证明（由精化器按行结构构造）。
+consolePrint : (n : String) -> String -> {r : Row} -> {w : Member n ConsoleOp r} -> Eff r Nat
+consolePrint n s = sendCore ConsoleOp "console" n (Print s)
 
 -- | 通过命名实例 `n` 发送 `EPrint`（stderr）；其余同 `consolePrint`。
-consoleEprint : (n : String) -> String -> {r : Row} -> {w : Member n (Console n) r} -> Eff r Int
-consoleEprint n s = sendCore (Console n) "console" n (EPrint s)
+consoleEprint : (n : String) -> String -> {r : Row} -> {w : Member n ConsoleOp r} -> Eff r Int
+consoleEprint n s = sendCore ConsoleOp "console" n (EPrint s)
 
 -- | 一阶 handler：`ret` 处理正常返回、`opH` 解释每个操作，结果行删除 `Console n`。`(key, name)` 与对应的 send 匹配。
-handleConsole : {a : Type} -> {b : Type} -> {r : Row} -> (n : String) -> {w : Member n (Console n) r} -> (a -> b) -> ((o : ConsoleOp) -> (resConsole o -> b) -> b) -> Eff r a -> Eff (Base.Eff.rowRem n (Console n) r) b
-handleConsole n ret opH comp = handleCore (Console n) "console" n ret opH comp
+handleConsole : {a : Type} -> {b : Type} -> {r : Row} -> (n : String) -> {w : Member n ConsoleOp r} -> (a -> b) -> ((o : ConsoleOp) -> (resConsole o -> b) -> b) -> Eff r a -> Eff (Base.Eff.rowRem n ConsoleOp r) b
+handleConsole n ret opH comp = handleCore ConsoleOp "console" n ret opH comp
 
 -- 真实 handler 的 op 解释：answer 里直接执行 IO 动作。
 -- | 真实 handler 的操作解释：在续延前执行 `Base.IO` 的 `print` / `eprint`（answer 是 IO 动作）。
@@ -61,9 +56,9 @@ consoleOpHIO op k = case op of
 
 -- IO-backed handler：结果行删除 Console n，answer 是 IO 动作，可用 `runIOAnswer` 执行。
 -- | IO-backed handler：结果行删除 `Console n`，answer 是 IO 动作，可直接交给 `runIOAnswer` 执行。
-handleConsoleHost : {a : Type} -> {r : Row} -> (n : String) -> Eff (Base.Eff.Cons n (Console n) r) a -> Eff r (Eff [] a)
+handleConsoleHost : {a : Type} -> {r : Row} -> (n : String) -> Eff (Base.Eff.Cons n ConsoleOp r) a -> Eff r (Eff [] a)
 handleConsoleHost n comp = handleConsole n (\a => pure a) consoleOpHIO comp
 
 -- | 单效应便捷入口（P3）：`handleConsoleHost n` + `runIOAnswer` 的组合。
-runConsole : {a : Type} -> (n : String) -> Eff [Console n] a -> Eff [] a
+runConsole : {a : Type} -> (n : String) -> Eff (Cons n ConsoleOp []) a -> Eff [] a
 runConsole n comp = joinEff (handleConsoleHost n comp)

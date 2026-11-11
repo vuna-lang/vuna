@@ -3,7 +3,7 @@ import Base.Eff
 import Base.EffState
 import Base.Pair
 
-prog : Eff [State "counter" Int] Int
+prog : Eff [StateOp Int@counter] Int
 prog = do
   x <- get "counter" Int
   _ <- put "counter" Int (x + 1)

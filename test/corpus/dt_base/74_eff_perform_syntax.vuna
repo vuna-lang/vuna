@@ -1,5 +1,5 @@
 -- native-effects N1：`perform <op>` 语法。key 取 op 族规范名（ND8），实例名由行解出
--- （`[Console "audit"]` → 名字 "audit"），结果类型走上下文。
+-- （`[ConsoleOp@audit]` → 名字 "audit"），结果类型走上下文。
 -- handler 侧也按 ND8 用同一 key（现有 base wrapper 仍手写 "console"，统一留给
 -- handle 语法的提交）。
 import Base.Eff
@@ -13,14 +13,14 @@ mockOpH op k = case op of
   Print s => k 5
   EPrint s => k 0
 
-prog : Eff [Console "audit"] Nat
+prog : Eff [ConsoleOp@audit] Nat
 prog = do
   n <- perform Print "hello"
   pure n
 
-runAudit : {a : Type} -> Eff (Cons "audit" (Console "audit") []) a -> a
+runAudit : {a : Type} -> Eff (Cons "audit" ConsoleOp []) a -> a
 runAudit comp =
-  runPure (handleCore (Console "audit") "Base.EffConsole.ConsoleOp" "audit" (\x => x) mockOpH comp)
+  runPure (handleCore ConsoleOp "Base.EffConsole.ConsoleOp" "audit" (\x => x) mockOpH comp)
 
 main : Nat
 main = runAudit prog

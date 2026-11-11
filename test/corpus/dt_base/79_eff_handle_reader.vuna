@@ -2,10 +2,10 @@
 import Base.Eff
 import Base.Eff.Reader
 
-askEnv : Eff [Reader "env" String] String
+askEnv : Eff [ReaderOp String@env] String
 askEnv = perform Ask
 
-run : {r : Row} -> Eff (Cons "env" (Reader "env" String) r) String -> Eff r String
+run : {r : Row} -> Eff (Cons "env" (ReaderOp String) r) String -> Eff r String
 run comp = handle comp {
   Ask k -> k "hello"
 }

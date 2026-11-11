@@ -6,21 +6,21 @@ base/lib/Base/Bits.vuna: add32, band, bnot, bor, bxor, mask32, mask8, rol32, rot
 base/lib/Base/Bool.vuna: Bool(..), and, bool, not, or, xor
 base/lib/Base/Buffer.vuna: contents, length, new, push
 base/lib/Base/Eff.vuna: Cont, Eff, Member(..), ResFn(..), Row(..), bracket, defaultInstance, effPrim, finally, handleCore, handleCoreLin, handleWith, handleWithAt, joinEff, mkCont, performCore, raise, resFn, resOf, resumeCont, rowRem, runEff, runPure, sendCore, weaken
-base/lib/Base/Eff/Reader.vuna: Reader, ReaderOp(..), ask, handleReader, handleReaderLin, local, resReader
-base/lib/Base/EffArgs.vuna: Args, ArgsOp(..), argsGetArgs, handleArgs, handleArgsHost, resArgs, runArgs
+base/lib/Base/Eff/Reader.vuna: ReaderOp(..), ask, handleReader, handleReaderLin, local, resReader
+base/lib/Base/EffArgs.vuna: ArgsOp(..), argsGetArgs, handleArgs, handleArgsHost, resArgs, runArgs
 base/lib/Base/EffChannel.vuna: Channel, newChannelInt, recv, recvWait, send, tryRecv
-base/lib/Base/EffClock.vuna: Clock, ClockOp(..), clockNow, clockSleepMicros, handleClock, handleClockHost, resClock, runClock
-base/lib/Base/EffConsole.vuna: Console, ConsoleOp(..), consoleEprint, consolePrint, handleConsole, handleConsoleHost, resConsole, runConsole
-base/lib/Base/EffEnv.vuna: Env, EnvOp(..), envExecPath, envGetCwd, envGetEnv, handleEnv, handleEnvHost, resEnv, runEnv
-base/lib/Base/EffError.vuna: Error, ErrorOp(..), catch, handleError, resError, runError, throw
-base/lib/Base/EffExit.vuna: Exit, ExitOp(..), exitWith, handleExit, handleExitHost, resExit, runExit
+base/lib/Base/EffClock.vuna: ClockOp(..), clockNow, clockSleepMicros, handleClock, handleClockHost, resClock, runClock
+base/lib/Base/EffConsole.vuna: ConsoleOp(..), consoleEprint, consolePrint, handleConsole, handleConsoleHost, resConsole, runConsole
+base/lib/Base/EffEnv.vuna: EnvOp(..), envExecPath, envGetCwd, envGetEnv, handleEnv, handleEnvHost, resEnv, runEnv
+base/lib/Base/EffError.vuna: ErrorOp(..), catch, handleError, resError, runError, throw
+base/lib/Base/EffExit.vuna: ExitOp(..), exitWith, handleExit, handleExitHost, resExit, runExit
 base/lib/Base/EffExn.vuna: Exn, ExnOp(..), bracketExn, catchExn, exnRes, handleExn, runExn, throwExn, tryWith
-base/lib/Base/EffFs.vuna: Fs, FsOp(..), fsFileExists, fsFileMtime, fsFileSize, fsIsDirectory, fsMakeDir, fsReadDir, fsReadFile, fsRemoveFile, fsWriteFile, fsWriteFileAtomic, handleFs, handleFsHost, resFs, runFs
+base/lib/Base/EffFs.vuna: FsOp(..), fsFileExists, fsFileMtime, fsFileSize, fsIsDirectory, fsMakeDir, fsReadDir, fsReadFile, fsRemoveFile, fsWriteFile, fsWriteFileAtomic, handleFs, handleFsHost, resFs, runFs
 base/lib/Base/EffMutex.vuna: Mutex, Semaphore, acquire, newMutex, newSemaphore, release, semSignal, semWait
-base/lib/Base/EffProcess.vuna: Process, ProcessOp(..), handleProcess, handleProcessHost, handleProcessHostObserved, handleProcessHostWith, processArgs, processExit, processRunIn, resProcess, runProcess
+base/lib/Base/EffProcess.vuna: ProcessOp(..), handleProcess, handleProcessHost, handleProcessHostObserved, handleProcessHostWith, processArgs, processExit, processRunIn, resProcess, runProcess
 base/lib/Base/EffSched.vuna: Scope, Task, TaskLin, awaitTask, awaitTaskLin, cancelScope, cancelTask, cancelTaskLin, forkTask, forkTaskLin, forkTaskWith, isCancelled, newScope, scopeWait, scopeWaitTimeout, withScope, withScopeTimeout, yieldNow
-base/lib/Base/EffState.vuna: State, StateOp(..), get, handleState, put, resState
-base/lib/Base/EffStdin.vuna: Stdin, StdinOp(..), handleStdin, handleStdinHost, resStdin, runStdin, stdinReadBytes, stdinReadLine
+base/lib/Base/EffState.vuna: StateOp(..), get, handleState, put, resState
+base/lib/Base/EffStdin.vuna: StdinOp(..), handleStdin, handleStdinHost, resStdin, runStdin, stdinReadBytes, stdinReadLine
 base/lib/Base/Eq.vuna: Eq(..)
 base/lib/Base/Error.vuna: Error, catchError, ok, runError, throwError
 base/lib/Base/Field.vuna: Field

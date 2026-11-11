@@ -6,13 +6,13 @@ import Base.List
 import Base.Monad
 import Base.Nat
 
-prog : Eff [Console@audit] Nat
+prog : Eff [ConsoleOp@audit] Nat
 prog = do
   n <- perform Print "hello"
   pure (n + 1)
 
 -- 省略 return：ret = \x => x
-runMock : Eff (Cons "audit" (Console "audit") []) Nat -> Nat
+runMock : Eff (Cons "audit" ConsoleOp []) Nat -> Nat
 runMock comp = runPure (handle comp {
   Print s k -> k 5
   EPrint s k -> k 7
@@ -20,7 +20,7 @@ runMock comp = runPure (handle comp {
 )
 
 -- 显式 return：答案类型 b 可以与 comp 结果类型 a 不同
-runBumped : Eff (Cons "audit" (Console "audit") []) Nat -> Nat
+runBumped : Eff (Cons "audit" ConsoleOp []) Nat -> Nat
 runBumped comp = runPure (handle comp {
   return x -> x + 100
   Print s k -> k 5
@@ -29,7 +29,7 @@ runBumped comp = runPure (handle comp {
 )
 
 -- 开放尾行：结果行 = rowRem 之后剩下的 r
-runOpen : {r : Row} -> {a : Type} -> Eff (Cons "audit" (Console "audit") r) a -> Eff r a
+runOpen : {r : Row} -> {a : Type} -> Eff (Cons "audit" ConsoleOp r) a -> Eff r a
 runOpen comp = handle comp {
   Print s k -> k 5
   EPrint s k -> k 7

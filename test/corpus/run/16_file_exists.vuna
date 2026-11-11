@@ -2,7 +2,7 @@
 import Base.Eff
 import Base.EffFs
 
-prog : Eff [Fs "real"] Int
+prog : Eff [FsOp@real] Int
 prog = do
   root <- fsFileExists "real" "/"
   nope <- fsFileExists "real" "/vuna/definitely-not-a-file-xyz"

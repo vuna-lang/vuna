@@ -4,7 +4,7 @@ import Base.Eff
 import Base.Eff.Reader
 import Base.Host
 
-prog : Eff [Reader "counter" Int] Int
+prog : Eff [ReaderOp Int@counter] Int
 prog = do
   e <- ask "counter" Int
   pure (e + 1)

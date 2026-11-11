@@ -11,7 +11,7 @@ mockH op k = case op of
   Print s => k 5
   EPrint s => k 0
 
-prog : Eff [Console@audit] Nat
+prog : Eff [ConsoleOp@audit] Nat
 prog = do
   n <- consolePrint "audit" "hi"
   pure n

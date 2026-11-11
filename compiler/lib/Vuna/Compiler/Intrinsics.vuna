@@ -324,7 +324,7 @@ effUnitTypeName = "Base.Eff.EffUnit"
 effMkCtor : String
 effMkCtor = "Base.Eff.Eff.MkEff"
 
--- | 默认实例名（命名行 ND3）：裸标签条目 `Cons "default" e Nil` 与名字槽最终化兜底共用；
+-- | 默认实例名（命名行 ND3）：裸标签条目 `Cons "default" e Nil` 与 `handleWithAt` 共用；
 -- 单点定义在 `Base.Eff.defaultInstance`，此处是编译器侧的镜像常量。
 effDefaultInstance : String
 effDefaultInstance = "default"

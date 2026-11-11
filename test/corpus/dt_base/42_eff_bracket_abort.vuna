@@ -19,7 +19,7 @@ handleAbort ret opH comp = handleCore AbortE "abort" "default" ret opH comp
 abortH : (o : AbortOp) -> (Int -> Int) -> Int
 abortH Abort k = 7
 
-prog : Eff [AbortE, State "counter" Int] Int
+prog : Eff [AbortE, StateOp Int@counter] Int
 prog = bracket (weaken "default" (do
   _ <- put "counter" Int 0
   pure 0

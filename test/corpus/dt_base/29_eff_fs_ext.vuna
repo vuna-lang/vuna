@@ -17,7 +17,7 @@ pathB = "/tmp/vuna_w10_fs/b.txt"
 b2i : Bool -> Int
 b2i b = if b then 1 else 0
 
-prepare : Eff [Fs "real"] Int
+prepare : Eff [FsOp@real] Int
 prepare = do
   _ <- fsRemoveFile "real" pathA
   _ <- fsRemoveFile "real" pathB
@@ -27,7 +27,7 @@ prepare = do
   _ <- fsRemoveFile "real" pathB
   pure written
 
-inspectFs : Int -> Eff [Fs "real"] String
+inspectFs : Int -> Eff [FsOp@real] String
 inspectFs written = do
   exists <- fsFileExists "real" pathA
   content <- fsReadFile "real" pathA
@@ -39,7 +39,7 @@ inspectFs written = do
   pure
     (strFromInt written ++ ":" ++ content ++ ":" ++ strFromInt size ++ ":" ++ strFromInt (b2i isdir) ++ ":" ++ join "," files ++ ":" ++ strFromInt (b2i exists2))
 
-prog : Eff [Fs "real"] String
+prog : Eff [FsOp@real] String
 prog = do
   written <- prepare
   result <- inspectFs written

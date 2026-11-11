@@ -3,7 +3,7 @@
 import Base.Eff
 import Base.EffConsole
 
-prog : Eff [Console "real"] Int
+prog : Eff [ConsoleOp@real] Int
 prog = do
   _ <- consolePrint "real" "hello"
   pure 7

@@ -5,7 +5,7 @@ import Base.Eff.Reader
 import Base.EffExn
 import Base.Result
 
-prog : Eff [Exn "default", Reader "counter" Int] Int
+prog : Eff [Exn@default, ReaderOp Int@counter] Int
 prog = do
   res <- tryWith "default" (do
     x <- ask "counter" Int

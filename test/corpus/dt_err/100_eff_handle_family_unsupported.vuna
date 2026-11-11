@@ -6,10 +6,10 @@ import Base.List
 import Base.Monad
 import Base.Nat
 
-prog : Eff [Exn "boom"] Nat
+prog : Eff [Exn@boom] Nat
 prog = pure 1
 
-run : Eff (Cons "boom" (Exn "boom") []) Nat -> Nat
+run : Eff (Cons "boom" Exn []) Nat -> Nat
 run comp = runPure (handle comp {
   ThrowExn msg k -> k 0
   Try sub k -> k 0

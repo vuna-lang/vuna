@@ -8,7 +8,7 @@ import Base.EffConsole
 tag : DepTag
 tag = DepTagA
 
-prog : Eff [Console "real"] Int
+prog : Eff [ConsoleOp@real] Int
 prog = do
   _ <- consolePrint "real" (hello ++ "/" ++ depText)
   pure 0

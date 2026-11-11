@@ -1,6 +1,5 @@
 module Base.EffStdin
-  ( Stdin
-  , StdinOp(..)
+  ( StdinOp(..)
   , handleStdin
   , handleStdinHost
   , resStdin
@@ -11,15 +10,12 @@ module Base.EffStdin
 
 -- Base.EffStdin：一阶标准输入效应（P2c：补 readLine / readBytes 标签）。
 --
--- 标签 `Stdin n` 是命名实例；操作 ReadLine（读一行，EOF 返回空串）与
+-- 标签 `StdinOp` 是命名实例；操作 ReadLine（读一行，EOF 返回空串）与
 -- ReadBytes（最多读 n 字节，n 是度量 → Nat）。真实 handler 用 `Base.Host` 实现。
 import Base.Eff
 import Base.Host
 import Base.Monad
 import Base.Nat
-
--- | 标准输入效应的标签类型 `Stdin n`：只做行索引，没有运行时构造子。
-data Stdin : String -> Type where
 
 -- | 标准输入操作：`ReadLine` / `ReadBytes`（最多 n 字节）。
 data StdinOp : Type where
@@ -32,16 +28,16 @@ resStdin ReadLine = String
 resStdin (ReadBytes _) = String
 
 -- | 通过命名实例读一行；EOF 返回空串（与空行不可区分）。
-stdinReadLine : (n : String) -> {r : Row} -> {w : Member n (Stdin n) r} -> Eff r String
-stdinReadLine n = sendCore (Stdin n) "stdin" n ReadLine
+stdinReadLine : (n : String) -> {r : Row} -> {w : Member n StdinOp r} -> Eff r String
+stdinReadLine n = sendCore StdinOp "stdin" n ReadLine
 
 -- | 通过命名实例最多读 `k` 个字节；有数据就立即返回（可能少于 k），EOF 返回空串。
-stdinReadBytes : (n : String) -> Nat -> {r : Row} -> {w : Member n (Stdin n) r} -> Eff r String
-stdinReadBytes n k = sendCore (Stdin n) "stdin" n (ReadBytes k)
+stdinReadBytes : (n : String) -> Nat -> {r : Row} -> {w : Member n StdinOp r} -> Eff r String
+stdinReadBytes n k = sendCore StdinOp "stdin" n (ReadBytes k)
 
--- | 一阶 handler：结果行删除 `Stdin n`。
-handleStdin : {a : Type} -> {b : Type} -> {r : Row} -> (n : String) -> {w : Member n (Stdin n) r} -> (a -> b) -> ((o : StdinOp) -> (resStdin o -> b) -> b) -> Eff r a -> Eff (Base.Eff.rowRem n (Stdin n) r) b
-handleStdin n ret opH comp = handleCore (Stdin n) "stdin" n ret opH comp
+-- | 一阶 handler：结果行删除 `StdinOp`。
+handleStdin : {a : Type} -> {b : Type} -> {r : Row} -> (n : String) -> {w : Member n StdinOp r} -> (a -> b) -> ((o : StdinOp) -> (resStdin o -> b) -> b) -> Eff r a -> Eff (Base.Eff.rowRem n StdinOp r) b
+handleStdin n ret opH comp = handleCore StdinOp "stdin" n ret opH comp
 
 -- | 真实 handler 的操作解释：读 stdin 后继续。
 stdinOpHIO : {a : Type} -> (o : StdinOp) -> (resStdin o -> Eff [] a) -> Eff [] a
@@ -53,10 +49,10 @@ stdinOpHIO op k = case op of
     v <- readBytes n
     k v
 
--- | IO-backed handler：结果行删除 `Stdin n`，answer 是 IO 动作，可交给 `runIOAnswer`。
-handleStdinHost : {a : Type} -> {r : Row} -> (n : String) -> Eff (Base.Eff.Cons n (Stdin n) r) a -> Eff r (Eff [] a)
+-- | IO-backed handler：结果行删除 `StdinOp`，answer 是 IO 动作，可交给 `runIOAnswer`。
+handleStdinHost : {a : Type} -> {r : Row} -> (n : String) -> Eff (Base.Eff.Cons n StdinOp r) a -> Eff r (Eff [] a)
 handleStdinHost n comp = handleStdin n (\a => pure a) stdinOpHIO comp
 
 -- | 单效应便捷入口（P3）：`handleStdinHost n` + `runIOAnswer` 的组合。
-runStdin : {a : Type} -> (n : String) -> Eff [Stdin n] a -> Eff [] a
+runStdin : {a : Type} -> (n : String) -> Eff (Cons n StdinOp []) a -> Eff [] a
 runStdin n comp = joinEff (handleStdinHost n comp)

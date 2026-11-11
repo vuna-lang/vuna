@@ -341,9 +341,9 @@ tcTemplate (UnsolvedHole _) = "unsolved hole <0>"
 tcTemplate (UnsolvedMetavarInfer _) =
   "cannot infer a type for this expression (unsolved metavariable ?<0>); add a type annotation"
 tcTemplate (EffResFamilyMissing _) =
-  "cannot find the effect family members for <0> (expected a label type `<family>` and a result family `res<family>` in the same module as the op family)"
+  "cannot find the result family for <0> (expected `res<family> : <params…> -> <Op> -> Type` in the same module as the op family)"
 tcTemplate (HandleFamilyUnsupported _) =
-  "effect syntax (perform/handle) supports only op families with a plain type, a `<Label> : String -> <params…> -> Type` label and a `res<Label> : <params…> -> Op -> Type` result family; <0> does not fit"
+  "effect syntax (perform/handle) supports only op families whose explicit parameters are types and a `res<family>` result family; <0> does not fit"
 tcTemplate (AmbiguousCtor _ _) =
   "ambiguous constructor <0> (candidates: <1>); add a type annotation or qualify it"
 tcTemplate (AmbiguousInstance _ _) = "ambiguous instance for <0> (candidates: <1>)"

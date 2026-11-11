@@ -3,7 +3,7 @@
 import Base.Eff
 import Base.EffConsole
 
-prog : Eff [Console "real"] Int
+prog : Eff [ConsoleOp@real] Int
 prog = do
   _ <- consolePrint "real" (join "-" (map strFromInt (map (\x => x + 1) [1, 2])))
   pure 0

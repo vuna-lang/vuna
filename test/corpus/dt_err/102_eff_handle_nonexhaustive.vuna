@@ -5,12 +5,12 @@ import Base.List
 import Base.Monad
 import Base.Nat
 
-prog : Eff [Console@audit] Nat
+prog : Eff [ConsoleOp@audit] Nat
 prog = do
   n <- perform (Print "hello")
   pure n
 
-run : Eff (Cons "audit" (Console "audit") Nil) Nat -> Nat
+run : Eff (Cons "audit" ConsoleOp Nil) Nat -> Nat
 run comp = runPure (handle comp {
   Print s k -> k 5
   })

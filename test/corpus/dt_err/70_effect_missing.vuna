@@ -2,7 +2,7 @@
 import Base.Eff
 import Base.EffState
 
-bad : Eff [State "handled" Int] Int
+bad : Eff [StateOp Int@handled] Int
 bad = get "wanted" Int
 
 main : Int

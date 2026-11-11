@@ -8,7 +8,7 @@ opH : (o : ReaderOp Int) -> (Base.Eff.Reader.resReader Int o -> Int) -> Int
 opH op k = case op of
   Ask => k 7
 
-handled : Eff [Reader "task" Int] Int -> Eff [] Int
+handled : Eff [ReaderOp Int@task] Int -> Eff [] Int
 handled comp = handleReader "task" Int (\a => a) opH comp
 
 prog : Eff [] (Result Int)

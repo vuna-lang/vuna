@@ -1,0 +1,10 @@
+-- D5/D6 负例：参数化 op 族的标签探测计数（StateOp Nat 两个实例）同样报歧义。
+import Base.Eff
+import Base.EffState
+import Base.Nat
+
+prog : Eff [StateOp Nat@a, StateOp Nat@b] Nat
+prog = perform Get
+
+main : Int
+main = 0

@@ -15,7 +15,7 @@ path = "/tmp/vuna_w10_fs_named/a.txt"
 b2i : Bool -> Int
 b2i b = if b then 1 else 0
 
-prog : (n : String) -> Eff [Fs n] String
+prog : (n : String) -> Eff (Cons n FsOp Nil) String
 prog n = do
   _ <- fsMakeDir n dir
   _ <- fsRemoveFile n path

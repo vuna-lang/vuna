@@ -4,7 +4,7 @@ import Base.Eff
 import Base.EffClock
 import Base.Host
 
-prog : (n : String) -> Eff [Clock n] Int
+prog : (n : String) -> Eff (Cons n ClockOp Nil) Int
 prog n = do
   t0 <- clockNow n
   _ <- clockSleepMicros n 2000

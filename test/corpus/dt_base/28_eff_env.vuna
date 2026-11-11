@@ -4,7 +4,7 @@ import Base.Eff
 import Base.EffEnv
 import Base.Host
 
-prog : (n : String) -> Eff [Env n] Int
+prog : (n : String) -> Eff (Cons n EnvOp Nil) Int
 prog n = do
   m <- envGetEnv n "VUNA_W10_MISSING_ENV_VAR"
   c <- envGetCwd n

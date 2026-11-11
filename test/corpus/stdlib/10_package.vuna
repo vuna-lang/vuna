@@ -16,7 +16,7 @@ result =
        ++ join "-" (map (\x => strFromInt x) xs) ++ "/"
        ++ strFromInt (fromMaybe 0 (lookup "a" (insert "a" 7 empty))) ++ "/" ++ strFromInt (strLength "p")
 
-prog : Eff [Console "real"] String
+prog : Eff [ConsoleOp@real] String
 prog = do
   _ <- consolePrint "real" "p"
   pure result

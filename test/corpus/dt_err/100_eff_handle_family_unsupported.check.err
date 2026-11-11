@@ -1,1 +1,1 @@
-[TC_HandleFamilyUnsupported] effect syntax (perform/handle) supports only op families with a plain type, a `<Label> : String -> <params…> -> Type` label and a `res<Label> : <params…> -> Op -> Type` result family; Base.EffExn.ExnOp does not fit
+[TC_HandleFamilyUnsupported] effect syntax (perform/handle) supports only op families whose explicit parameters are types and a `res<family>` result family; Base.EffExn.ExnOp does not fit

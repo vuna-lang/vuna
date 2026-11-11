@@ -1,0 +1,17 @@
+-- D2/D3/D6：裸标签行 = 默认实例名 "default"；perform / handle 都不写实例名。
+import Base.Eff
+import Base.EffConsole
+import Base.Monad
+import Base.Nat
+
+prog : Eff [ConsoleOp] Nat
+prog = do
+  n <- perform (Print "hi")
+  pure (n + 1)
+
+main : Nat
+main = runPure (handle prog {
+  Print s k -> k 1
+  EPrint s k -> k 0
+}
+)

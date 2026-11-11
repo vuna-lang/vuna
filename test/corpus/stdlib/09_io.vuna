@@ -3,7 +3,7 @@
 import Base.Eff
 import Base.EffConsole
 
-program : Eff [Console "real"] Int
+program : Eff [ConsoleOp@real] Int
 program = do
   n <- consolePrint "real" "abc"
   m <- consolePrint "real" "de"

@@ -3,8 +3,8 @@
 import Base.Eff
 import Base.EffState
 
-prog : Eff [State "n" Int] Int
+prog : Eff [StateOp Int@n] Int
 prog = get "n" Int
 
-main : Eff [State "n" Int] Int
+main : Eff [StateOp Int@n] Int
 main = prog

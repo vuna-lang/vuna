@@ -19,7 +19,6 @@ PKG_NoManifestUpward
 PS_ExpectedEndOfInput
 RN_AmbiguousConstructor
 RN_AmbiguousConstructorInExport
-TC_AmbiguousInstance
 TC_AppliedNotType
 TC_CannotSolveHigherOrder
 TC_CannotSolveMetavar

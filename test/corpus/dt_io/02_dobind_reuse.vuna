@@ -2,7 +2,7 @@
 import Base.Eff
 import Base.EffConsole
 
-prog : Eff [Console "real"] Int
+prog : Eff [ConsoleOp@real] Int
 prog = do
   x <- pure 41
   x <- pure 42

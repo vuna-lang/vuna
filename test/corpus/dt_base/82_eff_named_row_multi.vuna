@@ -1,0 +1,35 @@
+-- D2/D6：单实例裸标签 perform 自动解出唯一名字；多实例行用带 (n : String) 的
+-- wrapper 指定实例（裸标签在多实例上会报 TC_AmbiguousInstance，见 dt_err/108）。
+import Base.Eff
+import Base.EffConsole
+import Base.Monad
+import Base.Nat
+
+progA : Eff [ConsoleOp@a] Nat
+progA = perform (Print "a")
+
+runA : Nat
+runA = runPure (handle progA {
+  Print s k -> k 1
+  EPrint s k -> k 2
+}
+)
+
+multi : Eff [ConsoleOp@a, ConsoleOp@b] Nat
+multi = consolePrint "a" "b"
+
+aH : (o : ConsoleOp) -> (resConsole o -> Nat) -> Nat
+aH op k = case op of
+  Print s => k 5
+  EPrint s => k 6
+
+bH : (o : ConsoleOp) -> (resConsole o -> Nat) -> Nat
+bH op k = case op of
+  Print s => k 7
+  EPrint s => k 8
+
+runMulti : Nat
+runMulti = runPure (handleConsole "a" (\x => x) aH (handleConsole "b" (\x => x) bH multi))
+
+main : Nat
+main = runA + runMulti

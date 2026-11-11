@@ -5,7 +5,7 @@ import Base.EffState
 import Base.Result
 import Base.Pair
 
-prog : Eff [Exn "default", State "counter" Int] Int
+prog : Eff [Exn@default, StateOp Int@counter] Int
 prog = bracketExn "default" (pure 0) (\_ => put "counter" Int 99) (\_ => do
   _ <- throwExn "default" "boom"
   pure 1

@@ -2,7 +2,7 @@
 import Base.Eff
 import Base.Eff.Reader
 
-prog : Eff [Reader "counter" Int, Reader "config" Int] Int
+prog : Eff [ReaderOp Int@counter, ReaderOp Int@config] Int
 prog = do
   x <- ask "counter" Int
   y <- ask "config" Int
