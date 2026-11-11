@@ -824,9 +824,58 @@ floatIntrinsics =
     Intrinsic "bi_ge_float" (IFun IFloat (IFun IFloat IBool)) OpGeF Nothing "bi_ge_float" False
   ]
 
--- | 所有内建声明：基础表 + 浮点表。
+-- | Eff 动作版本的宿主原语（bootstrap 过渡表）：名字带 `prim_eff_` 前缀，
+-- 与同名 IO 原语语义相同、类型为 `Eff [] a`。单独成表是为了让每段列表字面量
+-- 留在旧 seed 的 fuel 内（同 `floatIntrinsics`；迁移完成后删除 IO 表/本表并改名）。
+effIntrinsics : List Intrinsic
+effIntrinsics =
+  [ Intrinsic "effTimeUs" (IEff IInt) OpNone (Just CapClock) "(dtp_timeUs ())" True,
+    Intrinsic "prim_eff_sleep" (IFun IInt (IEff IInt)) OpNone (Just CapClock) "dtp_sleep" True,
+    Intrinsic "prim_eff_newRef" (IPi "a" (IFun (IVar "a") (IEff (IRef (IVar "a"))))) OpNone Nothing "(fun x -> ref x)" True,
+    Intrinsic "prim_eff_readRef" (IPi "a" (IFun (IRef (IVar "a")) (IEff (IVar "a")))) OpNone Nothing "(fun r -> !r)" True,
+    Intrinsic "prim_eff_writeRef" (IPi "a" (IFun (IRef (IVar "a")) (IFun (IVar "a") (IEff IInt)))) OpNone Nothing "(fun r v -> r := v; 0)" True,
+    Intrinsic "prim_eff_newMArray" (IPi "a" (IFun IInt (IFun (IVar "a") (IEff (IMArray (IVar "a")))))) OpNone Nothing "(fun n v -> Array.make n v)" True,
+    Intrinsic "prim_eff_readMArray" (IPi "a" (IFun (IMArray (IVar "a")) (IFun IInt (IEff (IVar "a"))))) OpNone Nothing "(fun a i -> Array.get a i)" True,
+    Intrinsic "prim_eff_writeMArray" (IPi "a" (IFun (IMArray (IVar "a")) (IFun IInt (IFun (IVar "a") (IEff IInt))))) OpNone Nothing "(fun a i v -> Array.set a i v; 0)" True,
+    Intrinsic "prim_eff_mArrayLength" (IPi "a" (IFun (IMArray (IVar "a")) (IEff IInt))) OpNone Nothing "(fun a -> Array.length a)" True,
+    Intrinsic "prim_eff_newBuffer" (IEff IBuf) OpNone Nothing "(Buffer.create 16)" True,
+    Intrinsic "prim_eff_bufferAdd" (IFun IBuf (IFun IStr (IEff IInt))) OpNone Nothing "(fun b s -> Buffer.add_string b s; String.length s)" True,
+    Intrinsic "prim_eff_bufferContents" (IFun IBuf (IEff IStr)) OpNone Nothing "(fun b -> Buffer.contents b)" True,
+    Intrinsic "prim_eff_bufferLength" (IFun IBuf (IEff IInt)) OpNone Nothing "(fun b -> Buffer.length b)" True,
+    Intrinsic "prim_eff_print" (IFun IStr (IEff IInt)) OpNone (Just CapConsole) "dtp_print" True,
+    Intrinsic "prim_eff_eprint" (IFun IStr (IEff IInt)) OpNone (Just CapConsole) "(fun s -> prerr_string s; flush stderr; String.length s)" True,
+    Intrinsic "prim_eff_readFile" (IFun IStr (IEff IStr)) OpNone (Just CapFs) "dtp_readFile" True,
+    Intrinsic "prim_eff_writeFile" (IFun IStr (IFun IStr (IEff IInt))) OpNone (Just CapFs) "dtp_writeFile" True,
+    Intrinsic "prim_eff_writeFileAtomic" (IFun IStr (IFun IStr (IEff IInt))) OpNone (Just CapFs) "dtp_writeFileAtomic" True,
+    Intrinsic "prim_eff_readLine" (IEff IStr) OpNone (Just CapConsole) "(dtp_readLine ())" True,
+    Intrinsic "prim_eff_readBytes" (IFun IInt (IEff IStr)) OpNone (Just CapConsole) "dtp_readBytes" True,
+    Intrinsic "prim_eff_getArgs" (IEff (IList IStr)) OpNone (Just CapProcess) "(dtp_listOf (dtp_getArgs ()))" True,
+    Intrinsic "prim_eff_readDir" (IFun IStr (IEff (IList IStr))) OpNone (Just CapFs) "(fun p -> dtp_listOf (dtp_readDir p))" True,
+    Intrinsic "prim_eff_isDirectory" (IFun IStr (IEff IBool)) OpNone (Just CapFs) "dtp_isDirectory" True,
+    Intrinsic "prim_eff_makeDir" (IFun IStr (IEff IInt)) OpNone (Just CapFs) "dtp_makeDir" True,
+    Intrinsic "prim_eff_removeFile" (IFun IStr (IEff IInt)) OpNone (Just CapFs) "dtp_removeFile" True,
+    Intrinsic "prim_eff_fileExists" (IFun IStr (IEff IBool)) OpNone (Just CapFs) "dtp_fileExists" True,
+    Intrinsic "prim_eff_fileMtime" (IFun IStr (IEff IInt)) OpNone (Just CapFs) "dtp_fileMtime" True,
+    Intrinsic "prim_eff_fileSize" (IFun IStr (IEff IInt)) OpNone (Just CapFs) "dtp_fileSize" True,
+    Intrinsic "prim_eff_exit" (IFun IInt (IEff IInt)) OpNone (Just CapProcess) "dtp_exit" True,
+    Intrinsic "prim_eff_runIn" (IFun IStr (IFun (IList IStr) (IEff IInt))) OpNone (Just CapProcess) "(fun dir args -> dtp_runIn dir (dtp_ocamlOf args))" True,
+    Intrinsic "prim_eff_spawn" (IFun (IList IStr) (IEff IInt)) OpNone (Just CapProcess) "(fun args -> dtp_spawn (dtp_ocamlOf args))" True,
+    Intrinsic "prim_eff_wait" (IFun IInt (IEff IInt)) OpNone (Just CapProcess) "dtp_wait" True,
+    Intrinsic "prim_eff_netListen" (IFun IStr (IEff IInt)) OpNone (Just CapNetwork) "dtp_net_listen" True,
+    Intrinsic "prim_eff_netPort" (IFun IInt (IEff IInt)) OpNone (Just CapNetwork) "dtp_net_port" True,
+    Intrinsic "prim_eff_netAccept" (IFun IInt (IEff IInt)) OpNone (Just CapNetwork) "dtp_net_accept" True,
+    Intrinsic "prim_eff_netRecv" (IFun IInt (IFun IInt (IEff IStr))) OpNone (Just CapNetwork) "dtp_net_recv" True,
+    Intrinsic "prim_eff_netSend" (IFun IInt (IFun IStr (IEff IInt))) OpNone (Just CapNetwork) "dtp_net_send" True,
+    Intrinsic "prim_eff_netClose" (IFun IInt (IEff IInt)) OpNone (Just CapNetwork) "dtp_net_close" True,
+    Intrinsic "prim_eff_netConnect" (IFun IStr (IEff IInt)) OpNone (Just CapNetwork) "dtp_net_connect" True,
+    Intrinsic "prim_eff_getenv" (IFun IStr (IEff IStr)) OpNone (Just CapEnv) "dtp_getenv" True,
+    Intrinsic "prim_eff_getcwd" (IEff IStr) OpNone (Just CapEnv) "(dtp_getcwd ())" True,
+    Intrinsic "prim_eff_execPath" (IEff IStr) OpNone (Just CapEnv) "(dtp_execPath ())" True
+  ]
+
+-- | 所有内建声明：基础表 + 浮点表 + Eff 过渡表。
 allIntrinsics : List Intrinsic
-allIntrinsics = append baseIntrinsics floatIntrinsics
+allIntrinsics = append baseIntrinsics (append floatIntrinsics effIntrinsics)
 
 -- | 全部与 Float 有关的内建名（字面量/算术/比较/转换/格式化）：`vuna interp`/REPL 的
 -- 求值 guard 与 codegen 的按需 runtime helper 都按它判定「程序是否使用浮点」。
