@@ -124,7 +124,7 @@ runCli1 args = case args of
     "fmt" => fmtArgs rest
     "repl" => replArgs rest
     "doc" => Vuna.Doc.runDoc rest
-    "search" => Vuna.Search.runSearch rest
+    "search" => runPure (Vuna.Search.runSearch rest)
     "gen-errors" => genErrorsArgs rest
     "explain" => runPure (Vuna.Explain.runExplain rest)
     "clean-iface" => runPure (Vuna.Clean.runCleanIface rest)
@@ -482,8 +482,8 @@ genErrorsArgs : List String -> Int
 genErrorsArgs args = case parseToolArgs "vuna gen-errors" [] args of
   ErrC e => toolError (diagText e)
   OkC parsed => case parsed.positionals of
-    [] => runGenErrors "."
-    [root] => runGenErrors root
+    [] => runPure (runGenErrors ".")
+    [root] => runPure (runGenErrors root)
     _ => usageError 0
 
 -- ---------------------------------------------------------------

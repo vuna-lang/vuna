@@ -18,7 +18,7 @@ data SearchMode : Type where
   TypeMode : SearchMode
   NameDocMode : Bool -> Bool -> SearchMode
 
-runSearch : List String -> Int
+runSearch : List String -> Eff [] Int
 runSearch args = case parseToolArgs "vuna search" [BoolFlag "type", BoolFlag "name", BoolFlag "doc", ValueFlag "module", ValueFlag "limit", BoolFlag "json"] args of
   ErrC e => toolError (diagText e)
   OkC parsed =>
@@ -33,7 +33,7 @@ runSearch args = case parseToolArgs "vuna search" [BoolFlag "type", BoolFlag "na
           ErrC e => toolError (diagText e)
           OkC index => runOnIndex parsed mode query limit index
 
-runOnIndex : Parsed -> SearchMode -> String -> Int -> Index -> Int
+runOnIndex : Parsed -> SearchMode -> String -> Int -> Index -> Eff [] Int
 runOnIndex parsed (mode@TypeMode) query limit index = case searchType index query of
   ErrC e => toolError (diagText e)
   OkC hits => finish parsed mode query (filterHits parsed limit hits)
@@ -87,23 +87,20 @@ takeHits n (h :: rest) = if n <= 0 then [] else h :: takeHits (n - 1) rest
 -- ---------------------------------------------------------------
 -- 文本 / JSON
 -- ---------------------------------------------------------------
-finish : Parsed -> SearchMode -> String -> List SearchHit -> Int
-finish parsed mode query hits = if length hits == 0 then
-  let
-    _ = runPure (prim_eff_print "no results for `${query}`\n")
-  in 1
-else if flagSet parsed "json" then
-  let
-    _ = runPure (prim_eff_print "${renderJson (hitsJson mode query hits)}\n")
-  in 0
+finish : Parsed -> SearchMode -> String -> List SearchHit -> Eff [] Int
+finish parsed mode query hits = if length hits == 0 then do
+  _ <- prim_eff_print "no results for `${query}`\n"
+  pure 1
+else if flagSet parsed "json" then do
+  _ <- prim_eff_print "${renderJson (hitsJson mode query hits)}\n"
+  pure 0
 else printHits hits
 
-printHits : List SearchHit -> Int
-printHits [] = 0
-printHits (h :: rest) =
-  let
-    _ = runPure (prim_eff_print "${hitText h}\n")
-  in printHits rest
+printHits : List SearchHit -> Eff [] Int
+printHits [] = pure 0
+printHits (h :: rest) = do
+  _ <- prim_eff_print "${hitText h}\n"
+  printHits rest
 
 -- REPL `:search` 复用同一份单条命中渲染。
 renderHit : SearchHit -> String
@@ -133,8 +130,7 @@ hitJson h =
   JObj
     [Pair "module" (JStr (hitModule h)), Pair "name" (JStr (hitName h)), Pair "kind" (JStr (hitKind h)), Pair "signature" (JStr (hitSignature h)), Pair "doc" (JStr (hitDoc h)), Pair "line" (JNum (hitLine h)), Pair "score" (JNum (hitScore h)), Pair "match" (JStr (hitMatch h))]
 
-toolError : String -> Int
-toolError e =
-  let
-    _ = runPure (prim_eff_print "error: ${e}\n")
-  in 2
+toolError : String -> Eff [] Int
+toolError e = do
+  _ <- prim_eff_print "error: ${e}\n"
+  pure 2
