@@ -330,16 +330,20 @@ warnUnusedBinder sp name =
 -- QTT 使用点：Core `TVar` 现在携带源 span；检查期记录到进程内盒子，
 -- 报告线性/擦除错误时逐条挂 `fields.span name=use`。
 -- ---------------------------------------------------------------
+-- | QTT 使用点收集盒。
 record UseBox where
   useItems : List (Pair String Span)
   useTag : Int
 
+-- | 进程内 QTT 使用点收集引用。
 useSpansRef : IORef UseBox
 useSpansRef = runIO (newRef (UseBox [] 0))
 
+-- | 清空 QTT 使用点（每个定义体检查前调用）。
 resetUseSpans : Int -> Int
 resetUseSpans _ = runIO (writeRef useSpansRef (UseBox [] 0))
 
+-- | 记录一次变量使用点。
 recordUseSpan : String -> Span -> Int
 recordUseSpan name sp =
   let
@@ -347,13 +351,16 @@ recordUseSpan name sp =
     _ = runIO (writeRef useSpansRef (UseBox (Pair name sp :: box.useItems) box.useTag))
   in 0
 
+-- | 取某名字的全部使用点（按出现顺序）。
 usesOf : String -> List Span
 usesOf name =
   reverse (map secondOf (filter (\p => firstOf p == name) (runIO (readRef useSpansRef)).useItems))
 
+-- | 把某名字的使用点挂成 fields.span。
 withUseFields : String -> Diagnostic -> Diagnostic
 withUseFields name d = withUseSpans (usesOf name) d
 
+-- | 把一组 span 逐条挂成 fields.span。
 withUseSpans : List Span -> Diagnostic -> Diagnostic
 withUseSpans [] d = d
 withUseSpans (sp :: rest) d = withUseSpans rest (withField (FieldSpan "use" sp) d)
