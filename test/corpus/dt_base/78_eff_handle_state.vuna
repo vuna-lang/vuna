@@ -1,0 +1,29 @@
+-- native-effects N1（提交 4b）：参数化 op 族（State 的 k = 1）。op 族
+-- `StateOp : Type -> Type`、标签 `State n s`、结果族 `resState s op`；handle 按族参数补洞，
+-- 续延拿到 `resState s Get = s`。
+import Base.Eff
+import Base.EffState
+import Base.List
+import Base.Monad
+import Base.Nat
+
+getN : Eff [State "counter" Nat] Nat
+getN = perform Get
+
+putOne : Eff [State "counter" Nat] Nat
+putOne = perform Put 1
+
+prog : Eff [State "counter" Nat] Nat
+prog = do
+  n <- getN
+  _ <- putOne
+  pure n
+
+run : {r : Row} -> Eff (Cons "counter" (State "counter" Nat) r) Nat -> Eff r Nat
+run comp = handle comp {
+  Get k -> k 5
+  Put x k -> k 6
+}
+
+main : Nat
+main = runPure (run prog)

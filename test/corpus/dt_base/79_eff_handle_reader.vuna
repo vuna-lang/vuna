@@ -1,0 +1,14 @@
+-- native-effects N1（提交 4b）：参数化 op 族（Reader 的 k = 1）；结果行删除 Reader 条目。
+import Base.Eff
+import Base.Eff.Reader
+
+askEnv : Eff [Reader "env" String] String
+askEnv = perform Ask
+
+run : {r : Row} -> Eff (Cons "env" (Reader "env" String) r) String -> Eff r String
+run comp = handle comp {
+  Ask k -> k "hello"
+}
+
+main : String
+main = runPure (run askEnv)

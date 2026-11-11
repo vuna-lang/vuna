@@ -1,0 +1,35 @@
+-- native-effects N1（提交 4b）：comp 的行还没有具体化（行多态表达式）时，handle 降级到
+-- 行首条目版（`handleWithAt`）：名字取默认实例名 `main`，结果行由期望类型定。
+import Base.Eff
+import Base.EffConsole
+import Base.List
+import Base.Monad
+import Base.Nat
+
+fortyOne : Nat
+fortyOne = 41
+
+six : Nat
+six = 6
+
+-- comp 是 `pure`：行内容由 handle 定
+p1 : Nat
+p1 = runPure (handle (pure fortyOne) {
+  Print s k -> k 1
+  EPrint s k -> k 2
+}
+)
+
+-- comp 是内联 do 块：perform 的实例名同样取默认 main，与 handler 配对
+p2 : Nat
+p2 = runPure (handle (do
+  _ <- perform Print "hi"
+  pure six
+) {
+  Print s k -> k 5
+  EPrint s k -> k 7
+}
+)
+
+main : Nat
+main = p1 + p2

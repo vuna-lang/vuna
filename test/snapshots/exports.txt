@@ -4,7 +4,7 @@ base/lib/Base/Applicative.vuna: Applicative(..)
 base/lib/Base/Array.vuna: fromList, get, length, make, set, toList
 base/lib/Base/Bool.vuna: Bool(..), and, bool, not, or, xor
 base/lib/Base/Buffer.vuna: contents, length, new, push
-base/lib/Base/Eff.vuna: Cont, Eff, Member(..), ResFn(..), Row(..), bracket, defaultInstance, effPrim, finally, handleCore, handleCoreLin, handleWith, mkCont, performCore, resFn, resOf, resumeCont, rowRem, runEff, runIOAnswer, runIOEff, runPure, sendCore, weaken
+base/lib/Base/Eff.vuna: Cont, Eff, Member(..), ResFn(..), Row(..), bracket, defaultInstance, effPrim, finally, handleCore, handleCoreLin, handleWith, handleWithAt, mkCont, performCore, resFn, resOf, resumeCont, rowRem, runEff, runIOAnswer, runIOEff, runPure, sendCore, weaken
 base/lib/Base/Eff/Reader.vuna: Reader, ReaderOp(..), ask, handleReader, handleReaderLin, local, resReader
 base/lib/Base/EffArgs.vuna: Args, ArgsOp(..), argsGetArgs, handleArgs, handleArgsIO, resArgs, runArgs
 base/lib/Base/EffAsync.vuna: Task, async, await

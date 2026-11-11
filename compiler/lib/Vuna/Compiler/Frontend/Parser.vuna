@@ -974,7 +974,9 @@ else if atSym st "}" then psErr0 HandleNeedsOpClause
 else case peekPos st of
   Pos line col => if col <= handleCol then psErr0 HandleClauseNotIndented
   else Vuna.Compiler.Common.step (parseHandleClauses (fuel - 1) st col Nothing []) (\p, st2 => case p of
-    Pair retOpt ops => Vuna.Compiler.Common.step (expectSym st2 "}") (\_, st3 => OkC (Pair (HandleBlock retOpt ops) st3))
+    Pair retOpt ops =>
+      Vuna.Compiler.Common.step (expectSym st2 "}")
+        (\_, st3 => OkC (Pair (HandleBlock retOpt ops) st3))
   )
 
 -- | 子句头是否是 return 子句（`return` 不是全局关键字，只在子句头按标识符识别）。

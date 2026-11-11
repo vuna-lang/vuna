@@ -11,6 +11,7 @@ module Base.Eff
   , handleCore
   , handleCoreLin
   , handleWith
+  , handleWithAt
   , mkCont
   , performCore
   , resFn
@@ -208,6 +209,17 @@ resOf rf o = case rf of
 -- | 核心 handler 的类型化包装：handler 类型为 `(o : op) -> (resOf rf o -> b) -> b`；`rf` 是擦除量，`{w}` 置尾以便 `r` 先由 `comp` 解出。
 handleWith : (n : String) -> (key : String) -> (e : Type) -> (op : Type) -> {r : Row} -> {a : Type} -> {b : Type} -> (0 rf : ResFn op) -> Eff r a -> (a -> b) -> ((o : op) -> (resOf rf o -> b) -> b) -> {w : Member n e r} -> Eff (rowRem n e r) b
 handleWith n key e op rf comp ret opH = handleCore e key n ret opH comp
+
+-- `handle` 语法的第二种降级（comp 的行还没有具体化时用）：把被处理条目**放在行首**，
+-- 结果行就是剩下的 `er`——不需要 `rowRem` 归约，行内容由本函数的参数决定。
+-- 何时用：`handle (pure e) { ... }`、内联 do 块等 comp 是行多态表达式时，`handleWith` 的
+-- `r` 仍是未解 meta，结果行 `rowRem n e r` 在调用点 conv 卡住；此时把期望结果行交给
+-- `{er}` 隐式参数、名字取默认实例名，comp 的行就被定成 `Cons n e er`（语义正是
+-- 「comp 可能做被处理效应，handler 消费行首条目」）。正常 handler 完全体仍走 `handleWith`
+-- （支持条目在行中任意位置，用 `Member` 证明）。
+-- | 行首条目版核心 handler：`comp : Eff (Cons n e er) a`，结果行即 `er`；供 `handle` 在 comp 行未具体化时降级。
+handleWithAt : (n : String) -> (key : String) -> (e : Type) -> (op : Type) -> {er : Row} -> {a : Type} -> {b : Type} -> (0 rf : ResFn op) -> Eff (Cons n e er) a -> (a -> b) -> ((o : op) -> (resOf rf o -> b) -> b) -> Eff er b
+handleWithAt n key e op rf comp ret opH = handleCore e key n ret opH comp
 
 -- ---------------------------------------------------------------
 -- W7：线性函数（一次性闭包）与通用 bracket

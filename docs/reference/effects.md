@@ -254,7 +254,7 @@ __EFF_SECTION__
 
 | 模块 | 内容 |
 | --- | --- |
-| `Base.Eff` | `Row(..)`、`Eff`、`Member(..)`/`rowRem`、内建 `Functor`/`Applicative`/`Monad (Eff r)`（`do`/`>>=`/`>>`，不提供 `bindEff`/`pureEff`）、`sendCore`/`handleCore`/`handleCoreLin`、`handleWith` + `ResFn(..)`/`resFn`/`resOf`（`handle` 语法的降级目标：handler 类型显式、结果族作擦除量）、`Cont`/`mkCont`/`resumeCont`、`bracket`/`finally`、`weaken`、`runPure`/`runIOEff`/`runIOAnswer` |
+| `Base.Eff` | `Row(..)`、`Eff`、`Member(..)`/`rowRem`、内建 `Functor`/`Applicative`/`Monad (Eff r)`（`do`/`>>=`/`>>`，不提供 `bindEff`/`pureEff`）、`sendCore`/`handleCore`/`handleCoreLin`、`handleWith`/`handleWithAt` + `ResFn(..)`/`resFn`/`resOf`（`handle` 语法的两个降级目标：handler 类型显式、结果族作擦除量；行首条目版用于 comp 行未具体化）、`Cont`/`mkCont`/`resumeCont`、`bracket`/`finally`、`weaken`、`runPure`/`runIOEff`/`runIOAnswer` |
 | `Base.Eff.Reader` | `Reader n s` + `Ask`；`ask`/`handleReader`；`n` 是 String 实例名（`Reader "counter" Int`） |
 | `Base.EffState` | `State n s` + `Get`/`Put`；`get`/`put`/`handleState`（answer `s -> Pair a s` 线程状态） |
 | `Base.EffFs` | IO-backed Fs 效应（完整 fs 面；**命名实例** `Fs n`，如 `Fs "mock"`/`Fs "real"`）：`ReadFile`/`WriteFile`/`WriteFileAtomic`/`ReadDir`/`IsDirectory`/`MakeDir`/`RemoveFile`/`FileExists`/`FileMtime`/`FileSize` + `resFs`；`fsReadFile n`/`fsWriteFile n`/…/`handleFs n`（泛型）/`handleFsIO n`（IO-backed，可直接 `runIOAnswer`）；handler 用 `Base.IO` 实现。mock/real 可并存（`dt_base/40`） |
@@ -353,7 +353,8 @@ fork/await/yield/cancel/结构化 scope；W10 console/clock/env/process/fs 标�
   组合子；check 方向的自动 lift 见 §8.4（`tryEffLift`）。
 
 剩余：高阶效应类型（见 §10 非目标）。语言级 `perform`/`handle` 语法已落地
-（`Base.Eff.performCore` / `handleWith`，语法与边界见 [native-effects.md](native-effects.md)）。
+（`Base.Eff.performCore` / `handleWith`/`handleWithAt`；参数化 op 族 State/Reader 两种
+语法都支持，`handle` 的语法与边界见 [native-effects.md](native-effects.md)）。
 
 ## 9. 债务映射
 
@@ -371,8 +372,9 @@ fork/await/yield/cancel/结构化 scope；W10 console/clock/env/process/fs 标�
 
 - 多射续延（N1 的 `perform`/`handle` 已落地但只有 one-shot 续延；`Cont` 的线性类型化留
   N3/N4，见 [native-effects.md](native-effects.md)）；高阶效应类型（当前 `catch`/`local`/
-  `bracket`/scoped `Exn` 是库层 + 行约束的组合）；自动 lift 只在 check 方向（`tryEffLift`，
-  见 §8.4）。
+  `bracket`/scoped `Exn` 是库层 + 行约束的组合）：**作用域/高阶 op 族（Exn，op 携带 Row）
+  不能写 `handle` 块**，只能用手写 handler（`TC_HandleFamilyUnsupported`，D54）；
+  自动 lift 只在 check 方向（`tryEffLift`，见 §8.4）。
 - 高阶/作用域、一次性闭包与单线程调度器已落地；完整线性箭头、Domain 并行、父 fiber handler 继承仍属后续（见 D41/D44/D22）。
 - 高阶/作用域效应的**类型系统**（当前 `catch`/`local`/`bracket`/scoped `Exn` 是库层 + 行约束的组合，未做语言级高阶效应类型）。
 - 网络/服务端框架；只有最小 `async`/`await`（Domain，legacy）。

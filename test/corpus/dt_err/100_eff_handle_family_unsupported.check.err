@@ -1,1 +1,1 @@
-[TC_HandleFamilyUnsupported] handle syntax supports only effects whose op family is a plain type with `<Label> : String -> Type` and `res<Label> : Op -> Type`; Base.EffState.StateOp does not fit
+[TC_HandleFamilyUnsupported] effect syntax (perform/handle) supports only op families with a plain type, a `<Label> : String -> <params…> -> Type` label and a `res<Label> : <params…> -> Op -> Type` result family; Base.EffExn.ExnOp does not fit

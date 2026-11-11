@@ -379,12 +379,26 @@ else
         :: prefixFirst (spaces (ind + 2)) (renderExprGo (fuel - 1) env at (ind + 2) body)
     Nothing => prefixFirst prefix (renderExprGo (fuel - 1) env at ind body)
 
+-- handle 的 comp 回渲染：`{` 紧跟其后，裸应用/复杂表达式必须加括号（否则
+-- `handle pure x { ... }` 会被解析成记录字面量 `x { ... }`）。原子形态保持原样。
+renderHandleCompGo : Int -> List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Expr -> List String
+renderHandleCompGo fuel env at lineInd comp = if fuel <= 0 then []
+else case comp of
+  EVar _ _ => renderScrutGo (fuel - 1) env at lineInd comp
+  EInt _ _ => renderScrutGo (fuel - 1) env at lineInd comp
+  EStr _ _ => renderScrutGo (fuel - 1) env at lineInd comp
+  EFloat _ _ => renderScrutGo (fuel - 1) env at lineInd comp
+  EParen _ _ => renderScrutGo (fuel - 1) env at lineInd comp
+  _ => case renderBlockGo (fuel - 1) env at lineInd comp of
+    [single] => ["(" ++ single ++ ")"]
+    lines => append (prefixFirst "(" lines) ["${spaces lineInd})"]
+
 renderHandleGo : Int -> List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Expr -> Expr -> Expr -> List String
 renderHandleGo fuel env at lineInd comp ret op = if fuel <= 0 then []
 else
   let
     headLines =
-      appendLast " {" (prefixFirst "handle " (renderScrutGo (fuel - 1) env at lineInd comp))
+      appendLast " {" (prefixFirst "handle " (renderHandleCompGo (fuel - 1) env at lineInd comp))
     clauseInd = lineInd + 2
     retLines = case ret of
       ELam ([x]) body _ => renderHandleRetGo (fuel - 1) env at clauseInd x body

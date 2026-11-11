@@ -98,8 +98,8 @@ main : Eff [] Nat
 
 | 写法 | 降级目标 |
 | --- | --- |
-| `perform (Print s)` | `Base.Eff.performCore <n=洞> "<op族规范名>" (<族标签> <n=洞>) (Print s)`，结果类型由上下文定 |
-| `handle comp { return x -> e1  C p k -> e2 }` | `Base.Eff.handleWith <n=洞> "<op族规范名>" (<族标签> <n=洞>) <op族> (Base.Eff.resFn <res族>) comp (\x => e1) (\o, k => case o of { C p => e2 })` |
+| `perform (Print s)` | `Base.Eff.performCore <n=洞> "<op族规范名>" (<族标签> <n=洞> <族参数洞…>) (Print s)`，结果类型由上下文定 |
+| `handle comp { return x -> e1  C p k -> e2 }` | `Base.Eff.handleWith <n=洞> "<op族规范名>" (<族标签> <n=洞> <族参数洞…>) (<op族> <族参数洞…>) (Base.Eff.resFn (\o => <res族> <族参数洞…> o)) comp (\x => e1) (\o, k => case o of { C p => e2 })` |
 | `[Console@audit]` | `Cons "audit" (Console "audit") Nil`（ND4；裸标签条目名取首个 String 实参，否则 `defaultInstance`） |
 
 `handle` 块的 clause 形状：
@@ -119,6 +119,16 @@ handle comp {
   `k` 拿不到续延域）。`rf` 是**擦除量**：结果族 `op -> Type` 不能作显式类型实参
   （M15 禁 `(0 res : op -> Type)`，不标擦除则把 `resXxx` 名字带进运行时），所以用
   `Base.Eff.ResFn` 包装、由 base 函数 `resFn` 构造（构造子名在精化期按规范名查不到）。
+- **参数化 op 族**（State/Reader 的 `k = 1`，Console 等 `k = 0`）：族约定一致——
+  `<Op> : <params…> -> Type`、`<Label> : String -> <params…> -> Type`、
+  `res<Label> : <params…> -> <Op> -> Type`。降级点按 `k` 给标签/op/结果族补洞，
+  族参数由行条目（如 `State "counter" Nat` 的 `Nat`）与 op 的类型解出；`res` 用
+  η-λ `\o => res<族> ?p1 … ?pk o` 现场解族参数（不能直接传多态族名）。
+- **行多态 comp**（`handle (pure e) { … }`、内联 do 块）：`handleWith` 的 `r` 仍未解、
+  结果行 `rowRem n e r` 归约不了，check 位置失败后改降级到 `Base.Eff.handleWithAt`：
+  comp 的行被定成 `Cons n e er`（条目在行首）、名字取默认实例名（ND3 的 `main`）、
+  结果行就是 `er`（与期望类型合一）。正常 handler 完全体（comp 是参数或行首已有的
+  具体行）仍走 `handleWith`，支持条目在行中任意位置。
 - 名字仍由行解出（与 `perform` 同一 `Member` 求解路径）；key 两边都是 op 族规范名
   （ND8），所以 `perform` 发的效应正好被 `handle` 接住。
 - 子句必须**穷尽**该 op 族（合成 case 走普通覆盖检查，缺一个构造子即 `TC_NotExhaustive`）。
@@ -148,11 +158,11 @@ meta → 报未解，不发明行。**禁止贪婪 Here**：名字槽受限统�
 | `Loader` | 无专门分支：parser 已把 handle 降到 markers + 普通 λ/case，Loader 只做常规名字解析（构造子解析成规范名/over 名，供 ND10 推族） |
 | `Intrinsics.vuna` 效果协议常量 | `Row.Cons` 3 参、`Member` 3 参（名字槽）、`effDefaultInstance`；`perform`/`handle` 的 key 由降级点生成 |
 | `Elab/Dict.vuna` `memberLookupRow`/`resolveRowGoalsCtx`/`resolveDictGoals` | 3 参模式 + §3.2 名字求解规则 + 最终化兜底（ND1/ND6/ND7） |
-| `Elab/Term/Impl.vuna` | `@vuna@perform` → `performCore`；`@vuna@handle` → `Base.Eff.handleWith`：从 clause 构造子推 op 族（ND10，跨族报 `TC_HandleClauseFamilyMismatch`）、按 `<族>Op` ↔ `<族>` ↔ `res<族>` 推 label/res（ND9）、校验 op 族是 nullary（否则 `TC_HandleFamilyUnsupported`）；`handleOperand` 在 `inferEFuel`/`checkEFuel`/`inferEFuelHint` 三处内联拦截 |
+| `Elab/Term/Impl.vuna` | `@vuna@perform` → `performCore`；`@vuna@handle` → `Base.Eff.handleWith`（rowRem 版）/ `handleWithAt`（行首条目版，check 失败后重试）：从 clause 构造子推 op 族（ND10，跨族报 `TC_HandleClauseFamilyMismatch`）、按 `<族>Op` ↔ `<族>` ↔ `res<族>` 推 label/res（ND9）、按 op 族 kind 数显式参数个数 `k` 给标签/op/结果族补洞（State/Reader `k = 1`；标签/结果族 arity 与 `k` 不符报 `TC_HandleFamilyUnsupported`，如 Exn）；`handleOperand` 在 `inferEFuel`/`checkEFuel`/`inferEFuelHint` 三处内联拦截 |
 | `Core/Eval.vuna` `rowRemReduce` | `VCon consName (n :: h :: t :: _)` 双匹配（先名后标签）；比较前对 name/label（含 label 一层 spine 实参）做 `force`——已解 meta 在值里仍是 `VMeta` 节点，不 force 就永远比较不出相等（`handle` 的结果行依赖这一点） |
 | `Elab/Sig.vuna` / `Elab/Term/Impl.vuna` | 行条目展示 `Console@real`；名字未解诊断带 `(name, label)` |
 | `Diagnostics/{Tc,Frontend/Diagnostics}.vuna` | `TC_AmbiguousInstance`、`TC_EffResFamilyMissing`（ND9）、`TC_HandleClauseFamilyMismatch`（ND10）、`TC_HandleFamilyUnsupported`（族形状）；PS 侧 `PS_Handle{NeedsOpClause,ClauseNotIndented,ClauseNeedsCtor,ContinuationNameMismatch,ReturnMisplaced}` |
-| `Base.Eff`（base 包，不进 seed） | `defaultInstance`、`Row.Cons`/`Member` 3 参、`ResFn(..)`/`resFn`/`resOf`/`handleWith`（handler 类型显式、`rf` 擦除量、`{w : Member n e r}` 置尾）、12 个效应模块去 `String` 参数 |
+| `Base.Eff`（base 包，不进 seed） | `defaultInstance`、`Row.Cons`/`Member` 3 参、`ResFn(..)`/`resFn`/`resOf`/`handleWith`/`handleWithAt`（handler 类型显式、`rf` 擦除量、`{w : Member n e r}` 置尾；行首条目版把条目放在 comp 的行首、结果行即剩余行）、12 个效应模块去 `String` 参数 |
 
 不改：`Eff` 本体、`runPure`/`runIOEff`/`runIOAnswer`、`prim_effectPerform`/`prim_effectHandle`
 语义、`Codegen/Term.dtPrimRuntime` 的运行时块、`Eff` 的私有 `MkEff` 表示。
@@ -173,8 +183,10 @@ meta → 报未解，不发明行。**禁止贪婪 Here**：名字槽受限统�
    **提交 4a — `@` 行糖**（已完成）：`[X@name]` → `Cons "name" (X "name") Nil`
    （保留名 `@vuna@row@at` 编码，Fmt 往返稳定），夹具 `dt_base/75`。
    **提交 4b — `handle` 语法**（已完成）：`handleWith` + `ResFn` 擦除量 + op 族推断
-   + rowRem 归约修复 + Fmt/Lint 接线；夹具 `dt_base/76`、`dt_base/77` 与
-   `dt_err/99–104`；实现要点与边界见 §9。
+   + rowRem 归约修复 + Fmt/Lint 接线；随后补齐**参数化 op 族**（State/Reader，族参数
+   按 `k` 补洞，`perform` 同步支持）与**行多态 comp**（`handleWithAt` 行首条目版），
+   两者分别消掉当时登记的 D54/D56。夹具 `dt_base/76`–`80` 与 `dt_err/99–104`；
+   实现要点与边界见 §9。
 5. **N1 收口**（已完成）：语法面（`perform` / `handle` / `@` 行糖）与名字求解全部落地，
    文档同步到本节与 §9。
 
@@ -234,9 +246,11 @@ meta → 报未解，不发明行。**禁止贪婪 Here**：名字槽受限统�
 
 - N1 正例：`perform` 单实例不写名字（`dt_base/74`）；`@` 行糖（`75`）；`handle` 语法
   （`76_eff_handle_syntax`：省略 return / 显式 return / 开放尾行 wrapper / infer 位置的
-  let 绑定；`77_eff_handle_answer`：`return x -> pure x` 答案 + 两层 `runPure`、abort 续延）。
+  let 绑定；`77_eff_handle_answer`：`return x -> pure x` 答案 + 两层 `runPure`、abort 续延；
+  `78_eff_handle_state` / `79_eff_handle_reader`：参数化 op 族（`k = 1`）；
+  `80_eff_handle_unknown_row`：行多态 comp（`pure` 与内联 do 块）走 `handleWithAt`）。
 - N1 负例：res 族缺失 → `TC_EffResFamilyMissing`（`dt_err/98`、`101`）；clause 构造子跨族
-  → `TC_HandleClauseFamilyMismatch`（`99`）；参数化 op 族 → `TC_HandleFamilyUnsupported`
+  → `TC_HandleClauseFamilyMismatch`（`99`）；作用域/高阶 op 族（Exn）→ `TC_HandleFamilyUnsupported`
   （`100`）；子句不穷尽 → `TC_NotExhaustive`（`102`）；续延 binder 名不一致 → `PS_…`（`103`）；
   return 子句位置错 → `PS_HandleReturnMisplaced`（`104`）。
 - 工具链：`30_fmt_roundtrip` 覆盖 handle 夹具的 fmt 往返（格式化后仍 `check` 通过、二次 fmt 幂等）。
@@ -290,40 +304,32 @@ meta → 报未解，不发明行。**禁止贪婪 Here**：名字槽受限统�
   5. **运行期 key 尚未统一（ND8 下半）**：`perform` 用 op 族规范名，现有 base wrapper
      仍手写 `"console"` 等 key，所以 perform 程序要用**同 key 的 handler**
      （夹具 74 演示）；统一留给 `handle` 语法的提交。
-- **`handle` 降级的实现要点（提交 4b 实测，改这段代码前必读）**：
-  1. **handler 类型由 base 入口供给**：`handleCore` 的 `h` 是裸类型变量，合成 clause 里的
-     `case o of { C p => b }` 拿不到 `o` 的族（`TC_NotInductiveFamily`）、`k` 也拿不到续延
-     类型（`k 5` → `TC_TooManyArgs`）。新增 `Base.Eff.handleWith`，handler 域显式写
-     `(o : op) -> (resOf rf o -> b) -> b`；结果族 `res : op -> Type` 不能作显式类型实参
-     （M15 禁 `(0 res : op -> Type)`，不标擦除则 `resXxx` 名字进运行时触发
-     `CG_TypeLevelNameRuntime`），所以用 `ResFn` 包装 + `(0 rf)` 擦除量传入，并且降级点
-     通过 base 函数 `resFn` 构造包装值（构造子在精化期按规范名查不到；`globalsLookup` 只含定义）。
-  2. **`{w : Member n e r}` 必须排在 `comp` 之后**：`r` 由 comp 解出后 Member 当场解掉
-     name/label 两个洞；排前面会推迟到最终化，而调用点 conv 此时要归约结果行
-     `rowRem n e r`，只会得到 `expected Nil, got rowRem ?n ...`。`comp` 也排在 `ret` 之前：
-     先定 `a`，ret 体里的数字运算才不会被 Numeric 默认成 `Int`。
-  3. **`rowRemReduce` 要能看见已解 meta**：解表不改写已经构造好的 value，结果行里
-     name/label 仍是 `VMeta` 节点，而 `valueEqFuel` 不做 force ⇒ 永远比较不出相等。比较前
-     对 name、label（含 label 的一层 spine 实参）各 `force` 一次；未解 meta 仍照旧卡住。
-  4. **族形状限制**：只支持 nullary op 族 + `<Label> : String -> Type` + `res<Label> : Op -> Type`
-     （Console/Fs/Clock/Env/Process/Args/Stdin/Exit/Error）。State/Reader/Exn 是参数化族
-     （`StateOp : Type -> Type`），res 族还要按族参数实例化 → `TC_HandleFamilyUnsupported`，
-     继续用手写 handler（[debt.md](debt.md) D54）。
+  4. **族形状与参数个数**：base 全体一致——`<Op> : <params…> -> Type`、
+     `<Label> : String -> <params…> -> Type`、`res<Label> : <params…> -> <Op> -> Type`。
+     降级点按 op 族 kind 数**显式参数个数 `k`**：`k` 给标签/op 补洞，结果族用 η-λ
+     `\o => res<族> ?p1 … ?pk o` 现场解族参数（State/Reader `k = 1`，Console 等 `k = 0`）。
+     标签/结果族 arity 与 `k` 不符即 `TC_HandleFamilyUnsupported`：当前只剩**作用域/高阶族**
+     Exn（`ExnOp : String -> Row -> Type -> Type`，标签 arity 1）不支持，继续用手写 handler
+     （[debt.md](debt.md) D54）。`perform` 走同一套族推导（`perfFamilyOfValue` 允许族参数
+     是中性 spine），所以参数化族两种语法都可用。
   5. **key 配对**：`handle` 与 `perform` 的 key 都是 op 族规范名，二者配对；与 base 里手写
-     `"console"` 等 key 的旧 wrapper **不**配对（过渡期并存，统一留 N2/N3）。
+     `"console"`/`"state"`/`"reader"` 等 key 的旧 wrapper（`get`/`put`/`ask`/`runConsole`…）
+     **不**配对（过渡期并存，统一留 N2/N3），所以参数化族的语法夹具用 `perform` 而不是
+     `get`/`ask` 写程序。
   6. **同族多实例 + 裸标签**：标签含未解 meta 时 Member 走线性合一匹配、取首个匹配条目，
      不报 `TC_AmbiguousInstance`（perform/handle 共用同一路径，[debt.md](debt.md) D55）。
-  7. **语法边界**：`comp` 是裸标识符且紧跟 `{` 时按 handle 块解析（记录字面量作 comp 需加括号）；
-     同一 handle 块的所有 op 子句共用一个续延 binder 名（`PS_HandleContinuationNameMismatch`）；
-     `return` 不是全局关键字（只在子句头识别）。
-  8. **comp 的行必须在 handle 点已具体**（正常 handler 完全体天然满足）：
-     `runX comp = handle comp { ... }` 里 `comp` 是参数（行由调用点固定），或
-     `runOpen : {r} -> Eff (Cons "audit" (Console "audit") r) a -> Eff r a` 里行首是具体条目。
-     若 comp 是**行多态表达式**（`handle (pure e) { ... }`、内联 `do` 块、泛型函数直接调用），
-     comp 的行仍是未解 meta，结果行 `rowRem n e r` 在调用点 conv 时无法归约，报
-     `TC_TypeMismatch expected <row>, got rowRem ?n ...`。规避：把 comp 绑到带签名/参数的位置
-     （`let c : Eff [Console@audit] Nat = ...` 或函数参数）。更好的诊断/延迟默认化见
-     [debt.md](debt.md) D56。
+  7. **语法边界**：`comp` 是裸标识符且紧跟 `{` 时按 handle 块解析；其它形态（应用、do 块、
+     记录字面量）在源里建议加括号，`fmt` 回渲染时会自动补（`renderHandleCompGo`），
+     否则 `handle pure x { ... }` 会被解析成记录字面量 `x { ... }`。同一 handle 块的所有
+     op 子句共用一个续延 binder 名（`PS_HandleContinuationNameMismatch`）；`return` 不是
+     全局关键字（只在子句头识别）。
+  8. **comp 的行没有具体化时走行首条目版**：正常 handler 完全体的 comp 是参数（行由调用点
+     固定），走 `handleWith`（条目可在行中任意位置）。若 comp 是**行多态表达式**
+     （`handle (pure e) { … }`、内联 do 块、泛型函数直接调用），rowRem 版的 `r` 仍是未解
+     meta、结果行归约不了；check 位置在第一次失败后改降级到 `handleWithAt`：把条目放在
+     comp 的行首（`Cons n e er`）、名字取默认实例名（ND3 的 `main`）、结果行 `er` 与期望
+     类型合一。代价：失败路径上 handle 表达式会被精化两次；comp 的行已具体时行首版只会
+     同样失败，原错误保留。夹具 `dt_base/80`。
 - **相关：`fmt` 规范化与列表字面量模式冲突**：`fmt` 把 `a :: b :: []` 精确链改写成
   `[a, b]` 后，与该模式相邻的后续 Cons 分支会触发 `TC_RedundantCtorBranch`
   （无位置信息 `:0:0`，覆盖检查判定与 codegen 解糖不一致，机制待独立修复）。
