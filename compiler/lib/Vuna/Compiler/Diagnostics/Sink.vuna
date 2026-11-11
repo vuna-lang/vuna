@@ -1,131 +1,22 @@
--- | 诊断告警收集器：编译器在纯检查过程中发射 warning，驱动层在检查结束后取走。
-module Vuna.Compiler.Diagnostics.Sink
-  ( emitParseError
-  , emitWarning
-  , markImportUsed
-  , peekParseErrors
-  , resetParseErrors
-  , resetUsedImports
-  , resetWarnings
-  , takeParseErrors
-  , takeUsedImports
-  , takeWarnings
-  ) where
+-- | 诊断告警去重（纯 helper）。进程内收集器已在 M4 删除。
+module Vuna.Compiler.Diagnostics.Sink (dedupeWarnings) where
 
--- Vuna.Compiler.Diagnostics.Sink：warning 的进程内收集点。
+-- Vuna.Compiler.Diagnostics.Sink：warning 去重。
 --
--- 设计边界：`Check` 只有「成功/首个错误」两种形态，warning 不短路检查；在 warning
--- 通道正式进 `Check` 之前，用本模块的 IORef 收集。约束：
---   * 只有**单线程**检查路径使用（`vuna check`/LSP 单请求；包级并行用子进程隔离）；
---   * 每个检查入口（loader）开始时 `resetWarnings`，结束后消费方 `takeWarnings`；
---   * 不跨请求保留状态。
-import Base.Host
-import Base.IORef
-import Base.List
+-- M4：本模块原有的三个进程内可变登记表（warnings / used-imports / parse-errors）已删除：
+--   * Elab 的 warning 经 `Ec.ecWarnings` 显式线程，精化出口挂到 `DtProgram`；
+--   * loader 的 unused-import 与 parse 恢复诊断直接作为返回值交给驱动层；
+--   * 驱动层（`CompilerCli` / LSP）在输出前用本模块去重（保持旧 `takeWarnings` 的
+--     「按首次出现顺序去重」语义）。
 import Vuna.Compiler.Common
+import Base.List
 
--- 用记录包一层：`newRef []` 在模块边界上留弱类型变量（OCaml value restriction），
--- 记录类型让 ref 的载荷在定义处就是单态的。
--- | 诊断域实现：Vuna.Compiler.Diagnostics.Sink.WarnBox（目录/模板见 diagnostics.md）。
-record WarnBox where
-  warnBoxItems : List Diagnostic
-  warnBoxTag : Int
-
--- | 诊断域实现：Vuna.Compiler.Diagnostics.Sink.warningsRef（目录/模板见 diagnostics.md）。
-warningsRef : IORef WarnBox
-warningsRef = runPure (newRef (WarnBox [] 0))
-
--- | 清空收集器（检查入口调用）。返回 0 便于放在 let 链里。
-resetWarnings : Int -> Int
-resetWarnings _ =
-  let
-    _ = runPure (writeRef warningsRef (WarnBox [] 0))
-    _ = runPure (writeRef usedImportsRef (UsedImportsBox [] 0))
-    _ = runPure (writeRef parseErrorsRef (ParseErrorsBox [] 0))
-  in 0
-
--- | 追加一条 warning；返回 0 便于放在 let 链里。
-emitWarning : Diagnostic -> Int
-emitWarning d = runPure (modifyRef warningsRef (\b => WarnBox (append b.warnBoxItems [d]) 0))
-
--- | 取走当前全部 warning（读取后清空，避免下一次检查串扰）。
-takeWarnings : Int -> List Diagnostic
-takeWarnings _ =
-  let
-    b = runPure (readRef warningsRef)
-    _ = runPure (writeRef warningsRef (WarnBox [] 0))
-  in dedupeWarnings b.warnBoxItems
-
--- | 诊断域实现：Vuna.Compiler.Diagnostics.Sink.containsDiag（目录/模板见 diagnostics.md）。
+-- | 诊断域实现：两条诊断是否「同一位置 + 同一码 + 同一消息」（去重用；忽略字段/建议）。
 containsDiag : Diagnostic -> List Diagnostic -> Bool
 containsDiag d [] = False
 containsDiag d (x :: xs) = if sameDiag d x then True else containsDiag d xs
 
--- | 诊断域实现：Vuna.Compiler.Diagnostics.Sink.dedupeWarnings（目录/模板见 diagnostics.md）。
+-- | 诊断域实现：按首次出现顺序去重。
 dedupeWarnings : List Diagnostic -> List Diagnostic
 dedupeWarnings ds =
   reverse (foldl (\acc => \d => if containsDiag d acc then acc else d :: acc) [] ds)
-
--- 本次检查中用到的 import（模块名）：unused-import warning 的数据源。
--- | 诊断域实现：Vuna.Compiler.Diagnostics.Sink.UsedImportsBox（目录/模板见 diagnostics.md）。
-record UsedImportsBox where
-  usedImportNames : List String
-  usedImportTag : Int
-
--- | 诊断域实现：Vuna.Compiler.Diagnostics.Sink.usedImportsRef（目录/模板见 diagnostics.md）。
-usedImportsRef : IORef UsedImportsBox
-usedImportsRef = runPure (newRef (UsedImportsBox [] 0))
-
--- | 诊断域实现：Vuna.Compiler.Diagnostics.Sink.memUsedImport（目录/模板见 diagnostics.md）。
-memUsedImport : String -> List String -> Bool
-memUsedImport n [] = False
-memUsedImport n (x :: xs) = if n == x then True else memUsedImport n xs
-
--- | 诊断域实现：Vuna.Compiler.Diagnostics.Sink.markImportUsed（目录/模板见 diagnostics.md）。
-markImportUsed : String -> Int
-markImportUsed name =
-  runPure
-    (modifyRef usedImportsRef (\b => if memUsedImport name b.usedImportNames then b else UsedImportsBox (append b.usedImportNames [name]) 0))
-
--- | 诊断域实现：Vuna.Compiler.Diagnostics.Sink.takeUsedImports（目录/模板见 diagnostics.md）。
-takeUsedImports : Int -> List String
-takeUsedImports _ =
-  let
-    b = runPure (readRef usedImportsRef)
-  in b.usedImportNames
-
--- | 清空 import 使用集合（按检查单元/模块重置）。
-resetUsedImports : Int -> Int
-resetUsedImports _ = runPure (writeRef usedImportsRef (UsedImportsBox [] 0))
-
--- 解析阶段的非致命诊断（parser 恢复后收集；CLI 一次性打印全部）。
-record ParseErrorsBox where
-  parseErrors : List Diagnostic
-  parseErrorsTag : Int
-
-parseErrorsRef : IORef ParseErrorsBox
-parseErrorsRef = runPure (newRef (ParseErrorsBox [] 0))
-
--- | 解析阶段记录一条非致命诊断。
-emitParseError : Diagnostic -> Int
-emitParseError d =
-  runPure (modifyRef parseErrorsRef (\b => ParseErrorsBox (append b.parseErrors [d]) 0))
-
--- | 取走解析阶段收集的诊断（不清空）。
-takeParseErrors : Int -> List Diagnostic
-takeParseErrors _ =
-  let
-    b = runPure (readRef parseErrorsRef)
-    _ = runPure (writeRef parseErrorsRef (ParseErrorsBox [] 0))
-  in b.parseErrors
-
--- | 查看解析阶段收集的诊断（不清空）。
-peekParseErrors : Int -> List Diagnostic
-peekParseErrors _ =
-  let
-    b = runPure (readRef parseErrorsRef)
-  in b.parseErrors
-
--- | 清空解析阶段收集的诊断。
-resetParseErrors : Int -> Int
-resetParseErrors _ = runPure (writeRef parseErrorsRef (ParseErrorsBox [] 0))

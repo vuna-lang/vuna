@@ -102,7 +102,7 @@ sessionCheckIn ref baseDir ctx ifaces source = do
   result <- dtCheckSourceIncremental ctx source text ifaces [] s.sesAux False
   case result of
     ErrC e => pure (Just (Pair 1 (diagText e)))
-    OkC (Pair applied (Pair _ aux)) => if not applied then pure Nothing
+    OkC (Pair applied (Pair _ (Pair _ aux))) => if not applied then pure Nothing
     else do
       _ <- writeRef ref (Session s.sesRoot baseDir ifaces aux s.sesEvalAux)
       pure (Just (Pair 0 ""))

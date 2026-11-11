@@ -28,6 +28,7 @@ module Vuna.Compiler.Diag
   , rawAt
   , rawNoLoc
   , sameDiag
+  , withChildren
   , withContext
   , withFallbackSpan
   , withField
@@ -348,6 +349,14 @@ instance Applicative Check where
   liftA2 f (OkC x) (OkC y) = OkC (f x y)
   liftA2 f (ErrC e) _ = ErrC e
   liftA2 f _ (ErrC e) = ErrC e
+
+-- | 挂一批子诊断（批量错误通道：解析恢复期收集的多条诊断挂在首条错误上，
+-- 由 CLI 的诊断出口统一输出；渲染器不展开 children）。
+withChildren : List Diagnostic -> Diagnostic -> Diagnostic
+withChildren cs d =
+  Diagnostic d.diagId d.diagSeverity d.diagPhase d.diagCategory d.diagCode d.diagMessage
+    d.diagLabels d.diagFields d.diagTrace d.diagNotes d.diagSuggestions d.diagOrigin cs
+    d.diagInternal d.diagIce
 
 -- | 若诊断没有主位置，就用给定 span 补一个（包装器用）。
 withFallbackSpan : Span -> Diagnostic -> Diagnostic

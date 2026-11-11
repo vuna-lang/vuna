@@ -85,6 +85,8 @@ record CheckedPackage where
   -- 摘要路径下由依赖包摘要注入、因而不属于本包的 artifact 名字（写本包接口时跳过覆盖检查）。
   -- 全量路径为空（依赖模块的 decls 都在，归属可从声明推导）。
   checkedInherited : List String
+  -- M4：本次检查产生的 warning（loader 的 unused-import + Elab 的 Ec.ecWarnings）。
+  checkedWarnings : List Diagnostic
 
 -- 项目声明的拼接顺序：Loader 的 modules 列表是「依赖在前」的**反序**（依赖者先
 -- 出现，被依赖者靠后），DT 精化要求定义先于使用，因此先 reverse modules 再逐模块
@@ -93,7 +95,7 @@ dtProjectDecls : Pair (List Decl) (List Module) -> List Decl
 dtProjectDecls parts = append (concatMap moduleDeclsOf (reverse (secondOf parts))) (firstOf parts)
 
 -- 可执行包：入口文件 + 依赖模块（模块可见性由上下文的 roots 决定）。
-dtLoad : PackageContext -> String -> Eff [] (Check (List Decl))
+dtLoad : PackageContext -> String -> Eff [] (Check (Pair (List Decl) (List Diagnostic)))
 dtLoad ctx entry =
   let
     _ = stamp "load-start"
@@ -106,14 +108,14 @@ dtLoad ctx entry =
           _ = stamp "load-modules-done"
         in case resolveProject project of
           ErrC e => ErrC e
-          OkC parts =>
+          OkC resolved =>
             let
               _ = stamp "resolve-done"
-            in OkC (dtProjectDecls parts)
+            in OkC (Pair (dtProjectDecls (secondOf resolved)) (firstOf resolved))
     )
 
 -- M34.5 接口摘要（S1）：加载 + resolve 并保留模块归属（入口 / 库包两条入口）。
-dtLoadPartsForCheck : PackageContext -> String -> Eff [] (Check (Pair (List Decl) (List Module)))
+dtLoadPartsForCheck : PackageContext -> String -> Eff [] (Check (Pair (List Diagnostic) (Pair (List Decl) (List Module))))
 dtLoadPartsForCheck ctx entry = do
   projectR <- loadProject ctx entry
   pure (case projectR of
@@ -121,7 +123,7 @@ dtLoadPartsForCheck ctx entry = do
     OkC project => resolveProject project
   )
 
-dtLoadModulesParts : PackageContext -> List String -> Eff [] (Check (Pair (List Decl) (List Module)))
+dtLoadModulesParts : PackageContext -> List String -> Eff [] (Check (Pair (List Diagnostic) (Pair (List Decl) (List Module))))
 dtLoadModulesParts ctx names = do
   projectR <- loadProjectModules ctx names
   pure (case projectR of
@@ -131,44 +133,16 @@ dtLoadModulesParts ctx names = do
 
 -- 声明序列的 check 尾部（入口与库包同一条精化路径）。
 -- | 从已加载声明跑完整检查。
-dtCheckDecls : Eff [] (Check (List Decl)) -> Eff [] (Check (List String))
+dtCheckDecls : Eff [] (Check (Pair (List Decl) (List Diagnostic))) -> Eff [] (Check (List Diagnostic))
 dtCheckDecls loaded = do
   loadedR <- loaded
   pure (case loadedR of
     ErrC e => ErrC e
-    OkC decls =>
+    OkC p =>
       let
+        decls = firstOf p
+        loaderWarns = secondOf p
         _ = stamp "decls-ready"
-      in case elabProgram decls of
-        ErrC e => ErrC e
-        OkC program =>
-          let
-            _ = stamp "elab-done"
-          in case checkDtProgram program of
-            ErrC e => ErrC e
-            OkC _ =>
-              let
-                _ = stamp "codegen-check-done"
-                _ = warnUnusedDefsIn (secondOf program)
-              in OkC []
-  )
-
--- M34.5：与 dtCheck 同一条精化路径，但把 DtProgram / 模块表 / 入口声明一并返回
--- （检查缓存写接口摘要用）。
-dtCheckWithProgramParts : PackageContext -> String -> Eff [] (Check (Pair (List String) CheckedPackage))
-dtCheckWithProgramParts ctx entry = dtCheckPartsWithProgram (dtLoadPartsForCheck ctx entry)
-
-dtCheckLibraryWithProgramParts : PackageContext -> List String -> Eff [] (Check (Pair (List String) CheckedPackage))
-dtCheckLibraryWithProgramParts ctx names = dtCheckPartsWithProgram (dtLoadModulesParts ctx names)
-
-dtCheckPartsWithProgram : Eff [] (Check (Pair (List Decl) (List Module))) -> Eff [] (Check (Pair (List String) CheckedPackage))
-dtCheckPartsWithProgram loaded = do
-  loadedR <- loaded
-  pure (case loadedR of
-    ErrC e => ErrC e
-    OkC parts =>
-      let
-        decls = dtProjectDecls parts
       in case elabProgramFull decls of
         ErrC e => ErrC e
         OkC program =>
@@ -179,11 +153,44 @@ dtCheckPartsWithProgram loaded = do
             OkC _ =>
               let
                 _ = stamp "codegen-check-done"
-              in OkC (Pair [] (CheckedPackage program (secondOf parts) (firstOf parts) []))
+              in OkC
+                (append loaderWarns (append (dtProgWarnings program) (warnUnusedDefsIn (dtProgDefs program))))
+  )
+
+-- M34.5：与 dtCheck 同一条精化路径，但把 DtProgram / 模块表 / 入口声明一并返回
+-- （检查缓存写接口摘要用）。
+dtCheckWithProgramParts : PackageContext -> String -> Eff [] (Check (Pair (List Diagnostic) CheckedPackage))
+dtCheckWithProgramParts ctx entry = dtCheckPartsWithProgram (dtLoadPartsForCheck ctx entry)
+
+dtCheckLibraryWithProgramParts : PackageContext -> List String -> Eff [] (Check (Pair (List Diagnostic) CheckedPackage))
+dtCheckLibraryWithProgramParts ctx names = dtCheckPartsWithProgram (dtLoadModulesParts ctx names)
+
+dtCheckPartsWithProgram : Eff [] (Check (Pair (List Diagnostic) (Pair (List Decl) (List Module)))) -> Eff [] (Check (Pair (List Diagnostic) CheckedPackage))
+dtCheckPartsWithProgram loaded = do
+  loadedR <- loaded
+  pure (case loadedR of
+    ErrC e => ErrC e
+    OkC resolved =>
+      let
+        parts = secondOf resolved
+        loaderWarns = firstOf resolved
+        decls = dtProjectDecls parts
+      in case elabProgramFull decls of
+        ErrC e => ErrC e
+        OkC program =>
+          let
+            _ = stamp "elab-done"
+            warns = append loaderWarns (dtProgWarnings program)
+          in case checkDtProgram (Pair (dtProgDatas program) (dtProgDefs program)) of
+            ErrC e => ErrC e
+            OkC _ =>
+              let
+                _ = stamp "codegen-check-done"
+              in OkC (Pair warns (CheckedPackage program (secondOf parts) (firstOf parts) [] warns))
   )
 
 -- | 入口文件检查。
-dtCheck : PackageContext -> String -> Eff [] (Check (List String))
+dtCheck : PackageContext -> String -> Eff [] (Check (List Diagnostic))
 dtCheck ctx entry = dtCheckDecls (dtLoad ctx entry)
 
 -- M45：单文件检查的两个入口（`vuna check <file.vuna>`）。
@@ -202,13 +209,13 @@ dtFileHasModuleHeader path = do
   )
 
 -- | 按库模块检查单个文件（调用方已确认带 `module` 头）。
-dtCheckModuleFile : PackageContext -> String -> Eff [] (Check (List String))
+dtCheckModuleFile : PackageContext -> String -> Eff [] (Check (List Diagnostic))
 dtCheckModuleFile ctx path = do
   text <- prim_eff_readFile path
   checked <- dtCheckSourceChecked ctx path text
   pure (case checked of
     ErrC e => ErrC e
-    OkC _ => OkC []
+    OkC p => OkC (firstOf p)
   )
 
 -- 核心求值器：精化后用 NbE + delta 求 main 的值并 show（与 codegen 结果对照）。
@@ -217,7 +224,7 @@ dtEvalFile ctx entry = do
   declsR <- dtLoad ctx entry
   pure (case declsR of
     ErrC e => ErrC e
-    OkC decls => Vuna.Compiler.Common.bind (elabProgramFull decls) evalDtMain
+    OkC loaded => Vuna.Compiler.Common.bind (elabProgramFull (firstOf loaded)) evalDtMain
   )
 
 -- REPL 的表达式求值（M23）：上下文 + program 源码 + 表达式源码。
@@ -237,7 +244,7 @@ replProgramFull ctx program exprSource = do
     ErrC e => ErrC e
     OkC project => case resolveProject project of
       ErrC e => ErrC e
-      OkC parts => case splitReplExpr (dtProjectDecls parts) of
+      OkC resolved => case splitReplExpr (dtProjectDecls (secondOf resolved)) of
         ErrC e => ErrC e
         OkC p => case elabProgramFull (firstOf p) of
           ErrC e => ErrC e
@@ -265,16 +272,16 @@ dtEvalExprInfo ctx program exprSource = do
 
 -- M30 · LSP：把内存里的源码当入口（无模块头）或库模块（有模块头）加载并精化。
 -- 返回空 warning 列表；错误串仍是带 `<label>:line:col` 的稳定诊断，LSP 自行解析。
-dtCheckSource : PackageContext -> String -> String -> Eff [] (Check (List String))
+dtCheckSource : PackageContext -> String -> String -> Eff [] (Check (List Diagnostic))
 dtCheckSource ctx label source = do
   projectR <- loadModuleSource ctx label source
   pure (case projectR of
     ErrC e => ErrC e
     OkC project => case resolveProject project of
       ErrC e => ErrC e
-      OkC parts => case elabProgramFull (dtProjectDecls parts) of
+      OkC resolved => case elabProgramFull (dtProjectDecls (secondOf resolved)) of
         ErrC e => ErrC e
-        OkC _ => OkC []
+        OkC prog => OkC (append (firstOf resolved) (dtProgWarnings prog))
   )
 
 -- M34.5（LSP 消费接口）：依赖包模块从接口预置（零 parse/resolve/elab），只精化当前
@@ -288,7 +295,7 @@ missingDepModules pkg (m :: rest) ifaceNames =
   if modulePackageOf m /= pkg && memName (moduleNameOf m) ifaceNames == False then Base.List.Cons (moduleNameOf m) (missingDepModules pkg rest ifaceNames)
   else missingDepModules pkg rest ifaceNames
 
-dtCheckSourceWithIfaces : PackageContext -> String -> String -> List ModuleIface -> Eff [] (Check (List String))
+dtCheckSourceWithIfaces : PackageContext -> String -> String -> List ModuleIface -> Eff [] (Check (List Diagnostic))
 dtCheckSourceWithIfaces ctx label source ifaces =
   let
     _ = note "iface-source=check modules=${length ifaces}"
@@ -305,9 +312,9 @@ dtCheckSourceWithIfaces ctx label source ifaces =
               else note "iface-fallback=check missing=${join "," missing}"
           in if length missing == 0 then pure (case resolveProjectKeeping (preloadKeepOf ifaces mods) filtered of
             ErrC e => ErrC e
-            OkC parts => case dtCheckOursParts ctx parts (shiftedDepPrograms (materializedDeps (contextPackageName ctx) parts ifaces)) of
+            OkC resolved => case dtCheckOursParts ctx resolved (shiftedDepPrograms (materializedDeps (contextPackageName ctx) (secondOf resolved) ifaces)) of
               ErrC e => ErrC e
-              OkC _ => OkC []
+              OkC p => OkC (firstOf p)
           )
           else dtCheckSource ctx label source
 
@@ -350,6 +357,7 @@ replCheckPartsAux start pkgName deps parts ifaces cache =
       DtProgram (append depDatas (dtProgDatas prog)) (append depDefs (dtProgDefs prog))
         (dtProgGoals prog) (dtProgSols prog) (dedupGlobals (append depGlobals (dtProgGlobals prog)))
         (dtProgInsts prog) (dtProgClasses prog) prog.dtProgNext prog.dtProgDefVals prog.dtProgDepths
+        (dtProgWarnings prog)
   in OkC
     (Pair (Pair assembled (secondOf p)) (if cacheable then Just (AuxCache key preparedAux (Pair ecEmpty []) [] []) else Nothing))
   )
@@ -383,8 +391,9 @@ replProgramWithIfacesAux ctx program exprSource ifaces cache =
               else note "iface-fallback=repl missing=${join "," missing}"
           in if length missing == 0 then pure (case resolveProjectKeeping (preloadKeepOf ifaces mods) filtered of
             ErrC e => ErrC e
-            OkC parts =>
+            OkC resolved =>
               let
+                parts = secondOf resolved
                 deps = shiftedDepPrograms (materializedDeps (contextPackageName ctx) parts ifaces)
               in replCheckPartsAux (depStartOf deps) (contextPackageName ctx) deps parts ifaces cache
           )
@@ -534,7 +543,7 @@ loadReplDecls ctx source = do
     ErrC e => ErrC e
     OkC project => case resolveProject project of
       ErrC e => ErrC e
-      OkC parts => OkC (dtProjectDecls parts)
+      OkC resolved => OkC (dtProjectDecls (secondOf resolved))
   )
 
 -- `:defs` / `:info`：program 里每个定义的 zonk 后类型文本。
@@ -674,7 +683,7 @@ dtGoalsSource ctx label source = do
     ErrC e => ErrC e
     OkC project => case resolveProject project of
       ErrC e => ErrC e
-      OkC parts => goalsOfProgram (dtProjectDecls parts)
+      OkC resolved => goalsOfProgram (dtProjectDecls (secondOf resolved))
   )
 
 -- M40 · 容错版：未解洞也会让严格收尾失败，但 hover 仍要显示目标与上下文（M40 起改用这个）。
@@ -685,7 +694,7 @@ dtGoalsSourceTolerant ctx label source = do
     ErrC e => ErrC e
     OkC project => case resolveProject project of
       ErrC e => ErrC e
-      OkC parts => goalsOfProgramTolerant (dtProjectDecls parts)
+      OkC resolved => goalsOfProgramTolerant (dtProjectDecls (secondOf resolved))
   )
 
 -- M30 · `vuna test`：main 的返回类别，决定执行路径。
@@ -699,7 +708,7 @@ dtMainKind ctx entry = do
   declsR <- dtLoad ctx entry
   pure (case declsR of
     ErrC e => ErrC e
-    OkC decls => case elabProgram decls of
+    OkC loaded => case elabProgram (firstOf loaded) of
       ErrC e => ErrC e
       OkC p => case findMainDef (secondOf p) of
         Nothing => cgErr0 NoMain
@@ -802,7 +811,7 @@ defTableOf (d :: rest) = case dtDefBody d of
 -- 与单文件路径共用同一次精化，生成器把 datas/defs 按声明归属切到各模块文件；
 -- 模块列表按依赖序（Loader 的 modules 是依赖者在前的反序，这里 reverse）。
 -- M34.5 接口摘要：加载 + resolve 项目并保留模块归属（本包 decls 过滤用）。
-dtLoadParts : PackageContext -> String -> Eff [] (Check (Pair (List Decl) (List Module)))
+dtLoadParts : PackageContext -> String -> Eff [] (Check (Pair (List Diagnostic) (Pair (List Decl) (List Module))))
 dtLoadParts ctx entry = dtLoadPartsForCheck ctx entry
 
 -- 只精化本包 decls（依赖 artifact 从接口合并）；调用方保证接口已校验。
@@ -816,9 +825,11 @@ cachedNamesOne cp =
   append (map dtDataName (cachedDatas cp))
     (append (concatMap (\d => map dtCtorName (dtDataCtors d)) (cachedDatas cp)) (append (map dtDefName (cachedDefs cp)) (append (map firstOf (cachedGlobals cp)) (append (map dtInstName (cachedInsts cp)) (map dtClassName (cachedClasses cp))))))
 
-dtCheckOursParts : PackageContext -> Pair (List Decl) (List Module) -> List CachedProgram -> Check (Pair (List String) CheckedPackage)
-dtCheckOursParts ctx parts deps =
+dtCheckOursParts : PackageContext -> Pair (List Diagnostic) (Pair (List Decl) (List Module)) -> List CachedProgram -> Check (Pair (List Diagnostic) CheckedPackage)
+dtCheckOursParts ctx resolved deps =
   let
+    parts = secondOf resolved
+    loaderWarns = firstOf resolved
     pkgName = contextPackageName ctx
     modules = reverse (secondOf parts)
     ours = filter (\m => modulePackageOf m == pkgName) modules
@@ -831,8 +842,10 @@ dtCheckOursParts ctx parts deps =
     -- codegen 的 check（擦除/名字/构造子护栏）需要依赖包的 datas（构造子与标签信息）；
     -- 只生成本包 defs（依赖包 body 不重精化、不重新生成）。
     allDatas = append (concatMap cachedDatas deps) (dtProgDatas prog)
-  in Vuna.Compiler.Common.bind (checkDtProgram (Pair allDatas (dtProgDefs prog)))
-    (\_ => OkC (Pair [] (CheckedPackage prog (secondOf parts) (firstOf parts) (cachedNamesOf deps))))
+  in Vuna.Compiler.Common.bind (checkDtProgram (Pair allDatas (dtProgDefs prog))) (\_ => let
+    warns = append loaderWarns (dtProgWarnings prog)
+  in OkC (Pair warns (CheckedPackage prog (secondOf parts) (firstOf parts) (cachedNamesOf deps) warns))
+  )
   )
 
 -- 依赖接口 → 精化起始状态。
@@ -954,7 +967,7 @@ modulesOfIfaces ifaces = reverse (map moduleOfIface ifaces)
 -- 脏模块 + 入口声明；然后按同样顺序把干净产物合并回 DtProgram（codegen / 接口写仍看
 -- 整包）。干净模块判定在 Compile（依赖源哈希 + miDepHashes 链，保守传播）。
 -- ---------------------------------------------------------------
-dtLoadPartsIncremental : PackageContext -> String -> List ModuleIface -> List ModuleIface -> Eff [] (Check (Pair (List Decl) (List Module)))
+dtLoadPartsIncremental : PackageContext -> String -> List ModuleIface -> List ModuleIface -> Eff [] (Check (Pair (List Diagnostic) (Pair (List Decl) (List Module))))
 dtLoadPartsIncremental ctx entry depIfaces cleanIfaces =
   let
     preloaded = append (modulesOfIfaces depIfaces) (reverse (map moduleOfIface cleanIfaces))
@@ -1026,8 +1039,8 @@ dtAuxOfCache : String -> Maybe AuxCache -> Maybe AuxCache
 dtAuxOfCache key Nothing = Nothing
 dtAuxOfCache key (Just c) = if c.auxCacheKey == key then Just c else Nothing
 
-dtIncrementalChecked : PackageContext -> Pair (List Decl) (List Module) -> List ModuleIface -> List ModuleIface -> Check CheckedPackage
-dtIncrementalChecked ctx parts depIfaces cleanIfaces = Vuna.Compiler.Common.bind (dtIncrementalCheckedCore ctx parts depIfaces cleanIfaces Nothing True) (\r => case firstOf r of
+dtIncrementalChecked : PackageContext -> Pair (List Diagnostic) (Pair (List Decl) (List Module)) -> List ModuleIface -> List ModuleIface -> Check CheckedPackage
+dtIncrementalChecked ctx resolved depIfaces cleanIfaces = Vuna.Compiler.Common.bind (dtIncrementalCheckedCore ctx resolved depIfaces cleanIfaces Nothing True) (\r => case firstOf (secondOf r) of
   Just checked => OkC checked
   Nothing => icInternal "incremental check produced no package"
 )
@@ -1036,9 +1049,11 @@ dtIncrementalChecked ctx parts depIfaces cleanIfaces = Vuna.Compiler.Common.bind
 -- 工具链诊断只要「当前文件能不能过检查」，此时跳过整包组装与全量 codegen 检查
 -- （依赖 / 干净模块的产物在写各自接口时已经验过），只对本次新精化的 datas/defs 跑同一条
 -- 检查链 —— 诊断语义与全量路径一致（错误都落在本次精化的文件上）。
-dtIncrementalCheckedCore : PackageContext -> Pair (List Decl) (List Module) -> List ModuleIface -> List ModuleIface -> Maybe AuxCache -> Bool -> Check (Pair (Maybe CheckedPackage) (Maybe AuxCache))
-dtIncrementalCheckedCore ctx parts depIfaces cleanIfaces cache needPackage =
+dtIncrementalCheckedCore : PackageContext -> Pair (List Diagnostic) (Pair (List Decl) (List Module)) -> List ModuleIface -> List ModuleIface -> Maybe AuxCache -> Bool -> Check (Pair (List Diagnostic) (Pair (Maybe CheckedPackage) (Maybe AuxCache)))
+dtIncrementalCheckedCore ctx resolved depIfaces cleanIfaces cache needPackage =
   let
+    parts = secondOf resolved
+    loaderWarns = firstOf resolved
     pkgName = contextPackageName ctx
     modules = reverse (secondOf parts)
     ours = filter (\m => modulePackageOf m == pkgName) modules
@@ -1074,13 +1089,17 @@ dtIncrementalCheckedCore ctx parts depIfaces cleanIfaces cache needPackage =
     startEc = firstOf start
   in Vuna.Compiler.Common.bind prepared (\preparedAux => let
     next = if cacheable then Just (AuxCache key preparedAux start depCps cleanCps) else Nothing
-  in Vuna.Compiler.Common.bind (dtElabFullWithPrepared startEc startGlobals termAux preparedAux decls)
-    (\prog => if needPackage then dtFinishPackageScoped depCps cleanCps prog parts next else dtFinishScoped depCps cleanCps prog next)
+  in Vuna.Compiler.Common.bind (dtElabFullWithPrepared startEc startGlobals termAux preparedAux decls) (\prog => let
+    warns = append loaderWarns (dtProgWarnings prog)
+  in Vuna.Compiler.Common.bind
+    (if needPackage then dtFinishPackageScoped loaderWarns depCps cleanCps prog parts next else dtFinishScoped depCps cleanCps prog next)
+    (\r => OkC (Pair warns r))
+  )
   )
 
 -- 需要整包产物（写接口 / build）：组装 DtProgram + 整包 codegen 检查（与旧行为一致）。
-dtFinishPackage : List CachedProgram -> List CachedProgram -> DtProgram -> Pair (List Decl) (List Module) -> Maybe AuxCache -> Check (Pair (Maybe CheckedPackage) (Maybe AuxCache))
-dtFinishPackage depCps cleanCps prog parts next =
+dtFinishPackage : List Diagnostic -> List CachedProgram -> List CachedProgram -> DtProgram -> Pair (List Decl) (List Module) -> Maybe AuxCache -> Check (Pair (Maybe CheckedPackage) (Maybe AuxCache))
+dtFinishPackage loaderWarns depCps cleanCps prog parts next =
   let
     assembled =
       DtProgram
@@ -1089,7 +1108,9 @@ dtFinishPackage depCps cleanCps prog parts next =
         (dtProgGoals prog) (dtProgSols prog)
         (dedupGlobals (append (concatMap cachedGlobals cleanCps) (dtProgGlobals prog)))
         (dtProgInsts prog) (dtProgClasses prog) prog.dtProgNext prog.dtProgDefVals prog.dtProgDepths
-    checked = CheckedPackage assembled (secondOf parts) (firstOf parts) (cachedNamesOf depCps)
+        (dtProgWarnings prog)
+    warns = append loaderWarns (dtProgWarnings prog)
+    checked = CheckedPackage assembled (secondOf parts) (firstOf parts) (cachedNamesOf depCps) warns
   in Vuna.Compiler.Common.bind (checkDtProgram (Pair (dtProgDatas assembled) (dtProgDefs assembled)))
     (\_ => OkC (Pair (Just checked) next))
 
@@ -1097,8 +1118,8 @@ dtFinishPackage depCps cleanCps prog parts next =
 -- codegen 检查只跑**本次新精化**的 datas/defs（`dtCheckScoped`）——干净模块在它们
 -- 自己的接口写回时就跑过整包检查，依赖包同理。整包 `checkDtProgram` 会把这 65 个
 -- 模块再检查一遍（编辑一个模块后 1.4s 里的大头），对增量路径是纯重复。
-dtFinishPackageScoped : List CachedProgram -> List CachedProgram -> DtProgram -> Pair (List Decl) (List Module) -> Maybe AuxCache -> Check (Pair (Maybe CheckedPackage) (Maybe AuxCache))
-dtFinishPackageScoped depCps cleanCps prog parts next =
+dtFinishPackageScoped : List Diagnostic -> List CachedProgram -> List CachedProgram -> DtProgram -> Pair (List Decl) (List Module) -> Maybe AuxCache -> Check (Pair (Maybe CheckedPackage) (Maybe AuxCache))
+dtFinishPackageScoped loaderWarns depCps cleanCps prog parts next =
   let
     assembled =
       DtProgram
@@ -1107,7 +1128,9 @@ dtFinishPackageScoped depCps cleanCps prog parts next =
         (dtProgGoals prog) (dtProgSols prog)
         (dedupGlobals (append (concatMap cachedGlobals cleanCps) (dtProgGlobals prog)))
         (dtProgInsts prog) (dtProgClasses prog) prog.dtProgNext prog.dtProgDefVals prog.dtProgDepths
-    checked = CheckedPackage assembled (secondOf parts) (firstOf parts) (cachedNamesOf depCps)
+        (dtProgWarnings prog)
+    warns = append loaderWarns (dtProgWarnings prog)
+    checked = CheckedPackage assembled (secondOf parts) (firstOf parts) (cachedNamesOf depCps) warns
     allDatas =
       append (concatMap cachedDatas depCps)
         (append (concatMap cachedDatas cleanCps) (dtProgDatas prog))
@@ -1147,7 +1170,7 @@ dtCheckScoped allDatas unitDatas defs =
 --   3. termAux 预处理 / 起始 Ec / 已 shift 产物都可经 `cache` 复用（5b）；`needPackage` =
 --      调用方是否需要整包 CheckedPackage（只做诊断时跳过整包组装 + 整包 codegen 检查）。
 -- 返回 `Nothing` 表示「本路径不适用」（调用方回退全量，诊断必须仍正确）。
-dtCheckSourceIncremental : PackageContext -> String -> String -> List ModuleIface -> List ModuleIface -> Maybe AuxCache -> Bool -> Eff [] (Check (Pair Bool (Pair (Maybe CheckedPackage) (Maybe AuxCache))))
+dtCheckSourceIncremental : PackageContext -> String -> String -> List ModuleIface -> List ModuleIface -> Maybe AuxCache -> Bool -> Eff [] (Check (Pair Bool (Pair (List Diagnostic) (Pair (Maybe CheckedPackage) (Maybe AuxCache)))))
 dtCheckSourceIncremental ctx label source depIfaces cleanIfaces cache needPackage =
   let
     pkgName = contextPackageName ctx
@@ -1164,10 +1187,10 @@ dtCheckSourceIncremental ctx label source depIfaces cleanIfaces cache needPackag
             _ =
               if length missing == 0 then 0
               else note "iface-fallback=check-incremental missing=${join "," missing}"
-          in if length missing > 0 then OkC (Pair False (Pair Nothing cache))
+          in if length missing > 0 then OkC (Pair False (Pair [] (Pair Nothing cache)))
           else case resolveProjectKeeping (preloadKeepOf allIfaces mods) filtered of
             ErrC e => ErrC e
-            OkC parts => case dtIncrementalCheckedCore ctx parts (materializedDeps pkgName parts depIfaces) (materializedOwn pkgName parts cleanIfaces) cache needPackage of
+            OkC resolved => case dtIncrementalCheckedCore ctx resolved (materializedDeps pkgName (secondOf resolved) depIfaces) (materializedOwn pkgName (secondOf resolved) cleanIfaces) cache needPackage of
               ErrC e => ErrC e
               OkC r => OkC (Pair True r)
     )
@@ -1182,29 +1205,30 @@ dtEvalSourceIncremental ctx label source depIfaces cache = do
   pure (case rR of
     ErrC e => ErrC e
     OkC r => case secondOf r of
-      Pair (Just checked) aux => case evalDtMain checked.checkedProgram of
-        ErrC e => ErrC e
-        OkC out => OkC (Pair (firstOf r) (Pair out aux))
-      Pair Nothing aux => OkC (Pair (firstOf r) (Pair "" aux))
+      Pair warns rest => case firstOf rest of
+        Just checked => case evalDtMain checked.checkedProgram of
+          ErrC e => ErrC e
+          OkC out => OkC (Pair (firstOf r) (Pair out (secondOf rest)))
+        Nothing => OkC (Pair (firstOf r) (Pair "" (secondOf rest)))
   )
 
 -- 全量 checked（无 iface / 安全阀回退时用）：与 `dtCheckSource` 同一条加载/精化路径，
 -- 但保留 CheckedPackage（LSP 冷启动写回单模块接口用）。
-dtCheckSourceChecked : PackageContext -> String -> String -> Eff [] (Check (Pair (List String) CheckedPackage))
+dtCheckSourceChecked : PackageContext -> String -> String -> Eff [] (Check (Pair (List Diagnostic) CheckedPackage))
 dtCheckSourceChecked ctx label source = do
   projectR <- loadModuleSource ctx label source
   case projectR of
     ErrC e => pure (ErrC e)
     OkC project => dtCheckPartsWithProgram (pure (resolveProject project))
 
-dtCheckPackageIncrementalParts : PackageContext -> String -> List ModuleIface -> List ModuleIface -> Eff [] (Check (Pair (List String) CheckedPackage))
+dtCheckPackageIncrementalParts : PackageContext -> String -> List ModuleIface -> List ModuleIface -> Eff [] (Check (Pair (List Diagnostic) CheckedPackage))
 dtCheckPackageIncrementalParts ctx entry depIfaces cleanIfaces = do
   partsR <- dtLoadPartsIncremental ctx entry depIfaces cleanIfaces
   pure (case partsR of
     ErrC e => ErrC e
-    OkC parts => case dtIncrementalChecked ctx parts (materializedDeps (contextPackageName ctx) parts depIfaces) (materializedOwn (contextPackageName ctx) parts cleanIfaces) of
+    OkC resolved => case dtIncrementalChecked ctx resolved (materializedDeps (contextPackageName ctx) (secondOf resolved) depIfaces) (materializedOwn (contextPackageName ctx) (secondOf resolved) cleanIfaces) of
       ErrC e => ErrC e
-      OkC checked => OkC (Pair [] checked)
+      OkC checked => OkC (Pair checked.checkedWarnings checked)
   )
 
 -- codegen 的 split 层要求模块列表按依赖序（外部依赖在前）。增量路径的 loader 列表是
@@ -1361,9 +1385,9 @@ dtSplitProjectIncremental ctx entry printResult depIfaces cleanIfaces = do
   partsR <- dtLoadPartsIncremental ctx entry depIfaces cleanIfaces
   case partsR of
     ErrC e => pure (ErrC e)
-    OkC parts => case dtIncrementalChecked ctx parts (materializedDeps (contextPackageName ctx) parts depIfaces) (materializedOwn (contextPackageName ctx) parts cleanIfaces) of
+    OkC resolved => case dtIncrementalChecked ctx resolved (materializedDeps (contextPackageName ctx) (secondOf resolved) depIfaces) (materializedOwn (contextPackageName ctx) (secondOf resolved) cleanIfaces) of
       ErrC e => pure (ErrC e)
-      OkC checked => dtGenerateIncremental ctx entry parts checked printResult
+      OkC checked => dtGenerateIncremental ctx entry (secondOf resolved) checked printResult
 
 moduleOfIface : ModuleIface -> Module
 -- D28：接口文件不带信任点；来自接口的模块是「已解析」预置模块（`keep` 列表），
@@ -1415,7 +1439,7 @@ materializedOwn pkg parts ifaces =
     ourNames = map moduleNameOf (filter (\m => modulePackageOf m == pkg) (secondOf parts))
   in filter (\mi => memName (miNameOf mi) ourNames) ifaces
 
-dtLoadPartsWithIfaces : PackageContext -> String -> List ModuleIface -> Eff [] (Check (Pair (List Decl) (List Module)))
+dtLoadPartsWithIfaces : PackageContext -> String -> List ModuleIface -> Eff [] (Check (Pair (List Diagnostic) (Pair (List Decl) (List Module))))
 dtLoadPartsWithIfaces ctx entry ifaces = do
   projectR <- loadProjectWithPreloaded ctx entry (modulesOfIfaces ifaces)
   pure (case projectR of
@@ -1424,7 +1448,7 @@ dtLoadPartsWithIfaces ctx entry ifaces = do
       Pair filtered mods => resolveProjectKeeping (preloadKeepOf ifaces mods) filtered
   )
 
-dtLoadModulesPartsWithIfaces : PackageContext -> List String -> List ModuleIface -> Eff [] (Check (Pair (List Decl) (List Module)))
+dtLoadModulesPartsWithIfaces : PackageContext -> List String -> List ModuleIface -> Eff [] (Check (Pair (List Diagnostic) (Pair (List Decl) (List Module))))
 dtLoadModulesPartsWithIfaces ctx names ifaces = do
   projectR <- loadProjectModulesWithPreloaded ctx names (modulesOfIfaces ifaces)
   pure (case projectR of
@@ -1433,17 +1457,17 @@ dtLoadModulesPartsWithIfaces ctx names ifaces = do
       Pair filtered mods => resolveProjectKeeping (preloadKeepOf ifaces mods) filtered
   )
 
-dtCheckPackageWithIfacesParts : PackageContext -> String -> List ModuleIface -> Eff [] (Check (Pair (List String) CheckedPackage))
+dtCheckPackageWithIfacesParts : PackageContext -> String -> List ModuleIface -> Eff [] (Check (Pair (List Diagnostic) CheckedPackage))
 dtCheckPackageWithIfacesParts ctx entry ifaces = do
   partsR <- dtLoadPartsWithIfaces ctx entry ifaces
   pure (case partsR of
     ErrC e => ErrC e
-    OkC parts =>
-      dtCheckOursParts ctx parts
-        (shiftedDepPrograms (materializedDeps (contextPackageName ctx) parts ifaces))
+    OkC resolved =>
+      dtCheckOursParts ctx resolved
+        (shiftedDepPrograms (materializedDeps (contextPackageName ctx) (secondOf resolved) ifaces))
   )
 
-dtLoadModulesPartsIncremental : PackageContext -> List String -> List ModuleIface -> List ModuleIface -> Eff [] (Check (Pair (List Decl) (List Module)))
+dtLoadModulesPartsIncremental : PackageContext -> List String -> List ModuleIface -> List ModuleIface -> Eff [] (Check (Pair (List Diagnostic) (Pair (List Decl) (List Module))))
 dtLoadModulesPartsIncremental ctx names depIfaces cleanIfaces =
   let
     preloaded = append (modulesOfIfaces depIfaces) (reverse (map moduleOfIface cleanIfaces))
@@ -1456,24 +1480,24 @@ dtLoadModulesPartsIncremental ctx names depIfaces cleanIfaces =
         Pair filtered mods => resolveProjectKeeping (preloadKeepOf allIfaces mods) filtered
     )
 
-dtCheckLibraryPackageIncrementalParts : PackageContext -> List String -> List ModuleIface -> List ModuleIface -> Eff [] (Check (Pair (List String) CheckedPackage))
+dtCheckLibraryPackageIncrementalParts : PackageContext -> List String -> List ModuleIface -> List ModuleIface -> Eff [] (Check (Pair (List Diagnostic) CheckedPackage))
 dtCheckLibraryPackageIncrementalParts ctx names depIfaces cleanIfaces = do
   partsR <- dtLoadModulesPartsIncremental ctx names depIfaces cleanIfaces
   pure (case partsR of
     ErrC e => ErrC e
-    OkC parts => case dtIncrementalChecked ctx parts (materializedDeps (contextPackageName ctx) parts depIfaces) (materializedOwn (contextPackageName ctx) parts cleanIfaces) of
+    OkC resolved => case dtIncrementalChecked ctx resolved (materializedDeps (contextPackageName ctx) (secondOf resolved) depIfaces) (materializedOwn (contextPackageName ctx) (secondOf resolved) cleanIfaces) of
       ErrC e => ErrC e
-      OkC checked => OkC (Pair [] checked)
+      OkC checked => OkC (Pair checked.checkedWarnings checked)
   )
 
-dtCheckLibraryPackageWithIfacesParts : PackageContext -> List String -> List ModuleIface -> Eff [] (Check (Pair (List String) CheckedPackage))
+dtCheckLibraryPackageWithIfacesParts : PackageContext -> List String -> List ModuleIface -> Eff [] (Check (Pair (List Diagnostic) CheckedPackage))
 dtCheckLibraryPackageWithIfacesParts ctx names ifaces = do
   partsR <- dtLoadModulesPartsWithIfaces ctx names ifaces
   pure (case partsR of
     ErrC e => ErrC e
-    OkC parts =>
-      dtCheckOursParts ctx parts
-        (shiftedDepPrograms (materializedDeps (contextPackageName ctx) parts ifaces))
+    OkC resolved =>
+      dtCheckOursParts ctx resolved
+        (shiftedDepPrograms (materializedDeps (contextPackageName ctx) (secondOf resolved) ifaces))
   )
 
 -- 只精化本包声明、从接口合并依赖产物，再走同一条逐模块 split；返回 codegen 文件 +
@@ -1483,9 +1507,10 @@ dtSplitProjectWithIfaces ctx entry printResult ifaces = do
   partsR <- dtLoadPartsWithIfaces ctx entry ifaces
   case partsR of
     ErrC e => pure (ErrC e)
-    OkC parts =>
-      dtSplitPartsOurs ctx entry parts
-        (shiftedDepPrograms (materializedDeps (contextPackageName ctx) parts ifaces)) printResult
+    OkC resolved =>
+      dtSplitPartsOurs ctx entry (secondOf resolved)
+        (shiftedDepPrograms (materializedDeps (contextPackageName ctx) (secondOf resolved) ifaces))
+        printResult
 
 dtSplitPartsOurs : PackageContext -> String -> Pair (List Decl) (List Module) -> List CachedProgram -> Bool -> Eff [] (Check (Pair (List SplitFile) CheckedPackage))
 dtSplitPartsOurs ctx entry parts deps printResult =
@@ -1505,9 +1530,11 @@ dtSplitPartsOurs ctx entry parts deps printResult =
           DtProgram (append (concatMap cachedDatas deps) (dtProgDatas prog))
             (append (concatMap cachedDefs deps) (dtProgDefs prog)) (dtProgGoals prog)
             (dtProgSols prog) (dtProgGlobals prog) (dtProgInsts prog) (dtProgClasses prog)
-            prog.dtProgNext prog.dtProgDefVals prog.dtProgDepths
+            prog.dtProgNext prog.dtProgDefVals prog.dtProgDepths (dtProgWarnings prog)
         moduleParts = map (\m => Pair (moduleNameOf m) (moduleDeclsOf m)) modules
-        checked = CheckedPackage prog (secondOf parts) (firstOf parts) (cachedNamesOf deps)
+        checked =
+          CheckedPackage prog (secondOf parts) (firstOf parts) (cachedNamesOf deps)
+            (dtProgWarnings prog)
       in do
         filesR <-
           splitGenerateCached ctx entry modules moduleParts (firstOf parts) assembled printResult
@@ -1523,8 +1550,10 @@ dtSplitProjectParts ctx entry printResult = do
   partsR <- dtLoadParts ctx entry
   case partsR of
     ErrC e => pure (ErrC e)
-    OkC parts =>
+    OkC resolved =>
       let
+        parts = secondOf resolved
+        loaderWarns = firstOf resolved
         modules = reverse (secondOf parts)
         allDecls = append (concatMap moduleDeclsOf modules) (firstOf parts)
       in case elabProgramFull allDecls of
@@ -1536,15 +1565,18 @@ dtSplitProjectParts ctx entry printResult = do
               printResult
           pure (case filesR of
             ErrC e => ErrC e
-            OkC files => OkC (Pair files (CheckedPackage prog (secondOf parts) (firstOf parts) []))
+            OkC files =>
+              let
+                warns = append loaderWarns (dtProgWarnings prog)
+              in OkC (Pair files (CheckedPackage prog (secondOf parts) (firstOf parts) [] warns))
           )
 
 -- ---------------------------------------------------------------
 -- UN_UnusedDefinition：入口检查完成后，未被任何定义体/类型引用的定义告警。
 -- 只对入口路径启用（库包导出面未知，避免误报）；`main` / `_` 前缀 / `$` 内部名跳过。
 -- ---------------------------------------------------------------
--- | 入口检查后对未引用定义发 UN_UnusedDefinition 告警。
-warnUnusedDefsIn : List DtDef -> Int
+-- | 入口检查后收集未引用定义的 UN_UnusedDefinition 告警（返回值交给驱动层输出）。
+warnUnusedDefsIn : List DtDef -> List Diagnostic
 warnUnusedDefsIn defs =
   let
     used = concatMap dtDefGlobalNames defs
@@ -1560,22 +1592,21 @@ maybeTermGlobals : Maybe Term -> List String
 maybeTermGlobals Nothing = []
 maybeTermGlobals (Just t) = termGlobalNames t
 
--- | 未使用定义扫描实现。
-warnUnusedDefsGo : List DtDef -> List String -> Int
-warnUnusedDefsGo [] used = 0
+-- | 未使用定义扫描实现（按定义顺序返回诊断）。
+warnUnusedDefsGo : List DtDef -> List String -> List Diagnostic
+warnUnusedDefsGo [] used = []
 warnUnusedDefsGo (d :: rest) used =
   let
     name = dtDefName d
     skip = name == "main" || startsWith "_" name || startsWith "$" name
-    _ = if skip then 0
-    else if memName name used then 0
-    else case dtDefSpan d of
-      Just sp =>
-        warnAt1Mod
-          (\d => withSuggestion (Suggestion "remove unused definition `${name}`" MachineApplicable [DiagEdit sp ""]) d)
-          sp (UnusedDefinition name) name
-      Nothing => 0
-  in warnUnusedDefsGo rest used
+  in if skip then warnUnusedDefsGo rest used
+  else if memName name used then warnUnusedDefsGo rest used
+  else case dtDefSpan d of
+    Just sp =>
+      Base.List.Cons
+        (warnDiagAtMod (\x => withSuggestion (Suggestion "remove unused definition `${name}`" MachineApplicable [DiagEdit sp ""]) x) sp (UnusedDefinition name) [name])
+        (warnUnusedDefsGo rest used)
+    Nothing => warnUnusedDefsGo rest used
 
 -- 恢复式检查（MVP，仅入口文件）：逐次精化，失败时按诊断所在行移除对应顶层声明后重试，
 -- 收集最多 fuel 条独立错误。移除导致的后续级联错误也会被收集（调用方标注 best-effort）。
@@ -1586,7 +1617,7 @@ dtCheckRecovering ctx entry = do
   declsR <- dtLoad ctx entry
   pure (case declsR of
     ErrC e => ErrC e
-    OkC decls => recoverElab 8 decls [] []
+    OkC loaded => recoverElab 8 (firstOf loaded) [] []
   )
 
 -- | 恢复式精化循环：失败后移除相关声明继续。
@@ -1688,7 +1719,7 @@ dtCheckLibraryRecovering ctx names = do
   partsR <- dtLoadModulesParts ctx names
   pure (case partsR of
     ErrC e => ErrC e
-    OkC parts => recoverElab 8 (dtProjectDecls parts) [] []
+    OkC resolved => recoverElab 8 (dtProjectDecls (secondOf resolved)) [] []
   )
 
 -- | 去掉 ./ 前缀便于路径比较。

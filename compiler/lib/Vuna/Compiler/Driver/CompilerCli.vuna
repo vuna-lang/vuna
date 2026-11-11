@@ -353,17 +353,14 @@ emitDiagRevSeq o extra (d :: rest) = do
   pure (secondOf r)
 
 printDiagWithPrefix : CliOpts -> String -> Diagnostic -> Eff [] (Pair Int CliOpts)
-printDiagWithPrefix o extra d =
-  let
-    errs = takeParseErrors 0
-  in case errs of
-    [] => emitDiag o extra d
-    e :: _ =>
-      let
-        shown = takeDiags o.optMaxErrors errs
-      in do
-        o1 <- emitDiagRevSeq o extra shown
-        pure (Pair (diagExitFor e) o1)
+printDiagWithPrefix o extra d = case d.diagChildren of
+  [] => emitDiag o extra d
+  _ =>
+    let
+      shown = takeDiags o.optMaxErrors (d :: d.diagChildren)
+    in do
+      o1 <- emitDiagRevSeq o extra shown
+      pure (Pair (diagExitFor d) o1)
 
 -- | 输出错误诊断并返回退出码。
 printDiag : CliOpts -> Diagnostic -> Eff [] (Pair Int CliOpts)
@@ -381,13 +378,6 @@ printDiagList o extra ds =
   in do
     o1 <- emitDiagRevSeq o extra shown
     pure (Pair 0 o1)
-
-printWarnings : List String -> Eff [] Int
-printWarnings [] = pure 0
-printWarnings (w :: rest) = do
-  rendered <- renderCliDiagnosticEff "${w}\n"
-  _ <- prim_eff_print rendered
-  printWarnings rest
 
 defaultDir : Maybe String -> String
 defaultDir (Just dir2) = dir2
@@ -467,7 +457,7 @@ compileFileEntry printResult entry outDir o = do
         r <- compileToDir ctx entry printResult outDir
         case r of
           ErrC e => printDiag o1 e
-          OkC _ => finishWarningsDir o1 outDir 0
+          OkC p => finishWarningsDir (secondOf p) o1 outDir 0
 
 compilePkgDir : Bool -> String -> String -> CliOpts -> Eff [] (Pair Int CliOpts)
 compilePkgDir printResult dir outDir o = do
@@ -481,7 +471,7 @@ compilePkgDir printResult dir outDir o = do
         r <- compileToDir (packageContext pkg) (packageEntry pkg) printResult outDir
         case r of
           ErrC e => printDiag o1 e
-          OkC _ => finishWarningsDir o1 outDir 0
+          OkC p => finishWarningsDir (secondOf p) o1 outDir 0
 
 -- ---------------------------------------------------------------
 -- check：文件入口（包上下文）或包目录（可执行包 check 入口；库包 check [export].modules）
@@ -577,9 +567,9 @@ checkPackageCode pkg wantWarnings o = do
   r <- checkPackage wantWarnings pkg
   case r of
     ErrC e => checkPackageErr pkg e o
-    OkC _ =>
+    OkC ws0 =>
       let
-        ws = filter (ownedByPackage pkg) (takeWarnings 0)
+        ws = filter (ownedByPackage pkg) (dedupeWarnings ws0)
         shown = if o.optShowWarnings || o.optDenyWarnings then ws else []
         failed = if o.optDenyWarnings && length ws > 0 then 1 else 0
       in do
@@ -623,9 +613,9 @@ checkModuleFileEntry ctx path o = do
   checked <- dtCheckModuleFile ctx path
   case checked of
     ErrC e => printDiag o e
-    OkC _ =>
+    OkC ws0 =>
       let
-        ws = filter (ownedByFile path) (takeWarnings 0)
+        ws = filter (ownedByFile path) (dedupeWarnings ws0)
         shown = if o.optShowWarnings || o.optDenyWarnings then ws else []
       in do
         r <- printDiagList o "" shown
@@ -647,9 +637,9 @@ checkEntryFile ctx path o = do
             if length shown == 0 then printDiag (secondOf r) e else pure (Pair 1 (secondOf r))
         ErrC e2 => printDiag o e
     else printDiag o e
-    OkC _ =>
+    OkC ws0 =>
       let
-        ws = filter (ownedByFile path) (takeWarnings 0)
+        ws = filter (ownedByFile path) (dedupeWarnings ws0)
         shown = if o.optShowWarnings || o.optDenyWarnings then ws else []
       in do
         r <- printDiagList o "" shown
@@ -763,8 +753,7 @@ buildOne noCompile multiOut outM pkg o =
       r <- checkPackage False pkg
       case r of
         ErrC e => printDiag o e
-        OkC warnings => do
-          _ <- printWarnings warnings
+        OkC _ => do
           _ <- prim_eff_print "skipped (library): ${name} -> ${outDir}\n"
           pure (Pair 0 o)
 
@@ -813,10 +802,10 @@ ownedByPackage pkg d =
 
 -- compile/build 成功路径的 warning 消费（默认静默；-W 显示；--deny-warnings 提升退出码）。
 -- | 诊断/告警实现：finishWarnings（详见 diagnostics.md）。
-finishWarnings : Int -> CliOpts -> Eff [] (Pair Int CliOpts)
-finishWarnings code o =
+finishWarnings : List Diagnostic -> Int -> CliOpts -> Eff [] (Pair Int CliOpts)
+finishWarnings warns code o =
   let
-    ws = takeWarnings 0
+    ws = dedupeWarnings warns
     shown = if o.optShowWarnings || o.optDenyWarnings then ws else []
   in do
     r <- printDiagList o "" shown
@@ -824,10 +813,10 @@ finishWarnings code o =
 
 -- 与 finishWarnings 相同，但失败时删除已生成的输出目录（编译失败不留产物）。
 -- | 诊断/告警实现：finishWarningsDir（详见 diagnostics.md）。
-finishWarningsDir : CliOpts -> String -> Int -> Eff [] (Pair Int CliOpts)
-finishWarningsDir o dir code =
+finishWarningsDir : List Diagnostic -> CliOpts -> String -> Int -> Eff [] (Pair Int CliOpts)
+finishWarningsDir warns o dir code =
   let
-    ws = takeWarnings 0
+    ws = dedupeWarnings warns
     shown = if o.optShowWarnings || o.optDenyWarnings then ws else []
   in do
     r <- printDiagList o "" shown

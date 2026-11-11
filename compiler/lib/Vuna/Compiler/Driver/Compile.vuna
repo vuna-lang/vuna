@@ -92,7 +92,7 @@ mapMaybeEff f (x :: rest) = do
 -- M45：`wantWarnings` = 调用方要 warning（`-W` / `--deny-warnings`）。warning 不持久化，
 -- 缓存命中/干净模块复用都会跳过精化、丢掉 warning，所以这里跳过 check 缓存并强制本包
 -- 模块重算（依赖仍走接口摘要，不重算依赖包）。
-checkPackage : Bool -> Package -> Eff [] (Check (List String))
+checkPackage : Bool -> Package -> Eff [] (Check (List Diagnostic))
 checkPackage wantWarnings pkg = do
   exists <- prim_eff_fileExists (packageEntry pkg)
   if exists then checkCachedExe wantWarnings (packageContext pkg) (packageEntry pkg)
@@ -137,7 +137,7 @@ parentOfPath path =
 -- 逐模块 split 输出到 outDir：各模块 .ml + Main.ml + build.sh；Ok 写出的文件数。
 -- outDir 在 codegen 成功后才创建（精化失败不留产物）。
 -- M33 W5：包根 `ffi/*.c` 复制到 `OUTDIR/ffi/` 并写进 build.sh（受限 FFI 的 C 实现）。
-compileToDir : PackageContext -> String -> Bool -> String -> Eff [] (Check Int)
+compileToDir : PackageContext -> String -> Bool -> String -> Eff [] (Check (Pair Int (List Diagnostic)))
 compileToDir ctx entry printResult outDir = do
   audit <- ifaceAuditRequested
   if audit then auditCompile ctx entry printResult outDir
@@ -161,7 +161,7 @@ summarySplitParts ctx entry printResult = do
         Nothing => dtSplitProjectWithIfaces ctx entry printResult ifaces
     Nothing => dtSplitProjectParts ctx entry printResult
 
-compileToDirNormal : PackageContext -> String -> Bool -> String -> Eff [] (Check Int)
+compileToDirNormal : PackageContext -> String -> Bool -> String -> Eff [] (Check (Pair Int (List Diagnostic)))
 compileToDirNormal ctx entry printResult outDir = do
   key <- splitCacheKey ctx entry printResult
   path <- splitCachePath ctx key
@@ -174,7 +174,11 @@ compileToDirNormal ctx entry printResult outDir = do
         let
           _ = stamp "split-cache-hit"
         in do
-          writeCompiled ctx outDir cached
+          n <- writeCompiled ctx outDir cached
+          pure (case n of
+            ErrC e => ErrC e
+            OkC count => OkC (Pair count [])
+          )
       Nothing => do
         summary <- summarySplitParts ctx entry printResult
         case summary of
@@ -184,7 +188,7 @@ compileToDirNormal ctx entry printResult outDir = do
 -- 审计（`VUNA_IFACE_AUDIT=1`）：同一进程分别走摘要路径与全量路径，codegen 产物逐字节比较；
 -- 一致才按摘要结果落盘，不一致报 `iface-audit-mismatch` 且**不写任何缓存/接口**
 -- （坏缓存不能被下一次运行「合法」消费）。
-auditCompile : PackageContext -> String -> Bool -> String -> Eff [] (Check Int)
+auditCompile : PackageContext -> String -> Bool -> String -> Eff [] (Check (Pair Int (List Diagnostic)))
 auditCompile ctx entry printResult outDir = do
   key <- splitCacheKey ctx entry printResult
   path <- splitCachePath ctx key
@@ -203,7 +207,7 @@ auditCompile ctx entry printResult outDir = do
 
 -- 写产物 + 写 split 缓存 + 影子写模块接口（构建成功同样要产出接口，否则只 build 的工程
 -- 永远无法给下游提供接口）。
-finishBuild : PackageContext -> String -> String -> List SplitFile -> CheckedPackage -> Eff [] (Check Int)
+finishBuild : PackageContext -> String -> String -> List SplitFile -> CheckedPackage -> Eff [] (Check (Pair Int (List Diagnostic)))
 finishBuild ctx outDir cachePath files checked = do
   n <- writeCompiled ctx outDir files
   case n of
@@ -213,7 +217,7 @@ finishBuild ctx outDir cachePath files checked = do
       shadow <- writeIfaceShadow ctx checked
       case shadow of
         ErrC e => pure (ErrC e)
-        OkC _ => pure (OkC count)
+        OkC _ => pure (OkC (Pair count checked.checkedWarnings))
 
 -- 把（缓存的或新生成的）split 文件写入 outDir 并写 build.sh。
 writeCompiled : PackageContext -> String -> List SplitFile -> Eff [] (Check Int)
@@ -266,7 +270,12 @@ buildSplit dir outDir = do
   pkgR <- loadPackage dir
   case pkgR of
     ErrC e => pure (ErrC e)
-    OkC pkg => compileToDir (packageContext pkg) (packageEntry pkg) True outDir
+    OkC pkg => do
+      r <- compileToDir (packageContext pkg) (packageEntry pkg) True outDir
+      pure (case r of
+        ErrC e => ErrC e
+        OkC p => OkC (firstOf p)
+      )
 
 -- ---------------------------------------------------------------
 -- M30：build meta（确定性、无绝对路径/时间戳）
@@ -1196,7 +1205,7 @@ checkCacheHit path = do
     Nothing => False
   )
 
-checkCachedExe : Bool -> PackageContext -> String -> Eff [] (Check (List String))
+checkCachedExe : Bool -> PackageContext -> String -> Eff [] (Check (List Diagnostic))
 checkCachedExe wantWarnings ctx entry = do
   key <- checkCacheKeyExe ctx entry
   path <- checkCachePath ctx key
@@ -1211,7 +1220,7 @@ checkCachedExe wantWarnings ctx entry = do
 -- 缓存未命中时的精化入口：默认「依赖接口摘要齐全 ⇒ 摘要路径，否则全量」。
 -- 摘要路径返回 `Err` 时**直接上报**（不回退——回退会吞掉本包真实错误）。
 -- `VUNA_ELAB_FULL=1` 强制全量：排障/A-B 对拍用（测试里对两份诊断逐字节比较）。
-checkUncachedExe : Bool -> PackageContext -> String -> String -> Eff [] (Check (List String))
+checkUncachedExe : Bool -> PackageContext -> String -> String -> Eff [] (Check (List Diagnostic))
 checkUncachedExe wantWarnings ctx entry path = do
   full <- elabFullRequested
   if full then fullCheckExe ctx entry path
@@ -1224,7 +1233,7 @@ checkUncachedExe wantWarnings ctx entry path = do
 
 -- 摘要路径（**不落盘**）：接口不可用 ⇒ 全量（与旧行为一致，只是不再直接写缓存）。
 -- wantWarnings 时 clean 列表清空 ⇒ 本包模块全部重算（warning 不在缓存里）。
-summaryCheckExeParts : Bool -> PackageContext -> String -> Eff [] (Check (Pair (List String) CheckedPackage))
+summaryCheckExeParts : Bool -> PackageContext -> String -> Eff [] (Check (Pair (List Diagnostic) CheckedPackage))
 summaryCheckExeParts wantWarnings ctx entry = do
   depIfaces <- depIfacesOf ctx
   case depIfaces of
@@ -1250,7 +1259,7 @@ summaryCheckExeParts wantWarnings ctx entry = do
           in do
             dtCheckPackageWithIfacesParts ctx entry ifaces
 
-fullCheckExe : PackageContext -> String -> String -> Eff [] (Check (List String))
+fullCheckExe : PackageContext -> String -> String -> Eff [] (Check (List Diagnostic))
 fullCheckExe ctx entry path =
   let
     _ = note "cache-path=full"
@@ -1258,7 +1267,7 @@ fullCheckExe ctx entry path =
 
 -- 审计（`VUNA_IFACE_AUDIT=1`）：摘要路径 vs 全量路径的诊断逐字节对拍。一致才按摘要结果
 -- 落盘；不一致报 `iface-audit-mismatch` 并**不写缓存/接口**。
-auditCheckExe : Bool -> PackageContext -> String -> String -> Eff [] (Check (List String))
+auditCheckExe : Bool -> PackageContext -> String -> String -> Eff [] (Check (List Diagnostic))
 auditCheckExe wantWarnings ctx entry path = do
   summary <- summaryCheckExeParts wantWarnings ctx entry
   full <- dtCheckWithProgramParts ctx entry
@@ -1285,8 +1294,10 @@ ifaceAuditRequested = do
 
 -- 诊断签名：`Ok`/`Err` 都参与比较（顺序敏感，逐字节）。
 -- 直接按构造子在 clause 头分派（dispatch-lift），避免再嵌一层 case。
-checkSignatureOf : Check (Pair (List String) CheckedPackage) -> String
-checkSignatureOf (OkC p) = "ok\n${joinLines (firstOf p)}"
+-- warning 不参与签名：摘要路径在 `wantWarnings=false` 时会复用干净模块（不重算 warning），
+-- 全量路径会全算，二者在 warning 上不可比（warning 不进缓存，见 M45）。
+checkSignatureOf : Check (Pair (List Diagnostic) CheckedPackage) -> String
+checkSignatureOf (OkC _) = "ok\n"
 checkSignatureOf (ErrC e) = "err\n${diagText e}"
 
 splitSignatureOf : Check (Pair (List SplitFile) CheckedPackage) -> String
@@ -1767,7 +1778,7 @@ sameIfaceHashes (m :: rest) ys = case ifaceHashOfName ys (miNameOf m) of
 
 -- 写过缓存：检查成功才写；缓存内容对依赖方是接口摘要（读方校验），对本包是「同哈希跳过」标记
 -- （命中直接 Ok，不用重读内容——key 已含源哈希与编译器指纹）。
-checkAndCache : PackageContext -> String -> Eff [] (Check (Pair (List String) CheckedPackage)) -> Eff [] (Check (List String))
+checkAndCache : PackageContext -> String -> Eff [] (Check (Pair (List Diagnostic) CheckedPackage)) -> Eff [] (Check (List Diagnostic))
 checkAndCache ctx path checked = do
   checkedR <- checked
   case checkedR of
@@ -1783,7 +1794,7 @@ checkAndCache ctx path checked = do
         ErrC e => pure (ErrC e)
         OkC _ => pure (OkC (firstOf pr))
 
-checkCachedLib : Bool -> PackageContext -> List String -> Eff [] (Check (List String))
+checkCachedLib : Bool -> PackageContext -> List String -> Eff [] (Check (List Diagnostic))
 checkCachedLib wantWarnings ctx names = do
   key <- checkCacheKeyLib ctx names
   path <- checkCachePath ctx key
@@ -1795,7 +1806,7 @@ checkCachedLib wantWarnings ctx names = do
     else checkUncachedLib wantWarnings ctx names path
   else checkUncachedLib wantWarnings ctx names path
 
-checkUncachedLib : Bool -> PackageContext -> List String -> String -> Eff [] (Check (List String))
+checkUncachedLib : Bool -> PackageContext -> List String -> String -> Eff [] (Check (List Diagnostic))
 checkUncachedLib wantWarnings ctx names path = do
   full <- elabFullRequested
   if full then fullCheckLib ctx names path
@@ -1806,7 +1817,7 @@ checkUncachedLib wantWarnings ctx names path = do
       summary <- summaryCheckLibParts wantWarnings ctx names
       checkAndCache ctx path (pure summary)
 
-summaryCheckLibParts : Bool -> PackageContext -> List String -> Eff [] (Check (Pair (List String) CheckedPackage))
+summaryCheckLibParts : Bool -> PackageContext -> List String -> Eff [] (Check (Pair (List Diagnostic) CheckedPackage))
 summaryCheckLibParts wantWarnings ctx names = do
   depIfaces <- depIfacesOf ctx
   case depIfaces of
@@ -1832,13 +1843,13 @@ summaryCheckLibParts wantWarnings ctx names = do
           in do
             dtCheckLibraryPackageWithIfacesParts ctx names ifaces
 
-fullCheckLib : PackageContext -> List String -> String -> Eff [] (Check (List String))
+fullCheckLib : PackageContext -> List String -> String -> Eff [] (Check (List Diagnostic))
 fullCheckLib ctx names path =
   let
     _ = note "cache-path=full"
   in checkAndCache ctx path (dtCheckLibraryWithProgramParts ctx names)
 
-auditCheckLib : Bool -> PackageContext -> List String -> String -> Eff [] (Check (List String))
+auditCheckLib : Bool -> PackageContext -> List String -> String -> Eff [] (Check (List Diagnostic))
 auditCheckLib wantWarnings ctx names path = do
   summary <- summaryCheckLibParts wantWarnings ctx names
   full <- dtCheckLibraryWithProgramParts ctx names

@@ -1,4 +1,12 @@
-module Vuna.Compiler.Elab.Usage (checkDefUsage, checkProgramUsage, isTypeForming) where
+module Vuna.Compiler.Elab.Usage
+  ( checkDefUsage
+  , checkProgramUsage
+  , isTypeForming
+  , warnAt0
+  , warnAt0Mod
+  , warnAt1
+  , warnAt1Mod
+  ) where
 
 -- Vuna.Compiler.Elab.Usage：M38 QTT 用量检查。
 --
@@ -83,16 +91,16 @@ checkBinderRig ec sp name Rig1 used = case used of
       (tcErr1 sp (LinearOverused name) name)
 checkBinderRig ec sp name RigOmega used = OkC 0
 
--- 进入一个 binder：body usage 的头部就是它；检查后 drop。
-checkLamBinder : Ec -> Span -> String -> Rig -> List Rig -> Check (List Rig)
+-- 进入一个 binder：body usage 的头部就是它；检查后 drop（返回更新后的 Ec）。
+checkLamBinder : Ec -> Span -> String -> Rig -> List Rig -> Check (Pair (List Rig) Ec)
 checkLamBinder ec sp name rig [] = icInternal "usage vector lost lambda binder"
 checkLamBinder ec sp name rig (used :: rest) =
   let
-    _ = if isRigZero used && not (startsWith "_" name) then case rig of
-      RigOmega => warnUnusedBinder sp name
-      _ => 0
-    else 0
-  in Vuna.Compiler.Common.bind (checkBinderRig ec sp name rig used) (\_ => OkC rest)
+    ec1 = if isRigZero used && not (startsWith "_" name) then case rig of
+      RigOmega => warnUnusedBinder ec sp name
+      _ => ec
+    else ec
+  in Vuna.Compiler.Common.bind (checkBinderRig ec1 sp name rig used) (\_ => OkC (Pair rest ec1))
 
 -- 外层 env 里是否有同名、且**参与运行时**的 binder 吗（UN_ShadowedBinder 的比较对象）。
 --
@@ -107,25 +115,24 @@ shadowedByRuntime name ((Pair n rig) :: rest) =
 
 -- case 分支：binders 是 telescope 顺序（第一个字段最外），body usage 的前 k 项按
 -- 逆序对应它们（index 0 = 最后一个字段）。检查完整体 drop。
-checkAltBinders : Ec -> Span -> List (Pair String Rig) -> List Rig -> Check (List Rig)
+checkAltBinders : Ec -> Span -> List (Pair String Rig) -> List Rig -> Check (Pair (List Rig) Ec)
 checkAltBinders ec sp binders us = checkAltBindersGo ec sp (reverse binders) us
 
-checkAltBindersGo : Ec -> Span -> List (Pair String Rig) -> List Rig -> Check (List Rig)
-checkAltBindersGo ec sp [] us = OkC us
+checkAltBindersGo : Ec -> Span -> List (Pair String Rig) -> List Rig -> Check (Pair (List Rig) Ec)
+checkAltBindersGo ec sp [] us = OkC (Pair us ec)
 checkAltBindersGo ec sp ((Pair name rig) :: rest) us = case us of
   [] => icInternal "usage vector lost case binder"
   used :: more =>
     let
-      _ =
-        if name /= "_" && shadowedByRuntime name rest then warnAt1 sp (ShadowedBinder name) name
-        else 0
-    in let
-      _ = if isRigZero used && not (startsWith "_" name) then case rig of
-        RigOmega => warnUnusedBinder sp name
-        _ => 0
-      else 0
-    in Vuna.Compiler.Common.bind (checkBinderRig ec sp name rig used)
-      (\_ => checkAltBindersGo ec sp rest more)
+      ec1 =
+        if name /= "_" && shadowedByRuntime name rest then warnAt1 ec sp (ShadowedBinder name) name
+        else ec
+      ec2 = if isRigZero used && not (startsWith "_" name) then case rig of
+        RigOmega => warnUnusedBinder ec1 sp name
+        _ => ec1
+      else ec1
+    in Vuna.Compiler.Common.bind (checkBinderRig ec2 sp name rig used)
+      (\_ => checkAltBindersGo ec2 sp rest more)
 
 -- ---------------------------------------------------------------
 -- 项遍历（显式线程 `Ec`：使用点登记进 `ecUseSpans`，诊断就地取用）
@@ -143,12 +150,12 @@ checkTerm ec sp env t = case t of
   TPi name implicit rig dom cod => OkC (Pair (uZeroOf (natToInt (length env))) ec)
   TLam name rig body =>
     let
-      _ =
-        if name /= "_" && shadowedByRuntime name env then warnAt1 sp (ShadowedBinder name) name
-        else 0
+      ecW =
+        if name /= "_" && shadowedByRuntime name env then warnAt1 ec sp (ShadowedBinder name) name
+        else ec
       env2 = Base.List.Cons (Pair name rig) env
-    in Vuna.Compiler.Common.step (checkTerm ec sp env2 body)
-      (\u => \ec2 => Vuna.Compiler.Common.bind (checkLamBinder ec2 sp name rig u) (\rest => OkC (Pair rest ec2)))
+    in Vuna.Compiler.Common.step (checkTerm ecW sp env2 body)
+      (\u => \ec2 => Vuna.Compiler.Common.step (checkLamBinder ec2 sp name rig u) (\rest => \ec3 => OkC (Pair rest ec3)))
   TApp f a rig =>
     Vuna.Compiler.Common.step (checkTerm ec sp env f)
       (\uf => \ec1 => if isRigZero rig then OkC (Pair uf ec1) else Vuna.Compiler.Common.step (checkTerm ec1 sp env a) (\ua => \ec2 => OkC (Pair (uAdd uf (uScale rig ua)) ec2)))
@@ -193,7 +200,7 @@ checkAltsGo ec sp env ((CaseAlt cname binders body) :: rest) acc =
   let
     env2 = append (reverse binders) env
     k = natToInt (length binders)
-  in Vuna.Compiler.Common.step (checkTerm ec sp env2 body) (\u => \ec1 => Vuna.Compiler.Common.bind (checkAltBinders ec1 sp binders u) (\outer => checkAltsGo ec1 sp env rest (Just (case acc of
+  in Vuna.Compiler.Common.step (checkTerm ec sp env2 body) (\u => \ec1 => Vuna.Compiler.Common.step (checkAltBinders ec1 sp binders u) (\outer => \ec2 => checkAltsGo ec2 sp env rest (Just (case acc of
     Just prev => uJoin prev outer
     Nothing => outer
   )
@@ -334,9 +341,9 @@ defSpanOf d = case dtDefSpan d of
 
 -- 未使用 binder → `_<name>` 的 machine-applicable 改名建议（无引用，改名安全）。
 -- | 未使用 binder 告警（附改名建议）。
-warnUnusedBinder : Span -> String -> Int
-warnUnusedBinder sp name =
-  warnAt1Mod
+warnUnusedBinder : Ec -> Span -> String -> Ec
+warnUnusedBinder ec sp name =
+  warnAt1Mod ec
     (\d => withSuggestion (Suggestion "rename unused binder `${name}` to `_${name}`" MachineApplicable [DiagEdit sp "_${name}"]) d)
     sp (UnusedBinder name) name
 
@@ -364,3 +371,28 @@ withUseFields ec name d = withUseSpans (usesOf ec name) d
 withUseSpans : List Span -> Diagnostic -> Diagnostic
 withUseSpans [] d = d
 withUseSpans (sp :: rest) d = withUseSpans rest (withField (FieldSpan "use" sp) d)
+
+-- ---------------------------------------------------------------
+-- warning 发射（Elab 期）：把 warning 目录条目追加进显式状态 `Ec.ecWarnings`。
+-- 目录/模板的唯一真源是 `Vuna.Compiler.Diagnostics.Warning`（叶子层，不依赖 Elab）；
+-- 这里只做「构造 Diagnostic + 追加进 Ec」。本模块被 Case / Dt 复用（同一份状态语义）。
+-- ---------------------------------------------------------------
+-- | 在 span 上发一条 warning，追加进显式状态 `Ec`，返回更新后的 Ec。
+warnAt : Ec -> Span -> {n : Nat} -> WarnErr n -> Vec n String -> Ec
+warnAt ec sp e args = ecAddWarning ec (warnDiagAt sp e args)
+
+-- | arity 0 的 warning。
+warnAt0 : Ec -> Span -> WarnErr Zero -> Ec
+warnAt0 ec sp e = warnAt ec sp e []
+
+-- | arity 1 的 warning。
+warnAt1 : Ec -> Span -> WarnErr (Succ Zero) -> String -> Ec
+warnAt1 ec sp e a0 = warnAt ec sp e [a0]
+
+-- | 带后处理（如附加 suggestion）的 arity-1 warning。
+warnAt1Mod : Ec -> (Diagnostic -> Diagnostic) -> Span -> WarnErr (Succ Zero) -> String -> Ec
+warnAt1Mod ec f sp e a0 = ecAddWarning ec (warnDiagAtMod f sp e [a0])
+
+-- | 带后处理（如附加 suggestion）的 arity-0 warning。
+warnAt0Mod : Ec -> (Diagnostic -> Diagnostic) -> Span -> WarnErr Zero -> Ec
+warnAt0Mod ec f sp e = ecAddWarning ec (warnDiagAtMod f sp e [])

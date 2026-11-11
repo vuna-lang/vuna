@@ -553,7 +553,7 @@ cpOfModule parts prog mod =
     classes = bucketOf mod parts.ppClasses
     slice =
       DtProgram datas defs [] (dtProgSols prog) globals insts classes 0 (Base.HashMap.fromList [])
-        []
+        [] []
   in cachedOfProgramWith parts.ppSols slice
 
 sourceOf : List (Pair String SourceInfo) -> String -> SourceInfo

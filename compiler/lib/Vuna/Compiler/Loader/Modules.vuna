@@ -44,7 +44,6 @@ module Vuna.Compiler.Loader.Modules
 -- 导出表计算、加载流程与 flatten 在 Flatten；门面 `Vuna.Compiler.Loader` 保持原 API。
 import Vuna.Compiler.Loader.Diagnostics
 import Vuna.Compiler.Common
-import Vuna.Compiler.Diagnostics.Sink
 import Vuna.Compiler.Diagnostics.Rn
 import Base.HashMap
 import Base.List
@@ -224,12 +223,7 @@ else case imp.importAlias of
   Nothing => findImportModule rest name
 
 findImportPrefix : List Import -> String -> Maybe String
-findImportPrefix imports prefix = case findImportModule imports prefix of
-  Nothing => Nothing
-  Just m =>
-    let
-      _ = markImportUsed m
-    in Just m
+findImportPrefix imports prefix = findImportModule imports prefix
 
 -- 模块头导出列表里 `module X` 对应的 import 名（去重、保持出现顺序）。加载期算好放进
 -- `Module.moduleReexportsOf`，resolve 期并入 used-import 集合（M45）。
@@ -309,9 +303,7 @@ modulesExportingValueFrom : List Module -> List String -> String -> Check (List 
 modulesExportingValueFrom modules [] name = OkC []
 modulesExportingValueFrom modules (m :: rest) name = Vuna.Compiler.Common.bind (exportsOf modules m) (\es => case findExportValue es name of
   Just e =>
-    let
-      _ = markImportUsed m
-    in Vuna.Compiler.Common.bind (modulesExportingValueFrom modules rest name)
+    Vuna.Compiler.Common.bind (modulesExportingValueFrom modules rest name)
       (\more => OkC (Base.List.Cons (Pair m e) more))
   Nothing => modulesExportingValueFrom modules rest name
 )
@@ -325,7 +317,6 @@ modulesExportingCtorFrom : List Module -> List String -> String -> Check (List (
 modulesExportingCtorFrom modules [] name = OkC []
 modulesExportingCtorFrom modules (m :: rest) name = Vuna.Compiler.Common.bind (exportsOf modules m) (\es => let
   found = findExportCtors es name
-  _ = if length found == 0 then 0 else markImportUsed m
 in Vuna.Compiler.Common.bind (modulesExportingCtorFrom modules rest name)
   (\more => OkC (append (map (\e => Pair m e) found) more))
 )
@@ -338,9 +329,7 @@ modulesExportingTypeFrom : List Module -> List String -> String -> Check (List (
 modulesExportingTypeFrom modules [] name = OkC []
 modulesExportingTypeFrom modules (m :: rest) name = Vuna.Compiler.Common.bind (exportsOf modules m) (\es => case findExportType es name of
   Just e =>
-    let
-      _ = markImportUsed m
-    in Vuna.Compiler.Common.bind (modulesExportingTypeFrom modules rest name)
+    Vuna.Compiler.Common.bind (modulesExportingTypeFrom modules rest name)
       (\more => OkC (Base.List.Cons (Pair m e) more))
   Nothing => modulesExportingTypeFrom modules rest name
 )

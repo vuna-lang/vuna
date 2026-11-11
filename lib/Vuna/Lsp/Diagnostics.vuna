@@ -327,7 +327,7 @@ entryHashMatches (Just h) x = h == x
 
 -- 单文件增量精化（会话可用）：依赖接口 + 本包干净模块预置，只精化当前 buffer。
 -- 安全阀说「不适用」（Nothing）时回退全量。
-incrementalCheckedOf : DiagCache -> ToolContext -> String -> String -> Maybe String -> List Import -> Bool -> Eff [] (Check (Pair Bool (Pair (Maybe CheckedPackage) (Maybe AuxCache))))
+incrementalCheckedOf : DiagCache -> ToolContext -> String -> String -> Maybe String -> List Import -> Bool -> Eff [] (Check (Pair Bool (Pair (List Diagnostic) (Pair (Maybe CheckedPackage) (Maybe AuxCache)))))
 incrementalCheckedOf session tool label text modName imports needPkg = do
   needed <- toolNeededOfImports session.dcCtx tool (currentNameOf modName) imports
   let
@@ -335,27 +335,27 @@ incrementalCheckedOf session tool label text modName imports needPkg = do
   in dtCheckSourceIncremental session.dcCtx label text tool.tcDepIfaces cleanNeeded session.dcAux
     needPkg
 
-checkIncremental : DiagCache -> String -> String -> Maybe String -> List Import -> Eff [] (Pair (Maybe DiagCache) (List Diagnostic))
+checkIncremental : DiagCache -> String -> String -> Maybe String -> List Import -> Eff [] (Pair (Maybe DiagCache) (Pair (List Diagnostic) (List Diagnostic)))
 checkIncremental session label text modName imports = case session.dcTool of
-  Nothing => pure (Pair Nothing [])
+  Nothing => pure (Pair Nothing (Pair [] []))
   Just tool => do
     needPkg <- case modName of
       Just n => if isCleanModule session n then pure False else diskMatches label text
       Nothing => pure False
     checkedR <- incrementalCheckedOf session tool label text modName imports needPkg
     case checkedR of
-      ErrC e => pure (Pair (Just session) (diagsOfCheck label (ErrC e)))
-      OkC (Pair applied (Pair maybePkg maybeAux)) => if applied then
+      ErrC e => pure (Pair (Just session) (Pair (diagsOfCheck label (ErrC e)) []))
+      OkC (Pair applied (Pair warns (Pair maybePkg maybeAux))) => if applied then
         let
           session2 =
             DiagCache session.dcLabel session.dcKey session.dcCtx session.dcTool session.dcClean
               session.dcBuiltSec session.dcStats maybeAux session.dcFix
         in case maybePkg of
-          Nothing => pure (Pair (Just session2) [])
+          Nothing => pure (Pair (Just session2) (Pair [] warns))
           Just checkedPkg => do
             session3 <- writeBackModule session2 label text checkedPkg modName
-            pure (Pair (Just session3) [])
-      else pure (Pair Nothing [])
+            pure (Pair (Just session3) (Pair [] warns))
+      else pure (Pair Nothing (Pair [] []))
 
 -- 全量精化后的会话：命中既有缓存就沿用，否则用当前时间戳建一个无工具接口的会话。
 sessionForFull : Maybe DiagCache -> PackageContext -> String -> Eff [] DiagCache
@@ -366,19 +366,19 @@ sessionForFull Nothing ctx label = do
   pure (DiagCache label key ctx Nothing [] builtSec [] Nothing emptyFixityEnv)
 
 -- 上下文的精简入口（`dtCheckSourceChecked` 需要 ctx）。
-checkFullWith : Maybe DiagCache -> PackageContext -> String -> String -> Maybe String -> Eff [] (Pair (Maybe DiagCache) (List Diagnostic))
+checkFullWith : Maybe DiagCache -> PackageContext -> String -> String -> Maybe String -> Eff [] (Pair (Maybe DiagCache) (Pair (List Diagnostic) (List Diagnostic)))
 checkFullWith cache ctx label text modName = do
   checkedR <- dtCheckSourceChecked ctx label text
   case checkedR of
-    ErrC e => pure (Pair cache (diagsOfCheck label (ErrC e)))
-    OkC (Pair _ checkedPkg) => do
+    ErrC e => pure (Pair cache (Pair (diagsOfCheck label (ErrC e)) []))
+    OkC (Pair warns checkedPkg) => do
       session <- sessionForFull cache ctx label
       session2 <- writeBackModule session label text checkedPkg modName
       let
         keep = case cache of
           Just _ => Just session2
           Nothing => Nothing
-      in pure (Pair keep [])
+      in pure (Pair keep (Pair [] warns))
 
 -- ---------------------------------------------------------------
 -- lint（会话复用 fixity 模块图；外部文件变化会随会话重建清空）
@@ -411,7 +411,7 @@ findingDiagJson f =
 -- 一次请求的完整诊断链
 -- ---------------------------------------------------------------
 -- DT 诊断：会话可用时走单文件增量精化，否则回退全量（诊断语义不变）。
-checkDiagnostics : Maybe DiagCache -> String -> PackageContext -> String -> Maybe String -> List Import -> Eff [] (Pair (Maybe DiagCache) (List Diagnostic))
+checkDiagnostics : Maybe DiagCache -> String -> PackageContext -> String -> Maybe String -> List Import -> Eff [] (Pair (Maybe DiagCache) (Pair (List Diagnostic) (List Diagnostic)))
 checkDiagnostics cache label ctx text modName imports = do
   session <- usableSession cache ctx label text modName imports
   case session of
@@ -456,7 +456,7 @@ diagnosticsForCachedWith includeUnused cache uri text = do
                     (DiagCache c.dcLabel c.dcKey c.dcCtx c.dcTool c.dcClean c.dcBuiltSec c.dcStats c.dcAux (firstOf linted))
                 Nothing => Nothing
             in pure
-              (Pair cache3 (Pair label (append (secondOf checked) (append (secondOf linted) (filter (diagOwns label) (filter (warnAllowed includeUnused) (takeWarnings 0)))))))
+              (Pair cache3 (Pair label (append (firstOf (secondOf checked)) (append (secondOf linted) (filter (diagOwns label) (filter (warnAllowed includeUnused) (dedupeWarnings (secondOf (secondOf checked)))))))))
 
 publishDiagnostics : String -> Int -> String -> List Diagnostic -> Json
 publishDiagnostics uri version text diags =

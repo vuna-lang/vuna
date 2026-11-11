@@ -97,7 +97,7 @@ bindingTypes : PackageContext -> String -> Eff [] (Check (List (Pair String Stri
 bindingTypes ctx program = dtBindingTypes ctx program
 
 -- 内存 program 的整程序检查（自动签名写回后的复查；也用于 :load 模块的立即校验）。
-checkProgram : PackageContext -> String -> Eff [] (Check (List String))
+checkProgram : PackageContext -> String -> Eff [] (Check (List Diagnostic))
 checkProgram ctx program = dtCheckSource ctx "<repl>" program
 
 -- ---------------------------------------------------------------

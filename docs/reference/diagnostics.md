@@ -83,9 +83,22 @@ Diagnostic = { id, severity, phase, category, code, message, labels, fields, tra
 实例的 `\a => \b =>` 不误报；显式 `0 x` binder 与它们同等对待。`UN_UnusedDefinition`
 只在入口路径检查（库包导出面未知，避免误报）。编译器生成的内部 binder（do 忽略 binder
 命名 `_`、trait 字典字段 `_f<n>`）同样不参与 `UN_UnusedBinder` / `UN_ShadowedBinder`。
-`UN_UnusedImport` 按「名字解析实际使用 + 模块头 `module X` 重导出」两路追踪（alias 归一到
-import 名）；warning 不写入 iface / check 结果缓存，`-W` / `--deny-warnings` 会强制本包
-模块重新精化以避免漏报（见 [tooling.md](tooling.md) 退出码一节）。
+`UN_UnusedImport` 按「解析结果里实际引用的 canonical target（含重载构造子候选、do 链的
+bind 目标）+ 模块头 `module X` 重导出」判定（alias 归一到 import 名；模板字符串降级合成的
+`Base.Interp.interp` 不算使用，与旧判定一致）；warning 不写入 iface / check 结果缓存，
+`-W` / `--deny-warnings` 会强制本包模块重新精化以避免漏报（见
+[tooling.md](tooling.md) 退出码一节）。
+
+warning 的**通道**（M4 起）没有进程内全局收集器：Elab 期 `warnAt*`
+（`Elab/Usage.vuna`）把诊断追加进显式状态 `Ec.ecWarnings`，精化出口挂到
+`DtProgram.dtProgWarnings`；loader 的 unused-import（`Loader/Flatten.vuna` 的
+`unusedImportWarnings`）与入口路径的 `UN_UnusedDefinition`（`Driver/Dt.vuna`）直接返回
+诊断列表。驱动层把三者按 loader → elab → unused-def 的顺序拼成
+`CheckedPackage.checkedWarnings` / check 入口的返回值；`-W` / `--deny-warnings` / LSP
+在输出前用 `Diagnostics/Sink.vuna` 的 `dedupeWarnings` 去重（按首次出现顺序）。
+解析恢复期的多条 `PS_` 诊断由 `Parser.parseSourceRecovering` 显式返回，加载器把它们挂到
+首条错误的 `Diagnostic.diagChildren` 上（批量错误通道），CLI 逐个输出——两者都不再依赖
+跨调用保留的可变状态。
 
 ## 5. 渲染视图
 

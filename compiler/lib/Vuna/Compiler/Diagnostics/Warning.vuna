@@ -3,11 +3,9 @@ module Vuna.Compiler.Diagnostics.Warning
   ( WarnEntry(..)
   , WarnErr(..)
   , warnAll
-  , warnAt0
-  , warnAt0Mod
-  , warnAt1
-  , warnAt1Mod
   , warnCode
+  , warnDiagAt
+  , warnDiagAtMod
   , warnMsg
   , warnTemplate
   ) where
@@ -15,11 +13,12 @@ module Vuna.Compiler.Diagnostics.Warning
 -- Vuna.Compiler.Diagnostics.Warning：warning 目录（phase/category 由具体检查给）。
 --
 -- warning 与 error 共用 `Diagnostic`/渲染/LSP；区别只有 `Severity` 与退出码策略：
--- 默认不影响退出码，`--deny-warnings` 时提升为失败。`Check` 不短路，warning 经
--- `Diagnostics.Sink` 在检查结束后由驱动层取走。
+-- 默认不影响退出码，`--deny-warnings` 时提升为失败。本模块是**叶子层**：只做
+-- 「目录 → Diagnostic」的纯构造，不依赖 Elab 状态（`Ec` 版发射 helper 在
+-- `Vuna.Compiler.Elab.Warn`）。无 Ec 的调用方（loader 的 unused-import、驱动层的
+-- unused-def）直接用 `warnDiagAt*` 构造诊断并返回给驱动层；不存在进程内收集器。
 import Vuna.Compiler.Common
 import Vuna.Compiler.Diagnostics.Common
-import Vuna.Compiler.Diagnostics.Sink
 import Base.Nat
 import Base.Vec
 
@@ -62,18 +61,13 @@ warnMsg : {n : Nat} -> WarnErr n -> Vec n String -> Diagnostic
 warnMsg e args =
   diagNoLoc SevWarning PhUsage CatQuantity (warnCode e) (diagBody (warnTemplate e) args)
 
--- | 在 span 上发一条 warning（进 Sink，不影响 Check 结果）。
-warnAt : Span -> {n : Nat} -> WarnErr n -> Vec n String -> Int
-warnAt sp e args =
-  emitWarning (withLabel (Label (Just sp) "" LabelPrimary Nothing) (warnMsg e args))
+-- | 在 span 上构造一条 warning（纯函数；无 Ec 的调用方直接把它返回给驱动层）。
+warnDiagAt : Span -> {n : Nat} -> WarnErr n -> Vec n String -> Diagnostic
+warnDiagAt sp e args = withLabel (Label (Just sp) "" LabelPrimary Nothing) (warnMsg e args)
 
--- | 诊断域实现：Vuna.Compiler.Diagnostics.Warning.warnAt0（目录/模板见 diagnostics.md）。
-warnAt0 : Span -> WarnErr Zero -> Int
-warnAt0 sp e = warnAt sp e []
-
--- | 诊断域实现：Vuna.Compiler.Diagnostics.Warning.warnAt1（目录/模板见 diagnostics.md）。
-warnAt1 : Span -> WarnErr (Succ Zero) -> String -> Int
-warnAt1 sp e a0 = warnAt sp e [a0]
+-- | 带后处理（如附加 suggestion）的 span warning（纯函数）。
+warnDiagAtMod : (Diagnostic -> Diagnostic) -> Span -> {n : Nat} -> WarnErr n -> Vec n String -> Diagnostic
+warnDiagAtMod f sp e args = f (warnDiagAt sp e args)
 
 -- | 诊断域实现：Vuna.Compiler.Diagnostics.Warning.WarnEntry（目录/模板见 diagnostics.md）。
 record WarnEntry where
@@ -92,13 +86,3 @@ warnAll =
     WarnEntry (warnCode (UnusedImport "")) (warnTemplate (UnusedImport "")) "import 未使用",
     WarnEntry (warnCode (ShadowedBinder "")) (warnTemplate (ShadowedBinder "")) "binder 遮蔽外层同名 binder"
   ]
-
--- | 诊断域实现：带后处理（如附加 suggestion）的 arity-1 告警。
-warnAt1Mod : (Diagnostic -> Diagnostic) -> Span -> WarnErr (Succ Zero) -> String -> Int
-warnAt1Mod f sp e a0 =
-  emitWarning (f (withLabel (Label (Just sp) "" LabelPrimary Nothing) (warnMsg e [a0])))
-
--- | 诊断域实现：带后处理（如附加 suggestion）的 arity-0 告警。
-warnAt0Mod : (Diagnostic -> Diagnostic) -> Span -> WarnErr Zero -> Int
-warnAt0Mod f sp e =
-  emitWarning (f (withLabel (Label (Just sp) "" LabelPrimary Nothing) (warnMsg e [])))

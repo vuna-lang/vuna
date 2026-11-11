@@ -180,8 +180,8 @@ checkCaseFuel fuel globals ctx ec scrut alts expected sp = if fuel <= 0 then icF
 else Vuna.Compiler.Common.bind (inferEFuel (fuel - 1) globals ctx ec scrut) (\ps => case ps of
   Pair scrutTerm (Pair scrutTy ec1) => Vuna.Compiler.Common.bind (resolveOverAlts ec1 ctx scrutTy alts) (\q => case q of
     Pair alts2 ec2 =>
-      Vuna.Compiler.Common.bind (checkCaseAltsFlat alts2)
-        (\_ => if needsMatrixCase alts2 then checkCaseMatrixFuel (fuel - 1) globals ctx ec2 scrut alts2 expected sp else checkCaseFamFuel (fuel - 1) globals ctx ec2 scrutTerm scrutTy alts2 expected sp)
+      Vuna.Compiler.Common.step (checkCaseAltsFlat ec2 alts2)
+        (\_, ec3 => if needsMatrixCase alts2 then checkCaseMatrixFuel (fuel - 1) globals ctx ec3 scrut alts2 expected sp else checkCaseFamFuel (fuel - 1) globals ctx ec3 scrutTerm scrutTy alts2 expected sp)
   )
 )
 

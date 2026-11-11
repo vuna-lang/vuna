@@ -28,7 +28,6 @@ import Vuna.Compiler.CacheFormat
 import Vuna.Compiler.Loader.Diagnostics
 import Vuna.Compiler.Common
 import Vuna.Compiler.Hash
-import Vuna.Compiler.Diagnostics.Sink
 import Vuna.Compiler.Diagnostics.Warning
 import Vuna.Compiler.Diagnostics.Rn
 import Base.HashMap
@@ -38,6 +37,7 @@ import Vuna.Compiler.Loader.Fixity
 import Vuna.Compiler.Loader.Modules
 import Vuna.Compiler.Loader.Resolve
 import Vuna.Compiler.Debug
+import Vuna.Compiler.Intrinsics
 import Vuna.Compiler.Packages.Pkg
 
 -- M31.2：imports 模块的**可见 fixity 表**（Module 里已含各自的 import 闭包）。
@@ -137,17 +137,17 @@ parseFileWithPath path src = do
 -- 路径开头（parser 侧带 span 的诊断，如 `[PS_RepeatedPatternBinder]`）时不再重复加，
 -- 保持 CLI 首行的 `<file>:<line>:<col>: <消息>` 契约（DiagRender 才能追加源码片段）。
 parseAndStoreAt : String -> String -> String -> Eff [] (Check SourceFile)
-parseAndStoreAt cpath path src =
-  let
-    _ = resetParseErrors 0
-  in case parseSourceRecovering path src of
-    ErrC e => pure (ErrC (attachParsePath path e))
-    OkC parsed =>
-      let
-        errs = peekParseErrors 0
-      in case errs of
-        [] => fmap OkC (storeAstCache cpath src parsed)
-        e :: _ => pure (ErrC (attachParsePath path e))
+parseAndStoreAt cpath path src = case parseSourceRecovering path src of
+  ErrC e => pure (ErrC (attachParsePath path e))
+  OkC p =>
+    let
+      parsed = firstOf p
+      errs = secondOf p
+    in case errs of
+      [] => fmap OkC (storeAstCache cpath src parsed)
+      -- 恢复期收集到的多条诊断挂在首条错误上（批量错误通道）；首条保持无位置，
+      -- 与旧 CLI 的「原样打印解析诊断」逐字一致（--short/--json/--sarif 不受路径前缀影响）。
+      e :: rest => pure (ErrC (withChildren rest e))
 
 -- 解析错误统一加 `<path>: ` 前缀（parser 诊断本身无位置）。
 attachParsePath : String -> Diagnostic -> Diagnostic
@@ -704,36 +704,32 @@ loadProject ctx entry = loadProjectWithPreloaded ctx entry []
 -- 仍按源码加载；模块表的顺序约定与 `loadAll` 一致（新加载模块前插，dependents-first），
 -- 所以调用方应把 `preloaded` 按 reverse(topo) 传入。
 loadProjectWithPreloaded : PackageContext -> String -> List Module -> Eff [] (Check Project)
-loadProjectWithPreloaded ctx entry preloaded =
-  let
-    _ = resetWarnings 0
-  in do
-    exists <- prim_eff_fileExists entry
-    if exists then do
-      text <- prim_eff_readFile entry
-      parsed <- parseFileWithPath entry text
-      case parsed of
-        ErrC e => pure (ErrC e)
-        OkC (SourceFile hdr imports fixities decls) => case hdr of
-          Just (ModDecl dname hasList items sp) =>
-            pure (ldErr1 (ModuleHeaderInEntryFile entry) entry)
-          Nothing => case validateImports "<entry>" imports of
-            ErrC e => pure (ErrC e)
-            OkC _ => do
-              implicitR <- implicitPrelude (contextRoots ctx) (contextPackageName ctx) "" imports
-              case implicitR of
-                ErrC e => pure (ErrC e)
-                OkC implicit => do
-                  modulesR <-
-                    loadAll 1048576 (contextRoots ctx) (contextPrivileged ctx)
-                      (contextPackageName ctx) preloaded [] (append imports implicit)
-                  pure (case modulesR of
-                    ErrC e => ErrC e
-                    OkC modules =>
-                      OkC
-                        (Project decls imports implicit modules (contextPackageName ctx) (contextCapabilities ctx) (contextTrustUnsafe ctx) False fixities)
-                  )
-    else pure (ldErr1 (EntryFileNotFound entry) entry)
+loadProjectWithPreloaded ctx entry preloaded = do
+  exists <- prim_eff_fileExists entry
+  if exists then do
+    text <- prim_eff_readFile entry
+    parsed <- parseFileWithPath entry text
+    case parsed of
+      ErrC e => pure (ErrC e)
+      OkC (SourceFile hdr imports fixities decls) => case hdr of
+        Just (ModDecl dname hasList items sp) => pure (ldErr1 (ModuleHeaderInEntryFile entry) entry)
+        Nothing => case validateImports "<entry>" imports of
+          ErrC e => pure (ErrC e)
+          OkC _ => do
+            implicitR <- implicitPrelude (contextRoots ctx) (contextPackageName ctx) "" imports
+            case implicitR of
+              ErrC e => pure (ErrC e)
+              OkC implicit => do
+                modulesR <-
+                  loadAll 1048576 (contextRoots ctx) (contextPrivileged ctx)
+                    (contextPackageName ctx) preloaded [] (append imports implicit)
+                pure (case modulesR of
+                  ErrC e => ErrC e
+                  OkC modules =>
+                    OkC
+                      (Project decls imports implicit modules (contextPackageName ctx) (contextCapabilities ctx) (contextTrustUnsafe ctx) False fixities)
+                )
+  else pure (ldErr1 (EntryFileNotFound entry) entry)
 
 -- 库包入口：不带 app/Main.vuna 的包，以 [export].modules 作为根模块集合。
 loadProjectModules : PackageContext -> List String -> Eff [] (Check Project)
@@ -742,7 +738,6 @@ loadProjectModules ctx names = loadProjectModulesWithPreloaded ctx names []
 loadProjectModulesWithPreloaded : PackageContext -> List String -> List Module -> Eff [] (Check Project)
 loadProjectModulesWithPreloaded ctx names preloaded =
   let
-    _ = resetWarnings 0
     entryImports = map (\n => Import n False Nothing (Span "" 0 0 0 0)) names
   in do
     modulesR <-
@@ -762,32 +757,28 @@ loadProjectSource ctx label source = loadProjectSourceWithPreloaded ctx label so
 
 -- M34.5（LSP/REPL 消费接口）：入口以源码字符串给出，依赖包模块可预置（零 parse）。
 loadProjectSourceWithPreloaded : PackageContext -> String -> String -> List Module -> Eff [] (Check Project)
-loadProjectSourceWithPreloaded ctx label source preloaded =
-  let
-    _ = resetWarnings 0
-  in do
-    parsed <- parseFileWithPath label source
-    case parsed of
-      ErrC e => pure (ErrC e)
-      OkC (SourceFile hdr imports fixities decls) => case hdr of
-        Just (ModDecl dname hasList items sp) =>
-          pure (ldErr1 (ModuleHeaderInEntrySource label) label)
-        Nothing => case validateImports "<entry>" imports of
-          ErrC e => pure (ErrC e)
-          OkC _ => do
-            implicitR <- implicitPrelude (contextRoots ctx) (contextPackageName ctx) "" imports
-            case implicitR of
-              ErrC e => pure (ErrC e)
-              OkC implicit => do
-                modulesR <-
-                  loadAll 1048576 (contextRoots ctx) (contextPrivileged ctx)
-                    (contextPackageName ctx) preloaded [] (append imports implicit)
-                pure (case modulesR of
-                  ErrC e => ErrC e
-                  OkC modules =>
-                    OkC
-                      (Project decls imports implicit modules (contextPackageName ctx) (contextCapabilities ctx) (contextTrustUnsafe ctx) False fixities)
-                )
+loadProjectSourceWithPreloaded ctx label source preloaded = do
+  parsed <- parseFileWithPath label source
+  case parsed of
+    ErrC e => pure (ErrC e)
+    OkC (SourceFile hdr imports fixities decls) => case hdr of
+      Just (ModDecl dname hasList items sp) => pure (ldErr1 (ModuleHeaderInEntrySource label) label)
+      Nothing => case validateImports "<entry>" imports of
+        ErrC e => pure (ErrC e)
+        OkC _ => do
+          implicitR <- implicitPrelude (contextRoots ctx) (contextPackageName ctx) "" imports
+          case implicitR of
+            ErrC e => pure (ErrC e)
+            OkC implicit => do
+              modulesR <-
+                loadAll 1048576 (contextRoots ctx) (contextPrivileged ctx) (contextPackageName ctx)
+                  preloaded [] (append imports implicit)
+              pure (case modulesR of
+                ErrC e => ErrC e
+                OkC modules =>
+                  OkC
+                    (Project decls imports implicit modules (contextPackageName ctx) (contextCapabilities ctx) (contextTrustUnsafe ctx) False fixities)
+              )
 
 -- 以**源码字符串**给出一个**库模块**（M30 · LSP）：源码允许带 `module ... where`
 -- 头（LSP 打开 lib/ 下的文件时就是这种形态）。模块头存在时，按 import 闭包加载后
@@ -799,36 +790,33 @@ loadModuleSource ctx label source = loadModuleSourceWithPreloaded ctx label sour
 
 -- M34.5（LSP）：依赖包模块可预置（来自接口的 `Module`），只 parse 当前文件与同包源码。
 loadModuleSourceWithPreloaded : PackageContext -> String -> String -> List Module -> Eff [] (Check Project)
-loadModuleSourceWithPreloaded ctx label source preloaded =
-  let
-    _ = resetWarnings 0
-  in do
-    parsed <- parseFileWithPath label source
-    case parsed of
-      ErrC e => pure (ErrC e)
-      OkC (SourceFile hdr imports fixities decls) => case hdr of
-        Nothing => loadProjectSourceWithPreloaded ctx label source preloaded
-        Just (ModDecl name hasList items sp) => case validateImports name imports of
-          ErrC e => pure (ErrC e)
-          OkC _ => do
-            implicitR <- implicitPrelude (contextRoots ctx) (contextPackageName ctx) name imports
-            case implicitR of
-              ErrC e => pure (ErrC e)
-              OkC implicit => do
-                modulesR <-
-                  loadAll 1048576 (contextRoots ctx) (contextPrivileged ctx)
-                    (contextPackageName ctx) preloaded [] (append imports implicit)
-                case modulesR of
+loadModuleSourceWithPreloaded ctx label source preloaded = do
+  parsed <- parseFileWithPath label source
+  case parsed of
+    ErrC e => pure (ErrC e)
+    OkC (SourceFile hdr imports fixities decls) => case hdr of
+      Nothing => loadProjectSourceWithPreloaded ctx label source preloaded
+      Just (ModDecl name hasList items sp) => case validateImports name imports of
+        ErrC e => pure (ErrC e)
+        OkC _ => do
+          implicitR <- implicitPrelude (contextRoots ctx) (contextPackageName ctx) name imports
+          case implicitR of
+            ErrC e => pure (ErrC e)
+            OkC implicit => do
+              modulesR <-
+                loadAll 1048576 (contextRoots ctx) (contextPrivileged ctx) (contextPackageName ctx)
+                  preloaded [] (append imports implicit)
+              case modulesR of
+                ErrC e => pure (ErrC e)
+                OkC modules => case computeExports modules name hdr imports decls of
                   ErrC e => pure (ErrC e)
-                  OkC modules => case computeExports modules name hdr imports decls of
-                    ErrC e => pure (ErrC e)
-                    OkC exports =>
-                      let
-                        visible =
-                          dedupeFixities
-                            (append fixities (visibleFixitiesOf modules (append imports implicit)))
-                      in pure
-                        (OkC (Project [] imports implicit (Module name (contextPackageName ctx) imports implicit decls exports (contextCapabilities ctx) (contextTrustUnsafe ctx) visible (reexportedImportNames imports items) :: modules) (contextPackageName ctx) (contextCapabilities ctx) (contextTrustUnsafe ctx) False []))
+                  OkC exports =>
+                    let
+                      visible =
+                        dedupeFixities
+                          (append fixities (visibleFixitiesOf modules (append imports implicit)))
+                    in pure
+                      (OkC (Project [] imports implicit (Module name (contextPackageName ctx) imports implicit decls exports (contextCapabilities ctx) (contextTrustUnsafe ctx) visible (reexportedImportNames imports items) :: modules) (contextPackageName ctx) (contextCapabilities ctx) (contextTrustUnsafe ctx) False []))
 
 -- M31.3（B27）：fmt 用的「程序级 fixity」——本文件的 `infix*` 声明（在前，本地优先）
 -- ++ import 闭包可见的声明（Module 里已含各自的 import 闭包）。只 parse + 加载模块图，
@@ -887,41 +875,28 @@ fixitiesForSource ctx label source = do
     OkC p => OkC (secondOf p)
   )
 
--- 返回逐模块已解析（未 flatten）的声明，供 M12 分离编译使用。
-resolveProject : Project -> Check (Pair (List Decl) (List Module))
+-- 返回逐模块已解析（未 flatten）的声明 + 本次解析产生的 warning（unused import）。
+-- warning 是显式返回值：名字解析期不维护 used-set，解析完成后按「实际引用的目标」判定。
+resolveProject : Project -> Check (Pair (List Diagnostic) (Pair (List Decl) (List Module)))
 resolveProject project = resolveProjectKeeping [] project
 
 -- M34.5（S2）：`keep` 里的模块已经解析过（来自接口文件），原样保留、不重解析。
-resolveProjectKeeping : List String -> Project -> Check (Pair (List Decl) (List Module))
+resolveProjectKeeping : List String -> Project -> Check (Pair (List Diagnostic) (Pair (List Decl) (List Module)))
 resolveProjectKeeping keep (Project decls imports implicit modules entryPkg entryCaps entryTrust complete entryFixes) =
   let
     entryTable =
       tableOf
         (dedupeFixities (append entryFixes (visibleFixitiesOf modules (append imports implicit))))
-  in let
-    _ = resetUsedImports 0
-  in Vuna.Compiler.Common.bind (reorderProgram entryTable decls) (\decls2 => Vuna.Compiler.Common.bind (resolveEntry modules entryPkg entryCaps entryTrust (append imports implicit) decls2) (\entryDecls => let
-    _ = warnImportsList imports (takeUsedImports 0)
-  in Vuna.Compiler.Common.bind (resolveModulesKeep keep modules)
-    (\modules2 => Vuna.Compiler.Common.bind (checkTrustPoints entryPkg entryTrust complete entryDecls modules2) (\_ => OkC (Pair entryDecls modules2)))
-  )
-  )
+  in Vuna.Compiler.Common.bind (reorderProgram entryTable decls)
+    (\decls2 => Vuna.Compiler.Common.bind (resolveEntry modules entryPkg entryCaps entryTrust (append imports implicit) decls2) (\entryDecls => Vuna.Compiler.Common.bind (unusedImportWarnings modules imports entryDecls decls2 []) (\entryWarns => Vuna.Compiler.Common.bind (resolveModulesKeep keep modules) (\p2 => Vuna.Compiler.Common.bind (checkTrustPoints entryPkg entryTrust complete entryDecls (firstOf p2)) (\_ => OkC (Pair (append entryWarns (secondOf p2)) (Pair entryDecls (firstOf p2))))))))
 
-resolveModulesKeep : List String -> List Module -> Check (List Module)
-resolveModulesKeep keep [] = OkC []
-resolveModulesKeep keep ((Module name pkg imports implicit decls exports mcaps mtrust fixities reexports) :: rest) = if memName name keep then Vuna.Compiler.Common.bind (resolveModulesKeep keep rest)
-  (\d2 => OkC (Base.List.Cons (Module name pkg imports implicit decls exports mcaps mtrust fixities reexports) d2))
-else
-  let
-    _ = resetUsedImports 0
-  in Vuna.Compiler.Common.bind (reorderProgram (tableOf fixities) decls) (\decls2 => Vuna.Compiler.Common.bind (resolveProgram (Module name pkg imports implicit decls2 exports mcaps mtrust fixities reexports :: rest) name name (namespacesOf decls2) (append imports implicit) decls2) (\d => Vuna.Compiler.Common.bind (checkEffectsBuiltins name pkg mcaps mtrust d) (\d1 => let
-    -- M45：`module X` 重导出使用的 import 在加载期标记、被上面的 reset 清掉，这里补回。
-    _ = warnImportsList imports (append (takeUsedImports 0) reexports)
-  in Vuna.Compiler.Common.bind (resolveModulesKeep keep rest)
-    (\d2 => OkC (Base.List.Cons (Module name pkg imports implicit d1 exports mcaps mtrust fixities reexports) d2))
-  )
-  )
-  )
+resolveModulesKeep : List String -> List Module -> Check (Pair (List Module) (List Diagnostic))
+resolveModulesKeep keep [] = OkC (Pair [] [])
+resolveModulesKeep keep ((Module name pkg imports implicit decls exports mcaps mtrust fixities reexports) :: rest) =
+  if memName name keep then Vuna.Compiler.Common.bind (resolveModulesKeep keep rest)
+    (\p2 => OkC (Pair (Base.List.Cons (Module name pkg imports implicit decls exports mcaps mtrust fixities reexports) (firstOf p2)) (secondOf p2)))
+  else Vuna.Compiler.Common.bind (reorderProgram (tableOf fixities) decls)
+    (\decls2 => Vuna.Compiler.Common.bind (resolveProgram (Module name pkg imports implicit decls2 exports mcaps mtrust fixities reexports :: rest) name name (namespacesOf decls2) (append imports implicit) decls2) (\d => Vuna.Compiler.Common.bind (checkEffectsBuiltins name pkg mcaps mtrust d) (\d1 => Vuna.Compiler.Common.bind (unusedImportWarnings (Module name pkg imports implicit decls2 exports mcaps mtrust fixities reexports :: rest) imports d1 decls2 reexports) (\warns => Vuna.Compiler.Common.bind (resolveModulesKeep keep rest) (\p2 => OkC (Pair (Base.List.Cons (Module name pkg imports implicit d1 exports mcaps mtrust fixities reexports) (firstOf p2)) (append warns (secondOf p2))))))))
 
 dropPastSlash : List Int -> List Int
 dropPastSlash [] = []
@@ -941,20 +916,149 @@ parentOfPath path =
     else if startsWith "/" path && not (startsWith "/" parent) then "/${parent}" else parent
 
 -- ---------------------------------------------------------------
--- unused import warning：显式 import 未在所属检查单元的名字解析中被使用。
--- （隐式 Prelude 不参与；按模块重置 used-set，避免跨模块误抑制。）
+-- unused import warning：显式 import 未在所属检查单元里被引用。
+-- （隐式 Prelude 不参与；判定见 `unusedImportWarnings`。）
 -- ---------------------------------------------------------------
-warnImportsList : List Import -> List String -> Int
-warnImportsList [] used = 0
-warnImportsList (imp :: rest) used =
+unusedImportWarnings : List Module -> List Import -> List Decl -> List Decl -> List String -> Check (List Diagnostic)
+unusedImportWarnings modules imports decls sourceDecls reexports =
   let
-    _ =
-      if memName imp.importName used then 0
-      else warnAt1Mod
-        (\d => withSuggestion (Suggestion "remove unused import ${imp.importName}" MachineApplicable [DiagEdit (importRemovalSpan imp.importSpan) ""]) d)
-        imp.importSpan (UnusedImport imp.importName) imp.importName
-  in warnImportsList rest used
+    names0 = concatMap declGlobalNames decls
+    -- 模板字符串降级会合成 `Base.Interp.interp`（Resolve.lowerTemplate）：它是解析**之后**
+    -- 注入的 canonical 名，旧实现不把它算作 import 使用。源码没有显式引用 interp 时剔除
+    -- 合成名，保持旧判定（只被模板串引用的 import 仍报 unused）。
+    names =
+      if interpReferencedInSource sourceDecls then names0
+      else filter (\n => n /= interpMethodName) names0
+    nameSet = Base.HashMap.ofNames names
+  in unusedImportWarningsGo modules nameSet reexports imports
+
+-- | 源码里是否显式提到 `interp` / `Base.Interp.interp`（未解析 AST 的名字扫描）。
+interpReferencedInSource : List Decl -> Bool
+interpReferencedInSource decls =
+  let
+    names = concatMap declRefNames decls
+  in memName "interp" names || memName interpMethodName names
+
+unusedImportWarningsGo : List Module -> HashMap String Bool -> List String -> List Import -> Check (List Diagnostic)
+unusedImportWarningsGo modules nameSet reexports [] = OkC []
+unusedImportWarningsGo modules nameSet reexports (imp :: rest) = Vuna.Compiler.Common.bind (exportsOf modules (importName imp)) (\es => let
+  used = memName (importName imp) reexports || anyTargetIn nameSet (map exportTargetOf es)
+in Vuna.Compiler.Common.bind (unusedImportWarningsGo modules nameSet reexports rest)
+  (\more => OkC (if used then more else Base.List.Cons (warnDiagAtMod (\d => withSuggestion (Suggestion "remove unused import ${imp.importName}" MachineApplicable [DiagEdit (importRemovalSpan imp.importSpan) ""]) d) imp.importSpan (UnusedImport imp.importName) [imp.importName]) more))
+)
 
 -- 整行删除 import 的编辑 span：从行首到下一行行首（含换行）。
 importRemovalSpan : Span -> Span
 importRemovalSpan sp = Span (spanFile sp) (spanStartLine sp) 1 (spanStartLine sp + 1) 1
+
+-- 已解析声明里出现的全部引用目标（值 / 类型 / 构造子位置）。解析期已把可解析的名字
+-- 换成 canonical target；`@vuna@ctor@短名@t1@t2` 形态（重载构造子）展开成它的候选目标。
+declGlobalNames : Decl -> List String
+declGlobalNames d = concatMap expandGlobalName (declRefNames d)
+
+-- | 把内部语法名展开成它携带的 canonical target；普通名字原样返回。
+--   * `@vuna@ctor@短名@t1@t2`（重载构造子）→ 候选目标 t1/t2；
+--   * `@vuna@do@bind@<canonical>` / `@vuna@do@ignore@<canonical>` → canonical bind 目标
+--     （do 链在 rename 后仍引用 bind 的实现模块，import 是否使用要算上它）。
+expandGlobalName : String -> List String
+expandGlobalName n = if isOverCtorName n then overCtorTargets n
+else case doSyntaxCanonical n of
+  Just canonical => Base.List.Cons canonical []
+  Nothing => Base.List.Cons n []
+
+-- | 导出条目的 canonical target。
+exportTargetOf : ExportEntry -> String
+exportTargetOf e = e.target
+
+-- | import 导出表里是否有某个 target 出现在本次检查的已解析声明中。
+anyTargetIn : HashMap String Bool -> List String -> Bool
+anyTargetIn nameSet [] = False
+anyTargetIn nameSet (t :: rest) =
+  if Base.HashMap.member t nameSet then True else anyTargetIn nameSet rest
+
+-- | 声明里出现的引用名（不递归展开 over-ctor；构造子/类型/值位置都收集）。
+declRefNames : Decl -> List String
+declRefNames d = case d of
+  DData dname params kind ctors derivings viaField repr lin sp =>
+    append (exprRefNames kind) (append (concatMap ctorRefNames ctors) derivings)
+  DRecord dname params fields derivings viaField repr lin sp =>
+    append (concatMap fieldRefNames fields) derivings
+  DTrait tname params methods sp => concatMap traitMethodRefNames methods
+  DInstance ctxE head methods sp =>
+    append (concatMap exprRefNames ctxE)
+      (append (exprRefNames head) (concatMap declRefNames methods))
+  DSig name ctx ty sp => append (concatMap exprRefNames ctx) (exprRefNames ty)
+  DAxiom name ty sp => exprRefNames ty
+  DExtern name cName ty sp => exprRefNames ty
+  DFun name pats body sp => append (concatMap patRefNames pats) (exprRefNames body)
+
+-- | 构造子声明类型里的引用名。
+ctorRefNames : Ctor -> List String
+ctorRefNames c = exprRefNames c.ctorType
+
+-- | record 字段类型里的引用名。
+fieldRefNames : Field -> List String
+fieldRefNames f = exprRefNames f.fieldType
+
+-- | trait 方法类型里的引用名。
+traitMethodRefNames : TraitMethod -> List String
+traitMethodRefNames m = exprRefNames m.traitMethodType
+
+-- | 模式里的引用名（构造子 / record 名；binder 名不是引用）。
+patRefNames : Pat -> List String
+patRefNames p = case p of
+  PVar name sp => []
+  PAs name inner sp => patRefNames inner
+  PWild sp => []
+  PCon name pats sp => Base.List.Cons name (concatMap patRefNames pats)
+  PInt n sp => []
+  PStr s sp => []
+  PRecord name fields sp => Base.List.Cons name (concatMap (\f => patRefNames (secondOf f)) fields)
+
+-- | 表达式里出现的引用名（EVar 已由解析期换成 canonical target）。
+exprRefNames : Expr -> List String
+exprRefNames e = case e of
+  EVar n sp => Base.List.Cons n []
+  EInt n sp => []
+  EStr s sp => []
+  EFloat raw sp => []
+  ELam ps body sp => exprRefNames body
+  EApp fn args sp => append (exprRefNames fn) (concatMap exprRefNames args)
+  EPi name implicit qty dom cod sp => append (exprRefNames dom) (exprRefNames cod)
+  ELet binds body rec_ sp => append (concatMap bindRefNames binds) (exprRefNames body)
+  ELocalFun clauses sp => concatMap clauseRefNames clauses
+  ECase scrut alts sp => append (exprRefNames scrut) (concatMap bindRefNames alts)
+  EIf c t el sp => append (exprRefNames c) (append (exprRefNames t) (exprRefNames el))
+  EField base fname sp => exprRefNames base
+  ERecord name fields sp => Base.List.Cons name (concatMap (\f => exprRefNames (secondOf f)) fields)
+  ERecUpdate base fields sp =>
+    append (exprRefNames base) (concatMap (\f => exprRefNames (secondOf f)) fields)
+  EDo stmts sp => concatMap doStmtRefNames stmts
+  EInfix op lhs rhs sp => Base.List.Cons op (append (exprRefNames lhs) (exprRefNames rhs))
+  EParen inner sp => exprRefNames inner
+  EBacktick op lhs rhs sp => Base.List.Cons op (append (exprRefNames lhs) (exprRefNames rhs))
+  ESectOp op sp => Base.List.Cons op []
+  ESectL op rhs sp => Base.List.Cons op (exprRefNames rhs)
+  ESectR lhs op sp => Base.List.Cons op (exprRefNames lhs)
+  EAnn value ty sp => append (exprRefNames value) (exprRefNames ty)
+  EInterp multi parts sp => concatMap interpPartRefNames parts
+
+-- | `pat = expr` 绑定里的引用名（模式 binder 不算引用）。
+bindRefNames : Pair Pat Expr -> List String
+bindRefNames p = append (patRefNames (firstOf p)) (exprRefNames (secondOf p))
+
+-- | 局部函数 clause（参数模式 + body）里的引用名。
+clauseRefNames : Pair (List Pat) Expr -> List String
+clauseRefNames p = append (concatMap patRefNames (firstOf p)) (exprRefNames (secondOf p))
+
+-- | do 语句里的引用名。
+doStmtRefNames : DoStmt -> List String
+doStmtRefNames s = case s of
+  DBind pat e sp => append (patRefNames pat) (exprRefNames e)
+  DExpr e sp => exprRefNames e
+
+-- | 模板片段里的引用名（洞内表达式）。
+interpPartRefNames : InterpPart -> List String
+interpPartRefNames p = case p of
+  IPText s => []
+  IPHole e => exprRefNames e

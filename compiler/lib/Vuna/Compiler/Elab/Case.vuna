@@ -58,6 +58,7 @@ import Vuna.Compiler.Core
 import Vuna.Compiler.Diagnostics
 import Vuna.Compiler.Diagnostics.Warning
 import Vuna.Compiler.Elab.Meta
+import Vuna.Compiler.Elab.Usage
 import Vuna.Compiler.Elab.Types
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Intrinsics
@@ -504,50 +505,50 @@ stripAsPats [] = []
 stripAsPats ((Pair pat body) :: rest) = Pair (stripAsPat pat) body :: stripAsPats rest
 
 -- | 自动补注（M41 新增导出）：checkCaseAltsFlat。
-checkCaseAltsFlat : List (Pair Pat Expr) -> Check Int
-checkCaseAltsFlat alts = checkCaseAltsGo [] (stripAsPats alts)
+checkCaseAltsFlat : Ec -> List (Pair Pat Expr) -> Check (Pair Int Ec)
+checkCaseAltsFlat ec alts = checkCaseAltsGo ec [] (stripAsPats alts)
 
-checkCaseAltsGo : List (Pair Pat Expr) -> List (Pair Pat Expr) -> Check Int
-checkCaseAltsGo prevs alts = case alts of
-  [] => OkC 0
+checkCaseAltsGo : Ec -> List (Pair Pat Expr) -> List (Pair Pat Expr) -> Check (Pair Int Ec)
+checkCaseAltsGo ec prevs alts = case alts of
+  [] => OkC (Pair 0 ec)
   (Pair pat body) :: rest => case pat of
     PCon cname args psp => if ctorHeadCovered cname prevs then
       let
-        _ =
-          warnAt1Mod (removeBranchSuggest "remove redundant constructor branch" psp body) psp
+        ec1 =
+          warnAt1Mod ec (removeBranchSuggest "remove redundant constructor branch" psp body) psp
             (WarnRedundantCtorBranch cname) cname
-      in checkCaseAltsGo (Pair pat body :: prevs) rest
-    else checkCaseAltsGo (Pair pat body :: prevs) rest
+      in checkCaseAltsGo ec1 (Pair pat body :: prevs) rest
+    else checkCaseAltsGo ec (Pair pat body :: prevs) rest
     -- as-pattern：覆盖性按内层模式判定（`x@pat` 与 `pat` 的头部相同）。
     PInt n psp => if litHeadCovered pat prevs then
       let
-        _ =
-          warnAt1Mod (removeBranchSuggest "remove redundant literal branch" psp body) psp
+        ec1 =
+          warnAt1Mod ec (removeBranchSuggest "remove redundant literal branch" psp body) psp
             (WarnRedundantLiteralBranch (litLabel pat)) (litLabel pat)
-      in checkCaseAltsGo (Pair pat body :: prevs) rest
-    else checkCaseAltsGo (Pair pat body :: prevs) rest
+      in checkCaseAltsGo ec1 (Pair pat body :: prevs) rest
+    else checkCaseAltsGo ec (Pair pat body :: prevs) rest
     PStr s psp => if litHeadCovered pat prevs then
       let
-        _ =
-          warnAt1Mod (removeBranchSuggest "remove redundant literal branch" psp body) psp
+        ec1 =
+          warnAt1Mod ec (removeBranchSuggest "remove redundant literal branch" psp body) psp
             (WarnRedundantLiteralBranch (litLabel pat)) (litLabel pat)
-      in checkCaseAltsGo (Pair pat body :: prevs) rest
-    else checkCaseAltsGo (Pair pat body :: prevs) rest
-    PAs name inner psp => checkCaseAltsGo (Pair pat body :: prevs) rest
-    PVar pname psp => checkCatchAll prevs (Pair pat body) rest psp
-    PWild psp => checkCatchAll prevs (Pair pat body) rest psp
-    PRecord rn fields psp => checkCaseAltsGo (Pair pat body :: prevs) rest
+      in checkCaseAltsGo ec1 (Pair pat body :: prevs) rest
+    else checkCaseAltsGo ec (Pair pat body :: prevs) rest
+    PAs name inner psp => checkCaseAltsGo ec (Pair pat body :: prevs) rest
+    PVar pname psp => checkCatchAll ec prevs (Pair pat body) rest psp
+    PWild psp => checkCatchAll ec prevs (Pair pat body) rest psp
+    PRecord rn fields psp => checkCaseAltsGo ec (Pair pat body :: prevs) rest
 
 -- 兜底分支只能最后；后面的字面量分支报 `BranchAfterCatchAll`（B15 新诊断），
 -- 其它分支沿用既有 `CatchAllNotLast`。
-checkCatchAll : List (Pair Pat Expr) -> Pair Pat Expr -> List (Pair Pat Expr) -> Span -> Check Int
-checkCatchAll prevs alt [] sp = OkC 0
-checkCatchAll prevs alt rest sp = if hasLitHead rest then
+checkCatchAll : Ec -> List (Pair Pat Expr) -> Pair Pat Expr -> List (Pair Pat Expr) -> Span -> Check (Pair Int Ec)
+checkCatchAll ec prevs alt [] sp = OkC (Pair 0 ec)
+checkCatchAll ec prevs alt rest sp = if hasLitHead rest then
   let
-    _ =
-      warnAt0Mod (removeBranchSuggest "remove unreachable branch" sp (secondOf alt)) sp
+    ec1 =
+      warnAt0Mod ec (removeBranchSuggest "remove unreachable branch" sp (secondOf alt)) sp
         WarnBranchAfterCatchAll
-  in OkC 0
+  in OkC (Pair 0 ec1)
 else tcErr0 sp CatchAllNotLast
 
 hasLitHead : List (Pair Pat Expr) -> Bool
