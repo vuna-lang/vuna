@@ -1,7 +1,6 @@
 module Base
   ( module Base.Bits
   , module Base.Bool
-  , module Base.Effect
   , module Base.Eq
   , module Base.Float
   , module Base.Foldable
@@ -31,7 +30,6 @@ import Base.Pair
 import Base.Bits
 import Base.Bool
 import Base.Show
-import Base.Effect
 import Base.Eq
 import Base.Ord
 -- M31.1：加载 `Int` 的 Eq / Ord 实例（跟类型模块走；仅加载实例，不重导出名字）。

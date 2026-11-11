@@ -1,18 +1,24 @@
--- M37：ReaderT 效应栈（IO 之上）。`ask` 读环境，`local` 局部改写；
--- `runReaderT` 返回 IO 动作，由 main 执行。
-import Base.Effect
+-- M37：Reader 效应栈（用 Base.Eff.Reader 取代旧 ReaderT）。
+-- `ask` 读环境，`local` 在临时 handler 里改写；handler 的 answer 用 Int。
+import Base.Eff
+import Base.Eff.Reader
 import Base.IO.Host
-import Base.ReaderT
 
-prog : ReaderT Int Int
+prog : Eff [Reader "counter" Int] Int
 prog = do
-  e <- ask
-  liftIO (print "reader\n")
+  e <- ask "counter" Int
   pure (e + 1)
+
+opH : (o : ReaderOp Int) -> (Base.Eff.Reader.resReader Int o -> Int) -> Int
+opH op k = case op of
+  Ask => k 41
 
 main : IO Int
 main = do
-  a <- runReaderT prog 41
-  b <- runReaderT (local (\x => x + 1) ask) 41
-  print ("a=" ++ strFromInt a ++ ",b=" ++ strFromInt b ++ "\n")
+  _ <- print "reader\n"
+  a <- pure (runPure (handleReader "counter" Int (\x => x) opH prog))
+  b <-
+    pure
+      (runPure (handleReader "counter" Int (\x => x) opH (local "counter" Int (\x => x + 1) (ask "counter" Int))))
+  _ <- print ("a=" ++ strFromInt a ++ ",b=" ++ strFromInt b ++ "\n")
   exit 0

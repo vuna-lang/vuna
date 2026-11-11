@@ -1,19 +1,28 @@
--- M37：StateT 效应栈（IO 之上）。`runStateT` 返回 IO 动作，由 main 执行；
--- `liftIO` 把 IO 动作提升进 StateT，handler 显式取 Pair。
-import Base.Effect
+-- M37：State 效应栈（用 Base.EffState 取代旧 StateT）。
+-- 标签 `State "counter" Int`；handler 以 `s -> Pair a s` 为 answer 线程状态。
+import Base.Eff
+import Base.EffState
 import Base.IO.Host
 import Base.Pair
-import Base.StateT
 
-prog : StateT Int Int
+prog : Eff [State "counter" Int] Int
 prog = do
-  x <- get
-  _ <- put (x + 1)
-  liftIO (print "state\n")
+  x <- get "counter" Int
+  _ <- put "counter" Int (x + 1)
   pure (x + 10)
+
+ret : Int -> Int -> Pair Int Int
+ret a s = Pair a s
+
+opH : (o : StateOp Int) -> (Base.EffState.resState Int o -> Int -> Pair Int Int) -> Int -> Pair Int Int
+opH op k s = case op of
+  Get => k s s
+  Put x => k 0 x
 
 main : IO Int
 main = do
-  p <- runStateT prog 41
-  print ("result=" ++ strFromInt (firstOf p) ++ ",state=" ++ strFromInt (secondOf p) ++ "\n")
-  exit 0
+  _ <- print "state\n"
+  case runPure (handleState "counter" Int ret opH prog) 41 of
+    Pair a s => do
+      _ <- print ("result=" ++ strFromInt a ++ ",state=" ++ strFromInt s ++ "\n")
+      exit 0

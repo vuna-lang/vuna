@@ -694,8 +694,6 @@ baseIntrinsics =
     Intrinsic "prim_effectHandle" (IPi "u" (IPi "a" (IPi "b" (IPi "ret" (IPi "h" (IFun IStr (IFun IStr (IFun (IVar "ret") (IFun (IVar "h") (IFun (IFun (IVar "u") (IVar "a")) (IFun (IVar "u") (IVar "b")))))))))))) OpNone (Just CapUnsafe) "dtp_effect_handle" True,
     Intrinsic "prim_cleanupPush" (IFun (IFun IInt IInt) IInt) OpNone (Just CapUnsafe) "dtp_cleanup_push" True,
     Intrinsic "prim_cleanupPop" (IFun IInt IInt) OpNone (Just CapUnsafe) "dtp_cleanup_pop" True,
-    Intrinsic "prim_asyncFork" (IPi "a" (IFun (IFun IInt (IVar "a")) (IIO IInt))) OpNone Nothing "(fun th -> dtp_async_fork th)" True,
-    Intrinsic "prim_asyncAwait" (IPi "a" (IFun IInt (IVar "a"))) OpNone Nothing "(fun h -> Obj.obj (dtp_async_await h))" True,
     Intrinsic "prim_schedNewScope" (IFun IInt IInt) OpNone (Just CapUnsafe) "(fun _ -> dtp_sched_new_scope ())" True,
     Intrinsic "prim_schedFork" (IPi "a" (IFun IInt (IFun (IFun IInt (IVar "a")) IInt))) OpNone (Just CapUnsafe) "(fun sc th -> dtp_sched_fork sc th)" True,
     Intrinsic "prim_schedYield" (IFun IInt IInt) OpNone (Just CapUnsafe) "(fun _ -> dtp_sched_yield ())" True,
