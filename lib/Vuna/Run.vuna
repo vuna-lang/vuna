@@ -29,7 +29,7 @@ splitPassthrough ("--" :: rest) = Pair [] rest
 splitPassthrough (arg :: rest) = case splitPassthrough rest of
   Pair own pass => Pair (arg :: own) pass
 
-runRun : List String -> Int
+runRun : List String -> Eff [] Int
 runRun args =
   let
     parts = splitPassthrough args
@@ -42,7 +42,7 @@ runRun args =
       [dir] => runGo parsed passthrough dir
       _ => runError "usage: vuna run [--no-build] [--package NAME] [--out DIR] [DIR] [-- ARG]..."
 
-runGo : Parsed -> List String -> String -> Int
+runGo : Parsed -> List String -> String -> Eff [] Int
 runGo parsed passthrough dir = case requireDirectory dir of
   ErrC e => runError (diagText e)
   OkC _ => case loadPackage dir of
@@ -97,7 +97,7 @@ findPackageByName name (pkg :: rest) =
   if packageName pkg == name then Just pkg else findPackageByName name rest
 
 -- 构建（in-process，与 `vuna build` 完全同一条路径）后执行目标产物。
-runTarget : Parsed -> List String -> String -> Package -> Int
+runTarget : Parsed -> List String -> String -> Package -> Eff [] Int
 runTarget parsed passthrough dir target =
   let
     pkgFlag = case flagValue parsed "package" of
@@ -112,43 +112,36 @@ runTarget parsed passthrough dir target =
       buildCode =
         if flagSet parsed "no-build" then 0
         else runCompilerCliFor "vuna" (append ["build", dir] (append pkgFlag outFlag))
-    in if buildCode /= 0 then buildCode else execTarget passthrough target (flagValue parsed "out")
+    in if buildCode /= 0 then pure buildCode
+    else execTarget passthrough target (flagValue parsed "out")
 
 -- 执行：cwd 切到包目录，bin 用**相对包目录**的路径（`prim_eff_runIn` 先 chdir 再执行，
 -- 传 `packageDir ++ "/.output/bin/..."` 会在相对 DIR 下被拼成两遍；见 M38 验证记录）。
 -- `--out DIR` 时构建产物在 DIR/bin/<包名>；相对 DIR 按调用方 cwd 解析成绝对路径
 -- （`prim_eff_runIn` 会 chdir 到包目录，绝对路径不受影响）。
-execTarget : List String -> Package -> Maybe String -> Int
+execTarget : List String -> Package -> Maybe String -> Eff [] Int
 execTarget passthrough target outM =
   let
     pkgDir = packageDir target
     name = packageName target
   in case outM of
     Nothing =>
-      let
-        relBin = ".output/bin/${name}"
-      in if pathExistsFile "${pkgDir}/${relBin}" then runPure (prim_eff_runIn pkgDir (relBin :: passthrough))
-      else runError "binary not found: ${pkgDir}/${relBin} (build the package first, or drop --no-build)"
-    Just out =>
-      let
-        cwd = runPure getCwd
-        absOut = if startsWith "/" out then out else "${cwd}/${out}"
-        bin = "${absOut}/bin/${name}"
-      in if pathExistsFile bin then runPure (prim_eff_runIn pkgDir (bin :: passthrough))
+      if pathExistsFile "${pkgDir}/.output/bin/${name}" then prim_eff_runIn pkgDir (".output/bin/${name}" :: passthrough)
       else runError
-        "binary not found: ${bin} (build the package first with --out ${out}, or drop --no-build)"
+        "binary not found: ${pkgDir}/.output/bin/${name} (build the package first, or drop --no-build)"
+    Just out => do
+      cwd <- prim_eff_getcwd
+      if pathExistsFile "${if startsWith "/" out then out else "${cwd}/${out}"}/bin/${name}" then prim_eff_runIn pkgDir
+        ("${if startsWith "/" out then out else "${cwd}/${out}"}/bin/${name}" :: passthrough)
+      else runError
+        "binary not found: ${if startsWith "/" out then out else "${cwd}/${out}"}/bin/${name} (build the package first with --out ${out}, or drop --no-build)"
 
--- ---------------------------------------------------------------
--- 统一错误出口（2 = 用法/输入，1 = 被检查代码的语义失败）
--- ---------------------------------------------------------------
-runError : String -> Int
-runError e =
-  let
-    _ = runPure (prim_eff_print "error: ${e}\n")
-  in 2
+runError : String -> Eff [] Int
+runError e = do
+  _ <- prim_eff_print "error: ${e}\n"
+  pure 2
 
-runFailure : String -> Int
-runFailure e =
-  let
-    _ = runPure (prim_eff_print "error: ${e}\n")
-  in 1
+runFailure : String -> Eff [] Int
+runFailure e = do
+  _ <- prim_eff_print "error: ${e}\n"
+  pure 1
