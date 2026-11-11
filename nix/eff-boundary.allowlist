@@ -18,7 +18,6 @@ lib/Vuna/Cli/Args.vuna 6
 lib/Vuna/Cli.vuna 30
 lib/Vuna/Files.vuna 6
 lib/Vuna/Index/Scan.vuna 21
-lib/Vuna/Interp.vuna 11
 lib/Vuna/Json/Frame.vuna 1
 lib/Vuna/Json/Server.vuna 2
 lib/Vuna/Lsp/Bindings.vuna 3
@@ -29,7 +28,7 @@ lib/Vuna/Repl/Client.vuna 7
 lib/Vuna/Repl/Complete.vuna 2
 lib/Vuna/Repl/Server.vuna 11
 lib/Vuna/Repl/Term.vuna 12
-lib/Vuna/Repl.vuna 21
+lib/Vuna/Repl.vuna 22
 lib/Vuna/Run.vuna 4
 lib/Vuna/Test/Run.vuna 44
 lib/Vuna/Test/Suite.vuna 5

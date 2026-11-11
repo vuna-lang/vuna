@@ -102,44 +102,55 @@ effectBinaryName = "vuna-effect"
 
 -- 临时目录根：`$TMPDIR`（去尾部 `/`），没有就用 `/tmp`。
 -- 读环境是启动期动作，函数化（A05：零参顶层值会在模块初始化时求值）。
-tempBase : Int -> String
-tempBase _ =
-  let
-    env = runPure (prim_eff_getenv "TMPDIR")
-  in if env == "" then "/tmp"
-  else if endsWith "/" env then substring 0 (byteLength env - 1) env else env
+mapEff : (a -> Eff [] b) -> List a -> Eff [] (List b)
+mapEff f [] = pure []
+mapEff f (x :: rest) = do
+  y <- f x
+  ys <- mapEff f rest
+  pure (y :: ys)
+
+-- 临时目录根：`$TMPDIR`（去尾部 `/`），没有就用 `/tmp`。
+-- 读环境是启动期动作，函数化（A05：零参顶层值会在模块初始化时求值）。
+tempBase : Int -> Eff [] String
+tempBase _ = do
+  env <- prim_eff_getenv "TMPDIR"
+  pure
+    (if env == "" then "/tmp" else if endsWith "/" env then substring 0 (byteLength env - 1) env else env)
 
 -- 微秒时间戳命名 + 冲突探测：同一进程内连续执行不会撞名。探测走 `range` 生成的
 -- 有界列表（结构下降），异常情况最多换 1000 个后缀，都不行就用基名（失败由编译报）。
-freshTempDir : String -> String
+freshTempDir : String -> Eff [] String
 freshTempDir base = pickTempDir base (range 0 1001)
 
-pickTempDir : String -> List Int -> String
-pickTempDir base [] = base
-pickTempDir base (n :: rest) =
-  let
-    candidate = if n == 0 then base else "${base}-${n}"
-  in if runPure (prim_eff_fileExists candidate) then pickTempDir base rest else candidate
+pickTempDir : String -> List Int -> Eff [] String
+pickTempDir base [] = pure base
+pickTempDir base (n :: rest) = do
+  exists <- prim_eff_fileExists (if n == 0 then base else "${base}-${n}")
+  if exists then pickTempDir base rest else pure (if n == 0 then base else "${base}-${n}")
 
 -- 上下文依赖根 → 临时包的 [dependencies] 条目（包名 → 包目录）。
 -- base-only 上下文（包名为空）只有 base 一个根，必须全部带上；普通上下文跳过第一个
 -- 根（它是当前包自己的 lib：临时包不能依赖「自己」，否则触发依赖环）。
-effectDeps : PackageContext -> List (Pair String String)
+effectDeps : PackageContext -> Eff [] (List (Pair String String))
 effectDeps ctx = case contextRoots ctx of
-  [] => []
+  [] => pure []
   roots =>
-    if contextPackageName ctx == "" then map effectDep roots else map effectDep (drop 1 roots)
+    if contextPackageName ctx == "" then mapEff effectDep roots else mapEff effectDep (drop 1 roots)
 
-effectDep : Root -> Pair String String
-effectDep root = Pair (rootName root) (absoluteDir (rootPackageDir (rootDir root)))
+effectDep : Root -> Eff [] (Pair String String)
+effectDep root = do
+  dir <- absoluteDir (rootPackageDir (rootDir root))
+  pure (Pair (rootName root) dir)
 
 -- 模块根固定是 <包目录>/lib；去掉后缀得到包目录（manifest 的 [dependencies] 吃包目录）。
 rootPackageDir : String -> String
 rootPackageDir dir = if endsWith "/lib" dir then substring 0 (byteLength dir - 4) dir else dir
 
 -- 依赖路径必须是绝对路径（临时包不在调用方的工作目录下，相对路径会解析错）。
-absoluteDir : String -> String
-absoluteDir dir = if startsWith "/" dir then dir else "${runPure prim_eff_getcwd}/${dir}"
+absoluteDir : String -> Eff [] String
+absoluteDir dir = do
+  cwd <- prim_eff_getcwd
+  pure (if startsWith "/" dir then dir else "${cwd}/${dir}")
 
 tomlQuote : String -> String
 tomlQuote s = "\"${tomlEscaped (strUnpack s)}\""
@@ -173,55 +184,59 @@ capsSection caps = """
 effects = [${join ", " (map tomlQuote caps)}]
 """
 
-effectManifest : PackageContext -> String
-effectManifest ctx = """[package]
+effectManifest : PackageContext -> Eff [] String
+effectManifest ctx = do
+  deps <- effectDeps ctx
+  pure ("""[package]
 name = ${tomlQuote effectPackageName}
 privileged = true
-${depsSection (effectDeps ctx)}${capsSection (contextCapabilities ctx)}"""
+${depsSection deps}${capsSection (contextCapabilities ctx)}"""
+  )
 
 -- `ocamlopt` 是否在 PATH 里（链接阶段需要）。探针的 stdout/stderr 全部丢弃。
-hasOcamlopt : Int -> Bool
-hasOcamlopt _ =
-  runPure (prim_eff_runIn "." ["sh", "-c", "command -v ocamlopt >/dev/null 2>&1"]) == 0
+hasOcamlopt : Int -> Eff [] Bool
+hasOcamlopt _ = do
+  code <- prim_eff_runIn "." ["sh", "-c", "command -v ocamlopt >/dev/null 2>&1"]
+  pure (code == 0)
 
 noOcamloptMessage : String
 noOcamloptMessage =
   "`ocamlopt` not found in PATH; run the toolchain inside `nix develop` (or install OCaml) to compile effect programs"
 
-cleanupTemp : String -> Int -> Int
-cleanupTemp dir code =
-  let
-    _ = runPure (prim_eff_runIn "/" ["rm", "-rf", dir])
-  in code
+cleanupTemp : String -> Int -> Eff [] Int
+cleanupTemp dir code = do
+  _ <- prim_eff_runIn "/" ["rm", "-rf", dir]
+  pure code
 
-cleanupErr : String -> String -> Check Int
-cleanupErr dir e =
-  let
-    _ = runPure (prim_eff_runIn "/" ["rm", "-rf", dir])
-  in err e
+cleanupErr : String -> String -> Eff [] (Check Int)
+cleanupErr dir e = do
+  _ <- prim_eff_runIn "/" ["rm", "-rf", dir]
+  pure (err e)
 
 -- 把带 main 的入口源码编译成临时包里的可执行文件并运行，返回进程退出码。
 -- `printResult` 透传给 codegen 的 main 钩子（IO a 时先跑动作、再按 a 的类型打印）；
 -- effect 测试用 False（只看退出码，不比较输出）。
-runEffectProgram : PackageContext -> String -> Bool -> Check Int
-runEffectProgram ctx source printResult =
-  let
-    dir = freshTempDir "${tempBase 0}/vuna-effect-${runPure effTimeUs}"
-    entry = "${dir}/app/Main.vuna"
-    outDir = "${dir}/.output"
-    _ = runPure (prim_eff_makeDir dir)
-    _ = runPure (prim_eff_makeDir "${dir}/app")
-    _ = runPure (prim_eff_writeFile "${dir}/vuna.toml" (effectManifest ctx))
-    _ = runPure (prim_eff_writeFile entry source)
-  in case contextForDir dir of
+runEffectProgram : PackageContext -> String -> Bool -> Eff [] (Check Int)
+runEffectProgram ctx source printResult = do
+  base <- tempBase 0
+  now <- effTimeUs
+  dir <- freshTempDir "${base}/vuna-effect-${now}"
+  manifest <- effectManifest ctx
+  _ <- prim_eff_makeDir dir
+  _ <- prim_eff_makeDir "${dir}/app"
+  _ <- prim_eff_writeFile "${dir}/vuna.toml" manifest
+  _ <- prim_eff_writeFile "${dir}/app/Main.vuna" source
+  case contextForDir dir of
     ErrC e => cleanupErr dir (diagText e)
-    OkC ctxTmp => case compileToDir ctxTmp entry printResult outDir of
+    OkC ctxTmp => case compileToDir ctxTmp "${dir}/app/Main.vuna" printResult "${dir}/.output" of
       ErrC e => cleanupErr dir (diagText e)
-      OkC _ =>
-        let
-          _ = runPure (prim_eff_makeDir "${outDir}/bin")
-        in if hasOcamlopt 0 then case runBuildScript outDir "bin/${effectBinaryName}" effectBinaryName of
+      OkC _ => do
+        _ <- prim_eff_makeDir "${dir}/.output/bin"
+        has <- hasOcamlopt 0
+        if has then case runBuildScript "${dir}/.output" "bin/${effectBinaryName}" effectBinaryName of
           ErrC e => cleanupErr dir (diagText e)
-          OkC _ =>
-            OkC (cleanupTemp dir (runPure (prim_eff_runIn outDir ["bin/${effectBinaryName}"])))
+          OkC _ => do
+            code <- prim_eff_runIn "${dir}/.output" ["bin/${effectBinaryName}"]
+            c <- cleanupTemp dir code
+            pure (OkC c)
         else cleanupErr dir noOcamloptMessage

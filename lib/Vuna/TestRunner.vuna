@@ -340,7 +340,8 @@ runIOTest ctx path name = do
 runIOTestLegacy : PackageContext -> String -> String -> Eff [] TestOutcome
 runIOTestLegacy ctx path name = do
   source <- prim_eff_readFile path
-  pure (case runEffectProgram ctx source False of
+  res <- runEffectProgram ctx source False
+  pure (case res of
     ErrC e => TestFailed (diagText e)
     OkC 0 => TestPassed
     OkC code => TestFailed "effect program exited with code ${code}"

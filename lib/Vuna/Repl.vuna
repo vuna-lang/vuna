@@ -974,7 +974,7 @@ else if hasUnsolvedMeta tyText then
 else
   let
     source = "${ioTypeImports st tyText}${bufferProgram st}\nmain : ${tyText}\nmain = ${text}\n"
-  in case runEffectProgram st.stateCtx source (ioPrintResult tyText) of
+  in case runPure (runEffectProgram st.stateCtx source (ioPrintResult tyText)) of
     ErrC e =>
       let
         _ = printDiag st e
