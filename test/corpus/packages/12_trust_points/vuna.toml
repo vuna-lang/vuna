@@ -9,7 +9,7 @@ vuna-base = "../../../../base"
 [capabilities]
 effects = ["unsafe", "console"]
 
-# 信任点：只有这里列出的定义可以直接引用 `unsafe` 门控入口（`prim_runIO` /
+# 信任点：只有这里列出的定义可以直接引用 `unsafe` 门控入口（`prim_schedNewScope` /
 # `Base.IO.runIO` 等）；`TrustLib.probe` 只经信任入口间接使用，不需要列。
 [trust]
 unsafe = ["TrustLib.runIOHelper"]

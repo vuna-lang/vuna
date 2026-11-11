@@ -1,6 +1,0 @@
--- M37：`IO` 是内建效应类型（与 Int/String 同级），ad-hoc 入口不能再声明同名 data。
-data IO a : Type where
-  MkIO : (Int -> a) -> IO a
-
-main : Int
-main = 0

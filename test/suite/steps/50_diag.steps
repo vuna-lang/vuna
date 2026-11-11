@@ -242,7 +242,7 @@ out-contains: "kind":"span","name":"created"
 run: sh -c 'printf "f : a -> a\nf a = a\n\nmain : Int\nmain = f 1\n" > "$TMPDIR/m45-generic-shadow.vuna"'
 run: "$VUNA" check -W "$TMPDIR/m45-generic-shadow.vuna" 2>&1
 out-not-contains: UN_ShadowedBinder
-run: sh -c 'd="$TMPDIR/m45-inst-shadow.vuna"; printf "%s\n" "trait T f where" "  m3 : (a -> b -> c) -> f a -> f b -> f c" "" "instance T IO where" "  m3 f ma mb = prim_bindIO ma (\a => prim_bindIO mb (\b => prim_pureIO (f a b)))" "" "main : Int" "main = 0" > "$d"'
+run: sh -c 'd="$TMPDIR/m45-inst-shadow.vuna"; printf "%s\n" "trait T f where" "  m3 : (a -> b -> c) -> f a -> f b -> f c" "" "instance T Maybe where" "  m3 f (Just a) (Just b) = Just (f a b)" "  m3 _ _ _ = Nothing" "" "main : Int" "main = 0" > "$d"'
 run: "$VUNA" check -W "$TMPDIR/m45-inst-shadow.vuna" 2>&1
 out-not-contains: UN_ShadowedBinder
 # 对照：两个运行时 binder 真遮蔽仍然告警（corpus/dt_err/43_shadowed_binder 也覆盖）。

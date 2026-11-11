@@ -222,7 +222,7 @@ textHash s = strHash s * 1000003 + strHash "m30:${s}" + strLength s
 compilerFingerprint : Int
 compilerFingerprint =
   let
-    exe = runIO prim_execPath
+    exe = runPure prim_eff_execPath
     size = runPure (prim_eff_fileSize exe)
     mtime = runPure (prim_eff_fileMtime exe)
   in if size > 0 then textHash "${exe}:${size}:${mtime}" else textHash vunaVersion
@@ -787,7 +787,7 @@ sourceInfoForPath path =
     (runPure (prim_eff_fileSize path))
 
 toolNowSec : Int
-toolNowSec = runIO timeUs / 1000000
+toolNowSec = runPure effTimeUs / 1000000
 
 -- 校验：文件还在，且（mtime+size 快路径）或（内容哈希）与记录一致。
 -- 安全窗与 `sourceInfoUnchanged` 同一个（`mtimeSafetyWindowSec`）：记录的 mtime 距会话建立

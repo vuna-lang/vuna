@@ -1,7 +1,7 @@
 # 39) M26 上下文回归：包上下文/无 manifest 语义、效果边界、base 定位、已删路径，以及
 #      95_cross_dep 的依赖方向（build/check/compile 三入口都拒；consumer 正常构建运行）。
 #      临时夹具位于 case 私有 $TMPDIR；交叉依赖夹具复制到 $TMPDIR 后操作。
-run: sh -c 'ctx="$TMPDIR/ctx"; mkdir -p "$ctx"; printf "%s\n" "import Base.Nat" "" "main : Int" "main = case Succ Zero of" "  Zero => 0" "  Succ _ => 42" > "$ctx/use_base.vuna"; printf "%s\n" "import Vuna.Compiler.Common" "" "main : Int" "main = 1" > "$ctx/use_compiler.vuna"; printf "%s\n" "main : Int" "main = prim_print \"x\"" > "$ctx/effect.vuna"; printf "%s\n" "main : Int" "main = 1" > "$ctx/simple.vuna"; cp -R corpus/packages/95_cross_dep "$TMPDIR/cross"'
+run: sh -c 'ctx="$TMPDIR/ctx"; mkdir -p "$ctx"; printf "%s\n" "import Base.Nat" "" "main : Int" "main = case Succ Zero of" "  Zero => 0" "  Succ _ => 42" > "$ctx/use_base.vuna"; printf "%s\n" "import Vuna.Compiler.Common" "" "main : Int" "main = 1" > "$ctx/use_compiler.vuna"; printf "%s\n" "import Base.Eff" "" "main : Eff [] Int" "main = prim_eff_print \"x\"" > "$ctx/effect.vuna"; printf "%s\n" "main : Int" "main = 1" > "$ctx/simple.vuna"; cp -R corpus/packages/95_cross_dep "$TMPDIR/cross"'
 exit: 0
 run: "$VUNA" check "$TMPDIR/ctx/use_base.vuna" 2>&1
 exit: 0

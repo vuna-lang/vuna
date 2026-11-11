@@ -79,13 +79,10 @@ effects = ["console", "fs", "process", "env", "clock", "unsafe"]
 # `traceShow` / `awaitTaskLin`）不需要列。新增直接使用点必须同时更新本列表。
 [trust]
 unsafe = [
-  # IO 执行入口桥（`runIO = runPure . deferIO`，privileged 内部）。
-  "Base.Host.runIO",
   # ST/region 的唯一执行入口（入口处用一次 `runIO` 桥）。
   "Base.ST.runST",
   # 调试逃逸：求值期写 stderr（`runIO` + `prim_eprint`）；D34 仍是独立债务项。
   # Layer 1/2：运行时续延核心 + 通用 bracket cleanup 栈。
-  "Base.Eff.deferIO",
   "Base.Eff.sendCore",
   "Base.Eff.handleCore",
   "Base.Eff.bracket",

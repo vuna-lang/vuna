@@ -1,6 +1,5 @@
 module Base.Host
   ( Eff
-  , deferIO
   , eprint
   , execPath
   , exit
@@ -23,7 +22,6 @@ module Base.Host
   , readLine
   , removeFile
   , runEff
-  , runIO
   , runIn
   , runPure
   , sleepMicros
@@ -69,12 +67,6 @@ print s = fmap natFromInt (prim_eff_print s)
 -- | 向 stderr 写字符串（不自动换行），返回写入的字节数；与 `print` 对称。
 eprint : String -> Eff [] Int
 eprint = prim_eff_eprint
-
--- 实现层桥：执行一个 IO 动作（ST 内部、过渡期工具链）；等价于 `runPure (deferIO io)`。
--- 用户面不应出现（IO 只由特权层构造）。
--- | 实现层 IO 桥：`runPure (deferIO io)`（privileged 内部使用）。
-runIO : {a : Type} -> IO a -> a
-runIO io = runPure (deferIO io)
 
 -- | 向 stdout 写字符串并补 `\n`（返回写入的字节数，`Nat`）。
 println : String -> Eff [] Nat

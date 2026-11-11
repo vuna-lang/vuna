@@ -145,7 +145,7 @@ check_contains ":defs 列出 answer" "$defs_out" 'answer'
 batch_out=$(req '{"jsonrpc":"2.0","id":16,"method":"eval","params":{"code":":! echo hi"}}')
 check_contains "server 模式拒绝 :!" "$batch_out" '"ok":false'
 check_contains ":! 提示指向外部 shell" "$batch_out" '外部 shell'
-io_out=$(req '{"jsonrpc":"2.0","id":17,"method":"eval","params":{"code":"prim_print \"hi\""}}')
+io_out=$(req '{"jsonrpc":"2.0","id":17,"method":"eval","params":{"code":"import Base.Host\nprint \"hi\""}}')
 check_contains "server 模式拒绝效果表达式" "$io_out" '"ok":false'
 check_contains "效果表达式提示指向 vuna run" "$io_out" 'vuna run'
 

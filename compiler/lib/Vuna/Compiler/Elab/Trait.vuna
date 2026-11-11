@@ -337,7 +337,7 @@ headTypeNamesOf (e :: rest) = case headTypeNameOf e of
   Just n => n :: headTypeNamesOf rest
   Nothing => headTypeNamesOf rest
 
--- 全局可见的内建类型（没有定义模块）：`Int` / `String` / `IO` 与 M33 的内建类型构造子
+-- 全局可见的内建类型（没有定义模块）：`Int` / `String` 与 M33 的内建类型构造子
 -- `Array` / `IORef` / `MArray` / `Buffer`。它们的实例可以声明在任意模块，
 -- `base/lib/Base/{Array,IORef,MArray,Buffer}.vuna` 是约定落点。
 isGlobalHeadType : String -> Bool
@@ -345,7 +345,6 @@ isGlobalHeadType n =
   n == "Int"
     || n == "String"
     || n == "Float"
-    || n == "IO"
     || n == "Array"
     || n == "IORef"
     || n == "MArray"

@@ -38,7 +38,7 @@ unitCacheSchema = "vuna-unit-cache 1"
 binaryFingerprint : Int
 binaryFingerprint =
   let
-    exe = runIO prim_execPath
+    exe = runPure prim_eff_execPath
     size = runPure (prim_eff_fileSize exe)
     mtime = runPure (prim_eff_fileMtime exe)
   in if size > 0 then textHashOf "${exe}:${size}:${mtime}" else textHashOf vunaVersion

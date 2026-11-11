@@ -51,7 +51,6 @@ let v_Applicative_uBase_uEff_uEff_ur
 let v_Base_dEff_dbracket
 let v_Base_dEff_dcontAdapter
 let v_Base_dEff_ddefaultInstance
-let v_Base_dEff_ddeferIO
 let v_Base_dEff_deffPrim
 let v_Base_dEff_dfinally
 let v_Base_dEff_dhandleCore

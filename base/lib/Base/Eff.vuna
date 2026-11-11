@@ -6,7 +6,6 @@ module Base.Eff
   , Row(..)
   , bracket
   , defaultInstance
-  , deferIO
   , effPrim
   , finally
   , handleCore
@@ -129,12 +128,6 @@ runThunk e = case e of
 -- | 运行行已处理干净（`Nil`）的动作；仍有未处理效应时由运行时报告。
 runPure : {a : Type} -> Eff [] a -> a
 runPure e = runThunk e MkEffUnit
-
--- 把宿主动作（IO thunk）延迟进 Eff：只有特权层能构造 IO 动作（Host/内部可变 API），
--- 这个桥供实现层把动作交给 Eff 执行（ST/内部工具）；运行时只是把 IO thunk 应用一次。
--- | 把 IO 动作延迟进 `Eff []`（实现层桥：只在动作被执行时应用世界令牌）。
-deferIO : {a : Type} -> IO a -> Eff [] a
-deferIO io = MkEff (\_ => prim_runIO io)
 
 -- 仅供作用域 handler 实现内部使用（W6）：在嵌套 handler 下运行子计算，外层运行时
 -- handler 继续处理 r。普通用户用 runPure。

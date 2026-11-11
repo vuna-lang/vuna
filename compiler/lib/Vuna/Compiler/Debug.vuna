@@ -21,7 +21,7 @@ import Base.Hashable
 import Base.Host
 
 args : List String
-args = runIO prim_getArgs
+args = runPure prim_eff_getArgs
 
 debugOn : Bool
 debugOn = memName "--debug-perf" args || runPure (prim_eff_getenv "VUNA_DEBUG_PERF") == "1"
@@ -45,7 +45,7 @@ noteInt label n = note "${label}=${n}"
 stampNow : String -> Int
 stampNow label =
   let
-    _ = runPure (prim_eff_print "PERF ${label} ${runIO timeUs}\n")
+    _ = runPure (prim_eff_print "PERF ${label} ${runPure effTimeUs}\n")
   in 0
 
 stamp : String -> Int

@@ -47,14 +47,14 @@ check_eq "trust positive output" "" "$out"
 out=$("$VUNA" check "$here/neg_untrusted" 2>&1)
 check_eq "untrusted definition exit" "1" "$?"
 check_contains "untrusted definition message name" "$out" "TrustLib.probeAlias"
-check_contains "untrusted definition message trigger" "$out" "Base.Host.runIO"
+check_contains "untrusted definition message trigger" "$out" "prim_schedNewScope"
 check_contains "untrusted definition message fix" "$out" "is not a trust point"
 
-# 2b) 负例：未列入信任点的定义直调 `prim_runIO` 内建。
+# 2b) 负例：未列入信任点的定义直调 `prim_schedNewScope` 内建。
 out=$("$VUNA" check "$here/neg_untrusted_prim" 2>&1)
 check_eq "untrusted primitive exit" "1" "$?"
 check_contains "untrusted primitive message name" "$out" "TrustLib.probePrim"
-check_contains "untrusted primitive message trigger" "$out" "prim_runIO"
+check_contains "untrusted primitive message trigger" "$out" "prim_schedNewScope"
 
 # 3) 负例：信任点列表里的假定义。
 out=$("$VUNA" check "$here/neg_fake" 2>&1)

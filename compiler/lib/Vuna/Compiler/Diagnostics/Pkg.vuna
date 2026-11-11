@@ -137,7 +137,7 @@ pkgTemplate (InvalidExportModule _) =
 pkgTemplate (InvalidPackageName _) =
   "invalid package name \"<0>\" (allowed characters: a-z, 0-9, '-')"
 pkgTemplate (InvalidTrustPoint _) =
-  "invalid trust point \"<0>\" (expected a qualified definition name such as \"Base.IO.runPure\")"
+  "invalid trust point \"<0>\" (expected a qualified definition name such as \"Base.Eff.runPure\")"
 pkgTemplate (MissingManifest _) = "missing vuna.toml in <0>"
 pkgTemplate (MissingBase _) =
   "pkg: cannot locate vuna-base (tried: <0>); set VUNA_BASE to a directory containing vuna.toml"
@@ -151,7 +151,7 @@ pkgTemplate (UnknownKey _ _) = "unknown key \"<0>\" in [<1>]"
 pkgTemplate (TrustPointMissing _ _) =
   "trust point \"<1>\" is not a definition of this package; [trust] unsafe may only list real definitions (Module.def)"
 pkgTemplate (EffectCapabilityRequired _ _ _) =
-  "effectful builtin `<0>` requires capability `<1>` in <2> (declare [capabilities] effects = [\"<1>\"] or use Base.IO / typed effects)"
+  "effectful builtin `<0>` requires capability `<1>` in <2> (declare [capabilities] effects = [\"<1>\"] or use Base.Eff / typed effects)"
 
 -- | 诊断域实现：Vuna.Compiler.Diagnostics.Pkg.pkgMsg（目录/模板见 diagnostics.md）。
 pkgMsg : {n : Nat} -> PkgErr n -> Vec n String -> Diagnostic

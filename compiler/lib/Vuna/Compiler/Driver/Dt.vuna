@@ -564,8 +564,7 @@ dtGoalsSourceTolerant ctx label source =
 dtMainKind : PackageContext -> String -> Check String
 dtMainKind ctx entry = Vuna.Compiler.Common.bind (dtLoad ctx entry) (\decls => Vuna.Compiler.Common.bind (elabProgram decls) (\p => case findMainDef (secondOf p) of
   Nothing => cgErr0 NoMain
-  Just mainDef => if mainActionKind (dtDefType mainDef) == "IO" then OkC "IO"
-  else if mainActionKind (dtDefType mainDef) == "Eff" then OkC "Eff"
+  Just mainDef => if mainActionKind (dtDefType mainDef) == "Eff" then OkC "Eff"
   else case force (Base.HashMap.fromList (defTableOf (secondOf p))) solsEmpty defaultFuel (eval [] (dtDefType mainDef)) of
     VNeutral n => case n of
       NGlobal g sp => case sp of
@@ -637,13 +636,10 @@ interpMainShow table sols mainVal = case normalize (Base.HashMap.fromList table)
   VStr s => OkC s
   _ => cgErr0 MainNotValue
 
--- main 的动作层类别："IO"（宿主过渡入口）/ "Eff"（行已处理干净的 Eff 入口）/ ""（纯 main）。
+-- main 的动作层类别："Eff"（行已处理干净的 Eff 入口）/ ""（纯 main）。
 mainActionKind : Term -> String
 mainActionKind (TApp (TApp fn row _) _ _) = case fn of
   TGlobal g => if g == effTypeName then if isNilRowTermDt row then "Eff" else "" else ""
-  _ => ""
-mainActionKind (TApp fn _ _) = case fn of
-  TGlobal g => if g == ioFamilyName then "IO" else ""
   _ => ""
 mainActionKind _ = ""
 

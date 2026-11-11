@@ -968,8 +968,7 @@ else case lookupPair name st.gsCtors of
       p = genCtorRef st family name
     in OkC (Pair (firstOf p) (secondOf p))
   Nothing => case findIntrinsic name of
-    Just i => if isIOAlgebraName name then ioAlgebraText st name
-    else if intrinsicReturnsIO i then ioPrimText st name i
+    Just i => if name == primEffBind1Name then effLinearBindText st
     else if intrinsicReturnsEff i then effPrimText st name i
     else if needsListBridge i then if memName listFamilyName st.gsFamilies then
       let
@@ -981,17 +980,6 @@ else case lookupPair name st.gsCtors of
       let
         p = genValueRef st name
       in OkC (Pair (firstOf p) (secondOf p))
-
--- M37：效果原语的 runtime 是「立刻算完的表达式」；IO 是内建效应类型（运行时 = 裸
--- thunk `int -> 'a`），所以按 arity 包成 `fun args -> fun _ -> rt args`，由 main 钩子
--- 或 `runPure` 执行。`prim_eff_getArgs` / `prim_eff_readDir` 一类返回 `List` 的原语，其 runtime
--- 文本里内嵌 List 桥接 helper 调用（`dtp_listOf`），仍要按声明 List 族的单元限定。
-ioPrimText : GenSt -> String -> Intrinsic -> Check (Pair String GenSt)
-ioPrimText st name i = if needsListBridge i then
-  let
-    rt = genBridgeRef st i.intrinsicRuntime
-  in OkC (Pair (ioPrimThunkText (firstOf rt) (intrinsicArity i)) (secondOf rt))
-else OkC (Pair (ioPrimThunkText i.intrinsicRuntime (intrinsicArity i)) st)
 
 -- Eff 原语：运行时仍是 eager 函数，但结果必须是装箱的 `MkEff`（Eff 是 base data）。
 -- 生成 `MkEff (fun (_ : EffUnit) -> rt args)`；ctor 与 EffUnit 类型跨单元限定并记依赖。
@@ -1027,28 +1015,6 @@ effLinearBindText st =
     unitTy = firstOf unitP
   in OkC
     (Pair "(fun m k -> ${ctor} (fun (u : ${unitTy}) -> match m with ${ctor} f -> (match k (f u) with ${ctor} g -> g u)))" st2)
-
--- 内建模式的 thunk 包装：`prim_eff_print` → `(fun s -> fun (_ : int) -> dtp_print s)`；
--- 零参 `prim_eff_getArgs` → `(fun (_ : int) -> (dtp_listOf (dtp_getArgs ())))`。
--- token 必须标注 `int`：否则 OCaml 把世界令牌推成弱类型变量（`'_weak -> a`），
--- 部分应用的动作值（`readFile "x"`）会因值限制报 non-generalizable。
-ioPrimThunkText : String -> Int -> String
-ioPrimThunkText rt arity =
-  let
-    argText = joinWith " " (takeNames arity ioParamNames)
-  in if arity == 0 then "(fun (_ : int) -> ${rt})"
-  else "(fun ${argText} -> fun (_ : int) -> ${rt} ${argText})"
-
--- IO 代数原语（`prim_pureIO` / `prim_bindIO` / `prim_runIO`）的 runtime：它们**本身**
--- 产生 IO 动作（thunk 值），不能套通用的 eager 包装，因此单独生成。
-ioAlgebraText : GenSt -> String -> Check (Pair String GenSt)
-ioAlgebraText st name = OkC (Pair (ioAlgebraIntrinsicText name) st)
-
-ioAlgebraIntrinsicText : String -> String
-ioAlgebraIntrinsicText name =
-  if name == primPureIOName then "(fun x -> fun (_ : int) -> x)"
-  else if name == primBindIOName || name == primBindIO1Name then "(fun io k -> fun (w : int) -> k (io w) w)"
-  else "(fun io -> io 0)"
 
 -- 原语最多 2 个运行时参数（`prim_eff_writeFile` / `prim_eff_runIn`）；表比实际用到的长，
 -- `takeNames` 按 arity 截断（结构递归在表尾上，终止性检查可见）。
@@ -2126,16 +2092,13 @@ mainShow table tyTerm = case force (Base.HashMap.fromList table) solsEmpty defau
     _ => mainShowSynth
   _ => mainShowSynth
 
--- 拆 main 的动作层：返回 ('io' | 'eff', 内层类型)。
+-- 拆 main 的动作层：返回 ('eff', 内层类型)。
 -- Eff 只接受行已经是 Nil 的入口（Elab 的入口检查保证；这里再判一次形态）。
 actionResultTy : Term -> Maybe (Pair String Term)
 actionResultTy (TApp (TApp fn row _) arg _) = case fn of
   TGlobal g =>
     if g == effTypeName then if isNilRowTermCodegen row then Just (Pair "eff" arg) else Nothing
     else Nothing
-  _ => Nothing
-actionResultTy (TApp fn arg _) = case fn of
-  TGlobal g => if g == ioFamilyName then Just (Pair "io" arg) else Nothing
   _ => Nothing
 actionResultTy _ = Nothing
 

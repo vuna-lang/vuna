@@ -813,19 +813,14 @@ findDefByName : String -> List DtDef -> Maybe DtDef
 findDefByName name [] = Nothing
 findDefByName name (d :: rest) = if dtDefName d == name then Just d else findDefByName name rest
 
--- main 结果类型拆掉动作层后的内层类型。动作层有两种：
---   * `IO a`（宿主程序过渡期入口，M37 内建）；
---   * `Eff [] a`（用户面入口；行必须已经是 Nil，否则入口检查报 TC_UnhandledEffects）。
--- 返回 ("io"/"eff"/"other", 内层类型)；非动作 main 的内层就是它自己。
+-- main 结果类型拆掉动作层后的内层类型：`Eff [] a`（用户面入口；行必须是 Nil，否则入口检查
+-- 报 TC_UnhandledEffects）。返回 ("eff"/"other", 内层类型)；非动作 main 的内层就是它自己。
 mainActionOf : Term -> Pair String Term
 mainActionOf ty = case ty of
   TApp (TApp fn row _) arg _ => case fn of
     TGlobal g =>
       if g == effTypeName then if isNilRowTerm row then Pair "eff" arg else Pair "other" ty
       else Pair "other" ty
-    _ => Pair "other" ty
-  TApp fn arg _ => case fn of
-    TGlobal g => if g == ioFamilyName then Pair "io" arg else Pair "other" ty
     _ => Pair "other" ty
   _ => Pair "other" ty
 

@@ -208,7 +208,8 @@ else case normalizeAcc False (splitOnSlash path) [] of
 -- 否则 "." 这类相对路径的父目录仍是 "."，搜索在起点就停住）。
 absolutePath : String -> String
 absolutePath path =
-  if startsWith "/" path then normalizeDir path else normalizeDir "${runIO prim_getcwd}/${path}"
+  if startsWith "/" path then normalizeDir path
+  else normalizeDir "${runPure prim_eff_getcwd}/${path}"
 
 -- 依赖路径拼接：绝对路径直接用，相对路径相对 base 目录规范化。
 joinPath : String -> String -> String
@@ -468,7 +469,7 @@ locateBase _ =
     env = runPure (prim_eff_getenv "VUNA_BASE")
   in if env == "" then
     let
-      candidates = baseCandidates (manifestDir (absolutePath (runIO prim_execPath)))
+      candidates = baseCandidates (manifestDir (absolutePath (runPure prim_eff_execPath)))
     in firstExistingBase candidates candidates
   else
     let

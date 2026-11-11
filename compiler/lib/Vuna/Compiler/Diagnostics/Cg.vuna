@@ -55,7 +55,7 @@ cgCode (UnsolvedMetavarRuntime _) = "CG_UnsolvedMetavarRuntime"
 cgTemplate : {n : Nat} -> CgErr n -> String
 cgTemplate DependencyCycle = "dependency cycle between runtime definitions"
 cgTemplate InterpCannotExecuteEffects =
-  "interp cannot execute effects (main : IO a / Eff [] a); compile and run the program instead"
+  "interp cannot execute effects (main : Eff [] a); compile and run the program instead"
 cgTemplate MainNotValue = "main does not reduce to a value"
 cgTemplate NoMain = "no main definition"
 cgTemplate TypeUsedAtRuntime = "a type is used at runtime (M13 limitation)"

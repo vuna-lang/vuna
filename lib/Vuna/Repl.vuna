@@ -969,7 +969,7 @@ else if hasUnsolvedMeta tyText then
   let
     _ =
       printError st
-        "无法确定 IO 表达式的完整类型（${tyText}）；先定义成带签名的值再求值（如 `prog : Base.IO.IO Int` + `prog = ...`）"
+        "无法确定动作表达式的完整类型（${tyText}）；先定义成带签名的值再求值（如 `prog : Base.Eff.Eff Base.Eff.Row.Nil Int` + `prog = ...`）"
   in 0
 else
   let
@@ -1009,18 +1009,13 @@ hasMainDef program = case parseSource replTempFile program of
   OkC (SourceFile _ _ _ decls) => memName "main" (topNames decls)
 
 -- 顶层类型文本是 canonical 动作类型吗？`showTypeSig` 把 `Eff [] a` 渲染成
--- `(Base.Eff.Eff (Base.Eff.Row.Nil) Int)`；过渡期仍接受 `IO a`。
+-- `((Base.Eff.Eff Base.Eff.Row.Nil) Int)`。
 isIOTypeText : String -> Bool
 isIOTypeText tyText =
   let
     t = trim tyText
   in startsWith "((Base.Eff.Eff Base.Eff.Row.Nil) " t
     || startsWith "(Base.Eff.Eff Base.Eff.Row.Nil) " t
-    || startsWith "(Base.IO.IO " t
-    || startsWith "Base.IO.IO " t
-    || startsWith "(IO " t
-    || t == "Base.IO.IO"
-    || t == "IO"
 
 ioPrintResult : String -> Bool
 ioPrintResult tyText = case ioInnerType (trim tyText) of
@@ -1041,11 +1036,6 @@ ioInnerType t =
     (stripTrailingParen (trim (substring (byteLength effHead) (byteLength t - byteLength effHead) t)))
   else if startsWith effHeadBare t then Just
     (stripTrailingParen (trim (substring (byteLength effHeadBare) (byteLength t - byteLength effHeadBare) t)))
-  else if startsWith "(Base.IO.IO " t then Just
-    (stripTrailingParen (trim (substring (byteLength "(Base.IO.IO ") (byteLength t - byteLength "(Base.IO.IO ") t)))
-  else if startsWith "Base.IO.IO " t then Just
-    (stripTrailingParen (trim (substring (byteLength "Base.IO.IO ") (byteLength t - byteLength "Base.IO.IO ") t)))
-  else if startsWith "(IO " t then Just (stripTrailingParen (trim (substring 4 (byteLength t - 4) t)))
   else Nothing
 
 stripTrailingParen : String -> String
@@ -1445,7 +1435,7 @@ replHelp = """命令：
 作用域：Prelude 隐式自动导入；导入模块的类型名可作类型层实参（`:type Maybe` 给 kind）。
 快捷键：←/→ 移动、↑/↓ 历史、Ctrl-R 反向搜索历史、Ctrl-A/E 行首行尾、
         Ctrl-U/K/W 删到行首/行尾/前一单词、Ctrl-L 清屏、Ctrl-C 取消输入、Ctrl-D 退出。
-效果表达式（顶层类型是 IO a）会临时编译并运行；效果的输出直接到终端。
+效果表达式（顶层类型是 Eff [] a）会临时编译并运行；效果的输出直接到终端。
 """
 
 -- ---------------------------------------------------------------
