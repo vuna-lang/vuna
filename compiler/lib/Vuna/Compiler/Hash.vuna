@@ -1,4 +1,4 @@
--- | 内容寻址原语（v0）：确定性编码 + 248-bit 摘要。
+-- | 内容寻址原语（v2）：确定性编码 + SHA-256 摘要。
 module Vuna.Compiler.Hash
   ( Digest(..)
   , digestHex
@@ -14,28 +14,30 @@ module Vuna.Compiler.Hash
 
 -- Vuna.Compiler.Hash：内容寻址的**格式层**（不含查询/缓存策略）。
 --
--- 用途：缓存键、包身份（Merkle 根）、产物地址。不用于任何安全用途。
+-- 用途：缓存键、包身份（Merkle 根）、产物地址。不用于任何安全用途的密钥派生。
 --
--- 为什么不是 SHA-256：编译器的整数原语只有 `+ - * /` 与比较（没有位运算），
--- 因此 v0 用 8 条 lane 的 Mersenne-31 多项式摘要（248 bit）：每个 lane 的 h 恒
--- 小于 2^31，乘数小于 2^7，中间值 < 2^38，63-bit Int 不溢出、跨平台确定。
--- 将来补上位运算原语后，换算法只需递增 `hashVersion`（缓存键自动失效）。
---
--- 编码约定（canonical encoding，只依赖语义内容）：
---   * `encInt`    = 符号字节（0 非负 / 1 负）+ 8 字节大端幅值；
---   * `encString` = 长度 + UTF-8 字节；
---   * `encList`   = 长度 + 逐项编码；
---   * `encTag`    = 和类型构造子序号。
--- 编码**不含**名字、位置、顺序：调用方负责先规范化（排序/去 span），
--- 这是 `docs/architecture-target.md` D5 的"内容哈希"。
+-- * 摘要 = **SHA-256**（FIPS 180-4），在本模块用 `Base.Bits` 的 32-bit 包装实现：
+--   因此 OCaml 后端、将来的 wasm 后端与 `interp` 都能算出同一份内容地址——这是
+--   D2（两端语义一致）与 D5（内容寻址）共同要求的。
+-- * `Digest` 的 8 条 lane 就是 SHA-256 的 8 个 32-bit 大端字；`digestHex` 渲染成
+--   标准的小写 64 位十六进制。
+-- * 编码约定（canonical encoding，只依赖语义内容）：
+--     - `encInt`    = 符号字节（0 非负 / 1 负）+ 8 字节大端幅值；
+--     - `encString` = 长度 + UTF-8 字节；
+--     - `encList`   = 长度 + 逐项编码；
+--     - `encTag`    = 和类型构造子序号。
+--   编码**不含**名字、位置、顺序：调用方负责先规范化（排序/去 span）。
+-- * `hashVersion = 2`：v1 是 8 lane Mersenne-31（位运算原语落地前的过渡实现，
+--   已被本版取代；缓存键随版本号自动失效）。
+import Base.Bits
 import Base.List
 import Base.String
 
 -- | 摘要格式版本；算法或编码变化时递增（缓存键因此失效）。
 hashVersion : Int
-hashVersion = 1
+hashVersion = 2
 
--- | 8 lane 摘要，每个 lane ∈ [0, 2147483647)。
+-- | 8 个 32-bit 摘要字（大端序；即标准 SHA-256 的 64 位十六进制）。
 record Digest where
   digestLanes : List Int
 
@@ -43,29 +45,9 @@ record Digest where
 digestLanes : Digest -> List Int
 digestLanes (Digest lanes) = lanes
 
--- | Mersenne 素数 2^31-1：lane 的模数。
-mersenne : Int
-mersenne = 2147483647
-
--- | 每条 lane 的多项式底：小素数、两两不同，乘积远小于 2^31。
-laneBases : List Int
-laneBases = [31, 37, 41, 43, 47, 53, 59, 61]
-
--- | 取模（语言没有 `mod` 运算符；x >= 0 时「减商乘」即 x mod m）。
-modOf : Int -> Int -> Int
-modOf x m = x - x / m * m
-
--- | 单条 lane：滚动多项式 + 长度终混。
-laneOf : Int -> List Int -> Int -> Int
-laneOf base bytes n =
-  let
-    h0 = foldl (\h, b => modOf (h * base + b + 1) mersenne) base bytes
-    h1 = modOf (h0 * 1000003 + n + 1) mersenne
-  in modOf (h1 * 65599 + base) mersenne
-
 -- | 字节序列（每项 0..255）→ 摘要。
 digestOfBytes : List Int -> Digest
-digestOfBytes bytes = Digest (map (\base => laneOf base bytes (lenInt bytes)) laneBases)
+digestOfBytes bytes = Digest (sha256Bytes bytes)
 
 -- | 字符串 → 摘要（按 UTF-8 字节；`strUnpack` 的每一项即一个字节码）。
 digestOfString : String -> Digest
@@ -75,21 +57,228 @@ digestOfString s = digestOfBytes (strUnpack s)
 digestHex : Digest -> String
 digestHex (Digest lanes) = strConcatMany (map hex8 lanes)
 
+-- ---------------------------------------------------------------
+-- SHA-256（FIPS 180-4）
+-- ---------------------------------------------------------------
+-- | SHA-256 初始状态 H0（前 8 个素数平方根小数部分的前 32 位）。
+shaInit : List Int
+shaInit =
+  [1779033703, 3144134277, 1013904242, 2773480762, 1359893119, 2600822924, 528734635, 1541459225]
+
+-- | SHA-256 轮常量 K（前 64 个素数立方根小数部分的前 32 位）。
+shaK : List Int
+shaK =
+  [ 1116352408,
+    1899447441,
+    3049323471,
+    3921009573,
+    961987163,
+    1508970993,
+    2453635748,
+    2870763221,
+    3624381080,
+    310598401,
+    607225278,
+    1426881987,
+    1925078388,
+    2162078206,
+    2614888103,
+    3248222580,
+    3835390401,
+    4022224774,
+    264347078,
+    604807628,
+    770255983,
+    1249150122,
+    1555081692,
+    1996064986,
+    2554220882,
+    2821834349,
+    2952996808,
+    3210313671,
+    3336571891,
+    3584528711,
+    113926993,
+    338241895,
+    666307205,
+    773529912,
+    1294757372,
+    1396182291,
+    1695183700,
+    1986661051,
+    2177026350,
+    2456956037,
+    2730485921,
+    2820302411,
+    3259730800,
+    3345764771,
+    3516065817,
+    3600352804,
+    4094571909,
+    275423344,
+    430227734,
+    506948616,
+    659060556,
+    883997877,
+    958139571,
+    1322822218,
+    1537002063,
+    1747873779,
+    1955562222,
+    2024104815,
+    2227730452,
+    2361852424,
+    2428436474,
+    2756734187,
+    3204031479,
+    3329325298
+  ]
+
+-- | 列表长度（`Base.List.length` 返回 `Nat`；这里需要 `Int`）。
+lenInt : List a -> Int
+lenInt [] = 0
+lenInt (_ :: rest) = 1 + lenInt rest
+
+-- | 在第 `i` 位取整数（越界返回 0）。
+atIdx : Int -> List Int -> Int
+atIdx i [] = 0
+atIdx i (x :: rest) = if i <= 0 then x else atIdx (i - 1) rest
+
+-- | 重复 `n` 个 0。
+zeros : Int -> List Int
+zeros n = map (\_ => 0) (range 0 n)
+
+-- | 8 字节大端（SHA-256 的 64-bit 消息长度字段）。
+lenBytes : Int -> List Int
+lenBytes n =
+  [ band (shr n 56) 255,
+    band (shr n 48) 255,
+    band (shr n 40) 255,
+    band (shr n 32) 255,
+    band (shr n 24) 255,
+    band (shr n 16) 255,
+    band (shr n 8) 255,
+    band n 255
+  ]
+
+-- | 填充：`0x80` + 若干 0 + 64-bit 大端比特长度，使总长为 64 的倍数。
+padMessage : List Int -> List Int
+padMessage bytes =
+  let
+    n = lenInt bytes
+    r = n + 1 - (n + 1) / 64 * 64
+    zerosNeeded = if r <= 56 then 56 - r else 120 - r
+  in append (append (append bytes [128]) (zeros zerosNeeded)) (lenBytes (n * 8))
+
+-- | 切成 64 字节的块（`n` 为块数；用守卫 Int 递减证明终止）。
+chunk64 : List Int -> List (List Int)
+chunk64 bytes = chunks ((lenInt bytes + 63) / 64) bytes
+
+-- | 取前 `k` 个 64 字节块。
+chunks : Int -> List Int -> List (List Int)
+chunks k bytes = if k <= 0 then [] else take 64 bytes :: chunks (k - 1) (drop 64 bytes)
+
+-- | 4 字节大端 → 32-bit 字。
+wordAt : List Int -> Int -> Int
+wordAt chunk j =
+  let
+    b0 = atIdx (j * 4) chunk
+    b1 = atIdx (j * 4 + 1) chunk
+    b2 = atIdx (j * 4 + 2) chunk
+    b3 = atIdx (j * 4 + 3) chunk
+  in bor (bor (shl32 b0 24) (shl32 b1 16)) (bor (shl32 b2 8) b3)
+
+-- | 一个 64 字节块 → 16 个 32-bit 字。
+chunkWords : List Int -> List Int
+chunkWords chunk = map (\j => wordAt chunk j) (range 0 16)
+
+-- | 小写 sigma0：`rotr 7 ^ rotr 18 ^ shr 3`。
+sigma0Small : Int -> Int
+sigma0Small x = bxor (rotr32 x 7) (bxor (rotr32 x 18) (shr32 x 3))
+
+-- | 小写 sigma1：`rotr 17 ^ rotr 19 ^ shr 10`。
+sigma1Small : Int -> Int
+sigma1Small x = bxor (rotr32 x 17) (bxor (rotr32 x 19) (shr32 x 10))
+
+-- | 大写 Sigma0：`rotr 2 ^ rotr 13 ^ rotr 22`。
+bigSigma0 : Int -> Int
+bigSigma0 x = bxor (rotr32 x 2) (bxor (rotr32 x 13) (rotr32 x 22))
+
+-- | 大写 Sigma1：`rotr 6 ^ rotr 11 ^ rotr 25`。
+bigSigma1 : Int -> Int
+bigSigma1 x = bxor (rotr32 x 6) (bxor (rotr32 x 11) (rotr32 x 25))
+
+-- | 由 16 字扩展成 64 字消息表：从下标 16 起按 SHA-256 公式追加。
+schedule : List Int -> List Int
+schedule w16 = foldl extend w16 (range 16 64)
+
+-- | 消息表追加一位。
+extend : List Int -> Int -> List Int
+extend ws i =
+  let
+    w2 = atIdx (i - 2) ws
+    w7 = atIdx (i - 7) ws
+    w15 = atIdx (i - 15) ws
+    w16 = atIdx (i - 16) ws
+  in append ws [add32 (add32 (sigma1Small w2) w7) (add32 w16 (sigma0Small w15))]
+
+-- | 压缩函数：8 字状态 + 64 字消息表 → 8 字新状态（尚未与初值相加）。
+compress : List Int -> List Int -> List Int
+compress st ws = foldl (roundStep ws) st (range 0 64)
+
+-- | 单轮。
+roundStep : List Int -> List Int -> Int -> List Int
+roundStep ws st i =
+  let
+    a = atIdx 0 st
+    b = atIdx 1 st
+    c = atIdx 2 st
+    d = atIdx 3 st
+    e = atIdx 4 st
+    f = atIdx 5 st
+    g = atIdx 6 st
+    h = atIdx 7 st
+    s1 = bigSigma1 e
+    ch = bxor (band e f) (band (bnot e) g)
+    t1 = add32 (add32 (add32 h s1) (add32 ch (atIdx i shaK))) (atIdx i ws)
+    s0 = bigSigma0 a
+    maj = bxor (band a b) (bxor (band a c) (band b c))
+    t2 = add32 s0 maj
+  in [add32 t1 t2, a, b, c, add32 d t1, e, f, g]
+
+-- | 两个 8 字状态按 32-bit 加法逐位相加。
+zipAdd : List Int -> List Int -> List Int
+zipAdd xs ys = map (\i => add32 (atIdx i xs) (atIdx i ys)) (range 0 8)
+
+-- | 处理一个 64 字节块：更新 8 字状态。
+compressBlock : List Int -> List Int -> List Int
+compressBlock st block = zipAdd st (compress st (schedule (chunkWords block)))
+
+-- | SHA-256：字节序列 → 8 个 32-bit 大端字。
+sha256Bytes : List Int -> List Int
+sha256Bytes bytes = foldl compressBlock shaInit (chunk64 (padMessage bytes))
+
+-- ---------------------------------------------------------------
+-- 十六进制渲染
+-- ---------------------------------------------------------------
 -- | 一个 lane 的 8 位十六进制（16^7 … 16^0）。
 hex8 : Int -> String
 hex8 v =
   strConcatMany
     [hexDigit (digitAt v 268435456), hexDigit (digitAt v 16777216), hexDigit (digitAt v 1048576), hexDigit (digitAt v 65536), hexDigit (digitAt v 4096), hexDigit (digitAt v 256), hexDigit (digitAt v 16), hexDigit (digitAt v 1)]
 
--- | 取第 p 位（十六进制位）：`v / p` 的个位即该位。
+-- | 取第 `p` 位（十六进制位）。
 digitAt : Int -> Int -> Int
-digitAt v p = modOf (v / p) 16
+digitAt v p = band (v / p) 15
 
 -- | 十六进制数字 → 字符（0-9 → '0'-'9'；10-15 → 'a'-'f'）。
 hexDigit : Int -> String
 hexDigit d = if d < 10 then strFromInt d else strPack [87 + d]
 
--- | 编码整数：符号字节 + 8 字节大端幅值（幅值 < 2^63，8 字节足够）。
+-- ---------------------------------------------------------------
+-- 规范编码
+-- ---------------------------------------------------------------
+-- | 编码整数：符号字节 + 8 字节大端幅值。
 encInt : Int -> List Int
 encInt v =
   let
@@ -98,17 +287,17 @@ encInt v =
     sign = if neg then [1] else [0]
   in append sign (byte8 n)
 
--- | 8 字节大端（2^56 … 2^0）；n 必须为非负且 < 2^63。
+-- | 8 字节大端（2^56 … 2^0）。
 byte8 : Int -> List Int
 byte8 n =
-  [ modOf (n / 72057594037927936) 256,
-    modOf (n / 281474976710656) 256,
-    modOf (n / 1099511627776) 256,
-    modOf (n / 4294967296) 256,
-    modOf (n / 16777216) 256,
-    modOf (n / 65536) 256,
-    modOf (n / 256) 256,
-    modOf n 256
+  [ band (shr n 56) 255,
+    band (shr n 48) 255,
+    band (shr n 40) 255,
+    band (shr n 32) 255,
+    band (shr n 24) 255,
+    band (shr n 16) 255,
+    band (shr n 8) 255,
+    band n 255
   ]
 
 -- | 编码字符串：长度 + 字节。
@@ -125,8 +314,3 @@ encList f xs = append (encInt (lenInt xs)) (concatMap f xs)
 -- | 编码和类型标签（构造子序号，从 0 开始）。
 encTag : Int -> List Int
 encTag = encInt
-
--- | 列表长度（`Base.List.length` 返回 `Nat`；编码需要 `Int`）。
-lenInt : List a -> Int
-lenInt [] = 0
-lenInt (_ :: rest) = 1 + lenInt rest

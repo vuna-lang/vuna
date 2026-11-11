@@ -1,0 +1,36 @@
+-- 位运算原语：63-bit 二进制补码；移位计数 n<0 || n>=63 时结果为 0。
+-- 本夹具被 interp 与编译产物共享 golden（.out）交叉验证。
+andV : Int
+andV = bitAnd 240 204
+
+orV : Int
+orV = bitOr 240 15
+
+xorV : Int
+xorV = bitXor 255 15
+
+shlV : Int
+shlV = bitShl 1 4
+
+shrV : Int
+shrV = bitShr 256 4
+
+shrOut : Int
+shrOut = bitShr 256 63
+
+shlOut : Int
+shlOut = bitShl 1 63
+
+notZero : Int
+notZero = bitNot 0
+
+main : Int
+main =
+  andV * 1
+    + orV * 10
+    + xorV * 100
+    + shlV * 1000
+    + shrV * 10000
+    + shrOut * 100000
+    + shlOut * 1000000
+    + (if notZero == 0 - 1 then 0 else 7000)

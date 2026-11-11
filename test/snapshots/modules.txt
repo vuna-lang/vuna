@@ -140,6 +140,7 @@ Vuna.Compiler.Version  compiler/lib/Vuna/Compiler/Version.vuna
 app.Main  compiler/app/Main.vuna
 Base.Applicative  base/lib/Base/Applicative.vuna
 Base.Array  base/lib/Base/Array.vuna
+Base.Bits  base/lib/Base/Bits.vuna
 Base.Bool  base/lib/Base/Bool.vuna
 Base.Buffer  base/lib/Base/Buffer.vuna
 Base.Eff.Reader  base/lib/Base/Eff/Reader.vuna
@@ -287,6 +288,7 @@ app.Main  ./app/Main.vuna
 ## base（vuna-base）
 Base.Applicative  ./lib/Base/Applicative.vuna
 Base.Array  ./lib/Base/Array.vuna
+Base.Bits  ./lib/Base/Bits.vuna
 Base.Bool  ./lib/Base/Bool.vuna
 Base.Buffer  ./lib/Base/Buffer.vuna
 Base.Eff.Reader  ./lib/Base/Eff/Reader.vuna

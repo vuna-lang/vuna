@@ -19,7 +19,7 @@ compiler/lib/Vuna/Compiler/   （67 个模块：63 个导出 + 4 个内部模块
 ├─ Diag.vuna                  结构化诊断模型 + Check 结果通道（ErrC Diagnostic）
 ├─ Common.vuna                编译器门面（Source + Diag；bind/step/traverse）
 ├─ Intrinsics.vuna            内建声明唯一真源（名字/签名/arity/能力/runtime/可见性）
-├─ Hash.vuna                  内容寻址原语：确定性编码 + 248-bit 摘要（v0）
+├─ Hash.vuna                  内容寻址原语：确定性编码 + SHA-256 摘要（用 Base.Bits 实现）
 ├─ Query.vuna                 查询图骨架：记忆化 / 依赖快照 / early cutoff / trace
 ├─ Frontend/                  Ast Lexer Parser Cst Parser/Support Toml Manifest  词法（含无损 CST）/ 语法 / vuna.toml
 ├─ Packages/                  Pkg                              包图与模块根

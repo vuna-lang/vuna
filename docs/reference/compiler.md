@@ -24,7 +24,7 @@
 | `Diagnostics`（门面） | 错误码体系入口：重导出 `Diagnostics.Tc`/`Cg`/`Ic`/`Common` 与 `Base.Nat`/`Vec` | `tcErr0`、`cgErr0`、`icFuel`、`tcAll`、`cgAll` |
 | `Diagnostics.Tc` / `Cg` | `TcErr : Nat -> Type` / `CgErr : Nat -> Type` 域枚举（构造子携带模板、arity 由索引锁定）；`tcAll`/`cgAll` 按 arity 分块（避免单行巨表） | `tcCode`、`tcTemplate`、`cgCode`、`cgTemplate` |
 | `Intrinsics` | **内建声明唯一真源**：名字/签名形状（`IType`）/arity/归约标签（`IntrinsicOp`）/能力（`Capability`）/runtime 名/用户可见性；内置身份按声明 symbol（`IO` 内建；`Base.Bool.Bool` / `Base.List.List` / `Base.Nat.Nat`） | `findIntrinsic`、`intrinsicRuntime`、`intrinsicCapability`、`parseCapability` |
-| `Hash` | 内容寻址原语（v0）：确定性编码（符号 + 8 字节幅值 / 长度前缀列表 / 标签）+ 8 lane Mersenne-31 摘要（248 bit，只用算术、跨平台确定）；换 SHA-256 只需递增 `hashVersion` | `digestOfString`、`digestHex`、`encInt`、`encString`、`encList` |
+| `Hash` | 内容寻址原语（v2）：确定性编码（符号 + 8 字节幅值 / 长度前缀列表 / 标签）+ **SHA-256**（用 `Base.Bits` 的 32-bit 包装在语言内实现：OCaml / 未来 wasm / interp 同摘要）；`hashVersion=2` 随算法升级递增 | `digestOfString`、`digestHex`、`encInt`、`encString`、`encList` |
 | `Query` | 查询图骨架：按 key 记忆化、依赖摘要快照、early cutoff（重算后摘要不变则下游仍命中）、可观测 trace；并行 / 取消留给后续 | `query`、`dbEmpty`、`dbTrace`、`digestOfVal` |
 | `Frontend.Ast` | 语法类型与 AST helper（`Expr`/`Decl`/`Pat`/`Ctor`/`Import`/`ModDecl`/`TraitMethod`） | `clausesFor`、`funArity`、`declNames` |
 | `Frontend.Lexer` | 字符游标、token 与位置；注释单独 lex 出来供 formatter 使用 | `lexSource`、`lexComments` |

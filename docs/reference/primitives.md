@@ -73,6 +73,20 @@
   没有一元负号，负数写 `0 - n`；`min_int` 的绝对值超出可表示字面量，写 `0 - 4611686018427387903 - 1`。
 - 比较：`==` `/=` `<` `<=` `>` `>=` 返回 canonical `Bool`。
 
+### 3.0 位运算原语
+
+- 名字（可见、无能力位）：`bitAnd` / `bitOr` / `bitXor` / `bitNot` / `bitShl` / `bitShr`。
+- **语义按 63-bit 二进制补码**（与 `Int` 的表示一致；这是语言契约，不是实现细节——
+  内容寻址要求跨后端逐字节一致，所以 wasm 后端也按 63-bit 模拟）：
+  `bitNot x = -x - 1`；`bitShl` 低位补 0；`bitShr` 是**逻辑**右移（高位补 0）。
+- **移位计数越界返回 0**：`n < 0 || n >= 63` ⇒ 结果 0（OCaml 原生越界移位是未定义行为，
+  不暴露给用户）。
+- 没有 `bitRor` 原语：32-bit 固定宽度算术（`mask8` / `mask32` / `add32` / `rotr32` /
+  `rol32` / `shl32` / `shr32`）在 `Base.Bits` 库层；宽度策略留在库里，不进原语。
+- 没有运算符形式（`&` / `|` / `^` / `<<` / `>>`）：需要时用命名函数，或自己声明 `infixl`。
+- interp 与 runtime 同语义（`Core.Eval.primReduce` 委托给同名原语；codegen 生成
+  `bi_bit*`，and/or/xor/not 的饱和应用直接内联成 OCaml 位运算符）。
+
 ## 3.1 Nat
 
 - **身份**：`Base.Nat.Nat` 是 canonical data（固定 `Zero` / `Succ`），类型层仍是普通归纳族；
@@ -379,6 +393,8 @@
 | 类别 | 归约 | 说明 |
 | --- | --- | --- |
 | 上述运算符 | 是 | `/` 在除数为 0 时**不归约**（见下） |
+| `bitAnd` / `bitOr` / `bitXor` / `bitNot` / `bitShl` / `bitShr` | 是 | 63-bit 补码语义，与 runtime `bi_bit*` 同公式（移位越界 = 0） |
+| `bitAnd` / `bitOr` / `bitXor` / `bitNot` / `bitShl` / `bitShr` | 是 | 63-bit 补码语义，与 runtime `bi_bit*` 同公式（移位越界 = 0） |
 | `strFromInt` / `strLength` / `strHash` / `strAt` / `strSubstring` / `strShow` | 是 | 与 runtime **同语义同公式** |
 | `natAdd` / `natSub` / `natMul` / `natDiv` / `natToInt` / `natFromInt` | 是 | 与 runtime 同饱和 / 截断语义 |
 | `strUnpack` / `strPack` / `strConcatMany` / `strSubstTemplate` | **否** | 结果依赖 `Base.List.List` 的构造子表示（List 桥接），核心求值器不构造该表示 |

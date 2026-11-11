@@ -1,5 +1,6 @@
 module Base
-  ( module Base.Bool
+  ( module Base.Bits
+  , module Base.Bool
   , module Base.Effect
   , module Base.Eq
   , module Base.Float
@@ -27,6 +28,7 @@ module Base
 -- Vuna：stdlib 包门面（M11-C）。整模块重导出核心模块，保留各模块的抽象性
 -- （例如 Map/IO 的构造器不因门面而公开）。编译器/用户程序可以只 `import Vuna`。
 import Base.Pair
+import Base.Bits
 import Base.Bool
 import Base.Show
 import Base.Effect

@@ -646,14 +646,14 @@ else case findIntrinsic g of
     OpIdentity => case sp of
       [v] => Just v
       _ => Nothing
-    -- 位运算：phase A 只登记（旧种子不认识这些名字，归约先留空）；seed rotation 后
-    -- 再补上真实归约（见 primitives.md 的 63-bit 语义契约）。
-    OpBitAnd => Nothing
-    OpBitOr => Nothing
-    OpBitXor => Nothing
-    OpBitNot => Nothing
-    OpBitShl => Nothing
-    OpBitShr => Nothing
+    -- 位运算：与 codegen runtime 的 `bi_bit*` 同语义（63-bit 补码；移位越界 = 0）。
+    -- 归约委托给同名原语：编译器自身运行时执行 `bi_bitShl` 等，语义只有一份。
+    OpBitAnd => intPrim2 sp (\a, b => VInt (bitAnd a b))
+    OpBitOr => intPrim2 sp (\a, b => VInt (bitOr a b))
+    OpBitXor => intPrim2 sp (\a, b => VInt (bitXor a b))
+    OpBitNot => intPrim1 sp (\a => VInt (bitNot a))
+    OpBitShl => intPrim2 sp (\a, n => VInt (bitShl a n))
+    OpBitShr => intPrim2 sp (\a, n => VInt (bitShr a n))
     OpNone => Nothing
   Nothing => Nothing
 

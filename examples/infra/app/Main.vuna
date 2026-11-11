@@ -1,3 +1,4 @@
+import Base.Bits
 import Base.IO.Host
 import Base.List
 import Base.Pair
@@ -27,6 +28,13 @@ main : IO Int
 main = do
   _ <- println ("hash-empty " ++ digestHex (digestOfString ""))
   _ <- println ("hash-abc " ++ digestHex (digestOfString "abc"))
+  _ <- println ("sha-80a " ++ digestHex (digestOfString (repeatA 80)))
+  _ <-
+    println
+      ("bits " ++ joinInts [bitAnd 240 204, bitOr 240 15, bitXor 255 15, bitNot 0, bitShl 1 4, bitShr 256 4, bitShr 256 63, bitShl 1 63])
+  _ <-
+    println
+      ("bitslib " ++ joinInts [rotr32 1 1, add32 4294967295 2, mask32 (0 - 1), mask8 511, rol32 1 31])
   _ <- println ("enc-int-42 " ++ joinInts (encInt 42))
   _ <- println ("cst-sample " ++ verdict (roundtripOk sample))
   src <- getEnv "INFRA_SRC"
@@ -87,3 +95,7 @@ runAll seed db0 =
 lenInt : List String -> Int
 lenInt [] = 0
 lenInt (_ :: rest) = 1 + lenInt rest
+
+-- | 80 个 'a'（跨两个 SHA-256 块，覆盖填充的 r > 56 分支）。
+repeatA : Int -> String
+repeatA n = join "" (map (\_ => "a") (range 0 n))

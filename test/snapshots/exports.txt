@@ -1,7 +1,8 @@
 # M26 导出面快照（module X (...) where 的项，排序规范化；无 header => (implicit)）
-base/lib/Base.vuna: module Base.Bool, module Base.Effect, module Base.Eq, module Base.Float, module Base.Foldable, module Base.Hashable, module Base.IO, module Base.Interp, module Base.List, module Base.Map, module Base.Maybe, module Base.Monad, module Base.Monoid, module Base.Nat, module Base.Num, module Base.Ord, module Base.Pair, module Base.Result, module Base.Show, module Base.Sort, module Base.String, module Base.Traversable, module Base.Unit
+base/lib/Base.vuna: module Base.Bits, module Base.Bool, module Base.Effect, module Base.Eq, module Base.Float, module Base.Foldable, module Base.Hashable, module Base.IO, module Base.Interp, module Base.List, module Base.Map, module Base.Maybe, module Base.Monad, module Base.Monoid, module Base.Nat, module Base.Num, module Base.Ord, module Base.Pair, module Base.Result, module Base.Show, module Base.Sort, module Base.String, module Base.Traversable, module Base.Unit
 base/lib/Base/Applicative.vuna: Applicative(..)
 base/lib/Base/Array.vuna: fromList, get, length, make, set, toList
+base/lib/Base/Bits.vuna: add32, band, bnot, bor, bxor, mask32, mask8, rol32, rotr32, shl, shl32, shr, shr32
 base/lib/Base/Bool.vuna: Bool(..), and, bool, not, or, xor
 base/lib/Base/Buffer.vuna: contents, length, new, push
 base/lib/Base/Eff.vuna: Cont, Eff, Member(..), ResFn(..), Row(..), bracket, defaultInstance, effPrim, finally, handleCore, handleCoreLin, handleWith, handleWithAt, mkCont, performCore, resFn, resOf, resumeCont, rowRem, runEff, runIOAnswer, runIOEff, runPure, sendCore, weaken

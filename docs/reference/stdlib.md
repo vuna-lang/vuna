@@ -22,6 +22,7 @@
 | `Base.HashSet` | 键泛型的集合（内部 `HashMap a Bool`；empty/insert/member/fromList/toList/size；键需 `Eq` + `Hashable`） |
 | `Base.Unit` | 单元素类型 `Unit(..)`（`MkUnit`）+ `Eq` / `Ord` / `Show` / `Semigroup` / `Monoid` / `Hashable` 实例 |
 | `Base.Hashable` | 通用哈希 trait：`hash : a -> Int`、`hashStr`（String 的 0..1023 哈希）、`hashCombine`；`String`/`Int`/`Bool`/`Nat`/`Unit`/`List`/`Maybe`/`Pair`/`Result`/`Ordering` 实例，用户类型可 `deriving (Hashable)` |
+| `Base.Bits` | 位运算命名库 + 32-bit 固定宽度包装：`band` / `bor` / `bxor` / `bnot` / `shl` / `shr`（63-bit 语义，移位越界 = 0）+ `mask8` / `mask32` / `shl32` / `shr32` / `add32` / `rotr32` / `rol32`；SHA-256 / 编码类算法使用 |
 | `Base.Array` | 不可变数组（内建类型构造子 `Array`；`fromList` / `toList` / `length` / `get` / `set` / `make`，长度与下标是 `Nat`；`set` 返回新数组） |
 | `Base.IORef` | IO 内的可变引用（`newRef` / `readRef` / `writeRef` / `modifyRef`，全部 `IO`） |
 | `Base.MArray` | IO 内的可变数组（`new` / `read` / `write` / `length`，全部 `IO`） |

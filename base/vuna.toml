@@ -10,6 +10,7 @@ modules = [
   "Base.Pair",
   "Base.Field",
   "Base.Record",
+  "Base.Bits",
   "Base.Bool",
   "Base.Show",
   "Base.Eq",
