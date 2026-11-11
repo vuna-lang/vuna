@@ -1,4 +1,9 @@
-module Vuna.Compiler.Driver.DiagRender (renderCliDiagnostic, renderWithPrefix) where
+module Vuna.Compiler.Driver.DiagRender
+  ( renderCliDiagnostic
+  , renderCliDiagnosticEff
+  , renderWithPrefix
+  , renderWithPrefixEff
+  ) where
 
 -- Vuna.Compiler.Driver.DiagRender：CLI 诊断的源码片段渲染（M38 P3）。
 --
@@ -133,17 +138,20 @@ stripCr : String -> String
 stripCr s = if endsWith "\r" s then substring 0 (natFromInt (strLength s - 1)) s else s
 
 -- 依次尝试语法候选：文件存在、不是目录、行号在范围内才采纳；否则尝试下一个。
-firstReadableLoc : List (Pair String (Pair Int Int)) -> Maybe (Pair String (Pair Int (Pair Int String)))
-firstReadableLoc [] = Nothing
-firstReadableLoc ((Pair file (Pair line col)) :: rest) = if line < 1 then firstReadableLoc rest
-else if runPure (fileExists file) then if runPure (isDirectory file) then firstReadableLoc rest
-else
-  let
-    srcLines = lines (runPure (readFile file))
-  in case lineAt srcLines line of
-    Nothing => firstReadableLoc rest
-    Just rawLine => Just (Pair file (Pair line (Pair col (stripCr rawLine))))
-else firstReadableLoc rest
+firstReadableLocEff : List (Pair String (Pair Int Int)) -> Eff [] (Maybe (Pair String (Pair Int (Pair Int String))))
+firstReadableLocEff [] = pure Nothing
+firstReadableLocEff ((Pair file (Pair line col)) :: rest) = if line < 1 then firstReadableLocEff rest
+else do
+  exists <- fileExists file
+  if exists then do
+    isDir <- isDirectory file
+    if isDir then firstReadableLocEff rest
+    else do
+      raw <- readFile file
+      case lineAt (lines raw) line of
+        Nothing => firstReadableLocEff rest
+        Just rawLine => pure (Just (Pair file (Pair line (Pair col (stripCr rawLine)))))
+  else firstReadableLocEff rest
 
 -- ---------------------------------------------------------------
 -- 片段渲染：tab 显示成单空格；插入符覆盖 col 处的 token（标识符/数字/字符串/单符号）
@@ -204,34 +212,48 @@ snippetBlock file line col srcLine =
 -- 对外入口
 -- ---------------------------------------------------------------
 -- 消息体渲染：可渲染时返回「原消息 + 换行 + 片段」，否则原样返回。
-renderBody : String -> String
-renderBody msg = case firstReadableLoc (locCandidates msg) of
-  Nothing => msg
-  Just (Pair file (Pair line (Pair col srcLine))) => "${msg}\n${snippetBlock file line col srcLine}"
+renderBodyEff : String -> Eff [] String
+renderBodyEff msg = do
+  found <- firstReadableLocEff (locCandidates msg)
+  case found of
+    Nothing => pure msg
+    Just (Pair file (Pair line (Pair col srcLine))) =>
+      pure "${msg}\n${snippetBlock file line col srcLine}"
 
 -- 保留一个尾随换行（调用方常按 `message ++ "\n"` 传入）；消息内部含换行则退回原样。
-renderBodyWithNewline : String -> String
-renderBodyWithNewline body =
+renderBodyWithNewlineEff : String -> Eff [] String
+renderBodyWithNewlineEff body =
   let
     trailing = endsWith "\n" body
     core = if trailing then substring 0 (natFromInt (strLength body - 1)) body else body
-  in if contains "\n" core then body
-  else
-    let
-      rendered = renderBody core
-    in if trailing then "${rendered}\n" else rendered
+  in if contains "\n" core then pure body
+  else do
+    rendered <- renderBodyEff core
+    pure (if trailing then "${rendered}\n" else rendered)
 
 -- 完整 CLI 诊断行：保留前缀与可选 `[pkg] `，消息体追加源码片段。
-renderCliDiagnostic : String -> String
-renderCliDiagnostic s =
+renderCliDiagnosticEff : String -> Eff [] String
+renderCliDiagnosticEff s =
   let
     pp = splitCliPrefix s
     pk = splitPkg (secondOf pp)
-  in firstOf pp ++ firstOf pk ++ renderBodyWithNewline (secondOf pk)
+  in do
+    body <- renderBodyWithNewlineEff (secondOf pk)
+    pure (firstOf pp ++ firstOf pk ++ body)
+
+-- | 过渡包装：纯 API（M4 期调用方改用 `renderCliDiagnosticEff` 后删除）。
+renderCliDiagnostic : String -> String
+renderCliDiagnostic s = runPure (renderCliDiagnosticEff s)
 
 -- 用调用方给的显式前缀渲染（包级检查：前缀里带 `error: [包名] `）。
-renderWithPrefix : String -> String -> String
-renderWithPrefix prefix msg =
+renderWithPrefixEff : String -> String -> Eff [] String
+renderWithPrefixEff prefix msg =
   let
     pk = splitPkg msg
-  in prefix ++ firstOf pk ++ renderBodyWithNewline (secondOf pk)
+  in do
+    body <- renderBodyWithNewlineEff (secondOf pk)
+    pure (prefix ++ firstOf pk ++ body)
+
+-- | 过渡包装：纯 API（M4 期调用方改用 `renderWithPrefixEff` 后删除）。
+renderWithPrefix : String -> String -> String
+renderWithPrefix prefix msg = runPure (renderWithPrefixEff prefix msg)
