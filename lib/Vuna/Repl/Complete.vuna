@@ -49,15 +49,29 @@ splitFirstWordChars (c :: rest) acc =
 -- ---------------------------------------------------------------
 -- 候选池
 -- ---------------------------------------------------------------
-argCompletions : Int -> List String -> String -> List String
-argCompletions kind roots token = if token == "" then []
-else
-  let
-    mods =
-      if kind == 2 then moduleCompletions roots token
-      else if containsSlash token then [] else moduleCompletions roots token
-    paths = if kind == 2 then [] else pathCompletions token
-  in dedupStrs (append mods paths)
+argCompletions : Int -> List String -> String -> Eff [] (List String)
+argCompletions kind roots token = if token == "" then pure []
+else do
+  mods <-
+    if kind == 2 then moduleCompletions roots token
+    else if containsSlash token then pure [] else moduleCompletions roots token
+  paths <- if kind == 2 then pure [] else pathCompletions token
+  pure (dedupStrs (append mods paths))
+
+-- 小 helper：Effectful 的 map / concatMap（本模块自用）。
+mapEff : (a -> Eff [] b) -> List a -> Eff [] (List b)
+mapEff f [] = pure []
+mapEff f (x :: rest) = do
+  y <- f x
+  ys <- mapEff f rest
+  pure (y :: ys)
+
+concatMapEff : (a -> Eff [] (List b)) -> List a -> Eff [] (List b)
+concatMapEff f [] = pure []
+concatMapEff f (x :: rest) = do
+  xs <- f x
+  ys <- concatMapEff f rest
+  pure (append xs ys)
 
 containsSlash : String -> Bool
 containsSlash s = memInt 47 (strUnpack s)
@@ -69,26 +83,32 @@ memInt c (x :: rest) = x == c || memInt c rest
 -- ---------------------------------------------------------------
 -- 模块名候选（递归扫描模块根）
 -- ---------------------------------------------------------------
-moduleCompletions : List String -> String -> List String
-moduleCompletions roots token = concatMap (\root => modulesUnder root token) roots
+moduleCompletions : List String -> String -> Eff [] (List String)
+moduleCompletions roots token = concatMapEff (\root => modulesUnder root token) roots
 
-modulesUnder : String -> String -> List String
-modulesUnder root token = filter (\m => startsWith token m) (walkModules 8192 root root)
+modulesUnder : String -> String -> Eff [] (List String)
+modulesUnder root token = do
+  found <- walkModules 8192 root root
+  pure (filter (\m => startsWith token m) found)
 
 -- 递归扫描 `dir`（`root` 是模块根，用于把文件路径换算成模块全名）。
 -- 性能：只在按下 Tab 时扫；`startsWith token` 的过滤放到最后做（先收集路径）。
-walkModules : Int -> String -> String -> List String
-walkModules fuel root dir =
-  if fuel <= 0 then [] else concatMap (walkEntry (fuel - 1) root dir) (safeReadDir dir)
+walkModules : Int -> String -> String -> Eff [] (List String)
+walkModules fuel root dir = if fuel <= 0 then pure []
+else do
+  names <- safeReadDir dir
+  concatMapEff (walkEntry (fuel - 1) root dir) names
 
-walkEntry : Int -> String -> String -> String -> List String
-walkEntry fuel root dir name = if fuel <= 0 then []
-else if name == "" || name == "." || name == ".." || startsWith "." name then []
+walkEntry : Int -> String -> String -> String -> Eff [] (List String)
+walkEntry fuel root dir name = if fuel <= 0 then pure []
+else if name == "" || name == "." || name == ".." || startsWith "." name then pure []
 else
   let
     path = "${dir}/${name}"
-  in if dirExists path then walkModules (fuel - 1) root path
-  else if endsWith ".vuna" name then [moduleNameOf root path] else []
+  in do
+    isDir <- dirExists path
+    if isDir then walkModules (fuel - 1) root path
+    else pure (if endsWith ".vuna" name then [moduleNameOf root path] else [])
 
 dotsOf : String -> String
 dotsOf s = strPack (mapSlashToDot (strUnpack s))
@@ -113,30 +133,37 @@ dropSuffix : String -> String -> String
 dropSuffix suffix s =
   if endsWith suffix s then substring 0 (byteLength s - byteLength suffix) s else s
 
-safeReadDir : String -> List String
-safeReadDir dir = if dirExists dir then runPure (prim_eff_readDir dir) else []
+safeReadDir : String -> Eff [] (List String)
+safeReadDir dir = do
+  exists <- dirExists dir
+  if exists then prim_eff_readDir dir else pure []
 
 -- prim_eff_isDirectory 对不存在的路径会抛宿主异常，必须先判存在（与 Cli.Args 的约定一致）。
-dirExists : String -> Bool
-dirExists path = runPure (prim_eff_fileExists path) && runPure (prim_eff_isDirectory path)
+dirExists : String -> Eff [] Bool
+dirExists path = do
+  exists <- prim_eff_fileExists path
+  if exists then prim_eff_isDirectory path else pure False
 
 -- ---------------------------------------------------------------
 -- 文件路径候选
 -- ---------------------------------------------------------------
-pathCompletions : String -> List String
+pathCompletions : String -> Eff [] (List String)
 pathCompletions token =
   let
     Pair dirText base = splitLastSlash token
     dir = if dirText == "" then "." else dirText
-    entries =
-      filter (\n => startsWith base n && n /= base && not (startsWith "." n)) (safeReadDir dir)
-  in map (\n => pathCandidate dirText dir n) entries
+  in do
+    entries <- safeReadDir dir
+    mapEff (\n => pathCandidate dirText dir n)
+      (filter (\n => startsWith base n && n /= base && not (startsWith "." n)) entries)
 
-pathCandidate : String -> String -> String -> String
+pathCandidate : String -> String -> String -> Eff [] String
 pathCandidate dirText dir name =
   let
     shown = if dirText == "" then name else "${dirText}/${name}"
-  in if dirExists "${dir}/${name}" then "${shown}/" else shown
+  in do
+    isDir <- dirExists "${dir}/${name}"
+    pure (if isDir then "${shown}/" else shown)
 
 -- 按**最后一个** `/` 拆成 (目录, 末段)；没有 `/` 时目录为空串。
 splitLastSlash : String -> Pair String String

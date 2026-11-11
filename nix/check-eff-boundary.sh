@@ -17,9 +17,10 @@ allow="$root/nix/eff-boundary.allowlist"
 tmp="${TMPDIR:-/tmp}/eff-boundary.$$"
 trap 'rm -f "$tmp"' EXIT
 : >"$tmp"
-for f in $(cd "$root" && grep -rlE '\brun(Pure|IO) \(' compiler/lib lib --include='*.vuna' 2>/dev/null | sort); do
-  n=$(grep -cE '\brun(Pure|IO) \(' "$root/$f")
-  printf '%s %s\n' "$f" "$n" >>"$tmp"
+for f in $(cd "$root" && find compiler/lib lib -name '*.vuna' 2>/dev/null | sort); do
+  # 跨行也算：`runPure` 与 `(` 被 fmt 拆成两行时，逐行 grep 会漏计。
+  n=$(tr '\n' ' ' <"$root/$f" | grep -oE '\brun(Pure|IO)[[:space:]]*\(' | wc -l | tr -d ' ')
+  if [ "$n" -gt 0 ]; then printf '%s %s\n' "$f" "$n" >>"$tmp"; fi
 done
 if [ "${1:-}" = "--update" ]; then
   cp "$tmp" "$allow"

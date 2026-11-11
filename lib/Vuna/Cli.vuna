@@ -442,7 +442,7 @@ replArgs args = case parseToolArgs "vuna repl" [ValueFlag "listen", ValueFlag "c
 replClientWith : String -> Int
 replClientWith addr = case checkReplAddr addr of
   ErrC e => toolError (diagText e)
-  OkC _ => runReplClient addr
+  OkC _ => runPure (runReplClient addr)
 
 -- `--listen`：socket 上的常驻 server；启动目标与交互式同一套解析。
 replServerWith : String -> ReplStart -> Check PackageContext -> Int
@@ -457,9 +457,9 @@ replServerWithTarget addr target priv = case checkReplAddr addr of
 
 replWith : Maybe String -> Int -> ReplStart -> Check PackageContext -> Int
 replWith Nothing _ start (ErrC e) = toolFailure (diagText e)
-replWith Nothing _ start (OkC ctx) = runRepl ctx start
+replWith Nothing _ start (OkC ctx) = runPure (runRepl ctx start)
 replWith (Just addr) _ start (ErrC e) = toolFailure (diagText e)
-replWith (Just addr) _ start (OkC ctx) = runReplServer ctx start addr
+replWith (Just addr) _ start (OkC ctx) = runPure (runReplServer ctx start addr)
 
 -- 启动目标：存在目录 → 该包上下文；存在文件 → 文件所在包上下文 + 启动加载；
 -- 不存在且像模块名 → cwd 上下文 + 启动导入；其它报可操作错误。

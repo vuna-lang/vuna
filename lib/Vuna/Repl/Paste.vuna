@@ -16,19 +16,21 @@ module Vuna.Repl.Paste (pasteDisable, pasteEnable, readPasteBody) where
 import Vuna.Compiler.Common
 import Vuna.Repl.Paste.Decode
 import Vuna.Repl.Term
+import Base.Host
 
 -- 读粘贴体（起点在 `\e[200~` 之后）：逐字节喂状态机，读到 `\e[201~` 或 EOF/超时
 -- （termReadByte 返回 -1）为止。fuel 是字节数守卫（1 MiB），防终端异常时无限读。
-readPasteBody : Int -> String
-readPasteBody _ = strPack (reverse (readPasteGo 1048576 emptyPasteState).pasteContent)
+readPasteBody : Int -> Eff [] String
+readPasteBody _ = do
+  st <- readPasteGo 1048576 emptyPasteState
+  pure (strPack (reverse st.pasteContent))
 
-readPasteGo : Int -> PasteState -> PasteState
-readPasteGo fuel st = if fuel <= 0 then st
-else if pasteIsDone st then st
-else
-  let
-    b = termReadByte 0
-  in if b < 0 then st else readPasteGo (fuel - 1) (pasteFeed st (normalizePasteByte b))
+readPasteGo : Int -> PasteState -> Eff [] PasteState
+readPasteGo fuel st = if fuel <= 0 then pure st
+else if pasteIsDone st then pure st
+else do
+  b <- termReadByte 0
+  if b < 0 then pure st else readPasteGo (fuel - 1) (pasteFeed st (normalizePasteByte b))
 
 -- 终端粘贴的行尾可能是 CR / CRLF 的前半；缓冲里只保留裸 LF。
 normalizePasteByte : Int -> Int
@@ -37,8 +39,8 @@ normalizePasteByte b = if b == 13 then 10 else b
 -- ---------------------------------------------------------------
 -- 终端开关
 -- ---------------------------------------------------------------
-pasteEnable : Int -> Int
+pasteEnable : Int -> Eff [] Int
 pasteEnable _ = writeOut "${escCode}[?2004h"
 
-pasteDisable : Int -> Int
+pasteDisable : Int -> Eff [] Int
 pasteDisable _ = writeOut "${escCode}[?2004l"

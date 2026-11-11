@@ -300,52 +300,53 @@ ansi code s = "${escCode}[${code}m${s}${escCode}[0m"
 c : ReplState -> String -> String -> String
 c st code s = if st.stateSettings.settingColorOn then ansi code s else s
 
-isTTY : Int -> Bool
-isTTY _ = runPure (prim_eff_runIn "." ["sh", "-c", "test -t 0 && test -t 1"]) == 0
+isTTY : Int -> Eff [] Bool
+isTTY _ = do
+  code <- prim_eff_runIn "." ["sh", "-c", "test -t 0 && test -t 1"]
+  pure (code == 0)
 
-autoColorOk : Int -> Bool
-autoColorOk _ =
-  let
-    noColor = runPure (prim_eff_getenv "NO_COLOR")
-    term = runPure (prim_eff_getenv "TERM")
-  in noColor == "" && term /= "dumb"
+autoColorOk : Int -> Eff [] Bool
+autoColorOk _ = do
+  noColor <- prim_eff_getenv "NO_COLOR"
+  term <- prim_eff_getenv "TERM"
+  pure (noColor == "" && term /= "dumb")
 
 -- mode：0 auto / 1 on / 2 off。
-resolveColorOn : Int -> Bool -> Bool
-resolveColorOn 1 tty = True
-resolveColorOn 2 tty = False
-resolveColorOn _ tty = tty && autoColorOk 0
+resolveColorOn : Int -> Bool -> Eff [] Bool
+resolveColorOn 1 tty = pure True
+resolveColorOn 2 tty = pure False
+resolveColorOn _ tty = if tty then autoColorOk 0 else pure False
 
 -- editing：0 auto / 1 on / 2 off；非 tty 永远不可用。
 editingEnabled : ReplState -> Bool
 editingEnabled st = st.stateSettings.settingTty && st.stateSettings.settingEditing /= 2
 
-defaultSettings : Bool -> ReplSettings
-defaultSettings tty = ReplSettings False False 0 0 defaultPrompt tty (resolveColorOn 0 tty)
+defaultSettings : Bool -> Eff [] ReplSettings
+defaultSettings tty = do
+  on <- resolveColorOn 0 tty
+  pure (ReplSettings False False 0 0 defaultPrompt tty on)
 
 -- ---------------------------------------------------------------
 -- 打印 helper
 -- ---------------------------------------------------------------
 -- 唯一输出出口：交互式写 stdout；server 模式追加到 capture 缓冲。
 -- 返回写入的字节数（与 `prim_eff_print` 一致，供 `printImplicitParts` 这类累加用法）。
-replEmit : ReplState -> String -> Int
+replEmit : ReplState -> String -> Eff [] Int
 replEmit st s = case st.stateSink of
-  SinkStdout => runPure (prim_eff_print s)
-  SinkCapture outRef _ =>
-    let
-      cur = runPure (readRef outRef)
-      _ = runPure (writeRef outRef (cur ++ s))
-    in strLength s
+  SinkStdout => prim_eff_print s
+  SinkCapture outRef _ => do
+    cur <- readRef outRef
+    _ <- writeRef outRef (cur ++ s)
+    pure (strLength s)
 
 -- 错误通道（server 模式单独收集；`ok` = 该通道为空）。
-replEmitErr : ReplState -> String -> Int
+replEmitErr : ReplState -> String -> Eff [] Int
 replEmitErr st s = case st.stateSink of
-  SinkStdout => runPure (prim_eff_print s)
-  SinkCapture _ errRef =>
-    let
-      cur = runPure (readRef errRef)
-      _ = runPure (writeRef errRef (cur ++ s))
-    in strLength s
+  SinkStdout => prim_eff_print s
+  SinkCapture _ errRef => do
+    cur <- readRef errRef
+    _ <- writeRef errRef (cur ++ s)
+    pure (strLength s)
 
 -- capture 汇（server 模式）：子进程类效果（`:!` / 效果表达式）在阶段 1 拒绝执行。
 captureMode : ReplState -> Bool
@@ -353,20 +354,19 @@ captureMode st = case st.stateSink of
   SinkStdout => False
   SinkCapture _ _ => True
 
-printDiag : ReplState -> Diagnostic -> Int
+printDiag : ReplState -> Diagnostic -> Eff [] Int
 printDiag st d = printError st (diagText d)
 
-printError : ReplState -> String -> Int
+printError : ReplState -> String -> Eff [] Int
 printError st msg = replEmitErr st "${c st "31" "错误: "}${msg}\n"
 
-printHint : ReplState -> String -> Int
+printHint : ReplState -> String -> Eff [] Int
 printHint st msg = replEmit st "${c st "33" msg}\n"
 
-printOk : ReplState -> String -> ReplOutcome
-printOk st msg =
-  let
-    _ = replEmit st "${msg}\n"
-  in ReplContinue st
+printOk : ReplState -> String -> Eff [] ReplOutcome
+printOk st msg = do
+  _ <- replEmit st "${msg}\n"
+  pure (ReplContinue st)
 
 -- ---------------------------------------------------------------
 -- server 模式会话 API（Vuna.Repl.Server / Vuna.Repl.Client 使用）
@@ -374,24 +374,24 @@ printOk st msg =
 -- 起一个 session：非 tty 设置（无颜色 / 无行编辑）、历史文件为空（不读不写盘；
 -- 内存历史与 `:history` / `:again` 仍可用）、不打印 banner；`applyStart` 的提示消息
 -- 随 Ok 返回，由调用方决定是否放进协议响应。
-startReplSession : PackageContext -> ReplStart -> ReplSink -> Check (Pair ReplState String)
-startReplSession ctx start sink =
+startReplSession : PackageContext -> ReplStart -> ReplSink -> Eff [] (Check (Pair ReplState String))
+startReplSession ctx start sink = do
+  settings <- defaultSettings False
   let
-    settings = defaultSettings False
     st0 = initialState ctx settings [] "" sink
-  in applyStart st0 start
+  in do
+    pure (applyStart st0 start)
 
 -- 读出并清空两个 capture 通道（普通输出, 错误输出）；stdout 汇返回两个空串。
-replOutputDrain : ReplState -> Pair String String
+replOutputDrain : ReplState -> Eff [] (Pair String String)
 replOutputDrain st = case st.stateSink of
-  SinkStdout => Pair "" ""
-  SinkCapture outRef errRef =>
-    let
-      out = runPure (readRef outRef)
-      err = runPure (readRef errRef)
-      _ = runPure (writeRef outRef "")
-      _ = runPure (writeRef errRef "")
-    in Pair out err
+  SinkStdout => pure (Pair "" "")
+  SinkCapture outRef errRef => do
+    out <- readRef outRef
+    err <- readRef errRef
+    _ <- writeRef outRef ""
+    _ <- writeRef errRef ""
+    pure (Pair out err)
 
 -- 还有未完成的输入（续行 pending 或 `:{` 块未闭合）？
 replPendingOpen : ReplState -> Bool
@@ -401,14 +401,15 @@ replPendingOpen st = case st.stateBlock of
 
 -- 「输入结束」收尾：pending 完整则提交（等价交互式空行 / Ctrl-D 的补交），
 -- `:{` 块未闭合或仍 needsMore 则保持 pending。
-finishInput : ReplState -> ReplOutcome
-finishInput st = if st.statePending == "" then ReplContinue st
-else if needsMore st.statePending then ReplContinue st
+finishInput : ReplState -> Eff [] ReplOutcome
+finishInput st = if st.statePending == "" then pure (ReplContinue st)
+else if needsMore st.statePending then pure (ReplContinue st)
 else
   let
     unit = trim st.statePending
-    st1 = remember (withPending st "") unit
-  in submitText st1 unit
+  in do
+    st1 <- remember (withPending st "") unit
+    submitText st1 unit
 
 -- ---------------------------------------------------------------
 -- 名称 / 列表 / 块 helper
@@ -491,19 +492,16 @@ bufferSigNames st = dedupStrs (concatMap blockSignsOf st.stateDefs)
 -- ---------------------------------------------------------------
 -- 历史（内存 + 持久化；文件的单行/多行单元编码见 Vuna.Repl.History）
 -- ---------------------------------------------------------------
-historyFilePath : Int -> String
-historyFilePath _ =
-  let
-    env = runPure (prim_eff_getenv "VUNA_REPL_HISTORY")
-  in if env /= "" then env
-  else
-    let
-      xdg = runPure (prim_eff_getenv "XDG_STATE_HOME")
-    in if xdg /= "" then "${xdg}/vuna/repl_history"
-    else
-      let
-        home = runPure (prim_eff_getenv "HOME")
-      in if home == "" then "" else "${home}/.vuna_repl_history"
+historyFilePath : Int -> Eff [] String
+historyFilePath _ = do
+  env <- prim_eff_getenv "VUNA_REPL_HISTORY"
+  if env /= "" then pure env
+  else do
+    xdg <- prim_eff_getenv "XDG_STATE_HOME"
+    if xdg /= "" then pure "${xdg}/vuna/repl_history"
+    else do
+      home <- prim_eff_getenv "HOME"
+      pure (if home == "" then "" else "${home}/.vuna_repl_history")
 
 -- 读历史文件：v2（有头，`\n` 转义）或旧 v1（纯文本一行一条）由 History 判别。
 historyEntriesOf : String -> List String
@@ -516,34 +514,32 @@ loadHistoryFrom path = if path == "" then [] else takeLast replMaxHistory (histo
 
 -- 持久化：整份历史（旧条目 + 新单元）重写成 v2 格式；目录不存在时用 mkdir -p，父目录
 -- 不可写（沙箱 / 只读 HOME）时静默跳过。写失败不能把 REPL 拖崩，历史只是便利功能。
-persistHistory : ReplState -> String -> Int
-persistHistory st unit = if st.stateHistoryFile == "" then 0
+persistHistory : ReplState -> String -> Eff [] Int
+persistHistory st unit = if st.stateHistoryFile == "" then pure 0
 else
   let
     dir = parentOf st.stateHistoryFile
-    _ = runPure (prim_eff_runIn "." ["mkdir", "-p", dir])
-    writable = runPure (prim_eff_runIn "." ["sh", "-c", "test -w ${shellQuote dir}"]) == 0
-  in if not writable then 0
-  else
-    let
-      old = historyEntriesOf st.stateHistoryFile
-      lines2 = trimHistory (appendLast old unit)
-    in runPure (prim_eff_writeFileAtomic st.stateHistoryFile (renderHistoryFile lines2))
+  in do
+    _ <- prim_eff_runIn "." ["mkdir", "-p", dir]
+    writable <- prim_eff_runIn "." ["sh", "-c", "test -w ${shellQuote dir}"]
+    if writable /= 0 then pure 0
+    else
+      let
+        old = historyEntriesOf st.stateHistoryFile
+        lines2 = trimHistory (appendLast old unit)
+      in prim_eff_writeFileAtomic st.stateHistoryFile (renderHistoryFile lines2)
 
 -- 提交一个完整输入单元：记入内存历史（连续重复去重）并持久化（多行单元编码后仍是一行）。
-remember : ReplState -> String -> ReplState
-remember st unit = if trim unit == "" then st
+remember : ReplState -> String -> Eff [] ReplState
+remember st unit = if trim unit == "" then pure st
 else
   let
     u = trim unit
-  in if lastHistoryIs st.stateHistory u then st
-  else
-    let
-      _ = persistHistory st u
-    in ReplState st.stateCtx st.stateImports st.stateDefs st.statePending st.stateBlock
-      st.stateLoadKind st.stateLoadTarget st.stateBrowseIndex st.stateSettings
-      (trimHistory (appendLast st.stateHistory u)) st.stateHistoryFile st.stateAuxCache
-      st.stateToolSession st.stateIndexCache st.stateSink
+  in if lastHistoryIs st.stateHistory u then pure st
+  else do
+    _ <- persistHistory st u
+    pure
+      (ReplState st.stateCtx st.stateImports st.stateDefs st.statePending st.stateBlock st.stateLoadKind st.stateLoadTarget st.stateBrowseIndex st.stateSettings (trimHistory (appendLast st.stateHistory u)) st.stateHistoryFile st.stateAuxCache st.stateToolSession st.stateIndexCache st.stateSink)
 
 lastHistoryIs : List String -> String -> Bool
 lastHistoryIs [] u = False
@@ -564,34 +560,31 @@ promptRendered st = case st.stateBlock of
   Just block => c st "36" (promptPlain st)
   Nothing => if st.statePending == "" then c st "36" (promptPlain st) else c st "2" (promptPlain st)
 
-readInputPlain : ReplState -> ReadResult
-readInputPlain st =
-  let
-    _ = replEmit st (promptRendered st)
-  in let
-    raw = runPure prim_eff_readLine
-  in if trim raw == "" then
-    let
-      next = runPure prim_eff_readLine
-    in if next == "" then ReadEof else ReadBlankLine next
-  else ReadLine raw
+readInputPlain : ReplState -> Eff [] ReadResult
+readInputPlain st = do
+  _ <- replEmit st (promptRendered st)
+  raw <- prim_eff_readLine
+  if trim raw == "" then do
+    next <- prim_eff_readLine
+    pure (if next == "" then ReadEof else ReadBlankLine next)
+  else pure (ReadLine raw)
 
-readInput : ReplState -> ReadResult
-readInput st = if editingEnabled st then
-  let
-    outcome = editLine (editConfig st)
-  in case outcome of
-    EditLine text => ReadLine text
-    EditEof => ReadEof
-    EditCancel => ReadCancel
+readInput : ReplState -> Eff [] ReadResult
+readInput st = if editingEnabled st then do
+  cfg <- editConfig st
+  outcome <- editLine cfg
+  case outcome of
+    EditLine text => pure (ReadLine text)
+    EditEof => pure ReadEof
+    EditCancel => pure ReadCancel
     EditUnavailable => readInputPlain st
 else readInputPlain st
 
-editConfig : ReplState -> EditConfig
-editConfig st =
-  EditConfig (promptRendered st) (byteLength (promptPlain st)) st.stateHistory
-    (completionCandidates st) (terminalWidth 0) st.stateSettings.settingColorOn
-    (map rootDir (contextRoots st.stateCtx))
+editConfig : ReplState -> Eff [] EditConfig
+editConfig st = do
+  width <- terminalWidth 0
+  pure
+    (EditConfig (promptRendered st) (byteLength (promptPlain st)) st.stateHistory (completionCandidates st) width st.stateSettings.settingColorOn (map rootDir (contextRoots st.stateCtx)))
 
 completionCandidates : ReplState -> List String
 completionCandidates st =
@@ -600,24 +593,22 @@ completionCandidates st =
 -- ---------------------------------------------------------------
 -- 主循环
 -- ---------------------------------------------------------------
-runRepl : PackageContext -> ReplStart -> Int
-runRepl ctx start =
+runRepl : PackageContext -> ReplStart -> Eff [] Int
+runRepl ctx start = do
+  tty <- isTTY 0
+  settings <- defaultSettings tty
+  histFile <- historyFilePath 0
   let
-    tty = isTTY 0
-    settings = defaultSettings tty
-    histFile = historyFilePath 0
-    history = loadHistoryFrom histFile
-    st0 = initialState ctx settings history histFile SinkStdout
-    _ = replEmit st0 (bannerText st0)
-  in case applyStart st0 start of
-    ErrC e =>
-      let
-        _ = printDiag st0 e
-      in 2
-    OkC (Pair st1 msg) =>
-      let
-        _ = replEmit st1 "${msg}\n"
-      in replLoop replFuelBound st1
+    st0 = initialState ctx settings (loadHistoryFrom histFile) histFile SinkStdout
+  in do
+    _ <- replEmit st0 (bannerText st0)
+    case applyStart st0 start of
+      ErrC e => do
+        _ <- printDiag st0 e
+        pure 2
+      OkC (Pair st1 msg) => do
+        _ <- replEmit st1 "${msg}\n"
+        replLoop replFuelBound st1
 
 bannerText : ReplState -> String
 bannerText st = """vuna repl ${vunaVersion} · ${packageLabel st}
@@ -641,135 +632,146 @@ applyStart st (StartFile path) =
     >>= (\p => OkC (Pair (secondOf p) "已加载 ${path}（${firstOf p} 个定义）"))
 applyStart st (StartModule m) = doLoadModule st m >>= (\s => OkC (Pair s "已导入模块 ${m}"))
 
-replLoop : Int -> ReplState -> Int
-replLoop fuel st = if fuel <= 0 then 0
-else case readInput st of
-  ReadEof => finishAtEof st
-  ReadCancel =>
-    let
-      _ = printHint st "^C"
-    in replLoop (fuel - 1) (withBlock (withPending st "") Nothing)
-  ReadLine raw => case inputStep st raw of
-    ReplExit code => code
-    ReplContinue st2 => replLoop (fuel - 1) st2
-  ReadBlankLine next => case blankStep st next of
-    ReplExit code => code
-    ReplContinue st2 => replLoop (fuel - 1) st2
+replLoop : Int -> ReplState -> Eff [] Int
+replLoop fuel st = if fuel <= 0 then pure 0
+else do
+  input <- readInput st
+  case input of
+    ReadEof => finishAtEof st
+    ReadCancel => do
+      _ <- printHint st "^C"
+      replLoop (fuel - 1) (withBlock (withPending st "") Nothing)
+    ReadLine raw => do
+      outcome <- inputStep st raw
+      case outcome of
+        ReplExit code => pure code
+        ReplContinue st2 => replLoop (fuel - 1) st2
+    ReadBlankLine next => do
+      outcome <- blankStep st next
+      case outcome of
+        ReplExit code => pure code
+        ReplContinue st2 => replLoop (fuel - 1) st2
 
 -- 一行输入：块模式 / 续行 / 普通行。
-inputStep : ReplState -> String -> ReplOutcome
+inputStep : ReplState -> String -> Eff [] ReplOutcome
 inputStep st raw = case st.stateBlock of
   Just block => blockStep st block raw
   Nothing => if st.statePending == "" then lineStep st raw else pendingStep st raw
 
 -- 普通行：`:{}` → 块；冒号命令；续行；import；定义/表达式。
-lineStep : ReplState -> String -> ReplOutcome
+lineStep : ReplState -> String -> Eff [] ReplOutcome
 -- 命令保留行尾空白（`:set prompt X> ` 的尾空格有意义）；历史里存 trim 后的文本。
 lineStep st raw =
   let
     line = trim raw
-  in if line == ":{" then ReplContinue (withBlock st (Just ""))
-  else if startsWith ":" line then commandStep (remember st line) (trimLeftSpaces raw)
-  else if needsMore line then ReplContinue (withPending st "${line}\n")
-  else if startsWith "import " line then addImport (remember st line) line
-  else submitText (remember st line) line
+  in if line == ":{" then pure (ReplContinue (withBlock st (Just "")))
+  else if startsWith ":" line then do
+    st2 <- remember st line
+    commandStep st2 (trimLeftSpaces raw)
+  else if needsMore line then pure (ReplContinue (withPending st "${line}\n"))
+  else if startsWith "import " line then do
+    st2 <- remember st line
+    addImport st2 line
+  else do
+    st2 <- remember st line
+    submitText st2 line
 
 -- `:{ ... :}`：原样收集；`:}` 提交（去公共缩进），块内支持 :abandon/:q。
-blockStep : ReplState -> String -> String -> ReplOutcome
+blockStep : ReplState -> String -> String -> Eff [] ReplOutcome
 blockStep st block raw = if trim raw == ":}" then
   let
     unit = dedentBlock block
-  in if trim unit == "" then ReplContinue (withBlock st Nothing)
-  else submitText (withBlock (remember st unit) Nothing) unit
-else if trim raw == ":abandon" then
-  let
-    _ = printHint st "已放弃当前输入"
-  in ReplContinue (withBlock st Nothing)
-else if trim raw == ":q" || trim raw == ":quit" then ReplExit 0
-else ReplContinue (withBlock st (Just "${block}${raw}\n"))
+  in if trim unit == "" then pure (ReplContinue (withBlock st Nothing))
+  else do
+    st2 <- remember st unit
+    submitText (withBlock st2 Nothing) unit
+else if trim raw == ":abandon" then do
+  _ <- printHint st "已放弃当前输入"
+  pure (ReplContinue (withBlock st Nothing))
+else if trim raw == ":q" || trim raw == ":quit" then pure (ReplExit 0)
+else pure (ReplContinue (withBlock st (Just "${block}${raw}\n")))
 
 -- 续行：保留缩进；去缩进行/空行收尾；`:q` 可退出。
-pendingStep : ReplState -> String -> ReplOutcome
-pendingStep st raw = if trim raw == ":q" || trim raw == ":quit" then ReplExit 0
-else if trim raw == ":abandon" then
-  let
-    _ = printHint st "已放弃当前输入"
-  in ReplContinue (withPending st "")
+pendingStep : ReplState -> String -> Eff [] ReplOutcome
+pendingStep st raw = if trim raw == ":q" || trim raw == ":quit" then pure (ReplExit 0)
+else if trim raw == ":abandon" then do
+  _ <- printHint st "已放弃当前输入"
+  pure (ReplContinue (withPending st ""))
 else
   let
     pending2 = "${st.statePending}${raw}\n"
-  in if countChar 10 pending2 > replMaxPendingLines then
-    let
-      _ = printError st "续行超过 ${replMaxPendingLines} 行，已丢弃当前输入"
-    in ReplContinue (withPending st "")
-  else if needsMore pending2 then ReplContinue (withPending st pending2)
-  else if startsIndented raw then ReplContinue (withPending st pending2)
+  in if countChar 10 pending2 > replMaxPendingLines then do
+    _ <- printError st "续行超过 ${replMaxPendingLines} 行，已丢弃当前输入"
+    pure (ReplContinue (withPending st ""))
+  else if needsMore pending2 then pure (ReplContinue (withPending st pending2))
+  else if startsIndented raw then pure (ReplContinue (withPending st pending2))
   else
     let
       unit = trim pending2
-      st1 = remember (withPending st "") unit
-    in submitText st1 unit
+    in do
+      st1 <- remember (withPending st "") unit
+      submitText st1 unit
 
 -- 空行：块内保留空行；pending 完整则提交，不完整则保留并提示；无 pending 直接处理下一行。
-blankStep : ReplState -> String -> ReplOutcome
+blankStep : ReplState -> String -> Eff [] ReplOutcome
 blankStep st next = case st.stateBlock of
   Just block => inputStep (withBlock st (Just "${block}\n")) next
   Nothing => if st.statePending == "" then inputStep st next
-  else if needsMore st.statePending then
-    let
-      _ = printError st "输入不完整（已保留；继续输入或 :abandon 放弃）"
-    in inputStep st next
+  else if needsMore st.statePending then do
+    _ <- printError st "输入不完整（已保留；继续输入或 :abandon 放弃）"
+    inputStep st next
   else
     let
       unit = trim st.statePending
-      st1 = remember (withPending st "") unit
-    in case submitText st1 unit of
-      ReplExit code => ReplExit code
-      ReplContinue st2 => inputStep st2 next
+    in do
+      st1 <- remember (withPending st "") unit
+      outcome <- submitText st1 unit
+      case outcome of
+        ReplExit code => pure (ReplExit code)
+        ReplContinue st2 => inputStep st2 next
 
-finishAtEof : ReplState -> Int
-finishAtEof st = case finishInput st of
-  ReplExit code => code
-  ReplContinue st2 => if st2.statePending == "" then 0
-  else
-    let
-      _ = printError st2 "输入不完整，已丢弃当前输入"
-    in 0
+finishAtEof : ReplState -> Eff [] Int
+finishAtEof st = do
+  outcome <- finishInput st
+  case outcome of
+    ReplExit code => pure code
+    ReplContinue st2 => if st2.statePending == "" then pure 0
+    else do
+      _ <- printError st2 "输入不完整，已丢弃当前输入"
+      pure 0
 
 -- ---------------------------------------------------------------
 -- import / 定义
 -- ---------------------------------------------------------------
-addImport : ReplState -> String -> ReplOutcome
+addImport : ReplState -> String -> Eff [] ReplOutcome
 addImport st line =
   let
     imports2 = "${st.stateImports}${line}\n"
   in case parseSource replTempFile (imports2 ++ bufferDefs st) of
-    ErrC e =>
-      let
-        _ = printError st "parse error: ${diagText e}"
-      in ReplContinue st
-    OkC _ => ReplContinue (withImports st imports2)
+    ErrC e => do
+      _ <- printError st "parse error: ${diagText e}"
+      pure (ReplContinue st)
+    OkC _ => pure (ReplContinue (withImports st imports2))
 
 -- 定义还是表达式：整段能解析成顶层声明就追加到定义缓冲，否则按表达式求值。
 -- 缺签名的 DFun 先走自动签名（写回后复查，失败回滚）。
-submitText : ReplState -> String -> ReplOutcome
+submitText : ReplState -> String -> Eff [] ReplOutcome
 submitText st text = case parseSource replTempFile "${bufferProgram st}${text}\n" of
   OkC (SourceFile hdr imp fx decls) => case hdr of
     Just md => evalText st text
     Nothing => appendDecls st text
   ErrC e => evalText st text
 
-appendDecls : ReplState -> String -> ReplOutcome
+appendDecls : ReplState -> String -> Eff [] ReplOutcome
 appendDecls st text = case parseSource replTempFile text of
   OkC (SourceFile Nothing _ _ newDecls) => case prepareRedefinition st newDecls of
-    ErrC e =>
-      let
-        _ = printDiag st e
-      in ReplContinue st
+    ErrC e => do
+      _ <- printDiag st e
+      pure (ReplContinue st)
     OkC stRemoved =>
       let
         targets = missingTargets newDecls (bufferSigNames stRemoved)
-      in if lenInt targets == 0 then ReplContinue (withDefs stRemoved (appendLast stRemoved.stateDefs (mkBlock text False)))
+      in if lenInt targets == 0 then pure (ReplContinue (withDefs stRemoved (appendLast stRemoved.stateDefs (mkBlock text False))))
       else inferAndAppend st stRemoved text targets
   _ => evalText st text
 
@@ -805,30 +807,29 @@ missingTargets decls existing =
   filter (\n => not (memName n (sigNamesOf decls)) && not (memName n existing))
     (dedupStrs (funNamesOf decls))
 
-inferAndAppend : ReplState -> ReplState -> String -> List String -> ReplOutcome
+inferAndAppend : ReplState -> ReplState -> String -> List String -> Eff [] ReplOutcome
 inferAndAppend stOrig stRemoved text targets =
   let
     ctx = stRemoved.stateCtx
   in case inferDefTypes ctx (bufferProgram stRemoved) targets text of
-    ErrC e =>
-      let
-        _ = printError stOrig "无法自动推断签名：${diagText e}"
-        _ =
-          printHint stOrig
-            "提示: 带模式匹配 / trait 约束 / 高阶参数的定义请先写类型签名（如 `f : Int -> Int`）"
-      in ReplContinue stOrig
+    ErrC e => do
+      _ <- printError stOrig "无法自动推断签名：${diagText e}"
+      _ <-
+        printHint stOrig
+          "提示: 带模式匹配 / trait 约束 / 高阶参数的定义请先写类型签名（如 `f : Int -> Int`）"
+      pure (ReplContinue stOrig)
     OkC sigs =>
       let
         text2 = join "" (map sigLine sigs) ++ text
       in case checkProgram ctx "${bufferProgram stRemoved}\n${text2}\n" of
-        ErrC e =>
-          let
-            _ =
-              printError stOrig
-                "自动推断的签名未通过复查（请手写签名）：${diagText e}"
-          in ReplContinue stOrig
+        ErrC e => do
+          _ <-
+            printError stOrig
+              "自动推断的签名未通过复查（请手写签名）：${diagText e}"
+          pure (ReplContinue stOrig)
         OkC _ =>
-          ReplContinue (withDefs stRemoved (appendLast stRemoved.stateDefs (mkBlock text2 False)))
+          pure
+            (ReplContinue (withDefs stRemoved (appendLast stRemoved.stateDefs (mkBlock text2 False))))
 
 sigLine : Pair String String -> String
 sigLine p = "${firstOf p} : ${secondOf p}\n"
@@ -905,85 +906,77 @@ evalExprInfoRebuild st program expr = case replToolSession st.stateCtx program o
 -- ---------------------------------------------------------------
 -- 表达式求值
 -- ---------------------------------------------------------------
-evalText : ReplState -> String -> ReplOutcome
-evalText st text =
-  let
-    start = runPure effTimeUs
-  in case parseExpressionSource text of
-    ErrC e =>
-      let
-        _ = printDiag st e
-      in ReplContinue (withPending st "")
+evalText : ReplState -> String -> Eff [] ReplOutcome
+evalText st text = do
+  start <- effTimeUs
+  case parseExpressionSource text of
+    ErrC e => do
+      _ <- printDiag st e
+      pure (ReplContinue (withPending st ""))
     OkC _ => case evalExprInfoWithSession st (bufferProgram st) text of
       Pair session res => case res of
-        ErrC e =>
-          let
-            _ = printDiag st e
-          in ReplContinue (withToolSession (withPending st "") session)
+        ErrC e => do
+          _ <- printDiag st e
+          pure (ReplContinue (withToolSession (withPending st "") session))
         OkC (Pair info aux2) =>
           let
             tyText = secondOf info
             st2 = withToolSession (withAuxCache st aux2) session
-          in if isIOTypeText tyText then
-            let
-              _ = evalIO st2 text tyText
-              _ = printTypeLine st2 tyText
-              _ = printTiming st2 start
-            in ReplContinue (withPending st2 "")
-          else
-            let
-              _ = replEmit st2 "${c st2 "32" (firstOf info)}\n"
-              _ = printTypeLine st2 tyText
-              _ = printTiming st2 start
-            in ReplContinue (withPending st2 "")
+          in if isIOTypeText tyText then do
+            _ <- evalIO st2 text tyText
+            _ <- printTypeLine st2 tyText
+            _ <- printTiming st2 start
+            pure (ReplContinue (withPending st2 ""))
+          else do
+            _ <- replEmit st2 "${c st2 "32" (firstOf info)}\n"
+            _ <- printTypeLine st2 tyText
+            _ <- printTiming st2 start
+            pure (ReplContinue (withPending st2 ""))
 
-printTypeLine : ReplState -> String -> Int
+printTypeLine : ReplState -> String -> Eff [] Int
 printTypeLine st ty =
-  if st.stateSettings.settingPrintTypes then replEmit st "${c st "2" "  :: ${ty}"}\n" else 0
+  if st.stateSettings.settingPrintTypes then replEmit st "${c st "2" "  :: ${ty}"}\n" else pure 0
 
-printTiming : ReplState -> Int -> Int
-printTiming st start = if st.stateSettings.settingTiming then
+printTiming : ReplState -> Int -> Eff [] Int
+printTiming st start = if st.stateSettings.settingTiming then do
+  us <- effTimeUs
   let
-    us = runPure effTimeUs
     delta = imax 0 (us - start)
     ms = delta / 1000
     text = if ms <= 0 then "<1 ms" else "${ms} ms"
   in replEmit st "${c st "2" "  [${text}]"}\n"
-else 0
+else pure 0
 
 -- IO 表达式：合成 `main : <类型>` + `main = <表达式>`，临时编译并运行。
-evalIO : ReplState -> String -> String -> Int
-evalIO st text tyText = if captureMode st then
-  let
-    _ =
-      printError st
-        "server 模式暂不执行效果表达式（子进程会写真实 stdout，污染协议通道）；请用 `vuna run` 或 `vuna build` 后直接运行"
-  in 0
-else if hasMainDef (bufferProgram st) then
-  let
-    _ =
-      printError st
-        "程序已经定义了 main，无法把表达式当作效果入口（先 :reset 或改名）"
-  in 0
-else if hasUnsolvedMeta tyText then
-  let
-    _ =
-      printError st
-        "无法确定动作表达式的完整类型（${tyText}）；先定义成带签名的值再求值（如 `prog : Base.Eff.Eff Base.Eff.Row.Nil Int` + `prog = ...`）"
-  in 0
+evalIO : ReplState -> String -> String -> Eff [] Int
+evalIO st text tyText = if captureMode st then do
+  _ <-
+    printError st
+      "server 模式暂不执行效果表达式（子进程会写真实 stdout，污染协议通道）；请用 `vuna run` 或 `vuna build` 后直接运行"
+  pure 0
+else if hasMainDef (bufferProgram st) then do
+  _ <-
+    printError st
+      "程序已经定义了 main，无法把表达式当作效果入口（先 :reset 或改名）"
+  pure 0
+else if hasUnsolvedMeta tyText then do
+  _ <-
+    printError st
+      "无法确定动作表达式的完整类型（${tyText}）；先定义成带签名的值再求值（如 `prog : Base.Eff.Eff Base.Eff.Row.Nil Int` + `prog = ...`）"
+  pure 0
 else
   let
     source = "${ioTypeImports st tyText}${bufferProgram st}\nmain : ${tyText}\nmain = ${text}\n"
-  in case runPure (runEffectProgram st.stateCtx source (ioPrintResult tyText)) of
-    ErrC e =>
-      let
-        _ = printDiag st e
-      in 0
-    OkC code => if code == 0 then 0
-    else
-      let
-        _ = replEmit st "${c st "33" "[进程退出码 ${code}]"}\n"
-      in code
+  in do
+    result <- runEffectProgram st.stateCtx source (ioPrintResult tyText)
+    case result of
+      ErrC e => do
+        _ <- printDiag st e
+        pure 0
+      OkC code => if code == 0 then pure 0
+      else do
+        _ <- replEmit st "${c st "33" "[进程退出码 ${code}]"}\n"
+        pure code
 
 hasUnsolvedMeta : String -> Bool
 hasUnsolvedMeta tyText = contains "?" tyText
@@ -1170,11 +1163,11 @@ typeOpHint text = case opTokenOf text of
     else if memName op syntaxOps then "`${op}` 是语法符号，不能作为表达式"
     else "运算符不能直接作前缀表达式；加括号当值用：`:type (${op})`"
 
-printTypeOpHint : ReplState -> String -> Int
+printTypeOpHint : ReplState -> String -> Eff [] Int
 printTypeOpHint st text =
   let
     hint = typeOpHint text
-  in if hint == "" then 0 else printHint st "提示: ${hint}"
+  in if hint == "" then pure 0 else printHint st "提示: ${hint}"
 
 -- `:typeinfo` 的文档部分：工作区内按需构建 Index（与 `:info` 同一路径）；
 -- base-only 上下文、REPL 缓冲内的名字、或非简单标识符时静默跳过。
@@ -1194,119 +1187,113 @@ inReplBuffer : ReplState -> String -> Bool
 inReplBuffer st name =
   memName name (append (bufferSigNames st) (concatMap blockDefinesOf st.stateDefs))
 
-printTypeDoc : ReplState -> String -> ReplState
+printTypeDoc : ReplState -> String -> Eff [] ReplState
 printTypeDoc st text =
   let
     name = trim text
-  in if not (isSimpleNameText name) then st
-  else if inReplBuffer st name then st
+  in if not (isSimpleNameText name) then pure st
+  else if inReplBuffer st name then pure st
   else case findManifestDirMaybe (contextDir st.stateCtx) of
-    Nothing => st
-    Just _ => case ensureIndex st of
-      ErrC _ => st
-      OkC (Pair idx st2) => case findSymbol idx name of
-        ErrC _ => st2
-        OkC syms =>
-          let
-            _ = printFirstDoc st2 syms
-          in st2
+    Nothing => pure st
+    Just _ => do
+      ensured <- ensureIndex st
+      case ensured of
+        ErrC _ => pure st
+        OkC (Pair idx st2) => case findSymbol idx name of
+          ErrC _ => pure st2
+          OkC syms => do
+            _ <- printFirstDoc st2 syms
+            pure st2
 
-printFirstDoc : ReplState -> List Sym -> Int
-printFirstDoc st [] = 0
+printFirstDoc : ReplState -> List Sym -> Eff [] Int
+printFirstDoc st [] = pure 0
 printFirstDoc st (sym :: rest) =
   if symDoc sym == "" then printFirstDoc st rest else printDocText st (symDoc sym)
 
-printDocText : ReplState -> String -> Int
+printDocText : ReplState -> String -> Eff [] Int
 printDocText st doc = case lines doc of
-  [] => 0
-  first :: rest =>
-    let
-      _ = replEmit st "  ${c st "2" ("-- | " ++ first)}\n"
-    in printDocRest st rest
+  [] => pure 0
+  first :: rest => do
+    _ <- replEmit st "  ${c st "2" ("-- | " ++ first)}\n"
+    printDocRest st rest
 
-printDocRest : ReplState -> List String -> Int
-printDocRest st [] = 0
-printDocRest st (line :: rest) =
-  let
-    _ = replEmit st "  ${c st "2" ("     " ++ line)}\n"
-  in printDocRest st rest
+printDocRest : ReplState -> List String -> Eff [] Int
+printDocRest st [] = pure 0
+printDocRest st (line :: rest) = do
+  _ <- replEmit st "  ${c st "2" ("     " ++ line)}\n"
+  printDocRest st rest
 
-printImplicitParts : ReplState -> List String -> Int
+printImplicitParts : ReplState -> List String -> Eff [] Int
 printImplicitParts st [] = replEmit st "${c st "2" "  （无隐式参数）"}\n"
-printImplicitParts st segs =
-  let
-    header = replEmit st "  ${c st "1" "隐式参数："}\n"
-  in header + printImplicitSegs st segs
+printImplicitParts st segs = do
+  header <- replEmit st "  ${c st "1" "隐式参数："}\n"
+  rest <- printImplicitSegs st segs
+  pure (header + rest)
 
-printImplicitSegs : ReplState -> List String -> Int
-printImplicitSegs st [] = 0
-printImplicitSegs st (seg :: rest) =
-  let
-    _ = replEmit st "    ${colorTypeText st seg}\n"
-  in printImplicitSegs st rest
+printImplicitSegs : ReplState -> List String -> Eff [] Int
+printImplicitSegs st [] = pure 0
+printImplicitSegs st (seg :: rest) = do
+  _ <- replEmit st "    ${colorTypeText st seg}\n"
+  printImplicitSegs st rest
 
 -- `:type EXPR`：只打印 zonk 后的类型（不求值、不执行效果）。类型构造子（`Maybe`）
 -- 作为项参与表达式精化，因此输出的是它的 kind；限定名同样适用（需先 import）。
-typeStep : ReplState -> String -> ReplOutcome
+typeStep : ReplState -> String -> Eff [] ReplOutcome
 typeStep st exprText = if exprText == "" then commandUsage st ":type"
 else
   let
     expr = normalizeTypeArg exprText
   in case parseExpressionSource expr of
-    ErrC e =>
-      let
-        _ = printDiag st e
-        _ = printTypeOpHint st exprText
-      in ReplContinue st
+    ErrC e => do
+      _ <- printDiag st e
+      _ <- printTypeOpHint st exprText
+      pure (ReplContinue st)
     OkC _ => case evalExprInfoWithSession st (bufferProgram st) expr of
       Pair session res => case res of
-        ErrC e =>
-          let
-            _ = printDiag st e
-            _ = printTypeOpHint st exprText
-          in ReplContinue (withToolSession st session)
-        OkC (Pair info aux2) =>
-          let
-            _ = replEmit st "${exprText} : ${colorTypeText st (trim (secondOf info))}\n"
-          in ReplContinue (withToolSession (withAuxCache st aux2) session)
+        ErrC e => do
+          _ <- printDiag st e
+          _ <- printTypeOpHint st exprText
+          pure (ReplContinue (withToolSession st session))
+        OkC (Pair info aux2) => do
+          _ <- replEmit st "${exprText} : ${colorTypeText st (trim (secondOf info))}\n"
+          pure (ReplContinue (withToolSession (withAuxCache st aux2) session))
 
 -- `:typeinfo`（别名 `:ti`）：主行只显示显式部分，隐式 binder 单独列出；
 -- 简单名字在工作区内再给出 docstring（Index 不可用时静默跳过）。
-typeInfoStep : ReplState -> String -> ReplOutcome
+typeInfoStep : ReplState -> String -> Eff [] ReplOutcome
 typeInfoStep st exprText = if exprText == "" then commandUsage st ":typeinfo"
 else
   let
     expr = normalizeTypeArg exprText
   in case parseExpressionSource expr of
-    ErrC e =>
-      let
-        _ = printDiag st e
-        _ = printTypeOpHint st exprText
-      in ReplContinue st
+    ErrC e => do
+      _ <- printDiag st e
+      _ <- printTypeOpHint st exprText
+      pure (ReplContinue st)
     OkC _ => case evalExprInfoWithSession st (bufferProgram st) expr of
       Pair session res => case res of
-        ErrC e =>
-          let
-            _ = printDiag st e
-            _ = printTypeOpHint st exprText
-          in ReplContinue (withToolSession st session)
+        ErrC e => do
+          _ <- printDiag st e
+          _ <- printTypeOpHint st exprText
+          pure (ReplContinue (withToolSession st session))
         OkC (Pair info aux2) =>
           let
             st2 = withToolSession (withAuxCache st aux2) session
             Pair implicits explicitTy = splitImplicitParts (trim (secondOf info))
-            _ = replEmit st2 "${exprText} : ${colorTypeText st2 explicitTy}\n"
-            _ = printImplicitParts st2 implicits
-            st3 = printTypeDoc st2 exprText
-          in ReplContinue st3
+          in do
+            _ <- replEmit st2 "${exprText} : ${colorTypeText st2 explicitTy}\n"
+            _ <- printImplicitParts st2 implicits
+            st3 <- printTypeDoc st2 exprText
+            pure (ReplContinue st3)
 
 -- ---------------------------------------------------------------
 -- 命令分发
 -- ---------------------------------------------------------------
-commandStep : ReplState -> String -> ReplOutcome
+commandStep : ReplState -> String -> Eff [] ReplOutcome
 commandStep st cmd = commandStepFuel 16 st cmd
 
-commandStepFuel : Int -> ReplState -> String -> ReplOutcome
-commandStepFuel fuel st cmd = if fuel <= 0 then ReplContinue st
+commandStepFuel : Int -> ReplState -> String -> Eff [] ReplOutcome
+commandStepFuel fuel st cmd = if fuel <= 0 then pure (ReplContinue st)
 else
   let
     cmd2 = expandAlias cmd
@@ -1315,7 +1302,7 @@ else
     let
       Pair name restRaw = splitFirst cmd2
     in if name == ":help" then helpStep st (trim restRaw)
-    else if name == ":quit" then ReplExit 0
+    else if name == ":quit" then pure (ReplExit 0)
     else if name == ":reset" then resetStep st
     else if name == ":typeinfo" then typeInfoStep st (trim restRaw)
     else if name == ":type" then typeStep st (trim restRaw)
@@ -1331,19 +1318,19 @@ else
     else if name == ":history" then historyStep st
     else if name == ":again" then againStep fuel st (trim restRaw)
     else if name == ":abandon" then abandonStep st
-    else if name == ":}" then
-      let
-        _ = printError st "没有处于块输入模式"
-      in ReplContinue st
+    else if name == ":}" then do
+      _ <- printError st "没有处于块输入模式"
+      pure (ReplContinue st)
     else unknownCommand st cmd
 
-unknownCommand : ReplState -> String -> ReplOutcome
+unknownCommand : ReplState -> String -> Eff [] ReplOutcome
 unknownCommand st cmd =
   let
     Pair name rest = splitFirst cmd
     hint = suggestCommand name
-    _ = printError st "未知命令 `${cmd}`（输入 :help 查看可用命令）${hint}"
-  in ReplContinue st
+  in do
+    _ <- printError st "未知命令 `${cmd}`（输入 :help 查看可用命令）${hint}"
+    pure (ReplContinue st)
 
 suggestCommand : String -> String
 suggestCommand name =
@@ -1401,10 +1388,10 @@ usageOf name = case lookupPair name usageTable of
   Just u => u
   Nothing => "${name} …"
 
-commandUsage : ReplState -> String -> ReplOutcome
+commandUsage : ReplState -> String -> Eff [] ReplOutcome
 commandUsage st name = printOk st "用法: ${usageOf name}"
 
-helpStep : ReplState -> String -> ReplOutcome
+helpStep : ReplState -> String -> Eff [] ReplOutcome
 helpStep st arg = if arg == "" then printOk st replHelp
 else
   let
@@ -1442,55 +1429,55 @@ replHelp = """命令：
 -- :reset / :abandon
 -- ---------------------------------------------------------------
 -- `:reset` 只清缓冲（定义/import/加载目标/aux），保留包上下文、索引与会话缓存。
-resetStep : ReplState -> ReplOutcome
+resetStep : ReplState -> Eff [] ReplOutcome
 resetStep st =
   let
     st2 =
       ReplState st.stateCtx "" [] "" Nothing 0 "" st.stateBrowseIndex st.stateSettings
         st.stateHistory st.stateHistoryFile Nothing st.stateToolSession st.stateIndexCache
         st.stateSink
-    _ = printOk st2 "已清空"
-  in ReplContinue st2
+  in do
+    _ <- printOk st2 "已清空"
+    pure (ReplContinue st2)
 
-abandonStep : ReplState -> ReplOutcome
+abandonStep : ReplState -> Eff [] ReplOutcome
 abandonStep st = case st.stateBlock of
-  Nothing => if st.statePending == "" then
-    let
-      _ = printHint st "没有待续输入"
-    in ReplContinue st
+  Nothing => if st.statePending == "" then do
+    _ <- printHint st "没有待续输入"
+    pure (ReplContinue st)
   else abandonNow st
   Just block => abandonNow st
 
-abandonNow : ReplState -> ReplOutcome
-abandonNow st =
-  let
-    _ = printHint st "已放弃当前输入"
-  in ReplContinue (withBlock (withPending st "") Nothing)
+abandonNow : ReplState -> Eff [] ReplOutcome
+abandonNow st = do
+  _ <- printHint st "已放弃当前输入"
+  pure (ReplContinue (withBlock (withPending st "") Nothing))
 
 -- ---------------------------------------------------------------
 -- :load / :reload
 -- ---------------------------------------------------------------
-loadStep : ReplState -> String -> ReplOutcome
+loadStep : ReplState -> String -> Eff [] ReplOutcome
 loadStep st arg = if arg == "" then commandUsage st ":load"
-else if runPure (prim_eff_fileExists arg) then if runPure (prim_eff_isDirectory arg) then loadDirStep st arg else loadFileStep st "已加载" arg
-else if isModuleNameStr arg then loadModuleStep st arg "已导入模块"
-else
-  let
-    _ =
+else do
+  exists <- prim_eff_fileExists arg
+  if exists then do
+    isDir <- prim_eff_isDirectory arg
+    if isDir then loadDirStep st arg else loadFileStep st "已加载" arg
+  else if isModuleNameStr arg then loadModuleStep st arg "已导入模块"
+  else do
+    _ <-
       printError st
         "找不到文件或模块: ${arg}（:load 接受 <文件> | <目录> | <Module.Name>）"
-  in ReplContinue st
+    pure (ReplContinue st)
 
-loadFileStep : ReplState -> String -> String -> ReplOutcome
+loadFileStep : ReplState -> String -> String -> Eff [] ReplOutcome
 loadFileStep st verb path = case doLoadFile st path of
-  ErrC e =>
-    let
-      _ = printDiag st e
-    in ReplContinue st
-  OkC (Pair n st2) =>
-    let
-      _ = replEmit st2 "${verb} ${path}（${n} 个定义）\n"
-    in ReplContinue st2
+  ErrC e => do
+    _ <- printDiag st e
+    pure (ReplContinue st)
+  OkC (Pair n st2) => do
+    _ <- replEmit st2 "${verb} ${path}（${n} 个定义）\n"
+    pure (ReplContinue st2)
 
 doLoadFile : ReplState -> String -> Check (Pair Int ReplState)
 doLoadFile st path = case readText path of
@@ -1502,12 +1489,11 @@ doLoadFile st path = case readText path of
         "${path} 是模块文件（含 `module ... where` 头）；用 :load <模块名> 导入，或用 :browse <模块名> 查看接口"
     OkC (SourceFile Nothing _ _ decls) => OkC (Pair (lenInt decls) (loadedFileState st path source))
 
-loadModuleStep : ReplState -> String -> String -> ReplOutcome
+loadModuleStep : ReplState -> String -> String -> Eff [] ReplOutcome
 loadModuleStep st m verb = case doLoadModule st m of
-  ErrC e =>
-    let
-      _ = printDiag st e
-    in ReplContinue st
+  ErrC e => do
+    _ <- printDiag st e
+    pure (ReplContinue st)
   OkC st2 => printOk st2 "${verb} ${m}"
 
 doLoadModule : ReplState -> String -> Check ReplState
@@ -1530,12 +1516,11 @@ doLoadModule st m =
 importAlready : String -> String -> Bool
 importAlready imports m = memName "import ${m}" (map (\l => trim l) (lines imports))
 
-loadDirStep : ReplState -> String -> ReplOutcome
+loadDirStep : ReplState -> String -> Eff [] ReplOutcome
 loadDirStep st dir = case doLoadDir st dir of
-  ErrC e =>
-    let
-      _ = printDiag st e
-    in ReplContinue st
+  ErrC e => do
+    _ <- printDiag st e
+    pure (ReplContinue st)
   OkC st2 => printOk st2 "已切换包 ${packageNameLabel st2}（缓冲与索引已重置）"
 
 doLoadDir : ReplState -> String -> Check ReplState
@@ -1543,12 +1528,11 @@ doLoadDir st dir =
   contextForDir dir
     >>= (\ctx2 => OkC (switchedContext st (if contextPrivileged st.stateCtx then privilegedContext ctx2 else ctx2)))
 
-reloadStep : ReplState -> String -> ReplOutcome
+reloadStep : ReplState -> String -> Eff [] ReplOutcome
 reloadStep st arg = if trim arg /= "" then commandUsage st ":reload"
-else if st.stateLoadKind == 0 then
-  let
-    _ = printError st "还没有 :load 任何文件或模块（先 :load <FILE|DIR|MODULE>）"
-  in ReplContinue st
+else if st.stateLoadKind == 0 then do
+  _ <- printError st "还没有 :load 任何文件或模块（先 :load <FILE|DIR|MODULE>）"
+  pure (ReplContinue st)
 else if st.stateLoadKind == 1 then loadFileStep st "已重新加载" st.stateLoadTarget
 else loadModuleStep st st.stateLoadTarget "已重新加载模块"
 
@@ -1572,87 +1556,87 @@ isWordChar c = c >= 48 && c <= 57 || c >= 65 && c <= 90 || c >= 97 && c <= 122 |
 -- 快照未变就不重读全部源码算内容哈希；变了（新增/删除/编辑，含安全窗内的同 size 编辑）
 -- 才退回完整 `loadOrBuild`。索引只覆盖 workspace 源码，`:load DIR` 换上下文时快照一并清掉。
 -- 命中条件：同一包目录 + stat 快照逐条未变（窗口内文件回落内容哈希）。
-replIndexCacheFresh : ReplIndexCache -> String -> Bool
-replIndexCacheFresh cache dir =
-  cache.indexCacheDir == dir
-    && indexStatsUnchanged cache.indexCacheBuiltSec cache.indexCacheStats (runPure (indexStatsOf cache.indexCacheBuiltSec dir))
+replIndexCacheFresh : ReplIndexCache -> String -> Eff [] Bool
+replIndexCacheFresh cache dir = if cache.indexCacheDir == dir then do
+  current <- indexStatsOf cache.indexCacheBuiltSec dir
+  pure (indexStatsUnchanged cache.indexCacheBuiltSec cache.indexCacheStats current)
+else pure False
 
-ensureIndex : ReplState -> Check (Pair Index ReplState)
+ensureIndex : ReplState -> Eff [] (Check (Pair Index ReplState))
 ensureIndex st = case st.stateBrowseIndex of
-  Just idx => OkC (Pair idx st)
+  Just idx => pure (OkC (Pair idx st))
   Nothing =>
     let
       dir = contextDir st.stateCtx
     in case findManifestDirMaybe dir of
       Nothing =>
-        err
-          "当前目录不在 vuna workspace 内（向上找不到 vuna.toml）；:browse/:info/:search 需要在包或 workspace 根运行"
-      Just _ =>
-        let
-          cached = case st.stateIndexCache of
-            Just cache =>
-              if replIndexCacheFresh cache dir then Just cache.indexCacheIndex else Nothing
-            Nothing => Nothing
-        in case cached of
-          Just idx => OkC (Pair idx st)
-          Nothing =>
-            let
-              _ = replEmit st (c st "2" "正在构建源码索引…\n")
-            in case runPure (loadOrBuild dir) of
-              ErrC e => ErrC e
-              OkC idx =>
+        pure
+          (err "当前目录不在 vuna workspace 内（向上找不到 vuna.toml）；:browse/:info/:search 需要在包或 workspace 根运行")
+      Just _ => do
+        cached <- case st.stateIndexCache of
+          Just cache => do
+            fresh <- replIndexCacheFresh cache dir
+            pure (if fresh then Just cache.indexCacheIndex else Nothing)
+          Nothing => pure Nothing
+        case cached of
+          Just idx => pure (OkC (Pair idx st))
+          Nothing => do
+            _ <- replEmit st (c st "2" "正在构建源码索引…\n")
+            built <- loadOrBuild dir
+            case built of
+              ErrC e => pure (ErrC e)
+              OkC idx => do
+                now <- effTimeUs
                 let
-                  builtSec = runPure effTimeUs / 1000000
-                in OkC
-                  (Pair idx (withIndexSession st idx (runPure (indexStatsOf builtSec dir)) builtSec dir))
+                  builtSec = now / 1000000
+                in do
+                  stats <- indexStatsOf builtSec dir
+                  pure (OkC (Pair idx (withIndexSession st idx stats builtSec dir)))
 
-browseStep : ReplState -> String -> ReplOutcome
-browseStep st arg = case ensureIndex st of
-  ErrC e =>
-    let
-      _ = printDiag st e
-    in ReplContinue st
-  OkC (Pair idx st2) => if arg == "" then printOk st2 (renderModules idx)
-  else case renderApi idx arg of
-    ErrC e =>
-      let
-        _ = printDiag st2 e
-      in ReplContinue st2
-    OkC text => printOk st2 text
+browseStep : ReplState -> String -> Eff [] ReplOutcome
+browseStep st arg = do
+  ensured <- ensureIndex st
+  case ensured of
+    ErrC e => do
+      _ <- printDiag st e
+      pure (ReplContinue st)
+    OkC (Pair idx st2) => if arg == "" then printOk st2 (renderModules idx)
+    else case renderApi idx arg of
+      ErrC e => do
+        _ <- printDiag st2 e
+        pure (ReplContinue st2)
+      OkC text => printOk st2 text
 
-infoStep : ReplState -> String -> ReplOutcome
+infoStep : ReplState -> String -> Eff [] ReplOutcome
 infoStep st name = if name == "" then commandUsage st ":info"
 else case bindingTypes st.stateCtx (bufferProgram st) of
   OkC types => case lookupPair name types of
-    Just ty =>
-      let
-        _ = replEmit st "${c st "1" name} : ${c st "36" ty}${c st "2" "   -- REPL"}\n"
-      in ReplContinue st
+    Just ty => do
+      _ <- replEmit st "${c st "1" name} : ${c st "36" ty}${c st "2" "   -- REPL"}\n"
+      pure (ReplContinue st)
     Nothing => infoFromIndex st name
   ErrC e => infoFromIndex st name
 
-infoFromIndex : ReplState -> String -> ReplOutcome
-infoFromIndex st name = case ensureIndex st of
-  ErrC e =>
-    let
-      _ = printDiag st e
-    in ReplContinue st
-  OkC (Pair idx st2) => case findSymbol idx name of
-    ErrC e =>
-      let
-        _ = printDiag st2 e
-      in ReplContinue st2
-    OkC syms =>
-      let
-        _ = printSymInfos st2 idx syms
-      in ReplContinue st2
+infoFromIndex : ReplState -> String -> Eff [] ReplOutcome
+infoFromIndex st name = do
+  ensured <- ensureIndex st
+  case ensured of
+    ErrC e => do
+      _ <- printDiag st e
+      pure (ReplContinue st)
+    OkC (Pair idx st2) => case findSymbol idx name of
+      ErrC e => do
+        _ <- printDiag st2 e
+        pure (ReplContinue st2)
+      OkC syms => do
+        _ <- printSymInfos st2 idx syms
+        pure (ReplContinue st2)
 
-printSymInfos : ReplState -> Index -> List Sym -> Int
-printSymInfos st idx [] = 0
-printSymInfos st idx (s :: rest) =
-  let
-    _ = replEmit st "${infoText st idx s}\n"
-  in printSymInfos st idx rest
+printSymInfos : ReplState -> Index -> List Sym -> Eff [] Int
+printSymInfos st idx [] = pure 0
+printSymInfos st idx (s :: rest) = do
+  _ <- replEmit st "${infoText st idx s}\n"
+  printSymInfos st idx rest
 
 infoText : ReplState -> Index -> Sym -> String
 infoText st idx s = """${c st "1" (symFullName s)}
@@ -1668,27 +1652,26 @@ modulePathOf idx m = case filter (\mi => modName mi == m) (indexModules idx) of
   mi :: rest => modPath mi
   [] => "?"
 
-searchStep : ReplState -> String -> ReplOutcome
+searchStep : ReplState -> String -> Eff [] ReplOutcome
 searchStep st arg = if arg == "" then commandUsage st ":search"
-else case ensureIndex st of
-  ErrC e =>
-    let
-      _ = printDiag st e
-    in ReplContinue st
-  OkC (Pair idx st2) =>
-    let
-      Pair mode query = searchModeOf arg
-    in case runSearchHits idx mode query of
-      ErrC e =>
-        let
-          _ = printDiag st2 e
-        in ReplContinue st2
-      OkC hits => case take 20 hits of
-        [] => printOk st2 "没有匹配结果: ${query}"
-        limited =>
-          let
-            _ = printHits st2 limited
-          in ReplContinue st2
+else do
+  ensured <- ensureIndex st
+  case ensured of
+    ErrC e => do
+      _ <- printDiag st e
+      pure (ReplContinue st)
+    OkC (Pair idx st2) =>
+      let
+        Pair mode query = searchModeOf arg
+      in case runSearchHits idx mode query of
+        ErrC e => do
+          _ <- printDiag st2 e
+          pure (ReplContinue st2)
+        OkC hits => case take 20 hits of
+          [] => printOk st2 "没有匹配结果: ${query}"
+          limited => do
+            _ <- printHits st2 limited
+            pure (ReplContinue st2)
 
 searchModeOf : String -> Pair Int String
 searchModeOf arg =
@@ -1705,52 +1688,52 @@ runSearchHits idx mode query =
   else if contains "->" query || contains "=>" query then searchType idx query
   else OkC (searchNameDoc idx query False False)
 
-printHits : ReplState -> List SearchHit -> Int
-printHits st [] = 0
-printHits st (h :: rest) =
-  let
-    _ = replEmit st "${renderHit h}\n"
-  in printHits st rest
+printHits : ReplState -> List SearchHit -> Eff [] Int
+printHits st [] = pure 0
+printHits st (h :: rest) = do
+  _ <- replEmit st "${renderHit h}\n"
+  printHits st rest
 
 -- ---------------------------------------------------------------
 -- :defs / :imports / :delete
 -- ---------------------------------------------------------------
-defsStep : ReplState -> ReplOutcome
+defsStep : ReplState -> Eff [] ReplOutcome
 defsStep st = case bindingTypes st.stateCtx (bufferProgram st) of
-  ErrC e =>
-    let
-      _ = printDiag st e
-      _ = replEmit st "定义（仅名字）：\n"
-      _ = printBlockNames st [] st.stateDefs
-    in ReplContinue st
-  OkC types =>
-    let
-      _ = replEmit st "${c st "1" "定义："}\n"
-      n = printBlockNames st types st.stateDefs
-    in if n == 0 then
-      let
-        _ = replEmit st "${c st "2" "  （无；直接输入定义或 :load）"}\n"
-      in ReplContinue st
-    else ReplContinue st
+  ErrC e => do
+    _ <- printDiag st e
+    _ <- replEmit st "定义（仅名字）：\n"
+    _ <- printBlockNames st [] st.stateDefs
+    pure (ReplContinue st)
+  OkC types => do
+    _ <- replEmit st "${c st "1" "定义："}\n"
+    n <- printBlockNames st types st.stateDefs
+    if n == 0 then do
+      _ <- replEmit st "${c st "2" "  （无；直接输入定义或 :load）"}\n"
+      pure (ReplContinue st)
+    else pure (ReplContinue st)
 
-printBlockNames : ReplState -> List (Pair String String) -> List ReplBlock -> Int
-printBlockNames st types [] = 0
+printBlockNames : ReplState -> List (Pair String String) -> List ReplBlock -> Eff [] Int
+printBlockNames st types [] = pure 0
 printBlockNames st types (b :: rest) =
   let
     names = dedupStrs (append (blockDefinesOf b) (blockSignsOf b))
-    n1 = printNames st types b names
-  in n1 + printBlockNames st types rest
+  in do
+    n1 <- printNames st types b names
+    n2 <- printBlockNames st types rest
+    pure (n1 + n2)
 
-printNames : ReplState -> List (Pair String String) -> ReplBlock -> List String -> Int
-printNames st types b [] = 0
+printNames : ReplState -> List (Pair String String) -> ReplBlock -> List String -> Eff [] Int
+printNames st types b [] = pure 0
 printNames st types b (name :: rest) =
   let
     ty = case lookupPair name types of
       Just t => t
       Nothing => "?"
     origin = if b.blockFromFile then c st "2" "   (文件)" else ""
-    _ = replEmit st "  ${c st "1" name} : ${c st "36" ty}${origin}\n"
-  in 1 + printNames st types b rest
+  in do
+    _ <- replEmit st "  ${c st "1" name} : ${c st "36" ty}${origin}\n"
+    n2 <- printNames st types b rest
+    pure (1 + n2)
 
 -- 隐式自动导入（Prelude）：判定与 Loader 对 REPL 入口的处理完全一致，只用于展示。
 importNameOf : Import -> String
@@ -1767,7 +1750,7 @@ implicitImportNames st = case parseSource replTempFile st.stateImports of
       ErrC _ => []
       OkC implicit => map importNameOf implicit
 
-importsStep : ReplState -> ReplOutcome
+importsStep : ReplState -> Eff [] ReplOutcome
 importsStep st =
   let
     ls = filter (\l => trim l /= "") (lines st.stateImports)
@@ -1778,33 +1761,31 @@ importsStep st =
       explicitLines = map (\l => "  ${trim l}") ls
       implicitLines = map (\n => "  import ${n}  ${c st "2" "（隐式自动导入）"}") imps
       body = join "\n" (append explicitLines implicitLines)
-      _ = replEmit st "import：\n${body}\n"
-    in ReplContinue st
+    in do
+      _ <- replEmit st "import：\n${body}\n"
+      pure (ReplContinue st)
 
-deleteStep : ReplState -> String -> ReplOutcome
+deleteStep : ReplState -> String -> Eff [] ReplOutcome
 deleteStep st name = if name == "" then commandUsage st ":delete"
-else if hasFileConflict st.stateDefs [name] then
-  let
-    _ =
-      printError st
-        "定义 ${name} 来自已加载的文件；请修改文件后 :reload（或 :reset 清空）"
-  in ReplContinue st
+else if hasFileConflict st.stateDefs [name] then do
+  _ <-
+    printError st
+      "定义 ${name} 来自已加载的文件；请修改文件后 :reload（或 :reset 清空）"
+  pure (ReplContinue st)
 else
   let
     kept = filter (\b => not (memName name (blockNames b))) st.stateDefs
-  in if lenInt kept == lenInt st.stateDefs then
-    let
-      _ = printError st "未找到定义 ${name}"
-    in ReplContinue st
-  else
-    let
-      _ = printOk st "已删除 ${name}"
-    in ReplContinue (withDefs st kept)
+  in if lenInt kept == lenInt st.stateDefs then do
+    _ <- printError st "未找到定义 ${name}"
+    pure (ReplContinue st)
+  else do
+    _ <- printOk st "已删除 ${name}"
+    pure (ReplContinue (withDefs st kept))
 
 -- ---------------------------------------------------------------
 -- :set
 -- ---------------------------------------------------------------
-setStep : ReplState -> String -> ReplOutcome
+setStep : ReplState -> String -> Eff [] ReplOutcome
 setStep st argRaw =
   let
     arg = trimLeftSpaces argRaw
@@ -1821,50 +1802,44 @@ setStep st argRaw =
     else if opt == "prompt" then
       let
         p = if restRaw == "" then defaultPrompt else restRaw
-        _ = printOk st "prompt = ${p}"
-      in ReplContinue (withSettings st (settingsSetPrompt st.stateSettings p))
-    else
-      let
-        _ = printError st "未知设置 `${opt}`（可用：+t -t +s -s color editing prompt）"
-      in ReplContinue st
+      in do
+        _ <- printOk st "prompt = ${p}"
+        pure (ReplContinue (withSettings st (settingsSetPrompt st.stateSettings p)))
+    else do
+      _ <- printError st "未知设置 `${opt}`（可用：+t -t +s -s color editing prompt）"
+      pure (ReplContinue st)
 
-setPrintTypes : ReplState -> Bool -> ReplOutcome
-setPrintTypes st v =
-  let
-    _ = printOk st "+t ${onOff v}"
-  in ReplContinue (withSettings st (settingsSetPrintTypes st.stateSettings v))
+setPrintTypes : ReplState -> Bool -> Eff [] ReplOutcome
+setPrintTypes st v = do
+  _ <- printOk st "+t ${onOff v}"
+  pure (ReplContinue (withSettings st (settingsSetPrintTypes st.stateSettings v)))
 
-setTiming : ReplState -> Bool -> ReplOutcome
-setTiming st v =
-  let
-    _ = printOk st "+s ${onOff v}"
-  in ReplContinue (withSettings st (settingsSetTiming st.stateSettings v))
+setTiming : ReplState -> Bool -> Eff [] ReplOutcome
+setTiming st v = do
+  _ <- printOk st "+s ${onOff v}"
+  pure (ReplContinue (withSettings st (settingsSetTiming st.stateSettings v)))
 
-setColorOpt : ReplState -> String -> ReplOutcome
+setColorOpt : ReplState -> String -> Eff [] ReplOutcome
 setColorOpt st modeText = case parseMode modeText of
-  Nothing =>
-    let
-      _ = printError st "color 取值: auto | on | off"
-    in ReplContinue st
-  Just mode =>
-    let
-      on = resolveColorOn mode st.stateSettings.settingTty
-      _ = printOk st "color = ${modeName mode}"
-    in ReplContinue (withSettings st (settingsSetColor st.stateSettings mode on))
+  Nothing => do
+    _ <- printError st "color 取值: auto | on | off"
+    pure (ReplContinue st)
+  Just mode => do
+    on <- resolveColorOn mode st.stateSettings.settingTty
+    _ <- printOk st "color = ${modeName mode}"
+    pure (ReplContinue (withSettings st (settingsSetColor st.stateSettings mode on)))
 
-setEditingOpt : ReplState -> String -> ReplOutcome
+setEditingOpt : ReplState -> String -> Eff [] ReplOutcome
 setEditingOpt st modeText = case parseMode modeText of
-  Nothing =>
-    let
-      _ = printError st "editing 取值: auto | on | off"
-    in ReplContinue st
-  Just mode =>
-    let
-      _ =
-        if mode == 1 && not st.stateSettings.settingTty then printHint st "当前不是交互终端，行编辑不会生效"
-        else 0
-      _ = printOk st "editing = ${modeName mode}"
-    in ReplContinue (withSettings st (settingsSetEditing st.stateSettings mode))
+  Nothing => do
+    _ <- printError st "editing 取值: auto | on | off"
+    pure (ReplContinue st)
+  Just mode => do
+    _ <-
+      if mode == 1 && not st.stateSettings.settingTty then printHint st "当前不是交互终端，行编辑不会生效"
+      else pure 0
+    _ <- printOk st "editing = ${modeName mode}"
+    pure (ReplContinue (withSettings st (settingsSetEditing st.stateSettings mode)))
 
 parseMode : String -> Maybe Int
 parseMode "auto" = Just 0
@@ -1881,54 +1856,51 @@ onOff : Bool -> String
 onOff True = "on"
 onOff False = "off"
 
-printSettings : ReplState -> ReplOutcome
+printSettings : ReplState -> Eff [] ReplOutcome
 printSettings st =
   let
     s = st.stateSettings
-    _ = replEmit st "${c st "1" "设置："}\n"
-    _ = replEmit st "  +t      ${onOff s.settingPrintTypes}\n"
-    _ = replEmit st "  +s      ${onOff s.settingTiming}\n"
-    _ = replEmit st "  editing ${modeName s.settingEditing}\n"
-    _ =
+  in do
+    _ <- replEmit st "${c st "1" "设置："}\n"
+    _ <- replEmit st "  +t      ${onOff s.settingPrintTypes}\n"
+    _ <- replEmit st "  +s      ${onOff s.settingTiming}\n"
+    _ <- replEmit st "  editing ${modeName s.settingEditing}\n"
+    _ <-
       replEmit st
         "  color   ${if s.settingColorOn then "on" else "off"} (${modeName s.settingColor})\n"
-    _ = replEmit st "  prompt  ${s.settingPrompt}\n"
-  in ReplContinue st
+    _ <- replEmit st "  prompt  ${s.settingPrompt}\n"
+    pure (ReplContinue st)
 
 -- ---------------------------------------------------------------
 -- :history / :again / :!
 -- ---------------------------------------------------------------
-historyStep : ReplState -> ReplOutcome
+historyStep : ReplState -> Eff [] ReplOutcome
 historyStep st = if lenInt st.stateHistory == 0 then printOk st (c st "2" "（历史为空）")
-else
-  let
-    _ = printHistory st 1 st.stateHistory
-  in ReplContinue st
+else do
+  _ <- printHistory st 1 st.stateHistory
+  pure (ReplContinue st)
 
-printHistory : ReplState -> Int -> List String -> Int
-printHistory st i [] = 0
-printHistory st i (unit :: rest) =
-  let
-    _ = replEmit st "  ${i}  ${historyLine unit}\n"
-  in printHistory st (i + 1) rest
+printHistory : ReplState -> Int -> List String -> Eff [] Int
+printHistory st i [] = pure 0
+printHistory st i (unit :: rest) = do
+  _ <- replEmit st "  ${i}  ${historyLine unit}\n"
+  printHistory st (i + 1) rest
 
 historyLine : String -> String
 historyLine unit = case lines unit of
   [] => ""
   first :: rest => if lenInt rest == 0 then first else "${first} …"
 
-againStep : Int -> ReplState -> String -> ReplOutcome
+againStep : Int -> ReplState -> String -> Eff [] ReplOutcome
 againStep fuel st arg = if arg == "" then commandUsage st ":again"
 else case parsePositiveInt arg of
-  Nothing =>
-    let
-      _ = printError st "历史编号不是正整数: ${arg}"
-    in ReplContinue st
+  Nothing => do
+    _ <- printError st "历史编号不是正整数: ${arg}"
+    pure (ReplContinue st)
   Just n => case nthHistory n st.stateHistory of
-    Nothing =>
-      let
-        _ = printError st "没有第 ${arg} 条历史"
-      in ReplContinue st
+    Nothing => do
+      _ <- printError st "没有第 ${arg} 条历史"
+      pure (ReplContinue st)
     Just unit => processUnit (fuel - 1) (withBlock (withPending st "") Nothing) unit
 
 nthHistory : Int -> List String -> Maybe String
@@ -1938,9 +1910,9 @@ nthHistoryGo : Int -> Int -> List String -> Maybe String
 nthHistoryGo i n [] = Nothing
 nthHistoryGo i n (x :: rest) = if i == n then Just x else nthHistoryGo (i + 1) n rest
 
-processUnit : Int -> ReplState -> String -> ReplOutcome
+processUnit : Int -> ReplState -> String -> Eff [] ReplOutcome
 processUnit fuel st unit =
-  if fuel <= 0 then ReplContinue st
+  if fuel <= 0 then pure (ReplContinue st)
   else if startsWith ":" (trim unit) then commandStepFuel fuel st (trim unit)
   else submitText st (trim unit)
 
@@ -1952,22 +1924,19 @@ parseDigits [] acc = Just acc
 parseDigits (c :: rest) acc =
   if c >= 48 && c <= 57 then parseDigits rest (acc * 10 + (c - 48)) else Nothing
 
-shellStep : ReplState -> String -> ReplOutcome
+shellStep : ReplState -> String -> Eff [] ReplOutcome
 shellStep st cmd = if cmd == "" then commandUsage st ":!"
-else if captureMode st then
-  let
-    _ =
-      printError st
-        "server 模式不支持 `:!`（子进程会写真实 stdout，污染协议通道）；请用外部 shell"
-  in ReplContinue st
-else
-  let
-    code = runPure (prim_eff_runIn "." ["sh", "-c", cmd])
-  in if code == 0 then ReplContinue st
-  else
-    let
-      _ = replEmit st "${c st "33" "[进程退出码 ${code}]"}\n"
-    in ReplContinue st
+else if captureMode st then do
+  _ <-
+    printError st
+      "server 模式不支持 `:!`（子进程会写真实 stdout，污染协议通道）；请用外部 shell"
+  pure (ReplContinue st)
+else do
+  code <- prim_eff_runIn "." ["sh", "-c", cmd]
+  if code == 0 then pure (ReplContinue st)
+  else do
+    _ <- replEmit st "${c st "33" "[进程退出码 ${code}]"}\n"
+    pure (ReplContinue st)
 
 -- ---------------------------------------------------------------
 -- 小工具

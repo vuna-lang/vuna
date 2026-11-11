@@ -33,12 +33,11 @@ serverFuelBound : Int
 serverFuelBound = 1073741824
 
 -- 依次写出一组帧。
-writeFrames : (String -> Eff [] Int) -> List Json -> Int
-writeFrames writeS [] = 0
-writeFrames writeS (f :: rest) =
-  let
-    _ = runPure (writeS (renderFrame f))
-  in writeFrames writeS rest
+writeFrames : (String -> Eff [] Int) -> List Json -> Eff [] Int
+writeFrames writeS [] = pure 0
+writeFrames writeS (f :: rest) = do
+  _ <- writeS (renderFrame f)
+  writeFrames writeS rest
 
 -- 在一个连接上服务任意多帧，直到分发要求退出、对端关闭或传输层致命错误。
 -- 告警回调返回 `(新状态, 待发帧)`：各 server 决定坏帧要不要回错误帧。
@@ -46,59 +45,57 @@ writeFrames writeS (f :: rest) =
 -- 写字节
 -- 传输告警（记日志 + 可选错误帧）
 -- 分发：(是否退出, (新状态, 待发帧))
-serveConnection : (Int -> Eff [] String) -> (String -> Eff [] Int) -> (String -> s -> Pair s (List Json)) -> (Json -> s -> Pair Bool (Pair s (List Json))) -> s -> Pair ServerExit s
+serveConnection : (Int -> Eff [] String) -> (String -> Eff [] Int) -> (String -> s -> Eff [] (Pair s (List Json))) -> (Json -> s -> Eff [] (Pair Bool (Pair s (List Json)))) -> s -> Eff [] (Pair ServerExit s)
 serveConnection readN writeS warn dispatch state =
   connLoop serverFuelBound "" readN writeS warn dispatch state
 
-connLoop : Int -> String -> (Int -> Eff [] String) -> (String -> Eff [] Int) -> (String -> s -> Pair s (List Json)) -> (Json -> s -> Pair Bool (Pair s (List Json))) -> s -> Pair ServerExit s
-connLoop fuel pending readN writeS warn dispatch state = if fuel <= 0 then Pair (ExitFatal "frame fuel exhausted (internal)") state
-else if strLength pending > maxFrameBytes then Pair (ExitFatal "frame buffer exceeded limit") state
+connLoop : Int -> String -> (Int -> Eff [] String) -> (String -> Eff [] Int) -> (String -> s -> Eff [] (Pair s (List Json))) -> (Json -> s -> Eff [] (Pair Bool (Pair s (List Json)))) -> s -> Eff [] (Pair ServerExit s)
+connLoop fuel pending readN writeS warn dispatch state = if fuel <= 0 then pure (Pair (ExitFatal "frame fuel exhausted (internal)") state)
+else if strLength pending > maxFrameBytes then pure (Pair (ExitFatal "frame buffer exceeded limit") state)
 else case splitHeaderBlock pending of
   -- 还没有完整 header：继续读。
   Nothing => feedMore fuel pending readN writeS warn dispatch state
   Just (Pair headerBlock afterHeaders) => case contentLengthOf headerBlock of
     -- header 里没有可用的 Content-Length：丢掉这段 header，避免无限等待。
-    Nothing =>
-      let
-        w = warn "frame header without Content-Length dropped" state
-        _ = writeFrames writeS (secondOf w)
-      in connLoop (fuel - 1) afterHeaders readN writeS warn dispatch (firstOf w)
+    Nothing => do
+      w <- warn "frame header without Content-Length dropped" state
+      _ <- writeFrames writeS (secondOf w)
+      connLoop (fuel - 1) afterHeaders readN writeS warn dispatch (firstOf w)
     Just len => frameBody fuel pending afterHeaders len readN writeS warn dispatch state
 
 -- header 有效：body 不够就再读；够了就解码一帧。
-frameBody : Int -> String -> String -> Int -> (Int -> Eff [] String) -> (String -> Eff [] Int) -> (String -> s -> Pair s (List Json)) -> (Json -> s -> Pair Bool (Pair s (List Json))) -> s -> Pair ServerExit s
+frameBody : Int -> String -> String -> Int -> (Int -> Eff [] String) -> (String -> Eff [] Int) -> (String -> s -> Eff [] (Pair s (List Json))) -> (Json -> s -> Eff [] (Pair Bool (Pair s (List Json)))) -> s -> Eff [] (Pair ServerExit s)
 frameBody fuel pending afterHeaders len readN writeS warn dispatch state =
-  if len > maxFrameBytes then Pair (ExitFatal "frame too large") state
+  if len > maxFrameBytes then pure (Pair (ExitFatal "frame too large") state)
   else if strLength afterHeaders < len then feedMore fuel pending readN writeS warn dispatch state
   else decodeFrame fuel len afterHeaders readN writeS warn dispatch state
 
 -- 切出 body（`Content-Length` 字节，body 后没有换行）、解析并分发，然后继续下一帧。
-decodeFrame : Int -> Int -> String -> (Int -> Eff [] String) -> (String -> Eff [] Int) -> (String -> s -> Pair s (List Json)) -> (Json -> s -> Pair Bool (Pair s (List Json))) -> s -> Pair ServerExit s
+decodeFrame : Int -> Int -> String -> (Int -> Eff [] String) -> (String -> Eff [] Int) -> (String -> s -> Eff [] (Pair s (List Json))) -> (Json -> s -> Eff [] (Pair Bool (Pair s (List Json)))) -> s -> Eff [] (Pair ServerExit s)
 decodeFrame fuel len afterHeaders readN writeS warn dispatch state =
   let
     body = substring 0 (natFromInt len) afterHeaders
     rest = substring (natFromInt len) (natFromInt (strLength afterHeaders - len)) afterHeaders
   in case parseJson body of
-    ErrC e =>
+    ErrC e => do
+      w <- warn "malformed frame: ${diagText e}" state
+      _ <- writeFrames writeS (secondOf w)
+      connLoop (fuel - 1) rest readN writeS warn dispatch (firstOf w)
+    OkC msg => do
+      result <- dispatch msg state
       let
-        w = warn "malformed frame: ${diagText e}" state
-        _ = writeFrames writeS (secondOf w)
-      in connLoop (fuel - 1) rest readN writeS warn dispatch (firstOf w)
-    OkC msg =>
-      let
-        result = dispatch msg state
         shouldExit = firstOf result
         after = secondOf result
         state2 = firstOf after
         frames = secondOf after
-        _ = writeFrames writeS frames
-      in if shouldExit then Pair ExitRequested state2
-      else connLoop (fuel - 1) rest readN writeS warn dispatch state2
+      in do
+        _ <- writeFrames writeS frames
+        if shouldExit then pure (Pair ExitRequested state2)
+        else connLoop (fuel - 1) rest readN writeS warn dispatch state2
 
 -- 缓冲里还没有完整的一帧：再读一块（可能只到几个字节）；"" = 对端关闭。
-feedMore : Int -> String -> (Int -> Eff [] String) -> (String -> Eff [] Int) -> (String -> s -> Pair s (List Json)) -> (Json -> s -> Pair Bool (Pair s (List Json))) -> s -> Pair ServerExit s
-feedMore fuel pending readN writeS warn dispatch state =
-  let
-    chunk = runPure (readN frameChunkSize)
-  in if chunk == "" then Pair ExitClosed state
+feedMore : Int -> String -> (Int -> Eff [] String) -> (String -> Eff [] Int) -> (String -> s -> Eff [] (Pair s (List Json))) -> (Json -> s -> Eff [] (Pair Bool (Pair s (List Json)))) -> s -> Eff [] (Pair ServerExit s)
+feedMore fuel pending readN writeS warn dispatch state = do
+  chunk <- readN frameChunkSize
+  if chunk == "" then pure (Pair ExitClosed state)
   else connLoop (fuel - 1) (pending ++ chunk) readN writeS warn dispatch state

@@ -42,77 +42,84 @@ shellEscaped (c :: rest) =
   if c == 39 then "'\\''${shellEscaped rest}" else strPack [c] ++ shellEscaped rest
 
 -- 会话级临时路径（stty 状态 / 尺寸文件）；同一进程内 effTimeUs 保证不撞名。
-termTmpPath : Int -> String
-termTmpPath _ =
-  let
-    base = termTempBase 0
-  in "${base}/vuna-repl-term-${runPure effTimeUs}"
+termTmpPath : Int -> Eff [] String
+termTmpPath _ = do
+  base <- termTempBase 0
+  now <- effTimeUs
+  pure "${base}/vuna-repl-term-${now}"
 
-termTempBase : Int -> String
-termTempBase _ =
-  let
-    env = runPure (prim_eff_getenv "TMPDIR")
-  in if env == "" then "/tmp"
-  else if endsWith "/" env then substring 0 (byteLength env - 1) env else env
+termTempBase : Int -> Eff [] String
+termTempBase _ = do
+  env <- prim_eff_getenv "TMPDIR"
+  pure
+    (if env == "" then "/tmp" else if endsWith "/" env then substring 0 (byteLength env - 1) env else env)
 
-rmFile : String -> Int
-rmFile path = runPure (prim_eff_runIn "/" ["rm", "-f", path])
+rmFile : String -> Eff [] Int
+rmFile path = prim_eff_runIn "/" ["rm", "-f", path]
 
 -- `stty -g > path`：保存终端状态。
-termSaveState : String -> Int
-termSaveState path =
-  let
-    code = runPure (prim_eff_runIn "." ["sh", "-c", "stty -g > ${shellQuote path}"])
-  in if code == 0 && runPure (prim_eff_fileExists path) then 0 else 1
+termSaveState : String -> Eff [] Int
+termSaveState path = do
+  code <- prim_eff_runIn "." ["sh", "-c", "stty -g > ${shellQuote path}"]
+  if code == 0 then do
+    exists <- prim_eff_fileExists path
+    pure (if exists then 0 else 1)
+  else pure 1
 
 -- `stty <saved>`：恢复终端；失败再试 `stty sane`。
-termRestoreState : String -> Int
+termRestoreState : String -> Eff [] Int
 termRestoreState path =
   let
     saved = case readText path of
       ErrC e => ""
       OkC s => trim s
-    code = if saved == "" then 1 else runPure (prim_eff_runIn "." ["stty", saved])
-    _ = rmFile path
-  in if code == 0 then 0 else runPure (prim_eff_runIn "." ["stty", "sane"])
+  in do
+    code <- if saved == "" then pure 1 else prim_eff_runIn "." ["stty", saved]
+    _ <- rmFile path
+    if code == 0 then pure 0 else prim_eff_runIn "." ["stty", "sane"]
 
 -- `stty raw -echo min 1 time 0`：原始模式，逐字节阻塞读。
-termEnterRaw : Int -> Int
-termEnterRaw _ = runPure (prim_eff_runIn "." ["stty", "raw", "-echo", "min", "1", "time", "0"])
+termEnterRaw : Int -> Eff [] Int
+termEnterRaw _ = prim_eff_runIn "." ["stty", "raw", "-echo", "min", "1", "time", "0"]
 
 -- Esc 序列探测用：0.1s 超时读（readByte 返回 -1 = 无后续字节）。
-termReadTimeout : Int -> Int
-termReadTimeout _ = runPure (prim_eff_runIn "." ["stty", "min", "0", "time", "1"])
+termReadTimeout : Int -> Eff [] Int
+termReadTimeout _ = prim_eff_runIn "." ["stty", "min", "0", "time", "1"]
 
 -- 恢复阻塞读。
-termReadBlock : Int -> Int
-termReadBlock _ = runPure (prim_eff_runIn "." ["stty", "min", "1", "time", "0"])
+termReadBlock : Int -> Eff [] Int
+termReadBlock _ = prim_eff_runIn "." ["stty", "min", "1", "time", "0"]
 
 -- 读 1 字节；EOF 或超时返回 -1。
-termReadByte : Int -> Int
-termReadByte _ =
-  let
-    s = runPure (prim_eff_readBytes 1)
-  in case strUnpack s of
+termReadByte : Int -> Eff [] Int
+termReadByte _ = do
+  s <- prim_eff_readBytes 1
+  pure (case strUnpack s of
     [] => 0 - 1
     b :: rest => b
+  )
 
 -- 终端列数；失败默认 80。
-termWidth : Int -> Int
-termWidth _ =
+termWidth : Int -> Eff [] Int
+termWidth _ = do
+  base <- termTmpPath 0
   let
-    path = "${termTmpPath 0}.size"
-    _ = runPure (prim_eff_runIn "." ["sh", "-c", "stty size > ${shellQuote path}"])
-    text = case readText path of
-      ErrC e => ""
-      OkC s => trim s
-    _ = rmFile path
-    parts = filter (\p => p /= "") (split " " text)
-  in case parts of
-    _ :: cols :: rest => case parseDigitsInt cols of
-      Just n => if n > 0 then n else 80
-      Nothing => 80
-    _ => 80
+    path = "${base}.size"
+  in do
+    _ <- prim_eff_runIn "." ["sh", "-c", "stty size > ${shellQuote path}"]
+    let
+      text = case readText path of
+        ErrC e => ""
+        OkC s => trim s
+      parts = filter (\p => p /= "") (split " " text)
+    in do
+      _ <- rmFile path
+      pure (case parts of
+        _ :: cols :: rest => case parseDigitsInt cols of
+          Just n => if n > 0 then n else 80
+          Nothing => 80
+        _ => 80
+      )
 
 parseDigitsInt : String -> Maybe Int
 parseDigitsInt s = if s == "" then Nothing else parseDigits (strUnpack s) 0
@@ -122,5 +129,5 @@ parseDigits [] acc = Just acc
 parseDigits (c :: rest) acc =
   if c >= 48 && c <= 57 then parseDigits rest (acc * 10 + (c - 48)) else Nothing
 
-writeOut : String -> Int
-writeOut s = runPure (prim_eff_print s)
+writeOut : String -> Eff [] Int
+writeOut s = prim_eff_print s

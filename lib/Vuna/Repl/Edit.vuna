@@ -40,7 +40,7 @@ data EditOutcome : Type where
   EditCancel : EditOutcome
   EditUnavailable : EditOutcome
 
-terminalWidth : Int -> Int
+terminalWidth : Int -> Eff [] Int
 terminalWidth n = termWidth n
 
 record EditState where
@@ -85,33 +85,35 @@ data Key : Type where
   KPaste : String -> Key
   KIgnore : Key
 
-editLine : EditConfig -> EditOutcome
-editLine cfg =
-  let
-    path = termTmpPath 0
-  in if termSaveState path /= 0 then EditUnavailable
-  else if termEnterRaw 0 /= 0 then
-    let
-      _ = termRestoreState path
-    in EditUnavailable
-  else
-    let
-      st0 = EditState [] 0 0 [] False [] Nothing
-      _ = pasteEnable 0
-      -- 进入空闲轮询模式（min 0 time 1）：没有输入时每 0.1s 醒一次用于 resize 检测，
-      -- 不忙等；原绑定键读取改由 readKey 的 KIdle 分支处理。
-      _ = termReadTimeout 0
-      _ = redraw cfg cfg.editWidth st0
-      -- fuel 上限：空闲 tick 也扣 1，1e7 tick ≈ 11.6 天（远超一次交互会话）。
-      -- 边界：timed read 的**超时与 EOF 都返回 -1**（`prim_eff_readBytes` 无法区分），本编辑器
-      -- 一律当 KIdle——所以 tty 关闭/EOF 会退化成空闲轮询，耗尽 fuel 后以 ECancel 结束
-      -- （≈11.6 天）；正常退出靠 Ctrl-D（空行）或 `:quit`，不依赖 EOF 判定。
-      result = editLoop 10000000 cfg cfg.editWidth 0 st0
-      -- 先关括号粘贴（终端设置），再恢复 raw 前保存的终端状态。
-      _ = pasteDisable 0
-      _ = termRestoreState path
-      _ = writeOut "\n"
-    in outcomeOf result
+editLine : EditConfig -> Eff [] EditOutcome
+editLine cfg = do
+  path <- termTmpPath 0
+  saved <- termSaveState path
+  if saved /= 0 then pure EditUnavailable
+  else do
+    rawOk <- termEnterRaw 0
+    if rawOk /= 0 then do
+      _ <- termRestoreState path
+      pure EditUnavailable
+    else
+      let
+        st0 = EditState [] 0 0 [] False [] Nothing
+      in do
+        _ <- pasteEnable 0
+        -- 进入空闲轮询模式（min 0 time 1）：没有输入时每 0.1s 醒一次用于 resize 检测，
+        -- 不忙等；原绑定键读取改由 readKey 的 KIdle 分支处理。
+        _ <- termReadTimeout 0
+        _ <- redraw cfg cfg.editWidth st0
+        -- fuel 上限：空闲 tick 也扣 1，1e7 tick ≈ 11.6 天（远超一次交互会话）。
+        -- 边界：timed read 的**超时与 EOF 都返回 -1**（`prim_eff_readBytes` 无法区分），本编辑器
+        -- 一律当 KIdle——所以 tty 关闭/EOF 会退化成空闲轮询，耗尽 fuel 后以 ECancel 结束
+        -- （≈11.6 天）；正常退出靠 Ctrl-D（空行）或 `:quit`，不依赖 EOF 判定。
+        result <- editLoop 10000000 cfg cfg.editWidth 0 st0
+        -- 先关括号粘贴（终端设置），再恢复 raw 前保存的终端状态。
+        _ <- pasteDisable 0
+        _ <- termRestoreState path
+        _ <- writeOut "\n"
+        pure (outcomeOf result)
 
 outcomeOf : EditResult -> EditOutcome
 outcomeOf (ESubmit text) = EditLine text
@@ -121,29 +123,27 @@ outcomeOf (EContinue st) = EditLine (strOf st.esBuf)
 
 -- 主循环：读一键 → 处理 → 重绘；`KIdle` 每 20 tick（≈2s）查一次终端宽度，
 -- 变化时按新宽度重绘。`width` 是本轮使用的列数（初值来自 Repl 的 `stty size`）。
-editLoop : Int -> EditConfig -> Int -> Int -> EditState -> EditResult
-editLoop fuel cfg width tick st = if fuel <= 0 then ECancel
-else
-  let
-    key = readKey 0
-  in if isIdleKey key then
+editLoop : Int -> EditConfig -> Int -> Int -> EditState -> Eff [] EditResult
+editLoop fuel cfg width tick st = if fuel <= 0 then pure ECancel
+else do
+  key <- readKey 0
+  if isIdleKey key then
     let
       tick2 = tick + 1
     in if tick2 < 20 then editLoop (fuel - 1) cfg width tick2 st
-    else
-      let
-        width2 = terminalWidth 0
-      in if width2 == width then editLoop (fuel - 1) cfg width 0 st
-      else
-        let
-          _ = redraw cfg width2 st
-        in editLoop (fuel - 1) cfg width2 0 st
-  else case applyKey cfg key st of
-    EContinue st2 =>
-      let
-        _ = redraw cfg width st2
-      in editLoop (fuel - 1) cfg width 0 st2
-    other => other
+    else do
+      width2 <- terminalWidth 0
+      if width2 == width then editLoop (fuel - 1) cfg width 0 st
+      else do
+        _ <- redraw cfg width2 st
+        editLoop (fuel - 1) cfg width2 0 st
+  else do
+    outcome <- applyKey cfg key st
+    case outcome of
+      EContinue st2 => do
+        _ <- redraw cfg width st2
+        editLoop (fuel - 1) cfg width 0 st2
+      other => pure other
 
 isIdleKey : Key -> Bool
 isIdleKey KIdle = True
@@ -154,54 +154,51 @@ isIdleKey _ = False
 -- ---------------------------------------------------------------
 -- 终端处于 `min 0 time 1`（0.1s 超时）模式：没有输入时返回 KIdle，交给 resize 检测。
 -- Esc 序列的后续字节也用同一超时读取：单独的 Esc 键会在 0.1s 超时后判为 KEsc。
-readKey : Int -> Key
-readKey _ =
-  let
-    b = termReadByte 0
-  in if b < 0 then KIdle
-  else if b == 13 || b == 10 then KEnter
-  else if b == 127 || b == 8 then KBackspace
+readKey : Int -> Eff [] Key
+readKey _ = do
+  b <- termReadByte 0
+  if b < 0 then pure KIdle
+  else if b == 13 || b == 10 then pure KEnter
+  else if b == 127 || b == 8 then pure KBackspace
   else case b of
-    3 => KCtrC
-    4 => KCtrD
-    1 => KHome
-    5 => KEnd
-    11 => KCtrK
-    21 => KCtrU
-    23 => KCtrW
-    12 => KCtrL
-    18 => KCtrR
-    16 => KUp
-    14 => KDown
-    2 => KLeft
-    6 => KRight
-    9 => KTab
+    3 => pure KCtrC
+    4 => pure KCtrD
+    1 => pure KHome
+    5 => pure KEnd
+    11 => pure KCtrK
+    21 => pure KCtrU
+    23 => pure KCtrW
+    12 => pure KCtrL
+    18 => pure KCtrR
+    16 => pure KUp
+    14 => pure KDown
+    2 => pure KLeft
+    6 => pure KRight
+    9 => pure KTab
     27 => readEscape 0
-    _ => KChar b
+    _ => pure (KChar b)
 
-readEscape : Int -> Key
-readEscape _ =
-  let
-    b2 = termReadByte 0
-  in if b2 < 0 then KEsc else if b2 == 91 || b2 == 79 then csiKey 0 else KIgnore
+readEscape : Int -> Eff [] Key
+readEscape _ = do
+  b2 <- termReadByte 0
+  if b2 < 0 then pure KEsc else if b2 == 91 || b2 == 79 then csiKey 0 else pure KIgnore
 
 -- CSI / SS3：`ESC [ ... final`。参数位只取第一个数值（`;` 之后的忽略），最多 16 字节；
 -- 支持的 final：A/B/C/D（方向）、H/F（Home/End）、`~` 加参数（1/7 Home、4/8 End、
 -- 3 Delete、200 括号粘贴开始——随后读到 `ESC [ 2 0 1 ~` 为止作为一次粘贴内容）。
-csiKey : Int -> Key
+csiKey : Int -> Eff [] Key
 csiKey _ = csiParams 16 0 0
 
-csiParams : Int -> Int -> Int -> Key
-csiParams fuel acc digits = if fuel <= 0 then KIgnore
-else
-  let
-    b = termReadByte 0
-  in if b < 0 then KIgnore
+csiParams : Int -> Int -> Int -> Eff [] Key
+csiParams fuel acc digits = if fuel <= 0 then pure KIgnore
+else do
+  b <- termReadByte 0
+  if b < 0 then pure KIgnore
   else if b >= 48 && b <= 57 then csiParams (fuel - 1) (acc * 10 + (b - 48)) (digits + 1)
   else case b of
     59 => csiParams (fuel - 1) acc (digits + 1)
-    126 => if digits == 0 then KIgnore else csiTilde acc
-    _ => if b >= 64 && b <= 90 then csiLetter b else KIgnore
+    126 => if digits == 0 then pure KIgnore else csiTilde acc
+    _ => if b >= 64 && b <= 90 then pure (csiLetter b) else pure KIgnore
 
 csiLetter : Int -> Key
 csiLetter 65 = KUp
@@ -212,65 +209,70 @@ csiLetter 72 = KHome
 csiLetter 70 = KEnd
 csiLetter _ = KIgnore
 
-csiTilde : Int -> Key
-csiTilde 1 = KHome
-csiTilde 7 = KHome
-csiTilde 3 = KDelete
-csiTilde 4 = KEnd
-csiTilde 8 = KEnd
-csiTilde 200 = KPaste (readPasteBody 0)
-csiTilde _ = KIgnore
+csiTilde : Int -> Eff [] Key
+csiTilde 1 = pure KHome
+csiTilde 7 = pure KHome
+csiTilde 3 = pure KDelete
+csiTilde 4 = pure KEnd
+csiTilde 8 = pure KEnd
+csiTilde 200 = do
+  text <- readPasteBody 0
+  pure (KPaste text)
+csiTilde _ = pure KIgnore
 
 -- ---------------------------------------------------------------
 -- 按键处理
 -- ---------------------------------------------------------------
-applyKey : EditConfig -> Key -> EditState -> EditResult
+applyKey : EditConfig -> Key -> EditState -> Eff [] EditResult
 applyKey cfg key st =
   if st.esSearching then applySearchKey cfg key st else applyNormalKey cfg key st
 
-applyNormalKey : EditConfig -> Key -> EditState -> EditResult
-applyNormalKey cfg (KChar b) st = if b >= 32 then EContinue (insertByte b st) else EContinue st
-applyNormalKey cfg KEnter st = ESubmit (strOf st.esBuf)
-applyNormalKey cfg KBackspace st = EContinue (deleteBack st)
-applyNormalKey cfg KDelete st = EContinue (deleteAt st)
-applyNormalKey cfg KLeft st = EContinue (withCursor st (prevCharStart st.esBuf st.esCursor))
-applyNormalKey cfg KRight st = EContinue (withCursor st (nextCharStart st.esBuf st.esCursor))
-applyNormalKey cfg KHome st = EContinue (withCursor st 0)
-applyNormalKey cfg KEnd st = EContinue (withCursor st (lenInt st.esBuf))
-applyNormalKey cfg KUp st = EContinue (historyUp cfg st)
-applyNormalKey cfg KDown st = EContinue (historyDown cfg st)
-applyNormalKey cfg KTab st = EContinue (complete cfg st)
-applyNormalKey cfg KCtrK st = EContinue (killToEnd st)
-applyNormalKey cfg KCtrU st = EContinue (killToStart st)
-applyNormalKey cfg KCtrW st = EContinue (killWord st)
-applyNormalKey cfg KCtrL st =
-  let
-    _ = writeOut "${escCode}[2J${escCode}[H"
-  in EContinue st
-applyNormalKey cfg KCtrR st = EContinue (startSearch st)
-applyNormalKey cfg KCtrC st = ECancel
-applyNormalKey cfg KCtrD st = if lenInt st.esBuf == 0 then EExit else EContinue (deleteAt st)
-applyNormalKey cfg KEsc st = EContinue st
-applyNormalKey cfg KEof st = if lenInt st.esBuf == 0 then EExit else EContinue st
-applyNormalKey cfg KIdle st = EContinue st
-applyNormalKey cfg (KPaste text) st = EContinue (insertText st text)
-applyNormalKey cfg KIgnore st = EContinue st
+applyNormalKey : EditConfig -> Key -> EditState -> Eff [] EditResult
+applyNormalKey cfg (KChar b) st =
+  if b >= 32 then pure (EContinue (insertByte b st)) else pure (EContinue st)
+applyNormalKey cfg KEnter st = pure (ESubmit (strOf st.esBuf))
+applyNormalKey cfg KBackspace st = pure (EContinue (deleteBack st))
+applyNormalKey cfg KDelete st = pure (EContinue (deleteAt st))
+applyNormalKey cfg KLeft st = pure (EContinue (withCursor st (prevCharStart st.esBuf st.esCursor)))
+applyNormalKey cfg KRight st = pure (EContinue (withCursor st (nextCharStart st.esBuf st.esCursor)))
+applyNormalKey cfg KHome st = pure (EContinue (withCursor st 0))
+applyNormalKey cfg KEnd st = pure (EContinue (withCursor st (lenInt st.esBuf)))
+applyNormalKey cfg KUp st = pure (EContinue (historyUp cfg st))
+applyNormalKey cfg KDown st = pure (EContinue (historyDown cfg st))
+applyNormalKey cfg KTab st = do
+  st2 <- complete cfg st
+  pure (EContinue st2)
+applyNormalKey cfg KCtrK st = pure (EContinue (killToEnd st))
+applyNormalKey cfg KCtrU st = pure (EContinue (killToStart st))
+applyNormalKey cfg KCtrW st = pure (EContinue (killWord st))
+applyNormalKey cfg KCtrL st = do
+  _ <- writeOut "${escCode}[2J${escCode}[H"
+  pure (EContinue st)
+applyNormalKey cfg KCtrR st = pure (EContinue (startSearch st))
+applyNormalKey cfg KCtrC st = pure ECancel
+applyNormalKey cfg KCtrD st =
+  if lenInt st.esBuf == 0 then pure EExit else pure (EContinue (deleteAt st))
+applyNormalKey cfg KEsc st = pure (EContinue st)
+applyNormalKey cfg KEof st = if lenInt st.esBuf == 0 then pure EExit else pure (EContinue st)
+applyNormalKey cfg KIdle st = pure (EContinue st)
+applyNormalKey cfg (KPaste text) st = pure (EContinue (insertText st text))
+applyNormalKey cfg KIgnore st = pure (EContinue st)
 
-applySearchKey : EditConfig -> Key -> EditState -> EditResult
+applySearchKey : EditConfig -> Key -> EditState -> Eff [] EditResult
 applySearchKey cfg (KChar b) st =
-  if b >= 32 then EContinue (searchQueryAppend cfg st b) else EContinue st
-applySearchKey cfg KBackspace st = EContinue (searchQueryBackspace cfg st)
-applySearchKey cfg KCtrR st = EContinue (searchContinue cfg st)
+  if b >= 32 then pure (EContinue (searchQueryAppend cfg st b)) else pure (EContinue st)
+applySearchKey cfg KBackspace st = pure (EContinue (searchQueryBackspace cfg st))
+applySearchKey cfg KCtrR st = pure (EContinue (searchContinue cfg st))
 applySearchKey cfg KEnter st = case st.esMatch of
-  Just (Pair idx entry) => EContinue (acceptSearch st idx entry)
-  Nothing => EContinue (acceptSearchText st (strOf st.esQuery))
-applySearchKey cfg KEsc st = EContinue (exitSearch st)
-applySearchKey cfg KCtrC st = EContinue (exitSearch st)
-applySearchKey cfg KLeft st = EContinue (exitSearch st)
-applySearchKey cfg KRight st = EContinue (exitSearch st)
-applySearchKey cfg KIdle st = EContinue st
-applySearchKey cfg (KPaste text) st = EContinue (searchAppendText cfg st text)
-applySearchKey cfg _ st = EContinue st
+  Just (Pair idx entry) => pure (EContinue (acceptSearch st idx entry))
+  Nothing => pure (EContinue (acceptSearchText st (strOf st.esQuery)))
+applySearchKey cfg KEsc st = pure (EContinue (exitSearch st))
+applySearchKey cfg KCtrC st = pure (EContinue (exitSearch st))
+applySearchKey cfg KLeft st = pure (EContinue (exitSearch st))
+applySearchKey cfg KRight st = pure (EContinue (exitSearch st))
+applySearchKey cfg KIdle st = pure (EContinue st)
+applySearchKey cfg (KPaste text) st = pure (EContinue (searchAppendText cfg st text))
+applySearchKey cfg _ st = pure (EContinue st)
 
 -- 粘贴进搜索查询：逐字节追加（与打字同语义），不触发其它按键。
 searchAppendText : EditConfig -> EditState -> String -> EditState
@@ -418,33 +420,33 @@ historyDown cfg st =
 -- ---------------------------------------------------------------
 -- 补全
 -- ---------------------------------------------------------------
-complete : EditConfig -> EditState -> EditState
+complete : EditConfig -> EditState -> Eff [] EditState
 complete cfg st =
   let
     start = tokenStart st.esBuf st.esCursor
     prefix = strOf (take (st.esCursor - start) (drop start st.esBuf))
     kind = argKindOf st.esBuf st.esCursor
-    pool = if kind == 0 then cfg.editCompletions else argCompletions kind cfg.editRoots prefix
-    cands = filter (\c => startsWith prefix c && byteLength c > byteLength prefix) pool
-  in if prefix == "" then st
-  else case cands of
-    [] => bell st
-    [c] =>
-      withBuf st (append (append (take start st.esBuf) (strUnpack c)) (drop st.esCursor st.esBuf))
-        (start + byteLength c)
-    _ =>
-      let
-        common = commonPrefixStrs cands
-      in if byteLength common > byteLength prefix then withBuf st
-        (append (append (take start st.esBuf) (strUnpack common)) (drop st.esCursor st.esBuf))
-        (start + byteLength common)
-      else bell st
+  in if prefix == "" then pure st
+  else do
+    pool <- if kind == 0 then pure cfg.editCompletions else argCompletions kind cfg.editRoots prefix
+    let
+      cands = filter (\c => startsWith prefix c && byteLength c > byteLength prefix) pool
+    in case cands of
+      [] => bell st
+      [c] =>
+        pure
+          (withBuf st (append (append (take start st.esBuf) (strUnpack c)) (drop st.esCursor st.esBuf)) (start + byteLength c))
+      _ =>
+        let
+          common = commonPrefixStrs cands
+        in if byteLength common > byteLength prefix then pure
+          (withBuf st (append (append (take start st.esBuf) (strUnpack common)) (drop st.esCursor st.esBuf)) (start + byteLength common))
+        else bell st
 
-bell : EditState -> EditState
-bell st =
-  let
-    _ = writeOut (strPack [7])
-  in st
+bell : EditState -> Eff [] EditState
+bell st = do
+  _ <- writeOut (strPack [7])
+  pure st
 
 tokenStart : List Int -> Int -> Int
 tokenStart buf cur = tokenGo (reverse (take cur buf)) cur
@@ -521,10 +523,10 @@ exitSearch st = EditState st.esBuf st.esCursor st.esHistIdx st.esDraft False [] 
 -- ---------------------------------------------------------------
 -- 渲染
 -- ---------------------------------------------------------------
-redraw : EditConfig -> Int -> EditState -> Int
+redraw : EditConfig -> Int -> EditState -> Eff [] Int
 redraw cfg width st = if st.esSearching then redrawSearch cfg st else redrawNormal cfg width st
 
-redrawNormal : EditConfig -> Int -> EditState -> Int
+redrawNormal : EditConfig -> Int -> EditState -> Eff [] Int
 redrawNormal cfg width st =
   let
     avail = imax 8 (width - cfg.editPromptWidth)
@@ -540,7 +542,7 @@ renderBytes [] = ""
 renderBytes (b :: rest) =
   if b == 10 then "↵${renderBytes rest}" else "${strPack [b]}${renderBytes rest}"
 
-redrawSearch : EditConfig -> EditState -> Int
+redrawSearch : EditConfig -> EditState -> Eff [] Int
 redrawSearch cfg st =
   let
     queryText = strOf st.esQuery

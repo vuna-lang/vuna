@@ -562,8 +562,8 @@ runLsp : Int -> Int
 runLsp _ =
   let
     outcome =
-      serveConnection readChunk writeStdout lspWarn handleFrame
-        (logTo "starting" (LspState [] False False Nothing False Nothing [] [] Nothing))
+      runPure
+        (serveConnection readChunk writeStdout (\m => \s => pure (lspWarn m s)) (\m => \s => pure (handleFrame m s)) (logTo "starting" (LspState [] False False Nothing False Nothing [] [] Nothing)))
     exit = firstOf outcome
     state = secondOf outcome
   in case exit of
