@@ -1,5 +1,6 @@
 Base_dApplicative.ml
 Base_dArray.ml
+Base_dBits.ml
 Base_dBool.ml
 Base_dEq.ml
 Base_dFloat.ml
@@ -87,12 +88,14 @@ Vuna_dCompiler_dElab_dTrait.ml
 Vuna_dCompiler_dElab_dTypes.ml
 Vuna_dCompiler_dElab_dUsage.ml
 Vuna_dCompiler_dFrontend_dAst.ml
+Vuna_dCompiler_dFrontend_dCst.ml
 Vuna_dCompiler_dFrontend_dDiagnostics.ml
 Vuna_dCompiler_dFrontend_dLexer.ml
 Vuna_dCompiler_dFrontend_dManifest.ml
 Vuna_dCompiler_dFrontend_dParser.ml
 Vuna_dCompiler_dFrontend_dParser_dSupport.ml
 Vuna_dCompiler_dFrontend_dToml.ml
+Vuna_dCompiler_dHash.ml
 Vuna_dCompiler_dIntrinsics.ml
 Vuna_dCompiler_dLoader.ml
 Vuna_dCompiler_dLoader_dDiagnostics.ml
@@ -101,6 +104,7 @@ Vuna_dCompiler_dLoader_dFlatten.ml
 Vuna_dCompiler_dLoader_dModules.ml
 Vuna_dCompiler_dLoader_dResolve.ml
 Vuna_dCompiler_dPackages_dPkg.ml
+Vuna_dCompiler_dQuery.ml
 Vuna_dCompiler_dSource.ml
 Vuna_dCompiler_dVersion.ml
 Vuna_runtime.ml
