@@ -9,6 +9,11 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+# cache-nix-action 的 purge（清理本分支旧版本 cache）需要 actions: write。
+permissions:
+  contents: read
+  actions: write
+
 jobs:
   flake-check:
     runs-on: ubuntu-latest
@@ -19,5 +24,23 @@ jobs:
         with:
           extra_nix_config: |
             experimental-features = nix-command flakes
+      # Nix store 复用：命中时整条构建图（nixpkgs 工具链 + 未变输入已构建的
+      # derivations）直接从 GitHub Actions cache 恢复，只重跑输入变化的 derivation；
+      # 两次 main push 之间没变的 check（如 vuna-typecheck / vuna-tests）会整体跳过。
+      # 只在 main push 启用：PR run 不写 cache，避免多分支 cache 挤占 10GB 配额。
+      # primary-key 含 commit sha（每次 push 一份），restore 取同前缀最新一份，
+      # post 阶段先清掉本分支旧版本再存新版本。恢复出来的 /nix/store 路径本身就是
+      # 有效构建产物，与 nix/packages.nix 的 allowSubstitutes = false（不走
+      # substituter）不冲突。
+      - name: Restore and save Nix store
+        if: github.event_name == 'push'
+        uses: nix-community/cache-nix-action@v7
+        with:
+          primary-key: nix-${{ runner.os }}-${{ github.sha }}
+          restore-prefixes-first-match: nix-${{ runner.os }}-
+          purge: true
+          purge-prefixes: nix-${{ runner.os }}-
+          purge-created: 0
+          purge-primary-key: never
       - name: nix flake check
         run: sh nix/ci.sh
