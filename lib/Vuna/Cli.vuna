@@ -326,7 +326,7 @@ testRun opts dir = case requireDirectory dir of
   ErrC e => toolError (diagText e)
   OkC _ => case loadPackage dir of
     ErrC e => toolFailure (diagText e)
-    OkC pkg => runTests opts pkg
+    OkC pkg => runPure (runTests opts pkg)
 
 -- ---------------------------------------------------------------
 -- fmt
