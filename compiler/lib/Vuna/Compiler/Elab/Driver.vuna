@@ -1157,6 +1157,7 @@ dictCandidatesOf ec shown =
     insts = if fam == "" then ecInsts ec else ecInstsFamily ec fam
   in map (instCandidate shown) insts
 
+-- | 构造实例候选（带声明 span 与头/目标拒绝原因）。
 instCandidate : String -> DtInst -> Candidate
 instCandidate shown i =
   Candidate (dtInstName i) i.dtInstSpan

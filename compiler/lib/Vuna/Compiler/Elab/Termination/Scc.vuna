@@ -483,5 +483,6 @@ tryFuelThread comp defTbl ctors projs facts msg =
   else ErrC msg
   else ErrC msg
 
+-- | 取边上的参数关系编号。
 edgeModeOf : Pair (Pair (Pair String String) Int) Span -> Int
 edgeModeOf (Pair (Pair (Pair caller callee) mode) sp) = mode

@@ -451,5 +451,6 @@ checkSccsWith ownTbl (comp :: rest) defTbl ctors projs g facts =
     (\n => Vuna.Compiler.Common.bind (checkSccsWith ownTbl rest defTbl ctors projs g facts) (\m => OkC (n + m)))
   else checkSccsWith ownTbl rest defTbl ctors projs g facts
 
+-- | 取调用边的参数关系编号。
 callMode : Pair (Pair (Pair String String) Int) Span -> Int
 callMode (Pair (Pair (Pair caller callee) mode) sp) = mode

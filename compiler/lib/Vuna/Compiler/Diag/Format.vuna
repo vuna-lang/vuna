@@ -428,6 +428,7 @@ showInt n = strFromInt n
 candidateTextOf : Candidate -> String
 candidateTextOf c = c.candidateText
 
+-- | human 视图中调用点文件:行号后缀。
 callSpanSuffix : Maybe Span -> String
 callSpanSuffix Nothing = ""
 callSpanSuffix (Just sp) = " at ${sp.spanFile}:${strFromInt sp.spanStartLine}"
