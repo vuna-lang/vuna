@@ -169,7 +169,7 @@ diagnosticJson label lines d =
       Nothing => lspRange 0 0 0 0
       Just sp => labelRangeJson lines sp
     related = concatMap (labelRelatedJson label lines) d.diagLabels
-    fieldData = append (map fieldJson d.diagFields) (originFields d)
+    fieldData = append (append (map fieldJson d.diagFields) (originFields d)) (catalogFields d)
     base =
       [ Pair "range" range,
         Pair "severity" (JNum (lspSeverityOf d.diagSeverity)),
@@ -494,3 +494,8 @@ originFields : Diagnostic -> List Json
 originFields d = case d.diagOrigin of
   OriginDirect => []
   OriginCascade _ => [JObj [Pair "kind" (JStr "origin"), Pair "value" (JStr "cascade")]]
+
+catalogFields : Diagnostic -> List Json
+catalogFields d =
+  if d.diagCode == "" then []
+  else [JObj [Pair "kind" (JStr "catalog"), Pair "value" (JStr "vuna explain ${d.diagCode}")]]

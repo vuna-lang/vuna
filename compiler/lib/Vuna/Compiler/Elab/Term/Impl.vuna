@@ -677,7 +677,7 @@ ctxHasFieldDictGo ((Pair name ty) :: rest) idx ctx ec fname baseTy = case forceV
           VStr nm => case nm == fname of
             False => ctxHasFieldDictGo rest (idx + 1) ctx ec fname baseTy
             True => case convEc ec (ctxDepth ctx) aVal baseTy of
-              OkC ec2 => Just (Pair (TVar name idx) (Pair tVal ec2))
+              OkC ec2 => Just (Pair (TVar name idx (Span "" 0 0 0 0)) (Pair tVal ec2))
               ErrC _ => ctxHasFieldDictGo rest (idx + 1) ctx ec fname baseTy
           _ => ctxHasFieldDictGo rest (idx + 1) ctx ec fname baseTy
         _ => ctxHasFieldDictGo rest (idx + 1) ctx ec fname baseTy
@@ -1669,13 +1669,13 @@ joinEffectLabels (x :: rest) = case rest of
   _ => x ++ ", " ++ joinEffectLabels rest
 
 -- | 若「期望 Nil 行 / 实际具体非空行」则返回标签文本。
-unhandledEffectLabel : Ec -> Value -> Value -> Maybe String
+unhandledEffectLabel : Ec -> Value -> Value -> Maybe (List String)
 unhandledEffectLabel ec expected actual = case effRowOfValue (forceVal ec expected) of
   Nothing => Nothing
   Just expectedRow => if isNilRowValue ec expectedRow then case effRowOfValue (forceVal ec actual) of
     Nothing => Nothing
     Just actualRow => case rowEffectLabels 64 ec actualRow of
-      Just labels => if labels == [] then Nothing else Just (joinEffectLabels labels)
+      Just labels => if labels == [] then Nothing else Just labels
       Nothing => Nothing
   else Nothing
 
@@ -1723,9 +1723,11 @@ else case inferEFuelHint (fuel - 1) globals ctx ec expr expected of
         Just p => OkC (Pair (firstOf p) (resolveDictGoals globals (secondOf p)))
         Nothing => case unhandledEffectLabel ec1 expected actual of
           Just labels =>
-            onErrDiag
-              (\d => withField (FieldEffect "actual: ${showValue actual}") (withField (FieldEffect "expected: ${showValue expected}") (withField (FieldEffect labels) d)))
-              (tcErr1 (exprSpan expr) (UnhandledEffects labels) labels)
+            let
+              joined = joinEffectLabels labels
+            in onErrDiag
+              (\d => withEffectLabels labels (withField (FieldEffect "actual: ${showValue actual}") (withField (FieldEffect "expected: ${showValue expected}") d)))
+              (tcErr1 (exprSpan expr) (UnhandledEffects joined) joined)
           Nothing => ErrC (withFallbackSpan (exprSpan expr) e)
       OkC ec2 => OkC (Pair term (resolveDictGoals globals ec2))
 
@@ -2065,7 +2067,7 @@ dropPis t = t
 identityArgs : Int -> Int -> List Term -> Bool
 identityArgs i k [] = True
 identityArgs i k (a :: rest) = case a of
-  TVar _ idx => if idx == k - 1 - i then identityArgs (i + 1) k rest else False
+  TVar _ idx _ => if idx == k - 1 - i then identityArgs (i + 1) k rest else False
   _ => False
 
 -- 恒等结果索引：`F x1..xk` 且 xi 就是第 i 个族 binder（de Bruijn index = teleLen-1-i）。
@@ -2342,7 +2344,7 @@ data DoBindShape : Type where
 -- | 匹配 bind 签名 `{m}{Dict}{a}{b} -> m a -> (a -> m b) -> m b`，
 -- 返回显式实参、λ 位置与 λ binder 的 rig；形状不符返回 Nothing。
 bindShapeOf : Term -> Maybe DoBindShape
-bindShapeOf (TPi _ True _ _ (TPi _ True _ (TApp (TGlobal g) (TVar _ imD) _) (TPi _ True _ _ (TPi _ True _ _ (TPi _ False rigE (TApp (TVar _ imE) (TVar _ iaE) _) (TPi _ False rigL (TPi _ False rigInner (TVar _ iaL) (TApp (TVar _ imM) (TVar _ ibL) _)) (TApp (TVar _ imR) (TVar _ ibR) _))))))) =
+bindShapeOf (TPi _ True _ _ (TPi _ True _ (TApp (TGlobal g) (TVar _ imD _) _) (TPi _ True _ _ (TPi _ True _ _ (TPi _ False rigE (TApp (TVar _ imE _) (TVar _ iaE _) _) (TPi _ False rigL (TPi _ False rigInner (TVar _ iaL _) (TApp (TVar _ imM _) (TVar _ ibL _) _)) (TApp (TVar _ imR _) (TVar _ ibR _) _))))))) =
   if imD == 0 && imE == 3 && imM == 5 && imR == 5 then if iaE == 1 && iaL == 2 && ibL == 2 && ibR == 2 then Just (DoBindShape rigE rigL rigInner)
   else if iaE == 0 && iaL == 1 && ibL == 3 && ibR == 3 then Just (DoBindShape rigE rigL rigInner)
   else Nothing
@@ -2515,3 +2517,7 @@ else case doBlockShapeOf globals ctx ec chain.doChainCanonical of
             Pair term ec3 => OkC (Just (Pair term (Pair resultTy ec3)))
           )
         )
+
+withEffectLabels : List String -> Diagnostic -> Diagnostic
+withEffectLabels [] d = d
+withEffectLabels (l :: rest) d = withEffectLabels rest (withField (FieldEffect "unhandled: ${l}") d)

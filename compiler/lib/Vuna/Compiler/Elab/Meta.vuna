@@ -224,7 +224,7 @@ relevantMetas ec =
 -- 运行时位置：构造子/函数应用的擦除实参不生成代码，跳过；其余位置都算。
 termMetasRuntime : Term -> List Int
 termMetasRuntime (TMeta m) = [m]
-termMetasRuntime (TVar n i) = []
+termMetasRuntime (TVar n i _) = []
 termMetasRuntime (TGlobal g) = []
 termMetasRuntime (TType l) = []
 termMetasRuntime (TPi n implicit rig dom cod) = append (termMetasAll dom) (termMetasAll cod)
@@ -250,7 +250,7 @@ termMetasRuntime (TIf c th el) =
 -- 全部位置（类型里出现的元变量也算）。
 termMetasAll : Term -> List Int
 termMetasAll (TMeta m) = [m]
-termMetasAll (TVar n i) = []
+termMetasAll (TVar n i _) = []
 termMetasAll (TGlobal g) = []
 termMetasAll (TType l) = []
 termMetasAll (TPi n implicit rig dom cod) = append (termMetasAll dom) (termMetasAll cod)
@@ -618,7 +618,7 @@ else case alt0 of
 
 -- quote 出来的项里出现负 index：解引用了当前项作用域外的变量，不能替换。
 hasOutOfScopeVar : Term -> Bool
-hasOutOfScopeVar (TVar name i) = i < 0
+hasOutOfScopeVar (TVar name i _) = i < 0
 hasOutOfScopeVar (TPi n i r d c) = hasOutOfScopeVar d || hasOutOfScopeVar c
 hasOutOfScopeVar (TLam n r b) = hasOutOfScopeVar b
 hasOutOfScopeVar (TApp f a r) = hasOutOfScopeVar f || hasOutOfScopeVar a
@@ -707,7 +707,8 @@ methodArgTerms rigs nFields = methodArgTermsGo rigs nFields 0 (length rigs)
 methodArgTermsGo : List Rig -> Int -> Int -> Int -> List (Pair Term Rig)
 methodArgTermsGo [] nFields i arity = []
 methodArgTermsGo (rig :: rest) nFields i arity =
-  Pair (TVar "x${i}" (nFields + (arity - 1 - i))) rig :: methodArgTermsGo rest nFields (i + 1) arity
+  Pair (TVar "x${i}" (nFields + (arity - 1 - i)) (Span "" 0 0 0 0)) rig
+    :: methodArgTermsGo rest nFields (i + 1) arity
 
 -- 逐层 lambda 绑定方法参数（x_0 最外），每层用各自 rig。
 methodArgLams : List Rig -> Int -> Term -> Term
@@ -752,7 +753,7 @@ else case flattenTaggedApp head of
 allTeleArgs : Int -> List (Pair Term Rig) -> Bool
 allTeleArgs n [] = True
 allTeleArgs n (arg :: rest) = case firstOf arg of
-  TVar vname i => i >= 0 && i < n && allTeleArgs n rest
+  TVar vname i _ => i >= 0 && i < n && allTeleArgs n rest
   _ => False
 
 isBlanketInst : DtInst -> Bool
@@ -1023,7 +1024,7 @@ wrapOpaqueUses idxs t = wrapOpaqueUsesFuel 512 0 idxs t
 wrapOpaqueUsesFuel : Int -> Int -> List Int -> Term -> Term
 wrapOpaqueUsesFuel fuel depth idxs t = if fuel <= 0 then t
 else case t of
-  TVar name i => wrapOpaqueVar depth idxs name i
+  TVar name i _ => wrapOpaqueVar depth idxs name i
   TGlobal name => TGlobal name
   TMeta m => TMeta m
   TType l => TType l
@@ -1057,8 +1058,9 @@ else case t of
 
 wrapOpaqueVar : Int -> List Int -> String -> Int -> Term
 wrapOpaqueVar depth idxs name i =
-  if i < depth then TVar name i
-  else if memLevel (i - depth) idxs then castErased (TVar name i) else TVar name i
+  if i < depth then TVar name i (Span "" 0 0 0 0)
+  else if memLevel (i - depth) idxs then castErased (TVar name i (Span "" 0 0 0 0))
+  else TVar name i (Span "" 0 0 0 0)
 
 wrapOpaqueAltFuel : Int -> Int -> List Int -> CaseAlt -> CaseAlt
 wrapOpaqueAltFuel fuel depth idxs (CaseAlt name binders body) =
@@ -1121,7 +1123,7 @@ termHasOuterLinear : Ec -> Ctx -> Term -> Bool
 termHasOuterLinear ec ctx t = outerScan ec ctx 0 t
 
 outerScan : Ec -> Ctx -> Int -> Term -> Bool
-outerScan ec ctx depth (TVar name i) = if i > depth then case ctxItemAt (i - depth) ctx.ctxItems of
+outerScan ec ctx depth (TVar name i _) = if i > depth then case ctxItemAt (i - depth) ctx.ctxItems of
   Just (Pair n ty) => isLinearType ec (varTypeValue ctx (i - depth) ty)
   Nothing => False
 else False
@@ -1256,7 +1258,8 @@ etaCtorLa name i [] args = TCon name args
 etaCtorLa name i ((Pair _ rig) :: rest) args =
   let
     binder = "#eta${i}"
-  in TLam binder rig (etaCtorLa name (i + 1) rest (append args [Pair (TVar binder (length rest)) rig]))
+  in TLam binder rig
+    (etaCtorLa name (i + 1) rest (append args [Pair (TVar binder (length rest) (Span "" 0 0 0 0)) rig]))
 
 -- 丢掉列表前 n 个元素（构造子已收到的实参前缀）。
 dropCount : Int -> List a -> List a

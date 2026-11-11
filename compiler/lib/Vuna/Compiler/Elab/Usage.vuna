@@ -19,6 +19,8 @@ import Vuna.Compiler.Diagnostics
 import Vuna.Compiler.Elab.Meta
 import Vuna.Compiler.Elab.Types
 import Vuna.Compiler.Diagnostics.Warning
+import Base.IORef
+import Base.IO.Host
 
 -- 类型级定义的判据：定义**类型** force 后以宇宙收尾（`Type` 或 `... -> Type` 的 Pi 链）。
 -- M38 从 Codegen/Erase 上移到 Elab，成为用量检查与 codegen 分区的共同真源。
@@ -70,13 +72,16 @@ else case us of
 checkBinderRig : Span -> String -> Rig -> Rig -> Check Int
 checkBinderRig sp name Rig0 used =
   if isRigZero used then OkC 0
-  else onErrDiag (\d => withField (FieldQuantity name 0 1) d) (tcErr1 sp (ErasedBinderUsed name) name)
+  else onErrDiag (\d => withUseFields name (withField (FieldQuantity name 0 1) d))
+    (tcErr1 sp (ErasedBinderUsed name) name)
 checkBinderRig sp name Rig1 used = case used of
   Rig0 =>
-    onErrDiag (\d => withField (FieldQuantity name 1 0) d) (tcErr1 sp (LinearUnused name) name)
+    onErrDiag (\d => withUseFields name (withField (FieldQuantity name 1 0) d))
+      (tcErr1 sp (LinearUnused name) name)
   Rig1 => OkC 0
   RigOmega =>
-    onErrDiag (\d => withField (FieldQuantity name 1 2) d) (tcErr1 sp (LinearOverused name) name)
+    onErrDiag (\d => withUseFields name (withField (FieldQuantity name 1 2) d))
+      (tcErr1 sp (LinearOverused name) name)
 checkBinderRig sp name RigOmega used = OkC 0
 
 -- 进入一个 binder：body usage 的头部就是它；检查后 drop。
@@ -117,7 +122,10 @@ checkAltBindersGo sp ((Pair name rig) :: rest) us = case us of
 -- ---------------------------------------------------------------
 checkTerm : Span -> List (Pair String Rig) -> Term -> Check (List Rig)
 checkTerm sp env t = case t of
-  TVar name i => OkC (uVarAt (natToInt (length env)) i)
+  TVar name i usp =>
+    let
+      _ = if usp.spanStartLine == 0 then 0 else recordUseSpan name usp
+    in OkC (uVarAt (natToInt (length env)) i)
   TMeta m => OkC (uZeroOf (natToInt (length env)))
   TGlobal g => OkC (uZeroOf (natToInt (length env)))
   TType l => OkC (uZeroOf (natToInt (length env)))
@@ -193,6 +201,8 @@ checkDefUsage msp name body =
     sp = case msp of
       Just s => s
       Nothing => Span "" 0 0 0 0
+  in let
+    _ = resetUseSpans 0
   in Vuna.Compiler.Common.bind (checkTerm sp [] body) (\rest => OkC (natToInt (length rest)))
 
 -- ---------------------------------------------------------------
@@ -226,7 +236,7 @@ capCheckFuelMax = 1000000
 capCheckFuel : Int -> Ec -> Span -> Term -> Bool -> Check Int
 capCheckFuel fuel ec sp t allowed = if fuel <= 0 then icInternal "capture check fuel exhausted"
 else case t of
-  TVar name i => OkC 0
+  TVar name i _ => OkC 0
   TGlobal g => OkC 0
   TInt n => OkC 0
   TStr s => OkC 0
@@ -315,3 +325,35 @@ warnUnusedBinder sp name =
   warnAt1Mod
     (\d => withSuggestion (Suggestion "rename unused binder `${name}` to `_${name}`" MachineApplicable [DiagEdit sp "_${name}"]) d)
     sp (UnusedBinder name) name
+
+-- ---------------------------------------------------------------
+-- QTT 使用点：Core `TVar` 现在携带源 span；检查期记录到进程内盒子，
+-- 报告线性/擦除错误时逐条挂 `fields.span name=use`。
+-- ---------------------------------------------------------------
+record UseBox where
+  useItems : List (Pair String Span)
+  useTag : Int
+
+useSpansRef : IORef UseBox
+useSpansRef = runIO (newRef (UseBox [] 0))
+
+resetUseSpans : Int -> Int
+resetUseSpans _ = runIO (writeRef useSpansRef (UseBox [] 0))
+
+recordUseSpan : String -> Span -> Int
+recordUseSpan name sp =
+  let
+    box = runIO (readRef useSpansRef)
+    _ = runIO (writeRef useSpansRef (UseBox (Pair name sp :: box.useItems) box.useTag))
+  in 0
+
+usesOf : String -> List Span
+usesOf name =
+  reverse (map secondOf (filter (\p => firstOf p == name) (runIO (readRef useSpansRef)).useItems))
+
+withUseFields : String -> Diagnostic -> Diagnostic
+withUseFields name d = withUseSpans (usesOf name) d
+
+withUseSpans : List Span -> Diagnostic -> Diagnostic
+withUseSpans [] d = d
+withUseSpans (sp :: rest) d = withUseSpans rest (withField (FieldSpan "use" sp) d)

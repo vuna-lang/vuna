@@ -207,7 +207,7 @@ dictAppTermOf dname params = foldAppTerms (TGlobal dname) (dictParamArgs params 
 
 dictParamArgs : List String -> Int -> List (Pair Term Rig)
 dictParamArgs [] i = []
-dictParamArgs (p :: ps) i = Pair (TVar p i) Rig0 :: dictParamArgs ps (i - 1)
+dictParamArgs (p :: ps) i = Pair (TVar p i (Span "" 0 0 0 0)) Rig0 :: dictParamArgs ps (i - 1)
 
 -- trait 方法列表 → 旧内部形态（名字, 类型）对。span 走 `traitMethodSpan`。
 traitMethodPairs : List TraitMethod -> List (Pair String Expr)
@@ -260,13 +260,13 @@ projectionBodyOpaque fieldOpaque ctor fieldIdx rigs nFields nParams =
     arity = length rigs
     -- scrutinee 在分支绑定子之外求值，所以只跨过方法参数（_d=ar；参数 binder 在 _d 之外）。
     dictIdx = arity
-    fieldVar = TVar (fieldVarName fieldIdx) (nFields - 1 - fieldIdx)
+    fieldVar = TVar (fieldVarName fieldIdx) (nFields - 1 - fieldIdx) (Span "" 0 0 0 0)
     argPairs = methodArgTerms rigs nFields
     applied0 = foldAppTerms fieldVar argPairs
     applied = if fieldOpaque then wrapOpaqueUses [nFields - 1 - fieldIdx] applied0 else applied0
     binders = fieldBinderNames nFields
     alt = CaseAlt ctor binders applied
-    caseTerm = TCase (TVar "_d" dictIdx) [alt]
+    caseTerm = TCase (TVar "_d" dictIdx (Span "" 0 0 0 0)) [alt]
     lamArgs = methodArgLams rigs 0 caseTerm
   in projectionParamLams (projectionParamNames nParams) (TLam "_d" RigOmega lamArgs)
 
@@ -820,7 +820,7 @@ substInstParams : List Term -> Term -> Term
 substInstParams args t = substInstParamsGo (length args) args 0 t
 
 substInstParamsGo : Int -> List Term -> Int -> Term -> Term
-substInstParamsGo n args depth (t@(TVar nm i)) =
+substInstParamsGo n args depth (t@(TVar nm i sp)) =
   if i >= depth then if i - depth < n then shift 0 depth (instArgAt (n - 1 - (i - depth)) args) else t
   else t
 substInstParamsGo n args depth (TPi nm i r dom cod) =
@@ -1150,7 +1150,7 @@ else
         (\p => Pair (injectDictGoFuel (fuel - 1) defName dName appPos depth (firstOf p)) (secondOf p))
         args
   in if g == defName && length args2 > appPos && depth > appPos then foldAppTerms (TGlobal g)
-    (insertArgAt appPos (Pair (TVar dName (depth - appPos - 1)) RigOmega) args2)
+    (insertArgAt appPos (Pair (TVar dName (depth - appPos - 1) (Span "" 0 0 0 0)) RigOmega) args2)
   else foldAppTerms (TGlobal g) args2
 
 insertArgAt : Int -> a -> List a -> List a

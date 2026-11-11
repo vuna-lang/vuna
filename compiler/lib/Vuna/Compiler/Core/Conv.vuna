@@ -430,7 +430,7 @@ metaCreatedDepth sols depth m = case solsDepth m sols of
 -- 项在「创建深度 created、quote 深度 depth、已进入 extra 个内部 binder」下是否只引用
 -- 本地 binder / 创建深度之前的自由变量 / pattern spine 里的变量。
 termScopedTo : Int -> Int -> Int -> List (Pair String Int) -> Term -> Bool
-termScopedTo created depth extra levels (TVar name i) = if i < extra then True
+termScopedTo created depth extra levels (TVar name i _) = if i < extra then True
 else
   let
     level = depth + extra - 1 - i
@@ -510,13 +510,13 @@ spineLevels (p :: rest) = secondOf p :: spineLevels rest
 --   * 创建深度之前的自由变量 → `i + n`（n 个新 binder 在外侧）；
 --   * 内部 binder 变量（i < extra）保持原索引。
 absPatternBody : Int -> Int -> Int -> Int -> List Int -> Term -> Term
-absPatternBody n created depth extra levels (t@(TVar name i)) = if i < extra then t
+absPatternBody n created depth extra levels (t@(TVar name i sp)) = if i < extra then t
 else
   let
     level = depth + extra - 1 - i
   in case levelPos level levels of
-    Just pos => TVar name (extra + n - 1 - pos)
-    Nothing => TVar name (i + n)
+    Just pos => TVar name (extra + n - 1 - pos) sp
+    Nothing => TVar name (i + n) sp
 absPatternBody n created depth extra levels (TPi name implicit rig dom cod) =
   TPi name implicit rig (absPatternBody n created depth extra levels dom)
     (absPatternBody n created depth (extra + 1) levels cod)

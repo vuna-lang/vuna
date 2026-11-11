@@ -336,7 +336,7 @@ usedInTeleGo depth [] = False
 usedInTeleGo depth (t :: rest) = termUsesVar depth t || usedInTeleGo depth rest
 
 termUsesVar : Int -> Term -> Bool
-termUsesVar depth (TVar n i) = i == depth
+termUsesVar depth (TVar n i _) = i == depth
 termUsesVar depth (TMeta m) = False
 termUsesVar depth (TGlobal g) = False
 termUsesVar depth (TType l) = False

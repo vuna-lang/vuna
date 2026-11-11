@@ -84,7 +84,7 @@ termRepresentable datas (TPi name implicit rig dom cod) =
   termRepresentable datas dom && termRepresentable datas cod
 termRepresentable datas (TApp f a rig) = termAppHeadRepresentable datas f
 termRepresentable datas (TGlobal g) = knownTypeHead datas g
-termRepresentable datas (TVar name i) = True
+termRepresentable datas (TVar name i _) = True
 termRepresentable datas t = False
 
 -- | 应用脊的头部是否为可命名类型（沿 App 递归剥到全局头）。

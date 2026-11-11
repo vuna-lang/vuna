@@ -99,7 +99,7 @@ ityToTermEnv env (IFun a b) =
   TPi "_" False RigOmega (ityToTermEnv env a) (ityToTermEnv ("_" :: env) b)
 ityToTermEnv env (IFun1 a b) = TPi "_" False Rig1 (ityToTermEnv env a) (ityToTermEnv ("_" :: env) b)
 ityToTermEnv env (IVar name) = case indexOfName name env of
-  Just i => TVar name i
+  Just i => TVar name i (Span "" 0 0 0 0)
   Nothing => TGlobal name
 ityToTermEnv env (IArray elem) = TApp (TGlobal "Array") (ityToTermEnv env elem) Rig0
 ityToTermEnv env (IRef elem) = TApp (TGlobal "IORef") (ityToTermEnv env elem) Rig0

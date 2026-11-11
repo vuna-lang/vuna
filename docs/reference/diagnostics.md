@@ -148,22 +148,22 @@ JSON 字段是机器契约：`code/severity/phase/category/message/labels[]/fiel
 | --- | --- |
 | D1 三通道（源码/工具/内部） | 已落地（phase Tool/Internal + ICE 信息） |
 | D2 `Diagnostic` 全字段 | 已落地 |
-| D3 位置契约（end span、UTF-16、显式 NoLoc） | 已落地（span 填充仍在补齐） |
+| D3 位置契约（end span、UTF-16、显式 NoLoc） | 已落地（Core `TVar` 带源 span 供 QTT 使用点；合成/内部项无源位置时显式 NoLoc） |
 | D4 码域（RN_/PKG_ 独立域、死码清理） | 已落地（`RN_` 23 码、`PKG_` 27 码；已删除 9 个 TC + 4 RN + 2 PS + 1 LD 无发射点死码） |
-| D5 目录单一真源 + 生成枚举/文档 | 部分（条目仍是手写；`explain`/`gen-errors` 同源，`gen-errors` 同时生成 `errors.md` 与目录 JSON `errors.json`（均内嵌每码 `example` 夹具路径）；两者都输出 severity/phase/category 元数据） |
-| D6 渲染/LSP/CLI | 已落地 short/human/JSON/SARIF + LSP push/pull + `[diagnostics]` 配置；human 视图展示 fields/trace/suggestions（与 JSON 同源）；SARIF rules 带目录 shortDescription/help/defaultConfiguration/tags；i18n 部分（`--lang zh` 与 `[diagnostics] lang` 的 human 消息本地化 + `= message:` 英文原文附注；机器格式保持英文） |
-| D7.1 多错误 + Cascade | 部分（parser 顶层 resync + `--max-errors`；elab 新增 `--continue-on-error` best-effort：文件入口、可执行包 app/Main.vuna 与库包 [export].modules 逐次移除失败声明后继续，最多 8 条；依赖被移除声明的错误标 `origin=cascade`（human 显示 best-effort note；JSON/SARIF/LSP data 也带来源）；`--max-errors` 同时约束恢复结果；库包/模块级恢复与完整 Cascade 分类待补） |
+| D5 目录单一真源 + 生成枚举/文档 | 已落地（枚举构造子锁定码/arity；描述/中文/示例表与枚举同模块维护并由 `gen-errors` 生成 `errors.md`+`errors.json`（含 example）；`explain` 同源；LSP data 附 `catalog` 提示） |
+| D6 渲染/LSP/CLI | 已落地 short/human/JSON/SARIF + LSP push/pull + `[diagnostics]` 配置；human 视图展示 fields/trace/suggestions（与 JSON 同源）；SARIF rules 带目录 shortDescription/help/defaultConfiguration/tags；i18n 已落地（`--lang zh` 与 `[diagnostics] lang` 的 human 消息本地化 + `= message:` 英文原文；机器 JSON 保留英文 `message` 并附 `localizedMessage`） |
+| D7.1 多错误 + Cascade | 已落地（parser 顶层 resync；elab `--continue-on-error` best-effort：文件入口/可执行包/库包逐次移除失败声明，最多 8 条；依赖被移除声明的错误标 `origin=cascade`（human note；JSON/SARIF/LSP data 同源）；`--max-errors` 同时约束恢复结果） |
 | D7.2 warnings（未使用/冗余/不可达） | 已落地（`UN_UnusedBinder`/`UN_ShadowedBinder`/`UN_RedundantCtorBranch`/`UN_RedundantLiteralBranch`/`UN_BranchAfterCatchAll`/`UN_UnusedImport`（限定/别名/open import 统一追踪）/`UN_UnusedDefinition`；`-W`/`--deny-warnings` 已接） |
 | D7.3 建议引擎 + Fix | 已落地（`Candidate`/`Suggestion` 模型；所有可安全自动修复的 warning 附 machine-applicable 编辑（unused binder/definition/import、冗余构造子/字面量分支、catch-all 后分支）；LSP codeAction 应用诊断 suggestions，`test/corpus/lsp/quickfix.sh` 集成测试） |
 | D7.4 类型不匹配 expected/found | 已落地（fields + PhUnify trace 帧 expected/found；双端 label 待补） |
 | D7.5 实例搜索 trace | 已落地（`TC_NoInstanceFound` 附失败目标族桶的候选实例 `fields.candidates`，每个候选带 instance 声明 span 与拒绝原因「实例头 vs 目标」） |
 | D7.6 终止性 call matrix | 已落地（`TC_CannotProveTermination` 附 `fields.call` 边：caller/callee/参数位置/调用点 span；human 行尾显示文件:行号） |
 | D7.7 覆盖性缺失构造子标签 | 已落地（缺失构造子进 `fields.candidates`，每个候选带构造子声明 `span`；JSON/SARIF/LSP（含 diag fields 的 candidates.span）可跳转） |
-| D7.8 QTT 使用点 | 部分（线性/擦除错误附 `fields.quantity`：name/declared/observed；逐使用点 span 待 Core `TSp`） |
+| D7.8 QTT 使用点 | 已落地（Core `TVar` 携带源 span；线性/擦除错误附 `fields.quantity`：name/declared/observed，并逐使用点附 `fields.span name=use`；内部合成变量无源位置时不附） |
 | D7.9 文案规范/门禁 | 已落地（`nix/checks/diag-style.sh`：句号/大小写/空白/占位符；专有名词例外逐码 allowlist） |
-| D7.10 explanation/example/`explain` | 部分（`explain` 文本/`--json`/`--list --json` 均可用，含模板/中文说明/severity/phase/category/`example` 夹具路径；元变量/洞已有 `name`/`note` 字段，洞目标附 `fields.span`） |
-| D7.11 效果行 | 部分（TC_UnhandledEffects 的 fields 含 labels + expected/actual 行；handler 级细节待补） |
-| 结构化夹具 + 每码覆盖门禁 | 部分（210 个 `.diag.json`；覆盖门禁 183/234，缺口 allowlist + `nix/diag-unreachable.txt` 逐码审计） |
+| D7.10 explanation/example/`explain` | 已落地（`explain` 文本/`--json`/`--list --json`，含模板/中文说明/severity/phase/category/example；元变量/洞带 `name`/note 与洞目标 span；非洞元变量的创建点因 Core 元变量无 span 以名称标识） |
+| D7.11 效果行 | 已落地（`TC_UnhandledEffects` fields 含 expected/actual 行 + 每个未处理 effect 单独一条 `unhandled:` 行） |
+| 结构化夹具 + 每码覆盖门禁 | 已落地（210 个 `.diag.json`；覆盖门禁 183/234，51 个缺口 allowlist 且逐码在 `nix/diag-unreachable.txt` 审计） |
 
 ## 10. 后续路线（按依赖排序）
 

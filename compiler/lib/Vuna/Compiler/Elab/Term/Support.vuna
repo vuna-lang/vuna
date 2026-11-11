@@ -24,7 +24,7 @@ import Vuna.Compiler.Frontend.Ast
 -- 类型名只在没有任何值候选时作为「类型作为项」命中（数据族名在 globals 里有 kind）。
 inferVarRef : List (Pair String Term) -> Ctx -> Ec -> String -> Span -> Check (Pair Term (Pair Value Ec))
 inferVarRef globals ctx ec name sp = case ctxLookup name ctx of
-  Just (Pair idx tyTerm) => OkC (Pair (TVar name idx) (Pair (varTypeValue ctx idx tyTerm) ec))
+  Just (Pair idx tyTerm) => OkC (Pair (TVar name idx sp) (Pair (varTypeValue ctx idx tyTerm) ec))
   Nothing => case valueLookup globals ec name of
     Just (VECtor ctor) => inferCtorRef ec ctx name (dtCtorType ctor)
     -- M23：全隐式前缀的全局值（HM 泛化出的 unifyErr : Result a、empty : Map k v）

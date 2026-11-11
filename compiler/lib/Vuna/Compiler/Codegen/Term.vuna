@@ -1204,7 +1204,7 @@ else
 genTermFuel : Int -> GenSt -> List (Pair String Rig) -> Term -> Check (Pair String GenSt)
 genTermFuel fuel st binders t = if fuel <= 0 then icFuel "codegen"
 else case t of
-  TVar name i => case binderAt i binders of
+  TVar name i _ => case binderAt i binders of
     Just (Pair oc rig) =>
       if rigIsErased rig then cgErr1 (TypeLevelBindingRuntime name) name else OkC (Pair oc st)
     Nothing => icInternal "unbound runtime variable"
@@ -1679,7 +1679,7 @@ genProjAsCaseFuel fuel st binders base c tele i fi =
   let
     n = length tele
   in genTermFuel fuel st binders
-    (TCase base [CaseAlt c (projBinders tele 0) (TVar (recordProjVar fi) (n - 1 - fi))])
+    (TCase base [CaseAlt c (projBinders tele 0) (TVar (recordProjVar fi) (n - 1 - fi) (Span "" 0 0 0 0))])
 
 -- | 构造子应用的收尾：去装箱族转交 `genUnboxedConAppFinish`；record 族生成 OCaml record；
 -- 其余按族取 OCaml 构造子引用并拼上实参文本。

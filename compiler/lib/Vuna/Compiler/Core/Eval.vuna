@@ -96,7 +96,7 @@ evalFuelMax = 1000000
 evalFuel : Int -> List Value -> Term -> Value
 evalFuel fuel env t = if fuel <= 0 then VType levelZero
 else case t of
-  TVar name i => case lookupEnv i env of
+  TVar name i _ => case lookupEnv i env of
     Just v => v
     Nothing => VNeutral (NVar name i [])
   TMeta m => VMeta m []
@@ -836,7 +836,8 @@ quoteNeutralFuel : Int -> Int -> Neutral -> Term
 quoteNeutralFuel fuel depth n = if fuel <= 0 then TType levelZero
 else case n of
   NVar name level sp =>
-    applyTermSpine (TVar name (varIndex depth level)) (map (\a => quoteFuel (fuel - 1) depth a) sp)
+    applyTermSpine (TVar name (varIndex depth level) (Span "" 0 0 0 0))
+      (map (\a => quoteFuel (fuel - 1) depth a) sp)
   NGlobal g sp => applyTermSpine (TGlobal g) (map (\a => quoteFuel (fuel - 1) depth a) sp)
 
 -- M24.6 第一级：越界的 level 以前被静默当成最外层变量（index 0），错得无声。

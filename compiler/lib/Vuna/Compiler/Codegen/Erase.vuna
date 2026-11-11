@@ -132,7 +132,7 @@ showMetaHint m = " ?${m}"
 checkErasureFuel : Int -> List String -> List (Pair String Rig) -> Term -> Check Int
 checkErasureFuel fuel typeNames binders t = if fuel <= 0 then icFuel "erasure"
 else case t of
-  TVar name i => case binderAt i binders of
+  TVar name i _ => case binderAt i binders of
     Just (Pair n rig) =>
       if rigIsErased rig then cgErr1 (TypeLevelBindingRuntime name) name else OkC 0
     Nothing => icInternal "unbound runtime variable ${name} (index ${i}, binders ${length binders})"
@@ -194,7 +194,7 @@ termDepsIntoFuel : Int -> HashMap String Bool -> List String -> Term -> List Str
 termDepsIntoFuel fuel runtimeNames acc t = if fuel <= 0 then acc
 else case t of
   TGlobal name => if Base.HashMap.member name runtimeNames then addName name acc else acc
-  TVar name i => acc
+  TVar name i _ => acc
   TMeta m => acc
   TType l => acc
   TPi name implicit rig dom cod => acc
@@ -481,7 +481,7 @@ ensureUniqueOcamlNames datas defs =
 -- （含类型级定义，它们现在整体擦除、不再过擦除检查）做一次作用域验证，任何
 -- 越界/负 index 都在 check 期报内部错误，而不是在 codegen/OCaml 阶段才炸。
 checkTermScopes : Int -> Term -> Check Int
-checkTermScopes depth (TVar name i) =
+checkTermScopes depth (TVar name i _) =
   if i >= 0 then if i < depth then OkC 0 else icInternal "out-of-scope de Bruijn index ${i} (depth ${depth})"
   else icInternal "negative de Bruijn index ${i}"
 checkTermScopes depth (TGlobal name) = OkC 0

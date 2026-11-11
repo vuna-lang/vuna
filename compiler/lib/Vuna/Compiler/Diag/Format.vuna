@@ -287,7 +287,7 @@ maybeParent (Just n) = "${n}"
 jsonDiag : Diagnostic -> String
 jsonDiag d =
   join ""
-    ["{\"code\":${jsonStr d.diagCode}", ",\"severity\":${jsonStr (severityName d.diagSeverity)}", ",\"phase\":${jsonStr (phaseName d.diagPhase)}", ",\"category\":${jsonStr (categoryName d.diagCategory)}", ",\"message\":${jsonStr d.diagMessage}", ",\"labels\":[${join "," (map jsonLabel d.diagLabels)}]", ",\"fields\":[${join "," (map jsonField d.diagFields)}]", ",\"trace\":[${join "," (map jsonTrace d.diagTrace)}]", ",\"notes\":[${join "," (map jsonStr d.diagNotes)}]", ",\"suggestions\":[${join "," (map jsonSuggestion d.diagSuggestions)}]", ",\"origin\":${originJson d.diagOrigin}", ",\"internal\":${if d.diagInternal then "true" else "false"}", ",\"ice\":${maybeJsonIce d.diagIce}}"]
+    ["{\"code\":${jsonStr d.diagCode}", ",\"severity\":${jsonStr (severityName d.diagSeverity)}", ",\"phase\":${jsonStr (phaseName d.diagPhase)}", ",\"category\":${jsonStr (categoryName d.diagCategory)}", ",\"message\":${jsonStr d.diagMessage}${localizedJsonField d}", ",\"labels\":[${join "," (map jsonLabel d.diagLabels)}]", ",\"fields\":[${join "," (map jsonField d.diagFields)}]", ",\"trace\":[${join "," (map jsonTrace d.diagTrace)}]", ",\"notes\":[${join "," (map jsonStr d.diagNotes)}]", ",\"suggestions\":[${join "," (map jsonSuggestion d.diagSuggestions)}]", ",\"origin\":${originJson d.diagOrigin}", ",\"internal\":${if d.diagInternal then "true" else "false"}", ",\"ice\":${maybeJsonIce d.diagIce}}"]
 
 renderJson : Diagnostic -> String
 renderJson d = jsonDiag d
@@ -432,3 +432,9 @@ candidateTextOf c = c.candidateText
 callSpanSuffix : Maybe Span -> String
 callSpanSuffix Nothing = ""
 callSpanSuffix (Just sp) = " at ${sp.spanFile}:${strFromInt sp.spanStartLine}"
+
+localizedJsonField : Diagnostic -> String
+localizedJsonField d =
+  let
+    lm = localizedMessage d
+  in if lm == d.diagMessage then "" else ",\"localizedMessage\":${jsonStr lm}"

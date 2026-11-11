@@ -225,3 +225,11 @@ run: "$VUNA" check corpus/dt_err/16_nonterm.vuna --json 2>&1
 exit: 1
 out-contains: "arg":"call at argument position
 out-contains: "kind":"call"
+# QTT 使用点：线性重复使用错误附每个使用点的 fields.span（name=use）。
+run: "$VUNA" check corpus/dt_err/59_linear_twice.vuna --json 2>&1
+exit: 1
+out-contains: "kind":"span","name":"use"
+# 机器格式 i18n：--lang zh 的 JSON 保留英文 message 并附 localizedMessage。
+run: "$VUNA" check corpus/dt_err/02_conv.vuna --lang zh --json 2>&1
+exit: 1
+out-contains: "localizedMessage":

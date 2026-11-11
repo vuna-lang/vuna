@@ -548,7 +548,7 @@ isReplAtom ctors (TInt n) = True
 isReplAtom ctors (TStr s) = True
 isReplAtom ctors (TFloat raw) = True
 isReplAtom ctors (TBool b) = True
-isReplAtom ctors (TVar name i) = True
+isReplAtom ctors (TVar name i _) = True
 isReplAtom ctors (TGlobal g) = True
 isReplAtom ctors (TType l) = True
 isReplAtom ctors (TMeta m) = True
@@ -881,7 +881,7 @@ synthMainShowGo ec globals defs sp tyVal = case findClassByShortName "Show" (ecC
           tyTerm = quote 0 tyVal
           body =
             TLam "x" Rig1
-              (TApp (TApp (TApp (TGlobal mname) tyTerm Rig0) dictTerm RigOmega) (TVar "x" 0) Rig1)
+              (TApp (TApp (TApp (TGlobal mname) tyTerm Rig0) dictTerm RigOmega) (TVar "x" 0 (Span "" 0 0 0 0)) Rig1)
           def =
             DtDef mainShowDefName (TPi "x" False Rig1 tyTerm (TGlobal strTypeName)) body (Just sp)
         in OkC (rezonkDefs ec (append defs [def]))
@@ -1010,7 +1010,7 @@ findDefWithMeta ((Pair name body) :: rest) m =
 
 termHasMeta : Int -> Term -> Bool
 termHasMeta m (TMeta k) = k == m
-termHasMeta m (TVar n i) = False
+termHasMeta m (TVar n i _) = False
 termHasMeta m (TGlobal n) = False
 termHasMeta m (TType l) = False
 termHasMeta m (TPi n implicit rig dom cod) = termHasMeta m dom || termHasMeta m cod
@@ -1039,7 +1039,7 @@ anyAltHasMeta m (alt :: rest) = termHasMeta m (caseAltBody alt) || anyAltHasMeta
 -- 「本来就无 TMeta」的定义体，避免对全部定义体重建 Term（分配削减）。
 termHasAnyMeta : Term -> Bool
 termHasAnyMeta (TMeta k) = True
-termHasAnyMeta (TVar n i) = False
+termHasAnyMeta (TVar n i _) = False
 termHasAnyMeta (TGlobal n) = False
 termHasAnyMeta (TType l) = False
 termHasAnyMeta (TPi n implicit rig dom cod) = termHasAnyMeta dom || termHasAnyMeta cod
