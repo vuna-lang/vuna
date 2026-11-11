@@ -14,5 +14,5 @@ import Base.Host
 main : Eff [] Int
 main = do
   args <- getArgs
-  code <- pure (runCompilerCli args)
+  code <- runCompilerCli args
   exit code

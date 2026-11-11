@@ -107,12 +107,10 @@ runTarget parsed passthrough dir target =
       Nothing => []
       Just out => ["--out", out]
   in if not (isExecutable target) then runError "package ${packageLabel target} has no executable entry (app/Main.vuna)"
-  else
-    let
-      buildCode =
-        if flagSet parsed "no-build" then 0
-        else runCompilerCliFor "vuna" (append ["build", dir] (append pkgFlag outFlag))
-    in if buildCode /= 0 then pure buildCode
+  else if flagSet parsed "no-build" then execTarget passthrough target (flagValue parsed "out")
+  else do
+    buildCode <- runCompilerCliFor "vuna" (append ["build", dir] (append pkgFlag outFlag))
+    if buildCode /= 0 then pure buildCode
     else execTarget passthrough target (flagValue parsed "out")
 
 -- 执行：cwd 切到包目录，bin 用**相对包目录**的路径（`prim_eff_runIn` 先 chdir 再执行，

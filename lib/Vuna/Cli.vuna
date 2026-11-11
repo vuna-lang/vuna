@@ -113,10 +113,10 @@ runCli1 : List String -> Eff [] Int
 runCli1 args = case args of
   [] => usageError 0
   arg :: rest => case arg of
-    "compile" => pure (runCompilerCliFor "vuna" (arg :: rest))
-    "check" => pure (runCompilerCliFor "vuna" (arg :: rest))
-    "build" => pure (runCompilerCliFor "vuna" (arg :: rest))
-    "seed" => pure (runCompilerCliFor "vuna" (arg :: rest))
+    "compile" => runCompilerCliFor "vuna" (arg :: rest)
+    "check" => runCompilerCliFor "vuna" (arg :: rest)
+    "build" => runCompilerCliFor "vuna" (arg :: rest)
+    "seed" => runCompilerCliFor "vuna" (arg :: rest)
     "lint" => Vuna.Lint.runLint rest
     "interp" => interpArgs rest
     "test" => testArgs rest
@@ -135,8 +135,7 @@ runCli1 args = case args of
     "version" => printVersion 0
     "--version" => printVersion 0
     "help" => help 0
-    _ =>
-      if startsWith "-" arg then pure (runCompilerCliFor "vuna" args) else unknownCommand "vuna" arg
+    _ => if startsWith "-" arg then runCompilerCliFor "vuna" args else unknownCommand "vuna" arg
 
 -- M30：版本唯一真源在编译器包（Vuna.Compiler.Version），产品 CLI 与
 -- vuna-compiler 共用；VSCode 用它探测服务器。
