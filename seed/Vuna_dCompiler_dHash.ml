@@ -43,23 +43,56 @@ let v_Vuna_dCompiler_dHash_dbigSigma0 = (fun x -> ((Base_dBits.v_Base_dBits_dbxo
 
 let v_Vuna_dCompiler_dHash_dbigSigma1 = (fun x -> ((Base_dBits.v_Base_dBits_dbxor ((Base_dBits.v_Base_dBits_drotr32 x) 6)) ((Base_dBits.v_Base_dBits_dbxor ((Base_dBits.v_Base_dBits_drotr32 x) 11)) ((Base_dBits.v_Base_dBits_drotr32 x) 25))))
 
-let v_Vuna_dCompiler_dHash_dextend = (fun ws i -> ((fun w2 -> ((fun w7 -> ((fun w15 -> ((fun w16 -> ((Base_dList.v_Base_dList_dappend ws) (Base_dList.C_Base_dList_dList_Cons (((Base_dBits.v_Base_dBits_dadd32 ((Base_dBits.v_Base_dBits_dadd32 (v_Vuna_dCompiler_dHash_dsigma1Small w2)) w7)) ((Base_dBits.v_Base_dBits_dadd32 w16) (v_Vuna_dCompiler_dHash_dsigma0Small w15))), Base_dList.C_Base_dList_dList_Nil)))) ((v_Vuna_dCompiler_dHash_datIdx (i - 16)) ws))) ((v_Vuna_dCompiler_dHash_datIdx (i - 15)) ws))) ((v_Vuna_dCompiler_dHash_datIdx (i - 7)) ws))) ((v_Vuna_dCompiler_dHash_datIdx (i - 2)) ws)))
+let rec v_Vuna_dCompiler_dHash_datWindow = (fun mc0 mc1 -> (match mc1 with
+  | Base_dList.C_Base_dList_dList_Cons (dtb__5, dtb__6) -> (if (mc0 <= 0) then dtb__5 else ((v_Vuna_dCompiler_dHash_datWindow (mc0 - 1)) dtb__6))
+  | Base_dList.C_Base_dList_dList_Nil -> 0
+  | _ -> failwith "DT: impossible branch"
+))
 
-let v_Vuna_dCompiler_dHash_dschedule = (fun w16 -> (((Base_dList.v_Base_dList_dfoldl v_Vuna_dCompiler_dHash_dextend) w16) ((Base_dList.v_Base_dList_drange 16) 64)))
+let rec v_Vuna_dCompiler_dHash_dscheduleGo = (fun k window -> (if (k <= 0) then Base_dList.C_Base_dList_dList_Nil else ((fun w2 -> ((fun w7 -> ((fun w15 -> ((fun w16 -> ((fun next -> (Base_dList.C_Base_dList_dList_Cons (next, ((v_Vuna_dCompiler_dHash_dscheduleGo (k - 1)) (Base_dList.C_Base_dList_dList_Cons (next, ((Base_dList.v_Base_dList_dtake 15) window))))))) ((Base_dBits.v_Base_dBits_dadd32 ((Base_dBits.v_Base_dBits_dadd32 (v_Vuna_dCompiler_dHash_dsigma1Small w2)) w7)) ((Base_dBits.v_Base_dBits_dadd32 w16) (v_Vuna_dCompiler_dHash_dsigma0Small w15))))) ((v_Vuna_dCompiler_dHash_datWindow 15) window))) ((v_Vuna_dCompiler_dHash_datWindow 14) window))) ((v_Vuna_dCompiler_dHash_datWindow 6) window))) ((v_Vuna_dCompiler_dHash_datWindow 1) window))))
 
-let v_Vuna_dCompiler_dHash_droundStep = (fun ws st i -> ((fun a -> ((fun b -> ((fun c -> ((fun d -> ((fun e -> ((fun f -> ((fun g -> ((fun h -> ((fun s1 -> ((fun ch -> ((fun t1 -> ((fun s0 -> ((fun maj -> ((fun t2 -> (Base_dList.C_Base_dList_dList_Cons (((Base_dBits.v_Base_dBits_dadd32 t1) t2), (Base_dList.C_Base_dList_dList_Cons (a, (Base_dList.C_Base_dList_dList_Cons (b, (Base_dList.C_Base_dList_dList_Cons (c, (Base_dList.C_Base_dList_dList_Cons (((Base_dBits.v_Base_dBits_dadd32 d) t1), (Base_dList.C_Base_dList_dList_Cons (e, (Base_dList.C_Base_dList_dList_Cons (f, (Base_dList.C_Base_dList_dList_Cons (g, Base_dList.C_Base_dList_dList_Nil))))))))))))))))) ((Base_dBits.v_Base_dBits_dadd32 s0) maj))) ((Base_dBits.v_Base_dBits_dbxor ((Base_dBits.v_Base_dBits_dband a) b)) ((Base_dBits.v_Base_dBits_dbxor ((Base_dBits.v_Base_dBits_dband a) c)) ((Base_dBits.v_Base_dBits_dband b) c))))) (v_Vuna_dCompiler_dHash_dbigSigma0 a))) ((Base_dBits.v_Base_dBits_dadd32 ((Base_dBits.v_Base_dBits_dadd32 ((Base_dBits.v_Base_dBits_dadd32 h) s1)) ((Base_dBits.v_Base_dBits_dadd32 ch) ((v_Vuna_dCompiler_dHash_datIdx i) v_Vuna_dCompiler_dHash_dshaK)))) ((v_Vuna_dCompiler_dHash_datIdx i) ws)))) ((Base_dBits.v_Base_dBits_dbxor ((Base_dBits.v_Base_dBits_dband e) f)) ((Base_dBits.v_Base_dBits_dband (Base_dBits.v_Base_dBits_dbnot e)) g)))) (v_Vuna_dCompiler_dHash_dbigSigma1 e))) ((v_Vuna_dCompiler_dHash_datIdx 7) st))) ((v_Vuna_dCompiler_dHash_datIdx 6) st))) ((v_Vuna_dCompiler_dHash_datIdx 5) st))) ((v_Vuna_dCompiler_dHash_datIdx 4) st))) ((v_Vuna_dCompiler_dHash_datIdx 3) st))) ((v_Vuna_dCompiler_dHash_datIdx 2) st))) ((v_Vuna_dCompiler_dHash_datIdx 1) st))) ((v_Vuna_dCompiler_dHash_datIdx 0) st)))
+let v_Vuna_dCompiler_dHash_dschedule = (fun w16 -> ((Base_dList.v_Base_dList_dappend w16) ((v_Vuna_dCompiler_dHash_dscheduleGo 48) (Base_dList.v_Base_dList_dreverse w16))))
 
-let v_Vuna_dCompiler_dHash_dcompress = (fun st ws -> (((Base_dList.v_Base_dList_dfoldl (v_Vuna_dCompiler_dHash_droundStep ws)) st) ((Base_dList.v_Base_dList_drange 0) 64)))
+let v_Vuna_dCompiler_dHash_dch32 = (fun e f g -> ((Base_dBits.v_Base_dBits_dbxor ((Base_dBits.v_Base_dBits_dband e) f)) ((Base_dBits.v_Base_dBits_dband (Base_dBits.v_Base_dBits_dbnot e)) g)))
+
+let v_Vuna_dCompiler_dHash_dmaj32 = (fun a b c -> ((Base_dBits.v_Base_dBits_dbxor ((Base_dBits.v_Base_dBits_dband a) b)) ((Base_dBits.v_Base_dBits_dbxor ((Base_dBits.v_Base_dBits_dband a) c)) ((Base_dBits.v_Base_dBits_dband b) c))))
+
+let rec v_Vuna_dCompiler_dHash_droundsGo = (fun mc0 mc1 mc2 mc3 mc4 mc5 mc6 mc7 mc8 -> (match mc8 with
+  | Base_dList.C_Base_dList_dList_Cons (dtb__7, dtb__8) -> (match dtb__7 with
+  | { Base_dPair.f_Base_dPair_dPair_first = dtb__9; Base_dPair.f_Base_dPair_dPair_second = dtb__10 } -> ((fun t1 -> ((fun t2 -> (((((((((v_Vuna_dCompiler_dHash_droundsGo ((Base_dBits.v_Base_dBits_dadd32 t1) t2)) mc0) mc1) mc2) ((Base_dBits.v_Base_dBits_dadd32 mc3) t1)) mc4) mc5) mc6) dtb__8)) ((Base_dBits.v_Base_dBits_dadd32 (v_Vuna_dCompiler_dHash_dbigSigma0 mc0)) (((v_Vuna_dCompiler_dHash_dmaj32 mc0) mc1) mc2)))) ((Base_dBits.v_Base_dBits_dadd32 ((Base_dBits.v_Base_dBits_dadd32 ((Base_dBits.v_Base_dBits_dadd32 mc7) (v_Vuna_dCompiler_dHash_dbigSigma1 mc4))) ((Base_dBits.v_Base_dBits_dadd32 (((v_Vuna_dCompiler_dHash_dch32 mc4) mc5) mc6)) dtb__10))) dtb__9))
+  | _ -> failwith "DT: impossible branch"
+)
+  | Base_dList.C_Base_dList_dList_Nil -> (Base_dList.C_Base_dList_dList_Cons (mc0, (Base_dList.C_Base_dList_dList_Cons (mc1, (Base_dList.C_Base_dList_dList_Cons (mc2, (Base_dList.C_Base_dList_dList_Cons (mc3, (Base_dList.C_Base_dList_dList_Cons (mc4, (Base_dList.C_Base_dList_dList_Cons (mc5, (Base_dList.C_Base_dList_dList_Cons (mc6, (Base_dList.C_Base_dList_dList_Cons (mc7, Base_dList.C_Base_dList_dList_Nil))))))))))))))))
+  | _ -> failwith "DT: impossible branch"
+))
+
+let v_Vuna_dCompiler_dHash_dcompress = (fun st w16 -> (((((((((v_Vuna_dCompiler_dHash_droundsGo ((v_Vuna_dCompiler_dHash_datIdx 0) st)) ((v_Vuna_dCompiler_dHash_datIdx 1) st)) ((v_Vuna_dCompiler_dHash_datIdx 2) st)) ((v_Vuna_dCompiler_dHash_datIdx 3) st)) ((v_Vuna_dCompiler_dHash_datIdx 4) st)) ((v_Vuna_dCompiler_dHash_datIdx 5) st)) ((v_Vuna_dCompiler_dHash_datIdx 6) st)) ((v_Vuna_dCompiler_dHash_datIdx 7) st)) ((Base_dList.v_Base_dList_dzip (v_Vuna_dCompiler_dHash_dschedule w16)) v_Vuna_dCompiler_dHash_dshaK)))
 
 let v_Vuna_dCompiler_dHash_dzipAdd = (fun xs ys -> ((Base_dList.v_Base_dList_dmap (fun i -> ((Base_dBits.v_Base_dBits_dadd32 ((v_Vuna_dCompiler_dHash_datIdx i) xs)) ((v_Vuna_dCompiler_dHash_datIdx i) ys)))) ((Base_dList.v_Base_dList_drange 0) 8)))
 
-let v_Vuna_dCompiler_dHash_dcompressBlock = (fun st block -> ((v_Vuna_dCompiler_dHash_dzipAdd st) ((v_Vuna_dCompiler_dHash_dcompress st) (v_Vuna_dCompiler_dHash_dschedule (v_Vuna_dCompiler_dHash_dchunkWords block)))))
+let v_Vuna_dCompiler_dHash_dcompressBlock = (fun st block -> ((v_Vuna_dCompiler_dHash_dzipAdd st) ((v_Vuna_dCompiler_dHash_dcompress st) (v_Vuna_dCompiler_dHash_dchunkWords block))))
 
 let v_Vuna_dCompiler_dHash_dsha256Bytes = (fun bytes -> (((Base_dList.v_Base_dList_dfoldl v_Vuna_dCompiler_dHash_dcompressBlock) v_Vuna_dCompiler_dHash_dshaInit) (v_Vuna_dCompiler_dHash_dchunk64 (v_Vuna_dCompiler_dHash_dpadMessage bytes))))
 
 let v_Vuna_dCompiler_dHash_ddigestOfBytes = (fun bytes -> (v_Vuna_dCompiler_dHash_dsha256Bytes bytes))
 
-let v_Vuna_dCompiler_dHash_ddigestOfString = (fun s -> (v_Vuna_dCompiler_dHash_ddigestOfBytes (Base_dList.dtp_unpack s)))
+let v_Vuna_dCompiler_dHash_dpaddedLen = (fun n -> ((fun r -> ((fun z -> (((n + 1) + z) + 8)) (if (r <= 56) then (56 - r) else (120 - r)))) ((n + 1) - ((if 64 = 0 then failwith "division by zero" else (n + 1) / 64) * 64))))
+
+let v_Vuna_dCompiler_dHash_dpaddedByte = (fun s n total i -> (if (i < n) then ((dtp_strAt s) i) else (if (i = n) then 128 else (if (i < (total - 8)) then 0 else ((Base_dBits.v_Base_dBits_dband ((Base_dBits.v_Base_dBits_dshr (n * 8)) (8 * (7 - (i - (total - 8)))))) 255)))))
+
+let v_Vuna_dCompiler_dHash_dwordAtString = (fun s n total b j -> ((fun base -> ((fun b0 -> ((fun b1 -> ((fun b2 -> ((fun b3 -> ((Base_dBits.v_Base_dBits_dbor ((Base_dBits.v_Base_dBits_dbor ((Base_dBits.v_Base_dBits_dshl32 b0) 24)) ((Base_dBits.v_Base_dBits_dshl32 b1) 16))) ((Base_dBits.v_Base_dBits_dbor ((Base_dBits.v_Base_dBits_dshl32 b2) 8)) b3))) ((((v_Vuna_dCompiler_dHash_dpaddedByte s) n) total) (base + 3)))) ((((v_Vuna_dCompiler_dHash_dpaddedByte s) n) total) (base + 2)))) ((((v_Vuna_dCompiler_dHash_dpaddedByte s) n) total) (base + 1)))) ((((v_Vuna_dCompiler_dHash_dpaddedByte s) n) total) base))) ((b * 64) + (j * 4))))
+
+let v_Vuna_dCompiler_dHash_dchunkWordsString = (fun s n total b -> ((Base_dList.v_Base_dList_dmap (fun j -> (((((v_Vuna_dCompiler_dHash_dwordAtString s) n) total) b) j))) ((Base_dList.v_Base_dList_drange 0) 16)))
+
+let rec v_Vuna_dCompiler_dHash_dblocksGo = (fun s n total k b st -> (if (k <= 0) then st else ((((((v_Vuna_dCompiler_dHash_dblocksGo s) n) total) (k - 1)) (b + 1)) ((v_Vuna_dCompiler_dHash_dzipAdd st) ((v_Vuna_dCompiler_dHash_dcompress st) (v_Vuna_dCompiler_dHash_dschedule ((((v_Vuna_dCompiler_dHash_dchunkWordsString s) n) total) b)))))))
+
+let v_Vuna_dCompiler_dHash_dsha256OfString = (fun s -> ((fun n -> ((fun total -> ((((((v_Vuna_dCompiler_dHash_dblocksGo s) n) total) (if 64 = 0 then failwith "division by zero" else total / 64)) 0) v_Vuna_dCompiler_dHash_dshaInit)) (v_Vuna_dCompiler_dHash_dpaddedLen n))) (bi_strLength s)))
+
+let v_Vuna_dCompiler_dHash_ddigestOfString = (fun s -> (v_Vuna_dCompiler_dHash_dsha256OfString s))
+
+let rec v_Vuna_dCompiler_dHash_dprehashGo = (fun k i h0 h1 h2 h3 s -> (if (k <= 0) then (String.concat "" [(bi_strFromInt h0); ","; (bi_strFromInt h1); ","; (bi_strFromInt h2); ","; (bi_strFromInt h3)]) else ((fun b -> (((((((v_Vuna_dCompiler_dHash_dprehashGo (k - 1)) (i + 1)) ((h0 * 131) + b)) ((h1 * 137) + b)) ((h2 * 139) + b)) ((h3 * 149) + b)) s)) (((dtp_strAt s) i) + 1))))
+
+let v_Vuna_dCompiler_dHash_dprehashOfString = (fun s -> (((((((v_Vuna_dCompiler_dHash_dprehashGo (bi_strLength s)) 0) 1) 2) 3) 4) s))
 
 let v_Vuna_dCompiler_dHash_ddigitAt = (fun v p -> ((Base_dBits.v_Base_dBits_dband (if p = 0 then failwith "division by zero" else v / p)) 15))
 
@@ -67,7 +100,7 @@ let v_Vuna_dCompiler_dHash_dhexDigit = (fun d -> (if (d < 10) then (bi_strFromIn
 
 let v_Vuna_dCompiler_dHash_dhex8 = (fun v -> (Base_dList.dtp_concatMany (Base_dList.C_Base_dList_dList_Cons ((v_Vuna_dCompiler_dHash_dhexDigit ((v_Vuna_dCompiler_dHash_ddigitAt v) 268435456)), (Base_dList.C_Base_dList_dList_Cons ((v_Vuna_dCompiler_dHash_dhexDigit ((v_Vuna_dCompiler_dHash_ddigitAt v) 16777216)), (Base_dList.C_Base_dList_dList_Cons ((v_Vuna_dCompiler_dHash_dhexDigit ((v_Vuna_dCompiler_dHash_ddigitAt v) 1048576)), (Base_dList.C_Base_dList_dList_Cons ((v_Vuna_dCompiler_dHash_dhexDigit ((v_Vuna_dCompiler_dHash_ddigitAt v) 65536)), (Base_dList.C_Base_dList_dList_Cons ((v_Vuna_dCompiler_dHash_dhexDigit ((v_Vuna_dCompiler_dHash_ddigitAt v) 4096)), (Base_dList.C_Base_dList_dList_Cons ((v_Vuna_dCompiler_dHash_dhexDigit ((v_Vuna_dCompiler_dHash_ddigitAt v) 256)), (Base_dList.C_Base_dList_dList_Cons ((v_Vuna_dCompiler_dHash_dhexDigit ((v_Vuna_dCompiler_dHash_ddigitAt v) 16)), (Base_dList.C_Base_dList_dList_Cons ((v_Vuna_dCompiler_dHash_dhexDigit ((v_Vuna_dCompiler_dHash_ddigitAt v) 1)), Base_dList.C_Base_dList_dList_Nil))))))))))))))))))
 
-let v_Vuna_dCompiler_dHash_ddigestHex = (fun mc0 -> (let dtb__5 = mc0 in (Base_dList.dtp_concatMany ((Base_dList.v_Base_dList_dmap v_Vuna_dCompiler_dHash_dhex8) dtb__5))))
+let v_Vuna_dCompiler_dHash_ddigestHex = (fun mc0 -> (let dtb__11 = mc0 in (Base_dList.dtp_concatMany ((Base_dList.v_Base_dList_dmap v_Vuna_dCompiler_dHash_dhex8) dtb__11))))
 
 let v_Vuna_dCompiler_dHash_dbyte8 = (fun n -> (Base_dList.C_Base_dList_dList_Cons (((Base_dBits.v_Base_dBits_dband ((Base_dBits.v_Base_dBits_dshr n) 56)) 255), (Base_dList.C_Base_dList_dList_Cons (((Base_dBits.v_Base_dBits_dband ((Base_dBits.v_Base_dBits_dshr n) 48)) 255), (Base_dList.C_Base_dList_dList_Cons (((Base_dBits.v_Base_dBits_dband ((Base_dBits.v_Base_dBits_dshr n) 40)) 255), (Base_dList.C_Base_dList_dList_Cons (((Base_dBits.v_Base_dBits_dband ((Base_dBits.v_Base_dBits_dshr n) 32)) 255), (Base_dList.C_Base_dList_dList_Cons (((Base_dBits.v_Base_dBits_dband ((Base_dBits.v_Base_dBits_dshr n) 24)) 255), (Base_dList.C_Base_dList_dList_Cons (((Base_dBits.v_Base_dBits_dband ((Base_dBits.v_Base_dBits_dshr n) 16)) 255), (Base_dList.C_Base_dList_dList_Cons (((Base_dBits.v_Base_dBits_dband ((Base_dBits.v_Base_dBits_dshr n) 8)) 255), (Base_dList.C_Base_dList_dList_Cons (((Base_dBits.v_Base_dBits_dband n) 255), Base_dList.C_Base_dList_dList_Nil)))))))))))))))))
 

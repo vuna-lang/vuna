@@ -19,12 +19,14 @@ module Vuna.Compiler.Intrinsics
   , effMemberFamilyName
   , effMemberHereCtor
   , effMemberThereCtor
+  , effMkCtor
   , effRowConsCtor
   , effRowFamilyName
   , effRowNilCtor
   , effRowRemName
   , effRunName
   , effTypeName
+  , effUnitTypeName
   , findIntrinsic
   , floatIntrinsicNames
   , floatTypeName
@@ -41,6 +43,7 @@ module Vuna.Compiler.Intrinsics
   , intrinsicArity
   , intrinsicCapability
   , intrinsicName
+  , intrinsicReturnsEff
   , intrinsicReturnsIO
   , intrinsicSignature
   , intrinsicVisible
@@ -159,6 +162,9 @@ data IType : Type where
   IList : IType -> IType
   -- `IO <arg>`：内建效应类型；效果原语返回 IO 动作（M37 起 IO 是内建类型）
   IIO : IType -> IType
+  -- `Eff [] <arg>`：统一动作类型（宿主原语目标）；行为与 IIO 相同，只是结果类型是
+  -- `Base.Eff.Eff Base.Eff.Row.Nil arg`，codegen 需要包一层 `MkEff`。
+  IEff : IType -> IType
   IFun : IType -> IType -> IType
   -- M38：参数 binder 为 1 的函数（线性 continuation）；只给底层原语用。
   IFun1 : IType -> IType -> IType
@@ -351,6 +357,15 @@ effMemberThereCtor = "Base.Eff.Member.There"
 effTypeName : String
 effTypeName = "Base.Eff.Eff"
 
+-- | `Base.Eff.EffUnit`：Eff 的 dummy thunk 参数类型（codegen 包 `MkEff` 时用作
+-- `fun (_ : EffUnit) -> ...` 的标注；不进求值语义）。
+effUnitTypeName : String
+effUnitTypeName = "Base.Eff.EffUnit"
+
+-- | `Base.Eff.Eff.MkEff`：Eff 的唯一构造子（codegen 构造宿主原语动作时引用）。
+effMkCtor : String
+effMkCtor = "Base.Eff.Eff.MkEff"
+
 -- | 默认实例名（命名行 ND3）：裸标签条目 `Cons "main" e Nil` 与名字槽最终化兜底共用；
 -- 单点定义在 `Base.Eff.defaultInstance`，此处是编译器侧的镜像常量。
 effDefaultInstance : String
@@ -518,6 +533,18 @@ typeReturnsIO (IFun _ cod) = typeReturnsIO cod
 typeReturnsIO (IFun1 _ cod) = typeReturnsIO cod
 typeReturnsIO (IPi _ cod) = typeReturnsIO cod
 typeReturnsIO _ = False
+
+-- | 该内建是否返回 Eff 动作（`IEff` 在签名尾部）。
+intrinsicReturnsEff : Intrinsic -> Bool
+intrinsicReturnsEff i = typeReturnsEff (intrinsicSignature i)
+
+-- | `IType` 尾部是否为 `IEff`（与 `typeReturnsIO` 同形）。
+typeReturnsEff : IType -> Bool
+typeReturnsEff (IEff _) = True
+typeReturnsEff (IFun _ cod) = typeReturnsEff cod
+typeReturnsEff (IFun1 _ cod) = typeReturnsEff cod
+typeReturnsEff (IPi _ cod) = typeReturnsEff cod
+typeReturnsEff _ = False
 
 -- | 该内建是否需要能力（`intrinsicCapability` 非 `Nothing`）。
 isEffectfulIntrinsic : Intrinsic -> Bool

@@ -970,6 +970,7 @@ else case lookupPair name st.gsCtors of
   Nothing => case findIntrinsic name of
     Just i => if isIOAlgebraName name then ioAlgebraText st name
     else if intrinsicReturnsIO i then ioPrimText st name i
+    else if intrinsicReturnsEff i then effPrimText st name i
     else if needsListBridge i then if memName listFamilyName st.gsFamilies then
       let
         p = genBridgeRef st i.intrinsicRuntime
@@ -991,6 +992,27 @@ ioPrimText st name i = if needsListBridge i then
     rt = genBridgeRef st i.intrinsicRuntime
   in OkC (Pair (ioPrimThunkText (firstOf rt) (intrinsicArity i)) (secondOf rt))
 else OkC (Pair (ioPrimThunkText i.intrinsicRuntime (intrinsicArity i)) st)
+
+-- Eff 原语：运行时仍是 eager 函数，但结果必须是装箱的 `MkEff`（Eff 是 base data）。
+-- 生成 `MkEff (fun (_ : EffUnit) -> rt args)`；ctor 与 EffUnit 类型跨单元限定并记依赖。
+effPrimText : GenSt -> String -> Intrinsic -> Check (Pair String GenSt)
+effPrimText st name i =
+  let
+    rtPair =
+      if needsListBridge i then genBridgeRef st i.intrinsicRuntime else Pair i.intrinsicRuntime st
+    st1 = secondOf rtPair
+    unitP = qualTypeText st1.gsQual effUnitTypeName
+    st2 = gsAddDep st1 (secondOf unitP)
+    ctorP = genCtorRef st2 effTypeName effMkCtor
+    st3 = secondOf ctorP
+  in OkC (Pair (effThunkText (firstOf ctorP) (firstOf unitP) (firstOf rtPair) (intrinsicArity i)) st3)
+
+effThunkText : String -> String -> String -> Int -> String
+effThunkText ctor unitTy rt arity =
+  let
+    argText = joinWith " " (takeNames arity ioParamNames)
+  in if arity == 0 then "${ctor} (fun (_ : ${unitTy}) -> ${rt})"
+  else "(fun ${argText} -> ${ctor} (fun (_ : ${unitTy}) -> ${rt} ${argText}))"
 
 -- 内建模式的 thunk 包装：`prim_print` → `(fun s -> fun (_ : int) -> dtp_print s)`；
 -- 零参 `prim_getArgs` → `(fun (_ : int) -> (dtp_listOf (dtp_getArgs ())))`。

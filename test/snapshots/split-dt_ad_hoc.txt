@@ -2,6 +2,7 @@
 # files（排序，相对 OUTDIR）
 Base_dApplicative.ml
 Base_dBool.ml
+Base_dEff.ml
 Base_dEq.ml
 Base_dFloat.ml
 Base_dFoldable.ml
@@ -44,6 +45,31 @@ let v_Base_dBool_dor
 let v_Base_dBool_dxor
 let v_Hashable_uBase_uBool_uBool
 let v_Show_uBase_uBool_uBool
+
+== Base_dEff.ml
+let v_Applicative_uBase_uEff_uEff_ur
+let v_Base_dEff_dbracket
+let v_Base_dEff_dcontAdapter
+let v_Base_dEff_ddefaultInstance
+let v_Base_dEff_deffPrim
+let v_Base_dEff_dfinally
+let v_Base_dEff_dhandleCore
+let v_Base_dEff_dhandleCoreLin
+let v_Base_dEff_dhandleWith
+let v_Base_dEff_dhandleWithAt
+let v_Base_dEff_dmkCont
+let v_Base_dEff_dperformCore
+let v_Base_dEff_dresFn
+let v_Base_dEff_dresumeCont
+let v_Base_dEff_drunEff
+let v_Base_dEff_drunIOAnswer
+let v_Base_dEff_drunIOEff
+let v_Base_dEff_drunPure
+let v_Base_dEff_drunThunk
+let v_Base_dEff_dsendCore
+let v_Base_dEff_dweaken
+let v_Monad_uBase_uEff_uEff_ur
+type t_Base_dEff_dRow
 
 == Base_dEq.ml
 let v_Base_dEq_deq

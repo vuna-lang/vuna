@@ -56,4 +56,7 @@ import Base.Result
 import Base.String
 import Base.Monad
 import Base.Traversable
+-- 保证每个程序都加载 Base.Eff（宿主原语签名与 codegen 的 MkEff 需要它）；
+-- 这里只 import、不重导出，短名 Eff/Row 仍需显式 import Base.Eff 才能用。
+import Base.Eff
 import Base.Unit

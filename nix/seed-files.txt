@@ -2,6 +2,7 @@ Base_dApplicative.ml
 Base_dArray.ml
 Base_dBits.ml
 Base_dBool.ml
+Base_dEff.ml
 Base_dEq.ml
 Base_dFloat.ml
 Base_dFoldable.ml

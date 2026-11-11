@@ -1,0 +1,78 @@
+open Vuna_runtime
+type t_Base_dEff_dRow = C_Base_dEff_dRow_Nil | C_Base_dEff_dRow_Cons of (string) * (t_Base_dEff_dRow)
+and t_Base_dEff_dMember = C_Base_dEff_dMember_Here | C_Base_dEff_dMember_There of (t_Base_dEff_dMember)
+and t_Base_dEff_dEffUnit = C_Base_dEff_dEffUnit_MkEffUnit
+and 'a0 t_Base_dEff_dEff = C_Base_dEff_dEff_MkEff of ((t_Base_dEff_dEffUnit) -> 'a0)
+and ('a0, 'a1) t_Base_dEff_dCont = C_Base_dEff_dCont_MkCont of (('a0) -> 'a1)
+and 'a0 t_Base_dEff_dResFn = C_Base_dEff_dResFn_MkResFn of (('a0) -> Obj.t)
+
+let v_Monad_uBase_uEff_uEff_ur = (Base_dMonad.C_Dict_uBase_dMonad_dMonad_Monad ((fun e k -> (C_Base_dEff_dEff_MkEff ((fun u -> (match e with
+  | C_Base_dEff_dEff_MkEff (dtb__0) -> (match (k (dtb__0 u)) with
+  | C_Base_dEff_dEff_MkEff (dtb__1) -> (dtb__1 u)
+  | _ -> failwith "DT: impossible branch"
+)
+  | _ -> failwith "DT: impossible branch"
+)))))))
+
+let v_Applicative_uBase_uEff_uEff_ur = (Base_dApplicative.C_Dict_uBase_dApplicative_dApplicative_Applicative ((fun x -> (C_Base_dEff_dEff_MkEff ((fun _u -> x)))), (fun mf mx -> (C_Base_dEff_dEff_MkEff ((fun u -> (match mf with
+  | C_Base_dEff_dEff_MkEff (dtb__2) -> (match mx with
+  | C_Base_dEff_dEff_MkEff (dtb__3) -> ((dtb__2 u) (dtb__3 u))
+  | _ -> failwith "DT: impossible branch"
+)
+  | _ -> failwith "DT: impossible branch"
+))))), (fun f ma mb -> (C_Base_dEff_dEff_MkEff ((fun u -> (match ma with
+  | C_Base_dEff_dEff_MkEff (dtb__4) -> (match mb with
+  | C_Base_dEff_dEff_MkEff (dtb__5) -> ((f (dtb__4 u)) (dtb__5 u))
+  | _ -> failwith "DT: impossible branch"
+)
+  | _ -> failwith "DT: impossible branch"
+)))))))
+
+let v_Base_dEff_ddefaultInstance = "main"
+
+let v_Base_dEff_deffPrim = (fun f -> (C_Base_dEff_dEff_MkEff ((fun _u -> (f 0)))))
+
+let v_Base_dEff_dweaken = (fun comp -> (match comp with
+  | C_Base_dEff_dEff_MkEff (dtb__6) -> (C_Base_dEff_dEff_MkEff (dtb__6))
+  | _ -> failwith "DT: impossible branch"
+))
+
+let v_Base_dEff_drunThunk = (fun e _uarity3 -> ((match e with
+  | C_Base_dEff_dEff_MkEff (dtb__7) -> dtb__7
+  | _ -> failwith "DT: impossible branch"
+) _uarity3))
+
+let v_Base_dEff_drunPure = (fun e -> ((v_Base_dEff_drunThunk e) C_Base_dEff_dEffUnit_MkEffUnit))
+
+let v_Base_dEff_drunEff = (fun e -> ((v_Base_dEff_drunThunk e) C_Base_dEff_dEffUnit_MkEffUnit))
+
+let v_Base_dEff_drunIOEff = (fun e -> (((fun io k -> fun (w : int) -> k (io w) w) ((fun x -> fun (_ : int) -> x) 0)) (fun _u -> ((fun x -> fun (_ : int) -> x) (v_Base_dEff_drunEff e)))))
+
+let v_Base_dEff_dsendCore = (fun key name o -> (C_Base_dEff_dEff_MkEff ((fun _u -> ((((fun key name v -> Obj.obj (Effect.perform (Perform (key, name, Obj.repr v)))) key) name) o)))))
+
+let v_Base_dEff_dperformCore = (fun n key o -> (((v_Base_dEff_dsendCore key) n) o))
+
+let v_Base_dEff_dhandleCore = (fun key name ret opH comp -> (C_Base_dEff_dEff_MkEff ((((((dtp_effect_handle key) name) ret) opH) (v_Base_dEff_drunThunk comp)))))
+
+let v_Base_dEff_drunIOAnswer = (fun e -> (((fun io k -> fun (w : int) -> k (io w) w) ((fun x -> fun (_ : int) -> x) 0)) (fun _u -> ((fun x -> fun (_ : int) -> x) ((fun io -> io 0) (v_Base_dEff_drunEff e))))))
+
+let v_Base_dEff_dresumeCont = (fun c x -> (match c with
+  | C_Base_dEff_dCont_MkCont (dtb__8) -> (dtb__8 x)
+  | _ -> failwith "DT: impossible branch"
+))
+
+let v_Base_dEff_dcontAdapter = (fun opH o k -> (((Obj.magic opH) o) (C_Base_dEff_dCont_MkCont ((Obj.magic k)))))
+
+let v_Base_dEff_dhandleCoreLin = (fun key name ret opH comp -> (((((v_Base_dEff_dhandleCore key) name) ret) (v_Base_dEff_dcontAdapter (Obj.magic opH))) comp))
+
+let v_Base_dEff_dresFn = (fun r -> (C_Base_dEff_dResFn_MkResFn (r)))
+
+let v_Base_dEff_dhandleWith = (fun n key comp ret opH -> (((((v_Base_dEff_dhandleCore key) n) ret) (Obj.magic opH)) comp))
+
+let v_Base_dEff_dhandleWithAt = (fun n key comp ret opH -> (((((v_Base_dEff_dhandleCore key) n) ret) (Obj.magic opH)) comp))
+
+let v_Base_dEff_dmkCont = (fun k -> (C_Base_dEff_dCont_MkCont (k)))
+
+let v_Base_dEff_dbracket = (fun acquire release use -> (((Base_dMonad.v_Base_dMonad_dbind v_Monad_uBase_uEff_uEff_ur) acquire) (fun res -> (((Base_dMonad.v_Base_dMonad_dbind v_Monad_uBase_uEff_uEff_ur) (v_Base_dEff_deffPrim (fun _u -> (dtp_cleanup_push (fun _u -> (v_Base_dEff_drunEff (release res))))))) (fun _u -> (((Base_dMonad.v_Base_dMonad_dbind v_Monad_uBase_uEff_uEff_ur) (use res)) (fun a -> (((Base_dMonad.v_Base_dMonad_dbind v_Monad_uBase_uEff_uEff_ur) (v_Base_dEff_deffPrim (fun _u -> (dtp_cleanup_pop 0)))) (fun _u -> (((Base_dMonad.v_Base_dMonad_dbind v_Monad_uBase_uEff_uEff_ur) (release res)) (fun _u -> ((Base_dApplicative.v_Base_dApplicative_dpure v_Applicative_uBase_uEff_uEff_ur) a))))))))))))
+
+let v_Base_dEff_dfinally = (fun comp cleanup -> (((v_Base_dEff_dbracket ((Base_dApplicative.v_Base_dApplicative_dpure v_Applicative_uBase_uEff_uEff_ur) 0)) (fun _u -> cleanup)) (fun _u -> comp)))
