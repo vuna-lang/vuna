@@ -418,6 +418,15 @@ data IntrinsicOp : Type where
   -- 表现层 cast（`prim_erase`）：运行时不产生任何操作，归约成唯一实参本身。
   -- interp / 定义性相等都必须看穿它（否则 cast 会改变归约结果）。
   OpIdentity : IntrinsicOp
+  -- 位运算：Int 的 **63-bit 二进制补码**语义（与宿主 OCaml int 一致，是语言契约而
+  -- 不是实现细节；wasm 后端需按 63-bit 模拟）。移位计数 `n < 0 || n >= 63` 时结果为 0。
+  -- 内容寻址依赖它们跨后端逐字节一致，因此宽度必须固定。
+  OpBitAnd : IntrinsicOp
+  OpBitOr : IntrinsicOp
+  OpBitXor : IntrinsicOp
+  OpBitNot : IntrinsicOp
+  OpBitShl : IntrinsicOp
+  OpBitShr : IntrinsicOp
 
 -- ---------------------------------------------------------------
 -- 内建声明
@@ -634,11 +643,18 @@ baseIntrinsics : List Intrinsic
 -- F3 B：语言级调试构造（无能力位；assert/todo 由 Resolve 在 release 构建拒绝）。
 -- D23：`+ - * /` 只作为 codegen / interp 的映射目标（源码里的 `+` 等已由 Loader
 -- 换成 `Base.Num` 的方法别名，精化期再特化回这四个内建），因此不再对用户源码可见。
+-- 位运算（可见：库与编译器直接用；语义见 `IntrinsicOp` 的注释与 primitives.md）。
 baseIntrinsics =
   [ Intrinsic "+" (IFun IInt (IFun IInt IInt)) OpAdd Nothing "bi_add" False,
     Intrinsic "-" (IFun IInt (IFun IInt IInt)) OpSub Nothing "bi_sub" False,
     Intrinsic "*" (IFun IInt (IFun IInt IInt)) OpMul Nothing "bi_mul" False,
     Intrinsic "/" (IFun IInt (IFun IInt IInt)) OpDiv Nothing "bi_div" False,
+    Intrinsic "bitAnd" (IFun IInt (IFun IInt IInt)) OpBitAnd Nothing "bi_bitAnd" True,
+    Intrinsic "bitOr" (IFun IInt (IFun IInt IInt)) OpBitOr Nothing "bi_bitOr" True,
+    Intrinsic "bitXor" (IFun IInt (IFun IInt IInt)) OpBitXor Nothing "bi_bitXor" True,
+    Intrinsic "bitNot" (IFun IInt IInt) OpBitNot Nothing "bi_bitNot" True,
+    Intrinsic "bitShl" (IFun IInt (IFun IInt IInt)) OpBitShl Nothing "bi_bitShl" True,
+    Intrinsic "bitShr" (IFun IInt (IFun IInt IInt)) OpBitShr Nothing "bi_bitShr" True,
     Intrinsic "++" (IFun IStr (IFun IStr IStr)) OpConcat Nothing "bi_concat" True,
     Intrinsic "&&" (IFun IBool (IFun IBool IBool)) OpAnd Nothing "bi_and" True,
     Intrinsic "||" (IFun IBool (IFun IBool IBool)) OpOr Nothing "bi_or" True,

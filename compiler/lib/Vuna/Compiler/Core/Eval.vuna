@@ -646,6 +646,14 @@ else case findIntrinsic g of
     OpIdentity => case sp of
       [v] => Just v
       _ => Nothing
+    -- 位运算：phase A 只登记（旧种子不认识这些名字，归约先留空）；seed rotation 后
+    -- 再补上真实归约（见 primitives.md 的 63-bit 语义契约）。
+    OpBitAnd => Nothing
+    OpBitOr => Nothing
+    OpBitXor => Nothing
+    OpBitNot => Nothing
+    OpBitShl => Nothing
+    OpBitShr => Nothing
     OpNone => Nothing
   Nothing => Nothing
 

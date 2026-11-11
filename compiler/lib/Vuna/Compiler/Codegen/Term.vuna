@@ -65,6 +65,12 @@ let bi_ge_generic (a : 'a) (b : 'a) = compare a b >= 0
 let bi_concat a b = a ^ b
 let bi_and a b = a && b
 let bi_or a b = a || b
+let bi_bitAnd (a : int) (b : int) = a land b
+let bi_bitOr (a : int) (b : int) = a lor b
+let bi_bitXor (a : int) (b : int) = a lxor b
+let bi_bitNot (a : int) = lnot a
+let bi_bitShl (a : int) (n : int) = if n < 0 || n >= 63 then 0 else a lsl n
+let bi_bitShr (a : int) (n : int) = if n < 0 || n >= 63 then 0 else a lsr n
 let bi_natSucc (n : int) = if n >= max_int then max_int else n + 1
 let bi_natAdd (a : int) (b : int) = if a > max_int - b then max_int else a + b
 let bi_natSub (a : int) (b : int) = if a <= b then 0 else a - b
@@ -1309,6 +1315,10 @@ inlineOpArity "*" = 2
 inlineOpArity "/" = 2
 inlineOpArity "&&" = 2
 inlineOpArity "||" = 2
+inlineOpArity "bi_bitAnd" = 2
+inlineOpArity "bi_bitOr" = 2
+inlineOpArity "bi_bitXor" = 2
+inlineOpArity "bi_bitNot" = 1
 inlineOpArity "++" = 2
 inlineOpArity "bi_eq_int" = 2
 inlineOpArity "bi_neq_int" = 2
@@ -1347,6 +1357,12 @@ inlineText "*" ([a, b]) = Just "(${a} * ${b})"
 inlineText "/" ([a, b]) = Just "(if ${b} = 0 then failwith \"division by zero\" else ${a} / ${b})"
 inlineText "&&" ([a, b]) = Just "(${a} && ${b})"
 inlineText "||" ([a, b]) = Just "(${a} || ${b})"
+-- 位运算：与 / 或 / 异或 / 取反直接生成 OCaml 位运算符；移位保留 runtime helper
+-- （计数越界返回 0 的语义只写一份）。63-bit 补码语义与 `bi_bit*` 一致。
+inlineText "bi_bitAnd" ([a, b]) = Just "(${a} land ${b})"
+inlineText "bi_bitOr" ([a, b]) = Just "(${a} lor ${b})"
+inlineText "bi_bitXor" ([a, b]) = Just "(${a} lxor ${b})"
+inlineText "bi_bitNot" ([a]) = Just "(lnot ${a})"
 inlineText "++" ([a, b]) = Just "(${a} ^ ${b})"
 inlineText "bi_eq_int" ([a, b]) = Just "(${a} = ${b})"
 inlineText "bi_neq_int" ([a, b]) = Just "(${a} <> ${b})"
