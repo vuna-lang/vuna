@@ -10,7 +10,6 @@ module Vuna.Index
   , impactOf
   , indexModules
   , indexStatsOf
-  , indexStatsUnchanged
   , listAllSymbols
   , loadOrBuild
   , modBytes
@@ -44,7 +43,7 @@ module Vuna.Index
 -- 缓存设计（`.local/index/`，已 gitignore；M30 起 v2 内容哈希 + 原子写 + 目录锁）：
 --   - `manifest.txt` 首行 `vuna-index 3`，随后每行 `path TAB bytes TAB hash`——
 --     新鲜度判定的唯一依据（内容哈希；不再用 mtime+size，C11）；旧格式全量重建；
---   - 内存 stat 快照（`indexStatsOf` / `indexStatsUnchanged`，只服务 REPL 会话缓存）：
+--   - 内存 stat 快照（`indexStatsOf`，只服务 REPL 会话缓存；判定交给查询图节点，见下）：
 --     建立时记下每个源文件的 (path, bytes, mtime, 内容哈希)，复用前只重新 stat 比对，
 --     避免每次都读全部源码算内容哈希；窗口内文件仍回落内容哈希（语义同 Driver/Cache）。
 --   - `modules.txt`  每行 `module TAB pkg TAB path TAB bytes TAB declCount`；
@@ -68,7 +67,8 @@ module Vuna.Index
 --
 -- M4（效果显式化）：扫描/构建/缓存/时钟/锁这些宿主动作不再藏在纯签名里——
 -- `loadOrBuild` / `buildIndex` / `indexStatsOf` 是 `Eff []` 入口（调用方在纯上下文里用
--- 一处 `runPure` 过渡包装）；`indexStatsUnchanged` 只比较已取好的快照，保持纯。
+-- 一处 `runPure` 过渡包装）；`indexStatsOf` 产出的 stat 快照是 REPL 会话节点
+-- `index:<dir>` 的依赖表，命中判定在 `Query`（不再有本模块的逐条比较函数）。
 -- 数据模型、查找/影响面与文本渲染仍是纯函数。
 import Vuna.Index.Query
 import Vuna.Index.Render
