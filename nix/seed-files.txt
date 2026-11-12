@@ -104,6 +104,7 @@ Vuna_dCompiler_dHash.ml
 Vuna_dCompiler_dIntrinsics.ml
 Vuna_dCompiler_dLoader.ml
 Vuna_dCompiler_dLoader_dDiagnostics.ml
+Vuna_dCompiler_dLoader_dExpand.ml
 Vuna_dCompiler_dLoader_dFixity.ml
 Vuna_dCompiler_dLoader_dFlatten.ml
 Vuna_dCompiler_dLoader_dModules.ml
