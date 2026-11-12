@@ -1,34 +1,4 @@
-module Vuna.Compiler.Packages.Pkg
-  ( Package(..)
-  , PackageContext
-  , Root
-  , absolutePath
-  , contextDir
-  , contextForDir
-  , contextForFile
-  , contextPackageName
-  , contextPackageOf
-  , contextRelease
-  , contextRoots
-  , contextWithRelease
-  , findManifestDir
-  , findManifestDirMaybe
-  , joinPath
-  , loadManifestAt
-  , loadPackage
-  , locateBase
-  , normalizeDir
-  , packageContext
-  , packageDir
-  , packageEntry
-  , packageExports
-  , packageName
-  , packageRoots
-  , rootDir
-  , rootName
-  , rootPackage
-  , workspacePackages
-  ) where
+module Vuna.Compiler.Packages.Pkg where
 
 -- Vuna.Compiler.Packages.Pkg：M11.5 包 / workspace 解析层（不碰 Loader / CLI）。
 -- 每个包 = 带 vuna.toml 的目录；workspace 根同时是子包（Cargo 风格：
@@ -57,13 +27,13 @@ import Base.List
 -- mods 里的模块可被跨包 import。
 -- 抽象性：导出表只写 `Root`（不含 `(..)`）——record 的裸导出隐藏构造子，
 -- 外部只能读字段、不能构造。
-record Root where
+export record Root where
   rootDir : String
   rootName : String
   rootExports : Maybe (List String)
 
 -- 已解析的包：manifest、直接依赖（顺序同 [dependencies]）、包目录（已规范化）。
-record Package where
+export record Package(..) where
   packageManifest : Manifest
   packageDependencies : List Package
   packageDir : String
@@ -79,53 +49,53 @@ packageDependencies (Package m ds p) = ds
 --   - String         = 包名（base-only 时为 ""）
 --   - Bool           = release 构建模式（`--release` / `VUNA_RELEASE=1`；只影响诊断拒绝，
 --                      不改变产物，因此不参与缓存指纹）。
-record PackageContext where
+export record PackageContext where
   contextDir : String
   contextPackage : Maybe Package
   contextRoots : List Root
   contextPackageName : String
   contextRelease : Bool
 
-rootDir : Root -> String
+export rootDir : Root -> String
 rootDir (Root dir name exports) = dir
 
-rootName : Root -> String
+export rootName : Root -> String
 rootName (Root dir name exports) = name
 
 -- rootName 的别名（Loader/CLI 侧更常用的叫法）。
-rootPackage : Root -> String
+export rootPackage : Root -> String
 rootPackage root = rootName root
 
-contextDir : PackageContext -> String
+export contextDir : PackageContext -> String
 contextDir (PackageContext dir pkg roots name release) = dir
 
-contextRoots : PackageContext -> List Root
+export contextRoots : PackageContext -> List Root
 contextRoots (PackageContext dir pkg roots name release) = roots
 
 -- 上下文包名：base-only（ad-hoc）为空串；Loader 用它判同包可见性与效果内建。
-contextPackageOf : PackageContext -> Maybe Package
+export contextPackageOf : PackageContext -> Maybe Package
 contextPackageOf ctx = ctx.contextPackage
 
-contextPackageName : PackageContext -> String
+export contextPackageName : PackageContext -> String
 contextPackageName (PackageContext dir pkg roots name release) = name
 
 -- | release 构建模式（只影响 release 诊断拒绝，不参与缓存指纹）。
-contextRelease : PackageContext -> Bool
+export contextRelease : PackageContext -> Bool
 contextRelease (PackageContext dir pkg roots name release) = release
 
 -- | 在已有上下文上设置 release 模式（CLI 构造上下文后调用）。
-contextWithRelease : Bool -> PackageContext -> PackageContext
+export contextWithRelease : Bool -> PackageContext -> PackageContext
 contextWithRelease release ctx = { ctx | contextRelease = release }
 
-packageDir : Package -> String
+export packageDir : Package -> String
 packageDir (Package manifest dependencies dir) = dir
 
-packageName : Package -> String
+export packageName : Package -> String
 packageName package = case package.packageManifest.manifestName of
   Nothing => ""
   Just name => name
 
-packageExports : Package -> Maybe (List String)
+export packageExports : Package -> Maybe (List String)
 packageExports package = package.packageManifest.manifestExports
 
 -- ---------------------------------------------------------------- 路径工具
@@ -155,7 +125,7 @@ normalizeAcc absolute (seg :: rest) acc = case seg of
 
 -- | 目录字符串规范化（lexical，不解析符号链接）："a/./b/../c/" -> "a/c"。
 -- 相对路径空结果归一为 "."，绝对路径空结果归一为 "/"。
-normalizeDir : String -> String
+export normalizeDir : String -> String
 normalizeDir path = if startsWith "/" path then case normalizeAcc True (splitOnSlash path) [] of
   [] => "/"
   segments => "/${joinSlashes (reverse segments)}"
@@ -165,14 +135,14 @@ else case normalizeAcc False (splitOnSlash path) [] of
 
 -- | 相对路径按当前工作目录归一为绝对路径（M26：向上找 manifest 前必须先绝对化，
 -- 否则 "." 这类相对路径的父目录仍是 "."，搜索在起点就停住）。
-absolutePath : String -> Eff [] String
+export absolutePath : String -> Eff [] String
 absolutePath path = if startsWith "/" path then pure (normalizeDir path)
 else do
   cwd <- prim_eff_getcwd
   pure (normalizeDir "${cwd}/${path}")
 
 -- 依赖路径拼接：绝对路径直接用，相对路径相对 base 目录规范化。
-joinPath : String -> String -> String
+export joinPath : String -> String -> String
 joinPath base rel = if startsWith "/" rel then normalizeDir rel else normalizeDir "${base}/${rel}"
 
 joinPathsText : List String -> String
@@ -182,7 +152,7 @@ joinPathsText (path :: rest) = "${path}, ${joinPathsText rest}"
 
 -- ---------------------------------------------------------------- manifest
 -- path 是 vuna.toml 的路径；缺失时报 `pkg: missing vuna.toml in <目录>`。
-loadManifestAt : String -> Eff [] (Check Manifest)
+export loadManifestAt : String -> Eff [] (Check Manifest)
 loadManifestAt path = do
   exists <- prim_eff_fileExists path
   if exists then do
@@ -364,7 +334,7 @@ pkgFuelBound : Int
 pkgFuelBound = 1048576
 
 -- 加载 dir/vuna.toml 及其 [dependencies] 路径依赖（递归、含循环检测）。
-loadPackage : String -> Eff [] (Check Package)
+export loadPackage : String -> Eff [] (Check Package)
 loadPackage dir = do
   packageR <- loadPackageWalk pkgFuelBound [] Nothing dir
   pure (case packageR of
@@ -391,7 +361,7 @@ loadMembers baseDir (rel :: rest) = do
 -- 根包 + [workspace].members（顺序同 manifest）；没有 members 时只含根包。
 -- 每个成员自己的依赖图已由 loadPackage 校验；这里再校验并集，捕获跨成员的
 -- 同名不同目录冲突。
-workspacePackages : String -> Eff [] (Check (List Package))
+export workspacePackages : String -> Eff [] (Check (List Package))
 workspacePackages rootBaseDir =
   let
     base = normalizeDir rootBaseDir
@@ -426,7 +396,7 @@ else case dependencyRoots (packageName package :: seen) (packageDependencies pac
 
 -- 自身 lib 根在最前（exports = Nothing：本包内全部可见）；
 -- 随后是传递依赖的 lib 根（依赖优先的 DFS 后序），各自用 [export].modules 限制。
-packageRoots : Package -> List Root
+export packageRoots : Package -> List Root
 packageRoots package =
   let
     selfName = packageName package
@@ -435,11 +405,11 @@ packageRoots package =
     Pair seen roots => selfRoot :: roots
 
 -- 包入口固定为 <dir>/app/Main.vuna。
-packageEntry : Package -> String
+export packageEntry : Package -> String
 packageEntry package = "${packageDir package}/app/Main.vuna"
 
 -- 已知 Package 的上下文（调用方已有包对象时不必重新读盘）。
-packageContext : Package -> PackageContext
+export packageContext : Package -> PackageContext
 packageContext package =
   PackageContext (packageDir package) (Just package) (packageRoots package) (packageName package)
     False
@@ -461,7 +431,7 @@ findManifestUpMaybeStep fuel dir parent =
 -- 层数 k 满足 2*(k-1) ≤ strLength start——absolute 路径每层至少占「/x」两字符，
 -- 且 normalizeDir 已去掉空段/`.`/`..`，所以 2*k ≤ strLength start + 2；
 -- 取 2*strLength start + 4 严格覆盖（含末层 parent==dir 的收尾）。
-findManifestDirMaybe : String -> Eff [] (Maybe String)
+export findManifestDirMaybe : String -> Eff [] (Maybe String)
 findManifestDirMaybe startDir =
   let
     start = normalizeDir startDir
@@ -469,7 +439,7 @@ findManifestDirMaybe startDir =
 
 -- `findManifestDir` 保留给 fmt / index 这类「向上找 workspace 根」的工具；
 -- 包上下文一律走 `contextForFile` / `contextForDir`。
-findManifestDir : String -> Eff [] (Check String)
+export findManifestDir : String -> Eff [] (Check String)
 findManifestDir startDir = do
   found <- findManifestDirMaybe startDir
   pure (case found of
@@ -503,7 +473,7 @@ firstExistingBase original (dir :: rest) = do
 
 -- base 定位是启动期读环境/探路径的**动作**（A05 后零参顶层值会在模块初始化时求值），
 -- 因此函数化：调用方传 dummy 0，真正用到 base-only 上下文时才解析。
-locateBase : Int -> Eff [] (Check String)
+export locateBase : Int -> Eff [] (Check String)
 locateBase _ = do
   env <- prim_eff_getenv "VUNA_BASE"
   if env == "" then do
@@ -548,7 +518,7 @@ contextAt start = do
         OkC base => baseOnlyContext base
 
 -- 文件入口：相对路径先按 cwd 绝对化，再从文件所在目录向上找最近 vuna.toml。
-contextForFile : String -> Eff [] (Check PackageContext)
+export contextForFile : String -> Eff [] (Check PackageContext)
 contextForFile path = do
   absolute <- absolutePath path
   contextAt (manifestDir absolute)
@@ -556,7 +526,7 @@ contextForFile path = do
 -- 目录入口（REPL / 工具从 cwd 取上下文）：同样先绝对化再向上找 manifest。
 -- 「显式包目录」语义（check/compile/build 的目录参数）不用本函数，而是直接
 -- `loadPackage`：只认该目录自己的 vuna.toml，不向上搜索。
-contextForDir : String -> Eff [] (Check PackageContext)
+export contextForDir : String -> Eff [] (Check PackageContext)
 contextForDir dir = do
   absolute <- absolutePath dir
   contextAt absolute

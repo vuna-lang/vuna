@@ -1,13 +1,5 @@
 -- | 持久包 store：内容寻址对象 + 可重建的物化视图。
-module Vuna.PackageStore
-  ( isMaterializedEff
-  , materializeEff
-  , materializedDir
-  , objectPathOf
-  , readObjectEff
-  , storeRootEff
-  , writeObjectEff
-  ) where
+module Vuna.PackageStore where
 
 -- Vuna.PackageStore：`$VUNA_STORE` 下的两棵树（D15）。
 --
@@ -28,15 +20,15 @@ import Base.List
 import Base.String
 
 -- | 持久 store 根（`VUNA_STORE` → XDG → `~/.vuna/store`）。
-storeRootEff : Eff [] String
+export storeRootEff : Eff [] String
 storeRootEff = storeDataRootEff
 
 -- | 对象文件路径。
-objectPathOf : String -> String -> String
+export objectPathOf : String -> String -> String
 objectPathOf root digest = "${root}/objects/${digest}"
 
 -- | 物化视图目录。
-materializedDir : String -> String -> String
+export materializedDir : String -> String -> String
 materializedDir root digest = "${root}/pkgs/${digest}"
 
 -- 对象 tag/codec：schema 管载荷布局（`pkg-source 1`），不含编译器指纹。
@@ -47,7 +39,7 @@ packageCodec : String
 packageCodec = "pkg-source 1"
 
 -- | 写对象（原子替换；地址由调用方给出并已在写前校验）。
-writeObjectEff : String -> String -> List PackageFile -> Eff [] Int
+export writeObjectEff : String -> String -> List PackageFile -> Eff [] Int
 writeObjectEff root digest files = do
   _ <- ensureDirPath "${root}/objects"
   let
@@ -59,7 +51,7 @@ writeObjectEff root digest files = do
     pure 0
 
 -- | 读对象（framing + 内容地址校验后解码）；缺失/损坏 ⇒ `Nothing`。
-readObjectEff : String -> String -> Eff [] (Maybe (List PackageFile))
+export readObjectEff : String -> String -> Eff [] (Maybe (List PackageFile))
 readObjectEff root digest = do
   payload <- storeReadAsEff packageTag packageCodec digest (objectPathOf root digest)
   pure (case payload of
@@ -68,7 +60,7 @@ readObjectEff root digest = do
   )
 
 -- | 物化视图是否完整（`.complete` 内容必须等于摘要）。
-isMaterializedEff : String -> String -> Eff [] Bool
+export isMaterializedEff : String -> String -> Eff [] Bool
 isMaterializedEff root digest = do
   let
     marker = "${materializedDir root digest}/.complete"
@@ -80,7 +72,7 @@ isMaterializedEff root digest = do
     else pure False
 
 -- | 物化：逐文件写盘，最后写 `.complete`（提交点）；并发重复物化是幂等的。
-materializeEff : String -> String -> List PackageFile -> Eff [] Int
+export materializeEff : String -> String -> List PackageFile -> Eff [] Int
 materializeEff root digest files = do
   let
     dir = materializedDir root digest

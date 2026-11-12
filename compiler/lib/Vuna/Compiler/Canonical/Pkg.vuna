@@ -1,14 +1,5 @@
 -- | 源包的规范编码：内容摘要（文件集合）与语义身份（声明面 + 文件摘要）。
-module Vuna.Compiler.Canonical.Pkg
-  ( PackageFile(..)
-  , PackageIdentity(..)
-  , PackageSource(..)
-  , decPackageContent
-  , decPackageIdentity
-  , encPackageContent
-  , encPackageIdentity
-  , identityOfSource
-  ) where
+module Vuna.Compiler.Canonical.Pkg where
 
 -- Vuna.Compiler.Canonical.Pkg：包的**规范字节格式**（D5 / D12 的哈希输入侧）。
 --
@@ -29,19 +20,19 @@ import Vuna.Compiler.Common
 import Vuna.Compiler.Hash
 
 -- | 包内一个文件：相对包根的路径（正斜杠、无 `..`）+ 原始字节。
-record PackageFile where
+export record PackageFile(..) where
   pfPath : String
   pfContent : String
 
 -- | 一个包的完整内容视图（包名/导出/依赖声明 + 文件）。
-record PackageSource where
+export record PackageSource(..) where
   psName : String
   psExports : List String
   psDeps : List (Pair String String)
   psFiles : List PackageFile
 
 -- | 语义身份视图：文件用内容摘要替代字节（不必携带载荷）。
-record PackageIdentity where
+export record PackageIdentity(..) where
   piName : String
   piExports : List String
   piDeps : List (Pair String String)
@@ -61,11 +52,11 @@ encFiles : List PackageFile -> List String -> List String
 encFiles files acc = encTag contentTag (encList encFile files acc)
 
 -- | 内容编码：`#1;[n:(path, bytes)*]`。
-encPackageContent : List PackageFile -> String
+export encPackageContent : List PackageFile -> String
 encPackageContent files = encTop encFiles files
 
 -- ---------------------------------------------------------------- 身份编码
-identityOfSource : PackageSource -> PackageIdentity
+export identityOfSource : PackageSource -> PackageIdentity
 identityOfSource ps = PackageIdentity ps.psName ps.psExports ps.psDeps (map hashFile ps.psFiles)
 
 hashFile : PackageFile -> Pair String String
@@ -80,7 +71,7 @@ encIdentity pi acc =
     (encStr pi.piName (encList encStr pi.piExports (encList encStrPair pi.piDeps (encList encStrPair pi.piFiles acc))))
 
 -- | 身份编码：`#2;(name, exports, (alias, hash)*, (path, hash)*)`。
-encPackageIdentity : PackageIdentity -> String
+export encPackageIdentity : PackageIdentity -> String
 encPackageIdentity pi = encTop encIdentity pi
 
 -- ---------------------------------------------------------------- 解码
@@ -97,7 +88,7 @@ decContentAt fuel c = case decTag fuel c of
   Just (Pair tag c1) => if tag == contentTag then decList decFile fuel c1 else Nothing
 
 -- | 内容解码（供 roundtrip 与 store 读回）。
-decPackageContent : String -> Maybe (List PackageFile)
+export decPackageContent : String -> Maybe (List PackageFile)
 decPackageContent raw = case decContentAt (2 * strLength raw + 16) (curOf raw) of
   Nothing => Nothing
   Just (Pair files c2) => if curAtEnd c2 then Just files else Nothing
@@ -120,7 +111,7 @@ decIdentityAt fuel c = case decTag fuel c of
   else Nothing
 
 -- | 身份解码（供 roundtrip 与缓存键读回）。
-decPackageIdentity : String -> Maybe PackageIdentity
+export decPackageIdentity : String -> Maybe PackageIdentity
 decPackageIdentity raw = case decIdentityAt (2 * strLength raw + 16) (curOf raw) of
   Nothing => Nothing
   Just (Pair ident c2) => if curAtEnd c2 then Just ident else Nothing

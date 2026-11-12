@@ -1,13 +1,5 @@
 -- | 包内容收集与摘要：目录 → `PackageSource` → （内容摘要 / 语义身份）。
-module Vuna.Compiler.Packages.Source
-  ( contentHashOf
-  , identityHashOf
-  , normalizeHash
-  , packageFilesEff
-  , packageSourceEff
-  , skipSourceDir
-  , verifyHash
-  ) where
+module Vuna.Compiler.Packages.Source where
 
 -- Vuna.Compiler.Packages.Source：包内容的**收集与摘要**（D12 的输入侧）。
 --
@@ -26,7 +18,7 @@ import Base.Sort
 import Base.String
 
 -- | 收集时跳过的目录名（与 `Driver.Compile` 的构建扫描同源）。
-skipSourceDir : String -> Bool
+export skipSourceDir : String -> Bool
 skipSourceDir name =
   name == ".git"
     || name == ".local"
@@ -39,15 +31,15 @@ skipSourceDir name =
     || name == "corpus"
 
 -- | 摘要文本归一：接受 `sha256:<64hex>` 与裸 64 位十六进制。
-normalizeHash : String -> String
+export normalizeHash : String -> String
 normalizeHash h = if startsWith "sha256:" h then substring 7 64 h else h
 
 -- | 期望摘要 vs 实际摘要（两侧都归一）。
-verifyHash : String -> String -> Bool
+export verifyHash : String -> String -> Bool
 verifyHash expected actual = normalizeHash expected == normalizeHash actual
 
 -- | 包内全部文件（相对路径 + 字节），按路径升序。
-packageFilesEff : String -> Eff [] (List PackageFile)
+export packageFilesEff : String -> Eff [] (List PackageFile)
 packageFilesEff root = do
   manifestFiles <- readManifestFile root
   libFiles <- collectDirFiles 1048576 root "lib"
@@ -109,7 +101,7 @@ sortByPath : List PackageFile -> List PackageFile
 sortByPath files = sortBy filePathLe files
 
 -- | 由 manifest + 文件集合构造 `PackageSource`（依赖声明只取别名与摘要）。
-packageSourceEff : String -> Manifest -> Eff [] PackageSource
+export packageSourceEff : String -> Manifest -> Eff [] PackageSource
 packageSourceEff root manifest = do
   files <- packageFilesEff root
   pure
@@ -133,9 +125,9 @@ depKeyOf dep = Pair (depAliasOf dep) (case depHashOf dep of
 )
 
 -- | 内容摘要：只含 `(相对路径, 字节)`。
-contentHashOf : PackageSource -> String
+export contentHashOf : PackageSource -> String
 contentHashOf ps = contentAddress (encPackageContent ps.psFiles)
 
 -- | 语义身份：包名 + 导出 + 依赖摘要 + 文件内容摘要。
-identityHashOf : PackageSource -> String
+export identityHashOf : PackageSource -> String
 identityHashOf ps = contentAddress (encPackageIdentity (identityOfSource ps))

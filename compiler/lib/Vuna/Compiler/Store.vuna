@@ -1,29 +1,5 @@
 -- | 缓存载荷的**唯一存储层**：自描述 framing v2 + 原子写 + 目录布局。
-module Vuna.Compiler.Store
-  ( Frame(..)
-  , fCodecOf
-  , fPayloadOf
-  , fTagOf
-  , storeCacheBaseEff
-  , storeDataRootEff
-  , storeDecode
-  , storeDecodeAs
-  , storeDecodeFast
-  , storeEncode
-  , storeEncodeAs
-  , storeEnsureDirEff
-  , storeFileExistsEff
-  , storeMagic
-  , storeParentPathOf
-  , storeReadAsEff
-  , storeReadEff
-  , storeReadFastEff
-  , storeRemoveEff
-  , storeWriteAsEff
-  , storeWriteEff
-  , storeWriteIfChangedAsEff
-  , storeWriteIfChangedEff
-  ) where
+module Vuna.Compiler.Store where
 
 -- Vuna.Compiler.Store：磁盘缓存载荷的统一存储层（C32 收口 / D-Q2）。
 --
@@ -61,22 +37,22 @@ import Vuna.Compiler.Common
 import Vuna.Compiler.Hash
 
 -- | framing 版本串；格式变更即 bump（旧文件自然拒绝，不做迁移）。
-storeMagic : String
+export storeMagic : String
 storeMagic = "vuna-cache-frame 2"
 
 -- | 一次成功解码的结果：codec 名与载荷字节。
-record Frame where
+export record Frame(..) where
   fTag : String
   fCodec : String
   fPayload : String
 
-fTagOf : Frame -> String
+export fTagOf : Frame -> String
 fTagOf (Frame t c p) = t
 
-fCodecOf : Frame -> String
+export fCodecOf : Frame -> String
 fCodecOf (Frame t c p) = c
 
-fPayloadOf : Frame -> String
+export fPayloadOf : Frame -> String
 fPayloadOf (Frame t c p) = p
 
 -- 头行（含换行）；payload 从下一字节开始。
@@ -84,14 +60,14 @@ frameHeader : String -> String -> Int -> String -> String
 frameHeader tag codec len digest = "${storeMagic}|${tag}|${codec}|${len}|${digest}\n"
 
 -- | 载荷 → 可落盘的带自描述头的字节串。`tag` / `codec` 由调用方给出（不含 `|`）。
-storeEncode : String -> String -> String -> String
+export storeEncode : String -> String -> String -> String
 storeEncode tag codec payload =
   frameHeader tag codec (strLength payload) (Vuna.Compiler.Hash.contentAddress payload) ++ payload
 
 -- | 同上，但内容地址由调用方提供。用于**已经算过强哈希**的载荷（iface 模块文件的
 -- `miIfaceHash` 就是载荷全量语义面的 SHA-256）：省掉一次 MB 级再哈希，读侧也能用
 -- 期望哈希零成本校验（`storeDecodeAs`）。
-storeEncodeAs : String -> String -> String -> String -> String
+export storeEncodeAs : String -> String -> String -> String -> String
 storeEncodeAs tag codec digest payload = frameHeader tag codec (strLength payload) digest ++ payload
 
 -- 头行字段拆分：恰好 5 段（magic/tag/codec/len/digest）。多一段 / 少一段都拒绝。
@@ -147,7 +123,7 @@ headerDigestOf header = case headerFields header of
   Just fields => Just (secondOf (secondOf (secondOf (secondOf fields))))
 
 -- | 解码 + **完整校验**（含内容地址）。任一不符 ⇒ `Nothing`（调用方回退重算）。
-storeDecode : String -> String -> String -> Maybe String
+export storeDecode : String -> String -> String -> Maybe String
 storeDecode tag codec raw = case frameSplit raw of
   Nothing => Nothing
   Just p =>
@@ -161,7 +137,7 @@ storeDecode tag codec raw = case frameSplit raw of
 -- 用于调用方**已持有**载荷字节摘要的场景：iface 模块文件的 manifest 条目记录了写盘
 -- 时的载荷摘要（`mePayloadDigest`），读侧只需字符串比对——篡改 / 错位立即拒绝，且
 -- 对 9 MB 载荷不产生第二次 SHA-256（warm `check compiler` 的 36 ms 预算里没有这笔钱）。
-storeDecodeAs : String -> String -> String -> String -> Maybe String
+export storeDecodeAs : String -> String -> String -> String -> Maybe String
 storeDecodeAs tag codec digest raw = case frameSplit raw of
   Nothing => Nothing
   Just p =>
@@ -173,14 +149,14 @@ storeDecodeAs tag codec digest raw = case frameSplit raw of
 -- | 解码但不校验内容地址（只验 magic/tag/codec/长度）。仅供**随后会自证**的载荷使用：
 -- 解出来的值由调用方按语义哈希逐字段核对（iface 模块文件即如此），字节级摘要留给
 -- `storeDecode` / `storeDecodeAs`。
-storeDecodeFast : String -> String -> String -> Maybe String
+export storeDecodeFast : String -> String -> String -> Maybe String
 storeDecodeFast tag codec raw = case frameSplit raw of
   Nothing => Nothing
   Just p => if headerOk tag codec (firstOf p) (secondOf p) then Just (secondOf p) else Nothing
 
 -- | 持久包 store 的根（与临时缓存分开；D15）：`VUNA_STORE` → `$XDG_DATA_HOME/vuna/store`
 -- → `~/.vuna/store`。取包时写 `objects/` 与 `pkgs/`，`vuna clean --packages` 清理。
-storeDataRootEff : Eff [] String
+export storeDataRootEff : Eff [] String
 storeDataRootEff = do
   override <- prim_eff_getenv "VUNA_STORE"
   if override /= "" then pure override
@@ -193,14 +169,14 @@ storeDataRootEff = do
 
 -- 缓存根（`VUNA_CACHE_DIR` 覆盖；缺省 `$TMPDIR/vuna-cache`）。
 -- Nix 构建的源树只读 ⇒ 缓存放临时目录；本地开发同机 TMPDIR 持久 ⇒ 命中。
-storeCacheBaseEff : Eff [] String
+export storeCacheBaseEff : Eff [] String
 storeCacheBaseEff = do
   override <- prim_eff_getenv "VUNA_CACHE_DIR"
   tmp <- prim_eff_getenv "TMPDIR"
   pure (if override /= "" then override else "${if tmp == "" then "/tmp" else tmp}/vuna-cache")
 
 -- | 读 + 完整校验（magic/tag/codec/长度/内容地址）。
-storeReadEff : String -> String -> String -> Eff [] (Maybe String)
+export storeReadEff : String -> String -> String -> Eff [] (Maybe String)
 storeReadEff tag codec path = do
   exists <- prim_eff_fileExists path
   if exists then do
@@ -209,7 +185,7 @@ storeReadEff tag codec path = do
   else pure Nothing
 
 -- | 读 + 快速校验（跳过内容地址；仅供随后自证的载荷，见模块头）。
-storeReadFastEff : String -> String -> String -> Eff [] (Maybe String)
+export storeReadFastEff : String -> String -> String -> Eff [] (Maybe String)
 storeReadFastEff tag codec path = do
   exists <- prim_eff_fileExists path
   if exists then do
@@ -218,7 +194,7 @@ storeReadFastEff tag codec path = do
   else pure Nothing
 
 -- | 读 + 校验「头里的内容地址 == 期望值」（不重算；见 `storeDecodeAs`）。
-storeReadAsEff : String -> String -> String -> String -> Eff [] (Maybe String)
+export storeReadAsEff : String -> String -> String -> String -> Eff [] (Maybe String)
 storeReadAsEff tag codec digest path = do
   exists <- prim_eff_fileExists path
   if exists then do
@@ -227,16 +203,16 @@ storeReadAsEff tag codec digest path = do
   else pure Nothing
 
 -- | 写（原子替换）。返回写入字节数。
-storeWriteEff : String -> String -> String -> String -> Eff [] Int
+export storeWriteEff : String -> String -> String -> String -> Eff [] Int
 storeWriteEff tag codec path payload = prim_eff_writeFileAtomic path (storeEncode tag codec payload)
 
 -- | 写，但用调用方给的载荷摘要（已算过强哈希时用，见 `storeEncodeAs`）。
-storeWriteAsEff : String -> String -> String -> String -> String -> Eff [] Int
+export storeWriteAsEff : String -> String -> String -> String -> String -> Eff [] Int
 storeWriteAsEff tag codec digest path payload =
   prim_eff_writeFileAtomic path (storeEncodeAs tag codec digest payload)
 
 -- | 内容不变就不写：避免无意义地刷新 mtime / 制造写放大。
-storeWriteIfChangedEff : String -> String -> String -> String -> Eff [] Int
+export storeWriteIfChangedEff : String -> String -> String -> String -> Eff [] Int
 storeWriteIfChangedEff tag codec path payload =
   let
     raw = storeEncode tag codec payload
@@ -248,7 +224,7 @@ storeWriteIfChangedEff tag codec path payload =
     else prim_eff_writeFileAtomic path raw
 
 -- | 同 `storeWriteIfChangedEff`，但内容地址由调用方给出（见 `storeEncodeAs`）。
-storeWriteIfChangedAsEff : String -> String -> String -> String -> String -> Eff [] Int
+export storeWriteIfChangedAsEff : String -> String -> String -> String -> String -> Eff [] Int
 storeWriteIfChangedAsEff tag codec digest path payload =
   let
     raw = storeEncodeAs tag codec digest payload
@@ -259,14 +235,14 @@ storeWriteIfChangedAsEff tag codec digest path payload =
       if old == raw then pure 0 else prim_eff_writeFileAtomic path raw
     else prim_eff_writeFileAtomic path raw
 
-storeFileExistsEff : String -> Eff [] Bool
+export storeFileExistsEff : String -> Eff [] Bool
 storeFileExistsEff = prim_eff_fileExists
 
-storeRemoveEff : String -> Eff [] Int
+export storeRemoveEff : String -> Eff [] Int
 storeRemoveEff = prim_eff_removeFile
 
 -- | 逐级创建目录（`prim_eff_makeDir` 只建一层）。路径是文件系统图，用显式 fuel 守卫。
-storeEnsureDirEff : String -> Eff [] Int
+export storeEnsureDirEff : String -> Eff [] Int
 storeEnsureDirEff path = storeEnsureDirFuel 256 path
 
 -- | 建目录（幂等）。
@@ -295,7 +271,7 @@ storeParentOf path =
     else if startsWith "/" path && not (startsWith "/" p) then "/${p}" else p
 
 -- | 文件路径的父目录（`/a/b` → `/a`；`a` → `.`；`/a` → `/`）。对外导出给缓存路径使用。
-storeParentPathOf : String -> String
+export storeParentPathOf : String -> String
 storeParentPathOf = storeParentOf
 
 storeDropPastSlash : List Int -> List Int

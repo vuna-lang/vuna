@@ -1,60 +1,4 @@
-module Vuna.Compiler.Core.Eval
-  ( applyCaseAlt
-  , applyClosure
-  , applyClosureBinder
-  , applySpine
-  , applyTermSpine
-  , applyValue
-  , argValsAt
-  , asBool
-  , asInt
-  , asNat
-  , asStr
-  , boolPrim2
-  , catchAllEnv
-  , cmpInt
-  , eval
-  , evalAlt
-  , evalAlts
-  , evalArgTerms
-  , evalCase
-  , evalIf
-  , force
-  , freshVar
-  , genericCmp
-  , genericPrim2
-  , intPrim1
-  , intPrim2
-  , intPrim2Div
-  , lookupEnv
-  , natValue
-  , natValueToInt
-  , normalize
-  , normalizeCase
-  , normalizeIf
-  , normalizeNeutral
-  , primConst
-  , primReduce
-  , quote
-  , quoteArgValues
-  , quoteCaseAlt
-  , quoteNeutral
-  , showValue
-  , showValueAt
-  , spineAppend
-  , strEq
-  , strPrim1
-  , strPrim2
-  , strPrim3
-  , substSolvedAlt
-  , substSolvedAltAt
-  , substSolvedMetas
-  , substSolvedMetasAt
-  , substSolvedMetasAtGo
-  , substSolvedMetasAtTbl
-  , valueEqFuel
-  , varIndex
-  ) where
+module Vuna.Compiler.Core.Eval where
 
 -- Vuna.Compiler.Core.Eval：NbE 求值与 quote。
 --
@@ -72,11 +16,11 @@ import Vuna.Compiler.Intrinsics
 -- ---------------------------------------------------------------
 -- 环境与求值（beta）
 -- ---------------------------------------------------------------
-lookupEnv : Int -> List Value -> Maybe Value
+export lookupEnv : Int -> List Value -> Maybe Value
 lookupEnv i [] = Nothing
 lookupEnv i (v :: rest) = if i <= 0 then Just v else lookupEnv (i - 1) rest
 
-eval : List Value -> Term -> Value
+export eval : List Value -> Term -> Value
 eval env t = evalFuel (evalFuelFor t) env t
 
 -- | 求值 fuel 派生（D24）：固定 128 对深 Nat 链不够——字面量展开成 `Zero`/`Succ` 链后
@@ -123,14 +67,14 @@ else case t of
   TIf c th el =>
     evalIf (evalFuel (fuel - 1) env c) (evalFuel (fuel - 1) env th) (evalFuel (fuel - 1) env el)
 
-evalAlt : List Value -> CaseAlt -> VCaseAlt
+export evalAlt : List Value -> CaseAlt -> VCaseAlt
 evalAlt env (CaseAlt name binders body) = VCaseAlt name binders (Closure env body)
 
-evalAlts : List Value -> List CaseAlt -> List VCaseAlt
+export evalAlts : List Value -> List CaseAlt -> List VCaseAlt
 evalAlts env [] = []
 evalAlts env (alt :: rest) = evalAlt env alt :: evalAlts env rest
 
-evalArgTerms : List Value -> List (Pair Term Rig) -> List Value
+export evalArgTerms : List Value -> List (Pair Term Rig) -> List Value
 evalArgTerms env args = evalArgTermsFuel 128 env args
 
 evalArgTermsFuel : Int -> List Value -> List (Pair Term Rig) -> List Value
@@ -141,7 +85,7 @@ else case args of
 
 -- case 求值：命中构造子则把该构造子的实参绑进分支闭包，否则卡住。
 -- 构造子实参按「最近绑定在前」入环境（与 ctxBind 的 de Bruijn 约定一致）。
-evalCase : Value -> List VCaseAlt -> Value
+export evalCase : Value -> List VCaseAlt -> Value
 evalCase scrut alts = evalCaseFuel 128 scrut alts
 
 evalCaseFuel : Int -> Value -> List VCaseAlt -> Value
@@ -150,7 +94,7 @@ else case scrut of
   VCon c args => applyCaseAltFuel (fuel - 1) c args alts
   _ => VCase scrut alts
 
-applyCaseAlt : String -> List Value -> List VCaseAlt -> Value
+export applyCaseAlt : String -> List Value -> List VCaseAlt -> Value
 applyCaseAlt c args alts = applyCaseAltFuel 128 c args alts
 
 applyCaseAltFuel : Int -> String -> List Value -> List VCaseAlt -> Value
@@ -165,20 +109,20 @@ else case alts of
     Closure env body => evalFuel (fuel - 1) (catchAllEnv alt (VCon c args) env) body
   else applyCaseAltFuel (fuel - 1) c args rest
 
-catchAllEnv : VCaseAlt -> Value -> List Value -> List Value
+export catchAllEnv : VCaseAlt -> Value -> List Value -> List Value
 catchAllEnv alt scrut env = case alt.vCaseAltBinders of
   [] => env
   _ => scrut :: env
 
-evalIf : Value -> Value -> Value -> Value
+export evalIf : Value -> Value -> Value -> Value
 evalIf (VBool b) th el = if b then th else el
 evalIf c th el = VIf c th el
 
-spineAppend : Neutral -> Value -> Neutral
+export spineAppend : Neutral -> Value -> Neutral
 spineAppend (NVar name level sp) a = NVar name level (append sp [a])
 spineAppend (NGlobal g sp) a = NGlobal g (append sp [a])
 
-applyValue : Value -> Value -> Value
+export applyValue : Value -> Value -> Value
 applyValue f a = applyValueFuel 128 f a
 
 applyValueFuel : Int -> Value -> Value -> Value
@@ -196,10 +140,10 @@ else case f of
   VMeta m sp => VMeta m (append sp [a])
   _ => VApp f a
 
-applyClosure : Closure -> Value -> Value
+export applyClosure : Closure -> Value -> Value
 applyClosure (Closure env body) v = eval (v :: env) body
 
-applySpine : Value -> List Value -> Value
+export applySpine : Value -> List Value -> Value
 applySpine v [] = v
 applySpine v (a :: rest) = applySpine (applyValue v a) rest
 
@@ -217,7 +161,7 @@ applySpine v (a :: rest) = applySpine (applyValue v a) rest
 -- 定义体），先查缓存会让它们每次多付一次哈希查。实测（M30）：单次 `check compiler`
 -- 的定义展开只有 ~700 次，而 NGlobal force ~5M 次，所以先 defs 后缓存的顺序把
 -- 「未定义全局」的成本保持为原来的一次 defLookup，缓存 hit 的收益仍保留。
-force : HashMap String Term -> Sols -> Int -> Value -> Value
+export force : HashMap String Term -> Sols -> Int -> Value -> Value
 force defs sols fuel v = if fuel <= 0 then v
 else case v of
   VMeta m sp => case solsLookup m sols of
@@ -259,7 +203,7 @@ else case v of
   _ => v
 
 -- ---------------------------------------------------------------
-asInt : Value -> Maybe Int
+export asInt : Value -> Maybe Int
 asInt (VInt n) = Just n
 asInt _ = Nothing
 
@@ -283,10 +227,10 @@ natTruncSub a b = if a <= b then 0 else a - b
 natValueGo : Int -> Value -> Value
 natValueGo n acc = if n <= 0 then acc else natValueGo (n - 1) (VCon natSuccCtor [acc])
 
-natValue : Int -> Value
+export natValue : Int -> Value
 natValue n = natValueGo (natClamp n) (VCon natZeroCtor [])
 
-natValueToInt : Value -> Maybe Int
+export natValueToInt : Value -> Maybe Int
 natValueToInt (VInt n) = Just n
 natValueToInt (VCon c args) = natCtorInt c args
 natValueToInt _ = Nothing
@@ -302,7 +246,7 @@ else if c == natSuccCtor then case args of
   _ => Nothing
 else Nothing
 
-asNat : Value -> Maybe Int
+export asNat : Value -> Maybe Int
 asNat v = natValueToInt v
 
 -- ---------------------------------------------------------------
@@ -367,15 +311,15 @@ floatBool2 ([a, b]) f = case asFloat a of
   Nothing => Nothing
 floatBool2 _ = Nothing
 
-asStr : Value -> Maybe String
+export asStr : Value -> Maybe String
 asStr (VStr s) = Just s
 asStr _ = Nothing
 
-asBool : Value -> Maybe Bool
+export asBool : Value -> Maybe Bool
 asBool (VBool b) = Just b
 asBool _ = Nothing
 
-intPrim2 : List Value -> (Int -> Int -> Value) -> Maybe Value
+export intPrim2 : List Value -> (Int -> Int -> Value) -> Maybe Value
 intPrim2 ([a, b]) f = case asInt a of
   Just x => case asInt b of
     Just y => Just (f x y)
@@ -386,7 +330,7 @@ intPrim2 sp f = Nothing
 -- M23：除法在除数为 0 时**不归约**。核心求值器表达不了运行时异常（编译产物由 OCaml
 -- 抛 `Division_by_zero`），静默返回 0 会与产物/三路对照不一致；不归约让 `main` 报
 -- "does not reduce to a value"，把差异限制在「核心求值器不能表达异常」这条已知边界里。
-intPrim2Div : List Value -> Maybe Value
+export intPrim2Div : List Value -> Maybe Value
 intPrim2Div ([a, b]) = case asInt a of
   Just x => case asInt b of
     Just y => if y == 0 then Nothing else Just (VInt (x / y))
@@ -394,7 +338,7 @@ intPrim2Div ([a, b]) = case asInt a of
   Nothing => Nothing
 intPrim2Div sp = Nothing
 
-boolPrim2 : List Value -> (Bool -> Bool -> Value) -> Maybe Value
+export boolPrim2 : List Value -> (Bool -> Bool -> Value) -> Maybe Value
 boolPrim2 ([a, b]) f = case asBool a of
   Just x => case asBool b of
     Just y => Just (f x y)
@@ -403,11 +347,11 @@ boolPrim2 ([a, b]) f = case asBool a of
 boolPrim2 sp f = Nothing
 
 -- 零参 prelude 常量：True/False 在 globals 里是 TGlobal，需要在求值时归约成 VBool。
-primConst : List Value -> Value -> Maybe Value
+export primConst : List Value -> Value -> Maybe Value
 primConst [] v = Just v
 primConst sp v = Nothing
 
-strPrim2 : List Value -> (String -> String -> Value) -> Maybe Value
+export strPrim2 : List Value -> (String -> String -> Value) -> Maybe Value
 strPrim2 ([a, b]) f = case asStr a of
   Just x => case asStr b of
     Just y => Just (f x y)
@@ -415,7 +359,7 @@ strPrim2 ([a, b]) f = case asStr a of
   Nothing => Nothing
 strPrim2 sp f = Nothing
 
-intPrim1 : List Value -> (Int -> Value) -> Maybe Value
+export intPrim1 : List Value -> (Int -> Value) -> Maybe Value
 intPrim1 ([a]) f = case asInt a of
   Just x => Just (f x)
   Nothing => Nothing
@@ -443,17 +387,17 @@ natPrim2Div ([a, b]) = case asNat a of
   Nothing => Nothing
 natPrim2Div sp = Nothing
 
-strPrim1 : List Value -> (String -> Value) -> Maybe Value
+export strPrim1 : List Value -> (String -> Value) -> Maybe Value
 strPrim1 ([a]) f = case asStr a of
   Just x => Just (f x)
   Nothing => Nothing
 strPrim1 sp f = Nothing
 
 -- 字符串相等（`==` 的跨类型特化用）。
-strEq : String -> String -> Bool
+export strEq : String -> String -> Bool
 strEq a b = a == b
 
-genericCmp : Value -> Value -> Maybe Int
+export genericCmp : Value -> Value -> Maybe Int
 genericCmp (VInt x) b = case b of
   VInt y => Just (cmpInt x y)
   _ => Nothing
@@ -465,16 +409,16 @@ genericCmp (VBool x) b = case b of
   _ => Nothing
 genericCmp _ b = Nothing
 
-cmpInt : Int -> Int -> Int
+export cmpInt : Int -> Int -> Int
 cmpInt a b = if a == b then 0 else if a < b then 0 - 1 else 1
 
-genericPrim2 : List Value -> (Int -> Bool) -> Maybe Value
+export genericPrim2 : List Value -> (Int -> Bool) -> Maybe Value
 genericPrim2 ([a, b]) pred = case genericCmp a b of
   Just o => Just (VBool (pred o))
   Nothing => Nothing
 genericPrim2 sp pred = Nothing
 
-strPrim3 : List Value -> (String -> String -> String -> Value) -> Maybe Value
+export strPrim3 : List Value -> (String -> String -> String -> Value) -> Maybe Value
 strPrim3 ([a, b, c]) f = case asStr a of
   Just x => case asStr b of
     Just y => case asStr c of
@@ -488,7 +432,7 @@ strPrim3 sp f = Nothing
 -- 表查找是 O(1) 哈希（不再需要首字符预筛）。
 -- 行删除（W3 表示层修复）：`Base.Eff.rowRem` 是公理；这里按标签的类型值做结构相等
 -- 判断后再移除。类型族里重复变量（`rowRem e (Cons e r)`）不会强制相等，不能用于此。
-valueEqFuel : Int -> Value -> Value -> Maybe Bool
+export valueEqFuel : Int -> Value -> Value -> Maybe Bool
 valueEqFuel fuel a b = if fuel <= 0 then Nothing
 else case a of
   VType la => case b of
@@ -594,7 +538,7 @@ else case force defs sols (fuel - 1) a of
   else Nothing
   _ => Nothing
 
-primReduce : HashMap String Term -> Sols -> Int -> String -> List Value -> Maybe Value
+export primReduce : HashMap String Term -> Sols -> Int -> String -> List Value -> Maybe Value
 primReduce defs sols fuel g sp = if fuel <= 0 then Nothing
 else if g == effRowRemName then case sp of
   -- 命名行（ND1）：`rowRem n e r` 是唯一形状；单 Cons 分支（debt D53 规避）。
@@ -817,7 +761,7 @@ else case normalizeFuel (fuel - 1) defs sols (evalFuel - 1) c of
 -- ---------------------------------------------------------------
 -- quote：值 → 项（level 转 de Bruijn index）
 -- ---------------------------------------------------------------
-quote : Int -> Value -> Term
+export quote : Int -> Value -> Term
 quote depth v = quoteFuel 64 depth v
 
 quoteFuel : Int -> Int -> Value -> Term
@@ -846,7 +790,7 @@ else case v of
       (quoteFuel (fuel - 1) depth el)
 
 -- 分支绑定子的 level 约定：第一个实参 level 最低（quote 后 index 最大）。
-quoteCaseAlt : Int -> VCaseAlt -> CaseAlt
+export quoteCaseAlt : Int -> VCaseAlt -> CaseAlt
 quoteCaseAlt depth alt = quoteCaseAltFuel 64 depth alt
 
 quoteCaseAltFuel : Int -> Int -> VCaseAlt -> CaseAlt
@@ -859,7 +803,7 @@ else case alt0 of
       body = quoteFuel (fuel - 1) (depth + n) (applyClosureBinder clo argVals)
     in CaseAlt name binders body
 
-quoteArgValues : Int -> List Value -> List (Pair Term Rig)
+export quoteArgValues : Int -> List Value -> List (Pair Term Rig)
 quoteArgValues depth vs = quoteArgValuesFuel 64 depth vs
 
 quoteArgValuesFuel : Int -> Int -> List Value -> List (Pair Term Rig)
@@ -869,21 +813,21 @@ else case vs of
   a :: rest =>
     Pair (quoteFuel (fuel - 1) depth a) RigOmega :: quoteArgValuesFuel (fuel - 1) depth rest
 
-argValsAt : List (Pair String Rig) -> Int -> Int -> List Value
+export argValsAt : List (Pair String Rig) -> Int -> Int -> List Value
 argValsAt [] depth i = []
 argValsAt ((Pair name rig) :: rest) depth i =
   freshVar name (depth + i) :: argValsAt rest depth (i + 1)
 
 -- 逐个把实参喂给闭包：闭包 env 是分支外环境，实参按 arg0 先喂的顺序。
-applyClosureBinder : Closure -> List Value -> Value
+export applyClosureBinder : Closure -> List Value -> Value
 applyClosureBinder clo [] = VCon "_alt" []
 applyClosureBinder (Closure env body) (a :: rest) =
   applyClosureBinder (Closure (a :: env) body) rest
 
-freshVar : String -> Int -> Value
+export freshVar : String -> Int -> Value
 freshVar name level = VNeutral (NVar name level [])
 
-quoteNeutral : Int -> Neutral -> Term
+export quoteNeutral : Int -> Neutral -> Term
 quoteNeutral depth n = quoteNeutralFuel 64 depth n
 
 quoteNeutralFuel : Int -> Int -> Neutral -> Term
@@ -898,10 +842,10 @@ else case n of
 -- quote 是纯函数、不返回 Result；这里对越界返回负 index（-1），后续
 -- `binderAt` / 擦除检查会把它报成 "unbound runtime variable" 而不是悄悄指向 0。
 -- 正常路径（level < depth）不变。
-varIndex : Int -> Int -> Int
+export varIndex : Int -> Int -> Int
 varIndex depth level = if level < depth then depth - level - 1 else 0 - 1
 
-applyTermSpine : Term -> List Term -> Term
+export applyTermSpine : Term -> List Term -> Term
 applyTermSpine head [] = head
 applyTermSpine head (a :: rest) = applyTermSpine (TApp head a RigOmega) rest
 
@@ -909,7 +853,7 @@ applyTermSpine head (a :: rest) = applyTermSpine (TApp head a RigOmega) rest
 -- 字典元变量是运行时实参（Rig1），codegen 会对残留的 `TMeta` 报错；只有擦除的
 -- 类型/索引元变量（Rig0）可留在项里。字典解（实例构造子）是闭的，`quote 0` 安全；
 -- 带自由变量（非闭）的解跳过——它们只可能是擦除元变量，codegen 跳过。
-substSolvedMetas : List (Pair Int Value) -> Term -> Term
+export substSolvedMetas : List (Pair Int Value) -> Term -> Term
 substSolvedMetas sols (t@(TMeta m)) = case metaLookupList m sols of
   Just v =>
     let
@@ -935,7 +879,7 @@ substSolvedMetas sols (TIf c th el) =
   TIf (substSolvedMetas sols c) (substSolvedMetas sols th) (substSolvedMetas sols el)
 substSolvedMetas sols t = t
 
-substSolvedAlt : List (Pair Int Value) -> CaseAlt -> CaseAlt
+export substSolvedAlt : List (Pair Int Value) -> CaseAlt -> CaseAlt
 substSolvedAlt sols (CaseAlt n bs b) = CaseAlt n bs (substSolvedMetas sols b)
 
 -- M20 字典提升：替换 `?m` 为 `TVar d (depth - q)`（`q` = 插入点外侧绑定子数，含类参数绑定子）。
@@ -944,11 +888,11 @@ substSolvedAlt sols (CaseAlt n bs b) = CaseAlt n bs (substSolvedMetas sols b)
 -- binder 上下文里重写目标类型（`?a` 已解成定义自己的刚性变量），必须按那个深度取
 -- de Bruijn index；深度 0 的版本会把解里的 `NVar` 拍成越界变量（`mergeSort` 的
 -- 字典签名曾变成 `{d : Dict_Ord ?67}`）。
-substSolvedMetasAt : Int -> List (Pair Int Value) -> Term -> Term
+export substSolvedMetasAt : Int -> List (Pair Int Value) -> Term -> Term
 substSolvedMetasAt d [] t = t
 substSolvedMetasAt d sols t = substSolvedMetasAtGo d sols t
 
-substSolvedMetasAtGo : Int -> List (Pair Int Value) -> Term -> Term
+export substSolvedMetasAtGo : Int -> List (Pair Int Value) -> Term -> Term
 substSolvedMetasAtGo depth sols (t@(TMeta m)) = case metaLookupList m sols of
   Just v => quote depth v
   Nothing => t
@@ -974,14 +918,14 @@ substSolvedMetasAtGo depth sols (TIf c th el) =
     (substSolvedMetasAtGo depth sols el)
 substSolvedMetasAtGo depth sols t = t
 
-substSolvedAltAt : Int -> List (Pair Int Value) -> CaseAlt -> CaseAlt
+export substSolvedAltAt : Int -> List (Pair Int Value) -> CaseAlt -> CaseAlt
 substSolvedAltAt depth sols (CaseAlt n bs b) = CaseAlt n bs (substSolvedMetasAtGo depth sols b)
 
 isNilList : List a -> Bool
 isNilList [] = True
 isNilList _ = False
 
-showValueAt : Int -> Value -> String
+export showValueAt : Int -> Value -> String
 -- 快速路径：原子值直接给名字，免掉 quote+showTerm 的递归（mismatchAt 在试探路径上
 -- 每次 check 会构造 ~600 万条被丢弃的诊断消息，格式化是主要成本之一）。
 showValueAt depth v = case v of
@@ -998,19 +942,19 @@ showValueAt depth v = case v of
     Nothing => showTerm (quote depth v)
   _ => showTerm (quote depth v)
 
-showValue : Value -> String
+export showValue : Value -> String
 showValue v = showValueAt 0 v
 
-normalize : HashMap String Term -> Sols -> Int -> Value -> Value
+export normalize : HashMap String Term -> Sols -> Int -> Value -> Value
 normalize a1 a2 a3 a4 = normalizeFuel 1024 a1 a2 a3 a4
 
-normalizeCase : HashMap String Term -> Sols -> Int -> Value -> List VCaseAlt -> Value
+export normalizeCase : HashMap String Term -> Sols -> Int -> Value -> List VCaseAlt -> Value
 normalizeCase a1 a2 a3 a4 a5 = normalizeCaseFuel 1024 a1 a2 a3 a4 a5
 
-normalizeNeutral : HashMap String Term -> Sols -> Int -> Neutral -> Value
+export normalizeNeutral : HashMap String Term -> Sols -> Int -> Neutral -> Value
 normalizeNeutral a1 a2 a3 a4 = normalizeNeutralFuel 1024 a1 a2 a3 a4
 
-normalizeIf : HashMap String Term -> Sols -> Int -> Value -> Value -> Value -> Value
+export normalizeIf : HashMap String Term -> Sols -> Int -> Value -> Value -> Value -> Value
 normalizeIf a1 a2 a3 a4 a5 a6 = normalizeIfFuel 1024 a1 a2 a3 a4 a5 a6
 
 -- 已解元变量的**深度感知**内联（接口摘要 zonk 与字典提升共用的唯一入口）。
@@ -1020,7 +964,7 @@ normalizeIf a1 a2 a3 a4 a5 a6 = normalizeIfFuel 1024 a1 a2 a3 a4 a5 a6
 -- 解 quote 后若含负索引，说明它引用了出现点作用域外的 binder（跨定义上下文），
 -- **不内联**、保留 `TMeta`，由接口摘要安全阀拒绝这份摘要（宁可回退全量，不静默错）。
 -- 替换出来的项可能仍含已解元变量：同深度递归（限 fuel 防环）。
-substSolvedMetasAtTbl : HashMap Int Value -> Int -> Term -> Term
+export substSolvedMetasAtTbl : HashMap Int Value -> Int -> Term -> Term
 substSolvedMetasAtTbl sols depth t = substSolvedMetasAtTblFuel 128 sols depth t
 
 substSolvedMetasAtTblFuel : Int -> HashMap Int Value -> Int -> Term -> Term

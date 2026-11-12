@@ -1,5 +1,5 @@
 -- | `vuna fetch`：显式取包到持久 store（git / url），path 依赖只校验摘要。
-module Vuna.Fetch (fetchAt, runFetch, runPin) where
+module Vuna.Fetch where
 
 -- Vuna.Fetch：包获取（阶段 1）。纪律（D15）：
 --   * **只有 fetch 联网**；check/build/test 只读 store，缺对象报 `PKG_NotMaterialized`。
@@ -21,7 +21,7 @@ import Base.Nat
 import Base.List
 import Base.String
 
-runFetch : List String -> Eff [] Int
+export runFetch : List String -> Eff [] Int
 runFetch args = case parseToolArgs "vuna fetch" [BoolFlag "locked"] args of
   ErrC e => fetchFailText (diagText e)
   OkC parsed =>
@@ -34,7 +34,7 @@ runFetch args = case parseToolArgs "vuna fetch" [BoolFlag "locked"] args of
 
 -- | 取一个包目录声明的全部依赖（不递归展开依赖的依赖：直接依赖各自的 manifest 由
 -- 各自的 fetch/check 负责）。
-fetchAt : String -> Bool -> Eff [] Int
+export fetchAt : String -> Bool -> Eff [] Int
 fetchAt dir locked = do
   abs <- absolutePath dir
   let
@@ -178,7 +178,7 @@ printDiagEff d = do
 -- ---------------------------------------------------------------
 -- vuna pin：把 git 依赖的实际内容摘要写回 manifest（只改已有 `hash = ...` 行）
 -- ---------------------------------------------------------------
-runPin : List String -> Eff [] Int
+export runPin : List String -> Eff [] Int
 runPin args = case parseToolArgs "vuna pin" [] args of
   ErrC e => fetchFailText (diagText e)
   OkC parsed => case parsed.positionals of

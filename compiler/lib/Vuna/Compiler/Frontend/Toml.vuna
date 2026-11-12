@@ -1,16 +1,5 @@
 -- | TOML 子集解析器（vuna.toml / suite.toml / 包索引的格式层）。
-module Vuna.Compiler.Frontend.Toml
-  ( TomlDoc
-  , TomlEntry(..)
-  , TomlValue(..)
-  , arrayStrings
-  , lookupEntry
-  , lookupEntryLine
-  , parseToml
-  , parseTomlAt
-  , parseTomlDoc
-  , sectionsUnder
-  ) where
+module Vuna.Compiler.Frontend.Toml where
 
 -- Vuna.Compiler.Frontend.Toml：TOML 子集解析器。
 --
@@ -44,7 +33,7 @@ import Vuna.Compiler.Common
 import Vuna.Compiler.Diagnostics.Pkg
 import Base.Bits
 
-data TomlValue : Type where
+export data TomlValue(..) : Type where
   TStr : String -> TomlValue
   TInt : Int -> TomlValue
   TBool : Bool -> TomlValue
@@ -53,11 +42,11 @@ data TomlValue : Type where
   TTableArray : List (List (Pair String TomlValue)) -> TomlValue
 
 -- | 树视图的根：顶层字段表（字段有序，顺序 = 首次出现顺序）。
-TomlDoc : Type
+export TomlDoc : Type
 TomlDoc = List (Pair String TomlValue)
 
 -- section path、key、value 与 key 所在行号（从 1 开始）。
-record TomlEntry where
+export record TomlEntry(..) where
   tomlEntrySection : List String
   tomlEntryKey : String
   tomlEntryValue : TomlValue
@@ -832,10 +821,10 @@ else case cs.cursorChars of
   _ => parseSectionLine (fuel - 1) path cs currentPath fields
 
 -- ---------------------------------------------------------------- 对外
-parseToml : String -> Check (List TomlEntry)
+export parseToml : String -> Check (List TomlEntry)
 parseToml source = parseTomlAt "" source
 
-parseTomlAt : String -> String -> Check (List TomlEntry)
+export parseTomlAt : String -> String -> Check (List TomlEntry)
 parseTomlAt path source =
   let
     cs = TomlCursor (stripCR (strUnpack source)) 1 1
@@ -844,7 +833,7 @@ parseTomlAt path source =
     OkC fields => OkC (flattenFields (flattenFuel cs) [] fields)
 
 -- | 树视图（无行号）：顶层字段表。
-parseTomlDoc : String -> String -> Check TomlDoc
+export parseTomlDoc : String -> String -> Check TomlDoc
 parseTomlDoc path source =
   let
     cs = TomlCursor (stripCR (strUnpack source)) 1 1
@@ -853,25 +842,25 @@ parseTomlDoc path source =
     OkC fields => OkC (rootValue (flattenFuel cs) fields)
 
 -- | 数组值 → 字符串列表（元素全为 `TStr` 时成功，否则 `Nothing`）。
-arrayStrings : List TomlValue -> Maybe (List String)
+export arrayStrings : List TomlValue -> Maybe (List String)
 arrayStrings [] = Just []
 arrayStrings ((TStr s) :: rest) = case arrayStrings rest of
   Nothing => Nothing
   Just ss => Just (s :: ss)
 arrayStrings (_ :: rest) = Nothing
 
-lookupEntry : List String -> String -> List TomlEntry -> Maybe TomlValue
+export lookupEntry : List String -> String -> List TomlEntry -> Maybe TomlValue
 lookupEntry section key [] = Nothing
 lookupEntry section key ((TomlEntry s k v line) :: rest) =
   if samePath section s && k == key then Just v else lookupEntry section key rest
 
-lookupEntryLine : List String -> String -> List TomlEntry -> Maybe Int
+export lookupEntryLine : List String -> String -> List TomlEntry -> Maybe Int
 lookupEntryLine section key [] = Nothing
 lookupEntryLine section key ((TomlEntry s k v line) :: rest) =
   if samePath section s && k == key then Just line else lookupEntryLine section key rest
 
 -- | 列出直接挂在 `prefix` 下的子表名（去重、按首次出现顺序）。
-sectionsUnder : List String -> List TomlEntry -> List String
+export sectionsUnder : List String -> List TomlEntry -> List String
 sectionsUnder prefix entries = sectionsUnderGo prefix entries []
 
 sectionsUnderGo : List String -> List TomlEntry -> List String -> List String
