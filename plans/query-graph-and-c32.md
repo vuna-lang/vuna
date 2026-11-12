@@ -345,3 +345,19 @@ warm `check .` 56–57 ms（门槛 78）；全量 suite **5551 checks / 0 failed
 6. **验证口径**：每迁移一个消费者就跑该消费者的既有 steps（44g/44l1/44l2/LSP smoke/
    47c/38/§19），外加 `nix/checks/compiler-perf.sh`（它已按 `$TMPDIR/vuna-cache` 整体清理，
    与布局无关，只需确认 `--debug-perf` 的 `cache-own-clean`/`cache-path` 行仍在）。
+
+### 阶段 3 进展（2026-11-12，第 3 轮）
+
+- ✅ `ToolPayload`（`Driver/ToolPayload`，codec `tool-context 1`）：`ToolContext` 的规范编码，
+  `Iface` 补导出 Cur 级编解码别名；`examples/infra` 的 `tool-ctx-rt` + §64 断言锁死字段顺序。
+- 勘察确认下一步的形状：**会话记录整个进 blob**（不再只持久化「命中标记」）。REPL 的
+  `stateToolSession` 因此可以删除（不再需要内存里的 `ReplToolSession`：命中就从 blob 解码
+  `ToolContext`）。依赖表这样取：
+  - `man:<pkg>:<manifest mtime+size>`（本包 manifest）；
+  - `depman:<包>:<mtime+size>`（各依赖包 manifest，枚举成本 = workspace 图，不读 iface）；
+  - `closure:<sorted import 名单>`（buffer 新增 import ⇒ 依赖表变化 ⇒ miss，替代
+    `sessionClosureOk` 的启发式）。
+  注意顺序：这三个依赖**不需要**先建 `ToolContext`（旧实现是先建会话才知道 `tcStats`，
+  于是只能用 mtime 启发式倒推）——这正是图模型能删掉 `toolSessionFresh` 的原因。
+- 待做：`lib/Vuna/Tool/Session.vuna`（`toolHit`/`toolCommit` + blob 读写）、REPL 三处缓存迁移、
+  LSP `DiagCache` 迁移、Index/Doc 接图。
