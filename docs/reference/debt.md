@@ -59,7 +59,7 @@
 | D74 | `fetch` 的 `fuel 64` 是给 SCT 的显式下降参数，不是语义配额：依赖链深于 64 会报 depth limit（正常包图远小于此） | `lib/Vuna/Fetch.vuna`（`fetchAll 64`） | 后续（若真遇到，按依赖图深度动态给） |
 | D75 | opaque 的依赖模块过滤已覆盖包 `check`/`build`（`hideDepOpaqueDecls`），但单文件 `dtCheckSource`、REPL/表达式求值等直接 `elabProgramFull` 的路径尚未按模块隐藏 body | `compiler/lib/Vuna/Compiler/Driver/Dt.vuna` 的 `hideDepOpaqueDecls` 与各 `elabProgramFull` 调用点；[language.md](language.md) opaque 节 | 后续（统一 per-module 精化入口） |
 | D76 | `abstract` 已进 AST/parser/Canonical/Fmt，但语义尚未独立：当前与 `opaque` 共用“下游不展开”口径，sealing 与 ifaceHash 区分未定 | `Frontend/Ast.vuna` 的 `OpacityAbstract`；`Loader/Flatten.opaqueNamesOf` | 后续（先定语义，再动 ifaceHash） |
-| D77 | 旧模块头 `module M (exports) where` 仍是解析器兼容路径，93 个测试夹具仍使用它；源码与主包已全部迁移，但语法与夹具尚未移除 | `Frontend/Parser.psHeader`；`grep -rl '^module .*(' test --include=*.vuna` | 后续（终态移除；已在 `language.md` 标为迁移期） |
+| D77 | 旧模块头 `module M (exports) where` 仍是解析器兼容路径；`test/**/*.vuna` 夹具已全部迁到逐定义 export，但 steps 里生成的临时包字符串仍使用旧头，故解析器暂不能移除 | `Frontend/Parser.parseModDecl`；`grep -rl 'module .*(' test/suite/steps` | 后续（迁移 steps 生成串后移除） |
 | D78 | main 新增的 10 个包源/store `PKG_*` 码没有结构化夹具，只在 diag 审计 allowlist 中登记（DependencySourceMissing/FetchFailed/GitRevRequired/HashMalformed/HashMismatch/IndexMalformed/MissingHash/NotMaterialized/SourceConflict/UnknownSourceKey） | `nix/diag-coverage-allow.txt`、`nix/diag-unreachable.txt`；`nix/checks/diag-coverage.sh` | 后续（补包错误夹具） |
 
 ## 效应统一（Eff 已贯通）
