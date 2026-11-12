@@ -62,7 +62,7 @@ time_incremental() { # dir -> ms
   rm -rf "$cache"
   best=999999
   k=0
-  while [ "$k" -lt 2 ]; do
+  while [ "$k" -lt 3 ]; do
     cache=$(mktemp -d "$work/cache.XXXXXX")
     t0=$(date +%s%3N)
     TMPDIR="$cache" "$VUNA" check "$dir" >/dev/null 2>&1 || {
