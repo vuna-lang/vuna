@@ -169,6 +169,27 @@ idT x = x
   有定义体（`[TC_AxiomWithDefinition]`），也不能重复声明；
 - `axiom` 是保留关键字；当前编译器自身不用 axiom（旧 seed 必须能编译新源码）。
 
+## `opaque` / `transparent` 定义
+
+`opaque` 标记一个定义“对外不展开”，`transparent` 显式声明普通（默认）行为：
+
+```vuna
+export opaque N : Type
+N = Int
+
+export transparent M : Type
+M = Int
+```
+
+- opaque 定义体在**下游模块**的 deftbl 中不出现：跨包接口路径不会 delta 展开它，
+  `ifaceHash` 只含名字 + 类型，`implHash` 才含体；
+- 定义模块自身仍需要体来检查/生成代码；`transparent` 是显式默认，等价于不写；
+- 当前实现边界：**全量源码路径**（同一程序把所有包模块一起精化，如无接口缓存的
+  `vuna check <包>`）仍会展开 opaque 体；per-module 精化拆分后再统一。接口/增量路径
+  已按上述规则过滤。
+- `opaque record` 是记录表示档位的旧前缀，已退役；记录请用 `boxed record` /
+  `alias record`，见 [records-traits.md](records-traits.md)。
+
 ## 签名的 trait 约束
 
 顶层签名可写约束前缀（`f : Eq a, Show a => a -> String`）；语义、绑定顺序、诊断与边界见

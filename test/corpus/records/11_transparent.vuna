@@ -1,12 +1,12 @@
 -- R1（records-v2）：表示档位声明。
--- `transparent record`：声明透明别名（构造/投影定义性恒等；擦除后恰好一个运行时字段），
+-- `alias record`：声明透明别名（构造/投影定义性恒等；擦除后恰好一个运行时字段），
 -- `deriving via field` 只看声明档位即可通过。
-transparent record UserId where
+alias record UserId where
   uid : Int
 deriving via field (Show)
 
--- `opaque record`：强制装箱（FFI/ABI 稳定），即使形状满足去装箱判据。
-opaque record Handle where
+-- `boxed record`：强制装箱（FFI/ABI 稳定），即使形状满足去装箱判据。
+boxed record Handle where
   h : Int
 
 u : UserId

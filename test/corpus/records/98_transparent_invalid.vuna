@@ -1,5 +1,5 @@
 -- R1（records-v2）：`transparent` 声明要求擦除后恰好一个运行时字段。
-transparent record Bad where
+alias record Bad where
   a : Int
   b : Int
 
