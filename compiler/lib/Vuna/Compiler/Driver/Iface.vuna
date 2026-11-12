@@ -4,11 +4,21 @@ module Vuna.Compiler.Driver.Iface
   , PackageIface(..)
   , PackageManifest(..)
   , SourceInfo(..)
+  , decDepPair
+  , decManifestAt
   , decManifestComplete
+  , decManifestEntry
+  , decModuleIfaceAt
   , decModuleIfaceComplete
+  , decSourceInfo
   , depMissingHash
+  , encDepPair
   , encManifest
+  , encManifestAt
+  , encManifestEntry
   , encModuleIface
+  , encModuleIfaceAt
+  , encSourceInfo
   , hasMissingDep
   , hashOfIface
   , hashTextStrong
@@ -1198,8 +1208,14 @@ encModuleIfacePayload m acc =
     (encStr m.miPackage (encSourceInfo m.miSource (encStr m.miIfaceHash (encList encDepPair m.miDepHashes (encList encImport m.miImports (encList encImport m.miImplicitImports (encList encStr m.miCapabilities (encList encExportEntry m.miExports (encList encFixity m.miFixities (encList encDecl m.miDecls (encList encRecordMeta m.miRecords (encList encDecl m.miPrepared (encCachedProgram m.miCached acc)))))))))))))
 
 -- | `ModuleIface` 载荷字节（落盘用）。
+encModuleIfaceAt : ModuleIface -> List String -> List String
+encModuleIfaceAt = encModuleIfacePayload
+
 encModuleIface : ModuleIface -> String
 encModuleIface m = encTop encModuleIfacePayload m
+
+decModuleIfaceAt : Int -> Cur -> Maybe (Pair ModuleIface Cur)
+decModuleIfaceAt = decModuleIfacePayload
 
 decModuleIfacePayload : Int -> Cur -> Maybe (Pair ModuleIface Cur)
 decModuleIfacePayload fuel c = do
@@ -1251,8 +1267,14 @@ encManifestPayload m acc =
   encStr m.pmSchema
     (encStr m.pmCompiler (encStr m.pmPackage (encInt m.pmEnv (encList encManifestEntry m.pmModules acc))))
 
+encManifestAt : PackageManifest -> List String -> List String
+encManifestAt = encManifestPayload
+
 encManifest : PackageManifest -> String
 encManifest m = encTop encManifestPayload m
+
+decManifestAt : Int -> Cur -> Maybe (Pair PackageManifest Cur)
+decManifestAt = decManifestPayload
 
 decManifestPayload : Int -> Cur -> Maybe (Pair PackageManifest Cur)
 decManifestPayload fuel c =

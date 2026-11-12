@@ -31,6 +31,8 @@ out-contains: query4 hit dyn
 out-contains: query5 miss sb2,cutoff stat
 # QVal 三形态（marker / bytes / ref）规范渲染的单射性：固定摘要锁死。
 out-contains: query-marker 321a9065f3f0bc2f9fa352977224da350c0f2f0265b640cdbed5dc2576c6222f
+# 工具会话载荷（ToolContext）编码 roundtrip：字段顺序 / Maybe / 列表 / 尾部检查。
+out-contains: tool-ctx-rt ok
 # 规范编码 roundtrip + span 不敏感 + 字段覆盖（C32 哈希输入侧，Canonical.*）
 out-contains: canon-term-rt ok
 out-contains: canon-decl-rt ok

@@ -9,6 +9,8 @@ import Vuna.Compiler.Core.Term
 import Vuna.Compiler.Elab.Types
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Frontend.Cst
+import Vuna.Compiler.Driver.Compile
+import Vuna.Compiler.Driver.ToolPayload
 import Vuna.Compiler.Hash
 import Vuna.Compiler.Loader.Modules
 import Vuna.Compiler.Query
@@ -54,6 +56,7 @@ main = do
   _ <- println ("query4 " ++ showTrace (secondOf run4))
   _ <- println ("query5 " ++ showTrace (secondOf run5))
   _ <- println ("query-marker " ++ digestOfVal QMarker)
+  _ <- println ("tool-ctx-rt " ++ verdict toolContextRoundtrip)
   _ <- println ("query-order " ++ verdict (depsOrderAgnostic (firstOf run1)))
   _ <- println ("canon-term-rt " ++ verdict termFixturesRT)
   _ <- println ("canon-decl-rt " ++ verdict (declsRT declFixtures))
@@ -268,3 +271,17 @@ run5 =
     w2 = query db4 "stat" ["sa", "sb2"] (\_ => QBytes "out")
     n0 = lenInt (dbTrace db3)
   in Pair (firstOf w2) (drop n0 (dbTrace (firstOf w2)))
+
+-- | 工具会话载荷（`ToolContext`）的编码 roundtrip：空上下文也要逐字节稳定。
+-- 真实上下文含 iface 列表（`encModuleIfaceAt`），这里只验证字段顺序 / Maybe / 列表 / 尾部
+-- 检查这条骨架——载荷结构变了（schema bump）这条断言会立刻失败。
+toolContextSample : ToolContext
+toolContextSample = ToolContext [] [] Nothing ["Base.Int"] [] [] "/tmp/pkg"
+
+toolContextRoundtrip : Bool
+toolContextRoundtrip =
+  let
+    bytes = encToolContext toolContextSample
+  in case decToolContextComplete bytes of
+    Nothing => False
+    Just ctx => encToolContext ctx == bytes

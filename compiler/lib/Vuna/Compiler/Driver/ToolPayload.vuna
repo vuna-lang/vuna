@@ -1,0 +1,90 @@
+-- | 工具会话载荷的规范编码：`ToolContext` / `Index` 的记录树 → 规范字节。
+module Vuna.Compiler.Driver.ToolPayload
+  ( decToolContextComplete
+  , encToolContext
+  , toolContextCodec
+  , toolContextSchema
+  ) where
+
+-- Vuna.Compiler.Driver.ToolPayload：工具会话（LSP / REPL）缓存载荷的**显式规范编码**。
+--
+-- 为什么要有这一层：`QVal` 只有 `QMarker` / `QBytes` / `QRef` 三种形态，装不下记录树。
+-- 工具会话的类型值走「`QRef` + 内容寻址 blob」，所以必须有「记录 → 规范字节」的编码，
+-- 而且必须是**自描述**的（不依赖 OCaml 值表示、不依赖 Marshal）。
+--
+-- 编码复用 iface 的既有编码器（`encModuleIfaceAt` / `encManifestAt` / `encSourceInfo` /
+-- `encManifestEntry` / `encDepPair`），字段顺序 = `ToolContext` 的 record 声明顺序；
+-- `decToolContextComplete` 要求**全部消费完**（尾部多余字节 ⇒ `Nothing`，与其它载荷一致）。
+--
+-- 载荷本身由 `Store` 承载（`storeWriteEff` / `storeReadAsEff`），codec 段用
+-- `toolContextCodec`；blob 路径仍是内容寻址的 `<cache>/blobs/<digest>`。
+import Base.Int
+import Base.List
+import Base.Maybe
+import Base.Pair
+import Base.String
+import Vuna.Compiler.Canonical.Bytes
+import Vuna.Compiler.Driver.Compile
+import Vuna.Compiler.Driver.Iface
+
+-- | 载荷 schema（字段集变化必须 bump；旧 blob 自然拒绝）。
+toolContextSchema : String
+toolContextSchema = "vuna-tool-context 1"
+
+-- | `Store` 载荷的 codec 段。
+toolContextCodec : String
+toolContextCodec = "tool-context 1"
+
+encToolContextPayload : ToolContext -> List String -> List String
+encToolContextPayload ctx acc =
+  let
+    a = encList encModuleIfaceAt ctx.tcDepIfaces acc
+    b = encList encDepTableEntry ctx.tcDepTable a
+    c = encList encDepPair ctx.tcDepHashes b
+    d = encMaybe encManifestAt ctx.tcOwnManifest c
+    e = encList encStr ctx.tcNeeded d
+    f = encList encSourceInfo ctx.tcStats e
+  in encStr ctx.tcOwnDir f
+
+-- | `ToolContext` → 规范字节。
+encToolContext : ToolContext -> String
+encToolContext ctx = encTop encToolContextPayload ctx
+
+-- | `tcDepTable` 的一条：`(模块名, (包目录, manifest 条目))`。
+encDepTableEntry : Pair String (Pair String ManifestEntry) -> List String -> List String
+encDepTableEntry (Pair name (Pair dir entry)) acc =
+  encStr name (encStr dir (encManifestEntry entry acc))
+
+-- | 规范字节 → `ToolContext`（任何一步不符即 `Nothing`）。
+decToolContextComplete : String -> Maybe ToolContext
+decToolContextComplete s = case decToolContextPayload (strLength s) (curOf s) of
+  Nothing => Nothing
+  Just (Pair ctx rest) => if curAtEnd rest then Just ctx else Nothing
+
+decToolContextPayload : Int -> Cur -> Maybe (Pair ToolContext Cur)
+decToolContextPayload fuel c = case decStr (fuel - 1) c of
+  Nothing => Nothing
+  Just (Pair ownDir b1) => case decList decSourceInfo (fuel - 1) b1 of
+    Nothing => Nothing
+    Just (Pair stats b2) => case decList decStr (fuel - 1) b2 of
+      Nothing => Nothing
+      Just (Pair needed b3) => case decMaybe decManifestAt (fuel - 1) b3 of
+        Nothing => Nothing
+        Just (Pair ownManifest b4) => case decList decDepPair (fuel - 1) b4 of
+          Nothing => Nothing
+          Just (Pair depHashes b5) => case decList decDepTableEntry (fuel - 1) b5 of
+            Nothing => Nothing
+            Just (Pair depTable b6) => case decList decModuleIfaceAt (fuel - 1) b6 of
+              Nothing => Nothing
+              Just (Pair depIfaces b7) =>
+                Just
+                  (Pair (ToolContext depIfaces depHashes ownManifest needed stats depTable ownDir) b7)
+
+decDepTableEntry : Int -> Cur -> Maybe (Pair (Pair String (Pair String ManifestEntry)) Cur)
+decDepTableEntry fuel c = case decStr (fuel - 1) c of
+  Nothing => Nothing
+  Just (Pair name b1) => case decStr (fuel - 1) b1 of
+    Nothing => Nothing
+    Just (Pair dir b2) => case decManifestEntry (fuel - 1) b2 of
+      Nothing => Nothing
+      Just (Pair entry b3) => Just (Pair (Pair name (Pair dir entry)) b3)
