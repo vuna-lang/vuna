@@ -59,7 +59,7 @@
 | D74 | `fetch` 的 `fuel 64` 是给 SCT 的显式下降参数，不是语义配额：依赖链深于 64 会报 depth limit（正常包图远小于此） | `lib/Vuna/Fetch.vuna`（`fetchAll 64`） | 后续（若真遇到，按依赖图深度动态给） |
 | D75 | opaque 依赖过滤已覆盖包 `check`/`build`、单文件 `dtCheckSource`、REPL/表达式求值（`replProgramFull`）与 `dtEvalFile`；剩余只有 `Elab.Driver` 内部 goal/tolerant 查询不经过模块过滤 | `Dt.hideDepOpaqueDecls` 及各入口；`Elab/Driver.goalsOfProgram*` | 后续（只影响工具查询，不影响 check/build） |
 | D76 | `abstract` 已进 AST/parser/Canonical/Fmt，但语义尚未独立：当前与 `opaque` 共用“下游不展开”口径，sealing 与 ifaceHash 区分未定 | `Frontend/Ast.vuna` 的 `OpacityAbstract`；`Loader/Flatten.opaqueNamesOf` | 后续（先定语义，再动 ifaceHash） |
-| D77 | 旧模块头 `module M (exports) where` 仍是解析器兼容路径；`test/**/*.vuna` 夹具已全部迁到逐定义 export，但 `53_unit_cache_default` 与 `corpus/{cli,index,lsp,repl}` 辅助脚本仍生成旧头；53 迁移后 `build --no-compile` 的 split 解析报 `PS_ExpectedTopLevelDecl`，需先修 split 路径 | `Frontend/Parser.parseModDecl`；`grep -rl 'module .*(' test/suite/steps test/corpus/*/*.sh` | 后续（修 split + 迁移辅助脚本后移除） |
+| D77 | 旧模块头 `module M (exports) where` 仍是解析器兼容路径；`test/**/*.vuna` 夹具与 steps 生成串已基本迁移，仅 `corpus/lsp/smoke.sh` 的 ModDoc/Reexp 仍使用旧头（其 hover 断言依赖旧行号） | `Frontend/Parser.parseModDecl`；`grep -n 'module .*(' test/corpus/lsp/smoke.sh` | 后续（迁移 smoke 并更新 hover 断言后移除） |
 | D78 | main 新增的 10 个包源/store `PKG_*` 码没有结构化夹具，只在 diag 审计 allowlist 中登记（DependencySourceMissing/FetchFailed/GitRevRequired/HashMalformed/HashMismatch/IndexMalformed/MissingHash/NotMaterialized/SourceConflict/UnknownSourceKey） | `nix/diag-coverage-allow.txt`、`nix/diag-unreachable.txt`；`nix/checks/diag-coverage.sh` | 后续（补包错误夹具） |
 
 ## 效应统一（Eff 已贯通）
