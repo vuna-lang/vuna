@@ -262,3 +262,18 @@ warm `check .` 56–57 ms（门槛 78）；全量 suite **5551 checks / 0 failed
 - §64（`examples/infra`）扩到 25 条断言：原有 miss/hit/cutoff 三条不变，新增
   `query-order`（反序声明仍命中）、`query4`（动态依赖 hit）、`query5`（声明集合变 ⇒
   cutoff）、`query-marker`（QVal 三形态渲染的单射性锁死）。
+
+### 下一步（阶段 2 起的落点，已在阶段 0/1 期间核实）
+
+- `Driver/Compile.vuna` 的接入点：`checkPackage`（= `checkCachedExe` / `checkCachedLib`）
+  与 `compileToDir`；判定逻辑现在散在 `checkCacheHit` / `checkAndCache` / `ownCleanInfo` /
+  `depIfacesOf`，全部应改写成图节点（`env:` / `src:` / `ast:` / `iface:` / `check:` /
+  `split:` / `unit:`）。`check/` 与 `split/` 两个独立缓存目录随之下线。
+- 纯层已经就绪：`Query.queryHit` 用**观测依赖 + 声明集合**两条判据；`Query.Run.runNode`
+  带预算与环检测；`sessionSave` 可直接承接「跨进程 check 命中」（替代 `check/` marker）。
+- 工具侧（阶段 3）：`Lsp/Diagnostics` 的 `DiagCache`、`Repl` 的 `stateAuxCache` /
+  `stateToolSession` 换成持同一 `Db`；debug 行 `iface-source=repl` → `query-source=repl`。
+- 阶段 5 必做：`sh nix/seed-rotate.sh ./result/bin/vuna`（`Canonical.Lex` 已进
+  `Loader.Flatten` 的 import 闭包 ⇒ seed 闭包变化，`nix/seed-files.txt` 会新增
+  `Vuna_dCompiler_dCanonical_dLex.ml`）、`bench/compiler-baseline.txt` 重标定、
+  `nix flake check`。
