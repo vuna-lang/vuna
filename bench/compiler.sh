@@ -17,11 +17,12 @@
 #   build-all            workspace 全部（根包 + compiler 成员，串行；= check 全部 + codegen）
 #   build-compiler       仅 compiler 包（= check-compiler + codegen）
 #   build-warm           同 build-compiler，但 split 缓存已预热
-#   map-cold / map-hot   `vuna map` 索引冷 / 热
+#   map-cold / map-hot   `vuna map` 索引冷（清 query store）/ 热
 #   fmt-check            `vuna fmt --check`
 # 冷/热语义（M34.5 缓存落地后）：
-#   check-all / check-compiler / build-all / build-compiler 先清对应缓存（冷，代表首次构建）
+#   check-all / check-compiler / build-all / build-compiler 先清 query store（冷，代表首次构建）
 #   check-warm / build-warm 先预热一次再计时（热，代表缓存命中）
+#   map-cold 同样先清 query store；map-hot 直接复用上一次留下的索引
 #
 # 用法（仓库根目录）：
 #   sh bench/compiler.sh                    # 测量全部并打印表格
@@ -104,12 +105,14 @@ if [ -n "$ONLY" ]; then
   NAMES=$ONLY
 fi
 
-clear_check_cache() {
-  rm -rf "${TMPDIR:-/tmp}/vuna-cache"
+# 与 `Store` 同规则：`VUNA_CACHE_DIR` 覆盖，缺省 `$TMPDIR/vuna-cache`。
+cache_root() {
+  printf '%s' "${VUNA_CACHE_DIR:-${TMPDIR:-/tmp}/vuna-cache}"
 }
 
-clear_split_cache() {
-  rm -rf "${TMPDIR:-/tmp}/vuna-cache"
+# 冷基准统一清整个 query store（check / split / lex / 单元缓存同根）。
+clear_store_cache() {
+  rm -rf "$(cache_root)"
 }
 
 # 单项一次（成功才输出 ms；失败时打印错误并退出）。
@@ -117,25 +120,25 @@ run_once() {
   local name=$1 t0 t1 rc
   case $name in
     check-all)
-      clear_check_cache
+      clear_store_cache
       t0=$(date +%s%3N); (cd "$ROOT" && "$VUNA_BIN" check . >/dev/null 2>&1); rc=$?; t1=$(date +%s%3N) ;;
     check-compiler)
-      clear_check_cache
+      clear_store_cache
       t0=$(date +%s%3N); (cd "$ROOT" && "$VUNA_BIN" check compiler >/dev/null 2>&1); rc=$?; t1=$(date +%s%3N) ;;
     check-warm)
       (cd "$ROOT" && "$VUNA_BIN" check . >/dev/null 2>&1)
       t0=$(date +%s%3N); (cd "$ROOT" && "$VUNA_BIN" check . >/dev/null 2>&1); rc=$?; t1=$(date +%s%3N) ;;
     build-all)
-      clear_split_cache
+      clear_store_cache
       t0=$(date +%s%3N); (cd "$ROOT" && "$VUNA_BIN" build --no-compile --out "$WORK/ball" >/dev/null 2>&1); rc=$?; t1=$(date +%s%3N) ;;
     build-compiler)
-      clear_split_cache
+      clear_store_cache
       t0=$(date +%s%3N); (cd "$ROOT" && "$VUNA_BIN" build --no-compile --out "$WORK/build" compiler >/dev/null 2>&1); rc=$?; t1=$(date +%s%3N) ;;
     build-warm)
       (cd "$ROOT" && "$VUNA_BIN" build --no-compile --out "$WORK/bwarm" compiler >/dev/null 2>&1)
       t0=$(date +%s%3N); (cd "$ROOT" && "$VUNA_BIN" build --no-compile --out "$WORK/bwarm" compiler >/dev/null 2>&1); rc=$?; t1=$(date +%s%3N) ;;
     map-cold)
-      rm -rf "$ROOT/.local/index"
+      clear_store_cache
       t0=$(date +%s%3N); (cd "$ROOT" && "$VUNA_BIN" map >/dev/null 2>&1); rc=$?; t1=$(date +%s%3N) ;;
     map-hot)
       t0=$(date +%s%3N); (cd "$ROOT" && "$VUNA_BIN" map >/dev/null 2>&1); rc=$?; t1=$(date +%s%3N) ;;
@@ -218,7 +221,7 @@ if [ "$CHECK" -eq 1 ]; then
 fi
 
 if [ "$ALLOC" -eq 1 ]; then
-  clear_check_cache
+  clear_store_cache
   echo ""
   echo "== 分配统计（check . 冷，VN_PERF_STATS=1；每个进程一行：主进程 + 并行成员子进程）=="
   (cd "$ROOT" && VN_PERF_STATS=1 "$VUNA_BIN" check . 2>&1 >/dev/null | grep "^VN_PERF " || true)

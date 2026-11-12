@@ -20,8 +20,8 @@
 | `build --no-compile`（workspace） | ~5.2 s |
 | `build .`（含链接；单元缓存默认开） | ~7 s（其中 ocamlopt/链接 ~28 s CPU，16 路并行） |
 | `fmt --check`（全仓） | ~0.80 s |
-| `map`（热缓存命中） | ~0.75 s |
-| `map` 冷启动全量重建 | ~1.07 s（索引缓存失效后整仓重扫；C34 的 O(n²) 已修） |
+| `map`（热缓存命中） | ~0.13 s |
+| `map` 冷启动全量重建 | ~2.1 s（清 query store 后整仓重扫 + 编码/SHA-256；C34 的 O(n²) 已修） |
 | `lint` / `doc` / `api` / `gen-errors` | 均 <1 s |
 | LSP 单次编辑（会话热，重文件） | ~0.12 s（compiler 最大文件）/ ~0.02 s（根包普通文件） |
 | LSP 首次请求（建会话 + 首轮增量） | ~1.1–1.5 s |
@@ -304,8 +304,8 @@ golden 一致，再 warmup + 多次取中位数；RSS 用 GNU time 的 max RSS�
 | build-all | 8717 |
 | build-compiler | 3469 |
 | build-warm | 255 |
-| map-cold | 1502 |
-| map-hot | 878 |
+| map-cold | 2111 |
+| map-hot | 130 |
 | fmt-check | 1139 |
 
 **2026-11 标定的成本来源（C32 的显性代价，不是查询图引入的）**：冷路径
@@ -321,8 +321,11 @@ golden 一致，再 warmup + 多次取中位数；RSS 用 GNU time 的 max RSS�
 兜住真正影响交互的部分；大载荷热路径的优化方向是「per-file 内容寻址 blob + 小 manifest」
 （命中时直接 copy 字节、不做整体解码），记为后续项（见 [query-graph.md](query-graph.md) §6）。
 
-`map-cold` / `fmt-check` 相对旧基线（691 / 546）的上涨来自 HEAD 源码增长与仓内路径差异，
-与 2026-11 的修复无关（同一棵树、base/final 两个二进制的 A/B 读数一致），本轮未处理。
+`fmt-check` 相对旧基线（546）的上涨来自 HEAD 源码增长与仓内路径差异，与 2026-11 的修复无关
+（同一棵树、base/final 两个二进制的 A/B 读数一致），本轮未处理。`map-cold` 从旧基线 1502
+重标定为 2111：旧基准的清理命令只删迁移前的缓存目录，在索引缓存迁到查询图后已是空操作，
+实际测的是热路径；现在清 query store 后测真正的冷建索引（含 `Index.Codec` 编码 +
+SHA-256 内容地址）。
 
 **CI 门槛**：`bench/compiler.sh --check` 硬失败阈值；`vuna-compiler-growth`
 （合成 500/1000/2000/4000 单文件，每翻倍 ≤2.3×）；`vuna-compiler-growth-incremental`

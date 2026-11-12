@@ -4,6 +4,6 @@ check-warm 53
 build-all 8717
 build-compiler 3469
 build-warm 255
-map-cold 1502
-map-hot 878
+map-cold 2111
+map-hot 130
 fmt-check 1139
