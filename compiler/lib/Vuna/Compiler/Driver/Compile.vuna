@@ -50,6 +50,7 @@ import Vuna.Compiler.Canonical.Bytes
 import Vuna.Compiler.Fingerprint
 import Vuna.Compiler.Store
 import Vuna.Compiler.Packages.Pkg
+import Vuna.Compiler.Packages.Source
 import Vuna.Compiler.Driver.Dt
 import Vuna.Compiler.Elab
 import Vuna.Compiler.Driver.Cache
@@ -381,19 +382,10 @@ cacheBase = do
   tmp <- prim_eff_getenv "TMPDIR"
   pure (if override /= "" then override else "${if tmp == "" then "/tmp" else tmp}/vuna-cache")
 
--- 目录遍历（模块根内的 .vuna；与 Vuna.Files 的跳过规则一致，但 compiler 包不能
--- import 根包工具链）。fuel 守卫目录图（符号链接环）。
+-- 目录遍历（模块根内的 .vuna）。跳过名单与包内容收集共用一份（`Packages.Source`），
+-- 避免「什么算包内容」出现两套规则。fuel 守卫目录图（符号链接环）。
 skipMetaDir : String -> Bool
-skipMetaDir name =
-  name == ".git"
-    || name == ".local"
-    || name == ".output"
-    || name == ".direnv"
-    || name == "node_modules"
-    || name == "seed"
-    || name == "_scratch"
-    || name == "result"
-    || name == "corpus"
+skipMetaDir name = skipSourceDir name
 
 collectVunaMeta : Int -> String -> Eff [] (List String)
 collectVunaMeta fuel dir = if fuel <= 0 then pure []

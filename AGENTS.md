@@ -121,6 +121,7 @@ build，`dist/` 提交）；`nix/` = 构建图 + rotate/metrics/bench；`docs/` 
   [records-traits.md](docs/reference/records-traits.md)（记录/trait/do）、
   [effects.md](docs/reference/effects.md)（Eff 动作/效应栈/运行时效应）、
   [stdlib.md](docs/reference/stdlib.md)、[packages.md](docs/reference/packages.md)、
+  [package-store.md](docs/reference/package-store.md)（内容寻址 store / fetch / 摘要规则）、
   [primitives.md](docs/reference/primitives.md)（内建/原语/宿主层）、
   [operators.md](docs/reference/operators.md)（运算符=方法别名、实例落点规则）
 - 编译器实现：[compiler.md](docs/reference/compiler.md)（模块与输出模型、接口摘要）、

@@ -54,3 +54,24 @@ out-contains: canon-defs-rt ok
 out-contains: canon-span ok
 out-contains: canon-export-parent ok
 out-contains: canon-fixity-target ok
+# TOML 解析器（阶段 T）：子表 / 引号段名 / 点键 / 内联表 / 数组 / 表数组 / 多行字符串 /
+# unicode 转义 / literal 字符串；以及必须拒绝的输入（重复键、浮点、重复表、点键定义的
+# 表再被 `[a]` 定义）。
+out-contains: toml-subtable ok
+out-contains: toml-quoted ok
+out-contains: toml-dotted ok
+out-contains: toml-inline ok
+out-contains: toml-array-len 3
+out-contains: toml-table-array ok
+out-contains: toml-multiline ok
+out-contains: toml-unicode ok
+out-contains: toml-literal ok
+out-contains: toml-dup-key ok
+out-contains: toml-float ok
+out-contains: toml-dup-table ok
+out-contains: toml-dotted-conflict ok
+# 包内容/语义身份的规范编码（Canonical.Pkg）：roundtrip + 两者输入面的区分（D12）。
+out-contains: pkg-canon-rt ok
+out-contains: pkg-identity-rt ok
+out-contains: pkg-identity-name ok
+out-contains: pkg-identity-deps ok

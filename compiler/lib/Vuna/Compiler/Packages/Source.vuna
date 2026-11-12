@@ -1,0 +1,141 @@
+-- | 包内容收集与摘要：目录 → `PackageSource` → （内容摘要 / 语义身份）。
+module Vuna.Compiler.Packages.Source
+  ( contentHashOf
+  , identityHashOf
+  , normalizeHash
+  , packageFilesEff
+  , packageSourceEff
+  , skipSourceDir
+  , verifyHash
+  ) where
+
+-- Vuna.Compiler.Packages.Source：包内容的**收集与摘要**（D12 的输入侧）。
+--
+-- 包内容集合 = `vuna.toml` + `lib/**/*.vuna` + `app/**/*.vuna` + `test/**/*.vuna`，
+-- 跳过名单见 `skipSourceDir`（与构建/接口缓存同一份规则，避免两套「什么算包内容」）。
+-- 收集是显式 `Eff []`（读目录/读文件）；摘要与身份是纯函数（`Canonical.Pkg`）。
+--
+-- 摘要口径见 `Canonical.Pkg`：内容摘要含全部文件字节；语义身份把文件折成内容摘要、
+-- 且 `path` 依赖记 `"path"`（可变输入）。两者都不含绝对路径、mtime、遍历顺序。
+import Vuna.Compiler.Canonical.Pkg
+import Vuna.Compiler.Common
+import Vuna.Compiler.Frontend.Manifest
+import Vuna.Compiler.Hash
+import Base.List
+import Base.Sort
+import Base.String
+
+-- | 收集时跳过的目录名（与 `Driver.Compile` 的构建扫描同源）。
+skipSourceDir : String -> Bool
+skipSourceDir name =
+  name == ".git"
+    || name == ".local"
+    || name == ".output"
+    || name == ".direnv"
+    || name == "node_modules"
+    || name == "seed"
+    || name == "_scratch"
+    || name == "result"
+    || name == "corpus"
+
+-- | 摘要文本归一：接受 `sha256:<64hex>` 与裸 64 位十六进制。
+normalizeHash : String -> String
+normalizeHash h = if startsWith "sha256:" h then substring 7 64 h else h
+
+-- | 期望摘要 vs 实际摘要（两侧都归一）。
+verifyHash : String -> String -> Bool
+verifyHash expected actual = normalizeHash expected == normalizeHash actual
+
+-- | 包内全部文件（相对路径 + 字节），按路径升序。
+packageFilesEff : String -> Eff [] (List PackageFile)
+packageFilesEff root = do
+  manifestFiles <- readManifestFile root
+  libFiles <- collectDirFiles 1048576 root "lib"
+  appFiles <- collectDirFiles 1048576 root "app"
+  testFiles <- collectDirFiles 1048576 root "test"
+  pure (sortByPath (append manifestFiles (append libFiles (append appFiles testFiles))))
+
+readManifestFile : String -> Eff [] (List PackageFile)
+readManifestFile root = do
+  exists <- prim_eff_fileExists "${root}/vuna.toml"
+  if exists then do
+    content <- prim_eff_readFile "${root}/vuna.toml"
+    pure [PackageFile "vuna.toml" content]
+  else pure []
+
+collectDirFiles : Int -> String -> String -> Eff [] (List PackageFile)
+collectDirFiles fuel root rel = if fuel <= 0 then pure []
+else
+  let
+    dir = if rel == "" then root else "${root}/${rel}"
+  in do
+    exists <- prim_eff_fileExists dir
+    isDir <- if exists then prim_eff_isDirectory dir else pure False
+    if exists && isDir then do
+      names <- prim_eff_readDir dir
+      collectNames (fuel - 1) root rel names
+    else pure []
+
+collectNames : Int -> String -> String -> List String -> Eff [] (List PackageFile)
+collectNames fuel root rel [] = pure []
+collectNames fuel root rel (name :: rest) = if fuel <= 0 then pure []
+else do
+  here <- walkName (fuel - 1) root rel name
+  there <- collectNames (fuel - 1) root rel rest
+  pure (append here there)
+
+walkName : Int -> String -> String -> String -> Eff [] (List PackageFile)
+walkName fuel root rel name = if fuel <= 0 then pure []
+else case name of
+  "." => pure []
+  ".." => pure []
+  _ => if skipSourceDir name then pure []
+  else
+    let
+      childRel = if rel == "" then name else "${rel}/${name}"
+      childPath = "${root}/${childRel}"
+    in do
+      isDir <- prim_eff_isDirectory childPath
+      if isDir then collectDirFiles (fuel - 1) root childRel
+      else if endsWith ".vuna" name then do
+        content <- prim_eff_readFile childPath
+        pure [PackageFile childRel content]
+      else pure []
+
+filePathLe : PackageFile -> PackageFile -> Bool
+filePathLe a b = a.pfPath <= b.pfPath
+
+sortByPath : List PackageFile -> List PackageFile
+sortByPath files = sortBy filePathLe files
+
+-- | 由 manifest + 文件集合构造 `PackageSource`（依赖声明只取别名与摘要）。
+packageSourceEff : String -> Manifest -> Eff [] PackageSource
+packageSourceEff root manifest = do
+  files <- packageFilesEff root
+  pure
+    (PackageSource (packageNameOf manifest) (exportsOf manifest) (map depKeyOf manifest.manifestDependencies) files)
+
+packageNameOf : Manifest -> String
+packageNameOf manifest = case manifest.manifestName of
+  Nothing => ""
+  Just name => name
+
+exportsOf : Manifest -> List String
+exportsOf manifest = case manifest.manifestExports of
+  Nothing => []
+  Just xs => xs
+
+-- `path` 依赖记 `"path"`：它是可变输入，摘要不参与依赖方身份（D12）。
+depKeyOf : Dependency -> Pair String String
+depKeyOf dep = Pair (depAliasOf dep) (case depHashOf dep of
+  Nothing => "path"
+  Just h => normalizeHash h
+)
+
+-- | 内容摘要：只含 `(相对路径, 字节)`。
+contentHashOf : PackageSource -> String
+contentHashOf ps = contentAddress (encPackageContent ps.psFiles)
+
+-- | 语义身份：包名 + 导出 + 依赖摘要 + 文件内容摘要。
+identityHashOf : PackageSource -> String
+identityHashOf ps = contentAddress (encPackageIdentity (identityOfSource ps))

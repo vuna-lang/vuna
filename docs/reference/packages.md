@@ -8,9 +8,10 @@
 
 - 包元信息用 `vuna.toml`（TOML 子集）：`[package]`（只有 name）、`[workspace]`（members）、
   `[export]`（modules）、`[diagnostics]`（format / warnings / max-errors，见 [diagnostics.md](diagnostics.md) §5.1）、
-  `[dependencies]`（依赖名 = 相对路径，暂不做 registry）。未知 section / key、以及 `[package]`
-  里出现其他 key 都是错误，不静默忽略（`[capabilities]` / `[trust]` / `[privileged]` 已删除，
-  出现即未知 section/key）。
+  `[dependencies]`（依赖声明，见下节）。TOML 子集支持子表、引号段名（`[releases."1.2.0"]`）、
+  点键、内联表、表数组、多行字符串与 `\uXXXX` 转义；**不支持**浮点与日期时间（显式报错，
+  不静默近似）。未知 section / key、以及 `[package]` 里出现其他 key 都是错误，不静默忽略
+  （`[capabilities]` / `[trust]` / `[privileged]` 已删除，出现即未知 section/key）。
 - **workspace 根即一个包**（Cargo 风格）：根 `vuna.toml` 同时含 `[workspace]` 与
   `[package]`；成员是子目录，各自有自己的 `vuna.toml`。本仓库 = 根包 `vuna`（产品 CLI）+
   成员包 `vuna-compiler`（编译器）+ 成员包 `vuna-base`（标准库）；依赖图
@@ -64,10 +65,14 @@
   - `vuna doc [--check] [--package NAME] [DIR [OUT]]`：扫描 `lib/` 生成**单文件交互 HTML**
     API 文档（默认 `DIR/docs/api.html`，gitignored；workspace 根含所有成员包）；`--check`
     报告缺失 docstring 的顶层导出项；docstring / 搜索框 / 类型检索见 [api-docs.md](api-docs.md)；
-  - `vuna clean-iface [--dry-run] [DIR]`：批量删除 DIR 下的 vuna iface 缓存文件
-    （`*.iface` / `.vuna-iface` / 原子写残留 `*.iface.*.tmp`；默认 `DIR=.`，不碰 `.vuna`
-    源码）。接口缓存默认写在源文件旁，`VUNA_IFACE_DIR` 可整体镜像到外部根，见
-    [cache.md](cache.md)；
+  - `vuna fetch [--locked] [DIR]`：把不可变源依赖（`git` + `rev`、`url`）取到持久 store；
+    `path` 依赖只校验摘要。`--locked` 不联网、只校验已物化。`check`/`build` 永不取包，
+    缺对象报 `PKG_NotMaterialized`。布局与失败模式见 [package-store.md](package-store.md)；
+  - `vuna clean [--iface] [--store] [--packages] [--all] [--dry-run] [DIR]`：`--iface` 删树内
+    接口缓存（`*.iface` / `.vuna-iface` / 原子写残留）；`--store` 清临时缓存
+    （`/vuna-cache`）；`--packages` 清持久包 store（``）；不带 flag 时只清
+    iface + store。接口缓存默认写在 `.output/iface/<编译器指纹>/`，`VUNA_IFACE_DIR` 可整体
+    镜像到外部根，见 [cache.md](cache.md)；
   - `vuna map [--modules]` / `vuna map --find <Module.name>` / `vuna map --impact
     <Module.name>` / `vuna api <Module.name>`：`Vuna.Index` 的源码符号索引，用于定位定义、
     引用者与建议测试标签；索引缓存在 `$TMPDIR/vuna-cache` 的 `index:<dir>` 节点 + blobs，按**内容哈希**判定
@@ -102,6 +107,34 @@
 - **base 的宿主层直接使用点（只读说明）**：`base/vuna.toml` 曾用 `[trust] unsafe` 收敛
   `unsafe` 的直接使用点，机制删除后清单见 git 历史；13 个真实使用点见
   [effects.md](effects.md) §8.6。
+
+## 依赖声明（源 + 摘要）
+
+`[dependencies]` 支持三种等价写法（同一别名只能一种）：
+
+```toml
+[dependencies]
+greet = "../greet"                                   # 字符串 = path 简写
+mathlib = { git = "https://...", rev = "<commit>", hash = "sha256:<64hex>" }  # 内联表
+
+[dependencies.greet]                                 # 子表
+path = "../greet"
+```
+
+规则（D12/D13）：
+
+| 源 | 必填 | 语义 |
+| --- | --- | --- |
+| `path = "相对路径"` | 无 `hash`（可写，写了就校验） | 工作树共变的**可变输入**；不复制、不写 store |
+| `git = url` + `rev = commit` | `hash = "sha256:<64hex>"` | 不可变源；`vuna fetch` 取到持久 store |
+| `url = "..."` | `hash = ...` | URL 直指 `pkg-source 1` 对象文件（不是 tarball） |
+
+- 摘要只固定**不可变源**：改 `path` 依赖的源码**不需要**改任何 manifest（新鲜度由 iface
+  接口哈希链负责；回归见 `90/steps_native/67_pkg_deps`）。
+- 一个依赖图内包名唯一：无版本号共存；需要多版本只能改名/分叉。
+- 未知 key、源字段互斥、`git` 缺 `rev`、不可变源缺 hash 都在加载期报 `PKG_*` 码
+  （`PKG_UnknownSourceKey` / `PKG_SourceConflict` / `PKG_GitRevRequired` / `PKG_MissingHash`）。
+- 存储布局、fetch 流程与离线边界见 [package-store.md](package-store.md)。
 
 ## 包格式速查
 
@@ -188,6 +221,8 @@ modules = [
 | `vuna search [--type|--name|--doc] ... <query...>` | 名称 / docstring / 类型检索（Hoogle 式打分；`--json`） |
 | `vuna map [--modules]` / `--find` / `--impact` | 源码符号索引（内容哈希缓存；定义、引用位置、建议测试） |
 | `vuna api <Module.name>` | 某模块的签名面（含 docstring 与行号） |
+| `vuna fetch [--locked] [DIR]` | 取不可变源依赖到持久 store；`--locked` 只校验不联网 |
+| `vuna clean [--iface] [--store] [--packages] [--all] [--dry-run] [DIR]` | 清接口缓存 / 临时缓存 / 持久包 store |
 | `vuna gen-errors [ROOT]` | 生成错误码文档（默认 `docs/.generated/errors.md`） |
 | `vuna version`, `vuna --version` | 版本 |
 | `vuna help`, `vuna -h` | 用法 |
@@ -205,4 +240,5 @@ modules = [
 - 模块系统与 import 解析：[language.md](language.md)
 - `Prelude` 与标准库包：[stdlib.md](stdlib.md)
 - 内建 / 原语的声明面与效应语义：[primitives.md](primitives.md)
+- 持久包 store 与 fetch：[package-store.md](package-store.md)
 - 测试命令的环境变量与 nix 入口：[testing.md](testing.md)

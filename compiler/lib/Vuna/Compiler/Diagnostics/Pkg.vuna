@@ -52,10 +52,19 @@ data PkgErr : Nat -> Type where
   LibraryWithoutEntry : String -> PkgErr (Succ Zero)
   NoManifestUpward : String -> PkgErr (Succ Zero)
   TomlSyntax : String -> PkgErr (Succ Zero)
+  DependencySourceMissing : String -> PkgErr (Succ Zero)
+  GitRevRequired : String -> PkgErr (Succ Zero)
+  HashMalformed : String -> PkgErr (Succ Zero)
+  MissingHash : String -> PkgErr (Succ Zero)
+  SourceConflict : String -> PkgErr (Succ Zero)
+  NotMaterialized : String -> PkgErr (Succ Zero)
+  FetchFailed : String -> PkgErr (Succ Zero)
   UnexpectedTopLevelKey : String -> PkgErr (Succ Zero)
   UnknownSection : String -> PkgErr (Succ Zero)
   -- arity 2
   UnknownKey : String -> String -> PkgErr (Succ (Succ Zero))
+  UnknownSourceKey : String -> String -> PkgErr (Succ (Succ Zero))
+  HashMismatch : String -> String -> PkgErr (Succ (Succ Zero))
 
 -- | 诊断域实现：Vuna.Compiler.Diagnostics.Pkg.pkgCode（目录/模板见 diagnostics.md）。
 pkgCode : {n : Nat} -> PkgErr n -> String
@@ -84,6 +93,15 @@ pkgCode (TomlSyntax _) = "PKG_TomlSyntax"
 pkgCode (UnexpectedTopLevelKey _) = "PKG_UnexpectedTopLevelKey"
 pkgCode (UnknownSection _) = "PKG_UnknownSection"
 pkgCode (UnknownKey _ _) = "PKG_UnknownKey"
+pkgCode (UnknownSourceKey _ _) = "PKG_UnknownSourceKey"
+pkgCode (DependencySourceMissing _) = "PKG_DependencySourceMissing"
+pkgCode (GitRevRequired _) = "PKG_GitRevRequired"
+pkgCode (HashMalformed _) = "PKG_HashMalformed"
+pkgCode (MissingHash _) = "PKG_MissingHash"
+pkgCode (SourceConflict _) = "PKG_SourceConflict"
+pkgCode (NotMaterialized _) = "PKG_NotMaterialized"
+pkgCode (FetchFailed _) = "PKG_FetchFailed"
+pkgCode (HashMismatch _ _) = "PKG_HashMismatch"
 
 -- | 诊断域实现：Vuna.Compiler.Diagnostics.Pkg.pkgTemplate（目录/模板见 diagnostics.md）。
 pkgTemplate : {n : Nat} -> PkgErr n -> String
@@ -118,6 +136,18 @@ pkgTemplate (TomlSyntax _) = "<0>"
 pkgTemplate (UnexpectedTopLevelKey _) = "unexpected top-level key \"<0>\""
 pkgTemplate (UnknownSection _) = "unknown section [<0>]"
 pkgTemplate (UnknownKey _ _) = "unknown key \"<0>\" in [<1>]"
+pkgTemplate (UnknownSourceKey _ _) = "unknown key \"<0>\" in [dependencies.<1>]"
+pkgTemplate (DependencySourceMissing _) =
+  "dependency \"<0>\" must specify path, git (with rev) or url"
+pkgTemplate (GitRevRequired _) = "dependency \"<0>\" uses git but has no rev"
+pkgTemplate (HashMalformed _) = "invalid dependency hash \"<0>\" (expected sha256:<64 hex>)"
+pkgTemplate (MissingHash _) =
+  "dependency \"<0>\" must have a hash (only path dependencies may omit it)"
+pkgTemplate (SourceConflict _) =
+  "dependency \"<0>\" specifies more than one source (path / git / url)"
+pkgTemplate (NotMaterialized _) = "package \"<0>\" is not in the local store (run: vuna fetch)"
+pkgTemplate (FetchFailed _) = "package fetch failed: <0>"
+pkgTemplate (HashMismatch _ _) = "package \"<0>\" content hash mismatch: <1>"
 
 -- | 诊断域实现：Vuna.Compiler.Diagnostics.Pkg.pkgMsg（目录/模板见 diagnostics.md）。
 pkgMsg : {n : Nat} -> PkgErr n -> Vec n String -> Diagnostic
@@ -209,5 +239,14 @@ pkgAll =
     PkgEntry (pkgCode (TomlSyntax "")) (pkgTemplate (TomlSyntax "")) "vuna.toml 语法错误",
     PkgEntry (pkgCode (UnexpectedTopLevelKey "")) (pkgTemplate (UnexpectedTopLevelKey "")) "顶层未知 key",
     PkgEntry (pkgCode (UnknownSection "")) (pkgTemplate (UnknownSection "")) "未知 section",
-    PkgEntry (pkgCode (UnknownKey "" "")) (pkgTemplate (UnknownKey "" "")) "section 内未知 key"
+    PkgEntry (pkgCode (UnknownKey "" "")) (pkgTemplate (UnknownKey "" "")) "section 内未知 key",
+    PkgEntry (pkgCode (UnknownSourceKey "" "")) (pkgTemplate (UnknownSourceKey "" "")) "依赖表未知 key",
+    PkgEntry (pkgCode (DependencySourceMissing "")) (pkgTemplate (DependencySourceMissing "")) "依赖未指定源",
+    PkgEntry (pkgCode (GitRevRequired "")) (pkgTemplate (GitRevRequired "")) "git 依赖缺 rev",
+    PkgEntry (pkgCode (HashMalformed "")) (pkgTemplate (HashMalformed "")) "依赖哈希格式非法",
+    PkgEntry (pkgCode (MissingHash "")) (pkgTemplate (MissingHash "")) "不可变源缺哈希",
+    PkgEntry (pkgCode (SourceConflict "")) (pkgTemplate (SourceConflict "")) "依赖源冲突",
+    PkgEntry (pkgCode (NotMaterialized "")) (pkgTemplate (NotMaterialized "")) "包未物化",
+    PkgEntry (pkgCode (FetchFailed "")) (pkgTemplate (FetchFailed "")) "取包失败",
+    PkgEntry (pkgCode (HashMismatch "" "")) (pkgTemplate (HashMismatch "" "")) "包内容摘要不符"
   ]

@@ -13,6 +13,7 @@ module Vuna.Compiler.Packages.Pkg
   , contextWithRelease
   , findManifestDir
   , findManifestDirMaybe
+  , joinPath
   , loadManifestAt
   , loadPackage
   , locateBase
@@ -46,6 +47,9 @@ module Vuna.Compiler.Packages.Pkg
 import Vuna.Compiler.Common
 import Vuna.Compiler.Diagnostics.Pkg
 import Vuna.Compiler.Frontend.Manifest
+import Vuna.Compiler.Canonical.Pkg
+import Vuna.Compiler.Packages.Source
+import Vuna.Compiler.Store
 import Base.List
 
 -- 模块根：目录、包名、可选导出模块列表。
@@ -226,13 +230,45 @@ mismatchMessage Nothing actual = "pkg: package name mismatch"
 mismatchMessage (Just expected) actual =
   "pkg: dependency ${expected} expects package name ${expected} but found ${actual}"
 
-loadDependencyList : Int -> List (Pair String String) -> String -> List (Pair String String) -> Eff [] (Check (List Package))
+-- 不可变源依赖：定位 store 物化视图（`<store>/pkgs/<digest>`）并校验 `.complete`。
+-- 物化视图由 `vuna fetch` 写入；check/build 只读，缺失即 `PKG_NotMaterialized`。
+loadStoreDependency : Int -> List (Pair String String) -> Dependency -> Eff [] (Check Package)
+loadStoreDependency fuel stack dep = case depHashOf dep of
+  Nothing => pure (pkgNoLoc1 (NotMaterialized (depAliasOf dep)) (depAliasOf dep))
+  Just hash => do
+    root <- storeDataRootEff
+    let
+      digest = normalizeHash hash
+      dir = "${root}/pkgs/${digest}"
+    in do
+      exists <- prim_eff_fileExists "${dir}/.complete"
+      if exists then do
+        text <- prim_eff_readFile "${dir}/.complete"
+        if text == digest then loadPackageWalk fuel stack (Just (depAliasOf dep)) dir
+        else pure (pkgNoLoc1 (NotMaterialized (depAliasOf dep)) (depAliasOf dep))
+      else pure (pkgNoLoc1 (NotMaterialized (depAliasOf dep)) (depAliasOf dep))
+
+-- path 依赖显式写摘要时校验（不写则跳过：可变输入，D12）。
+verifyPathHashEff : Dependency -> String -> Eff [] (Check Int)
+verifyPathHashEff dep dir = case depHashOf dep of
+  Nothing => pure (OkC 0)
+  Just expected => do
+    files <- packageFilesEff dir
+    let
+      actual = contentHashOf (PackageSource "" [] [] files)
+    in if verifyHash expected actual then pure (OkC 0)
+    else do
+      let
+        detail = "declared ${expected}, actual ${actual}"
+      in pure (pkgNoLoc (HashMismatch (depAliasOf dep) detail) [depAliasOf dep, detail])
+
+loadDependencyList : Int -> List (Pair String String) -> String -> List Dependency -> Eff [] (Check (List Package))
 loadDependencyList fuel stack baseDir deps = if fuel <= 0 then pure (icFuel "pkg")
 else case deps of
   [] => pure (OkC [])
-  (Pair depName rel) :: rest => do
-    dependencyR <- loadPackageWalk (fuel - 1) stack (Just depName) (joinPath baseDir rel)
-    case dependencyR of
+  dep :: rest => do
+    depR <- loadOneDependency (fuel - 1) stack baseDir dep
+    case depR of
       ErrC e => pure (ErrC e)
       OkC dependency => do
         restR <- loadDependencyList (fuel - 1) stack baseDir rest
@@ -240,6 +276,24 @@ else case deps of
           ErrC e => ErrC e
           OkC dependencies => OkC (Base.List.Cons dependency dependencies)
         )
+
+-- 单条依赖：path 定位工作树目录（显式摘要则校验）；git/url 定位 store 物化视图。
+loadOneDependency : Int -> List (Pair String String) -> String -> Dependency -> Eff [] (Check Package)
+loadOneDependency fuel stack baseDir dep = case depSourceOf dep of
+  DepPath rel => do
+    let
+      dir = joinPath baseDir rel
+    in do
+      depR <- loadPackageWalk fuel stack (Just (depAliasOf dep)) dir
+      case depR of
+        ErrC e => pure (ErrC e)
+        OkC dependency => do
+          hashR <- verifyPathHashEff dep dir
+          case hashR of
+            ErrC e => pure (ErrC e)
+            OkC _ => pure (OkC dependency)
+  DepGit url rev => loadStoreDependency fuel stack dep
+  DepUrl url => loadStoreDependency fuel stack dep
 
 loadPackageWalk : Int -> List (Pair String String) -> Maybe String -> String -> Eff [] (Check Package)
 loadPackageWalk fuel stack depName dir = if fuel <= 0 then pure (icFuel "pkg")

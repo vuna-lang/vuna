@@ -12,6 +12,7 @@ Vuna.Doc.Run  ./lib/Vuna/Doc/Run.vuna
 Vuna.Doc.Types  ./lib/Vuna/Doc/Types.vuna
 Vuna.Doc  ./lib/Vuna/Doc.vuna
 Vuna.Explain  ./lib/Vuna/Explain.vuna
+Vuna.Fetch  ./lib/Vuna/Fetch.vuna
 Vuna.Files  ./lib/Vuna/Files.vuna
 Vuna.FixityEnv  ./lib/Vuna/FixityEnv.vuna
 Vuna.Fmt.Comment  ./lib/Vuna/Fmt/Comment.vuna
@@ -41,6 +42,7 @@ Vuna.Lsp.Protocol  ./lib/Vuna/Lsp/Protocol.vuna
 Vuna.Lsp.Query  ./lib/Vuna/Lsp/Query.vuna
 Vuna.Lsp.Rename  ./lib/Vuna/Lsp/Rename.vuna
 Vuna.Lsp  ./lib/Vuna/Lsp.vuna
+Vuna.PackageStore  ./lib/Vuna/PackageStore.vuna
 Vuna.Repl.Client  ./lib/Vuna/Repl/Client.vuna
 Vuna.Repl.Complete  ./lib/Vuna/Repl/Complete.vuna
 Vuna.Repl.Edit  ./lib/Vuna/Repl/Edit.vuna
@@ -67,6 +69,7 @@ Vuna.Compiler.Canonical.Bytes  compiler/lib/Vuna/Compiler/Canonical/Bytes.vuna
 Vuna.Compiler.Canonical.CoreTerm  compiler/lib/Vuna/Compiler/Canonical/CoreTerm.vuna
 Vuna.Compiler.Canonical.Elab  compiler/lib/Vuna/Compiler/Canonical/Elab.vuna
 Vuna.Compiler.Canonical.Lex  compiler/lib/Vuna/Compiler/Canonical/Lex.vuna
+Vuna.Compiler.Canonical.Pkg  compiler/lib/Vuna/Compiler/Canonical/Pkg.vuna
 Vuna.Compiler.Canonical  compiler/lib/Vuna/Compiler/Canonical.vuna
 Vuna.Compiler.Codegen.Assembly  compiler/lib/Vuna/Compiler/Codegen/Assembly.vuna
 Vuna.Compiler.Codegen.Decl  compiler/lib/Vuna/Compiler/Codegen/Decl.vuna
@@ -144,6 +147,7 @@ Vuna.Compiler.Loader.Modules  compiler/lib/Vuna/Compiler/Loader/Modules.vuna
 Vuna.Compiler.Loader.Resolve  compiler/lib/Vuna/Compiler/Loader/Resolve.vuna
 Vuna.Compiler.Loader  compiler/lib/Vuna/Compiler/Loader.vuna
 Vuna.Compiler.Packages.Pkg  compiler/lib/Vuna/Compiler/Packages/Pkg.vuna
+Vuna.Compiler.Packages.Source  compiler/lib/Vuna/Compiler/Packages/Source.vuna
 Vuna.Compiler.Query.Run  compiler/lib/Vuna/Compiler/Query/Run.vuna
 Vuna.Compiler.Query  compiler/lib/Vuna/Compiler/Query.vuna
 Vuna.Compiler.Source  compiler/lib/Vuna/Compiler/Source.vuna
@@ -212,6 +216,7 @@ Vuna.Compiler.Canonical.Bytes  ./lib/Vuna/Compiler/Canonical/Bytes.vuna
 Vuna.Compiler.Canonical.CoreTerm  ./lib/Vuna/Compiler/Canonical/CoreTerm.vuna
 Vuna.Compiler.Canonical.Elab  ./lib/Vuna/Compiler/Canonical/Elab.vuna
 Vuna.Compiler.Canonical.Lex  ./lib/Vuna/Compiler/Canonical/Lex.vuna
+Vuna.Compiler.Canonical.Pkg  ./lib/Vuna/Compiler/Canonical/Pkg.vuna
 Vuna.Compiler.Canonical  ./lib/Vuna/Compiler/Canonical.vuna
 Vuna.Compiler.Codegen.Assembly  ./lib/Vuna/Compiler/Codegen/Assembly.vuna
 Vuna.Compiler.Codegen.Decl  ./lib/Vuna/Compiler/Codegen/Decl.vuna
@@ -289,6 +294,7 @@ Vuna.Compiler.Loader.Modules  ./lib/Vuna/Compiler/Loader/Modules.vuna
 Vuna.Compiler.Loader.Resolve  ./lib/Vuna/Compiler/Loader/Resolve.vuna
 Vuna.Compiler.Loader  ./lib/Vuna/Compiler/Loader.vuna
 Vuna.Compiler.Packages.Pkg  ./lib/Vuna/Compiler/Packages/Pkg.vuna
+Vuna.Compiler.Packages.Source  ./lib/Vuna/Compiler/Packages/Source.vuna
 Vuna.Compiler.Query.Run  ./lib/Vuna/Compiler/Query/Run.vuna
 Vuna.Compiler.Query  ./lib/Vuna/Compiler/Query.vuna
 Vuna.Compiler.Source  ./lib/Vuna/Compiler/Source.vuna

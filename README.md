@@ -152,7 +152,8 @@ manifest，不向上找。命令语义与包格式
 | [docs/reference/operators.md](docs/reference/operators.md) | 运算符=方法别名、`Eq`/`Ord` 真源、实例落点规则 |
 | [docs/reference/floats.md](docs/reference/floats.md) | `Float` 原语、字面量转换 trait（FromString/FromInt/FromFloat）、`deriving`、Prelude/产物影响与 interp 限制 |
 | [docs/reference/primitives.md](docs/reference/primitives.md) | 内建/原语唯一声明面、Int/String 语义、宿主层原语与推荐的 `Base.Eff.*` handler 用法 |
-| [docs/reference/packages.md](docs/reference/packages.md) | `vuna.toml` 包格式、workspace / 依赖 DAG、工具链命令一览 |
+| [docs/reference/packages.md](docs/reference/packages.md) | `vuna.toml` 包格式（含依赖声明）、workspace / 依赖 DAG、工具链命令一览 |
+| [docs/reference/package-store.md](docs/reference/package-store.md) | 持久包 store、`vuna fetch` / `clean --packages`、内容摘要与语义身份 |
 | [docs/reference/core.md](docs/reference/core.md) | Core TT / NbE / 合一 / 精化器 / 擦除 / codegen 护栏的实现参考 |
 | [docs/reference/api-docs.md](docs/reference/api-docs.md) | API 文档：docstring、单文件 HTML、`vuna search` / 类型检索 |
 | [docs/reference/tooling.md](docs/reference/tooling.md) | 工具链：`vuna goal`、LSP（含 codeAction quick fix）、`vuna doc`（单文件 HTML）、`vuna run` / REPL 调试命令、**REPL server / client（`--listen`/`--client`，JSON-RPC over socket）**、错误码体系与代表性错误索引 |

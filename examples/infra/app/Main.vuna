@@ -4,15 +4,18 @@ import Base.Maybe
 import Base.Pair
 import Base.String
 import Vuna.Compiler.Canonical
+import Vuna.Compiler.Canonical.Pkg
 import Vuna.Compiler.Common
 import Vuna.Compiler.Core.Term
 import Vuna.Compiler.Elab.Types
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Frontend.Cst
+import Vuna.Compiler.Frontend.Toml
 import Vuna.Compiler.Driver.Compile
 import Vuna.Compiler.Driver.ToolPayload
 import Vuna.Compiler.Hash
 import Vuna.Compiler.Loader.Modules
+import Vuna.Compiler.Packages.Source
 import Vuna.Compiler.Query
 import Vuna.Compiler.Query.Run
 
@@ -66,6 +69,11 @@ main = do
   _ <- prim_eff_print (("canon-span " ++ verdict spanInsensitive) ++ "\n")
   _ <- prim_eff_print (("canon-export-parent " ++ verdict parentCovered) ++ "\n")
   _ <- prim_eff_print (("canon-fixity-target " ++ verdict fixityCovered) ++ "\n")
+  -- 包内容/语义身份的规范编码 roundtrip 与两者输入面的区分（D12）。
+  _ <- prim_eff_print (("pkg-canon-rt " ++ verdict pkgContentRT) ++ "\n")
+  _ <- prim_eff_print (("pkg-identity-rt " ++ verdict pkgIdentityRT) ++ "\n")
+  _ <- prim_eff_print (("pkg-identity-name " ++ verdict pkgIdentityName) ++ "\n")
+  _ <- prim_eff_print (("pkg-identity-deps " ++ verdict pkgIdentityDeps) ++ "\n")
   -- 查询图 Eff 层：span（可观测）/ 取消 / 并行波次。断言行见 test/suite/steps/64_infra.steps。
   r1 <- runNode (runEmpty qrunOpts) "a" [] (\_ => pure (Pair (QBytes "1") []))
   _ <- prim_eff_print (("qrun-seq1 " ++ runSpansText (firstOf r1)) ++ "\n")
@@ -97,10 +105,113 @@ main = do
   _ <-
     prim_eff_print
       (("qrun-wave-cancel " ++ runSpansText (firstOf w5)) ++ " " ++ waveValsText (secondOf w5) ++ "\n")
+  -- TOML 解析自检：子表 / 引号段名 / 点键 / 内联表 / 数组 / 表数组 / 多行字符串 /
+  -- unicode 转义 / literal 字符串，以及必须拒绝的重复键、浮点、重复表、点键冲突。
+  _ <-
+    prim_eff_print (("toml-subtable " ++ verdict (lookupIntIs ["a"] "x" 1 "[a]\nx = 1\n")) ++ "\n")
+  _ <-
+    prim_eff_print
+      (("toml-quoted " ++ verdict (lookupStrIs ["releases", "1.2.0"] "git" "g" "[releases.\"1.2.0\"]\ngit = \"g\"\n")) ++ "\n")
+  _ <-
+    prim_eff_print
+      (("toml-dotted " ++ verdict (lookupIntIs ["a", "b"] "c" 7 "a.b.c = 7\n")) ++ "\n")
+  _ <-
+    prim_eff_print
+      (("toml-inline " ++ verdict (lookupStrIs ["dependencies", "greet"] "path" "../greet" "[dependencies]\ngreet = { path = \"../greet\" }\n")) ++ "\n")
+  _ <-
+    prim_eff_print
+      (("toml-array-len " ++ strFromInt (arrayLenOf "x" "x = [1, \"two\", true]\n")) ++ "\n")
+  _ <-
+    prim_eff_print
+      (("toml-table-array " ++ verdict (lookupStrIs ["bin", "1"] "name" "b" "[[bin]]\nname = \"a\"\n[[bin]]\nname = \"b\"\n")) ++ "\n")
+  _ <-
+    prim_eff_print
+      (("toml-multiline " ++ verdict (lookupStrIs [] "s" "hello\nworld" "s = \"\"\"\nhello\nworld\"\"\"\n")) ++ "\n")
+  _ <-
+    prim_eff_print
+      (("toml-unicode " ++ verdict (lookupStrIs [] "s" "中" "s = \"\\u4e2d\"\n")) ++ "\n")
+  _ <-
+    prim_eff_print
+      (("toml-literal " ++ verdict (lookupStrIs [] "s" "a\\nb" "s = 'a\\nb'\n")) ++ "\n")
+  _ <- prim_eff_print (("toml-dup-key " ++ verdict (parsesNot "[a]\nx = 1\nx = 2\n")) ++ "\n")
+  _ <- prim_eff_print (("toml-float " ++ verdict (parsesNot "x = 1.5\n")) ++ "\n")
+  _ <- prim_eff_print (("toml-dup-table " ++ verdict (parsesNot "[a]\n[a]\n")) ++ "\n")
+  _ <- prim_eff_print (("toml-dotted-conflict " ++ verdict (parsesNot "a.b = 1\n[a]\n")) ++ "\n")
   prim_eff_exit 0
 
 -- ---------------------------------------------------------------
--- 查询图 Eff 层自检：span / 取消 / 并行波次（`Vuna.Compiler.Query.Run`）
+-- TOML 断言辅助
+-- ---------------------------------------------------------------
+parsesNot : String -> Bool
+parsesNot src = case parseTomlAt "t" src of
+  ErrC _ => True
+  OkC _ => False
+
+lookupIntIs : List String -> String -> Int -> String -> Bool
+lookupIntIs section key expected src = case parseTomlAt "t" src of
+  ErrC _ => False
+  OkC entries => case lookupEntry section key entries of
+    Just (TInt n) => n == expected
+    _ => False
+
+lookupStrIs : List String -> String -> String -> String -> Bool
+lookupStrIs section key expected src = case parseTomlAt "t" src of
+  ErrC _ => False
+  OkC entries => case lookupEntry section key entries of
+    Just (TStr s) => s == expected
+    _ => False
+
+arrayLenOf : String -> String -> Int
+arrayLenOf key src = case parseTomlAt "t" src of
+  ErrC _ => 0 - 1
+  OkC entries => case lookupEntry [] key entries of
+    Just (TArray xs) => listLen xs
+    _ => 0 - 1
+
+listLen : List a -> Int
+listLen [] = 0
+listLen (_ :: rest) = 1 + listLen rest
+
+-- ---------------------------------------------------------------
+-- 包编码断言（Canonical.Pkg / Packages.Source）
+-- ---------------------------------------------------------------
+pkgFilesSample : List PackageFile
+pkgFilesSample =
+  [ PackageFile "lib/A.vuna" "module A where\n\nx : Int\nx = 1\n",
+    PackageFile "vuna.toml" "[package]\nname = \"p\"\n"
+  ]
+
+-- 内容编码 roundtrip：解码后重编码逐字节一致。
+pkgContentRT : Bool
+pkgContentRT = case decPackageContent (encPackageContent pkgFilesSample) of
+  Nothing => False
+  Just files => encPackageContent files == encPackageContent pkgFilesSample
+
+-- 身份编码 roundtrip。
+pkgIdentityRT : Bool
+pkgIdentityRT =
+  let
+    ident = identityOfSource (PackageSource "p" ["A"] [] pkgFilesSample)
+  in case decPackageIdentity (encPackageIdentity ident) of
+    Nothing => False
+    Just ident2 => encPackageIdentity ident2 == encPackageIdentity ident
+
+-- 同文件、不同包名 ⇒ 内容摘要相同、身份不同（身份含声明面）。
+pkgIdentityName : Bool
+pkgIdentityName =
+  let
+    a = PackageSource "p" [] [] pkgFilesSample
+    b = PackageSource "q" [] [] pkgFilesSample
+  in contentHashOf a == contentHashOf b && not (identityHashOf a == identityHashOf b)
+
+-- 同包、依赖表不同 ⇒ 内容摘要相同、身份不同（依赖摘要进身份）。
+pkgIdentityDeps : Bool
+pkgIdentityDeps =
+  let
+    a = PackageSource "p" [] [] pkgFilesSample
+    b = PackageSource "p" [] [Pair "dep" "abc"] pkgFilesSample
+  in contentHashOf a == contentHashOf b && not (identityHashOf a == identityHashOf b)
+
 -- ---------------------------------------------------------------
 qrunOpts : RunOpts
 qrunOpts = RunOpts "pkg" 0 False ""

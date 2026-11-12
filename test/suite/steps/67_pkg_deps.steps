@@ -1,0 +1,63 @@
+# 67) 依赖声明形态（阶段 0）：`[dependencies]` 的字符串简写 / 子表 / 内联表三路等价，
+#     以及摘要规则（D12）：`path` 依赖不写摘要；`git`（带 rev）/ `url` 必须带
+#     `sha256:<64 hex>`。结构错误必须在加载期报可定位的 PKG_ 码。
+#     最后一条是设计回归：改依赖源码不需要动任何 vuna.toml（新鲜度由 iface 链负责）。
+
+# 67a) 字符串简写（历史形态）继续可用。
+run: sh -c 'd="$TMPDIR/d67a"; rm -rf "$d"; mkdir -p "$d/app"; printf "[package]\nname = \"d67a\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "main : Int\nmain = 1\n" > "$d/app/Main.vuna"; "$VUNA" check "$d"'
+exit: 0
+
+# 67b) 子表：`[dependencies.<alias>] path = ...`。
+run: sh -c 'd="$TMPDIR/d67b"; rm -rf "$d"; mkdir -p "$d/app"; printf "[package]\nname = \"d67b\"\n\n[dependencies.vuna-base]\npath = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "main : Int\nmain = 1\n" > "$d/app/Main.vuna"; "$VUNA" check "$d"'
+exit: 0
+
+# 67c) 内联表：`vuna-base = { path = ... }` 与子表等价。
+run: sh -c 'd="$TMPDIR/d67c"; rm -rf "$d"; mkdir -p "$d/app"; printf "[package]\nname = \"d67c\"\n\n[dependencies]\nvuna-base = { path = \"%s\" }\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "main : Int\nmain = 1\n" > "$d/app/Main.vuna"; "$VUNA" check "$d"'
+exit: 0
+
+# 67d) git 依赖缺 hash ⇒ PKG_MissingHash（不可变源必须固定）。
+run: sh -c 'd="$TMPDIR/d67d"; rm -rf "$d"; mkdir -p "$d/app"; printf "[package]\nname = \"d67d\"\n\n[dependencies.foo]\ngit = \"https://example.invalid/x.git\"\nrev = \"abc123\"\n" > "$d/vuna.toml"; printf "main : Int\nmain = 1\n" > "$d/app/Main.vuna"'
+run: "$VUNA" check "$TMPDIR/d67d" 2>&1
+exit: 1
+out-contains: [PKG_MissingHash]
+
+# 67e) hash 格式非法 ⇒ PKG_HashMalformed。
+run: sh -c 'd="$TMPDIR/d67e"; rm -rf "$d"; mkdir -p "$d/app"; printf "[package]\nname = \"d67e\"\n\n[dependencies.foo]\ngit = \"https://example.invalid/x.git\"\nrev = \"abc123\"\nhash = \"sha256:xyz\"\n" > "$d/vuna.toml"; printf "main : Int\nmain = 1\n" > "$d/app/Main.vuna"'
+run: "$VUNA" check "$TMPDIR/d67e" 2>&1
+exit: 1
+out-contains: [PKG_HashMalformed]
+
+# 67f) 同时写 path 与 git ⇒ PKG_SourceConflict。
+run: sh -c 'd="$TMPDIR/d67f"; rm -rf "$d"; mkdir -p "$d/app"; printf "[package]\nname = \"d67f\"\n\n[dependencies.foo]\npath = \"../x\"\ngit = \"https://example.invalid/x.git\"\nrev = \"abc123\"\n" > "$d/vuna.toml"; printf "main : Int\nmain = 1\n" > "$d/app/Main.vuna"'
+run: "$VUNA" check "$TMPDIR/d67f" 2>&1
+exit: 1
+out-contains: [PKG_SourceConflict]
+
+# 67g) git 缺 rev ⇒ PKG_GitRevRequired。
+run: sh -c 'd="$TMPDIR/d67g"; rm -rf "$d"; mkdir -p "$d/app"; printf "[package]\nname = \"d67g\"\n\n[dependencies.foo]\ngit = \"https://example.invalid/x.git\"\n" > "$d/vuna.toml"; printf "main : Int\nmain = 1\n" > "$d/app/Main.vuna"'
+run: "$VUNA" check "$TMPDIR/d67g" 2>&1
+exit: 1
+out-contains: [PKG_GitRevRequired]
+
+# 67h) 同一别名既有字符串简写又有子表：TOML 层就非法（key 不能同时是值又是表）⇒ PKG_TomlSyntax。
+run: sh -c 'd="$TMPDIR/d67h"; rm -rf "$d"; mkdir -p "$d/app"; printf "[package]\nname = \"d67h\"\n\n[dependencies]\nvuna-base = \"%s\"\n\n[dependencies.vuna-base]\nhash = \"sha256:0000000000000000000000000000000000000000000000000000000000000000\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "main : Int\nmain = 1\n" > "$d/app/Main.vuna"'
+run: "$VUNA" check "$TMPDIR/d67h" 2>&1
+exit: 1
+out-contains: [PKG_TomlSyntax]
+
+# 67i) 依赖表里的未知 key ⇒ PKG_UnknownSourceKey（不静默忽略）。
+run: sh -c 'd="$TMPDIR/d67i"; rm -rf "$d"; mkdir -p "$d/app"; printf "[package]\nname = \"d67i\"\n\n[dependencies.foo]\npath = \"../x\"\nhsh = \"typo\"\n" > "$d/vuna.toml"; printf "main : Int\nmain = 1\n" > "$d/app/Main.vuna"'
+run: "$VUNA" check "$TMPDIR/d67i" 2>&1
+exit: 1
+out-contains: [PKG_UnknownSourceKey]
+
+# 67j) 完整的不可变源声明在阶段 0 尚未接入 store ⇒ PKG_NotMaterialized（带 fetch 提示）。
+run: sh -c 'd="$TMPDIR/d67j"; rm -rf "$d"; mkdir -p "$d/app"; printf "[package]\nname = \"d67j\"\n\n[dependencies.foo]\ngit = \"https://example.invalid/x.git\"\nrev = \"abc123\"\nhash = \"sha256:0000000000000000000000000000000000000000000000000000000000000000\"\n" > "$d/vuna.toml"; printf "main : Int\nmain = 1\n" > "$d/app/Main.vuna"'
+run: "$VUNA" check "$TMPDIR/d67j" 2>&1
+exit: 1
+out-contains: [PKG_NotMaterialized]
+
+# 67k) 设计回归：改依赖源码一行后，依赖方 check 仍成功且 manifest 不变（D12：path 依赖是
+#      可变输入，摘要只属于不可变源；新鲜度由 siHash → miIfaceHash → miDepHashes 链负责）。
+run: sh -c 'rm -rf "$TMPDIR/d67k"; mkdir -p "$TMPDIR/d67k/dep/lib" "$TMPDIR/d67k/app/app"; printf "[package]\nname = \"dep\"\n[export]\nmodules = [\"D\"]\n" > "$TMPDIR/d67k/dep/vuna.toml"; printf "module D where\n\nv : Int\nv = 1\n" > "$TMPDIR/d67k/dep/lib/D.vuna"; printf "[package]\nname = \"d67k\"\n\n[dependencies]\ndep = \"../dep\"\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$TMPDIR/d67k/app/vuna.toml"; printf "import D\n\nmain : Int\nmain = v\n" > "$TMPDIR/d67k/app/app/Main.vuna"; "$VUNA" check "$TMPDIR/d67k/app" >/dev/null 2>&1 || exit 1; cp "$TMPDIR/d67k/app/vuna.toml" "$TMPDIR/d67k/before.toml"; printf "module D where\n\nv : Int\nv = 2\n" > "$TMPDIR/d67k/dep/lib/D.vuna"; "$VUNA" check "$TMPDIR/d67k/app" >/dev/null 2>&1 || exit 1; cmp "$TMPDIR/d67k/app/vuna.toml" "$TMPDIR/d67k/before.toml"'
+exit: 0

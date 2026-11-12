@@ -1,28 +1,64 @@
 module Vuna.Compiler.Frontend.Manifest
-  ( Manifest(..)
+  ( Dependency(..)
+  , DependencySource(..)
+  , Manifest(..)
+  , depAliasOf
+  , depHashOf
+  , depSourceOf
   , manifestDir
   , parseManifest
   , resolveManifestPath
   , validateManifest
   ) where
 
--- Vuna.Compiler.Frontend.Manifest：vuna.toml 的语义模型（M11.5 包管理基础件）。
--- 表约定（M30：删除死字段 version / edition——registry/lockfile 归 F4，当前没有消费者）：
+-- Vuna.Compiler.Frontend.Manifest：vuna.toml 的语义模型（包管理基础件）。
+-- 表约定：
 --   [package]     name（必填）
 --   [workspace]   members = ["stdlib", "app"]（可选）
 --   [export]      modules = ["Base.List"]（可选；值必须是字符串数组）
---   [dependencies] <dep-name> = "<相对路径>"
+--   [diagnostics] format / warnings / max-errors / lang / deny-warnings（可选）
+--   [dependencies] 两种等价写法（可混用，但同一别名只能一种）：
+--       greet = "../greet"                                  -- 字符串 = path 简写
+--       greet = { path = "../greet", hash = "sha256:..." }  -- 内联表
+--       [dependencies.greet]                                -- 子表
+--       path = "../greet"
+--       hash = "sha256:..."
+--
+-- 摘要规则（D12）：`path` 依赖是**可变输入**，不写摘要（工作树共变；新鲜度由
+-- iface 的 miDepHashes 链判定）；`git`（必须带 `rev`）与 `url` 是不可变源，必须带
+-- `hash = "sha256:<64 hex>"`（裸 64 位十六进制也接受）。
 -- parseManifest 只解析，不检查文件是否存在；validateManifest 做结构校验。
 -- 本模块不做文件 I/O：调用方用自己的 prim_eff_readFile 读入内容后传入。
 import Vuna.Compiler.Common
 import Vuna.Compiler.Frontend.Toml
 import Vuna.Compiler.Diagnostics.Pkg
 
+-- | 依赖来源：相对路径（可变输入）/ git（url + rev）/ 单个 url。
+data DependencySource : Type where
+  DepPath : String -> DependencySource
+  DepGit : String -> String -> DependencySource
+  DepUrl : String -> DependencySource
+
+-- | 一条依赖声明：本地别名 + 来源 + 可选摘要。
+record Dependency where
+  depAlias : String
+  depSource : DependencySource
+  depHash : Maybe String
+
+depAliasOf : Dependency -> String
+depAliasOf (Dependency alias source hash) = alias
+
+depSourceOf : Dependency -> DependencySource
+depSourceOf (Dependency alias source hash) = source
+
+depHashOf : Dependency -> Maybe String
+depHashOf (Dependency alias source hash) = hash
+
 record Manifest where
   manifestName : Maybe String
   manifestMembers : List String
   manifestExports : Maybe (List String)
-  manifestDependencies : List (Pair String String)
+  manifestDependencies : List Dependency
   manifestPath : String
   -- | `[diagnostics]`：渲染格式 / warnings 开关 / max-errors（可选；命令行 flag 优先）。
   manifestDiagFormat : Maybe String
@@ -30,6 +66,19 @@ record Manifest where
   manifestDiagMaxErrors : Maybe Int
   manifestDiagLang : Maybe String
   manifestDiagDenyWarnings : Maybe Bool
+
+-- 依赖表的累积状态（字符串简写单独收集，见 collectDependencies）。
+record DepAcc where
+  depAccAlias : String
+  depAccPath : Maybe String
+  depAccGit : Maybe String
+  depAccRev : Maybe String
+  depAccUrl : Maybe String
+  depAccHash : Maybe String
+  depAccTableLine : Int
+
+emptyDepAcc : String -> Int -> DepAcc
+emptyDepAcc alias line = DepAcc alias Nothing Nothing Nothing Nothing Nothing line
 
 -- 字符分类（与 Toml 内部约定一致；vuna 无字符字面量，统一用 char code）。
 isDigitChar : Int -> Bool
@@ -41,7 +90,6 @@ isUpperAlphaChar c = c >= 65 && c <= 90
 isLowerAlphaChar : Int -> Bool
 isLowerAlphaChar c = c >= 97 && c <= 122
 
--- 错误定位：解析期的错误带 `path:line: `，纯结构校验错误带 `path: `。
 atLine : String -> Int -> String -> String
 atLine path line msg = if path == "" then "line ${line}: ${msg}" else "${path}:${line}: ${msg}"
 
@@ -72,7 +120,9 @@ stringField path section key entries = case lookupEntry section key entries of
 stringListField : String -> List String -> String -> List TomlEntry -> Check (Maybe (List String))
 stringListField path section key entries = case lookupEntry section key entries of
   Nothing => OkC Nothing
-  Just (TList xs) => OkC (Just xs)
+  Just (TArray xs) => case arrayStrings xs of
+    Nothing => pkgAt1 path (fieldLine path section key entries) (ExpectedStringArray key) key
+    Just ys => OkC (Just ys)
   Just value => pkgAt1 path (fieldLine path section key entries) (ExpectedStringArray key) key
 
 -- | 读 `[section] key` 的布尔值：缺省返回 `Nothing`，类型不符报带位置的行号错误。
@@ -97,6 +147,20 @@ orFalse : Maybe Bool -> Bool
 orFalse Nothing = False
 orFalse (Just b) = b
 
+-- 依赖表 section：`[dependencies.<alias>]`（长度恰为 2，首段固定）。
+isDepTableSection : List String -> Bool
+isDepTableSection section = case section of
+  [first, second] => first == "dependencies"
+  _ => False
+
+depAliasOfSection : List String -> String
+depAliasOfSection section = case section of
+  [first, second] => second
+  _ => ""
+
+isDepSourceKey : String -> Bool
+isDepSourceKey key = key == "path" || key == "git" || key == "rev" || key == "url" || key == "hash"
+
 -- 只接受约定表；未知表 / 未知 key 报带行号的错误（防止字段拼写错误被静默忽略）。
 checkOneEntry : String -> TomlEntry -> Check Int
 checkOneEntry path (TomlEntry section key value line) =
@@ -107,6 +171,9 @@ checkOneEntry path (TomlEntry section key value line) =
   else if sameSection section ["diagnostics"] then if key == "format" || key == "warnings" || key == "max-errors" || key == "lang" || key == "deny-warnings" then OkC 0
   else pkgAt2 path line (UnknownKey key "diagnostics") key "diagnostics"
   else if sameSection section ["dependencies"] then OkC 0
+  else if isDepTableSection section then if isDepSourceKey key then OkC 0
+  else pkgAt2 path line (UnknownSourceKey key (depAliasOfSection section)) key
+    (depAliasOfSection section)
   else pkgAt1 path line (UnknownSection (joinDots section)) (joinDots section)
 
 checkEntries : String -> List TomlEntry -> Check Int
@@ -115,16 +182,161 @@ checkEntries path (entry :: rest) = case checkOneEntry path entry of
   ErrC e => ErrC e
   OkC ok => checkEntries path rest
 
-collectDependencies : String -> List TomlEntry -> Check (List (Pair String String))
-collectDependencies path entries = collectDependenciesAcc path entries []
+-- ---------------------------------------------------------------- 依赖收集
+-- 分组辅助：按别名累积（保持首次出现顺序）。
+hasAcc : String -> List DepAcc -> Bool
+hasAcc alias [] = False
+hasAcc alias (acc :: rest) = acc.depAccAlias == alias || hasAcc alias rest
 
-collectDependenciesAcc : String -> List TomlEntry -> List (Pair String String) -> Check (List (Pair String String))
-collectDependenciesAcc path [] acc = OkC (reverse acc)
-collectDependenciesAcc path ((TomlEntry section key value line) :: rest) acc = if sameSection section ["dependencies"] then case value of
-  TStr rel => collectDependenciesAcc path rest (Pair key rel :: acc)
+ensureAcc : String -> Int -> List DepAcc -> List DepAcc
+ensureAcc alias line acc = if hasAcc alias acc then acc else append acc [emptyDepAcc alias line]
+
+mapAcc : String -> (DepAcc -> DepAcc) -> List DepAcc -> List DepAcc
+mapAcc alias f [] = []
+mapAcc alias f (acc :: rest) =
+  if acc.depAccAlias == alias then f acc :: rest else acc :: mapAcc alias f rest
+
+setAccPath : String -> DepAcc -> DepAcc
+setAccPath s acc = { acc | depAccPath = Just s }
+
+setAccGit : String -> DepAcc -> DepAcc
+setAccGit s acc = { acc | depAccGit = Just s }
+
+setAccRev : String -> DepAcc -> DepAcc
+setAccRev s acc = { acc | depAccRev = Just s }
+
+setAccUrl : String -> DepAcc -> DepAcc
+setAccUrl s acc = { acc | depAccUrl = Just s }
+
+setAccHash : String -> DepAcc -> DepAcc
+setAccHash s acc = { acc | depAccHash = Just s }
+
+stringValueOf : String -> String -> TomlValue -> Int -> Check String
+stringValueOf path key value line = case value of
+  TStr s => OkC s
+  _ => pkgAt1 path line (ExpectedString key) key
+
+-- | 把一条依赖表字段写进累积状态（未知 key 已由 checkOneEntry 拒绝）。
+applyDepEntry : String -> String -> String -> TomlValue -> Int -> List DepAcc -> Check (List DepAcc)
+applyDepEntry path alias key value line acc =
+  let
+    ensured = ensureAcc alias line acc
+  in case key of
+    "path" => case stringValueOf path key value line of
+      ErrC e => ErrC e
+      OkC s => OkC (mapAcc alias (setAccPath s) ensured)
+    "git" => case stringValueOf path key value line of
+      ErrC e => ErrC e
+      OkC s => OkC (mapAcc alias (setAccGit s) ensured)
+    "rev" => case stringValueOf path key value line of
+      ErrC e => ErrC e
+      OkC s => OkC (mapAcc alias (setAccRev s) ensured)
+    "url" => case stringValueOf path key value line of
+      ErrC e => ErrC e
+      OkC s => OkC (mapAcc alias (setAccUrl s) ensured)
+    _ => case stringValueOf path key value line of
+      ErrC e => ErrC e
+      OkC s => OkC (mapAcc alias (setAccHash s) ensured)
+
+collectTables : String -> List TomlEntry -> List DepAcc -> Check (List DepAcc)
+collectTables path [] acc = OkC acc
+collectTables path ((TomlEntry section key value line) :: rest) acc = if isDepTableSection section then case applyDepEntry path (depAliasOfSection section) key value line acc of
+  ErrC e => ErrC e
+  OkC acc2 => collectTables path rest acc2
+else collectTables path rest acc
+
+-- 字符串简写：`[dependencies] name = "相对路径"`。
+collectStrings : String -> List TomlEntry -> List (Pair String (Pair String Int)) -> Check (List (Pair String (Pair String Int)))
+collectStrings path [] acc = OkC (reverse acc)
+collectStrings path ((TomlEntry section key value line) :: rest) acc = if sameSection section ["dependencies"] then case value of
+  TStr rel => collectStrings path rest (Pair key (Pair rel line) :: acc)
   _ => pkgAt1 path line (DependencyPathNotString key) key
-else collectDependenciesAcc path rest acc
+else collectStrings path rest acc
 
+-- 由累积状态构造依赖：源互斥 + git 需要 rev。
+buildDependency : String -> DepAcc -> Check Dependency
+buildDependency path acc = case acc.depAccPath of
+  Just p => case acc.depAccGit of
+    Just _ => pkgAt1 path acc.depAccTableLine (SourceConflict acc.depAccAlias) acc.depAccAlias
+    Nothing => case acc.depAccUrl of
+      Just _ => pkgAt1 path acc.depAccTableLine (SourceConflict acc.depAccAlias) acc.depAccAlias
+      Nothing => OkC (Dependency acc.depAccAlias (DepPath p) acc.depAccHash)
+  Nothing => case acc.depAccGit of
+    Just url => case acc.depAccRev of
+      Nothing => pkgAt1 path acc.depAccTableLine (GitRevRequired acc.depAccAlias) acc.depAccAlias
+      Just rev => case acc.depAccUrl of
+        Just _ => pkgAt1 path acc.depAccTableLine (SourceConflict acc.depAccAlias) acc.depAccAlias
+        Nothing => OkC (Dependency acc.depAccAlias (DepGit url rev) acc.depAccHash)
+    Nothing => case acc.depAccUrl of
+      Just u => OkC (Dependency acc.depAccAlias (DepUrl u) acc.depAccHash)
+      Nothing =>
+        pkgAt1 path acc.depAccTableLine (DependencySourceMissing acc.depAccAlias) acc.depAccAlias
+
+buildTables : String -> List DepAcc -> List Dependency -> Check (List Dependency)
+buildTables path [] acc = OkC (reverse acc)
+buildTables path (tableAcc :: rest) acc = case buildDependency path tableAcc of
+  ErrC e => ErrC e
+  OkC dep => buildTables path rest (dep :: acc)
+
+collectDependencies : String -> List TomlEntry -> Check (List Dependency)
+collectDependencies path entries = case collectStrings path entries [] of
+  ErrC e => ErrC e
+  OkC strings => case collectTables path entries [] of
+    ErrC e => ErrC e
+    OkC tables => case buildTables path tables [] of
+      ErrC e => ErrC e
+      OkC tableDeps =>
+        OkC
+          (append (map (\p => Dependency (firstOf p) (DepPath (firstOf (secondOf p))) Nothing) strings) tableDeps)
+
+-- ---------------------------------------------------------------- 依赖校验
+isHexChar : Int -> Bool
+isHexChar c = isDigitChar c || c >= 65 && c <= 70 || c >= 97 && c <= 102
+
+allHex : List Int -> Bool
+allHex [] = True
+allHex (c :: rest) = isHexChar c && allHex rest
+
+-- | 摘要文本：`sha256:<64 hex>` 或裸 64 位十六进制。
+validHashText : String -> Bool
+validHashText s =
+  if startsWith "sha256:" s then strLength s == 71 && allHex (strUnpack (substring 7 64 s))
+  else strLength s == 64 && allHex (strUnpack s)
+
+checkHashForm : String -> String -> Maybe String -> Check Int
+checkHashForm path alias hashArg = case hashArg of
+  Nothing => OkC 0
+  Just h => if validHashText h then OkC 0 else pkgPath1 path (HashMalformed h) h
+
+validateDependency : String -> Dependency -> Check Int
+validateDependency path (Dependency alias source hashArg) = if alias == "" then pkgPath0 path EmptyDependencyName
+else case source of
+  DepPath rel =>
+    if rel == "" then pkgPath1 path (EmptyDependencyPath alias) alias
+    else checkHashForm path alias hashArg
+  DepGit url rev => case hashArg of
+    Nothing => pkgPath1 path (MissingHash alias) alias
+    Just h =>
+      if url == "" then pkgPath1 path (DependencySourceMissing alias) alias
+      else if rev == "" then pkgPath1 path (GitRevRequired alias) alias
+      else checkHashForm path alias hashArg
+  DepUrl u => case hashArg of
+    Nothing => pkgPath1 path (MissingHash alias) alias
+    Just h =>
+      if u == "" then pkgPath1 path (DependencySourceMissing alias) alias
+      else checkHashForm path alias hashArg
+
+validateDepsSeen : String -> List String -> List Dependency -> Check Int
+validateDepsSeen path seen [] = OkC 0
+validateDepsSeen path seen (dep :: rest) = if memName (depAliasOf dep) seen then pkgPath1 path (DuplicateDependency (depAliasOf dep)) (depAliasOf dep)
+else case validateDependency path dep of
+  ErrC e => ErrC e
+  OkC ok => validateDepsSeen path (depAliasOf dep :: seen) rest
+
+validateDependencies : String -> List Dependency -> Check Int
+validateDependencies path deps = validateDepsSeen path [] deps
+
+-- ---------------------------------------------------------------- 构造
 validateDiagFormat : String -> Maybe String -> Check Int
 validateDiagFormat path Nothing = OkC 0
 validateDiagFormat path (Just f) =
@@ -193,17 +405,6 @@ validateModules path (m :: rest) =
 validateExports : String -> Maybe (List String) -> Check Int
 validateExports path Nothing = OkC 0
 validateExports path (Just modules) = validateModules path modules
-
-validateDependencies : String -> List (Pair String String) -> Check Int
-validateDependencies path deps = validateDepsSeen path [] deps
-
-validateDepsSeen : String -> List String -> List (Pair String String) -> Check Int
-validateDepsSeen path seen [] = OkC 0
-validateDepsSeen path seen ((Pair name rel) :: rest) =
-  if name == "" then pkgPath0 path EmptyDependencyName
-  else if rel == "" then pkgPath1 path (EmptyDependencyPath name) name
-  else if memName name seen then pkgPath1 path (DuplicateDependency name) name
-  else validateDepsSeen path (name :: seen) rest
 
 validateManifest : Manifest -> Check Manifest
 validateManifest (Manifest name members exports deps path diagFmt diagWarns diagMax diagLang diagDeny) =

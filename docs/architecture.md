@@ -150,7 +150,10 @@ vuna.toml → Frontend.{Toml.parseToml, Manifest.parseManifest/validateManifest}
 目录入口 `check/build <dir>` 直接 `loadPackage` 只认该目录 manifest（不向上找）；跨包只认
 依赖包 `[export]`，隐藏模块报错；依赖图 DAG、包名唯一；`[package]` 只接受 `name`
 （`[capabilities]` / `[trust]` / `[privileged]` 已删除）。
-测试：第 28–29、33、39 段 + `checks.vuna-package`。
+**依赖定位**：`path` 依赖 = 工作树目录（可变输入）；`git`/`url` 依赖 = 持久 store 的物化视图
+`$VUNA_STORE/pkgs/<内容摘要>`（`vuna fetch` 写入，check/build 只读）。摘要规则与 store
+布局见 [package-store.md](reference/package-store.md)，决策见 D12–D15。
+测试：第 28–29、33、39 段 + `checks.vuna-package` + steps §67/§68。
 
 ## 3. 根包工具链与 TCB 边界
 

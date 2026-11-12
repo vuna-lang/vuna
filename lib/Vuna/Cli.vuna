@@ -38,6 +38,7 @@ import Vuna.Search
 import Vuna.Doc
 import Vuna.GenErrors
 import Vuna.Clean
+import Vuna.Fetch
 import Vuna.Explain
 import Vuna.TestRunner
 import Vuna.Test.Suite
@@ -73,9 +74,10 @@ toolUsageLines prog = """  ${prog} lint [--fix] <file.vuna>...
       名称 / docstring / 类型检索（类型检索为 parse 级）
   ${prog} gen-errors [ROOT]  从枚举真源生成错误码文档（ROOT 必须是已存在目录；输出 ROOT/docs/.generated/errors.md）
   ${prog} explain <CODE> | --list [PREFIX]  查询错误码目录（消息模板 + 说明）
-  ${prog} clean [--iface] [--store] [--all] [--dry-run] [DIR]
-      清理缓存：iface = 树内 *.iface/.vuna-iface；store = \${TMPDIR}/vuna-cache（或 $VUNA_CACHE_DIR）
-      不带 flag 时两者都清；--dry-run 只报数量
+  ${prog} fetch [--locked] [DIR]           取包到持久 store（git/url；--locked 只校验不联网）
+  ${prog} clean [--iface] [--store] [--packages] [--all] [--dry-run] [DIR]
+      清理缓存：iface = 树内 *.iface/.vuna-iface；store = 临时缓存根（\${TMPDIR}/vuna-cache 或 $VUNA_CACHE_DIR）；
+      packages = 持久包 store（$VUNA_STORE）。不带 flag 时只清 iface+store；--dry-run 只报数量
   ${prog} map [--modules]                      模块总览（索引缓存在 $TMPDIR/vuna-cache 的 index:<dir> 节点 + blobs，自动新鲜度判定）
   ${prog} map --find <Module.name>             定位符号：定义位置 + 引用者 + 建议测试
   ${prog} map --impact <Module.name>           改动影响面：受影响模块 + 测试标签
@@ -133,6 +135,7 @@ runCli1 args = case args of
     "search" => Vuna.Search.runSearch (stripReleaseArgs rest)
     "gen-errors" => genErrorsArgs (stripReleaseArgs rest)
     "explain" => Vuna.Explain.runExplain (stripReleaseArgs rest)
+    "fetch" => Vuna.Fetch.runFetch (stripReleaseArgs rest)
     "clean" => Vuna.Clean.runClean (stripReleaseArgs rest)
     "map" => mapArgs (stripReleaseArgs rest)
     "api" => apiArgs (stripReleaseArgs rest)

@@ -154,7 +154,9 @@ getBool section key entries = case lookupEntry section key entries of
 getList : List String -> String -> List TomlEntry -> Check (Maybe (List String))
 getList section key entries = case lookupEntry section key entries of
   Nothing => OkC Nothing
-  Just (TList xs) => OkC (Just xs)
+  Just (TArray xs) => case arrayStrings xs of
+    Nothing => err (fieldErr section key "expected an array of strings")
+    Just ys => OkC (Just ys)
   Just _ => err (fieldErr section key "expected an array of strings")
 
 -- 可选字段的解包（Maybe 默认值只用于“缺失”，类型错误仍由 get* 报出）。
@@ -245,10 +247,10 @@ buildFamily suite entries name =
               OkC flags =>
                 let
                   excludeList = case lookupEntry section "exclude" entries of
-                    Just (TList xs) => xs
+                    Just (TArray xs) => fromMaybe [] (arrayStrings xs)
                     _ => []
                   includeList = case lookupEntry section "include" entries of
-                    Just (TList xs) => xs
+                    Just (TArray xs) => fromMaybe [] (arrayStrings xs)
                     _ => []
                   kind = strOr "auto" opts.familyOptKind
                 in if kind == "auto" || kind == "golden" || kind == "error" || kind == "check-ok" || kind == "check-error" || kind == "lint" || kind == "fix" || kind == "steps" then OkC

@@ -1,0 +1,108 @@
+# 包存储与获取（package store / fetch）
+
+本文记录**依赖如何被固定、包对象存在哪里、check/build 如何离线复用**。包格式与命令
+一览见 [packages.md](packages.md)；终态方向与决策（D12–D15）见
+[architecture-target.md](../architecture-target.md)。
+
+## 1. 两个摘要，输入面不同
+
+| 摘要 | 输入 | 用途 | 何时变 |
+| --- | --- | --- | --- |
+| **内容摘要** `contentHash` | `vuna.toml` + `lib/**/*.vuna` + `app/**/*.vuna` + `test/**/*.vuna` 的 `(相对路径, 字节)`，按路径升序 | 不可变源的完整性校验（manifest 的 `hash`） | 任何文件字节变化（含注释、测试） |
+| **语义身份** `identityHash` | 包名 + `[export]` + 各依赖的 `(别名, 摘要)` + 每个文件的 `(路径, 内容摘要)` | 缓存失效 / `pmEnv` | 声明面或任何源码语义变化；**不含**绝对路径、mtime、注释、测试目录以外的非文件信息 |
+
+规范编码在 `Vuna.Compiler.Canonical.Pkg`（codec `pkg-source 1`，原子文法同
+`Canonical.Bytes`：`#tag;` / `i<n>;` / `s<len>:<bytes>` / `b0|b1` / `[<n>:…]`）。
+roundtrip 自检：`examples/infra` 的 `pkg-canon-rt` / `pkg-identity-rt`。
+
+**为什么 `path` 依赖不写摘要**（D12）：`path` 是工作树共变的可变输入，正确性由
+「源内容哈希 → 模块接口哈希 → 依赖接口哈希链」保证；把摘要写进 manifest 会让每次改
+依赖源码都要改上游 manifest，把「完整性」错配到「日常开发」。`git` / `url` 是不可变源，
+必须带 `hash`。
+
+## 2. store 布局
+
+```text
+$VUNA_STORE                     # 默认 $XDG_DATA_HOME/vuna/store，回退 ~/.vuna/store
+  objects/<64hex>               # 不可变对象：`pkg-source 1` 载荷 + Store framing，地址 = 内容摘要
+  pkgs/<64hex>/                 # 物化视图（可删可重建），最后写 .complete（内容 = 摘要）作为提交点
+  tmp/                          # 取包中转（git clone 等）
+```
+
+- **对象是唯一真源**：内容摘要即对象地址；写用 `prim_eff_writeFileAtomic`。
+- **物化视图可丢弃**：读前校验 `.complete`，缺失/不符就重建；并发重复物化幂等。
+- framing 复用 `Vuna.Compiler.Store`，但 tag **不含编译器指纹**（`pkg-source/1`）：
+  包对象只是源码字节，跨编译器版本复用。
+- 临时缓存（`$TMPDIR/vuna-cache`：查询图索引 / split blob / 单元缓存）与持久 store
+  是两套生命周期：前者随时可删，后者跨会话/跨项目存活。
+
+## 3. 获取（`vuna fetch`）
+
+```console
+vuna fetch [--locked] [DIR]
+```
+
+| 源 | 行为 |
+| --- | --- |
+| `path` | 不复制、不写 store；声明了 `hash` 就校验（不符报 `PKG_HashMismatch`），没写则打印当前摘要 |
+| `git` + `rev` + `hash` | 已物化 ⇒ `cached`；否则克隆到 `tmp/` → checkout `rev` → 收集内容 → 校验摘要 → 写对象 + 物化 |
+| `url` + `hash` | URL 直指 **`pkg-source 1` 对象文件**（不是 tar/压缩包；vuna 没有解压原语），下载后按 framing + 内容地址校验 |
+
+- **只有 fetch 联网**：`check` / `build` / `test` 只读 store，缺对象报
+  `PKG_NotMaterialized`（消息里带 `vuna fetch` 提示），绝不隐式取包。
+- `--locked`：不联网，只检查 store 是否已物化；缺失即失败。
+- 传输外置给宿主：`git`（clone/checkout）与 `curl`（URL 下载）。语言内只有裸 TCP 原语，
+  **不实现 TLS**；HTTPS 由宿主工具的证书栈承担。
+- 摘要不符时**不写 store、不物化**：说明源被改写或声明过期，需人工确认后用正确摘要重写。
+
+## 4. 解析与失败模式
+
+`Vuna.Compiler.Packages.Pkg` 的依赖定位：
+
+```text
+DepPath rel      → <包目录>/<rel>
+DepGit/DepUrl    → $VUNA_STORE/pkgs/<normalizeHash hash>   （校验 .complete）
+```
+
+- 缺失/损坏 ⇒ `PKG_NotMaterialized`；hash 不符（path 显式锁定时）⇒ `PKG_HashMismatch`。
+- **包名唯一性不变**：一个依赖图内同名包只能出现一次（无版本号，D13）；需要多版本
+  只能改名/分叉。
+- 只读 store（Nix 沙箱）：fetch 失败，已物化可直接 build；Nix 构建应把 store 目录作为
+  输入（`fetchgit` + 预物化），而不是在构建里联网。
+
+## 5. 清理
+
+```console
+vuna clean --packages [--dry-run]   # 清持久 store（objects + pkgs + tmp）
+vuna clean --store                  # 清临时缓存（$TMPDIR/vuna-cache），语义未变
+vuna clean --all                    # 两者都清（含 --packages）
+```
+
+不带 flag 时只清 `iface + store`（默认**不碰**持久 store：对象跨项目复用，误删代价是
+重新取包）。当前没有按引用计数的 GC；`--packages` 是整根清理。
+
+## 6. 已知边界
+
+- **无版本号 / 无 lockfile**：manifest 即锁文件；`path` 依赖不锁定。
+- **无 registry 服务器**：静态索引（`name → version → (源, hash)`）是下一阶段的便利层，
+  不是真源；包名只是本地别名，不需要全局唯一命名。
+- **`url` 不是 tarball**：没有 tar/zip/解压原语，URL 只能是 `pkg-source 1` 对象文件。
+- **git/curl 由宿主提供**：缺失时是宿主错误（与 `vuna build` 依赖 `ocamlopt` 同级）。
+- **无签名/信任**：摘要只保证完整性，来源可信性由用户选择的 URL 决定。
+- **导出面**：新模块 `Canonical.Pkg` / `Packages.Source` 在 `compiler/vuna.toml` 的
+  `[export]` 列表里，跨包（如 `examples/infra`）可直接 import。
+
+## 7. 测试标签
+
+- `90/steps_native/67_pkg_deps`：依赖声明三路写法、摘要规则、结构错误码、改依赖源码
+  不动 manifest 的回归。
+- `90/steps_native/68_pkg_fetch`：本地 git 仓库取包、摘要不符、`--locked`、离线 check、
+  `clean --packages`。
+- `90/steps_native/64_infra`：`pkg-canon-rt` / `pkg-identity-*`（规范编码与两种摘要的输入面）。
+
+## 相关阅读
+
+- 包格式与命令：[packages.md](packages.md)
+- 终态决策（D12–D15）：[architecture-target.md](../architecture-target.md)
+- 缓存与查询图：[cache.md](cache.md)、[query-graph.md](query-graph.md)
+- 存储层 framing：[cache.md](cache.md) 的「存储与 key」

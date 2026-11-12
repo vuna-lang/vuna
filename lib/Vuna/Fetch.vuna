@@ -1,0 +1,176 @@
+-- | `vuna fetch`：显式取包到持久 store（git / url），path 依赖只校验摘要。
+module Vuna.Fetch (fetchAt, runFetch) where
+
+-- Vuna.Fetch：包获取（阶段 1）。纪律（D15）：
+--   * **只有 fetch 联网**；check/build/test 只读 store，缺对象报 `PKG_NotMaterialized`。
+--   * `path` 依赖是可变输入（D12）：不复制进 store，只按声明摘要校验（无摘要则跳过）。
+--   * `git` 依赖：clone → checkout rev → 收集内容 → 校验声明摘要 → 写对象 + 物化。
+--   * `url` 依赖：URL 直指 **`pkg-source 1` 对象文件**（不是 tar/压缩包；vuna 没有解压
+--     原语），下载后按 framing + 内容地址校验。
+--   * `--locked`：不联网，只检查 store 是否已物化；缺失即失败。
+-- 传输外置给宿主 `git` / `curl`；语言内只有裸 TCP 原语，不实现 TLS。
+import Vuna.Cli.Args
+import Vuna.Compiler.Canonical.Pkg
+import Vuna.Compiler.Common
+import Vuna.Compiler.Diagnostics.Pkg
+import Vuna.Compiler.Frontend.Manifest
+import Vuna.Compiler.Packages.Pkg
+import Vuna.Compiler.Packages.Source
+import Vuna.PackageStore
+import Base.Nat
+import Base.List
+import Base.String
+
+runFetch : List String -> Eff [] Int
+runFetch args = case parseToolArgs "vuna fetch" [BoolFlag "locked"] args of
+  ErrC e => fetchFailText (diagText e)
+  OkC parsed =>
+    let
+      locked = flagSet parsed "locked"
+    in case parsed.positionals of
+      [] => fetchAt "." locked
+      [dir] => fetchAt dir locked
+      _ => fetchFailText "too many arguments; expected at most one directory"
+
+-- | 取一个包目录声明的全部依赖（不递归展开依赖的依赖：直接依赖各自的 manifest 由
+-- 各自的 fetch/check 负责）。
+fetchAt : String -> Bool -> Eff [] Int
+fetchAt dir locked = do
+  abs <- absolutePath dir
+  let
+    manifestPath = "${abs}/vuna.toml"
+  in do
+    exists <- prim_eff_fileExists manifestPath
+    if exists then do
+      raw <- prim_eff_readFile manifestPath
+      case parseManifest manifestPath raw of
+        ErrC e => printDiagEff e
+        OkC manifest => case validateManifest manifest of
+          ErrC e => printDiagEff e
+          OkC valid => do
+            root <- storeRootEff
+            fetchDeps root locked (manifestDir manifestPath) valid.manifestDependencies
+    else fetchFailText "missing vuna.toml in ${dir}"
+
+fetchDeps : String -> Bool -> String -> List Dependency -> Eff [] Int
+fetchDeps root locked baseDir [] = pure 0
+fetchDeps root locked baseDir (dep :: rest) = do
+  code <- fetchOne root locked baseDir dep
+  if code /= 0 then pure code else fetchDeps root locked baseDir rest
+
+fetchOne : String -> Bool -> String -> Dependency -> Eff [] Int
+fetchOne root locked baseDir dep = case depSourceOf dep of
+  DepPath rel => fetchPath root baseDir dep rel
+  DepGit url rev => case depHashOf dep of
+    Nothing => fetchFailText "dependency ${depAliasOf dep}: git source needs hash"
+    Just expected => do
+      let
+        digest = normalizeHash expected
+      in do
+        done <- isMaterializedEff root digest
+        if done then do
+          _ <- prim_eff_print "fetch: ${depAliasOf dep} cached\n"
+          pure 0
+        else if locked then fetchFail (NotMaterialized (depAliasOf dep)) (depAliasOf dep)
+        else fetchGit root dep url rev digest
+  DepUrl u => case depHashOf dep of
+    Nothing => fetchFailText "dependency ${depAliasOf dep}: url source needs hash"
+    Just expected => do
+      let
+        digest = normalizeHash expected
+      in do
+        done <- isMaterializedEff root digest
+        if done then do
+          _ <- prim_eff_print "fetch: ${depAliasOf dep} cached\n"
+          pure 0
+        else if locked then fetchFail (NotMaterialized (depAliasOf dep)) (depAliasOf dep)
+        else fetchUrl root dep u digest
+
+-- path 依赖：工作树共变，不写 store；有声明摘要就校验。
+fetchPath : String -> String -> Dependency -> String -> Eff [] Int
+fetchPath root baseDir dep rel =
+  let
+    dir = joinPath baseDir rel
+  in do
+    files <- packageFilesEff dir
+    verifyPathDep dep (contentHashOf (PackageSource "" [] [] files))
+
+verifyPathDep : Dependency -> String -> Eff [] Int
+verifyPathDep dep actual = case depHashOf dep of
+  Nothing => do
+    _ <- prim_eff_print "fetch: ${depAliasOf dep} path unlocked (${actual})\n"
+    pure 0
+  Just expected => if verifyHash expected actual then do
+    _ <- prim_eff_print "fetch: ${depAliasOf dep} path ok\n"
+    pure 0
+  else hashMismatch (depAliasOf dep) expected actual
+
+fetchGit : String -> Dependency -> String -> String -> String -> Eff [] Int
+fetchGit root dep url rev expected =
+  let
+    tmp = "${root}/tmp/git-${expected}"
+  in do
+    _ <- ensureDirPath root
+    _ <- prim_eff_runIn root ["rm", "-rf", tmp]
+    _ <- ensureDirPath tmp
+    cloneCode <- prim_eff_runIn tmp ["git", "clone", "--quiet", url, "."]
+    if cloneCode /= 0 then fetchFail (FetchFailed url) url
+    else do
+      checkoutCode <- prim_eff_runIn tmp ["git", "checkout", "--quiet", rev]
+      if checkoutCode /= 0 then fetchFail (FetchFailed "${url}@${rev}") "${url}@${rev}"
+      else do
+        files <- packageFilesEff tmp
+        verifyAndStore root dep expected (PackageSource "" [] [] files)
+
+-- 校验声明摘要后写对象 + 物化（git 与 url 共用）。
+verifyAndStore : String -> Dependency -> String -> PackageSource -> Eff [] Int
+verifyAndStore root dep expected ps =
+  let
+    actual = contentHashOf ps
+  in if verifyHash expected actual then do
+    _ <- writeObjectEff root actual ps.psFiles
+    _ <- materializeEff root actual ps.psFiles
+    _ <- prim_eff_print "fetch: ${depAliasOf dep} ok\n"
+    pure 0
+  else hashMismatch (depAliasOf dep) expected actual
+
+-- URL 直指 `pkg-source 1` 对象文件；下载后由 framing + 内容地址校验兜底。
+fetchUrl : String -> Dependency -> String -> String -> Eff [] Int
+fetchUrl root dep url expected =
+  let
+    obj = objectPathOf root expected
+  in do
+    _ <- ensureDirPath "${root}/objects"
+    code <- prim_eff_runIn root ["curl", "-fsSL", url, "-o", obj]
+    if code /= 0 then fetchFail (FetchFailed url) url
+    else do
+      got <- readObjectEff root expected
+      case got of
+        Nothing => fetchFail (FetchFailed url) url
+        Just files => do
+          _ <- materializeEff root expected files
+          _ <- prim_eff_print "fetch: ${depAliasOf dep} ok\n"
+          pure 0
+
+hashMismatch : String -> String -> String -> Eff [] Int
+hashMismatch alias expected actual =
+  let
+    detail = "declared ${expected}, actual ${actual}"
+  in case pkgNoLoc (HashMismatch alias detail) [alias, detail] of
+    ErrC d => printDiagEff d
+    OkC _ => pure 0
+
+fetchFail : PkgErr (Succ Zero) -> String -> Eff [] Int
+fetchFail e arg = case pkgNoLoc1 e arg of
+  ErrC d => printDiagEff d
+  OkC _ => pure 0
+
+fetchFailText : String -> Eff [] Int
+fetchFailText msg = do
+  _ <- prim_eff_print "error: ${msg}\n"
+  pure 2
+
+printDiagEff : Diagnostic -> Eff [] Int
+printDiagEff d = do
+  _ <- prim_eff_print (diagText d ++ "\n")
+  pure 1

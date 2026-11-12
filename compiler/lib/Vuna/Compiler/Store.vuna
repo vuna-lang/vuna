@@ -5,6 +5,7 @@ module Vuna.Compiler.Store
   , fPayloadOf
   , fTagOf
   , storeCacheBaseEff
+  , storeDataRootEff
   , storeDecode
   , storeDecodeAs
   , storeDecodeFast
@@ -176,6 +177,19 @@ storeDecodeFast : String -> String -> String -> Maybe String
 storeDecodeFast tag codec raw = case frameSplit raw of
   Nothing => Nothing
   Just p => if headerOk tag codec (firstOf p) (secondOf p) then Just (secondOf p) else Nothing
+
+-- | 持久包 store 的根（与临时缓存分开；D15）：`VUNA_STORE` → `$XDG_DATA_HOME/vuna/store`
+-- → `~/.vuna/store`。取包时写 `objects/` 与 `pkgs/`，`vuna clean --packages` 清理。
+storeDataRootEff : Eff [] String
+storeDataRootEff = do
+  override <- prim_eff_getenv "VUNA_STORE"
+  if override /= "" then pure override
+  else do
+    xdg <- prim_eff_getenv "XDG_DATA_HOME"
+    if xdg /= "" then pure "${xdg}/vuna/store"
+    else do
+      home <- prim_eff_getenv "HOME"
+      pure (if home == "" then "/tmp/vuna-store" else "${home}/.vuna/store")
 
 -- 缓存根（`VUNA_CACHE_DIR` 覆盖；缺省 `$TMPDIR/vuna-cache`）。
 -- Nix 构建的源树只读 ⇒ 缓存放临时目录；本地开发同机 TMPDIR 持久 ⇒ 命中。

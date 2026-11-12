@@ -1,0 +1,126 @@
+-- | 源包的规范编码：内容摘要（文件集合）与语义身份（声明面 + 文件摘要）。
+module Vuna.Compiler.Canonical.Pkg
+  ( PackageFile(..)
+  , PackageIdentity(..)
+  , PackageSource(..)
+  , decPackageContent
+  , decPackageIdentity
+  , encPackageContent
+  , encPackageIdentity
+  , identityOfSource
+  ) where
+
+-- Vuna.Compiler.Canonical.Pkg：包的**规范字节格式**（D5 / D12 的哈希输入侧）。
+--
+-- 两种摘要，输入面不同（这是 D5「内容哈希 / 逻辑指纹 / 身份模型分开」的落地）：
+--
+--   * **内容摘要**（`contentHashOf`）= `encPackageContent` 的 SHA-256：只含
+--     `(相对路径, 文件字节)`，按路径升序。它是不可变源的完整性校验（`hash` 字段），
+--     改注释/测试都会改变它——这是"取到的字节是否就是我声明的字节"。
+--   * **语义身份**（`identityHashOf`）= `encPackageIdentity` 的 SHA-256：包名 +
+--     `[export]` + 各依赖的 `(别名, 摘要)` + 每个文件的 `(路径, 内容摘要)`。它是缓存
+--     失效与 `pmEnv` 的身份；`path` 依赖的摘要记 `"path"`（可变输入，工作树共变），
+--     因此改依赖源码不会改变依赖方的身份 —— 新鲜度由 iface 的 `miDepHashes` 链负责。
+--
+-- 规范编码沿用 `Canonical.Bytes` 的原子文法（自定界、累积器风格）；roundtrip 自检
+-- 在 `examples/infra`（`pkg-canon-rt` 断言）。
+import Vuna.Compiler.Canonical.Bytes
+import Vuna.Compiler.Common
+import Vuna.Compiler.Hash
+
+-- | 包内一个文件：相对包根的路径（正斜杠、无 `..`）+ 原始字节。
+record PackageFile where
+  pfPath : String
+  pfContent : String
+
+-- | 一个包的完整内容视图（包名/导出/依赖声明 + 文件）。
+record PackageSource where
+  psName : String
+  psExports : List String
+  psDeps : List (Pair String String)
+  psFiles : List PackageFile
+
+-- | 语义身份视图：文件用内容摘要替代字节（不必携带载荷）。
+record PackageIdentity where
+  piName : String
+  piExports : List String
+  piDeps : List (Pair String String)
+  piFiles : List (Pair String String)
+
+contentTag : Int
+contentTag = 1
+
+identityTag : Int
+identityTag = 2
+
+-- ---------------------------------------------------------------- 内容编码
+encFile : PackageFile -> List String -> List String
+encFile f acc = encStr f.pfPath (encStr f.pfContent acc)
+
+encFiles : List PackageFile -> List String -> List String
+encFiles files acc = encTag contentTag (encList encFile files acc)
+
+-- | 内容编码：`#1;[n:(path, bytes)*]`。
+encPackageContent : List PackageFile -> String
+encPackageContent files = encTop encFiles files
+
+-- ---------------------------------------------------------------- 身份编码
+identityOfSource : PackageSource -> PackageIdentity
+identityOfSource ps = PackageIdentity ps.psName ps.psExports ps.psDeps (map hashFile ps.psFiles)
+
+hashFile : PackageFile -> Pair String String
+hashFile f = Pair f.pfPath (contentAddress f.pfContent)
+
+encStrPair : Pair String String -> List String -> List String
+encStrPair p acc = encStr (firstOf p) (encStr (secondOf p) acc)
+
+encIdentity : PackageIdentity -> List String -> List String
+encIdentity pi acc =
+  encTag identityTag
+    (encStr pi.piName (encList encStr pi.piExports (encList encStrPair pi.piDeps (encList encStrPair pi.piFiles acc))))
+
+-- | 身份编码：`#2;(name, exports, (alias, hash)*, (path, hash)*)`。
+encPackageIdentity : PackageIdentity -> String
+encPackageIdentity pi = encTop encIdentity pi
+
+-- ---------------------------------------------------------------- 解码
+decFile : Int -> Cur -> Maybe (Pair PackageFile Cur)
+decFile fuel c = case decStr fuel c of
+  Nothing => Nothing
+  Just (Pair path c1) => case decStr fuel c1 of
+    Nothing => Nothing
+    Just (Pair content c2) => Just (Pair (PackageFile path content) c2)
+
+decContentAt : Int -> Cur -> Maybe (Pair (List PackageFile) Cur)
+decContentAt fuel c = case decTag fuel c of
+  Nothing => Nothing
+  Just (Pair tag c1) => if tag == contentTag then decList decFile fuel c1 else Nothing
+
+-- | 内容解码（供 roundtrip 与 store 读回）。
+decPackageContent : String -> Maybe (List PackageFile)
+decPackageContent raw = case decContentAt (2 * strLength raw + 16) (curOf raw) of
+  Nothing => Nothing
+  Just (Pair files c2) => if curAtEnd c2 then Just files else Nothing
+
+decStrPair : Int -> Cur -> Maybe (Pair (Pair String String) Cur)
+decStrPair fuel c = decPair decStr decStr fuel c
+
+decIdentityAt : Int -> Cur -> Maybe (Pair PackageIdentity Cur)
+decIdentityAt fuel c = case decTag fuel c of
+  Nothing => Nothing
+  Just (Pair tag c1) => if tag == identityTag then case decStr fuel c1 of
+    Nothing => Nothing
+    Just (Pair name c2) => case decList decStr fuel c2 of
+      Nothing => Nothing
+      Just (Pair exports c3) => case decList decStrPair fuel c3 of
+        Nothing => Nothing
+        Just (Pair deps c4) => case decList decStrPair fuel c4 of
+          Nothing => Nothing
+          Just (Pair files c5) => Just (Pair (PackageIdentity name exports deps files) c5)
+  else Nothing
+
+-- | 身份解码（供 roundtrip 与缓存键读回）。
+decPackageIdentity : String -> Maybe PackageIdentity
+decPackageIdentity raw = case decIdentityAt (2 * strLength raw + 16) (curOf raw) of
+  Nothing => Nothing
+  Just (Pair ident c2) => if curAtEnd c2 then Just ident else Nothing
