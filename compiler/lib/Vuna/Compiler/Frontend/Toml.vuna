@@ -261,26 +261,37 @@ else case pathSegs of
         _ => failAt path line "table array \"${name}\" has no current element"
       NodeLeaf _ leafLine => failAt path leafLine "key \"${name}\" is not a table"
 
+-- 重复 key 的 section 后缀（顶层 key 不带）。
+sectionOfPath : List String -> List String
+sectionOfPath pathSegs = case splitLast pathSegs of
+  Just (Pair section key) => section
+  Nothing => []
+
+duplicateKeyMsg : String -> List String -> String
+duplicateKeyMsg name section =
+  if lenInt section == 0 then "duplicate key \"${name}\""
+  else "duplicate key \"${name}\" in [${joinDots section}]"
+
 -- | 插入叶子值：`path` 的最后一段是键，前面是表；中间表按点键规则创建。
-insertValue : Int -> String -> Int -> List String -> TomlValue -> List (Pair String TomlNode) -> Check (List (Pair String TomlNode))
-insertValue fuel path line pathSegs value fields = if fuel <= 0 then icFuel "toml"
+insertValue : Int -> String -> Int -> List String -> List String -> TomlValue -> List (Pair String TomlNode) -> Check (List (Pair String TomlNode))
+insertValue fuel path line pathSegs section value fields = if fuel <= 0 then icFuel "toml"
 else case pathSegs of
   [] => failAt path line "empty key"
   [name] => case lookupField name fields of
     Nothing => OkC (append fields [Pair name (NodeLeaf value line)])
     Just existing => case existing of
-      NodeLeaf _ oldLine => failAt path oldLine "duplicate key \"${name}\""
+      NodeLeaf _ oldLine => failAt path line (duplicateKeyMsg name section)
       _ => failAt path line "key \"${name}\" conflicts with a table"
   name :: rest => case lookupField name fields of
-    Nothing => case insertValue (fuel - 1) path line rest value [] of
+    Nothing => case insertValue (fuel - 1) path line rest section value [] of
       ErrC e => ErrC e
       OkC inner => OkC (append fields [Pair name (NodeTable inner KindDotted line)])
     Just existing => case existing of
-      NodeTable inner oldKind oldLine => case insertValue (fuel - 1) path line rest value inner of
+      NodeTable inner oldKind oldLine => case insertValue (fuel - 1) path line rest section value inner of
         ErrC e => ErrC e
         OkC inner2 => OkC (replaceField name (NodeTable inner2 oldKind oldLine) fields)
       NodeTableArray elems arrayLine => case lastNode elems of
-        Just (NodeTable inner oldKind oldLine) => case insertValue (fuel - 1) path line rest value inner of
+        Just (NodeTable inner oldKind oldLine) => case insertValue (fuel - 1) path line rest section value inner of
           ErrC e => ErrC e
           OkC inner2 =>
             OkC
@@ -538,10 +549,12 @@ parseKeySegment path cs = case cs.cursorChars of
   c :: rest => case c of
     34 => case parseBasicString path cs of
       ErrC e => ErrC e
-      OkC (Pair s after) => OkC (Pair s after)
+      OkC (Pair s after) =>
+        if s == "" then failAt path cs.cursorLine "expected a key" else OkC (Pair s after)
     39 => case parseLiteralString path cs of
       ErrC e => ErrC e
-      OkC (Pair s after) => OkC (Pair s after)
+      OkC (Pair s after) =>
+        if s == "" then failAt path cs.cursorLine "expected a key" else OkC (Pair s after)
     _ => parseBareKey path cs
 
 -- dotted key：`a.b."c.d"`（段之间允许空格）。
@@ -646,7 +659,7 @@ else case skipBlank cs of
           [] => failAt path line2 "expected '=' in inline table"
           c2 :: rest2 => if c2 == 61 then case parseValue (fuel - 1) path (skipBlank (TomlCursor rest2 line2 (col2 + 1))) of
             ErrC e => ErrC e
-            OkC (Pair value afterValue) => case insertValue (pathFuel keyPath) path line2 keyPath value fields of
+            OkC (Pair value afterValue) => case insertValue (pathFuel keyPath) path line2 keyPath (sectionOfPath keyPath) value fields of
               ErrC e => ErrC e
               OkC fields2 => case skipBlank afterValue of
                 TomlCursor chars3 line3 col3 => case chars3 of
@@ -778,7 +791,7 @@ else case parseValue (fuel - 1) path (skipBlank cs) of
     OkC afterLine =>
       let
         fullPath = appendPath currentPath keyPath
-      in case insertValue (pathFuel fullPath) path keyLine fullPath value fields of
+      in case insertValue (pathFuel fullPath) path keyLine fullPath (sectionOfPath fullPath) value fields of
         ErrC e => ErrC e
         OkC fields2 => parseTomlLoop (fuel - 1) path afterLine currentPath fields2
 
