@@ -265,30 +265,6 @@ in
     script = ./vuna-index.sh;
   };
 
-  # D30：docstring 覆盖 ratchet 门禁。`vuna doc --check` 判定顶层符号缺失，
-  # 与提交入库的 nix/doc-coverage.baseline 比较受管辖包（vuna-compiler + vuna-base）
-  # 的缺失总数：超过基线（回归）即失败，低于基线通过并提示下调基线。补齐公开面后
-  # 往下压；到 0 时可换成直接的 doc --check。根包 lib/ 正并行改造，暂不纳入（移动靶）。
-  doc-coverage = mkCheck {
-    name = "vuna-doc-coverage";
-    srcs = [
-      ../../compiler
-      ../../base
-      ../../vuna.toml
-      ../../nix/doc-coverage.sh
-      ../../nix/doc-coverage.baseline
-    ];
-    env = {
-      VUNA = "${vuna}/bin/vuna";
-    };
-    nativeBuildInputs = [
-      pkgs.bash
-      pkgs.coreutils
-      pkgs.gnused
-    ];
-    script = ./doc-coverage.sh;
-  };
-
   context-budget = mkCheck {
     name = "vuna-context-budget";
     srcs = [

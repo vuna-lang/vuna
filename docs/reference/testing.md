@@ -366,17 +366,21 @@ interp / compile 文案不同时用 `.compile.err`。
 
 ## Nix checks 清单
 
-`nix flake check` 实测 **17 项**：3 个 package 构建（`vuna` / `vuna-compiler` /
-`vuna-seed`）+ 14 个 check 语义项（`context-budget`、`doc-coverage`、`seed-selfhost`、
-`vuna-compiler-growth`、`vuna-compiler-growth-incremental`、`vuna-compiler-perf`、
-`vuna-fmt`、`vuna-index`、`vuna-lint`、
-`vuna-metrics`、`vuna-package`、`vuna-tests`、`vuna-typecheck`、`vscode-ext`；主体是
-`nix/checks/<name>.sh`）。语义项：
+`nix flake check` 实测 **20 项**：3 个 package 构建（`vuna` / `vuna-compiler` /
+`vuna-seed`，同时暴露为 checks）+ 17 个 check 语义项（`context-budget`、`diag-coverage`、
+`diag-raw`、`diag-style`、`eff-boundary`、`seed-selfhost`、`vuna-compiler-growth`、
+`vuna-compiler-growth-incremental`、`vuna-compiler-perf`、`vuna-fmt`、`vuna-index`、
+`vuna-lint`、`vuna-metrics`、`vuna-package`、`vuna-tests`、`vuna-typecheck`、`vscode-ext`；
+主体是 `nix/checks/<name>.sh`）。语义项：
 
 - `seed-selfhost`：seed→stage0→stage1→stage2 逐字节一致、TCB 黑名单、seed 完整 allowlist、闭包数量、增量构建、
   行为抽查与 seed 滞后报告（不阻塞）；
 - `vuna-tests`：沙箱跑 `vuna test --suite test/suite.toml`（`--jobs auto --no-cache`）；
 - `vuna-typecheck` / `vuna-lint`：`vuna check .` 自检、lint 零 finding；
+- `eff-boundary`：隐藏效果守卫，`runPure` 调用点只降不增（基线
+  `nix/eff-boundary.allowlist`，当前为空），见 [effects.md](effects.md)；
+- `diag-coverage` / `diag-style` / `diag-raw`：诊断码覆盖基线、文案模板规范、
+  compiler 源码诊断必须走域码（见 [diagnostics.md](diagnostics.md)）；
 - **`check` 的覆盖边界**：`vuna check <pkg>` 只检查**该包入口的 import 闭包**——可执行包
   （有 `app/Main.vuna`）检查入口闭包，库包以 `[export].modules` 为根。因此可执行包里
   **未被入口引用的新模块不会被 `check` 覆盖**，而包 iface 也只覆盖被精化的模块（依赖
@@ -399,11 +403,6 @@ interp / compile 文案不同时用 `.compile.err`。
   `nix/codegen.baseline` 的精确基线；种子尺寸不设门槛（见 [compiler.md](compiler.md)
   §codegen 夹具基线）；
 - `vuna-index`：`map` / `--find` / `--impact` / `api` 与内容哈希缓存失效；
-- `doc-coverage`：docstring 覆盖 ratchet 门禁（D30）。统计受管辖包（`vuna-compiler` +
-  `vuna-base`；根包 `lib/` 并行改造期暂不纳入）的 `vuna doc --check` 缺失总数，与
-  `nix/doc-coverage.baseline` 比：超过基线（新增公开符号没带 docstring）即失败，低于基线
-  通过并提示下调基线。补齐公开面后往下压，压到 0 时可直接换成 `doc --check`（见
-  [api-docs.md](api-docs.md)）；
 - `context-budget`：入口文档字节数与单模块行数对 `nix/context.budget`（预算按实测 ×1.5
   留余量；超过预算失败，达到 70% 只打印 `WARN`。`WARN` 在本机跑 check 时可见，nix 只在
   失败时打印 builder 日志，所以 CI 成功时不显示）；

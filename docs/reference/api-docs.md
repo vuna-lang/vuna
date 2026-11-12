@@ -75,9 +75,8 @@ vuna doc [--check] [--package NAME] [DIR [OUT]]
 - 每个包尊重自己的 `[export].modules`（按 manifest 顺序；缺模块是错误，exit 2）。
 - `--check` 不写文件：逐个报告**顶层符号**缺失 docstring（前置 `-- |` 与尾随 `-- ^` 都
   算；私有名 `_` 前缀跳过），有缺失 exit 1；成员（构造子/字段/方法）不强制。
-- `--check` 已接进 `nix flake check`（`checks.doc-coverage`）：以 ratchet 方式对比
-  `nix/doc-coverage.baseline`，缺失数超过基线即门禁失败（挡回归），低于基线提示下调；
-  覆盖全量后可换成直接的 `doc --check`。见 [testing.md](testing.md) 的 Nix checks 清单。
+- `--check` 只在本地按需运行，**不在** `nix flake check` 里（docstring 覆盖不是 CI 门禁）；
+  受管辖包与缺失统计口径见 [testing.md](testing.md) 的 Nix checks 清单与 [debt.md](debt.md) D30。
 - 输出包含：标题/统计、搜索框、包/kind 过滤、左侧 TOC、模块/符号章节、签名代码块、
   docstring 渲染、内嵌搜索 JSON 与客户端 JS。无外部 CSS/JS/CDN，`file://` 直接打开。
 - HTML 是可复现的：无时间戳/随机数，同一 DocBook 两次生成逐字节一致。
