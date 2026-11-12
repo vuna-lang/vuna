@@ -28,7 +28,7 @@ gen_mod() { # n file
   : >"$file"
   i=1
   while [ "$i" -le "$n" ]; do
-    printf 'f%s : Int\nf%s = %s\n' "$i" "$i" "$i" >>"$file"
+    printf 'export f%s : Int\nf%s = %s\n' "$i" "$i" "$i" >>"$file"
     i=$((i + 1))
   done
 }
