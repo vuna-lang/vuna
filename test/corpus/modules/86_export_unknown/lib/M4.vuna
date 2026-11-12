@@ -1,4 +1,0 @@
-module M4 (nope) where
-
-pub : Int
-pub = 1

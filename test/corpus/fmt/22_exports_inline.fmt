@@ -1,4 +1,0 @@
-module Vuna.Tiny (Alpha(..), Gamma, beta, zeta) where
-
-zeta : Int
-zeta = 1

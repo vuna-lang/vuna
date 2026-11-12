@@ -1,4 +1,0 @@
-[package]
-name = "p"
-[export]
-modules = ["Main"]

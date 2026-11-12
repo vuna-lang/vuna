@@ -1,8 +1,0 @@
-module Vuna.Zeta (zeta, Gamma, module Base.Bool, beta, Alpha(..), module Base.List, Base.HashMap.fromList) where
-
-import Base.HashMap
-import Base.Bool
-import Base.List
-
-zeta : Int
-zeta = 1
