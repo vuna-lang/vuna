@@ -1,4 +1,4 @@
-module Vuna.GenErrors (runGenErrors) where
+module Vuna.GenErrors where
 
 -- Vuna.GenErrors：从**枚举真源**生成错误码文档。
 --
@@ -72,7 +72,7 @@ allEntries =
   append (map tcEntryToEntry tcAll)
     (append (map cgEntryToEntry cgAll) (append (map lintEntryToEntry lintAll) (append (map lexEntryToEntry lexAll) (append (map psEntryToEntry psAll) (append (map icEntryToEntry icAll) (append (map rnEntryToEntry rnAll) (append (map pkgEntryToEntry pkgAll) (append (map warnEntryToEntry warnAll) (map ldEntryToEntry ldAll)))))))))
 
-runGenErrors : String -> Eff [] Int
+export runGenErrors : String -> Eff [] Int
 runGenErrors root = do
   rootR <- requireDirectory root
   case rootR of

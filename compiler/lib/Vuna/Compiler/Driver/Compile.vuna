@@ -1,31 +1,4 @@
-module Vuna.Compiler.Driver.Compile
-  ( ToolContext(..)
-  , baseDepIfacesOf
-  , buildMetaText
-  , buildSplit
-  , checkPackage
-  , compileToDir
-  , depIfacesForCheck
-  , depIfacesForTool
-  , depIfacesForToolProgram
-  , depIfacesForToolSource
-  , depIfacesForToolSourceDetailed
-  , ensureDirPath
-  , metaUpToDate
-  , runBuildScript
-  , sourceInfoForPath
-  , toolCleanOwnModules
-  , toolCompilerFingerprint
-  , toolHasOwnManifest
-  , toolNeededOfImports
-  , toolNowSec
-  , toolOwnEntrySourceHash
-  , toolSessionFresh
-  , toolTextHash
-  , toolWriteModuleIface
-  , toolWriteModuleIfaceCold
-  , writeBuildMeta
-  ) where
+module Vuna.Compiler.Driver.Compile where
 
 -- Vuna.Compiler.Driver.Compile：编译入口（供 CompilerCli / 测试使用）。唯一路径是 DT：
 -- 精化（Elab）→ 擦除检查 + 逐模块 OCaml 生成（Codegen.Split）；`check*` 只检查不产码。
@@ -96,7 +69,7 @@ mapMaybeEff f (x :: rest) = do
 -- M45：`wantWarnings` = 调用方要 warning（`-W` / `--deny-warnings`）。warning 不持久化，
 -- 缓存命中/干净模块复用都会跳过精化、丢掉 warning，所以这里跳过 check 缓存并强制本包
 -- 模块重算（依赖仍走接口摘要，不重算依赖包）。
-checkPackage : Bool -> Bool -> Package -> Eff [] (Check (List Diagnostic))
+export checkPackage : Bool -> Bool -> Package -> Eff [] (Check (List Diagnostic))
 checkPackage release wantWarnings pkg =
   let
     ctx = contextWithRelease release (packageContext pkg)
@@ -112,7 +85,7 @@ checkPackage release wantWarnings pkg =
 -- 并发注意：并行构建会在同一目录上竞争；宿主 `makeDir` 不幂等（EEXIST 直接抛异常），
 -- 「先 exists 再 makeDir」有 TOCTOU 窗口。末级创建走 `mkdir -p`（幂等）。
 -- 递归沿 `parentOfPath` 上升，不是结构下降，用显式 fuel 守卫（路径深度上限）。
-ensureDirPath : String -> Eff [] Int
+export ensureDirPath : String -> Eff [] Int
 ensureDirPath path = ensureDirPathFuel 256 path
 
 ensureDirPathFuel : Int -> String -> Eff [] Int
@@ -144,7 +117,7 @@ parentOfPath path =
 -- 逐模块 split 输出到 outDir：各模块 .ml + Main.ml + build.sh；Ok 写出的文件数。
 -- outDir 在 codegen 成功后才创建（精化失败不留产物）。
 -- M33 W5：包根 `ffi/*.c` 复制到 `OUTDIR/ffi/` 并写进 build.sh（受限 FFI 的 C 实现）。
-compileToDir : PackageContext -> String -> Bool -> String -> Eff [] (Check (Pair Int (List Diagnostic)))
+export compileToDir : PackageContext -> String -> Bool -> String -> Eff [] (Check (Pair Int (List Diagnostic)))
 compileToDir ctx entry printResult outDir = do
   audit <- ifaceAuditRequested
   if audit then auditCompile ctx entry printResult outDir
@@ -333,7 +306,7 @@ copyFfiFiles ctxDir outDir = do
     else pure []
 
 -- loadPackage + compileToDir：给定包目录的代码生成（seed rotation / 测试用）。
-buildSplit : String -> String -> Eff [] (Check Int)
+export buildSplit : String -> String -> Eff [] (Check Int)
 buildSplit dir outDir = do
   pkgR <- loadPackage dir
   case pkgR of
@@ -485,7 +458,7 @@ lastSegmentRev (c :: rest) acc = if c == 47 then strPack acc else lastSegmentRev
 lastSegment : String -> String
 lastSegment path = lastSegmentRev (reverse (strUnpack path)) []
 
-buildMetaText : PackageContext -> String -> Bool -> Eff [] String
+export buildMetaText : PackageContext -> String -> Bool -> Eff [] String
 buildMetaText ctx entry linked = do
   sources <- contextSources ctx entry
   deps <- dependencyHashes ctx
@@ -501,13 +474,13 @@ buildMetaText ctx entry linked = do
 metaPathOf : String -> String
 metaPathOf outDir = "${outDir}/${metaFileName}"
 
-writeBuildMeta : String -> PackageContext -> String -> Bool -> Eff [] Int
+export writeBuildMeta : String -> PackageContext -> String -> Bool -> Eff [] Int
 writeBuildMeta outDir ctx entry linked = do
   text <- buildMetaText ctx entry linked
   prim_eff_writeFile (metaPathOf outDir) text
 
 -- 同哈希跳过：meta 内容与期望（linked=true）完全一致，且产物二进制存在。
-metaUpToDate : String -> PackageContext -> String -> String -> Eff [] Bool
+export metaUpToDate : String -> PackageContext -> String -> String -> Eff [] Bool
 metaUpToDate outDir ctx entry binPath = do
   let
     path = metaPathOf outDir
@@ -522,7 +495,7 @@ metaUpToDate outDir ctx entry binPath = do
 
 -- 在 dir 里跑生成的 build.sh：`sh build.sh <out>`（out 相对 dir，例如 "bin/<pkg>"）。
 -- 链接失败给出带包名/目录/退出码的清晰错误（ocamlopt 的 stderr 已在终端）。
-runBuildScript : String -> String -> String -> Eff [] (Check Int)
+export runBuildScript : String -> String -> String -> Eff [] (Check Int)
 runBuildScript dir out name = do
   code <- prim_eff_runIn dir ["sh", "build.sh", out]
   pure
@@ -770,7 +743,7 @@ else case lookupPair name tbl of
 
 -- M34.5（LSP/REPL）：把「本包依赖闭包的模块接口」暴露给工具链（不暴露内部实现）。
 -- 无包上下文/依赖接口不全时返回 Nothing，调用方退回不带 ifaces 的旧路径。
-depIfacesForCheck : PackageContext -> Eff [] (Maybe (List ModuleIface))
+export depIfacesForCheck : PackageContext -> Eff [] (Maybe (List ModuleIface))
 depIfacesForCheck ctx = depIfacesOf ctx
 
 -- 工具链消费默认走接口：M34.6 起默认开启（`VUNA_IFACE_TOOL=0` 关闭做 A/B/排障）。
@@ -889,7 +862,7 @@ toolImportsOfSource ctx label source = do
   parsed <- parseFileWithPath label source
   case parsed of
     ErrC _ => pure []
-    OkC (SourceFile hdr imports fixities decls) => case hdr of
+    OkC (SourceFile hdr imports fixities decls _ _ _) => case hdr of
       Just (ModDecl dname _ _ _ _ _ _) => toolImportNamesOf ctx dname imports
       Nothing => toolImportNamesOf ctx "" imports
 
@@ -928,7 +901,7 @@ else do
 ownEntriesOf : String -> PackageManifest -> List (Pair String (Pair String ManifestEntry))
 ownEntriesOf dir mf = map (\e => Pair (meNameOfEntry e) (Pair dir e)) (pmModulesOf mf)
 
-depIfacesForToolSource : PackageContext -> String -> String -> Eff [] (Maybe (List ModuleIface))
+export depIfacesForToolSource : PackageContext -> String -> String -> Eff [] (Maybe (List ModuleIface))
 depIfacesForToolSource ctx label source = do
   enabled <- toolEnabled
   if enabled then do
@@ -965,10 +938,10 @@ depIfacesForToolSource ctx label source = do
   else pure Nothing
 
 -- REPL：program 是「imports + 定义」的源码，闭包同样从它的 import 算。
-depIfacesForToolProgram : PackageContext -> String -> Eff [] (Maybe (List ModuleIface))
+export depIfacesForToolProgram : PackageContext -> String -> Eff [] (Maybe (List ModuleIface))
 depIfacesForToolProgram ctx program = depIfacesForToolSource ctx "<repl>" program
 
-depIfacesForTool : PackageContext -> Eff [] (Maybe (List ModuleIface))
+export depIfacesForTool : PackageContext -> Eff [] (Maybe (List ModuleIface))
 depIfacesForTool ctx = do
   enabled <- toolEnabled
   if enabled then depIfacesOf ctx else pure Nothing
@@ -977,7 +950,7 @@ depIfacesForTool ctx = do
 -- `depIfacesOf` 需要 `ctx.contextPackage`（有 manifest 才有），单文件夹具拿不到；
 -- 这里直接读 roots 里 base 包的接口，供会话化工具（test runner 等）注入。
 -- 接口缺失 / schema / 编译器 tag 不符 ⇒ Nothing（调用方回退全量精化）。
-baseDepIfacesOf : PackageContext -> Eff [] (Maybe (List ModuleIface))
+export baseDepIfacesOf : PackageContext -> Eff [] (Maybe (List ModuleIface))
 baseDepIfacesOf ctx = case ctx.contextPackage of
   Just _ => pure Nothing
   Nothing => case contextRoots ctx of
@@ -1007,7 +980,7 @@ baseDepIfacesOf ctx = case ctx.contextPackage of
 -- `tcStats`：校验面（依赖/本包模块源文件 + manifest 文件的 (路径, 内容哈希, mtime, size)）；
 -- `tcDepTable`：依赖模块名 → (接口目录, manifest 条目)，buffer 改 import 时重算闭包用；
 -- `tcOwnDir`：本包接口目录（建会话时在 Eff 上取好；`toolNeededOfImports` 仍是纯函数）。
-record ToolContext where
+export record ToolContext(..) where
   tcDepIfaces : List ModuleIface
   tcDepHashes : List (Pair String String)
   tcOwnManifest : Maybe PackageManifest
@@ -1031,17 +1004,17 @@ statsOfManifest (Pair dir mf) = do
   pure (append (map meSourceOfEntry (pmModulesOf mf)) [mfInfo])
 
 -- 内容哈希（与缓存 key / 接口源信息同一函数）：工具链侧比较 buffer 与磁盘内容用。
-toolTextHash : String -> String
+export toolTextHash : String -> String
 toolTextHash = payloadDigest
 
-sourceInfoForPath : String -> Eff [] SourceInfo
+export sourceInfoForPath : String -> Eff [] SourceInfo
 sourceInfoForPath path = do
   raw <- prim_eff_readFile path
   mtime <- prim_eff_fileMtime path
   size <- prim_eff_fileSize path
   pure (SourceInfo path (payloadDigest raw) mtime size)
 
-toolNowSec : Eff [] Int
+export toolNowSec : Eff [] Int
 toolNowSec = do
   us <- effTimeUs
   pure (us / 1000000)
@@ -1064,7 +1037,7 @@ sourceFresh builtSec si = do
         content <- prim_eff_readFile path
         pure (payloadDigest content == siHashOf si)
 
-toolSessionFresh : Int -> List SourceInfo -> Eff [] Bool
+export toolSessionFresh : Int -> List SourceInfo -> Eff [] Bool
 toolSessionFresh builtSec [] = pure True
 toolSessionFresh builtSec (si :: rest) = do
   fresh <- sourceFresh builtSec si
@@ -1080,14 +1053,14 @@ toolContextTable ctx tool =
   in append tool.tcDepTable ownTable
 
 -- import 名 → 闭包（含同包 manifest 里的模块）；buffer 每次变化都按当前 imports 重算。
-toolNeededOfImports : PackageContext -> ToolContext -> String -> List Import -> Eff [] (List String)
+export toolNeededOfImports : PackageContext -> ToolContext -> String -> List Import -> Eff [] (List String)
 toolNeededOfImports ctx tool currentName imports = do
   importNames <- toolImportNamesOf ctx currentName imports
   pure (toolClosure (toolContextTable ctx tool) importNames)
 
 -- 惰性工具接口 + 会话上下文（M34.6 5a）：与 `depIfacesForToolSource` 同一套校验，
 -- 额外返回依赖哈希表 / 本包 manifest / 闭包 / 校验面。
-depIfacesForToolSourceDetailed : PackageContext -> String -> String -> Eff [] (Maybe ToolContext)
+export depIfacesForToolSourceDetailed : PackageContext -> String -> String -> Eff [] (Maybe ToolContext)
 depIfacesForToolSourceDetailed ctx label source = do
   enabled <- toolEnabled
   if enabled then do
@@ -1128,7 +1101,7 @@ depIfacesForToolSourceDetailed ctx label source = do
 -- 本包干净模块（M34.6 5a/5c）：manifest 条目里「源内容未变 + 依赖哈希链仍成立」的模块。
 -- 只读 `needed` 里的模块接口文件（闭包子集）；`exclude` 是当前正在编辑的模块名（buffer
 -- 可能与磁盘不同，不能复用它的 iface）。
-toolCleanOwnModules : PackageContext -> ToolContext -> Int -> Maybe String -> List String -> Eff [] (List ModuleIface)
+export toolCleanOwnModules : PackageContext -> ToolContext -> Int -> Maybe String -> List String -> Eff [] (List ModuleIface)
 toolCleanOwnModules ctx tool builtSec exclude needed = case tool.tcOwnManifest of
   Nothing => pure []
   Just mf => do
@@ -1164,7 +1137,7 @@ toolCleanGo builtSec depTbl (m :: rest) cleanRev = do
 -- 单模块接口写回（M34.6 5a）：LSP 每次成功请求后只写「当前模块」的接口（合并进本包
 -- manifest，保留其他条目）。语义与整包 ifaceOfPackage 一致（见 `Iface.ifaceOfModule`）；
 -- 有缺口/其他脏模块时返回 Err，调用方静默跳过（不影响诊断）。
-toolWriteModuleIface : PackageContext -> ToolContext -> List ModuleIface -> CheckedPackage -> String -> SourceInfo -> Eff [] (Check ModuleIface)
+export toolWriteModuleIface : PackageContext -> ToolContext -> List ModuleIface -> CheckedPackage -> String -> SourceInfo -> Eff [] (Check ModuleIface)
 toolWriteModuleIface ctx tool clean checked name si = do
   let
     miResult =
@@ -1202,7 +1175,7 @@ else do
 
 -- 冷启动（没有工具会话 / 本包还没有 manifest）：依赖哈希从磁盘接口汇总，干净模块按
 -- 现有判定重算；能写就写（LSP-only 会话逐步变热），失败不影响诊断。
-toolWriteModuleIfaceCold : PackageContext -> CheckedPackage -> String -> SourceInfo -> Eff [] (Check ModuleIface)
+export toolWriteModuleIfaceCold : PackageContext -> CheckedPackage -> String -> SourceInfo -> Eff [] (Check ModuleIface)
 toolWriteModuleIfaceCold ctx checked name si = do
   clean <- cleanIfacesOrEmpty ctx
   depTbl <- depIfaceHashTable ctx
@@ -1219,7 +1192,7 @@ toolWriteModuleIfaceCold ctx checked name si = do
 
 -- LSP 写回守卫：本包 manifest 是否已存在（冷启动写回只在没有 manifest 时做，
 -- 避免把「工具接口暂时不可用」的会话写进去污染依赖哈希链）。
-toolHasOwnManifest : PackageContext -> Eff [] Bool
+export toolHasOwnManifest : PackageContext -> Eff [] Bool
 toolHasOwnManifest ctx = do
   mf <- toolOwnManifest ctx
   pure (case mf of
@@ -1228,7 +1201,7 @@ toolHasOwnManifest ctx = do
   )
 
 -- 本包 manifest 里某模块记录的源内容哈希（判断「磁盘内容已检查过」⇒ 不必重写接口）。
-toolOwnEntrySourceHash : ToolContext -> String -> Maybe String
+export toolOwnEntrySourceHash : ToolContext -> String -> Maybe String
 toolOwnEntrySourceHash tool name = case tool.tcOwnManifest of
   Just mf => entryHashOfEntries (pmModulesOf mf) name
   Nothing => Nothing
@@ -1239,7 +1212,7 @@ entryHashOfEntries (e :: rest) name =
   if meNameOfEntry e == name then Just (siHashOf (meSourceOfEntry e))
   else entryHashOfEntries rest name
 
-toolCompilerFingerprint : Eff [] Int
+export toolCompilerFingerprint : Eff [] Int
 toolCompilerFingerprint = compilerFingerprint
 
 -- | 包级 check 的图入口（阶段 2）：命中判定（`Driver.Graph` + `Query`）→ 未命中则跑

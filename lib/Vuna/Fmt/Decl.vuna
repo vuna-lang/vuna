@@ -1,4 +1,4 @@
-module Vuna.Fmt.Decl (filterSections, joinSections, renderSourceSections) where
+module Vuna.Fmt.Decl where
 
 -- Vuna.Fmt.Decl：声明 / 模块头 / import / `infix*` 声明的打印与文件组装（M24 后维护·源码
 -- 重组，从 Vuna.Fmt 拆出；M31.3 加 fixity 声明打印与程序级 fixity 参数）。
@@ -411,7 +411,8 @@ renderFixityLine at d = attachAt at (fixitySpan d) 0 [renderFixityDecl d]
 
 renderHeader : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Maybe ModDecl -> List String
 renderHeader at Nothing = []
-renderHeader at (Just m) = attachAt at m.modDeclSpan 0 (renderModDecl at m)
+renderHeader at (Just m) =
+  if m.modDeclName == "" then [] else attachAt at m.modDeclSpan 0 (renderModDecl at m)
 
 renderImportLine : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Import -> List String
 renderImportLine at imp = attachAt at imp.importSpan 0 [renderImport imp]
@@ -484,7 +485,7 @@ renderEofComments comments = concatMap (commentLeadLines 0) comments
 
 -- 文件组装：模块头 / imports / `infix*` 声明 / 声明 / 文件末尾注释各成一个 section，
 -- 非空 section 之间空一行（`filterSections` 去掉空 section 靠 `joinSections` 分隔）。
-renderSourceSections : List FixityDecl -> Maybe ModDecl -> List Import -> List FixityDecl -> List Decl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> List Comment -> List (List String)
+export renderSourceSections : List FixityDecl -> Maybe ModDecl -> List Import -> List FixityDecl -> List Decl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> List Comment -> List (List String)
 renderSourceSections env hdr imports fixities decls at eof =
   [ renderHeader at hdr,
     renderImportLines at hdr imports,
@@ -493,13 +494,13 @@ renderSourceSections env hdr imports fixities decls at eof =
     renderEofComments eof
   ]
 
-filterSections : List (List String) -> List (List String)
+export filterSections : List (List String) -> List (List String)
 filterSections [] = []
 filterSections (section :: rest) = case section of
   [] => filterSections rest
   _ => section :: filterSections rest
 
-joinSections : List (List String) -> List String
+export joinSections : List (List String) -> List String
 joinSections [] = []
 joinSections ([section]) = section
 joinSections (section :: rest) = append section ("" :: joinSections rest)

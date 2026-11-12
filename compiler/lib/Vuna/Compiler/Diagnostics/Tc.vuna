@@ -1,22 +1,4 @@
-module Vuna.Compiler.Diagnostics.Tc
-  ( TcEntry(..)
-  , TcErr(..)
-  , tcAll
-  , tcCode
-  , tcCoverageMissing
-  , tcErr
-  , tcErr0
-  , tcErr0NoLoc
-  , tcErr1
-  , tcErr1NoLoc
-  , tcErr2
-  , tcErr2NoLoc
-  , tcErr3
-  , tcMsg
-  , tcTemplate
-  , tcTypeMismatch
-  , tcTypeMismatchNoLoc
-  ) where
+module Vuna.Compiler.Diagnostics.Tc where
 
 -- Vuna.Compiler.Diagnostics.Tc：TC_ 域（精化 / 终止性 / 覆盖性诊断）。
 --
@@ -36,7 +18,7 @@ import Base.Vec
 -- TC_：精化 / 终止性 / 覆盖性诊断（Elab）
 -- arity = 构造子索引；String payload = 消息模板（占位符 `<0>` `<1>`…）
 -- ---------------------------------------------------------------
-data TcErr : Nat -> Type where
+export data TcErr(..) : Nat -> Type where
   -- arity 0
   BoolCaseRestriction : TcErr Zero
   CaseBranchTooFewArgs : TcErr Zero
@@ -159,7 +141,7 @@ data TcErr : Nat -> Type where
 -- code 派生（唯一真源；`gen-errors` 与 throw 都用它）
 -- ---------------------------------------------------------------
 -- | 自动补注（M41 新增导出）：tcCode。
-tcCode : {n : Nat} -> TcErr n -> String
+export tcCode : {n : Nat} -> TcErr n -> String
 tcCode BoolCaseRestriction = "TC_BoolCaseRestriction"
 tcCode CaseBranchTooFewArgs = "TC_CaseBranchTooFewArgs"
 tcCode CatchAllNotLast = "TC_CatchAllNotLast"
@@ -266,7 +248,7 @@ tcCode (DeriveUnsupportedKind _) = "TC_DeriveUnsupportedKind"
 -- 模板（构造子 payload，占位符 `<0>`/`<1>`；已去掉旧 `DT: ` 前缀）
 -- ---------------------------------------------------------------
 -- | 自动补注（M41 新增导出）：tcTemplate。
-tcTemplate : {n : Nat} -> TcErr n -> String
+export tcTemplate : {n : Nat} -> TcErr n -> String
 tcTemplate BoolCaseRestriction = "case on Bool only accepts True / False / variable patterns (M19)"
 tcTemplate CaseBranchTooFewArgs = "case branch has too few arguments for its constructor"
 tcTemplate CatchAllNotLast = "the catch-all branch must be the last one"
@@ -399,7 +381,7 @@ tcTemplate (MainArity _) = "main must not take parameters (got <0>)"
 -- ---------------------------------------------------------------
 -- 文档遍历源（同构 List；`gen-errors` 遍历渲染；不承载 arity——arity 在构造子类型里）
 -- ---------------------------------------------------------------
-record TcEntry where
+export record TcEntry(..) where
   tcEntryCode : String
   tcEntryTemplate : String
   tcEntryDesc : String
@@ -563,7 +545,7 @@ tcChunk12 =
     TcEntry (tcCode (MainArity "")) (tcTemplate (MainArity "")) "main 带参数（入口必须零参）"
   ]
 
-tcAll : List TcEntry
+export tcAll : List TcEntry
 tcAll =
   concatLists
     [tcChunk0, tcChunk1, tcChunk2, tcChunk3, tcChunk4, tcChunk5, tcChunk6, tcChunk7, tcChunk8, tcChunk9, tcChunk10, tcChunk11, tcChunk12]
@@ -572,26 +554,26 @@ tcAll =
 -- throw：构造结构化诊断（code/template 仍由本域枚举唯一持有）
 -- ---------------------------------------------------------------
 -- | 模板消息构造函数。
-tcMsg : {n : Nat} -> TcErr n -> Vec n String -> Diagnostic
+export tcMsg : {n : Nat} -> TcErr n -> Vec n String -> Diagnostic
 tcMsg e args = mkDiag SevError PhElab CatTypes (tcCode e) (diagBody (tcTemplate e) args)
 
 -- TC 诊断带位置（渲染器负责 `文件:行:列: [CODE] 消息`）。
-tcErr : {n : Nat} -> Span -> TcErr n -> Vec n String -> Check a
+export tcErr : {n : Nat} -> Span -> TcErr n -> Vec n String -> Check a
 tcErr sp e args = ErrC (withDiagSpan sp (tcMsg e args))
 
 -- ---------------------------------------------------------------
 -- 人体工学：按 arity 分档的 throw（调用点不必手搓 Vec）
 -- ---------------------------------------------------------------
 -- | 自动补注（M41 新增导出）：tcErr0。
-tcErr0 : Span -> TcErr Zero -> Check a
+export tcErr0 : Span -> TcErr Zero -> Check a
 tcErr0 sp e = tcErr sp e []
 
 -- | 自动补注（M41 新增导出）：tcErr1。
-tcErr1 : Span -> TcErr (Succ Zero) -> String -> Check a
+export tcErr1 : Span -> TcErr (Succ Zero) -> String -> Check a
 tcErr1 sp e a0 = tcErr sp e [a0]
 
 -- | 自动补注（M41 新增导出）：tcErr2。
-tcErr2 : Span -> TcErr (Succ (Succ Zero)) -> String -> String -> Check a
+export tcErr2 : Span -> TcErr (Succ (Succ Zero)) -> String -> String -> Check a
 tcErr2 sp e a0 a1 = tcErr sp e [a0, a1]
 
 -- ---------------------------------------------------------------
@@ -599,39 +581,39 @@ tcErr2 sp e a0 a1 = tcErr sp e [a0, a1]
 -- 输出形态是无前缀的 `[CODE] 消息`（与带位置的 `文件:行:列: [CODE] 消息` 区分）。
 -- ---------------------------------------------------------------
 -- | 自动补注（M41 新增导出）：tcErr0NoLoc。
-tcErr0NoLoc : TcErr Zero -> Check a
+export tcErr0NoLoc : TcErr Zero -> Check a
 tcErr0NoLoc e = ErrC (tcMsg e [])
 
 -- | 自动补注（M41 新增导出）：tcErr1NoLoc。
-tcErr1NoLoc : TcErr (Succ Zero) -> String -> Check a
+export tcErr1NoLoc : TcErr (Succ Zero) -> String -> Check a
 tcErr1NoLoc e a0 = ErrC (tcMsg e [a0])
 
 -- | 自动补注（M41 新增导出）：tcErr2NoLoc。
-tcErr2NoLoc : TcErr (Succ (Succ Zero)) -> String -> String -> Check a
+export tcErr2NoLoc : TcErr (Succ (Succ Zero)) -> String -> String -> Check a
 tcErr2NoLoc e a0 a1 = ErrC (tcMsg e [a0, a1])
 
 -- ---------------------------------------------------------------
 -- 类型不匹配：code + expected/found 机器可读字段（LSP/JSON 不解析散文）。
 -- ---------------------------------------------------------------
 -- | 诊断构造辅助：tcTypeMismatch（code/template 见本模块目录）。
-tcTypeMismatch : Span -> String -> String -> Check a
+export tcTypeMismatch : Span -> String -> String -> Check a
 tcTypeMismatch sp expected found =
   ErrC
     (withField (FieldFound found) (withField (FieldExpected expected) (withDiagSpan sp (withTrace (TraceFrame PhUnify "unify: expected ${expected}" Nothing []) (withTrace (TraceFrame PhUnify "unify: found ${found}" Nothing []) (tcMsg (TypeMismatch expected found) [expected, found]))))))
 
 -- | 诊断构造辅助：tcTypeMismatchNoLoc（code/template 见本模块目录）。
-tcTypeMismatchNoLoc : String -> String -> Check a
+export tcTypeMismatchNoLoc : String -> String -> Check a
 tcTypeMismatchNoLoc expected found =
   ErrC
     (withField (FieldFound found) (withField (FieldExpected expected) (withTrace (TraceFrame PhUnify "unify: expected ${expected}" Nothing []) (withTrace (TraceFrame PhUnify "unify: found ${found}" Nothing []) (tcMsg (TypeMismatch expected found) [expected, found])))))
 
 -- | 诊断构造辅助：tcErr3（code/template 见本模块目录）。
-tcErr3 : Span -> TcErr (Succ (Succ (Succ Zero))) -> String -> String -> String -> Check a
+export tcErr3 : Span -> TcErr (Succ (Succ (Succ Zero))) -> String -> String -> String -> Check a
 tcErr3 sp e a0 a1 a2 = tcErr sp e [a0, a1, a2]
 
 -- | 覆盖性：把所有不可达/未覆盖的构造子一次性列出（每个构造子进 `fields.candidates`）。
 -- | 诊断构造辅助：tcCoverageMissing（code/template 见本模块目录）。
-tcCoverageMissing : Span -> List (Pair String (Maybe Span)) -> Check a
+export tcCoverageMissing : Span -> List (Pair String (Maybe Span)) -> Check a
 tcCoverageMissing sp ctors =
   let
     joined = join ", " (map firstOf ctors)

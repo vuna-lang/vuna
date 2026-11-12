@@ -56,18 +56,49 @@ export_items() { # header-file
     *) printf '(implicit)' ;;
   esac
 }
+new_items() { # file
+  awk '
+    function trim(s) { sub(/^[ \t]+/,"",s); sub(/[ \t]+$/,"",s); return s }
+    /^export import / {
+      line=$0; sub(/^export import /,"",line)
+      if (line ~ /^qualified /) sub(/^qualified /,"",line)
+      mod=line; sub(/[ \t(].*/,"",mod)
+      if (line ~ /\(/) {
+        body=line; sub(/^[^(]*\(/,"",body); sub(/\).*/,"",body)
+        n=split(body,a,","); for (i=1;i<=n;i++) { it=trim(a[i]); if (it != "") print mod "." it }
+      } else print "module " mod
+      next
+    }
+    /^export / {
+      line=$0; sub(/^export /,"",line)
+      if (line ~ /^(opaque|transparent) /) sub(/^(opaque|transparent) /,"",line)
+      if (line ~ /^(alias|boxed) /) sub(/^(alias|boxed) /,"",line)
+      if (line ~ /^linear /) sub(/^linear /,"",line)
+      if (line ~ /^(data|record|trait) /) {
+        rest=line; sub(/^(data|record|trait) /,"",rest)
+        name=rest; sub(/[ \t(:].*/,"",name)
+        suffix=""
+        if (rest ~ /\(\.\.\)/) suffix="(..)"
+        else if (match(rest, /\([^)]*\)/)) suffix=substr(rest,RSTART,RLENGTH)
+        print name suffix
+      } else if (line ~ /^(axiom|extern) /) {
+        rest=line; sub(/^(axiom|extern) /,"",rest); name=rest; sub(/[ \t:].*/,"",name); print name
+      } else {
+        name=line; sub(/[ \t:].*/,"",name); print name
+      }
+    }
+  ' "$1"
+}
 
 {
-  echo "# M26 导出面快照（module X (...) where 的项，排序规范化；无 header => (implicit)）"
+  echo "# M26 导出面快照（module X (...) where 的项，排序规范化；新语法逐定义 export；旧 header 仍按列表）"
   for f in $(find lib/Vuna compiler/lib/Vuna base/lib -name '*.vuna' | LC_ALL=C sort); do
     header=$(awk '/^module[ \t]/{f=1} f{print} f&&/ where[ \t]*$/{exit}' "$f")
-    if [ -z "$header" ]; then
-      printf '%s: (implicit)\n' "$f"
-    else
-      printf '%s\n' "$header" >"$tmp/one-header"
-      items=$(export_items "$tmp/one-header")
-      printf '%s: %s\n' "$f" "$items"
-    fi
+    case "$header" in
+      *\(*) printf '%s\n' "$header" >"$tmp/one-header"; items=$(export_items "$tmp/one-header") ;;
+      *) items=$(new_items "$f" | LC_ALL=C sort -u | paste -sd , - | sed 's/,/, /g') ;;
+    esac
+    printf '%s: %s\n' "$f" "$items"
   done
 } >"$tmp/exports.txt"
 

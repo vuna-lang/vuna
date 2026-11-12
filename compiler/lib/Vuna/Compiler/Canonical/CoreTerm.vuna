@@ -1,12 +1,5 @@
 -- | Core 项（`Term`）的规范编码 + 解析器（内容寻址的哈希输入格式）。
-module Vuna.Compiler.Canonical.CoreTerm
-  ( decRig
-  , decTerm
-  , decTermComplete
-  , encRig
-  , encTerm
-  , encTermBytes
-  ) where
+module Vuna.Compiler.Canonical.CoreTerm where
 
 -- Vuna.Compiler.Canonical.CoreTerm：Core `Term` 的规范字节编码（C32 哈希输入侧）。
 --
@@ -36,7 +29,7 @@ noSpan = Span "" 0 0 0 0
 -- 编码
 -- ---------------------------------------------------------------
 -- | multiplicity 的三档（`Rig0` / `Rig1` / `RigOmega`）。
-encRig : Rig -> List String -> List String
+export encRig : Rig -> List String -> List String
 encRig Rig0 acc = encTag 0 acc
 encRig Rig1 acc = encTag 1 acc
 encRig RigOmega acc = encTag 2 acc
@@ -80,7 +73,7 @@ encInts : List Int -> List String -> List String
 encInts xs acc = encList encInt xs acc
 
 -- | Core 项的规范编码（accumulator 风格：不拷贝子分片）。
-encTerm : Term -> List String -> List String
+export encTerm : Term -> List String -> List String
 encTerm (TVar n i _) acc = encTag 0 (encStr n (encInt i acc))
 encTerm (TMeta m) acc = encTag 1 (encInt m acc)
 encTerm (TGlobal g) acc = encTag 2 (encStr g acc)
@@ -103,7 +96,7 @@ encTerm (TFloat f) acc = encTag 16 (encStr f acc)
 encTerm (TRecord c args) acc = encTag 17 (encStr c (encArgs args acc))
 
 -- | 整项编码成一个字节串（供 SHA-256 直接取摘要）。
-encTermBytes : Term -> String
+export encTermBytes : Term -> String
 encTermBytes t = encTop encTerm t
 
 -- ---------------------------------------------------------------
@@ -111,7 +104,7 @@ encTermBytes t = encTop encTerm t
 -- ---------------------------------------------------------------
 -- | 解析 multiplicity：tag 0/1/2。
 -- | 解析 multiplicity：tag 0/1/2。
-decRig : Int -> Cur -> Maybe (Pair Rig Cur)
+export decRig : Int -> Cur -> Maybe (Pair Rig Cur)
 decRig fuel bytes = if fuel <= 0 then Nothing
 else case decTag fuel bytes of
   Nothing => Nothing
@@ -151,7 +144,7 @@ else case decStr (fuel - 1) bytes of
       Just (Pair body b3) => Just (Pair (CaseAlt n bs body) b3)
 
 -- | 解析 Core 项（tag 必须与 `encTerm` 一致；燃料按剩余字节上界递减）。
-decTerm : Int -> Cur -> Maybe (Pair Term Cur)
+export decTerm : Int -> Cur -> Maybe (Pair Term Cur)
 decTerm fuel bytes = if fuel <= 0 then Nothing
 else case decTag fuel bytes of
   Nothing => Nothing
@@ -259,7 +252,7 @@ else case decTag fuel bytes of
     _ => Nothing
 
 -- | 解析整串（要求恰好消费完）：roundtrip 测试入口。
-decTermComplete : String -> Maybe Term
+export decTermComplete : String -> Maybe Term
 decTermComplete s = case decTerm (strLength s) (curOf s) of
   Nothing => Nothing
   Just (Pair t rest) => if curAtEnd rest then Just t else Nothing

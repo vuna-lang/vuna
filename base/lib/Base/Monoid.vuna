@@ -1,4 +1,4 @@
-module Base.Monoid (Monoid(..), Semigroup(..)) where
+module Base.Monoid where
 
 -- Base.Monoid：`Semigroup`（`mappend`）与 `Monoid`（`mempty`）。
 --
@@ -9,11 +9,11 @@ module Base.Monoid (Monoid(..), Semigroup(..)) where
 -- 方法名用 `mappend` / `mempty`（与 `Base.List.append`、`Base.Map.empty` 错开，
 -- 避免 Prelude 自动注入后的短名歧义）。
 -- | 结合二元运算 trait：`mappend` 可结合（List 拼接、String 拼接、Nat 加法等）。
-trait Semigroup a where
+export trait Semigroup a(..) where
   -- | 结合二元运算（`List` 拼接、`String` 拼接、`Nat` 加法等）。
   mappend : a -> a -> a
 
 -- | 单位元 trait：`mempty` 与 `Semigroup.mappend` 配合（无父类，泛型代码同时约束两者）。
-trait Monoid a where
+export trait Monoid a(..) where
   -- | 单位元。
   mempty : a

@@ -1,13 +1,5 @@
 -- | 实例名派生（trait 投影/实例字典的符号名）。
-module Vuna.Compiler.Elab.InstName
-  ( argNameOf
-  , argSuffix
-  , argSuffixTail
-  , derivedInstName
-  , exprNameFor
-  , instanceHeadName
-  , instanceName
-  ) where
+module Vuna.Compiler.Elab.InstName where
 
 -- Vuna.Compiler.Elab.InstName：实例名派生（trait 投影/实例字典的符号名）。
 -- 拆自 `Elab/Trait.vuna`（M30 收尾：Trait 单模块超过 context-budget 的 1195 行）。
@@ -17,7 +9,7 @@ import Vuna.Compiler.Elab.Meta
 import Vuna.Compiler.Frontend.Ast
 
 -- | 实例头 `Show Int` 的类名与实参。
-instanceHeadName : Expr -> Maybe String
+export instanceHeadName : Expr -> Maybe String
 instanceHeadName (EVar n sp) = Just n
 instanceHeadName (EApp fn args sp) = case fn of
   EVar n fsp => Just n
@@ -35,7 +27,7 @@ instanceHeadName _ = Nothing
 -- 同一个 dict 名——否则 `findInstanceClash` 的名字判重会把两个合法 head 误报成
 -- duplicate（monad/01 等夹具的回归）。同一类内的 head 唯一性仍由 coherence 保证
 -- （`anyInstanceExact` / `anyInstanceOverlap` 按 head 判定）。
-instanceName : String -> Expr -> String
+export instanceName : String -> Expr -> String
 instanceName cname headExpr = sanitizeInstName "${baseNameOf cname}_${derivedInstName headExpr}"
 
 -- 实例名里的限定名（`Base.Field.Field`）带点；codegen 按名字前缀切模块时会把
@@ -46,23 +38,23 @@ sanitizeInstName s = join "_" (split "." s)
 
 -- | 实例头的名字后缀（类名本身不计入，类短名已由 `instanceName` 加过一次）：
 -- `Eq Int` → `Int`、`Eq Base.Bool.Bool` → `Base.Bool.Bool`、`Eq (Box a)` → `Box_a`。
-derivedInstName : Expr -> String
+export derivedInstName : Expr -> String
 derivedInstName (EApp fn args sp) = argSuffixTail args
 derivedInstName other = exprNameFor other
 
 -- | 头实参的完整名序列（首项无前导下划线；嵌套应用递归拼）。
-argSuffixTail : List Expr -> String
+export argSuffixTail : List Expr -> String
 argSuffixTail [] = ""
 argSuffixTail (a :: rest) = exprNameFor a ++ argSuffix rest
 
 -- | 头实参的名字序列（首项带前导下划线 `_`，用于拼接 `Eq_a_b` 形态）。
-argSuffix : List Expr -> String
+export argSuffix : List Expr -> String
 argSuffix [] = ""
 argSuffix (a :: rest) = "_${exprNameFor a}${argSuffix rest}"
 
 -- | 类型表达式的完整名：`EVar` 直接用解析后的全名（库模块 = `<模块>.<名字>`，入口 = 裸名；
 -- 不能再取最后一段，否则不同模块的同名 data 会撞名）。
-exprNameFor : Expr -> String
+export exprNameFor : Expr -> String
 exprNameFor e = case e of
   EVar n sp => n
   EInt n sp => strFromInt n
@@ -72,6 +64,6 @@ exprNameFor e = case e of
   _ => "X"
 
 -- | 实例头实参的名字（`Pretty Color` 里的 `Color`）。
-argNameOf : Expr -> String
+export argNameOf : Expr -> String
 argNameOf (EVar n sp) = n
 argNameOf _ = "Int"

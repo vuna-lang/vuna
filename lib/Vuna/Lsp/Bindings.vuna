@@ -1,10 +1,4 @@
-module Vuna.Lsp.Bindings
-  ( bindingDefinitionAt
-  , bindingHoverAt
-  , bindingRenameOccurrences
-  , localBindingAtSf
-  , moduleSourceIn
-  ) where
+module Vuna.Lsp.Bindings where
 
 -- Vuna.Lsp.Bindings：光标处「绑定」的解析（M40；工具链模块，**永不进 seed 闭包**）。
 --
@@ -106,7 +100,7 @@ record WalkEnv where
 -- ---------------------------------------------------------------
 -- 入口
 -- ---------------------------------------------------------------
-bindingHoverAt : String -> Int -> Int -> String -> Eff [] (Maybe Json)
+export bindingHoverAt : String -> Int -> Int -> String -> Eff [] (Maybe Json)
 bindingHoverAt uri line col text = case parseSource "<lsp>" text of
   ErrC e => pure Nothing
   OkC sf => case tokenAtCursor text line col of
@@ -119,7 +113,7 @@ bindingHoverAt uri line col text = case parseSource "<lsp>" text of
           Nothing => pure Nothing
           Just lb => pure (Just (localHoverJson lb line tokStart token))
 
-bindingDefinitionAt : String -> Int -> Int -> String -> Eff [] (Maybe Json)
+export bindingDefinitionAt : String -> Int -> Int -> String -> Eff [] (Maybe Json)
 bindingDefinitionAt uri line col text = case parseSource "<lsp>" text of
   ErrC e => pure Nothing
   OkC sf => case tokenAtCursor text line col of
@@ -138,7 +132,7 @@ bindingDefinitionAt uri line col text = case parseSource "<lsp>" text of
 -- 光标处局部绑定的身份 = binder 定义位置（1-based line/col）；`Nothing` = 光标不在任何
 -- 可改名的局部绑定上（调用方继续走顶层符号）。解析失败也返回 Nothing，不抛错。
 -- 参数带已解析的 SourceFile：rename 需要在一份文档上重复判定很多位置，避免重复 parse。
-localBindingAtSf : SourceFile -> String -> Int -> Int -> Maybe (Pair Int Int)
+export localBindingAtSf : SourceFile -> String -> Int -> Int -> Maybe (Pair Int Int)
 localBindingAtSf sf text line col = case tokenAtCursor text line col of
   Nothing => Nothing
   Just (Pair tokStart token) => case localBindAt line col text sf tokStart token of
@@ -148,7 +142,7 @@ localBindingAtSf sf text line col = case tokenAtCursor text line col of
 -- 光标处局部绑定的全部出现位置（binder 定义 + 作用域内的使用），按文档顺序。
 -- 做法：对全文里该名字的每个整词出现位置**重新跑一次局部解析**，只有解析到同一个 binder
 -- 才计入——遮蔽（shadowing）与作用域顺序直接复用 `localBindAt`，不另写一套判断。
-bindingRenameOccurrences : Int -> Int -> String -> Maybe (List (Pair Int Int))
+export bindingRenameOccurrences : Int -> Int -> String -> Maybe (List (Pair Int Int))
 bindingRenameOccurrences line col text = case parseSource "<lsp>" text of
   ErrC e => Nothing
   OkC sf => case tokenAtCursor text line col of
@@ -226,7 +220,7 @@ modulePathOf uri name = do
 -- 模块名 → 源文本：按包上下文的模块根探测（`probeRoots`），找不到 / 读失败 → Nothing。
 -- 调用方（LSP case split）持有一份 `PackageContext`，直接用它的 roots，避免每个 binder
 -- 都重算一次上下文；依赖模块每次读盘（与模块 hover 同口径，未保存改动不反映）。
-moduleSourceIn : List Root -> String -> Eff [] (Maybe String)
+export moduleSourceIn : List Root -> String -> Eff [] (Maybe String)
 moduleSourceIn roots name = do
   path <- probeRoots roots name
   if path == "" then pure Nothing
@@ -254,7 +248,7 @@ moduleFileInfo : Bool -> String -> String -> String -> Eff [] (Pair String (Pair
 moduleFileInfo isSelf text path name = if isSelf then
   let
     sf = case parseSource "<lsp>" text of
-      ErrC e => SourceFile Nothing [] [] []
+      ErrC e => SourceFile Nothing [] [] [] [] [] []
       OkC parsed => parsed
   in pure (Pair (moduleDocOf sf text) (moduleHeaderPos sf (split "\n" text) name))
 else if path == "" then pure (Pair "" (Pair 1 1))
@@ -264,7 +258,7 @@ else do
     source <- prim_eff_readFile path
     let
       sf = case parseSource path source of
-        ErrC e => SourceFile Nothing [] [] []
+        ErrC e => SourceFile Nothing [] [] [] [] [] []
         OkC parsed => parsed
     in pure (Pair (moduleDocOf sf source) (moduleHeaderPos sf (split "\n" source) name))
   else pure (Pair "" (Pair 1 1))

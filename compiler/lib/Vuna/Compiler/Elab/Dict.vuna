@@ -1,37 +1,4 @@
-module Vuna.Compiler.Elab.Dict
-  ( MemberLookup(..)
-  , allocTeleMetas
-  , argHeadMatchesKind
-  , boolShortCircuit
-  , dictArgKind
-  , dictArgKinds
-  , dictArgUnsolvedMeta
-  , dictClassArg
-  , dictClassArgs
-  , firstUnsolvedDictGoal
-  , firstUnsolvedDictGoalMeta
-  , firstUnsolvedDictGoalSpan
-  , firstUnsolvedInterpGoal
-  , firstUnsolvedInterpGoalSpan
-  , firstUnsolvedMemberGoal
-  , firstUnsolvedMemberGoalSpan
-  , hasSpecificInterpInstance
-  , isCmpMethod
-  , isDictDomain
-  , isEqMethod
-  , isMemberDomain
-  , isRigidDictArg
-  , memberLookup
-  , neutralHeadOrSelf
-  , numMethodOpName
-  , resolveDictGoals
-  , resolveRowGoalsCtx
-  , searchInstanceIn
-  , specializeCmpTy
-  , specializeEqTy
-  , substDictTerm
-  , valueDictFamily
-  ) where
+module Vuna.Compiler.Elab.Dict where
 
 -- Vuna.Compiler.Elab.Dict：字典编码的**表示与实例搜索**：字典类型/实例头的识别、实例搜索（conv 头匹配）、
 -- 延迟字典元变量的回填（resolveDictGoals）、运算符特化（==、<、&& 等降到内建/方法投影）。
@@ -52,7 +19,7 @@ import Vuna.Compiler.Elab.Types
 import Vuna.Compiler.Intrinsics
 import Vuna.Compiler.Frontend.Ast
 
-isDictDomain : Ec -> Value -> Bool
+export isDictDomain : Ec -> Value -> Bool
 isDictDomain ec dom = isDictValue ec (forceVal ec dom)
 
 isDictValue : Ec -> Value -> Bool
@@ -70,7 +37,7 @@ isDictFamily ec g = memName g (map (\c => dictTypeName (dtClassName c)) (ecClass
 --      每个隐式插入点的全实例 conv 扫描（自检热路径）；
 --   3. 全局候选按「分配 tele meta → conv 结果头 → 递归解 ctx」匹配；named 实例不参与
 --      自动搜索（M23 语义，T2b 删除该特性）。
-searchInstanceIn : List (Pair String Term) -> Ctx -> Ec -> Value -> Span -> Check (Pair Term Ec)
+export searchInstanceIn : List (Pair String Term) -> Ctx -> Ec -> Value -> Span -> Check (Pair Term Ec)
 searchInstanceIn globals ctx ec dom sp = searchInstFuel globals ctx 16 ec dom sp
 
 -- 兼容入口：无局部上下文（顶层回填路径）。
@@ -263,7 +230,7 @@ showResolvedValue ec v = showTerm (zonkTerm ec 0 (quote 0 (forceVal ec v)))
 
 -- M36：未解字典目标里第一个插值目标（诊断用）——`Elab.Driver` 在报“未解元变量”之前
 -- 先命中它，给出可操作的 `TC_InterpNoInstance`（类型参数已确定的那些）。
-firstUnsolvedInterpGoal : Ec -> Maybe String
+export firstUnsolvedInterpGoal : Ec -> Maybe String
 firstUnsolvedInterpGoal ec = firstUnsolvedInterpGoalGo ec (ecPending ec)
 
 firstUnsolvedInterpGoalGo : Ec -> List Constraint -> Maybe String
@@ -303,7 +270,7 @@ rigidSearchFast : Ec -> Value -> Bool
 rigidSearchFast ec dom = isRigidDictArg ec dom && allInstancesMono (searchCandidates ec dom)
 
 -- 字典/实例头的族名（`Dict_<类>`）；非字典形态返回空串。
-valueDictFamily : Value -> String
+export valueDictFamily : Value -> String
 valueDictFamily (VNeutral n) = case n of
   NGlobal g sp => g
   _ => ""
@@ -313,7 +280,7 @@ valueDictFamily _ = ""
 -- 实例（如用户自定义 `instance Interp Int`），洞与显式 `interp` 都必须走字典路径，
 -- 不能被编译器的 String/Int/Nat 快捷降级静默覆盖。
 -- S5a：候选直接取 `Dict_Interp` 的族桶（桶键即实例头族名），不再扫全表。
-hasSpecificInterpInstance : Ec -> String -> Bool
+export hasSpecificInterpInstance : Ec -> String -> Bool
 hasSpecificInterpInstance ec tyName =
   hasSpecificInterpInstanceGo tyName (ecInstsFamily ec (dictTypeName interpTypeName))
 
@@ -383,7 +350,7 @@ else case allocTeleMetas inst.dtInstSpan ctx ec inst.dtInstTele of
                 Just
                   (Pair (foldAppTerms (TGlobal (dtInstName inst)) (append teleArgs dictArgs)) ec3)
 
-allocTeleMetas : Maybe Span -> Ctx -> Ec -> List (Pair String Term) -> Pair (List Int) Ec
+export allocTeleMetas : Maybe Span -> Ctx -> Ec -> List (Pair String Term) -> Pair (List Int) Ec
 allocTeleMetas msp ctx ec [] = Pair [] ec
 allocTeleMetas msp ctx ec (t :: rest) = case allocMetaAt msp ctx ec of
   Pair tm ec1 => case allocTeleMetas msp ctx ec1 rest of
@@ -445,14 +412,14 @@ hereCtorName = effMemberHereCtor
 thereCtorName : String
 thereCtorName = effMemberThereCtor
 
-data MemberLookup : Type where
+export data MemberLookup(..) : Type where
   MemberFound : Value -> Ec -> MemberLookup
   MemberAbsent : MemberLookup
   MemberStuck : MemberLookup
   -- 命名行（ND6）：标签候选 ≥2，推迟到最终化报 TC_AmbiguousInstance；携带候选文本。
   MemberAmbiguous : List String -> MemberLookup
 
-isMemberDomain : Ec -> Value -> Bool
+export isMemberDomain : Ec -> Value -> Bool
 isMemberDomain ec dom = case quote 0 dom of
   -- 命名行（ND1）：`Member n e r`（实例名、标签、行）。
   TApp (TApp (TApp (TGlobal g) _ _) _ _) _ _ => g == memberDomName
@@ -477,7 +444,7 @@ ctorValue ec name vals = case dtCtorLookupEc ec name of
   Just ctor => VCon (dtCtorName ctor) vals
   Nothing => VCon name vals
 
-memberLookup : Int -> Int -> Ec -> Value -> MemberLookup
+export memberLookup : Int -> Int -> Ec -> Value -> MemberLookup
 memberLookup fuel depth ec dom = if fuel <= 0 then MemberStuck
 else case memberSpine dom of
   Nothing => MemberStuck
@@ -593,7 +560,7 @@ solveRowMeta ec m v = case solveMeta (ecDefTbl ec) (ecSolsP ec) 0 m [] v of
   OkC sols2 => OkC (ecPutSols ec (solsList sols2))
   ErrC e => ErrC e
 
-resolveRowGoalsCtx : List (Pair String Term) -> Ctx -> Ec -> Span -> Check Ec
+export resolveRowGoalsCtx : List (Pair String Term) -> Ctx -> Ec -> Span -> Check Ec
 resolveRowGoalsCtx globals ctx ec sp = resolveRowGoalsCtxGo globals ctx sp (ecPending ec) ec []
 
 resolveRowGoalsCtxGo : List (Pair String Term) -> Ctx -> Span -> List Constraint -> Ec -> List Constraint -> Check Ec
@@ -627,7 +594,7 @@ resolveRowGoalsCtxGo globals ctx sp ((c@(Constraint cid kind m dom cspan cdepth)
         ErrC e => resolveRowGoalsCtxGo globals ctx sp rest ec (c :: kept)
       ErrC e => resolveRowGoalsCtxGo globals ctx sp rest ec (c :: kept)
 
-resolveDictGoals : List (Pair String Term) -> Ec -> Ec
+export resolveDictGoals : List (Pair String Term) -> Ec -> Ec
 resolveDictGoals globals ec = resolveDictGoalsFuel (length (ecPending ec) + 1) globals ec
 
 -- 单趟 worklist：逐个处理表头，成功即提交；未解目标按原顺序追加到表尾（保持旧的
@@ -702,7 +669,7 @@ else case dictClassArgs ec forced of
 -- `TApp (TApp (TGlobal inst) <typeArg>) <dictArg>`，而 Value spine 不含 rig；
 -- 直接 `quote 0` 会把 erased 类型实参渲染成运行期实参（OCaml 里出现 `v_Int`）。
 -- 这里按实例签名的 Pi 前缀（`Π tele(Rig0). Π ctx(Rig1). head`）恢复每个实参的 rig。
-substDictTerm : Ec -> Term -> Term
+export substDictTerm : Ec -> Term -> Term
 substDictTerm ec t = substDictTermGo ec 0 t
 
 substDictTermGo : Ec -> Int -> Term -> Term
@@ -809,7 +776,7 @@ joinRestInstNames (i :: rest) = ", ${dtInstName i}${joinRestInstNames rest}"
 
 -- 字典族的类参数 kind：字典 data `Dict_C` 的构造子类型的前导隐式 Pi 域
 -- （`MkDict_C : {p1 : K1} -> {p2 : K2} -> <字段>` 里的 `K1, K2, ...`）。
-dictArgKinds : Ec -> Value -> Maybe (List Value)
+export dictArgKinds : Ec -> Value -> Maybe (List Value)
 dictArgKinds ec dom = case dictFamilyNameOf ec dom of
   Nothing => Nothing
   Just fam => case dtDataLookup fam (ecDatas ec) of
@@ -832,7 +799,7 @@ else case v of
   _ => reverse acc
 
 -- 第一个类参数的 kind（单参数路径与历史诊断共用）。
-dictArgKind : Ec -> Value -> Maybe Value
+export dictArgKind : Ec -> Value -> Maybe Value
 dictArgKind ec dom = case dictArgKinds ec dom of
   Just (k :: rest) => Just k
   _ => Nothing
@@ -844,7 +811,7 @@ dictFamilyNameOf ec dom = case forceVal ec dom of
 
 -- 实参头部 `g` 的 kind 与类参数 kind 一致（`Color` 对 `Show`，`Maybe` 对 `Monad`）才约束。
 -- 头部是元变量（`?m' Int`）或 Pi 都不是具体构造子 ⇒ 不约束。
-argHeadMatchesKind : List (Pair String Term) -> Ec -> Ctx -> Value -> Value -> Bool
+export argHeadMatchesKind : List (Pair String Term) -> Ec -> Ctx -> Value -> Value -> Bool
 argHeadMatchesKind globals ec ctx forced argKind = case neutralHeadOrSelf forced of
   VNeutral (NGlobal g []) => case typeHeadLookup globals ec g of
     Just dictSig => case convEc ec (ctxDepth ctx) argKind (forceVal ec (eval [] dictSig)) of
@@ -854,18 +821,18 @@ argHeadMatchesKind globals ec ctx forced argKind = case neutralHeadOrSelf forced
   _ => False
 
 -- 中性应用的头部（`Box Int` ⇒ `Box`）；非应用原样返回。
-neutralHeadOrSelf : Value -> Value
+export neutralHeadOrSelf : Value -> Value
 neutralHeadOrSelf (VNeutral (NGlobal g (_ :: _))) = VNeutral (NGlobal g [])
 neutralHeadOrSelf v = v
 
 -- 字典域的全部类参数（`Dict_C p1 .. pn` 的 spine）。单参数 trait 只有一个元素；
 -- 旧入口 `dictClassArg` 仍返回第一个参数（Interp 等单参数特化路径依赖它）。
-dictClassArgs : Ec -> Value -> List Value
+export dictClassArgs : Ec -> Value -> List Value
 dictClassArgs ec dom = case forceVal ec dom of
   VNeutral (NGlobal g sp) => sp
   _ => []
 
-dictClassArg : Ec -> Value -> Maybe Value
+export dictClassArg : Ec -> Value -> Maybe Value
 dictClassArg ec dom = case dictClassArgs ec dom of
   arg :: rest => Just arg
   [] => Nothing
@@ -874,7 +841,7 @@ dictClassArg ec dom = case dictClassArgs ec dom of
 -- M29-T2a：判定改为**结构化**——`a`、`Box a`、`List (Box a)` 都算刚性（旧实现只看裸 NVar，
 -- 导致 `mem (Box a)` 这类泛型调用点既搜不到实例、也不提升成隐式字典参数）。
 -- 多参数：任一参数含刚性变量，具体实例头就必然匹配不上（全单态实例时）。
-isRigidDictArg : Ec -> Value -> Bool
+export isRigidDictArg : Ec -> Value -> Bool
 isRigidDictArg ec dom = anyRigidClassArg ec (dictClassArgs ec dom)
 
 anyRigidClassArg : Ec -> List Value -> Bool
@@ -913,7 +880,7 @@ classHasProjection className short name ec = case findClassByShortName className
   Nothing => False
   Just cls => classMethodProjection cls.dtClassMethods short == name
 
-isEqMethod : Ec -> String -> Bool
+export isEqMethod : Ec -> String -> Bool
 -- 后两个是**内部生成名**：`Elab.Derive`（deriving 展开）与 `Elab.Match`（字面量模式）
 -- 直接构造 `EVar "=="` / `EVar "/="`，不经过 Loader 别名；用户源码的 `==` 一律在
 -- Loader 被换成 `eq`，所以内部名不会泄漏到用户语义。
@@ -923,7 +890,7 @@ isEqMethod ec name =
     || name == "=="
     || name == "/="
 
-isCmpMethod : Ec -> String -> Bool
+export isCmpMethod : Ec -> String -> Bool
 isCmpMethod ec name =
   classHasProjection "Ord" "lt" name ec
     || classHasProjection "Ord" "le" name ec
@@ -940,7 +907,7 @@ isCmpMethod ec name =
 -- 算术特化靠它把方法投影映射回内建原语名；泛型 `Num a =>` 代码在具体类型未知时由
 -- 调用方回落到普通 trait 应用。
 -- | 把 `Base.Num` 的方法投影映射回规范运算符名（`+` / `-` / `*` / `/`）；不是 Num 方法时返回 `Nothing`。
-numMethodOpName : Ec -> String -> Maybe String
+export numMethodOpName : Ec -> String -> Maybe String
 numMethodOpName ec name =
   if classHasProjection "Num" "add" name ec then Just "+"
   else if classHasProjection "Num" "sub" name ec then Just "-"
@@ -974,7 +941,7 @@ cmpMethodShortOf name = methodShortOf name
 -- M29（决策 A）：**删除泛型结构比较兜底**——程序里没有 `Eq` 类、或具体类型搜不到实例时
 -- 在 check 期报错（`TC_EqRequiresEvidence` / `TC_NoInstanceFound`），不再退回
 -- `bi_eq_generic`（OCaml 多态相等）或 interp 的另一套 `valueEqDeep`。
-specializeEqTy : List (Pair String Term) -> Ctx -> String -> Term -> Term -> Span -> Value -> Ec -> Check (Maybe (Pair Term (Pair Value Ec)))
+export specializeEqTy : List (Pair String Term) -> Ctx -> String -> Term -> Term -> Span -> Value -> Ec -> Check (Maybe (Pair Term (Pair Value Ec)))
 specializeEqTy globals ctx name aTerm bTerm sp aTy ec = case builtinEqTyName (forceVal ec aTy) of
   Just tyName =>
     Vuna.Compiler.Common.bind (eqRuntimeName (eqMethodShortOf name) tyName)
@@ -1046,7 +1013,7 @@ cmpGenericName _ = "bi_ge_generic"
 -- 那样被第一个内建实例（Ord Int）提前定死，随后与 `List a` 统一时报 occurs check。
 -- 延迟成字典目标，等类参数被实参/结果类型解出来后再回填。
 -- 多参数：任一参数未解就延迟（实例头能同时约束所有参数，提前搜索会定死更多元变量）。
-dictArgUnsolvedMeta : Ec -> Value -> Bool
+export dictArgUnsolvedMeta : Ec -> Value -> Bool
 dictArgUnsolvedMeta ec dom = anyUnsolvedMetaArg ec (dictClassArgs ec dom)
 
 -- 结构判定：类参数里**嵌套**的未解 meta 也算未解（`Eff ?r` 的行 meta 是典型）。
@@ -1057,7 +1024,7 @@ anyUnsolvedMetaArg ec [] = False
 anyUnsolvedMetaArg ec (arg :: rest) =
   hasUnsolvedMetaValue (ecSolsP ec) (forceVal ec arg) || anyUnsolvedMetaArg ec rest
 
-specializeCmpTy : List (Pair String Term) -> Ctx -> String -> Term -> Term -> Span -> Value -> Ec -> Check (Maybe (Pair Term (Pair Value Ec)))
+export specializeCmpTy : List (Pair String Term) -> Ctx -> String -> Term -> Term -> Span -> Value -> Ec -> Check (Maybe (Pair Term (Pair Value Ec)))
 -- M24.7：`Ord` 类/实例在库（`Base.Ord`），按短名查类并用真实字典名/方法投影名。
 -- M31.1：`name` 是方法投影完整名（`Base.Ord.lt` 等），字典分支直接使用。
 -- M29：**删除「无 Ord 类 → 任意类型泛型比较」兜底**——没有 `Ord` 证据时在 check 期报错
@@ -1087,11 +1054,11 @@ specializeCmpTy globals ctx name aTerm bTerm sp aTy ec = case cmpBuiltinTyName (
           if isRigidDictArg ec dictTy then deferEqDict globals ctx mname tyTerm aTerm bTerm sp dictTy ec
           else ErrC e
 
-boolShortCircuit : String -> Term -> Term -> Term
+export boolShortCircuit : String -> Term -> Term -> Term
 boolShortCircuit name a b = if name == "&&" then TIf a b (TBool False) else TIf a (TBool True) b
 
 -- W3：收尾检查——仍未解的行成员证明（缺效应，或推断不足）。
-firstUnsolvedMemberGoal : Ec -> Maybe String
+export firstUnsolvedMemberGoal : Ec -> Maybe String
 firstUnsolvedMemberGoal ec = firstUnsolvedMemberGoalGo ec (ecPending ec)
 
 firstUnsolvedMemberGoalGo : Ec -> List Constraint -> Maybe String
@@ -1105,7 +1072,7 @@ else firstUnsolvedMemberGoalGo ec rest
 -- 只剩一个未解 meta，旧实现混在 `unsolved metavariable` 里；这里把它识别成「缺实例」。
 -- 跳过三类：Interp/Member 有专门诊断；类参数仍含未解 meta 时保持原 unsolved 文案；
 -- 刚性类参数可能是待泛化的延迟目标，不能误报成缺实例。
-firstUnsolvedDictGoal : Ec -> Maybe String
+export firstUnsolvedDictGoal : Ec -> Maybe String
 firstUnsolvedDictGoal ec = firstUnsolvedDictGoalGo ec (ecPending ec)
 
 firstUnsolvedDictGoalGo : Ec -> List Constraint -> Maybe String
@@ -1125,7 +1092,7 @@ firstUnsolvedDictGoalGo ec ((Constraint cid kind m dom cspan cdepth) :: rest) = 
 -- 的第一条未解约束一致：都按 pending 顺序扫描、跳过已解 meta）。
 -- D51②：按目标类别精确取第一条未解约束的 span（与 `firstUnsolved*` 选中同一条）。
 -- | 第一条未解 Interp 目标的延迟点 span（按 pending 顺序扫描，跳过已解 meta）。
-firstUnsolvedInterpGoalSpan : Ec -> Maybe Span
+export firstUnsolvedInterpGoalSpan : Ec -> Maybe Span
 firstUnsolvedInterpGoalSpan ec = firstUnsolvedInterpSpanGo ec (ecPending ec)
 
 -- | firstUnsolvedInterpGoalSpan 的递归实现：只保留 Interp 类目标的 span。
@@ -1140,7 +1107,7 @@ firstUnsolvedInterpSpanGo ec ((Constraint cid kind m dom cspan cdepth) :: rest) 
     else firstUnsolvedInterpSpanGo ec rest
 
 -- | 第一条未解行成员目标的延迟点 span（按 pending 顺序扫描，跳过已解 meta）。
-firstUnsolvedMemberGoalSpan : Ec -> Maybe Span
+export firstUnsolvedMemberGoalSpan : Ec -> Maybe Span
 firstUnsolvedMemberGoalSpan ec = firstUnsolvedMemberSpanGo ec (ecPending ec)
 
 -- | firstUnsolvedMemberGoalSpan 的递归实现：只保留行成员目标的 span。
@@ -1152,7 +1119,7 @@ firstUnsolvedMemberSpanGo ec ((Constraint cid kind m dom cspan cdepth) :: rest) 
 else firstUnsolvedMemberSpanGo ec rest
 
 -- | 第一条未解普通字典目标的延迟点 span（跳过 Interp、行成员、含未解 meta 与刚性参数的目标）。
-firstUnsolvedDictGoalSpan : Ec -> Maybe Span
+export firstUnsolvedDictGoalSpan : Ec -> Maybe Span
 firstUnsolvedDictGoalSpan ec = firstUnsolvedDictSpanGo ec (ecPending ec)
 
 -- | firstUnsolvedDictGoalSpan 的递归实现，按与 firstUnsolvedDictGoal 相同的类别过滤。
@@ -1169,7 +1136,7 @@ firstUnsolvedDictSpanGo ec ((Constraint cid kind m dom cspan cdepth) :: rest) = 
     else if isRigidDictArg ec forced then firstUnsolvedDictSpanGo ec rest else cspan
 
 -- | 第一条未解字典目标对应的元变量 id（供创建点溯源；与 `firstUnsolvedDictGoal` 同一条）。
-firstUnsolvedDictGoalMeta : Ec -> Maybe Int
+export firstUnsolvedDictGoalMeta : Ec -> Maybe Int
 firstUnsolvedDictGoalMeta ec = firstUnsolvedDictGoalMetaGo ec (ecPending ec)
 
 -- | 扫描实现：跳过已解/非字典目标。

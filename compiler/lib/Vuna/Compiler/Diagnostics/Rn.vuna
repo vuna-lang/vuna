@@ -1,20 +1,5 @@
 -- | RN_ 域：名字解析（import/export/限定名/构造子/类型名）与内置宏展开诊断。
-module Vuna.Compiler.Diagnostics.Rn
-  ( RnEntry(..)
-  , RnErr(..)
-  , rnAll
-  , rnAt0
-  , rnAt1
-  , rnAt2
-  , rnAt3
-  , rnCode
-  , rnErr
-  , rnMsg
-  , rnNoLoc0
-  , rnNoLoc1
-  , rnNoLoc2
-  , rnTemplate
-  ) where
+module Vuna.Compiler.Diagnostics.Rn where
 
 -- Vuna.Compiler.Diagnostics.Rn：名字解析阶段（phase = Resolve，category = Names）。
 --
@@ -28,7 +13,7 @@ import Base.Nat
 import Base.Vec
 
 -- | 诊断域实现：Vuna.Compiler.Diagnostics.Rn.RnErr（目录/模板见 diagnostics.md）。
-data RnErr : Nat -> Type where
+export data RnErr(..) : Nat -> Type where
   -- arity 0
   DuplicateImport : RnErr Zero
   -- arity 1
@@ -63,7 +48,7 @@ data RnErr : Nat -> Type where
   MacroArity : String -> String -> String -> RnErr (Succ (Succ (Succ Zero)))
 
 -- | 诊断域实现：Vuna.Compiler.Diagnostics.Rn.rnCode（目录/模板见 diagnostics.md）。
-rnCode : {n : Nat} -> RnErr n -> String
+export rnCode : {n : Nat} -> RnErr n -> String
 rnCode DuplicateImport = "RN_DuplicateImport"
 rnCode (AmbiguousConstructorExport _) = "RN_AmbiguousConstructorExport"
 rnCode (AmbiguousModule _ _) = "RN_AmbiguousModule"
@@ -92,7 +77,7 @@ rnCode (ValueNotExported _ _) = "RN_ValueNotExported"
 rnCode (MacroArity _ _ _) = "RN_MacroArity"
 
 -- | 诊断域实现：Vuna.Compiler.Diagnostics.Rn.rnTemplate（目录/模板见 diagnostics.md）。
-rnTemplate : {n : Nat} -> RnErr n -> String
+export rnTemplate : {n : Nat} -> RnErr n -> String
 rnTemplate DuplicateImport = "duplicate import"
 rnTemplate (AmbiguousConstructorExport _) =
   "ambiguous constructor export <0> (write T(..) or qualify it)"
@@ -124,11 +109,11 @@ rnTemplate (ValueNotExported _ _) = "<0> is not exported by <1>"
 rnTemplate (MacroArity _ _ _) = "macro <0> expects <1> argument(s), got <2>"
 
 -- | 诊断域实现：Vuna.Compiler.Diagnostics.Rn.rnMsg（目录/模板见 diagnostics.md）。
-rnMsg : {n : Nat} -> RnErr n -> Vec n String -> Diagnostic
+export rnMsg : {n : Nat} -> RnErr n -> Vec n String -> Diagnostic
 rnMsg e args = diagNoLoc SevError PhResolve CatNames (rnCode e) (diagBody (rnTemplate e) args)
 
 -- | 诊断域实现：Vuna.Compiler.Diagnostics.Rn.rnErr（目录/模板见 diagnostics.md）。
-rnErr : Span -> {n : Nat} -> RnErr n -> Vec n String -> Check a
+export rnErr : Span -> {n : Nat} -> RnErr n -> Vec n String -> Check a
 rnErr sp e args = ErrC (withLabel (Label (Just sp) "" LabelPrimary Nothing) (rnMsg e args))
 
 -- | 诊断域实现：Vuna.Compiler.Diagnostics.Rn.rnNoLoc（目录/模板见 diagnostics.md）。
@@ -136,41 +121,41 @@ rnNoLoc : {n : Nat} -> RnErr n -> Vec n String -> Check a
 rnNoLoc e args = ErrC (rnMsg e args)
 
 -- | 诊断域实现：Vuna.Compiler.Diagnostics.Rn.rnAt0（目录/模板见 diagnostics.md）。
-rnAt0 : Span -> RnErr Zero -> Check a
+export rnAt0 : Span -> RnErr Zero -> Check a
 rnAt0 sp e = rnErr sp e []
 
 -- | 诊断域实现：Vuna.Compiler.Diagnostics.Rn.rnAt1（目录/模板见 diagnostics.md）。
-rnAt1 : Span -> RnErr (Succ Zero) -> String -> Check a
+export rnAt1 : Span -> RnErr (Succ Zero) -> String -> Check a
 rnAt1 sp e a0 = rnErr sp e [a0]
 
 -- | 诊断域实现：Vuna.Compiler.Diagnostics.Rn.rnAt2（目录/模板见 diagnostics.md）。
-rnAt2 : Span -> RnErr (Succ (Succ Zero)) -> String -> String -> Check a
+export rnAt2 : Span -> RnErr (Succ (Succ Zero)) -> String -> String -> Check a
 rnAt2 sp e a0 a1 = rnErr sp e [a0, a1]
 
 -- | 带三个插值实参、带 span 的报错（宏 arity 错误用）。
-rnAt3 : Span -> RnErr (Succ (Succ (Succ Zero))) -> String -> String -> String -> Check a
+export rnAt3 : Span -> RnErr (Succ (Succ (Succ Zero))) -> String -> String -> String -> Check a
 rnAt3 sp e a0 a1 a2 = rnErr sp e [a0, a1, a2]
 
 -- | 诊断域实现：Vuna.Compiler.Diagnostics.Rn.rnNoLoc0（目录/模板见 diagnostics.md）。
-rnNoLoc0 : RnErr Zero -> Check a
+export rnNoLoc0 : RnErr Zero -> Check a
 rnNoLoc0 e = rnNoLoc e []
 
 -- | 诊断域实现：Vuna.Compiler.Diagnostics.Rn.rnNoLoc1（目录/模板见 diagnostics.md）。
-rnNoLoc1 : RnErr (Succ Zero) -> String -> Check a
+export rnNoLoc1 : RnErr (Succ Zero) -> String -> Check a
 rnNoLoc1 e a0 = rnNoLoc e [a0]
 
 -- | 诊断域实现：Vuna.Compiler.Diagnostics.Rn.rnNoLoc2（目录/模板见 diagnostics.md）。
-rnNoLoc2 : RnErr (Succ (Succ Zero)) -> String -> String -> Check a
+export rnNoLoc2 : RnErr (Succ (Succ Zero)) -> String -> String -> Check a
 rnNoLoc2 e a0 a1 = rnNoLoc e [a0, a1]
 
 -- | 诊断域实现：Vuna.Compiler.Diagnostics.Rn.RnEntry（目录/模板见 diagnostics.md）。
-record RnEntry where
+export record RnEntry(..) where
   rnEntryCode : String
   rnEntryTemplate : String
   rnEntryDesc : String
 
 -- | 诊断域实现：Vuna.Compiler.Diagnostics.Rn.rnAll（目录/模板见 diagnostics.md）。
-rnAll : List RnEntry
+export rnAll : List RnEntry
 rnAll =
   [ RnEntry (rnCode DuplicateImport) (rnTemplate DuplicateImport) "重复 import",
     RnEntry (rnCode (AmbiguousConstructorExport "")) (rnTemplate (AmbiguousConstructorExport "")) "导出的构造子歧义",

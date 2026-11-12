@@ -1,13 +1,4 @@
-module Base.EffMutex
-  ( Mutex
-  , Semaphore
-  , acquire
-  , newMutex
-  , newSemaphore
-  , release
-  , semSignal
-  , semWait
-  ) where
+module Base.EffMutex where
 
 -- Base.EffMutex：W9 单线程协作式 Mutex / Semaphore。
 -- 实现是 IORef + yield 忙等（无阻塞原语）；单线程下 read/write 之间不会被打断。
@@ -23,11 +14,11 @@ import Base.Result
 import Base.Num
 
 -- | 单线程协作式互斥锁：内部是取值 0/1 的 `IORef`（构造器不导出）。
-data Mutex : Type where
+export data Mutex : Type where
   MkMutex : IORef Int -> Mutex
 
 -- | 新建未加锁的 Mutex（内部计数 0）。
-newMutex : Eff [] Mutex
+export newMutex : Eff [] Mutex
 newMutex = do
   r <- newRef 0
   pure (MkMutex r)
@@ -52,19 +43,19 @@ else do
     acquireFuel (fuel - 1) m
 
 -- | `acquireFuel 256` 的便捷入口（最多轮询 256 次）。
-acquire : Mutex -> Eff [] (Result Int)
+export acquire : Mutex -> Eff [] (Result Int)
 acquire m = acquireFuel 256 m
 
 -- | 释放锁（计数置 0），返回 `IORef` 写入原语的 `Int` 结果。
-release : Mutex -> Eff [] Int
+export release : Mutex -> Eff [] Int
 release (MkMutex r) = writeRef r 0
 
 -- | 单线程协作式信号量：内部是计数值 `IORef`（构造器不导出）。
-data Semaphore : Type where
+export data Semaphore : Type where
   MkSemaphore : IORef Int -> Semaphore
 
 -- | 新建初值为 `n` 的信号量。
-newSemaphore : Int -> Eff [] Semaphore
+export newSemaphore : Int -> Eff [] Semaphore
 newSemaphore n = do
   r <- newRef n
   pure (MkSemaphore r)
@@ -82,11 +73,11 @@ else do
     semWaitFuel (fuel - 1) (MkSemaphore r)
 
 -- | `semWaitFuel 256` 的便捷入口。
-semWait : Semaphore -> Eff [] (Result Int)
+export semWait : Semaphore -> Eff [] (Result Int)
 semWait s = semWaitFuel 256 s
 
 -- | V 操作：计数加一，返回 `IORef` 写入原语的 `Int` 结果。
-semSignal : Semaphore -> Eff [] Int
+export semSignal : Semaphore -> Eff [] Int
 semSignal (MkSemaphore r) = do
   v <- readRef r
   writeRef r (v + 1)

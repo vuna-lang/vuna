@@ -1,11 +1,4 @@
-module Vuna.Index.Query
-  ( findReferences
-  , findSymbol
-  , impactOf
-  , listAllSymbols
-  , referencesAt
-  , symbolAt
-  ) where
+module Vuna.Index.Query where
 
 -- Vuna.Index.Query：符号查找（全名/裸名/后缀）、位置查询（`referencesAt`）与改动
 -- 影响面（M24 后维护·源码重组；M30 refs 带位置）。
@@ -16,7 +9,7 @@ import Vuna.Index.Types
 -- ---------------------------------------------------------------
 -- 查找
 -- ---------------------------------------------------------------
-findSymbol : Index -> String -> Check (List Sym)
+export findSymbol : Index -> String -> Check (List Sym)
 findSymbol index query =
   let
     syms = index.indexSymbols
@@ -44,7 +37,7 @@ findBySuffix syms query =
 
 -- 某模块里给定行/列上的符号：先按行收窄；多候选时优先列完全一致的，否则取该行
 -- 第一个符号。用于 LSP/referencesAt 这类「光标位置 → 定义」的查询。
-symbolAt : Index -> String -> Int -> Int -> Check Sym
+export symbolAt : Index -> String -> Int -> Int -> Check Sym
 symbolAt index modQuery queryLine queryCol =
   let
     onLine = filter (\s => symModule s == modQuery && symLine s == queryLine) index.indexSymbols
@@ -58,7 +51,7 @@ symbolAt index modQuery queryLine queryCol =
         [] => err "no symbol at ${modQuery}:${queryLine}:${queryCol}"
 
 -- 位置上的符号被哪些地方引用（refs 的 line/col 是引用出现处）。
-referencesAt : Index -> String -> Int -> Int -> Check (List Ref)
+export referencesAt : Index -> String -> Int -> Int -> Check (List Ref)
 referencesAt index modQuery queryLine queryCol = case symbolAt index modQuery queryLine queryCol of
   ErrC e => ErrC e
   OkC sym => OkC (refsNamed (symName sym) index.indexRefs)
@@ -67,7 +60,7 @@ refsNamed : String -> List Ref -> List Ref
 refsNamed name refs = filter (\r => refName r == name) refs
 
 -- 按名/全名查引用点（LSP references 的按名视图；referencesAt 是先由位置找符号）。
-findReferences : Index -> String -> Check (List Ref)
+export findReferences : Index -> String -> Check (List Ref)
 findReferences index query = case findSymbol index query of
   ErrC e => ErrC e
   OkC syms => OkC (refsForNames (map symName syms) index.indexRefs)
@@ -79,7 +72,7 @@ refsForNames names refs = filter (\r => memName (refName r) names) refs
 -- 影响面
 -- ---------------------------------------------------------------
 -- 影响面：引用该符号的模块（来自 refs 反向边）+ 建议测试标签。
-impactOf : Index -> String -> Check String
+export impactOf : Index -> String -> Check String
 impactOf index query = case findSymbol index query of
   ErrC e => ErrC e
   OkC syms =>
@@ -98,5 +91,5 @@ tagsOfKinds kinds =
   if memName "trait" kinds then "traits, run"
   else if memName "data" kinds || memName "record" kinds then "records, run" else "run, stdlib"
 
-listAllSymbols : Index -> List Sym
+export listAllSymbols : Index -> List Sym
 listAllSymbols index = index.indexSymbols

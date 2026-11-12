@@ -1,4 +1,4 @@
-module Base.FromString (FromString(..)) where
+module Base.FromString where
 
 -- Base.FromString：字面量转换 trait（checking 位置的 `"..."` 按期望类型转换）。
 --
@@ -8,7 +8,7 @@ module Base.FromString (FromString(..)) where
 --
 -- 实例落点沿用 trait 规则：实例跟类型模块走（孤儿检查见 records-traits.md）。
 -- | 把字符串字面量转换为 `a`：期望类型为 `a` 且存在本实例时，`"..."` 等价于 `fromString "..."`；没有可失败形态，解析失败由实例自行处理。
-trait FromString a where
+export trait FromString a(..) where
   fromString : String -> a
 
 -- `String` 是字面量的默认类型：恒等转换（不增删字符）。

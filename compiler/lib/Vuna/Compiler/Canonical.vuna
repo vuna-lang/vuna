@@ -1,10 +1,5 @@
 -- | 规范编码门面：Core 项 / Frontend AST / 精化产物的内容寻址字节格式。
-module Vuna.Compiler.Canonical
-  ( module Vuna.Compiler.Canonical.Ast
-  , module Vuna.Compiler.Canonical.Bytes
-  , module Vuna.Compiler.Canonical.CoreTerm
-  , module Vuna.Compiler.Canonical.Elab
-  ) where
+module Vuna.Compiler.Canonical where
 
 -- Vuna.Compiler.Canonical：内容寻址的**规范编码**层（D5 / C32 哈希输入侧）。
 --
@@ -18,7 +13,7 @@ module Vuna.Compiler.Canonical
 -- 为什么不是 `prim_marshal`：Marshal 的字节是「本编译器表示」的函数（含 span、随字段
 -- 顺序/版本漂移），而内容寻址要求「同内容 ⇒ 同字节」。编码规则见 `Bytes` 模块注释；
 -- roundtrip（`dec` 后重编码逐字节一致）由 `examples/infra` 的 §64 断言。
-import Vuna.Compiler.Canonical.Ast
-import Vuna.Compiler.Canonical.Bytes
-import Vuna.Compiler.Canonical.Elab
-import Vuna.Compiler.Canonical.CoreTerm
+export import Vuna.Compiler.Canonical.Ast
+export import Vuna.Compiler.Canonical.Bytes
+export import Vuna.Compiler.Canonical.Elab
+export import Vuna.Compiler.Canonical.CoreTerm

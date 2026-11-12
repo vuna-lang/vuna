@@ -173,17 +173,17 @@ TOML
 cat >"$pkg/lib/Dep.vuna" <<'VUNA'
 module Dep where
 
-depHelper : Int -> Int
+export depHelper : Int -> Int
 depHelper n = n
 
-data Box a : Type where
+export data Box a(..) : Type where
   Box : a -> Box a
 
-record Point where
+export record Point(..) where
   px : Int
   py : Int
 
-trait Shape a where
+export trait Shape a(..) where
   area : a -> Int
 VUNA
 
@@ -242,7 +242,7 @@ cat >"$tmp/in.jsonl" <<JSONL
 {"jsonrpc":"2.0","method":"textDocument/didChange","params":{"textDocument":{"uri":"$main_uri","version":2},"contentChanges":[{"text":"$main_good"}]}}
 {"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"$linty_uri","languageId":"vuna","version":1,"text":"module Linty where\n\nnameArity : String -> Int\nnameArity name =\n  if name == \"+\" then 2\n  else if name == \"-\" then 2\n  else 0\n"}}}
 {"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"$fmt_uri","languageId":"vuna","version":1,"text":"x:Int\nx = 1\n"}}}
-{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"$dep_uri","languageId":"vuna","version":1,"text":"module Dep where\n\ndepHelper : Int -> Int\ndepHelper n = n\n\ndata Box a : Type where\n  Box : a -> Box a\n\nrecord Point where\n  px : Int\n  py : Int\n\ntrait Shape a where\n  area : a -> Int\n"}}}
+{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"$dep_uri","languageId":"vuna","version":1,"text":"module Dep where\n\nexport depHelper : Int -> Int\ndepHelper n = n\n\nexport data Box a(..) : Type where\n  Box : a -> Box a\n\nexport record Point(..) where\n  px : Int\n  py : Int\n\nexport trait Shape a(..) where\n  area : a -> Int\n"}}}
 {"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"$spaced_uri","languageId":"vuna","version":1,"text":"module Spaced where\n\nvalue : Int\nvalue = 1\n"}}}
 {"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"$hole_uri","languageId":"vuna","version":1,"text":"id : (a : Type) -> a -> a\nid a x = x\n\nmain : Int\nmain = id _ 7\n"}}}
 {"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"$main2_uri","languageId":"vuna","version":1,"text":"module Main2 where\n\nimport Dep\n\nother : Int\nother = depHe\n"}}}
@@ -500,7 +500,7 @@ check_eq "交互式会话退出码 0" "0" "$?"
 # range 必须是光标 token（line 6, char 8..17），不能是定义位置。
 {
   printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{}}}'
-  printf '%s\n' '{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"'"$dep_uri"'","languageId":"vuna","version":1,"text":"module Dep where\n\ndepHelper : Int -> Int\ndepHelper n = n\n\nuseIt : Int\nuseIt = depHelper 1\n"}}}'
+  printf '%s\n' '{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"'"$dep_uri"'","languageId":"vuna","version":1,"text":"module Dep where\n\nexport depHelper : Int -> Int\ndepHelper n = n\n\nuseIt : Int\nuseIt = depHelper 1\n"}}}'
   printf '%s\n' '{"jsonrpc":"2.0","id":2,"method":"textDocument/hover","params":{"textDocument":{"uri":"'"$dep_uri"'"},"position":{"line":6,"character":10}}}'
   printf '%s\n' '{"jsonrpc":"2.0","id":3,"method":"shutdown","params":null}'
   printf '%s\n' '{"jsonrpc":"2.0","method":"exit","params":null}'
@@ -521,7 +521,7 @@ module Doc where
 
 -- | Helper docs.
 -- | second line.
-depHelper : Int -> Int
+export depHelper : Int -> Int
 depHelper n = n
 
 -- ordinary note
@@ -532,7 +532,7 @@ useIt : Int
 useIt = depHelper 1
 VEOF
 doc_uri="file://$tmp/docws/lib/Doc.vuna"
-doc_open='{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"'"$doc_uri"'","languageId":"vuna","version":1,"text":"module Doc where\n\n-- | Helper docs.\n-- | second line.\ndepHelper : Int -> Int\ndepHelper n = n\n\n-- ordinary note\nother : Int\nother = 2\n\nuseIt : Int\nuseIt = depHelper 1\n"}}}'
+doc_open='{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"'"$doc_uri"'","languageId":"vuna","version":1,"text":"module Doc where\n\n-- | Helper docs.\n-- | second line.\nexport depHelper : Int -> Int\ndepHelper n = n\n\n-- ordinary note\nother : Int\nother = 2\n\nuseIt : Int\nuseIt = depHelper 1\n"}}}'
 {
   frame_line '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{}}}'
   frame_line "$doc_open"
@@ -825,7 +825,7 @@ shadow n =
   let n = n + 1
   in n
 
-record Point where
+export record Point(..) where
   px : Int
   py : Int
 
@@ -836,7 +836,7 @@ mk : Int -> Point
 mk v = Point { px = v, py = 0 }
 VEOF
 rename_uri="file://$tmp/renamews/lib/Rename.vuna"
-rename_text='module Rename where\n\ntopFn : Int -> Int\ntopFn n = n + 1\n\nuseTop : Int\nuseTop = topFn 1\n\nshadow : Int -> Int\nshadow n =\n  let n = n + 1\n  in n\n\nrecord Point where\n  px : Int\n  py : Int\n\nmoveX : Point -> Int\nmoveX p = p.px\n\nmk : Int -> Point\nmk v = Point { px = v, py = 0 }\n'
+rename_text='module Rename where\n\ntopFn : Int -> Int\ntopFn n = n + 1\n\nuseTop : Int\nuseTop = topFn 1\n\nshadow : Int -> Int\nshadow n =\n  let n = n + 1\n  in n\n\nexport record Point(..) where\n  px : Int\n  py : Int\n\nmoveX : Point -> Int\nmoveX p = p.px\n\nmk : Int -> Point\nmk v = Point { px = v, py = 0 }\n'
 {
   frame_line '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{}}}'
   frame_line '{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"'"$rename_uri"'","languageId":"vuna","version":1,"text":"'"$rename_text"'"}}}'
@@ -905,12 +905,12 @@ printf '[package]\nname = "splitws"\n\n[dependencies]\nvuna-base = "%s/base"\n' 
 cat >"$tmp/splitws/lib/Split.vuna" <<'VEOF'
 module Split where
 
-data Color : Type where
+export data Color(..) : Type where
   Red : Color
   Green : Color
   Blue : Color
 
-data Box a : Type where
+export data Box a(..) : Type where
   Box : a -> Box a
 
 data H : Type where
@@ -957,7 +957,7 @@ pairof : Pairing Int Bool -> Int
 pairof p = _
 VEOF
 split_uri="file://$tmp/splitws/lib/Split.vuna"
-split_text='module Split where\n\ndata Color : Type where\n  Red : Color\n  Green : Color\n  Blue : Color\n\ndata Box a : Type where\n  Box : a -> Box a\n\ndata H : Type where\n  MkH : {n : Int} -> H\n\npick : Color -> Bool -> Int\npick c b = _\n\nunbox : Box Int -> Int\nunbox bx = _\n\nwrap : Color -> Int\nwrap c =\n  _\n\napply : (Int -> Int) -> Int\napply f = _\n\nhval : H -> Int\nhval h = _\n\nstill : Color -> Int\nstill c = 0\n\nrecord Pt where\n  ptX : Int\n  ptY : Bool\n\nrecord Pairing a b where\n  left : a\n  right : b\n\ndata Either a b : Type where\n  Left : a -> Either a b\n  Right : b -> Either a b\n\nrgb : Pt -> Int\nrgb r = _\n\neither : Either Int Bool -> Int\neither e = _\n\npairof : Pairing Int Bool -> Int\npairof p = _\n'
+split_text='module Split where\n\nexport data Color(..) : Type where\n  Red : Color\n  Green : Color\n  Blue : Color\n\nexport data Box a(..) : Type where\n  Box : a -> Box a\n\ndata H : Type where\n  MkH : {n : Int} -> H\n\npick : Color -> Bool -> Int\npick c b = _\n\nunbox : Box Int -> Int\nunbox bx = _\n\nwrap : Color -> Int\nwrap c =\n  _\n\napply : (Int -> Int) -> Int\napply f = _\n\nhval : H -> Int\nhval h = _\n\nstill : Color -> Int\nstill c = 0\n\nrecord Pt where\n  ptX : Int\n  ptY : Bool\n\nrecord Pairing a b where\n  left : a\n  right : b\n\ndata Either a b : Type where\n  Left : a -> Either a b\n  Right : b -> Either a b\n\nrgb : Pt -> Int\nrgb r = _\n\neither : Either Int Bool -> Int\neither e = _\n\npairof : Pairing Int Bool -> Int\npairof p = _\n'
 
 # 从会话输出里取指定 id 的响应帧（正文是单行 JSON）。
 lsp_frame_id() { # file id
@@ -1063,11 +1063,11 @@ printf '[package]\nname = "splitqws"\n\n[dependencies]\nvuna-base = "%s/base"\n'
 cat >"$tmp/splitqws/lib/Dep.vuna" <<'VEOF'
 module Dep where
 
-data Color : Type where
+export data Color(..) : Type where
   Red : Color
   Green : Color
 
-record Point where
+export record Point(..) where
   px : Int
   py : Int
 VEOF

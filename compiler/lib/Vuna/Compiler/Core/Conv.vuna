@@ -1,17 +1,4 @@
-module Vuna.Compiler.Core.Conv
-  ( conv
-  , convBoth
-  , convCaseAlts
-  , convNeutral
-  , convOneAlt
-  , convSpines
-  , convValueLists
-  , etaLeft
-  , etaRight
-  , mismatchAt
-  , solveMeta
-  , solveMetaNew
-  ) where
+module Vuna.Compiler.Core.Conv where
 
 -- Vuna.Compiler.Core.Conv：定义性相等（beta + delta + eta）与元变量求解。
 --
@@ -398,7 +385,7 @@ else
   in convFuel (fuel - 1) defs sols (depth + n) (applyClosureBinder a.vCaseAltClosure args)
     (applyClosureBinder b.vCaseAltClosure args)
 
-mismatchAt : Int -> Value -> Value -> Check a
+export mismatchAt : Int -> Value -> Value -> Check a
 mismatchAt depth a b =
   let
     sa = showValueAt depth a
@@ -645,10 +632,10 @@ else case solsLookup m sols of
             (\sols2 => convSpinesFuel (fuel - 1) defs sols2 depth sp sp2 (VMeta m sp) rhs)
       _ => solveMetaPattern (fuel - 1) defs sols depth m sp rhs
 
-solveMetaNew : HashMap String Term -> Sols -> Int -> Int -> Value -> Check Sols
+export solveMetaNew : HashMap String Term -> Sols -> Int -> Int -> Value -> Check Sols
 solveMetaNew defs sols depth m rhs = solveMetaEmpty sols depth m rhs
 
-conv : HashMap String Term -> Sols -> Int -> Value -> Value -> Check Sols
+export conv : HashMap String Term -> Sols -> Int -> Value -> Value -> Check Sols
 conv a1 a2 a3 a4 a5 =
   let
     _ =
@@ -656,29 +643,29 @@ conv a1 a2 a3 a4 a5 =
         "conv-in: ${showTerm (quote a3 a4)} <> ${showTerm (quote a3 a5)} |v: ${showValueAt a3 a4} <> ${showValueAt a3 a5} @${a3}"
   in convFuel (convFuelFor a4 a5) a1 a2 a3 a4 a5
 
-convBoth : HashMap String Term -> Sols -> Int -> Value -> Value -> Check Sols
+export convBoth : HashMap String Term -> Sols -> Int -> Value -> Value -> Check Sols
 convBoth a1 a2 a3 a4 a5 = convBothFuel (convFuelFor a4 a5) a1 a2 a3 a4 a5
 
-convCaseAlts : HashMap String Term -> Sols -> Int -> List VCaseAlt -> List VCaseAlt -> Check Sols
+export convCaseAlts : HashMap String Term -> Sols -> Int -> List VCaseAlt -> List VCaseAlt -> Check Sols
 convCaseAlts a1 a2 a3 a4 a5 = convCaseAltsFuel 64 a1 a2 a3 a4 a5
 
-convOneAlt : HashMap String Term -> Sols -> Int -> VCaseAlt -> VCaseAlt -> Check Sols
+export convOneAlt : HashMap String Term -> Sols -> Int -> VCaseAlt -> VCaseAlt -> Check Sols
 convOneAlt a1 a2 a3 a4 a5 = convOneAltFuel 64 a1 a2 a3 a4 a5
 
-convValueLists : HashMap String Term -> Sols -> Int -> List Value -> List Value -> Check Sols
+export convValueLists : HashMap String Term -> Sols -> Int -> List Value -> List Value -> Check Sols
 convValueLists a1 a2 a3 a4 a5 = convValueListsFuel 64 a1 a2 a3 a4 a5
 
-convNeutral : HashMap String Term -> Sols -> Int -> Neutral -> Neutral -> Value -> Value -> Check Sols
+export convNeutral : HashMap String Term -> Sols -> Int -> Neutral -> Neutral -> Value -> Value -> Check Sols
 convNeutral a1 a2 a3 a4 a5 a6 a7 = convNeutralFuel 64 a1 a2 a3 a4 a5 a6 a7
 
-convSpines : HashMap String Term -> Sols -> Int -> List Value -> List Value -> Value -> Value -> Check Sols
+export convSpines : HashMap String Term -> Sols -> Int -> List Value -> List Value -> Value -> Value -> Check Sols
 convSpines a1 a2 a3 a4 a5 a6 a7 = convSpinesFuel 64 a1 a2 a3 a4 a5 a6 a7
 
-etaLeft : HashMap String Term -> Sols -> Int -> Value -> String -> Closure -> Check Sols
+export etaLeft : HashMap String Term -> Sols -> Int -> Value -> String -> Closure -> Check Sols
 etaLeft a1 a2 a3 a4 a5 a6 = etaLeftFuel 64 a1 a2 a3 a4 a5 a6
 
-etaRight : HashMap String Term -> Sols -> Int -> String -> Closure -> Value -> Check Sols
+export etaRight : HashMap String Term -> Sols -> Int -> String -> Closure -> Value -> Check Sols
 etaRight a1 a2 a3 a4 a5 a6 = etaRightFuel 64 a1 a2 a3 a4 a5 a6
 
-solveMeta : HashMap String Term -> Sols -> Int -> Int -> List Value -> Value -> Check Sols
+export solveMeta : HashMap String Term -> Sols -> Int -> Int -> List Value -> Value -> Check Sols
 solveMeta a1 a2 a3 a4 a5 a6 = solveMetaFuel 64 a1 a2 a3 a4 a5 a6

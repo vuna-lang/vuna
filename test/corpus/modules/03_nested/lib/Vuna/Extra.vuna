@@ -1,4 +1,4 @@
 import Vuna.Base
 
-answer : Int
+export answer : Int
 answer = Vuna.Base.answer + 2

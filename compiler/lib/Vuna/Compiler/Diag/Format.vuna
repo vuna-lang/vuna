@@ -1,11 +1,5 @@
 -- | 诊断渲染：short（首行）/ human（源码片段 + notes）/ JSON。
-module Vuna.Compiler.Diag.Format
-  ( renderHuman
-  , renderJson
-  , renderJsonList
-  , renderSarif
-  , renderShort
-  ) where
+module Vuna.Compiler.Diag.Format where
 
 -- Vuna.Compiler.Diag.Format：诊断的唯一渲染层（诊断重设计 M5/M6）。
 --
@@ -78,7 +72,7 @@ applicabilityName HasPlaceholder = "has-placeholder"
 -- ---------------------------------------------------------------
 -- short：首行（与过渡期 CLI 逐字节兼容）
 -- ---------------------------------------------------------------
-renderShort : Diagnostic -> String
+export renderShort : Diagnostic -> String
 renderShort = diagText
 
 -- ---------------------------------------------------------------
@@ -165,7 +159,7 @@ headerOf lang d =
   else "${severityName d.diagSeverity}[${d.diagCode}]: ${msg}"
 
 -- `lang` 只是显式参数（`en` / `zh`）：没有 ambient 语言状态；片段读取是 Eff。
-renderHuman : String -> Diagnostic -> Eff [] String
+export renderHuman : String -> Diagnostic -> Eff [] String
 renderHuman lang d =
   let
     primary = primarySpan d.diagLabels
@@ -297,10 +291,10 @@ jsonDiag lang d =
   join ""
     ["{\"code\":${jsonStr d.diagCode}", ",\"severity\":${jsonStr (severityName d.diagSeverity)}", ",\"phase\":${jsonStr (phaseName d.diagPhase)}", ",\"category\":${jsonStr (categoryName d.diagCategory)}", ",\"message\":${jsonStr d.diagMessage}${localizedJsonField lang d}", ",\"labels\":[${join "," (map jsonLabel d.diagLabels)}]", ",\"fields\":[${join "," (map jsonField d.diagFields)}]", ",\"trace\":[${join "," (map jsonTrace d.diagTrace)}]", ",\"notes\":[${join "," (map jsonStr d.diagNotes)}]", ",\"suggestions\":[${join "," (map jsonSuggestion d.diagSuggestions)}]", ",\"origin\":${originJson d.diagOrigin}", ",\"internal\":${if d.diagInternal then "true" else "false"}", ",\"ice\":${maybeJsonIce d.diagIce}}"]
 
-renderJson : String -> Diagnostic -> String
+export renderJson : String -> Diagnostic -> String
 renderJson lang d = jsonDiag lang d
 
-renderJsonList : String -> List Diagnostic -> String
+export renderJsonList : String -> List Diagnostic -> String
 renderJsonList lang ds =
   "{\"version\":1,\"tool\":\"vuna\",\"diagnostics\":[${join "," (map (jsonDiag lang) ds)}]}"
 
@@ -379,7 +373,7 @@ sarifLevelName "warning" = "warning"
 sarifLevelName _ = "note"
 
 -- | SARIF 2.1.0 文档（所有诊断进一个 run）。
-renderSarif : List Diagnostic -> String
+export renderSarif : List Diagnostic -> String
 renderSarif ds =
   "{\"$schema\":\"https://json.schemastore.org/sarif-2.1.0.json\",\"version\":\"2.1.0\",\"runs\":[{\"tool\":{\"driver\":{\"name\":\"vuna\",\"version\":${jsonStr vunaVersion},\"rules\":[${sarifRules ds}]}},\"results\":[${join "," (map sarifResult ds)}]}]}"
 

@@ -1,12 +1,4 @@
-module Base.EffClock
-  ( ClockOp(..)
-  , clockNow
-  , clockSleepMicros
-  , handleClock
-  , handleClockHost
-  , resClock
-  , runClock
-  ) where
+module Base.EffClock where
 
 -- Base.EffClock：一阶时钟效应（W10 效应标签迁移）。
 --
@@ -19,25 +11,25 @@ import Base.Eff
 import Base.Monad
 
 -- | clock 操作：`Now`（微秒时间戳）与 `SleepMicros`（睡眠微秒数）。
-data ClockOp : Type where
+export data ClockOp(..) : Type where
   Now : ClockOp
   SleepMicros : Int -> ClockOp
 
 -- | 操作的结果类型族：`Now` 与 `SleepMicros` 都返回 `Int`。
-resClock : ClockOp -> Type
+export resClock : ClockOp -> Type
 resClock Now = Int
 resClock (SleepMicros us) = Int
 
 -- | 通过命名实例读当前时间戳（微秒）。
-clockNow : (n : String) -> {r : Row} -> {w : Member n ClockOp r} -> Eff r Int
+export clockNow : (n : String) -> {r : Row} -> {w : Member n ClockOp r} -> Eff r Int
 clockNow n = sendCore ClockOp "clock" n Now
 
 -- | 通过命名实例睡 `us` 微秒；真实 handler 走编译器原生 `prim_eff_sleep`（阻塞睡眠，不是忙等）。
-clockSleepMicros : (n : String) -> Int -> {r : Row} -> {w : Member n ClockOp r} -> Eff r Int
+export clockSleepMicros : (n : String) -> Int -> {r : Row} -> {w : Member n ClockOp r} -> Eff r Int
 clockSleepMicros n us = sendCore ClockOp "clock" n (SleepMicros us)
 
 -- | 一阶 handler：`ret` / `opH` 由调用方给出，结果行删除 `ClockOp`。
-handleClock : {a : Type} -> {b : Type} -> {r : Row} -> (n : String) -> {w : Member n ClockOp r} -> (a -> b) -> ((o : ClockOp) -> (resClock o -> b) -> b) -> Eff r a -> Eff (Base.Eff.rowRem n ClockOp r) b
+export handleClock : {a : Type} -> {b : Type} -> {r : Row} -> (n : String) -> {w : Member n ClockOp r} -> (a -> b) -> ((o : ClockOp) -> (resClock o -> b) -> b) -> Eff r a -> Eff (Base.Eff.rowRem n ClockOp r) b
 handleClock n ret opH comp = handleCore ClockOp "clock" n ret opH comp
 
 -- | 真实 handler 的操作解释：`Now` 走 `effTimeUs`，`SleepMicros` 走 `prim_eff_sleep`（阻塞睡眠）。
@@ -51,9 +43,9 @@ clockOpHIO op k = case op of
     k 0
 
 -- | 宿主 handler：结果行删除 `ClockOp`，answer 是已处理干净的 `Eff []` 动作，可用 `joinEff` 展平。
-handleClockHost : {a : Type} -> {r : Row} -> (n : String) -> Eff (Base.Eff.Cons n ClockOp r) a -> Eff r (Eff [] a)
+export handleClockHost : {a : Type} -> {r : Row} -> (n : String) -> Eff (Base.Eff.Cons n ClockOp r) a -> Eff r (Eff [] a)
 handleClockHost n comp = handleClock n (\a => pure a) clockOpHIO comp
 
 -- | 单效应便捷入口（P3）：`handleClockHost n` + `joinEff` 的组合。
-runClock : {a : Type} -> (n : String) -> Eff (Cons n ClockOp []) a -> Eff [] a
+export runClock : {a : Type} -> (n : String) -> Eff (Cons n ClockOp []) a -> Eff [] a
 runClock n comp = joinEff (handleClockHost n comp)

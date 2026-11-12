@@ -1,4 +1,4 @@
-module Base.Float (FromFloat(..), abs, floatToInt, intToFloat, sqrt) where
+module Base.Float where
 
 -- Base.Float：`Float` primitive 类型的宿主模块（实例 + 字面量转换 trait + 转换 helper）。
 --
@@ -17,7 +17,7 @@ import Base.Show
 
 -- | 把 `Float` 字面量转换为 `a`：期望类型为 `a` 且存在本实例时，`1.5` 等价于
 -- `fromFloat 1.5`（与 `FromString` / `FromInt` 同一套 checking 位置降级规则）。
-trait FromFloat a where
+export trait FromFloat a(..) where
   fromFloat : Float -> a
 
 -- `Float` 是字面量的默认类型：恒等转换。
@@ -47,17 +47,17 @@ instance Show Float where
   show x = strFromFloat x
 
 -- | 浮点绝对值（对应 OCaml `abs_float`）。
-abs : Float -> Float
+export abs : Float -> Float
 abs = floatAbs
 
 -- | 浮点平方根（对应 OCaml `sqrt`）。
-sqrt : Float -> Float
+export sqrt : Float -> Float
 sqrt = floatSqrt
 
 -- | Int → Float（有损：超出 2^53 的整数会舍入；对应 OCaml `float_of_int`）。
-intToFloat : Int -> Float
+export intToFloat : Int -> Float
 intToFloat = floatFromInt
 
 -- | Float → Int（向零截断；NaN/无穷/超出范围的行为由 OCaml `int_of_float` 决定）。
-floatToInt : Float -> Int
+export floatToInt : Float -> Int
 floatToInt = intFromFloat

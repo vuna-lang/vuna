@@ -1,20 +1,4 @@
-module Base.EffFs
-  ( FsOp(..)
-  , fsFileExists
-  , fsFileMtime
-  , fsFileSize
-  , fsIsDirectory
-  , fsMakeDir
-  , fsReadDir
-  , fsReadFile
-  , fsRemoveFile
-  , fsWriteFile
-  , fsWriteFileAtomic
-  , handleFs
-  , handleFsHost
-  , resFs
-  , runFs
-  ) where
+module Base.EffFs where
 
 -- Base.EffFs：一阶文件系统效应（Layer 1 的宿主-backed 示例；W10 扩到完整 fs 面）。
 --
@@ -33,7 +17,7 @@ import Base.Bool
 import Base.List
 
 -- | fs 操作描述：读 / 写 / 原子写 / 列目录 / 判目录 / 建目录 / 删文件 / 存在性 / mtime / size，各带路径参数。
-data FsOp : Type where
+export data FsOp(..) : Type where
   ReadFile : String -> FsOp
   WriteFile : String -> String -> FsOp
   WriteFileAtomic : String -> String -> FsOp
@@ -46,7 +30,7 @@ data FsOp : Type where
   FileSize : String -> FsOp
 
 -- | 操作的结果类型族：读文件 `String`、读目录 `List String`、布尔查询 `Bool`，其余（写入 / 删除 / 元数据）返回 `Int`。
-resFs : FsOp -> Type
+export resFs : FsOp -> Type
 resFs (ReadFile p) = String
 resFs (WriteFile p s) = Nat
 resFs (WriteFileAtomic p s) = Int
@@ -59,47 +43,47 @@ resFs (FileMtime p) = Int
 resFs (FileSize p) = Nat
 
 -- | 通过命名实例读整个文件为 String；真实 handler 走 `prim_eff_readFile`。
-fsReadFile : (n : String) -> String -> {r : Row} -> {w : Member n FsOp r} -> Eff r String
+export fsReadFile : (n : String) -> String -> {r : Row} -> {w : Member n FsOp r} -> Eff r String
 fsReadFile n p = sendCore FsOp "fs" n (ReadFile p)
 
 -- | 通过命名实例把整串写入文件，返回写入字节数（`Nat`，D25）。
-fsWriteFile : (n : String) -> String -> String -> {r : Row} -> {w : Member n FsOp r} -> Eff r Nat
+export fsWriteFile : (n : String) -> String -> String -> {r : Row} -> {w : Member n FsOp r} -> Eff r Nat
 fsWriteFile n p s = sendCore FsOp "fs" n (WriteFile p s)
 
 -- | 通过命名实例原子写（写临时文件后 rename）：并发读者只会看到完整旧内容或完整新内容。
-fsWriteFileAtomic : (n : String) -> String -> String -> {r : Row} -> {w : Member n FsOp r} -> Eff r Int
+export fsWriteFileAtomic : (n : String) -> String -> String -> {r : Row} -> {w : Member n FsOp r} -> Eff r Int
 fsWriteFileAtomic n p s = sendCore FsOp "fs" n (WriteFileAtomic p s)
 
 -- | 通过命名实例列目录（真实 handler 按字符串排序；目录不存在时抛宿主异常）。
-fsReadDir : (n : String) -> String -> {r : Row} -> {w : Member n FsOp r} -> Eff r (List String)
+export fsReadDir : (n : String) -> String -> {r : Row} -> {w : Member n FsOp r} -> Eff r (List String)
 fsReadDir n p = sendCore FsOp "fs" n (ReadDir p)
 
 -- | 通过命名实例判断是否目录（真实 handler 对不存在的路径抛宿主异常）。
-fsIsDirectory : (n : String) -> String -> {r : Row} -> {w : Member n FsOp r} -> Eff r Bool
+export fsIsDirectory : (n : String) -> String -> {r : Row} -> {w : Member n FsOp r} -> Eff r Bool
 fsIsDirectory n p = sendCore FsOp "fs" n (IsDirectory p)
 
 -- | 通过命名实例建目录（幂等，已存在时返回 0）。
-fsMakeDir : (n : String) -> String -> {r : Row} -> {w : Member n FsOp r} -> Eff r Int
+export fsMakeDir : (n : String) -> String -> {r : Row} -> {w : Member n FsOp r} -> Eff r Int
 fsMakeDir n p = sendCore FsOp "fs" n (MakeDir p)
 
 -- | 通过命名实例删文件（幂等，不存在时返回 0）。
-fsRemoveFile : (n : String) -> String -> {r : Row} -> {w : Member n FsOp r} -> Eff r Int
+export fsRemoveFile : (n : String) -> String -> {r : Row} -> {w : Member n FsOp r} -> Eff r Int
 fsRemoveFile n p = sendCore FsOp "fs" n (RemoveFile p)
 
 -- | 通过命名实例判断路径是否存在（不存在返回 False，不抛异常）。
-fsFileExists : (n : String) -> String -> {r : Row} -> {w : Member n FsOp r} -> Eff r Bool
+export fsFileExists : (n : String) -> String -> {r : Row} -> {w : Member n FsOp r} -> Eff r Bool
 fsFileExists n p = sendCore FsOp "fs" n (FileExists p)
 
 -- | 通过命名实例取 mtime（秒级）；取不到时静默返回 0。
-fsFileMtime : (n : String) -> String -> {r : Row} -> {w : Member n FsOp r} -> Eff r Int
+export fsFileMtime : (n : String) -> String -> {r : Row} -> {w : Member n FsOp r} -> Eff r Int
 fsFileMtime n p = sendCore FsOp "fs" n (FileMtime p)
 
 -- | 通过命名实例取文件字节数（`Nat`，D25）；取不到时静默返回 0。
-fsFileSize : (n : String) -> String -> {r : Row} -> {w : Member n FsOp r} -> Eff r Nat
+export fsFileSize : (n : String) -> String -> {r : Row} -> {w : Member n FsOp r} -> Eff r Nat
 fsFileSize n p = sendCore FsOp "fs" n (FileSize p)
 
 -- | 一阶 handler：`ret` / `opH` 由调用方给出，结果行删除 `FsOp`。
-handleFs : {a : Type} -> {b : Type} -> {r : Row} -> (n : String) -> {w : Member n FsOp r} -> (a -> b) -> ((o : FsOp) -> (resFs o -> b) -> b) -> Eff r a -> Eff (Base.Eff.rowRem n FsOp r) b
+export handleFs : {a : Type} -> {b : Type} -> {r : Row} -> (n : String) -> {w : Member n FsOp r} -> (a -> b) -> ((o : FsOp) -> (resFs o -> b) -> b) -> Eff r a -> Eff (Base.Eff.rowRem n FsOp r) b
 handleFs n ret opH comp = handleCore FsOp "fs" n ret opH comp
 
 -- | 真实 handler 的操作解释：把每个操作映射到对应 `prim_eff_*` 原语（`WriteFile` / `FileSize` 的结果在边界转回 `Nat`）。
@@ -137,9 +121,9 @@ fsOpHIO op k = case op of
     k n
 
 -- | 宿主 handler：结果行删除 `FsOp`，answer 是已处理干净的 `Eff []` 动作，可直接交给 `joinEff` 展平。
-handleFsHost : {a : Type} -> {r : Row} -> (n : String) -> Eff (Base.Eff.Cons n FsOp r) a -> Eff r (Eff [] a)
+export handleFsHost : {a : Type} -> {r : Row} -> (n : String) -> Eff (Base.Eff.Cons n FsOp r) a -> Eff r (Eff [] a)
 handleFsHost n comp = handleFs n (\a => pure a) fsOpHIO comp
 
 -- | 单效应便捷入口（P3）：`handleFsHost n` + `joinEff` 的组合。
-runFs : {a : Type} -> (n : String) -> Eff (Cons n FsOp []) a -> Eff [] a
+export runFs : {a : Type} -> (n : String) -> Eff (Cons n FsOp []) a -> Eff [] a
 runFs n comp = joinEff (handleFsHost n comp)

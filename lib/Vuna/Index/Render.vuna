@@ -1,4 +1,4 @@
-module Vuna.Index.Render (renderApi, renderModules, renderOverview) where
+module Vuna.Index.Render where
 
 -- Vuna.Index.Render：`vuna map` / `vuna api` 的文本渲染（M24 后维护·源码重组）。
 -- 纯字符串拼装，不读源码。M30 删除 `renderDocWithComments`：`vuna doc --with-comments`
@@ -10,7 +10,7 @@ import Vuna.Index.Types
 -- 渲染
 -- ---------------------------------------------------------------
 -- 总览：按包分组的模块表。
-renderOverview : Index -> String
+export renderOverview : Index -> String
 renderOverview index =
   let
     ms = indexModules index
@@ -24,12 +24,12 @@ overviewSection ms pkg =
     title = if pkg == "" then "(no package)" else pkg
   in "\n## ${title}\n\n${join "\n" (map (\m => "  ${modName m}  ${modBytes m}B  ${modDecls m} decls") mine)}"
 
-renderModules : Index -> String
+export renderModules : Index -> String
 renderModules index =
   "${join "\n" (map (\m => "${modName m}  ${modPath m}") (indexModules index))}\n"
 
 -- 某模块的 API 面（签名 + 行号 + 注释）。
-renderApi : Index -> String -> Check String
+export renderApi : Index -> String -> Check String
 renderApi index modQuery =
   let
     syms = filter (\s => symModule s == modQuery) index.indexSymbols

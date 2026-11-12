@@ -1,9 +1,9 @@
 -- 无模块头：隐式导出 f/g/h。
-f : Int -> Int
+export f : Int -> Int
 f x = x + 1
 
-g : Int -> Int
+export g : Int -> Int
 g x = x * 2
 
-h : Int -> Int
+export h : Int -> Int
 h x = x - 1

@@ -1,9 +1,4 @@
-module Vuna.Compiler.Loader.Resolve
-  ( namespacesOf
-  , namespacesOfWith
-  , resolveEntry
-  , resolveProgram
-  ) where
+module Vuna.Compiler.Loader.Resolve where
 
 -- Vuna.Compiler.Loader.Resolve：名字解析（M24 后维护（源码重组）从 Loader.vuna 拆出）。
 --
@@ -123,7 +118,7 @@ ctorCandsOf (d :: rest) = case d of
   _ => ctorCandsOf rest
 
 -- | 解析期命名空间（`release` 决定 assert/todo 拒绝检查是否生效）。
-namespacesOfWith : Bool -> List Decl -> Namespaces
+export namespacesOfWith : Bool -> List Decl -> Namespaces
 namespacesOfWith release decls =
   let
     vals = valueNamesOf decls
@@ -133,7 +128,7 @@ namespacesOfWith release decls =
   in Namespaces { nsValues = vals, nsCtors = cts, nsTypes = tys, nsValueSet = Base.HashMap.ofNames vals, nsCtorSet = Base.HashMap.ofNames cts, nsTypeSet = Base.HashMap.ofNames tys, nsCtorCands = cands, nsRelease = release }
 
 -- | 工具默认（debug 构建）。
-namespacesOf : List Decl -> Namespaces
+export namespacesOf : List Decl -> Namespaces
 namespacesOf = namespacesOfWith False
 
 -- 本模块内某个短名的构造子 canonical 目标（含 record）。
@@ -935,13 +930,13 @@ resolveInstanceMethod modules label prefix ns imports (DFun name pats body sp) =
 resolveInstanceMethod modules label prefix ns imports _ =
   icInternal "unexpected instance body declaration"
 
-resolveProgram : List Module -> String -> String -> Namespaces -> List Import -> List Decl -> Check (List Decl)
+export resolveProgram : List Module -> String -> String -> Namespaces -> List Import -> List Decl -> Check (List Decl)
 resolveProgram modules label prefix ns imports decls =
   Vuna.Compiler.Common.traverse (resolveDecl modules label prefix ns imports) decls
 
 -- M41：entry 文件的构造子也按族限定（`Data.Ctor`），同名构造子不再互相覆盖；
 -- 原先的「entry 构造子共享一个全局命名空间」防御随 canonical 命名一并删除。
-resolveEntry : Bool -> List Module -> String -> List Import -> List Decl -> Check (List Decl)
+export resolveEntry : Bool -> List Module -> String -> List Import -> List Decl -> Check (List Decl)
 resolveEntry release modules entryPkg imports decls =
   resolveProgram modules "<entry>" "" (namespacesOfWith release decls) imports decls
 

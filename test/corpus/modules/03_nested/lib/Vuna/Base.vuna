@@ -1,2 +1,2 @@
-answer : Int
+export answer : Int
 answer = 40

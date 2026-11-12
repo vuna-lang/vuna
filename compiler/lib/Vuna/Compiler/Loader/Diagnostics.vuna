@@ -1,17 +1,4 @@
-module Vuna.Compiler.Loader.Diagnostics
-  ( LdDiag(..)
-  , LdEntry(..)
-  , ldAll
-  , ldCode
-  , ldErr
-  , ldErr0
-  , ldErr1
-  , ldErr2
-  , ldMsg
-  , ldTemplate
-  , module Base.Nat
-  , module Base.Vec
-  ) where
+module Vuna.Compiler.Loader.Diagnostics where
 
 -- Vuna.Compiler.Loader.Diagnostics：模块加载 / 包图诊断的域枚举（M30 重构）。
 --
@@ -21,10 +8,10 @@ module Vuna.Compiler.Loader.Diagnostics
 -- `DT: internal:` 的 fuel 耗尽等内部不变量不占符号。
 import Vuna.Compiler.Common
 import Vuna.Compiler.Diagnostics.Common
-import Base.Nat
-import Base.Vec
+export import Base.Nat
+export import Base.Vec
 
-data LdDiag : Nat -> Type where
+export data LdDiag(..) : Nat -> Type where
   -- arity 1
   EntryFileNotFound : String -> LdDiag (Succ Zero)
   ImportCycle : String -> LdDiag (Succ Zero)
@@ -35,7 +22,7 @@ data LdDiag : Nat -> Type where
   ModuleNotFound : String -> String -> LdDiag (Succ (Succ Zero))
   ModuleNotExported : String -> String -> LdDiag (Succ (Succ Zero))
 
-ldCode : {n : Nat} -> LdDiag n -> String
+export ldCode : {n : Nat} -> LdDiag n -> String
 ldCode (EntryFileNotFound _) = "LD_EntryFileNotFound"
 ldCode (ImportCycle _) = "LD_ImportCycle"
 ldCode (InvalidModuleName _) = "LD_InvalidModuleName"
@@ -44,7 +31,7 @@ ldCode (ModuleHeaderInEntrySource _) = "LD_ModuleHeaderInEntrySource"
 ldCode (ModuleNotFound _ _) = "LD_ModuleNotFound"
 ldCode (ModuleNotExported _ _) = "LD_ModuleNotExported"
 
-ldTemplate : {n : Nat} -> LdDiag n -> String
+export ldTemplate : {n : Nat} -> LdDiag n -> String
 ldTemplate (EntryFileNotFound _) = "entry file not found: <0>"
 ldTemplate (ImportCycle _) = "import cycle: <0>"
 ldTemplate (InvalidModuleName _) = "invalid module name: <0>"
@@ -53,12 +40,12 @@ ldTemplate (ModuleHeaderInEntrySource _) = "module header is not allowed in entr
 ldTemplate (ModuleNotFound _ _) = "module <0> not found (roots: <1>)"
 ldTemplate (ModuleNotExported _ _) = "module <0> is not exported by package <1>"
 
-record LdEntry where
+export record LdEntry(..) where
   ldEntryCode : String
   ldEntryTemplate : String
   ldEntryDesc : String
 
-ldAll : List LdEntry
+export ldAll : List LdEntry
 ldAll =
   [ LdEntry (ldCode (EntryFileNotFound "")) (ldTemplate (EntryFileNotFound "")) "入口文件不存在",
     LdEntry (ldCode (ImportCycle "")) (ldTemplate (ImportCycle "")) "import 成环",
@@ -69,20 +56,20 @@ ldAll =
     LdEntry (ldCode (ModuleNotExported "" "")) (ldTemplate (ModuleNotExported "" "")) "模块未被包导出"
   ]
 
-ldMsg : {n : Nat} -> LdDiag n -> Vec n String -> Diagnostic
+export ldMsg : {n : Nat} -> LdDiag n -> Vec n String -> Diagnostic
 ldMsg e args = mkDiag SevError PhLoad CatPackage (ldCode e) (diagBody (ldTemplate e) args)
 
-ldErr : {n : Nat} -> LdDiag n -> Vec n String -> Check a
+export ldErr : {n : Nat} -> LdDiag n -> Vec n String -> Check a
 ldErr e args = ErrC (ldMsg e args)
 
 -- | 自动补注（M41 新增导出）：ldErr0。
-ldErr0 : LdDiag Zero -> Check a
+export ldErr0 : LdDiag Zero -> Check a
 ldErr0 e = ldErr e []
 
 -- | 自动补注（M41 新增导出）：ldErr1。
-ldErr1 : LdDiag (Succ Zero) -> String -> Check a
+export ldErr1 : LdDiag (Succ Zero) -> String -> Check a
 ldErr1 e a0 = ldErr e [a0]
 
 -- | 自动补注（M41 新增导出）：ldErr2。
-ldErr2 : LdDiag (Succ (Succ Zero)) -> String -> String -> Check a
+export ldErr2 : LdDiag (Succ (Succ Zero)) -> String -> String -> Check a
 ldErr2 e a0 a1 = ldErr e [a0, a1]

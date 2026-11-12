@@ -1,4 +1,4 @@
-module Vuna.Repl.Server (checkReplAddr, runReplServer) where
+module Vuna.Repl.Server where
 
 -- Vuna.Repl.Server：REPL server（JSON-RPC over Content-Length，socket 传输）。
 --
@@ -29,7 +29,7 @@ import Vuna.Repl
 import Base.IORef
 
 -- 地址校验（CLI 层）：只接受本机端点。
-checkReplAddr : String -> Check String
+export checkReplAddr : String -> Check String
 checkReplAddr addr =
   if startsWith "unix:" addr && strLength addr > 5 then OkC addr
   else if startsWith "tcp:127.0.0.1:" addr && strLength addr > 14 then OkC addr
@@ -137,7 +137,7 @@ cleanupAddr : String -> Eff [] Int
 cleanupAddr addr = if startsWith "unix:" addr then prim_eff_removeFile (unixPathOf addr) else pure 0
 
 -- CLI 入口：起 session → listen → 打印就绪行 → accept 循环（每个连接一个会话切片）。
-runReplServer : PackageContext -> ReplStart -> String -> Eff [] Int
+export runReplServer : PackageContext -> ReplStart -> String -> Eff [] Int
 runReplServer ctx start addr = do
   outRef <- newRef ""
   errRef <- newRef ""

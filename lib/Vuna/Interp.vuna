@@ -1,13 +1,4 @@
-module Vuna.Interp
-  ( bindingTypes
-  , checkProgram
-  , evalExprInfo
-  , evalExprInfoWithAux
-  , inferDefTypes
-  , interpretExpr
-  , interpretFile
-  , runEffectProgram
-  ) where
+module Vuna.Interp where
 
 -- Vuna.Interp：解释器 facade（工具链侧；编译入口见 Vuna.Compiler.Driver.Compile）。
 --
@@ -33,7 +24,7 @@ import Vuna.Compiler.Packages.Pkg
 import Vuna.Compiler.Driver.Dt
 import Vuna.Compiler.Driver.Compile
 
-interpretFile : PackageContext -> String -> Eff [] String
+export interpretFile : PackageContext -> String -> Eff [] String
 interpretFile ctx entry = do
   result <- dtEvalFile ctx entry
   pure (case result of
@@ -43,7 +34,7 @@ interpretFile ctx entry = do
 
 -- REPL 用：program（imports + 定义，定义必须已写签名）与表达式都在内存里求值，
 -- 不需要临时文件；表达式类型由 DT 精化器推断，值用 showValue 展示。
-interpretExpr : PackageContext -> String -> String -> Eff [] String
+export interpretExpr : PackageContext -> String -> String -> Eff [] String
 interpretExpr ctx program expr = do
   ifaces <- depIfacesForToolProgram ctx program
   case ifaces of
@@ -64,7 +55,7 @@ interpretExpr ctx program expr = do
 -- 类型文本形如 `((Base.Eff.Eff Base.Eff.Row.Nil) Int)`（canonical 全名）；REPL 据此决定是否走效果执行。
 -- M34.6（5b）：REPL 会话复用 termAux（依赖包 decls）的 record/deriving 预处理结果。
 -- 缓存 key 由接口哈希决定（REPL 的依赖接口不变时一直命中），失败路径不缓存。
-evalExprInfoWithAux : PackageContext -> String -> String -> Maybe AuxCache -> Eff [] (Check (Pair (Pair String String) (Maybe AuxCache)))
+export evalExprInfoWithAux : PackageContext -> String -> String -> Maybe AuxCache -> Eff [] (Check (Pair (Pair String String) (Maybe AuxCache)))
 evalExprInfoWithAux ctx program expr aux = do
   ifaces <- depIfacesForToolProgram ctx program
   case ifaces of
@@ -76,7 +67,7 @@ evalExprInfoWithAux ctx program expr aux = do
         OkC i => OkC (Pair i aux)
       )
 
-evalExprInfo : PackageContext -> String -> String -> Eff [] (Check (Pair String String))
+export evalExprInfo : PackageContext -> String -> String -> Eff [] (Check (Pair String String))
 evalExprInfo ctx program expr = do
   ifaces <- depIfacesForToolProgram ctx program
   case ifaces of
@@ -88,15 +79,15 @@ evalExprInfo ctx program expr = do
 -- ---------------------------------------------------------------
 -- 为缺签名的顶层 DFun 推断可回读的签名；targets 由 REPL 选出（块内无签名、且缓冲里
 -- 也没有只含签名的块）。失败返回可读错误，由 REPL 加提示后保持会话状态不变。
-inferDefTypes : PackageContext -> String -> List String -> String -> Eff [] (Check (List (Pair String String)))
+export inferDefTypes : PackageContext -> String -> List String -> String -> Eff [] (Check (List (Pair String String)))
 inferDefTypes ctx program targets defSource = dtInferDefTypes ctx program targets defSource
 
 -- program 里每个顶层定义的名字 + zonk 后类型文本（`:defs` / `:info` 用）。
-bindingTypes : PackageContext -> String -> Eff [] (Check (List (Pair String String)))
+export bindingTypes : PackageContext -> String -> Eff [] (Check (List (Pair String String)))
 bindingTypes ctx program = dtBindingTypes ctx program
 
 -- 内存 program 的整程序检查（自动签名写回后的复查；也用于 :load 模块的立即校验）。
-checkProgram : PackageContext -> String -> Eff [] (Check (List Diagnostic))
+export checkProgram : PackageContext -> String -> Eff [] (Check (List Diagnostic))
 checkProgram ctx program = dtCheckSource ctx "<repl>" program
 
 -- ---------------------------------------------------------------
@@ -225,7 +216,7 @@ cleanupErr dir e = do
 -- 把带 main 的入口源码编译成临时包里的可执行文件并运行，返回进程退出码。
 -- `printResult` 透传给 codegen 的 main 钩子（动作 main 先跑动作、再按结果类型打印）；
 -- effect 测试用 False（只看退出码，不比较输出）。
-runEffectProgram : PackageContext -> String -> Bool -> Eff [] (Check Int)
+export runEffectProgram : PackageContext -> String -> Bool -> Eff [] (Check Int)
 runEffectProgram ctx source printResult = do
   base <- tempBase 0
   now <- effTimeUs

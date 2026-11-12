@@ -1,4 +1,4 @@
-module Base.State (State, evalState, execState, get, modify, put, runState) where
+module Base.State where
 
 -- Base.State：库级 State monad（M33 W6 落地；M35.1 补 Functor/Monad 实例，`do` 可用）。
 --
@@ -9,19 +9,19 @@ import Base.Int
 import Base.Monad
 
 -- | 库级 State monad：表示是 `s -> Pair a s` 的纯函数，没有语言级效应。用 `runState` / `evalState` / `execState` 运行；`do` 依赖本模块的 Functor / Monad 实例。
-record State s a where
+export record State s a where
   stateRun : s -> Pair a s
 
 -- | 运行 State 并返回「结果 + 最终状态」的 `Pair`；是唯一 handler，其余运行函数都基于它。
-runState : State s a -> s -> Pair a s
+export runState : State s a -> s -> Pair a s
 runState (State f) s = f s
 
 -- | 运行 State 并只取结果（丢弃最终状态）。
-evalState : State s a -> s -> a
+export evalState : State s a -> s -> a
 evalState st s = firstOf (runState st s)
 
 -- | 运行 State 并只取最终状态（丢弃结果）。
-execState : State s a -> s -> s
+export execState : State s a -> s -> s
 execState st s = secondOf (runState st s)
 
 instance Functor (State s) where
@@ -46,13 +46,13 @@ instance Applicative (State s) where
   )
 
 -- | 取当前状态（结果与状态相同）。
-get : State s s
+export get : State s s
 get = State (\s => Pair s s)
 
 -- | 替换状态，返回占位结果 `0`（签名 `State s Int`）。
-put : s -> State s Int
+export put : s -> State s Int
 put s = State (\_ => Pair 0 s)
 
 -- | 用 `f` 变换状态，返回占位结果 `0`。
-modify : (s -> s) -> State s Int
+export modify : (s -> s) -> State s Int
 modify f = State (\s => Pair 0 (f s))

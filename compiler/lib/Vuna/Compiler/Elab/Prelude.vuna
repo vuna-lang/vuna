@@ -1,18 +1,4 @@
-module Vuna.Compiler.Elab.Prelude
-  ( builtinEqTyName
-  , builtinTyName
-  , classMethodProjection
-  , cmpBuiltinTyName
-  , eqRuntimeName
-  , floatTy
-  , fun2
-  , intTy
-  , preludeGlobals
-  , preludeNames
-  , preludeValueGlobals
-  , prependParams
-  , strTy
-  ) where
+module Vuna.Compiler.Elab.Prelude where
 
 -- Vuna.Compiler.Elab.Prelude：把 `Vuna.Compiler.Intrinsics` 的**唯一内建声明表**翻译成
 -- DT 的 prelude globals（签名项）。M27 起这里不再有第二份名字/签名表：
@@ -30,21 +16,21 @@ import Vuna.Compiler.Core
 import Vuna.Compiler.Diagnostics
 import Vuna.Compiler.Intrinsics
 
-intTy : Term
+export intTy : Term
 intTy = TGlobal intTypeName
 
-strTy : Term
+export strTy : Term
 strTy = TGlobal strTypeName
 
 -- | 内建 `Float` 类型名对应的核心项（`TGlobal floatTypeName`）。
-floatTy : Term
+export floatTy : Term
 floatTy = TGlobal floatTypeName
 
 boolTy : Term
 boolTy = TGlobal boolTypeName
 
 -- `a -> b -> c` 的签名拼接（b/c 按外层 binder 深度移位）。
-fun2 : Term -> Term -> Term -> Term
+export fun2 : Term -> Term -> Term -> Term
 fun2 a b c = TPi "_" False RigOmega a (TPi "_" False RigOmega (shift 0 1 b) (shift 0 2 c))
 
 -- ---------------------------------------------------------------
@@ -53,7 +39,7 @@ fun2 a b c = TPi "_" False RigOmega a (TPi "_" False RigOmega (shift 0 1 b) (shi
 -- M31.1：`==` / `/=` 已变成 `eq` / `neq` 的解析期别名（Loader），所以特化按**方法短名**
 -- （`eq` / `neq`）选 runtime 函数名。特化在精化期完成，codegen 只按名字映射。
 -- 内建类型名（`VNeutral (NGlobal g [])` 形态）。
-builtinTyName : Value -> Maybe String
+export builtinTyName : Value -> Maybe String
 builtinTyName v = case v of
   VNeutral n => case n of
     -- M29：用 `length`（Int 的 `==` 是特化路径），不依赖 List 的泛型结构比较兜底。
@@ -63,7 +49,7 @@ builtinTyName v = case v of
 
 -- 按实参类型 + 方法短名选 runtime 函数名（只有 Int / String 可特化；其它类型走 Eq 字典）。
 -- | 自动补注（M41 新增导出）：eqRuntimeName。
-eqRuntimeName : String -> String -> Check String
+export eqRuntimeName : String -> String -> Check String
 eqRuntimeName method "Int" = if method == "eq" then OkC "bi_eq_int" else OkC "bi_neq_int"
 eqRuntimeName method "String" = if method == "eq" then OkC "bi_eq_str" else OkC "bi_neq_str"
 eqRuntimeName method "Float" = if method == "eq" then OkC "bi_eq_float" else OkC "bi_neq_float"
@@ -130,7 +116,7 @@ preludeTypeGlobals =
   append (map (\n => Pair n (TType levelZero)) typeIntrinsicNames)
     (map (\t => Pair (typeIntrinsicCtorName t) (typeCtorKindTerm (typeIntrinsicCtorArity t))) typeIntrinsicArities)
 
-preludeValueGlobals : List (Pair String Term)
+export preludeValueGlobals : List (Pair String Term)
 preludeValueGlobals =
   map (\i => Pair (intrinsicName i) (ityToTerm (intrinsicSignature i))) userIntrinsics
 
@@ -140,16 +126,16 @@ internalValueGlobals : List (Pair String Term)
 internalValueGlobals =
   map (\i => Pair (intrinsicName i) (ityToTerm (intrinsicSignature i))) internalIntrinsics
 
-preludeGlobals : List (Pair String Term)
+export preludeGlobals : List (Pair String Term)
 preludeGlobals = append preludeTypeGlobals (append preludeValueGlobals internalValueGlobals)
 
 -- 「禁止重定义」名单：primitive 类型名 + 内建类型构造子 + 全部用户可见内建值名。
 -- 只在入口（ad-hoc）文件里可能命中——模块内声明会被 mangle 成 `<Module>.name`。
-preludeNames : List String
+export preludeNames : List String
 preludeNames = append preludeTypeNames preludeValueNames
 
 -- 只认内建可特化类型（`Int` / `String`）；其它类型在 DT 里走 `Eq` 实例。
-builtinEqTyName : Value -> Maybe String
+export builtinEqTyName : Value -> Maybe String
 builtinEqTyName v = case builtinTyName v of
   Just g =>
     if g == intTypeName then Just intTypeName
@@ -159,7 +145,7 @@ builtinEqTyName v = case builtinTyName v of
 
 -- 比较运算符的运行时特化只认 Int / String / canonical Bool；其它类型（用户 data /
 -- 刚性变量）必须走 Ord 字典。
-cmpBuiltinTyName : Value -> Maybe String
+export cmpBuiltinTyName : Value -> Maybe String
 cmpBuiltinTyName v = case builtinTyName v of
   Just g =>
     if g == intTypeName then Just intTypeName
@@ -170,7 +156,7 @@ cmpBuiltinTyName v = case builtinTyName v of
 
 -- 族名后的参数作为**隐式** binder 前置到 kind（`data List a : Type` 的 `a` + `Type`
 -- ⇒ `{a : Type} -> Type`）。
-prependParams : List String -> Term -> Term
+export prependParams : List String -> Term -> Term
 prependParams [] kindTerm = kindTerm
 prependParams (p :: rest) kindTerm =
   TPi p False Rig0 (TType levelZero) (prependParams rest kindTerm)
@@ -183,7 +169,7 @@ baseNameOf name = case splitLastDot (splitOnDot name) of
   Pair rev base => base
 
 -- 类方法（按短名）的投影全局名：Loader 把 trait 方法 mangle 成 `<模块前缀>.<方法短名>`。
-classMethodProjection : List (Pair String Term) -> String -> String
+export classMethodProjection : List (Pair String Term) -> String -> String
 classMethodProjection methods short = classMethodProjectionGo short methods short
 
 classMethodProjectionGo : String -> List (Pair String Term) -> String -> String

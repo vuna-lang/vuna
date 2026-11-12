@@ -1,14 +1,4 @@
-module Vuna.Json.Frame
-  ( allDigits
-  , contentLengthOf
-  , digitsToInt
-  , frameChunkSize
-  , maxFrameBytes
-  , readChunk
-  , renderFrame
-  , renderFrameBody
-  , splitHeaderBlock
-  ) where
+module Vuna.Json.Frame where
 
 -- Vuna.Json.Frame：stdio server 的字节级帧层（工具链；**永不进 seed 闭包**）。
 --
@@ -27,26 +17,26 @@ import Vuna.Compiler.Common
 import Vuna.Json
 
 -- 每次 readChunk 的字节数（帧 body 可能跨多块；缓冲里拼够 Content-Length 再切帧）。
-frameChunkSize : Int
+export frameChunkSize : Int
 frameChunkSize = 65536
 
 -- 单帧 / 缓冲上界（16 MiB）。
-maxFrameBytes : Int
+export maxFrameBytes : Int
 maxFrameBytes = 16777216
 
 -- 从 stdin 读最多 n 字节（`prim_eff_readBytes` 的动作值；由 `serveConnection` 执行）。
 --
 -- 语义：有数据就立即返回已到达的字节（**可能少于 n**），EOF 返回 ""。
 -- 调用方（`Vuna.Json.Server.serveConnection`）负责拼接缓冲并重试切帧。
-readChunk : Int -> Eff [] String
+export readChunk : Int -> Eff [] String
 readChunk n = prim_eff_readBytes n
 
 -- 把一帧编码成字节串（纯函数；传输层与 socket 传输共用）。
-renderFrame : Json -> String
+export renderFrame : Json -> String
 renderFrame payload = renderFrameBody (renderJson payload)
 
 -- 同上，但 body 已经是编码好的 JSON 文本（`vuna repl --client` 直接透传 stdin 的 body）。
-renderFrameBody : String -> String
+export renderFrameBody : String -> String
 renderFrameBody body = "Content-Length: ${strLength body}\r\n\r\n${body}"
 
 -- 数字 / ASCII 小写工具（`Content-Length` 解析用；`allDigits` / `digitsToInt`
@@ -58,13 +48,13 @@ allDigitCodes : List Int -> Bool
 allDigitCodes [] = True
 allDigitCodes (c :: rest) = isDigitCode c && allDigitCodes rest
 
-allDigits : String -> Bool
+export allDigits : String -> Bool
 allDigits s = s /= "" && allDigitCodes (strUnpack s)
 
 parseIntFull : String -> Maybe Int
 parseIntFull s = if allDigits s then Just (digitsToInt (strUnpack s) 0) else Nothing
 
-digitsToInt : List Int -> Int -> Int
+export digitsToInt : List Int -> Int -> Int
 digitsToInt [] acc = acc
 digitsToInt (c :: rest) acc = digitsToInt rest (acc * 10 + (c - 48))
 
@@ -102,7 +92,7 @@ cutHeaders at buf gap =
 -- 不能「先找 CRLF，找不到再退回 LF」：混合流里前一个 LF 帧的 body 会把后一个 CRLF
 -- 结束符圈进同一个 header 块，于是按错误的 Content-Length 切 body。
 -- Nothing = 缓冲里还没有完整 header（需要再读一块）。
-splitHeaderBlock : String -> Maybe (Pair String String)
+export splitHeaderBlock : String -> Maybe (Pair String String)
 splitHeaderBlock buf = chooseHeaderHit (findFrom crlfCrlf 0 buf) (findFrom lfLf 0 buf) buf
 
 chooseHeaderHit : Int -> Int -> String -> Maybe (Pair String String)
@@ -125,7 +115,7 @@ findLengthLine (line :: rest) = case parseContentLength line of
   Nothing => findLengthLine rest
 
 -- header 块里的 Content-Length（必须 > 0；0 长度或缺失都算 header 无效）。
-contentLengthOf : String -> Maybe Int
+export contentLengthOf : String -> Maybe Int
 contentLengthOf block = case findLengthLine (split "\n" block) of
   Nothing => Nothing
   Just n => if n > 0 then Just n else Nothing

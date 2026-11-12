@@ -1,4 +1,4 @@
-module Base.Eq (Eq(..)) where
+module Base.Eq where
 
 -- Base.Eq：`Eq` trait 的**声明**（M31.1：trait 声明与实例分离）。
 --
@@ -17,7 +17,7 @@ infixl 4 == = eq
 infixl 4 /= = neq
 
 -- | 可判定相等性的 trait：`eq` / `neq` 两个方法；`==` / `/=` 是它们的别名，fixity 与别名映射由本模块的 `infixl` 声明提供。Bool 实例随 trait 留在本模块（方法返回 Bool，放 Base.Bool 会成 import 环），Int / String 实例在各自类型模块。
-trait Eq a where
+export trait Eq a(..) where
   eq : a -> a -> Bool
   neq : a -> a -> Bool
 

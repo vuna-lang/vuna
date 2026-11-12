@@ -1,5 +1,5 @@
 -- | 源码索引载荷的规范编码（`Index` → 规范字节，落 `Store` blob）。
-module Vuna.Index.Codec (decIndexComplete, encIndex, indexPayloadCodec, indexPayloadSchema) where
+module Vuna.Index.Codec where
 
 -- Vuna.Index.Codec：`Index` 记录树的**显式规范编码**（与 `ToolPayload` 同一套路子）。
 --
@@ -18,15 +18,15 @@ import Vuna.Compiler.Canonical.Bytes
 import Vuna.Index.Types
 
 -- | 载荷 schema（字段集变化必须 bump；旧 blob 自然拒绝）。
-indexPayloadSchema : String
+export indexPayloadSchema : String
 indexPayloadSchema = "vuna-index-payload 1"
 
 -- | `Store` 载荷的 codec 段。
-indexPayloadCodec : String
+export indexPayloadCodec : String
 indexPayloadCodec = "index-payload 1"
 
 -- | `Index` → 规范字节（三张表按 record 声明顺序串接）。
-encIndex : Index -> String
+export encIndex : Index -> String
 encIndex idx = encTop encIndexPayload idx
 
 encIndexPayload : Index -> List String -> List String
@@ -48,7 +48,7 @@ encRef : Ref -> List String -> List String
 encRef r acc = encStr r.refModule (encStr r.refName (encInt r.refLine (encInt r.refCol acc)))
 
 -- | 规范字节 → `Index`（任何一步不符即 `Nothing`）。
-decIndexComplete : String -> Maybe Index
+export decIndexComplete : String -> Maybe Index
 decIndexComplete s = case decIndexPayload (strLength s) (curOf s) of
   Nothing => Nothing
   Just (Pair idx rest) => if curAtEnd rest then Just idx else Nothing

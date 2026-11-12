@@ -1,5 +1,5 @@
 -- | 元变量创建点登记：`newMetaAt` 在创建元变量时记录源 span，诊断按 id 反查。
-module Vuna.Compiler.Elab.MetaSpans (metaSpanOf, newHoleMeta, newMetaAt, recordMetaSpan) where
+module Vuna.Compiler.Elab.MetaSpans where
 
 -- Vuna.Compiler.Elab.MetaSpans：元变量 → 创建点 span 的显式状态（存在 `Ec.ecMetaSpans`）。
 --
@@ -15,11 +15,11 @@ import Vuna.Compiler.Core
 import Vuna.Compiler.Elab.Types
 
 -- | 记录元变量创建点（同 id 覆盖：新记录前插，查找取首个匹配）。
-recordMetaSpan : Ec -> Int -> Span -> Ec
+export recordMetaSpan : Ec -> Int -> Span -> Ec
 recordMetaSpan ec m sp = ecPutMetaSpans ec (Pair m sp :: ecMetaSpans ec)
 
 -- | 按元变量 id 查创建点。
-metaSpanOf : Ec -> Int -> Maybe Span
+export metaSpanOf : Ec -> Int -> Maybe Span
 metaSpanOf ec m = lookupMeta m (ecMetaSpans ec)
 
 -- | 线性查表（后创建覆盖先创建）。
@@ -28,7 +28,7 @@ lookupMeta m [] = Nothing
 lookupMeta m ((Pair k sp) :: rest) = if k == m then Just sp else lookupMeta m rest
 
 -- | 新建元变量并登记创建点（诊断可反查「在哪个源码构造创建」）。
-newMetaAt : Span -> Ctx -> Ec -> Pair Term Ec
+export newMetaAt : Span -> Ctx -> Ec -> Pair Term Ec
 newMetaAt sp ctx ec =
   let
     p = newMeta ctx ec
@@ -36,7 +36,7 @@ newMetaAt sp ctx ec =
 
 -- M15：新建一个「洞」元变量：除创建深度外还记下目标类型与上下文快照（供 goal 显示）。
 -- M40：`name` 是洞的显示名（`_` 传 `""`，`?name` 传 `"?name"`）。
-newHoleMeta : Ctx -> Ec -> Span -> Value -> String -> Pair Term Ec
+export newHoleMeta : Ctx -> Ec -> Span -> Value -> String -> Pair Term Ec
 newHoleMeta ctx ec sp ty name =
   let
     m = ecNext ec

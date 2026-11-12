@@ -1,5 +1,5 @@
 _helper : Int -> Int
 _helper x = x + 1
 
-pub : Int -> Int
+export pub : Int -> Int
 pub x = _helper x

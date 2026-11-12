@@ -2,10 +2,10 @@
 -- Nil/Cons 带进来，见 vuna.toml 注释）。D23 起 `+ - * /` 是 `Base.Num` 方法别名，
 -- 无 base 的包没有这套 trait，因此这里只保留 cross-module data 需要的取首元素
 -- （不再用算术演示 sum）。
-data List a : Type where
+export data List a(..) : Type where
   Nil : List a
   Cons : a -> List a -> List a
 
-firstList : List Int -> Int
+export firstList : List Int -> Int
 firstList Nil = 0
 firstList (Cons x _) = x

@@ -1,34 +1,4 @@
-module Vuna.Compiler.Codegen.Decl
-  ( QualCtx(..)
-  , boolText
-  , ctorOcamlName
-  , ctorOpaqueKeptFlags
-  , ctorOpaqueTableOf
-  , ctorShapeOf
-  , flagMatchesRig
-  , genTypeDeclsOf
-  , genTypeDeclsWith
-  , hasRecordRepr
-  , isRecordData
-  , joinWith
-  , noQual
-  , ocamlBinderName
-  , ocamlString
-  , qualCtorText
-  , qualOf
-  , qualTypeText
-  , qualValueText
-  , recordFieldLabel
-  , recordRtFields
-  , runtimeDatas
-  , sanitizeName
-  , typeDepsOf
-  , typeName
-  , unitOfTbl
-  , unitTblOf
-  , usedTableOf
-  , valueName
-  ) where
+module Vuna.Compiler.Codegen.Decl where
 
 -- Vuna.Compiler.Codegen.Decl：OCaml 名字编码 + data/构造子类型声明生成。
 --
@@ -61,7 +31,7 @@ sanitizeChar 39 = [95, 112]
 sanitizeChar 35 = [95, 104]
 sanitizeChar c = if isAsciiAlphaNum c then [c] else strUnpack "_x${c}_"
 
-sanitizeName : String -> String
+export sanitizeName : String -> String
 sanitizeName name = strPack (concatMap sanitizeChar (strUnpack name))
 
 ocamlPad3 : String -> String
@@ -75,24 +45,24 @@ ocamlEscapeChar 9 = [92, 116]
 ocamlEscapeChar 13 = [92, 114]
 ocamlEscapeChar c = if c >= 32 && c <= 126 then [c] else strUnpack "\\${ocamlPad3 (strFromInt c)}"
 
-ocamlString : String -> String
+export ocamlString : String -> String
 ocamlString s = "\"${strPack (concatMap ocamlEscapeChar (strUnpack s))}\""
 
-valueName : String -> String
+export valueName : String -> String
 valueName name = "v_${sanitizeName name}"
 
 -- 单独提出来：OCaml `if` 直接作构造子实参时 早期 codegen 的括号处理不可靠，
 -- 这里把它包成一个命名函数，保证自举编译本文件时生成的 OCaml 合法。
-boolText : Bool -> String
+export boolText : Bool -> String
 boolText True = "true"
 boolText False = "false"
 
 -- M14：族 → OCaml 变体类型名；构造子 → 带族前缀的变体构造子名（避免跨族重名）。
-typeName : String -> String
+export typeName : String -> String
 typeName name = "t_${sanitizeName name}"
 
 -- | 自动补注（M41 新增导出）：ctorOcamlName。
-ctorOcamlName : String -> String -> String
+export ctorOcamlName : String -> String -> String
 ctorOcamlName family ctor = "C_${sanitizeName family}_${sanitizeName (ctorShortName ctor)}"
 
 -- ---------------------------------------------------------------
@@ -108,23 +78,23 @@ ctorOcamlName family ctor = "C_${sanitizeName family}_${sanitizeName (ctorShortN
 --
 -- `QualCtx` 只承载「名字 → 归属单元」这两张表与当前单元；`noQual` 是 check 路径
 -- （单文件装配、文本丢弃）用的空表，所有引用都回落成裸名。
-record QualCtx where
+export record QualCtx(..) where
   qcUnit : String
   qcDefs : HashMap String String
   qcDatas : HashMap String String
 
-noQual : QualCtx
+export noQual : QualCtx
 noQual = QualCtx "" (Base.HashMap.fromList []) (Base.HashMap.fromList [])
 
-unitTblOf : List (Pair String String) -> HashMap String String
+export unitTblOf : List (Pair String String) -> HashMap String String
 unitTblOf pairs = Base.HashMap.insertAll pairs (Base.HashMap.fromList [])
 
-unitOfTbl : HashMap String String -> String -> String
+export unitOfTbl : HashMap String String -> String -> String
 unitOfTbl tbl name = case Base.HashMap.lookup name tbl of
   Just u => u
   Nothing => ""
 
-qualOf : String -> List (Pair String String) -> List (Pair String String) -> QualCtx
+export qualOf : String -> List (Pair String String) -> List (Pair String String) -> QualCtx
 qualOf unit defs datas = QualCtx unit (unitTblOf defs) (unitTblOf datas)
 
 -- 跨单元引用前缀：同单元 / 未知归属（内建名由调用方先处理）→ 裸名 + 无依赖。
@@ -133,14 +103,14 @@ qualPrefix qc owner text =
   if owner == "" || owner == qc.qcUnit then Pair text "" else Pair "${owner}.${text}" owner
 
 -- (OCaml 文本, 依赖单元或 "")
-qualValueText : QualCtx -> String -> Pair String String
+export qualValueText : QualCtx -> String -> Pair String String
 qualValueText qc name = qualPrefix qc (unitOfTbl qc.qcDefs name) (valueName name)
 
-qualCtorText : QualCtx -> String -> String -> Pair String String
+export qualCtorText : QualCtx -> String -> String -> Pair String String
 qualCtorText qc family ctor =
   qualPrefix qc (unitOfTbl qc.qcDatas family) (ctorOcamlName family ctor)
 
-qualTypeText : QualCtx -> String -> Pair String String
+export qualTypeText : QualCtx -> String -> Pair String String
 qualTypeText qc name = qualPrefix qc (unitOfTbl qc.qcDatas name) (typeName name)
 
 dataTypeGlobalNames : DtData -> List String
@@ -151,7 +121,7 @@ dataTypeGlobalNamesGo acc [] = acc
 dataTypeGlobalNamesGo acc (c :: rest) =
   dataTypeGlobalNamesGo (append acc (termGlobalNames (dtCtorType c))) rest
 
-typeDepsOf : QualCtx -> List DtData -> List String
+export typeDepsOf : QualCtx -> List DtData -> List String
 typeDepsOf qc datas = typeDepsOfGo qc (concatMap dataTypeGlobalNames datas) []
 
 typeDepsOfGo : QualCtx -> List String -> List String -> List String
@@ -225,7 +195,7 @@ ocamlReservedWords =
     "with"
   ]
 
-ocamlBinderName : String -> String
+export ocamlBinderName : String -> String
 ocamlBinderName name =
   let
     oc = sanitizeName name
@@ -233,7 +203,7 @@ ocamlBinderName name =
 
 -- 一次性线性拼接：先插分隔符成列表，再用运行时 `String.concat` 单遍拼出。
 -- 旧的 `x ++ sep ++ joinWith sep rest` 在千级片段上是 O(n²) 字节拷贝（build 路径曾占 ~20s）。
-joinWith : String -> List String -> String
+export joinWith : String -> List String -> String
 joinWith sep xs = strConcatMany (interpose sep xs)
 
 interpose : String -> List String -> List String
@@ -497,11 +467,11 @@ renderFieldTy qc levels table datas lvl _ slot = Pair (typeParamName slot) (slot
 -- （True = 该 binder 进运行时表示）。类型声明、构造子应用、case 分支绑定三处都消费
 -- 同一份 flags，并在使用点校验长度 / 擦除标志一致；三处各自 `if erased` 漂移会静默
 -- 错编译（字段数、telescope 长度、绑定数三者没有交叉校验）。
-flagMatchesRig : Bool -> Rig -> Bool
+export flagMatchesRig : Bool -> Rig -> Bool
 flagMatchesRig True rig = not (rigIsErased rig)
 flagMatchesRig False rig = rigIsErased rig
 
-ctorShapeOf : List DtData -> List (Pair String (List Bool))
+export ctorShapeOf : List DtData -> List (Pair String (List Bool))
 ctorShapeOf [] = []
 ctorShapeOf (d :: rest) =
   append (map (\c => Pair (dtCtorName c) (ctorKeepFlags c)) (dtDataCtors d)) (ctorShapeOf rest)
@@ -547,13 +517,13 @@ ctorOpaqueGo datas ((Pair name rig) :: rest) lvl v famLevels acc = case v of
     in ctorOpaqueGo datas rest (lvl + 1) next fam2 (flag :: acc)
   _ => reverse acc
 
-ctorOpaqueTableOf : List DtData -> List (Pair String (List Bool))
+export ctorOpaqueTableOf : List DtData -> List (Pair String (List Bool))
 ctorOpaqueTableOf datas =
   concatMap (\d => map (\c => Pair (dtCtorName c) (ctorOpaqueFlagsOf datas c)) (dtDataCtors d))
     datas
 
 -- 只保留「运行时字段」位置的不透明标志（与 alignCtorArgs 之后的实参逐位对齐）。
-ctorOpaqueKeptFlags : List Bool -> List Bool -> List Bool
+export ctorOpaqueKeptFlags : List Bool -> List Bool -> List Bool
 ctorOpaqueKeptFlags [] _ = []
 ctorOpaqueKeptFlags _ [] = []
 ctorOpaqueKeptFlags (keep :: keeps) (opq :: opqs) =
@@ -622,18 +592,18 @@ genCtorDecl qc levels table datas c =
 -- 判定：`dtDataIsRecord`（声明来源）且单构造子；零字段 record 仍判为 record，
 -- 但 `hasRecordRepr` 会因没有运行时字段而回落变体。
 -- | R4：该族是否为 record（声明来源 + 单构造子）。
-isRecordData : DtData -> Bool
+export isRecordData : DtData -> Bool
 isRecordData d = if dtDataIsRecord d then case dtDataCtors d of
   [_] => True
   _ => False
 else False
 
 -- | R4：record 字段的 OCaml record label（按 record 名前缀，避免不同 record 间标签撞车）。
-recordFieldLabel : String -> String -> String
+export recordFieldLabel : String -> String -> String
 recordFieldLabel family field = "f_${sanitizeName family}_${sanitizeName field}"
 
 -- | R4：record 的运行时字段（字段声明序号 → label），只含 keep 字段。
-recordRtFields : DtData -> List (Pair Int String)
+export recordRtFields : DtData -> List (Pair Int String)
 recordRtFields d = case dtDataCtors d of
   [c] =>
     let
@@ -651,7 +621,7 @@ recordRtFieldsGo family (k :: ks) (f :: fs) =
 
 -- | R4：该族用 OCaml record 表示：是 record 且**有**运行时字段
 -- （εrecord 的字段表为空；零运行时字段的 record 仍用变体）。
-hasRecordRepr : DtData -> Bool
+export hasRecordRepr : DtData -> Bool
 hasRecordRepr d = if isRecordData d then case recordRtFields d of
   [] => False
   _ => True
@@ -707,7 +677,7 @@ isBoolFamilyName name = name == boolTypeName
 isNatFamilyName : String -> Bool
 isNatFamilyName name = name == natTypeName
 
-runtimeDatas : List DtData -> List DtData
+export runtimeDatas : List DtData -> List DtData
 runtimeDatas datas =
   filter (\d => not (isBoolFamilyName (dtDataName d)) && not (isNatFamilyName (dtDataName d))) datas
 
@@ -715,13 +685,13 @@ runtimeDatas datas =
 -- `subset` 是实际写进本文件的族。
 -- 族参数「用到哪些」的不动点只依赖全体 datas；split 逐模块生成时必须把它一次算好
 -- 传进来（旧实现每个模块都重算一遍 ⇒ O(#模块 × #datas × 构造子)）。
-usedTableOf : List DtData -> List (Pair String (List Int))
+export usedTableOf : List DtData -> List (Pair String (List Int))
 usedTableOf datas = usedTableFix datas (map (\d => Pair (dtDataName d) []) datas)
 
-genTypeDeclsOf : QualCtx -> List DtData -> List DtData -> Check String
+export genTypeDeclsOf : QualCtx -> List DtData -> List DtData -> Check String
 genTypeDeclsOf qc allDatas subset = genTypeDeclsWith qc (usedTableOf allDatas) allDatas subset
 
-genTypeDeclsWith : QualCtx -> List (Pair String (List Int)) -> List DtData -> List DtData -> Check String
+export genTypeDeclsWith : QualCtx -> List (Pair String (List Int)) -> List DtData -> List DtData -> Check String
 genTypeDeclsWith qc table allDatas [] = OkC ""
 genTypeDeclsWith qc table allDatas subset =
   Vuna.Compiler.Common.bind

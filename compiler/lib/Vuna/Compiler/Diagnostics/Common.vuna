@@ -1,11 +1,5 @@
 -- | TC_/CG_ 等域共享的诊断拼装 helper。
-module Vuna.Compiler.Diagnostics.Common
-  ( concatLists
-  , diagBody
-  , mkDiag
-  , withDiagDef
-  , withDiagSpan
-  ) where
+module Vuna.Compiler.Diagnostics.Common where
 
 -- Vuna.Compiler.Diagnostics.Common：与具体域枚举无关的机械逻辑。
 --
@@ -20,23 +14,23 @@ import Base.Nat
 import Base.Vec
 
 -- | 模板替换：`<0>`/`<1>` 由 `Vec n String` 按序替换，arity 编译期锁定。
-diagBody : {n : Nat} -> String -> Vec n String -> String
+export diagBody : {n : Nat} -> String -> Vec n String -> String
 diagBody template args = substTemplate template args
 
 -- | 无位置诊断（显式 NoLoc）。
-mkDiag : Severity -> Phase -> Category -> String -> String -> Diagnostic
+export mkDiag : Severity -> Phase -> Category -> String -> String -> Diagnostic
 mkDiag sev phase cat code msg = diagNoLoc sev phase cat code msg
 
 -- | 补主位置标签。
-withDiagSpan : Span -> Diagnostic -> Diagnostic
+export withDiagSpan : Span -> Diagnostic -> Diagnostic
 withDiagSpan sp d = withLabel (Label (Just sp) "" LabelPrimary Nothing) d
 
 -- | 定义级诊断：主位置 + `in \`name\`` 上下文标签（旧字符串前缀的结构化替代）。
-withDiagDef : Maybe Span -> String -> Diagnostic -> Diagnostic
+export withDiagDef : Maybe Span -> String -> Diagnostic -> Diagnostic
 withDiagDef msp name d = withContext msp name d
 
 -- | 分块拼接：`tcAll` / `cgAll` 按 ≤8 项分块后按顺序还原成一张表。
 -- split codegen 把单个列表字面量打成一行，整表字面量会产生超长行；拼接保持顺序不变。
-concatLists : List (List a) -> List a
+export concatLists : List (List a) -> List a
 concatLists [] = []
 concatLists (xs :: rest) = append xs (concatLists rest)

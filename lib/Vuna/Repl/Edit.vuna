@@ -1,4 +1,4 @@
-module Vuna.Repl.Edit (EditConfig(..), EditOutcome(..), editLine, terminalWidth) where
+module Vuna.Repl.Edit where
 
 -- Vuna.Repl.Edit：REPL 行编辑器（工具链；不进 seed 闭包）。
 --
@@ -23,7 +23,7 @@ import Vuna.Repl.Complete
 import Vuna.Repl.Paste
 import Vuna.Repl.Term
 
-record EditConfig where
+export record EditConfig(..) where
   editPrompt : String
   editPromptWidth : Int
   editHistory : List String
@@ -33,13 +33,13 @@ record EditConfig where
   -- 当前包上下文的模块根（`:load` / `:browse` / `import` 参数位补全用）。
   editRoots : List String
 
-data EditOutcome : Type where
+export data EditOutcome(..) : Type where
   EditLine : String -> EditOutcome
   EditEof : EditOutcome
   EditCancel : EditOutcome
   EditUnavailable : EditOutcome
 
-terminalWidth : Int -> Eff [] Int
+export terminalWidth : Int -> Eff [] Int
 terminalWidth n = termWidth n
 
 record EditState where
@@ -84,7 +84,7 @@ data Key : Type where
   KPaste : String -> Key
   KIgnore : Key
 
-editLine : EditConfig -> Eff [] EditOutcome
+export editLine : EditConfig -> Eff [] EditOutcome
 editLine cfg = do
   path <- termTmpPath 0
   saved <- termSaveState path

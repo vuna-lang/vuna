@@ -1,4 +1,4 @@
-module Vuna.Compiler.Driver.DiagRender (renderCliDiagnosticEff, renderWithPrefixEff) where
+module Vuna.Compiler.Driver.DiagRender where
 
 -- Vuna.Compiler.Driver.DiagRender：CLI 诊断的源码片段渲染（M38 P3）。
 --
@@ -228,7 +228,7 @@ renderBodyWithNewlineEff body =
     pure (if trailing then "${rendered}\n" else rendered)
 
 -- | 完整 CLI 诊断行：保留前缀与可选 `[pkg] `，消息体追加源码片段。
-renderCliDiagnosticEff : String -> Eff [] String
+export renderCliDiagnosticEff : String -> Eff [] String
 renderCliDiagnosticEff s =
   let
     pp = splitCliPrefix s
@@ -238,7 +238,7 @@ renderCliDiagnosticEff s =
     pure (firstOf pp ++ firstOf pk ++ body)
 
 -- 用调用方给的显式前缀渲染（包级检查：前缀里带 `error: [包名] `）。
-renderWithPrefixEff : String -> String -> Eff [] String
+export renderWithPrefixEff : String -> String -> Eff [] String
 renderWithPrefixEff prefix msg =
   let
     pk = splitPkg msg

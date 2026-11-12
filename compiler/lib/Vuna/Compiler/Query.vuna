@@ -1,27 +1,5 @@
 -- | 查询图引擎：按 key 记忆化、依赖快照、early cutoff、动态依赖、可观测 trace。
-module Vuna.Compiler.Query
-  ( Db
-  , Entry(..)
-  , QVal(..)
-  , dbEmpty
-  , dbEntryCount
-  , dbLookup
-  , dbNote
-  , dbOriginOf
-  , dbTrace
-  , dbTraceText
-  , dbWithOrigin
-  , digestOfPayload
-  , digestOfVal
-  , markHit
-  , query
-  , queryDepValues
-  , queryHit
-  , queryResolve
-  , queryResolveTagged
-  , queryWith
-  , showQVal
-  ) where
+module Vuna.Compiler.Query where
 
 -- Vuna.Compiler.Query：查询图的**纯核心**（一个 key = 一个缓存单元 = 一个可观测单元）。
 --
@@ -64,13 +42,13 @@ import Vuna.Compiler.Hash
 --   * `QBytes`：内联载荷（通常 ≤ 64 KB）；
 --   * `QRef`：大载荷的内容地址（`Hash.contentAddress`），需要内容时从 `Store` 取
 --     （D-Q4：`Db` 不常驻 MB 级产物）。
-data QVal : Type where
+export data QVal(..) : Type where
   QMarker : QVal
   QBytes : String -> QVal
   QRef : String -> QVal
 
 -- | 一个 key 的缓存条目。
-record Entry where
+export record Entry(..) where
   -- | 观测依赖快照：dep key + 当时的摘要。**始终按 dep key 升序**（顺序无关比较）。
   entryDeps : List (Pair String String)
   -- | 上次调用**声明**的依赖 key 集合（升序）。声明集合变了 ⇒ 图输入变了 ⇒ 必须
@@ -86,29 +64,29 @@ record Entry where
   entryHits : Int
 
 -- | 查询图状态：key → entry 的记忆化表 + 按发生顺序排列（读侧 reverse）的 trace。
-record Db where
+export record Db where
   dbEntryMap : HashMap String Entry
   dbTraceLines : List String
   -- | 新建 entry 时写入的产物来源（run 层按调用方身份设置：`pkg` / `tool`）。
   dbOrigin : String
 
 -- | 空查询图：无缓存、无 trace，来源 `pkg`。
-dbEmpty : Db
+export dbEmpty : Db
 dbEmpty = Db (Base.HashMap.fromList []) [] "pkg"
 
 -- | 设置后续新建条目的产物来源。
-dbWithOrigin : Db -> String -> Db
+export dbWithOrigin : Db -> String -> Db
 dbWithOrigin db origin = Db db.dbEntryMap db.dbTraceLines origin
 
-dbOriginOf : Db -> String
+export dbOriginOf : Db -> String
 dbOriginOf db = db.dbOrigin
 
 -- | 按**发生顺序**返回 trace 行。
-dbTrace : Db -> List String
+export dbTrace : Db -> List String
 dbTrace db = reverse db.dbTraceLines
 
 -- | trace 拼成一行（逗号分隔，无末尾逗号）——`--debug-query` / 测试断言用。
-dbTraceText : Db -> String
+export dbTraceText : Db -> String
 dbTraceText db = joinComma (dbTrace db)
 
 joinComma : List String -> String
@@ -117,21 +95,21 @@ joinComma ([x]) = x
 joinComma (x :: rest) = "${x},${joinComma rest}"
 
 -- | 条目数。
-dbEntryCount : Db -> Int
+export dbEntryCount : Db -> Int
 dbEntryCount db = Base.HashMap.size db.dbEntryMap
 
 -- | 查一个 key 的当前值。
-dbLookup : Db -> String -> Maybe QVal
+export dbLookup : Db -> String -> Maybe QVal
 dbLookup db key = case Base.HashMap.lookup key db.dbEntryMap of
   Just e => Just e.entryVal
   Nothing => Nothing
 
 -- | 追加一行 trace（run 层用它记 `cycle` / `reject` 等图外事件）。
-dbNote : Db -> String -> Db
+export dbNote : Db -> String -> Db
 dbNote db line = Db db.dbEntryMap (line :: db.dbTraceLines) db.dbOrigin
 
 -- | 载荷的内容地址（64 位十六进制）：`QBytes` / `QRef` 的完整性口径。
-digestOfPayload : String -> String
+export digestOfPayload : String -> String
 digestOfPayload payload = Vuna.Compiler.Hash.contentAddress payload
 
 -- | 把 QVal 渲染成**单射**的规范文本（`digestOfVal` 的输入）。
@@ -139,7 +117,7 @@ digestOfPayload payload = Vuna.Compiler.Hash.contentAddress payload
 -- 每个构造子带独立标签，字符串用「字节长度:内容」前缀编码 ⇒ 不同值不会渲染成同一串，
 -- 因此摘要相同的实际内容也相同（cutoff 判据成立）。字段之间不需要分隔符：长度前缀
 -- 本身可解析。
-showQVal : QVal -> String
+export showQVal : QVal -> String
 showQVal QMarker = "marker:"
 showQVal (QBytes s) = "bytes:${lenPrefixed s}"
 showQVal (QRef d) = "ref:${lenPrefixed d}"
@@ -149,7 +127,7 @@ lenPrefixed : String -> String
 lenPrefixed s = "${strLength s}:${s}"
 
 -- | 值的摘要（64 位十六进制）。
-digestOfVal : QVal -> String
+export digestOfVal : QVal -> String
 digestOfVal v = digestOfPayload (showQVal v)
 
 -- ---------------------------------------------------------------
@@ -204,14 +182,14 @@ sameDeps (p :: ps) (q :: qs) = firstOf p == firstOf q && secondOf p == secondOf 
 -- 算完再回来做纯提交。把这三段各自导出，run 层与纯调用方就共用一份判据。
 -- ---------------------------------------------------------------
 -- | 静态依赖的查询（最常用形态）：依赖 = 调用方声明的列表。
-query : Db -> String -> List String -> (List QVal -> QVal) -> Pair Db QVal
+export query : Db -> String -> List String -> (List QVal -> QVal) -> Pair Db QVal
 query db key deps compute = queryWith db key deps (\vals => Pair (compute vals) deps)
 
 -- | 动态依赖的查询：compute 返回「值 + 实际观测到的依赖 key 列表」。
 --
 -- 观测依赖（而非声明依赖）成为下次的命中判据：compute 少读了一个 dep 就少一条判据，
 -- 不会因为「声明里有、实际没用」而伪失效。声明依赖仍用于取当前值。
-queryWith : Db -> String -> List String -> (List QVal -> Pair QVal (List String)) -> Pair Db QVal
+export queryWith : Db -> String -> List String -> (List QVal -> Pair QVal (List String)) -> Pair Db QVal
 queryWith db key deps compute = case queryHit db key deps of
   Just v => Pair (markHit db key) v
   Nothing => queryResolve db key deps (compute (queryDepValues db deps))
@@ -225,7 +203,7 @@ queryWith db key deps compute = case queryHit db key deps of
 --   2. **观测依赖摘要未变**：entry 记录的 `entryDeps` 逐项比当前摘要（顺序无关）。
 --      「声明了但没读」的 key 因此不参与失效判定（动态依赖的意义）。
 --   3. dep 缺失按 `QBytes key` 占位 ⇒ 「dep 还没算」不会误判命中。
-queryHit : Db -> String -> List String -> Maybe QVal
+export queryHit : Db -> String -> List String -> Maybe QVal
 queryHit db key deps = case Base.HashMap.lookup key db.dbEntryMap of
   Nothing => Nothing
   Just old =>
@@ -241,11 +219,11 @@ recordedKeys [] = []
 recordedKeys ((Pair k _) :: rest) = k :: recordedKeys rest
 
 -- | 取声明依赖的当前值（按调用方给的顺序；miss 重算时喂给 compute）。
-queryDepValues : Db -> List String -> List QVal
+export queryDepValues : Db -> List String -> List QVal
 queryDepValues db deps = map (\s => dsValueOf s) (snapDeps db deps)
 
 -- | 命中记账：命中数 +1，trace 记 `hit <key>`，值不变。
-markHit : Db -> String -> Db
+export markHit : Db -> String -> Db
 markHit db key = case Base.HashMap.lookup key db.dbEntryMap of
   Nothing => Db db.dbEntryMap ("hit ${key}" :: db.dbTraceLines) db.dbOrigin
   Just old =>
@@ -257,14 +235,14 @@ markHit db key = case Base.HashMap.lookup key db.dbEntryMap of
 --
 -- 旧值摘要与新值相同 ⇒ `cutoff`（保留旧值/来源，只更新依赖快照与命中数）；
 -- 否则 ⇒ `miss`（写新 entry）。无旧 entry 时一律 `miss`。
-queryResolve : Db -> String -> List String -> Pair QVal (List String) -> Pair Db QVal
+export queryResolve : Db -> String -> List String -> Pair QVal (List String) -> Pair Db QVal
 queryResolve db key deps result = firstOf (queryResolveTagged db key deps result)
 
 -- | `queryResolve` 的**带标签**形态：额外返回本次提交的类别 `miss` / `cutoff`。
 --
 -- Eff 层（`Query.Run`）要用它记节点 span 的 outcome：判据与提交只有这一份实现，
 -- span 标签不能重新猜（`cutoff` 与 `miss` 的判据就是这里比的两个摘要）。
-queryResolveTagged : Db -> String -> List String -> Pair QVal (List String) -> Pair (Pair Db QVal) String
+export queryResolveTagged : Db -> String -> List String -> Pair QVal (List String) -> Pair (Pair Db QVal) String
 queryResolveTagged db key deps result =
   let
     val = firstOf result

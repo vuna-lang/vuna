@@ -1,12 +1,4 @@
-module Vuna.Compiler.Elab.Usage
-  ( checkDefUsage
-  , checkProgramUsage
-  , isTypeForming
-  , warnAt0
-  , warnAt0Mod
-  , warnAt1
-  , warnAt1Mod
-  ) where
+module Vuna.Compiler.Elab.Usage where
 
 -- Vuna.Compiler.Elab.Usage：M38 QTT 用量检查。
 --
@@ -30,7 +22,7 @@ import Vuna.Compiler.Diagnostics.Warning
 
 -- 类型级定义的判据：定义**类型** force 后以宇宙收尾（`Type` 或 `... -> Type` 的 Pi 链）。
 -- M38 从 Codegen/Erase 上移到 Elab，成为用量检查与 codegen 分区的共同真源。
-isTypeForming : Value -> Bool
+export isTypeForming : Value -> Bool
 isTypeForming v = isTypeFormingFuel 128 v
 
 isTypeFormingFuel : Int -> Value -> Bool
@@ -215,7 +207,7 @@ isRigZero _ = False
 
 -- 顶层入口：body 是闭项；遍历后应无残留用量（有残留说明存在未绑定变量，作用域护栏会
 -- 在 codegen 侧再查；这里只保证不静默）。进入前清空使用点登记（每个定义体一份）。
-checkDefUsage : Ec -> Maybe Span -> String -> Term -> Check Ec
+export checkDefUsage : Ec -> Maybe Span -> String -> Term -> Check Ec
 checkDefUsage ec msp name body =
   let
     sp = case msp of
@@ -321,7 +313,7 @@ isTypeLevelDef ec d =
 
 -- 程序级入口：只检查有体的运行时定义（类型级定义跳过）。使用点状态在 Ec 上线程，
 -- 返回收尾后的 Ec（调用方把它接回主状态）。
-checkProgramUsage : Ec -> List DtDef -> Check Ec
+export checkProgramUsage : Ec -> List DtDef -> Check Ec
 checkProgramUsage ec defs = checkProgramUsageGo ec defs
 
 checkProgramUsageGo : Ec -> List DtDef -> Check Ec
@@ -382,17 +374,17 @@ warnAt : Ec -> Span -> {n : Nat} -> WarnErr n -> Vec n String -> Ec
 warnAt ec sp e args = ecAddWarning ec (warnDiagAt sp e args)
 
 -- | arity 0 的 warning。
-warnAt0 : Ec -> Span -> WarnErr Zero -> Ec
+export warnAt0 : Ec -> Span -> WarnErr Zero -> Ec
 warnAt0 ec sp e = warnAt ec sp e []
 
 -- | arity 1 的 warning。
-warnAt1 : Ec -> Span -> WarnErr (Succ Zero) -> String -> Ec
+export warnAt1 : Ec -> Span -> WarnErr (Succ Zero) -> String -> Ec
 warnAt1 ec sp e a0 = warnAt ec sp e [a0]
 
 -- | 带后处理（如附加 suggestion）的 arity-1 warning。
-warnAt1Mod : Ec -> (Diagnostic -> Diagnostic) -> Span -> WarnErr (Succ Zero) -> String -> Ec
+export warnAt1Mod : Ec -> (Diagnostic -> Diagnostic) -> Span -> WarnErr (Succ Zero) -> String -> Ec
 warnAt1Mod ec f sp e a0 = ecAddWarning ec (warnDiagAtMod f sp e [a0])
 
 -- | 带后处理（如附加 suggestion）的 arity-0 warning。
-warnAt0Mod : Ec -> (Diagnostic -> Diagnostic) -> Span -> WarnErr Zero -> Ec
+export warnAt0Mod : Ec -> (Diagnostic -> Diagnostic) -> Span -> WarnErr Zero -> Ec
 warnAt0Mod ec f sp e = ecAddWarning ec (warnDiagAtMod f sp e [])

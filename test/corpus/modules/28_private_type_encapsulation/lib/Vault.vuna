@@ -2,9 +2,9 @@
 data _T : Type where
   _Mk : Int -> _T
 
-mk : Int -> _T
+export mk : Int -> _T
 mk n = _Mk n
 
-use : _T -> Int
+export use : _T -> Int
 use v = case v of
   _Mk n => n

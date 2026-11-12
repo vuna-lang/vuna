@@ -1,12 +1,4 @@
-module Vuna.Compiler.Elab.InstCoherence
-  ( InstClash(..)
-  , anyInstanceExact
-  , findInstanceClash
-  , headsAlphaEqual
-  , headsOverlap
-  , instanceExactQuiet
-  , teleAlphaEnv
-  ) where
+module Vuna.Compiler.Elab.InstCoherence where
 
 -- Vuna.Compiler.Elab.InstCoherence：实例的一致性（coherence）判定。
 --
@@ -35,17 +27,17 @@ import Vuna.Compiler.Elab.Types
 -- 必然得到不同名字；名字判重只可能命中「同类同 head」或「不同类恰好同短名 + 同 head」
 -- （后者本就无法生成两个不同的 dict 符号，显式报 duplicate 比静默丢一个更好）。
 -- coherence 的语义真源仍是下面的 head 判定（`anyInstanceExact`/`anyInstanceOverlap`）。
-data InstClash : Type where
+export data InstClash(..) : Type where
   ClashDuplicate : InstClash
   ClashOverlap : InstClash
 
-findInstanceClash : Ec -> String -> List (Pair String Term) -> Term -> List DtInst -> Pair (Maybe InstClash) Ec
+export findInstanceClash : Ec -> String -> List (Pair String Term) -> Term -> List DtInst -> Pair (Maybe InstClash) Ec
 findInstanceClash ec name tele head seen =
   if hasInstName name seen then Pair (Just ClashDuplicate) ec
   else if anyInstanceExact ec (length tele) head seen then Pair (Just ClashDuplicate) ec
   else anyInstanceOverlap ec (isBlanketInstHead (length tele) head) tele head seen
 
-anyInstanceExact : Ec -> Int -> Term -> List DtInst -> Bool
+export anyInstanceExact : Ec -> Int -> Term -> List DtInst -> Bool
 anyInstanceExact ec n head [] = False
 anyInstanceExact ec n head (i :: rest) =
   if length i.dtInstTele == n then if headsAlphaEqual ec n head i.dtInstHead then True else anyInstanceExact ec n head rest
@@ -62,17 +54,17 @@ else case headsOverlap ec tele head i.dtInstTele i.dtInstHead of
   Pair True ec1 => Pair (Just ClashOverlap) ec1
   Pair False ec1 => anyInstanceOverlap ec newBlanket tele head rest
 
-instanceExactQuiet : Ec -> Int -> Term -> DtInst -> Bool
+export instanceExactQuiet : Ec -> Int -> Term -> DtInst -> Bool
 instanceExactQuiet ec n head inst =
   length inst.dtInstTele == n && headsAlphaEqual ec n head inst.dtInstHead
 
 -- 同一 tele 长度下按 index 对齐的 α-等价（两个 head 的 tele 变量都映射到同一组占位 level）。
-headsAlphaEqual : Ec -> Int -> Term -> Term -> Bool
+export headsAlphaEqual : Ec -> Int -> Term -> Term -> Bool
 headsAlphaEqual ec n a b = case conv (ecDefTbl ec) (ecSolsP ec) 0 (eval (teleAlphaEnv n) a) (eval (teleAlphaEnv n) b) of
   OkC _ => True
   ErrC e => False
 
-teleAlphaEnv : Int -> List Value
+export teleAlphaEnv : Int -> List Value
 teleAlphaEnv n = teleAlphaEnvGo n 0
 
 teleAlphaEnvGo : Int -> Int -> List Value
@@ -82,7 +74,7 @@ teleAlphaEnvGo remaining i =
 
 -- 重叠判定：把一侧 tele 变量实例化成 meta、另一侧实例化成互不相同的刚性占位（global），
 -- conv 成功即「可合一」。两侧都有 tele 时只需一个方向（另一方向由对称性覆盖）。
-headsOverlap : Ec -> List (Pair String Term) -> Term -> List (Pair String Term) -> Term -> Pair Bool Ec
+export headsOverlap : Ec -> List (Pair String Term) -> Term -> List (Pair String Term) -> Term -> Pair Bool Ec
 headsOverlap ec tele1 h1 tele2 h2 = case tele1 of
   [] => case tele2 of
     [] => Pair (headsAlphaEqual ec 0 h1 h2) ec

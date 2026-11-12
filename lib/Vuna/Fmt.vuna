@@ -1,4 +1,4 @@
-module Vuna.Fmt (formatSourceWith) where
+module Vuna.Fmt where
 
 -- Vuna.Fmt：vuna 源码格式化器门面（parse → 规范打印）。
 -- 输出约定：2 空格缩进、顶层声明之间一个空行、文件末尾一个换行、无行尾空白；
@@ -28,14 +28,25 @@ import Vuna.Fmt.Comment
 import Vuna.Fmt.Decl
 import Vuna.Fmt.Util
 
-formatSourceWith : List FixityDecl -> String -> Check String
+export formatSourceWith : List FixityDecl -> String -> Check String
 formatSourceWith programFixities source = case parseSource "<fmt>" source of
   ErrC e => ErrC e
-  OkC (SourceFile hdr imports fx decls0) => case reorderProgram (tableOfKeepOps (append fx programFixities)) decls0 of
+  OkC (SourceFile hdr imports fx decls0 exports reexports opacity) => case reorderProgram (tableOfKeepOps (append fx programFixities)) decls0 of
     ErrC e => ErrC e
     OkC decls => case lexComments source of
       ErrC e => ErrC e
       OkC comments => case assignComments (anchorSpans hdr imports fx decls) comments [] [] of
-        Pair at eof => case joinSections (filterSections (renderSourceSections (append fx programFixities) hdr imports fx decls at eof)) of
-          [] => OkC ""
-          lines => OkC (unlines lines)
+        Pair at eof =>
+          let
+            hdr2 = case hdr of
+              Just m =>
+                Just
+                  (ModDecl m.modDeclName m.modDeclHasExportList m.modDeclExportItems exports reexports opacity m.modDeclSpan)
+              Nothing => case exports of
+                [] => case reexports of
+                  [] => Nothing
+                  _ => Just (ModDecl "" False [] exports reexports opacity dummySpan)
+                _ => Just (ModDecl "" False [] exports reexports opacity dummySpan)
+          in case joinSections (filterSections (renderSourceSections (append fx programFixities) hdr2 imports fx decls at eof)) of
+            [] => OkC ""
+            lines => OkC (unlines lines)

@@ -1,4 +1,4 @@
-module Base.Reader (Reader, ask, local, runReader) where
+module Base.Reader where
 
 -- Base.Reader：库级 Reader monad（M33 W6 落地；M35.1 补 Functor/Monad 实例，`do` 可用）。
 --
@@ -6,11 +6,11 @@ module Base.Reader (Reader, ask, local, runReader) where
 import Base.Monad
 
 -- | 库级 Reader monad：表示是 `e -> a` 的纯函数（构造器不导出）；用 `runReader` 运行，`do` 依赖 Functor / Monad 实例。
-record Reader e a where
+export record Reader e a where
   readerRun : e -> a
 
 -- | handler：把环境 `e` 喂给 Reader 得到结果。
-runReader : Reader e a -> e -> a
+export runReader : Reader e a -> e -> a
 runReader (Reader f) e = f e
 
 instance Functor (Reader e) where
@@ -25,9 +25,9 @@ instance Applicative (Reader e) where
   liftA2 f ra rb = Reader (\e => f (ra.readerRun e) (rb.readerRun e))
 
 -- | 取当前环境（结果与环境相同）。
-ask : Reader e e
+export ask : Reader e e
 ask = Reader (\e => e)
 
 -- | 在 `f` 修改后的环境下运行 `r`；改写只作用于该动作，不逃逸。
-local : (e -> e) -> Reader e a -> Reader e a
+export local : (e -> e) -> Reader e a -> Reader e a
 local f r = Reader (\e => r.readerRun (f e))

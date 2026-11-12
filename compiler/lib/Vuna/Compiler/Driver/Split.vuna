@@ -1,16 +1,4 @@
-module Vuna.Compiler.Driver.Split
-  ( SplitFile(..)
-  , buildScript
-  , canonicalTopo
-  , decSplitFileComplete
-  , decSplitFilesComplete
-  , encSplitFile
-  , encSplitFiles
-  , splitGraph
-  , splitLayers
-  , writeSplitFiles
-  , writeSplitFilesIfChanged
-  ) where
+module Vuna.Compiler.Driver.Split where
 
 -- Vuna.Compiler.Driver.Split：分离编译的输出文件模型与构建脚本生成。
 --
@@ -30,7 +18,7 @@ import Vuna.Compiler.Hash
 import Base.HashMap
 import Base.List
 
-record SplitFile where
+export record SplitFile(..) where
   splitName : String
   splitText : String
   splitDeps : List String
@@ -46,7 +34,7 @@ splitDeps : SplitFile -> List String
 splitDeps (SplitFile name text deps) = deps
 
 -- M4（效果显式化）：落盘是宿主动作，显式在 `Eff []` 里；文件内容/依赖图计算保持纯。
-writeSplitFiles : String -> List SplitFile -> Eff [] (Check Int)
+export writeSplitFiles : String -> List SplitFile -> Eff [] (Check Int)
 writeSplitFiles dir [] = pure (OkC 0)
 writeSplitFiles dir (f :: rest) = do
   restR <- writeSplitFiles dir rest
@@ -57,7 +45,7 @@ writeSplitFiles dir (f :: rest) = do
       pure (OkC (n + 1))
 
 -- M30：只写内容变化的文件（build 的逐模块增量写盘；内容相同不 touch）。
-writeSplitFilesIfChanged : String -> List SplitFile -> Eff [] (Check Int)
+export writeSplitFilesIfChanged : String -> List SplitFile -> Eff [] (Check Int)
 writeSplitFilesIfChanged dir [] = pure (OkC 0)
 writeSplitFilesIfChanged dir (f :: rest) = do
   restR <- writeSplitFilesIfChanged dir rest
@@ -81,7 +69,7 @@ writeSplitFilesIfChanged dir (f :: rest) = do
 
 -- 编译单元依赖图：按输出顺序取 .ml（跳过 .mli），unit = 文件名去掉 ".ml"；
 -- deps 原样保留（已是直接依赖单元名，保持顺序、不去重）。
-splitGraph : List SplitFile -> List (Pair String (List String))
+export splitGraph : List SplitFile -> List (Pair String (List String))
 splitGraph [] = []
 splitGraph (f :: rest) =
   let
@@ -95,7 +83,7 @@ stripMl name = substring 0 (byteLength name - 3) name
 -- 按直接依赖分层。graph 是拓扑序（依赖在前），一遍扫描即可算出所有层的 depth：
 --   depth(unit) = 1 + max(depth(dep))；无依赖 depth = 0；dep 不在 graph 里按 depth 0 计。
 -- 层内保持 graph 顺序（确定），层间按 depth 升序。
-splitLayers : List (Pair String (List String)) -> List (List (Pair String (List String)))
+export splitLayers : List (Pair String (List String)) -> List (List (Pair String (List String)))
 splitLayers [] = []
 splitLayers graph =
   let
@@ -135,7 +123,7 @@ maxInt a b = if a > b then a else b
 --     调用，避免几十次进程启动（单核下分层并行的进程/I/O 开销反而更慢）；
 --   * 其余情况（干净 + 多核，或已有 .cmx 的增量）：按**内容哈希**（.ml/.mli + 直接依赖
 --     .stamp）逐单元编译，单单元层前台、多单元层 `&` 并行 + 逐个 `wait` 收尾。
-buildScript : List (Pair String (List String)) -> List String -> String
+export buildScript : List (Pair String (List String)) -> List String -> String
 buildScript graph cFiles = """#!/bin/sh
 # 由 vuna 生成：分离编译构建脚本（C35：按直接依赖分层并行 + 内容哈希增量）。用法: ./build.sh [OUT]
 # 干净构建且 JOBS<=1：一次 ocamlopt 编译全部 .mli/.ml 并链接；
@@ -332,7 +320,7 @@ filesOfDepthEntries table (unit :: rest) = case Base.HashMap.lookup "${unit}.ml"
   Just f => f :: filesOfDepthEntries table rest
   Nothing => filesOfDepthEntries table rest
 
-canonicalTopo : List SplitFile -> List SplitFile
+export canonicalTopo : List SplitFile -> List SplitFile
 canonicalTopo files =
   let
     graph = splitGraph files
@@ -370,7 +358,7 @@ normalizeFileDeps ties f = SplitFile (splitName f) (splitText f) (sortDepsByTie 
 -- 内容地址覆盖。
 --
 -- | `SplitFile` 的规范编码：名字 / 文本 / 依赖表。
-encSplitFile : SplitFile -> List String -> List String
+export encSplitFile : SplitFile -> List String -> List String
 encSplitFile f acc = encStr f.splitName (encStr f.splitText (encList encStr f.splitDeps acc))
 
 decSplitFile : Int -> Cur -> Maybe (Pair SplitFile Cur)
@@ -381,17 +369,17 @@ decSplitFile fuel c = do
   pure (Pair (SplitFile (firstOf p1) (firstOf p2) (firstOf p3)) (secondOf p3))
 
 -- | `List SplitFile` 的规范编码（split 缓存载荷）。
-encSplitFiles : List SplitFile -> List String -> List String
+export encSplitFiles : List SplitFile -> List String -> List String
 encSplitFiles fs acc = encList encSplitFile fs acc
 
 -- | 整串解析 `List SplitFile`（split 缓存载荷入口）。
-decSplitFilesComplete : String -> Maybe (List SplitFile)
+export decSplitFilesComplete : String -> Maybe (List SplitFile)
 decSplitFilesComplete s = case decList decSplitFile (strLength s) (curOf s) of
   Nothing => Nothing
   Just (Pair fs rest) => if curAtEnd rest then Just fs else Nothing
 
 -- | 整串解析单个 `SplitFile`（单元缓存载荷入口）。
-decSplitFileComplete : String -> Maybe SplitFile
+export decSplitFileComplete : String -> Maybe SplitFile
 decSplitFileComplete s = case decSplitFile (strLength s) (curOf s) of
   Nothing => Nothing
   Just (Pair f rest) => if curAtEnd rest then Just f else Nothing

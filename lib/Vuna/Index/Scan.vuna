@@ -1,4 +1,4 @@
-module Vuna.Index.Scan (buildIndex, loadOrBuild, loadOrBuildCheap) where
+module Vuna.Index.Scan where
 
 -- Vuna.Index.Scan：parse 级扫描、符号抽取、全量构建与索引缓存。
 --
@@ -393,7 +393,7 @@ indexOneExisting env dir pkgName path = do
       -- M31.3（B26/B27）：必须按**程序级** fixity 重排（本文件声明 ++ import 闭包，
       -- 本地优先）。只用本地声明会让用到 `+`/`==`/`::` 的文件报 unknown fixity，
       -- 然后被当错误跳过 → `vuna map` 静默漏模块。
-      OkC (SourceFile srcHdr imports fx decls0) => case reorderProgram (tableOfKeepOps (append programFixities fx)) decls0 of
+      OkC (SourceFile srcHdr imports fx decls0 _ _ _) => case reorderProgram (tableOfKeepOps (append programFixities fx)) decls0 of
         ErrC e => pure (Pair env2 (err "${path}: ${diagText e}"))
         OkC decls =>
           let
@@ -450,7 +450,7 @@ collectAll env (root :: rest) acc = do
     collectAll (firstOf stepped) rest (secondOf stepped)
 
 -- 全量构建（parse 所有源码，不读写缓存）。
-buildIndex : String -> Eff [] (Check Index)
+export buildIndex : String -> Eff [] (Check Index)
 buildIndex repo = do
   dirs <- packageDirs repo
   stepped <- collectAll emptyFixityEnv dirs (Acc [] [] [] [])
@@ -532,13 +532,13 @@ strongDepOf path = do
 -- 带缓存的入口（CLI：`vuna map` / `vuna api`）：强依赖 + `index:<dir>` 节点
 -- → 命中读 blob 解码 → 未命中重建并写回。非 workspace（向上找不到 vuna.toml）是
 -- **输入错误**，不再静默建空索引。
-loadOrBuild : String -> Eff [] (Check Index)
+export loadOrBuild : String -> Eff [] (Check Index)
 loadOrBuild repo = indexLoadOrBuild repo False
 
 -- 廉价入口（REPL：每会话首次 `:browse`/`:info`/`:search`）：依赖表用 stat 键
 -- `st:<path>:<bytes>:<mtime>:<hash>`（安全窗内回落内容哈希），不读全部源码算哈希。
 -- 节点 key 前缀不同（`index-cheap:`），与 CLI 的强依赖缓存互不污染。
-loadOrBuildCheap : String -> Eff [] (Check Index)
+export loadOrBuildCheap : String -> Eff [] (Check Index)
 loadOrBuildCheap repo = indexLoadOrBuild repo True
 
 indexLoadOrBuild : String -> Bool -> Eff [] (Check Index)

@@ -1,15 +1,4 @@
-module Vuna.Compiler.Driver.PerfCache
-  ( unitCacheBucketGc
-  , unitCacheCodec
-  , unitCacheDir
-  , unitCacheEntryDir
-  , unitCacheEntryKeyOf
-  , unitCacheFileName
-  , unitCacheGc
-  , unitCacheRead
-  , unitCacheTag
-  , unitCacheWrite
-  ) where
+module Vuna.Compiler.Driver.PerfCache where
 
 -- Vuna.Compiler.Driver.PerfCache：codegen **单元级**缓存（M34.5 S5）的磁盘层。
 --
@@ -38,10 +27,10 @@ unitCacheSchema : String
 unitCacheSchema = "vuna-unit-cache 2"
 
 -- | 单元缓存载荷的编码版本（`Store` 的 codec 段）。
-unitCacheCodec : String
+export unitCacheCodec : String
 unitCacheCodec = "split-file 1"
 
-unitCacheTag : Eff [] String
+export unitCacheTag : Eff [] String
 unitCacheTag = do
   tag <- compilerTagEff
   pure "${unitCacheSchema}/${tag}"
@@ -54,7 +43,7 @@ cacheBaseOf = do
     tmp => tmp
   )
 
-unitCacheDir : String -> Eff [] String
+export unitCacheDir : String -> Eff [] String
 unitCacheDir pkg = do
   base <- cacheBaseOf
   pure "${base}/vuna-cache/${hashTextOf pkg}/split-units"
@@ -66,7 +55,7 @@ unitCachePath : String -> String -> String -> String
 unitCachePath dir name key = "${dir}/${unitCacheFileName name key}"
 
 -- 单元文件名（桶内 GC 用同一函数算「本次仍被引用」的集合，不能另写一套命名）。
-unitCacheFileName : String -> String -> String
+export unitCacheFileName : String -> String -> String
 unitCacheFileName name key =
   let
     h1 = textHashOf "k1:${key}"
@@ -83,11 +72,11 @@ charSafe c = if c == 46 then 95 else c
 -- M34.5（S7）：单元缓存按 **entry 分桶**。同一包在不同工具/入口下共用包名 key 会让
 -- 不同入口的单元互相污染（entry key 已含声明哈希，但桶隔离才是清理与命中的边界）。
 -- 目录名带 entry key 的两个哈希；GC 只保留当前 entry 桶（旧 layout 的散落文件一并清）。
-unitCacheEntryDir : String -> String -> String
+export unitCacheEntryDir : String -> String -> String
 unitCacheEntryDir base entryKey =
   "${base}/e-${textHashOf "entry:${entryKey}"}-${textHashOf "entry2:${entryKey}"}"
 
-unitCacheEntryKeyOf : List (Pair String String) -> String
+export unitCacheEntryKeyOf : List (Pair String String) -> String
 unitCacheEntryKeyOf keys = case lookupPair "__entry__" keys of
   Just k => k
   Nothing => ""
@@ -104,7 +93,7 @@ safeRemoveFile path = do
   exists <- prim_eff_fileExists path
   if exists then prim_eff_runIn "/" ["rm", "-f", path] else pure 0
 
-unitCacheGc : String -> String -> Eff [] Int
+export unitCacheGc : String -> String -> Eff [] Int
 unitCacheGc base keepDir = do
   _ <- storeEnsureDirEff base
   names <- prim_eff_readDir base
@@ -141,7 +130,7 @@ dropFiles dir (f :: rest) = do
 -- 单元一定在保留集合里（不会删掉马上要命中的），而同一入口反复编辑累积下来的旧 key 文件
 -- 全部清掉 ⇒ 桶内文件数有界（≤ 单元数 + 1）。
 -- key 的传递依赖链保证「依赖接口变化 ⇒ 依赖者 key 变化」，旧 key 文件不再可能被命中。
-unitCacheBucketGc : String -> List String -> Eff [] Int
+export unitCacheBucketGc : String -> List String -> Eff [] Int
 unitCacheBucketGc dir keepNames = do
   _ <- storeEnsureDirEff dir
   names <- prim_eff_readDir dir
@@ -161,7 +150,7 @@ bucketGcGo dir keepNames (f :: rest) =
       _ <- safeRemoveFile path
       bucketGcGo dir keepNames rest
 
-unitCacheRead : String -> String -> String -> Eff [] (Maybe SplitFile)
+export unitCacheRead : String -> String -> String -> Eff [] (Maybe SplitFile)
 unitCacheRead dir name key = do
   tag <- unitCacheTag
   payload <- storeReadEff tag unitCacheCodec (unitCachePath dir name key)
@@ -170,7 +159,7 @@ unitCacheRead dir name key = do
     Nothing => Nothing
   )
 
-unitCacheWrite : String -> String -> String -> SplitFile -> Eff [] Int
+export unitCacheWrite : String -> String -> String -> SplitFile -> Eff [] Int
 unitCacheWrite dir name key sf = do
   _ <- storeEnsureDirEff dir
   tag <- unitCacheTag

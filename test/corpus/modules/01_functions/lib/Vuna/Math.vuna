@@ -1,2 +1,2 @@
-three : Int
+export three : Int
 three = 1 + 2

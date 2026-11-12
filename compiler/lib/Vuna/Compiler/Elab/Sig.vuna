@@ -1,19 +1,4 @@
-module Vuna.Compiler.Elab.Sig
-  ( arityFun
-  , bannedForModule
-  , classParamKind
-  , classParamKindOf
-  , definedNames
-  , exprMaxAppArity
-  , methodArgRigsOf
-  , modulePrefixOf
-  , qualifiedBannedTbl
-  , quantifyTopSig
-  , quantifyTopSigCached
-  , quantifyTopSigCtxCached
-  , quantifyTraitSig
-  , topQuantBanned
-  ) where
+module Vuna.Compiler.Elab.Sig where
 
 -- Vuna.Compiler.Elab.Sig：签名工具：trait 类参数的 kind 推断（M19）与顶层签名的自由名量化（M20）。
 -- 由原 `Elab.Kind` + `Elab.Quant` 合并而成（两者都只做 AST 变换、且 Quant 依赖 Kind）。
@@ -28,13 +13,13 @@ import Vuna.Compiler.Intrinsics
 -- ---------------------------------------------------------------------------
 -- 类参数的 kind 推断（多参数 trait 逐参数调用）：参数名被应用了 k 个实参就当
 -- `Type -> ... -> Type`（k 个箭头），从未被应用就是 `Type`。
-classParamKindOf : String -> List (Pair String Expr) -> Term
+export classParamKindOf : String -> List (Pair String Expr) -> Term
 classParamKindOf pname methods = arityFun (methodMaxAppArity pname methods) (TType levelZero)
 
-classParamKind : String -> List (Pair String Expr) -> Term
+export classParamKind : String -> List (Pair String Expr) -> Term
 classParamKind pname methods = classParamKindOf pname methods
 
-arityFun : Int -> Term -> Term
+export arityFun : Int -> Term -> Term
 arityFun n res = if n <= 0 then res else TPi "_" False Rig0 (TType levelZero) (arityFun (n - 1) res)
 
 methodMaxAppArity : String -> List (Pair String Expr) -> Int
@@ -45,7 +30,7 @@ maxIntList : List Int -> Int
 maxIntList [] = 0
 maxIntList (x :: rest) = if x >= maxIntList rest then x else maxIntList rest
 
-exprMaxAppArity : String -> Expr -> Int
+export exprMaxAppArity : String -> Expr -> Int
 exprMaxAppArity pname (EApp (EVar f fsp) args sp) =
   if f == pname then maxIntList (natToInt (length args) :: map (exprMaxAppArity pname) args)
   else maxIntList (map (exprMaxAppArity pname) args)
@@ -68,7 +53,7 @@ exprMaxAppArity pname _ = 0
 
 -- 方法的显式参数各自的 multiplicity（M19）：逐 binder 按域判断，判据由调用方传入
 -- （`Elab` 的 `binderRig`——`Elab.Sig` 不重复定义擦除规则，保持单一入口）。
-methodArgRigsOf : (Bool -> Value -> Rig) -> Term -> List Rig
+export methodArgRigsOf : (Bool -> Value -> Rig) -> Term -> List Rig
 methodArgRigsOf rigOf ty = methodArgRigsOfGo rigOf ty []
 
 methodArgRigsOfGo : (Bool -> Value -> Rig) -> Term -> List Value -> List Rig
@@ -85,7 +70,7 @@ methodArgRigsOfGo rigOf _ env = []
 -- 把 trait 方法签名里的自由小写名量化为隐式类型参数。
 -- `boundInScope` 给出「这个名字已在上下文里」的判定（trait 的类参数不算自由变量，
 -- 且它们的 kind 是 `Type -> Type` 这类高阶形态，不能被 `Type` 覆盖）。
-quantifyTraitSig : (String -> Bool) -> Expr -> Span -> Expr
+export quantifyTraitSig : (String -> Bool) -> Expr -> Span -> Expr
 quantifyTraitSig inScope ty sp = quantify (freeNames inScope ty) ty sp
 
 freeNames : (String -> Bool) -> Expr -> List String
@@ -155,18 +140,18 @@ dropName b (n :: rest) = if n == b then dropName b rest else n :: dropName b res
 
 -- 顶层签名里要量化的自由名字：额外排除本程序另有定义的名字（`vapp` 这类会被误
 -- 当类型变量）与内建 prelude 名。每个名字的 kind 按它在签名里的应用次数推断。
-quantifyTopSig : HashMap String Bool -> Expr -> Span -> Expr
+export quantifyTopSig : HashMap String Bool -> Expr -> Span -> Expr
 quantifyTopSig banned ty sp =
   quantifyTopKinds (keepOutTbl banned (freeNames (\n => False) ty)) ty ty sp
 
 -- 顶层量化要排除的名字集合（本程序定义名 + 内建 prelude 名），哈希集合 O(1) 判定。
-topQuantBanned : List String -> HashMap String Bool
+export topQuantBanned : List String -> HashMap String Bool
 topQuantBanned defined = Base.HashMap.ofNames (append defined topPreludeNames)
 
 -- C29（M28）：banned 集按**模块作用域**计算——只排除「与签名同一模块里另有定义」的
 -- 名字。程序级 flatten 后模块边界落在名字的模块前缀（最后一段之前）上；入口文件的
 -- 顶层名没有前缀（空串）。跨模块同名小写名不再让签名里的类型变量被误当全局名。
-bannedForModule : String -> List String -> HashMap String Bool
+export bannedForModule : String -> List String -> HashMap String Bool
 bannedForModule sigName defined = topQuantBanned (filterNamesInModule sigName defined)
 
 filterNamesInModule : String -> List String -> List String
@@ -176,7 +161,7 @@ filterNamesInModule sigName (n :: rest) =
   else filterNamesInModule sigName rest
 
 -- 名字的模块前缀（`Base.Nat.succ` → `Base.Nat`；入口顶层的 `main` → ""）。
-modulePrefixOf : String -> String
+export modulePrefixOf : String -> String
 modulePrefixOf name = case splitLastDot (splitOnDot name) of
   Pair rev base => joinDots rev
 
@@ -191,7 +176,7 @@ modulePrefixOf name = case splitLastDot (splitOnDot name) of
 --   旧：banned = prelude ∪ { n ∈ defined | modulePrefixOf n == modulePrefixOf sigName }
 --   新：keepOutQualified σ 用 prelude 表 + 键 `modulePrefixOf sigName ++ "\t" ++ n`
 -- 分隔符取 `\t`（标识符只允许字母/数字/下划线/撇号，mangle 前缀只含点，绝不会撞）。
-qualifiedBannedTbl : List String -> HashMap String Bool
+export qualifiedBannedTbl : List String -> HashMap String Bool
 qualifiedBannedTbl defined =
   Base.HashMap.insertAll (map (\n => Pair (qualifiedKey (modulePrefixOf n) n) True) defined)
     (Base.HashMap.fromList [])
@@ -200,7 +185,7 @@ qualifiedKey : String -> String -> String
 qualifiedKey prefix name = "${prefix}\t${name}"
 
 -- 与 `quantifyTopSig` 同义，但 banned 用共享的 qualified 表 + 全局 prelude 表。
-quantifyTopSigCached : String -> HashMap String Bool -> HashMap String Bool -> Expr -> Span -> Expr
+export quantifyTopSigCached : String -> HashMap String Bool -> HashMap String Bool -> Expr -> Span -> Expr
 quantifyTopSigCached prefix banned preludeBanned ty sp =
   quantifyTopKinds (keepOutQualified prefix banned preludeBanned (freeNames (\n => False) ty)) ty ty
     sp
@@ -208,7 +193,7 @@ quantifyTopSigCached prefix banned preludeBanned ty sp =
 -- M32：带 trait 约束的顶层签名量化。约束实参与返回类型**一起**参与自由名扫描与
 -- kind 推断（只出现在 `Eq a` 里的 `a` 也要量化），但只把 Pi 链包在返回类型上：
 -- `f : Eq a => a -> Bool` 量化成 `{a : Type} -> (Eq a => a -> Bool)`。
-quantifyTopSigCtxCached : String -> HashMap String Bool -> HashMap String Bool -> List Expr -> Expr -> Span -> Expr
+export quantifyTopSigCtxCached : String -> HashMap String Bool -> HashMap String Bool -> List Expr -> Expr -> Span -> Expr
 quantifyTopSigCtxCached prefix banned preludeBanned ctx ty sp =
   let
     combined = EApp (EVar "#sig" sp) (append ctx [ty]) sp
@@ -236,7 +221,7 @@ topPreludeNames : List String
 topPreludeNames = append ["Type", "->", "_"] (append typeIntrinsicNames preludeValueNames)
 
 -- 本程序里另有定义（DFun / DAxiom）的顶层名字：签名里的这些名字不是类型变量。
-definedNames : List Decl -> List String
+export definedNames : List Decl -> List String
 definedNames [] = []
 definedNames (d :: rest) = case d of
   DFun n pats body sp => n :: definedNames rest

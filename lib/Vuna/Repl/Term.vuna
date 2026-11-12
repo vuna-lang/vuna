@@ -1,18 +1,4 @@
-module Vuna.Repl.Term
-  ( ansi
-  , escCode
-  , rmFile
-  , shellQuote
-  , termEnterRaw
-  , termReadBlock
-  , termReadByte
-  , termReadTimeout
-  , termRestoreState
-  , termSaveState
-  , termTmpPath
-  , termWidth
-  , writeOut
-  ) where
+module Vuna.Repl.Term where
 
 -- Vuna.Repl.Term：REPL 行编辑的终端层（工具链；不进 seed 闭包）。
 --
@@ -25,14 +11,14 @@ module Vuna.Repl.Term
 import Vuna.Cli.Args
 import Vuna.Compiler.Common
 
-escCode : String
+export escCode : String
 escCode = strPack [27]
 
-ansi : String -> String -> String
+export ansi : String -> String -> String
 ansi code s = "${escCode}[${code}m${s}${escCode}[0m"
 
 -- 单引号 shell 转义（路径可能来自 TMPDIR）。
-shellQuote : String -> String
+export shellQuote : String -> String
 shellQuote s = "'${shellEscaped (strUnpack s)}'"
 
 shellEscaped : List Int -> String
@@ -41,7 +27,7 @@ shellEscaped (c :: rest) =
   if c == 39 then "'\\''${shellEscaped rest}" else strPack [c] ++ shellEscaped rest
 
 -- 会话级临时路径（stty 状态 / 尺寸文件）；同一进程内 effTimeUs 保证不撞名。
-termTmpPath : Int -> Eff [] String
+export termTmpPath : Int -> Eff [] String
 termTmpPath _ = do
   base <- termTempBase 0
   now <- effTimeUs
@@ -53,11 +39,11 @@ termTempBase _ = do
   pure
     (if env == "" then "/tmp" else if endsWith "/" env then substring 0 (byteLength env - 1) env else env)
 
-rmFile : String -> Eff [] Int
+export rmFile : String -> Eff [] Int
 rmFile path = prim_eff_runIn "/" ["rm", "-f", path]
 
 -- `stty -g > path`：保存终端状态。
-termSaveState : String -> Eff [] Int
+export termSaveState : String -> Eff [] Int
 termSaveState path = do
   code <- prim_eff_runIn "." ["sh", "-c", "stty -g > ${shellQuote path}"]
   if code == 0 then do
@@ -66,7 +52,7 @@ termSaveState path = do
   else pure 1
 
 -- `stty <saved>`：恢复终端；失败再试 `stty sane`。
-termRestoreState : String -> Eff [] Int
+export termRestoreState : String -> Eff [] Int
 termRestoreState path = do
   textR <- readText path
   let
@@ -79,19 +65,19 @@ termRestoreState path = do
     if code == 0 then pure 0 else prim_eff_runIn "." ["stty", "sane"]
 
 -- `stty raw -echo min 1 time 0`：原始模式，逐字节阻塞读。
-termEnterRaw : Int -> Eff [] Int
+export termEnterRaw : Int -> Eff [] Int
 termEnterRaw _ = prim_eff_runIn "." ["stty", "raw", "-echo", "min", "1", "time", "0"]
 
 -- Esc 序列探测用：0.1s 超时读（readByte 返回 -1 = 无后续字节）。
-termReadTimeout : Int -> Eff [] Int
+export termReadTimeout : Int -> Eff [] Int
 termReadTimeout _ = prim_eff_runIn "." ["stty", "min", "0", "time", "1"]
 
 -- 恢复阻塞读。
-termReadBlock : Int -> Eff [] Int
+export termReadBlock : Int -> Eff [] Int
 termReadBlock _ = prim_eff_runIn "." ["stty", "min", "1", "time", "0"]
 
 -- 读 1 字节；EOF 或超时返回 -1。
-termReadByte : Int -> Eff [] Int
+export termReadByte : Int -> Eff [] Int
 termReadByte _ = do
   s <- prim_eff_readBytes 1
   pure (case strUnpack s of
@@ -100,7 +86,7 @@ termReadByte _ = do
   )
 
 -- 终端列数；失败默认 80。
-termWidth : Int -> Eff [] Int
+export termWidth : Int -> Eff [] Int
 termWidth _ = do
   base <- termTmpPath 0
   let
@@ -130,5 +116,5 @@ parseDigits [] acc = Just acc
 parseDigits (c :: rest) acc =
   if c >= 48 && c <= 57 then parseDigits rest (acc * 10 + (c - 48)) else Nothing
 
-writeOut : String -> Eff [] Int
+export writeOut : String -> Eff [] Int
 writeOut s = prim_eff_print s

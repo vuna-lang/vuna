@@ -1,16 +1,4 @@
-module Vuna.Compiler.Diagnostics
-  ( codeDomain
-  , diagCategoryOf
-  , diagDescOf
-  , diagPhaseOf
-  , diagSeverityOf
-  , module Base.Nat
-  , module Base.Vec
-  , module Vuna.Compiler.Common
-  , module Vuna.Compiler.Diagnostics.Cg
-  , module Vuna.Compiler.Diagnostics.Ic
-  , module Vuna.Compiler.Diagnostics.Tc
-  ) where
+module Vuna.Compiler.Diagnostics where
 
 -- Vuna.Compiler.Diagnostics：错误码体系门面（M30 B19 拆分后保留原名字集合）。
 --
@@ -41,30 +29,30 @@ module Vuna.Compiler.Diagnostics
 -- 对外名字集合与拆分前逐项一致，调用点零改动。
 -- 本模块是**编译器侧**真源，进 seed（被 `vuna check .` 自检）。根包 Lint/Diagnostics 与
 -- Frontend/Diagnostics 单向 import 本模块；compiler 永不 import 根包。
-import Vuna.Compiler.Common
-import Base.Nat
+export import Vuna.Compiler.Common
+export import Base.Nat
 import Base.String
-import Base.Vec
+export import Base.Vec
 import Vuna.Compiler.Diagnostics.Rn
 import Vuna.Compiler.Diagnostics.Pkg
 import Vuna.Compiler.Diagnostics.Warning
 import Vuna.Compiler.Frontend.Diagnostics
 import Vuna.Compiler.Loader.Diagnostics
-import Vuna.Compiler.Diagnostics.Cg as Cg
-import Vuna.Compiler.Diagnostics.Ic as Ic
-import Vuna.Compiler.Diagnostics.Tc as Tc
+export import Vuna.Compiler.Diagnostics.Cg as Cg
+export import Vuna.Compiler.Diagnostics.Ic as Ic
+export import Vuna.Compiler.Diagnostics.Tc as Tc
 
 -- ---------------------------------------------------------------
 -- 目录元数据：severity/phase/category 由码域推导（单点映射，不另建真源）。
 -- ---------------------------------------------------------------
 -- | 码的域前缀（`TC_TypeMismatch` → `TC`）。
-codeDomain : String -> String
+export codeDomain : String -> String
 codeDomain code = case split "_" code of
   [] => code
   d :: _ => d
 
 -- | 码域 → 诊断阶段。
-diagPhaseOf : String -> String
+export diagPhaseOf : String -> String
 diagPhaseOf "LX" = "lex"
 diagPhaseOf "PS" = "parse"
 diagPhaseOf "RN" = "resolve"
@@ -79,7 +67,7 @@ diagPhaseOf "FX" = "effect"
 diagPhaseOf _ = "tool"
 
 -- | 码域 → 诊断类别。
-diagCategoryOf : String -> String
+export diagCategoryOf : String -> String
 diagCategoryOf "LX" = "syntax"
 diagCategoryOf "PS" = "syntax"
 diagCategoryOf "RN" = "resolve"
@@ -94,14 +82,14 @@ diagCategoryOf "FX" = "effects"
 diagCategoryOf _ = "tool"
 
 -- | 码域 → 默认 severity（UN_/LN_ 为 warning，其余 error）。
-diagSeverityOf : String -> String
+export diagSeverityOf : String -> String
 diagSeverityOf "UN" = "warning"
 diagSeverityOf "LN" = "warning"
 diagSeverityOf _ = "error"
 
 -- | 码 → 目录说明（中文；human 渲染在 `--lang zh` 时展示）。LN_ 说明在 lint 目录，
 -- 编译器内部不可见，返回 Nothing。
-diagDescOf : String -> Maybe String
+export diagDescOf : String -> Maybe String
 diagDescOf code = lookupDesc code allDescPairs
 
 -- | TC 目录 (code,desc) 对。

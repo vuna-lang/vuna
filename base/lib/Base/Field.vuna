@@ -1,4 +1,4 @@
-module Base.Field (Field) where
+module Base.Field where
 
 -- Base.Field：`HasField` 的**类型级字段标签** `Field "id"`。
 --
@@ -8,4 +8,4 @@ module Base.Field (Field) where
 -- `HasField (Field "id") a t` 时 `Field "id"` 是普通类型应用。
 --
 -- | 类型级字段标签 `Field "id"`：空归纳族，只做 `HasField` 的索引，没有值 / 运行时语义。
-data Field : String -> Type where
+export data Field : String -> Type where

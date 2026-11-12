@@ -1,4 +1,4 @@
-module Base.Show (DebugShow(..), Show(..), dbgShow) where
+module Base.Show where
 
 -- Base.Show：`Show` trait 与 `String` 实例（M24.7：从编译器合成迁到库）。
 --
@@ -15,7 +15,7 @@ module Base.Show (DebugShow(..), Show(..), dbgShow) where
 -- 特化；trait 声明、方法投影与实例搜索全部走库里的普通声明（见
 -- docs/reference/stdlib.md「内建与库的边界」）。
 -- | 把值渲染为可读 String 的 trait，只有一个方法 `show`。方法面与编译器内建 Show 逐位对齐，`deriving (Show)` 展开出的实例体直接落在本 trait 上。`Int` / `Bool` 实例在各自类型模块，`String` 实例留本模块以避免 `Base.String -> Base.Interp -> Base.Show` 的 import 环。
-trait Show a where
+export trait Show a(..) where
   show : a -> String
 
 -- 与 runtime 展示共用同一实现（M27：`strShow` 是唯一转义源）。
@@ -24,7 +24,7 @@ instance Show String where
 
 -- | 调试展示 trait：默认实现由 `Show` 派生，因此**所有 `Show` 实例自动获得
 -- `DebugShow`**（blanket instance）；需要不同调试格式的类型可另写实例。
-trait DebugShow a where
+export trait DebugShow a(..) where
   debugShow : a -> String
 
 -- | 默认实现：直接用 `show`。blanket instance 的约束由实例 ctx 承担（`Show a`）。
@@ -34,7 +34,7 @@ instance Show a => DebugShow a where
 -- | 调试打印：把 `debugShow x` 交给内置宏 `dbg!`（受 `--debug-perf` / `VUNA_DEBUG_PERF=1`
 -- 门控，带时间戳写 stderr）后返回 `x`；值语义不变，只用于调试。
 -- 见 docs/reference/debugging.md §3。
-dbgShow : DebugShow a => a -> a
+export dbgShow : DebugShow a => a -> a
 dbgShow x =
   let
     _ = dbg! (debugShow x)

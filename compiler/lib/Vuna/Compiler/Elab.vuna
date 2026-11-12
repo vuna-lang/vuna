@@ -1,60 +1,4 @@
-module Vuna.Compiler.Elab
-  ( Data.eraseIndexMask
-  , Data.indexErasureCandidates
-  , Derive.instHead
-  , Driver.DtGoalInfo
-  , Driver.addClassesEc
-  , Driver.addDatasEc
-  , Driver.addInstsEc
-  , Driver.dtEvalExprIn
-  , Driver.dtEvalExprInInfo
-  , Driver.ecOfProgram
-  , Driver.elabProgram
-  , Driver.elabProgramFull
-  , Driver.elabProgramFullWith
-  , Driver.elabProgramFullWithAux
-  , Driver.elabProgramGoWith
-  , Driver.elabProgramGoWithAux
-  , Driver.goalsOfProgram
-  , Driver.goalsOfProgramTolerant
-  , Driver.maybeAddHasFieldInstances
-  , InstName.derivedInstName
-  , InstName.instanceName
-  , Meta.dictCtorName
-  , Meta.dictTypeName
-  , Meta.isFamilyKindValue
-  , Meta.valueOpaqueScoped
-  , Trait.checkInstanceHeads
-  , Trait.elabInstanceBodies
-  , Types.DtClass
-  , Types.DtCtor
-  , Types.DtData
-  , Types.DtDef
-  , Types.DtFieldMeta(..)
-  , Types.DtGoal
-  , Types.DtProgram
-  , Types.dtClassName
-  , Types.dtCtorFamily
-  , Types.dtCtorName
-  , Types.dtCtorTelescope
-  , Types.dtCtorType
-  , Types.dtDataCtors
-  , Types.dtDataFields
-  , Types.dtDataIsRecord
-  , Types.dtDataName
-  , Types.dtDefBody
-  , Types.dtDefExtern
-  , Types.dtDefHasBody
-  , Types.dtDefName
-  , Types.dtDefSpan
-  , Types.dtDefType
-  , Types.dtProgDatas
-  , Types.dtProgDefs
-  , Types.dtProgGoals
-  , Types.dtProgSols
-  , Usage.checkProgramUsage
-  , Usage.isTypeForming
-  ) where
+module Vuna.Compiler.Elab where
 
 -- Vuna.Compiler.Elab：DT 精化器门面（双向检查 + 一阶元变量 + 类型级隐式插入 + M14 索引族）。
 -- 输入是 parser 的原始声明（不经 Loader）：名字解析在精化器里完成。
@@ -64,11 +8,11 @@ module Vuna.Compiler.Elab
 -- 实现按依赖层次拆到 `Elab/` 下的子模块（Types → Meta/Case/Dict → Term → Data/Trait → Driver），
 -- 这里只做**选择性重导出**（`子模块.名字`）：对外导出的名字集合与拆分前逐项一致，
 -- 抽象性也沿用拆分前语义（v0：与类型同名的 data 构造子随类型名一起导出；record 才抽象）。
-import Vuna.Compiler.Elab.Types as Types
-import Vuna.Compiler.Elab.Meta as Meta
-import Vuna.Compiler.Elab.Data as Data
-import Vuna.Compiler.Elab.Trait as Trait
-import Vuna.Compiler.Elab.InstName as InstName
-import Vuna.Compiler.Elab.Driver as Driver
-import Vuna.Compiler.Elab.Derive as Derive
-import Vuna.Compiler.Elab.Usage as Usage
+export import Vuna.Compiler.Elab.Types as Types (DtClass, DtCtor, DtData, DtDef, DtFieldMeta(..), DtGoal, DtProgram, dtClassName, dtCtorFamily, dtCtorName, dtCtorTelescope, dtCtorType, dtDataCtors, dtDataFields, dtDataIsRecord, dtDataName, dtDefBody, dtDefExtern, dtDefHasBody, dtDefName, dtDefSpan, dtDefType, dtProgDatas, dtProgDefs, dtProgGoals, dtProgSols)
+export import Vuna.Compiler.Elab.Meta as Meta (dictCtorName, dictTypeName, isFamilyKindValue, valueOpaqueScoped)
+export import Vuna.Compiler.Elab.Data as Data (eraseIndexMask, indexErasureCandidates)
+export import Vuna.Compiler.Elab.Trait as Trait (checkInstanceHeads, elabInstanceBodies)
+export import Vuna.Compiler.Elab.InstName as InstName (derivedInstName, instanceName)
+export import Vuna.Compiler.Elab.Driver as Driver (DtGoalInfo, addClassesEc, addDatasEc, addInstsEc, dtEvalExprIn, dtEvalExprInInfo, ecOfProgram, elabProgram, elabProgramFull, elabProgramFullWith, elabProgramFullWithAux, elabProgramGoWith, elabProgramGoWithAux, goalsOfProgram, goalsOfProgramTolerant, maybeAddHasFieldInstances)
+export import Vuna.Compiler.Elab.Derive as Derive (instHead)
+export import Vuna.Compiler.Elab.Usage as Usage (checkProgramUsage, isTypeForming)

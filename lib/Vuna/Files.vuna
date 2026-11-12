@@ -1,10 +1,4 @@
-module Vuna.Files
-  ( collectSourceFiles
-  , collectVunaFiles
-  , exampleOf
-  , pathExistsDir
-  , pathExistsFile
-  ) where
+module Vuna.Files where
 
 -- Vuna.Files：目录遍历工具（fmt / doc / test / Index 共用）。
 -- 只依赖 prim_eff_readDir / prim_eff_isDirectory / prim_eff_fileExists 内建；prim_eff_readDir 返回字典序，遍历顺序确定。
@@ -55,7 +49,7 @@ skipGenerated name =
     || name == "result"
     || name == "corpus"
 
-collectVunaFiles : String -> Eff [] (List String)
+export collectVunaFiles : String -> Eff [] (List String)
 collectVunaFiles dir = collectVunaFilesGo 1048576 dir
 
 -- 目录树是文件系统图（符号链接可成环），递归无法用结构下降证明；用显式 fuel 守卫。
@@ -84,7 +78,7 @@ else case name of
       else pure (if endsWith ".vuna" name then [path] else [])
 
 -- 递归收集目录下所有非隐藏项（文件与目录），用于通用遍历。
-collectSourceFiles : String -> Eff [] (List String)
+export collectSourceFiles : String -> Eff [] (List String)
 collectSourceFiles dir = collectSourceFilesGo 1048576 dir
 
 collectSourceFilesGo : Int -> String -> Eff [] (List String)
@@ -110,19 +104,19 @@ else case name of
       if exists then collectSourceFilesGo (fuel - 1) path else pure [path]
 
 -- 安全的目录判定：不存在返回 False，而不是抛异常。
-pathExistsDir : String -> Eff [] Bool
+export pathExistsDir : String -> Eff [] Bool
 pathExistsDir path = do
   exists <- pathExistsFile path
   if exists then prim_eff_isDirectory path else pure False
 
-pathExistsFile : String -> Eff [] Bool
+export pathExistsFile : String -> Eff [] Bool
 pathExistsFile path = prim_eff_fileExists path
 
 -- ---------------------------------------------------------------
 -- 诊断码 → 示例夹具（`explain`/`gen-errors` 共用；生成物不参与门禁）
 -- ---------------------------------------------------------------
 -- | 在 test/corpus（及 test/ 工作目录下的 corpus）找第一个包含该码的 `.diag.json`。
-exampleOf : String -> Eff [] (Maybe String)
+export exampleOf : String -> Eff [] (Maybe String)
 exampleOf code = do
   here <- findDiagExample 512 "test/corpus" code
   case here of

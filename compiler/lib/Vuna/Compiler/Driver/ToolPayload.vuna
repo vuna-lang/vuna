@@ -1,10 +1,5 @@
 -- | 工具会话载荷的规范编码：`ToolContext` / `Index` 的记录树 → 规范字节。
-module Vuna.Compiler.Driver.ToolPayload
-  ( decToolContextComplete
-  , encToolContext
-  , toolContextCodec
-  , toolContextSchema
-  ) where
+module Vuna.Compiler.Driver.ToolPayload where
 
 -- Vuna.Compiler.Driver.ToolPayload：工具会话（LSP / REPL）缓存载荷的**显式规范编码**。
 --
@@ -28,11 +23,11 @@ import Vuna.Compiler.Driver.Compile
 import Vuna.Compiler.Driver.Iface
 
 -- | 载荷 schema（字段集变化必须 bump；旧 blob 自然拒绝）。
-toolContextSchema : String
+export toolContextSchema : String
 toolContextSchema = "vuna-tool-context 1"
 
 -- | `Store` 载荷的 codec 段。
-toolContextCodec : String
+export toolContextCodec : String
 toolContextCodec = "tool-context 1"
 
 encToolContextPayload : ToolContext -> List String -> List String
@@ -47,7 +42,7 @@ encToolContextPayload ctx acc =
   in encStr ctx.tcOwnDir f
 
 -- | `ToolContext` → 规范字节。
-encToolContext : ToolContext -> String
+export encToolContext : ToolContext -> String
 encToolContext ctx = encTop encToolContextPayload ctx
 
 -- | `tcDepTable` 的一条：`(模块名, (包目录, manifest 条目))`。
@@ -56,7 +51,7 @@ encDepTableEntry (Pair name (Pair dir entry)) acc =
   encStr name (encStr dir (encManifestEntry entry acc))
 
 -- | 规范字节 → `ToolContext`（任何一步不符即 `Nothing`）。
-decToolContextComplete : String -> Maybe ToolContext
+export decToolContextComplete : String -> Maybe ToolContext
 decToolContextComplete s = case decToolContextPayload (strLength s) (curOf s) of
   Nothing => Nothing
   Just (Pair ctx rest) => if curAtEnd rest then Just ctx else Nothing

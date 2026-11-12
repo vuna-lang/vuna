@@ -1,4 +1,4 @@
-module Vuna.Lint.Fix (fixLoop) where
+module Vuna.Lint.Fix where
 
 -- Vuna.Lint.Fix：把 lint 规则给出的编辑描述应用到源码（M24 后维护·源码重组，从 Vuna.Lint 拆出）。
 --
@@ -59,7 +59,7 @@ applyFixes source findings =
 
 -- `programFixities` 与首轮 lint 用的是同一份程序级 fixity（--fix 只做格式/结构改写，
 -- 不改 imports），每轮复验必须继续按它重排，否则会退化成 unknown fixity。
-fixLoop : List FixityDecl -> String -> List Finding -> Int -> Int -> Check (Pair Int String)
+export fixLoop : List FixityDecl -> String -> List Finding -> Int -> Int -> Check (Pair Int String)
 fixLoop programFixities source findings passes total = if passes <= 0 then OkC (Pair total source)
 else case applyFixes source findings of
   ErrC e => ErrC e

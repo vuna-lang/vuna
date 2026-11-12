@@ -1,16 +1,4 @@
-module Vuna.Repl
-  ( ReplOutcome(..)
-  , ReplSink(..)
-  , ReplStart(..)
-  , ReplState(..)
-  , finishInput
-  , inputStep
-  , isModuleNameStr
-  , replOutputDrain
-  , replPendingOpen
-  , runRepl
-  , startReplSession
-  ) where
+module Vuna.Repl where
 
 -- Vuna.Repl：交互式 REPL（M11.5；M23 起底层是 DT 精化 + 核心求值；REPL v2 重写）。
 --
@@ -100,7 +88,7 @@ replFuelBound : Int
 replFuelBound = 1073741824
 
 -- 启动目标：由 CLI 解析；`:load` 复用同一套 doLoad* 函数。
-data ReplStart : Type where
+export data ReplStart(..) : Type where
   StartNone : ReplStart
   StartFile : String -> ReplStart
   StartDir : String -> ReplStart
@@ -124,7 +112,7 @@ record ReplSettings where
 -- 输出汇（server 模式的核心）：交互式 REPL 写 stdout；`vuna repl --listen` / `--server`
 -- 把同一份 step 函数的输出收集进 IORef，再作为一帧 JSON-RPC 响应回给客户端。
 -- 约束：`Vuna.Repl` 内除 `replEmit` / `replEmitErr` 外**不得直接 `prim_eff_print`**。
-data ReplSink : Type where
+export data ReplSink(..) : Type where
   SinkStdout : ReplSink
   -- 普通输出 / 错误输出（两个独立通道，服务端分别映射到 result.output / result.error）。
   SinkCapture : IORef String -> IORef String -> ReplSink
@@ -139,7 +127,7 @@ record ReplToolSession where
   -- 解出来 / 复用的工具上下文（依赖接口 + 校验面 + 闭包名单）。
   sessionTool : ToolContext
 
-record ReplState where
+export record ReplState(..) where
   stateCtx : PackageContext
   stateImports : String
   stateDefs : List ReplBlock
@@ -155,7 +143,7 @@ record ReplState where
   stateToolSession : Maybe ReplToolSession
   stateSink : ReplSink
 
-data ReplOutcome : Type where
+export data ReplOutcome(..) : Type where
   ReplContinue : ReplState -> ReplOutcome
   ReplExit : Int -> ReplOutcome
 
@@ -361,7 +349,7 @@ printOk st msg = do
 -- 起一个 session：非 tty 设置（无颜色 / 无行编辑）、历史文件为空（不读不写盘；
 -- 内存历史与 `:history` / `:again` 仍可用）、不打印 banner；`applyStart` 的提示消息
 -- 随 Ok 返回，由调用方决定是否放进协议响应。
-startReplSession : PackageContext -> ReplStart -> ReplSink -> Eff [] (Check (Pair ReplState String))
+export startReplSession : PackageContext -> ReplStart -> ReplSink -> Eff [] (Check (Pair ReplState String))
 startReplSession ctx start sink = do
   settings <- defaultSettings False
   let
@@ -369,7 +357,7 @@ startReplSession ctx start sink = do
   in applyStart st0 start
 
 -- 读出并清空两个 capture 通道（普通输出, 错误输出）；stdout 汇返回两个空串。
-replOutputDrain : ReplState -> Eff [] (Pair String String)
+export replOutputDrain : ReplState -> Eff [] (Pair String String)
 replOutputDrain st = case st.stateSink of
   SinkStdout => pure (Pair "" "")
   SinkCapture outRef errRef => do
@@ -380,14 +368,14 @@ replOutputDrain st = case st.stateSink of
     pure (Pair out err)
 
 -- 还有未完成的输入（续行 pending 或 `:{` 块未闭合）？
-replPendingOpen : ReplState -> Bool
+export replPendingOpen : ReplState -> Bool
 replPendingOpen st = case st.stateBlock of
   Just _ => True
   Nothing => st.statePending /= ""
 
 -- 「输入结束」收尾：pending 完整则提交（等价交互式空行 / Ctrl-D 的补交），
 -- `:{` 块未闭合或仍 needsMore 则保持 pending。
-finishInput : ReplState -> Eff [] ReplOutcome
+export finishInput : ReplState -> Eff [] ReplOutcome
 finishInput st = if st.statePending == "" then pure (ReplContinue st)
 else if needsMore st.statePending then pure (ReplContinue st)
 else
@@ -459,7 +447,7 @@ mkBlock text0 fromFile =
   let
     text = ensureTrailingNewline text0
   in case parseSource replTempFile text of
-    OkC (SourceFile _ _ _ decls) =>
+    OkC (SourceFile _ _ _ decls _ _ _) =>
       ReplBlock text (dedupStrs (funNamesOf decls)) (dedupStrs (sigNamesOf decls)) fromFile
     ErrC e => ReplBlock text [] [] fromFile
 
@@ -585,7 +573,7 @@ completionCandidates st =
 -- ---------------------------------------------------------------
 -- 主循环
 -- ---------------------------------------------------------------
-runRepl : PackageContext -> ReplStart -> Eff [] Int
+export runRepl : PackageContext -> ReplStart -> Eff [] Int
 runRepl ctx start = do
   tty <- isTTY 0
   settings <- defaultSettings tty
@@ -655,7 +643,7 @@ else do
         ReplContinue st2 => replLoop (fuel - 1) st2
 
 -- 一行输入：块模式 / 续行 / 普通行。
-inputStep : ReplState -> String -> Eff [] ReplOutcome
+export inputStep : ReplState -> String -> Eff [] ReplOutcome
 inputStep st raw = case st.stateBlock of
   Just block => blockStep st block raw
   Nothing => if st.statePending == "" then lineStep st raw else pendingStep st raw
@@ -759,14 +747,14 @@ addImport st line =
 -- 缺签名的 DFun 先走自动签名（写回后复查，失败回滚）。
 submitText : ReplState -> String -> Eff [] ReplOutcome
 submitText st text = case parseSource replTempFile "${bufferProgram st}${text}\n" of
-  OkC (SourceFile hdr imp fx decls) => case hdr of
+  OkC (SourceFile hdr imp fx decls _ _ _) => case hdr of
     Just md => evalText st text
     Nothing => appendDecls st text
   ErrC e => evalText st text
 
 appendDecls : ReplState -> String -> Eff [] ReplOutcome
 appendDecls st text = case parseSource replTempFile text of
-  OkC (SourceFile Nothing _ _ newDecls) => case prepareRedefinition st newDecls of
+  OkC (SourceFile Nothing _ _ newDecls _ _ _) => case prepareRedefinition st newDecls of
     ErrC e => do
       _ <- printDiag st e
       pure (ReplContinue st)
@@ -881,7 +869,7 @@ toolNodeKey ctx = "tooliface:${contextPackageName ctx}:${toolTextHash (contextDi
 bufferImports : String -> List String
 bufferImports program = case parseSource replTempFile program of
   ErrC _ => []
-  OkC (SourceFile _ imports _ _) => map replImportName imports
+  OkC (SourceFile _ imports _ _ _ _ _) => map replImportName imports
 
 -- 与 `implicitImportNames` 同一个取名单 helper：只取 import 的模块名。
 replImportName : Import -> String
@@ -1044,7 +1032,7 @@ ioTypeImports st tyText =
 hasMainDef : String -> Bool
 hasMainDef program = case parseSource replTempFile program of
   ErrC e => False
-  OkC (SourceFile _ _ _ decls) => memName "main" (topNames decls)
+  OkC (SourceFile _ _ _ decls _ _ _) => memName "main" (topNames decls)
 
 -- 顶层类型文本是 canonical 动作类型吗？`showTypeSig` 把 `Eff [] a` 渲染成
 -- `((Base.Eff.Eff Base.Eff.Row.Nil) Int)`。
@@ -1538,10 +1526,10 @@ doLoadFile st path = do
     ErrC e => ErrC e
     OkC source => case parseSource path source of
       ErrC e => ErrC e
-      OkC (SourceFile (Just _) _ _ _) =>
+      OkC (SourceFile (Just _) _ _ _ _ _ _) =>
         err
           "${path} 是模块文件（含 `module ... where` 头）；用 :load <模块名> 导入，或用 :browse <模块名> 查看接口"
-      OkC (SourceFile Nothing _ _ decls) =>
+      OkC (SourceFile Nothing _ _ decls _ _ _) =>
         OkC (Pair (lenInt decls) (loadedFileState st path source))
   )
 
@@ -1602,7 +1590,7 @@ else if st.stateLoadKind == 0 then do
 else if st.stateLoadKind == 1 then loadFileStep st "已重新加载" st.stateLoadTarget
 else loadModuleStep st st.stateLoadTarget "已重新加载模块"
 
-isModuleNameStr : String -> Bool
+export isModuleNameStr : String -> Bool
 isModuleNameStr s = if endsWith ".vuna" s then False
 else case strUnpack s of
   [] => False
@@ -1792,7 +1780,7 @@ importNameOf (Import n _ _ _) = n
 implicitImportNames : ReplState -> Eff [] (List String)
 implicitImportNames st = case parseSource replTempFile st.stateImports of
   ErrC _ => pure []
-  OkC (SourceFile _ imports _ _) => do
+  OkC (SourceFile _ imports _ _ _ _ _) => do
     verdict <-
       implicitPrelude (contextRoots st.stateCtx) (contextPackageName st.stateCtx) "" imports
     pure (case verdict of

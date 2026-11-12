@@ -1,12 +1,4 @@
-module Base.EffConsole
-  ( ConsoleOp(..)
-  , consoleEprint
-  , consolePrint
-  , handleConsole
-  , handleConsoleHost
-  , resConsole
-  , runConsole
-  ) where
+module Base.EffConsole where
 
 -- Base.EffConsole：一阶 console 效应（W10 效应标签迁移）。
 --
@@ -20,26 +12,26 @@ import Base.Nat
 import Base.Monad
 
 -- | console 操作：`Print` / `EPrint` 各带一个 `String`。
-data ConsoleOp : Type where
+export data ConsoleOp(..) : Type where
   Print : String -> ConsoleOp
   EPrint : String -> ConsoleOp
 
 -- | 操作的结果类型族：`Print` 返回写入字节数（`Nat`，D25）；`EPrint` 仍返回 `Int`
 -- （`prim_eff_eprint` 本轮未迁移）。
-resConsole : ConsoleOp -> Type
+export resConsole : ConsoleOp -> Type
 resConsole (Print s) = Nat
 resConsole (EPrint s) = Int
 
 -- | 通过命名实例 `n` 发送 `Print`；返回写入字节数（`Nat`）。行里需要 `Member n ConsoleOp r` 证明（由精化器按行结构构造）。
-consolePrint : (n : String) -> String -> {r : Row} -> {w : Member n ConsoleOp r} -> Eff r Nat
+export consolePrint : (n : String) -> String -> {r : Row} -> {w : Member n ConsoleOp r} -> Eff r Nat
 consolePrint n s = sendCore ConsoleOp "console" n (Print s)
 
 -- | 通过命名实例 `n` 发送 `EPrint`（stderr）；其余同 `consolePrint`。
-consoleEprint : (n : String) -> String -> {r : Row} -> {w : Member n ConsoleOp r} -> Eff r Int
+export consoleEprint : (n : String) -> String -> {r : Row} -> {w : Member n ConsoleOp r} -> Eff r Int
 consoleEprint n s = sendCore ConsoleOp "console" n (EPrint s)
 
 -- | 一阶 handler：`ret` 处理正常返回、`opH` 解释每个操作，结果行删除 `Console n`。`(key, name)` 与对应的 send 匹配。
-handleConsole : {a : Type} -> {b : Type} -> {r : Row} -> (n : String) -> {w : Member n ConsoleOp r} -> (a -> b) -> ((o : ConsoleOp) -> (resConsole o -> b) -> b) -> Eff r a -> Eff (Base.Eff.rowRem n ConsoleOp r) b
+export handleConsole : {a : Type} -> {b : Type} -> {r : Row} -> (n : String) -> {w : Member n ConsoleOp r} -> (a -> b) -> ((o : ConsoleOp) -> (resConsole o -> b) -> b) -> Eff r a -> Eff (Base.Eff.rowRem n ConsoleOp r) b
 handleConsole n ret opH comp = handleCore ConsoleOp "console" n ret opH comp
 
 -- 真实 handler 的 op 解释：answer 里直接执行宿主原语。
@@ -54,11 +46,11 @@ consoleOpHIO op k = case op of
     k r
 
 -- | 宿主 handler：结果行删除 `Console n`，answer 是已处理干净的 `Eff []` 动作，可直接交给 `joinEff` 展平。
-handleConsoleHost : {a : Type} -> {r : Row} -> (n : String) -> Eff (Base.Eff.Cons n ConsoleOp r) a -> Eff r (Eff [] a)
+export handleConsoleHost : {a : Type} -> {r : Row} -> (n : String) -> Eff (Base.Eff.Cons n ConsoleOp r) a -> Eff r (Eff [] a)
 handleConsoleHost n comp = handleConsole n (\a => pure a) consoleOpHIO comp
 
 -- | 单效应便捷入口（P3）：`handleConsoleHost n` + `joinEff` 的组合。
-runConsole : {a : Type} -> (n : String) -> Eff (Cons n ConsoleOp []) a -> Eff [] a
+export runConsole : {a : Type} -> (n : String) -> Eff (Cons n ConsoleOp []) a -> Eff [] a
 runConsole n comp = joinEff (handleConsoleHost n comp)
 
 -- ---------------------------------------------------------------

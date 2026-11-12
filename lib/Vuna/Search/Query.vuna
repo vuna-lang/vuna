@@ -1,4 +1,4 @@
-module Vuna.Search.Query (searchNameDoc, searchType, typeNameMap) where
+module Vuna.Search.Query where
 
 -- Vuna.Search.Query：名称 / docstring / 类型检索的纯函数部分（工具链；永不进 seed 闭包）。
 --
@@ -62,7 +62,7 @@ allTokens (t :: rest) doc = if contains t doc then allTokens rest doc else False
 privateSym : Sym -> Bool
 privateSym s = startsWith "_" (symName s)
 
-searchNameDoc : Index -> String -> Bool -> Bool -> List SearchHit
+export searchNameDoc : Index -> String -> Bool -> Bool -> List SearchHit
 searchNameDoc index query nameOnly docOnly =
   let
     syms = filter (\s => not (privateSym s)) index.indexSymbols
@@ -116,7 +116,7 @@ allocNamed name st =
 bindVar : String -> Int -> NormState -> NormState
 bindVar name id st = NormState (normNext st) (Pair name id :: normEnv st)
 
-typeNameMap : Index -> List (Pair String String)
+export typeNameMap : Index -> List (Pair String String)
 typeNameMap index =
   let
     types = filter isTypeSym index.indexSymbols
@@ -334,7 +334,7 @@ else case unifyFlex 100 (Subst []) query sig of
 parseQuery : String -> Check Expr
 parseQuery query = case parseSource "<type-query>" "q : ${query}" of
   ErrC e => ErrC e
-  OkC (SourceFile hdr imports fx decls) => case decls of
+  OkC (SourceFile hdr imports fx decls _ _ _) => case decls of
     (DSig name ctx ty sp) :: rest => OkC ty
     _ => err "type query is not a signature"
 
@@ -343,7 +343,7 @@ parseSymType names s = case parseExpressionSource (symType s) of
   ErrC e => Nothing
   OkC e => schemeOf names e
 
-searchType : Index -> String -> Check (List SearchHit)
+export searchType : Index -> String -> Check (List SearchHit)
 searchType index query = case parseQuery query of
   ErrC e => err "cannot parse type query: ${diagText e}"
   OkC queryExpr =>

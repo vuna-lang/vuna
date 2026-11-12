@@ -1,4 +1,4 @@
-module Vuna.Doc.Run (runDoc) where
+module Vuna.Doc.Run where
 
 -- Vuna.Doc.Run：`vuna doc` 的参数解析、包发现、[export] 过滤、HTML 写出与 --check。
 --
@@ -13,7 +13,7 @@ import Vuna.Doc.Html
 import Vuna.Doc.Model
 import Vuna.Files
 
-runDoc : List String -> Eff [] Int
+export runDoc : List String -> Eff [] Int
 runDoc args = case parseToolArgs "vuna doc" [BoolFlag "check", ValueFlag "package"] args of
   ErrC e => docError (diagText e)
   OkC parsed => case parsed.positionals of

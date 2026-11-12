@@ -1,11 +1,4 @@
-module Vuna.Lint.Rules
-  ( Edit(..)
-  , Finding(..)
-  , isNilList
-  , joinLines
-  , lintSourceWith
-  , splitLines
-  ) where
+module Vuna.Lint.Rules where
 
 -- Vuna.Lint.Rules：lint 的 dispatch 规则 + 列表字面量规则（AST 驱动）+ 源码切片工具。
 --
@@ -39,12 +32,12 @@ import Vuna.Lint.Diagnostics
 lintFuelExhausted : String -> a
 lintFuelExhausted what = prim_fail "vuna: internal: lint ${what} fuel exhausted"
 
-record Edit where
+export record Edit(..) where
   editStart : Int
   editEnd : Int
   editLines : List String
 
-record Finding where
+export record Finding(..) where
   findingLine : Int
   findingCol : Int
   findingCode : String
@@ -76,7 +69,7 @@ record ChainRes where
 lintFuel : Int
 lintFuel = 1000000
 
-isNilList : List a -> Bool
+export isNilList : List a -> Bool
 isNilList [] = True
 isNilList (x :: rest) = False
 
@@ -110,7 +103,7 @@ blankChars : List Int -> Bool
 blankChars [] = True
 blankChars (c :: rest) = isSpaceChar c && blankChars rest
 
-splitLines : String -> List String
+export splitLines : String -> List String
 splitLines source = splitLinesFrom (strUnpack source) [] []
 
 splitLinesFrom : List Int -> List String -> List Int -> List String
@@ -119,7 +112,7 @@ splitLinesFrom (c :: rest) acc cur =
   if c == 10 then splitLinesFrom rest (strPack (reverse cur) :: acc) []
   else splitLinesFrom rest acc (c :: cur)
 
-joinLines : List String -> String
+export joinLines : List String -> String
 joinLines [] = ""
 -- 单元素列表不加换行：splitLines 对以换行结尾的源码会补一个空行，旧实现
 -- （`line ++ "\n" ++ joinLines rest`）会让 --fix 每次多写一个行尾换行。
@@ -1600,10 +1593,10 @@ dedupGo kept (f :: rest) = if coveredBy kept f then dedupGo kept rest else dedup
 -- `programFixities` = 本文件 `infix*` 声明 ++ 该文件 import 闭包可见声明（调用方算）；
 -- 这里再把它放在本文件声明（parse 得到的 env）之前——本地优先，与 Loader 一致。
 -- 缺声明时严格报 unknown fixity（不静默按默认优先级重排）。
-lintSourceWith : List FixityDecl -> String -> Check (List Finding)
+export lintSourceWith : List FixityDecl -> String -> Check (List Finding)
 lintSourceWith programFixities source = case parseSource "<lint>" source of
   ErrC e => ErrC e
-  OkC (SourceFile _ _ fx decls0) => case reorderProgram (tableOfKeepOps (append programFixities fx)) decls0 of
+  OkC (SourceFile _ _ fx decls0 _ _ _) => case reorderProgram (tableOfKeepOps (append programFixities fx)) decls0 of
     ErrC e => ErrC e
     OkC decls => case lexSource source of
       ErrC e => ErrC e

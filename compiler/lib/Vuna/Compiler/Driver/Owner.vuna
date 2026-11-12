@@ -1,20 +1,4 @@
-module Vuna.Compiler.Driver.Owner
-  ( SplitMeta(..)
-  , entryOwner
-  , knownModuleOrErr
-  , lookupModuleOf
-  , modulePrefixOfName
-  , nameOwnerPairsOfDatas
-  , nameOwnerPairsOfDefs
-  , splitDataOwnerEntriesOf
-  , splitDataOwnerEntriesOfModules
-  , splitDataOwnerOf
-  , splitDeclNames
-  , splitDefOwnerOf
-  , splitMetaOf
-  , splitOwnerEntriesOf
-  , splitOwnerEntriesOfModules
-  ) where
+module Vuna.Compiler.Driver.Owner where
 
 -- Vuna.Compiler.Driver.Owner：**声明归属表**——声明名 / 实例名 / 方法投影名 / 派生实例名
 -- → 所属模块（入口声明归合成模块 `Main`）。
@@ -36,17 +20,17 @@ splitNoSpan : Span
 splitNoSpan = Span "" 0 0 0 0
 
 -- 入口单元的固定名（入口声明不带模块前缀，统一归到 `Main`）。
-entryOwner : String
+export entryOwner : String
 entryOwner = "Main"
 
-modulePrefixOfName : String -> String
+export modulePrefixOfName : String -> String
 modulePrefixOfName name = case splitLastDot (splitOnDot name) of
   Pair rev base => joinDots rev
 
 -- ---------------------------------------------------------------
 -- 归属表：声明名 / 实例名 / 方法投影名 → 模块；data / 字典 data → 模块
 -- ---------------------------------------------------------------
-splitDeclNames : List Decl -> List String
+export splitDeclNames : List Decl -> List String
 splitDeclNames [] = []
 splitDeclNames (d :: rest) = case d of
   DSig name ctx ty sp => name :: splitDeclNames rest
@@ -127,27 +111,27 @@ splitInstanceOwnersGo owner [] = []
 splitInstanceOwnersGo owner (d :: rest) =
   append (splitInstanceOwnerOf owner d) (splitInstanceOwnersGo owner rest)
 
-splitOwnerEntriesOf : String -> List Decl -> List (Pair String String)
+export splitOwnerEntriesOf : String -> List Decl -> List (Pair String String)
 splitOwnerEntriesOf owner decls =
   append (map (\n => Pair n owner) (splitDeclNames decls))
     (append (splitInstanceOwnersGo owner decls) (concatMap (splitTraitDefOwnerOf owner) decls))
 
-splitDataOwnerEntriesOf : String -> List Decl -> List (Pair String String)
+export splitDataOwnerEntriesOf : String -> List Decl -> List (Pair String String)
 splitDataOwnerEntriesOf owner decls =
   append (map (\n => Pair n owner) (splitDataNames decls))
     (concatMap (splitTraitDataOwnerOf owner) decls)
 
-splitOwnerEntriesOfModules : List (Pair String (List Decl)) -> List (Pair String String)
+export splitOwnerEntriesOfModules : List (Pair String (List Decl)) -> List (Pair String String)
 splitOwnerEntriesOfModules [] = []
 splitOwnerEntriesOfModules ((Pair mname decls) :: rest) =
   append (splitOwnerEntriesOf mname decls) (splitOwnerEntriesOfModules rest)
 
-splitDataOwnerEntriesOfModules : List (Pair String (List Decl)) -> List (Pair String String)
+export splitDataOwnerEntriesOfModules : List (Pair String (List Decl)) -> List (Pair String String)
 splitDataOwnerEntriesOfModules [] = []
 splitDataOwnerEntriesOfModules ((Pair mname decls) :: rest) =
   append (splitDataOwnerEntriesOf mname decls) (splitDataOwnerEntriesOfModules rest)
 
-record SplitMeta where
+export record SplitMeta(..) where
   smDefOwners : List (Pair String String)
   smDataOwners : List (Pair String String)
   smKnownModules : List String
@@ -157,7 +141,7 @@ record SplitMeta where
   smDefOwnerT : HashMap String String
   smDataOwnerT : HashMap String String
 
-splitMetaOf : List (Pair String (List Decl)) -> List Decl -> SplitMeta
+export splitMetaOf : List (Pair String (List Decl)) -> List Decl -> SplitMeta
 splitMetaOf modules entryDecls =
   let
     knownModules = map (\p => firstOf p) modules
@@ -169,17 +153,17 @@ splitMetaOf modules entryDecls =
   in SplitMeta defOwners dataOwners knownModules (Base.HashMap.fromList defOwners)
     (Base.HashMap.fromList dataOwners)
 
-lookupModuleOf : List (Pair String String) -> String -> Maybe String
+export lookupModuleOf : List (Pair String String) -> String -> Maybe String
 lookupModuleOf pairs name = lookupPair name pairs
 
-knownModuleOrErr : List String -> String -> String -> Check String
+export knownModuleOrErr : List String -> String -> String -> Check String
 knownModuleOrErr knownModules what name =
   let
     prefix = modulePrefixOfName name
   in if memName prefix knownModules then OkC prefix
   else icInternal "DT split: `${what}` ${name} has module prefix `${prefix}` but no such module"
 
-splitDataOwnerOf : SplitMeta -> DtData -> Check String
+export splitDataOwnerOf : SplitMeta -> DtData -> Check String
 splitDataOwnerOf meta d = case Base.HashMap.lookup (dtDataName d) meta.smDataOwnerT of
   Just o => OkC o
   Nothing =>
@@ -192,7 +176,7 @@ splitDataOwnerOf meta d = case Base.HashMap.lookup (dtDataName d) meta.smDataOwn
 isSyntheticInternalName : String -> Bool
 isSyntheticInternalName name = name == mainShowDefName || startsWith "@vuna@" name
 
-splitDefOwnerOf : SplitMeta -> String -> Check String
+export splitDefOwnerOf : SplitMeta -> String -> Check String
 splitDefOwnerOf meta name = case Base.HashMap.lookup name meta.smDefOwnerT of
   Just o => OkC o
   Nothing =>
@@ -200,13 +184,13 @@ splitDefOwnerOf meta name = case Base.HashMap.lookup name meta.smDefOwnerT of
     else if isSyntheticInternalName name then OkC entryOwner
     else icInternal "DT split: cannot determine module for definition `${name}`"
 
-nameOwnerPairsOfDefs : SplitMeta -> List DtDef -> Check (List (Pair String String))
+export nameOwnerPairsOfDefs : SplitMeta -> List DtDef -> Check (List (Pair String String))
 nameOwnerPairsOfDefs meta [] = OkC []
 nameOwnerPairsOfDefs meta (d :: rest) =
   Vuna.Compiler.Common.bind (splitDefOwnerOf meta (dtDefName d))
     (\o => Vuna.Compiler.Common.bind (nameOwnerPairsOfDefs meta rest) (\ps => OkC (Pair (dtDefName d) o :: ps)))
 
-nameOwnerPairsOfDatas : SplitMeta -> List DtData -> Check (List (Pair String String))
+export nameOwnerPairsOfDatas : SplitMeta -> List DtData -> Check (List (Pair String String))
 nameOwnerPairsOfDatas meta [] = OkC []
 nameOwnerPairsOfDatas meta (d :: rest) =
   Vuna.Compiler.Common.bind (splitDataOwnerOf meta d)

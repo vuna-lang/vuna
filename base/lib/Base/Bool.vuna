@@ -1,5 +1,5 @@
 -- | 布尔类型与逻辑辅助函数。
-module Base.Bool (Bool(..), and, bool, not, or, xor) where
+module Base.Bool where
 
 -- Base.Bool：布尔类型与逻辑辅助函数。按「实例跟类型模块走」的落点规则承载
 -- `Show Bool` 实例（B24），因此依赖 Base.Show；`Eq` / `Ord` 实例随 trait 留在
@@ -12,34 +12,34 @@ infixl 3 &&
 infixl 2 ||
 
 -- | 布尔：`False` / `True`。
-data Bool : Type where
+export data Bool(..) : Type where
   -- | 假。
   False : Bool
   -- | 真。
   True : Bool
 
 -- | 逻辑非。
-not : Bool -> Bool
+export not : Bool -> Bool
 not True = False
 not False = True
 
 -- | 逻辑与（非短路版本；短路内建是 `&&`）。
-and : Bool -> Bool -> Bool
+export and : Bool -> Bool -> Bool
 and True b = b
 and False b = False
 
 -- | 逻辑或（非短路版本；短路内建是 `||`）。
-or : Bool -> Bool -> Bool
+export or : Bool -> Bool -> Bool
 or True b = True
 or False b = b
 
 -- | 逻辑异或。
-xor : Bool -> Bool -> Bool
+export xor : Bool -> Bool -> Bool
 xor True b = not b
 xor False b = b
 
 -- | 布尔消除：先假分支、再真分支。
-bool : a -> a -> Bool -> a
+export bool : a -> a -> Bool -> a
 bool ifFalse ifTrue True = ifTrue
 bool ifFalse ifTrue False = ifFalse
 

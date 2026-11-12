@@ -1,13 +1,4 @@
-module Vuna.Compiler.Codegen.Assembly
-  ( UnitParts
-  , checkDtProgram
-  , genUnitParts
-  , genUnitText
-  , mainHook
-  , prepareDtProgram
-  , runtimeUnit
-  , unitPartsDeps
-  ) where
+module Vuna.Compiler.Codegen.Assembly where
 
 -- Vuna.Compiler.Codegen.Assembly：split 产物的**唯一装配实现**（M26；原 Program）。
 --
@@ -28,24 +19,24 @@ import Vuna.Compiler.Codegen.Erase
 import Vuna.Compiler.Codegen.Term
 
 -- 运行时前缀单元：`Vuna_runtime.ml` 只有 `dtRuntime`，是唯一被其余单元 open 的单元。
-runtimeUnit : String
+export runtimeUnit : String
 runtimeUnit = "Vuna_runtime"
 
 -- 装配片段：文件头（open 头）、类型声明、List 桥接、按 SCC 顺序的正文，外加生成状态
 -- 与该单元的直接依赖单元。构造子不导出：调用方只能经 `genUnitText` / `unitPartsDeps`
 -- 读取，避免各处重复实现拼接顺序。
-record UnitParts where
+export record UnitParts where
   unitPartsFragments : List String
   unitPartsBodies : List String
   unitPartsState : GenSt
   unitPartsDeps : List String
 
-unitPartsDeps : UnitParts -> List String
+export unitPartsDeps : UnitParts -> List String
 unitPartsDeps (UnitParts fragments bodies st deps) = deps
 
 -- check / split 共用的准备阶段：名字护栏 + 分区 + 擦除检查 + SCC 分组。
 -- 返回 (运行时定义（源码顺序）, 已按依赖排序的分组)。
-prepareDtProgram : Pair (List DtData) (List DtDef) -> Check (Pair (List DtDef) (List (List DtDef)))
+export prepareDtProgram : Pair (List DtData) (List DtDef) -> Check (Pair (List DtDef) (List (List DtDef)))
 prepareDtProgram program =
   let
     datas = firstOf program
@@ -81,7 +72,7 @@ prepareDtProgram program =
 --   allDatas  ：整个程序的运行时族（类型渲染与构造子表的完整视图）
 --   unitDatas ：写进本单元的类型声明
 --   groups    ：本单元运行时分组的 SCC 序（由调用方按归属过滤后分组）
-genUnitParts : List (Pair String (List Int)) -> QualCtx -> List DtData -> List DtData -> List (List DtDef) -> Check UnitParts
+export genUnitParts : List (Pair String (List Int)) -> QualCtx -> List DtData -> List DtData -> List (List DtDef) -> Check UnitParts
 genUnitParts usedTbl qc allDatas unitDatas groups = Vuna.Compiler.Common.bind (genTypeDeclsWith qc usedTbl allDatas unitDatas) (\typeText => let
   _ = dbg! "cg-typedecls-done"
 in Vuna.Compiler.Common.bind (genGroups (adjTblOf (depAdjacency (concatGroups groups))) (mkGenSt qc allDatas) groups) (\p => case p of
@@ -102,14 +93,14 @@ uniqueDeps deps = foldl addDep [] deps
 
 -- 片段拼接：open 头 + 类型 + 桥接 + 正文（正文之间空行分隔，末尾不带换行；
 -- 调用方按需要补换行/钩子）。
-genUnitText : UnitParts -> String
+export genUnitText : UnitParts -> String
 genUnitText (UnitParts fragments bodies st deps) =
   strConcatMany (append fragments [joinWith "\n\n" bodies])
 
 -- main 输出钩子的唯一实现（原 Program.generateDtProgram 与 Split.splitMainHook 合并）。
 -- 返回的文本以换行开头，调用方直接接在正文之后；动作 main（`Eff []`）先跑动作。
 -- 第二个分量是 main 钩子引用到的依赖单元（C35）。
-mainHook : QualCtx -> Pair (List DtData) (List DtDef) -> List DtDef -> Bool -> Check (Pair String (List String))
+export mainHook : QualCtx -> Pair (List DtData) (List DtDef) -> List DtDef -> Bool -> Check (Pair String (List String))
 mainHook qc program runtimeDefs printResult = case findDtDef "main" runtimeDefs of
   Nothing => cgErr0 NoMain
   Just mainDef =>
@@ -133,7 +124,7 @@ hookDeps dep = if dep == "" then [] else [dep]
 -- `vuna check` 跑一遍完整装配（丢弃文本），保证「能 check 就能 build」：
 -- 擦除检查、构造子引用、SCC 分组、类型声明与函数生成都在这一步走到。
 -- main 的存在与返回类型只在生成阶段要求，这样没有 main 的库模块也能 check。
-checkDtProgram : Pair (List DtData) (List DtDef) -> Check Int
+export checkDtProgram : Pair (List DtData) (List DtDef) -> Check Int
 checkDtProgram program = Vuna.Compiler.Common.bind (prepareDtProgram program) (\p => let
   _ = dbg! "cg-prepare-done"
 in case p of

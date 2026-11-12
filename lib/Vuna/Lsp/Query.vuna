@@ -1,17 +1,4 @@
-module Vuna.Lsp.Query
-  ( codeActionsFor
-  , completionItems
-  , definitionResult
-  , documentSymbols
-  , fixAllLintCommand
-  , fixAllLintWorkspaceEdit
-  , formattingEdits
-  , holeHoverAt
-  , referencesResult
-  , symbolHoverResult
-  , workspaceRoot
-  , workspaceSymbols
-  ) where
+module Vuna.Lsp.Query where
 
 -- Vuna.Lsp.Query：LSP 各查询方法的实现（工具链模块，**永不进 seed 闭包**）。
 --
@@ -153,13 +140,13 @@ symbolHoverJson s line startCol token =
 currentModuleNameOf : String -> String
 currentModuleNameOf text = case parseSource "<lsp>" text of
   ErrC e => ""
-  OkC (SourceFile hdr imports fx decls) => currentModuleName decls hdr
+  OkC (SourceFile hdr imports fx decls _ _ _) => currentModuleName decls hdr
 
 -- hover 的第一段：DT 洞目标（包上下文；与 `vuna goal` 同源）。
 -- 快速判据：文本里没有洞（`_` / `?name`）时直接跳过——否则每次 hover 都要跑一遍
 -- 整模块（含 import 闭包）的 DT 精化，大文件上是秒级开销。
 -- M40：用 tolerant 查询，**未解洞**也能拿到目标类型与上下文快照。
-holeHoverAt : String -> Int -> Int -> String -> Eff [] (Maybe Json)
+export holeHoverAt : String -> Int -> Int -> String -> Eff [] (Maybe Json)
 holeHoverAt uri line col text =
   if hasHole text then holeHoverChecked uri line col text else pure Nothing
 
@@ -212,7 +199,7 @@ hasHole : String -> Bool
 hasHole text = holeScan (strUnpack text) (0 - 1)
 
 -- hover 的第二段：光标标识符的签名/注释（Index；不可用/未命中 → null）。
-symbolHoverResult : String -> Int -> Int -> String -> Maybe Index -> Json
+export symbolHoverResult : String -> Int -> Int -> String -> Maybe Index -> Json
 symbolHoverResult uri line col text Nothing = JNull
 symbolHoverResult uri line col text (Just idx) = case tokenAtCursor text line col of
   Nothing => JNull
@@ -221,7 +208,7 @@ symbolHoverResult uri line col text (Just idx) = case tokenAtCursor text line co
     Just sym => symbolHoverJson sym line startCol token
 
 -- definition：光标 token → Index 符号 → Location；Index 不可用/未命中时同文件兜底。
-definitionResult : String -> Int -> Int -> String -> Maybe Index -> Json
+export definitionResult : String -> Int -> Int -> String -> Maybe Index -> Json
 definitionResult uri line col text Nothing =
   bufferDefinition uri text (fromMaybe "" (fmap secondOf (tokenAtCursor text line col)))
 definitionResult uri line col text (Just idx) = case tokenAtCursor text line col of
@@ -238,7 +225,7 @@ definitionResult uri line col text (Just idx) = case tokenAtCursor text line col
 -- 而不是按名字全局匹配（那会把同名顶层符号 / 其它作用域的同名局部混进来）。
 -- 局部未命中（顶层符号 / 模块名 / 洞 / 关键字 ⇒ `bindingRenameOccurrences` 返回 Nothing）才回落
 -- Index refs。返回扁平 Location 列表（与 `referencesFor` 同结构）。
-referencesResult : String -> Int -> Int -> String -> Maybe Index -> List Json
+export referencesResult : String -> Int -> Int -> String -> Maybe Index -> List Json
 referencesResult uri line col text midx =
   let
     localHits = localRefLocations uri line col text
@@ -270,7 +257,7 @@ localRefLocation uri text line col =
 -- M31.3（B27）：fixity 是程序级的——与 CLI 同源，用 `Vuna.FixityEnv`（按文件目录缓存模块图，
 -- 声明表逐文件重算 local + import 闭包）。上下文/加载失败或未知运算符 ⇒ 返回空 edits
 -- （不让 LSP 请求失败，也不静默改语义）。
-formattingEdits : String -> String -> Eff [] (List Json)
+export formattingEdits : String -> String -> Eff [] (List Json)
 formattingEdits uri text = do
   fxR <- formattingFixities uri text
   pure (case fxR of
@@ -308,7 +295,7 @@ formattingFixities uri text =
 -- `context.only`（Maybe：Nothing = 客户端不限制、Just [] = 明确不要任何 kind）：
 --   - quickfix 动作只在未限制或含 `quickfix` 时给；
 --   - case split 动作只在未限制或含 `refactor` / `refactor.rewrite` 时给。
-codeActionsFor : String -> String -> Int -> Int -> Int -> Int -> Maybe (List String) -> Eff [] (List Json)
+export codeActionsFor : String -> String -> Int -> Int -> Int -> Int -> Maybe (List String) -> Eff [] (List Json)
 codeActionsFor uri text reqStart reqStartCol reqEnd reqEndCol only = do
   ctxR <- contextForDoc uri
   case ctxR of
@@ -384,7 +371,7 @@ findingQuickFix uri f = case f.findingEdit of
       (JObj [Pair "title" (JStr "fix: ${f.findingRule}"), Pair "kind" (JStr "quickfix"), Pair "diagnostics" (JArr [findingDiagJson f]), Pair "edit" (JObj [Pair "changes" (JObj [Pair uri (JArr [textEditJson (editLspRange e) (joinLines e.editLines)])])])])
 
 -- fix all 的命令名（initialize capabilities 的 executeCommandProvider 与动作共用）。
-fixAllLintCommand : String
+export fixAllLintCommand : String
 fixAllLintCommand = "vuna.fixAllLint"
 
 -- C38：fix all 走 `Command`（不内嵌 WorkspaceEdit）：客户端选中后发
@@ -409,7 +396,7 @@ fixAllActions uri programFixities text findings = case fixAllLintEdit programFix
 
 -- `workspace/executeCommand` 的 `vuna.fixAllLint`：按当前缓冲重算 lint + fixLoop，
 -- 返回 WorkspaceEdit（changes 按 uri 分组）；无改动 / 上下文不可用 → Nothing。
-fixAllLintWorkspaceEdit : String -> String -> Eff [] (Maybe Json)
+export fixAllLintWorkspaceEdit : String -> String -> Eff [] (Maybe Json)
 fixAllLintWorkspaceEdit uri text = do
   ctxR <- contextForDoc uri
   case ctxR of
@@ -553,9 +540,21 @@ preludeSplit roots tyName = do
     Nothing => pure Nothing
     Just source => case parseSource "<prelude>" source of
       ErrC e => pure Nothing
-      OkC sf => case sf.sourceFileModDecl of
-        Nothing => pure Nothing
-        Just m => firstMaybeEff (map (exportedSplit roots tyName) m.modDeclExportItems)
+      OkC sf =>
+        firstMaybeEff (map (\m => moduleSplitIn roots m tyName) (preludeReexportModuleNames sf))
+
+reexportModuleName : ExportItem -> List String
+reexportModuleName (XModule name sp) = [name]
+reexportModuleName _ = []
+
+preludeReexportModuleNames : SourceFile -> List String
+preludeReexportModuleNames sf =
+  let
+    newNames = concatMap reexportModuleName sf.sourceFileReexports
+    oldNames = case sf.sourceFileModDecl of
+      Just m => concatMap reexportModuleName m.modDeclExportItems
+      Nothing => []
+  in if isEmptyList newNames then oldNames else newNames
 
 importSplit : List Root -> String -> Import -> Eff [] (Maybe SplitTy)
 importSplit roots tyName imp = moduleSplitIn roots imp.importName tyName
@@ -634,9 +633,13 @@ preludeReexportModules roots = do
     Nothing => pure []
     Just source => case parseSource "<prelude>" source of
       ErrC e => pure []
-      OkC sf => case sf.sourceFileModDecl of
-        Nothing => pure []
-        Just m => pure (mapMaybe exportModuleName m.modDeclExportItems)
+      OkC sf =>
+        let
+          newNames = mapMaybe exportModuleName sf.sourceFileReexports
+          oldNames = case sf.sourceFileModDecl of
+            Nothing => []
+            Just m => mapMaybe exportModuleName m.modDeclExportItems
+        in pure (append newNames oldNames)
 
 typePatternPrefix : SourceFile -> List String -> String -> Maybe String
 typePatternPrefix sf preludeModules modName = if modName == "" then Just ""
@@ -734,7 +737,7 @@ else
       Nothing => pure dir
       Just p => outermostManifest (fuel - 1) p
 
-workspaceRoot : String -> Eff [] String
+export workspaceRoot : String -> Eff [] String
 workspaceRoot uri =
   let
     path = decodeUri uri
@@ -788,7 +791,7 @@ declBufferNames d = append (typeNamesOf [d]) (declNames d)
 bufferNames : String -> List String
 bufferNames text = case parseSource "<completion>" text of
   ErrC e => []
-  OkC (SourceFile hdr imports fx decls) => dedupeNames (concatMap declBufferNames decls)
+  OkC (SourceFile hdr imports fx decls _ _ _) => dedupeNames (concatMap declBufferNames decls)
 
 dedupeNames : List String -> List String
 dedupeNames xs = dedupeNamesGo xs [] []
@@ -860,10 +863,10 @@ declSymbolJson lines d =
   in symbolJson name (declSymbolKind d) (spanRange sp) (nameSelRange lines sp name)
     (declChildrenJson lines d)
 
-documentSymbols : String -> String -> Eff [] (List Json)
+export documentSymbols : String -> String -> Eff [] (List Json)
 documentSymbols uri text = case parseSource uri text of
   ErrC e => pure []
-  OkC (SourceFile hdr imports fx decls0) => do
+  OkC (SourceFile hdr imports fx decls0 _ _ _) => do
     fxR <- formattingFixities uri text
     pure (case fxR of
       ErrC _ => []
@@ -884,7 +887,7 @@ findDeclByName name (d :: rest) =
 bufferDefinition : String -> String -> String -> Json
 bufferDefinition uri text token = case parseSource uri text of
   ErrC e => JNull
-  OkC (SourceFile hdr imports fx decls) => case findDeclByName (lastSegment token) decls of
+  OkC (SourceFile hdr imports fx decls _ _ _) => case findDeclByName (lastSegment token) decls of
     Nothing => JNull
     Just d =>
       JArr
@@ -1020,7 +1023,7 @@ qualifiedCompletions ln chars prefixStart prefix (Just idx) =
         idx.indexSymbols
   in finishCompls (map (\s => Compl (symName s) (symCompletionKind s) (symSig s)) hits)
 
-completionItems : String -> Int -> Int -> Maybe Index -> List Json
+export completionItems : String -> Int -> Int -> Maybe Index -> List Json
 completionItems text line0 col0 midx =
   let
     ln = lineText text (line0 + 1)
@@ -1051,7 +1054,7 @@ symbolInfoJson idx s = case symLocation idx s of
     Just
       (JObj (append [Pair "name" (JStr (symName s)), Pair "kind" (JNum (symSymbolKind s)), Pair "location" loc] (if symModule s == "" then [] else [Pair "containerName" (JStr (symModule s))])))
 
-workspaceSymbols : Maybe Index -> String -> List Json
+export workspaceSymbols : Maybe Index -> String -> List Json
 workspaceSymbols Nothing query = []
 workspaceSymbols (Just idx) query =
   let

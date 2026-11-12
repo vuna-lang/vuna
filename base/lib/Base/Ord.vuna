@@ -1,4 +1,4 @@
-module Base.Ord (Ord(..), Ordering(..), compare, max, min) where
+module Base.Ord where
 
 -- Base.Ord：`Ord` trait 的**声明**（M31.1：trait 声明与实例分离），外加三值比较
 -- `Ordering` / `compare` 与 `min` / `max`。
@@ -25,7 +25,7 @@ infixl 4 > = gt
 infixl 4 >= = ge
 
 -- | 全序比较的 trait：`lt` / `le` / `gt` / `ge` 四个方法；`<` / `<=` / `>` / `>=` 是它们的别名，fixity 由本模块的 `infixl` 声明提供。Bool 实例随 trait 留在本模块（方法返回 Bool，放 Base.Bool 会成 import 环），Int / String 实例在各自类型模块。
-trait Ord a where
+export trait Ord a(..) where
   lt : a -> a -> Bool
   le : a -> a -> Bool
   gt : a -> a -> Bool
@@ -43,7 +43,7 @@ instance Ord Bool where
   ge False x = x
 
 -- | 三值比较结果：`LT`（小于）/ `EQ`（相等）/ `GT`（大于）；顺序即 `LT < EQ < GT`。
-data Ordering : Type where
+export data Ordering(..) : Type where
   -- | 小于。
   LT : Ordering
   -- | 相等。
@@ -80,15 +80,15 @@ instance Show Ordering where
     GT => "GT"
 
 -- | 三值比较：`x < y` 为 `LT`，`y < x` 为 `GT`，否则 `EQ`（只用 `Ord.lt` 派生，不依赖 `Eq` 实例）。
-compare : Ord a => a -> a -> Ordering
+export compare : Ord a => a -> a -> Ordering
 compare x y = if x < y then LT else if y < x then GT else EQ
 
 -- | 两值中较小者（用 `le` 判定，相等时返回第一个）。
-min : Ord a => a -> a -> a
+export min : Ord a => a -> a -> a
 min x y = if x <= y then x else y
 
 -- | 两值中较大者（用 `le` 判定，相等时返回第二个）。
-max : Ord a => a -> a -> a
+export max : Ord a => a -> a -> a
 max x y = if x <= y then y else x
 
 instance Hashable Ordering where

@@ -1,52 +1,29 @@
-module Base
-  ( module Base.Bits
-  , module Base.Bool
-  , module Base.Eq
-  , module Base.Float
-  , module Base.Foldable
-  , module Base.Hashable
-  , module Base.Interp
-  , module Base.List
-  , module Base.Map
-  , module Base.Maybe
-  , module Base.Monad
-  , module Base.Monoid
-  , module Base.Nat
-  , module Base.Num
-  , module Base.Ord
-  , module Base.Pair
-  , module Base.Result
-  , module Base.Show
-  , module Base.Sort
-  , module Base.String
-  , module Base.Traversable
-  , module Base.Unit
-  ) where
+module Base where
 
 -- Vuna：stdlib 包门面（M11-C）。整模块重导出核心模块，保留各模块的抽象性
 -- （例如 Map 的构造器不因门面而公开）。编译器/用户程序可以只 `import Vuna`。
-import Base.Pair
-import Base.Bits
-import Base.Bool
-import Base.Show
-import Base.Eq
-import Base.Ord
+export import Base.Pair
+export import Base.Bits
+export import Base.Bool
+export import Base.Show
+export import Base.Eq
+export import Base.Ord
 -- M31.1：加载 `Int` 的 Eq / Ord 实例（跟类型模块走；仅加载实例，不重导出名字）。
 import Base.Int
-import Base.Interp
-import Base.Foldable
-import Base.Float
-import Base.Hashable
-import Base.List
-import Base.Monoid
+export import Base.Interp
+export import Base.Foldable
+export import Base.Float
+export import Base.Hashable
+export import Base.List
+export import Base.Monoid
 -- D23：算术运算符 `+ - * /` 是 `Num` 方法的别名（fixity/别名真源在 Base.Num）。
-import Base.Num
-import Base.Maybe
-import Base.Nat
-import Base.Result
-import Base.String
-import Base.Sort
-import Base.Traversable
-import Base.Unit
-import Base.Map
-import Base.Monad
+export import Base.Num
+export import Base.Maybe
+export import Base.Nat
+export import Base.Result
+export import Base.String
+export import Base.Sort
+export import Base.Traversable
+export import Base.Unit
+export import Base.Map
+export import Base.Monad

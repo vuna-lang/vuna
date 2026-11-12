@@ -1,31 +1,5 @@
 -- | 编译器底层源码位置与路径工具（不含 `Result`；诊断结果类型在 `Diag`）。
-module Vuna.Compiler.Source
-  ( Pos(..)
-  , Span(..)
-  , baseName
-  , containsDot
-  , joinArrows
-  , joinDots
-  , joinSlashes
-  , posCol
-  , posLine
-  , showSpanLoc
-  , spanEndCol
-  , spanEndLine
-  , spanFile
-  , spanStartCol
-  , spanStartLine
-  , splitLastDot
-  , splitOnChar
-  , splitOnDot
-  , splitPath
-  , suggest
-  , module Base.Bool
-  , module Base.List
-  , module Base.Maybe
-  , module Base.Pair
-  , module Base.String
-  ) where
+module Vuna.Compiler.Source where
 
 -- Vuna.Compiler.Source：从 `Vuna.Compiler.Common` 拆出的位置/路径层。
 --
@@ -35,14 +9,14 @@ module Vuna.Compiler.Source
 --
 -- 位置约定：行、列均从 1 开始；列 = UTF-8 字节（与 lexer 的 `advanceChar` 一致）。
 -- LSP 的 UTF-16 换算只在 LSP 适配器做。
-import Base.Pair
-import Base.Bool
-import Base.List
-import Base.Maybe
-import Base.String
+export import Base.Pair
+export import Base.Bool
+export import Base.List
+export import Base.Maybe
+export import Base.String
 
 -- | 源码位置：行、列，均从 1 开始。
-record Pos where
+export record Pos(..) where
   -- | 行号（从 1 开始）。
   posLine : Int
   -- | 列号（从 1 开始；UTF-8 字节）。
@@ -50,7 +24,7 @@ record Pos where
 
 -- | 源码 span：文件、起始行列、结束行列。文件在解析时由调用方注入，
 -- 供跨模块 flatten 后仍能追溯每个表达式来自哪个源文件。
-record Span where
+export record Span(..) where
   -- | 该 span 所在的源文件路径。
   spanFile : String
   -- | 起始行（从 1 开始）。
@@ -63,35 +37,35 @@ record Span where
   spanEndCol : Int
 
 -- | 取源码位置的行号。
-posLine : Pos -> Int
+export posLine : Pos -> Int
 posLine (Pos l c) = l
 
 -- | 取源码位置的列号。
-posCol : Pos -> Int
+export posCol : Pos -> Int
 posCol (Pos l c) = c
 
 -- | 取 span 的起始行。
-spanStartLine : Span -> Int
+export spanStartLine : Span -> Int
 spanStartLine (Span f sl sc el ec) = sl
 
 -- | 取 span 的起始列。
-spanStartCol : Span -> Int
+export spanStartCol : Span -> Int
 spanStartCol (Span f sl sc el ec) = sc
 
 -- | 取 span 的结束行。
-spanEndLine : Span -> Int
+export spanEndLine : Span -> Int
 spanEndLine (Span f sl sc el ec) = el
 
 -- | 取 span 的结束列。
-spanEndCol : Span -> Int
+export spanEndCol : Span -> Int
 spanEndCol (Span f sl sc el ec) = ec
 
 -- | 取 span 的文件。
-spanFile : Span -> String
+export spanFile : Span -> String
 spanFile (Span f sl sc el ec) = f
 
 -- | 把 span 渲染成 `文件:行:列`（错误信息前缀）。
-showSpanLoc : Span -> String
+export showSpanLoc : Span -> String
 showSpanLoc (Span f sl sc el ec) = "${f}:${sl}:${sc}"
 
 -- | 字符（字节码）是否在列表里；线性扫描，用于小字符集判断。
@@ -100,15 +74,15 @@ memChar c [] = False
 memChar c (x :: rest) = x == c || memChar c rest
 
 -- | 字符串是否含 `.`（模块路径判定的快速路径）。
-containsDot : String -> Bool
+export containsDot : String -> Bool
 containsDot s = memChar 46 (strUnpack s)
 
 -- | 按 `.` 拆分模块路径 `A.B.C` → `["A","B","C"]`。
-splitOnDot : String -> List String
+export splitOnDot : String -> List String
 splitOnDot s = splitCharsOnDot (strUnpack s) [] []
 
 -- | 按任意分隔字符切分（`splitOnDot` 的泛化；内部标记名解码用）。
-splitOnChar : Int -> String -> List String
+export splitOnChar : Int -> String -> List String
 splitOnChar sep s = splitCharsOn sep (strUnpack s) [] []
 
 -- | 自动补注（M41 新增导出）：splitCharsOn。
@@ -127,32 +101,32 @@ splitCharsOnDot (c :: rest) acc seg =
 
 -- | 把已拆分的段列表的**最后一段**单独分出来：`["A","B"]` → `(["A"], "B")`；
 -- 空列表返回 `([], "")`。
-splitLastDot : List String -> Pair (List String) String
+export splitLastDot : List String -> Pair (List String) String
 splitLastDot parts = case reverse parts of
   [] => Pair [] ""
   last :: rest => Pair (reverse rest) last
 
 -- | 用 `.` 拼接模块路径段；空列表得空串，单段原样返回。
-joinDots : List String -> String
+export joinDots : List String -> String
 joinDots [] = ""
 joinDots ([x]) = x
 joinDots (x :: rest) = "${x}.${joinDots rest}"
 
 -- | 用 `/` 拼接文件路径段；空列表得空串，单段原样返回。
-joinSlashes : List String -> String
+export joinSlashes : List String -> String
 joinSlashes [] = ""
 joinSlashes ([x]) = x
 joinSlashes (x :: rest) = "${x}/${joinSlashes rest}"
 
 -- | 用 ` -> ` 拼接类型/签名片段（展示用）；空列表得空串，单段原样返回。
-joinArrows : List String -> String
+export joinArrows : List String -> String
 joinArrows [] = ""
 joinArrows ([x]) = x
 joinArrows (x :: rest) = "${x} -> ${joinArrows rest}"
 
 -- | 路径拆分：返回去掉最后一段的目录与最后一段（无 "/" 时目录为 ""）。
 -- 编译器驱动（创建输出文件父目录）与 doc 共用，因此放在 Base 而不是工具模块。
-splitPath : String -> Pair String String
+export splitPath : String -> Pair String String
 splitPath path = splitPathChars (strUnpack path) []
 
 -- | `splitPath` 的码点级实现：遇 `/`（47）即切成目录与剩余（含最后一段）。
@@ -165,11 +139,11 @@ splitPathChars (c :: rest) acc =
   if c == 47 then Pair (strPack (reverse acc)) (strPack rest) else splitPathChars rest (c :: acc)
 
 -- | 取路径最后一段（文件名/模块名），等价 `secondOf (splitPath path)`。
-baseName : String -> String
+export baseName : String -> String
 baseName path = secondOf (splitPath path)
 
 -- | 候选建议：与出错名相似的名字（诊断）。无相似项返回空串。
-suggest : String -> List String -> String
+export suggest : String -> List String -> String
 suggest name [] = ""
 suggest name (c :: rest) =
   if _similarName name c then " (did you mean ${c}?)" else suggest name rest

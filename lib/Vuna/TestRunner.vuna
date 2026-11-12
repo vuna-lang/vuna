@@ -1,4 +1,4 @@
-module Vuna.TestRunner (TestOpts(..), runTests) where
+module Vuna.TestRunner where
 
 -- Vuna.TestRunner：包内测试运行器（M11.5；M30 起支持效果测试与 workspace 聚合）。
 --
@@ -49,7 +49,7 @@ import Vuna.Interp
 
 -- `vuna test` 的选项；默认构造值（空过滤 + 全 False + jobs=1 + 无 only-file）等价于
 -- M30 的固定行为。
-record TestOpts where
+export record TestOpts(..) where
   testFilter : List String
   testListOnly : Bool
   testVerbose : Bool
@@ -70,7 +70,7 @@ record Tally where
   tallyFail : Int
   tallyStopped : Bool
 
-runTests : TestOpts -> Package -> Eff [] Int
+export runTests : TestOpts -> Package -> Eff [] Int
 runTests opts pkg = case opts.testOnlyFile of
   Just name => runOnlyFile opts pkg name
   Nothing => do

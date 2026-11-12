@@ -1,21 +1,4 @@
-module Vuna.Doc.Model
-  ( DocBook(..)
-  , DocItem(..)
-  , DocModule(..)
-  , bookModules
-  , buildModules
-  , itemDoc
-  , itemKind
-  , itemLine
-  , itemMembers
-  , itemName
-  , itemSignature
-  , moduleDoc
-  , moduleItems
-  , moduleName
-  , modulePackage
-  , modulePath
-  ) where
+module Vuna.Doc.Model where
 
 -- Vuna.Doc.Model：把源码解析成文档模型（工具链；永不进 seed 闭包）。
 --
@@ -36,7 +19,7 @@ import Vuna.Sig
 -- ---------------------------------------------------------------
 -- 数据模型
 -- ---------------------------------------------------------------
-record DocItem where
+export record DocItem(..) where
   itemName : String
   itemKind : String
   itemSignature : String
@@ -44,57 +27,57 @@ record DocItem where
   itemLine : Int
   itemMembers : List DocItem
 
-itemName : DocItem -> String
+export itemName : DocItem -> String
 itemName (DocItem name kind sig doc line members) = name
 
-itemKind : DocItem -> String
+export itemKind : DocItem -> String
 itemKind (DocItem name kind sig doc line members) = kind
 
-itemSignature : DocItem -> String
+export itemSignature : DocItem -> String
 itemSignature (DocItem name kind sig doc line members) = sig
 
-itemDoc : DocItem -> String
+export itemDoc : DocItem -> String
 itemDoc (DocItem name kind sig doc line members) = doc
 
-itemLine : DocItem -> Int
+export itemLine : DocItem -> Int
 itemLine (DocItem name kind sig doc line members) = line
 
-itemMembers : DocItem -> List DocItem
+export itemMembers : DocItem -> List DocItem
 itemMembers (DocItem name kind sig doc line members) = members
 
-record DocModule where
+export record DocModule(..) where
   modulePackage : String
   moduleName : String
   modulePath : String
   moduleDoc : String
   moduleItems : List DocItem
 
-modulePackage : DocModule -> String
+export modulePackage : DocModule -> String
 modulePackage (DocModule pkg name path doc items) = pkg
 
-moduleName : DocModule -> String
+export moduleName : DocModule -> String
 moduleName (DocModule pkg name path doc items) = name
 
-modulePath : DocModule -> String
+export modulePath : DocModule -> String
 modulePath (DocModule pkg name path doc items) = path
 
-moduleDoc : DocModule -> String
+export moduleDoc : DocModule -> String
 moduleDoc (DocModule pkg name path doc items) = doc
 
-moduleItems : DocModule -> List DocItem
+export moduleItems : DocModule -> List DocItem
 moduleItems (DocModule pkg name path doc items) = items
 
-record DocBook where
+export record DocBook(..) where
   bookModules : List DocModule
 
-bookModules : DocBook -> List DocModule
+export bookModules : DocBook -> List DocModule
 bookModules (DocBook modules) = modules
 
 -- ---------------------------------------------------------------
 -- 构建
 -- ---------------------------------------------------------------
 -- 包名 + 源文件列表 -> 模块列表（按输入文件顺序；调用方负责 [export] 过滤）。
-buildModules : String -> List String -> Eff [] (Check (List DocModule))
+export buildModules : String -> List String -> Eff [] (Check (List DocModule))
 buildModules pkg files = do
   built <- buildModulesGo emptyFixityEnv pkg files []
   pure (secondOf built)
@@ -125,7 +108,7 @@ buildModuleWith pkg path source looked =
     ErrC e => Pair env2 (err "${path}: cannot load package fixity context: ${diagText e}")
     OkC programFixities => case parseSource path source of
       ErrC e => Pair env2 (err "${path}: ${diagText e}")
-      OkC (SourceFile hdr imports fx decls0) => case reorderProgram (tableOfKeepOps (append programFixities fx)) decls0 of
+      OkC (SourceFile hdr imports fx decls0 _ _ _) => case reorderProgram (tableOfKeepOps (append programFixities fx)) decls0 of
         ErrC e => Pair env2 (err "${path}: ${diagText e}")
         OkC decls =>
           let

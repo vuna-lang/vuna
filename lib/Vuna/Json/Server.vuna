@@ -1,4 +1,4 @@
-module Vuna.Json.Server (ServerExit(..), serveConnection) where
+module Vuna.Json.Server where
 
 -- Vuna.Json.Server：JSON-RPC 连接循环（工具链；**永不进 seed 闭包**）。
 --
@@ -19,7 +19,7 @@ import Vuna.Json
 import Vuna.Json.Frame
 
 -- 连接结束的原因；**不含退出码**——同一个原因在不同 server 里映射不同。
-data ServerExit : Type where
+export data ServerExit(..) : Type where
   -- 分发要求退出（LSP `exit` / REPL `shutdown`、`:quit`）。
   ExitRequested : ServerExit
   -- 读端 EOF：stdio 的 stdin 关闭 / socket 的对端关闭。
@@ -44,7 +44,7 @@ writeFrames writeS (f :: rest) = do
 -- 写字节
 -- 传输告警（记日志 + 可选错误帧）
 -- 分发：(是否退出, (新状态, 待发帧))
-serveConnection : (Int -> Eff [] String) -> (String -> Eff [] Int) -> (String -> s -> Eff [] (Pair s (List Json))) -> (Json -> s -> Eff [] (Pair Bool (Pair s (List Json)))) -> s -> Eff [] (Pair ServerExit s)
+export serveConnection : (Int -> Eff [] String) -> (String -> Eff [] Int) -> (String -> s -> Eff [] (Pair s (List Json))) -> (Json -> s -> Eff [] (Pair Bool (Pair s (List Json)))) -> s -> Eff [] (Pair ServerExit s)
 serveConnection readN writeS warn dispatch state =
   connLoop serverFuelBound "" readN writeS warn dispatch state
 

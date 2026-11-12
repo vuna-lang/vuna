@@ -1,20 +1,4 @@
-module Vuna.Compiler.Driver.Cache
-  ( CachedProgram(..)
-  , cachedClasses
-  , cachedDatas
-  , cachedDefs
-  , cachedGlobals
-  , cachedInsts
-  , cachedOfProgram
-  , cachedOfProgramWith
-  , cachedProgramIssue
-  , cachedProgramValid
-  , decCachedProgram
-  , decCachedProgramComplete
-  , encCachedProgram
-  , shiftCachedProgram
-  , summaryMetaSegment
-  ) where
+module Vuna.Compiler.Driver.Cache where
 
 -- Vuna.Compiler.Driver.Cache：M34.5 / C37：接口摘要（依赖包 elab 复用）的载体——参考 Idris2 的 TTC：
 -- **只含闭合结果，不携带任何 elab 状态**（sols / next / dict goals / defVals）。
@@ -40,26 +24,26 @@ import Vuna.Compiler.Core.Term
 import Vuna.Compiler.Elab.Meta
 import Vuna.Compiler.Elab.Types
 
-record CachedProgram where
+export record CachedProgram(..) where
   cachedDatas : List DtData
   cachedDefs : List DtDef
   cachedGlobals : List (Pair String Term)
   cachedInsts : List DtInst
   cachedClasses : List DtClass
 
-cachedDatas : CachedProgram -> List DtData
+export cachedDatas : CachedProgram -> List DtData
 cachedDatas (CachedProgram datas defs globals insts classes) = datas
 
-cachedDefs : CachedProgram -> List DtDef
+export cachedDefs : CachedProgram -> List DtDef
 cachedDefs (CachedProgram datas defs globals insts classes) = defs
 
-cachedGlobals : CachedProgram -> List (Pair String Term)
+export cachedGlobals : CachedProgram -> List (Pair String Term)
 cachedGlobals (CachedProgram datas defs globals insts classes) = globals
 
-cachedInsts : CachedProgram -> List DtInst
+export cachedInsts : CachedProgram -> List DtInst
 cachedInsts (CachedProgram datas defs globals insts classes) = insts
 
-cachedClasses : CachedProgram -> List DtClass
+export cachedClasses : CachedProgram -> List DtClass
 cachedClasses (CachedProgram datas defs globals insts classes) = classes
 
 -- ---------------------------------------------------------------
@@ -105,13 +89,13 @@ fixInst tbl (DtInst n tele ctxE head sp) =
     nTele = length tele
   in DtInst n (fixTele tbl 0 tele) (map (fixTerm tbl nTele) ctxE) (fixTerm tbl nTele head) sp
 
-cachedOfProgram : DtProgram -> CachedProgram
+export cachedOfProgram : DtProgram -> CachedProgram
 cachedOfProgram prog = cachedOfProgramWith (Base.HashMap.fromList (dtProgSols prog)) prog
 
 -- M34.6：整包 sols 的 HashMap Int 可能很大（数万条）。接口写侧按模块切片后仍要按**整包**
 -- sols 做一次深度 zonk：旧实现每个模块都重建一次整包 HashMap Int（O(#模块 × #sols)）。
 -- 这里把表做成显式参数，调用方（Iface 的 `ProgParts`）整包只建一次。
-cachedOfProgramWith : HashMap Int Value -> DtProgram -> CachedProgram
+export cachedOfProgramWith : HashMap Int Value -> DtProgram -> CachedProgram
 cachedOfProgramWith tbl prog =
   CachedProgram (map (fixData tbl) (dtProgDatas prog)) (map (fixDef tbl) (dtProgDefs prog))
     (map (\p => Pair (firstOf p) (fixTerm tbl 0 (secondOf p))) (dtProgGlobals prog))
@@ -177,7 +161,7 @@ classesValid (c :: rest) =
     && termsValidAt (length c.dtClassParams) c.dtClassFieldTys
     && classesValid rest
 
-cachedProgramValid : CachedProgram -> Bool
+export cachedProgramValid : CachedProgram -> Bool
 cachedProgramValid (CachedProgram datas defs globals insts classes) =
   datasValid datas
     && defsValid defs
@@ -297,7 +281,7 @@ classesIssue (c :: rest) =
     issue = classIssue c
   in if issue == "" then classesIssue rest else issue
 
-cachedProgramIssue : CachedProgram -> String
+export cachedProgramIssue : CachedProgram -> String
 cachedProgramIssue (CachedProgram datas defs globals insts classes) =
   let
     datasI = datasIssue datas
@@ -318,7 +302,7 @@ cachedProgramIssue (CachedProgram datas defs globals insts classes) =
 -- `Dt.shiftedDepPrograms` —— 与 iface 列表顺序无关）：段 0 留给根包，不同摘要 / 根包
 -- 之间编号互不冲突；消费方把它们当作**新的未解元变量**（只出现在不生成代码、不参与
 -- 运行时比较的擦除位置）。段宽 2^30 远大于单模块元变量数。
-summaryMetaSegment : Int
+export summaryMetaSegment : Int
 summaryMetaSegment = 1073741824
 
 -- 项内元变量整体移位。meta 编号是**全局**的、与 binder 深度无关 ⇒ 只做结构遍历、不需要
@@ -424,7 +408,7 @@ shiftInst off (DtInst n tele ctxE head sp) =
 shiftGlobal : Int -> Pair String Term -> Check (Pair String Term)
 shiftGlobal off (Pair n t) = Vuna.Compiler.Common.bind (shiftTerm off t) (\t2 => OkC (Pair n t2))
 
-shiftCachedProgram : Int -> CachedProgram -> Check CachedProgram
+export shiftCachedProgram : Int -> CachedProgram -> Check CachedProgram
 shiftCachedProgram off (CachedProgram datas defs globals insts classes) =
   Vuna.Compiler.Common.bind (Vuna.Compiler.Common.traverse (shiftData off) datas)
     (\datas2 => Vuna.Compiler.Common.bind (Vuna.Compiler.Common.traverse (shiftDef off) defs) (\defs2 => Vuna.Compiler.Common.bind (Vuna.Compiler.Common.traverse (shiftGlobal off) globals) (\globals2 => Vuna.Compiler.Common.bind (Vuna.Compiler.Common.traverse (shiftInst off) insts) (\insts2 => Vuna.Compiler.Common.bind (Vuna.Compiler.Common.traverse (shiftClass off) classes) (\classes2 => OkC (CachedProgram datas2 defs2 globals2 insts2 classes2))))))
@@ -439,7 +423,7 @@ shiftCachedProgram off (CachedProgram datas defs globals insts classes) =
 -- 增量精化的起点，不产出用户可见位置）。
 --
 -- | `CachedProgram` 的规范编码。
-encCachedProgram : CachedProgram -> List String -> List String
+export encCachedProgram : CachedProgram -> List String -> List String
 encCachedProgram cp acc =
   encList encDtData cp.cachedDatas
     (encList encDtDef cp.cachedDefs (encList encGlobalPair cp.cachedGlobals (encList encDtInst cp.cachedInsts (encList encDtClass cp.cachedClasses acc))))
@@ -448,12 +432,12 @@ encGlobalPair : Pair String Term -> List String -> List String
 encGlobalPair (Pair n t) acc = encStr n (encTerm t acc)
 
 -- | 解析 `CachedProgram`（整串入口：要求恰好消费完）。
-decCachedProgramComplete : String -> Maybe CachedProgram
+export decCachedProgramComplete : String -> Maybe CachedProgram
 decCachedProgramComplete s = case decCachedProgram (strLength s) (curOf s) of
   Nothing => Nothing
   Just (Pair cp rest) => if curAtEnd rest then Just cp else Nothing
 
-decCachedProgram : Int -> Cur -> Maybe (Pair CachedProgram Cur)
+export decCachedProgram : Int -> Cur -> Maybe (Pair CachedProgram Cur)
 decCachedProgram fuel c =
   thenPair (decList decDtData (fuel - 1) c)
     (\datas, b1 => thenPair (decList decDtDef (fuel - 1) b1) (\defs, b2 => thenPair (decList decGlobalPair (fuel - 1) b2) (\globals, b3 => thenPair (decList decDtInst (fuel - 1) b3) (\insts, b4 => thenPair (decList decDtClass (fuel - 1) b4) (\classes, b5 => Just (Pair (CachedProgram datas defs globals insts classes) b5))))))

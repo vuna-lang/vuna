@@ -1,18 +1,4 @@
-module Vuna.Cli.Args
-  ( ArgErr(..)
-  , ArgSpec(..)
-  , Parsed(..)
-  , argErrText
-  , ensureDirPath
-  , flagSet
-  , flagValue
-  , flagValues
-  , parentOf
-  , parseToolArgs
-  , readText
-  , requireDirectory
-  , requireExists
-  ) where
+module Vuna.Cli.Args where
 
 -- Vuna.Cli.Args：工具命令的统一参数解析与输入/输出路径守卫（M30 · CLI 错误层）。
 --
@@ -41,7 +27,7 @@ import Vuna.Compiler.Driver.CompilerCli
 -- ---------------------------------------------------------------
 -- BoolFlag：开关（如 `--check`）；ValueFlag：需要紧跟一个值（如 `--find <Module.name>`）；
 -- MultiValueFlag：可重复取值（如 `--filter a --filter b`），用于筛选类参数。
-data ArgSpec : Type where
+export data ArgSpec(..) : Type where
   BoolFlag : String -> ArgSpec
   ValueFlag : String -> ArgSpec
   MultiValueFlag : String -> ArgSpec
@@ -56,13 +42,13 @@ specOf name [] = Nothing
 specOf name (spec :: rest) = if specName spec == name then Just spec else specOf name rest
 
 -- 参数错误：统一由 `argErrText` 渲染成单行可读文案。
-data ArgErr : Type where
+export data ArgErr(..) : Type where
   UnknownFlag : String -> ArgErr
   DuplicateFlag : String -> ArgErr
   MissingValue : String -> ArgErr
 
 -- 解析结果：开关名集合、取值 flag 的 (name, value)、按用户顺序的位置参数。
-record Parsed where
+export record Parsed(..) where
   flagNames : List String
   valuesOf : List (Pair String String)
   positionals : List String
@@ -73,16 +59,16 @@ data ParseOut : Type where
   PErr : ArgErr -> ParseOut
 
 -- 某开关是否出现（名字不带 `--`）。
-flagSet : Parsed -> String -> Bool
+export flagSet : Parsed -> String -> Bool
 flagSet parsed name = memName name parsed.flagNames
 
 -- 某取值 flag 的值（名字不带 `--`）。
-flagValue : Parsed -> String -> Maybe String
+export flagValue : Parsed -> String -> Maybe String
 flagValue parsed name = lookupValue name parsed.valuesOf
 
 -- 某可重复取值 flag 的全部值（按用户给出的顺序；未出现 = 空列表）。
 -- MultiValueFlag 的重复出现是合法的，因此这里收集的是列表而不是单值。
-flagValues : Parsed -> String -> List String
+export flagValues : Parsed -> String -> List String
 flagValues parsed name = lookupValues name parsed.valuesOf
 
 lookupValues : String -> List (Pair String String) -> List String
@@ -105,7 +91,7 @@ hasValue name values = case lookupValue name values of
 -- ---------------------------------------------------------------
 -- 工具命令共用入口：`cmd` 只用于错误文案，`specs` 是允许的 flag 表，
 -- `args` 是去掉子命令后的参数。
-parseToolArgs : String -> List ArgSpec -> List String -> Check Parsed
+export parseToolArgs : String -> List ArgSpec -> List String -> Check Parsed
 parseToolArgs cmd specs args = case parseGo False specs args [] [] [] of
   POk parsed => OkC parsed
   PErr e => err (argErrText cmd e)
@@ -169,7 +155,7 @@ removedHintFor flag = case toolRemovedFlagHint flag of
   Nothing => removedFlagHint flag
 
 -- 渲染参数错误；`cmd` 是完整命令名（如 "vuna fmt"），只用在不涉及已删 flag 的文案里。
-argErrText : String -> ArgErr -> String
+export argErrText : String -> ArgErr -> String
 argErrText cmd (UnknownFlag flag) = case removedHintFor flag of
   Just hint => "${flag} has been removed; ${hint}"
   Nothing => "unknown flag for `${cmd}`: ${flag}"
@@ -180,7 +166,7 @@ argErrText cmd (MissingValue flag) = "flag requires a value: ${flag}"
 -- 读盘守卫（禁止在不存在路径上调 prim_eff_isDirectory）
 -- ---------------------------------------------------------------
 -- 读一个文本文件：先判存在、再判目录，最后才读。
-readText : String -> Eff [] (Check String)
+export readText : String -> Eff [] (Check String)
 readText path = do
   exists <- prim_eff_fileExists path
   if exists then do
@@ -192,13 +178,13 @@ readText path = do
   else pure (err "no such file: ${path}")
 
 -- 要求路径存在（文件或目录均可）。
-requireExists : String -> Eff [] (Check Int)
+export requireExists : String -> Eff [] (Check Int)
 requireExists path = do
   exists <- prim_eff_fileExists path
   pure (if exists then OkC 0 else err "no such file: ${path}")
 
 -- 要求路径存在且是目录。
-requireDirectory : String -> Eff [] (Check Int)
+export requireDirectory : String -> Eff [] (Check Int)
 requireDirectory path = do
   exists <- prim_eff_fileExists path
   if exists then do
@@ -209,7 +195,7 @@ requireDirectory path = do
 -- ---------------------------------------------------------------
 -- 目录创建（prim_eff_makeDir 只建一层）
 -- ---------------------------------------------------------------
-parentOf : String -> String
+export parentOf : String -> String
 parentOf path =
   let
     parent = parentText path
@@ -236,7 +222,7 @@ joinSlashPartsGo (part :: rest) = "${part}/${joinSlashPartsGo rest}"
 
 -- 递归创建所有缺失的父目录；已存在返回 0。`prim_eff_makeDir` 对已存在路径返回 0。
 -- 递归不沿输入结构下降（parentOf 返回 String），用显式 fuel（字节长度上界）守卫。
-ensureDirPath : String -> Eff [] Int
+export ensureDirPath : String -> Eff [] Int
 ensureDirPath path = ensureDirPathGo (strLength path + 2) path
 
 ensureDirPathGo : Int -> String -> Eff [] Int

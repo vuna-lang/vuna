@@ -1,10 +1,4 @@
-module Vuna.Repl.Paste.Decode
-  ( PasteState(..)
-  , emptyPasteState
-  , pasteFeed
-  , pasteIsDone
-  , pasteTerminator
-  ) where
+module Vuna.Repl.Paste.Decode where
 
 -- Vuna.Repl.Paste.Decode：括号粘贴的**纯解码状态机**（工具链；不进 seed 闭包）。
 --
@@ -20,24 +14,24 @@ module Vuna.Repl.Paste.Decode
 import Vuna.Compiler.Common
 
 -- `\e[201~` 的字节。
-pasteTerminator : List Int
+export pasteTerminator : List Int
 pasteTerminator = [27, 91, 50, 48, 49, 126]
 
 -- 粘贴状态：`pasteContent` 是内容字节的**逆序**累积（避免 O(n²) 拼接），
 -- `pasteMatch` 是终止序列的已匹配前缀（正序），`pasteDone` 是完成标记。
-record PasteState where
+export record PasteState(..) where
   pasteContent : List Int
   pasteMatch : List Int
   pasteDone : Bool
 
-emptyPasteState : PasteState
+export emptyPasteState : PasteState
 emptyPasteState = PasteState [] [] False
 
-pasteIsDone : PasteState -> Bool
+export pasteIsDone : PasteState -> Bool
 pasteIsDone st = st.pasteDone
 
 -- 纯解码一步：一个字节进去，新状态出来（可完全脱离终端与效果测试）。
-pasteFeed : PasteState -> Int -> PasteState
+export pasteFeed : PasteState -> Int -> PasteState
 pasteFeed st b = if st.pasteDone then st
 else
   let

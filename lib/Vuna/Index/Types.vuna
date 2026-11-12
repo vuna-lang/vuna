@@ -1,27 +1,4 @@
-module Vuna.Index.Types
-  ( Index(..)
-  , ModuleInfo(..)
-  , Ref(..)
-  , Sym(..)
-  , distinct
-  , indexModules
-  , modBytes
-  , modDecls
-  , modName
-  , modPackage
-  , modPath
-  , refModule
-  , refName
-  , symCol
-  , symDoc
-  , symFullName
-  , symKind
-  , symLine
-  , symModule
-  , symName
-  , symSig
-  , symType
-  ) where
+module Vuna.Index.Types where
 
 -- Vuna.Index.Types：源码符号索引的数据模型与字段访问子（M24 后维护·源码重组）。
 -- 只含可序列化的纯数据；构建/查询/渲染分别在 Scan / Query / Render。
@@ -31,32 +8,32 @@ import Vuna.Compiler.Common
 -- 数据模型
 -- ---------------------------------------------------------------
 -- 模块元信息（不含 AST，可安全序列化到缓存）。
-record ModuleInfo where
+export record ModuleInfo(..) where
   modName : String
   modPackage : String
   modPath : String
   modBytes : Int
   modDecls : Int
 
-modName : ModuleInfo -> String
+export modName : ModuleInfo -> String
 modName (ModuleInfo m p path bytes decls) = m
 
-modPackage : ModuleInfo -> String
+export modPackage : ModuleInfo -> String
 modPackage (ModuleInfo m p path bytes decls) = p
 
-modPath : ModuleInfo -> String
+export modPath : ModuleInfo -> String
 modPath (ModuleInfo m p path bytes decls) = path
 
-modBytes : ModuleInfo -> Int
+export modBytes : ModuleInfo -> Int
 modBytes (ModuleInfo m p path bytes decls) = bytes
 
-modDecls : ModuleInfo -> Int
+export modDecls : ModuleInfo -> Int
 modDecls (ModuleInfo m p path bytes decls) = decls
 
 -- 符号：模块全名、名字、种类、显示签名、语法类型、docstring、起始行列。
 -- `symType` 是 `Vuna.Sig.renderType` 的**可回读**类型文本（函数/构造子/字段/
 -- 方法/axiom/extern）；data/record/trait 为空。`vuna search --type` 用它建类型表。
-record Sym where
+export record Sym(..) where
   symModule : String
   symName : String
   symKind : String
@@ -66,58 +43,58 @@ record Sym where
   symLine : Int
   symCol : Int
 
-symModule : Sym -> String
+export symModule : Sym -> String
 symModule (Sym sMod sName sKind sSig sType sDoc sLine sCol) = sMod
 
-symName : Sym -> String
+export symName : Sym -> String
 symName (Sym sMod sName sKind sSig sType sDoc sLine sCol) = sName
 
-symKind : Sym -> String
+export symKind : Sym -> String
 symKind (Sym sMod sName sKind sSig sType sDoc sLine sCol) = sKind
 
-symSig : Sym -> String
+export symSig : Sym -> String
 symSig (Sym sMod sName sKind sSig sType sDoc sLine sCol) = sSig
 
-symType : Sym -> String
+export symType : Sym -> String
 symType (Sym sMod sName sKind sSig sType sDoc sLine sCol) = sType
 
-symDoc : Sym -> String
+export symDoc : Sym -> String
 symDoc (Sym sMod sName sKind sSig sType sDoc sLine sCol) = sDoc
 
-symLine : Sym -> Int
+export symLine : Sym -> Int
 symLine (Sym sMod sName sKind sSig sType sDoc sLine sCol) = sLine
 
-symCol : Sym -> Int
+export symCol : Sym -> Int
 symCol (Sym sMod sName sKind sSig sType sDoc sLine sCol) = sCol
 
-symFullName : Sym -> String
+export symFullName : Sym -> String
 symFullName (Sym sMod sName sKind sSig sType sDoc sLine sCol) = "${sMod}.${sName}"
 
 -- 引用：引用方模块、被引用的名字、引用出现处（行、列）。M30：refs 不只记录
 -- 「模块引用了哪些名字」，还记录出现位置，供 `referencesAt` 与影响面分析使用。
-record Ref where
+export record Ref(..) where
   refModule : String
   refName : String
   refLine : Int
   refCol : Int
 
-refModule : Ref -> String
+export refModule : Ref -> String
 refModule (Ref refMod refNm refLn refCl) = refMod
 
-refName : Ref -> String
+export refName : Ref -> String
 refName (Ref refMod refNm refLn refCl) = refNm
 
 -- 索引：模块 + 符号 + 反向边（引用方模块 → 引用位置）。
-record Index where
+export record Index(..) where
   indexModules : List ModuleInfo
   indexSymbols : List Sym
   indexRefs : List Ref
 
-indexModules : Index -> List ModuleInfo
+export indexModules : Index -> List ModuleInfo
 indexModules (Index ms syms refs) = ms
 
 -- 去重（保持首次出现顺序）：Scan 的引用抽取与 Render 的分组共用。
-distinct : List String -> List String
+export distinct : List String -> List String
 distinct xs = distinctGo xs []
 
 distinctGo : List String -> List String -> List String

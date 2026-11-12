@@ -1,16 +1,4 @@
-module Vuna.Json.Rpc
-  ( errInternal
-  , errInvalidParams
-  , errInvalidRequest
-  , errMethodNotFound
-  , errParse
-  , idOf
-  , methodOf
-  , notify
-  , paramsOf
-  , responseErr
-  , responseOk
-  ) where
+module Vuna.Json.Rpc where
 
 -- Vuna.Json.Rpc：JSON-RPC 2.0 信封的构造与读取（工具链；**永不进 seed 闭包**）。
 --
@@ -25,42 +13,42 @@ import Vuna.Compiler.Common
 import Vuna.Json
 
 -- JSON-RPC 2.0 错误码（负数）。
-errParse : Int
+export errParse : Int
 errParse = 0 - 32700
 
-errInvalidRequest : Int
+export errInvalidRequest : Int
 errInvalidRequest = 0 - 32600
 
-errMethodNotFound : Int
+export errMethodNotFound : Int
 errMethodNotFound = 0 - 32601
 
-errInvalidParams : Int
+export errInvalidParams : Int
 errInvalidParams = 0 - 32602
 
-errInternal : Int
+export errInternal : Int
 errInternal = 0 - 32603
 
 -- 请求读取：`id` 缺省为 `null`（LSP 与 REPL server 都用这个语义回显）。
-idOf : Json -> Json
+export idOf : Json -> Json
 idOf msg = fromMaybe JNull (jsonGet "id" msg)
 
 -- `method` 字段；没有 / 不是字符串时返回 Nothing（客户端对我们请求的响应也走这里）。
-methodOf : Json -> Maybe String
+export methodOf : Json -> Maybe String
 methodOf msg = jsonGet "method" msg >>= jsonAsStr
 
 -- `params` 字段；缺省为空对象（与 LSP 的宽松语义一致）。
-paramsOf : Json -> Json
+export paramsOf : Json -> Json
 paramsOf msg = fromMaybe (JObj []) (jsonGet "params" msg)
 
 -- 响应 / 通知构造。
-responseOk : Json -> Json -> Json
+export responseOk : Json -> Json -> Json
 responseOk id body = JObj [Pair "jsonrpc" (JStr "2.0"), Pair "id" id, Pair "result" body]
 
-responseErr : Json -> Int -> String -> Json
+export responseErr : Json -> Int -> String -> Json
 responseErr id code message =
   JObj
     [Pair "jsonrpc" (JStr "2.0"), Pair "id" id, Pair "error" (JObj [Pair "code" (JNum code), Pair "message" (JStr message)])]
 
-notify : String -> Json -> Json
+export notify : String -> Json -> Json
 notify methodName params =
   JObj [Pair "jsonrpc" (JStr "2.0"), Pair "method" (JStr methodName), Pair "params" params]

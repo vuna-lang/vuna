@@ -1,4 +1,4 @@
-module Base.HashSet (HashSet, empty, fromList, insert, member, size, toList) where
+module Base.HashSet where
 
 -- Base.HashSet：键泛型的持久集合，内部是 `HashMap a Bool`。
 --
@@ -15,31 +15,31 @@ import Base.Pair
 import Base.Show
 
 -- | 键泛型的集合，内部是键都映射到 `True` 的 `HashMap a Bool`；构造器不导出。
-record HashSet a where
+export record HashSet a where
   hashSetTable : HashMap a Bool
 
 -- | 空集合（空表统一写 `HashMap.fromList []`）。
-empty : Hashable a => HashSet a
+export empty : Hashable a => HashSet a
 empty = HashSet (Base.HashMap.fromList [])
 
 -- | 插入一个元素（重复插入幂等）。
-insert : Eq a, Hashable a => a -> HashSet a -> HashSet a
+export insert : Eq a, Hashable a => a -> HashSet a -> HashSet a
 insert key (HashSet t) = HashSet (Base.HashMap.insert key True t)
 
 -- | 判断元素是否在集合中。
-member : Eq a, Hashable a => a -> HashSet a -> Bool
+export member : Eq a, Hashable a => a -> HashSet a -> Bool
 member key (HashSet t) = Base.HashMap.member key t
 
 -- | 从列表构造（重复元素自然去重）。
-fromList : Eq a, Hashable a => List a -> HashSet a
+export fromList : Eq a, Hashable a => List a -> HashSet a
 fromList xs = foldl (\acc, x => insert x acc) empty xs
 
 -- | 按桶序展开为列表，**不保证插入序**。
-toList : Eq a => HashSet a -> List a
+export toList : Eq a => HashSet a -> List a
 toList (HashSet t) = map firstOf (Base.HashMap.toList t)
 
 -- | 元素个数（`Nat`，O(n)，经 `toList` 计数）。
-size : Eq a => HashSet a -> Nat
+export size : Eq a => HashSet a -> Nat
 size s = length (toList s)
 
 -- `Show` 经 `toList`：构造器不可见；桶序展开。

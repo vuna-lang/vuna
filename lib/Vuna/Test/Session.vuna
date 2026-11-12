@@ -1,4 +1,4 @@
-module Vuna.Test.Session (Session, sessionCheck, sessionInterp, sessionNew) where
+module Vuna.Test.Session where
 
 -- Vuna.Test.Session：测试 runner 的**进程内精化会话**（每个 worker 进程一个）。
 --
@@ -24,14 +24,14 @@ import Vuna.Compiler.Packages.Pkg
 import Vuna.Compiler.Version
 import Vuna.Files
 
-record Session where
+export record Session where
   sesRoot : String -- 接口镜像根（`${envTmp}/iface`；空 = 不镜像，读源码旁）
   sesDir : String -- 当前依赖接口目录 key（base 绝对目录；空 = 尚未建立）
   sesIfaces : List ModuleIface
   sesAux : Maybe AuxCache -- check 路径的 termAux 预处理缓存
   sesEvalAux : Maybe AuxCache -- interp 路径的缓存
 
-sessionNew : String -> Session
+export sessionNew : String -> Session
 sessionNew ifaceRoot = Session ifaceRoot "" [] Nothing Nothing
 
 -- 逃生开关：`VUNA_TEST_NO_SESSION=1` 强制回退 CLI 子进程（A/B 排查用）。
@@ -80,7 +80,7 @@ ensureSession ref baseDir = do
         pure (Just ifaces)
 
 -- check：Just (0, "") = 通过；Just (1, 诊断) = 失败；Nothing = 会话不可用（回退 CLI）。
-sessionCheck : IORef Session -> String -> String -> Eff [] (Maybe (Pair Int String))
+export sessionCheck : IORef Session -> String -> String -> Eff [] (Maybe (Pair Int String))
 sessionCheck ref baseDir source = do
   disabled <- sessionDisabled
   if disabled then pure Nothing
@@ -108,7 +108,7 @@ sessionCheckIn ref baseDir ctx ifaces source = do
 
 -- interp：Just (0, 输出) = 求值成功（与 CLI 打印的 trim 后文本一致）；
 -- Just (1, 诊断) = 精化失败；Nothing = 会话不可用（回退 CLI）。
-sessionInterp : IORef Session -> String -> String -> Eff [] (Maybe (Pair Int String))
+export sessionInterp : IORef Session -> String -> String -> Eff [] (Maybe (Pair Int String))
 sessionInterp ref baseDir source = do
   disabled <- sessionDisabled
   if disabled then pure Nothing

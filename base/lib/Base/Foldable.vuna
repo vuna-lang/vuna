@@ -1,4 +1,4 @@
-module Base.Foldable (Foldable(..), foldMap) where
+module Base.Foldable where
 
 -- Base.Foldable：可折叠容器（方法 `fold`）与 `foldMap`。
 --
@@ -10,9 +10,9 @@ module Base.Foldable (Foldable(..), foldMap) where
 import Base.Monoid
 
 -- | 可折叠容器：`fold` 是右折叠，参数顺序为 `(元素 -> 累加器 -> 累加器) -> 初始值 -> 容器`。
-trait Foldable t where
+export trait Foldable t(..) where
   fold : (a -> b -> b) -> b -> t a -> b
 
 -- | 把每个元素映射到 monoid 再合并；需要 `Monoid`（单位元）与 `Semigroup`（合并）两个假设。
-foldMap : Foldable t, Monoid m, Semigroup m => (a -> m) -> t a -> m
+export foldMap : Foldable t, Monoid m, Semigroup m => (a -> m) -> t a -> m
 foldMap f xs = fold (\v, acc => mappend (f v) acc) mempty xs

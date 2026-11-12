@@ -1,4 +1,4 @@
-module Vuna.Repl.Client (runReplClient) where
+module Vuna.Repl.Client where
 
 -- Vuna.Repl.Client：`vuna repl --client ADDR` —— 一次调用发一个请求、收一个响应。
 --
@@ -39,7 +39,7 @@ else case splitHeaderBlock buf of
     chunk <- prim_eff_netRecv conn clientChunkSize
     if chunk == "" then pure Nothing else readOneFrame conn (buf ++ chunk) (fuel - 1)
 
-runReplClient : String -> Eff [] Int
+export runReplClient : String -> Eff [] Int
 runReplClient addr = do
   body <- readStdinAll "" clientFuelBound
   conn <- prim_eff_netConnect addr

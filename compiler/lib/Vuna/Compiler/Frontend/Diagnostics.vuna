@@ -1,25 +1,4 @@
-module Vuna.Compiler.Frontend.Diagnostics
-  ( LexDiag(..)
-  , LexEntry(..)
-  , PsDiag(..)
-  , PsEntry(..)
-  , lexAll
-  , lexCode
-  , lexErr
-  , lexErr0
-  , lexMsg
-  , lexTemplate
-  , psAll
-  , psCode
-  , psErr
-  , psErr0
-  , psErr1
-  , psMsg
-  , psTemplate
-  , module Base.Nat
-  , module Base.Vec
-  , module Vuna.Compiler.Common
-  ) where
+module Vuna.Compiler.Frontend.Diagnostics where
 
 -- Vuna.Compiler.Frontend.Diagnostics：词法/语法诊断的域枚举（M30 重构）。
 --
@@ -28,15 +7,15 @@ module Vuna.Compiler.Frontend.Diagnostics
 --
 -- 域：`LX_`（词法）、`PS_`（语法）。arity 由 `Nat` 索引在编译期锁定（同 TC 机制）。
 -- 说明：`DT: internal:` 的 fuel 耗尽等内部不变量**不占符号**，仍走裸字符串。
-import Vuna.Compiler.Common
+export import Vuna.Compiler.Common
 import Vuna.Compiler.Diagnostics.Common
-import Base.Nat
-import Base.Vec
+export import Base.Nat
+export import Base.Vec
 
 -- ---------------------------------------------------------------
 -- LX_：词法诊断
 -- ---------------------------------------------------------------
-data LexDiag : Nat -> Type where
+export data LexDiag(..) : Nat -> Type where
   UnterminatedBlockComment : LexDiag Zero
   UnterminatedString : LexDiag Zero
   -- M36：模板字符串的插值洞没有闭合（缺 `}`）。
@@ -47,7 +26,7 @@ data LexDiag : Nat -> Type where
   -- 不再按 `acc * 10 + d` 静默回绕。
   IntLiteralOutOfRange : LexDiag Zero
 
-lexCode : {n : Nat} -> LexDiag n -> String
+export lexCode : {n : Nat} -> LexDiag n -> String
 lexCode UnterminatedBlockComment = "LX_UnterminatedBlockComment"
 lexCode UnterminatedString = "LX_UnterminatedString"
 lexCode UnterminatedInterpolation = "LX_UnterminatedInterpolation"
@@ -55,7 +34,7 @@ lexCode UnknownEscape = "LX_UnknownEscape"
 lexCode UnexpectedCharacter = "LX_UnexpectedCharacter"
 lexCode IntLiteralOutOfRange = "LX_IntLiteralOutOfRange"
 
-lexTemplate : {n : Nat} -> LexDiag n -> String
+export lexTemplate : {n : Nat} -> LexDiag n -> String
 lexTemplate UnterminatedBlockComment = "unterminated block comment"
 lexTemplate UnterminatedString = "unterminated string literal"
 lexTemplate UnterminatedInterpolation = "unterminated string interpolation (missing closing '}')"
@@ -66,7 +45,7 @@ lexTemplate IntLiteralOutOfRange = "integer literal is out of range (max is 4611
 -- ---------------------------------------------------------------
 -- PS_：语法诊断
 -- ---------------------------------------------------------------
-data PsDiag : Nat -> Type where
+export data PsDiag(..) : Nat -> Type where
   -- arity 0
   CaseAltNotIndented : PsDiag Zero
   CaseNeedsAlternative : PsDiag Zero
@@ -125,7 +104,7 @@ data PsDiag : Nat -> Type where
   ExpectedDeclAtColumn : String -> PsDiag (Succ Zero)
   ExpectedToken : String -> PsDiag (Succ Zero)
 
-psCode : {n : Nat} -> PsDiag n -> String
+export psCode : {n : Nat} -> PsDiag n -> String
 psCode CaseAltNotIndented = "PS_CaseAltNotIndented"
 psCode CaseNeedsAlternative = "PS_CaseNeedsAlternative"
 psCode DoBlockMustEndWithExpr = "PS_DoBlockMustEndWithExpr"
@@ -172,7 +151,7 @@ psCode (WhereSigDuplicate _) = "PS_WhereSigDuplicate"
 psCode (WhereSigMultiClause _) = "PS_WhereSigMultiClause"
 psCode (WhereSigNoDef _) = "PS_WhereSigNoDef"
 
-psTemplate : {n : Nat} -> PsDiag n -> String
+export psTemplate : {n : Nat} -> PsDiag n -> String
 psTemplate CaseAltNotIndented = "case alternative is not indented enough"
 psTemplate CaseNeedsAlternative = "case expression needs an alternative"
 psTemplate DoBlockMustEndWithExpr = "do block must end with an expression"
@@ -228,17 +207,17 @@ psTemplate (WhereSigNoDef _) = "binding signature for `<0>` has no definition"
 -- ---------------------------------------------------------------
 -- 文档遍历源
 -- ---------------------------------------------------------------
-record LexEntry where
+export record LexEntry(..) where
   lexEntryCode : String
   lexEntryTemplate : String
   lexEntryDesc : String
 
-record PsEntry where
+export record PsEntry(..) where
   psEntryCode : String
   psEntryTemplate : String
   psEntryDesc : String
 
-lexAll : List LexEntry
+export lexAll : List LexEntry
 lexAll =
   [ LexEntry (lexCode UnterminatedBlockComment) (lexTemplate UnterminatedBlockComment) "块注释未闭合",
     LexEntry (lexCode UnterminatedString) (lexTemplate UnterminatedString) "字符串字面量未闭合",
@@ -248,7 +227,7 @@ lexAll =
     LexEntry (lexCode IntLiteralOutOfRange) (lexTemplate IntLiteralOutOfRange) "整数字面量超出范围"
   ]
 
-psAll : List PsEntry
+export psAll : List PsEntry
 psAll =
   [ PsEntry (psCode CaseAltNotIndented) (psTemplate CaseAltNotIndented) "case 分支缩进不足",
     PsEntry (psCode CaseNeedsAlternative) (psTemplate CaseNeedsAlternative) "case 缺少分支",
@@ -300,28 +279,28 @@ psAll =
 -- ---------------------------------------------------------------
 -- throw：构造结构化诊断（前端诊断由调用方补位置；当前多数仍无 span）
 -- ---------------------------------------------------------------
-lexMsg : {n : Nat} -> LexDiag n -> Vec n String -> Diagnostic
+export lexMsg : {n : Nat} -> LexDiag n -> Vec n String -> Diagnostic
 lexMsg e args = mkDiag SevError PhLex CatSyntax (lexCode e) (diagBody (lexTemplate e) args)
 
-psMsg : {n : Nat} -> PsDiag n -> Vec n String -> Diagnostic
+export psMsg : {n : Nat} -> PsDiag n -> Vec n String -> Diagnostic
 psMsg e args = mkDiag SevError PhParse CatSyntax (psCode e) (diagBody (psTemplate e) args)
 
-lexErr : {n : Nat} -> LexDiag n -> Vec n String -> Check a
+export lexErr : {n : Nat} -> LexDiag n -> Vec n String -> Check a
 lexErr e args = ErrC (lexMsg e args)
 
-psErr : {n : Nat} -> PsDiag n -> Vec n String -> Check a
+export psErr : {n : Nat} -> PsDiag n -> Vec n String -> Check a
 psErr e args = case e of
   ExpectedToken s => ErrC (withField (FieldExpected s) (psMsg e args))
   _ => ErrC (psMsg e args)
 
 -- | 自动补注（M41 新增导出）：lexErr0。
-lexErr0 : LexDiag Zero -> Check a
+export lexErr0 : LexDiag Zero -> Check a
 lexErr0 e = lexErr e []
 
 -- | 自动补注（M41 新增导出）：psErr0。
-psErr0 : PsDiag Zero -> Check a
+export psErr0 : PsDiag Zero -> Check a
 psErr0 e = psErr e []
 
 -- | 自动补注（M41 新增导出）：psErr1。
-psErr1 : PsDiag (Succ Zero) -> String -> Check a
+export psErr1 : PsDiag (Succ Zero) -> String -> Check a
 psErr1 e a0 = psErr e [a0]

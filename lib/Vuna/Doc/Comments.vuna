@@ -1,4 +1,4 @@
-module Vuna.Doc.Comments (docTableOf) where
+module Vuna.Doc.Comments where
 
 -- Vuna.Doc.Comments：从 `lexComments` 的原始注释里识别 docstring 并关联到声明。
 --
@@ -57,18 +57,15 @@ targetsOfDecls (d :: rest) = append (targetsOfDecl d) (targetsOfDecls rest)
 
 targetsOfDecl : Decl -> List DocTarget
 targetsOfDecl (DData name params kind ctors derivings viaField repr lin sp) =
-  DocTarget (spanStartLine sp) (spanStartCol sp) "decl" name "" :: ctorTargets name ctors
+  DocTarget (spanStartLine sp) 1 "decl" name "" :: ctorTargets name ctors
 targetsOfDecl (DRecord name params fields derivings viaField repr lin sp) =
-  DocTarget (spanStartLine sp) (spanStartCol sp) "decl" name "" :: fieldTargets name fields
+  DocTarget (spanStartLine sp) 1 "decl" name "" :: fieldTargets name fields
 targetsOfDecl (DTrait name params methods sp) =
-  DocTarget (spanStartLine sp) (spanStartCol sp) "decl" name "" :: methodTargets name methods
-targetsOfDecl (DSig name ctx ty sp) =
-  [DocTarget (spanStartLine sp) (spanStartCol sp) "decl" name ""]
-targetsOfDecl (DFun name pats body sp) =
-  [DocTarget (spanStartLine sp) (spanStartCol sp) "decl" name ""]
-targetsOfDecl (DAxiom name ty sp) = [DocTarget (spanStartLine sp) (spanStartCol sp) "decl" name ""]
-targetsOfDecl (DExtern name cName ty sp) =
-  [DocTarget (spanStartLine sp) (spanStartCol sp) "decl" name ""]
+  DocTarget (spanStartLine sp) 1 "decl" name "" :: methodTargets name methods
+targetsOfDecl (DSig name ctx ty sp) = [DocTarget (spanStartLine sp) 1 "decl" name ""]
+targetsOfDecl (DFun name pats body sp) = [DocTarget (spanStartLine sp) 1 "decl" name ""]
+targetsOfDecl (DAxiom name ty sp) = [DocTarget (spanStartLine sp) 1 "decl" name ""]
+targetsOfDecl (DExtern name cName ty sp) = [DocTarget (spanStartLine sp) 1 "decl" name ""]
 targetsOfDecl (DInstance ctxE head methods sp) = []
 
 ctorTargets : String -> List Ctor -> List DocTarget
@@ -359,7 +356,7 @@ removeDoc key ((Pair k v) :: rest) = if k == key then rest else Pair k v :: remo
 -- ---------------------------------------------------------------
 -- 入口
 -- ---------------------------------------------------------------
-docTableOf : Maybe ModDecl -> List Decl -> List Comment -> DocTable
+export docTableOf : Maybe ModDecl -> List Decl -> List Comment -> DocTable
 docTableOf hdr decls comments =
   let
     blocks = docBlocksOf comments

@@ -1,4 +1,4 @@
-module Vuna.Compiler.Elab.Termination (checkTerminationDecls, checkTerminationDeclsWith) where
+module Vuna.Compiler.Elab.Termination where
 
 -- Vuna.Compiler.Elab.Termination：DT 终止性检查入口（M16 → M25.2a → M25.2b → M25.2c）。
 -- 判据细节见 `.Measure`（size/R2/投影/关系/弱环）与 `.Scc`（size-change）。
@@ -409,7 +409,7 @@ else
 
 -- 只报告 own 里定义的函数的终止性失败；其余（依赖包已在自己 check 里验过）只作为
 -- 分析上下文参与 SCT（跨包调用/投影/构造子关系需要它们的子句）。全量路径 own = 全部名字。
-checkTerminationDecls : List Decl -> Check Int
+export checkTerminationDecls : List Decl -> Check Int
 checkTerminationDecls decls = checkTerminationDeclsWith (dfunNames decls) decls
 
 dfunNames : List Decl -> List String
@@ -418,7 +418,7 @@ dfunNames (d :: rest) = case d of
   DFun name pats body sp => name :: dfunNames rest
   _ => dfunNames rest
 
-checkTerminationDeclsWith : List String -> List Decl -> Check Int
+export checkTerminationDeclsWith : List String -> List Decl -> Check Int
 checkTerminationDeclsWith own decls =
   let
     defs = groupDefs decls

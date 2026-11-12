@@ -1,5 +1,5 @@
 -- | 二元组类型与投影函数。
-module Base.Pair (Pair(..), firstOf, secondOf) where
+module Base.Pair where
 
 -- Base.Pair：二元组类型与投影函数。按「实例跟类型模块走」的落点规则承载
 -- `Show` / `Eq` / `Ord` 实例，因此依赖 Base.Show / Base.Eq / Base.Ord；
@@ -11,16 +11,16 @@ import Base.Ord
 import Base.Show
 
 -- | 二元组 `Pair a b`；构造子字段是 `first` / `second`。
-record Pair a b where
+export record Pair a b(..) where
   first : a
   second : b
 
 -- | 取第一个分量。
-firstOf : Pair a b -> a
+export firstOf : Pair a b -> a
 firstOf (Pair a b) = a
 
 -- | 取第二个分量。
-secondOf : Pair a b -> b
+export secondOf : Pair a b -> b
 secondOf (Pair a b) = b
 
 -- B31：容器 `Show` 实例；`Interp` 经 blanket `Show a => Interp a` 自动获得。

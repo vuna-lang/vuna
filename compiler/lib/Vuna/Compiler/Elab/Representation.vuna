@@ -1,16 +1,4 @@
-module Vuna.Compiler.Elab.Representation
-  ( UnboxedCand(..)
-  , ctorFieldDomainTerm
-  , ctorKeepFlags
-  , findDtData
-  , isSpecialUnboxFamily
-  , keptIndices
-  , lookupUnboxedInfo
-  , termIsFunction
-  , termRepresentable
-  , unboxedFamilySet
-  , unboxedInfoOf
-  ) where
+module Vuna.Compiler.Elab.Representation where
 
 -- Vuna.Compiler.Elab.Representation：表示判定的单一真源（R1：声明优先，推断回落）。
 -- `ReprBoxed` 强制装箱；`ReprAlias` 强制去装箱（仍要求单保留字段形状）；
@@ -27,7 +15,7 @@ import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Intrinsics
 
 -- | 自动去装箱候选：族名、唯一保留字段所在的构造子，以及该字段在完整 telescope 中的下标。
-record UnboxedCand where
+export record UnboxedCand(..) where
   unboxedCandName : String
   unboxedCandCtor : DtCtor
   unboxedCandIndex : Int
@@ -46,11 +34,11 @@ unboxedCandIndex (UnboxedCand name ctor idx) = idx
 
 -- 构造子字段形状唯一真源：True = 该 binder 进运行时表示。
 -- | 构造子字段形状的唯一真源：为每个 telescope binder 标出是否进入运行时表示（未擦除）。
-ctorKeepFlags : DtCtor -> List Bool
+export ctorKeepFlags : DtCtor -> List Bool
 ctorKeepFlags c = map (\b => not (rigIsErased (secondOf b))) (dtCtorTelescope c)
 
 -- | 从 keep 标志列表里取出所有保留位置的下标（从 0 开始）。
-keptIndices : List Bool -> List Int
+export keptIndices : List Bool -> List Int
 keptIndices flags = keptIndicesGo flags 0
 
 -- | keptIndices 的带当前下标累积器实现。
@@ -60,13 +48,13 @@ keptIndicesGo (k :: rest) i =
   if k then i :: keptIndicesGo rest (i + 1) else keptIndicesGo rest (i + 1)
 
 -- | 是否为不可去装箱的内建族（Bool / Nat / Type 构造子）。
-isSpecialUnboxFamily : String -> Bool
+export isSpecialUnboxFamily : String -> Bool
 isSpecialUnboxFamily name =
   name == boolTypeName || name == natTypeName || isTypeConstructorName name
 
 -- 按族名查 data（Representation 自包含，不依赖 Codegen）。
 -- | 按族名在数据表里查 DtData；找不到返回 Nothing。
-findDtData : String -> List DtData -> Maybe DtData
+export findDtData : String -> List DtData -> Maybe DtData
 findDtData name [] = Nothing
 findDtData name (d :: rest) = if dtDataName d == name then Just d else findDtData name rest
 
@@ -79,7 +67,7 @@ knownTypeHead datas g = g == intTypeName || g == strTypeName || g == boolTypeNam
 
 -- 运行时字段类型是否可由现有字段渲染规则忠实命名（不做定义性展开）。
 -- | 运行时字段类型能否由现有渲染规则忠实命名；函数与未知名保守拒绝。
-termRepresentable : List DtData -> Term -> Bool
+export termRepresentable : List DtData -> Term -> Bool
 termRepresentable datas (TPi name implicit rig dom cod) =
   termRepresentable datas dom && termRepresentable datas cod
 termRepresentable datas (TApp f a rig) = termAppHeadRepresentable datas f
@@ -97,7 +85,7 @@ termAppHeadRepresentable datas t = False
 
 -- 构造子第 i 个 telescope binder 的域（0 基，按完整 telescope 计）。
 -- | 取构造子第 i 个 telescope binder 的域（0 基，按完整 telescope 计）。
-ctorFieldDomainTerm : DtCtor -> Int -> Maybe Term
+export ctorFieldDomainTerm : DtCtor -> Int -> Maybe Term
 ctorFieldDomainTerm c i = ctorFieldDomainTermGo 512 i (dtCtorType c)
 
 -- | ctorFieldDomainTerm 的带 fuel 递归实现：沿 Pi 链走到第 i 个 binder。
@@ -110,7 +98,7 @@ else case t of
 
 -- 函数 / Pi 字段保持装箱：OCaml 值限制会让零参顶层定义的别名函数类型出现弱类型变量。
 -- | 项是否为函数/Pi 类型（这类字段保持装箱，避免 OCaml 弱类型变量）。
-termIsFunction : Term -> Bool
+export termIsFunction : Term -> Bool
 termIsFunction (TPi _ _ _ _ _) = True
 termIsFunction _ = False
 
@@ -189,7 +177,7 @@ anyReachBack fuel edges visited target (n :: rest) =
   else anyReachBack (fuel - 1) edges visited target rest
 
 -- | 计算最终可去装箱的族到 (构造子, 保留字段下标) 的映射，滤掉自身或互递归候选。
-unboxedInfoOf : List DtData -> List (Pair String (Pair DtCtor Int))
+export unboxedInfoOf : List DtData -> List (Pair String (Pair DtCtor Int))
 unboxedInfoOf datas =
   let
     cands = unboxedCandidates datas
@@ -200,11 +188,11 @@ unboxedInfoOf datas =
     (filter (\cand => not (reachesBackTo fuel edges [unboxedCandName cand] (unboxedCandName cand) (unboxedCandName cand))) cands)
 
 -- | 可去装箱族的名字集合（unboxedInfoOf 的键）。
-unboxedFamilySet : List DtData -> List String
+export unboxedFamilySet : List DtData -> List String
 unboxedFamilySet datas = map firstOf (unboxedInfoOf datas)
 
 -- | 在去装箱信息表里按族名查 (构造子, 下标)；未命中返回 Nothing。
-lookupUnboxedInfo : String -> List (Pair String (Pair DtCtor Int)) -> Maybe (Pair DtCtor Int)
+export lookupUnboxedInfo : String -> List (Pair String (Pair DtCtor Int)) -> Maybe (Pair DtCtor Int)
 lookupUnboxedInfo name [] = Nothing
 lookupUnboxedInfo name (p :: rest) =
   if firstOf p == name then Just (secondOf p) else lookupUnboxedInfo name rest

@@ -1,4 +1,4 @@
-module Vuna.Compiler.Elab.Match (allVarPats, multiToCaseExpr, multiToExpr) where
+module Vuna.Compiler.Elab.Match where
 
 -- Vuna.Compiler.Elab.Match：把「多 clause + 构造子/字面量模式」的函数体降级成核心表达式。
 --
@@ -22,7 +22,7 @@ import Vuna.Compiler.Frontend.Ast
 
 -- 单 clause 的参数全是变量（或通配）时可直接 `checkDef` 绑定；否则需要 `multiToExpr`
 -- 合成 case（如 `firstOf (Pair a b) = a`——参数是构造子模式）。
-allVarPats : List Pat -> Bool
+export allVarPats : List Pat -> Bool
 allVarPats [] = True
 allVarPats (p :: rest) = case p of
   PVar _ _ => allVarPats rest
@@ -31,7 +31,7 @@ allVarPats (p :: rest) = case p of
   PAs _ _ _ => False
   _ => False
 
-multiToExpr : List (Pair String (List String)) -> List (Pair (List Pat) Expr) -> Check Expr
+export multiToExpr : List (Pair String (List String)) -> List (Pair (List Pat) Expr) -> Check Expr
 multiToExpr table clauses = case arityOf clauses of
   Nothing => ErrC (tcMsg FunctionNoClauses [])
   Just n =>
@@ -43,7 +43,7 @@ multiToExpr table clauses = case arityOf clauses of
 -- 与 multiToExpr 同一套模式矩阵，但不包 lambda：`name` 是已在作用域里的位置名，
 -- 直接返回以它为 scrutinee 的嵌套 case 体。供 Elab 的 case 去重降级使用
 -- （先把 scrutinee 用 let 绑定成 name，保证只求值一次）。
-multiToCaseExpr : List (Pair String (List String)) -> List (Pair (List Pat) Expr) -> String -> Check Expr
+export multiToCaseExpr : List (Pair String (List String)) -> List (Pair (List Pat) Expr) -> String -> Check Expr
 multiToCaseExpr table clauses name = buildColumnExpr table clauses [name] 200
 
 arityOf : List (Pair (List Pat) Expr) -> Maybe Int

@@ -1,4 +1,4 @@
-module Base.EffError (ErrorOp(..), catch, handleError, resError, runError, throw) where
+module Base.EffError where
 
 -- Base.EffError：一阶 Error 效应 + 作用域 catch（Layer 2）。
 --
@@ -9,19 +9,19 @@ import Base.Monad
 import Base.Result
 
 -- | error 操作只有 `Throw`，携带错误消息 `String`。
-data ErrorOp : Type where
+export data ErrorOp(..) : Type where
   Throw : String -> ErrorOp
 
 -- | 结果族：`Throw` 返回 `Int`（占位；throw 不恢复续延）。
-resError : ErrorOp -> Type
+export resError : ErrorOp -> Type
 resError (Throw s) = Int
 
 -- | 通过命名实例抛出错误；返回类型任意（直接丢弃续延，不恢复）。
-throw : (n : String) -> String -> {a : Type} -> {r : Row} -> Eff r a
+export throw : (n : String) -> String -> {a : Type} -> {r : Row} -> Eff r a
 throw n msg = sendCore ErrorOp "error" n (Throw msg)
 
 -- | 一阶 handler：`ret` / `opH` 由调用方给出，结果行删除 `ErrorOp`。
-handleError : {a : Type} -> {b : Type} -> {r : Row} -> (n : String) -> (a -> b) -> ((o : ErrorOp) -> (resError o -> b) -> b) -> Eff r a -> Eff (Base.Eff.rowRem n ErrorOp r) b
+export handleError : {a : Type} -> {b : Type} -> {r : Row} -> (n : String) -> (a -> b) -> ((o : ErrorOp) -> (resError o -> b) -> b) -> Eff r a -> Eff (Base.Eff.rowRem n ErrorOp r) b
 handleError n ret opH comp = handleCore ErrorOp "error" n ret opH comp
 
 -- | 内部：默认 `ret`——成功值包装成 `Ok`。
@@ -40,11 +40,11 @@ catchResult n fallback res = case res of
   Err s => fallback s
 
 -- | 把 `ErrorOp` 收成 `Result`：`Ok a` / `Err msg`；结果行删除 `ErrorOp`。
-runError : (n : String) -> {a : Type} -> {r : Row} -> Eff (Base.Eff.Cons n ErrorOp r) a -> Eff r (Result a)
+export runError : (n : String) -> {a : Type} -> {r : Row} -> Eff (Base.Eff.Cons n ErrorOp r) a -> Eff r (Result a)
 runError n comp = handleError n errorRet errorOpH comp
 
 -- | 作用域 catch：在 `comp` 内安装临时 handler；Throw 截获后丢弃续延、在 handler 之外执行 `fallback`，成功时原样返回。
-catch : (n : String) -> {a : Type} -> {r : Row} -> Eff (Base.Eff.Cons n ErrorOp r) a -> (String -> Eff (Base.Eff.Cons n ErrorOp r) a) -> Eff (Base.Eff.Cons n ErrorOp r) a
+export catch : (n : String) -> {a : Type} -> {r : Row} -> Eff (Base.Eff.Cons n ErrorOp r) a -> (String -> Eff (Base.Eff.Cons n ErrorOp r) a) -> Eff (Base.Eff.Cons n ErrorOp r) a
 catch n comp fallback = do
   res <- weaken n (handleError n errorRet errorOpH comp)
   catchResult n fallback res

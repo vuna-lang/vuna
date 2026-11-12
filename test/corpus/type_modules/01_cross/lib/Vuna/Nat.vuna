@@ -1,11 +1,11 @@
-data Nat : Type where
+export data Nat(..) : Type where
   Z : Nat
   S : Nat -> Nat
 
-plus : Nat -> Nat -> Nat
+export plus : Nat -> Nat -> Nat
 plus Z y = y
 plus (S x) y = S (plus x y)
 
-toInt : Nat -> Int
+export toInt : Nat -> Int
 toInt Z = 0
 toInt (S n) = 1 + toInt n

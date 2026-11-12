@@ -1,40 +1,4 @@
-module Vuna.Compiler.Driver.Dt
-  ( AuxCache
-  , CheckedPackage(..)
-  , dtAuxKey
-  , dtBindingTypes
-  , dtCheck
-  , dtCheckLibraryPackageIncrementalParts
-  , dtCheckLibraryPackageWithIfacesParts
-  , dtCheckLibraryRecovering
-  , dtCheckLibraryWithProgramParts
-  , dtCheckModuleFile
-  , dtCheckPackageIncrementalParts
-  , dtCheckPackageWithIfacesParts
-  , dtCheckRecovering
-  , dtCheckSource
-  , dtCheckSourceChecked
-  , dtCheckSourceIncremental
-  , dtCheckSourceWithIfaces
-  , dtCheckWithProgramParts
-  , dtEvalExpr
-  , dtEvalExprInfo
-  , dtEvalExprInfoWithAuxCache
-  , dtEvalExprInfoWithIfaces
-  , dtEvalExprWithAuxCache
-  , dtEvalExprWithIfaces
-  , dtEvalFile
-  , dtEvalSourceIncremental
-  , dtFileHasModuleHeader
-  , dtGoalsSource
-  , dtGoalsSourceTolerant
-  , dtInferDefTypes
-  , dtMainKind
-  , dtPrepareTermAux
-  , dtSplitProjectIncremental
-  , dtSplitProjectParts
-  , dtSplitProjectWithIfaces
-  ) where
+module Vuna.Compiler.Driver.Dt where
 
 -- Vuna.Compiler.Driver.Dt：DT 路径的 facade（供 Compile / CompilerCli / Interp 使用）。
 --
@@ -76,7 +40,7 @@ import Vuna.Compiler.Driver.Split
 -- M34.5 模块级接口（S1）：一次成功 check 的**完整输入面**。接口摘要要按模块归属切
 -- `DtProgram`，所以 check 的出口需要保留加载/解析后的模块表与入口声明（此前只返回
 -- `DtProgram`，归属信息在中途被丢掉）。Loader 顺序是依赖者在前的反序。
-record CheckedPackage where
+export record CheckedPackage(..) where
   checkedProgram : DtProgram
   checkedModules : List Module
   checkedEntryDecls : List Decl
@@ -157,10 +121,10 @@ dtCheckDecls loaded = do
 
 -- M34.5：与 dtCheck 同一条精化路径，但把 DtProgram / 模块表 / 入口声明一并返回
 -- （检查缓存写接口摘要用）。
-dtCheckWithProgramParts : PackageContext -> String -> Eff [] (Check (Pair (List Diagnostic) CheckedPackage))
+export dtCheckWithProgramParts : PackageContext -> String -> Eff [] (Check (Pair (List Diagnostic) CheckedPackage))
 dtCheckWithProgramParts ctx entry = dtCheckPartsWithProgram (dtLoadPartsForCheck ctx entry)
 
-dtCheckLibraryWithProgramParts : PackageContext -> List String -> Eff [] (Check (Pair (List Diagnostic) CheckedPackage))
+export dtCheckLibraryWithProgramParts : PackageContext -> List String -> Eff [] (Check (Pair (List Diagnostic) CheckedPackage))
 dtCheckLibraryWithProgramParts ctx names = dtCheckPartsWithProgram (dtLoadModulesParts ctx names)
 
 dtCheckPartsWithProgram : Eff [] (Check (Pair (List Diagnostic) (Pair (List Decl) (List Module)))) -> Eff [] (Check (Pair (List Diagnostic) CheckedPackage))
@@ -188,7 +152,7 @@ dtCheckPartsWithProgram loaded = do
   )
 
 -- | 入口文件检查。
-dtCheck : PackageContext -> String -> Eff [] (Check (List Diagnostic))
+export dtCheck : PackageContext -> String -> Eff [] (Check (List Diagnostic))
 dtCheck ctx entry = dtCheckDecls (dtLoad ctx entry)
 
 -- M45：单文件检查的两个入口（`vuna check <file.vuna>`）。
@@ -197,17 +161,17 @@ dtCheck ctx entry = dtCheckDecls (dtLoad ctx entry)
 -- `loadModuleSource` + `elabProgramFull` + `checkDtProgram` 链（含用量/遮蔽告警），
 -- 但**不**跑 `warnUnusedDefsIn`（库包导出面未知，会把导出函数全报成未使用），
 -- 也不写 iface / check 缓存。无头文件仍走入口语义（`dtCheck`）。
-dtFileHasModuleHeader : String -> Eff [] Bool
+export dtFileHasModuleHeader : String -> Eff [] Bool
 dtFileHasModuleHeader path = do
   text <- prim_eff_readFile path
   parsed <- parseFileWithPath path text
   pure (case parsed of
-    OkC (SourceFile (Just _) _ _ _) => True
+    OkC (SourceFile (Just _) _ _ _ _ _ _) => True
     _ => False
   )
 
 -- | 按库模块检查单个文件（调用方已确认带 `module` 头）。
-dtCheckModuleFile : PackageContext -> String -> Eff [] (Check (List Diagnostic))
+export dtCheckModuleFile : PackageContext -> String -> Eff [] (Check (List Diagnostic))
 dtCheckModuleFile ctx path = do
   text <- prim_eff_readFile path
   checked <- dtCheckSourceChecked ctx path text
@@ -217,7 +181,7 @@ dtCheckModuleFile ctx path = do
   )
 
 -- 核心求值器：精化后用 NbE + delta 求 main 的值并 show（与 codegen 结果对照）。
-dtEvalFile : PackageContext -> String -> Eff [] (Check String)
+export dtEvalFile : PackageContext -> String -> Eff [] (Check String)
 dtEvalFile ctx entry = do
   declsR <- dtLoad ctx entry
   pure (case declsR of
@@ -249,7 +213,7 @@ replProgramFull ctx program exprSource = do
           OkC prog => OkC (Pair prog (secondOf p))
   )
 
-dtEvalExpr : PackageContext -> String -> String -> Eff [] (Check String)
+export dtEvalExpr : PackageContext -> String -> String -> Eff [] (Check String)
 dtEvalExpr ctx program exprSource = do
   pR <- replProgramFull ctx program exprSource
   pure (case pR of
@@ -260,7 +224,7 @@ dtEvalExpr ctx program exprSource = do
 -- M30 · REPL：表达式求值 + 类型文本。REPL 用类型判断是否为 `Eff [] a`（决定是否走
 -- compile+run）；类型文本经 `showTerm` 渲染 zonk 后的类型，可直接写回合成签名的
 -- `main : <type>`。
-dtEvalExprInfo : PackageContext -> String -> String -> Eff [] (Check (Pair String String))
+export dtEvalExprInfo : PackageContext -> String -> String -> Eff [] (Check (Pair String String))
 dtEvalExprInfo ctx program exprSource = do
   pR <- replProgramFull ctx program exprSource
   pure (case pR of
@@ -270,7 +234,7 @@ dtEvalExprInfo ctx program exprSource = do
 
 -- M30 · LSP：把内存里的源码当入口（无模块头）或库模块（有模块头）加载并精化。
 -- 返回空 warning 列表；错误串仍是带 `<label>:line:col` 的稳定诊断，LSP 自行解析。
-dtCheckSource : PackageContext -> String -> String -> Eff [] (Check (List Diagnostic))
+export dtCheckSource : PackageContext -> String -> String -> Eff [] (Check (List Diagnostic))
 dtCheckSource ctx label source = do
   projectR <- loadModuleSource ctx label source
   pure (case projectR of
@@ -293,7 +257,7 @@ missingDepModules pkg (m :: rest) ifaceNames =
   if modulePackageOf m /= pkg && memName (moduleNameOf m) ifaceNames == False then Base.List.Cons (moduleNameOf m) (missingDepModules pkg rest ifaceNames)
   else missingDepModules pkg rest ifaceNames
 
-dtCheckSourceWithIfaces : PackageContext -> String -> String -> List ModuleIface -> Eff [] (Check (List Diagnostic))
+export dtCheckSourceWithIfaces : PackageContext -> String -> String -> List ModuleIface -> Eff [] (Check (List Diagnostic))
 dtCheckSourceWithIfaces ctx label source ifaces =
   let
     _ = dbg! "query-source=check modules=${length ifaces}"
@@ -406,7 +370,7 @@ replProgramWithIfacesAux ctx program exprSource ifaces cache =
             )
 
 -- REPL 会话入口：复用 termAux 预处理缓存（5b），返回更新后的缓存。
-dtEvalExprInfoWithAuxCache : PackageContext -> String -> String -> List ModuleIface -> Maybe AuxCache -> Eff [] (Check (Pair (Pair String String) (Maybe AuxCache)))
+export dtEvalExprInfoWithAuxCache : PackageContext -> String -> String -> List ModuleIface -> Maybe AuxCache -> Eff [] (Check (Pair (Pair String String) (Maybe AuxCache)))
 dtEvalExprInfoWithAuxCache ctx program exprSource ifaces cache = do
   pR <- replProgramWithIfacesAux ctx program exprSource ifaces cache
   pure (case pR of
@@ -416,7 +380,7 @@ dtEvalExprInfoWithAuxCache ctx program exprSource ifaces cache = do
       OkC info => OkC (Pair info (secondOf p))
   )
 
-dtEvalExprWithAuxCache : PackageContext -> String -> String -> List ModuleIface -> Maybe AuxCache -> Eff [] (Check (Pair String (Maybe AuxCache)))
+export dtEvalExprWithAuxCache : PackageContext -> String -> String -> List ModuleIface -> Maybe AuxCache -> Eff [] (Check (Pair String (Maybe AuxCache)))
 dtEvalExprWithAuxCache ctx program exprSource ifaces cache = do
   pR <- replProgramWithIfacesAux ctx program exprSource ifaces cache
   pure (case pR of
@@ -426,7 +390,7 @@ dtEvalExprWithAuxCache ctx program exprSource ifaces cache = do
       OkC out => OkC (Pair out (secondOf p))
   )
 
-dtEvalExprInfoWithIfaces : PackageContext -> String -> String -> List ModuleIface -> Eff [] (Check (Pair String String))
+export dtEvalExprInfoWithIfaces : PackageContext -> String -> String -> List ModuleIface -> Eff [] (Check (Pair String String))
 dtEvalExprInfoWithIfaces ctx program exprSource ifaces = do
   pR <- replProgramWithIfaces ctx program exprSource ifaces
   pure (case pR of
@@ -434,7 +398,7 @@ dtEvalExprInfoWithIfaces ctx program exprSource ifaces = do
     OkC p => dtEvalExprInInfo (firstOf p) (secondOf p)
   )
 
-dtEvalExprWithIfaces : PackageContext -> String -> String -> List ModuleIface -> Eff [] (Check String)
+export dtEvalExprWithIfaces : PackageContext -> String -> String -> List ModuleIface -> Eff [] (Check String)
 dtEvalExprWithIfaces ctx program exprSource ifaces = do
   pR <- replProgramWithIfaces ctx program exprSource ifaces
   pure (case pR of
@@ -459,11 +423,11 @@ record GenMeta where
   genMetaName : String
   genMetaKind : Term
 
-dtInferDefTypes : PackageContext -> String -> List String -> String -> Eff [] (Check (List (Pair String String)))
+export dtInferDefTypes : PackageContext -> String -> List String -> String -> Eff [] (Check (List (Pair String String)))
 dtInferDefTypes ctx program targets defSource = if length targets == 0 then pure (OkC [])
 else case parseSource "<repl>" defSource of
   ErrC e => pure (ErrC e)
-  OkC (SourceFile hdr _ _ defDecls) => case hdr of
+  OkC (SourceFile hdr _ _ defDecls _ _ _) => case hdr of
     Just _ => pure (err "自动签名不支持模块文件")
     Nothing => case aritiesOf targets defDecls of
       ErrC e => pure (ErrC e)
@@ -548,7 +512,7 @@ loadReplDecls ctx source = do
   )
 
 -- `:defs` / `:info`：program 里每个定义的 zonk 后类型文本。
-dtBindingTypes : PackageContext -> String -> Eff [] (Check (List (Pair String String)))
+export dtBindingTypes : PackageContext -> String -> Eff [] (Check (List (Pair String String)))
 dtBindingTypes ctx program = do
   declsR <- loadReplDecls ctx program
   pure (case declsR of
@@ -677,7 +641,7 @@ listLen [] = 0
 listLen (_ :: rest) = 1 + listLen rest
 
 -- M30 · LSP hover：内存源码的洞目标（与 `vuna goal` 同源）。
-dtGoalsSource : PackageContext -> String -> String -> Eff [] (Check (List DtGoalInfo))
+export dtGoalsSource : PackageContext -> String -> String -> Eff [] (Check (List DtGoalInfo))
 dtGoalsSource ctx label source = do
   projectR <- loadModuleSource ctx label source
   pure (case projectR of
@@ -688,7 +652,7 @@ dtGoalsSource ctx label source = do
   )
 
 -- M40 · 容错版：未解洞也会让严格收尾失败，但 hover 仍要显示目标与上下文（M40 起改用这个）。
-dtGoalsSourceTolerant : PackageContext -> String -> String -> Eff [] (Check (List DtGoalInfo))
+export dtGoalsSourceTolerant : PackageContext -> String -> String -> Eff [] (Check (List DtGoalInfo))
 dtGoalsSourceTolerant ctx label source = do
   projectR <- loadModuleSource ctx label source
   pure (case projectR of
@@ -704,7 +668,7 @@ dtGoalsSourceTolerant ctx label source = do
 --   "Int"    —— 0 通过；
 --   "Bool"   —— True 通过；
 --   "Other"  —— 明确拒绝（不是静默当失败）。
-dtMainKind : PackageContext -> String -> Eff [] (Check String)
+export dtMainKind : PackageContext -> String -> Eff [] (Check String)
 dtMainKind ctx entry = do
   declsR <- dtLoad ctx entry
   pure (case declsR of
@@ -1028,7 +992,7 @@ dtLoadPartsIncremental ctx entry depIfaces cleanIfaces =
 -- 可复用参数（语义与 `elabProgramFullWithAux` 逐项相同：startEc/startGlobals 不变，
 -- termAux 原始 decls 仍传给 `prepareDeclsWith`，prepared 版本只服务 record 头解消与
 -- 终止性 SCT 上下文）。
-dtPrepareTermAux : List Decl -> Check (List Decl)
+export dtPrepareTermAux : List Decl -> Check (List Decl)
 dtPrepareTermAux aux =
   Vuna.Compiler.Common.bind (prepareDecls aux) (\p => expandDerivings (secondOf p))
 
@@ -1060,7 +1024,7 @@ dtElabFullWithPrepared startEc startGlobals termAux preparedAux decls = Vuna.Com
 --   - start：依赖 / 干净模块产物构造的起始 Ec + globals（`depStartOfAt` + shift 很贵）；
 --   - depCps / cleanCps：shift 后的闭合产物（组装与收窄范围检查复用）。
 -- key = 包名 + 参与模块名 + 接口哈希；iface 集合一变即失配（保守但正确）。
-record AuxCache where
+export record AuxCache where
   auxCacheKey : String
   auxCacheDecls : List Decl
   auxCacheStart : Pair Ec (List (Pair String Term))
@@ -1070,7 +1034,7 @@ record AuxCache where
 auxKeyOne : ModuleIface -> String
 auxKeyOne m = "${miNameOf m}:${miIfaceHashOf m}"
 
-dtAuxKey : String -> List ModuleIface -> List ModuleIface -> String
+export dtAuxKey : String -> List ModuleIface -> List ModuleIface -> String
 dtAuxKey pkg deps clean =
   strFromInt
     (hashTextStrong "aux|${pkg}|${join ";" (map auxKeyOne deps)}|${join ";" (map auxKeyOne clean)}")
@@ -1213,7 +1177,7 @@ dtCheckScoped allDatas unitDatas defs =
 --   3. termAux 预处理 / 起始 Ec / 已 shift 产物都可经 `cache` 复用（5b）；`needPackage` =
 --      调用方是否需要整包 CheckedPackage（只做诊断时跳过整包组装 + 整包 codegen 检查）。
 -- 返回 `Nothing` 表示「本路径不适用」（调用方回退全量，诊断必须仍正确）。
-dtCheckSourceIncremental : PackageContext -> String -> String -> List ModuleIface -> List ModuleIface -> Maybe AuxCache -> Bool -> Eff [] (Check (Pair Bool (Pair (List Diagnostic) (Pair (Maybe CheckedPackage) (Maybe AuxCache)))))
+export dtCheckSourceIncremental : PackageContext -> String -> String -> List ModuleIface -> List ModuleIface -> Maybe AuxCache -> Bool -> Eff [] (Check (Pair Bool (Pair (List Diagnostic) (Pair (Maybe CheckedPackage) (Maybe AuxCache)))))
 dtCheckSourceIncremental ctx label source depIfaces cleanIfaces cache needPackage =
   let
     pkgName = contextPackageName ctx
@@ -1242,7 +1206,7 @@ dtCheckSourceIncremental ctx label source depIfaces cleanIfaces cache needPackag
 -- 同包模块以接口预置，只精化当前入口），但需要整包组装后的 `CheckedPackage`——依赖
 -- 模块的 defs 要在场，`evalDtMain` 才能归约跨模块调用（`needPackage = True`）。
 -- 第一分量沿用后者的语义：False = 本路径不适用（调用方回退全量）。
-dtEvalSourceIncremental : PackageContext -> String -> String -> List ModuleIface -> Maybe AuxCache -> Eff [] (Check (Pair Bool (Pair String (Maybe AuxCache))))
+export dtEvalSourceIncremental : PackageContext -> String -> String -> List ModuleIface -> Maybe AuxCache -> Eff [] (Check (Pair Bool (Pair String (Maybe AuxCache))))
 dtEvalSourceIncremental ctx label source depIfaces cache = do
   rR <- dtCheckSourceIncremental ctx label source depIfaces [] cache True
   pure (case rR of
@@ -1257,14 +1221,14 @@ dtEvalSourceIncremental ctx label source depIfaces cache = do
 
 -- 全量 checked（无 iface / 安全阀回退时用）：与 `dtCheckSource` 同一条加载/精化路径，
 -- 但保留 CheckedPackage（LSP 冷启动写回单模块接口用）。
-dtCheckSourceChecked : PackageContext -> String -> String -> Eff [] (Check (Pair (List Diagnostic) CheckedPackage))
+export dtCheckSourceChecked : PackageContext -> String -> String -> Eff [] (Check (Pair (List Diagnostic) CheckedPackage))
 dtCheckSourceChecked ctx label source = do
   projectR <- loadModuleSource ctx label source
   case projectR of
     ErrC e => pure (ErrC e)
     OkC project => dtCheckPartsWithProgram (pure (resolveProjectWith (contextRelease ctx) project))
 
-dtCheckPackageIncrementalParts : PackageContext -> String -> List ModuleIface -> List ModuleIface -> Eff [] (Check (Pair (List Diagnostic) CheckedPackage))
+export dtCheckPackageIncrementalParts : PackageContext -> String -> List ModuleIface -> List ModuleIface -> Eff [] (Check (Pair (List Diagnostic) CheckedPackage))
 dtCheckPackageIncrementalParts ctx entry depIfaces cleanIfaces = do
   partsR <- dtLoadPartsIncremental ctx entry depIfaces cleanIfaces
   pure (case partsR of
@@ -1423,7 +1387,7 @@ dtGenerateIncremental ctx entry parts checked printResult extraDefLocs =
       OkC files => OkC (Pair files checked)
     )
 
-dtSplitProjectIncremental : PackageContext -> String -> Bool -> List ModuleIface -> List ModuleIface -> Eff [] (Check (Pair (List SplitFile) CheckedPackage))
+export dtSplitProjectIncremental : PackageContext -> String -> Bool -> List ModuleIface -> List ModuleIface -> Eff [] (Check (Pair (List SplitFile) CheckedPackage))
 dtSplitProjectIncremental ctx entry printResult depIfaces cleanIfaces = do
   partsR <- dtLoadPartsIncremental ctx entry depIfaces cleanIfaces
   case partsR of
@@ -1508,7 +1472,7 @@ dtLoadModulesPartsWithIfaces ctx names ifaces = do
         resolveProjectKeeping (contextRelease ctx) (preloadKeepOf ifaces mods) filtered
   )
 
-dtCheckPackageWithIfacesParts : PackageContext -> String -> List ModuleIface -> Eff [] (Check (Pair (List Diagnostic) CheckedPackage))
+export dtCheckPackageWithIfacesParts : PackageContext -> String -> List ModuleIface -> Eff [] (Check (Pair (List Diagnostic) CheckedPackage))
 dtCheckPackageWithIfacesParts ctx entry ifaces = do
   partsR <- dtLoadPartsWithIfaces ctx entry ifaces
   pure (case partsR of
@@ -1532,7 +1496,7 @@ dtLoadModulesPartsIncremental ctx names depIfaces cleanIfaces =
           resolveProjectKeeping (contextRelease ctx) (preloadKeepOf allIfaces mods) filtered
     )
 
-dtCheckLibraryPackageIncrementalParts : PackageContext -> List String -> List ModuleIface -> List ModuleIface -> Eff [] (Check (Pair (List Diagnostic) CheckedPackage))
+export dtCheckLibraryPackageIncrementalParts : PackageContext -> List String -> List ModuleIface -> List ModuleIface -> Eff [] (Check (Pair (List Diagnostic) CheckedPackage))
 dtCheckLibraryPackageIncrementalParts ctx names depIfaces cleanIfaces = do
   partsR <- dtLoadModulesPartsIncremental ctx names depIfaces cleanIfaces
   pure (case partsR of
@@ -1542,7 +1506,7 @@ dtCheckLibraryPackageIncrementalParts ctx names depIfaces cleanIfaces = do
       OkC checked => OkC (Pair checked.checkedWarnings checked)
   )
 
-dtCheckLibraryPackageWithIfacesParts : PackageContext -> List String -> List ModuleIface -> Eff [] (Check (Pair (List Diagnostic) CheckedPackage))
+export dtCheckLibraryPackageWithIfacesParts : PackageContext -> List String -> List ModuleIface -> Eff [] (Check (Pair (List Diagnostic) CheckedPackage))
 dtCheckLibraryPackageWithIfacesParts ctx names ifaces = do
   partsR <- dtLoadModulesPartsWithIfaces ctx names ifaces
   pure (case partsR of
@@ -1554,7 +1518,7 @@ dtCheckLibraryPackageWithIfacesParts ctx names ifaces = do
 
 -- 只精化本包声明、从接口合并依赖产物，再走同一条逐模块 split；返回 codegen 文件 +
 -- CheckedPackage（构建路径也写接口摘要）。
-dtSplitProjectWithIfaces : PackageContext -> String -> Bool -> List ModuleIface -> Eff [] (Check (Pair (List SplitFile) CheckedPackage))
+export dtSplitProjectWithIfaces : PackageContext -> String -> Bool -> List ModuleIface -> Eff [] (Check (Pair (List SplitFile) CheckedPackage))
 dtSplitProjectWithIfaces ctx entry printResult ifaces = do
   partsR <- dtLoadPartsWithIfaces ctx entry ifaces
   case partsR of
@@ -1596,7 +1560,7 @@ dtSplitPartsOurs ctx entry parts deps printResult =
 
 -- 全量路径的 parts 版本（构建缓存未命中且依赖接口不可用）：同一份 CheckedPackage 供
 -- 接口影子写使用，避免 build 后还要再 check 一次才写接口。
-dtSplitProjectParts : PackageContext -> String -> Bool -> Eff [] (Check (Pair (List SplitFile) CheckedPackage))
+export dtSplitProjectParts : PackageContext -> String -> Bool -> Eff [] (Check (Pair (List SplitFile) CheckedPackage))
 dtSplitProjectParts ctx entry printResult = do
   partsR <- dtLoadParts ctx entry
   case partsR of
@@ -1663,7 +1627,7 @@ warnUnusedDefsGo (d :: rest) used =
 -- 收集最多 fuel 条独立错误。移除导致的后续级联错误也会被收集（调用方标注 best-effort）。
 -- 成功路径仍由 `dtCheck` 负责（含 codegen）；本函数只在首次失败时使用。
 -- | 诊断/告警实现：dtCheckRecovering（详见 diagnostics.md）。
-dtCheckRecovering : PackageContext -> String -> Eff [] (Check (List Diagnostic))
+export dtCheckRecovering : PackageContext -> String -> Eff [] (Check (List Diagnostic))
 dtCheckRecovering ctx entry = do
   declsR <- dtLoad ctx entry
   pure (case declsR of
@@ -1765,7 +1729,7 @@ isIdentChar : Int -> Bool
 isIdentChar c = c >= 48 && c <= 57 || c >= 65 && c <= 90 || c >= 97 && c <= 122 || c == 95
 
 -- | 库包（[export].modules）的恢复式检查：加载模块后对汇总声明做逐声明恢复。
-dtCheckLibraryRecovering : PackageContext -> List String -> Eff [] (Check (List Diagnostic))
+export dtCheckLibraryRecovering : PackageContext -> List String -> Eff [] (Check (List Diagnostic))
 dtCheckLibraryRecovering ctx names = do
   partsR <- dtLoadModulesParts ctx names
   pure (case partsR of

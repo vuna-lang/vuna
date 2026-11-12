@@ -1,4 +1,4 @@
-module Vuna.Doc.Prose (htmlEscape, renderProse) where
+module Vuna.Doc.Prose where
 
 -- Vuna.Doc.Prose：docstring 的受限 Markdown -> HTML（生成期完成；客户端不解析 Markdown）。
 --
@@ -10,7 +10,7 @@ import Vuna.Compiler.Common
 -- ---------------------------------------------------------------
 -- 转义
 -- ---------------------------------------------------------------
-htmlEscape : String -> String
+export htmlEscape : String -> String
 htmlEscape s = htmlEscapeChars (strUnpack s) ""
 
 htmlEscapeChars : List Int -> String -> String
@@ -28,7 +28,7 @@ htmlEscapeChar c = strPack [c]
 -- ---------------------------------------------------------------
 -- 入口
 -- ---------------------------------------------------------------
-renderProse : List (Pair String String) -> String -> String
+export renderProse : List (Pair String String) -> String -> String
 renderProse links text =
   join "\n" (filterNonEmpty (renderFenceParts links (split "```" text) False))
 

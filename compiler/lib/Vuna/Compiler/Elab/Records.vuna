@@ -1,25 +1,4 @@
-module Vuna.Compiler.Elab.Records
-  ( RecordFieldMeta(..)
-  , RecordMeta(..)
-  , desugarRecords
-  , duplicateFieldMsg
-  , fieldNamesOf
-  , firstUnknownFieldMsg
-  , hasDuplicateFieldNames
-  , lookupProvided
-  , lookupRecord
-  , missingFieldMsg
-  , prepareDecls
-  , prepareDeclsWith
-  , recordArrowType
-  , recordCtorType
-  , recordFieldPairs
-  , recordHasFieldInstances
-  , recordParamPis
-  , recordRetType
-  , recordsOfDecls
-  , unknownFieldMsg
-  ) where
+module Vuna.Compiler.Elab.Records where
 
 -- Vuna.Compiler.Elab.Records：`record` 的**语法**与结构化元数据（M19 提取成共享模块）。
 --
@@ -37,14 +16,14 @@ import Vuna.Compiler.Frontend.Ast
 
 -- | R2：一条 record 字段的结构化元数据。`recordFieldIndex` 是声明序号（也是降级后
 -- 构造子里的位置参数序号）；`recordFieldType` 仍带源码 span，供 `HasField` 实例生成。
-record RecordFieldMeta where
+export record RecordFieldMeta(..) where
   recordFieldName : String
   recordFieldType : Expr
   recordFieldIndex : Int
 
 -- | R2：一条 record 声明的结构化元数据（名字 / 参数 / 字段表 / 派生 / 表示档位 / 构造子 /
 -- 线性标记）。进 iface 后工具与下游包按字段表查表，不再依赖前缀约定或重跑源码解析。
-record RecordMeta where
+export record RecordMeta(..) where
   recordMetaName : String
   recordMetaParams : List String
   recordMetaFields : List RecordFieldMeta
@@ -56,7 +35,7 @@ record RecordMeta where
   recordMetaLinear : Bool
 
 -- | R2：字段表 → （名字，类型）对（只用于仍需该形状的旧 helper）。
-recordFieldPairs : List RecordFieldMeta -> List (Pair String Expr)
+export recordFieldPairs : List RecordFieldMeta -> List (Pair String Expr)
 recordFieldPairs [] = []
 recordFieldPairs (f :: rest) = Pair f.recordFieldName f.recordFieldType :: recordFieldPairs rest
 
@@ -66,31 +45,31 @@ recordFieldNames [] = []
 recordFieldNames (f :: rest) = f.recordFieldName :: recordFieldNames rest
 
 -- | R2：按名字查 record 元数据。
-lookupRecord : String -> List RecordMeta -> Maybe RecordMeta
+export lookupRecord : String -> List RecordMeta -> Maybe RecordMeta
 lookupRecord name [] = Nothing
 lookupRecord name (r :: rest) = if r.recordMetaName == name then Just r else lookupRecord name rest
 
-fieldNamesOf : List (Pair a b) -> List a
+export fieldNamesOf : List (Pair a b) -> List a
 fieldNamesOf [] = []
 fieldNamesOf ((Pair n t) :: rest) = n :: fieldNamesOf rest
 
-lookupProvided : String -> List (Pair String a) -> Maybe a
+export lookupProvided : String -> List (Pair String a) -> Maybe a
 lookupProvided fname [] = Nothing
 lookupProvided fname ((Pair n e) :: rest) = if n == fname then Just e else lookupProvided fname rest
 
-hasDuplicateFieldNames : List (Pair String a) -> Bool
+export hasDuplicateFieldNames : List (Pair String a) -> Bool
 hasDuplicateFieldNames [] = False
 hasDuplicateFieldNames ((Pair n e) :: rest) = case lookupProvided n rest of
   Just _ => True
   Nothing => hasDuplicateFieldNames rest
 
-missingFieldMsg : Span -> String -> Diagnostic
+export missingFieldMsg : Span -> String -> Diagnostic
 missingFieldMsg sp fname = withDiagSpan sp (tcMsg (RecordMissingField fname) [fname])
 
-unknownFieldMsg : Span -> String -> Diagnostic
+export unknownFieldMsg : Span -> String -> Diagnostic
 unknownFieldMsg sp fname = withDiagSpan sp (tcMsg (RecordUnknownField fname) [fname])
 
-duplicateFieldMsg : Span -> Diagnostic
+export duplicateFieldMsg : Span -> Diagnostic
 duplicateFieldMsg sp = withDiagSpan sp (tcMsg RecordDuplicateField [])
 
 hasUnknownFields : List String -> List (Pair String a) -> Bool
@@ -98,13 +77,13 @@ hasUnknownFields fieldNames [] = False
 hasUnknownFields fieldNames ((Pair n v) :: rest) =
   if memName n fieldNames then hasUnknownFields fieldNames rest else True
 
-firstUnknownFieldMsg : Span -> List String -> List (Pair String a) -> Diagnostic
+export firstUnknownFieldMsg : Span -> List String -> List (Pair String a) -> Diagnostic
 firstUnknownFieldMsg sp fieldNames [] = unknownFieldMsg sp ""
 firstUnknownFieldMsg sp fieldNames ((Pair n v) :: rest) =
   if memName n fieldNames then firstUnknownFieldMsg sp fieldNames rest else unknownFieldMsg sp n
 
 -- R4：收集 record 声明的结构化元数据（**不降级**；DRecord 原样留在 decls 里）。
-recordsOfDecls : List Decl -> List RecordMeta
+export recordsOfDecls : List Decl -> List RecordMeta
 recordsOfDecls [] = []
 recordsOfDecls (d :: rest) = case d of
   DRecord dname params fields derivings viaField repr lin sp =>
@@ -123,14 +102,14 @@ recordFieldsOf (f :: rest) i =
 recordParamVarExprs : List String -> Span -> List Expr
 recordParamVarExprs params sp = map (\p => EVar p sp) params
 
-recordRetType : String -> List String -> Span -> Expr
+export recordRetType : String -> List String -> Span -> Expr
 recordRetType dname params sp = EApp (EVar dname sp) (recordParamVarExprs params sp) sp
 
 -- 构造子类型用一等的 `EPi` 表示（不是 `EVar "->"` 的语法编码）：这是记录降级的
 -- **输出**，交给下游检查器，不应当依赖某个检查器对箭头语法的特殊处理。
 -- R2：binder 名只带**位置**信息（`@vuna@record@arg<i>`），不再编码字段名——字段身份
 -- 由 `RecordMeta` / `DtData.dtDataFields` 的结构化字段表承载。
-recordArrowType : List Field -> Expr -> Span -> Expr
+export recordArrowType : List Field -> Expr -> Span -> Expr
 recordArrowType fields ret sp = recordArrowTypeGo 0 fields ret sp
 
 recordArrowTypeGo : Int -> List Field -> Expr -> Span -> Expr
@@ -140,17 +119,17 @@ recordArrowTypeGo i (f :: fs) ret sp =
 
 -- 记录构造子类型显式带族参数（`elabCtor` 用首 binder 名判断，字段 binder 已不是 `_`）。
 -- | R4：把记录族参数包成显式 Pi（implicit=True），供精化期合成构造子/派生使用。
-recordParamPis : List String -> Expr -> Span -> Expr
+export recordParamPis : List String -> Expr -> Span -> Expr
 recordParamPis [] ret sp = ret
 recordParamPis (p :: rest) ret sp =
   EPi p True Nothing (EVar "Type" sp) (recordParamPis rest ret sp) sp
 
 -- | R4：组装记录合成构造子的完整类型：族参数 Pi + 字段箭头 + 返回记录类型。
-recordCtorType : List String -> List Field -> Expr -> Span -> Expr
+export recordCtorType : List String -> List Field -> Expr -> Span -> Expr
 recordCtorType params fields ret sp = recordParamPis params (recordArrowType fields ret sp) sp
 
 -- 记录语法降级：构造 → 构造器应用；记录模式 → 构造器模式（按声明顺序补 PWild）。
-desugarRecords : List RecordMeta -> List Decl -> Check (List Decl)
+export desugarRecords : List RecordMeta -> List Decl -> Check (List Decl)
 desugarRecords records decls = Vuna.Compiler.Common.traverse (desugarRecordDecl records) decls
 
 desugarRecordDecl : List RecordMeta -> Decl -> Check Decl
@@ -309,7 +288,7 @@ desugarAltFuel fuel records (Pair pat body) =
 
 -- HasField 实例：为当前模块的 record 字段生成 `instance HasField (Field "f") R T`。
 -- | 为一批记录的每个字段生成 `HasField` 实例声明。
-recordHasFieldInstances : List RecordMeta -> List Decl
+export recordHasFieldInstances : List RecordMeta -> List Decl
 recordHasFieldInstances [] = []
 recordHasFieldInstances (r :: rest) =
   append (recordHasFieldInstancesOf r) (recordHasFieldInstances rest)
@@ -360,12 +339,12 @@ hasFieldInstanceDecl rname params ctor n fi fname fty =
 -- R2：同时返回本包/依赖包的 `RecordMeta` 表，供 `elabDatas` 把字段表写进 `DtData`。
 -- R4：返回的 decls **保留 DRecord**（不再降级成 DData）；依赖包的 record 头只贡献
 -- 元数据，供本包字段访问/更新/模式与 `HasField` 实例生成使用。
-prepareDecls : List Decl -> Check (Pair (List RecordMeta) (List Decl))
+export prepareDecls : List Decl -> Check (Pair (List RecordMeta) (List Decl))
 prepareDecls decls0 = prepareDeclsWith [] decls0
 
 -- M34.5 接口摘要路径：本包的 record 语法降级需要**依赖包 record 头**参与字段访问/
 -- record 更新/模式降级的消解（依赖包只提供语法头，不精化）；auxDecls 是依赖模块的原始 decls。
-prepareDeclsWith : List Decl -> List Decl -> Check (Pair (List RecordMeta) (List Decl))
+export prepareDeclsWith : List Decl -> List Decl -> Check (Pair (List RecordMeta) (List Decl))
 prepareDeclsWith auxDecls decls0 =
   let
     records = append (recordsOfDecls auxDecls) (recordsOfDecls decls0)

@@ -1,7 +1,4 @@
-module Vuna.Compiler.Codegen
-  ( module Vuna.Compiler.Codegen.Assembly
-  , module Vuna.Compiler.Codegen.Split
-  ) where
+module Vuna.Compiler.Codegen where
 
 -- Vuna.Compiler.Codegen：DT 擦除 codegen 的门面。
 --
@@ -13,5 +10,5 @@ module Vuna.Compiler.Codegen
 --   - Assembly：split 产物装配（prepare / 类型 / 桥接 / 正文 / main 钩子）；
 --   - Split   ：声明归属表与分文件装配。
 -- 外部（Driver.Dt）只 import 本门面，不依赖任何子模块。
-import Vuna.Compiler.Codegen.Assembly
-import Vuna.Compiler.Codegen.Split
+export import Vuna.Compiler.Codegen.Assembly
+export import Vuna.Compiler.Codegen.Split

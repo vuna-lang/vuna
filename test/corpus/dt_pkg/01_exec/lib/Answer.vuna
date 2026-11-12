@@ -1,5 +1,5 @@
 module Answer where
 
 -- M22.1：最底层模块，被 Util 引用，用于验证「依赖在前」的声明顺序。
-answer : Int
+export answer : Int
 answer = 41

@@ -1,12 +1,4 @@
-module Base.EffStdin
-  ( StdinOp(..)
-  , handleStdin
-  , handleStdinHost
-  , resStdin
-  , runStdin
-  , stdinReadBytes
-  , stdinReadLine
-  ) where
+module Base.EffStdin where
 
 -- Base.EffStdin：一阶标准输入效应（P2c：补 readLine / readBytes 标签）。
 --
@@ -17,25 +9,25 @@ import Base.Monad
 import Base.Nat
 
 -- | 标准输入操作：`ReadLine` / `ReadBytes`（最多 n 字节）。
-data StdinOp : Type where
+export data StdinOp(..) : Type where
   ReadLine : StdinOp
   ReadBytes : Nat -> StdinOp
 
 -- | 操作的结果类型族：两个操作都返回 `String`。
-resStdin : StdinOp -> Type
+export resStdin : StdinOp -> Type
 resStdin ReadLine = String
 resStdin (ReadBytes _) = String
 
 -- | 通过命名实例读一行；EOF 返回空串（与空行不可区分）。
-stdinReadLine : (n : String) -> {r : Row} -> {w : Member n StdinOp r} -> Eff r String
+export stdinReadLine : (n : String) -> {r : Row} -> {w : Member n StdinOp r} -> Eff r String
 stdinReadLine n = sendCore StdinOp "stdin" n ReadLine
 
 -- | 通过命名实例最多读 `k` 个字节；有数据就立即返回（可能少于 k），EOF 返回空串。
-stdinReadBytes : (n : String) -> Nat -> {r : Row} -> {w : Member n StdinOp r} -> Eff r String
+export stdinReadBytes : (n : String) -> Nat -> {r : Row} -> {w : Member n StdinOp r} -> Eff r String
 stdinReadBytes n k = sendCore StdinOp "stdin" n (ReadBytes k)
 
 -- | 一阶 handler：结果行删除 `StdinOp`。
-handleStdin : {a : Type} -> {b : Type} -> {r : Row} -> (n : String) -> {w : Member n StdinOp r} -> (a -> b) -> ((o : StdinOp) -> (resStdin o -> b) -> b) -> Eff r a -> Eff (Base.Eff.rowRem n StdinOp r) b
+export handleStdin : {a : Type} -> {b : Type} -> {r : Row} -> (n : String) -> {w : Member n StdinOp r} -> (a -> b) -> ((o : StdinOp) -> (resStdin o -> b) -> b) -> Eff r a -> Eff (Base.Eff.rowRem n StdinOp r) b
 handleStdin n ret opH comp = handleCore StdinOp "stdin" n ret opH comp
 
 -- | 真实 handler 的操作解释：读 stdin 后继续。
@@ -49,9 +41,9 @@ stdinOpHIO op k = case op of
     k v
 
 -- | 宿主 handler：结果行删除 `StdinOp`，answer 是已处理干净的 `Eff []` 动作，可用 `joinEff` 展平。
-handleStdinHost : {a : Type} -> {r : Row} -> (n : String) -> Eff (Base.Eff.Cons n StdinOp r) a -> Eff r (Eff [] a)
+export handleStdinHost : {a : Type} -> {r : Row} -> (n : String) -> Eff (Base.Eff.Cons n StdinOp r) a -> Eff r (Eff [] a)
 handleStdinHost n comp = handleStdin n (\a => pure a) stdinOpHIO comp
 
 -- | 单效应便捷入口（P3）：`handleStdinHost n` + `joinEff` 的组合。
-runStdin : {a : Type} -> (n : String) -> Eff (Cons n StdinOp []) a -> Eff [] a
+export runStdin : {a : Type} -> (n : String) -> Eff (Cons n StdinOp []) a -> Eff [] a
 runStdin n comp = joinEff (handleStdinHost n comp)

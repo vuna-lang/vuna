@@ -1,4 +1,4 @@
-module Vuna.Repl.History (historyHeader, parseHistoryFile, renderHistoryFile) where
+module Vuna.Repl.History where
 
 -- Vuna.Repl.History：REPL 会话历史文件的编解码（工具链；不进 seed 闭包）。
 --
@@ -20,7 +20,7 @@ module Vuna.Repl.History (historyHeader, parseHistoryFile, renderHistoryFile) wh
 -- 与用户实际输入单元同名的概率可忽略（判别只看**首行**，首行必须是头）。
 import Vuna.Compiler.Common
 
-historyHeader : String
+export historyHeader : String
 historyHeader = "vuna-repl-history 2"
 
 backslash : Int
@@ -30,7 +30,7 @@ newline : Int
 newline = 10
 
 -- 解析整份历史文件；空行（旧行为）一律丢弃。返回旧→新的单元列表。
-parseHistoryFile : String -> List String
+export parseHistoryFile : String -> List String
 parseHistoryFile text = case lines text of
   [] => []
   first :: rest =>
@@ -38,7 +38,7 @@ parseHistoryFile text = case lines text of
     else filterNonEmpty (first :: rest)
 
 -- 渲染成 v2 文件文本（总是以 `\n` 结尾；空历史也写出头，保证格式判别稳定）。
-renderHistoryFile : List String -> String
+export renderHistoryFile : List String -> String
 renderHistoryFile units = "${historyHeader}\n${join "\n" (map encodeUnit units)}\n"
 
 filterNonEmpty : List String -> List String

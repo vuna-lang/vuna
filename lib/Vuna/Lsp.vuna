@@ -1,4 +1,4 @@
-module Vuna.Lsp (runLsp, runLspTool) where
+module Vuna.Lsp where
 
 -- Vuna.Lsp：LSP 服务器门面（工具链模块，**永不进 seed 闭包**）。
 --
@@ -589,7 +589,7 @@ abnormalExit state = do
 -- A05：零参顶层定义在模块初始化时求值，所以「动作」必须函数化。
 -- runLsp 是读 stdin 的 LSP 帧循环：若留成零参值，任何子命令启动都会跑它。
 -- M4：整个入口显式 `Eff []`（帧处理/诊断/索引都已在 Eff 里），由 CLI 运行时执行。
-runLsp : Int -> Eff [] Int
+export runLsp : Int -> Eff [] Int
 runLsp _ = do
   outcome <-
     serveConnection readChunk writeStdout (\m => \s => pure (lspWarn m s))
@@ -604,5 +604,5 @@ runLsp _ = do
     ExitFatal msg => abnormalExit (logTo msg state)
 
 -- CLI 入口：与其它工具命令一致，返回退出码（由 Vuna.Cli 插入分发）。
-runLspTool : List String -> Eff [] Int
+export runLspTool : List String -> Eff [] Int
 runLspTool args = runLsp 0

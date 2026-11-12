@@ -1,13 +1,4 @@
-module Base.EffEnv
-  ( EnvOp(..)
-  , envExecPath
-  , envGetCwd
-  , envGetEnv
-  , handleEnv
-  , handleEnvHost
-  , resEnv
-  , runEnv
-  ) where
+module Base.EffEnv where
 
 -- Base.EffEnv：一阶环境效应（W10 效应标签迁移）。
 --
@@ -17,31 +8,31 @@ import Base.Eff
 import Base.Monad
 
 -- | env 操作：`GetEnv` 带变量名、`GetCwd`、`ExecPath`。
-data EnvOp : Type where
+export data EnvOp(..) : Type where
   GetEnv : String -> EnvOp
   GetCwd : EnvOp
   ExecPath : EnvOp
 
 -- | 操作的结果类型族：三个操作都返回 `String`。
-resEnv : EnvOp -> Type
+export resEnv : EnvOp -> Type
 resEnv (GetEnv k) = String
 resEnv GetCwd = String
 resEnv ExecPath = String
 
 -- | 通过命名实例取环境变量；真实 handler 走 `prim_eff_getenv`（未设置或为空串都返回空串）。
-envGetEnv : (n : String) -> String -> {r : Row} -> {w : Member n EnvOp r} -> Eff r String
+export envGetEnv : (n : String) -> String -> {r : Row} -> {w : Member n EnvOp r} -> Eff r String
 envGetEnv n k = sendCore EnvOp "env" n (GetEnv k)
 
 -- | 通过命名实例取当前工作目录。
-envGetCwd : (n : String) -> {r : Row} -> {w : Member n EnvOp r} -> Eff r String
+export envGetCwd : (n : String) -> {r : Row} -> {w : Member n EnvOp r} -> Eff r String
 envGetCwd n = sendCore EnvOp "env" n GetCwd
 
 -- | 通过命名实例取可执行文件路径。
-envExecPath : (n : String) -> {r : Row} -> {w : Member n EnvOp r} -> Eff r String
+export envExecPath : (n : String) -> {r : Row} -> {w : Member n EnvOp r} -> Eff r String
 envExecPath n = sendCore EnvOp "env" n ExecPath
 
 -- | 一阶 handler：`ret` / `opH` 由调用方给出，结果行删除 `EnvOp`。
-handleEnv : {a : Type} -> {b : Type} -> {r : Row} -> (n : String) -> {w : Member n EnvOp r} -> (a -> b) -> ((o : EnvOp) -> (resEnv o -> b) -> b) -> Eff r a -> Eff (Base.Eff.rowRem n EnvOp r) b
+export handleEnv : {a : Type} -> {b : Type} -> {r : Row} -> (n : String) -> {w : Member n EnvOp r} -> (a -> b) -> ((o : EnvOp) -> (resEnv o -> b) -> b) -> Eff r a -> Eff (Base.Eff.rowRem n EnvOp r) b
 handleEnv n ret opH comp = handleCore EnvOp "env" n ret opH comp
 
 -- | 真实 handler 的操作解释：把三个操作映射到 `prim_eff_getenv` / `prim_eff_getcwd` / `prim_eff_execPath`。
@@ -58,9 +49,9 @@ envOpHIO op k = case op of
     k v
 
 -- | 宿主 handler：结果行删除 `EnvOp`，answer 是已处理干净的 `Eff []` 动作，可用 `joinEff` 展平。
-handleEnvHost : {a : Type} -> {r : Row} -> (n : String) -> Eff (Base.Eff.Cons n EnvOp r) a -> Eff r (Eff [] a)
+export handleEnvHost : {a : Type} -> {r : Row} -> (n : String) -> Eff (Base.Eff.Cons n EnvOp r) a -> Eff r (Eff [] a)
 handleEnvHost n comp = handleEnv n (\a => pure a) envOpHIO comp
 
 -- | 单效应便捷入口（P3）：`handleEnvHost n` + `joinEff` 的组合。
-runEnv : {a : Type} -> (n : String) -> Eff (Cons n EnvOp []) a -> Eff [] a
+export runEnv : {a : Type} -> (n : String) -> Eff (Cons n EnvOp []) a -> Eff [] a
 runEnv n comp = joinEff (handleEnvHost n comp)

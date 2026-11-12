@@ -1,4 +1,4 @@
-module Base.EffArgs (ArgsOp(..), argsGetArgs, handleArgs, handleArgsHost, resArgs, runArgs) where
+module Base.EffArgs where
 
 -- Base.EffArgs：一阶命令行参数效应（P2c：补 getArgs 标签，供夹具迁移 typed effects）。
 --
@@ -9,19 +9,19 @@ import Base.Monad
 import Base.List
 
 -- | 参数操作：`GetArgs`（不含 argv[0] 的命令行参数）。
-data ArgsOp : Type where
+export data ArgsOp(..) : Type where
   GetArgs : ArgsOp
 
 -- | 操作的结果类型族：`GetArgs` 返回 `List String`。
-resArgs : ArgsOp -> Type
+export resArgs : ArgsOp -> Type
 resArgs GetArgs = List String
 
 -- | 通过命名实例取命令行参数。
-argsGetArgs : (n : String) -> {r : Row} -> {w : Member n ArgsOp r} -> Eff r (List String)
+export argsGetArgs : (n : String) -> {r : Row} -> {w : Member n ArgsOp r} -> Eff r (List String)
 argsGetArgs n = sendCore ArgsOp "args" n GetArgs
 
 -- | 一阶 handler：`ret` / `opH` 由调用方给出，结果行删除 `ArgsOp`。
-handleArgs : {a : Type} -> {b : Type} -> {r : Row} -> (n : String) -> {w : Member n ArgsOp r} -> (a -> b) -> ((o : ArgsOp) -> (resArgs o -> b) -> b) -> Eff r a -> Eff (Base.Eff.rowRem n ArgsOp r) b
+export handleArgs : {a : Type} -> {b : Type} -> {r : Row} -> (n : String) -> {w : Member n ArgsOp r} -> (a -> b) -> ((o : ArgsOp) -> (resArgs o -> b) -> b) -> Eff r a -> Eff (Base.Eff.rowRem n ArgsOp r) b
 handleArgs n ret opH comp = handleCore ArgsOp "args" n ret opH comp
 
 -- | 真实 handler 的操作解释：取 `prim_eff_getArgs` 后继续。
@@ -32,9 +32,9 @@ argsOpHIO op k = case op of
     k xs
 
 -- | 宿主 handler：结果行删除 `ArgsOp`，answer 是已处理干净的 `Eff []` 动作，可用 `joinEff` 展平。
-handleArgsHost : {a : Type} -> {r : Row} -> (n : String) -> Eff (Base.Eff.Cons n ArgsOp r) a -> Eff r (Eff [] a)
+export handleArgsHost : {a : Type} -> {r : Row} -> (n : String) -> Eff (Base.Eff.Cons n ArgsOp r) a -> Eff r (Eff [] a)
 handleArgsHost n comp = handleArgs n (\a => pure a) argsOpHIO comp
 
 -- | 单效应便捷入口（P3）：`handleArgsHost n` + `joinEff` 的组合。
-runArgs : {a : Type} -> (n : String) -> Eff (Cons n ArgsOp []) a -> Eff [] a
+export runArgs : {a : Type} -> (n : String) -> Eff (Cons n ArgsOp []) a -> Eff [] a
 runArgs n comp = joinEff (handleArgsHost n comp)

@@ -1,5 +1,5 @@
 -- | 成功/失败结果类型与组合子。
-module Base.Result (Result(..), mapError, step, traverse, withDefault) where
+module Base.Result where
 
 -- Base.Result：成功/失败结果类型与组合子（Base 语义迁移 + 常用补充）。
 -- `Functor` / `Monad` 实例：组合统一用 `fmap` / `bind` / `pure` / `do`；库内不再提供
@@ -21,7 +21,7 @@ import Base.Show
 import Base.String
 
 -- | 成功 `Ok x` 或失败 `Err message`。
-data Result a : Type where
+export data Result a(..) : Type where
   -- | 成功。
   Ok : a -> Result a
   -- | 失败（错误消息）。
@@ -47,7 +47,7 @@ instance Applicative Result where
   liftA2 f _ (Err e) = Err e
 
 -- | 对列表逐项执行 `Result` 计算；遇到第一个 `Err` 立即返回。
-traverse : (a -> Result b) -> List a -> Result (List b)
+export traverse : (a -> Result b) -> List a -> Result (List b)
 traverse f [] = Ok []
 traverse f (x :: xs) = case f x of
   Err e => Err e
@@ -56,17 +56,17 @@ traverse f (x :: xs) = case f x of
     Ok ys => Ok (y :: ys)
 
 -- | 处理 `Result (Pair a b)` 的双参数绑定（常用作状态传递）：同时解构 `Pair`，因此不能写成 `bind` 别名（`do` 的 pattern 只支持变量/通配）。
-step : Result (Pair a b) -> (a -> b -> Result c) -> Result c
+export step : Result (Pair a b) -> (a -> b -> Result c) -> Result c
 step (Ok (Pair x st)) k = k x st
 step (Err e) k = Err e
 
 -- | 映射错误消息。
-mapError : (String -> String) -> Result a -> Result a
+export mapError : (String -> String) -> Result a -> Result a
 mapError f (Ok x) = Ok x
 mapError f (Err e) = Err (f e)
 
 -- | 成功取值，失败返回默认值。
-withDefault : a -> Result a -> a
+export withDefault : a -> Result a -> a
 withDefault d (Ok x) = x
 withDefault d (Err e) = d
 

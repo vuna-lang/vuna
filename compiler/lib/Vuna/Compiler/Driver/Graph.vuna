@@ -1,17 +1,5 @@
 -- | 编译管线的图节点族：node key 构造 + **审计路径**的提交 helper。
-module Vuna.Compiler.Driver.Graph
-  ( CheckMods(..)
-  , checkModsOf
-  , checkNodeKey
-  , graphCheckMods
-  , graphCommitRef
-  , graphNodeKey
-  , graphRunOpts
-  , nodeCompilerKey
-  , nodeDepsKey
-  , nodeEnvKey
-  , nodeSrcKey
-  ) where
+module Vuna.Compiler.Driver.Graph where
 
 -- Vuna.Compiler.Driver.Graph：把「包级 check / build」的缓存判定搬进查询图（阶段 2）。
 --
@@ -48,7 +36,7 @@ import Vuna.Compiler.Query.Run
 --
 -- `cmKind` = `exe`（可执行包入口）/ `lib:<namesHash>`（库包导出面）。`cmVer` 是
 -- 「编译器版本 + 指纹」，换二进制即整套 node key 换代。
-record CheckMods where
+export record CheckMods(..) where
   cmPkg : String
   cmKind : String
   cmManifest : String
@@ -57,19 +45,19 @@ record CheckMods where
   cmVer : String
 
 -- | 拼 `CheckMods`（纯构造；摘要由调用方算好传入）。
-checkModsOf : String -> String -> String -> String -> String -> String -> CheckMods
+export checkModsOf : String -> String -> String -> String -> String -> String -> CheckMods
 checkModsOf pkg kind manifest sources deps ver = CheckMods pkg kind manifest sources deps ver
 
 -- | 通用节点 key：`<family>:<pkg>:<kind>`（稳定：不含摘要；摘要进依赖表）。
-graphNodeKey : String -> CheckMods -> String
+export graphNodeKey : String -> CheckMods -> String
 graphNodeKey family m = "${family}:${m.cmPkg}:${m.cmKind}"
 
 -- | check 节点的 key。
-checkNodeKey : CheckMods -> String
+export checkNodeKey : CheckMods -> String
 checkNodeKey m = graphNodeKey "check" m
 
 -- | 四个输入节点的 key（顺序固定 = env / src / deps / ver）。
-graphCheckMods : CheckMods -> List String
+export graphCheckMods : CheckMods -> List String
 graphCheckMods m =
   [ nodeEnvKey m.cmPkg m.cmManifest,
     nodeSrcKey m.cmPkg m.cmSources,
@@ -77,25 +65,25 @@ graphCheckMods m =
     nodeCompilerKey m.cmVer
   ]
 
-nodeEnvKey : String -> String -> String
+export nodeEnvKey : String -> String -> String
 nodeEnvKey pkg manifestHash = "env:${pkg}:${manifestHash}"
 
-nodeSrcKey : String -> String -> String
+export nodeSrcKey : String -> String -> String
 nodeSrcKey pkg closureHash = "src:${pkg}:${closureHash}"
 
-nodeDepsKey : String -> String -> String
+export nodeDepsKey : String -> String -> String
 nodeDepsKey pkg closureHash = "deps:${pkg}:${closureHash}"
 
-nodeCompilerKey : String -> String
+export nodeCompilerKey : String -> String
 nodeCompilerKey verHash = "ver:${verHash}"
 
 -- | 包级 check 会话的配置：来源 `pkg`、不设预算、按包名分桶持久化。
-graphRunOpts : String -> RunOpts
+export graphRunOpts : String -> RunOpts
 graphRunOpts pkg = RunOpts "pkg" 0 True pkg
 
 -- | 审计路径（`VUNA_IFACE_AUDIT=1`）提交一次成功的 build：值 = 产物内容地址 `QRef`，
 -- 依赖表 = 本次输入摘要。正常路径的提交由 `Query.Run.runCachedNode` 做，不用本函数。
-graphCommitRef : Db -> String -> CheckMods -> String -> Db
+export graphCommitRef : Db -> String -> CheckMods -> String -> Db
 graphCommitRef db key mods digest =
   firstOf (queryResolve db key (graphCheckMods mods) (Pair (QRef digest) []))
 

@@ -1,4 +1,4 @@
-module Vuna.Repl.Complete (argCompletions, argKindOf, moduleNameOf, splitLastSlash) where
+module Vuna.Repl.Complete where
 
 -- Vuna.Repl.Complete：`:load` / `:browse` / `import` **参数位**的 Tab 补全候选
 -- （工具链；不进 seed 闭包）。
@@ -23,7 +23,7 @@ import Vuna.Compiler.Common
 -- ---------------------------------------------------------------
 -- 返回补全种类：0 = 普通（命令名 / 缓冲绑定名，由 Repl 提供）；
 --               1 = `:load` 参数（模块名 + 文件路径）；2 = 只要模块名（`:browse` / `import`）。
-argKindOf : List Int -> Int -> Int
+export argKindOf : List Int -> Int -> Int
 argKindOf buf cur =
   let
     text = trimLeft (strPack (take cur buf))
@@ -48,7 +48,7 @@ splitFirstWordChars (c :: rest) acc =
 -- ---------------------------------------------------------------
 -- 候选池
 -- ---------------------------------------------------------------
-argCompletions : Int -> List String -> String -> Eff [] (List String)
+export argCompletions : Int -> List String -> String -> Eff [] (List String)
 argCompletions kind roots token = if token == "" then pure []
 else do
   mods <-
@@ -117,7 +117,7 @@ mapSlashToDot [] = []
 mapSlashToDot (c :: rest) = (if c == 47 then 46 else c) :: mapSlashToDot rest
 
 -- 路径 → 模块全名（`root` 是该模块根目录；不在根下返回空串）。纯函数，可直接单测。
-moduleNameOf : String -> String -> String
+export moduleNameOf : String -> String -> String
 moduleNameOf root path =
   let
     prefix = if endsWith "/" root then root else "${root}/"
@@ -165,7 +165,7 @@ pathCandidate dirText dir name =
     pure (if isDir then "${shown}/" else shown)
 
 -- 按**最后一个** `/` 拆成 (目录, 末段)；没有 `/` 时目录为空串。
-splitLastSlash : String -> Pair String String
+export splitLastSlash : String -> Pair String String
 splitLastSlash s = splitLastSlashRev (reverse (strUnpack s)) []
 
 splitLastSlashRev : List Int -> List Int -> Pair String String

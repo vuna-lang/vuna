@@ -1,4 +1,4 @@
-module Vuna.Test.Run (runSuite) where
+module Vuna.Test.Run where
 
 -- Vuna.Test.Run：suite 模式的原生执行器。
 --
@@ -1764,7 +1764,7 @@ watchSuite opts suite = do
   snapshot <- watchSnapshot suite.suiteRoot
   watchLoop 100000000 opts suite snapshot rc
 
-runSuite : SuiteOpts -> Suite -> Eff [] Int
+export runSuite : SuiteOpts -> Suite -> Eff [] Int
 runSuite opts suite =
   if opts.suiteAudit then auditSuite opts suite
   else if opts.suiteWatch then watchSuite opts suite else runSuiteOnce opts suite

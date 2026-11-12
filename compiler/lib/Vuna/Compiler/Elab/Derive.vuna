@@ -1,4 +1,4 @@
-module Vuna.Compiler.Elab.Derive (expandDerivings, instHead) where
+module Vuna.Compiler.Elab.Derive where
 
 -- Vuna.Compiler.Elab.Derive：`deriving` 的**实例生成**（M19；M24.7 改为库里的 trait）。
 --
@@ -44,7 +44,7 @@ traitMethodGlobal tname methodName = case splitLastDot (splitOnDot tname) of
 -- 两段式：先收集所有派生实例，再整体**追加到声明列表末尾**。不能就地插到 data 之后
 -- ——那条 data 的族信息要等 `elabDatas` 阶段才进 `globals`，插在中间会让实例方法体里
 -- 的 `case` 拿不到 scrutinee 的类型。
-expandDerivings : List Decl -> Check (List Decl)
+export expandDerivings : List Decl -> Check (List Decl)
 expandDerivings decls =
   Vuna.Compiler.Common.bind (collectDerivings decls) (\insts => OkC (append decls insts))
 
@@ -194,7 +194,7 @@ deriveFieldTypeName (EApp (EVar n sp) args sp2) = n
 deriveFieldTypeName _ = "?"
 
 -- `T <Data> a1 .. an` 形态的实例头（`T` 是解析后的完整类名）。
-instHead : String -> String -> List String -> Span -> Expr
+export instHead : String -> String -> List String -> Span -> Expr
 instHead tn dname params sp = EApp (EVar tn sp) [applyTypeParams (EVar dname sp) params sp] sp
 
 -- `Box` 应用到 data 参数上：`Box a b`（单参数 trait 的实例头实参是一个**类型**）。

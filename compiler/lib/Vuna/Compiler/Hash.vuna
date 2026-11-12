@@ -1,16 +1,5 @@
 -- | 内容寻址摘要原语：SHA-256 + 大输入内容键（预折叠）/ 内容地址。
-module Vuna.Compiler.Hash
-  ( Digest(..)
-  , contentAddress
-  , contentKey
-  , digestHex
-  , digestInt
-  , digestIntOf
-  , digestLanes
-  , digestOfBytes
-  , digestOfString
-  , prehashOfString
-  ) where
+module Vuna.Compiler.Hash where
 
 -- Vuna.Compiler.Hash：内容寻址的**格式层**（不含查询/缓存策略）。
 --
@@ -28,15 +17,15 @@ import Base.List
 import Base.String
 
 -- | 8 个 32-bit 摘要字（大端序；即标准 SHA-256 的 64 位十六进制）。
-record Digest where
+export record Digest(..) where
   digestLanes : List Int
 
 -- | 取摘要的 8 条 lane。
-digestLanes : Digest -> List Int
+export digestLanes : Digest -> List Int
 digestLanes (Digest lanes) = lanes
 
 -- | 字节序列（每项 0..255）→ 摘要。
-digestOfBytes : List Int -> Digest
+export digestOfBytes : List Int -> Digest
 digestOfBytes bytes = Digest (sha256Bytes bytes)
 
 -- | 字符串 → 摘要（按 UTF-8 字节）。
@@ -44,11 +33,11 @@ digestOfBytes bytes = Digest (sha256Bytes bytes)
 -- 直接按字节下标（`strAt`，O(1)）喂 SHA，**不**先 `strUnpack` 成列表：接口载荷可达
 -- 数 MB，逐字节建 cons 会让 iface 哈希成为 check 的新热点。语义与 `digestOfBytes
 -- (strUnpack s)` 完全相同（同一组字节、同一算法）。
-digestOfString : String -> Digest
+export digestOfString : String -> Digest
 digestOfString s = Digest (sha256OfString s)
 
 -- | 渲染成小写十六进制：每条 lane 8 位，共 64 位。
-digestHex : Digest -> String
+export digestHex : Digest -> String
 digestHex (Digest lanes) = strConcatMany (map hex8 lanes)
 
 -- | 摘要 → 63-bit 派生键（`Int`）：8 条 lane 依次滚动折叠后掩到 `Int` 正区间。
@@ -56,11 +45,11 @@ digestHex (Digest lanes) = strConcatMany (map hex8 lanes)
 -- 用途：必须落成 `Int` 的位置（排序键、缓存目录/文件名里的短 key、测试 runner 的
 -- 分桶）。它是 SHA-256 的派生量，碰撞面约 2^-62，取代旧的 10-bit `strHash` 折叠与
 -- 6-lane 盐（60-bit）实现；需要可移植/可展示的内容地址仍用 `digestHex`。
-digestInt : Digest -> Int
+export digestInt : Digest -> Int
 digestInt (Digest lanes) = band (foldl (\h, lane => h * 1000003 + lane) 0 lanes) 4611686018427387903
 
 -- | 字符串 → 63-bit 派生键（`digestInt` 的便捷入口）；对整串跑 SHA-256，只适合短输入。
-digestIntOf : String -> Int
+export digestIntOf : String -> Int
 digestIntOf s = digestInt (digestOfString s)
 
 -- | **内容键**（63-bit）`contentKey s = digestIntOf (prehashOfString s)`。
@@ -69,12 +58,12 @@ digestIntOf s = digestInt (digestOfString s)
 -- 多项式预折叠（O(n) 低常数，与 `payloadDigest` 同一威胁模型：无对手、只防意外碰撞），
 -- 再对折叠串跑 SHA-256 并取 63-bit 派生键——因此**不再**对每个源文件逐字节跑语言内
 -- SHA（那会让 `check` 的缓存 key 计算从 ~20ms 抬到数百 ms）。
-contentKey : String -> Int
+export contentKey : String -> Int
 contentKey s = digestIntOf (prehashOfString s)
 
 -- | **内容地址**（64 位十六进制）：`digestHex (digestOfString (prehashOfString s))`。
 -- 与 `contentKey` 同一折叠，输出可展示/可比较的地址（ast 缓存 key、内容寻址文件名）。
-contentAddress : String -> String
+export contentAddress : String -> String
 contentAddress s = digestHex (digestOfString (prehashOfString s))
 
 -- ---------------------------------------------------------------
@@ -347,7 +336,7 @@ sha256OfString s =
 --
 -- OCaml `Int` 溢出按 63-bit 二进制补码回绕（§primitives），因此乘法天然 mod 2^63，
 -- 不需要取模运算；跨机器、跨进程确定。
-prehashOfString : String -> String
+export prehashOfString : String -> String
 prehashOfString s = prehashGo (strLength s) 0 1 2 3 4 s
 
 -- | 逐字节滚动（`k` 为剩余字节数，守卫 Int 递减）。

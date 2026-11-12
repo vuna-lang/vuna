@@ -1,4 +1,4 @@
-module Vuna.FixityEnv (FixityEnv, emptyFixityEnv, fixitiesForFile) where
+module Vuna.FixityEnv where
 
 -- Vuna.FixityEnv：工具链（fmt / lint / LSP）的 per-file **程序级 fixity** 解析器（M31.3 / B27）。
 --
@@ -22,11 +22,11 @@ import Vuna.Compiler.Loader.Modules
 import Vuna.Compiler.Packages.Pkg
 
 -- 表示抽象：只有 emptyFixityEnv / fixitiesForFile 能构造与推进缓存。
-record FixityEnv where
+export record FixityEnv where
   fixityEnvCtxCache : List (Pair String PackageContext)
   fixityEnvModCache : List (Pair String (List Module))
 
-emptyFixityEnv : FixityEnv
+export emptyFixityEnv : FixityEnv
 emptyFixityEnv = FixityEnv [] []
 
 -- 缓存键：文件所在**目录**（无 `/` 时用 "."）。同一目录的文件共享上下文；
@@ -52,7 +52,7 @@ cachePut key value entries = Pair key value :: cacheForget key entries
 -- 取一个文件的程序级 fixity：`Pair env' (Result (List FixityDecl))`。
 -- env' 带回推进后的缓存（即使本次失败，已成功的上下文缓存仍可复用）。
 -- M4：上下文解析 / 模块图加载是宿主动作，显式 `Eff []`；缓存推进仍是纯数据。
-fixitiesForFile : FixityEnv -> String -> String -> Eff [] (Pair FixityEnv (Check (List FixityDecl)))
+export fixitiesForFile : FixityEnv -> String -> String -> Eff [] (Pair FixityEnv (Check (List FixityDecl)))
 fixitiesForFile (FixityEnv ctxCache modCache) path source =
   let
     dir = dirKey path

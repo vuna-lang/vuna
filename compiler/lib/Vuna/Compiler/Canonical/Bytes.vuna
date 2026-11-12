@@ -1,30 +1,5 @@
 -- | 规范字节编码的原子层：自定界原子 + 对应的解析器（roundtrip 与载荷解码共用）。
-module Vuna.Compiler.Canonical.Bytes
-  ( Cur(..)
-  , curAtEnd
-  , curChar
-  , curOf
-  , curSkip
-  , curSlice
-  , decBool
-  , decInt
-  , decList
-  , decMaybe
-  , decPair
-  , decStr
-  , decTag
-  , encBool
-  , encConcat
-  , encInt
-  , encList
-  , encMaybe
-  , encPair
-  , encStr
-  , encTag
-  , encTop
-  , lenOf
-  , thenPair
-  ) where
+module Vuna.Compiler.Canonical.Bytes where
 
 -- Vuna.Compiler.Canonical.Bytes：内容寻址的**规范字节格式**（C32 哈希输入侧 + 载荷解码侧）。
 --
@@ -64,62 +39,62 @@ import Base.String
 --
 -- 不持有「剩余串」（`curS` 始终是原串、偏移递增）是有意的：`decStr` 取子串时用
 -- `strSubstring start len curS` 一次拷贝，其余原子只推进偏移，不做任何字符串拼接。
-record Cur where
+export record Cur(..) where
   curS : String
   curI : Int
 
 -- | 从串头开一个光标。
-curOf : String -> Cur
+export curOf : String -> Cur
 curOf s = Cur s 0
 
 -- | 光标是否已到串尾。
-curAtEnd : Cur -> Bool
+export curAtEnd : Cur -> Bool
 curAtEnd c = c.curI >= strLength c.curS
 
 -- | 当前字节（越界返回 `Nothing`；`strAt` 越界返回 -1，这里显式判）。
-curChar : Cur -> Maybe Int
+export curChar : Cur -> Maybe Int
 curChar c = if c.curI < strLength c.curS then Just (strAt c.curS c.curI) else Nothing
 
 -- | 前进一格（只在确认未越界后调用）。
-curSkip : Cur -> Cur
+export curSkip : Cur -> Cur
 curSkip c = Cur c.curS (c.curI + 1)
 
 -- | 取 `[start, start+len)` 的字节串（越界时调用方已校验，见 `decStr`）。
-curSlice : Cur -> Int -> Int -> String
+export curSlice : Cur -> Int -> Int -> String
 curSlice c start len = strSubstring start len c.curS
 
 -- | `List` 长度（`Base.List.length` 返回 `Nat`；编码要 `Int`）。
-lenOf : List a -> Int
+export lenOf : List a -> Int
 lenOf [] = 0
 lenOf (_ :: rest) = 1 + lenOf rest
 
 -- | 把分片列表拼成最终字节串（一次 `strConcatMany`）。
-encConcat : List String -> String
+export encConcat : List String -> String
 encConcat parts = strConcatMany parts
 
 -- | 编码入口：`encTop f x` = 把 x 的完整编码拼成一个字符串。
-encTop : (a -> List String -> List String) -> a -> String
+export encTop : (a -> List String -> List String) -> a -> String
 encTop f x = encConcat (f x [])
 
 -- | 和类型构造子序号：`#<n>;`。
-encTag : Int -> List String -> List String
+export encTag : Int -> List String -> List String
 encTag n acc = "#${strFromInt n};" :: acc
 
 -- | 整数：`i<十进制>;`（负数带前置 `-`；无前导零）。
-encInt : Int -> List String -> List String
+export encInt : Int -> List String -> List String
 encInt n acc = "i${strFromInt n};" :: acc
 
 -- | 字符串：`s<字节长度>:<原始字节>`（长度是字节数，不是字符数）。
-encStr : String -> List String -> List String
+export encStr : String -> List String -> List String
 encStr s acc = "s${strFromInt (strLength s)}:" :: s :: acc
 
 -- | 布尔：`b1` / `b0`。
-encBool : Bool -> List String -> List String
+export encBool : Bool -> List String -> List String
 encBool True acc = "b1" :: acc
 encBool False acc = "b0" :: acc
 
 -- | 列表：`[<n>:<元素编码...>`（n = 元素个数）。
-encList : (a -> List String -> List String) -> List a -> List String -> List String
+export encList : (a -> List String -> List String) -> List a -> List String -> List String
 encList f xs acc = "[${strFromInt (lenOf xs)}:" :: encListGo f xs acc
 
 -- | 列表元素：正序 cons 到 acc 上（递归吃 tail；编码本身不拷贝子分片）。
@@ -128,16 +103,16 @@ encListGo f [] acc = acc
 encListGo f (x :: rest) acc = f x (encListGo f rest acc)
 
 -- | Maybe：`0` 表示 Nothing；`1<值编码>` 表示 Just。
-encMaybe : (a -> List String -> List String) -> Maybe a -> List String -> List String
+export encMaybe : (a -> List String -> List String) -> Maybe a -> List String -> List String
 encMaybe f Nothing acc = "0" :: acc
 encMaybe f (Just x) acc = "1" :: f x acc
 
 -- | 二元组（`Pair`）：两个分量直接串接（各自自定界，无需额外前缀）。
-encPair : (a -> List String -> List String) -> (b -> List String -> List String) -> Pair a b -> List String -> List String
+export encPair : (a -> List String -> List String) -> (b -> List String -> List String) -> Pair a b -> List String -> List String
 encPair fa fb (Pair x y) acc = fa x (fb y acc)
 
 -- | 解析一步的绑定：`thenPair (Just (Pair v rest)) k = k v rest`。
-thenPair : Maybe (Pair a Cur) -> (a -> Cur -> Maybe (Pair b Cur)) -> Maybe (Pair b Cur)
+export thenPair : Maybe (Pair a Cur) -> (a -> Cur -> Maybe (Pair b Cur)) -> Maybe (Pair b Cur)
 thenPair Nothing k = Nothing
 thenPair (Just (Pair v rest)) k = k v rest
 
@@ -156,14 +131,14 @@ else case curChar c of
     else if isDigit b then decNumStop (fuel - 1) stop (acc * 10 + (b - 48)) (curSkip c) else Nothing
 
 -- | 解析 tag：`#<n>;`。
-decTag : Int -> Cur -> Maybe (Pair Int Cur)
+export decTag : Int -> Cur -> Maybe (Pair Int Cur)
 decTag fuel c = if fuel <= 0 then Nothing
 else case curChar c of
   Just 35 => decNumStop (fuel - 1) 59 0 (curSkip c)
   _ => Nothing
 
 -- | 解析整数：`i[-]<n>;`。
-decInt : Int -> Cur -> Maybe (Pair Int Cur)
+export decInt : Int -> Cur -> Maybe (Pair Int Cur)
 decInt fuel c = if fuel <= 0 then Nothing
 else case curChar c of
   Just 105 => case curChar (curSkip c) of
@@ -173,7 +148,7 @@ else case curChar c of
   _ => Nothing
 
 -- | 解析布尔：`b1` / `b0`。
-decBool : Int -> Cur -> Maybe (Pair Bool Cur)
+export decBool : Int -> Cur -> Maybe (Pair Bool Cur)
 decBool fuel c = if fuel <= 0 then Nothing
 else case curChar c of
   Just 98 => case curChar (curSkip c) of
@@ -183,7 +158,7 @@ else case curChar c of
   _ => Nothing
 
 -- | 解析字符串：`s<n>:<n 个字节>`（按字节取，不重新解码 UTF-8）。
-decStr : Int -> Cur -> Maybe (Pair String Cur)
+export decStr : Int -> Cur -> Maybe (Pair String Cur)
 decStr fuel c = if fuel <= 0 then Nothing
 else case curChar c of
   Just 115 =>
@@ -192,7 +167,7 @@ else case curChar c of
   _ => Nothing
 
 -- | 解析列表：`[<n>:<n 个元素>`。
-decList : (Int -> Cur -> Maybe (Pair a Cur)) -> Int -> Cur -> Maybe (Pair (List a) Cur)
+export decList : (Int -> Cur -> Maybe (Pair a Cur)) -> Int -> Cur -> Maybe (Pair (List a) Cur)
 decList fp fuel c = if fuel <= 0 then Nothing
 else case curChar c of
   Just 91 =>
@@ -207,7 +182,7 @@ decItems fp n fuel c acc =
   else thenPair (fp fuel c) (\x, b => decItems fp (n - 1) (fuel - 1) b (x :: acc))
 
 -- | 解析 Maybe：`0` = Nothing；`1<item>` = Just。
-decMaybe : (Int -> Cur -> Maybe (Pair a Cur)) -> Int -> Cur -> Maybe (Pair (Maybe a) Cur)
+export decMaybe : (Int -> Cur -> Maybe (Pair a Cur)) -> Int -> Cur -> Maybe (Pair (Maybe a) Cur)
 decMaybe fp fuel c = if fuel <= 0 then Nothing
 else case curChar c of
   Just 48 => Just (Pair Nothing (curSkip c))
@@ -215,7 +190,7 @@ else case curChar c of
   _ => Nothing
 
 -- | 解析二元组：两个分量按编码顺序消费。
-decPair : (Int -> Cur -> Maybe (Pair a Cur)) -> (Int -> Cur -> Maybe (Pair b Cur)) -> Int -> Cur -> Maybe (Pair (Pair a b) Cur)
+export decPair : (Int -> Cur -> Maybe (Pair a Cur)) -> (Int -> Cur -> Maybe (Pair b Cur)) -> Int -> Cur -> Maybe (Pair (Pair a b) Cur)
 decPair fa fb fuel c =
   thenPair (fa (fuel - 1) c)
     (\x, b1 => thenPair (fb (fuel - 1) b1) (\y, b2 => Just (Pair (Pair x y) b2)))

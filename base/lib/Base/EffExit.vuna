@@ -1,4 +1,4 @@
-module Base.EffExit (ExitOp(..), exitWith, handleExit, handleExitHost, resExit, runExit) where
+module Base.EffExit where
 
 -- Base.EffExit：一阶进程退出效应（P2c：补 exit 标签）。
 --
@@ -8,19 +8,19 @@ import Base.Eff
 import Base.Monad
 
 -- | 退出操作：`ExitWith` 带状态码。
-data ExitOp : Type where
+export data ExitOp(..) : Type where
   ExitWith : Int -> ExitOp
 
 -- | 操作的结果类型族：`ExitWith` 声明返回 `Int`（执行即退出，不返回）。
-resExit : ExitOp -> Type
+export resExit : ExitOp -> Type
 resExit (ExitWith _) = Int
 
 -- | 通过命名实例退出进程（原语类型 `Int -> Eff [] Int`，执行即退出、不返回）。
-exitWith : (n : String) -> Int -> {r : Row} -> {w : Member n ExitOp r} -> Eff r Int
+export exitWith : (n : String) -> Int -> {r : Row} -> {w : Member n ExitOp r} -> Eff r Int
 exitWith n code = sendCore ExitOp "exit" n (ExitWith code)
 
 -- | 一阶 handler：结果行删除 `ExitOp`。
-handleExit : {a : Type} -> {b : Type} -> {r : Row} -> (n : String) -> {w : Member n ExitOp r} -> (a -> b) -> ((o : ExitOp) -> (resExit o -> b) -> b) -> Eff r a -> Eff (Base.Eff.rowRem n ExitOp r) b
+export handleExit : {a : Type} -> {b : Type} -> {r : Row} -> (n : String) -> {w : Member n ExitOp r} -> (a -> b) -> ((o : ExitOp) -> (resExit o -> b) -> b) -> Eff r a -> Eff (Base.Eff.rowRem n ExitOp r) b
 handleExit n ret opH comp = handleCore ExitOp "exit" n ret opH comp
 
 -- | 真实 handler 的操作解释：执行 `prim_eff_exit code`；`k 0` 不可达，只为类型闭合。
@@ -31,9 +31,9 @@ exitOpHIO op k = case op of
     k 0
 
 -- | 宿主 handler：结果行删除 `ExitOp`，answer 是已处理干净的 `Eff []` 动作，可用 `joinEff` 展平。
-handleExitHost : {a : Type} -> {r : Row} -> (n : String) -> Eff (Base.Eff.Cons n ExitOp r) a -> Eff r (Eff [] a)
+export handleExitHost : {a : Type} -> {r : Row} -> (n : String) -> Eff (Base.Eff.Cons n ExitOp r) a -> Eff r (Eff [] a)
 handleExitHost n comp = handleExit n (\a => pure a) exitOpHIO comp
 
 -- | 单效应便捷入口（P3）：`handleExitHost n` + `joinEff` 的组合。
-runExit : {a : Type} -> (n : String) -> Eff (Cons n ExitOp []) a -> Eff [] a
+export runExit : {a : Type} -> (n : String) -> Eff (Cons n ExitOp []) a -> Eff [] a
 runExit n comp = joinEff (handleExitHost n comp)

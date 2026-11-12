@@ -1,4 +1,4 @@
-module Base.Hashable (Hashable(..), hashCombine, hashStr) where
+module Base.Hashable where
 
 -- Base.Hashable：通用哈希 trait（泛型哈希容器的键约束）。
 --
@@ -17,13 +17,13 @@ module Base.Hashable (Hashable(..), hashCombine, hashStr) where
 import Base.Num
 
 -- | 可哈希的 trait：`hash : a -> Int`。约定：`eq x y` 为真时必须 `hash x == hash y`。
-trait Hashable a where
+export trait Hashable a(..) where
   hash : a -> Int
 
 -- | `String` 的 0..1023 哈希（intrinsic `strHash` 的同一公式）；也供需要采样键的工具使用。
-hashStr : String -> Int
+export hashStr : String -> Int
 hashStr s = strHash s
 
 -- | 组合两个哈希（复合键与 `deriving (Hashable)` 使用）；溢出按 Int 回绕，容器自行归一化。
-hashCombine : Int -> Int -> Int
+export hashCombine : Int -> Int -> Int
 hashCombine a b = a * 31 + b

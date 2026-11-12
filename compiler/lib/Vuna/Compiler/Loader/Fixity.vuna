@@ -1,15 +1,4 @@
-module Vuna.Compiler.Loader.Fixity
-  ( FixityTable
-  , lookupFixity
-  , lookupFixityDecl
-  , reorderExpr
-  , reorderPattern
-  , reorderProgram
-  , symbolOfTargetIn
-  , syntaxFixityDecls
-  , tableOf
-  , tableOfKeepOps
-  ) where
+module Vuna.Compiler.Loader.Fixity where
 
 -- Vuna.Compiler.Loader.Fixity：中缀重排（M31.2/M31.3）。
 --
@@ -30,22 +19,22 @@ import Vuna.Compiler.Common
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Diagnostics.Rn
 
-record FixityTable where
+export record FixityTable where
   renameMode : Bool
   fixityDecls : List FixityDecl
 
-tableOf : List FixityDecl -> FixityTable
+export tableOf : List FixityDecl -> FixityTable
 tableOf ds = FixityTable True ds
 
 -- Fmt 用：不替换别名（打印时保留源码里的运算符写法）；section 与反引号保留原形。
-tableOfKeepOps : List FixityDecl -> FixityTable
+export tableOfKeepOps : List FixityDecl -> FixityTable
 tableOfKeepOps ds = FixityTable False ds
 
 renameMode : FixityTable -> Bool
 renameMode (FixityTable r ds) = r
 
 -- 语法运算符：`->` 由 parser/Elab 消费，不属于任何库模块，因此恒可见（不是用户表兜底）。
-syntaxFixityDecls : List FixityDecl
+export syntaxFixityDecls : List FixityDecl
 syntaxFixityDecls = [FixityDecl "->" 1 2 Nothing (Span "" 0 0 0 0)]
 
 -- 反向别名：方法名/构造子名（`eq`/`Cons`/`bind`）-> 运算符符号。Fmt 打印用。
@@ -56,7 +45,7 @@ findTarget (d :: rest) name = case d.fixityTarget of
   Nothing => findTarget rest name
 
 -- Fmt 用：按调用方给的**程序级**声明表反查符号。
-symbolOfTargetIn : List FixityDecl -> String -> Maybe String
+export symbolOfTargetIn : List FixityDecl -> String -> Maybe String
 symbolOfTargetIn ds name = findTarget ds name
 
 -- 第一处匹配生效：调用方把「本模块 + imports 闭包」放在前面、语法表放在后面。
@@ -65,12 +54,12 @@ lookupDecl op [] = Nothing
 lookupDecl op (d :: rest) = if d.fixityOp == op then Just d else lookupDecl op rest
 
 -- 查找顺序：调用方给的声明（本模块 + import 闭包）→ 语法表（`->`）。没有别处兜底。
-lookupFixityDecl : FixityTable -> String -> Maybe FixityDecl
+export lookupFixityDecl : FixityTable -> String -> Maybe FixityDecl
 lookupFixityDecl t op = case lookupDecl op t.fixityDecls of
   Just d => Just d
   Nothing => lookupDecl op syntaxFixityDecls
 
-lookupFixity : FixityTable -> String -> Maybe (Pair Int Int)
+export lookupFixity : FixityTable -> String -> Maybe (Pair Int Int)
 lookupFixity t op = case lookupFixityDecl t op of
   Just d => Just (Pair d.fixityLevel d.fixityAssoc)
   Nothing => Nothing
@@ -151,7 +140,7 @@ reorderChain t e = Vuna.Compiler.Common.bind (collectChain t e) (\p => case p of
   )
 )
 
-reorderExpr : FixityTable -> Expr -> Check Expr
+export reorderExpr : FixityTable -> Expr -> Check Expr
 reorderExpr t (EVar name sp) = OkC (EVar name sp)
 reorderExpr t (EInt n sp) = OkC (EInt n sp)
 reorderExpr t (EStr s sp) = OkC (EStr s sp)
@@ -255,7 +244,7 @@ reorderDoStmt t (DBind pat expr sp) =
 reorderDoStmt t (DExpr expr sp) =
   Vuna.Compiler.Common.bind (reorderExpr t expr) (\e2 => OkC (DExpr e2 sp))
 
-reorderPattern : FixityTable -> Pat -> Check Pat
+export reorderPattern : FixityTable -> Pat -> Check Pat
 reorderPattern t pat = case pat of
   PVar name sp => OkC (PVar name sp)
   PWild sp => OkC (PWild sp)
@@ -331,5 +320,5 @@ reorderInstanceMethodDecl t (DFun name pats body sp) =
     (\pats2 => Vuna.Compiler.Common.bind (reorderExpr t body) (\b2 => OkC (DFun name pats2 b2 sp)))
 reorderInstanceMethodDecl t other = OkC other
 
-reorderProgram : FixityTable -> List Decl -> Check (List Decl)
+export reorderProgram : FixityTable -> List Decl -> Check (List Decl)
 reorderProgram t decls = Vuna.Compiler.Common.traverse (\v => reorderDecl t v) decls

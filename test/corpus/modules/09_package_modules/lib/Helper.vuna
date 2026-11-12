@@ -3,5 +3,5 @@
 -- 同包模块统一从 lib/ 解析。
 import Vuna.Math
 
-triple : Int -> Int
+export triple : Int -> Int
 triple x = x + double x

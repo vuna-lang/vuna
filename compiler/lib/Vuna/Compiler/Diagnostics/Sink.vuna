@@ -1,5 +1,5 @@
 -- | 诊断告警去重（纯 helper）。进程内收集器已在 M4 删除。
-module Vuna.Compiler.Diagnostics.Sink (dedupeWarnings) where
+module Vuna.Compiler.Diagnostics.Sink where
 
 -- Vuna.Compiler.Diagnostics.Sink：warning 去重。
 --
@@ -17,6 +17,6 @@ containsDiag d [] = False
 containsDiag d (x :: xs) = if sameDiag d x then True else containsDiag d xs
 
 -- | 诊断域实现：按首次出现顺序去重。
-dedupeWarnings : List Diagnostic -> List Diagnostic
+export dedupeWarnings : List Diagnostic -> List Diagnostic
 dedupeWarnings ds =
   reverse (foldl (\acc => \d => if containsDiag d acc then acc else d :: acc) [] ds)

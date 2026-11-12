@@ -1,14 +1,4 @@
-module Base.EffExn
-  ( Exn
-  , ExnOp(..)
-  , bracketExn
-  , catchExn
-  , exnRes
-  , handleExn
-  , runExn
-  , throwExn
-  , tryWith
-  ) where
+module Base.EffExn where
 
 -- Base.EffExn：高阶/作用域 Error（W6）。
 -- `Try` 操作携带一个子计算；handler 用嵌套的 `runExn` + `runEff` 在临时 handler
@@ -20,28 +10,28 @@ import Base.Result
 import Base.Num
 
 -- | exn 效应的标签类型 `Exn`（无参标记；实例名在行的 `Cons n Exn r` 条目里）。
-data Exn : Type where
+export data Exn : Type where
 
 -- | exn 操作（高阶）：`ThrowExn msg` 与 `Try sub`——`Try` 携带一个子计算，由 handler 在临时 handler 下运行。
-data ExnOp : String -> Row -> Type -> Type where
+export data ExnOp(..) : String -> Row -> Type -> Type where
   ThrowExn : (0 n : String) -> {r : Row} -> {a : Type} -> String -> ExnOp n r a
   Try : (0 n : String) -> {r : Row} -> {a : Type} -> Eff (Base.Eff.Cons n Exn r) a -> ExnOp n r a
 
 -- | 结果族：`ThrowExn` 返回 `Int`，`Try` 返回 `Result a`。
-exnRes : (n : String) -> (r : Row) -> (a : Type) -> ExnOp n r a -> Type
+export exnRes : (n : String) -> (r : Row) -> (a : Type) -> ExnOp n r a -> Type
 exnRes n r a (ThrowExn _ s) = Int
 exnRes n r a (Try _ comp) = Result a
 
 -- | 通过命名实例抛异常；返回类型任意（不恢复续延）。
-throwExn : (n : String) -> String -> {a : Type} -> {r : Row} -> Eff (Base.Eff.Cons n Exn r) a
+export throwExn : (n : String) -> String -> {a : Type} -> {r : Row} -> Eff (Base.Eff.Cons n Exn r) a
 throwExn n msg = sendCore Exn "exn" n (ThrowExn n msg)
 
 -- | 把子计算 `comp` 包成 `Try` 操作交给 handler，返回 `Result a`（`Ok` 值 / `Err` 消息）。
-tryWith : (n : String) -> {a : Type} -> {r : Row} -> Eff (Base.Eff.Cons n Exn r) a -> Eff (Base.Eff.Cons n Exn r) (Result a)
+export tryWith : (n : String) -> {a : Type} -> {r : Row} -> Eff (Base.Eff.Cons n Exn r) a -> Eff (Base.Eff.Cons n Exn r) (Result a)
 tryWith n comp = sendCore Exn "exn" n (Try n comp)
 
 -- | 一阶 handler：`ret` / `opH` 由调用方给出；结果行删除 `Exn`。
-handleExn : (n : String) -> {a : Type} -> {b : Type} -> {r : Row} -> (a -> b) -> ((o : ExnOp n r a) -> (exnRes n r a o -> b) -> b) -> Eff (Base.Eff.Cons n Exn r) a -> Eff r b
+export handleExn : (n : String) -> {a : Type} -> {b : Type} -> {r : Row} -> (a -> b) -> ((o : ExnOp n r a) -> (exnRes n r a o -> b) -> b) -> Eff (Base.Eff.Cons n Exn r) a -> Eff r b
 handleExn n ret opH comp = handleCore Exn "exn" n ret opH comp
 
 -- | 内部：handler 的操作解释——`ThrowExn` 变 `Err`；`Try` 用减一的 fuel 嵌套 `runExnFuel`，再把结果交给续延。
@@ -58,11 +48,11 @@ runExnFuel fuel n comp =
   else handleExn n (\a => Ok a) (exnOpH (fuel - 1) n) comp
 
 -- | 把 `Exn` 收成 `Result`（fuel 64）；结果行删除 `Exn`。
-runExn : (n : String) -> {a : Type} -> {r : Row} -> Eff (Base.Eff.Cons n Exn r) a -> Eff r (Result a)
+export runExn : (n : String) -> {a : Type} -> {r : Row} -> Eff (Base.Eff.Cons n Exn r) a -> Eff r (Result a)
 runExn n comp = runExnFuel 64 n comp
 
 -- | 作用域 catch：成功原样返回，`Err s` 交给 `fallback`（仍在该 exn handler 下继续）。
-catchExn : (n : String) -> {a : Type} -> {r : Row} -> Eff (Base.Eff.Cons n Exn r) a -> (String -> Eff (Base.Eff.Cons n Exn r) a) -> Eff (Base.Eff.Cons n Exn r) a
+export catchExn : (n : String) -> {a : Type} -> {r : Row} -> Eff (Base.Eff.Cons n Exn r) a -> (String -> Eff (Base.Eff.Cons n Exn r) a) -> Eff (Base.Eff.Cons n Exn r) a
 catchExn n comp fallback = do
   res <- tryWith n comp
   case res of
@@ -70,7 +60,7 @@ catchExn n comp fallback = do
     Err s => fallback s
 
 -- | exn 版 bracket：acquire → use → release；use 成功或抛异常都会 release，异常在 release 之后重新抛出。
-bracketExn : (n : String) -> {res : Type} -> {a : Type} -> {r : Row} -> Eff (Base.Eff.Cons n Exn r) res -> (res -> Eff (Base.Eff.Cons n Exn r) Int) -> (res -> Eff (Base.Eff.Cons n Exn r) a) -> Eff (Base.Eff.Cons n Exn r) a
+export bracketExn : (n : String) -> {res : Type} -> {a : Type} -> {r : Row} -> Eff (Base.Eff.Cons n Exn r) res -> (res -> Eff (Base.Eff.Cons n Exn r) Int) -> (res -> Eff (Base.Eff.Cons n Exn r) a) -> Eff (Base.Eff.Cons n Exn r) a
 bracketExn n acquire release use = do
   res <- acquire
   r <- tryWith n (use res)

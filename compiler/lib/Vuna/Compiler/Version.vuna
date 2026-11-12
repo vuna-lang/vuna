@@ -1,5 +1,5 @@
 -- | vuna 版本号的唯一真源（编译器包进 seed）。
-module Vuna.Compiler.Version (vunaVersion) where
+module Vuna.Compiler.Version where
 
 -- Vuna.Compiler.Version：vuna 版本号的唯一真源（编译器包进 seed）。
 --
@@ -8,5 +8,5 @@ module Vuna.Compiler.Version (vunaVersion) where
 -- version 常量在 nix/common.nix（构建图无法读取 vuna 源码，需人工同步）。
 -- | 当前 vuna 版本号（`0.1.0`）。发布前版本只在源码改这一处；Nix 包的 version 常量在
 -- `nix/common.nix`（构建图无法读取 vuna 源码，需人工同步）。
-vunaVersion : String
+export vunaVersion : String
 vunaVersion = "0.1.0"

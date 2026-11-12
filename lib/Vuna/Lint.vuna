@@ -1,4 +1,4 @@
-module Vuna.Lint (runLint) where
+module Vuna.Lint where
 
 -- Vuna.Lint：vuna 源码风格检查与自动修复（首批规则）门面。
 -- 规则扫描与语法层工具在 Vuna.Lint.Rules，编辑应用在 Vuna.Lint.Fix；
@@ -95,7 +95,7 @@ lintFiles doFix env (path :: rest) = do
   restCode <- lintFiles doFix (firstOf stepped) rest
   pure (if secondOf stepped > restCode then secondOf stepped else restCode)
 
-runLint : List String -> Eff [] Int
+export runLint : List String -> Eff [] Int
 runLint args = case parseToolArgs "vuna lint" [BoolFlag "fix"] args of
   ErrC e => do
     _ <- prim_eff_print "error: ${diagText e}\n"

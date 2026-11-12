@@ -1,4 +1,4 @@
-module Base.EffChannel (Channel, newChannelInt, recv, recvWait, send, tryRecv) where
+module Base.EffChannel where
 
 -- Base.EffChannel：W9 的 cooperative channel（单线程；忙等 yield）。
 -- 这是最小 Channel：send 入队；recvWait 用 yield 轮询直到有值（无阻塞原语）。
@@ -14,7 +14,7 @@ import Base.Result
 import Base.Num
 
 -- | 单实例、无界、单线程的 cooperative channel：内部是装 `List a` 的 `IORef`（构造器不导出）。
-data Channel a : Type where
+export data Channel a : Type where
   MkChannel : {a : Type} -> IORef (List a) -> Channel a
 
 -- | 内部：与通道元素类型无关的空 `List Int`（用 `drop 1 [0]` 构造，避免字面量泛化问题）。
@@ -22,17 +22,17 @@ emptyInts : List Int
 emptyInts = drop 1 [0]
 
 -- | 新建 `Channel Int`（当前只暴露 Int 通道）；通道是单实例、无界的。
-newChannelInt : Eff [] (Channel Int)
+export newChannelInt : Eff [] (Channel Int)
 newChannelInt = do
   r <- newRef emptyInts
   pure (MkChannel r)
 
 -- | 把 `x` 追加到队尾；队首是下一次 `tryRecv` 取走的值。返回 `IORef` 写入原语的 `Int` 结果。
-send : {a : Type} -> Channel a -> a -> Eff [] Int
+export send : {a : Type} -> Channel a -> a -> Eff [] Int
 send (MkChannel r) x = modifyRef r (\xs => append xs [x])
 
 -- | 非阻塞取队首：有值就出队并返回 `Just x`，空队列返回 `Nothing`。
-tryRecv : {a : Type} -> Channel a -> Eff [] (Maybe a)
+export tryRecv : {a : Type} -> Channel a -> Eff [] (Maybe a)
 tryRecv (MkChannel r) = do
   xs <- readRef r
   case xs of
@@ -42,7 +42,7 @@ tryRecv (MkChannel r) = do
       pure (Just x)
 
 -- | 带 fuel 的等待取：轮询到空队列时 `yieldNow` 后重试，fuel 耗尽返回 `Err channel: timeout`。
-recvWait : {a : Type} -> Int -> Channel a -> Eff [] (Result a)
+export recvWait : {a : Type} -> Int -> Channel a -> Eff [] (Result a)
 recvWait fuel c = if fuel <= 0 then pure (Err "channel: timeout")
 else do
   m <- tryRecv c
@@ -53,5 +53,5 @@ else do
       recvWait (fuel - 1) c
 
 -- | `recvWait 64` 的便捷入口（最多轮询 64 次）。
-recv : {a : Type} -> Channel a -> Eff [] (Result a)
+export recv : {a : Type} -> Channel a -> Eff [] (Result a)
 recv c = recvWait 64 c

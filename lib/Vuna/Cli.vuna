@@ -1,4 +1,4 @@
-module Vuna.Cli (runCli) where
+module Vuna.Cli where
 
 -- Vuna.Cli：产品 CLI（vuna）。
 --
@@ -106,7 +106,7 @@ stripReleaseArgs [] = []
 stripReleaseArgs (a :: rest) =
   if a == "--release" then stripReleaseArgs rest else Base.List.Cons a (stripReleaseArgs rest)
 
-runCli : List String -> Eff [] Int
+export runCli : List String -> Eff [] Int
 runCli args = if anyHelp (helpSurface args) then help 0 else runCli1 (stripPerfFlags args)
 
 -- `--` 之后是字面量参数（`vuna run <pkg> -- --help` 必须透传给子进程），不参与
@@ -639,7 +639,7 @@ goalRun file = do
     ErrC e => toolError (diagText e)
     OkC source => case parseSource file source of
       ErrC e => toolFailure (diagText e)
-      OkC (SourceFile _ _ fx decls0) => do
+      OkC (SourceFile _ _ fx decls0 _ _ _) => do
         looked <- fixitiesForFile emptyFixityEnv file source
         case secondOf looked of
           ErrC e => toolFailure (diagText e)

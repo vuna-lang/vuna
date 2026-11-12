@@ -1,4 +1,4 @@
-module Vuna.Compiler.Loader.Expand (expandDecls) where
+module Vuna.Compiler.Loader.Expand where
 
 -- Vuna.Compiler.Loader.Expand：内置宏的 AST→AST 展开 pass。
 --
@@ -28,7 +28,7 @@ expandFuelBound : Int
 expandFuelBound = 1073741824
 
 -- | 展开一组声明里的全部内置宏调用；无宏时逐节点重建 AST、语义与 span 不变。
-expandDecls : List Decl -> Check (List Decl)
+export expandDecls : List Decl -> Check (List Decl)
 expandDecls decls = expandDeclsGo expandFuelBound decls
 
 expandDeclsGo : Int -> List Decl -> Check (List Decl)

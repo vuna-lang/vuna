@@ -1,4 +1,4 @@
-module Vuna.Doc.Html (renderPage) where
+module Vuna.Doc.Html where
 
 -- Vuna.Doc.Html：DocBook -> 自包含单 HTML（工具链；永不进 seed 闭包）。
 --
@@ -59,7 +59,7 @@ memberLink modName parent member =
 -- ---------------------------------------------------------------
 -- 页面
 -- ---------------------------------------------------------------
-renderPage : DocBook -> String
+export renderPage : DocBook -> String
 renderPage book =
   strConcatMany
     ["<!doctype html>\n<html lang='zh-CN'>\n<head>\n", "<meta charset='utf-8'>\n", "<meta name='viewport' content='width=device-width, initial-scale=1'>\n", "<title>vuna API</title>\n<style>\n", css, "</style>\n</head>\n<body>\n", sidebar book, "<main>\n", header book, "<div id='results' hidden></div>\n<div id='doc-content'>\n", strConcatMany (map (renderModule (linkMap book)) (bookModules book)), "</div>\n</main>\n", "<script type='application/json' id='vuna-index'>", scriptSafe (renderJson (JArr (searchEntries book))), "</script>\n<script>\n", js, "\n</script>\n</body>\n</html>\n"]

@@ -1,41 +1,4 @@
-module Vuna.Compiler.Loader.Modules
-  ( ExportEntry(..)
-  , ExportRef(..)
-  , Module(..)
-  , Namespaces(..)
-  , Project(..)
-  , collectModuleFiles
-  , ctorCanonical
-  , exportsOf
-  , findExportCtor
-  , findExportCtors
-  , findExportType
-  , findExportValue
-  , findImportModule
-  , findImportPrefix
-  , findModule
-  , findModuleFile
-  , importModuleNames
-  , importName
-  , isDataOrRecordCtorTarget
-  , mangle
-  , moduleAllImportsOf
-  , moduleDecls
-  , moduleDeclsOf
-  , moduleFixitiesOf
-  , moduleNameOf
-  , modulePackageOf
-  , moduleReexportsOf
-  , modulesExportingCtor
-  , modulesExportingType
-  , modulesExportingValue
-  , projectEntryAllImports
-  , reexportedImportNames
-  , reexportedImportNamesOfHeader
-  , unifyEntryPairs
-  , validModuleName
-  , validateImports
-  ) where
+module Vuna.Compiler.Loader.Modules where
 
 -- Vuna.Compiler.Loader.Modules：加载器的**数据与模块图**（叶子层，无跨 Loader 子模块依赖）。
 --
@@ -56,7 +19,7 @@ import Vuna.Compiler.Packages.Pkg
 -- 名字解析与 codegen 拓扑序用 all；模块重导出/include 只认显式 import。
 -- M31.2：最后一个字段是**可见 fixity 表**（本模块声明 + imports 闭包，查找时本模块优先；
 -- 中缀重排见 `Loader.Fixity`）。
-record Module where
+export record Module(..) where
   moduleNameOf : String
   modulePackageOf : String
   moduleImportsOf : List Import
@@ -72,7 +35,7 @@ record Module where
 -- 已加载项目：入口声明/import + 依赖模块列表（M12 分离编译用；保持 flatten 前的形态）。
 -- entryPkg 用于按包限制 effectful 内建（M12.6：普通包只能经 Eff + handler 使用效果）。
 -- M31.2：entryFixities 是入口文件自己的 fixity 声明（入口 decls 的重排要用）。
-record Project where
+export record Project(..) where
   projectEntryDecls : List Decl
   projectEntryImports : List Import
   projectImplicitImports : List Import
@@ -80,26 +43,26 @@ record Project where
   projectEntryPkg : String
   projectEntryFixities : List FixityDecl
 
-moduleNameOf : Module -> String
+export moduleNameOf : Module -> String
 moduleNameOf (Module n p is imps ds es fx _) = n
 
-modulePackageOf : Module -> String
+export modulePackageOf : Module -> String
 modulePackageOf (Module n p is imps ds es fx _) = p
 
-moduleAllImportsOf : Module -> List Import
+export moduleAllImportsOf : Module -> List Import
 moduleAllImportsOf (Module n p is imps ds es fx _) = append is imps
 
-moduleDeclsOf : Module -> List Decl
+export moduleDeclsOf : Module -> List Decl
 moduleDeclsOf (Module n p is imps ds es fx _) = ds
 
-moduleFixitiesOf : Module -> List FixityDecl
+export moduleFixitiesOf : Module -> List FixityDecl
 moduleFixitiesOf (Module n p is imps ds es fx _) = fx
 
 -- | M45：模块重导出的 import 名（见 Module 字段注释）。
-moduleReexportsOf : Module -> List String
+export moduleReexportsOf : Module -> List String
 moduleReexportsOf (Module n p is imps ds es fx reexports) = reexports
 
-projectEntryAllImports : Project -> List Import
+export projectEntryAllImports : Project -> List Import
 projectEntryAllImports (Project ds is imps ms pkg fx) = append is imps
 
 -- M28（B18）：解析期的三个命名空间，与导出表 kind 一一对应，**不再拍平**。
@@ -107,7 +70,7 @@ projectEntryAllImports (Project ds is imps ms pkg fx) = append is imps
 --   ctors  = 构造子命名空间（data 构造子 / record 名 / trait 方法；导出 kind "ctor"）
 --   types  = 类型命名空间（data / record / trait 的类型名；导出 kind "type"）
 -- 解析位置决定查哪个表：类型位置只查 types；值位置按 values → ctors → types（类型当项）。
-record Namespaces where
+export record Namespaces(..) where
   nsValues : List String
   nsCtors : List String
   nsTypes : List String
@@ -127,14 +90,14 @@ record Namespaces where
 -- kind 用字符串区分两套命名空间：val（函数/值）、ctor（构造器）、type（类型名）。
 -- ctor 条目额外记录所属数据类型的定义名，供 `T(..)` 重导出保持源模块的抽象性。
 -- 模块导出表条目：公开名、定义处名字、所属类型（仅 ctor）。
-record ExportEntry where
+export record ExportEntry(..) where
   kind : String
   public : String
   target : String
   parent : String
 deriving (Eq)
 
-record ExportRef where
+export record ExportRef(..) where
   refKind : String
   refTarget : String
   refParent : String
@@ -155,24 +118,24 @@ allSegmentsValid (seg :: rest) = if validSegment seg then case rest of
   _ => allSegmentsValid rest
 else False
 
-validModuleName : String -> Bool
+export validModuleName : String -> Bool
 validModuleName name = case splitOnDot name of
   [] => False
   segs => allSegmentsValid segs
 
-mangle : String -> String -> String
+export mangle : String -> String -> String
 mangle prefix name = if prefix == "" then name else "${prefix}.${name}"
 
 -- M41：构造子 canonical 名 = `Module.Data.Ctor`（entry 文件 `Data.Ctor`）。
 -- 不同数据类型的同名构造子因此天然不冲突；裸名按期望类型在候选里选（见 Resolve/Elab）。
 -- | 自动补注（M41 新增导出）：ctorCanonical。
-ctorCanonical : String -> String -> String -> String
+export ctorCanonical : String -> String -> String -> String
 ctorCanonical prefix dname cname = mangle prefix "${dname}.${cname}"
 
-importName : Import -> String
+export importName : Import -> String
 importName (Import name isQualified alias sp) = name
 
-importModuleNames : List Import -> List String
+export importModuleNames : List Import -> List String
 importModuleNames imports = map importName imports
 
 hasDuplicateName : List String -> Bool
@@ -194,7 +157,7 @@ checkImportAliases label moduleNames ((Pair alias m) :: rest) =
   else checkImportAliases label moduleNames rest
   else rnNoLoc1 (InvalidModuleAlias alias) alias
 
-validateImports : String -> List Import -> Check (List a)
+export validateImports : String -> List Import -> Check (List a)
 validateImports label imports =
   if hasDuplicateName (importModuleNames imports) then rnNoLoc0 DuplicateImport
   else checkImportAliases label (importModuleNames imports) (importAliases imports)
@@ -206,19 +169,19 @@ openModuleNames (imp :: rest) =
   else Base.List.Cons (importName imp) (openModuleNames rest)
 
 -- 纯查找（不标记 used）：`import X` 或 `import X as Y` 里 `name` 对应的 import 模块名。
-findImportModule : List Import -> String -> Maybe String
+export findImportModule : List Import -> String -> Maybe String
 findImportModule [] _ = Nothing
 findImportModule (imp :: rest) name = if importName imp == name then Just (importName imp)
 else case imp.importAlias of
   Just alias => if alias == name then Just (importName imp) else findImportModule rest name
   Nothing => findImportModule rest name
 
-findImportPrefix : List Import -> String -> Maybe String
+export findImportPrefix : List Import -> String -> Maybe String
 findImportPrefix imports prefix = findImportModule imports prefix
 
 -- 模块头导出列表里 `module X` 对应的 import 名（去重、保持出现顺序）。加载期算好放进
 -- `Module.moduleReexportsOf`，resolve 期并入 used-import 集合（M45）。
-reexportedImportNames : List Import -> List ExportItem -> List String
+export reexportedImportNames : List Import -> List ExportItem -> List String
 reexportedImportNames imports items = reexportedImportNamesGo imports items []
 
 reexportedImportNamesGo : List Import -> List ExportItem -> List String -> List String
@@ -231,7 +194,7 @@ reexportedImportNamesGo imports ((XModule name _) :: rest) acc = case findImport
 reexportedImportNamesGo imports (_ :: rest) acc = reexportedImportNamesGo imports rest acc
 
 -- | 有显式导出列表时才算重导出；无 module 头 / 隐式导出 = []。
-reexportedImportNamesOfHeader : List Import -> Maybe ModDecl -> List String
+export reexportedImportNamesOfHeader : List Import -> Maybe ModDecl -> List String
 reexportedImportNamesOfHeader imports (Just (ModDecl _ True items _ _ _ _)) =
   reexportedImportNames imports items
 reexportedImportNamesOfHeader imports _ = []
@@ -249,7 +212,7 @@ missingModule : String -> Check a
 missingModule name =
   icInternal "module ${name} is not loaded (import list and module table disagree)"
 
-moduleDecls : List Module -> String -> Check (List Decl)
+export moduleDecls : List Module -> String -> Check (List Decl)
 moduleDecls modules name = case findModule modules name of
   Just (Module mname mpkg imports imps decls exports fx _) => OkC decls
   Nothing => missingModule name
@@ -258,7 +221,7 @@ moduleCtors : List Module -> String -> Check (List String)
 moduleCtors modules name =
   Vuna.Compiler.Common.bind (moduleDecls modules name) (\decls => OkC (ctorsOf decls))
 
-exportsOf : List Module -> String -> Check (List ExportEntry)
+export exportsOf : List Module -> String -> Check (List ExportEntry)
 exportsOf modules name = case findModule modules name of
   Just (Module mname mpkg imports imps decls exports fx _) => OkC exports
   Nothing => missingModule name
@@ -269,15 +232,15 @@ lookupExport kinds name [] = Nothing
 lookupExport kinds name (e :: rest) =
   if memName e.kind kinds && e.public == name then Just e else lookupExport kinds name rest
 
-findExportValue : List ExportEntry -> String -> Maybe ExportEntry
+export findExportValue : List ExportEntry -> String -> Maybe ExportEntry
 findExportValue entries name = lookupExport ["val", "ctor"] name entries
 
-findExportCtor : List ExportEntry -> String -> Maybe ExportEntry
+export findExportCtor : List ExportEntry -> String -> Maybe ExportEntry
 findExportCtor entries name = lookupExport ["ctor"] name entries
 
 -- M41：同名构造子可以有多条导出（不同族、不同 target）。裸名解析要拿全集。
 -- | 自动补注（M41 新增导出）：findExportCtors。
-findExportCtors : List ExportEntry -> String -> List ExportEntry
+export findExportCtors : List ExportEntry -> String -> List ExportEntry
 findExportCtors entries name = filterCtors name entries
 
 -- | 自动补注（M41 新增导出）：filterCtors。
@@ -287,7 +250,7 @@ filterCtors name (e :: rest) =
   if e.kind == "ctor" && e.public == name then Base.List.Cons e (filterCtors name rest)
   else filterCtors name rest
 
-findExportType : List ExportEntry -> String -> Maybe ExportEntry
+export findExportType : List ExportEntry -> String -> Maybe ExportEntry
 findExportType entries name = lookupExport ["type"] name entries
 
 modulesExportingValueFrom : List Module -> List String -> String -> Check (List (Pair String ExportEntry))
@@ -299,7 +262,7 @@ modulesExportingValueFrom modules (m :: rest) name = Vuna.Compiler.Common.bind (
   Nothing => modulesExportingValueFrom modules rest name
 )
 
-modulesExportingValue : List Module -> List Import -> String -> Check (List (Pair String ExportEntry))
+export modulesExportingValue : List Module -> List Import -> String -> Check (List (Pair String ExportEntry))
 modulesExportingValue modules imports name =
   modulesExportingValueFrom modules (openModuleNames imports) name
 
@@ -312,7 +275,7 @@ in Vuna.Compiler.Common.bind (modulesExportingCtorFrom modules rest name)
   (\more => OkC (append (map (\e => Pair m e) found) more))
 )
 
-modulesExportingCtor : List Module -> List Import -> String -> Check (List (Pair String ExportEntry))
+export modulesExportingCtor : List Module -> List Import -> String -> Check (List (Pair String ExportEntry))
 modulesExportingCtor modules imports name =
   modulesExportingCtorFrom modules (openModuleNames imports) name
 
@@ -325,7 +288,7 @@ modulesExportingTypeFrom modules (m :: rest) name = Vuna.Compiler.Common.bind (e
   Nothing => modulesExportingTypeFrom modules rest name
 )
 
-modulesExportingType : List Module -> List Import -> String -> Check (List (Pair String ExportEntry))
+export modulesExportingType : List Module -> List Import -> String -> Check (List (Pair String ExportEntry))
 modulesExportingType modules imports name =
   modulesExportingTypeFrom modules (openModuleNames imports) name
 
@@ -334,7 +297,7 @@ sameTargetRest : ExportEntry -> List (Pair a ExportEntry) -> Bool
 sameTargetRest e [] = True
 sameTargetRest e ((Pair m e2) :: rest) = e.target == e2.target && sameTargetRest e rest
 
-unifyEntryPairs : String -> String -> String -> List (Pair String ExportEntry) -> Check (Pair String ExportEntry)
+export unifyEntryPairs : String -> String -> String -> List (Pair String ExportEntry) -> Check (Pair String ExportEntry)
 unifyEntryPairs label kindLabel name [] = icInternal "unifyEntryPairs: empty candidates"
 unifyEntryPairs label kindLabel name (p :: rest) =
   if sameTargetRest (secondOf p) rest then OkC p
@@ -352,7 +315,7 @@ rootAllows importerPkg root name = case root.rootExports of
 
 -- M4（效果显式化）：模块根候选的**存在性探测**是宿主动作，显式在 `Eff []` 里；
 -- 可见性判定与候选分类保持纯。
-collectModuleFiles : List Root -> String -> String -> List (Pair String Root) -> List String -> Eff [] (Pair (List (Pair String Root)) (List String))
+export collectModuleFiles : List Root -> String -> String -> List (Pair String Root) -> List String -> Eff [] (Pair (List (Pair String Root)) (List String))
 collectModuleFiles [] name importerPkg allowed hidden =
   pure (Pair (reverse allowed) (reverse hidden))
 collectModuleFiles (root :: rest) name importerPkg allowed hidden =
@@ -370,7 +333,7 @@ _joinRootDirs roots = _joinNames (map rootDir roots)
 candidateDir : Pair String Root -> String
 candidateDir candidate = rootDir (secondOf candidate)
 
-findModuleFile : List Root -> String -> String -> Eff [] (Check (Pair String Root))
+export findModuleFile : List Root -> String -> String -> Eff [] (Check (Pair String Root))
 findModuleFile roots name importerPkg = do
   collected <- collectModuleFiles roots name importerPkg [] []
   let
@@ -386,7 +349,7 @@ findModuleFile roots name importerPkg = do
         (_joinNames (map candidateDir allowed))
   )
 
-findModule : List Module -> String -> Maybe Module
+export findModule : List Module -> String -> Maybe Module
 findModule [] name = Nothing
 findModule ((Module mname mpkg imports imps decls exports fx reexports) :: rest) name =
   if mname == name then Just (Module mname mpkg imports imps decls exports fx reexports)
@@ -395,7 +358,7 @@ findModule ((Module mname mpkg imports imps decls exports fx reexports) :: rest)
 -- M41：target 是否是某个 data/record 的构造子（用于把 trait method 从“构造子重载候选”
 -- 里排除；trait method 不是族的构造子，仍按原名字解析）。
 -- | 自动补注（M41 新增导出）：isDataOrRecordCtorTarget。
-isDataOrRecordCtorTarget : List Module -> String -> Bool
+export isDataOrRecordCtorTarget : List Module -> String -> Bool
 isDataOrRecordCtorTarget [] target = False
 isDataOrRecordCtorTarget (m :: rest) target =
   isCtorTargetInDecls (moduleNameOf m) target (moduleDeclsOf m)

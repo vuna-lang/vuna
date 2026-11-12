@@ -1,10 +1,4 @@
-module Vuna.Fmt.Comment
-  ( anchorSpans
-  , anyItemHasComments
-  , assignComments
-  , attachAt
-  , commentLeadLines
-  ) where
+module Vuna.Fmt.Comment where
 
 -- Vuna.Fmt.Comment：注释保留（M11.6）。
 --
@@ -98,7 +92,7 @@ blockCommentLines indent c =
     first :: rest =>
       "${spaces indent}{-${trimRightSpaces first}" :: commentTailLines indent stripN rest
 
-commentLeadLines : Int -> Comment -> List String
+export commentLeadLines : Int -> Comment -> List String
 commentLeadLines indent c = case c.commentKind of
   CLine => ["${spaces indent}--${c.commentText}"]
   CBlock =>
@@ -202,7 +196,7 @@ nextFold best (sp :: rest) csp = if isLaterAnchor sp csp then case best of
   Just b => if betterNext sp b then nextFold (Just sp) rest csp else nextFold best rest csp
 else nextFold best rest csp
 
-assignComments : List Span -> List Comment -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> List Comment -> Pair (List (Pair (Pair Int Int) (Pair (List Comment) (List Comment)))) (List Comment)
+export assignComments : List Span -> List Comment -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> List Comment -> Pair (List (Pair (Pair Int Int) (Pair (List Comment) (List Comment)))) (List Comment)
 assignComments anchors [] at eof = Pair at eof
 assignComments anchors (c :: rest) at eof =
   let
@@ -321,7 +315,7 @@ localClauseAnchors : Pair (List Pat) Expr -> List Span
 localClauseAnchors (Pair pats body) = exprAnchors body
 
 -- M31.3：`infix*` 声明的 span 也是注释锚点（前置/行尾注释随声明保留）。
-anchorSpans : Maybe ModDecl -> List Import -> List FixityDecl -> List Decl -> List Span
+export anchorSpans : Maybe ModDecl -> List Import -> List FixityDecl -> List Decl -> List Span
 anchorSpans hdr imports fixities decls =
   append (headerAnchors hdr)
     (append (map importAnchor imports) (append (map fixitySpan fixities) (concatMap declAnchors decls)))
@@ -336,7 +330,7 @@ trailingOn at sp lines = case trailOf at (spanStartLine sp) (spanStartCol sp) of
   [] => lines
   cs => foldl (\acc, c => appendLast " ${inlineCommentText c}" acc) lines cs
 
-attachAt : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Span -> Int -> List String -> List String
+export attachAt : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Span -> Int -> List String -> List String
 attachAt at sp indent lines = append (leadingLines at sp indent) (trailingOn at sp lines)
 
 -- 导出项是否挂了注释（前置或行尾）：有注释时强制多行，避免单行把后续项注释掉。
@@ -348,6 +342,6 @@ itemHasComments at item =
     Nothing => False
     Just slot => not (isNilList (firstOf slot)) || not (isNilList (secondOf slot))
 
-anyItemHasComments : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> List ExportItem -> Bool
+export anyItemHasComments : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> List ExportItem -> Bool
 anyItemHasComments at [] = False
 anyItemHasComments at (item :: rest) = itemHasComments at item || anyItemHasComments at rest

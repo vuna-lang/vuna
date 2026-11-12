@@ -1,4 +1,4 @@
-module Base.Vec (Vec(..), substTemplate, vhead, vlen, vtail) where
+module Base.Vec where
 
 -- Base.Vec：长度索引向量，`Vec n a` 的 `n` 是 `Base.Nat` 索引（索引在前、元素类型在末位，
 -- 与 `Eff r a` / `Error e a` 同序：值类型放最后，trait 高阶实例才能按 `Vec n` 匹配）。
@@ -17,26 +17,26 @@ import Base.List
 import Base.Num
 
 -- | 长度索引向量：`Vec n a` 的索引 `n : Nat` 在类型层锁定元素个数，构造子 `Nil` / `Cons` 与索引同构；`a` / `n` 皆是 Rig0，运行时擦除。索引在前、值类型在末位（与 `Eff r a` / `Error e a` 一致）。
-data Vec : Nat -> Type -> Type where
+export data Vec(..) : Nat -> Type -> Type where
   Nil : {a : Type} -> Vec Zero a
   Cons : {n : Nat} -> {a : Type} -> a -> Vec n a -> Vec (Succ n) a
 
 -- 首元素：长度至少 1（`Succ n`），索引排除空向量。
 -- `n` 隐式（Rig0）：递归/调用时由 `Vec (Succ n) a` 的索引反推，不必手写。
 -- | 取首元素；签名要求长度至少 1（`Vec (Succ n) a`），`Nil` 分支在类型层被排除，无需运行时空检查。
-vhead : {n : Nat} -> Vec (Succ n) a -> a
+export vhead : {n : Nat} -> Vec (Succ n) a -> a
 vhead xs = case xs of
   y :: ys => y
 
 -- 去尾：长度至少 1，结果长度 `n`。
 -- | 去掉首元素，结果长度为 `n`；同样只对非空向量定义。
-vtail : {n : Nat} -> Vec (Succ n) a -> Vec n a
+export vtail : {n : Nat} -> Vec (Succ n) a -> Vec n a
 vtail xs = case xs of
   y :: ys => ys
 
 -- 长度（`n` 是 Rig0 索引，这里走运行时计数，与 `List.length` 同义）。
 -- | 返回向量长度（运行时递归计数；`n` 是 Rig0 索引，运行时擦除）。
-vlen : {n : Nat} -> Vec n a -> Nat
+export vlen : {n : Nat} -> Vec n a -> Nat
 vlen xs = case xs of
   [] => 0
   y :: ys => 1 + vlen ys
@@ -54,7 +54,7 @@ vlen xs = case xs of
 -- 旧实现是 vuna 层 char-list 扫描（strUnpack/append/reverse/strPack），一次消息 ~5–10µs；
 -- 诊断消息在「试探-回退」路径上被丢弃前也要付这笔钱，实测占 check 的一半以上。
 -- | 按占位符 `<0>` / `<1>` / …（序号 = 实参位置）把实参向量填进模板；实现走运行时单遍 `Buffer` 扫描，vuna 侧只做 Vec → List。实参耗尽时占位符原样保留（arity 已在类型层防住）。
-substTemplate : {n : Nat} -> String -> Vec n String -> String
+export substTemplate : {n : Nat} -> String -> Vec n String -> String
 substTemplate template args = strSubstTemplate template (vecToList args)
 
 -- | 内部辅助：把 `Vec n String` 转成 `List String` 交给运行时替换器。

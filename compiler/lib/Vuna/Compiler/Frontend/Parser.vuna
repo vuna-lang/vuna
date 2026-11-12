@@ -1,9 +1,4 @@
-module Vuna.Compiler.Frontend.Parser
-  ( parseExpressionSource
-  , parseSource
-  , parseSourceRecovering
-  , parseSourceRecoveringTokens
-  ) where
+module Vuna.Compiler.Frontend.Parser where
 
 -- vuna 源码 parser：offside layout，返回 AST 与 imports。
 import Base.List
@@ -13,13 +8,13 @@ import Vuna.Compiler.Frontend.Diagnostics
 import Vuna.Compiler.Frontend.Lexer
 import Vuna.Compiler.Frontend.Parser.Support
 
-parseSource : String -> String -> Check SourceFile
+export parseSource : String -> String -> Check SourceFile
 parseSource file source =
   Vuna.Compiler.Common.bind (lexSource source)
     (\toks => Vuna.Compiler.Common.bind (parseSourceFile False (PState file toks (Pos 1 0) (length toks))) (\p => OkC (firstOf (firstOf p))))
 
 -- 单表达式解析（REPL / 工具用）：整段输入必须恰好是一个表达式。
-parseExpressionSource : String -> Check Expr
+export parseExpressionSource : String -> Check Expr
 parseExpressionSource source =
   Vuna.Compiler.Common.bind (lexSource source)
     (\toks => Vuna.Compiler.Common.step (parseExpr (stateFuel (PState "<expr>" toks (Pos 1 0) (length toks))) (PState "<expr>" toks (Pos 1 0) (length toks)) 0 0) (\e, st => if isEof st then OkC e else psErr0 ExpectedEndOfExpr))
@@ -44,22 +39,16 @@ emptyParsedDecl : ParsedDecl
 emptyParsedDecl = ParsedDecl Nothing Nothing Nothing Nothing
 
 -- 把逐定义导出/重导出/归约修饰符挂到模块头上；入口文件没有模块头（这些信息也无下游）。
-withExportInfo : Maybe ModDecl -> List ExportSpec -> List ExportItem -> List OpacitySpec -> Maybe ModDecl
-withExportInfo Nothing _ _ _ = Nothing
-withExportInfo (Just m) exports reexports opacity =
-  Just
-    (ModDecl m.modDeclName m.modDeclHasExportList m.modDeclExportItems exports reexports opacity m.modDeclSpan)
-
 -- 可选模块头（M10）：`module M (导出项, ...) where`；列表省略 = 导出全部。
 parseSourceFile : Bool -> PState -> Check (Pair (Pair SourceFile PState) (List Diagnostic))
 parseSourceFile recover st = Vuna.Compiler.Common.step (parseModDecl st) (\hdr, st1 => Vuna.Compiler.Common.step (parseImports (stateFuel st1) st1) (\imp, st2 => case imp of
-  Pair imports reexports => if isEof st2 then OkC (Pair (Pair (SourceFile (withExportInfo hdr [] reexports []) imports [] []) st2) [])
+  Pair imports reexports => if isEof st2 then OkC (Pair (Pair (SourceFile hdr imports [] [] [] reexports []) st2) [])
   else case peekPos st2 of
     Pos line col => Vuna.Compiler.Common.step (parseDecls recover (stateFuel st2) st2 col emptyDeclAcc) (\p, rest => case rest of
       Pair st3 errs => case p of
         DeclAcc fixities decls exports opacity =>
           if isEof st3 then OkC
-            (Pair (Pair (SourceFile (withExportInfo hdr exports reexports opacity) imports fixities decls) st3) errs)
+            (Pair (Pair (SourceFile hdr imports fixities decls exports reexports opacity) st3) errs)
           else psErr0 ExpectedEndOfInput
     )
 )
@@ -1665,13 +1654,13 @@ foldPCon sp (p :: rest) = PCon listConsSyntax [p, foldPCon sp rest] sp
 -- 文件加载专用：开启解析恢复（收集多个语法错误），调用范围外恢复短路。
 -- 返回「解析结果 + 恢复期收集到的非致命诊断」（诊断按出现顺序；空 = 没有语法错误）。
 -- | 文件加载专用：开启解析恢复并显式返回多条语法错误。
-parseSourceRecovering : String -> String -> Check (Pair SourceFile (List Diagnostic))
+export parseSourceRecovering : String -> String -> Check (Pair SourceFile (List Diagnostic))
 parseSourceRecovering file source =
   Vuna.Compiler.Common.bind (lexSource source) (\toks => parseSourceRecoveringTokens file toks)
 
 -- 从**已有 token 流**解析（AST 缓存命中路径）：与 `parseSourceRecovering` 逐字节等价，
 -- 只是跳过 lex。位置全部来自 token 自身，因此诊断 span 与冷路径一致。
-parseSourceRecoveringTokens : String -> List PTok -> Check (Pair SourceFile (List Diagnostic))
+export parseSourceRecoveringTokens : String -> List PTok -> Check (Pair SourceFile (List Diagnostic))
 parseSourceRecoveringTokens file toks =
   Vuna.Compiler.Common.bind (parseSourceFile True (PState file toks (Pos 1 0) (length toks)))
     (\p => OkC (Pair (firstOf (firstOf p)) (secondOf p)))

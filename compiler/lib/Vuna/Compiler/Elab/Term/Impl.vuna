@@ -1,59 +1,4 @@
-module Vuna.Compiler.Elab.Term.Impl
-  ( boolAltFuel
-  , boolAltGoFuel
-  , checkAppCtorFuel
-  , checkAppFuel
-  , checkAppGeneralFuel
-  , checkAppUnderTypeFuel
-  , checkBoolCaseFuel
-  , checkByInferFuel
-  , checkCaseFamFuel
-  , checkCaseFuel
-  , checkCaseMatrixFuel
-  , checkCaseOfFuel
-  , checkCondBoolFuel
-  , checkEFuel
-  , checkLamFuel
-  , checkLetFuel
-  , checkLetGoFuel
-  , checkLetOneFuel
-  , checkLitAltsFuel
-  , checkLitBoundVarFuel
-  , checkLitCaseFuel
-  , checkTypeAtKind
-  , checkTypeFuel
-  , checkTypeInferFuel
-  , constrainDictDomFuel
-  , constrainDictDomGoKFuel
-  , deferDictBinderFuel
-  , effRowOfValue
-  , elabCaseAltsFuel
-  , elabCatchAllFuel
-  , elabConAltFuel
-  , inferAnnFuel
-  , inferAppFuel
-  , inferAppGeneralFuel
-  , inferAppGeneralGoFuel
-  , inferAppUnderTypeFuel
-  , inferArgsFuel
-  , inferArgsGo
-  , inferCaseEFuel
-  , inferEFuel
-  , inferLetBoundFuel
-  , inferLetFuel
-  , inferLetGoFuel
-  , inferLetIgnoredFuel
-  , inferPiFuel
-  , isNilRowValue
-  , joinEffectLabels
-  , litAltStepFuel
-  , resolveOverFunPats
-  , rowEffectLabels
-  , specializeBoolAppFuel
-  , specializeCmpAppFuel
-  , specializeEqAppFuel
-  , specializeOpAppFuel
-  ) where
+module Vuna.Compiler.Elab.Term.Impl where
 
 -- Vuna.Compiler.Elab.Term.Impl（M25.2c 拆分）：项检查的 fuel 版实现（组内互递归只经 *Fuel 名）。
 import Base.List
@@ -100,7 +45,7 @@ branchBinderOpaque ec ctx i = case ctxItemAt i ctx.ctxItems of
     in r
   Nothing => False
 
-elabConAltFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> DtData -> List Value -> Value -> Value -> String -> List Pat -> Span -> Expr -> Check (Pair CaseAlt Ec)
+export elabConAltFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> DtData -> List Value -> Value -> Value -> String -> List Pat -> Span -> Expr -> Check (Pair CaseAlt Ec)
 elabConAltFuel fuel globals ctx ec dd idxs scrutVal expected cname args psp body = if fuel <= 0 then icFuel "inference"
 else case findCtorIn cname (dtDataCtors dd) of
   Nothing =>
@@ -128,7 +73,7 @@ else case findCtorIn cname (dtDataCtors dd) of
     )
   )
 
-elabCaseAltsFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Value -> DtData -> List Value -> Value -> Value -> List (Pair Pat Expr) -> List CaseAlt -> Check (Pair (List CaseAlt) Ec)
+export elabCaseAltsFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Value -> DtData -> List Value -> Value -> Value -> List (Pair Pat Expr) -> List CaseAlt -> Check (Pair (List CaseAlt) Ec)
 elabCaseAltsFuel fuel globals ctx ec scrutTy dd idxs scrutVal expected [] acc =
   if fuel <= 0 then icFuel "inference" else OkC (Pair (reverse acc) ec)
 elabCaseAltsFuel fuel globals ctx ec scrutTy dd idxs scrutVal expected (alt :: rest) acc = if fuel <= 0 then icFuel "inference"
@@ -149,7 +94,7 @@ else case alt of
 -- 内部用空名字标记兜底分支（Core / codegen 按空名字识别）。
 -- M23：变量兜底分支要把变量按 scrutinee 的**类型**绑进上下文
 -- （`case xs of [] => 0; ys => length ys`），否则分支体里的变量是未知名字。
-elabCatchAllFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Value -> DtData -> List Value -> Value -> List (Pair Pat Expr) -> List CaseAlt -> Expr -> String -> Span -> Check (Pair (List CaseAlt) Ec)
+export elabCatchAllFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Value -> DtData -> List Value -> Value -> List (Pair Pat Expr) -> List CaseAlt -> Expr -> String -> Span -> Check (Pair (List CaseAlt) Ec)
 elabCatchAllFuel fuel globals ctx ec scrutTy dd idxs expected rest acc body pname psp = if fuel <= 0 then icFuel "inference"
 else
   let
@@ -175,7 +120,7 @@ else
 --      （`Elab.Match.multiToCaseExpr`）；矩阵生成的 case 天然是规范形，会再回到本入口走 ③；
 --   ③ 规范形直接按 scrutinee 家族降低（Bool → if；Int/String → if 链；归纳族 → TCase）。
 -- 没有第二条「去重降级」路径，也没有精化器内的嵌套模式折叠。
-checkCaseFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Expr -> List (Pair Pat Expr) -> Value -> Span -> Check (Pair Term Ec)
+export checkCaseFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Expr -> List (Pair Pat Expr) -> Value -> Span -> Check (Pair Term Ec)
 checkCaseFuel fuel globals ctx ec scrut alts expected sp = if fuel <= 0 then icFuel "inference"
 else Vuna.Compiler.Common.bind (inferEFuel (fuel - 1) globals ctx ec scrut) (\ps => case ps of
   Pair scrutTerm (Pair scrutTy ec1) => Vuna.Compiler.Common.bind (resolveOverAlts ec1 ctx scrutTy alts) (\q => case q of
@@ -195,7 +140,7 @@ needsMatrixCase alts = anyNestedPat alts || hasDupNames (altNames alts)
 -- 而嵌套 case 会各自降级；若两层都用固定前缀，内层生成的 `_sc_...` 会与外层分支绑定
 -- 同名（编译器源码 `binderHeadName` 的 `PTok (TIdent name) p => case ... of Just (PTok ...)`
 -- 曾因此串位）。分支体在更深的作用域里检查，所以深度前缀保证不同层的名字不相交。
-checkCaseMatrixFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Expr -> List (Pair Pat Expr) -> Value -> Span -> Check (Pair Term Ec)
+export checkCaseMatrixFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Expr -> List (Pair Pat Expr) -> Value -> Span -> Check (Pair Term Ec)
 checkCaseMatrixFuel fuel globals ctx ec scrut alts expected sp = if fuel <= 0 then icFuel "inference"
 else
   let
@@ -204,7 +149,7 @@ else
   in Vuna.Compiler.Common.bind (multiToCaseExpr (ctorFamilyTable ec) clauses name)
     (\bodyExpr => checkEFuel (fuel - 1) globals ctx ec (ELet [Pair (PVar name sp) scrut] bodyExpr False sp) expected)
 
-checkCaseFamFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Term -> Value -> List (Pair Pat Expr) -> Value -> Span -> Check (Pair Term Ec)
+export checkCaseFamFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Term -> Value -> List (Pair Pat Expr) -> Value -> Span -> Check (Pair Term Ec)
 checkCaseFamFuel fuel globals ctx ec scrutTerm scrutTy alts expected sp = if fuel <= 0 then icFuel "inference"
 else case forceVal ec scrutTy of
   VNeutral (NGlobal fam idxs) => if fam == boolTypeName && length idxs == 0 then checkBoolCaseFuel (fuel - 1) globals ctx ec scrutTerm alts expected sp
@@ -218,7 +163,7 @@ else case forceVal ec scrutTy of
   _ => tcErr0 sp NotInductiveFamily
 
 -- M19：Bool 上的 case 降级成 if（`True` / `False` 是零参构造子形态的模式）。
-checkBoolCaseFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Term -> List (Pair Pat Expr) -> Value -> Span -> Check (Pair Term Ec)
+export checkBoolCaseFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Term -> List (Pair Pat Expr) -> Value -> Span -> Check (Pair Term Ec)
 checkBoolCaseFuel fuel globals ctx ec scrutTerm alts expected sp = if fuel <= 0 then icFuel "inference"
 else Vuna.Compiler.Common.bind (boolAltFuel (fuel - 1) globals ctx ec alts boolTrueCtor expected sp) (\p => case p of
   Pair trueBody (Pair catchAll ec1) => case catchAll of
@@ -229,12 +174,12 @@ else Vuna.Compiler.Common.bind (boolAltFuel (fuel - 1) globals ctx ec alts boolT
 )
 
 -- 取 `True` / `False` 分支的体；变量/通配分支作为两边的兜底。
-boolAltFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> List (Pair Pat Expr) -> String -> Value -> Span -> Check (Pair Term (Pair (Maybe Term) Ec))
+export boolAltFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> List (Pair Pat Expr) -> String -> Value -> Span -> Check (Pair Term (Pair (Maybe Term) Ec))
 boolAltFuel fuel globals ctx ec alts target expected sp =
   if fuel <= 0 then icFuel "inference"
   else boolAltGoFuel (fuel - 1) globals ctx ec alts target expected sp Nothing
 
-boolAltGoFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> List (Pair Pat Expr) -> String -> Value -> Span -> Maybe Term -> Check (Pair Term (Pair (Maybe Term) Ec))
+export boolAltGoFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> List (Pair Pat Expr) -> String -> Value -> Span -> Maybe Term -> Check (Pair Term (Pair (Maybe Term) Ec))
 boolAltGoFuel fuel globals ctx ec [] target expected sp catchAll = if fuel <= 0 then icFuel "inference"
 else case catchAll of
   Just t => OkC (Pair t (Pair Nothing ec))
@@ -258,7 +203,7 @@ else case alt of
 
 -- M19：Int / String 上的字面量模式降级成嵌套 if。
 -- `case n of 0 => a; 1 => b; x => c` 变成 `if n == 0 then a else if n == 1 then b else c`。
-checkLitCaseFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Term -> String -> List (Pair Pat Expr) -> Value -> Span -> Check (Pair Term Ec)
+export checkLitCaseFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Term -> String -> List (Pair Pat Expr) -> Value -> Span -> Check (Pair Term Ec)
 checkLitCaseFuel fuel globals ctx ec scrutTerm tyName alts expected sp = if fuel <= 0 then icFuel "inference"
 else Vuna.Compiler.Common.bind (checkLitAltsFuel (fuel - 1) globals ctx ec scrutTerm tyName alts expected sp) (\p => case p of
   Pair term (Pair True ec1) => OkC (Pair term ec1)
@@ -267,7 +212,7 @@ else Vuna.Compiler.Common.bind (checkLitAltsFuel (fuel - 1) globals ctx ec scrut
 
 -- Int / String 字面量列：每个字面量降成 `if n == lit then body else <rest>`；
 -- 变量/通配分支提供 fallback（并且把变量绑进上下文，让用户在体里能用它）。
-checkLitAltsFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Term -> String -> List (Pair Pat Expr) -> Value -> Span -> Check (Pair Term (Pair Bool Ec))
+export checkLitAltsFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Term -> String -> List (Pair Pat Expr) -> Value -> Span -> Check (Pair Term (Pair Bool Ec))
 checkLitAltsFuel fuel globals ctx ec scrutTerm tyName [] expected sp =
   if fuel <= 0 then icFuel "inference"
   else OkC (Pair (TIf (TBool False) (TInt 0) (TInt 0)) (Pair False ec))
@@ -287,7 +232,7 @@ else case alt of
     _ => tcErr0 (patSpan pat) IntStringCaseRestriction
 
 -- 字面量分支：`if n == lit then body else <rest>`（rest 提供 fallback）。
-litAltStepFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Term -> String -> Term -> Expr -> List (Pair Pat Expr) -> Value -> Span -> Check (Pair Term (Pair Bool Ec))
+export litAltStepFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Term -> String -> Term -> Expr -> List (Pair Pat Expr) -> Value -> Span -> Check (Pair Term (Pair Bool Ec))
 litAltStepFuel fuel globals ctx ec scrutTerm tyName litTerm body rest expected sp = if fuel <= 0 then icFuel "inference"
 else Vuna.Compiler.Common.bind (checkEFuel (fuel - 1) globals ctx ec body expected) (\p => case p of
   Pair bodyTerm ec1 => Vuna.Compiler.Common.bind (checkLitAltsFuel (fuel - 1) globals ctx ec1 scrutTerm tyName rest expected sp) (\q => case q of
@@ -298,7 +243,7 @@ else Vuna.Compiler.Common.bind (checkEFuel (fuel - 1) globals ctx ec body expect
 )
 
 -- fallback 分支的体在「scrutinee 绑成该变量」的上下文里检查。
-checkLitBoundVarFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Term -> String -> String -> Expr -> Value -> Span -> Check (Pair Term Ec)
+export checkLitBoundVarFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Term -> String -> String -> Expr -> Value -> Span -> Check (Pair Term Ec)
 checkLitBoundVarFuel fuel globals ctx ec scrutTerm tyName name body expected sp = if fuel <= 0 then icFuel "inference"
 else
   let
@@ -368,7 +313,7 @@ else
     Pair bodyTerm ec2 => OkC (Pair (TApp (TLam name rig bodyTerm) bindTerm Rig1) ec2)
   )
 
-checkCaseOfFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Term -> Value -> String -> List Value -> List (Pair Pat Expr) -> Value -> Span -> Check (Pair Term Ec)
+export checkCaseOfFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Term -> Value -> String -> List Value -> List (Pair Pat Expr) -> Value -> Span -> Check (Pair Term Ec)
 checkCaseOfFuel fuel globals ctx ec scrutTerm scrutTy fam idxs alts expected sp = if fuel <= 0 then icFuel "inference"
 else case dtDataLookup fam (ecDatas ec) of
   Nothing => tcErr0 sp NotInductiveFamily
@@ -378,7 +323,7 @@ else case dtDataLookup fam (ecDatas ec) of
 
 -- M19：case 出现在推断位置（函数实参、if 分支、let 的 value）。做法是建一个元变量当
 -- 期望类型，再按检查模式处理 case——分支逐个 check 会把期望写进这个元变量。
-inferCaseEFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Expr -> List (Pair Pat Expr) -> Span -> Check (Pair Term (Pair Value Ec))
+export inferCaseEFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Expr -> List (Pair Pat Expr) -> Span -> Check (Pair Term (Pair Value Ec))
 inferCaseEFuel fuel globals ctx ec scrut alts sp = if fuel <= 0 then icFuel "inference"
 else
   let
@@ -394,7 +339,7 @@ else
 -- `if` 条件：先按 prelude `Bool` 检查——保住 `==`/`/=` 的 Int/String **特化**
 -- （推断位会把隐式类型实参留在 spine 上，运行时的 primReduce 归约不了）；失败再按
 -- 推断收下真实 `Base.Bool.Bool` 条件（`Base.List.filter` 的 `if p x`）。
-checkCondBoolFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Expr -> Span -> Check (Pair Term Ec)
+export checkCondBoolFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Expr -> Span -> Check (Pair Term Ec)
 checkCondBoolFuel fuel globals ctx ec c sp = if fuel <= 0 then icFuel "inference"
 else case checkEFuel (fuel - 1) globals ctx ec c (VNeutral (NGlobal boolTypeName [])) of
   OkC pc => OkC pc
@@ -624,7 +569,7 @@ handleCallExpr globals ec expr sp = handleCallExprWith globals ec expr sp False
 handleCallExprAt : List (Pair String Term) -> Ec -> Expr -> Span -> Check Expr
 handleCallExprAt globals ec expr sp = handleCallExprWith globals ec expr sp True
 
-inferEFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Expr -> Check (Pair Term (Pair Value Ec))
+export inferEFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Expr -> Check (Pair Term (Pair Value Ec))
 inferEFuel fuel globals ctx ec expr = if fuel <= 0 then icFuel "inference"
 else case handleOperand expr of
   Just _ =>
@@ -911,7 +856,7 @@ else case fields of
   )
 
 -- 先检查 ty 是合法类型，再把 value 按该类型 check；推导位返回 eval ty 作为类型。
-inferAnnFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Expr -> Expr -> Span -> Check (Pair Term (Pair Value Ec))
+export inferAnnFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Expr -> Expr -> Span -> Check (Pair Term (Pair Value Ec))
 inferAnnFuel fuel globals ctx ec value ty sp = if fuel <= 0 then icFuel "inference"
 else Vuna.Compiler.Common.bind (checkTypeFuel (fuel - 1) globals ctx ec ty) (\pt => case pt of
   Pair tyTerm (Pair _ ec1) =>
@@ -922,7 +867,7 @@ else Vuna.Compiler.Common.bind (checkTypeFuel (fuel - 1) globals ctx ec ty) (\pt
     )
 )
 
-inferPiFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> String -> Bool -> Maybe Qty -> Expr -> Expr -> Span -> Check (Pair Term (Pair Value Ec))
+export inferPiFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> String -> Bool -> Maybe Qty -> Expr -> Expr -> Span -> Check (Pair Term (Pair Value Ec))
 inferPiFuel fuel globals ctx ec name implicit qty dom cod sp = if fuel <= 0 then icFuel "inference"
 else Vuna.Compiler.Common.bind (checkTypeFuel (fuel - 1) globals ctx ec dom) (\pd => case pd of
   Pair domTerm (Pair domSort ec1) =>
@@ -971,7 +916,7 @@ skipArithSpecForHint ec name Nothing = False
 skipArithSpecForHint ec name (Just p) = skipArithSpecForExpected ec name (secondOf p)
 
 -- 应用：逐个消费显式实参，遇到隐式 Pi 先插入元变量。
-inferAppFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Expr -> List Expr -> Span -> Maybe (Pair Int Value) -> Check (Pair Term (Pair Value Ec))
+export inferAppFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Expr -> List Expr -> Span -> Maybe (Pair Int Value) -> Check (Pair Term (Pair Value Ec))
 inferAppFuel fuel globals ctx ec fn args sp hint = if fuel <= 0 then icFuel "inference"
 else case fn of
   EVar "->" _ => case args of
@@ -1021,7 +966,7 @@ else case fn of
           )
     _ => inferAppGeneralFuel (fuel - 1) globals ctx ec fn args sp hint
 
-inferAppGeneralFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Expr -> List Expr -> Span -> Maybe (Pair Int Value) -> Check (Pair Term (Pair Value Ec))
+export inferAppGeneralFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Expr -> List Expr -> Span -> Maybe (Pair Int Value) -> Check (Pair Term (Pair Value Ec))
 inferAppGeneralFuel fuel globals ctx ec fn args sp hint = if fuel <= 0 then icFuel "inference"
 else case fn of
   EVar name vsp => Vuna.Compiler.Common.bind (specializeOpAppFuel (fuel - 1) globals ctx ec name args sp) (\mspec => case mspec of
@@ -1030,7 +975,7 @@ else case fn of
   )
   _ => inferAppGeneralGoFuel (fuel - 1) globals ctx ec fn args sp hint
 
-inferAppGeneralGoFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Expr -> List Expr -> Span -> Maybe (Pair Int Value) -> Check (Pair Term (Pair Value Ec))
+export inferAppGeneralGoFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Expr -> List Expr -> Span -> Maybe (Pair Int Value) -> Check (Pair Term (Pair Value Ec))
 inferAppGeneralGoFuel fuel globals ctx ec fn args sp hint = if fuel <= 0 then icFuel "inference"
 else Vuna.Compiler.Common.bind (inferEFuel (fuel - 1) globals ctx ec fn) (\pf => case pf of
   Pair fnTerm (Pair fnTy ec1) => Vuna.Compiler.Common.bind (inferArgsFuel (fuel - 1) globals ctx ec1 fnTy args sp hint) (\pa => case pa of
@@ -1039,7 +984,7 @@ else Vuna.Compiler.Common.bind (inferEFuel (fuel - 1) globals ctx ec fn) (\pf =>
   )
 )
 
-inferArgsFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Value -> List Expr -> Span -> Maybe (Pair Int Value) -> Check (Pair (List (Pair Term Rig)) (Pair Value Ec))
+export inferArgsFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Value -> List Expr -> Span -> Maybe (Pair Int Value) -> Check (Pair (List (Pair Term Rig)) (Pair Value Ec))
 inferArgsFuel fuel globals ctx ec ty args sp hint =
   if fuel <= 0 then icFuel "inference" else inferArgsGo 64 globals ctx ec ty args sp hint
 
@@ -1134,7 +1079,7 @@ expandArgListLit ec dom a = case listLitElems a of
   Just elems => expandListLit ec (listLitFamily ec (forceVal ec dom)) elems (exprSpan a)
   Nothing => OkC a
 
-inferArgsGo : Int -> List (Pair String Term) -> Ctx -> Ec -> Value -> List Expr -> Span -> Maybe (Pair Int Value) -> Check (Pair (List (Pair Term Rig)) (Pair Value Ec))
+export inferArgsGo : Int -> List (Pair String Term) -> Ctx -> Ec -> Value -> List Expr -> Span -> Maybe (Pair Int Value) -> Check (Pair (List (Pair Term Rig)) (Pair Value Ec))
 inferArgsGo fuel globals ctx ec ty args sp hint = if fuel <= 0 then icFuel "inference"
 else
   let
@@ -1212,7 +1157,7 @@ else
       [] => OkC (Pair [] (Pair forced ec))
       a :: rest => tcErr0 (exprSpan a) TooManyArgs
 
-deferDictBinderFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Value -> Closure -> List Expr -> Span -> Maybe (Pair Int Value) -> Check (Pair (List (Pair Term Rig)) (Pair Value Ec))
+export deferDictBinderFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Value -> Closure -> List Expr -> Span -> Maybe (Pair Int Value) -> Check (Pair (List (Pair Term Rig)) (Pair Value Ec))
 deferDictBinderFuel fuel globals ctx ec dom clo args sp hint = if fuel <= 0 then icFuel "inference"
 else
   let
@@ -1226,7 +1171,7 @@ else
 -- 用后续显式实参约束 `Dict_C ?a` 里的类参数。M22：先取字典族的**类参数 kind**，
 -- 实参头部与它 kind 不匹配（`Monad ?m` 被 `41 : Int` 解成 `?m = Int`）或头部不是
 -- 具体构造子（`?m' Int`）就不约束——类参数由字典实例 / 结果类型决定。
-constrainDictDomFuel : Int -> List (Pair String Term) -> Ec -> Ctx -> Value -> List Expr -> Span -> Check Ec
+export constrainDictDomFuel : Int -> List (Pair String Term) -> Ec -> Ctx -> Value -> List Expr -> Span -> Check Ec
 constrainDictDomFuel fuel globals ec ctx dom args sp = if fuel <= 0 then icFuel "inference"
 else case dictClassArg ec dom of
   Nothing => OkC ec
@@ -1244,7 +1189,7 @@ else case dictClassArg ec dom of
       )
       _ => constrainDictDomGoKFuel (fuel - 1) globals ec ctx argTy argKind args sp
 
-constrainDictDomGoKFuel : Int -> List (Pair String Term) -> Ec -> Ctx -> Value -> Value -> List Expr -> Span -> Check Ec
+export constrainDictDomGoKFuel : Int -> List (Pair String Term) -> Ec -> Ctx -> Value -> Value -> List Expr -> Span -> Check Ec
 constrainDictDomGoKFuel fuel globals ec ctx argTy argKind args sp = if fuel <= 0 then icFuel "inference"
 else case args of
   [] => OkC ec
@@ -1422,7 +1367,7 @@ else case args of
   )
   _ => OkC Nothing
 
-checkEFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Expr -> Value -> Check (Pair Term Ec)
+export checkEFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Expr -> Value -> Check (Pair Term Ec)
 checkEFuel fuel globals ctx ec expr expected = if fuel <= 0 then icFuel "inference"
 else case handleOperand expr of
   -- 首选 rowRem 版（条目可在行中任意位置，名字由 Member 行解）。失败后重试行首条目版：
@@ -1542,7 +1487,7 @@ else case expr of
 -- 统一绑定块（M28）：`let` 与 `where` 走同一套顺序作用域；`where` 多一条记法约束
 -- （签名行必填，`checkBindingSigs`）。签名绑定在 parser 里已降级成 `EAnn value ty`，
 -- 值一律按签名以 checking 模式精化（`inferEFuel` 的 EAnn 分支），因此这里不再区分来源。
-checkLetFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> List (Pair Pat Expr) -> Expr -> Bool -> Value -> Span -> Check (Pair Term Ec)
+export checkLetFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> List (Pair Pat Expr) -> Expr -> Bool -> Value -> Span -> Check (Pair Term Ec)
 checkLetFuel fuel globals ctx ec binds body rec_ expected sp =
   if fuel <= 0 then icFuel "inference"
   else Vuna.Compiler.Common.bind (Vuna.Compiler.Common.traverse (expandBind ec) binds)
@@ -1628,21 +1573,21 @@ expandDoStmt ec (DExpr value sp) =
   Vuna.Compiler.Common.bind (expandLocalFuns ec value) (\v2 => OkC (DExpr v2 sp))
 
 -- M19：推断位的 `let`（嵌套 let 的 value 位置就是推断位）。
-inferLetFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> List (Pair Pat Expr) -> Expr -> Bool -> Span -> Check (Pair Term (Pair Value Ec))
+export inferLetFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> List (Pair Pat Expr) -> Expr -> Bool -> Span -> Check (Pair Term (Pair Value Ec))
 inferLetFuel fuel globals ctx ec binds body rec_ sp =
   if fuel <= 0 then icFuel "inference"
   else Vuna.Compiler.Common.bind (Vuna.Compiler.Common.traverse (expandBind ec) binds)
     (\binds2 => Vuna.Compiler.Common.bind (checkBindingSigs rec_ binds2) (\_ => inferLetGoFuel (fuel - 1) globals ctx ec binds2 body rec_ sp))
 
 -- M24：where/let 绑定块是**顺序 let**：每个绑定只看得到它之前的绑定；递归放顶层定义组。
-checkLetGoFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> List (Pair Pat Expr) -> Expr -> Bool -> Value -> Span -> Check (Pair Term Ec)
+export checkLetGoFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> List (Pair Pat Expr) -> Expr -> Bool -> Value -> Span -> Check (Pair Term Ec)
 checkLetGoFuel fuel globals ctx ec [] body rec_ expected sp =
   if fuel <= 0 then icFuel "inference" else checkEFuel (fuel - 1) globals ctx ec body expected
 checkLetGoFuel fuel globals ctx ec (bind :: rest) body rec_ expected sp =
   if fuel <= 0 then icFuel "inference"
   else checkLetOneFuel (fuel - 1) globals ctx ec bind rest body rec_ expected sp
 
-checkLetOneFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Pair Pat Expr -> List (Pair Pat Expr) -> Expr -> Bool -> Value -> Span -> Check (Pair Term Ec)
+export checkLetOneFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Pair Pat Expr -> List (Pair Pat Expr) -> Expr -> Bool -> Value -> Span -> Check (Pair Term Ec)
 checkLetOneFuel fuel globals ctx ec bind rest body rec_ expected sp = if fuel <= 0 then icFuel "inference"
 else case firstOf bind of
   PVar name psp =>
@@ -1685,7 +1630,7 @@ else case firstOf bind of
       expected
 
 -- M19：推断位的 `let`（嵌套 let 的 value 位置就是推断位）；入口见上方 `inferLetFuel`。
-inferLetGoFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> List (Pair Pat Expr) -> Expr -> Bool -> Span -> Check (Pair Term (Pair Value Ec))
+export inferLetGoFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> List (Pair Pat Expr) -> Expr -> Bool -> Span -> Check (Pair Term (Pair Value Ec))
 inferLetGoFuel fuel globals ctx ec binds body rec_ sp = if fuel <= 0 then icFuel "inference"
 else case binds of
   [] => inferEFuel (fuel - 1) globals ctx ec body
@@ -1697,7 +1642,7 @@ else case binds of
       inferEFuel (fuel - 1) globals ctx ec
         (ECase value [Pair pat (ELet rest body rec_ sp)] (patSpan pat))
 
-inferLetBoundFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> String -> Expr -> List (Pair Pat Expr) -> Expr -> Bool -> Span -> Check (Pair Term (Pair Value Ec))
+export inferLetBoundFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> String -> Expr -> List (Pair Pat Expr) -> Expr -> Bool -> Span -> Check (Pair Term (Pair Value Ec))
 inferLetBoundFuel fuel globals ctx ec name value rest body rec_ sp = if fuel <= 0 then icFuel "inference"
 else Vuna.Compiler.Common.bind (inferEFuel (fuel - 1) globals ctx ec value) (\pv => case pv of
   Pair valueTerm (Pair valueTy ec1) =>
@@ -1713,7 +1658,7 @@ else Vuna.Compiler.Common.bind (inferEFuel (fuel - 1) globals ctx ec value) (\pv
     )
 )
 
-inferLetIgnoredFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Expr -> List (Pair Pat Expr) -> Expr -> Bool -> Span -> Check (Pair Term (Pair Value Ec))
+export inferLetIgnoredFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Expr -> List (Pair Pat Expr) -> Expr -> Bool -> Span -> Check (Pair Term (Pair Value Ec))
 inferLetIgnoredFuel fuel globals ctx ec value rest body rec_ sp = if fuel <= 0 then icFuel "inference"
 else Vuna.Compiler.Common.bind (inferEFuel (fuel - 1) globals ctx ec value) (\pv => case pv of
   Pair valueTerm (Pair valueTy ec1) =>
@@ -1802,13 +1747,13 @@ effRowAndResult (VNeutral (NGlobal g (r :: a :: _))) =
 effRowAndResult _ = Nothing
 
 -- | 从 `Eff row a` 值里取出 row；不是 Eff 应用返回 Nothing。
-effRowOfValue : Value -> Maybe Value
+export effRowOfValue : Value -> Maybe Value
 effRowOfValue v = case effRowAndResult v of
   Just p => Just (firstOf p)
   Nothing => Nothing
 
 -- | 行是否为 `Nil`（强归约后）。
-isNilRowValue : Ec -> Value -> Bool
+export isNilRowValue : Ec -> Value -> Bool
 isNilRowValue ec v = case forceVal ec v of
   VCon n _ => n == effRowNilCtor
   _ => False
@@ -1846,7 +1791,7 @@ rowEntryText : Ec -> Value -> Value -> String
 rowEntryText ec n h = rowLabelText ec h ++ "@" ++ rowNameText ec n
 
 -- | 具体行里的标签列表；遇到未解元变量/未知形态返回 Nothing（不猜）。
-rowEffectLabels : Int -> Ec -> Value -> Maybe (List String)
+export rowEffectLabels : Int -> Ec -> Value -> Maybe (List String)
 rowEffectLabels fuel ec row = if fuel <= 0 then Nothing
 else case forceVal ec row of
   VCon consName cargs => if consName == effRowNilCtor then Just []
@@ -1860,7 +1805,7 @@ else case forceVal ec row of
   _ => Nothing
 
 -- | 标签列表拼成逗号分隔（不引入 Base.String 依赖）。
-joinEffectLabels : List String -> String
+export joinEffectLabels : List String -> String
 joinEffectLabels [] = ""
 joinEffectLabels (x :: rest) = case rest of
   [] => x
@@ -1910,7 +1855,7 @@ tryEffLift ctx globals ec expected actual term = case globalsLookup "Base.Eff.we
                 Just
                   (Pair (TApp (TApp (TApp (TApp (TApp (TGlobal "Base.Eff.weaken") (quote d nV) Rig0) (quote d eV) Rig0) (quote d tailF) Rig0) (quote d (secondOf p)) Rig0) term RigOmega) ec2)
 
-checkByInferFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Expr -> Value -> Check (Pair Term Ec)
+export checkByInferFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Expr -> Value -> Check (Pair Term Ec)
 checkByInferFuel fuel globals ctx ec expr expected = if fuel <= 0 then icFuel "inference"
 else case inferEFuelHint (fuel - 1) globals ctx ec expr expected of
   ErrC e => ErrC e
@@ -1927,7 +1872,7 @@ else case inferEFuelHint (fuel - 1) globals ctx ec expr expected of
           Nothing => ErrC (withFallbackSpan (exprSpan expr) e)
       OkC ec2 => OkC (Pair term (resolveDictGoals globals ec2))
 
-checkLamFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> List String -> Expr -> Value -> Span -> Check (Pair Term Ec)
+export checkLamFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> List String -> Expr -> Value -> Span -> Check (Pair Term Ec)
 checkLamFuel fuel globals ctx ec [] body expected sp =
   if fuel <= 0 then icFuel "inference" else checkEFuel (fuel - 1) globals ctx ec body expected
 checkLamFuel fuel globals ctx ec (name :: rest) body expected sp = if fuel <= 0 then icFuel "inference"
@@ -1995,7 +1940,7 @@ typeAppTerm ec name args = case dtDataLookup name (ecDatas ec) of
   Just dd => if dtDataIsRecord dd then TRecord name args else foldAppTerms (TGlobal name) args
   Nothing => foldAppTerms (TGlobal name) args
 
-checkTypeFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Expr -> Check (Pair Term (Pair Level Ec))
+export checkTypeFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Expr -> Check (Pair Term (Pair Level Ec))
 checkTypeFuel fuel globals ctx ec expr = if fuel <= 0 then icFuel "inference"
 else case expr of
   EVar name sp => case ctxLookup name ctx of
@@ -2016,7 +1961,7 @@ else case expr of
     else checkTypeInferFuel (fuel - 1) globals ctx ec expr
   _ => checkTypeInferFuel (fuel - 1) globals ctx ec expr
 
-checkTypeInferFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Expr -> Check (Pair Term (Pair Level Ec))
+export checkTypeInferFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Expr -> Check (Pair Term (Pair Level Ec))
 checkTypeInferFuel fuel globals ctx ec expr = if fuel <= 0 then icFuel "inference"
 else Vuna.Compiler.Common.bind (inferEFuel (fuel - 1) globals ctx ec expr) (\p => case p of
   Pair term (Pair ty ec1) =>
@@ -2031,7 +1976,7 @@ else Vuna.Compiler.Common.bind (inferEFuel (fuel - 1) globals ctx ec expr) (\p =
 
 -- 检查方向的应用：构造子的隐式族参数/索引由期望类型反向约束（M14 的索引推断）。
 -- 非构造子仍走「先推断再统一」。
-checkAppFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Expr -> List Expr -> Value -> Span -> Check (Pair Term Ec)
+export checkAppFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Expr -> List Expr -> Value -> Span -> Check (Pair Term Ec)
 checkAppFuel fuel globals ctx ec fn args expected sp = if fuel <= 0 then icFuel "inference"
 else case fn of
   EVar name vsp => if isOverCtorName name then Vuna.Compiler.Common.bind
@@ -2064,7 +2009,7 @@ else case valueLookup globals ec name of
 -- 类型位置的应用：名字已在类型命名空间（`checkAppFuel` 的 `isTypeName` 保证），按它的
 -- kind 应用；结果必须是宇宙。M28（B18）删掉了「infer 失败退回常规推断」的兜底——
 -- 进入这里就说明这是类型位置 + 类型命名空间，退化会把命名空间判断又搅混。
-checkAppUnderTypeFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> String -> List Expr -> Value -> Span -> Check (Pair Term Ec)
+export checkAppUnderTypeFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> String -> List Expr -> Value -> Span -> Check (Pair Term Ec)
 checkAppUnderTypeFuel fuel globals ctx ec name args expected sp = if fuel <= 0 then icFuel "inference"
 else Vuna.Compiler.Common.bind (inferAppUnderTypeFuel (fuel - 1) globals ctx ec name args sp) (\p => case p of
   Pair term (Pair lvl ec1) =>
@@ -2072,7 +2017,7 @@ else Vuna.Compiler.Common.bind (inferAppUnderTypeFuel (fuel - 1) globals ctx ec 
       (\ec2 => OkC (Pair term ec2))
 )
 
-inferAppUnderTypeFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> String -> List Expr -> Span -> Check (Pair Term (Pair Level Ec))
+export inferAppUnderTypeFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> String -> List Expr -> Span -> Check (Pair Term (Pair Level Ec))
 inferAppUnderTypeFuel fuel globals ctx ec name args sp = if fuel <= 0 then icFuel "inference"
 else case typeHeadLookup globals ec name of
   Nothing => tcErr1 sp (UnknownName name) name
@@ -2089,7 +2034,7 @@ else case typeHeadLookup globals ec name of
 -- 期望 kind 是宇宙时沿用 checkType（旧「头实参必须是类型」语义 + 宇宙检查）；
 -- 是箭头 kind 时以「类型名 + 实参」在类型的 kind 上应用实参（同 checkTypeFuel 的
 -- EApp 分支），再用 conv 把结果 kind 与期望 kind 对齐。
-checkTypeAtKind : List (Pair String Term) -> Ctx -> Ec -> Expr -> Value -> Span -> Check (Pair Term Ec)
+export checkTypeAtKind : List (Pair String Term) -> Ctx -> Ec -> Expr -> Value -> Span -> Check (Pair Term Ec)
 checkTypeAtKind globals ctx ec expr expected sp = case forceVal ec expected of
   VType _ =>
     Vuna.Compiler.Common.bind (checkTypeFuel 256 globals ctx ec expr)
@@ -2115,7 +2060,7 @@ checkTypeAtKind globals ctx ec expr expected sp = case forceVal ec expected of
 -- 返回 `Nothing` 表示「不是泛化比较运算符的饱和应用」，调用方走常规路径。
 -- 特化后的项是 `bi_eq_int a b` / `bi_eq_str a b` 这类具体运行时函数应用，
 -- 因此 codegen 只需要名字映射（不感知类型），M18.6 的封装不被破坏。
-specializeEqAppFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> String -> List Expr -> Span -> Check (Maybe (Pair Term (Pair Value Ec)))
+export specializeEqAppFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> String -> List Expr -> Span -> Check (Maybe (Pair Term (Pair Value Ec)))
 specializeEqAppFuel fuel globals ctx ec name args sp = if fuel <= 0 then icFuel "inference"
 else if isEqMethod ec name then case args of
   [a, b] => Vuna.Compiler.Common.bind (inferEFuel (fuel - 1) globals ctx ec a) (\pa => case pa of
@@ -2132,7 +2077,7 @@ else if isEqMethod ec name then case args of
   _ => OkC Nothing
 else OkC Nothing
 
-specializeCmpAppFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> String -> List Expr -> Span -> Check (Maybe (Pair Term (Pair Value Ec)))
+export specializeCmpAppFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> String -> List Expr -> Span -> Check (Maybe (Pair Term (Pair Value Ec)))
 specializeCmpAppFuel fuel globals ctx ec name args sp = if fuel <= 0 then icFuel "inference"
 else if isCmpMethod ec name then case args of
   [a, b] => Vuna.Compiler.Common.bind (inferEFuel (fuel - 1) globals ctx ec a) (\pa => case pa of
@@ -2151,7 +2096,7 @@ else OkC Nothing
 
 -- 统一入口：先试模板插值的原始类型快捷路径，再试 `==` / `/=`，再试比较运算符，
 -- 最后试 `&&` / `||` 的短路降级。
-specializeOpAppFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> String -> List Expr -> Span -> Check (Maybe (Pair Term (Pair Value Ec)))
+export specializeOpAppFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> String -> List Expr -> Span -> Check (Maybe (Pair Term (Pair Value Ec)))
 specializeOpAppFuel fuel globals ctx ec name args sp = if fuel <= 0 then icFuel "inference"
 else if name == interpMethodName then specializeInterpPrimApp (fuel - 1) globals ctx ec name args sp
 else Vuna.Compiler.Common.bind (specializeEqAppFuel (fuel - 1) globals ctx ec name args sp) (\r => case r of
@@ -2210,7 +2155,7 @@ isStringTyValue _ = False
 -- 降成 `TIf`：`a && b` ⇒ `if a then b else False`、`a || b` ⇒ `if a then True else b`。
 -- 核心求值器与 codegen 都只需处理 TIf/if，短路语义自动一致，不在 Core/Codegen
 -- 各打一份补丁。
-specializeBoolAppFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> String -> List Expr -> Span -> Check (Maybe (Pair Term (Pair Value Ec)))
+export specializeBoolAppFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> String -> List Expr -> Span -> Check (Maybe (Pair Term (Pair Value Ec)))
 specializeBoolAppFuel fuel globals ctx ec name args sp = if fuel <= 0 then icFuel "inference"
 else if name == "&&" || name == "||" then case args of
   [a, b] => Vuna.Compiler.Common.bind (checkEFuel (fuel - 1) globals ctx ec a (VNeutral (NGlobal boolTypeName []))) (\pa => case pa of
@@ -2223,7 +2168,7 @@ else if name == "&&" || name == "||" then case args of
   _ => tcErr1 sp (NeedsTwoArgs name) name
 else OkC Nothing
 
-checkAppGeneralFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Expr -> List Expr -> Value -> Span -> Check (Pair Term Ec)
+export checkAppGeneralFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Expr -> List Expr -> Value -> Span -> Check (Pair Term Ec)
 checkAppGeneralFuel fuel globals ctx ec fn args expected sp = if fuel <= 0 then icFuel "inference"
 else case fn of
   EVar name vsp => Vuna.Compiler.Common.bind (specializeArithCheckFuel (fuel - 1) globals ctx ec name args expected sp) (\arith => case arith of
@@ -2391,7 +2336,7 @@ resolveOverAltsGo (Succ k) ec ctx ty alts = case alts of
 
 -- 多子句函数 / 实例方法：按签名 Pi 链逐列解析每条 clause 的参数模式。
 -- | 自动补注（M41 新增导出）：resolveOverFunPats。
-resolveOverFunPats : Ec -> Ctx -> Value -> List (Pair (List Pat) Expr) -> Check (Pair (List (Pair (List Pat) Expr)) Ec)
+export resolveOverFunPats : Ec -> Ctx -> Value -> List (Pair (List Pat) Expr) -> Check (Pair (List (Pair (List Pat) Expr)) Ec)
 resolveOverFunPats ec ctx expected clauses =
   resolveOverFunPatsGo (natFromInt 512) ec ctx expected clauses
 
@@ -2425,7 +2370,7 @@ resolveClausePatsFuel (Succ k) ec ctx ty pats = case pats of
       )
     _ => OkC (Pair pats ec)
 
-checkAppCtorFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> String -> List Expr -> Value -> Span -> Check (Pair Term Ec)
+export checkAppCtorFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> String -> List Expr -> Value -> Span -> Check (Pair Term Ec)
 checkAppCtorFuel fuel globals ctx ec name args expected sp = if fuel <= 0 then icFuel "inference"
 else case dtCtorLookupEc ec name of
   Nothing => tcErr1 sp (UnknownName name) name

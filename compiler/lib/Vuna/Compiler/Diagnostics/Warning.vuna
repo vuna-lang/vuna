@@ -1,14 +1,5 @@
 -- | UN_ 域：不影响检查结果的告警（未使用/冗余/遮蔽），severity = warning。
-module Vuna.Compiler.Diagnostics.Warning
-  ( WarnEntry(..)
-  , WarnErr(..)
-  , warnAll
-  , warnCode
-  , warnDiagAt
-  , warnDiagAtMod
-  , warnMsg
-  , warnTemplate
-  ) where
+module Vuna.Compiler.Diagnostics.Warning where
 
 -- Vuna.Compiler.Diagnostics.Warning：warning 目录（phase/category 由具体检查给）。
 --
@@ -23,7 +14,7 @@ import Base.Nat
 import Base.Vec
 
 -- | 诊断域实现：Vuna.Compiler.Diagnostics.Warning.WarnErr（目录/模板见 diagnostics.md）。
-data WarnErr : Nat -> Type where
+export data WarnErr(..) : Nat -> Type where
   -- arity 0
   WarnBranchAfterCatchAll : WarnErr Zero
   -- arity 1
@@ -35,7 +26,7 @@ data WarnErr : Nat -> Type where
   ShadowedBinder : String -> WarnErr (Succ Zero)
 
 -- | 诊断域实现：Vuna.Compiler.Diagnostics.Warning.warnCode（目录/模板见 diagnostics.md）。
-warnCode : {n : Nat} -> WarnErr n -> String
+export warnCode : {n : Nat} -> WarnErr n -> String
 warnCode WarnBranchAfterCatchAll = "UN_BranchAfterCatchAll"
 warnCode (WarnRedundantCtorBranch _) = "UN_RedundantCtorBranch"
 warnCode (WarnRedundantLiteralBranch _) = "UN_RedundantLiteralBranch"
@@ -45,7 +36,7 @@ warnCode (UnusedImport _) = "UN_UnusedImport"
 warnCode (ShadowedBinder _) = "UN_ShadowedBinder"
 
 -- | 诊断域实现：Vuna.Compiler.Diagnostics.Warning.warnTemplate（目录/模板见 diagnostics.md）。
-warnTemplate : {n : Nat} -> WarnErr n -> String
+export warnTemplate : {n : Nat} -> WarnErr n -> String
 warnTemplate WarnBranchAfterCatchAll = "this branch is unreachable (a catch-all precedes it)"
 warnTemplate (WarnRedundantCtorBranch _) =
   "redundant constructor branch: `<0>` is already covered by an earlier branch"
@@ -57,26 +48,26 @@ warnTemplate (UnusedImport _) = "module `<0>` is imported but never used"
 warnTemplate (ShadowedBinder _) = "binder `<0>` shadows an outer binder"
 
 -- | 诊断域实现：Vuna.Compiler.Diagnostics.Warning.warnMsg（目录/模板见 diagnostics.md）。
-warnMsg : {n : Nat} -> WarnErr n -> Vec n String -> Diagnostic
+export warnMsg : {n : Nat} -> WarnErr n -> Vec n String -> Diagnostic
 warnMsg e args =
   diagNoLoc SevWarning PhUsage CatQuantity (warnCode e) (diagBody (warnTemplate e) args)
 
 -- | 在 span 上构造一条 warning（纯函数；无 Ec 的调用方直接把它返回给驱动层）。
-warnDiagAt : Span -> {n : Nat} -> WarnErr n -> Vec n String -> Diagnostic
+export warnDiagAt : Span -> {n : Nat} -> WarnErr n -> Vec n String -> Diagnostic
 warnDiagAt sp e args = withLabel (Label (Just sp) "" LabelPrimary Nothing) (warnMsg e args)
 
 -- | 带后处理（如附加 suggestion）的 span warning（纯函数）。
-warnDiagAtMod : (Diagnostic -> Diagnostic) -> Span -> {n : Nat} -> WarnErr n -> Vec n String -> Diagnostic
+export warnDiagAtMod : (Diagnostic -> Diagnostic) -> Span -> {n : Nat} -> WarnErr n -> Vec n String -> Diagnostic
 warnDiagAtMod f sp e args = f (warnDiagAt sp e args)
 
 -- | 诊断域实现：Vuna.Compiler.Diagnostics.Warning.WarnEntry（目录/模板见 diagnostics.md）。
-record WarnEntry where
+export record WarnEntry(..) where
   warnEntryCode : String
   warnEntryTemplate : String
   warnEntryDesc : String
 
 -- | 诊断域实现：Vuna.Compiler.Diagnostics.Warning.warnAll（目录/模板见 diagnostics.md）。
-warnAll : List WarnEntry
+export warnAll : List WarnEntry
 warnAll =
   [ WarnEntry (warnCode WarnBranchAfterCatchAll) (warnTemplate WarnBranchAfterCatchAll) "catch-all 之后的分支不可达",
     WarnEntry (warnCode (WarnRedundantCtorBranch "")) (warnTemplate (WarnRedundantCtorBranch "")) "冗余构造子分支",

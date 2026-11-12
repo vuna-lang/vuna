@@ -1,9 +1,4 @@
-module Vuna.Compiler.Driver.CompilerCli
-  ( compilerUsageLines
-  , removedFlagHint
-  , runCompilerCli
-  , runCompilerCliFor
-  ) where
+module Vuna.Compiler.Driver.CompilerCli where
 
 -- Vuna.Compiler.Driver.CompilerCli：编译器自己的 CLI（vuna-compiler）。
 --
@@ -29,7 +24,7 @@ import Base.Nat
 import Base.List
 
 -- | CLI 辅助：compilerUsageLines（参数/退出码约定见 tooling.md）。
-compilerUsageLines : String -> String
+export compilerUsageLines : String -> String
 compilerUsageLines prog = """  ${prog} compile [--no-print] [--release] (<entry.vuna> | <package-dir>) <out-dir>
   ${prog} check [--release] [--continue-on-error] (<file.vuna> | <package-dir>)
   <file.vuna>                   带 module 头 → 按库模块检查（包上下文）；无头 → 入口文件
@@ -53,7 +48,7 @@ mapEff f (x :: rest) = do
   pure (y :: ys)
 
 -- | CLI 辅助：runCompilerCli（参数/退出码约定见 tooling.md）。
-runCompilerCli : List String -> Eff [] Int
+export runCompilerCli : List String -> Eff [] Int
 runCompilerCli args = runCompilerCliFor "vuna-compiler" args
 
 -- CLI 选项集中状态：入口构造一次，命令链显式传递（M4：不再有 ambient 存储）。
@@ -190,7 +185,7 @@ stripDiagFormatGo (arg :: rest) acc found =
   else stripDiagFormatGo rest (arg :: acc) found
 
 -- | 编译器 CLI 入口：剥离诊断参数后分发。
-runCompilerCliFor : String -> List String -> Eff [] Int
+export runCompilerCliFor : String -> List String -> Eff [] Int
 runCompilerCliFor prog args = do
   envRel <- prim_eff_getenv "VUNA_RELEASE"
   let
@@ -296,7 +291,7 @@ removedCommand prog cmd hint = do
 dashFlag : String -> String
 dashFlag name = "--${name}"
 
-removedFlagHint : String -> Maybe String
+export removedFlagHint : String -> Maybe String
 removedFlagHint flag =
   if flag == dashFlag "dt" then Just "DT is the only path; drop the flag"
   else if flag == dashFlag "package" then Just "use `build` or `compile`"

@@ -1,46 +1,4 @@
-module Vuna.Compiler.Elab.Case
-  ( BranchVerdict(..)
-  , allCtorsUnsatisfiable
-  , allCtorsUnsatisfiableGo
-  , altNames
-  , anyNestedArg
-  , anyNestedPat
-  , bindCtorTele
-  , branchAfterUnify
-  , branchIsReachable
-  , branchReachable
-  , branchVerdict
-  , checkCaseAltsFlat
-  , checkCaseDone
-  , checkCoverage
-  , checkCovered
-  , ctorExplicitArity
-  , ctorResultTerms
-  , ctorResultVals
-  , ctorResultValsIn
-  , ctorValueIn
-  , ctxHasEmptyBinder
-  , ctxHasEmptyBinderAt
-  , hasCatchAll
-  , hasDupNames
-  , isEmptyFamilyValue
-  , isRigidVal
-  , nestedInPat
-  , occursLevel
-  , occursLevelList
-  , patIrrefutable
-  , patsAllIrrefutable
-  , reflectScrutinee
-  , rigidIdxVals
-  , teleValsFrom
-  , unifyErr
-  , unifyIdx
-  , unifyIdxConv
-  , unifyIdxList
-  , unifyIdxListSized
-  , unifyIdxRigid
-  , wildArgs
-  ) where
+module Vuna.Compiler.Elab.Case where
 
 -- Vuna.Compiler.Elab.Case：case 精化的**基础设施**：索引合一（unifyIdx）、构造子结果值（scrutinee 反射）、
 -- 模式 telescope 绑定（bindCtorTele）、分支可达性（BranchVerdict + allCtorsUnsatisfiable）、
@@ -72,10 +30,10 @@ import Vuna.Compiler.Intrinsics
 -- 方向约定：优先精化 **level 更大**（更内层）的变量，于是 ctor 一侧的新鲜变量精化成
 -- scrutinee 的真实变量（`m ↦ n`），不会把真实变量解到分支作用域外（level 形态，无需 de Bruijn）。
 -- | 自动补注（M41 新增导出）：unifyErr。
-unifyErr : Check a
+export unifyErr : Check a
 unifyErr = ErrC (tcMsg ImpossibleBranchIndex [])
 
-unifyIdxList : Ec -> List (Pair Int Value) -> Int -> Int -> List Value -> List Value -> Check (List (Pair Int Value))
+export unifyIdxList : Ec -> List (Pair Int Value) -> Int -> Int -> List Value -> List Value -> Check (List (Pair Int Value))
 unifyIdxList ec acc depth fuel xs ys =
   if fuel <= 0 then unifyErr else unifyIdxListGo ec acc depth fuel xs ys
 
@@ -93,7 +51,7 @@ unifyIdxListGo ec acc depth fuel _ _ = unifyErr
 -- unifyIdx 大约消耗 4 步）。入口按两侧值里的 Nat 链前缀深度派生燃料（上限 `idxFuelMax`
 -- 防失控输入）。**只动入口**：递归路径仍按递减 fuel 走，`unifyIdxList` 的 SCT 终止性
 -- 证明不受影响。
-unifyIdxListSized : Ec -> List (Pair Int Value) -> Int -> List Value -> List Value -> Check (List (Pair Int Value))
+export unifyIdxListSized : Ec -> List (Pair Int Value) -> Int -> List Value -> List Value -> Check (List (Pair Int Value))
 unifyIdxListSized ec acc depth xs ys = unifyIdxList ec acc depth (idxFuelFor xs ys) xs ys
 
 idxFuelFor : List Value -> List Value -> Int
@@ -164,7 +122,7 @@ idxIsNatSuccHead (VNeutral n) = case n of
 idxIsNatSuccHead _ = False
 
 -- | 自动补注（M41 新增导出）：unifyIdx。
-unifyIdx : Ec -> List (Pair Int Value) -> Int -> Int -> Value -> Value -> Check (List (Pair Int Value))
+export unifyIdx : Ec -> List (Pair Int Value) -> Int -> Int -> Value -> Value -> Check (List (Pair Int Value))
 unifyIdx ec acc depth fuel a b = if fuel <= 0 then ErrC (tcMsg IndexFuel [])
 else
   let
@@ -195,7 +153,7 @@ else
 -- 实例化变量用 `_occurs` 这个名字 + 不与 `lvl` 相同的 level（见 occursFreshLevel）。
 -- 扫描带 fuel：实例化闭包后递归不再沿值结构下降（SCT 无法证明终止），用递减 fuel 兜底；
 -- true 才是真 occurs，fuel 耗尽的 False 只会因为值异常巨大而发生（实际扫描深度 = 值大小）。
-occursLevel : Int -> Int -> Int -> Value -> Bool
+export occursLevel : Int -> Int -> Int -> Value -> Bool
 occursLevel fuel depth lvl v = if fuel <= 0 then False
 else case v of
   VNeutral n => case n of
@@ -228,7 +186,7 @@ else case v of
 occursFreshLevel : Int -> Int -> Int
 occursFreshLevel depth lvl = if depth == lvl then lvl + 1 else depth
 
-occursLevelList : Int -> Int -> Int -> List Value -> Bool
+export occursLevelList : Int -> Int -> Int -> List Value -> Bool
 occursLevelList fuel depth lvl [] = False
 occursLevelList fuel depth lvl (v :: rest) =
   occursLevel (fuel - 1) depth lvl v || occursLevelList (fuel - 1) depth lvl rest
@@ -239,7 +197,7 @@ occursFuel : Int
 occursFuel = 1000000
 
 -- 刚性位置：构造子/中性头按结构递归，其余回落到 conv 的相等性判定。
-unifyIdxRigid : Ec -> List (Pair Int Value) -> Int -> Int -> Value -> Value -> Check (List (Pair Int Value))
+export unifyIdxRigid : Ec -> List (Pair Int Value) -> Int -> Int -> Value -> Value -> Check (List (Pair Int Value))
 unifyIdxRigid ec acc depth fuel a b = if fuel <= 0 then unifyErr
 else case a of
   VCon c xs => case b of
@@ -267,7 +225,7 @@ else case a of
   _ => unifyIdxConv ec acc depth a b
 
 -- conv 回落：只判定相等（索引里的 meta 求解读 M15）。
-unifyIdxConv : Ec -> List (Pair Int Value) -> Int -> Value -> Value -> Check (List (Pair Int Value))
+export unifyIdxConv : Ec -> List (Pair Int Value) -> Int -> Value -> Value -> Check (List (Pair Int Value))
 unifyIdxConv ec acc depth a b = case conv (ecDefTbl ec) (ecSolsP ec) depth a b of
   OkC sols2 => OkC acc
   ErrC e => unifyErr
@@ -281,22 +239,22 @@ unifyIdxConv ec acc depth a b = case conv (ecDefTbl ec) (ecSolsP ec) depth a b o
 --      空族判定唯一实现是 `isEmptyFamilyValue` → `allCtorsUnsatisfiable`。
 -- 覆盖率（省略分支）与 elabConAlt（写出分支）都问 `BranchVerdict`，因此不会再出现
 -- 「写也错、省也错」：一个分支要么可达（两边都接受），要么不可达（写出报错、省略合法）。
-data BranchVerdict : Type where
+export data BranchVerdict(..) : Type where
   BranchOk : BranchVerdict
   BranchImpossibleIndex : BranchVerdict
   BranchImpossibleEmptyCtx : BranchVerdict
 
-branchIsReachable : BranchVerdict -> Bool
+export branchIsReachable : BranchVerdict -> Bool
 branchIsReachable BranchOk = True
 branchIsReachable _ = False
 
 -- 索引合一成功之后的判定：上下文空族（与覆盖率完全同一实现）。
-branchAfterUnify : Ec -> Ctx -> List (Pair Int Value) -> BranchVerdict
+export branchAfterUnify : Ec -> Ctx -> List (Pair Int Value) -> BranchVerdict
 branchAfterUnify ec branchCtx refs =
   if ctxHasEmptyBinder ec (ctxRefine branchCtx refs) then BranchImpossibleEmptyCtx else BranchOk
 
 -- 覆盖率用它模拟一个**未写出**的构造子分支：绑哑通配（只借绑定与求值），不合成分支体。
-branchVerdict : Ctx -> Ec -> List Value -> DtCtor -> BranchVerdict
+export branchVerdict : Ctx -> Ec -> List Value -> DtCtor -> BranchVerdict
 branchVerdict ctx ec idxs ctor = case bindCtorTele ctx (dtCtorType ctor) (wildArgs (ctorExplicitArity (dtCtorType ctor))) of
   ErrC e => BranchOk
   OkC (Pair branchCtx (Pair binders leftover)) => if nonEmpty leftover then BranchOk
@@ -304,23 +262,23 @@ branchVerdict ctx ec idxs ctor = case bindCtorTele ctx (dtCtorType ctor) (wildAr
     ErrC e => BranchImpossibleIndex
     OkC refs => branchAfterUnify ec branchCtx refs
 
-branchReachable : Ctx -> Ec -> List Value -> DtCtor -> Bool
+export branchReachable : Ctx -> Ec -> List Value -> DtCtor -> Bool
 branchReachable ctx ec idxs ctor = branchIsReachable (branchVerdict ctx ec idxs ctor)
 
-wildArgs : Int -> List Pat
+export wildArgs : Int -> List Pat
 wildArgs n = if n <= 0 then [] else Base.List.Cons (PWild (Span "" 0 0 0 0)) (wildArgs (n - 1))
 
 -- 构造子类型的显式 binder 个数 = case 分支要写的模式个数（隐式 binder 由 bindCtorTele 自理）。
-ctorExplicitArity : Term -> Int
+export ctorExplicitArity : Term -> Int
 ctorExplicitArity (TPi n implicit rig dom cod) =
   if implicit then ctorExplicitArity cod else 1 + ctorExplicitArity cod
 ctorExplicitArity _ = 0
 
 -- 分支上下文里是否有 binder 的类型求值后是空归纳族。
-ctxHasEmptyBinder : Ec -> Ctx -> Bool
+export ctxHasEmptyBinder : Ec -> Ctx -> Bool
 ctxHasEmptyBinder ec ctx = ctxHasEmptyBinderAt ec ctx 0 ctx.ctxItems
 
-ctxHasEmptyBinderAt : Ec -> Ctx -> Int -> List (Pair String Term) -> Bool
+export ctxHasEmptyBinderAt : Ec -> Ctx -> Int -> List (Pair String Term) -> Bool
 ctxHasEmptyBinderAt ec ctx idx [] = False
 ctxHasEmptyBinderAt ec ctx idx ((Pair name ty) :: rest) =
   isEmptyFamilyValue ec (ctxDepth ctx) (varTypeValue ctx idx ty)
@@ -328,7 +286,7 @@ ctxHasEmptyBinderAt ec ctx idx ((Pair name ty) :: rest) =
 
 -- 值是不是「空归纳族」：族已知，且**每个**构造子的结果索引都与这些索引合一失败
 -- （`Fin Zero`、零构造子的族都算）。合一是本地试算、不提交，所以只会误判成「非空」（保守）。
-isEmptyFamilyValue : Ec -> Int -> Value -> Bool
+export isEmptyFamilyValue : Ec -> Int -> Value -> Bool
 isEmptyFamilyValue ec depth v = case forceVal ec v of
   VNeutral n => case n of
     -- 只有**索引全刚性**时才敢判空：索引里出现中性项（`Fin (f Zero)`）时，「合一一律失败」
@@ -341,11 +299,11 @@ isEmptyFamilyValue ec depth v = case forceVal ec v of
     _ => False
   _ => False
 
-rigidIdxVals : List Value -> Bool
+export rigidIdxVals : List Value -> Bool
 rigidIdxVals [] = True
 rigidIdxVals (x :: rest) = isRigidVal x && rigidIdxVals rest
 
-isRigidVal : Value -> Bool
+export isRigidVal : Value -> Bool
 isRigidVal (VCon c args) = rigidIdxVals args
 isRigidVal (VType l) = True
 isRigidVal (VInt n) = True
@@ -354,10 +312,10 @@ isRigidVal (VFloat raw) = True
 isRigidVal (VBool b) = True
 isRigidVal _ = False
 
-allCtorsUnsatisfiable : Ec -> DtData -> List Value -> Int -> Bool
+export allCtorsUnsatisfiable : Ec -> DtData -> List Value -> Int -> Bool
 allCtorsUnsatisfiable ec dd idxs depth = allCtorsUnsatisfiableGo ec (dtDataCtors dd) idxs depth
 
-allCtorsUnsatisfiableGo : Ec -> List DtCtor -> List Value -> Int -> Bool
+export allCtorsUnsatisfiableGo : Ec -> List DtCtor -> List Value -> Int -> Bool
 allCtorsUnsatisfiableGo ec [] idxs depth = True
 allCtorsUnsatisfiableGo ec (ctor :: rest) idxs depth = case unifyIdxListSized ec [] depth (ctorResultVals ctor depth) idxs of
   OkC refs => False
@@ -369,7 +327,7 @@ allCtorsUnsatisfiableGo ec (ctor :: rest) idxs depth = case unifyIdxListSized ec
 -- M28：这条路径只服务**规范形** case（每个构造子一个分支、子模式全是变量/通配）。
 -- 嵌套模式在 `checkCase` 里先降级成模式矩阵（`Elab.Match.multiToCaseExpr`），因此这里
 -- 遇到非变量子模式只可能是内部错误，报 `NestedPatterns`。
-bindCtorTele : Ctx -> Term -> List Pat -> Check (Pair Ctx (Pair (List (Pair String Rig)) (List Pat)))
+export bindCtorTele : Ctx -> Term -> List Pat -> Check (Pair Ctx (Pair (List (Pair String Rig)) (List Pat)))
 bindCtorTele ctx ty subpats = bindCtorGo ctx ty subpats []
 
 bindCtorGo : Ctx -> Term -> List Pat -> List (Pair String Rig) -> Check (Pair Ctx (Pair (List (Pair String Rig)) (List Pat)))
@@ -403,7 +361,7 @@ freshTeleVals [] base i = []
 freshTeleVals ((Pair name erased) :: rest) base i =
   VNeutral (NVar name (base + i) []) :: freshTeleVals rest base (i + 1)
 
-ctorResultVals : DtCtor -> Int -> List Value
+export ctorResultVals : DtCtor -> Int -> List Value
 ctorResultVals c base =
   let
     tele = dtCtorTelescope c
@@ -413,22 +371,22 @@ ctorResultVals c base =
 -- 分支里的结果索引：用分支上下文（含已绑定的构造子字段）求值。
 -- 于是 `Cons b m y ys` 的结果索引 `Vec (Succ m) b` 里出现的就是这些真实 binder，
 -- 合一 `b ↦ a`、`Succ m ↦ n` 后分支体的类型自动被精化。
-ctorResultValsIn : Ctx -> DtCtor -> List Value
+export ctorResultValsIn : Ctx -> DtCtor -> List Value
 ctorResultValsIn ctx c = map (\t => evalCtx ctx t) (ctorResultTerms c)
 
-ctorResultTerms : DtCtor -> List Term
+export ctorResultTerms : DtCtor -> List Term
 ctorResultTerms c = case resultSpine (dtCtorType c) of
   Pair head args => args
 
 -- M24.5：分支里构造子的**值** `VCon c [telescope 各 binder 的值]`。
 -- bindCtorTele 刚把 telescope 绑到分支上下文末尾，binder i（telescope 顺序）的 level 是
 -- `depth - n + i`，按该顺序排列即 VCon 实参顺序（与求值器 / TCon 实参对齐约定一致）。
-ctorValueIn : Ctx -> DtCtor -> Value
+export ctorValueIn : Ctx -> DtCtor -> Value
 ctorValueIn ctx c =
   VCon (dtCtorName c)
     (teleValsFrom (ctxDepth ctx - length (dtCtorTelescope c)) (length (dtCtorTelescope c)))
 
-teleValsFrom : Int -> Int -> List Value
+export teleValsFrom : Int -> Int -> List Value
 teleValsFrom low k =
   if k <= 0 then []
   else Base.List.Cons (VNeutral (NVar "_tele" low [])) (teleValsFrom (low + 1) (k - 1))
@@ -441,7 +399,7 @@ teleValsFrom low k =
 -- 只对**中性变量**（`NVar` 且 spine 为空）反射：非变量 scrutinee（`f x`、字面量、别的
 -- 分支绑定子……）拿不到等式，保持旧行为；Bool/Int/String 的 case 走各自的专用路径，
 -- 不会到这里。
-reflectScrutinee : Ec -> Int -> List (Pair Int Value) -> Value -> Value -> Check (List (Pair Int Value))
+export reflectScrutinee : Ec -> Int -> List (Pair Int Value) -> Value -> Value -> Check (List (Pair Int Value))
 reflectScrutinee ec depth refs ctorVal scrutVal = case force (ecDefTbl ec) (ecSolsP ec) defaultFuel (refineValue refs defaultFuel scrutVal) of
   VNeutral n => case n of
     NVar name lvl [] => unifyIdx ec refs depth defaultFuel (VNeutral n) ctorVal
@@ -458,12 +416,12 @@ reflectScrutinee ec depth refs ctorVal scrutVal = case force (ecDefTbl ec) (ecSo
 -- 「重复」= 不可达：同一构造子分支之前已经有一条**不可反驳**的同构造子分支
 -- （子模式全是变量/通配），或同一字面量已经出现过。真正需要模式矩阵的重复
 -- （`Just (TStr s)` 之后的 `Just v`）不算重复：矩阵降级会让两条分支都可达。
-patIrrefutable : Pat -> Bool
+export patIrrefutable : Pat -> Bool
 patIrrefutable (PVar name sp) = True
 patIrrefutable (PWild sp) = True
 patIrrefutable _ = False
 
-patsAllIrrefutable : List Pat -> Bool
+export patsAllIrrefutable : List Pat -> Bool
 patsAllIrrefutable [] = True
 patsAllIrrefutable (p :: rest) = patIrrefutable p && patsAllIrrefutable rest
 
@@ -505,7 +463,7 @@ stripAsPats [] = []
 stripAsPats ((Pair pat body) :: rest) = Pair (stripAsPat pat) body :: stripAsPats rest
 
 -- | 自动补注（M41 新增导出）：checkCaseAltsFlat。
-checkCaseAltsFlat : Ec -> List (Pair Pat Expr) -> Check (Pair Int Ec)
+export checkCaseAltsFlat : Ec -> List (Pair Pat Expr) -> Check (Pair Int Ec)
 checkCaseAltsFlat ec alts = checkCaseAltsGo ec [] (stripAsPats alts)
 
 checkCaseAltsGo : Ec -> List (Pair Pat Expr) -> List (Pair Pat Expr) -> Check (Pair Int Ec)
@@ -561,19 +519,19 @@ hasLitHead ((Pair pat body) :: rest) = case pat of
 -- ---------------------------------------------------------------
 -- M19：模式辅助（覆盖面 / 矩阵降级判定）
 -- ---------------------------------------------------------------
-altNames : List (Pair Pat Expr) -> List String
+export altNames : List (Pair Pat Expr) -> List String
 altNames [] = []
 altNames ((Pair pat body) :: rest) = case pat of
   PCon cname args psp => cname :: altNames rest
   _ => altNames rest
 
-hasCatchAll : List (Pair Pat Expr) -> Bool
+export hasCatchAll : List (Pair Pat Expr) -> Bool
 hasCatchAll [] = False
 hasCatchAll ((Pair pat body) :: rest) = case pat of
   PCon cname args psp => hasCatchAll rest
   _ => True
 
-hasDupNames : List String -> Bool
+export hasDupNames : List String -> Bool
 hasDupNames [] = False
 hasDupNames (x :: rest) = memName x rest || hasDupNames rest
 
@@ -581,15 +539,15 @@ hasDupNames (x :: rest) = memName x rest || hasDupNames rest
 -- 直接在精化器里把嵌套模式折成内层 case 时，兜底分支的体会被内联到更深的 binder
 -- 作用域，体里引用外层绑定会错位。矩阵降级生成的是**表达式**，名字在重新精化时
 -- 按作用域解析，不会错位。
-anyNestedPat : List (Pair Pat Expr) -> Bool
+export anyNestedPat : List (Pair Pat Expr) -> Bool
 anyNestedPat [] = False
 anyNestedPat ((Pair pat body) :: rest) = nestedInPat pat || anyNestedPat rest
 
-nestedInPat : Pat -> Bool
+export nestedInPat : Pat -> Bool
 nestedInPat (PCon c args sp) = anyNestedArg args
 nestedInPat _ = False
 
-anyNestedArg : List Pat -> Bool
+export anyNestedArg : List Pat -> Bool
 anyNestedArg [] = False
 anyNestedArg (a :: rest) = case a of
   PVar n psp => anyNestedArg rest
@@ -603,11 +561,11 @@ anyNestedArg (a :: rest) = case a of
 -- 性能：**已写出的分支直接跳过**（不跑可达性），只有「没写的构造子」才需要判可达性——
 -- 否则每个 case 的每个构造子都要模拟一次分支（绑定 telescope + 上下文空类型检查），
 -- 编译器自检会慢 4 倍以上。
-checkCoverage : Ctx -> Ec -> DtData -> List Value -> List (Pair Pat Expr) -> Span -> Check Int
+export checkCoverage : Ctx -> Ec -> DtData -> List Value -> List (Pair Pat Expr) -> Span -> Check Int
 checkCoverage ctx ec dd idxs alts sp =
   checkCovered ctx ec dd idxs (altNames alts) alts sp (dtDataCtors dd)
 
-checkCovered : Ctx -> Ec -> DtData -> List Value -> List String -> List (Pair Pat Expr) -> Span -> List DtCtor -> Check Int
+export checkCovered : Ctx -> Ec -> DtData -> List Value -> List String -> List (Pair Pat Expr) -> Span -> List DtCtor -> Check Int
 checkCovered ctx ec dd idxs written alts sp ctors =
   let
     missing = missingCtors ctx ec idxs written ctors
@@ -621,7 +579,7 @@ missingCtors ctx ec idxs written (ctor :: rest) =
     (missingCtors ctx ec idxs written rest)
   else missingCtors ctx ec idxs written rest
 
-checkCaseDone : Ec -> Ctx -> DtData -> List Value -> List (Pair Pat Expr) -> Value -> Span -> Term -> List CaseAlt -> Check (Pair Term Ec)
+export checkCaseDone : Ec -> Ctx -> DtData -> List Value -> List (Pair Pat Expr) -> Value -> Span -> Term -> List CaseAlt -> Check (Pair Term Ec)
 checkCaseDone ec ctx dd idxs alts expected sp scrutTerm altTerms =
   if hasCatchAll alts then OkC (Pair (TCase scrutTerm altTerms) ec)
   else Vuna.Compiler.Common.bind (checkCoverage ctx ec dd idxs alts sp)

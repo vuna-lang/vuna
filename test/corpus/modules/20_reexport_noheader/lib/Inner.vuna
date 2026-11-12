@@ -1,14 +1,14 @@
 -- 无模块头：隐式导出全部公开名字，导出表不得因多子句/同名 sig 重复。
-data Color : Type where
+export data Color(..) : Type where
   Red : Color
   Blue : Color
 
-addInt : Int -> Int -> Int
+export addInt : Int -> Int -> Int
 addInt x y = x + y
 
-pick : Color -> Int
+export pick : Color -> Int
 pick Red = 1
 pick Blue = 2
 
-triple : Int -> Int
+export triple : Int -> Int
 triple x = x + x + x

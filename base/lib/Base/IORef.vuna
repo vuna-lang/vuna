@@ -1,4 +1,4 @@
-module Base.IORef (modifyRef, newRef, readRef, writeRef) where
+module Base.IORef where
 
 -- Base.IORef：`Eff []` 内的可变引用（M33 W3）。内建类型构造子 `IORef`，OCaml 表示 `'a ref`。
 --
@@ -8,19 +8,19 @@ import Base.Eff
 import Base.Monad
 
 -- | 创建初值为 `x` 的新引用（`Eff []` 动作）。
-newRef : a -> Eff [] (IORef a)
+export newRef : a -> Eff [] (IORef a)
 newRef x = prim_eff_newRef x
 
 -- | 读取引用当前值。
-readRef : IORef a -> Eff [] a
+export readRef : IORef a -> Eff [] a
 readRef r = prim_eff_readRef r
 
 -- | 写入新值，返回底层原语的 `Int` 结果（写入本身无有意义的返回值，通常忽略）。
-writeRef : IORef a -> a -> Eff [] Int
+export writeRef : IORef a -> a -> Eff [] Int
 writeRef r v = prim_eff_writeRef r v
 
 -- | 读-改-写一次完成：读到当前值、应用 `f` 后写回，返回写入原语的 `Int` 结果。
-modifyRef : IORef a -> (a -> a) -> Eff [] Int
+export modifyRef : IORef a -> (a -> a) -> Eff [] Int
 modifyRef r f = do
   x <- readRef r
   writeRef r (f x)

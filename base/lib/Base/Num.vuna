@@ -1,4 +1,4 @@
-module Base.Num (Num(..)) where
+module Base.Num where
 
 -- Base.Num：数值算术 trait（D23）。`+ - * /` 是 `Num` 方法 `add` / `sub` / `mul` / `div`
 -- 的别名；算术不再绑定到 `Int` 内建值，用户类型可以实现自己的 `Num` 实例。实例跟类型
@@ -19,7 +19,7 @@ infixl 7 * = mul
 infixl 7 / = div
 
 -- | 数值算术 trait：`add` / `sub` / `mul` / `div` 对应 `+` / `-` / `*` / `/`（后者是这些方法的中缀别名）。
-trait Num a where
+export trait Num a(..) where
   -- | 加法（`+`）。
   add : a -> a -> a
   -- | 减法（`-`）。

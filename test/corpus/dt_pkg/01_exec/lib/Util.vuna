@@ -5,5 +5,5 @@ import Answer
 -- M31.3（B26）/D23：本包**不加 vuna-base 依赖**（段 34d 会把整包拷贝到 $tmp 构建，
 -- 相对路径依赖会失效）。D23 起 `+` 是 `Base.Num` 方法别名、内建 `+` 对源码不可见，
 -- 无 base 的包不能再做算术；本夹具只验证跨模块引用，因此直接返回底层值。
-incAnswer : Int
+export incAnswer : Int
 incAnswer = answer

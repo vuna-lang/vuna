@@ -1,4 +1,4 @@
-module Vuna.Repl.Paste (pasteDisable, pasteEnable, readPasteBody) where
+module Vuna.Repl.Paste where
 
 -- Vuna.Repl.Paste：括号粘贴（bracketed paste）的终端开关与读取（工具链；不进 seed 闭包）。
 --
@@ -19,7 +19,7 @@ import Vuna.Repl.Term
 
 -- 读粘贴体（起点在 `\e[200~` 之后）：逐字节喂状态机，读到 `\e[201~` 或 EOF/超时
 -- （termReadByte 返回 -1）为止。fuel 是字节数守卫（1 MiB），防终端异常时无限读。
-readPasteBody : Int -> Eff [] String
+export readPasteBody : Int -> Eff [] String
 readPasteBody _ = do
   st <- readPasteGo 1048576 emptyPasteState
   pure (strPack (reverse st.pasteContent))
@@ -38,8 +38,8 @@ normalizePasteByte b = if b == 13 then 10 else b
 -- ---------------------------------------------------------------
 -- 终端开关
 -- ---------------------------------------------------------------
-pasteEnable : Int -> Eff [] Int
+export pasteEnable : Int -> Eff [] Int
 pasteEnable _ = writeOut "${escCode}[?2004h"
 
-pasteDisable : Int -> Eff [] Int
+export pasteDisable : Int -> Eff [] Int
 pasteDisable _ = writeOut "${escCode}[?2004l"

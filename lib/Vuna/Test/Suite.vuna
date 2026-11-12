@@ -1,12 +1,4 @@
-module Vuna.Test.Suite
-  ( Case(..)
-  , CaseKind(..)
-  , Family(..)
-  , Suite(..)
-  , SuiteOpts(..)
-  , discoverCases
-  , parseSuiteFile
-  ) where
+module Vuna.Test.Suite where
 
 -- Vuna.Test.Suite：suite 文件（test/suite.toml）的模型、校验与 case discovery。
 --
@@ -22,7 +14,7 @@ import Vuna.Files
 import Vuna.Cli.Args
 
 -- `vuna test --suite` 的选项。jobs = 0 表示 auto（由 runner 探测全部可用核）。
-record SuiteOpts where
+export record SuiteOpts(..) where
   suitePath : String
   suiteJobs : Int
   suiteListOnly : Bool
@@ -48,7 +40,7 @@ record SuiteOpts where
   suiteAudit : Bool
 
 -- 一个 family：目录约定 + 各阶段的上限开关（后缀决定实际参与；family 关掉即不跑）。
-record Family where
+export record Family(..) where
   familyName : String
   familySection : String
   familyDir : String
@@ -64,7 +56,7 @@ record Family where
   familyExclude : List String
   familyInclude : List String
 
-record Suite where
+export record Suite(..) where
   suiteName : String
   suiteRoot : String
   suiteDefaultJobs : Int
@@ -76,7 +68,7 @@ record Suite where
 
 -- `CGolden` 的字段：source expected interp check compile run compareInterp。
 -- `CError` 的字段：source expectedErr interp check compile。
-data CaseKind : Type where
+export data CaseKind(..) : Type where
   CGolden : String -> String -> Bool -> Bool -> Bool -> Bool -> Bool -> CaseKind
   CError : String -> String -> Bool -> Bool -> Bool -> CaseKind
   CCheck : String -> Bool -> String -> CaseKind
@@ -88,7 +80,7 @@ data CaseKind : Type where
   CSteps : String -> CaseKind
   CBroken : String -> CaseKind
 
-record Case where
+export record Case(..) where
   caseId : String
   caseSection : String
   caseTags : List String
@@ -567,7 +559,7 @@ else case family.familyEntry of
 -- ---------------------------------------------------------------
 -- 对外入口
 -- ---------------------------------------------------------------
-parseSuiteFile : String -> Eff [] (Check Suite)
+export parseSuiteFile : String -> Eff [] (Check Suite)
 parseSuiteFile path = do
   cwd <- prim_eff_getcwd
   let
@@ -583,7 +575,7 @@ parseSuiteAt absPath = do
       ErrC e => pure (ErrC e)
       OkC entries => pure (buildSuiteWithEntries absPath entries)
 
-discoverCases : Suite -> Eff [] (List Case)
+export discoverCases : Suite -> Eff [] (List Case)
 discoverCases suite =
   let
     seedPath = "${suite.suiteRoot}/test/corpus/run/12_fact.vuna"

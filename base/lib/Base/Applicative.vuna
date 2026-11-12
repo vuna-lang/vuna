@@ -1,4 +1,4 @@
-module Base.Applicative (Applicative(..)) where
+module Base.Applicative where
 
 -- Base.Applicative：`Applicative` trait（`pure` / `ap` / `liftA2` 三个方法）。
 --
@@ -24,7 +24,7 @@ module Base.Applicative (Applicative(..)) where
 -- 需要同时声明 `Functor` / `Applicative` / `Monad` 三个实例，并显式实现本 trait
 -- 的三个方法。
 -- | 应用函子 trait：`pure` 提升纯值，`ap` 在动作上应用函数，`liftA2` 在动作上应用二元函数。
-trait Applicative f where
+export trait Applicative f(..) where
   -- | 把纯值提升为动作。
   pure : a -> f a
   -- | 应用动作里的函数：把 `f (a -> b)` 应用到 `f a` 得到 `f b`。

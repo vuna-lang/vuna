@@ -1,19 +1,5 @@
 -- | 位运算：命名入口 + 32-bit 固定宽度包装。
-module Base.Bits
-  ( add32
-  , band
-  , bnot
-  , bor
-  , bxor
-  , mask32
-  , mask8
-  , rol32
-  , rotr32
-  , shl
-  , shl32
-  , shr
-  , shr32
-  ) where
+module Base.Bits where
 
 -- Base.Bits：位运算原语的命名库 + 32-bit 固定宽度纪律。
 --
@@ -27,51 +13,51 @@ module Base.Bits
 import Base.Num
 
 -- | 按位与（63-bit）。
-band : Int -> Int -> Int
+export band : Int -> Int -> Int
 band a b = bitAnd a b
 
 -- | 按位或（63-bit）。
-bor : Int -> Int -> Int
+export bor : Int -> Int -> Int
 bor a b = bitOr a b
 
 -- | 按位异或（63-bit）。
-bxor : Int -> Int -> Int
+export bxor : Int -> Int -> Int
 bxor a b = bitXor a b
 
 -- | 按位取反（63-bit）：`bnot x = -x - 1`。
-bnot : Int -> Int
+export bnot : Int -> Int
 bnot a = bitNot a
 
 -- | 左移（63-bit，低位补 0）；计数越界返回 0。
-shl : Int -> Int -> Int
+export shl : Int -> Int -> Int
 shl a n = bitShl a n
 
 -- | 逻辑右移（63-bit，高位补 0）；计数越界返回 0。
-shr : Int -> Int -> Int
+export shr : Int -> Int -> Int
 shr a n = bitShr a n
 
 -- | 取低 32 位。
-mask32 : Int -> Int
+export mask32 : Int -> Int
 mask32 x = band x 4294967295
 
 -- | 取低 8 位（一个字节）。
-mask8 : Int -> Int
+export mask8 : Int -> Int
 mask8 x = band x 255
 
 -- | 32-bit 左移（先移位再取低 32 位）。
-shl32 : Int -> Int -> Int
+export shl32 : Int -> Int -> Int
 shl32 x n = mask32 (shl x n)
 
 -- | 32-bit 逻辑右移（输入按低 32 位处理，结果 < 2^32）。
-shr32 : Int -> Int -> Int
+export shr32 : Int -> Int -> Int
 shr32 x n = shr (mask32 x) n
 
 -- | 32-bit 加法（模 2^32）。
-add32 : Int -> Int -> Int
+export add32 : Int -> Int -> Int
 add32 a b = mask32 (a + b)
 
 -- | 32-bit 循环右移；`n` 先对 32 取模（负数按补码语义落入 0..31）。
-rotr32 : Int -> Int -> Int
+export rotr32 : Int -> Int -> Int
 rotr32 x n =
   let
     m = n - n / 32 * 32
@@ -79,7 +65,7 @@ rotr32 x n =
   in bor (shr32 x m) (shl low (32 - m))
 
 -- | 32-bit 循环左移；`n` 先对 32 取模。
-rol32 : Int -> Int -> Int
+export rol32 : Int -> Int -> Int
 rol32 x n =
   let
     m = n - n / 32 * 32

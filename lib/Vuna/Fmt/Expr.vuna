@@ -1,13 +1,4 @@
-module Vuna.Fmt.Expr
-  ( inlineExpr
-  , inlinePrec
-  , parenWrapInd
-  , renderBindingValue
-  , renderExpr
-  , renderPat
-  , renderPatAtom
-  , renderTypeExpr
-  ) where
+module Vuna.Fmt.Expr where
 
 -- Vuna.Fmt.Expr：表达式 / 模式 / 块级布局的打印（M24 后维护·源码重组，从 Vuna.Fmt 拆出）。
 --
@@ -639,7 +630,7 @@ else case inlinePrecGo formatFuelBound env 0 e of
   Nothing => renderBlockGo (fuel - 1) env at lineInd e
 
 -- 类型表达式不折行（保持签名/字段类型紧凑，避免 `->` 链被打断）。
-renderTypeExpr : List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Expr -> List String
+export renderTypeExpr : List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Expr -> List String
 renderTypeExpr env at lineInd e = renderTypeExprFuel formatFuelBound env at lineInd e
 
 -- 显式 fuel 的类型渲染：绑定块里的签名行需要把 fuel 串下去（SCT）。
@@ -1065,28 +1056,28 @@ formatFuelBound : Int
 formatFuelBound = 1073741824
 
 -- 对外 API 保持不变：入口用固定预算调用内部 Go 版本。
-parenWrapInd : List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Expr -> List String
+export parenWrapInd : List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Expr -> List String
 parenWrapInd env at lineInd e = parenWrapIndGo formatFuelBound env at lineInd e
 
-renderBindingValue : List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> String -> Expr -> List String
+export renderBindingValue : List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> String -> Expr -> List String
 renderBindingValue env at lineInd prefixText value =
   renderBindingValueGo formatFuelBound env at lineInd prefixText value
 
-renderExpr : List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Expr -> List String
+export renderExpr : List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Expr -> List String
 renderExpr env at lineInd e = renderExprGo formatFuelBound env at lineInd e
 
 -- 单行渲染（inline*）同样经相互递归的 Maybe 链：用 fuel 守卫 + 同参数位递减。
 -- 对外 API 不变：inlineExpr/inlinePrec 用固定预算进入内部 Go 版本。
-inlineExpr : List FixityDecl -> Expr -> Maybe String
+export inlineExpr : List FixityDecl -> Expr -> Maybe String
 inlineExpr env e = inlineExprGo formatFuelBound env e
 
-inlinePrec : List FixityDecl -> Int -> Expr -> Maybe String
+export inlinePrec : List FixityDecl -> Int -> Expr -> Maybe String
 inlinePrec env minPrec e = inlinePrecGo formatFuelBound env minPrec e
 
 -- 模式渲染同样经相互递归的 Pat 链；用 fuel 守卫 + 同参数位递减。
 -- 对外 API 不变：renderPat/renderPatAtom 用固定预算进入内部 Go 版本。
-renderPat : Pat -> String
+export renderPat : Pat -> String
 renderPat pat = renderPatGo formatFuelBound pat
 
-renderPatAtom : Pat -> String
+export renderPatAtom : Pat -> String
 renderPatAtom pat = renderPatAtomGo formatFuelBound pat

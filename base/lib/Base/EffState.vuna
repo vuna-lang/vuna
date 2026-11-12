@@ -1,4 +1,4 @@
-module Base.EffState (StateOp(..), get, handleState, put, resState) where
+module Base.EffState where
 
 -- Base.EffState：一阶 State 效应（Layer 1）。
 --
@@ -8,23 +8,23 @@ module Base.EffState (StateOp(..), get, handleState, put, resState) where
 import Base.Eff
 
 -- | state 操作：`Get` 与 `Put x`，都按状态类型 `s` 参数化。
-data StateOp : Type -> Type where
+export data StateOp(..) : Type -> Type where
   Get : {s : Type} -> StateOp s
   Put : {s : Type} -> s -> StateOp s
 
 -- | 结果族：`Get` 返回状态 `s`，`Put` 返回 `Int`（占位结果）。
-resState : (s : Type) -> StateOp s -> Type
+export resState : (s : Type) -> StateOp s -> Type
 resState s Get = s
 resState s (Put x) = Int
 
 -- | 通过命名实例读状态；行里需要 `Member n (StateOp s) r` 证明。
-get : (n : String) -> (s : Type) -> {r : Row} -> {w : Member n (StateOp s) r} -> Eff r s
+export get : (n : String) -> (s : Type) -> {r : Row} -> {w : Member n (StateOp s) r} -> Eff r s
 get n s = sendCore (StateOp s) "state" n Get
 
 -- | 通过命名实例写状态，返回占位结果 `Int`。
-put : (n : String) -> (s : Type) -> s -> {r : Row} -> {w : Member n (StateOp s) r} -> Eff r Int
+export put : (n : String) -> (s : Type) -> s -> {r : Row} -> {w : Member n (StateOp s) r} -> Eff r Int
 put n s x = sendCore (StateOp s) "state" n (Put x)
 
 -- | 一阶 handler：`ret` / `opH` 由调用方给出（answer 类型 `b` 可选，经典写法 `b = s -> Pair a s` 让续延线程状态），结果行删除 `StateOp s`。
-handleState : {a : Type} -> {b : Type} -> {r : Row} -> (n : String) -> (s : Type) -> {w : Member n (StateOp s) r} -> (a -> b) -> ((o : StateOp s) -> (resState s o -> b) -> b) -> Eff r a -> Eff (Base.Eff.rowRem n (StateOp s) r) b
+export handleState : {a : Type} -> {b : Type} -> {r : Row} -> (n : String) -> (s : Type) -> {w : Member n (StateOp s) r} -> (a -> b) -> ((o : StateOp s) -> (resState s o -> b) -> b) -> Eff r a -> Eff (Base.Eff.rowRem n (StateOp s) r) b
 handleState n s ret opH comp = handleCore (StateOp s) "state" n ret opH comp

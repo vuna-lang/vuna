@@ -1,25 +1,4 @@
-module Prelude
-  ( module Base.Bool
-  , module Base.Eq
-  , module Base.Float
-  , module Base.Foldable
-  , module Base.FromInt
-  , module Base.FromString
-  , module Base.Hashable
-  , module Base.Interp
-  , module Base.List
-  , module Base.Maybe
-  , module Base.Monad
-  , module Base.Monoid
-  , module Base.Num
-  , module Base.Ord
-  , module Base.Pair
-  , module Base.Result
-  , module Base.Show
-  , module Base.String
-  , module Base.Traversable
-  , module Base.Unit
-  ) where
+module Prelude where
 
 -- Prelude：默认导入（自动 import）的精选门面。
 --
@@ -33,29 +12,29 @@ module Prelude
 -- Base.Float（2026-11 rotation 后提升）：`FromFloat` / 转换 helper 与
 -- `Eq` / `Ord` / `Show Float` 实例随 Prelude 可见；代价是 Prelude 闭包包含
 -- Base.Float，所有程序的 `Vuna_runtime.ml` 都会带浮点 helper（见 floats.md）。
-import Base.Pair
-import Base.Bool
-import Base.Show
-import Base.Eq
-import Base.Ord
+export import Base.Pair
+export import Base.Bool
+export import Base.Show
+export import Base.Eq
+export import Base.Ord
 -- M31.1：加载 `Int` 的 Eq / Ord 实例（跟类型模块走；仅加载实例，不重导出名字）。
 import Base.Int
-import Base.Interp
-import Base.Foldable
-import Base.Float
-import Base.FromInt
-import Base.FromString
-import Base.Hashable
-import Base.List
-import Base.Monoid
+export import Base.Interp
+export import Base.Foldable
+export import Base.Float
+export import Base.FromInt
+export import Base.FromString
+export import Base.Hashable
+export import Base.List
+export import Base.Monoid
 -- D23：算术运算符 `+ - * /` 是 `Num` 方法的别名；fixity 与别名真源在 Base.Num。
-import Base.Num
-import Base.Maybe
-import Base.Result
-import Base.String
-import Base.Monad
-import Base.Traversable
+export import Base.Num
+export import Base.Maybe
+export import Base.Result
+export import Base.String
+export import Base.Monad
+export import Base.Traversable
 -- 保证每个程序都加载 Base.Eff（宿主原语签名与 codegen 的 MkEff 需要它）；
 -- 这里只 import、不重导出，短名 Eff/Row 仍需显式 import Base.Eff 才能用。
 import Base.Eff
-import Base.Unit
+export import Base.Unit

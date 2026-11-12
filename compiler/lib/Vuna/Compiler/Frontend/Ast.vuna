@@ -188,8 +188,8 @@ data ReprTier : Type where
 -- 源码迁移到 `alias`/`boxed` 后（Phase 2）改回新词。
 reprPrefix : ReprTier -> String
 reprPrefix ReprAuto = ""
-reprPrefix ReprAlias = "transparent "
-reprPrefix ReprBoxed = "opaque "
+reprPrefix ReprAlias = "alias "
+reprPrefix ReprBoxed = "boxed "
 
 data Expr : Type where
   EVar : String -> Span -> Expr
@@ -345,6 +345,10 @@ record SourceFile where
   sourceFileImports : List Import
   sourceFileFixities : List FixityDecl
   sourceFileDecls : List Decl
+  -- D11：无模块头的模块文件也要能逐定义 export（入口文件在 Flatten 丢弃这些字段）。
+  sourceFileExports : List ExportSpec
+  sourceFileReexports : List ExportItem
+  sourceFileOpacity : List OpacitySpec
 
 -- 各节点的源码 span 访问器。
 patSpan : Pat -> Span

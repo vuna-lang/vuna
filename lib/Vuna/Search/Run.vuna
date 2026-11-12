@@ -1,4 +1,4 @@
-module Vuna.Search.Run (renderHit, runSearch) where
+module Vuna.Search.Run where
 
 -- Vuna.Search.Run：`vuna search` 的参数、索引、模式选择、文本/JSON 输出。
 --
@@ -17,7 +17,7 @@ data SearchMode : Type where
   TypeMode : SearchMode
   NameDocMode : Bool -> Bool -> SearchMode
 
-runSearch : List String -> Eff [] Int
+export runSearch : List String -> Eff [] Int
 runSearch args = case parseToolArgs "vuna search" [BoolFlag "type", BoolFlag "name", BoolFlag "doc", ValueFlag "module", ValueFlag "limit", BoolFlag "json"] args of
   ErrC e => toolError (diagText e)
   OkC parsed =>
@@ -104,7 +104,7 @@ printHits (h :: rest) = do
   printHits rest
 
 -- REPL `:search` 复用同一份单条命中渲染。
-renderHit : SearchHit -> String
+export renderHit : SearchHit -> String
 renderHit h = hitText h
 
 hitText : SearchHit -> String

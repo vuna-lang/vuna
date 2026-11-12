@@ -1,4 +1,4 @@
-module Vuna.Compiler.Codegen.Split (generateDtSplitProgram, generateDtSplitProgramWith) where
+module Vuna.Compiler.Codegen.Split where
 
 -- Vuna.Compiler.Codegen.Split：逐模块 split 生成（`compile` / `build` / `seed` 的唯一输出模型）。
 --
@@ -213,7 +213,7 @@ noUnitStore _ _ = pure 0
 
 -- M4（效果显式化）：单元缓存的 lookup/store 是宿主动作，生成外壳显式在 `Eff []` 里；
 -- 纯生成逻辑（归属表、分文件、依赖序校验）保持纯函数。
-generateDtSplitProgram : List (Pair String (List Decl)) -> List Decl -> DtProgram -> Bool -> List String -> String -> List (Pair String (Pair String Int)) -> Eff [] (Check (List SplitFile))
+export generateDtSplitProgram : List (Pair String (List Decl)) -> List Decl -> DtProgram -> Bool -> List String -> String -> List (Pair String (Pair String Int)) -> Eff [] (Check (List SplitFile))
 generateDtSplitProgram modules entryDecls prog printResult roots contextDir extraDefLocs =
   generateDtSplitProgramWith noUnitLookup noUnitStore modules entryDecls prog printResult roots
     contextDir extraDefLocs
@@ -239,7 +239,7 @@ anyDefUsesTrace (d :: rest) = case dtDefBody d of
   Nothing => anyDefUsesTrace rest
   Just body => termUsesFloat traceIntrinsicNames body || anyDefUsesTrace rest
 
-generateDtSplitProgramWith : (String -> Eff [] (Maybe SplitFile)) -> (String -> SplitFile -> Eff [] Int) -> List (Pair String (List Decl)) -> List Decl -> DtProgram -> Bool -> List String -> String -> List (Pair String (Pair String Int)) -> Eff [] (Check (List SplitFile))
+export generateDtSplitProgramWith : (String -> Eff [] (Maybe SplitFile)) -> (String -> SplitFile -> Eff [] Int) -> List (Pair String (List Decl)) -> List Decl -> DtProgram -> Bool -> List String -> String -> List (Pair String (Pair String Int)) -> Eff [] (Check (List SplitFile))
 generateDtSplitProgramWith lookup store modules entryDecls prog printResult roots contextDir extraDefLocs =
   let
     -- M34.6：把「精化完成 → prepare 开始」之间的构建独有开销分段（compiler 包约 0.4s，

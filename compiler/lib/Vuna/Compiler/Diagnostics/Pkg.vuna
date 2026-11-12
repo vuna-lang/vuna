@@ -1,21 +1,5 @@
 -- | PKG_ 域：`vuna.toml` 清单解析/结构校验/包图诊断。
-module Vuna.Compiler.Diagnostics.Pkg
-  ( PkgEntry(..)
-  , PkgErr(..)
-  , pkgAll
-  , pkgAt0
-  , pkgAt1
-  , pkgAt2
-  , pkgCode
-  , pkgInvalid
-  , pkgMsg
-  , pkgNoLoc
-  , pkgNoLoc1
-  , pkgPath0
-  , pkgPath1
-  , pkgPath2
-  , pkgTemplate
-  ) where
+module Vuna.Compiler.Diagnostics.Pkg where
 
 -- Vuna.Compiler.Diagnostics.Pkg：包清单与包图（phase = Load，category = Package）。
 --
@@ -27,7 +11,7 @@ import Base.Nat
 import Base.Vec
 
 -- | 诊断域实现：Vuna.Compiler.Diagnostics.Pkg.PkgErr（目录/模板见 diagnostics.md）。
-data PkgErr : Nat -> Type where
+export data PkgErr(..) : Nat -> Type where
   -- arity 0
   EmptyDependencyName : PkgErr Zero
   EmptyMember : PkgErr Zero
@@ -67,7 +51,7 @@ data PkgErr : Nat -> Type where
   HashMismatch : String -> String -> PkgErr (Succ (Succ Zero))
 
 -- | 诊断域实现：Vuna.Compiler.Diagnostics.Pkg.pkgCode（目录/模板见 diagnostics.md）。
-pkgCode : {n : Nat} -> PkgErr n -> String
+export pkgCode : {n : Nat} -> PkgErr n -> String
 pkgCode EmptyDependencyName = "PKG_EmptyDependencyName"
 pkgCode EmptyMember = "PKG_EmptyMember"
 pkgCode EmptyPackageName = "PKG_EmptyPackageName"
@@ -104,7 +88,7 @@ pkgCode (FetchFailed _) = "PKG_FetchFailed"
 pkgCode (HashMismatch _ _) = "PKG_HashMismatch"
 
 -- | 诊断域实现：Vuna.Compiler.Diagnostics.Pkg.pkgTemplate（目录/模板见 diagnostics.md）。
-pkgTemplate : {n : Nat} -> PkgErr n -> String
+export pkgTemplate : {n : Nat} -> PkgErr n -> String
 pkgTemplate EmptyDependencyName = "dependency name must not be empty"
 pkgTemplate EmptyMember = "workspace member must not be empty"
 pkgTemplate EmptyPackageName = "package name must not be empty"
@@ -150,7 +134,7 @@ pkgTemplate (FetchFailed _) = "package fetch failed: <0>"
 pkgTemplate (HashMismatch _ _) = "package \"<0>\" content hash mismatch: <1>"
 
 -- | 诊断域实现：Vuna.Compiler.Diagnostics.Pkg.pkgMsg（目录/模板见 diagnostics.md）。
-pkgMsg : {n : Nat} -> PkgErr n -> Vec n String -> Diagnostic
+export pkgMsg : {n : Nat} -> PkgErr n -> Vec n String -> Diagnostic
 pkgMsg e args = diagNoLoc SevError PhLoad CatPackage (pkgCode e) (diagBody (pkgTemplate e) args)
 
 -- | 诊断域实现：Vuna.Compiler.Diagnostics.Pkg.pkgSpan（目录/模板见 diagnostics.md）。
@@ -171,49 +155,49 @@ pkgPath : String -> {n : Nat} -> PkgErr n -> Vec n String -> Check a
 pkgPath path e args = pkgAt path 1 e args
 
 -- | 诊断域实现：Vuna.Compiler.Diagnostics.Pkg.pkgNoLoc（目录/模板见 diagnostics.md）。
-pkgNoLoc : {n : Nat} -> PkgErr n -> Vec n String -> Check a
+export pkgNoLoc : {n : Nat} -> PkgErr n -> Vec n String -> Check a
 pkgNoLoc e args = ErrC (pkgMsg e args)
 
 -- | 诊断域实现：Vuna.Compiler.Diagnostics.Pkg.pkgNoLoc1（目录/模板见 diagnostics.md）。
-pkgNoLoc1 : PkgErr (Succ Zero) -> String -> Check a
+export pkgNoLoc1 : PkgErr (Succ Zero) -> String -> Check a
 pkgNoLoc1 e a0 = pkgNoLoc e [a0]
 
 -- | 诊断域实现：Vuna.Compiler.Diagnostics.Pkg.pkgAt0（目录/模板见 diagnostics.md）。
-pkgAt0 : String -> Int -> PkgErr Zero -> Check a
+export pkgAt0 : String -> Int -> PkgErr Zero -> Check a
 pkgAt0 path line e = pkgAt path line e []
 
 -- | 诊断域实现：Vuna.Compiler.Diagnostics.Pkg.pkgAt1（目录/模板见 diagnostics.md）。
-pkgAt1 : String -> Int -> PkgErr (Succ Zero) -> String -> Check a
+export pkgAt1 : String -> Int -> PkgErr (Succ Zero) -> String -> Check a
 pkgAt1 path line e a0 = pkgAt path line e [a0]
 
 -- | 诊断域实现：Vuna.Compiler.Diagnostics.Pkg.pkgAt2（目录/模板见 diagnostics.md）。
-pkgAt2 : String -> Int -> PkgErr (Succ (Succ Zero)) -> String -> String -> Check a
+export pkgAt2 : String -> Int -> PkgErr (Succ (Succ Zero)) -> String -> String -> Check a
 pkgAt2 path line e a0 a1 = pkgAt path line e [a0, a1]
 
 -- | 诊断域实现：Vuna.Compiler.Diagnostics.Pkg.pkgPath0（目录/模板见 diagnostics.md）。
-pkgPath0 : String -> PkgErr Zero -> Check a
+export pkgPath0 : String -> PkgErr Zero -> Check a
 pkgPath0 path e = pkgPath path e []
 
 -- | 诊断域实现：Vuna.Compiler.Diagnostics.Pkg.pkgPath1（目录/模板见 diagnostics.md）。
-pkgPath1 : String -> PkgErr (Succ Zero) -> String -> Check a
+export pkgPath1 : String -> PkgErr (Succ Zero) -> String -> Check a
 pkgPath1 path e a0 = pkgPath path e [a0]
 
 -- | 诊断域实现：Vuna.Compiler.Diagnostics.Pkg.pkgPath2（目录/模板见 diagnostics.md）。
-pkgPath2 : String -> PkgErr (Succ (Succ Zero)) -> String -> String -> Check a
+export pkgPath2 : String -> PkgErr (Succ (Succ Zero)) -> String -> String -> Check a
 pkgPath2 path e a0 a1 = pkgPath path e [a0, a1]
 
 -- | 诊断域实现：Vuna.Compiler.Diagnostics.Pkg.pkgInvalid（目录/模板见 diagnostics.md）。
-pkgInvalid : String -> Check a
+export pkgInvalid : String -> Check a
 pkgInvalid msg = pkgNoLoc (Invalid msg) [msg]
 
 -- | 诊断域实现：Vuna.Compiler.Diagnostics.Pkg.PkgEntry（目录/模板见 diagnostics.md）。
-record PkgEntry where
+export record PkgEntry(..) where
   pkgEntryCode : String
   pkgEntryTemplate : String
   pkgEntryDesc : String
 
 -- | 诊断域实现：Vuna.Compiler.Diagnostics.Pkg.pkgAll（目录/模板见 diagnostics.md）。
-pkgAll : List PkgEntry
+export pkgAll : List PkgEntry
 pkgAll =
   [ PkgEntry (pkgCode EmptyDependencyName) (pkgTemplate EmptyDependencyName) "依赖名为空",
     PkgEntry (pkgCode EmptyMember) (pkgTemplate EmptyMember) "workspace 成员名为空",

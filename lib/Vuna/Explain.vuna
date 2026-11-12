@@ -1,5 +1,5 @@
 -- | vuna explain：按错误码查询目录条目（消息模板 + 说明）。
-module Vuna.Explain (runExplain) where
+module Vuna.Explain where
 
 -- Vuna.Explain：`vuna explain CODE` / `vuna explain --list`。
 --
@@ -113,7 +113,7 @@ stripExplainJson ("--json" :: rest) = Pair (firstOf (stripExplainJson rest)) Tru
 stripExplainJson (arg :: rest) =
   Pair (Base.List.Cons arg (firstOf (stripExplainJson rest))) (secondOf (stripExplainJson rest))
 
-runExplain : List String -> Eff [] Int
+export runExplain : List String -> Eff [] Int
 runExplain args = explainArgs args
 
 -- JSON 输出（`vuna explain --json` / `--list --json`）；本地转义，不依赖 Vuna.Json

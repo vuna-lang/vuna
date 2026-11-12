@@ -1,4 +1,4 @@
-module Vuna.Lsp.Rename (prepareRenameAt, renameAt) where
+module Vuna.Lsp.Rename where
 
 -- Vuna.Lsp.Rename：LSP rename（C38；工具链模块，**永不进 seed 闭包**）。
 --
@@ -711,7 +711,7 @@ else case strUnpack name of
 -- 入口
 -- ---------------------------------------------------------------
 -- prepareRename：只回光标 token 的范围 + 占位名；无法改名回 null。
-prepareRenameAt : String -> Int -> Int -> String -> Maybe Index -> Eff [] Json
+export prepareRenameAt : String -> Int -> Int -> String -> Maybe Index -> Eff [] Json
 prepareRenameAt uri line col text midx = do
   targetM <- resolveTarget uri line col text midx
   case targetM of
@@ -724,7 +724,7 @@ prepareRenameAt uri line col text midx = do
         (JObj [Pair "range" (lspRange line nameStart line (nameStart + strLength name)), Pair "placeholder" (JStr name)])
 
 -- rename：局部绑定 → 当前文档；顶层符号 → 当前文档 + 目标模块 + 跨文件候选模块。
-renameAt : String -> Int -> Int -> String -> String -> Maybe Index -> Eff [] Json
+export renameAt : String -> Int -> Int -> String -> String -> Maybe Index -> Eff [] Json
 renameAt uri line col text newName midx = if not (validNewName newName) then pure JNull
 else do
   targetM <- resolveTarget uri line col text midx

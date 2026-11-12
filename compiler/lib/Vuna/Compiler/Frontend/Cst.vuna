@@ -1,12 +1,5 @@
 -- | 无损 CST 词法层：把源码切成携带前置 trivia 的 token 流，`renderCst` 可逐字节还原。
-module Vuna.Compiler.Frontend.Cst
-  ( CstToken(..)
-  , Trivia(..)
-  , TriviaKind(..)
-  , lexCst
-  , renderCst
-  , roundtripOk
-  ) where
+module Vuna.Compiler.Frontend.Cst where
 
 -- Vuna.Compiler.Frontend.Cst：**无损**词法层（token 流 + trivia），不做语法分析。
 --
@@ -36,7 +29,7 @@ import Vuna.Compiler.Common
 import Vuna.Compiler.Frontend.Lexer
 
 -- | trivia 的种类：空白、行注释、块注释。
-data TriviaKind : Type where
+export data TriviaKind(..) : Type where
   -- | 空白（空格 / tab / 换行 / 回车）。
   TrivSpace : TriviaKind
   -- | `--` 行注释（不含行尾换行）。
@@ -45,7 +38,7 @@ data TriviaKind : Type where
   TrivBlockComment : TriviaKind
 
 -- | 一段 trivia：种类 + 源码原文 + span。
-record Trivia where
+export record Trivia(..) where
   -- | trivia 的种类。
   triviaKind : TriviaKind
   -- | 该 trivia 在源码里的原始文本（逐字节）。
@@ -54,7 +47,7 @@ record Trivia where
   triviaSpan : Span
 
 -- | 一个 CST token：形态 tag + 源码原文 + span + 前置 trivia。
-record CstToken where
+export record CstToken(..) where
   -- | token 形态：`ident` / `kw` / `int` / `float` / `str` / `tmpl` / `sym` / `eof`。
   cstTag : String
   -- | 该 token 在源码里的原始文本（逐字节）。
@@ -271,7 +264,7 @@ buildTokens source rows comments prevEnd (t :: rest) =
 
 -- | 把源码切成无损 token 流（每个 token 带前置 trivia）；编译器 lexer 拒绝源码
 -- （词法错误）时返回 `Nothing`。
-lexCst : String -> Maybe (List CstToken)
+export lexCst : String -> Maybe (List CstToken)
 lexCst source = case lexSource source of
   ErrC _ => Nothing
   OkC toks =>
@@ -291,11 +284,11 @@ renderParts : CstToken -> List String
 renderParts t = append (map triviaTextOf t.cstLeading) [t.cstText]
 
 -- | 把 token 流逐字节还原成源码。
-renderCst : List CstToken -> String
+export renderCst : List CstToken -> String
 renderCst toks = strConcatMany (concatMap renderParts toks)
 
 -- | `renderCst (lexCst s)` 是否逐字节等于 `s`；词法失败时为 `False`。
-roundtripOk : String -> Bool
+export roundtripOk : String -> Bool
 roundtripOk s = case lexCst s of
   Nothing => False
   Just toks => renderCst toks == s

@@ -1,14 +1,4 @@
-module Vuna.Lsp.Diagnostics
-  ( DiagCache
-  , contextForDoc
-  , diagReportJson
-  , diagnosticsForCached
-  , diagnosticsForSuggestions
-  , findingDiagJson
-  , publishDiagnosticsCached
-  , publishDiagnosticsEmpty
-  , publishDiagnosticsFor
-  ) where
+module Vuna.Lsp.Diagnostics where
 
 -- Vuna.Lsp.Diagnostics：LSP 诊断链（工具链模块，**永不进 seed 闭包**）。
 --
@@ -189,7 +179,7 @@ diagnosticJson label lines d =
 
 -- 包上下文：file:// URI → 路径 → `contextForFile`；非 file URI（或磁盘上不存在的
 -- 路径）退化到 cwd 的 `contextForDir "."`。失败由调用方转成 0:0 的 `pkg: ...` 诊断。
-contextForDoc : String -> Eff [] (Check (Pair String PackageContext))
+export contextForDoc : String -> Eff [] (Check (Pair String PackageContext))
 contextForDoc uri =
   let
     path = decodeUri uri
@@ -219,7 +209,7 @@ contextForDoc uri =
 -- ---------------------------------------------------------------
 -- 缓存项只在「编译器指纹 / 包名 / 闭包源文件与 manifest 的 stat 全部未变」时复用；
 -- 外部改任意依赖文件后下一次请求必然失败校验并重建（无 watcher）。
-record DiagCache where
+export record DiagCache where
   dcLabel : String
   dcKey : Int
   dcCtx : PackageContext
@@ -430,7 +420,7 @@ findingToDiagnostic f =
 
 -- 单个 lint finding 的 Diagnostic JSON（codeAction 内嵌诊断用）：与 publishDiagnostics
 -- 的字段集合一致（range/severity/source/code/message），客户端可按 code 关联。
-findingDiagJson : Finding -> Json
+export findingDiagJson : Finding -> Json
 findingDiagJson f =
   JObj
     (append [Pair "range" (lspRange f.findingLine f.findingCol f.findingLine (f.findingCol + 1)), Pair "severity" (JNum severityWarning), Pair "source" (JStr "vuna")] (append (if f.findingCode == "" then [] else [Pair "code" (JStr f.findingCode)]) [Pair "message" (JStr f.findingMessage)]))
@@ -450,11 +440,11 @@ checkDiagnostics cache label ctx text modName imports = do
         Just s2 => pure (Pair (Just s2) (secondOf inc))
         Nothing => checkFullWith (Just s) ctx label text modName
 
-diagnosticsForCached : Maybe DiagCache -> String -> String -> Eff [] (Pair (Maybe DiagCache) (Pair String (List Diagnostic)))
+export diagnosticsForCached : Maybe DiagCache -> String -> String -> Eff [] (Pair (Maybe DiagCache) (Pair String (List Diagnostic)))
 diagnosticsForCached = diagnosticsForCachedWith False
 
 -- 代码动作路径：包含 `UN_UnusedImport`（编辑器侧虽不回放其诊断，但仍可给出删除 import 的修复）。
-diagnosticsForSuggestions : Maybe DiagCache -> String -> String -> Eff [] (Pair (Maybe DiagCache) (Pair String (List Diagnostic)))
+export diagnosticsForSuggestions : Maybe DiagCache -> String -> String -> Eff [] (Pair (Maybe DiagCache) (Pair String (List Diagnostic)))
 diagnosticsForSuggestions = diagnosticsForCachedWith True
 
 diagnosticsForCachedWith : Bool -> Maybe DiagCache -> String -> String -> Eff [] (Pair (Maybe DiagCache) (Pair String (List Diagnostic)))
@@ -464,7 +454,7 @@ diagnosticsForCachedWith includeUnused cache uri text = do
     ErrC e => pure (Pair cache (Pair "" [e]))
     OkC (Pair label ctx) => case parseSource label text of
       ErrC e => pure (Pair cache (Pair label [e]))
-      OkC (SourceFile hdr imports fixities decls) =>
+      OkC (SourceFile hdr imports fixities decls _ _ _) =>
         let
           modName = case hdr of
             Just (ModDecl n hasList items _ _ _ sp) => Just n
@@ -495,7 +485,7 @@ publishDiagnostics uri version text diags =
     (JObj [Pair "uri" (JStr uri), Pair "version" (JNum version), Pair "diagnostics" (JArr jsonDiags)])
 
 -- 一次请求的完整发布帧 + 更新后的会话缓存（LSP 门面持有缓存，跨请求复用）。
-publishDiagnosticsCached : Maybe DiagCache -> String -> Int -> String -> Eff [] (Pair (Maybe DiagCache) Json)
+export publishDiagnosticsCached : Maybe DiagCache -> String -> Int -> String -> Eff [] (Pair (Maybe DiagCache) Json)
 publishDiagnosticsCached cache uri version text = do
   result <- diagnosticsForCached cache uri text
   let
@@ -503,11 +493,11 @@ publishDiagnosticsCached cache uri version text = do
   in pure (Pair (firstOf result) (publishDiagnostics uri version text (secondOf labeled)))
 
 -- didClose：直接发空诊断（不跑检查链）。
-publishDiagnosticsEmpty : String -> Int -> Json
+export publishDiagnosticsEmpty : String -> Int -> Json
 publishDiagnosticsEmpty uri version = publishDiagnostics uri version "" []
 
 -- 无会话的便捷入口（测试 / 一次性请求）。
-publishDiagnosticsFor : String -> Int -> String -> Eff [] Json
+export publishDiagnosticsFor : String -> Int -> String -> Eff [] Json
 publishDiagnosticsFor uri version text = do
   result <- publishDiagnosticsCached Nothing uri version text
   pure (secondOf result)
@@ -549,7 +539,7 @@ writeBackModule session label text checked (Just name) = do
 -- Pull diagnostics（LSP 3.17 textDocument/diagnostic）
 -- ---------------------------------------------------------------
 -- | 一次 pull 的完整报告（kind=full）。items 与 push 的 diagnostics 字段同构。
-diagReportJson : String -> String -> List Diagnostic -> Json
+export diagReportJson : String -> String -> List Diagnostic -> Json
 diagReportJson uri text diags =
   let
     lines0 = lines text

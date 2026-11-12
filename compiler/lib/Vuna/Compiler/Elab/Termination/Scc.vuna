@@ -1,4 +1,4 @@
-module Vuna.Compiler.Elab.Termination.Scc (sctCheck, tryFuelThread) where
+module Vuna.Compiler.Elab.Termination.Scc where
 
 -- Vuna.Compiler.Elab.Termination.Scc（M25.2c 拆分）：size-change termination 引擎——
 -- 参数级 size-change 图、传递闭包、幂等图严格边判定（SCT 定理）。
@@ -404,7 +404,7 @@ sctBadText ((Pair (Pair f g) gs) :: rest) =
 sctDiag : List (Pair (Pair String String) (List (List ScEdge))) -> String
 sctDiag table = joinComma (dedup (sctBadText table))
 
-sctCheck : List String -> HashMap String (List (Pair (List Pat) Expr)) -> List String -> List (Pair String (List Int)) -> HashMap String (List Int) -> Diagnostic -> Check Int
+export sctCheck : List String -> HashMap String (List (Pair (List Pat) Expr)) -> List String -> List (Pair String (List Int)) -> HashMap String (List Int) -> Diagnostic -> Check Int
 sctCheck comp defTbl ctors projs facts msg =
   let
     sites = siteCollect comp ctors projs defTbl facts
@@ -473,7 +473,7 @@ fuelMembersGuarded (f :: rest) defTbl = case clausesOfDefTbl f defTbl of
     Nothing => False
     Just p0 => hasFuelGuard p0 (secondOf cl) && fuelMembersGuarded rest defTbl
 
-tryFuelThread : List String -> HashMap String (List (Pair (List Pat) Expr)) -> List String -> List (Pair String (List Int)) -> HashMap String (List Int) -> Diagnostic -> Check Int
+export tryFuelThread : List String -> HashMap String (List (Pair (List Pat) Expr)) -> List String -> List (Pair String (List Int)) -> HashMap String (List Int) -> Diagnostic -> Check Int
 tryFuelThread comp defTbl ctors projs facts msg =
   let
     sites = siteCollect comp ctors projs defTbl facts

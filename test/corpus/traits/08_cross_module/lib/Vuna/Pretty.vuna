@@ -1,8 +1,8 @@
 -- 无模块头 = 全导出：trait 方法、Color 构造器、default 实例都可见。
-trait Pretty a where
+export trait Pretty a(..) where
   pretty : a -> String
 
-data Color : Type where
+export data Color(..) : Type where
   Red : Color
   Blue : Color
 

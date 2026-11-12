@@ -1,1 +1,1 @@
-dup x = x
+export dup x = x

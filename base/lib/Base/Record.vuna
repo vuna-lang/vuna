@@ -1,6 +1,6 @@
-module Base.Record (HasField(..), module Base.Field) where
+module Base.Record where
 
-import Base.Field
+export import Base.Field
 
 -- Base.Record：nominal 记录的**泛型读访问**（HasField）。
 --
@@ -15,5 +15,5 @@ import Base.Field
 -- Base.Record 的模块」里自动生成（实例落在定义 record 的模块，满足孤儿规则）。
 --
 -- | 泛型读访问：`HasField (Field "f") a t` 表示类型 `a` 含字段 `f : t`；`getField` 是该字段的投影。原型：字典由调用点构造（调用点尚未打通）。
-trait HasField (l : Type) (a : Type) (t : Type) where
+export trait HasField (l : Type) (a : Type) (t : Type)(..) where
   getField : a -> t

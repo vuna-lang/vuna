@@ -1,19 +1,4 @@
-module Vuna.Json
-  ( Json(..)
-  , jsonAsArr
-  , jsonAsBool
-  , jsonAsInt
-  , jsonAsObj
-  , jsonAsStr
-  , jsonBoolOr
-  , jsonGet
-  , jsonGetIn
-  , jsonIntOr
-  , jsonObjSingle
-  , jsonStrOr
-  , parseJson
-  , renderJson
-  ) where
+module Vuna.Json where
 
 -- Vuna.Json：最小 JSON 读写（LSP 用；**永不进 seed 闭包**）。
 --
@@ -34,7 +19,7 @@ import Base.String
 -- ---------------------------------------------------------------
 -- 数据模型
 -- ---------------------------------------------------------------
-data Json : Type where
+export data Json(..) : Type where
   JNull : Json
   JBool : Bool -> Json
   JNum : Int -> Json
@@ -43,13 +28,13 @@ data Json : Type where
   JObj : List (Pair String Json) -> Json
 
 -- 单键对象（构造响应时常用）。
-jsonObjSingle : String -> Json -> Json
+export jsonObjSingle : String -> Json -> Json
 jsonObjSingle k v = JObj [Pair k v]
 
 -- ---------------------------------------------------------------
 -- 访问器
 -- ---------------------------------------------------------------
-jsonGet : String -> Json -> Maybe Json
+export jsonGet : String -> Json -> Maybe Json
 jsonGet key (JObj kvs) = lookupKV key kvs
 jsonGet key _ = Nothing
 
@@ -58,48 +43,48 @@ lookupKV key [] = Nothing
 lookupKV key ((Pair k x) :: rest) = if k == key then Just x else lookupKV key rest
 
 -- 嵌套路径：`jsonGetIn ["params", "textDocument", "uri"] v`。
-jsonGetIn : List String -> Json -> Maybe Json
+export jsonGetIn : List String -> Json -> Maybe Json
 jsonGetIn [] v = Just v
 jsonGetIn (k :: rest) v = case jsonGet k v of
   Nothing => Nothing
   Just inner => jsonGetIn rest inner
 
-jsonAsStr : Json -> Maybe String
+export jsonAsStr : Json -> Maybe String
 jsonAsStr (JStr s) = Just s
 jsonAsStr _ = Nothing
 
-jsonAsInt : Json -> Maybe Int
+export jsonAsInt : Json -> Maybe Int
 jsonAsInt (JNum n) = Just n
 jsonAsInt _ = Nothing
 
-jsonAsBool : Json -> Maybe Bool
+export jsonAsBool : Json -> Maybe Bool
 jsonAsBool (JBool b) = Just b
 jsonAsBool _ = Nothing
 
-jsonAsArr : Json -> Maybe (List Json)
+export jsonAsArr : Json -> Maybe (List Json)
 jsonAsArr (JArr xs) = Just xs
 jsonAsArr _ = Nothing
 
-jsonAsObj : Json -> Maybe (List (Pair String Json))
+export jsonAsObj : Json -> Maybe (List (Pair String Json))
 jsonAsObj (JObj kvs) = Just kvs
 jsonAsObj _ = Nothing
 
-jsonStrOr : String -> Json -> String
+export jsonStrOr : String -> Json -> String
 jsonStrOr d (JStr s) = s
 jsonStrOr d _ = d
 
-jsonIntOr : Int -> Json -> Int
+export jsonIntOr : Int -> Json -> Int
 jsonIntOr d (JNum n) = n
 jsonIntOr d _ = d
 
-jsonBoolOr : Bool -> Json -> Bool
+export jsonBoolOr : Bool -> Json -> Bool
 jsonBoolOr d (JBool b) = b
 jsonBoolOr d _ = d
 
 -- ---------------------------------------------------------------
 -- 渲染
 -- ---------------------------------------------------------------
-renderJson : Json -> String
+export renderJson : Json -> String
 renderJson JNull = "null"
 renderJson (JBool b) = if b then "true" else "false"
 renderJson (JNum n) = strFromInt n
@@ -144,7 +129,7 @@ hexDigit d = if d < 10 then 48 + d else 87 + d
 jsonFuel : List Int -> Int
 jsonFuel chars = 8 * length chars + 64
 
-parseJson : String -> Check Json
+export parseJson : String -> Check Json
 parseJson source =
   let
     chars = skipJsonWs (strUnpack source)

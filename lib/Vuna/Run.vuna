@@ -1,4 +1,4 @@
-module Vuna.Run (runRun) where
+module Vuna.Run where
 
 -- Vuna.Run：`vuna run` —— 构建并运行包的可执行入口（M38；工具链，永不进 seed 闭包）。
 --
@@ -28,7 +28,7 @@ splitPassthrough ("--" :: rest) = Pair [] rest
 splitPassthrough (arg :: rest) = case splitPassthrough rest of
   Pair own pass => Pair (arg :: own) pass
 
-runRun : List String -> Eff [] Int
+export runRun : List String -> Eff [] Int
 runRun args =
   let
     parts = splitPassthrough args

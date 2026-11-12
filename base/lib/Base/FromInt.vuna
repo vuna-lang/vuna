@@ -1,4 +1,4 @@
-module Base.FromInt (FromInt(..)) where
+module Base.FromInt where
 
 -- Base.FromInt：整数字面量转换 trait（checking 位置的非内建期望类型）。
 --
@@ -9,7 +9,7 @@ module Base.FromInt (FromInt(..)) where
 -- 期望类型是 `Nat` 时字面量仍展开成 `Zero`/`Succ` 链，不走本 trait；显式 Int→Nat
 -- 用 `Base.Nat.fromInt`。
 -- | 把整数字面量转换为 `a`：期望类型为 `a` 且存在本实例时，`42` 等价于 `fromInt 42`。
-trait FromInt a where
+export trait FromInt a(..) where
   fromInt : Int -> a
 
 -- `Int` 是字面量的默认类型：恒等转换。

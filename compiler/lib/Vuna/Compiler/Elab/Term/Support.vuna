@@ -1,13 +1,4 @@
-module Vuna.Compiler.Elab.Term.Support
-  ( allImplicitPrefix
-  , checkBindingSigs
-  , checkWhereSigs
-  , inferVarRef
-  , instantiateAllImplicit
-  , instantiateAllImplicitFuel
-  , whereBindingName
-  , withEffectLabels
-  ) where
+module Vuna.Compiler.Elab.Term.Support where
 
 -- Vuna.Compiler.Elab.Term.Support（M25.2c 拆分）：Term 的非递归叶子 helper（无组内递归）。
 import Vuna.Compiler.Common
@@ -23,7 +14,7 @@ import Vuna.Compiler.Frontend.Ast
 
 -- M28（B18）：值位置只查值命名空间（`valueLookup`：构造子优先，再全局定义）。
 -- 类型名只在没有任何值候选时作为「类型作为项」命中（数据族名在 globals 里有 kind）。
-inferVarRef : List (Pair String Term) -> Ctx -> Ec -> String -> Span -> Check (Pair Term (Pair Value Ec))
+export inferVarRef : List (Pair String Term) -> Ctx -> Ec -> String -> Span -> Check (Pair Term (Pair Value Ec))
 inferVarRef globals ctx ec name sp = case ctxLookup name ctx of
   Just (Pair idx tyTerm) => OkC (Pair (TVar name idx sp) (Pair (varTypeValue ctx idx tyTerm) ec))
   Nothing => case valueLookup globals ec name of
@@ -39,15 +30,15 @@ inferVarRef globals ctx ec name sp = case ctxLookup name ctx of
     Nothing => tcErr1 sp (UnknownName name) name
 
 -- 签名项是否以隐式 Pi 开头并最终落到值（{a : Type} -> Result a）；显式 Pi 不算。
-allImplicitPrefix : Term -> Bool
+export allImplicitPrefix : Term -> Bool
 allImplicitPrefix (TPi n implicit rig dom cod) = implicit && allImplicitPrefix cod
 allImplicitPrefix _ = True
 
 -- 实例化全隐式前缀：逐个插元变量，得到「值 + 剩余值类型」。
-instantiateAllImplicit : Ctx -> Ec -> Term -> Value -> List (Pair Term Rig) -> Pair Term (Pair Value Ec)
+export instantiateAllImplicit : Ctx -> Ec -> Term -> Value -> List (Pair Term Rig) -> Pair Term (Pair Value Ec)
 instantiateAllImplicit ctx ec head ty acc = instantiateAllImplicitFuel 64 ctx ec head ty acc
 
-instantiateAllImplicitFuel : Int -> Ctx -> Ec -> Term -> Value -> List (Pair Term Rig) -> Pair Term (Pair Value Ec)
+export instantiateAllImplicitFuel : Int -> Ctx -> Ec -> Term -> Value -> List (Pair Term Rig) -> Pair Term (Pair Value Ec)
 instantiateAllImplicitFuel fuel ctx ec head ty acc = if fuel <= 0 then Pair (foldAppTerms head (reverse acc)) (Pair ty ec)
 else case forceVal ec ty of
   VPi name implicit rig dom clo => if implicit then
@@ -63,11 +54,11 @@ else case forceVal ec ty of
 -- where 块（parser 的 `ELet .. True`）要求每个绑定都有签名行；普通 `let` 的签名可选。
 -- 两者共用同一套绑定块模型（parser 的 `bindingItemsToBinds`），这里只收口「是否强制」，
 -- 使 check/infer 两条 let 路径不再各自重复这一段分支。
-checkBindingSigs : Bool -> List (Pair Pat Expr) -> Check Int
+export checkBindingSigs : Bool -> List (Pair Pat Expr) -> Check Int
 checkBindingSigs True binds = checkWhereSigs binds
 checkBindingSigs False binds = OkC 0
 
-checkWhereSigs : List (Pair Pat Expr) -> Check Int
+export checkWhereSigs : List (Pair Pat Expr) -> Check Int
 checkWhereSigs [] = OkC 0
 checkWhereSigs (bind :: rest) = case secondOf bind of
   EAnn value ty annSp => checkWhereSigs rest
@@ -76,11 +67,11 @@ checkWhereSigs (bind :: rest) = case secondOf bind of
       name = whereBindingName (firstOf bind)
     in tcErr2 (patSpan (firstOf bind)) (WhereNeedsSig name name) name name
 
-whereBindingName : Pat -> String
+export whereBindingName : Pat -> String
 whereBindingName (PVar name sp) = name
 whereBindingName _ = "_"
 
 -- | 逐条未处理 effect 挂 `unhandled:` 字段。
-withEffectLabels : List String -> Diagnostic -> Diagnostic
+export withEffectLabels : List String -> Diagnostic -> Diagnostic
 withEffectLabels [] d = d
 withEffectLabels (l :: rest) d = withEffectLabels rest (withField (FieldEffect "unhandled: ${l}") d)

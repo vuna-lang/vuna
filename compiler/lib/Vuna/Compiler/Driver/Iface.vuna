@@ -1,78 +1,4 @@
-module Vuna.Compiler.Driver.Iface
-  ( ManifestEntry(..)
-  , ModuleIface(..)
-  , PackageIface(..)
-  , PackageManifest(..)
-  , SourceInfo(..)
-  , decDepPair
-  , decManifestAt
-  , decManifestComplete
-  , decManifestEntry
-  , decModuleIfaceAt
-  , decModuleIfaceComplete
-  , decSourceInfo
-  , depMissingHash
-  , encDepPair
-  , encManifest
-  , encManifestAt
-  , encManifestEntry
-  , encModuleIface
-  , encModuleIfaceAt
-  , encSourceInfo
-  , hasMissingDep
-  , hashOfIface
-  , hashTextStrong
-  , ifaceCodec
-  , ifaceFileTag
-  , ifaceMirrorMode
-  , ifaceOfModule
-  , ifaceOfPackage
-  , ifaceRelPathOf
-  , ifaceSchema
-  , manifestCodec
-  , manifestPathOf
-  , meDepsOfEntry
-  , meFileOfEntry
-  , meIfaceHashOfEntry
-  , meImportsOfEntry
-  , meNameOfEntry
-  , meOriginOfEntry
-  , mePayloadDigestOfEntry
-  , meSourceOfEntry
-  , miCachedOf
-  , miDeclsOf
-  , miDefLocsOf
-  , miDepHashesOf
-  , miExportsOf
-  , miFixitiesOf
-  , miIfaceHashOf
-  , miImplicitImportsOf
-  , miImportsOf
-  , miNameOf
-  , miPackageOf
-  , miPreparedOf
-  , miRecordsOf
-  , miSourceOf
-  , moduleNamesOf
-  , modulePathOf
-  , packageIfaceValid
-  , payloadDigest
-  , pmCompilerOf
-  , pmEnvOf
-  , pmModulesOf
-  , pmPackageOf
-  , pmSchemaOf
-  , readManifest
-  , readModuleFile
-  , readPackageIface
-  , shaText
-  , siHashOf
-  , siMtimeOf
-  , siPathOf
-  , siSizeOf
-  , writeModuleIfaceMerge
-  , writePackageIface
-  ) where
+module Vuna.Compiler.Driver.Iface where
 
 -- Vuna.Compiler.Driver.Iface：**模块级接口摘要**（TTC 思路）的载体与读写。
 --
@@ -129,13 +55,13 @@ import Vuna.Compiler.Packages.Pkg
 
 -- 源信息：模块名 → (绝对路径, 内容哈希, mtime, size)。路径只用于本机校验（换 checkout
 -- 会失效，回退全量）；mtime/size 是可选快路径（`VUNA_CACHE_MTIME=1`），默认仍用内容哈希。
-record SourceInfo where
+export record SourceInfo(..) where
   siPath : String
   siHash : String
   siMtime : Int
   siSize : Int
 
-record ModuleIface where
+export record ModuleIface(..) where
   miName : String
   miPackage : String
   miSource : SourceInfo
@@ -166,7 +92,7 @@ record ModuleIface where
   -- 构建」与「后续增量构建」的 `Vuna_runtime.ml` 不可逐字节一致（C51）。
   miDefLocs : List (Pair String (Pair String Int))
 
-record PackageIface where
+export record PackageIface(..) where
   piSchema : String
   piCompiler : String
   piPackage : String
@@ -174,61 +100,61 @@ record PackageIface where
   piEnv : Int
   piModules : List ModuleIface
 
-siPathOf : SourceInfo -> String
+export siPathOf : SourceInfo -> String
 siPathOf s = s.siPath
 
-siHashOf : SourceInfo -> String
+export siHashOf : SourceInfo -> String
 siHashOf s = s.siHash
 
-siMtimeOf : SourceInfo -> Int
+export siMtimeOf : SourceInfo -> Int
 siMtimeOf s = s.siMtime
 
-siSizeOf : SourceInfo -> Int
+export siSizeOf : SourceInfo -> Int
 siSizeOf s = s.siSize
 
-miNameOf : ModuleIface -> String
+export miNameOf : ModuleIface -> String
 miNameOf m = m.miName
 
-miPackageOf : ModuleIface -> String
+export miPackageOf : ModuleIface -> String
 miPackageOf m = m.miPackage
 
-miCachedOf : ModuleIface -> CachedProgram
+export miCachedOf : ModuleIface -> CachedProgram
 miCachedOf m = m.miCached
 
-miIfaceHashOf : ModuleIface -> String
+export miIfaceHashOf : ModuleIface -> String
 miIfaceHashOf m = m.miIfaceHash
 
-miDepHashesOf : ModuleIface -> List (Pair String String)
+export miDepHashesOf : ModuleIface -> List (Pair String String)
 miDepHashesOf m = m.miDepHashes
 
-miSourceOf : ModuleIface -> SourceInfo
+export miSourceOf : ModuleIface -> SourceInfo
 miSourceOf m = m.miSource
 
-miImportsOf : ModuleIface -> List Import
+export miImportsOf : ModuleIface -> List Import
 miImportsOf m = m.miImports
 
-miImplicitImportsOf : ModuleIface -> List Import
+export miImplicitImportsOf : ModuleIface -> List Import
 miImplicitImportsOf m = m.miImplicitImports
 
-miExportsOf : ModuleIface -> List ExportEntry
+export miExportsOf : ModuleIface -> List ExportEntry
 miExportsOf m = m.miExports
 
-miFixitiesOf : ModuleIface -> List FixityDecl
+export miFixitiesOf : ModuleIface -> List FixityDecl
 miFixitiesOf m = m.miFixities
 
-miDeclsOf : ModuleIface -> List Decl
+export miDeclsOf : ModuleIface -> List Decl
 miDeclsOf m = m.miDecls
 
 -- | R2：模块的结构化 record 字段表。
-miRecordsOf : ModuleIface -> List RecordMeta
+export miRecordsOf : ModuleIface -> List RecordMeta
 miRecordsOf m = m.miRecords
 
-miPreparedOf : ModuleIface -> List Decl
+export miPreparedOf : ModuleIface -> List Decl
 miPreparedOf m = m.miPrepared
 
 -- | 本模块定义的位置表（vuna 全名 → (spanFile, spanStartLine)）；不进接口哈希，
 -- 只用于 codegen 的位置表补行（见字段注释）。
-miDefLocsOf : ModuleIface -> List (Pair String (Pair String Int))
+export miDefLocsOf : ModuleIface -> List (Pair String (Pair String Int))
 miDefLocsOf m = m.miDefLocs
 
 defLocOf : DtDef -> Maybe (Pair String (Pair String Int))
@@ -284,7 +210,7 @@ setPrepared prepared mi =
 -- C32：接口载荷改为 `Canonical.*` 显式编码 + `Store` framing（Marshal 彻底退出缓存面），
 -- manifest 增加 `mePayloadDigest`，布局变化 ⇒ 20。
 -- C51：`ModuleIface.miDefLocs`（定义位置表，不进接口哈希）随载荷持久化，布局变化 ⇒ 22。
-ifaceSchema : String
+export ifaceSchema : String
 ifaceSchema = "vuna-iface 22"
 
 -- | 接口哈希的**算法格式版本**：参与哈希输入（与 `ifaceSchema` 独立——schema 管载荷
@@ -299,17 +225,17 @@ ifaceHashVersion = "vuna-iface-hash 5 (sha256 + canonical)"
 -- 概率，碰撞会直接导致「错误复用」。D5 起接口哈希改用 SHA-256（`shaText`）；
 -- `hashTextStrong` 是「必须落成 Int」位置（排序键 / 工具缓存 / codegen unit key）的统一
 -- 强哈希：SHA-256 的 63-bit 派生键（`Hash.contentKey`），不再是 6-lane 盐折叠。
-hashTextStrong : String -> Int
+export hashTextStrong : String -> Int
 hashTextStrong s = Vuna.Compiler.Hash.contentKey s
 
 -- | 内容摘要（SHA-256，64 位小写十六进制）。接口哈希用它替换旧的 6-lane strHash 折叠
 -- （后者只有约 60 bit，碰撞面在几百模块规模上不可忽略）。
-shaText : String -> String
+export shaText : String -> String
 shaText s = Vuna.Compiler.Hash.digestHex (Vuna.Compiler.Hash.digestOfString s)
 
 -- | 大载荷段（源文本 / 规范编码字节）的内容地址：先 4-lane 预哈希折叠，再做 SHA-256
 -- （与 `Hash.contentAddress` 同一函数）。
-payloadDigest : String -> String
+export payloadDigest : String -> String
 payloadDigest s = Vuna.Compiler.Hash.contentAddress s
 
 -- | 可解析分片：长度前缀，保证多段拼接无歧义。
@@ -321,7 +247,7 @@ digestParts : List String -> String
 digestParts ps = shaText (strConcatMany (map partOf ps))
 
 -- | 依赖接口不可得时的哨兵（永不失配任何真实哈希）。
-depMissingHash : String
+export depMissingHash : String
 depMissingHash = "missing"
 
 -- 哈希前按**语义键文本**规范化顺序（不再用哈希值当排序键）：同一集合在「全量 / 增量」
@@ -482,7 +408,7 @@ hashOfParts name pkg imports implicitImports fixities records exports decls cp =
   digestParts
     [ifaceHashVersion, name, pkg, hashImports imports, hashImports implicitImports, hashFixities fixities, hashRecords records, hashDecls decls, hashDatas (cachedDatas cp), hashDefs (cachedDefs cp), hashGlobals (cachedGlobals cp), hashInsts (cachedInsts cp), hashClasses (cachedClasses cp), hashExports exports]
 
-hashOfIface : ModuleIface -> String
+export hashOfIface : ModuleIface -> String
 hashOfIface m =
   hashOfParts (miNameOf m) (miPackageOf m) (miImportsOf m) (miImplicitImportsOf m) (miFixitiesOf m)
     (miRecordsOf m) (miExportsOf m) (miDeclsOf m) (miCachedOf m)
@@ -619,7 +545,7 @@ importNamesOfModule m = map importNameOf (append m.moduleImportsOf m.moduleImpli
 
 -- | 依赖哈希表里是否还有"写接口时不可得"的哨兵：有则说明这份接口是在依赖接口缺失时
 -- 写下的，读侧不能信任它的依赖链（要重算并重写，见 Compile 的 clean 判定）。
-hasMissingDep : List (Pair String String) -> Bool
+export hasMissingDep : List (Pair String String) -> Bool
 hasMissingDep [] = False
 hasMissingDep ((Pair _ h) :: rest) = h == depMissingHash || hasMissingDep rest
 
@@ -746,7 +672,7 @@ coverageResult oi ourNames inherited ifaces prog = case firstCoverageIssue oi ou
   Just issue => icInternal "iface: ${issue}"
   Nothing => OkC ifaces
 
-ifaceOfPackage : String -> List (Pair String SourceInfo) -> List (Pair String String) -> List String -> List ModuleIface -> List Module -> List Decl -> DtProgram -> Check (List ModuleIface)
+export ifaceOfPackage : String -> List (Pair String SourceInfo) -> List (Pair String String) -> List String -> List ModuleIface -> List Module -> List Decl -> DtProgram -> Check (List ModuleIface)
 ifaceOfPackage pkg sources knownDeps inherited clean modules entryDecls prog =
   let
     ourModules = reverse (filter (\m => modulePackageOf m == pkg) modules)
@@ -795,7 +721,7 @@ allOwnedPresent oi inherited name (a :: rest) present =
   in if skip then allOwnedPresent oi inherited name rest present
   else memName a present && allOwnedPresent oi inherited name rest present
 
-ifaceOfModule : String -> SourceInfo -> List (Pair String String) -> List String -> List ModuleIface -> List Module -> List Decl -> DtProgram -> String -> Check ModuleIface
+export ifaceOfModule : String -> SourceInfo -> List (Pair String String) -> List String -> List ModuleIface -> List Module -> List Decl -> DtProgram -> String -> Check ModuleIface
 ifaceOfModule pkg si knownDeps inherited clean modules entryDecls prog name =
   let
     ourModules = reverse (filter (\m => modulePackageOf m == pkg) modules)
@@ -819,7 +745,7 @@ ifaceOfModule pkg si knownDeps inherited clean modules entryDecls prog name =
       else icInternal "iface: module ${name} has uncovered artifacts"
 
 -- 包接口自检：schema/编译器指纹由读侧校验；这里只检查模块集合非空 + 摘要闭合。
-packageIfaceValid : PackageIface -> Bool
+export packageIfaceValid : PackageIface -> Bool
 packageIfaceValid pi =
   pi.piSchema == ifaceSchema && length pi.piModules > 0 && allValid pi.piModules
 
@@ -827,7 +753,7 @@ allValid : List ModuleIface -> Bool
 allValid [] = True
 allValid (m :: rest) = cachedProgramValid (miCachedOf m) && allValid rest
 
-moduleNamesOf : List ModuleIface -> List String
+export moduleNamesOf : List ModuleIface -> List String
 moduleNamesOf [] = []
 moduleNamesOf (m :: rest) = miNameOf m :: moduleNamesOf rest
 
@@ -860,7 +786,7 @@ relUnder pkgDir path =
 -- 接口目录模式：`VUNA_IFACE_DIR` 非空 = 外部镜像根，用**内容寻址**文件名
 -- （`<stem>-<hash>.iface`），同一路径永远不可能承载两份不同内容；默认布局仍写源文件旁
 -- （命名 `<stem>.iface`，路径固定，读侧靠 `miName` + `miIfaceHash` 校验）。
-ifaceMirrorMode : Eff [] Bool
+export ifaceMirrorMode : Eff [] Bool
 ifaceMirrorMode = do
   dir <- prim_eff_getenv "VUNA_IFACE_DIR"
   pure (dir /= "")
@@ -873,7 +799,7 @@ ifaceHashToken h = strSubstring 0 16 h
 -- 两侧都先**绝对化**：`siPath` 由写侧构造时应已是绝对值（见 `Compile.ownSourceInfos`），
 -- 但包目录可能来自相对入口（`check base` vs `check $PWD/base`）——不归一就会算出空相对
 -- 路径、整包跳过写，且载荷字节随入口写法变化。
-ifaceRelPathOf : String -> String -> SourceInfo -> Eff [] String
+export ifaceRelPathOf : String -> String -> SourceInfo -> Eff [] String
 ifaceRelPathOf h pkgDir si = do
   mirror <- ifaceMirrorMode
   pkg <- absolutePath pkgDir
@@ -895,7 +821,7 @@ validIfaceRelPath file =
     && not (contains "/../" file)
     && endsWith ".iface" file
 
-record ManifestEntry where
+export record ManifestEntry(..) where
   meName : String
   meFile : String
   meSource : SourceInfo
@@ -913,7 +839,7 @@ record ManifestEntry where
   -- 哈希漂移不能靠源哈希发现）；工具链自己两者都接受（§44p）。
   meOrigin : String
 
-record PackageManifest where
+export record PackageManifest(..) where
   pmSchema : String
   pmCompiler : String
   pmPackage : String
@@ -925,49 +851,49 @@ record PackageManifest where
 
 -- S7（manifest 访问器）：构造函数已导出；这里给 Compile 的按需读路径一套只读访问器，
 -- 避免跨模块直接依赖 record 投影语法。
-meNameOfEntry : ManifestEntry -> String
+export meNameOfEntry : ManifestEntry -> String
 meNameOfEntry (ManifestEntry n f s h pd d im o) = n
 
-meFileOfEntry : ManifestEntry -> String
+export meFileOfEntry : ManifestEntry -> String
 meFileOfEntry (ManifestEntry n f s h pd d im o) = f
 
-meSourceOfEntry : ManifestEntry -> SourceInfo
+export meSourceOfEntry : ManifestEntry -> SourceInfo
 meSourceOfEntry (ManifestEntry n f s h pd d im o) = s
 
-meIfaceHashOfEntry : ManifestEntry -> String
+export meIfaceHashOfEntry : ManifestEntry -> String
 meIfaceHashOfEntry (ManifestEntry n f s h pd d im o) = h
 
-meDepsOfEntry : ManifestEntry -> List (Pair String String)
+export meDepsOfEntry : ManifestEntry -> List (Pair String String)
 meDepsOfEntry (ManifestEntry n f s h pd d im o) = d
 
-meImportsOfEntry : ManifestEntry -> List String
+export meImportsOfEntry : ManifestEntry -> List String
 meImportsOfEntry (ManifestEntry n f s h pd d im o) = im
 
-meOriginOfEntry : ManifestEntry -> String
+export meOriginOfEntry : ManifestEntry -> String
 meOriginOfEntry (ManifestEntry n f s h pd d im o) = o
 
-mePayloadDigestOfEntry : ManifestEntry -> String
+export mePayloadDigestOfEntry : ManifestEntry -> String
 mePayloadDigestOfEntry (ManifestEntry n f s h pd d im o) = pd
 
-pmSchemaOf : PackageManifest -> String
+export pmSchemaOf : PackageManifest -> String
 pmSchemaOf (PackageManifest s c p e ms) = s
 
-pmCompilerOf : PackageManifest -> String
+export pmCompilerOf : PackageManifest -> String
 pmCompilerOf (PackageManifest s c p e ms) = c
 
-pmPackageOf : PackageManifest -> String
+export pmPackageOf : PackageManifest -> String
 pmPackageOf (PackageManifest s c p e ms) = p
 
-pmEnvOf : PackageManifest -> Int
+export pmEnvOf : PackageManifest -> Int
 pmEnvOf (PackageManifest s c p e ms) = e
 
-pmModulesOf : PackageManifest -> List ManifestEntry
+export pmModulesOf : PackageManifest -> List ManifestEntry
 pmModulesOf (PackageManifest s c p e ms) = ms
 
-manifestPathOf : String -> String
+export manifestPathOf : String -> String
 manifestPathOf dir = "${dir}/${manifestFileName}"
 
-modulePathOf : String -> String -> String
+export modulePathOf : String -> String -> String
 modulePathOf dir file = "${dir}/${file}"
 
 -- ---------------------------------------------------------------
@@ -976,11 +902,11 @@ modulePathOf dir file = "${dir}/${file}"
 -- tag = `<ifaceSchema>/<compilerTag>`：schema 管**字段集**，codec 管**编码布局**，
 -- tag 管 schema + 编译器指纹。三者任一不符 ⇒ 读侧拒绝（回退全量），不做任何迁移：
 -- vuna 无兼容义务，旧接口目录由 `vuna clean --iface` 清理。
-ifaceFileTag : String -> String
+export ifaceFileTag : String -> String
 ifaceFileTag compiler = "${ifaceSchema}/${compiler}"
 
 -- | 读 manifest（`.vuna-iface`）：framing 校验 → 规范解码 → 版本 / 编译器核对。
-readManifest : String -> String -> Eff [] (Maybe PackageManifest)
+export readManifest : String -> String -> Eff [] (Maybe PackageManifest)
 readManifest dir compiler = do
   payload <- storeReadEff (ifaceFileTag compiler) manifestCodec (manifestPathOf dir)
   case payload of
@@ -1085,7 +1011,7 @@ entryNameIn : List ManifestEntry -> String -> Bool
 entryNameIn [] _ = False
 entryNameIn (e :: rest) name = meNameOfEntry e == name || entryNameIn rest name
 
-writeModuleIfaceMerge : String -> String -> String -> String -> Int -> String -> ModuleIface -> Eff [] Int
+export writeModuleIfaceMerge : String -> String -> String -> String -> Int -> String -> ModuleIface -> Eff [] Int
 writeModuleIfaceMerge dir compiler pkg pkgDir env origin mi =
   let
     payload = encModuleIface mi
@@ -1112,7 +1038,7 @@ writeModuleIfaceMerge dir compiler pkg pkgDir env origin mi =
 
 -- | 写接口：`oldReadable` 由调用方从**刚刚做过的那次整包接口读取**带下来（check/build 的
 -- 写前校验已经完整解码过一遍），避免这里再读 + 解码一遍所有模块文件。
-writePackageIface : Bool -> String -> String -> String -> String -> Int -> List ModuleIface -> Eff [] Int
+export writePackageIface : Bool -> String -> String -> String -> String -> Int -> List ModuleIface -> Eff [] Int
 writePackageIface oldReadable dir compiler pkg pkgDir env modules = do
   -- 只有「整包接口可完整读回」时才信任旧 manifest 做按模块跳过；损坏/缺文件的旧接口
   -- 会让读侧回退全量，这里必须强制全量重写，否则损坏文件永远不被覆盖。
@@ -1137,7 +1063,7 @@ ifaceFileTokenOk e = do
   if mirror then pure (endsWith "-${ifaceHashToken (meIfaceHashOfEntry e)}.iface" (meFileOfEntry e))
   else pure True
 
-readModuleFile : String -> String -> ManifestEntry -> Eff [] (Maybe ModuleIface)
+export readModuleFile : String -> String -> ManifestEntry -> Eff [] (Maybe ModuleIface)
 readModuleFile dir compiler e = if not (validIfaceRelPath (meFileOfEntry e)) then pure Nothing
 else do
   tokenOk <- ifaceFileTokenOk e
@@ -1182,7 +1108,7 @@ readModuleFiles dir compiler (e :: rest) = do
         Nothing => Nothing
       )
 
-readPackageIface : String -> String -> Eff [] (Maybe PackageIface)
+export readPackageIface : String -> String -> Eff [] (Maybe PackageIface)
 readPackageIface dir compiler = do
   mf <- readManifest dir compiler
   case mf of
@@ -1210,25 +1136,25 @@ readPackageIface dir compiler = do
 -- 读侧先按期望载荷摘要验文件（`Store.storeReadAsEff`，不重算 MB 级哈希），再解码，
 -- 再逐字段核对 `miName` / `miIfaceHash`——三层都不通过就回退全量。
 -- | iface 载荷编码版本（与 `ifaceSchema` 独立：schema 管字段集，本版本管编码布局）。
-ifaceCodec : String
+export ifaceCodec : String
 ifaceCodec = "module-iface 3"
 
-manifestCodec : String
+export manifestCodec : String
 manifestCodec = "package-manifest 1"
 
 -- | `SourceInfo`：路径 / 源内容摘要 / mtime / size（全部参与载荷 roundtrip）。
-encSourceInfo : SourceInfo -> List String -> List String
+export encSourceInfo : SourceInfo -> List String -> List String
 encSourceInfo s acc = encStr s.siPath (encStr s.siHash (encInt s.siMtime (encInt s.siSize acc)))
 
-decSourceInfo : Int -> Cur -> Maybe (Pair SourceInfo Cur)
+export decSourceInfo : Int -> Cur -> Maybe (Pair SourceInfo Cur)
 decSourceInfo fuel c =
   thenPair (decStr (fuel - 1) c)
     (\path, b1 => thenPair (decStr (fuel - 1) b1) (\hash, b2 => thenPair (decInt (fuel - 1) b2) (\mtime, b3 => thenPair (decInt (fuel - 1) b3) (\size, b4 => Just (Pair (SourceInfo path hash mtime size) b4)))))
 
-encDepPair : Pair String String -> List String -> List String
+export encDepPair : Pair String String -> List String -> List String
 encDepPair (Pair n h) acc = encStr n (encStr h acc)
 
-decDepPair : Int -> Cur -> Maybe (Pair (Pair String String) Cur)
+export decDepPair : Int -> Cur -> Maybe (Pair (Pair String String) Cur)
 decDepPair fuel c =
   thenPair (decStr (fuel - 1) c)
     (\n, b1 => thenPair (decStr (fuel - 1) b1) (\h, b2 => Just (Pair (Pair n h) b2)))
@@ -1249,13 +1175,13 @@ encModuleIfacePayload m acc =
     (encStr m.miPackage (encSourceInfo m.miSource (encStr m.miIfaceHash (encList encDepPair m.miDepHashes (encList encImport m.miImports (encList encImport m.miImplicitImports (encList encExportEntry m.miExports (encList encFixity m.miFixities (encList encDecl m.miDecls (encList encRecordMeta m.miRecords (encList encDecl m.miPrepared (encCachedProgram m.miCached (encList encDefLoc m.miDefLocs acc)))))))))))))
 
 -- | `ModuleIface` 载荷字节（落盘用）。
-encModuleIfaceAt : ModuleIface -> List String -> List String
+export encModuleIfaceAt : ModuleIface -> List String -> List String
 encModuleIfaceAt = encModuleIfacePayload
 
-encModuleIface : ModuleIface -> String
+export encModuleIface : ModuleIface -> String
 encModuleIface m = encTop encModuleIfacePayload m
 
-decModuleIfaceAt : Int -> Cur -> Maybe (Pair ModuleIface Cur)
+export decModuleIfaceAt : Int -> Cur -> Maybe (Pair ModuleIface Cur)
 decModuleIfaceAt = decModuleIfacePayload
 
 decModuleIfacePayload : Int -> Cur -> Maybe (Pair ModuleIface Cur)
@@ -1277,7 +1203,7 @@ decModuleIfacePayload fuel c = do
   pure
     (Pair (ModuleIface (firstOf p1) (firstOf p2) (firstOf p3) (firstOf p4) (firstOf p5) (firstOf p6) (firstOf p7) (firstOf p8) (firstOf p9) (firstOf p10) (firstOf p11) (firstOf p12) (firstOf p13) (firstOf p14)) (secondOf p14))
 
-decManifestEntry : Int -> Cur -> Maybe (Pair ManifestEntry Cur)
+export decManifestEntry : Int -> Cur -> Maybe (Pair ManifestEntry Cur)
 decManifestEntry fuel c = do
   p1 <- decStr (fuel - 1) c
   p2 <- decStr (fuel - 1) (secondOf p1)
@@ -1291,13 +1217,13 @@ decManifestEntry fuel c = do
     (Pair (ManifestEntry (firstOf p1) (firstOf p2) (firstOf p3) (firstOf p4) (firstOf p5) (firstOf p6) (firstOf p7) (firstOf p8)) (secondOf p8))
 
 -- | 解析 `ModuleIface` 载荷（整串入口：要求恰好消费完）。
-decModuleIfaceComplete : String -> Maybe ModuleIface
+export decModuleIfaceComplete : String -> Maybe ModuleIface
 decModuleIfaceComplete s = case decModuleIfacePayload (strLength s) (curOf s) of
   Nothing => Nothing
   Just (Pair m rest) => if curAtEnd rest then Just m else Nothing
 
 -- | `ManifestEntry` 的规范编码。
-encManifestEntry : ManifestEntry -> List String -> List String
+export encManifestEntry : ManifestEntry -> List String -> List String
 encManifestEntry e acc =
   encStr e.meName
     (encStr e.meFile (encSourceInfo e.meSource (encStr e.meIfaceHash (encStr e.mePayloadDigest (encList encDepPair e.meDeps (encList encStr e.meImports (encStr e.meOrigin acc)))))))
@@ -1308,13 +1234,13 @@ encManifestPayload m acc =
   encStr m.pmSchema
     (encStr m.pmCompiler (encStr m.pmPackage (encInt m.pmEnv (encList encManifestEntry m.pmModules acc))))
 
-encManifestAt : PackageManifest -> List String -> List String
+export encManifestAt : PackageManifest -> List String -> List String
 encManifestAt = encManifestPayload
 
-encManifest : PackageManifest -> String
+export encManifest : PackageManifest -> String
 encManifest m = encTop encManifestPayload m
 
-decManifestAt : Int -> Cur -> Maybe (Pair PackageManifest Cur)
+export decManifestAt : Int -> Cur -> Maybe (Pair PackageManifest Cur)
 decManifestAt = decManifestPayload
 
 decManifestPayload : Int -> Cur -> Maybe (Pair PackageManifest Cur)
@@ -1323,7 +1249,7 @@ decManifestPayload fuel c =
     (\schema, b1 => thenPair (decStr (fuel - 1) b1) (\compiler, b2 => thenPair (decStr (fuel - 1) b2) (\pkg, b3 => thenPair (decInt (fuel - 1) b3) (\env, b4 => thenPair (decList decManifestEntry (fuel - 1) b4) (\mods, b5 => Just (Pair (PackageManifest schema compiler pkg env mods) b5))))))
 
 -- | 解析 `PackageManifest` 载荷（整串入口：要求恰好消费完）。
-decManifestComplete : String -> Maybe PackageManifest
+export decManifestComplete : String -> Maybe PackageManifest
 decManifestComplete s = case decManifestPayload (strLength s) (curOf s) of
   Nothing => Nothing
   Just (Pair m rest) => if curAtEnd rest then Just m else Nothing

@@ -1,4 +1,4 @@
-module Vuna.Sig (renderType, renderTypeInCtx) where
+module Vuna.Sig where
 
 -- Vuna.Sig：语法级类型打印（工具链共用；永不进 seed 闭包）。
 --
@@ -16,7 +16,7 @@ module Vuna.Sig (renderType, renderTypeInCtx) where
 import Vuna.Compiler.Common
 import Vuna.Compiler.Frontend.Ast
 
-renderType : Expr -> String
+export renderType : Expr -> String
 renderType (EVar name sp) = if isListNilSyntax name then "[]" else name
 renderType (ty@(EApp (EVar op _) ([a, b]) _)) = if op == "->" then "${renderTypeArg a} -> ${renderType b}"
 else if isListConsSyntax op then case listTailText b of
@@ -49,7 +49,7 @@ renderQty (Just Q0) = "0 "
 renderQty (Just Q1) = "1 "
 
 -- 签名约束前缀（`C a, D b => τ`）；空 ctx 与旧输出逐字一致。
-renderTypeInCtx : List Expr -> Expr -> String
+export renderTypeInCtx : List Expr -> Expr -> String
 renderTypeInCtx [] ty = renderType ty
 renderTypeInCtx ctx ty = "${join ", " (map renderType ctx)} => ${renderType ty}"
 

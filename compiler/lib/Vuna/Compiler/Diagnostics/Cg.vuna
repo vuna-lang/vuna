@@ -1,15 +1,4 @@
-module Vuna.Compiler.Diagnostics.Cg
-  ( CgEntry(..)
-  , CgErr(..)
-  , cgAll
-  , cgCode
-  , cgErr
-  , cgErr0
-  , cgErr1
-  , cgErrDefAt
-  , cgMsg
-  , cgTemplate
-  ) where
+module Vuna.Compiler.Diagnostics.Cg where
 
 -- Vuna.Compiler.Diagnostics.Cg：CG_ 域（codegen / 驱动诊断；无位置）。
 --
@@ -24,7 +13,7 @@ import Base.Vec
 -- ---------------------------------------------------------------
 -- CG_：codegen / 驱动诊断（Codegen / Driver；无位置）
 -- ---------------------------------------------------------------
-data CgErr : Nat -> Type where
+export data CgErr(..) : Nat -> Type where
   -- arity 0
   DependencyCycle : CgErr Zero
   InterpCannotExecuteEffects : CgErr Zero
@@ -39,7 +28,7 @@ data CgErr : Nat -> Type where
   TypeLevelNameRuntime : String -> CgErr (Succ Zero)
   UnsolvedMetavarRuntime : String -> CgErr (Succ Zero)
 
-cgCode : {n : Nat} -> CgErr n -> String
+export cgCode : {n : Nat} -> CgErr n -> String
 cgCode DependencyCycle = "CG_DependencyCycle"
 cgCode InterpCannotExecuteEffects = "CG_InterpCannotExecuteEffects"
 cgCode MainNotValue = "CG_MainNotValue"
@@ -52,7 +41,7 @@ cgCode (TypeLevelBindingRuntime _) = "CG_TypeLevelBindingRuntime"
 cgCode (TypeLevelNameRuntime _) = "CG_TypeLevelNameRuntime"
 cgCode (UnsolvedMetavarRuntime _) = "CG_UnsolvedMetavarRuntime"
 
-cgTemplate : {n : Nat} -> CgErr n -> String
+export cgTemplate : {n : Nat} -> CgErr n -> String
 cgTemplate DependencyCycle = "dependency cycle between runtime definitions"
 cgTemplate InterpCannotExecuteEffects =
   "interp cannot execute effects (main : Eff [] a); compile and run the program instead"
@@ -69,12 +58,12 @@ cgTemplate (TypeLevelBindingRuntime _) = "type-level binding `<0>` is used at ru
 cgTemplate (TypeLevelNameRuntime _) = "type-level name `<0>` is used at runtime"
 cgTemplate (UnsolvedMetavarRuntime _) = "unsolved metavariable in runtime code<0>"
 
-record CgEntry where
+export record CgEntry(..) where
   cgEntryCode : String
   cgEntryTemplate : String
   cgEntryDesc : String
 
-cgAll : List CgEntry
+export cgAll : List CgEntry
 cgAll = concatLists [cgChunk0, cgChunk1]
 
 cgChunk0 : List CgEntry
@@ -99,22 +88,22 @@ cgChunk1 =
 -- ---------------------------------------------------------------
 -- throw：构造结构化诊断（CG 无位置；定义级由 cgErrDefAt 补上下文）
 -- ---------------------------------------------------------------
-cgMsg : {n : Nat} -> CgErr n -> Vec n String -> Diagnostic
+export cgMsg : {n : Nat} -> CgErr n -> Vec n String -> Diagnostic
 cgMsg e args = mkDiag SevError PhCodegen CatCodegen (cgCode e) (diagBody (cgTemplate e) args)
 
-cgErr : {n : Nat} -> CgErr n -> Vec n String -> Check a
+export cgErr : {n : Nat} -> CgErr n -> Vec n String -> Check a
 cgErr e args = ErrC (cgMsg e args)
 
 -- | 自动补注（M41 新增导出）：cgErr0。
-cgErr0 : CgErr Zero -> Check a
+export cgErr0 : CgErr Zero -> Check a
 cgErr0 e = cgErr e []
 
 -- | 自动补注（M41 新增导出）：cgErr1。
-cgErr1 : CgErr (Succ Zero) -> String -> Check a
+export cgErr1 : CgErr (Succ Zero) -> String -> Check a
 cgErr1 e a0 = cgErr e [a0]
 
 -- ---------------------------------------------------------------
 -- 定义级 CG 诊断：主位置 + `in \`name\`` 上下文标签。
 -- ---------------------------------------------------------------
-cgErrDefAt : Maybe Span -> String -> {n : Nat} -> CgErr n -> Vec n String -> Check a
+export cgErrDefAt : Maybe Span -> String -> {n : Nat} -> CgErr n -> Vec n String -> Check a
 cgErrDefAt span name e args = ErrC (withContext span name (cgMsg e args))

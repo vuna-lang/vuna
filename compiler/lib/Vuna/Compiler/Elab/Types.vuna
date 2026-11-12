@@ -1,117 +1,4 @@
-module Vuna.Compiler.Elab.Types
-  ( Constraint(..)
-  , ConstraintKind(..)
-  , ConstraintStore
-  , Ctx(..)
-  , DtClass(..)
-  , DtCtor(..)
-  , DtData(..)
-  , DtDef(..)
-  , DtFieldMeta(..)
-  , DtGoal(..)
-  , DtInst(..)
-  , DtProgram(..)
-  , Ec(..)
-  , InstStore
-  , csEmpty
-  , ctorTblOfDatas
-  , ctxBind
-  , ctxBindValue
-  , ctxDepth
-  , ctxEnv
-  , ctxEnvAt
-  , ctxLookup
-  , ctxLookupAt
-  , ctxRefine
-  , datasHaveLinear
-  , dtClassName
-  , dtCtorFamily
-  , dtCtorName
-  , dtCtorTelescope
-  , dtCtorType
-  , dtDataCtors
-  , dtDataFields
-  , dtDataIsRecord
-  , dtDataKind
-  , dtDataLinear
-  , dtDataName
-  , dtDataRepr
-  , dtDefBody
-  , dtDefExtern
-  , dtDefHasBody
-  , dtDefName
-  , dtDefSpan
-  , dtDefType
-  , dtInstName
-  , dtProgClasses
-  , dtProgDatas
-  , dtProgDefs
-  , dtProgGlobals
-  , dtProgGoals
-  , dtProgInsts
-  , dtProgSols
-  , dtProgWarnings
-  , ecAddClass
-  , ecAddConstraint
-  , ecAddData
-  , ecAddDef
-  , ecAddGoal
-  , ecAddInst
-  , ecAddInstRaw
-  , ecAddWarning
-  , ecClasses
-  , ecConstraints
-  , ecDatas
-  , ecDefTbl
-  , ecDefVals
-  , ecDefs
-  , ecDepthTbl
-  , ecEmpty
-  , ecGlobalsTbl
-  , ecGoals
-  , ecHasLinear
-  , ecInsts
-  , ecInstsAudit
-  , ecInstsFamily
-  , ecMetaSpans
-  , ecNext
-  , ecPending
-  , ecPutClausesTbl
-  , ecPutConstraints
-  , ecPutCtorTbl
-  , ecPutDefTbl
-  , ecPutDefVals
-  , ecPutGlobalsTbl
-  , ecPutMetaSpans
-  , ecPutNext
-  , ecPutPending
-  , ecPutSols
-  , ecPutUseSpans
-  , ecPutWarnings
-  , ecRecordTried
-  , ecSetGlobalsComplete
-  , ecSolTbl
-  , ecSols
-  , ecSolsP
-  , ecTriedAt
-  , ecUseSpans
-  , ecWarnings
-  , emptyCtx
-  , errAt
-  , evalCtx
-  , flattenTaggedApp
-  , forceVal
-  , hasInstName
-  , instFamilyOf
-  , instStoreEmpty
-  , instStoreOf
-  , instStorePush
-  , newMeta
-  , refineLookup
-  , refineValue
-  , solsToTbl
-  , varTypeValue
-  ) where
+module Vuna.Compiler.Elab.Types where
 
 -- Vuna.Compiler.Elab.Types：Elab 的数据定义与共享状态：DtDef/DtCtor/DtData/DtGoal/DtClass/DtInst/Constraint/DtProgram
 -- 等精化结果、Ec 环境与 Ctx 局部上下文、以及「上下文环境求值 / 索引精化代入」的基础设施。
@@ -129,76 +16,76 @@ import Vuna.Compiler.Frontend.Ast
 -- M29（A14）：末位带**来源 span**——顶层 DFun/DAxiom 用子句 span；instance 生成的
 -- 字典定义用 instance 声明 span；trait 方法投影用 trait 声明 span；其它生成项（无来源）
 -- 给 `Nothing`。codegen/擦除诊断据此把 `file:line:col:` 前缀补上。
-data DtDef : Type where
+export data DtDef(..) : Type where
   DtDef : String -> Term -> Term -> Maybe Span -> DtDef
   DtAxiom : String -> Term -> Maybe Span -> DtDef
   -- M33 W5：受限 FFI：签名 + C 符号名，运行时由生成代码的 OCaml `external` 提供。
   DtExtern : String -> Term -> String -> Maybe Span -> DtDef
 
-dtDefName : DtDef -> String
+export dtDefName : DtDef -> String
 dtDefName (DtDef name ty body span) = name
 dtDefName (DtAxiom name ty span) = name
 dtDefName (DtExtern name ty cName span) = name
 
-dtDefType : DtDef -> Term
+export dtDefType : DtDef -> Term
 dtDefType (DtDef name ty body span) = ty
 dtDefType (DtAxiom name ty span) = ty
 dtDefType (DtExtern name ty cName span) = ty
 
-dtDefBody : DtDef -> Maybe Term
+export dtDefBody : DtDef -> Maybe Term
 dtDefBody (DtDef name ty body span) = Just body
 dtDefBody (DtAxiom name ty span) = Nothing
 dtDefBody (DtExtern name ty cName span) = Nothing
 
 -- 有运行时定义体的定义（axiom 不算）：构造 def 表 / 求值环境时用它滤掉无体顶层。
-dtDefHasBody : DtDef -> Bool
+export dtDefHasBody : DtDef -> Bool
 dtDefHasBody (DtDef name ty body span) = True
 dtDefHasBody (DtAxiom name ty span) = False
 dtDefHasBody (DtExtern name ty cName span) = True
 
 -- extern 的 C 符号名（Nothing = 不是 extern 定义）。
-dtDefExtern : DtDef -> Maybe String
+export dtDefExtern : DtDef -> Maybe String
 dtDefExtern (DtExtern name ty cName span) = Just cName
 dtDefExtern _ = Nothing
 
 -- 来源 span（A14 唯一读入口）：诊断在 def 粒度补 `file:line:col:` 前缀；`Nothing` 时保持无位置。
-dtDefSpan : DtDef -> Maybe Span
+export dtDefSpan : DtDef -> Maybe Span
 dtDefSpan (DtDef name ty body span) = span
 dtDefSpan (DtAxiom name ty span) = span
 dtDefSpan (DtExtern name ty cName span) = span
 
 -- M14：一个构造子。telescope 是「族参数 + 字段」的完整 binder 表（名字 / 擦除标志），
 -- 类型项是闭合的（`{n : Nat} -> {a : Type} -> a -> Vec n a -> Vec (Succ n) a` 形态）。
-record DtCtor where
+export record DtCtor(..) where
   dtCtorName : String
   dtCtorFamily : String
   dtCtorTelescope : List (Pair String Rig)
   dtCtorType : Term
   dtCtorSpan : Maybe Span
 
-dtCtorName : DtCtor -> String
+export dtCtorName : DtCtor -> String
 dtCtorName (DtCtor name family tele ty sp) = name
 
-dtCtorFamily : DtCtor -> String
+export dtCtorFamily : DtCtor -> String
 dtCtorFamily (DtCtor name family tele ty sp) = family
 
-dtCtorTelescope : DtCtor -> List (Pair String Rig)
+export dtCtorTelescope : DtCtor -> List (Pair String Rig)
 dtCtorTelescope (DtCtor name family tele ty sp) = tele
 
-dtCtorType : DtCtor -> Term
+export dtCtorType : DtCtor -> Term
 dtCtorType (DtCtor name family tele ty sp) = ty
 
 -- | R2（records-v2）：一条 record 字段的 Core 元数据（名字 / 声明序号 / 字段类型）。
 -- `dtFieldType` 处在**外层上下文**（只剩族参数）里：构造子 telescope 的字段域已按
 -- 序号 shift 掉前序字段 binder（record 字段类型不能引用前序字段），因此投影时
 -- `eval (reverse idxs) dtFieldType` 即可，无需 `@vuna@record@dep` 占位值。
-record DtFieldMeta where
+export record DtFieldMeta(..) where
   dtFieldName : String
   dtFieldIndex : Int
   dtFieldType : Term
 
 -- M14：一个归纳族（索引族）。params 来自 kind 的 Pi binder（域是宇宙的擦除）。
-record DtData where
+export record DtData(..) where
   dtDataName : String
   dtDataParams : List (Pair String Rig)
   dtDataCtors : List DtCtor
@@ -215,38 +102,38 @@ record DtData where
   -- 都按这个标记区分，不再靠 `dtDataFields` 非空猜（零字段 record 也有独立身份）。
   dtDataIsRecord : Bool
 
-dtDataName : DtData -> String
+export dtDataName : DtData -> String
 dtDataName (DtData name params ctors kind viaClasses lin repr fields isRec) = name
 
-dtDataCtors : DtData -> List DtCtor
+export dtDataCtors : DtData -> List DtCtor
 dtDataCtors (DtData name params ctors kind viaClasses lin repr fields isRec) = ctors
 
-dtDataKind : DtData -> Term
+export dtDataKind : DtData -> Term
 dtDataKind (DtData name params ctors kind viaClasses lin repr fields isRec) = kind
 
 -- | 取出 `deriving via field` 声明的类名列表（canonical 名；空表示普通 data）。
 dtDataViaClasses : DtData -> List String
 dtDataViaClasses (DtData name params ctors kind viaClasses lin repr fields isRec) = viaClasses
 
-dtDataLinear : DtData -> Bool
+export dtDataLinear : DtData -> Bool
 
 -- | R1（records-v2）：表示档位（`ReprAuto` = 未声明，回落自动去装箱推断；档位进 iface，下游与 FFI 可依赖）。
-dtDataRepr : DtData -> ReprTier
+export dtDataRepr : DtData -> ReprTier
 dtDataRepr (DtData name params ctors kind viaClasses lin repr fields isRec) = repr
 
 -- | R2：record 字段表（普通 data 为空）。进 iface（`miCached`），跨包字段访问据此查表。
-dtDataFields : DtData -> List DtFieldMeta
+export dtDataFields : DtData -> List DtFieldMeta
 dtDataFields (DtData name params ctors kind viaClasses lin repr fields isRec) = fields
 
 -- | R4：该族是否由 `record` 声明（`data` 与字典族为 False）。
-dtDataIsRecord : DtData -> Bool
+export dtDataIsRecord : DtData -> Bool
 dtDataIsRecord (DtData name params ctors kind viaClasses lin repr fields isRec) = isRec
 
 dtDataLinear (DtData name params ctors kind viaClasses lin repr fields isRec) = lin
 
 -- M15：一个洞的目标。编号、位置、目标类型（level 形态）、绑定时上下文快照。
 -- M40：`dtGoalName` 是洞的显示名（`_` = 匿名 → `""`；`?name` → `"?name"`）。
-record DtGoal where
+export record DtGoal(..) where
   dtGoalMeta : Int
   dtGoalSpan : Span
   dtGoalType : Value
@@ -254,32 +141,32 @@ record DtGoal where
   dtGoalName : String
 
 -- M15：接口（trait）声明。参数名表、方法（名字 + 完整投影类型项）。
-record DtClass where
+export record DtClass(..) where
   dtClassName : String
   dtClassParams : List String
   dtClassMethods : List (Pair String Term)
   dtClassFieldTys : List Term
 
-dtClassName : DtClass -> String
+export dtClassName : DtClass -> String
 dtClassName (DtClass name params projs fieldTys) = name
 
 -- M15：已注册实例：定义名 + 实例头类型项（`Show Int` 这类闭合项）+ 是否命名实例。
 -- M23：`as name` 的命名实例**不参与**自动实例搜索（只能 `@name` 选中，与 HM 一致），
 -- 否则 `instance Pretty Color` 与 `instance Pretty Color as fancy` 会撞成歧义。
-record DtInst where
+export record DtInst(..) where
   dtInstName : String
   dtInstTele : List (Pair String Term)
   dtInstCtx : List Term
   dtInstHead : Term
   dtInstSpan : Maybe Span
 
-dtInstName : DtInst -> String
+export dtInstName : DtInst -> String
 dtInstName (DtInst name tele ctxE head sp) = name
 
 -- 把一个项拆成「全局头 + 带 multiplicity 的实参表」（`Dict_C a` ⇒ `(Dict_C, [a])`）。
 -- 非全局头（元变量/局部变量/lambda/…）返回 Nothing。实例头识别、族名提取共用它。
 -- | 把项拆成「全局头 + 带 multiplicity 的实参表」（如 `Dict_C a` 拆成 `(Dict_C, [a])`）；头不是全局名时返回 Nothing。
-flattenTaggedApp : Term -> Maybe (Pair String (List (Pair Term Rig)))
+export flattenTaggedApp : Term -> Maybe (Pair String (List (Pair Term Rig)))
 flattenTaggedApp (TApp f a rig) = case flattenTaggedApp f of
   Just (Pair g args) => Just (Pair g (append args [Pair a rig]))
   Nothing => Nothing
@@ -294,29 +181,29 @@ flattenTaggedApp _ = Nothing
 -- 语义真相始终是 `instsList`。字段与构造器不导出：外部只能经 `instStoreEmpty` /
 -- `instStoreOf` / `instStorePush` 维护，经 `ecInsts`（全表）/ `ecInstsFamily`（族桶）读。
 -- | 实例登记表：按登记序排列的权威实例列表，加上按实例头族名（`Dict_<类>`）分桶的派生索引。
-record InstStore where
+export record InstStore where
   instsList : List DtInst
   instsByFamily : HashMap String (List DtInst)
 
 -- 实例头的族名（`Dict_<类>` 全局名）；头不是全局应用时返回空串（理论上实例头都合法）。
 -- | 实例头的字典族名（`Dict_<类>` 全局名）；头不是全局应用时返回空串。
-instFamilyOf : DtInst -> String
+export instFamilyOf : DtInst -> String
 instFamilyOf i = case flattenTaggedApp i.dtInstHead of
   Just (Pair g args) => g
   Nothing => ""
 
 -- | 空实例登记表：权威列表与族索引都为空。
-instStoreEmpty : InstStore
+export instStoreEmpty : InstStore
 instStoreEmpty = InstStore [] (Base.HashMap.fromList [])
 
 -- 按登记序建表（`ecAddInstRaw` 每次 push；总量 ≪ 100，逐步 push 的 O(n²) 可忽略）。
 -- | 按登记序由实例列表构建登记表（逐个 push，实例总量很小）。
-instStoreOf : List DtInst -> InstStore
+export instStoreOf : List DtInst -> InstStore
 instStoreOf [] = instStoreEmpty
 instStoreOf (i :: rest) = instStorePush (instStoreOf rest) i
 
 -- | 把一个实例追加到权威列表末尾，同时追加进它所属头族的桶。
-instStorePush : InstStore -> DtInst -> InstStore
+export instStorePush : InstStore -> DtInst -> InstStore
 instStorePush store i =
   let
     fam = instFamilyOf i
@@ -340,12 +227,12 @@ instStoreFamily store fam = case Base.HashMap.lookup fam store.instsByFamily of
 -- 延迟点 span 与创建深度（诊断/作用域检查用；C3 起由延迟点填）。`csPending` 保持旧
 -- 旧 `ecDictGoals` 的列表顺序语义（尾部 append、旋转），`csNextId` 只用于分配 id。
 -- | 延迟约束的类别：`CkDict` 是字典目标，`CkRow` 是行成员（效应）目标。
-data ConstraintKind : Type where
+export data ConstraintKind(..) : Type where
   CkDict : ConstraintKind
   CkRow : ConstraintKind
 
 -- | 一条延迟约束：稳定 id、类别、待解元变量、目标域值、延迟点 span 与创建深度。
-record Constraint where
+export record Constraint(..) where
   conId : Int
   conKind : ConstraintKind
   conMeta : Int
@@ -354,7 +241,7 @@ record Constraint where
   conDepth : Int
 
 -- | 统一约束存储：待处理约束列表（保持旧字典目标的顺序语义）、下一个 id、id 到尝试 epoch 的记录。
-record ConstraintStore where
+export record ConstraintStore where
   csPending : List Constraint
   csNextId : Int
   -- C4（epoch）：conId ↦ 上次尝试时的解表长度。只有解表增长才值得重试；没有进展的
@@ -362,7 +249,7 @@ record ConstraintStore where
   csTried : List (Pair Int Int)
 
 -- | 空约束存储：无待处理约束、id 从 0 开始、无已尝试记录。
-csEmpty : ConstraintStore
+export csEmpty : ConstraintStore
 csEmpty = ConstraintStore [] 0 []
 
 -- M30（D18）末尾两个字段是**可重建缓存**（真相始终是列表 / defTbl）：
@@ -372,7 +259,7 @@ csEmpty = ConstraintStore [] 0 []
 --   - `ecDefVals : HashMap String Value`：定义体的求值结果共享缓存，进 `Sols.defVals`；
 --     只在 `elabBodies` 的安全前缀检查通过后增量插入（见 `Elab.Driver` 的证明），
 --     `force` 命中时仍然 applySpine 后继续 force（fuel 语义不变）。
-record Ec where
+export record Ec(..) where
   ecNext : Int
   ecSols : List (Pair Int Value)
   ecDefsRev : List (Pair String Term)
@@ -400,14 +287,14 @@ record Ec where
   -- M4：本次精化发射的 warning（按发射顺序；由 Elab 显式线程，精化出口挂到 DtProgram）。
   ecWarnings : List Diagnostic
 
-ecNext : Ec -> Int
+export ecNext : Ec -> Int
 
-ecPutNext : Ec -> Int -> Ec
+export ecPutNext : Ec -> Int -> Ec
 ecPutNext (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals haslin mspans uspans warnings) n =
   Ec n sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl
     defvals haslin mspans uspans warnings
 
-ecPutClausesTbl : Ec -> HashMap String (List (Pair (List Pat) Expr)) -> Ec
+export ecPutClausesTbl : Ec -> HashMap String (List (Pair (List Pat) Expr)) -> Ec
 ecPutClausesTbl (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals haslin mspans uspans warnings) ctbl2 =
   Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl2
     ctortbl defvals haslin mspans uspans warnings
@@ -415,58 +302,58 @@ ecPutClausesTbl (Ec next sols defs datas depths goals insts classes dgoals deftb
 ecNext (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals haslin mspans uspans warnings) =
   next
 
-ecSols : Ec -> List (Pair Int Value)
+export ecSols : Ec -> List (Pair Int Value)
 ecSols (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals haslin mspans uspans warnings) =
   sols
 
-ecDefs : Ec -> List (Pair String Term)
+export ecDefs : Ec -> List (Pair String Term)
 -- 内部按「新定义前插」存放（ecAddDef O(1)），读出时还原源顺序。
 ecDefs (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals haslin mspans uspans warnings) =
   reverse defs
 
 -- 定义体的哈希索引：`force` 的 delta 展开用它查「这个全局名有没有定义体」。
-ecDefTbl : Ec -> HashMap String Term
+export ecDefTbl : Ec -> HashMap String Term
 ecDefTbl (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals haslin mspans uspans warnings) =
   deftbl
 
 -- 全局签名（含构造子/族名）的哈希索引：正文类型检查的热路径用它替代线性扫 globals。
 -- 在 `elabBodies` 之前用当时的 globals 建一次；正文期间每精化一个定义就插入它的类型。
-ecGlobalsTbl : Ec -> HashMap String Term
+export ecGlobalsTbl : Ec -> HashMap String Term
 ecGlobalsTbl (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals haslin mspans uspans warnings) =
   gtbl
 
-ecPutGlobalsTbl : Ec -> HashMap String Term -> Ec
+export ecPutGlobalsTbl : Ec -> HashMap String Term -> Ec
 ecPutGlobalsTbl (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals haslin mspans uspans warnings) gtbl2 =
   Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl2 soltbl dptbl gcomp ctbl
     ctortbl defvals haslin mspans uspans warnings
 
-ecDatas : Ec -> List DtData
+export ecDatas : Ec -> List DtData
 ecDatas (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals haslin mspans uspans warnings) =
   datas
 
-ecDepthTbl : Ec -> HashMap Int Int
+export ecDepthTbl : Ec -> HashMap Int Int
 ecDepthTbl (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals haslin mspans uspans warnings) =
   dptbl
 
 -- 全局表是否已完整建立（bodies 阶段开始前由 elabProgramGo 置 True）。完整时
 -- globalsLookup 未命中即可返回 Nothing：省掉「线性扫全 globals」的回落
 -- （实测 16k 次/单次 check、每次扫 ~2500 项；未命中的都是数据族名）。
-ecSetGlobalsComplete : Ec -> Bool -> Ec
+export ecSetGlobalsComplete : Ec -> Bool -> Ec
 ecSetGlobalsComplete (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals haslin mspans uspans warnings) g =
   Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl g ctbl ctortbl
     defvals haslin mspans uspans warnings
 
-ecGoals : Ec -> List DtGoal
+export ecGoals : Ec -> List DtGoal
 ecGoals (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals haslin mspans uspans warnings) =
   goals
 
-ecInsts : Ec -> List DtInst
+export ecInsts : Ec -> List DtInst
 ecInsts (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals haslin mspans uspans warnings) =
   insts.instsList
 
 -- S5a：实例表的**族桶**读入口（精确匹配，`fam` 未知 = 空表）。
 -- | 读取实例表中某个头族的实例桶（精确匹配；未知族返回空表）。
-ecInstsFamily : Ec -> String -> List DtInst
+export ecInstsFamily : Ec -> String -> List DtInst
 ecInstsFamily (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals haslin mspans uspans warnings) fam =
   instStoreFamily insts fam
 
@@ -476,7 +363,7 @@ ecInstsFamily (Ec next sols defs datas depths goals insts classes dgoals deftbl 
 --   2) 每个桶逐项等于「按该族过滤权威表」的结果（桶内容与族键一致，且桶内保序）。
 -- 用实例名序列比较（`DtInst` 没有 Eq 实例；实例名唯一）。
 -- | 自检实例表索引：所有桶的条目总数等于权威表长度，且每个桶与按该族过滤权威表的结果逐项一致。
-ecInstsAudit : Ec -> Bool
+export ecInstsAudit : Ec -> Bool
 ecInstsAudit (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals haslin mspans uspans warnings) =
   let
     pairs = Base.HashMap.toList insts.instsByFamily
@@ -502,56 +389,56 @@ instNamesEq [] (b :: brest) = False
 instNamesEq (a :: arest) [] = False
 instNamesEq (a :: arest) (b :: brest) = a == b && instNamesEq arest brest
 
-ecClasses : Ec -> List DtClass
+export ecClasses : Ec -> List DtClass
 ecClasses (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals haslin mspans uspans warnings) =
   classes
 
-ecAddGoal : Ec -> DtGoal -> Ec
+export ecAddGoal : Ec -> DtGoal -> Ec
 ecAddGoal (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals haslin mspans uspans warnings) g =
   Ec next sols defs datas depths (append goals [g]) insts classes dgoals deftbl gtbl soltbl dptbl
     gcomp ctbl ctortbl defvals haslin mspans uspans warnings
 
-ecAddInst : Ec -> DtInst -> Ec
+export ecAddInst : Ec -> DtInst -> Ec
 ecAddInst ec i = if hasInstName (dtInstName i) (ecInsts ec) then ec else ecAddInstRaw ec i
 
-hasInstName : String -> List DtInst -> Bool
+export hasInstName : String -> List DtInst -> Bool
 hasInstName name [] = False
 hasInstName name (i :: rest) = dtInstName i == name || hasInstName name rest
 
-ecAddInstRaw : Ec -> DtInst -> Ec
+export ecAddInstRaw : Ec -> DtInst -> Ec
 ecAddInstRaw (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals haslin mspans uspans warnings) i =
   Ec next sols defs datas depths goals (instStorePush insts i) classes dgoals deftbl gtbl soltbl
     dptbl gcomp ctbl ctortbl defvals haslin mspans uspans warnings
 
-ecAddClass : Ec -> DtClass -> Ec
+export ecAddClass : Ec -> DtClass -> Ec
 ecAddClass (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals haslin mspans uspans warnings) c =
   Ec next sols defs datas depths goals insts (append classes [c]) dgoals deftbl gtbl soltbl dptbl
     gcomp ctbl ctortbl defvals haslin mspans uspans warnings
 
 -- S4：约束存储读写（所有入口直接使用）。
 -- | 读取当前统一约束存储。
-ecConstraints : Ec -> ConstraintStore
+export ecConstraints : Ec -> ConstraintStore
 ecConstraints (Ec next sols defs datas depths goals insts classes cons deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals haslin mspans uspans warnings) =
   cons
 
 -- | 写回统一约束存储。
-ecPutConstraints : Ec -> ConstraintStore -> Ec
+export ecPutConstraints : Ec -> ConstraintStore -> Ec
 ecPutConstraints (Ec next sols defs datas depths goals insts classes cons deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals haslin mspans uspans warnings) cons2 =
   Ec next sols defs datas depths goals insts classes cons2 deftbl gtbl soltbl dptbl gcomp ctbl
     ctortbl defvals haslin mspans uspans warnings
 
 -- | 取约束存储里的待处理约束列表（维持原有顺序）。
-ecPending : Ec -> List Constraint
+export ecPending : Ec -> List Constraint
 ecPending ec = case ecConstraints ec of
   ConstraintStore pending next tried => pending
 
 -- | 替换待处理约束列表，保留下一个 id 与已尝试记录。
-ecPutPending : Ec -> List Constraint -> Ec
+export ecPutPending : Ec -> List Constraint -> Ec
 ecPutPending ec pending2 = case ecConstraints ec of
   ConstraintStore pending next tried => ecPutConstraints ec (ConstraintStore pending2 next tried)
 
 -- | 分配新 id 并把一条约束追加到待处理列表末尾。
-ecAddConstraint : Ec -> ConstraintKind -> Int -> Value -> Maybe Span -> Int -> Ec
+export ecAddConstraint : Ec -> ConstraintKind -> Int -> Value -> Maybe Span -> Int -> Ec
 ecAddConstraint ec kind meta dom span depth = case ecConstraints ec of
   ConstraintStore pending next tried =>
     ecPutConstraints ec
@@ -559,12 +446,12 @@ ecAddConstraint ec kind meta dom span depth = case ecConstraints ec of
 
 -- C4：已尝试记录（epoch = 解表长度）。
 -- | 查某个约束上次尝试时的 epoch（解表长度）；没试过返回 Nothing。
-ecTriedAt : Ec -> Int -> Maybe Int
+export ecTriedAt : Ec -> Int -> Maybe Int
 ecTriedAt ec cid = case ecConstraints ec of
   ConstraintStore pending next tried => assocIntLookup cid tried
 
 -- | 记录某个约束在给定 epoch 的尝试（epoch 通常是当时的解表长度）。
-ecRecordTried : Ec -> Int -> Int -> Ec
+export ecRecordTried : Ec -> Int -> Int -> Ec
 ecRecordTried ec cid epoch = case ecConstraints ec of
   ConstraintStore pending next tried =>
     ecPutConstraints ec (ConstraintStore pending next (assocIntSet cid epoch tried))
@@ -580,7 +467,7 @@ assocIntSet cid v [] = [Pair cid v]
 assocIntSet cid v ((Pair k w) :: rest) =
   if k == cid then Pair k v :: rest else Pair k w :: assocIntSet cid v rest
 
-ecEmpty : Ec
+export ecEmpty : Ec
 ecEmpty =
   Ec 0 [] [] [] [] [] instStoreEmpty [] csEmpty (Base.HashMap.fromList [])
     (Base.HashMap.fromList []) (Base.HashMap.fromList []) (Base.HashMap.fromList []) False
@@ -588,15 +475,15 @@ ecEmpty =
 
 -- 解表的哈希索引（键 = 元变量编号的十进制串）：`substDictTerm`/`rezonkDefs` 会对每个
 -- 定义体的每个元变量查解，关联表是 O(#解) 一次；索引把它降到 O(1)。
-ecSolTbl : Ec -> HashMap Int Value
+export ecSolTbl : Ec -> HashMap Int Value
 ecSolTbl (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals haslin mspans uspans warnings) =
   soltbl
 
-ecPutSols : Ec -> List (Pair Int Value) -> Ec
+export ecPutSols : Ec -> List (Pair Int Value) -> Ec
 
 -- force/conv 的解表包装：list（权威）+ 哈希索引（O(1) 查）+ 元变量创建深度索引（M28：
 -- 求解点就地检查解的作用域）。
-ecSolsP : Ec -> Sols
+export ecSolsP : Ec -> Sols
 ecSolsP ec = solsOf (ecSolTbl ec) (ecSols ec) (ecDepthTbl ec) (ecDefVals ec)
 
 ecPutSols ec sols2 =
@@ -628,7 +515,7 @@ memDataNameIn name (d :: rest) = if dtDataName d == name then True else memDataN
 -- 值定义进 delta 表；但与数据族同名的定义**不进**——否则 `force` 会把签名里的
 -- `TGlobal T`（类型位置，本应是族）delta 展开成值定义体，`T` 就退化成了值类型。
 -- 定义体仍进 `ecDefs`（codegen 照常产出 `v_T`），只是不做定义性展开。
-ecAddDef : Ec -> Pair String Term -> Ec
+export ecAddDef : Ec -> Pair String Term -> Ec
 ecAddDef (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals haslin mspans uspans warnings) d =
   let
     delta =
@@ -637,78 +524,78 @@ ecAddDef (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl 
   in Ec next sols (d :: defs) datas depths goals insts classes dgoals delta gtbl soltbl dptbl gcomp
     ctbl ctortbl defvals haslin mspans uspans warnings
 
-ecAddData : Ec -> DtData -> Ec
+export ecAddData : Ec -> DtData -> Ec
 ecAddData (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals haslin mspans uspans warnings) d =
   Ec next sols defs (append datas [d]) depths goals insts classes dgoals deftbl gtbl soltbl dptbl
     gcomp ctbl (Base.HashMap.insertAll (dataCtorPairs d) ctortbl) defvals
     (if dtDataLinear d then True else haslin) mspans uspans warnings
 
 -- 构造子索引：名字 → DtCtor（唯一真相仍是 `ecDatas`；表只是可重建缓存）。
-ctorTblOfDatas : List DtData -> HashMap String DtCtor
+export ctorTblOfDatas : List DtData -> HashMap String DtCtor
 ctorTblOfDatas datas =
   Base.HashMap.insertAll (concatMap dataCtorPairs datas) (Base.HashMap.fromList [])
 
 dataCtorPairs : DtData -> List (Pair String DtCtor)
 dataCtorPairs d = map (\c => Pair (dtCtorName c) c) (dtDataCtors d)
 
-ecPutCtorTbl : Ec -> HashMap String DtCtor -> Ec
+export ecPutCtorTbl : Ec -> HashMap String DtCtor -> Ec
 ecPutCtorTbl (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals haslin mspans uspans warnings) ctortbl2 =
   Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl
     ctortbl2 defvals haslin mspans uspans warnings
 
 -- 定义体求值结果的共享缓存（键 = 全局名）。`force` 先查它，再回落 defs 表。
-ecDefVals : Ec -> HashMap String Value
+export ecDefVals : Ec -> HashMap String Value
 ecDefVals (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals haslin mspans uspans warnings) =
   defvals
 
-ecHasLinear : Ec -> Bool
+export ecHasLinear : Ec -> Bool
 ecHasLinear (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals haslin mspans uspans warnings) =
   haslin
 
 -- M4：元变量创建点登记表的读写（纯状态；调用方通过 Ec 线程）。
 -- | 读取元变量创建点登记表。
-ecMetaSpans : Ec -> List (Pair Int Span)
+export ecMetaSpans : Ec -> List (Pair Int Span)
 ecMetaSpans (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals haslin mspans uspans warnings) =
   mspans
 
 -- | 写回元变量创建点登记表。
-ecPutMetaSpans : Ec -> List (Pair Int Span) -> Ec
+export ecPutMetaSpans : Ec -> List (Pair Int Span) -> Ec
 ecPutMetaSpans (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals haslin mspans uspans warnings) mspans2 =
   Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl
     ctortbl defvals haslin mspans2 uspans warnings
 
 -- | 读取 QTT 使用点登记表（新记录在前）。
-ecUseSpans : Ec -> List (Pair String Span)
+export ecUseSpans : Ec -> List (Pair String Span)
 ecUseSpans (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals haslin mspans uspans warnings) =
   uspans
 
 -- | 写回 QTT 使用点登记表。
-ecPutUseSpans : Ec -> List (Pair String Span) -> Ec
+export ecPutUseSpans : Ec -> List (Pair String Span) -> Ec
 ecPutUseSpans (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals haslin mspans uspans warnings) uspans2 =
   Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl
     ctortbl defvals haslin mspans uspans2 warnings
 
 -- M4：warning 列表的读写（精化期就地追加；精化出口把最终列表挂到 DtProgram）。
 -- | 读取本次精化已发射的 warning（发射顺序）。
-ecWarnings : Ec -> List Diagnostic
+export ecWarnings : Ec -> List Diagnostic
 ecWarnings (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals haslin mspans uspans warnings) =
   warnings
 
 -- | 写回 warning 列表。
-ecPutWarnings : Ec -> List Diagnostic -> Ec
+export ecPutWarnings : Ec -> List Diagnostic -> Ec
 ecPutWarnings (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals haslin mspans uspans warnings) warnings2 =
   Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl
     ctortbl defvals haslin mspans uspans warnings2
 
 -- | 追加一条 warning（保持发射顺序；warning 数量小，尾部 append 足够）。
-ecAddWarning : Ec -> Diagnostic -> Ec
+export ecAddWarning : Ec -> Diagnostic -> Ec
 ecAddWarning ec d = ecPutWarnings ec (append (ecWarnings ec) [d])
 
-datasHaveLinear : List DtData -> Bool
+export datasHaveLinear : List DtData -> Bool
 datasHaveLinear [] = False
 datasHaveLinear (d :: rest) = dtDataLinear d || datasHaveLinear rest
 
-ecPutDefVals : Ec -> HashMap String Value -> Ec
+export ecPutDefVals : Ec -> HashMap String Value -> Ec
 ecPutDefVals (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals haslin mspans uspans warnings) defvals2 =
   Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl
     ctortbl defvals2 haslin mspans uspans warnings
@@ -716,44 +603,44 @@ ecPutDefVals (Ec next sols defs datas depths goals insts classes dgoals deftbl g
 -- 局部上下文：最近绑定的在前（名字 + 类型项；类型项在当前上下文里有效）。
 -- refinements 是 M14 的索引精化：level ↦ Value（level 形态，可提到更新的 binder，无需 de Bruijn
 -- 搬运）。求值环境构造时代入，于是所有类型的求值/相等检查自动享受精化。
-record Ctx where
+export record Ctx(..) where
   ctxItems : List (Pair String Term)
   ctxRefVals : List (Pair Int Value)
 
-ctxDepth : Ctx -> Int
+export ctxDepth : Ctx -> Int
 ctxDepth ctx = length ctx.ctxItems
 
-ctxBind : String -> Term -> Ctx -> Ctx
+export ctxBind : String -> Term -> Ctx -> Ctx
 ctxBind name ty (Ctx items refs) = Ctx (Pair name ty :: items) refs
 
 -- 把一个 Value 形态的类型重新 quote 成项再入上下文（Pi 值里的域只有 Value）。
-ctxBindValue : String -> Value -> Ctx -> Ctx
+export ctxBindValue : String -> Value -> Ctx -> Ctx
 ctxBindValue name dom ctx = ctxBind name (quote (ctxDepth ctx) dom) ctx
 
 -- 记录一批精化（不做链式化简，代入在 ctxEnv 里做）。
-ctxRefine : Ctx -> List (Pair Int Value) -> Ctx
+export ctxRefine : Ctx -> List (Pair Int Value) -> Ctx
 ctxRefine (Ctx items refs) more = Ctx items (append refs more)
 
-ctxLookupAt : String -> List (Pair String Term) -> Int -> Maybe (Pair Int Term)
+export ctxLookupAt : String -> List (Pair String Term) -> Int -> Maybe (Pair Int Term)
 ctxLookupAt name [] idx = Nothing
 ctxLookupAt name ((Pair n ty) :: rest) idx =
   if n == name then Just (Pair idx ty) else ctxLookupAt name rest (idx + 1)
 
-ctxLookup : String -> Ctx -> Maybe (Pair Int Term)
+export ctxLookup : String -> Ctx -> Maybe (Pair Int Term)
 ctxLookup name ctx = ctxLookupAt name ctx.ctxItems 0
 
 -- 上下文的求值环境：binder 的 level 从底部开始，与 quote 约定一致。
-ctxEnvAt : List (Pair String Term) -> Int -> Int -> List Value
+export ctxEnvAt : List (Pair String Term) -> Int -> Int -> List Value
 ctxEnvAt [] idx depth = []
 ctxEnvAt ((Pair name ty) :: rest) idx depth =
   VNeutral (NVar name (depth - idx - 1) []) :: ctxEnvAt rest (idx + 1) depth
 
-ctxEnv : Ctx -> List Value
+export ctxEnv : Ctx -> List Value
 ctxEnv (Ctx items refs) = ctxEnvAt items 0 (length items)
 
 -- M14：把精化代入一个值。精化是「level ↦ Value」，而求值环境里的 binder 都是中性变量，
 -- 求值后做一次重写即可（索引位置上出现的基本是中性变量或构造子值）。resolveLevel 处理链式精化。
-refineValue : List (Pair Int Value) -> Int -> Value -> Value
+export refineValue : List (Pair Int Value) -> Int -> Value -> Value
 refineValue refs fuel v = if fuel <= 0 then v
 else case v of
   VNeutral n => case n of
@@ -773,43 +660,43 @@ else case v of
   VMeta m sp => VMeta m (map (refineValue refs (fuel - 1)) sp)
   _ => v
 
-refineLookup : Int -> List (Pair Int Value) -> Maybe Value
+export refineLookup : Int -> List (Pair Int Value) -> Maybe Value
 refineLookup lvl [] = Nothing
 refineLookup lvl ((Pair l v) :: rest) = if l == lvl then Just v else refineLookup lvl rest
 
 -- 在取用点把精化代入求值环境再 eval（闭包捕获环境，域/余域递归精化）。见 docs/reference/core.md。
-evalCtx : Ctx -> Term -> Value
+export evalCtx : Ctx -> Term -> Value
 evalCtx (Ctx items refs) ty =
   eval (map (refineValue refs defaultFuel) (ctxEnvAt items 0 (length items))) ty
 
 -- 局部变量 i 的类型：存储时按「绑定时上下文」，取用时需要 weaken (i+1)。
-varTypeValue : Ctx -> Int -> Term -> Value
+export varTypeValue : Ctx -> Int -> Term -> Value
 varTypeValue (Ctx items refs) idx ty =
   eval (map (refineValue refs defaultFuel) (ctxEnvAt items 0 (length items))) (shift 0 (idx + 1) ty)
 
-emptyCtx : Ctx
+export emptyCtx : Ctx
 emptyCtx = Ctx [] []
 
 -- ---------------------------------------------------------------
 -- 错误 / 状态 helper
 -- ---------------------------------------------------------------
-errAt : Span -> String -> Check a
+export errAt : Span -> String -> Check a
 errAt sp msg = rawAt sp msg
 
 -- M15：新建元变量并记录创建深度（求解时的作用域检查用）。
-newMeta : Ctx -> Ec -> Pair Term Ec
+export newMeta : Ctx -> Ec -> Pair Term Ec
 newMeta ctx (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals haslin mspans uspans warnings) =
   Pair (TMeta next)
     (Ec (next + 1) sols defs datas (Pair next (ctxDepth ctx) :: depths) goals insts classes dgoals deftbl gtbl soltbl (Base.HashMap.insert next (ctxDepth ctx) dptbl) gcomp ctbl ctortbl defvals haslin mspans uspans warnings)
 
-forceVal : Ec -> Value -> Value
+export forceVal : Ec -> Value -> Value
 forceVal ec v = force (ecDefTbl ec) (ecSolsP ec) defaultFuel v
 
 -- M15：完整精化，额外返回洞目标与最终状态（供 `vuna goal` / LSP 的洞显示）。
 -- M23：还带上收尾时的 globals / 实例表 / 类表 / 元变量游标——REPL 的表达式求值要在
 -- 与程序相同的环境里精化一条表达式（`dtEvalExprIn`），这些状态不属于「定义」但对
 -- 精化是必需的。
-record DtProgram where
+export record DtProgram(..) where
   dtProgDatas : List DtData
   dtProgDefs : List DtDef
   dtProgGoals : List DtGoal
@@ -823,45 +710,45 @@ record DtProgram where
   -- M4：本次精化发射的 warning（诊断出口；驱动层按检查单元过滤）。
   dtProgWarnings : List Diagnostic
 
-dtProgDatas : DtProgram -> List DtData
+export dtProgDatas : DtProgram -> List DtData
 dtProgDatas (DtProgram datas defs goals sols globals insts classes next defvals depths warnings) =
   datas
 
-dtProgDefs : DtProgram -> List DtDef
+export dtProgDefs : DtProgram -> List DtDef
 dtProgDefs (DtProgram datas defs goals sols globals insts classes next defvals depths warnings) =
   defs
 
 -- M30（D18）：定义体求值结果的共享缓存（`Ec.ecDefVals` 的收尾快照）；「没有」= `(Base.HashMap.fromList [])`。
-dtProgGoals : DtProgram -> List DtGoal
+export dtProgGoals : DtProgram -> List DtGoal
 dtProgGoals (DtProgram datas defs goals sols globals insts classes next defvals depths warnings) =
   goals
 
-dtProgSols : DtProgram -> List (Pair Int Value)
+export dtProgSols : DtProgram -> List (Pair Int Value)
 dtProgSols (DtProgram datas defs goals sols globals insts classes next defvals depths warnings) =
   sols
 
-dtProgGlobals : DtProgram -> List (Pair String Term)
+export dtProgGlobals : DtProgram -> List (Pair String Term)
 dtProgGlobals (DtProgram datas defs goals sols globals insts classes next defvals depths warnings) =
   globals
 
-dtProgInsts : DtProgram -> List DtInst
+export dtProgInsts : DtProgram -> List DtInst
 dtProgInsts (DtProgram datas defs goals sols globals insts classes next defvals depths warnings) =
   insts
 
-dtProgClasses : DtProgram -> List DtClass
+export dtProgClasses : DtProgram -> List DtClass
 dtProgClasses (DtProgram datas defs goals sols globals insts classes next defvals depths warnings) =
   classes
 
 -- | 本次精化发射的 warning（按发射顺序）。
-dtProgWarnings : DtProgram -> List Diagnostic
+export dtProgWarnings : DtProgram -> List Diagnostic
 dtProgWarnings (DtProgram datas defs goals sols globals insts classes next defvals depths warnings) =
   warnings
 
 -- 解表 → 索引（键 = 元变量编号的十进制串）。解表里每个元变量最多一条解，顺序无关。
-solsToTbl : List (Pair Int Value) -> HashMap Int Value
+export solsToTbl : List (Pair Int Value) -> HashMap Int Value
 solsToTbl sols = Base.HashMap.insertAll sols (Base.HashMap.fromList [])
 
-ecPutDefTbl : Ec -> HashMap String Term -> Ec
+export ecPutDefTbl : Ec -> HashMap String Term -> Ec
 ecPutDefTbl (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals haslin mspans uspans warnings) deftbl2 =
   Ec next sols defs datas depths goals insts classes dgoals deftbl2 gtbl soltbl dptbl gcomp ctbl
     ctortbl defvals haslin mspans uspans warnings
