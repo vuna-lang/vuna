@@ -678,6 +678,18 @@ parseFieldSuffix fuel st blockCol base =
     (\_, st1 => Vuna.Compiler.Common.step (expectIdent st1) (\fname, st2 => parseFieldSuffix (fuel - 1) st2 blockCol (EField base fname (spanFromExpr base st2))))
   else OkC (Pair base st)
 
+-- 内置宏调用：`name!` 的 `!` 必须与标识符**紧邻**（同行且列号连续）。带空格的
+-- `a ! b` 仍是普通中缀运算符，`!=` / `!!` 等更长的符号 token 也不触发。
+macroBangAt : PState -> Pos -> String -> Bool
+macroBangAt st start name = case peekTok st of
+  PTok (TSym "!") p => posLine p == posLine start && posCol p == posCol start + strLength name
+  _ => False
+
+-- 宏原子：无实参时是裸标记 `EVar`（交给展开期报 arity），有实参时是标记应用。
+macroAtom : String -> List Expr -> Span -> Span -> Expr
+macroAtom name [] appSp headSp = EVar (macroSyntaxName name) headSp
+macroAtom name args appSp headSp = EApp (EVar (macroSyntaxName name) headSp) args appSp
+
 parseAtomBase : Int -> PState -> Int -> Check (Pair Expr PState)
 parseAtomBase fuel st blockCol = if fuel <= 0 then icFuel "parser"
 else case peekTok st of
@@ -686,6 +698,8 @@ else case peekTok st of
       st1 = advance st
     in if atSym st1 "{" then Vuna.Compiler.Common.step (expectSym st1 "{")
       (\_, st1b => Vuna.Compiler.Common.step (parseRecordAssignments (fuel - 1) st1b blockCol) (\fields, st2 => OkC (Pair (ERecord name fields (spanOf st st2)) st2)))
+    else if macroBangAt st1 p name then Vuna.Compiler.Common.step (expectSym st1 "!")
+      (\_, st1b => Vuna.Compiler.Common.step (parseArgs (fuel - 1) st1b blockCol) (\args, st2 => OkC (Pair (macroAtom name args (spanOf st st2) (spanOf st st1b)) st2)))
     else OkC (Pair (EVar name (spanOf st st1)) st1)
   PTok (TInt n) p => OkC (Pair (EInt n (spanOf st (advance st))) (advance st))
   PTok (TFloat raw) p => OkC (Pair (EFloat raw (spanOf st (advance st))) (advance st))

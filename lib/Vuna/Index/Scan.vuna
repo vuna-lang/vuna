@@ -325,7 +325,10 @@ refsInExpr sMod e = reverse (refsInExprGo sMod e [])
 refsInExprGo : String -> Expr -> List Ref -> List Ref
 refsInExprGo sMod e acc = case e of
   -- M40：洞（`_` / `?name`）不是引用，不进索引（否则 `map --impact` / references 有噪音）。
-  EVar n sp => if isHoleName n then acc else Ref sMod n (spanStartLine sp) (spanStartCol sp) :: acc
+  -- 内置宏标记（`@vuna@macro@name`）同理：它只是 `name!` 的语法编码，不是符号引用。
+  EVar n sp =>
+    if isHoleName n || isMacroSyntaxName n then acc
+    else Ref sMod n (spanStartLine sp) (spanStartCol sp) :: acc
   EInt n sp => acc
   EStr s sp => acc
   EFloat raw sp => acc

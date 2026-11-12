@@ -96,11 +96,15 @@ module Vuna.Compiler.Frontend.Ast
   , isInternalSyntaxName
   , isListConsSyntax
   , isListNilSyntax
+  , isMacroSyntaxName
   , isOverCtorName
   , isPerformSyntax
   , isRowAtSyntax
   , listConsSyntax
   , listNilSyntax
+  , macroNameOf
+  , macroSyntaxName
+  , macroSyntaxPrefix
   , overCtorName
   , overCtorShort
   , overCtorTargets
@@ -623,6 +627,31 @@ rowAtSyntax = "@vuna@row@at"
 -- | 自动补注（N1 新增导出）：isRowAtSyntax。
 isRowAtSyntax : String -> Bool
 isRowAtSyntax name = name == rowAtSyntax
+
+-- ---------------------------------------------------------------
+-- 内置宏：`name!` 调用的保留名编码
+-- ---------------------------------------------------------------
+-- 与 `@vuna@perform` / `@vuna@handle` 同一先例：**不新增 AST 构造子**，parser 把
+-- `name! args` 编码成 `EApp (EVar "@vuna@macro@name") args`（无参时是裸 `EVar`）。
+-- Loader 在名字解析前把标记展开成真正表达式，所以 Elab / Codegen / 缓存 / 无损 CST
+-- 都看不到标记；Fmt 反向把标记渲染回 `name!`，Index 过滤标记引用。用户源码写不出
+-- `@vuna@` 开头的标识符，标记不会与用户名字冲突。
+-- | 宏调用标记的前缀（parser 产出、Loader 展开、Fmt 回渲染共用的唯一真源）。
+macroSyntaxPrefix : String
+macroSyntaxPrefix = "@vuna@macro@"
+
+-- | 由宏名生成 parser / Loader 之间的标记名。
+macroSyntaxName : String -> String
+macroSyntaxName name = "${macroSyntaxPrefix}${name}"
+
+-- | 是否是宏调用标记名（`@vuna@macro@<name>`）。
+isMacroSyntaxName : String -> Bool
+isMacroSyntaxName name = startsWith macroSyntaxPrefix name
+
+-- | 宏调用标记名 → 用户书写的宏名（非标记返回 `Nothing`）。
+macroNameOf : String -> Maybe String
+macroNameOf name =
+  if isMacroSyntaxName name then Just (dropNamePrefix macroSyntaxPrefix name) else Nothing
 
 -- | 自动补注（S3 新增导出）：doBindSyntaxPrefix。
 doBindSyntaxPrefix : String

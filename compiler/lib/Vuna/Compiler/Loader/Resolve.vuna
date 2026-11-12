@@ -579,10 +579,13 @@ else case expr of
   -- 在这里直接放行，否则会报 unbound variable）。
   EVar name sp =>
     if isHoleName name then OkC (EVar name sp)
+    else if isMacroSyntaxName name then icInternal "unexpanded macro invocation ${name}"
     else if isInternalSyntaxName name then OkC (EVar name sp)
     else if containsDot name then resolveDottedExpr modules label prefix ns imports scope name sp
     else Vuna.Compiler.Common.bind (resolveGlobal modules label prefix ns imports scope name)
       (\n => checkDebugConstruct sp name n scope)
+  -- 内置宏标记必须在 `Loader.Expand` 里展开；走到这里说明展开漏了（internal error，
+  -- 不静默透传成普通内部名）。
   -- M31.2：`EInfix` / `EParen` 是 parser 的中间产物，正常路径在 Loader 重排里已消除；
   -- 走到这里说明重排漏了（internal error，不静默透传）。
   EInfix op lhs rhs sp => icInternal "unreordered infix operator ${op}"
@@ -849,6 +852,7 @@ else case ty of
   EStr s sp => OkC ty
   EVar name sp =>
     if memName name bound then OkC ty
+    else if isMacroSyntaxName name then icInternal "unexpanded macro invocation ${name}"
     else if isInternalSyntaxName name then OkC ty
     else Vuna.Compiler.Common.bind (resolveTypeName modules label prefix ns imports name)
       (\n => OkC (EVar n sp))

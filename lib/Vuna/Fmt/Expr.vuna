@@ -427,9 +427,12 @@ inlineExprGo fuel env e = if fuel <= 0 then Nothing else inlinePrecGo (fuel - 1)
 inlinePrecGo : Int -> List FixityDecl -> Int -> Expr -> Maybe String
 inlinePrecGo fuel env minPrec e = if fuel <= 0 then Nothing
 else case e of
-  EVar name sp =>
-    if name == "Nil" || isListNilSyntax name then Just "[]"
-    else if isSymbolName name then Just "(${name})" else Just name
+  EVar name sp => case macroNameOf name of
+    -- 内置宏标记回渲染成 `name!`（编码见 `Frontend/Ast.macroSyntaxName`）。
+    Just macroName => Just "${macroName}!"
+    Nothing =>
+      if name == "Nil" || isListNilSyntax name then Just "[]"
+      else if isSymbolName name then Just "(${name})" else Just name
   EInt n sp => Just (strFromInt n)
   EStr s sp => Just (renderStr s)
   EFloat raw sp => Just raw
@@ -708,7 +711,9 @@ else case e of
   -- A2：局部函数组只作为 let/where 绑定值出现，由 `renderLetBindingGo` 展开成多子句。
   ELocalFun clauses sp => []
   EAnn value ty sp => renderExprGo (fuel - 1) env at lineInd value
-  EVar name sp => if isSymbolName name then ["(${name})"] else [name]
+  EVar name sp => case macroNameOf name of
+    Just macroName => ["${macroName}!"]
+    Nothing => if isSymbolName name then ["(${name})"] else [name]
   EInt n sp => [strFromInt n]
   EStr s sp => [renderStr s]
   EFloat raw sp => [raw]

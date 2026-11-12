@@ -28,6 +28,7 @@ import Vuna.Compiler.Canonical.Lex
 import Vuna.Compiler.Fingerprint
 import Vuna.Compiler.Store
 import Vuna.Compiler.Loader.Diagnostics
+import Vuna.Compiler.Loader.Expand
 import Vuna.Compiler.Common
 import Vuna.Compiler.Hash
 import Vuna.Compiler.Diagnostics.Warning
@@ -843,7 +844,7 @@ resolveProjectKeeping keep (Project decls imports implicit modules entryPkg entr
       tableOf
         (dedupeFixities (append entryFixes (visibleFixitiesOf modules (append imports implicit))))
   in Vuna.Compiler.Common.bind (reorderProgram entryTable decls)
-    (\decls2 => Vuna.Compiler.Common.bind (resolveEntry modules entryPkg (append imports implicit) decls2) (\entryDecls => Vuna.Compiler.Common.bind (unusedImportWarnings modules imports entryDecls decls2 []) (\entryWarns => Vuna.Compiler.Common.bind (resolveModulesKeep keep modules) (\p2 => OkC (Pair (append entryWarns (secondOf p2)) (Pair entryDecls (firstOf p2)))))))
+    (\decls2 => Vuna.Compiler.Common.bind (expandDecls decls2) (\decls3 => Vuna.Compiler.Common.bind (resolveEntry modules entryPkg (append imports implicit) decls3) (\entryDecls => Vuna.Compiler.Common.bind (unusedImportWarnings modules imports entryDecls decls3 []) (\entryWarns => Vuna.Compiler.Common.bind (resolveModulesKeep keep modules) (\p2 => OkC (Pair (append entryWarns (secondOf p2)) (Pair entryDecls (firstOf p2))))))))
 
 resolveModulesKeep : List String -> List Module -> Check (Pair (List Module) (List Diagnostic))
 resolveModulesKeep keep [] = OkC (Pair [] [])
@@ -851,7 +852,7 @@ resolveModulesKeep keep ((Module name pkg imports implicit decls exports fixitie
   if memName name keep then Vuna.Compiler.Common.bind (resolveModulesKeep keep rest)
     (\p2 => OkC (Pair (Base.List.Cons (Module name pkg imports implicit decls exports fixities reexports) (firstOf p2)) (secondOf p2)))
   else Vuna.Compiler.Common.bind (reorderProgram (tableOf fixities) decls)
-    (\decls2 => Vuna.Compiler.Common.bind (resolveProgram (Module name pkg imports implicit decls2 exports fixities reexports :: rest) name name (namespacesOf decls2) (append imports implicit) decls2) (\d1 => Vuna.Compiler.Common.bind (unusedImportWarnings (Module name pkg imports implicit decls2 exports fixities reexports :: rest) imports d1 decls2 reexports) (\warns => Vuna.Compiler.Common.bind (resolveModulesKeep keep rest) (\p2 => OkC (Pair (Base.List.Cons (Module name pkg imports implicit d1 exports fixities reexports) (firstOf p2)) (append warns (secondOf p2)))))))
+    (\decls2 => Vuna.Compiler.Common.bind (expandDecls decls2) (\decls3 => Vuna.Compiler.Common.bind (resolveProgram (Module name pkg imports implicit decls3 exports fixities reexports :: rest) name name (namespacesOf decls3) (append imports implicit) decls3) (\d1 => Vuna.Compiler.Common.bind (unusedImportWarnings (Module name pkg imports implicit decls3 exports fixities reexports :: rest) imports d1 decls3 reexports) (\warns => Vuna.Compiler.Common.bind (resolveModulesKeep keep rest) (\p2 => OkC (Pair (Base.List.Cons (Module name pkg imports implicit d1 exports fixities reexports) (firstOf p2)) (append warns (secondOf p2))))))))
 
 -- ---------------------------------------------------------------
 -- unused import warning：显式 import 未在所属检查单元里被引用。

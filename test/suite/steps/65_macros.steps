@@ -1,0 +1,37 @@
+# 65) 内置宏机制：`name!` 的紧邻规则、fmt 往返、错误边界。
+#     宏在 parser 里编码成保留名标记（`@vuna@macro@name`），Loader 在名字解析前展开；
+#     fmt / lint / index 只处理调用形式，不展开。探针宏的开关/惰性 e2e 见 65d。
+#
+# 65a) fmt 往返：`name!` 在原子位置与应用位置都稳定；二次 fmt 幂等。
+run: mkdir -p "$TMPDIR/mac-fmt"
+run: sh -c 'printf "%s\n" "main : Int" "main = perfNote! (if True then \"a\" else \"b\")" "" "f : Int -> Int" "f x = x" "" "g : Int" "g = f perfNote! \"x\"" > "$TMPDIR/mac-fmt/Main.vuna"'
+run: "$VUNA" fmt "$TMPDIR/mac-fmt/Main.vuna" >/dev/null 2>&1
+read: $TMPDIR/mac-fmt/Main.vuna
+out-contains: perfNote! (if True then "a" else "b")
+out-contains: (perfNote! "x")
+run: "$VUNA" fmt --check "$TMPDIR/mac-fmt/Main.vuna" >/dev/null 2>&1
+exit: 0
+
+# 65b) 带空格的 `!` 仍是普通中缀运算符（宏只吃紧邻的 `!`）。
+run: mkdir -p "$TMPDIR/mac-infix/app"
+run: printf '[package]\nname = "mac-infix"\n\n[dependencies]\nvuna-base = "%s"\n' "$VUNA_BASE" > "$TMPDIR/mac-infix/vuna.toml"
+run: sh -c 'printf "%s\n" "infixl 6 ! = plusInt" "" "plusInt : Int -> Int -> Int" "plusInt a b = a + b" "" "main : Int" "main = 1 ! 2" > "$TMPDIR/mac-infix/app/Main.vuna"'
+run: "$VUNA" interp "$TMPDIR/mac-infix/app/Main.vuna" 2>&1
+out-equals: 3
+
+# 65c) 错误边界：未知宏 / arity 不符 / 编译器包外使用宏。
+run: printf 'main : Int\nmain = nope! 1\n' > "$TMPDIR/mac-unknown.vuna"
+run: "$VUNA" check "$TMPDIR/mac-unknown.vuna" 2>&1
+exit: nonzero
+out-contains: RN_UnknownMacro
+out-contains: unknown macro: nope
+run: printf 'main : Int\nmain = perfNote! "a" "b"\n' > "$TMPDIR/mac-arity.vuna"
+run: "$VUNA" check "$TMPDIR/mac-arity.vuna" 2>&1
+exit: nonzero
+out-contains: RN_MacroArity
+out-contains: macro perfNote expects 1 argument(s), got 2
+# 探针宏展开后引用 Vuna.Compiler.Debug：编译器包外没有该模块，报未 import（钉住边界）。
+run: printf 'main : Int\nmain = perfNote! "x"\n' > "$TMPDIR/mac-outside.vuna"
+run: "$VUNA" check "$TMPDIR/mac-outside.vuna" 2>&1
+exit: nonzero
+out-contains: RN_ModuleNotImported

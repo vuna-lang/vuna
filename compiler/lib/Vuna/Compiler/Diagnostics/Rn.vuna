@@ -1,4 +1,4 @@
--- | RN_ 域：名字解析（import/export/限定名/构造子/类型名）诊断。
+-- | RN_ 域：名字解析（import/export/限定名/构造子/类型名）与内置宏展开诊断。
 module Vuna.Compiler.Diagnostics.Rn
   ( RnEntry(..)
   , RnErr(..)
@@ -6,6 +6,7 @@ module Vuna.Compiler.Diagnostics.Rn
   , rnAt0
   , rnAt1
   , rnAt2
+  , rnAt3
   , rnCode
   , rnErr
   , rnMsg
@@ -17,9 +18,10 @@ module Vuna.Compiler.Diagnostics.Rn
 
 -- Vuna.Compiler.Diagnostics.Rn：名字解析阶段（phase = Resolve，category = Names）。
 --
--- 这些错误发生在 import/export/限定名/构造子解析，语义是「名字不可用/不唯一」，
--- 与模块图加载（LD_）和类型检查（TC_）分开。消息体与旧实现逐字一致（旧 label 前缀
--- 由 span/上下文承载，不再拼进消息）。
+-- 这些错误发生在 import/export/限定名/构造子解析与内置宏展开，语义是「名字不可用/
+-- 不唯一」或「宏调用形状不对」，与模块图加载（LD_）和类型检查（TC_）分开。消息体与旧
+-- 实现逐字一致（旧 label 前缀由 span/上下文承载，不再拼进消息）。
+-- 宏展开错误也归入本域：展开发生在名字解析之前、同样只依赖名字与 span，足够同构。
 import Vuna.Compiler.Common
 import Vuna.Compiler.Diagnostics.Common
 import Base.Nat
@@ -48,12 +50,15 @@ data RnErr : Nat -> Type where
   UnknownType : String -> RnErr (Succ Zero)
   UnknownFixity : String -> RnErr (Succ Zero)
   UnknownVariable : String -> RnErr (Succ Zero)
+  UnknownMacro : String -> RnErr (Succ Zero)
   AmbiguousPrelude : String -> RnErr (Succ Zero)
   -- arity 2
   AmbiguousConstructor : String -> String -> RnErr (Succ (Succ Zero))
   AmbiguousConstructorInExport : String -> String -> RnErr (Succ (Succ Zero))
   TypeNotExported : String -> String -> RnErr (Succ (Succ Zero))
   ValueNotExported : String -> String -> RnErr (Succ (Succ Zero))
+  -- arity 3
+  MacroArity : String -> String -> String -> RnErr (Succ (Succ (Succ Zero)))
 
 -- | 诊断域实现：Vuna.Compiler.Diagnostics.Rn.rnCode（目录/模板见 diagnostics.md）。
 rnCode : {n : Nat} -> RnErr n -> String
@@ -76,11 +81,13 @@ rnCode (UnknownInterface _) = "RN_UnknownInterface"
 rnCode (UnknownType _) = "RN_UnknownType"
 rnCode (UnknownFixity _) = "RN_UnknownFixity"
 rnCode (UnknownVariable _) = "RN_UnknownVariable"
+rnCode (UnknownMacro _) = "RN_UnknownMacro"
 rnCode (AmbiguousPrelude _) = "RN_AmbiguousPrelude"
 rnCode (AmbiguousConstructor _ _) = "RN_AmbiguousConstructor"
 rnCode (AmbiguousConstructorInExport _ _) = "RN_AmbiguousConstructorInExport"
 rnCode (TypeNotExported _ _) = "RN_TypeNotExported"
 rnCode (ValueNotExported _ _) = "RN_ValueNotExported"
+rnCode (MacroArity _ _ _) = "RN_MacroArity"
 
 -- | 诊断域实现：Vuna.Compiler.Diagnostics.Rn.rnTemplate（目录/模板见 diagnostics.md）。
 rnTemplate : {n : Nat} -> RnErr n -> String
@@ -105,12 +112,14 @@ rnTemplate (UnknownType _) = "unknown type <0>"
 rnTemplate (UnknownFixity _) =
   "unknown fixity for operator <0> (declare it with infixl/infixr/infix)"
 rnTemplate (UnknownVariable _) = "unbound variable <0>"
+rnTemplate (UnknownMacro _) = "unknown macro: <0>"
 rnTemplate (AmbiguousPrelude _) = "ambiguous implicit Prelude (found in: <0>)"
 rnTemplate (AmbiguousConstructor _ _) = "ambiguous constructor <0> (qualify it as <1>)"
 rnTemplate (AmbiguousConstructorInExport _ _) =
   "ambiguous constructor <0> in <1>; export T(..) instead"
 rnTemplate (TypeNotExported _ _) = "type <0> is not exported by <1>"
 rnTemplate (ValueNotExported _ _) = "<0> is not exported by <1>"
+rnTemplate (MacroArity _ _ _) = "macro <0> expects <1> argument(s), got <2>"
 
 -- | 诊断域实现：Vuna.Compiler.Diagnostics.Rn.rnMsg（目录/模板见 diagnostics.md）。
 rnMsg : {n : Nat} -> RnErr n -> Vec n String -> Diagnostic
@@ -135,6 +144,10 @@ rnAt1 sp e a0 = rnErr sp e [a0]
 -- | 诊断域实现：Vuna.Compiler.Diagnostics.Rn.rnAt2（目录/模板见 diagnostics.md）。
 rnAt2 : Span -> RnErr (Succ (Succ Zero)) -> String -> String -> Check a
 rnAt2 sp e a0 a1 = rnErr sp e [a0, a1]
+
+-- | 带三个插值实参、带 span 的报错（宏 arity 错误用）。
+rnAt3 : Span -> RnErr (Succ (Succ (Succ Zero))) -> String -> String -> String -> Check a
+rnAt3 sp e a0 a1 a2 = rnErr sp e [a0, a1, a2]
 
 -- | 诊断域实现：Vuna.Compiler.Diagnostics.Rn.rnNoLoc0（目录/模板见 diagnostics.md）。
 rnNoLoc0 : RnErr Zero -> Check a
@@ -176,9 +189,11 @@ rnAll =
     RnEntry (rnCode (UnknownType "")) (rnTemplate (UnknownType "")) "未知类型",
     RnEntry (rnCode (UnknownFixity "")) (rnTemplate (UnknownFixity "")) "未知运算符 fixity",
     RnEntry (rnCode (UnknownVariable "")) (rnTemplate (UnknownVariable "")) "未绑定变量",
+    RnEntry (rnCode (UnknownMacro "")) (rnTemplate (UnknownMacro "")) "未知宏",
     RnEntry (rnCode (AmbiguousPrelude "")) (rnTemplate (AmbiguousPrelude "")) "隐式 Prelude 歧义",
     RnEntry (rnCode (AmbiguousConstructor "" "")) (rnTemplate (AmbiguousConstructor "" "")) "构造子歧义",
     RnEntry (rnCode (AmbiguousConstructorInExport "" "")) (rnTemplate (AmbiguousConstructorInExport "" "")) "导出中构造子歧义",
     RnEntry (rnCode (TypeNotExported "" "")) (rnTemplate (TypeNotExported "" "")) "类型未被导出",
-    RnEntry (rnCode (ValueNotExported "" "")) (rnTemplate (ValueNotExported "" "")) "值未被导出"
+    RnEntry (rnCode (ValueNotExported "" "")) (rnTemplate (ValueNotExported "" "")) "值未被导出",
+    RnEntry (rnCode (MacroArity "" "" "")) (rnTemplate (MacroArity "" "" "")) "宏参数个数不匹配"
   ]
