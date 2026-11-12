@@ -123,6 +123,8 @@ end:
 - 失败行带 case id；断言失败给步骤名 / expected / actual 片段。父进程汇总也列出失败
   case id（`N checks, M failed case(s): <id>, ...`）；worker 没写出结果文件时汇总报
   `<id> (no result)`（崩溃 / OOM / 被杀），并还原真实 case 名而不是 `unknown-<index>`。
+  `run:` 步的退出码/超时失败额外附**该步命令**与**捕获输出尾部**（脚本自己打印的
+  `FAIL: ...` 就在里面），否则只能看到 `exit: exit 1`。
 - 本地结果缓存：成功的 golden/error case 写入 `.local/test-cache/`，key 含编译器指纹、
   base 源码树哈希、source/expected 内容（目录型再含夹具 .vuna 树）；命中打印 `(cached)`。
   `--no-cache` 关闭，CI check 固定 `--no-cache`；`*.steps` 不缓存。
