@@ -2175,11 +2175,37 @@ genDtHook bodyText table tyTerm mainExpr printResult = Vuna.Compiler.Common.bind
 -- 动作 main 的执行表达式：
 -- W9：main 动作作为纤程 0 交给调度器（`dtp_sched_main`）：这样 main 里的
 -- `yieldNow`/`awaitTask` 也能挂起；没有任务的普通程序只是多一层 match_with。
-actionRunText : QualCtx -> Pair (List DtData) (List DtDef) -> String -> String -> Pair String String
-actionRunText qc program mainRef kind = if kind == "eff" then
+-- 阶段 2：main 的行是内建 ConsoleOp 时，entry 自动装 `runConsoleHost`
+-- （把 `ConsoleOp` 的 send 翻译成 `prim_eff_print_host`；handler 未导出）。
+isConsoleLabelTerm : Term -> Bool
+isConsoleLabelTerm (TGlobal g) = g == "Base.EffConsole.ConsoleOp"
+isConsoleLabelTerm _ = False
+
+isConsoleRowTerm : Term -> Bool
+isConsoleRowTerm (TCon g args) = if g == effRowConsCtor then case args of
+  _ :: label :: tail :: _ =>
+    isConsoleLabelTerm (firstOf label) && isNilRowTermCodegen (firstOf tail)
+  _ => False
+else False
+isConsoleRowTerm _ = False
+isConsoleRowTerm _ = False
+
+isConsoleMainTy : Term -> Bool
+isConsoleMainTy (TApp (TApp fn row _) _ _) = case fn of
+  TGlobal g => g == effTypeName && isConsoleRowTerm row
+  _ => False
+isConsoleMainTy _ = False
+
+actionRunText : QualCtx -> Pair (List DtData) (List DtDef) -> String -> String -> Term -> Pair String String
+actionRunText qc program mainRef kind mainTy = if kind == "eff" then
   let
     runRef = qualValueText qc effMainRunName
-  in Pair "dtp_sched_main (fun () -> ${firstOf runRef} ${mainRef})" (secondOf runRef)
+  in if isConsoleMainTy mainTy then
+    let
+      consoleRef = qualValueText qc "Base.EffConsole.runConsoleHost"
+    in Pair "dtp_sched_main (fun () -> ${firstOf runRef} (${firstOf consoleRef} ${mainRef}))"
+      (secondOf consoleRef)
+  else Pair "dtp_sched_main (fun () -> ${firstOf runRef} ${mainRef})" (secondOf runRef)
 else Pair "dtp_sched_main (fun () -> ${mainRef} 0)" ""
 
 genTerm : GenSt -> List (Pair String Rig) -> Term -> Check (Pair String GenSt)

@@ -60,3 +60,24 @@ handleConsoleHost n comp = handleConsole n (\a => pure a) consoleOpHIO comp
 -- | 单效应便捷入口（P3）：`handleConsoleHost n` + `joinEff` 的组合。
 runConsole : {a : Type} -> (n : String) -> Eff (Cons n ConsoleOp []) a -> Eff [] a
 runConsole n comp = joinEff (handleConsoleHost n comp)
+
+-- ---------------------------------------------------------------
+-- 阶段 2：带行的真实 handler（entry 自动预装用；不导出，用户拿不到）
+-- ---------------------------------------------------------------
+-- | 带 `ConsoleOp` 行的 op 解释：真实打印后写穿继续（answer 行是 `[ConsoleOp]`）。
+consoleOpHIOHost : {a : Type} -> (o : ConsoleOp) -> (resConsole o -> Eff (Cons "default" ConsoleOp []) a) -> Eff (Cons "default" ConsoleOp []) a
+consoleOpHIOHost op k = case op of
+  Print s => do
+    r <- fmap natFromInt (prim_eff_print_host s)
+    k r
+  EPrint s => do
+    r <- raise (prim_eff_eprint s)
+    k r
+
+-- | 带行的宿主 handler：删掉 `Console n`，answer 是 `Eff [ConsoleOp]`（不导出）。
+handleConsoleHostHost : {a : Type} -> {r : Row} -> (n : String) -> Eff (Base.Eff.Cons n ConsoleOp r) a -> Eff r (Eff (Cons "default" ConsoleOp []) a)
+handleConsoleHostHost n comp = handleConsole n (\a => pure a) consoleOpHIOHost comp
+
+-- | entry 自动预装用：`Cons "default" ConsoleOp Nil` 的动作 → `Eff [ConsoleOp]`（不导出）。
+runConsoleHost : {a : Type} -> Eff (Cons "default" ConsoleOp []) a -> Eff (Cons "default" ConsoleOp []) a
+runConsoleHost comp = joinEff (handleConsoleHostHost "default" comp)

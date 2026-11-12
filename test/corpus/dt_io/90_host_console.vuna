@@ -1,8 +1,8 @@
--- 阶段 0 spike：main 的行是内建 ConsoleOp，entry 用隐藏的 runMain 执行。
+-- 阶段 2：main 的行是内建 ConsoleOp；entry 自动装 runConsoleHost（用户不写 handler）。
 import Base.Eff
 import Base.EffConsole
 
 main : Eff [ConsoleOp] Int
 main = do
-  _ <- prim_eff_print_host "host-spike\n"
+  _ <- consolePrint "default" "auto-spike\n"
   pure 0
