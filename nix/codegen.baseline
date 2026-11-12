@@ -13,6 +13,12 @@
 #       bytes 4242 → 4462、lines 82 → 86、maxline 810 → 882；runtime 的位置表按口径
 #       排除（不计入本基线）。
 #
+# 2026-11-12 删除 Base.Host 后复核：codegen 夹具 `Effects.vuna` 从
+#       `import Base.Host` + `print` 改为 `import Base.Eff` + `prim_eff_print`，
+#       Effects.ml 引用的模块前缀变长 ⇒ bytes 4169 → 4250（其余指标不变：lines 80 /
+#       maxline 823 / longlines 6 / letrec 1 / strcat 1 / eqint 0 / zeroarg 0 /
+#       ctorcount 17）。属夹具源码面变化，非 codegen 膨胀。
+#
 # 规则：本文件是精确基线（`=<expected>`），不是上限；不等即失败（双向捕获膨胀与
 #       优化丢失）。种子尺寸不在这里设阈值（见 docs/reference/compiler.md）。
 # M33 codegen 优化后重标定：内建内联消除了 `bi_eq_int`（eqint 3 → 0）、`++` 链展开为
@@ -40,7 +46,7 @@
 #       （其余指标同上），即 +18 字节漂移早于本任务、非 Float 改动引入；按实测把
 #       bytes 重标定为 4233。
 files =4
-bytes =4169
+bytes =4250
 lines =80
 maxline =823
 longlines =6
