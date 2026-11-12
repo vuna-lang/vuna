@@ -3,7 +3,7 @@
 #     清持久 store 后 check 回到 PKG_NotMaterialized。
 
 # 68a) 搭一个本地 git 依赖包（dep）与依赖方（app），hash 先写全零。
-run: sh -c 'rm -rf "$TMPDIR/f68"; mkdir -p "$TMPDIR/f68/dep/lib" "$TMPDIR/f68/app/app"; printf "[package]\nname = \"dep\"\n[export]\nmodules = [\"D\"]\n" > "$TMPDIR/f68/dep/vuna.toml"; printf "module D where\n\nv : Int\nv = 41\n" > "$TMPDIR/f68/dep/lib/D.vuna"; ( cd "$TMPDIR/f68/dep" && git init -q && git add -A && git -c user.email=t@t -c user.name=t commit -qm init ); rev=$( cd "$TMPDIR/f68/dep" && git rev-parse HEAD ); printf "[package]\nname = \"app\"\n\n[dependencies.dep]\ngit = \"file://%s\"\nrev = \"%s\"\nhash = \"sha256:0000000000000000000000000000000000000000000000000000000000000000\"\n" "$TMPDIR/f68/dep" "$rev" > "$TMPDIR/f68/app/vuna.toml"; printf "import D\n\nmain : Int\nmain = v\n" > "$TMPDIR/f68/app/app/Main.vuna"'
+run: sh -c 'rm -rf "$TMPDIR/f68"; mkdir -p "$TMPDIR/f68/dep/lib" "$TMPDIR/f68/app/app"; printf "[package]\nname = \"dep\"\n[export]\nmodules = [\"D\"]\n" > "$TMPDIR/f68/dep/vuna.toml"; printf "module D where\n\nexport v : Int\nv = 41\n" > "$TMPDIR/f68/dep/lib/D.vuna"; ( cd "$TMPDIR/f68/dep" && git init -q && git add -A && git -c user.email=t@t -c user.name=t commit -qm init ); rev=$( cd "$TMPDIR/f68/dep" && git rev-parse HEAD ); printf "[package]\nname = \"app\"\n\n[dependencies.dep]\ngit = \"file://%s\"\nrev = \"%s\"\nhash = \"sha256:0000000000000000000000000000000000000000000000000000000000000000\"\n" "$TMPDIR/f68/dep" "$rev" > "$TMPDIR/f68/app/vuna.toml"; printf "import D\n\nmain : Int\nmain = v\n" > "$TMPDIR/f68/app/app/Main.vuna"'
 exit: 0
 
 # 68b) 摘要不符 ⇒ PKG_HashMismatch（不写 store、不物化），输出里带实际摘要。
@@ -44,7 +44,7 @@ exit: 1
 out-contains: PKG_NotMaterialized
 # 68i) pin：依赖源码前进一个 rev 后，`vuna pin` 把实际内容摘要写回 manifest 的 hash 行，
 #      随后 fetch 命中、check 成功（pin = 取包 + 重算摘要 + 段内替换 hash）。
-run: sh -c 'printf "module D where\n\nv : Int\nv = 42\n" > "$TMPDIR/f68/dep/lib/D.vuna"; ( cd "$TMPDIR/f68/dep" && git add -A && git -c user.email=t@t -c user.name=t commit -qm bump ); rev=$( cd "$TMPDIR/f68/dep" && git rev-parse HEAD ); sed -i "s|^rev = .*|rev = \"$rev\"|" "$TMPDIR/f68/app/vuna.toml"; VUNA_STORE="$TMPDIR/f68/store" "$VUNA" pin "$TMPDIR/f68/app" 2>&1'
+run: sh -c 'printf "module D where\n\nexport v : Int\nv = 42\n" > "$TMPDIR/f68/dep/lib/D.vuna"; ( cd "$TMPDIR/f68/dep" && git add -A && git -c user.email=t@t -c user.name=t commit -qm bump ); rev=$( cd "$TMPDIR/f68/dep" && git rev-parse HEAD ); sed -i "s|^rev = .*|rev = \"$rev\"|" "$TMPDIR/f68/app/vuna.toml"; VUNA_STORE="$TMPDIR/f68/store" "$VUNA" pin "$TMPDIR/f68/app" 2>&1'
 out-contains: pin: updated 1 dependency hash(es)
 run: sh -c 'VUNA_STORE="$TMPDIR/f68/store" "$VUNA" fetch "$TMPDIR/f68/app" 2>&1'
 out-contains: cached
