@@ -68,6 +68,7 @@ import Vuna.Index
 import Vuna.Interp
 import Vuna.Repl.Edit
 import Vuna.Repl.History
+import Vuna.Tool.Session
 import Vuna.Repl.Term
 import Vuna.Search.Query
 import Vuna.Search.Run
@@ -131,15 +132,15 @@ data ReplSink : Type where
   -- 普通输出 / 错误输出（两个独立通道，服务端分别映射到 result.output / result.error）。
   SinkCapture : IORef String -> IORef String -> ReplSink
 
--- 工具接口会话（M34.6 5c）：一次 `depIfacesForToolSourceDetailed` 的结果 + 校验面。
--- 每条表达式先 `toolSessionFresh`（源/manifest stat，安全窗内回落内容哈希）再复用，
--- 因此依赖源码或 manifest 改动后下一次求值必然重建，不会用旧 iface。
+-- 工具接口会话（阶段 3 起是**查询图客户端**）：一次 `depIfacesForToolSourceDetailed` 的结果
+-- 提交成 `tooliface:<pkg>:<dirHash>` 节点（值 `QMarker`），依赖表 = 校验面 stat +
+-- import 闭包。每条表达式先 `Query.queryHit` 判命中：命中就复用这份 `ToolContext`，
+-- 依赖源码 / manifest 改动后依赖表变化 ⇒ miss ⇒ 重建。判定不再由本模块的 mtime 启发式做。
 record ReplToolSession where
+  -- 查询图会话（共用 `Db`；REPL 内是纯内存，不落索引）。
+  sessionDb : ToolSession
+  -- 解出来 / 复用的工具上下文（依赖接口 + 校验面 + 闭包名单）。
   sessionTool : ToolContext
-  sessionKey : Int
-  sessionDir : String
-  sessionBuiltSec : Int
-  sessionStats : List SourceInfo
 
 -- 源码索引会话：索引 + 建立时的源文件 stat 快照 + 建立时刻 + 目录。复用前对快照做廉价
 -- 校验（`Vuna.Index.indexStatsUnchanged`：窗口外的文件只 stat，窗口内的回落内容哈希），
@@ -860,54 +861,76 @@ sigLine p = "${firstOf p} : ${secondOf p}\n"
 -- 闭包重读依赖 iface（166 模块 ≈0.5–1.5s/条）。这里把结果按「编译器指纹 + 包名 + 包目录」
 -- 缓存在 `stateToolSession`，复用前按三层失效判定：
 --   1. key（编译器二进制指纹 / 包名 / 包目录）——编译器重编或 `:load DIR` 换上下文即失效
---      （后者由 `switchedContext` 清会话保证）；
---   2. 校验面 stat（依赖源码 + 本包 manifest，`toolSessionFresh`）——依赖改了必重建，
---      不会出现「改了源码 REPL 还用旧 iface」；
---   3. import 闭包未扩大（`sessionClosureOk`）——buffer 新增 import 会引入闭包外模块，必须重建。
--- 无工具接口（base-only / 依赖接口不全）时缓存为 Nothing，每条求值走不带 iface 的旧路径。
--- ---------------------------------------------------------------
-replSessionKey : PackageContext -> Eff [] Int
-replSessionKey ctx = do
-  fp <- toolCompilerFingerprint
-  pure (fp * 1000003 + hashTextStrong "repl|${contextPackageName ctx}|${contextDir ctx}")
+-- 工具会话节点的依赖 key 表（阶段 3）：**校验面 stat + import 闭包**。
+--
+--   * `st:<path>:<mtime>:<size>` —— 依赖源码与本包 manifest 的 stat（`tcStats` 的前身；
+--     旧实现 `toolSessionFresh` 就是在跑这套比较，现在交给 `Query.queryHit` 的依赖表）；
+--   * `closure:<排序后的 import 名>` —— buffer 新增 import 会引入闭包外模块，必须重建
+--     （取代 `sessionClosureOk` 的逐个 `memName` 判断）。
+--
+-- 两段都进**依赖表**而不是 key：key 保持稳定（`tooliface:<pkg>:<dirHash>`），任何一段变化
+-- 都让依赖表变化 ⇒ miss ⇒ 重建。
+toolSessionDeps : ToolContext -> List String -> List String
+toolSessionDeps tool imports =
+  append (map statDepKey tool.tcStats) ["closure:${join "," (sortStrings imports)}"]
 
+statDepKey : SourceInfo -> String
+statDepKey si = "st:${si.siPath}:${strFromInt si.siMtime}:${strFromInt si.siSize}"
+
+-- 简易插入排序（闭包名单很短，避免为排序多 import 一个模块）。
+sortStrings : List String -> List String
+sortStrings [] = []
+sortStrings (x :: rest) = insertStr x (sortStrings rest)
+
+insertStr : String -> List String -> List String
+insertStr x [] = [x]
+insertStr x (y :: rest) = if x <= y then x :: y :: rest else y :: insertStr x rest
+
+-- 会话节点 key：包名 + 包目录哈希（`:load DIR` 换目录即换 key）。
+toolNodeKey : PackageContext -> String
+toolNodeKey ctx = "tooliface:${contextPackageName ctx}:${toolTextHash (contextDir ctx)}"
+
+-- buffer 的 import 名单（解析失败时按空名单处理：保守复用即不重建，解析错误稍后会由
+-- 求值本身报出来）。
+bufferImports : String -> List String
+bufferImports program = case parseSource replTempFile program of
+  ErrC _ => []
+  OkC (SourceFile _ imports _ _) => map replImportName imports
+
+-- 与 `implicitImportNames` 同一个取名单 helper：只取 import 的模块名。
+replImportName : Import -> String
+replImportName (Import n _ _ _) = n
+
+-- 重建会话：跑一次 `depIfacesForToolSourceDetailed`，把结果提交进查询图节点。
+-- 返回 `Nothing` = 依赖接口不全（base-only / 依赖包没 check），本次求值走无 iface 旧路径。
 replToolSession : PackageContext -> String -> Eff [] (Maybe ReplToolSession)
 replToolSession ctx program = do
   toolR <- depIfacesForToolSourceDetailed ctx "<repl>" program
   case toolR of
     Nothing => pure Nothing
     Just tool => do
-      key <- replSessionKey ctx
-      built <- toolNowSec
-      pure (Just (ReplToolSession tool key (contextDir ctx) built tool.tcStats))
+      let
+        deps = toolSessionDeps tool (bufferImports program)
+        base = toolSessionNewMemory "tool"
+        key = toolNodeKey ctx
+      in do
+        ts <- toolCommitValue base key deps
+        pure (Just (ReplToolSession ts tool))
 
--- buffer 当前的 import 闭包还在会话建立时的闭包里吗？新增 import ⇒ 闭包扩大 ⇒ 必须重建。
--- 沿用建会话时的闭包算法（隐式 Prelude 一并算进 `needed`），因此 buffer 只加定义不加
--- import 时判定不变；一旦 import 名不在会话闭包里就整条重建。
-sessionClosureOk : PackageContext -> ReplToolSession -> String -> Bool
-sessionClosureOk ctx session program = case parseSource replTempFile program of
-  ErrC _ => True
-  OkC (SourceFile _ imports _ _) =>
-    neededInClosure session.sessionTool.tcNeeded (map replImportName imports)
-
-neededInClosure : List String -> List String -> Bool
-neededInClosure closure [] = True
-neededInClosure closure (n :: rest) = memName n closure && neededInClosure closure rest
-
--- 与 `implicitImportNames` 同一个取名单 helper：只取 import 的模块名。
-replImportName : Import -> String
-replImportName (Import n _ _ _) = n
-
--- 命中条件：key / 包目录一致 + 校验面 stat 未变 + 闭包未扩大。
+-- 复用判定：会话存在 + 图节点在**当前依赖表**下仍命中。
+-- 命中即沿用内存里的 `ToolContext`（`QMarker` 不携带记录；记录本来就在手上）。
 sessionUsable : ReplState -> String -> Eff [] Bool
 sessionUsable st program = case st.stateToolSession of
   Nothing => pure False
   Just session => do
-    key <- replSessionKey st.stateCtx
-    if session.sessionKey == key && session.sessionDir == contextDir st.stateCtx then do
-      fresh <- toolSessionFresh session.sessionBuiltSec session.sessionStats
-      pure (fresh && sessionClosureOk st.stateCtx session program)
-    else pure False
+    let
+      deps = toolSessionDeps session.sessionTool (bufferImports program)
+    in do
+      hit <- toolHitValue session.sessionDb (toolNodeKey st.stateCtx) deps
+      pure (case hit of
+        Nothing => False
+        Just _ => True
+      )
 
 -- 会话可用就复用依赖接口；否则（一次）重建；都不可能时（base-only / 依赖接口不全）走
 -- 不带 iface 的旧求值路径，且不记住会话（下次求值再试一次，成本是零：直接返回 Nothing）。

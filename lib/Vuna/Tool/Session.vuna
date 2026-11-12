@@ -7,6 +7,7 @@ module Vuna.Tool.Session
   , toolHitValue
   , toolLoadPayload
   , toolSessionNew
+  , toolSessionNewMemory
   , toolStorePayload
   ) where
 
@@ -41,6 +42,11 @@ record ToolSession where
 -- | 新建会话（`origin` 用 `tool`；`bucket` 决定索引落到哪个桶）。
 toolSessionNew : String -> String -> ToolSession
 toolSessionNew origin bucket = ToolSession dbEmpty (RunOpts origin 0 True bucket)
+
+-- | 新建**只留在内存**的会话（长驻工具进程内复用，不落盘；`QMarker` 命中即可复用
+-- 调用方已持有的记录，落盘反而会让下次进程白命中一次又没有记录）。
+toolSessionNewMemory : String -> ToolSession
+toolSessionNewMemory origin = ToolSession dbEmpty (RunOpts origin 0 False "")
 
 -- | 从磁盘索引恢复会话（没有索引 ⇒ 空 `Db`）。
 toolSessionResume : ToolSession -> Eff [] ToolSession
