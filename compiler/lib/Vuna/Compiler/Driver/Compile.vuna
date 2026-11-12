@@ -1382,7 +1382,7 @@ hashTableOf dep = do
   )
 
 -- 包级环境指纹（manifest `pmEnv`）：自身 `vuna.toml` 内容 + 传递依赖（名字 / 规范化目录 /
--- 各自 toml 内容）+ 编译器标签。`[capabilities]` / `[trust]` / `[dependencies]` / flags
+-- 各自 toml 内容）+ 编译器标签。`[dependencies]` / flags
 -- 都可能改变语义，但都不在模块源文件哈希里，必须单独构成失效判据（§44o）。
 packageEnvHash : PackageContext -> Eff [] Int
 packageEnvHash ctx = do
@@ -1712,8 +1712,8 @@ resyncCleanSources : List (Pair String SourceInfo) -> List ModuleIface -> List M
 resyncCleanSources sources clean = map (\m => case lookupPair (miNameOf m) sources of
   Just si =>
     ModuleIface (miNameOf m) (miPackageOf m) si (miIfaceHashOf m) (miDepHashesOf m) (miImportsOf m)
-      (miImplicitImportsOf m) (miCapabilitiesOf m) (miExportsOf m) (miFixitiesOf m) (miDeclsOf m)
-      (miRecordsOf m) (miPreparedOf m) (miCachedOf m)
+      (miImplicitImportsOf m) (miExportsOf m) (miFixitiesOf m) (miDeclsOf m) (miRecordsOf m)
+      (miPreparedOf m) (miCachedOf m)
   Nothing => m
 ) clean
 

@@ -6,7 +6,6 @@
 # 是三个独立的失败夹具（纯失败 / 效果失败 / 不支持的 main 类型），用目录路径单独跑。
 [package]
 name = "test-m30"
-privileged = true
 
 [workspace]
 members = ["member"]
@@ -14,6 +13,4 @@ members = ["member"]
 [dependencies]
 vuna-base = "../../../base"
 
-# IoPass.vuna 直接调用 prim_print（显式能力）；其余测试走宿主层或纯值。
-[capabilities]
-effects = ["console"]
+# IoPass.vuna 直接调用 prim_print（无 manifest 门控）；其余测试走宿主层或纯值。

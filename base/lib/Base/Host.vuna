@@ -30,20 +30,20 @@ module Base.Host
   , module Base.Monad
   ) where
 
--- Base.Host：**宿主层**（F3 P2）。只有 `[package] privileged = true` 的包可以 import
--- 本模块（`Loader.Flatten` 按 `[package] privileged` 拒绝非特权 import，错误码
--- `LD_HostModulePrivileged`）。
+-- Base.Host：**宿主层**。
+--
+-- 无 manifest 门控：任何包（用户包、ad-hoc 文件）都可以 import 本模块并直接调用
+-- `prim_*`。用户面仍**应**经 `Base.Eff.*` 标签 + handler 使用效果（纪律，不是强制）。
 --
 -- 这里放宿主别名（console/fs/process/env/clock 的 `prim_eff_*` 包装）：base 的真实
 -- handler（`Base.EffConsole` / `Base.EffFs` / …）、`Base.ST`、`Base.IORef` 等实现层，
 -- 以及编译器与根包工具链。所有别名返回 `Eff [] a`：宿主原语只是行已处理干净的叶子，
 -- 用户面仍经 `Base.Eff.*` 标签 + handler。
 --
--- 用户面（无特权包 / ad-hoc）只有 `Base.Eff` 的 `Eff` 代数/实例 + handler；运行入口
--- `main : Eff [] a`。宿主动作只由特权层构造（能力边界在构造侧）。
+-- 用户面有 `Base.Eff` 的 `Eff` 代数/实例 + handler；运行入口 `main : Eff [] a`。
 --
 -- 别名保留（不直接暴露 `prim_eff_*`）的理由：在边界统一做 Int/Nat 归一化（D25）、
--- 行尾/换行、`sleepMicros` 守卫，并作为 D28 `[trust] unsafe` 的审计面。
+-- 行尾/换行与 `sleepMicros` 守卫。
 import Base.Eff
 import Base.List
 import Base.Bool

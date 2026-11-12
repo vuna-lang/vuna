@@ -1,7 +1,6 @@
--- | 内建声明的唯一真源（M27）：内建/原语的名字、签名形状、interp 归约标签、能力与可见性。
+-- | 内建声明的唯一真源（M27）：内建/原语的名字、签名形状、interp 归约标签与可见性。
 module Vuna.Compiler.Intrinsics
-  ( Capability(..)
-  , IType(..)
+  ( IType(..)
   , Intrinsic
   , IntrinsicOp(..)
   , TypeIntrinsic(..)
@@ -12,8 +11,6 @@ module Vuna.Compiler.Intrinsics
   , boolTrueCtor
   , boolTypeName
   , canonicalCtorsFor
-  , capabilityName
-  , capabilityNames
   , dbgIntrinsicName
   , effDefaultInstance
   , effMemberFamilyName
@@ -40,13 +37,11 @@ module Vuna.Compiler.Intrinsics
   , interpMethodName
   , interpTypeName
   , intrinsicArity
-  , intrinsicCapability
   , intrinsicName
   , intrinsicReturnsEff
   , intrinsicSignature
   , intrinsicVisible
   , isDebugOnlyName
-  , isEffectfulIntrinsic
   , isIntrinsicName
   , isIntrinsicTypeName
   , isTypeConstructorName
@@ -58,7 +53,6 @@ module Vuna.Compiler.Intrinsics
   , natTypeName
   , natZeroCtor
   , needsListBridge
-  , parseCapability
   , preludeTypeNames
   , preludeValueNames
   , primEffBind1Name
@@ -77,9 +71,9 @@ module Vuna.Compiler.Intrinsics
 -- Vuna.Compiler.Intrinsics：**内建声明的唯一真源**（M27）。
 --
 -- 这里只有纯数据：内建/原语的名字、签名形状（IType）、interp 归约标签（IntrinsicOp）、
--- 所需能力（Capability）、OCaml runtime 名字，以及是否对用户源码可见。
+-- OCaml runtime 名字，以及是否对用户源码可见。
 -- 消费方：
---   - `Loader.Resolve`：名字解析（arity）、DT prelude 放行、效应能力检查；
+--   - `Loader.Resolve`：名字解析（arity）、DT prelude 放行；
 --   - `Elab.Prelude`：构造 prelude globals（签名）；
 --   - `Codegen.Term`：全局名 → runtime 表达式；
 --   - `Core.Eval`：按 IntrinsicOp 归约。
@@ -91,50 +85,6 @@ module Vuna.Compiler.Intrinsics
 --   - 隐藏的内部 runtime 名（`bi_*`）只供 codegen 映射，不对用户源码可见。
 import Vuna.Compiler.Common
 import Base.HashMap
-
--- ---------------------------------------------------------------
--- 能力（capability）：显式、不可按包名伪造的效应声明面
--- ---------------------------------------------------------------
--- | 效应能力：显式、不可按包名伪造的效应声明面（`[capabilities] effects`）。
-data Capability : Type where
-  CapConsole : Capability
-  CapFs : Capability
-  CapProcess : Capability
-  CapEnv : Capability
-  CapClock : Capability
-  -- 允许执行运行时效应核心（`prim_effectPerform` / `prim_effectHandle` / cleanup/sched；工具链特权）。
-  CapUnsafe : Capability
-  -- 网络（loopback TCP / Unix domain socket；工具链 server 模式用）。
-  CapNetwork : Capability
-
--- | 能力的源码名字（`vuna.toml` / 诊断里用的字符串）。
-capabilityName : Capability -> String
-capabilityName CapConsole = "console"
-capabilityName CapFs = "fs"
-capabilityName CapProcess = "process"
-capabilityName CapEnv = "env"
-capabilityName CapClock = "clock"
-capabilityName CapUnsafe = "unsafe"
-capabilityName CapNetwork = "net"
-
--- | 所有能力的源码名字列表（诊断「缺能力」提示用）。
-capabilityNames : List String
-capabilityNames = map capabilityName allCapabilities
-
--- | 全部效应能力（`capabilityNames` / 放行检查用）。
-allCapabilities : List Capability
-allCapabilities = [CapConsole, CapFs, CapProcess, CapEnv, CapClock, CapUnsafe, CapNetwork]
-
--- | 从源码名字解析能力；未知名字返回 `Nothing`。
-parseCapability : String -> Maybe Capability
-parseCapability "console" = Just CapConsole
-parseCapability "fs" = Just CapFs
-parseCapability "process" = Just CapProcess
-parseCapability "env" = Just CapEnv
-parseCapability "clock" = Just CapClock
-parseCapability "unsafe" = Just CapUnsafe
-parseCapability "net" = Just CapNetwork
-parseCapability _ = Nothing
 
 -- ---------------------------------------------------------------
 -- 签名形状：只表达内建签名需要的形状（不含依赖 pi / 多态细节）
@@ -251,7 +201,7 @@ effRunName = "Base.Eff.runPure"
 -- ---------------------------------------------------------------
 -- 调试构造（F3 B）：语言级 debug 名字
 -- ---------------------------------------------------------------
--- 这些是**编译器内建的调试构造**，不是库函数、不需要能力位：
+-- 这些是**编译器内建的调试构造**，不是库函数、不需要 import：
 --   * `dbg "msg" x`：求值期把 msg 写 stderr 后返回 x（debug / release 都可用；
 --     debug 输出不是程序语义的一部分）；
 --   * `assert cond "msg" x`：debug-only；失败走 failwith（main 钩子渲染），release
@@ -328,9 +278,6 @@ effMkCtor = "Base.Eff.Eff.MkEff"
 effDefaultInstance : String
 effDefaultInstance = "default"
 
--- ---------------------------------------------------------------
--- 特权边界（F3 P2）：宿主层模块与执行入口
--- ---------------------------------------------------------------
 -- | prelude 类型层名字：primitive 类型 + 内建类型构造子（禁止重定义 + Loader 放行）。
 preludeTypeNames : List String
 preludeTypeNames = append typeIntrinsicNames typeIntrinsicCtorNames
@@ -410,9 +357,9 @@ data IntrinsicOp : Type where
 -- 内建声明
 -- ---------------------------------------------------------------
 --
--- 字段：名字、签名形状、interp 归约标签、所需能力（Nothing = 纯）、runtime 表达式、
--- 是否对用户源码可见（False = 只供 codegen 映射的内部名）。
--- | 内建声明：名字、签名形状、interp 归约标签、所需能力、runtime 表达式、可见性。
+-- 字段：名字、签名形状、interp 归约标签、runtime 表达式、是否对用户源码可见
+-- （False = 只供 codegen 映射的内部名）。
+-- | 内建声明：名字、签名形状、interp 归约标签、runtime 表达式、可见性。
 record Intrinsic where
   -- | 内建的源码名字（如 `+`、`strFromInt`、`prim_eff_print`）。
   intrinsicName : String
@@ -420,8 +367,6 @@ record Intrinsic where
   intrinsicSignature : IType
   -- | interp 归约标签。
   intrinsicOp : IntrinsicOp
-  -- | 所需能力（`Nothing` = 纯）。
-  intrinsicCapability : Maybe Capability
   -- | OCaml runtime 表达式（codegen 全局名 → runtime 的映射目标）。
   intrinsicRuntime : String
   -- | 是否对用户源码可见（`False` = 只供 codegen 映射的内部名 `bi_*`）。
@@ -429,19 +374,15 @@ record Intrinsic where
 
 -- | 取内建的名字。
 intrinsicName : Intrinsic -> String
-intrinsicName (Intrinsic name sig op cap runtime visible) = name
+intrinsicName (Intrinsic name sig op runtime visible) = name
 
 -- | 取内建的签名形状。
 intrinsicSignature : Intrinsic -> IType
-intrinsicSignature (Intrinsic name sig op cap runtime visible) = sig
-
--- | 取内建所需的能力（`Nothing` = 纯）。
-intrinsicCapability : Intrinsic -> Maybe Capability
-intrinsicCapability (Intrinsic name sig op cap runtime visible) = cap
+intrinsicSignature (Intrinsic name sig op runtime visible) = sig
 
 -- | 该内建是否对用户源码可见。
 intrinsicVisible : Intrinsic -> Bool
-intrinsicVisible (Intrinsic name sig op cap runtime visible) = visible
+intrinsicVisible (Intrinsic name sig op runtime visible) = visible
 
 -- | 该内建的 runtime 表达式依赖 canonical `Base.List.List` 桥接 helper（`dtp_*`）。
 -- 没有 base 的包用这些内建时，生成前必须报错（而不是产出 Unbound value）。
@@ -484,12 +425,6 @@ typeReturnsEff (IFun _ cod) = typeReturnsEff cod
 typeReturnsEff (IFun1 _ cod) = typeReturnsEff cod
 typeReturnsEff (IPi _ cod) = typeReturnsEff cod
 typeReturnsEff _ = False
-
--- | 该内建是否需要能力（`intrinsicCapability` 非 `Nothing`）。
-isEffectfulIntrinsic : Intrinsic -> Bool
-isEffectfulIntrinsic i = case intrinsicCapability i of
-  Just _ => True
-  Nothing => False
 
 -- | 语言 primitive 类型名（Bool 不在其中：它是 base 的普通 data 声明）。
 typeIntrinsicNames : List String
@@ -586,10 +521,10 @@ fromFloatMethodName = "Base.Float.fromFloat"
 -- 内部 `bi_*` 只服务 codegen。分成两张表是为了让每段列表字面量的项大小留在旧 seed
 -- 擦除检查的 fuel 内（bootstrap 约束，见 docs/reference/bootstrap.md）。
 baseIntrinsics : List Intrinsic
--- 效果原语（M27：只保留 `prim_*` 名；公开名删除，用户经 Base.Host 或显式能力）。
+-- 效果原语（`prim_*` 名；任何包可直接使用，推荐经 Base.Eff / Base.Host）。
 -- 精化器合成的比较/相等特化名（内部：不对用户源码可见）。
 -- M33 W3：内建类型构造子 Array / IORef / MArray / Buffer 的原语。
--- 纯 Array 原语无能力；IORef / MArray / Buffer 都是 `Eff []` 动作（无能力：不触碰外部世界）。
+-- 纯 Array 原语不触碰外部世界；IORef / MArray / Buffer 都是 `Eff []` 动作。
 -- 空数组字面量：non-expansive 的 OCaml `[||]`，让 `HashMap` 的空表这类零参多态值可泛化。
 -- M33 W4：字节切片（clamp 语义与 Base.String.substring 一致），避免 List 桥接。
 -- M34.5：编译器内部缓存原语（Marshal 纯数据；含闭包会在运行期失败）。
@@ -601,112 +536,110 @@ baseIntrinsics : List Intrinsic
 -- 已被 `Base.Host.eprint` 使用；`prim_fail` 供工具链的 fuel 耗尽路径使用。
 -- 内部 cast（`visible = False`）：只由精化器插入，runtime 是 OCaml 的 `%identity`；
 -- 运行时位置的不透明擦除依赖值靠它进出（见 docs/reference/effects.md §5/§6）。
--- 运行时续延（Layer 1）：一次性 effect handler。两者都要求 `unsafe` 能力，
--- 只供 `Base.Eff` 的信任包装使用；类型在源码层由 Base.Eff 的 API 收紧，
+-- 运行时续延（Layer 1）：一次性 effect handler，只供 `Base.Eff` 的包装使用；类型在源码层由 Base.Eff 的 API 收紧，
 -- 运行时表达式用 Obj.magic 桥接（与 M39 的不透明 cast 同一套表示）。
 -- Layer 3：最小并发（OCaml 5 Domain）。只允许在 main 域 fork/await；任务体应是
 -- 行已被处理干净的 Eff（Base.EffAsync 的 API 强制 Nil）。
 -- W9：单线程 fiber 调度器原语（Base.EffSched 的信任边界；runtime = dtp_sched_*）。
--- 与 effect 原语一样可见但要求 `unsafe` 能力：只有声明了 unsafe 的包（base）能直调。
 -- 原生睡眠（W10 收尾）：微秒；真实实现是 `Unix.sleepf`（阻塞，非忙等）。
--- 能力 `clock`（与 effTimeUs 同族）；interp 不归约（OpNone），效果程序只 compile+run。
+-- clock 族（与 effTimeUs 同族）；interp 不归约（OpNone），效果程序只 compile+run。
 -- `Base.EffClock` 与 `Base.Host.sleepMicros` 都已直接使用它（`spinMicros` 已删除）。
--- F3 B：语言级调试构造（无能力位；assert/todo 由 Resolve 在 release 构建拒绝）。
+-- F3 B：语言级调试构造（不经过宿主层；assert/todo 由 Resolve 在 release 构建拒绝）。
 -- D23：`+ - * /` 只作为 codegen / interp 的映射目标（源码里的 `+` 等已由 Loader
 -- 换成 `Base.Num` 的方法别名，精化期再特化回这四个内建），因此不再对用户源码可见。
 -- 位运算（可见：库与编译器直接用；语义见 `IntrinsicOp` 的注释与 primitives.md）。
 baseIntrinsics =
-  [ Intrinsic "+" (IFun IInt (IFun IInt IInt)) OpAdd Nothing "bi_add" False,
-    Intrinsic "-" (IFun IInt (IFun IInt IInt)) OpSub Nothing "bi_sub" False,
-    Intrinsic "*" (IFun IInt (IFun IInt IInt)) OpMul Nothing "bi_mul" False,
-    Intrinsic "/" (IFun IInt (IFun IInt IInt)) OpDiv Nothing "bi_div" False,
-    Intrinsic "bitAnd" (IFun IInt (IFun IInt IInt)) OpBitAnd Nothing "bi_bitAnd" True,
-    Intrinsic "bitOr" (IFun IInt (IFun IInt IInt)) OpBitOr Nothing "bi_bitOr" True,
-    Intrinsic "bitXor" (IFun IInt (IFun IInt IInt)) OpBitXor Nothing "bi_bitXor" True,
-    Intrinsic "bitNot" (IFun IInt IInt) OpBitNot Nothing "bi_bitNot" True,
-    Intrinsic "bitShl" (IFun IInt (IFun IInt IInt)) OpBitShl Nothing "bi_bitShl" True,
-    Intrinsic "bitShr" (IFun IInt (IFun IInt IInt)) OpBitShr Nothing "bi_bitShr" True,
-    Intrinsic "++" (IFun IStr (IFun IStr IStr)) OpConcat Nothing "bi_concat" True,
-    Intrinsic "&&" (IFun IBool (IFun IBool IBool)) OpAnd Nothing "bi_and" True,
-    Intrinsic "||" (IFun IBool (IFun IBool IBool)) OpOr Nothing "bi_or" True,
-    Intrinsic "strFromInt" (IFun IInt IStr) OpStrFromInt Nothing "bi_strFromInt" True,
-    Intrinsic "strUnpack" (IFun IStr (IList IInt)) OpStrUnpack Nothing "dtp_unpack" True,
-    Intrinsic "strPack" (IFun (IList IInt) IStr) OpStrPack Nothing "dtp_pack" True,
-    Intrinsic "strLength" (IFun IStr IInt) OpStrLength Nothing "bi_strLength" True,
-    Intrinsic "strConcatMany" (IFun (IList IStr) IStr) OpStrConcatMany Nothing "dtp_concatMany" True,
-    Intrinsic "strSubstTemplate" (IFun IStr (IFun (IList IStr) IStr)) OpStrSubstTemplate Nothing "dtp_substTemplate" True,
-    Intrinsic "strHash" (IFun IStr IInt) OpStrHash Nothing "dtp_strHash" True,
-    Intrinsic "strAt" (IFun IStr (IFun IInt IInt)) OpStrAt Nothing "dtp_strAt" True,
-    Intrinsic "strSubstring" (IFun IInt (IFun IInt (IFun IStr IStr))) OpStrSubstring Nothing "dtp_substring" True,
-    Intrinsic "strShow" (IFun IStr IStr) OpStrShow Nothing "dt_show_string" True,
-    Intrinsic primEraseName (IPi "a" (IFun (IVar "a") (IVar "a"))) OpIdentity Nothing "Obj.magic" False,
-    Intrinsic "natAdd" (IFun INat (IFun INat INat)) OpNatAdd Nothing "bi_natAdd" True,
-    Intrinsic "natSub" (IFun INat (IFun INat INat)) OpNatSub Nothing "bi_natSub" True,
-    Intrinsic "natMul" (IFun INat (IFun INat INat)) OpNatMul Nothing "bi_natMul" True,
-    Intrinsic "natDiv" (IFun INat (IFun INat INat)) OpNatDiv Nothing "bi_natDiv" True,
-    Intrinsic "natToInt" (IFun INat IInt) OpNatToInt Nothing "bi_natToInt" True,
-    Intrinsic "natFromInt" (IFun IInt INat) OpNatFromInt Nothing "bi_natFromInt" True,
-    Intrinsic "arrayLength" (IPi "a" (IFun (IArray (IVar "a")) IInt)) OpNone Nothing "Array.length" True,
-    Intrinsic "arrayEmpty" (IPi "a" (IArray (IVar "a"))) OpNone Nothing "[||]" True,
-    Intrinsic "arrayGet" (IPi "a" (IFun (IArray (IVar "a")) (IFun IInt (IVar "a")))) OpNone Nothing "Array.get" True,
-    Intrinsic "arraySet" (IPi "a" (IFun (IArray (IVar "a")) (IFun IInt (IFun (IVar "a") (IArray (IVar "a")))))) OpNone Nothing "dtp_arraySet" True,
-    Intrinsic "arrayMake" (IPi "a" (IFun IInt (IFun (IVar "a") (IArray (IVar "a"))))) OpNone Nothing "Array.make" True,
-    Intrinsic "arrayFromList" (IPi "a" (IFun (IList (IVar "a")) (IArray (IVar "a")))) OpNone Nothing "(fun xs -> Array.of_list (dtp_ocamlOf xs))" True,
-    Intrinsic "arrayToList" (IPi "a" (IFun (IArray (IVar "a")) (IList (IVar "a")))) OpNone Nothing "(fun a -> dtp_listOf (Array.to_list a))" True,
-    Intrinsic "prim_effectPerform" (IPi "a" (IPi "b" (IFun IStr (IFun IStr (IFun (IVar "a") (IVar "b")))))) OpNone (Just CapUnsafe) "(fun key name v -> Obj.obj (Effect.perform (Perform (key, name, Obj.repr v))))" True,
-    Intrinsic "prim_effectHandle" (IPi "u" (IPi "a" (IPi "b" (IPi "ret" (IPi "h" (IFun IStr (IFun IStr (IFun (IVar "ret") (IFun (IVar "h") (IFun (IFun (IVar "u") (IVar "a")) (IFun (IVar "u") (IVar "b")))))))))))) OpNone (Just CapUnsafe) "dtp_effect_handle" True,
-    Intrinsic "prim_cleanupPush" (IFun (IFun IInt IInt) IInt) OpNone (Just CapUnsafe) "dtp_cleanup_push" True,
-    Intrinsic "prim_cleanupPop" (IFun IInt IInt) OpNone (Just CapUnsafe) "dtp_cleanup_pop" True,
-    Intrinsic "prim_schedNewScope" (IFun IInt IInt) OpNone (Just CapUnsafe) "(fun _ -> dtp_sched_new_scope ())" True,
-    Intrinsic "prim_schedFork" (IPi "a" (IFun IInt (IFun (IFun IInt (IVar "a")) IInt))) OpNone (Just CapUnsafe) "(fun sc th -> dtp_sched_fork sc th)" True,
-    Intrinsic "prim_schedYield" (IFun IInt IInt) OpNone (Just CapUnsafe) "(fun _ -> dtp_sched_yield ())" True,
-    Intrinsic "prim_schedIsCancelled" (IFun IInt IInt) OpNone (Just CapUnsafe) "(fun _ -> dtp_sched_is_cancelled ())" True,
-    Intrinsic "prim_schedAwait" (IFun IInt IInt) OpNone (Just CapUnsafe) "dtp_sched_await" True,
-    Intrinsic "prim_schedTaskResult" (IPi "a" (IFun IInt (IVar "a"))) OpNone (Just CapUnsafe) "(fun id -> Obj.obj (dtp_sched_task_result id))" True,
-    Intrinsic "prim_schedTaskError" (IFun IInt IStr) OpNone (Just CapUnsafe) "dtp_sched_task_error" True,
-    Intrinsic "prim_schedCancelTask" (IFun IInt IInt) OpNone (Just CapUnsafe) "dtp_sched_cancel_task_prim" True,
-    Intrinsic "prim_schedCancelScope" (IFun IInt IInt) OpNone (Just CapUnsafe) "dtp_sched_cancel_scope" True,
-    Intrinsic "prim_schedScopeWait" (IFun IInt IInt) OpNone (Just CapUnsafe) "dtp_sched_scope_wait" True,
-    Intrinsic "prim_schedScopeWaitTimeout" (IFun IInt (IFun IInt IInt)) OpNone (Just CapUnsafe) "dtp_sched_scope_wait_timeout" True,
-    Intrinsic "prim_schedScopeError" (IFun IInt IStr) OpNone (Just CapUnsafe) "dtp_sched_scope_error" True,
-    Intrinsic "prim_schedScopeCount" (IFun IInt IInt) OpNone (Just CapUnsafe) "dtp_sched_scope_count" True,
-    Intrinsic "prim_fail" (IPi "a" (IFun IStr (IVar "a"))) OpNone Nothing "(fun msg -> failwith msg)" True,
-    Intrinsic dbgIntrinsicName (IPi "a" (IFun IStr (IFun (IVar "a") (IVar "a")))) OpNone Nothing "(fun s x -> prerr_string s; prerr_newline (); x)" True,
-    Intrinsic assertIntrinsicName (IPi "a" (IFun IBool (IFun IStr (IFun (IVar "a") (IVar "a"))))) OpNone Nothing "(fun b msg x -> if b then x else failwith (\"assertion failed: \" ^ msg))" True,
-    Intrinsic todoIntrinsicName (IPi "a" (IFun IStr (IVar "a"))) OpNone Nothing "(fun msg -> failwith (\"TODO: \" ^ msg))" True,
-    Intrinsic "bi_eq_int" (IFun IInt (IFun IInt IBool)) OpEqInt Nothing "bi_eq_int" False,
-    Intrinsic "bi_neq_int" (IFun IInt (IFun IInt IBool)) OpNeqInt Nothing "bi_neq_int" False,
-    Intrinsic "bi_eq_str" (IFun IStr (IFun IStr IBool)) OpEqStr Nothing "bi_eq_str" False,
-    Intrinsic "bi_neq_str" (IFun IStr (IFun IStr IBool)) OpNeqStr Nothing "bi_neq_str" False,
-    Intrinsic "bi_lt_int" (IFun IInt (IFun IInt IBool)) OpLtInt Nothing "bi_lt_int" False,
-    Intrinsic "bi_le_int" (IFun IInt (IFun IInt IBool)) OpLeInt Nothing "bi_le_int" False,
-    Intrinsic "bi_gt_int" (IFun IInt (IFun IInt IBool)) OpGtInt Nothing "bi_gt_int" False,
-    Intrinsic "bi_ge_int" (IFun IInt (IFun IInt IBool)) OpGeInt Nothing "bi_ge_int" False,
-    Intrinsic "bi_lt_generic" (IFun IInt (IFun IInt IBool)) OpLtGeneric Nothing "bi_lt_generic" False,
-    Intrinsic "bi_le_generic" (IFun IInt (IFun IInt IBool)) OpLeGeneric Nothing "bi_le_generic" False,
-    Intrinsic "bi_gt_generic" (IFun IInt (IFun IInt IBool)) OpGtGeneric Nothing "bi_gt_generic" False,
-    Intrinsic "bi_ge_generic" (IFun IInt (IFun IInt IBool)) OpGeGeneric Nothing "bi_ge_generic" False
+  [ Intrinsic "+" (IFun IInt (IFun IInt IInt)) OpAdd "bi_add" False,
+    Intrinsic "-" (IFun IInt (IFun IInt IInt)) OpSub "bi_sub" False,
+    Intrinsic "*" (IFun IInt (IFun IInt IInt)) OpMul "bi_mul" False,
+    Intrinsic "/" (IFun IInt (IFun IInt IInt)) OpDiv "bi_div" False,
+    Intrinsic "bitAnd" (IFun IInt (IFun IInt IInt)) OpBitAnd "bi_bitAnd" True,
+    Intrinsic "bitOr" (IFun IInt (IFun IInt IInt)) OpBitOr "bi_bitOr" True,
+    Intrinsic "bitXor" (IFun IInt (IFun IInt IInt)) OpBitXor "bi_bitXor" True,
+    Intrinsic "bitNot" (IFun IInt IInt) OpBitNot "bi_bitNot" True,
+    Intrinsic "bitShl" (IFun IInt (IFun IInt IInt)) OpBitShl "bi_bitShl" True,
+    Intrinsic "bitShr" (IFun IInt (IFun IInt IInt)) OpBitShr "bi_bitShr" True,
+    Intrinsic "++" (IFun IStr (IFun IStr IStr)) OpConcat "bi_concat" True,
+    Intrinsic "&&" (IFun IBool (IFun IBool IBool)) OpAnd "bi_and" True,
+    Intrinsic "||" (IFun IBool (IFun IBool IBool)) OpOr "bi_or" True,
+    Intrinsic "strFromInt" (IFun IInt IStr) OpStrFromInt "bi_strFromInt" True,
+    Intrinsic "strUnpack" (IFun IStr (IList IInt)) OpStrUnpack "dtp_unpack" True,
+    Intrinsic "strPack" (IFun (IList IInt) IStr) OpStrPack "dtp_pack" True,
+    Intrinsic "strLength" (IFun IStr IInt) OpStrLength "bi_strLength" True,
+    Intrinsic "strConcatMany" (IFun (IList IStr) IStr) OpStrConcatMany "dtp_concatMany" True,
+    Intrinsic "strSubstTemplate" (IFun IStr (IFun (IList IStr) IStr)) OpStrSubstTemplate "dtp_substTemplate" True,
+    Intrinsic "strHash" (IFun IStr IInt) OpStrHash "dtp_strHash" True,
+    Intrinsic "strAt" (IFun IStr (IFun IInt IInt)) OpStrAt "dtp_strAt" True,
+    Intrinsic "strSubstring" (IFun IInt (IFun IInt (IFun IStr IStr))) OpStrSubstring "dtp_substring" True,
+    Intrinsic "strShow" (IFun IStr IStr) OpStrShow "dt_show_string" True,
+    Intrinsic primEraseName (IPi "a" (IFun (IVar "a") (IVar "a"))) OpIdentity "Obj.magic" False,
+    Intrinsic "natAdd" (IFun INat (IFun INat INat)) OpNatAdd "bi_natAdd" True,
+    Intrinsic "natSub" (IFun INat (IFun INat INat)) OpNatSub "bi_natSub" True,
+    Intrinsic "natMul" (IFun INat (IFun INat INat)) OpNatMul "bi_natMul" True,
+    Intrinsic "natDiv" (IFun INat (IFun INat INat)) OpNatDiv "bi_natDiv" True,
+    Intrinsic "natToInt" (IFun INat IInt) OpNatToInt "bi_natToInt" True,
+    Intrinsic "natFromInt" (IFun IInt INat) OpNatFromInt "bi_natFromInt" True,
+    Intrinsic "arrayLength" (IPi "a" (IFun (IArray (IVar "a")) IInt)) OpNone "Array.length" True,
+    Intrinsic "arrayEmpty" (IPi "a" (IArray (IVar "a"))) OpNone "[||]" True,
+    Intrinsic "arrayGet" (IPi "a" (IFun (IArray (IVar "a")) (IFun IInt (IVar "a")))) OpNone "Array.get" True,
+    Intrinsic "arraySet" (IPi "a" (IFun (IArray (IVar "a")) (IFun IInt (IFun (IVar "a") (IArray (IVar "a")))))) OpNone "dtp_arraySet" True,
+    Intrinsic "arrayMake" (IPi "a" (IFun IInt (IFun (IVar "a") (IArray (IVar "a"))))) OpNone "Array.make" True,
+    Intrinsic "arrayFromList" (IPi "a" (IFun (IList (IVar "a")) (IArray (IVar "a")))) OpNone "(fun xs -> Array.of_list (dtp_ocamlOf xs))" True,
+    Intrinsic "arrayToList" (IPi "a" (IFun (IArray (IVar "a")) (IList (IVar "a")))) OpNone "(fun a -> dtp_listOf (Array.to_list a))" True,
+    Intrinsic "prim_effectPerform" (IPi "a" (IPi "b" (IFun IStr (IFun IStr (IFun (IVar "a") (IVar "b")))))) OpNone "(fun key name v -> Obj.obj (Effect.perform (Perform (key, name, Obj.repr v))))" True,
+    Intrinsic "prim_effectHandle" (IPi "u" (IPi "a" (IPi "b" (IPi "ret" (IPi "h" (IFun IStr (IFun IStr (IFun (IVar "ret") (IFun (IVar "h") (IFun (IFun (IVar "u") (IVar "a")) (IFun (IVar "u") (IVar "b")))))))))))) OpNone "dtp_effect_handle" True,
+    Intrinsic "prim_cleanupPush" (IFun (IFun IInt IInt) IInt) OpNone "dtp_cleanup_push" True,
+    Intrinsic "prim_cleanupPop" (IFun IInt IInt) OpNone "dtp_cleanup_pop" True,
+    Intrinsic "prim_schedNewScope" (IFun IInt IInt) OpNone "(fun _ -> dtp_sched_new_scope ())" True,
+    Intrinsic "prim_schedFork" (IPi "a" (IFun IInt (IFun (IFun IInt (IVar "a")) IInt))) OpNone "(fun sc th -> dtp_sched_fork sc th)" True,
+    Intrinsic "prim_schedYield" (IFun IInt IInt) OpNone "(fun _ -> dtp_sched_yield ())" True,
+    Intrinsic "prim_schedIsCancelled" (IFun IInt IInt) OpNone "(fun _ -> dtp_sched_is_cancelled ())" True,
+    Intrinsic "prim_schedAwait" (IFun IInt IInt) OpNone "dtp_sched_await" True,
+    Intrinsic "prim_schedTaskResult" (IPi "a" (IFun IInt (IVar "a"))) OpNone "(fun id -> Obj.obj (dtp_sched_task_result id))" True,
+    Intrinsic "prim_schedTaskError" (IFun IInt IStr) OpNone "dtp_sched_task_error" True,
+    Intrinsic "prim_schedCancelTask" (IFun IInt IInt) OpNone "dtp_sched_cancel_task_prim" True,
+    Intrinsic "prim_schedCancelScope" (IFun IInt IInt) OpNone "dtp_sched_cancel_scope" True,
+    Intrinsic "prim_schedScopeWait" (IFun IInt IInt) OpNone "dtp_sched_scope_wait" True,
+    Intrinsic "prim_schedScopeWaitTimeout" (IFun IInt (IFun IInt IInt)) OpNone "dtp_sched_scope_wait_timeout" True,
+    Intrinsic "prim_schedScopeError" (IFun IInt IStr) OpNone "dtp_sched_scope_error" True,
+    Intrinsic "prim_schedScopeCount" (IFun IInt IInt) OpNone "dtp_sched_scope_count" True,
+    Intrinsic "prim_fail" (IPi "a" (IFun IStr (IVar "a"))) OpNone "(fun msg -> failwith msg)" True,
+    Intrinsic dbgIntrinsicName (IPi "a" (IFun IStr (IFun (IVar "a") (IVar "a")))) OpNone "(fun s x -> prerr_string s; prerr_newline (); x)" True,
+    Intrinsic assertIntrinsicName (IPi "a" (IFun IBool (IFun IStr (IFun (IVar "a") (IVar "a"))))) OpNone "(fun b msg x -> if b then x else failwith (\"assertion failed: \" ^ msg))" True,
+    Intrinsic todoIntrinsicName (IPi "a" (IFun IStr (IVar "a"))) OpNone "(fun msg -> failwith (\"TODO: \" ^ msg))" True,
+    Intrinsic "bi_eq_int" (IFun IInt (IFun IInt IBool)) OpEqInt "bi_eq_int" False,
+    Intrinsic "bi_neq_int" (IFun IInt (IFun IInt IBool)) OpNeqInt "bi_neq_int" False,
+    Intrinsic "bi_eq_str" (IFun IStr (IFun IStr IBool)) OpEqStr "bi_eq_str" False,
+    Intrinsic "bi_neq_str" (IFun IStr (IFun IStr IBool)) OpNeqStr "bi_neq_str" False,
+    Intrinsic "bi_lt_int" (IFun IInt (IFun IInt IBool)) OpLtInt "bi_lt_int" False,
+    Intrinsic "bi_le_int" (IFun IInt (IFun IInt IBool)) OpLeInt "bi_le_int" False,
+    Intrinsic "bi_gt_int" (IFun IInt (IFun IInt IBool)) OpGtInt "bi_gt_int" False,
+    Intrinsic "bi_ge_int" (IFun IInt (IFun IInt IBool)) OpGeInt "bi_ge_int" False,
+    Intrinsic "bi_lt_generic" (IFun IInt (IFun IInt IBool)) OpLtGeneric "bi_lt_generic" False,
+    Intrinsic "bi_le_generic" (IFun IInt (IFun IInt IBool)) OpLeGeneric "bi_le_generic" False,
+    Intrinsic "bi_gt_generic" (IFun IInt (IFun IInt IBool)) OpGtGeneric "bi_gt_generic" False,
+    Intrinsic "bi_ge_generic" (IFun IInt (IFun IInt IBool)) OpGeGeneric "bi_ge_generic" False
   ]
 
 -- | 浮点相关内建（字面量转换/算术/比较/格式化）。单独成表：见 `baseIntrinsics` 的
 -- bootstrap 说明；顺序上追加在基础表之后。
 floatIntrinsics : List Intrinsic
 floatIntrinsics =
-  [ Intrinsic "strFromFloat" (IFun IFloat IStr) OpStrFromFloat Nothing "string_of_float" True,
-    Intrinsic "floatFromInt" (IFun IInt IFloat) OpFloatFromInt Nothing "float_of_int" True,
-    Intrinsic "intFromFloat" (IFun IFloat IInt) OpIntFromFloat Nothing "int_of_float" True,
-    Intrinsic "floatAbs" (IFun IFloat IFloat) OpFloatAbs Nothing "abs_float" True,
-    Intrinsic "floatSqrt" (IFun IFloat IFloat) OpFloatSqrt Nothing "sqrt" True,
-    Intrinsic "bi_add_float" (IFun IFloat (IFun IFloat IFloat)) OpAddF Nothing "bi_add_float" False,
-    Intrinsic "bi_sub_float" (IFun IFloat (IFun IFloat IFloat)) OpSubF Nothing "bi_sub_float" False,
-    Intrinsic "bi_mul_float" (IFun IFloat (IFun IFloat IFloat)) OpMulF Nothing "bi_mul_float" False,
-    Intrinsic "bi_div_float" (IFun IFloat (IFun IFloat IFloat)) OpDivF Nothing "bi_div_float" False,
-    Intrinsic "bi_eq_float" (IFun IFloat (IFun IFloat IBool)) OpEqF Nothing "bi_eq_float" False,
-    Intrinsic "bi_neq_float" (IFun IFloat (IFun IFloat IBool)) OpNeqF Nothing "bi_neq_float" False,
-    Intrinsic "bi_lt_float" (IFun IFloat (IFun IFloat IBool)) OpLtF Nothing "bi_lt_float" False,
-    Intrinsic "bi_le_float" (IFun IFloat (IFun IFloat IBool)) OpLeF Nothing "bi_le_float" False,
-    Intrinsic "bi_gt_float" (IFun IFloat (IFun IFloat IBool)) OpGtF Nothing "bi_gt_float" False,
-    Intrinsic "bi_ge_float" (IFun IFloat (IFun IFloat IBool)) OpGeF Nothing "bi_ge_float" False
+  [ Intrinsic "strFromFloat" (IFun IFloat IStr) OpStrFromFloat "string_of_float" True,
+    Intrinsic "floatFromInt" (IFun IInt IFloat) OpFloatFromInt "float_of_int" True,
+    Intrinsic "intFromFloat" (IFun IFloat IInt) OpIntFromFloat "int_of_float" True,
+    Intrinsic "floatAbs" (IFun IFloat IFloat) OpFloatAbs "abs_float" True,
+    Intrinsic "floatSqrt" (IFun IFloat IFloat) OpFloatSqrt "sqrt" True,
+    Intrinsic "bi_add_float" (IFun IFloat (IFun IFloat IFloat)) OpAddF "bi_add_float" False,
+    Intrinsic "bi_sub_float" (IFun IFloat (IFun IFloat IFloat)) OpSubF "bi_sub_float" False,
+    Intrinsic "bi_mul_float" (IFun IFloat (IFun IFloat IFloat)) OpMulF "bi_mul_float" False,
+    Intrinsic "bi_div_float" (IFun IFloat (IFun IFloat IFloat)) OpDivF "bi_div_float" False,
+    Intrinsic "bi_eq_float" (IFun IFloat (IFun IFloat IBool)) OpEqF "bi_eq_float" False,
+    Intrinsic "bi_neq_float" (IFun IFloat (IFun IFloat IBool)) OpNeqF "bi_neq_float" False,
+    Intrinsic "bi_lt_float" (IFun IFloat (IFun IFloat IBool)) OpLtF "bi_lt_float" False,
+    Intrinsic "bi_le_float" (IFun IFloat (IFun IFloat IBool)) OpLeF "bi_le_float" False,
+    Intrinsic "bi_gt_float" (IFun IFloat (IFun IFloat IBool)) OpGtF "bi_gt_float" False,
+    Intrinsic "bi_ge_float" (IFun IFloat (IFun IFloat IBool)) OpGeF "bi_ge_float" False
   ]
 
 -- | Eff 动作版本的宿主原语（bootstrap 过渡表）：名字带 `prim_eff_` 前缀，
@@ -714,49 +647,49 @@ floatIntrinsics =
 -- 留在旧 seed 的 fuel 内（同 `floatIntrinsics`；迁移完成后本表并改名）。
 effIntrinsics : List Intrinsic
 effIntrinsics =
-  [ Intrinsic primEffBind1Name (IPi "a" (IPi "b" (IFun1 (IEff (IVar "a")) (IFun1 (IFun1 (IVar "a") (IEff (IVar "b"))) (IEff (IVar "b")))))) OpNone Nothing "" True,
-    Intrinsic "effTimeUs" (IEff IInt) OpNone (Just CapClock) "(dtp_timeUs ())" True,
-    Intrinsic "prim_eff_sleep" (IFun IInt (IEff IInt)) OpNone (Just CapClock) "dtp_sleep" True,
-    Intrinsic "prim_eff_newRef" (IPi "a" (IFun (IVar "a") (IEff (IRef (IVar "a"))))) OpNone Nothing "(fun x -> ref x)" True,
-    Intrinsic "prim_eff_readRef" (IPi "a" (IFun (IRef (IVar "a")) (IEff (IVar "a")))) OpNone Nothing "(fun r -> !r)" True,
-    Intrinsic "prim_eff_writeRef" (IPi "a" (IFun (IRef (IVar "a")) (IFun (IVar "a") (IEff IInt)))) OpNone Nothing "(fun r v -> r := v; 0)" True,
-    Intrinsic "prim_eff_newMArray" (IPi "a" (IFun IInt (IFun (IVar "a") (IEff (IMArray (IVar "a")))))) OpNone Nothing "(fun n v -> Array.make n v)" True,
-    Intrinsic "prim_eff_readMArray" (IPi "a" (IFun (IMArray (IVar "a")) (IFun IInt (IEff (IVar "a"))))) OpNone Nothing "(fun a i -> Array.get a i)" True,
-    Intrinsic "prim_eff_writeMArray" (IPi "a" (IFun (IMArray (IVar "a")) (IFun IInt (IFun (IVar "a") (IEff IInt))))) OpNone Nothing "(fun a i v -> Array.set a i v; 0)" True,
-    Intrinsic "prim_eff_mArrayLength" (IPi "a" (IFun (IMArray (IVar "a")) (IEff IInt))) OpNone Nothing "(fun a -> Array.length a)" True,
-    Intrinsic "prim_eff_newBuffer" (IEff IBuf) OpNone Nothing "(Buffer.create 16)" True,
-    Intrinsic "prim_eff_bufferAdd" (IFun IBuf (IFun IStr (IEff IInt))) OpNone Nothing "(fun b s -> Buffer.add_string b s; String.length s)" True,
-    Intrinsic "prim_eff_bufferContents" (IFun IBuf (IEff IStr)) OpNone Nothing "(fun b -> Buffer.contents b)" True,
-    Intrinsic "prim_eff_bufferLength" (IFun IBuf (IEff IInt)) OpNone Nothing "(fun b -> Buffer.length b)" True,
-    Intrinsic "prim_eff_print" (IFun IStr (IEff IInt)) OpNone (Just CapConsole) "dtp_print" True,
-    Intrinsic "prim_eff_eprint" (IFun IStr (IEff IInt)) OpNone (Just CapConsole) "(fun s -> prerr_string s; flush stderr; String.length s)" True,
-    Intrinsic "prim_eff_readFile" (IFun IStr (IEff IStr)) OpNone (Just CapFs) "dtp_readFile" True,
-    Intrinsic "prim_eff_writeFile" (IFun IStr (IFun IStr (IEff IInt))) OpNone (Just CapFs) "dtp_writeFile" True,
-    Intrinsic "prim_eff_writeFileAtomic" (IFun IStr (IFun IStr (IEff IInt))) OpNone (Just CapFs) "dtp_writeFileAtomic" True,
-    Intrinsic "prim_eff_readLine" (IEff IStr) OpNone (Just CapConsole) "(dtp_readLine ())" True,
-    Intrinsic "prim_eff_readBytes" (IFun IInt (IEff IStr)) OpNone (Just CapConsole) "dtp_readBytes" True,
-    Intrinsic "prim_eff_getArgs" (IEff (IList IStr)) OpNone (Just CapProcess) "(dtp_listOf (dtp_getArgs ()))" True,
-    Intrinsic "prim_eff_readDir" (IFun IStr (IEff (IList IStr))) OpNone (Just CapFs) "(fun p -> dtp_listOf (dtp_readDir p))" True,
-    Intrinsic "prim_eff_isDirectory" (IFun IStr (IEff IBool)) OpNone (Just CapFs) "dtp_isDirectory" True,
-    Intrinsic "prim_eff_makeDir" (IFun IStr (IEff IInt)) OpNone (Just CapFs) "dtp_makeDir" True,
-    Intrinsic "prim_eff_removeFile" (IFun IStr (IEff IInt)) OpNone (Just CapFs) "dtp_removeFile" True,
-    Intrinsic "prim_eff_fileExists" (IFun IStr (IEff IBool)) OpNone (Just CapFs) "dtp_fileExists" True,
-    Intrinsic "prim_eff_fileMtime" (IFun IStr (IEff IInt)) OpNone (Just CapFs) "dtp_fileMtime" True,
-    Intrinsic "prim_eff_fileSize" (IFun IStr (IEff IInt)) OpNone (Just CapFs) "dtp_fileSize" True,
-    Intrinsic "prim_eff_exit" (IFun IInt (IEff IInt)) OpNone (Just CapProcess) "dtp_exit" True,
-    Intrinsic "prim_eff_runIn" (IFun IStr (IFun (IList IStr) (IEff IInt))) OpNone (Just CapProcess) "(fun dir args -> dtp_runIn dir (dtp_ocamlOf args))" True,
-    Intrinsic "prim_eff_spawn" (IFun (IList IStr) (IEff IInt)) OpNone (Just CapProcess) "(fun args -> dtp_spawn (dtp_ocamlOf args))" True,
-    Intrinsic "prim_eff_wait" (IFun IInt (IEff IInt)) OpNone (Just CapProcess) "dtp_wait" True,
-    Intrinsic "prim_eff_netListen" (IFun IStr (IEff IInt)) OpNone (Just CapNetwork) "dtp_net_listen" True,
-    Intrinsic "prim_eff_netPort" (IFun IInt (IEff IInt)) OpNone (Just CapNetwork) "dtp_net_port" True,
-    Intrinsic "prim_eff_netAccept" (IFun IInt (IEff IInt)) OpNone (Just CapNetwork) "dtp_net_accept" True,
-    Intrinsic "prim_eff_netRecv" (IFun IInt (IFun IInt (IEff IStr))) OpNone (Just CapNetwork) "dtp_net_recv" True,
-    Intrinsic "prim_eff_netSend" (IFun IInt (IFun IStr (IEff IInt))) OpNone (Just CapNetwork) "dtp_net_send" True,
-    Intrinsic "prim_eff_netClose" (IFun IInt (IEff IInt)) OpNone (Just CapNetwork) "dtp_net_close" True,
-    Intrinsic "prim_eff_netConnect" (IFun IStr (IEff IInt)) OpNone (Just CapNetwork) "dtp_net_connect" True,
-    Intrinsic "prim_eff_getenv" (IFun IStr (IEff IStr)) OpNone (Just CapEnv) "dtp_getenv" True,
-    Intrinsic "prim_eff_getcwd" (IEff IStr) OpNone (Just CapEnv) "(dtp_getcwd ())" True,
-    Intrinsic "prim_eff_execPath" (IEff IStr) OpNone (Just CapEnv) "(dtp_execPath ())" True
+  [ Intrinsic primEffBind1Name (IPi "a" (IPi "b" (IFun1 (IEff (IVar "a")) (IFun1 (IFun1 (IVar "a") (IEff (IVar "b"))) (IEff (IVar "b")))))) OpNone "" True,
+    Intrinsic "effTimeUs" (IEff IInt) OpNone "(dtp_timeUs ())" True,
+    Intrinsic "prim_eff_sleep" (IFun IInt (IEff IInt)) OpNone "dtp_sleep" True,
+    Intrinsic "prim_eff_newRef" (IPi "a" (IFun (IVar "a") (IEff (IRef (IVar "a"))))) OpNone "(fun x -> ref x)" True,
+    Intrinsic "prim_eff_readRef" (IPi "a" (IFun (IRef (IVar "a")) (IEff (IVar "a")))) OpNone "(fun r -> !r)" True,
+    Intrinsic "prim_eff_writeRef" (IPi "a" (IFun (IRef (IVar "a")) (IFun (IVar "a") (IEff IInt)))) OpNone "(fun r v -> r := v; 0)" True,
+    Intrinsic "prim_eff_newMArray" (IPi "a" (IFun IInt (IFun (IVar "a") (IEff (IMArray (IVar "a")))))) OpNone "(fun n v -> Array.make n v)" True,
+    Intrinsic "prim_eff_readMArray" (IPi "a" (IFun (IMArray (IVar "a")) (IFun IInt (IEff (IVar "a"))))) OpNone "(fun a i -> Array.get a i)" True,
+    Intrinsic "prim_eff_writeMArray" (IPi "a" (IFun (IMArray (IVar "a")) (IFun IInt (IFun (IVar "a") (IEff IInt))))) OpNone "(fun a i v -> Array.set a i v; 0)" True,
+    Intrinsic "prim_eff_mArrayLength" (IPi "a" (IFun (IMArray (IVar "a")) (IEff IInt))) OpNone "(fun a -> Array.length a)" True,
+    Intrinsic "prim_eff_newBuffer" (IEff IBuf) OpNone "(Buffer.create 16)" True,
+    Intrinsic "prim_eff_bufferAdd" (IFun IBuf (IFun IStr (IEff IInt))) OpNone "(fun b s -> Buffer.add_string b s; String.length s)" True,
+    Intrinsic "prim_eff_bufferContents" (IFun IBuf (IEff IStr)) OpNone "(fun b -> Buffer.contents b)" True,
+    Intrinsic "prim_eff_bufferLength" (IFun IBuf (IEff IInt)) OpNone "(fun b -> Buffer.length b)" True,
+    Intrinsic "prim_eff_print" (IFun IStr (IEff IInt)) OpNone "dtp_print" True,
+    Intrinsic "prim_eff_eprint" (IFun IStr (IEff IInt)) OpNone "(fun s -> prerr_string s; flush stderr; String.length s)" True,
+    Intrinsic "prim_eff_readFile" (IFun IStr (IEff IStr)) OpNone "dtp_readFile" True,
+    Intrinsic "prim_eff_writeFile" (IFun IStr (IFun IStr (IEff IInt))) OpNone "dtp_writeFile" True,
+    Intrinsic "prim_eff_writeFileAtomic" (IFun IStr (IFun IStr (IEff IInt))) OpNone "dtp_writeFileAtomic" True,
+    Intrinsic "prim_eff_readLine" (IEff IStr) OpNone "(dtp_readLine ())" True,
+    Intrinsic "prim_eff_readBytes" (IFun IInt (IEff IStr)) OpNone "dtp_readBytes" True,
+    Intrinsic "prim_eff_getArgs" (IEff (IList IStr)) OpNone "(dtp_listOf (dtp_getArgs ()))" True,
+    Intrinsic "prim_eff_readDir" (IFun IStr (IEff (IList IStr))) OpNone "(fun p -> dtp_listOf (dtp_readDir p))" True,
+    Intrinsic "prim_eff_isDirectory" (IFun IStr (IEff IBool)) OpNone "dtp_isDirectory" True,
+    Intrinsic "prim_eff_makeDir" (IFun IStr (IEff IInt)) OpNone "dtp_makeDir" True,
+    Intrinsic "prim_eff_removeFile" (IFun IStr (IEff IInt)) OpNone "dtp_removeFile" True,
+    Intrinsic "prim_eff_fileExists" (IFun IStr (IEff IBool)) OpNone "dtp_fileExists" True,
+    Intrinsic "prim_eff_fileMtime" (IFun IStr (IEff IInt)) OpNone "dtp_fileMtime" True,
+    Intrinsic "prim_eff_fileSize" (IFun IStr (IEff IInt)) OpNone "dtp_fileSize" True,
+    Intrinsic "prim_eff_exit" (IFun IInt (IEff IInt)) OpNone "dtp_exit" True,
+    Intrinsic "prim_eff_runIn" (IFun IStr (IFun (IList IStr) (IEff IInt))) OpNone "(fun dir args -> dtp_runIn dir (dtp_ocamlOf args))" True,
+    Intrinsic "prim_eff_spawn" (IFun (IList IStr) (IEff IInt)) OpNone "(fun args -> dtp_spawn (dtp_ocamlOf args))" True,
+    Intrinsic "prim_eff_wait" (IFun IInt (IEff IInt)) OpNone "dtp_wait" True,
+    Intrinsic "prim_eff_netListen" (IFun IStr (IEff IInt)) OpNone "dtp_net_listen" True,
+    Intrinsic "prim_eff_netPort" (IFun IInt (IEff IInt)) OpNone "dtp_net_port" True,
+    Intrinsic "prim_eff_netAccept" (IFun IInt (IEff IInt)) OpNone "dtp_net_accept" True,
+    Intrinsic "prim_eff_netRecv" (IFun IInt (IFun IInt (IEff IStr))) OpNone "dtp_net_recv" True,
+    Intrinsic "prim_eff_netSend" (IFun IInt (IFun IStr (IEff IInt))) OpNone "dtp_net_send" True,
+    Intrinsic "prim_eff_netClose" (IFun IInt (IEff IInt)) OpNone "dtp_net_close" True,
+    Intrinsic "prim_eff_netConnect" (IFun IStr (IEff IInt)) OpNone "dtp_net_connect" True,
+    Intrinsic "prim_eff_getenv" (IFun IStr (IEff IStr)) OpNone "dtp_getenv" True,
+    Intrinsic "prim_eff_getcwd" (IEff IStr) OpNone "(dtp_getcwd ())" True,
+    Intrinsic "prim_eff_execPath" (IEff IStr) OpNone "(dtp_execPath ())" True
   ]
 
 -- | 所有内建声明：基础表 + 浮点表 + Eff 过渡表。

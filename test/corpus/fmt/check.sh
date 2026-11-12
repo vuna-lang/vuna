@@ -55,13 +55,9 @@ cp "$HERE/_probe.vuna" "$pkg/app/Main.vuna"
 cat >"$pkg/vuna.toml" <<EOF
 [package]
 name = "vuna"
-privileged = true
 
 [dependencies]
 vuna-base = "$REPO/base"
-
-[capabilities]
-effects = ["console", "fs", "process", "env", "clock", "unsafe"]
 EOF
 chmod -R u+w "$pkg" 2>/dev/null || true
 # M26：compile 产目录（Vuna_runtime.ml + 模块 + Main.ml + build.sh），不是单文件 .ml。

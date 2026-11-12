@@ -7,10 +7,10 @@
 ## 包管理与工具链
 
 - 包元信息用 `vuna.toml`（TOML 子集）：`[package]`（只有 name）、`[workspace]`（members）、
-  `[export]`（modules）、`[capabilities]`（effects）、`[trust]`（unsafe 定义级信任点）、
-  `[diagnostics]`（format / warnings / max-errors，见 [diagnostics.md](diagnostics.md) §5.1）、
+  `[export]`（modules）、`[diagnostics]`（format / warnings / max-errors，见 [diagnostics.md](diagnostics.md) §5.1）、
   `[dependencies]`（依赖名 = 相对路径，暂不做 registry）。未知 section / key、以及 `[package]`
-  里出现其他 key 都是错误，不静默忽略。
+  里出现其他 key 都是错误，不静默忽略（`[capabilities]` / `[trust]` / `[privileged]` 已删除，
+  出现即未知 section/key）。
 - **workspace 根即一个包**（Cargo 风格）：根 `vuna.toml` 同时含 `[workspace]` 与
   `[package]`；成员是子目录，各自有自己的 `vuna.toml`。本仓库 = 根包 `vuna`（产品 CLI）+
   成员包 `vuna-compiler`（编译器）+ 成员包 `vuna-base`（标准库）；依赖图
@@ -77,48 +77,31 @@
 - 示例：`examples/multi/` 是多包 workspace（根包 + 成员包 `greet` + `base` 路径依赖），
   `checks.vuna-package` 在 Nix 沙箱里构建并运行它，验证包管理路径可复现。
 - 可执行入口：`vuna build` 要求入口 `main : Eff [] a`（运行时执行动作，退出码用 `exit`）。
-  效果内建只有 `prim_*` 名：包必须在 manifest 显式声明能力才能直接调用，未声明的包只能经
-  `Base.Host`（推荐路径）；`vuna interp` 是纯核心求值（不执行效果），效果程序用 `compile` +
-  运行产物。
+  没有 manifest 级能力/特权/信任门控：effectful `prim_*`（含 `prim_eff_*`）与宿主层
+  `Base.Host` 对任何包（用户包、ad-hoc 文件）都可见。用户面**应**经 `Base.Eff.*` 标签 +
+  handler 使用效果——这是约定与文档纪律，不是强制门控。`vuna interp` 是纯核心求值
+  （不执行效果），效果程序用 `compile` + 运行产物。
 
-## 效应能力
+## 效应边界（manifest 门控已删除）
 
-- 包在 `[capabilities] effects` 里**显式声明**可直接使用的 effectful 内建能力：合法值
-  `console` / `fs` / `process` / `env` / `clock` / `unsafe`（可任意子集）。`Frontend.Manifest` 只做
-  结构校验（空名字 / 重复名字分别报错），合法能力名与放行判定在 Loader：未知名字报
-  `unknown capability ...`（typo 不静默降级）；`manifestCapabilities` 是读取入口。
-- 能力按**包**生效：同包所有模块共享本包 manifest 的能力；`PackageContext` / `Root` /
-  `Module` / `Project` 都携带能力，`Loader.Resolve.checkEffectsBuiltins` 按
-  `Vuna.Compiler.Intrinsics` 里每个内建声明的能力位检查。**没有按包名 / 路由的 allowlist**，
-  能力声明不可由调用参数伪造；检查覆盖整个源文件（包括未求值的定义），不只看 `main`。
-- 能力声明是**特权包专属**：`[capabilities]` / `[trust]` 只能出现在
-  `[package] privileged = true` 的 manifest（`vuna-base` / `vuna-compiler` / 根包；测试夹具包
-  按需标记）；用户包/ad-hoc 声明即 manifest 错误。宿主层模块由特权包在
-  `[privileged] modules = ["Base.Host"]` 里声明（base 的清单），非特权包 import 即
-  `LD_HostModulePrivileged`，也不能直调 `prim_*`；用户面宿主效应经 `Base.Eff.*` 标签 +
-  handler（`runPure : Eff [] a -> a`）。REPL 默认非特权，`vuna repl --privileged` 才以
-  特权上下文求值 ad-hoc 片段。
-
-### 定义级信任点（D28，opt-in 严格模式）
-
-- `[trust] unsafe = ["Module.def", ...]` 是**定义级**信任声明：声明该 section 的包进入
-  **严格模式**——只有列表里的定义可以**直接**引用 `unsafe` 门控目标（`intrinsicCapability`
-  为 `unsafe` 的内建 `prim_schedNewScope` / `prim_effectPerform` / `prim_effectHandle` /
-  `prim_cleanup*` / `prim_sched*`，以及 `runPure` 别名）。其它定义（同包所有模块 +
-  入口文件）直调即被 `Loader.Resolve` 拒绝，错误给出定义全限定名、触发的内建名与修复写法。
-- 检查是**逐定义**的：`DFun` body 与 instance 方法体里**直接出现**目标名字才需要信任点；
-  只经信任入口间接调用的传递调用者不需要列。新增直接使用点必须同时更新清单。
-- `[trust]` 是 opt-in：没有该 section 的包保持原有「包级 `unsafe` 能力 + 整模块首个效应」
-  检查，不做定义级限制（根包 `vuna` 与 `vuna-compiler` 因此不受影响）。`[trust]` 但能力表
-  没有 `unsafe` → 报错；列表项必须是 `Module.def` 形式的字符串且是本包**真实定义**，
-  假项在模块解析后报错（`checkTrustPoints`）。入口文件定义没有全限定名，不能作为信任点。
-- **base 是唯一 opt-in 方**：`vuna-base` 的 `[trust] unsafe` 是它的安全审计面（直接使用点
-  见 `base/vuna.toml`，夹具 `test/corpus/packages/12_trust_points/`）。
-
-- 本仓库声明：根包 `vuna` 与 `vuna-compiler` 声明全部六个能力（含 `unsafe`；工具链在
-  main 之外用 `runPure`，没有 `[trust]`，保持包级门控）；`vuna-base` 声明
-  `console` / `fs` / `process` / `env` / `clock` / `unsafe`，并用 `[trust] unsafe` 收紧
-  `unsafe` 的直接使用点。无 manifest 的 ad-hoc 文件没有能力，直接调用 effectful 内建即被拒。
+- 没有 manifest 级能力 / 特权 / 信任机制：`vuna.toml` 不再有 `[capabilities]`、`[trust]`、
+  `[privileged]`；`[package]` 只接受 `name`。
+- 任何包（用户包、ad-hoc 文件）都可以 `import Base.Host`、直接调用 `prim_*` / `prim_eff_*`
+  （效果原语是 `Eff []` 叶子）。编译器不再有包级原语白名单、宿主模块 import 门控、`unsafe` 的定义级
+  审计，也没有 `REPL --privileged`。旧诊断码 `PKG_EmptyCapability`、
+  `PKG_DuplicateCapability`、`PKG_TrustNeedsUnsafe`、`PKG_EmptyTrustPoint`、
+  `PKG_DuplicateTrustPoint`、`PKG_InvalidTrustPoint`、`PKG_TrustPointMissing`、
+  `PKG_NonPrivileged`、`PKG_EffectCapabilityRequired`、`RN_UnknownCapability`、
+  `LD_HostModulePrivileged` 全部删除（未发布、无兼容义务；历史见 git）。
+- **用户面纪律（非门控）**：标准库与用户代码**应**经 `Base.Eff.*` 标签 + handler 使用效果
+  （入口执行点 `runPure : Eff [] a -> a`）；`Base.Host` 与 `prim_*` 是宿主层 / 底层原语，
+  base、编译器与根工具链内部仍直接使用它们——不再由编译器强制，只是约定。
+- **显式接受的损失**（历史见 git；后续用表示层权限（N2/N3）或新模型补）：宿主层 import 门控、
+  每包原语白名单、`unsafe` 定义级审计、网络仅根包可用。仍然有效的边界决策：唯一动作类型
+  是 `Eff r a`，入口 `main : Eff [] a`，`vuna interp` 不执行运行时效应。
+- **base 的宿主层直接使用点（只读说明）**：`base/vuna.toml` 曾用 `[trust] unsafe` 收敛
+  `unsafe` 的直接使用点，机制删除后清单见 git 历史；13 个真实使用点见
+  [effects.md](effects.md) §8.6。
 
 ## 包格式速查
 
@@ -133,10 +116,6 @@ members = ["compiler", "base"]
 [dependencies]
 vuna-compiler = "compiler"
 vuna-base = "base"
-
-# 直接使用 effectful 内建（本包 = 产品 CLI/工具链）的能力声明
-[capabilities]
-effects = ["console", "fs", "process", "env", "clock"]
 ```
 
 ```toml
@@ -165,23 +144,11 @@ modules = [
   "Base.ST",
   "Prelude"
 ]
-
-# D28：定义级信任点（opt-in 严格模式）。unsafe 的直接使用点必须显式列出。
-[trust]
-unsafe = [
-  "runPure",
-  "Base.ST.runST",
-  "Base.Eff.bracket",
-  # …完整清单见 base/vuna.toml
-]
 ```
 
 （`vuna-base` 不在 `[dependencies]` 里依赖别的包；上例的 `[dependencies]` 段从略。
-`vuna-base` 的 `[capabilities] effects` 列
-`["console", "fs", "process", "env", "clock", "unsafe"]`：`Base.Host` 封装了这些能力对应的
-`prim_*`；`unsafe` 的直接使用点（`runPure` 执行入口、`Base.Eff` 运行时续延、`Base.EffSched`
-调度器原语等）逐条列在 `[trust] unsafe` 里，见
-[effects.md](effects.md) 与 `base/vuna.toml`。）
+成员包 manifest 只有 `[package]` + `[export]`（可选 `[diagnostics]`、`[dependencies]`）：
+没有能力 / 特权 / 信任 section。`Base.Host` 封装宿主别名，任何包都可 import。）
 
 `[export]` 的每个名字都是模块全名；`[dependencies]` 的值是相对该包目录的路径（lexical
 规范化，不做 realpath）。manifest 只被解析与校验（`Vuna.Compiler.Frontend.Manifest`），

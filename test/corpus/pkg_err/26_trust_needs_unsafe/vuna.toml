@@ -1,6 +1,0 @@
-[package]
-name = "p"
-[trust]
-unsafe = ["Base.Host.runPure"]
-[export]
-modules = ["Main"]

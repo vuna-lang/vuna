@@ -1,0 +1,5 @@
+[package]
+name = "prim-direct"
+
+[dependencies]
+vuna-base = "../../../../base"

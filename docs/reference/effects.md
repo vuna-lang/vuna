@@ -2,7 +2,7 @@
 
 **现状**：用户面唯一动作类型是 `Eff r a`（`Base.Eff`，构造子不导出；`MkEff` 是内部表示），
 入口是 `main : Eff [] a`（行必须为 `Nil`），执行入口是 `Base.Eff.runPure`。宿主原语只剩
-`prim_eff_*`（`Eff []`）；`Base.Host` 是特权别名层（做 Int/Nat 归一化），
+`prim_eff_*`（`Eff []`）；`Base.Host` 是宿主层别名（做 Int/Nat 归一化，任何包都可 import），
 所有宿主 handler 的 answer 是 `Eff []`，入口组合是 `runX = joinEff (handleXHost …)`。用户面
 执行一个已处理干净的动作用 `runPure`；`ST`/`IORef`/`MArray`/`Buffer` 的实现也全部是 `Eff []`。
 
@@ -17,8 +17,8 @@ Args / Exit）；`Member` 行约束、`local`/`catch`/scoped `Exn`、线性续�
 ## 1. 范围
 
 - **本页覆盖**：`Eff` 统一动作的表示/执行、handler 与 `Eff []` answer、`Base.Host` 宿主层、
-  ST/region 的可变数据、base 的 `unsafe` 信任点、通用 Eff 的边界。
-- **不覆盖**：原语/能力的逐条语义（[primitives.md](primitives.md) §7）；纯效应 monad
+  ST/region 的可变数据、宿主层直调纪律、通用 Eff 的边界。
+- **不覆盖**：原语/宿主层的逐条语义（[primitives.md](primitives.md) §7）；纯效应 monad
   （`Base.State` / `Reader` / `Error`，它们不碰宿主，见 [stdlib.md](stdlib.md)）；
   并行/多核与 Domain 内存模型（只有单线程调度器，见 §8.5）；完整 QTT。
 
@@ -37,8 +37,9 @@ Args / Exit）；`Member` 行约束、`local`/`catch`/scoped `Exn`、线性续�
 - `main : Eff [] a` 的**行检查在类型期**：entry 处仍有未处理行报
   `TC_UnhandledEffects`；`vuna interp` 遇到动作入口报
   `[CG_InterpCannotExecuteEffects]`（纯核心求值器只跑纯 main）。
-- `Eff []` 不表示「无副作用」：它表示「无未处理的行效应」；特权宿主层构造的叶子里可以
-  有真实宿主操作。副作用边界由能力/特权层把关，不由 `Eff []` 把关。
+- `Eff []` 不表示「无副作用」：它表示「无未处理的行效应」；宿主层构造的叶子里可以
+  有真实宿主操作。宿主副作用**不再由 manifest 能力/特权门控**把关；用户面应经
+  `Base.Eff.*` 标签 + handler 使用效果（纪律/文档约定，见 §8.6）。
 
 ### 2.2 四层边界（当前）
 
@@ -46,18 +47,17 @@ Args / Exit）；`Member` 行约束、`local`/`catch`/scoped `Exn`、线性续�
 | --- | --- | --- |
 | 用户面 | `Eff r a` + `Base.Eff.*` 标签/handler | 用户包与 ad-hoc 的唯一动作类型；`main : Eff [] a` |
 | handler 层 | `handleXHost` → `Eff r (Eff [] a)`，`runX = joinEff …` | 宿主 handler 的 answer 是已处理干净的 `Eff []` 动作；`joinEff` 展平 |
-| 宿主别名层 | `Base.Host`（privileged） | Eff 别名走 `prim_eff_*`；`[package] privileged = true` 才可 import；能力/信任门控不变 |
+| 宿主别名层 | `Base.Host`（宿主层） | Eff 别名走 `prim_eff_*`；任何包都可 import；不再有 manifest 能力/信任门控 |
 
 - **代数**：`Monad (Eff r)` / `Applicative` / `Functor` 实例已内建；用户用 `pure` / `do` /
   `>>=` / `fmap`，动作的构造入口只有这些实例方法。
-- **`unsafe` 的定义级信任点（D28）**：包在 manifest 声明 `[trust] unsafe = ["Module.def", ...]`
-  后进入严格模式：只有列出的定义可以**直接**引用 `unsafe` 门控目标（CapUnsafe 内建、
-  `Base.Eff` 的运行时效应核心）；`Loader.Resolve` 逐定义扫描，错误给出定义全限定名、触发内建名与
-  修复写法。未声明 `[trust]` 的包保持包级门控。base 是当前唯一 opt-in 方，清单即安全审计面
-  （`base/vuna.toml`；机制见 [packages.md](packages.md) §效应能力）。
-- **能力边界**：效果原语只有 `prim_*` / `prim_eff_*` 名；`[capabilities]` / `[trust]` 只允许
-  `[package] privileged = true` 的包声明（用户包/ad-hoc 声明即 manifest 错误），非特权包
-  不能 import `Base.Host`，也不能直调 `prim_*`。用户面宿主效应经 `Base.Eff.*` 标签 + handler。
+- **宿主层边界（manifest 门控已删除）**：`vuna.toml` 不再有 `[capabilities]` / `[trust]` /
+  `[privileged]`；任何包（用户包、ad-hoc 文件）都可以 `import Base.Host`、直接调用
+  `prim_*` / `prim_eff_*`（`Eff []` 叶子）。用户面**应**经 `Base.Eff.*` 标签 + handler 使用
+  效果——这是纪律/文档约定，不是编译器强制。`Base.Host` 与 `prim_*` 是宿主层/底层原语，
+  base、编译器与根工具链内部仍使用它们。旧门控与相关诊断码（`PKG_NonPrivileged`、
+  `LD_HostModulePrivileged`、`RN_UnknownCapability`、`PKG_EffectCapabilityRequired` 等）已
+  删除，历史见 git；显式接受的损失与后续方向见 §8.6。
 - **错误报告**：没有异常 / handler 层之外的语言级异常；未捕获的宿主异常由生成的 main 钩子
   统一报告为 `vuna: runtime error: ...` + 位置帧 + exit 2（见 [debugging.md](debugging.md)）。
   `dbg` / `dbgShow` / `assert` / `todo` 是语言级调试构造，不参与效应系统。
@@ -79,8 +79,8 @@ git 历史；QTT 的 `D32`（transformer 无法泛化到任意 monad）随实现
   库外不可命名；句柄不能逃逸（负例 `test/corpus/dt_err/56_st_escape.vuna`）。
 - 操作直接构造 `Eff []` 动作（`newRef` / `readRef` / …），`runST` 在入口执行**一次**
   `runPure`；线性 continuation 经 `prim_eff_bind1`（`bindST1`）线程化；region 内没有其它执行点。
-- 不声明 `Functor/Monad (ST r)`（region 的显式 binder 与字典提升顺序冲突，见 §2.2
-  old note），region 多态代码用 `bindST` / `pureST` / `fmapST`。
+- 不声明 `Functor/Monad (ST r)`（region 的显式 binder 与字典提升顺序冲突），region 多态代码用
+  `bindST` / `pureST` / `fmapST`。
 - 当前边界：`ST` 动作本身可复制（无线性箭头在动作内部线程化线性值）；
   `Ref`/`SArray` 的“恰好一次”已由 QTT 类型化（D22）。
 
@@ -141,9 +141,9 @@ CPS `Eff` 已经可 `check` + `compile` + 运行，且 interp 与产物逐字节
    是唯一执行入口；没有「隐式生效的 handler 栈」。
 3. **可变数据两条边界**：`IORef` / `MArray` / `Buffer` 的公开操作与实现都是 `Eff []`；
    `Ref` / `SArray` 只能在 `ST r` 里用，且不能逃出 `runST`。两者表示同构、类型隔离。
-4. **能力是权限层，不是类型豁免**：`prim_effectPerform` / `prim_effectHandle` / cleanup/sched 使用点必须声明 `unsafe`；
-   base 因此声明 `unsafe`，并用 `[trust] unsafe` 把直接使用点收敛到定义级（D28，opt-in
-   严格模式；清单见 `base/vuna.toml`，机制见 [packages.md](packages.md) §效应能力）。
+4. **宿主层是底层原语面，不是类型豁免**：`prim_effectPerform` / `prim_effectHandle` /
+   cleanup/sched 是宿主层原语，常规用户面经 `Base.Eff.*` 标签 + handler 使用效果；不再有
+   `unsafe` 能力位或 `[trust]` 定义级清单（机制已删除，历史见 git）。
 5. **效应组合显式**：transformer 的 handler 必须显式调用；没有自动 lift 到任意深度。
 6. **不透明擦除值的表示与 cast 由同一份判据驱动**：`Elab.Meta.valueOpaqueScoped` 与
    `Codegen.Decl` 的 `isTypeHeadOpaqueDatas` / `ctorOpaqueFlagsOf` 必须同步；
@@ -188,14 +188,14 @@ CPS `Eff` 已经可 `check` + `compile` + 运行，且 interp 与产物逐字节
 ### 8.2 运行时
 
 - `Vuna_runtime` 声明 `type _ Effect.t += Perform : string * string * Obj.t -> Obj.t Effect.t`。
-- 隐藏 intrinsic `prim_effectPerform` / `prim_effectHandle`（要求 `unsafe`，只供
-  `Base.Eff` 包装）：
+- 隐藏 intrinsic `prim_effectPerform` / `prim_effectHandle`（宿主层原语，常规只由
+  `Base.Eff` 包装使用；不再有 `unsafe` 门控）：
   - `perform` → `Effect.perform`；
   - `handle` → `Vuna_runtime.dtp_effect_handle`：`Effect.Deep.match_with`，按
     `(key, name)` 过滤；不匹配返回 `None` 交给外层 handler；`retc` 应用 handler 的
     `ret`；`continue` 一次。handler 退出（正常 / 异常 / abort 丢弃续延）时执行该
     extent 内未弹出的 bracket cleanup。
-- W7 的 cleanup 机制：`prim_cleanupPush` / `prim_cleanupPop`（隐藏、`unsafe`）登记/
+- W7 的 cleanup 机制：`prim_cleanupPush` / `prim_cleanupPop`（隐藏）登记/
   弹出每纤程 cleanup 栈（`dtp_cleanup_*`）；`Base.Eff.bracket`/`finally` 用它保证
   非 `Exn` abort 也跑 release（细节见 [effects-layers.md](effects-layers.md) §8.5）。
 - 语义是**一次性（one-shot）**：resume 两次抛 `Continuation_already_resumed`；
@@ -228,7 +228,7 @@ CPS `Eff` 已经可 `check` + `compile` + 运行，且 interp 与产物逐字节
 `31–36`（调度器：fork/await、取消、超时、监督、重复 await、Channel）、`37–39`
 （Mutex、线性 TaskLin、effect-aware forkTaskWith）、`40–41`（fs 命名实例 /
 process 可控 Exit）、`42–44`（通用 bracket abort cleanup、调度器 bracket、一次性闭包）、`45`（行语法糖）；
-负例 `dt_err/70–81`；能力包夹具 `packages/10_prim_io` 是 `prim_sleep` 原生探针。
+负例 `dt_err/70–81`；原语探针夹具 `packages/10_prim_io`（`prim_sleep`）。
 细节见 §8.6 与 [effects-layers.md](effects-layers.md)。
 ### 8.4 已知边界（下一步）
 
@@ -285,8 +285,8 @@ fork/await/yield/cancel/结构化 scope；W10 console/clock/env/process/fs 标�
 ### 8.6 效果进类型
 
 把已落地的库级行编码变成**编译器协议 + 用户面
-约束**。仍然有效的边界决策：不做类型级能力行（行只描述、不授权，边界靠包特权）；
-续延保持一次性（one-shot）。
+约束**。仍然有效的边界决策：不做类型级能力行（行只描述、不授权，边界靠约定：宿主层
+对任何包可见，用户面经 handler）；续延保持一次性（one-shot）。
 已落地：
 
 - **协议集中（D3）**：编译器原先散落在 `Core/Eval`、`Elab/Dict` 的
@@ -295,12 +295,23 @@ fork/await/yield/cancel/结构化 scope；W10 console/clock/env/process/fs 标�
   `Member` 证明构造只引用常量。
 - **入口收紧**：`runPure : Eff [] a -> a`（行必须 `Nil`）——入口处的未处理效应是类型错误
   （负例 `dt_err/82_unhandled_effect_entry`），运行时 `unhandled effect` 兜底只服务
-  特权/内部路径。
+  库内部路径。
 - **专门诊断（P1c）**：`Elab/Term/Impl.checkByInferFuel` 在「期望行 `Nil`、实际行具体
   非空」时改报 `TC_UnhandledEffects` 并列出标签；不再只是裸 `TC_TypeMismatch`。
-- **特权边界**：`[capabilities]`/`[trust]` 与宿主层 `Base.Host` 只允许
-  `[package] privileged = true` 的包；特权模块由 manifest 声明；REPL 默认非特权
-  （显式 `--privileged`）；用户面与夹具已迁到 `Eff` + handler。
+- **宿主层门控已删除（显式接受的损失）**：`[capabilities]` / `[trust]` / `[privileged]`
+  与宿主模块 import 门控整体删除——任何包（用户包、ad-hoc 文件）都可以
+  `import Base.Host`、直调 `prim_*`；没有每包原语白名单、`unsafe` 定义级审计，也没有
+  REPL `--privileged`。用户面仍**应**经 `Base.Eff.*` 标签 + handler（`runX =
+  joinEff (handleXHost …)`）；这是纪律/文档约定，不是强制门控。后续用表示层权限
+  （N2/N3）或新模型补；历史与旧诊断码（`PKG_NonPrivileged`、`LD_HostModulePrivileged`、
+  `RN_UnknownCapability`、`PKG_EffectCapabilityRequired` 等）见 git。
+- **base 宿主层直接使用点（只读说明，原 `[trust] unsafe` 清单）**：13 个真实使用点——
+  `Base.Eff.sendCore`、`Base.Eff.handleCore`、`Base.Eff.bracket`、
+  `Base.EffSched.yieldNow`、`Base.EffSched.isCancelled`、`Base.EffSched.newScope`、
+  `Base.EffSched.forkTask`、`Base.EffSched.awaitTask`、`Base.EffSched.cancelTask`、
+  `Base.EffSched.cancelScope`、`Base.EffSched.scopeWait`、`Base.EffSched.scopeWaitTimeout`、
+  `Base.EffSched.forkTaskLin`（同段清单另列 `Base.ST.runST`，ST/region 的唯一执行入口）。
+  机制删除后这份清单不再是强制约束，只作安全审计参考。
 - **单效应组合子与自动 lift**：`runConsole`/`runFs`/`runEnv`/`runClock`/`runProcess`
   组合子；check 方向的自动 lift 见 §8.4（`tryEffLift`）。
 
@@ -314,7 +325,6 @@ fork/await/yield/cancel/结构化 scope；W10 console/clock/env/process/fs 标�
 | --- | --- | --- |
 | D22 | 线性捕获规则与一次性闭包（`Base.Eff.Cont`/`mkCont`）已有；剩余：multiplicity 多态/依赖 multiplicity、通用线性箭头类型、`ST` 动作本身仍可复制；ST 无 `Monad` 实例。线性值经 ω 形参通用函数被拒（库 API 需显式 `(1 x : …)`）是同一根因 | 后续 |
 | D27 | 表示轴已落地（§5）：CPS `Eff` 的 `res op` 用不透明值 + 恒等 cast 编译；残留：精化期未解 meta 的漏 cast 边界、trait 自动生成 λ 的插入点未覆盖、以及用户级 `Eff` API / 行 / 重排（D03） | 后续 |
-| D28 | `base` 的 `unsafe` 授权曾是包级（没有机制约束到使用点）：已落地**定义级信任点**（opt-in `[trust] unsafe` + `Loader.Resolve` 逐定义强制 + base 审计清单 `base/vuna.toml`）；剩余：严格模式仍是 opt-in（root/compiler 保持包级门控） | `Frontend.Manifest`、`Loader.{Resolve,Modules}`、`Packages.Pkg`、`base/vuna.toml`；夹具 `packages/12_trust_points` | 后续 |
 | D32 | transformer 无任意 monad 泛化（隐式参数 kind 推断缺口，§3.2） | 后续 |
 | D37 | 运行时效应的剩余缺口：高阶 scoped handler、线性续延/一次性闭包/`bracket`（含 abort cleanup）、单线程调度器、未处理效应诊断均已落地；Layer 3 扩展见 D41/D44 | `Base/Eff*`；§8.4 | 后续 |
 | D41 | 已落地面：scoped handler、线性续延/一次性闭包/通用 `bracket`（abort cleanup）、`Base.EffSched`（单线程调度器，含 Mutex/Channel/线性 TaskLin/forkTaskWith）；剩余：Domain 并行、父 fiber handler 继承 | §8.5；D44 | 后续 |
@@ -338,7 +348,7 @@ fork/await/yield/cancel/结构化 scope；W10 console/clock/env/process/fs 标�
 ## 相关阅读
 
 - 标准库模块：[stdlib.md](stdlib.md)；量化/线性规则：[qtt.md](qtt.md)
-- 原语与能力（`prim_*`、效果原语）：[primitives.md](primitives.md) §7
+- 原语与宿主层（`prim_*`、效果原语）：[primitives.md](primitives.md) §7
 - 记录 / trait / `do` 与 `Monad`：[records-traits.md](records-traits.md)
 - 类型系统（擦除判据、宇宙）：[type-system.md](type-system.md)；Core 实现：[core.md](core.md)
 - 自举与 rotation：[bootstrap.md](bootstrap.md)；测试标签：[testing.md](testing.md)

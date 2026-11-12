@@ -43,11 +43,12 @@
    manager）永不进入 seed 闭包；黑名单见 `nix/tcb-forbidden.txt`；
 5. **动作入口与宿主层**：唯一动作类型是 `Eff r a`；用户面入口是 `main : Eff [] a`（行必须
    Nil，入口处未处理效应是类型错误），执行入口是 `Base.Eff.runPure : Eff [] a -> a`。
-   `Base.Host` 是特权宿主别名层（`prim_eff_*` + Int/Nat 归一化），
+   `Base.Host` 是宿主层别名（`prim_eff_*` + Int/Nat 归一化），
    `ST`/`IORef`/`MArray`/`Buffer` 实现全是 `Eff []`。
-   **特权边界**：`[capabilities]`/`[trust]` 与宿主层模块 `Base.Host` 只允许
-   `[package] privileged = true` 的包；用户包/ad-hoc 只能经 `Eff` + handler（见
-   [effects.md](docs/reference/effects.md) §8.6）。
+   **无 manifest 门控**：没有 manifest 级能力/特权/信任机制；任何包（用户包、ad-hoc 文件）
+   都可以 `import Base.Host`、直接调用 `prim_*`（效果原语是 `Eff []` 叶子）。用户面**应**仍经
+   `Base.Eff.*` 标签 + handler 使用效果——这是纪律/文档约定，不是强制门控
+   （见 [effects.md](docs/reference/effects.md) §8.6）。
    **M4 已完成**：编译器/工具链不再用 `runPure (...)` 在纯签名里隐藏 Eff 执行；
    守卫基线为 0（`checks.eff-boundary`），唯一 sanctioned tracing 例外见
    `nix/eff-boundary.exceptions`。
@@ -120,7 +121,7 @@ build，`dist/` 提交）；`nix/` = 构建图 + rotate/metrics/bench；`docs/` 
   [records-traits.md](docs/reference/records-traits.md)（记录/trait/do）、
   [effects.md](docs/reference/effects.md)（Eff 动作/效应栈/运行时效应）、
   [stdlib.md](docs/reference/stdlib.md)、[packages.md](docs/reference/packages.md)、
-  [primitives.md](docs/reference/primitives.md)（内建/原语/能力）、
+  [primitives.md](docs/reference/primitives.md)（内建/原语/宿主层）、
   [operators.md](docs/reference/operators.md)（运算符=方法别名、实例落点规则）
 - 编译器实现：[compiler.md](docs/reference/compiler.md)（模块与输出模型、接口摘要）、
   [diagnostics.md](docs/reference/diagnostics.md)（诊断模型/错误码/渲染/LSP/迁移状态）、
@@ -134,7 +135,7 @@ build，`dist/` 提交）；`nix/` = 构建图 + rotate/metrics/bench；`docs/` 
 - 仓库探索（按场景选工具、探索后落盘）：技能 `.agents/skills/repo-navigation/SKILL.md`
 - 自举与种子：[bootstrap.md](docs/reference/bootstrap.md)；测试与 CI：[testing.md](docs/reference/testing.md)；
   性能：[performance.md](docs/reference/performance.md)
-- 债务 / 能力缺口：[debt.md](docs/reference/debt.md)（只含开放项，带证据）
+- 债务 / 已知缺口：[debt.md](docs/reference/debt.md)（只含开放项，带证据）
 
 > 文档分层规则：`README.md` 只保留定位/上手/目录/硬约束/导航；细节在 `docs/reference/`；
 > 已完成阶段 / 已落地决策 / 历史在 git 历史。

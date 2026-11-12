@@ -17,7 +17,7 @@ module Base.EffProcess
 --   * `Args`：取进程参数（`prim_eff_getArgs`，**不含** argv[0]）；
 --   * `Exit`：以状态码退出（`prim_eff_exit`，真实 handler 下不返回）；
 --   * `RunIn`：在目录 dir 下运行命令（`prim_eff_runIn`），返回退出码。
--- 真实 handler 用现有 `process` 能力原语；没有新增原语。
+-- 真实 handler 用现有 `process` 原语；没有新增原语。
 --
 -- W10 收尾：`Exit` 可控。`handleProcessHost` 保留「真实退出」语义（`onExit = exit`）；
 -- `handleProcessHostWith` 让调用方传入 `onExit`，从而在真实原语路径上**观察**退出码而

@@ -1,9 +1,0 @@
-module Main where
-
-echoIt : Int
-echoIt = let
-  _ = prim_eff_print "x"
-  in 0
-
-main : Int
-main = echoIt

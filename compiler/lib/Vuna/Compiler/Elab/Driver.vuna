@@ -816,13 +816,12 @@ findDefByName name (d :: rest) = if dtDefName d == name then Just d else findDef
 -- main 结果类型拆掉动作层后的内层类型：`Eff [] a`（用户面入口；行必须是 Nil，否则入口检查
 -- 报 TC_UnhandledEffects）。返回 ("eff"/"other", 内层类型)；非动作 main 的内层就是它自己。
 mainActionOf : Term -> Pair String Term
-mainActionOf ty = case ty of
-  TApp (TApp fn row _) arg _ => case fn of
-    TGlobal g =>
-      if g == effTypeName then if isNilRowTerm row then Pair "eff" arg else Pair "other" ty
-      else Pair "other" ty
-    _ => Pair "other" ty
+mainActionOf (ty@(TApp (TApp fn row _) arg _)) = case fn of
+  TGlobal g =>
+    if g == effTypeName then if isNilRowTerm row then Pair "eff" arg else Pair "other" ty
+    else Pair "other" ty
   _ => Pair "other" ty
+mainActionOf ty = Pair "other" ty
 
 -- | 行项是否是 `Eff []`（语法上的 `Base.Eff.Row.Nil`）。
 isNilRowTerm : Term -> Bool
@@ -832,20 +831,19 @@ isNilRowTerm _ = False
 
 -- | 入口行检查：`main : Eff [] a` 之外的 Eff 行必须是 Nil；否则报未处理效应。
 mainEntryRowCheck : Ec -> List (Pair String Term) -> Span -> Term -> Check Int
-mainEntryRowCheck ec bodies sp ty = case ty of
-  TApp (TApp fn row _) _ _ => case fn of
-    TGlobal g => if g == effTypeName then
-      let
-        rowV = force (Base.HashMap.fromList bodies) (ecSolsP ec) defaultFuel (eval [] row)
-      in if isNilRowValue ec rowV then OkC 0
-      else case rowEffectLabels 64 ec rowV of
-        Just labels =>
-          if labels == [] then OkC 0
-          else tcErr1 sp (UnhandledEffects (joinEffectLabels labels)) (joinEffectLabels labels)
-        Nothing => tcErr1 sp (UnhandledEffects (showTerm row)) (showTerm row)
-    else OkC 0
-    _ => OkC 0
+mainEntryRowCheck ec bodies sp (TApp (TApp fn row _) _ _) = case fn of
+  TGlobal g => if g == effTypeName then
+    let
+      rowV = force (Base.HashMap.fromList bodies) (ecSolsP ec) defaultFuel (eval [] row)
+    in if isNilRowValue ec rowV then OkC 0
+    else case rowEffectLabels 64 ec rowV of
+      Just labels =>
+        if labels == [] then OkC 0
+        else tcErr1 sp (UnhandledEffects (joinEffectLabels labels)) (joinEffectLabels labels)
+      Nothing => tcErr1 sp (UnhandledEffects (showTerm row)) (showTerm row)
+  else OkC 0
   _ => OkC 0
+mainEntryRowCheck ec bodies sp _ = OkC 0
 
 -- main 结果类型是否是内建展示类型（与 Codegen.Term.mainShowForName 的集合一致）。
 mainShowBuiltinTy : Value -> Bool

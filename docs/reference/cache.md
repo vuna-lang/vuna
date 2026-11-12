@@ -18,15 +18,15 @@
 
 ## 对照 Idris2 TTC
 
-| 能力 | Idris2 TTC | vuna 现状 |
+| 方面 | Idris2 TTC | vuna 现状 |
 | --- | --- | --- |
 | 单位 | 每模块一个 `.ttc` | 每模块一个 `<源文件相对路径>.iface`（与源码同布局）+ 包级 `.vuna-iface`（S3/S8） |
-| 接口内容 | 接口 + 编译后定义（case tree）+ metadata + import hashes | 闭合精化产物（datas / defs 含 body / globals / insts / classes）+ **已解析源码声明** + exports / fixities / imports / capabilities |
-| 失效 | 源哈希 + 依赖 `ifaceHash`（public/inline 定义体参与） | 模块源码哈希 + `miDepHashes`（直接 import 的接口哈希）+ 包级 `pmEnv`（`vuna.toml` / 传递依赖 / 编译器标签）；`miIfaceHash` 覆盖**载荷全量语义面**（exports / capabilities / imports / fixities / record 头 / datas / defs / globals / insts / classes），只排除 span/路径 |
+| 接口内容 | 接口 + 编译后定义（case tree）+ metadata + import hashes | 闭合精化产物（datas / defs 含 body / globals / insts / classes）+ **已解析源码声明** + exports / fixities / imports |
+| 失效 | 源哈希 + 依赖 `ifaceHash`（public/inline 定义体参与） | 模块源码哈希 + `miDepHashes`（直接 import 的接口哈希）+ 包级 `pmEnv`（`vuna.toml` / 传递依赖 / 编译器标签）；`miIfaceHash` 覆盖**载荷全量语义面**（exports / imports / fixities / record 头 / datas / defs / globals / insts / classes），只排除 span/路径 |
 | 加载 | 读 `.ttc`，不读源 | 读接口；依赖模块以「已加载模块」注入 Loader（零 parse/resolve） |
 | 上游变化 | `importHashes` 链 | `miDepHashes` 链（包内模块也参与） |
 | 下游 | 编译器从 TTC 生成代码 | 同一份 `DtProgram` 视图（依赖 artifacts 来自接口）→ `Codegen.Split` |
-| 版本 | TTC header/version | `ifaceSchema`（字段布局 + 哈希输入集合）+ 编译器 fingerprint + 包名 + `pmEnv` |
+| 版本 | TTC header/version | `ifaceSchema`（字段布局 + 哈希输入集合；当前 `vuna-iface 21`）+ 编译器 fingerprint + 包名 + `pmEnv` |
 | 来源 | 无 | 条目 `meOrigin`（`pkg` = 整包 check/build，`tool` = LSP/REPL 单模块写回）；命令行只信任 `pkg` |
 | 快判 | TTC 在构建目录、mtime/hash | 默认在源文件旁（`<pkg>/lib/.../X.iface` + `<pkg>/.vuna-iface`）；`VUNA_IFACE_DIR` 可整体镜像到外部根。默认内容哈希，`VUNA_CACHE_MTIME=1` 时 mtime+size 快路径（距 now <5s 的文件仍回读内容哈希，见下） |
 
@@ -85,7 +85,7 @@ Dt.check（全量或摘要路径）→ CheckedPackage = { DtProgram, modules, en
   → Driver.Compile.writeIfaceShadow
       ifaceOfPackage：按 Module 归属把 DtProgram 切成每模块 CachedProgram
         （归属表来自 Driver.Owner：声明名 / 实例名 / 派生实例 / trait 投影 / Dict_）
-      → 逐模块 hashOfParts（exports / capabilities / imports / fixities / record 头 /
+      → 逐模块 hashOfParts（exports / imports / fixities / record 头 /
         miDecls / datas / defs / globals / insts / classes；不含 span / 源路径）→ miIfaceHash
         （各段先按语义键文本排序，再由 `Canonical.*` 编码；内容摘要 = **SHA-256**
         （`Iface.shaText`）；排序是插入排序 O(d²)，单模块数千项时是已知边界——逐项哈希的
@@ -138,7 +138,7 @@ Driver.Compile.depIfacesOf
 2. **`deftbl` 只装定义体**：签名项进 deftbl 会让 `force` 把 `Int`/`String` 归约成 `Type`
    （C37 的 `Eq Type` 假歧义根因）。
 3. **接口哈希不含 span / 源路径，但必须覆盖读方消费的全部语义字段**：换行、注释、
-   checkout 路径变化不失效；exports（含 parent）、capabilities、imports、fixities（含
+   checkout 路径变化不失效；exports（含 parent）、imports、fixities（含
    别名目标）、record 头（含字段类型）、miDecls、datas、defs、globals、insts、classes
    全部参与。历史缺口：`hashExports` 定义存在但从未接线（§44m 回归）；`ExportEntry.parent`、
    `FixityDecl.fixityTarget`、record 字段类型与 `miDecls` 曾整段不进哈希（C47），现已由
@@ -149,8 +149,10 @@ Driver.Compile.depIfacesOf
 7. **依赖模块零 parse**：接口模式下依赖模块只被 read（算哈希），从不 `parseFileWithPath`；
    `--debug-perf` 的 `parse-module=<name>` 计数可验证（测试 §44 断言 `Dep` 未被 parse）。
 8. **包级环境指纹（`pmEnv`）必须校验**：自身 `vuna.toml` + 传递依赖（名字 / 规范化目录 /
-   toml 内容）+ 编译器标签。`[capabilities]` / `[trust]` / `[dependencies]` / flags 不改变
-   模块源哈希，只能靠它整包判脏（§44n）。
+   toml 内容）+ 编译器标签。`[export]` / `[diagnostics]` / `[dependencies]` / flags 不改变
+   模块源哈希，只能靠它整包判脏（§44n）。manifest 能力/信任/特权 section 已删除，其从
+   `pmEnv` 语义中移除使 `ifaceSchema` 20→21、`ifaceCodec` 1→2、`ifaceHashVersion` 4→5
+   （旧接口自然换代，不会与新代码互读）。
 9. **产物来源（`meOrigin`）决定命令行是否可信**：`pkg`（整包 check/build）与 `tool`
    （LSP/REPL 单模块写回）分开；`check`/`build` 只复用 `pkg`（§44p）。工具产物下一次整包
    写回归为 `pkg`。
@@ -366,7 +368,8 @@ load 之后按闭包过滤模块表：起点 = entry 的全部 imports（含隐�
   文件由写侧孤儿 GC（mtime > 60s 且未被 manifest 引用）清。
 - **判据维护成本**：新增接口字段时必须同时接进 `hashOfParts`（或在文档里写明为什么不需要），
   否则就是下一类「载荷变了、哈希没变」。`ifaceSchema` 的语义已扩为「字段布局 + 哈希输入
-  集合」，两者任一变化都要 bump。
+  集合」，两者任一变化都要 bump（当前 `vuna-iface 21` / `module-iface 2` /
+  `vuna-iface-hash 5`；manifest 能力/信任 section 删除即一次这样的 bump）。
 - **其余缓存仍是 TMPDIR + 包名哈希**：check / split / split-units 按包名哈希隔离
   （`VUNA_IFACE_DIR` 只影响 iface），跨项目同名包在 TMPDIR 缓存上仍可能互相覆盖（各自
   回退，正确性不受影响）。

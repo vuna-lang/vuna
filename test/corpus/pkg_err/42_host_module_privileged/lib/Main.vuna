@@ -1,6 +1,0 @@
-module Main where
-
-import Base.Host
-
-main : Int
-main = 0

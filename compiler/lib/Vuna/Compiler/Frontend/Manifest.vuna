@@ -8,16 +8,9 @@ module Vuna.Compiler.Frontend.Manifest
 
 -- Vuna.Compiler.Frontend.Manifest：vuna.toml 的语义模型（M11.5 包管理基础件）。
 -- 表约定（M30：删除死字段 version / edition——registry/lockfile 归 F4，当前没有消费者）：
---   [package]     name（必填）、privileged = true（可选；F3 P2 特权包标记）
+--   [package]     name（必填）
 --   [workspace]   members = ["stdlib", "app"]（可选）
 --   [export]      modules = ["Base.List"]（可选；值必须是字符串数组）
---   [capabilities] effects = ["console", "fs"]（可选；M27 效应能力声明，值必须是
---                 字符串数组；合法能力名的语义校验由 Loader 负责）
---   [trust]       unsafe = ["Base.Host.runPure", ...]（可选；D28 定义级信任点。声明后该包
---                 进入**严格模式**：只有列出的定义可以直接引用 `unsafe` 门控的内建
---                 或 `Base.Host.runPure` 别名；值必须是字符串数组，每项是 `Module.def`
---                 形式的全限定定义名，语义校验在模块解析后做）
---   [privileged]  modules = ["Base.Host"]（可选；F3 P2 宿主层模块声明，仅特权包可声明）
 --   [dependencies] <dep-name> = "<相对路径>"
 -- parseManifest 只解析，不检查文件是否存在；validateManifest 做结构校验。
 -- 本模块不做文件 I/O：调用方用自己的 prim_eff_readFile 读入内容后传入。
@@ -30,17 +23,6 @@ record Manifest where
   manifestMembers : List String
   manifestExports : Maybe (List String)
   manifestDependencies : List (Pair String String)
-  manifestCapabilities : List String
-  -- | D28：`[trust] unsafe` 信任点；`Nothing` = 没有声明该 section（非严格模式），
-  -- `Just []` = 严格模式但没有任何信任点。
-  manifestTrustUnsafe : Maybe (List String)
-  -- | F3 P2：`[package] privileged = true`。只有特权包可以声明 `[capabilities]`/
-  -- `[trust]`、直调 `prim_*`、import 宿主层模块（`[privileged] modules` 声明的模块）。
-  -- 用户包与 ad-hoc 文件默认 False。
-  manifestPrivileged : Bool
-  -- | F3 P2：本包对外声明的**宿主层模块**（`[privileged] modules = [...]`）；只有特权包
-  -- 可以声明，只有特权包可以 import。例如 base 声明 `["Base.Host"]`。
-  manifestHostModules : List String
   manifestPath : String
   -- | `[diagnostics]`：渲染格式 / warnings 开关 / max-errors（可选；命令行 flag 优先）。
   manifestDiagFormat : Maybe String
@@ -49,8 +31,6 @@ record Manifest where
   manifestDiagLang : Maybe String
   manifestDiagDenyWarnings : Maybe Bool
 
--- M27：manifest 的 `[capabilities].effects` 声明；空列表表示该包没有直接使用
--- effectful 内建的能力（只能经宿主层）。
 -- 字符分类（与 Toml 内部约定一致；vuna 无字符字面量，统一用 char code）。
 isDigitChar : Int -> Bool
 isDigitChar c = c >= 48 && c <= 57
@@ -121,15 +101,9 @@ orFalse (Just b) = b
 checkOneEntry : String -> TomlEntry -> Check Int
 checkOneEntry path (TomlEntry section key value line) =
   if sameSection section [] then pkgAt1 path line (UnexpectedTopLevelKey key) key
-  else if sameSection section ["package"] then if key == "name" || key == "privileged" then OkC 0
-  else pkgAt2 path line (UnknownKey key "package") key "package"
+  else if sameSection section ["package"] then if key == "name" then OkC 0 else pkgAt2 path line (UnknownKey key "package") key "package"
   else if sameSection section ["workspace"] then if key == "members" then OkC 0 else pkgAt2 path line (UnknownKey key "workspace") key "workspace"
   else if sameSection section ["export"] then if key == "modules" then OkC 0 else pkgAt2 path line (UnknownKey key "export") key "export"
-  else if sameSection section ["capabilities"] then if key == "effects" then OkC 0
-  else pkgAt2 path line (UnknownKey key "capabilities") key "capabilities"
-  else if sameSection section ["trust"] then if key == "unsafe" then OkC 0 else pkgAt2 path line (UnknownKey key "trust") key "trust"
-  else if sameSection section ["privileged"] then if key == "modules" then OkC 0
-  else pkgAt2 path line (UnknownKey key "privileged") key "privileged"
   else if sameSection section ["diagnostics"] then if key == "format" || key == "warnings" || key == "max-errors" || key == "lang" || key == "deny-warnings" then OkC 0
   else pkgAt2 path line (UnknownKey key "diagnostics") key "diagnostics"
   else if sameSection section ["dependencies"] then OkC 0
@@ -165,7 +139,7 @@ validateDiagMax path (Just n) =
 buildManifest : String -> List TomlEntry -> Check Manifest
 buildManifest path entries =
   Vuna.Compiler.Common.bind (checkEntries path entries)
-    (\checked => Vuna.Compiler.Common.bind (stringField path ["package"] "name" entries) (\name => Vuna.Compiler.Common.bind (stringListField path ["workspace"] "members" entries) (\members => Vuna.Compiler.Common.bind (stringListField path ["export"] "modules" entries) (\exports => Vuna.Compiler.Common.bind (collectDependencies path entries) (\deps => Vuna.Compiler.Common.bind (stringListField path ["capabilities"] "effects" entries) (\caps => Vuna.Compiler.Common.bind (stringListField path ["trust"] "unsafe" entries) (\trust => Vuna.Compiler.Common.bind (boolField path ["package"] "privileged" entries) (\privileged => Vuna.Compiler.Common.bind (stringListField path ["privileged"] "modules" entries) (\hosts => Vuna.Compiler.Common.bind (stringField path ["diagnostics"] "format" entries) (\diagFmt => Vuna.Compiler.Common.bind (boolField path ["diagnostics"] "warnings" entries) (\diagWarns => Vuna.Compiler.Common.bind (intField path ["diagnostics"] "max-errors" entries) (\diagMax => Vuna.Compiler.Common.bind (stringField path ["diagnostics"] "lang" entries) (\diagLang => Vuna.Compiler.Common.bind (boolField path ["diagnostics"] "deny-warnings" entries) (\diagDeny => Vuna.Compiler.Common.bind (validateDiagFormat path diagFmt) (\_ => Vuna.Compiler.Common.bind (validateDiagMax path diagMax) (\_ => Vuna.Compiler.Common.bind (validateDiagLang path diagLang) (\_ => OkC (Manifest name (orEmptyList members) exports deps (orEmptyList caps) trust (orFalse privileged) (orEmptyList hosts) path diagFmt diagWarns diagMax diagLang diagDeny))))))))))))))))))
+    (\checked => Vuna.Compiler.Common.bind (stringField path ["package"] "name" entries) (\name => Vuna.Compiler.Common.bind (stringListField path ["workspace"] "members" entries) (\members => Vuna.Compiler.Common.bind (stringListField path ["export"] "modules" entries) (\exports => Vuna.Compiler.Common.bind (collectDependencies path entries) (\deps => Vuna.Compiler.Common.bind (stringField path ["diagnostics"] "format" entries) (\diagFmt => Vuna.Compiler.Common.bind (boolField path ["diagnostics"] "warnings" entries) (\diagWarns => Vuna.Compiler.Common.bind (intField path ["diagnostics"] "max-errors" entries) (\diagMax => Vuna.Compiler.Common.bind (stringField path ["diagnostics"] "lang" entries) (\diagLang => Vuna.Compiler.Common.bind (boolField path ["diagnostics"] "deny-warnings" entries) (\diagDeny => Vuna.Compiler.Common.bind (validateDiagFormat path diagFmt) (\_ => Vuna.Compiler.Common.bind (validateDiagMax path diagMax) (\_ => Vuna.Compiler.Common.bind (validateDiagLang path diagLang) (\_ => OkC (Manifest name (orEmptyList members) exports deps path diagFmt diagWarns diagMax diagLang diagDeny))))))))))))))
 
 parseManifest : String -> String -> Check Manifest
 parseManifest path contents =
@@ -231,52 +205,10 @@ validateDepsSeen path seen ((Pair name rel) :: rest) =
   else if memName name seen then pkgPath1 path (DuplicateDependency name) name
   else validateDepsSeen path (name :: seen) rest
 
--- M27：能力声明只做结构校验（非空、无重复）；合法能力名的语义表在 Loader 侧，
--- 这里不重复一份名字表（避免两处真源漂移）。
-validateCapabilities : String -> List String -> Check Int
-validateCapabilities path caps = validateCapsSeen path [] caps
-
-validateCapsSeen : String -> List String -> List String -> Check Int
-validateCapsSeen path seen [] = OkC 0
-validateCapsSeen path seen (c :: rest) =
-  if c == "" then pkgPath0 path EmptyCapability
-  else if memName c seen then pkgPath1 path (DuplicateCapability c) c
-  else validateCapsSeen path (c :: seen) rest
-
--- | D28：`[trust] unsafe` 的结构校验——声明了信任点就必须声明 `unsafe` 能力；
--- 每项必须非空、不重复、形如 `Module.def`。「是否为本包真实定义」在模块解析后校验。
-validateTrust : String -> List String -> Maybe (List String) -> Check Int
-validateTrust path caps Nothing = OkC 0
-validateTrust path caps (Just entries) =
-  if memName "unsafe" caps then validateTrustEntries path [] entries
-  else pkgPath0 path TrustNeedsUnsafe
-
--- | `[trust] unsafe` 的逐项校验（非空、无重复、形如 `Module.def`）。
-validateTrustEntries : String -> List String -> List String -> Check Int
-validateTrustEntries path seen [] = OkC 0
-validateTrustEntries path seen (entry :: rest) =
-  if entry == "" then pkgPath0 path EmptyTrustPoint
-  else if memName entry seen then pkgPath1 path (DuplicateTrustPoint entry) entry
-  else if validTrustPointName entry then validateTrustEntries path (entry :: seen) rest
-  else pkgPath1 path (InvalidTrustPoint entry) entry
-
--- | 信任点名字的形状：`Module.Name.def`（至少一级模块名 + 一个定义名）。
-validTrustPointName : String -> Bool
-validTrustPointName name = case splitLastDot (splitOnDot name) of
-  Pair revPrefix base => validModuleName (joinDots revPrefix) && base /= "" && base /= "_"
-
--- | F3 P2：`[capabilities]` / `[trust]` / `[privileged] modules` 只允许特权包声明。
--- 用户包与 ad-hoc 文件的正常路径是 typed effects（`Base.Eff.*` + handler），
--- 不允许直调宿主原语、也不允许声明宿主层模块。
-validatePrivilege : String -> Bool -> List String -> Maybe (List String) -> List String -> Check Int
-validatePrivilege path True caps trust hosts = validateModules path hosts
-validatePrivilege path False [] Nothing [] = OkC 0
-validatePrivilege path False _ _ _ = pkgPath0 path NonPrivileged
-
 validateManifest : Manifest -> Check Manifest
-validateManifest (Manifest name members exports deps caps trust privileged hosts path diagFmt diagWarns diagMax diagLang diagDeny) =
+validateManifest (Manifest name members exports deps path diagFmt diagWarns diagMax diagLang diagDeny) =
   Vuna.Compiler.Common.bind (validateName path name)
-    (\okName => Vuna.Compiler.Common.bind (validateMembers path members) (\okMembers => Vuna.Compiler.Common.bind (validateExports path exports) (\okExports => Vuna.Compiler.Common.bind (validateDependencies path deps) (\okDeps => Vuna.Compiler.Common.bind (validateCapabilities path caps) (\okCaps => Vuna.Compiler.Common.bind (validateTrust path caps trust) (\okTrust => Vuna.Compiler.Common.bind (validatePrivilege path privileged caps trust hosts) (\okPriv => OkC (Manifest name members exports deps caps trust privileged hosts path diagFmt diagWarns diagMax diagLang diagDeny))))))))
+    (\okName => Vuna.Compiler.Common.bind (validateMembers path members) (\okMembers => Vuna.Compiler.Common.bind (validateExports path exports) (\okExports => Vuna.Compiler.Common.bind (validateDependencies path deps) (\okDeps => OkC (Manifest name members exports deps path diagFmt diagWarns diagMax diagLang diagDeny)))))
 
 -- manifest 所在目录：`a/b/vuna.toml` -> `a/b`；没有目录成分 -> "."。
 manifestDir : String -> String

@@ -124,27 +124,24 @@ fixed point → 全部通过后才替换 `seed/` 并写入 `nix/seed-rotation.tx
 5. **唯一路径**：语言夹具、`vuna interp`、包构建与 seed 全部走 DT（精化 + 擦除 codegen），
    没有可切换的检查器，也没有第二套 codegen。
 
-## 效应能力（capabilities）
+## 效应边界（manifest 门控已删除）
 
-`seed/` 里没有工具链模块，但编译器自身需要文件读写。效应边界是 manifest 里的**显式能力
-声明**，不是按包名 allowlist：
+`seed/` 里没有工具链模块，但编译器自身需要文件读写。这条边界**不再由 manifest 门控**：
+`[capabilities]` / `[trust]` / `[privileged]` 与宿主模块 import 门控已整体删除。
 
-- 包在 `vuna.toml` 的 `[capabilities] effects` 里声明 `console` / `fs` / `process` / `env` /
-  `clock` / `unsafe` 的任意子集（合法名与放行判定在 `Vuna.Compiler.Intrinsics` +
-  `Loader.Resolve.checkEffectsBuiltins`；未知 / 重复能力名直接报错）；
-- 效果原语只有 `prim_*` 名并返回 `Eff []` 动作；动作类型是 `Base.Eff` 的 `Eff`（构造器不导出），
-  每个内建的能力位、签名与 runtime 名同源在 `Vuna.Compiler.Intrinsics`。未声明能力的包
-  只能经 `Base.Host` 使用效果；声明了能力的包可直接用 `prim_*`（不需要 import `Base.Host`）；
-- 仓库内三个包的能力声明见各自 `vuna.toml`：根包与 `vuna-compiler` 五个能力，`vuna-base`
-  声明 `console` / `fs` / `process`（`Base.Host` 的封装面）+ `unsafe`（`runPure` 与
-  `Base.ST.runST` 的信任点）；`test/corpus` 与夹具 manifest
-  不声明能力，只能经 `Base.Host`；
-- 能力随包上下文传递（`PackageContext` / `Root` / `Module` / `Project`），无 manifest 的
-  ad-hoc 文件没有能力；
-- base 定位用的 `prim_getenv` / `prim_getcwd` / `prim_execPath` 需要 `env` 能力，与其它
-  effectful 内建走同一套检查。
-
-`Driver.CompilerCli.runIn`（`prim_runIn`）是唯一的进程执行入口，需要 `process` 能力。
+- **seed 闭包不变**：seed 仍只含 compiler 包入口闭包；编译器与 `Base.Host` 仍直调
+  `prim_*`（`Eff []` 叶子）。动作类型仍是唯一的 `Eff r a`，入口 `main : Eff [] a`，
+  执行入口 `Base.Eff.runPure`。
+- **任何包都可见宿主层**：用户包、`test/corpus` 夹具、ad-hoc 文件都可以 `import Base.Host`、
+  直接调用 `prim_*` / `prim_eff_*`；没有每包原语白名单、`unsafe` 定义级审计，也没有
+  REPL `--privileged`。编译器不再检查内建的能力位。
+- **用户面纪律（非门控）**：用户面**应**经 `Base.Eff.*` 标签 + handler 使用效果；宿主层
+  细节留在 `Base.Host` / `Base.Eff*` 内部。见 [effects.md](effects.md) §8.6 与
+  [primitives.md](primitives.md) §7。
+- **显式接受的损失**：宿主层 import 门控、每包原语白名单、`unsafe` 定义级审计、网络仅
+  根包可用；历史见 git，后续用表示层权限（N2/N3）或新模型补。
+- `Driver.CompilerCli.runIn`（`prim_runIn`）仍是唯一的进程执行入口（代码内部约定，
+  不再是能力检查）。
 
 ## 种子文件集（当前）
 
@@ -180,7 +177,7 @@ flag 统一为 `-g -w -a+39 -warn-error +39`（warning 39 = unused rec，设 war
 ## 相关阅读
 
 - 编译器模块职责：[compiler.md](compiler.md)
-- 内建声明面、原语语义与效应能力：[primitives.md](primitives.md)
+- 内建声明面、原语语义与宿主层：[primitives.md](primitives.md)
 - 子系统数据流与改动定位：[architecture.md](../architecture.md)
 - 测试与 CI 门槛：[testing.md](testing.md)
 - 开放债务：[debt.md](debt.md)

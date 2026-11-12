@@ -583,9 +583,8 @@ resolveUnqualifiedSplit sf roots tyName = case findSplitIn sf.sourceFileDecls ty
 -- 边界：类型文本是精化器 show 出来的**规范全名**（`Dep.Point` / `B.Local`），所以
 -- `import ... as` 的模块别名不会出现在这里；也没有类型别名声明可展开（见 lsp.md）。
 tagSplit : String -> Maybe SplitTy -> Maybe (Pair String SplitTy)
-tagSplit modName split = case split of
-  Just cs => Just (Pair modName cs)
-  Nothing => Nothing
+tagSplit modName (Just cs) = Just (Pair modName cs)
+tagSplit modName Nothing = Nothing
 
 resolveTypeSplit : SourceFile -> List Root -> String -> String -> Eff [] (Maybe (Pair String SplitTy))
 resolveTypeSplit sf roots curMod tyText = case parseExpressionSource tyText of

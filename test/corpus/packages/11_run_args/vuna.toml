@@ -1,6 +1,5 @@
 [package]
 name = "run-args"
-privileged = true
 
 [dependencies]
 vuna-base = "../../../../base"

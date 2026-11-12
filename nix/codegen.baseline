@@ -40,10 +40,10 @@
 #       （其余指标同上），即 +18 字节漂移早于本任务、非 Float 改动引入；按实测把
 #       bytes 重标定为 4233。
 files =4
-bytes =4083
+bytes =4169
 lines =80
 maxline =823
-longlines =5
+longlines =6
 letrec =1
 strcat =1
 eqint =0
@@ -60,3 +60,7 @@ ctorcount =17
 # 漂移重标定（2026-11-11，位运算原语 + SHA-256/Bits 合并后）：夹具源码与口径未变，
 #       产物 bytes 4097 → 4083（其余指标不变；dd65112 的 Codegen.Term/Intrinsics 改动
 #       是唯一触到 codegen 的提交）。按实测精确基线重标定。
+# 漂移重标定（2026-11-12，删除 manifest privileged/capabilities/trust）：夹具源码与口径
+#       未变，但 bytes 4083 → 4169、longlines 5 → 6。复核：干净 HEAD worktree（dd9f8c9）
+#       用同一产品 CLI 重跑夹具得到同样的 4169/6 ⇒ 漂移早于本批改动、非能力/信任删除
+#       引入（候选来源是 HEAD 的 query/graph 线 codegen）；按实测精确基线重标定。

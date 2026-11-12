@@ -1,9 +1,0 @@
--- D28 正例入口：普通效果程序；信任点检查在 check/build 期，而不是运行时。
--- `import TrustLib` 让库模块进入加载闭包（信任点校验需要模块已解析）。
-import Base.Host
-import TrustLib
-
-main : Eff [] Int
-main = do
-  _ <- print "trust ok\n"
-  pure 0

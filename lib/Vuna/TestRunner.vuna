@@ -239,21 +239,20 @@ matchesAnyFilter (pat :: rest) pkgName file =
 -- 逐文件执行；返回 Tally
 -- ---------------------------------------------------------------
 runTestFiles : TestOpts -> PackageContext -> String -> List String -> Int -> Int -> Eff [] Tally
-runTestFiles opts ctx dir files pass fail = case files of
-  [] => do
-    _ <- prim_eff_print "\n${pass} passed, ${fail} failed\n"
-    pure (Tally pass fail False)
-  name :: rest => do
-    t0 <- effTimeUs
-    outcome <- runOneTest ctx "${dir}/${name}" name
-    us <- effTimeUs
-    _ <- printOutcome opts name outcome (us - t0)
-    case outcome of
-      TestPassed => runTestFiles opts ctx dir rest (pass + 1) fail
-      TestFailed _ => if opts.testFailFast then do
-        _ <- prim_eff_print "\n${pass} passed, ${fail + 1} failed\n"
-        pure (Tally pass (fail + 1) True)
-      else runTestFiles opts ctx dir rest pass (fail + 1)
+runTestFiles opts ctx dir [] pass fail = do
+  _ <- prim_eff_print "\n${pass} passed, ${fail} failed\n"
+  pure (Tally pass fail False)
+runTestFiles opts ctx dir (name :: rest) pass fail = do
+  t0 <- effTimeUs
+  outcome <- runOneTest ctx "${dir}/${name}" name
+  us <- effTimeUs
+  _ <- printOutcome opts name outcome (us - t0)
+  case outcome of
+    TestPassed => runTestFiles opts ctx dir rest (pass + 1) fail
+    TestFailed _ => if opts.testFailFast then do
+      _ <- prim_eff_print "\n${pass} passed, ${fail + 1} failed\n"
+      pure (Tally pass (fail + 1) True)
+    else runTestFiles opts ctx dir rest pass (fail + 1)
 
 -- ---------------------------------------------------------------
 -- C23/C39：进程级并行（jobs > 1）
@@ -293,14 +292,13 @@ else case pending of
 
 -- 等完所有在跑子进程并打印与串行一致的汇总行（fail-fast 触发时也走这里）。
 finishRunning : TestOpts -> List (Pair Int String) -> Int -> Int -> Bool -> Eff [] Tally
-finishRunning opts running pass fail stopped = case running of
-  [] => do
-    _ <- prim_eff_print "\n${pass} passed, ${fail} failed\n"
-    pure (Tally pass fail stopped)
-  (Pair pid _) :: rest => do
-    code <- prim_eff_wait pid
-    finishRunning opts rest (if code == 0 then pass + 1 else pass)
-      (if code == 0 then fail else fail + 1) (stopped || opts.testFailFast && code /= 0)
+finishRunning opts [] pass fail stopped = do
+  _ <- prim_eff_print "\n${pass} passed, ${fail} failed\n"
+  pure (Tally pass fail stopped)
+finishRunning opts ((Pair pid _) :: rest) pass fail stopped = do
+  code <- prim_eff_wait pid
+  finishRunning opts rest (if code == 0 then pass + 1 else pass)
+    (if code == 0 then fail else fail + 1) (stopped || opts.testFailFast && code /= 0)
 
 -- 子进程 argv：`test <包目录> --only-file <文件名> --jobs 1 [--verbose]`。
 -- 子进程模式（runOnlyFile）不会再并行 / 递归 spawn。

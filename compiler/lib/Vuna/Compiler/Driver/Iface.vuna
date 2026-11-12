@@ -40,7 +40,6 @@ module Vuna.Compiler.Driver.Iface
   , mePayloadDigestOfEntry
   , meSourceOfEntry
   , miCachedOf
-  , miCapabilitiesOf
   , miDeclsOf
   , miDepHashesOf
   , miExportsOf
@@ -89,10 +88,10 @@ module Vuna.Compiler.Driver.Iface
 --     Idris2 存的是编译后的 case tree，vuna 的等价物就是 resolved 子句。**这是与 TTC
 --     字段集的唯一实质差异**：多了 decls、少了编译后端产物（codegen 在 vuna 侧由
 --     `Codegen.*` 从 DtProgram 现生成）。
---   - `miExports` / `miFixities` / imports / capabilities：加载器把依赖模块「当已加载模块」
+--   - `miExports` / `miFixities` / imports：加载器把依赖模块「当已加载模块」
 --     复用时需要的模块图数据（不读源码）。
 --   - `miSource` / `miIfaceHash`：失效判定。`miIfaceHash` 覆盖**载荷全量语义面**
---     （导出表、能力声明、imports、fixity、record 头、data/ctor、defs、globals、实例、
+--     （导出表、imports、fixity、record 头、data/ctor、defs、globals、实例、
 --     类），只排除 span / 源路径，因此换行/注释/路径变化不会误失效；读方实际消费的任何
 --     字段都必须参与哈希，否则会出现「载荷变了、哈希没变」的陈旧复用（§44m/§44n）。
 --     摘要算法是 **SHA-256**（`shaText`，D5）；`siHash` 是源内容摘要，同一函数。
@@ -146,7 +145,6 @@ record ModuleIface where
   miDepHashes : List (Pair String String)
   miImports : List Import
   miImplicitImports : List Import
-  miCapabilities : List String
   miExports : List ExportEntry
   miFixities : List FixityDecl
   miDecls : List Decl
@@ -205,9 +203,6 @@ miImportsOf m = m.miImports
 miImplicitImportsOf : ModuleIface -> List Import
 miImplicitImportsOf m = m.miImplicitImports
 
-miCapabilitiesOf : ModuleIface -> List String
-miCapabilitiesOf m = m.miCapabilities
-
 miExportsOf : ModuleIface -> List ExportEntry
 miExportsOf m = m.miExports
 
@@ -243,8 +238,7 @@ preparedForModule modules entryDecls name =
 setPrepared : List Decl -> ModuleIface -> ModuleIface
 setPrepared prepared mi =
   ModuleIface mi.miName mi.miPackage mi.miSource mi.miIfaceHash mi.miDepHashes mi.miImports
-    mi.miImplicitImports mi.miCapabilities mi.miExports mi.miFixities mi.miDecls mi.miRecords
-    prepared mi.miCached
+    mi.miImplicitImports mi.miExports mi.miFixities mi.miDecls mi.miRecords prepared mi.miCached
 
 -- 接口格式版本：Marshal 布局或字段语义变化必须 bump（旧缓存自然失效）。
 -- R1（records-v2）：DRecord/DData/DtData 增加 ReprTier 槽位，Marshal 布局变化 ⇒ bump。
@@ -257,12 +251,12 @@ setPrepared prepared mi =
 -- C32：接口载荷改为 `Canonical.*` 显式编码 + `Store` framing（Marshal 彻底退出缓存面），
 -- manifest 增加 `mePayloadDigest`，布局变化 ⇒ 20。
 ifaceSchema : String
-ifaceSchema = "vuna-iface 20"
+ifaceSchema = "vuna-iface 21"
 
 -- | 接口哈希的**算法格式版本**：参与哈希输入（与 `ifaceSchema` 独立——schema 管载荷
 -- 布局，本版本管摘要算法/分片编码；换算法时旧哈希自然换代）。
 ifaceHashVersion : String
-ifaceHashVersion = "vuna-iface-hash 4 (sha256 + canonical)"
+ifaceHashVersion = "vuna-iface-hash 5 (sha256 + canonical)"
 
 -- ---------------------------------------------------------------
 -- 哈希：接口哈希必须比 `strHash`（10 bit）强得多
@@ -430,11 +424,6 @@ exportKeyOf e = "${e.public}|${e.kind}|${e.target}|${e.parent}"
 hashExports : List ExportEntry -> String
 hashExports es = payloadDigest (encTop (encList encExportEntry) (sortByText exportKeyOf es))
 
--- 模块能力声明（`[capabilities]` 在模块头的可见面）：决定依赖方的特权检查，必须参与
--- 接口哈希，否则升级/降级能力不会让依赖模块失效。
-hashCapabilities : List String -> String
-hashCapabilities cs = payloadDigest (encTop (encList encStr) (sortByText (\s => s) cs))
-
 -- fixity 带 span：编码器丢弃 span，只写操作符 / 级别 / 结合性 / 别名目标。
 hashFixities : List FixityDecl -> String
 hashFixities fs = payloadDigest (encTop (encList encFixity) fs)
@@ -453,15 +442,15 @@ hashImports is = payloadDigest (encTop (encList encImport) is)
 hashDecls : List Decl -> String
 hashDecls ds = payloadDigest (encTop encDecls ds)
 
-hashOfParts : String -> String -> List Import -> List Import -> List FixityDecl -> List RecordMeta -> List ExportEntry -> List String -> List Decl -> CachedProgram -> String
-hashOfParts name pkg imports implicitImports fixities records exports capabilities decls cp =
+hashOfParts : String -> String -> List Import -> List Import -> List FixityDecl -> List RecordMeta -> List ExportEntry -> List Decl -> CachedProgram -> String
+hashOfParts name pkg imports implicitImports fixities records exports decls cp =
   digestParts
-    [ifaceHashVersion, name, pkg, hashImports imports, hashImports implicitImports, hashFixities fixities, hashRecords records, hashDecls decls, hashDatas (cachedDatas cp), hashDefs (cachedDefs cp), hashGlobals (cachedGlobals cp), hashInsts (cachedInsts cp), hashClasses (cachedClasses cp), hashExports exports, hashCapabilities capabilities]
+    [ifaceHashVersion, name, pkg, hashImports imports, hashImports implicitImports, hashFixities fixities, hashRecords records, hashDecls decls, hashDatas (cachedDatas cp), hashDefs (cachedDefs cp), hashGlobals (cachedGlobals cp), hashInsts (cachedInsts cp), hashClasses (cachedClasses cp), hashExports exports]
 
 hashOfIface : ModuleIface -> String
 hashOfIface m =
   hashOfParts (miNameOf m) (miPackageOf m) (miImportsOf m) (miImplicitImportsOf m) (miFixitiesOf m)
-    (miRecordsOf m) (miExportsOf m) (miCapabilitiesOf m) (miDeclsOf m) (miCachedOf m)
+    (miRecordsOf m) (miExportsOf m) (miDeclsOf m) (miCachedOf m)
 
 -- ---------------------------------------------------------------
 -- 归属索引（与 codegen 同一规则）：decl/data 表命中优先，带点名字回落模块前缀。
@@ -620,18 +609,17 @@ mkIfaceBase pkg parts prog sources clean m = case cleanIfaceOf clean (moduleName
       records = recordsOfDecls m.moduleDeclsOf
       h =
         hashOfParts name pkg m.moduleImportsOf m.moduleImplicitImportsOf m.moduleFixitiesOf records
-          m.moduleExportsOf m.moduleCapabilities m.moduleDeclsOf cp
+          m.moduleExportsOf m.moduleDeclsOf cp
     in ModuleIface name pkg (sourceOf sources name) h [] m.moduleImportsOf m.moduleImplicitImportsOf
-      m.moduleCapabilities m.moduleExportsOf m.moduleFixitiesOf m.moduleDeclsOf records [] cp
+      m.moduleExportsOf m.moduleFixitiesOf m.moduleDeclsOf records [] cp
 
 finishIface : List (Pair String String) -> List ModuleIface -> Module -> ModuleIface -> ModuleIface
 finishIface tbl clean m mi = case cleanIfaceOf clean (miNameOf mi) of
   Just old => old
   Nothing =>
     ModuleIface (miNameOf mi) (miPackageOf mi) (miSourceOf mi) (miIfaceHashOf mi)
-      (depHashesOf tbl m) (miImportsOf mi) (miImplicitImportsOf mi) (miCapabilitiesOf mi)
-      (miExportsOf mi) (miFixitiesOf mi) (miDeclsOf mi) (miRecordsOf mi) (miPreparedOf mi)
-      (miCachedOf mi)
+      (depHashesOf tbl m) (miImportsOf mi) (miImplicitImportsOf mi) (miExportsOf mi)
+      (miFixitiesOf mi) (miDeclsOf mi) (miRecordsOf mi) (miPreparedOf mi) (miCachedOf mi)
 
 ifacesGo : String -> ProgParts -> DtProgram -> List (Pair String SourceInfo) -> List (Pair String String) -> List ModuleIface -> List Module -> Pair (List ModuleIface) (List (Pair String String))
 ifacesGo pkg parts prog sources knownDeps clean modules =
@@ -887,7 +875,7 @@ record PackageManifest where
   pmCompiler : String
   pmPackage : String
   -- 包级环境指纹：自身 `vuna.toml` 内容 + 传递依赖（名字 / 目录 / toml 内容）+
-  -- 编译器标签。`[capabilities]` / `[trust]` / `[dependencies]` 等变化不体现在模块源
+  -- 编译器标签。`[dependencies]` 等变化不体现在模块源
   -- 文件哈希里，必须靠它整包判脏（§44o）。
   pmEnv : Int
   pmModules : List ManifestEntry
@@ -1179,7 +1167,7 @@ readPackageIface dir compiler = do
 -- 再逐字段核对 `miName` / `miIfaceHash`——三层都不通过就回退全量。
 -- | iface 载荷编码版本（与 `ifaceSchema` 独立：schema 管字段集，本版本管编码布局）。
 ifaceCodec : String
-ifaceCodec = "module-iface 1"
+ifaceCodec = "module-iface 2"
 
 manifestCodec : String
 manifestCodec = "package-manifest 1"
@@ -1205,7 +1193,7 @@ decDepPair fuel c =
 encModuleIfacePayload : ModuleIface -> List String -> List String
 encModuleIfacePayload m acc =
   encStr m.miName
-    (encStr m.miPackage (encSourceInfo m.miSource (encStr m.miIfaceHash (encList encDepPair m.miDepHashes (encList encImport m.miImports (encList encImport m.miImplicitImports (encList encStr m.miCapabilities (encList encExportEntry m.miExports (encList encFixity m.miFixities (encList encDecl m.miDecls (encList encRecordMeta m.miRecords (encList encDecl m.miPrepared (encCachedProgram m.miCached acc)))))))))))))
+    (encStr m.miPackage (encSourceInfo m.miSource (encStr m.miIfaceHash (encList encDepPair m.miDepHashes (encList encImport m.miImports (encList encImport m.miImplicitImports (encList encExportEntry m.miExports (encList encFixity m.miFixities (encList encDecl m.miDecls (encList encRecordMeta m.miRecords (encList encDecl m.miPrepared (encCachedProgram m.miCached acc))))))))))))
 
 -- | `ModuleIface` 载荷字节（落盘用）。
 encModuleIfaceAt : ModuleIface -> List String -> List String
@@ -1226,15 +1214,14 @@ decModuleIfacePayload fuel c = do
   p5 <- decList decDepPair (fuel - 1) (secondOf p4)
   p6 <- decList decImport (fuel - 1) (secondOf p5)
   p7 <- decList decImport (fuel - 1) (secondOf p6)
-  p8 <- decList decStr (fuel - 1) (secondOf p7)
-  p9 <- decList decExportEntry (fuel - 1) (secondOf p8)
-  p10 <- decList decFixity (fuel - 1) (secondOf p9)
-  p11 <- decList decDecl (fuel - 1) (secondOf p10)
-  p12 <- decList decRecordMeta (fuel - 1) (secondOf p11)
-  p13 <- decList decDecl (fuel - 1) (secondOf p12)
-  p14 <- decCachedProgram (fuel - 1) (secondOf p13)
+  p8 <- decList decExportEntry (fuel - 1) (secondOf p7)
+  p9 <- decList decFixity (fuel - 1) (secondOf p8)
+  p10 <- decList decDecl (fuel - 1) (secondOf p9)
+  p11 <- decList decRecordMeta (fuel - 1) (secondOf p10)
+  p12 <- decList decDecl (fuel - 1) (secondOf p11)
+  p13 <- decCachedProgram (fuel - 1) (secondOf p12)
   pure
-    (Pair (ModuleIface (firstOf p1) (firstOf p2) (firstOf p3) (firstOf p4) (firstOf p5) (firstOf p6) (firstOf p7) (firstOf p8) (firstOf p9) (firstOf p10) (firstOf p11) (firstOf p12) (firstOf p13) (firstOf p14)) (secondOf p14))
+    (Pair (ModuleIface (firstOf p1) (firstOf p2) (firstOf p3) (firstOf p4) (firstOf p5) (firstOf p6) (firstOf p7) (firstOf p8) (firstOf p9) (firstOf p10) (firstOf p11) (firstOf p12) (firstOf p13)) (secondOf p13))
 
 decManifestEntry : Int -> Cur -> Maybe (Pair ManifestEntry Cur)
 decManifestEntry fuel c = do

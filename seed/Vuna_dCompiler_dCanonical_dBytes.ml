@@ -1,4 +1,16 @@
 open Vuna_runtime
+type t_Vuna_dCompiler_dCanonical_dBytes_dCur = { f_Vuna_dCompiler_dCanonical_dBytes_dCur_curS : string; f_Vuna_dCompiler_dCanonical_dBytes_dCur_curI : int }
+
+let v_Vuna_dCompiler_dCanonical_dBytes_dcurOf = (fun s -> { f_Vuna_dCompiler_dCanonical_dBytes_dCur_curS = s; f_Vuna_dCompiler_dCanonical_dBytes_dCur_curI = 0 })
+
+let v_Vuna_dCompiler_dCanonical_dBytes_dcurAtEnd = (fun c -> ((c).f_Vuna_dCompiler_dCanonical_dBytes_dCur_curI >= (bi_strLength (c).f_Vuna_dCompiler_dCanonical_dBytes_dCur_curS)))
+
+let v_Vuna_dCompiler_dCanonical_dBytes_dcurChar = (fun c -> (if ((c).f_Vuna_dCompiler_dCanonical_dBytes_dCur_curI < (bi_strLength (c).f_Vuna_dCompiler_dCanonical_dBytes_dCur_curS)) then (Base_dMaybe.C_Base_dMaybe_dMaybe_Just (((dtp_strAt (c).f_Vuna_dCompiler_dCanonical_dBytes_dCur_curS) (c).f_Vuna_dCompiler_dCanonical_dBytes_dCur_curI))) else Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing))
+
+let v_Vuna_dCompiler_dCanonical_dBytes_dcurSkip = (fun c -> { f_Vuna_dCompiler_dCanonical_dBytes_dCur_curS = (c).f_Vuna_dCompiler_dCanonical_dBytes_dCur_curS; f_Vuna_dCompiler_dCanonical_dBytes_dCur_curI = ((c).f_Vuna_dCompiler_dCanonical_dBytes_dCur_curI + 1) })
+
+let v_Vuna_dCompiler_dCanonical_dBytes_dcurSlice = (fun c start len -> (((dtp_substring start) len) (c).f_Vuna_dCompiler_dCanonical_dBytes_dCur_curS))
+
 let rec v_Vuna_dCompiler_dCanonical_dBytes_dlenOf = (fun mc0 -> (match mc0 with
   | Base_dList.C_Base_dList_dList_Cons (dtb__0, dtb__1) -> (1 + (v_Vuna_dCompiler_dCanonical_dBytes_dlenOf dtb__1))
   | Base_dList.C_Base_dList_dList_Nil -> 0
@@ -31,9 +43,14 @@ let v_Vuna_dCompiler_dCanonical_dBytes_dencMaybe = (fun mc0 mc1 mc2 -> (match mc
   | _ -> failwith "DT: impossible branch"
 ))
 
+let v_Vuna_dCompiler_dCanonical_dBytes_dencPair = (fun mc0 mc1 mc2 mc3 -> (match mc2 with
+  | { Base_dPair.f_Base_dPair_dPair_first = dtb__5; Base_dPair.f_Base_dPair_dPair_second = dtb__6 } -> ((mc0 dtb__5) ((mc1 dtb__6) mc3))
+  | _ -> failwith "DT: impossible branch"
+))
+
 let v_Vuna_dCompiler_dCanonical_dBytes_dthenPair = (fun mc0 mc1 -> (match mc0 with
-  | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__5) -> (match dtb__5 with
-  | { Base_dPair.f_Base_dPair_dPair_first = dtb__6; Base_dPair.f_Base_dPair_dPair_second = dtb__7 } -> ((mc1 dtb__6) dtb__7)
+  | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__7) -> (match dtb__7 with
+  | { Base_dPair.f_Base_dPair_dPair_first = dtb__8; Base_dPair.f_Base_dPair_dPair_second = dtb__9 } -> ((mc1 dtb__8) dtb__9)
   | _ -> failwith "DT: impossible branch"
 )
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing -> Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing
@@ -42,64 +59,48 @@ let v_Vuna_dCompiler_dCanonical_dBytes_dthenPair = (fun mc0 mc1 -> (match mc0 wi
 
 let v_Vuna_dCompiler_dCanonical_dBytes_disDigit = (fun c -> (if (c >= 48) then (c <= 57) else false))
 
-let rec v_Vuna_dCompiler_dCanonical_dBytes_ddecNumStop = (fun fuel stop acc bytes -> (if (fuel <= 0) then Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing else (match bytes with
-  | Base_dList.C_Base_dList_dList_Nil -> Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing
-  | Base_dList.C_Base_dList_dList_Cons (dtb__8, dtb__9) -> (if (dtb__8 = stop) then (Base_dMaybe.C_Base_dMaybe_dMaybe_Just ({ Base_dPair.f_Base_dPair_dPair_first = acc; Base_dPair.f_Base_dPair_dPair_second = dtb__9 })) else (if (v_Vuna_dCompiler_dCanonical_dBytes_disDigit dtb__8) then ((((v_Vuna_dCompiler_dCanonical_dBytes_ddecNumStop (fuel - 1)) stop) ((acc * 10) + (dtb__8 - 48))) dtb__9) else Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing))
+let rec v_Vuna_dCompiler_dCanonical_dBytes_ddecNumStop = (fun fuel stop acc c -> (if (fuel <= 0) then Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing else (match (v_Vuna_dCompiler_dCanonical_dBytes_dcurChar c) with
+  | Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing -> Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing
+  | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__10) -> (if (dtb__10 = stop) then (Base_dMaybe.C_Base_dMaybe_dMaybe_Just ({ Base_dPair.f_Base_dPair_dPair_first = acc; Base_dPair.f_Base_dPair_dPair_second = (v_Vuna_dCompiler_dCanonical_dBytes_dcurSkip c) })) else (if (v_Vuna_dCompiler_dCanonical_dBytes_disDigit dtb__10) then ((((v_Vuna_dCompiler_dCanonical_dBytes_ddecNumStop (fuel - 1)) stop) ((acc * 10) + (dtb__10 - 48))) (v_Vuna_dCompiler_dCanonical_dBytes_dcurSkip c)) else Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing))
   | _ -> failwith "DT: impossible branch"
 )))
 
-let rec v_Vuna_dCompiler_dCanonical_dBytes_dtakeN = (fun n bytes -> (if (n <= 0) then Base_dList.C_Base_dList_dList_Nil else (match bytes with
-  | Base_dList.C_Base_dList_dList_Nil -> Base_dList.C_Base_dList_dList_Nil
-  | Base_dList.C_Base_dList_dList_Cons (dtb__10, dtb__11) -> (Base_dList.C_Base_dList_dList_Cons (dtb__10, ((v_Vuna_dCompiler_dCanonical_dBytes_dtakeN (n - 1)) dtb__11)))
-  | _ -> failwith "DT: impossible branch"
-)))
-
-let rec v_Vuna_dCompiler_dCanonical_dBytes_ddropN = (fun n bytes -> (if (n <= 0) then bytes else (match bytes with
-  | Base_dList.C_Base_dList_dList_Nil -> Base_dList.C_Base_dList_dList_Nil
-  | Base_dList.C_Base_dList_dList_Cons (dtb__12, dtb__13) -> ((v_Vuna_dCompiler_dCanonical_dBytes_ddropN (n - 1)) dtb__13)
-  | _ -> failwith "DT: impossible branch"
-)))
-
-let v_Vuna_dCompiler_dCanonical_dBytes_ddecTag = (fun fuel bytes -> (if (fuel <= 0) then Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing else (match bytes with
-  | Base_dList.C_Base_dList_dList_Nil -> Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing
-  | Base_dList.C_Base_dList_dList_Cons (dtb__14, dtb__15) -> (if (dtb__14 = 35) then ((((v_Vuna_dCompiler_dCanonical_dBytes_ddecNumStop (fuel - 1)) 59) 0) dtb__15) else Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing)
-  | _ -> failwith "DT: impossible branch"
-)))
-
-let v_Vuna_dCompiler_dCanonical_dBytes_ddecInt = (fun fuel bytes -> (if (fuel <= 0) then Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing else (match bytes with
-  | Base_dList.C_Base_dList_dList_Nil -> Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing
-  | Base_dList.C_Base_dList_dList_Cons (dtb__16, dtb__17) -> (if (dtb__16 = 105) then ((fun nd_uscrut5 -> (match nd_uscrut5 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__18, dtb__19) -> (if (dtb__18 = 45) then ((v_Vuna_dCompiler_dCanonical_dBytes_dthenPair ((((v_Vuna_dCompiler_dCanonical_dBytes_ddecNumStop (fuel - 1)) 59) 0) dtb__19)) (fun n b -> (Base_dMaybe.C_Base_dMaybe_dMaybe_Just ({ Base_dPair.f_Base_dPair_dPair_first = (0 - n); Base_dPair.f_Base_dPair_dPair_second = b })))) else ((v_Vuna_dCompiler_dCanonical_dBytes_dthenPair ((((v_Vuna_dCompiler_dCanonical_dBytes_ddecNumStop (fuel - 1)) 59) 0) dtb__17)) (fun n b -> (Base_dMaybe.C_Base_dMaybe_dMaybe_Just ({ Base_dPair.f_Base_dPair_dPair_first = n; Base_dPair.f_Base_dPair_dPair_second = b })))))
-  | _ -> ((v_Vuna_dCompiler_dCanonical_dBytes_dthenPair ((((v_Vuna_dCompiler_dCanonical_dBytes_ddecNumStop (fuel - 1)) 59) 0) dtb__17)) (fun n b -> (Base_dMaybe.C_Base_dMaybe_dMaybe_Just ({ Base_dPair.f_Base_dPair_dPair_first = n; Base_dPair.f_Base_dPair_dPair_second = b }))))
-)) dtb__17) else Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing)
-  | _ -> failwith "DT: impossible branch"
-)))
-
-let v_Vuna_dCompiler_dCanonical_dBytes_ddecBool = (fun fuel bytes -> (if (fuel <= 0) then Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing else (match bytes with
-  | Base_dList.C_Base_dList_dList_Nil -> Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing
-  | Base_dList.C_Base_dList_dList_Cons (dtb__20, dtb__21) -> (if (dtb__20 = 98) then ((fun nd_uscrut5 -> (match nd_uscrut5 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__22, dtb__23) -> (if (dtb__22 = 49) then (Base_dMaybe.C_Base_dMaybe_dMaybe_Just ({ Base_dPair.f_Base_dPair_dPair_first = true; Base_dPair.f_Base_dPair_dPair_second = dtb__23 })) else (if (dtb__22 = 48) then (Base_dMaybe.C_Base_dMaybe_dMaybe_Just ({ Base_dPair.f_Base_dPair_dPair_first = false; Base_dPair.f_Base_dPair_dPair_second = dtb__23 })) else Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing))
+let v_Vuna_dCompiler_dCanonical_dBytes_ddecTag = (fun fuel c -> (if (fuel <= 0) then Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing else ((fun nd_uscrut2 -> (match nd_uscrut2 with
+  | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__11) -> (if (dtb__11 = 35) then ((((v_Vuna_dCompiler_dCanonical_dBytes_ddecNumStop (fuel - 1)) 59) 0) (v_Vuna_dCompiler_dCanonical_dBytes_dcurSkip c)) else Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing)
   | _ -> Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing
-)) dtb__21) else Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing)
-  | _ -> failwith "DT: impossible branch"
-)))
+)) (v_Vuna_dCompiler_dCanonical_dBytes_dcurChar c))))
 
-let v_Vuna_dCompiler_dCanonical_dBytes_ddecStr = (fun fuel bytes -> (if (fuel <= 0) then Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing else (match bytes with
-  | Base_dList.C_Base_dList_dList_Nil -> Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing
-  | Base_dList.C_Base_dList_dList_Cons (dtb__24, dtb__25) -> (if (dtb__24 = 115) then ((v_Vuna_dCompiler_dCanonical_dBytes_dthenPair ((((v_Vuna_dCompiler_dCanonical_dBytes_ddecNumStop (fuel - 1)) 58) 0) dtb__25)) (fun n b -> ((fun taken -> (if ((v_Vuna_dCompiler_dCanonical_dBytes_dlenOf taken) = n) then (Base_dMaybe.C_Base_dMaybe_dMaybe_Just ({ Base_dPair.f_Base_dPair_dPair_first = (Base_dList.dtp_pack taken); Base_dPair.f_Base_dPair_dPair_second = ((v_Vuna_dCompiler_dCanonical_dBytes_ddropN n) b) })) else Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing)) ((v_Vuna_dCompiler_dCanonical_dBytes_dtakeN n) b)))) else Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing)
-  | _ -> failwith "DT: impossible branch"
-)))
+let v_Vuna_dCompiler_dCanonical_dBytes_ddecInt = (fun fuel c -> (if (fuel <= 0) then Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing else ((fun nd_uscrut2 -> (match nd_uscrut2 with
+  | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__12) -> (if (dtb__12 = 105) then ((fun nd_uscrut5 -> (match nd_uscrut5 with
+  | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__13) -> (if (dtb__13 = 45) then ((v_Vuna_dCompiler_dCanonical_dBytes_dthenPair ((((v_Vuna_dCompiler_dCanonical_dBytes_ddecNumStop (fuel - 1)) 59) 0) (v_Vuna_dCompiler_dCanonical_dBytes_dcurSkip (v_Vuna_dCompiler_dCanonical_dBytes_dcurSkip c)))) (fun n b -> (Base_dMaybe.C_Base_dMaybe_dMaybe_Just ({ Base_dPair.f_Base_dPair_dPair_first = (0 - n); Base_dPair.f_Base_dPair_dPair_second = b })))) else ((v_Vuna_dCompiler_dCanonical_dBytes_dthenPair ((((v_Vuna_dCompiler_dCanonical_dBytes_ddecNumStop (fuel - 1)) 59) 0) (v_Vuna_dCompiler_dCanonical_dBytes_dcurSkip c))) (fun n b -> (Base_dMaybe.C_Base_dMaybe_dMaybe_Just ({ Base_dPair.f_Base_dPair_dPair_first = n; Base_dPair.f_Base_dPair_dPair_second = b })))))
+  | _ -> ((v_Vuna_dCompiler_dCanonical_dBytes_dthenPair ((((v_Vuna_dCompiler_dCanonical_dBytes_ddecNumStop (fuel - 1)) 59) 0) (v_Vuna_dCompiler_dCanonical_dBytes_dcurSkip c))) (fun n b -> (Base_dMaybe.C_Base_dMaybe_dMaybe_Just ({ Base_dPair.f_Base_dPair_dPair_first = n; Base_dPair.f_Base_dPair_dPair_second = b }))))
+)) (v_Vuna_dCompiler_dCanonical_dBytes_dcurChar (v_Vuna_dCompiler_dCanonical_dBytes_dcurSkip c))) else Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing)
+  | _ -> Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing
+)) (v_Vuna_dCompiler_dCanonical_dBytes_dcurChar c))))
 
-let rec v_Vuna_dCompiler_dCanonical_dBytes_ddecItems = (fun fp n fuel bytes acc -> (if (n <= 0) then (Base_dMaybe.C_Base_dMaybe_dMaybe_Just ({ Base_dPair.f_Base_dPair_dPair_first = (Base_dList.v_Base_dList_dreverse acc); Base_dPair.f_Base_dPair_dPair_second = bytes })) else (if (fuel <= 0) then Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing else ((v_Vuna_dCompiler_dCanonical_dBytes_dthenPair ((fp fuel) bytes)) (fun x b -> (((((v_Vuna_dCompiler_dCanonical_dBytes_ddecItems fp) (n - 1)) (fuel - 1)) b) (Base_dList.C_Base_dList_dList_Cons (x, acc))))))))
+let v_Vuna_dCompiler_dCanonical_dBytes_ddecBool = (fun fuel c -> (if (fuel <= 0) then Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing else ((fun nd_uscrut2 -> (match nd_uscrut2 with
+  | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__14) -> (if (dtb__14 = 98) then ((fun nd_uscrut5 -> (match nd_uscrut5 with
+  | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__15) -> (if (dtb__15 = 49) then (Base_dMaybe.C_Base_dMaybe_dMaybe_Just ({ Base_dPair.f_Base_dPair_dPair_first = true; Base_dPair.f_Base_dPair_dPair_second = (v_Vuna_dCompiler_dCanonical_dBytes_dcurSkip (v_Vuna_dCompiler_dCanonical_dBytes_dcurSkip c)) })) else (if (dtb__15 = 48) then (Base_dMaybe.C_Base_dMaybe_dMaybe_Just ({ Base_dPair.f_Base_dPair_dPair_first = false; Base_dPair.f_Base_dPair_dPair_second = (v_Vuna_dCompiler_dCanonical_dBytes_dcurSkip (v_Vuna_dCompiler_dCanonical_dBytes_dcurSkip c)) })) else Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing))
+  | _ -> Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing
+)) (v_Vuna_dCompiler_dCanonical_dBytes_dcurChar (v_Vuna_dCompiler_dCanonical_dBytes_dcurSkip c))) else Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing)
+  | _ -> Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing
+)) (v_Vuna_dCompiler_dCanonical_dBytes_dcurChar c))))
 
-let v_Vuna_dCompiler_dCanonical_dBytes_ddecList = (fun fp fuel bytes -> (if (fuel <= 0) then Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing else (match bytes with
-  | Base_dList.C_Base_dList_dList_Nil -> Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing
-  | Base_dList.C_Base_dList_dList_Cons (dtb__26, dtb__27) -> (if (dtb__26 = 91) then ((v_Vuna_dCompiler_dCanonical_dBytes_dthenPair ((((v_Vuna_dCompiler_dCanonical_dBytes_ddecNumStop (fuel - 1)) 58) 0) dtb__27)) (fun n b -> (((((v_Vuna_dCompiler_dCanonical_dBytes_ddecItems fp) n) (fuel - 1)) b) Base_dList.C_Base_dList_dList_Nil))) else Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing)
-  | _ -> failwith "DT: impossible branch"
-)))
+let v_Vuna_dCompiler_dCanonical_dBytes_ddecStr = (fun fuel c -> (if (fuel <= 0) then Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing else ((fun nd_uscrut2 -> (match nd_uscrut2 with
+  | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__16) -> (if (dtb__16 = 115) then ((v_Vuna_dCompiler_dCanonical_dBytes_dthenPair ((((v_Vuna_dCompiler_dCanonical_dBytes_ddecNumStop (fuel - 1)) 58) 0) (v_Vuna_dCompiler_dCanonical_dBytes_dcurSkip c))) (fun n b -> (if (if (n < 0) then true else (((b).f_Vuna_dCompiler_dCanonical_dBytes_dCur_curI + n) > (bi_strLength (b).f_Vuna_dCompiler_dCanonical_dBytes_dCur_curS))) then Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing else (Base_dMaybe.C_Base_dMaybe_dMaybe_Just ({ Base_dPair.f_Base_dPair_dPair_first = (((v_Vuna_dCompiler_dCanonical_dBytes_dcurSlice b) (b).f_Vuna_dCompiler_dCanonical_dBytes_dCur_curI) n); Base_dPair.f_Base_dPair_dPair_second = { f_Vuna_dCompiler_dCanonical_dBytes_dCur_curS = (b).f_Vuna_dCompiler_dCanonical_dBytes_dCur_curS; f_Vuna_dCompiler_dCanonical_dBytes_dCur_curI = ((b).f_Vuna_dCompiler_dCanonical_dBytes_dCur_curI + n) } }))))) else Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing)
+  | _ -> Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing
+)) (v_Vuna_dCompiler_dCanonical_dBytes_dcurChar c))))
 
-let v_Vuna_dCompiler_dCanonical_dBytes_ddecMaybe = (fun fp fuel bytes -> (if (fuel <= 0) then Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing else (match bytes with
-  | Base_dList.C_Base_dList_dList_Nil -> Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing
-  | Base_dList.C_Base_dList_dList_Cons (dtb__28, dtb__29) -> (if (dtb__28 = 48) then (Base_dMaybe.C_Base_dMaybe_dMaybe_Just ({ Base_dPair.f_Base_dPair_dPair_first = Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing; Base_dPair.f_Base_dPair_dPair_second = dtb__29 })) else (if (dtb__28 = 49) then ((v_Vuna_dCompiler_dCanonical_dBytes_dthenPair ((fp (fuel - 1)) dtb__29)) (fun x b -> (Base_dMaybe.C_Base_dMaybe_dMaybe_Just ({ Base_dPair.f_Base_dPair_dPair_first = (Base_dMaybe.C_Base_dMaybe_dMaybe_Just (x)); Base_dPair.f_Base_dPair_dPair_second = b })))) else Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing))
-  | _ -> failwith "DT: impossible branch"
-)))
+let rec v_Vuna_dCompiler_dCanonical_dBytes_ddecItems = (fun fp n fuel c acc -> (if (n <= 0) then (Base_dMaybe.C_Base_dMaybe_dMaybe_Just ({ Base_dPair.f_Base_dPair_dPair_first = (Base_dList.v_Base_dList_dreverse acc); Base_dPair.f_Base_dPair_dPair_second = c })) else (if (fuel <= 0) then Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing else ((v_Vuna_dCompiler_dCanonical_dBytes_dthenPair ((fp fuel) c)) (fun x b -> (((((v_Vuna_dCompiler_dCanonical_dBytes_ddecItems fp) (n - 1)) (fuel - 1)) b) (Base_dList.C_Base_dList_dList_Cons (x, acc))))))))
+
+let v_Vuna_dCompiler_dCanonical_dBytes_ddecList = (fun fp fuel c -> (if (fuel <= 0) then Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing else ((fun nd_uscrut4 -> (match nd_uscrut4 with
+  | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__17) -> (if (dtb__17 = 91) then ((v_Vuna_dCompiler_dCanonical_dBytes_dthenPair ((((v_Vuna_dCompiler_dCanonical_dBytes_ddecNumStop (fuel - 1)) 58) 0) (v_Vuna_dCompiler_dCanonical_dBytes_dcurSkip c))) (fun n b -> (((((v_Vuna_dCompiler_dCanonical_dBytes_ddecItems fp) n) (fuel - 1)) b) Base_dList.C_Base_dList_dList_Nil))) else Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing)
+  | _ -> Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing
+)) (v_Vuna_dCompiler_dCanonical_dBytes_dcurChar c))))
+
+let v_Vuna_dCompiler_dCanonical_dBytes_ddecMaybe = (fun fp fuel c -> (if (fuel <= 0) then Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing else ((fun nd_uscrut4 -> (match nd_uscrut4 with
+  | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__18) -> (if (dtb__18 = 48) then (Base_dMaybe.C_Base_dMaybe_dMaybe_Just ({ Base_dPair.f_Base_dPair_dPair_first = Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing; Base_dPair.f_Base_dPair_dPair_second = (v_Vuna_dCompiler_dCanonical_dBytes_dcurSkip c) })) else (if (dtb__18 = 49) then ((v_Vuna_dCompiler_dCanonical_dBytes_dthenPair ((fp (fuel - 1)) (v_Vuna_dCompiler_dCanonical_dBytes_dcurSkip c))) (fun x b -> (Base_dMaybe.C_Base_dMaybe_dMaybe_Just ({ Base_dPair.f_Base_dPair_dPair_first = (Base_dMaybe.C_Base_dMaybe_dMaybe_Just (x)); Base_dPair.f_Base_dPair_dPair_second = b })))) else Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing))
+  | _ -> Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing
+)) (v_Vuna_dCompiler_dCanonical_dBytes_dcurChar c))))
+
+let v_Vuna_dCompiler_dCanonical_dBytes_ddecPair = (fun fa fb fuel c -> ((v_Vuna_dCompiler_dCanonical_dBytes_dthenPair ((fa (fuel - 1)) c)) (fun x b1 -> ((v_Vuna_dCompiler_dCanonical_dBytes_dthenPair ((fb (fuel - 1)) b1)) (fun y b2 -> (Base_dMaybe.C_Base_dMaybe_dMaybe_Just ({ Base_dPair.f_Base_dPair_dPair_first = { Base_dPair.f_Base_dPair_dPair_first = x; Base_dPair.f_Base_dPair_dPair_second = y }; Base_dPair.f_Base_dPair_dPair_second = b2 })))))))

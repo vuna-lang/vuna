@@ -60,8 +60,7 @@ vuna: runtime error: division by zero
 
 ## 3. 语言级调试构造：`dbg` / `dbgShow` / `assert` / `todo`
 
-这些名字是**编译器内建的调试构造**（不是库函数；不需要 import，不需要能力位，
-也不进 `[trust]`）：
+这些名字是**编译器内建的调试构造**（不是库函数；不需要 import，也不受任何门控）：
 
 | 名字 | 签名 | 行为 |
 | --- | --- | --- |
@@ -106,12 +105,13 @@ vuna: runtime error: assertion failed: broken invariant
 `Vuna.Compiler.Intrinsics` 的调试/诊断内建（真源在 Intrinsics，语义见
 [primitives.md](primitives.md) §7）：
 
-- `dbg` / `assert` / `todo`：§3 的语言级调试构造（无能力位；`assert` / `todo` 由
+- `dbg` / `assert` / `todo`：§3 的语言级调试构造（`assert` / `todo` 由
   `Loader.Resolve` 在 release 构建拒绝）；
-- `prim_eprint : String -> Eff [] Int`（能力 `console`）：写 stderr 并 flush；
-- `prim_fail : String -> a`（无能力）：抛 `Failure <msg>`，可被报告器渲染。
+- `prim_eprint : String -> Eff [] Int`（console 组）：写 stderr 并 flush；
+- `prim_fail : String -> a`：抛 `Failure <msg>`，可被报告器渲染。
 
-普通程序用 §3 的构造即可；需要直接调用原语时按 `[capabilities].effects` 声明能力。
+普通程序用 §3 的构造即可；需要直接调用原语时可直接引用 `prim_*` / `prim_eff_*`
+（没有 manifest 门控；用户面**应**经 `Base.Eff` + handler）。
 
 ## 5. 调试回路里的命令
 

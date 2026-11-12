@@ -4,22 +4,30 @@
 #     拒绝 ⇒ 回退重算、不崩，且缓存文件被重写成合法 framing。
 #     单字节篡改用 dd 打在载荷中部（不是头部，避免只靠 magic 就过）。
 #     阶段 2 起 codegen 产物落在**内容寻址 blob**（`$TMPDIR/vuna-cache/blobs/<digest>`），
-#     图节点 `split:<pkg>:<kind>` 只存地址；所以坏字节的后果是「该地址读不出 ⇒ 重算并
-#     写回同一路径」。
+#     图节点 `split:<pkg>:<kind>` 只存地址；坏字节的后果是「该地址读不出 ⇒ 重算并写回
+#     同一路径」。单元缓存（`PerfCache`）仍是独立目录，一并断言 framing。
 #     夹具 corpus/packages/m34_summary 复制到 $TMPDIR（不改工作树），副本内所有
 #     vuna.toml 的 `vuna-base =` 行重写为 $VUNA_BASE。
 run: sh -c 'rm -rf "$TMPDIR/c32-pkg" "$TMPDIR/c32-cache" "$TMPDIR/c32-clean" "$TMPDIR/c32-out2"; cp -r corpus/packages/m34_summary "$TMPDIR/c32-pkg"; for mf in "$TMPDIR/c32-pkg"/*/vuna.toml; do sed -i "s|^vuna-base = .*|vuna-base = \"$VUNA_BASE\"|" "$mf"; done; TMPDIR="$TMPDIR/c32-cache" "$VUNA" build --no-compile --out "$TMPDIR/c32-clean" "$TMPDIR/c32-pkg/root" >/dev/null 2>&1'
 run: sh -c 'blob=$(find "$TMPDIR/c32-cache"/vuna-cache/blobs -type f 2>/dev/null | head -1); [ -n "$blob" ] && printf "%s" "$blob" > "$TMPDIR/c32-blob-path"'
-# 52a) framing 头：magic 是 v2，tag 带 split-node schema 1，codec 段是显式声明的编码族。
+run: sh -c 'unit=$(find "$TMPDIR/c32-cache"/vuna-cache -path "*/split-units/*" -type f 2>/dev/null | head -1); [ -n "$unit" ] && printf "%s" "$unit" > "$TMPDIR/c32-unit-path"'
+# 52a) 产物 blob 的 framing 头：magic 是 v2，tag 带 split-node schema 1，codec 是 split-files 1。
 run: sh -c 'blob=$(cat "$TMPDIR/c32-blob-path"); head -c 18 "$blob"'
 out-equals: vuna-cache-frame 2
 run: sh -c 'blob=$(cat "$TMPDIR/c32-blob-path"); head -1 "$blob" | cut -d"|" -f2 | cut -d"/" -f1'
 out-equals: vuna-split-node 1
 run: sh -c 'blob=$(cat "$TMPDIR/c32-blob-path"); head -1 "$blob" | cut -d"|" -f3'
 out-equals: split-files 1
-# 52b) 截断：全部 blob 只留前 4096 字节（头行仍完整、载荷少一截）⇒ len/内容地址校验拒绝
-#      ⇒ 全量重算并重写同一路径。产物**文件集**必须与干净构建一致；逐字节一致性受既有
-#      的「全量 vs 增量 codegen」差异影响（debt C51），不在本条断言范围内。
+# 52a2) 单元缓存（PerfCache）的 framing 头：tag 带 unit-cache schema 2，codec 是 split-file 1。
+run: sh -c 'unit=$(cat "$TMPDIR/c32-unit-path"); head -c 18 "$unit"'
+out-equals: vuna-cache-frame 2
+run: sh -c 'unit=$(cat "$TMPDIR/c32-unit-path"); head -1 "$unit" | cut -d"|" -f2 | cut -d"/" -f1'
+out-equals: vuna-unit-cache 2
+run: sh -c 'unit=$(cat "$TMPDIR/c32-unit-path"); head -1 "$unit" | cut -d"|" -f3'
+out-equals: split-file 1
+# 52b) 截断：全部 blob 只留前 4096 字节（头行完整、载荷少一截）⇒ len/内容地址校验拒绝
+#      ⇒ 重算并重写同一路径。产物**文件集**必须与干净构建一致；逐字节一致性受既有的
+#      「全量 vs 增量 codegen」差异影响（debt C51），不在本条断言范围内。
 run: sh -c 'for f in $(find "$TMPDIR/c32-cache"/vuna-cache/blobs -type f); do head -c 4096 "$f" > "$f.part"; mv "$f.part" "$f"; done; TMPDIR="$TMPDIR/c32-cache" "$VUNA" build --no-compile --out "$TMPDIR/c32-out2" "$TMPDIR/c32-pkg/root" >/dev/null 2>&1'
 run: sh -c '(cd "$TMPDIR/c32-clean" && find . -type f | LC_ALL=C sort) > "$TMPDIR/names-clean"; (cd "$TMPDIR/c32-out2" && find . -type f | LC_ALL=C sort) > "$TMPDIR/names-out2"; diff "$TMPDIR/names-clean" "$TMPDIR/names-out2"'
 # 52c) 篡改：在每个 blob 的载荷中部改一个字节（长度不变，内容地址必须拒绝）⇒ 重建成功。

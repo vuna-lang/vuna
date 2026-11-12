@@ -8,10 +8,6 @@
 # 探针用 clock（sleepMicros），效果测试用 console。
 [package]
 name = "m38-test-jobs"
-privileged = true
 
 [dependencies]
 vuna-base = "../../../../base"
-
-[capabilities]
-effects = ["console", "clock"]

@@ -10,8 +10,8 @@ run: "$VUNA" check "$TMPDIR/ctx/use_compiler.vuna" 2>&1
 exit: nonzero
 out-contains: LD_ModuleNotFound
 run: "$VUNA" check "$TMPDIR/ctx/effect.vuna" 2>&1
-exit: nonzero
-out-contains: requires capability
+exit: 0
+out-equals:
 run: "$VUNA" check "$TMPDIR/ctx/simple.vuna" 2>&1
 exit: 0
 out-equals:

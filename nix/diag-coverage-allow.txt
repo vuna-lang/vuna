@@ -50,3 +50,4 @@ TC_UnknownName
 TC_UnknownRecord
 TC_UnsolvedMetavar
 TC_UnsolvedMetavarInfer
+TC_CannotRedefineBuiltin

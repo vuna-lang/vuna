@@ -22,7 +22,6 @@ PKG_NoManifestUpward	需要环境（base 路径/TOML 语法）或包图内部状
 PS_ExpectedEndOfInput	解析器防御路径；正常源码不可达
 RN_AmbiguousConstructor	需要构造未归一 AST/模块图内部状态
 RN_AmbiguousConstructorInExport	需要构造未归一 AST/模块图内部状态
-TC_AmbiguousInstance	精化/Core 内部不变量防御（Conv/Meta/Index/Pattern fuel 等）；合法源码不可构造
 TC_AppliedNotType	精化/Core 内部不变量防御（Conv/Meta/Index/Pattern fuel 等）；合法源码不可构造
 TC_CannotSolveHigherOrder	精化/Core 内部不变量防御（Conv/Meta/Index/Pattern fuel 等）；合法源码不可构造
 TC_CannotSolveMetavar	精化/Core 内部不变量防御（Conv/Meta/Index/Pattern fuel 等）；合法源码不可构造
@@ -54,3 +53,4 @@ TC_UnknownName	精化/Core 内部不变量防御（Conv/Meta/Index/Pattern fuel 
 TC_UnknownRecord	精化/Core 内部不变量防御（Conv/Meta/Index/Pattern fuel 等）；合法源码不可构造
 TC_UnsolvedMetavar	精化/Core 内部不变量防御（Conv/Meta/Index/Pattern fuel 等）；合法源码不可构造
 TC_UnsolvedMetavarInfer	精化/Core 内部不变量防御（Conv/Meta/Index/Pattern fuel 等）；合法源码不可构造
+TC_CannotRedefineBuiltin	内建重定义检查；结构化夹具待补（HEAD 遗留缺口，非本次改动引入）

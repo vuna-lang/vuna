@@ -3,15 +3,12 @@ module Vuna.Compiler.Packages.Pkg
   , PackageContext
   , Root
   , absolutePath
-  , contextCapabilities
   , contextDir
   , contextForDir
   , contextForFile
   , contextPackageName
   , contextPackageOf
-  , contextPrivileged
   , contextRoots
-  , contextTrustUnsafe
   , findManifestDir
   , findManifestDirMaybe
   , loadManifestAt
@@ -24,14 +21,9 @@ module Vuna.Compiler.Packages.Pkg
   , packageExports
   , packageName
   , packageRoots
-  , privilegedContext
-  , rootCapabilities
   , rootDir
-  , rootHostModules
   , rootName
   , rootPackage
-  , rootPrivileged
-  , rootTrustUnsafe
   , workspacePackages
   ) where
 
@@ -47,8 +39,6 @@ module Vuna.Compiler.Packages.Pkg
 -- `VUNA_BASE` 覆盖 + 可执行文件相对布局），此时包名为空（ad-hoc 入口）。
 -- 旧的环境根（命令行 flag 与 raw 模式 / List Root）已删除；`Root` 只作为包上下文的
 -- 内部模块根（类型 + 访问器导出，构造子不导出）。
--- M27：`Root` / `PackageContext` 携带 manifest 的 `[capabilities].effects` 能力声明
--- （只是数据通路；合法能力名与放行判定由 Loader 消费）。
 -- M4（效果显式化）：manifest 读盘、存在性探测、cwd / 环境 / 可执行文件路径全部显式在
 -- `Eff []` 里（本模块不再用 `runPure` 隐藏执行）。路径规范化、依赖图校验、包/上下文
 -- 构造等纯逻辑保持纯函数。
@@ -57,8 +47,7 @@ import Vuna.Compiler.Diagnostics.Pkg
 import Vuna.Compiler.Frontend.Manifest
 import Base.Host
 
--- 模块根：目录、包名、可选导出模块列表、能力列表（M27：该包 manifest 的
--- `[capabilities].effects`）、信任点（D28：该包 manifest 的 `[trust] unsafe`）。
+-- 模块根：目录、包名、可选导出模块列表。
 -- exports = Nothing 表示该根不限制导出（自己包）；exports = Just mods 表示只有
 -- mods 里的模块可被跨包 import。
 -- 抽象性：导出表只写 `Root`（不含 `(..)`）——record 的裸导出隐藏构造子，
@@ -67,13 +56,6 @@ record Root where
   rootDir : String
   rootName : String
   rootExports : Maybe (List String)
-  rootCapabilities : List String
-  -- | D28：该包 manifest 的 `[trust] unsafe`（Nothing = 非严格模式）。
-  rootTrustUnsafe : Maybe (List String)
-  -- | F3 P2：`[package] privileged`（宿主层 import / prim_* / [capabilities] 仅限特权包）。
-  rootPrivileged : Bool
-  -- | F3 P2：该包声明的宿主层模块（`[privileged] modules`）；非空即不可被非特权包 import。
-  rootHostModules : List String
 
 -- 已解析的包：manifest、直接依赖（顺序同 [dependencies]）、包目录（已规范化）。
 record Package where
@@ -89,77 +71,35 @@ packageDependencies (Package m ds p) = ds
 --   - String         = 上下文目录（包目录；base-only 时为 ""）
 --   - Maybe Package  = 包本体（base-only 时为 Nothing：文件不属于任何包）
 --   - List Root      = 模块根列表（自己 lib 在最前，随后是依赖闭包）
---   - String         = 包名（base-only 时为 ""，无显式能力、effectful prim_* 被拒）
---   - List String    = 本包 manifest 声明的能力（M27；base-only 时为 []）
---   - Maybe (List String) = 本包 manifest 的 `[trust] unsafe`（D28；Nothing = 非严格模式）
+--   - String         = 包名（base-only 时为 ""）
 record PackageContext where
   contextDir : String
   contextPackage : Maybe Package
   contextRoots : List Root
   contextPackageName : String
-  contextCapabilities : List String
-  -- | D28：本包 manifest 的 `[trust] unsafe`（Nothing = 非严格模式）。
-  contextTrustUnsafe : Maybe (List String)
-  -- | F3 P2：本包是否特权包（ad-hoc / 用户包为 False）。
-  contextPrivileged : Bool
 
 rootDir : Root -> String
-rootDir (Root dir name exports caps trust priv hosts) = dir
+rootDir (Root dir name exports) = dir
 
 rootName : Root -> String
-rootName (Root dir name exports caps trust priv hosts) = name
+rootName (Root dir name exports) = name
 
 -- rootName 的别名（Loader/CLI 侧更常用的叫法）。
 rootPackage : Root -> String
 rootPackage root = rootName root
 
--- M27：该模块根所属包声明的效应能力（空列表 = 只能经 Eff + handler）。
-rootCapabilities : Root -> List String
-rootCapabilities (Root dir name exports caps trust priv hosts) = caps
-
--- | D28：该模块根所属包的信任点（`[trust] unsafe`；Nothing = 非严格模式）。
-rootTrustUnsafe : Root -> Maybe (List String)
-rootTrustUnsafe (Root dir name exports caps trust priv hosts) = trust
-
--- | F3 P2：该模块根所属包是否特权包（`[package] privileged`）。
-rootPrivileged : Root -> Bool
-rootPrivileged (Root dir name exports caps trust priv hosts) = priv
-
--- | F3 P2：该包的宿主层模块声明（`[privileged] modules`）。
-rootHostModules : Root -> List String
-rootHostModules (Root dir name exports caps trust priv hosts) = hosts
-
 contextDir : PackageContext -> String
-contextDir (PackageContext dir pkg roots name caps trust priv) = dir
+contextDir (PackageContext dir pkg roots name) = dir
 
 contextRoots : PackageContext -> List Root
-contextRoots (PackageContext dir pkg roots name caps trust priv) = roots
+contextRoots (PackageContext dir pkg roots name) = roots
 
 -- 上下文包名：base-only（ad-hoc）为空串；Loader 用它判同包可见性与效果内建。
 contextPackageOf : PackageContext -> Maybe Package
 contextPackageOf ctx = ctx.contextPackage
 
 contextPackageName : PackageContext -> String
-contextPackageName (PackageContext dir pkg roots name caps trust priv) = name
-
--- M27：本包声明的效应能力（入口文件用；base-only / ad-hoc 为 []）。
-contextCapabilities : PackageContext -> List String
-contextCapabilities (PackageContext dir pkg roots name caps trust priv) = caps
-
--- | D28：本包的信任点（入口文件用；base-only / ad-hoc 为 Nothing）。
-contextTrustUnsafe : PackageContext -> Maybe (List String)
-contextTrustUnsafe (PackageContext dir pkg roots name caps trust priv) = trust
-
--- | F3 P2：本包是否特权包（ad-hoc / 用户包为 False）。
-contextPrivileged : PackageContext -> Bool
-contextPrivileged (PackageContext dir pkg roots name caps trust priv) = priv
-
--- | F3 P2（过渡）：把上下文标记为特权。仅供开发工具（REPL）对 ad-hoc 片段求值用；
--- 用户包与普通 ad-hoc 编译仍按 manifest 判定。P2 收口时 REPL 改为显式 `--privileged`
--- 或在非特权上下文里只接受 typed effects。
-privilegedContext : PackageContext -> PackageContext
-privilegedContext (PackageContext dir pkg roots name caps trust priv) =
-  PackageContext dir pkg roots name caps trust True
+contextPackageName (PackageContext dir pkg roots name) = name
 
 packageDir : Package -> String
 packageDir (Package manifest dependencies dir) = dir
@@ -314,8 +254,7 @@ else
 
 -- ---------------------------------------------------------------- 包名唯一性（M24.7）
 -- 包名不是纯标签，它参与两项语义判定：
---   - `Loader.rootAllows` 的「同包永远可见」（`rootName root == importerPkg`）；
---   - manifest `[capabilities] effects` 的显式能力表。
+--   - `Loader.rootAllows` 的「同包永远可见」（`rootName root == importerPkg`）。
 -- 因此同一依赖图里两个**不同目录**共用包名是配置错误。旧实现 `dependencyRoots`
 -- 只按包名去重：后出现的那支依赖（连同它自己的整支依赖）被静默丢弃，模块解析
 -- 悄悄退化到前一个同名包（实测 `check` 输出 exit 0）。现在加载后显式校验：
@@ -407,8 +346,6 @@ workspacePackages rootBaseDir =
 dependencyRootOf : Package -> Root
 dependencyRootOf package =
   Root "${packageDir package}/lib" (packageName package) (packageExports package)
-    package.packageManifest.manifestCapabilities package.packageManifest.manifestTrustUnsafe
-    package.packageManifest.manifestPrivileged package.packageManifest.manifestHostModules
 
 -- DFS 后序：先深依赖、再直接依赖本体；按包名去重（首次出现保留）。
 -- 包名唯一性由 `checkUniquePackageNames` 在加载期保证（同名 ⇒ 同目录），所以
@@ -427,10 +364,7 @@ packageRoots : Package -> List Root
 packageRoots package =
   let
     selfName = packageName package
-    selfRoot =
-      Root "${packageDir package}/lib" selfName Nothing package.packageManifest.manifestCapabilities
-        package.packageManifest.manifestTrustUnsafe package.packageManifest.manifestPrivileged
-        package.packageManifest.manifestHostModules
+    selfRoot = Root "${packageDir package}/lib" selfName Nothing
   in case dependencyRoots [selfName] package.packageDependencies of
     Pair seen roots => selfRoot :: roots
 
@@ -442,8 +376,6 @@ packageEntry package = "${packageDir package}/app/Main.vuna"
 packageContext : Package -> PackageContext
 packageContext package =
   PackageContext (packageDir package) (Just package) (packageRoots package) (packageName package)
-    package.packageManifest.manifestCapabilities package.packageManifest.manifestTrustUnsafe
-    package.packageManifest.manifestPrivileged
 
 -- ---------------------------------------------------------------- 查找
 findManifestUpMaybe : Int -> String -> Eff [] (Maybe String)
@@ -527,7 +459,7 @@ baseOnlyContext base = do
   packageR <- loadPackage base
   pure (case packageR of
     ErrC e => ErrC e
-    OkC package => OkC (PackageContext "" Nothing [dependencyRootOf package] "" [] Nothing False)
+    OkC package => OkC (PackageContext "" Nothing [dependencyRootOf package] "")
   )
 
 -- 从 start（已绝对化的目录）向上找最近 manifest；找不到 → base-only。

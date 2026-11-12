@@ -1,6 +1,0 @@
-# M35.3：用到 net 原语但未声明 `net` 能力 → 能力检查失败（不是绕过能力检查的入口）。
-[package]
-name = "net-no-capability"
-
-[dependencies]
-vuna-base = "../../../../base"

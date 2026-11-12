@@ -74,7 +74,10 @@ Diagnostic = { id, severity, phase, category, code, message, labels, fields, tra
 | `UN_` | 告警（未使用/冗余/遮蔽），severity = warning | `Diagnostics/Warning.vuna` |
 | `LN_`/`FX_` | lint 规则/修复 | `lib/Vuna/Lint/Diagnostics.vuna` |
 
-约定：符号语义稳定；一个码一种语义。`vuna explain CODE` 与 `vuna gen-errors` 都从这些
+约定：符号语义稳定；一个码一种语义。**没有「诊断码只增不删」的约定**：vuna 未发布、
+无兼容义务，删改码允许（同步目录、`explain` 与夹具），历史在 git——本次删除 manifest
+能力/特权/信任机制即移除了 `PKG_EmptyCapability` 等 11 个码。`vuna explain CODE` 与
+`vuna gen-errors` 都从这些
 枚举条目读取（不维护第二份列表）。
 
 告警语义：`UN_ShadowedBinder` 只比较**运行时** binder（`Rig ≠ 0`）。`Rig0` 的隐式类型 /
@@ -180,7 +183,7 @@ JSON 字段是机器契约：`code/severity/phase/category/message/labels[]/fiel
 | D1 三通道（源码/工具/内部） | 已落地（phase Tool/Internal + ICE 信息） |
 | D2 `Diagnostic` 全字段 | 已落地 |
 | D3 位置契约（end span、UTF-16、显式 NoLoc） | 已落地（Core `TVar` 带源 span 供 QTT 使用点；合成/内部项无源位置时显式 NoLoc） |
-| D4 码域（RN_/PKG_ 独立域、死码清理） | 已落地（`RN_` 23 码、`PKG_` 27 码；已删除 9 个 TC + 4 RN + 2 PS + 1 LD 无发射点死码） |
+| D4 码域（RN_/PKG_ 独立域、死码清理） | 已落地（`RN_` / `PKG_` 各自独立域；历代已清理无发射点死码；本次删除 manifest 能力/信任机制又移除 11 个码——9 个 `PKG_` + `RN_UnknownCapability` + `LD_HostModulePrivileged`。未发布、无兼容义务，码可删；具体码数以枚举真源与 `gen-errors` 产物为准） |
 | D5 目录单一真源 + 生成枚举/文档 | 已落地（枚举构造子锁定码/arity；描述/中文/示例表与枚举同模块维护并由 `gen-errors` 生成 `errors.md`+`errors.json`（含 example）；`explain` 同源；LSP data 附 `catalog` 提示） |
 | D6 渲染/LSP/CLI | 已落地 short/human/JSON/SARIF + LSP push/pull + `[diagnostics]` 配置；human 视图展示 fields/trace/suggestions（与 JSON 同源）；SARIF rules 带目录 shortDescription/help/defaultConfiguration/tags；i18n 已落地（`--lang zh` 与 `[diagnostics] lang` 的 human 消息本地化 + `= message:` 英文原文；机器 JSON 保留英文 `message` 并附 `localizedMessage`） |
 | D7.1 多错误 + Cascade | 已落地（parser 顶层 resync；elab `--continue-on-error` best-effort：文件入口/可执行包/库包逐次移除失败声明，最多 8 条；依赖被移除声明的错误标 `origin=cascade`（human note；JSON/SARIF/LSP data 同源）；`--max-errors` 同时约束恢复结果） |

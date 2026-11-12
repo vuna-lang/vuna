@@ -1,8 +1,0 @@
-[package]
-name = "p"
-[capabilities]
-effects = ["unsafe"]
-[trust]
-unsafe = [""]
-[export]
-modules = ["Main"]

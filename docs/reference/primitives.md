@@ -1,9 +1,9 @@
-# 原语语义规范（Int / String / Show / 效果原语与能力）
+# 原语语义规范（Int / String / Show / 效果原语与宿主层）
 
 本文是 vuna **原语语义的唯一权威**：值域与宽度、字符串编码、错误行为、interp 归约边界、
-效果原语与能力模型、生成 runtime 的契约。内建声明面只有一份真源
-`Vuna.Compiler.Intrinsics`（`allIntrinsics` / `Capability` / `IntrinsicOp`），消费方是
-`Loader.Resolve`（解析 + 能力检查）、`Elab.Prelude`（签名）、`Codegen.Term`（runtime
+效果原语与宿主层模型、生成 runtime 的契约。内建声明面只有一份真源
+`Vuna.Compiler.Intrinsics`（`allIntrinsics` / `IntrinsicOp`），消费方是
+`Loader.Resolve`（解析）、`Elab.Prelude`（签名）、`Codegen.Term`（runtime
 映射）、`Core.Eval`（interp 归约）。语法见 [language.md](language.md)，类型规则见
 [type-system.md](type-system.md)，库的边界见 [stdlib.md](stdlib.md)，开放债务见
 [debt.md](debt.md)。
@@ -13,10 +13,10 @@
 | 术语 | 含义 |
 | --- | --- |
 | primitive 类型 | `Int` / `String`：没有 `data` 声明，表示与字面量由编译器提供 |
-| intrinsic | `Intrinsics.allIntrinsics` 的一条：名字、签名形状（`IType`）、interp 归约标签（`IntrinsicOp`）、所需能力、runtime 表达式、是否对源码可见 |
+| intrinsic | `Intrinsics.allIntrinsics` 的一条：名字、签名形状（`IType`）、interp 归约标签（`IntrinsicOp`）、runtime 表达式、是否对源码可见 |
 | runtime helper | 生成产物 `Vuna_runtime.ml` 里的 OCaml 函数（`bi_*` / `dtp_*` / `dt_show_string`）；`bi_*` 不对用户源码可见 |
-| 效果原语 | 带能力（`intrinsicCapability = Just c`）的 intrinsic：只有 `prim_eff_*` 名，外加 `effTimeUs` |
-| 能力（capability） | manifest `[capabilities].effects` 的显式声明，决定该包能否**直接**调用效果原语 |
+| 效果原语 | `intrinsicReturnsEff` 的 intrinsic：返回 `Eff [] a`，名字只有 `prim_eff_*`，外加 `effTimeUs` |
+| 宿主层 | `Base.Host` 的 Eff 别名 + `prim_*` / `prim_eff_*` 原语；任何包都可 import / 直调，没有 manifest 门控 |
 
 ## 2. 身份与常量
 
@@ -75,7 +75,7 @@
 
 ### 3.0 位运算原语
 
-- 名字（可见、无能力位）：`bitAnd` / `bitOr` / `bitXor` / `bitNot` / `bitShl` / `bitShr`。
+- 名字（可见）：`bitAnd` / `bitOr` / `bitXor` / `bitNot` / `bitShl` / `bitShr`。
 - **语义按 63-bit 二进制补码**（与 `Int` 的表示一致；这是语言契约，不是实现细节——
   内容寻址要求跨后端逐字节一致，所以 wasm 后端也按 63-bit 模拟）：
   `bitNot x = -x - 1`；`bitShl` 低位补 0；`bitShr` 是**逻辑**右移（高位补 0）。
@@ -170,8 +170,8 @@
 | `strSubstring` | `Int -> Int -> String -> String` | 字节切片：start/len 按字节 clamp——负 start 视为 0、负 len 视为 0、越界截断到末尾；与 `Base.String.substring` 同语义 |
 | `strConcatMany` | `List String -> String` | 一次性拼接（OCaml `String.concat ""`） |
 | `strSubstTemplate` | `String -> List String -> String` | `<N>` 占位符按序号替换；非数字 `<`、越界序号原样保留（`Base.Vec.substTemplate`） |
-| `effTimeUs` | `Eff [] Int` | 微秒时间戳（`Unix.gettimeofday`）；效果原语，能力 `clock` |
-| `prim_eff_sleep` | `Int -> Eff [] Int` | 阻塞睡眠 n 微秒（runtime `dtp_sleep` = `Unix.sleepf`；n <= 0 立即返回 0）；效果原语，能力 `clock`；interp 不归约 |
+| `effTimeUs` | `Eff [] Int` | 微秒时间戳（`Unix.gettimeofday`）；效果原语（clock 组） |
+| `prim_eff_sleep` | `Int -> Eff [] Int` | 阻塞睡眠 n 微秒（runtime `dtp_sleep` = `Unix.sleepf`；n <= 0 立即返回 0）；效果原语（clock 组）；interp 不归约 |
 
 `strHash` 的 interp 实现（`Core.Eval.strHashOf`）与 runtime `dtp_strHash` 是同一公式。
 
@@ -190,7 +190,7 @@
 这些是**类型层构造子**，不是 `data` 声明：没有构造子可模式匹配，只能经原语 / 库 API 使用。
 类型参数在签名里用隐式 `{a : Type}` 绑定（`Elab.Prelude.ityToTerm` 生成 de Bruijn）。
 
-**纯原语**（无能力，直接返回值）：
+**纯原语**（直接返回值）：
 
 | 原语 | 签名 | runtime |
 | --- | --- | --- |
@@ -201,7 +201,7 @@
 | `arrayFromList` | `List a -> Array a` | `Array.of_list`（经 List 桥接 `dtp_ocamlOf`） |
 | `arrayToList` | `Array a -> List a` | `Array.to_list`（经 `dtp_listOf`） |
 
-**可变数据原语**（`prim_eff_*` 返回 `Eff []`；无能力：不触碰外部世界；`Base.IORef` / `Base.MArray` / `Base.Buffer` 的公开操作返回 `Eff []`）：
+**可变数据原语**（`prim_eff_*` 返回 `Eff []`；不触碰外部世界；`Base.IORef` / `Base.MArray` / `Base.Buffer` 的公开操作返回 `Eff []`）：
 
 | 原语 | 签名 | runtime |
 | --- | --- | --- |
@@ -222,7 +222,7 @@
   `ST` 动作本身仍可复制；仍无依赖 multiplicity / 线性箭头（
   多用未禁止，见 [effects.md](effects.md)）。
 
-## 7. 效果原语、Eff 动作与能力
+## 7. 效果原语、Eff 动作与宿主层
 
 **动作类型**：唯一动作类型是 `Eff r a`（`Base.Eff`，装箱 data；行是擦除索引），入口
 `main : Eff [] a`，执行 `Base.Eff.runPure`。
@@ -231,15 +231,15 @@
 
 | 表 | 名字 | 类型 | 用途 |
 | --- | --- | --- | --- |
-| Eff 表 | `prim_eff_*`（如 `prim_eff_print`、`prim_eff_readFile`、`effTimeUs`） | 返回 `Eff [] a` | `Base.Host` 的 Eff 别名、特权层 |
+| Eff 表 | `prim_eff_*`（如 `prim_eff_print`、`prim_eff_readFile`、`effTimeUs`） | 返回 `Eff [] a` | `Base.Host` 的 Eff 别名、宿主层 |
 
 原语在 codegen 里包成 `MkEff (fun _ -> rt args)`；`Base.Host` 在 Eff 别名上做 Int/Nat 归一化
 （`print`/`writeFile`/`fileSize`/`readBytes` 等）。
 
 **Eff 代数不是原语**：`pure` / `>>=` / `do` / `fmap` 来自 `Functor`/`Applicative`/`Monad (Eff r)`
 实例（`Base.Eff` 内建）；`runPure` / `joinEff` / `raise` / `weaken` 是 `Base.Eff` 的库函数。
-`prim_effectPerform` / `prim_effectHandle` / `prim_cleanupPush` / `prim_cleanupPop` 仍是
-`unsafe` 门控的运行时效应核心，只由 `Base.Eff` 包装使用（D28 信任点）。
+`prim_effectPerform` / `prim_effectHandle` / `prim_cleanupPush` / `prim_cleanupPop` 是隐藏的
+运行时效应核心，常规只由 `Base.Eff` 包装使用（不再有 `unsafe` 门控）。
 
 **效果原语类型**（`prim_eff_*`，全部返回 `Eff []`）：`prim_eff_print : String -> Eff [] Int`
 （`Base.Host.print` 在边界转 `Nat`）、`prim_eff_readFile : String -> Eff [] String`、
@@ -260,17 +260,17 @@
 两条调试/诊断原语；调试构造是**语言级内建**（见
 [debugging.md](debugging.md) §3）：
 
-- `dbg : String -> a -> a`（**无能力**）：求值期把消息 + 换行写 stderr 后返回第二个实参；
-- `assert : Bool -> String -> a -> a`（**无能力**、debug-only）：失败抛 `Failure`；
-- `todo : String -> a`（**无能力**、debug-only）：以 `TODO: <msg>` 抛 `Failure`；
-- `prim_eff_eprint : String -> Eff [] Int`（能力 `console`）：写 stderr 并 flush，返回写入字节数；
-- `prim_fail : String -> a`（**无能力**、不在动作里）：抛 `Failure <msg>` 的底值，
+- `dbg : String -> a -> a`：求值期把消息 + 换行写 stderr 后返回第二个实参；
+- `assert : Bool -> String -> a -> a`（debug-only）：失败抛 `Failure`；
+- `todo : String -> a`（debug-only）：以 `TODO: <msg>` 抛 `Failure`；
+- `prim_eff_eprint : String -> Eff [] Int`（console 组）：写 stderr 并 flush，返回写入字节数；
+- `prim_fail : String -> a`（不在动作里）：抛 `Failure <msg>` 的底值，
   由生成的运行时报告器渲染成 `vuna: runtime error: ...` 并 exit 2。
 
 `assert` / `todo` 在 release 构建（`--release` / `VUNA_RELEASE=1`）里由 `Loader.Resolve`
 拒绝（`TC_DebugConstructInRelease`）；`dbg` 在两种构建都可用。
 
-`net` 能力与 7 条 socket 原语（工具链 server 与测试用；用户代码同样按能力直调）：
+`net` 原语 7 条 socket（工具链 server 与测试用；任何包都可直调）：
 
 - `prim_netListen : String -> Eff [] Int`：绑定并监听，返回 listener 句柄。地址是
   `tcp:HOST:PORT`（HOST 只接受数字 IPv4；`PORT=0` 取临时端口）或 `unix:PATH`；
@@ -282,14 +282,13 @@
 - `prim_netClose : Int -> Eff [] Int`：关闭句柄（幂等）；
 - `prim_netConnect : String -> Eff [] Int`：客户端连接（`vuna repl --client` 与测试夹具用）。
 
-`net` 是**权限**不是豁免：未声明时报 `` effectful builtin `prim_eff_netListen` requires capability
-`net` ``。句柄是小整数，运行时映射到 `Unix.file_descr` 表，**不引入新的语言类型**；
+句柄是小整数，运行时映射到 `Unix.file_descr` 表，**不引入新的语言类型**；
 无 DNS / TLS / 异步 / 超时（`accept`/`recv` 阻塞，见 §8）。
 
-**名字面**：效果原语只保留 `prim_eff_*` 名。用户有两条合法用法：
+**名字面**：效果原语只有 `prim_eff_*` 名（外加 `effTimeUs`）。两种用法都合法：
 
 1. `import Base.Host`，使用返回 `Eff []` 的 API（`print` / `readFile` / …——它们是 `prim_eff_*` 的**别名**）；
-2. 在 `vuna.toml` 声明所需能力后**直接**调用 `prim_eff_*`，得到 `Eff []` 动作（不需要 alias）。
+2. **直接**调用 `prim_eff_*`，得到 `Eff []` 动作（不需要 alias、不需要任何声明）。
 
 **执行入口**：动作只在 `main` 处由运行时执行；`main : Eff [] a` 的产物钩子是
 `dtp_sched_main (fun () -> Base.Eff.runPure v_main)`。没有 main 之外的通用执行入口：
@@ -298,9 +297,11 @@
 **内部 cast（不可见）**：`prim_erase` 是隐藏 intrinsic（`visible = False`），只由精化器在
 「运行时类型不可命名」的 binder 使用点插入；签名 `{a} -> a -> a`、runtime `Obj.magic`、
 `IntrinsicOp.OpIdentity` 让它对求值/定义性相等透明。用户源码不可引用它（不在 prelude，
-也不吃能力位）。设计见 [effects.md](effects.md) §5。
+也不受任何门控）。设计见 [effects.md](effects.md) §5。
 
-| 能力 | 原语 / 入口 |
+以下分组只是**文档归类**（内建表不再带能力位；调用不受门控）：
+
+| 分组 | 原语 / 入口 |
 | --- | --- |
 | `console` | `prim_eff_print`、`prim_eff_eprint`、`prim_eff_readLine`、`prim_eff_readBytes` |
 | `fs` | `prim_eff_readFile`、`prim_eff_writeFile`、`prim_eff_writeFileAtomic`、`prim_eff_readDir`、`prim_eff_isDirectory`、`prim_eff_makeDir`、`prim_eff_removeFile`、`prim_eff_fileExists`、`prim_eff_fileMtime`、`prim_eff_fileSize` |
@@ -308,23 +309,19 @@
 | `env` | `prim_eff_getenv`、`prim_eff_getcwd`、`prim_eff_execPath` |
 | `clock` | `effTimeUs`、`prim_eff_sleep` |
 | `net` | `prim_eff_netListen`、`prim_eff_netPort`、`prim_eff_netAccept`、`prim_eff_netRecv`、`prim_eff_netSend`、`prim_eff_netClose`、`prim_eff_netConnect` |
-| `unsafe` | `prim_effectPerform` / `prim_effectHandle` / `prim_cleanupPush` / `prim_cleanupPop`（运行时续延与 bracket cleanup，仅 Base.Eff）；base 用 `[trust] unsafe` 显式列出直接使用点（D28 定义级信任，见 packages.md） |
+| 运行时核心（隐藏） | `prim_effectPerform` / `prim_effectHandle` / `prim_cleanupPush` / `prim_cleanupPop`（运行时续延与 bracket cleanup，常规仅 `Base.Eff` 包装使用） |
 
-- 声明面：manifest `[capabilities] effects = ["console", "fs", ...]`，按**包**声明
-  （`Frontend.Manifest.manifestCapabilities`）；无 manifest 的 ad-hoc 文件没有能力。
-  `vuna interp` 与 `vuna test` 的入口文件同样受这条约束：ad-hoc 文件没有能力，测试文件
-  属于所在包、用该包声明的能力。
-- 未知能力名报 `unknown capability "<name>" (known: console, fs, process, env, clock, unsafe, net)`
-  （`Loader.Resolve.checkCapabilities`）。
-- 用到但未声明报
-  `` effectful builtin `<name>` requires capability `<cap>` in <package> (declare [capabilities] effects = ["<cap>"] or use Base.Eff/Base.Host) ``
-  （`Loader.Resolve.checkEffectsBuiltins`）。
-- **这是权限声明，不是检查豁免**：能力不改变类型检查、擦除或 codegen 语义，只决定能否在
-  源码里直接引用效果原语；没有按包名字符串判定的 allowlist。声明 `[trust] unsafe`
-  的包把 `unsafe` 收紧到定义级（opt-in；见 [packages.md](packages.md) §效应能力）。
-- `base` 包声明 `["console", "fs", "process", "env", "clock", "unsafe"]`，并把 `unsafe` 的直接
-  使用点逐条列进 `[trust] unsafe`（D28；`Base.Eff` / `Base.EffSched`，
-  见 [effects.md](effects.md)）；根包声明七个能力（含 `unsafe`/`net`）但无 `[trust]`，编译器包六个（不含 `net`）。
+- **原语是普通内建**：任何包（用户包、ad-hoc 文件）都可以直接调用 `prim_*` /
+  `prim_eff_*`，也都可以 `import Base.Host`。不再有 manifest `[capabilities]` /
+  `[trust]`、每包原语白名单、宿主模块 import 门控，也没有 REPL `--privileged`；旧诊断码
+  （`PKG_EffectCapabilityRequired`、`RN_UnknownCapability`、`LD_HostModulePrivileged`、
+  `PKG_NonPrivileged` 等）已删除，历史见 git。
+- **推荐用法（纪律，非强制）**：常规用户面经 `Base.Eff.*` 标签 + handler 使用效果
+  （入口 `runPure : Eff [] a -> a`），宿主层细节留在 `Base.Host` / `Base.Eff*` 内部；
+  base、编译器与根工具链内部仍直接使用原语。原语不改变类型检查、擦除或 codegen 语义，
+  只是底层叶子。
+- 显式接受的损失（宿主层 import 门控、每包原语白名单、网络仅根包可用等）与后续方向见
+  [effects.md](effects.md) §8.6。
 
 ## 8. 生成 runtime 的契约
 

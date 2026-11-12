@@ -1,3 +1,0 @@
--- M27：没有声明能力时直接调 effectful prim_* 必须被拒。
-main : Int
-main = prim_eff_print "x"

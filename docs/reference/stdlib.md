@@ -45,7 +45,7 @@
 | `Base.Float` | `Float` primitive 类型模块（**随 `Prelude` 自动导出**，2026-11 rotation 后提升）：`FromFloat` trait + `abs` / `sqrt` / `intToFloat` / `floatToInt` + `Eq` / `Ord` / `Show` / `Num` 实例；字面量、算术/比较、`main : Float`、模板插值本来就不需要 import。Prelude 闭包包含本模块后，所有程序的 runtime 都带浮点 helper（[floats.md](floats.md)） |
 | `Base.FromString` / `Base.FromInt` | 字面量转换 trait（`fromString` / `fromInt`）与 `String` / `Int` 恒等实例；`Prelude` 导出，`deriving (FromString)` / `(FromInt)` 为单字段包装类型自动派生（见 [floats.md](floats.md)） |
 | `Base.Bool` | `Bool` 类型与逻辑 helper + `Show` / `Hashable` 实例（`if` 输出 `True` / `False`）；`Eq` / `Ord` 实例因 Bool 是方法返回类型随 trait 留在 `Base.Eq` / `Base.Ord` |
-| `Base.Host` | **特权宿主层**：Eff 别名（`print`/`println`/`readFile`/`writeFile`/`getArgs`/`exit`/`runIn`/`writeFileAtomic` 与 env/clock 等，走 `prim_eff_*`，度量用 `Eff [] Nat`，`eprint` 仍 `Int`）+ 实现层全是 `Eff []`；re-export `Base.Eff` 的 `Eff`/`runPure`/`joinEff`/`raise`/`runEff`；只有 `[package] privileged = true` 的包可 import |
+| `Base.Host` | **宿主层**：Eff 别名（`print`/`println`/`readFile`/`writeFile`/`getArgs`/`exit`/`runIn`/`writeFileAtomic` 与 env/clock 等，走 `prim_eff_*`，度量用 `Eff [] Nat`，`eprint` 仍 `Int`）+ 实现层全是 `Eff []`；re-export `Base.Eff` 的 `Eff`/`runPure`/`joinEff`/`raise`/`runEff`；任何包都可 import（无 manifest 门控） |
 | `Base.Eff` | 通用运行时效应核心（Layer 1）：开放行 `Row`、抽象动作 `Eff`（无世界令牌）、`Member` 行成员证明/`rowRem`、`weaken`、线性 `Cont`/`resumeCont`/`handleCoreLin`、内建 `Functor`/`Applicative`/`Monad (Eff r)`（`do`/`>>=`；不提供 `bindEff`/`pureEff`）、`sendCore`/`handleCore`、`runPure`/`joinEff`/`raise`（`runPure`/`joinEff` 要求行已处理干净，入口处未处理效应是类型错误）；OCaml 5 一次性续延；见 [effects.md](effects.md) §8 |
 | `Base.Eff.Reader` | 标签 `ReaderOp s` + `Ask`（实例名在行条目）：`ask`/`handleReader`/`handleReaderLin`/`local`（L2 作用域） |
 | `Base.EffState` | 标签 `StateOp s` + `Get`/`Put`（实例名在行条目）：`get`/`put`/`handleState`（answer `s -> Pair a s` 线程状态） |
@@ -198,13 +198,13 @@ module Base.Error (Error, catchError, ok, runError, throwError) where
   形态声明。字符串展示只有一个实现 `strShow`——`Base.Show` 的 `String` 实例是
   `show s = strShow s`，库不再另写一套转义；`Show Bool` 用 `if` 输出 `True` / `False`；
   `Eq Bool` / `Ord Bool` 用模式匹配穷尽（不依赖 `==` / `<`，避免实例体自引用）。
-- **效果原语单表**：`prim_eff_*`（`Eff []`，`Base.Host` 用户面）；`Base.Host` 做 Nat 归一化并声明
-  `[capabilities].effects = ["console", "fs", "process", ...]`；动作只在 `main` 执行
-  （钩子 `dtp_sched_main (fun () -> runPure v_main)`）；`runPure` 是唯一 main 执行入口。能力是**权限声明**，不是检查豁免（`Loader.Resolve.checkEffectsBuiltins`）。
-  声明了能力的包可以直接用 `prim_eff_*` 而不 import `Base.Host`（用户面应经 `Eff` + handler）。
+- **效果原语单表**：`prim_eff_*`（`Eff []`，`Base.Host` 是宿主层用户面）；`Base.Host` 做
+  Nat 归一化。没有 manifest 能力/特权声明：任何包都可 import `Base.Host`、直调 `prim_*`。
+  动作只在 `main` 执行（钩子 `dtp_sched_main (fun () -> runPure v_main)`）；`runPure` 是
+  唯一 main 执行入口。用户面**应**经 `Eff` + handler（纪律，非强制）。
 - **ad-hoc 单文件与包内模块一致**：`Prelude` 自动注入，`Show` / `Eq` / `Ord` 及其实例开箱
-  可用；诊断在缺少显式 import 时仍会提示加对应 import。ad-hoc 文件没有能力，效果只能经
-  `Base.Eff` + handler（`Base.Host` 不可 import）。
+  可用；诊断在缺少显式 import 时仍会提示加对应 import。ad-hoc 文件同样没有能力门控：
+  既可经 `Base.Eff` + handler，也可直接 `Base.Host` / `prim_*`（约定：用户面应经 handler）。
 - split 输出（`compile` / `build` 目录）的编译单元只有 `Vuna_runtime` + 各源码模块 +
   `Main`；文件集以 `seed/` 与 `nix/seed-count.txt` 为准。
 
@@ -234,7 +234,7 @@ module Base.Error (Error, catchError, ok, runError, throwError) where
   （用户自定义 op + 深 handler + 行/重排）未实现（见 [debt.md](debt.md) / [effects.md](effects.md)）；没有语言级并发 / async；
   **效应标签在库层完成**：`Base.EffFs` 扩到完整 fs 面并改为命名
   实例（如 `"mock"`/`"real"`），新增 `Base.EffConsole`/`EffClock`/`EffEnv`/`EffProcess`（命名实例 +
-  宿主 handler），`Base.Host` 仍是特权逃逸口；收尾又补原生 `prim_sleep`
+  宿主 handler），`Base.Host` 仍是宿主层逃逸口；收尾又补原生 `prim_sleep`
   （`Base.EffClock` 与 `Base.Host.sleepMicros` 都已使用，`spinMicros` 已删除）、可控
   `Exit`（`handleProcessHostWith`/`…Observed`）与工具链一条 console 路径（`vuna version`）；
   见 [effects.md](effects.md) §8.6；

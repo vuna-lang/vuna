@@ -106,8 +106,7 @@ checkProgram ctx program = dtCheckSource ctx "<repl>" program
 -- 临时包布局（每次执行一个，结束后 `rm -rf` 清理）：
 --   <TMPDIR>/vuna-effect-<effTimeUs>/
 --     vuna.toml          -- 包名固定 vuna-effect；[dependencies] 复用调用方上下文的
---                           依赖根（绝对路径）；[capabilities].effects 复制调用方本包
---                           的能力声明（否则入口里的 prim_* 会被能力检查拒绝）
+--                           依赖根（绝对路径）
 --     app/Main.vuna      -- 调用方给的「带 main 的完整入口源码」
 --     .output/           -- compileToDir 产物 + build.sh + bin/vuna-effect
 --
@@ -196,21 +195,12 @@ depsSection deps = """
 [dependencies]
 ${join "" (map depLine deps)}"""
 
-capsSection : List String -> String
-capsSection [] = ""
-capsSection caps = """
-
-[capabilities]
-effects = [${join ", " (map tomlQuote caps)}]
-"""
-
 effectManifest : PackageContext -> Eff [] String
 effectManifest ctx = do
   deps <- effectDeps ctx
   pure ("""[package]
 name = ${tomlQuote effectPackageName}
-privileged = true
-${depsSection deps}${capsSection (contextCapabilities ctx)}"""
+${depsSection deps}"""
   )
 
 -- `ocamlopt` 是否在 PATH 里（链接阶段需要）。探针的 stdout/stderr 全部丢弃。

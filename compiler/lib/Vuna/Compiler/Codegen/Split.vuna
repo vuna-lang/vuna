@@ -250,10 +250,9 @@ generateDtSplitProgramWith lookup store modules entryDecls prog printResult root
     _ = stamp "cg-runtimeText-done"
   in case prepareDtProgram (Pair (dtProgDatas prog) allDefs) of
     ErrC e => pure (ErrC e)
-    OkC p => case p of
-      Pair runtime groups =>
-        splitProgramFilesWith lookup store modules entryDecls printResult runtime allDatas allDefs
-          meta runtimeText
+    OkC (Pair runtime groups) =>
+      splitProgramFilesWith lookup store modules entryDecls printResult runtime allDatas allDefs
+        meta runtimeText
 
 splitProgramFilesWith : (String -> Eff [] (Maybe SplitFile)) -> (String -> SplitFile -> Eff [] Int) -> List (Pair String (List Decl)) -> List Decl -> Bool -> List DtDef -> List DtData -> List DtDef -> SplitMeta -> String -> Eff [] (Check (List SplitFile))
 splitProgramFilesWith lookup store modules entryDecls printResult runtime allDatas allDefs meta runtimeText = case checkResolvedModules meta modules entryDecls runtime allDatas of

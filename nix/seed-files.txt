@@ -23,17 +23,18 @@ Base_dOrd.ml
 Base_dPair.ml
 Base_dResult.ml
 Base_dShow.ml
+Base_dSort.ml
 Base_dString.ml
 Base_dTraversable.ml
 Base_dUnit.ml
 Base_dVec.ml
 Main.ml
 Prelude.ml
-Vuna_dCompiler_dCacheFormat.ml
 Vuna_dCompiler_dCanonical_dAst.ml
 Vuna_dCompiler_dCanonical_dBytes.ml
 Vuna_dCompiler_dCanonical_dCoreTerm.ml
 Vuna_dCompiler_dCanonical_dElab.ml
+Vuna_dCompiler_dCanonical_dLex.ml
 Vuna_dCompiler_dCodegen.ml
 Vuna_dCompiler_dCodegen_dAssembly.ml
 Vuna_dCompiler_dCodegen_dDecl.ml
@@ -62,6 +63,7 @@ Vuna_dCompiler_dDriver_dCompile.ml
 Vuna_dCompiler_dDriver_dCompilerCli.ml
 Vuna_dCompiler_dDriver_dDiagRender.ml
 Vuna_dCompiler_dDriver_dDt.ml
+Vuna_dCompiler_dDriver_dGraph.ml
 Vuna_dCompiler_dDriver_dIface.ml
 Vuna_dCompiler_dDriver_dOwner.ml
 Vuna_dCompiler_dDriver_dPerfCache.ml
@@ -90,6 +92,7 @@ Vuna_dCompiler_dElab_dTermination_dScc.ml
 Vuna_dCompiler_dElab_dTrait.ml
 Vuna_dCompiler_dElab_dTypes.ml
 Vuna_dCompiler_dElab_dUsage.ml
+Vuna_dCompiler_dFingerprint.ml
 Vuna_dCompiler_dFrontend_dAst.ml
 Vuna_dCompiler_dFrontend_dCst.ml
 Vuna_dCompiler_dFrontend_dDiagnostics.ml
@@ -108,7 +111,9 @@ Vuna_dCompiler_dLoader_dModules.ml
 Vuna_dCompiler_dLoader_dResolve.ml
 Vuna_dCompiler_dPackages_dPkg.ml
 Vuna_dCompiler_dQuery.ml
+Vuna_dCompiler_dQuery_dRun.ml
 Vuna_dCompiler_dSource.ml
+Vuna_dCompiler_dStore.ml
 Vuna_dCompiler_dVersion.ml
 Vuna_runtime.ml
 build.sh

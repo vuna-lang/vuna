@@ -1,0 +1,9 @@
+-- 没有任何 manifest 门控时也可以 import Base.Host / 直调 prim_*（旧的 privileged/capabilities 已删除；这是显式接受的行为）。
+-- 原语现在返回 `Eff []` 动作，使用点放在未求值的定义里：`vuna test` 只 interp main（纯），检查仍覆盖全文件。
+import Base.Host
+
+probe : Eff [] Bool
+probe = prim_eff_fileExists "/"
+
+main : Int
+main = 1

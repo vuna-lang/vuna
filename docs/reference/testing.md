@@ -251,9 +251,9 @@ golden/runtime case 的 codegen 产物按「生成模块集」分桶（`set-<key
   获得 base；
 - 两类上下文都**自动注入 `Prelude`**，因此夹具需要 `show` / `==` / 比较 / `deriving` 时
   直接可用；显式 `import Prelude` 仍合法；
-- 夹具 manifest 都**不声明 `[capabilities]`**：corpus 代码只能经 `Base.Host` 使用效果；能力
-  正 / 反例在 `packages/{07_effect_capability, 96_effect_no_capability,
-  97_unknown_capability}`；
+- 夹具 manifest 只有 `[package]` / `[export]` / `[dependencies]`（没有能力 / 信任 /
+  特权 section）：corpus 代码既可经 `Base.Host`、也可直接调 `prim_*` 使用效果，没有门控；
+  原语直调正例是 `packages/07_prim_direct`（import `Base.Host` + 直调 `prim_eff_*`）；
 - `test/corpus/fmt/check.sh` 与主 runner 用同一套约定（`VUNA_BASE` + 目录化 compile），
   不接受模块根参数。
 
@@ -308,8 +308,7 @@ interp / compile 文案不同时用 `.compile.err`。
   data 的 OCaml 构造子名）；`06_entry_trait` 覆盖入口 trait 的归属与产物；
   `93_duplicate_name` 覆盖同名包显式报错；`94_ambiguous_module` 覆盖包上下文下的歧义模块；
   `95_cross_dep` 覆盖依赖方向的负例（依赖包不能 import 消费包模块）；
-  `07_effect_capability`（声明 `[capabilities] effects` 后可直接调 `prim_*`）与负例
-  `96_effect_no_capability`（未声明能力）、`97_unknown_capability`（未知能力名）；
+  `07_prim_direct`（无 manifest 门控：可 import `Base.Host` 并直调 `prim_*`）；
   `08_module_scope`（entry 顶层小写名与同包模块签名里的类型变量同名，banned 集按模块作用域
   计算后 base 模块不再报 `unknown name x`）；
 - `corpus/err/`、`corpus/run_err/`：解析 / 求值错误片段；`run_err` 的 `.err` 是 DT 诊断
@@ -352,12 +351,12 @@ interp / compile 文案不同时用 `.compile.err`。
   `split-dt_ad_hoc.txt` 等逐文件 `type t_`/`let v_` 名字清单）。golden 由
   `test/snapshots/update.sh` 重新生成（**有意变更才更新**，diff 必须可解释），断言是
   「生成结果与 golden 逐字节一致」。
-- **第 39 段：包上下文与能力回归**。覆盖语义边界：无 manifest 的文件只可见 base
+- **第 39 段：包上下文回归**。覆盖语义边界：无 manifest 的文件只可见 base
   （`VUNA_BASE` 生效、找不到 base 明确报错）；目录入口只认该目录自己的 manifest、不向上
   找；ad-hoc 单文件自动注入 Prelude；依赖方向（`95_cross_dep`：依赖包不能 import 消费包
   模块）在所有入口上下文都被拒（`build` / `check` / `compile` 三入口）；removed-hint 非 0
-  退出 + 可操作提示，且 `vuna help` 不再宣传已删路径；39c 用 `prim_print` 断言无 manifest
-  上下文报 `requires capability`（能力必须显式声明）。
+  退出 + 可操作提示，且 `vuna help` 不再宣传已删路径；无 manifest 的 ad-hoc 文件直接调用
+  effectful 原语也通过（`effect.vuna`，旧 `requires capability` 断言已删除）。
 
 ## Nix checks 清单
 

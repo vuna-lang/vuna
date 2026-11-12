@@ -1,6 +1,0 @@
-module TrustLib (helper) where
-
--- D28 负例：manifest 声明了 `[trust]` 但能力表没有 `unsafe`，manifest 校验直接报错。
--- | 存在的纯定义（信任点名字合法，但能力声明缺失才是错误来源）。
-helper : Int -> Int
-helper x = x

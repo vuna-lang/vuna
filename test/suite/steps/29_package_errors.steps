@@ -1,6 +1,3 @@
 # 29) 包模式错误：缺依赖 / 依赖环 / 隐藏模块 / 依赖包歧义 → 非 0、含片段、不留产物。
 run: sh -c 'for raw in corpus/packages/9[0-9]_*/ corpus/packages/m31_*/; do [ -d "$raw" ] || continue; dir=${raw%/}; case "$dir" in *95_cross_dep) continue ;; esac; fragment=$(cat "$dir/expected.err"); rm -rf "$dir/.output"; if out=$("$VUNA" build "$dir" 2>&1); then printf "expected failure: %s\n" "$dir"; exit 1; fi; printf "%s" "$out" | grep -qF "$fragment" || { printf "fragment missing: %s\n" "$dir"; exit 1; }; if [ -e "$dir/.output" ]; then printf "output left: %s\n" "$dir"; exit 1; fi; rm -rf "$dir/.output"; done'
 exit: 0
-# 29b) 定义级信任点（夹具自带 check.sh：严格正例 + 非严格对照 + 4 组负例）
-run: sh corpus/packages/12_trust_points/check.sh "$VUNA"
-exit: 0

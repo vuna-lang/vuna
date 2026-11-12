@@ -3,7 +3,7 @@
 本文是 vuna 仓库的**子系统地图**：回答“改一个功能要在哪些模块动手、该跑哪段测试”。逐模块
 职责见 [compiler.md](reference/compiler.md)，Core / 精化器见 [core.md](reference/core.md)，
 语义见 [language.md](reference/language.md) / [type-system.md](reference/type-system.md) / [qtt.md](reference/qtt.md)，
-自举 / 内建原语能力见 [bootstrap.md](reference/bootstrap.md) / [primitives.md](reference/primitives.md)，
+自举 / 内建原语与宿主层见 [bootstrap.md](reference/bootstrap.md) / [primitives.md](reference/primitives.md)，
 模块级接口缓存见 [cache.md](reference/cache.md)（失效判据 / 包级环境指纹 / 工具产物来源 /
 镜像内容寻址；排障用 `VUNA_IFACE_AUDIT=1`，CI 建议加 `VUNA_IFACE_SELFTEST=1`），
 增量判定（节点模型、命中判据、会话索引）见 [query-graph.md](reference/query-graph.md)。
@@ -19,7 +19,7 @@ compiler/lib/Vuna/Compiler/   （72 个模块：68 个导出 + 4 个内部模块
 ├─ Source.vuna                底层位置/路径工具（Pos/Span，无 Result）
 ├─ Diag.vuna                  结构化诊断模型 + Check 结果通道（ErrC Diagnostic）
 ├─ Common.vuna                编译器门面（Source + Diag；bind/step/traverse）
-├─ Intrinsics.vuna            内建声明唯一真源（名字/签名/arity/能力/runtime/可见性）
+├─ Intrinsics.vuna            内建声明唯一真源（名字/签名/arity/runtime/可见性）
 ├─ Hash.vuna                  内容寻址摘要原语：SHA-256 + 63-bit 派生键 + 大载荷预哈希（用 Base.Bits 实现）
 ├─ Canonical.vuna             规范字节编码门面（自定界文法 + 解码器）；子模块 Term / Ast / Elab / Bytes
 ├─ Query.vuna                 查询图骨架：记忆化 / 依赖快照 / early cutoff / trace
@@ -103,8 +103,8 @@ Elab/codegen 看不到模板）。fmt/lint/index/doc 只 parse，仍按 `EInterp
 构造子 η 展开在 `Elab.Meta`；`DtDef` 带来源 span。trait / 实例语义见
 [records-traits.md](reference/records-traits.md)。
 
-**内建单一真源**：`Vuna.Compiler.Intrinsics` 是名字 / 签名 / arity / 归约 / 能力 / runtime /
-可见性的唯一真源；`Loader.Resolve`（arity、放行、能力）、`Elab.Prelude`（签名）、
+**内建单一真源**：`Vuna.Compiler.Intrinsics` 是名字 / 签名 / arity / 归约 / runtime /
+可见性的唯一真源；`Loader.Resolve`（arity、放行）、`Elab.Prelude`（签名）、
 `Core.Eval`（归约）、`Codegen.Term`（runtime）都消费它。内置身份按声明 symbol 判定：`Bool` / `List` / `Nat` 是 base 普通
 data（`Base.Bool.Bool` / `Base.List.List` / `Base.Nat.Nat`），不按短名。
 
@@ -116,7 +116,7 @@ data（`Base.Bool.Bool` / `Base.List.List` / `Base.Nat.Nat`），不按短名。
 **入口符号**：`Driver.Dt.dtCheck` / `dtCheckWithProgramParts` / `dtCheckPackageWithIfacesParts` / `dtSplitProjectParts` / `dtEvalFile` /
 `dtEvalExpr`；`Loader.Flatten.loadProject*` / `resolveProject`；`Elab.Driver.elabProgramFull`
 （洞目标 `goalsOfProgram`）、`Elab.Termination.checkTerminationDecls`、`Elab.Match.multiToExpr`、
-`Core.Eval` / `Core.Conv`；`Intrinsics.findIntrinsic`、`Loader.Resolve.checkEffectsBuiltins`；
+`Core.Eval` / `Core.Conv`；`Intrinsics.findIntrinsic`；
 `Codegen.Assembly.*`；`Codegen.Split.generateDtSplitProgram`；
 `Driver.Split.SplitFile` / `buildScript`；CLI 经 `Driver.Compile.*` 接 `Driver.CompilerCli`。
 
@@ -136,18 +136,19 @@ vuna.toml → Frontend.{Toml.parseToml, Manifest.parseManifest/validateManifest}
  → Packages.Pkg.loadPackage / workspacePackages（DAG、模块根）
  → contextForFile（最近 manifest + 依赖闭包）| contextForDir（工具/REPL 从 cwd）
    | locateBase（无 manifest → base-only：`VUNA_BASE` 或 exe 相对布局，失败报错）
- → Loader.loadProject（PackageContext → Project；`[capabilities].effects` 随上下文传递）
+ → Loader.loadProject（PackageContext → Project）
 ```
 
 **入口符号**：`Pkg.loadPackage` / `workspacePackages` / `findManifestDirMaybe` /
-`contextForFile` / `contextForDir` / `locateBase` / `contextCapabilities`
+`contextForFile` / `contextForDir` / `locateBase`
 （`PackageContext` 抽象 + `contextPackage` / `contextRoots` / `contextDir`）；
-`Manifest.manifestCapabilities`、`Loader.Flatten.loadProject*` / `resolveProject`；CLI 在
+`Loader.Flatten.loadProject*` / `resolveProject`；CLI 在
 `Driver.Compile.checkPackage` / `compileToDir`。
 
 **约束**：Toml/Manifest 不碰 I/O，Pkg 只做 lexical 规范化；**每个源文件唯一包上下文**，
 目录入口 `check/build <dir>` 直接 `loadPackage` 只认该目录 manifest（不向上找）；跨包只认
-依赖包 `[export]`，隐藏模块报错；依赖图 DAG、包名唯一；`[capabilities]` 名由 Loader 校验。
+依赖包 `[export]`，隐藏模块报错；依赖图 DAG、包名唯一；`[package]` 只接受 `name`
+（`[capabilities]` / `[trust]` / `[privileged]` 已删除）。
 测试：第 28–29、33、39 段 + `checks.vuna-package`。
 
 ## 3. 根包工具链与 TCB 边界
@@ -168,17 +169,17 @@ vuna.toml → Frontend.{Toml.parseToml, Manifest.parseManifest/validateManifest}
   `CliOpts` 已是显式参数；`Diag.Format` 语言也改为显式 `lang` 参数。
   API 文档与检索见
   [api-docs.md](reference/api-docs.md)，调试工作流见 [debugging.md](reference/debugging.md)。
-- 进程执行只在 `Driver.CompilerCli.runIn`（`prim_runIn`，需要 `process`；工具链经 `runPure`）。
+- 进程执行只在 `Driver.CompilerCli.runIn`（`prim_runIn`；工具链经 `runPure`）。
 - **stdio / socket server 公共层**（工具链，不进 seed）：`Vuna.Json.Frame`（字节级
   `Content-Length` 帧 + 16 MiB 上界）、`Vuna.Json.Rpc`（JSON-RPC 信封与错误码）、
   `Vuna.Json.Server.serveConnection`（读帧 → 分发 → 发帧的连接循环）；LSP 与 REPL server
   共用这一层，传输与退出策略由各自传入。
-- 网络原语：`net` 能力（`prim_netListen/Accept/Recv/Send/Close/Port/Connect`，
+- 网络原语：`net` 组（`prim_netListen/Accept/Recv/Send/Close/Port/Connect`，
   句柄是 Int、运行时映射 `Unix.file_descr`），见 [primitives.md](reference/primitives.md) §7。
   当前已落地 loopback TCP 与 Unix domain socket（异步/取消/TLS/HTTP 为非目标，见
   [tooling.md](reference/tooling.md) §5）。
 - **运行时效应（Layer 1–3，`runtime-effects` 分支）**：`prim_effectPerform` / `prim_effectHandle`
-  （`unsafe`）把 OCaml 5 一次性续延接入 `Base.Eff`（开放行 + 命名实例 + 一阶效应）；
+  把 OCaml 5 一次性续延接入 `Base.Eff`（开放行 + 命名实例 + 一阶效应）；
   `Vuna_runtime` 声明通用 `Perform (key, name, payload)`（key/name 都是 String），handler 按 key/name 过滤并
   `continue` 一次；W7 起 handler 壳是 `dtp_effect_handle`，它在 handler 退出时执行
   每纤程 cleanup 栈（`prim_cleanupPush`/`prim_cleanupPop` → `dtp_cleanup_*`），
@@ -188,12 +189,12 @@ vuna.toml → Frontend.{Toml.parseToml, Manifest.parseManifest/validateManifest}
   钩子经 `dtp_sched_main` 把 main 跑成纤程 0）；`vuna interp` 不执行运行时效应（见
   [effects.md](reference/effects.md) §8）。
 - **TCB**：工具链永不进 seed（`compiler/app/Main.vuna` 闭包不含 `Vuna.*` 工具模块；
-  `nix/tcb-forbidden.txt` 黑名单）；效应边界是 manifest 显式能力
-  （`[capabilities].effects` ∈ console/fs/process/env/clock/net/unsafe），
-  `checkEffectsBuiltins` 按 `Intrinsics` 能力位检查；原语返回 `Eff []` 动作（只在 `main` 执行，
-  钩子是 `v_main 0`），未声明能力的包只能经 `Base.Host`，`runPure`/`prim_schedNewScope` 需
-  `unsafe`；`base` 自身声明 `unsafe`（`runPure` 别名与 `Base.ST.runST`，见
-  [effects.md](reference/effects.md)）。
+  `nix/tcb-forbidden.txt` 黑名单）；效应边界**不再由 manifest 门控**：没有
+  `[capabilities]` / `[trust]` / `[privileged]`，宿主层 `Base.Host` 与 `prim_*` 对任何包
+  可见（用户包/ad-hoc 也可 import / 直调）。用户面**应**经 `Base.Eff.*` 标签 + handler
+  使用效果——纪律/文档约定，不是强制门控；原语返回 `Eff []` 动作（只在 `main` 执行，
+  钩子是 `v_main 0`）。显式接受的损失与后续方向见
+  [effects.md](reference/effects.md) §8.6。
 
 ## 4. LSP 与索引（工具链侧，不进 seed）
 

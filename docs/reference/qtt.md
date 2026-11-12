@@ -157,7 +157,7 @@ mk t = mkContI (\x => useToken t + x)   -- 捕获 t；rig-1 实参位置 → 允
 - 用量检查把 let 的 RHS 按单次求值计（应用 rig=1），线性值经 let 传递不再误报；
   但推断位置把线性值传给通用运算符/trait 方法仍被拒（形参默认 ω；期望类型触发
   `bi_add` 等特化才通过），见 debt D22（multiplicity 多态）。
-- 线性世界令牌 / per-module `unsafe` 未做（debt D28）。
+- 线性世界令牌未做（per-module `unsafe` 门控已随 manifest 机制删除，D28 关闭）。
 - 运行时不做所有权检查；线性是静态纪律（线性值仍可经非线性 data 的字段被复制，
   见 D42）。
 

@@ -421,9 +421,9 @@ and v_Vuna_dCompiler_dCanonical_dCoreTerm_ddecTerm = (fun fuel bytes -> (if (fue
 
 let v_Vuna_dCompiler_dCanonical_dCoreTerm_ddecTermComplete = (fun s -> ((fun nd_uscrut1 -> (match nd_uscrut1 with
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__203) -> (match dtb__203 with
-  | { Base_dPair.f_Base_dPair_dPair_first = dtb__204; Base_dPair.f_Base_dPair_dPair_second = dtb__205 } -> (if ((Vuna_dCompiler_dCanonical_dBytes.v_Vuna_dCompiler_dCanonical_dBytes_dlenOf dtb__205) = 0) then (Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__204)) else Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing)
+  | { Base_dPair.f_Base_dPair_dPair_first = dtb__204; Base_dPair.f_Base_dPair_dPair_second = dtb__205 } -> (if (Vuna_dCompiler_dCanonical_dBytes.v_Vuna_dCompiler_dCanonical_dBytes_dcurAtEnd dtb__205) then (Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__204)) else Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing)
   | _ -> failwith "DT: impossible branch"
 )
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing -> Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing
   | _ -> failwith "DT: impossible branch"
-)) ((v_Vuna_dCompiler_dCanonical_dCoreTerm_ddecTerm (bi_strLength s)) (Base_dList.dtp_unpack s))))
+)) ((v_Vuna_dCompiler_dCanonical_dCoreTerm_ddecTerm (bi_strLength s)) (Vuna_dCompiler_dCanonical_dBytes.v_Vuna_dCompiler_dCanonical_dBytes_dcurOf s))))

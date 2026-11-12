@@ -222,5 +222,5 @@ quantity / 线性规则见 [qtt.md](qtt.md)（quantity 与擦除口径以该页�
 - 语法、`let` / `where`、模块与命名空间：[language.md](language.md)
 - 记录、trait / 实例 / `deriving`、`do` / Monad：[records-traits.md](records-traits.md)
 - Core 表示、NbE、合一、精化器、擦除 codegen 不变量：[core.md](core.md)
-- 原语身份、Int / String 语义、效果能力：[primitives.md](primitives.md)
+- 原语身份、Int / String 语义、宿主层：[primitives.md](primitives.md)
 - 未关闭的债务：[debt.md](debt.md)

@@ -1,7 +1,0 @@
-[package]
-name = "p"
-[trust]
-unsafe = true
-points = ["a", "a"]
-[export]
-modules = ["Main"]

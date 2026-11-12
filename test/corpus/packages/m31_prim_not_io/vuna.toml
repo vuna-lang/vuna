@@ -1,9 +1,5 @@
 [package]
 name = "m31-prim-not-io"
-privileged = true
 
 [dependencies]
 vuna-base = "../../../../base"
-
-[capabilities]
-effects = ["env"]

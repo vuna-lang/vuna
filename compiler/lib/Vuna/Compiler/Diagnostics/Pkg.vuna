@@ -11,8 +11,6 @@ module Vuna.Compiler.Diagnostics.Pkg
   , pkgMsg
   , pkgNoLoc
   , pkgNoLoc1
-  , pkgNoLoc2
-  , pkgNoLoc3
   , pkgPath0
   , pkgPath1
   , pkgPath2
@@ -31,19 +29,13 @@ import Base.Vec
 -- | 诊断域实现：Vuna.Compiler.Diagnostics.Pkg.PkgErr（目录/模板见 diagnostics.md）。
 data PkgErr : Nat -> Type where
   -- arity 0
-  EmptyCapability : PkgErr Zero
   EmptyDependencyName : PkgErr Zero
   EmptyMember : PkgErr Zero
   EmptyPackageName : PkgErr Zero
-  EmptyTrustPoint : PkgErr Zero
   MissingPackageName : PkgErr Zero
-  NonPrivileged : PkgErr Zero
-  TrustNeedsUnsafe : PkgErr Zero
   -- arity 1
   DependencyPathNotString : String -> PkgErr (Succ Zero)
-  DuplicateCapability : String -> PkgErr (Succ Zero)
   DuplicateDependency : String -> PkgErr (Succ Zero)
-  DuplicateTrustPoint : String -> PkgErr (Succ Zero)
   EmptyDependencyPath : String -> PkgErr (Succ Zero)
   ExpectedBool : String -> PkgErr (Succ Zero)
   ExpectedString : String -> PkgErr (Succ Zero)
@@ -55,7 +47,6 @@ data PkgErr : Nat -> Type where
   Invalid : String -> PkgErr (Succ Zero)
   InvalidExportModule : String -> PkgErr (Succ Zero)
   InvalidPackageName : String -> PkgErr (Succ Zero)
-  InvalidTrustPoint : String -> PkgErr (Succ Zero)
   MissingManifest : String -> PkgErr (Succ Zero)
   MissingBase : String -> PkgErr (Succ Zero)
   LibraryWithoutEntry : String -> PkgErr (Succ Zero)
@@ -65,23 +56,15 @@ data PkgErr : Nat -> Type where
   UnknownSection : String -> PkgErr (Succ Zero)
   -- arity 2
   UnknownKey : String -> String -> PkgErr (Succ (Succ Zero))
-  TrustPointMissing : String -> String -> PkgErr (Succ (Succ Zero))
-  EffectCapabilityRequired : String -> String -> String -> PkgErr (Succ (Succ (Succ Zero)))
 
 -- | 诊断域实现：Vuna.Compiler.Diagnostics.Pkg.pkgCode（目录/模板见 diagnostics.md）。
 pkgCode : {n : Nat} -> PkgErr n -> String
-pkgCode EmptyCapability = "PKG_EmptyCapability"
 pkgCode EmptyDependencyName = "PKG_EmptyDependencyName"
 pkgCode EmptyMember = "PKG_EmptyMember"
 pkgCode EmptyPackageName = "PKG_EmptyPackageName"
-pkgCode EmptyTrustPoint = "PKG_EmptyTrustPoint"
 pkgCode MissingPackageName = "PKG_MissingPackageName"
-pkgCode NonPrivileged = "PKG_NonPrivileged"
-pkgCode TrustNeedsUnsafe = "PKG_TrustNeedsUnsafe"
 pkgCode (DependencyPathNotString _) = "PKG_DependencyPathNotString"
-pkgCode (DuplicateCapability _) = "PKG_DuplicateCapability"
 pkgCode (DuplicateDependency _) = "PKG_DuplicateDependency"
-pkgCode (DuplicateTrustPoint _) = "PKG_DuplicateTrustPoint"
 pkgCode (EmptyDependencyPath _) = "PKG_EmptyDependencyPath"
 pkgCode (ExpectedBool _) = "PKG_ExpectedBool"
 pkgCode (ExpectedString _) = "PKG_ExpectedString"
@@ -93,7 +76,6 @@ pkgCode (ExpectedStringArray _) = "PKG_ExpectedStringArray"
 pkgCode (Invalid _) = "PKG_Invalid"
 pkgCode (InvalidExportModule _) = "PKG_InvalidExportModule"
 pkgCode (InvalidPackageName _) = "PKG_InvalidPackageName"
-pkgCode (InvalidTrustPoint _) = "PKG_InvalidTrustPoint"
 pkgCode (MissingManifest _) = "PKG_MissingManifest"
 pkgCode (MissingBase _) = "PKG_MissingBase"
 pkgCode (LibraryWithoutEntry _) = "PKG_LibraryWithoutEntry"
@@ -102,25 +84,15 @@ pkgCode (TomlSyntax _) = "PKG_TomlSyntax"
 pkgCode (UnexpectedTopLevelKey _) = "PKG_UnexpectedTopLevelKey"
 pkgCode (UnknownSection _) = "PKG_UnknownSection"
 pkgCode (UnknownKey _ _) = "PKG_UnknownKey"
-pkgCode (TrustPointMissing _ _) = "PKG_TrustPointMissing"
-pkgCode (EffectCapabilityRequired _ _ _) = "PKG_EffectCapabilityRequired"
 
 -- | 诊断域实现：Vuna.Compiler.Diagnostics.Pkg.pkgTemplate（目录/模板见 diagnostics.md）。
 pkgTemplate : {n : Nat} -> PkgErr n -> String
-pkgTemplate EmptyCapability = "capability name must not be empty"
 pkgTemplate EmptyDependencyName = "dependency name must not be empty"
 pkgTemplate EmptyMember = "workspace member must not be empty"
 pkgTemplate EmptyPackageName = "package name must not be empty"
-pkgTemplate EmptyTrustPoint = "trust point name must not be empty"
 pkgTemplate MissingPackageName = "missing [package] name"
-pkgTemplate NonPrivileged =
-  "non-privileged package declares [capabilities]/[trust]/[privileged]; only [package] privileged = true packages may declare capabilities, trust points or host-layer modules (user code should use Base.Eff.* handlers)"
-pkgTemplate TrustNeedsUnsafe =
-  "[trust] unsafe requires capability \"unsafe\" in [capabilities] effects"
 pkgTemplate (DependencyPathNotString _) = "dependency \"<0>\" must have a string relative path"
-pkgTemplate (DuplicateCapability _) = "duplicate capability \"<0>\""
 pkgTemplate (DuplicateDependency _) = "duplicate dependency \"<0>\""
-pkgTemplate (DuplicateTrustPoint _) = "duplicate trust point \"<0>\""
 pkgTemplate (EmptyDependencyPath _) = "dependency \"<0>\" path must not be empty"
 pkgTemplate (ExpectedBool _) = "expected a boolean for \"<0>\""
 pkgTemplate (ExpectedString _) = "expected a string for \"<0>\""
@@ -136,8 +108,6 @@ pkgTemplate (InvalidExportModule _) =
   "invalid export module \"<0>\" (segments must match [A-Z][A-Za-z0-9_]*)"
 pkgTemplate (InvalidPackageName _) =
   "invalid package name \"<0>\" (allowed characters: a-z, 0-9, '-')"
-pkgTemplate (InvalidTrustPoint _) =
-  "invalid trust point \"<0>\" (expected a qualified definition name such as \"Base.Eff.runPure\")"
 pkgTemplate (MissingManifest _) = "missing vuna.toml in <0>"
 pkgTemplate (MissingBase _) =
   "pkg: cannot locate vuna-base (tried: <0>); set VUNA_BASE to a directory containing vuna.toml"
@@ -148,10 +118,6 @@ pkgTemplate (TomlSyntax _) = "<0>"
 pkgTemplate (UnexpectedTopLevelKey _) = "unexpected top-level key \"<0>\""
 pkgTemplate (UnknownSection _) = "unknown section [<0>]"
 pkgTemplate (UnknownKey _ _) = "unknown key \"<0>\" in [<1>]"
-pkgTemplate (TrustPointMissing _ _) =
-  "trust point \"<1>\" is not a definition of this package; [trust] unsafe may only list real definitions (Module.def)"
-pkgTemplate (EffectCapabilityRequired _ _ _) =
-  "effectful builtin `<0>` requires capability `<1>` in <2> (declare [capabilities] effects = [\"<1>\"] or use Base.Eff / typed effects)"
 
 -- | 诊断域实现：Vuna.Compiler.Diagnostics.Pkg.pkgMsg（目录/模板见 diagnostics.md）。
 pkgMsg : {n : Nat} -> PkgErr n -> Vec n String -> Diagnostic
@@ -181,10 +147,6 @@ pkgNoLoc e args = ErrC (pkgMsg e args)
 -- | 诊断域实现：Vuna.Compiler.Diagnostics.Pkg.pkgNoLoc1（目录/模板见 diagnostics.md）。
 pkgNoLoc1 : PkgErr (Succ Zero) -> String -> Check a
 pkgNoLoc1 e a0 = pkgNoLoc e [a0]
-
--- | 诊断域实现：Vuna.Compiler.Diagnostics.Pkg.pkgNoLoc2（目录/模板见 diagnostics.md）。
-pkgNoLoc2 : PkgErr (Succ (Succ Zero)) -> String -> String -> Check a
-pkgNoLoc2 e a0 a1 = pkgNoLoc e [a0, a1]
 
 -- | 诊断域实现：Vuna.Compiler.Diagnostics.Pkg.pkgAt0（目录/模板见 diagnostics.md）。
 pkgAt0 : String -> Int -> PkgErr Zero -> Check a
@@ -223,18 +185,12 @@ record PkgEntry where
 -- | 诊断域实现：Vuna.Compiler.Diagnostics.Pkg.pkgAll（目录/模板见 diagnostics.md）。
 pkgAll : List PkgEntry
 pkgAll =
-  [ PkgEntry (pkgCode EmptyCapability) (pkgTemplate EmptyCapability) "能力名为空",
-    PkgEntry (pkgCode EmptyDependencyName) (pkgTemplate EmptyDependencyName) "依赖名为空",
+  [ PkgEntry (pkgCode EmptyDependencyName) (pkgTemplate EmptyDependencyName) "依赖名为空",
     PkgEntry (pkgCode EmptyMember) (pkgTemplate EmptyMember) "workspace 成员名为空",
     PkgEntry (pkgCode EmptyPackageName) (pkgTemplate EmptyPackageName) "包名为空",
-    PkgEntry (pkgCode EmptyTrustPoint) (pkgTemplate EmptyTrustPoint) "信任点名为空",
     PkgEntry (pkgCode MissingPackageName) (pkgTemplate MissingPackageName) "缺 [package] name",
-    PkgEntry (pkgCode NonPrivileged) (pkgTemplate NonPrivileged) "非特权包声明特权能力",
-    PkgEntry (pkgCode TrustNeedsUnsafe) (pkgTemplate TrustNeedsUnsafe) "[trust] 需要 unsafe 能力",
     PkgEntry (pkgCode (DependencyPathNotString "")) (pkgTemplate (DependencyPathNotString "")) "依赖路径必须是字符串",
-    PkgEntry (pkgCode (DuplicateCapability "")) (pkgTemplate (DuplicateCapability "")) "重复能力名",
     PkgEntry (pkgCode (DuplicateDependency "")) (pkgTemplate (DuplicateDependency "")) "重复依赖",
-    PkgEntry (pkgCode (DuplicateTrustPoint "")) (pkgTemplate (DuplicateTrustPoint "")) "重复信任点",
     PkgEntry (pkgCode (EmptyDependencyPath "")) (pkgTemplate (EmptyDependencyPath "")) "依赖路径为空",
     PkgEntry (pkgCode (ExpectedBool "")) (pkgTemplate (ExpectedBool "")) "布尔字段类型错误",
     PkgEntry (pkgCode (ExpectedString "")) (pkgTemplate (ExpectedString "")) "字符串字段类型错误",
@@ -246,7 +202,6 @@ pkgAll =
     PkgEntry (pkgCode (Invalid "")) (pkgTemplate (Invalid "")) "通用清单/包图错误",
     PkgEntry (pkgCode (InvalidExportModule "")) (pkgTemplate (InvalidExportModule "")) "非法导出模块名",
     PkgEntry (pkgCode (InvalidPackageName "")) (pkgTemplate (InvalidPackageName "")) "非法包名",
-    PkgEntry (pkgCode (InvalidTrustPoint "")) (pkgTemplate (InvalidTrustPoint "")) "非法信任点名",
     PkgEntry (pkgCode (MissingManifest "")) (pkgTemplate (MissingManifest "")) "找不到 vuna.toml",
     PkgEntry (pkgCode (MissingBase "")) (pkgTemplate (MissingBase "")) "找不到 vuna-base",
     PkgEntry (pkgCode (LibraryWithoutEntry "")) (pkgTemplate (LibraryWithoutEntry "")) "库包缺入口/导出",
@@ -254,11 +209,5 @@ pkgAll =
     PkgEntry (pkgCode (TomlSyntax "")) (pkgTemplate (TomlSyntax "")) "vuna.toml 语法错误",
     PkgEntry (pkgCode (UnexpectedTopLevelKey "")) (pkgTemplate (UnexpectedTopLevelKey "")) "顶层未知 key",
     PkgEntry (pkgCode (UnknownSection "")) (pkgTemplate (UnknownSection "")) "未知 section",
-    PkgEntry (pkgCode (UnknownKey "" "")) (pkgTemplate (UnknownKey "" "")) "section 内未知 key",
-    PkgEntry (pkgCode (TrustPointMissing "" "")) (pkgTemplate (TrustPointMissing "" "")) "trust point 不是本包定义",
-    PkgEntry (pkgCode (EffectCapabilityRequired "" "" "")) (pkgTemplate (EffectCapabilityRequired "" "" "")) "effectful builtin 缺能力声明"
+    PkgEntry (pkgCode (UnknownKey "" "")) (pkgTemplate (UnknownKey "" "")) "section 内未知 key"
   ]
-
--- | 诊断域实现：Vuna.Compiler.Diagnostics.Pkg.pkgNoLoc3（目录/模板见 diagnostics.md）。
-pkgNoLoc3 : {n : Nat} -> PkgErr (Succ (Succ (Succ Zero))) -> String -> String -> String -> Check a
-pkgNoLoc3 e a0 a1 a2 = pkgNoLoc e [a0, a1, a2]

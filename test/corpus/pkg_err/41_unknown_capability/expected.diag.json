@@ -1,1 +1,0 @@
-{"version":1,"tool":"vuna","diagnostics":[{"code":"RN_UnknownCapability","severity":"error","phase":"resolve","category":"names","message":"unknown capability \"bogus\" (known: console, fs, process, env, clock, unsafe, net)","labels":[],"fields":[],"trace":[],"notes":[],"suggestions":[],"origin":{"kind":"direct"},"internal":false,"ice":null}]}

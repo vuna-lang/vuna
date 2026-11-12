@@ -1,0 +1,6 @@
+[package]
+name = "p"
+privileged = true
+
+[export]
+modules = ["Main"]

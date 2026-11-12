@@ -46,7 +46,7 @@ nix run .#vuna-run-tests -- --list                  # 列出章节/case（--only
 ./result/bin/vuna doc                          # 生成 docs/api.html（gitignored）
 ```
 
-自己新建包：`vuna.toml` + `app/Main.vuna`，入口 `main : Eff [] a`，效果 API 来自 `Base.Eff`（特权宿主别名在 `Base.Host`）。
+自己新建包：`vuna.toml` + `app/Main.vuna`，入口 `main : Eff [] a`，效果 API 来自 `Base.Eff`（宿主层别名在 `Base.Host`，任何包都可 import）。
 格式见 [packages.md](docs/reference/packages.md)，示例见 `examples/multi/`。
 
 编译器选取：优先本地 `./result/bin/vuna`；否则 `nix run vuna -- <subcommand>`（注册表别名）。
@@ -94,7 +94,7 @@ fork `vuna-compiler`）；`vuna build` 在 codegen 后执行生成的 `build.sh`
 import）；无 manifest 时只有 base 上下文（`VUNA_BASE` 覆盖，否则按可执行文件相对布局
 探测），ad-hoc 单文件自动注入 `Prelude`。目录入口（`check/build <dir>`）只认该目录自己的
 manifest，不向上找。命令语义与包格式
-（含 `[capabilities]`）见 [packages.md](docs/reference/packages.md)，语言语义见
+见 [packages.md](docs/reference/packages.md)，语言语义见
 [language.md](docs/reference/language.md)。
 
 ## 目录结构
@@ -125,10 +125,10 @@ manifest，不向上找。命令语义与包格式
 
 1. **当前 seed 必须能编译当前源码**，rotation 后 stage1 == stage2（fixed point）；
 2. **`seed/` 只含 compiler 包入口闭包**：工具链不进 TCB（`nix/tcb-forbidden.txt`）；
-3. **效果原语返回 `Eff []` 动作**：包在 `[capabilities] effects` 声明
-   `console`/`fs`/`process`/`env`/`clock`/`unsafe` 后才能直接调用 effectful `prim_*`，
-   否则经 `Base.Eff` + handler（宿主层 `Base.Host` 不可 import）；动作只在 `main` 执行（`Intrinsics` + `checkEffectsBuiltins`，没有包名
-   allowlist）；
+3. **效果原语返回 `Eff []` 动作**：effectful `prim_*`（含 `prim_eff_*`）没有 manifest
+   门控——任何包都可直接调用，`Base.Host` 任何包都可 import；用户面**应**经 `Base.Eff` +
+   handler 使用效果（约定，非强制）。动作只在 `main` 执行（唯一动作类型 `Eff r a`，
+   入口 `main : Eff [] a`）；
 4. **唯一路径**：语言夹具、`vuna interp`、包构建与 seed 全部走 DT；没有第二套
    checker/codegen；
 5. 编译器自检通过（`vuna check .`）；`seed/` 是生成物，禁止手改。
@@ -151,7 +151,7 @@ manifest，不向上找。命令语义与包格式
 | [docs/reference/stdlib.md](docs/reference/stdlib.md) | 标准库 `vuna-base` 模块清单与 `Prelude` 自动导入 |
 | [docs/reference/operators.md](docs/reference/operators.md) | 运算符=方法别名、`Eq`/`Ord` 真源、实例落点规则 |
 | [docs/reference/floats.md](docs/reference/floats.md) | `Float` 原语、字面量转换 trait（FromString/FromInt/FromFloat）、`deriving`、Prelude/产物影响与 interp 限制 |
-| [docs/reference/primitives.md](docs/reference/primitives.md) | 内建/原语唯一声明面、Int/String 语义、效应能力（`[capabilities]`） |
+| [docs/reference/primitives.md](docs/reference/primitives.md) | 内建/原语唯一声明面、Int/String 语义、宿主层原语与推荐的 `Base.Eff.*` handler 用法 |
 | [docs/reference/packages.md](docs/reference/packages.md) | `vuna.toml` 包格式、workspace / 依赖 DAG、工具链命令一览 |
 | [docs/reference/core.md](docs/reference/core.md) | Core TT / NbE / 合一 / 精化器 / 擦除 / codegen 护栏的实现参考 |
 | [docs/reference/api-docs.md](docs/reference/api-docs.md) | API 文档：docstring、单文件 HTML、`vuna search` / 类型检索 |

@@ -15,8 +15,9 @@ N2 动作类型统一 → N3 表示收敛 → N4 箭头行 direct-style。当前
 四个根因（证据见 [effects.md](effects.md)）：
 
 1. **双轨制（已消除）**：旧内建动作类型（特权基座）与 `Eff`（用户面库级效应）平行，渡口
-   `runPure` / `joinEff` 两个方向；特权边界（`privileged` /
-   `[trust]` / `unsafe`）只管内建轨。
+   `runPure` / `joinEff` 两个方向；manifest 能力/特权/信任机制（`privileged` /
+   `[trust]` / `unsafe`）**已整体删除**（历史见 git；后续用表示层权限 N2/N3 或新模型补），
+   当年只管内建轨。
 2. **三重表示**：同一抽象三副面孔——纯 monad（`Base.State`/`Reader`/`Error`）、
    效应行（`Base.Eff.*`）与宿主 handler（历史 transformer/`MonadIO` 已删除）。
    库 API 与文档面被乘三倍。
@@ -26,7 +27,8 @@ N2 动作类型统一 → N3 表示收敛 → N4 箭头行 direct-style。当前
    行字面量按期望族特判展开。命名行计划里的名字求解规则（原 §4 流程图）本质是类型检查器
    规则，却要以"库 + 协议"形式维护。
 4. **描述/权威分离**：类型层 `Row` 说"程序经过哪些效应"，但"被允许做什么"靠三条平行
-   机制：运行时 `(key, name)` 路由、包级特权、能力声明，互不可推。
+   机制：运行时 `(key, name)` 路由、包级特权、能力声明，互不可推（后两者已随 manifest
+   机制删除，现行边界只剩运行时路由 + 约定）。
 
 **关键事实**：`Base.Eff` **在 seed 闭包里**（`Vuna.Compiler.Common` import 它；`nix/seed-files.txt`
 含 `Base_dEff.ml`），base 的其余效应模块不在 seed。D2 只改标签形状、不引入新语法，旧 seed
@@ -66,7 +68,7 @@ main : Eff [] Nat
 | key | 手写字符串（send/handle 两侧对齐靠约定） | **key := op 族规范名**（编译器推导，两侧由构造保证一致） |
 | 实例名 | 每效应 `X : String -> …` 编码 | 名字进 `Row`（ND1），默认 `"default"`（ND3），显式 `@` 名（ND4） |
 | 行标签 | `Console n` / `State n s` 等 String 参数化标签 | **标签 = op 族应用**（`ConsoleOp`、`StateOp Nat`）；`Exn` 是无参标记类型 |
-| 权威 | 包特权 + `unsafe` + `[trust]` | 宿主 op 构造器不导出（N2）；`unsafe` 面收缩到"构造宿主 handler" |
+| 权威 | 已删除：包特权 + `unsafe` + `[trust]`（历史见 git） | 宿主 op 构造器不导出（N2）；后续用表示层权限（N2/N3）或新模型补 |
 | 纯效应 | `Base.State`/`Reader`/`Error` 三轨并存 | mock handler 一种写法；interp 可执行（N3） |
 | 一次性续延 | 运行时异常兜底（resume 两次抛 `Continuation_already_resumed`） | QTT 线性续延类型化（N3/N4） |
 | `res op` 擦除 hack | `Obj.t` + 恒等 cast（D27 残留） | 消失：续延只在运行时，不出现在用户 OCaml 类型里 |
@@ -235,12 +237,13 @@ handle comp {
 ## 4. N2：动作类型统一（已完成）
 
 - `main : Eff [] a`（替代 `main : Eff [] a`）；运行时 main 钩子预装宿主 handler（print/fs/
-  clock/env/process 的 handler 在特权层由 runtime 直接提供）。
+  clock/env/process 的 handler 在宿主层由 runtime 直接提供）。
 - 宿主 op 类型（`ConsoleOp` 等的宿主分支）构造器不导出：用户能 `perform`、能写 mock
-  handler，但**不能**在无 handler 情况下构造宿主动作——权威边界从 `unsafe`/`privileged`
-  收缩为"宿主 op 构造器不导出"。
-- `Base.Host`、`prim_schedNewScope` 保留为特权逃生口；`runPure` 收缩为内部。
-- 内建动作类型已删除；`Base.Host` / `ST` / `IORef` 等宿主面保留为特权层。
+  handler，但**不能**在无 handler 情况下构造宿主动作。旧的 manifest 权威
+  （`unsafe`/`privileged`）已删除（历史见 git；后续用表示层权限 N2/N3 或新模型补），
+  现行权威只有"宿主 op 构造器不导出"。
+- `Base.Host`、`prim_schedNewScope` 保留为宿主层逃生口；`runPure` 收缩为内部。
+- 内建动作类型已删除；`Base.Host` / `ST` / `IORef` 等宿主面保留为宿主层。
 
 ## 5. N3：表示收敛
 

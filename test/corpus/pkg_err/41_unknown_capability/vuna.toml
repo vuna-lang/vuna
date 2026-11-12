@@ -1,7 +1,0 @@
-[package]
-name = "p"
-privileged = true
-[capabilities]
-effects = ["bogus"]
-[export]
-modules = ["Main"]

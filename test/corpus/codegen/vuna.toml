@@ -6,13 +6,9 @@
 # List 结构递归、Int 相等、动作/do、prim_* 的 `Eff` 包装与跨模块 split；详见各模块头注释。
 [package]
 name = "codegen-fixture"
-privileged = true
 
 [export]
 modules = ["Core", "Fancy", "Effects"]
 
 [dependencies]
 vuna-base = "../../../base"
-
-[capabilities]
-effects = ["console"]

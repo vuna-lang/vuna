@@ -35,9 +35,9 @@
 #   - 文档按主题重整：删除 history/dt-core/dt-parity/dt.md，新增 core/tooling/records-traits
 #     并把 DT 语义并入 type-system；合并 main 的 LSP/readBytes 文档后按实测复标定：
 #     coldstart 29731 / agents 104 / arch 167 / readme 163 / max_ref 279。
-coldstart_bytes 40776
-agents_lines 133
-arch_lines 229
+coldstart_bytes 41836
+agents_lines 140
+arch_lines 235
 readme_lines 174
 #   - M24.5：dt-parity.md §6 重写（实测能力表 + 边界）到 203 行；Elab 新增 scrutinee 反射、
 #     不可达分支、inlineSolvedMetas（3348 → 3513）。按实测重标定 max_ref 208 / max_module 3530；
@@ -47,8 +47,8 @@ readme_lines 174
 #     （coldstart 40787→39333 / agents 136→130 / arch 222→219 / readme 204→172）。
 #     max_ref_lines 438（primitives.md）与 max_module_lines 2400（Elab/Term/Impl.vuna）
 #     是改动前已存在的漏标定（旧预算 415/2300 本身已红），按实测重标定。
-max_ref_lines 454
-max_module_lines 2709
+max_ref_lines 473
+max_module_lines 2728
 #   - M27：新增 `primitives.md` 与内建/原语/能力文档、`Vuna.Compiler.Intrinsics` 模块；
 #     按 `sh nix/context-budget.sh .` 实测收紧：coldstart 29055 / agents 104 / arch 156 /
 #     readme 163 / max_ref 206 / max_module 811（入口文档有 45B 余量，agents 临界）。
@@ -215,3 +215,9 @@ max_module_lines 2709
 #     的 D5 摘要改写（coldstart 40758 → 40776）、`docs/reference/primitives.md` 增加位运算
 #     语义（max_ref 443 → 454）。按 `sh nix/context-budget.sh .` 实测复标定；agents / arch /
 #     readme / max_module 不变（`Elab/Term/Impl.vuna` 仍是 2709）。
+#   - 2026-11-12 删除 manifest privileged/capabilities/trust（本轮）：HEAD（dd9f8c9）实测
+#     coldstart 41787 / agents 139 / arch 234 / max_ref 470 / max_module 2728 已全部超旧预算
+#     （既有漏标定，非本轮引入）。本轮文档改写让入口再 +49B、agents/arch 各 +1 行、
+#     max_ref +3 行（primitives.md 的「原语是普通内建」说明），max_module 不变。按
+#     `sh nix/context-budget.sh .` 实测复标定到当前值（不留额外余量，维持 ratchet 语义）；
+#     后续压缩文档时按实测下调。

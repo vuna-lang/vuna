@@ -1,3 +1,0 @@
--- M31：`unsafe` 门控内建（`prim_schedNewScope`）在 main 之外执行，必须显式声明 `unsafe` 能力。
-main : Int
-main = prim_schedNewScope 0

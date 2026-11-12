@@ -42,7 +42,7 @@
   `dtp_sched_main (fun () -> v_main 0)`），循环从就绪队列取任务跑一步（运行到下一个
   挂起点或结束），再按等待关系唤醒。任务之间不共享 handler 栈：用户 `Perform` 效应
   只在任务自己的纤程里被 handler 处理。
-- 调度器原语是隐藏 intrinsic `prim_sched*`（实现 `dtp_sched_*`，要求 `unsafe`，只供
+- 调度器原语是隐藏 intrinsic `prim_sched*`（实现 `dtp_sched_*`，常规只供
   `Base.EffSched` 包装；普通用户经 `Base.EffSched` 的 API）。它们**不是行里的效应**：
   行 `Nil` 的任务也能 fork/yield/await。
 
@@ -135,7 +135,7 @@ main 结束时统一取消清理（最外层兜底）；跨域 handler / Domain 
 - **宿主 handler 的形态**：`handleXHost` 接受行首为对应标签的 `Eff (Cons e r) a`，
   返回 `Eff r (Eff [] a)`，由 `joinEff` 执行（真实 handler 的 op 解释返回 `Eff []` 动作）。
 - **原生 sleep**：编译器原语 `prim_sleep : Int -> Eff [] Int`（微秒；运行时
-  `dtp_sleep` 用 `Unix.sleepf`，阻塞睡眠；能力 `clock`；`OpNone`，interp 不归约）。
+  `dtp_sleep` 用 `Unix.sleepf`，阻塞睡眠；`OpNone`，interp 不归约）。
   `Base.EffClock` 的 `SleepMicros` 与 `Base.Host.sleepMicros` 都已改用 `prim_sleep`
   （`spinMicros` 已删除；当前 seed 认识 `prim_sleep`）。
 - **可控 `Exit`**：`handleProcessHost` 保留真实语义（`onExit = exit`，调用即
@@ -150,8 +150,8 @@ main 结束时统一取消清理（最外层兜底）；跨域 handler / Domain 
   console 标签——`consoleLine` 用 `consolePrint "vuna"` + `handleConsoleHost "vuna"` + `joinEff`，
   只在最外层 `runPure`（工具链入口仍是 `main : Eff [] Int`）。这是工具链逐步迁移的样板，不是
   全量迁移（`lib/` 其余模块仍直接用 `Base.Host` / `runPure`）。**编译器级强制不可行**的
-  具体位置：`Loader.Resolve.checkEffectsBuiltins` 只做**包级**能力声明检查（manifest），
-  类型系统没有类型级能力行，`Base.Host`/`prim_*` 在任何包内都可用；编译器自身
+  具体位置：manifest 能力/信任门控已整体删除（旧 `checkEffectsBuiltins` 的包级能力检查
+  不复存在），类型系统也没有类型级能力行，`Base.Host`/`prim_*` 在任何包内都可用；编译器自身
   也在 seed 闭包里必须做宿主操作（`Base.Host`、`Codegen`）。**最小下一步**：在 `vuna lint`
   增加一条模块级规则（如禁止 `lib/Vuna/**` 新增直接 `prim_*`/`Base.Host` 使用，白名单
   `Vuna.Cli.consoleLine` 一类的迁移点），而不是改类型检查器。
@@ -168,17 +168,17 @@ main 结束时统一取消清理（最外层兜底）；跨域 handler / Domain 
   - `dt_base/41_eff_process_exit`：`Exit` 在 mock（`"mock"`）与观察 handler（`"observed"`）下可观察、不退出；
   - 负例 `dt_err/78_eff_fs_instance_mismatch`：程序需要 `FsOp`、handler 处理 `FsOp`
     → `TC_TypeMismatch`（实例名必须一致）；
-  - 能力包夹具 `test/corpus/packages/10_prim_io`：声明 `clock` 后直调 `prim_sleep` 并断言
-    真实推进时间（native sleep 的正向探针）。
-- **能力**：`base` 的 `[capabilities] effects` 增加 `env`/`clock`（真实 handler 需要），
-  仍是包级权限声明，不是类型级能力行。`Test/corpus` 单文件夹具包仍**不声明**能力，
-  直接原语探针放在 `packages/` 里（沿用既有约定）。
-- **边界**（D43 已由 P2 特权边界收口）：
-  - **用户面**：非特权包不能 import `Base.Host`、不能直调 `prim_*`、不能声明
-    `[capabilities]`/`[trust]`；`Base.Host` 只留宿主别名与实现（P2a/P2c）。
-  - **特权层**：`vuna-base` 真实 handler、`vuna-compiler` 与根工具链保留 Host/原语；
+  - 原语探针夹具 `test/corpus/packages/10_prim_io`：直调 `prim_sleep` 并断言真实推进时间
+    （native sleep 的正向探针；没有 manifest 门控）。
+- **能力（历史）**：`base` 的 `[capabilities] effects` 曾声明 `env`/`clock`（真实 handler
+  需要）；该机制已整体删除——没有包级能力声明/检查，任何包都可 import `Base.Host`、
+  直调 `prim_*`。仍有效的边界决策：不做类型级能力行（见 [effects.md](effects.md) §8.6）。
+- **边界**（D43 已收口；manifest 门控已删除）：
+  - **宿主层可见**：`Base.Host` 是宿主层别名，任何包都可 import，直调 `prim_*` 也不受
+    门控；用户面**应**经 `Eff` + handler（纪律/文档约定，不是强制）。
+  - **内部使用**：`vuna-base` 真实 handler、`vuna-compiler` 与根工具链保留 Host/原语；
     工具链只迁了一条真实 console 路径（`vuna version`），编译器不迁移（终态决策）。
   - **`Exit` 的真实语义保留**：`handleProcessHost` 仍会结束进程；「不退出」只在 mock /
     `onExit` 参数 / `handleProcessHostObserved` 下成立；
   - 入口未处理效应是类型错误（`TC_UnhandledEffects`）；运行时 `unhandled effect` 兜底
-    仍服务特权/内部路径；行擦除、运行时字符串 key 等既有边界不变。
+    仍服务库内部路径；行擦除、运行时字符串 key 等既有边界不变。

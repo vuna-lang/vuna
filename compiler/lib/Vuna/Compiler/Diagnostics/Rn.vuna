@@ -49,7 +49,6 @@ data RnErr : Nat -> Type where
   UnknownFixity : String -> RnErr (Succ Zero)
   UnknownVariable : String -> RnErr (Succ Zero)
   AmbiguousPrelude : String -> RnErr (Succ Zero)
-  UnknownCapability : String -> String -> RnErr (Succ (Succ Zero))
   -- arity 2
   AmbiguousConstructor : String -> String -> RnErr (Succ (Succ Zero))
   AmbiguousConstructorInExport : String -> String -> RnErr (Succ (Succ Zero))
@@ -78,7 +77,6 @@ rnCode (UnknownType _) = "RN_UnknownType"
 rnCode (UnknownFixity _) = "RN_UnknownFixity"
 rnCode (UnknownVariable _) = "RN_UnknownVariable"
 rnCode (AmbiguousPrelude _) = "RN_AmbiguousPrelude"
-rnCode (UnknownCapability _ _) = "RN_UnknownCapability"
 rnCode (AmbiguousConstructor _ _) = "RN_AmbiguousConstructor"
 rnCode (AmbiguousConstructorInExport _ _) = "RN_AmbiguousConstructorInExport"
 rnCode (TypeNotExported _ _) = "RN_TypeNotExported"
@@ -108,7 +106,6 @@ rnTemplate (UnknownFixity _) =
   "unknown fixity for operator <0> (declare it with infixl/infixr/infix)"
 rnTemplate (UnknownVariable _) = "unbound variable <0>"
 rnTemplate (AmbiguousPrelude _) = "ambiguous implicit Prelude (found in: <0>)"
-rnTemplate (UnknownCapability _ _) = "unknown capability \"<0>\" (known: <1>)"
 rnTemplate (AmbiguousConstructor _ _) = "ambiguous constructor <0> (qualify it as <1>)"
 rnTemplate (AmbiguousConstructorInExport _ _) =
   "ambiguous constructor <0> in <1>; export T(..) instead"
@@ -180,7 +177,6 @@ rnAll =
     RnEntry (rnCode (UnknownFixity "")) (rnTemplate (UnknownFixity "")) "未知运算符 fixity",
     RnEntry (rnCode (UnknownVariable "")) (rnTemplate (UnknownVariable "")) "未绑定变量",
     RnEntry (rnCode (AmbiguousPrelude "")) (rnTemplate (AmbiguousPrelude "")) "隐式 Prelude 歧义",
-    RnEntry (rnCode (UnknownCapability "" "")) (rnTemplate (UnknownCapability "" "")) "未知能力",
     RnEntry (rnCode (AmbiguousConstructor "" "")) (rnTemplate (AmbiguousConstructor "" "")) "构造子歧义",
     RnEntry (rnCode (AmbiguousConstructorInExport "" "")) (rnTemplate (AmbiguousConstructorInExport "" "")) "导出中构造子歧义",
     RnEntry (rnCode (TypeNotExported "" "")) (rnTemplate (TypeNotExported "" "")) "类型未被导出",

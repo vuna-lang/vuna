@@ -64,9 +64,6 @@ record Module where
   moduleImplicitImportsOf : List Import
   moduleDeclsOf : List Decl
   moduleExportsOf : List ExportEntry
-  moduleCapabilities : List String
-  -- | D28：本模块所属包的 `[trust] unsafe` 信任点（Nothing = 非严格模式，不做定义级检查）。
-  moduleTrustUnsafe : Maybe (List String)
   moduleFixitiesOf : List FixityDecl
   -- | M45：模块头导出列表里 `module X` 重导出的 import 名（`import X` / `import X as Y`
   -- 统一成 `X`）。resolve 期把它们并入 used-import 集合，`UN_UnusedImport` 才不会把
@@ -82,36 +79,29 @@ record Project where
   projectImplicitImports : List Import
   projectModules : List Module
   projectEntryPkg : String
-  projectEntryCapabilities : List String
-  -- | D28：入口文件所属包的 `[trust] unsafe` 信任点（Nothing = 非严格模式）。
-  projectEntryTrustUnsafe : Maybe (List String)
-  -- | D28：本次加载是否覆盖了本包**全部**库模块（库包 [export] 加载 = True；
-  -- 入口文件 / 单文件 / REPL / LSP 只加载 import 闭包 = False）。信任点存在性校验
-  -- 在完整加载时要求所有项都可解析，部分加载时只校验已加载模块里的项。
-  projectModulesComplete : Bool
   projectEntryFixities : List FixityDecl
 
 moduleNameOf : Module -> String
-moduleNameOf (Module n p is imps ds es cs ts fx _) = n
+moduleNameOf (Module n p is imps ds es fx _) = n
 
 modulePackageOf : Module -> String
-modulePackageOf (Module n p is imps ds es cs ts fx _) = p
+modulePackageOf (Module n p is imps ds es fx _) = p
 
 moduleAllImportsOf : Module -> List Import
-moduleAllImportsOf (Module n p is imps ds es cs ts fx _) = append is imps
+moduleAllImportsOf (Module n p is imps ds es fx _) = append is imps
 
 moduleDeclsOf : Module -> List Decl
-moduleDeclsOf (Module n p is imps ds es cs ts fx _) = ds
+moduleDeclsOf (Module n p is imps ds es fx _) = ds
 
 moduleFixitiesOf : Module -> List FixityDecl
-moduleFixitiesOf (Module n p is imps ds es cs ts fx _) = fx
+moduleFixitiesOf (Module n p is imps ds es fx _) = fx
 
 -- | M45：模块重导出的 import 名（见 Module 字段注释）。
 moduleReexportsOf : Module -> List String
-moduleReexportsOf (Module n p is imps ds es cs ts fx reexports) = reexports
+moduleReexportsOf (Module n p is imps ds es fx reexports) = reexports
 
 projectEntryAllImports : Project -> List Import
-projectEntryAllImports (Project ds is imps ms pkg pcaps ptrust complete fx) = append is imps
+projectEntryAllImports (Project ds is imps ms pkg fx) = append is imps
 
 -- M28（B18）：解析期的三个命名空间，与导出表 kind 一一对应，**不再拍平**。
 --   values = 值命名空间（DFun / 签名 / 实例名；导出 kind "val"）
@@ -260,7 +250,7 @@ missingModule name =
 
 moduleDecls : List Module -> String -> Check (List Decl)
 moduleDecls modules name = case findModule modules name of
-  Just (Module mname mpkg imports imps decls exports mcaps mtrust fx _) => OkC decls
+  Just (Module mname mpkg imports imps decls exports fx _) => OkC decls
   Nothing => missingModule name
 
 moduleCtors : List Module -> String -> Check (List String)
@@ -269,7 +259,7 @@ moduleCtors modules name =
 
 exportsOf : List Module -> String -> Check (List ExportEntry)
 exportsOf modules name = case findModule modules name of
-  Just (Module mname mpkg imports imps decls exports mcaps mtrust fx _) => OkC exports
+  Just (Module mname mpkg imports imps decls exports fx _) => OkC exports
   Nothing => missingModule name
 
 -- 按命名空间查公开名：kinds 是允许的 kind 列表（val / ctor / type）。
@@ -397,8 +387,8 @@ findModuleFile roots name importerPkg = do
 
 findModule : List Module -> String -> Maybe Module
 findModule [] name = Nothing
-findModule ((Module mname mpkg imports imps decls exports mcaps mtrust fx reexports) :: rest) name =
-  if mname == name then Just (Module mname mpkg imports imps decls exports mcaps mtrust fx reexports)
+findModule ((Module mname mpkg imports imps decls exports fx reexports) :: rest) name =
+  if mname == name then Just (Module mname mpkg imports imps decls exports fx reexports)
   else findModule rest name
 
 -- M41：target 是否是某个 data/record 的构造子（用于把 trait method 从“构造子重载候选”

@@ -1390,11 +1390,9 @@ dtSplitProjectIncremental ctx entry printResult depIfaces cleanIfaces = do
       OkC checked => dtGenerateIncremental ctx entry (secondOf resolved) checked printResult
 
 moduleOfIface : ModuleIface -> Module
--- D28：接口文件不带信任点；来自接口的模块是「已解析」预置模块（`keep` 列表），
--- 不会再走定义级信任检查（写接口的包在 check/build 时已校验过）。
 moduleOfIface mi =
   Module (miNameOf mi) (miPackageOf mi) (miImportsOf mi) (miImplicitImportsOf mi) (miDeclsOf mi)
-    (miExportsOf mi) (miCapabilitiesOf mi) Nothing (miFixitiesOf mi) []
+    (miExportsOf mi) (miFixitiesOf mi) []
 
 -- ---------------------------------------------------------------
 -- M34.5（S6）：依赖可见性收敛。全量路径只加载 entry/本包模块的 **import 闭包**；
@@ -1414,14 +1412,14 @@ else case findModuleNamed mods n of
   Just m => closureGo (fuel - 1) mods (n :: visited) (append rest (importsOfModuleNames m))
 
 filterProjectToImports : String -> Project -> Pair Project (List Module)
-filterProjectToImports pkg (Project ds imports implicit mods epkg caps trust complete fixes) =
+filterProjectToImports pkg (Project ds imports implicit mods epkg fixes) =
   let
     entryStarts = map findModuleNameField (append imports implicit)
     ownNames = map moduleNameOf (filter (\m => modulePackageOf m == pkg) mods)
     starts = append entryStarts ownNames
     closed = closureGo 8192 mods [] starts
     kept = filter (\m => memName (moduleNameOf m) closed) mods
-  in Pair (Project ds imports implicit kept epkg caps trust complete fixes) kept
+  in Pair (Project ds imports implicit kept epkg fixes) kept
 
 preloadKeepOf : List ModuleIface -> List Module -> List String
 preloadKeepOf ifaces mods =

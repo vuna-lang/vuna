@@ -11,7 +11,7 @@
 （fmt/lint/repl/doc/test/lsp）在根包 `lib/`，不在闭包里。
 代码按**目录即层**组织：Frontend → Packages → Loader → Core → Elab → Codegen → Driver，
 同层模块可互相 import，上层只能依赖下层。每层 `X.vuna` 是**门面**：只 import 子模块并选择性
-重导出，实现与数据定义都在 `X/` 的叶子模块。全包 **86 个模块**（78 个导出 + 内部
+重导出，实现与数据定义都在 `X/` 的叶子模块。全包 **87 个模块**（79 个导出 + 内部
 `Debug` / `Diag` / `Diag.Format` / `Diagnostics.Ic` / `Driver.Iface` / `Driver.Owner` /
 `Elab.MetaSpans` / `Source`）；目标每模块 ≤~800 行
 （`Codegen.Term` / `Driver.Dt` / `Elab.Trait` 等已超目标，约 1.1–1.2k 行）。
@@ -24,7 +24,7 @@
 | `Common` | 编译器门面：重导出 `Source` + `Diag`，并保留固定类型的 `bind`/`step`/`traverse` | `bind`、`showSpanLoc`、`suggest`、`splitPath` |
 | `Diagnostics`（门面） | 错误码体系入口：重导出 `Diagnostics.Tc`/`Cg`/`Ic`/`Common` 与 `Base.Nat`/`Vec` | `tcErr0`、`cgErr0`、`icFuel`、`tcAll`、`cgAll` |
 | `Diagnostics.Tc` / `Cg` | `TcErr : Nat -> Type` / `CgErr : Nat -> Type` 域枚举（构造子携带模板、arity 由索引锁定）；`tcAll`/`cgAll` 按 arity 分块（避免单行巨表） | `tcCode`、`tcTemplate`、`cgCode`、`cgTemplate` |
-| `Intrinsics` | **内建声明唯一真源**：名字/签名形状（`IType`）/arity/归约标签（`IntrinsicOp`）/能力（`Capability`）/runtime 名/用户可见性；内置身份按声明 symbol（`Base.Bool.Bool` / `Base.List.List` / `Base.Nat.Nat`） | `findIntrinsic`、`intrinsicRuntime`、`intrinsicCapability`、`parseCapability` |
+| `Intrinsics` | **内建声明唯一真源**：名字/签名形状（`IType`）/arity/归约标签（`IntrinsicOp`）/runtime 名/用户可见性（不再有 `Capability` 能力位）；内置身份按声明 symbol（`Base.Bool.Bool` / `Base.List.List` / `Base.Nat.Nat`） | `findIntrinsic`、`intrinsicRuntime` |
 | `Hash` | 内容寻址摘要原语：**SHA-256**（用 `Base.Bits` 的 32-bit 包装在语言内实现：OCaml / 未来 wasm / interp 同摘要）；`digestHex`（64 位十六进制）/ `digestInt`（63-bit 派生键，取代旧 10-bit `strHash` 与 6-lane 盐）/ `prehashOfString`（MB 级载荷折叠）/ `contentKey`·`contentAddress`（大输入：预折叠 + SHA，缓存 key 与内容地址） | `digestOfString`、`digestHex`、`digestIntOf`、`contentKey`、`contentAddress`、`prehashOfString` |
 | `Fingerprint` | 编译器指纹的唯一来源：exe 路径 + 大小 + mtime → 63-bit 键，拼成 `<版本>/<指纹>` 的 tag；iface 分桶、lex/check/split/unit 的 key 与 framing tag 共用（C48 关闭的关键：二进制换代即整套缓存换代） | `compilerFingerprintEff`、`compilerTagEff`、`textHashOf` |
 | `Store` | **唯一**缓存载荷落盘层：`vuna-cache-frame 2\|<tag>\|<codec>\|<len>\|<内容地址>\n<payload>` 的编解码（纯）、读侧三层校验（framing → 头内内容地址 → 调用方语义自证）、原子写、去抖写、缓存根探测与清理入口 | `storeEncode`、`storeDecode`、`storeReadEff`、`storeReadAsEff`、`storeWriteEff`、`storeWriteIfChangedEff`、`storeCacheBaseEff` |
@@ -44,7 +44,7 @@
 | `Packages.Pkg` | 包 / workspace 解析层：manifest 图、依赖 DAG、**每个文件的包上下文**（最近 manifest + 依赖闭包）、base 定位（不碰 Loader / CLI） | `loadPackage`、`workspacePackages`、`contextForFile`、`contextForDir`、`locateBase` |
 | `Loader`（门面） | 模块加载、名字解析与 flatten 的稳定入口；对外导出 `Project` / `Module` / `ExportEntry` 与 `loadProject*` / `resolveProject` | `loadProject`、`loadProjectModules`、`resolveProject` |
 | `Loader.Modules` | 加载器的数据与模块图（叶子）：模块根、import 边、导出表结构 | `collectModuleFiles`、`moduleAllImportsOf` |
-| `Loader.Resolve` | 名字解析 + 效应能力检查：把 parse 后声明/表达式解析成带模块前缀的名字；内建 arity/prelude 放行/能力检查都消费 `Intrinsics` | `resolveProgram`、`checkEffectsBuiltins` |
+| `Loader.Resolve` | 名字解析：把 parse 后声明/表达式解析成带模块前缀的名字；内建 arity / prelude 放行消费 `Intrinsics` | `resolveProgram` |
 | `Loader.Flatten` | 模块导出表计算、加载流程与 flatten（`Prelude` 自动导入——含 ad-hoc 单文件、`[export]` 可见性）；内存源码的**库模块**入口（LSP）；lex 缓存 `parseFileWithPath`（key = `contentAddress(lexCacheSchema + 编译器 tag + 路径 + 源内容)`，载荷 = `Canonical.Lex.encPTokList` + `Store` framing；命中后只跑语法分析，**token 流带位置**所以诊断 / codegen 位置表与冷路径一致；**改 `Frontend.Lexer` 的 `Tok` / `PTok` 布局要 bump `lexCacheSchema` 与 `lexCacheCodec`**，编译器 tag 保证新旧二进制不互读） | `loadProject`、`loadProjectModules`、`loadProjectSource`、`loadModuleSource`、`visibleFixitiesOf` / `dedupeFixities`、`fixitiesForSource` / `fixitiesForSourceIn`（fmt/LSP/lint 的程序级 fixity） |
 | `Core`（门面） | core 类型论表示、NbE 求值与定义性相等等公开面；细节见 [core.md](core.md) | `Core.Eval.eval`、`quote`、`normalize`、`Core.Conv.conv`、`Core.Term.defaultFuel` |
 | `Core.Term` | `Term`/`Value`/`Neutral`/`Closure`/`Rig`/`Level`/`Sols` 等数据（唯一真源）与 `shift`/`substVarAt`/显示等纯项变换 | `shift`、`substVarAt`、`rigIsErased` |
@@ -79,11 +79,12 @@
 | `Driver.Dt` | DT 路径 facade（供 `Compile` / `CompilerCli` / `Interp` / LSP 使用）：单一 `PackageContext` 加载形状；内存源码检查/洞目标、`dtMainKind`、`dtEvalExprInfo`；接口摘要路径的起始 Ec 组装（`depStartOf`）与接口/预置模块入口 | `dtCheck`、`dtCheckWithProgramParts`、`dtCheckPackageWithIfacesParts`、`dtSplitProjectParts`、`dtSplitProjectWithIfaces`、`CheckedPackage` |
 | `Driver.Compile` | 编译入口：`PackageContext` 检查/编译、目录式 codegen、构建脚本执行；build meta 与递归建目录（`mkdir -p`，并发幂等）；check 结果与 codegen 产物都由查询图节点判定（`Driver.Graph`），命中即跳过精化 / 直接写产物；依赖接口校验（`depIfacesOf`）+ 接口影子写（`writeIfaceShadow`）；`VUNA_ELAB_FULL=1` 强制全量 | `checkPackage`、`compileToDir`、`depIfacesOf`、`buildMetaText`、`metaUpToDate`、`writeBuildMeta` |
 | `Driver.Graph` | 编译管线的图节点族（纯 helper）：`check:<pkg>:<kind>` / `split:<pkg>:<pr0\|pr1>` 节点 key、四个输入摘要节点（`env:` / `src:` / `deps:` / `ver:`）、命中判定与提交（值 = `QMarker` / `QRef`）；`Compile` import 它，反向不成环 | `CheckMods`、`checkNodeKey`、`graphNodeKey`、`graphHit`、`graphCommit`、`graphCommitRef`、`graphRunOpts` |
+| `Driver.ToolPayload` | 工具会话载荷编码：`ToolContext` → 规范字节（codec `tool-context 1`），供 LSP/REPL 的 `QRef` blob 使用；字段顺序 = record 声明顺序，解码要求恰好消费完 | `encToolContext`、`decToolContextComplete`、`toolContextSchema`、`toolContextCodec` |
 | `Driver.CompilerCli` | 编译器自己的 CLI（`vuna-compiler`）；含受限进程执行入口 `runIn`；workspace check/build 单元、`build --package`、`version` | `runCompilerCli`、`compilerUsageLines`、`runIn` |
 | `Version` | 版本号唯一真源；产品 CLI / `vuna-compiler` / build meta / VSCode 探测共用 | `vunaVersion` |
 
-`compiler/vuna.toml` 的 `[export]` 列出全部 78 个导出模块（上列 8 个内部模块不在内）；
-`[capabilities] effects` 声明六个能力（编译器直接使用 `prim_*`）。工具链模块不在此包。
+`compiler/vuna.toml` 的 `[export]` 列出全部 79 个导出模块（上列 8 个内部模块不在内）；
+编译器直接使用 `prim_*`（无 manifest 能力/特权声明）。工具链模块不在此包。
 
 ## 根包工具链模块（`lib/`，不进 seed）
 
@@ -114,9 +115,8 @@
   闭包；无 manifest 为 base-only）；
 - `Loader.Flatten.loadProject` / `loadProjectModules` / `loadProjectSource` 解析 import 图并
   flatten（内部名字带模块前缀；ad-hoc 单文件自动注入 `Prelude`）；
-- `Loader.Resolve` 的内建 arity/prelude 放行与效应能力检查、`Elab.Prelude` 的签名全部来自
-  `Vuna.Compiler.Intrinsics`；能力按包 manifest 的 `[capabilities].effects` 判定，错误带
-  `requires capability ...`；
+- `Loader.Resolve` 的内建 arity / prelude 放行、`Elab.Prelude` 的签名全部来自
+  `Vuna.Compiler.Intrinsics`；没有 manifest 能力/特权/信任检查（机制已删除）；
 - `Elab.Driver.elabProgramFull` 做 DT 双向精化（record 声明由 `Elab.Data` 直接精化、
   `deriving` 由 `Elab.Derive` 从字段表展开，多 clause 由 `Elab.Match` 展开），产出
   `DtProgram`（datas / defs / classes / insts）；
@@ -168,7 +168,7 @@ check / build pkg
 摘要字段（每包只存**自己的声明**，依赖闭包由读方逐包合并）：`datas`（kind + 构造子类型）、
 `defs`（type + body）、`globals`（签名面）、`insts`（tele / 约束 / 头）、`classes`（投影 /
 字段类型）、`miDecls`（已解析源码声明，供 record 精化与终止性 SCT 使用）、exports /
-fixities / imports / capabilities、`miSource`、`miIfaceHash`、`miDepHashes`。
+fixities / imports、`miSource`、`miIfaceHash`、`miDepHashes`。
 
 ### 硬不变量
 
@@ -312,7 +312,7 @@ diff。盲区：base/runtime 自身的 codegen 不在这条门禁里；尺寸也
 
 - 子系统数据流与改动定位：[architecture.md](../architecture.md)
 - Core / NbE / 精化器内部规则：[core.md](core.md)
-- 内建声明面、原语语义与效应能力：[primitives.md](primitives.md)
+- 内建声明面、原语语义与宿主层：[primitives.md](primitives.md)
 - 包格式、build meta 与增量构建：[packages.md](packages.md)
 - 种子策略与 rotation：[bootstrap.md](bootstrap.md)
 - 工具链（goal / LSP / 错误码）：[tooling.md](tooling.md)

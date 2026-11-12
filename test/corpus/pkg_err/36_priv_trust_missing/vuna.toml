@@ -1,9 +1,0 @@
-[package]
-name = "p"
-privileged = true
-[capabilities]
-effects = ["unsafe"]
-[trust]
-unsafe = ["Base.Host.runPure"]
-[export]
-modules = ["Main"]

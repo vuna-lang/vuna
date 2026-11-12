@@ -1,11 +1,11 @@
 import Base.Host
 
--- 重叠探针 B：打印 START-B 后睡 500ms 再打印 END-B（比 A 的 3s 早结束，用来区分
+-- 重叠探针 B：打印 START-B 后睡 800ms 再打印 END-B（比 A 的 3s 早结束，用来区分
 -- 「并行时 B 的 END 早于 A 的 END」与「串行时 B 根本没在 A 结束前启动」）。
--- 500ms 而不是 100ms：并行 worker 的进程启动在新起的并行任务/高负载下可能超过 100ms，
+-- 800ms 而不是 100ms：并行 worker 的进程启动在新起的并行任务/高负载下可能超过 100ms，
 -- 会把「A 还没来得及打印 START」误判成「没有重叠」（§47c 曾因此偶发失败）。
 main : Eff [] Int
 main = do
   _ <- print "START-B\n"
-  _ <- sleepMicros 500000
+  _ <- sleepMicros 800000
   fmap natToInt (print "END-B\n")

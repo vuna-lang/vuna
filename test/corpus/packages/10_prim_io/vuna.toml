@@ -1,9 +1,5 @@
 [package]
 name = "prim-io"
-privileged = true
 
 [dependencies]
 vuna-base = "../../../../base"
-
-[capabilities]
-effects = ["console", "process", "clock"]

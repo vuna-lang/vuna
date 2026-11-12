@@ -1,0 +1,3 @@
+-- 包内测试：没有 manifest 门控；测试入口返回 "" 表示通过。
+main : String
+main = ""

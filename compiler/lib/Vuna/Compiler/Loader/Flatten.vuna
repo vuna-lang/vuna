@@ -340,8 +340,7 @@ isRecordTarget modules decls prefix target = case splitLastDot (splitOnDot targe
       m = joinDots revPrefix
     in if m == prefix then isRecordDecl base decls
     else case findModule modules m of
-      Just (Module mname mpkg mimports mimps dcs exports mcaps mtrust mfx _) =>
-        isRecordDecl base dcs
+      Just (Module mname mpkg mimports mimps dcs exports mfx _) => isRecordDecl base dcs
       Nothing => False
 
 isRecordDecl : String -> List Decl -> Bool
@@ -601,43 +600,21 @@ implicitPreludeDeps importerPkg deps =
   rnNoLoc1 (AmbiguousPrelude (joinArrows (map (\c => rootName (secondOf c)) deps)))
     (joinArrows (map (\c => rootName (secondOf c)) deps))
 
--- F3 P2：按包名查模块根的 `[package] privileged`；找不到按非特权处理。
--- | 按包名查模块根的 `[package] privileged`；找不到按非特权处理。
-rootPrivilegedOf : List Root -> String -> Bool
-rootPrivilegedOf [] name = False
-rootPrivilegedOf (root :: rest) name =
-  if rootName root == name then rootPrivileged root else rootPrivilegedOf rest name
-
--- F3 P2：该模块是否属于某个包的 `[privileged] modules`（宿主层模块）。
--- F3 P2：importing 包是否特权。entry（ad-hoc）包的包名为 ""，不在 roots 里，
--- 用 selfPriv（来自 PackageContext.contextPrivileged）。
--- | importing 包是否特权：按包名查 roots，entry（ad-hoc，包名为空）用 `selfPriv`。
-importerPrivileged : List Root -> Bool -> String -> Bool
-importerPrivileged roots selfPriv importerPkg =
-  if rootPrivilegedOf roots importerPkg then True else if importerPkg == "" then selfPriv else False
-
--- | 该模块名是否属于某个包的 `[privileged] modules`（宿主层模块）。
-hostModuleIn : List Root -> String -> Bool
-hostModuleIn [] name = False
-hostModuleIn (root :: rest) name =
-  if memName name (rootHostModules root) then True else hostModuleIn rest name
-
-loadAll : Int -> List Root -> Bool -> String -> List Module -> List String -> List Import -> Eff [] (Check (List Module))
-loadAll fuel roots selfPriv importerPkg modules stack imports = if fuel <= 0 then pure (icFuel "loader")
+loadAll : Int -> List Root -> String -> List Module -> List String -> List Import -> Eff [] (Check (List Module))
+loadAll fuel roots importerPkg modules stack imports = if fuel <= 0 then pure (icFuel "loader")
 else case imports of
   [] => pure (OkC modules)
   imp :: rest => do
-    modulesR <- loadModule (fuel - 1) roots selfPriv importerPkg modules stack (importName imp)
+    modulesR <- loadModule (fuel - 1) roots importerPkg modules stack (importName imp)
     case modulesR of
       ErrC e => pure (ErrC e)
-      OkC modules2 => loadAll (fuel - 1) roots selfPriv importerPkg modules2 stack rest
+      OkC modules2 => loadAll (fuel - 1) roots importerPkg modules2 stack rest
 
-loadModule : Int -> List Root -> Bool -> String -> List Module -> List String -> String -> Eff [] (Check (List Module))
-loadModule fuel roots selfPriv importerPkg modules stack name = if fuel <= 0 then pure (icFuel "loader")
+loadModule : Int -> List Root -> String -> List Module -> List String -> String -> Eff [] (Check (List Module))
+loadModule fuel roots importerPkg modules stack name = if fuel <= 0 then pure (icFuel "loader")
 else case findModule modules name of
   Just m => pure (OkC modules)
   Nothing => if memName name stack then pure (ldErr1 (ImportCycle (showCycle name stack)) (showCycle name stack))
-  else if hostModuleIn roots name && not (importerPrivileged roots selfPriv importerPkg) then pure (ldErr1 (HostModulePrivileged name) name)
   else if validModuleName name then do
     foundR <- findModuleFile roots name importerPkg
     case foundR of
@@ -663,7 +640,7 @@ else case findModule modules name of
                     ErrC e => pure (ErrC e)
                     OkC implicit => do
                       modulesR <-
-                        loadAll (fuel - 1) roots selfPriv (rootName root) modules (name :: stack)
+                        loadAll (fuel - 1) roots (rootName root) modules (name :: stack)
                           (append imports implicit)
                       case modulesR of
                         ErrC e => pure (ErrC e)
@@ -675,7 +652,7 @@ else case findModule modules name of
                                 dedupeFixities
                                   (append fixities (visibleFixitiesOf modules2 (append imports implicit)))
                             in pure
-                              (OkC (Base.List.Cons (Module name (rootName root) imports implicit decls exports (rootCapabilities root) (rootTrustUnsafe root) visible (reexportedImportNamesOfHeader imports hdr)) modules2))
+                              (OkC (Base.List.Cons (Module name (rootName root) imports implicit decls exports visible (reexportedImportNamesOfHeader imports hdr)) modules2))
   else pure (ldErr1 (InvalidModuleName name) name)
 
 -- 包上下文入口：ctx 给出模块根（自己 lib 在最前 + 依赖闭包）与导入方包名
@@ -706,13 +683,12 @@ loadProjectWithPreloaded ctx entry preloaded = do
               ErrC e => pure (ErrC e)
               OkC implicit => do
                 modulesR <-
-                  loadAll 1048576 (contextRoots ctx) (contextPrivileged ctx)
-                    (contextPackageName ctx) preloaded [] (append imports implicit)
+                  loadAll 1048576 (contextRoots ctx) (contextPackageName ctx) preloaded []
+                    (append imports implicit)
                 pure (case modulesR of
                   ErrC e => ErrC e
                   OkC modules =>
-                    OkC
-                      (Project decls imports implicit modules (contextPackageName ctx) (contextCapabilities ctx) (contextTrustUnsafe ctx) False fixities)
+                    OkC (Project decls imports implicit modules (contextPackageName ctx) fixities)
                 )
   else pure (ldErr1 (EntryFileNotFound entry) entry)
 
@@ -726,13 +702,10 @@ loadProjectModulesWithPreloaded ctx names preloaded =
     entryImports = map (\n => Import n False Nothing (Span "" 0 0 0 0)) names
   in do
     modulesR <-
-      loadAll 1048576 (contextRoots ctx) (contextPrivileged ctx) (contextPackageName ctx) preloaded
-        [] entryImports
+      loadAll 1048576 (contextRoots ctx) (contextPackageName ctx) preloaded [] entryImports
     pure (case modulesR of
       ErrC e => ErrC e
-      OkC modules =>
-        OkC
-          (Project [] [] [] modules (contextPackageName ctx) (contextCapabilities ctx) (contextTrustUnsafe ctx) True [])
+      OkC modules => OkC (Project [] [] [] modules (contextPackageName ctx) [])
     )
 
 -- 入口以**源码字符串**给出（REPL 的表达式求值）：入口不落盘（import 仍按上下文的
@@ -756,13 +729,12 @@ loadProjectSourceWithPreloaded ctx label source preloaded = do
             ErrC e => pure (ErrC e)
             OkC implicit => do
               modulesR <-
-                loadAll 1048576 (contextRoots ctx) (contextPrivileged ctx) (contextPackageName ctx)
-                  preloaded [] (append imports implicit)
+                loadAll 1048576 (contextRoots ctx) (contextPackageName ctx) preloaded []
+                  (append imports implicit)
               pure (case modulesR of
                 ErrC e => ErrC e
                 OkC modules =>
-                  OkC
-                    (Project decls imports implicit modules (contextPackageName ctx) (contextCapabilities ctx) (contextTrustUnsafe ctx) False fixities)
+                  OkC (Project decls imports implicit modules (contextPackageName ctx) fixities)
               )
 
 -- 以**源码字符串**给出一个**库模块**（M30 · LSP）：源码允许带 `module ... where`
@@ -789,8 +761,8 @@ loadModuleSourceWithPreloaded ctx label source preloaded = do
             ErrC e => pure (ErrC e)
             OkC implicit => do
               modulesR <-
-                loadAll 1048576 (contextRoots ctx) (contextPrivileged ctx) (contextPackageName ctx)
-                  preloaded [] (append imports implicit)
+                loadAll 1048576 (contextRoots ctx) (contextPackageName ctx) preloaded []
+                  (append imports implicit)
               case modulesR of
                 ErrC e => pure (ErrC e)
                 OkC modules => case computeExports modules name hdr imports decls of
@@ -801,7 +773,7 @@ loadModuleSourceWithPreloaded ctx label source preloaded = do
                         dedupeFixities
                           (append fixities (visibleFixitiesOf modules (append imports implicit)))
                     in pure
-                      (OkC (Project [] imports implicit (Module name (contextPackageName ctx) imports implicit decls exports (contextCapabilities ctx) (contextTrustUnsafe ctx) visible (reexportedImportNames imports items) :: modules) (contextPackageName ctx) (contextCapabilities ctx) (contextTrustUnsafe ctx) False []))
+                      (OkC (Project [] imports implicit (Module name (contextPackageName ctx) imports implicit decls exports visible (reexportedImportNames imports items) :: modules) (contextPackageName ctx) []))
 
 -- M31.3（B27）：fmt 用的「程序级 fixity」——本文件的 `infix*` 声明（在前，本地优先）
 -- ++ import 闭包可见的声明（Module 里已含各自的 import 闭包）。只 parse + 加载模块图，
@@ -826,8 +798,8 @@ fixitiesForSourceIn ctx modules0 label source = do
             ErrC e => pure (ErrC e)
             OkC implicit => do
               modulesR <-
-                loadAll 1048576 (contextRoots ctx) (contextPrivileged ctx) (contextPackageName ctx)
-                  modules0 [] (append imports implicit)
+                loadAll 1048576 (contextRoots ctx) (contextPackageName ctx) modules0 []
+                  (append imports implicit)
               pure (case modulesR of
                 ErrC e => ErrC e
                 OkC modules =>
@@ -842,8 +814,8 @@ fixitiesForSourceIn ctx modules0 label source = do
             ErrC e => pure (ErrC e)
             OkC implicit => do
               modulesR <-
-                loadAll 1048576 (contextRoots ctx) (contextPrivileged ctx) (contextPackageName ctx)
-                  modules0 [] (append imports implicit)
+                loadAll 1048576 (contextRoots ctx) (contextPackageName ctx) modules0 []
+                  (append imports implicit)
               pure (case modulesR of
                 ErrC e => ErrC e
                 OkC modules =>
@@ -867,21 +839,21 @@ resolveProject project = resolveProjectKeeping [] project
 
 -- M34.5（S2）：`keep` 里的模块已经解析过（来自接口文件），原样保留、不重解析。
 resolveProjectKeeping : List String -> Project -> Check (Pair (List Diagnostic) (Pair (List Decl) (List Module)))
-resolveProjectKeeping keep (Project decls imports implicit modules entryPkg entryCaps entryTrust complete entryFixes) =
+resolveProjectKeeping keep (Project decls imports implicit modules entryPkg entryFixes) =
   let
     entryTable =
       tableOf
         (dedupeFixities (append entryFixes (visibleFixitiesOf modules (append imports implicit))))
   in Vuna.Compiler.Common.bind (reorderProgram entryTable decls)
-    (\decls2 => Vuna.Compiler.Common.bind (resolveEntry modules entryPkg entryCaps entryTrust (append imports implicit) decls2) (\entryDecls => Vuna.Compiler.Common.bind (unusedImportWarnings modules imports entryDecls decls2 []) (\entryWarns => Vuna.Compiler.Common.bind (resolveModulesKeep keep modules) (\p2 => Vuna.Compiler.Common.bind (checkTrustPoints entryPkg entryTrust complete entryDecls (firstOf p2)) (\_ => OkC (Pair (append entryWarns (secondOf p2)) (Pair entryDecls (firstOf p2))))))))
+    (\decls2 => Vuna.Compiler.Common.bind (resolveEntry modules entryPkg (append imports implicit) decls2) (\entryDecls => Vuna.Compiler.Common.bind (unusedImportWarnings modules imports entryDecls decls2 []) (\entryWarns => Vuna.Compiler.Common.bind (resolveModulesKeep keep modules) (\p2 => OkC (Pair (append entryWarns (secondOf p2)) (Pair entryDecls (firstOf p2)))))))
 
 resolveModulesKeep : List String -> List Module -> Check (Pair (List Module) (List Diagnostic))
 resolveModulesKeep keep [] = OkC (Pair [] [])
-resolveModulesKeep keep ((Module name pkg imports implicit decls exports mcaps mtrust fixities reexports) :: rest) =
+resolveModulesKeep keep ((Module name pkg imports implicit decls exports fixities reexports) :: rest) =
   if memName name keep then Vuna.Compiler.Common.bind (resolveModulesKeep keep rest)
-    (\p2 => OkC (Pair (Base.List.Cons (Module name pkg imports implicit decls exports mcaps mtrust fixities reexports) (firstOf p2)) (secondOf p2)))
+    (\p2 => OkC (Pair (Base.List.Cons (Module name pkg imports implicit decls exports fixities reexports) (firstOf p2)) (secondOf p2)))
   else Vuna.Compiler.Common.bind (reorderProgram (tableOf fixities) decls)
-    (\decls2 => Vuna.Compiler.Common.bind (resolveProgram (Module name pkg imports implicit decls2 exports mcaps mtrust fixities reexports :: rest) name name (namespacesOf decls2) (append imports implicit) decls2) (\d => Vuna.Compiler.Common.bind (checkEffectsBuiltins name pkg mcaps mtrust d) (\d1 => Vuna.Compiler.Common.bind (unusedImportWarnings (Module name pkg imports implicit decls2 exports mcaps mtrust fixities reexports :: rest) imports d1 decls2 reexports) (\warns => Vuna.Compiler.Common.bind (resolveModulesKeep keep rest) (\p2 => OkC (Pair (Base.List.Cons (Module name pkg imports implicit d1 exports mcaps mtrust fixities reexports) (firstOf p2)) (append warns (secondOf p2))))))))
+    (\decls2 => Vuna.Compiler.Common.bind (resolveProgram (Module name pkg imports implicit decls2 exports fixities reexports :: rest) name name (namespacesOf decls2) (append imports implicit) decls2) (\d1 => Vuna.Compiler.Common.bind (unusedImportWarnings (Module name pkg imports implicit decls2 exports fixities reexports :: rest) imports d1 decls2 reexports) (\warns => Vuna.Compiler.Common.bind (resolveModulesKeep keep rest) (\p2 => OkC (Pair (Base.List.Cons (Module name pkg imports implicit d1 exports fixities reexports) (firstOf p2)) (append warns (secondOf p2)))))))
 
 -- ---------------------------------------------------------------
 -- unused import warning：显式 import 未在所属检查单元里被引用。
@@ -946,19 +918,17 @@ anyTargetIn nameSet (t :: rest) =
 
 -- | 声明里出现的引用名（不递归展开 over-ctor；构造子/类型/值位置都收集）。
 declRefNames : Decl -> List String
-declRefNames d = case d of
-  DData dname params kind ctors derivings viaField repr lin sp =>
-    append (exprRefNames kind) (append (concatMap ctorRefNames ctors) derivings)
-  DRecord dname params fields derivings viaField repr lin sp =>
-    append (concatMap fieldRefNames fields) derivings
-  DTrait tname params methods sp => concatMap traitMethodRefNames methods
-  DInstance ctxE head methods sp =>
-    append (concatMap exprRefNames ctxE)
-      (append (exprRefNames head) (concatMap declRefNames methods))
-  DSig name ctx ty sp => append (concatMap exprRefNames ctx) (exprRefNames ty)
-  DAxiom name ty sp => exprRefNames ty
-  DExtern name cName ty sp => exprRefNames ty
-  DFun name pats body sp => append (concatMap patRefNames pats) (exprRefNames body)
+declRefNames (DData dname params kind ctors derivings viaField repr lin sp) =
+  append (exprRefNames kind) (append (concatMap ctorRefNames ctors) derivings)
+declRefNames (DRecord dname params fields derivings viaField repr lin sp) =
+  append (concatMap fieldRefNames fields) derivings
+declRefNames (DTrait tname params methods sp) = concatMap traitMethodRefNames methods
+declRefNames (DInstance ctxE head methods sp) =
+  append (concatMap exprRefNames ctxE) (append (exprRefNames head) (concatMap declRefNames methods))
+declRefNames (DSig name ctx ty sp) = append (concatMap exprRefNames ctx) (exprRefNames ty)
+declRefNames (DAxiom name ty sp) = exprRefNames ty
+declRefNames (DExtern name cName ty sp) = exprRefNames ty
+declRefNames (DFun name pats body sp) = append (concatMap patRefNames pats) (exprRefNames body)
 
 -- | 构造子声明类型里的引用名。
 ctorRefNames : Ctor -> List String
@@ -974,42 +944,44 @@ traitMethodRefNames m = exprRefNames m.traitMethodType
 
 -- | 模式里的引用名（构造子 / record 名；binder 名不是引用）。
 patRefNames : Pat -> List String
-patRefNames p = case p of
-  PVar name sp => []
-  PAs name inner sp => patRefNames inner
-  PWild sp => []
-  PCon name pats sp => Base.List.Cons name (concatMap patRefNames pats)
-  PInt n sp => []
-  PStr s sp => []
-  PRecord name fields sp => Base.List.Cons name (concatMap (\f => patRefNames (secondOf f)) fields)
+patRefNames (PVar name sp) = []
+patRefNames (PAs name inner sp) = patRefNames inner
+patRefNames (PWild sp) = []
+patRefNames (PCon name pats sp) = Base.List.Cons name (concatMap patRefNames pats)
+patRefNames (PInt n sp) = []
+patRefNames (PStr s sp) = []
+patRefNames (PRecord name fields sp) =
+  Base.List.Cons name (concatMap (\f => patRefNames (secondOf f)) fields)
 
 -- | 表达式里出现的引用名（EVar 已由解析期换成 canonical target）。
 exprRefNames : Expr -> List String
-exprRefNames e = case e of
-  EVar n sp => Base.List.Cons n []
-  EInt n sp => []
-  EStr s sp => []
-  EFloat raw sp => []
-  ELam ps body sp => exprRefNames body
-  EApp fn args sp => append (exprRefNames fn) (concatMap exprRefNames args)
-  EPi name implicit qty dom cod sp => append (exprRefNames dom) (exprRefNames cod)
-  ELet binds body rec_ sp => append (concatMap bindRefNames binds) (exprRefNames body)
-  ELocalFun clauses sp => concatMap clauseRefNames clauses
-  ECase scrut alts sp => append (exprRefNames scrut) (concatMap bindRefNames alts)
-  EIf c t el sp => append (exprRefNames c) (append (exprRefNames t) (exprRefNames el))
-  EField base fname sp => exprRefNames base
-  ERecord name fields sp => Base.List.Cons name (concatMap (\f => exprRefNames (secondOf f)) fields)
-  ERecUpdate base fields sp =>
-    append (exprRefNames base) (concatMap (\f => exprRefNames (secondOf f)) fields)
-  EDo stmts sp => concatMap doStmtRefNames stmts
-  EInfix op lhs rhs sp => Base.List.Cons op (append (exprRefNames lhs) (exprRefNames rhs))
-  EParen inner sp => exprRefNames inner
-  EBacktick op lhs rhs sp => Base.List.Cons op (append (exprRefNames lhs) (exprRefNames rhs))
-  ESectOp op sp => Base.List.Cons op []
-  ESectL op rhs sp => Base.List.Cons op (exprRefNames rhs)
-  ESectR lhs op sp => Base.List.Cons op (exprRefNames lhs)
-  EAnn value ty sp => append (exprRefNames value) (exprRefNames ty)
-  EInterp multi parts sp => concatMap interpPartRefNames parts
+exprRefNames (EVar n sp) = Base.List.Cons n []
+exprRefNames (EInt n sp) = []
+exprRefNames (EStr s sp) = []
+exprRefNames (EFloat raw sp) = []
+exprRefNames (ELam ps body sp) = exprRefNames body
+exprRefNames (EApp fn args sp) = append (exprRefNames fn) (concatMap exprRefNames args)
+exprRefNames (EPi name implicit qty dom cod sp) = append (exprRefNames dom) (exprRefNames cod)
+exprRefNames (ELet binds body rec_ sp) = append (concatMap bindRefNames binds) (exprRefNames body)
+exprRefNames (ELocalFun clauses sp) = concatMap clauseRefNames clauses
+exprRefNames (ECase scrut alts sp) = append (exprRefNames scrut) (concatMap bindRefNames alts)
+exprRefNames (EIf c t el sp) = append (exprRefNames c) (append (exprRefNames t) (exprRefNames el))
+exprRefNames (EField base fname sp) = exprRefNames base
+exprRefNames (ERecord name fields sp) =
+  Base.List.Cons name (concatMap (\f => exprRefNames (secondOf f)) fields)
+exprRefNames (ERecUpdate base fields sp) =
+  append (exprRefNames base) (concatMap (\f => exprRefNames (secondOf f)) fields)
+exprRefNames (EDo stmts sp) = concatMap doStmtRefNames stmts
+exprRefNames (EInfix op lhs rhs sp) =
+  Base.List.Cons op (append (exprRefNames lhs) (exprRefNames rhs))
+exprRefNames (EParen inner sp) = exprRefNames inner
+exprRefNames (EBacktick op lhs rhs sp) =
+  Base.List.Cons op (append (exprRefNames lhs) (exprRefNames rhs))
+exprRefNames (ESectOp op sp) = Base.List.Cons op []
+exprRefNames (ESectL op rhs sp) = Base.List.Cons op (exprRefNames rhs)
+exprRefNames (ESectR lhs op sp) = Base.List.Cons op (exprRefNames lhs)
+exprRefNames (EAnn value ty sp) = append (exprRefNames value) (exprRefNames ty)
+exprRefNames (EInterp multi parts sp) = concatMap interpPartRefNames parts
 
 -- | `pat = expr` 绑定里的引用名（模式 binder 不算引用）。
 bindRefNames : Pair Pat Expr -> List String
@@ -1021,12 +993,10 @@ clauseRefNames p = append (concatMap patRefNames (firstOf p)) (exprRefNames (sec
 
 -- | do 语句里的引用名。
 doStmtRefNames : DoStmt -> List String
-doStmtRefNames s = case s of
-  DBind pat e sp => append (patRefNames pat) (exprRefNames e)
-  DExpr e sp => exprRefNames e
+doStmtRefNames (DBind pat e sp) = append (patRefNames pat) (exprRefNames e)
+doStmtRefNames (DExpr e sp) = exprRefNames e
 
 -- | 模板片段里的引用名（洞内表达式）。
 interpPartRefNames : InterpPart -> List String
-interpPartRefNames p = case p of
-  IPText s => []
-  IPHole e => exprRefNames e
+interpPartRefNames (IPText s) = []
+interpPartRefNames (IPHole e) = exprRefNames e

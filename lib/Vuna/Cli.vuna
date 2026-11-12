@@ -436,7 +436,7 @@ fmtFiles check env (path :: rest) changed = do
 -- repl
 -- ---------------------------------------------------------------
 replArgs : List String -> Eff [] Int
-replArgs args = case parseToolArgs "vuna repl" [ValueFlag "listen", ValueFlag "client", BoolFlag "privileged"] args of
+replArgs args = case parseToolArgs "vuna repl" [ValueFlag "listen", ValueFlag "client"] args of
   ErrC e => toolError (diagText e)
   OkC parsed => case flagValue parsed "client" of
     Just addr => case flagValue parsed "listen" of
@@ -449,14 +449,14 @@ replArgs args = case parseToolArgs "vuna repl" [ValueFlag "listen", ValueFlag "c
       Just addr => case parsed.positionals of
         [] => do
           ctxR <- contextForDir "."
-          replServerWith addr StartNone (maybePrivilegedCtx (flagSet parsed "privileged") ctxR)
-        [target] => replServerWithTarget addr target (flagSet parsed "privileged")
+          replServerWith addr StartNone ctxR
+        [target] => replServerWithTarget addr target
         _ => usageError 0
       Nothing => case parsed.positionals of
         [] => do
           ctxR <- contextForDir "."
-          replWith Nothing 0 StartNone (maybePrivilegedCtx (flagSet parsed "privileged") ctxR)
-        [target] => replTargetWith Nothing target (flagSet parsed "privileged")
+          replWith Nothing 0 StartNone ctxR
+        [target] => replTargetWith Nothing target
         _ => usageError 0
 
 -- `--client`：纯传输（不加载包上下文；地址校验在 Server 层共用）。
@@ -471,42 +471,33 @@ replServerWith addr start ctxRes = case checkReplAddr addr of
   ErrC e => toolError (diagText e)
   OkC _ => replWith (Just addr) 0 start ctxRes
 
-replServerWithTarget : String -> String -> Bool -> Eff [] Int
-replServerWithTarget addr target priv = case checkReplAddr addr of
+replServerWithTarget : String -> String -> Eff [] Int
+replServerWithTarget addr target = case checkReplAddr addr of
   ErrC e => toolError (diagText e)
-  OkC _ => replTargetWith (Just addr) target priv
+  OkC _ => replTargetWith (Just addr) target
 
 replWith : Maybe String -> Int -> ReplStart -> Check PackageContext -> Eff [] Int
-replWith listen _ start ctxRes = case ctxRes of
-  ErrC e => toolFailure (diagText e)
-  OkC ctx => case listen of
-    Nothing => runRepl ctx start
-    Just addr => runReplServer ctx start addr
+replWith listen _ start (ErrC e) = toolFailure (diagText e)
+replWith listen _ start (OkC ctx) = case listen of
+  Nothing => runRepl ctx start
+  Just addr => runReplServer ctx start addr
 
 -- 启动目标：存在目录 → 该包上下文；存在文件 → 文件所在包上下文 + 启动加载；
 -- 不存在且像模块名 → cwd 上下文 + 启动导入；其它报可操作错误。
--- F3 P2b：REPL 默认按**非特权**上下文求值；`vuna repl --privileged` 显式以特权上下文
--- 求值（开发工具开关，见 `Pkg.privilegedContext`）。
-maybePrivilegedCtx : Bool -> Check PackageContext -> Check PackageContext
-maybePrivilegedCtx False r = r
-maybePrivilegedCtx True r = case r of
-  ErrC e => ErrC e
-  OkC c => OkC (privilegedContext c)
-
-replTargetWith : Maybe String -> String -> Bool -> Eff [] Int
-replTargetWith listen target priv = do
+replTargetWith : Maybe String -> String -> Eff [] Int
+replTargetWith listen target = do
   exists <- prim_eff_fileExists target
   if exists then do
     isDir <- prim_eff_isDirectory target
     if isDir then do
       ctxR <- contextForDir target
-      replWith listen 0 (StartDir target) (maybePrivilegedCtx priv ctxR)
+      replWith listen 0 (StartDir target) ctxR
     else do
       ctxR <- contextForFile target
-      replWith listen 0 (StartFile target) (maybePrivilegedCtx priv ctxR)
+      replWith listen 0 (StartFile target) ctxR
   else if isModuleNameStr target then do
     ctxR <- contextForDir "."
-    replWith listen 0 (StartModule target) (maybePrivilegedCtx priv ctxR)
+    replWith listen 0 (StartModule target) ctxR
   else toolFailure
     ("找不到文件或目录: " ++ target ++ "（vuna repl 接受 <FILE> | <DIR> | <Module.Name>）")
 

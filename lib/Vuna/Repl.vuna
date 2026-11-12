@@ -1583,9 +1583,7 @@ doLoadDir st dir = do
   ctxR <- contextForDir dir
   pure (case ctxR of
     ErrC e => ErrC e
-    OkC ctx2 =>
-      OkC
-        (switchedContext st (if contextPrivileged st.stateCtx then privilegedContext ctx2 else ctx2))
+    OkC ctx2 => OkC (switchedContext st ctx2)
   )
 
 reloadStep : ReplState -> String -> Eff [] ReplOutcome

@@ -178,12 +178,12 @@ main = show (UserId { uid = 3 }) ++ "/" ++ show (Wrap { w = 5 }) ++ "/" ++ prett
   `[TC_DerivingViaOnlyRecord]`。
 - 委托是**表示级**的：只有 wrapper 与 field 运行时表示完全一致时才成立；当前这等价于
   自动去装箱判据。因此函数 / Pi 字段包装（`Eff` / `Reader` / 续延）暂时不能用
-  `deriving via field`（它们保持装箱，见 debt D50）。
+  `deriving via field`（它们保持装箱；这是委托表示级判据的直接后果）。
 - 显式实例优先：如果 wrapper 自己声明了 `instance C Wrapper`，不会被委托覆盖。
 - 参数化包装的字段类型会代入 wrapper 的实参；多参数 class 中 wrapper 出现在任一参数位置
   时也可以委托。
 - 目前只处理 class 参数**头部**是 wrapper 的委托；`C (List (Wrapper a))` 这种嵌套在容器里的
-  包装不会自动回溯到 `C (List (Field a))`（见 debt D50）。
+  包装不会自动回溯到 `C (List (Field a))`（同上，委托只覆盖头部参数）。
 - 没有 `newtype` / `type` 关键字：`record` 提供名义类型，`transparent` / 缺省推断负责表示，
   `deriving via field` 负责实例；结构 `deriving` 保持逐字段比较 / 展示。
 - 实现：`Elab.Dict.searchInstFuel` 的 `tryViaDict` 在实例搜索期替换类参数；
@@ -391,7 +391,7 @@ main = case (MkEmail "x@y") of MkEmail s => s
   声明期报错。没有父类：`Monad` 不自动提供 `Applicative`，每个 monad 类型要写全三个实例。
 - **`Eff`** 是 `base/lib/Base/Eff.vuna` 的抽象动作类型（构造子 `MkEff` 不导出）；组合统一用
   `Functor` / `Applicative` / `Monad` trait 的 `fmap` / `bind` / `pure` / `liftA2`、`>>=` 与 `do`。动作只在 `main`
-  执行；`runPure` 是唯一的 main 外入口、需要能力 `unsafe`（工具链与 `Base.ST` 用）。
+  执行；`runPure` 是唯一的 main 外入口（工具链与 `Base.ST` 用；不再有 `unsafe` 能力位）。
   参数化效应 monad（`Base.State` / `Base.Reader` / `Base.Error`）与 ST 见
   [effects.md](effects.md)。
 - **库内组合约定**：类型已有实例时，组合统一写 `do` / `>>=` / `>>` / `bind` / `pure` /
@@ -425,8 +425,8 @@ main = case (MkEmail "x@y") of MkEmail s => s
 - 效果 API 直接返回 `Eff []`：`print` / `println` / `readFile` / `writeFile` / `readLine` /
   `readDir` / `isDirectory` / `makeDir` / `removeFile` / `fileExists` / `getArgs` /
   `exit`（例如 `getArgs : Eff [] (List String)`、`print : String -> Eff [] Nat`）；内部用
-  不导出的 `prim_*` 原语。普通包只能经 `Base.Host` 使用效果；要在源码里直接调用
-  `prim_*`，必须在 `vuna.toml` 声明 `[capabilities] effects`（见
+  不导出的 `prim_*` 原语。宿主层对任何包可见：也可 `import Base.Host` 或在源码里直接调用
+  `prim_*`（没有 manifest 能力声明；用户面**应**经 `Base.Eff.*` + handler，见
   [primitives.md](primitives.md)）。
 - 可执行包 / `vuna build` 要求 `main : Eff [] a`；`vuna interp` 是纯核心求值，任何
   `main : Eff [] a` 一律报错。`vuna test` 的纯 `String` / `Int` / `Bool` 测试走核心求值，

@@ -1,9 +1,0 @@
-[package]
-name = "effect-capability"
-privileged = true
-
-[dependencies]
-vuna-base = "../../../../base"
-
-[capabilities]
-effects = ["fs"]

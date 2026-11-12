@@ -1,0 +1,8 @@
+[package]
+name = "p"
+
+[capabilities]
+effects = ["console"]
+
+[export]
+modules = ["Main"]
