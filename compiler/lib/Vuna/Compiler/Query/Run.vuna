@@ -1,0 +1,266 @@
+-- | 查询图的 **Eff 层**：预算 / 环检测 / 逐节点执行 / 会话索引持久化。
+module Vuna.Compiler.Query.Run
+  ( RunOpts(..)
+  , RunState
+  , decQueryIndexComplete
+  , encQueryIndex
+  , runEmpty
+  , runNode
+  , runNote
+  , runStepCount
+  , runWithBudget
+  , sessionLoad
+  , sessionSave
+  ) where
+
+-- Vuna.Compiler.Query.Run：把纯核心 `Query` 接到「真的会做 IO / parse / 精化」的调用方。
+--
+-- 与纯层分工（见 `Query` 模块头）：
+--   * `Query` 只有判据与记账（命中、cutoff、依赖快照），纯函数、显式 `Db`；
+--   * 本模块管**图外**的东西：预算、环检测、会话索引的读写。
+--
+-- 三段式的用法（run 层与纯层共用判据）：
+--
+--     case Query.queryHit db key deps of
+--       Just v  => 直接返回（**完全不**执行 compute）
+--       Nothing => do r <- compute (Query.queryDepValues db deps)   -- Eff：真 parse / 精化
+--                     let (db2, v) = Query.queryResolve db key deps r
+--
+-- `runNode` 就是这一段的封装，并额外处理预算与环。
+--
+-- **环检测**：纯层看不到调用栈，所以 `RunState` 自己维护一个 `rsStack`（当前正在算的
+-- key，最新在前）。key 已在栈上 ⇒ 记 `cycle <key>` 并返回 `Nothing`（调用方按「这个节点
+-- 算不出来」处理：回退旧路径或报错，绝不递归下去）。模块 import 环由 loader 拒绝，这里
+-- 防的是图构造错误（例如把 `iface:<m>` 挂在自身依赖上）。
+--
+-- **预算**：`roBudget` 是本次会话允许的**逻辑步数**（每个 compute 扣 1），不是墙钟时间
+-- ——墙钟时间在语言里不可测（`effTimeUs` 属特权宿主层），而且按步数守恒比时间更可复现。
+-- 预算耗尽 ⇒ 记 `reject budget <key>` 并返回 `Nothing`；调用方决定回退还是报错。
+--
+-- **取消**：没有抢占式取消（`EffSched` 的取消只在任务边界生效）。run 层用「预算耗尽」
+-- 作为协作式取消的唯一形态；强杀留给进程级超时（测试 runner 已有）。
+--
+-- **会话索引**：`sessionSave` 把 `Db` 写成一条 `Store` 载荷（codec `query-index 1`），
+-- 路径 `<cache>/query/<包桶>/index`，tag 带编译器指纹（换二进制即整套失效）。载荷只
+-- 存**判据**（key / 依赖快照 / 值摘要 / 值本身）：`QRef` 只存地址，`QBytes` 超过
+-- 64 KB 时也转 `QRef`（内容另存，见 `Query` 的 QVal 说明）。
+import Base.Bool
+import Base.HashMap
+import Base.Host
+import Base.Int
+import Base.List
+import Base.Maybe
+import Base.Pair
+import Base.String
+import Vuna.Compiler.Canonical.Bytes
+import Vuna.Compiler.Debug
+import Vuna.Compiler.Fingerprint
+import Vuna.Compiler.Hash
+import Vuna.Compiler.Query
+import Vuna.Compiler.Store
+
+-- | 一次图会话的配置。
+record RunOpts where
+  -- | 新建条目的产物来源（`pkg` / `tool`），与 iface 的 `meOrigin` 同语义。
+  roOrigin : String
+  -- | 允许的逻辑步数（每个 compute 扣 1）；`<= 0` 表示不设限。
+  roBudget : Int
+  -- | 是否读写会话索引（工具链常驻会话开；一次性 CLI 关，避免写放大）。
+  roPersist : Bool
+  -- | 会话索引的包桶名（通常是包名；空 = 不落盘）。
+  roBucket : String
+
+-- | 图会话状态：Db + 调用栈 + 预算余额 + 已执行步数。
+record RunState where
+  rsDb : Db
+  rsStack : List String
+  rsBudget : Int
+  rsBudget0 : Int
+  rsSteps : Int
+
+-- | 空会话（按 opts 设定来源与预算）。
+runEmpty : RunOpts -> RunState
+runEmpty opts = RunState (dbWithOrigin dbEmpty opts.roOrigin) [] opts.roBudget opts.roBudget 0
+
+-- | 剩余预算（不设限时恒为 `roBudget` 的负值语义见 `runWithBudget`）。
+runWithBudget : RunState -> Int -> RunState
+runWithBudget st n = RunState st.rsDb st.rsStack n n st.rsSteps
+
+-- | 已执行步数（`--debug-query` 与测试断言的观测点）。
+runStepCount : RunState -> Int
+runStepCount st = st.rsSteps
+
+-- | 会话里记一行 trace（图外事件：`cycle` / `reject`）。
+runNote : RunState -> String -> RunState
+runNote st line = RunState (dbNote st.rsDb line) st.rsStack st.rsBudget st.rsBudget0 st.rsSteps
+
+-- | 预算扣减：返回 `Nothing` 表示已耗尽（调用方记 `reject`）。
+spendBudget : RunState -> Maybe RunState
+spendBudget st =
+  if st.rsBudget0 <= 0 then Just st
+  else if st.rsBudget <= 0 then Nothing
+  else Just (RunState st.rsDb st.rsStack (st.rsBudget - 1) st.rsBudget0 (st.rsSteps + 1))
+
+inStack : List String -> String -> Bool
+inStack [] _ = False
+inStack (k :: rest) key = if k == key then True else inStack rest key
+
+-- | 执行一个节点：命中 ⇒ 直接返回；否则在 `Eff` 里算，再做纯提交。
+--
+-- `deps` 必须已经算过（调用方按拓扑序驱动）；`compute` 拿到依赖值后返回
+-- 「值 + 实际观测到的依赖 key 列表」（动态依赖，见 `Query.queryWith`）。
+-- 返回 `Nothing` = 这次没算出来（环 / 预算耗尽），`Db` 里不会留下半成品 entry，
+-- 调用方可以安全回退（旧路径 / 报错）。
+--
+-- **环**：`rsStack` 由调用方在驱动嵌套节点时线程（`runNode` 返回的状态里已含父链），
+-- 再加一条「key 出现在自己的 deps 里」的自环兜底。图构造错误时宁可 `Nothing`，
+-- 也绝不递归下去。
+runNode : RunState -> String -> List String -> (List QVal -> Eff [] (Pair QVal (List String))) -> Eff [] (Pair RunState (Maybe QVal))
+runNode st key deps compute = if inStack st.rsStack key || memKey key deps then do
+  let
+    _ = note "query-cycle ${key}"
+  in pure (Pair (runNote st "cycle ${key}") Nothing)
+else case queryHit st.rsDb key deps of
+  Just v =>
+    pure
+      (Pair (RunState (markHit st.rsDb key) st.rsStack st.rsBudget st.rsBudget0 st.rsSteps) (Just v))
+  Nothing => case spendBudget st of
+    Nothing => do
+      let
+        _ = note "query-reject budget ${key}"
+      in pure (Pair (runNote st "reject ${key}") Nothing)
+    Just st1 => do
+      let
+        _ = note "query-miss ${key}"
+      in do
+        result <- compute (queryDepValues st1.rsDb deps)
+        let
+          parent = queryResolve st1.rsDb key deps result
+        in pure
+          (Pair (RunState (firstOf parent) st1.rsStack st1.rsBudget st1.rsBudget0 st1.rsSteps) (Just (secondOf parent)))
+
+-- ---------------------------------------------------------------
+-- 会话索引（`query-index 1`）
+-- ---------------------------------------------------------------
+-- | 载荷编码版本（`Store` 的 codec 段）。
+queryIndexCodec : String
+queryIndexCodec = "query-index 1"
+
+queryIndexSchema : String
+queryIndexSchema = "vuna-query-index 1"
+
+queryIndexTag : Eff [] String
+queryIndexTag = do
+  tag <- compilerTagEff
+  pure "${queryIndexSchema}/${tag}"
+
+-- | 包桶 → 索引路径（包名哈希；与其它 TMPDIR 缓存同一隔离口径）。
+sessionPath : String -> Eff [] String
+sessionPath bucket = do
+  base <- storeCacheBaseEff
+  pure "${base}/query/${strFromInt (hashContentKey bucket)}/index"
+
+encVal : QVal -> List String -> List String
+encVal QMarker acc = encTag 0 acc
+encVal (QBytes s) acc = encTag 1 (encStr s acc)
+encVal (QRef d) acc = encTag 2 (encStr d acc)
+
+decVal : Int -> Cur -> Maybe (Pair QVal Cur)
+decVal fuel c = if fuel <= 0 then Nothing
+else case decTag fuel c of
+  Nothing => Nothing
+  Just (Pair tag b1) => case tag of
+    0 => Just (Pair QMarker b1)
+    1 => case decStr (fuel - 1) b1 of
+      Nothing => Nothing
+      Just (Pair s b2) => Just (Pair (QBytes s) b2)
+    2 => case decStr (fuel - 1) b1 of
+      Nothing => Nothing
+      Just (Pair d b2) => Just (Pair (QRef d) b2)
+    _ => Nothing
+
+encDep : Pair String String -> List String -> List String
+encDep (Pair k d) acc = encStr k (encStr d acc)
+
+decDep : Int -> Cur -> Maybe (Pair (Pair String String) Cur)
+decDep fuel c = case decStr (fuel - 1) c of
+  Nothing => Nothing
+  Just (Pair k b1) => case decStr (fuel - 1) b1 of
+    Nothing => Nothing
+    Just (Pair d b2) => Just (Pair (Pair k d) b2)
+
+-- | 一条 entry：key / 观测依赖快照 / 声明集合 / 值摘要 / 来源 / 命中数 / 值。
+encIndexEntry : Pair String Entry -> List String -> List String
+encIndexEntry (Pair key e) acc =
+  encStr key
+    (encStr e.entryDigest (encStr e.entryOrigin (encInt e.entryHits (encList encStr e.entryDeclared (encList encDep e.entryDeps (encVal e.entryVal acc))))))
+
+decIndexEntry : Int -> Cur -> Maybe (Pair (Pair String Entry) Cur)
+decIndexEntry fuel c = case decStr (fuel - 1) c of
+  Nothing => Nothing
+  Just (Pair key b1) => case decStr (fuel - 1) b1 of
+    Nothing => Nothing
+    Just (Pair digest b2) => case decStr (fuel - 1) b2 of
+      Nothing => Nothing
+      Just (Pair origin b3) => case decInt (fuel - 1) b3 of
+        Nothing => Nothing
+        Just (Pair hits b4) => case decList decStr (fuel - 1) b4 of
+          Nothing => Nothing
+          Just (Pair declared b5) => case decList decDep (fuel - 1) b5 of
+            Nothing => Nothing
+            Just (Pair deps b6) => case decVal (fuel - 1) b6 of
+              Nothing => Nothing
+              Just (Pair val b7) =>
+                Just (Pair (Pair key (Entry deps declared digest origin val hits)) b7)
+
+-- | `Db` → 索引载荷（键序由 `HashMap.toList` 给定，写入前不排序：条目表是 map，
+-- 顺序不影响语义；读回后同样进 map）。
+encQueryIndex : Db -> String
+encQueryIndex db = encTop (encList encIndexEntry) (Base.HashMap.toList db.dbEntryMap)
+
+-- | 索引载荷 → `Db`（任何一步不符即 `Nothing` ⇒ 当作没有会话索引）。
+decQueryIndexComplete : String -> Maybe Db
+decQueryIndexComplete s = case decList decIndexEntry (strLength s) (curOf s) of
+  Nothing => Nothing
+  Just (Pair pairs rest) =>
+    if curAtEnd rest then Just (Db (Base.HashMap.fromList pairs) [] (dbOriginOf dbEmpty))
+    else Nothing
+
+-- | 读会话索引；没有/损坏 ⇒ 空 `Db`（不报错：索引只是加速，正确性不依赖它）。
+sessionLoad : RunOpts -> Eff [] Db
+sessionLoad opts = if not opts.roPersist || opts.roBucket == "" then pure dbEmpty
+else do
+  tag <- queryIndexTag
+  path <- sessionPath opts.roBucket
+  payload <- storeReadEff tag queryIndexCodec path
+  case payload of
+    Nothing => pure (dbWithOrigin dbEmpty opts.roOrigin)
+    Just bytes => case decQueryIndexComplete bytes of
+      Just db => pure (dbWithOrigin db opts.roOrigin)
+      Nothing => do
+        let
+          _ = note "query-index-reject len=${strLength bytes}"
+        in pure (dbWithOrigin dbEmpty opts.roOrigin)
+
+-- | 写会话索引（内容不变则跳过：避免每次请求都刷 mtime）。
+sessionSave : RunOpts -> Db -> Eff [] Int
+sessionSave opts db = if not opts.roPersist || opts.roBucket == "" then pure 0
+else do
+  tag <- queryIndexTag
+  path <- sessionPath opts.roBucket
+  dir <- storeCacheBaseEff
+  _ <- storeEnsureDirEff "${dir}/query/${strFromInt (hashContentKey opts.roBucket)}"
+  storeWriteIfChangedEff tag queryIndexCodec path (encQueryIndex db)
+
+-- ---------------------------------------------------------------
+-- 说明：图节点的**具体族**（`env:` / `ast:` / `iface:` / `check:` / `split:` / `unit:`）
+-- 由 `Vuna.Compiler.Driver.Graph` 定义；本模块只提供执行骨架，不认识任何具体 key。
+-- ---------------------------------------------------------------
+-- | key 是否在 deps 列表里（自环兜底）。
+memKey : String -> List String -> Bool
+memKey _ [] = False
+memKey key (k :: rest) = if k == key then True else memKey key rest
+
+-- | 包桶 → 63-bit 键（与其它 TMPDIR 缓存同一隔离口径；`Hash.contentKey`）。
+hashContentKey : String -> Int
+hashContentKey bucket = Vuna.Compiler.Hash.contentKey bucket

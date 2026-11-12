@@ -33,6 +33,7 @@ modules = [
   "Vuna.Compiler.Fingerprint",
   "Vuna.Compiler.Store",
   "Vuna.Compiler.Query",
+  "Vuna.Compiler.Query.Run",
   "Vuna.Compiler.Frontend.Diagnostics",
   "Vuna.Compiler.Loader.Diagnostics",
   "Vuna.Compiler.Frontend.Ast",

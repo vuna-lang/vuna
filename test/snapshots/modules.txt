@@ -140,6 +140,7 @@ Vuna.Compiler.Loader.Modules  compiler/lib/Vuna/Compiler/Loader/Modules.vuna
 Vuna.Compiler.Loader.Resolve  compiler/lib/Vuna/Compiler/Loader/Resolve.vuna
 Vuna.Compiler.Loader  compiler/lib/Vuna/Compiler/Loader.vuna
 Vuna.Compiler.Packages.Pkg  compiler/lib/Vuna/Compiler/Packages/Pkg.vuna
+Vuna.Compiler.Query.Run  compiler/lib/Vuna/Compiler/Query/Run.vuna
 Vuna.Compiler.Query  compiler/lib/Vuna/Compiler/Query.vuna
 Vuna.Compiler.Source  compiler/lib/Vuna/Compiler/Source.vuna
 Vuna.Compiler.Store  compiler/lib/Vuna/Compiler/Store.vuna
@@ -286,6 +287,7 @@ Vuna.Compiler.Loader.Modules  ./lib/Vuna/Compiler/Loader/Modules.vuna
 Vuna.Compiler.Loader.Resolve  ./lib/Vuna/Compiler/Loader/Resolve.vuna
 Vuna.Compiler.Loader  ./lib/Vuna/Compiler/Loader.vuna
 Vuna.Compiler.Packages.Pkg  ./lib/Vuna/Compiler/Packages/Pkg.vuna
+Vuna.Compiler.Query.Run  ./lib/Vuna/Compiler/Query/Run.vuna
 Vuna.Compiler.Query  ./lib/Vuna/Compiler/Query.vuna
 Vuna.Compiler.Source  ./lib/Vuna/Compiler/Source.vuna
 Vuna.Compiler.Store  ./lib/Vuna/Compiler/Store.vuna

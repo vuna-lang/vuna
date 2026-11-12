@@ -51,6 +51,10 @@ main = do
   _ <- println ("query1 " ++ showTrace (secondOf run1))
   _ <- println ("query2 " ++ showTrace (secondOf run2))
   _ <- println ("query3 " ++ showTrace (secondOf run3))
+  _ <- println ("query4 " ++ showTrace (secondOf run4))
+  _ <- println ("query5 " ++ showTrace (secondOf run5))
+  _ <- println ("query-marker " ++ digestOfVal QMarker)
+  _ <- println ("query-order " ++ verdict (depsOrderAgnostic (firstOf run1)))
   _ <- println ("canon-term-rt " ++ verdict termFixturesRT)
   _ <- println ("canon-decl-rt " ++ verdict (declsRT declFixtures))
   _ <- println ("canon-defs-rt " ++ verdict defsRT)
@@ -72,11 +76,18 @@ verdict False = "fail"
 showTrace : List String -> String
 showTrace ts = join "," ts
 
--- | 取列表里的整数（`QInt` 之外一律 0；自检程序不做错误处理）。
+-- | 取列表里的整数（`QBytes` 解析失败一律 0；自检程序不做错误处理）。
+-- `QVal` 只有 marker / bytes / ref 三形态（D-Q4），负载文本按十进制解读。
 intOf : List QVal -> Int
 intOf [] = 0
-intOf ((QInt n) :: _) = n
-intOf (_ :: rest) = intOf rest
+intOf (v :: rest) = case v of
+  QBytes s => intOfText (strUnpack s) 0
+  _ => intOf rest
+
+-- | 十进制文本 → Int（只认数字；自检负载全是 `strFromInt` 的输出）。
+intOfText : List Int -> Int -> Int
+intOfText [] acc = acc
+intOfText (c :: cs) acc = if c >= 48 && c <= 57 then intOfText cs (acc * 10 + (c - 48)) else acc
 
 -- 三次运行的查询图场景：源节点按**输入内容**作 key（`src#<seed>`，内容寻址），
 -- half 是 src/2（会吸收输入差异），label 依赖 half。seed 4 → 5 时 src 是新的 key
@@ -95,11 +106,11 @@ runAll : Int -> Db -> Pair Db (List String)
 runAll seed db0 =
   let
     srcKey = "src#" ++ strFromInt seed
-    p1 = query db0 srcKey [] (\depVals => QInt seed)
+    p1 = query db0 srcKey [] (\depVals => QBytes (strFromInt seed))
     db1 = firstOf p1
-    p2 = query db1 "half" [srcKey] (\depVals => QInt (intOf depVals / 2))
+    p2 = query db1 "half" [srcKey] (\depVals => QBytes (strFromInt (intOf depVals / 2)))
     db2 = firstOf p2
-    p3 = query db2 "label" ["half"] (\depVals => QStr ("half=" ++ strFromInt (intOf depVals)))
+    p3 = query db2 "label" ["half"] (\depVals => QBytes ("half=" ++ strFromInt (intOf depVals)))
     db3 = firstOf p3
     n0 = lenInt (dbTrace db0)
   in Pair db3 (drop n0 (dbTrace db3))
@@ -217,3 +228,43 @@ fixityCovered : Bool
 fixityCovered =
   not
     (encTop encFixity (FixityDecl "::" 5 1 Nothing sp0) == encTop encFixity (FixityDecl "::" 5 1 (Just "Cons") sp0))
+
+-- ---------------------------------------------------------------
+-- 查询图 v2 自检（顺序无关依赖 / 动态依赖 / marker 摘要）
+-- ---------------------------------------------------------------
+-- | 依赖顺序不影响命中：同一个 key 用相反顺序的依赖表再查必须 hit。
+-- 形参直接收 `Db`（收 `Pair Db _` 再 `firstOf` 会让 `firstOf` 的隐式参数与
+-- `query` 的返回类型互相牵连，推断出错误分量）。
+depsOrderAgnostic : Db -> Bool
+depsOrderAgnostic db0 =
+  let
+    db1 = firstOf (query db0 "ord" ["x", "y"] (\_ => QBytes "v"))
+    db2 = firstOf (query db1 "ord" ["y", "x"] (\_ => QBytes "v"))
+    n0 = lenInt (dbTrace db1)
+  in drop n0 (dbTrace db2) == ["hit ord"]
+
+-- | 动态依赖：`queryWith` 记录**观测**到的依赖（而不是声明表），下次按观测表判命中。
+-- 这里声明两个、只观测一个；同一声明集合再查 ⇒ 命中。
+run4 : Pair Db (List String)
+run4 =
+  let
+    db1 = firstOf (query dbEmpty "da" [] (\_ => QBytes "1"))
+    db2 = firstOf (query db1 "db" [] (\_ => QBytes "2"))
+    w1 = queryWith db2 "dyn" ["da", "db"] (\_ => Pair (QBytes "out") ["da"])
+    db3 = firstOf w1
+    w2 = queryWith db3 "dyn" ["da", "db"] (\_ => Pair (QBytes "out") ["da"])
+    n0 = lenInt (dbTrace db3)
+  in Pair (firstOf w2) (drop n0 (dbTrace (firstOf w2)))
+
+-- | 声明集合变化 ⇒ 必须重算（输入面变了）；值仍相同 ⇒ `cutoff`（下游判据不动）。
+run5 : Pair Db (List String)
+run5 =
+  let
+    db1 = firstOf (query dbEmpty "sa" [] (\_ => QBytes "1"))
+    db2 = firstOf (query db1 "sb" [] (\_ => QBytes "2"))
+    w1 = query db2 "stat" ["sa", "sb"] (\_ => QBytes "out")
+    db3 = firstOf w1
+    db4 = firstOf (query db3 "sb2" [] (\_ => QBytes "2-changed"))
+    w2 = query db4 "stat" ["sa", "sb2"] (\_ => QBytes "out")
+    n0 = lenInt (dbTrace db3)
+  in Pair (firstOf w2) (drop n0 (dbTrace (firstOf w2)))

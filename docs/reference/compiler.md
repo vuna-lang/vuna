@@ -11,7 +11,7 @@
 （fmt/lint/repl/doc/test/lsp）在根包 `lib/`，不在闭包里。
 代码按**目录即层**组织：Frontend → Packages → Loader → Core → Elab → Codegen → Driver，
 同层模块可互相 import，上层只能依赖下层。每层 `X.vuna` 是**门面**：只 import 子模块并选择性
-重导出，实现与数据定义都在 `X/` 的叶子模块。全包 **84 个模块**（76 个导出 + 内部
+重导出，实现与数据定义都在 `X/` 的叶子模块。全包 **85 个模块**（77 个导出 + 内部
 `Debug` / `Diag` / `Diag.Format` / `Diagnostics.Ic` / `Driver.Iface` / `Driver.Owner` /
 `Elab.MetaSpans` / `Source`）；目标每模块 ≤~800 行
 （`Codegen.Term` / `Driver.Dt` / `Elab.Trait` 等已超目标，约 1.1–1.2k 行）。
@@ -33,7 +33,8 @@
 | `Canonical.Ast` | Frontend `Expr` / `Pat` / `Decl` / `SourceFile` 的规范编码 / 解析（**全部 span 丢弃**：它只服务 iface 哈希输入、codegen 单元 key 与 roundtrip 自检；**不要**拿它当缓存载荷，缓存命中会丢诊断位置） | `encExpr`、`encDecl`、`encDecls`、`encSourceFile`、`decDeclsComplete`、`decSourceFileComplete` |
 | `Canonical.Lex` | 词法 token 流（`List PTok`）的规范编码 / 解析：**位置逐字节保真**，只服务 lex 缓存载荷（`Store` 承载），不进任何哈希输入 | `encPTokList`、`decPTokListComplete`、`encTok`、`decTok` |
 | `Canonical.Elab` | 接口载荷与哈希输入域：`DtDef` / `DtData` / `DtCtor` / `DtInst` / `DtClass` / `RecordMeta` / `ExportEntry` / `FixityDecl` / `Import` / `ModDecl`（span 丢弃、字段全覆盖） | `encDtDef`、`encDtData`、`encExportEntry`、`encRecordMeta`、`encFixity`、`encModDecl` |
-| `Query` | 查询图骨架：按 key 记忆化、依赖摘要快照、early cutoff（重算后摘要不变则下游仍命中）、可观测 trace；并行 / 取消留给后续 | `query`、`dbEmpty`、`dbTrace`、`digestOfVal` |
+| `Query` | 查询图**纯核心**：按 key 记忆化、顺序无关的依赖快照（D-Q3）、early cutoff、动态依赖（`queryWith` 观测依赖）、可观测 trace（`hit` / `cutoff` / `miss`）| `query`、`queryWith`、`queryHit`、`queryResolve`、`dbEmpty`、`dbTraceText`、`digestOfVal` |
+| `Query.Run` | 查询图**Eff 层**：预算（逻辑步数）、自环 / 栈环检测、会话索引持久化（`Store` + codec `query-index 1`，路径 `<cache>/query/<包桶>/index`）；并行 / 抢占式取消不在本轮 | `RunOpts`、`runNode`、`runNote`、`sessionLoad`、`sessionSave` |
 | `Frontend.Ast` | 语法类型与 AST helper（`Expr`/`Decl`/`Pat`/`Ctor`/`Import`/`ModDecl`/`TraitMethod`） | `clausesFor`、`funArity`、`declNames` |
 | `Frontend.Lexer` | 字符游标、token 与位置；注释单独 lex 出来供 formatter 使用 | `lexSource`、`lexComments` |
 | `Frontend.Cst` | 无损 CST 词法层：token 携带前置 trivia（空白 / 行注释 / 块注释）与 span，`renderCst` 逐字节还原源码；宏 / 格式化 / LSP 的 span 映射基础 | `lexCst`、`renderCst`、`roundtripOk` |
@@ -80,7 +81,7 @@
 | `Driver.CompilerCli` | 编译器自己的 CLI（`vuna-compiler`）；含受限进程执行入口 `runIn`；workspace check/build 单元、`build --package`、`version` | `runCompilerCli`、`compilerUsageLines`、`runIn` |
 | `Version` | 版本号唯一真源；产品 CLI / `vuna-compiler` / build meta / VSCode 探测共用 | `vunaVersion` |
 
-`compiler/vuna.toml` 的 `[export]` 列出全部 76 个导出模块（上列 8 个内部模块不在内）；
+`compiler/vuna.toml` 的 `[export]` 列出全部 77 个导出模块（上列 8 个内部模块不在内）；
 `[capabilities] effects` 声明六个能力（编译器直接使用 `prim_*`）。工具链模块不在此包。
 
 ## 根包工具链模块（`lib/`，不进 seed）

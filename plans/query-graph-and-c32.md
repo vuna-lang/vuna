@@ -204,7 +204,7 @@ Lead：阶段门禁（`vuna check .`、suite、bench、`nix flake check`、rotat
 ## 进度
 
 - [x] 阶段 0：Store + codec + 删 Marshal + clean 命令（**偏差已登记，见下**）
-- [ ] 阶段 1：Query v2 + Query.Run
+- [x] 阶段 1：Query v2 + Query.Run（纯核心三段式 + Eff 层预算/环/会话索引）
 - [ ] 阶段 2：Driver.Graph 接 check/build/compile
 - [ ] 阶段 3：LSP / REPL 接图
 - [ ] 阶段 4：test / doc / index 接图
@@ -241,3 +241,24 @@ token 流带位置 ⇒ 重放 parse 与冷路径逐字节一致；且 lexer 占 
 
 阶段 0 门禁实测（本机 16 核，改后二进制）：warm `check compiler` 28–30 ms（门槛 43）、
 warm `check .` 56–57 ms（门槛 78）；全量 suite **5551 checks / 0 failed**。
+
+### 阶段 1 落地记录（2026-11-12）
+
+`Query` 改成**三段式**纯核心，Eff 层复用同一套判据：
+
+- `queryHit db key deps`（判命中：声明集合一致 + 观测依赖摘要未变）、
+  `queryDepValues`（取依赖值喂 compute）、`queryResolve`（算完提交，判 cutoff/miss）；
+  `query` / `queryWith` 只是这三段的组合。
+- `QVal = QMarker | QBytes | QRef`（D-Q4）；`Entry` 增 `entryDeclared`（上次声明的 dep key
+  集合）与 `entryHits`、`entryOrigin`（与 iface `meOrigin` 同语义）。
+- **依赖比较顺序无关**（D-Q3，两侧都排序后逐项比），推翻旧头注释第 5 条。
+- 动态依赖的判据是**观测依赖**，但「声明集合变化」也算失效：只按观测表判命中会让
+  「新增一个依赖」永远看不见（新 key 不在观测表里），所以两条一起用。
+- `Query.Run`（新模块，Eff）：`RunOpts`/`RunState`、`runNode`（命中 → 预算 → compute →
+  纯提交）、自环（key ∈ deps）与栈环（`rsStack`）检测、`sessionLoad`/`sessionSave`
+  （`Store` + codec `query-index 1`，路径 `<cache>/query/<包桶>/index`，`writeIfChanged`）。
+  **并行与抢占式取消不在本轮**：`EffSched` 的取消只在任务边界生效，run 层用「预算耗尽」
+  作为唯一协作式取消形态，强杀留给进程级超时。
+- §64（`examples/infra`）扩到 25 条断言：原有 miss/hit/cutoff 三条不变，新增
+  `query-order`（反序声明仍命中）、`query4`（动态依赖 hit）、`query5`（声明集合变 ⇒
+  cutoff）、`query-marker`（QVal 三形态渲染的单射性锁死）。
