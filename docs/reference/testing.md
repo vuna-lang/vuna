@@ -384,7 +384,7 @@ interp / compile 文案不同时用 `.compile.err`。
 - `ir-boundary`：IR 边界结构性守卫（`Vuna.Compiler.Ir*` 不得 import
   Core/Elab/Intrinsics/Codegen；文本生成层 `Codegen.{Decl,Term,Assembly}` 与门面不得
   import Core/Elab/Intrinsics；`Codegen/Lower.vuna` 是唯一的上游消费者；`Codegen.Split`
-  必须路由到 Lower；生成层必须 import IR），见 [ir.md](ir.md)；
+  必须路由到 Lower 且不得 import Core/Intrinsics；生成层必须 import IR），见 [ir.md](ir.md)；
 - `diag-coverage` / `diag-style` / `diag-raw`：诊断码覆盖基线、文案模板规范、
   compiler 源码诊断必须走域码（见 [diagnostics.md](diagnostics.md)）；
 - **`check` 的覆盖边界**：`vuna check <pkg>` 只检查**该包入口的 import 闭包**——可执行包

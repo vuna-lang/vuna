@@ -22,7 +22,7 @@ Loader → Elab → Core ──Lower──> IR ──Codegen.{Decl,Term,Assembly
 
 | 边界 | 规则 | 守护 |
 | --- | --- | --- |
-| 依赖方向 | `Ir*` 不 import `Core` / `Elab` / `Intrinsics` / `Codegen`；后端（`Codegen` 门面与 `Decl`/`Term`/`Assembly`/`Split`）不 import `Core` / `Elab` / `Intrinsics`，唯一例外是 `Codegen/Lower.vuna` | `checks.ir-boundary`（`nix/checks/ir-boundary.sh`） |
+| 依赖方向 | `Ir*` 不 import `Core` / `Elab` / `Intrinsics` / `Codegen`；文本生成层（`Codegen` 门面与 `Decl`/`Term`/`Assembly`）不 import `Core` / `Elab` / `Intrinsics`，唯一的上游消费者是 `Codegen/Lower.vuna`。`Codegen/Split.vuna` 按声明归属切分，因此允许 import `Elab`（`DtProgram`/`DtDef`/`DtData` 是切分单位），但 `Core` / `Intrinsics` 一律不许，且必须路由到 `Codegen.Lower` | `checks.ir-boundary`（`nix/checks/ir-boundary.sh`） |
 | 名字 | IR 节点里只有**源码名**与已确定的运行时符号（`IrRuntime` / `IrBridge`）；`v_` / `t_` / `C_` / `f_` 前缀、转义、`Unit.` 限定都属于后端 | 同上 + review |
 | 数据 | IR 只有确定性纯数据（`String` / `Int` / `Bool` / `List` / `Pair` / `Maybe` / `Span`）：不含闭包、`HashMap`、`Value`、`Term` | `Ir.Model` 的 import 面 |
 

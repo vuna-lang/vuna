@@ -151,7 +151,8 @@ Track A 第一步（Core → IR → OCaml）之后这些不变量分两层：**�
 - **依赖分组**：Kosaraju SCC（`Ir.Analysis.assembleGroupNames`）在 Lowering 期算出，结果带
   `irGroupIsRec`；自 / 互递归才用 `let rec ... and ...`；零参顶层定义生成 `let v_x = body`。
 - **边界护栏**：`checks.ir-boundary`（`nix/checks/ir-boundary.sh`）静态断言「IR 不 import
-  上游、文本生成层不 import Core/Elab/Intrinsics、Split 必须路由到 Lower」。
+  上游、文本生成层不 import Core/Elab/Intrinsics、Split 必须路由到 Lower 且不碰
+  Core/Intrinsics」。
 
 ## 8. 实现入口
 

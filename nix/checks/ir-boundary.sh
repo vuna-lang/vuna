@@ -5,7 +5,7 @@
 #           `Codegen.Split` 只做「归属表 + 按归属过滤 + 分文件」，每个单元都经
 #           `Codegen.Lower` 出 `IrUnit` 再交给 `Codegen.Assembly` 装配。
 #
-# 四条规则（违反即失败）：
+# 五条规则（违反即失败）：
 #   1. `Vuna.Compiler.Ir*`（IR 模型与分析）不得依赖任何上游/目标侧模块：
 #      不许 import `Vuna.Compiler.Core*`、`Vuna.Compiler.Elab*`、`Vuna.Compiler.Intrinsics`、
 #      `Vuna.Compiler.Codegen*`。IR 只认「源码名 + 已决策的表示形状」。
@@ -16,8 +16,10 @@
 #   3. 正向断言：`Codegen/Lower.vuna` 存在且 import 了 `Core`/`Elab`（Core → IR 的
 #      唯一入口；防止「删了直连路径也删了 lowering」）。
 #   4. 正向断言：`Codegen.Split` 经 `Codegen.Lower` 出 IR（而不是自己拿 `DtDef` 拼文本）。
-#      Split 需要 `DtProgram`（归属表与按单元过滤都以声明为单位），所以它是这条链上
-#      唯一允许 import `Elab` 的后端模块；但它必须路由到 Lower。
+#      Split 仍要按声明归属切分，所以它是这条链上唯一允许 import `Elab` 的后端模块
+#      （`DtProgram` / `DtDef` / `DtData` 是切分单位）；但 `Core` / `Intrinsics` 一律不许
+#      ——擦除判据与 runtime 名映射都在 Lowering。
+#   5. 正向断言：文本生成层都消费 IR（避免留下未迁移的死路径）。
 #
 # 只扫 `import` / `export import` 行（vuna 的模块依赖面就是这些行）。
 set -eu
@@ -74,13 +76,14 @@ else
   fi
 fi
 
-# 规则 4：Split 必须路由到 Lowering。
+# 规则 4：Split 必须路由到 Lowering，且不得自己消费 Core / Intrinsics。
 SPLIT=compiler/lib/Vuna/Compiler/Codegen/Split.vuna
 if [ -f "$SPLIT" ]; then
   if ! imports_of "$SPLIT" | grep -qE '^Vuna\.Compiler\.Codegen\.Lower$'; then
     echo "ir-boundary: $SPLIT does not import Vuna.Compiler.Codegen.Lower (must lower per unit)"
     fail=$((fail + 1))
   fi
+  check_forbidden "$SPLIT" '^(Vuna\.Compiler\.(Core|Intrinsics)(\.|$))'
 fi
 
 # 规则 5（正向断言）：文本生成层都消费 IR（避免留下未迁移的死路径）。
