@@ -107,7 +107,7 @@ in
       VUNA = "${vuna}/bin/vuna";
       VUNA_SEED = "${vuna-seed}/bin/vuna-seed";
     };
-    nativeBuildInputs = ocamlTools ++ [ pkgs.util-linux ];
+    nativeBuildInputs = ocamlTools ++ [ pkgs.util-linux pkgs.git ];
     script = ./vuna-tests.sh;
   };
 
