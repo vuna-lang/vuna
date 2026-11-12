@@ -516,9 +516,7 @@ parseDecl st blockCol = case peekTok st of
   PTok (TKw "linear") p => parseLinearDecl st blockCol p
   -- records-v2：表示档位前缀只允许 record（A2：data 收归位置/求和类型）。
   -- D11：`alias` / `boxed` 是软关键字（只在紧跟 record/linear record 时生效）；
-  -- `transparent` / `opaque record` 是已退役旧写法（仅 parser 兼容）。
-  PTok (TKw "transparent") p => parseTieredDecl ReprAlias st blockCol p
-  PTok (TKw "opaque") p => parseTieredDecl ReprBoxed st blockCol p
+  -- 记录表示档位不再接受退役的 `transparent record` / `opaque record`。
   PTok (TKw "axiom") p => parseAxiom st blockCol p
   PTok (TKw "extern") p => parseExtern st blockCol p
   PTok (TKw "record") p => parseRecord False ReprAuto st blockCol p
