@@ -361,3 +361,21 @@ warm `check .` 56–57 ms（门槛 78）；全量 suite **5551 checks / 0 failed
   于是只能用 mtime 启发式倒推）——这正是图模型能删掉 `toolSessionFresh` 的原因。
 - 待做：`lib/Vuna/Tool/Session.vuna`（`toolHit`/`toolCommit` + blob 读写）、REPL 三处缓存迁移、
   LSP `DiagCache` 迁移、Index/Doc 接图。
+
+### 合并与对齐记录（2026-11-12）
+
+并发会话的 `acd96e8`（删除 manifest 能力/特权/信任门控 + seed rotation）已合入
+`query-graph-nodes`（merge 提交 `2bc0d39`），冲突四处按主题取舍：
+
+- `compiler.md`：保留 `Driver.Graph` 并补 `Driver.ToolPayload` 行；计数按合并后实测
+  **87 模块 / 79 导出**；`[export]` 段落采用 main 的「无 manifest 门控」措辞。
+- `52_cache_framing.steps`：重写成同时覆盖两侧断言——52a 产物 blob（`vuna-split-node 1` /
+  `split-files 1`）、52a2 单元缓存（`vuna-unit-cache 2` / `split-file 1`）、52b/52c blob
+  截断与篡改、52d 查询图索引、52e/52f lex。
+- `OverlapB.vuna`：取 main 的 800ms（比本分支 500ms 更稳）。
+- 快照：以 main 为基线重生成（能力字段删除 + 新模块/导出）。
+
+合并后验证（main 工作树、`nix build .#vuna` 新二进制）：`vuna check .` 通过、
+`vuna fmt --check compiler lib app examples` 通过、`nix/check-eff-boundary.sh` ok、
+section 90 **1397 checks / 0 failed**、全量 suite **5490 checks / 0 failed**、
+warm `check compiler` **29 ms**（门槛 43）/ `check .` **53 ms**（门槛 78）。
