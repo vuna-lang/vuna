@@ -1398,6 +1398,7 @@ elabFunDefIn globals ctx0 ec ([Pair pats body]) expected sp =
 elabFunDefIn globals ctx0 ec clauses expected sp =
   elabFunDefMulti globals ctx0 ec clauses expected sp
 
+-- | 多个 clause / 方程左端模式的精化入口（MULTI / CHECKDEF 打点）。
 elabFunDefMulti : List (Pair String Term) -> Ctx -> Ec -> List (Pair (List Pat) Expr) -> Value -> Span -> Check (Pair Term Ec)
 elabFunDefMulti globals ctx0 ec clauses expected sp =
   let
