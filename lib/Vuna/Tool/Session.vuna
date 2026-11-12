@@ -1,0 +1,101 @@
+-- | 工具会话层：工具链（LSP / REPL / doc / index）共用的查询图会话。
+module Vuna.Tool.Session
+  ( ToolSession(..)
+  , toolBlobPath
+  , toolBlobTag
+  , toolCommitValue
+  , toolHitValue
+  , toolLoadPayload
+  , toolSessionNew
+  , toolStorePayload
+  ) where
+
+-- Vuna.Tool.Session：工具链侧对 `Query`（纯核心）+ `Query.Run`（Eff 层）的薄封装。
+--
+-- 设计（阶段 3）：
+--   * 所有工具共用**同一个 `Db`**：不再有 `DiagCache` / `stateAuxCache` / `stateToolSession`
+--     各自一套 mtime 启发式；
+--   * 大值（`ToolContext` / `Index` 记录树）走「`QRef` = 内容地址 + blob」：节点里只存
+--     64 位十六进制摘要，载荷落在 `<cache>/blobs/<digest>`（与 codegen 产物同一个 blob 树，
+--     内容寻址天然去重）；
+--   * 会话索引按桶持久化（`sessionLoad` / `sessionSave`），桶名由调用方给定
+--     （`tool` origin，`tool:<包>` / `index:<目录>` 之类）——工具进程长驻时命中不落盘，
+--     跨进程重启才读索引。
+--
+-- 这里**不**做失效判定：那是 `Query.queryHit` 的事（声明集合 + 观测依赖摘要）。本模块只负责
+-- 「取节点 → 读 blob → 解出记录」与「写 blob → 提交节点 → 落索引」这两条固定流程。
+import Base.Host
+import Base.Maybe
+import Base.String
+import Vuna.Compiler.Driver.Compile
+import Vuna.Compiler.Hash
+import Vuna.Compiler.Query
+import Vuna.Compiler.Query.Run
+import Vuna.Compiler.Store
+
+-- | 工具会话：一个 `Db` + 持久化配置。
+record ToolSession where
+  tsDb : Db
+  tsOpts : RunOpts
+
+-- | 新建会话（`origin` 用 `tool`；`bucket` 决定索引落到哪个桶）。
+toolSessionNew : String -> String -> ToolSession
+toolSessionNew origin bucket = ToolSession dbEmpty (RunOpts origin 0 True bucket)
+
+-- | 从磁盘索引恢复会话（没有索引 ⇒ 空 `Db`）。
+toolSessionResume : ToolSession -> Eff [] ToolSession
+toolSessionResume ts = do
+  db <- sessionLoad ts.tsOpts
+  pure (ToolSession db ts.tsOpts)
+
+-- | 命中：返回节点里的载荷地址（`QRef` 的摘要）或 `QMarker` 的 `Nothing`。
+toolHitValue : ToolSession -> String -> List String -> Eff [] (Maybe (Maybe String))
+toolHitValue ts key deps = do
+  resumed <- toolSessionResume ts
+  pure (case queryHit resumed.tsDb key deps of
+    Nothing => Nothing
+    Just QMarker => Just Nothing
+    Just (QBytes _) => Just Nothing
+    Just (QRef digest) => Just (Just digest)
+  )
+
+-- | 提交 `QMarker` 节点（成功但无载荷）。
+toolCommitValue : ToolSession -> String -> List String -> Eff [] ToolSession
+toolCommitValue ts key deps = do
+  resumed <- toolSessionResume ts
+  db <- pure (firstOf (queryResolve resumed.tsDb key deps (Pair QMarker [])))
+  _ <- sessionSave ts.tsOpts db
+  pure (ToolSession db ts.tsOpts)
+
+-- | 写 blob 并提交 `QRef` 节点（值 = 内容地址；载荷按内容寻址去重）。
+toolStorePayload : ToolSession -> String -> List String -> String -> String -> Eff [] (Pair ToolSession String)
+toolStorePayload ts key deps codec payload = do
+  digest <- pure (contentAddress payload)
+  tag <- toolBlobTag
+  path <- toolBlobPath digest
+  base <- storeCacheBaseEff
+  _ <- storeEnsureDirEff "${base}/blobs"
+  _ <- storeWriteIfChangedAsEff tag codec digest path payload
+  resumed <- toolSessionResume ts
+  db <- pure (firstOf (queryResolve resumed.tsDb key deps (Pair (QRef digest) [])))
+  _ <- sessionSave ts.tsOpts db
+  pure (Pair (ToolSession db ts.tsOpts) digest)
+
+-- | 读 blob（framing 全量校验 + 内容地址比对；任何不符 ⇒ `Nothing` ⇒ 调用方重算）。
+toolLoadPayload : String -> String -> Eff [] (Maybe String)
+toolLoadPayload digest codec = do
+  tag <- toolBlobTag
+  path <- toolBlobPath digest
+  storeReadAsEff tag codec digest path
+
+-- | blob 路径：`<cache>/blobs/<digest>`（与 codegen 产物共用）。
+toolBlobPath : String -> Eff [] String
+toolBlobPath digest = do
+  base <- storeCacheBaseEff
+  pure "${base}/blobs/${digest}"
+
+-- | blob 的 framing tag：schema + 编译器指纹（换二进制整套失效）。
+toolBlobTag : Eff [] String
+toolBlobTag = do
+  fp <- toolCompilerFingerprint
+  pure "vuna-tool-blob 1/${strFromInt fp}"
