@@ -554,7 +554,7 @@ let rec v_Vuna_dCompiler_dCore_dTerm_dcountLams = (fun mc0 -> (match mc0 with
 let rec v_Vuna_dCompiler_dCore_dTerm_dhasFreeTermVar = (fun mc0 mc1 -> (match mc1 with
   | C_Vuna_dCompiler_dCore_dTerm_dTerm_TIf (dtb__488, dtb__489, dtb__490) -> (if (if ((v_Vuna_dCompiler_dCore_dTerm_dhasFreeTermVar mc0) dtb__488) then true else ((v_Vuna_dCompiler_dCore_dTerm_dhasFreeTermVar mc0) dtb__489)) then true else ((v_Vuna_dCompiler_dCore_dTerm_dhasFreeTermVar mc0) dtb__490))
   | C_Vuna_dCompiler_dCore_dTerm_dTerm_TCase (dtb__491, dtb__492) -> (if ((v_Vuna_dCompiler_dCore_dTerm_dhasFreeTermVar mc0) dtb__491) then true else ((v_Vuna_dCompiler_dCore_dTerm_danyAltFree mc0) dtb__492))
-  | C_Vuna_dCompiler_dCore_dTerm_dTerm_TRecUpd (dtb__493, dtb__494, dtb__495, dtb__496, dtb__497) -> (if ((v_Vuna_dCompiler_dCore_dTerm_dhasFreeTermVar mc0) dtb__493) then true else ((v_Vuna_dCompiler_dCore_dTerm_dhasFreeTermVar mc0) dtb__497))
+  | C_Vuna_dCompiler_dCore_dTerm_dTerm_TRecUpd (dtb__493, dtb__494, dtb__495, dtb__496, dtb__497) -> (if ((v_Vuna_dCompiler_dCore_dTerm_dhasFreeTermVar mc0) dtb__493) then true else ((v_Vuna_dCompiler_dCore_dTerm_dhasFreeTermVar (mc0 + (Base_dList.v_Base_dList_dlength dtb__495))) dtb__497))
   | C_Vuna_dCompiler_dCore_dTerm_dTerm_TProj (dtb__498, dtb__499, dtb__500, dtb__501, dtb__502) -> ((v_Vuna_dCompiler_dCore_dTerm_dhasFreeTermVar mc0) dtb__498)
   | C_Vuna_dCompiler_dCore_dTerm_dTerm_TRecord (dtb__503, dtb__504) -> ((v_Vuna_dCompiler_dCore_dTerm_danyPairFree mc0) dtb__504)
   | C_Vuna_dCompiler_dCore_dTerm_dTerm_TMk (dtb__505, dtb__506) -> ((v_Vuna_dCompiler_dCore_dTerm_danyPairFree mc0) dtb__506)

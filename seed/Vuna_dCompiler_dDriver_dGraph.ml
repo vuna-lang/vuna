@@ -19,10 +19,4 @@ let v_Vuna_dCompiler_dDriver_dGraph_dgraphCheckMods = (fun m -> (Base_dList.C_Ba
 
 let v_Vuna_dCompiler_dDriver_dGraph_dgraphRunOpts = (fun pkg -> { Vuna_dCompiler_dQuery_dRun.f_Vuna_dCompiler_dQuery_dRun_dRunOpts_roOrigin = "pkg"; Vuna_dCompiler_dQuery_dRun.f_Vuna_dCompiler_dQuery_dRun_dRunOpts_roBudget = 0; Vuna_dCompiler_dQuery_dRun.f_Vuna_dCompiler_dQuery_dRun_dRunOpts_roPersist = true; Vuna_dCompiler_dQuery_dRun.f_Vuna_dCompiler_dQuery_dRun_dRunOpts_roBucket = pkg })
 
-let v_Vuna_dCompiler_dDriver_dGraph_dgraphHit = (fun db key mods -> (((Vuna_dCompiler_dQuery.v_Vuna_dCompiler_dQuery_dqueryHit db) key) (v_Vuna_dCompiler_dDriver_dGraph_dgraphCheckMods mods)))
-
-let v_Vuna_dCompiler_dDriver_dGraph_dgraphCommit = (fun db key mods -> (Base_dPair.v_Base_dPair_dfirstOf ((((Vuna_dCompiler_dQuery.v_Vuna_dCompiler_dQuery_dqueryResolve db) key) (v_Vuna_dCompiler_dDriver_dGraph_dgraphCheckMods mods)) { Base_dPair.f_Base_dPair_dPair_first = Vuna_dCompiler_dQuery.C_Vuna_dCompiler_dQuery_dQVal_QMarker; Base_dPair.f_Base_dPair_dPair_second = Base_dList.C_Base_dList_dList_Nil })))
-
 let v_Vuna_dCompiler_dDriver_dGraph_dgraphCommitRef = (fun db key mods digest -> (Base_dPair.v_Base_dPair_dfirstOf ((((Vuna_dCompiler_dQuery.v_Vuna_dCompiler_dQuery_dqueryResolve db) key) (v_Vuna_dCompiler_dDriver_dGraph_dgraphCheckMods mods)) { Base_dPair.f_Base_dPair_dPair_first = (Vuna_dCompiler_dQuery.C_Vuna_dCompiler_dQuery_dQVal_QRef (digest)); Base_dPair.f_Base_dPair_dPair_second = Base_dList.C_Base_dList_dList_Nil })))
-
-let v_Vuna_dCompiler_dDriver_dGraph_dgraphNote = (fun db kind key -> ((Vuna_dCompiler_dQuery.v_Vuna_dCompiler_dQuery_ddbNote db) (String.concat "" [kind; " "; key])))
