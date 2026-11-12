@@ -8,7 +8,7 @@
 #
 # 另两条（M34.6）：
 #   - **包内增量**：改一个叶子模块后 `check .` 必须明显快于冷路径（否则逐模块增量失效）；
-#   - **工具链接口路径**：REPL 默认应走 `iface-source=repl`，不应回退全量。
+#   - **工具链接口路径**：REPL 默认应走 `query-source=repl`，不应回退全量。
 set -eu
 out=$1
 vuna=${VUNA:?}
@@ -52,14 +52,14 @@ if [ "$incr_parses" -gt 20 ]; then
 fi
 
 # 工具链接口路径默认开启：REPL 一次求值应命中 iface 路径，且结果正确；如果回退全量
-# （iface-fallback）或根本没走接口（无 iface-source=repl），说明默认开关/闭包/安全阀坏了。
+# （iface-fallback）或根本没走接口（无 query-source=repl），说明默认开关/闭包/安全阀坏了。
 repl_out=$(printf 'import Base.List\nlength [1, 2, 3]\n:q\n' | TMPDIR="${TMPDIR:-/tmp}" VUNA_DEBUG_PERF=1 "$vuna" repl 2>&1)
 echo "$repl_out" | grep -qE '(^| )3$' || {
   echo "FAIL: REPL iface evaluation produced wrong result" >&2
   echo "$repl_out" | tail -5 >&2
   exit 1
 }
-echo "$repl_out" | grep -q 'iface-source=repl' || {
+echo "$repl_out" | grep -q 'query-source=repl' || {
   echo "FAIL: REPL did not use the interface path (default-on broken)" >&2
   exit 1
 }
