@@ -793,13 +793,12 @@ isBuiltinHostLabel (VNeutral (NGlobal g _)) = isBuiltinEffectTag g
 isBuiltinHostLabel _ = False
 
 isBuiltinHostRowValue : Value -> Bool
-isBuiltinHostRowValue v = case v of
-  VCon g args => if g == effRowNilCtor then True
-  else if g == effRowConsCtor then case args of
-    _ :: label :: tail :: _ => isBuiltinHostLabel label && isBuiltinHostRowValue tail
-    _ => False
-  else False
+isBuiltinHostRowValue (VCon g args) = if g == effRowNilCtor then True
+else if g == effRowConsCtor then case args of
+  _ :: label :: tail :: _ => isBuiltinHostLabel label && isBuiltinHostRowValue tail
   _ => False
+else False
+isBuiltinHostRowValue _ = False
 
 -- | 入口行检查：`main : Eff [] a` 或 `Eff [内建宿主效应] a`；其余行报未处理效应。
 mainEntryRowCheck : Ec -> List (Pair String Term) -> Span -> Term -> Check Int

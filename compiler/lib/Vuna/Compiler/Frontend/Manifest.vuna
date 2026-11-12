@@ -140,14 +140,12 @@ orFalse (Just b) = b
 
 -- 依赖表 section：`[dependencies.<alias>]`（长度恰为 2，首段固定）。
 isDepTableSection : List String -> Bool
-isDepTableSection section = case section of
-  [first, second] => first == "dependencies"
-  _ => False
+isDepTableSection ([first, second]) = first == "dependencies"
+isDepTableSection _ = False
 
 depAliasOfSection : List String -> String
-depAliasOfSection section = case section of
-  [first, second] => second
-  _ => ""
+depAliasOfSection ([first, second]) = second
+depAliasOfSection _ = ""
 
 isDepSourceKey : String -> Bool
 isDepSourceKey key = key == "path" || key == "git" || key == "rev" || key == "url" || key == "hash"
@@ -204,9 +202,8 @@ setAccHash : String -> DepAcc -> DepAcc
 setAccHash s acc = { acc | depAccHash = Just s }
 
 stringValueOf : String -> String -> TomlValue -> Int -> Check String
-stringValueOf path key value line = case value of
-  TStr s => OkC s
-  _ => pkgAt1 path line (ExpectedString key) key
+stringValueOf path key (TStr s) line = OkC s
+stringValueOf path key _ line = pkgAt1 path line (ExpectedString key) key
 
 -- | 把一条依赖表字段写进累积状态（未知 key 已由 checkOneEntry 拒绝）。
 applyDepEntry : String -> String -> String -> TomlValue -> Int -> List DepAcc -> Check (List DepAcc)
@@ -296,9 +293,9 @@ validHashText s =
   else strLength s == 64 && allHex (strUnpack s)
 
 checkHashForm : String -> String -> Maybe String -> Check Int
-checkHashForm path alias hashArg = case hashArg of
-  Nothing => OkC 0
-  Just h => if validHashText h then OkC 0 else pkgPath1 path (HashMalformed h) h
+checkHashForm path alias Nothing = OkC 0
+checkHashForm path alias (Just h) =
+  if validHashText h then OkC 0 else pkgPath1 path (HashMalformed h) h
 
 validateDependency : String -> Dependency -> Check Int
 validateDependency path (Dependency alias source hashArg) = if alias == "" then pkgPath0 path EmptyDependencyName

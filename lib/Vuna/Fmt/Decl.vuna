@@ -109,33 +109,30 @@ mapFirstLineContaining needle f (line :: rest) =
   if contains needle line then f line :: rest else line :: mapFirstLineContaining needle f rest
 
 applyDeclMods : FmtDeclMods -> Decl -> List String -> List String
-applyDeclMods mods decl lines = case decl of
-  DInstance ctxE head methods sp => lines
-  DFun name pats body sp => lines
-  _ =>
-    let
-      name = declFmtName decl
-      prefix = lookupText name mods.fdmPrefix
-      members = membersSuffix (lookupMembersText name mods.fdmMembers)
-      marker = case decl of
-        DData _ _ _ _ _ _ _ _ _ => "data ${name}"
-        DRecord _ _ _ _ _ _ _ _ => "record ${name}"
-        DTrait _ _ _ _ => "trait ${name}"
-        DAxiom _ _ _ => "axiom ${name}"
-        DExtern _ _ _ _ => "extern ${name}"
-        DSig _ _ _ _ => "${name} :"
-        _ => ""
-      afterPrefix = mapFirstLineContaining marker (\line => prefix ++ line) lines
-    in case decl of
-      DData _ _ _ _ _ _ _ _ _ =>
-        mapFirstLineContaining marker (\line => insertBeforeMarker " : " members line) afterPrefix
-      DRecord _ _ _ _ _ _ _ _ =>
-        mapFirstLineContaining marker (\line => insertBeforeMarker " where" members line)
-          afterPrefix
-      DTrait _ _ _ _ =>
-        mapFirstLineContaining marker (\line => insertBeforeMarker " where" members line)
-          afterPrefix
-      _ => afterPrefix
+applyDeclMods mods (DInstance ctxE head methods sp) lines = lines
+applyDeclMods mods (DFun name pats body sp) lines = lines
+applyDeclMods mods decl lines =
+  let
+    name = declFmtName decl
+    prefix = lookupText name mods.fdmPrefix
+    members = membersSuffix (lookupMembersText name mods.fdmMembers)
+    marker = case decl of
+      DData _ _ _ _ _ _ _ _ _ => "data ${name}"
+      DRecord _ _ _ _ _ _ _ _ => "record ${name}"
+      DTrait _ _ _ _ => "trait ${name}"
+      DAxiom _ _ _ => "axiom ${name}"
+      DExtern _ _ _ _ => "extern ${name}"
+      DSig _ _ _ _ => "${name} :"
+      _ => ""
+    afterPrefix = mapFirstLineContaining marker (\line => prefix ++ line) lines
+  in case decl of
+    DData _ _ _ _ _ _ _ _ _ =>
+      mapFirstLineContaining marker (\line => insertBeforeMarker " : " members line) afterPrefix
+    DRecord _ _ _ _ _ _ _ _ =>
+      mapFirstLineContaining marker (\line => insertBeforeMarker " where" members line) afterPrefix
+    DTrait _ _ _ _ =>
+      mapFirstLineContaining marker (\line => insertBeforeMarker " where" members line) afterPrefix
+    _ => afterPrefix
 
 -- 声明渲染
 -- ---------------------------------------------------------------
