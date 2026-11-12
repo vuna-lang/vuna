@@ -8,7 +8,7 @@ run: sh -c 'for mf in "$TMPDIR/iface-audit-pkg"/*/vuna.toml; do sed "s|vuna-base
 run: sh -c 'TMPDIR="$TMPDIR/iface-audit-cache" "$VUNA" check "$TMPDIR/iface-audit-pkg/dep" && TMPDIR="$TMPDIR/iface-audit-cache" "$VUNA" check "$TMPDIR/iface-audit-pkg/mid"'
 exit: 0
 # dep 隐藏 foo（Mid 用到 Dep.foo）：实现体不变、只改导出面。
-run: sh -c 'cp "$TMPDIR/iface-audit-pkg/dep/lib/Dep.vuna" "$TMPDIR/audit-dep-orig.vuna"; printf "%s\n" "module Dep (bar) where" "" "foo : Int" "foo = 1" "" "bar : Int" "bar = 2" > "$TMPDIR/iface-audit-pkg/dep/lib/Dep.vuna"'
+run: sh -c 'cp "$TMPDIR/iface-audit-pkg/dep/lib/Dep.vuna" "$TMPDIR/audit-dep-orig.vuna"; printf "%s\n" "module Dep where" "" "foo : Int" "foo = 1" "" "export bar : Int" "bar = 2" > "$TMPDIR/iface-audit-pkg/dep/lib/Dep.vuna"'
 run: sh -c 'find "$TMPDIR/iface-audit-cache"/vuna-cache -name query -type d -prune -exec rm -rf {} + 2>/dev/null || true'
 run: sh -c 'TMPDIR="$TMPDIR/iface-audit-cache" "$VUNA" check "$TMPDIR/iface-audit-pkg/dep"'
 # 摘要路径：必须判脏并报错（退出码 1）；诊断去掉 DEBUG 行后落盘，供全量路径逐字节对拍。

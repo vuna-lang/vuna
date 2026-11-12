@@ -41,7 +41,7 @@ run: cache="$TMPDIR/iface-enum-cache"; root="$TMPDIR/iface-enum-root"; TMPDIR="$
 exit: 0
 out-contains: iface-write=0/
 # 57d) 同名不同目录：同一镜像根下各占一棵树，不互相覆盖（旧实现按包名哈希会互踩）。
-run: a="$TMPDIR/iface-same-a"; b="$TMPDIR/iface-same-b"; mkdir -p "$a/lib" "$b/lib"; printf '[package]\nname = "iface-same"\n\n[export]\nmodules = ["SA"]\n' >"$a/vuna.toml"; printf '[package]\nname = "iface-same"\n\n[export]\nmodules = ["SB"]\n' >"$b/vuna.toml"; printf 'module SA (saVal) where\n\nsaVal : Int\nsaVal = 1\n' >"$a/lib/SA.vuna"; printf 'module SB (sbVal) where\n\nsbVal : Int\nsbVal = 2\n' >"$b/lib/SB.vuna"
+run: a="$TMPDIR/iface-same-a"; b="$TMPDIR/iface-same-b"; mkdir -p "$a/lib" "$b/lib"; printf '[package]\nname = "iface-same"\n\n[export]\nmodules = ["SA"]\n' >"$a/vuna.toml"; printf '[package]\nname = "iface-same"\n\n[export]\nmodules = ["SB"]\n' >"$b/vuna.toml"; printf 'module SA where\n\nexport saVal : Int\nsaVal = 1\n' >"$a/lib/SA.vuna"; printf 'module SB where\n\nexport sbVal : Int\nsbVal = 2\n' >"$b/lib/SB.vuna"
 exit: 0
 run: cache="$TMPDIR/iface-same-cache"; root="$TMPDIR/iface-same-root"; TMPDIR="$cache" VUNA_IFACE_DIR="$root" "$VUNA" check "$TMPDIR/iface-same-a" 2>&1
 exit: 0

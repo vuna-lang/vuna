@@ -1,6 +1,6 @@
 # 54) REPL v2 加载矩阵：模块 / 目录 / 文件 / CLI 参数 / 包内浏览与检索 / 历史持久化。
 #     工作区夹具写在 case 私有 $TMPDIR（包上下文只依赖 $VUNA_BASE），不改工作树。
-run: sh -c 'rm -rf "$TMPDIR/repl-ws"; mkdir -p "$TMPDIR/repl-ws/lib"; printf "[package]\nname = \"replws\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$TMPDIR/repl-ws/vuna.toml"; printf "module Foo (greeting) where\n\ngreeting : String\ngreeting = \"hi\"\n" > "$TMPDIR/repl-ws/lib/Foo.vuna"; printf "answer : Int\nanswer = 42\n" > "$TMPDIR/repl-entry.vuna"'
+run: sh -c 'rm -rf "$TMPDIR/repl-ws"; mkdir -p "$TMPDIR/repl-ws/lib"; printf "[package]\nname = \"replws\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$TMPDIR/repl-ws/vuna.toml"; printf "module Foo where\n\nexport greeting : String\ngreeting = \"hi\"\n" > "$TMPDIR/repl-ws/lib/Foo.vuna"; printf "answer : Int\nanswer = 42\n" > "$TMPDIR/repl-entry.vuna"'
 # 模块加载 / 模块名错误。
 run: printf ':load Base.Nat\nZero\n:q\n' | "$VUNA" repl 2>&1
 out-contains: 已导入模块 Base.Nat

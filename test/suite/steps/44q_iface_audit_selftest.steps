@@ -8,7 +8,7 @@
 #      的 case 私有镜像根 `$VUNA_IFACE_DIR`，本包「冷」= 删镜像根下本包目录 + query store。
 run: sh -c 'mkdir -p "$TMPDIR/c49/pkg/lib" "$TMPDIR/c49/pkg/app"'
 run: sh -c 'printf "%s\n" "[package]" "name = \"c49rec\"" "" "[dependencies]" "vuna-base = \"$VUNA_BASE\"" > "$TMPDIR/c49/pkg/vuna.toml"'
-run: sh -c 'printf "%s\n" "module C49 (Box(..), bump) where" "" "record Box where" "  a : Int" "  b : Int" "" "bump : Box -> Box" "bump x = { x | a = x.a + 1 }" > "$TMPDIR/c49/pkg/lib/C49.vuna"'
+run: sh -c 'printf "%s\n" "module C49 where" "" "export record Box(..) where" "  a : Int" "  b : Int" "" "export bump : Box -> Box" "bump x = { x | a = x.a + 1 }" > "$TMPDIR/c49/pkg/lib/C49.vuna"'
 run: sh -c 'printf "%s\n" "import C49" "" "main : Int" "main = (bump (Box { a = 1, b = 2 })).a" > "$TMPDIR/c49/pkg/app/Main.vuna"'
 # 预热依赖包（base）接口到 case 私有镜像根：之后的「冷」只冷本包，避免多次全量精化 base。
 run: sh -c 'rm -rf "$TMPDIR/c49/cache"; TMPDIR="$TMPDIR/c49/cache" "$VUNA" check "$VUNA_BASE" >/dev/null 2>&1'

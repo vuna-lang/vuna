@@ -4,10 +4,10 @@
 # 夹具现场生成在 case 私有 $TMPDIR（vuna-base 直接指 $VUNA_BASE）。
 run: mkdir -p "$TMPDIR/iface-k-dep/lib" "$TMPDIR/iface-k-root/lib" "$TMPDIR/iface-k-root/app"
 run: printf '[package]\nname = "iface-k-dep"\n\n[export]\nmodules = ["KDep"]\n\n[dependencies]\nvuna-base = "%s"\n' "$VUNA_BASE" > "$TMPDIR/iface-k-dep/vuna.toml"
-run: printf 'module KDep (kdepVal, KBox(..), unKBox) where\n\ndata KBox : Type where\n  MkKBox : Int -> KBox\n\nunKBox : KBox -> Int\nunKBox (MkKBox n) = n\n\nkdepVal : Int\nkdepVal = 42\n' > "$TMPDIR/iface-k-dep/lib/KDep.vuna"
+run: printf 'module KDep where\n\nexport data KBox(..) : Type where\n  MkKBox : Int -> KBox\n\nexport unKBox : KBox -> Int\nunKBox (MkKBox n) = n\n\nexport kdepVal : Int\nkdepVal = 42\n' > "$TMPDIR/iface-k-dep/lib/KDep.vuna"
 run: printf '[package]\nname = "iface-k-root"\n\n[dependencies]\niface-k-dep = "%s"\nvuna-base = "%s"\n' "$TMPDIR/iface-k-dep" "$VUNA_BASE" > "$TMPDIR/iface-k-root/vuna.toml"
-run: printf 'module KInner (innerVal) where\n\nimport KDep\n\ninnerVal : Int\ninnerVal = kdepVal\n' > "$TMPDIR/iface-k-root/lib/KInner.vuna"
-run: printf 'module KOuter (outerVal) where\n\nimport KInner\n\nouterVal : Int\nouterVal = innerVal + 1\n' > "$TMPDIR/iface-k-root/lib/KOuter.vuna"
+run: printf 'module KInner where\n\nimport KDep\n\nexport innerVal : Int\ninnerVal = kdepVal\n' > "$TMPDIR/iface-k-root/lib/KInner.vuna"
+run: printf 'module KOuter where\n\nimport KInner\n\nexport outerVal : Int\nouterVal = innerVal + 1\n' > "$TMPDIR/iface-k-root/lib/KOuter.vuna"
 run: printf 'import KOuter\n\nmain : Int\nmain = outerVal\n' > "$TMPDIR/iface-k-root/app/Main.vuna"
 # 预热依赖/本包接口。
 run: "$VUNA" check "$VUNA_BASE"
