@@ -1,4 +1,4 @@
--- P3：单效应便捷入口 `runConsole` = `handleConsoleHost` + `runIOAnswer`。
+-- P3：单效应便捷入口 `runConsole` = `handleConsoleHost` + `joinEff`。
 -- 用户面只经 `Eff` + handler，不需要 import 宿主层。
 import Base.Eff
 import Base.EffConsole

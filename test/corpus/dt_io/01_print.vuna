@@ -1,5 +1,5 @@
--- M21：DT 产物真正执行 Base.IO 的效果；P2c 起用户面经 Eff + handler，
--- `runConsole` = handleConsoleHost + runIOAnswer。输出见同名 .out。
+-- M21：DT 产物真正执行 Base.Host 的效果；P2c 起用户面经 Eff + handler，
+-- `runConsole` = handleConsoleHost + joinEff。输出见同名 .out。
 import Base.Eff
 import Base.EffConsole
 

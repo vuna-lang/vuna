@@ -57,9 +57,7 @@ processRunIn n dir args = sendCore ProcessOp "process" n (RunIn dir args)
 handleProcess : {a : Type} -> {b : Type} -> {r : Row} -> (n : String) -> {w : Member n ProcessOp r} -> (a -> b) -> ((o : ProcessOp) -> (resProcess o -> b) -> b) -> Eff r a -> Eff (Base.Eff.rowRem n ProcessOp r) b
 handleProcess n ret opH comp = handleCore ProcessOp "process" n ret opH comp
 
--- `onExit` 决定 `Exit c` 的语义：真实路径传 `exit`（进程结束、不返回），
--- 观察路径传 `prim_pureIO`（把退出码交给续延，程序继续）。
--- | 内部：以 `onExit` 决定 `Exit c` 语义的 IO 操作解释——真实路径传 `exit`（进程结束、不返回），观察路径传 `prim_pureIO`（退出码交给续延）。
+-- | 内部：以 `onExit` 决定 `Exit c` 语义的宿主操作解释——真实路径传 `exit`（进程结束、不返回），观察路径传 `pure`（退出码交给续延）。
 processOpHIOWith : (Int -> Eff [] Int) -> {a : Type} -> (o : ProcessOp) -> (resProcess o -> Eff [] a) -> Eff [] a
 processOpHIOWith onExit op k = case op of
   Args => do
@@ -72,7 +70,7 @@ processOpHIOWith onExit op k = case op of
     c <- prim_eff_runIn dir args
     k c
 
--- | IO-backed handler：由调用方传入 `onExit`，结果行删除 `ProcessOp`，answer 是 IO 动作。
+-- | 宿主 handler：由调用方传入 `onExit`，结果行删除 `ProcessOp`，answer 是已处理干净的 `Eff []` 动作。
 handleProcessHostWith : {a : Type} -> {r : Row} -> (n : String) -> (Int -> Eff [] Int) -> Eff (Base.Eff.Cons n ProcessOp r) a -> Eff r (Eff [] a)
 handleProcessHostWith n onExit comp = handleProcess n (\a => pure a) (processOpHIOWith onExit) comp
 
@@ -86,6 +84,6 @@ handleProcessHost n comp = handleProcessHostWith n (\c => exit c) comp
 handleProcessHostObserved : {a : Type} -> {r : Row} -> (n : String) -> Eff (Base.Eff.Cons n ProcessOp r) a -> Eff r (Eff [] a)
 handleProcessHostObserved n comp = handleProcessHostWith n (\c => pure c) comp
 
--- | 单效应便捷入口（P3）：`handleProcessHost n` + `runIOAnswer` 的组合。
+-- | 单效应便捷入口（P3）：`handleProcessHost n` + `joinEff` 的组合。
 runProcess : {a : Type} -> (n : String) -> Eff (Cons n ProcessOp []) a -> Eff [] a
 runProcess n comp = joinEff (handleProcessHost n comp)

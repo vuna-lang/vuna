@@ -1,4 +1,4 @@
-# D28 正例：声明 `[trust] unsafe` 的包进入严格模式，列出的定义可以直调 `runIO`。
+# D28 正例：声明 `[trust] unsafe` 的包进入严格模式，列出的定义可以直调 unsafe 门控内建。
 [package]
 name = "trust-points"
 privileged = true
@@ -9,7 +9,7 @@ vuna-base = "../../../../base"
 [capabilities]
 effects = ["unsafe", "console"]
 
-# 信任点：只有这里列出的定义可以直接引用 `unsafe` 门控入口（`prim_schedNewScope` /
-# `Base.IO.runIO` 等）；`TrustLib.probe` 只经信任入口间接使用，不需要列。
+# 信任点：只有这里列出的定义可以直接引用 `unsafe` 门控入口（`prim_schedNewScope` 等）；
+# `TrustLib.probe` 只经信任入口间接使用，不需要列。
 [trust]
 unsafe = ["TrustLib.runIOHelper"]

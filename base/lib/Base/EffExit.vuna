@@ -31,10 +31,10 @@ exitOpHIO op k = case op of
     _ <- exit code
     k 0
 
--- | IO-backed handler：结果行删除 `ExitOp`，answer 是 IO 动作，可交给 `runIOAnswer`。
+-- | 宿主 handler：结果行删除 `ExitOp`，answer 是已处理干净的 `Eff []` 动作，可用 `joinEff` 展平。
 handleExitHost : {a : Type} -> {r : Row} -> (n : String) -> Eff (Base.Eff.Cons n ExitOp r) a -> Eff r (Eff [] a)
 handleExitHost n comp = handleExit n (\a => pure a) exitOpHIO comp
 
--- | 单效应便捷入口（P3）：`handleExitHost n` + `runIOAnswer` 的组合。
+-- | 单效应便捷入口（P3）：`handleExitHost n` + `joinEff` 的组合。
 runExit : {a : Type} -> (n : String) -> Eff (Cons n ExitOp []) a -> Eff [] a
 runExit n comp = joinEff (handleExitHost n comp)

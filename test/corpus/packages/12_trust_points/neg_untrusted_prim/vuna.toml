@@ -1,4 +1,4 @@
-# D28 负例：未列入信任点的定义直接调用 `prim_schedNewScope` 内建（不是 runIO 别名）→ 报错。
+# D28 负例：未列入信任点的定义直接调用 `prim_schedNewScope` 内建 → 报错。
 [package]
 name = "trust-neg-prim"
 privileged = true

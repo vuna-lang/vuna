@@ -11,7 +11,7 @@ module Base.EffClock
 -- Base.EffClock：一阶时钟效应（W10 IO 标签迁移）。
 --
 -- 标签 `ClockOp` 是命名实例；操作 `Now`（微秒时间戳）与 `SleepMicros`
--- （睡 n 微秒）。真实 handler 用 `Base.IO.nowMicros` 与编译器原生原语 `prim_eff_sleep`
+-- （睡 n 微秒）。真实 handler 用 `Base.Host.nowMicros` 与编译器原生原语 `prim_eff_sleep`
 -- 实现（W10 收尾：阻塞睡眠，不是忙等）。
 --
 -- 边界：`Base.EffClock` 与 `Base.Host.sleepMicros` 都已使用原生 `prim_eff_sleep`；
@@ -52,10 +52,10 @@ clockOpHIO op k = case op of
     _ <- prim_eff_sleep us
     k 0
 
--- | IO-backed handler：结果行删除 `ClockOp`，answer 是 IO 动作，可交给 `runIOAnswer`。
+-- | 宿主 handler：结果行删除 `ClockOp`，answer 是已处理干净的 `Eff []` 动作，可用 `joinEff` 展平。
 handleClockHost : {a : Type} -> {r : Row} -> (n : String) -> Eff (Base.Eff.Cons n ClockOp r) a -> Eff r (Eff [] a)
 handleClockHost n comp = handleClock n (\a => pure a) clockOpHIO comp
 
--- | 单效应便捷入口（P3）：`handleClockHost n` + `runIOAnswer` 的组合。
+-- | 单效应便捷入口（P3）：`handleClockHost n` + `joinEff` 的组合。
 runClock : {a : Type} -> (n : String) -> Eff (Cons n ClockOp []) a -> Eff [] a
 runClock n comp = joinEff (handleClockHost n comp)

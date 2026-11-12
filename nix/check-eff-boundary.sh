@@ -2,7 +2,7 @@
 # M4 守卫：编译器/工具链的「隐藏效果」不得新增。
 #
 # 用户面已统一到 Eff（main : Eff [] a、runPure 执行）；但 compiler/lib 与 lib 里仍有
-# 历史遗留的 `runPure (...)` / `runIO (...)` 在纯签名内执行宿主动作（D59）。在 M4 迁移
+# 历史遗留的 `runPure (...)` 在纯签名内执行宿主动作（D59）。在 M4 迁移
 # 完成前，本脚本把当前调用点作为**基线**（nix/eff-boundary.allowlist），只允许减少、
 # 不允许新增：
 #   - allowlist 里没有的文件出现调用点 → 失败；
@@ -25,7 +25,7 @@ trap 'rm -f "$tmp" "$excTmp"' EXIT
 is_exempt() { [ -f "$exc" ] && grep -qxF -- "$1" "$exc"; }
 for f in $(cd "$root" && find compiler/lib lib -name '*.vuna' 2>/dev/null | sort); do
   # 跨行也算：`runPure` 与 `(` 被 fmt 拆成两行时，逐行 grep 会漏计。
-  n=$(tr '\n' ' ' <"$root/$f" | grep -oE '\brun(Pure|IO)[[:space:]]*\(' | wc -l | tr -d ' ')
+  n=$(tr '\n' ' ' <"$root/$f" | grep -oE '\brunPure[[:space:]]*\(' | wc -l | tr -d ' ')
   if is_exempt "$f"; then
     if [ "$n" -gt 0 ]; then printf '%s %s\n' "$f" "$n" >>"$excTmp"; fi
     continue

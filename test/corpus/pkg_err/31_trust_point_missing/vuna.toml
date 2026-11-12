@@ -3,6 +3,6 @@ name = "p"
 [capabilities]
 effects = ["unsafe"]
 [trust]
-unsafe = ["Base.IO.Host.runIO"]
+unsafe = ["Base.Host.runPure"]
 [export]
 modules = ["Main"]

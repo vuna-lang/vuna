@@ -4,11 +4,11 @@
 # 用法: sh check.sh <vuna>
 #
 # 覆盖：
-#   - 正例（顶层 12_trust_points 包本身）：unsafe + trust，信任点直调 `runIO` → check 0；
-#   - 负例 1（neg_untrusted）：未列入信任点的定义直调 `runIO` 别名 → exit 1 + 明确消息；
+#   - 正例（顶层 12_trust_points 包本身）：unsafe + trust，信任点直调 `prim_schedNewScope` → check 0；
+#   - 负例 1（neg_untrusted）：未列入信任点的定义直调 unsafe 门控内建 → exit 1 + 明确消息；
 #   - 负例 2（neg_fake）：信任点列表写不存在的定义 → exit 1；
 #   - 负例 3（neg_no_unsafe）：有 `[trust]` 但能力表没有 `unsafe` → exit 1；
-#   - 负例 4（neg_entry_direct）：入口定义直调 `runIO`（入口不能作为信任点）→ exit 1；
+#   - 负例 4（neg_entry_direct）：入口定义直调 unsafe 门控内建（入口不能作为信任点）→ exit 1；
 #   - 正例 5（non_strict）：有 `unsafe` 能力、没有 `[trust]` → 不启用定义级检查，check 0。
 set -u
 
@@ -43,7 +43,7 @@ out=$("$VUNA" check "$here" 2>&1)
 check_eq "trust positive check exit" "0" "$?"
 check_eq "trust positive output" "" "$out"
 
-# 2) 负例：未列入信任点的定义直调 runIO 别名。
+# 2) 负例：未列入信任点的定义直调 unsafe 门控内建。
 out=$("$VUNA" check "$here/neg_untrusted" 2>&1)
 check_eq "untrusted definition exit" "1" "$?"
 check_contains "untrusted definition message name" "$out" "TrustLib.probeAlias"

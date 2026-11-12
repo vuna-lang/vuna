@@ -32,10 +32,10 @@ argsOpHIO op k = case op of
     xs <- getArgs
     k xs
 
--- | IO-backed handler：结果行删除 `ArgsOp`，answer 是 IO 动作，可交给 `runIOAnswer`。
+-- | 宿主 handler：结果行删除 `ArgsOp`，answer 是已处理干净的 `Eff []` 动作，可用 `joinEff` 展平。
 handleArgsHost : {a : Type} -> {r : Row} -> (n : String) -> Eff (Base.Eff.Cons n ArgsOp r) a -> Eff r (Eff [] a)
 handleArgsHost n comp = handleArgs n (\a => pure a) argsOpHIO comp
 
--- | 单效应便捷入口（P3）：`handleArgsHost n` + `runIOAnswer` 的组合。
+-- | 单效应便捷入口（P3）：`handleArgsHost n` + `joinEff` 的组合。
 runArgs : {a : Type} -> (n : String) -> Eff (Cons n ArgsOp []) a -> Eff [] a
 runArgs n comp = joinEff (handleArgsHost n comp)

@@ -2,8 +2,8 @@
 
 **现状**：用户面唯一动作类型是 `Eff r a`（`Base.Eff`，构造子不导出；`MkEff` 是内部表示），
 入口是 `main : Eff [] a`（行必须为 `Nil`），执行入口是 `Base.Eff.runPure`。`IO` 类型与
-`Base.IO` 模块均已删除：没有 `main : IO`、没有 `runIO`/`runIOEff`/`runIOAnswer`，也没有 IO
-原语表。宿主原语只剩 `prim_eff_*`（`Eff []`）；`Base.Host` 是特权别名层（做 Int/Nat 归一化），
+`Base.IO` 模块均已删除：没有 `main : IO`，也没有 IO 原语表。宿主原语只剩 `prim_eff_*`
+（`Eff []`）；`Base.Host` 是特权别名层（做 Int/Nat 归一化），
 所有宿主 handler 的 answer 是 `Eff []`，入口组合是 `runX = joinEff (handleXHost …)`。用户面
 执行一个已处理干净的动作用 `runPure`；`ST`/`IORef`/`MArray`/`Buffer` 的实现也全部是 `Eff []`。
 
@@ -50,7 +50,7 @@ Args / Exit）；`Member` 行约束、`local`/`catch`/scoped `Exn`、线性续�
 | 宿主别名层 | `Base.Host`（privileged） | Eff 别名走 `prim_eff_*`；`[package] privileged = true` 才可 import；能力/信任门控不变 |
 
 - **代数**：`Monad (Eff r)` / `Applicative` / `Functor` 实例已内建；用户用 `pure` / `do` /
-  `>>=` / `fmap`，不再有 `prim_pureIO` / `prim_bindIO` 这类用户可见构造入口。
+  `>>=` / `fmap`，动作的构造入口只有这些实例方法。
 - **`unsafe` 的定义级信任点（D28）**：包在 manifest 声明 `[trust] unsafe = ["Module.def", ...]`
   后进入严格模式：只有列出的定义可以**直接**引用 `unsafe` 门控目标（CapUnsafe 内建、
   `Base.Eff` 的运行时效应核心）；`Loader.Resolve` 逐定义扫描，错误给出定义全限定名、触发内建名与
@@ -137,7 +137,7 @@ CPS `Eff` 已经可 `check` + `compile` + 运行，且 interp 与产物逐字节
 ## 7. 设计规则（已实现部分）
 
 1. **Eff 是唯一动作类型 + 内建代数**：`pure`/`do`/`>>=` 来自 `Functor`/`Applicative`/`Monad (Eff r)` 实例；
-   用户面不再有 `prim_pureIO`/`prim_bindIO`；`joinEff` 展平 handler answer，`runPure` 执行。
+   用户面动作由实例方法构造；`joinEff` 展平 handler answer，`runPure` 执行。
 2. **handler 是解释器**：`runPure` / `runConsole` / `runFs` / `runST`
    是唯一执行入口；没有「隐式生效的 handler 栈」。
 3. **可变数据两条边界**：`IORef` / `MArray` / `Buffer` 的公开操作与实现都是 `Eff []`；
@@ -339,7 +339,7 @@ fork/await/yield/cancel/结构化 scope；W10 console/clock/env/process/fs 标�
 ## 相关阅读
 
 - 标准库模块：[stdlib.md](stdlib.md)；量化/线性规则：[qtt.md](qtt.md)
-- 原语与能力（`prim_*`、`runIO`、效果原语）：[primitives.md](primitives.md) §7
+- 原语与能力（`prim_*`、效果原语）：[primitives.md](primitives.md) §7
 - 记录 / trait / `do` 与 `Monad`：[records-traits.md](records-traits.md)
 - 类型系统（擦除判据、宇宙）：[type-system.md](type-system.md)；Core 实现：[core.md](core.md)
 - 自举与 rotation：[bootstrap.md](bootstrap.md)；测试标签：[testing.md](testing.md)

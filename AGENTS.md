@@ -43,9 +43,8 @@
    manager）永不进入 seed 闭包；黑名单见 `nix/tcb-forbidden.txt`；
 5. **动作入口与宿主层**：唯一动作类型是 `Eff r a`；用户面入口是 `main : Eff [] a`（行必须
    Nil，入口处未处理效应是类型错误），执行入口是 `Base.Eff.runPure : Eff [] a -> a`。
-   **`IO` 类型、`Base.IO` 模块与 IO 原语表（`prim_pureIO`/`bindIO`/`runIO`/IO 版宿主原语）
-   全部已删除**；`Base.Host` 是特权宿主别名层（`prim_eff_*` + Int/Nat 归一化），
-   `ST`/`IORef`/`MArray`/`Buffer` 实现全是 `Eff []`，没有 `runIO`/`deferIO` 桥。
+   **`IO` 类型与 `Base.IO` 模块全部已删除**；`Base.Host` 是特权宿主别名层（`prim_eff_*` +
+   Int/Nat 归一化），`ST`/`IORef`/`MArray`/`Buffer` 实现全是 `Eff []`。
    **特权边界**：`[capabilities]`/`[trust]` 与宿主层模块 `Base.Host` 只允许
    `[package] privileged = true` 的包；用户包/ad-hoc 只能经 `Eff` + handler（见
    [effects.md](docs/reference/effects.md) §8.6）。

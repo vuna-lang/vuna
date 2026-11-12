@@ -12,9 +12,9 @@ module Base.EffConsole
 --
 -- 行标签 = `ConsoleOp`（D2），实例名在行的 `Cons n ConsoleOp r` 条目里：同一程序
 -- 里可以同时安装多个 console handler（例如 "mock" = 收集器、"real" = 真实
--- stdout/stderr），行里按实例名区分。操作只有 Print / EPrint；handler 用 `Base.IO` 的
--- `print` / `eprint` 实现真实语义，`handleConsoleHost` 是可直接交给
--- `runIOAnswer` 的 IO-backed handler。
+-- stdout/stderr），行里按实例名区分。操作只有 Print / EPrint；handler 用 `Base.Host` 的
+-- `print` / `eprint` 实现真实语义，`handleConsoleHost` 是可直接交给 `joinEff` 展平的
+-- 宿主 handler。
 import Base.Eff
 import Base.Host
 import Base.Nat
@@ -43,8 +43,8 @@ consoleEprint n s = sendCore ConsoleOp "console" n (EPrint s)
 handleConsole : {a : Type} -> {b : Type} -> {r : Row} -> (n : String) -> {w : Member n ConsoleOp r} -> (a -> b) -> ((o : ConsoleOp) -> (resConsole o -> b) -> b) -> Eff r a -> Eff (Base.Eff.rowRem n ConsoleOp r) b
 handleConsole n ret opH comp = handleCore ConsoleOp "console" n ret opH comp
 
--- 真实 handler 的 op 解释：answer 里直接执行 IO 动作。
--- | 真实 handler 的操作解释：在续延前执行 `Base.IO` 的 `print` / `eprint`（answer 是 IO 动作）。
+-- 真实 handler 的 op 解释：answer 里直接执行宿主动作。
+-- | 真实 handler 的操作解释：在续延前执行 `Base.Host` 的 `print` / `eprint`（answer 是 `Eff []` 动作）。
 consoleOpHIO : {a : Type} -> (o : ConsoleOp) -> (resConsole o -> Eff [] a) -> Eff [] a
 consoleOpHIO op k = case op of
   Print s => do
@@ -54,11 +54,10 @@ consoleOpHIO op k = case op of
     r <- eprint s
     k r
 
--- IO-backed handler：结果行删除 Console n，answer 是 IO 动作，可用 `runIOAnswer` 执行。
--- | IO-backed handler：结果行删除 `Console n`，answer 是 IO 动作，可直接交给 `runIOAnswer` 执行。
+-- | 宿主 handler：结果行删除 `Console n`，answer 是已处理干净的 `Eff []` 动作，可直接交给 `joinEff` 展平。
 handleConsoleHost : {a : Type} -> {r : Row} -> (n : String) -> Eff (Base.Eff.Cons n ConsoleOp r) a -> Eff r (Eff [] a)
 handleConsoleHost n comp = handleConsole n (\a => pure a) consoleOpHIO comp
 
--- | 单效应便捷入口（P3）：`handleConsoleHost n` + `runIOAnswer` 的组合。
+-- | 单效应便捷入口（P3）：`handleConsoleHost n` + `joinEff` 的组合。
 runConsole : {a : Type} -> (n : String) -> Eff (Cons n ConsoleOp []) a -> Eff [] a
 runConsole n comp = joinEff (handleConsoleHost n comp)

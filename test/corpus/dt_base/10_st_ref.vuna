@@ -1,6 +1,6 @@
 -- M35.1：Base.ST 的 region 内可变数据（真实 IORef 表示）。
 -- M38 起 Ref 是 linear record：读/写/释放都消费句柄并返回新句柄；线性结果用 bindST1。
--- ST 动作经 Base.IO.runIO 执行 → interp 不归约（带 .nointerp），只 compile + 运行。
+-- ST 动作经 runST/runPure 执行 → interp 不归约（带 .nointerp），只 compile + 运行。
 import Base.ST
 import Base.Int
 

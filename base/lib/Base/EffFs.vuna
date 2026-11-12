@@ -16,11 +16,11 @@ module Base.EffFs
   , runFs
   ) where
 
--- Base.EffFs：一阶文件系统效应（Layer 1 的 IO-backed 示例；W10 扩到完整 fs 面）。
+-- Base.EffFs：一阶文件系统效应（Layer 1 的宿主-backed 示例；W10 扩到完整 fs 面）。
 --
--- 操作是描述；handler 用 Base.IO 的原语实现真实语义。answer 用 IO a，
--- 由 runIOAnswer 执行最终答案（见 Base.Eff）。`handleFsHost` 是 W10 增加的
--- 可直接 `runIOAnswer` 的 IO-backed handler。
+-- 操作是描述；handler 用 Base.Host 的原语实现真实语义。answer 是 `Eff [] a`，
+-- 由 `joinEff` 展平（见 Base.Eff）。`handleFsHost` 是 W10 增加的
+-- 可直接 `joinEff` 展平的宿主 handler。
 --
 -- W10 收尾：`Fs` 改为**命名实例**（`FsOp`，n 是 String 实例名，与 Console/Clock/Env/
 -- Process 一致）。同一个程序因此可以同时装 mock handler（如纯 answer 的内存表）与
@@ -59,7 +59,7 @@ resFs (FileExists p) = Bool
 resFs (FileMtime p) = Int
 resFs (FileSize p) = Nat
 
--- | 通过命名实例读整个文件为 String；真实 handler 走 `Base.IO.readFile`。
+-- | 通过命名实例读整个文件为 String；真实 handler 走 `Base.Host.readFile`。
 fsReadFile : (n : String) -> String -> {r : Row} -> {w : Member n FsOp r} -> Eff r String
 fsReadFile n p = sendCore FsOp "fs" n (ReadFile p)
 
@@ -103,7 +103,7 @@ fsFileSize n p = sendCore FsOp "fs" n (FileSize p)
 handleFs : {a : Type} -> {b : Type} -> {r : Row} -> (n : String) -> {w : Member n FsOp r} -> (a -> b) -> ((o : FsOp) -> (resFs o -> b) -> b) -> Eff r a -> Eff (Base.Eff.rowRem n FsOp r) b
 handleFs n ret opH comp = handleCore FsOp "fs" n ret opH comp
 
--- | 真实 handler 的操作解释：把每个操作映射到 `Base.IO` 的对应原语（原子写走 `prim_eff_writeFileAtomic`）。
+-- | 真实 handler 的操作解释：把每个操作映射到 `Base.Host` 的对应原语（原子写走 `prim_eff_writeFileAtomic`）。
 fsOpHIO : {a : Type} -> (o : FsOp) -> (resFs o -> Eff [] a) -> Eff [] a
 fsOpHIO op k = case op of
   ReadFile p => do
@@ -137,10 +137,10 @@ fsOpHIO op k = case op of
     n <- fileSize p
     k n
 
--- | IO-backed handler：结果行删除 `FsOp`，answer 是 IO 动作，可直接交给 `runIOAnswer`。
+-- | 宿主 handler：结果行删除 `FsOp`，answer 是已处理干净的 `Eff []` 动作，可直接交给 `joinEff` 展平。
 handleFsHost : {a : Type} -> {r : Row} -> (n : String) -> Eff (Base.Eff.Cons n FsOp r) a -> Eff r (Eff [] a)
 handleFsHost n comp = handleFs n (\a => pure a) fsOpHIO comp
 
--- | 单效应便捷入口（P3）：`handleFsHost n` + `runIOAnswer` 的组合。
+-- | 单效应便捷入口（P3）：`handleFsHost n` + `joinEff` 的组合。
 runFs : {a : Type} -> (n : String) -> Eff (Cons n FsOp []) a -> Eff [] a
 runFs n comp = joinEff (handleFsHost n comp)

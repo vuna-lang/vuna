@@ -321,10 +321,10 @@
   `` effectful builtin `<name>` requires capability `<cap>` in <package> (declare [capabilities] effects = ["<cap>"] or use Base.Eff/Base.Host) ``
   （`Loader.Resolve.checkEffectsBuiltins`）。
 - **这是权限声明，不是检查豁免**：能力不改变类型检查、擦除或 codegen 语义，只决定能否在
-  源码里直接引用效果原语 / `runIO`；没有按包名字符串判定的 allowlist。声明 `[trust] unsafe`
+  源码里直接引用效果原语；没有按包名字符串判定的 allowlist。声明 `[trust] unsafe`
   的包把 `unsafe` 收紧到定义级（opt-in；见 [packages.md](packages.md) §效应能力）。
 - `base` 包声明 `["console", "fs", "process", "env", "clock", "unsafe"]`，并把 `unsafe` 的直接
-  使用点逐条列进 `[trust] unsafe`（D28；`runIO` / `Base.Eff` / `Base.EffSched`，
+  使用点逐条列进 `[trust] unsafe`（D28；`Base.Eff` / `Base.EffSched`，
   见 [effects.md](effects.md)）；根包声明七个能力（含 `unsafe`/`net`）但无 `[trust]`，编译器包六个（不含 `net`）。
 
 ## 8. 生成 runtime 的契约

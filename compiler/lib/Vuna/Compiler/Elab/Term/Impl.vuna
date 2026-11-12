@@ -1794,7 +1794,7 @@ else case handleOperand expr of
 -- ---------------------------------------------------------------
 -- 期望类型是 `Eff [] a`、实际类型是 `Eff r a`（r 为具体非空行）时，报
 -- `TC_UnhandledEffects` 并列出标签，而不是裸的 `TC_TypeMismatch`。
--- 触发位置不限于 `runPure`/`runIOEff`/`runIOAnswer`：任何要求 Nil 行的期望都适用。
+-- 触发位置不限于 `runPure`：任何要求 Nil 行的期望都适用。
 -- | 从 `Eff row a` 值里取出 (row, a)；不是 Eff 应用返回 Nothing。
 effRowAndResult : Value -> Maybe (Pair Value Value)
 effRowAndResult (VNeutral (NGlobal g (r :: a :: _))) =
