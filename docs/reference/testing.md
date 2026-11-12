@@ -344,7 +344,9 @@ interp / compile 文案不同时用 `.compile.err`。
   （`.run.out`）覆盖用户本地 `data Bool`/`List` 与 canonical `Base.*` 身份并存；
   `57_universe`、`58_case_matrix`/`58b_case_absurd`、`59_axiom`/`59_eta`/`59_let_where`、
   `60_erasure_unify`、`61_namespace_dual`、`60_ctor_eta`、`61_implicit_values`、
-  `62_sigma_basic`、`63_dep_lookup` 覆盖现行类型规则。`corpus/dt_err/*` 是对应负例
+  `62_sigma_basic`、`63_dep_lookup` 覆盖现行类型规则。`corpus/dt_deep/` 是「深层嵌套
+  单定义体」夹具（150 层嵌套应用）：迁移前 codegen 的固定 fuel 在这里必然耗尽，IR 之后
+  必须能编译并跑出结果（用例 `103_ir_lowering.steps`）。`corpus/dt_err/*` 是对应负例
   （kind / 宇宙、冗余 / 不可达分支、axiom 运行时、命名空间、隐式参数、泛型 Σ、无 Eq 证据
   等）。`corpus/dt_base/`、`corpus/dt_io/`、`corpus/dt_pkg/`、`corpus/dt_ad_hoc/` 是 DT
   专项夹具；
@@ -366,12 +368,12 @@ interp / compile 文案不同时用 `.compile.err`。
 
 ## Nix checks 清单
 
-`nix flake check` 实测 **20 项**：3 个 package 构建（`vuna` / `vuna-compiler` /
-`vuna-seed`，同时暴露为 checks）+ 17 个 check 语义项（`context-budget`、`diag-coverage`、
-`diag-raw`、`diag-style`、`eff-boundary`、`seed-selfhost`、`vuna-compiler-growth`、
-`vuna-compiler-growth-incremental`、`vuna-compiler-perf`、`vuna-fmt`、`vuna-index`、
-`vuna-lint`、`vuna-metrics`、`vuna-package`、`vuna-tests`、`vuna-typecheck`、`vscode-ext`；
-主体是 `nix/checks/<name>.sh`）。语义项：
+`nix flake check` 实测 **21 项**：3 个 package 构建（`vuna` / `vuna-compiler` /
+`vuna-seed`，同时暴露为 checks）+ 18 个 check 语义项（`context-budget`、`diag-coverage`、
+`diag-raw`、`diag-style`、`eff-boundary`、`ir-boundary`、`seed-selfhost`、
+`vuna-compiler-growth`、`vuna-compiler-growth-incremental`、`vuna-compiler-perf`、
+`vuna-fmt`、`vuna-index`、`vuna-lint`、`vuna-metrics`、`vuna-package`、`vuna-tests`、
+`vuna-typecheck`、`vscode-ext`；主体是 `nix/checks/<name>.sh`）。语义项：
 
 - `seed-selfhost`：seed→stage0→stage1→stage2 逐字节一致、TCB 黑名单、seed 完整 allowlist、闭包数量、增量构建、
   行为抽查与 seed 滞后报告（不阻塞）；
@@ -379,6 +381,10 @@ interp / compile 文案不同时用 `.compile.err`。
 - `vuna-typecheck` / `vuna-lint`：`vuna check .` 自检、lint 零 finding；
 - `eff-boundary`：隐藏效果守卫，`runPure` 调用点只降不增（基线
   `nix/eff-boundary.allowlist`，当前为空），见 [effects.md](effects.md)；
+- `ir-boundary`：IR 边界结构性守卫（`Vuna.Compiler.Ir*` 不得 import
+  Core/Elab/Intrinsics/Codegen；文本生成层 `Codegen.{Decl,Term,Assembly}` 与门面不得
+  import Core/Elab/Intrinsics；`Codegen/Lower.vuna` 是唯一的上游消费者；`Codegen.Split`
+  必须路由到 Lower；生成层必须 import IR），见 [ir.md](ir.md)；
 - `diag-coverage` / `diag-style` / `diag-raw`：诊断码覆盖基线、文案模板规范、
   compiler 源码诊断必须走域码（见 [diagnostics.md](diagnostics.md)）；
 - **`check` 的覆盖边界**：`vuna check <pkg>` 只检查**该包入口的 import 闭包**——可执行包

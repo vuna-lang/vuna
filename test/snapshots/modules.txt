@@ -76,6 +76,7 @@ Vuna.Compiler.Canonical  compiler/lib/Vuna/Compiler/Canonical.vuna
 Vuna.Compiler.Codegen.Assembly  compiler/lib/Vuna/Compiler/Codegen/Assembly.vuna
 Vuna.Compiler.Codegen.Decl  compiler/lib/Vuna/Compiler/Codegen/Decl.vuna
 Vuna.Compiler.Codegen.Erase  compiler/lib/Vuna/Compiler/Codegen/Erase.vuna
+Vuna.Compiler.Codegen.Lower  compiler/lib/Vuna/Compiler/Codegen/Lower.vuna
 Vuna.Compiler.Codegen.Split  compiler/lib/Vuna/Compiler/Codegen/Split.vuna
 Vuna.Compiler.Codegen.Term  compiler/lib/Vuna/Compiler/Codegen/Term.vuna
 Vuna.Compiler.Codegen  compiler/lib/Vuna/Compiler/Codegen.vuna
@@ -141,6 +142,9 @@ Vuna.Compiler.Frontend.Parser  compiler/lib/Vuna/Compiler/Frontend/Parser.vuna
 Vuna.Compiler.Frontend.Toml  compiler/lib/Vuna/Compiler/Frontend/Toml.vuna
 Vuna.Compiler.Hash  compiler/lib/Vuna/Compiler/Hash.vuna
 Vuna.Compiler.Intrinsics  compiler/lib/Vuna/Compiler/Intrinsics.vuna
+Vuna.Compiler.Ir.Analysis  compiler/lib/Vuna/Compiler/Ir/Analysis.vuna
+Vuna.Compiler.Ir.Model  compiler/lib/Vuna/Compiler/Ir/Model.vuna
+Vuna.Compiler.Ir  compiler/lib/Vuna/Compiler/Ir.vuna
 Vuna.Compiler.Loader.Diagnostics  compiler/lib/Vuna/Compiler/Loader/Diagnostics.vuna
 Vuna.Compiler.Loader.Expand  compiler/lib/Vuna/Compiler/Loader/Expand.vuna
 Vuna.Compiler.Loader.Fixity  compiler/lib/Vuna/Compiler/Loader/Fixity.vuna
@@ -225,6 +229,7 @@ Vuna.Compiler.Canonical  ./lib/Vuna/Compiler/Canonical.vuna
 Vuna.Compiler.Codegen.Assembly  ./lib/Vuna/Compiler/Codegen/Assembly.vuna
 Vuna.Compiler.Codegen.Decl  ./lib/Vuna/Compiler/Codegen/Decl.vuna
 Vuna.Compiler.Codegen.Erase  ./lib/Vuna/Compiler/Codegen/Erase.vuna
+Vuna.Compiler.Codegen.Lower  ./lib/Vuna/Compiler/Codegen/Lower.vuna
 Vuna.Compiler.Codegen.Split  ./lib/Vuna/Compiler/Codegen/Split.vuna
 Vuna.Compiler.Codegen.Term  ./lib/Vuna/Compiler/Codegen/Term.vuna
 Vuna.Compiler.Codegen  ./lib/Vuna/Compiler/Codegen.vuna
@@ -290,6 +295,9 @@ Vuna.Compiler.Frontend.Parser  ./lib/Vuna/Compiler/Frontend/Parser.vuna
 Vuna.Compiler.Frontend.Toml  ./lib/Vuna/Compiler/Frontend/Toml.vuna
 Vuna.Compiler.Hash  ./lib/Vuna/Compiler/Hash.vuna
 Vuna.Compiler.Intrinsics  ./lib/Vuna/Compiler/Intrinsics.vuna
+Vuna.Compiler.Ir.Analysis  ./lib/Vuna/Compiler/Ir/Analysis.vuna
+Vuna.Compiler.Ir.Model  ./lib/Vuna/Compiler/Ir/Model.vuna
+Vuna.Compiler.Ir  ./lib/Vuna/Compiler/Ir.vuna
 Vuna.Compiler.Loader.Diagnostics  ./lib/Vuna/Compiler/Loader/Diagnostics.vuna
 Vuna.Compiler.Loader.Expand  ./lib/Vuna/Compiler/Loader/Expand.vuna
 Vuna.Compiler.Loader.Fixity  ./lib/Vuna/Compiler/Loader/Fixity.vuna

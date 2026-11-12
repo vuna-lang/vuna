@@ -1,0 +1,23 @@
+# 103) IR 降低（Track A 第一步）：固定 fuel 退场（Core → IR → OCaml 单一链路）。
+#
+# corpus/dt_deep 是 150 层嵌套应用：迁移前的后端用固定 512 步 `genTermFuel` 驱动
+# 「项 → 文本」，在这个深度必报 `IC_FuelExhausted (codegen)`（项本身完全合法）。
+# IR 之后后端按节点结构递归、Lowering 无固定预算，因此必须通过并且产物能真跑。
+#
+# IR 的结构边界（后端只消费 IR、IR 不 import 上游）由 `checks.ir-boundary`
+# （`nix/checks/ir-boundary.sh`）在 `nix flake check` 里守；本 steps 用例只钉产物行为。
+run: "$VUNA" check corpus/dt_deep 2>&1
+exit: 0
+out-not-contains: IC_FuelExhausted
+
+run: "$VUNA" compile corpus/dt_deep "$TMPDIR/dt-deep" 2>&1
+exit: 0
+file-exists: $TMPDIR/dt-deep/Main.ml
+file-contains: $TMPDIR/dt-deep/Main.ml let v_deep =
+
+# 产物必须真能跑：150 层 step 累加到 150。
+run: cd "$TMPDIR/dt-deep" && sh build.sh prog 2>&1
+exit: 0
+run: "$TMPDIR/dt-deep/prog" 2>&1
+exit: 0
+out-equals: 150

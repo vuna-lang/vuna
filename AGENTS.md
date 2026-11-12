@@ -85,7 +85,7 @@
 
 ```console
 nix build .#vuna --out-link result   # 产品 CLI；.#vuna-compiler / .#vuna-seed 同理
-nix flake check                      # 20 项：3 packages + 17 checks（含 vscode-ext）
+nix flake check                      # 21 项：3 packages + 18 checks（含 vscode-ext / ir-boundary）
 nix run .#vuna-run-tests [-- --list | --only dt]   # 原生 suite（vuna test --suite）；bench：.#vuna-bench --quick / .#vuna-perf --check
 vuna check .                         # 包级类型检查（自检）；vuna build . → .output/bin/<包名>
 vuna fmt --check <PATH>...           # 格式化检查（省略 PATH = workspace 各包 lib/app/test）；vuna lint <file>...
@@ -125,6 +125,7 @@ build，`dist/` 提交）；`nix/` = 构建图 + rotate/metrics/bench；`docs/` 
   [primitives.md](docs/reference/primitives.md)（内建/原语/宿主层）、
   [operators.md](docs/reference/operators.md)（运算符=方法别名、实例落点规则）
 - 编译器实现：[compiler.md](docs/reference/compiler.md)（模块与输出模型、接口摘要）、
+  [ir.md](docs/reference/ir.md)（擦除后 IR：Core → IR 的决策划分与边界）、
   [diagnostics.md](docs/reference/diagnostics.md)（诊断模型/错误码/渲染/LSP/迁移状态）、
   [core.md](docs/reference/core.md)（Core TT / NbE / 精化器）；
   模块级缓存：[cache.md](docs/reference/cache.md)（TTC 式接口、失效判定、已知边界）；

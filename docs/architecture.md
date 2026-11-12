@@ -14,8 +14,8 @@
 ## 仓库分层
 
 ```text
-compiler/lib/Vuna/Compiler/   （87 个模块：79 个导出 + 8 个内部模块；目录即层：
-                                Frontend → Packages → Loader → Core → Elab → Codegen → Driver）
+compiler/lib/Vuna/Compiler/   （93 个模块：85 个导出 + 8 个内部模块；目录即层：
+                                Frontend → Packages → Loader → Core → Elab → Ir → Codegen → Driver）
 ├─ Source.vuna                底层位置/路径工具（Pos/Span，无 Result）
 ├─ Diag.vuna                  结构化诊断模型 + Check 结果通道（ErrC Diagnostic）
 ├─ Common.vuna                编译器门面（Source + Diag；bind/step/traverse）
@@ -31,7 +31,9 @@ compiler/lib/Vuna/Compiler/   （87 个模块：79 个导出 + 8 个内部模块
 ├─ Elab.vuna + Elab/          Sig Types Meta Case Dict Term
 │                             Data Trait InstName Driver Termination
 │                             Prelude Match Records Derive     双向精化
-├─ Codegen.vuna + Codegen/    Decl Erase Term Assembly Split  擦除检查 + OCaml 生成
+├─ Ir.vuna + Ir/            Model Analysis                   擦除后 IR（纯数据 + SCC；无 Core 依赖）
+├─ Codegen.vuna + Codegen/  Lower Decl Erase Term
+│                           Assembly Split                   Core→IR 降低 + OCaml 文本生成
 └─ Driver/                    Split Dt Compile CompilerCli      输出模型 / facade / 编译入口 / CLI
   PerfCache                          codegen 单元缓存（S5）
                               Owner Iface Cache                 归属表 / 模块接口 / 包级摘要
@@ -57,7 +59,8 @@ import 子模块并选择性重导出（对外名字面不变），实现只在�
  → Packages.Pkg.contextForFile   （最近 vuna.toml + 依赖闭包 → PackageContext；无则 base-only）
  → Loader.Flatten.loadProject    （import 图 → 名字解析 → flatten；ad-hoc 自动注入 Prelude；随后 `Loader.Expand` 展开内置宏）
  → Elab.Driver.elabProgramFull   （Records/Derive 展开 → 精化；record 不再降级）
- → Codegen.Assembly              （DtProgram 的 unit 划分/文本/main 钩子）
+ → Codegen.Lower                 （Core → Ir：擦除/表示/形态/入口分类，程序级检查）
+ → Codegen.Assembly              （IrUnit 的装配：open 头/类型/桥接/正文/依赖表）
  → Codegen.Split.generateDtSplitProgram  （唯一生成器：runtime + 各模块 + Main，带直接依赖）
  → sh build.sh                   （Driver.Split：层内并行；ocamlopt 链接）
 ```
@@ -69,8 +72,9 @@ import 子模块并选择性重导出（对外名字面不变），实现只在�
 **运行时错误报告**：`Vuna_runtime.ml` 由 `Codegen.Term.dtRuntimeWith` 生成 =
 运行时常量 + `dt_def_locs`（定义位置表：mangled 值名 → `定义名 (相对路径:行)`，路径按
 `PackageContext` 的模块根/包目录归一）+ `dt_report_exn`（未捕获异常报告器）。
-`Codegen.Assembly` 的 main 钩子在入口动作外包 `try`；入口零参 `main` 的初始化期绑定也套
-同一报告器，`Main.ml` 首行开 `Printexc.record_backtrace`。详见
+`Codegen.Term.genEntryHook` 的 main 钩子在入口动作外包 `try`；入口零参 `main` 的初始化期
+绑定也套同一报告器（Lowering 在 `IrDef` 上标 `irDefInitGuard`），`Main.ml` 首行开
+`Printexc.record_backtrace`。详见
 [debugging.md](reference/debugging.md)。
 
 **名字解析三命名空间**：`Loader.Resolve` 的解析期状态是三个**分开**的表
@@ -106,11 +110,12 @@ Elab/codegen 看不到模板）。fmt/lint/index/doc 只 parse，仍按 `EInterp
 
 **内建单一真源**：`Vuna.Compiler.Intrinsics` 是名字 / 签名 / arity / 归约 / runtime /
 可见性的唯一真源；`Loader.Resolve`（arity、放行）、`Elab.Prelude`（签名）、
-`Core.Eval`（归约）、`Codegen.Term`（runtime）都消费它。内置身份按声明 symbol 判定：`Bool` / `List` / `Nat` 是 base 普通
+`Core.Eval`（归约）、`Codegen.Lower`（runtime 名映射）都消费它。内置身份按声明 symbol 判定：`Bool` / `List` / `Nat` 是 base 普通
 data（`Base.Bool.Bool` / `Base.List.List` / `Base.Nat.Nat`），不按短名。
 
-擦除检查由 `Codegen.Assembly.checkDtProgram` 负责（判据 `Core.rigIsErased`）；不透明字段
-走后端表示（判据 `Codegen.Decl.ctorOpaqueFlagsOf`）。`vuna interp`
+擦除检查由 `Codegen.Lower.checkProgramOf` 负责（判据 `Core.rigIsErased`）；不透明字段的
+判定也在 Lowering（`ctorOpaqueFlagsOf`），后端只把 `IrTyOpaque` / `IrCast` 渲染成
+`Obj.t` / `Obj.magic`。`vuna interp`
 走同一精化链后由 `Driver.Dt.dtEvalFile` 求 `main`（纯求值：只展示 `Int`/`String`/`Bool`，
 任何 `main : Eff [] a` 报错并提示 `compile`）。
 
@@ -118,7 +123,8 @@ data（`Base.Bool.Bool` / `Base.List.List` / `Base.Nat.Nat`），不按短名。
 `dtEvalExpr`；`Loader.Flatten.loadProject*` / `resolveProject`；`Elab.Driver.elabProgramFull`
 （洞目标 `goalsOfProgram`）、`Elab.Termination.checkTerminationDecls`、`Elab.Match.multiToExpr`、
 `Core.Eval` / `Core.Conv`；`Intrinsics.findIntrinsic`；
-`Codegen.Assembly.*`；`Codegen.Split.generateDtSplitProgram`；
+`Codegen.Lower.*`（Core→IR）、`Codegen.Assembly.*`、`Codegen.Term.*`；
+`Codegen.Split.generateDtSplitProgram`；
 `Driver.Split.SplitFile` / `buildScript`；CLI 经 `Driver.Compile.*` 接 `Driver.CompilerCli`。
 
 **通常连带改动**：语法 = `Frontend.{Lexer,Parser,Ast}` + `Fmt` + `Elab.Term` / `Elab.Match` +

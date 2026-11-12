@@ -1,0 +1,14 @@
+# codegen fuel 关闭夹具（Track A 第一步的验收夹具）：
+#
+# 迁移前的 OCaml 后端用固定 512 步的 `genTermFuel` / `genAppFuel` 驱动项 → 文本，
+# 深层嵌套的单个定义体会在**约 128 层嵌套应用**处撞上这个预算，报
+# `IC_FuelExhausted (codegen)`——而项本身完全合法，只是「深度 > 预算」。
+#
+# IR 之后后端只渲染 IR 节点（每个节点一次结构递归，无固定预算），这个夹具因此能
+# 编译通过；`checks.ir-boundary` 与 steps 用例 `103_ir_lowering.steps` 一起把这件事
+# 钉成门禁：旧路径（固定 fuel）消失前它必须失败、消失后必须通过。
+[package]
+name = "dt-deep"
+
+[dependencies]
+vuna-base = "../../../base"

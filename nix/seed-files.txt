@@ -42,6 +42,7 @@ Vuna_dCompiler_dCodegen.ml
 Vuna_dCompiler_dCodegen_dAssembly.ml
 Vuna_dCompiler_dCodegen_dDecl.ml
 Vuna_dCompiler_dCodegen_dErase.ml
+Vuna_dCompiler_dCodegen_dLower.ml
 Vuna_dCompiler_dCodegen_dSplit.ml
 Vuna_dCompiler_dCodegen_dTerm.ml
 Vuna_dCompiler_dCommon.ml
@@ -105,6 +106,9 @@ Vuna_dCompiler_dFrontend_dParser_dSupport.ml
 Vuna_dCompiler_dFrontend_dToml.ml
 Vuna_dCompiler_dHash.ml
 Vuna_dCompiler_dIntrinsics.ml
+Vuna_dCompiler_dIr.ml
+Vuna_dCompiler_dIr_dAnalysis.ml
+Vuna_dCompiler_dIr_dModel.ml
 Vuna_dCompiler_dLoader.ml
 Vuna_dCompiler_dLoader_dDiagnostics.ml
 Vuna_dCompiler_dLoader_dExpand.ml

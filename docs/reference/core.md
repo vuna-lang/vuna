@@ -129,19 +129,29 @@ data Term where
 
 ## 7. codegen 侧不变量
 
-- **构造子字段形状单一真源**：`Codegen.Decl.ctorKeepFlags` 从构造子 telescope 的 rig 算出
-  keep flags；类型声明、构造子应用、case 分支绑定三处消费同一份并校验 rig。
-- **不透明字段单一真源**：`Codegen.Decl.ctorOpaqueFlagsOf` 与 keep flags 逐位对齐，
-  由「运行时类型是否不可命名」判据算出；类型声明的 `Obj.t`、arity/used-levels 计算、
-  构造子实参 `Obj.magic` 三处共用。精化器侧的 binder cast 必须用同一判据
-  （`Elab.Meta.valueOpaqueScoped`），两侧不一致就会在 `ocamlopt` 处报字段类型错配。
+Track A 第一步（Core → IR → OCaml）之后这些不变量分两层：**决策**在 `Codegen.Lower`
+（产出 `Ir`），**渲染**在 `Codegen.{Decl,Term}`（只消费 `Ir`）。
+
+- **构造子字段形状单一真源**：`Elab.Representation.ctorKeepFlags` 从构造子 telescope 的 rig
+  算出 keep flags；Lowering 用它把实参归一成运行时实参表、决定 case binder 形状，后端只
+  渲染。
+- **不透明字段单一真源**：`ctorOpaqueFlagsOf` 与 keep flags 逐位对齐，由「运行时类型是否
+  不可命名」判据算出；Lowering 据此产出 `IrTyOpaque`（类型声明里的 `Obj.t`）与 `IrCast`
+  （构造子实参的 `Obj.magic`）、以及 arity / used-levels 的跳过规则。精化器侧的 binder
+  cast 必须用同一判据（`Elab.Meta.valueOpaqueScoped`），两侧不一致就会在 `ocamlopt` 处报
+  字段类型错配。
 - **de Bruijn 作用域护栏**：`Core.varIndex` 越界返回 `-1`（不是静默 0）；
-  `Codegen.Erase.checkAllDefScopes` 对运行时会生成的定义体做作用域校验，越界报内部错误。
-- **名字护栏**：`ensureUniqueOcamlNames` 对实际生成的 `v_*` / `t_*` / `C_*` 做族内去重。
+  `Codegen.Lower.checkProgramOf` → `Erase.checkAllDefScopes` 对运行时会生成的定义体做作用域
+  校验，越界报内部错误。`IrVar` 携带 binder 身份（不是裸下标），所以「渲染出未绑定名字」
+  在 IR 层不可表达。
+- **名字护栏**：`Codegen.Lower.ensureUniqueOcamlNamesIn` 对实际生成的 `v_*` / `t_*` / `C_*`
+  做族内去重。
 - **入口护栏**：`checkResolvedModules` 要求模块声明带模块前缀；入口声明必须不带点、非空、
-  不重复；每个 `DtDef` / `DtData` 必须有归属。
-- **依赖分组**：Kosaraju SCC（`Codegen.Erase.groupRuntimeDefs`），自 / 互递归才用
-  `let rec ... and ...`；零参顶层定义生成 `let v_x = body`。
+  不重复；每个运行时 `DtDef` / `DtData` 必须有归属。
+- **依赖分组**：Kosaraju SCC（`Ir.Analysis.assembleGroupNames`）在 Lowering 期算出，结果带
+  `irGroupIsRec`；自 / 互递归才用 `let rec ... and ...`；零参顶层定义生成 `let v_x = body`。
+- **边界护栏**：`checks.ir-boundary`（`nix/checks/ir-boundary.sh`）静态断言「IR 不 import
+  上游、文本生成层不 import Core/Elab/Intrinsics、Split 必须路由到 Lower」。
 
 ## 8. 实现入口
 
@@ -149,7 +159,8 @@ data Term where
 | --- | --- |
 | Core | `Core.Eval.eval` / `force` / `normalize` / `quote`；`Core.Conv.conv` / `solveMeta` |
 | Elab | `Elab.Driver.elabProgramFull` / `goalsOfProgram`；`Elab.Term.inferE` / `checkE`；`Elab.Case` / `Elab.Match` / `Elab.Data` / `Elab.Trait` / `Elab.Termination` |
-| Codegen | `Codegen.Assembly.checkDtProgram` / `prepareDtProgram`；`Codegen.Split.generateDtSplitProgram`；`Codegen.Erase.*` |
+| IR | `Codegen.Lower.lowerTerm` / `lowerUnitOf` / `lowerProgramOf`；`Ir.Model`（数据）/ `Ir.Analysis`（SCC） |
+| Codegen | `Codegen.Lower.checkProgramOf`（程序级检查）；`Codegen.Assembly.genUnitParts`；`Codegen.Term.genIr` / `genEntryHook`；`Codegen.Split.generateDtSplitProgram`；`Codegen.Erase.*` |
 
 数据流与改动定位见 [architecture.md](../architecture.md)；测试标签见
 [testing.md](testing.md)。

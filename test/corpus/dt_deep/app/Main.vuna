@@ -1,0 +1,13 @@
+-- 150 层嵌套应用：迁移前的固定 512 步 codegen 预算会在此耗尽。
+--
+-- 每层 `step (...)` 消耗 genTermFuel 若干步（genAppFuel → genPlainAppFuel →
+-- genPlainAppFallback → 两个子项），150 层就超过 512。新路径（Core → IR → 文本）
+-- 只按节点结构递归，与嵌套深度无关。
+step : Int -> Int
+step a = a + 1
+
+deep : Int -> Int
+deep x = step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (step (x))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+
+main : Int
+main = deep 0
