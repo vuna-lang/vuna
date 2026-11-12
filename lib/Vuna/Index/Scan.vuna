@@ -237,7 +237,7 @@ dedupeGo (s :: rest) seen acc =
 -- ---------------------------------------------------------------
 -- 模块全名：源码模块头优先；无模块头时按路径推导。
 moduleNameOf : String -> String -> Maybe ModDecl -> String
-moduleNameOf dir path (Just (ModDecl name explicit items sp)) = name
+moduleNameOf dir path (Just (ModDecl name explicit items _ _ _ sp)) = name
 moduleNameOf dir path Nothing = segmentModule dir path
 
 segmentModule : String -> String -> String

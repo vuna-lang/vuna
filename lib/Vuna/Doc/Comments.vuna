@@ -48,7 +48,7 @@ targetKey t = "${targetKind t}\t${targetParent t}\t${targetName t}\t${targetLine
 
 moduleTargets : Maybe ModDecl -> List DocTarget
 moduleTargets Nothing = []
-moduleTargets (Just (ModDecl name hasList items sp)) =
+moduleTargets (Just (ModDecl name hasList items _ _ _ sp)) =
   [DocTarget (spanStartLine sp) (spanStartCol sp) "module" name ""]
 
 targetsOfDecls : List Decl -> List DocTarget

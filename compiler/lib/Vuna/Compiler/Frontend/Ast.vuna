@@ -36,6 +36,8 @@ module Vuna.Compiler.Frontend.Ast
   , EStr
   , EVar
   , ExportItem
+  , ExportMembers(..)
+  , ExportSpec(..)
   , Expr
   , Field(..)
   , FixityDecl(..)
@@ -44,6 +46,8 @@ module Vuna.Compiler.Frontend.Ast
   , Import(..)
   , InterpPart
   , ModDecl(..)
+  , Opacity(..)
+  , OpacitySpec(..)
   , PAs
   , PCon
   , PInt
@@ -60,6 +64,7 @@ module Vuna.Compiler.Frontend.Ast
   , XBare
   , XModule
   , XTypeAll
+  , XTypeSome
   , clausesFor
   , ctorArity
   , ctorDisplayName
@@ -79,6 +84,8 @@ module Vuna.Compiler.Frontend.Ast
   , doStmtSpan
   , doSyntaxCanonical
   , exportItemSpan
+  , exportSpecName
+  , exportSpecSpan
   , exprSpan
   , fieldName
   , fieldSpan
@@ -105,6 +112,8 @@ module Vuna.Compiler.Frontend.Ast
   , macroNameOf
   , macroSyntaxName
   , macroSyntaxPrefix
+  , opacitySpecName
+  , opacitySpecSpan
   , overCtorName
   , overCtorShort
   , overCtorTargets
@@ -164,20 +173,23 @@ qtyIsZero : Qty -> Bool
 qtyIsZero Q0 = True
 qtyIsZero Q1 = False
 
--- | R1（records-v2）：记录表示三档声明（`transparent record` / `record` / `opaque record`）。
--- `ReprAuto` = 未声明：回落到自动去装箱推断（R1 过渡；终态删除推断）。
--- `ReprTransparent` = 声明透明别名：构造/投影定义性恒等，要求擦除后恰好一个运行时字段。
--- `ReprOpaque` = 声明强制装箱（FFI/ABI 稳定）。档位进 DtData 与 iface（D7：声明优先）。
+-- | 记录表示三档声明（`alias record` / `record` / `boxed record`）。
+-- `ReprAuto` = 未声明：回落到自动去装箱推断（过渡；终态删除推断）。
+-- `ReprAlias` = 声明去装箱别名：构造/投影定义性恒等，要求擦除后恰好一个运行时字段。
+-- `ReprBoxed` = 声明强制装箱（FFI/ABI 稳定）。档位进 DtData 与 iface（D7：声明优先）。
 data ReprTier : Type where
   ReprAuto : ReprTier
-  ReprTransparent : ReprTier
-  ReprOpaque : ReprTier
+  ReprAlias : ReprTier
+  ReprBoxed : ReprTier
 
 -- | 档位的源码前缀（Fmt 用；`ReprAuto` 无前缀）。
+--
+-- 迁移期：仓库源码仍用旧词，Fmt 先继续输出旧词，避免 `vuna fmt --check` 与源码不一致；
+-- 源码迁移到 `alias`/`boxed` 后（Phase 2）改回新词。
 reprPrefix : ReprTier -> String
 reprPrefix ReprAuto = ""
-reprPrefix ReprTransparent = "transparent "
-reprPrefix ReprOpaque = "opaque "
+reprPrefix ReprAlias = "transparent "
+reprPrefix ReprBoxed = "opaque "
 
 data Expr : Type where
   EVar : String -> Span -> Expr
@@ -253,7 +265,7 @@ data Decl : Type where
   -- M38：末位 `Bool` 是 `lin data` 标记。
   -- M42：`derivings` 后的 `Bool` 是 `deriving via field` 标记（仅 record 允许）。
   -- R1：`viaField` 后的 `ReprTier` 是表示档位（data 恒为 `ReprAuto`，record 由
-  -- `transparent`/`opaque` 前缀给出）；降级与 DtData 都要携带它。
+  -- `alias`/`boxed` 前缀给出）；降级与 DtData 都要携带它。
   DData : String -> List String -> Expr -> List Ctor -> List String -> Bool -> ReprTier -> Bool -> Span -> Decl
   -- M28：`axiom name : Ty` —— 无体的可擦除/不透明顶层（决策 5 / D10）。
   -- 它是**类型层**定义：类型层引用合法，运行时使用由擦除检查报错。
@@ -273,16 +285,58 @@ data Decl : Type where
 
 -- M10 模块头与导出项。
 -- XBare 是裸名导出，XTypeAll 是 `T(..)`，XModule 是 `module B` 整模块重导出。
+-- XTypeSome 是 `T(A, B)`（D11：data 构造子 / trait 方法子集；顺序无语义）。
 data ExportItem : Type where
   XBare : String -> Span -> ExportItem
   XTypeAll : String -> Span -> ExportItem
+  XTypeSome : String -> List String -> Span -> ExportItem
   XModule : String -> Span -> ExportItem
 
--- 模块头：模块名、是否写了显式导出列表、导出项、span。
+-- D11：逐定义 `export` 的成员集合（`T` / `T(..)` / `T(A, B)`）。
+data ExportMembers : Type where
+  EMNone : ExportMembers
+  EMAll : ExportMembers
+  EMOnly : List String -> ExportMembers
+
+-- D11：一条逐定义导出声明。
+-- `ESValue` = 值/axiom/extern/用户符号；`ESType` = data/record/trait + 成员面。
+data ExportSpec : Type where
+  ESValue : String -> Span -> ExportSpec
+  ESType : String -> ExportMembers -> Span -> ExportSpec
+
+exportSpecName : ExportSpec -> String
+exportSpecName (ESValue name sp) = name
+exportSpecName (ESType name members sp) = name
+
+exportSpecSpan : ExportSpec -> Span
+exportSpecSpan (ESValue name sp) = sp
+exportSpecSpan (ESType name members sp) = sp
+
+-- D11：定义归约修饰符。
+data Opacity : Type where
+  OpacityOpaque : Opacity
+  OpacityTransparent : Opacity
+
+record OpacitySpec where
+  opacityName : String
+  opacityKind : Opacity
+  opacitySpan : Span
+
+opacitySpecName : OpacitySpec -> String
+opacitySpecName (OpacitySpec name kind sp) = name
+
+opacitySpecSpan : OpacitySpec -> Span
+opacitySpecSpan (OpacitySpec name kind sp) = sp
+
+-- 模块头：模块名、是否写了显式导出列表、导出项、span；
+-- D11：逐定义导出/重导出/归约修饰符也挂在模块头（入口文件没有模块头，不需要它们）。
 record ModDecl where
   modDeclName : String
   modDeclHasExportList : Bool
   modDeclExportItems : List ExportItem
+  modDeclExports : List ExportSpec
+  modDeclReexports : List ExportItem
+  modDeclOpacity : List OpacitySpec
   modDeclSpan : Span
 
 -- parser 的产物：可选模块头 + imports + fixity/别名声明 + 顶层声明。
@@ -372,6 +426,7 @@ record Import where
 exportItemSpan : ExportItem -> Span
 exportItemSpan (XBare name sp) = sp
 exportItemSpan (XTypeAll name sp) = sp
+exportItemSpan (XTypeSome name members sp) = sp
 exportItemSpan (XModule name sp) = sp
 
 collectClauses : List Decl -> String -> List (Pair (List Pat) Expr)

@@ -145,7 +145,7 @@ data TcErr : Nat -> Type where
   -- R4（records-v2）：`deriving via field` 只允许 `record`（`data` 已退役记录语义）。
   DerivingViaOnlyRecord : TcErr Zero
   -- R1（records-v2）：`transparent record` 声明不满足「擦除后恰好一个运行时字段」（含递归）。
-  ReprTransparentInvalid : TcErr Zero
+  ReprAliasInvalid : TcErr Zero
   RecordDuplicateField : TcErr Zero
   RecordMissingField : String -> TcErr (Succ Zero)
   RecordUnknownField : String -> TcErr (Succ Zero)
@@ -252,7 +252,7 @@ tcCode (TypeMismatchCaseBranch _ _) = "TC_TypeMismatchCaseBranch"
 tcCode (WhereNeedsSig _ _) = "TC_WhereNeedsSig"
 tcCode DerivingViaUnboxedRequired = "TC_DerivingViaUnboxedRequired"
 tcCode DerivingViaOnlyRecord = "TC_DerivingViaOnlyRecord"
-tcCode ReprTransparentInvalid = "TC_ReprTransparentInvalid"
+tcCode ReprAliasInvalid = "TC_ReprAliasInvalid"
 tcCode RecordDuplicateField = "TC_RecordDuplicateField"
 tcCode (RecordMissingField _) = "TC_RecordMissingField"
 tcCode (RecordUnknownField _) = "TC_RecordUnknownField"
@@ -366,8 +366,7 @@ tcTemplate DerivingViaUnboxedRequired =
   "deriving via field requires a zero-cost single-field wrapper (auto-unboxed)"
 tcTemplate DerivingViaOnlyRecord =
   "deriving via field is only allowed on record declarations (data no longer has record semantics)"
-tcTemplate ReprTransparentInvalid =
-  "declared transparent requires exactly one non-recursive runtime field"
+tcTemplate ReprAliasInvalid = "declared alias requires exactly one non-recursive runtime field"
 tcTemplate RecordDuplicateField = "duplicate field"
 tcTemplate (RecordMissingField _) = "missing field <0>"
 tcTemplate (RecordUnknownField _) = "unknown field <0>"
@@ -532,7 +531,7 @@ tcChunk10 =
   [ TcEntry (tcCode (WhereNeedsSig "" "")) (tcTemplate (WhereNeedsSig "" "")) "where 绑定缺类型签名",
     TcEntry (tcCode DerivingViaUnboxedRequired) (tcTemplate DerivingViaUnboxedRequired) "deriving via field 需要自动去装箱的单字段包装",
     TcEntry (tcCode DerivingViaOnlyRecord) (tcTemplate DerivingViaOnlyRecord) "deriving via field 只允许 record（data 已退役记录语义）",
-    TcEntry (tcCode ReprTransparentInvalid) (tcTemplate ReprTransparentInvalid) "transparent record 要求擦除后恰好一个（非递归）运行时字段",
+    TcEntry (tcCode ReprAliasInvalid) (tcTemplate ReprAliasInvalid) "alias record 要求擦除后恰好一个（非递归）运行时字段",
     TcEntry (tcCode RecordDuplicateField) (tcTemplate RecordDuplicateField) "record 字段重复",
     TcEntry (tcCode (RecordMissingField "")) (tcTemplate (RecordMissingField "")) "record 缺字段",
     TcEntry (tcCode (RecordUnknownField "")) (tcTemplate (RecordUnknownField "")) "record 未知字段",

@@ -24,23 +24,51 @@ parseExpressionSource source =
   Vuna.Compiler.Common.bind (lexSource source)
     (\toks => Vuna.Compiler.Common.step (parseExpr (stateFuel (PState "<expr>" toks (Pos 1 0) (length toks))) (PState "<expr>" toks (Pos 1 0) (length toks)) 0 0) (\e, st => if isEof st then OkC e else psErr0 ExpectedEndOfExpr))
 
+-- D11：解析器累加器（导出/重导出/归约修饰符与声明一起收集）。
+record DeclAcc where
+  declAccFixities : List FixityDecl
+  declAccDecls : List Decl
+  declAccExports : List ExportSpec
+  declAccOpacity : List OpacitySpec
+
+emptyDeclAcc : DeclAcc
+emptyDeclAcc = DeclAcc [] [] [] []
+
+record ParsedDecl where
+  parsedFixity : Maybe FixityDecl
+  parsedDecl : Maybe Decl
+  parsedExport : Maybe ExportSpec
+  parsedOpacity : Maybe OpacitySpec
+
+emptyParsedDecl : ParsedDecl
+emptyParsedDecl = ParsedDecl Nothing Nothing Nothing Nothing
+
+-- 把逐定义导出/重导出/归约修饰符挂到模块头上；入口文件没有模块头（这些信息也无下游）。
+withExportInfo : Maybe ModDecl -> List ExportSpec -> List ExportItem -> List OpacitySpec -> Maybe ModDecl
+withExportInfo Nothing _ _ _ = Nothing
+withExportInfo (Just m) exports reexports opacity =
+  Just
+    (ModDecl m.modDeclName m.modDeclHasExportList m.modDeclExportItems exports reexports opacity m.modDeclSpan)
+
 -- 可选模块头（M10）：`module M (导出项, ...) where`；列表省略 = 导出全部。
 parseSourceFile : Bool -> PState -> Check (Pair (Pair SourceFile PState) (List Diagnostic))
-parseSourceFile recover st = Vuna.Compiler.Common.step (parseModDecl st) (\hdr, st1 => Vuna.Compiler.Common.step (parseImports (stateFuel st1) st1) (\imports, st2 => if isEof st2 then OkC (Pair (Pair (SourceFile hdr imports [] []) st2) [])
-else case peekPos st2 of
-  Pos line col => Vuna.Compiler.Common.step (parseDecls recover (stateFuel st2) st2 col [] []) (\p, rest => case rest of
-    Pair st3 errs => case p of
-      Pair fixities decls =>
-        if isEof st3 then OkC (Pair (Pair (SourceFile hdr imports fixities decls) st3) errs)
-        else psErr0 ExpectedEndOfInput
-  )
+parseSourceFile recover st = Vuna.Compiler.Common.step (parseModDecl st) (\hdr, st1 => Vuna.Compiler.Common.step (parseImports (stateFuel st1) st1) (\imp, st2 => case imp of
+  Pair imports reexports => if isEof st2 then OkC (Pair (Pair (SourceFile (withExportInfo hdr [] reexports []) imports [] []) st2) [])
+  else case peekPos st2 of
+    Pos line col => Vuna.Compiler.Common.step (parseDecls recover (stateFuel st2) st2 col emptyDeclAcc) (\p, rest => case rest of
+      Pair st3 errs => case p of
+        DeclAcc fixities decls exports opacity =>
+          if isEof st3 then OkC
+            (Pair (Pair (SourceFile (withExportInfo hdr exports reexports opacity) imports fixities decls) st3) errs)
+          else psErr0 ExpectedEndOfInput
+    )
 )
 )
 
 parseModDecl : PState -> Check (Pair (Maybe ModDecl) PState)
 parseModDecl st =
   if atKw st "module" then Vuna.Compiler.Common.step (expectKw st "module")
-    (\_, st1 => Vuna.Compiler.Common.step (expectIdent st1) (\name, st2 => if atSym st2 "(" then Vuna.Compiler.Common.step (parseExportItems st2) (\items, st3 => Vuna.Compiler.Common.step (expectKw st3 "where") (\_, st4 => OkC (Pair (Just (ModDecl name True items (spanOf st st4))) st4))) else Vuna.Compiler.Common.step (expectKw st2 "where") (\_, st3 => OkC (Pair (Just (ModDecl name False [] (spanOf st st3))) st3))))
+    (\_, st1 => Vuna.Compiler.Common.step (expectIdent st1) (\name, st2 => if atSym st2 "(" then Vuna.Compiler.Common.step (parseExportItems st2) (\items, st3 => Vuna.Compiler.Common.step (expectKw st3 "where") (\_, st4 => OkC (Pair (Just (ModDecl name True items [] [] [] (spanOf st st4))) st4))) else Vuna.Compiler.Common.step (expectKw st2 "where") (\_, st3 => OkC (Pair (Just (ModDecl name False [] [] [] [] (spanOf st st3))) st3))))
   else OkC (Pair Nothing st)
 
 parseExportItems : PState -> Check (Pair (List ExportItem) PState)
@@ -62,14 +90,62 @@ parseExportItem st = case peekTok st of
   PTok (TIdent name) p =>
     let
       st1 = advance st
-    in if atSym st1 "(" then Vuna.Compiler.Common.step (expectSym st1 "(")
-      (\_, st2 => Vuna.Compiler.Common.step (expectSym st2 "..") (\_, st3 => Vuna.Compiler.Common.step (expectSym st3 ")") (\_, st4 => OkC (Pair (XTypeAll name (spanOf st st4)) st4))))
+    in if atSym st1 "(" then Vuna.Compiler.Common.step (parseExportMembers st1)
+      (\members, st2 => OkC (Pair (exportItemOf name members (spanOf st st2)) st2))
     else OkC (Pair (XBare name (spanOf st st1)) st1)
   -- M31.3：导出用户符号名函数（`(<+>)`）。保留符号不可导出。
   PTok (TSym op) p =>
     if isReservedValueName op then psErr0 ExpectedExportItem
     else OkC (Pair (XBare op (spanOf st (advance st))) (advance st))
   _ => psErr0 ExpectedExportItem
+
+-- | `T(..)` / `T(A, B)` / `T()` 的括号体（`(` 尚未消费）。
+parseExportMembers : PState -> Check (Pair ExportMembers PState)
+parseExportMembers st =
+  Vuna.Compiler.Common.step (expectSym st "(")
+    (\_, st1 => if atSym st1 ")" then OkC (Pair EMNone (advance st1)) else if atSym st1 ".." then Vuna.Compiler.Common.step (expectSym st1 "..") (\_, st2 => Vuna.Compiler.Common.step (expectSym st2 ")") (\_, st3 => OkC (Pair EMAll st3))) else Vuna.Compiler.Common.step (parseMemberNames (stateFuel st1) st1) (\names, st2 => OkC (Pair (EMOnly names) st2)))
+
+parseMemberNames : Int -> PState -> Check (Pair (List String) PState)
+parseMemberNames fuel st =
+  if fuel <= 0 then icFuel "parser"
+  else Vuna.Compiler.Common.step (expectIdent st)
+    (\name, st1 => if atSym st1 "," then Vuna.Compiler.Common.step (parseMemberNames (fuel - 1) (advance st1)) (\rest, st2 => OkC (Pair (Base.List.Cons name rest) st2)) else Vuna.Compiler.Common.step (expectSym st1 ")") (\_, st2 => OkC (Pair [name] st2)))
+
+exportItemOf : String -> ExportMembers -> Span -> ExportItem
+exportItemOf name EMAll sp = XTypeAll name sp
+exportItemOf name EMNone sp = XTypeSome name [] sp
+exportItemOf name (EMOnly members) sp = XTypeSome name members sp
+
+-- | `export import [qualified] B [as L] [(x, T(..), T(A, B))]`。
+-- 返回普通 `Import`（与 `import` 同语义）+ 重导出项。
+parseExportImport : PState -> Check (Pair (Pair Import (List ExportItem)) PState)
+parseExportImport st =
+  Vuna.Compiler.Common.step (expectIdent st)
+    (\_, st1 => if atKw st1 "import" then Vuna.Compiler.Common.step (expectKw st1 "import") (\_, st2 => Vuna.Compiler.Common.step (parseImportAfterKeyword st2) (\imp, st3 => parseReexportTail imp st3)) else psErr0 ExpectedTopLevelDecl)
+
+-- 复用 `import` 之后的 qualified/模块名/as 解析。
+parseImportAfterKeyword : PState -> Check (Pair Import PState)
+parseImportAfterKeyword st =
+  if atKw st "qualified" then Vuna.Compiler.Common.step (expectKw st "qualified") (\_, st1 => parseImportAlias st1 True)
+  else parseImportAlias st False
+
+parseReexportTail : Import -> PState -> Check (Pair (Pair Import (List ExportItem)) PState)
+parseReexportTail imp st =
+  if atSym st "(" then Vuna.Compiler.Common.step (parseExportItems st)
+    (\items, st1 => OkC (Pair (Pair imp (map (qualifyExportItem (reexportPrefix imp)) items)) st1))
+  else OkC (Pair (Pair imp [XModule (reexportPrefix imp) imp.importSpan]) st)
+
+-- 重导出项里的模块前缀：写了 alias 用 alias，否则用全名。
+reexportPrefix : Import -> String
+reexportPrefix imp = case imp.importAlias of
+  Just alias => alias
+  Nothing => imp.importName
+
+qualifyExportItem : String -> ExportItem -> ExportItem
+qualifyExportItem prefix (XBare name sp) = XBare "${prefix}.${name}" sp
+qualifyExportItem prefix (XTypeAll name sp) = XTypeAll "${prefix}.${name}" sp
+qualifyExportItem prefix (XTypeSome name members sp) = XTypeSome "${prefix}.${name}" members sp
+qualifyExportItem prefix (XModule name sp) = XModule name sp
 
 parseImportSpec : PState -> Check (Pair Import PState)
 parseImportSpec st =
@@ -81,39 +157,64 @@ parseImportAlias st isQualified =
   Vuna.Compiler.Common.step (expectIdent st)
     (\name, st1 => if atKw st1 "as" then Vuna.Compiler.Common.step (expectKw st1 "as") (\_, st2 => Vuna.Compiler.Common.step (expectIdent st2) (\alias, st3 => OkC (Pair (Import name isQualified (Just alias) (spanOf st st3)) st3))) else OkC (Pair (Import name isQualified Nothing (spanOf st st1)) st1))
 
-parseImports : Int -> PState -> Check (Pair (List Import) PState)
-parseImports fuel st =
-  if fuel <= 0 then icFuel "parser"
-  else if atKw st "import" then Vuna.Compiler.Common.step (parseImportSpec st)
-    (\imp, st1 => Vuna.Compiler.Common.step (parseImports (fuel - 1) st1) (\rest, st2 => OkC (Pair (Base.List.Cons imp rest) st2)))
-  else OkC (Pair [] st)
+-- D11：import 区同时收 `export import` 的重导出项；列表顺序无语义。
+parseImports : Int -> PState -> Check (Pair (Pair (List Import) (List ExportItem)) PState)
+parseImports fuel st = if fuel <= 0 then icFuel "parser"
+else if atKw st "import" then Vuna.Compiler.Common.step (parseImportSpec st) (\imp, st1 => Vuna.Compiler.Common.step (parseImports (fuel - 1) st1) (\rest, st2 => case rest of
+  Pair imports reexports => OkC (Pair (Pair (Base.List.Cons imp imports) reexports) st2)
+)
+)
+else if atIdentName st "export" && atKw (advance st) "import" then Vuna.Compiler.Common.step (parseExportImport st) (\p, st1 => case p of
+  Pair imp reexports => Vuna.Compiler.Common.step (parseImports (fuel - 1) st1) (\rest, st2 => case rest of
+    Pair imports reexports2 =>
+      OkC (Pair (Pair (Base.List.Cons imp imports) (append reexports reexports2)) st2)
+  )
+)
+else OkC (Pair (Pair [] []) st)
 
 -- M31.2：`infixl` / `infixr` / `infix` 声明与顶层声明穿插收集（声明本身不进入 Decl，
 -- 由 Loader 在中缀重排时消费；见 `SourceFile.fixities`）。
-parseDecls : Bool -> Int -> PState -> Int -> List FixityDecl -> List Decl -> Check (Pair (Pair (List FixityDecl) (List Decl)) (Pair PState (List Diagnostic)))
-parseDecls recover fuel st blockCol fixAcc declAcc = if fuel <= 0 then icFuel "parser"
-else if isEof st then OkC (Pair (Pair (reverse fixAcc) (reverse declAcc)) (Pair st []))
+-- D11：累加器定义在文件前部（`DeclAcc` / `ParsedDecl`）。
+parseDecls : Bool -> Int -> PState -> Int -> DeclAcc -> Check (Pair DeclAcc (Pair PState (List Diagnostic)))
+parseDecls recover fuel st blockCol acc = if fuel <= 0 then icFuel "parser"
+else if isEof st then OkC (Pair (reverseDeclAcc acc) (Pair st []))
 else case peekPos st of
   Pos line col => if col == blockCol then case parseFixityOrDecl st blockCol of
     ErrC e => if recover then
       let
         st2 = recoverDecl st blockCol
-      in Vuna.Compiler.Common.step (parseDecls True (fuel - 1) st2 blockCol fixAcc declAcc) (\p, rest => case rest of
+      in Vuna.Compiler.Common.step (parseDecls True (fuel - 1) st2 blockCol acc) (\p, rest => case rest of
         Pair st3 errs => OkC (Pair p (Pair st3 (Base.List.Cons e errs)))
       )
     else ErrC e
     OkC p =>
       let
-        payload = firstOf p
+        pd = firstOf p
         st1 = secondOf p
-        fd = firstOf payload
-        dl = secondOf payload
-      in case fd of
-        Just f => parseDecls recover (fuel - 1) st1 blockCol (Base.List.Cons f fixAcc) declAcc
-        Nothing => case dl of
-          d :: _ => parseDecls recover (fuel - 1) st1 blockCol fixAcc (Base.List.Cons d declAcc)
-          [] => icInternal "parseFixityOrDecl returned nothing"
+        acc2 = addParsedDecl pd acc
+      in parseDecls recover (fuel - 1) st1 blockCol acc2
   else psErr1 (ExpectedDeclAtColumn (strFromInt blockCol)) (strFromInt blockCol)
+
+addParsedDecl : ParsedDecl -> DeclAcc -> DeclAcc
+addParsedDecl (ParsedDecl mfix mdecl mexp mop) (DeclAcc fixities decls exports opacity) =
+  let
+    fixities2 = case mfix of
+      Just f => Base.List.Cons f fixities
+      Nothing => fixities
+    decls2 = case mdecl of
+      Just d => Base.List.Cons d decls
+      Nothing => decls
+    exports2 = case mexp of
+      Just e => Base.List.Cons e exports
+      Nothing => exports
+    opacity2 = case mop of
+      Just o => Base.List.Cons o opacity
+      Nothing => opacity
+  in DeclAcc fixities2 decls2 exports2 opacity2
+
+reverseDeclAcc : DeclAcc -> DeclAcc
+reverseDeclAcc (DeclAcc fixities decls exports opacity) =
+  DeclAcc (reverse fixities) (reverse decls) (reverse exports) (reverse opacity)
 
 -- 解析恢复：跳过一个坏声明，停在下一个「与块首同列」的 token（无则到 EOF）。
 recoverDecl : PState -> Int -> PState
@@ -131,21 +232,271 @@ skipFrom [] blockCol = []
 skipFrom (t :: rest) blockCol =
   if posCol t.ptokPos == blockCol then Base.List.Cons t rest else skipToDeclLine rest blockCol
 
--- 一条顶层声明：fixity 声明（返回 Just）或普通 Decl（返回单元素列表）。
-parseFixityOrDecl : PState -> Int -> Check (Pair (Pair (Maybe FixityDecl) (List Decl)) PState)
+-- 一条顶层声明：fixity / 带修饰符的声明 / 普通 Decl。
+parseFixityOrDecl : PState -> Int -> Check (Pair ParsedDecl PState)
 parseFixityOrDecl st blockCol = case peekTok st of
   PTok (TKw "infixl") p =>
     Vuna.Compiler.Common.step (parseFixityDecl st blockCol 1 p)
-      (\fd, st1 => OkC (Pair (Pair (Just fd) []) st1))
+      (\fd, st1 => OkC (Pair (ParsedDecl (Just fd) Nothing Nothing Nothing) st1))
   PTok (TKw "infixr") p =>
     Vuna.Compiler.Common.step (parseFixityDecl st blockCol 2 p)
-      (\fd, st1 => OkC (Pair (Pair (Just fd) []) st1))
+      (\fd, st1 => OkC (Pair (ParsedDecl (Just fd) Nothing Nothing Nothing) st1))
   PTok (TKw "infix") p =>
     Vuna.Compiler.Common.step (parseFixityDecl st blockCol 0 p)
-      (\fd, st1 => OkC (Pair (Pair (Just fd) []) st1))
+      (\fd, st1 => OkC (Pair (ParsedDecl (Just fd) Nothing Nothing Nothing) st1))
   _ =>
-    Vuna.Compiler.Common.step (parseDecl st blockCol)
-      (\decl, st1 => OkC (Pair (Pair Nothing [decl]) st1))
+    if exportStart st then parseExportDecl st blockCol
+    else if opacityStart st then parseOpacityDecl st blockCol
+    else Vuna.Compiler.Common.step (parseDecl st blockCol)
+      (\decl, st1 => OkC (Pair (ParsedDecl Nothing (Just decl) Nothing Nothing) st1))
+
+-- 软关键字 `export`：`export f : T` / `export data ...`；不吞掉名为 export 的普通定义。
+exportStart : PState -> Bool
+exportStart st = case peekTok st of
+  PTok (TIdent "export") _ => exportMarkerFollows (advance st)
+  _ => False
+
+exportMarkerFollows : PState -> Bool
+exportMarkerFollows st = case peekTok st of
+  PTok (TSym ":") _ => False
+  PTok (TIdent _) _ => case peekTok (advance st) of
+    PTok (TSym ":") _ => True
+    _ => True
+  PTok (TSym _) _ => case peekTok (advance st) of
+    PTok (TSym ":") _ => True
+    _ => True
+  PTok (TKw "data") _ => True
+  PTok (TKw "record") _ => True
+  PTok (TKw "trait") _ => True
+  PTok (TKw "axiom") _ => True
+  PTok (TKw "extern") _ => True
+  PTok (TKw "linear") _ => True
+  PTok (TKw "opaque") _ => True
+  PTok (TKw "transparent") _ => True
+  PTok (TKw "import") _ => True
+  _ => False
+
+-- `opaque` / `transparent` 在声明开头：后跟 record/linear record 时是旧档位词，
+-- 否则是定义归约修饰符。
+opacityStart : PState -> Bool
+opacityStart st = case peekTok st of
+  PTok (TKw "opaque") _ => not (tierFollows st)
+  PTok (TKw "transparent") _ => not (tierFollows st)
+  _ => False
+
+-- | 逐定义导出：`export [opaque|transparent] <decl>`。
+parseExportDecl : PState -> Int -> Check (Pair ParsedDecl PState)
+parseExportDecl st blockCol =
+  Vuna.Compiler.Common.step (expectIdent st)
+    (\_, st1 => if atKw st1 "opaque" && not (tierFollows st1) then Vuna.Compiler.Common.step (expectKw st1 "opaque") (\_, st2 => parseExportedValue (Just OpacityOpaque) st2 blockCol) else if atKw st1 "transparent" && not (tierFollows st1) then Vuna.Compiler.Common.step (expectKw st1 "transparent") (\_, st2 => parseExportedValue (Just OpacityTransparent) st2 blockCol) else parseExportedPlain Nothing st1 blockCol)
+
+parseExportedPlain : Maybe Opacity -> PState -> Int -> Check (Pair ParsedDecl PState)
+parseExportedPlain op st blockCol = case peekTok st of
+  PTok (TKw "data") p =>
+    if opacityGiven op then psErr1 (ExpectedToken "value signature") "value signature"
+    else parseDataExport False st blockCol p
+  PTok (TKw "linear") p =>
+    if opacityGiven op then psErr1 (ExpectedToken "value signature") "value signature"
+    else parseLinearExport st blockCol p
+  PTok (TKw "record") p =>
+    if opacityGiven op then psErr1 (ExpectedToken "value signature") "value signature"
+    else parseRecordExport False ReprAuto st blockCol p
+  PTok (TKw "trait") p =>
+    if opacityGiven op then psErr1 (ExpectedToken "value signature") "value signature"
+    else parseTraitExport st blockCol p
+  PTok (TKw "axiom") p => parseAxiomExport op st blockCol p
+  PTok (TKw "extern") p => parseExternExport op st blockCol p
+  PTok (TKw "transparent") p =>
+    if tierFollows st then parseTieredExport ReprAlias st blockCol p
+    else psErr1 (ExpectedToken "value signature") "value signature"
+  PTok (TKw "opaque") p =>
+    if tierFollows st then parseTieredExport ReprBoxed st blockCol p
+    else psErr1 (ExpectedToken "value signature") "value signature"
+  PTok (TIdent name) p =>
+    if (name == "alias" || name == "boxed") && tierFollows st then if opacityGiven op then psErr1 (ExpectedToken "value signature") "value signature"
+    else parseTieredExport (if name == "alias" then ReprAlias else ReprBoxed) st blockCol p
+    else parseExportedValue op st blockCol
+  PTok (TSym _) _ => parseExportedValue op st blockCol
+  _ => psErr0 ExpectedTopLevelDecl
+
+opacityGiven : Maybe Opacity -> Bool
+opacityGiven Nothing = False
+opacityGiven (Just _) = True
+
+opacitySpecOf : Maybe Opacity -> String -> Span -> Maybe OpacitySpec
+opacitySpecOf Nothing name sp = Nothing
+opacitySpecOf (Just kind) name sp = Just (OpacitySpec name kind sp)
+
+-- | `export [opaque|transparent] f : T`（也接受无签名的子句，交给 Elab 报既有诊断）。
+parseExportedValue : Maybe Opacity -> PState -> Int -> Check (Pair ParsedDecl PState)
+parseExportedValue op st blockCol = case peekTok st of
+  PTok (TIdent name) p =>
+    let
+      st1 = advance st
+    in if atSym st1 ":" then Vuna.Compiler.Common.step (parseSignature st1 blockCol True name p)
+      (\decl, st2 => OkC (Pair (ParsedDecl Nothing (Just decl) (Just (ESValue name (spanOf st st2))) (opacitySpecOf op name (spanOf st st2))) st2))
+    else Vuna.Compiler.Common.step (parseClause st1 blockCol name p)
+      (\decl, st2 => OkC (Pair (ParsedDecl Nothing (Just decl) (Just (ESValue name (spanOf st st2))) (opacitySpecOf op name (spanOf st st2))) st2))
+  PTok (TSym sym) p => if isReservedValueName sym then psErr1 (ExpectedToken "value name") "value name"
+  else
+    let
+      st1 = advance st
+    in if atSym st1 ":" then Vuna.Compiler.Common.step (parseSignature st1 blockCol True sym p)
+      (\decl, st2 => OkC (Pair (ParsedDecl Nothing (Just decl) (Just (ESValue sym (spanOf st st2))) (opacitySpecOf op sym (spanOf st st2))) st2))
+    else Vuna.Compiler.Common.step (parseClause st1 blockCol sym p)
+      (\decl, st2 => OkC (Pair (ParsedDecl Nothing (Just decl) (Just (ESValue sym (spanOf st st2))) (opacitySpecOf op sym (spanOf st st2))) st2))
+  _ => psErr1 (ExpectedToken "value name") "value name"
+
+parseAxiomExport : Maybe Opacity -> PState -> Int -> Pos -> Check (Pair ParsedDecl PState)
+parseAxiomExport op st blockCol kwPos = if opacityGiven op then psErr1 (ExpectedToken "value signature") "value signature"
+else Vuna.Compiler.Common.step (parseAxiom st blockCol kwPos) (\decl, st1 => case decl of
+  DAxiom name _ sp =>
+    OkC (Pair (ParsedDecl Nothing (Just decl) (Just (ESValue name sp)) Nothing) st1)
+  _ => icInternal "parseAxiomExport: not an axiom"
+)
+
+parseExternExport : Maybe Opacity -> PState -> Int -> Pos -> Check (Pair ParsedDecl PState)
+parseExternExport op st blockCol kwPos = if opacityGiven op then psErr1 (ExpectedToken "value signature") "value signature"
+else Vuna.Compiler.Common.step (parseExtern st blockCol kwPos) (\decl, st1 => case decl of
+  DExtern name _ _ sp =>
+    OkC (Pair (ParsedDecl Nothing (Just decl) (Just (ESValue name sp)) Nothing) st1)
+  _ => icInternal "parseExternExport: not an extern"
+)
+
+-- | `export linear data/record ...`。
+parseLinearExport : PState -> Int -> Pos -> Check (Pair ParsedDecl PState)
+parseLinearExport st blockCol kwPos = Vuna.Compiler.Common.step (expectKw st "linear") (\_, st1 => case peekTok st1 of
+  PTok (TKw "data") _ => parseDataExport True st1 blockCol kwPos
+  PTok (TKw "record") _ => parseRecordExport True ReprAuto st1 blockCol kwPos
+  _ => psErr1 (ExpectedToken "data/record") "data/record"
+)
+
+-- | 归约修饰符：`opaque f : T` / `transparent f : T`（值定义；不导出）。
+parseOpacityDecl : PState -> Int -> Check (Pair ParsedDecl PState)
+parseOpacityDecl st blockCol = case peekTok st of
+  PTok (TKw "opaque") p =>
+    Vuna.Compiler.Common.step (expectKw st "opaque")
+      (\_, st1 => parseOpacityValue OpacityOpaque st1 blockCol (spanOf st st1))
+  PTok (TKw "transparent") p =>
+    Vuna.Compiler.Common.step (expectKw st "transparent")
+      (\_, st1 => parseOpacityValue OpacityTransparent st1 blockCol (spanOf st st1))
+  _ => psErr0 ExpectedTopLevelDecl
+
+parseOpacityValue : Opacity -> PState -> Int -> Span -> Check (Pair ParsedDecl PState)
+parseOpacityValue kind st blockCol kwSpan = case peekTok st of
+  PTok (TIdent name) p =>
+    let
+      st1 = advance st
+    in if atSym st1 ":" then Vuna.Compiler.Common.step (parseSignature st1 blockCol True name p)
+      (\decl, st2 => OkC (Pair (ParsedDecl Nothing (Just decl) Nothing (Just (OpacitySpec name kind (spanOf st st2)))) st2))
+    else psErr1 (ExpectedToken "value signature") "value signature"
+  PTok (TSym sym) p => if isReservedValueName sym then psErr1 (ExpectedToken "value name") "value name"
+  else
+    let
+      st1 = advance st
+    in if atSym st1 ":" then Vuna.Compiler.Common.step (parseSignature st1 blockCol True sym p)
+      (\decl, st2 => OkC (Pair (ParsedDecl Nothing (Just decl) Nothing (Just (OpacitySpec sym kind (spanOf st st2)))) st2))
+    else psErr1 (ExpectedToken "value signature") "value signature"
+  _ => psErr1 (ExpectedToken "value signature") "value signature"
+
+-- | `export alias record` / `export boxed record`（迁移期也接受旧档位词）。
+parseTieredExport : ReprTier -> PState -> Int -> Pos -> Check (Pair ParsedDecl PState)
+parseTieredExport tier st blockCol kwPos = case peekTok (advance st) of
+  PTok (TKw "linear") _ => case peekTok (advance (advance st)) of
+    PTok (TKw "record") _ => parseRecordExport True tier (advance (advance st)) blockCol kwPos
+    _ => psErr1 (ExpectedToken "record") "record"
+  PTok (TKw "record") _ => parseRecordExport False tier (advance st) blockCol kwPos
+  _ => psErr1 (ExpectedToken "record") "record"
+
+-- | 导出 `data`：名字/参数后允许成员列表 `(..)` / `(A, B)` / `()`。
+parseDataExport : Bool -> PState -> Int -> Pos -> Check (Pair ParsedDecl PState)
+parseDataExport lin st blockCol kwPos = Vuna.Compiler.Common.step (expectKw st "data") (\_, st1 => Vuna.Compiler.Common.step (expectIdent st1) (\name, st2 => Vuna.Compiler.Common.step (parseParams (stateFuel st2) st2) (\params, st3 => Vuna.Compiler.Common.step (parseOptionalMembers st3) (\members, st3b => Vuna.Compiler.Common.step (expectSym st3b ":") (\_, st4 => Vuna.Compiler.Common.step (parseExpr (stateFuel st4) st4 blockCol 0) (\ty, st5 => Vuna.Compiler.Common.step (expectKw st5 "where") (\_, st6 => Vuna.Compiler.Common.step (parseCtors st6 blockCol) (\ctors, st7 => Vuna.Compiler.Common.step (parseDeriving st7) (\dv, st8 => case dv of
+  Pair derivings via =>
+    let
+      decl =
+        DData name params ty ctors derivings via ReprAuto lin
+          (Span (fileOf st) (posLine kwPos) (posCol kwPos) (posLine (lastPos st8)) (posCol (lastPos st8)))
+    in OkC
+      (Pair (ParsedDecl Nothing (Just decl) (Just (ESType name members (declSpan decl))) Nothing) st8)
+)
+)
+)
+)
+)
+)
+)
+)
+)
+
+parseRecordExport : Bool -> ReprTier -> PState -> Int -> Pos -> Check (Pair ParsedDecl PState)
+parseRecordExport lin tier st blockCol kwPos = Vuna.Compiler.Common.step (expectKw st "record") (\_, st1 => Vuna.Compiler.Common.step (expectIdent st1) (\name, st2 => Vuna.Compiler.Common.step (parseParams (stateFuel st2) st2) (\params, st3 => Vuna.Compiler.Common.step (parseOptionalMembers st3) (\members, st3b => Vuna.Compiler.Common.step (expectKw st3b "where") (\_, st4 => Vuna.Compiler.Common.step (parseFields st4 blockCol) (\fields, st5 => Vuna.Compiler.Common.step (parseDeriving st5) (\dv, st6 => case dv of
+  Pair derivings via =>
+    let
+      decl =
+        DRecord name params fields derivings via tier lin
+          (Span (fileOf st) (posLine kwPos) (posCol kwPos) (posLine (lastPos st6)) (posCol (lastPos st6)))
+    in OkC
+      (Pair (ParsedDecl Nothing (Just decl) (Just (ESType name members (declSpan decl))) Nothing) st6)
+)
+)
+)
+)
+)
+)
+)
+
+parseTraitExport : PState -> Int -> Pos -> Check (Pair ParsedDecl PState)
+parseTraitExport st blockCol kwPos = Vuna.Compiler.Common.step (expectKw st "trait") (\_, st1 => Vuna.Compiler.Common.step (expectIdent st1) (\name, st2 => Vuna.Compiler.Common.step (parseTraitExportHead st2) (\head, st3 => case head of
+  Pair params members => Vuna.Compiler.Common.step (expectKw st3 "where") (\_, st4 => Vuna.Compiler.Common.step (parseMethodSigs st4 blockCol) (\methods, st5 => let
+    decl =
+      DTrait name params methods
+        (Span (fileOf st) (posLine kwPos) (posCol kwPos) (posLine (lastPos st5)) (posCol (lastPos st5)))
+  in OkC
+    (Pair (ParsedDecl Nothing (Just decl) (Just (ESType name members (declSpan decl))) Nothing) st5)
+  )
+  )
+)
+)
+)
+
+-- trait 导出头：`(..)`/`(m1, m2)` 是成员列表；否则是原有的 kind 参数 `(a : Type)`。
+parseTraitExportHead : PState -> Check (Pair (Pair (List TraitParam) ExportMembers) PState)
+parseTraitExportHead st =
+  Vuna.Compiler.Common.step (parseTraitExportParams (stateFuel st) st)
+    (\params, st1 => if atSym st1 "(" then Vuna.Compiler.Common.step (parseExportMembers st1) (\members, st2 => OkC (Pair (Pair params members) st2)) else OkC (Pair (Pair params EMNone) st1))
+
+-- trait 导出头里的 kind 参数：遇到成员列表 `(..)`/`(m1, m2)` 就停，不把它当参数。
+parseTraitExportParams : Int -> PState -> Check (Pair (List TraitParam) PState)
+parseTraitExportParams fuel st = if fuel <= 0 then icFuel "parser"
+else case peekTok st of
+  PTok (TIdent name) _ =>
+    Vuna.Compiler.Common.step (parseTraitExportParams (fuel - 1) (advance st))
+      (\rest, st1 => OkC (Pair (Base.List.Cons (TraitParam name Nothing) rest) st1))
+  PTok (TSym "(") _ =>
+    if parenIsMemberList st then OkC (Pair [] st)
+    else Vuna.Compiler.Common.step (parseTraitParamGroup st)
+      (\params, st1 => Vuna.Compiler.Common.step (parseTraitExportParams (fuel - 1) st1) (\rest, st2 => OkC (Pair (append params rest) st2)))
+  _ => OkC (Pair [] st)
+
+parseTraitParamGroup : PState -> Check (Pair (List TraitParam) PState)
+parseTraitParamGroup st =
+  Vuna.Compiler.Common.step (expectSym st "(")
+    (\_, st1 => Vuna.Compiler.Common.step (parsePiNames (stateFuel st1) st1) (\names, st2 => Vuna.Compiler.Common.step (expectSym st2 ":") (\_, st3 => Vuna.Compiler.Common.step (parseExpr (stateFuel st3) st3 0 0) (\kind, st4 => Vuna.Compiler.Common.step (expectSym st4 ")") (\_, st5 => OkC (Pair (map (\n => TraitParam n (Just kind)) names) st5))))))
+
+-- 只看括号组里第一个 token：`..` / `)` / `ident ,` / `ident )` 是成员列表；
+-- `ident ident :` / `ident :` 是 kind 参数（trait 的旧语法）。
+parenIsMemberList : PState -> Bool
+parenIsMemberList st = case peekTok (advance st) of
+  PTok (TSym "..") _ => True
+  PTok (TSym ")") _ => True
+  PTok (TIdent _) _ => case peekTok (advance (advance st)) of
+    PTok (TSym ",") _ => True
+    PTok (TSym ")") _ => True
+    _ => False
+  _ => False
+
+parseOptionalMembers : PState -> Check (Pair ExportMembers PState)
+parseOptionalMembers st = if atSym st "(" then parseExportMembers st else OkC (Pair EMNone st)
 
 -- `infixl 6 +` / `infixr 5 :: = Cons` / `infix 4 == = eq`。
 parseFixityDecl : PState -> Int -> Int -> Pos -> Check (Pair FixityDecl PState)
@@ -174,15 +525,19 @@ parseDecl : PState -> Int -> Check (Pair Decl PState)
 parseDecl st blockCol = case peekTok st of
   PTok (TKw "data") p => parseData False st blockCol p
   PTok (TKw "linear") p => parseLinearDecl st blockCol p
-  -- R1（records-v2）：表示档位前缀只允许 record（A2：data 收归位置/求和类型）。
-  PTok (TKw "transparent") p => parseTieredDecl ReprTransparent st blockCol p
-  PTok (TKw "opaque") p => parseTieredDecl ReprOpaque st blockCol p
+  -- records-v2：表示档位前缀只允许 record（A2：data 收归位置/求和类型）。
+  -- D11：`alias` / `boxed` 是软关键字（只在紧跟 record/linear record 时生效）；
+  -- `transparent` / `opaque record` 是迁移期旧写法。
+  PTok (TKw "transparent") p => parseTieredDecl ReprAlias st blockCol p
+  PTok (TKw "opaque") p => parseTieredDecl ReprBoxed st blockCol p
   PTok (TKw "axiom") p => parseAxiom st blockCol p
   PTok (TKw "extern") p => parseExtern st blockCol p
   PTok (TKw "record") p => parseRecord False ReprAuto st blockCol p
   PTok (TKw "trait") p => parseTrait st blockCol p
   PTok (TKw "instance") p => parseInstance st blockCol p
-  PTok (TIdent name) p =>
+  PTok (TIdent name) p => if name == "alias" && tierFollows st then parseTieredDecl ReprAlias st blockCol p
+  else if name == "boxed" && tierFollows st then parseTieredDecl ReprBoxed st blockCol p
+  else
     let
       st1 = advance st
     in if atSym st1 ":" then parseSignature st1 blockCol True name p
@@ -395,7 +750,17 @@ parseLinearDecl st blockCol kwPos = Vuna.Compiler.Common.step (expectKw st "line
   _ => psErr1 (ExpectedToken "data/record") "data/record"
 )
 
--- | R1（records-v2）：`transparent record ...` / `opaque record ...`（可再带 `lin`）。
+-- | 软关键字 `alias` / `boxed`：后面必须跟 `record` 或 `linear record` 才按档位前缀解析；
+-- 否则退化成普通标识符（现有源码里的 `alias` binder 就是靠这条保持可用）。
+tierFollows : PState -> Bool
+tierFollows st = case peekTok (advance st) of
+  PTok (TKw "record") _ => True
+  PTok (TKw "linear") _ => case peekTok (advance (advance st)) of
+    PTok (TKw "record") _ => True
+    _ => False
+  _ => False
+
+-- | R1（records-v2）：`alias record ...` / `boxed record ...`（可再带 `lin`；迁移期也接受旧词）。
 -- kwPos 指向档位前缀，声明 span 从这里开始；档位只对 record 有意义（对 data 报错）。
 parseTieredDecl : ReprTier -> PState -> Int -> Pos -> Check (Pair Decl PState)
 parseTieredDecl tier st blockCol kwPos = case peekTok (advance st) of
@@ -423,7 +788,7 @@ parseData lin st blockCol kwPos = Vuna.Compiler.Common.step (expectKw st "data")
 )
 
 -- 记录声明（M10.5）：`record Name params where` + 缩进字段 `f : Ty`，可跟 deriving。
--- R1：第二参数是表示档位（`transparent`/`opaque` 前缀给出，缺省 `ReprAuto`）。
+-- 第二参数是表示档位（`alias`/`boxed` 前缀给出，缺省 `ReprAuto`；迁移期也接受旧词）。
 parseRecord : Bool -> ReprTier -> PState -> Int -> Pos -> Check (Pair Decl PState)
 parseRecord lin tier st blockCol kwPos = Vuna.Compiler.Common.step (expectKw st "record") (\_, st1 => Vuna.Compiler.Common.step (expectIdent st1) (\name, st2 => Vuna.Compiler.Common.step (parseParams (stateFuel st2) st2) (\params, st3 => Vuna.Compiler.Common.step (expectKw st3 "where") (\_, st4 => Vuna.Compiler.Common.step (parseFields st4 blockCol) (\fields, st5 => Vuna.Compiler.Common.step (parseDeriving st5) (\dv, st6 => case dv of
   Pair derivings via =>

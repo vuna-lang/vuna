@@ -109,11 +109,11 @@ encBinder (Pair n r) acc = encStr n (encRig r acc)
 encMaybeTerm : Maybe Term -> List String -> List String
 encMaybeTerm m acc = encMaybe encTerm m acc
 
--- | 表示档位：`ReprAuto`/`ReprTransparent`/`ReprOpaque` = tag 0/1/2。
+-- | 表示档位：`ReprAuto`/`ReprAlias`/`ReprBoxed` = tag 0/1/2。
 encReprTier : ReprTier -> List String -> List String
 encReprTier ReprAuto = encTag 0
-encReprTier ReprTransparent = encTag 1
-encReprTier ReprOpaque = encTag 2
+encReprTier ReprAlias = encTag 1
+encReprTier ReprBoxed = encTag 2
 
 -- ---------------------------------------------------------------
 -- 编码：接口元数据
@@ -181,8 +181,8 @@ decReprTier : Int -> Cur -> Maybe (Pair ReprTier Cur)
 decReprTier fuel bytes = if fuel <= 0 then Nothing
 else thenPair (decTag fuel bytes) (\tag, b1 => case tag of
   0 => Just (Pair ReprAuto b1)
-  1 => Just (Pair ReprTransparent b1)
-  2 => Just (Pair ReprOpaque b1)
+  1 => Just (Pair ReprAlias b1)
+  2 => Just (Pair ReprBoxed b1)
   _ => Nothing
 )
 

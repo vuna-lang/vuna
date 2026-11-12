@@ -471,8 +471,17 @@ exportItemEntries modules prefix decls imports (XModule name sp) = case findImpo
   Just m => exportsOf modules m
 exportItemEntries modules prefix decls imports (XTypeAll name sp) =
   exportTypeAll modules prefix decls imports name sp
+exportItemEntries modules prefix decls imports (XTypeSome name members sp) =
+  Vuna.Compiler.Common.bind (exportTypeAll modules prefix decls imports name sp)
+    (\es => OkC (filterExportMembers members es))
 exportItemEntries modules prefix decls imports (XBare name sp) =
   exportBare modules prefix decls imports name sp
+
+filterExportMembers : List String -> List ExportEntry -> List ExportEntry
+filterExportMembers members [] = []
+filterExportMembers members (e :: rest) =
+  if e.kind == "ctor" && not (memName e.public members) then filterExportMembers members rest
+  else Base.List.Cons e (filterExportMembers members rest)
 
 hasSamePublicKind : ExportEntry -> List ExportEntry -> Bool
 hasSamePublicKind e [] = False
@@ -517,9 +526,10 @@ checkExportDuplicates prefix (e :: rest) =
 -- 显式导出列表里「同一个名字写了两遍」是错误（`module M (foo, foo)`）；
 -- 但同一个**定义**经不同模块重导出（两个门面都重导出 `Functor(..)`）不是冲突——条目按 target 去重即可。
 exportItemKey : ExportItem -> String
-exportItemKey (XBare n sp) = "bare:${n}"
-exportItemKey (XTypeAll n sp) = "typeall:${n}"
-exportItemKey (XModule n sp) = "module:${n}"
+exportItemKey (XBare n _) = "bare:${n}"
+exportItemKey (XTypeAll n _) = "typeall:${n}"
+exportItemKey (XTypeSome n members _) = "typesome:${n}"
+exportItemKey (XModule n _) = "module:${n}"
 
 duplicateExportItem : List ExportItem -> Maybe String
 duplicateExportItem items =
@@ -535,9 +545,10 @@ memFirstOf key [] = False
 memFirstOf key ((Pair k n) :: more) = key == k || memFirstOf key more
 
 exportItemName : ExportItem -> String
-exportItemName (XBare n sp) = n
-exportItemName (XTypeAll n sp) = n
-exportItemName (XModule n sp) = n
+exportItemName (XBare n _) = n
+exportItemName (XTypeAll n _) = n
+exportItemName (XTypeSome n _ _) = n
+exportItemName (XModule n _) = n
 
 checkExportItems : String -> List ExportItem -> Check Int
 checkExportItems prefix items = case duplicateExportItem items of
@@ -560,15 +571,29 @@ exportItemsAll modules prefix decls imports (item :: rest) =
 
 validateModuleHeader : String -> Maybe ModDecl -> Check (List a)
 validateModuleHeader label Nothing = OkC []
-validateModuleHeader label (Just (ModDecl declared hasList items sp)) =
+validateModuleHeader label (Just (ModDecl declared hasList items _ _ _ sp)) =
   if declared == label then OkC [] else rnAt1 sp (ModuleNameMismatch declared) declared
 
 computeExports : List Module -> String -> Maybe ModDecl -> List Import -> List Decl -> Check (List ExportEntry)
 computeExports modules prefix Nothing imports decls = OkC (implicitExports prefix decls)
-computeExports modules prefix (Just (ModDecl declared hasList items sp)) imports decls =
-  if hasList then Vuna.Compiler.Common.bind (explicitExports modules prefix decls imports items)
+computeExports modules prefix (Just (ModDecl declared hasList items exports reexports opacity sp)) imports decls =
+  if notEmpty exports || notEmpty reexports then if hasList then rnAt1 sp (DuplicateExport "module header") "module header"
+  else Vuna.Compiler.Common.bind
+    (explicitExports modules prefix decls imports (append (map exportSpecToItem exports) reexports))
+    (\es => Vuna.Compiler.Common.bind (checkExportDuplicates prefix es) (\_ => OkC es))
+  else if hasList then Vuna.Compiler.Common.bind (explicitExports modules prefix decls imports items)
     (\es => Vuna.Compiler.Common.bind (checkExportDuplicates prefix es) (\_ => OkC es))
   else OkC (implicitExports prefix decls)
+
+notEmpty : List a -> Bool
+notEmpty [] = False
+notEmpty (_ :: _) = True
+
+exportSpecToItem : ExportSpec -> ExportItem
+exportSpecToItem (ESValue name sp) = XBare name sp
+exportSpecToItem (ESType name EMNone sp) = XBare name sp
+exportSpecToItem (ESType name EMAll sp) = XTypeAll name sp
+exportSpecToItem (ESType name (EMOnly members) sp) = XTypeSome name members sp
 
 showCycle : String -> List String -> String
 showCycle name stack = joinArrows (reverse (name :: stack))
@@ -673,7 +698,8 @@ loadProjectWithPreloaded ctx entry preloaded = do
     case parsed of
       ErrC e => pure (ErrC e)
       OkC (SourceFile hdr imports fixities decls) => case hdr of
-        Just (ModDecl dname hasList items sp) => pure (ldErr1 (ModuleHeaderInEntryFile entry) entry)
+        Just (ModDecl dname hasList items _ _ _ sp) =>
+          pure (ldErr1 (ModuleHeaderInEntryFile entry) entry)
         Nothing => case validateImports "<entry>" imports of
           ErrC e => pure (ErrC e)
           OkC _ => do
@@ -719,7 +745,8 @@ loadProjectSourceWithPreloaded ctx label source preloaded = do
   case parsed of
     ErrC e => pure (ErrC e)
     OkC (SourceFile hdr imports fixities decls) => case hdr of
-      Just (ModDecl dname hasList items sp) => pure (ldErr1 (ModuleHeaderInEntrySource label) label)
+      Just (ModDecl dname hasList items _ _ _ sp) =>
+        pure (ldErr1 (ModuleHeaderInEntrySource label) label)
       Nothing => case validateImports "<entry>" imports of
         ErrC e => pure (ErrC e)
         OkC _ => do
@@ -752,7 +779,7 @@ loadModuleSourceWithPreloaded ctx label source preloaded = do
     ErrC e => pure (ErrC e)
     OkC (SourceFile hdr imports fixities decls) => case hdr of
       Nothing => loadProjectSourceWithPreloaded ctx label source preloaded
-      Just (ModDecl name hasList items sp) => case validateImports name imports of
+      Just (ModDecl name hasList items _ _ _ sp) => case validateImports name imports of
         ErrC e => pure (ErrC e)
         OkC _ => do
           implicitR <- implicitPrelude (contextRoots ctx) (contextPackageName ctx) name imports
@@ -805,7 +832,7 @@ fixitiesForSourceIn ctx modules0 label source = do
                   OkC
                     (Pair modules (dedupeFixities (append fixities (visibleFixitiesOf modules (append imports implicit)))))
               )
-      Just (ModDecl name hasList items sp) => case validateImports name imports of
+      Just (ModDecl name hasList items _ _ _ sp) => case validateImports name imports of
         ErrC e => pure (ErrC e)
         OkC _ => do
           implicitR <- implicitPrelude (contextRoots ctx) (contextPackageName ctx) name imports

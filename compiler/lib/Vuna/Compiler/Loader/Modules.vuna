@@ -232,7 +232,7 @@ reexportedImportNamesGo imports (_ :: rest) acc = reexportedImportNamesGo import
 
 -- | 有显式导出列表时才算重导出；无 module 头 / 隐式导出 = []。
 reexportedImportNamesOfHeader : List Import -> Maybe ModDecl -> List String
-reexportedImportNamesOfHeader imports (Just (ModDecl _ True items _)) =
+reexportedImportNamesOfHeader imports (Just (ModDecl _ True items _ _ _ _)) =
   reexportedImportNames imports items
 reexportedImportNamesOfHeader imports _ = []
 

@@ -91,8 +91,8 @@ encQty Q1 acc = encTag 1 acc
 -- | 记录表示档位。
 encReprTier : ReprTier -> List String -> List String
 encReprTier ReprAuto acc = encTag 0 acc
-encReprTier ReprTransparent acc = encTag 1 acc
-encReprTier ReprOpaque acc = encTag 2 acc
+encReprTier ReprAlias acc = encTag 1 acc
+encReprTier ReprBoxed acc = encTag 2 acc
 
 -- | 可选 quantity：`0` / `1<qty>`（前缀在值之前）。
 encMaybeQty : Maybe Qty -> List String -> List String
@@ -336,8 +336,8 @@ else case decTag fuel bytes of
   Nothing => Nothing
   Just (Pair tag b1) => case tag of
     0 => Just (Pair ReprAuto b1)
-    1 => Just (Pair ReprTransparent b1)
-    2 => Just (Pair ReprOpaque b1)
+    1 => Just (Pair ReprAlias b1)
+    2 => Just (Pair ReprBoxed b1)
     _ => Nothing
 
 -- | 解析可选 quantity。
@@ -851,17 +851,34 @@ decDeclsComplete s = case decDecls (strLength s) (curOf s) of
 -- `Loader.Flatten` 的 parse 侧 span 恢复策略处理，与 hash 输入口径一致，
 -- 不会出现「缓存命中 ⇒ 诊断位置变了」的二义性（见 docs/reference/cache.md）。
 --
--- | `ExportItem`：模块头的一条导出项（`XBare` / `XTypeAll` / `XModule`）。
+-- | `ExportItem`：模块头/重导出的一条导出项（`XBare` / `XTypeAll` / `XTypeSome` / `XModule`）。
 encExportItem : ExportItem -> List String -> List String
 encExportItem (XBare name _) acc = encTag 0 (encStr name acc)
 encExportItem (XTypeAll name _) acc = encTag 1 (encStr name acc)
+encExportItem (XTypeSome name members _) acc = encTag 3 (encStr name (encList encStr members acc))
 encExportItem (XModule name _) acc = encTag 2 (encStr name acc)
+
+encExportMembers : ExportMembers -> List String -> List String
+encExportMembers EMNone acc = encTag 0 acc
+encExportMembers EMAll acc = encTag 1 acc
+encExportMembers (EMOnly members) acc = encTag 2 (encList encStr members acc)
+
+encExportSpec : ExportSpec -> List String -> List String
+encExportSpec (ESValue name _) acc = encTag 0 (encStr name acc)
+encExportSpec (ESType name members _) acc = encTag 1 (encStr name (encExportMembers members acc))
+
+encOpacity : Opacity -> List String -> List String
+encOpacity OpacityOpaque acc = encTag 0 acc
+encOpacity OpacityTransparent acc = encTag 1 acc
+
+encOpacitySpec : OpacitySpec -> List String -> List String
+encOpacitySpec o acc = encStr o.opacityName (encOpacity o.opacityKind acc)
 
 -- | `ModDecl`：模块名 / 是否有显式导出表 / 导出项 / span（丢弃）。
 encModDecl : ModDecl -> List String -> List String
 encModDecl m acc =
   encStr m.modDeclName
-    (encBool m.modDeclHasExportList (encList encExportItem m.modDeclExportItems acc))
+    (encBool m.modDeclHasExportList (encList encExportItem m.modDeclExportItems (encList encExportSpec m.modDeclExports (encList encExportItem m.modDeclReexports (encList encOpacitySpec m.modDeclOpacity acc)))))
 
 -- | `SourceFile`：可选模块头 / imports / fixity / 顶层声明。
 encSourceFile : SourceFile -> List String -> List String
@@ -881,21 +898,56 @@ encFixityLike f acc =
   encStr f.fixityOp
     (encInt f.fixityLevel (encInt f.fixityAssoc (encMaybe encStr f.fixityTarget acc)))
 
--- | 解析 `ExportItem`（tag 0/1/2）。
+-- | 解析 `ExportItem`（tag 0/1/2/3）。
 decExportItem : Int -> Cur -> Maybe (Pair ExportItem Cur)
 decExportItem fuel c = if fuel <= 0 then Nothing
 else thenPair (decTag fuel c) (\tag, b1 => case tag of
   0 => thenPair (decStr (fuel - 1) b1) (\n, b2 => Just (Pair (XBare n noSpan) b2))
   1 => thenPair (decStr (fuel - 1) b1) (\n, b2 => Just (Pair (XTypeAll n noSpan) b2))
+  3 =>
+    thenPair (decStr (fuel - 1) b1)
+      (\n, b2 => thenPair (decList decStr (fuel - 1) b2) (\ms, b3 => Just (Pair (XTypeSome n ms noSpan) b3)))
   2 => thenPair (decStr (fuel - 1) b1) (\n, b2 => Just (Pair (XModule n noSpan) b2))
   _ => Nothing
 )
+
+decExportMembers : Int -> Cur -> Maybe (Pair ExportMembers Cur)
+decExportMembers fuel c = if fuel <= 0 then Nothing
+else thenPair (decTag fuel c) (\tag, b1 => case tag of
+  0 => Just (Pair EMNone b1)
+  1 => Just (Pair EMAll b1)
+  2 => thenPair (decList decStr (fuel - 1) b1) (\ms, b2 => Just (Pair (EMOnly ms) b2))
+  _ => Nothing
+)
+
+decExportSpec : Int -> Cur -> Maybe (Pair ExportSpec Cur)
+decExportSpec fuel c = if fuel <= 0 then Nothing
+else thenPair (decTag fuel c) (\tag, b1 => case tag of
+  0 => thenPair (decStr (fuel - 1) b1) (\n, b2 => Just (Pair (ESValue n noSpan) b2))
+  1 =>
+    thenPair (decStr (fuel - 1) b1)
+      (\n, b2 => thenPair (decExportMembers (fuel - 1) b2) (\ms, b3 => Just (Pair (ESType n ms noSpan) b3)))
+  _ => Nothing
+)
+
+decOpacity : Int -> Cur -> Maybe (Pair Opacity Cur)
+decOpacity fuel c = if fuel <= 0 then Nothing
+else thenPair (decTag fuel c) (\tag, b1 => case tag of
+  0 => Just (Pair OpacityOpaque b1)
+  1 => Just (Pair OpacityTransparent b1)
+  _ => Nothing
+)
+
+decOpacitySpec : Int -> Cur -> Maybe (Pair OpacitySpec Cur)
+decOpacitySpec fuel c =
+  thenPair (decStr (fuel - 1) c)
+    (\name, b1 => thenPair (decOpacity (fuel - 1) b1) (\kind, b2 => Just (Pair (OpacitySpec name kind noSpan) b2)))
 
 -- | 解析 `ModDecl`。
 decModDecl : Int -> Cur -> Maybe (Pair ModDecl Cur)
 decModDecl fuel c =
   thenPair (decStr (fuel - 1) c)
-    (\name, b1 => thenPair (decBool (fuel - 1) b1) (\hasList, b2 => thenPair (decList decExportItem (fuel - 1) b2) (\items, b3 => Just (Pair (ModDecl name hasList items noSpan) b3))))
+    (\name, b1 => thenPair (decBool (fuel - 1) b1) (\hasList, b2 => thenPair (decList decExportItem (fuel - 1) b2) (\items, b3 => thenPair (decList decExportSpec (fuel - 1) b3) (\exports, b4 => thenPair (decList decExportItem (fuel - 1) b4) (\reexports, b5 => thenPair (decList decOpacitySpec (fuel - 1) b5) (\opacity, b6 => Just (Pair (ModDecl name hasList items exports reexports opacity noSpan) b6)))))))
 
 decImportLike : Int -> Cur -> Maybe (Pair Import Cur)
 decImportLike fuel c =

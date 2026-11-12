@@ -1,1 +1,1 @@
-declared transparent requires exactly one non-recursive runtime field
+declared alias requires exactly one non-recursive runtime field

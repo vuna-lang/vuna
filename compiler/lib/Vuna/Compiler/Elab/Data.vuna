@@ -290,11 +290,11 @@ checkViaDataDecls [] datas = OkC 0
 checkViaDataDecls ((Pair d sp) :: rest) datas = case d of
   DData dname params kind ctors derivings viaField repr lin dsp2 =>
     if viaField then tcErr0 dsp2 DerivingViaOnlyRecord
-    else if reprIsTransparent repr && not (memName dname (unboxedFamilySet datas)) then tcErr0 dsp2 ReprTransparentInvalid
+    else if reprIsAlias repr && not (memName dname (unboxedFamilySet datas)) then tcErr0 dsp2 ReprAliasInvalid
     else checkViaDataDecls rest datas
   -- R4：record 声明不再降级成 DData，via-field / transparent 的校验在本分支完成。
   DRecord dname params fields derivings viaField repr lin dsp2 =>
-    if reprIsTransparent repr && not (memName dname (unboxedFamilySet datas)) then tcErr0 dsp2 ReprTransparentInvalid
+    if reprIsAlias repr && not (memName dname (unboxedFamilySet datas)) then tcErr0 dsp2 ReprAliasInvalid
     else if viaField then if viaFieldOk repr dname datas then checkViaDataDecls rest datas
     else tcErr0 dsp2 DerivingViaUnboxedRequired
     else checkViaDataDecls rest datas
@@ -304,14 +304,14 @@ checkViaDataDecls ((Pair d sp) :: rest) datas = case d of
 -- | R1：`deriving via field` 的合法性看声明档位：transparent/auto 看形状（auto 即旧推断），
 -- opaque 恒为装箱 ⇒ 直接拒绝。
 viaFieldOk : ReprTier -> String -> List DtData -> Bool
-viaFieldOk ReprTransparent dname datas = viaShapeOk dname datas
+viaFieldOk ReprAlias dname datas = viaShapeOk dname datas
 viaFieldOk ReprAuto dname datas = viaShapeOk dname datas
-viaFieldOk ReprOpaque _ _ = False
+viaFieldOk ReprBoxed _ _ = False
 
--- | R1：`ReprTransparent` 判定（不引入 Eq 实例）。
-reprIsTransparent : ReprTier -> Bool
-reprIsTransparent ReprTransparent = True
-reprIsTransparent _ = False
+-- | R1：`ReprAlias` 判定（不引入 Eq 实例）。
+reprIsAlias : ReprTier -> Bool
+reprIsAlias ReprAlias = True
+reprIsAlias _ = False
 
 -- via 的字段必须是构造子 telescope 中紧跟族参数的第一个字段：
 -- 字典委托按 `field : F params` 替换类参数，不处理前面还有擦除字段的依赖类型。

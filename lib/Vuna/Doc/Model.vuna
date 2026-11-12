@@ -137,7 +137,7 @@ buildModuleWith pkg path source looked =
             (OkC (DocModule pkg (moduleNameOfPath path hdr) path (docTableModuleDoc table) (itemsOfDecls table decls)))
 
 moduleNameOfPath : String -> Maybe ModDecl -> String
-moduleNameOfPath path (Just (ModDecl name hasList items sp)) = name
+moduleNameOfPath path (Just (ModDecl name hasList items _ _ _ sp)) = name
 moduleNameOfPath path Nothing = stripVunaSuffix (baseName path)
 
 stripVunaSuffix : String -> String

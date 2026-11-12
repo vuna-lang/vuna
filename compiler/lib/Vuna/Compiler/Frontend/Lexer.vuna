@@ -107,7 +107,10 @@ isOpChar c =
 
 -- 关键字表（M28 增 `axiom`；M31.2 增 `infixl` / `infixr` / `infix`）。
 isKeyword : String -> Bool
--- R1（records-v2）：记录表示档位前缀（`transparent record` / `opaque record`）。
+-- records-v2：表示档位前缀（`alias record` / `boxed record`）与 D11 的 `export` /
+-- `abstract` 是**软关键字**：只在声明位置的特定上下文识别，不进入该表，避免与用户
+-- 已有的同名标识符（编译器源码里就有 `alias` 等 binder）冲突。
+-- `transparent` / `opaque` 仍是硬关键字（迁移期兼作旧 record 档位词）。
 -- native-effects N1：`perform op`（ND12 保留名编码）。
 isKeyword s =
   s == "data"

@@ -467,7 +467,7 @@ diagnosticsForCachedWith includeUnused cache uri text = do
       OkC (SourceFile hdr imports fixities decls) =>
         let
           modName = case hdr of
-            Just (ModDecl n hasList items sp) => Just n
+            Just (ModDecl n hasList items _ _ _ sp) => Just n
             Nothing => Nothing
         in do
           checked <- checkDiagnostics cache label ctx text modName imports

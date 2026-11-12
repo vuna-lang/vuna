@@ -17,6 +17,7 @@ import Vuna.Fmt.Comment
 import Vuna.Fmt.Expr
 import Vuna.Fmt.Util
 import Base.Sort
+import Base.String
 
 -- ---------------------------------------------------------------
 -- M38：线性声明前缀。
@@ -27,6 +28,114 @@ linearPrefix False = ""
 -- R1（records-v2）：声明前缀 = 表示档位前缀 + 线性前缀（`transparent record` / `lin record`）。
 declPrefix : ReprTier -> Bool -> String
 declPrefix tier lin = reprPrefix tier ++ linearPrefix lin
+
+-- D11：逐定义 export / opacity 的渲染前缀（从模块头 side table 取）。
+record FmtDeclMods where
+  fdmPrefix : List (Pair String String)
+  fdmMembers : List (Pair String ExportMembers)
+
+emptyFmtDeclMods : FmtDeclMods
+emptyFmtDeclMods = FmtDeclMods [] []
+
+opacityWord : Opacity -> String
+opacityWord OpacityOpaque = "opaque "
+opacityWord OpacityTransparent = "transparent "
+
+lookupText : String -> List (Pair String String) -> String
+lookupText name [] = ""
+lookupText name ((Pair n p) :: rest) = if n == name then p else lookupText name rest
+
+lookupMembersText : String -> List (Pair String ExportMembers) -> Maybe ExportMembers
+lookupMembersText name [] = Nothing
+lookupMembersText name ((Pair n m) :: rest) =
+  if n == name then Just m else lookupMembersText name rest
+
+lookupOpacityByName : String -> List OpacitySpec -> String
+lookupOpacityByName name [] = ""
+lookupOpacityByName name (o :: rest) =
+  if o.opacityName == name then opacityWord o.opacityKind else lookupOpacityByName name rest
+
+anyExportOf : String -> List ExportSpec -> Bool
+anyExportOf name [] = False
+anyExportOf name (e :: rest) = exportSpecName e == name || anyExportOf name rest
+
+exportPrefixOf : List OpacitySpec -> ExportSpec -> Pair String String
+exportPrefixOf opacity e =
+  Pair (exportSpecName e) ("export " ++ lookupOpacityByName (exportSpecName e) opacity)
+
+opacityOnlyOf : List ExportSpec -> OpacitySpec -> List (Pair String String)
+opacityOnlyOf exports o =
+  if anyExportOf o.opacityName exports then [] else [Pair o.opacityName (opacityWord o.opacityKind)]
+
+membersOfSpec : ExportSpec -> List (Pair String ExportMembers)
+membersOfSpec (ESType name m sp) = [Pair name m]
+membersOfSpec _ = []
+
+buildFmtDeclMods : Maybe ModDecl -> FmtDeclMods
+buildFmtDeclMods Nothing = emptyFmtDeclMods
+buildFmtDeclMods (Just (ModDecl _ _ _ exports _ opacity _)) =
+  let
+    opacityOnly = concatMap (opacityOnlyOf exports) opacity
+    members = concatMap membersOfSpec exports
+  in FmtDeclMods (append (map (exportPrefixOf opacity) exports) opacityOnly) members
+
+-- 声明名（渲染侧前缀查找用）；instance 不参与导出。
+declFmtName : Decl -> String
+declFmtName (DData name params kind ctors derivings viaField repr lin sp) = name
+declFmtName (DAxiom name ty sp) = name
+declFmtName (DExtern name cName ty sp) = name
+declFmtName (DSig name ctx ty sp) = name
+declFmtName (DFun name pats body sp) = name
+declFmtName (DRecord name params fields derivings viaField repr lin sp) = name
+declFmtName (DTrait name params methods sp) = name
+declFmtName (DInstance ctxE head methods sp) = ""
+
+membersSuffix : Maybe ExportMembers -> String
+membersSuffix Nothing = ""
+membersSuffix (Just EMNone) = ""
+membersSuffix (Just EMAll) = "(..)"
+membersSuffix (Just (EMOnly ms)) = "(${joinComma ms})"
+
+insertBeforeMarker : String -> String -> String -> String
+insertBeforeMarker marker suffix line = if contains marker line then case split marker line of
+  [] => line
+  [only] => line
+  first :: rest => "${first}${suffix}${marker}${join marker rest}"
+else line
+
+mapFirstLineContaining : String -> (String -> String) -> List String -> List String
+mapFirstLineContaining needle f [] = []
+mapFirstLineContaining needle f (line :: rest) =
+  if contains needle line then f line :: rest else line :: mapFirstLineContaining needle f rest
+
+applyDeclMods : FmtDeclMods -> Decl -> List String -> List String
+applyDeclMods mods decl lines = case decl of
+  DInstance ctxE head methods sp => lines
+  DFun name pats body sp => lines
+  _ =>
+    let
+      name = declFmtName decl
+      prefix = lookupText name mods.fdmPrefix
+      members = membersSuffix (lookupMembersText name mods.fdmMembers)
+      marker = case decl of
+        DData _ _ _ _ _ _ _ _ _ => "data ${name}"
+        DRecord _ _ _ _ _ _ _ _ => "record ${name}"
+        DTrait _ _ _ _ => "trait ${name}"
+        DAxiom _ _ _ => "axiom ${name}"
+        DExtern _ _ _ _ => "extern ${name}"
+        DSig _ _ _ _ => "${name} :"
+        _ => ""
+      afterPrefix = mapFirstLineContaining marker (\line => prefix ++ line) lines
+    in case decl of
+      DData _ _ _ _ _ _ _ _ _ =>
+        mapFirstLineContaining marker (\line => insertBeforeMarker " : " members line) afterPrefix
+      DRecord _ _ _ _ _ _ _ _ =>
+        mapFirstLineContaining marker (\line => insertBeforeMarker " where" members line)
+          afterPrefix
+      DTrait _ _ _ _ =>
+        mapFirstLineContaining marker (\line => insertBeforeMarker " where" members line)
+          afterPrefix
+      _ => afterPrefix
 
 -- 声明渲染
 -- ---------------------------------------------------------------
@@ -189,15 +298,16 @@ renderLocalFunClauses env at lineInd name ((Pair pats body) :: rest) =
     (renderLocalFunClauses env at lineInd name rest)
 
 -- 顶层声明：不同函数之间一个空行；类型签名紧贴同名函数子句。
-renderTopDecls : List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> List Decl -> List String
-renderTopDecls env at [] = []
-renderTopDecls env at (d :: rest) = append (renderDeclAt env at 0 d) (renderTopRest env at d rest)
+renderTopDecls : FmtDeclMods -> List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> List Decl -> List String
+renderTopDecls mods env at [] = []
+renderTopDecls mods env at (d :: rest) =
+  append (applyDeclMods mods d (renderDeclAt env at 0 d)) (renderTopRest mods env at d rest)
 
-renderTopRest : List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Decl -> List Decl -> List String
-renderTopRest env at prev [] = []
-renderTopRest env at prev (d :: rest) =
-  if attachDecl prev d then append (renderDeclAt env at 0 d) (renderTopRest env at d rest)
-  else "" :: append (renderDeclAt env at 0 d) (renderTopRest env at d rest)
+renderTopRest : FmtDeclMods -> List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Decl -> List Decl -> List String
+renderTopRest mods env at prev [] = []
+renderTopRest mods env at prev (d :: rest) =
+  if attachDecl prev d then append (applyDeclMods mods d (renderDeclAt env at 0 d)) (renderTopRest mods env at d rest)
+  else "" :: append (applyDeclMods mods d (renderDeclAt env at 0 d)) (renderTopRest mods env at d rest)
 
 attachDecl : Decl -> Decl -> Bool
 attachDecl prev (DFun n pats body sp) = declNamed prev n
@@ -212,8 +322,9 @@ declNamed _ n = False
 -- 模块头 / import / `infix*` 声明 / 文件组装
 -- ---------------------------------------------------------------
 renderModDecl : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> ModDecl -> List String
-renderModDecl at (ModDecl name True items sp) = renderExplicitModDecl at name (sortExports items)
-renderModDecl at (ModDecl name False items sp) = ["module ${name} where"]
+renderModDecl at (ModDecl name True items _ _ _ sp) =
+  renderExplicitModDecl at name (sortExports items)
+renderModDecl at (ModDecl name False items _ _ _ sp) = ["module ${name} where"]
 
 -- 空导出列表（`module M () where`）与短列表保持单行；超宽或含项注释时逐项一行。
 renderExplicitModDecl : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> String -> List ExportItem -> List String
@@ -244,9 +355,10 @@ renderExportLine at prefixText item =
   attachAt at (exportItemSpan item) 2 [prefixText ++ renderExportItem item]
 
 renderExportItem : ExportItem -> String
-renderExportItem (XBare name sp) = name
-renderExportItem (XTypeAll name sp) = "${name}(..)"
-renderExportItem (XModule name sp) = "module ${name}"
+renderExportItem (XBare name _) = name
+renderExportItem (XTypeAll name _) = "${name}(..)"
+renderExportItem (XTypeSome name members _) = "${name}(${joinComma members})"
+renderExportItem (XModule name _) = "module ${name}"
 
 -- 排序键：分组前缀（`module B` = 1，其余 = 0）++ 字面文本；稳定排序保证幂等。
 exportRank : ExportItem -> Int
@@ -304,6 +416,68 @@ renderHeader at (Just m) = attachAt at m.modDeclSpan 0 (renderModDecl at m)
 renderImportLine : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Import -> List String
 renderImportLine at imp = attachAt at imp.importSpan 0 [renderImport imp]
 
+-- D11：`export import` 行。整模块重导出用普通 import 形式，选择性重导出带括号列表。
+headerReexports : Maybe ModDecl -> List ExportItem
+headerReexports Nothing = []
+headerReexports (Just (ModDecl _ _ _ _ reexports _ _)) = reexports
+
+importPrefixText : Import -> String
+importPrefixText imp = case imp.importAlias of
+  Just alias => alias
+  Nothing => imp.importName
+
+dropPrefixText : String -> String -> String
+dropPrefixText prefix text =
+  if startsWith prefix text then strPack (dropNChars (strLength prefix) (strUnpack text)) else text
+
+dropNChars : Int -> List Int -> List Int
+dropNChars n xs = if n <= 0 then xs
+else case xs of
+  [] => []
+  _ :: rest => dropNChars (n - 1) rest
+
+itemMatchesPrefix : String -> ExportItem -> Bool
+itemMatchesPrefix prefix item =
+  let
+    dotted = "${prefix}."
+  in case item of
+    XModule n _ => n == prefix
+    XBare n _ => startsWith dotted n
+    XTypeAll n _ => startsWith dotted n
+    XTypeSome n _ _ => startsWith dotted n
+
+itemsForImport : Import -> List ExportItem -> List ExportItem
+itemsForImport imp items = filter (itemMatchesPrefix (importPrefixText imp)) items
+
+renderSelectiveItem : String -> ExportItem -> String
+renderSelectiveItem prefix item =
+  let
+    p = "${prefix}."
+  in case item of
+    XBare n _ => dropPrefixText p n
+    XTypeAll n _ => "${dropPrefixText p n}(..)"
+    XTypeSome n members _ => "${dropPrefixText p n}(${joinComma members})"
+    XModule n _ => n
+
+isWholeModuleReexport : ExportItem -> Bool
+isWholeModuleReexport (XModule _ _) = True
+isWholeModuleReexport _ = False
+
+anyWholeModule : List ExportItem -> Bool
+anyWholeModule [] = False
+anyWholeModule (i :: rest) = isWholeModuleReexport i || anyWholeModule rest
+
+renderReexportLine : Import -> List ExportItem -> String
+renderReexportLine imp items =
+  if anyWholeModule items then "export ${renderImport imp}"
+  else "export ${renderImport imp} (${joinComma (map (renderSelectiveItem (importPrefixText imp)) items)})"
+
+renderImportLines : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Maybe ModDecl -> List Import -> List String
+renderImportLines at hdr imports = concatMap (\imp => case itemsForImport imp (headerReexports hdr) of
+  [] => renderImportLine at imp
+  items => attachAt at imp.importSpan 0 [renderReexportLine imp items]
+) imports
+
 renderEofComments : List Comment -> List String
 renderEofComments [] = []
 renderEofComments comments = concatMap (commentLeadLines 0) comments
@@ -313,9 +487,9 @@ renderEofComments comments = concatMap (commentLeadLines 0) comments
 renderSourceSections : List FixityDecl -> Maybe ModDecl -> List Import -> List FixityDecl -> List Decl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> List Comment -> List (List String)
 renderSourceSections env hdr imports fixities decls at eof =
   [ renderHeader at hdr,
-    concatMap (renderImportLine at) imports,
+    renderImportLines at hdr imports,
     concatMap (renderFixityLine at) fixities,
-    renderTopDecls env at decls,
+    renderTopDecls (buildFmtDeclMods hdr) env at decls,
     renderEofComments eof
   ]
 

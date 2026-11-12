@@ -356,6 +356,8 @@ exportPositions lines kind name items =
 exportPosition : List String -> String -> ExportItem -> List (Pair Int Int)
 exportPosition lines name (XBare n sp) = if n == name then firstInSpanOf lines sp name else []
 exportPosition lines name (XTypeAll n sp) = if n == name then firstInSpanOf lines sp name else []
+exportPosition lines name (XTypeSome n members sp) =
+  if n == name then firstInSpanOf lines sp name else []
 exportPosition lines name (XModule n sp) = []
 
 exportItemsOf : SourceFile -> List ExportItem

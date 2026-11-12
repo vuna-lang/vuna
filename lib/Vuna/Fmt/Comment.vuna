@@ -248,7 +248,7 @@ headerAnchors (Just m) = append [m.modDeclSpan] (modDeclItemAnchors m)
 
 -- 导出项也作为注释锚点：排序时项注释随项移动。
 modDeclItemAnchors : ModDecl -> List Span
-modDeclItemAnchors (ModDecl _ _ items _) = map exportItemSpan items
+modDeclItemAnchors (ModDecl _ _ items _ _ _ _) = map exportItemSpan items
 
 declAnchors : Decl -> List Span
 declAnchors (DData name params kind ctors derivings viaField repr lin sp) = sp :: map ctorSpan ctors

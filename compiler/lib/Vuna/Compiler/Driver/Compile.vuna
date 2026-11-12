@@ -898,7 +898,7 @@ toolImportsOfSource ctx label source = do
   case parsed of
     ErrC _ => pure []
     OkC (SourceFile hdr imports fixities decls) => case hdr of
-      Just (ModDecl dname _ _ _) => toolImportNamesOf ctx dname imports
+      Just (ModDecl dname _ _ _ _ _ _) => toolImportNamesOf ctx dname imports
       Nothing => toolImportNamesOf ctx "" imports
 
 toolImportNamesOf : PackageContext -> String -> List Import -> Eff [] (List String)

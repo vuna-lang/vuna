@@ -1,0 +1,18 @@
+# 100) D11 语法地基：逐定义 export / export import / alias|boxed record / opaque 修饰符。
+#      迁移期旧模块头仍然工作；这里验证新语法本身（默认 module-private 只在有逐定义
+#      export 的模块上生效，旧 header 语义不变）。
+run: sh -c 'rm -rf "$TMPDIR/export-pkg"; mkdir -p "$TMPDIR/export-pkg/lib"'
+run: sh -c 'printf "%s\n" "[package]" "name = \"export-pkg\"" "" "[export]" "modules = [\"P\", \"Q\"]" "" "[dependencies]" "vuna-base = \"$VUNA_BASE\"" > "$TMPDIR/export-pkg/vuna.toml"'
+run: sh -c 'printf "%s\n" "module P where" "" "export data T(A, B) : Type where" "  A : T" "  B : T" "" "export record R(..) where" "  x : Int" "" "alias record AR where" "  ax : Int" "" "boxed record BR where" "  bx : Int" "" "export f : T" "f = A" "" "opaque g : T" "g = B" > "$TMPDIR/export-pkg/lib/P.vuna"'
+run: sh -c 'printf "%s\n" "module Q where" "import P" "" "export v : T" "v = f" "" "export r : Int" "r = (R { x = 7 }).x" > "$TMPDIR/export-pkg/lib/Q.vuna"'
+run: "$VUNA" check "$TMPDIR/export-pkg"
+exit: 0
+# 选择性子集：B 未导出 ⇒ 另一模块使用 B 必须失败（默认 private / 子集语义）。
+run: sh -c 'mkdir -p "$TMPDIR/export-neg/lib"; printf "%s\n" "[package]" "name = \"export-neg\"" "" "[export]" "modules = [\"P\", \"R\"]" "" "[dependencies]" "vuna-base = \"$VUNA_BASE\"" > "$TMPDIR/export-neg/vuna.toml"; printf "%s\n" "module P where" "" "export data T(A) : Type where" "  A : T" "  B : T" > "$TMPDIR/export-neg/lib/P.vuna"; printf "%s\n" "module R where" "import P" "" "bad : T" "bad = B" > "$TMPDIR/export-neg/lib/R.vuna"'
+run: "$VUNA" check "$TMPDIR/export-neg"
+exit: 1
+out-contains: unbound variable B
+# 选择性重导出：Q 只 re-export A/f，R 通过 Q 看不到 B（同样失败）。
+run: sh -c 'rm -rf "$TMPDIR/export-reexp"; mkdir -p "$TMPDIR/export-reexp/lib"; printf "%s\n" "[package]" "name = \"export-reexp\"" "" "[export]" "modules = [\"P\", \"Q\", \"R\"]" "" "[dependencies]" "vuna-base = \"$VUNA_BASE\"" > "$TMPDIR/export-reexp/vuna.toml"; printf "%s\n" "module P where" "" "export data T(A, B) : Type where" "  A : T" "  B : T" "" "export f : T" "f = A" > "$TMPDIR/export-reexp/lib/P.vuna"; printf "%s\n" "module Q where" "export import P (T(..), f)" > "$TMPDIR/export-reexp/lib/Q.vuna"; printf "%s\n" "module R where" "import Q" "" "export ok : T" "ok = f" > "$TMPDIR/export-reexp/lib/R.vuna"'
+run: "$VUNA" check "$TMPDIR/export-reexp"
+exit: 0

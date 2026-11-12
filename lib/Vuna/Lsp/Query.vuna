@@ -779,7 +779,7 @@ bestSymbol idx curMod token = case findSymbol idx token of
 -- 当前文档的模块名（无 module 头 → ""）。
 currentModuleName : List Decl -> Maybe ModDecl -> String
 currentModuleName decls Nothing = ""
-currentModuleName decls (Just (ModDecl name explicit items sp)) = name
+currentModuleName decls (Just (ModDecl name explicit items _ _ _ sp)) = name
 
 -- 当前缓冲里的顶层名字（类型名 + 声明名），供补全使用。
 declBufferNames : Decl -> List String
