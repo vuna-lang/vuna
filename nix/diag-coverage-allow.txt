@@ -51,3 +51,13 @@ TC_UnknownRecord
 TC_UnsolvedMetavar
 TC_UnsolvedMetavarInfer
 TC_CannotRedefineBuiltin
+PKG_DependencySourceMissing
+PKG_FetchFailed
+PKG_GitRevRequired
+PKG_HashMalformed
+PKG_HashMismatch
+PKG_IndexMalformed
+PKG_MissingHash
+PKG_NotMaterialized
+PKG_SourceConflict
+PKG_UnknownSourceKey
