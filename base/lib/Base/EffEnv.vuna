@@ -12,9 +12,8 @@ module Base.EffEnv
 -- Base.EffEnv：一阶环境效应（W10 效应标签迁移）。
 --
 -- 标签 = `EnvOp`（实例名在行的 `Cons n EnvOp r` 条目里）；操作 GetEnv / GetCwd / ExecPath 都返回 String。
--- 真实 handler 用 `Base.Host` 的 `getEnv` / `getCwd` / `execPath` 实现。
+-- 真实 handler 直调对应 `prim_eff_*` 原语（`prim_eff_getenv` / `prim_eff_getcwd` / `prim_eff_execPath`）。
 import Base.Eff
-import Base.Host
 import Base.Monad
 
 -- | env 操作：`GetEnv` 带变量名、`GetCwd`、`ExecPath`。
@@ -29,7 +28,7 @@ resEnv (GetEnv k) = String
 resEnv GetCwd = String
 resEnv ExecPath = String
 
--- | 通过命名实例取环境变量；真实 handler 走 `Base.Host.getEnv`（未设置或为空串都返回空串）。
+-- | 通过命名实例取环境变量；真实 handler 走 `prim_eff_getenv`（未设置或为空串都返回空串）。
 envGetEnv : (n : String) -> String -> {r : Row} -> {w : Member n EnvOp r} -> Eff r String
 envGetEnv n k = sendCore EnvOp "env" n (GetEnv k)
 
@@ -45,17 +44,17 @@ envExecPath n = sendCore EnvOp "env" n ExecPath
 handleEnv : {a : Type} -> {b : Type} -> {r : Row} -> (n : String) -> {w : Member n EnvOp r} -> (a -> b) -> ((o : EnvOp) -> (resEnv o -> b) -> b) -> Eff r a -> Eff (Base.Eff.rowRem n EnvOp r) b
 handleEnv n ret opH comp = handleCore EnvOp "env" n ret opH comp
 
--- | 真实 handler 的操作解释：把三个操作映射到 `Base.Host` 的 `getEnv` / `getCwd` / `execPath`。
+-- | 真实 handler 的操作解释：把三个操作映射到 `prim_eff_getenv` / `prim_eff_getcwd` / `prim_eff_execPath`。
 envOpHIO : {a : Type} -> (o : EnvOp) -> (resEnv o -> Eff [] a) -> Eff [] a
 envOpHIO op k = case op of
   GetEnv name => do
-    v <- getEnv name
+    v <- prim_eff_getenv name
     k v
   GetCwd => do
-    v <- getCwd
+    v <- prim_eff_getcwd
     k v
   ExecPath => do
-    v <- execPath
+    v <- prim_eff_execPath
     k v
 
 -- | 宿主 handler：结果行删除 `EnvOp`，answer 是已处理干净的 `Eff []` 动作，可用 `joinEff` 展平。

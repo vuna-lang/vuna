@@ -72,7 +72,6 @@ import Vuna.Compiler.Codegen.Decl
 import Vuna.Compiler.Driver.Cache
 import Vuna.Compiler.Driver.Iface
 import Vuna.Compiler.Driver.PerfCache
-import Base.Host
 import Vuna.Compiler.Driver.Split
 
 -- M34.5 模块级接口（S1）：一次成功 check 的**完整输入面**。接口摘要要按模块归属切
@@ -1310,7 +1309,7 @@ unitKeysOf modules entryDecls printResult =
     entryHash = encTop encDecls entryDecls
     entryKey =
       shaText
-        "e|${entryHash}|${if printResult then "print" else "noprint"}|${concatKeys (map pairKeyValue modKeys)}"
+        "e|${entryHash}|${if printResult then "prim_eff_print" else "noprint"}|${concatKeys (map pairKeyValue modKeys)}"
   in Pair "__entry__" entryKey :: modKeys
 
 -- M4（效果显式化）：PerfCache 的磁盘层与生成器的 lookup/store 回调都是宿主动作，

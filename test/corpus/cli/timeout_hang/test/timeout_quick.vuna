@@ -1,5 +1,5 @@
 -- W1 超时夹具（通过路径）：1ms 睡眠在短超时内照常通过。
--- P2c：睡眠走 Clock 效应（runClock），不再直接 import Host。
+-- P2c：睡眠走 Clock 效应（runClock），不再直接调用宿主原语。
 import Base.Eff
 import Base.EffClock
 

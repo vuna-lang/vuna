@@ -11,9 +11,8 @@ module Base.EffStdin
 -- Base.EffStdin：一阶标准输入效应（P2c：补 readLine / readBytes 标签）。
 --
 -- 标签 `StdinOp` 是命名实例；操作 ReadLine（读一行，EOF 返回空串）与
--- ReadBytes（最多读 n 字节，n 是度量 → Nat）。真实 handler 用 `Base.Host` 实现。
+-- ReadBytes（最多读 n 字节，n 是度量 → Nat）。真实 handler 直调 `prim_eff_*` 实现。
 import Base.Eff
-import Base.Host
 import Base.Monad
 import Base.Nat
 
@@ -43,10 +42,10 @@ handleStdin n ret opH comp = handleCore StdinOp "stdin" n ret opH comp
 stdinOpHIO : {a : Type} -> (o : StdinOp) -> (resStdin o -> Eff [] a) -> Eff [] a
 stdinOpHIO op k = case op of
   ReadLine => do
-    v <- readLine
+    v <- prim_eff_readLine
     k v
   ReadBytes n => do
-    v <- readBytes n
+    v <- prim_eff_readBytes (natToInt n)
     k v
 
 -- | 宿主 handler：结果行删除 `StdinOp`，answer 是已处理干净的 `Eff []` 动作，可用 `joinEff` 展平。

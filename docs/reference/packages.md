@@ -76,9 +76,9 @@
     `compiler/lib/Vuna/Compiler/Version.vuna`。
 - 示例：`examples/multi/` 是多包 workspace（根包 + 成员包 `greet` + `base` 路径依赖），
   `checks.vuna-package` 在 Nix 沙箱里构建并运行它，验证包管理路径可复现。
-- 可执行入口：`vuna build` 要求入口 `main : Eff [] a`（运行时执行动作，退出码用 `exit`）。
-  没有 manifest 级能力/特权/信任门控：effectful `prim_*`（含 `prim_eff_*`）与宿主层
-  `Base.Host` 对任何包（用户包、ad-hoc 文件）都可见。用户面**应**经 `Base.Eff.*` 标签 +
+- 可执行入口：`vuna build` 要求入口 `main : Eff [] a`（运行时执行动作，退出码用 `prim_eff_exit` / `Base.EffExit`）。
+  没有 manifest 级能力/特权/信任门控：effectful `prim_*` / `prim_eff_*` 宿主层
+  对任何包（用户包、ad-hoc 文件）都可见（直接调用即可）。用户面**应**经 `Base.Eff.*` 标签 +
   handler 使用效果——这是约定与文档纪律，不是强制门控。`vuna interp` 是纯核心求值
   （不执行效果），效果程序用 `compile` + 运行产物。
 
@@ -86,7 +86,7 @@
 
 - 没有 manifest 级能力 / 特权 / 信任机制：`vuna.toml` 不再有 `[capabilities]`、`[trust]`、
   `[privileged]`；`[package]` 只接受 `name`。
-- 任何包（用户包、ad-hoc 文件）都可以 `import Base.Host`、直接调用 `prim_*` / `prim_eff_*`
+- 任何包（用户包、ad-hoc 文件）都可以直接调用 `prim_*` / `prim_eff_*`
   （效果原语是 `Eff []` 叶子）。编译器不再有包级原语白名单、宿主模块 import 门控、`unsafe` 的定义级
   审计，也没有 `REPL --privileged`。旧诊断码 `PKG_EmptyCapability`、
   `PKG_DuplicateCapability`、`PKG_TrustNeedsUnsafe`、`PKG_EmptyTrustPoint`、
@@ -94,8 +94,8 @@
   `PKG_NonPrivileged`、`PKG_EffectCapabilityRequired`、`RN_UnknownCapability`、
   `LD_HostModulePrivileged` 全部删除（未发布、无兼容义务；历史见 git）。
 - **用户面纪律（非门控）**：标准库与用户代码**应**经 `Base.Eff.*` 标签 + handler 使用效果
-  （入口执行点 `runPure : Eff [] a -> a`）；`Base.Host` 与 `prim_*` 是宿主层 / 底层原语，
-  base、编译器与根工具链内部仍直接使用它们——不再由编译器强制，只是约定。
+  （入口执行点 `runPure : Eff [] a -> a`）；`prim_*` / `prim_eff_*` 是宿主层 / 底层原语，
+  base 的 Eff handler、编译器与根工具链内部仍直接使用它们——不再由编译器强制，只是约定。
 - **显式接受的损失**（历史见 git；后续用表示层权限（N2/N3）或新模型补）：宿主层 import 门控、
   每包原语白名单、`unsafe` 定义级审计、网络仅根包可用。仍然有效的边界决策：唯一动作类型
   是 `Eff r a`，入口 `main : Eff [] a`，`vuna interp` 不执行运行时效应。
@@ -140,14 +140,14 @@ modules = [
   "Base.Sort",
   "Base.Map",
   "Base.Monad",
-  "Base.Host",
+
   "Prelude"
 ]
 ```
 
 （`vuna-base` 不在 `[dependencies]` 里依赖别的包；上例的 `[dependencies]` 段从略。
 成员包 manifest 只有 `[package]` + `[export]`（可选 `[diagnostics]`、`[dependencies]`）：
-没有能力 / 特权 / 信任 section。`Base.Host` 封装宿主别名，任何包都可 import。）
+没有能力 / 特权 / 信任 section。宿主层直接调用 `prim_eff_*`，原宿主别名模块已删除。）
 
 `[export]` 的每个名字都是模块全名；`[dependencies]` 的值是相对该包目录的路径（lexical
 规范化，不做 realpath）。manifest 只被解析与校验（`Vuna.Compiler.Frontend.Manifest`），

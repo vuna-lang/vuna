@@ -16,7 +16,7 @@
 | intrinsic | `Intrinsics.allIntrinsics` 的一条：名字、签名形状（`IType`）、interp 归约标签（`IntrinsicOp`）、runtime 表达式、是否对源码可见 |
 | runtime helper | 生成产物 `Vuna_runtime.ml` 里的 OCaml 函数（`bi_*` / `dtp_*` / `dt_show_string`）；`bi_*` 不对用户源码可见 |
 | 效果原语 | `intrinsicReturnsEff` 的 intrinsic：返回 `Eff [] a`，名字只有 `prim_eff_*`，外加 `effTimeUs` |
-| 宿主层 | `Base.Host` 的 Eff 别名 + `prim_*` / `prim_eff_*` 原语；任何包都可 import / 直调，没有 manifest 门控 |
+| 宿主层 | 直接调用 `prim_eff_*`（外加 `effTimeUs`）；原宿主别名模块已删除，任何包都可直调，没有 manifest 门控 |
 
 ## 2. 身份与常量
 
@@ -108,9 +108,10 @@
   的中缀别名；`Int` / `Nat` / `Float` 实例由精化器按期望类型/实参类型特化回内建原语，
   其它类型走普通 trait 方法应用。用户类型实现 `Num`（并配 `FromInt` 收字面量）即可重载
   四则（`1 + 2 : MyNum`），见 [operators.md](operators.md)「`Num` 的唯一真源」。
-- **度量返回 Nat（D25）**：`prim_print` / `prim_writeFile` / `prim_fileSize` 的签名是
-  `… -> Eff [] Nat`（宿主面 `Base.Host.print` / `writeFile` / `fileSize` 在边界转 `Nat`；实现层 `prim_eff_*` 仍是 `Eff [] Int`）；
-  `prim_eprint` / `prim_writeFileAtomic` 与编译器内部计数器（level/meta/fuel/span/arity、
+- **度量返回 Nat（D25，只留在 Eff handler 的 result 族）**：`Base.EffConsole.Print` 与
+  `Base.EffFs.WriteFile` / `FileSize` 的结果是 `Nat`（handler 在边界从原语的 `Int` 转 `Nat`）；
+  直接调用 `prim_eff_print` / `prim_eff_writeFile` / `prim_eff_fileSize` 得到 `Eff [] Int`。
+  `prim_eff_eprint` / `prim_eff_writeFileAtomic` 与编译器内部计数器（level/meta/fuel/span/arity、
   字节计数中间量）保留 `Int`。
 - **展示**：`main : Nat` 与 interp 都输出十进制。
 
@@ -225,10 +226,10 @@
 
 | 表 | 名字 | 类型 | 用途 |
 | --- | --- | --- | --- |
-| Eff 表 | `prim_eff_*`（如 `prim_eff_print`、`prim_eff_readFile`、`effTimeUs`） | 返回 `Eff [] a` | `Base.Host` 的 Eff 别名、宿主层 |
+| Eff 表 | `prim_eff_*`（如 `prim_eff_print`、`prim_eff_readFile`、`effTimeUs`） | 返回 `Eff [] a` | 宿主层（原宿主别名模块已删除，直接调用） |
 
-原语在 codegen 里包成 `MkEff (fun _ -> rt args)`；`Base.Host` 在 Eff 别名上做 Int/Nat 归一化
-（`print`/`writeFile`/`fileSize`/`readBytes` 等）。
+原语在 codegen 里包成 `MkEff (fun _ -> rt args)`；Int/Nat 归一化只在 `Base.Eff.*` handler
+的 result 族（`Print`、`WriteFile`/`FileSize`）里做，原语本身返回 `Int`。
 
 **Eff 代数不是原语**：`pure` / `>>=` / `do` / `fmap` 来自 `Functor`/`Applicative`/`Monad (Eff r)`
 实例（`Base.Eff` 内建）；`runPure` / `joinEff` / `raise` / `weaken` 是 `Base.Eff` 的库函数。
@@ -236,7 +237,7 @@
 运行时效应核心，常规只由 `Base.Eff` 包装使用（不再有 `unsafe` 门控）。
 
 **效果原语类型**（`prim_eff_*`，全部返回 `Eff []`）：`prim_eff_print : String -> Eff [] Int`
-（`Base.Host.print` 在边界转 `Nat`）、`prim_eff_readFile : String -> Eff [] String`、
+（`Base.EffConsole.Print` 在 handler 边界转 `Nat`）、`prim_eff_readFile : String -> Eff [] String`、
 `prim_eff_readLine : Eff [] String`、`prim_eff_readDir : String -> Eff [] (List String)`、
 `prim_eff_isDirectory` / `prim_eff_fileExists : String -> Eff [] Bool`、
 `prim_eff_makeDir` / `prim_eff_removeFile` / `prim_eff_fileMtime : String -> Eff [] Int`、
@@ -266,23 +267,21 @@
 
 `net` 原语 7 条 socket（工具链 server 与测试用；任何包都可直调）：
 
-- `prim_netListen : String -> Eff [] Int`：绑定并监听，返回 listener 句柄。地址是
+- `prim_eff_netListen : String -> Eff [] Int`：绑定并监听，返回 listener 句柄。地址是
   `tcp:HOST:PORT`（HOST 只接受数字 IPv4；`PORT=0` 取临时端口）或 `unix:PATH`；
-- `prim_netPort : Int -> Eff [] Int`：listener 的端口（TCP；unix 返回 0），配合 `PORT=0`；
-- `prim_netAccept : Int -> Eff [] Int`：阻塞接受一个连接，返回连接句柄；
-- `prim_netRecv : Int -> Int -> Eff [] String`：最多读 n 字节、**有数据就立即返回**（可能更少）；
+- `prim_eff_netPort : Int -> Eff [] Int`：listener 的端口（TCP；unix 返回 0），配合 `PORT=0`；
+- `prim_eff_netAccept : Int -> Eff [] Int`：阻塞接受一个连接，返回连接句柄；
+- `prim_eff_netRecv : Int -> Int -> Eff [] String`：最多读 n 字节、**有数据就立即返回**（可能更少）；
   `""` 表示对端关闭；
-- `prim_netSend : Int -> String -> Eff [] Int`：写完整串（内部循环处理部分写），返回字节数；
-- `prim_netClose : Int -> Eff [] Int`：关闭句柄（幂等）；
-- `prim_netConnect : String -> Eff [] Int`：客户端连接（`vuna repl --client` 与测试夹具用）。
+- `prim_eff_netSend : Int -> String -> Eff [] Int`：写完整串（内部循环处理部分写），返回字节数；
+- `prim_eff_netClose : Int -> Eff [] Int`：关闭句柄（幂等）；
+- `prim_eff_netConnect : String -> Eff [] Int`：客户端连接（`vuna repl --client` 与测试夹具用）。
 
 句柄是小整数，运行时映射到 `Unix.file_descr` 表，**不引入新的语言类型**；
 无 DNS / TLS / 异步 / 超时（`accept`/`recv` 阻塞，见 §8）。
 
-**名字面**：效果原语只有 `prim_eff_*` 名（外加 `effTimeUs`）。两种用法都合法：
-
-1. `import Base.Host`，使用返回 `Eff []` 的 API（`print` / `readFile` / …——它们是 `prim_eff_*` 的**别名**）；
-2. **直接**调用 `prim_eff_*`，得到 `Eff []` 动作（不需要 alias、不需要任何声明）。
+**名字面**：效果原语只有 `prim_eff_*` 名（外加 `effTimeUs`）。唯一用法是**直接**调用
+`prim_eff_*`，得到 `Eff []` 动作（不需要 alias、不需要任何声明；原宿主别名层已删除）。
 
 **执行入口**：动作只在 `main` 处由运行时执行；`main : Eff [] a` 的产物钩子是
 `dtp_sched_main (fun () -> Base.Eff.runPure v_main)`。没有 main 之外的通用执行入口：
@@ -306,13 +305,13 @@
 | 运行时核心（隐藏） | `prim_effectPerform` / `prim_effectHandle` / `prim_cleanupPush` / `prim_cleanupPop`（运行时续延与 bracket cleanup，常规仅 `Base.Eff` 包装使用） |
 
 - **原语是普通内建**：任何包（用户包、ad-hoc 文件）都可以直接调用 `prim_*` /
-  `prim_eff_*`，也都可以 `import Base.Host`。不再有 manifest `[capabilities]` /
+  `prim_eff_*`。不再有 manifest `[capabilities]` /
   `[trust]`、每包原语白名单、宿主模块 import 门控，也没有 REPL `--privileged`；旧诊断码
   （`PKG_EffectCapabilityRequired`、`RN_UnknownCapability`、`LD_HostModulePrivileged`、
   `PKG_NonPrivileged` 等）已删除，历史见 git。
 - **推荐用法（纪律，非强制）**：常规用户面经 `Base.Eff.*` 标签 + handler 使用效果
-  （入口 `runPure : Eff [] a -> a`），宿主层细节留在 `Base.Host` / `Base.Eff*` 内部；
-  base、编译器与根工具链内部仍直接使用原语。原语不改变类型检查、擦除或 codegen 语义，
+  （入口 `runPure : Eff [] a -> a`），宿主层细节留在 `Base.Eff*` handler 内部（需要直调时
+  调用 `prim_eff_*`）；base 的 Eff handler、编译器与根工具链内部仍直接使用原语。原语不改变类型检查、擦除或 codegen 语义，
   只是底层叶子。
 - 显式接受的损失（宿主层 import 门控、每包原语白名单、网络仅根包可用等）与后续方向见
   [effects.md](effects.md) §8.6。
@@ -331,26 +330,26 @@
 
 | 原语 | runtime 契约 |
 | --- | --- |
-| `prim_print` | 写 stdout 并 flush，返回**字节数**（签名 `Eff [] Nat`，D25） |
-| `prim_writeFile` | 二进制写整串，返回**字节数**（签名 `Eff [] Nat`，D25）；写失败抛宿主异常 |
-| `prim_writeFileAtomic` | 同 `prim_writeFile`，但写 `<path>.<pid>.tmp` 后 `Sys.rename` 原子替换：并发读者只会看到完整旧内容或完整新内容（workspace 并行 check 的子进程共享缓存目录，必须原子写） |
-| `prim_readFile` | 读整个文件为字节串；读失败抛宿主异常 |
-| `prim_readLine` | 读一行；EOF 返回 `""`（与空行不可区分） |
-| `prim_readBytes` | `Int -> String`：最多读 n 字节，**有数据就立即返回**（可能少于 n），EOF 返回 `""`；调用方负责循环 / 拼接（LSP 帧读取用） |
-| `prim_readDir` | 目录项按字符串排序；目录不存在 / 不可读时抛宿主异常 |
-| `prim_makeDir` / `prim_removeFile` | **幂等**：已存在 / 不存在时直接返回 `0` |
-| `prim_fileExists` | 路径不存在时为 `False` |
-| `prim_isDirectory` | 普通路径检查；**不存在**的路径抛宿主异常（`Sys_error` → `failwith`） |
-| `prim_fileMtime` / `prim_fileSize` | 秒级 mtime / 字节数；取不到时**静默返回 0**（`prim_fileMtime` 仍是 `Int`，`prim_fileSize` 是 `Nat`，D25） |
-| `prim_getenv` | 变量未设置或为空串都返回 `""`（两者不可区分） |
-| `prim_getcwd` | 失败时返回 `"."` |
-| `prim_execPath` | 先读 `/proc/self/exe`（**Linux 假设**），失败回落 `Sys.executable_name` |
-| `prim_getArgs` | 排除 `argv[0]` 的其余参数 |
-| `prim_exit` | 立即退出进程（原语类型 `Int -> Eff [] Int`，执行即退出、**不返回**） |
-| `prim_sleep` | 阻塞 `Unix.sleepf (us / 1000000)`；`us <= 0` 立即返回 `0`（真实睡眠，非忙等） |
-| `prim_runIn` | 在给定目录执行 `sh` 命令并返回退出码，执行后恢复原 cwd |
-| `prim_spawn` | 异步启动子进程（argv 列表，继承 stdin/stdout/stderr），返回 pid |
-| `prim_wait` | 等待子进程并返回退出码（signal/stopped 归 1） |
+| `prim_eff_print` | 写 stdout 并 flush，返回**字节数**（签名 `Eff [] Int`；`Base.EffConsole.Print` 在 handler 边界转 `Nat`，D25） |
+| `prim_eff_writeFile` | 二进制写整串，返回**字节数**（签名 `Eff [] Int`；`Base.EffFs.WriteFile` 在 handler 边界转 `Nat`，D25）；写失败抛宿主异常 |
+| `prim_eff_writeFileAtomic` | 同 `prim_eff_writeFile`，但写 `<path>.<pid>.tmp` 后 `Sys.rename` 原子替换：并发读者只会看到完整旧内容或完整新内容（workspace 并行 check 的子进程共享缓存目录，必须原子写） |
+| `prim_eff_readFile` | 读整个文件为字节串；读失败抛宿主异常 |
+| `prim_eff_readLine` | 读一行；EOF 返回 `""`（与空行不可区分） |
+| `prim_eff_readBytes` | `Int -> String`：最多读 n 字节，**有数据就立即返回**（可能少于 n），EOF 返回 `""`；调用方负责循环 / 拼接（LSP 帧读取用） |
+| `prim_eff_readDir` | 目录项按字符串排序；目录不存在 / 不可读时抛宿主异常 |
+| `prim_eff_makeDir` / `prim_eff_removeFile` | **幂等**：已存在 / 不存在时直接返回 `0` |
+| `prim_eff_fileExists` | 路径不存在时为 `False` |
+| `prim_eff_isDirectory` | 普通路径检查；**不存在**的路径抛宿主异常（`Sys_error` → `failwith`） |
+| `prim_eff_fileMtime` / `prim_eff_fileSize` | 秒级 mtime / 字节数；取不到时**静默返回 0**（两个原语都返回 `Int`；`Base.EffFs.FileSize` 的结果族是 `Nat`，D25） |
+| `prim_eff_getenv` | 变量未设置或为空串都返回 `""`（两者不可区分） |
+| `prim_eff_getcwd` | 失败时返回 `"."` |
+| `prim_eff_execPath` | 先读 `/proc/self/exe`（**Linux 假设**），失败回落 `Sys.executable_name` |
+| `prim_eff_getArgs` | 排除 `argv[0]` 的其余参数 |
+| `prim_eff_exit` | 立即退出进程（原语类型 `Int -> Eff [] Int`，执行即退出、**不返回**） |
+| `prim_eff_sleep` | 阻塞 `Unix.sleepf (us / 1000000)`；`us <= 0` 立即返回 `0`（真实睡眠，非忙等） |
+| `prim_eff_runIn` | 在给定目录执行 `sh` 命令并返回退出码，执行后恢复原 cwd |
+| `prim_eff_spawn` | 异步启动子进程（argv 列表，继承 stdin/stdout/stderr），返回 pid |
+| `prim_eff_wait` | 等待子进程并返回退出码（signal/stopped 归 1） |
 | `prim_eff_netListen` | 绑定并监听：`tcp:HOST:PORT`（`SO_REUSEADDR`，backlog 8）或 `unix:PATH`（bind 前删除已存在的路径，开发工具惯例）；返回句柄表下标；失败 `failwith "net: ..."` |
 | `prim_eff_netPort` | `getsockname` 的端口（TCP）；unix socket 返回 0 |
 | `prim_eff_netAccept` | 阻塞接受一个连接，返回新句柄 |
@@ -390,8 +389,8 @@
   （退出码 2；无 `DT:` 前缀），不做「纯动作求值、效果丢弃」。
 - **List 桥接**：codegen 把返回或接收 `List` 的 10 个原语映射到桥接 helper（`dtp_unpack` /
   `dtp_pack` / `dtp_concatMany` / `dtp_substTemplate` / `dtp_listOf` / `dtp_ocamlOf`）：
-  `strUnpack` / `strPack` / `strConcatMany` / `strSubstTemplate`、`prim_getArgs` /
-  `prim_readDir` / `prim_runIn` / `prim_spawn`、`arrayFromList` / `arrayToList`。桥接只为
+  `strUnpack` / `strPack` / `strConcatMany` / `strSubstTemplate`、`prim_eff_getArgs` /
+  `prim_eff_readDir` / `prim_eff_runIn` / `prim_eff_spawn`、`arrayFromList` / `arrayToList`。桥接只为
   canonical `Base.List.List` 声明生成；包内没有该族时（例如没有 base 依赖）codegen 报
   ``[CG_ListBridgeRequired] builtin `<name>` requires the canonical `Base.List.List` declaration ...``。
 - 相关夹具带 `.nointerp` 标记，只做 `compile` + 运行产物。

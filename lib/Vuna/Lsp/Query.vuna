@@ -51,7 +51,6 @@ import Vuna.Lint.Rules
 import Vuna.Lsp.Bindings
 import Vuna.Lsp.Diagnostics
 import Vuna.Lsp.Protocol
-import Base.Host
 
 -- 结果上限：避免病态索引/大文件把单帧撑爆。
 maxCompletions : Int

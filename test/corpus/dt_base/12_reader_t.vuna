@@ -2,7 +2,6 @@
 -- `ask` 读环境，`local` 在临时 handler 里改写；handler 的 answer 用 Int。
 import Base.Eff
 import Base.Eff.Reader
-import Base.Host
 
 prog : Eff [ReaderOp Int@counter] Int
 prog = do
@@ -15,10 +14,10 @@ opH op k = case op of
 
 main : Eff [] Int
 main = do
-  _ <- print "reader\n"
+  _ <- prim_eff_print "reader\n"
   a <- pure (runPure (handleReader "counter" Int (\x => x) opH prog))
   b <-
     pure
       (runPure (handleReader "counter" Int (\x => x) opH (local "counter" Int (\x => x + 1) (ask "counter" Int))))
-  _ <- print ("a=" ++ strFromInt a ++ ",b=" ++ strFromInt b ++ "\n")
-  exit 0
+  _ <- prim_eff_print ("a=" ++ strFromInt a ++ ",b=" ++ strFromInt b ++ "\n")
+  prim_eff_exit 0

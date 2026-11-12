@@ -25,8 +25,8 @@ import Vuna.Compiler.Driver.DiagRender
 import Vuna.Compiler.Driver.Dt
 import Vuna.Compiler.Version
 import Vuna.Compiler.Diag.Format
-import Base.Host
 import Base.Nat
+import Base.List
 
 -- | CLI 辅助：compilerUsageLines（参数/退出码约定见 tooling.md）。
 compilerUsageLines : String -> String
@@ -139,7 +139,7 @@ takeDiags n ds = if n <= 0 then ds else takeDiagsGo n ds
 -- | 诊断/告警实现：takeDiagsGo（详见 diagnostics.md）。
 takeDiagsGo : Int -> List Diagnostic -> List Diagnostic
 takeDiagsGo n [] = []
-takeDiagsGo n (d :: rest) = if n <= 0 then [] else d :: takeDiagsGo (n - 1) rest
+takeDiagsGo n (d :: rest) = if n <= 0 then [] else Base.List.Cons d (takeDiagsGo (n - 1) rest)
 
 -- | 诊断/告警实现：stripDenyWarnings（详见 diagnostics.md）。
 stripDenyWarnings : List String -> List String

@@ -26,7 +26,6 @@ import Vuna.Compiler.Codegen.Erase
 import Vuna.Compiler.Codegen.Term
 import Vuna.Compiler.Core
 import Vuna.Compiler.Intrinsics
-import Base.Host
 
 splitUnitOfModule : String -> String
 splitUnitOfModule modName = sanitizeName modName

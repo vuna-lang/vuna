@@ -3,9 +3,8 @@ module Base.EffArgs (ArgsOp(..), argsGetArgs, handleArgs, handleArgsHost, resArg
 -- Base.EffArgs：一阶命令行参数效应（P2c：补 getArgs 标签，供夹具迁移 typed effects）。
 --
 -- 标签 = `ArgsOp`（实例名在行的 `Cons n ArgsOp r` 条目里）；操作只有 GetArgs，返回 `List String`。
--- 真实 handler 用 `Base.Host.getArgs` 实现。
+-- 真实 handler 用 `prim_eff_getArgs` 实现。
 import Base.Eff
-import Base.Host
 import Base.Monad
 import Base.List
 
@@ -25,11 +24,11 @@ argsGetArgs n = sendCore ArgsOp "args" n GetArgs
 handleArgs : {a : Type} -> {b : Type} -> {r : Row} -> (n : String) -> {w : Member n ArgsOp r} -> (a -> b) -> ((o : ArgsOp) -> (resArgs o -> b) -> b) -> Eff r a -> Eff (Base.Eff.rowRem n ArgsOp r) b
 handleArgs n ret opH comp = handleCore ArgsOp "args" n ret opH comp
 
--- | 真实 handler 的操作解释：取 `Base.Host.getArgs` 后继续。
+-- | 真实 handler 的操作解释：取 `prim_eff_getArgs` 后继续。
 argsOpHIO : {a : Type} -> (o : ArgsOp) -> (resArgs o -> Eff [] a) -> Eff [] a
 argsOpHIO op k = case op of
   GetArgs => do
-    xs <- getArgs
+    xs <- prim_eff_getArgs
     k xs
 
 -- | 宿主 handler：结果行删除 `ArgsOp`，answer 是已处理干净的 `Eff []` 动作，可用 `joinEff` 展平。

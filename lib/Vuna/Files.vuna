@@ -17,7 +17,6 @@ module Vuna.Files
 -- M4（效果显式化）：目录遍历、存在性判定与读文件全部显式在 `Eff []` 里，
 -- 纯过滤/路径/名称逻辑（`skipGenerated` 等）保持纯函数。
 import Vuna.Compiler.Common
-import Base.Host
 
 -- C41：工具链 fuel 耗尽不是「空结果」，而是内部不变量被破坏；与编译器一致硬失败。
 toolFuelExhausted : String -> a

@@ -32,7 +32,6 @@ import Vuna.Doc.Comments
 import Vuna.Doc.Types
 import Vuna.FixityEnv
 import Vuna.Sig
-import Base.Host
 
 -- ---------------------------------------------------------------
 -- 数据模型

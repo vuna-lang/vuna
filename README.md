@@ -46,7 +46,7 @@ nix run .#vuna-run-tests -- --list                  # 列出章节/case（--only
 ./result/bin/vuna doc                          # 生成 docs/api.html（gitignored）
 ```
 
-自己新建包：`vuna.toml` + `app/Main.vuna`，入口 `main : Eff [] a`，效果 API 来自 `Base.Eff`（宿主层别名在 `Base.Host`，任何包都可 import）。
+自己新建包：`vuna.toml` + `app/Main.vuna`，入口 `main : Eff [] a`，效果 API 来自 `Base.Eff`（宿主层直接调用 `prim_eff_*`，原宿主别名模块已删除，任何包都可直调）。
 格式见 [packages.md](docs/reference/packages.md)，示例见 `examples/multi/`。
 
 编译器选取：优先本地 `./result/bin/vuna`；否则 `nix run vuna -- <subcommand>`（注册表别名）。
@@ -86,7 +86,7 @@ vuna help, -h
 `vuna-compiler` 是同一套编译器命令的独立 CLI（seed 的来源），参数与 `vuna` 的同名命令一致。
 `vuna` 的编译命令直接调用 `Vuna.Compiler.Driver.CompilerCli` 的库实现（in-process 调库，不
 fork `vuna-compiler`）；`vuna build` 在 codegen 后执行生成的 `build.sh`（经受限进程执行内建
-`prim_runIn` 调 `ocamlopt`）产出 `DIR/bin/<包名>`，无额外运行时依赖。`vuna interp` 是
+`prim_eff_runIn` 调 `ocamlopt`）产出 `DIR/bin/<包名>`，无额外运行时依赖。`vuna interp` 是
 **DT 精化 + 核心求值**：先按 DT 检查再求 `main` 的值，只展示 `Int`/`String`/`Bool`；任何
 `main : Eff [] a` 一律明确报错（核心求值器不执行效果），请改用 `compile` + 运行产物。
 
@@ -126,7 +126,7 @@ manifest，不向上找。命令语义与包格式
 1. **当前 seed 必须能编译当前源码**，rotation 后 stage1 == stage2（fixed point）；
 2. **`seed/` 只含 compiler 包入口闭包**：工具链不进 TCB（`nix/tcb-forbidden.txt`）；
 3. **效果原语返回 `Eff []` 动作**：effectful `prim_*`（含 `prim_eff_*`）没有 manifest
-   门控——任何包都可直接调用，`Base.Host` 任何包都可 import；用户面**应**经 `Base.Eff` +
+   门控——任何包都可直接调用 `prim_*` / `prim_eff_*`；用户面**应**经 `Base.Eff` +
    handler 使用效果（约定，非强制）。动作只在 `main` 执行（唯一动作类型 `Eff r a`，
    入口 `main : Eff [] a`）；
 4. **唯一路径**：语言夹具、`vuna interp`、包构建与 seed 全部走 DT；没有第二套

@@ -34,7 +34,6 @@ import Vuna.Doc.Types
 import Vuna.FixityEnv
 import Vuna.Index.Types
 import Vuna.Sig
-import Base.Host
 import Vuna.Index.Codec
 import Vuna.Tool.Session
 

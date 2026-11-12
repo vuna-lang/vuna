@@ -25,7 +25,6 @@ module Vuna.Json.Frame
 -- 正常源文件帧远小于此）。`splitHeaderBlock` 同时容忍 `\r\n\r\n` 与裸 `\n\n`。
 import Vuna.Compiler.Common
 import Vuna.Json
-import Base.Host
 
 -- 每次 readChunk 的字节数（帧 body 可能跨多块；缓冲里拼够 Content-Length 再切帧）。
 frameChunkSize : Int

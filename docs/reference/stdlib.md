@@ -42,23 +42,22 @@
 | `Base.Float` | `Float` primitive 类型模块（**随 `Prelude` 自动导出**，2026-11 rotation 后提升）：`FromFloat` trait + `abs` / `sqrt` / `intToFloat` / `floatToInt` + `Eq` / `Ord` / `Show` / `Num` 实例；字面量、算术/比较、`main : Float`、模板插值本来就不需要 import。Prelude 闭包包含本模块后，所有程序的 runtime 都带浮点 helper（[floats.md](floats.md)） |
 | `Base.FromString` / `Base.FromInt` | 字面量转换 trait（`fromString` / `fromInt`）与 `String` / `Int` 恒等实例；`Prelude` 导出，`deriving (FromString)` / `(FromInt)` 为单字段包装类型自动派生（见 [floats.md](floats.md)） |
 | `Base.Bool` | `Bool` 类型与逻辑 helper + `Show` / `Hashable` 实例（`if` 输出 `True` / `False`）；`Eq` / `Ord` 实例因 Bool 是方法返回类型随 trait 留在 `Base.Eq` / `Base.Ord` |
-| `Base.Host` | **宿主层**：Eff 别名（`print`/`println`/`readFile`/`writeFile`/`getArgs`/`exit`/`runIn`/`writeFileAtomic` 与 env/clock 等，走 `prim_eff_*`，度量用 `Eff [] Nat`，`eprint` 仍 `Int`）+ 实现层全是 `Eff []`；re-export `Base.Eff` 的 `Eff`/`runPure`/`joinEff`/`raise`/`runEff`；任何包都可 import（无 manifest 门控） |
 | `Base.Eff` | 通用运行时效应核心（Layer 1）：开放行 `Row`、抽象动作 `Eff`（无世界令牌）、`Member` 行成员证明/`rowRem`、`weaken`、线性 `Cont`/`resumeCont`/`handleCoreLin`、内建 `Functor`/`Applicative`/`Monad (Eff r)`（`do`/`>>=`；不提供 `bindEff`/`pureEff`）、`sendCore`/`handleCore`、`runPure`/`joinEff`/`raise`（`runPure`/`joinEff` 要求行已处理干净，入口处未处理效应是类型错误）；OCaml 5 一次性续延；见 [effects.md](effects.md) §8 |
 | `Base.Eff.Reader` | 标签 `ReaderOp s` + `Ask`（实例名在行条目）：`ask`/`handleReader`/`handleReaderLin`/`local`（L2 作用域） |
 | `Base.EffState` | 标签 `StateOp s` + `Get`/`Put`（实例名在行条目）：`get`/`put`/`handleState`（answer `s -> Pair a s` 线程状态） |
-| `Base.EffFs` | 宿主-backed Fs 效应（完整 fs 面；标签 `FsOp`（实例名在行条目，如 `FsOp@mock`/`FsOp@real`））：`ReadFile`/`WriteFile`/`WriteFileAtomic`/`ReadDir`/`IsDirectory`/`MakeDir`/`RemoveFile`/`FileExists`/`FileMtime`/`FileSize` + `fsReadFile n`/`fsWriteFile n`/…/`handleFs n`/`handleFsHost n`；`WriteFile` / `FileSize` 的结果是 `Nat`（`WriteFileAtomic` 仍 `Int`）；handler 用 `Base.Host` 实现；mock（纯 answer）与 real handler 可并存（`dt_base/37`） |
+| `Base.EffFs` | 宿主-backed Fs 效应（完整 fs 面；标签 `FsOp`（实例名在行条目，如 `FsOp@mock`/`FsOp@real`））：`ReadFile`/`WriteFile`/`WriteFileAtomic`/`ReadDir`/`IsDirectory`/`MakeDir`/`RemoveFile`/`FileExists`/`FileMtime`/`FileSize` + `fsReadFile n`/`fsWriteFile n`/…/`handleFs n`/`handleFsHost n`；`WriteFile` / `FileSize` 的结果是 `Nat`（`WriteFileAtomic` 仍 `Int`）；真实 handler 直接调用对应 `prim_eff_*`；mock（纯 answer）与 real handler 可并存（`dt_base/37`） |
 | `Base.EffError` | 一阶 Error 效应 + 作用域 `catch`（L2）：`throw`/`handleError`/`runError`/`catch` |
 | `Base.EffExn` | W6/W7 高阶/作用域 Error：`Try` 操作携带 `Eff` 子计算，`handleExn`/`runExn`/`catchExn`/`bracketExn`；scoped handler |
 | `Base.EffSched` | W9 单线程 fiber 调度器（L3）：不透明 `Task`/`Scope`，`forkTask`/`awaitTask`/`yieldNow`/`isCancelled`/`cancelTask`/`cancelScope`/`scopeWait`/`scopeWaitTimeout`/`withScope`/`withScopeTimeout`/`raise`/`forkTaskWith`/线性 `TaskLin`；协作式取消（含清理宽限）、结构化作用域、逻辑步数超时；任务体 `Eff Nil a`；见 [effects.md](effects.md) §8.5 |
 | `Base.EffChannel` | W9 cooperative channel：`send`/`tryRecv`/`recvWait`（忙等 yield，无 Mutex/信号量）；生产者-消费者夹具 `dt_base/36` |
 | `Base.EffMutex` | W9 cooperative Mutex/Semaphore（IORef + yield 忙等；无阻塞原语）；`acquire`/`release`/`semWait`/`semSignal` |
-| `Base.EffConsole` | W10 console 标签 `ConsoleOp`（实例名在行条目）：`Print`/`EPrint`；`consolePrint`（结果 `Nat`，D25）/`consoleEprint`（仍 `Int`）/`handleConsole`/`handleConsoleHost`（真实 handler 用 `Base.Host.print`/`eprint`）；`runConsole n`（`handleConsoleHost` + `joinEff` 单效应入口） |
-| `Base.EffClock` | W10 clock 标签 `ClockOp`：`Now`（微秒）/`SleepMicros`；`clockNow`/`clockSleepMicros`/`handleClock`/`handleClockHost`；`runClock n`（单效应入口）（真实 handler 用 `Base.Host.nowMicros` 与原生 `prim_eff_sleep`） |
-| `Base.EffEnv` | W10 env 标签 `EnvOp`：`GetEnv`/`GetCwd`/`ExecPath`；`envGetEnv`/`envGetCwd`/`envExecPath`/`handleEnv`/`handleEnvHost`（真实 handler 用 `Base.Host.getEnv`/`getCwd`/`execPath`） |
-| `Base.EffArgs` | P2c 参数标签 `ArgsOp`：`GetArgs`；`argsGetArgs`/`handleArgs`/`handleArgsHost`（真实 handler 用 `Base.Host.getArgs`）；`runArgs n` 单效应入口 |
-| `Base.EffStdin` | P2c 标准输入标签 `StdinOp`：`ReadLine`/`ReadBytes`；`stdinReadLine`/`stdinReadBytes`/`handleStdin`/`handleStdinHost`（真实 handler 用 `Base.Host.readLine`/`readBytes`）；`runStdin n` |
-| `Base.EffExit` | 退出标签：`ExitWith`；`exitWith`/`handleExit`/`handleExitHost`（真实 handler 用 `Base.Host.exit`）；`runExit n` |
-| `Base.EffProcess` | process 标签（命名实例，如 `"mock"`/`"real"`）：`Args`/`Exit`/`RunIn`；`processArgs`/`processExit`/`processRunIn`/`handleProcess`/`handleProcessHost`（真实 handler 用 `prim_getArgs`/`prim_exit`/`prim_runIn`）/`handleProcessHostWith`（自定义 `onExit`）/`handleProcessHostObserved`（`Exit` 可观察、不退出） |
+| `Base.EffConsole` | W10 console 标签 `ConsoleOp`（实例名在行条目）：`Print`/`EPrint`；`consolePrint`（结果 `Nat`，D25）/`consoleEprint`（仍 `Int`）/`handleConsole`/`handleConsoleHost`（真实 handler 用 `prim_eff_print`/`prim_eff_eprint`，`Print` 在 result 族转 `Nat`）；`runConsole n`（`handleConsoleHost` + `joinEff` 单效应入口） |
+| `Base.EffClock` | W10 clock 标签 `ClockOp`：`Now`（微秒）/`SleepMicros`；`clockNow`/`clockSleepMicros`/`handleClock`/`handleClockHost`；`runClock n`（单效应入口）（真实 handler 用 `effTimeUs` 与原生 `prim_eff_sleep`） |
+| `Base.EffEnv` | W10 env 标签 `EnvOp`：`GetEnv`/`GetCwd`/`ExecPath`；`envGetEnv`/`envGetCwd`/`envExecPath`/`handleEnv`/`handleEnvHost`（真实 handler 用 `prim_eff_getenv`/`prim_eff_getcwd`/`prim_eff_execPath`） |
+| `Base.EffArgs` | P2c 参数标签 `ArgsOp`：`GetArgs`；`argsGetArgs`/`handleArgs`/`handleArgsHost`（真实 handler 用 `prim_eff_getArgs`）；`runArgs n` 单效应入口 |
+| `Base.EffStdin` | P2c 标准输入标签 `StdinOp`：`ReadLine`/`ReadBytes`；`stdinReadLine`/`stdinReadBytes`/`handleStdin`/`handleStdinHost`（真实 handler 用 `prim_eff_readLine`/`prim_eff_readBytes`）；`runStdin n` |
+| `Base.EffExit` | 退出标签：`ExitWith`；`exitWith`/`handleExit`/`handleExitHost`（真实 handler 用 `prim_eff_exit`）；`runExit n` |
+| `Base.EffProcess` | process 标签（命名实例，如 `"mock"`/`"real"`）：`Args`/`Exit`/`RunIn`；`processArgs`/`processExit`/`processRunIn`/`handleProcess`/`handleProcessHost`（真实 handler 用 `prim_eff_getArgs`/`prim_eff_exit`/`prim_eff_runIn`）/`handleProcessHostWith`（自定义 `onExit`）/`handleProcessHostObserved`（`Exit` 可观察、不退出） |
 | `Base` | 包门面：整模块重导出核心模块（含 `Base.Nat` / `Base.Num` / `Base.Unit` / `Base.Applicative`(经 Monad) / `Base.Monoid` / `Base.Foldable` / `Base.Traversable` / `Base.Hashable`；不含 `Vec` 与哈希容器；`import Base` 即可用） |
 | `Prelude` | 顶层模块（`base/lib/Prelude.vuna`）：重导出 `Base.Pair` / `Bool` / `Eq` / `Ord` / `Num` / `Show` / `Interp` / `List` / `Maybe` / `Result` / `String` / `Monad`(含 `Applicative`) / `Unit` / `Monoid` / `Foldable` / `Traversable` / `Hashable`，按包上下文自动导入（规则见下节「Prelude 自动导入」）；显式 `import` 时不再重复注入；刻意不重导出 `Base.Eff`（效果 API 需显式 import；Prelude 仅 import 加载）与 `Base.Nat` |
 
@@ -105,22 +104,22 @@ module Base.Nat (Nat(..), plus, minus, mult, toInt, fromInt, fromIntMaybe,
 module Base.Num (Num(..)) where
 module Base.Vec (Vec(..), substTemplate, vhead, vlen, vtail) where
 module Base.Monad (Functor(..), Monad(..), module Base.Applicative) where
-module Base.Host (print, println, readFile, writeFile, getArgs, exit, ...) where
 module Base.Error (Error, catchError, ok, runError, throwError) where
 ```
 
-`Base.Host` 完整导出见 `base/lib/Base/Host.vuna` 的模块头；`Prelude` 的导出列表见
-`base/lib/Prelude.vuna`。
+导出清单里没有宿主层别名模块（原宿主别名模块已删除），宿主操作直接调用 `prim_eff_*`；
+`Eff` / `runPure` / `joinEff` / `raise` / `runEff` 统一从 `Base.Eff` 显式 import。
+`Prelude` 的导出列表见 `base/lib/Prelude.vuna`。
 
 ## 度量与 Nat
 
 - **公开度量用 Nat**：`List.length`、`Array.length/get/set/make`、
-  `String.byteLength/substring/repeat`、`Host.fileSize/readBytes`、
+  `String.byteLength/substring/repeat`、`Base.EffFs.fsFileSize`、
   `Map.size`、`HashMap.size`、`HashSet.size`、`Vec.vlen`。
-- **D25 起宿主返回量也是 Nat**：`Base.Host.print` / `println` / `writeFile` / `fileSize`
-  返回 `Eff [] Nat`（`prim_print` / `prim_writeFile` / `prim_fileSize` 的签名是 `IEff INat`），
-  `Base.EffConsole` 的 `Print` 与 `Base.EffFs` 的 `WriteFile` / `FileSize` 结果同步为 `Nat`；
-  `eprint` / `prim_eprint` / `prim_writeFileAtomic` 与内部状态码仍 `Int`。
+- **D25 起 Nat 归一化只留在 Eff handler 的 result 族**：`Base.EffConsole` 的 `Print` 与
+  `Base.EffFs` 的 `WriteFile` / `FileSize` 结果是 `Nat`（handler 在边界用 `natFromInt` 转）；
+  直接调用 `prim_eff_print` / `prim_eff_writeFile` / `prim_eff_fileSize` 得到 `Eff [] Int`；
+  `prim_eff_eprint` / `prim_eff_writeFileAtomic` 与内部状态码仍 `Int`。
 - **低层原语仍是 Int**：`strLength` / `arrayLength` / `prim_*Length` 等保持 Int 签名；
   Base 在边界用 `natFromInt` / `natToInt`（运行时恒等或单分支）转换。这样避免了
   seed 阶段改 intrinsic 签名的自举死锁。
@@ -170,7 +169,7 @@ module Base.Error (Error, catchError, ok, runError, throwError) where
   用户写同名 `data Bool` 是普通 data，不与 canonical 冲突。
 - **`List` 也是 base 的普通 `data` 声明**：canonical 身份 `Base.List.List`。返回或接收
   `List` 的 10 个原语（`strUnpack` / `strPack` / `strConcatMany` / `strSubstTemplate`、
-  `prim_getArgs` / `prim_readDir` / `prim_runIn` / `prim_spawn`、`arrayFromList` /
+  `prim_eff_getArgs` / `prim_eff_readDir` / `prim_eff_runIn` / `prim_eff_spawn`、`arrayFromList` /
   `arrayToList`）经 List 桥接 helper（`dtp_unpack` / `dtp_pack` / `dtp_listOf` 等）落地，
   桥接只为 canonical `Base.List.List` 生成；包内没有该族时 codegen 报
   `CG_ListBridgeRequired`。`Prelude` 自动注入 `Base.List`，所以正常上下文里总可用。
@@ -195,13 +194,13 @@ module Base.Error (Error, catchError, ok, runError, throwError) where
   形态声明。字符串展示只有一个实现 `strShow`——`Base.Show` 的 `String` 实例是
   `show s = strShow s`，库不再另写一套转义；`Show Bool` 用 `if` 输出 `True` / `False`；
   `Eq Bool` / `Ord Bool` 用模式匹配穷尽（不依赖 `==` / `<`，避免实例体自引用）。
-- **效果原语单表**：`prim_eff_*`（`Eff []`，`Base.Host` 是宿主层用户面）；`Base.Host` 做
-  Nat 归一化。没有 manifest 能力/特权声明：任何包都可 import `Base.Host`、直调 `prim_*`。
+- **效果原语单表**：`prim_eff_*`（`Eff []`，外加 `effTimeUs`）就是宿主层；原宿主别名模块已删除，
+  宿主操作直接调用这些原语。没有 manifest 能力/特权声明：任何包都可直调 `prim_*` / `prim_eff_*`。
   动作只在 `main` 执行（钩子 `dtp_sched_main (fun () -> runPure v_main)`）；`runPure` 是
-  唯一 main 执行入口。用户面**应**经 `Eff` + handler（纪律，非强制）。
+  唯一 main 执行入口。Int/Nat 归一化只在 Eff handler 的 result 族。用户面**应**经 `Eff` + handler（纪律，非强制）。
 - **ad-hoc 单文件与包内模块一致**：`Prelude` 自动注入，`Show` / `Eq` / `Ord` 及其实例开箱
   可用；诊断在缺少显式 import 时仍会提示加对应 import。ad-hoc 文件同样没有能力门控：
-  既可经 `Base.Eff` + handler，也可直接 `Base.Host` / `prim_*`（约定：用户面应经 handler）。
+  既可经 `Base.Eff` + handler，也可直接调用 `prim_*` / `prim_eff_*`（约定：用户面应经 handler）。
 - split 输出（`compile` / `build` 目录）的编译单元只有 `Vuna_runtime` + 各源码模块 +
   `Main`；文件集以 `seed/` 与 `nix/seed-count.txt` 为准。
 
@@ -229,8 +228,8 @@ module Base.Error (Error, catchError, ok, runError, throwError) where
   （用户自定义 op + 深 handler + 行/重排）未实现（见 [debt.md](debt.md) / [effects.md](effects.md)）；没有语言级并发 / async；
   **效应标签在库层完成**：`Base.EffFs` 扩到完整 fs 面并改为命名
   实例（如 `"mock"`/`"real"`），新增 `Base.EffConsole`/`EffClock`/`EffEnv`/`EffProcess`（命名实例 +
-  宿主 handler），`Base.Host` 仍是宿主层逃逸口；收尾又补原生 `prim_sleep`
-  （`Base.EffClock` 与 `Base.Host.sleepMicros` 都已使用，`spinMicros` 已删除）、可控
+  宿主 handler），宿主层仍可直接调用 `prim_eff_*`；收尾又补原生 `prim_eff_sleep`
+  （`Base.EffClock` 与直接调用 `prim_eff_sleep` 的路径都已使用，`spinMicros` 已删除）、可控
   `Exit`（`handleProcessHostWith`/`…Observed`）与工具链一条 console 路径（`vuna version`）；
   见 [effects.md](effects.md) §8.6；
 - 抽象类型（`Map`、`HashMap`、`HashSet`）跨包不可构造、不可模式匹配，只能经 API 使用；

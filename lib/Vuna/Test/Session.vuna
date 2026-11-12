@@ -15,7 +15,6 @@ module Vuna.Test.Session (Session, sessionCheck, sessionInterp, sessionNew) wher
 --
 -- 会话只服务「正例」（golden 的 check/interp 断言）；负例仍走 CLI，保证 `.check.err`
 -- / `.compile.err` 片段与退出码语义完全一致。
-import Base.Host
 import Base.IORef
 import Vuna.Compiler.Common
 import Vuna.Compiler.Driver.Compile

@@ -25,7 +25,6 @@ module Vuna.Tool.Session
 --
 -- 这里**不**做失效判定：那是 `Query.queryHit` 的事（声明集合 + 观测依赖摘要）。本模块只负责
 -- 「取节点 → 读 blob → 解出记录」与「写 blob → 提交节点 → 落索引」这两条固定流程。
-import Base.Host
 import Base.Maybe
 import Base.String
 import Vuna.Compiler.Driver.Compile
@@ -33,6 +32,7 @@ import Vuna.Compiler.Hash
 import Vuna.Compiler.Query
 import Vuna.Compiler.Query.Run
 import Vuna.Compiler.Store
+import Base.Eff
 
 -- | 工具会话：一个 `Db` + 持久化配置。
 record ToolSession where

@@ -50,7 +50,6 @@ import Base.List
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Frontend.Lexer
 import Base.Eq
-import Base.Host
 import Vuna.Compiler.Packages.Pkg
 
 -- 显式 import 与自动注入的 Prelude（隐式 import）分开保存：

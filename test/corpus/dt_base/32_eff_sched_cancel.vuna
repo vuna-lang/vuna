@@ -3,7 +3,6 @@
 -- 取消结果由 awaitTask 的 Err "cancelled" 观察。
 import Base.Eff
 import Base.EffSched
-import Base.Host
 import Base.Result
 
 spin : List Int -> Eff [] Int
@@ -12,14 +11,14 @@ spin (_ :: rest) = do
   st <- yieldNow
   if st <= 0 then spin rest
   else do
-    _ <- raise (println "cleanup")
+    _ <- raise (prim_eff_print ("cleanup" ++ "\n"))
     pure 2
 
 prog : Eff [] (Result Int)
 prog = withScope (\sc => do
   w <- forkTask sc (spin [0, 0, 0, 0, 0, 0])
   _ <- yieldNow
-  _ <- raise (println "cancel")
+  _ <- raise (prim_eff_print ("cancel" ++ "\n"))
   _ <- cancelScope sc
   _ <- scopeWait sc
   rw <- awaitTask w

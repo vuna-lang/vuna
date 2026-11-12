@@ -20,7 +20,6 @@ import Vuna.Compiler.Common
 import Vuna.Compiler.Frontend.Toml
 import Vuna.Files
 import Vuna.Cli.Args
-import Base.Host
 
 -- `vuna test --suite` 的选项。jobs = 0 表示 auto（由 runner 探测全部可用核）。
 record SuiteOpts where
@@ -112,7 +111,7 @@ readTextFile path = do
   exists <- pathExistsFile path
   if exists then do
     isDir <- pathExistsDir path
-    if isDir then pure (err "is a directory: ${path}") else fmap OkC (readFile path)
+    if isDir then pure (err "is a directory: ${path}") else fmap OkC (prim_eff_readFile path)
   else pure (err "no such file: ${path}")
 
 -- suite 文件在 <root>/test/suite.toml；root = 上两级。
@@ -346,7 +345,8 @@ parseWant base = do
 
 -- `.run.exit` 的期望退出码（十进制；空/非数字视为 0）。
 readExitCode : String -> Eff [] Int
-readExitCode path = fmap (\text => parseExitDigits (strUnpack (trim text)) 0 0) (readFile path)
+readExitCode path =
+  fmap (\text => parseExitDigits (strUnpack (trim text)) 0 0) (prim_eff_readFile path)
 
 parseExitDigits : List Int -> Int -> Int -> Int
 parseExitDigits [] acc seen = if seen == 0 then 0 else acc
@@ -435,7 +435,7 @@ discoverDirFamily suite family entry =
     exists <- pathExistsDir dir
     if not exists then pure [brokenFamilyCase family "family dir not found: ${dir}"]
     else do
-      names <- readDir dir
+      names <- prim_eff_readDir dir
       concatMapEff (oneDir family dir entry) names
 
 oneDir : Family -> String -> String -> String -> Eff [] (List Case)
@@ -465,7 +465,7 @@ discoverFileFamily suite family =
     exists <- pathExistsDir dir
     if not exists then pure [brokenFamilyCase family "family dir not found: ${dir}"]
     else do
-      names <- readDir dir
+      names <- prim_eff_readDir dir
       concatMapEff (oneFile family dir) names
 
 matchesExclude : Family -> String -> Bool
@@ -545,7 +545,7 @@ discoverStepsFamily suite family =
     exists <- pathExistsDir dir
     if not exists then pure [brokenFamilyCase family "family dir not found: ${dir}"]
     else do
-      names <- readDir dir
+      names <- prim_eff_readDir dir
       pure (concatMap (\name => if endsWith ".steps" name then
         let
           rel = substring 0 (byteLength name - 6) name
@@ -567,7 +567,7 @@ else case family.familyEntry of
 -- ---------------------------------------------------------------
 parseSuiteFile : String -> Eff [] (Check Suite)
 parseSuiteFile path = do
-  cwd <- getCwd
+  cwd <- prim_eff_getcwd
   let
     absPath = if startsWith "/" path then path else "${cwd}/${path}"
   in parseSuiteAt absPath

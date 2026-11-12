@@ -25,7 +25,6 @@ module Base.EffProcess
 -- 程序继续执行）。mock handler（`handleProcess`）本来就能观察 `Exit`。
 -- 夹具 dt_base/38（mock + observed 两条路径；真实退出路径不触发，避免测试进程退出）。
 import Base.Eff
-import Base.Host
 import Base.Monad
 import Base.List
 
@@ -61,7 +60,7 @@ handleProcess n ret opH comp = handleCore ProcessOp "process" n ret opH comp
 processOpHIOWith : (Int -> Eff [] Int) -> {a : Type} -> (o : ProcessOp) -> (resProcess o -> Eff [] a) -> Eff [] a
 processOpHIOWith onExit op k = case op of
   Args => do
-    xs <- getArgs
+    xs <- prim_eff_getArgs
     k xs
   Exit c => do
     r <- onExit c
@@ -77,7 +76,7 @@ handleProcessHostWith n onExit comp = handleProcess n (\a => pure a) (processOpH
 -- 真实路径：`Exit` 调用 `prim_eff_exit`，进程立即退出、不返回。
 -- | 真实路径 handler：`Exit` 调 `prim_eff_exit`，进程立即退出、不返回。
 handleProcessHost : {a : Type} -> {r : Row} -> (n : String) -> Eff (Base.Eff.Cons n ProcessOp r) a -> Eff r (Eff [] a)
-handleProcessHost n comp = handleProcessHostWith n (\c => exit c) comp
+handleProcessHost n comp = handleProcessHostWith n (\c => prim_eff_exit c) comp
 
 -- 观察路径：`Exit c` 不退出，退出码作为操作结果交还给程序。
 -- | 观察路径 handler：`Exit c` 不退出，把退出码作为操作结果交还给程序，程序继续执行。

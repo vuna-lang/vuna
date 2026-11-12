@@ -3,21 +3,20 @@
 -- 结构化作用域：withScope 在 body 结束后等所有子任务结束，Ok 带回完成数汇总。
 import Base.Eff
 import Base.EffSched
-import Base.Host
 import Base.Result
 
 work : String -> String -> Int -> Eff [] Int
 work first second n = do
-  _ <- raise (println first)
+  _ <- raise (prim_eff_print (first ++ "\n"))
   _ <- yieldNow
-  _ <- raise (println second)
+  _ <- raise (prim_eff_print (second ++ "\n"))
   pure n
 
 prog : Eff [] (Result Int)
 prog = withScope (\sc => do
   ta <- forkTask sc (work "a1" "a2" 10)
   tb <- forkTask sc (work "b1" "b2" 20)
-  _ <- raise (println "forked")
+  _ <- raise (prim_eff_print ("forked" ++ "\n"))
   rb <- awaitTask tb
   case rb of
     Ok b => do

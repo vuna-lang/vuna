@@ -37,7 +37,6 @@ import Vuna.Lsp.Diagnostics
 import Vuna.Lsp.Protocol
 import Vuna.Lsp.Query
 import Vuna.Lsp.Rename
-import Base.Host
 
 -- ---------------------------------------------------------------
 -- 常量
@@ -597,9 +596,9 @@ runLsp _ = do
       (\m => \s => handleFrame m s)
       (logTo "starting" (LspState [] False False Nothing False Nothing [] [] Nothing))
   let
-    exit = firstOf outcome
+    prim_eff_exit = firstOf outcome
     state = secondOf outcome
-  in case exit of
+  in case prim_eff_exit of
     ExitRequested => exitCodeOf state
     ExitClosed => abnormalExit state
     ExitFatal msg => abnormalExit (logTo msg state)

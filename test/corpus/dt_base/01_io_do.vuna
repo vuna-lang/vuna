@@ -1,6 +1,6 @@
--- M21：`import Base.Host` 即可用 `do` / `bind` / `pure` / `fmap`（Functor / Monad
--- 由 Base.Host 重导出的 Base.Monad 带出，Loader 的 T(..) 重导出规则同时带出方法投影）。
-import Base.Host
+-- M21：`do` / `bind` / `pure` / `fmap` 由自动导入的 `Prelude`（含 `Base.Monad`）带出；
+-- `import Base.Eff` 提供动作类型 `Eff`。Loader 的 T(..) 重导出规则同时带出方法投影。
+import Base.Eff
 
 main : Eff [] Int
 main = do

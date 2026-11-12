@@ -514,7 +514,7 @@ fromFloatMethodName = "Base.Float.fromFloat"
 -- 内部 `bi_*` 只服务 codegen。分成两张表是为了让每段列表字面量的项大小留在旧 seed
 -- 擦除检查的 fuel 内（bootstrap 约束，见 docs/reference/bootstrap.md）。
 baseIntrinsics : List Intrinsic
--- 效果原语（`prim_*` 名；任何包可直接使用，推荐经 Base.Eff / Base.Host）。
+-- 效果原语（`prim_*` 名；任何包可直接使用，推荐经 `Base.Eff` 标签 + handler）。
 -- 精化器合成的比较/相等特化名（内部：不对用户源码可见）。
 -- M33 W3：内建类型构造子 Array / IORef 的原语。
 -- 纯 Array 原语不触碰外部世界；IORef 是 `Eff []` 动作。
@@ -526,7 +526,7 @@ baseIntrinsics : List Intrinsic
 -- 语义：add/mul 饱和到 max_int，sub 截断到 0，div 除零与 Int 同文案失败。
 -- M38：运行时诊断原语。`prim_eff_eprint` 写 stderr 并 flush（报告器/调试输出用）；
 -- `prim_fail` 抛 Failure（报告器把它渲染成 "vuna: runtime error: ..."）。`prim_eff_eprint`
--- 已被 `Base.Host.eprint` 使用；`prim_fail` 供工具链的 fuel 耗尽路径使用。
+-- 供工具链的 stderr 报告使用；`prim_fail` 供工具链的 fuel 耗尽路径使用。
 -- 内部 cast（`visible = False`）：只由精化器插入，runtime 是 OCaml 的 `%identity`；
 -- 运行时位置的不透明擦除依赖值靠它进出（见 docs/reference/effects.md §5/§6）。
 -- 运行时续延（Layer 1）：一次性 effect handler，只供 `Base.Eff` 的包装使用；类型在源码层由 Base.Eff 的 API 收紧，
@@ -536,7 +536,7 @@ baseIntrinsics : List Intrinsic
 -- W9：单线程 fiber 调度器原语（Base.EffSched 的信任边界；runtime = dtp_sched_*）。
 -- 原生睡眠（W10 收尾）：微秒；真实实现是 `Unix.sleepf`（阻塞，非忙等）。
 -- clock 族（与 effTimeUs 同族）；interp 不归约（OpNone），效果程序只 compile+run。
--- `Base.EffClock` 与 `Base.Host.sleepMicros` 都已直接使用它（`spinMicros` 已删除）。
+-- `Base.EffClock` 与工具链的 sleep 都直接使用它（`spinMicros` 已删除）。
 -- F3 B：语言级调试构造（不经过宿主层；assert/todo 由 Resolve 在 release 构建拒绝）。
 -- D23：`+ - * /` 只作为 codegen / interp 的映射目标（源码里的 `+` 等已由 Loader
 -- 换成 `Base.Num` 的方法别名，精化期再特化回这四个内建），因此不再对用户源码可见。

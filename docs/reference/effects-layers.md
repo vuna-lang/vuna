@@ -116,16 +116,16 @@ main 结束时统一取消清理（最外层兜底）；跨域 handler / Domain 
 ### 8.6 效应标签迁移（库层 + 一条工具链真实路径）
 
 迁移背景：唯一动作类型统一为 `Eff`；用户面 API 迁到效应标签，handler 内部用
-`Base.Host` / `prim_*` 实现。迁移在**库层**完成；后续补齐了原生 sleep 原语、fs 命名实例、
+`prim_eff_*` 实现。迁移在**库层**完成；后续补齐了原生 sleep 原语、fs 命名实例、
 可控 `Exit` 与一条工具链真实路径。
 
 | 模块 | 标签（行条目） | 操作 | 真实 handler | mock 方式 |
 | --- | --- | --- | --- | --- |
-| `Base.EffConsole` | `ConsoleOp`（实例名在行条目，如 `ConsoleOp`/`ConsoleOp`） | `Print String` / `EPrint String` | `handleConsoleHost` → `Base.Host.print`/`eprint` | 自定义 `handleConsole`（如收集日志） |
-| `Base.EffClock` | `ClockOp`（实例名在行条目，`Cons "mock" ClockOp r`） | `Now`（微秒）/`SleepMicros Int` | `handleClockHost` → `Base.Host.nowMicros` + **原生 `prim_sleep`** | 固定时间戳 / 忽略 sleep |
-| `Base.EffEnv` | `EnvOp`（实例名在行条目） | `GetEnv String`/`GetCwd`/`ExecPath` | `handleEnvHost` → `Base.Host.getEnv`/`getCwd`/`execPath` | 固定字符串 |
+| `Base.EffConsole` | `ConsoleOp`（实例名在行条目，如 `ConsoleOp`/`ConsoleOp`） | `Print String` / `EPrint String` | `handleConsoleHost` → `prim_eff_print`/`prim_eff_eprint`（`Print` 在 result 族转 `Nat`） | 自定义 `handleConsole`（如收集日志） |
+| `Base.EffClock` | `ClockOp`（实例名在行条目，`Cons "mock" ClockOp r`） | `Now`（微秒）/`SleepMicros Int` | `handleClockHost` → `effTimeUs` + **原生 `prim_eff_sleep`** | 固定时间戳 / 忽略 sleep |
+| `Base.EffEnv` | `EnvOp`（实例名在行条目） | `GetEnv String`/`GetCwd`/`ExecPath` | `handleEnvHost` → `prim_eff_getenv`/`prim_eff_getcwd`/`prim_eff_execPath` | 固定字符串 |
 | `Base.EffProcess` | `ProcessOp`（实例名在行条目） | `Args`/`Exit Int`/`RunIn String (List String)` | `handleProcessHost`（真实退出）/ `handleProcessHostWith`（自定义 onExit）/ `handleProcessHostObserved`（观察退出码） | 自定义 `handleProcess`（`Exit c` 作为操作结果） |
-| `Base.EffFs` | `FsOp`（实例名在行条目，如 `FsOp`/`FsOp`） | `ReadFile`/`WriteFile`/`WriteFileAtomic`/`ReadDir`/`IsDirectory`/`MakeDir`/`RemoveFile`/`FileExists`/`FileMtime`/`FileSize` | `handleFsHost n` → `Base.Host`/`prim_*` | 自定义 `handleFs n`（纯 answer 内存表） |
+| `Base.EffFs` | `FsOp`（实例名在行条目，如 `FsOp`/`FsOp`） | `ReadFile`/`WriteFile`/`WriteFileAtomic`/`ReadDir`/`IsDirectory`/`MakeDir`/`RemoveFile`/`FileExists`/`FileMtime`/`FileSize` | `handleFsHost n` → `prim_eff_*`（`WriteFile`/`FileSize` 在 result 族转 `Nat`） | 自定义 `handleFs n`（纯 answer 内存表） |
 
  - **命名实例**：console/clock/env/process/fs 的标签都是 op 族应用（`ConsoleOp`/`FsOp`…），
   实例名在行条目里（`Cons "mock" FsOp r` 与 `Cons "real" FsOp r` 是不同条目），因此同一个
@@ -134,11 +134,11 @@ main 结束时统一取消清理（最外层兜底）；跨域 handler / Domain 
   （`fsReadFile n path`、`handleFsHost n`），夹具 `dt_base/18`/`29`/`40` 已更新。
 - **宿主 handler 的形态**：`handleXHost` 接受行首为对应标签的 `Eff (Cons e r) a`，
   返回 `Eff r (Eff [] a)`，由 `joinEff` 执行（真实 handler 的 op 解释返回 `Eff []` 动作）。
-- **原生 sleep**：编译器原语 `prim_sleep : Int -> Eff [] Int`（微秒；运行时
+- **原生 sleep**：编译器原语 `prim_eff_sleep : Int -> Eff [] Int`（微秒；运行时
   `dtp_sleep` 用 `Unix.sleepf`，阻塞睡眠；`OpNone`，interp 不归约）。
-  `Base.EffClock` 的 `SleepMicros` 与 `Base.Host.sleepMicros` 都已改用 `prim_sleep`
-  （`spinMicros` 已删除；当前 seed 认识 `prim_sleep`）。
-- **可控 `Exit`**：`handleProcessHost` 保留真实语义（`onExit = exit`，调用即
+  `Base.EffClock` 的 `SleepMicros` 直接走 `prim_eff_sleep`
+  （`spinMicros` 已删除；当前 seed 认识 `prim_eff_sleep`）。
+- **可控 `Exit`**：`handleProcessHost` 保留真实语义（`onExit = prim_eff_exit`，调用即
   结束进程）；`handleProcessHostWith n onExit` 让调用方替换退出行为，`handleProcessHostObserved n`
   是现成实例：`Exit c` 不退出、把 `c` 交给续延，程序继续执行。mock handler 本来就能
   观察 `Exit`。真实路径的夹具（`dt_base/30`）仍只覆盖 `Args`/`RunIn`，避免测试进程退出；
@@ -149,34 +149,34 @@ main 结束时统一取消清理（最外层兜底）；跨域 handler / Domain 
 - **工具链真实路径**：`lib/Vuna/Cli.vuna` 的 `vuna version` 输出改走
   console 标签——`consoleLine` 用 `consolePrint "vuna"` + `handleConsoleHost "vuna"` + `joinEff`，
   只在最外层 `runPure`（工具链入口仍是 `main : Eff [] Int`）。这是工具链逐步迁移的样板，不是
-  全量迁移（`lib/` 其余模块仍直接用 `Base.Host` / `runPure`）。**编译器级强制不可行**的
+  全量迁移（`lib/` 其余模块仍直接调用 `prim_eff_*` / `runPure`）。**编译器级强制不可行**的
   具体位置：manifest 能力/信任门控已整体删除（旧 `checkEffectsBuiltins` 的包级能力检查
-  不复存在），类型系统也没有类型级能力行，`Base.Host`/`prim_*` 在任何包内都可用；编译器自身
-  也在 seed 闭包里必须做宿主操作（`Base.Host`、`Codegen`）。**最小下一步**：在 `vuna lint`
-  增加一条模块级规则（如禁止 `lib/Vuna/**` 新增直接 `prim_*`/`Base.Host` 使用，白名单
+  不复存在），类型系统也没有类型级能力行，`prim_*`/`prim_eff_*` 在任何包内都可用；编译器自身
+  也在 seed 闭包里必须做宿主操作（`prim_eff_*`、`Codegen`）。**最小下一步**：在 `vuna lint`
+  增加一条模块级规则（如禁止 `lib/Vuna/**` 新增直接 `prim_*`/`prim_eff_*` 使用，白名单
   `Vuna.Cli.consoleLine` 一类的迁移点），而不是改类型检查器。
 - **对拍夹具**（`.nointerp`，只 check + compile + run）：
   - `dt_base/26_eff_console`：同一 `prog n` 在 `ConsoleOp@mock`（mock，纯 answer 收集日志）
-    与 `ConsoleOp@real`（real，`print`/`eprint`）下各跑一次；
+    与 `ConsoleOp@real`（real，`prim_eff_print`/`prim_eff_eprint`）下各跑一次；
   - `dt_base/27_eff_clock`：mock 固定时间 → elapsed 0；real 断言 sleep 后时间推进
-    （真实 handler 现在走 `prim_sleep`）；
+    （真实 handler 现在走 `prim_eff_sleep`）；
   - `dt_base/28_eff_env`：mock 与 real 对「缺失变量为空 / cwd 非空 / execPath 非空」打分；
   - `dt_base/29_eff_fs_ext`：真实 fs 读写 + 原子写 + 元数据 + 目录 + 删除（`handleFsHost "real"`）；
-  - `dt_base/30_eff_process`：mock 固定 args/退出码；real 用 `prim_getArgs`（不含 argv[0]）
-    与 `prim_runIn "true"`；
+  - `dt_base/30_eff_process`：mock 固定 args/退出码；real 用 `prim_eff_getArgs`（不含 argv[0]）
+    与 `prim_eff_runIn "true"`；
   - `dt_base/40_eff_fs_named`：fs 命名实例 mock（`"mock"`）/ real（`"real"`）并存对拍；
   - `dt_base/41_eff_process_exit`：`Exit` 在 mock（`"mock"`）与观察 handler（`"observed"`）下可观察、不退出；
   - 负例 `dt_err/78_eff_fs_instance_mismatch`：程序需要 `FsOp`、handler 处理 `FsOp`
     → `TC_TypeMismatch`（实例名必须一致）；
-  - 原语探针夹具 `test/corpus/packages/10_prim_io`：直调 `prim_sleep` 并断言真实推进时间
+  - 原语探针夹具 `test/corpus/packages/10_prim_io`：直调 `prim_eff_sleep` 并断言真实推进时间
     （native sleep 的正向探针；没有 manifest 门控）。
 - **能力（历史）**：`base` 的 `[capabilities] effects` 曾声明 `env`/`clock`（真实 handler
-  需要）；该机制已整体删除——没有包级能力声明/检查，任何包都可 import `Base.Host`、
-  直调 `prim_*`。仍有效的边界决策：不做类型级能力行（见 [effects.md](effects.md) §8.6）。
+  需要）；该机制已整体删除——没有包级能力声明/检查，任何包都可直调 `prim_*` /
+  `prim_eff_*`。仍有效的边界决策：不做类型级能力行（见 [effects.md](effects.md) §8.6）。
 - **边界**（D43 已收口；manifest 门控已删除）：
-  - **宿主层可见**：`Base.Host` 是宿主层别名，任何包都可 import，直调 `prim_*` 也不受
+  - **宿主层可见**：宿主层就是直接调用 `prim_eff_*`（原宿主别名模块已删除），任何包都可直调 `prim_*` / `prim_eff_*`，不受
     门控；用户面**应**经 `Eff` + handler（纪律/文档约定，不是强制）。
-  - **内部使用**：`vuna-base` 真实 handler、`vuna-compiler` 与根工具链保留 Host/原语；
+  - **内部使用**：`vuna-base` 真实 handler、`vuna-compiler` 与根工具链保留原语直调；
     工具链只迁了一条真实 console 路径（`vuna version`），编译器不迁移（终态决策）。
   - **`Exit` 的真实语义保留**：`handleProcessHost` 仍会结束进程；「不退出」只在 mock /
     `onExit` 参数 / `handleProcessHostObserved` 下成立；

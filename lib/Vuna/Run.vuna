@@ -20,7 +20,6 @@ import Vuna.Compiler.Packages.Pkg
 import Vuna.Compiler.Driver.CompilerCli
 import Vuna.Cli.Args
 import Vuna.Files
-import Base.Host
 
 -- 按第一个 `--` 切分：前段是自身参数，后段原样透传。
 splitPassthrough : List String -> Pair (List String) (List String)

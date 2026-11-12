@@ -11,7 +11,7 @@ run: "$VUNA" run "$TMPDIR/run-args" --out "$TMPDIR/m38-run-outdir" 2>&1
 out-contains: no args
 run: "$VUNA" run "$TMPDIR/run-args" --no-build --out "$TMPDIR/m38-run-outdir" -- alpha 2>&1
 out-equals: alpha
-run: sh -c 'mkdir -p "$TMPDIR/m38-run-exit/app"; printf "[package]\nname = \"m38-run-exit\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" >"$TMPDIR/m38-run-exit/vuna.toml"; printf "import Base.Host\n\nmain : Eff [] Int\nmain = exit 7\n" >"$TMPDIR/m38-run-exit/app/Main.vuna"'
+run: sh -c 'mkdir -p "$TMPDIR/m38-run-exit/app"; printf "[package]\nname = \"m38-run-exit\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" >"$TMPDIR/m38-run-exit/vuna.toml"; printf "import Base.Eff\n\nmain : Eff [] Int\nmain = prim_eff_exit 7\n" >"$TMPDIR/m38-run-exit/app/Main.vuna"'
 run: "$VUNA" build "$TMPDIR/m38-run-exit" >/dev/null 2>&1
 run: "$VUNA" run "$TMPDIR/m38-run-exit" --no-build >/dev/null 2>&1
 exit: 7

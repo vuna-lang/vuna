@@ -71,7 +71,6 @@ import Vuna.Repl.Term
 import Vuna.Search.Query
 import Vuna.Search.Run
 import Vuna.Search.Types
-import Base.Host
 import Base.IORef
 
 replTempFile : String
@@ -1027,8 +1026,8 @@ else
 hasUnsolvedMeta : String -> Bool
 hasUnsolvedMeta tyText = contains "?" tyText
 
--- D25：动作结果类型可能是 `Base.Nat.Nat` 这类跨模块 canonical 名（`Host.print` 返回
--- `Eff [] Nat`）；生成的入口文件要补对应 `import` 才能解析限定名。用户已显式 import 时不
+-- D25：动作结果类型可能是 `Base.Nat.Nat` 这类跨模块 canonical 名（`Base.EffConsole.Print`
+-- 在 result 族里返回 `Nat`）；生成的入口文件要补对应 `import` 才能解析限定名。用户已显式 import 时不
 -- 重复（重复 import 是硬错误）。
 ioTypeImports : ReplState -> String -> String
 ioTypeImports st tyText =

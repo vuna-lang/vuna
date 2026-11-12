@@ -14,7 +14,6 @@ module Vuna.Clean (runClean) where
 import Vuna.Cli.Args
 import Vuna.Compiler.Common
 import Vuna.Compiler.Store
-import Base.Host
 
 runClean : List String -> Eff [] Int
 runClean args = case parseToolArgs "vuna clean" [BoolFlag "dry-run", BoolFlag "iface", BoolFlag "store", BoolFlag "all"] args of

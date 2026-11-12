@@ -1,47 +1,45 @@
--- M21：`Base.Host` 的公开 API 在 DT 下全部可用（类型面）。效果不在这条夹具里执行
+-- M21：宿主原语（`prim_eff_*`）在 DT 下的类型面。效果不在这条夹具里执行
 -- （纯核心求值器不跑效果），运行时效果见 corpus/dt_io/。
-import Base.Host
+-- D25 的 `Nat` 边界在 Eff 标签的 result 族（`Base.EffConsole.Print`、`Base.EffFs.WriteFile`/`FileSize`），
+-- 直接调用原语得到 `Int`。
+import Base.Eff
 import Base.List
-import Base.Nat
 
 readProbe : Eff [] String
-readProbe = readFile "x"
+readProbe = prim_eff_readFile "x"
 
-writeProbe : Eff [] Nat
-writeProbe = writeFile "x" "y"
+writeProbe : Eff [] Int
+writeProbe = prim_eff_writeFile "x" "y"
 
 lineProbe : Eff [] String
-lineProbe = readLine
+lineProbe = prim_eff_readLine
 
 dirProbe : Eff [] (List String)
-dirProbe = readDir "."
+dirProbe = prim_eff_readDir "."
 
 isDirProbe : Eff [] Bool
-isDirProbe = isDirectory "."
+isDirProbe = prim_eff_isDirectory "."
 
 makeDirProbe : Eff [] Int
-makeDirProbe = makeDir "x"
+makeDirProbe = prim_eff_makeDir "x"
 
 removeProbe : Eff [] Int
-removeProbe = removeFile "x"
+removeProbe = prim_eff_removeFile "x"
 
 existsProbe : Eff [] Bool
-existsProbe = fileExists "x"
+existsProbe = prim_eff_fileExists "x"
 
 mtimeProbe : Eff [] Int
-mtimeProbe = fileTimeProbe
+mtimeProbe = prim_eff_fileMtime "x"
 
-fileTimeProbe : Eff [] Int
-fileTimeProbe = fileMtime "x"
-
-sizeProbe : Eff [] Nat
-sizeProbe = fileSize "x"
+sizeProbe : Eff [] Int
+sizeProbe = prim_eff_fileSize "x"
 
 argsProbe : Eff [] (List String)
-argsProbe = getArgs
+argsProbe = prim_eff_getArgs
 
 exitProbe : Eff [] Int
-exitProbe = exit 0
+exitProbe = prim_eff_exit 0
 
 main : Eff [] Int
 main = pure 0

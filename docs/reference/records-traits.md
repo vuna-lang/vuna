@@ -421,12 +421,13 @@ main = case (MkEmail "x@y") of MkEmail s => s
 - `Hashable`：`hash : a -> Int`，泛型 `HashMap` / `HashSet` 的键约束；用户类型可
   `deriving (Hashable)`（与 Show/Eq/Ord 同一套展开，复合字段用 `hashCombine`）。
 
-- 效果 API 直接返回 `Eff []`：`print` / `println` / `readFile` / `writeFile` / `readLine` /
-  `readDir` / `isDirectory` / `makeDir` / `removeFile` / `fileExists` / `getArgs` /
-  `exit`（例如 `getArgs : Eff [] (List String)`、`print : String -> Eff [] Nat`）；内部用
-  不导出的 `prim_*` 原语。宿主层对任何包可见：也可 `import Base.Host` 或在源码里直接调用
-  `prim_*`（没有 manifest 能力声明；用户面**应**经 `Base.Eff.*` + handler，见
-  [primitives.md](primitives.md)）。
+- 效果 API 直接返回 `Eff []`：用户面经 `Base.Eff.*` 标签 + handler（如 `consolePrint` /
+  `fsReadFile`）；handler 内部直接调用 `prim_eff_*` 原语（`print`/`readFile`/`writeFile`/
+  `readLine` 等别名层已随宿主别名模块删除；`println` 也不再提供，换行写
+  `prim_eff_print (s ++ "\n")`），原语返回 `Eff []`（例如
+  `prim_eff_getArgs : Eff [] (List String)`、`prim_eff_print : String -> Eff [] Int`）。
+  宿主层对任何包可见：源码里可直接调用 `prim_*` / `prim_eff_*`（没有 manifest 能力声明；
+  用户面**应**经 `Base.Eff.*` + handler，见 [primitives.md](primitives.md)）。
 - 可执行包 / `vuna build` 要求 `main : Eff [] a`；`vuna interp` 是纯核心求值，任何
   `main : Eff [] a` 一律报错。`vuna test` 的纯 `String` / `Int` / `Bool` 测试走核心求值，
   `main : Eff [] ...` 走 compile + 运行；REPL 的动作表达式经临时包 compile + 运行。

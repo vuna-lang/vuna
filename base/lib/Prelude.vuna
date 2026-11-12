@@ -24,9 +24,8 @@ module Prelude
 -- Prelude：默认导入（自动 import）的精选门面。
 --
 -- 只重导出最常用的核心模块；Map / Sort 需要显式 import。
--- 刻意不重导出 Base.Host：print/readFile/writeFile/getArgs/exit 与编译器直接
--- 使用的效果内建同名，若进入隐式 import 会把工具链里的内建调用解析成
--- 宿主别名。需要宿主操作时显式 `import Base.Host`。
+-- 宿主层（`prim_eff_*`）是全局内建名，任何模块可直接调用，不需要也不提供别名门面。
+-- 需要效果标签 / 运行入口时显式 `import Base.Eff`。
 --
 -- M24.7：Show / Eq / Ord 的 trait 声明与内建类型实例在库里（Base.Show /
 -- Base.Eq / Base.Ord），因此随 Prelude 自动可见，用户程序不必显式 import。

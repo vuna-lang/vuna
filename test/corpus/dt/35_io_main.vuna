@@ -1,5 +1,5 @@
 -- M37：main : Eff [] a 的 hook 对动作应用世界令牌 0；pure 构造 `Eff []` 动作。
-import Base.Host
+import Base.Eff
 
 main : Eff [] String
 main = pure "hello"

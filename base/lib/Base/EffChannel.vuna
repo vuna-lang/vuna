@@ -5,7 +5,6 @@ module Base.EffChannel (Channel, newChannelInt, recv, recvWait, send, tryRecv) w
 -- 单实例/无界；生产者在父纤程 yield 时由调度器运行。
 import Base.Eff
 import Base.EffSched
-import Base.Host
 import Base.IORef
 import Base.List
 import Base.Maybe

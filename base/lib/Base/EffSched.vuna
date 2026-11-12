@@ -46,7 +46,6 @@ module Base.EffSched
 --   * 超时是**逻辑步数**（调度器步进次数）：`withScopeTimeout n` 在 n 步后取消范围
 --     并返回 `Err "timeout"`（不要求真实 sleep / 时钟）。
 import Base.Eff
-import Base.Host
 import Base.Monad
 import Base.Ord
 import Base.Result

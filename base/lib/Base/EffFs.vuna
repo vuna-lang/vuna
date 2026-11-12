@@ -18,7 +18,7 @@ module Base.EffFs
 
 -- Base.EffFs：一阶文件系统效应（Layer 1 的宿主-backed 示例；W10 扩到完整 fs 面）。
 --
--- 操作是描述；handler 用 Base.Host 的原语实现真实语义。answer 是 `Eff [] a`，
+-- 操作是描述；真实 handler 直调 `prim_eff_*` 原语实现语义。answer 是 `Eff [] a`，
 -- 由 `joinEff` 展平（见 Base.Eff）。`handleFsHost` 是 W10 增加的
 -- 可直接 `joinEff` 展平的宿主 handler。
 --
@@ -27,7 +27,6 @@ module Base.EffFs
 -- 真实宿主 handler（`handleFsHost "real"`），或用两个 mock 实例做对照；行条目按实例名区分。
 -- 所有操作与 handler 都显式带实例名（夹具 dt_base/18、29、40）。
 import Base.Eff
-import Base.Host
 import Base.Nat
 import Base.Monad
 import Base.Bool
@@ -59,7 +58,7 @@ resFs (FileExists p) = Bool
 resFs (FileMtime p) = Int
 resFs (FileSize p) = Nat
 
--- | 通过命名实例读整个文件为 String；真实 handler 走 `Base.Host.readFile`。
+-- | 通过命名实例读整个文件为 String；真实 handler 走 `prim_eff_readFile`。
 fsReadFile : (n : String) -> String -> {r : Row} -> {w : Member n FsOp r} -> Eff r String
 fsReadFile n p = sendCore FsOp "fs" n (ReadFile p)
 
@@ -103,38 +102,38 @@ fsFileSize n p = sendCore FsOp "fs" n (FileSize p)
 handleFs : {a : Type} -> {b : Type} -> {r : Row} -> (n : String) -> {w : Member n FsOp r} -> (a -> b) -> ((o : FsOp) -> (resFs o -> b) -> b) -> Eff r a -> Eff (Base.Eff.rowRem n FsOp r) b
 handleFs n ret opH comp = handleCore FsOp "fs" n ret opH comp
 
--- | 真实 handler 的操作解释：把每个操作映射到 `Base.Host` 的对应原语（原子写走 `prim_eff_writeFileAtomic`）。
+-- | 真实 handler 的操作解释：把每个操作映射到对应 `prim_eff_*` 原语（`WriteFile` / `FileSize` 的结果在边界转回 `Nat`）。
 fsOpHIO : {a : Type} -> (o : FsOp) -> (resFs o -> Eff [] a) -> Eff [] a
 fsOpHIO op k = case op of
   ReadFile p => do
-    s <- readFile p
+    s <- prim_eff_readFile p
     k s
   WriteFile p s => do
-    n <- writeFile p s
+    n <- fmap natFromInt (prim_eff_writeFile p s)
     k n
   WriteFileAtomic p s => do
     n <- prim_eff_writeFileAtomic p s
     k n
   ReadDir p => do
-    xs <- readDir p
+    xs <- prim_eff_readDir p
     k xs
   IsDirectory p => do
-    b <- isDirectory p
+    b <- prim_eff_isDirectory p
     k b
   MakeDir p => do
-    n <- makeDir p
+    n <- prim_eff_makeDir p
     k n
   RemoveFile p => do
-    n <- removeFile p
+    n <- prim_eff_removeFile p
     k n
   FileExists p => do
-    b <- fileExists p
+    b <- prim_eff_fileExists p
     k b
   FileMtime p => do
-    n <- fileMtime p
+    n <- prim_eff_fileMtime p
     k n
   FileSize p => do
-    n <- fileSize p
+    n <- fmap natFromInt (prim_eff_fileSize p)
     k n
 
 -- | 宿主 handler：结果行删除 `FsOp`，answer 是已处理干净的 `Eff []` 动作，可直接交给 `joinEff` 展平。

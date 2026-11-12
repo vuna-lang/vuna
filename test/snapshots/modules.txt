@@ -180,7 +180,6 @@ Base.FromString  base/lib/Base/FromString.vuna
 Base.HashMap  base/lib/Base/HashMap.vuna
 Base.HashSet  base/lib/Base/HashSet.vuna
 Base.Hashable  base/lib/Base/Hashable.vuna
-Base.Host  base/lib/Base/Host.vuna
 Base.IORef  base/lib/Base/IORef.vuna
 Base.Int  base/lib/Base/Int.vuna
 Base.Interp  base/lib/Base/Interp.vuna
@@ -329,7 +328,6 @@ Base.FromString  ./lib/Base/FromString.vuna
 Base.HashMap  ./lib/Base/HashMap.vuna
 Base.HashSet  ./lib/Base/HashSet.vuna
 Base.Hashable  ./lib/Base/Hashable.vuna
-Base.Host  ./lib/Base/Host.vuna
 Base.IORef  ./lib/Base/IORef.vuna
 Base.Int  ./lib/Base/Int.vuna
 Base.Interp  ./lib/Base/Interp.vuna

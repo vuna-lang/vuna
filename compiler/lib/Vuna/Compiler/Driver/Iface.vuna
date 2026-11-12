@@ -113,6 +113,7 @@ import Vuna.Compiler.Common
 import Vuna.Compiler.Hash
 import Vuna.Compiler.Store
 import Base.HashMap
+import Base.List
 import Vuna.Compiler.Core
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Elab.Types
@@ -124,7 +125,6 @@ import Vuna.Compiler.Debug
 import Vuna.Compiler.Driver.Owner
 import Vuna.Compiler.Loader.Modules
 import Vuna.Compiler.Packages.Pkg
-import Base.Host
 
 -- 源信息：模块名 → (绝对路径, 内容哈希, mtime, size)。路径只用于本机校验（换 checkout
 -- 会失效，回退全量）；mtime/size 是可选快路径（`VUNA_CACHE_MTIME=1`），默认仍用内容哈希。
@@ -297,7 +297,8 @@ depMissingHash = "missing"
 insertByText : String -> a -> List (Pair String a) -> List (Pair String a)
 insertByText k x [] = [Pair k x]
 insertByText k x ((Pair ky y) :: rest) =
-  if k <= ky then Pair k x :: Pair ky y :: rest else Pair ky y :: insertByText k x rest
+  if k <= ky then Base.List.Cons (Pair k x) (Base.List.Cons (Pair ky y) rest)
+  else Base.List.Cons (Pair ky y) (insertByText k x rest)
 
 sortTextPairs : List (Pair String a) -> List (Pair String a)
 sortTextPairs [] = []
@@ -529,7 +530,8 @@ partitionByOwnerGo : (a -> Maybe String) -> List a -> HashMap String (List a) ->
 partitionByOwnerGo ownerOf [] tbl = tbl
 partitionByOwnerGo ownerOf (x :: rest) tbl = case ownerOf x of
   Nothing => partitionByOwnerGo ownerOf rest tbl
-  Just o => partitionByOwnerGo ownerOf rest (Base.HashMap.insert o (x :: bucketOf o tbl) tbl)
+  Just o =>
+    partitionByOwnerGo ownerOf rest (Base.HashMap.insert o (Base.List.Cons x (bucketOf o tbl)) tbl)
 
 bucketOf : String -> HashMap String (List a) -> List a
 bucketOf name tbl = case Base.HashMap.lookup name tbl of
@@ -1035,7 +1037,8 @@ writeModules dir compiler pkgDir origin old (m :: rest) =
 replaceManifestEntry : List ManifestEntry -> ManifestEntry -> List ManifestEntry
 replaceManifestEntry [] e = [e]
 replaceManifestEntry (x :: rest) e =
-  if meNameOfEntry x == meNameOfEntry e then e :: rest else x :: replaceManifestEntry rest e
+  if meNameOfEntry x == meNameOfEntry e then Base.List.Cons e rest
+  else Base.List.Cons x (replaceManifestEntry rest e)
 
 entryNameIn : List ManifestEntry -> String -> Bool
 entryNameIn [] _ = False

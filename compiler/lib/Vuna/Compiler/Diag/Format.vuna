@@ -19,11 +19,11 @@ module Vuna.Compiler.Diag.Format
 -- 行/列；LSP 适配器负责转 UTF-16。
 import Vuna.Compiler.Source
 import Vuna.Compiler.Diag
-import Base.Host
 import qualified Vuna.Compiler.Diagnostics
 import Base.Nat
 import Base.String
 import Vuna.Compiler.Version
+import Base.Eff
 
 -- ---------------------------------------------------------------
 -- 名称

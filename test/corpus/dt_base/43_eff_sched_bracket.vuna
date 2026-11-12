@@ -3,7 +3,6 @@
 -- pop + release（不是硬中止路径；硬中止只有尽力清理，见 effects-layers.md）。
 import Base.Eff
 import Base.EffSched
-import Base.Host
 import Base.Result
 
 spin : List Int -> Eff [] Int
@@ -14,7 +13,7 @@ spin (_ :: rest) = do
 
 task : Eff [] Int
 task =
-  bracket (raise (println "acquire")) (\_ => raise (fmap natToInt (println "release")))
+  bracket (raise (prim_eff_print ("acquire" ++ "\n"))) (\_ => raise (prim_eff_print ("release" ++ "\n")))
     (\_ => spin [0, 0, 0, 0, 0])
 
 prog : Eff [] (Result Int)

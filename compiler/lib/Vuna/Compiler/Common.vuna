@@ -1,6 +1,7 @@
 -- | 编译器门面：源码位置 + 结构化诊断结果通道（`Check`/`OkC`/`ErrC`/`bind`/`step`/`traverse`）。
 module Vuna.Compiler.Common
-  ( EffCheck(..)
+  ( Eff
+  , EffCheck(..)
   , bind
   , runEffCheck
   , step
@@ -18,6 +19,11 @@ module Vuna.Compiler.Common
 -- 与 `Base.Check` 的关系：compiler 与根工具链统一用本模块的 `Check`（错误载荷是
 -- `Diagnostic`）；`Base.Check`（字符串错误）只留给 `base/` 标准库内部。因此这里
 -- **不再重导出 `Base.Check`**；仍需要字符串错误的代码应显式 import `Base.Check`。
+--
+-- `Eff` 类型：编译器/工具链大量签名写 `Eff [] a`；这里只重导出类型名 `Eff`（不重导出
+-- `Row(..)` 构造子），避免与 `Base.List` 的 `Cons`/`Nil` 在无期望类型的列表表达式上
+-- 产生 TC_AmbiguousCtor，也避免每个模块重复 `import Base.Eff`。需要行/续延等接口的模块
+-- 仍显式 `import Base.Eff`。
 import Vuna.Compiler.Source
 import Vuna.Compiler.Diag
 import Base.Eff

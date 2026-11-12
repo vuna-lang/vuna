@@ -22,7 +22,6 @@ import Vuna.Compiler.Common
 import Vuna.Repl.Complete
 import Vuna.Repl.Paste
 import Vuna.Repl.Term
-import Base.Host
 
 record EditConfig where
   editPrompt : String

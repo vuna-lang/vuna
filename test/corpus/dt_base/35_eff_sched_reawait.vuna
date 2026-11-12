@@ -2,7 +2,6 @@
 -- 对已完成任务 cancelTask 是 no-op（不算错误）。
 import Base.Eff
 import Base.EffSched
-import Base.Host
 import Base.Result
 
 sumThree : Result Int -> Result Int -> Result Int -> Result Int

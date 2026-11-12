@@ -32,7 +32,6 @@ import Vuna.Compiler.Common
 import Vuna.Compiler.Packages.Pkg
 import Vuna.Compiler.Driver.Dt
 import Vuna.Compiler.Driver.Compile
-import Base.Host
 
 interpretFile : PackageContext -> String -> Eff [] String
 interpretFile ctx entry = do

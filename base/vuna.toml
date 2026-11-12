@@ -57,6 +57,5 @@ modules = [
   "Base.EffSched",
   "Base.EffStdin",
   "Base.Monad",
-  "Base.Host",
   "Prelude"
 ]

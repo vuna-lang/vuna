@@ -252,8 +252,8 @@ golden/runtime case 的 codegen 产物按「生成模块集」分桶（`set-<key
 - 两类上下文都**自动注入 `Prelude`**，因此夹具需要 `show` / `==` / 比较 / `deriving` 时
   直接可用；显式 `import Prelude` 仍合法；
 - 夹具 manifest 只有 `[package]` / `[export]` / `[dependencies]`（没有能力 / 信任 /
-  特权 section）：corpus 代码既可经 `Base.Host`、也可直接调 `prim_*` 使用效果，没有门控；
-  原语直调正例是 `packages/07_prim_direct`（import `Base.Host` + 直调 `prim_eff_*`）；
+  特权 section）：corpus 代码可直接调用 `prim_*` / `prim_eff_*` 使用效果，没有门控；
+  原语直调正例是 `packages/07_prim_direct`（直调 `prim_eff_*`）；
 - `test/corpus/fmt/check.sh` 与主 runner 用同一套约定（`VUNA_BASE` + 目录化 compile），
   不接受模块根参数。
 
@@ -308,7 +308,7 @@ interp / compile 文案不同时用 `.compile.err`。
   data 的 OCaml 构造子名）；`06_entry_trait` 覆盖入口 trait 的归属与产物；
   `93_duplicate_name` 覆盖同名包显式报错；`94_ambiguous_module` 覆盖包上下文下的歧义模块；
   `95_cross_dep` 覆盖依赖方向的负例（依赖包不能 import 消费包模块）；
-  `07_prim_direct`（无 manifest 门控：可 import `Base.Host` 并直调 `prim_*`）；
+  `07_prim_direct`（无 manifest 门控：直调 `prim_*` / `prim_eff_*`）；
   `08_module_scope`（entry 顶层小写名与同包模块签名里的类型变量同名，banned 集按模块作用域
   计算后 base 模块不再报 `unknown name x`）；
 - `corpus/err/`、`corpus/run_err/`：解析 / 求值错误片段；`run_err` 的 `.err` 是 DT 诊断

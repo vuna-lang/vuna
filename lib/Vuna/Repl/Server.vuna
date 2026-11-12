@@ -26,7 +26,6 @@ import Vuna.Json.Frame
 import Vuna.Json.Rpc
 import Vuna.Json.Server
 import Vuna.Repl
-import Base.Host
 import Base.IORef
 
 -- 地址校验（CLI 层）：只接受本机端点。

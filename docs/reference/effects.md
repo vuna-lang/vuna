@@ -2,8 +2,10 @@
 
 **现状**：用户面唯一动作类型是 `Eff r a`（`Base.Eff`，构造子不导出；`MkEff` 是内部表示），
 入口是 `main : Eff [] a`（行必须为 `Nil`），执行入口是 `Base.Eff.runPure`。宿主原语只剩
-`prim_eff_*`（`Eff []`）；`Base.Host` 是宿主层别名（做 Int/Nat 归一化，任何包都可 import），
-所有宿主 handler 的 answer 是 `Eff []`，入口组合是 `runX = joinEff (handleXHost …)`。用户面
+`prim_eff_*`（`Eff []`）；宿主层就是直接调用这些原语（原宿主别名模块已删除，任何包都可直调），
+Int/Nat 归一化只留在 `Base.Eff.*` handler 的 result 族（`Print`、`WriteFile`/`FileSize` 返回
+`Nat`，直接调用原语得到 `Int`）。所有宿主 handler 的 answer 是 `Eff []`，入口组合是
+`runX = joinEff (handleXHost …)`。用户面
 执行一个已处理干净的动作用 `runPure`；`IORef` 的实现也是 `Eff []`。
 
 运行时效应核心已落地（§8）：OCaml 5 一次性 delimited continuations + 开放行 + 命名实例 +
@@ -16,7 +18,7 @@ Args / Exit）；`Member` 行约束、`local`/`catch`/scoped `Exn`、线性续�
 
 ## 1. 范围
 
-- **本页覆盖**：`Eff` 统一动作的表示/执行、handler 与 `Eff []` answer、`Base.Host` 宿主层、
+- **本页覆盖**：`Eff` 统一动作的表示/执行、handler 与 `Eff []` answer、宿主层（直接调用 `prim_eff_*`）、
   宿主层直调纪律、通用 Eff 的边界。
 - **不覆盖**：原语/宿主层的逐条语义（[primitives.md](primitives.md) §7）；纯效应 monad
   （`Base.State` / `Reader` / `Error`，它们不碰宿主，见 [stdlib.md](stdlib.md)）；
@@ -47,15 +49,15 @@ Args / Exit）；`Member` 行约束、`local`/`catch`/scoped `Exn`、线性续�
 | --- | --- | --- |
 | 用户面 | `Eff r a` + `Base.Eff.*` 标签/handler | 用户包与 ad-hoc 的唯一动作类型；`main : Eff [] a` |
 | handler 层 | `handleXHost` → `Eff r (Eff [] a)`，`runX = joinEff …` | 宿主 handler 的 answer 是已处理干净的 `Eff []` 动作；`joinEff` 展平 |
-| 宿主别名层 | `Base.Host`（宿主层） | Eff 别名走 `prim_eff_*`；任何包都可 import；不再有 manifest 能力/信任门控 |
+| 宿主层 | `prim_eff_*`（外加 `effTimeUs`） | 直接调用即得 `Eff []` 动作；任何包都可直调；Int/Nat 归一化只在 Eff handler 的 result 族；不再有 manifest 能力/信任门控 |
 
 - **代数**：`Monad (Eff r)` / `Applicative` / `Functor` 实例已内建；用户用 `pure` / `do` /
   `>>=` / `fmap`，动作的构造入口只有这些实例方法。
 - **宿主层边界（manifest 门控已删除）**：`vuna.toml` 不再有 `[capabilities]` / `[trust]` /
-  `[privileged]`；任何包（用户包、ad-hoc 文件）都可以 `import Base.Host`、直接调用
+  `[privileged]`；任何包（用户包、ad-hoc 文件）都可以直接调用
   `prim_*` / `prim_eff_*`（`Eff []` 叶子）。用户面**应**经 `Base.Eff.*` 标签 + handler 使用
-  效果——这是纪律/文档约定，不是编译器强制。`Base.Host` 与 `prim_*` 是宿主层/底层原语，
-  base、编译器与根工具链内部仍使用它们。旧门控与相关诊断码（`PKG_NonPrivileged`、
+  效果——这是纪律/文档约定，不是编译器强制。`prim_*` / `prim_eff_*` 是宿主层/底层原语，
+  base 的 Eff handler、编译器与根工具链内部仍直接使用它们。旧门控与相关诊断码（`PKG_NonPrivileged`、
   `LD_HostModulePrivileged`、`RN_UnknownCapability`、`PKG_EffectCapabilityRequired` 等）已
   删除，历史见 git；显式接受的损失与后续方向见 §8.6。
 - **错误报告**：没有异常 / handler 层之外的语言级异常；未捕获的宿主异常由生成的 main 钩子
@@ -204,11 +206,11 @@ CPS `Eff` 已经可 `check` + `compile` + 运行，且 interp 与产物逐字节
 | `Base.Eff` | `Row(..)`、`Eff`、`Member(..)`/`rowRem`、内建 `Functor`/`Applicative`/`Monad (Eff r)`（`do`/`>>=`/`>>`，不提供 `bindEff`/`pureEff`）、`sendCore`/`handleCore`/`handleCoreLin`、`handleWith`/`handleWithAt` + `ResFn(..)`/`resFn`/`resOf`（`handle` 语法的两个降级目标：handler 类型显式、结果族作擦除量；行首条目版用于 comp 行未具体化）、`Cont`/`mkCont`/`resumeCont`、`bracket`/`finally`、`weaken`、`joinEff`/`raise`、`runPure` |
 | `Base.Eff.Reader` | `ReaderOp s` + `Ask`；`ask`/`handleReader`；实例名在行条目（`Cons "counter" (ReaderOp Int) r`） |
 | `Base.EffState` | `StateOp s` + `Get`/`Put`；`get`/`put`/`handleState`（answer `s -> Pair a s` 线程状态） |
-| `Base.EffFs` | 宿主-backed Fs 效应（完整 fs 面；标签 `FsOp`，实例名在行条目，如 `Cons "real" FsOp r`）：`ReadFile`/`WriteFile`/`WriteFileAtomic`/`ReadDir`/`IsDirectory`/`MakeDir`/`RemoveFile`/`FileExists`/`FileMtime`/`FileSize` + `resFs`；`fsReadFile n`/`fsWriteFile n`/…/`handleFs n`（泛型）/`handleFsHost n`（answer `Eff []`，`runFs = joinEff ∘ handleFsHost`）；handler 用 `Base.Host` 实现。mock/real 可并存（`dt_base/40`） |
-| `Base.EffConsole` | W10 console 标签 `ConsoleOp`（实例名在行条目，如 `ConsoleOp@mock`/`ConsoleOp@real`）：`Print`/`EPrint`；`consolePrint`/`consoleEprint`/`handleConsole`/`handleConsoleHost`（真实 handler 用 `Base.Host.print`/`eprint`） |
-| `Base.EffClock` | W10 clock 标签 `ClockOp`：`Now`（微秒时间戳）/`SleepMicros`；`clockNow`/`clockSleepMicros`/`handleClock`/`handleClockHost`（真实 handler 用 `Base.Host.nowMicros` 与编译器原生 `prim_sleep`） |
-| `Base.EffEnv` | W10 env 标签 `EnvOp`：`GetEnv`/`GetCwd`/`ExecPath`；`envGetEnv`/`envGetCwd`/`envExecPath`/`handleEnv`/`handleEnvHost`（真实 handler 用 `Base.Host.getEnv`/`getCwd`/`execPath`） |
-| `Base.EffProcess` | W10 process 标签 `ProcessOp`：`Args`/`Exit`/`RunIn`；`processArgs`/`processExit`/`processRunIn`/`handleProcess`/`handleProcessHost`（真实 handler 用 `prim_getArgs`/`prim_exit`/`prim_runIn`）/`handleProcessHostWith`（自定义 `onExit`）/`handleProcessHostObserved`（`Exit` 可观察、不退出） |
+| `Base.EffFs` | 宿主-backed Fs 效应（完整 fs 面；标签 `FsOp`，实例名在行条目，如 `Cons "real" FsOp r`）：`ReadFile`/`WriteFile`/`WriteFileAtomic`/`ReadDir`/`IsDirectory`/`MakeDir`/`RemoveFile`/`FileExists`/`FileMtime`/`FileSize` + `resFs`；`fsReadFile n`/`fsWriteFile n`/…/`handleFs n`（泛型）/`handleFsHost n`（answer `Eff []`，`runFs = joinEff ∘ handleFsHost`）；真实 handler 直接调用对应 `prim_eff_*`（`WriteFile`/`FileSize` 在 result 族转 `Nat`）。mock/real 可并存（`dt_base/40`） |
+| `Base.EffConsole` | W10 console 标签 `ConsoleOp`（实例名在行条目，如 `ConsoleOp@mock`/`ConsoleOp@real`）：`Print`/`EPrint`；`consolePrint`/`consoleEprint`/`handleConsole`/`handleConsoleHost`（真实 handler 用 `prim_eff_print`/`prim_eff_eprint`，`Print` 在 result 族转 `Nat`） |
+| `Base.EffClock` | W10 clock 标签 `ClockOp`：`Now`（微秒时间戳）/`SleepMicros`；`clockNow`/`clockSleepMicros`/`handleClock`/`handleClockHost`（真实 handler 用 `effTimeUs` 与编译器原生 `prim_eff_sleep`） |
+| `Base.EffEnv` | W10 env 标签 `EnvOp`：`GetEnv`/`GetCwd`/`ExecPath`；`envGetEnv`/`envGetCwd`/`envExecPath`/`handleEnv`/`handleEnvHost`（真实 handler 用 `prim_eff_getenv`/`prim_eff_getcwd`/`prim_eff_execPath`） |
+| `Base.EffProcess` | W10 process 标签 `ProcessOp`：`Args`/`Exit`/`RunIn`；`processArgs`/`processExit`/`processRunIn`/`handleProcess`/`handleProcessHost`（真实 handler 用 `prim_eff_getArgs`/`prim_eff_exit`/`prim_eff_runIn`）/`handleProcessHostWith`（自定义 `onExit`）/`handleProcessHostObserved`（`Exit` 可观察、不退出） |
 | `Base.EffError` | `ErrorOp` + `throw`/`handleError`/`runError`/`catch`（L2 作用域 catch） |
 | `Base.EffExn` | W6 高阶 scoped Error：标签为无参标记 `Exn`，`ExnOp` 的 `Try` 携带子计算；`tryWith`/`runExn`/`catchExn`/`bracketExn` |
 | `Base.EffMutex` | W9 Mutex/Semaphore（IORef + yield 忙等）：`acquire`/`release`/`semWait`/`semSignal` |
@@ -221,7 +223,7 @@ CPS `Eff` 已经可 `check` + `compile` + 运行，且 interp 与产物逐字节
 `31–36`（调度器：fork/await、取消、超时、监督、重复 await、Channel）、`37–39`
 （Mutex、线性 TaskLin、effect-aware forkTaskWith）、`40–41`（fs 命名实例 /
 process 可控 Exit）、`42–44`（通用 bracket abort cleanup、调度器 bracket、一次性闭包）、`45`（行语法糖）；
-负例 `dt_err/70–81`；原语探针夹具 `packages/10_prim_io`（`prim_sleep`）。
+负例 `dt_err/70–81`；原语探针夹具 `packages/10_prim_io`（`prim_eff_sleep`）。
 细节见 §8.6 与 [effects-layers.md](effects-layers.md)。
 ### 8.4 已知边界（下一步）
 
@@ -293,7 +295,7 @@ fork/await/yield/cancel/结构化 scope；W10 console/clock/env/process/fs 标�
   非空」时改报 `TC_UnhandledEffects` 并列出标签；不再只是裸 `TC_TypeMismatch`。
 - **宿主层门控已删除（显式接受的损失）**：`[capabilities]` / `[trust]` / `[privileged]`
   与宿主模块 import 门控整体删除——任何包（用户包、ad-hoc 文件）都可以
-  `import Base.Host`、直调 `prim_*`；没有每包原语白名单、`unsafe` 定义级审计，也没有
+  直调 `prim_*` / `prim_eff_*`；没有每包原语白名单、`unsafe` 定义级审计，也没有
   REPL `--privileged`。用户面仍**应**经 `Base.Eff.*` 标签 + handler（`runX =
   joinEff (handleXHost …)`）；这是纪律/文档约定，不是强制门控。后续用表示层权限
   （N2/N3）或新模型补；历史与旧诊断码（`PKG_NonPrivileged`、`LD_HostModulePrivileged`、

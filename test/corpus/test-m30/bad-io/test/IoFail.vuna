@@ -1,7 +1,7 @@
-import Base.Host
 
+import Base.Eff
 -- 效果测试（失败）：进程退出码 1 → FAIL（`vuna test` 退出码 1）。
 main : Eff [] Int
 main = do
-  _ <- print "test-m30: io-fail (expected failure)\n"
-  exit 1
+  _ <- prim_eff_print "test-m30: io-fail (expected failure)\n"
+  prim_eff_exit 1

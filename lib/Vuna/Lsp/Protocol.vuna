@@ -54,7 +54,6 @@ import Vuna.Compiler.Common
 import Vuna.Json
 import Vuna.Json.Frame
 import Vuna.Json.Rpc
-import Base.Host
 
 -- 小工具
 -- ---------------------------------------------------------------

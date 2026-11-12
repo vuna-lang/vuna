@@ -56,7 +56,6 @@ module Vuna.Compiler.Store
 --
 -- 代价：写侧多一次内容地址（本机 ~2.2 ms/MB）；读侧同样（fast 档为 0）。check marker
 -- 载荷为 0 字节，split/unit 载荷只在 miss 路径写。
-import Base.Host
 import Vuna.Compiler.Common
 import Vuna.Compiler.Hash
 

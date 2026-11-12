@@ -1,5 +1,5 @@
--- M21：Functor / Monad 方法投影经 import Base.Host 可见（fmap / bind / pure）。
-import Base.Host
+-- M21：Functor / Monad 方法投影随自动导入的 `Prelude` 可见（fmap / bind / pure）。
+import Base.Eff
 
 main : Eff [] Int
 main = fmap (\x => x + 1) (pure 41) >>= (\y => pure y)

@@ -36,7 +36,6 @@ import Vuna.Index
 import Vuna.Json
 import Vuna.Lsp.Bindings
 import Vuna.Lsp.Protocol
-import Base.Host
 
 -- ---------------------------------------------------------------
 -- 数据与常量

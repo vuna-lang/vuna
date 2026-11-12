@@ -34,7 +34,6 @@ import Vuna.Compiler.Driver.Split
 import Vuna.Compiler.Fingerprint
 import Vuna.Compiler.Store
 import Vuna.Compiler.Version
-import Base.Host
 
 unitCacheSchema : String
 unitCacheSchema = "vuna-unit-cache 2"

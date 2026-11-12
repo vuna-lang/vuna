@@ -2,7 +2,6 @@
 -- real handler 走 prim_eff_getArgs（不含 argv[0]）与 prim_eff_runIn（true 的退出码 0）。
 import Base.Eff
 import Base.EffProcess
-import Base.Host
 import Base.List
 
 prog : (n : String) -> Eff (Cons n ProcessOp Nil) String
@@ -23,7 +22,7 @@ mopH op k = case op of
 main : Eff [] Int
 main = case runPure (handleProcess "mock" mret mopH (prog "mock")) of
   mockLog => do
-    _ <- print ("mock " ++ mockLog ++ "\n")
+    _ <- prim_eff_print ("mock " ++ mockLog ++ "\n")
     realLog <- runProcess "real" (prog "real")
-    _ <- print ("real " ++ realLog ++ "\n")
+    _ <- prim_eff_print ("real " ++ realLog ++ "\n")
     pure 0

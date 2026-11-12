@@ -21,7 +21,7 @@
 | D64 | 可变数组/可变字符串缓冲：`Base.MArray` / `Base.Buffer` 与内建类型构造子、8 个原语一并删除；需要时按新架构重建（先定表示与 `Eff []` 纯度模型） | `base/lib/Base/{MArray,Buffer}.vuna`（历史）；[primitives.md](primitives.md) §6 | 后续 |
 | D24 | Nat 字面量编译期展开为 `Zero`/`Succ` 链（Core / iface 载荷随字面量大小线性增长）；`Codegen/Term.genTerm` 的 512 fuel 在 Vec 索引 ≥128 时可耗尽 | `Elab/Term/Impl.natLitTerm`；`Codegen/Term.genTerm`；[primitives.md](primitives.md) §3.1 | 后续 |
 | D27 | 精化期未解 meta 按「可表示」处理会漏插 cast（终解后才知道类型不可表示） | `Elab/Meta.vuna` 的未解 meta 判据；[effects.md](effects.md) §5 | 后续 |
-| D62 | manifest 门控已删除（显式接受的损失）：任意包可 `import Base.Host`、直调 `prim_*`；没有每包原语白名单、`unsafe` 定义级审计，网络原语对任何包可见 | `compiler/lib/Vuna/Compiler/Intrinsics.vuna`、`Base.Host`；[effects.md](effects.md) §8.6 | 后续（表示层权限 N2/N3 或新模型） |
+| D62 | manifest 门控已删除（显式接受的损失）：任意包可直调 `prim_*` / `prim_eff_*`；没有每包原语白名单、`unsafe` 定义级审计，网络原语对任何包可见 | `compiler/lib/Vuna/Compiler/Intrinsics.vuna`、`base/lib/Base/Eff*.vuna`；[effects.md](effects.md) §8.6 | 后续（表示层权限 N2/N3 或新模型） |
 | D32 | 顶层签名的自由隐式变量 kind 只按应用次数推断（不从构造子 kind 反推）；头可合一的重叠实例被拒 | `Elab/Sig.quantifyTopKinds`、`Elab/Trait.{instanceTeleMetas,classParamKindOf}` | 后续 |
 | D37 | `runEff` 内部信任入口仍接受任意行；运行时 `unhandled effect` 兜底仍服务库内部路径 | `base/lib/Base/Eff.vuna`（`runPure`）；`compiler/lib/Vuna/Compiler/Elab/Term/Impl.vuna`（`unhandledEffectLabel`）；[effects.md](effects.md) §8.4/§8.6 | 后续 |
 | D41 | 无 Domain 并行、父 fiber handler 继承 | `Base.EffSched`；[effects.md](effects.md) §8.5 | 后续 |

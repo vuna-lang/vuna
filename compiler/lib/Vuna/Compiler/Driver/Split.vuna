@@ -28,7 +28,7 @@ import Vuna.Compiler.Canonical.Bytes
 import Vuna.Compiler.Common
 import Vuna.Compiler.Hash
 import Base.HashMap
-import Base.Host
+import Base.List
 
 record SplitFile where
   splitName : String
@@ -86,7 +86,7 @@ splitGraph [] = []
 splitGraph (f :: rest) =
   let
     name = splitName f
-  in if endsWith ".ml" name then Pair (stripMl name) (splitDeps f) :: splitGraph rest
+  in if endsWith ".ml" name then Base.List.Cons (Pair (stripMl name) (splitDeps f)) (splitGraph rest)
   else splitGraph rest
 
 stripMl : String -> String
@@ -300,7 +300,8 @@ depthEntryLess a b =
 insertDepthEntry : Pair String Int -> List (Pair String Int) -> List (Pair String Int)
 insertDepthEntry x [] = [x]
 insertDepthEntry x (y :: rest) =
-  if depthEntryLess x y then x :: y :: rest else y :: insertDepthEntry x rest
+  if depthEntryLess x y then Base.List.Cons x (Base.List.Cons y rest)
+  else Base.List.Cons y (insertDepthEntry x rest)
 
 sortDepthEntries : List (Pair String Int) -> List (Pair String Int)
 sortDepthEntries [] = []
@@ -333,7 +334,8 @@ sortDepsByTie (x :: rest) = insertDep x (sortDepsByTie rest)
 insertDep : String -> List String -> List String
 insertDep x [] = [x]
 insertDep x (y :: rest) =
-  if unitTieKey x <= unitTieKey y then x :: y :: rest else y :: insertDep x rest
+  if unitTieKey x <= unitTieKey y then Base.List.Cons x (Base.List.Cons y rest)
+  else Base.List.Cons y (insertDep x rest)
 
 normalizeFileDeps : SplitFile -> SplitFile
 normalizeFileDeps f = SplitFile (splitName f) (splitText f) (sortDepsByTie (splitDeps f))

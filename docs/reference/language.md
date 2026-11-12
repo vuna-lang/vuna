@@ -53,9 +53,9 @@
   **别名**（fixity 与别名由库模块里的 `infixl ... = ...` 声明提供，`Loader.Fixity` 在重排时
   替换）。`a == b` 与 `eq a b` 同义，Int / String 上由内建实例特化，其它类型走 `Eq` / `Ord`
   字典。trait 声明与实例的落点规则见 [operators.md](operators.md)；
-- 效果原语**只有 `prim_*` 名**（`prim_print` / `prim_readFile` / `prim_getArgs` /
-  `prim_getenv` / …）：用户经 `Base.Host` 的宿主操作使用，也可直接调用
-  `prim_*` / `prim_eff_*`（没有 manifest 门控）；见 [primitives.md](primitives.md) 的
+- 效果原语**只有 `prim_eff_*` 名**（`prim_eff_print` / `prim_eff_readFile` / `prim_eff_getArgs` /
+  `prim_eff_getenv` / …；外加 `effTimeUs`）：宿主层直接调用这些原语（原宿主别名模块已删除），
+  没有 manifest 门控；见 [primitives.md](primitives.md) 的
   效果原语与宿主层一节；
 - `&&` / `||` 短路求值：先求左操作数，左侧能决定结果时不求值右侧（核心求值器与 codegen
   一致）；

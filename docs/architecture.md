@@ -169,7 +169,7 @@ vuna.toml → Frontend.{Toml.parseToml, Manifest.parseManifest/validateManifest}
   `CliOpts` 已是显式参数；`Diag.Format` 语言也改为显式 `lang` 参数。
   API 文档与检索见
   [api-docs.md](reference/api-docs.md)，调试工作流见 [debugging.md](reference/debugging.md)。
-- 进程执行只在 `Driver.CompilerCli.runIn`（`prim_runIn`；工具链经 `runPure`）。
+- 进程执行只在 `Driver.CompilerCli.runIn`（`prim_eff_runIn`；工具链经 `runPure`）。
 - **stdio / socket server 公共层**（工具链，不进 seed）：`Vuna.Json.Frame`（字节级
   `Content-Length` 帧 + 16 MiB 上界）、`Vuna.Json.Rpc`（JSON-RPC 信封与错误码）、
   `Vuna.Json.Server.serveConnection`（读帧 → 分发 → 发帧的连接循环）；LSP 与 REPL server
@@ -190,8 +190,8 @@ vuna.toml → Frontend.{Toml.parseToml, Manifest.parseManifest/validateManifest}
   [effects.md](reference/effects.md) §8）。
 - **TCB**：工具链永不进 seed（`compiler/app/Main.vuna` 闭包不含 `Vuna.*` 工具模块；
   `nix/tcb-forbidden.txt` 黑名单）；效应边界**不再由 manifest 门控**：没有
-  `[capabilities]` / `[trust]` / `[privileged]`，宿主层 `Base.Host` 与 `prim_*` 对任何包
-  可见（用户包/ad-hoc 也可 import / 直调）。用户面**应**经 `Base.Eff.*` 标签 + handler
+  `[capabilities]` / `[trust]` / `[privileged]`，宿主层 `prim_*` / `prim_eff_*` 对任何包
+  可见（用户包/ad-hoc 也可直调）。用户面**应**经 `Base.Eff.*` 标签 + handler
   使用效果——纪律/文档约定，不是强制门控；原语返回 `Eff []` 动作（只在 `main` 执行，
   钩子是 `v_main 0`）。显式接受的损失与后续方向见
   [effects.md](reference/effects.md) §8.6。

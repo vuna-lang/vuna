@@ -3,7 +3,6 @@
 -- （`handleProcessHost` 的 `prim_eff_exit`）保留，但本夹具不触发它（否则测试进程退出）。
 import Base.Eff
 import Base.EffProcess
-import Base.Host
 import Base.List
 
 prog : (n : String) -> Eff (Cons n ProcessOp Nil) Int
@@ -23,7 +22,7 @@ mopH op k = case op of
 main : Eff [] Int
 main = do
   _ <-
-    print ("mock " ++ strFromInt (runPure (handleProcess "mock" mret mopH (prog "mock"))) ++ "\n")
+    prim_eff_print ("mock " ++ strFromInt (runPure (handleProcess "mock" mret mopH (prog "mock"))) ++ "\n")
   observed <- joinEff (handleProcessHostObserved "observed" (prog "observed"))
-  _ <- print ("observed " ++ strFromInt observed ++ "\n")
+  _ <- prim_eff_print ("observed " ++ strFromInt observed ++ "\n")
   pure 0

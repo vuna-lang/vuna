@@ -46,7 +46,6 @@ import Vuna.Json
 import Vuna.Tool.Session
 import Vuna.Lint.Rules
 import Vuna.Lsp.Protocol
-import Base.Host
 
 -- DiagnosticSeverity：1 = Error、2 = Warning、3 = Information、4 = Hint
 severityError : Int

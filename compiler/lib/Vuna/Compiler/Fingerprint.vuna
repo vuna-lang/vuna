@@ -20,9 +20,9 @@ module Vuna.Compiler.Fingerprint
 -- 足以区分重新构建的编译器。
 --
 -- M4：env/stat 是宿主动作，显式 `Eff []`（不再在模块初始化时用 `runPure` 取一次）。
-import Base.Host
 import Vuna.Compiler.Hash
 import Vuna.Compiler.Version
+import Base.Eff
 
 -- | 指纹派生：把三要素拼成内容键（纯函数，便于测试与跨模块复用口径）。
 fingerprintOfStat : String -> Int -> Int -> Int

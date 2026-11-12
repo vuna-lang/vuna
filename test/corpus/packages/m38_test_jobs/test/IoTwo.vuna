@@ -1,5 +1,5 @@
-import Base.Host
 
+import Base.Eff
 -- 效果测试（通过）：第二个效果测试，验证多个效果测试文件并行时各自独立编译运行。
 main : Eff [] Int
-main = fmap natToInt (print "m38-test-jobs: io-two\n")
+main = prim_eff_print "m38-test-jobs: io-two\n"

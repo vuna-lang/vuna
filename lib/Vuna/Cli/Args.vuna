@@ -35,7 +35,6 @@ module Vuna.Cli.Args
 -- 纯 flag 解析 API 保持纯函数。
 import Vuna.Compiler.Common
 import Vuna.Compiler.Driver.CompilerCli
-import Base.Host
 
 -- ---------------------------------------------------------------
 -- 参数说明表

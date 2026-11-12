@@ -43,10 +43,12 @@
    manager）永不进入 seed 闭包；黑名单见 `nix/tcb-forbidden.txt`；
 5. **动作入口与宿主层**：唯一动作类型是 `Eff r a`；用户面入口是 `main : Eff [] a`（行必须
    Nil，入口处未处理效应是类型错误），执行入口是 `Base.Eff.runPure : Eff [] a -> a`。
-   `Base.Host` 是宿主层别名（`prim_eff_*` + Int/Nat 归一化），
+   宿主层 = 直接调用 `prim_eff_*`（原宿主别名模块已删除）；Int/Nat 归一化只保留在
+   `Base.Eff.*` handler 的 result 族（如 `Base.EffConsole.Print`、`Base.EffFs.WriteFile`/`FileSize`
+   返回 `Nat`，直接调用原语得到 `Int`）。
    `IORef` 实现全是 `Eff []`。
    **无 manifest 门控**：没有 manifest 级能力/特权/信任机制；任何包（用户包、ad-hoc 文件）
-   都可以 `import Base.Host`、直接调用 `prim_*`（效果原语是 `Eff []` 叶子）。用户面**应**仍经
+   都可以直接调用 `prim_*` / `prim_eff_*`（效果原语是 `Eff []` 叶子）。用户面**应**仍经
    `Base.Eff.*` 标签 + handler 使用效果——这是纪律/文档约定，不是强制门控
    （见 [effects.md](docs/reference/effects.md) §8.6）。
    **M4 已完成**：编译器/工具链不再用 `runPure (...)` 在纯签名里隐藏 Eff 执行；

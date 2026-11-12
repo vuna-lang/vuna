@@ -10,11 +10,10 @@ import Vuna.FixityEnv
 import Vuna.Fmt
 import Vuna.Compiler.Frontend.Parser
 import Base.Monad
-import Base.Host
 
 main : Eff [] Int
 main = do
-  args <- getArgs
+  args <- prim_eff_getArgs
   run args
 
 run : List String -> Eff [] Int
@@ -24,12 +23,12 @@ run args =
     Cons "check" (Cons path Nil) => runCheck path
     Cons "write" (Cons path (Cons out Nil)) => runWrite path out
     _ => do
-      _ <- print "usage: probe (fmt|check|write) file [out]\n"
+      _ <- prim_eff_print "usage: probe (fmt|check|write) file [out]\n"
       pure 2
 
 fail : String -> String -> Eff [] Int
 fail path msg = do
-  _ <- print (path ++ ": " ++ msg ++ "\n")
+  _ <- prim_eff_print (path ++ ": " ++ msg ++ "\n")
   pure 1
 
 -- 程序级 fixity：与 CLI 同源（Vuna.FixityEnv：按文件目录缓存模块图，声明表逐文件算）。
@@ -40,19 +39,19 @@ fixitiesFor path source = do
 
 runFmt : String -> Eff [] Int
 runFmt path = do
-  source <- readFile path
+  source <- prim_eff_readFile path
   fxR <- fixitiesFor path source
   case fxR of
     ErrC e => fail path (diagText e)
     OkC env => case formatSourceWith env source of
       ErrC e => fail path ("format error: " ++ diagText e)
       OkC out => do
-        _ <- print out
+        _ <- prim_eff_print out
         pure 0
 
 runCheck : String -> Eff [] Int
 runCheck path = do
-  source <- readFile path
+  source <- prim_eff_readFile path
   fxR <- fixitiesFor path source
   case fxR of
     ErrC e => fail path (diagText e)
@@ -72,12 +71,12 @@ runCheck path = do
 
 runWrite : String -> String -> Eff [] Int
 runWrite path out = do
-  source <- readFile path
+  source <- prim_eff_readFile path
   fxR <- fixitiesFor path source
   case fxR of
     ErrC e => fail path (diagText e)
     OkC env => case formatSourceWith env source of
       ErrC e => fail path ("format error: " ++ diagText e)
       OkC formatted => do
-        _ <- writeFile out formatted
+        _ <- prim_eff_writeFile out formatted
         pure 0

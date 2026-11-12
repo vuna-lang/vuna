@@ -18,7 +18,7 @@ module Vuna.Compiler.Debug (debugOn, note, noteInt, releaseOn, sampleKey, stamp,
 import Vuna.Compiler.Common
 import Base.HashMap
 import Base.Hashable
-import Base.Host
+import Base.Eff
 
 args : List String
 args = runPure prim_eff_getArgs

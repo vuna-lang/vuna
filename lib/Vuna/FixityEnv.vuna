@@ -20,7 +20,6 @@ import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Loader.Flatten
 import Vuna.Compiler.Loader.Modules
 import Vuna.Compiler.Packages.Pkg
-import Base.Host
 
 -- 表示抽象：只有 emptyFixityEnv / fixitiesForFile 能构造与推进缓存。
 record FixityEnv where

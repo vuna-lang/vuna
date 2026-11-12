@@ -12,7 +12,6 @@ import Vuna.Index
 import Vuna.Json
 import Vuna.Search.Query
 import Vuna.Search.Types
-import Base.Host
 
 data SearchMode : Type where
   TypeMode : SearchMode

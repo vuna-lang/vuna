@@ -1,11 +1,17 @@
--- D25：宿主度量返回 `Nat`（`prim_eff_print` / `prim_eff_writeFile` / `prim_eff_fileSize` → `INat`）。
--- 验证 Host 的 `Eff [] Nat` 签名、`Nat` 算术与 main 展示。
-import Base.Host
+-- D25：宿主度量在 Eff 标签的 result 族里是 `Nat`（`Base.EffConsole.Print`、
+-- `Base.EffFs.WriteFile`/`FileSize`）；直调 `prim_eff_*` 原语得到 `Int`。
+-- 本夹具用真实 handler 取 `Nat`、做 `Nat` 算术，并由 main 展示。
+import Base.Eff
+import Base.EffConsole
+import Base.EffFs
 import Base.Nat
 
-main : Eff [] Nat
-main = do
-  written <- writeFile "/tmp/vuna_d25_measure.txt" "hello"
-  size <- fileSize "/tmp/vuna_d25_measure.txt"
-  printed <- print "p\n"
+prog : Eff [FsOp@real, ConsoleOp@real] Nat
+prog = do
+  written <- fsWriteFile "real" "/tmp/vuna_d25_measure.txt" "hello"
+  size <- fsFileSize "real" "/tmp/vuna_d25_measure.txt"
+  printed <- consolePrint "real" "p\n"
   pure (written + size + printed)
+
+main : Eff [] Nat
+main = runConsole "real" (joinEff (handleFsHost "real" prog))

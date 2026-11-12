@@ -16,7 +16,6 @@ module Vuna.Repl.Paste (pasteDisable, pasteEnable, readPasteBody) where
 import Vuna.Compiler.Common
 import Vuna.Repl.Paste.Decode
 import Vuna.Repl.Term
-import Base.Host
 
 -- 读粘贴体（起点在 `\e[200~` 之后）：逐字节喂状态机，读到 `\e[201~` 或 EOF/超时
 -- （termReadByte 返回 -1）为止。fuel 是字节数守卫（1 MiB），防终端异常时无限读。

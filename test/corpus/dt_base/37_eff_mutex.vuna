@@ -2,7 +2,6 @@
 import Base.Eff
 import Base.EffMutex
 import Base.EffSched
-import Base.Host
 import Base.IORef
 import Base.Result
 

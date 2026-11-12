@@ -1,4 +1,4 @@
--- P2c：fs 查询走 typed effects（Fs 标签 + runFs），不再直接 import Host。
+-- P2c：fs 查询走 typed effects（Fs 标签 + runFs），不再直接调用宿主原语。
 import Base.Eff
 import Base.EffFs
 

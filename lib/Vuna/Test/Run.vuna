@@ -20,7 +20,6 @@ import Vuna.Test.Session
 import Vuna.Test.Suite
 import Vuna.Files
 import Vuna.Json
-import Base.Host
 import Base.IORef
 
 -- 执行环境。
@@ -72,7 +71,7 @@ record CaseResult where
 -- 小工具
 -- ---------------------------------------------------------------
 envVar : String -> Eff [] String
-envVar name = getEnv name
+envVar name = prim_eff_getenv name
 
 envOr : String -> String -> Eff [] String
 envOr name fallback = do
@@ -195,7 +194,7 @@ else do
 makeTempRoot : String -> Eff [] String
 makeTempRoot tag = do
   base <- tempBase 0
-  stamp <- nowMicros
+  stamp <- effTimeUs
   freshTempRoot 1000 "${base}/vuna-suite-${strOfInt stamp}-${safeName tag}"
 
 helperScript : String
@@ -204,7 +203,7 @@ helperScript =
 
 writeHelper : String -> Eff [] String
 writeHelper tmp = do
-  _ <- writeFile "${tmp}/run-capture.sh" helperScript
+  _ <- prim_eff_writeFile "${tmp}/run-capture.sh" helperScript
   pure "${tmp}/run-capture.sh"
 
 -- ---------------------------------------------------------------
@@ -213,7 +212,7 @@ writeHelper tmp = do
 readMaybeFile : String -> Eff [] String
 readMaybeFile path = do
   exists <- pathExistsFile path
-  if exists then readFile path else pure ""
+  if exists then prim_eff_readFile path else pure ""
 
 -- 运行 argv（cwd 由 prim_eff_runIn 控制），timeout 秒级；返回退出码与分离输出。
 runCmdWith : Bool -> Env -> String -> String -> Int -> List String -> Eff [] CmdResult
@@ -310,7 +309,7 @@ finishCase id start assertions =
     failed = countFail assertions
     passed = countPass assertions
   in do
-    now <- nowMicros
+    now <- effTimeUs
     pure
       (CaseResult id (if failed == 0 then "pass" else "fail") passed failed (passed + failed) ((now - start) / 1000) (failMessages assertions))
 
@@ -364,7 +363,7 @@ nonNegTotal (h :: rest) =
 -- 极端情况下互相踩写）；并发跑时给其中一个传 `--cache-dir` 隔离。
 buildCacheDir : Env -> String -> Eff [] String
 buildCacheDir env staging = do
-  names <- readDir staging
+  names <- prim_eff_readDir staging
   pure "${env.envBuildDir}/set-${buildSetKey names}"
 
 -- 把 staging 整份同步进共享目录（base 的 .ml 内容不变 ⇒ stamp 命中；Main.ml 换成
@@ -400,8 +399,8 @@ goldenCase env c source expected wantInterp wantCheck wantCompile wantRun wantCo
   let
     staging = "${env.envTmp}/stage-${safeName c.caseId}"
   in do
-    start <- nowMicros
-    expectedText <- fmap trimNewlines (readFile expected)
+    start <- effTimeUs
+    expectedText <- fmap trimNewlines (prim_eff_readFile expected)
     interpR <- if wantInterp then probeInterp env c source else pure (CmdResult 1 "" "" False)
     checkCode <- if wantCheck then do
       r <- probeCheck env c source
@@ -447,7 +446,7 @@ goldenCase env c source expected wantInterp wantCheck wantCompile wantRun wantCo
       pure
         (if runOk then trimNewlines (combinedOut runR) else if wantInterp then trimNewlines (combinedOut interpR) else "")
     if env.envBless && base.resFail > 0 then do
-      _ <- writeFile expected "${actualForBless}\n"
+      _ <- prim_eff_writeFile expected "${actualForBless}\n"
       pure
         (CaseResult c.caseId "blessed" base.resChecks 0 base.resChecks base.resMs ["blessed ${expected}"])
     else pure base
@@ -483,13 +482,13 @@ errorCase env c source expected wantInterp wantCheck wantCompile =
       diagSource = if pkgMode then "." else relativeTo env.envCwd source
       diagCwd = caseCwd
     in do
-      start <- nowMicros
-      fragment <- fmap trimNewlines (readFile expected)
+      start <- effTimeUs
+      fragment <- fmap trimNewlines (prim_eff_readFile expected)
       compileExists <- pathExistsFile compileErrPath
-      compileFragment <- if compileExists then fmap trimNewlines (readFile compileErrPath)
+      compileFragment <- if compileExists then fmap trimNewlines (prim_eff_readFile compileErrPath)
       else do
         legacyExists <- pathExistsFile legacyCerrPath
-        if legacyExists then fmap trimNewlines (readFile legacyCerrPath) else pure fragment
+        if legacyExists then fmap trimNewlines (prim_eff_readFile legacyCerrPath) else pure fragment
       interpA <- if wantInterp then do
         r <-
           runCmdMerged env "${c.caseId}-interp" env.envCwd c.caseTimeout
@@ -522,12 +521,12 @@ errorCase env c source expected wantInterp wantCheck wantCompile =
           (withEnvIface env (append [env.envVuna, "check", diagSource, "--json"] denyArgs))
       actualDiag <- pure (normalizeDiagText env (trimNewlines (combinedOut diagRun)))
       diagA <- if env.envBlessDiag then do
-        _ <- writeFile diagPath "${actualDiag}\n"
+        _ <- prim_eff_writeFile diagPath "${actualDiag}\n"
         pure []
       else do
         hasDiag <- pathExistsFile diagPath
         if hasDiag then do
-          expectedDiag <- readFile diagPath
+          expectedDiag <- prim_eff_readFile diagPath
           pure [assertEq "diag json" (normalizeDiagText env (trimNewlines expectedDiag)) actualDiag]
         else pure []
       finishCase c.caseId start (append interpA (append checkA (append compileA diagA)))
@@ -555,7 +554,7 @@ parseDigits (c :: rest) acc count =
 hashFileText : String -> Eff [] String
 hashFileText path = do
   exists <- pathExistsFile path
-  if exists then readFile path else pure ""
+  if exists then prim_eff_readFile path else pure ""
 
 hashFiles : Int -> List String -> Eff [] Int
 hashFiles acc [] = pure acc
@@ -582,8 +581,8 @@ appTreeHash source expected = do
 -- 文件型夹具：source/expected 内容 + mtime/size。
 fileTreeHash : String -> String -> Eff [] Int
 fileTreeHash source expected = do
-  stamp <- fileMtime source
-  size <- fileSize source
+  stamp <- prim_eff_fileMtime source
+  size <- prim_eff_fileSize source
   sourceText <- hashFileText source
   expectedText <- hashFileText expected
   pure (hashTextStrong "${sourceText}|${expectedText}|${strOfInt stamp}|${strOfInt size}")
@@ -622,7 +621,7 @@ lastFailedIds env =
     exists <- pathExistsFile path
     if not exists then pure []
     else do
-      text <- readFile path
+      text <- prim_eff_readFile path
       pure (filter (\line => line /= "") (lines text))
 
 filterLastFailed : Env -> List Case -> Eff [] (List Case)
@@ -638,7 +637,7 @@ recordLastFailed env results =
     text = join "\n" (map resIdOf failed)
   in do
     _ <- ensureDirPath (lastFailedDir env)
-    fmap natToInt (writeFile (lastFailedPath env) text)
+    prim_eff_writeFile (lastFailedPath env) text
 
 caseIdIn : List String -> Case -> Bool
 caseIdIn ids c = memName c.caseId ids
@@ -657,7 +656,7 @@ readCached env c = do
       exists <- pathExistsFile path
       if not exists then pure Nothing
       else do
-        text <- readFile path
+        text <- prim_eff_readFile path
         pure (Just (CaseResult c.caseId "cached" (cachedChecks text) 0 (cachedChecks text) 0 []))
 
 cachedChecks : String -> Int
@@ -667,7 +666,7 @@ writeCached : Env -> Case -> CaseResult -> Eff [] Int
 writeCached env c r = do
   key <- cacheKey env c
   if key == 0 || r.resStatus /= "pass" then pure 0
-  else fmap natToInt (writeFile (cachePath env key) "${strOfInt r.resChecks}\n")
+  else prim_eff_writeFile (cachePath env key) "${strOfInt r.resChecks}\n"
 
 runCase : Env -> Case -> Eff [] CaseResult
 runCase env c = do
@@ -681,7 +680,7 @@ runCase env c = do
 
 checkCase : Env -> Case -> String -> Bool -> String -> Eff [] CaseResult
 checkCase env c source expectPass expectedErr = do
-  start <- nowMicros
+  start <- effTimeUs
   r <-
     runCmdMerged env "${c.caseId}-check" env.envCwd c.caseTimeout
       (withEnvIface env [env.envVuna, "check", source])
@@ -705,8 +704,8 @@ relativeTestPath env source =
 
 lintCase : Env -> Case -> String -> String -> Eff [] CaseResult
 lintCase env c source expected = do
-  start <- nowMicros
-  rawExpected <- readFile expected
+  start <- effTimeUs
+  rawExpected <- prim_eff_readFile expected
   r <-
     runCmdMerged env "${c.caseId}-lint" env.envCwd c.caseTimeout
       (withEnvIface env [env.envVuna, "lint", relativeTestPath env source])
@@ -728,18 +727,18 @@ fixCase env c source expected =
   let
     work = fixWorkPath env c
   in do
-    start <- nowMicros
-    expectedText <- fmap trimNewlines (readFile expected)
-    sourceText <- readFile source
-    _ <- writeFile work sourceText
+    start <- effTimeUs
+    expectedText <- fmap trimNewlines (prim_eff_readFile expected)
+    sourceText <- prim_eff_readFile source
+    _ <- prim_eff_writeFile work sourceText
     _ <-
       runCmdMerged env "${c.caseId}-fix1" env.envCwd c.caseTimeout
         (withEnvIface env [env.envVuna, "lint", "--fix", work])
-    onceText <- readFile work
+    onceText <- prim_eff_readFile work
     _ <-
       runCmdMerged env "${c.caseId}-fix2" env.envCwd c.caseTimeout
         (withEnvIface env [env.envVuna, "lint", "--fix", work])
-    twiceText <- readFile work
+    twiceText <- prim_eff_readFile work
     let
       once = trimNewlines onceText
       twice = trimNewlines twiceText
@@ -755,7 +754,7 @@ runtimeCase env c source expectedErr expectedExit =
   let
     staging = "${env.envTmp}/stage-${safeName c.caseId}"
   in do
-    start <- nowMicros
+    start <- effTimeUs
     fragmentText <- readMaybeFile expectedErr
     comp <-
       runCmdMerged env "${c.caseId}-compile" env.envCwd c.caseTimeout
@@ -1110,10 +1109,10 @@ stepsCase env c path =
   let
     caseTmp = stepsTmpDir env c
   in do
-    start <- nowMicros
+    start <- effTimeUs
     _ <- ensureDirPath caseTmp
     hasPath <- pathExistsFile path
-    text <- if hasPath then readFile path else pure ""
+    text <- if hasPath then prim_eff_readFile path else pure ""
     case parseStepsV2 text of
       SpErr msg =>
         finishCase c.caseId start [Assertion "steps" False "parse error in ${path}: ${msg}"]
@@ -1130,8 +1129,8 @@ seedCase env c source expected =
     outdir = uniqueOutDir env c.caseId
     ifaceDir = "${outdir}-iface"
   in do
-    start <- nowMicros
-    expectedText <- fmap trimNewlines (readFile expected)
+    start <- effTimeUs
+    expectedText <- fmap trimNewlines (prim_eff_readFile expected)
     _ <- removeTree outdir
     _ <- removeTree ifaceDir
     _ <- ensureDirPath ifaceDir
@@ -1160,7 +1159,7 @@ runCaseGo env c = case c.caseKind of
   CSeed source expected => seedCase env c source expected
   CSteps path => stepsCase env c path
   CBroken msg => do
-    start <- nowMicros
+    start <- effTimeUs
     finishCase c.caseId start [Assertion "case" False msg]
 
 -- ---------------------------------------------------------------
@@ -1199,9 +1198,10 @@ filterCases opts cases = filter (caseMatches opts) cases
 -- ---------------------------------------------------------------
 -- 打印与汇总
 -- ---------------------------------------------------------------
--- D25：`print` 返回 `Nat`（字节数）；工具链这里仍按 Int 使用（丢弃/比较都按 Int）。
+-- D25：`prim_eff_print` 返回 `Int` 字节数；`Nat` 归一化只在 Eff handler 的 result 族。
+-- 工具链这里按 Int 使用（丢弃/比较都按 Int）。
 printLine : String -> Eff [] Int
-printLine s = fmap natToInt (print "${s}\n")
+printLine s = prim_eff_print "${s}\n"
 
 statusLine : Bool -> CaseResult -> String
 statusLine verbose r =
@@ -1258,7 +1258,7 @@ writeResultFile dir index r =
     path = "${dir}/${strOfInt index}.tsv"
     line =
       "${r.resId}\t${r.resStatus}\t${strOfInt r.resPass}\t${strOfInt r.resFail}\t${strOfInt r.resChecks}\t${strOfInt r.resMs}\n"
-  in fmap natToInt (writeFile path line)
+  in prim_eff_writeFile path line
 
 runCasesIndexed : Env -> Bool -> Bool -> Bool -> String -> List (Pair Int Case) -> Eff [] (List CaseResult)
 runCasesIndexed env verbose failFast quiet resultsDir indexed =
@@ -1356,7 +1356,7 @@ readResultFile dir index =
     exists <- pathExistsFile path
     if not exists then pure Nothing
     else do
-      text <- readFile path
+      text <- prim_eff_readFile path
       pure (case split "\t" (trimNewlines text) of
         [id, status, pass, fail, checks, ms] =>
           Just
@@ -1528,7 +1528,7 @@ casePaths env c = case c.caseKind of
 -- 章节/步骤文件的文本认领：夹具变更时，文件里提到该 corpus 目录就算“相关”。
 claimTextTouches : Env -> String -> List String -> Eff [] Bool
 claimTextTouches env path changed = do
-  text <- readFile path
+  text <- prim_eff_readFile path
   let
     corpusChanges = filter (\p => startsWith "test/corpus/" p) changed
   in pure
@@ -1578,7 +1578,7 @@ claimTextPairs : List Case -> Eff [] (List (Pair String String))
 claimTextPairs [] = pure []
 claimTextPairs (c :: rest) = case c.caseKind of
   CSteps path => do
-    text <- readFile path
+    text <- prim_eff_readFile path
     more <- claimTextPairs rest
     pure (Pair path text :: more)
   _ => claimTextPairs rest
@@ -1650,7 +1650,7 @@ familyFixtures root family =
     exists <- pathExistsDir dir
     if not exists then pure []
     else do
-      names <- readDir dir
+      names <- prim_eff_readDir dir
       case family.familyEntry of
         Just entry => concatMapEff (fixtureEntryOf dir family.familyDir entry) names
         Nothing => pure (concatMap (fixtureTopOf family.familyDir) (filter isFixtureFile names))
@@ -1700,7 +1700,7 @@ auditSuite opts suite = do
 maxMtime : Int -> List String -> Eff [] Int
 maxMtime acc [] = pure acc
 maxMtime acc (path :: rest) = do
-  m <- fileMtime path
+  m <- prim_eff_fileMtime path
   maxMtime (if m > acc then m else acc) rest
 
 watchSnapshot : String -> Eff [] Int
@@ -1718,7 +1718,7 @@ watchSnapshot root = do
 watchLoop : Int -> SuiteOpts -> Suite -> Int -> Int -> Eff [] Int
 watchLoop fuel opts suite last rc = if fuel <= 0 then pure rc
 else do
-  _ <- sleepMicros 500000
+  _ <- prim_eff_sleep 500000
   now <- watchSnapshot suite.suiteRoot
   if now /= last then do
     _ <- printLine "watch: change detected, rerunning"
@@ -1760,7 +1760,7 @@ runSuiteOnce opts suite =
     baseHash <- hashTree baseDir
     cacheExists <- pathExistsDir cacheDir
     _ <- if cacheExists then pure 0 else ensureDirPath cacheDir
-    vuna <- execPath
+    vuna <- prim_eff_execPath
     vunaSeed <- envOr "VUNA_SEED" "vuna-seed"
     ocamlopt <- envOr "OCAMLOPT" "ocamlopt"
     -- 跨 run 的构建桶：base 的 .cmx 只编译一次，后续 run 直接命中 stamp。

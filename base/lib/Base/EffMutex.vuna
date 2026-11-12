@@ -16,7 +16,6 @@ import Base.Eff
 import Base.EffSched
 import Base.Bool
 import Base.Eq
-import Base.Host
 import Base.IORef
 import Base.Monad
 import Base.Ord

@@ -129,18 +129,18 @@ fixed point → 全部通过后才替换 `seed/` 并写入 `nix/seed-rotation.tx
 `seed/` 里没有工具链模块，但编译器自身需要文件读写。这条边界**不再由 manifest 门控**：
 `[capabilities]` / `[trust]` / `[privileged]` 与宿主模块 import 门控已整体删除。
 
-- **seed 闭包不变**：seed 仍只含 compiler 包入口闭包；编译器与 `Base.Host` 仍直调
-  `prim_*`（`Eff []` 叶子）。动作类型仍是唯一的 `Eff r a`，入口 `main : Eff [] a`，
+- **seed 闭包不变**：seed 仍只含 compiler 包入口闭包；编译器与 base 的 Eff handler 仍直调
+  `prim_*` / `prim_eff_*`（`Eff []` 叶子）。动作类型仍是唯一的 `Eff r a`，入口 `main : Eff [] a`，
   执行入口 `Base.Eff.runPure`。
-- **任何包都可见宿主层**：用户包、`test/corpus` 夹具、ad-hoc 文件都可以 `import Base.Host`、
-  直接调用 `prim_*` / `prim_eff_*`；没有每包原语白名单、`unsafe` 定义级审计，也没有
+- **任何包都可见宿主层**：用户包、`test/corpus` 夹具、ad-hoc 文件都可以直接调用
+  `prim_*` / `prim_eff_*`；没有每包原语白名单、`unsafe` 定义级审计，也没有
   REPL `--privileged`。编译器不再检查内建的能力位。
 - **用户面纪律（非门控）**：用户面**应**经 `Base.Eff.*` 标签 + handler 使用效果；宿主层
-  细节留在 `Base.Host` / `Base.Eff*` 内部。见 [effects.md](effects.md) §8.6 与
+  细节留在 `prim_eff_*` / `Base.Eff*` handler 内部（原宿主别名模块已删除）。见 [effects.md](effects.md) §8.6 与
   [primitives.md](primitives.md) §7。
 - **显式接受的损失**：宿主层 import 门控、每包原语白名单、`unsafe` 定义级审计、网络仅
   根包可用；历史见 git，后续用表示层权限（N2/N3）或新模型补。
-- `Driver.CompilerCli.runIn`（`prim_runIn`）仍是唯一的进程执行入口（代码内部约定，
+- `Driver.CompilerCli.runIn`（`prim_eff_runIn`）仍是唯一的进程执行入口（代码内部约定，
   不再是能力检查）。
 
 ## 种子文件集（当前）

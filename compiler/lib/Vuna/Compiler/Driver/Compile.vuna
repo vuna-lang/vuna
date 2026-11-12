@@ -63,7 +63,7 @@ import Vuna.Compiler.Loader
 import Vuna.Compiler.Query
 import Vuna.Compiler.Query.Run
 import Vuna.Compiler.Version
-import Base.Host
+import Base.List
 
 -- ---------------------------------------------------------------
 -- 效果辅助（本模块自用；顺序与纯 `map` / `concatMap` / `mapMaybe` 一致）
@@ -575,7 +575,7 @@ collectDepPackages seen ps = collectDepPackagesFuel 4096 seen ps
 
 collectDepPackagesFuel : Int -> List String -> List Package -> Pair (List String) (List Package)
 collectDepPackagesFuel fuel seen [] = Pair seen []
-collectDepPackagesFuel fuel seen (p :: rest) = if fuel <= 0 then Pair seen (p :: rest)
+collectDepPackagesFuel fuel seen (p :: rest) = if fuel <= 0 then Pair seen (Base.List.Cons p rest)
 else if memName (packageName p) seen then collectDepPackagesFuel (fuel - 1) seen rest
 else case collectDepPackagesFuel (fuel - 1) (packageName p :: seen) p.packageDependencies of
   Pair seen1 transitive => case collectDepPackagesFuel (fuel - 1) seen1 rest of
@@ -1135,7 +1135,8 @@ filterOwnEntries needed exclude (e :: rest) =
       Just x => meNameOfEntry e /= x
       Nothing => True
     )
-  in if keep then e :: filterOwnEntries needed exclude rest else filterOwnEntries needed exclude rest
+  in if keep then Base.List.Cons e (filterOwnEntries needed exclude rest)
+  else filterOwnEntries needed exclude rest
 
 toolCleanGo : Int -> List (Pair String String) -> List ModuleIface -> List ModuleIface -> Eff [] (List ModuleIface)
 toolCleanGo builtSec depTbl [] cleanRev = pure (reverse cleanRev)

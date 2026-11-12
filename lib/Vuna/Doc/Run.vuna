@@ -12,7 +12,6 @@ import Vuna.Compiler.Packages.Pkg
 import Vuna.Doc.Html
 import Vuna.Doc.Model
 import Vuna.Files
-import Base.Host
 
 runDoc : List String -> Eff [] Int
 runDoc args = case parseToolArgs "vuna doc" [BoolFlag "check", ValueFlag "package"] args of

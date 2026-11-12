@@ -1,7 +1,7 @@
 -- M38：`vuna run` 参数透传夹具。无参数时输出 "no args"（供包夹具循环比对）；
 -- 有参数时输出第一个参数（`vuna run <pkg> -- a b` 应输出 "a"）。
-import Base.Host
 import Base.Monad
+import Base.Eff
 
 firstArg : List String -> String
 firstArg [] = "no args"
@@ -9,6 +9,6 @@ firstArg (a :: _) = a
 
 main : Eff [] Int
 main = do
-  args <- getArgs
-  println (firstArg args)
-  exit 0
+  args <- prim_eff_getArgs
+  prim_eff_print ((firstArg args) ++ "\n")
+  prim_eff_exit 0

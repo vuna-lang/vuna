@@ -1,5 +1,5 @@
-import Base.Host
 
+import Base.Eff
 -- 重叠探针 B：打印 START-B 后睡 800ms 再打印 END-B（比 A 的 3s 早结束，用来区分
 -- 「并行时 B 的 END 早于 A 的 END」与「串行时 B 根本没在 A 结束前启动」）。
 -- 2s 而不是 100ms：全量 suite 在 `--jobs auto` 下会同时跑几十个 case，并行 worker 的进程
@@ -7,6 +7,6 @@ import Base.Host
 -- （§47c 在高负载下偶发失败）。2s 仍远小于 A 的 3s，串行/并行判据不变。
 main : Eff [] Int
 main = do
-  _ <- print "START-B\n"
-  _ <- sleepMicros 2000000
-  fmap natToInt (print "END-B\n")
+  _ <- prim_eff_print "START-B\n"
+  _ <- prim_eff_sleep 2000000
+  prim_eff_print "END-B\n"

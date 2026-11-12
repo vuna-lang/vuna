@@ -20,7 +20,7 @@ module Vuna.Compiler.Driver.DiagRender (renderCliDiagnosticEff, renderWithPrefix
 -- 但 compiler 包不能 import lib，故在本模块内独立实现；file 可含 ':'，也可能带
 -- `Vuna.Compiler.X: ` / `[CG_X] ` 之类的前置标签，故对候选做宽松归一化后再读文件。
 import Vuna.Compiler.Common
-import Base.Host
+import Base.List
 
 -- ---------------------------------------------------------------
 -- 字符与文本小工具
@@ -106,7 +106,8 @@ scanCandidates msg acc (a :: rest) = case rest of
     c :: tail =>
       let
         next = scanCandidates msg (a :: acc) rest
-      in if isNumText b && isNumText c then Pair (normalizeFile (join ":" (reverse (a :: acc)))) (Pair (parseNum b) (parseNum c)) :: next
+      in if isNumText b && isNumText c then Base.List.Cons
+        (Pair (normalizeFile (join ":" (reverse (a :: acc)))) (Pair (parseNum b) (parseNum c))) next
       else next
 
 -- 候选 file 可能带前置标签（`Vuna.Compiler.Common: ` / `[CG_X] ` / `in name: `）。
@@ -137,12 +138,12 @@ firstReadableLocEff : List (Pair String (Pair Int Int)) -> Eff [] (Maybe (Pair S
 firstReadableLocEff [] = pure Nothing
 firstReadableLocEff ((Pair file (Pair line col)) :: rest) = if line < 1 then firstReadableLocEff rest
 else do
-  exists <- fileExists file
+  exists <- prim_eff_fileExists file
   if exists then do
-    isDir <- isDirectory file
+    isDir <- prim_eff_isDirectory file
     if isDir then firstReadableLocEff rest
     else do
-      raw <- readFile file
+      raw <- prim_eff_readFile file
       case lineAt (lines raw) line of
         Nothing => firstReadableLocEff rest
         Just rawLine => pure (Just (Pair file (Pair line (Pair col (stripCr rawLine)))))

@@ -10,7 +10,6 @@ module Vuna.Repl.Client (runReplClient) where
 -- 退出码：收到响应 0；连接失败（宿主异常，运行时报 `net: connect: ...`）或响应不完整 2。
 import Vuna.Compiler.Common
 import Vuna.Json.Frame
-import Base.Host
 
 clientChunkSize : Int
 clientChunkSize = 65536

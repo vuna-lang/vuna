@@ -2,7 +2,6 @@
 -- 失败消息经 awaitTask 的 Err 返回；body 返回 Err 后 withScope 先取消再等干净。
 import Base.Eff
 import Base.EffSched
-import Base.Host
 import Base.Result
 
 bad : Eff [] Int
@@ -13,11 +12,11 @@ bad = do
 work : List Int -> Eff [] Int
 work [] = pure 0
 work (_ :: rest) = do
-  _ <- raise (println "tick")
+  _ <- raise (prim_eff_print ("tick" ++ "\n"))
   st <- yieldNow
   if st <= 0 then work rest
   else do
-    _ <- raise (println "sibling-cleanup")
+    _ <- raise (prim_eff_print ("sibling-cleanup" ++ "\n"))
     pure 9
 
 prog : Eff [] (Result Int)
@@ -29,13 +28,13 @@ prog = withScope (\sc => do
   case rb of
     Ok _ => pure (Ok 0)
     Err e => do
-      _ <- raise (println e)
+      _ <- raise (prim_eff_print (e ++ "\n"))
       _ <- scopeWait sc
       rw <- awaitTask tg
       case rw of
         Ok _ => pure (Err e)
         Err e2 => do
-          _ <- raise (println e2)
+          _ <- raise (prim_eff_print (e2 ++ "\n"))
           pure (Err e)
 )
 

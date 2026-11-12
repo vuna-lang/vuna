@@ -1,6 +1,6 @@
 -- M37：动作类型是 `Eff`（构造子不导出）；do 块由 loader 降级到 bind/pure，
--- 实例来自 Base.Host 重导出的 Base.Monad，main 钩子对动作应用世界令牌 0。
-import Base.Host
+-- 实例来自自动导入的 `Prelude`（`Base.Monad`），main 钩子对动作应用世界令牌 0。
+import Base.Eff
 
 main : Eff [] Int
 main = do

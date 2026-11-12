@@ -3,7 +3,6 @@
 -- （open-row + Monad 字典 meta 未从期望类型早解）；拆分后语义/操作顺序不变。
 import Base.Eff
 import Base.EffFs
-import Base.Host
 
 dir : String
 dir = "/tmp/vuna_w10_fs"
@@ -48,5 +47,5 @@ prog = do
 main : Eff [] Int
 main = do
   summary <- runFs "real" prog
-  _ <- print (summary ++ "\n")
+  _ <- prim_eff_print (summary ++ "\n")
   pure 0
