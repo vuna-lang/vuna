@@ -1,5 +1,5 @@
 -- | `vuna add <name>[@<version>] [DIR]`：查静态索引 → 写回 `[dependencies]` → 取包。
-module Vuna.Add (runAdd) where
+module Vuna.Add where
 
 -- Vuna.Add：索引的唯一消费者（D14）。流程：
 --   1. 读包 manifest 的 `[registry].index`（目录 / `file://` / `http(s)://`）；
@@ -18,7 +18,7 @@ import Vuna.Registry
 import Base.List
 import Base.String
 
-runAdd : List String -> Eff [] Int
+export runAdd : List String -> Eff [] Int
 runAdd args = case parseToolArgs "vuna add" [BoolFlag "dry-run", BoolFlag "no-fetch"] args of
   ErrC e => addFailText (diagText e)
   OkC parsed =>

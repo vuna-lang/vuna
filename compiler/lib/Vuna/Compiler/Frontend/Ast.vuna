@@ -1,155 +1,27 @@
-module Vuna.Compiler.Frontend.Ast
-  ( Ctor(..)
-  , DAxiom
-  , DBind
-  , DData
-  , DExpr
-  , DExtern
-  , DFun
-  , DInstance
-  , DRecord
-  , DSig
-  , DTrait
-  , Decl
-  , DoStmt
-  , EAnn
-  , EApp
-  , EBacktick
-  , ECase
-  , EDo
-  , EField
-  , EFloat
-  , EIf
-  , EInfix
-  , EInt
-  , EInterp
-  , ELam
-  , ELet
-  , ELocalFun
-  , EParen
-  , EPi
-  , ERecUpdate
-  , ERecord
-  , ESectL
-  , ESectOp
-  , ESectR
-  , EStr
-  , EVar
-  , ExportItem
-  , ExportMembers(..)
-  , ExportSpec(..)
-  , Expr
-  , Field(..)
-  , FixityDecl(..)
-  , IPHole
-  , IPText
-  , Import(..)
-  , InterpPart
-  , ModDecl(..)
-  , Opacity(..)
-  , OpacitySpec(..)
-  , PAs
-  , PCon
-  , PInt
-  , PRecord
-  , PStr
-  , PVar
-  , PWild
-  , Pat
-  , Qty(..)
-  , ReprTier(..)
-  , SourceFile(..)
-  , TraitMethod(..)
-  , TraitParam(..)
-  , XBare
-  , XModule
-  , XTypeAll
-  , XTypeSome
-  , clausesFor
-  , ctorArity
-  , ctorDisplayName
-  , ctorName
-  , ctorShortName
-  , ctorSpan
-  , ctorType
-  , ctorsOf
-  , declDerivings
-  , declNames
-  , declSpan
-  , doBindSyntaxName
-  , doBindSyntaxPrefix
-  , doIgnoreSyntaxName
-  , doIgnoreSyntaxPrefix
-  , doStmtExpr
-  , doStmtSpan
-  , doSyntaxCanonical
-  , exportItemSpan
-  , exportSpecName
-  , exportSpecSpan
-  , exprSpan
-  , fieldName
-  , fieldSpan
-  , fieldType
-  , fixitySpan
-  , funArity
-  , handleNoRetSyntax
-  , handleSyntax
-  , holeNameOf
-  , isDoBindSyntaxName
-  , isDoIgnoreSyntaxName
-  , isHandleNoRetSyntax
-  , isHandleSyntax
-  , isHoleName
-  , isInternalSyntaxName
-  , isListConsSyntax
-  , isListNilSyntax
-  , isMacroSyntaxName
-  , isOverCtorName
-  , isPerformSyntax
-  , isRowAtSyntax
-  , listConsSyntax
-  , listNilSyntax
-  , macroNameOf
-  , macroSyntaxName
-  , macroSyntaxPrefix
-  , opacitySpecName
-  , opacitySpecSpan
-  , overCtorName
-  , overCtorShort
-  , overCtorTargets
-  , patSpan
-  , performSyntax
-  , qtyIsZero
-  , reprPrefix
-  , rowAtSyntax
-  , topNames
-  , traitMethodName
-  , traitMethodSpan
-  , typeNamesOf
-  ) where
+module Vuna.Compiler.Frontend.Ast where
 
 -- Vuna.Compiler.Frontend.Ast：core-v0/M10.5 的语法类型与 AST 辅助函数。
 import Vuna.Compiler.Common
 
 -- 记录字段：字段名 + 类型表达式 + span（M10.5）。
-record Field where
+export record Field(..) where
   fieldName : String
   fieldType : Expr
   fieldSpan : Span
 
 -- trait 方法签名：方法名 + 类型表达式 + span（M30 B20：span 覆盖「方法名到类型结束」，
 -- 让方法级诊断/符号/注释锚点能落到方法行，而不是整条 trait 声明行）。
-record TraitMethod where
+export record TraitMethod(..) where
   traitMethodName : String
   traitMethodType : Expr
   traitMethodSpan : Span
 
 -- 多参数 trait 的显式 kind 参数：`trait C (a : Type) (r : Row)`；裸参数 kind = Nothing。
-record TraitParam where
+export record TraitParam(..) where
   traitParamName : String
   traitParamKind : Maybe Expr
 
-data Pat : Type where
+export data Pat(..) : Type where
   PVar : String -> Span -> Pat
   -- as-pattern（`x@pat` / `(pat)@x`）：匹配内层模式，并把整个匹配值绑定到 x。
   PAs : String -> Pat -> Span -> Pat
@@ -159,17 +31,17 @@ data Pat : Type where
   PStr : String -> Span -> Pat
   PRecord : String -> List (Pair String Pat) -> Span -> Pat
 
-data InterpPart : Type where
+export data InterpPart(..) : Type where
   IPText : String -> InterpPart
   IPHole : Expr -> InterpPart
 
 -- M38：显式 binder quantity。源码写法 `(0 x : A)` / `(1 x : A)`；不写 = ω。
 -- 只列可写出的两档；`RigOmega` 由「没有 Qty」表示，不引入 ω 字形。
-data Qty : Type where
+export data Qty(..) : Type where
   Q0 : Qty
   Q1 : Qty
 
-qtyIsZero : Qty -> Bool
+export qtyIsZero : Qty -> Bool
 qtyIsZero Q0 = True
 qtyIsZero Q1 = False
 
@@ -177,7 +49,7 @@ qtyIsZero Q1 = False
 -- `ReprAuto` = 未声明：回落到自动去装箱推断（过渡；终态删除推断）。
 -- `ReprAlias` = 声明去装箱别名：构造/投影定义性恒等，要求擦除后恰好一个运行时字段。
 -- `ReprBoxed` = 声明强制装箱（FFI/ABI 稳定）。档位进 DtData 与 iface（D7：声明优先）。
-data ReprTier : Type where
+export data ReprTier(..) : Type where
   ReprAuto : ReprTier
   ReprAlias : ReprTier
   ReprBoxed : ReprTier
@@ -186,12 +58,12 @@ data ReprTier : Type where
 --
 -- 迁移期：仓库源码仍用旧词，Fmt 先继续输出旧词，避免 `vuna fmt --check` 与源码不一致；
 -- 源码迁移到 `alias`/`boxed` 后（Phase 2）改回新词。
-reprPrefix : ReprTier -> String
+export reprPrefix : ReprTier -> String
 reprPrefix ReprAuto = ""
 reprPrefix ReprAlias = "alias "
 reprPrefix ReprBoxed = "boxed "
 
-data Expr : Type where
+export data Expr(..) : Type where
   EVar : String -> Span -> Expr
   EInt : Int -> Span -> Expr
   EStr : String -> Span -> Expr
@@ -239,28 +111,28 @@ data Expr : Type where
 -- M31.2：fixity / 别名声明（`infixl 6 +`、`infixr 5 :: = Cons`、`infix 4 == = eq`）。
 -- 只进入 `SourceFile.fixities`，由 Loader 在中缀重排时消费；**不进入 `Decl`**，避免所有
 -- Decl 匹配点扩散。
-record FixityDecl where
+export record FixityDecl(..) where
   fixityOp : String
   fixityLevel : Int
   fixityAssoc : Int
   fixityTarget : Maybe String
   fixitySpan : Span
 
-fixitySpan : FixityDecl -> Span
+export fixitySpan : FixityDecl -> Span
 fixitySpan (FixityDecl op level assoc target sp) = sp
 
 -- do 语句（M11）：`pat <- expr` 或裸表达式；最后一条必须是裸表达式。
-data DoStmt : Type where
+export data DoStmt(..) : Type where
   DBind : Pat -> Expr -> Span -> DoStmt
   DExpr : Expr -> Span -> DoStmt
 
-record Ctor where
+export record Ctor(..) where
   ctorName : String
   ctorType : Expr
   ctorArity : Int
   ctorSpan : Span
 
-data Decl : Type where
+export data Decl(..) : Type where
   -- M14：`data Name params : kind where`；kind 是索引族的类型表达式（HM 路径只接受 `Type`）。
   -- M38：末位 `Bool` 是 `lin data` 标记。
   -- M42：`derivings` 后的 `Bool` 是 `deriving via field` 标记（仅 record 允许）。
@@ -286,51 +158,51 @@ data Decl : Type where
 -- M10 模块头与导出项。
 -- XBare 是裸名导出，XTypeAll 是 `T(..)`，XModule 是 `module B` 整模块重导出。
 -- XTypeSome 是 `T(A, B)`（D11：data 构造子 / trait 方法子集；顺序无语义）。
-data ExportItem : Type where
+export data ExportItem(..) : Type where
   XBare : String -> Span -> ExportItem
   XTypeAll : String -> Span -> ExportItem
   XTypeSome : String -> List String -> Span -> ExportItem
   XModule : String -> Span -> ExportItem
 
 -- D11：逐定义 `export` 的成员集合（`T` / `T(..)` / `T(A, B)`）。
-data ExportMembers : Type where
+export data ExportMembers(..) : Type where
   EMNone : ExportMembers
   EMAll : ExportMembers
   EMOnly : List String -> ExportMembers
 
 -- D11：一条逐定义导出声明。
 -- `ESValue` = 值/axiom/extern/用户符号；`ESType` = data/record/trait + 成员面。
-data ExportSpec : Type where
+export data ExportSpec(..) : Type where
   ESValue : String -> Span -> ExportSpec
   ESType : String -> ExportMembers -> Span -> ExportSpec
 
-exportSpecName : ExportSpec -> String
+export exportSpecName : ExportSpec -> String
 exportSpecName (ESValue name sp) = name
 exportSpecName (ESType name members sp) = name
 
-exportSpecSpan : ExportSpec -> Span
+export exportSpecSpan : ExportSpec -> Span
 exportSpecSpan (ESValue name sp) = sp
 exportSpecSpan (ESType name members sp) = sp
 
 -- D11：定义归约修饰符。
-data Opacity : Type where
+export data Opacity(..) : Type where
   OpacityOpaque : Opacity
   OpacityTransparent : Opacity
 
-record OpacitySpec where
+export record OpacitySpec(..) where
   opacityName : String
   opacityKind : Opacity
   opacitySpan : Span
 
-opacitySpecName : OpacitySpec -> String
+export opacitySpecName : OpacitySpec -> String
 opacitySpecName (OpacitySpec name kind sp) = name
 
-opacitySpecSpan : OpacitySpec -> Span
+export opacitySpecSpan : OpacitySpec -> Span
 opacitySpecSpan (OpacitySpec name kind sp) = sp
 
 -- 模块头：模块名、是否写了显式导出列表、导出项、span；
 -- D11：逐定义导出/重导出/归约修饰符也挂在模块头（入口文件没有模块头，不需要它们）。
-record ModDecl where
+export record ModDecl(..) where
   modDeclName : String
   modDeclHasExportList : Bool
   modDeclExportItems : List ExportItem
@@ -340,7 +212,7 @@ record ModDecl where
   modDeclSpan : Span
 
 -- parser 的产物：可选模块头 + imports + fixity/别名声明 + 顶层声明。
-record SourceFile where
+export record SourceFile(..) where
   sourceFileModDecl : Maybe ModDecl
   sourceFileImports : List Import
   sourceFileFixities : List FixityDecl
@@ -351,7 +223,7 @@ record SourceFile where
   sourceFileOpacity : List OpacitySpec
 
 -- 各节点的源码 span 访问器。
-patSpan : Pat -> Span
+export patSpan : Pat -> Span
 patSpan (PVar name sp) = sp
 patSpan (PAs name inner sp) = sp
 patSpan (PWild sp) = sp
@@ -360,7 +232,7 @@ patSpan (PInt n sp) = sp
 patSpan (PStr s sp) = sp
 patSpan (PRecord name fields sp) = sp
 
-exprSpan : Expr -> Span
+export exprSpan : Expr -> Span
 exprSpan (EVar name sp) = sp
 exprSpan (EInfix op lhs rhs sp) = sp
 exprSpan (EParen inner sp) = exprSpan inner
@@ -385,15 +257,15 @@ exprSpan (EDo stmts sp) = sp
 exprSpan (EAnn inner ty sp) = sp
 exprSpan (EInterp multi parts sp) = sp
 
-doStmtSpan : DoStmt -> Span
+export doStmtSpan : DoStmt -> Span
 doStmtSpan (DBind pat expr sp) = sp
 doStmtSpan (DExpr expr sp) = sp
 
-doStmtExpr : DoStmt -> Expr
+export doStmtExpr : DoStmt -> Expr
 doStmtExpr (DBind pat expr sp) = expr
 doStmtExpr (DExpr expr sp) = expr
 
-declSpan : Decl -> Span
+export declSpan : Decl -> Span
 declSpan (DData name params kind ctors derivings viaField repr lin sp) = sp
 declSpan (DAxiom name ty sp) = sp
 declSpan (DExtern name cName ty sp) = sp
@@ -403,83 +275,83 @@ declSpan (DRecord name params fields derivings viaField repr lin sp) = sp
 declSpan (DTrait name params methods sp) = sp
 declSpan (DInstance ctxE head methods sp) = sp
 
-ctorSpan : Ctor -> Span
+export ctorSpan : Ctor -> Span
 ctorSpan (Ctor name ty arity sp) = sp
 
-fieldSpan : Field -> Span
+export fieldSpan : Field -> Span
 fieldSpan (Field name ty sp) = sp
 
-fieldName : Field -> String
+export fieldName : Field -> String
 fieldName (Field name ty sp) = name
 
-fieldType : Field -> Expr
+export fieldType : Field -> Expr
 fieldType (Field name ty sp) = ty
 
-traitMethodName : TraitMethod -> String
+export traitMethodName : TraitMethod -> String
 traitMethodName (TraitMethod name ty sp) = name
 
-traitMethodSpan : TraitMethod -> Span
+export traitMethodSpan : TraitMethod -> Span
 traitMethodSpan (TraitMethod name ty sp) = sp
 
-record Import where
+export record Import(..) where
   importName : String
   importIsQualified : Bool
   importAlias : Maybe String
   importSpan : Span
 
-exportItemSpan : ExportItem -> Span
+export exportItemSpan : ExportItem -> Span
 exportItemSpan (XBare name sp) = sp
 exportItemSpan (XTypeAll name sp) = sp
 exportItemSpan (XTypeSome name members sp) = sp
 exportItemSpan (XModule name sp) = sp
 
-collectClauses : List Decl -> String -> List (Pair (List Pat) Expr)
+export collectClauses : List Decl -> String -> List (Pair (List Pat) Expr)
 collectClauses [] name = []
 collectClauses (d :: rest) name = case d of
   DFun n pats body _ =>
     if n == name then Pair pats body :: collectClauses rest name else collectClauses rest name
   _ => collectClauses rest name
 
-clausesFor : List Decl -> String -> List (Pair (List Pat) Expr)
+export clausesFor : List Decl -> String -> List (Pair (List Pat) Expr)
 clausesFor decls name = collectClauses decls name
 
-funArity : String -> List Decl -> Maybe Int
+export funArity : String -> List Decl -> Maybe Int
 funArity name decls = case clausesFor decls name of
   [] => Nothing
   (Pair pats body) :: _ => Just (natToInt (length pats))
 
-ctorName : Ctor -> String
+export ctorName : Ctor -> String
 ctorName (Ctor name ty arity _) = name
 
 -- canonical 构造子名的最后一段（短名）。data 构造子的 canonical 形如
 -- `Module.Data.Ctor`（entry 文件是 `Data.Ctor`），短名用于族内查找/OCaml 名字/诊断。
 -- | 自动补注（M41 新增导出）：ctorShortName。
-ctorShortName : String -> String
+export ctorShortName : String -> String
 ctorShortName name = secondOf (splitLastDot (splitOnDot name))
 
 -- 用户可见的构造子名：`FamilyShort.Ctor`（单段名原样返回）。
 -- 不用完整的 `Module.Data.Ctor`：那会把模块路径泄漏进诊断。
 -- | 自动补注（M41 新增导出）：ctorDisplayName。
-ctorDisplayName : String -> String
+export ctorDisplayName : String -> String
 ctorDisplayName name = case splitLastDot (splitOnDot name) of
   Pair [] base => base
   Pair revPrefix base => case reverse revPrefix of
     [] => base
     fam :: rest => "${fam}.${base}"
 
-ctorType : Ctor -> Expr
+export ctorType : Ctor -> Expr
 ctorType (Ctor name ty arity _) = ty
 
-typeArity : Expr -> Int
+export typeArity : Expr -> Int
 typeArity (EApp (EVar "->" _) ([x, rest]) _) = 1 + typeArity rest
 typeArity _ = 0
 
-lookupCtorArity : String -> List Ctor -> Maybe Int
+export lookupCtorArity : String -> List Ctor -> Maybe Int
 lookupCtorArity name [] = Nothing
 lookupCtorArity name (c :: rest) =
   if ctorName c == name then Just c.ctorArity else lookupCtorArity name rest
 
-ctorArity : String -> List Decl -> Maybe Int
+export ctorArity : String -> List Decl -> Maybe Int
 ctorArity name [] = Nothing
 ctorArity name (d :: rest) = case d of
   DData dname params kind ctors derivings viaField repr lin sp => case lookupCtorArity name ctors of
@@ -489,7 +361,7 @@ ctorArity name (d :: rest) = case d of
     if name == dname then Just (natToInt (length fields)) else ctorArity name rest
   _ => ctorArity name rest
 
-declNames : Decl -> List String
+export declNames : Decl -> List String
 declNames (DFun name pats body _) = [name]
 declNames (DAxiom name ty _) = [name]
 declNames (DExtern name cName ty _) = [name]
@@ -502,10 +374,10 @@ declNames (DInstance ctxE head methods _) = []
 -- 顶层可见名字（M20：把 data / record / trait 的**类型名**也算进来）。
 -- Loader 用它判断「是不是本模块声明的名字」；DT 的类型名可以在值层位置出现
 -- （`Vec n Nat` 的 `Nat`），所以必须一并认出来。语义仍由下游检查器决定。
-topNames : List Decl -> List String
+export topNames : List Decl -> List String
 topNames decls = concatMap declNames decls
 
-declAllNames : Decl -> List String
+export declAllNames : Decl -> List String
 declAllNames (DData dname params kind ctors derivings viaField repr lin _) =
   dname :: map ctorName ctors
 declAllNames (DRecord dname params fields derivings viaField repr lin _) = [dname]
@@ -518,19 +390,19 @@ _declCtors (DRecord dname params fields derivings viaField repr lin _) = [dname]
 _declCtors (DTrait tname params methods _) = map traitMethodName methods
 _declCtors _ = []
 
-ctorsOf : List Decl -> List String
+export ctorsOf : List Decl -> List String
 ctorsOf decls = concatMap _declCtors decls
 
-declTypeNames : Decl -> List String
+export declTypeNames : Decl -> List String
 declTypeNames (DData name params kind ctors derivings viaField repr lin _) = [name]
 declTypeNames (DRecord name params fields derivings viaField repr lin _) = [name]
 declTypeNames (DTrait name params methods _) = [name]
 declTypeNames _ = []
 
-typeNamesOf : List Decl -> List String
+export typeNamesOf : List Decl -> List String
 typeNamesOf decls = concatMap declTypeNames decls
 
-declDerivings : Decl -> List String
+export declDerivings : Decl -> List String
 declDerivings (DData name params kind ctors derivings viaField repr lin _) = derivings
 declDerivings (DRecord name params fields derivings viaField repr lin _) = derivings
 declDerivings _ = []
@@ -541,16 +413,16 @@ declDerivings _ = []
 -- Termination/Codegen 的结构遍历因此零改动）；洞名判定是唯一真源，Loader 放行、
 -- 精化器建 goal、索引引用过滤都走这里。
 -- ---------------------------------------------------------------
-isHoleName : String -> Bool
+export isHoleName : String -> Bool
 isHoleName name = name == "_" || holeNamed name
 
-holeNamed : String -> Bool
+export holeNamed : String -> Bool
 holeNamed name = case strUnpack name of
   63 :: _ :: _ => True
   _ => False
 
 -- 洞的显示名：`_` → ""（匿名）；`?name` → "?name"。
-holeNameOf : String -> String
+export holeNameOf : String -> String
 holeNameOf name = if holeNamed name then name else ""
 
 -- ---------------------------------------------------------------
@@ -560,71 +432,71 @@ holeNameOf name = if holeNamed name then name else ""
 -- parse 阶段的结构遍历因此零改动（这些名字只在 Loader 之后出现，且不参与用户符号）。
 --   `@vuna@ctor@<短名>@<候选 canonical 1>@<候选 canonical 2>...`
 -- | 自动补注（M41 新增导出）：internalNamePrefix。
-internalNamePrefix : String
+export internalNamePrefix : String
 internalNamePrefix = "@vuna@"
 
 -- | 自动补注（M41 新增导出）：overCtorPrefix。
-overCtorPrefix : String
+export overCtorPrefix : String
 overCtorPrefix = "@vuna@ctor@"
 
 -- | 自动补注（M41 新增导出）：isInternalSyntaxName。
-isInternalSyntaxName : String -> Bool
+export isInternalSyntaxName : String -> Bool
 isInternalSyntaxName name = startsWith internalNamePrefix name
 
 -- | 自动补注（M41 新增导出）：dropNChars。
-dropNChars : Int -> List Int -> List Int
+export dropNChars : Int -> List Int -> List Int
 dropNChars n xs = if n <= 0 then xs
 else case xs of
   [] => []
   _ :: rest => dropNChars (n - 1) rest
 
 -- | 自动补注（M41 新增导出）：dropNamePrefix。
-dropNamePrefix : String -> String -> String
+export dropNamePrefix : String -> String -> String
 dropNamePrefix p name =
   if startsWith p name then strPack (dropNChars (strLength p) (strUnpack name)) else name
 
 -- | 自动补注（M41 新增导出）：joinWithAt。
-joinWithAt : List String -> String
+export joinWithAt : List String -> String
 joinWithAt [] = ""
 joinWithAt ([x]) = x
 joinWithAt (x :: rest) = "${x}@${joinWithAt rest}"
 
 -- | 自动补注（M41 新增导出）：overCtorName。
-overCtorName : String -> List String -> String
+export overCtorName : String -> List String -> String
 overCtorName short targets = "${overCtorPrefix}${short}@${joinWithAt targets}"
 
 -- | 自动补注（M41 新增导出）：overCtorShort。
-overCtorShort : String -> String
+export overCtorShort : String -> String
 overCtorShort name = case splitOnChar 64 (dropNamePrefix overCtorPrefix name) of
   [] => ""
   s :: rest => s
 
 -- | 自动补注（M41 新增导出）：overCtorTargets。
-overCtorTargets : String -> List String
+export overCtorTargets : String -> List String
 overCtorTargets name = case splitOnChar 64 (dropNamePrefix overCtorPrefix name) of
   [] => []
   s :: rest => rest
 
 -- | 自动补注（M41 新增导出）：isOverCtorName。
-isOverCtorName : String -> Bool
+export isOverCtorName : String -> Bool
 isOverCtorName name = startsWith overCtorPrefix name
 
 -- M41：列表字面量的保留名（parser 产出；Loader 原样放行；Elab 按期望族的 Nil/Cons
 -- 通用展开）。不再借裸 `Nil`/`Cons` 走构造子名字解析。
 -- | 自动补注（M41 新增导出）：listNilSyntax。
-listNilSyntax : String
+export listNilSyntax : String
 listNilSyntax = "@vuna@list@nil"
 
 -- | 自动补注（M41 新增导出）：listConsSyntax。
-listConsSyntax : String
+export listConsSyntax : String
 listConsSyntax = "@vuna@list@cons"
 
 -- | 自动补注（M41 新增导出）：isListNilSyntax。
-isListNilSyntax : String -> Bool
+export isListNilSyntax : String -> Bool
 isListNilSyntax name = name == listNilSyntax
 
 -- | 自动补注（M41 新增导出）：isListConsSyntax。
-isListConsSyntax : String -> Bool
+export isListConsSyntax : String -> Bool
 isListConsSyntax name = name == listConsSyntax
 
 -- ---------------------------------------------------------------
@@ -646,11 +518,11 @@ isListConsSyntax name = name == listConsSyntax
 -- （行解 / 默认名）与 res 族（`res<族短名>`），再降级到 `Base.Eff.performCore`。
 -- 用户源码写不出 `@vuna@` 开头的标识符，所以标记不会与用户名字冲突。
 -- | 自动补注（N1 新增导出）：performSyntax。
-performSyntax : String
+export performSyntax : String
 performSyntax = "@vuna@perform"
 
 -- | 自动补注（N1 新增导出）：isPerformSyntax。
-isPerformSyntax : String -> Bool
+export isPerformSyntax : String -> Bool
 isPerformSyntax name = name == performSyntax
 
 -- native-effects N1（提交 4b）：`handle <comp> { ... }` 的保留名编码（ND12）。parser 产出
@@ -662,29 +534,29 @@ isPerformSyntax name = name == performSyntax
 --     续延 binder `k` 是 λ 的第二个参数（同一 handle 块的所有 op 子句共用这个名字）。
 -- Elab 从 clause 构造子推 op 族，再降级到 `Base.Eff.handleWith`。
 -- | 自动补注（N1 提交 4b 新增导出）：handleSyntax。
-handleSyntax : String
+export handleSyntax : String
 handleSyntax = "@vuna@handle"
 
 -- | 自动补注（N1 提交 4b 新增导出）：isHandleSyntax。
-isHandleSyntax : String -> Bool
+export isHandleSyntax : String -> Bool
 isHandleSyntax name = name == handleSyntax
 
 -- | 自动补注（N1 提交 4b 新增导出）：handleNoRetSyntax（无 return 子句的哨兵）。
-handleNoRetSyntax : String
+export handleNoRetSyntax : String
 handleNoRetSyntax = "@vuna@handle@noret"
 
 -- | 自动补注（N1 提交 4b 新增导出）：isHandleNoRetSyntax。
-isHandleNoRetSyntax : String -> Bool
+export isHandleNoRetSyntax : String -> Bool
 isHandleNoRetSyntax name = name == handleNoRetSyntax
 
 -- native-effects N1（ND4）：行字面量里的显式实例名 `X@name`，编码成
 -- `EApp (EVar "@vuna@row@at") [X, name]`；只在行字面量展开时被解释。
 -- | 自动补注（N1 新增导出）：rowAtSyntax。
-rowAtSyntax : String
+export rowAtSyntax : String
 rowAtSyntax = "@vuna@row@at"
 
 -- | 自动补注（N1 新增导出）：isRowAtSyntax。
-isRowAtSyntax : String -> Bool
+export isRowAtSyntax : String -> Bool
 isRowAtSyntax name = name == rowAtSyntax
 
 -- ---------------------------------------------------------------
@@ -696,49 +568,49 @@ isRowAtSyntax name = name == rowAtSyntax
 -- 都看不到标记；Fmt 反向把标记渲染回 `name!`，Index 过滤标记引用。用户源码写不出
 -- `@vuna@` 开头的标识符，标记不会与用户名字冲突。
 -- | 宏调用标记的前缀（parser 产出、Loader 展开、Fmt 回渲染共用的唯一真源）。
-macroSyntaxPrefix : String
+export macroSyntaxPrefix : String
 macroSyntaxPrefix = "@vuna@macro@"
 
 -- | 由宏名生成 parser / Loader 之间的标记名。
-macroSyntaxName : String -> String
+export macroSyntaxName : String -> String
 macroSyntaxName name = "${macroSyntaxPrefix}${name}"
 
 -- | 是否是宏调用标记名（`@vuna@macro@<name>`）。
-isMacroSyntaxName : String -> Bool
+export isMacroSyntaxName : String -> Bool
 isMacroSyntaxName name = startsWith macroSyntaxPrefix name
 
 -- | 宏调用标记名 → 用户书写的宏名（非标记返回 `Nothing`）。
-macroNameOf : String -> Maybe String
+export macroNameOf : String -> Maybe String
 macroNameOf name =
   if isMacroSyntaxName name then Just (dropNamePrefix macroSyntaxPrefix name) else Nothing
 
 -- | 自动补注（S3 新增导出）：doBindSyntaxPrefix。
-doBindSyntaxPrefix : String
+export doBindSyntaxPrefix : String
 doBindSyntaxPrefix = "@vuna@do@bind@"
 
 -- | 自动补注（S3 新增导出）：doIgnoreSyntaxPrefix。
-doIgnoreSyntaxPrefix : String
+export doIgnoreSyntaxPrefix : String
 doIgnoreSyntaxPrefix = "@vuna@do@ignore@"
 
 -- | 自动补注（S3 新增导出）：doBindSyntaxName。
-doBindSyntaxName : String -> String
+export doBindSyntaxName : String -> String
 doBindSyntaxName canonical = "${doBindSyntaxPrefix}${canonical}"
 
 -- | 自动补注（S3 新增导出）：doIgnoreSyntaxName。
-doIgnoreSyntaxName : String -> String
+export doIgnoreSyntaxName : String -> String
 doIgnoreSyntaxName canonical = "${doIgnoreSyntaxPrefix}${canonical}"
 
 -- | 自动补注（S3 新增导出）：isDoBindSyntaxName。
-isDoBindSyntaxName : String -> Bool
+export isDoBindSyntaxName : String -> Bool
 isDoBindSyntaxName name = startsWith doBindSyntaxPrefix name
 
 -- | 自动补注（S3 新增导出）：isDoIgnoreSyntaxName。
-isDoIgnoreSyntaxName : String -> Bool
+export isDoIgnoreSyntaxName : String -> Bool
 isDoIgnoreSyntaxName name = startsWith doIgnoreSyntaxPrefix name
 
 -- 标记头里的 canonical bind 名；不是 do 标记头返回 `Nothing`。
 -- | 自动补注（S3 新增导出）：doSyntaxCanonical。
-doSyntaxCanonical : String -> Maybe String
+export doSyntaxCanonical : String -> Maybe String
 doSyntaxCanonical name =
   if isDoBindSyntaxName name then Just (dropNamePrefix doBindSyntaxPrefix name)
   else if isDoIgnoreSyntaxName name then Just (dropNamePrefix doIgnoreSyntaxPrefix name) else Nothing

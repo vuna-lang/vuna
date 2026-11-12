@@ -1,11 +1,5 @@
 -- | 静态包索引：`index/<name>.toml` 的解析与版本解析（`vuna add` 的查询层）。
-module Vuna.Registry
-  ( RegistryEntry(..)
-  , Release(..)
-  , loadRegistryEntryEff
-  , parseRegistryEntry
-  , resolveRelease
-  ) where
+module Vuna.Registry where
 
 -- Vuna.Registry：**可选**的静态索引（D14）。它只是 `name [@version] → (源, hash)` 的
 -- 便利层，不是身份真源：
@@ -32,13 +26,13 @@ import Base.List
 import Base.String
 
 -- | 一条发布：人读版本号 + 不可变源 + 内容摘要。
-record Release where
+export record Release(..) where
   relVersion : String
   relSource : DependencySource
   relHash : String
 
 -- | 一个包的索引条目（发布顺序 = 文件里的顺序）。
-record RegistryEntry where
+export record RegistryEntry(..) where
   regName : String
   regReleases : List Release
 
@@ -49,7 +43,7 @@ lastRelease ([x]) = Just x
 lastRelease (_ :: rest) = lastRelease rest
 
 -- | 按版本精确解析；`Nothing` 取索引里的最后一个发布。
-resolveRelease : RegistryEntry -> Maybe String -> Maybe Release
+export resolveRelease : RegistryEntry -> Maybe String -> Maybe Release
 resolveRelease entry Nothing = lastRelease entry.regReleases
 resolveRelease entry (Just version) = findRelease version entry.regReleases
 
@@ -88,7 +82,7 @@ buildRelease path version entries =
       Nothing => pkgPath1 path (IndexMalformed "release ${version}: needs git or url") version
 
 -- | 解析索引文件文本。
-parseRegistryEntry : String -> String -> Check RegistryEntry
+export parseRegistryEntry : String -> String -> Check RegistryEntry
 parseRegistryEntry path text = case parseTomlAt path text of
   ErrC e => ErrC e
   OkC entries => case stringEntry path ["package"] "name" entries of
@@ -114,7 +108,7 @@ isFileUrl : String -> Bool
 isFileUrl s = startsWith "file://" s
 
 -- | 读索引条目：目录 / `file://` / `http(s)://`（后者经宿主 `curl` 落到临时文件）。
-loadRegistryEntryEff : String -> String -> Eff [] (Check RegistryEntry)
+export loadRegistryEntryEff : String -> String -> Eff [] (Check RegistryEntry)
 loadRegistryEntryEff indexRoot name =
   let
     root = stripIndexSlash indexRoot

@@ -1,4 +1,4 @@
-module Vuna.Clean (runClean) where
+module Vuna.Clean where
 
 -- Vuna.Clean：缓存清理（`vuna clean [--iface] [--store] [--packages] [--gc] [--all] [--dry-run] [DIR]`）。
 --
@@ -20,7 +20,7 @@ import Vuna.Compiler.Store
 import Base.List
 import Base.String
 
-runClean : List String -> Eff [] Int
+export runClean : List String -> Eff [] Int
 runClean args = case parseToolArgs "vuna clean" [BoolFlag "dry-run", BoolFlag "iface", BoolFlag "store", BoolFlag "packages", BoolFlag "gc", BoolFlag "all"] args of
   ErrC e => cleanError (diagText e)
   OkC parsed =>

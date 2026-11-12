@@ -1,4 +1,6 @@
-module Vuna.Doc (runDoc) where
+module Vuna.Doc where
+
+export import Vuna.Doc.Run (runDoc)
 
 -- Vuna.Doc：`vuna doc` 的门面（工具链；永不进 seed 闭包）。
 --
@@ -10,4 +12,3 @@ module Vuna.Doc (runDoc) where
 --   * Vuna.Doc.Run        参数、包发现、[export]、--check、写出。
 --
 -- 输出是**一个自包含 HTML**；旧的 docs/api.md 工作流已删除（不再生成 Markdown）。
-import Vuna.Doc.Run

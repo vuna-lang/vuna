@@ -1,15 +1,4 @@
-module Vuna.Compiler.Frontend.Manifest
-  ( Dependency(..)
-  , DependencySource(..)
-  , Manifest(..)
-  , depAliasOf
-  , depHashOf
-  , depSourceOf
-  , manifestDir
-  , parseManifest
-  , resolveManifestPath
-  , validateManifest
-  ) where
+module Vuna.Compiler.Frontend.Manifest where
 
 -- Vuna.Compiler.Frontend.Manifest：vuna.toml 的语义模型（包管理基础件）。
 -- 表约定：
@@ -34,27 +23,27 @@ import Vuna.Compiler.Frontend.Toml
 import Vuna.Compiler.Diagnostics.Pkg
 
 -- | 依赖来源：相对路径（可变输入）/ git（url + rev）/ 单个 url。
-data DependencySource : Type where
+export data DependencySource(..) : Type where
   DepPath : String -> DependencySource
   DepGit : String -> String -> DependencySource
   DepUrl : String -> DependencySource
 
 -- | 一条依赖声明：本地别名 + 来源 + 可选摘要。
-record Dependency where
+export record Dependency(..) where
   depAlias : String
   depSource : DependencySource
   depHash : Maybe String
 
-depAliasOf : Dependency -> String
+export depAliasOf : Dependency -> String
 depAliasOf (Dependency alias source hash) = alias
 
-depSourceOf : Dependency -> DependencySource
+export depSourceOf : Dependency -> DependencySource
 depSourceOf (Dependency alias source hash) = source
 
-depHashOf : Dependency -> Maybe String
+export depHashOf : Dependency -> Maybe String
 depHashOf (Dependency alias source hash) = hash
 
-record Manifest where
+export record Manifest(..) where
   manifestName : Maybe String
   manifestMembers : List String
   manifestExports : Maybe (List String)
@@ -384,7 +373,7 @@ buildManifest path entries = case checkEntries path entries of
                               OkC
                                 (Manifest name (orEmptyList members) exports deps path diagFmt diagWarns diagMax diagLang diagDeny regIndex)
 
-parseManifest : String -> String -> Check Manifest
+export parseManifest : String -> String -> Check Manifest
 parseManifest path contents =
   Vuna.Compiler.Common.bind (parseTomlAt path contents) (\entries => buildManifest path entries)
 
@@ -437,13 +426,13 @@ validateExports : String -> Maybe (List String) -> Check Int
 validateExports path Nothing = OkC 0
 validateExports path (Just modules) = validateModules path modules
 
-validateManifest : Manifest -> Check Manifest
+export validateManifest : Manifest -> Check Manifest
 validateManifest (Manifest name members exports deps path diagFmt diagWarns diagMax diagLang diagDeny regIndex) =
   Vuna.Compiler.Common.bind (validateName path name)
     (\okName => Vuna.Compiler.Common.bind (validateMembers path members) (\okMembers => Vuna.Compiler.Common.bind (validateExports path exports) (\okExports => Vuna.Compiler.Common.bind (validateDependencies path deps) (\okDeps => OkC (Manifest name members exports deps path diagFmt diagWarns diagMax diagLang diagDeny regIndex)))))
 
 -- manifest 所在目录：`a/b/vuna.toml` -> `a/b`；没有目录成分 -> "."。
-manifestDir : String -> String
+export manifestDir : String -> String
 manifestDir path = dirFromRev (reverse (strUnpack path))
 
 dirFromRev : List Int -> String
@@ -454,7 +443,7 @@ dirResult : String -> String
 dirResult dir = if dir == "" then "/" else dir
 
 -- 依赖路径的相对解析基础：manifest 目录 + 相对路径。
-resolveManifestPath : Manifest -> String -> String
+export resolveManifestPath : Manifest -> String -> String
 resolveManifestPath manifest rel =
   let
     dir = manifestDir manifest.manifestPath

@@ -1,40 +1,4 @@
-module Vuna.Lsp.Protocol
-  ( allDigits
-  , clampInt
-  , contentLengthOf
-  , decodeUri
-  , digitsToInt
-  , dirOfPath
-  , errInvalidParams
-  , errMethodNotFound
-  , fileNameOf
-  , findNamePos
-  , findSubstring
-  , flushLogLines
-  , idOf
-  , isEmptyList
-  , isPrefixChars
-  , lastElem
-  , lastSegment
-  , lineText
-  , logLine
-  , lspRange
-  , notify
-  , nthCode
-  , paramsOf
-  , parentDir
-  , pathToUri
-  , qualPrefixLen
-  , readChunk
-  , responseErr
-  , responseOk
-  , spanContainsPos
-  , spanRange
-  , splitHeaderBlock
-  , stripTrailingDots
-  , tokenAtCursor
-  , wordPrefixLen
-  ) where
+module Vuna.Lsp.Protocol where
 
 -- Vuna.Lsp.Protocol：LSP 的传输与通用工具层（工具链模块，**永不进 seed 闭包**）。
 --
@@ -52,51 +16,51 @@ module Vuna.Lsp.Protocol
 -- REPL server 共用同一份机械实现，各自的请求语义/错误策略留在各自模块。
 import Vuna.Compiler.Common
 import Vuna.Json
-import Vuna.Json.Frame
-import Vuna.Json.Rpc
+export import Vuna.Json.Frame
+export import Vuna.Json.Rpc
 
 -- 小工具
 -- ---------------------------------------------------------------
-maxInt : Int -> Int -> Int
+export maxInt : Int -> Int -> Int
 maxInt a b = if a >= b then a else b
 
-clampInt : Int -> Int -> Int -> Int
+export clampInt : Int -> Int -> Int -> Int
 clampInt lo hi v = if v < lo then lo else if v > hi then hi else v
 
-isEmptyList : List a -> Bool
+export isEmptyList : List a -> Bool
 isEmptyList [] = True
 isEmptyList _ = False
 
-isWordCode : Int -> Bool
+export isWordCode : Int -> Bool
 isWordCode c = c >= 48 && c <= 57 || c >= 65 && c <= 90 || c >= 97 && c <= 122 || c == 95
 
-wordPrefixLen : List Int -> Int
+export wordPrefixLen : List Int -> Int
 wordPrefixLen [] = 0
 wordPrefixLen (c :: rest) = if isWordCode c then 1 + wordPrefixLen rest else 0
 
-qualPrefixLen : List Int -> Int
+export qualPrefixLen : List Int -> Int
 qualPrefixLen [] = 0
 qualPrefixLen (c :: rest) = if isWordCode c || c == 46 then 1 + qualPrefixLen rest else 0
 
 -- 第 i 个字符的字节码（0-based）；越界返回 -1。
-nthCode : List Int -> Int -> Int
+export nthCode : List Int -> Int -> Int
 nthCode [] i = 0 - 1
 nthCode (c :: rest) i = if i <= 0 then c else nthCode rest (i - 1)
 
-dropDotCodes : List Int -> List Int
+export dropDotCodes : List Int -> List Int
 dropDotCodes [] = []
 dropDotCodes (c :: rest) = if c == 46 then dropDotCodes rest else c :: rest
 
-stripTrailingDots : String -> String
+export stripTrailingDots : String -> String
 stripTrailingDots s = strPack (reverse (dropDotCodes (reverse (strUnpack s))))
 
-lastElem : List a -> Maybe a
+export lastElem : List a -> Maybe a
 lastElem [] = Nothing
 lastElem (x :: rest) = case rest of
   [] => Just x
   _ => lastElem rest
 
-lastSegment : String -> String
+export lastSegment : String -> String
 lastSegment token = case lastElem (splitOnDot token) of
   Nothing => token
   Just x => x
@@ -104,21 +68,21 @@ lastSegment token = case lastElem (splitOnDot token) of
 -- ---------------------------------------------------------------
 -- URI：file:// + %XX 解码/编码
 -- ---------------------------------------------------------------
-fileScheme : String
+export fileScheme : String
 fileScheme = "file://"
 
-hexValue : Int -> Int
+export hexValue : Int -> Int
 hexValue c =
   if c >= 48 && c <= 57 then c - 48
   else if c >= 97 && c <= 102 then c - 87 else if c >= 65 && c <= 70 then c - 55 else 0 - 1
 
-hexDigitCode : Int -> Int
+export hexDigitCode : Int -> Int
 hexDigitCode v = if v < 10 then 48 + v else 87 + v
 
-percentDecode : String -> String
+export percentDecode : String -> String
 percentDecode s = percentDecodeChars (strUnpack s) []
 
-percentDecodeChars : List Int -> List Int -> String
+export percentDecodeChars : List Int -> List Int -> String
 percentDecodeChars [] acc = strPack (reverse acc)
 percentDecodeChars (c :: rest) acc = if c == 37 then case rest of
   h :: l :: more =>
@@ -131,48 +95,48 @@ percentDecodeChars (c :: rest) acc = if c == 37 then case rest of
 else percentDecodeChars rest (c :: acc)
 
 -- URI 路径里只保留绝对安全字符，其余 %XX 编码。
-uriSafe : Int -> Bool
+export uriSafe : Int -> Bool
 uriSafe c = isWordCode c || c == 47 || c == 46 || c == 45 || c == 126
 
-percentEncode : String -> String
+export percentEncode : String -> String
 percentEncode s = strPack (reverse (percentEncodeChars (strUnpack s) []))
 
-percentEncodeChars : List Int -> List Int -> List Int
+export percentEncodeChars : List Int -> List Int -> List Int
 percentEncodeChars [] acc = acc
 percentEncodeChars (c :: rest) acc =
   if uriSafe c then percentEncodeChars rest (c :: acc)
   else percentEncodeChars rest (hexDigitCode (c - c / 16 * 16) :: hexDigitCode (c / 16) :: 37 :: acc)
 
-pathToUri : String -> String
+export pathToUri : String -> String
 pathToUri path = fileScheme ++ percentEncode path
 
-decodeUri : String -> String
+export decodeUri : String -> String
 decodeUri uri =
   if startsWith fileScheme uri then percentDecode (substring 7 (byteLength uri - 7) uri) else ""
 
 -- 路径工具：注意 `Vuna.Compiler.Common.splitPath` 按**第一个** `/` 切
 -- （Driver/Compile 也注明它不适合取 basename），不能用来取目录/文件名；
 -- 这里按最后一个 `/` 自己算。
-lastSlashGo : List Int -> Int -> Int -> Int
+export lastSlashGo : List Int -> Int -> Int -> Int
 lastSlashGo [] idx last = last
 lastSlashGo (c :: rest) idx last = lastSlashGo rest (idx + 1) (if c == 47 then idx else last)
 
-lastSlashIndex : String -> Int
+export lastSlashIndex : String -> Int
 lastSlashIndex s = lastSlashGo (strUnpack s) 0 (0 - 1)
 
 -- 目录部分（无 "/" 时返回 "."；根 "/" 返回 "/"）。
-dirOfPath : String -> String
+export dirOfPath : String -> String
 dirOfPath path = case lastSlashIndex path of
   i => if i < 0 then "." else if i == 0 then "/" else substring 0 (natFromInt i) path
 
 -- 最后一段（文件名/目录名）。
-fileNameOf : String -> String
+export fileNameOf : String -> String
 fileNameOf path = case lastSlashIndex path of
   i =>
     if i < 0 then path
     else substring (natFromInt (i + 1)) (natFromInt (strLength path - i - 1)) path
 
-parentDir : String -> String
+export parentDir : String -> String
 parentDir path =
   let
     d = dirOfPath path
@@ -181,28 +145,28 @@ parentDir path =
 -- ---------------------------------------------------------------
 -- 位置换算：vuna 的 Span 从 1 开始，LSP 从 0 开始
 -- ---------------------------------------------------------------
-lspPosition : Int -> Int -> Json
+export lspPosition : Int -> Int -> Json
 lspPosition line col =
   JObj [Pair "line" (JNum (maxInt 0 (line - 1))), Pair "character" (JNum (maxInt 0 (col - 1)))]
 
-lspRange : Int -> Int -> Int -> Int -> Json
+export lspRange : Int -> Int -> Int -> Int -> Json
 lspRange sl sc el ec = JObj [Pair "start" (lspPosition sl sc), Pair "end" (lspPosition el ec)]
 
-spanRange : Span -> Json
+export spanRange : Span -> Json
 spanRange sp = lspRange (spanStartLine sp) (spanStartCol sp) (spanEndLine sp) sp.spanEndCol
 
 -- 文档位置上的 token / 名字
 -- ---------------------------------------------------------------
 -- 第 line 行（1-based）的文本；越界返回 ""。
-lineText : String -> Int -> String
+export lineText : String -> Int -> String
 lineText text line = lineAt1 (split "\n" text) line
 
-lineAt1 : List String -> Int -> String
+export lineAt1 : List String -> Int -> String
 lineAt1 [] n = ""
 lineAt1 (x :: rest) n = if n <= 1 then x else lineAt1 rest (n - 1)
 
 -- 光标（1-based line/col）处的名字：允许限定名（`Base.List.map`），去掉尾部 `.`。
-tokenAtCursor : String -> Int -> Int -> Maybe (Pair Int String)
+export tokenAtCursor : String -> Int -> Int -> Maybe (Pair Int String)
 tokenAtCursor text line col =
   let
     ln = lineText text line
@@ -221,36 +185,36 @@ tokenAtCursor text line col =
 -- ---------------------------------------------------------------
 -- span / 文本定位小工具（Bindings / Query 共用；M40 从 Query 上移）
 -- ---------------------------------------------------------------
-posBeforeOrEq : Int -> Int -> Int -> Int -> Bool
+export posBeforeOrEq : Int -> Int -> Int -> Int -> Bool
 posBeforeOrEq l1 c1 l2 c2 = l1 < l2 || l1 == l2 && c1 <= c2
 
 -- 1-based 位置是否落在 span 内（含端点；与 `Fmt.Comment.containsPos` 同口径）。
-spanContainsPos : Span -> Int -> Int -> Bool
+export spanContainsPos : Span -> Int -> Int -> Bool
 spanContainsPos sp line col =
   posBeforeOrEq (spanStartLine sp) (spanStartCol sp) line col
     && posBeforeOrEq line col (spanEndLine sp) sp.spanEndCol
 
 -- 子串首次出现的字节偏移；找不到返回 -1（字节偏移）。
-findSubstring : String -> String -> Int
+export findSubstring : String -> String -> Int
 findSubstring needle hay = findSubGo (strUnpack needle) (strUnpack hay) 0
 
-findSubGo : List Int -> List Int -> Int -> Int
+export findSubGo : List Int -> List Int -> Int -> Int
 findSubGo needle [] idx = 0 - 1
 findSubGo needle (c :: rest) idx =
   if isPrefixChars needle (c :: rest) then idx else findSubGo needle rest (idx + 1)
 
-isPrefixChars : List Int -> List Int -> Bool
+export isPrefixChars : List Int -> List Int -> Bool
 isPrefixChars [] _ = True
 isPrefixChars _ [] = False
 isPrefixChars (x :: xs) (y :: ys) = x == y && isPrefixChars xs ys
 
 -- 在 span 覆盖的行范围里找名字的起始位置（1-based line/col）。
-findNamePos : List String -> Span -> String -> Maybe (Pair Int Int)
+export findNamePos : List String -> Span -> String -> Maybe (Pair Int Int)
 findNamePos lines sp name =
   scanNameLines (spanStartLine sp) True (spanStartCol sp) (spanEndLine sp)
     (drop (spanStartLine sp - 1) lines) name
 
-scanNameLines : Int -> Bool -> Int -> Int -> List String -> String -> Maybe (Pair Int Int)
+export scanNameLines : Int -> Bool -> Int -> Int -> List String -> String -> Maybe (Pair Int Int)
 scanNameLines lineNo isFirst firstCol lastLine remaining name = if lineNo > lastLine then Nothing
 else case remaining of
   [] => Nothing
@@ -265,9 +229,9 @@ else case remaining of
 
 -- 日志行前缀；退出时一次写出（`prim_eff_writeFile "/dev/stderr"` 每次打开都会截断，
 -- 逐行写会把前面的行冲掉，所以内存累积、退出时 join 一次）。
-logLine : String -> String
+export logLine : String -> String
 logLine s = "[vuna-lsp] ${s}\n"
 
-flushLogLines : List String -> Eff [] Int
+export flushLogLines : List String -> Eff [] Int
 flushLogLines [] = pure 0
 flushLogLines logs = prim_eff_writeFile "/dev/stderr" (join "" (map logLine (reverse logs)))

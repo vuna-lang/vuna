@@ -1,27 +1,4 @@
-module Vuna.Compiler.Frontend.Lexer
-  ( CBlock
-  , CKind
-  , CLine
-  , Comment(..)
-  , PTok(..)
-  , TEof
-  , TFloat
-  , TIdent
-  , TInt
-  , TKw
-  , TStr
-  , TSym
-  , TTmpl
-  , TmplPart(..)
-  , Tok
-  , commentSpan
-  , isDigit
-  , isIdentStart
-  , isLowerChar
-  , isUpperChar
-  , lexComments
-  , lexSource
-  ) where
+module Vuna.Compiler.Frontend.Lexer where
 
 -- vuna 源码 lexer：字符游标、token 与 pos。
 --
@@ -37,11 +14,11 @@ import Vuna.Compiler.Common
 import Vuna.Compiler.Frontend.Diagnostics
 
 -- 模板字面量的片段（M36）：文本块或插值洞（洞内 token 列表）。
-data TmplPart : Type where
+export data TmplPart(..) : Type where
   TPText : String -> TmplPart
   TPHole : List PTok -> TmplPart
 
-data Tok : Type where
+export data Tok(..) : Type where
   TIdent : String -> Tok
   TKw : String -> Tok
   TInt : Int -> Tok
@@ -54,36 +31,36 @@ data Tok : Type where
   -- `TFloat`：十进制浮点字面量的原始文本（放末尾保持 tag 顺序，bootstrap 兼容）。
   TFloat : String -> Tok
 
-record PTok where
+export record PTok(..) where
   ptokTok : Tok
   ptokPos : Pos
 
-record Chars where
+export record Chars(..) where
   charsRemaining : List Int
   charsPos : Pos
 
-advanceChar : Int -> Pos -> Pos
+export advanceChar : Int -> Pos -> Pos
 advanceChar c (Pos line col) = if c == 10 then Pos (line + 1) 1 else Pos line (col + 1)
 
-isUpperChar : Int -> Bool
+export isUpperChar : Int -> Bool
 isUpperChar c = c >= 65 && c <= 90
 
-isLowerChar : Int -> Bool
+export isLowerChar : Int -> Bool
 isLowerChar c = c >= 97 && c <= 122
 
-isIdentStart : Int -> Bool
+export isIdentStart : Int -> Bool
 isIdentStart c = isUpperChar c || isLowerChar c || c == 95
 
-isIdentChar : Int -> Bool
+export isIdentChar : Int -> Bool
 isIdentChar c = isIdentStart c || isDigit c || c == 39
 
-isDigit : Int -> Bool
+export isDigit : Int -> Bool
 isDigit c = c >= 48 && c <= 57
 
-isSpace : Int -> Bool
+export isSpace : Int -> Bool
 isSpace c = c == 32 || c == 9 || c == 10 || c == 13
 
-isOpChar : Int -> Bool
+export isOpChar : Int -> Bool
 isOpChar c =
   c == 33
     || c == 36
@@ -106,7 +83,7 @@ isOpChar c =
     || c == 58
 
 -- 关键字表（M28 增 `axiom`；M31.2 增 `infixl` / `infixr` / `infix`）。
-isKeyword : String -> Bool
+export isKeyword : String -> Bool
 -- records-v2：表示档位前缀（`alias record` / `boxed record`）与 D11 的 `export` /
 -- `abstract` 是**软关键字**：只在声明位置的特定上下文识别，不进入该表，避免与用户
 -- 已有的同名标识符（编译器源码里就有 `alias` 等 binder）冲突。
@@ -143,15 +120,15 @@ isKeyword s =
     || s == "infixr"
     || s == "infix"
 
-classifyIdent : String -> Tok
+export classifyIdent : String -> Tok
 classifyIdent s = if isKeyword s then TKw s else TIdent s
 
-skipLineComment : Chars -> Chars
+export skipLineComment : Chars -> Chars
 skipLineComment (Chars [] p) = Chars [] p
 skipLineComment (Chars (c :: rest) p) =
   if c == 10 then Chars (c :: rest) p else skipLineComment (Chars rest (advanceChar c p))
 
-skipBlockComment : Int -> Chars -> Check Chars
+export skipBlockComment : Int -> Chars -> Check Chars
 skipBlockComment depth (Chars [] p) = lexErr0 UnterminatedBlockComment
 skipBlockComment depth (Chars (c :: rest) p) = case rest of
   c2 :: rest2 =>
@@ -163,7 +140,7 @@ skipBlockComment depth (Chars (c :: rest) p) = case rest of
 
 -- 跳过 trivia。fuel 按字符/注释段递减（M36 起所有扫描器都不再回传 fuel：
 -- 主循环与各扫描器各自持有一个够用的显式 fuel，终止性走「守卫 Int + 严格递减」）。
-skipTrivia : Int -> Chars -> Check Chars
+export skipTrivia : Int -> Chars -> Check Chars
 skipTrivia fuel cs = if fuel <= 0 then icFuel "lexer"
 else case cs of
   Chars [] p => OkC cs
@@ -176,7 +153,7 @@ else case cs of
     else OkC cs
     [] => OkC cs
 
-collectIdent : Chars -> List Int -> Pair String Chars
+export collectIdent : Chars -> List Int -> Pair String Chars
 collectIdent (Chars [] p) acc = Pair (strPack (reverse acc)) (Chars [] p)
 collectIdent (Chars (c :: rest) p) acc = if isIdentChar c then collectIdent (Chars rest (advanceChar c p)) (c :: acc)
 else if c == 46 then case rest of
@@ -188,12 +165,12 @@ else Pair (strPack (reverse acc)) (Chars (c :: rest) p)
 
 -- 63 位宿主 int 的上界（2^62 - 1）。字面量累加超过它就无法表示：C40 起在词法期报
 -- `LX_IntLiteralOutOfRange`，不再让 `acc * 10 + d` 静默回绕成小值或负数。
-maxIntLiteral : Int
+export maxIntLiteral : Int
 maxIntLiteral = 4611686018427387903
 
 -- 十进制字面量的累加。每位先判「再乘 10 加 d 是否会超出 maxIntLiteral」，越界即报错；
 -- 因此 `4611686018427387903` 仍合法，`...904` 起报 `LX_IntLiteralOutOfRange`。
-collectInt : Chars -> Int -> Check (Pair Int Chars)
+export collectInt : Chars -> Int -> Check (Pair Int Chars)
 collectInt (Chars [] p) acc = OkC (Pair acc (Chars [] p))
 collectInt (Chars (c :: rest) p) acc = if isDigit c then
   let
@@ -208,7 +185,7 @@ else OkC (Pair acc (Chars (c :: rest) p))
 -- 先看数字串后面是否是「`.` + 数字」，是才走浮点扫描；否则保持旧的整数扫描
 -- （含 `LX_IntLiteralOutOfRange` 语义）。这样普通整数路径没有额外分配。
 -- | 数字串后面是否紧跟「`.` + 数字」：是则整段按浮点字面量扫描，否则走整数路径。
-digitRunIsFloat : Chars -> Bool
+export digitRunIsFloat : Chars -> Bool
 digitRunIsFloat (Chars [] p) = False
 digitRunIsFloat (Chars (c :: rest) p) = if isDigit c then digitRunIsFloat (Chars rest (advanceChar c p))
 else if c == 46 then case rest of
@@ -218,7 +195,7 @@ else False
 
 -- 收集 `digits '.' digits` 的原始文本（首字符已消费，acc 是逆序的数字字符）。
 -- | 收集浮点字面量 `digits . digits` 的原始文本；遇到 `.` 后交给 `collectFrac`。
-collectFloat : Chars -> List Int -> Pair String Chars
+export collectFloat : Chars -> List Int -> Pair String Chars
 collectFloat (Chars [] p) acc = Pair (strPack (reverse acc)) (Chars [] p)
 collectFloat (Chars (c :: rest) p) acc =
   if isDigit c then collectFloat (Chars rest (advanceChar c p)) (c :: acc)
@@ -226,13 +203,13 @@ collectFloat (Chars (c :: rest) p) acc =
   else Pair (strPack (reverse acc)) (Chars (c :: rest) p)
 
 -- | 收集浮点字面量的小数部分（`.` 已消费），遇到非数字即停止。
-collectFrac : Chars -> List Int -> Pair String Chars
+export collectFrac : Chars -> List Int -> Pair String Chars
 collectFrac (Chars [] p) acc = Pair (strPack (reverse acc)) (Chars [] p)
 collectFrac (Chars (c :: rest) p) acc =
   if isDigit c then collectFrac (Chars rest (advanceChar c p)) (c :: acc)
   else Pair (strPack (reverse acc)) (Chars (c :: rest) p)
 
-collectOp : Chars -> List Int -> Pair String Chars
+export collectOp : Chars -> List Int -> Pair String Chars
 collectOp (Chars [] p) acc = Pair (strPack (reverse acc)) (Chars [] p)
 collectOp (Chars (c :: rest) p) acc =
   if isOpChar c then collectOp (Chars rest (advanceChar c p)) (c :: acc)
@@ -250,7 +227,7 @@ collectOp (Chars (c :: rest) p) acc =
 -- 源码位置；洞里的注释随 `skipTrivia` 跳过（不进入 AST，fmt 会丢失它们——已知边界）。
 -- ---------------------------------------------------------------
 -- 转义字符 → 实际码点（`\$` 是 M36 新增：用来写一个字面 `${`）。
-decodeEscape : Int -> Maybe Int
+export decodeEscape : Int -> Maybe Int
 decodeEscape 110 = Just 10
 decodeEscape 116 = Just 9
 decodeEscape 114 = Just 13
@@ -260,17 +237,17 @@ decodeEscape 39 = Just 39
 decodeEscape 36 = Just 36
 decodeEscape other = Nothing
 
-dropOpeningNewline : Chars -> Chars
+export dropOpeningNewline : Chars -> Chars
 dropOpeningNewline (cs@(Chars (c :: rest) p)) = if c == 10 then Chars rest (advanceChar c p) else cs
 dropOpeningNewline (cs@(Chars [] p)) = cs
 
-flushText : List Int -> List TmplPart -> List TmplPart
+export flushText : List Int -> List TmplPart -> List TmplPart
 flushText [] parts = parts
 flushText acc parts = TPText (strPack (reverse acc)) :: parts
 
 -- 扫描模板正文。`multi` = 是否 `"""`；入口位置在**开引号之后**。
 -- 返回：(parts（正序）、(字面量之后的 Chars, 结束引号位置))。
-scanTemplateText : Int -> Bool -> Chars -> List Int -> List TmplPart -> Check (Pair (List TmplPart) (Pair Chars Pos))
+export scanTemplateText : Int -> Bool -> Chars -> List Int -> List TmplPart -> Check (Pair (List TmplPart) (Pair Chars Pos))
 -- 单行结束 `"`；单行不允许原始换行
 scanTemplateText fuel multi cs acc parts = if fuel <= 0 then icFuel "lexer"
 else case cs of
@@ -314,7 +291,7 @@ else case cs of
 
 -- 洞内 token 扫描：从 `${` 之后开始，`{`/`}` 计深度，深度 0 的 `}` 不消费。
 -- 内部字符串/注释由 token 词法（`lexOneToken` / `skipTrivia`）整体跳过。
-lexHoleTokens : Int -> Int -> Chars -> List PTok -> Check (Pair (List PTok) Chars)
+export lexHoleTokens : Int -> Int -> Chars -> List PTok -> Check (Pair (List PTok) Chars)
 lexHoleTokens fuel depth cs acc = if fuel <= 0 then icFuel "lexer"
 else case skipTrivia (fuel - 1) cs of
   ErrC e => ErrC e
@@ -326,13 +303,13 @@ else case skipTrivia (fuel - 1) cs of
       OkC (Pair tok cs3) => lexHoleTokens (fuel - 1) (depthAfter depth tok.ptokTok) cs3 (tok :: acc)
 
 -- 洞的深度更新：`{` 加深、`}` 变浅；其它 token 不变。
-depthAfter : Int -> Tok -> Int
+export depthAfter : Int -> Tok -> Int
 depthAfter depth (TSym "{") = depth + 1
 depthAfter depth (TSym "}") = if depth > 0 then depth - 1 else 0
 depthAfter depth _ = depth
 
 -- 消费一个 token（调用方保证已 skipTrivia 且输入非空）。
-lexOneToken : Int -> Chars -> Check (Pair PTok Chars)
+export lexOneToken : Int -> Chars -> Check (Pair PTok Chars)
 lexOneToken fuel cs = if fuel <= 0 then icFuel "lexer"
 else case cs of
   Chars [] p => icInternal "lexOneToken on empty input"
@@ -356,7 +333,7 @@ else case cs of
 
 -- `"..."` / `"""..."""`：判定形式后走模板扫描，再决定 token 形态。
 -- 单行且无洞 → `TStr`（保持旧 token 形态）；其余（多行 / 含洞）→ `TTmpl`。
-lexStringToken : Int -> Int -> List Int -> Pos -> Check (Pair PTok Chars)
+export lexStringToken : Int -> Int -> List Int -> Pos -> Check (Pair PTok Chars)
 lexStringToken fuel c rest p = if fuel <= 0 then icFuel "lexer"
 else case rest of
   c2 :: rest3 => case rest3 of
@@ -370,7 +347,7 @@ else case rest of
     [] => lexSingleStringToken (fuel - 1) (Chars rest (advanceChar c p)) p
   [] => lexSingleStringToken (fuel - 1) (Chars rest (advanceChar c p)) p
 
-lexSingleStringToken : Int -> Chars -> Pos -> Check (Pair PTok Chars)
+export lexSingleStringToken : Int -> Chars -> Pos -> Check (Pair PTok Chars)
 lexSingleStringToken fuel body p = if fuel <= 0 then icFuel "lexer"
 else case scanTemplateText (fuel - 1) False body [] [] of
   ErrC e => ErrC e
@@ -380,7 +357,7 @@ else case scanTemplateText (fuel - 1) False body [] [] of
 
 -- 主循环：trivia 之后逐个 token，直到 EOF。每个 token 扣 1 步（各扫描器自带够用的
 -- fuel：token 内的字符数 ≤ 剩余源码长度，见 `sourceFuel` 的上界说明）。
-lexChars : Int -> Chars -> Check (List PTok)
+export lexChars : Int -> Chars -> Check (List PTok)
 lexChars fuel cs = if fuel <= 0 then icFuel "lexer"
 else case skipTrivia fuel cs of
   ErrC e => ErrC e
@@ -392,7 +369,7 @@ else case skipTrivia fuel cs of
         ErrC e => ErrC e
         OkC toks => OkC (tok :: toks)
 
-lexSource : String -> Check (List PTok)
+export lexSource : String -> Check (List PTok)
 lexSource source = lexChars (sourceFuel source) (Chars (strUnpack source) (Pos 1 1))
 
 -- 显式 fuel 的初值（M36）。
@@ -401,7 +378,7 @@ lexSource source = lexChars (sourceFuel source) (Chars (strUnpack source) (Pos 1
 -- 每个字符扣 1，且单个 token 的字符数 ≤ len，扫描起点处的存量 fuel 远大于它；
 -- 注释扫描每次递归扣 1，每次至少消费 1 个字符 ⇒ 调用次数 ≤ len。
 -- 取 4*len+64：任何合法输入都不会耗尽（耗尽即明确的 internal 错误，不静默半途而废）。
-sourceFuel : String -> Int
+export sourceFuel : String -> Int
 sourceFuel source = 4 * strLength source + 64
 
 -- ---------------------------------------------------------------
@@ -409,35 +386,35 @@ sourceFuel source = 4 * strLength source + 64
 -- 与 skipTrivia 使用同一套规则（`--` 行注释、`{- -}` 可嵌套块注释，
 -- 字符串字面量里的 `--` / `{-` 不算注释；模板字面量整体按模板扫描跳过）。
 -- ---------------------------------------------------------------
-data CKind : Type where
+export data CKind(..) : Type where
   CLine : CKind
   CBlock : CKind
 
-record Comment where
+export record Comment(..) where
   commentKind : CKind
   commentText : String
   commentSpan : Span
 
-commentSpan : Comment -> Span
+export commentSpan : Comment -> Span
 commentSpan (Comment kind text sp) = sp
 
-trimTrailingSpace : String -> String
+export trimTrailingSpace : String -> String
 trimTrailingSpace s = strPack (reverse (dropTrailingSpace (reverse (strUnpack s))))
 
-dropTrailingSpace : List Int -> List Int
+export dropTrailingSpace : List Int -> List Int
 dropTrailingSpace [] = []
 dropTrailingSpace (c :: rest) =
   if c == 32 || c == 9 || c == 13 then dropTrailingSpace rest else Base.List.Cons c rest
 
 -- 行注释正文：从 `--` 之后扫到行尾（不消费换行）；endP 是最后一个正文字符位置。
-collectLineBody : Chars -> List Int -> Pos -> Pair String (Pair Chars Pos)
+export collectLineBody : Chars -> List Int -> Pos -> Pair String (Pair Chars Pos)
 collectLineBody (Chars [] p) acc endP = Pair (strPack (reverse acc)) (Pair (Chars [] p) endP)
 collectLineBody (Chars (c :: rest) p) acc endP =
   if c == 10 then Pair (strPack (reverse acc)) (Pair (Chars (c :: rest) p) endP)
   else collectLineBody (Chars rest (advanceChar c p)) (c :: acc) p
 
 -- 块注释正文：深度从 1 开始，返回 `{-` 与 `-}` 之间的原文；endP 是 `}` 的位置。
-collectBlockBody : Chars -> Int -> List Int -> Pos -> Check (Pair String (Pair Chars Pos))
+export collectBlockBody : Chars -> Int -> List Int -> Pos -> Check (Pair String (Pair Chars Pos))
 collectBlockBody (Chars [] p) depth acc endP = lexErr0 UnterminatedBlockComment
 collectBlockBody (Chars (c :: rest) p) depth acc endP = case rest of
   c2 :: rest2 =>
@@ -450,11 +427,11 @@ collectBlockBody (Chars (c :: rest) p) depth acc endP = case rest of
     else collectBlockBody (Chars rest (advanceChar c p)) depth (c :: acc) p
   [] => collectBlockBody (Chars rest (advanceChar c p)) depth (c :: acc) p
 
-commentSpanOf : Pos -> Pos -> Span
+export commentSpanOf : Pos -> Pos -> Span
 commentSpanOf startP endP = Span "" (posLine startP) (posCol startP) (posLine endP) (posCol endP)
 
 -- 跳过整段字符串字面量（开引号在 `c`/`p`，`rest` 为其后）。
-skipStringLiteral : Int -> Int -> List Int -> Pos -> Check Chars
+export skipStringLiteral : Int -> Int -> List Int -> Pos -> Check Chars
 skipStringLiteral fuel c (rest@(c2 :: rest3)) p = case rest3 of
   c3 :: rest4 => if c2 == 34 && c3 == 34 then
     let
@@ -466,12 +443,12 @@ skipStringLiteral fuel c (rest@(c2 :: rest3)) p = case rest3 of
   [] => skipSingleStringLiteral fuel (Chars rest (advanceChar c p))
 skipStringLiteral fuel c (rest@[]) p = skipSingleStringLiteral fuel (Chars rest (advanceChar c p))
 
-skipSingleStringLiteral : Int -> Chars -> Check Chars
+export skipSingleStringLiteral : Int -> Chars -> Check Chars
 skipSingleStringLiteral fuel body = case scanTemplateText (fuel - 1) False body [] [] of
   ErrC e => ErrC e
   OkC (Pair parts (Pair cs2 endP)) => OkC cs2
 
-scanComments : Int -> Chars -> List Comment -> Check (List Comment)
+export scanComments : Int -> Chars -> List Comment -> Check (List Comment)
 scanComments fuel (Chars [] p) acc = if fuel <= 0 then icFuel "lexer" else OkC (reverse acc)
 scanComments fuel (Chars (c :: rest) p) acc = if fuel <= 0 then icFuel "lexer"
 else if c == 34 then case skipStringLiteral (fuel - 1) c rest p of
@@ -490,5 +467,5 @@ else case rest of
   [] => OkC (reverse acc)
 
 -- 扫描整段源码里的注释（源码顺序），供格式化器按位置重新插入。
-lexComments : String -> Check (List Comment)
+export lexComments : String -> Check (List Comment)
 lexComments source = scanComments (sourceFuel source) (Chars (strUnpack source) (Pos 1 1)) []

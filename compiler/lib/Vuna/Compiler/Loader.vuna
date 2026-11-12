@@ -1,27 +1,4 @@
-module Vuna.Compiler.Loader
-  ( ExportEntry(..)
-  , Module(..)
-  , Project(..)
-  , implicitPrelude
-  , loadModuleSource
-  , loadModuleSourceWithPreloaded
-  , loadProject
-  , loadProjectModules
-  , loadProjectModulesWithPreloaded
-  , loadProjectSource
-  , loadProjectSourceWithPreloaded
-  , loadProjectWithPreloaded
-  , moduleAllImportsOf
-  , moduleDeclsOf
-  , moduleNameOf
-  , moduleOpaqueOf
-  , modulePackageOf
-  , parseFileWithPath
-  , projectEntryAllImports
-  , resolveProject
-  , resolveProjectKeeping
-  , resolveProjectWith
-  ) where
+module Vuna.Compiler.Loader where
 
 -- Vuna.Compiler.Loader：模块加载、名字解析与 flatten 的**门面**（M24 后维护（源码重组）按层拆分）。
 --
@@ -33,5 +10,5 @@ module Vuna.Compiler.Loader
 -- 包上下文的 roots 决定；旧的环境根 API 已删除。
 -- 门面按名重导出原来的公开 API（语义/抽象性不变：Module/Project 的构造器保持公开、
 -- ExportEntry 只公开类型）。
-import Vuna.Compiler.Loader.Flatten
-import Vuna.Compiler.Loader.Modules
+export import Vuna.Compiler.Loader.Flatten
+export import Vuna.Compiler.Loader.Modules

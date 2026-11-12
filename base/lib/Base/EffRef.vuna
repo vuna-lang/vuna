@@ -1,4 +1,4 @@
-module Base.EffRef (RefOp(..), refNew, refRead, refWrite) where
+module Base.EffRef where
 
 -- Base.EffRef：带内建 Ref 行的可变引用（阶段 4）。
 --
@@ -8,17 +8,17 @@ module Base.EffRef (RefOp(..), refNew, refRead, refWrite) where
 import Base.Eff
 
 -- | Ref 行标签（无载荷；操作直接映射到带行原语）。
-data RefOp : Type where
+export data RefOp(..) : Type where
   RefTag : RefOp
 
 -- | 创建引用（带 `RefOp` 行）。
-refNew : a -> Eff [RefOp] (IORef a)
+export refNew : a -> Eff [RefOp] (IORef a)
 refNew x = prim_eff_newRef_host x
 
 -- | 读引用（带 `RefOp` 行）。
-refRead : IORef a -> Eff [RefOp] a
+export refRead : IORef a -> Eff [RefOp] a
 refRead r = prim_eff_readRef_host r
 
 -- | 写引用，返回底层原语的 `Int`（带 `RefOp` 行）。
-refWrite : IORef a -> a -> Eff [RefOp] Int
+export refWrite : IORef a -> a -> Eff [RefOp] Int
 refWrite r v = prim_eff_writeRef_host r v

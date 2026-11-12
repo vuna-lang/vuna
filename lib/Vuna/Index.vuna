@@ -1,38 +1,4 @@
-module Vuna.Index
-  ( Index(..)
-  , ModuleInfo(..)
-  , Ref(..)
-  , Sym(..)
-  , buildIndex
-  , findReferences
-  , findSymbol
-  , impactOf
-  , indexModules
-  , listAllSymbols
-  , loadOrBuild
-  , loadOrBuildCheap
-  , modBytes
-  , modDecls
-  , modName
-  , modPackage
-  , modPath
-  , refModule
-  , refName
-  , referencesAt
-  , renderApi
-  , renderModules
-  , renderOverview
-  , symCol
-  , symDoc
-  , symFullName
-  , symKind
-  , symLine
-  , symModule
-  , symName
-  , symSig
-  , symType
-  , symbolAt
-  ) where
+module Vuna.Index where
 
 -- Vuna.Index：源码符号索引（工具链模块，**永不进 seed 闭包**）。
 --
@@ -68,7 +34,7 @@ module Vuna.Index
 -- `buildIndex` 是 `Eff []` 入口；REPL 的廉价依赖表由 `Scan` 内部维护（`indexStatsOf`
 -- 产出 stat 快照），命中判定在 `Query`。
 -- 数据模型、查找/影响面与文本渲染仍是纯函数。
-import Vuna.Index.Query
-import Vuna.Index.Render
-import Vuna.Index.Scan
-import Vuna.Index.Types
+export import Vuna.Index.Query
+export import Vuna.Index.Render
+export import Vuna.Index.Scan
+export import Vuna.Index.Types

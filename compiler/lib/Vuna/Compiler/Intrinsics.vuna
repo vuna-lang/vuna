@@ -1,81 +1,5 @@
 -- | 内建声明的唯一真源（M27）：内建/原语的名字、签名形状、interp 归约标签与可见性。
-module Vuna.Compiler.Intrinsics
-  ( IType(..)
-  , Intrinsic
-  , IntrinsicOp(..)
-  , TypeIntrinsic(..)
-  , allIntrinsics
-  , arityOfType
-  , assertIntrinsicName
-  , boolFalseCtor
-  , boolTrueCtor
-  , boolTypeName
-  , builtinEffectRunHostOf
-  , builtinEffects
-  , canonicalCtorsFor
-  , debugLineIntrinsicName
-  , debugOnIntrinsicName
-  , effDefaultInstance
-  , effMainRunName
-  , effMemberFamilyName
-  , effMemberHereCtor
-  , effMemberThereCtor
-  , effMkCtor
-  , effRowAppendName
-  , effRowConsCtor
-  , effRowFamilyName
-  , effRowNilCtor
-  , effRowRemName
-  , effRunName
-  , effTypeName
-  , effUnitTypeName
-  , findIntrinsic
-  , floatIntrinsicNames
-  , floatTypeName
-  , fromFloatMethodName
-  , fromFloatTypeName
-  , fromIntMethodName
-  , fromIntTypeName
-  , fromStringMethodName
-  , fromStringTypeName
-  , intTypeName
-  , internalIntrinsicNames
-  , internalIntrinsics
-  , interpMethodName
-  , interpTypeName
-  , intrinsicArity
-  , intrinsicName
-  , intrinsicReturnsEff
-  , intrinsicSignature
-  , intrinsicVisible
-  , isBuiltinEffectTag
-  , isDebugOnlyName
-  , isIntrinsicName
-  , isIntrinsicTypeName
-  , isTypeConstructorName
-  , listConsCtor
-  , listFamilyName
-  , listNilCtor
-  , mainShowDefName
-  , natSuccCtor
-  , natTypeName
-  , natZeroCtor
-  , needsListBridge
-  , preludeTypeNames
-  , preludeValueNames
-  , primEffBind1Name
-  , primEraseName
-  , strTypeName
-  , todoIntrinsicName
-  , traceIntrinsicNames
-  , typeIntrinsicArities
-  , typeIntrinsicArityOf
-  , typeIntrinsicCtorArity
-  , typeIntrinsicCtorName
-  , typeIntrinsicCtorNames
-  , typeIntrinsicNames
-  , userIntrinsics
-  ) where
+module Vuna.Compiler.Intrinsics where
 
 -- Vuna.Compiler.Intrinsics：**内建声明的唯一真源**（M27）。
 --
@@ -99,7 +23,7 @@ import Base.HashMap
 -- 签名形状：只表达内建签名需要的形状（不含依赖 pi / 多态细节）
 -- ---------------------------------------------------------------
 -- | 内建签名形状：只表达内建签名需要的形状（不含依赖 pi / 多态细节）。
-data IType : Type where
+export data IType(..) : Type where
   -- 宇宙 `Type`（类型构造子 / 类型变量参数的域）
   ITy : IType
   IInt : IType
@@ -130,7 +54,7 @@ data IType : Type where
   IEffRow : IType -> IType -> IType
 
 -- | 签名形状的函数 arity：`IFun`/`IFun1` 各计 1，隐式 `IPi` 不计，其余为 0。
-arityOfType : IType -> Int
+export arityOfType : IType -> Int
 arityOfType (IFun _ cod) = 1 + arityOfType cod
 arityOfType (IFun1 _ cod) = 1 + arityOfType cod
 arityOfType (IPi _ cod) = arityOfType cod
@@ -143,26 +67,26 @@ arityOfType _ = 0
 -- 名字恒可见（prelude 类型层），codegen 按固定 OCaml 类型渲染（见 Codegen.Decl）。
 -- 参数个数的唯一真源在此；Elab.Prelude 据此生成 kind，Codegen.Decl 据此渲染。
 -- | 内建类型构造子（M33 W3）：带参数的类型构造子，名字恒可见，参数个数在此定。
-record TypeIntrinsic where
+export record TypeIntrinsic(..) where
   -- | 构造子的源码名字（`Array` / `IORef`）。
   typeIntrinsicCtorName : String
   -- | 类型参数个数。
   typeIntrinsicCtorArity : Int
 
 -- | 取内建类型构造子的名字。
-typeIntrinsicCtorName : TypeIntrinsic -> String
+export typeIntrinsicCtorName : TypeIntrinsic -> String
 typeIntrinsicCtorName (TypeIntrinsic name arity) = name
 
 -- | 取内建类型构造子的类型参数个数。
-typeIntrinsicCtorArity : TypeIntrinsic -> Int
+export typeIntrinsicCtorArity : TypeIntrinsic -> Int
 typeIntrinsicCtorArity (TypeIntrinsic name arity) = arity
 
 -- | 全部内建类型构造子及其 arity（Elab.Prelude 生成 kind、Codegen.Decl 渲染的唯一真源）。
-typeIntrinsicArities : List TypeIntrinsic
+export typeIntrinsicArities : List TypeIntrinsic
 typeIntrinsicArities = [TypeIntrinsic "Array" 1, TypeIntrinsic "IORef" 1]
 
 -- | 名字对应的内建类型构造子 arity；不是内建类型构造子时返回 `-1`。
-typeIntrinsicArityOf : String -> Int
+export typeIntrinsicArityOf : String -> Int
 typeIntrinsicArityOf name = typeIntrinsicArityOfRest name typeIntrinsicArities
 
 -- | `typeIntrinsicArityOf` 的递归实现：在 arity 表里线性找名字。
@@ -173,12 +97,12 @@ typeIntrinsicArityOfRest name (t :: rest) =
   else typeIntrinsicArityOfRest name rest
 
 -- | 所有内建类型构造子的名字列表（类型位置放行面用）。
-typeIntrinsicCtorNames : List String
+export typeIntrinsicCtorNames : List String
 typeIntrinsicCtorNames = map typeIntrinsicCtorName typeIntrinsicArities
 
 -- | 运行时「可命名类型头」的唯一真源：primitive 类型 + 内建类型构造子 + 内建效应类型。
 -- 其它类型头（类型族 / axiom / 未知全局）在运行时不可命名，按擦除依赖类型处理。
-isTypeConstructorName : String -> Bool
+export isTypeConstructorName : String -> Bool
 isTypeConstructorName name =
   name == intTypeName
     || name == strTypeName
@@ -196,7 +120,7 @@ record BuiltinEffect where
 
 -- | 全部内建宿主效应（标签 + runXHost）。未实现的条目先占位，entry 只对已实现的
 -- 表项自动预装；用户自定义效应仍须自己 handle 成 Nil。
-builtinEffects : List BuiltinEffect
+export builtinEffects : List BuiltinEffect
 builtinEffects =
   [ BuiltinEffect "Base.EffConsole.ConsoleOp" "Base.EffConsole.runConsoleHost" "default",
     BuiltinEffect "Base.EffFs.FsOp" "Base.EffFs.runFsHost" "default",
@@ -212,7 +136,7 @@ builtinEffects =
   ]
 
 -- | 标签对应的 `runXHost` 全名；不是内建宿主效应时返回空串。
-builtinEffectRunHostOf : String -> String
+export builtinEffectRunHostOf : String -> String
 builtinEffectRunHostOf tag = builtinEffectRunHostOfRest tag builtinEffects
 
 builtinEffectRunHostOfRest : String -> List BuiltinEffect -> String
@@ -221,7 +145,7 @@ builtinEffectRunHostOfRest tag (e :: rest) =
   if e.beTag == tag then e.beRunHost else builtinEffectRunHostOfRest tag rest
 
 -- | 该标签是否是内建宿主效应（`beRunHost` 为空表示只允许行、无需预装 handler）。
-isBuiltinEffectTag : String -> Bool
+export isBuiltinEffectTag : String -> Bool
 isBuiltinEffectTag tag = builtinEffectExistsRest tag builtinEffects
 
 builtinEffectExistsRest : String -> List BuiltinEffect -> Bool
@@ -231,28 +155,28 @@ builtinEffectExistsRest tag (e :: rest) =
 
 -- | Eff 版线性绑定（bootstrap 过渡表；当前无库调用方）：`Eff [] a` 的线性 continuation。
 -- runtime 由 codegen 专门生成（装箱 `MkEff` 的 match），不能复用 eager 包装。
-primEffBind1Name : String
+export primEffBind1Name : String
 primEffBind1Name = "prim_eff_bind1"
 
 -- | 表现层 cast：精化器在「运行时位置出现不可命名的擦除依赖类型」时插入
 -- （见 docs/reference/effects.md §5/§6）。隐藏 intrinsic：只供精化器引用，
 -- 不对用户源码可见；求值期由 `IntrinsicOp.OpIdentity` 归约成参数本身。
-primEraseName : String
+export primEraseName : String
 primEraseName = "prim_erase"
 
 -- | 非内建 `main` 类型的 Show 展示定义名（D17）：Elab 收尾合成
 -- `@vuna@main_show : T -> String`，codegen 的 main 钩子与 interp 的 main 展示按它取用；
 -- 名字里的 `@` 不在用户标识符语法里，不会与用户定义冲突。
-mainShowDefName : String
+export mainShowDefName : String
 mainShowDefName = "@vuna@main_show"
 
 -- | 关闭动作入口（`Base.Eff.runPure : Eff [] a -> a`）的 canonical 名（协议常量）。
-effRunName : String
+export effRunName : String
 effRunName = "Base.Eff.runPure"
 
 -- | main 入口的隐藏执行名（`Base.Eff.runMain`，未导出）：codegen 的 main 钩子引用它，
 -- 用于执行带内建宿主效应行的 `main`（`runPure` 只收 Nil）。
-effMainRunName : String
+export effMainRunName : String
 effMainRunName = "Base.Eff.runMain"
 
 -- ---------------------------------------------------------------
@@ -272,23 +196,23 @@ effMainRunName = "Base.Eff.runMain"
 -- 生成的 `Vuna_runtime`；`visible = False`，源码写不出来。
 -- 用哑 `Int` 实参承载开关查询，避免在源码层出现「纯 Bool 值读取进程配置」的形态。
 -- | `dbg!` 的开关查询原语（`--debug-perf` / `VUNA_DEBUG_PERF=1`）。
-debugOnIntrinsicName : String
+export debugOnIntrinsicName : String
 debugOnIntrinsicName = "@vuna@debug@on"
 
 -- | `dbg!` 的发射原语（带时间戳写 stderr，返回 0）。
-debugLineIntrinsicName : String
+export debugLineIntrinsicName : String
 debugLineIntrinsicName = "@vuna@debug@line"
 
 -- | `assert`：debug-only 断言（release 构建拒绝）。
-assertIntrinsicName : String
+export assertIntrinsicName : String
 assertIntrinsicName = "assert"
 
 -- | `todo`：debug-only 未实现占位（release 构建拒绝）。
-todoIntrinsicName : String
+export todoIntrinsicName : String
 todoIntrinsicName = "todo"
 
 -- | 是否是 release 构建要拒绝的 debug-only 构造名（assert / todo）。
-isDebugOnlyName : String -> Bool
+export isDebugOnlyName : String -> Bool
 isDebugOnlyName name = name == assertIntrinsicName || name == todoIntrinsicName
 
 -- ---------------------------------------------------------------
@@ -300,64 +224,64 @@ isDebugOnlyName name = name == assertIntrinsicName || name == todoIntrinsicName
 -- 形状：`Row : Type 1`（`Nil`/`Cons`），`Member : Type -> Row -> Type 1`（`Here`/`There`），
 -- `rowRem : Type -> Row -> Row`（axiom，由编译器按标签值结构相等归约）。
 -- | 效应行族 `Base.Eff.Row`（Type-1 数据）。
-effRowFamilyName : String
+export effRowFamilyName : String
 effRowFamilyName = "Base.Eff.Row"
 
 -- | 空行构造子 `Base.Eff.Row.Nil`。
-effRowNilCtor : String
+export effRowNilCtor : String
 effRowNilCtor = "Base.Eff.Row.Nil"
 
 -- | 行扩展构造子 `Base.Eff.Row.Cons`（标签 + 尾行）。
-effRowConsCtor : String
+export effRowConsCtor : String
 effRowConsCtor = "Base.Eff.Row.Cons"
 
 -- | 行删除 `Base.Eff.rowRem`（axiom，由编译器归约）。
-effRowRemName : String
+export effRowRemName : String
 effRowRemName = "Base.Eff.rowRem"
 
 -- | 行拼接 `Base.Eff.rowAppend`（axiom，由编译器归约：Nil 单位 + Cons 递归）。
-effRowAppendName : String
+export effRowAppendName : String
 effRowAppendName = "Base.Eff.rowAppend"
 
 -- | 行成员证明族 `Base.Eff.Member`（Type-1 归纳族）。
-effMemberFamilyName : String
+export effMemberFamilyName : String
 effMemberFamilyName = "Base.Eff.Member"
 
 -- | 行成员证明构造子 `Base.Eff.Member.Here`（头部命中）。
-effMemberHereCtor : String
+export effMemberHereCtor : String
 effMemberHereCtor = "Base.Eff.Member.Here"
 
 -- | 行成员证明构造子 `Base.Eff.Member.There`（跳过头部）。
-effMemberThereCtor : String
+export effMemberThereCtor : String
 effMemberThereCtor = "Base.Eff.Member.There"
 
 -- | 效应动作类型 `Base.Eff.Eff`（`Eff : Row -> Type -> Type`，用户面效果类型）。
-effTypeName : String
+export effTypeName : String
 effTypeName = "Base.Eff.Eff"
 
 -- | `Base.Eff.EffUnit`：Eff 的 dummy thunk 参数类型（codegen 包 `MkEff` 时用作
 -- `fun (_ : EffUnit) -> ...` 的标注；不进求值语义）。
-effUnitTypeName : String
+export effUnitTypeName : String
 effUnitTypeName = "Base.Eff.EffUnit"
 
 -- | `Base.Eff.Eff.MkEff`：Eff 的唯一构造子（codegen 构造宿主原语动作时引用）。
-effMkCtor : String
+export effMkCtor : String
 effMkCtor = "Base.Eff.Eff.MkEff"
 
 -- | 默认实例名（命名行 ND3）：裸标签条目 `Cons "default" e Nil` 与 `handleWithAt` 共用；
 -- 单点定义在 `Base.Eff.defaultInstance`，此处是编译器侧的镜像常量。
-effDefaultInstance : String
+export effDefaultInstance : String
 effDefaultInstance = "default"
 
 -- | prelude 类型层名字：primitive 类型 + 内建类型构造子（禁止重定义 + Loader 放行）。
-preludeTypeNames : List String
+export preludeTypeNames : List String
 preludeTypeNames = append typeIntrinsicNames typeIntrinsicCtorNames
 
 -- ---------------------------------------------------------------
 -- interp 归约标签（Core.Eval 按它归约；OpNone = 不在 interp 归约）
 -- ---------------------------------------------------------------
 -- | interp 归约标签（`Core.Eval` 按它归约；`OpNone` = 不在 interp 归约）。
-data IntrinsicOp : Type where
+export data IntrinsicOp(..) : Type where
   OpNone : IntrinsicOp
   OpAdd : IntrinsicOp
   OpSub : IntrinsicOp
@@ -431,7 +355,7 @@ data IntrinsicOp : Type where
 -- 字段：名字、签名形状、interp 归约标签、runtime 表达式、是否对用户源码可见
 -- （False = 只供 codegen 映射的内部名）。
 -- | 内建声明：名字、签名形状、interp 归约标签、runtime 表达式、可见性。
-record Intrinsic where
+export record Intrinsic where
   -- | 内建的源码名字（如 `+`、`strFromInt`、`prim_eff_print`）。
   intrinsicName : String
   -- | 签名形状（`IType`）。
@@ -444,20 +368,20 @@ record Intrinsic where
   intrinsicVisible : Bool
 
 -- | 取内建的名字。
-intrinsicName : Intrinsic -> String
+export intrinsicName : Intrinsic -> String
 intrinsicName (Intrinsic name sig op runtime visible) = name
 
 -- | 取内建的签名形状。
-intrinsicSignature : Intrinsic -> IType
+export intrinsicSignature : Intrinsic -> IType
 intrinsicSignature (Intrinsic name sig op runtime visible) = sig
 
 -- | 该内建是否对用户源码可见。
-intrinsicVisible : Intrinsic -> Bool
+export intrinsicVisible : Intrinsic -> Bool
 intrinsicVisible (Intrinsic name sig op runtime visible) = visible
 
 -- | 该内建的 runtime 表达式依赖 canonical `Base.List.List` 桥接 helper（`dtp_*`）。
 -- 没有 base 的包用这些内建时，生成前必须报错（而不是产出 Unbound value）。
-needsListBridge : Intrinsic -> Bool
+export needsListBridge : Intrinsic -> Bool
 needsListBridge i = case i.intrinsicRuntime of
   "dtp_unpack" => True
   "dtp_pack" => True
@@ -473,20 +397,20 @@ needsListBridge i = case i.intrinsicRuntime of
 
 -- | canonical 族（base 的 data 声明）必须由 vuna-base 以固定的构造子集合声明；
 -- 其它同名声明是非法伪造。
-canonicalCtorsFor : String -> Maybe (List String)
+export canonicalCtorsFor : String -> Maybe (List String)
 canonicalCtorsFor name =
   if name == boolTypeName then Just [boolTrueCtor, boolFalseCtor]
   else if name == listFamilyName then Just [listNilCtor, listConsCtor]
   else if name == natTypeName then Just [natZeroCtor, natSuccCtor] else Nothing
 
 -- | 内建的函数 arity（按 `arityOfType (intrinsicSignature i)` 计算）。
-intrinsicArity : Intrinsic -> Int
+export intrinsicArity : Intrinsic -> Int
 intrinsicArity i = arityOfType (intrinsicSignature i)
 
 -- thunk（C2 内建模式：`fun args -> fun _ -> rt args`；C1 legacy 模式：`MkIO (fun _ -> …)`）。
 -- 零参原语因此是真正的值而不是每次求值的表达式。
 -- | 该内建是否返回 Eff 动作（`IEff` 在签名尾部）。
-intrinsicReturnsEff : Intrinsic -> Bool
+export intrinsicReturnsEff : Intrinsic -> Bool
 intrinsicReturnsEff i = typeReturnsEff (intrinsicSignature i)
 
 -- | `IType` 尾部是否为 `IEff` / `IEffRow`（供 codegen 包 `MkEff`）。
@@ -499,94 +423,94 @@ typeReturnsEff (IPi _ cod) = typeReturnsEff cod
 typeReturnsEff _ = False
 
 -- | 语言 primitive 类型名（Bool 不在其中：它是 base 的普通 data 声明）。
-typeIntrinsicNames : List String
+export typeIntrinsicNames : List String
 typeIntrinsicNames = [intTypeName, strTypeName, floatTypeName]
 
 -- | `Int` primitive 类型的源码名字。
-intTypeName : String
+export intTypeName : String
 intTypeName = "Int"
 
 -- | `String` primitive 类型的源码名字。
-strTypeName : String
+export strTypeName : String
 strTypeName = "String"
 
 -- | `Float` primitive 类型的源码名字（运行时是 OCaml IEEE-754 double，无 data 声明）。
-floatTypeName : String
+export floatTypeName : String
 floatTypeName = "Float"
 
 -- | Bool 的完整符号身份：它是 base 里的普通 data 声明，身份 = `Base.Bool.Bool`（M27）。
-boolTypeName : String
+export boolTypeName : String
 boolTypeName = "Base.Bool.Bool"
 
 -- | canonical `True` 构造子的完整符号。
-boolTrueCtor : String
+export boolTrueCtor : String
 boolTrueCtor = "Base.Bool.Bool.True"
 
 -- | canonical `False` 构造子的完整符号。
-boolFalseCtor : String
+export boolFalseCtor : String
 boolFalseCtor = "Base.Bool.Bool.False"
 
 -- | Nat 的完整符号身份（`Base.Nat.Nat`）；运行时表示固定为 OCaml `int`
 -- （Zero=0、Succ n=n+1 饱和），所以**不生成**变体类型（见 Codegen.Decl）。
-natTypeName : String
+export natTypeName : String
 natTypeName = "Base.Nat.Nat"
 
 -- | canonical `Zero` 构造子的完整符号。
-natZeroCtor : String
+export natZeroCtor : String
 natZeroCtor = "Base.Nat.Nat.Zero"
 
 -- | canonical `Succ` 构造子的完整符号。
-natSuccCtor : String
+export natSuccCtor : String
 natSuccCtor = "Base.Nat.Nat.Succ"
 
 -- | 类型位置的放行面：primitive 类型名 + 内建类型构造子（M33 W3）。
-isIntrinsicTypeName : String -> Bool
+export isIntrinsicTypeName : String -> Bool
 isIntrinsicTypeName name = memName name preludeTypeNames
 
 -- | List 的完整符号身份（base 里普通 data 声明，不是短名）：List 的判定只认它。
-listFamilyName : String
+export listFamilyName : String
 listFamilyName = "Base.List.List"
 
 -- | canonical `Nil` 构造子的完整符号。
-listNilCtor : String
+export listNilCtor : String
 listNilCtor = "Base.List.List.Nil"
 
 -- | canonical `Cons` 构造子的完整符号。
-listConsCtor : String
+export listConsCtor : String
 listConsCtor = "Base.List.List.Cons"
 
 -- | M36：模板字符串插值的 trait 的 canonical 名。编译器把 `${e}` 降级成对
 -- `interp` 方法投影的调用（`Loader.Resolve`），转换语义完全由 base 里的实例决定。
-interpTypeName : String
+export interpTypeName : String
 interpTypeName = "Base.Interp.Interp"
 
 -- | M36：模板插值 trait 的 `interp` 方法的 canonical 名。
-interpMethodName : String
+export interpMethodName : String
 interpMethodName = "Base.Interp.interp"
 
 -- | 字面量转换：`FromString` trait 的 canonical 名（checking 位置的字符串字面量按
 -- 期望类型降级时用；声明在 base 的 `Base.FromString`）。
-fromStringTypeName : String
+export fromStringTypeName : String
 fromStringTypeName = "Base.FromString.FromString"
 
 -- | `FromString` 的方法投影 canonical 名。
-fromStringMethodName : String
+export fromStringMethodName : String
 fromStringMethodName = "Base.FromString.fromString"
 
 -- | 字面量转换：`FromInt` trait 的 canonical 名（声明在 base 的 `Base.FromInt`）。
-fromIntTypeName : String
+export fromIntTypeName : String
 fromIntTypeName = "Base.FromInt.FromInt"
 
 -- | `FromInt` 的方法投影 canonical 名。
-fromIntMethodName : String
+export fromIntMethodName : String
 fromIntMethodName = "Base.FromInt.fromInt"
 
 -- | 字面量转换：`FromFloat` trait 的 canonical 名（声明在 base 的 `Base.Float`）。
-fromFloatTypeName : String
+export fromFloatTypeName : String
 fromFloatTypeName = "Base.Float.FromFloat"
 
 -- | `FromFloat` 的方法投影 canonical 名。
-fromFloatMethodName : String
+export fromFloatMethodName : String
 fromFloatMethodName = "Base.Float.fromFloat"
 
 -- | 所有内建声明（基础表；浮点表另立，见 `floatIntrinsics`）。用户可见项进 Loader/prelude；
@@ -795,28 +719,28 @@ effIntrinsics =
 -- | 编译器 tracing 的隐藏原语（`visible = False`）：只由内置宏 `dbg!` 展开引用，
 -- 用户源码不可写。签名与 runtime 都在此表；`Elab.Prelude` 会把它们补进 prelude globals
 -- （不进用户可见名单），`Core.Eval` 在 interp 里归约为 no-op。
-internalIntrinsics : List Intrinsic
+export internalIntrinsics : List Intrinsic
 internalIntrinsics =
   [ Intrinsic debugOnIntrinsicName (IFun IInt IBool) OpNone "dtp_debug_on" False,
     Intrinsic debugLineIntrinsicName (IFun IStr IInt) OpNone "dtp_debug_line" False
   ]
 
 -- | 编译器 tracing 原语名：codegen 据此按需追加 runtime helper（`usesTrace`）。
-traceIntrinsicNames : List String
+export traceIntrinsicNames : List String
 traceIntrinsicNames = [debugOnIntrinsicName, debugLineIntrinsicName]
 
 -- | 隐藏原语名清单：iface 覆盖性检查把它们视作 prelude 名字（不归属任何模块）。
-internalIntrinsicNames : List String
+export internalIntrinsicNames : List String
 internalIntrinsicNames = map intrinsicName internalIntrinsics
 
 -- | 所有内建声明：基础表 + 浮点表 + Eff 过渡表 + 编译器 tracing 表。
-allIntrinsics : List Intrinsic
+export allIntrinsics : List Intrinsic
 allIntrinsics =
   append baseIntrinsics (append floatIntrinsics (append effIntrinsics internalIntrinsics))
 
 -- | 全部与 Float 有关的内建名（字面量/算术/比较/转换/格式化）：`vuna interp`/REPL 的
 -- 求值 guard 与 codegen 的按需 runtime helper 都按它判定「程序是否使用浮点」。
-floatIntrinsicNames : List String
+export floatIntrinsicNames : List String
 floatIntrinsicNames =
   [ "strFromFloat",
     "floatFromInt",
@@ -842,19 +766,19 @@ intrinsicTbl =
     (Base.HashMap.fromList [])
 
 -- | 按名字查内建声明（内部用 `HashMap` 表）；内部 `bi_*` 名也能查到。
-findIntrinsic : String -> Maybe Intrinsic
+export findIntrinsic : String -> Maybe Intrinsic
 findIntrinsic name = Base.HashMap.lookup name intrinsicTbl
 
 -- | 名字是否是**对用户源码可见**的内建（内部 `bi_*` 返回 `False`）。
-isIntrinsicName : String -> Bool
+export isIntrinsicName : String -> Bool
 isIntrinsicName name = case findIntrinsic name of
   Just i => intrinsicVisible i
   Nothing => False
 
 -- | 用户可见的内建声明子集（进 Loader / prelude）。
-userIntrinsics : List Intrinsic
+export userIntrinsics : List Intrinsic
 userIntrinsics = filter intrinsicVisible allIntrinsics
 
 -- | 用户可见的内建值名字（prelude 全局与「禁止重定义」名单共用）。
-preludeValueNames : List String
+export preludeValueNames : List String
 preludeValueNames = map intrinsicName userIntrinsics

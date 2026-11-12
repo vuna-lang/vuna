@@ -1,96 +1,4 @@
-module Vuna.Compiler.Core.Term
-  ( CaseAlt(..)
-  , Closure(..)
-  , Level(..)
-  , Neutral(..)
-  , Rig(..)
-  , Sols(..)
-  , Term(..)
-  , VCaseAlt(..)
-  , Value(..)
-  , anyAltFree
-  , anyNegativeVarAlts
-  , anyNegativeVarArgs
-  , anyPairFree
-  , caseAltBinders
-  , caseAltBody
-  , caseAltName
-  , countLams
-  , countPis
-  , cutoffOf
-  , defLookup
-  , defaultExplicitRig
-  , defaultFuel
-  , hasFreeTermVar
-  , hasFreeVar
-  , hasFreeVarAlts
-  , hasFreeVarArgs
-  , hasMeta
-  , hasMetaAlts
-  , hasMetaArgs
-  , hasNegativeVar
-  , hasUnsolvedMetaClo
-  , hasUnsolvedMetaList
-  , hasUnsolvedMetaValue
-  , insertDictBinder
-  , insertDictBinderGo
-  , insertLamBinder
-  , insertLamBinderGo
-  , isTypeValue
-  , levelEq
-  , levelEscapes
-  , levelEscapesClo
-  , levelEscapesList
-  , levelLt
-  , levelMax
-  , levelOfInt
-  , levelSucc
-  , levelToInt
-  , levelZero
-  , metaLookup
-  , metaLookupList
-  , natChainValue
-  , not
-  , rigAdd
-  , rigExact
-  , rigIsErased
-  , rigIsLinear
-  , rigIsOmega
-  , rigJoin
-  , rigOfBinder
-  , rigScale
-  , shift
-  , shiftAlt
-  , shiftAlts
-  , shiftArgs
-  , showArgTerms
-  , showBinders
-  , showCoreAlts
-  , showCoreChars
-  , showCoreString
-  , showRig
-  , showTerm
-  , showTypeSig
-  , solsCons
-  , solsDepth
-  , solsEmpty
-  , solsFromList
-  , solsList
-  , solsLookup
-  , solsOf
-  , solsPutDefVals
-  , substAltAt
-  , substMetaVar
-  , substMetaVarAlt
-  , substMetaVarGo
-  , substVarAt
-  , termGlobalNames
-  , termHasUnsolvedMeta
-  , termReachesFloat
-  , termSize
-  , termUsesFloat
-  , typeLevelOf
-  ) where
+module Vuna.Compiler.Core.Term where
 
 -- Vuna.Compiler.Core.Term：core 类型论的表示层与纯数据操作。
 --
@@ -105,6 +13,7 @@ module Vuna.Compiler.Core.Term
 import Vuna.Compiler.Common
 import Base.HashMap
 import Vuna.Compiler.Intrinsics
+export import Base.Bool (not)
 
 -- ---------------------------------------------------------------
 -- M18.6：表示层定型（QTT 预留）
@@ -113,7 +22,7 @@ import Vuna.Compiler.Intrinsics
 -- Rig 是「这个 binder 在运行时用几次」的三值格子。M38 起精化器三值都产生（Rig0 / Rig1 / RigOmega）；
 -- 擦除与用量判据只读 Rig（`rigIsErased`），codegen 的下游
 -- 逻辑（判「是否擦除」）不变。
-data Rig : Type where
+export data Rig(..) : Type where
   -- 运行时零次：类型级 binder、隐式实参。擦除 = 不进运行时表示。
   Rig0 : Rig
   -- 运行时恰好一次：普通值 binder。
@@ -122,47 +31,47 @@ data Rig : Type where
   RigOmega : Rig
 
 -- 「是否擦除」唯一判据：Elab 与 Codegen 都走这里，不直接模式匹配 Rig。
-rigIsErased : Rig -> Bool
+export rigIsErased : Rig -> Bool
 rigIsErased Rig0 = True
 rigIsErased Rig1 = False
 rigIsErased RigOmega = False
 
-rigIsLinear : Rig -> Bool
+export rigIsLinear : Rig -> Bool
 rigIsLinear Rig1 = True
 rigIsLinear _ = False
 
-rigIsOmega : Rig -> Bool
+export rigIsOmega : Rig -> Bool
 rigIsOmega RigOmega = True
 rigIsOmega _ = False
 
 -- 精化器的判据：隐式 binder 恒 Rig0；显式 binder 只有域是宇宙才 Rig0；
 -- 其余显式值 binder 默认 ω（M38：不再默认 Rig1；1 是显式线性标注）。
 -- 注意这是**默认构造**入口；带源码 quantity 的路径走 Elab 的 `rigForPi`。
-rigOfBinder : Bool -> Bool -> Rig
+export rigOfBinder : Bool -> Bool -> Rig
 rigOfBinder True isTypeDom = Rig0
 rigOfBinder False True = Rig0
 rigOfBinder False False = RigOmega
 
-defaultExplicitRig : Rig
+export defaultExplicitRig : Rig
 defaultExplicitRig = RigOmega
 
 -- M38：Rig 三值半环。唯一实现；Elab/Usage 不自己写三值分支。
 --   add   ：同一变量多次出现 / 顺序组合
 --   scale ：把一段 usage 按 binder quantity 放大
 --   join  ：分支合并（0∨1 = ω：线性值必须在每条路径上都被消费）
-rigAdd : Rig -> Rig -> Rig
+export rigAdd : Rig -> Rig -> Rig
 rigAdd Rig0 b = b
 rigAdd a Rig0 = a
 rigAdd Rig1 Rig1 = RigOmega
 rigAdd _ _ = RigOmega
 
-rigScale : Rig -> Rig -> Rig
+export rigScale : Rig -> Rig -> Rig
 rigScale Rig0 _ = Rig0
 rigScale _ Rig0 = Rig0
 rigScale Rig1 u = u
 rigScale RigOmega u = RigOmega
 
-rigJoin : Rig -> Rig -> Rig
+export rigJoin : Rig -> Rig -> Rig
 rigJoin Rig0 Rig0 = Rig0
 rigJoin Rig1 Rig1 = Rig1
 rigJoin RigOmega _ = RigOmega
@@ -170,14 +79,14 @@ rigJoin _ RigOmega = RigOmega
 rigJoin _ _ = RigOmega
 
 -- 声明的 quantity 与实测 usage 是否兼容（0/1 精确；ω 任意）。
-rigExact : Rig -> Rig -> Bool
+export rigExact : Rig -> Rig -> Bool
 rigExact Rig0 Rig0 = True
 rigExact Rig0 _ = False
 rigExact Rig1 Rig1 = True
 rigExact Rig1 _ = False
 rigExact RigOmega _ = True
 
-showRig : Rig -> String
+export showRig : Rig -> String
 showRig Rig0 = "0"
 showRig Rig1 = "1"
 showRig RigOmega = "ω"
@@ -185,32 +94,32 @@ showRig RigOmega = "ω"
 -- 宇宙层级：不透明。`Level` 的表示（现在就是一个非负 Int）只有本模块可见；
 -- 其它模块只能经 levelZero / levelSucc / levelMax / levelToInt / levelEq / levelLt
 -- 与 `TType` / `VType` 触碰层级，**禁止**自己做 `Int` 算术或模式匹配。
-record Level where
+export record Level(..) where
   levelToInt : Int
 
-levelZero : Level
+export levelZero : Level
 levelZero = Level 0
 
-levelSucc : Level -> Level
+export levelSucc : Level -> Level
 levelSucc (Level n) = Level (n + 1)
 
-levelMax : Level -> Level -> Level
+export levelMax : Level -> Level -> Level
 levelMax (Level a) (Level b) = Level (if a >= b then a else b)
 
-levelToInt : Level -> Int
+export levelToInt : Level -> Int
 levelToInt (Level n) = n
 
 -- 只给输入语法 `Type n` 与解析器/测试用；生产路径一律经 levelSucc / levelMax。
-levelOfInt : Int -> Level
+export levelOfInt : Int -> Level
 levelOfInt n = Level n
 
-levelEq : Level -> Level -> Bool
+export levelEq : Level -> Level -> Bool
 levelEq (Level a) (Level b) = a == b
 
-levelLt : Level -> Level -> Bool
+export levelLt : Level -> Level -> Bool
 levelLt (Level a) (Level b) = a < b
 
-data Term : Type where
+export data Term(..) : Type where
   TVar : String -> Int -> Span -> Term
   TMeta : Int -> Term
   TGlobal : String -> Term
@@ -243,29 +152,29 @@ data Term : Type where
   TRecord : String -> List (Pair Term Rig) -> Term
 
 -- case 分支：构造子名 + 绑定子（名字 / multiplicity）+ 体。
-record CaseAlt where
+export record CaseAlt(..) where
   caseAltName : String
   caseAltBinders : List (Pair String Rig)
   caseAltBody : Term
 
-caseAltName : CaseAlt -> String
+export caseAltName : CaseAlt -> String
 caseAltName (CaseAlt name binders body) = name
 
-caseAltBinders : CaseAlt -> List (Pair String Rig)
+export caseAltBinders : CaseAlt -> List (Pair String Rig)
 caseAltBinders (CaseAlt name binders body) = binders
 
-caseAltBody : CaseAlt -> Term
+export caseAltBody : CaseAlt -> Term
 caseAltBody (CaseAlt name binders body) = body
 
-record Closure where
+export record Closure(..) where
   closureEnv : List Value
   closureBody : Term
 
-data Neutral : Type where
+export data Neutral(..) : Type where
   NVar : String -> Int -> List Value -> Neutral
   NGlobal : String -> List Value -> Neutral
 
-data Value : Type where
+export data Value(..) : Type where
   VType : Level -> Value
   VPi : String -> Bool -> Rig -> Value -> Closure -> Value
   VLam : String -> Rig -> Closure -> Value
@@ -287,12 +196,12 @@ data Value : Type where
   VFloat : String -> Value
 
 -- case 分支的值形态：绑定子 + 悬挂在「绑定子入环境后」的闭包。
-record VCaseAlt where
+export record VCaseAlt(..) where
   vCaseAltName : String
   vCaseAltBinders : List (Pair String Rig)
   vCaseAltClosure : Closure
 
-defaultFuel : Int
+export defaultFuel : Int
 defaultFuel = 512
 
 -- ---------------------------------------------------------------
@@ -313,7 +222,7 @@ natChainMax = 4611686018427387903
 -- `TApp` 嵌套的应用脊）折成 `Maybe Int`，非链形态或部分应用返回 `Nothing`。
 -- 超过 `natChainMax` 时与运行时 Nat 一样饱和；链深超过内部上限返回 `Nothing`
 -- （防失控输入，正常源码字面量远小于该上限）。
-natChainValue : Term -> Maybe Int
+export natChainValue : Term -> Maybe Int
 natChainValue t = natChainGo 1000000 t
 
 natChainGo : Int -> Term -> Maybe Int
@@ -351,7 +260,7 @@ flattenTermAppGo t acc = Pair t acc
 -- | 项的节点数（`TVar` / 字面量 / binder 各计 1，case 只数 scrutinee 与分支体）。
 -- 用一个线性遍历把「固定 fuel」换成「按项规模派生 + 显式上限」，深项不再假报
 -- fuel 耗尽；调用方各自再套上限防 DoS。
-termSize : Term -> Int
+export termSize : Term -> Int
 termSize (TVar _ _ _) = 1
 termSize (TMeta _) = 1
 termSize (TGlobal _) = 1
@@ -383,11 +292,11 @@ termSizeAlts (alt :: rest) = termSize (caseAltBody alt) + termSizeAlts rest
 -- 元变量 / 定义表（M14：解是 level 形态的 Value，可以提到当前上下文里的局部变量）
 -- ---------------------------------------------------------------
 -- 热路径入口：查解表的 HashMap Int 索引（O(1)、无 strFromInt 分配）。
-metaLookup : Int -> HashMap Int Value -> Maybe Value
+export metaLookup : Int -> HashMap Int Value -> Maybe Value
 metaLookup i t = Base.HashMap.lookup i t
 
 -- 纯 list 场景（只有解表 list、没有索引）的线性兜底；热路径不要用。
-metaLookupList : Int -> List (Pair Int Value) -> Maybe Value
+export metaLookupList : Int -> List (Pair Int Value) -> Maybe Value
 metaLookupList i [] = Nothing
 metaLookupList i ((Pair j t) :: rest) = if i == j then Just t else metaLookupList i rest
 
@@ -406,46 +315,46 @@ metaLookupList i ((Pair j t) :: rest) = if i == j then Just t else metaLookupLis
 -- 它是可重建缓存：未命中一律回落 `force` 原来的 defs 表 delta 展开，所以缓存内容
 -- 少一点只影响速度、不影响语义。缓存写入只发生在 `Elab.Driver.elabBodies` 的安全
 -- 前缀检查之后（闭项、无未解元变量、可达全局名全部已缓存或永不定义），见那里的证明。
-record Sols where
+export record Sols(..) where
   solsTbl : HashMap Int Value
   solsList : List (Pair Int Value)
   solsDepth : HashMap Int Int
   solsDefVals : HashMap String Value
 
-solsEmpty : Sols
+export solsEmpty : Sols
 solsEmpty = Sols (Base.HashMap.fromList []) [] (Base.HashMap.fromList []) (Base.HashMap.fromList [])
 
-solsFromList : List (Pair Int Value) -> Sols
+export solsFromList : List (Pair Int Value) -> Sols
 solsFromList xs =
   Sols (Base.HashMap.insertAll xs (Base.HashMap.fromList [])) xs (Base.HashMap.fromList [])
     (Base.HashMap.fromList [])
 
 -- Elab 侧构造：解表（list 权威）+ 解索引 + 元变量创建深度索引 + 定义值缓存。
-solsOf : HashMap Int Value -> List (Pair Int Value) -> HashMap Int Int -> HashMap String Value -> Sols
+export solsOf : HashMap Int Value -> List (Pair Int Value) -> HashMap Int Int -> HashMap String Value -> Sols
 solsOf t xs d dv = Sols t xs d dv
 
-solsList : Sols -> List (Pair Int Value)
+export solsList : Sols -> List (Pair Int Value)
 solsList (Sols t xs d dv) = xs
 
 -- 定义值缓存（`force` 的 delta 展开先查它；未命中才回落 defs 表）。
-solsPutDefVals : Sols -> HashMap String Value -> Sols
+export solsPutDefVals : Sols -> HashMap String Value -> Sols
 solsPutDefVals (Sols t xs d dv) dv2 = Sols t xs d dv2
 
 -- 元变量创建深度（绑定当时的上下文长度）；未登记的元变量返回 Nothing。
-solsDepth : Int -> Sols -> Maybe Int
+export solsDepth : Int -> Sols -> Maybe Int
 solsDepth i (Sols t xs d dv) = Base.HashMap.lookup i d
 
-solsLookup : Int -> Sols -> Maybe Value
+export solsLookup : Int -> Sols -> Maybe Value
 -- 索引与 list 同步维护（`solsCons`/`ecPutSols` 每次前插都插表），所以 miss 就是「未解」，
 -- 不做线性兜底：未解元变量在推断期是**高频**查询，兜底会退化成 O(#解)/次。
 solsLookup i (Sols t xs d dv) = Base.HashMap.lookup i t
 
-solsCons : Int -> Value -> Sols -> Sols
+export solsCons : Int -> Value -> Sols -> Sols
 solsCons i v (Sols t xs d dv) = Sols (Base.HashMap.insert i v t) (Pair i v :: xs) d dv
 
 -- 项里是否有**未解**元变量（D18 的值共享安全条件之一：含未解 meta 的体不缓存）。
 -- 已解的 TMeta 不算：缓存里留下的是已解值，后续求解不会改写既有解。
-termHasUnsolvedMeta : Sols -> Term -> Bool
+export termHasUnsolvedMeta : Sols -> Term -> Bool
 termHasUnsolvedMeta sols (TMeta m) = case solsLookup m sols of
   Just _ => False
   Nothing => True
@@ -483,7 +392,7 @@ termHasUnsolvedMetaAlts sols (alt :: rest) =
 
 -- | 项是否含浮点字面量，或引用名字在给定列表里的全局（`floatIntrinsicNames` 等）：
 -- interp/REPL 拒绝浮点求值、codegen 按需生成浮点 runtime helper 的共用判据。
-termUsesFloat : List String -> Term -> Bool
+export termUsesFloat : List String -> Term -> Bool
 termUsesFloat names (TFloat raw) = True
 termUsesFloat names (TGlobal n) = memName n names
 termUsesFloat names (TVar n i _) = False
@@ -517,7 +426,7 @@ anyAltUsesFloat names (a :: rest) =
   termUsesFloat names (caseAltBody a) || anyAltUsesFloat names rest
 
 -- | 项里出现的全部 `TGlobal` 名字（不去重；可达性扫描用）。
-termGlobalNames : Term -> List String
+export termGlobalNames : Term -> List String
 termGlobalNames (TFloat raw) = []
 termGlobalNames (TGlobal n) = [n]
 termGlobalNames (TVar n i _) = []
@@ -544,7 +453,7 @@ termGlobalNames (TIf c th el) =
 -- interp/REPL 的浮点求值 guard 用它（不能只看程序里“有没有 Base.Float 定义”，否则
 -- `import Base` 的正常程序会被误拒）；工作列表 + fuel 限深（不做 visited：defs 环由
 -- fuel 兜底）。
-termReachesFloat : List (Pair String Term) -> List String -> Term -> Bool
+export termReachesFloat : List (Pair String Term) -> List String -> Term -> Bool
 termReachesFloat defs names t = reachesTermsFuel 4096 defs names [t]
 
 -- | 可达性扫描的工作列表步进：命中浮点即真，否则把该项引用的全局定义体加入待查
@@ -569,11 +478,11 @@ lookupPair : String -> List (Pair String Term) -> Maybe Term
 lookupPair name [] = Nothing
 lookupPair name ((Pair n v) :: rest) = if n == name then Just v else lookupPair name rest
 
-defLookup : String -> HashMap String Term -> Maybe Term
+export defLookup : String -> HashMap String Term -> Maybe Term
 defLookup name tbl = Base.HashMap.lookup name tbl
 
 -- 闭合项检查：TVar 只有在被 lambda/Pi 绑定时才允许。
-hasFreeVar : Int -> Term -> Bool
+export hasFreeVar : Int -> Term -> Bool
 hasFreeVar depth (TVar name i _) = i >= depth
 hasFreeVar depth (TMeta m) = False
 hasFreeVar depth (TGlobal g) = False
@@ -595,16 +504,16 @@ hasFreeVar depth (TFloat raw) = False
 hasFreeVar depth (TBool b) = False
 hasFreeVar depth (TIf c th el) = hasFreeVar depth c || hasFreeVar depth th || hasFreeVar depth el
 
-hasFreeVarArgs : Int -> List (Pair Term Rig) -> Bool
+export hasFreeVarArgs : Int -> List (Pair Term Rig) -> Bool
 hasFreeVarArgs depth [] = False
 hasFreeVarArgs depth ((Pair a rig) :: rest) = hasFreeVar depth a || hasFreeVarArgs depth rest
 
-hasFreeVarAlts : Int -> List CaseAlt -> Bool
+export hasFreeVarAlts : Int -> List CaseAlt -> Bool
 hasFreeVarAlts depth [] = False
 hasFreeVarAlts depth (alt :: rest) =
   hasFreeVar (depth + length (caseAltBinders alt)) (caseAltBody alt) || hasFreeVarAlts depth rest
 
-hasMeta : Int -> Int -> Term -> Bool
+export hasMeta : Int -> Int -> Term -> Bool
 hasMeta m depth (TMeta j) = m == j
 hasMeta m depth (TVar name i _) = False
 hasMeta m depth (TGlobal g) = False
@@ -625,11 +534,11 @@ hasMeta m depth (TFloat raw) = False
 hasMeta m depth (TBool b) = False
 hasMeta m depth (TIf c th el) = hasMeta m depth c || hasMeta m depth th || hasMeta m depth el
 
-hasMetaArgs : Int -> Int -> List (Pair Term Rig) -> Bool
+export hasMetaArgs : Int -> Int -> List (Pair Term Rig) -> Bool
 hasMetaArgs m depth [] = False
 hasMetaArgs m depth ((Pair a rig) :: rest) = hasMeta m depth a || hasMetaArgs m depth rest
 
-hasMetaAlts : Int -> Int -> List CaseAlt -> Bool
+export hasMetaAlts : Int -> Int -> List CaseAlt -> Bool
 hasMetaAlts m depth [] = False
 hasMetaAlts m depth (alt :: rest) =
   hasMeta m (depth + length (caseAltBinders alt)) (caseAltBody alt) || hasMetaAlts m depth rest
@@ -638,7 +547,7 @@ hasMetaAlts m depth (alt :: rest) =
 -- de Bruijn 移动：把项从深度 depth 的上下文嵌入到更深上下文（自由变量 +amount）。
 -- 局部上下文的类型按「绑定时上下文」存储，取用时需要 shift 0 (idx+1)。
 -- ---------------------------------------------------------------
-shift : Int -> Int -> Term -> Term
+export shift : Int -> Int -> Term -> Term
 shift depth amount (t@(TVar name i sp)) = if i >= depth then TVar name (i + amount) sp else t
 shift depth amount (t@(TMeta m)) = t
 shift depth amount (t@(TGlobal g)) = t
@@ -662,21 +571,21 @@ shift depth amount (t@(TBool b)) = t
 shift depth amount (TIf c th el) =
   TIf (shift depth amount c) (shift depth amount th) (shift depth amount el)
 
-shiftArgs : Int -> Int -> List (Pair Term Rig) -> List (Pair Term Rig)
+export shiftArgs : Int -> Int -> List (Pair Term Rig) -> List (Pair Term Rig)
 shiftArgs depth amount [] = []
 shiftArgs depth amount ((Pair a rig) :: rest) =
   Pair (shift depth amount a) rig :: shiftArgs depth amount rest
 
-shiftAlts : Int -> Int -> List CaseAlt -> List CaseAlt
+export shiftAlts : Int -> Int -> List CaseAlt -> List CaseAlt
 shiftAlts depth amount [] = []
 shiftAlts depth amount (alt :: rest) = shiftAlt depth amount alt :: shiftAlts depth amount rest
 
-shiftAlt : Int -> Int -> CaseAlt -> CaseAlt
+export shiftAlt : Int -> Int -> CaseAlt -> CaseAlt
 shiftAlt depth amount (CaseAlt name binders body) =
   CaseAlt name binders (shift (depth + length binders) amount body)
 
 -- 把项里对 de Bruijn 索引 `idx` 的变量引用替换成项 `arg`（按索引替换，不按名字）。
-substVarAt : Int -> Term -> Term -> Term
+export substVarAt : Int -> Term -> Term -> Term
 substVarAt idx arg (t@(TVar n i _)) = if i == idx then arg else t
 substVarAt idx arg (t@(TMeta m)) = t
 substVarAt idx arg (t@(TGlobal g)) = t
@@ -703,15 +612,15 @@ substVarAt idx arg (t@(TBool b)) = t
 substVarAt idx arg (TIf c th el) =
   TIf (substVarAt idx arg c) (substVarAt idx arg th) (substVarAt idx arg el)
 
-substAltAt : Int -> Term -> CaseAlt -> CaseAlt
+export substAltAt : Int -> Term -> CaseAlt -> CaseAlt
 substAltAt idx arg alt =
   CaseAlt (caseAltName alt) (caseAltBinders alt)
     (substVarAt (idx + length (caseAltBinders alt)) arg (caseAltBody alt))
 
-substMetaVar : Int -> String -> Int -> Term -> Term
+export substMetaVar : Int -> String -> Int -> Term -> Term
 substMetaVar m name q t = substMetaVarGo m name q 0 t
 
-substMetaVarGo : Int -> String -> Int -> Int -> Term -> Term
+export substMetaVarGo : Int -> String -> Int -> Int -> Term -> Term
 substMetaVarGo m name q depth (t@(TMeta n)) =
   if n == m then TVar name (depth - q) (Span "" 0 0 0 0) else t
 substMetaVarGo m name q depth (TPi n i r d c) =
@@ -734,29 +643,29 @@ substMetaVarGo m name q depth (TIf c th el) =
     (substMetaVarGo m name q depth el)
 substMetaVarGo m name q depth t = t
 
-substMetaVarAlt : Int -> String -> Int -> Int -> CaseAlt -> CaseAlt
+export substMetaVarAlt : Int -> String -> Int -> Int -> CaseAlt -> CaseAlt
 substMetaVarAlt m name q depth (CaseAlt bn bs b) =
   CaseAlt bn bs (substMetaVarGo m name q (depth + length bs) b)
 
 -- M20 字典提升：在 `TPi` 链索引 `idx` 的绑定子后插入 `{d : Dict_C a}`（隐式运行时字典）。
 -- `dictDom` 里类参数引用插入后索引 +1（`d` 落在类参数绑定子之内）。
-insertDictBinder : String -> Int -> Term -> Term -> Term
+export insertDictBinder : String -> Int -> Term -> Term -> Term
 insertDictBinder name idx dictDom t = insertDictBinderGo name idx dictDom 0 t
 
 -- 在 telescope 里插入 binder（插在第 idx+1 个 binder 之后）：cod 根处深度恰好是 idx+1，
 -- 其中 0..idx 号索引都指向插入点之前的 binder，索引全部 +1；`shift 0 1` 在嵌套 binder
 -- 内会把 cutoff 自动抬高 1，正好让「插入点之后才绑定的变量」保持不变。
-insertDictBinderGo : String -> Int -> Term -> Int -> Term -> Term
+export insertDictBinderGo : String -> Int -> Term -> Int -> Term -> Term
 insertDictBinderGo name idx dictDom depth (TPi n i r d c) =
   if depth == idx then TPi n i r d (TPi name True RigOmega dictDom (shift 0 1 c))
   else TPi n i r d (insertDictBinderGo name idx dictDom (depth + 1) c)
 insertDictBinderGo name idx dictDom depth t = t
 
 -- M29：保留给旧调用面的纯 helper（本模块不再用；导出名保持稳定以免动导出面快照）。
-cutoffOf : Int -> Int -> Int
+export cutoffOf : Int -> Int -> Int
 cutoffOf total idx = if total - (idx + 1) <= 0 then 0 else total - (idx + 1)
 
-countPis : Term -> Int
+export countPis : Term -> Int
 countPis (TPi n i r d c) = 1 + countPis c
 countPis _ = 0
 
@@ -765,21 +674,21 @@ countPis _ = 0
 -- 必须是 0（`shift` 下钻 binder 时会自动抬高 cutoff，正好保持体内层变量不变）。旧实现
 -- 传 `total - (idx + 1)`，导致第 `idx` 个 binder 及一部分外侧变量少移一位——被提升的
 -- 字典变量因此可能退化成显式参数（`ma` → `d114` 自应用）。
-insertLamBinder : String -> Int -> Term -> Term
+export insertLamBinder : String -> Int -> Term -> Term
 insertLamBinder name idx t = insertLamBinderGo name idx 0 t
 
-insertLamBinderGo : String -> Int -> Int -> Term -> Term
+export insertLamBinderGo : String -> Int -> Int -> Term -> Term
 insertLamBinderGo name idx depth (TLam n r b) =
   if depth == idx then TLam n r (TLam name RigOmega (shift 0 1 b))
   else TLam n r (insertLamBinderGo name idx (depth + 1) b)
 insertLamBinderGo name idx depth t = t
 
-countLams : Term -> Int
+export countLams : Term -> Int
 countLams (TLam n r b) = 1 + countLams b
 countLams _ = 0
 
 -- 项里是否有自由变量（`i >= depth` 的 `TVar`）。闭项无自由变量。
-hasFreeTermVar : Int -> Term -> Bool
+export hasFreeTermVar : Int -> Term -> Bool
 hasFreeTermVar d (TVar n i _) = i >= d
 hasFreeTermVar d (TPi n i r dm cd) = hasFreeTermVar d dm || hasFreeTermVar (d + 1) cd
 hasFreeTermVar d (TLam n r b) = hasFreeTermVar (d + 1) b
@@ -796,18 +705,18 @@ hasFreeTermVar d (TCase s alts) = hasFreeTermVar d s || anyAltFree d alts
 hasFreeTermVar d (TIf c th el) = hasFreeTermVar d c || hasFreeTermVar d th || hasFreeTermVar d el
 hasFreeTermVar d _ = False
 
-anyPairFree : Int -> List (Pair Term Rig) -> Bool
+export anyPairFree : Int -> List (Pair Term Rig) -> Bool
 anyPairFree d [] = False
 anyPairFree d ((Pair a r) :: rest) = hasFreeTermVar d a || anyPairFree d rest
 
-anyAltFree : Int -> List CaseAlt -> Bool
+export anyAltFree : Int -> List CaseAlt -> Bool
 anyAltFree d [] = False
 anyAltFree d ((CaseAlt n bs b) :: rest) = hasFreeTermVar (d + length bs) b || anyAltFree d rest
 
 -- 负 de Bruijn 索引：quote 的越界产物（`varIndex` 对越界 level 返回 -1）。`hasFreeTermVar`
 -- 只查上界，负索引会被 `lookupEnv` 的 `i <= 0` 当成**最内层**变量（静默错位），所以
 -- 序列化/摘要校验必须单独拒绝它。
-hasNegativeVar : Term -> Bool
+export hasNegativeVar : Term -> Bool
 hasNegativeVar (TVar n i _) = i < 0
 hasNegativeVar (TPi n i r d c) = hasNegativeVar d || hasNegativeVar c
 hasNegativeVar (TLam n r b) = hasNegativeVar b
@@ -821,16 +730,16 @@ hasNegativeVar (TCase s alts) = hasNegativeVar s || anyNegativeVarAlts alts
 hasNegativeVar (TIf c th el) = hasNegativeVar c || hasNegativeVar th || hasNegativeVar el
 hasNegativeVar _ = False
 
-anyNegativeVarArgs : List (Pair Term Rig) -> Bool
+export anyNegativeVarArgs : List (Pair Term Rig) -> Bool
 anyNegativeVarArgs [] = False
 anyNegativeVarArgs ((Pair a r) :: rest) = hasNegativeVar a || anyNegativeVarArgs rest
 
-anyNegativeVarAlts : List CaseAlt -> Bool
+export anyNegativeVarAlts : List CaseAlt -> Bool
 anyNegativeVarAlts [] = False
 anyNegativeVarAlts ((CaseAlt n bs b) :: rest) = hasNegativeVar b || anyNegativeVarAlts rest
 
 -- M20：值里是否还有未解元变量（`VMeta m` 未解，或解里仍有未解）。
-hasUnsolvedMetaValue : Sols -> Value -> Bool
+export hasUnsolvedMetaValue : Sols -> Value -> Bool
 hasUnsolvedMetaValue sols v = hasUnsolvedMetaValueFuel 64 sols v
 
 hasUnsolvedMetaValueFuel : Int -> Sols -> Value -> Bool
@@ -856,7 +765,7 @@ else case v of
       || hasUnsolvedMetaValueFuel (fuel - 1) sols el
   _ => False
 
-hasUnsolvedMetaList : Sols -> List Value -> Bool
+export hasUnsolvedMetaList : Sols -> List Value -> Bool
 hasUnsolvedMetaList sols vs = hasUnsolvedMetaListFuel 64 sols vs
 
 hasUnsolvedMetaListFuel : Int -> Sols -> List Value -> Bool
@@ -866,7 +775,7 @@ else case vs of
   v :: rest =>
     hasUnsolvedMetaValueFuel (fuel - 1) sols v || hasUnsolvedMetaListFuel (fuel - 1) sols rest
 
-hasUnsolvedMetaClo : Sols -> Closure -> Bool
+export hasUnsolvedMetaClo : Sols -> Closure -> Bool
 hasUnsolvedMetaClo sols clo = hasUnsolvedMetaCloFuel 64 sols clo
 
 hasUnsolvedMetaCloFuel : Int -> Sols -> Closure -> Bool
@@ -877,11 +786,11 @@ else case clo of
 -- ---------------------------------------------------------------
 -- 宇宙 helper
 -- ---------------------------------------------------------------
-isTypeValue : Value -> Bool
+export isTypeValue : Value -> Bool
 isTypeValue (VType l) = True
 isTypeValue _ = False
 
-typeLevelOf : Value -> Maybe Level
+export typeLevelOf : Value -> Maybe Level
 typeLevelOf (VType l) = Just l
 typeLevelOf _ = Nothing
 
@@ -889,7 +798,7 @@ typeLevelOf _ = Nothing
 -- 打印（错误信息与 interp --dt 结果展示）
 -- ---------------------------------------------------------------
 -- 解里是否出现 level ≥ limit 的局部变量（即创建该元变量之后才绑定的变量）。
-levelEscapes : Int -> Int -> Value -> Bool
+export levelEscapes : Int -> Int -> Value -> Bool
 levelEscapes limit depth (VNeutral n) = case n of
   NVar name lvl sp => lvl >= limit || levelEscapesList limit sp
   NGlobal g sp => levelEscapesList limit sp
@@ -909,14 +818,14 @@ levelEscapes limit depth (VStr s) = False
 levelEscapes limit depth (VFloat raw) = False
 levelEscapes limit depth (VBool b) = False
 
-levelEscapesList : Int -> List Value -> Bool
+export levelEscapesList : Int -> List Value -> Bool
 levelEscapesList limit [] = False
 levelEscapesList limit (v :: rest) = levelEscapes limit 0 v || levelEscapesList limit rest
 
-levelEscapesClo : Int -> Closure -> Bool
+export levelEscapesClo : Int -> Closure -> Bool
 levelEscapesClo limit (Closure env body) = levelEscapesList limit env
 
-showTerm : Term -> String
+export showTerm : Term -> String
 showTerm (TVar name i _) = name
 showTerm (TMeta m) = "?${m}"
 showTerm (TGlobal g) = g
@@ -943,7 +852,7 @@ showTerm (TIf c th el) = "if ${showTerm c} then ${showTerm th} else ${showTerm e
 -- `showTerm` 不为匿名 Pi 的域补括号：`(Int -> Int) -> Int` 会渲染成
 -- `Int -> Int -> Int`（右结合），写回源码会静默改变类型；TApp/TCon 的实参也有
 -- 同样问题。这里只在需要时补括号，其余形态委托 `showTerm`（诊断文案不受影响）。
-showTypeSig : Term -> String
+export showTypeSig : Term -> String
 showTypeSig (TPi name implicit rig dom cod) =
   if name == "_" then showSigParenIfPi dom ++ " -> " ++ showTypeSig cod
   else if implicit then "{" ++ name ++ " : " ++ showTypeSig dom ++ "} -> " ++ showTypeSig cod
@@ -962,7 +871,7 @@ showSigArgs : List (Pair Term Rig) -> String
 showSigArgs [] = ""
 showSigArgs ((Pair a rig) :: rest) = " " ++ showSigParenIfPi a ++ showSigArgs rest
 
-showArgTerms : List (Pair Term Rig) -> String
+export showArgTerms : List (Pair Term Rig) -> String
 showArgTerms [] = ""
 showArgTerms ((Pair a rig) :: rest) = " ${showTerm a}${showArgTerms rest}"
 
@@ -977,19 +886,19 @@ showSigAppText s [] = s
 showSigAppText s ((Pair a _) :: rest) =
   showSigAppText ("(" ++ s ++ " " ++ showSigParenIfPi a ++ ")") rest
 
-showCoreAlts : List CaseAlt -> String
+export showCoreAlts : List CaseAlt -> String
 showCoreAlts [] = ""
 showCoreAlts (alt :: rest) =
   "${caseAltName alt}${showBinders (caseAltBinders alt)} => ${showTerm (caseAltBody alt)} | ${showCoreAlts rest}"
 
-showBinders : List (Pair String Rig) -> String
+export showBinders : List (Pair String Rig) -> String
 showBinders [] = ""
 showBinders ((Pair n rig) :: rest) = " ${n}${showBinders rest}"
 
-showCoreString : String -> String
+export showCoreString : String -> String
 showCoreString s = "\"${showCoreChars (strUnpack s)}\""
 
-showCoreChars : List Int -> String
+export showCoreChars : List Int -> String
 showCoreChars [] = ""
 showCoreChars (c :: rest) = case c of
   34 => "\\\"${showCoreChars rest}"

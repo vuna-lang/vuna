@@ -36,8 +36,8 @@ export tryRecv : {a : Type} -> Channel a -> Eff [] (Maybe a)
 tryRecv (MkChannel r) = do
   xs <- readRef r
   case xs of
-    [] => pure Nothing
-    x :: rest => do
+    Base.List.Nil => pure Nothing
+    Base.List.Cons x rest => do
       _ <- writeRef r rest
       pure (Just x)
 

@@ -1,16 +1,4 @@
-module Vuna.Compiler.Codegen.Term
-  ( GenSt(..)
-  , actionResultTy
-  , actionRunText
-  , dtDefLocTable
-  , dtListBridge
-  , dtRuntime
-  , dtRuntimeWith
-  , findListFamilyData
-  , genDtHook
-  , genGroups
-  , mkGenSt
-  ) where
+module Vuna.Compiler.Codegen.Term where
 
 -- Vuna.Compiler.Codegen.Term：项 → OCaml（擦除驱动）+ DT 运行时前缀。
 --
@@ -30,7 +18,7 @@ import Vuna.Compiler.Elab.Representation
 import Vuna.Compiler.Codegen.Erase
 
 -- DT runtime：只包含 prelude 里出现的运算与 show（名字/语义与运行时 helper 一致）。
-dtRuntime : String
+export dtRuntime : String
 dtRuntime = """let () =
   let c = Gc.get () in
   Gc.set { c with minor_heap_size = 16 * 1024 * 1024; space_overhead = 200 }
@@ -859,7 +847,7 @@ let dt_report_exn e bt =
 -- M34.6：旧实现 `row ++ dtDefLocTable norm rest` 是右嵌套 `++`，每层都重拷整段已累积
 -- 文本（compiler 包 3086 行 ⇒ 约 430MB 拷贝、~365ms）；改为先 map 出行再一次性
 -- `strConcatMany`（runtime `String.concat ""`，单遍分配）。
-dtDefLocTable : (String -> String) -> List DtDef -> List (Pair String (Pair String Int)) -> String
+export dtDefLocTable : (String -> String) -> List DtDef -> List (Pair String (Pair String Int)) -> String
 dtDefLocTable norm defs extra =
   strConcatMany
     (sortLocRows (filter (\r => r /= "") (append (map (dtDefLocRow norm) defs) (map (extraLocRow norm) extra))))
@@ -918,7 +906,7 @@ let dtp_debug_line (s : string) =
 -- `dt_def_locs` 必须定义在报告器之前（报告器读它）；空表写成 `[]`。
 -- `usesFloat` / `usesTrace` 为 False 时对应 helper 不出现：不用 Float/tracing 的程序
 -- runtime 与引入该功能前**逐字节一致**（旧 seed 固定点/缓存关键）。
-dtRuntimeWith : String -> Bool -> Bool -> String
+export dtRuntimeWith : String -> Bool -> Bool -> String
 dtRuntimeWith locs usesFloat usesTrace =
   dtRuntime
     ++ (if usesFloat then dtFloatRuntime else "")
@@ -933,7 +921,7 @@ dtRuntimeWith locs usesFloat usesTrace =
 -- 归纳族（`Base.List.List` 在 OCaml 里是变体类型 `t_Base_dList_dList`）。这两个 helper
 -- 按实际族名生成，把 int list ↔ 族构造子互转；`genGlobalRef` 把 `strUnpack`/`strPack`
 -- 映射到它们（桥接只服务 Int 元素，与 prelude 签名 `List Int` 一致）。
-dtListBridge : List DtData -> String
+export dtListBridge : List DtData -> String
 dtListBridge datas = case findListFamilyData datas of
   Nothing => ""
   Just dd => case findFamilyCtor (dtDataCtors dd) listNilCtor of
@@ -986,7 +974,7 @@ findFamilyCtor : List DtCtor -> String -> Maybe DtCtor
 findFamilyCtor [] name = Nothing
 findFamilyCtor (c :: rest) name = if dtCtorName c == name then Just c else findFamilyCtor rest name
 
-findListFamilyData : List DtData -> Maybe DtData
+export findListFamilyData : List DtData -> Maybe DtData
 findListFamilyData [] = Nothing
 findListFamilyData (d :: rest) =
   if dtDataName d == listFamilyName then Just d else findListFamilyData rest
@@ -1070,7 +1058,7 @@ else case names of
 -- M24.6：`gsCtorShapes` 是构造子字段形状的唯一真源，构造子应用与 case 分支都按它
 -- 校验/生成（见 `ctorKeepFlags`）。D27 起再加一张 `gsCtorOpaques`：运行时不可命名的
 -- 擦除依赖字段（`Obj.t`），构造子应用处要对该实参生成 `Obj.magic`。
-record GenSt where
+export record GenSt(..) where
   gsFamilies : List String
   gsCtors : List (Pair String String)
   gsCtorShapes : List (Pair String (List Bool))
@@ -1106,7 +1094,7 @@ ctorTableOf : List DtData -> List (Pair String String)
 ctorTableOf [] = []
 ctorTableOf (d :: rest) = append (ctorTableOfData d) (ctorTableOf rest)
 
-mkGenSt : QualCtx -> List DtData -> GenSt
+export mkGenSt : QualCtx -> List DtData -> GenSt
 mkGenSt qc datas =
   GenSt (map dtDataName datas) (ctorTableOf datas) (ctorShapeOf datas) (ctorOpaqueTableOf datas)
     (unboxedFamilySet datas)
@@ -2108,7 +2096,7 @@ genGroupLet st group isRec = Vuna.Compiler.Common.bind (genGroupBodies st isRec 
     _ => OkC (Pair ((if isRec then "let rec " else "let ") ++ joinWith "\nand " defs) st2)
 )
 
-genGroups : HashMap String (List String) -> GenSt -> List (List DtDef) -> Check (Pair (List String) GenSt)
+export genGroups : HashMap String (List String) -> GenSt -> List (List DtDef) -> Check (Pair (List String) GenSt)
 genGroups adj st [] = OkC (Pair [] st)
 genGroups adj st (g :: rest) = Vuna.Compiler.Common.bind (genGroup adj st g) (\p => case p of
   Pair text st2 => Vuna.Compiler.Common.bind (genGroups adj st2 rest) (\q => case q of
@@ -2129,7 +2117,7 @@ mainShow table tyTerm = case force (Base.HashMap.fromList table) solsEmpty defau
 -- 拆 main 的动作层：返回 ('eff', 内层类型)。
 -- 阶段 0 spike：接受任意行（Nil 或内建宿主效应行）；entry 检查在 Elab 侧保证行合法，
 -- 执行由 `runMain`（任意行）负责，不再只认 Nil。
-actionResultTy : Term -> Maybe (Pair String Term)
+export actionResultTy : Term -> Maybe (Pair String Term)
 actionResultTy (TApp (TApp fn row _) arg _) = case fn of
   TGlobal g => if g == effTypeName then Just (Pair "eff" arg) else Nothing
   _ => Nothing
@@ -2158,7 +2146,7 @@ mainShowSynth = OkC (Pair (valueName mainShowDefName) "show")
 -- M38：动作整体包进 `try`——未捕获异常交给运行时报告器（dt_report_exn）打印
 -- "vuna: runtime error: ..." + 命中的 vuna 位置帧，然后 exit 2（不再是 OCaml 的
 -- Fatal error 形态）。try 只包 main 这一处，不碰 lambda，尾调不受影响。
-genDtHook : String -> List (Pair String Term) -> Term -> String -> Bool -> Check String
+export genDtHook : String -> List (Pair String Term) -> Term -> String -> Bool -> Check String
 genDtHook bodyText table tyTerm mainExpr printResult = Vuna.Compiler.Common.bind (mainShow table tyTerm) (\showPair => case showPair of
   Pair showFn kind =>
     let
@@ -2209,7 +2197,7 @@ builtinWrapTextGo qc acc (tag :: rest) =
       deps = addDepUnique (secondOf acc) (secondOf runRef)
     in builtinWrapTextGo qc (Pair "(${firstOf runRef} ${firstOf acc})" deps) rest
 
-actionRunText : QualCtx -> Pair (List DtData) (List DtDef) -> String -> String -> Term -> Pair String (List String)
+export actionRunText : QualCtx -> Pair (List DtData) (List DtDef) -> String -> String -> Term -> Pair String (List String)
 actionRunText qc program mainRef kind mainTy = if kind == "eff" then
   let
     runRef = qualValueText qc effMainRunName
