@@ -4,7 +4,7 @@ base/lib/Base/Applicative.vuna: Applicative(..)
 base/lib/Base/Array.vuna: fromList, get, length, make, set, toList
 base/lib/Base/Bits.vuna: add32, band, bnot, bor, bxor, mask32, mask8, rol32, rotr32, shl, shl32, shr, shr32
 base/lib/Base/Bool.vuna: Bool(..), and, bool, not, or, xor
-base/lib/Base/Eff.vuna: Cont, Eff, Member(..), ResFn(..), Row(..), bracket, defaultInstance, effPrim, finally, handleCore, handleCoreLin, handleWith, handleWithAt, joinEff, mkCont, performCore, raise, resFn, resOf, resumeCont, rowAppend, rowRem, runEff, runPure, sendCore, weaken
+base/lib/Base/Eff.vuna: Cont, Eff, Member(..), ResFn(..), Row(..), bracket, defaultInstance, effPrim, finally, handleCore, handleCoreLin, handleWith, handleWithAt, joinEff, joinEffNilOuter, mkCont, performCore, raise, resFn, resOf, resumeCont, rowAppend, rowRem, runEff, runPure, sendCore, weaken
 base/lib/Base/Eff/Reader.vuna: ReaderOp(..), ask, handleReader, handleReaderLin, local, resReader
 base/lib/Base/EffArgs.vuna: ArgsOp(..), argsGetArgs, handleArgs, handleArgsHost, resArgs, runArgs
 base/lib/Base/EffChannel.vuna: Channel, newChannelInt, recv, recvWait, send, tryRecv
@@ -144,6 +144,7 @@ compiler/lib/Vuna/Compiler/Query/Run.vuna: NodeSpan(..), RunOpts(..), RunState, 
 compiler/lib/Vuna/Compiler/Source.vuna: Pos(..), Span(..), baseName, containsDot, joinArrows, joinDots, joinSlashes, module Base.Bool, module Base.List, module Base.Maybe, module Base.Pair, module Base.String, posCol, posLine, showSpanLoc, spanEndCol, spanEndLine, spanFile, spanStartCol, spanStartLine, splitLastDot, splitOnChar, splitOnDot, splitPath, suggest
 compiler/lib/Vuna/Compiler/Store.vuna: Frame(..), fCodecOf, fPayloadOf, fTagOf, storeCacheBaseEff, storeDataRootEff, storeDecode, storeDecodeAs, storeDecodeFast, storeEncode, storeEncodeAs, storeEnsureDirEff, storeFileExistsEff, storeMagic, storeParentPathOf, storeReadAsEff, storeReadEff, storeReadFastEff, storeRemoveEff, storeWriteAsEff, storeWriteEff, storeWriteIfChangedAsEff, storeWriteIfChangedEff
 compiler/lib/Vuna/Compiler/Version.vuna: vunaVersion
+lib/Vuna/Add.vuna: runAdd
 lib/Vuna/Clean.vuna: runClean
 lib/Vuna/Cli.vuna: runCli
 lib/Vuna/Cli/Args.vuna: ArgErr(..), ArgSpec(..), Parsed(..), argErrText, ensureDirPath, flagSet, flagValue, flagValues, parentOf, parseToolArgs, readText, requireDirectory, requireExists
@@ -186,6 +187,7 @@ lib/Vuna/Lsp/Protocol.vuna: allDigits, clampInt, contentLengthOf, decodeUri, dig
 lib/Vuna/Lsp/Query.vuna: codeActionsFor, completionItems, definitionResult, documentSymbols, fixAllLintCommand, fixAllLintWorkspaceEdit, formattingEdits, holeHoverAt, referencesResult, symbolHoverResult, workspaceRoot, workspaceSymbols
 lib/Vuna/Lsp/Rename.vuna: prepareRenameAt, renameAt
 lib/Vuna/PackageStore.vuna: isMaterializedEff, materializeEff, materializedDir, objectPathOf, readObjectEff, storeRootEff, writeObjectEff
+lib/Vuna/Registry.vuna: RegistryEntry(..), Release(..), loadRegistryEntryEff, parseRegistryEntry, resolveRelease
 lib/Vuna/Repl.vuna: ReplOutcome(..), ReplSink(..), ReplStart(..), ReplState(..), finishInput, inputStep, isModuleNameStr, replOutputDrain, replPendingOpen, runRepl, startReplSession
 lib/Vuna/Repl/Client.vuna: runReplClient
 lib/Vuna/Repl/Complete.vuna: argCompletions, argKindOf, moduleNameOf, splitLastSlash

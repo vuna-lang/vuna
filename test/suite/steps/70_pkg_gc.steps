@@ -1,0 +1,34 @@
+# 70) store GC（阶段 3）：`clean --packages --gc` 只删未被工作区 manifest 引用的对象，
+#     保留当前包与 members 声明的 git/url 依赖摘要。
+
+# 70a) 造两个 git 依赖包（greet / other），用 probe 的 mismatch 输出拿到各自摘要，
+#      写回 probe manifest 后 fetch 到同一个 store（objects 里两个对象）。
+run: sh -c 'rm -rf "$TMPDIR/g70"; mkdir -p "$TMPDIR/g70/greet/lib" "$TMPDIR/g70/other/lib" "$TMPDIR/g70/probe/app" "$TMPDIR/g70/probe2/app" "$TMPDIR/g70/app/app"; printf "[package]\nname = \"greet\"\n[export]\nmodules = [\"G\"]\n" > "$TMPDIR/g70/greet/vuna.toml"; printf "module G where\n\ng : Int\ng = 7\n" > "$TMPDIR/g70/greet/lib/G.vuna"; ( cd "$TMPDIR/g70/greet" && git init -q && git add -A && git -c user.email=t@t -c user.name=t commit -qm init ); printf "[package]\nname = \"other\"\n[export]\nmodules = [\"O\"]\n" > "$TMPDIR/g70/other/vuna.toml"; printf "module O where\n\no : Int\no = 9\n" > "$TMPDIR/g70/other/lib/O.vuna"; ( cd "$TMPDIR/g70/other" && git init -q && git add -A && git -c user.email=t@t -c user.name=t commit -qm init )'
+exit: 0
+
+run: sh -c 'r1=$( cd "$TMPDIR/g70/greet" && git rev-parse HEAD ); r2=$( cd "$TMPDIR/g70/other" && git rev-parse HEAD ); printf "[package]\nname = \"probe\"\n\n[dependencies.greet]\ngit = \"file://%s\"\nrev = \"%s\"\nhash = \"sha256:0000000000000000000000000000000000000000000000000000000000000000\"\n" "$TMPDIR/g70/greet" "$r1" > "$TMPDIR/g70/probe/vuna.toml"; printf "import G\n\nmain : Int\nmain = g\n" > "$TMPDIR/g70/probe/app/Main.vuna"; printf "[package]\nname = \"probe2\"\n\n[dependencies.other]\ngit = \"file://%s\"\nrev = \"%s\"\nhash = \"sha256:0000000000000000000000000000000000000000000000000000000000000000\"\n" "$TMPDIR/g70/other" "$r2" > "$TMPDIR/g70/probe2/vuna.toml"; printf "import O\n\nmain : Int\nmain = o\n" > "$TMPDIR/g70/probe2/app/Main.vuna"; a1=$(VUNA_STORE="$TMPDIR/g70/store" "$VUNA" fetch "$TMPDIR/g70/probe" 2>&1 | sed -n "s/.*actual \([0-9a-f][0-9a-f]*\).*/\1/p" | head -1); a2=$(VUNA_STORE="$TMPDIR/g70/store" "$VUNA" fetch "$TMPDIR/g70/probe2" 2>&1 | sed -n "s/.*actual \([0-9a-f][0-9a-f]*\).*/\1/p" | head -1); [ -n "$a1" ] && [ -n "$a2" ] || exit 1; sed -i "s|hash = \"sha256:0*\"|hash = \"sha256:$a1\"|" "$TMPDIR/g70/probe/vuna.toml"; sed -i "s|hash = \"sha256:0*\"|hash = \"sha256:$a2\"|" "$TMPDIR/g70/probe2/vuna.toml"; VUNA_STORE="$TMPDIR/g70/store" "$VUNA" fetch "$TMPDIR/g70/probe" >/dev/null 2>&1; VUNA_STORE="$TMPDIR/g70/store" "$VUNA" fetch "$TMPDIR/g70/probe2" >/dev/null 2>&1'
+exit: 0
+
+run: sh -c 'n=$(ls "$TMPDIR/g70/store/objects" | wc -l | tr -d " "); [ "$n" = "2" ]'
+exit: 0
+
+# 70b) app 只引用 greet（直接复用 probe 的依赖行，摘要已经是真实值）；gc 应删 other。
+run: sh -c 'cp "$TMPDIR/g70/probe/vuna.toml" "$TMPDIR/g70/app/vuna.toml"; sed -i "s/^name = \"probe\"/name = \"app\"/" "$TMPDIR/g70/app/vuna.toml"; printf "import G\n\nmain : Int\nmain = g\n" > "$TMPDIR/g70/app/app/Main.vuna"'
+exit: 0
+
+run: sh -c 'VUNA_STORE="$TMPDIR/g70/store" "$VUNA" clean --packages --gc --dry-run "$TMPDIR/g70/app" 2>&1'
+out-contains: clean-packages --gc: would remove
+
+run: sh -c 'VUNA_STORE="$TMPDIR/g70/store" "$VUNA" clean --packages --gc "$TMPDIR/g70/app" 2>&1'
+out-contains: clean-packages --gc: removed
+
+# 70c) 只剩 greet 的对象；app 仍能 check（git 依赖从 store 物化视图加载）。
+run: sh -c 'n=$(ls "$TMPDIR/g70/store/objects" | wc -l | tr -d " "); [ "$n" = "1" ]'
+exit: 0
+run: sh -c 'VUNA_STORE="$TMPDIR/g70/store" "$VUNA" check "$TMPDIR/g70/app"'
+exit: 0
+
+# 70d) `--gc` 必须与 `--packages` 连用（用法错误）。
+run: sh -c 'VUNA_STORE="$TMPDIR/g70/store" "$VUNA" clean --gc 2>&1'
+exit: 2
+out-contains: requires --packages

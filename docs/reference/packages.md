@@ -68,11 +68,14 @@
   - `vuna fetch [--locked] [DIR]`：把不可变源依赖（`git` + `rev`、`url`）取到持久 store；
     `path` 依赖只校验摘要。`--locked` 不联网、只校验已物化。`check`/`build` 永不取包，
     缺对象报 `PKG_NotMaterialized`。布局与失败模式见 [package-store.md](package-store.md)；
-  - `vuna clean [--iface] [--store] [--packages] [--all] [--dry-run] [DIR]`：`--iface` 删树内
-    接口缓存（`*.iface` / `.vuna-iface` / 原子写残留）；`--store` 清临时缓存
-    （`/vuna-cache`）；`--packages` 清持久包 store（``）；不带 flag 时只清
-    iface + store。接口缓存默认写在 `.output/iface/<编译器指纹>/`，`VUNA_IFACE_DIR` 可整体
-    镜像到外部根，见 [cache.md](cache.md)；
+  - `vuna add <name>[@<version>] [DIR]`：查 `[registry].index`（目录 / `file://` / `http(s)://`），
+    按版本解析出 `(源, hash)`，写回 `[dependencies]` 的内联表行并自动 fetch；
+    `--dry-run` 只打印，`--no-fetch` 只改 manifest。索引是便利层，不是身份真源；
+  - `vuna clean [--iface] [--store] [--packages] [--gc] [--all] [--dry-run] [DIR]`：`--iface`
+    删树内接口缓存（`*.iface` / `.vuna-iface` / 原子写残留）；`--store` 清临时缓存
+    （`$TMPDIR/vuna-cache`）；`--packages` 清持久包 store（`$VUNA_STORE`），`--gc` 只删未被
+    工作区 manifest 引用的对象；不带 flag 时只清 iface + store。接口缓存默认写在
+    `.output/iface/<编译器指纹>/`，`VUNA_IFACE_DIR` 可整体镜像到外部根，见 [cache.md](cache.md)；
   - `vuna map [--modules]` / `vuna map --find <Module.name>` / `vuna map --impact
     <Module.name>` / `vuna api <Module.name>`：`Vuna.Index` 的源码符号索引，用于定位定义、
     引用者与建议测试标签；索引缓存在 `$TMPDIR/vuna-cache` 的 `index:<dir>` 节点 + blobs，按**内容哈希**判定
@@ -222,7 +225,8 @@ modules = [
 | `vuna map [--modules]` / `--find` / `--impact` | 源码符号索引（内容哈希缓存；定义、引用位置、建议测试） |
 | `vuna api <Module.name>` | 某模块的签名面（含 docstring 与行号） |
 | `vuna fetch [--locked] [DIR]` | 取不可变源依赖到持久 store；`--locked` 只校验不联网 |
-| `vuna clean [--iface] [--store] [--packages] [--all] [--dry-run] [DIR]` | 清接口缓存 / 临时缓存 / 持久包 store |
+| `vuna add <name>[@<version>] [DIR]` | 查 `[registry].index` → 写回 `[dependencies]` 并取包（`--dry-run` / `--no-fetch`） |
+| `vuna clean [--iface] [--store] [--packages] [--gc] [--all] [--dry-run] [DIR]` | 清接口缓存 / 临时缓存 / 持久包 store（`--gc` 只删未引用对象） |
 | `vuna gen-errors [ROOT]` | 生成错误码文档（默认 `docs/.generated/errors.md`） |
 | `vuna version`, `vuna --version` | 版本 |
 | `vuna help`, `vuna -h` | 用法 |

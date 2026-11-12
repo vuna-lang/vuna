@@ -81,7 +81,51 @@ vuna clean --all                    # 两者都清（含 --packages）
 不带 flag 时只清 `iface + store`（默认**不碰**持久 store：对象跨项目复用，误删代价是
 重新取包）。当前没有按引用计数的 GC；`--packages` 是整根清理。
 
-## 6. 已知边界
+## 6. 静态索引与 `vuna add`（阶段 2）
+
+索引是**可选**的便利层（D14）：`name [@version] → (源, hash)`。
+
+```toml
+# index/<name>.toml（[releases."<version>"] 用引号段名）
+[package]
+name = "greet"
+
+[releases."1.2.0"]
+git = "https://..."        # 或 url = "..."（pkg-source 对象文件）
+rev = "<commit>"
+hash = "sha256:<64hex>"
+```
+
+包 manifest 里声明索引位置：
+
+```toml
+[registry]
+index = "../registry"      # 目录 / file:// / http(s)://（后者由宿主 curl 取一次）
+```
+
+```console
+vuna add greet@1.2.0 [DIR] [--dry-run] [--no-fetch]
+```
+
+- 无版本时取索引里的**最后一个**发布；版本精确匹配；版本不存在报可读错误（退出码 2）。
+- 写回 `[dependencies]` 段的内联表行：同名行替换，否则段末追加；子表形式不猜、报错让
+ 用户手改。
+- 默认随后 `vuna fetch`（命中 `cached` 不重复取）；`--no-fetch` 只改 manifest，
+  `--dry-run` 只打印。
+- **索引不可信**：写回的永远是摘要，之后 fetch/check 只认摘要。
+
+## 7. GC（阶段 3）
+
+```console
+vuna clean --packages --gc [--dry-run] [DIR]
+```
+
+引用集 = `DIR` 的 manifest 与 `[workspace].members` 里 `git` / `url` 依赖的摘要
+（`path` 依赖不参与，D12）。只删 `objects/<digest>` 与 `pkgs/<digest>/...` 中不被引用的
+文件；空目录会残留（与 `clean --store` 一致，只删文件）。不带 `--gc` 的 `--packages`
+仍是整根清理。`--gc` 必须与 `--packages` 连用。
+
+## 8. 已知边界
 
 - **无版本号 / 无 lockfile**：manifest 即锁文件；`path` 依赖不锁定。
 - **无 registry 服务器**：静态索引（`name → version → (源, hash)`）是下一阶段的便利层，
@@ -92,12 +136,16 @@ vuna clean --all                    # 两者都清（含 --packages）
 - **导出面**：新模块 `Canonical.Pkg` / `Packages.Source` 在 `compiler/vuna.toml` 的
   `[export]` 列表里，跨包（如 `examples/infra`）可直接 import。
 
-## 7. 测试标签
+## 9. 测试标签
 
 - `90/steps_native/67_pkg_deps`：依赖声明三路写法、摘要规则、结构错误码、改依赖源码
   不动 manifest 的回归。
 - `90/steps_native/68_pkg_fetch`：本地 git 仓库取包、摘要不符、`--locked`、离线 check、
-  `clean --packages`。
+  `clean --packages`、`pin`。
+- `90/steps_native/69_pkg_registry`：本地静态索引、`add` 的 dry-run/写回/自动 fetch/幂等、
+  版本不存在、`--no-fetch`、`[registry]` 未知 key。
+- `90/steps_native/70_pkg_gc`：`clean --packages --gc` 保留被引用对象、删除未引用对象、
+  `--gc` 必须配 `--packages`。
 - `90/steps_native/64_infra`：`pkg-canon-rt` / `pkg-identity-*`（规范编码与两种摘要的输入面）。
 
 ## 相关阅读

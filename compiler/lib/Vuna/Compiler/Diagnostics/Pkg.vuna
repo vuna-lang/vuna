@@ -43,6 +43,7 @@ export data PkgErr(..) : Nat -> Type where
   SourceConflict : String -> PkgErr (Succ Zero)
   NotMaterialized : String -> PkgErr (Succ Zero)
   FetchFailed : String -> PkgErr (Succ Zero)
+  IndexMalformed : String -> PkgErr (Succ Zero)
   UnexpectedTopLevelKey : String -> PkgErr (Succ Zero)
   UnknownSection : String -> PkgErr (Succ Zero)
   -- arity 2
@@ -85,6 +86,7 @@ pkgCode (MissingHash _) = "PKG_MissingHash"
 pkgCode (SourceConflict _) = "PKG_SourceConflict"
 pkgCode (NotMaterialized _) = "PKG_NotMaterialized"
 pkgCode (FetchFailed _) = "PKG_FetchFailed"
+pkgCode (IndexMalformed _) = "PKG_IndexMalformed"
 pkgCode (HashMismatch _ _) = "PKG_HashMismatch"
 
 -- | 诊断域实现：Vuna.Compiler.Diagnostics.Pkg.pkgTemplate（目录/模板见 diagnostics.md）。
@@ -131,6 +133,7 @@ pkgTemplate (SourceConflict _) =
   "dependency \"<0>\" specifies more than one source (path / git / url)"
 pkgTemplate (NotMaterialized _) = "package \"<0>\" is not in the local store (run: vuna fetch)"
 pkgTemplate (FetchFailed _) = "package fetch failed: <0>"
+pkgTemplate (IndexMalformed _) = "invalid package index: <0>"
 pkgTemplate (HashMismatch _ _) = "package \"<0>\" content hash mismatch: <1>"
 
 -- | 诊断域实现：Vuna.Compiler.Diagnostics.Pkg.pkgMsg（目录/模板见 diagnostics.md）。
@@ -232,5 +235,6 @@ pkgAll =
     PkgEntry (pkgCode (SourceConflict "")) (pkgTemplate (SourceConflict "")) "依赖源冲突",
     PkgEntry (pkgCode (NotMaterialized "")) (pkgTemplate (NotMaterialized "")) "包未物化",
     PkgEntry (pkgCode (FetchFailed "")) (pkgTemplate (FetchFailed "")) "取包失败",
+    PkgEntry (pkgCode (IndexMalformed "")) (pkgTemplate (IndexMalformed "")) "包索引格式非法",
     PkgEntry (pkgCode (HashMismatch "" "")) (pkgTemplate (HashMismatch "" "")) "包内容摘要不符"
   ]

@@ -57,6 +57,7 @@ let v_Base_dEff_dhandleCoreLin
 let v_Base_dEff_dhandleWith
 let v_Base_dEff_dhandleWithAt
 let v_Base_dEff_djoinEff
+let v_Base_dEff_djoinEffNilOuter
 let v_Base_dEff_dmkCont
 let v_Base_dEff_dperformCore
 let v_Base_dEff_draise

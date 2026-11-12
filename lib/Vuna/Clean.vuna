@@ -1,47 +1,57 @@
 module Vuna.Clean (runClean) where
 
--- Vuna.Clean：缓存清理（`vuna clean [--iface] [--store] [--packages] [--all] [--dry-run] [DIR]`）。
+-- Vuna.Clean：缓存清理（`vuna clean [--iface] [--store] [--packages] [--gc] [--all] [--dry-run] [DIR]`）。
 --
 --   --iface     树内接口缓存（`*.iface` / `.vuna-iface` / 原子写残留 `*.iface.*.tmp`）
 --   --store     `Vuna.Compiler.Store` 的临时缓存根（`$VUNA_CACHE_DIR` 或 `$TMPDIR/vuna-cache`）
 --   --packages  持久包 store（`$VUNA_STORE` / XDG / `~/.vuna/store`）：objects + 物化视图
+--   --gc        与 `--packages` 连用：只删**未被工作区 manifest 引用**的对象（引用集 =
+--               当前包与 `[workspace].members` 里 git/url 依赖的 hash），其余保留
 --   --all       三者都清（默认不含 --packages：持久对象跨项目复用，只有显式 --all 才删）
 --
--- `DIR` 只对 `--iface` 有意义（默认 `.`）；`--store` / `--packages` 的根由环境决定。
--- 识别按文件名 / 目录布局，不读内容：既不把宿主异常漏给用户，也不会误删 `.vuna`
--- 源码（`.iface` 扩展是 vuna 保留名，`vuna-cache` / 包 store 根由各自模块独占）。
+-- `DIR` 只对 `--iface` 与 `--gc` 的引用集有用（默认 `.`）；`--store` / `--packages`
+-- 的根由环境决定。识别按文件名 / 目录布局，不读内容。
 import Vuna.Cli.Args
 import Vuna.Compiler.Common
+import Vuna.Compiler.Frontend.Manifest
+import Vuna.Compiler.Packages.Pkg
+import Vuna.Compiler.Packages.Source
 import Vuna.Compiler.Store
+import Base.List
+import Base.String
 
 runClean : List String -> Eff [] Int
-runClean args = case parseToolArgs "vuna clean" [BoolFlag "dry-run", BoolFlag "iface", BoolFlag "store", BoolFlag "packages", BoolFlag "all"] args of
+runClean args = case parseToolArgs "vuna clean" [BoolFlag "dry-run", BoolFlag "iface", BoolFlag "store", BoolFlag "packages", BoolFlag "gc", BoolFlag "all"] args of
   ErrC e => cleanError (diagText e)
   OkC parsed =>
     let
       dry = flagSet parsed "dry-run"
+      wantGc = flagSet parsed "gc"
       anyFlag =
         flagSet parsed "iface"
           || flagSet parsed "store"
           || flagSet parsed "packages"
+          || flagSet parsed "gc"
           || flagSet parsed "all"
       wantIface = flagSet parsed "iface" || flagSet parsed "all" || not anyFlag
       wantStore = flagSet parsed "store" || flagSet parsed "all" || not anyFlag
       wantPackages = flagSet parsed "packages" || flagSet parsed "all"
-    in case parsed.positionals of
-      [] => cleanTargets wantIface wantStore wantPackages dry "."
+    in if wantGc && not wantPackages then cleanError "vuna clean --gc requires --packages"
+    else case parsed.positionals of
+      [] => cleanTargets wantIface wantStore wantPackages wantGc dry "."
       [dir] =>
-        if (wantStore || wantPackages) && not wantIface then cleanError "vuna clean --store/--packages takes no directory"
-        else cleanTargets wantIface wantStore wantPackages dry dir
+        if (wantStore || wantPackages) && not wantIface && not wantGc then cleanError "vuna clean --store/--packages takes no directory"
+        else cleanTargets wantIface wantStore wantPackages wantGc dry dir
       _ => cleanError "too many arguments; expected at most one directory"
 
-cleanTargets : Bool -> Bool -> Bool -> Bool -> String -> Eff [] Int
-cleanTargets wantIface wantStore wantPackages dry dir = do
+cleanTargets : Bool -> Bool -> Bool -> Bool -> Bool -> String -> Eff [] Int
+cleanTargets wantIface wantStore wantPackages wantGc dry dir = do
   code <- if wantIface then cleanIfaceAt dir dry else pure 0
   if code /= 0 then pure code
   else do
     storeCode <- if wantStore then cleanStore dry else pure 0
-    if storeCode /= 0 then pure storeCode else if wantPackages then cleanPackages dry else pure 0
+    if storeCode /= 0 then pure storeCode
+    else if wantPackages then cleanPackages wantGc dir dry else pure 0
 
 cleanIfaceAt : String -> Bool -> Eff [] Int
 cleanIfaceAt dir dry = do
@@ -63,10 +73,76 @@ cleanStore dry = do
   root <- storeCacheBaseEff
   cleanRoot root "clean-store" dry
 
-cleanPackages : Bool -> Eff [] Int
-cleanPackages dry = do
+-- `--packages`：默认整根清理；`--gc` 只删未被工作区 manifest 引用的对象。
+cleanPackages : Bool -> String -> Bool -> Eff [] Int
+cleanPackages wantGc dir dry = do
   root <- storeDataRootEff
-  cleanRoot root "clean-packages" dry
+  if wantGc then cleanPackagesGc root dir dry else cleanRoot root "clean-packages" dry
+
+cleanPackagesGc : String -> String -> Bool -> Eff [] Int
+cleanPackagesGc root dir dry = do
+  roots <- collectRootDigests dir
+  all <- walkFiles 1048576 root
+  let
+    drop = filter (\p => not (isReferenced roots p)) all
+    n = length drop
+  in do
+    _ <- if dry then pure 0 else removeEach drop
+    _ <-
+      prim_eff_print
+        "clean-packages --gc: ${storeVerb dry} ${strFromInt n} unreferenced file(s) under ${root}\n"
+    pure 0
+
+-- 路径属于被引用对象：`objects/<digest>` 或 `pkgs/<digest>/...`。
+isReferenced : List String -> String -> Bool
+isReferenced roots path =
+  anyLine (\d => contains "/objects/${d}" path || contains "/pkgs/${d}/" path) roots
+
+anyLine : (a -> Bool) -> List a -> Bool
+anyLine f [] = False
+anyLine f (x :: rest) = if f x then True else anyLine f rest
+
+-- 引用集 = 当前包 + `[workspace].members` 的 git/url 依赖摘要（path 依赖不参与，D12）。
+collectRootDigests : String -> Eff [] (List String)
+collectRootDigests dir = do
+  abs <- absolutePath dir
+  top <- manifestInfoEff "${abs}/vuna.toml"
+  case top of
+    Nothing => pure []
+    Just (Pair hashes members) => do
+      memberHashes <- collectMemberHashes abs members
+      pure (append hashes memberHashes)
+
+collectMemberHashes : String -> List String -> Eff [] (List String)
+collectMemberHashes base [] = pure []
+collectMemberHashes base (rel :: rest) = do
+  info <- manifestInfoEff (joinPath base "${rel}/vuna.toml")
+  let
+    here = case info of
+      Nothing => []
+      Just (Pair hashes members) => hashes
+  in do
+    there <- collectMemberHashes base rest
+    pure (append here there)
+
+manifestInfoEff : String -> Eff [] (Maybe (Pair (List String) (List String)))
+manifestInfoEff path = do
+  exists <- prim_eff_fileExists path
+  if exists then do
+    raw <- prim_eff_readFile path
+    case parseManifest path raw of
+      ErrC _ => pure Nothing
+      OkC manifest => case validateManifest manifest of
+        ErrC _ => pure Nothing
+        OkC valid =>
+          pure (Just (Pair (depHashesOf valid.manifestDependencies) valid.manifestMembers))
+  else pure Nothing
+
+depHashesOf : List Dependency -> List String
+depHashesOf [] = []
+depHashesOf (dep :: rest) = case depHashOf dep of
+  Nothing => depHashesOf rest
+  Just h => normalizeHash h :: depHashesOf rest
 
 cleanRoot : String -> String -> Bool -> Eff [] Int
 cleanRoot root label dry = do
