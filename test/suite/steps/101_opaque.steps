@@ -15,3 +15,7 @@ run: sh -c 'sed -i "s/D\.M/D.N/" "$TMPDIR/opq/app/app/Main.vuna"'
 run: "$VUNA" check "$TMPDIR/opq/app/app/Main.vuna"
 exit: 1
 out-contains: got D.N
+# interp（dtEvalFile）同样隐藏依赖 opaque body。
+run: "$VUNA" interp "$TMPDIR/opq/app/app/Main.vuna" 2>&1
+exit: 2
+out-contains: got D.N
