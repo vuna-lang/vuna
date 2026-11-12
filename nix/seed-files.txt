@@ -45,7 +45,6 @@ Vuna_dCompiler_dCore.ml
 Vuna_dCompiler_dCore_dConv.ml
 Vuna_dCompiler_dCore_dEval.ml
 Vuna_dCompiler_dCore_dTerm.ml
-Vuna_dCompiler_dDebug.ml
 Vuna_dCompiler_dDiag.ml
 Vuna_dCompiler_dDiag_dFormat.ml
 Vuna_dCompiler_dDiagnostics.ml

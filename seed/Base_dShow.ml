@@ -16,4 +16,4 @@ let v_Base_dShow_ddebugShow = (fun _ud x0 -> (match _ud with
   | _ -> failwith "DT: impossible branch"
 ))
 
-let v_Base_dShow_ddbgShow = (fun _uctx0 x -> (((fun s x -> prerr_string s; prerr_newline (); x) ((v_Base_dShow_ddebugShow _uctx0) x)) x))
+let v_Base_dShow_ddbgShow = (fun _uctx0 x -> ((fun _u -> x) (if (dtp_debug_on 0) then (dtp_debug_line ((v_Base_dShow_ddebugShow _uctx0) x)) else 0)))
