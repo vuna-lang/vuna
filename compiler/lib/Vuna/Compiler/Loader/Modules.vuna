@@ -31,6 +31,8 @@ export record Module(..) where
   -- 统一成 `X`）。resolve 期把它们并入 used-import 集合，`UN_UnusedImport` 才不会把
   -- 「只用于重导出」的 import 报成未使用（used-set 在加载期标记、resolve 期被重置）。
   moduleReexportsOf : List String
+  -- D11：本模块声明为 opaque 的定义全名（已 mangle）；下游 depStart 不把它们的体放进 deftbl。
+  moduleOpaqueOf : List String
 
 -- 已加载项目：入口声明/import + 依赖模块列表（M12 分离编译用；保持 flatten 前的形态）。
 -- entryPkg 用于按包限制 effectful 内建（M12.6：普通包只能经 Eff + handler 使用效果）。
@@ -44,23 +46,26 @@ export record Project(..) where
   projectEntryFixities : List FixityDecl
 
 export moduleNameOf : Module -> String
-moduleNameOf (Module n p is imps ds es fx _) = n
+moduleNameOf (Module n p is imps ds es fx _ _) = n
 
 export modulePackageOf : Module -> String
-modulePackageOf (Module n p is imps ds es fx _) = p
+modulePackageOf (Module n p is imps ds es fx _ _) = p
 
 export moduleAllImportsOf : Module -> List Import
-moduleAllImportsOf (Module n p is imps ds es fx _) = append is imps
+moduleAllImportsOf (Module n p is imps ds es fx _ _) = append is imps
 
 export moduleDeclsOf : Module -> List Decl
-moduleDeclsOf (Module n p is imps ds es fx _) = ds
+moduleDeclsOf (Module n p is imps ds es fx _ _) = ds
 
 export moduleFixitiesOf : Module -> List FixityDecl
-moduleFixitiesOf (Module n p is imps ds es fx _) = fx
+moduleFixitiesOf (Module n p is imps ds es fx _ _) = fx
 
 -- | M45：模块重导出的 import 名（见 Module 字段注释）。
 export moduleReexportsOf : Module -> List String
-moduleReexportsOf (Module n p is imps ds es fx reexports) = reexports
+moduleReexportsOf (Module n p is imps ds es fx reexports _) = reexports
+
+export moduleOpaqueOf : Module -> List String
+moduleOpaqueOf (Module n p is imps ds es fx reexports opacity) = opacity
 
 export projectEntryAllImports : Project -> List Import
 projectEntryAllImports (Project ds is imps ms pkg fx) = append is imps
@@ -214,7 +219,7 @@ missingModule name =
 
 export moduleDecls : List Module -> String -> Check (List Decl)
 moduleDecls modules name = case findModule modules name of
-  Just (Module mname mpkg imports imps decls exports fx _) => OkC decls
+  Just (Module mname mpkg imports imps decls exports fx _ _) => OkC decls
   Nothing => missingModule name
 
 moduleCtors : List Module -> String -> Check (List String)
@@ -223,7 +228,7 @@ moduleCtors modules name =
 
 export exportsOf : List Module -> String -> Check (List ExportEntry)
 exportsOf modules name = case findModule modules name of
-  Just (Module mname mpkg imports imps decls exports fx _) => OkC exports
+  Just (Module mname mpkg imports imps decls exports fx _ _) => OkC exports
   Nothing => missingModule name
 
 -- 按命名空间查公开名：kinds 是允许的 kind 列表（val / ctor / type）。
@@ -351,8 +356,8 @@ findModuleFile roots name importerPkg = do
 
 export findModule : List Module -> String -> Maybe Module
 findModule [] name = Nothing
-findModule ((Module mname mpkg imports imps decls exports fx reexports) :: rest) name =
-  if mname == name then Just (Module mname mpkg imports imps decls exports fx reexports)
+findModule ((Module mname mpkg imports imps decls exports fx reexports opacity) :: rest) name =
+  if mname == name then Just (Module mname mpkg imports imps decls exports fx reexports opacity)
   else findModule rest name
 
 -- M41：target 是否是某个 data/record 的构造子（用于把 trait method 从“构造子重载候选”

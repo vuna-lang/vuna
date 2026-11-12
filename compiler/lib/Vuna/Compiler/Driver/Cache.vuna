@@ -30,21 +30,29 @@ export record CachedProgram(..) where
   cachedGlobals : List (Pair String Term)
   cachedInsts : List DtInst
   cachedClasses : List DtClass
+  cachedOpaque : List String
 
 export cachedDatas : CachedProgram -> List DtData
-cachedDatas (CachedProgram datas defs globals insts classes) = datas
+cachedDatas (CachedProgram datas defs globals insts classes _) = datas
 
 export cachedDefs : CachedProgram -> List DtDef
-cachedDefs (CachedProgram datas defs globals insts classes) = defs
+cachedDefs (CachedProgram datas defs globals insts classes _) = defs
 
 export cachedGlobals : CachedProgram -> List (Pair String Term)
-cachedGlobals (CachedProgram datas defs globals insts classes) = globals
+cachedGlobals (CachedProgram datas defs globals insts classes _) = globals
 
 export cachedInsts : CachedProgram -> List DtInst
-cachedInsts (CachedProgram datas defs globals insts classes) = insts
+cachedInsts (CachedProgram datas defs globals insts classes _) = insts
 
 export cachedClasses : CachedProgram -> List DtClass
-cachedClasses (CachedProgram datas defs globals insts classes) = classes
+cachedClasses (CachedProgram datas defs globals insts classes _) = classes
+
+export cachedOpaqueOf : CachedProgram -> List String
+cachedOpaqueOf (CachedProgram datas defs globals insts classes names) = names
+
+export withCachedOpaque : List String -> CachedProgram -> CachedProgram
+withCachedOpaque names (CachedProgram datas defs globals insts classes _) =
+  CachedProgram datas defs globals insts classes names
 
 -- ---------------------------------------------------------------
 -- 写摘要：按出现点深度内联已解元变量
@@ -99,7 +107,7 @@ export cachedOfProgramWith : HashMap Int Value -> DtProgram -> CachedProgram
 cachedOfProgramWith tbl prog =
   CachedProgram (map (fixData tbl) (dtProgDatas prog)) (map (fixDef tbl) (dtProgDefs prog))
     (map (\p => Pair (firstOf p) (fixTerm tbl 0 (secondOf p))) (dtProgGlobals prog))
-    (map (fixInst tbl) (dtProgInsts prog)) (map (fixClass tbl) (dtProgClasses prog))
+    (map (fixInst tbl) (dtProgInsts prog)) (map (fixClass tbl) (dtProgClasses prog)) []
 
 -- ---------------------------------------------------------------
 -- 读摘要前的校验：闭合 + 无 meta + 无负索引
@@ -162,7 +170,7 @@ classesValid (c :: rest) =
     && classesValid rest
 
 export cachedProgramValid : CachedProgram -> Bool
-cachedProgramValid (CachedProgram datas defs globals insts classes) =
+cachedProgramValid (CachedProgram datas defs globals insts classes _) =
   datasValid datas
     && defsValid defs
     && globalsValid globals
@@ -282,7 +290,7 @@ classesIssue (c :: rest) =
   in if issue == "" then classesIssue rest else issue
 
 export cachedProgramIssue : CachedProgram -> String
-cachedProgramIssue (CachedProgram datas defs globals insts classes) =
+cachedProgramIssue (CachedProgram datas defs globals insts classes _) =
   let
     datasI = datasIssue datas
     defsI = defsIssue defs
@@ -409,9 +417,9 @@ shiftGlobal : Int -> Pair String Term -> Check (Pair String Term)
 shiftGlobal off (Pair n t) = Vuna.Compiler.Common.bind (shiftTerm off t) (\t2 => OkC (Pair n t2))
 
 export shiftCachedProgram : Int -> CachedProgram -> Check CachedProgram
-shiftCachedProgram off (CachedProgram datas defs globals insts classes) =
+shiftCachedProgram off (CachedProgram datas defs globals insts classes _) =
   Vuna.Compiler.Common.bind (Vuna.Compiler.Common.traverse (shiftData off) datas)
-    (\datas2 => Vuna.Compiler.Common.bind (Vuna.Compiler.Common.traverse (shiftDef off) defs) (\defs2 => Vuna.Compiler.Common.bind (Vuna.Compiler.Common.traverse (shiftGlobal off) globals) (\globals2 => Vuna.Compiler.Common.bind (Vuna.Compiler.Common.traverse (shiftInst off) insts) (\insts2 => Vuna.Compiler.Common.bind (Vuna.Compiler.Common.traverse (shiftClass off) classes) (\classes2 => OkC (CachedProgram datas2 defs2 globals2 insts2 classes2))))))
+    (\datas2 => Vuna.Compiler.Common.bind (Vuna.Compiler.Common.traverse (shiftDef off) defs) (\defs2 => Vuna.Compiler.Common.bind (Vuna.Compiler.Common.traverse (shiftGlobal off) globals) (\globals2 => Vuna.Compiler.Common.bind (Vuna.Compiler.Common.traverse (shiftInst off) insts) (\insts2 => Vuna.Compiler.Common.bind (Vuna.Compiler.Common.traverse (shiftClass off) classes) (\classes2 => OkC (CachedProgram datas2 defs2 globals2 insts2 classes2 []))))))
 
 -- ---------------------------------------------------------------
 -- 载荷编码（CachedProgram 落盘 / 载荷自描述，D-Q2）
@@ -426,7 +434,7 @@ shiftCachedProgram off (CachedProgram datas defs globals insts classes) =
 export encCachedProgram : CachedProgram -> List String -> List String
 encCachedProgram cp acc =
   encList encDtData cp.cachedDatas
-    (encList encDtDef cp.cachedDefs (encList encGlobalPair cp.cachedGlobals (encList encDtInst cp.cachedInsts (encList encDtClass cp.cachedClasses acc))))
+    (encList encDtDef cp.cachedDefs (encList encGlobalPair cp.cachedGlobals (encList encDtInst cp.cachedInsts (encList encDtClass cp.cachedClasses (encList encStr cp.cachedOpaque acc)))))
 
 encGlobalPair : Pair String Term -> List String -> List String
 encGlobalPair (Pair n t) acc = encStr n (encTerm t acc)
@@ -440,7 +448,7 @@ decCachedProgramComplete s = case decCachedProgram (strLength s) (curOf s) of
 export decCachedProgram : Int -> Cur -> Maybe (Pair CachedProgram Cur)
 decCachedProgram fuel c =
   thenPair (decList decDtData (fuel - 1) c)
-    (\datas, b1 => thenPair (decList decDtDef (fuel - 1) b1) (\defs, b2 => thenPair (decList decGlobalPair (fuel - 1) b2) (\globals, b3 => thenPair (decList decDtInst (fuel - 1) b3) (\insts, b4 => thenPair (decList decDtClass (fuel - 1) b4) (\classes, b5 => Just (Pair (CachedProgram datas defs globals insts classes) b5))))))
+    (\datas, b1 => thenPair (decList decDtDef (fuel - 1) b1) (\defs, b2 => thenPair (decList decGlobalPair (fuel - 1) b2) (\globals, b3 => thenPair (decList decDtInst (fuel - 1) b3) (\insts, b4 => thenPair (decList decDtClass (fuel - 1) b4) (\classes, b5 => thenPair (decList decStr (fuel - 1) b5) (\names, b6 => Just (Pair (CachedProgram datas defs globals insts classes names) b6)))))))
 
 decGlobalPair : Int -> Cur -> Maybe (Pair (Pair String Term) Cur)
 decGlobalPair fuel c =

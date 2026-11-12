@@ -22,7 +22,7 @@ probeArgs =
   ]
 
 probeCp : CachedProgram
-probeCp = CachedProgram [] [DtDef "x" (TType (levelOfInt 0)) probeBody Nothing] [] [] []
+probeCp = CachedProgram [] [DtDef "x" (TType (levelOfInt 0)) probeBody Nothing] [] [] [] []
 
 showInts : List Int -> String
 showInts [] = ""
@@ -46,7 +46,7 @@ deepTerm : Term
 deepTerm = foldl step (TMeta 99) (range 0 600)
 
 deepCp : CachedProgram
-deepCp = CachedProgram [] [DtDef "deep" (TType (levelOfInt 0)) deepTerm Nothing] [] [] []
+deepCp = CachedProgram [] [DtDef "deep" (TType (levelOfInt 0)) deepTerm Nothing] [] [] [] []
 
 shiftOk : CachedProgram -> String
 shiftOk cp = if showInts (shiftedMetas cp) == showInts expected then "SHIFT_OK" else "SHIFT_BAD:" ++ showInts (shiftedMetas cp)

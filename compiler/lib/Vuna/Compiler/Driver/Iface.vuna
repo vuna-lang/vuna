@@ -211,12 +211,12 @@ setPrepared prepared mi =
 -- manifest 增加 `mePayloadDigest`，布局变化 ⇒ 20。
 -- C51：`ModuleIface.miDefLocs`（定义位置表，不进接口哈希）随载荷持久化，布局变化 ⇒ 22。
 export ifaceSchema : String
-ifaceSchema = "vuna-iface 22"
+ifaceSchema = "vuna-iface 23"
 
 -- | 接口哈希的**算法格式版本**：参与哈希输入（与 `ifaceSchema` 独立——schema 管载荷
 -- 布局，本版本管摘要算法/分片编码；换算法时旧哈希自然换代）。
 ifaceHashVersion : String
-ifaceHashVersion = "vuna-iface-hash 5 (sha256 + canonical)"
+ifaceHashVersion = "vuna-iface-hash 6 (opaque bodies excluded)"
 
 -- ---------------------------------------------------------------
 -- 哈希：接口哈希必须比 `strHash`（10 bit）强得多
@@ -357,9 +357,20 @@ defView d = Pair (dtDefName d) (Pair (canonTermTop (dtDefType d)) (canonMaybe (d
 encDefView : Pair String (Pair Term (Maybe Term)) -> List String -> List String
 encDefView (Pair name (Pair ty body)) acc = encStr name (encTerm ty (encMaybe encTerm body acc))
 
-hashDefs : List DtDef -> String
-hashDefs ds =
-  payloadDigest (encTop (encList encDefView) (sortByText (\p => firstOf p) (map defView ds)))
+hashDefView : List String -> DtDef -> Pair String (Pair Term (Maybe Term))
+hashDefView names d =
+  let
+    name = dtDefName d
+    body = if memName name names then Nothing else dtDefBody d
+  in Pair name (Pair (canonTermTop (dtDefType d)) (canonMaybe body))
+
+hashDefs : List String -> List DtDef -> String
+hashDefs names ds =
+  payloadDigest
+    (encTop (encList encDefView) (sortByText (\p => firstOf p) (map (hashDefView names) ds)))
+
+hashOpaque : List String -> String
+hashOpaque names = payloadDigest (encTop (encList encStr) (sortByText (\n => n) names))
 
 -- 数据族 + 构造子 / 实例 / 类 / globals / 导出表：闭合项，无 span / 无路径，显式编码。
 hashDatas : List DtData -> String
@@ -406,7 +417,7 @@ hashDecls ds = payloadDigest (encTop encDecls ds)
 hashOfParts : String -> String -> List Import -> List Import -> List FixityDecl -> List RecordMeta -> List ExportEntry -> List Decl -> CachedProgram -> String
 hashOfParts name pkg imports implicitImports fixities records exports decls cp =
   digestParts
-    [ifaceHashVersion, name, pkg, hashImports imports, hashImports implicitImports, hashFixities fixities, hashRecords records, hashDecls decls, hashDatas (cachedDatas cp), hashDefs (cachedDefs cp), hashGlobals (cachedGlobals cp), hashInsts (cachedInsts cp), hashClasses (cachedClasses cp), hashExports exports]
+    [ifaceHashVersion, name, pkg, hashImports imports, hashImports implicitImports, hashFixities fixities, hashRecords records, hashDecls decls, hashDatas (cachedDatas cp), hashDefs (cachedOpaqueOf cp) (cachedDefs cp), hashGlobals (cachedGlobals cp), hashInsts (cachedInsts cp), hashClasses (cachedClasses cp), hashExports exports, hashOpaque (cachedOpaqueOf cp)]
 
 export hashOfIface : ModuleIface -> String
 hashOfIface m =
@@ -520,8 +531,8 @@ progPartsOf oi prog =
 
 -- 单模块的闭合产物：从预分桶取切片，再用整包 sols 做一次深度 zonk。sols 表由
 -- `ProgParts` 整包建一次（`cachedOfProgramWith`），不再逐模块重建。
-cpOfModule : ProgParts -> DtProgram -> String -> CachedProgram
-cpOfModule parts prog mod =
+cpOfModule : ProgParts -> DtProgram -> String -> List String -> CachedProgram
+cpOfModule parts prog mod opaqueNames =
   let
     datas = bucketOf mod parts.ppDatas
     defs = bucketOf mod parts.ppDefs
@@ -531,7 +542,7 @@ cpOfModule parts prog mod =
     slice =
       DtProgram datas defs [] (dtProgSols prog) globals insts classes 0 (Base.HashMap.fromList [])
         [] []
-  in cachedOfProgramWith parts.ppSols slice
+  in withCachedOpaque opaqueNames (cachedOfProgramWith parts.ppSols slice)
 
 sourceOf : List (Pair String SourceInfo) -> String -> SourceInfo
 sourceOf [] _ = SourceInfo "" "" 0 0
@@ -572,7 +583,7 @@ mkIfaceBase pkg parts prog sources clean m = case cleanIfaceOf clean (moduleName
   Nothing =>
     let
       name = moduleNameOf m
-      cp = cpOfModule parts prog name
+      cp = cpOfModule parts prog name (moduleOpaqueOf m)
       records = recordsOfDecls m.moduleDeclsOf
       h =
         hashOfParts name pkg m.moduleImportsOf m.moduleImplicitImportsOf m.moduleFixitiesOf records

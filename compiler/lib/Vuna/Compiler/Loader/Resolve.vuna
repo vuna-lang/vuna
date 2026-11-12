@@ -942,7 +942,7 @@ resolveEntry release modules entryPkg imports decls =
 
 resolveModules : Bool -> List Module -> Check (List Decl)
 resolveModules release [] = OkC []
-resolveModules release (modules@((Module name mpkg imports imps decls exports fx _) :: rest)) =
+resolveModules release (modules@((Module name mpkg imports imps decls exports fx _ _) :: rest)) =
   Vuna.Compiler.Common.bind
     (resolveProgram modules name name (namespacesOfWith release decls) (append imports imps) decls)
     (\d1 => Vuna.Compiler.Common.bind (resolveModules release rest) (\d2 => OkC (append d1 d2)))

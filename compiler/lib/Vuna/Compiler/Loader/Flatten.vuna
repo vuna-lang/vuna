@@ -270,7 +270,7 @@ isRecordTarget modules decls prefix target = case splitLastDot (splitOnDot targe
       m = joinDots revPrefix
     in if m == prefix then isRecordDecl base decls
     else case findModule modules m of
-      Just (Module mname mpkg mimports mimps dcs exports mfx _) => isRecordDecl base dcs
+      Just (Module mname mpkg mimports mimps dcs exports mfx _ _) => isRecordDecl base dcs
       Nothing => False
 
 isRecordDecl : String -> List Decl -> Bool
@@ -502,6 +502,12 @@ validateModuleHeader label Nothing = OkC []
 validateModuleHeader label (Just (ModDecl declared hasList items _ _ _ sp)) =
   if declared == label then OkC [] else rnAt1 sp (ModuleNameMismatch declared) declared
 
+opaqueNamesOf : String -> List OpacitySpec -> List String
+opaqueNamesOf prefix [] = []
+opaqueNamesOf prefix (o :: rest) = case o.opacityKind of
+  OpacityOpaque => Base.List.Cons (mangle prefix (opacitySpecName o)) (opaqueNamesOf prefix rest)
+  OpacityTransparent => opaqueNamesOf prefix rest
+
 computeExports : List Module -> String -> Maybe ModDecl -> List Import -> List Decl -> List ExportSpec -> List ExportItem -> Check (List ExportEntry)
 computeExports modules prefix hdr imports decls extraExports extraReexports =
   let
@@ -611,7 +617,7 @@ else case findModule modules name of
                                 dedupeFixities
                                   (append fixities (visibleFixitiesOf modules2 (append imports implicit)))
                             in pure
-                              (OkC (Base.List.Cons (Module name (rootName root) imports implicit decls exports visible (reexportedImportNamesOfHeader imports hdr)) modules2))
+                              (OkC (Base.List.Cons (Module name (rootName root) imports implicit decls exports visible (reexportedImportNamesOfHeader imports hdr) (opaqueNamesOf name opacity)) modules2))
   else pure (ldErr1 (InvalidModuleName name) name)
 
 -- 包上下文入口：ctx 给出模块根（自己 lib 在最前 + 依赖闭包）与导入方包名
@@ -734,7 +740,7 @@ loadModuleSourceWithPreloaded ctx label source preloaded = do
                         dedupeFixities
                           (append fixities (visibleFixitiesOf modules (append imports implicit)))
                     in pure
-                      (OkC (Project [] imports implicit (Module name (contextPackageName ctx) imports implicit decls exports visible (reexportedImportNames imports items) :: modules) (contextPackageName ctx) []))
+                      (OkC (Project [] imports implicit (Module name (contextPackageName ctx) imports implicit decls exports visible (reexportedImportNames imports items) (opaqueNamesOf name opacity) :: modules) (contextPackageName ctx) []))
 
 -- M31.3（B27）：fmt 用的「程序级 fixity」——本文件的 `infix*` 声明（在前，本地优先）
 -- ++ import 闭包可见的声明（Module 里已含各自的 import 闭包）。只 parse + 加载模块图，
@@ -814,11 +820,11 @@ resolveProjectKeeping release keep (Project decls imports implicit modules entry
 
 resolveModulesKeep : Bool -> List String -> List Module -> Check (Pair (List Module) (List Diagnostic))
 resolveModulesKeep release keep [] = OkC (Pair [] [])
-resolveModulesKeep release keep ((Module name pkg imports implicit decls exports fixities reexports) :: rest) =
+resolveModulesKeep release keep ((Module name pkg imports implicit decls exports fixities reexports opacity) :: rest) =
   if memName name keep then Vuna.Compiler.Common.bind (resolveModulesKeep release keep rest)
-    (\p2 => OkC (Pair (Base.List.Cons (Module name pkg imports implicit decls exports fixities reexports) (firstOf p2)) (secondOf p2)))
+    (\p2 => OkC (Pair (Base.List.Cons (Module name pkg imports implicit decls exports fixities reexports opacity) (firstOf p2)) (secondOf p2)))
   else Vuna.Compiler.Common.bind (reorderProgram (tableOf fixities) decls)
-    (\decls2 => Vuna.Compiler.Common.bind (expandDecls decls2) (\decls3 => Vuna.Compiler.Common.bind (resolveProgram (Module name pkg imports implicit decls3 exports fixities reexports :: rest) name name (namespacesOfWith release decls3) (append imports implicit) decls3) (\d1 => Vuna.Compiler.Common.bind (unusedImportWarnings (Module name pkg imports implicit decls3 exports fixities reexports :: rest) imports d1 decls3 reexports) (\warns => Vuna.Compiler.Common.bind (resolveModulesKeep release keep rest) (\p2 => OkC (Pair (Base.List.Cons (Module name pkg imports implicit d1 exports fixities reexports) (firstOf p2)) (append warns (secondOf p2))))))))
+    (\decls2 => Vuna.Compiler.Common.bind (expandDecls decls2) (\decls3 => Vuna.Compiler.Common.bind (resolveProgram (Module name pkg imports implicit decls3 exports fixities reexports opacity :: rest) name name (namespacesOfWith release decls3) (append imports implicit) decls3) (\d1 => Vuna.Compiler.Common.bind (unusedImportWarnings (Module name pkg imports implicit decls3 exports fixities reexports opacity :: rest) imports d1 decls3 reexports) (\warns => Vuna.Compiler.Common.bind (resolveModulesKeep release keep rest) (\p2 => OkC (Pair (Base.List.Cons (Module name pkg imports implicit d1 exports fixities reexports opacity) (firstOf p2)) (append warns (secondOf p2))))))))
 
 -- ---------------------------------------------------------------
 -- unused import warning：显式 import 未在所属检查单元里被引用。

@@ -828,7 +828,10 @@ depStartOfAt next progs =
       filter (\p => memName (firstOf p) dataKeys == False)
         (dedupGlobals (append preludeGlobals (concatMap cachedGlobals progs)))
     globals = append defGlobals (map (\d => Pair (dtDataName d) (dtDataKind d)) datas)
-    bodies = dedupDefBodies (concatMap cachedDefs progs)
+    opaqueNames = concatMap cachedOpaqueOf progs
+    bodies =
+      filter (\p => not (memName (firstOf p) opaqueNames))
+        (dedupDefBodies (concatMap cachedDefs progs))
     ec0 = ecEmpty
     ec1 = addDatasEc ec0 datas
     ec2 = addInstsEc ec1 (dedupInsts (concatMap cachedInsts progs))
@@ -1407,7 +1410,7 @@ dtSplitProjectIncremental ctx entry printResult depIfaces cleanIfaces = do
 moduleOfIface : ModuleIface -> Module
 moduleOfIface mi =
   Module (miNameOf mi) (miPackageOf mi) (miImportsOf mi) (miImplicitImportsOf mi) (miDeclsOf mi)
-    (miExportsOf mi) (miFixitiesOf mi) []
+    (miExportsOf mi) (miFixitiesOf mi) [] (cachedOpaqueOf (miCachedOf mi))
 
 -- ---------------------------------------------------------------
 -- M34.5（S6）：依赖可见性收敛。全量路径只加载 entry/本包模块的 **import 闭包**；

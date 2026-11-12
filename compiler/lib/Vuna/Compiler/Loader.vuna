@@ -14,6 +14,7 @@ module Vuna.Compiler.Loader
   , moduleAllImportsOf
   , moduleDeclsOf
   , moduleNameOf
+  , moduleOpaqueOf
   , modulePackageOf
   , parseFileWithPath
   , projectEntryAllImports
