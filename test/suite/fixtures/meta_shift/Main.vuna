@@ -1,0 +1,62 @@
+import Prelude
+import Base.List
+import Vuna.Compiler.Common
+import Vuna.Compiler.Core.Term
+import Vuna.Compiler.Elab.Types
+import Vuna.Compiler.Elab.Meta
+import Vuna.Compiler.Driver.Cache
+
+off : Int
+off = 1000
+
+probeBody : Term
+probeBody = TCon "x" probeArgs
+
+probeArgs : List (Pair Term Rig)
+probeArgs =
+  [ Pair (TMk "m" [Pair (TMeta 0) Rig0, Pair (TRecord "r" [Pair (TMeta 1) Rig0]) Rig1]) Rig1
+  , Pair (TProj (TMeta 2) "c" [] 0 1) Rig1
+  , Pair (TRecUpd (TMeta 3) "c" [Pair "f" Rig1] [0] (TMeta 4)) Rig1
+  , Pair (TCase (TMeta 5) [CaseAlt "k" [Pair "b" Rig1] (TMeta 6)]) Rig1
+  , Pair (TIf (TMeta 7) (TMeta 8) (TMeta 9)) Rig1
+  ]
+
+probeCp : CachedProgram
+probeCp = CachedProgram [] [DtDef "x" (TType (levelOfInt 0)) probeBody Nothing] [] [] []
+
+showInts : List Int -> String
+showInts [] = ""
+showInts (x :: rest) = strFromInt x ++ "," ++ showInts rest
+
+expected : List Int
+expected = map (\i => off + i) (range 0 10)
+
+defMetas : DtDef -> List Int
+defMetas d = case dtDefBody d of
+  Just b => termMetasAll b
+  Nothing => []
+
+shiftedMetas : CachedProgram -> List Int
+shiftedMetas cp = concatMap defMetas (cachedDefs cp)
+
+step : Term -> Int -> Term
+step acc _ = TIf acc acc acc
+
+deepTerm : Term
+deepTerm = foldl step (TMeta 99) (range 0 600)
+
+deepCp : CachedProgram
+deepCp = CachedProgram [] [DtDef "deep" (TType (levelOfInt 0)) deepTerm Nothing] [] [] []
+
+shiftOk : CachedProgram -> String
+shiftOk cp = if showInts (shiftedMetas cp) == showInts expected then "SHIFT_OK" else "SHIFT_BAD:" ++ showInts (shiftedMetas cp)
+
+fuelOk : Check CachedProgram -> String
+fuelOk r = case r of
+  ErrC _ => "FUEL_ERR"
+  OkC _ => "FUEL_SILENT_BAD"
+
+main : String
+main = case shiftCachedProgram off probeCp of
+  ErrC _ => "SHIFT_ERR"
+  OkC cp => shiftOk cp ++ " " ++ fuelOk (shiftCachedProgram off deepCp)

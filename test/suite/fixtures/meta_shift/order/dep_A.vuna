@@ -1,0 +1,9 @@
+module Dep.A (mkA) where
+
+import Prelude
+
+mkA : Int
+mkA = f Nil
+
+f : {a : Type} -> List a -> Int
+f xs = 0

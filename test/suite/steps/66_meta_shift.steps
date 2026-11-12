@@ -1,0 +1,47 @@
+# 66) C37 A 回归：接口摘要「擦除位残 meta」的移位/段分配。
+#
+# A① `shiftTerm` 覆盖全部 Term 构造子、fuel 用尽返回可检测错误：
+#     旧缺陷：`shiftTermFuel` 只递归 TPi/TLam/TApp/TCon/TCase/TIf，TMk/TRecord/TProj/
+#     TRecUpd 落到 `_ => t`；且 fuel(=128) 用尽后原样返回整棵子树 ⇒ record 构造/更新里的
+#     残 meta 保持旧编号、与本包 fresh 编号撞号（静默错项），深层项则静默漏移。
+#     探针直接 import `Vuna.Compiler.Driver.Cache`，把这些 meta 嵌进
+#     TMk/TRecord/TProj/TRecUpd/TCase/TIf 后断言全部 +off；600 层嵌套 > fuel guard 断言
+#     返回可检测的 ErrC。
+#
+# A② dep 段号与 iface 列表顺序无关：
+#     夹具 dep 有两个**互不 import** 的模块（A/B），翻转 `[export].modules` 顺序会改变
+#     dep manifest 的模块序（已验证）⇒ 旧实现的 `(idx+1)<<30` 段号随之变化。这里对同一
+#     app 做两次 `build --no-compile`（dep 模块序 A,B vs B,A，均先 check dep 写接口），
+#     codegen 产物目录必须逐字节一致。
+#
+# 夹具包按真实依赖布局构造（compiler / base 作为依赖包），只用 $VUNA / $VUNA_BASE / $TMPDIR。
+run: sh -c 'rm -rf "$TMPDIR/meta-shift" "$TMPDIR/meta-shift-cache"; mkdir -p "$TMPDIR/meta-shift/app"'
+run: sh -c 'cp "$(dirname "$VUNA_BASE")/test/suite/fixtures/meta_shift/Main.vuna" "$TMPDIR/meta-shift/app/Main.vuna"'
+run: sh -c 'printf "%s\n" "[package]" "name = \"metashift\"" "" "[dependencies]" "vuna-compiler = \"$VUNA_BASE/../compiler\"" > "$TMPDIR/meta-shift/vuna.toml"'
+run: sh -c 'TMPDIR="$TMPDIR/meta-shift-cache" "$VUNA" run "$TMPDIR/meta-shift" 2>&1'
+exit: 0
+out-contains: SHIFT_OK
+out-contains: FUEL_ERR
+out-not-contains: SHIFT_BAD
+out-not-contains: SHIFT_ERR
+out-not-contains: FUEL_SILENT_BAD
+# --- A②：dep 模块序翻转后 app 的 codegen 产物逐字节稳定 ---
+run: sh -c 'rm -rf "$TMPDIR/ms-order"; mkdir -p "$TMPDIR/ms-order/dep/lib/Dep" "$TMPDIR/ms-order/app/app"'
+run: sh -c 'cp "$(dirname "$VUNA_BASE")/test/suite/fixtures/meta_shift/order/dep_A.vuna" "$TMPDIR/ms-order/dep/lib/Dep/A.vuna"'
+run: sh -c 'cp "$(dirname "$VUNA_BASE")/test/suite/fixtures/meta_shift/order/dep_B.vuna" "$TMPDIR/ms-order/dep/lib/Dep/B.vuna"'
+run: sh -c 'cp "$(dirname "$VUNA_BASE")/test/suite/fixtures/meta_shift/order/app_Main.vuna" "$TMPDIR/ms-order/app/app/Main.vuna"'
+run: sh -c 'printf "%s\n" "[package]" "name = \"msdep\"" "" "[export]" "modules = [\"Dep.A\", \"Dep.B\"]" "" "[dependencies]" "vuna-base = \"$VUNA_BASE\"" > "$TMPDIR/ms-order/dep/vuna.toml"'
+run: sh -c 'printf "%s\n" "[package]" "name = \"msapp\"" "" "[dependencies]" "vuna-base = \"$VUNA_BASE\"" "msdep = \"../dep\"" > "$TMPDIR/ms-order/app/vuna.toml"'
+run: sh -c 'TMPDIR="$TMPDIR/ms-order-cache" "$VUNA" check "$TMPDIR/ms-order/dep" >/dev/null 2>&1 && TMPDIR="$TMPDIR/ms-order-cache" "$VUNA" build --no-compile --out "$TMPDIR/ms-order/out1" "$TMPDIR/ms-order/app" >/dev/null 2>&1'
+exit: 0
+run: sh -c 'test -f "$TMPDIR/ms-order/out1/Main.ml" && test -f "$TMPDIR/ms-order/out1/Dep_dA.ml"'
+exit: 0
+# 翻转 dep 的 [export].modules 顺序，清掉两包接口与查询缓存后重跑。
+run: sh -c 'printf "%s\n" "[package]" "name = \"msdep\"" "" "[export]" "modules = [\"Dep.B\", \"Dep.A\"]" "" "[dependencies]" "vuna-base = \"$VUNA_BASE\"" > "$TMPDIR/ms-order/dep/vuna.toml"'
+run: sh -c 'rm -rf "$TMPDIR/ms-order/dep/.output" "$TMPDIR/ms-order/app/.output" "$TMPDIR/ms-order-cache"'
+run: sh -c 'TMPDIR="$TMPDIR/ms-order-cache" "$VUNA" check "$TMPDIR/ms-order/dep" >/dev/null 2>&1 && TMPDIR="$TMPDIR/ms-order-cache" "$VUNA" build --no-compile --out "$TMPDIR/ms-order/out2" "$TMPDIR/ms-order/app" >/dev/null 2>&1'
+exit: 0
+run: sh -c 'test -f "$TMPDIR/ms-order/out2/Main.ml" && test -f "$TMPDIR/ms-order/out2/Dep_dA.ml"'
+exit: 0
+run: sh -c 'diff -rq "$TMPDIR/ms-order/out1" "$TMPDIR/ms-order/out2"'
+exit: 0

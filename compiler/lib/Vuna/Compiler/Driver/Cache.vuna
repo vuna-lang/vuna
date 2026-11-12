@@ -314,66 +314,120 @@ cachedProgramIssue (CachedProgram datas defs globals insts classes) =
 -- 包段重编号：摘要里允许残留的「擦除位置未解 meta」
 -- ---------------------------------------------------------------
 -- 精化器（M23 决策）允许擦除位置留未解元变量；摘要无 sols，无法跨包共享这些解。
--- 读摘要时给每个依赖包分配 `(idx+1) << 30` 段并整体移位：段 0 留给根包，不同摘要 /
--- 根包之间编号互不冲突；消费方把它们当作**新的未解元变量**（只出现在不生成代码、
--- 不参与运行时比较的擦除位置）。段宽 2^30 远大于单包元变量数。
+-- 读摘要时给每个依赖模块分配一个段并整体移位（段号 = 模块名排序后的名次，见
+-- `Dt.shiftedDepPrograms` —— 与 iface 列表顺序无关）：段 0 留给根包，不同摘要 / 根包
+-- 之间编号互不冲突；消费方把它们当作**新的未解元变量**（只出现在不生成代码、不参与
+-- 运行时比较的擦除位置）。段宽 2^30 远大于单模块元变量数。
 summaryMetaSegment : Int
 summaryMetaSegment = 1073741824
 
--- 项内元变量整体移位（fuel 守卫：TCase 分支不是 Term 的结构子项，SCT 证不了终止）。
-shiftTerm : Int -> Term -> Term
-shiftTerm off t = shiftTermFuel 128 off t
+-- 项内元变量整体移位。meta 编号是**全局**的、与 binder 深度无关 ⇒ 只做结构遍历、不需要
+-- 深度参数（`TRecUpd` 的 base/body、`TCase` 分支体、`TProj` 的 base 里的 meta 同样要移）。
+--
+-- 旧实现有两处**静默漏移**：(a) 漏了 `TMk` / `TRecord` / `TProj` / `TRecUpd`（落到
+-- `_ => t`）——record 构造/更新里擦除位的残 meta 会保持旧编号、与本包 fresh 编号撞号；
+-- (b) fuel 用尽后原样返回剩余子树。现在 fuel 耗尽 ⇒ `icFuel "meta-shift"`（内部错误、可
+-- 检测，绝不静默用未移位的项）；fuel 取 `defaultFuel`，与 codegen / conv 的守卫同级
+-- （codegen 能接受的项深度内不会触发）。
+shiftTerm : Int -> Term -> Check Term
+shiftTerm off t = shiftTermFuel defaultFuel off t
 
-shiftTermFuel : Int -> Int -> Term -> Term
-shiftTermFuel fuel off t = if fuel <= 0 then t
+shiftTermFuel : Int -> Int -> Term -> Check Term
+shiftTermFuel fuel off t = if fuel <= 0 then icFuel "meta-shift"
 else case t of
-  TMeta m => TMeta (m + off)
-  TPi n i r d c => TPi n i r (shiftTermFuel (fuel - 1) off d) (shiftTermFuel (fuel - 1) off c)
-  TLam n r b => TLam n r (shiftTermFuel (fuel - 1) off b)
-  TApp f a r => TApp (shiftTermFuel (fuel - 1) off f) (shiftTermFuel (fuel - 1) off a) r
+  TVar n i sp => OkC (TVar n i sp)
+  TMeta m => OkC (TMeta (m + off))
+  TGlobal g => OkC (TGlobal g)
+  TType l => OkC (TType l)
+  TPi n i r d c =>
+    Vuna.Compiler.Common.bind (shiftTermFuel (fuel - 1) off d)
+      (\d2 => Vuna.Compiler.Common.bind (shiftTermFuel (fuel - 1) off c) (\c2 => OkC (TPi n i r d2 c2)))
+  TLam n r b =>
+    Vuna.Compiler.Common.bind (shiftTermFuel (fuel - 1) off b) (\b2 => OkC (TLam n r b2))
+  TApp f a r =>
+    Vuna.Compiler.Common.bind (shiftTermFuel (fuel - 1) off f)
+      (\f2 => Vuna.Compiler.Common.bind (shiftTermFuel (fuel - 1) off a) (\a2 => OkC (TApp f2 a2 r)))
   TCon c args =>
-    TCon c (map (\p => Pair (shiftTermFuel (fuel - 1) off (firstOf p)) (secondOf p)) args)
-  TCase s alts => TCase (shiftTermFuel (fuel - 1) off s) (map (shiftAltFuel (fuel - 1) off) alts)
+    Vuna.Compiler.Common.bind (shiftArgs (fuel - 1) off args) (\args2 => OkC (TCon c args2))
+  TMk c args =>
+    Vuna.Compiler.Common.bind (shiftArgs (fuel - 1) off args) (\args2 => OkC (TMk c args2))
+  TRecord c args =>
+    Vuna.Compiler.Common.bind (shiftArgs (fuel - 1) off args) (\args2 => OkC (TRecord c args2))
+  TCase s alts =>
+    Vuna.Compiler.Common.bind (shiftTermFuel (fuel - 1) off s)
+      (\s2 => Vuna.Compiler.Common.bind (shiftAlts (fuel - 1) off alts) (\alts2 => OkC (TCase s2 alts2)))
+  TProj base c tele i fi =>
+    Vuna.Compiler.Common.bind (shiftTermFuel (fuel - 1) off base)
+      (\base2 => OkC (TProj base2 c tele i fi))
+  TRecUpd base c tele idxs body =>
+    Vuna.Compiler.Common.bind (shiftTermFuel (fuel - 1) off base)
+      (\base2 => Vuna.Compiler.Common.bind (shiftTermFuel (fuel - 1) off body) (\body2 => OkC (TRecUpd base2 c tele idxs body2)))
+  TInt n => OkC (TInt n)
+  TStr s => OkC (TStr s)
+  TBool b => OkC (TBool b)
   TIf c th el =>
-    TIf (shiftTermFuel (fuel - 1) off c) (shiftTermFuel (fuel - 1) off th)
-      (shiftTermFuel (fuel - 1) off el)
-  _ => t
+    Vuna.Compiler.Common.bind (shiftTermFuel (fuel - 1) off c)
+      (\c2 => Vuna.Compiler.Common.bind (shiftTermFuel (fuel - 1) off th) (\th2 => Vuna.Compiler.Common.bind (shiftTermFuel (fuel - 1) off el) (\el2 => OkC (TIf c2 th2 el2))))
+  TFloat raw => OkC (TFloat raw)
 
-shiftAltFuel : Int -> Int -> CaseAlt -> CaseAlt
-shiftAltFuel fuel off (CaseAlt n bs b) = CaseAlt n bs (shiftTermFuel fuel off b)
+-- 实参表 / case 分支表：元素项是 Term 的子项（不是结构子项，SCT 证不了终止 ⇒ 走 fuel）。
+shiftArgs : Int -> Int -> List (Pair Term Rig) -> Check (List (Pair Term Rig))
+shiftArgs fuel off [] = OkC []
+shiftArgs fuel off ((Pair a r) :: rest) =
+  Vuna.Compiler.Common.bind (shiftTermFuel fuel off a)
+    (\a2 => Vuna.Compiler.Common.bind (shiftArgs fuel off rest) (\rest2 => OkC (Pair a2 r :: rest2)))
 
-shiftDef : Int -> DtDef -> DtDef
-shiftDef off (DtDef n ty body sp) = DtDef n (shiftTerm off ty) (shiftTerm off body) sp
-shiftDef off (DtAxiom n ty sp) = DtAxiom n (shiftTerm off ty) sp
-shiftDef off (DtExtern n ty c sp) = DtExtern n (shiftTerm off ty) c sp
+shiftAlts : Int -> Int -> List CaseAlt -> Check (List CaseAlt)
+shiftAlts fuel off [] = OkC []
+shiftAlts fuel off ((CaseAlt n bs b) :: rest) =
+  Vuna.Compiler.Common.bind (shiftTermFuel fuel off b)
+    (\b2 => Vuna.Compiler.Common.bind (shiftAlts fuel off rest) (\rest2 => OkC (CaseAlt n bs b2 :: rest2)))
 
-shiftCtor : Int -> DtCtor -> DtCtor
-shiftCtor off (DtCtor n fam tele ty sp) = DtCtor n fam tele (shiftTerm off ty) sp
+shiftDef : Int -> DtDef -> Check DtDef
+shiftDef off (DtDef n ty body sp) =
+  Vuna.Compiler.Common.bind (shiftTerm off ty)
+    (\ty2 => Vuna.Compiler.Common.bind (shiftTerm off body) (\body2 => OkC (DtDef n ty2 body2 sp)))
+shiftDef off (DtAxiom n ty sp) =
+  Vuna.Compiler.Common.bind (shiftTerm off ty) (\ty2 => OkC (DtAxiom n ty2 sp))
+shiftDef off (DtExtern n ty c sp) =
+  Vuna.Compiler.Common.bind (shiftTerm off ty) (\ty2 => OkC (DtExtern n ty2 c sp))
 
-shiftData : Int -> DtData -> DtData
+shiftCtor : Int -> DtCtor -> Check DtCtor
+shiftCtor off (DtCtor n fam tele ty sp) =
+  Vuna.Compiler.Common.bind (shiftTerm off ty) (\ty2 => OkC (DtCtor n fam tele ty2 sp))
 
-shiftFieldMeta : Int -> DtFieldMeta -> DtFieldMeta
-shiftFieldMeta off (DtFieldMeta fn fi fty) = DtFieldMeta fn fi (shiftTerm off fty)
+shiftFieldMeta : Int -> DtFieldMeta -> Check DtFieldMeta
+shiftFieldMeta off (DtFieldMeta fn fi fty) =
+  Vuna.Compiler.Common.bind (shiftTerm off fty) (\fty2 => OkC (DtFieldMeta fn fi fty2))
 
+shiftData : Int -> DtData -> Check DtData
 shiftData off (DtData n ps ctors kind viaClasses lin repr fields isRec) =
-  DtData n ps (map (shiftCtor off) ctors) (shiftTerm off kind) viaClasses lin repr
-    (map (shiftFieldMeta off) fields) isRec
+  Vuna.Compiler.Common.bind (Vuna.Compiler.Common.traverse (shiftCtor off) ctors)
+    (\ctors2 => Vuna.Compiler.Common.bind (shiftTerm off kind) (\kind2 => Vuna.Compiler.Common.bind (Vuna.Compiler.Common.traverse (shiftFieldMeta off) fields) (\fields2 => OkC (DtData n ps ctors2 kind2 viaClasses lin repr fields2 isRec))))
 
-shiftClass : Int -> DtClass -> DtClass
+shiftTele : Int -> List (Pair String Term) -> Check (List (Pair String Term))
+shiftTele off [] = OkC []
+shiftTele off ((Pair n t) :: rest) =
+  Vuna.Compiler.Common.bind (shiftTerm off t)
+    (\t2 => Vuna.Compiler.Common.bind (shiftTele off rest) (\rest2 => OkC (Pair n t2 :: rest2)))
+
+shiftClass : Int -> DtClass -> Check DtClass
 shiftClass off (DtClass n ps projs tys) =
-  DtClass n ps (map (\p => Pair (firstOf p) (shiftTerm off (secondOf p))) projs)
-    (map (shiftTerm off) tys)
+  Vuna.Compiler.Common.bind (shiftTele off projs)
+    (\projs2 => Vuna.Compiler.Common.bind (Vuna.Compiler.Common.traverse (shiftTerm off) tys) (\tys2 => OkC (DtClass n ps projs2 tys2)))
 
-shiftInst : Int -> DtInst -> DtInst
+shiftInst : Int -> DtInst -> Check DtInst
 shiftInst off (DtInst n tele ctxE head sp) =
-  DtInst n (map (\p => Pair (firstOf p) (shiftTerm off (secondOf p))) tele)
-    (map (shiftTerm off) ctxE) (shiftTerm off head) sp
+  Vuna.Compiler.Common.bind (shiftTele off tele)
+    (\tele2 => Vuna.Compiler.Common.bind (Vuna.Compiler.Common.traverse (shiftTerm off) ctxE) (\ctx2 => Vuna.Compiler.Common.bind (shiftTerm off head) (\head2 => OkC (DtInst n tele2 ctx2 head2 sp))))
 
-shiftCachedProgram : Int -> CachedProgram -> CachedProgram
+shiftGlobal : Int -> Pair String Term -> Check (Pair String Term)
+shiftGlobal off (Pair n t) = Vuna.Compiler.Common.bind (shiftTerm off t) (\t2 => OkC (Pair n t2))
+
+shiftCachedProgram : Int -> CachedProgram -> Check CachedProgram
 shiftCachedProgram off (CachedProgram datas defs globals insts classes) =
-  CachedProgram (map (shiftData off) datas) (map (shiftDef off) defs)
-    (map (\p => Pair (firstOf p) (shiftTerm off (secondOf p))) globals) (map (shiftInst off) insts)
-    (map (shiftClass off) classes)
+  Vuna.Compiler.Common.bind (Vuna.Compiler.Common.traverse (shiftData off) datas)
+    (\datas2 => Vuna.Compiler.Common.bind (Vuna.Compiler.Common.traverse (shiftDef off) defs) (\defs2 => Vuna.Compiler.Common.bind (Vuna.Compiler.Common.traverse (shiftGlobal off) globals) (\globals2 => Vuna.Compiler.Common.bind (Vuna.Compiler.Common.traverse (shiftInst off) insts) (\insts2 => Vuna.Compiler.Common.bind (Vuna.Compiler.Common.traverse (shiftClass off) classes) (\classes2 => OkC (CachedProgram datas2 defs2 globals2 insts2 classes2))))))
 
 -- ---------------------------------------------------------------
 -- 载荷编码（CachedProgram 落盘 / 载荷自描述，D-Q2）

@@ -126,8 +126,9 @@ key 是**纯字符串**（不参与哈希输入），节点分成两组：
 查询图的 trace / cutoff / 会话索引。
 
 `split` 节点的值是 blob 的**内容地址**，载荷落在 `<cache>/blobs/<digest>`（跨包共享）。
-命中时按地址读 blob、校验 framing 四段（tag/codec/len/内容地址）后再规范解码；任何不符
-⇒ 当作 miss 重算并重写同一路径。坏字节永远进不了解码器。
+命中时按地址读 blob、校验 framing 四段（tag/codec/len/**重算的内容地址**）后再规范解码；
+任何不符 ⇒ 当作 miss 重算并重写同一路径。坏字节永远进不了解码器（同长度载荷篡改也走
+重算，见 [cache.md](cache.md)「存储与 key」的内容地址校验两档）。
 
 **载荷顺序即产物顺序**：codec `split-files 2` 起，blob 内容在写侧就是 `canonicalTopo`
 （依赖在前的确定性拓扑序），命中路径直接按该顺序写 `.ml` 与 `build.sh`，不再重算规范化。
@@ -160,8 +161,7 @@ key 是**纯字符串**（不参与哈希输入），节点分成两组：
   不是新鲜度启发式缓存。
 - `Doc` 没有自有缓存（每次现 parse），`vuna test` 走 `compileToDir` ⇒ 自动吃 split 节点。
 
-仍未做：`debt.md` 只剩 C51（codegen 全量/增量逐字节差异，与图无关）；`VUNA_LEGACY_PATH`
-从未实现，已从计划删掉。
+仍未做：`VUNA_LEGACY_PATH` 从未实现，已从计划删掉。
 
 ## 8. 已知边界
 

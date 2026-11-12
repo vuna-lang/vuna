@@ -41,6 +41,7 @@ module Vuna.Compiler.Driver.Iface
   , meSourceOfEntry
   , miCachedOf
   , miDeclsOf
+  , miDefLocsOf
   , miDepHashesOf
   , miExportsOf
   , miFixitiesOf
@@ -123,6 +124,7 @@ import Vuna.Compiler.Elab.Derive
 import Vuna.Compiler.Driver.Cache
 import Vuna.Compiler.Driver.Owner
 import Vuna.Compiler.Intrinsics
+import Vuna.Compiler.Source
 import Vuna.Compiler.Loader.Modules
 import Vuna.Compiler.Packages.Pkg
 
@@ -158,6 +160,12 @@ record ModuleIface where
   -- （`miDepHashes`，clean 判定已包含）保证。
   miPrepared : List Decl
   miCached : CachedProgram
+  -- 本模块每个定义的位置表（vuna 全名 → (spanFile, spanStartLine)），**不进
+  -- `miIfaceHash`**：span 不是语义面，移动代码不能失效依赖方（见 §不变量第 3 条）。
+  -- 只服务 codegen 的 `dt_def_locs`（运行时错误回溯）：增量路径从接口复用干净模块时，
+  -- `DtDef` 的 span 不在载荷里，必须用本表把干净模块的行补回位置表，否则「首次全量
+  -- 构建」与「后续增量构建」的 `Vuna_runtime.ml` 不可逐字节一致（C51）。
+  miDefLocs : List (Pair String (Pair String Int))
 
 record PackageIface where
   piSchema : String
@@ -219,6 +227,31 @@ miRecordsOf m = m.miRecords
 miPreparedOf : ModuleIface -> List Decl
 miPreparedOf m = m.miPrepared
 
+-- | 本模块定义的位置表（vuna 全名 → (spanFile, spanStartLine)）；不进接口哈希，
+-- 只用于 codegen 的位置表补行（见字段注释）。
+miDefLocsOf : ModuleIface -> List (Pair String (Pair String Int))
+miDefLocsOf m = m.miDefLocs
+
+defLocOf : DtDef -> Maybe (Pair String (Pair String Int))
+defLocOf d = case dtDefSpan d of
+  Nothing => Nothing
+  Just sp => Just (Pair (dtDefName d) (Pair sp.spanFile sp.spanStartLine))
+
+-- 位置表按 vuna 名排序：写侧（整包接口）与读侧（增量 codegen 补行）各取一次，顺序
+-- 必须与全量路径 codegen 的位置表逐字节一致（C51 的确定性要求）。无 span 的定义跳过
+-- （与 `dtDefLocTable` 的跳过语义一致）。
+insertByDefLoc : Pair String (Pair String Int) -> List (Pair String (Pair String Int)) -> List (Pair String (Pair String Int))
+insertByDefLoc p [] = [p]
+insertByDefLoc p ((Pair k v) :: rest) =
+  if firstOf p <= k then Base.List.Cons p (Base.List.Cons (Pair k v) rest)
+  else Base.List.Cons (Pair k v) (insertByDefLoc p rest)
+
+defLocsOfDefs : List DtDef -> List (Pair String (Pair String Int))
+defLocsOfDefs [] = []
+defLocsOfDefs (d :: rest) = case defLocOf d of
+  Nothing => defLocsOfDefs rest
+  Just p => insertByDefLoc p (defLocsOfDefs rest)
+
 -- 单模块的 prepared decls：aux = 同包其它模块的原始 decls + 入口声明。
 -- 只在整包写回（本包模块数 > 1）时计算：LSP/单模块写回只有部分上下文，算出的
 -- prepared 不完整 ⇒ 留空，让读侧回退整表 `dtPrepareTermAux`。
@@ -239,6 +272,7 @@ setPrepared : List Decl -> ModuleIface -> ModuleIface
 setPrepared prepared mi =
   ModuleIface mi.miName mi.miPackage mi.miSource mi.miIfaceHash mi.miDepHashes mi.miImports
     mi.miImplicitImports mi.miExports mi.miFixities mi.miDecls mi.miRecords prepared mi.miCached
+    mi.miDefLocs
 
 -- 接口格式版本：Marshal 布局或字段语义变化必须 bump（旧缓存自然失效）。
 -- R1（records-v2）：DRecord/DData/DtData 增加 ReprTier 槽位，Marshal 布局变化 ⇒ bump。
@@ -250,8 +284,9 @@ setPrepared prepared mi =
 -- `miDepHashes` 由 Int 变 String ⇒ Marshal 布局变化 ⇒ 19。
 -- C32：接口载荷改为 `Canonical.*` 显式编码 + `Store` framing（Marshal 彻底退出缓存面），
 -- manifest 增加 `mePayloadDigest`，布局变化 ⇒ 20。
+-- C51：`ModuleIface.miDefLocs`（定义位置表，不进接口哈希）随载荷持久化，布局变化 ⇒ 22。
 ifaceSchema : String
-ifaceSchema = "vuna-iface 21"
+ifaceSchema = "vuna-iface 22"
 
 -- | 接口哈希的**算法格式版本**：参与哈希输入（与 `ifaceSchema` 独立——schema 管载荷
 -- 布局，本版本管摘要算法/分片编码；换算法时旧哈希自然换代）。
@@ -619,6 +654,7 @@ mkIfaceBase pkg parts prog sources clean m = case cleanIfaceOf clean (moduleName
           m.moduleExportsOf m.moduleDeclsOf cp
     in ModuleIface name pkg (sourceOf sources name) h [] m.moduleImportsOf m.moduleImplicitImportsOf
       m.moduleExportsOf m.moduleFixitiesOf m.moduleDeclsOf records [] cp
+      (defLocsOfDefs (cachedDefs cp))
 
 finishIface : List (Pair String String) -> List ModuleIface -> Module -> ModuleIface -> ModuleIface
 finishIface tbl clean m mi = case cleanIfaceOf clean (miNameOf mi) of
@@ -627,6 +663,7 @@ finishIface tbl clean m mi = case cleanIfaceOf clean (miNameOf mi) of
     ModuleIface (miNameOf mi) (miPackageOf mi) (miSourceOf mi) (miIfaceHashOf mi)
       (depHashesOf tbl m) (miImportsOf mi) (miImplicitImportsOf mi) (miExportsOf mi)
       (miFixitiesOf mi) (miDeclsOf mi) (miRecordsOf mi) (miPreparedOf mi) (miCachedOf mi)
+      (miDefLocsOf mi)
 
 ifacesGo : String -> ProgParts -> DtProgram -> List (Pair String SourceInfo) -> List (Pair String String) -> List ModuleIface -> List Module -> Pair (List ModuleIface) (List (Pair String String))
 ifacesGo pkg parts prog sources knownDeps clean modules =
@@ -1175,7 +1212,7 @@ readPackageIface dir compiler = do
 -- 再逐字段核对 `miName` / `miIfaceHash`——三层都不通过就回退全量。
 -- | iface 载荷编码版本（与 `ifaceSchema` 独立：schema 管字段集，本版本管编码布局）。
 ifaceCodec : String
-ifaceCodec = "module-iface 2"
+ifaceCodec = "module-iface 3"
 
 manifestCodec : String
 manifestCodec = "package-manifest 1"
@@ -1197,11 +1234,20 @@ decDepPair fuel c =
   thenPair (decStr (fuel - 1) c)
     (\n, b1 => thenPair (decStr (fuel - 1) b1) (\h, b2 => Just (Pair (Pair n h) b2)))
 
+-- | 定义位置表条目：vuna 全名 → (spanFile, spanStartLine)。
+encDefLoc : Pair String (Pair String Int) -> List String -> List String
+encDefLoc (Pair name (Pair file line)) acc = encStr name (encStr file (encInt line acc))
+
+decDefLoc : Int -> Cur -> Maybe (Pair (Pair String (Pair String Int)) Cur)
+decDefLoc fuel c =
+  thenPair (decStr (fuel - 1) c)
+    (\name, b1 => thenPair (decStr (fuel - 1) b1) (\file, b2 => thenPair (decInt (fuel - 1) b2) (\line, b3 => Just (Pair (Pair name (Pair file line)) b3))))
+
 -- | `ModuleIface` 的规范编码（字段顺序 = record 声明顺序）。
 encModuleIfacePayload : ModuleIface -> List String -> List String
 encModuleIfacePayload m acc =
   encStr m.miName
-    (encStr m.miPackage (encSourceInfo m.miSource (encStr m.miIfaceHash (encList encDepPair m.miDepHashes (encList encImport m.miImports (encList encImport m.miImplicitImports (encList encExportEntry m.miExports (encList encFixity m.miFixities (encList encDecl m.miDecls (encList encRecordMeta m.miRecords (encList encDecl m.miPrepared (encCachedProgram m.miCached acc))))))))))))
+    (encStr m.miPackage (encSourceInfo m.miSource (encStr m.miIfaceHash (encList encDepPair m.miDepHashes (encList encImport m.miImports (encList encImport m.miImplicitImports (encList encExportEntry m.miExports (encList encFixity m.miFixities (encList encDecl m.miDecls (encList encRecordMeta m.miRecords (encList encDecl m.miPrepared (encCachedProgram m.miCached (encList encDefLoc m.miDefLocs acc)))))))))))))
 
 -- | `ModuleIface` 载荷字节（落盘用）。
 encModuleIfaceAt : ModuleIface -> List String -> List String
@@ -1228,8 +1274,9 @@ decModuleIfacePayload fuel c = do
   p11 <- decList decRecordMeta (fuel - 1) (secondOf p10)
   p12 <- decList decDecl (fuel - 1) (secondOf p11)
   p13 <- decCachedProgram (fuel - 1) (secondOf p12)
+  p14 <- decList decDefLoc (fuel - 1) (secondOf p13)
   pure
-    (Pair (ModuleIface (firstOf p1) (firstOf p2) (firstOf p3) (firstOf p4) (firstOf p5) (firstOf p6) (firstOf p7) (firstOf p8) (firstOf p9) (firstOf p10) (firstOf p11) (firstOf p12) (firstOf p13)) (secondOf p13))
+    (Pair (ModuleIface (firstOf p1) (firstOf p2) (firstOf p3) (firstOf p4) (firstOf p5) (firstOf p6) (firstOf p7) (firstOf p8) (firstOf p9) (firstOf p10) (firstOf p11) (firstOf p12) (firstOf p13) (firstOf p14)) (secondOf p14))
 
 decManifestEntry : Int -> Cur -> Maybe (Pair ManifestEntry Cur)
 decManifestEntry fuel c = do

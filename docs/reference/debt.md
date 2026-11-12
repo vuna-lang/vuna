@@ -40,9 +40,7 @@
 
 | ID | 仍未成立的事实 | 证据 | 归属 |
 | --- | --- | --- | --- |
-| C51 | 同一包的 codegen 产物在「首次全量构建」与「后续重算（有接口/单元缓存可复用）」两条路径上不是逐字节相同：`Base_dOrd.ml` 里冲突重命名的 binder 会从 `dtb__2` 变成 `dtb_X2`（残余 meta 编号差异，与查询图无关，§52b 曾因命中 split 缓存而掩盖）。当前 §52b/§52c 只断言「产物文件集一致 + 坏字节被拒绝并重写合法 framing」 | 复现：`build` 一次后清 `blobs` 与 `split-units` 再 build，`diff -r` 首个差异在 `Base_dOrd.ml` 的 `C_Dict_…` 分支 | 后续 |
-| C49 | `VUNA_IFACE_AUDIT=1` 与 `VUNA_IFACE_SELFTEST=1` **同时**在冷缓存（无 `.output/iface`）下跑 `check <包目录>` 会误报 `iface selftest: package iface invalid`（单独任一开关都通过；HEAD 60afe83 上同样复现，不是新引入）。根因初步在 audit 双路径与写侧自检读回的组合，未定位 | 复现：`rm -rf compiler/.output/iface; VUNA_IFACE_AUDIT=1 VUNA_IFACE_SELFTEST=1 vuna check compiler`；[cache.md](cache.md)/[testing.md](testing.md) | 后续 |
-| C37 | 擦除位置残留未解 meta 仍靠包段 `(idx+1)<<30` 重编号（LSP 单模块写回与整包 check 的哈希差异已由 `meOrigin` 结构性隔离，不再需要「首次整包自愈」） | `Driver/Dt`（`shiftCachedProgram`）；[cache.md](cache.md) | 后续 |
+| C37 | 擦除位置残留未解 meta 仍靠跨包段重编号共享（**A 已修**：`shiftTerm` 覆盖全部 Term 构造子、fuel 用尽报可检测内部错误而非静默漏移；dep 段号按模块名排序后的名次分配、与 iface 列表顺序无关。**仍未做**：语义方案 B——在精化收尾冻结擦除位未解 meta，需用户拍板「依赖方不再能替别的模块解洞」） | `Driver/Cache`（`shiftTerm`/`shiftCachedProgram`）、`Driver/Dt`（`shiftedDepPrograms`）、`test/suite/steps/66_meta_shift.steps`；[cache.md](cache.md) | 后续（B 待决策） |
 | C38 | LSP case split：不检查依赖模块导出面；构造子 / record 解析是 parse 级；每请求重跑容错精化（无进程内缓存）；洞在类型位置仍可能生成非法 `case`；索引族 case split 需要精化器暴露可达构造子（研究，非债务） | `lib/Vuna/Lsp/Query.caseSplitActions`、`lib/Vuna/Lsp/Bindings`；`test/corpus/lsp/smoke.sh`；[lsp.md](lsp.md) | 后续 |
 | C45 | LSP 缺局部绑定推断类型：λ / `as` / 记录 pun 等无语法标注的 binder 只能给文本推导位置/类型；同名 `?name` 不共享求解 | `lib/Vuna/Lsp/Bindings.vuna`、`Elab/Driver.goalsOfProgramTolerant`；[lsp.md](lsp.md) | 后续 |
 | C46 | `vuna test` 的 main 通过判据只认 `Int`/`Nat`/`String`/`Bool` 与 `Eff [] a`（动作 main 只按退出码 0，不比较返回值） | `lib/Vuna/Test/Run.vuna`（`dtMainKind`）；[primitives.md](primitives.md) §5 | 后续 |

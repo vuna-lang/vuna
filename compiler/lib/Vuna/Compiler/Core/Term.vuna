@@ -788,7 +788,10 @@ hasFreeTermVar d (TCon c args) = anyPairFree d args
 hasFreeTermVar d (TMk c args) = anyPairFree d args
 hasFreeTermVar d (TRecord c args) = anyPairFree d args
 hasFreeTermVar d (TProj base c tele i fi) = hasFreeTermVar d base
-hasFreeTermVar d (TRecUpd base c tele idxs body) = hasFreeTermVar d base || hasFreeTermVar d body
+-- `TRecUpd.body` 在 `tele` 绑定子之下（与 `hasFreeVar` / `hasMeta` / `shift` /
+-- `substVarAt` 同口径）：record-update 定义体里的字段 binder 引用不是自由变量。
+hasFreeTermVar d (TRecUpd base c tele idxs body) =
+  hasFreeTermVar d base || hasFreeTermVar (d + length tele) body
 hasFreeTermVar d (TCase s alts) = hasFreeTermVar d s || anyAltFree d alts
 hasFreeTermVar d (TIf c th el) = hasFreeTermVar d c || hasFreeTermVar d th || hasFreeTermVar d el
 hasFreeTermVar d _ = False

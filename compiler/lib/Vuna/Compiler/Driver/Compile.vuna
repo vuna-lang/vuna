@@ -1740,7 +1740,7 @@ resyncCleanSources sources clean = map (\m => case lookupPair (miNameOf m) sourc
   Just si =>
     ModuleIface (miNameOf m) (miPackageOf m) si (miIfaceHashOf m) (miDepHashesOf m) (miImportsOf m)
       (miImplicitImportsOf m) (miExportsOf m) (miFixitiesOf m) (miDeclsOf m) (miRecordsOf m)
-      (miPreparedOf m) (miCachedOf m)
+      (miPreparedOf m) (miCachedOf m) (miDefLocsOf m)
   Nothing => m
 ) clean
 
@@ -1998,12 +1998,18 @@ writeSplitBlob files = do
     _ <- storeWriteIfChangedAsEff tag splitCacheCodec digest path payload
     pure digest
 
--- | 读 blob：framing 全量校验 + 内容地址比对通过才解码；任何不符 ⇒ Nothing（重算）。
+-- | 读 blob：framing 全量校验（**重算**载荷内容地址，不只是比对头声明）+ 内容地址比对
+-- 通过才解码；任何不符 ⇒ Nothing（重算并重写同一路径）。
+--
+-- C51 相邻修复：split 载荷没有 iface 那种「逐字段语义自证」，所以不能走
+-- `storeReadAsEff`（只比头里的地址字符串，同长度载荷篡改会静默进入解码器 → 损坏的
+-- codegen 产物）。重算成本是 `contentAddress` 的预折叠 + SHA-256（~2.2 ms/MB），
+-- 只在 split 命中路径付一次；§52c 的「载荷中部单字节篡改」因此真正被拒绝。
 readSplitBlob : String -> Eff [] (Maybe (List SplitFile))
 readSplitBlob digest = do
   tag <- splitBlobTag
   path <- splitBlobPath digest
-  payload <- storeReadAsEff tag splitCacheCodec digest path
+  payload <- storeReadEff tag splitCacheCodec path
   pure (case payload of
     Just bytes => decSplitFilesComplete bytes
     Nothing => Nothing

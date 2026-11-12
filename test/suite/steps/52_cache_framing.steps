@@ -27,12 +27,15 @@ out-equals: vuna-unit-cache 2
 run: sh -c 'unit=$(cat "$TMPDIR/c32-unit-path"); head -1 "$unit" | cut -d"|" -f3'
 out-equals: split-file 1
 # 52b) 截断：全部 blob 只留前 4096 字节（头行完整、载荷少一截）⇒ len/内容地址校验拒绝
-#      ⇒ 重算并重写同一路径。产物**文件集**必须与干净构建一致；逐字节一致性受既有的
-#      「全量 vs 增量 codegen」差异影响（debt C51），不在本条断言范围内。
+#      ⇒ 重算并重写同一路径。产物必须与干净构建**逐字节一致**（C51 已修：首次全量构建
+#      与「后续重算、有接口/单元缓存可复用」两条 codegen 路径的输出相同，包括
+#      `Vuna_runtime.ml` 的 `dt_def_locs` 表）。
 run: sh -c 'for f in $(find "$TMPDIR/c32-cache"/vuna-cache/blobs -type f); do head -c 4096 "$f" > "$f.part"; mv "$f.part" "$f"; done; TMPDIR="$TMPDIR/c32-cache" "$VUNA" build --no-compile --out "$TMPDIR/c32-out2" "$TMPDIR/c32-pkg/root" >/dev/null 2>&1'
-run: sh -c '(cd "$TMPDIR/c32-clean" && find . -type f | LC_ALL=C sort) > "$TMPDIR/names-clean"; (cd "$TMPDIR/c32-out2" && find . -type f | LC_ALL=C sort) > "$TMPDIR/names-out2"; diff "$TMPDIR/names-clean" "$TMPDIR/names-out2"'
-# 52c) 篡改：在每个 blob 的载荷中部改一个字节（长度不变，内容地址必须拒绝）⇒ 重建成功。
+run: diff -r "$TMPDIR/c32-clean" "$TMPDIR/c32-out2"
+# 52c) 篡改：在每个 blob 的载荷中部改一个字节（长度不变，内容地址必须拒绝）⇒ 重建成功，
+#      产物仍与干净构建逐字节一致。
 run: sh -c 'for f in $(find "$TMPDIR/c32-cache"/vuna-cache/blobs -type f); do off=$(( $(stat -c %s "$f") / 2 )); printf "X" | dd of="$f" bs=1 seek="$off" conv=notrunc 2>/dev/null; done; TMPDIR="$TMPDIR/c32-cache" "$VUNA" build --no-compile --out "$TMPDIR/c32-out2" "$TMPDIR/c32-pkg/root" >/dev/null 2>&1'
+run: diff -r "$TMPDIR/c32-clean" "$TMPDIR/c32-out2"
 run: sh -c 'blob=$(cat "$TMPDIR/c32-blob-path"); head -c 18 "$blob"'
 out-equals: vuna-cache-frame 2
 # 52d) check 结果：阶段 2 起是**查询图节点**（`check:<pkg>:<kind>`，值 = QMarker），

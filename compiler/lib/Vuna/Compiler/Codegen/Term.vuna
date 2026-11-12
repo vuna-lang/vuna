@@ -851,13 +851,32 @@ let dt_report_exn e bt =
 """
 
 -- 定义位置表：OCaml 值名 → (vuna 定义名, 文件:行)。无 span 的定义跳过（axiom/生成项
--- 里没有来源的那些）；顺序严格按传入列表，生成是确定性的。`norm` 负责把 span 里的
--- 文件路径归一到模块根 / 包目录下（见 Codegen.Split）。
+-- 里没有来源的那些）。`norm` 负责把 span 里的文件路径归一到模块根 / 包目录下（见
+-- Codegen.Split）。
+-- C51（确定性）：增量路径的干净模块从接口复用，`DtDef` 不带 span，位置行来自接口里
+-- 持久化的 `miDefLocs`（额外行）；两条路径的 def 拼接顺序不同，所以这里把行**按文本
+-- 排序**再拼接——全量/增量产物因此逐字节一致，运行时 `assoc_opt` 查找不依赖顺序。
 -- M34.6：旧实现 `row ++ dtDefLocTable norm rest` 是右嵌套 `++`，每层都重拷整段已累积
 -- 文本（compiler 包 3086 行 ⇒ 约 430MB 拷贝、~365ms）；改为先 map 出行再一次性
--- `strConcatMany`（runtime `String.concat ""`，单遍分配），输出逐字节不变。
-dtDefLocTable : (String -> String) -> List DtDef -> String
-dtDefLocTable norm defs = strConcatMany (map (dtDefLocRow norm) defs)
+-- `strConcatMany`（runtime `String.concat ""`，单遍分配）。
+dtDefLocTable : (String -> String) -> List DtDef -> List (Pair String (Pair String Int)) -> String
+dtDefLocTable norm defs extra =
+  strConcatMany
+    (sortLocRows (filter (\r => r /= "") (append (map (dtDefLocRow norm) defs) (map (extraLocRow norm) extra))))
+
+sortLocRows : List String -> List String
+sortLocRows [] = []
+sortLocRows (r :: rest) = insertLocRow r (sortLocRows rest)
+
+insertLocRow : String -> List String -> List String
+insertLocRow r [] = [r]
+insertLocRow r (x :: rest) =
+  if r <= x then Base.List.Cons r (Base.List.Cons x rest)
+  else Base.List.Cons x (insertLocRow r rest)
+
+extraLocRow : (String -> String) -> Pair String (Pair String Int) -> String
+extraLocRow norm (Pair name (Pair file line)) =
+  "  (${ocamlString (valueName name)}, (${ocamlString name}, ${ocamlString "${norm file}:${line}"}));\n"
 
 dtDefLocRow : (String -> String) -> DtDef -> String
 dtDefLocRow norm d = case dtDefSpan d of

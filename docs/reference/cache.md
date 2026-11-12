@@ -26,7 +26,7 @@
 | 加载 | 读 `.ttc`，不读源 | 读接口；依赖模块以「已加载模块」注入 Loader（零 parse/resolve） |
 | 上游变化 | `importHashes` 链 | `miDepHashes` 链（包内模块也参与） |
 | 下游 | 编译器从 TTC 生成代码 | 同一份 `DtProgram` 视图（依赖 artifacts 来自接口）→ `Codegen.Split` |
-| 版本 | TTC header/version | `ifaceSchema`（字段布局 + 哈希输入集合；当前 `vuna-iface 21`）+ 编译器 fingerprint + 包名 + `pmEnv` |
+| 版本 | TTC header/version | `ifaceSchema`（字段布局 + 哈希输入集合；当前 `vuna-iface 22`）+ 编译器 fingerprint + 包名 + `pmEnv` |
 | 来源 | 无 | 条目 `meOrigin`（`pkg` = 整包 check/build，`tool` = LSP/REPL 单模块写回）；命令行只信任 `pkg` |
 | 快判 | TTC 在构建目录、mtime/hash | 默认在源文件旁（`<pkg>/lib/.../X.iface` + `<pkg>/.vuna-iface`）；`VUNA_IFACE_DIR` 可整体镜像到外部根。默认内容哈希，`VUNA_CACHE_MTIME=1` 时 mtime+size 快路径（距 now <5s 的文件仍回读内容哈希，见下） |
 
@@ -133,8 +133,10 @@ Driver.Compile.depIfacesOf
 ## 不变量
 
 1. **接口字段必须闭合**：`cachedProgramValid` 保证 datas / defs / globals / insts / classes
-   无未解 meta、无负索引、无自由变量；擦除位残 meta 仍按包段重编号（见
-   [compiler.md](compiler.md) §硬不变量）。
+   无未解 meta、无负索引、无自由变量；擦除位残 meta 仍按跨包段重编号，段号 = 模块名排序后的名次（与 iface 列表顺序无关，C37 A②；见 [compiler.md](compiler.md) §硬不变量）。闭合判定必须按项的**真实 binder 结构**计深度
+   （`TLam`/`TPi` 的 cod、`TCase` 分支的 pattern binder、`TRecUpd.body` 的 `tele`）；
+   漏算一段 binder 就会把合法的字段引用当成自由变量（C49：`TRecUpd` 漏 `length tele`
+   ⇒ 任何带 record-update 定义的接口都被写侧自检拒绝。回归 §44q）。
 2. **`deftbl` 只装定义体**：签名项进 deftbl 会让 `force` 把 `Int`/`String` 归约成 `Type`
    （C37 的 `Eq Type` 假歧义根因）。
 3. **接口哈希不含 span / 源路径，但必须覆盖读方消费的全部语义字段**：换行、注释、
@@ -142,7 +144,11 @@ Driver.Compile.depIfacesOf
    别名目标）、record 头（含字段类型）、miDecls、datas、defs、globals、insts、classes
    全部参与。历史缺口：`hashExports` 定义存在但从未接线（§44m 回归）；`ExportEntry.parent`、
    `FixityDecl.fixityTarget`、record 字段类型与 `miDecls` 曾整段不进哈希（C47），现已由
-   规范编码补齐。
+   规范编码补齐。**例外：`miDefLocs`（定义位置表）只进载荷、不进哈希**——它是
+   `Vuna_runtime.dt_def_locs` 的输入，只影响运行时错误报告的行号，不改变任何语义/类型/
+   接口结论；放进哈希会让「移动代码」失效依赖方，违反本条的目标。读侧消费它，但产物的
+   正确性仍由源内容哈希（源移动 ⇒ 本模块脏 ⇒ 重精化 ⇒ 重写 loc 行）与 split 节点输入的
+   源闭包摘要保证（C51 关闭时补入）。
 4. **归属表必须覆盖全部 artifact**：写侧做覆盖性检查；漏项不写接口（安全阀）。
 5. **依赖接口哈希链必须闭合**：包内与跨包都按直接 import 校验；缺项（`-1` 哨兵）永不失配。
 6. **摘要路径的 `Err` 必须上报**：只有「接口不可用」才回退全量，本包真实错误不得被吞。
@@ -206,8 +212,13 @@ vuna-cache-frame 2|<tag>|<codec>|<len>|<64 位十六进制内容地址>\n<payloa
 - `len` 与 `<payload>` 的字节数必须相符；内容地址 = `Hash.contentAddress payload`。
 - 读侧**只扫头行**（首个换行之前，限 512 字节），逐项校验 magic / tag / codec / len /
   内容地址；任一不符 ⇒ `Nothing`（视为 miss、重算并覆盖），绝不把任意字节喂给解码器。
-  校验内容地址**不重算 MB 级 SHA-256**：调用方若已知期望摘要（iface manifest 的
-  `mePayloadDigest`），传预期值直接比字符串即可（`storeReadAsEff`）。
+  内容地址校验分两档：**没有语义自证**的载荷（split blob、split-units、lex、query
+  index）用 `storeReadEff`，**重算** `Hash.contentAddress payload` 与头声明比较——同
+  长度载荷篡改因此被拒绝（C51 相邻修复：split blob 原先走 `storeReadAsEff`，只比对头
+  里的地址字符串，单字节篡改会静默进入解码器并生成损坏的 codegen 产物）；成本是预折叠
+  + SHA-256（~2.2 ms/MB），只在命中路径付一次。`storeReadAsEff` 只用于**随后会逐字段
+  语义自证**的载荷（iface 模块文件：`hashOfIface` + `miName` / `miIfaceHash` 比对），
+  调用方已知期望摘要（manifest 的 `mePayloadDigest`）时直接比字符串。
 - 载荷本身是 `Canonical.*` 的显式原子文法（`#tag;` / `i<n>;` / `s<len>:<bytes>` /
   `b0|b1` / `[<n>:…]` / `0|1…`），自定界、与 OCaml 版本无关；解码失败即 miss。
 
@@ -306,7 +317,7 @@ import 闭包需要的模块接口」作为预置模块交给 Loader（`dtCheckS
 自愈」这种条件触发。工具会话内部仍可用 tool 条目（热路径收益保留）。下一次整包
 `check`/`build` 会把该模块重写成 `pkg`（`writeModules` 的 unchanged 判定包含来源）。
 测试 §44p 覆盖：冷启动写回 → `tool` → check 拒绝 → 重写为 `pkg`。
-接口摘要仍剩的缺口只是擦除位置残留未解 meta 的包段重编号（见 debt C37 的历史说明）。
+接口摘要的擦除位残 meta 仍按跨包段重编号（C37 A 已修：移位覆盖全部 Term 构造子、段号与 iface 列表顺序无关；彻底收尾需语义方案 B，见 debt C37）。
 
 ## codegen 单元级缓存（S5/S7，默认开启）
 
@@ -319,6 +330,15 @@ import 闭包需要的模块接口」作为预置模块交给 Loader（`dtCheckS
 key」保留文件、旧 key 清除，因此连续编辑不会让桶无限增长（测试 §53）。生成结果规范化为
 确定性拓扑序（深度分层 + 同层名字哈希，依赖同序 normalize），增量与干净重建产物逐字节
 一致（测试 §44h/§44j）。
+
+**位置表确定性（C51，已关闭）**：增量路径的干净模块 `DtDef` 来自接口载荷，载荷按设计
+不存 span（哈希输入丢 span；`Canonical.Elab` 同理），所以 `dt_def_locs` 行不能只从
+`dtProgDefs` 的 span 生成。现在每个模块的接口额外持久化 `miDefLocs`（vuna 全名 →
+(spanFile, spanStartLine)，**不进接口哈希**），增量 split 把它作为「补行」传给
+`Codegen.Term.dtDefLocTable`，与本次精化 defs 的 span 行合并后**按行文本排序**输出。
+排序同时消除「全量路径 def 顺序 = 精化顺序」与「增量路径 = 依赖产物 ++ 干净模块 ++
+本次精化」的拼接顺序差异。效果：首次全量构建、后续增量重建（含单元缓存命中）的
+codegen 目录 `diff -r` 为空（测试 §52b/§52c 从「文件集一致」收紧为逐字节一致）。
 
 实测（同机预热后改入口）：workspace `build --no-compile .` 中位 3236ms（开）vs 3612ms
 （关）→ -10.4%；全量链接 `build .` 6621 vs 7042ms → -6.0%。
@@ -369,8 +389,9 @@ load 之后按闭包过滤模块表：起点 = entry 的全部 imports（含隐�
   文件由写侧孤儿 GC（mtime > 60s 且未被 manifest 引用）清。
 - **判据维护成本**：新增接口字段时必须同时接进 `hashOfParts`（或在文档里写明为什么不需要），
   否则就是下一类「载荷变了、哈希没变」。`ifaceSchema` 的语义已扩为「字段布局 + 哈希输入
-  集合」，两者任一变化都要 bump（当前 `vuna-iface 21` / `module-iface 2` /
-  `vuna-iface-hash 5`；manifest 能力/信任 section 删除即一次这样的 bump）。
+  集合」，两者任一变化都要 bump（当前 `vuna-iface 22` / `module-iface 3` /
+  `vuna-iface-hash 5`；manifest 能力/信任 section 删除即一次这样的 bump）。miDefLocs
+  （定义位置表）只进载荷、不进 `miIfaceHash`，见「不变量」第 3 条。
 - **其余缓存仍是 TMPDIR + 包名哈希**：check / split / split-units 按包名哈希隔离
   （`VUNA_IFACE_DIR` 只影响 iface），跨项目同名包在 TMPDIR 缓存上仍可能互相覆盖（各自
   回退，正确性不受影响）。
@@ -390,7 +411,7 @@ load 之后按闭包过滤模块表：起点 = entry 的全部 imports（含隐�
   （`vuna check base` vs `vuna check $PWD/base`）。不归一的话同一份源码在不同入口写法下
   算出不同载荷字节 ⇒ `mePayloadDigest` 失配 ⇒ 每次 check 都整包重写接口。写侧
   （`Compile.ownSourceInfos`）与读侧（`Iface.ifaceRelPathOf`）都先 `absolutePath` 归一。
-- **擦除位残 meta** 仍靠包段重编号；彻底方案是精化收尾消 meta。
+- **擦除位残 meta**：跨包复用依赖摘要时按「模块名排序后的名次」分配段号重编号（与 iface 列表顺序无关；移位覆盖全部 Term 构造子，fuel 用尽报内部错误而非静默漏移，C37 A①/A②，回归 `test/suite/steps/66_meta_shift.steps`）。彻底方案是精化收尾消 meta——语义方案 B（依赖方不再能替别的模块解洞）需决策，见 [debt.md](debt.md) C37，本轮未做。
 - 接口多存 `miDecls`（见上），文件比 TTC 的「只存编译后定义」更接近源码体积；后续可换更
   紧凑的终止性/record 上下文表示。
 - **`defVals` 不参与记忆化**；`DtProgram.dtProgDefVals` 字段保留为空表，

@@ -310,9 +310,11 @@ dtCheckSourceWithIfaces ctx label source ifaces =
               else 0
           in if length missing == 0 then pure (case resolveProjectKeeping (contextRelease ctx) (preloadKeepOf ifaces mods) filtered of
             ErrC e => ErrC e
-            OkC resolved => case dtCheckOursParts ctx resolved (shiftedDepPrograms (materializedDeps (contextPackageName ctx) (secondOf resolved) ifaces)) of
+            OkC resolved => case shiftedDepPrograms (materializedDeps (contextPackageName ctx) (secondOf resolved) ifaces) of
               ErrC e => ErrC e
-              OkC p => OkC (firstOf p)
+              OkC deps => case dtCheckOursParts ctx resolved deps of
+                ErrC e => ErrC e
+                OkC p => OkC (firstOf p)
           )
           else dtCheckSource ctx label source
 
@@ -389,11 +391,12 @@ replProgramWithIfacesAux ctx program exprSource ifaces cache =
               else 0
           in if length missing == 0 then pure (case resolveProjectKeeping (contextRelease ctx) (preloadKeepOf ifaces mods) filtered of
             ErrC e => ErrC e
-            OkC resolved =>
-              let
-                parts = secondOf resolved
-                deps = shiftedDepPrograms (materializedDeps (contextPackageName ctx) parts ifaces)
-              in replCheckPartsAux (depStartOf deps) (contextPackageName ctx) deps parts ifaces cache
+            OkC resolved => case shiftedDepPrograms (materializedDeps (contextPackageName ctx) (secondOf resolved) ifaces) of
+              ErrC e => ErrC e
+              OkC deps =>
+                let
+                  parts = secondOf resolved
+                in replCheckPartsAux (depStartOf deps) (contextPackageName ctx) deps parts ifaces cache
           )
           else do
             pR <- replProgramFull ctx program exprSource
@@ -943,17 +946,55 @@ dedupGlobals gs = dedupKeepLast (\g => firstOf g) gs
 -- 依赖模块来自接口文件：`Module` 用接口里存的已解析 decls 构造，Loader 直接命中、不读
 -- 源码；起始 Ec 由模块摘要合并（`depStartOf`）。模块表顺序 = reverse(topo)，与 `loadAll`
 -- 的「新加载者前插」约定一致，这样 `dtProjectDecls` 的 reverse 之后仍是依赖在前。
--- 依赖模块摘要合并：每个模块分配独立元变量段（`(idx+1) << 30`）。摘要允许保留**擦除
--- 位置**的未解 meta（精化器不要求有解），而根包精化从 0 开始编号；不分配段会让依赖 meta
--- 与根包 meta 编号相撞（同号被当成同一个元变量）。段宽远大于单模块元变量数。
-shiftedDepPrograms : List ModuleIface -> List CachedProgram
-shiftedDepPrograms ifaces = shiftedDepProgramsGo 0 ifaces
+-- 依赖模块摘要合并：每个模块分配独立元变量段。摘要允许保留**擦除位置**的未解 meta
+-- （精化器不要求有解），而根包精化从 0 开始编号；不分配段会让依赖 meta 与根包 meta
+-- 编号相撞（同号被当成同一个元变量）。
+--
+-- **段号只由模块名排序后的名次决定**（C37 A②）：旧实现用 iface 列表位置 `idx+1`，
+-- 而该列表 = 依赖包 DFS 序 + 每包 manifest 模块序 ⇒ 换模块顺序会改变段号（并让 payload
+-- 字节抖动）。现在按 `miNameOf` 排序后取名的名次，列表顺序变化不再影响任何编号。
+-- 段号下界 = `summaryMetaSegment`（2^30）> 本包一次运行的 fresh 编号上界；因此 dep meta
+-- 既不会与 fresh/clean 撞号，也不在 `unsolvedFrom 0 (ecNext)` 的扫描范围内（不会被当成本包
+-- 未解洞报错）。移位失败（项深超 codegen guard）⇒ 内部错误，不静默用未移位的项。
+shiftedDepPrograms : List ModuleIface -> Check (List CachedProgram)
+shiftedDepPrograms ifaces =
+  let
+    names = dedupSortedNames (sortNames (map miNameOf ifaces))
+  in if length names /= length ifaces then icInternal "iface: duplicate dependency module name"
+  else shiftedDepProgramsGo (nameSlotTbl names 0) ifaces
 
-shiftedDepProgramsGo : Int -> List ModuleIface -> List CachedProgram
-shiftedDepProgramsGo _ [] = []
-shiftedDepProgramsGo idx (m :: rest) =
-  shiftCachedProgram ((idx + 1) * summaryMetaSegment) (miCachedOf m)
-    :: shiftedDepProgramsGo (idx + 1) rest
+-- 模块名排序（插入排序；依赖模块数 ~几十，与哈希表相比更省常数）。
+sortNames : List String -> List String
+sortNames [] = []
+sortNames (x :: rest) = insertName x (sortNames rest)
+
+insertName : String -> List String -> List String
+insertName x [] = [x]
+insertName x (y :: rest) =
+  if x <= y then Base.List.Cons x (Base.List.Cons y rest) else Base.List.Cons y (insertName x rest)
+
+-- 排序后去重（重名意味着两个模块抢同一个段 ⇒ 静默撞号，调用方按内部错误拒绝）。
+-- 累加器版本：只在结构子项（列表尾）上递归，SCT 可证终止；比较「最后保留的那个名字」。
+dedupSortedNames : List String -> List String
+dedupSortedNames xs = reverse (dedupSortedGo xs [])
+
+dedupSortedGo : List String -> List String -> List String
+dedupSortedGo [] acc = acc
+dedupSortedGo (x :: rest) acc = case acc of
+  [] => dedupSortedGo rest (Base.List.Cons x acc)
+  y :: _ => if x == y then dedupSortedGo rest acc else dedupSortedGo rest (Base.List.Cons x acc)
+
+nameSlotTbl : List String -> Int -> List (Pair String Int)
+nameSlotTbl [] _ = []
+nameSlotTbl (x :: rest) i = Base.List.Cons (Pair x i) (nameSlotTbl rest (i + 1))
+
+shiftedDepProgramsGo : List (Pair String Int) -> List ModuleIface -> Check (List CachedProgram)
+shiftedDepProgramsGo _ [] = OkC []
+shiftedDepProgramsGo tbl (m :: rest) = case lookupPair (miNameOf m) tbl of
+  Nothing => icInternal "iface: dependency module missing from shift table: ${miNameOf m}"
+  Just slot =>
+    Vuna.Compiler.Common.bind (shiftCachedProgram ((slot + 1) * summaryMetaSegment) (miCachedOf m))
+      (\cp => Vuna.Compiler.Common.bind (shiftedDepProgramsGo tbl rest) (\rest2 => OkC (Base.List.Cons cp rest2)))
 
 modulesOfIfaces : List ModuleIface -> List Module
 modulesOfIfaces ifaces = reverse (map moduleOfIface ifaces)
@@ -1064,21 +1105,23 @@ dtIncrementalCheckedCore ctx resolved depIfaces cleanIfaces cache needPackage =
     key = dtAuxKey pkgName depIfaces cleanIfaces
     cacheable = length depIfaces + length cleanIfaces > 0
     hit = if cacheable then dtAuxOfCache key cache else Nothing
-    depCps = case hit of
-      Just c => c.auxCacheDepCps
+    -- dep 产物要移位：失败（项深超 codegen guard）⇒ 内部错误，不静默使用未移位项。
+    depCpsR = case hit of
+      Just c => OkC c.auxCacheDepCps
       Nothing => shiftedDepPrograms depIfaces
-    cleanCps = case hit of
-      Just c => c.auxCacheCleanCps
-      Nothing => map miCachedOf cleanIfaces
-    start = case hit of
-      Just c => c.auxCacheStart
-      Nothing => depStartOfAt (cleanStartNext cleanCps) (append depCps cleanCps)
     -- termAux 的 prepared 形态优先取接口里持久化的版本（每个模块自己一份，写侧算好）：
     -- 「编辑一个模块」只让该模块脏，其余干净模块的 prepared 仍有效 ⇒ 不必对整表重跑
     -- record 降级 / deriving 展开（这是编辑后重建的主要成本）。任一参与模块缺
     -- prepared（旧 schema / LSP 单模块写回）就整体回退 `dtPrepareTermAux`。
     ifacePrepared = concatMap miPreparedOf (append depIfaces cleanIfaces)
     missingPrepared = filter (\mi => length (miPreparedOf mi) == 0) (append depIfaces cleanIfaces)
+  in Vuna.Compiler.Common.bind depCpsR (\depCps => let
+    cleanCps = case hit of
+      Just c => c.auxCacheCleanCps
+      Nothing => map miCachedOf cleanIfaces
+    start = case hit of
+      Just c => c.auxCacheStart
+      Nothing => depStartOfAt (cleanStartNext cleanCps) (append depCps cleanCps)
     prepared = case hit of
       Just c => OkC c.auxCacheDecls
       Nothing =>
@@ -1093,6 +1136,7 @@ dtIncrementalCheckedCore ctx resolved depIfaces cleanIfaces cache needPackage =
   in Vuna.Compiler.Common.bind
     (if needPackage then dtFinishPackageScoped loaderWarns depCps cleanCps prog parts next else dtFinishScoped depCps cleanCps prog next)
     (\r => OkC (Pair warns r))
+  )
   )
   )
 
@@ -1342,8 +1386,8 @@ unitCacheEnabled = do
   v <- prim_eff_getenv "VUNA_UNIT_CACHE"
   pure (v /= "0")
 
-splitGenerateCached : PackageContext -> String -> List Module -> List (Pair String (List Decl)) -> List Decl -> DtProgram -> Bool -> Eff [] (Check (List SplitFile))
-splitGenerateCached ctx entry modules moduleParts entryDecls prog printResult =
+splitGenerateCached : PackageContext -> String -> List Module -> List (Pair String (List Decl)) -> List Decl -> DtProgram -> Bool -> List (Pair String (Pair String Int)) -> Eff [] (Check (List SplitFile))
+splitGenerateCached ctx entry modules moduleParts entryDecls prog printResult extraDefLocs =
   let
     pkg = contextPackageName ctx
     keys = unitKeysOf modules entryDecls printResult
@@ -1361,19 +1405,19 @@ splitGenerateCached ctx entry modules moduleParts entryDecls prog printResult =
     in do
       _ <- if enabled && pkg /= "" then unitCacheGc base dir else pure 0
       _ <- if enabled && pkg /= "" then unitCacheBucketGc dir keepNames else pure 0
-      if pkg == "" || not enabled then generateDtSplitProgram moduleParts entryDecls prog printResult roots cdir
+      if pkg == "" || not enabled then generateDtSplitProgram moduleParts entryDecls prog printResult roots cdir extraDefLocs
       else generateDtSplitProgramWith (unitCacheLookup dir keys) (unitCacheStore dir keys) moduleParts
-        entryDecls prog printResult roots cdir
+        entryDecls prog printResult roots cdir extraDefLocs
 
-dtGenerateIncremental : PackageContext -> String -> Pair (List Decl) (List Module) -> CheckedPackage -> Bool -> Eff [] (Check (Pair (List SplitFile) CheckedPackage))
-dtGenerateIncremental ctx entry parts checked printResult =
+dtGenerateIncremental : PackageContext -> String -> Pair (List Decl) (List Module) -> CheckedPackage -> Bool -> List (Pair String (Pair String Int)) -> Eff [] (Check (Pair (List SplitFile) CheckedPackage))
+dtGenerateIncremental ctx entry parts checked printResult extraDefLocs =
   let
     modules = topoModules (secondOf parts)
     moduleParts = map (\m => Pair (moduleNameOf m) (moduleDeclsOf m)) modules
   in do
     filesR <-
       splitGenerateCached ctx entry modules moduleParts (firstOf parts) checked.checkedProgram
-        printResult
+        printResult extraDefLocs
     pure (case filesR of
       ErrC e => ErrC e
       OkC files => OkC (Pair files checked)
@@ -1384,9 +1428,17 @@ dtSplitProjectIncremental ctx entry printResult depIfaces cleanIfaces = do
   partsR <- dtLoadPartsIncremental ctx entry depIfaces cleanIfaces
   case partsR of
     ErrC e => pure (ErrC e)
-    OkC resolved => case dtIncrementalChecked ctx resolved (materializedDeps (contextPackageName ctx) (secondOf resolved) depIfaces) (materializedOwn (contextPackageName ctx) (secondOf resolved) cleanIfaces) of
-      ErrC e => pure (ErrC e)
-      OkC checked => dtGenerateIncremental ctx entry (secondOf resolved) checked printResult
+    OkC resolved =>
+      let
+        pkgName = contextPackageName ctx
+        parts = secondOf resolved
+        cleanOwn = materializedOwn pkgName parts cleanIfaces
+        -- 增量路径的干净模块 `DtDef` 来自接口载荷（span 不在载荷里），codegen 的位置表
+        -- 用接口持久化的 `miDefLocs` 补行；全量路径的 defs 自带 span，补行表为空。
+        extraDefLocs = concatMap miDefLocsOf cleanOwn
+      in case dtIncrementalChecked ctx resolved (materializedDeps pkgName parts depIfaces) cleanOwn of
+        ErrC e => pure (ErrC e)
+        OkC checked => dtGenerateIncremental ctx entry parts checked printResult extraDefLocs
 
 moduleOfIface : ModuleIface -> Module
 moduleOfIface mi =
@@ -1461,9 +1513,9 @@ dtCheckPackageWithIfacesParts ctx entry ifaces = do
   partsR <- dtLoadPartsWithIfaces ctx entry ifaces
   pure (case partsR of
     ErrC e => ErrC e
-    OkC resolved =>
-      dtCheckOursParts ctx resolved
-        (shiftedDepPrograms (materializedDeps (contextPackageName ctx) (secondOf resolved) ifaces))
+    OkC resolved => case shiftedDepPrograms (materializedDeps (contextPackageName ctx) (secondOf resolved) ifaces) of
+      ErrC e => ErrC e
+      OkC deps => dtCheckOursParts ctx resolved deps
   )
 
 dtLoadModulesPartsIncremental : PackageContext -> List String -> List ModuleIface -> List ModuleIface -> Eff [] (Check (Pair (List Diagnostic) (Pair (List Decl) (List Module))))
@@ -1495,9 +1547,9 @@ dtCheckLibraryPackageWithIfacesParts ctx names ifaces = do
   partsR <- dtLoadModulesPartsWithIfaces ctx names ifaces
   pure (case partsR of
     ErrC e => ErrC e
-    OkC resolved =>
-      dtCheckOursParts ctx resolved
-        (shiftedDepPrograms (materializedDeps (contextPackageName ctx) (secondOf resolved) ifaces))
+    OkC resolved => case shiftedDepPrograms (materializedDeps (contextPackageName ctx) (secondOf resolved) ifaces) of
+      ErrC e => ErrC e
+      OkC deps => dtCheckOursParts ctx resolved deps
   )
 
 -- 只精化本包声明、从接口合并依赖产物，再走同一条逐模块 split；返回 codegen 文件 +
@@ -1507,10 +1559,9 @@ dtSplitProjectWithIfaces ctx entry printResult ifaces = do
   partsR <- dtLoadPartsWithIfaces ctx entry ifaces
   case partsR of
     ErrC e => pure (ErrC e)
-    OkC resolved =>
-      dtSplitPartsOurs ctx entry (secondOf resolved)
-        (shiftedDepPrograms (materializedDeps (contextPackageName ctx) (secondOf resolved) ifaces))
-        printResult
+    OkC resolved => case shiftedDepPrograms (materializedDeps (contextPackageName ctx) (secondOf resolved) ifaces) of
+      ErrC e => pure (ErrC e)
+      OkC deps => dtSplitPartsOurs ctx entry (secondOf resolved) deps printResult
 
 dtSplitPartsOurs : PackageContext -> String -> Pair (List Decl) (List Module) -> List CachedProgram -> Bool -> Eff [] (Check (Pair (List SplitFile) CheckedPackage))
 dtSplitPartsOurs ctx entry parts deps printResult =
@@ -1537,7 +1588,7 @@ dtSplitPartsOurs ctx entry parts deps printResult =
             (dtProgWarnings prog)
       in do
         filesR <-
-          splitGenerateCached ctx entry modules moduleParts (firstOf parts) assembled printResult
+          splitGenerateCached ctx entry modules moduleParts (firstOf parts) assembled printResult []
         pure (case filesR of
           ErrC e => ErrC e
           OkC files => OkC (Pair files checked)
@@ -1562,7 +1613,7 @@ dtSplitProjectParts ctx entry printResult = do
           filesR <-
             splitGenerateCached ctx entry modules
               (map (\m => Pair (moduleNameOf m) (moduleDeclsOf m)) modules) (firstOf parts) prog
-              printResult
+              printResult []
           pure (case filesR of
             ErrC e => ErrC e
             OkC files =>

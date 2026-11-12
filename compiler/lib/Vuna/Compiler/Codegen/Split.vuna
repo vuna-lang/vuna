@@ -213,10 +213,10 @@ noUnitStore _ _ = pure 0
 
 -- M4（效果显式化）：单元缓存的 lookup/store 是宿主动作，生成外壳显式在 `Eff []` 里；
 -- 纯生成逻辑（归属表、分文件、依赖序校验）保持纯函数。
-generateDtSplitProgram : List (Pair String (List Decl)) -> List Decl -> DtProgram -> Bool -> List String -> String -> Eff [] (Check (List SplitFile))
-generateDtSplitProgram modules entryDecls prog printResult roots contextDir =
+generateDtSplitProgram : List (Pair String (List Decl)) -> List Decl -> DtProgram -> Bool -> List String -> String -> List (Pair String (Pair String Int)) -> Eff [] (Check (List SplitFile))
+generateDtSplitProgram modules entryDecls prog printResult roots contextDir extraDefLocs =
   generateDtSplitProgramWith noUnitLookup noUnitStore modules entryDecls prog printResult roots
-    contextDir
+    contextDir extraDefLocs
 
 -- M34.5（S5）：带**单元级缓存**的生成入口。`lookup` 按模块名（入口用 `__entry__`）
 -- 返回上次生成的 `SplitFile`（key 已由调用方算好，含依赖哈希链）；命中即跳过该单元的
@@ -239,8 +239,8 @@ anyDefUsesTrace (d :: rest) = case dtDefBody d of
   Nothing => anyDefUsesTrace rest
   Just body => termUsesFloat traceIntrinsicNames body || anyDefUsesTrace rest
 
-generateDtSplitProgramWith : (String -> Eff [] (Maybe SplitFile)) -> (String -> SplitFile -> Eff [] Int) -> List (Pair String (List Decl)) -> List Decl -> DtProgram -> Bool -> List String -> String -> Eff [] (Check (List SplitFile))
-generateDtSplitProgramWith lookup store modules entryDecls prog printResult roots contextDir =
+generateDtSplitProgramWith : (String -> Eff [] (Maybe SplitFile)) -> (String -> SplitFile -> Eff [] Int) -> List (Pair String (List Decl)) -> List Decl -> DtProgram -> Bool -> List String -> String -> List (Pair String (Pair String Int)) -> Eff [] (Check (List SplitFile))
+generateDtSplitProgramWith lookup store modules entryDecls prog printResult roots contextDir extraDefLocs =
   let
     -- M34.6：把「精化完成 → prepare 开始」之间的构建独有开销分段（compiler 包约 0.4s，
     -- 旧实现无 stamp 不可归因）；stamp 关闭时只花一次分支。
@@ -249,7 +249,8 @@ generateDtSplitProgramWith lookup store modules entryDecls prog printResult root
     allDefs = dtProgDefs prog
     meta = splitMetaOf modules entryDecls
     _ = dbg! "cg-splitmeta-done"
-    locTbl = dtDefLocTable (splitLocPath roots contextDir) allDefs
+    -- `extraDefLocs`：增量路径从接口复用的干净模块的位置行（`DtDef` 无 span）。
+    locTbl = dtDefLocTable (splitLocPath roots contextDir) allDefs extraDefLocs
     _ = dbg! "cg-deflocs-done"
     usesFloat = anyDefUsesFloat allDefs
     usesTrace = anyDefUsesTrace allDefs
