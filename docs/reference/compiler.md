@@ -11,8 +11,9 @@
 （fmt/lint/repl/doc/test/lsp）在根包 `lib/`，不在闭包里。
 代码按**目录即层**组织：Frontend → Packages → Loader → Core → Elab → Codegen → Driver，
 同层模块可互相 import，上层只能依赖下层。每层 `X.vuna` 是**门面**：只 import 子模块并选择性
-重导出，实现与数据定义都在 `X/` 的叶子模块。全包 **72 个模块**（68 个导出 + 内部
-`Debug` / `CacheFormat` / `Driver.Iface` / `Driver.Owner`）；目标每模块 ≤~800 行
+重导出，实现与数据定义都在 `X/` 的叶子模块。全包 **84 个模块**（76 个导出 + 内部
+`Debug` / `Diag` / `Diag.Format` / `Diagnostics.Ic` / `Driver.Iface` / `Driver.Owner` /
+`Elab.MetaSpans` / `Source`）；目标每模块 ≤~800 行
 （`Codegen.Term` / `Driver.Dt` / `Elab.Trait` 等已超目标，约 1.1–1.2k 行）。
 
 | 模块 | 职责 | 关键入口 |
@@ -25,10 +26,13 @@
 | `Diagnostics.Tc` / `Cg` | `TcErr : Nat -> Type` / `CgErr : Nat -> Type` 域枚举（构造子携带模板、arity 由索引锁定）；`tcAll`/`cgAll` 按 arity 分块（避免单行巨表） | `tcCode`、`tcTemplate`、`cgCode`、`cgTemplate` |
 | `Intrinsics` | **内建声明唯一真源**：名字/签名形状（`IType`）/arity/归约标签（`IntrinsicOp`）/能力（`Capability`）/runtime 名/用户可见性；内置身份按声明 symbol（`IO` 内建；`Base.Bool.Bool` / `Base.List.List` / `Base.Nat.Nat`） | `findIntrinsic`、`intrinsicRuntime`、`intrinsicCapability`、`parseCapability` |
 | `Hash` | 内容寻址摘要原语：**SHA-256**（用 `Base.Bits` 的 32-bit 包装在语言内实现：OCaml / 未来 wasm / interp 同摘要）；`digestHex`（64 位十六进制）/ `digestInt`（63-bit 派生键，取代旧 10-bit `strHash` 与 6-lane 盐）/ `prehashOfString`（MB 级载荷折叠）/ `contentKey`·`contentAddress`（大输入：预折叠 + SHA，缓存 key 与内容地址） | `digestOfString`、`digestHex`、`digestIntOf`、`contentKey`、`contentAddress`、`prehashOfString` |
-| `Canonical`（门面） | 规范字节编码（D5 / C32 哈希输入侧）：自定界原子文法 `#tag;` / `i<n>;` / `s<len>:<bytes>` / `b0\|b1` / `[<n>:…]` / `0\|1…`，累积器编码 + 对应解码器（roundtrip） | `encConcat`、`encTag`、`encInt`、`encStr`、`encMaybe`、`decStr`、`thenPair` |
+| `Fingerprint` | 编译器指纹的唯一来源：exe 路径 + 大小 + mtime → 63-bit 键，拼成 `<版本>/<指纹>` 的 tag；iface 分桶、lex/check/split/unit 的 key 与 framing tag 共用（C48 关闭的关键：二进制换代即整套缓存换代） | `compilerFingerprintEff`、`compilerTagEff`、`textHashOf` |
+| `Store` | **唯一**缓存载荷落盘层：`vuna-cache-frame 2\|<tag>\|<codec>\|<len>\|<内容地址>\n<payload>` 的编解码（纯）、读侧三层校验（framing → 头内内容地址 → 调用方语义自证）、原子写、去抖写、缓存根探测与清理入口 | `storeEncode`、`storeDecode`、`storeReadEff`、`storeReadAsEff`、`storeWriteEff`、`storeWriteIfChangedEff`、`storeCacheBaseEff` |
+| `Canonical`（门面） | 规范字节编码（D5 / C32 的**唯一**载荷与哈希输入格式）：自定界原子文法 `#tag;` / `i<n>;` / `s<len>:<bytes>` / `b0\|b1` / `[<n>:…]` / `0\|1…`，累积器编码 + 游标解码器（`Cur` = 原串 + 偏移，避免 `strUnpack` 整串拷贝） | `encConcat`、`encTag`、`encInt`、`encStr`、`encMaybe`、`decStr`、`curOf`、`thenPair` |
 | `Canonical.Term` | Core `Term` 的规范编码 / 解析（tag = 构造子声明序；`TVar` 的 span 丢弃） | `encTerm`、`encTermBytes`、`decTermComplete` |
-| `Canonical.Ast` | Frontend `Expr` / `Pat` / `Decl` 的规范编码 / 解析（全部 span 丢弃；codegen 单元 key 与 roundtrip 用） | `encExpr`、`encDecl`、`encDecls`、`decDeclsComplete` |
-| `Canonical.Elab` | 接口哈希输入域：`DtDef` / `DtData` / `DtInst` / `DtClass` / `RecordMeta` / `ExportEntry` / `FixityDecl` / `Import`（span 丢弃、字段全覆盖） | `encDtDef`、`encDtData`、`encExportEntry`、`encRecordMeta`、`encFixity` |
+| `Canonical.Ast` | Frontend `Expr` / `Pat` / `Decl` / `SourceFile` 的规范编码 / 解析（**全部 span 丢弃**：它只服务 iface 哈希输入、codegen 单元 key 与 roundtrip 自检；**不要**拿它当缓存载荷，缓存命中会丢诊断位置） | `encExpr`、`encDecl`、`encDecls`、`encSourceFile`、`decDeclsComplete`、`decSourceFileComplete` |
+| `Canonical.Lex` | 词法 token 流（`List PTok`）的规范编码 / 解析：**位置逐字节保真**，只服务 lex 缓存载荷（`Store` 承载），不进任何哈希输入 | `encPTokList`、`decPTokListComplete`、`encTok`、`decTok` |
+| `Canonical.Elab` | 接口载荷与哈希输入域：`DtDef` / `DtData` / `DtCtor` / `DtInst` / `DtClass` / `RecordMeta` / `ExportEntry` / `FixityDecl` / `Import` / `ModDecl`（span 丢弃、字段全覆盖） | `encDtDef`、`encDtData`、`encExportEntry`、`encRecordMeta`、`encFixity`、`encModDecl` |
 | `Query` | 查询图骨架：按 key 记忆化、依赖摘要快照、early cutoff（重算后摘要不变则下游仍命中）、可观测 trace；并行 / 取消留给后续 | `query`、`dbEmpty`、`dbTrace`、`digestOfVal` |
 | `Frontend.Ast` | 语法类型与 AST helper（`Expr`/`Decl`/`Pat`/`Ctor`/`Import`/`ModDecl`/`TraitMethod`） | `clausesFor`、`funArity`、`declNames` |
 | `Frontend.Lexer` | 字符游标、token 与位置；注释单独 lex 出来供 formatter 使用 | `lexSource`、`lexComments` |
@@ -40,7 +44,7 @@
 | `Loader`（门面） | 模块加载、名字解析与 flatten 的稳定入口；对外导出 `Project` / `Module` / `ExportEntry` 与 `loadProject*` / `resolveProject` | `loadProject`、`loadProjectModules`、`resolveProject` |
 | `Loader.Modules` | 加载器的数据与模块图（叶子）：模块根、import 边、导出表结构 | `collectModuleFiles`、`moduleAllImportsOf` |
 | `Loader.Resolve` | 名字解析 + 效应能力检查：把 parse 后声明/表达式解析成带模块前缀的名字；内建 arity/prelude 放行/能力检查都消费 `Intrinsics` | `resolveProgram`、`checkEffectsBuiltins` |
-| `Loader.Flatten` | 模块导出表计算、加载流程与 flatten（`Prelude` 自动导入——含 ad-hoc 单文件、`[export]` 可见性）；内存源码的**库模块**入口（LSP）；AST 缓存 `parseFileWithPath`（key = SHA-256(`astCacheSchema` + 路径 + 源内容) + payload 回读校验 + `prim_writeFileAtomic` 原子写；不含编译器指纹，**改 `Frontend.Ast` 布局要 bump schema**，见 debt C48） | `loadProject`、`loadProjectModules`、`loadProjectSource`、`loadModuleSource`、`visibleFixitiesOf` / `dedupeFixities`、`fixitiesForSource` / `fixitiesForSourceIn`（fmt/LSP/lint 的程序级 fixity） |
+| `Loader.Flatten` | 模块导出表计算、加载流程与 flatten（`Prelude` 自动导入——含 ad-hoc 单文件、`[export]` 可见性）；内存源码的**库模块**入口（LSP）；lex 缓存 `parseFileWithPath`（key = `contentAddress(lexCacheSchema + 编译器 tag + 路径 + 源内容)`，载荷 = `Canonical.Lex.encPTokList` + `Store` framing；命中后只跑语法分析，**token 流带位置**所以诊断 / codegen 位置表与冷路径一致；**改 `Frontend.Lexer` 的 `Tok` / `PTok` 布局要 bump `lexCacheSchema` 与 `lexCacheCodec`**，编译器 tag 保证新旧二进制不互读） | `loadProject`、`loadProjectModules`、`loadProjectSource`、`loadModuleSource`、`visibleFixitiesOf` / `dedupeFixities`、`fixitiesForSource` / `fixitiesForSourceIn`（fmt/LSP/lint 的程序级 fixity） |
 | `Core`（门面） | core 类型论表示、NbE 求值与定义性相等等公开面；细节见 [core.md](core.md) | `Core.Eval.eval`、`quote`、`normalize`、`Core.Conv.conv`、`Core.Term.defaultFuel` |
 | `Core.Term` | `Term`/`Value`/`Neutral`/`Closure`/`Rig`/`Level`/`Sols` 等数据（唯一真源）与 `shift`/`substVarAt`/显示等纯项变换 | `shift`、`substVarAt`、`rigIsErased` |
 | `Core.Eval` | beta 求值、delta 展开、prelude 原语归约、深度正规化与 quote | `eval`、`force`、`applyClosure`、`normalize`、`quote` |
@@ -76,9 +80,8 @@
 | `Driver.CompilerCli` | 编译器自己的 CLI（`vuna-compiler`）；含受限进程执行入口 `runIn`；workspace check/build 单元、`build --package`、`version` | `runCompilerCli`、`compilerUsageLines`、`runIn` |
 | `Version` | 版本号唯一真源；产品 CLI / `vuna-compiler` / build meta / VSCode 探测共用 | `vunaVersion` |
 
-`compiler/vuna.toml` 的 `[export]` 列出全部 68 个导出模块（内部 `Debug` / `CacheFormat` /
-`Driver.Iface` / `Driver.Owner` 不在内）；`[capabilities] effects` 声明六个能力（编译器直接
-使用 `prim_*`）。工具链模块不在此包。
+`compiler/vuna.toml` 的 `[export]` 列出全部 76 个导出模块（上列 8 个内部模块不在内）；
+`[capabilities] effects` 声明六个能力（编译器直接使用 `prim_*`）。工具链模块不在此包。
 
 ## 根包工具链模块（`lib/`，不进 seed）
 
@@ -194,8 +197,9 @@ fixities / imports / capabilities、`miSource`、`miIfaceHash`、`miDepHashes`�
 - LSP / REPL 消费接口默认开启（`VUNA_IFACE_TOOL=0` 关闭）：惰性闭包 + 会话缓存 + 单文件
   增量 + 单模块写回已落地；残留擦除位 meta 依赖包段重编号、LSP-only 写回哈希由首次整包
   check 自愈。
-- 快判默认内容哈希，`VUNA_CACHE_MTIME=1` 可开 mtime+size 快路径（5s 安全窗）；缓存载荷已有
-  framing + 损坏回退，但仍是 OCaml Marshal（显式自描述格式归后续，见 debt C32）。
+- 快判默认内容哈希，`VUNA_CACHE_MTIME=1` 可开 mtime+size 快路径（5s 安全窗）；缓存载荷是
+  `Canonical.*` 显式编码 + `Store` framing（magic/tag/codec/len/内容地址），读侧坏条目
+  即 miss 并覆盖写（C32 已关闭，见 [cache.md](cache.md)）。
 
 ## codegen 的表示
 

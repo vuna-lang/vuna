@@ -28,6 +28,7 @@ modules = [
   "Vuna.Compiler.Canonical.Bytes",
   "Vuna.Compiler.Canonical.Elab",
   "Vuna.Compiler.Canonical.CoreTerm",
+  "Vuna.Compiler.Canonical.Lex",
   "Vuna.Compiler.Hash",
   "Vuna.Compiler.Fingerprint",
   "Vuna.Compiler.Store",

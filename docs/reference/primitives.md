@@ -391,7 +391,7 @@
 | `strFromInt` / `strLength` / `strHash` / `strAt` / `strSubstring` / `strShow` | 是 | 与 runtime **同语义同公式** |
 | `natAdd` / `natSub` / `natMul` / `natDiv` / `natToInt` / `natFromInt` | 是 | 与 runtime 同饱和 / 截断语义 |
 | `strUnpack` / `strPack` / `strConcatMany` / `strSubstTemplate` | **否** | 结果依赖 `Base.List.List` 的构造子表示（List 桥接），核心求值器不构造该表示 |
-| 全部 `OpNone` 原语：效果原语（`prim_eff_*`）、容器原语、`prim_marshal` / `prim_unmarshal`、`prim_fail` | **否** | 纯求值器不执行效果 / 不构造内建容器表示 |
+| 全部 `OpNone` 原语：效果原语（`prim_eff_*`）、容器原语、`prim_fail` | **否** | 纯求值器不执行效果 / 不构造内建容器表示 |
 | `a / 0` | **否** | 核心求值器表达不了运行期异常；显式分类，不返回 0 |
 
 - 不可归约时 `main` 报 `[CG_MainNotValue] main does not reduce to a value`。

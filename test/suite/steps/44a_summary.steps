@@ -25,7 +25,7 @@ exit: 0
 out-contains: cache-path=summary deps=0
 out-contains: iface-selftest=ok
 run: sh -c 'head -c 40 "$(cat "$TMPDIR/corrupt-iface")"'
-out-contains: vuna-iface-file 1
+out-contains: vuna-cache-frame 2
 
 # 44c) 同一份源码全量路径也通过；构建产物正确（摘要只服务 check，codegen 仍全量）。
 run: TMPDIR="$TMPDIR/summary-full-cache" VUNA_ELAB_FULL=1 "$VUNA" check corpus/packages/m34_summary/root

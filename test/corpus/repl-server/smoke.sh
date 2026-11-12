@@ -24,7 +24,27 @@ VUNA=$1
   exit 2
 }
 
-tmp=$(mktemp -d "${TMPDIR:-/tmp}/vuna-repl-server.XXXXXX") || exit 1
+# 工作目录必须**短**：Unix domain socket 的 `sun_path` 上限是 108 字节（含结尾 NUL），
+# 而这里要在它下面放 `repl.sock`。suite 的 steps 用例把 `TMPDIR` 指到
+# `$TMPDIR/vuna-suite-<stamp>-suite/c-<hash>`（本身就 55+ 字符），若再拼
+# `vuna-repl-server.XXXXXX/repl.sock` 就会超过上限 ⇒ `bind` 失败、server 不打印就绪行、
+# `wait_log` 空转到 10s 超时（症状：用例"随机"失败且耗时恒为 ~11s）。
+# 所以优先用短目录，过长就退到 `/tmp` 下的短前缀目录（socket 的隔离要求比源码副本低）。
+make_short_tmp() { # base1 base2 ... -> 打印目录
+  for base in "$@"; do
+    [ -n "$base" ] || continue
+    d=$(mktemp -d "$base/vrs.XXXXXX" 2>/dev/null) || continue
+    # 余量：`/repl.sock`（10）+ `/nonexistent.sock`（17）都要塞得下。
+    if [ ${#d} -le 88 ]; then
+      printf '%s' "$d"
+      return 0
+    fi
+    rm -rf "$d"
+  done
+  return 1
+}
+
+tmp=$(make_short_tmp "${TMPDIR:-/tmp}" /tmp) || exit 1
 
 pass=0
 fail=0

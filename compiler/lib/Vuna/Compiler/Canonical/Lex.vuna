@@ -1,0 +1,205 @@
+-- | 词法 token 流的规范编码（lex 缓存载荷：位置逐字节保真）。
+module Vuna.Compiler.Canonical.Lex
+  ( decPTok
+  , decPTokListComplete
+  , decPos
+  , decTmplPart
+  , decTok
+  , encPTok
+  , encPTokList
+  , encPos
+  , encTmplPart
+  , encTok
+  ) where
+
+-- Vuna.Compiler.Canonical.Lex：`Lexer` 的 token 流（`List PTok`）的规范字节格式。
+--
+-- 为什么缓存 **token** 而不是 AST：
+--   * parse = lex + 语法分析，实测 lex 占 86%（40 KB 文件：lex 3.96 ms / 全程 4.59 ms），
+--     所以缓存 lex 结果就拿到了绝大部分收益；
+--   * AST 编码**必须丢 span**（那是 iface 哈希输入的口径：移动代码不能改依赖方摘要），
+--     于是「AST 缓存命中」的进程里所有诊断位置都会退化成 `:0:0`——这不是可接受的
+--     缓存语义（测试 §8/§34 直接比对 span）。token 流带位置，重放 parse 得到的 AST
+--     与直接 parse 逐字节相同，位置随之保真。
+--
+-- 与 `Canonical.Ast` 的关系：本模块只服务**载荷**（`Store` 承载），不参与任何哈希输入；
+-- 因此位置字段照编不误，取摘要的是 `Loader.Flatten` 对「路径 + 源文本 + 编译器 tag」
+-- 的内容地址。
+--
+-- 原子文法仍走 `Canonical.Bytes`：tag 与构造子声明顺序一致（新增只能追加）。
+--
+-- 实现约束（SCT）：`enc*` / `dec*` 是同一个互递归组。列表的递归主体**必须**是独立函数
+-- 并显式递归（`encPTokListGo` 之于 `encPTokList`）；把 `encTmplPart` / `decPTok` 当裸实参
+-- 传给 `encList` / `decList` 时，SCT 只看到一条无参数调用边，证不出终止（与
+-- `Canonical.Ast` 的 `encExprListGo` / `decExprListItems` 同一处理）。
+import Base.Bool
+import Base.Int
+import Base.List
+import Base.Maybe
+import Base.Pair
+import Base.String
+import Vuna.Compiler.Canonical.Bytes
+import Vuna.Compiler.Frontend.Lexer
+import Vuna.Compiler.Source
+
+-- ---------------------------------------------------------------
+-- 编码
+-- ---------------------------------------------------------------
+-- | 位置 `(行, 列)`：两个整数（列是 UTF-8 字节，与 lexer 一致）。
+encPos : Pos -> List String -> List String
+encPos p acc = encInt (posLine p) (encInt (posCol p) acc)
+
+-- | `TmplPart`：文本块（tag 0）/ 插值洞（tag 1，洞内 token 列表）。
+encTmplPart : TmplPart -> List String -> List String
+encTmplPart (TPText s) acc = encTag 0 (encStr s acc)
+encTmplPart (TPHole toks) acc = encTag 1 (encPTokList toks acc)
+
+-- | `Tok`：tag 与 `Lexer` 的构造子声明顺序一致（`TEof` 之后新增只能追加）。
+encTok : Tok -> List String -> List String
+encTok (TIdent s) acc = encTag 0 (encStr s acc)
+encTok (TKw s) acc = encTag 1 (encStr s acc)
+encTok (TInt n) acc = encTag 2 (encInt n acc)
+encTok (TStr s) acc = encTag 3 (encStr s acc)
+encTok (TTmpl multi parts endPos) acc =
+  encTag 4 (encBool multi (encTmplPartList parts (encPos endPos acc)))
+encTok (TSym s) acc = encTag 5 (encStr s acc)
+encTok TEof acc = encTag 6 acc
+encTok (TFloat raw) acc = encTag 7 (encStr raw acc)
+
+-- | 模板片段表（计数头 + 递归主体）。
+encTmplPartList : List TmplPart -> List String -> List String
+encTmplPartList xs acc = "[${strFromInt (lenOf xs)}:" :: encTmplPartListGo xs acc
+
+encTmplPartListGo : List TmplPart -> List String -> List String
+encTmplPartListGo [] acc = acc
+encTmplPartListGo (x :: rest) acc = encTmplPart x (encTmplPartListGo rest acc)
+
+-- | `PTok`：token + 位置（字段顺序 = `PTok` 声明顺序）。
+-- 用位置模式而不是记录投影：SCT 只看得到「模式里绑定的子项」，`p.ptokTok` 这种
+-- 投影在 size-change 图里不是下降边。
+encPTok : PTok -> List String -> List String
+encPTok (PTok tok pos) acc = encTok tok (encPos pos acc)
+
+-- | token 列表（模板洞里的子列表也走这里）。
+encPTokList : List PTok -> List String -> List String
+encPTokList xs acc = "[${strFromInt (lenOf xs)}:" :: encPTokListGo xs acc
+
+encPTokListGo : List PTok -> List String -> List String
+encPTokListGo [] acc = acc
+encPTokListGo (x :: rest) acc = encPTok x (encPTokListGo rest acc)
+
+-- ---------------------------------------------------------------
+-- 解码（燃料逐原子递减；与编码严格对称）
+-- ---------------------------------------------------------------
+-- | 解析位置。
+decPos : Int -> Cur -> Maybe (Pair Pos Cur)
+decPos fuel c =
+  thenPair (decInt (fuel - 1) c)
+    (\line, b1 => thenPair (decInt (fuel - 1) b1) (\col, b2 => Just (Pair (Pos line col) b2)))
+
+-- | 解析列表头 `[<n>:`（`Bytes.decNumStop` 私有；这里自带）。
+decListHead : Int -> Cur -> Maybe (Pair Int Cur)
+decListHead fuel c = if fuel <= 0 then Nothing
+else case curChar c of
+  Just 91 => decListDigits (fuel - 1) 0 (curSkip c)
+  _ => Nothing
+
+decListDigits : Int -> Int -> Cur -> Maybe (Pair Int Cur)
+decListDigits fuel acc c = if fuel <= 0 then Nothing
+else case curChar c of
+  Nothing => Nothing
+  Just b =>
+    if b == 58 then Just (Pair acc (curSkip c))
+    else if b >= 48 && b <= 57 then decListDigits (fuel - 1) (acc * 10 + (b - 48)) (curSkip c)
+    else Nothing
+
+-- | 解析 `TmplPart`。
+decTmplPart : Int -> Cur -> Maybe (Pair TmplPart Cur)
+decTmplPart fuel c = if fuel <= 0 then Nothing
+else case decTag fuel c of
+  Nothing => Nothing
+  Just (Pair tag b1) => case tag of
+    0 => case decStr (fuel - 1) b1 of
+      Nothing => Nothing
+      Just (Pair s b2) => Just (Pair (TPText s) b2)
+    1 => case decPTokList (fuel - 1) b1 of
+      Nothing => Nothing
+      Just (Pair toks b2) => Just (Pair (TPHole toks) b2)
+    _ => Nothing
+
+-- | 解析 `Tok`。
+decTok : Int -> Cur -> Maybe (Pair Tok Cur)
+decTok fuel c = if fuel <= 0 then Nothing
+else case decTag fuel c of
+  Nothing => Nothing
+  Just (Pair tag b1) => case tag of
+    0 => case decStr (fuel - 1) b1 of
+      Nothing => Nothing
+      Just (Pair s b2) => Just (Pair (TIdent s) b2)
+    1 => case decStr (fuel - 1) b1 of
+      Nothing => Nothing
+      Just (Pair s b2) => Just (Pair (TKw s) b2)
+    2 => case decInt (fuel - 1) b1 of
+      Nothing => Nothing
+      Just (Pair n b2) => Just (Pair (TInt n) b2)
+    3 => case decStr (fuel - 1) b1 of
+      Nothing => Nothing
+      Just (Pair s b2) => Just (Pair (TStr s) b2)
+    4 => case decBool (fuel - 1) b1 of
+      Nothing => Nothing
+      Just (Pair multi b2) => case decTmplPartList (fuel - 1) b2 of
+        Nothing => Nothing
+        Just (Pair parts b3) => case decPos (fuel - 1) b3 of
+          Nothing => Nothing
+          Just (Pair endPos b4) => Just (Pair (TTmpl multi parts endPos) b4)
+    5 => case decStr (fuel - 1) b1 of
+      Nothing => Nothing
+      Just (Pair s b2) => Just (Pair (TSym s) b2)
+    6 => Just (Pair TEof b1)
+    7 => case decStr (fuel - 1) b1 of
+      Nothing => Nothing
+      Just (Pair raw b2) => Just (Pair (TFloat raw) b2)
+    _ => Nothing
+
+-- | 解析单个 `PTok`（token 在前、位置在后）。
+decPTok : Int -> Cur -> Maybe (Pair PTok Cur)
+decPTok fuel c = if fuel <= 0 then Nothing
+else case decTok (fuel - 1) c of
+  Nothing => Nothing
+  Just (Pair tok b1) => case decPos (fuel - 1) b1 of
+    Nothing => Nothing
+    Just (Pair pos b2) => Just (Pair (PTok tok pos) b2)
+
+-- | 解析模板片段表。
+decTmplPartList : Int -> Cur -> Maybe (Pair (List TmplPart) Cur)
+decTmplPartList fuel bytes = if fuel <= 0 then Nothing
+else case decListHead fuel bytes of
+  Nothing => Nothing
+  Just (Pair n b1) => decTmplPartItems (fuel - 1) n b1 []
+
+decTmplPartItems : Int -> Int -> Cur -> List TmplPart -> Maybe (Pair (List TmplPart) Cur)
+decTmplPartItems fuel n bytes acc = if fuel <= 0 then Nothing
+else if n <= 0 then Just (Pair (reverse acc) bytes)
+else case decTmplPart (fuel - 1) bytes of
+  Nothing => Nothing
+  Just (Pair x b1) => decTmplPartItems (fuel - 1) (n - 1) b1 (x :: acc)
+
+-- | 解析 token 列表（顶层载荷 / 模板洞内的 token 流）。
+decPTokList : Int -> Cur -> Maybe (Pair (List PTok) Cur)
+decPTokList fuel bytes = if fuel <= 0 then Nothing
+else case decListHead fuel bytes of
+  Nothing => Nothing
+  Just (Pair n b1) => decPTokItems (fuel - 1) n b1 []
+
+decPTokItems : Int -> Int -> Cur -> List PTok -> Maybe (Pair (List PTok) Cur)
+decPTokItems fuel n bytes acc = if fuel <= 0 then Nothing
+else if n <= 0 then Just (Pair (reverse acc) bytes)
+else case decPTok (fuel - 1) bytes of
+  Nothing => Nothing
+  Just (Pair x b1) => decPTokItems (fuel - 1) (n - 1) b1 (x :: acc)
+
+-- | 整串解析 token 列表（lex 缓存载荷入口）：要求恰好消费完。
+decPTokListComplete : String -> Maybe (List PTok)
+decPTokListComplete s = case decPTokList (strLength s) (curOf s) of
+  Nothing => Nothing
+  Just (Pair ts rest) => if curAtEnd rest then Just ts else Nothing

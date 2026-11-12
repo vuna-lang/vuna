@@ -60,11 +60,11 @@ Vuna.Test.Session  ./lib/Vuna/Test/Session.vuna
 Vuna.Test.Suite  ./lib/Vuna/Test/Suite.vuna
 Vuna.TestRunner  ./lib/Vuna/TestRunner.vuna
 app.Main  ./app/Main.vuna
-Vuna.Compiler.CacheFormat  compiler/lib/Vuna/Compiler/CacheFormat.vuna
 Vuna.Compiler.Canonical.Ast  compiler/lib/Vuna/Compiler/Canonical/Ast.vuna
 Vuna.Compiler.Canonical.Bytes  compiler/lib/Vuna/Compiler/Canonical/Bytes.vuna
 Vuna.Compiler.Canonical.CoreTerm  compiler/lib/Vuna/Compiler/Canonical/CoreTerm.vuna
 Vuna.Compiler.Canonical.Elab  compiler/lib/Vuna/Compiler/Canonical/Elab.vuna
+Vuna.Compiler.Canonical.Lex  compiler/lib/Vuna/Compiler/Canonical/Lex.vuna
 Vuna.Compiler.Canonical  compiler/lib/Vuna/Compiler/Canonical.vuna
 Vuna.Compiler.Codegen.Assembly  compiler/lib/Vuna/Compiler/Codegen/Assembly.vuna
 Vuna.Compiler.Codegen.Decl  compiler/lib/Vuna/Compiler/Codegen/Decl.vuna
@@ -122,6 +122,7 @@ Vuna.Compiler.Elab.Trait  compiler/lib/Vuna/Compiler/Elab/Trait.vuna
 Vuna.Compiler.Elab.Types  compiler/lib/Vuna/Compiler/Elab/Types.vuna
 Vuna.Compiler.Elab.Usage  compiler/lib/Vuna/Compiler/Elab/Usage.vuna
 Vuna.Compiler.Elab  compiler/lib/Vuna/Compiler/Elab.vuna
+Vuna.Compiler.Fingerprint  compiler/lib/Vuna/Compiler/Fingerprint.vuna
 Vuna.Compiler.Frontend.Ast  compiler/lib/Vuna/Compiler/Frontend/Ast.vuna
 Vuna.Compiler.Frontend.Cst  compiler/lib/Vuna/Compiler/Frontend/Cst.vuna
 Vuna.Compiler.Frontend.Diagnostics  compiler/lib/Vuna/Compiler/Frontend/Diagnostics.vuna
@@ -141,6 +142,7 @@ Vuna.Compiler.Loader  compiler/lib/Vuna/Compiler/Loader.vuna
 Vuna.Compiler.Packages.Pkg  compiler/lib/Vuna/Compiler/Packages/Pkg.vuna
 Vuna.Compiler.Query  compiler/lib/Vuna/Compiler/Query.vuna
 Vuna.Compiler.Source  compiler/lib/Vuna/Compiler/Source.vuna
+Vuna.Compiler.Store  compiler/lib/Vuna/Compiler/Store.vuna
 Vuna.Compiler.Version  compiler/lib/Vuna/Compiler/Version.vuna
 app.Main  compiler/app/Main.vuna
 Base.Applicative  base/lib/Base/Applicative.vuna
@@ -204,11 +206,11 @@ Prelude  base/lib/Prelude.vuna
 
 
 ## compiler（vuna-compiler）
-Vuna.Compiler.CacheFormat  ./lib/Vuna/Compiler/CacheFormat.vuna
 Vuna.Compiler.Canonical.Ast  ./lib/Vuna/Compiler/Canonical/Ast.vuna
 Vuna.Compiler.Canonical.Bytes  ./lib/Vuna/Compiler/Canonical/Bytes.vuna
 Vuna.Compiler.Canonical.CoreTerm  ./lib/Vuna/Compiler/Canonical/CoreTerm.vuna
 Vuna.Compiler.Canonical.Elab  ./lib/Vuna/Compiler/Canonical/Elab.vuna
+Vuna.Compiler.Canonical.Lex  ./lib/Vuna/Compiler/Canonical/Lex.vuna
 Vuna.Compiler.Canonical  ./lib/Vuna/Compiler/Canonical.vuna
 Vuna.Compiler.Codegen.Assembly  ./lib/Vuna/Compiler/Codegen/Assembly.vuna
 Vuna.Compiler.Codegen.Decl  ./lib/Vuna/Compiler/Codegen/Decl.vuna
@@ -266,6 +268,7 @@ Vuna.Compiler.Elab.Trait  ./lib/Vuna/Compiler/Elab/Trait.vuna
 Vuna.Compiler.Elab.Types  ./lib/Vuna/Compiler/Elab/Types.vuna
 Vuna.Compiler.Elab.Usage  ./lib/Vuna/Compiler/Elab/Usage.vuna
 Vuna.Compiler.Elab  ./lib/Vuna/Compiler/Elab.vuna
+Vuna.Compiler.Fingerprint  ./lib/Vuna/Compiler/Fingerprint.vuna
 Vuna.Compiler.Frontend.Ast  ./lib/Vuna/Compiler/Frontend/Ast.vuna
 Vuna.Compiler.Frontend.Cst  ./lib/Vuna/Compiler/Frontend/Cst.vuna
 Vuna.Compiler.Frontend.Diagnostics  ./lib/Vuna/Compiler/Frontend/Diagnostics.vuna
@@ -285,6 +288,7 @@ Vuna.Compiler.Loader  ./lib/Vuna/Compiler/Loader.vuna
 Vuna.Compiler.Packages.Pkg  ./lib/Vuna/Compiler/Packages/Pkg.vuna
 Vuna.Compiler.Query  ./lib/Vuna/Compiler/Query.vuna
 Vuna.Compiler.Source  ./lib/Vuna/Compiler/Source.vuna
+Vuna.Compiler.Store  ./lib/Vuna/Compiler/Store.vuna
 Vuna.Compiler.Version  ./lib/Vuna/Compiler/Version.vuna
 app.Main  ./app/Main.vuna
 

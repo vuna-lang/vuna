@@ -38,8 +38,6 @@
 
 | ID | 仍未成立的事实 | 证据 | 归属 |
 | --- | --- | --- | --- |
-| C32 | 缓存**载荷落盘**仍是 OCaml Marshal（哈希输入侧已换成 `Canonical.*` 显式编码）：`ModuleIface`/`CachedProgram`/`SplitFile`/AST 条目没有自描述编码；check 缓存命中路径仍写入 1–4MB `CachedProgram` 载荷（写放大）；载荷校验和只有 10-bit `strHash`，碰撞面未收紧（iface 侧已由 SHA-256 内容摘要 + schema/`pmEnv`/内容寻址文件名/`hashOfIface` 自证叠加防护，其余载荷仍只有 framing） | `Vuna.Compiler.CacheFormat`、`Driver/Compile`、`Driver/Iface`、`Vuna.Compiler.Canonical.*`；[cache.md](cache.md) | 后续 |
-| C48 | `ast` 解析缓存 key 不含编译器指纹：只按「路径 + 内容哈希」命中，两个 AST 布局不同的二进制（未 rotation 的 seed 与新 vuna、或同 TMPDIR 的新旧二进制）会互读对方条目，轻则误报类型错、重则段错误。修法要把编译器指纹下沉到 Loader 层；直接下沉会在纯签名里新增 `runPure`，与 M4 守卫（只允许减）冲突，需等 M4 收口或由调用方显式传入 | `Loader/Flatten.vuna`（`astKeyOf`/`astCacheDir`）、`Driver/Compile.vuna`（`compilerFingerprint`）；[cache.md](cache.md) | 后续（M4） |
 | C49 | `VUNA_IFACE_AUDIT=1` 与 `VUNA_IFACE_SELFTEST=1` **同时**在冷缓存（无 `.output/iface`）下跑 `check <包目录>` 会误报 `iface selftest: package iface invalid`（单独任一开关都通过；HEAD 60afe83 上同样复现，不是新引入）。根因初步在 audit 双路径与写侧自检读回的组合，未定位 | 复现：`rm -rf compiler/.output/iface; VUNA_IFACE_AUDIT=1 VUNA_IFACE_SELFTEST=1 vuna check compiler`；[cache.md](cache.md)/[testing.md](testing.md) | 后续 |
 | C37 | 擦除位置残留未解 meta 仍靠包段 `(idx+1)<<30` 重编号（LSP 单模块写回与整包 check 的哈希差异已由 `meOrigin` 结构性隔离，不再需要「首次整包自愈」） | `Driver/Dt`（`shiftCachedProgram`）；[cache.md](cache.md) | 后续 |
 | C38 | LSP case split：不检查依赖模块导出面；构造子 / record 解析是 parse 级；每请求重跑容错精化（无进程内缓存）；洞在类型位置仍可能生成非法 `case`；索引族 case split 需要精化器暴露可达构造子（研究，非债务） | `lib/Vuna/Lsp/Query.caseSplitActions`、`lib/Vuna/Lsp/Bindings`；`test/corpus/lsp/smoke.sh`；[lsp.md](lsp.md) | 后续 |

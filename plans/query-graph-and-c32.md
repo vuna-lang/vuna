@@ -52,8 +52,11 @@ CLI / LSP / REPL / test / doc / index 全部改成它的客户端。
 - **D-Q5 check 缓存只记「同输入曾成功」**：载荷 = marker，消除写放大；
   `cachedOfProgram` 不再进 check 缓存（已由 iface 承载）。
 - **D-Q6 删 `prim_marshal`/`prim_unmarshal`**：无兼容义务，从语言面消除「随手序列化」入口。
-- **D-Q7 AST 条目去源文本回读校验**：key 已是内容地址 + 新增 payload digest，冗余；
-  同时让 AST 载荷不依赖路径字符串。
+- **D-Q7 解析缓存去源文本回读校验；载荷是 token 流不是 AST**（实施中修正）：
+  key 已是内容地址 + 新增 payload digest，回读校验冗余。原计划缓存 `Canonical.Ast`
+  `encSourceFile`，实测会**丢 span**（cached 命中时诊断位置退化 `:0:0`、codegen 位置表
+  变 `":0"`），改为缓存词法 token 流（`Canonical.Lex`）：位置保真，且 lexer 占 parse 的
+  86%，收益不变。详见「阶段 0 落地记录 · 偏差 1」。
 - **D-Q8 `clean-iface` → `vuna clean [--iface] [--store] [--all] [--dry-run] [DIR]`**：
   一个清理入口覆盖树内 iface 与 `$TMPDIR` store。
 - **D-Q9 编译器指纹下沉到 `Vuna.Compiler.Fingerprint`**：`Compile`/`PerfCache`/`Flatten`
@@ -200,9 +203,41 @@ Lead：阶段门禁（`vuna check .`、suite、bench、`nix flake check`、rotat
 
 ## 进度
 
-- [ ] 阶段 0：Store + codec + 删 Marshal + clean 命令
+- [x] 阶段 0：Store + codec + 删 Marshal + clean 命令（**偏差已登记，见下**）
 - [ ] 阶段 1：Query v2 + Query.Run
 - [ ] 阶段 2：Driver.Graph 接 check/build/compile
 - [ ] 阶段 3：LSP / REPL 接图
 - [ ] 阶段 4：test / doc / index 接图
 - [ ] 阶段 5：收尾（删旧路径、债务、基线、rotation、flake check）
+
+### 阶段 0 落地记录（2026-11-12）
+
+已完成：`Store`（framing v2）、`Fingerprint`、`Canonical.Bytes` 游标化、
+`Canonical.Ast`/`Canonical.Elab`、`Driver.{Iface,Cache,Split,PerfCache}` 全量显式编码、
+check 缓存 marker、删 `prim_marshal`/`prim_unmarshal`/`dtp_marshal`/`dtp_unmarshal`、
+删 `CacheFormat.vuna`、`vuna clean [--iface|--store|--all|--dry-run]`、§52/§59 改造、
+`ifaceSchema` 19→20、`mePayloadDigest` 三层读校验。
+
+**偏差 1（推翻 D-Q7 的字面表述）**：载荷缓存**不是 AST，而是词法 token 流**。
+原计划让 `Loader.Flatten` 缓存 `Canonical.Ast.encSourceFile`；实测缓存命中后
+**所有诊断位置退化成 `:0:0`、codegen 的 `dt_def_locs` 整表变成 `":0"`**（AST 编码按
+iface 哈希口径丢 span），全量 suite 133 个 case 失败、unused-import 等 warning 直接消失
+（warning 靠 `ownedByFile` 按 span 文件名归属，位置丢了就被过滤掉）。
+token 流带位置 ⇒ 重放 parse 与冷路径逐字节一致；且 lexer 占 parse 的 86%
+（40 KB 文件 lex 3.96 ms / 全程 4.59 ms），收益几乎不变。落地为
+`Canonical.Lex` + `lexCacheSchema = "vuna-lex-cache 1"` + codec `lex-tokens 1`，
+目录 `$TMPDIR/vuna-cache/lex/`。`Canonical.Ast.encSourceFile` 保留但**只服务 roundtrip
+自检**，`cache.md` 已写明「不要拿它当载荷」。
+
+**偏差 2（新发现，顺手修）**：`SourceInfo.siPath` 之前保留入口写法（相对/绝对），
+它进接口载荷 ⇒ `vuna check base` 与 `vuna check $PWD/base` 交替会算出不同载荷字节、
+`mePayloadDigest` 失配、**每次 check 整包重写接口**。写侧（`Compile.ownSourceInfos`）与
+读侧（`Iface.ifaceRelPathOf`）都改成先 `absolutePath` 归一（§57c 覆盖）。
+
+**偏差 3（测试基建）**：`corpus/repl-server/smoke.sh` 的 socket 落在 case `TMPDIR` 下，
+而 steps 的 `TMPDIR` 本身已 55+ 字符，拼出 `repl.sock` 会超过 `sun_path` 108 字节上限
+⇒ bind 失败、等就绪行空转到 10s（表现为「随机失败且耗时恒为 ~11s」）。改成短路径
+工作目录（`vrs.XXXXXX`，过长退到 `/tmp`），并写进 `testing.md`。
+
+阶段 0 门禁实测（本机 16 核，改后二进制）：warm `check compiler` 28–30 ms（门槛 43）、
+warm `check .` 56–57 ms（门槛 78）；全量 suite **5551 checks / 0 failed**。

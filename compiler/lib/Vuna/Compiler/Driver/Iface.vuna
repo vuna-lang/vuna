@@ -805,15 +805,15 @@ moduleNamesOf (m :: rest) = miNameOf m :: moduleNamesOf rest
 manifestFileName : String
 manifestFileName = ".vuna-iface"
 
--- 源文件相对包目录的路径（两侧 lexical 归一后剥前缀；包目录为 "." 时剥前导 "./"）。
--- 写侧只用本包 roots 下的源文件，正常不会失败；失败返回 "" ⇒ 该模块不写（不写坏 manifest）。
+-- 源文件相对包目录的路径（两侧都必须**绝对且 lexical 归一**后剥前缀；调用方见
+-- `ifaceRelPathOf`）。写侧只用本包 roots 下的源文件，正常不会失败；失败返回 ""
+-- ⇒ 该模块不写（不写坏 manifest）。
 relUnder : String -> String -> String
 relUnder pkgDir path =
   let
     pkg = normalizeDir pkgDir
     p = normalizeDir path
-  in if pkg == "." then if startsWith "./" p then strSubstring 2 (strLength p - 2) p else p
-  else if startsWith "${pkg}/" p then strSubstring (strLength pkg + 1) (strLength p - strLength pkg - 1) p
+  in if startsWith "${pkg}/" p then strSubstring (strLength pkg + 1) (strLength p - strLength pkg - 1) p
   else ""
 
 -- 接口目录模式：`VUNA_IFACE_DIR` 非空 = 外部镜像根，用**内容寻址**文件名
@@ -829,11 +829,16 @@ ifaceHashToken : String -> String
 ifaceHashToken h = strSubstring 0 16 h
 
 -- 接口文件相对路径：源相对路径把 `.vuna` 换成 `.iface`（默认），镜像模式再插入内容哈希。
+-- 两侧都先**绝对化**：`siPath` 由写侧构造时应已是绝对值（见 `Compile.ownSourceInfos`），
+-- 但包目录可能来自相对入口（`check base` vs `check $PWD/base`）——不归一就会算出空相对
+-- 路径、整包跳过写，且载荷字节随入口写法变化。
 ifaceRelPathOf : String -> String -> SourceInfo -> Eff [] String
 ifaceRelPathOf h pkgDir si = do
   mirror <- ifaceMirrorMode
+  pkg <- absolutePath pkgDir
+  path <- absolutePath (siPathOf si)
   let
-    rel = relUnder pkgDir (siPathOf si)
+    rel = relUnder pkg path
     stem =
       if rel == "" then ""
       else if endsWith ".vuna" rel then strSubstring 0 (strLength rel - 5) rel else rel

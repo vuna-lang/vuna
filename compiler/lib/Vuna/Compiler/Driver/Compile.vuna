@@ -1645,15 +1645,22 @@ gcIfaceGo keep (p :: rest) = do
         tail <- gcIfaceGo keep rest
         pure (removed + tail)
 
+-- 本包各模块的源信息表（模块名 → 绝对路径 / 内容哈希 / mtime / size）。
+--
+-- 路径一律**绝对化**：`SourceInfo.siPath` 会进接口载荷，而包目录/root 目录可能是相对入口
+-- 给出的（`check base` vs `check $PWD/base`）。不归一的话同一份源码在不同入口写法下
+-- 算出不同载荷字节 ⇒ 载荷摘要失配 ⇒ 每次 check 都整包重写接口（§57c 覆盖）。
 ownSourceInfos : PackageContext -> Eff [] (List (Pair String SourceInfo))
 ownSourceInfos ctx = do
   walked <- mapEff (\root => do
     paths <- collectVunaMeta 1048576 (rootDir root)
     mapEff (\p => do
-      raw <- prim_eff_readFile p
-      mtime <- prim_eff_fileMtime p
-      size <- prim_eff_fileSize p
-      pure (Pair (moduleNameOfPath (rootDir root) p) (SourceInfo p (payloadDigest raw) mtime size))
+      abs <- absolutePath p
+      raw <- prim_eff_readFile abs
+      mtime <- prim_eff_fileMtime abs
+      size <- prim_eff_fileSize abs
+      pure
+        (Pair (moduleNameOfPath (rootDir root) p) (SourceInfo abs (payloadDigest raw) mtime size))
     ) paths
   ) (filter (\r => rootName r == contextPackageName ctx) (contextRoots ctx))
   pure (concatMap (\xs => xs) walked)

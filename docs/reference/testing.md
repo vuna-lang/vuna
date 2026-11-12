@@ -114,6 +114,11 @@ end:
 - family 与 `*.steps` case 都进 worker 并行；worker 按 `index mod N` 静态分片。每个
   steps case 额外有独立的 `TMPDIR` / `VUNA_IFACE_DIR` / `VUNA_REPL_HISTORY`（不再有
   串行 lane；需要独占仓库路径的用例在步骤里把夹具复制到 `$TMPDIR`）。
+  **Unix domain socket 用例注意 `sun_path` 上限（108 字节含 NUL）**：case 的 `TMPDIR` 是
+  `$TMPDIR/vuna-suite-<stamp>-suite/c-<hash>`（自身已 55+ 字符），再拼
+  `vuna-repl-server.XXXXXX/repl.sock` 会越界 ⇒ `bind` 失败、server 不打就绪行、等待方空转到
+  10s 超时（症状是「随机失败且耗时恒为 ~11s」）。`corpus/repl-server/smoke.sh` 因此把工作
+  目录放在尽量短的路径上（`vrs.XXXXXX`，过长时退到 `/tmp`）。新写 socket 用例照此办理。
 - `--fail-fast`：worker 内部失败后不再启动新 case。
 - 失败行带 case id；断言失败给步骤名 / expected / actual 片段。
 - 本地结果缓存：成功的 golden/error case 写入 `.local/test-cache/`，key 含编译器指纹、

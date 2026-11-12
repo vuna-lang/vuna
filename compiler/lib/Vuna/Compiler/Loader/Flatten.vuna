@@ -24,8 +24,8 @@ module Vuna.Compiler.Loader.Flatten
 -- 「依赖序列 + 入口声明」拼接。
 import Base.List
 import Base.Host
-import Vuna.Compiler.Canonical.Ast
 import Vuna.Compiler.Canonical.Bytes
+import Vuna.Compiler.Canonical.Lex
 import Vuna.Compiler.Fingerprint
 import Vuna.Compiler.Store
 import Vuna.Compiler.Loader.Diagnostics
@@ -35,6 +35,7 @@ import Vuna.Compiler.Diagnostics.Warning
 import Vuna.Compiler.Diagnostics.Rn
 import Base.HashMap
 import Vuna.Compiler.Frontend.Ast
+import Vuna.Compiler.Frontend.Lexer
 import Vuna.Compiler.Frontend.Parser
 import Vuna.Compiler.Loader.Fixity
 import Vuna.Compiler.Loader.Modules
@@ -46,91 +47,92 @@ import Vuna.Compiler.Packages.Pkg
 -- M31.2：imports 模块的**可见 fixity 表**（Module 里已含各自的 import 闭包）。
 -- 本模块声明由调用方放在返回列表最前，查找时第一处匹配生效。
 -- M31.2：parse 错误带文件名（前端诊断无位置，加载器知道路径）。
--- M34.5 第 4 步：AST 缓存。parse 结果按「路径 + 源内容」哈希复用——LSP 反复检查同一
--- 文件、workspace 多次 check 时省掉重复 parse。缓存目录随 `$TMPDIR` 清理。
 --
--- key 的**强度**必须够：内建 `strHash` 只有 10 bit（运行时 `land 1023`），初版把两路
--- 10-bit + 长度拼起来，实测在测试套件里发生跨文件命中（其它文件的 AST 被当作
--- `corpus/term/05_multi_clause.vuna` 的入口，报 `LD_ModuleHeaderInEntryFile`）。
--- 现在 key = SHA-256（64 位十六进制），见 `astKeyOf`。
+-- M34.5 第 4 步 / C32 收口：**lex 缓存**。parse = lex + 语法分析，lexer 占大头（实测
+-- 40 KB 文件 lex 3.96 ms / 全程 4.59 ms）；缓存 token 流后命中路径只跑语法分析。
 --
--- C32 / C48 收口（本次）：
---   * 载荷不再是 `prim_marshal`：走 `Canonical.Ast.encSourceFile` 的显式规范编码
---     （codec `ast-source 1`）+ `Store` framing；读侧必须通过全部校验才解码，坏字节
---     不会再喂给 Marshal（语言里没有 try/catch，旧实现会直接崩进程）；
---   * payload 里**不再带源文本**回读校验：key 已是对「路径 + 源文本 + 编译器 tag」的
---     内容地址，framing 头里另带载荷内容地址——同字节同地址，回读比较只是冗余拷贝
---     （旧 136 KB 缓存里近 100% 是源文本副本）；
---   * key 里**并入编译器 tag**（关闭 C48）：换编译器后旧 AST 不再被读，不必靠
---     schema bump + 二进制换代兜底。
+-- 为什么不是 AST 缓存（上一版的做法，已废除）：`Canonical.Ast` 的编码口径**故意丢
+-- span**（它是 iface 哈希输入，移动代码不能改依赖方摘要），于是 AST 缓存命中时进程里
+-- 所有诊断位置退化成 `:0:0`、codegen 的 `dt_def_locs` 整表变成 `":0"`——缓存改变了
+-- 用户可见行为，不可接受。token 流带位置，重放 parse 得到的 AST 与冷路径逐字节相同。
 --
--- 注意：AST 条目只服务「parse 结果复用」，**不参与接口哈希**；span 不进入编码，命中
--- 路径拿到的 `SourceFile` 的 span 是 `noSpan`。这与接口哈希口径一致，且需要位置信息的
--- 消费者（诊断 / codegen 位置表）用的是 `SourceInfo` / `DtDef` 自己的 span，不是 AST
--- 缓存条目。
-astCacheSchema : String
-astCacheSchema = "vuna-ast-cache 8"
+-- key = `contentAddress(schema + 编译器 tag + 路径 + 源文本)`（C48：含编译器指纹，
+-- AST/Token 布局不同的二进制各占一套 key 空间）；载荷 = `Canonical.Lex` 的显式编码 +
+-- `Store` framing（magic/tag/codec/len/内容地址），坏字节在读侧变成 miss、不会进解码器
+-- （旧 `prim_marshal` 实现会直接崩进程）。
+lexCacheSchema : String
+lexCacheSchema = "vuna-lex-cache 1"
 
--- | AST 载荷编码版本（`Store` 的 codec 段）。
-astCacheCodec : String
-astCacheCodec = "ast-source 1"
+-- | lex 载荷编码版本（`Store` 的 codec 段）。
+lexCacheCodec : String
+lexCacheCodec = "lex-tokens 1"
 
--- M4（效果显式化）：AST 缓存目录/读写、模块文件探测与读盘都是宿主动作，显式在
--- `Eff []` 里；导出表计算、flatten 与 resolve 保持纯函数。
-astCacheDir : Eff [] String
-astCacheDir = do
+-- M4（效果显式化）：缓存目录/读写、模块文件探测与读盘都是宿主动作，显式在 `Eff []` 里；
+-- 导出表计算、flatten 与 resolve 保持纯函数。
+lexCacheDir : Eff [] String
+lexCacheDir = do
   base <- prim_eff_getenv "TMPDIR"
-  pure "${if base == "" then "/tmp" else base}/vuna-cache/ast"
+  pure "${if base == "" then "/tmp" else base}/vuna-cache/lex"
 
--- | AST 条目的 key：schema + 编译器 tag + 路径 + 源文本的内容地址（C48）。
-astKeyOf : String -> String -> String -> String
-astKeyOf tag path src =
-  Vuna.Compiler.Hash.contentAddress "${astCacheSchema}\t${tag}\t${path}\t${src}"
+-- | lex 条目的 key：schema + 编译器 tag + 路径 + 源文本的内容地址（C48）。
+lexKeyOf : String -> String -> String -> String
+lexKeyOf tag path src =
+  Vuna.Compiler.Hash.contentAddress "${lexCacheSchema}\t${tag}\t${path}\t${src}"
 
--- | 读 AST 缓存：`Store` framing 全量校验通过才解码；任何不符 ⇒ `Nothing`（重新 parse）。
-readAstCache : String -> String -> String -> Eff [] (Maybe SourceFile)
-readAstCache tag codec cpath = do
-  payload <- storeReadEff "${astCacheSchema}/${tag}" codec cpath
+-- | 读 lex 缓存：`Store` framing 全量校验通过才解码；任何不符 ⇒ `Nothing`（重新 lex）。
+readLexCache : String -> String -> String -> Eff [] (Maybe (List PTok))
+readLexCache tag codec cpath = do
+  payload <- storeReadEff "${lexCacheSchema}/${tag}" codec cpath
   pure (case payload of
     Nothing => Nothing
-    Just bytes => decSourceFileComplete bytes
+    Just bytes => decPTokListComplete bytes
   )
 
--- | 写 AST 缓存（目录先建好；原子写由 `Store` 负责）。
-storeAstCache : String -> String -> String -> SourceFile -> Eff [] SourceFile
-storeAstCache tag cpath codec parsed = do
-  astDir <- astCacheDir
-  _ <- storeEnsureDirEff astDir
-  _ <- storeWriteEff "${astCacheSchema}/${tag}" codec cpath (encTop encSourceFile parsed)
-  pure parsed
+-- | 写 lex 缓存（目录先建好；原子写由 `Store` 负责）。
+storeLexCache : String -> String -> List PTok -> Eff [] Int
+storeLexCache tag cpath toks = do
+  lexDir <- lexCacheDir
+  _ <- storeEnsureDirEff lexDir
+  storeWriteEff "${lexCacheSchema}/${tag}" lexCacheCodec cpath (encTop encPTokList toks)
 
+-- | 解析一个源文件（带 lex 缓存）。所有加载路径都走这里。
 parseFileWithPath : String -> String -> Eff [] (Check SourceFile)
 parseFileWithPath path src = do
-  astDir <- astCacheDir
+  lexDir <- lexCacheDir
   tag <- compilerTagEff
   let
-    cpath = "${astDir}/${astKeyOf tag path src}"
+    cpath = "${lexDir}/${lexKeyOf tag path src}"
   in do
-    cached <- readAstCache tag astCacheCodec cpath
+    cached <- readLexCache tag lexCacheCodec cpath
     case cached of
-      Just file => pure (OkC file)
-      Nothing => parseAndStoreAt tag astCacheCodec cpath path src
+      Just toks => pure (parseWith path toks)
+      Nothing => lexAndStore tag cpath path src
 
--- 解析错误统一加 `<path>: ` 前缀（parser 诊断本身无位置）；例外：诊断首行已经以本文件
--- 路径开头（parser 侧带 span 的诊断，如 `[PS_RepeatedPatternBinder]`）时不再重复加，
--- 保持 CLI 首行的 `<file>:<line>:<col>: <消息>` 契约（DiagRender 才能追加源码片段）。
-parseAndStoreAt : String -> String -> String -> String -> String -> Eff [] (Check SourceFile)
-parseAndStoreAt tag codec cpath path src = case parseSourceRecovering path src of
+-- | 缓存未命中：lex → 落盘 → 解析。落盘**无条件**（即使语法有错）：token 流只依赖源文本，
+-- 与 parse 是否成功无关，错文件下次也能省掉 lex。
+lexAndStore : String -> String -> String -> String -> Eff [] (Check SourceFile)
+lexAndStore tag cpath path src = case lexSource src of
   ErrC e => pure (ErrC (attachParsePath path e))
+  OkC toks => do
+    _ <- storeLexCache tag cpath toks
+    pure (parseWith path toks)
+
+-- | 由 token 流得到 parse 结果。解析错误统一加 `<path>: ` 前缀（parser 诊断本身无位置）；
+-- 例外：诊断首行已经以本文件路径开头（parser 侧带 span 的诊断，如
+-- `[PS_RepeatedPatternBinder]`）时不再重复加，保持 CLI 首行的
+-- `<file>:<line>:<col>: <消息>` 契约（DiagRender 追加源码片段）。
+parseWith : String -> List PTok -> Check SourceFile
+parseWith path toks = case parseSourceRecoveringTokens path toks of
+  ErrC e => ErrC (attachParsePath path e)
   OkC p =>
     let
       parsed = firstOf p
       errs = secondOf p
     in case errs of
-      [] => fmap OkC (storeAstCache tag cpath codec parsed)
+      [] => OkC parsed
       -- 恢复期收集到的多条诊断挂在首条错误上（批量错误通道）；首条保持无位置，
       -- 与旧 CLI 的「原样打印解析诊断」逐字一致（--short/--json/--sarif 不受路径前缀影响）。
-      e :: rest => pure (ErrC (withChildren rest e))
+      e :: rest => ErrC (withChildren rest e)
 
 -- 解析错误统一加 `<path>: ` 前缀（parser 诊断本身无位置）。
 attachParsePath : String -> Diagnostic -> Diagnostic

@@ -57,7 +57,7 @@ AST 上；Idris2 的对应阶段吃编译后的 case tree。vuna 的等价物就
   SHA-256。MB 级段先 `prehashOfString` 折叠（4 lane 63-bit 多项式，非密码学）再 SHA-256，
   避免逐字节 SHA 成为 check 的新热点（实测 check-all 会 +1.1 s）。
 - **版本分工**：`ifaceHashVersion` 管接口哈希的段集合与编码口径；`checkCacheSchema` /
-  `unitCacheSchema` / `astCacheSchema` 各自管对应缓存键的口径；二进制换代由
+  `unitCacheSchema` / `lexCacheSchema` 各自管对应缓存键的口径；二进制换代由
   `ifaceCompilerTag`（版本 + 编译器指纹）与各 cache tag 兜底。任一变化都必须换代。
 - **源内容哈希 `siHash` 同一函数**（预哈希 + SHA-256），与 `miIfaceHash` 共用一套规范。
 - **大输入用内容键，不逐字节跑语言内 SHA**：`check` 的缓存 key 每轮要对全部源文件取
@@ -71,8 +71,10 @@ AST 上；Idris2 的对应阶段吃编译后的 case tree。vuna 的等价物就
 - **依赖链自愈**：`miDepHashes` 记录写接口时各依赖模块的摘要；依赖接口不可得时记哨兵
   `depMissingHash`。带哨兵的接口**判脏并重写**（workspace 并行检查下依赖可能后写，
   必须先保守重算一次），链校验跳过哨兵项。
-- 已知边界：**载荷存储**仍是 OCaml Marshal（C32 剩余：`ModuleIface`/`CachedProgram`/
-  `SplitFile` 的落盘编码，解码器只服务 roundtrip 自检）；哈希输入侧已完全显式。
+- **载荷存储也是显式编码**（C32 已关闭）：`ModuleIface` / `CachedProgram` / `SplitFile` /
+  `List PTok`（词法 token 流，见下「lex 缓存」）与哈希输入侧共用 `Canonical.*` 的同一套
+  原子文法，外层套 `Store` 的 framing（见下「存储与 key」）。解码器不再只服务 roundtrip
+  自检，它是唯一读路径；缓存面没有任何 `Marshal` 参与。
 
 ## 数据流
 
@@ -160,12 +162,12 @@ Driver.Compile.depIfacesOf
 ## 存储与 key
 
 ```text
-# 默认：接口文件落在**构建产物目录**（gitignored；`vuna clean-iface .` 批量清理）
-<包目录>/.output/iface/<编译器指纹>/lib/Base/Int.iface   # 源文件 lib/Base/Int.vuna 的接口（Marshal，原子写）
+# 默认：接口文件落在**构建产物目录**（gitignored；`vuna clean --iface .` 批量清理）
+<包目录>/.output/iface/<编译器指纹>/lib/Base/Int.iface   # 源文件 lib/Base/Int.vuna 的接口（显式编码，原子写）
 <包目录>/.output/iface/<编译器指纹>/.vuna-iface          # 包级 manifest（模块名 → 相对路径/源信息/接口哈希）
 #   按编译器指纹分桶：seed / nix 产品二进制 / 本地构建产物各自命中自己的接口，
 #   交替使用不再互相失效（此前同布局写在源树旁，三者互踩 ⇒ 每次全量精化 5–7s）。
-#   指纹随二进制变化 ⇒ 旧桶会残留（每个几十 MB 量级），`vuna clean-iface <DIR>` 清。
+#   指纹随二进制变化 ⇒ 旧桶会残留（每个几十 MB 量级），`vuna clean --iface` 清。
 
 # VUNA_IFACE_DIR=R 时：整体镜像到外部根（内容寻址，适合持久化/共享/多步工具）
 <R>/<包绝对目录>/lib/Base/Int-<ifaceHashToken>.iface
@@ -173,25 +175,38 @@ Driver.Compile.depIfacesOf
 #   同一模块的新旧版本各占一个文件名；manifest 是唯一索引（最后原子写 = 提交点），
 #   未被引用的旧 token 在 mtime 超过 60s 后由孤儿 GC 删除（写侧、锁内）。
 
-# 其余缓存仍在 $TMPDIR/vuna-cache/（按包名哈希，与本布局无关）
-$TMPDIR/vuna-cache/<hashText(textHash(包名))>/check/<key>                          # 包级 check 缓存（framing）
+# 其余缓存仍在 $TMPDIR/vuna-cache/（按包名哈希，与本布局无关）；目录名 = 语义 key，
+# 文件内头再记载荷内容地址（身份与完整性分离，见下）
+$TMPDIR/vuna-cache/<hashText(textHash(包名))>/check/<key>                          # 包级 check 缓存（marker，0 字节载荷）
 $TMPDIR/vuna-cache/<hashText(textHash(包名))>/split/<key>                          # codegen SplitFile 缓存
 $TMPDIR/vuna-cache/<hashText(textHash(包名))>/split-units/e-<entryId>/<unit>.unit  # 单元缓存
-$TMPDIR/vuna-cache/ast/<key>                                                       # parse 结果缓存（schema 7）
+$TMPDIR/vuna-cache/lex/<hashText(lexKey)>                                          # 词法 token 流缓存（含编译器 tag）
 ```
 
 check 结果缓存只记录「同输入下曾经成功」，**不含 warning**；请求告警
 （`-W` / `--deny-warnings` / manifest `[diagnostics] warnings`）时 `checkPackage` 跳过
 check 缓存、并把摘要路径的「干净本包模块」表清空（本包模块全部重新精化，依赖包仍从接口
 预置），因此该次 check 不是 27ms 的命中路径，而是「摘要路径 + 本包重算」。普通 check
-不受影响。
+不受影响。条目载荷是**空 marker**（`check-marker 1`，len=0）：命中路径从不读内容，
+「写 1–4MB `CachedProgram` 但没人读」的写放大已关闭（C32）。
 
-**载荷 framing（C32 最小硬化）**：除 iface 文件自己的
-`vuna-iface-file 1|schema|compiler|\n` 头外，split/check/ast/unit 载荷统一用
-`CacheFormat`：`magic|tag|len|strHash 校验和\n` + payload。读侧先做**头行前缀扫描 + 长度
-校验**（不做整段 `strUnpack`，否则命中路径会从 ~80ms 抬到 1.1s），不合法 ⇒ 视为 miss、
-重算并覆盖；不再把任意字节喂给 `Marshal.from_bytes`。schema/tag 变化即拒绝旧缓存（无兼容
-义务）。载荷本身仍是 OCaml Marshal（显式编码格式是后续项，见 [debt.md](debt.md) C32）。
+**载荷 framing（`Store`，唯一落盘层）**：所有缓存载荷都由
+`Vuna.Compiler.Store` 承载，格式
+
+```text
+vuna-cache-frame 2|<tag>|<codec>|<len>|<64 位十六进制内容地址>\n<payload>
+```
+
+- `tag` = `<schema>/<编译器 tag>`（schema 管载荷布局，编译器 tag = 版本 + 指纹）；
+- `codec` = 载荷编码族（如 `module-iface 1` / `package-manifest 1` / `split-files 1` /
+  `lex-tokens 1` / `check-marker 1`）；
+- `len` 与 `<payload>` 的字节数必须相符；内容地址 = `Hash.contentAddress payload`。
+- 读侧**只扫头行**（首个换行之前，限 512 字节），逐项校验 magic / tag / codec / len /
+  内容地址；任一不符 ⇒ `Nothing`（视为 miss、重算并覆盖），绝不把任意字节喂给解码器。
+  校验内容地址**不重算 MB 级 SHA-256**：调用方若已知期望摘要（iface manifest 的
+  `mePayloadDigest`），传预期值直接比字符串即可（`storeReadAsEff`）。
+- 载荷本身是 `Canonical.*` 的显式原子文法（`#tag;` / `i<n>;` / `s<len>:<bytes>` /
+  `b0|b1` / `[<n>:…]` / `0|1…`），自定界、与 OCaml 版本无关；解码失败即 miss。
 
 **key 与可移植性**：接口文件的 key 就是**包目录 + 相对源路径**，不再用包名哈希。默认布局
 下文件就在源码旁（`<stem>.iface`，路径固定），同一包在相对/绝对/含 `..` 的不同写法下指向
@@ -208,8 +223,8 @@ checkout / 移动目录只是 miss（回退全量），不会误用；symlink / 
 的 mtime）。
 
 **清理**：默认布局会在工作树留下 `*.iface` / `.vuna-iface`（`.gitignore` 已忽略）；
-`vuna clean-iface [--dry-run] [DIR]` 按文件名批量删除它们（以及原子写残留
-`*.iface.*.tmp`），不碰 `.vuna` 源码。
+`vuna clean --iface [--dry-run] [DIR]` 按文件名批量删除它们（以及原子写残留
+`*.iface.*.tmp`），不碰 `.vuna` 源码；`vuna clean --store` 另清 `/vuna-cache`。
 
 **per-module 写**：写侧只重写「接口哈希 / 依赖哈希 / 来源」变化（或文件缺失）的模块，
 manifest 最后原子写 = 提交点；读侧先读 manifest，再逐模块读文件并校验「相对路径 ↔ 记录名
@@ -335,34 +350,41 @@ load 之后按闭包过滤模块表：起点 = entry 的全部 imports（含隐�
   仍是模块的结构化字段表。字段表 / 表示档位 / `dtDataIsRecord` 都进 `miCached`，跨包
   字段访问与表示判定按同一份结论。布局与语义变化 ⇒ `vuna-iface 16 → 17`；`TRecord` 类型
   前导再 bump 到 18。
-- **序列化**：载荷已有 framing + 损坏回退 + schema/编译器指纹拒绝 + 内容寻址文件名
-  + `hashOfIface` 自证，但**落盘仍是 OCaml Marshal**（非自描述格式；同长同校验和的构造性
-  损坏仍可能让 `Marshal.from_string` 抛异常；读侧 `readModuleFileRaw` 的
-  `miName`/`miIfaceHash` 校验会拒绝，SELFTEST 下还会做载荷自证）。**哈希输入侧已换成
-  显式规范编码**（`Canonical.*`，C32 的哈希部分关闭）；把 `ModuleIface`/`CachedProgram`/
-  `SplitFile` 的**落盘编码**也换成同一格式（C32 剩余）是后续项。
+- **序列化（C32 已关闭）**：载荷用 `Canonical.*` 显式编码（自描述、自定界、无 OCaml 版本
+  依赖）外加 `Store` framing（magic/tag/codec/len/内容地址）；损坏、截断、错 codec 都
+  在读侧变成 `Nothing`（miss + 覆盖写），不会进解码器，也不再有「同长同校验和 ⇒ 解出错类型」
+  的构造性风险。语义面另有三层自证：内容寻址文件名 token、manifest 的 `mePayloadDigest`、
+  `miName`/`miIfaceHash` 比对（SELFTEST 下更会做 `hashOfIface` 全载荷自证）。
 - **依赖可见性已收敛（S6）**：摘要路径 load 后按 entry/本包 import 闭包过滤模块表，未
   materialize 的依赖模块不提供实例/类，等价于全量路径（测试 §44i）。
 - **默认 iface 落在 `.output/iface/<编译器指纹>/`**（构建产物目录，gitignored）：与
   `.ml`/`.cmx`/`build.sh` 同生命周期，删包产物即清缓存；按指纹分桶让 seed / nix 产品
-  二进制 / 本地构建产物各自命中，不再互相失效。批量清理用 `vuna clean-iface [DIR]`
+  二进制 / 本地构建产物各自命中，不再互相失效。批量清理用 `vuna clean --iface [DIR]`
   （已覆盖 `.output`）；指纹变化后旧桶不会被自动 GC，需要时手动清。默认布局（路径固定）
   的模块删除/改名孤儿不会被自动 GC（读侧只看 manifest，孤儿不参与）；镜像模式的内容寻址
   文件由写侧孤儿 GC（mtime > 60s 且未被 manifest 引用）清。
 - **判据维护成本**：新增接口字段时必须同时接进 `hashOfParts`（或在文档里写明为什么不需要），
   否则就是下一类「载荷变了、哈希没变」。`ifaceSchema` 的语义已扩为「字段布局 + 哈希输入
   集合」，两者任一变化都要 bump。
-- **其余缓存仍是 TMPDIR + 包名哈希**：check / split / split-units / ast 按包名哈希隔离
+- **其余缓存仍是 TMPDIR + 包名哈希**：check / split / split-units 按包名哈希隔离
   （`VUNA_IFACE_DIR` 只影响 iface），跨项目同名包在 TMPDIR 缓存上仍可能互相覆盖（各自
   回退，正确性不受影响）。
-- **`ast` 解析缓存不按编译器指纹隔离（2026-11-10 实测）**：它只按「文件路径 + 内容」命中，
-  存的是编译器自身 `Ast` 的 Marshal 载荷。两个 AST 布局不同的编译器（例如改了
-  `DRecord`/`DtData` 但尚未 rotation 的 seed 与新 vuna，或同一 TMPDIR 里的新旧二进制）
-  会互相读到对方的条目：轻则误报类型错误（如把 `lin` 位读错），重则段错误。表现特征：
-  「同一源码、`vuna check <单包>` 通过但 `vuna check .` 崩、或换个 TMPDIR 就好了」。
-  规避：换二进制或改 AST 走 `TMPDIR=$(mktemp -d) vuna ...`（rotation 会同步 seed 与 vuna
-  的布局，之后自然一致）。彻底修复 = 缓存键纳入编译器指纹（与 iface 的 `compilerTag`
-  同源），见 debt C48。
+- **`lex` 缓存的 key 含编译器指纹（C48 已关闭）**：`lexKeyOf` 的哈希输入是
+  `lexCacheSchema\t<编译器 tag>\t<路径>\t<源内容>`，framing 的 tag 段同样带编译器 tag。
+  `PTok` / `Tok` 布局不同的二进制（未 rotation 的 seed 与新 vuna、同一 TMPDIR 里的新旧
+  二进制）因此各占一套 key 空间，不可能互读对方条目。指纹只在 `Eff []` 的加载入口取一次
+  （`Fingerprint.compilerTagEff`），纯函数部分不吃指纹，M4 守卫不受影响。
+- **lex 缓存（不是 AST 缓存）**：载荷是 `Lexer` 的 `List PTok`，不是 parse 产物。原因有
+  两条：① parse = lex + 语法分析，实测 lexer 占 86%（40 KB 文件 lex 3.96 ms / 全程
+  4.59 ms），缓存 token 流就拿到绝大部分收益；② **AST 编码必须丢 span**（它是接口哈希的
+  输入，移动代码不能改依赖方摘要），若把 AST 当载荷，缓存命中的进程里所有诊断位置会退化
+  成 `:0:0`、codegen 的 `dt_def_locs` 整表变成 `":0"`——缓存改变了用户可见行为。token 流
+  自带位置，重放 parse 得到的 AST 与冷路径逐字节相同。**新增缓存载荷时不要用
+  `Canonical.Ast` 的 `encSourceFile`**：它只服务哈希输入与 roundtrip 自检。
+- **`SourceInfo.siPath` 一律绝对值**：它进接口载荷，而包目录/root 目录可能来自相对入口
+  （`vuna check base` vs `vuna check $PWD/base`）。不归一的话同一份源码在不同入口写法下
+  算出不同载荷字节 ⇒ `mePayloadDigest` 失配 ⇒ 每次 check 都整包重写接口。写侧
+  （`Compile.ownSourceInfos`）与读侧（`Iface.ifaceRelPathOf`）都先 `absolutePath` 归一。
 - **擦除位残 meta** 仍靠包段重编号；彻底方案是精化收尾消 meta。
 - 接口多存 `miDecls`（见上），文件比 TTC 的「只存编译后定义」更接近源码体积；后续可换更
   紧凑的终止性/record 上下文表示。

@@ -2,6 +2,7 @@ module Vuna.Compiler.Frontend.Parser
   ( parseExpressionSource
   , parseSource
   , parseSourceRecovering
+  , parseSourceRecoveringTokens
   ) where
 
 -- vuna 源码 parser：offside layout，返回 AST 与 imports。
@@ -1286,5 +1287,11 @@ foldPCon sp (p :: rest) = PCon listConsSyntax [p, foldPCon sp rest] sp
 -- | 文件加载专用：开启解析恢复并显式返回多条语法错误。
 parseSourceRecovering : String -> String -> Check (Pair SourceFile (List Diagnostic))
 parseSourceRecovering file source =
-  Vuna.Compiler.Common.bind (lexSource source)
-    (\toks => Vuna.Compiler.Common.bind (parseSourceFile True (PState file toks (Pos 1 0) (length toks))) (\p => OkC (Pair (firstOf (firstOf p)) (secondOf p))))
+  Vuna.Compiler.Common.bind (lexSource source) (\toks => parseSourceRecoveringTokens file toks)
+
+-- 从**已有 token 流**解析（AST 缓存命中路径）：与 `parseSourceRecovering` 逐字节等价，
+-- 只是跳过 lex。位置全部来自 token 自身，因此诊断 span 与冷路径一致。
+parseSourceRecoveringTokens : String -> List PTok -> Check (Pair SourceFile (List Diagnostic))
+parseSourceRecoveringTokens file toks =
+  Vuna.Compiler.Common.bind (parseSourceFile True (PState file toks (Pos 1 0) (length toks)))
+    (\p => OkC (Pair (firstOf (firstOf p)) (secondOf p)))
