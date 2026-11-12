@@ -810,13 +810,12 @@ findDefByName : String -> List DtDef -> Maybe DtDef
 findDefByName name [] = Nothing
 findDefByName name (d :: rest) = if dtDefName d == name then Just d else findDefByName name rest
 
--- main 结果类型拆掉动作层后的内层类型：`Eff [] a`（用户面入口；行必须是 Nil，否则入口检查
--- 报 TC_UnhandledEffects）。返回 ("eff"/"other", 内层类型)；非动作 main 的内层就是它自己。
+-- main 结果类型拆掉动作层后的内层类型：`Eff [] a`（纯入口）或 `Eff [内建宿主效应] a`
+-- （entry 用隐藏的 `runMain` 执行；行必须是 Nil 或内建效应行，否则入口检查报
+-- TC_UnhandledEffects）。返回 ("eff"/"other", 内层类型)；非动作 main 的内层就是它自己。
 mainActionOf : Term -> Pair String Term
 mainActionOf (ty@(TApp (TApp fn row _) arg _)) = case fn of
-  TGlobal g =>
-    if g == effTypeName then if isNilRowTerm row then Pair "eff" arg else Pair "other" ty
-    else Pair "other" ty
+  TGlobal g => if g == effTypeName then Pair "eff" arg else Pair "other" ty
   _ => Pair "other" ty
 mainActionOf ty = Pair "other" ty
 
@@ -826,13 +825,29 @@ isNilRowTerm (TGlobal g) = g == effRowNilCtor
 isNilRowTerm (TCon g []) = g == effRowNilCtor
 isNilRowTerm _ = False
 
--- | 入口行检查：`main : Eff [] a` 之外的 Eff 行必须是 Nil；否则报未处理效应。
+-- 阶段 0 spike：内建宿主效应行（目前只有 ConsoleOp）。entry 允许这类行，用隐藏的
+-- `Base.Eff.runMain` 执行；用户自定义的未处理效应仍报 TC_UnhandledEffects。
+isBuiltinHostLabel : Value -> Bool
+isBuiltinHostLabel (VNeutral (NGlobal g _)) = g == "Base.EffConsole.ConsoleOp"
+isBuiltinHostLabel _ = False
+
+isBuiltinHostRowValue : Value -> Bool
+isBuiltinHostRowValue v = case v of
+  VCon g args => if g == effRowNilCtor then True
+  else if g == effRowConsCtor then case args of
+    _ :: label :: tail :: _ => isBuiltinHostLabel label && isBuiltinHostRowValue tail
+    _ => False
+  else False
+  _ => False
+
+-- | 入口行检查：`main : Eff [] a` 或 `Eff [内建宿主效应] a`；其余行报未处理效应。
 mainEntryRowCheck : Ec -> List (Pair String Term) -> Span -> Term -> Check Int
 mainEntryRowCheck ec bodies sp (TApp (TApp fn row _) _ _) = case fn of
   TGlobal g => if g == effTypeName then
     let
       rowV = force (Base.HashMap.fromList bodies) (ecSolsP ec) defaultFuel (eval [] row)
     in if isNilRowValue ec rowV then OkC 0
+    else if isBuiltinHostRowValue rowV then OkC 0
     else case rowEffectLabels 64 ec rowV of
       Just labels =>
         if labels == [] then OkC 0

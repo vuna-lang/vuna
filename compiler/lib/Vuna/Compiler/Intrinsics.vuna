@@ -14,6 +14,7 @@ module Vuna.Compiler.Intrinsics
   , debugLineIntrinsicName
   , debugOnIntrinsicName
   , effDefaultInstance
+  , effMainRunName
   , effMemberFamilyName
   , effMemberHereCtor
   , effMemberThereCtor
@@ -115,8 +116,14 @@ data IType : Type where
   IRef : IType -> IType
   -- 隐式类型参数绑定（`{a : Type} -> ...`）；不进函数 arity。
   IPi : String -> IType -> IType
-  -- `Float` primitive 类型的签名形状（放末尾保持 tag 顺序）。
+  -- `Float` primitive 类型的签名形状（保持已有 tag 顺序；新构造子只追加在它之后）。
   IFloat : IType
+  -- 内建宿主效应行（阶段 0 spike）：`IRowNil` / `IRowCons name label tail` 构造 Core 的行项；
+  -- `IGlobal` 引用一个全局类型名；`IEffRow row result` 是带行的 `Eff row result`。
+  IRowNil : IType
+  IRowCons : String -> IType -> IType -> IType
+  IGlobal : String -> IType
+  IEffRow : IType -> IType -> IType
 
 -- | 签名形状的函数 arity：`IFun`/`IFun1` 各计 1，隐式 `IPi` 不计，其余为 0。
 arityOfType : IType -> Int
@@ -194,6 +201,11 @@ mainShowDefName = "@vuna@main_show"
 -- | 关闭动作入口（`Base.Eff.runPure : Eff [] a -> a`）的 canonical 名（协议常量）。
 effRunName : String
 effRunName = "Base.Eff.runPure"
+
+-- | main 入口的隐藏执行名（`Base.Eff.runMain`，未导出）：codegen 的 main 钩子引用它，
+-- 用于执行带内建宿主效应行的 `main`（`runPure` 只收 Nil）。
+effMainRunName : String
+effMainRunName = "Base.Eff.runMain"
 
 -- ---------------------------------------------------------------
 -- 调试构造（F3 B）：语言级 debug 名字
@@ -425,9 +437,10 @@ intrinsicArity i = arityOfType (intrinsicSignature i)
 intrinsicReturnsEff : Intrinsic -> Bool
 intrinsicReturnsEff i = typeReturnsEff (intrinsicSignature i)
 
--- | `IType` 尾部是否为 `IEff`（供 codegen 包 `MkEff`）。
+-- | `IType` 尾部是否为 `IEff` / `IEffRow`（供 codegen 包 `MkEff`）。
 typeReturnsEff : IType -> Bool
 typeReturnsEff (IEff _) = True
+typeReturnsEff (IEffRow _ _) = True
 typeReturnsEff (IFun _ cod) = typeReturnsEff cod
 typeReturnsEff (IFun1 _ cod) = typeReturnsEff cod
 typeReturnsEff (IPi _ cod) = typeReturnsEff cod
@@ -652,6 +665,7 @@ floatIntrinsics =
 -- 类型为 `Eff [] a`。单独成表是为了让每段列表字面量
 -- 留在旧 seed 的 fuel 内（同 `floatIntrinsics`；迁移完成后本表并改名）。
 effIntrinsics : List Intrinsic
+-- 阶段 0 spike：带内建 ConsoleOp 行的宿主打印（验证 `IEffRow`/entry/runMain 机制）。
 effIntrinsics =
   [ Intrinsic primEffBind1Name (IPi "a" (IPi "b" (IFun1 (IEff (IVar "a")) (IFun1 (IFun1 (IVar "a") (IEff (IVar "b"))) (IEff (IVar "b")))))) OpNone "" True,
     Intrinsic "effTimeUs" (IEff IInt) OpNone "(dtp_timeUs ())" True,
@@ -660,6 +674,7 @@ effIntrinsics =
     Intrinsic "prim_eff_readRef" (IPi "a" (IFun (IRef (IVar "a")) (IEff (IVar "a")))) OpNone "(fun r -> !r)" True,
     Intrinsic "prim_eff_writeRef" (IPi "a" (IFun (IRef (IVar "a")) (IFun (IVar "a") (IEff IInt)))) OpNone "(fun r v -> r := v; 0)" True,
     Intrinsic "prim_eff_print" (IFun IStr (IEff IInt)) OpNone "dtp_print" True,
+    Intrinsic "prim_eff_print_host" (IFun IStr (IEffRow (IRowCons "default" (IGlobal "Base.EffConsole.ConsoleOp") IRowNil) IInt)) OpNone "dtp_print" True,
     Intrinsic "prim_eff_eprint" (IFun IStr (IEff IInt)) OpNone "(fun s -> prerr_string s; flush stderr; String.length s)" True,
     Intrinsic "prim_eff_readFile" (IFun IStr (IEff IStr)) OpNone "dtp_readFile" True,
     Intrinsic "prim_eff_writeFile" (IFun IStr (IFun IStr (IEff IInt))) OpNone "dtp_writeFile" True,

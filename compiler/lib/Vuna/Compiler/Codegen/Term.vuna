@@ -2127,12 +2127,11 @@ mainShow table tyTerm = case force (Base.HashMap.fromList table) solsEmpty defau
   _ => mainShowSynth
 
 -- 拆 main 的动作层：返回 ('eff', 内层类型)。
--- Eff 只接受行已经是 Nil 的入口（Elab 的入口检查保证；这里再判一次形态）。
+-- 阶段 0 spike：接受任意行（Nil 或内建宿主效应行）；entry 检查在 Elab 侧保证行合法，
+-- 执行由 `runMain`（任意行）负责，不再只认 Nil。
 actionResultTy : Term -> Maybe (Pair String Term)
 actionResultTy (TApp (TApp fn row _) arg _) = case fn of
-  TGlobal g =>
-    if g == effTypeName then if isNilRowTermCodegen row then Just (Pair "eff" arg) else Nothing
-    else Nothing
+  TGlobal g => if g == effTypeName then Just (Pair "eff" arg) else Nothing
   _ => Nothing
 actionResultTy _ = Nothing
 
@@ -2179,7 +2178,7 @@ genDtHook bodyText table tyTerm mainExpr printResult = Vuna.Compiler.Common.bind
 actionRunText : QualCtx -> Pair (List DtData) (List DtDef) -> String -> String -> Pair String String
 actionRunText qc program mainRef kind = if kind == "eff" then
   let
-    runRef = qualValueText qc effRunName
+    runRef = qualValueText qc effMainRunName
   in Pair "dtp_sched_main (fun () -> ${firstOf runRef} ${mainRef})" (secondOf runRef)
 else Pair "dtp_sched_main (fun () -> ${mainRef} 0)" ""
 

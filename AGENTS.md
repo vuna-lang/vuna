@@ -42,7 +42,8 @@
 4. **工具链不进 TCB**：`fmt`/`lint`/`repl`/`doc`/`test`/`Index`/`LSP`（以及 package
    manager）永不进入 seed 闭包；黑名单见 `nix/tcb-forbidden.txt`；
 5. **动作入口与宿主层**：唯一动作类型是 `Eff r a`；用户面入口是 `main : Eff [] a`（行必须
-   Nil，入口处未处理效应是类型错误），执行入口是 `Base.Eff.runPure : Eff [] a -> a`。
+   Nil，入口处未处理效应是类型错误；阶段 0 起也允许内建宿主效应行，见 debt D65），
+   执行入口是 `Base.Eff.runPure : Eff [] a -> a`。
    宿主层 = 直接调用 `prim_eff_*`（`Base.Host` 已删除）；Int/Nat 归一化只在
    `Base.Eff.*` handler 的 result 族（`Print`/`WriteFile`/`FileSize` 返回 `Nat`）。
    `IORef` 实现全是 `Eff []`。

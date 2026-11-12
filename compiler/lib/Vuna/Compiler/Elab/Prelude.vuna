@@ -95,6 +95,14 @@ ityToTermEnv env (IList elem) = TApp (TGlobal listFamilyName) (ityToTermEnv env 
 -- 统一动作类型入口：`Eff [] a`（行必须是 Nil；宿主原语不携带用户效应）。
 ityToTermEnv env (IEff elem) =
   TApp (TApp (TGlobal effTypeName) (TCon effRowNilCtor []) Rig0) (ityToTermEnv env elem) Rig0
+-- 阶段 0 spike：内建宿主效应的行项与带行动作（构造 Core 的 `Cons name label tail`）。
+ityToTermEnv env IRowNil = TCon effRowNilCtor []
+ityToTermEnv env (IRowCons name label tail) =
+  TCon effRowConsCtor
+    [Pair (TStr name) Rig0, Pair (ityToTermEnv env label) Rig0, Pair (ityToTermEnv env tail) Rig0]
+ityToTermEnv env (IGlobal n) = TGlobal n
+ityToTermEnv env (IEffRow row elem) =
+  TApp (TApp (TGlobal effTypeName) (ityToTermEnv env row) Rig0) (ityToTermEnv env elem) Rig0
 -- cod 在 binder 下：env 加匿名占位，保证外层 IVar 的 de Bruijn 索引随 Pi 深度 shift。
 ityToTermEnv env (IFun a b) =
   TPi "_" False RigOmega (ityToTermEnv env a) (ityToTermEnv ("_" :: env) b)

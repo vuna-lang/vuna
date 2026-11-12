@@ -64,6 +64,7 @@ let v_Base_dEff_draise
 let v_Base_dEff_dresFn
 let v_Base_dEff_dresumeCont
 let v_Base_dEff_drunEff
+let v_Base_dEff_drunMain
 let v_Base_dEff_drunPure
 let v_Base_dEff_drunThunk
 let v_Base_dEff_dsendCore

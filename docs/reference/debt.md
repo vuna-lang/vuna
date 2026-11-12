@@ -22,6 +22,7 @@
 | D24 | Nat 字面量编译期展开为 `Zero`/`Succ` 链（Core / iface 载荷随字面量大小线性增长）；`Codegen/Term.genTerm` 的 512 fuel 在 Vec 索引 ≥128 时可耗尽 | `Elab/Term/Impl.natLitTerm`；`Codegen/Term.genTerm`；[primitives.md](primitives.md) §3.1 | 后续 |
 | D27 | 精化期未解 meta 按「可表示」处理会漏插 cast（终解后才知道类型不可表示） | `Elab/Meta.vuna` 的未解 meta 判据；[effects.md](effects.md) §5 | 后续 |
 | D62 | manifest 门控已删除（显式接受的损失）：任意包可直调 `prim_*` / `prim_eff_*`；没有每包原语白名单、`unsafe` 定义级审计，网络原语对任何包可见 | `compiler/lib/Vuna/Compiler/Intrinsics.vuna`、`base/lib/Base/Eff*.vuna`；[effects.md](effects.md) §8.6 | 后续（表示层权限 N2/N3 或新模型） |
+| D65 | 宿主效应内建化进行中（阶段 0 已完成最小闭环）：只有 Console 的 `prim_eff_print_host` 带 `Eff [ConsoleOp]` 行；entry 用隐藏 `Base.Eff.runMain` 执行内建行 main；`runPure` 已拒绝非 Nil。剩余：`append` 行拼接与 `joinEff` 泛化、entry 自动 handler 预装、`prim_eff_*` 全部改 `@vuna@` 隐藏、其余 10 个效应（Fs/Clock/Env/Process/Exit/Stdin/Args/Net/Ref/Sched）迁移、编译器/工具链自身 IO 迁移、eff-boundary 守卫改写 | `compiler/lib/Vuna/Compiler/{Intrinsics,Elab/Prelude,Elab/Driver,Codegen/Term}.vuna`、`base/lib/Base/Eff.vuna`；[effects.md](effects.md) §2.1 | 后续 |
 | D32 | 顶层签名的自由隐式变量 kind 只按应用次数推断（不从构造子 kind 反推）；头可合一的重叠实例被拒 | `Elab/Sig.quantifyTopKinds`、`Elab/Trait.{instanceTeleMetas,classParamKindOf}` | 后续 |
 | D37 | `runEff` 内部信任入口仍接受任意行；运行时 `unhandled effect` 兜底仍服务库内部路径 | `base/lib/Base/Eff.vuna`（`runEff`）；`compiler/lib/Vuna/Compiler/Elab/Term/Impl.vuna`（`unhandledEffectLabel`）；[effects.md](effects.md) §8.4/§8.6 | 后续 |
 | D41 | 无 Domain 并行、父 fiber handler 继承 | `Base.EffSched`；[effects.md](effects.md) §8.5 | 后续 |

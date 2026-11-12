@@ -42,6 +42,12 @@ Args / Exit）；`Member` 行约束、`local`/`catch`/scoped `Exn`、线性续�
 - `Eff []` 不表示「无副作用」：它表示「无未处理的行效应」；宿主层构造的叶子里可以
   有真实宿主操作。宿主副作用**不再由 manifest 能力/特权门控**把关；用户面应经
   `Base.Eff.*` 标签 + handler 使用效果（纪律/文档约定，见 §8.6）。
+- **阶段 0（进行中）**：宿主效应开始内建化。`IEffRow` 让宿主原语携带内建效应行
+  （当前只有 `prim_eff_print_host : String -> Eff [ConsoleOp] Int`）；`main` 的行允许内建
+  效应（`main : Eff [ConsoleOp] a`），entry 用**未导出**的 `Base.Eff.runMain` 执行；
+  `runPure` 仍只收 Nil——`runPure (prim_eff_print_host "x")` 报 `TC_UnhandledEffects`。
+  剩余工作（`append` 行拼接与 `joinEff` 泛化、entry 自动 handler 预装、`prim_eff_*` 全部
+  改 `@vuna@` 隐藏、其余效应迁移、编译器/工具链自身 IO 迁移）见 debt D65。
 
 ### 2.2 四层边界（当前）
 

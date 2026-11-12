@@ -1,0 +1,8 @@
+-- 阶段 0 spike：main 的行是内建 ConsoleOp，entry 用隐藏的 runMain 执行。
+import Base.Eff
+import Base.EffConsole
+
+main : Eff [ConsoleOp] Int
+main = do
+  _ <- prim_eff_print_host "host-spike\n"
+  pure 0
