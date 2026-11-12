@@ -57,7 +57,7 @@ parseSourceFile recover st = Vuna.Compiler.Common.step (parseModDecl st) (\hdr, 
 parseModDecl : PState -> Check (Pair (Maybe ModDecl) PState)
 parseModDecl st =
   if atKw st "module" then Vuna.Compiler.Common.step (expectKw st "module")
-    (\_, st1 => Vuna.Compiler.Common.step (expectIdent st1) (\name, st2 => if atSym st2 "(" then Vuna.Compiler.Common.step (parseExportItems st2) (\items, st3 => Vuna.Compiler.Common.step (expectKw st3 "where") (\_, st4 => OkC (Pair (Just (ModDecl name True items [] [] [] (spanOf st st4))) st4))) else Vuna.Compiler.Common.step (expectKw st2 "where") (\_, st3 => OkC (Pair (Just (ModDecl name False [] [] [] [] (spanOf st st3))) st3))))
+    (\_, st1 => Vuna.Compiler.Common.step (expectIdent st1) (\name, st2 => Vuna.Compiler.Common.step (expectKw st2 "where") (\_, st3 => OkC (Pair (Just (ModDecl name False [] [] [] [] (spanOf st st3))) st3))))
   else OkC (Pair Nothing st)
 
 parseExportItems : PState -> Check (Pair (List ExportItem) PState)

@@ -342,38 +342,6 @@ vuna/base/compiler 三包源码统一按当前语言能力书写，新增/修改
   `opaque` / `transparent` 之前或之后；`export import` 直接替换同模块的普通 `import`，
   不会重复导入。导出项顺序不是语义，`vuna fmt` 会规范化。
 
-- **旧模块头（迁移期兼容，终态移除）**：模块文件可以在 `import` 之前写一个模块头声明
-  导出项（导出列表可以跨行；入口文件不能写）：
-
-  ```vuna
-  module Vuna.Math where           -- 旧语义：省略列表 = 全部导出
-  module Vuna.Math () where        -- 显式导出空集（旧语法）
-  module Vuna.Math
-    ( three
-    , Nat(..)
-    , module Vuna.Compiler.Common
-    , Vuna.Compiler.Frontend.Lexer.lexSource
-    ) where
-  ```
-
-  `vuna fmt` 会把显式导出列表规范为：导出项按字面文本的 ASCII 字典序排序（`module B`
-  整模块重导出排最后）；单行超过 100 列或列表内含注释时逐项一行（逗号前置），否则保持
-  单行。排序只影响书写顺序——导出仍是集合，语义不变。
-
-  模块名必须与路径推导出的模块名一致（`lib/Vuna/Math.vuna` ⇔ `Vuna.Math`），不一致是
-  硬错误。导出项按「类型名 / 值名」两套命名空间解析（`module B` 是整模块重导出，不属于
-  单个名字）：
-
-  - `name`：裸名，类型 / 值两套命名空间都解析，同名都导出（构造器名按值命名空间解析）；
-    单独导出类型名时只导出类型本身（构造器不可见，即抽象类型）；
-  - `Name(..)`：导出类型及全部非私有构造器（重导出已导入的类型时只公开源模块本来就
-    公开的构造器，保持源的抽象性）；
-  - `module B`：整模块重导出，B 必须是直接 import 的模块，保留 B 的抽象性；
-  - `B.name`：从 B 选择性重导出，B 必须是直接 import 的模块；
-
-  这里的 B 可以用模块全名或 import alias 引用。暂不支持重命名重导出（`foo = B.foo`）和
-  构造器子集（`T(C1,C2)`）；同一 (kind, 名字) 重复导出（包括 `module B` 已覆盖的名字再
-  单独写 `B.x`）是 `duplicate export` 硬错误；导出当前作用域不可见的名字也是硬错误；
 - **私有性只看 `export`**：模块默认 module-private；`_` 前缀不再有特殊私有含义，
   `export _helper` 是合法的。裸 `_` 仍不能作顶层名（它是通配符）；
 - **抽象类型**：导出项 `T` 只导出类型、不导出构造器，跨模块既不能构造也不能模式匹配；

@@ -620,32 +620,28 @@ printf '[package]\nname = "modws"\n\n[dependencies]\nvuna-base = "%s/base"\n' "$
 cat >"$tmp/modws/lib/ModDoc.vuna" <<'VEOF'
 -- | ModDoc module docs.
 -- | second line.
-module ModDoc (helper2) where
+module ModDoc where
 
-helper2 : Int -> Int
+export helper2 : Int -> Int
 helper2 n = n
 VEOF
 cat >"$tmp/modws/lib/Reexp.vuna" <<'VEOF'
-module Reexp
-  ( module ModDoc
-  , useIt
-  ) where
+module Reexp where
 
-import ModDoc
-
-useIt : Int
+export import ModDoc
+export useIt : Int
 useIt = helper2 7
 VEOF
 moddoc_uri="file://$tmp/modws/lib/ModDoc.vuna"
 reexp_uri="file://$tmp/modws/lib/Reexp.vuna"
-reexp_text='module Reexp\n  ( module ModDoc\n  , useIt\n  ) where\n\nimport ModDoc\n\nuseIt : Int\nuseIt = helper2 7\n'
+reexp_text='module Reexp where\n\nexport import ModDoc\nexport useIt : Int\nuseIt = helper2 7\n'
 {
   frame_line '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{}}}'
   frame_line '{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"'"$reexp_uri"'","languageId":"vuna","version":1,"text":"'"$reexp_text"'"}}}'
-  frame_line '{"jsonrpc":"2.0","id":2,"method":"textDocument/hover","params":{"textDocument":{"uri":"'"$reexp_uri"'"},"position":{"line":5,"character":9}}}'
-  frame_line '{"jsonrpc":"2.0","id":3,"method":"textDocument/hover","params":{"textDocument":{"uri":"'"$reexp_uri"'"},"position":{"line":1,"character":13}}}'
+  frame_line '{"jsonrpc":"2.0","id":2,"method":"textDocument/hover","params":{"textDocument":{"uri":"'"$reexp_uri"'"},"position":{"line":2,"character":16}}}'
+  frame_line '{"jsonrpc":"2.0","id":3,"method":"textDocument/hover","params":{"textDocument":{"uri":"'"$reexp_uri"'"},"position":{"line":2,"character":16}}}'
   frame_line '{"jsonrpc":"2.0","id":4,"method":"textDocument/hover","params":{"textDocument":{"uri":"'"$reexp_uri"'"},"position":{"line":0,"character":8}}}'
-  frame_line '{"jsonrpc":"2.0","id":5,"method":"textDocument/definition","params":{"textDocument":{"uri":"'"$reexp_uri"'"},"position":{"line":5,"character":9}}}'
+  frame_line '{"jsonrpc":"2.0","id":5,"method":"textDocument/definition","params":{"textDocument":{"uri":"'"$reexp_uri"'"},"position":{"line":2,"character":16}}}'
   frame_line '{"jsonrpc":"2.0","id":6,"method":"shutdown","params":null}'
   frame_line '{"jsonrpc":"2.0","method":"exit","params":null}'
 } | "$VUNA" lsp >"$tmp/modhover.out" 2>/dev/null
