@@ -19,6 +19,7 @@ module Vuna.Compiler.Intrinsics
   , effMemberHereCtor
   , effMemberThereCtor
   , effMkCtor
+  , effRowAppendName
   , effRowConsCtor
   , effRowFamilyName
   , effRowNilCtor
@@ -266,6 +267,10 @@ effRowConsCtor = "Base.Eff.Row.Cons"
 -- | 行删除 `Base.Eff.rowRem`（axiom，由编译器归约）。
 effRowRemName : String
 effRowRemName = "Base.Eff.rowRem"
+
+-- | 行拼接 `Base.Eff.rowAppend`（axiom，由编译器归约：Nil 单位 + Cons 递归）。
+effRowAppendName : String
+effRowAppendName = "Base.Eff.rowAppend"
 
 -- | 行成员证明族 `Base.Eff.Member`（Type-1 归纳族）。
 effMemberFamilyName : String

@@ -228,8 +228,8 @@ let rec v_Vuna_dCompiler_dElab_dData_delabDataBodies = (fun decls heads globals 
   | _ -> failwith "DT: impossible branch"
 ))
 
-let v_Vuna_dCompiler_dElab_dData_dreprIsTransparent = (fun mc0 -> (match mc0 with
-  | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dReprTier_ReprTransparent -> true
+let v_Vuna_dCompiler_dElab_dData_dreprIsAlias = (fun mc0 -> (match mc0 with
+  | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dReprTier_ReprAlias -> true
   | _ -> false
 ))
 
@@ -247,17 +247,17 @@ let v_Vuna_dCompiler_dElab_dData_dviaShapeOk = (fun dname datas -> (if ((Base_dL
 )) ((Vuna_dCompiler_dElab_dRepresentation.v_Vuna_dCompiler_dElab_dRepresentation_dlookupUnboxedInfo dname) (Vuna_dCompiler_dElab_dRepresentation.v_Vuna_dCompiler_dElab_dRepresentation_dunboxedInfoOf datas))) else false))
 
 let v_Vuna_dCompiler_dElab_dData_dviaFieldOk = (fun mc0 mc1 mc2 -> (match mc0 with
-  | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dReprTier_ReprOpaque -> false
+  | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dReprTier_ReprBoxed -> false
   | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dReprTier_ReprAuto -> ((v_Vuna_dCompiler_dElab_dData_dviaShapeOk mc1) mc2)
-  | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dReprTier_ReprTransparent -> ((v_Vuna_dCompiler_dElab_dData_dviaShapeOk mc1) mc2)
+  | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dReprTier_ReprAlias -> ((v_Vuna_dCompiler_dElab_dData_dviaShapeOk mc1) mc2)
   | _ -> failwith "DT: impossible branch"
 ))
 
 let rec v_Vuna_dCompiler_dElab_dData_dcheckViaDataDecls = (fun mc0 mc1 -> (match mc0 with
   | Base_dList.C_Base_dList_dList_Cons (dtb__159, dtb__160) -> (match dtb__159 with
   | { Base_dPair.f_Base_dPair_dPair_first = dtb__161; Base_dPair.f_Base_dPair_dPair_second = dtb__162 } -> (match dtb__161 with
-  | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dDecl_DData (dtb__163, dtb__164, dtb__165, dtb__166, dtb__167, dtb__168, dtb__169, dtb__170, dtb__171) -> (if dtb__168 then ((Vuna_dCompiler_dDiagnostics_dTc.v_Vuna_dCompiler_dDiagnostics_dTc_dtcErr0 dtb__171) Vuna_dCompiler_dDiagnostics_dTc.C_Vuna_dCompiler_dDiagnostics_dTc_dTcErr_DerivingViaOnlyRecord) else (if (if (v_Vuna_dCompiler_dElab_dData_dreprIsTransparent dtb__169) then (Base_dBool.v_Base_dBool_dnot ((Base_dList.v_Base_dList_dmemName dtb__163) (Vuna_dCompiler_dElab_dRepresentation.v_Vuna_dCompiler_dElab_dRepresentation_dunboxedFamilySet mc1))) else false) then ((Vuna_dCompiler_dDiagnostics_dTc.v_Vuna_dCompiler_dDiagnostics_dTc_dtcErr0 dtb__171) Vuna_dCompiler_dDiagnostics_dTc.C_Vuna_dCompiler_dDiagnostics_dTc_dTcErr_ReprTransparentInvalid) else ((v_Vuna_dCompiler_dElab_dData_dcheckViaDataDecls dtb__160) mc1)))
-  | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dDecl_DRecord (dtb__172, dtb__173, dtb__174, dtb__175, dtb__176, dtb__177, dtb__178, dtb__179) -> (if (if (v_Vuna_dCompiler_dElab_dData_dreprIsTransparent dtb__177) then (Base_dBool.v_Base_dBool_dnot ((Base_dList.v_Base_dList_dmemName dtb__172) (Vuna_dCompiler_dElab_dRepresentation.v_Vuna_dCompiler_dElab_dRepresentation_dunboxedFamilySet mc1))) else false) then ((Vuna_dCompiler_dDiagnostics_dTc.v_Vuna_dCompiler_dDiagnostics_dTc_dtcErr0 dtb__179) Vuna_dCompiler_dDiagnostics_dTc.C_Vuna_dCompiler_dDiagnostics_dTc_dTcErr_ReprTransparentInvalid) else (if dtb__176 then (if (((v_Vuna_dCompiler_dElab_dData_dviaFieldOk dtb__177) dtb__172) mc1) then ((v_Vuna_dCompiler_dElab_dData_dcheckViaDataDecls dtb__160) mc1) else ((Vuna_dCompiler_dDiagnostics_dTc.v_Vuna_dCompiler_dDiagnostics_dTc_dtcErr0 dtb__179) Vuna_dCompiler_dDiagnostics_dTc.C_Vuna_dCompiler_dDiagnostics_dTc_dTcErr_DerivingViaUnboxedRequired)) else ((v_Vuna_dCompiler_dElab_dData_dcheckViaDataDecls dtb__160) mc1)))
+  | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dDecl_DData (dtb__163, dtb__164, dtb__165, dtb__166, dtb__167, dtb__168, dtb__169, dtb__170, dtb__171) -> (if dtb__168 then ((Vuna_dCompiler_dDiagnostics_dTc.v_Vuna_dCompiler_dDiagnostics_dTc_dtcErr0 dtb__171) Vuna_dCompiler_dDiagnostics_dTc.C_Vuna_dCompiler_dDiagnostics_dTc_dTcErr_DerivingViaOnlyRecord) else (if (if (v_Vuna_dCompiler_dElab_dData_dreprIsAlias dtb__169) then (Base_dBool.v_Base_dBool_dnot ((Base_dList.v_Base_dList_dmemName dtb__163) (Vuna_dCompiler_dElab_dRepresentation.v_Vuna_dCompiler_dElab_dRepresentation_dunboxedFamilySet mc1))) else false) then ((Vuna_dCompiler_dDiagnostics_dTc.v_Vuna_dCompiler_dDiagnostics_dTc_dtcErr0 dtb__171) Vuna_dCompiler_dDiagnostics_dTc.C_Vuna_dCompiler_dDiagnostics_dTc_dTcErr_ReprAliasInvalid) else ((v_Vuna_dCompiler_dElab_dData_dcheckViaDataDecls dtb__160) mc1)))
+  | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dDecl_DRecord (dtb__172, dtb__173, dtb__174, dtb__175, dtb__176, dtb__177, dtb__178, dtb__179) -> (if (if (v_Vuna_dCompiler_dElab_dData_dreprIsAlias dtb__177) then (Base_dBool.v_Base_dBool_dnot ((Base_dList.v_Base_dList_dmemName dtb__172) (Vuna_dCompiler_dElab_dRepresentation.v_Vuna_dCompiler_dElab_dRepresentation_dunboxedFamilySet mc1))) else false) then ((Vuna_dCompiler_dDiagnostics_dTc.v_Vuna_dCompiler_dDiagnostics_dTc_dtcErr0 dtb__179) Vuna_dCompiler_dDiagnostics_dTc.C_Vuna_dCompiler_dDiagnostics_dTc_dTcErr_ReprAliasInvalid) else (if dtb__176 then (if (((v_Vuna_dCompiler_dElab_dData_dviaFieldOk dtb__177) dtb__172) mc1) then ((v_Vuna_dCompiler_dElab_dData_dcheckViaDataDecls dtb__160) mc1) else ((Vuna_dCompiler_dDiagnostics_dTc.v_Vuna_dCompiler_dDiagnostics_dTc_dtcErr0 dtb__179) Vuna_dCompiler_dDiagnostics_dTc.C_Vuna_dCompiler_dDiagnostics_dTc_dTcErr_DerivingViaUnboxedRequired)) else ((v_Vuna_dCompiler_dElab_dData_dcheckViaDataDecls dtb__160) mc1)))
   | _ -> ((v_Vuna_dCompiler_dElab_dData_dcheckViaDataDecls dtb__160) mc1)
 )
   | _ -> failwith "DT: impossible branch"

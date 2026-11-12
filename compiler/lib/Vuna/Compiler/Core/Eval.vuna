@@ -576,11 +576,32 @@ else
     else Nothing
     _ => Nothing
 
+-- 行拼接（阶段 1）：`rowAppend r t` 是公理，编译器归约：
+--   rowAppend Nil t = t；rowAppend r Nil = r；rowAppend (Cons n h tail) t = Cons n h (rowAppend tail t)。
+-- 右单位让 `joinEff (handleXHost …)`（answer 行 Nil 的旧 handler）保持原签名。
+appendReduce : HashMap String Term -> Sols -> Int -> Value -> Value -> Maybe Value
+appendReduce defs sols fuel a b = if fuel <= 0 then Nothing
+else case force defs sols (fuel - 1) a of
+  VCon aca aa => if aca == effRowNilCtor then Just (force defs sols (fuel - 1) b)
+  else if aca == effRowConsCtor then case aa of
+    n :: h :: t :: _ => case force defs sols (fuel - 1) b of
+      VCon bcb _ => if bcb == effRowNilCtor then Just (VCon effRowConsCtor [n, h, t])
+      else case appendReduce defs sols (fuel - 1) t b of
+        Just t2 => Just (VCon effRowConsCtor [n, h, t2])
+        Nothing => Nothing
+      _ => Nothing
+    _ => Nothing
+  else Nothing
+  _ => Nothing
+
 primReduce : HashMap String Term -> Sols -> Int -> String -> List Value -> Maybe Value
 primReduce defs sols fuel g sp = if fuel <= 0 then Nothing
 else if g == effRowRemName then case sp of
   -- 命名行（ND1）：`rowRem n e r` 是唯一形状；单 Cons 分支（debt D53 规避）。
   n :: e :: r :: _ => rowRemReduce defs sols (fuel - 1) n e r
+  _ => Nothing
+else if g == effRowAppendName then case sp of
+  a :: b :: _ => appendReduce defs sols (fuel - 1) a b
   _ => Nothing
 else case findIntrinsic g of
   Just i => case i.intrinsicOp of

@@ -51,10 +51,18 @@ let v_Base_dEff_drunPure = (fun e -> ((v_Base_dEff_drunThunk e) C_Base_dEff_dEff
 
 let v_Base_dEff_drunEff = (fun e -> ((v_Base_dEff_drunThunk e) C_Base_dEff_dEffUnit_MkEffUnit))
 
-let v_Base_dEff_djoinEff = (fun m -> (((Base_dMonad.v_Base_dMonad_dbind v_Monad_uBase_uEff_uEff_ur) m) (fun inner -> ((Base_dApplicative.v_Base_dApplicative_dpure v_Applicative_uBase_uEff_uEff_ur) (v_Base_dEff_drunPure inner)))))
+let v_Base_dEff_drunMain = (fun e -> ((v_Base_dEff_drunThunk e) C_Base_dEff_dEffUnit_MkEffUnit))
+
+let v_Base_dEff_djoinEff = (fun m -> (C_Base_dEff_dEff_MkEff ((fun u -> (match m with
+  | C_Base_dEff_dEff_MkEff (dtb__9) -> (match (dtb__9 u) with
+  | C_Base_dEff_dEff_MkEff (dtb__10) -> (dtb__10 u)
+  | _ -> failwith "DT: impossible branch"
+)
+  | _ -> failwith "DT: impossible branch"
+)))))
 
 let v_Base_dEff_draise = (fun mc0 -> (match mc0 with
-  | C_Base_dEff_dEff_MkEff (dtb__9) -> (C_Base_dEff_dEff_MkEff (dtb__9))
+  | C_Base_dEff_dEff_MkEff (dtb__11) -> (C_Base_dEff_dEff_MkEff (dtb__11))
   | _ -> failwith "DT: impossible branch"
 ))
 
@@ -65,7 +73,7 @@ let v_Base_dEff_dperformCore = (fun n key o -> (((v_Base_dEff_dsendCore key) n) 
 let v_Base_dEff_dhandleCore = (fun key name ret opH comp -> (C_Base_dEff_dEff_MkEff ((((((dtp_effect_handle key) name) ret) opH) (v_Base_dEff_drunThunk comp)))))
 
 let v_Base_dEff_dresumeCont = (fun c x -> (match c with
-  | C_Base_dEff_dCont_MkCont (dtb__10) -> (dtb__10 x)
+  | C_Base_dEff_dCont_MkCont (dtb__12) -> (dtb__12 x)
   | _ -> failwith "DT: impossible branch"
 ))
 

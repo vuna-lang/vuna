@@ -63,6 +63,11 @@ data Member : String -> Type -> Row -> Type 1 where
 -- | 从行 `r` 中删除标签 `e` 并保留顺序（handler 的结果行）。它不是类型族：由编译器按标签类型的值结构相等归约（`Core.Eval.rowRemReduce`）。
 axiom rowRem : String -> Type -> Row -> Row
 
+-- 行拼接（阶段 1）：`rowAppend r t` 把两个行接起来；由编译器归约（`Core.Eval.appendReduce`）：
+-- 左/右单位（Nil 恒等）与 `Cons` 递归。`joinEff` 用它把 handler answer 的行并到外层行。
+-- | 行拼接 `rowAppend r t`（axiom，由编译器归约：Nil 单位 + Cons 递归）。
+axiom rowAppend : Row -> Row -> Row
+
 -- 默认实例名（命名行 ND3 / native-effects ND3）：裸标签条目 = `Cons "default" e Nil`；
 -- 行字面量展开与 `handleWithAt` 共用（编译器侧镜像 `Intrinsics.effDefaultInstance`）。
 defaultInstance : String
@@ -143,9 +148,13 @@ runMain : {r : Row} -> {a : Type} -> Eff r a -> a
 runMain e = runThunk e MkEffUnit
 
 -- 展平 handler 的 answer：宿主 handler 的 `runX = joinEff (handleXHost …)`。
--- | 展平 `Eff r (Eff [] a)`：外层按 r 解释，内层在结果位置执行。
-joinEff : {r : Row} -> {a : Type} -> Eff r (Eff [] a) -> Eff r a
-joinEff m = m >>= (\inner => pure (runPure inner))
+-- | 展平 `Eff r (Eff t a)`：把内层动作的行并到外层（`rowAppend r t`），运行时恒等。
+-- answer 行是 Nil 的旧 handler 经右单位归约（`rowAppend r Nil = r`）保持原签名。
+joinEff : {r : Row} -> {t : Row} -> {a : Type} -> Eff r (Eff t a) -> Eff (rowAppend r t) a
+joinEff m = MkEff (\u => case m of
+  MkEff f => case f u of
+    MkEff g => g u
+)
 
 -- 行扩宽（任意目标行）：`Eff [] a` 是每个行的子行，运行时恒等。
 -- | 把行已处理干净的动作放进任意行：`Eff [] a -> Eff r a`（运行时恒等；行只是擦除索引）。
