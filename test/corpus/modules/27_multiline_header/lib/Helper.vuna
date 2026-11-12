@@ -1,4 +1,4 @@
-module Helper (helperValue) where
+module Helper where
 
-helperValue : Int
+export helperValue : Int
 helperValue = 20

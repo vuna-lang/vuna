@@ -1,12 +1,12 @@
-module Vuna.Use (total, firstOr) where
+module Vuna.Use where
 
 -- 只 import 门面包 Facade，验证跨两跳（facade → stdlib）的重导出可用。
 import Facade
 
-total : List Int -> Int
+export total : List Int -> Int
 total xs = length xs
 
-firstOr : Maybe Int -> Int
+export firstOr : Maybe Int -> Int
 firstOr m =
   case m of
     Just x => x

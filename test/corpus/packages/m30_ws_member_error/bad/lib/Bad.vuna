@@ -1,4 +1,4 @@
-module Bad (bad) where
+module Bad where
 
-bad : Int
+export bad : Int
 bad = "not an int"

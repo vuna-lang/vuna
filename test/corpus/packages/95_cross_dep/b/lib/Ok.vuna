@@ -1,4 +1,4 @@
-module Ok (okValue) where
+module Ok where
 
-okValue : Int
+export okValue : Int
 okValue = 7

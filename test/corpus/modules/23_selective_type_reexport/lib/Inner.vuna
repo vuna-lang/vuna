@@ -1,10 +1,10 @@
-module Inner (T, mk, unT) where
+module Inner where
 
-data T : Type where
+export data T : Type where
   MkT : Int -> T
 
-mk : Int -> T
+export mk : Int -> T
 mk n = MkT n
 
-unT : T -> Int
+export unT : T -> Int
 unT (MkT n) = n

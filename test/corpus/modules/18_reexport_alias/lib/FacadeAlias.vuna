@@ -1,3 +1,3 @@
-module FacadeAlias (module I) where
+module FacadeAlias where
 
-import Impl2 as I
+export import Impl2 as I

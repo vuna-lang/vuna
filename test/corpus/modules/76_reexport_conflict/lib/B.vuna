@@ -1,4 +1,4 @@
-module B (foo) where
+module B where
 
-foo : Int
+export foo : Int
 foo = 2

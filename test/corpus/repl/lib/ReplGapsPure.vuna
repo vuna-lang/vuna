@@ -1,4 +1,4 @@
-module ReplGapsPure (checks) where
+module ReplGapsPure where
 
 -- REPL v2 缺口（W2）的**纯函数**回归：历史文件编解码 / 括号粘贴解码 / 补全候选判定。
 --
@@ -135,7 +135,7 @@ argKindOk =
     + expect (kindOf "1 + 1" == 0)
     + expect (kindOf "  :load Ba" == 1)
 
-checks : Int
+export checks : Int
 checks =
   histV1
     + histV1Literal

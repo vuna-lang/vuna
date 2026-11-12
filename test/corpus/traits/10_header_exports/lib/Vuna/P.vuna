@@ -1,9 +1,9 @@
-module Vuna.P (Pretty(..), Color(..)) where
+module Vuna.P where
 
-trait Pretty a where
+export trait Pretty a(..) where
   pretty : a -> String
 
-data Color : Type where
+export data Color(..) : Type where
   Red : Color
   Blue : Color
 

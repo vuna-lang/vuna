@@ -1,7 +1,7 @@
-module Dup (dupValue) where
+module Dup where
 
 -- 依赖方向负例：A 属于消费包 consumer-a，b 的包上下文里没有 A。
 import A
 
-dupValue : Int
+export dupValue : Int
 dupValue = aval

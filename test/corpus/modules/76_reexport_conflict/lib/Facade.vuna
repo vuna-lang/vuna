@@ -1,4 +1,4 @@
-module Facade (module A, module B) where
+module Facade where
 
-import A
-import B
+export import A
+export import B

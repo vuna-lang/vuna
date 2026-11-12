@@ -1,4 +1,4 @@
-module Dep.Hidden (hiddenText) where
+module Dep.Hidden where
 
-hiddenText : String
+export hiddenText : String
 hiddenText = "hidden"

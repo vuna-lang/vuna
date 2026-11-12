@@ -1,4 +1,4 @@
-module A (aValue) where
+module A where
 
-aValue : String
+export aValue : String
 aValue = "a"

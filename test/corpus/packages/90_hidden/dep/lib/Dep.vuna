@@ -1,4 +1,4 @@
-module Dep (depText) where
+module Dep where
 
-depText : String
+export depText : String
 depText = "dep"

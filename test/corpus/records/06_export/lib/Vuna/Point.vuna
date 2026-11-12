@@ -1,8 +1,8 @@
-module Vuna.Point (Point(..), mk) where
+module Vuna.Point where
 
-record Point where
+export record Point(..) where
   x : Int
   y : Int
 
-mk : Int -> Int -> Point
+export mk : Int -> Int -> Point
 mk a b = Point { x = a, y = b }

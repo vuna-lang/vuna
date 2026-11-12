@@ -1,6 +1,6 @@
-module Facade (module Base.List, module Base.Maybe) where
+module Facade where
 
 -- 跨包重导出夹具：facade 包把 vuna-base 的 List/Maybe 门面化；
 -- 只依赖 facade 的包应当能拿到这些名字（对应 compiler 包 Vuna.Compiler.Common 的场景）。
-import Base.List
-import Base.Maybe
+export import Base.List
+export import Base.Maybe

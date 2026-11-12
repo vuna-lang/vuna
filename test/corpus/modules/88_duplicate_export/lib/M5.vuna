@@ -1,4 +1,5 @@
-module M5 (foo, foo) where
+module M5 where
 
-foo : Int
+export foo : Int
 foo = 1
+export foo : Int

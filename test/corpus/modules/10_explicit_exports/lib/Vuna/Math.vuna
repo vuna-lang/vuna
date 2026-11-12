@@ -1,9 +1,9 @@
-module Vuna.Math (three, double) where
+module Vuna.Math where
 
-three : Int
+export three : Int
 three = 3
 
-double : Int -> Int
+export double : Int -> Int
 double x = x * 2
 
 notExported : Int

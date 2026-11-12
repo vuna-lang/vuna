@@ -1,4 +1,4 @@
-module Vuna.Hello (hello) where
+module Vuna.Hello where
 
-hello : String
+export hello : String
 hello = "hello"

@@ -1,6 +1,6 @@
 -- 跨模块同名构造子（其一）：模块 X 导出 A(..)，构造子 `Nil` 的 canonical 身份是
 -- `X.A.Nil`。模块 Y 有同名的 `Nil` 但属于 `Y.B`，导出列表里两者不冲突。
-module X (A(..)) where
+module X where
 
-data A : Type where
+export data A(..) : Type where
   Nil : A

@@ -1,7 +1,7 @@
-module Impl (foo, Color(..)) where
+module Impl where
 
-foo : Int
+export foo : Int
 foo = 20
 
-data Color : Type where
+export data Color(..) : Type where
   Red : Color

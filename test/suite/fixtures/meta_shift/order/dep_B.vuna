@@ -1,8 +1,8 @@
-module Dep.B (mkB) where
+module Dep.B where
 
 import Prelude
 
-mkB : Int
+export mkB : Int
 mkB = g Nil
 
 g : {a : Type} -> List a -> Int

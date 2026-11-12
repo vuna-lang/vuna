@@ -1,12 +1,12 @@
-module Vuna.Box (Box, makeBox, boxValue) where
+module Vuna.Box where
 
 -- 对外只导出类型 Box（构造器 MkBox 保持抽象），包外只能经 API 使用。
-data Box : Type where
+export data Box : Type where
   MkBox : Int -> Box
 
-makeBox : Int -> Box
+export makeBox : Int -> Box
 makeBox n = MkBox n
 
-boxValue : Box -> Int
+export boxValue : Box -> Int
 boxValue b = case b of
   MkBox n => n

@@ -1,7 +1,7 @@
-module M (pub) where
+module M where
 
 data _T : Type where
   MkT : Int -> _T
 
-pub : Int
+export pub : Int
 pub = 0

@@ -1,4 +1,4 @@
-module Member (greet) where
+module Member where
 
-greet : String
+export greet : String
 greet = "hello from member"

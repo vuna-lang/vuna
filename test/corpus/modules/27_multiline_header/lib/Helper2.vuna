@@ -1,4 +1,4 @@
-module Helper2 (choice) where
+module Helper2 where
 
-choice : Int
+export choice : Int
 choice = 12

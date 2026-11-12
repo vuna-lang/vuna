@@ -1,7 +1,7 @@
-module Impl (foo, T(..)) where
+module Impl where
 
-foo : Int
+export foo : Int
 foo = 20
 
-data T : Type where
+export data T(..) : Type where
   C : Int -> T

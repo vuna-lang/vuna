@@ -1,4 +1,4 @@
-module Hidden (secret) where
+module Hidden where
 
-secret : Int
+export secret : Int
 secret = 7

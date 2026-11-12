@@ -1,9 +1,9 @@
-module Impl (foo, double) where
+module Impl where
 
-foo : Int
+export foo : Int
 foo = 20
 
-double : Int -> Int
+export double : Int -> Int
 double x = x * 2
 
 secret : Int

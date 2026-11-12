@@ -1,4 +1,4 @@
-module Shadow (shadowMain) where
+module Shadow where
 import Values
 
 -- 本模块在**类型**命名空间声明 `token`；值命名空间的 `token` 是 import 来的 Int 值。
@@ -9,5 +9,5 @@ data token : Type where
 tag : token -> Int
 tag t = 1
 
-shadowMain : Int
+export shadowMain : Int
 shadowMain = token + tag MkToken

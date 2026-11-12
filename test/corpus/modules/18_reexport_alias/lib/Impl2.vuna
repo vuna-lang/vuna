@@ -1,4 +1,4 @@
-module Impl2 (bump) where
+module Impl2 where
 
-bump : Int -> Int
+export bump : Int -> Int
 bump x = x + 1

@@ -1,16 +1,16 @@
-module Types (Pair(..), mk, pairFst, firstTy) where
+module Types where
 
 -- 类型名与构造子同名：类型位置解析成族，值位置解析成构造子。
-data Pair a b : Type where
+export data Pair a b(..) : Type where
   Pair : a -> b -> Pair a b
 
-mk : Pair Int String
+export mk : Pair Int String
 mk = Pair 7 "x"
 
-pairFst : Pair Int String -> Int
+export pairFst : Pair Int String -> Int
 pairFst p = case p of
   Pair n s => n
 
 -- 类型作为项：族名出现在值位置（显式 `(a : Type)` 实参）。
-firstTy : (a : Type) -> a -> Type
+export firstTy : (a : Type) -> a -> Type
 firstTy a x = a

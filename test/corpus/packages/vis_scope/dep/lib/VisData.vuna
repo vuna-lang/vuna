@@ -1,7 +1,7 @@
-module VisData (Color(..)) where
+module VisData where
 
 -- M34.5（S6）可见性夹具：data 在 VisData，trait + 实例在 VisTrait。
 -- 实例与 trait 同模块（B23 落点规则）；root 只 import VisData 时看不到 trait。
-data Color : Type where
+export data Color(..) : Type where
   Red : Color
   Blue : Color

@@ -1,4 +1,4 @@
-module Visible (answer) where
+module Visible where
 
-answer : Int
+export answer : Int
 answer = 42

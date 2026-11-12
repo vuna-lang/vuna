@@ -1,6 +1,6 @@
-module M (v) where
+module M where
 
-v : Int
+export v : Int
 v = 1
 
 w : Int

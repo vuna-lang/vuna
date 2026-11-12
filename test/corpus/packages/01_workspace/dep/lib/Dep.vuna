@@ -1,8 +1,8 @@
-module Dep (DepTag(..), depText) where
+module Dep where
 
-depText : String
+export depText : String
 depText = "dep"
 
 -- C35/M37：跨单元构造子引用的夹具。
-data DepTag : Type where
+export data DepTag(..) : Type where
   DepTagA : DepTag

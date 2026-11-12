@@ -1,4 +1,4 @@
-module Inner (foo) where
+module Inner where
 
-foo : Int
+export foo : Int
 foo = 42

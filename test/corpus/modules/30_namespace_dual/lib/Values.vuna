@@ -1,5 +1,5 @@
-module Values (token) where
+module Values where
 
 -- 值命名空间的小写名，供 Shadow 模块与值层同名类型对照。
-token : Int
+export token : Int
 token = 42

@@ -1,7 +1,7 @@
-module T (Color(..), Pretty(..)) where
+module T where
 
-data Color : Type where
+export data Color(..) : Type where
   Red : Color
 
-trait Pretty a where
+export trait Pretty a(..) where
   pretty : a -> String

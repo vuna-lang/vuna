@@ -1,4 +1,4 @@
-module N (n) where
+module N where
 
-n : Int
+export n : Int
 n = 2

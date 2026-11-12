@@ -1,3 +1,3 @@
-module Facade (Inner.T, Inner.C, Inner.D) where
+module Facade where
 
-import Inner
+export import Inner (T, C, D)

@@ -1,4 +1,4 @@
-module M (foo) where
+module M where
 
-foo : Int -> Int
+export foo : Int -> Int
 foo x = x

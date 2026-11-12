@@ -1,4 +1,4 @@
-module Dup (dupValue) where
+module Dup where
 
-dupValue : Int
+export dupValue : Int
 dupValue = 1

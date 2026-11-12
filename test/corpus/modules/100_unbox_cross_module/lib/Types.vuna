@@ -1,14 +1,14 @@
-module Types (UserId, Wrap(..), mkUser, getWrap) where
+module Types where
 
-record UserId where
+export record UserId where
   uid : Int
 
-data Wrap : Type where
+export data Wrap(..) : Type where
   MkWrap : Int -> Wrap
 
-mkUser : Int -> UserId
+export mkUser : Int -> UserId
 mkUser n = UserId { uid = n }
 
-getWrap : Wrap -> Int
+export getWrap : Wrap -> Int
 getWrap w = case w of
   MkWrap n => n

@@ -1,1 +1,2 @@
-module Facade (module Missing) where
+module Facade where
+export import Missing
