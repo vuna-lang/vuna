@@ -153,8 +153,8 @@ else
   ws=$tmp/ws
   mkdir -p "$ws/lib/Sub"
   printf '[package]\nname = "replgaps"\n\n[dependencies]\nvuna-base = "%s"\n' "$VUNA_BASE" >"$ws/vuna.toml"
-  printf 'module Foo (greeting) where\n\ngreeting : String\ngreeting = "hi"\n' >"$ws/lib/Foo.vuna"
-  printf 'module Sub.Bar (barVal) where\n\nbarVal : Int\nbarVal = 7\n' >"$ws/lib/Sub/Bar.vuna"
+  printf 'module Foo where\n\nexport greeting : String\ngreeting = "hi"\n' >"$ws/lib/Foo.vuna"
+  printf 'module Sub.Bar where\n\nexport barVal : Int\nbarVal = 7\n' >"$ws/lib/Sub/Bar.vuna"
   printf 'answer : Int\nanswer = 42\n' >"$ws/snippet.vuna"
 
   out=$( (sleep 0.8; printf ':browse F\t'; sleep 0.4; printf '\n'; sleep 0.3; printf ':q\n') |

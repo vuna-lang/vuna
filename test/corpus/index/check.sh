@@ -58,10 +58,10 @@ cat >"$ws/vuna.toml" <<'EOF'
 name = "index-ws"
 EOF
 cat >"$ws/lib/Demo/A.vuna" <<'EOF'
-module Demo.A (one) where
+module Demo.A where
 
 -- | doc for one
-one : Int
+export one : Int
 one = 1
 
 -- | first doc line
@@ -70,14 +70,14 @@ two : Int
 two = 2
 EOF
 cat >"$ws/lib/Demo/B.vuna" <<'EOF'
-module Demo.B (two) where
+module Demo.B where
 
 import Demo.A
 
 -- M31.3（B26）：临时 workspace 无 base 依赖，`+` 需本地 fixity 声明。
 infixl 6 +
 
-two : Int
+export two : Int
 two = one + one
 EOF
 

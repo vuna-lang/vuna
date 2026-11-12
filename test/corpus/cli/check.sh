@@ -137,7 +137,7 @@ check_contains "doc [export] counts rendered modules" "$out" "(1 modules)"
 # 缺导出模块 → 错误。
 mkdir -p "$tmp/badexport/lib"
 printf '[package]\nname = "badexport"\n\n[export]\nmodules = ["Missing.One"]\n' >"$tmp/badexport/vuna.toml"
-printf 'module Present (p) where\n\np : Int\np = 0\n' >"$tmp/badexport/lib/Present.vuna"
+printf 'module Present where\n\nexport p : Int\np = 0\n' >"$tmp/badexport/lib/Present.vuna"
 run "doc missing exported module" "$tmp" doc "$tmp/badexport" "$tmp/bad.md"
 check_eq "doc missing export exit" "2" "$code"
 check_contains "doc missing export error" "$out" "exported module not found"
@@ -145,7 +145,7 @@ check_contains "doc missing export error" "$out" "exported module not found"
 # 默认 OUT：DIR/docs/api.html（父目录不存在也要能建）。
 mkdir -p "$tmp/docpkg2/lib/Vuna"
 printf '[package]\nname = "docpkg2"\n' >"$tmp/docpkg2/vuna.toml"
-printf 'module Vuna.Only (x) where\n\nx : Int\nx = 1\n' >"$tmp/docpkg2/lib/Vuna/Only.vuna"
+printf 'module Vuna.Only where\n\nexport x : Int\nx = 1\n' >"$tmp/docpkg2/lib/Vuna/Only.vuna"
 run "doc default OUT" "$tmp/docpkg2" doc
 check_eq "doc default OUT exit" "0" "$code"
 if [ -f "$tmp/docpkg2/docs/api.html" ]; then ok; else bad "doc default OUT did not write DIR/docs/api.html"; fi
