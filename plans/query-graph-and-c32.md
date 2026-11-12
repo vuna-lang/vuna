@@ -398,3 +398,16 @@ warm `check compiler` **29 ms**（门槛 43）/ `check .` **53 ms**（门槛 78�
   - REPL `stateAuxCache`：`AuxCache` 是「按 import 名单草拟的辅助表」（termAux 预处理），
     它的失效面就是 buffer + 依赖接口；下一轮并进 `tooliface:` 节点的 `closure:` 段即可
     （同一 key、不同依赖），不需要独立节点。
+
+### 阶段 5 预演：rotation + flake check（2026-11-12，第 5 轮）
+
+- `sh nix/seed-rotate.sh ./result/bin/vuna`：**119 个文件，fixed point 通过**。相对上一版
+  seed 只有 `Driver/dDt.ml`、`Driver/dCompile.ml` 两个模块变化（debug 字符串改名），
+  `nix/seed-rotation.txt` 同步（提交 34c7d73）。
+- `nix flake check -j2`：**all checks passed**（含 `seed-selfhost` 的 TCB 断言 /
+  文件集 allowlist / 闭包数量 / stage1==stage2、`eff-boundary`、`vuna-tests`、
+  `vuna-typecheck`、`vuna-fmt`、`vuna-lint`、`vuna-index`、`doc-coverage`、`diag-*`、
+  `metrics`、`package`、`compiler-perf`、`compiler-growth*`、`vscode-ext`）。
+- 过程中抓到并修掉一个真问题（提交 6e964ee）：`nix/checks/compiler-perf.sh` 还 grep
+  `iface-source=repl`，debug 行改名后误报「REPL 没走接口路径」。顺带确认 `iface-fallback=`
+  的名字保留（它仍是回退**原因**的名字，不是缓存层名字）。
