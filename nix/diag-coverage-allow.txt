@@ -54,7 +54,6 @@ TC_CannotRedefineBuiltin
 PKG_FetchFailed
 PKG_HashMismatch
 PKG_IndexMalformed
-PKG_NotMaterialized
 PS_ExpectedExportItem
 RN_AmbiguousConstructorExport
 RN_CannotExportUnknownName

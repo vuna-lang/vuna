@@ -57,7 +57,6 @@ TC_CannotRedefineBuiltin	内建重定义检查；结构化夹具待补（HEAD �
 PKG_FetchFailed	包源/store 错误；结构化夹具待补（main 新增缺口，非本次改动引入）
 PKG_HashMismatch	包源/store 错误；结构化夹具待补（main 新增缺口，非本次改动引入）
 PKG_IndexMalformed	包源/store 错误；结构化夹具待补（main 新增缺口，非本次改动引入）
-PKG_NotMaterialized	包源/store 错误；结构化夹具待补（main 新增缺口，非本次改动引入）
 PS_ExpectedExportItem	旧模块头/旧导出面专用诊断；夹具迁移后暂无合法新语法触发路径
 RN_AmbiguousConstructorExport	旧模块头/旧导出面专用诊断；夹具迁移后暂无合法新语法触发路径
 RN_CannotExportUnknownName	旧模块头/旧导出面专用诊断；夹具迁移后暂无合法新语法触发路径

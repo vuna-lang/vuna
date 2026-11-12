@@ -1,0 +1,8 @@
+[package]
+name = "pkg-not-materialized"
+
+[export]
+modules = ["Main"]
+
+[dependencies]
+bad = { git = "file:///tmp/nonexistent-d11", rev = "0000000000000000000000000000000000000000", hash = "sha256:0000000000000000000000000000000000000000000000000000000000000000" }
