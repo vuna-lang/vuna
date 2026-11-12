@@ -100,35 +100,38 @@ dtCheckDecls loaded = do
   loadedR <- loaded
   pure (case loadedR of
     ErrC e => ErrC e
-    OkC p =>
-      let
-        decls = firstOf p
-        loaderWarns = secondOf p
-        _ = dbg! "decls-ready"
-      in case elabProgramFull decls of
-        ErrC e => ErrC e
-        OkC program =>
-          let
-            _ = dbg! "elab-done"
-          in case checkDtProgram (Pair (dtProgDatas program) (dtProgDefs program)) of
-            ErrC e => ErrC e
-            OkC _ =>
-              let
-                _ = dbg! "codegen-check-done"
-              in OkC
-                (append loaderWarns (append (dtProgWarnings program) (warnUnusedDefsIn (dtProgDefs program))))
+    OkC p => checkDeclsWithWarns (secondOf p) (firstOf p)
   )
+
+checkDeclsWithWarns : List Diagnostic -> List Decl -> Check (List Diagnostic)
+checkDeclsWithWarns loaderWarns decls =
+  let
+    _ = dbg! "decls-ready"
+  in case elabProgramFull decls of
+    ErrC e => ErrC e
+    OkC program =>
+      let
+        _ = dbg! "elab-done"
+      in case checkDtProgram (Pair (dtProgDatas program) (dtProgDefs program)) of
+        ErrC e => ErrC e
+        OkC _ =>
+          let
+            _ = dbg! "codegen-check-done"
+          in OkC
+            (append loaderWarns (append (dtProgWarnings program) (warnUnusedDefsIn (dtProgDefs program))))
 
 -- M34.5：与 dtCheck 同一条精化路径，但把 DtProgram / 模块表 / 入口声明一并返回
 -- （检查缓存写接口摘要用）。
 export dtCheckWithProgramParts : PackageContext -> String -> Eff [] (Check (Pair (List Diagnostic) CheckedPackage))
-dtCheckWithProgramParts ctx entry = dtCheckPartsWithProgram (dtLoadPartsForCheck ctx entry)
+dtCheckWithProgramParts ctx entry =
+  dtCheckPartsWithProgram (contextPackageName ctx) (dtLoadPartsForCheck ctx entry)
 
 export dtCheckLibraryWithProgramParts : PackageContext -> List String -> Eff [] (Check (Pair (List Diagnostic) CheckedPackage))
-dtCheckLibraryWithProgramParts ctx names = dtCheckPartsWithProgram (dtLoadModulesParts ctx names)
+dtCheckLibraryWithProgramParts ctx names =
+  dtCheckPartsWithProgram (contextPackageName ctx) (dtLoadModulesParts ctx names)
 
-dtCheckPartsWithProgram : Eff [] (Check (Pair (List Diagnostic) (Pair (List Decl) (List Module)))) -> Eff [] (Check (Pair (List Diagnostic) CheckedPackage))
-dtCheckPartsWithProgram loaded = do
+dtCheckPartsWithProgram : String -> Eff [] (Check (Pair (List Diagnostic) (Pair (List Decl) (List Module)))) -> Eff [] (Check (Pair (List Diagnostic) CheckedPackage))
+dtCheckPartsWithProgram pkg loaded = do
   loadedR <- loaded
   pure (case loadedR of
     ErrC e => ErrC e
@@ -136,7 +139,7 @@ dtCheckPartsWithProgram loaded = do
       let
         parts = secondOf resolved
         loaderWarns = firstOf resolved
-        decls = dtProjectDecls parts
+        decls = hideDepOpaqueDecls pkg (secondOf parts) (dtProjectDecls parts)
       in case elabProgramFull decls of
         ErrC e => ErrC e
         OkC program =>
@@ -151,9 +154,43 @@ dtCheckPartsWithProgram loaded = do
               in OkC (Pair warns (CheckedPackage program (secondOf parts) (firstOf parts) [] warns))
   )
 
+-- D11（全量源码路径的 opaque）：依赖包的 opaque 值定义在 check 前降成 axiom：
+-- 类型保留，体从 decls 中移除（签名也已消费）。这样下游无法 delta 展开；定义包自身
+-- 不走这条路径，仍保留体做完整检查/代码生成。接口路径由 `depStartOfAt` 已做同样过滤。
+hideDepOpaqueDecls : String -> List Module -> List Decl -> List Decl
+hideDepOpaqueDecls pkg modules decls =
+  let
+    names = concatMap moduleOpaqueOf (filter (\m => modulePackageOf m /= pkg) modules)
+  in mapMaybe (hideOneOpaque names decls) decls
+
+hideOneOpaque : List String -> List Decl -> Decl -> Maybe Decl
+hideOneOpaque names decls decl = case decl of
+  DSig name ctx ty sp => if memName name names then Nothing else Just decl
+  DFun name pats body sp => if memName name names then case opaqueSigType name decls of
+    Just ty => Just (DAxiom name ty sp)
+    Nothing => Just decl
+  else Just decl
+  _ => Just decl
+
+opaqueSigType : String -> List Decl -> Maybe Expr
+opaqueSigType name [] = Nothing
+opaqueSigType name (d :: rest) = case d of
+  DSig n ctx ty sp => if n == name then Just ty else opaqueSigType name rest
+  _ => opaqueSigType name rest
+
 -- | 入口文件检查。
 export dtCheck : PackageContext -> String -> Eff [] (Check (List Diagnostic))
-dtCheck ctx entry = dtCheckDecls (dtLoad ctx entry)
+dtCheck ctx entry = do
+  loadedR <- dtLoadPartsForCheck ctx entry
+  pure (case loadedR of
+    ErrC e => ErrC e
+    OkC resolved =>
+      let
+        parts = secondOf resolved
+        modules = secondOf parts
+        decls = hideDepOpaqueDecls (contextPackageName ctx) modules (dtProjectDecls parts)
+      in checkDeclsWithWarns (firstOf resolved) decls
+  )
 
 -- M45：单文件检查的两个入口（`vuna check <file.vuna>`）。
 --
@@ -1229,7 +1266,9 @@ dtCheckSourceChecked ctx label source = do
   projectR <- loadModuleSource ctx label source
   case projectR of
     ErrC e => pure (ErrC e)
-    OkC project => dtCheckPartsWithProgram (pure (resolveProjectWith (contextRelease ctx) project))
+    OkC project =>
+      dtCheckPartsWithProgram (contextPackageName ctx)
+        (pure (resolveProjectWith (contextRelease ctx) project))
 
 export dtCheckPackageIncrementalParts : PackageContext -> String -> List ModuleIface -> List ModuleIface -> Eff [] (Check (Pair (List Diagnostic) CheckedPackage))
 dtCheckPackageIncrementalParts ctx entry depIfaces cleanIfaces = do
