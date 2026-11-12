@@ -165,7 +165,7 @@ idT x = x
   签名一样量化为隐式类型参数（`axiom anyEq : a -> a` 等价 `{a : Type} -> a -> a`）；
 - 运行时位置使用 axiom 是硬错误（`check` 与 `compile` 同一条诊断）：
   `[CG_AxiomAtRuntime] axiom ... cannot be used at runtime (it has no runtime definition)`；
-- axiom 是普通顶层声明：名字自动 mangle、`_` 前缀私有、可进模块导出表；同一名字不能再
+- axiom 是普通顶层声明：名字自动 mangle、默认不导出、`export` 后可进模块导出表；同一名字不能再
   有定义体（`[TC_AxiomWithDefinition]`），也不能重复声明；
 - `axiom` 是保留关键字；当前编译器自身不用 axiom（旧 seed 必须能编译新源码）。
 
@@ -296,12 +296,36 @@ vuna/base/compiler 三包源码统一按当前语言能力书写，新增/修改
 
   alias 只是额外的限定前缀，原全名仍然可用；alias 必须是单个大写段、全文件唯一，且不能
   与另一个被 import 的模块名冲突；
-- **模块头**：模块文件可以在 `import` 之前写一个模块头声明导出项（导出列表可以跨行；
-  入口文件不能写）：
+- **逐定义导出（D11 终态）**：模块默认 **module-private**，只有 `export` 标在定义前的
+  名字对下游可见。
 
   ```vuna
-  module Vuna.Math where           -- 省略导出列表 = 导出全部（v0 兼容）
-  module Vuna.Math () where        -- 显式导出空集
+  module Vuna.Math where
+
+  export three : Int
+  export data Nat(..) : Type where
+    Z : Nat
+    S : Nat -> Nat
+  export record UserId(..) where
+    raw : Int
+  export trait Show a(..) where
+    show : a -> String
+
+  export import Vuna.Compiler.Common       -- 导入 + 整模块重导出
+  export import B (x, T(..))              -- 选择性重导出
+  ```
+
+  `export data T` 只导出类型（抽象，构造器不可见）；`T(..)` 导出全部公开构造器，
+  `T(A, B)` 只导出子集；record / trait 同理（`R(..)` / `C(m1, m2)`）。`export` 可写在
+  `opaque` / `transparent` 之前或之后；`export import` 直接替换同模块的普通 `import`，
+  不会重复导入。导出项顺序不是语义，`vuna fmt` 会规范化。
+
+- **旧模块头（迁移期兼容，终态移除）**：模块文件可以在 `import` 之前写一个模块头声明
+  导出项（导出列表可以跨行；入口文件不能写）：
+
+  ```vuna
+  module Vuna.Math where           -- 旧语义：省略列表 = 全部导出
+  module Vuna.Math () where        -- 显式导出空集（旧语法）
   module Vuna.Math
     ( three
     , Nat(..)
@@ -328,9 +352,8 @@ vuna/base/compiler 三包源码统一按当前语言能力书写，新增/修改
   这里的 B 可以用模块全名或 import alias 引用。暂不支持重命名重导出（`foo = B.foo`）和
   构造器子集（`T(C1,C2)`）；同一 (kind, 名字) 重复导出（包括 `module B` 已覆盖的名字再
   单独写 `B.x`）是 `duplicate export` 硬错误；导出当前作用域不可见的名字也是硬错误；
-- **`_` 前缀私有**：任何顶层名字（值 / 类型 / 构造器）以 `_` 开头即模块私有，不能导出；
-  显式导出 `_` 名是硬错误（不是静默剔除），裸 `_` 也不能作顶层名；`(..)` 同样不会让
-  `_` 构造器变公开；
+- **私有性只看 `export`**：模块默认 module-private；`_` 前缀不再有特殊私有含义，
+  `export _helper` 是合法的。裸 `_` 仍不能作顶层名（它是通配符）；
 - **抽象类型**：导出项 `T` 只导出类型、不导出构造器，跨模块既不能构造也不能模式匹配；
   要公开构造器必须写 `T(..)`；
 - **模块路径不变式**：模块路径的最后一段是文件名、中间段是目录，目录本身不是模块。
@@ -342,7 +365,7 @@ vuna/base/compiler 三包源码统一按当前语言能力书写，新增/修改
   构造子）→ 本模块类型名 → import 模块导出的类型名（后两者是**类型作为项**的退路，
   见下节）。两个 open import 导出同名但指向不同定义时，裸名报歧义（指向同一定义的重复
   导出不算歧义，例如原模块与它的门面重导出）；写全名或 alias 即可消歧；import 只提供
-  目标模块**导出列表**中的名字（省略模块头 = 全部导出，`_` 前缀除外）；
+  目标模块**导出列表**中的名字（只看该模块的逐定义 `export`）；
 - **构造子身份是「数据类型 + 构造子」**：data 构造子的 canonical 名是
   `Module.Data.Ctor`（entry 文件里是 `Data.Ctor`），record / trait 保持
   `Module.Name`。因此不同数据类型可以有同名构造子（`List.Nil` 与 `Vec.Nil`）；
@@ -360,7 +383,7 @@ vuna/base/compiler 三包源码统一按当前语言能力书写，新增/修改
   `Base.List.List`。模式 `[]` / `[a, b]` 同样按 scrutinee 族展开。
 - 限定名用**完整模块名**或 alias，永远不会歧义，但同样只解析目标模块的导出项；import
   只算直接依赖，**不传递**：A import B，C import A 看不到 B 的名字——除非 A 用
-  `module B` / `B.name` 显式重导出；
+  `export import B` / `export import B (x)` 显式重导出；
 - Loader 解析 import 图、做名字解析后 **flatten** 成一个 program（内部名字带模块前缀，
   如 `Vuna.Compiler.Frontend.Parser.parseSource`），解释器与 codegen 复用同一份实现；
   `show` 只显示最后一段，所以输出与包内程序一致。

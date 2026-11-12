@@ -25,7 +25,7 @@ linearPrefix : Bool -> String
 linearPrefix True = "linear "
 linearPrefix False = ""
 
--- R1（records-v2）：声明前缀 = 表示档位前缀 + 线性前缀（`transparent record` / `lin record`）。
+-- R1（records-v2）：声明前缀 = 表示档位前缀 + 线性前缀（`alias record` / `lin record`）。
 declPrefix : ReprTier -> Bool -> String
 declPrefix tier lin = reprPrefix tier ++ linearPrefix lin
 

@@ -212,8 +212,7 @@ findOwnCtorNames name (d :: rest) = case d of
 ownCtorEntries : String -> String -> List String -> List ExportEntry
 ownCtorEntries prefix dname [] = []
 ownCtorEntries prefix dname (cname :: rest) =
-  if isPrivateName cname then ownCtorEntries prefix dname rest
-  else Base.List.Cons
+  Base.List.Cons
     ExportEntry { kind = "ctor", public = cname, target = mangle prefix cname, parent = mangle prefix dname }
     (ownCtorEntries prefix dname rest)
 
@@ -222,8 +221,7 @@ ownCtorEntries prefix dname (cname :: rest) =
 ownDataCtorEntries : String -> String -> List String -> List ExportEntry
 ownDataCtorEntries prefix dname [] = []
 ownDataCtorEntries prefix dname (cname :: rest) =
-  if isPrivateName cname then ownDataCtorEntries prefix dname rest
-  else Base.List.Cons
+  Base.List.Cons
     ExportEntry { kind = "ctor", public = cname, target = ctorCanonical prefix dname cname, parent = mangle prefix dname }
     (ownDataCtorEntries prefix dname rest)
 
@@ -253,58 +251,6 @@ ctorEntriesOfType typeTarget [] = []
 ctorEntriesOfType typeTarget (e :: rest) =
   if e.kind == "ctor" && e.parent == typeTarget then Base.List.Cons e (ctorEntriesOfType typeTarget rest)
   else ctorEntriesOfType typeTarget rest
-
-declImplicitExports : String -> Decl -> List ExportEntry
-declImplicitExports prefix d = case d of
-  DData dname params kind ctors derivings viaField repr lin sp =>
-    if isPrivateName dname then []
-    else Base.List.Cons
-      ExportEntry { kind = "type", public = dname, target = mangle prefix dname, parent = "" }
-      (ownDataCtorEntries prefix dname (map ctorName ctors))
-  DRecord dname params fields derivings viaField repr lin sp =>
-    if isPrivateName dname then []
-    else Base.List.Cons
-      ExportEntry { kind = "type", public = dname, target = mangle prefix dname, parent = "" }
-      (ownCtorEntries prefix dname [dname])
-  DTrait tname params methods sp =>
-    if isPrivateName tname then []
-    else Base.List.Cons
-      ExportEntry { kind = "type", public = tname, target = mangle prefix tname, parent = "" }
-      (ownCtorEntries prefix tname (map traitMethodName methods))
-  -- M29-T2b：命名实例已删除，实例不出现在导出表（字典按实例表注册）。
-  DInstance ctxE head methods sp => []
-  DSig name ctx ty sp =>
-    if isPrivateName name then []
-    else [ExportEntry { kind = "val", public = name, target = mangle prefix name, parent = "" }]
-  -- M28：axiom 是无体的可擦除顶层，导出层按值条目处理（类型层引用跨模块可见）。
-  DAxiom name ty sp =>
-    if isPrivateName name then []
-    else [ExportEntry { kind = "val", public = name, target = mangle prefix name, parent = "" }]
-  DExtern name cName ty sp =>
-    if isPrivateName name then []
-    else [ExportEntry { kind = "val", public = name, target = mangle prefix name, parent = "" }]
-  DFun name pats body sp =>
-    if isPrivateName name then []
-    else [ExportEntry { kind = "val", public = name, target = mangle prefix name, parent = "" }]
-
-implicitExports : String -> List Decl -> List ExportEntry
-implicitExports prefix decls = dedupeImplicitExports (concatMap (declImplicitExports prefix) decls)
-
--- 没有模块头 = 导出全部：类型签名 DSig 与子句 DFun 会为同一个函数各产生一条
--- val 条目，必须去重，否则重导出该模块时会在 duplicate export 检查里误报。
-dedupeImplicitExports : List ExportEntry -> List ExportEntry
-dedupeImplicitExports entries = dedupeByPublic entries (Base.HashMap.fromList []) []
-
--- 按 (kind, public, target) 去重：类型签名与子句会为同一个函数各产生一条 val 条目；
--- M41 起同名不同族的构造子 target 不同，必须两条都保留。
-dedupeByPublic : List ExportEntry -> HashMap String Int -> List ExportEntry -> List ExportEntry
-dedupeByPublic [] seen acc = reverse acc
-dedupeByPublic (e :: rest) seen acc =
-  let
-    key = "${e.kind}|${e.public}|${e.target}"
-  in case Base.HashMap.lookup key seen of
-    Just _ => dedupeByPublic rest seen acc
-    Nothing => dedupeByPublic rest (Base.HashMap.insert key 1 seen) (e :: acc)
 
 -- 裸名导出时，若名字是 **record 类型** 且与其同名构造器 target 相同，只导出类型、
 -- 不导出构造器：抽象记录必须写 T(..) 才公开构造器。（普通 data 里 ctor 与类型同名
@@ -387,8 +333,7 @@ ownCtorEntriesNamed prefix name (d :: rest) = case d of
 exportBare : List Module -> String -> List Decl -> List Import -> String -> Span -> Check (List ExportEntry)
 exportBare modules prefix decls imports name sp = case splitLastDot (splitOnDot name) of
   Pair revPrefix base => case revPrefix of
-    [] => if isPrivateName name then ErrC (privateExportMsg prefix sp name)
-    else Vuna.Compiler.Common.bind (ownOrImportedTypeRef modules prefix decls imports name) (\tr => Vuna.Compiler.Common.bind (ownOrImportedValueRef modules prefix decls imports name) (\vr => case tr of
+    [] => Vuna.Compiler.Common.bind (ownOrImportedTypeRef modules prefix decls imports name) (\tr => Vuna.Compiler.Common.bind (ownOrImportedValueRef modules prefix decls imports name) (\vr => case tr of
       Nothing => case vr of
         Nothing => rnAt1 sp (CannotExportUnknownName name) name
         Just _ => OkC (refEntryList name vr)
@@ -424,8 +369,7 @@ else case findExportValue es base of
 exportTypeAll : List Module -> String -> List Decl -> List Import -> String -> Span -> Check (List ExportEntry)
 exportTypeAll modules prefix decls imports name sp = case splitLastDot (splitOnDot name) of
   Pair revPrefix base => case revPrefix of
-    [] => if isPrivateName name then ErrC (privateExportMsg prefix sp name)
-    else case ownTypeEntries prefix decls name of
+    [] => case ownTypeEntries prefix decls name of
       Just entries => OkC entries
       Nothing => Vuna.Compiler.Common.bind (modulesExportingType modules imports name) (\pairs => case pairs of
         [] => rnAt1 sp (CannotExportUnknownName name) name

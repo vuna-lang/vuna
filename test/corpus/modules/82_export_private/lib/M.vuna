@@ -1,4 +1,4 @@
-module M (_helper) where
+module M where
 
-_helper : Int
+export _helper : Int
 _helper = 1

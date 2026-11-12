@@ -86,13 +86,13 @@ R4 起 record 是一等声明：`Elab.Records.recordsOfDecls` 只收集 `RecordM
 
 | 写法 | 档位 | 语义 |
 | --- | --- | --- |
-| `transparent record R where ...` | `ReprTransparent` | 透明别名：构造 / 投影是定义性恒等；**要求擦除后恰好一个运行时字段**，否则 `[TC_ReprTransparentInvalid]` |
+| `alias record R where ...` | `ReprAlias` | 透明别名：构造 / 投影是定义性恒等；**要求擦除后恰好一个运行时字段**，否则 `[TC_ReprAliasInvalid]` |
 | `record R where ...`（无前缀） | `ReprAuto` | 未声明：**仅 record** 回落到自动去装箱推断（`data` 恒装箱） |
-| `opaque record R where ...` | `ReprOpaque` | 强制装箱（FFI / ABI 稳定）：即使形状满足去装箱判据也保留运行时包装 |
+| `boxed record R where ...` | `ReprBoxed` | 强制装箱（FFI / ABI 稳定）：即使形状满足去装箱判据也保留运行时包装 |
 
 档位进 `DtData` 与 iface（`recordHash` 参与失效判定），下游包与 codegen 看到的是
-**同一个**声明结论，不再各自推断。`transparent` / `opaque` 只适用于 `record`
-（`transparent data` 是语法错误）；`lin` 可与档位组合（`transparent lin record`）。
+**同一个**声明结论，不再各自推断。`alias` / `boxed` 只适用于 `record`
+（`alias data` 是语法错误）；`lin` 可与档位组合（`alias lin record`）。
 
 `ReprAuto` 的推断判据（`Elab.Representation.unboxedCandidateOfData`，由擦除后的
 构造子形状决定，`ctorKeepFlags`）**只对 record 生效**；普通 `data` 恒装箱，不再参与
@@ -106,13 +106,13 @@ R4 起 record 是一等声明：`Elab.Records.recordsOfDecls` 只收集 `RecordM
 5. `Bool` / `Nat` / 内建特殊族不参与。
 
 ```vuna
-transparent record UserId where
+alias record UserId where
   uid : Int
 
 record Wrap where
   w : Int
 
-opaque record Handle where
+boxed record Handle where
   h : Int
 
 -- UserId / Wrap 去装箱（后者靠推断回落）：OCaml 里就是 int；
@@ -135,8 +135,8 @@ getUser u = u.uid
 ### `deriving via field`
 
 只有 `record` 可以写 `deriving via field (C1, C2, ...)`：合法性**只看声明档位**
-（R1）：`transparent` 直接成立；未声明（`ReprAuto`）按自动去装箱推断判定；
-`opaque` 恒为装箱，直接拒绝。`data` 已退役记录语义，写 `via field` 报
+（R1）：`alias` 直接成立；未声明（`ReprAuto`）按自动去装箱推断判定；
+`boxed` 恒为装箱，直接拒绝。`data` 已退役记录语义，写 `via field` 报
 `[TC_DerivingViaOnlyRecord]`。实例不是逐方法生成的，而是在实例搜索期做 **字典委托**（GND）：
 
 ```text
@@ -172,9 +172,9 @@ main : String
 main = show (UserId { uid = 3 }) ++ "/" ++ show (Wrap { w = 5 }) ++ "/" ++ pretty (Tagged { tag = 7 })
 ```
 
-- **只允许 record**：包装必须实际去装箱（`transparent` 声明，或未声明且形状满足
+- **只允许 record**：包装必须实际去装箱（`alias` 声明，或未声明且形状满足
   单字段判据），否则报 `[TC_DerivingViaUnboxedRequired]`（多字段、多构造子、函数 / Pi 字段、
-  递归包装、未知名 / 不透明字段、`opaque` 声明都不满足）。`data` 写 `via field` 直接报
+  递归包装、未知名 / 不透明字段、`boxed` 声明都不满足）。`data` 写 `via field` 直接报
   `[TC_DerivingViaOnlyRecord]`。
 - 委托是**表示级**的：只有 wrapper 与 field 运行时表示完全一致时才成立；当前这等价于
   自动去装箱判据。因此函数 / Pi 字段包装（`Eff` / `Reader` / 续延）暂时不能用
@@ -184,7 +184,7 @@ main = show (UserId { uid = 3 }) ++ "/" ++ show (Wrap { w = 5 }) ++ "/" ++ prett
   时也可以委托。
 - 目前只处理 class 参数**头部**是 wrapper 的委托；`C (List (Wrapper a))` 这种嵌套在容器里的
   包装不会自动回溯到 `C (List (Field a))`（同上，委托只覆盖头部参数）。
-- 没有 `newtype` / `type` 关键字：`record` 提供名义类型，`transparent` / 缺省推断负责表示，
+- 没有 `newtype` / `type` 关键字：`record` 提供名义类型，`alias` / 缺省推断负责表示，
   `deriving via field` 负责实例；结构 `deriving` 保持逐字段比较 / 展示。
 - 实现：`Elab.Dict.searchInstFuel` 的 `tryViaDict` 在实例搜索期替换类参数；
   `Elab.Data.checkViaDataDecls` 校验表示条件。因为 `interp` 是纯 Core 求值器（不做

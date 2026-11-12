@@ -126,7 +126,7 @@ export data TcErr(..) : Nat -> Type where
   DerivingViaUnboxedRequired : TcErr Zero
   -- R4（records-v2）：`deriving via field` 只允许 `record`（`data` 已退役记录语义）。
   DerivingViaOnlyRecord : TcErr Zero
-  -- R1（records-v2）：`transparent record` 声明不满足「擦除后恰好一个运行时字段」（含递归）。
+  -- R1（records-v2）：`alias record` 声明不满足「擦除后恰好一个运行时字段」（含递归）。
   ReprAliasInvalid : TcErr Zero
   RecordDuplicateField : TcErr Zero
   RecordMissingField : String -> TcErr (Succ Zero)
