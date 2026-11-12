@@ -1,11 +1,14 @@
-# 冷启动上下文预算（CI 门槛；超预算 = CI 失败）。
+# 冷启动上下文预算（CI 门槛；超预算 = CI 失败，达到 70% = WARN）。
 #
 # 动机：AI agent 的改动成本 ≈ 必须读进上下文的字节数。代码可以按需读
 # （`vuna map --find` + span 区间），但入口文档每轮对话都要读，所以单立预算。
 #
-# 指标定义见 nix/context-budget.sh。本文件**只允许降，不允许升**；唯一例外是
-# 格式化规则改变导致的单点行数增长（须在标定历史中论证），其余情况有意调整文档
-# 结构后，用 `sh nix/context-budget.sh .` 复测并下调，注释记录原因。
+# 指标定义见 nix/context-budget.sh。**2026-11-12 起改为「实测 × 1.5 余量」策略**：
+# 预算按当时实测值上浮 50% 标定，用法是
+#   - 超过预算 ⇒ REGRESSION，CI 失败；
+#   - 达到预算的 70% ⇒ 打印 WARN（早期信号，不失败）。
+# 这样常规的文档/模块增长不再每次都触发复标定；压缩文档后仍按实测**下调**预算
+# （ratchet 只在下调方向约束）。历史条目标定沿用旧口径，仅作参考。
 #
 # 标定历史：
 #   - Index 工具链落地：coldstart_bytes 34000（AGENTS+architecture+README）。
@@ -35,10 +38,10 @@
 #   - 文档按主题重整：删除 history/dt-core/dt-parity/dt.md，新增 core/tooling/records-traits
 #     并把 DT 语义并入 type-system；合并 main 的 LSP/readBytes 文档后按实测复标定：
 #     coldstart 29731 / agents 104 / arch 167 / readme 163 / max_ref 279。
-coldstart_bytes 42212
-agents_lines 141
-arch_lines 236
-readme_lines 175
+coldstart_bytes 63318
+agents_lines 212
+arch_lines 354
+readme_lines 263
 #   - M24.5：dt-parity.md §6 重写（实测能力表 + 边界）到 203 行；Elab 新增 scrutinee 反射、
 #     不可达分支、inlineSolvedMetas（3348 → 3513）。按实测重标定 max_ref 208 / max_module 3530；
 #     入口文档（coldstart/agents/arch/readme）不变。
@@ -47,8 +50,8 @@ readme_lines 175
 #     （coldstart 40787→39333 / agents 136→130 / arch 222→219 / readme 204→172）。
 #     max_ref_lines 438（primitives.md）与 max_module_lines 2400（Elab/Term/Impl.vuna）
 #     是改动前已存在的漏标定（旧预算 415/2300 本身已红），按实测重标定。
-max_ref_lines 474
-max_module_lines 2728
+max_ref_lines 711
+max_module_lines 4092
 #   - M27：新增 `primitives.md` 与内建/原语/能力文档、`Vuna.Compiler.Intrinsics` 模块；
 #     按 `sh nix/context-budget.sh .` 实测收紧：coldstart 29055 / agents 104 / arch 156 /
 #     readme 163 / max_ref 206 / max_module 811（入口文档有 45B 余量，agents 临界）。
@@ -225,3 +228,9 @@ max_module_lines 2728
 #     coldstart 42264 / agents 141 / arch 236 / readme 175 / max_ref 474 已超旧预算
 #     （既有漏标定，非本轮引入）；本轮删除未增加入口文档，coldstart 反而 -52B。按
 #     `sh nix/context-budget.sh .` 实测复标定到当前值，max_module 不变（仍 2728）。
+#   - 2026-11-12 预算策略调整（用户指示）：不再按实测值紧贴标定（历史上每轮特性/文档
+#     增长都要复标定，且 cache.md 加一行就让 CI 红）。改为按当时实测值上浮 50% 留余量，
+#     并在达到预算 70% 时打印 WARN 作为早期信号，超预算才失败。本次按实测
+#     （coldstart 42203 / agents 141 / arch 236 / readme 175 / max_ref 475 /
+#     max_module 2728）上浮 50% 取整：coldstart 63318 / agents 212 / arch 354 /
+#     readme 263 / max_ref 711 / max_module 4092。压缩文档后仍按实测下调。

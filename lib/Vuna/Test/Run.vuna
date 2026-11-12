@@ -1022,6 +1022,27 @@ exitAsserts spec code =
   else [ Assertion "exit" (code == fromMaybe 0 (parseLeadingInt spec)) "expected ${spec}, got ${strOfInt code}"
   ]
 
+-- 失败上下文：step 命令行 + 捕获输出尾部。CI 里 steps case 只报 `exit: exit 1`，
+-- 看不出是哪条命令失败、也看不到脚本自己打印的原因（如 corpus check.sh 的 `FAIL:` 行）。
+stepContext : String -> String -> String
+stepContext cmd out =
+  let
+    outTail = trimNewlines out
+  in "\n  step: ${truncateHead 240 cmd}"
+    ++ (if byteLength outTail == 0 then "" else "\n  output tail:\n${truncateTail 1600 outTail}")
+
+withStepContext : String -> Assertion -> Assertion
+withStepContext ctx a =
+  if a.assertionOk then a else Assertion a.assertionName False "${a.assertionDetail}${ctx}"
+
+truncateHead : Int -> String -> String
+truncateHead n s = if byteLength s <= n then s else "${substring 0 (natFromInt n) s}…"
+
+truncateTail : Int -> String -> String
+truncateTail n s =
+  if byteLength s <= n then s
+  else "…${substring (natFromInt (byteLength s - n)) (natFromInt n) s}"
+
 fileContainsAssert : Env -> String -> Pair String String -> Eff [] Assertion
 fileContainsAssert env caseTmp (Pair path frag) = do
   text <- readMaybeFile (stepPath env caseTmp path)
@@ -1052,8 +1073,12 @@ stepAssertsV2 : Env -> String -> Int -> Step -> Eff [] (List Assertion)
 stepAssertsV2 env caseTmp timeout st = if byteLength st.stRun > 0 then do
   r <- runCmdMerged env "step" env.envCwd timeout (withStepsEnv env caseTmp ["sh", "-c", st.stRun])
   outA <- outAsserts env caseTmp (combinedOut r) st
-  pure
-    (append (if r.cmdTimedOut then [Assertion "timeout" False "step timed out after ${strOfInt timeout}s"] else []) (append (exitAsserts st.stExit r.cmdCode) outA))
+  let
+    ctx = stepContext st.stRun (combinedOut r)
+    headA =
+      if r.cmdTimedOut then [Assertion "timeout" False "step timed out after ${strOfInt timeout}s${ctx}"]
+      else []
+  in pure (append headA (append (map (withStepContext ctx) (exitAsserts st.stExit r.cmdCode)) outA))
 else if byteLength st.stRead > 0 then
   let
     resolved = stepPath env caseTmp st.stRead
@@ -1240,9 +1265,10 @@ summarize results =
   let
     checks = sumInts (map resChecksOf results)
     failed = sumInts (map resFailOf results)
-    badCases = listLength (filter isFailed results)
+    bad = filter isFailed results
+    badCases = listLength bad
   in if failed == 0 && badCases == 0 then "vuna tests passed (${strOfInt checks} checks)"
-  else "${strOfInt checks} checks, ${strOfInt badCases} failed case(s)"
+  else "${strOfInt checks} checks, ${strOfInt badCases} failed case(s): ${join ", " (map resIdOf bad)}"
 
 printCompiler : Env -> Eff [] Int
 printCompiler env = do
@@ -1364,19 +1390,25 @@ readResultFile dir index =
         _ => Nothing
       )
 
-collectResults : String -> Int -> Eff [] (List CaseResult)
-collectResults dir count = collectResultsGo (count + 1) dir count 0 []
+collectResults : String -> Int -> List (Pair Int Case) -> Eff [] (List CaseResult)
+collectResults dir count indexed = collectResultsGo (count + 1) dir count 0 indexed []
 
-collectResultsGo : Int -> String -> Int -> Int -> List CaseResult -> Eff [] (List CaseResult)
-collectResultsGo fuel dir count index acc = if fuel <= 0 then pure (reverse acc)
+-- 缺结果文件 ⇒ worker 没跑完/被杀（崩溃、OOM、超时被外层杀），不是 case 断言失败。
+-- 用 index → case id 还原真实用例名；旧行为只报 `unknown-<index>`，线上失败完全无法定位。
+caseIdAt : Int -> List (Pair Int Case) -> String
+caseIdAt i [] = "unknown-${strOfInt i}"
+caseIdAt i ((Pair j c) :: rest) = if j == i then c.caseId else caseIdAt i rest
+
+collectResultsGo : Int -> String -> Int -> Int -> List (Pair Int Case) -> List CaseResult -> Eff [] (List CaseResult)
+collectResultsGo fuel dir count index indexed acc = if fuel <= 0 then pure (reverse acc)
 else if index >= count then pure (reverse acc)
 else do
   found <- readResultFile dir index
   case found of
-    Just r => collectResultsGo (fuel - 1) dir count (index + 1) (r :: acc)
+    Just r => collectResultsGo (fuel - 1) dir count (index + 1) indexed (r :: acc)
     Nothing =>
-      collectResultsGo (fuel - 1) dir count (index + 1)
-        (CaseResult "unknown-${strOfInt index}" "fail" 0 1 0 0 [] :: acc)
+      collectResultsGo (fuel - 1) dir count (index + 1) indexed
+        (CaseResult "${caseIdAt index indexed} (no result)" "fail" 0 1 0 0 [] :: acc)
 
 printJSON : List CaseResult -> Eff [] Int
 printJSON results =
@@ -1426,7 +1458,7 @@ runParent env opts suite cases = do
     _ <- ensureDirPath resultsDir
     pids <- spawnWorkers env opts resultsDir effective (effective + 1) 0 []
     _ <- waitPids pids
-    results <- collectResults resultsDir n
+    results <- collectResults resultsDir n indexed
     finishResults env opts results
 
 indexAll : List Case -> Int -> List (Pair Int Case) -> List (Pair Int Case)
