@@ -28,7 +28,7 @@ out-contains: 7
 out-not-contains: TC_UnknownName
 # 安全阀：新增一个不在本包 manifest 里的模块，它的依赖无法从 manifest 闭包推出；
 # 加载后必须回退全量（iface-fallback=repl）且结果仍正确。
-run: printf 'module KNew (newVal) where\n\nimport KDep\n\nnewVal : Int\nnewVal = kdepVal + 1\n' > "$TMPDIR/iface-k-root/lib/KNew.vuna"
+run: printf 'module KNew where\n\nimport KDep\n\nexport newVal : Int\nnewVal = kdepVal + 1\n' > "$TMPDIR/iface-k-root/lib/KNew.vuna"
 run: cd "$TMPDIR/iface-k-root" && printf 'import KNew\nnewVal\n:q\n' | VUNA_DEBUG_PERF=1 "$VUNA" repl 2>&1
 out-contains: iface-fallback=repl missing=
 out-contains: 43
