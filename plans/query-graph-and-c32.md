@@ -379,3 +379,22 @@ warm `check .` 56–57 ms（门槛 78）；全量 suite **5551 checks / 0 failed
 `vuna fmt --check compiler lib app examples` 通过、`nix/check-eff-boundary.sh` ok、
 section 90 **1397 checks / 0 failed**、全量 suite **5490 checks / 0 failed**、
 warm `check compiler` **29 ms**（门槛 43）/ `check .` **53 ms**（门槛 78）。
+
+### 阶段 3 进展（2026-11-12，第 4 轮）
+
+- ✅ REPL `stateToolSession` → `tooliface:<pkg>:<dirHash>` 节点（`QMarker`），依赖表 =
+  校验面 stat（`st:<path>:<mtime>:<size>`）+ import 闭包（`closure:<排序名单>`）；
+  `replSessionKey` / `toolSessionFresh` / `sessionClosureOk` 的启发式全部删除（提交 e5669c1）。
+- ✅ LSP `DiagCache` → `lspiface:<pkg>:<dirHash>` 节点，`cacheFresh` 改成图命中；
+  `dcKey`（指纹+包）保留作廉价标签校验（提交 fda4616）。
+- ✅ debug 行统一：`iface-source=` → `query-source=`、`iface-tool-lazy` → `query-lazy`
+  （提交 ab3c464）。
+- 仍留两项（下一轮）：
+  - REPL `stateIndexCache`：它是 `Index` 的 stat 快照 + 安全窗内容哈希回退
+    （`indexStatsUnchanged`）。直接换成图命中会**丢掉窗口内同 size 编辑的内容哈希回退**；
+    要么把「窗口内文件的内容哈希」也算进依赖表（读哈希 = 慢，等于把优化退回去），要么等
+    阶段 4 把 `Index.loadOrBuild` 整个接到图上时一起做（`.local/index/` manifest 本身
+    已经是内容哈希 + 原子写，天然是「索引节点」的载荷）。**决定：并入阶段 4**。
+  - REPL `stateAuxCache`：`AuxCache` 是「按 import 名单草拟的辅助表」（termAux 预处理），
+    它的失效面就是 buffer + 依赖接口；下一轮并进 `tooliface:` 节点的 `closure:` 段即可
+    （同一 key、不同依赖），不需要独立节点。
