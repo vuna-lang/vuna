@@ -205,7 +205,7 @@ Lead：阶段门禁（`vuna check .`、suite、bench、`nix flake check`、rotat
 
 - [x] 阶段 0：Store + codec + 删 Marshal + clean 命令（**偏差已登记，见下**）
 - [x] 阶段 1：Query v2 + Query.Run（纯核心三段式 + Eff 层预算/环/会话索引）
-- [ ] 阶段 2：Driver.Graph 接 check/build/compile
+- [x] 阶段 2：Driver.Graph 接 check/build/compile（check + split 节点，check/、split/ 目录下线）
 - [ ] 阶段 3：LSP / REPL 接图
 - [ ] 阶段 4：test / doc / index 接图
 - [ ] 阶段 5：收尾（删旧路径、债务、基线、rotation、flake check）
