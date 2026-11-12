@@ -170,7 +170,9 @@ Base.EffExit  base/lib/Base/EffExit.vuna
 Base.EffExn  base/lib/Base/EffExn.vuna
 Base.EffFs  base/lib/Base/EffFs.vuna
 Base.EffMutex  base/lib/Base/EffMutex.vuna
+Base.EffNet  base/lib/Base/EffNet.vuna
 Base.EffProcess  base/lib/Base/EffProcess.vuna
+Base.EffRef  base/lib/Base/EffRef.vuna
 Base.EffSched  base/lib/Base/EffSched.vuna
 Base.EffState  base/lib/Base/EffState.vuna
 Base.EffStdin  base/lib/Base/EffStdin.vuna
@@ -320,7 +322,9 @@ Base.EffExit  ./lib/Base/EffExit.vuna
 Base.EffExn  ./lib/Base/EffExn.vuna
 Base.EffFs  ./lib/Base/EffFs.vuna
 Base.EffMutex  ./lib/Base/EffMutex.vuna
+Base.EffNet  ./lib/Base/EffNet.vuna
 Base.EffProcess  ./lib/Base/EffProcess.vuna
+Base.EffRef  ./lib/Base/EffRef.vuna
 Base.EffSched  ./lib/Base/EffSched.vuna
 Base.EffState  ./lib/Base/EffState.vuna
 Base.EffStdin  ./lib/Base/EffStdin.vuna

@@ -1,0 +1,48 @@
+module Base.EffNet
+  ( NetOp(..)
+  , netAccept
+  , netClose
+  , netConnect
+  , netListen
+  , netPort
+  , netRecv
+  , netSend
+  ) where
+
+-- Base.EffNet：带内建 Net 行的网络操作（阶段 4）。
+--
+-- 操作直调带行宿主原语（`prim_eff_net*_host`），不经过 sendCore/handler：网络是
+-- 宿主机制，不提供 mock；`NetOp` 只是行标签。
+import Base.Eff
+
+-- | Net 行标签（无载荷；操作直接映射到带行原语）。
+data NetOp : Type where
+  NetTag : NetOp
+
+-- | 绑定并监听地址，返回句柄表下标（带 `NetOp` 行）。
+netListen : String -> Eff [NetOp] Int
+netListen addr = prim_eff_netListen_host addr
+
+-- | 取监听句柄的端口（带 `NetOp` 行）。
+netPort : Int -> Eff [NetOp] Int
+netPort h = prim_eff_netPort_host h
+
+-- | 接受连接，返回新句柄（带 `NetOp` 行）。
+netAccept : Int -> Eff [NetOp] Int
+netAccept h = prim_eff_netAccept_host h
+
+-- | 接收最多 n 字节（带 `NetOp` 行）。
+netRecv : Int -> Int -> Eff [NetOp] String
+netRecv h n = prim_eff_netRecv_host h n
+
+-- | 发送字符串，返回写入字节数（带 `NetOp` 行）。
+netSend : Int -> String -> Eff [NetOp] Int
+netSend h s = prim_eff_netSend_host h s
+
+-- | 关闭句柄（带 `NetOp` 行）。
+netClose : Int -> Eff [NetOp] Int
+netClose h = prim_eff_netClose_host h
+
+-- | 连接地址，返回句柄（带 `NetOp` 行）。
+netConnect : String -> Eff [NetOp] Int
+netConnect addr = prim_eff_netConnect_host addr

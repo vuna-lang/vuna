@@ -1,0 +1,9 @@
+-- 阶段 4：Ref 内建行（带行宿主原语 + entry 允许 RefOp 行，无需 handler）。
+import Base.Eff
+import Base.EffRef
+
+main : Eff [RefOp] Int
+main = do
+  r <- refNew 41
+  _ <- refWrite r 42
+  refRead r

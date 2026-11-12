@@ -2201,9 +2201,13 @@ builtinWrapTextGo : QualCtx -> Pair String (List String) -> List String -> Pair 
 builtinWrapTextGo qc acc [] = acc
 builtinWrapTextGo qc acc (tag :: rest) =
   let
-    runRef = qualValueText qc (builtinEffectRunHostOf tag)
-    deps = addDepUnique (secondOf acc) (secondOf runRef)
-  in builtinWrapTextGo qc (Pair "(${firstOf runRef} ${firstOf acc})" deps) rest
+    runName = builtinEffectRunHostOf tag
+  in if runName == "" then builtinWrapTextGo qc acc rest
+  else
+    let
+      runRef = qualValueText qc runName
+      deps = addDepUnique (secondOf acc) (secondOf runRef)
+    in builtinWrapTextGo qc (Pair "(${firstOf runRef} ${firstOf acc})" deps) rest
 
 actionRunText : QualCtx -> Pair (List DtData) (List DtDef) -> String -> String -> Term -> Pair String (List String)
 actionRunText qc program mainRef kind mainTy = if kind == "eff" then

@@ -1,0 +1,8 @@
+-- 阶段 4：Net 内建行（listen/close，验证带行原语与 entry）。
+import Base.Eff
+import Base.EffNet
+
+main : Eff [NetOp] Int
+main = do
+  h <- netListen "tcp:127.0.0.1:0"
+  netClose h

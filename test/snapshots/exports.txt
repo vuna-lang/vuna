@@ -16,7 +16,9 @@ base/lib/Base/EffExit.vuna: ExitOp(..), exitWith, handleExit, handleExitHost, re
 base/lib/Base/EffExn.vuna: Exn, ExnOp(..), bracketExn, catchExn, exnRes, handleExn, runExn, throwExn, tryWith
 base/lib/Base/EffFs.vuna: FsOp(..), fsFileExists, fsFileMtime, fsFileSize, fsIsDirectory, fsMakeDir, fsReadDir, fsReadFile, fsRemoveFile, fsWriteFile, fsWriteFileAtomic, handleFs, handleFsHost, resFs, runFs
 base/lib/Base/EffMutex.vuna: Mutex, Semaphore, acquire, newMutex, newSemaphore, release, semSignal, semWait
+base/lib/Base/EffNet.vuna: NetOp(..), netAccept, netClose, netConnect, netListen, netPort, netRecv, netSend
 base/lib/Base/EffProcess.vuna: ProcessOp(..), handleProcess, handleProcessHost, handleProcessHostObserved, handleProcessHostWith, processArgs, processExit, processRunIn, resProcess, runProcess
+base/lib/Base/EffRef.vuna: RefOp(..), refNew, refRead, refWrite
 base/lib/Base/EffSched.vuna: Scope, Task, TaskLin, awaitTask, awaitTaskLin, cancelScope, cancelTask, cancelTaskLin, forkTask, forkTaskLin, forkTaskWith, isCancelled, newScope, scopeWait, scopeWaitTimeout, withScope, withScopeTimeout, yieldNow
 base/lib/Base/EffState.vuna: StateOp(..), get, handleState, put, resState
 base/lib/Base/EffStdin.vuna: StdinOp(..), handleStdin, handleStdinHost, resStdin, runStdin, stdinReadBytes, stdinReadLine

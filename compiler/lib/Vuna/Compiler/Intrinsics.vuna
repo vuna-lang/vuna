@@ -206,9 +206,9 @@ builtinEffects =
     BuiltinEffect "Base.EffExit.ExitOp" "Base.EffExit.runExitHost" "default",
     BuiltinEffect "Base.EffStdin.StdinOp" "Base.EffStdin.runStdinHost" "default",
     BuiltinEffect "Base.EffArgs.ArgsOp" "Base.EffArgs.runArgsHost" "default",
-    BuiltinEffect "Base.EffNet.NetOp" "Base.EffNet.runNetHost" "default",
-    BuiltinEffect "Base.EffRef.RefOp" "Base.EffRef.runRefHost" "default",
-    BuiltinEffect "Base.EffSched.SchedOp" "Base.EffSched.runSchedHost" "default"
+    BuiltinEffect "Base.EffNet.NetOp" "" "default",
+    BuiltinEffect "Base.EffRef.RefOp" "" "default",
+    BuiltinEffect "Base.EffSched.SchedOp" "" "default"
   ]
 
 -- | 标签对应的 `runXHost` 全名；不是内建宿主效应时返回空串。
@@ -220,11 +220,14 @@ builtinEffectRunHostOfRest tag [] = ""
 builtinEffectRunHostOfRest tag (e :: rest) =
   if e.beTag == tag then e.beRunHost else builtinEffectRunHostOfRest tag rest
 
--- | 该标签是否是内建宿主效应。
+-- | 该标签是否是内建宿主效应（`beRunHost` 为空表示只允许行、无需预装 handler）。
 isBuiltinEffectTag : String -> Bool
-isBuiltinEffectTag tag = case builtinEffectRunHostOf tag of
-  "" => False
-  _ => True
+isBuiltinEffectTag tag = builtinEffectExistsRest tag builtinEffects
+
+builtinEffectExistsRest : String -> List BuiltinEffect -> Bool
+builtinEffectExistsRest tag [] = False
+builtinEffectExistsRest tag (e :: rest) =
+  if e.beTag == tag then True else builtinEffectExistsRest tag rest
 
 -- | Eff 版线性绑定（bootstrap 过渡表；当前无库调用方）：`Eff [] a` 的线性 continuation。
 -- runtime 由 codegen 专门生成（装箱 `MkEff` 的 match），不能复用 eager 包装。
@@ -717,6 +720,7 @@ effIntrinsics : List Intrinsic
 -- 阶段 0 spike：带内建 ConsoleOp 行的宿主打印（验证 `IEffRow`/entry/runMain 机制）。
 -- 阶段 3：带内建 FsOp 行的宿主原语（entry 自动预装用；与旧原语同 runtime）。
 -- 阶段 3：带内建效应行的宿主原语（Clock/Env/Process/Exit/Stdin/Args）。
+-- 阶段 4：Ref / Net 的带行宿主原语。
 effIntrinsics =
   [ Intrinsic primEffBind1Name (IPi "a" (IPi "b" (IFun1 (IEff (IVar "a")) (IFun1 (IFun1 (IVar "a") (IEff (IVar "b"))) (IEff (IVar "b")))))) OpNone "" True,
     Intrinsic "effTimeUs" (IEff IInt) OpNone "(dtp_timeUs ())" True,
@@ -764,6 +768,16 @@ effIntrinsics =
     Intrinsic "prim_eff_readLine_host" (IEffRow (IRowCons "default" (IGlobal "Base.EffStdin.StdinOp") IRowNil) IStr) OpNone "(dtp_readLine ())" True,
     Intrinsic "prim_eff_readBytes_host" (IFun IInt (IEffRow (IRowCons "default" (IGlobal "Base.EffStdin.StdinOp") IRowNil) IStr)) OpNone "dtp_readBytes" True,
     Intrinsic "prim_eff_getArgs_host" (IEffRow (IRowCons "default" (IGlobal "Base.EffArgs.ArgsOp") IRowNil) (IList IStr)) OpNone "(dtp_listOf (dtp_getArgs ()))" True,
+    Intrinsic "prim_eff_newRef_host" (IPi "a" (IFun (IVar "a") (IEffRow (IRowCons "default" (IGlobal "Base.EffRef.RefOp") IRowNil) (IRef (IVar "a"))))) OpNone "(fun x -> ref x)" True,
+    Intrinsic "prim_eff_readRef_host" (IPi "a" (IFun (IRef (IVar "a")) (IEffRow (IRowCons "default" (IGlobal "Base.EffRef.RefOp") IRowNil) (IVar "a")))) OpNone "(fun r -> !r)" True,
+    Intrinsic "prim_eff_writeRef_host" (IPi "a" (IFun (IRef (IVar "a")) (IFun (IVar "a") (IEffRow (IRowCons "default" (IGlobal "Base.EffRef.RefOp") IRowNil) IInt)))) OpNone "(fun r v -> r := v; 0)" True,
+    Intrinsic "prim_eff_netListen_host" (IFun IStr (IEffRow (IRowCons "default" (IGlobal "Base.EffNet.NetOp") IRowNil) IInt)) OpNone "dtp_net_listen" True,
+    Intrinsic "prim_eff_netPort_host" (IFun IInt (IEffRow (IRowCons "default" (IGlobal "Base.EffNet.NetOp") IRowNil) IInt)) OpNone "dtp_net_port" True,
+    Intrinsic "prim_eff_netAccept_host" (IFun IInt (IEffRow (IRowCons "default" (IGlobal "Base.EffNet.NetOp") IRowNil) IInt)) OpNone "dtp_net_accept" True,
+    Intrinsic "prim_eff_netRecv_host" (IFun IInt (IFun IInt (IEffRow (IRowCons "default" (IGlobal "Base.EffNet.NetOp") IRowNil) IStr))) OpNone "dtp_net_recv" True,
+    Intrinsic "prim_eff_netSend_host" (IFun IInt (IFun IStr (IEffRow (IRowCons "default" (IGlobal "Base.EffNet.NetOp") IRowNil) IInt))) OpNone "dtp_net_send" True,
+    Intrinsic "prim_eff_netClose_host" (IFun IInt (IEffRow (IRowCons "default" (IGlobal "Base.EffNet.NetOp") IRowNil) IInt)) OpNone "dtp_net_close" True,
+    Intrinsic "prim_eff_netConnect_host" (IFun IStr (IEffRow (IRowCons "default" (IGlobal "Base.EffNet.NetOp") IRowNil) IInt)) OpNone "dtp_net_connect" True,
     Intrinsic "prim_eff_spawn" (IFun (IList IStr) (IEff IInt)) OpNone "(fun args -> dtp_spawn (dtp_ocamlOf args))" True,
     Intrinsic "prim_eff_wait" (IFun IInt (IEff IInt)) OpNone "dtp_wait" True,
     Intrinsic "prim_eff_netListen" (IFun IStr (IEff IInt)) OpNone "dtp_net_listen" True,
