@@ -61,3 +61,6 @@ PKG_MissingHash
 PKG_NotMaterialized
 PKG_SourceConflict
 PKG_UnknownSourceKey
+PS_ExpectedExportItem
+RN_AmbiguousConstructorExport
+RN_CannotExportUnknownName
