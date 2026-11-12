@@ -166,6 +166,11 @@ Driver.Compile.depIfacesOf
     条目 `meIfaceHash` 一致。同一路径永远不可能承载两份不同内容 ⇒ 消除「布局/半写错位」。
 11. **载荷可自证**：`hashOfIface` 从已存载荷重算哈希，`VUNA_IFACE_SELFTEST=1` 时在写侧
     读回与读侧判净都校验；失败即拒绝（不静默用坏缓存）。默认关闭（O(payload)，CI 开）。
+12. **D11 opaque 与 ifaceHash 分工**：`CachedProgram.cachedOpaque` 记录模块声明的 opaque
+    定义全名；`hashOfParts` 对 opaque 只哈希名字 + 类型（不哈希体），并单独哈希名单；
+    `ifaceHashVersion` 5→6、`ifaceSchema` 22→23。下游 `depStartOfAt` 不把 opaque 体放进
+    deftbl，因而接口/分离编译路径不展开它们。**已知边界**：全量源码路径仍把同程序模块
+    一起精化，opaque 体在该路径仍会展开；per-module 精化拆分后再收口。
 
 ## 存储与 key
 
