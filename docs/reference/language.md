@@ -184,8 +184,9 @@ M = Int
 - opaque 定义体在**下游模块**的 deftbl 中不出现：跨包接口路径不会 delta 展开它，
   `ifaceHash` 只含名字 + 类型，`implHash` 才含体；
 - 定义模块自身仍需要体来检查/生成代码；`transparent` 是显式默认，等价于不写；
-- `abstract` 已可解析（`abstract f : T` / `export abstract f : T`），当前与 opaque
-  共用下游 body 隐藏口径；独立 sealing 语义见 [debt.md](debt.md) D76；
+- `abstract` 已可解析（`abstract f : T` / `export abstract f : T`）：定义体在**本模块内**也
+  不可展开（seal）；`opaque` 只对下游隐藏。包增量路径对 abstract 自身使用尚未 seal，见
+  [debt.md](debt.md) D76；
 - 包 check/build、单文件 `dtCheckSource`、REPL/表达式求值与 `dtEvalFile` 均已按
   依赖模块隐藏 opaque 体（`hideDepOpaqueDecls`）；只剩内部 goal/tolerant 查询，见
   [debt.md](debt.md) D75。

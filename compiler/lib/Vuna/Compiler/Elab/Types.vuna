@@ -524,6 +524,12 @@ ecAddDef (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl 
   in Ec next sols (d :: defs) datas depths goals insts classes dgoals delta gtbl soltbl dptbl gcomp
     ctbl ctortbl defvals haslin mspans uspans warnings
 
+export ecRemoveDefTbl : String -> Ec -> Ec
+ecRemoveDefTbl name (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals haslin mspans uspans warnings) =
+  Ec next sols defs datas depths goals insts classes dgoals
+    (Base.HashMap.fromList (filter (\p => not (firstOf p == name)) (Base.HashMap.toList deftbl)))
+    gtbl soltbl dptbl gcomp ctbl ctortbl defvals haslin mspans uspans warnings
+
 export ecAddData : Ec -> DtData -> Ec
 ecAddData (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals haslin mspans uspans warnings) d =
   Ec next sols defs (append datas [d]) depths goals insts classes dgoals deftbl gtbl soltbl dptbl

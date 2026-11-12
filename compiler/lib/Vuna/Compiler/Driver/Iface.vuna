@@ -51,6 +51,7 @@ import Vuna.Compiler.Driver.Owner
 import Vuna.Compiler.Intrinsics
 import Vuna.Compiler.Source
 import Vuna.Compiler.Loader.Modules
+import Vuna.Compiler.Loader.Flatten
 import Vuna.Compiler.Packages.Pkg
 
 -- 源信息：模块名 → (绝对路径, 内容哈希, mtime, size)。路径只用于本机校验（换 checkout
@@ -221,7 +222,7 @@ ifaceSchema = "vuna-iface 26"
 -- | 接口哈希的**算法格式版本**：参与哈希输入（与 `ifaceSchema` 独立——schema 管载荷
 -- 布局，本版本管摘要算法/分片编码；换算法时旧哈希自然换代）。
 ifaceHashVersion : String
-ifaceHashVersion = "vuna-iface-hash 6 (opaque bodies excluded)"
+ifaceHashVersion = "vuna-iface-hash 7 (opaque/abstract bodies excluded)"
 
 -- ---------------------------------------------------------------
 -- 哈希：接口哈希必须比 `strHash`（10 bit）强得多
@@ -422,7 +423,7 @@ hashDecls ds = payloadDigest (encTop encDecls ds)
 hashOfParts : String -> String -> List Import -> List Import -> List FixityDecl -> List RecordMeta -> List ExportEntry -> List Decl -> CachedProgram -> String
 hashOfParts name pkg imports implicitImports fixities records exports decls cp =
   digestParts
-    [ifaceHashVersion, name, pkg, hashImports imports, hashImports implicitImports, hashFixities fixities, hashRecords records, hashDecls decls, hashDatas (cachedDatas cp), hashDefs (cachedOpaqueOf cp) (cachedDefs cp), hashGlobals (cachedGlobals cp), hashInsts (cachedInsts cp), hashClasses (cachedClasses cp), hashExports exports, hashOpaque (cachedOpaqueOf cp)]
+    [ifaceHashVersion, name, pkg, hashImports imports, hashImports implicitImports, hashFixities fixities, hashRecords records, hashDecls decls, hashDatas (cachedDatas cp), hashDefs (map opaqueBaseName (cachedOpaqueOf cp)) (cachedDefs cp), hashGlobals (cachedGlobals cp), hashInsts (cachedInsts cp), hashClasses (cachedClasses cp), hashExports exports, hashOpaque (cachedOpaqueOf cp)]
 
 export hashOfIface : ModuleIface -> String
 hashOfIface m =

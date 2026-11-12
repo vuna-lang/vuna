@@ -139,7 +139,7 @@ dtCheckPartsWithProgram pkg loaded = do
       let
         parts = secondOf resolved
         loaderWarns = firstOf resolved
-        decls = hideDepOpaqueDecls pkg (secondOf parts) (dtProjectDecls parts)
+        decls = sealOpaqueDecls (secondOf parts) (firstOf parts)
       in case elabProgramFull decls of
         ErrC e => ErrC e
         OkC program =>
@@ -154,23 +154,40 @@ dtCheckPartsWithProgram pkg loaded = do
               in OkC (Pair warns (CheckedPackage program (secondOf parts) (firstOf parts) [] warns))
   )
 
--- D11（全量源码路径的 opaque）：依赖包的 opaque 值定义在 check 前降成 axiom：
--- 类型保留，体从 decls 中移除（签名也已消费）。这样下游无法 delta 展开；定义包自身
--- 不走这条路径，仍保留体做完整检查/代码生成。接口路径由 `depStartOfAt` 已做同样过滤。
-hideDepOpaqueDecls : String -> List Module -> List Decl -> List Decl
-hideDepOpaqueDecls pkg modules decls =
-  let
-    names = concatMap moduleOpaqueOf (filter (\m => modulePackageOf m /= pkg) modules)
-  in mapMaybe (hideOneOpaque names decls) decls
+-- D11：模块边界 seal。opaque 在模块末尾 seal（定义模块自身可展开）；abstract 在
+-- 其 DFun 之后立即 seal（定义模块自身也不能展开）。seal 是内部 DAxiom，名字带
+-- `@seal@` 前缀，elabBodies 见到后从 deftbl 移除目标体；体仍留在 ecDefs 供 codegen。
+sealOpaqueDecls : List Module -> List Decl -> List Decl
+sealOpaqueDecls modules entryDecls = append (concatMap sealModule (reverse modules)) entryDecls
 
-hideOneOpaque : List String -> List Decl -> Decl -> Maybe Decl
-hideOneOpaque names decls (decl@(DSig name ctx ty sp)) =
-  if memName name names then Nothing else Just decl
-hideOneOpaque names decls (decl@(DFun name pats body sp)) = if memName name names then case opaqueSigType name decls of
-  Just ty => Just (DAxiom name ty sp)
-  Nothing => Just decl
-else Just decl
-hideOneOpaque names decls decl = Just decl
+sealModule : Module -> List Decl
+sealModule m =
+  let
+    decls = moduleDeclsOf m
+    names = moduleOpaqueOf m
+    abstracts = map opaqueBaseName (filter isAbstractOpaqueName names)
+    opaques = map opaqueBaseName (filter (\n => not (isAbstractOpaqueName n)) names)
+    body = sealAbstractAfter decls abstracts
+  in append body (map (sealDeclOf decls) opaques)
+
+sealAbstractAfter : List Decl -> List String -> List Decl
+sealAbstractAfter [] names = []
+sealAbstractAfter (d :: rest) names = case d of
+  DFun n pats body sp =>
+    if memName n names then Base.List.Cons d (Base.List.Cons (sealDeclOf (d :: rest) n) (sealAbstractAfter rest names))
+    else Base.List.Cons d (sealAbstractAfter rest names)
+  _ => Base.List.Cons d (sealAbstractAfter rest names)
+
+sealDeclOf : List Decl -> String -> Decl
+sealDeclOf decls name =
+  let
+    ty = case opaqueSigType name decls of
+      Just t => t
+      Nothing => EVar "Type" sealSpan
+  in DAxiom ("vuna_seal_" ++ name) ty sealSpan
+
+sealSpan : Span
+sealSpan = Span "<seal>" 1 1 1 1
 
 opaqueSigType : String -> List Decl -> Maybe Expr
 opaqueSigType name [] = Nothing
@@ -188,7 +205,7 @@ dtCheck ctx entry = do
       let
         parts = secondOf resolved
         modules = secondOf parts
-        decls = hideDepOpaqueDecls (contextPackageName ctx) modules (dtProjectDecls parts)
+        decls = sealOpaqueDecls modules (firstOf parts)
       in checkDeclsWithWarns (firstOf resolved) decls
   )
 
@@ -226,7 +243,7 @@ dtEvalFile ctx entry = do
     OkC resolved =>
       let
         parts = secondOf resolved
-        decls = hideDepOpaqueDecls (contextPackageName ctx) (secondOf parts) (dtProjectDecls parts)
+        decls = sealOpaqueDecls (secondOf parts) (firstOf parts)
       in Vuna.Compiler.Common.bind (elabProgramFull decls) evalDtMain
   )
 
@@ -247,7 +264,7 @@ replProgramFull ctx program exprSource = do
     ErrC e => ErrC e
     OkC project => case resolveProjectWith (contextRelease ctx) project of
       ErrC e => ErrC e
-      OkC resolved => case splitReplExpr (hideDepOpaqueDecls (contextPackageName ctx) (secondOf (secondOf resolved)) (dtProjectDecls (secondOf resolved))) of
+      OkC resolved => case splitReplExpr (sealOpaqueDecls (secondOf (secondOf resolved)) (firstOf (secondOf resolved))) of
         ErrC e => ErrC e
         OkC p => case elabProgramFull (firstOf p) of
           ErrC e => ErrC e
@@ -282,7 +299,7 @@ dtCheckSource ctx label source = do
     ErrC e => ErrC e
     OkC project => case resolveProjectWith (contextRelease ctx) project of
       ErrC e => ErrC e
-      OkC resolved => case elabProgramFull (hideDepOpaqueDecls (contextPackageName ctx) (secondOf (secondOf resolved)) (dtProjectDecls (secondOf resolved))) of
+      OkC resolved => case elabProgramFull (sealOpaqueDecls (secondOf (secondOf resolved)) (firstOf (secondOf resolved))) of
         ErrC e => ErrC e
         OkC prog => OkC (append (firstOf resolved) (dtProgWarnings prog))
   )
@@ -869,7 +886,7 @@ depStartOfAt next progs =
       filter (\p => memName (firstOf p) dataKeys == False)
         (dedupGlobals (append preludeGlobals (concatMap cachedGlobals progs)))
     globals = append defGlobals (map (\d => Pair (dtDataName d) (dtDataKind d)) datas)
-    opaqueNames = concatMap cachedOpaqueOf progs
+    opaqueNames = map opaqueBaseName (concatMap cachedOpaqueOf progs)
     bodies =
       filter (\p => not (memName (firstOf p) opaqueNames))
         (dedupDefBodies (concatMap cachedDefs progs))

@@ -1,6 +1,6 @@
 # 101) D11 opaque：全量源码路径也必须把依赖包的 opaque body 从 deftbl 隐藏；
 #      transparent 仍按普通定义展开。
-run: sh -c 'rm -rf "$TMPDIR/opq"; mkdir -p "$TMPDIR/opq/dep/lib" "$TMPDIR/opq/app/app"; printf "%s\n" "[package]" "name = \"d\"" "" "[export]" "modules = [\"D\"]" > "$TMPDIR/opq/dep/vuna.toml"; printf "%s\n" "module D where" "" "export opaque N : Type" "N = Int" "" "export transparent M : Type" "M = Int" > "$TMPDIR/opq/dep/lib/D.vuna"'
+run: sh -c 'rm -rf "$TMPDIR/opq"; mkdir -p "$TMPDIR/opq/dep/lib" "$TMPDIR/opq/app/app"; printf "%s\n" "[package]" "name = \"d\"" "" "[export]" "modules = [\"D\"]" > "$TMPDIR/opq/dep/vuna.toml"; printf "%s\n" "module D where" "" "export opaque N : Type" "N = Int" "" "export transparent M : Type" "M = Int" "" "own : N -> Int" "own x = x" > "$TMPDIR/opq/dep/lib/D.vuna"'
 run: sh -c 'printf "%s\n" "[package]" "name = \"a\"" "" "[dependencies]" "d = \"$TMPDIR/opq/dep\"" "vuna-base = \"$VUNA_BASE\"" > "$TMPDIR/opq/app/vuna.toml"; printf "%s\n" "import D" "" "use : D.N -> Int" "use x = x" > "$TMPDIR/opq/app/app/Main.vuna"'
 # opaque body 不展开：D.N 与 Int 不是定义相等。
 run: "$VUNA" check "$TMPDIR/opq/app"

@@ -273,7 +273,11 @@ elabBodies (d :: rest) globals doneDefs acc ec = case d of
       )
   -- M28：axiom 只产出无体/不透明的 `DtAxiom`（类型已在签名阶段精化进 globals）；
   -- 不进 Ec 的 defs 表（没有体可 delta 展开），也不进 doneDefs。
-  DAxiom name tyExpr sp => case globalsLookup name globals ec of
+  DAxiom name tyExpr sp => if startsWith "vuna_seal_" name then
+    let
+      target = strSubstring 10 (strLength name - 10) name
+    in elabBodies rest globals doneDefs acc (ecRemoveDefTbl target ec)
+  else case globalsLookup name globals ec of
     Nothing => tcErr1 sp (ExpectedSignature name) name
     Just tyTerm => elabBodies rest globals doneDefs (DtAxiom name tyTerm (Just sp) :: acc) ec
   -- M33 W5：extern 的签名同样已在 globals；这里只做受限 FFI 类型检查并落成 DtExtern。
