@@ -429,6 +429,15 @@ hashOfIface m =
   hashOfParts (miNameOf m) (miPackageOf m) (miImportsOf m) (miImplicitImportsOf m) (miFixitiesOf m)
     (miRecordsOf m) (miExportsOf m) (miDeclsOf m) (miCachedOf m)
 
+-- D11：包级双摘要。模块按名字排序后聚合；iface 摘要只含下游可见面，impl 摘要含产物面。
+export pkgIfaceHashOf : PackageIface -> String
+pkgIfaceHashOf (PackageIface schema compiler pkg env mods) =
+  digestParts ("vuna-pkg-iface-hash 1" :: pkg :: map miIfaceHashOf (sortByText miNameOf mods))
+
+export pkgImplHashOf : PackageIface -> String
+pkgImplHashOf (PackageIface schema compiler pkg env mods) =
+  digestParts ("vuna-pkg-impl-hash 1" :: pkg :: map miImplHashOf (sortByText miNameOf mods))
+
 -- D11：产物摘要。与 ifaceHash 的差别只有 opaque body：ifaceHash 不含它，implHash 含它。
 implHashOfParts : String -> String -> List RecordMeta -> List ExportEntry -> List Decl -> CachedProgram -> String
 implHashOfParts name pkg records exports decls cp =

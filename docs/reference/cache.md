@@ -170,9 +170,9 @@ Driver.Compile.depIfacesOf
     定义全名；`hashOfParts` 对 opaque 只哈希名字 + 类型（不哈希体），并单独哈希名单；
     `ifaceHashVersion` 5→6、`ifaceSchema` 22→24。`ModuleIface.miImplHash` 是独立产物摘要：
     含 opaque body 与 prepared 面，只用于 impl/产物新鲜度，不参与下游 iface 依赖键。下游
-    `depStartOfAt` 不把 opaque 体放进 deftbl，因而接口/分离编译路径不展开它们。**已知边界**：
-    全量源码路径仍把同程序模块一起精化，opaque 体在该路径仍会展开；per-module 精化拆分后
-    再收口。
+    `depStartOfAt` 不把 opaque 体放进 deftbl，因而接口/分离编译路径不展开它们。包级由
+    `pkgIfaceHashOf` / `pkgImplHashOf` 按模块名排序聚合。**已知边界**：全量源码路径仍把
+    同程序模块一起精化，opaque 体在该路径仍会展开；per-module 精化拆分后再收口。
 
 ## 存储与 key
 
