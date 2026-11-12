@@ -1,2 +1,2 @@
 main : Int
-main = perfNote! "a" "b"
+main = dbg! "a" "b"

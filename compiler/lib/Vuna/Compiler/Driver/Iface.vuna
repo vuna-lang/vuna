@@ -121,7 +121,6 @@ import Vuna.Compiler.Elab.Prelude
 import Vuna.Compiler.Elab.Records
 import Vuna.Compiler.Elab.Derive
 import Vuna.Compiler.Driver.Cache
-import Vuna.Compiler.Debug
 import Vuna.Compiler.Driver.Owner
 import Vuna.Compiler.Intrinsics
 import Vuna.Compiler.Loader.Modules
@@ -951,19 +950,17 @@ readManifest dir compiler = do
   case payload of
     Nothing => do
       let
-        _ = perfNote! "iface-manifest-read-miss dir=${dir}"
+        _ = dbg! "iface-manifest-read-miss dir=${dir}"
       in pure Nothing
     Just bytes => case decManifestComplete bytes of
       Just mf => if mf.pmSchema == ifaceSchema && mf.pmCompiler == compiler then pure (Just mf)
       else do
         let
-          _ =
-            perfNote!
-              "iface-manifest-version-mismatch schema=${mf.pmSchema} compiler=${mf.pmCompiler}"
+          _ = dbg! "iface-manifest-version-mismatch schema=${mf.pmSchema} compiler=${mf.pmCompiler}"
         in pure Nothing
       Nothing => do
         let
-          _ = perfNote! "iface-manifest-decode-fail len=${strLength bytes}"
+          _ = dbg! "iface-manifest-decode-fail len=${strLength bytes}"
         in pure Nothing
 
 -- manifest 写去抖：内容逐字节相同就跳过。默认布局的 manifest 在源树里，避免每次 check
@@ -1123,17 +1120,17 @@ readModuleFileRaw dir compiler e = do
   case payload of
     Nothing => do
       let
-        _ = perfNote! "iface-module-read-miss name=${meNameOfEntry e}"
+        _ = dbg! "iface-module-read-miss name=${meNameOfEntry e}"
       in pure Nothing
     Just bytes => case decModuleIfaceComplete bytes of
       Just m => if miNameOf m == meNameOfEntry e && miIfaceHashOf m == meIfaceHashOfEntry e then pure (Just m)
       else do
         let
-          _ = perfNote! "iface-module-mismatch name=${meNameOfEntry e} got=${miNameOf m}"
+          _ = dbg! "iface-module-mismatch name=${meNameOfEntry e} got=${miNameOf m}"
         in pure Nothing
       Nothing => do
         let
-          _ = perfNote! "iface-module-decode-fail name=${meNameOfEntry e} len=${strLength bytes}"
+          _ = dbg! "iface-module-decode-fail name=${meNameOfEntry e} len=${strLength bytes}"
         in pure Nothing
 
 readModuleFiles : String -> String -> List ManifestEntry -> Eff [] (Maybe (List ModuleIface))

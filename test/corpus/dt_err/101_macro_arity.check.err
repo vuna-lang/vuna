@@ -1,1 +1,1 @@
-macro perfNote expects 1 argument(s), got 2
+macro dbg expects 1 argument(s), got 2

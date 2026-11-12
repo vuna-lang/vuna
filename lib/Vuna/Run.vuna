@@ -2,7 +2,7 @@ module Vuna.Run (runRun) where
 
 -- Vuna.Run：`vuna run` —— 构建并运行包的可执行入口（M38；工具链，永不进 seed 闭包）。
 --
--- 参数模型：`vuna run [--no-build] [--package NAME] [--out DIR] [DIR] [-- ARG]...`。
+-- 参数模型：`vuna run [--no-build] [--release] [--package NAME] [--out DIR] [DIR] [-- ARG]...`。
 -- 按**第一个** `--` 切分：前段是 vuna 自己的参数，后段原样透传给被运行的程序
 -- （参数与子进程退出码都不改）。DIR 默认 "."，可以是包目录，也可以是 workspace 根。
 --
@@ -34,12 +34,14 @@ runRun args =
     parts = splitPassthrough args
     own = firstOf parts
     passthrough = secondOf parts
-  in case parseToolArgs "vuna run" [BoolFlag "no-build", ValueFlag "package", ValueFlag "out"] own of
+  in case parseToolArgs "vuna run" [BoolFlag "no-build", BoolFlag "release", ValueFlag "package", ValueFlag "out"] own of
     ErrC e => runError (diagText e)
     OkC parsed => case parsed.positionals of
       [] => runGo parsed passthrough "."
       [dir] => runGo parsed passthrough dir
-      _ => runError "usage: vuna run [--no-build] [--package NAME] [--out DIR] [DIR] [-- ARG]..."
+      _ =>
+        runError
+          "usage: vuna run [--no-build] [--release] [--package NAME] [--out DIR] [DIR] [-- ARG]..."
 
 runGo : Parsed -> List String -> String -> Eff [] Int
 runGo parsed passthrough dir = do
@@ -128,12 +130,15 @@ runTarget parsed passthrough dir target =
     outFlag = case flagValue parsed "out" of
       Nothing => []
       Just out => ["--out", out]
+    releaseFlag = if flagSet parsed "release" then ["--release"] else []
   in do
     executable <- isExecutable target
     if not executable then runError "package ${packageLabel target} has no executable entry (app/Main.vuna)"
     else if flagSet parsed "no-build" then execTarget passthrough target (flagValue parsed "out")
     else do
-      buildCode <- runCompilerCliFor "vuna" (append ["build", dir] (append pkgFlag outFlag))
+      buildCode <-
+        runCompilerCliFor "vuna"
+          (append ["build", dir] (append releaseFlag (append pkgFlag outFlag)))
       if buildCode /= 0 then pure buildCode
       else execTarget passthrough target (flagValue parsed "out")
 

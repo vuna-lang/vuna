@@ -11,12 +11,12 @@ exit: 0
 run: sh -c 'cp "$TMPDIR/iface-audit-pkg/dep/lib/Dep.vuna" "$TMPDIR/audit-dep-orig.vuna"; printf "%s\n" "module Dep (bar) where" "" "foo : Int" "foo = 1" "" "bar : Int" "bar = 2" > "$TMPDIR/iface-audit-pkg/dep/lib/Dep.vuna"'
 run: sh -c 'find "$TMPDIR/iface-audit-cache"/vuna-cache -name query -type d -prune -exec rm -rf {} + 2>/dev/null || true'
 run: sh -c 'TMPDIR="$TMPDIR/iface-audit-cache" "$VUNA" check "$TMPDIR/iface-audit-pkg/dep"'
-# 摘要路径：必须判脏并报错（退出码 1）；诊断去掉 DEBUG/PERF 行后落盘，供全量路径逐字节对拍。
+# 摘要路径：必须判脏并报错（退出码 1）；诊断去掉 DEBUG 行后落盘，供全量路径逐字节对拍。
 run: sh -c 'find "$TMPDIR/iface-audit-cache"/vuna-cache -name query -type d -prune -exec rm -rf {} + 2>/dev/null || true'
-run: sh -c 'TMPDIR="$TMPDIR/iface-audit-cache" "$VUNA" check "$TMPDIR/iface-audit-pkg/mid" > "$TMPDIR/audit-summary.raw" 2>&1; rc=$?; grep -vE "^(DEBUG|PERF) " "$TMPDIR/audit-summary.raw" > "$TMPDIR/audit-summary.diag" || true; [ "$rc" -eq 1 ]'
+run: sh -c 'TMPDIR="$TMPDIR/iface-audit-cache" "$VUNA" check "$TMPDIR/iface-audit-pkg/mid" > "$TMPDIR/audit-summary.raw" 2>&1; rc=$?; grep -vE "^DEBUG " "$TMPDIR/audit-summary.raw" > "$TMPDIR/audit-summary.diag" || true; [ "$rc" -eq 1 ]'
 # 全量路径：同样判错，且诊断与摘要路径逐字节一致。
 run: sh -c 'find "$TMPDIR/iface-audit-cache"/vuna-cache -name query -type d -prune -exec rm -rf {} + 2>/dev/null || true'
-run: sh -c 'TMPDIR="$TMPDIR/iface-audit-cache" VUNA_ELAB_FULL=1 "$VUNA" check "$TMPDIR/iface-audit-pkg/mid" > "$TMPDIR/audit-full.raw" 2>&1; rc=$?; grep -vE "^(DEBUG|PERF) " "$TMPDIR/audit-full.raw" > "$TMPDIR/audit-full.diag" || true; [ "$rc" -eq 1 ]'
+run: sh -c 'TMPDIR="$TMPDIR/iface-audit-cache" VUNA_ELAB_FULL=1 "$VUNA" check "$TMPDIR/iface-audit-pkg/mid" > "$TMPDIR/audit-full.raw" 2>&1; rc=$?; grep -vE "^DEBUG " "$TMPDIR/audit-full.raw" > "$TMPDIR/audit-full.diag" || true; [ "$rc" -eq 1 ]'
 read: $TMPDIR/audit-summary.diag
 out-equals-file: $TMPDIR/audit-full.diag
 # `VUNA_IFACE_AUDIT=1`：同一进程跑摘要 + 全量并逐字节比较，不一致即失败且不落盘。

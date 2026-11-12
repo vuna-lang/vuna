@@ -11,7 +11,6 @@ module Vuna.Compiler.Intrinsics
   , boolTrueCtor
   , boolTypeName
   , canonicalCtorsFor
-  , dbgIntrinsicName
   , debugLineIntrinsicName
   , debugOnIntrinsicName
   , effDefaultInstance
@@ -200,16 +199,11 @@ effRunName = "Base.Eff.runPure"
 -- 调试构造（F3 B）：语言级 debug 名字
 -- ---------------------------------------------------------------
 -- 这些是**编译器内建的调试构造**，不是库函数、不需要 import：
---   * `dbg "msg" x`：求值期把 msg 写 stderr 后返回 x（debug / release 都可用；
---     debug 输出不是程序语义的一部分）；
 --   * `assert cond "msg" x`：debug-only；失败走 failwith（main 钩子渲染），release
 --     构建由 `Loader.Resolve` 拒绝；
 --   * `todo "msg"`：debug-only 的未实现占位，语义同 assert(False, msg)。
--- `DebugShow` / `dbgShow` 是 `Base.Show` 里的库层，建立在 `dbg` 上。
--- | `dbg`：把消息写 stderr 后返回第二个实参（debug/release 都可用）。
-dbgIntrinsicName : String
-dbgIntrinsicName = "dbg"
-
+-- 用户面调试输出统一走内置宏 `dbg!`（见下方编译器 tracing 段）；`DebugShow` / `dbgShow`
+-- 是 `Base.Show` 里基于 `dbg!` 的库层。
 -- ---------------------------------------------------------------
 -- 编译器 tracing（内置宏 `dbg!` 的隐藏后端）
 -- ---------------------------------------------------------------
@@ -617,7 +611,6 @@ baseIntrinsics =
     Intrinsic "prim_schedScopeError" (IFun IInt IStr) OpNone "dtp_sched_scope_error" True,
     Intrinsic "prim_schedScopeCount" (IFun IInt IInt) OpNone "dtp_sched_scope_count" True,
     Intrinsic "prim_fail" (IPi "a" (IFun IStr (IVar "a"))) OpNone "(fun msg -> failwith msg)" True,
-    Intrinsic dbgIntrinsicName (IPi "a" (IFun IStr (IFun (IVar "a") (IVar "a")))) OpNone "(fun s x -> prerr_string s; prerr_newline (); x)" True,
     Intrinsic assertIntrinsicName (IPi "a" (IFun IBool (IFun IStr (IFun (IVar "a") (IVar "a"))))) OpNone "(fun b msg x -> if b then x else failwith (\"assertion failed: \" ^ msg))" True,
     Intrinsic todoIntrinsicName (IPi "a" (IFun IStr (IVar "a"))) OpNone "(fun msg -> failwith (\"TODO: \" ^ msg))" True,
     Intrinsic "bi_eq_int" (IFun IInt (IFun IInt IBool)) OpEqInt "bi_eq_int" False,

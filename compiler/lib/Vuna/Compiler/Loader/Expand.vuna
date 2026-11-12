@@ -7,17 +7,14 @@ module Vuna.Compiler.Loader.Expand (expandDecls) where
 -- 标记，Elab / Codegen / 接口缓存都只看到普通表达式。
 --
 -- 规则：先递归展开实参，再套用宏；插入节点的 span 一律取调用点 span（实参保留自身
--- span），满足「宏携带 span」不变量。展开结果只引用 `Vuna.Compiler.Debug` 的宏后端
--- 名字（全限定），因此不存在捕获调用方局部名字的问题；调用方必须 import 该模块。
+-- span），满足「宏携带 span」不变量。展开结果只引用隐藏原语 `@vuna@debug@*`
+--（见 `Intrinsics.internalIntrinsics`），不依赖库模块、不捕获调用方名字，任何包都可用。
 --
--- 目前只有编译器内部探针宏（注册表在 `expandMacro`）：
---   * `dbg! msg`          → 带时间戳的 `DEBUG` 行（`--debug-perf` 门控）
---   * `perfNote! msg`     → `if perfEnabled then debugLine msg else unit`
---   * `perfStamp! label`  → `if perfEnabled then perfMark label else unit`
---   * `perfSample! key l` → perfStamp 的 1/64 确定性采样版
--- `dbg!` 展开到隐藏原语（`@vuna@debug@*`，见 `Intrinsics.internalIntrinsics`），不依赖
--- 任何库模块；其余探针仍引用 `Vuna.Compiler.Debug`（阶段 A 保留，阶段 B 删除）。
--- 用户自定义宏不在本阶段范围内。
+-- 唯一内置宏（注册表在 `expandMacro`）：
+--   * `dbg! msg` → `if @vuna@debug@on 0 then @vuna@debug@line msg else 0`
+--     开关由 `--debug-perf` / `VUNA_DEBUG_PERF=1` 门控；行格式
+--     `DEBUG <epoch-us> <text>`（stderr），关闭时实参不求值。
+-- 用户自定义宏不在范围内。
 import Base.List
 import Base.Nat
 import Vuna.Compiler.Common
@@ -229,19 +226,11 @@ else case parts of
 -- ---------------------------------------------------------------
 -- 内置宏注册表与展开
 -- ---------------------------------------------------------------
--- 宏后端名（`D` = `Vuna.Compiler.Debug`）：展开结果全限定引用，避免捕获调用方名字。
--- 调用方必须 `import Vuna.Compiler.Debug`，否则名字解析报 `RN_ModuleNotImported`。
-debugRef : String -> Span -> Expr
-debugRef name sp = EVar "Vuna.Compiler.Debug.${name}" sp
-
-macroCall : String -> List Expr -> Span -> Expr
-macroCall name args sp = EApp (debugRef name sp) args sp
-
--- 统一的开关守卫：关闭时实参不被求值，也不构造字符串。
-guardedMacro : Span -> Expr -> Expr
-guardedMacro sp body = EIf (debugRef "perfEnabled" sp) body (debugRef "unit" sp) sp
-
--- 隐藏原语引用（`@vuna@…`）：Resolve 作为内部名直通，签名由 `Elab.Prelude` 提供。
+-- ---------------------------------------------------------------
+-- 内置宏注册表与展开
+-- ---------------------------------------------------------------
+-- 隐藏原语引用（`@vuna@…`）：Resolve 作为内部名直通，签名由 `Elab.Prelude` 提供；
+-- `@vuna@` 前缀保证不会被用户源码写出来，也不捕获调用方局部名字。
 internalRef : String -> Span -> Expr
 internalRef name sp = EVar name sp
 
@@ -262,15 +251,4 @@ expandMacro name args sp = if name == "dbg" then case args of
   [msg] =>
     OkC (EIf (debugOnRef sp) (EApp (internalRef debugLineIntrinsicName sp) [msg] sp) (EInt 0 sp) sp)
   _ => macroArityMismatch name 1 args sp
-else if name == "perfNote" then case args of
-  [msg] => OkC (guardedMacro sp (macroCall "debugLine" [msg] sp))
-  _ => macroArityMismatch name 1 args sp
-else if name == "perfStamp" then case args of
-  [label] => OkC (guardedMacro sp (macroCall "perfMark" [label] sp))
-  _ => macroArityMismatch name 1 args sp
-else if name == "perfSample" then case args of
-  [key, label] =>
-    OkC
-      (guardedMacro sp (EIf (macroCall "sampled" [key] sp) (macroCall "perfMark" [label] sp) (debugRef "unit" sp) sp))
-  _ => macroArityMismatch name 2 args sp
 else rnAt1 sp (UnknownMacro name) name

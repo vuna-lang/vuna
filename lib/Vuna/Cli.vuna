@@ -60,7 +60,7 @@ toolUsageLines prog = """  ${prog} lint [--fix] <file.vuna>...
       --jobs N 每个测试文件一个子进程、最多 N 并发，默认 1）
   ${prog} test --suite FILE [--only PAT] [--filter PAT] [--list] [--json] [--jobs auto|N]
       运行原生 suite（test/suite.toml）；--jobs auto 用探测到的全部可用核
-  ${prog} run [--no-build] [--package NAME] [--out DIR] [DIR] [-- ARG]...
+  ${prog} run [--no-build] [--release] [--package NAME] [--out DIR] [DIR] [-- ARG]...
       构建并运行包的可执行入口（`--` 之后的参数原样透传）
   ${prog} fmt [--check] [PATH]...              格式化（PATH 可为文件或目录；省略 = workspace 内各包的 lib/app/test）
   ${prog} repl [FILE|DIR|MODULE]               交互式 REPL（可直接加载文件/目录/模块）
@@ -89,16 +89,22 @@ toolUsageLines prog = """  ${prog} lint [--fix] <file.vuna>...
 usageFor : String -> String
 usageFor prog = "usage:\n${compilerUsageLines prog}${toolUsageLines prog}"
 
--- `--debug-perf` / `--release` 是全局开关（见 Vuna.Compiler.Debug）：不参与子命令分发。
--- `--release` 由编译器经 `prim_eff_getArgs` 自行读取（strip 只影响分发，不影响 argv）。
-stripDebugFlags : List String -> List String
-stripDebugFlags [] = []
-stripDebugFlags (a :: rest) =
-  if a == "--debug-perf" || a == "--release" then stripDebugFlags rest
-  else Base.List.Cons a (stripDebugFlags rest)
+-- `--debug-perf` 由 runtime 原语读原始 argv/env（不参与子命令分发）；
+-- `--release` 是编译期选项：compile/check/build/run 透传给编译器，其它工具命令丢弃
+-- （工具上下文默认 debug 构建）。
+stripPerfFlags : List String -> List String
+stripPerfFlags [] = []
+stripPerfFlags (a :: rest) =
+  if a == "--debug-perf" then stripPerfFlags rest else Base.List.Cons a (stripPerfFlags rest)
+
+-- 工具命令不接受 `--release`：保持“全局旗标被忽略”的旧行为。
+stripReleaseArgs : List String -> List String
+stripReleaseArgs [] = []
+stripReleaseArgs (a :: rest) =
+  if a == "--release" then stripReleaseArgs rest else Base.List.Cons a (stripReleaseArgs rest)
 
 runCli : List String -> Eff [] Int
-runCli args = if anyHelp (helpSurface args) then help 0 else runCli1 (stripDebugFlags args)
+runCli args = if anyHelp (helpSurface args) then help 0 else runCli1 (stripPerfFlags args)
 
 -- `--` 之后是字面量参数（`vuna run <pkg> -- --help` 必须透传给子进程），不参与
 -- help 扫描；其余命令的 `--` 语义与 `Vuna.Cli.Args` 一致。
@@ -117,21 +123,21 @@ runCli1 args = case args of
     "check" => runCompilerCliFor "vuna" (arg :: rest)
     "build" => runCompilerCliFor "vuna" (arg :: rest)
     "seed" => runCompilerCliFor "vuna" (arg :: rest)
-    "lint" => Vuna.Lint.runLint rest
-    "interp" => interpArgs rest
-    "test" => testArgs rest
+    "lint" => Vuna.Lint.runLint (stripReleaseArgs rest)
+    "interp" => interpArgs (stripReleaseArgs rest)
+    "test" => testArgs (stripReleaseArgs rest)
     "run" => Vuna.Run.runRun rest
-    "fmt" => fmtArgs rest
-    "repl" => replArgs rest
-    "doc" => Vuna.Doc.runDoc rest
-    "search" => Vuna.Search.runSearch rest
-    "gen-errors" => genErrorsArgs rest
-    "explain" => Vuna.Explain.runExplain rest
-    "clean" => Vuna.Clean.runClean rest
-    "map" => mapArgs rest
-    "api" => apiArgs rest
-    "lsp" => Vuna.Lsp.runLspTool rest
-    "goal" => goalArgs rest
+    "fmt" => fmtArgs (stripReleaseArgs rest)
+    "repl" => replArgs (stripReleaseArgs rest)
+    "doc" => Vuna.Doc.runDoc (stripReleaseArgs rest)
+    "search" => Vuna.Search.runSearch (stripReleaseArgs rest)
+    "gen-errors" => genErrorsArgs (stripReleaseArgs rest)
+    "explain" => Vuna.Explain.runExplain (stripReleaseArgs rest)
+    "clean" => Vuna.Clean.runClean (stripReleaseArgs rest)
+    "map" => mapArgs (stripReleaseArgs rest)
+    "api" => apiArgs (stripReleaseArgs rest)
+    "lsp" => Vuna.Lsp.runLspTool (stripReleaseArgs rest)
+    "goal" => goalArgs (stripReleaseArgs rest)
     "version" => printVersion 0
     "--version" => printVersion 0
     "help" => help 0

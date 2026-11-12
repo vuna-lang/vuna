@@ -13,6 +13,7 @@ module Vuna.Compiler.Loader.Flatten
   , parseFileWithPath
   , resolveProject
   , resolveProjectKeeping
+  , resolveProjectWith
   ) where
 
 -- Vuna.Compiler.Loader.Flatten：模块导出表计算、加载流程与 flatten（M24 后维护（源码重组）从 Loader.vuna 拆出）。
@@ -40,7 +41,6 @@ import Vuna.Compiler.Frontend.Parser
 import Vuna.Compiler.Loader.Fixity
 import Vuna.Compiler.Loader.Modules
 import Vuna.Compiler.Loader.Resolve
-import Vuna.Compiler.Debug
 import Vuna.Compiler.Intrinsics
 import Vuna.Compiler.Packages.Pkg
 
@@ -623,7 +623,7 @@ else case findModule modules name of
           -- F3 P2：宿主层模块只允许特权包 import（base 自己/compiler/根工具链）。
           path = firstOf found
           root = secondOf found
-          _ = perfNote! "parse-module=${name}"
+          _ = dbg! "parse-module=${name}"
         in do
           text <- prim_eff_readFile path
           parsed <- parseFileWithPath path text
@@ -834,25 +834,29 @@ fixitiesForSource ctx label source = do
 -- 返回逐模块已解析（未 flatten）的声明 + 本次解析产生的 warning（unused import）。
 -- warning 是显式返回值：名字解析期不维护 used-set，解析完成后按「实际引用的目标」判定。
 resolveProject : Project -> Check (Pair (List Diagnostic) (Pair (List Decl) (List Module)))
-resolveProject project = resolveProjectKeeping [] project
+resolveProject project = resolveProjectKeeping False [] project
+
+-- | 带 release 模式的解析入口（CLI 路径显式传入 `--release` / `VUNA_RELEASE=1`）。
+resolveProjectWith : Bool -> Project -> Check (Pair (List Diagnostic) (Pair (List Decl) (List Module)))
+resolveProjectWith release project = resolveProjectKeeping release [] project
 
 -- M34.5（S2）：`keep` 里的模块已经解析过（来自接口文件），原样保留、不重解析。
-resolveProjectKeeping : List String -> Project -> Check (Pair (List Diagnostic) (Pair (List Decl) (List Module)))
-resolveProjectKeeping keep (Project decls imports implicit modules entryPkg entryFixes) =
+resolveProjectKeeping : Bool -> List String -> Project -> Check (Pair (List Diagnostic) (Pair (List Decl) (List Module)))
+resolveProjectKeeping release keep (Project decls imports implicit modules entryPkg entryFixes) =
   let
     entryTable =
       tableOf
         (dedupeFixities (append entryFixes (visibleFixitiesOf modules (append imports implicit))))
   in Vuna.Compiler.Common.bind (reorderProgram entryTable decls)
-    (\decls2 => Vuna.Compiler.Common.bind (expandDecls decls2) (\decls3 => Vuna.Compiler.Common.bind (resolveEntry modules entryPkg (append imports implicit) decls3) (\entryDecls => Vuna.Compiler.Common.bind (unusedImportWarnings modules imports entryDecls decls3 []) (\entryWarns => Vuna.Compiler.Common.bind (resolveModulesKeep keep modules) (\p2 => OkC (Pair (append entryWarns (secondOf p2)) (Pair entryDecls (firstOf p2))))))))
+    (\decls2 => Vuna.Compiler.Common.bind (expandDecls decls2) (\decls3 => Vuna.Compiler.Common.bind (resolveEntry release modules entryPkg (append imports implicit) decls3) (\entryDecls => Vuna.Compiler.Common.bind (unusedImportWarnings modules imports entryDecls decls3 []) (\entryWarns => Vuna.Compiler.Common.bind (resolveModulesKeep release keep modules) (\p2 => OkC (Pair (append entryWarns (secondOf p2)) (Pair entryDecls (firstOf p2))))))))
 
-resolveModulesKeep : List String -> List Module -> Check (Pair (List Module) (List Diagnostic))
-resolveModulesKeep keep [] = OkC (Pair [] [])
-resolveModulesKeep keep ((Module name pkg imports implicit decls exports fixities reexports) :: rest) =
-  if memName name keep then Vuna.Compiler.Common.bind (resolveModulesKeep keep rest)
+resolveModulesKeep : Bool -> List String -> List Module -> Check (Pair (List Module) (List Diagnostic))
+resolveModulesKeep release keep [] = OkC (Pair [] [])
+resolveModulesKeep release keep ((Module name pkg imports implicit decls exports fixities reexports) :: rest) =
+  if memName name keep then Vuna.Compiler.Common.bind (resolveModulesKeep release keep rest)
     (\p2 => OkC (Pair (Base.List.Cons (Module name pkg imports implicit decls exports fixities reexports) (firstOf p2)) (secondOf p2)))
   else Vuna.Compiler.Common.bind (reorderProgram (tableOf fixities) decls)
-    (\decls2 => Vuna.Compiler.Common.bind (expandDecls decls2) (\decls3 => Vuna.Compiler.Common.bind (resolveProgram (Module name pkg imports implicit decls3 exports fixities reexports :: rest) name name (namespacesOf decls3) (append imports implicit) decls3) (\d1 => Vuna.Compiler.Common.bind (unusedImportWarnings (Module name pkg imports implicit decls3 exports fixities reexports :: rest) imports d1 decls3 reexports) (\warns => Vuna.Compiler.Common.bind (resolveModulesKeep keep rest) (\p2 => OkC (Pair (Base.List.Cons (Module name pkg imports implicit d1 exports fixities reexports) (firstOf p2)) (append warns (secondOf p2))))))))
+    (\decls2 => Vuna.Compiler.Common.bind (expandDecls decls2) (\decls3 => Vuna.Compiler.Common.bind (resolveProgram (Module name pkg imports implicit decls3 exports fixities reexports :: rest) name name (namespacesOfWith release decls3) (append imports implicit) decls3) (\d1 => Vuna.Compiler.Common.bind (unusedImportWarnings (Module name pkg imports implicit decls3 exports fixities reexports :: rest) imports d1 decls3 reexports) (\warns => Vuna.Compiler.Common.bind (resolveModulesKeep release keep rest) (\p2 => OkC (Pair (Base.List.Cons (Module name pkg imports implicit d1 exports fixities reexports) (firstOf p2)) (append warns (secondOf p2))))))))
 
 -- ---------------------------------------------------------------
 -- unused import warning：显式 import 未在所属检查单元里被引用。

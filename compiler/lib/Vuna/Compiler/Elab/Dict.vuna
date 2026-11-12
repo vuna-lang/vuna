@@ -43,7 +43,6 @@ import Base.HashMap
 import Vuna.Compiler.Core
 import Vuna.Compiler.Core.Term
 import Vuna.Compiler.Diagnostics
-import Vuna.Compiler.Debug
 import Vuna.Compiler.Elab.Meta
 import Vuna.Compiler.Elab.MetaSpans
 import Vuna.Compiler.Elab.Representation
@@ -96,7 +95,7 @@ searchInstFuel globals ctx fuel ec dom sp = if fuel <= 0 then missingInstance ec
 else
   let
     _ =
-      perfNote!
+      dbg!
         "search: dom=${showValue dom} rigid=${if rigidSearchFast ec dom then "T" else "F"} insts=${length (ecInsts ec)}"
   in case localDictLookup ctx 0 dom ec of
     Just pair => OkC pair
@@ -238,7 +237,7 @@ finishInstanceSearch dom sp ([m]) ec = OkC (Pair m.instMatchTerm ec)
 finishInstanceSearch dom sp matches ec =
   let
     _ =
-      perfNote!
+      dbg!
         "search-ambig: dom=${showValue dom} cands=${join "," (map (\x => dtInstName (instMatchInst x)) matches)}"
     sd = showValue dom
     names = joinInstNames (map instMatchInst matches)
@@ -359,13 +358,13 @@ else case allocTeleMetas inst.dtInstSpan ctx ec inst.dtInstTele of
   Pair metas ec1 =>
     let
       _ =
-        perfNote!
+        dbg!
           "inst-try: ${dtInstName inst} head=${showTerm inst.dtInstHead} tele=${length inst.dtInstTele}"
       hd = eval (map (\m => VMeta m []) metas) inst.dtInstHead
     in case conv (ecDefTbl ec1) (ecSolsP ec1) 0 dom hd of
       ErrC e =>
         let
-          _ = perfNote! "inst-conv-err: ${dtInstName inst} dom=${showValue dom} hd=${showValue hd}"
+          _ = dbg! "inst-conv-err: ${dtInstName inst} dom=${showValue dom} hd=${showValue hd}"
         in Nothing
       OkC sols2 =>
         let

@@ -50,8 +50,7 @@
    `prim_*` / `prim_eff_*`。用户面**应**仍经 `Base.Eff.*` 标签 + handler（纪律，不是门控，
    见 [effects.md](docs/reference/effects.md) §8.6）。
    **M4 已完成**：编译器/工具链不再用 `runPure (...)` 在纯签名里隐藏 Eff 执行；
-   守卫基线为 0（`checks.eff-boundary`），唯一 sanctioned tracing 例外见
-   `nix/eff-boundary.exceptions`。
+   守卫基线为 0（`checks.eff-boundary`），无例外；tracing 走隐藏 runtime 原语。
 6. **唯一路径**：语言夹具、`vuna interp`、包构建与 seed 全部走 DT（精化 + 擦除
    codegen，`vuna check .` 也是 DT 自检）；没有可切换的检查器，也没有第二套 codegen；
 7. 编译器自检通过：`vuna check .` 必须能检查自身源码（`checks.vuna-typecheck`）。
@@ -61,8 +60,7 @@
 - **禁止手改 `seed/`**：它是生成物；只能通过 seed rotation 更新
   （`sh nix/seed-rotate.sh ./result/bin/vuna`）。
 - **M4 守卫**：隐藏效果由 `sh nix/check-eff-boundary.sh` 守护（基线 `nix/eff-boundary.allowlist`
-  为空，只允许减少、不允许新增），已作为 `checks.eff-boundary` 接入 `nix flake check`；
-  唯一允许的 tracing 例外集中登记在 `nix/eff-boundary.exceptions`。
+  为空，只允许减少、不允许新增），已作为 `checks.eff-boundary` 接入 `nix flake check`。
 - 允许 `git add` / `git commit`；`git checkout` / `git reset` 会丢工作树改动，执行前先确认。
   提交信息沿用仓库风格（`type(scope): 描述`）。
 - **代码改动后跑 `vuna fmt <改动的文件/目录>`**：源码应与 fmt 输出一致（`--check` 省略
@@ -131,7 +129,7 @@ build，`dist/` 提交）；`nix/` = 构建图 + rotate/metrics/bench；`docs/` 
 - 工具链（`goal` / LSP / `doc` / `search` / 错误码；`vuna gen-errors` 生成
   `docs/.generated/errors.md`）：[tooling.md](docs/reference/tooling.md)；API 文档与检索：
   [api-docs.md](docs/reference/api-docs.md)；lint：[lint.md](docs/reference/lint.md)；
-  调试与运行时错误：[debugging.md](docs/reference/debugging.md)（片段/运行时报告/`dbg`/`assert`/`vuna run`/REPL）
+  调试与运行时错误：[debugging.md](docs/reference/debugging.md)（片段/运行时报告/`dbg!`/`assert`/`vuna run`/REPL）
 - 仓库探索（按场景选工具、探索后落盘）：技能 `.agents/skills/repo-navigation/SKILL.md`
 - 自举与种子：[bootstrap.md](docs/reference/bootstrap.md)；测试与 CI：[testing.md](docs/reference/testing.md)；
   性能：[performance.md](docs/reference/performance.md)

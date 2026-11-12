@@ -383,7 +383,6 @@ in
       ../../lib
       ../../nix/check-eff-boundary.sh
       ../../nix/eff-boundary.allowlist
-      ../../nix/eff-boundary.exceptions
     ];
     nativeBuildInputs = [
       pkgs.bash

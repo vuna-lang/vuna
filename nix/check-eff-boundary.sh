@@ -8,7 +8,7 @@
 #   - allowlist 里没有的文件出现调用点 → 失败；
 #   - 某文件调用点数超过基线 → 失败；
 #   - 基线里的文件调用点变少 → 提示更新基线（不失败）；
-#   - nix/eff-boundary.exceptions 里的文件是显式 sanctioned 例外（不计入基线，单独报告）。
+#   - nix/eff-boundary.exceptions（若存在）里的文件是显式 sanctioned 例外；当前为零例外。
 #
 # 用法：sh nix/check-eff-boundary.sh [--update]
 set -eu
@@ -21,7 +21,7 @@ excTmp="${tmp}.exc"
 trap 'rm -f "$tmp" "$excTmp"' EXIT
 : >"$tmp"
 : >"$excTmp"
-# 显式例外：设计上保留的 tracing/调试通道（nix/eff-boundary.exceptions，每行一个路径）。
+# 显式例外：设计上保留的 tracing/调试通道（nix/eff-boundary.exceptions，每行一个路径；当前不存在）。
 is_exempt() { [ -f "$exc" ] && grep -qxF -- "$1" "$exc"; }
 for f in $(cd "$root" && find compiler/lib lib -name '*.vuna' 2>/dev/null | sort); do
   # 跨行也算：`runPure` 与 `(` 被 fmt 拆成两行时，逐行 grep 会漏计。

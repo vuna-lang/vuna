@@ -1,4 +1,9 @@
-module Vuna.Compiler.Loader.Resolve (namespacesOf, resolveEntry, resolveProgram) where
+module Vuna.Compiler.Loader.Resolve
+  ( namespacesOf
+  , namespacesOfWith
+  , resolveEntry
+  , resolveProgram
+  ) where
 
 -- Vuna.Compiler.Loader.Resolve：名字解析（M24 后维护（源码重组）从 Loader.vuna 拆出）。
 --
@@ -13,7 +18,6 @@ import Vuna.Compiler.Diagnostics.Rn
 import Vuna.Compiler.Diagnostics.Pkg
 import Base.HashMap
 import Vuna.Compiler.Diagnostics
-import Vuna.Compiler.Debug
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Frontend.Lexer
 import Vuna.Compiler.Loader.Modules
@@ -118,14 +122,19 @@ ctorCandsOf (d :: rest) = case d of
   DRecord dname params fields derivings viaField repr lin sp => Pair dname dname :: ctorCandsOf rest
   _ => ctorCandsOf rest
 
-namespacesOf : List Decl -> Namespaces
-namespacesOf decls =
+-- | 解析期命名空间（`release` 决定 assert/todo 拒绝检查是否生效）。
+namespacesOfWith : Bool -> List Decl -> Namespaces
+namespacesOfWith release decls =
   let
     vals = valueNamesOf decls
     cts = ctorsOf decls
     tys = typeNamesOf decls
     cands = ctorCandsOf decls
-  in Namespaces { nsValues = vals, nsCtors = cts, nsTypes = tys, nsValueSet = Base.HashMap.ofNames vals, nsCtorSet = Base.HashMap.ofNames cts, nsTypeSet = Base.HashMap.ofNames tys, nsCtorCands = cands }
+  in Namespaces { nsValues = vals, nsCtors = cts, nsTypes = tys, nsValueSet = Base.HashMap.ofNames vals, nsCtorSet = Base.HashMap.ofNames cts, nsTypeSet = Base.HashMap.ofNames tys, nsCtorCands = cands, nsRelease = release }
+
+-- | 工具默认（debug 构建）。
+namespacesOf : List Decl -> Namespaces
+namespacesOf = namespacesOfWith False
 
 -- 本模块内某个短名的构造子 canonical 目标（含 record）。
 -- | 自动补注（M41 新增导出）：localCtorTargets。
@@ -565,9 +574,9 @@ concatLeft sp acc (e :: rest) = concatLeft sp (EApp (EVar "++" sp) [acc, e] sp) 
 -- scope 放行（`resolveGlobal` 对局部名返回原名）；顶层同名定义会 mangle 成
 -- `Module.name`，不会命中这个检查。
 -- | release 构建里拒绝 debug-only 构造（`assert`/`todo`）；局部同名 binder 由 scope 放行。
-checkDebugConstruct : Span -> String -> String -> List String -> Check Expr
-checkDebugConstruct sp name resolved scope =
-  if releaseBuild then if isDebugOnlyName resolved then if memName name scope then OkC (EVar resolved sp)
+checkDebugConstruct : Bool -> Span -> String -> String -> List String -> Check Expr
+checkDebugConstruct release sp name resolved scope =
+  if release then if isDebugOnlyName resolved then if memName name scope then OkC (EVar resolved sp)
   else tcErr1 sp (DebugConstructInRelease resolved) resolved
   else OkC (EVar resolved sp)
   else OkC (EVar resolved sp)
@@ -583,7 +592,7 @@ else case expr of
     else if isInternalSyntaxName name then OkC (EVar name sp)
     else if containsDot name then resolveDottedExpr modules label prefix ns imports scope name sp
     else Vuna.Compiler.Common.bind (resolveGlobal modules label prefix ns imports scope name)
-      (\n => checkDebugConstruct sp name n scope)
+      (\n => checkDebugConstruct ns.nsRelease sp name n scope)
   -- 内置宏标记必须在 `Loader.Expand` 里展开；走到这里说明展开漏了（internal error，
   -- 不静默透传成普通内部名）。
   -- M31.2：`EInfix` / `EParen` 是 parser 的中间产物，正常路径在 Loader 重排里已消除；
@@ -932,16 +941,16 @@ resolveProgram modules label prefix ns imports decls =
 
 -- M41：entry 文件的构造子也按族限定（`Data.Ctor`），同名构造子不再互相覆盖；
 -- 原先的「entry 构造子共享一个全局命名空间」防御随 canonical 命名一并删除。
-resolveEntry : List Module -> String -> List Import -> List Decl -> Check (List Decl)
-resolveEntry modules entryPkg imports decls =
-  resolveProgram modules "<entry>" "" (namespacesOf decls) imports decls
+resolveEntry : Bool -> List Module -> String -> List Import -> List Decl -> Check (List Decl)
+resolveEntry release modules entryPkg imports decls =
+  resolveProgram modules "<entry>" "" (namespacesOfWith release decls) imports decls
 
-resolveModules : List Module -> Check (List Decl)
-resolveModules [] = OkC []
-resolveModules (modules@((Module name mpkg imports imps decls exports fx _) :: rest)) =
+resolveModules : Bool -> List Module -> Check (List Decl)
+resolveModules release [] = OkC []
+resolveModules release (modules@((Module name mpkg imports imps decls exports fx _) :: rest)) =
   Vuna.Compiler.Common.bind
-    (resolveProgram modules name name (namespacesOf decls) (append imports imps) decls)
-    (\d1 => Vuna.Compiler.Common.bind (resolveModules rest) (\d2 => OkC (append d1 d2)))
+    (resolveProgram modules name name (namespacesOfWith release decls) (append imports imps) decls)
+    (\d1 => Vuna.Compiler.Common.bind (resolveModules release rest) (\d2 => OkC (append d1 d2)))
 
 tyShape : Expr -> String
 tyShape (EVar n _) = "var ${n}"

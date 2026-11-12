@@ -24,7 +24,6 @@ import Base.HashMap
 import Vuna.Compiler.Core.Term
 import Vuna.Compiler.Core.Eval
 import Vuna.Compiler.Diagnostics
-import Vuna.Compiler.Debug
 import Vuna.Compiler.Intrinsics
 
 -- ---------------------------------------------------------------
@@ -315,7 +314,7 @@ else case a of
     VApp f2 x2 => if isNatLikeValue a && isNatLikeValue b then convNatApplied fuel defs sols depth f x f2 x2 a b
     else
       let
-        _ = perfNote! "vapp: ${showValue a} <> ${showValue b} | x=${showValue x} x2=${showValue x2}"
+        _ = dbg! "vapp: ${showValue a} <> ${showValue b} | x=${showValue x} x2=${showValue x2}"
       in Vuna.Compiler.Common.bind (convFuel (fuel - 1) defs sols depth f f2)
         (\sols2 => convFuel (fuel - 1) defs sols2 depth x x2)
     _ => mismatchAt depth a b
@@ -653,7 +652,7 @@ conv : HashMap String Term -> Sols -> Int -> Value -> Value -> Check Sols
 conv a1 a2 a3 a4 a5 =
   let
     _ =
-      perfNote!
+      dbg!
         "conv-in: ${showTerm (quote a3 a4)} <> ${showTerm (quote a3 a5)} |v: ${showValueAt a3 a4} <> ${showValueAt a3 a5} @${a3}"
   in convFuel (convFuelFor a4 a5) a1 a2 a3 a4 a5
 

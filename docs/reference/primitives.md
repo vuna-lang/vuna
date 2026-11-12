@@ -252,18 +252,20 @@
 
 纯 `main` 直接调用效果原语是类型错误（`TC_TypeMismatch`）：效果只能出现在 `Eff` 动作里。
 
-两条调试/诊断原语；调试构造是**语言级内建**（见
-[debugging.md](debugging.md) §3）：
+调试/诊断原语与语言级调试构造（见 [debugging.md](debugging.md) §3）：
 
-- `dbg : String -> a -> a`：求值期把消息 + 换行写 stderr 后返回第二个实参；
 - `assert : Bool -> String -> a -> a`（debug-only）：失败抛 `Failure`；
 - `todo : String -> a`（debug-only）：以 `TODO: <msg>` 抛 `Failure`；
+- `@vuna@debug@on : Int -> Bool` / `@vuna@debug@line : String -> Int`：编译器 tracing 的
+  **隐藏 runtime 原语**（`visible = False`，源码不可写；只由 `dbg!` 展开引用；
+  `vuna interp` 归约为 no-op）；
 - `prim_eff_eprint : String -> Eff [] Int`（console 组）：写 stderr 并 flush，返回写入字节数；
 - `prim_fail : String -> a`（不在动作里）：抛 `Failure <msg>` 的底值，
   由生成的运行时报告器渲染成 `vuna: runtime error: ...` 并 exit 2。
 
-`assert` / `todo` 在 release 构建（`--release` / `VUNA_RELEASE=1`）里由 `Loader.Resolve`
-拒绝（`TC_DebugConstructInRelease`）；`dbg` 在两种构建都可用。
+`assert` / `todo` 在 release 构建（CLI 显式解析 `--release` / `VUNA_RELEASE=1` 得到 `Bool`，
+包括 workspace 成员子进程）里由 `Loader.Resolve` 拒绝（`TC_DebugConstructInRelease`）；
+`dbg!` 作为调试输出在两种构建都可用（受 `--debug-perf` 门控）。
 
 `net` 原语 7 条 socket（工具链 server 与测试用；任何包都可直调）：
 

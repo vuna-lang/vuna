@@ -119,6 +119,8 @@ record Namespaces where
   -- M41：data/record 构造子的候选表（短名 → 未加模块 prefix 的 "Data.Ctor"）。
   -- 同名构造子按族区分；trait 方法不在此表（不是族的构造子）。
   nsCtorCands : List (Pair String String)
+  -- release 构建模式：Resolve 的 assert/todo 拒绝检查用（显式传入，不读进程环境）。
+  nsRelease : Bool
 
 -- 字段访问按全局唯一字段名解析（Elab 降级成模式绑定）；构造用命名字段。
 -- 模块导出表（M10）。每条是「本模块公开名 → 定义处带模块前缀的名字」。

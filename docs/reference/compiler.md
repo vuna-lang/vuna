@@ -11,8 +11,8 @@
 （fmt/lint/repl/doc/test/lsp）在根包 `lib/`，不在闭包里。
 代码按**目录即层**组织：Frontend → Packages → Loader → Core → Elab → Codegen → Driver，
 同层模块可互相 import，上层只能依赖下层。每层 `X.vuna` 是**门面**：只 import 子模块并选择性
-重导出，实现与数据定义都在 `X/` 的叶子模块。全包 **88 个模块**（79 个导出 + 内部
-`Debug` / `Diag` / `Diag.Format` / `Diagnostics.Ic` / `Driver.Iface` / `Driver.Owner` /
+重导出，实现与数据定义都在 `X/` 的叶子模块。全包 **87 个模块**（79 个导出 + 内部
+`Diag` / `Diag.Format` / `Diagnostics.Ic` / `Driver.Iface` / `Driver.Owner` /
 `Elab.MetaSpans` / `Loader.Expand` / `Source`）；目标每模块 ≤~800 行
 （`Codegen.Term` / `Driver.Dt` / `Elab.Trait` 等已超目标，约 1.1–1.2k 行）。
 
@@ -46,7 +46,7 @@
 | `Loader.Modules` | 加载器的数据与模块图（叶子）：模块根、import 边、导出表结构 | `collectModuleFiles`、`moduleAllImportsOf` |
 | `Loader.Resolve` | 名字解析：把 parse 后声明/表达式解析成带模块前缀的名字；内建 arity / prelude 放行消费 `Intrinsics` | `resolveProgram` |
 | `Loader.Flatten` | 模块导出表计算、加载流程与 flatten（`Prelude` 自动导入——含 ad-hoc 单文件、`[export]` 可见性）；内存源码的**库模块**入口（LSP）；lex 缓存 `parseFileWithPath`（key = `contentAddress(lexCacheSchema + 编译器 tag + 路径 + 源内容)`，载荷 = `Canonical.Lex.encPTokList` + `Store` framing；命中后只跑语法分析，**token 流带位置**所以诊断 / codegen 位置表与冷路径一致；**改 `Frontend.Lexer` 的 `Tok` / `PTok` 布局要 bump `lexCacheSchema` 与 `lexCacheCodec`**，编译器 tag 保证新旧二进制不互读） | `loadProject`、`loadProjectModules`、`loadProjectSource`、`loadModuleSource`、`visibleFixitiesOf` / `dedupeFixities`、`fixitiesForSource` / `fixitiesForSourceIn`（fmt/LSP/lint 的程序级 fixity） |
-| `Loader.Expand` | 内置宏展开 pass：parser 把 `name!` 编码成保留名 `@vuna@macro@name`，这里在 fixity 重排后、名字解析前做 AST→AST 展开（当前 `perfNote!` / `perfStamp!` / `perfSample!`，插入节点 span = 调用点） | `expandDecls` |
+| `Loader.Expand` | 内置宏展开 pass：parser 把 `name!` 编码成保留名 `@vuna@macro@name`，这里在 fixity 重排后、名字解析前做 AST→AST 展开（当前唯一内置宏 `dbg!`，展开到隐藏 runtime 原语；插入节点 span = 调用点） | `expandDecls` |
 | `Core`（门面） | core 类型论表示、NbE 求值与定义性相等等公开面；细节见 [core.md](core.md) | `Core.Eval.eval`、`quote`、`normalize`、`Core.Conv.conv`、`Core.Term.defaultFuel` |
 | `Core.Term` | `Term`/`Value`/`Neutral`/`Closure`/`Rig`/`Level`/`Sols` 等数据（唯一真源）与 `shift`/`substVarAt`/显示等纯项变换 | `shift`、`substVarAt`、`rigIsErased` |
 | `Core.Eval` | beta 求值、delta 展开、prelude 原语归约、深度正规化与 quote | `eval`、`force`、`applyClosure`、`normalize`、`quote` |
@@ -84,7 +84,7 @@
 | `Driver.CompilerCli` | 编译器自己的 CLI（`vuna-compiler`）；含受限进程执行入口 `runIn`；workspace check/build 单元、`build --package`、`version` | `runCompilerCli`、`compilerUsageLines`、`runIn` |
 | `Version` | 版本号唯一真源；产品 CLI / `vuna-compiler` / build meta / VSCode 探测共用 | `vunaVersion` |
 
-`compiler/vuna.toml` 的 `[export]` 列出全部 79 个导出模块（上列 9 个内部模块不在内）；
+`compiler/vuna.toml` 的 `[export]` 列出全部 79 个导出模块（上列 8 个内部模块不在内）；
 编译器直接使用 `prim_*`（无 manifest 能力/特权声明）。工具链模块不在此包。
 
 ## 根包工具链模块（`lib/`，不进 seed）

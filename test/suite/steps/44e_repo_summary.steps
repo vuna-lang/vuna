@@ -6,5 +6,5 @@ exit: 0
 run: sh -c 'cd .. && TMPDIR="$TMPDIR/summary-repo-cache" "$VUNA" check . --debug-perf'
 exit: 0
 out-contains: cache-path=summary deps=2
-# 探针走内置宏（perfNote!/perfStamp!）展开：--debug-perf 下 DEBUG 行仍必须出现。
+# 探针走内置宏 `dbg!` 展开：--debug-perf 下 DEBUG 行仍必须出现。
 out-contains: DEBUG

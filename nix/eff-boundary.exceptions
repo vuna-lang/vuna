@@ -1,3 +1,0 @@
-# M4 sanctioned exceptions（显式白名单，必须写明理由；守卫会把它们单独报告）。
-# 只允许放「设计上就是要保留的 tracing/调试通道」，不得放迁移债。
-compiler/lib/Vuna/Compiler/Debug.vuna

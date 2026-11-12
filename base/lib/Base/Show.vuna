@@ -31,7 +31,11 @@ trait DebugShow a where
 instance Show a => DebugShow a where
   debugShow x = show x
 
--- | 调试打印：把 `debugShow x` 写 stderr（经语言级内建 `dbg`）后返回 `x`；
--- 值语义不变，只用于调试。见 docs/reference/debugging.md §3。
+-- | 调试打印：把 `debugShow x` 交给内置宏 `dbg!`（受 `--debug-perf` / `VUNA_DEBUG_PERF=1`
+-- 门控，带时间戳写 stderr）后返回 `x`；值语义不变，只用于调试。
+-- 见 docs/reference/debugging.md §3。
 dbgShow : DebugShow a => a -> a
-dbgShow x = dbg (debugShow x) x
+dbgShow x =
+  let
+    _ = dbg! (debugShow x)
+  in x

@@ -1,14 +1,14 @@
-# 65) 内置宏机制：`name!` 的紧邻规则、fmt 往返、错误边界。
+# 65) 内置宏机制：`name!` 的紧邻规则、fmt 往返、统一 `dbg!` 的开关/惰性/输出协议。
 #     宏在 parser 里编码成保留名标记（`@vuna@macro@name`），Loader 在名字解析前展开；
-#     fmt / lint / index 只处理调用形式，不展开。探针宏的开关/惰性 e2e 见 65d。
+#     fmt / lint / index 只处理调用形式，不展开。展开到隐藏 runtime 原语，任何包可用。
 #
 # 65a) fmt 往返：`name!` 在原子位置与应用位置都稳定；二次 fmt 幂等。
 run: mkdir -p "$TMPDIR/mac-fmt"
-run: sh -c 'printf "%s\n" "main : Int" "main = perfNote! (if True then \"a\" else \"b\")" "" "f : Int -> Int" "f x = x" "" "g : Int" "g = f perfNote! \"x\"" > "$TMPDIR/mac-fmt/Main.vuna"'
+run: sh -c 'printf "%s\n" "main : Int" "main = dbg! (if True then \"a\" else \"b\")" "" "f : Int -> Int" "f x = x" "" "g : Int" "g = f dbg! \"x\"" > "$TMPDIR/mac-fmt/Main.vuna"'
 run: "$VUNA" fmt "$TMPDIR/mac-fmt/Main.vuna" >/dev/null 2>&1
 read: $TMPDIR/mac-fmt/Main.vuna
-out-contains: perfNote! (if True then "a" else "b")
-out-contains: (perfNote! "x")
+out-contains: dbg! (if True then "a" else "b")
+out-contains: (dbg! "x")
 run: "$VUNA" fmt --check "$TMPDIR/mac-fmt/Main.vuna" >/dev/null 2>&1
 exit: 0
 
@@ -19,51 +19,50 @@ run: sh -c 'printf "%s\n" "infixl 6 ! = plusInt" "" "plusInt : Int -> Int -> Int
 run: "$VUNA" interp "$TMPDIR/mac-infix/app/Main.vuna" 2>&1
 out-equals: 3
 
-# 65c) 错误边界：未知宏 / arity 不符 / 编译器包外使用宏。
+# 65c) 错误边界：未知宏 / arity 不符。`dbg!` 不依赖任何库模块，base-only 包也能用。
 run: printf 'main : Int\nmain = nope! 1\n' > "$TMPDIR/mac-unknown.vuna"
 run: "$VUNA" check "$TMPDIR/mac-unknown.vuna" 2>&1
 exit: nonzero
 out-contains: RN_UnknownMacro
 out-contains: unknown macro: nope
-run: printf 'main : Int\nmain = perfNote! "a" "b"\n' > "$TMPDIR/mac-arity.vuna"
+run: printf 'main : Int\nmain = dbg! "a" "b"\n' > "$TMPDIR/mac-arity.vuna"
 run: "$VUNA" check "$TMPDIR/mac-arity.vuna" 2>&1
 exit: nonzero
 out-contains: RN_MacroArity
-out-contains: macro perfNote expects 1 argument(s), got 2
-# 探针宏展开后引用 Vuna.Compiler.Debug：编译器包外没有该模块，报未 import（钉住边界）。
-run: printf 'main : Int\nmain = perfNote! "x"\n' > "$TMPDIR/mac-outside.vuna"
-run: "$VUNA" check "$TMPDIR/mac-outside.vuna" 2>&1
-exit: nonzero
-out-contains: RN_ModuleNotImported
-# 65d) e2e：把 compiler 包复制到 $TMPDIR 并加一个探针模块（编译器包内部才能 import
-#      Vuna.Compiler.Debug），依赖包调用它验证宏展开、开关、惰性与输出协议。
-run: mkdir -p "$TMPDIR/mac-e2e"
-run: cp -R ../compiler "$TMPDIR/mac-e2e/compiler"
-run: cp -R ../base "$TMPDIR/mac-e2e/base"
-run: sh -c 'rm -rf "$TMPDIR/mac-e2e/compiler/.output" "$TMPDIR/mac-e2e/base/.output"; find "$TMPDIR/mac-e2e/compiler" "$TMPDIR/mac-e2e/base" -name "*.iface" -delete'
-run: sed -i 's/"Vuna.Compiler.Driver.PerfCache"/"Vuna.Compiler.Driver.PerfCache",\n  "Vuna.Compiler.MacroProbe"/' "$TMPDIR/mac-e2e/compiler/vuna.toml"
-run: printf '%s\n' 'module Vuna.Compiler.MacroProbe (probeEager, probeNote, probeStamp) where' '' 'import Vuna.Compiler.Debug' '' 'probeNote : Int' 'probeNote = let _ = perfNote! "probe=${42}" in 42' '' 'probeStamp : Int' 'probeStamp = let _ = perfStamp! "probe-phase" in 1' '' 'probeEager : Int -> Int' 'probeEager _ = let _ = perfNote! (prim_fail "eager") in 7' > "$TMPDIR/mac-e2e/compiler/lib/Vuna/Compiler/MacroProbe.vuna"
-run: mkdir -p "$TMPDIR/mac-e2e/app/app"
-run: printf '[package]\nname = "mac-app"\n\n[dependencies]\nvuna-compiler = "%s"\nvuna-base = "%s"\n' "$TMPDIR/mac-e2e/compiler" "$TMPDIR/mac-e2e/base" > "$TMPDIR/mac-e2e/app/vuna.toml"
-run: printf 'import Vuna.Compiler.MacroProbe\n\nmain : Int\nmain = probeNote + probeStamp\n' > "$TMPDIR/mac-e2e/app/app/Main.vuna"
-run: TMPDIR="$TMPDIR/mac-e2e/tmp" "$VUNA" build "$TMPDIR/mac-e2e/app" 2>&1
+out-contains: macro dbg expects 1 argument(s), got 2
+
+# 65d) e2e（base-only 包，不需要 compiler 依赖）：开关、输出协议、惰性、interp 静默。
+run: mkdir -p "$TMPDIR/mac-e2e/app"
+run: printf '[package]\nname = "mac-app"\n\n[dependencies]\nvuna-base = "%s"\n' "$VUNA_BASE" > "$TMPDIR/mac-e2e/vuna.toml"
+run: printf 'main : Int\nmain = let _ = dbg! "probe=${42}" in 43\n' > "$TMPDIR/mac-e2e/app/Main.vuna"
+run: TMPDIR="$TMPDIR/mac-e2e/tmp" "$VUNA" build "$TMPDIR/mac-e2e" 2>&1
 out-contains: built
-# 默认关闭：不打印 DEBUG/PERF，结果 43。
-run: "$TMPDIR/mac-e2e/app/.output/bin/mac-app" 2>&1
+# 默认关闭：无 DEBUG 行，结果 43。
+run: "$TMPDIR/mac-e2e/.output/bin/mac-app" >"$TMPDIR/mac-e2e/off.out" 2>"$TMPDIR/mac-e2e/off.err"
+read: $TMPDIR/mac-e2e/off.out
 out-equals: 43
-out-not-contains: DEBUG
-# VUNA_DEBUG_PERF=1：宏展开的守卫打开，输出协议不变。
-run: VUNA_DEBUG_PERF=1 "$TMPDIR/mac-e2e/app/.output/bin/mac-app" 2>&1
-out-contains: DEBUG probe=42
-out-contains: PERF probe-phase
-out-contains: 43
-# 惰性：关闭时 perfNote! 的实参不求值（prim_fail 不触发），开启时才求值并失败。
-run: printf 'import Vuna.Compiler.MacroProbe\n\nmain : Int\nmain = probeEager 0\n' > "$TMPDIR/mac-e2e/app/app/Main.vuna"
-run: TMPDIR="$TMPDIR/mac-e2e/tmp" "$VUNA" build "$TMPDIR/mac-e2e/app" 2>&1
+read: $TMPDIR/mac-e2e/off.err
+out-equals:
+# VUNA_DEBUG_PERF=1：输出协议 `DEBUG <epoch-us> <text>`（stderr），时间戳是整数微秒。
+run: VUNA_DEBUG_PERF=1 "$TMPDIR/mac-e2e/.output/bin/mac-app" >"$TMPDIR/mac-e2e/on.out" 2>"$TMPDIR/mac-e2e/on.err"
+read: $TMPDIR/mac-e2e/on.out
+out-equals: 43
+run: grep -E '^DEBUG [0-9]+ probe=42$' "$TMPDIR/mac-e2e/on.err"
+exit: 0
+# 生成的程序读自己的 argv：直接给二进制 `--debug-perf` 也打开。
+run: "$TMPDIR/mac-e2e/.output/bin/mac-app" --debug-perf >/dev/null 2>"$TMPDIR/mac-e2e/argv.err"
+run: grep -E '^DEBUG [0-9]+ probe=42$' "$TMPDIR/mac-e2e/argv.err"
+exit: 0
+# interp 不执行 tracing：静默、结果正确。
+run: "$VUNA" interp "$TMPDIR/mac-e2e/app/Main.vuna" 2>&1
+out-equals: 43
+# 惰性：关闭时 dbg! 的实参不求值（prim_fail 不触发），开启时才求值并失败。
+run: printf 'main : Int\nmain = let _ = dbg! (prim_fail "eager") in 7\n' > "$TMPDIR/mac-e2e/app/Main.vuna"
+run: TMPDIR="$TMPDIR/mac-e2e/tmp" "$VUNA" build "$TMPDIR/mac-e2e" 2>&1
 out-contains: built
-run: "$TMPDIR/mac-e2e/app/.output/bin/mac-app" 2>&1
+run: "$TMPDIR/mac-e2e/.output/bin/mac-app" 2>&1
 out-equals: 7
-run: VUNA_DEBUG_PERF=1 "$TMPDIR/mac-e2e/app/.output/bin/mac-app" >/dev/null 2>"$TMPDIR/mac-e2e/eager.err"
+run: VUNA_DEBUG_PERF=1 "$TMPDIR/mac-e2e/.output/bin/mac-app" >/dev/null 2>"$TMPDIR/mac-e2e/eager.err"
 exit: 2
 read: $TMPDIR/mac-e2e/eager.err
 out-contains: runtime error: eager

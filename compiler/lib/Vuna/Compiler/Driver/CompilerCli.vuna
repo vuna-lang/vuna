@@ -69,9 +69,14 @@ record CliOpts where
   optMaxErrors : Int
   optContinueOnError : Bool
   optSarifItems : List Diagnostic
+  optRelease : Bool
 
 defaultCliOpts : CliOpts
-defaultCliOpts = CliOpts "short" "en" False False False False False False 0 False []
+defaultCliOpts = CliOpts "short" "en" False False False False False False 0 False [] False
+
+-- | 在已有 opts 上打开 release 模式（`--release`）。
+markRelease : CliOpts -> CliOpts
+markRelease o = { o | optRelease = True }
 
 -- 显式 state 辅助：把不改 opts 的动作结果带回（退出码 + 当前 CliOpts）。
 withOpts : CliOpts -> Eff [] Int -> Eff [] (Pair Int CliOpts)
@@ -130,7 +135,7 @@ applyManifestOpts (Just pkg) o =
       Just n => n
       Nothing => o.optMaxErrors
   in CliOpts fmt lang o.optLangExplicit deny showW2 o.optFormatExplicit o.optWarningsExplicit
-    o.optDenyExplicit maxE o.optContinueOnError o.optSarifItems
+    o.optDenyExplicit maxE o.optContinueOnError o.optSarifItems o.optRelease
 
 -- | 诊断/告警实现：takeDiags（详见 diagnostics.md）。
 takeDiags : Int -> List Diagnostic -> List Diagnostic
@@ -186,7 +191,8 @@ stripDiagFormatGo (arg :: rest) acc found =
 
 -- | 编译器 CLI 入口：剥离诊断参数后分发。
 runCompilerCliFor : String -> List String -> Eff [] Int
-runCompilerCliFor prog args =
+runCompilerCliFor prog args = do
+  envRel <- prim_eff_getenv "VUNA_RELEASE"
   let
     stripped = stripDiagFormat args
     strippedLang = stripLang (firstOf stripped)
@@ -201,7 +207,7 @@ runCompilerCliFor prog args =
       CliOpts fmt detectedLang (hasLangFlag args) (hasDenyWarnings args)
         (hasDenyWarnings args || hasShowWarnings args) (hasFormatFlag args)
         (hasDenyWarnings args || hasShowWarnings args) (hasDenyWarnings args) (secondOf strippedMax)
-        (secondOf strippedContinue) []
+        (secondOf strippedContinue) [] (envRel == "1")
   in if anyHelp (firstOf strippedContinue) then helpFor prog
   else do
     r <- runCompilerCliFor1 prog (firstOf strippedContinue) opts
@@ -422,7 +428,7 @@ compileParse : String -> Bool -> Maybe String -> Maybe String -> List String -> 
 compileParse prog printResult entry outDir args o = case args of
   [] => compileFinish prog printResult entry outDir o
   "--no-print" :: rest => compileParse prog False entry outDir rest o
-  "--release" :: rest => compileParse prog printResult entry outDir rest o
+  "--release" :: rest => compileParse prog printResult entry outDir rest (markRelease o)
   arg :: rest => if startsWith "-" arg then withOpts o (removedFlag prog arg)
   else case entry of
     Nothing => compileParse prog printResult (Just arg) outDir rest o
@@ -450,8 +456,9 @@ compileFileEntry printResult entry outDir o = do
   ctxR <- contextForFile entry
   case ctxR of
     ErrC e => printDiag o e
-    OkC ctx =>
+    OkC ctx0 =>
       let
+        ctx = contextWithRelease o.optRelease ctx0
         o1 = applyDiagConfig (contextPackageOf ctx) o
       in do
         r <- compileToDir ctx entry printResult outDir
@@ -468,7 +475,9 @@ compilePkgDir printResult dir outDir o = do
       let
         o1 = applyDiagConfig (Just pkg) o
       in do
-        r <- compileToDir (packageContext pkg) (packageEntry pkg) printResult outDir
+        r <-
+          compileToDir (contextWithRelease o.optRelease (packageContext pkg)) (packageEntry pkg)
+            printResult outDir
         case r of
           ErrC e => printDiag o1 e
           OkC p => finishWarningsDir (secondOf p) o1 outDir 0
@@ -479,7 +488,7 @@ compilePkgDir printResult dir outDir o = do
 -- | CLI 辅助：checkArgs（参数/退出码约定见 tooling.md）。
 checkArgs : String -> List String -> CliOpts -> Eff [] (Pair Int CliOpts)
 checkArgs prog [] o = withOpts o (usageErr prog)
-checkArgs prog ("--release" :: rest) o = checkArgs prog rest o
+checkArgs prog ("--release" :: rest) o = checkArgs prog rest (markRelease o)
 checkArgs prog (arg :: rest) o = if startsWith "-" arg then withOpts o (removedFlag prog arg)
 else case rest of
   [] => checkEmit arg o
@@ -511,9 +520,10 @@ checkPkgDir dir o = do
 checkSpawnArgs : CliOpts -> String -> List String
 checkSpawnArgs o dir =
   let
+    head0 = if o.optRelease then ["check", "--release"] else ["check"]
     base =
-      if o.optDiagFormat == "short" then ["check", dir]
-      else ["check", "--error-format", o.optDiagFormat, dir]
+      if o.optDiagFormat == "short" then append head0 [dir]
+      else append head0 ["--error-format", o.optDiagFormat, dir]
     base2 = if o.optShowWarnings then append base ["--warnings"] else base
   in if o.optDenyWarnings then append base2 ["--deny-warnings"] else base2
 
@@ -564,7 +574,7 @@ checkPackageSeq pkg code o =
 
 checkPackageCode : Package -> Bool -> CliOpts -> Eff [] (Pair Int CliOpts)
 checkPackageCode pkg wantWarnings o = do
-  r <- checkPackage wantWarnings pkg
+  r <- checkPackage o.optRelease wantWarnings pkg
   case r of
     ErrC e => checkPackageErr pkg e o
     OkC ws0 =>
@@ -585,8 +595,9 @@ checkFileEntry path o = do
   ctxR <- contextForFile path
   case ctxR of
     ErrC e => printDiag o e
-    OkC ctx =>
+    OkC ctx0 =>
       let
+        ctx = contextWithRelease o.optRelease ctx0
         o1 = applyDiagConfig (contextPackageOf ctx) o
       in do
         moduleEntry <- isModuleFileEntry ctx path
@@ -660,7 +671,7 @@ buildParse : String -> Bool -> Maybe String -> Maybe String -> Maybe String -> L
 buildParse prog noCompile out dir pkg args o = case args of
   [] => buildRun noCompile (defaultDir dir) out pkg o
   "--no-compile" :: rest => buildParse prog True out dir pkg rest o
-  "--release" :: rest => buildParse prog noCompile out dir pkg rest o
+  "--release" :: rest => buildParse prog noCompile out dir pkg rest (markRelease o)
   "--out" :: rest => case rest of
     outDir :: more => if startsWith "-" outDir then withOpts o (removedFlag prog outDir)
     else case out of
@@ -736,7 +747,7 @@ buildOne noCompile multiOut outM pkg o =
     exists <- prim_eff_fileExists entry
     if exists then
       let
-        ctx = packageContext pkg
+        ctx = contextWithRelease o.optRelease (packageContext pkg)
         binPath = "${outDir}/bin/${name}"
       in if noCompile then compileCodegen ctx entry outDir o
       else do
@@ -750,7 +761,7 @@ buildOne noCompile multiOut outM pkg o =
             ErrC e => printDiag o e
             OkC _ => buildLinked ctx entry outDir name o
     else do
-      r <- checkPackage False pkg
+      r <- checkPackage o.optRelease False pkg
       case r of
         ErrC e => printDiag o e
         OkC _ => do
@@ -869,7 +880,8 @@ packageRecover pkg e o = do
 -- | 可执行包入口的恢复式检查。
 packageRecoverExe : Package -> Diagnostic -> CliOpts -> Eff [] (Pair Int CliOpts)
 packageRecoverExe pkg e o = do
-  recovered <- dtCheckRecovering (packageContext pkg) (packageEntry pkg)
+  recovered <-
+    dtCheckRecovering (contextWithRelease o.optRelease (packageContext pkg)) (packageEntry pkg)
   case recovered of
     OkC ds => printRecovered pkg e ds o
     ErrC e2 => printDiagWithPrefix o "[${packageName pkg}] " e2
@@ -878,7 +890,8 @@ packageRecoverExe pkg e o = do
 packageRecoverLib : Package -> Diagnostic -> CliOpts -> Eff [] (Pair Int CliOpts)
 packageRecoverLib pkg e o = case packageExports pkg of
   Just names => do
-    recovered <- dtCheckLibraryRecovering (packageContext pkg) names
+    recovered <-
+      dtCheckLibraryRecovering (contextWithRelease o.optRelease (packageContext pkg)) names
     case recovered of
       OkC ds => printRecovered pkg e ds o
       ErrC e2 => printDiagWithPrefix o "[${packageName pkg}] " e2

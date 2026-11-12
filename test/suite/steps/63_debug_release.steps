@@ -1,5 +1,7 @@
-# 63) F3 B：语言级调试构造 `dbg` / `assert` / `todo` 与 release 构建拒绝。
-run: D="$TMPDIR/debug-constructs"; rm -rf "$D"; mkdir -p "$D"; printf 'main : Int\nmain = dbg "msg" (assert True "ok" 1)\n' >"$D/ok.vuna"; printf 'main : Int\nmain = assert False "boom" 0\n' >"$D/assert.vuna"; printf 'main : Int\nmain = todo "later"\n' >"$D/todo.vuna"; printf 'main : Int\nmain = dbg "x" 1\n' >"$D/dbg.vuna"
+# 63) F3 B：语言级调试构造 `dbg!` / `assert` / `todo` 与 release 构建拒绝。
+#     `--release` / `VUNA_RELEASE=1` 在 CLI 边界解析成显式 Bool，沿调用链传到 Resolver；
+#     包括 workspace 成员的子进程 check（旧实现成员子进程 argv 没有旗标，会漏判）。
+run: D="$TMPDIR/debug-constructs"; rm -rf "$D"; mkdir -p "$D"; printf 'main : Int\nmain = let _ = dbg! "msg" in assert True "ok" 1\n' >"$D/ok.vuna"; printf 'main : Int\nmain = assert False "boom" 0\n' >"$D/assert.vuna"; printf 'main : Int\nmain = todo "later"\n' >"$D/todo.vuna"; printf 'main : Int\nmain = let _ = dbg! "x" in 1\n' >"$D/dbg.vuna"
 run: "$VUNA" check "$TMPDIR/debug-constructs/ok.vuna" >/dev/null 2>&1
 run: VUNA_RELEASE=1 "$VUNA" check "$TMPDIR/debug-constructs/assert.vuna" 2>&1
 exit: 1
@@ -11,3 +13,10 @@ run: VUNA_RELEASE=1 "$VUNA" check "$TMPDIR/debug-constructs/dbg.vuna" >/dev/null
 run: VUNA_RELEASE= "$VUNA" check --release "$TMPDIR/debug-constructs/assert.vuna" 2>&1
 exit: 1
 out-contains: TC_DebugConstructInRelease
+# workspace：根包干净、成员包含 assert；`check --release` 必须让成员子进程也按 release 判。
+run: sh -c 'mkdir -p "$TMPDIR/rel-ws/app" "$TMPDIR/rel-ws/m/app"; printf "[package]\nname = \"rel-ws\"\n\n[workspace]\nmembers = [\"m\"]\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" >"$TMPDIR/rel-ws/vuna.toml"; printf "[package]\nname = \"m\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" >"$TMPDIR/rel-ws/m/vuna.toml"; printf "main : Int\nmain = 1\n" >"$TMPDIR/rel-ws/app/Main.vuna"; printf "main : Int\nmain = assert False \"member assert\" 0\n" >"$TMPDIR/rel-ws/m/app/Main.vuna"'
+run: TMPDIR="$TMPDIR/rel-ws-cache" "$VUNA" check --release "$TMPDIR/rel-ws" 2>&1
+exit: 1
+out-contains: TC_DebugConstructInRelease
+out-contains: [m]
+run: TMPDIR="$TMPDIR/rel-ws-cache2" "$VUNA" check "$TMPDIR/rel-ws" >/dev/null 2>&1

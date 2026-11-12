@@ -52,7 +52,6 @@ import Base.Maybe
 import Base.Pair
 import Base.String
 import Vuna.Compiler.Canonical.Bytes
-import Vuna.Compiler.Debug
 import Vuna.Compiler.Fingerprint
 import Vuna.Compiler.Hash
 import Vuna.Compiler.Query
@@ -118,7 +117,7 @@ inStack (k :: rest) key = if k == key then True else inStack rest key
 runNode : RunState -> String -> List String -> (List QVal -> Eff [] (Pair QVal (List String))) -> Eff [] (Pair RunState (Maybe QVal))
 runNode st key deps compute = if inStack st.rsStack key || memKey key deps then do
   let
-    _ = perfNote! "query-cycle ${key}"
+    _ = dbg! "query-cycle ${key}"
   in pure (Pair (runNote st "cycle ${key}") Nothing)
 else case queryHit st.rsDb key deps of
   Just v =>
@@ -127,11 +126,11 @@ else case queryHit st.rsDb key deps of
   Nothing => case spendBudget st of
     Nothing => do
       let
-        _ = perfNote! "query-reject budget ${key}"
+        _ = dbg! "query-reject budget ${key}"
       in pure (Pair (runNote st "reject ${key}") Nothing)
     Just st1 => do
       let
-        _ = perfNote! "query-miss ${key}"
+        _ = dbg! "query-miss ${key}"
       in do
         result <- compute (queryDepValues st1.rsDb deps)
         let
@@ -239,7 +238,7 @@ else do
       Just db => pure (dbWithOrigin db opts.roOrigin)
       Nothing => do
         let
-          _ = perfNote! "query-index-reject len=${strLength bytes}"
+          _ = dbg! "query-index-reject len=${strLength bytes}"
         in pure (dbWithOrigin dbEmpty opts.roOrigin)
 
 -- | 写会话索引（内容不变则跳过：避免每次请求都刷 mtime）。

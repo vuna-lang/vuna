@@ -21,7 +21,6 @@ module Vuna.Compiler.Codegen.Assembly
 -- `Codegen.Term` 生成 `Unit.name` 全限定名；`UnitParts` 同时带出该单元**直接引用**
 -- 到的依赖单元（`unitPartsDeps`），供 `Codegen.Split` 写进 `SplitFile` 与 build.sh。
 import Vuna.Compiler.Common
-import Vuna.Compiler.Debug
 import Vuna.Compiler.Diagnostics
 import Vuna.Compiler.Elab
 import Vuna.Compiler.Codegen.Decl
@@ -63,13 +62,13 @@ prepareDtProgram program =
         familyTypeNames = filter (\n => not (memName n runtimeNames)) familyNames
         allTypeNames = append typeNames familyTypeNames
       in let
-        _ = perfStamp! "cg-partition-done"
+        _ = dbg! "cg-partition-done"
       in Vuna.Compiler.Common.bind (checkNoAxiomRuntime axiomNames runtime) (\_ => Vuna.Compiler.Common.bind (checkAllDefScopes defs) (\_ => Vuna.Compiler.Common.bind (ensureUniqueOcamlNames datas runtime) (\_ => let
-        _ = perfStamp! "cg-names-done"
+        _ = dbg! "cg-names-done"
       in Vuna.Compiler.Common.bind (checkAllErasure allTypeNames runtime) (\_ => let
-        _ = perfStamp! "cg-erasure-done"
+        _ = dbg! "cg-erasure-done"
       in Vuna.Compiler.Common.bind (groupRuntimeDefs runtime) (\groups => let
-        _ = perfStamp! "cg-groups-done"
+        _ = dbg! "cg-groups-done"
       in OkC (Pair runtime groups)
       )
       )
@@ -84,11 +83,11 @@ prepareDtProgram program =
 --   groups    ：本单元运行时分组的 SCC 序（由调用方按归属过滤后分组）
 genUnitParts : List (Pair String (List Int)) -> QualCtx -> List DtData -> List DtData -> List (List DtDef) -> Check UnitParts
 genUnitParts usedTbl qc allDatas unitDatas groups = Vuna.Compiler.Common.bind (genTypeDeclsWith qc usedTbl allDatas unitDatas) (\typeText => let
-  _ = perfStamp! "cg-typedecls-done"
+  _ = dbg! "cg-typedecls-done"
 in Vuna.Compiler.Common.bind (genGroups (adjTblOf (depAdjacency (concatGroups groups))) (mkGenSt qc allDatas) groups) (\p => case p of
   Pair bodies st =>
     let
-      _ = perfStamp! "cg-genGroups-done"
+      _ = dbg! "cg-genGroups-done"
       deps = uniqueDeps (append (append [runtimeUnit] (typeDepsOf qc unitDatas)) st.gsDeps)
     in OkC (UnitParts [openHeader qc, typeText, listBridgeFor allDatas unitDatas] bodies st deps)
 )
@@ -136,7 +135,7 @@ hookDeps dep = if dep == "" then [] else [dep]
 -- main 的存在与返回类型只在生成阶段要求，这样没有 main 的库模块也能 check。
 checkDtProgram : Pair (List DtData) (List DtDef) -> Check Int
 checkDtProgram program = Vuna.Compiler.Common.bind (prepareDtProgram program) (\p => let
-  _ = perfStamp! "cg-prepare-done"
+  _ = dbg! "cg-prepare-done"
 in case p of
   Pair runtime groups =>
     Vuna.Compiler.Common.bind

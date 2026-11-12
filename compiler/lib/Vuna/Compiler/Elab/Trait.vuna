@@ -69,7 +69,6 @@ module Vuna.Compiler.Elab.Trait
 import Base.List
 import Vuna.Compiler.Common
 import Base.HashMap
-import Vuna.Compiler.Debug
 import Vuna.Compiler.Core
 import Vuna.Compiler.Diagnostics
 import Vuna.Compiler.Elab.Dict
@@ -664,7 +663,7 @@ elabConstraintDomains classes globals ctx ((Pair cname argExprs) :: rest) sp ec 
     Nothing => tcErr0 sp ConstraintNotDict
     Just kindVals =>
       let
-        _ = perfNote! "constraint-dom: ${cname} args=${length argExprs} kinds=${length kindVals}"
+        _ = dbg! "constraint-dom: ${cname} args=${length argExprs} kinds=${length kindVals}"
       in if length kindVals /= length argExprs then tcErr0 sp ConstraintNotDict
       else Vuna.Compiler.Common.bind (checkArgsAtKinds globals ctx ec argExprs kindVals sp) (\q => case q of
         Pair argTerms ec1 => Vuna.Compiler.Common.bind (elabConstraintDomains classes globals ctx rest sp ec1) (\r => case r of
@@ -1392,30 +1391,23 @@ else
 -- （标准模式矩阵：整列变量改名继续；有构造子则用该位置名作 scrutinee，同构造子的子模式递归，
 -- 变量/通配汇成兜底）。产物是纯 lambda + case，交给既有精化路径，覆盖/索引/擦除全自动。
 elabFunDefIn : List (Pair String Term) -> Ctx -> Ec -> List (Pair (List Pat) Expr) -> Value -> Span -> Check (Pair Term Ec)
+elabFunDefIn globals ctx0 ec [] expected sp = tcErr0 sp FunctionNoClauses
+elabFunDefIn globals ctx0 ec ([Pair pats body]) expected sp =
+  if allVarPats pats then checkDefIn globals ctx0 ec pats body expected sp
+  else elabFunDefMulti globals ctx0 ec [Pair pats body] expected sp
 elabFunDefIn globals ctx0 ec clauses expected sp =
+  elabFunDefMulti globals ctx0 ec clauses expected sp
+
+elabFunDefMulti : List (Pair String Term) -> Ctx -> Ec -> List (Pair (List Pat) Expr) -> Value -> Span -> Check (Pair Term Ec)
+elabFunDefMulti globals ctx0 ec clauses expected sp =
   let
-    key = strFromInt (spanStartLine sp)
-  in case clauses of
-    [] => tcErr0 sp FunctionNoClauses
-    [Pair pats body] => if allVarPats pats then checkDefIn globals ctx0 ec pats body expected sp
-    else
-      let
-        _ = perfSample! key "MULTI"
-      in Vuna.Compiler.Common.bind (resolveOverFunPats ec ctx0 expected clauses) (\r => case r of
-        Pair clauses2 ec1 => Vuna.Compiler.Common.bind (multiToExpr (ctorFamilyTable ec1) clauses2) (\bodyExpr => let
-          _ = perfSample! key "CHECKDEF"
-        in checkDefIn globals ctx0 ec1 [] bodyExpr expected sp
-        )
-      )
-    _ =>
-      let
-        _ = perfSample! key "MULTI"
-      in Vuna.Compiler.Common.bind (resolveOverFunPats ec ctx0 expected clauses) (\r => case r of
-        Pair clauses2 ec1 => Vuna.Compiler.Common.bind (multiToExpr (ctorFamilyTable ec1) clauses2) (\bodyExpr => let
-          _ = perfSample! key "CHECKDEF"
-        in checkDefIn globals ctx0 ec1 [] bodyExpr expected sp
-        )
-      )
+    _ = dbg! "MULTI"
+  in Vuna.Compiler.Common.bind (resolveOverFunPats ec ctx0 expected clauses) (\r => case r of
+    Pair clauses2 ec1 => Vuna.Compiler.Common.bind (multiToExpr (ctorFamilyTable ec1) clauses2) (\bodyExpr => let
+      _ = dbg! "CHECKDEF"
+    in checkDefIn globals ctx0 ec1 [] bodyExpr expected sp
+    )
+  )
 
 elabFunDef : List (Pair String Term) -> Ec -> List (Pair (List Pat) Expr) -> Value -> Span -> Check (Pair Term Ec)
 elabFunDef globals ec clauses expected sp = elabFunDefIn globals emptyCtx ec clauses expected sp

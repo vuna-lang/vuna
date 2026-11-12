@@ -15,7 +15,6 @@ module Vuna.Compiler.Codegen.Split (generateDtSplitProgram, generateDtSplitProgr
 -- 推导不到的带点名字回落到「模块前缀必须是已知模块」，否则报错。
 import Vuna.Compiler.Common
 import Base.HashMap
-import Vuna.Compiler.Debug
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Driver.Owner
 import Vuna.Compiler.Driver.Split
@@ -245,17 +244,17 @@ generateDtSplitProgramWith lookup store modules entryDecls prog printResult root
   let
     -- M34.6：把「精化完成 → prepare 开始」之间的构建独有开销分段（compiler 包约 0.4s，
     -- 旧实现无 stamp 不可归因）；stamp 关闭时只花一次分支。
-    _ = perfStamp! "cg-splitstart"
+    _ = dbg! "cg-splitstart"
     allDatas = runtimeDatas (dtProgDatas prog)
     allDefs = dtProgDefs prog
     meta = splitMetaOf modules entryDecls
-    _ = perfStamp! "cg-splitmeta-done"
+    _ = dbg! "cg-splitmeta-done"
     locTbl = dtDefLocTable (splitLocPath roots contextDir) allDefs
-    _ = perfStamp! "cg-deflocs-done"
+    _ = dbg! "cg-deflocs-done"
     usesFloat = anyDefUsesFloat allDefs
     usesTrace = anyDefUsesTrace allDefs
     runtimeText = dtRuntimeWith locTbl usesFloat usesTrace
-    _ = perfStamp! "cg-runtimeText-done"
+    _ = dbg! "cg-runtimeText-done"
   in case prepareDtProgram (Pair (dtProgDatas prog) allDefs) of
     ErrC e => pure (ErrC e)
     OkC (Pair runtime groups) =>

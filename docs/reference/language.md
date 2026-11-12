@@ -216,22 +216,24 @@ vuna/base/compiler 三包源码统一按当前语言能力书写，新增/修改
 
 ## 内置宏（`name!`）
 
-标识符后**紧邻**的 `!` 是一次内置宏调用：`perfNote! "x"`。`!` 与名字之间不能有空格；
+标识符后**紧邻**的 `!` 是一次内置宏调用：`dbg! "x"`。`!` 与名字之间不能有空格；
 带空格的 `a ! b` 仍是普通中缀运算符（`!` 也可以被 `infix` 声明），`!=` / `!!` 不触发。
 
-- **参数按原子贪婪**：`perfStamp! "phase"` 是一个调用；`f perfNote! x` 解析为
-  `f (perfNote! x)`（宏调用先吞掉自己的原子实参）；块实参用括号。
+- **参数按原子贪婪**：`dbg! "phase"` 是一个调用；`f dbg! x` 解析为
+  `f (dbg! x)`（宏调用先吞掉自己的原子实参）；块实参用括号。
 - **只出现在表达式位置**：模式位置不解析 `!`；宏也不能当函数值传递。
 - **展开时机**：`Loader` 在 fixity 重排之后、名字解析之前做 AST→AST 展开（`Loader.Expand`），
   Elab / Codegen / 接口缓存都只会看到普通表达式；parser 用保留名
   `@vuna@macro@<name>` 编码调用，Fmt 反向渲染回 `name!`，Index 不把标记当引用。
-- **卫生性**：展开结果引用全限定名（内置宏的后端在 `Vuna.Compiler.Debug`），
-  不捕获调用方局部名字；宏名不能被局部绑定遮蔽；每个实参只出现一次。
+- **卫生性**：展开结果只引用隐藏 runtime 原语（`@vuna@debug@*`，见
+  [primitives.md](primitives.md)），不依赖库模块、不捕获调用方局部名字；宏名不能被局部
+  绑定遮蔽；每个实参只出现一次。
 - **span**：展开出的节点继承调用点 span（实参保留自身 span），诊断可回溯到 `name!`。
-- **唯一的内置宏**（编译器内部探针；调用方必须 `import Vuna.Compiler.Debug`）：
-  `perfNote! text`（`DEBUG` 行）、`perfStamp! label`（`PERF` 时间戳）、
-  `perfSample! key label`（按 1/64 确定性采样打点）。它们返回 `Unit`，实参在
-  `--debug-perf` 关闭时**不求值**（守卫在展开里）。语义见 [performance.md](performance.md) §2。
+- **唯一的内置宏**：`dbg! text`，展开为
+  `if @vuna@debug@on 0 then @vuna@debug@line text else 0`。它在任何包可用、不需要
+  import；`--debug-perf` / `VUNA_DEBUG_PERF=1` 打开时向 stderr 写
+  `DEBUG <epoch-us> <text>`（逐行 flush），关闭时实参**不求值**；表达式返回 `Int 0`。
+  见 [debugging.md](debugging.md) §3 与 [performance.md](performance.md) §2。
 - **错误**：未知宏 `[RN_UnknownMacro]`、参数个数不符 `[RN_MacroArity]`，都带调用点 span。
 - **边界**：暂不支持用户自定义宏 / 模式宏 / 宏生成宏；宏名是全局内置名，不参与模块作用域
   （见 [debt.md](debt.md)）。

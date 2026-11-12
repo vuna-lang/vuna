@@ -1,11 +1,19 @@
-# 46) 语言级调试构造（F3 B）：dbg/dbgShow 走 stderr 且返回值不变；assert/todo 失败走
-#     运行时报告器（exit 2、帧指向调用点）。
-run: sh -c 'mkdir -p "$TMPDIR/m38-dbg/app"; printf "[package]\nname = \"m38-dbg\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" >"$TMPDIR/m38-dbg/vuna.toml"; printf "main : Int\nmain = dbg \"m38-trace\" (dbgShow 42)\n" >"$TMPDIR/m38-dbg/app/Main.vuna"'
+# 46) 语言级调试构造（F3 B）：dbg! / dbgShow 受 --debug-perf 门控（stderr，带时间戳）
+#     并返回值不变；assert/todo 失败走运行时报告器（exit 2、帧指向调用点）。
+run: sh -c 'mkdir -p "$TMPDIR/m38-dbg/app"; printf "[package]\nname = \"m38-dbg\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" >"$TMPDIR/m38-dbg/vuna.toml"; printf "main : Int\nmain = let _ = dbg! \"m38-trace\" in dbgShow 42\n" >"$TMPDIR/m38-dbg/app/Main.vuna"'
 run: "$VUNA" build "$TMPDIR/m38-dbg" 2>&1
+# 默认关闭：无 debug 行，返回值仍是 42。
 run: sh -c '"$TMPDIR/m38-dbg/.output/bin/m38-dbg" >"$TMPDIR/m38-dbg.out" 2>"$TMPDIR/m38-dbg.err"'
 read: $TMPDIR/m38-dbg.out
 out-equals: 42
 read: $TMPDIR/m38-dbg.err
+out-equals:
+# 打开：两条 DEBUG 行（显式 dbg! + dbgShow 的 debugShow），stdout 仍只有 42。
+run: sh -c 'VUNA_DEBUG_PERF=1 "$TMPDIR/m38-dbg/.output/bin/m38-dbg" >"$TMPDIR/m38-dbg.on.out" 2>"$TMPDIR/m38-dbg.on.err"'
+read: $TMPDIR/m38-dbg.on.out
+out-equals: 42
+read: $TMPDIR/m38-dbg.on.err
+out-contains: DEBUG
 out-contains: m38-trace
 out-contains: 42
 run: sh -c 'printf "main : Int\nmain = assert False \"m38 assert\" 7\n" >"$TMPDIR/m38-dbg/app/Main.vuna"'

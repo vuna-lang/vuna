@@ -6,7 +6,6 @@ import Base.List
 import Vuna.Compiler.Common
 import Base.HashMap
 import Vuna.Compiler.Diagnostics
-import Vuna.Compiler.Debug
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Elab.Termination.Measure
 import Vuna.Compiler.Elab.Termination.Scc
@@ -434,7 +433,7 @@ checkTerminationDeclsWith own decls =
     facts = computePosFactsWork nodes defTbl rgT 1024 [] callerNames
     -- O(n²)→O(n)：own 只建一次哈希表，逐 SCC 的 own 判定从线性扫改成 O(1) 查表。
     ownTbl = Base.HashMap.ofNames own
-    _ = perfStamp! "term-facts"
+    _ = dbg! "term-facts"
     fuel = graphFuel g nodes
     post = postOrder gT g nodes
     comps = sccOf post fuel rgT (Base.HashMap.fromList []) []

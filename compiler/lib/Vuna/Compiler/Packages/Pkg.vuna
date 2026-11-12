@@ -8,7 +8,9 @@ module Vuna.Compiler.Packages.Pkg
   , contextForFile
   , contextPackageName
   , contextPackageOf
+  , contextRelease
   , contextRoots
+  , contextWithRelease
   , findManifestDir
   , findManifestDirMaybe
   , loadManifestAt
@@ -72,11 +74,14 @@ packageDependencies (Package m ds p) = ds
 --   - Maybe Package  = 包本体（base-only 时为 Nothing：文件不属于任何包）
 --   - List Root      = 模块根列表（自己 lib 在最前，随后是依赖闭包）
 --   - String         = 包名（base-only 时为 ""）
+--   - Bool           = release 构建模式（`--release` / `VUNA_RELEASE=1`；只影响诊断拒绝，
+--                      不改变产物，因此不参与缓存指纹）。
 record PackageContext where
   contextDir : String
   contextPackage : Maybe Package
   contextRoots : List Root
   contextPackageName : String
+  contextRelease : Bool
 
 rootDir : Root -> String
 rootDir (Root dir name exports) = dir
@@ -89,17 +94,25 @@ rootPackage : Root -> String
 rootPackage root = rootName root
 
 contextDir : PackageContext -> String
-contextDir (PackageContext dir pkg roots name) = dir
+contextDir (PackageContext dir pkg roots name release) = dir
 
 contextRoots : PackageContext -> List Root
-contextRoots (PackageContext dir pkg roots name) = roots
+contextRoots (PackageContext dir pkg roots name release) = roots
 
 -- 上下文包名：base-only（ad-hoc）为空串；Loader 用它判同包可见性与效果内建。
 contextPackageOf : PackageContext -> Maybe Package
 contextPackageOf ctx = ctx.contextPackage
 
 contextPackageName : PackageContext -> String
-contextPackageName (PackageContext dir pkg roots name) = name
+contextPackageName (PackageContext dir pkg roots name release) = name
+
+-- | release 构建模式（只影响 release 诊断拒绝，不参与缓存指纹）。
+contextRelease : PackageContext -> Bool
+contextRelease (PackageContext dir pkg roots name release) = release
+
+-- | 在已有上下文上设置 release 模式（CLI 构造上下文后调用）。
+contextWithRelease : Bool -> PackageContext -> PackageContext
+contextWithRelease release ctx = { ctx | contextRelease = release }
 
 packageDir : Package -> String
 packageDir (Package manifest dependencies dir) = dir
@@ -376,6 +389,7 @@ packageEntry package = "${packageDir package}/app/Main.vuna"
 packageContext : Package -> PackageContext
 packageContext package =
   PackageContext (packageDir package) (Just package) (packageRoots package) (packageName package)
+    False
 
 -- ---------------------------------------------------------------- 查找
 findManifestUpMaybe : Int -> String -> Eff [] (Maybe String)
@@ -459,7 +473,7 @@ baseOnlyContext base = do
   packageR <- loadPackage base
   pure (case packageR of
     ErrC e => ErrC e
-    OkC package => OkC (PackageContext "" Nothing [dependencyRootOf package] "")
+    OkC package => OkC (PackageContext "" Nothing [dependencyRootOf package] "" False)
   )
 
 -- 从 start（已绝对化的目录）向上找最近 manifest；找不到 → base-only。

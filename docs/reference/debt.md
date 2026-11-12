@@ -49,7 +49,8 @@
 | D29/D31 | 检索与类型名解析是 parse 级：不做实例 / 隐式参数 / 依赖相等 / 类型别名展开，无语义级检索；短名歧义回退源码短名，不按 import 闭包规范化 | `lib/Vuna/Search/Query`（`typeNameMap` / `canonName`）；[api-docs.md](api-docs.md) | 后续 |
 | D30 | docstring 覆盖未全仓化：`vuna doc --check` 受管辖包仍是 compiler+base，root `lib/`、`app/` 未被收集；门禁是 ratchet 而非零缺失；多页 HTML 与零缺失不计划（内部符号为主、单文件可直接打开） | `lib/Vuna/Doc/*`、`nix/doc-coverage.sh`；[api-docs.md](api-docs.md) | 后续（多页/零缺失不计划） |
 | D33 | 运行时错误只有定义级位置：无表达式级 span、局部变量值、断点（无 DAP）；`ocamlopt` 单元内联会把抛错点归到调用者帧；非入口单元顶层初始化的异常不在捕获范围 | `Codegen/Term`（`dtDefLocTable` / `dtRuntimeWith`）；[debugging.md](debugging.md) §2 | 后续 |
-| D67 | 全局旗标名有两份字面量：`Vuna.Cli.stripDebugFlags` 与 `Vuna.Compiler.Debug` 各自匹配 `--debug-perf` / `--release`；统一需要把 flags 门面导出到包外 | `lib/Vuna/Cli.vuna`（`stripDebugFlags`）、`compiler/lib/Vuna/Compiler/Debug.vuna` | 后续（不影响行为，只影响新增全局旗标的维护点） |
+| D67 | 全局旗标字面量仍分散：`Vuna.Cli.stripPerfFlags` 匹配 `--debug-perf`，生成的 runtime 文本里匹配 `--debug-perf` / `VUNA_DEBUG_PERF`；`--release` 在 `Vuna.Cli`、`Vuna.Run`、`CompilerCli` 与 `VUNA_RELEASE` 读取处各有一份 | `lib/Vuna/Cli.vuna`、`lib/Vuna/Run.vuna`、`compiler/lib/Vuna/Compiler/Driver/CompilerCli.vuna`、`compiler/lib/Vuna/Compiler/Codegen/Term.vuna` | 后续（统一成旗标门面；不影响行为） |
+| D68 | 编译器 trace 开关是**运行时原语**（`@vuna@debug@on` 读 argv/env），不是显式传参：深部探针在 `Elab`/`Conv`/`Codegen` 的纯函数里，传 trace 能力会把整条纯核心 effect 化 | `compiler/lib/Vuna/Compiler/Intrinsics.vuna`、`Codegen/Term.vuna`（`dtTraceRuntime`）、`Loader/Expand.vuna` | 终局若要求零 ambient 配置，只能删深部探针或引入显式 trace 效应（与 D4 一起评估） |
 | D35 | REPL 的 resize 重绘靠空闲轮询（tty 关闭退化为空闲轮询，接受为限制）；Index 只覆盖 workspace 源码（外部依赖模块只能 `:load` 不能 `:browse`） | `lib/Vuna/Repl/Edit.vuna`、`lib/Vuna/Index/*`；[tooling.md](tooling.md) §4 | 后续 |
 
 ## 效应统一（Eff 已贯通）
