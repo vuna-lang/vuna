@@ -302,3 +302,46 @@ warm `check .` 56–57 ms（门槛 78）；全量 suite **5551 checks / 0 failed
 遗留（阶段 3+）：LSP/REPL 仍各自持缓存（`DiagCache` / `stateAuxCache` /
 `stateToolSession`），test/doc/index 未接图；`vuna clean --store` 仍按目录清；seed rotation
 留到阶段 5。
+
+## 阶段 3/4 执行设计（2026-11-12 勘察后落盘）
+
+目标：LSP / REPL / test / doc / index 都改成**查询图客户端**，删掉各自的 ad-hoc 会话缓存。
+难点不是判定逻辑（`Query` 已就绪），而是**大值载荷的编码**：这些缓存里存的是记录树
+（`ToolContext` / `Index` / doc 索引），`QVal` 只有三种形态，装不进去。
+
+设计：
+
+1. **tool 会话层（新）** `lib/Vuna/Tool/Session.vuna`（工具链，不进 seed）：
+   `ToolSession = { tsDb : Db, tsOpts : RunOpts, tsPath : String }`，
+   `toolHit : ToolSession -> String -> List String -> Maybe QVal`、
+   `toolCommit : ToolSession -> String -> List String -> QVal -> Eff [] ToolSession`（提交后
+   `sessionSave`，桶名 `tool:<包名>`，origin `tool`）。所有工具共用这一层 ⇒ 同一个 `Db`。
+2. **编码**（`compiler/lib/Vuna/Compiler/Driver/ToolPayload.vuna`，进 seed 因为记录定义在
+   compiler）：`encToolContext`/`decToolContext`（codec `tool-context 1`），
+   `encIndexPayload`/`decIndexPayload`（`index-payload 1`，`Index.Types` 的记录树）——
+   复用已有 `encModuleIface` / `decModuleIfaceComplete` / `encSourceInfo` / `encManifest`；
+   缺的 `decSourceInfo`、`ManifestEntry` 解码器在这里补。大值 `QRef` + `Store` blob
+   （路径 `<cache>/blobs/<digest>`，与 split 产物同一个 blob 树）。
+3. **REPL**（`lib/Vuna/Repl.vuna`）：
+   - `stateToolSession`（137–142 记录 + `withToolSession` 238）→ `ToolSession` + 节点
+     `tooliface:<pkg>:<dirHash>`，依赖 = 现有校验面（`sessionStats` 的
+     `path:size:mtime` 键；安全窗外的内容哈希进 key 的另一段）。
+   - `stateIndexCache`（148–155 + `withIndexCache`）→ 节点 `index:<dir>`，依赖 = 逐源文件
+     `srcstat:<path>:<size>:<mtime>`，值 = `QRef`（`index-payload 1` blob）。
+   - `stateAuxCache`：`AuxCache` 是「按 import 名单草拟的辅助表」，可并入 `tooliface:` 节点的
+     依赖（import 名单进 key），记录删除。
+   - debug 行：`iface-source=repl` → `query-source=repl`、`iface-tool-lazy` →
+     `query-lazy`；`test/suite/steps/44g_tool_iface.steps` 同步（两处片段 + 一条 grep）。
+4. **LSP**（`lib/Vuna/Lsp/Diagnostics.vuna`）：`DiagCache`（222）去掉
+   `dcStats`/`dcBuiltSec` 的 mtime 启发式，改成 `ToolSession` + 节点
+   `lspiface:<pkg>:<dirHash>`；`buildSession`（267）/`usableSession`（284）/
+   `sessionClosureOk`（295）合并成「取节点 → 命中复用 → 未命中重建并提交」；
+   `diagnosticsForCached` 的「干净模块」来自节点依赖表的命中结果。
+5. **Index / Doc**（阶段 4）：`Vuna.Index.loadOrBuild`（`lib/Vuna/Index/Scan.vuna`）的
+   `.local/index/` manifest 换成 `index:<dir>` 节点 + blob；`vuna map` 输出必须与
+   `test/snapshots/modules.txt` 逐字节一致（现有 §38 快照兜底）。`vuna doc` 同理，
+   节点 `doc:<pkg>:<closureHash>`。`vuna test` 已经走 `compileToDir` ⇒ 自动吃到 split 节点，
+   只需删它自己按文件名的旧缓存（若有）。
+6. **验证口径**：每迁移一个消费者就跑该消费者的既有 steps（44g/44l1/44l2/LSP smoke/
+   47c/38/§19），外加 `nix/checks/compiler-perf.sh`（它已按 `$TMPDIR/vuna-cache` 整体清理，
+   与布局无关，只需确认 `--debug-perf` 的 `cache-own-clean`/`cache-path` 行仍在）。
