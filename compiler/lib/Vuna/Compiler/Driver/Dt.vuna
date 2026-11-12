@@ -858,7 +858,7 @@ dtCheckOursParts ctx resolved deps =
     ours = filter (\m => modulePackageOf m == pkgName) modules
     depsOnly = filter (\m => modulePackageOf m /= pkgName) modules
     -- 本包声明：本包模块 + 入口声明；依赖模块只作为终止性分析上下文（不精化）。
-    decls = append (concatMap moduleDeclsOf ours) (firstOf parts)
+    decls = append (concatMap sealModule ours) (firstOf parts)
     termAux = concatMap moduleDeclsOf depsOnly
     start = depStartOf deps
   in Vuna.Compiler.Common.bind (elabProgramFullWithAux (firstOf start) (secondOf start) termAux decls) (\prog => let
@@ -1125,7 +1125,7 @@ dtIncrementalCheckedCore ctx resolved depIfaces cleanIfaces cache needPackage =
     depsOnly = filter (\m => modulePackageOf m /= pkgName) modules
     cleanNames = moduleNamesOf cleanIfaces
     dirtyOurs = filter (\m => memName (moduleNameOf m) cleanNames == False) ours
-    decls = append (concatMap moduleDeclsOf dirtyOurs) (firstOf parts)
+    decls = append (concatMap sealModule dirtyOurs) (firstOf parts)
     termAux = append (concatMap moduleDeclsOf depsOnly) (concatMap miDeclsOf cleanIfaces)
     key = dtAuxKey pkgName depIfaces cleanIfaces
     cacheable = length depIfaces + length cleanIfaces > 0

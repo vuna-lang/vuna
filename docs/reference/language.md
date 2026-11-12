@@ -185,11 +185,9 @@ M = Int
   `ifaceHash` 只含名字 + 类型，`implHash` 才含体；
 - 定义模块自身仍需要体来检查/生成代码；`transparent` 是显式默认，等价于不写；
 - `abstract` 已可解析（`abstract f : T` / `export abstract f : T`）：定义体在**本模块内**也
-  不可展开（seal）；`opaque` 只对下游隐藏。包增量路径对 abstract 自身使用尚未 seal，见
-  [debt.md](debt.md) D76；
-- 包 check/build、单文件 `dtCheckSource`、REPL/表达式求值与 `dtEvalFile` 均已按
-  依赖模块隐藏 opaque 体（`hideDepOpaqueDecls`）；只剩内部 goal/tolerant 查询，见
-  [debt.md](debt.md) D75。
+  不可展开（seal）；`opaque` 只对下游隐藏，定义模块仍可展开。
+- 包 check/build（含增量路径）、单文件 `dtCheckSource`、REPL/表达式求值与 `dtEvalFile`
+  均使用模块边界 seal；goal/tolerant 查询仍不复用模块过滤（只影响工具查询）。
 - `opaque record` 是记录表示档位的旧前缀，已退役；记录请用 `boxed record` /
   `alias record`，见 [records-traits.md](records-traits.md)。
 

@@ -57,8 +57,6 @@
 | D72 | 静态索引是单文件条目、单根：一个 `[registry].index`，同名多版本靠 `[releases]`；无多源/优先级/镜像/撤销列表 | `lib/Vuna/Registry.vuna`、`compiler/lib/Vuna/Compiler/Frontend/Manifest.vuna`；[package-store.md](package-store.md) §6 | 后续（多源在需要时再加） |
 | D73 | store GC 的根集只扫一层 `[workspace].members`（与非成员包引用的对象不计入）：跨 workspace 共享的 store 上 `--gc` 可能误删其他项目引用的对象 | `lib/Vuna/Clean.vuna`（`collectMemberHashes`）；[package-store.md](package-store.md) §7 | 后续（需要全局 roots 索引） |
 | D74 | `fetch` 的 `fuel 64` 是给 SCT 的显式下降参数，不是语义配额：依赖链深于 64 会报 depth limit（正常包图远小于此） | `lib/Vuna/Fetch.vuna`（`fetchAll 64`） | 后续（若真遇到，按依赖图深度动态给） |
-| D75 | opaque 全量路径已改为模块边界 seal（`vuna_seal_*`）：依赖包自身仍可展开 opaque body，下游模块不可；包增量路径仍走 iface `depStart` 过滤，未走 seal | `Dt.sealOpaqueDecls`；`Elab/Driver.elabBodies`；`101_opaque` | 后续（包增量路径统一） |
-| D76 | `abstract` 已有独立 sealing：全量/单文件路径在该 DFun 之后立即 seal，本模块后续定义不能展开；包增量路径尚未 seal，且 ifaceHash 目前对 abstract 与 opaque 同口径 | `Dt.sealAbstractAfter`；`Loader/Flatten.opaqueNamesOf`；`102_abstract` | 后续（增量路径 + 双哈希区分） |
 | D77 | 旧模块头 `module M (exports) where` 仍是解析器兼容路径；`test/**/*.vuna` 夹具与 steps 生成串已基本迁移，仅 `corpus/lsp/smoke.sh` 的 ModDoc/Reexp 仍使用旧头（其 hover 断言依赖旧行号） | `Frontend/Parser.parseModDecl`；`grep -n 'module .*(' test/corpus/lsp/smoke.sh` | 后续（迁移 smoke 并更新 hover 断言后移除） |
 | D78 | 3 个包源/store `PKG_*` 码仍无结构化夹具：FetchFailed / HashMismatch / IndexMalformed（均需 git 仓或 registry 索引动态环境） | `nix/diag-coverage-allow.txt`、`nix/diag-unreachable.txt`；`nix/checks/diag-coverage.sh` | 后续（补包错误夹具） |
 

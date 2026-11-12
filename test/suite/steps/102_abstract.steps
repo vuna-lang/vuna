@@ -9,3 +9,7 @@ exit: 0
 run: "$VUNA" check "$TMPDIR/abs-pkg/lib/A.vuna"
 exit: 1
 out-contains: got A.T
+# 包 check 的增量路径也必须 seal abstract。
+run: "$VUNA" check "$TMPDIR/abs-pkg"
+exit: 1
+out-contains: got A.T
