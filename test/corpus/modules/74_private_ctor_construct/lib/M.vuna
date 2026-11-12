@@ -1,5 +1,5 @@
-module M (T(..)) where
+module M where
 
-data T : Type where
+export data T(A) : Type where
   _C : Int -> T
   A : T
