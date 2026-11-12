@@ -6,7 +6,7 @@
 自举 / 内建原语与宿主层见 [bootstrap.md](reference/bootstrap.md) / [primitives.md](reference/primitives.md)，
 模块级接口缓存见 [cache.md](reference/cache.md)（失效判据 / 包级环境指纹 / 工具产物来源 /
 镜像内容寻址；排障用 `VUNA_IFACE_AUDIT=1`，CI 建议加 `VUNA_IFACE_SELFTEST=1`），
-增量判定（节点模型、命中判据、会话索引）见 [query-graph.md](reference/query-graph.md)。
+增量判定（节点模型、命中判据、span / 取消 / 并行波次、会话索引）见 [query-graph.md](reference/query-graph.md)。
 
 > 本页是**现状**地图；终态方向、不变量与非目标见
 > [architecture-target.md](architecture-target.md)。
@@ -23,6 +23,7 @@ compiler/lib/Vuna/Compiler/   （87 个模块：79 个导出 + 8 个内部模块
 ├─ Hash.vuna                  内容寻址摘要原语：SHA-256 + 63-bit 派生键 + 大载荷预哈希（用 Base.Bits 实现）
 ├─ Canonical.vuna             规范字节编码门面（自定界文法 + 解码器）；子模块 Term / Ast / Elab / Bytes
 ├─ Query.vuna                 查询图骨架：记忆化 / 依赖快照 / early cutoff / trace
+├─ Query/Run.vuna             图 Eff 层：预算 / 取消 / 节点 span / 并行波次 / 会话索引
 ├─ Frontend/                  Ast Lexer Parser Cst Parser/Support Toml Manifest  词法（含无损 CST）/ 语法 / vuna.toml
 ├─ Packages/                  Pkg                              包图与模块根
 ├─ Loader.vuna + Loader/      Modules Resolve Flatten          模块图 / 名字解析 / flatten

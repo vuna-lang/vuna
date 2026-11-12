@@ -172,9 +172,10 @@ summarySplitParts ctx entry printResult = do
 -- 载荷写到内容寻址的 blob（`<cache>/blobs/<digest>`，`Store` framing）。
 --
 -- 命中：按节点里的地址读 blob → 规范解码 → 直接写产物（载荷在写侧已规范拓扑序，
--- 所以这里不再重跑 `canonicalTopo`）；
--- 未命中：跑摘要/全量 split → **规范化一次** → 写 blob → 提交节点 → 写接口影子。
--- blob 读失败 / 解码失败 ⇒ 当作 miss 重算（坏字节永远不进解码器，见 `Store`）。
+-- 所以这里不再重跑 `canonicalTopo`）；blob 读不出 ⇒ 按 miss 重算（坏字节永远进不了
+-- 解码器，见 `Store`）。
+-- 未命中：跑摘要/全量 split → **规范化一次** → 写 blob → 写产物 / 接口影子。
+-- 两条路径都经 `runCachedNode`：span / 取消 / 预算 / trace 由查询图统一记账。
 compileToDirNormal : PackageContext -> String -> Bool -> String -> Eff [] (Check (Pair Int (List Diagnostic)))
 compileToDirNormal ctx entry printResult outDir = do
   mods <- splitModsOf ctx entry printResult
@@ -184,26 +185,23 @@ compileToDirNormal ctx entry printResult outDir = do
     _ = dbg! "split-cache-key-done"
   in do
     db0 <- sessionLoad opts
-    case graphHit db0 key mods of
-      Just (QRef digest) => do
-        cached <- readSplitBlob digest
-        case cached of
-          Just files => do
-            let
-              _ = dbg! "split-cache-hit"
-            in do
-              n <- writeCompiledNormalized ctx outDir files
-              pure (case n of
-                ErrC e => ErrC e
-                OkC count => OkC (Pair count [])
-              )
-          Nothing => splitBuild ctx entry printResult outDir opts key mods db0
-      _ => splitBuild ctx entry printResult outDir opts key mods db0
+    pair <-
+      runCachedNode (runResume opts db0) key (graphCheckMods mods)
+        (splitNodeCompute ctx entry printResult outDir) (splitNodeRecover ctx outDir)
+    let
+      st1 = firstOf pair
+      result = secondOf pair
+    in case result of
+      ErrC e => pure (ErrC e)
+      OkC a => do
+        _ <- sessionSave opts (runDbOf st1)
+        pure (OkC a)
 
--- 未命中（或 blob 不可用）：重算 → 规范化 → 写 blob → 提交节点。
--- 规范化只做一次：blob 载荷与产物 build.sh 共用同一份规范序（命中路径因此零重算）。
-splitBuild : PackageContext -> String -> Bool -> String -> RunOpts -> String -> CheckMods -> Db -> Eff [] (Check (Pair Int (List Diagnostic)))
-splitBuild ctx entry printResult outDir opts key mods db0 = do
+-- `split` 节点的重算动作：摘要/全量 split → 规范化 → 写 blob → 写产物 / 接口影子 →
+-- 返回（产物数 + warning + 提交值 `QRef`）。规范化只做一次：blob 载荷与产物 build.sh
+-- 共用同一份规范序（命中路径因此零重算）。
+splitNodeCompute : PackageContext -> String -> Bool -> String -> List QVal -> Eff [] (Check (Pair (Pair Int (List Diagnostic)) (Pair QVal (List String))))
+splitNodeCompute ctx entry printResult outDir _ = do
   summary <- summarySplitParts ctx entry printResult
   case summary of
     ErrC e => pure (ErrC e)
@@ -218,15 +216,29 @@ splitBuild ctx entry printResult outDir opts key mods db0 = do
         case n of
           ErrC e => pure (ErrC e)
           OkC count => do
-            let
-              db1 = graphCommitRef (graphNote db0 "query-commit" key) key mods digest
-              _ = dbg! "query-miss ${key}"
-            in do
-              _ <- sessionSave opts db1
-              shadow <- writeIfaceShadow ctx checked
-              case shadow of
-                ErrC e => pure (ErrC e)
-                OkC _ => pure (OkC (Pair count checked.checkedWarnings))
+            shadow <- writeIfaceShadow ctx checked
+            case shadow of
+              ErrC e => pure (ErrC e)
+              OkC _ =>
+                pure (OkC (Pair (Pair count checked.checkedWarnings) (Pair (QRef digest) [])))
+
+-- `split` 节点的命中恢复：按 `QRef` 读 blob 并写产物；blob 读不出 / 形态不符 ⇒
+-- `OkC Nothing`（交给 `runCachedNode` 按 miss 重算）。
+splitNodeRecover : PackageContext -> String -> QVal -> Eff [] (Check (Maybe (Pair Int (List Diagnostic))))
+splitNodeRecover ctx outDir (QRef digest) = do
+  cached <- readSplitBlob digest
+  case cached of
+    Just files => do
+      let
+        _ = dbg! "split-cache-hit"
+      in do
+        n <- writeCompiledNormalized ctx outDir files
+        pure (case n of
+          ErrC e => ErrC e
+          OkC count => OkC (Just (Pair count []))
+        )
+    Nothing => pure (OkC Nothing)
+splitNodeRecover ctx outDir _ = pure (OkC Nothing)
 
 -- 审计（`VUNA_IFACE_AUDIT=1`）：同一进程分别走摘要路径与全量路径，codegen 产物逐字节比较；
 -- 一致才按摘要结果落盘，不一致报 `iface-audit-mismatch` 且**不写任何缓存/接口**
@@ -1245,6 +1257,7 @@ toolCompilerFingerprint = compilerFingerprint
 -- 命中时**完全跳过**精化（与旧 `check/` marker 目录等价）；`-W` / `--deny-warnings`
 -- （warning 不持久化）、`VUNA_ELAB_FULL=1`（强制全量）、`VUNA_IFACE_AUDIT=1`（双路径
 -- 对拍）都直接绕过图（既不判命中也不提交），保持各自的既有语义。
+-- 节点执行走 `runCachedNode`：span / 取消 / 预算 / trace 在查询图里统一记账。
 checkViaGraph : PackageContext -> CheckMods -> Eff [] (Check (List Diagnostic)) -> Eff [] (Check (List Diagnostic))
 checkViaGraph ctx mods run = do
   full <- elabFullRequested
@@ -1256,20 +1269,24 @@ checkViaGraph ctx mods run = do
       key = checkNodeKey mods
     in do
       db0 <- sessionLoad opts
-      case graphHit db0 key mods of
-        Just _ => do
-          _ <- pure (dbg! "query-hit ${key}")
-          pure (OkC [])
-        Nothing => do
-          _ <- pure (dbg! "query-miss ${key}")
-          r <- run
-          case r of
-            ErrC e => pure (ErrC e)
-            OkC ds => do
-              db1 <- pure (graphCommit (graphNote db0 "query-commit" key) key mods)
-              _ <- sessionSave opts db1
-              _ <- pure (dbg! "query-commit ${key}")
-              pure (OkC ds)
+      pair <-
+        runCachedNode (runResume opts db0) key (graphCheckMods mods) (checkViaGraphCompute run)
+          (\_ => pure (OkC (Just [])))
+      let
+        st1 = firstOf pair
+      in case secondOf pair of
+        ErrC e => pure (ErrC e)
+        OkC ds => do
+          _ <- sessionSave opts (runDbOf st1)
+          pure (OkC ds)
+
+-- check 节点的重算动作：跑精化路径；成功 ⇒ 提交值 `QMarker`（诊断本身不持久化）。
+checkViaGraphCompute : Eff [] (Check (List Diagnostic)) -> List QVal -> Eff [] (Check (Pair (List Diagnostic) (Pair QVal (List String))))
+checkViaGraphCompute run _ = do
+  r <- run
+  case r of
+    ErrC e => pure (ErrC e)
+    OkC ds => pure (OkC (Pair ds (Pair QMarker [])))
 
 checkCachedExe : Bool -> PackageContext -> String -> Eff [] (Check (List Diagnostic))
 checkCachedExe wantWarnings ctx entry = do

@@ -1,14 +1,11 @@
--- | 编译管线的图节点族：node key 构造 + 命中 / 提交（纯 helper）。
+-- | 编译管线的图节点族：node key 构造 + **审计路径**的提交 helper。
 module Vuna.Compiler.Driver.Graph
   ( CheckMods(..)
   , checkModsOf
   , checkNodeKey
   , graphCheckMods
-  , graphCommit
   , graphCommitRef
-  , graphHit
   , graphNodeKey
-  , graphNote
   , graphRunOpts
   , nodeCompilerKey
   , nodeDepsKey
@@ -18,12 +15,15 @@ module Vuna.Compiler.Driver.Graph
 
 -- Vuna.Compiler.Driver.Graph：把「包级 check / build」的缓存判定搬进查询图（阶段 2）。
 --
--- 这里只放**纯**部分：节点 key 的构造、命中判定、提交。真正的精化 / codegen 在
--- `Driver.Compile`（它 import 本模块，反向不行——否则成环）。
+-- 这里只放**纯**部分：节点 key 的构造、输入摘要依赖表、以及审计路径的提交 helper。
+-- 真正的执行（命中判定 / 精化 / codegen / span / 取消）在 `Driver.Compile`，统一经
+-- `Query.Run.runCachedNode`——同一份「命中 ⇒ 跳过、未命中 ⇒ 算 + 提交」语义只有一处。
+-- `Driver.Compile` import 本模块，反向不行——否则成环。
 --
 -- 节点族（key 是纯字符串，不参与哈希输入）：
 --
 --   check:<pkg>:<kind>            包级 check 节点（值 = `QMarker`）
+--   split:<pkg>:pr0|pr1           包级 build 节点（值 = 产物 blob 的 `QRef`）
 --   env:<pkg>:<manifestHash>      包的 vuna.toml 内容摘要
 --   src:<pkg>:<closureHash>       本包源文件闭包摘要
 --   deps:<pkg>:<closureHash>      依赖包接口闭包摘要
@@ -37,7 +37,7 @@ module Vuna.Compiler.Driver.Graph
 --
 -- 与旧 `check/` marker 目录的关系：语义完全等价（四个摘要全等 ⇒ 命中），但判定从「拼一个
 -- 复合 key 当文件名」变成「一个节点 + 依赖快照」，可以直接被 `Query.Run` 的会话索引持久化，
--- 且是和其它图节点同一套 cutoff / trace 语义。
+-- 且是和其它图节点同一套 cutoff / trace / span 语义。
 import Base.List
 import Base.Pair
 import Base.String
@@ -93,22 +93,11 @@ nodeCompilerKey verHash = "ver:${verHash}"
 graphRunOpts : String -> RunOpts
 graphRunOpts pkg = RunOpts "pkg" 0 True pkg
 
--- | 命中判定（纯）：把 check 节点的当前依赖表交给 `Query.queryHit`。
-graphHit : Db -> String -> CheckMods -> Maybe QVal
-graphHit db key mods = queryHit db key (graphCheckMods mods)
-
--- | 提交一次成功的 check（值 = `QMarker`，依赖表 = 本次输入摘要）。
-graphCommit : Db -> String -> CheckMods -> Db
-graphCommit db key mods = firstOf (queryResolve db key (graphCheckMods mods) (Pair QMarker []))
-
--- | 提交一次成功的 build（值 = 物内容地址 `QRef`，依赖表同 check）。
+-- | 审计路径（`VUNA_IFACE_AUDIT=1`）提交一次成功的 build：值 = 产物内容地址 `QRef`，
+-- 依赖表 = 本次输入摘要。正常路径的提交由 `Query.Run.runCachedNode` 做，不用本函数。
 graphCommitRef : Db -> String -> CheckMods -> String -> Db
 graphCommitRef db key mods digest =
   firstOf (queryResolve db key (graphCheckMods mods) (Pair (QRef digest) []))
 
--- | 图事件写进 trace（`query-hit` / `query-miss`），随后由调用方 `sessionSave`。
-graphNote : Db -> String -> String -> Db
-graphNote db kind key = dbNote db "${kind} ${key}"
-
--- 说明：`Db` 的 trace 行只用于调试与测试断言（`--debug-query` / §72），不参与正确性；
--- 会话索引落盘前会被裁掉（`Query.Run.encQueryIndex` 不含 trace）。
+-- 说明：`Db` 的 trace 行只用于调试与测试断言（`--debug-query` / `Query.Run.runSpansText`），
+-- 不参与正确性；会话索引落盘前会被裁掉（`Query.Run.encQueryIndex` 不含 trace）。

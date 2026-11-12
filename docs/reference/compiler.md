@@ -34,7 +34,7 @@
 | `Canonical.Lex` | 词法 token 流（`List PTok`）的规范编码 / 解析：**位置逐字节保真**，只服务 lex 缓存载荷（`Store` 承载），不进任何哈希输入 | `encPTokList`、`decPTokListComplete`、`encTok`、`decTok` |
 | `Canonical.Elab` | 接口载荷与哈希输入域：`DtDef` / `DtData` / `DtCtor` / `DtInst` / `DtClass` / `RecordMeta` / `ExportEntry` / `FixityDecl` / `Import` / `ModDecl`（span 丢弃、字段全覆盖） | `encDtDef`、`encDtData`、`encExportEntry`、`encRecordMeta`、`encFixity`、`encModDecl` |
 | `Query` | 查询图**纯核心**：按 key 记忆化、顺序无关的依赖快照（D-Q3）、early cutoff、动态依赖（`queryWith` 观测依赖）、可观测 trace（`hit` / `cutoff` / `miss`）| `query`、`queryWith`、`queryHit`、`queryResolve`、`dbEmpty`、`dbTraceText`、`digestOfVal` |
-| `Query.Run` | 查询图**Eff 层**：预算（逻辑步数）、自环 / 栈环检测、会话索引持久化（`Store` + codec `query-index 1`，路径 `<cache>/query/<包桶>/index`）；并行 / 抢占式取消不在本轮 | `RunOpts`、`runNode`、`runNote`、`sessionLoad`、`sessionSave` |
+| `Query.Run` | 查询图**Eff 层**：预算（逻辑步数）、自环 / 栈环检测、**节点 span**（开始序 / 波次 / outcome，`--debug-perf` 输出 `query-span`）、**协作式取消**（节点边界）、**并行波次**（`EffSched` scope，声明序提交，波内预算平均切分；波内是叶节点，契约违反自动回退顺序）、会话索引持久化（`Store` + codec `query-index 1`，路径 `<cache>/query/<包桶>/index`）；无抢占式取消 | `RunOpts`、`runResume`、`runNode`、`runCachedNode`、`runWave`/`waveNode`、`runCancel`、`runSpans`/`runSpansText`、`sessionLoad`、`sessionSave` |
 | `Frontend.Ast` | 语法类型与 AST helper（`Expr`/`Decl`/`Pat`/`Ctor`/`Import`/`ModDecl`/`TraitMethod`） | `clausesFor`、`funArity`、`declNames` |
 | `Frontend.Lexer` | 字符游标、token 与位置；注释单独 lex 出来供 formatter 使用 | `lexSource`、`lexComments` |
 | `Frontend.Cst` | 无损 CST 词法层：token 携带前置 trivia（空白 / 行注释 / 块注释）与 span，`renderCst` 逐字节还原源码；宏 / 格式化 / LSP 的 span 映射基础 | `lexCst`、`renderCst`、`roundtripOk` |

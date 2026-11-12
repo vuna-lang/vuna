@@ -1,63 +1,96 @@
--- | 查询图的 **Eff 层**：预算 / 环检测 / 逐节点执行 / 会话索引持久化。
+-- | 查询图的 **Eff 层**：预算 / 环检测 / 逐节点执行 / **span 观测** / **协作式取消** /
+-- **并行波次** / 会话索引持久化。
 module Vuna.Compiler.Query.Run
-  ( RunOpts(..)
+  ( NodeSpan(..)
+  , RunOpts(..)
   , RunState
+  , WaveNode
   , decQueryIndexComplete
   , encQueryIndex
+  , runCachedNode
+  , runCancel
+  , runCancelled
+  , runDbOf
   , runEmpty
   , runNode
   , runNote
+  , runResume
+  , runSpanCount
+  , runSpanReport
+  , runSpans
+  , runSpansText
   , runStepCount
+  , runWave
   , runWithBudget
   , sessionLoad
   , sessionSave
+  , waveNode
   ) where
 
 -- Vuna.Compiler.Query.Run：把纯核心 `Query` 接到「真的会做 I/O / parse / 精化」的调用方。
 --
 -- 与纯层分工（见 `Query` 模块头）：
 --   * `Query` 只有判据与记账（命中、cutoff、依赖快照），纯函数、显式 `Db`；
---   * 本模块管**图外**的东西：预算、环检测、会话索引的读写。
+--   * 本模块管**图外**的东西：预算、环检测、**span**、**取消**、**并行波次**、会话索引。
 --
--- 三段式的用法（run 层与纯层共用判据）：
+-- **三段式**的用法（run 层与纯层共用判据）：
 --
 --     case Query.queryHit db key deps of
 --       Just v  => 直接返回（**完全不**执行 compute）
 --       Nothing => do r <- compute (Query.queryDepValues db deps)   -- Eff：真 parse / 精化
 --                     let (db2, v) = Query.queryResolve db key deps r
 --
--- `runNode` 就是这一段的封装，并额外处理预算与环。
+-- `runNode` 就是这一段的封装；`runCachedNode` 是它的 `Check` 错误通道版本（编译器
+-- 图节点用：compute 失败不提交、不写 entry，span 记 `error`）。
+--
+-- **span（可观测性）**：每个节点（命中也是）在执行完记一段 `NodeSpan`：key、开始/结束
+-- 微秒、outcome（`hit` / `miss` / `cutoff` / `reject` / `cycle` / `cancel` / `error`）、
+-- 波次号。`nsSeq` 是**开始序**（并行波次也按声明序分配），因此 `runSpans` 的顺序与调度
+-- 无关、可断言；`runSpanReport` 才带耗时（耗时不可复现，只用于 perf 人读）。
+-- 探针 `dbg! "query-span ..."` 在 `--debug-perf` 下逐节点输出。
+--
+-- **取消（协作式）**：`runCancel` 置会话取消位；`runNode` / `runCachedNode` 在**节点边界**
+-- 检查「取消位 ∨ 当前纤程 `isCancelled`」，命中即记 `cancel <key>` 并返回 `Nothing` /
+-- `ErrC`，不执行 compute。取消不会中断正在跑的 compute（`EffSched` 的取消只在挂起点
+-- 生效，强杀归进程级超时）。`runWave` 在波内任一子任务失败/取消时取消同 scope 的其余
+-- 子任务（已挂起的子任务在挂起点收到取消）。
+--
+-- **并行波次**：`runWave` 把**互相独立**的叶节点放进一个 `EffSched` scope 里 fork，父
+-- 纤程按声明序 await 并按**声明序提交**（`queryResolve*`），所以 trace / span 序号 /
+-- 节点值都不依赖调度顺序（确定性）。波内预算按波宽**平均切分**（总额不超支；不足
+-- 一波宽的余量留在父会话里，下次仍可用）。契约（key 唯一、deps 不指向同波节点）由
+-- `runWave` 检查，违反时**自动回退为顺序执行**。
 --
 -- **环检测**：纯层看不到调用栈，所以 `RunState` 自己维护一个 `rsStack`（当前正在算的
--- key，最新在前）。key 已在栈上 ⇒ 记 `cycle <key>` 并返回 `Nothing`（调用方按「这个节点
--- 算不出来」处理：回退旧路径或报错，绝不递归下去）。模块 import 环由 loader 拒绝，这里
--- 防的是图构造错误（例如把 `iface:<m>` 挂在自身依赖上）。
+-- key，最新在前）。key 已在栈上 ⇒ 记 `cycle <key>` 并返回 `Nothing`。模块 import 环由
+-- loader 拒绝，这里防的是图构造错误。
 --
--- **预算**：`roBudget` 是本次会话允许的**逻辑步数**（每个 compute 扣 1），不是墙钟时间
--- ——墙钟时间在语言里不可测（`effTimeUs` 属特权宿主层），而且按步数守恒比时间更可复现。
--- 预算耗尽 ⇒ 记 `reject budget <key>` 并返回 `Nothing`；调用方决定回退还是报错。
---
--- **取消**：没有抢占式取消（`EffSched` 的取消只在任务边界生效）。run 层用「预算耗尽」
--- 作为协作式取消的唯一形态；强杀留给进程级超时（测试 runner 已有）。
+-- **预算**：`roBudget` 是本次会话允许的**逻辑步数**（每个 compute 扣 1），不是墙钟时间。
+-- 预算耗尽 ⇒ 记 `reject <key>` 并返回 `Nothing`。
 --
 -- **会话索引**：`sessionSave` 把 `Db` 写成一条 `Store` 载荷（codec `query-index 1`），
 -- 路径 `<cache>/query/<包桶>/index`，tag 带编译器指纹（换二进制即整套失效）。载荷只
--- 存**判据**（key / 依赖快照 / 值摘要 / 值本身）：`QRef` 只存地址，`QBytes` 超过
--- 64 KB 时也转 `QRef`（内容另存，见 `Query` 的 QVal 说明）。
+-- 存**判据**（key / 依赖快照 / 值摘要 / 值本身）；span 与 trace 不落盘。
 import Base.Bool
+import Base.Eff
+import Base.EffSched
 import Base.HashMap
 import Base.Int
 import Base.List
 import Base.Maybe
 import Base.Pair
+import Base.Result
 import Base.String
 import Vuna.Compiler.Canonical.Bytes
+import Vuna.Compiler.Common
 import Vuna.Compiler.Fingerprint
 import Vuna.Compiler.Hash
 import Vuna.Compiler.Query
 import Vuna.Compiler.Store
-import Base.Eff
 
+-- ---------------------------------------------------------------
+-- 配置与状态
+-- ---------------------------------------------------------------
 -- | 一次图会话的配置。
 record RunOpts where
   -- | 新建条目的产物来源（`pkg` / `tool`），与 iface 的 `meOrigin` 同语义。
@@ -69,74 +102,490 @@ record RunOpts where
   -- | 会话索引的包桶名（通常是包名；空 = 不落盘）。
   roBucket : String
 
--- | 图会话状态：Db + 调用栈 + 预算余额 + 已执行步数。
+-- | 一个节点的 span：**开始序**（`nsSeq`，并行波次也按声明序）+ 波次号 + key +
+-- 开始/结束微秒 + outcome。耗时 = `nsEndUs - nsStartUs`。
+record NodeSpan where
+  nsSeq : Int
+  -- | 波次号：0 = 顺序节点；>0 = 并行波次（`rsWaveSeq + 1`）。
+  nsWave : Int
+  nsKey : String
+  nsStartUs : Int
+  nsEndUs : Int
+  -- | `hit` / `miss` / `cutoff` / `reject` / `cycle` / `cancel` / `error`。
+  nsOutcome : String
+
+-- | 图会话状态：Db + 调用栈 + 预算余额 + 已执行步数 + span 记账 + 取消位。
 record RunState where
   rsDb : Db
   rsStack : List String
   rsBudget : Int
   rsBudget0 : Int
   rsSteps : Int
+  -- | span（**前插**；读侧 `runSpans` 统一 reverse，保持开始序）。
+  rsSpans : List NodeSpan
+  -- | 下一个 span 的开始序号。
+  rsSpanSeq : Int
+  -- | 下一个并行波次号。
+  rsWaveSeq : Int
+  -- | 协作式取消位（`runCancel` 置位；节点边界生效）。
+  rsCancelled : Bool
 
 -- | 空会话（按 opts 设定来源与预算）。
 runEmpty : RunOpts -> RunState
-runEmpty opts = RunState (dbWithOrigin dbEmpty opts.roOrigin) [] opts.roBudget opts.roBudget 0
+runEmpty opts = runResume opts dbEmpty
 
--- | 剩余预算（不设限时恒为 `roBudget` 的负值语义见 `runWithBudget`）。
+-- | 从已加载的 `Db`（会话索引）恢复一个会话。
+runResume : RunOpts -> Db -> RunState
+runResume opts db =
+  RunState (dbWithOrigin db opts.roOrigin) [] opts.roBudget opts.roBudget 0 [] 1 0 False
+
+-- | 剩余预算（不设限时 `roBudget <= 0` 的会话等价于无限）。
 runWithBudget : RunState -> Int -> RunState
-runWithBudget st n = RunState st.rsDb st.rsStack n n st.rsSteps
+runWithBudget st n =
+  RunState st.rsDb st.rsStack n n st.rsSteps st.rsSpans st.rsSpanSeq st.rsWaveSeq st.rsCancelled
 
 -- | 已执行步数（`--debug-query` 与测试断言的观测点）。
 runStepCount : RunState -> Int
 runStepCount st = st.rsSteps
 
--- | 会话里记一行 trace（图外事件：`cycle` / `reject`）。
+-- | 当前 `Db`（`runCachedNode` 提交后由调用方 `sessionSave`）。
+runDbOf : RunState -> Db
+runDbOf st = st.rsDb
+
+-- | 会话是否已被请求取消。
+runCancelled : RunState -> Bool
+runCancelled st = st.rsCancelled
+
+-- | 请求取消本会话：后续节点在**节点边界**记 `cancel` 并拒绝执行。
+runCancel : RunState -> RunState
+runCancel st =
+  RunState st.rsDb st.rsStack st.rsBudget st.rsBudget0 st.rsSteps st.rsSpans st.rsSpanSeq
+    st.rsWaveSeq True
+
+-- | 会话里记一行 trace（图外事件：`cycle` / `reject` / `cancel`）。
 runNote : RunState -> String -> RunState
-runNote st line = RunState (dbNote st.rsDb line) st.rsStack st.rsBudget st.rsBudget0 st.rsSteps
+runNote st line =
+  RunState (dbNote st.rsDb line) st.rsStack st.rsBudget st.rsBudget0 st.rsSteps st.rsSpans
+    st.rsSpanSeq st.rsWaveSeq st.rsCancelled
+
+-- | 按开始序返回 span（**确定性**：与调度顺序无关）。
+runSpans : RunState -> List NodeSpan
+runSpans st = reverse st.rsSpans
+
+-- | span 数。
+runSpanCount : RunState -> Int
+runSpanCount st = listLen st.rsSpans
+
+-- | span 的确定性文本（无耗时）：`hit check:pkg` / `w1:miss split:pkg`，逗号分隔。
+runSpansText : RunState -> String
+runSpansText st = join "," (map spanText (runSpans st))
+
+-- | span 的带耗时文本（不可复现，perf 人读用）。
+runSpanReport : RunState -> String
+runSpanReport st = join "," (map spanReport (runSpans st))
+
+spanText : NodeSpan -> String
+spanText s =
+  let
+    body = "${s.nsOutcome} ${s.nsKey}"
+  in if s.nsWave <= 0 then body else "w${strFromInt s.nsWave}:${body}"
+
+spanReport : NodeSpan -> String
+spanReport s = "${spanText s} ${strFromInt (s.nsEndUs - s.nsStartUs)}us"
+
+-- 取序列长度（`Base.List.length` 返回 `Nat`；预算与波宽计算需要 `Int`）。
+listLen : List a -> Int
+listLen [] = 0
+listLen (_ :: rest) = 1 + listLen rest
+
+maxInt : Int -> Int -> Int
+maxInt a b = if a >= b then a else b
+
+-- ---------------------------------------------------------------
+-- 内部状态改写（record 无更新语法：逐字段重建，保持字段顺序）
+-- ---------------------------------------------------------------
+withDb : RunState -> Db -> RunState
+withDb st db =
+  RunState db st.rsStack st.rsBudget st.rsBudget0 st.rsSteps st.rsSpans st.rsSpanSeq st.rsWaveSeq
+    st.rsCancelled
+
+withWave : RunState -> Int -> RunState
+withWave st wave =
+  RunState st.rsDb st.rsStack st.rsBudget st.rsBudget0 st.rsSteps st.rsSpans st.rsSpanSeq wave
+    st.rsCancelled
+
+-- | 记一段 span（前插；`seq` 由调用方给，顺序 = 开始序）。`--debug-perf` 下同时输出
+-- `DEBUG <epoch-us> query-span <key> <outcome> <dur>us`（stderr）。
+addSpan : RunState -> Int -> Int -> String -> String -> Int -> Int -> RunState
+addSpan st seq wave key outcome t0 t1 =
+  let
+    _ = dbg! "query-span ${key} ${outcome} ${strFromInt (t1 - t0)}us"
+  in RunState st.rsDb st.rsStack st.rsBudget st.rsBudget0 st.rsSteps
+    (NodeSpan seq wave key t0 t1 outcome :: st.rsSpans) (seq + 1) st.rsWaveSeq st.rsCancelled
 
 -- | 预算扣减：返回 `Nothing` 表示已耗尽（调用方记 `reject`）。
 spendBudget : RunState -> Maybe RunState
 spendBudget st =
-  if st.rsBudget0 <= 0 then Just st
+  if st.rsBudget0 <= 0 then Just
+    (RunState st.rsDb st.rsStack st.rsBudget st.rsBudget0 (st.rsSteps + 1) st.rsSpans st.rsSpanSeq st.rsWaveSeq st.rsCancelled)
   else if st.rsBudget <= 0 then Nothing
-  else Just (RunState st.rsDb st.rsStack (st.rsBudget - 1) st.rsBudget0 (st.rsSteps + 1))
+  else Just
+    (RunState st.rsDb st.rsStack (st.rsBudget - 1) st.rsBudget0 (st.rsSteps + 1) st.rsSpans st.rsSpanSeq st.rsWaveSeq st.rsCancelled)
 
 inStack : List String -> String -> Bool
 inStack [] _ = False
 inStack (k :: rest) key = if k == key then True else inStack rest key
 
+-- | key 是否在 deps 列表里（自环兜底）。
+memKey : String -> List String -> Bool
+memKey _ [] = False
+memKey key (k :: rest) = if k == key then True else memKey key rest
+
+-- | 本节点边界是否该取消：会话取消位 ∨ 当前纤程已被调度器请求取消。
+cancelRequested : RunState -> Eff [] Bool
+cancelRequested st = do
+  sched <- isCancelled
+  pure (st.rsCancelled || sched == 1)
+
+-- ---------------------------------------------------------------
+-- 节点执行
+-- ---------------------------------------------------------------
 -- | 执行一个节点：命中 ⇒ 直接返回；否则在 `Eff` 里算，再做纯提交。
 --
 -- `deps` 必须已经算过（调用方按拓扑序驱动）；`compute` 拿到依赖值后返回
 -- 「值 + 实际观测到的依赖 key 列表」（动态依赖，见 `Query.queryWith`）。
--- 返回 `Nothing` = 这次没算出来（环 / 预算耗尽），`Db` 里不会留下半成品 entry，
--- 调用方可以安全回退（旧路径 / 报错）。
---
--- **环**：`rsStack` 由调用方在驱动嵌套节点时线程（`runNode` 返回的状态里已含父链），
--- 再加一条「key 出现在自己的 deps 里」的自环兜底。图构造错误时宁可 `Nothing`，
--- 也绝不递归下去。
+-- 返回 `Nothing` = 这次没算出来（环 / 预算耗尽 / 取消），`Db` 里不会留下半成品 entry，
+-- 调用方可以安全回退。每个结局都记一段 span（见模块头）。
 runNode : RunState -> String -> List String -> (List QVal -> Eff [] (Pair QVal (List String))) -> Eff [] (Pair RunState (Maybe QVal))
-runNode st key deps compute = if inStack st.rsStack key || memKey key deps then do
-  let
-    _ = dbg! "query-cycle ${key}"
-  in pure (Pair (runNote st "cycle ${key}") Nothing)
-else case queryHit st.rsDb key deps of
-  Just v =>
-    pure
-      (Pair (RunState (markHit st.rsDb key) st.rsStack st.rsBudget st.rsBudget0 st.rsSteps) (Just v))
-  Nothing => case spendBudget st of
-    Nothing => do
+runNode st key deps compute = do
+  t0 <- effTimeUs
+  cancelled <- cancelRequested st
+  if cancelled then do
+    t1 <- effTimeUs
+    pure (Pair (addSpan (runNote st ("cancel " ++ key)) st.rsSpanSeq 0 key "cancel" t0 t1) Nothing)
+  else if inStack st.rsStack key || memKey key deps then do
+    let
+      _ = dbg! "query-cycle ${key}"
+    in do
+      t1 <- effTimeUs
+      pure (Pair (addSpan (runNote st ("cycle " ++ key)) st.rsSpanSeq 0 key "cycle" t0 t1) Nothing)
+  else case queryHit st.rsDb key deps of
+    Just v => do
+      t1 <- effTimeUs
       let
-        _ = dbg! "query-reject budget ${key}"
-      in pure (Pair (runNote st "reject ${key}") Nothing)
-    Just st1 => do
-      let
-        _ = dbg! "query-miss ${key}"
-      in do
-        result <- compute (queryDepValues st1.rsDb deps)
+        _ = dbg! "query-hit ${key}"
+        st1 = addSpan (withDb st (markHit st.rsDb key)) st.rsSpanSeq 0 key "hit" t0 t1
+      in pure (Pair st1 (Just v))
+    Nothing => case spendBudget st of
+      Nothing => do
         let
-          parent = queryResolve st1.rsDb key deps result
-        in pure
-          (Pair (RunState (firstOf parent) st1.rsStack st1.rsBudget st1.rsBudget0 st1.rsSteps) (Just (secondOf parent)))
+          _ = dbg! "query-reject budget ${key}"
+        in do
+          t1 <- effTimeUs
+          pure
+            (Pair (addSpan (runNote st ("reject " ++ key)) st.rsSpanSeq 0 key "reject" t0 t1) Nothing)
+      Just st1 => do
+        let
+          _ = dbg! "query-miss ${key}"
+        in do
+          result <- compute (queryDepValues st1.rsDb deps)
+          t1 <- effTimeUs
+          let
+            resolved = queryResolveTagged st1.rsDb key deps result
+            st2 =
+              addSpan (withDb st1 (firstOf (firstOf resolved))) st1.rsSpanSeq 0 key
+                (secondOf resolved) t0 t1
+          in pure (Pair st2 (Just (secondOf (firstOf resolved))))
+
+-- | 带 `Check` 错误通道的节点执行（编译器图节点用：`compute` 失败 ⇒ 不提交、span 记
+-- `error`，调用方拿到 `ErrC`）。`recover` 在命中时按节点值恢复结果；返回
+-- `OkC Nothing` 表示「命中不可用（如 blob 读失败）」，按 miss 重算。
+runCachedNode : RunState -> String -> List String -> (List QVal -> Eff [] (Check (Pair a (Pair QVal (List String))))) -> (QVal -> Eff [] (Check (Maybe a))) -> Eff [] (Pair RunState (Check a))
+runCachedNode st key deps compute recover = do
+  t0 <- effTimeUs
+  cancelled <- cancelRequested st
+  if cancelled then do
+    t1 <- effTimeUs
+    pure
+      (Pair (addSpan (runNote st ("cancel " ++ key)) st.rsSpanSeq 0 key "cancel" t0 t1) (err "query node cancelled: ${key}"))
+  else if inStack st.rsStack key || memKey key deps then do
+    t1 <- effTimeUs
+    pure
+      (Pair (addSpan (runNote st ("cycle " ++ key)) st.rsSpanSeq 0 key "cycle" t0 t1) (err "query cycle: ${key}"))
+  else case queryHit st.rsDb key deps of
+    Just v => do
+      recovered <- recover v
+      t1 <- effTimeUs
+      case recovered of
+        ErrC e => pure (Pair (addSpan st st.rsSpanSeq 0 key "error" t0 t1) (ErrC e))
+        OkC (Just a) => do
+          let
+            _ = dbg! "query-hit ${key}"
+            st1 = addSpan (withDb st (markHit st.rsDb key)) st.rsSpanSeq 0 key "hit" t0 t1
+          in pure (Pair st1 (OkC a))
+        OkC Nothing => runCachedMiss st key deps compute t0
+    Nothing => runCachedMiss st key deps compute t0
+
+runCachedMiss : RunState -> String -> List String -> (List QVal -> Eff [] (Check (Pair a (Pair QVal (List String))))) -> Int -> Eff [] (Pair RunState (Check a))
+runCachedMiss st key deps compute t0 = case spendBudget st of
+  Nothing => do
+    t1 <- effTimeUs
+    pure
+      (Pair (addSpan (runNote st ("reject " ++ key)) st.rsSpanSeq 0 key "reject" t0 t1) (err "query budget exhausted: ${key}"))
+  Just st1 => do
+    let
+      _ = dbg! "query-miss ${key}"
+    in do
+      result <- compute (queryDepValues st1.rsDb deps)
+      t1 <- effTimeUs
+      case result of
+        ErrC e => pure (Pair (addSpan st1 st1.rsSpanSeq 0 key "error" t0 t1) (ErrC e))
+        OkC p => do
+          let
+            resolved = queryResolveTagged st1.rsDb key deps (secondOf p)
+            st2 =
+              addSpan (withDb st1 (firstOf (firstOf resolved))) st1.rsSpanSeq 0 key
+                (secondOf resolved) t0 t1
+          in pure (Pair st2 (OkC (firstOf p)))
+
+-- ---------------------------------------------------------------
+-- 并行波次（互相独立的叶节点）
+-- ---------------------------------------------------------------
+-- | 波次叶节点：key + 声明依赖 + 计算（拿到依赖值，返回「值 + 观测依赖」）。
+-- 构造子不导出（用 `waveNode` 构造）。
+data WaveNode : Type where
+  WaveNodeMk : String -> List String -> (List QVal -> Eff [] (Pair QVal (List String))) -> WaveNode
+
+-- | 构造一个波次叶节点。**契约**：同一波内 key 唯一，且 deps 不能指向同波的其它 key；
+-- 违反时 `runWave` 自动回退为顺序执行（语义与逐个 `runNode` 完全一致）。
+waveNode : String -> List String -> (List QVal -> Eff [] (Pair QVal (List String))) -> WaveNode
+waveNode key deps compute = WaveNodeMk key deps compute
+
+waveKey : WaveNode -> String
+waveKey (WaveNodeMk key _ _) = key
+
+waveDeps : WaveNode -> List String
+waveDeps (WaveNodeMk _ deps _) = deps
+
+waveCompute : WaveNode -> List QVal -> Eff [] (Pair QVal (List String))
+waveCompute (WaveNodeMk _ _ compute) = compute
+
+-- | 波内一个叶节点的执行结果（**尚未提交**：提交在父纤程里按声明序做，因此提交顺序 /
+-- trace 顺序 / span 序号与调度顺序无关 ⇒ 结果确定）。
+record WaveOut where
+  -- | `hit` / `compute` / `cancel` / `reject` / `cycle`。
+  woOutcome : String
+  woStartUs : Int
+  woEndUs : Int
+  -- | 命中时的值。
+  woValue : Maybe QVal
+  -- | 未命中时 compute 的产物（值 + 观测依赖），由父节点提交。
+  woFresh : Maybe (Pair QVal (List String))
+
+woOutcomeOf : WaveOut -> String
+woOutcomeOf w = w.woOutcome
+
+woStartOf : WaveOut -> Int
+woStartOf w = w.woStartUs
+
+woEndOf : WaveOut -> Int
+woEndOf w = w.woEndUs
+
+woValueOf : WaveOut -> Maybe QVal
+woValueOf w = w.woValue
+
+woFreshOf : WaveOut -> Maybe (Pair QVal (List String))
+woFreshOf w = w.woFresh
+
+-- | 执行一波**互相独立**的叶节点。
+--
+-- 返回与 `nodes` **同序**的结果列表（`Nothing` = 该节点取消 / 预算拒绝 / 环）。
+-- 波内提交按声明序做（不是完成序）；预算按波宽平均切分；波内任一子任务失败/取消时
+-- 取消同 scope 其余子任务。空波返回原状态；单节点直接走 `runNode`；契约不满足
+-- （key 重复 / deps 指向同波节点）自动回退顺序执行。
+runWave : RunState -> List WaveNode -> Eff [] (Pair RunState (List (Pair String (Maybe QVal))))
+runWave st [] = pure (Pair st [])
+runWave st ([n]) = do
+  r <- runNode st (waveKey n) (waveDeps n) (waveCompute n)
+  pure (Pair (firstOf r) [Pair (waveKey n) (secondOf r)])
+runWave st nodes = if nodesIndependent nodes then runWaveReady st nodes else runWaveSeq st nodes
+
+runWaveReady : RunState -> List WaveNode -> Eff [] (Pair RunState (List (Pair String (Maybe QVal))))
+runWaveReady st nodes = do
+  cancelled <- cancelRequested st
+  if cancelled then pure (cancelWave st nodes) else runWaveParallel st nodes
+
+runWaveSeq : RunState -> List WaveNode -> Eff [] (Pair RunState (List (Pair String (Maybe QVal))))
+runWaveSeq st [] = pure (Pair st [])
+runWaveSeq st (n :: rest) = do
+  r <- runNode st (waveKey n) (waveDeps n) (waveCompute n)
+  restR <- runWaveSeq (firstOf r) rest
+  pure (Pair (firstOf restR) (Pair (waveKey n) (secondOf r) :: secondOf restR))
+
+-- 已取消的波：不 fork，逐节点记 cancel span / trace，返回全 `Nothing`。
+cancelWave : RunState -> List WaveNode -> Pair RunState (List (Pair String (Maybe QVal)))
+cancelWave st [] = Pair st []
+cancelWave st (n :: rest) =
+  let
+    st1 = addSpan (runNote st ("cancel " ++ waveKey n)) st.rsSpanSeq 0 (waveKey n) "cancel" 0 0
+    tailR = cancelWave st1 rest
+  in Pair (firstOf tailR) (Pair (waveKey n) Nothing :: secondOf tailR)
+
+runWaveParallel : RunState -> List WaveNode -> Eff [] (Pair RunState (List (Pair String (Maybe QVal))))
+runWaveParallel st nodes = do
+  let
+    width = listLen nodes
+    childSt = waveSlice st width
+    wave = st.rsWaveSeq + 1
+  in do
+    sc <- newScope
+    tasks <- mapEff (\n => forkTask sc (waveLeaf childSt n)) nodes
+    outs <- mapEff (\t => awaitTask t) tasks
+    _ <- scopeWait sc
+    pure (commitWave st wave (zip nodes outs))
+
+-- 波内预算：总额平均切分（`share = 余额 / 波宽`）；`share <= 0` 时子任务预算位为
+-- 「已耗尽」（budget0 = 1、budget = 0），即整波 reject，余量留在父会话。
+waveSlice : RunState -> Int -> RunState
+waveSlice st width = if st.rsBudget0 <= 0 then st
+else
+  let
+    share = st.rsBudget / width
+  in if share <= 0 then RunState st.rsDb st.rsStack 0 1 st.rsSteps st.rsSpans st.rsSpanSeq st.rsWaveSeq st.rsCancelled
+  else RunState st.rsDb st.rsStack share share st.rsSteps st.rsSpans st.rsSpanSeq st.rsWaveSeq
+    st.rsCancelled
+
+waveLeaf : RunState -> WaveNode -> Eff [] WaveOut
+waveLeaf st node = do
+  t0 <- effTimeUs
+  cancelled <- cancelRequested st
+  if cancelled then do
+    t1 <- effTimeUs
+    pure (WaveOut "cancel" t0 t1 Nothing Nothing)
+  else if inStack st.rsStack (waveKey node) || memKey (waveKey node) (waveDeps node) then do
+    t1 <- effTimeUs
+    pure (WaveOut "cycle" t0 t1 Nothing Nothing)
+  else case queryHit st.rsDb (waveKey node) (waveDeps node) of
+    Just v => do
+      t1 <- effTimeUs
+      pure (WaveOut "hit" t0 t1 (Just v) Nothing)
+    Nothing => case spendBudget st of
+      Nothing => do
+        t1 <- effTimeUs
+        pure (WaveOut "reject" t0 t1 Nothing Nothing)
+      Just st1 => do
+        let
+          _ = dbg! "query-miss ${waveKey node}"
+        in do
+          result <- waveCompute node (queryDepValues st1.rsDb (waveDeps node))
+          t1 <- effTimeUs
+          pure (WaveOut "compute" t0 t1 Nothing (Just result))
+
+-- 父纤程提交：按声明序 fold；每个节点一段 span（波次号 = `wave`）。
+commitWave : RunState -> Int -> List (Pair WaveNode (Result WaveOut)) -> Pair RunState (List (Pair String (Maybe QVal)))
+commitWave st wave pairs =
+  let
+    stW = withWave st wave
+    folded = foldl (commitOne wave) (Pair stW []) pairs
+    st1 = firstOf folded
+    st2 = chargeWave st1 (freshCount pairs)
+  in Pair st2 (reverse (secondOf folded))
+
+commitOne : Int -> Pair RunState (List (Pair String (Maybe QVal))) -> Pair WaveNode (Result WaveOut) -> Pair RunState (List (Pair String (Maybe QVal)))
+commitOne wave acc pr =
+  let
+    st = firstOf acc
+    accList = secondOf acc
+    node = firstOf pr
+  in case secondOf pr of
+    Err msg => commitErr wave st accList node msg
+    Ok wo => commitOut wave st accList node (waveDeps node) wo
+
+commitErr : Int -> RunState -> List (Pair String (Maybe QVal)) -> WaveNode -> String -> Pair RunState (List (Pair String (Maybe QVal)))
+commitErr wave st accList node msg =
+  let
+    key = waveKey node
+  in if msg == "cancelled" then commitAbort wave st accList node "cancel" ("cancel " ++ key) 0 0
+  else commitAbort wave st accList node "error" ("wave-error " ++ key ++ " " ++ msg) 0 0
+
+commitOut : Int -> RunState -> List (Pair String (Maybe QVal)) -> WaveNode -> List String -> WaveOut -> Pair RunState (List (Pair String (Maybe QVal)))
+commitOut wave st accList node deps wo = case woOutcomeOf wo of
+  "hit" => commitHit wave st accList node wo
+  "compute" => commitFresh wave st accList node deps wo
+  other =>
+    commitAbort wave st accList node other (other ++ " " ++ waveKey node) (woStartOf wo)
+      (woEndOf wo)
+
+commitHit : Int -> RunState -> List (Pair String (Maybe QVal)) -> WaveNode -> WaveOut -> Pair RunState (List (Pair String (Maybe QVal)))
+commitHit wave st accList node wo = case woValueOf wo of
+  Nothing =>
+    commitAbort wave st accList node "error" ("wave-error " ++ waveKey node) (woStartOf wo)
+      (woEndOf wo)
+  Just v =>
+    let
+      key = waveKey node
+    in Pair
+      (addSpan (withDb st (markHit st.rsDb key)) st.rsSpanSeq wave key "hit" (woStartOf wo) (woEndOf wo))
+      (Pair key (Just v) :: accList)
+
+commitFresh : Int -> RunState -> List (Pair String (Maybe QVal)) -> WaveNode -> List String -> WaveOut -> Pair RunState (List (Pair String (Maybe QVal)))
+commitFresh wave st accList node deps wo = case woFreshOf wo of
+  Nothing =>
+    commitAbort wave st accList node "error" ("wave-error " ++ waveKey node) (woStartOf wo)
+      (woEndOf wo)
+  Just fresh =>
+    let
+      key = waveKey node
+      resolved = queryResolveTagged st.rsDb key deps fresh
+    in Pair
+      (addSpan (withDb st (firstOf (firstOf resolved))) st.rsSpanSeq wave key (secondOf resolved) (woStartOf wo) (woEndOf wo))
+      (Pair key (Just (secondOf (firstOf resolved))) :: accList)
+
+commitAbort : Int -> RunState -> List (Pair String (Maybe QVal)) -> WaveNode -> String -> String -> Int -> Int -> Pair RunState (List (Pair String (Maybe QVal)))
+commitAbort wave st accList node outcome line t0 t1 =
+  Pair (addSpan (withDb st (dbNote st.rsDb line)) st.rsSpanSeq wave (waveKey node) outcome t0 t1)
+    (Pair (waveKey node) Nothing :: accList)
+
+-- 本波真正执行了 compute 的节点数（父会话据此扣步数 / 扣预算）。
+freshCount : List (Pair WaveNode (Result WaveOut)) -> Int
+freshCount pairs = foldl countFresh 0 pairs
+
+countFresh : Int -> Pair WaveNode (Result WaveOut) -> Int
+countFresh acc pr = case secondOf pr of
+  Err _ => acc
+  Ok wo => if woOutcomeOf wo == "compute" then acc + 1 else acc
+
+-- 父会话结算：步数 += 本波 compute 数；预算（有限时）-= 同一数量。
+chargeWave : RunState -> Int -> RunState
+chargeWave st spent =
+  if st.rsBudget0 <= 0 then RunState st.rsDb st.rsStack st.rsBudget st.rsBudget0 (st.rsSteps + spent) st.rsSpans st.rsSpanSeq
+    st.rsWaveSeq st.rsCancelled
+  else RunState st.rsDb st.rsStack (maxInt 0 (st.rsBudget - spent)) st.rsBudget0 (st.rsSteps + spent)
+    st.rsSpans st.rsSpanSeq st.rsWaveSeq st.rsCancelled
+
+-- 波契约：key 唯一，且没有节点依赖同波的其它 key（含自环）。
+nodesIndependent : List WaveNode -> Bool
+nodesIndependent nodes = keysUnique nodes && depsClosed nodes nodes
+
+keysUnique : List WaveNode -> Bool
+keysUnique [] = True
+keysUnique (n :: rest) = not (memName (waveKey n) (map waveKey rest)) && keysUnique rest
+
+depsClosed : List WaveNode -> List WaveNode -> Bool
+depsClosed [] _ = True
+depsClosed (n :: rest) all = not (depHitsWave (waveDeps n) all) && depsClosed rest all
+
+depHitsWave : List String -> List WaveNode -> Bool
+depHitsWave [] _ = False
+depHitsWave (d :: ds) nodes = memName d (map waveKey nodes) || depHitsWave ds nodes
+
+-- 顺序 `Eff` map（本模块自用；与 `Driver.Compile.mapEff` 同形）。
+mapEff : (a -> Eff [] b) -> List a -> Eff [] (List b)
+mapEff f [] = pure []
+mapEff f (x :: rest) = do
+  y <- f x
+  ys <- mapEff f rest
+  pure (y :: ys)
 
 -- ---------------------------------------------------------------
 -- 会话索引（`query-index 1`）
@@ -252,14 +701,9 @@ else do
   storeWriteIfChangedEff tag queryIndexCodec path (encQueryIndex db)
 
 -- ---------------------------------------------------------------
--- 说明：图节点的**具体族**（`env:` / `ast:` / `iface:` / `check:` / `split:` / `unit:`）
+-- 说明：图节点的**具体族**（`env:` / `src:` / `deps:` / `ver:` / `check:` / `split:`）
 -- 由 `Vuna.Compiler.Driver.Graph` 定义；本模块只提供执行骨架，不认识任何具体 key。
 -- ---------------------------------------------------------------
--- | key 是否在 deps 列表里（自环兜底）。
-memKey : String -> List String -> Bool
-memKey _ [] = False
-memKey key (k :: rest) = if k == key then True else memKey key rest
-
 -- | 包桶 → 63-bit 键（与其它 TMPDIR 缓存同一隔离口径；`Hash.contentKey`）。
 hashContentKey : String -> Int
 hashContentKey bucket = Vuna.Compiler.Hash.contentKey bucket

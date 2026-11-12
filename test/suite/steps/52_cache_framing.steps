@@ -42,6 +42,8 @@ run: sh -c 'rm -rf "$TMPDIR/c32-check-cache"; TMPDIR="$TMPDIR/c32-check-cache" "
 run: sh -c 'ok=1; n=0; for f in $(find "$TMPDIR/c32-check-cache"/vuna-cache/query -type f 2>/dev/null); do n=$((n + 1)); [ "$(head -c 18 "$f")" = "vuna-cache-frame 2" ] || ok=0; [ "$(head -1 "$f" | cut -d"|" -f3)" = "query-index 1" ] || ok=0; done; [ "$n" -ge 2 ] && [ "$ok" -eq 1 ]'
 run: sh -c 'for f in $(find "$TMPDIR/c32-check-cache"/vuna-cache/query -type f 2>/dev/null); do head -c 40 "$f" > "$f.part"; mv "$f.part" "$f"; done; TMPDIR="$TMPDIR/c32-check-cache" VUNA_DEBUG_PERF=1 "$VUNA" check "$TMPDIR/c32-pkg/dep" 2>&1 | tee "$TMPDIR/c32-check.log"'
 out-contains: query-miss check:dep:lib:
+# 图节点 span：每个节点一段 `query-span <key> <outcome> <dur>us`（真实 check 节点也带 span）。
+out-contains: query-span check:dep:lib:
 run: sh -c 'ok=1; for f in $(find "$TMPDIR/c32-check-cache"/vuna-cache/query -type f 2>/dev/null); do [ "$(head -c 18 "$f")" = "vuna-cache-frame 2" ] || ok=0; done; [ "$ok" -eq 1 ]'
 # 52e) lex 缓存：全部截断后照常 lex 并重写（旧 Marshal 实现会 Marshal.from_string 崩溃）。
 run: sh -c 'rm -rf "$TMPDIR/c32-lex-cache"; TMPDIR="$TMPDIR/c32-lex-cache" "$VUNA" check "$TMPDIR/c32-pkg/root" >/dev/null 2>&1; TMPDIR="$TMPDIR/c32-lex-cache" "$VUNA" check "$TMPDIR/c32-pkg/root" >/dev/null 2>&1; list=$(find "$TMPDIR/c32-lex-cache/vuna-cache/lex" -type f 2>/dev/null); [ -n "$list" ] || exit 1; printf "%s\n" "$list" | wc -l | tr -d " " > "$TMPDIR/c32-lex-count"; for f in $list; do head -c 8 "$f" > "$f.part"; mv "$f.part" "$f"; done; rm -rf "$TMPDIR/c32-lex-cache"/vuna-cache/query'

@@ -31,6 +31,20 @@ out-contains: query4 hit dyn
 out-contains: query5 miss sb2,cutoff stat
 # QVal 三形态（marker / bytes / ref）规范渲染的单射性：固定摘要锁死。
 out-contains: query-marker 321a9065f3f0bc2f9fa352977224da350c0f2f0265b640cdbed5dc2576c6222f
+# 查询图 Eff 层：span（可观测）/ 取消 / 并行波次（Query.Run.runNode / runWave）。
+# span 按**开始序**渲染（与调度顺序无关），因此可直接断言；耗时不进断言（不可复现）。
+out-contains: qrun-seq1 miss a
+out-contains: qrun-seq2 miss a,hit a steps=1
+out-contains: qrun-cancel cancel b -
+# 并行波次：首次 miss、第二次全 hit（波次号递增、span 累积；提交按声明序 ⇒ 顺序确定）。
+out-contains: qrun-wave1 w1:miss wa,w1:miss wb 10,20
+out-contains: qrun-wave2 w1:miss wa,w1:miss wb,w2:hit wa,w2:hit wb 10,20
+# 波契约不满足（q 依赖同波的 p）⇒ 自动回退顺序执行（无波次号）。
+out-contains: qrun-wave-seq miss p,miss q 7,8
+# 预算按波宽平均切分：余额 1 < 波宽 2 ⇒ 整波 reject（返回全 Nothing），余额留在父会话。
+out-contains: qrun-budget w1:reject wa,w1:reject wb -,-
+# 已取消的会话：波不 fork，逐节点记 cancel。
+out-contains: qrun-wave-cancel cancel wa,cancel wb -,-
 # 工具会话载荷（ToolContext）编码 roundtrip：字段顺序 / Maybe / 列表 / 尾部检查。
 out-contains: tool-ctx-rt ok
 # 规范编码 roundtrip + span 不敏感 + 字段覆盖（C32 哈希输入侧，Canonical.*）

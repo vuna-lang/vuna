@@ -45,7 +45,8 @@ Db    = { dbEntryMap : HashMap String Entry, dbTraceLines : List String, dbOrigi
 
 命中 ⇒ `hit <key>`（`entryHits + 1`，值不变，不写盘）。
 未命中 ⇒ 调 compute；算完 `queryResolve` 比较值摘要：相同 ⇒ `cutoff <key>`（保留旧值与
-来源，只更新依赖表）；不同 ⇒ `miss <key>`（覆盖条目）。
+来源，只更新依赖表）；不同 ⇒ `miss <key>`（覆盖条目）。`queryResolveTagged` 是同一提交的
+带标签形态（多返回 `miss` / `cutoff`），Eff 层用它记 span outcome——判据只有一份实现。
 
 **cutoff 的价值**：重算过但产物没变，下游节点的判据（上游摘要）就不动，整条链不用重算。
 编译管线里典型场景：依赖包接口摘要变了但本包 iface 摘要没变。
@@ -54,18 +55,59 @@ Db    = { dbEntryMap : HashMap String Entry, dbTraceLines : List String, dbOrigi
 
 ```text
 RunOpts  = { roOrigin, roBudget, roPersist, roBucket }
-RunState = { rsDb, rsStack, rsBudget, rsBudget0, rsSteps }
+RunState = { rsDb, rsStack, rsBudget, rsBudget0, rsSteps
+           , rsSpans, rsSpanSeq, rsWaveSeq, rsCancelled }
 ```
 
+- `runResume opts db`：从会话索引恢复状态（`runEmpty` 是它的空 `Db` 特例）。
 - `runNode st key deps compute`：自环（`key ∈ deps`）/ 栈环（`rsStack`）⇒ `cycle <key>`；
-  命中 ⇒ `hit`；预算耗尽（`roBudget > 0` 且用尽）⇒ `reject <key>`；否则 compute 后提交。
-- **取消**只有「预算耗尽」一种协作式形态：`EffSched` 的取消在任务边界生效，
-  用步数预算表达「这次查询不值得继续」，强杀留给进程级超时。
+  命中 ⇒ `hit`；取消 ⇒ `cancel <key>`；预算耗尽（`roBudget > 0` 且用尽）⇒ `reject <key>`；
+  否则 compute 后提交。每个结局都记一段 span（见 §4）。
+- `runCachedNode st key deps compute recover`：同一语义的 `Check` 版本，给编译管线节点用
+  （compute 失败 ⇒ 不提交、span 记 `error`；`recover` 返回 `OkC Nothing` = 命中不可用，
+  按 miss 重算——`split` 节点的 blob 读失败走这条）。
 - **会话索引**：`<cache>/query/<hashContentKey(桶)>/index`，`Store` framing +
   codec `query-index 1`，tag 带编译器指纹（换二进制整套失效）。载荷只含条目表（map），
-  不含 trace；写侧 `storeWriteIfChangedEff` 去抖。
+  不含 trace / span；写侧 `storeWriteIfChangedEff` 去抖。
 
-## 4. 编译管线的节点族（`Driver.Graph`）
+## 4. span、取消与并行波次
+
+**span（可观测性）**：每个节点（命中也是）执行完记一段 `NodeSpan`：
+
+```text
+NodeSpan = { nsSeq      -- 开始序（并行波次也按声明序分配 ⇒ 与调度无关）
+           , nsWave     -- 0 = 顺序节点；>0 = 并行波次
+           , nsKey, nsStartUs, nsEndUs
+           , nsOutcome  -- hit | miss | cutoff | reject | cycle | cancel | error }
+```
+
+- `runSpans` 按开始序返回；`runSpansText` 是**确定性**文本（不含耗时）：
+  `miss a,hit b` / `w1:miss a,w1:miss b`——测试断言与调试输出用这一形态。
+- `runSpanReport` 才带 `… <dur>us`（耗时不可复现，只用于 perf 人读）。
+- `--debug-perf`（`VUNA_DEBUG_PERF=1`）下每个节点额外输出
+  `DEBUG <epoch-us> query-span <key> <outcome> <dur>us`（stderr）；编译管线的 `check:` / `split:` 节点同一条路径
+  （`Driver.Compile` 经 `runCachedNode`，不再是「图外」事件）。
+
+**取消**：`runCancel` 置会话取消位；`runNode` / `runCachedNode` 在**节点边界**检查
+「取消位 ∨ 当前纤程 `isCancelled`」，命中即记 `cancel <key>` 并返回 `Nothing` / `ErrC`，
+不执行 compute。取消不中断正在跑的 compute（`EffSched` 的取消只在挂起点生效），
+强杀留给进程级超时。预算（`roBudget`）仍是「这次查询不值得继续」的另一种表达。
+
+**并行波次**：`runWave st nodes` 把**互相独立**的叶节点放进一个 `EffSched` scope 里
+`forkTask`，父纤程按声明序 `awaitTask` 并按**声明序提交**（`queryResolveTagged`）。
+因此 trace 顺序、span 开始序、节点值都不依赖调度顺序（确定性）；波内任一子任务失败 /
+取消时取消同 scope 其余子任务。
+
+- 叶子节点的声明：`waveNode key deps compute`（与 `runNode` 同一 compute 形态）。
+- **契约**：同波 key 唯一，且 deps 不指向同波其它 key。违反时自动回退顺序执行
+  （语义与逐个 `runNode` 完全一致），不会静默产出错误的依赖快照。
+- **预算**：按波宽平均切分（`share = 余额 / 波宽`）。总额不超支；`share <= 0`（余额
+  不足一波宽）⇒ 整波 `reject`，余量留在父会话。
+- 返回值与声明同序：`List (key, Maybe QVal)`；`Nothing` = 取消 / 拒绝 / 环。
+- 边界：波内节点是**叶**（compute 里不能再驱动嵌套节点，那需要传回 `RunState`）；
+  嵌套场景继续用 `runNode` / `runCachedNode` 逐层驱动。
+
+## 5. 编译管线的节点族（`Driver.Graph`）
 
 key 是**纯字符串**（不参与哈希输入），节点分成两组：
 
@@ -93,7 +135,7 @@ key 是**纯字符串**（不参与哈希输入），节点分成两组：
 [performance.md](performance.md) §9）。旧 `split-files 1` 载荷因 codec 不符自然 miss 一次。
 单个 `SplitFile` 的单元缓存载荷仍是 codegen 原始形态，不受此约定影响。
 
-## 5. 失效与清理
+## 6. 失效与清理
 
 - 失效是**内容寻址 + 依赖快照**的自然后果：源文件、依赖接口、manifest、编译器指纹任何
   一项变化都会让相应节点的依赖表变。
@@ -102,7 +144,7 @@ key 是**纯字符串**（不参与哈希输入），节点分成两组：
 - 旧布局 `check/`、`split/` 已下线；缓存根由 `Store` 独占（`query/` + `blobs/` + `lex/` +
   单元缓存），清理时不需要认识具体节点。
 
-## 6. 当前消费者
+## 7. 当前消费者
 
 - LSP：`lspiface:<pkg>:<dirHash>` 节点，依赖表 = 校验面 stat（`st:` 键）；闭包扩大仍由
   `sessionClosureOk` 判定（后续可并进 `closure:` 依赖键）。
@@ -121,10 +163,16 @@ key 是**纯字符串**（不参与哈希输入），节点分成两组：
 仍未做：`debt.md` 只剩 C51（codegen 全量/增量逐字节差异，与图无关）；`VUNA_LEGACY_PATH`
 从未实现，已从计划删掉。
 
-## 7. 已知边界
+## 8. 已知边界
 
 - `Db` 没有「输入可变」概念：需要「同一 key 换值」的场景必须靠声明集合变化触发重算。
 - 命中判定要求**声明集合稳定**：调用方漏声明就会漏失效（`queryWith` 的观测表能收窄，但
   收窄的前提是声明集合仍能反映输入面变化）。
-- 会话索引是**进程间**缓存；同进程内命中不需要落盘（`sessionSave` 只在提交后写）。
-- 并行 / 抢占式取消不在模型内（见 §3 预算说明）。
+- 会话索引是**进程间**缓存；同进程内命中不需要落盘（`sessionSave` 只在提交后写）；
+  span / trace 不落盘。
+- **并行**是单线程协作式并发（`Base.EffSched`），不是多核：波次的价值在结构化取消与
+  将来的 Domain 并行，当前不承诺墙钟加速。波内节点必须是叶（见 §4 边界）。
+- **取消**只在节点 / 任务边界生效，不中断正在跑的 compute；强杀归进程级超时。
+  无抢占式取消。
+- **span 只有节点粒度**：没有子阶段（模块内精化、codegen 各段）细分；耗时值不可复现，
+  确定性断言只用不带耗时的 `runSpansText`。

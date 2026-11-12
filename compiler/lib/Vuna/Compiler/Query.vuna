@@ -18,6 +18,7 @@ module Vuna.Compiler.Query
   , queryDepValues
   , queryHit
   , queryResolve
+  , queryResolveTagged
   , queryWith
   , showQVal
   ) where
@@ -257,19 +258,26 @@ markHit db key = case Base.HashMap.lookup key db.dbEntryMap of
 -- 旧值摘要与新值相同 ⇒ `cutoff`（保留旧值/来源，只更新依赖快照与命中数）；
 -- 否则 ⇒ `miss`（写新 entry）。无旧 entry 时一律 `miss`。
 queryResolve : Db -> String -> List String -> Pair QVal (List String) -> Pair Db QVal
-queryResolve db key deps result =
+queryResolve db key deps result = firstOf (queryResolveTagged db key deps result)
+
+-- | `queryResolve` 的**带标签**形态：额外返回本次提交的类别 `miss` / `cutoff`。
+--
+-- Eff 层（`Query.Run`）要用它记节点 span 的 outcome：判据与提交只有这一份实现，
+-- span 标签不能重新猜（`cutoff` 与 `miss` 的判据就是这里比的两个摘要）。
+queryResolveTagged : Db -> String -> List String -> Pair QVal (List String) -> Pair (Pair Db QVal) String
+queryResolveTagged db key deps result =
   let
     val = firstOf result
     declared = sortKeys deps
     observed = depPairsFromKeys db (snapDeps db deps) (secondOf result)
     digest = digestOfVal val
   in case Base.HashMap.lookup key db.dbEntryMap of
-    Nothing => Pair (commitMiss db key declared observed digest val) val
+    Nothing => Pair (Pair (commitMiss db key declared observed digest val) val) "miss"
     Just old =>
       if old.entryDigest == digest then Pair
-        (Db (Base.HashMap.insert key (Entry observed declared old.entryDigest old.entryOrigin old.entryVal (old.entryHits + 1)) db.dbEntryMap) ("cutoff ${key}" :: db.dbTraceLines) db.dbOrigin)
-        old.entryVal
-      else Pair (commitMiss db key declared observed digest val) val
+        (Pair (Db (Base.HashMap.insert key (Entry observed declared old.entryDigest old.entryOrigin old.entryVal (old.entryHits + 1)) db.dbEntryMap) ("cutoff ${key}" :: db.dbTraceLines) db.dbOrigin) old.entryVal)
+        "cutoff"
+      else Pair (Pair (commitMiss db key declared observed digest val) val) "miss"
 
 -- | 写新 entry（trace 记 `miss`）。
 commitMiss : Db -> String -> List String -> List (Pair String String) -> String -> QVal -> Db
