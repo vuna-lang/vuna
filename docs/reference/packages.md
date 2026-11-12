@@ -70,7 +70,7 @@
     [cache.md](cache.md)；
   - `vuna map [--modules]` / `vuna map --find <Module.name>` / `vuna map --impact
     <Module.name>` / `vuna api <Module.name>`：`Vuna.Index` 的源码符号索引，用于定位定义、
-    引用者与建议测试标签；索引缓存在 `.local/index/`（gitignored），按**内容哈希**判定
+    引用者与建议测试标签；索引缓存在 `$TMPDIR/vuna-cache` 的 `index:<dir>` 节点 + blobs，按**内容哈希**判定
     新鲜度（同 size/同 mtime 的内容变更也会失效），refs 带行 / 列位置，没有刷新命令；
   - `vuna version` / `vuna --version`：打印 `vuna <版本>`；版本唯一真源是
     `compiler/lib/Vuna/Compiler/Version.vuna`。

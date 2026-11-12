@@ -46,14 +46,12 @@ module Vuna.Repl
 --
 -- 会话缓存（M34.6 5c）：
 --   * 工具接口会话（`stateToolSession`）：`depIfacesForToolSourceDetailed` 的结果（依赖
---     接口 + 依赖哈希表 + 本包 manifest + import 闭包 + 校验面）按「编译器指纹 + 包名 +
---     包目录」缓存，每条表达式先按校验面（依赖/本包 manifest 的源文件 stat + 安全窗内回落
---     内容哈希）确认未失效才复用，失效即整条重建；import 闭包扩大（新增 import）同样重建。
---     不再每条表达式重读 manifest / iface（C37③）。
---   * 源码索引会话（`stateIndexCache`）：首次 `:browse`/`:info`/`:search` 构建索引时记下
---     逐源文件的 stat 快照（路径 + bytes + mtime + 内容哈希），后续调用先对快照做廉价校验
---     （查询图节点 `index:<dir>`，窗口外只 stat、窗口内回落内容哈希），命中就不重读
---     全部源码的内容哈希；快照失效才走完整 `loadOrBuild`（D35）。
+--     接口 + 依赖哈希表 + 本包 manifest + import 闭包 + 校验面）提交成查询图节点
+--     `tooliface:<pkg>:<dirHash>`（依赖表 = 校验面 stat + import 闭包），每条表达式先
+--     `Query.queryHit` 判命中；miss 才整条重建。不再每条表达式重读 manifest / iface（C37③）。
+--   * 源码索引（`stateBrowseIndex` + `loadOrBuildCheap`）：索引入口自身就是查询图客户端
+--     （`index:<dir>` 节点 + `<cache>/blobs` 载荷），命中就从 blob 解码、未命中才扫描重建；
+--     REPL 只额外在会话内记住解出来的 `Index`，避免同一会话反复解码。
 import Vuna.Cli.Args
 import Vuna.Compiler.Common
 import Vuna.Compiler.Driver.Compile
@@ -142,19 +140,6 @@ record ReplToolSession where
   -- 解出来 / 复用的工具上下文（依赖接口 + 校验面 + 闭包名单）。
   sessionTool : ToolContext
 
--- 源码索引会话：索引 + 建立时的源文件 stat 快照 + 建立时刻 + 目录。复用前对快照做廉价
--- 校验（查询图节点 `index:<dir>`：依赖表 = `indexStatsOf` 的 stat 快照键；窗口外的文件只
--- stat，窗口内的回落内容哈希），
--- 命中就不重读全部源码的内容哈希；校验失败回退完整 `loadOrBuild`（内容哈希判定 + 按需
--- 重建 + 回写 `.local/index` 缓存）。快照只存内存，不改 manifest 的 v3 格式。
-record ReplIndexCache where
-  indexCacheIndex : Index
-  -- 查询图会话（共用 `Db`；REPL 内纯内存）+ 建立时的 stat 快照。
-  indexCacheDb : ToolSession
-  indexCacheStats : List SourceStat
-  indexCacheBuiltSec : Int
-  indexCacheDir : String
-
 record ReplState where
   stateCtx : PackageContext
   stateImports : String
@@ -169,7 +154,6 @@ record ReplState where
   stateHistoryFile : String
   stateAuxCache : Maybe AuxCache
   stateToolSession : Maybe ReplToolSession
-  stateIndexCache : Maybe ReplIndexCache
   stateSink : ReplSink
 
 data ReplOutcome : Type where
@@ -188,83 +172,82 @@ data ReadResult : Type where
 -- ---------------------------------------------------------------
 initialState : PackageContext -> ReplSettings -> List String -> String -> ReplSink -> ReplState
 initialState ctx settings history histFile sink =
-  ReplState ctx "" [] "" Nothing 0 "" Nothing settings history histFile Nothing Nothing Nothing sink
+  ReplState ctx "" [] "" Nothing 0 "" Nothing settings history histFile Nothing Nothing sink
 
 withCtx : ReplState -> PackageContext -> ReplState
 withCtx st ctx =
   ReplState ctx st.stateImports st.stateDefs st.statePending st.stateBlock st.stateLoadKind
     st.stateLoadTarget st.stateBrowseIndex st.stateSettings st.stateHistory st.stateHistoryFile
-    st.stateAuxCache st.stateToolSession st.stateIndexCache st.stateSink
+    st.stateAuxCache st.stateToolSession st.stateSink
 
 withPending : ReplState -> String -> ReplState
 withPending st p =
   ReplState st.stateCtx st.stateImports st.stateDefs p st.stateBlock st.stateLoadKind
     st.stateLoadTarget st.stateBrowseIndex st.stateSettings st.stateHistory st.stateHistoryFile
-    st.stateAuxCache st.stateToolSession st.stateIndexCache st.stateSink
+    st.stateAuxCache st.stateToolSession st.stateSink
 
 withBlock : ReplState -> Maybe String -> ReplState
 withBlock st b =
   ReplState st.stateCtx st.stateImports st.stateDefs st.statePending b st.stateLoadKind
     st.stateLoadTarget st.stateBrowseIndex st.stateSettings st.stateHistory st.stateHistoryFile
-    st.stateAuxCache st.stateToolSession st.stateIndexCache st.stateSink
+    st.stateAuxCache st.stateToolSession st.stateSink
 
 withDefs : ReplState -> List ReplBlock -> ReplState
 withDefs st blocks =
   ReplState st.stateCtx st.stateImports blocks st.statePending st.stateBlock st.stateLoadKind
     st.stateLoadTarget st.stateBrowseIndex st.stateSettings st.stateHistory st.stateHistoryFile
-    Nothing st.stateToolSession st.stateIndexCache st.stateSink
+    Nothing st.stateToolSession st.stateSink
 
 withImports : ReplState -> String -> ReplState
 withImports st imports =
   ReplState st.stateCtx imports st.stateDefs st.statePending st.stateBlock st.stateLoadKind
     st.stateLoadTarget st.stateBrowseIndex st.stateSettings st.stateHistory st.stateHistoryFile
-    Nothing st.stateToolSession st.stateIndexCache st.stateSink
+    Nothing st.stateToolSession st.stateSink
 
 withLoad : ReplState -> Int -> String -> ReplState
 withLoad st kind target =
   ReplState st.stateCtx st.stateImports st.stateDefs st.statePending st.stateBlock kind target
     st.stateBrowseIndex st.stateSettings st.stateHistory st.stateHistoryFile st.stateAuxCache
-    st.stateToolSession st.stateIndexCache st.stateSink
+    st.stateToolSession st.stateSink
 
 withSettings : ReplState -> ReplSettings -> ReplState
 withSettings st s =
   ReplState st.stateCtx st.stateImports st.stateDefs st.statePending st.stateBlock st.stateLoadKind
     st.stateLoadTarget st.stateBrowseIndex s st.stateHistory st.stateHistoryFile st.stateAuxCache
-    st.stateToolSession st.stateIndexCache st.stateSink
+    st.stateToolSession st.stateSink
 
 withAuxCache : ReplState -> Maybe AuxCache -> ReplState
 withAuxCache st a =
   ReplState st.stateCtx st.stateImports st.stateDefs st.statePending st.stateBlock st.stateLoadKind
     st.stateLoadTarget st.stateBrowseIndex st.stateSettings st.stateHistory st.stateHistoryFile a
-    st.stateToolSession st.stateIndexCache st.stateSink
+    st.stateToolSession st.stateSink
 
 -- 换工具接口会话（求值路径按需重建/复用）。
 withToolSession : ReplState -> Maybe ReplToolSession -> ReplState
 withToolSession st s =
   ReplState st.stateCtx st.stateImports st.stateDefs st.statePending st.stateBlock st.stateLoadKind
     st.stateLoadTarget st.stateBrowseIndex st.stateSettings st.stateHistory st.stateHistoryFile
-    st.stateAuxCache s st.stateIndexCache st.stateSink
+    st.stateAuxCache s st.stateSink
 
--- 记下索引会话：索引 + 源文件 stat 快照 + 建立时刻 + 目录。
-withIndexSession : ReplState -> Index -> ToolSession -> List SourceStat -> Int -> String -> ReplState
-withIndexSession st idx db stats builtSec dir =
+-- 记下会话内索引（只是内存复用；索引本身的跨进程缓存由 `index:<dir>` 节点承担）。
+withBrowseIndex : ReplState -> Index -> ReplState
+withBrowseIndex st idx =
   ReplState st.stateCtx st.stateImports st.stateDefs st.statePending st.stateBlock st.stateLoadKind
     st.stateLoadTarget (Just idx) st.stateSettings st.stateHistory st.stateHistoryFile
-    st.stateAuxCache st.stateToolSession (Just (ReplIndexCache idx db stats builtSec dir))
-    st.stateSink
+    st.stateAuxCache st.stateToolSession st.stateSink
 
 -- `:load DIR`：换上下文并清空缓冲/加载目标/索引/aux/会话缓存；设置与历史保留。
 switchedContext : ReplState -> PackageContext -> ReplState
 switchedContext st ctx =
   ReplState ctx "" [] "" Nothing 0 "" Nothing st.stateSettings st.stateHistory st.stateHistoryFile
-    Nothing Nothing Nothing st.stateSink
+    Nothing Nothing st.stateSink
 
 -- `:load FILE`：整段源码进缓冲；加载目标按文件记录。
 loadedFileState : ReplState -> String -> String -> ReplState
 loadedFileState st path source =
   ReplState st.stateCtx "" [mkBlock (ensureTrailingNewline source) True] "" Nothing 1 path
     st.stateBrowseIndex st.stateSettings st.stateHistory st.stateHistoryFile Nothing
-    st.stateToolSession st.stateIndexCache st.stateSink
+    st.stateToolSession st.stateSink
 
 -- 只替换 settings（其它字段由调用方保持）。
 settingsSetPrintTypes : ReplSettings -> Bool -> ReplSettings
@@ -549,7 +532,7 @@ else
   else do
     _ <- persistHistory st u
     pure
-      (ReplState st.stateCtx st.stateImports st.stateDefs st.statePending st.stateBlock st.stateLoadKind st.stateLoadTarget st.stateBrowseIndex st.stateSettings (trimHistory (appendLast st.stateHistory u)) st.stateHistoryFile st.stateAuxCache st.stateToolSession st.stateIndexCache st.stateSink)
+      (ReplState st.stateCtx st.stateImports st.stateDefs st.statePending st.stateBlock st.stateLoadKind st.stateLoadTarget st.stateBrowseIndex st.stateSettings (trimHistory (appendLast st.stateHistory u)) st.stateHistoryFile st.stateAuxCache st.stateToolSession st.stateSink)
 
 lastHistoryIs : List String -> String -> Bool
 lastHistoryIs [] u = False
@@ -1503,8 +1486,7 @@ resetStep st =
   let
     st2 =
       ReplState st.stateCtx "" [] "" Nothing 0 "" st.stateBrowseIndex st.stateSettings
-        st.stateHistory st.stateHistoryFile Nothing st.stateToolSession st.stateIndexCache
-        st.stateSink
+        st.stateHistory st.stateHistoryFile Nothing st.stateToolSession st.stateSink
   in do
     _ <- printOk st2 "已清空"
     pure (ReplContinue st2)
@@ -1589,7 +1571,7 @@ doLoadModule st m =
           st2 =
             ReplState st.stateCtx imports2 st.stateDefs st.statePending st.stateBlock 2 m
               st.stateBrowseIndex st.stateSettings st.stateHistory st.stateHistoryFile Nothing
-              st.stateToolSession st.stateIndexCache st.stateSink
+              st.stateToolSession st.stateSink
         in OkC st2
     )
 
@@ -1637,31 +1619,8 @@ isWordChar c = c >= 48 && c <= 57 || c >= 65 && c <= 90 || c >= 97 && c <= 122 |
 -- ---------------------------------------------------------------
 -- 索引 / :browse / :info / :search
 -- ---------------------------------------------------------------
--- 索引会话节点的依赖表：`indexStatsOf` 的 stat 快照 → 键。
--- 路径 + 字节数 + mtime（+ 安全窗内的内容哈希）进 key，key 稳定（`index:<dir>`）；
--- 任一项变化 ⇒ 依赖表变化 ⇒ miss ⇒ 重建。等价于旧的 `indexStatsUnchanged` 逐条比较，
--- 但比较逻辑归 `Query.queryHit`，本模块不再有一套自己的判据。
-indexDepKey : SourceStat -> String
-indexDepKey (SourceStat path bytes mtime contentHash) =
-  "st:${path}:${strFromInt bytes}:${strFromInt mtime}:${contentHash}"
-
-indexDeps : List SourceStat -> List String
-indexDeps stats = map indexDepKey stats
-
-indexNodeKey : String -> String
-indexNodeKey dir = "index:${dir}"
-
--- 会话内复用索引：同一包目录 + 查询图节点在当前 stat 快照下命中。
-replIndexCacheFresh : ReplIndexCache -> String -> Eff [] Bool
-replIndexCacheFresh cache dir = if cache.indexCacheDir == dir then do
-  current <- indexStatsOf cache.indexCacheBuiltSec dir
-  hit <- toolHitValue cache.indexCacheDb (indexNodeKey dir) (indexDeps current)
-  pure (case hit of
-    Just _ => True
-    Nothing => False
-  )
-else pure False
-
+-- `:browse`/`:info`/`:search` 的索引入口：会话内已有索引就直接用；否则 `loadOrBuildCheap`
+-- （索引节点命中就从 blob 解码、未命中才扫描重建并写回）。
 ensureIndex : ReplState -> Eff [] (Check (Pair Index ReplState))
 ensureIndex st = case st.stateBrowseIndex of
   Just idx => pure (OkC (Pair idx st))
@@ -1675,27 +1634,11 @@ ensureIndex st = case st.stateBrowseIndex of
           pure
             (err "当前目录不在 vuna workspace 内（向上找不到 vuna.toml）；:browse/:info/:search 需要在包或 workspace 根运行")
         Just _ => do
-          cached <- case st.stateIndexCache of
-            Just cache => do
-              fresh <- replIndexCacheFresh cache dir
-              pure (if fresh then Just cache.indexCacheIndex else Nothing)
-            Nothing => pure Nothing
-          case cached of
-            Just idx => pure (OkC (Pair idx st))
-            Nothing => do
-              _ <- replEmit st (c st "2" "正在构建源码索引…\n")
-              built <- loadOrBuild dir
-              case built of
-                ErrC e => pure (ErrC e)
-                OkC idx => do
-                  now <- effTimeUs
-                  let
-                    builtSec = now / 1000000
-                  in do
-                    stats <- indexStatsOf builtSec dir
-                    base <- pure (toolSessionNewMemory "tool")
-                    db <- toolCommitValue base (indexNodeKey dir) (indexDeps stats)
-                    pure (OkC (Pair idx (withIndexSession st idx db stats builtSec dir)))
+          _ <- replEmit st (c st "2" "正在构建源码索引…\n")
+          built <- loadOrBuildCheap dir
+          case built of
+            ErrC e => pure (ErrC e)
+            OkC idx => pure (OkC (Pair idx (withBrowseIndex st idx)))
 
 browseStep : ReplState -> String -> Eff [] ReplOutcome
 browseStep st arg = do

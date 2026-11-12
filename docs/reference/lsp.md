@@ -50,7 +50,7 @@ Content-Length: <字节数>\r\n
 ### 模块名与局部绑定的解析
 
 `hover` / `definition` 在洞与 Index 之间插了一步 `Vuna.Lsp.Bindings`（**parse 级**、不触发
-`.local/index/` 构建；解析失败或未命中就退回原路径）：
+`Vuna.Index`（`index:<dir>` 节点；解析失败或未命中就退回原路径）：
 
 - **模块引用**：`import` 的模块名 / alias、导出项 `module B`（全名或 alias）、模块头自身、
   限定名的模块前缀（`Base.List.map` 光标落在 `List` ⇒ 模块 `Base.List`；落在 `map` ⇒ 不命中）。
@@ -103,7 +103,7 @@ Content-Length: <字节数>\r\n
   一致（range / severity / source / code / message），客户端按 `code` 直接关联。
 - 已知边界（模块头注释同步记录）：`didChange` 全量重新精化（大文件可能滞后，编辑器端应
   去抖）；依赖的未保存改动读盘；Index 每进程一次、不随编辑刷新；首次索引查找可能触发
-  `.local/index/` 全量重建（仓库级秒级，期间请求排队）；没有洞的文件 hover 不跑精化，
+  索引节点全量重建（仓库级秒级，期间请求排队）；没有洞的文件 hover 不跑精化，
   含洞的文件每次 hover 会重跑一次整模块精化；多根 workspace 取首个文档；一次只发首个编译
   错误；`codeAction` 每次重算 fixity + lint（无进程内缓存），并产出 quickfix /
   `refactor.rewrite` case split / `vuna.fixAllLint` command；`rename` 的跨文件范围基于 Index（磁盘内容），未保存的其它模块改动不反映，且不跟进类型名在其它模块签名里的使用。

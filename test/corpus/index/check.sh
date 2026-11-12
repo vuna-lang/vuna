@@ -1,16 +1,21 @@
 #!/bin/sh
-# test/corpus/index/check.sh：Vuna.Index 缓存 v3 自检（M30 · C11/D13）。
+# test/corpus/index/check.sh：Vuna.Index 缓存自检（阶段 4 起是**查询图节点 + blob**）。
 #
 # 用法: sh corpus/index/check.sh <vuna>
 #
+# 缓存形状：
+#   `index:<dir>` 节点（会话索引落在 `$TMPDIR/vuna-cache/query/<桶>/index`，codec
+#   `query-index 1`），值 = 载荷内容地址（`QRef`）；载荷 = `Index.Codec.encIndex` 的规范
+#   字节，落 `$TMPDIR/vuna-cache/blobs/<digest>`（codec `index-payload 1`，`Store` framing）。
+#   `.local/index/` 不再创建。
+#
 # 在一个临时 workspace 里验证（不依赖仓库自身缓存，避免并行测试互相干扰）：
-#   1) manifest v3 首行 `vuna-index 3`，条目 path<TAB>bytes<TAB>hash（3 字段）；
-#   2) refs.txt 记录引用位置（module<TAB>name<TAB>line<TAB>col，4 字段）；
-#   3) 第二次 map 命中缓存：manifest 内容与 mtime 都不变，无 cache.lock 残留；
-#   4) 同 size + 同 mtime 的内容变更必须使缓存失效（内容哈希，而非 mtime+size）；
-#   5) 过期锁（>=60s）被清理并重建缓存；新鲜锁（<60s）跳过写缓存但 map 仍成功；
-#   6) 并发两个 map：都成功且不残留 cache.lock；
-#   7) 非 workspace 的 map 给出可读错误并非 0（C12）。
+#   1) 首次 map：exit 0、**不**创建 `.local/index/`、blob 的 framing tag/codec 正确；
+#   2) 第二次 map：图节点命中（`index-path=cache`），blob 集合不变；
+#   3) 同 size + 同 mtime 的内容变更必须失效（安全窗内回落内容哈希，而非 mtime+size）；
+#   4) blob 被截断（framing 校验失败）⇒ 重算并重写合法 framing；
+#   5) 并发两个 map：都成功且缓存可读；
+#   6) 非 workspace 的 map 给出可读错误并非 0（C12）。
 set -u
 
 VUNA=${1:?usage: check.sh <vuna>}
@@ -21,6 +26,9 @@ esac
 
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/vuna-index-check.XXXXXX") || exit 1
 trap 'rm -rf "$tmp"' EXIT INT TERM
+# 独立缓存根，避免与仓库自身的 `vuna-cache` 互相干扰。
+export TMPDIR="$tmp/cache"
+mkdir -p "$TMPDIR"
 
 pass=0
 fail=0
@@ -38,6 +46,10 @@ check_contains() {
     *) bad "$1 (missing [$3] in [$2])" ;;
   esac
 }
+check_ne() {
+  if [ "$2" != "$3" ]; then ok; else bad "$1 (unexpected [$2])"; fi
+}
+blobs() { find "$TMPDIR/vuna-cache/blobs" -type f 2>/dev/null; }
 
 ws="$tmp/ws"
 mkdir -p "$ws/lib/Demo"
@@ -69,103 +81,59 @@ two : Int
 two = one + one
 EOF
 
-manifest="$ws/.local/index/manifest.txt"
-refscache="$ws/.local/index/refs.txt"
-
-# 1) 首次构建：v3 格式 + 无锁残留。
-( cd "$ws" && "$VUNA" map >/dev/null 2>&1 )
+# 1) 首次构建：图节点未命中 → 建索引、写 blob；`.local/index/` 不再创建。
+first=$( cd "$ws" && VUNA_DEBUG_PERF=1 "$VUNA" map 2>&1 )
 check_eq "index first map exit" "0" "$?"
-check_eq "index manifest v3 header" "vuna-index 3" "$(head -1 "$manifest" 2>/dev/null)"
-check_eq "index manifest 3 fields" "3" "$(grep 'Demo/A.vuna' "$manifest" 2>/dev/null | awk -F'\t' '{print NF}')"
-case "$(grep 'Demo/A.vuna' "$manifest" 2>/dev/null | awk -F'\t' '{print $3}')" in
-  [0-9]*-[0-9]*) ok ;;
-  *) bad "index manifest hash is not the v3 combined hash" ;;
-esac
-if [ -e "$ws/.local/index/cache.lock" ]; then bad "index lock leaked after first map"; else ok; fi
-check_eq "index refs 4 fields" "4" "$(grep -m1 '^Demo.B	' "$refscache" 2>/dev/null | awk -F'\t' '{print NF}')"
-check_contains "index refs record position" "$(cat "$refscache" 2>/dev/null)" "Demo.B	one	9	"
-symbols="$ws/.local/index/symbols.txt"
-check_eq "index symbols 8 fields" "8" "$(awk -F'\t' '$1=="Demo.A" && $2=="one" {print NF; exit}' "$symbols" 2>/dev/null)"
-check_contains "index docstring survives cache" "$(cat "$symbols" 2>/dev/null)" "first doc line"
+check_contains "index first map builds" "$first" "index-path=build"
+check_contains "index map output" "$first" "Demo.A"
+if [ -e "$ws/.local/index" ]; then bad "index still writes .local/index"; else ok; fi
+blob=$(blobs | head -1)
+if [ -n "$blob" ]; then ok; else bad "index blob missing"; fi
+check_eq "index blob framing magic" "vuna-cache-frame 2" "$(head -c 18 "$blob" 2>/dev/null)"
+check_eq "index blob codec" "index-payload 1" "$(head -1 "$blob" 2>/dev/null | cut -d'|' -f3)"
 api_out=$(cd "$ws" && "$VUNA" api Demo.A 2>&1)
-check_contains "api multi-line doc from cache" "$api_out" "second doc line"
+check_contains "api multi-line doc" "$api_out" "second doc line"
 
-# 2) 第二次 map 命中缓存：manifest 内容/mtime 不变。
-before=$(cat "$manifest")
-before_mtime=$(stat -c %Y "$manifest")
-sleep 1
-( cd "$ws" && "$VUNA" map >/dev/null 2>&1 )
+# 2) 第二次 map：节点命中（读 blob 解码），blob 集合与字节数不变。
+before_count=$(blobs | wc -l | tr -d ' ')
+before_size=$(wc -c < "$blob" | tr -d ' ')
+second=$( cd "$ws" && VUNA_DEBUG_PERF=1 "$VUNA" map 2>&1 )
 check_eq "index second map exit" "0" "$?"
-check_eq "index cache hit keeps manifest" "$before" "$(cat "$manifest")"
-check_eq "index cache hit keeps mtime" "$before_mtime" "$(stat -c %Y "$manifest")"
-if [ -e "$ws/.local/index/cache.lock" ]; then bad "index lock leaked after cache hit"; else ok; fi
+check_contains "index cache hit" "$second" "index-path=cache"
+check_eq "index cache hit keeps blob count" "$before_count" "$(blobs | wc -l | tr -d ' ')"
+check_eq "index cache hit keeps blob bytes" "$before_size" "$(wc -c < "$blob" | tr -d ' ')"
 
-# 2b) 缓存命中时过期残留锁也会被清理（崩溃残留不能永久挡住写缓存）。
-mkdir -p "$ws/.local/index/cache.lock"
-touch -d "2 hours ago" "$ws/.local/index/cache.lock"
-( cd "$ws" && "$VUNA" map >/dev/null 2>&1 )
-check_eq "index stale-lock cache-hit exit" "0" "$?"
-if [ -e "$ws/.local/index/cache.lock" ]; then bad "index stale lock survived a cache hit"; else ok; fi
-check_eq "index stale-lock cache-hit keeps manifest" "$before" "$(cat "$manifest")"
-
-# 3) 同 size + 同 mtime 的内容变更必须失效。
+# 3) 同 size + 同 mtime 的内容变更必须失效（安全窗内回落内容哈希）。
 cp -p "$ws/lib/Demo/A.vuna" "$tmp/A.bak"
 sed -i '3s/for/Xor/' "$ws/lib/Demo/A.vuna"
 touch -r "$tmp/A.bak" "$ws/lib/Demo/A.vuna"
-( cd "$ws" && "$VUNA" map >/dev/null 2>&1 )
+changed=$( cd "$ws" && VUNA_DEBUG_PERF=1 "$VUNA" map 2>&1 )
 check_eq "index content-change map exit" "0" "$?"
-after=$(cat "$manifest")
-if [ "$before" = "$after" ]; then
-  bad "index cache did not invalidate on same size+mtime content change"
-else
-  ok
-fi
-check_contains "index symbols updated with content" "$(cat "$ws/.local/index/symbols.txt" 2>/dev/null)" "Xor"
-if [ -e "$ws/.local/index/cache.lock" ]; then bad "index lock leaked after content rebuild"; else ok; fi
-# 恢复内容后再跑，manifest 回到原值（并且再次失效过）。
+check_contains "index content change rebuilds" "$changed" "index-path=build"
+check_contains "index symbols updated with content" "$(cd "$ws" && "$VUNA" api Demo.A 2>&1)" "Xor"
 cp -p "$tmp/A.bak" "$ws/lib/Demo/A.vuna"
-( cd "$ws" && "$VUNA" map >/dev/null 2>&1 )
+restored=$( cd "$ws" && VUNA_DEBUG_PERF=1 "$VUNA" map 2>&1 )
 check_eq "index restored content map exit" "0" "$?"
-check_eq "index restored content manifest" "$before" "$(cat "$manifest")"
+check_contains "index restored content rebuilds" "$restored" "index-path=build"
 
-# 4) 过期锁：>=60s 的 cache.lock 被清理并重建。
-sed -i '3s/for/Xor/' "$ws/lib/Demo/A.vuna"
-touch -r "$tmp/A.bak" "$ws/lib/Demo/A.vuna"
-mkdir -p "$ws/.local/index/cache.lock"
-touch -d '2 hours ago' "$ws/.local/index/cache.lock"
-( cd "$ws" && "$VUNA" map >/dev/null 2>&1 )
-check_eq "index stale-lock map exit" "0" "$?"
-if [ -e "$ws/.local/index/cache.lock" ]; then bad "index stale lock was not removed"; else ok; fi
-check_contains "index stale-lock rebuild content" "$(cat "$ws/.local/index/symbols.txt" 2>/dev/null)" "Xor"
-cp -p "$tmp/A.bak" "$ws/lib/Demo/A.vuna"
-( cd "$ws" && "$VUNA" map >/dev/null 2>&1 )
+# 4) blob 截断：framing（len/内容地址）校验失败 ⇒ 重算并重写合法 framing。
+for f in $(blobs); do head -c 64 "$f" > "$f.part"; mv "$f.part" "$f"; done
+rebuilt=$( cd "$ws" && VUNA_DEBUG_PERF=1 "$VUNA" map 2>&1 )
+check_eq "index truncated-blob map exit" "0" "$?"
+check_contains "index truncated blob rebuild" "$rebuilt" "index-path=build"
+n_blob=$(blobs | head -1)
+check_eq "index blob reframed magic" "vuna-cache-frame 2" "$(head -c 18 "$n_blob" 2>/dev/null)"
+check_eq "index blob reframed codec" "index-payload 1" "$(head -1 "$n_blob" 2>/dev/null | cut -d'|' -f3)"
 
-# 5) 新鲜锁：跳过写缓存，但 map 仍成功；清锁后下一次 map 补写 manifest。
-rm -f "$manifest"
-mkdir -p "$ws/.local/index/cache.lock"
-fresh=$(cd "$ws" && "$VUNA" map 2>/dev/null)
-code=$?
-check_eq "index fresh-lock map exit" "0" "$code"
-check_contains "index fresh-lock output" "$fresh" "Demo.A"
-if [ -e "$manifest" ]; then bad "index wrote cache while a fresh lock existed"; else ok; fi
-rm -rf "$ws/.local/index/cache.lock"
-( cd "$ws" && "$VUNA" map >/dev/null 2>&1 )
-check_eq "index fresh-lock recovery map exit" "0" "$?"
-if [ -e "$manifest" ]; then ok; else bad "index did not rewrite manifest after fresh lock cleared"; fi
-if [ -e "$ws/.local/index/cache.lock" ]; then bad "index lock leaked after recovery"; else ok; fi
-
-# 6) 并发两个 map：都成功、不残留锁。
-rm -rf "$ws/.local/index"
+# 5) 并发两个 map：都成功，随后缓存可读。
 ( cd "$ws" && "$VUNA" map >/dev/null 2>&1; echo $? >"$tmp/c1" ) &
 ( cd "$ws" && "$VUNA" map >/dev/null 2>&1; echo $? >"$tmp/c2" ) &
 wait
 check_eq "index concurrent map 1 exit" "0" "$(cat "$tmp/c1" 2>/dev/null)"
 check_eq "index concurrent map 2 exit" "0" "$(cat "$tmp/c2" 2>/dev/null)"
-if [ -e "$ws/.local/index/cache.lock" ]; then bad "index lock leaked after concurrent maps"; else ok; fi
-( cd "$ws" && "$VUNA" map >/dev/null 2>&1 )
-check_contains "index concurrent cache readable" "$(cat "$ws/.local/index/manifest.txt" 2>/dev/null)" "Demo/B.vuna"
+check_contains "index concurrent cache readable" "$( cd "$ws" && VUNA_DEBUG_PERF=1 "$VUNA" map 2>&1 )" "index-path=cache"
 
-# 7) 非 workspace：可读错误 + 非 0。
+# 6) 非 workspace：可读错误 + 非 0。
 mkdir -p "$tmp/empty"
 ( cd "$tmp/empty" && "$VUNA" map ) >"$tmp/map.err" 2>&1
 code=$?

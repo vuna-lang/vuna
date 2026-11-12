@@ -12,6 +12,7 @@ module Vuna.Index
   , indexStatsOf
   , listAllSymbols
   , loadOrBuild
+  , loadOrBuildCheap
   , modBytes
   , modDecls
   , modName
@@ -40,19 +41,18 @@ module Vuna.Index
 -- 目的：让 agent/人类用一条命令定位「符号在哪、谁引用它、该跑哪些测试」，而不是通读
 -- 全仓。索引只依赖 parse 级信息（AST + Span + lexComments），不跑类型检查。
 --
--- 缓存设计（`.local/index/`，已 gitignore；M30 起 v2 内容哈希 + 原子写 + 目录锁）：
---   - `manifest.txt` 首行 `vuna-index 3`，随后每行 `path TAB bytes TAB hash`——
---     新鲜度判定的唯一依据（内容哈希；不再用 mtime+size，C11）；旧格式全量重建；
---   - 内存 stat 快照（`indexStatsOf`，只服务 REPL 会话缓存；判定交给查询图节点，见下）：
---     建立时记下每个源文件的 (path, bytes, mtime, 内容哈希)，复用前只重新 stat 比对，
---     避免每次都读全部源码算内容哈希；窗口内文件仍回落内容哈希（语义同 Driver/Cache）。
---   - `modules.txt`  每行 `module TAB pkg TAB path TAB bytes TAB declCount`；
---   - `symbols.txt`  每行 `module TAB name TAB kind TAB line TAB col TAB sig TAB doc TAB type`；
---   - `refs.txt`     每行 `module TAB name TAB line TAB col`（引用出现位置）。
+-- 缓存设计（阶段 4 起：查询图节点 + 内容寻址 blob；**不再有 `.local/index/`**）：
+--   - 节点 `index:<dir>`（CLI 强依赖）/ `index-cheap:<dir>`（REPL 廉价依赖），
+--     值 = 载荷内容地址（`QRef`），会话索引落 `$TMPDIR/vuna-cache/query/<桶>/index`；
+--   - 载荷 = `Vuna.Index.Codec.encIndex` 的规范字节，落
+--     `$TMPDIR/vuna-cache/blobs/<digest>`（codec `index-payload 1`，`Store` framing）；
+--   - 依赖表：强路径 = 逐源文件内容哈希 `f:<path>:<hash>`（语义等于旧 manifest 的 C11
+--     判定）；廉价路径（REPL）= stat 键 `st:<path>:<bytes>:<mtime>:<hash>`，只对安全窗内
+--     的文件算内容哈希（`indexStatsOf`）。
 --
--- 新鲜度：每次调用先遍历目录 + 读文件算内容哈希（不读 AST），与 manifest 逐条一致就
--- 从 `*.txt` 回读索引；否则全量重建并写回。因此**没有「刷新索引」命令**：
--- `vuna map` / `vuna api` 自己判定。缓存不可写 / 写失败时降级为纯内存构建（不报错）。
+-- 新鲜度：每次调用先算依赖表（强路径读全部源码算哈希；廉价路径只 stat + 窗口内哈希），
+-- 与节点记录的依赖表一致就读 blob 解码；否则全量重建、写 blob、提交节点。
+-- 因此**没有「刷新索引」命令**：`vuna map` / `vuna api` / REPL 自己判定。
 --
 -- 文档决策（M30）：顶层签名必填；parse 级签名就是工具链需要的语义面，不引入独立的
 -- 语义索引（D13 的语义部分由 LSP 的 DT 检查消费，不在 Index 里重复）。

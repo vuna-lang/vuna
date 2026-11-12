@@ -20,6 +20,7 @@ Vuna.Fmt.Expr  ./lib/Vuna/Fmt/Expr.vuna
 Vuna.Fmt.Util  ./lib/Vuna/Fmt/Util.vuna
 Vuna.Fmt  ./lib/Vuna/Fmt.vuna
 Vuna.GenErrors  ./lib/Vuna/GenErrors.vuna
+Vuna.Index.Codec  ./lib/Vuna/Index/Codec.vuna
 Vuna.Index.Query  ./lib/Vuna/Index/Query.vuna
 Vuna.Index.Render  ./lib/Vuna/Index/Render.vuna
 Vuna.Index.Scan  ./lib/Vuna/Index/Scan.vuna

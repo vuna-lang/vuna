@@ -78,7 +78,7 @@ toolUsageLines prog = """  ${prog} lint [--fix] <file.vuna>...
   ${prog} clean [--iface] [--store] [--all] [--dry-run] [DIR]
       清理缓存：iface = 树内 *.iface/.vuna-iface；store = \${TMPDIR}/vuna-cache（或 $VUNA_CACHE_DIR）
       不带 flag 时两者都清；--dry-run 只报数量
-  ${prog} map [--modules]                      模块总览（索引缓存在 .local/index/，自动新鲜度判定）
+  ${prog} map [--modules]                      模块总览（索引缓存在 $TMPDIR/vuna-cache 的 index:<dir> 节点 + blobs，自动新鲜度判定）
   ${prog} map --find <Module.name>             定位符号：定义位置 + 引用者 + 建议测试
   ${prog} map --impact <Module.name>           改动影响面：受影响模块 + 测试标签
   ${prog} api <Module.name>                    某模块的签名面（含注释与行号）
@@ -516,7 +516,7 @@ genErrorsArgs args = case parseToolArgs "vuna gen-errors" [] args of
 
 -- ---------------------------------------------------------------
 -- map / api（源码索引）
--- 索引缓存在 .local/index/，每次调用自动按内容哈希判定新鲜度，
+-- 索引缓存在 $TMPDIR/vuna-cache（`index:<dir>` 节点 + 内容寻址 blob），每次调用自动按内容哈希判定新鲜度，
 -- 没有「刷新索引」命令；详见 Vuna.Index。
 -- ---------------------------------------------------------------
 mapArgs : List String -> Eff [] Int

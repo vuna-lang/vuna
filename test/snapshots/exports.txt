@@ -160,10 +160,11 @@ lib/Vuna/Fmt/Decl.vuna: filterSections, joinSections, renderSourceSections
 lib/Vuna/Fmt/Expr.vuna: inlineExpr, inlinePrec, parenWrapInd, renderBindingValue, renderExpr, renderPat, renderPatAtom, renderTypeExpr
 lib/Vuna/Fmt/Util.vuna: appendBefore, appendLast, concatStrings, dummySpan, firstLine, fitsLine, isNilList, joinComma, joinLines, joinSpace, lastLineOf, mapMaybeStrings, maxWidth, prefixFirst, restLines, spaces, strWidth
 lib/Vuna/GenErrors.vuna: runGenErrors
-lib/Vuna/Index.vuna: Index(..), ModuleInfo(..), Ref(..), SourceStat(..), Sym(..), buildIndex, findReferences, findSymbol, impactOf, indexModules, indexStatsOf, listAllSymbols, loadOrBuild, modBytes, modDecls, modName, modPackage, modPath, refModule, refName, referencesAt, renderApi, renderModules, renderOverview, symCol, symDoc, symFullName, symKind, symLine, symModule, symName, symSig, symType, symbolAt
+lib/Vuna/Index.vuna: Index(..), ModuleInfo(..), Ref(..), SourceStat(..), Sym(..), buildIndex, findReferences, findSymbol, impactOf, indexModules, indexStatsOf, listAllSymbols, loadOrBuild, loadOrBuildCheap, modBytes, modDecls, modName, modPackage, modPath, refModule, refName, referencesAt, renderApi, renderModules, renderOverview, symCol, symDoc, symFullName, symKind, symLine, symModule, symName, symSig, symType, symbolAt
+lib/Vuna/Index/Codec.vuna: decIndexComplete, encIndex, indexPayloadCodec, indexPayloadSchema
 lib/Vuna/Index/Query.vuna: findReferences, findSymbol, impactOf, listAllSymbols, referencesAt, symbolAt
 lib/Vuna/Index/Render.vuna: renderApi, renderModules, renderOverview
-lib/Vuna/Index/Scan.vuna: SourceStat(..), buildIndex, indexStatsOf, loadOrBuild
+lib/Vuna/Index/Scan.vuna: SourceStat(..), buildIndex, indexStatsOf, loadOrBuild, loadOrBuildCheap
 lib/Vuna/Index/Types.vuna: Index(..), ModuleInfo(..), Ref(..), Sym(..), distinct, indexModules, modBytes, modDecls, modName, modPackage, modPath, refModule, refName, symCol, symDoc, symFullName, symKind, symLine, symModule, symName, symSig, symType
 lib/Vuna/Interp.vuna: bindingTypes, checkProgram, evalExprInfo, evalExprInfoWithAux, inferDefTypes, interpretExpr, interpretFile, runEffectProgram
 lib/Vuna/Json.vuna: Json(..), jsonAsArr, jsonAsBool, jsonAsInt, jsonAsObj, jsonAsStr, jsonBoolOr, jsonGet, jsonGetIn, jsonIntOr, jsonObjSingle, jsonStrOr, parseJson, renderJson

@@ -1,0 +1,108 @@
+-- | 源码索引载荷的规范编码（`Index` → 规范字节，落 `Store` blob）。
+module Vuna.Index.Codec (decIndexComplete, encIndex, indexPayloadCodec, indexPayloadSchema) where
+
+-- Vuna.Index.Codec：`Index` 记录树的**显式规范编码**（与 `ToolPayload` 同一套路子）。
+--
+-- 为什么要它：`Index` 是工具链里最大的缓存载荷（模块表 + 符号表 + 引用表，MB 级）。
+-- 以前它落 `.local/index/` 的四个自制文本文件（manifest + modules/symbols/refs），
+-- 由 Scan 自己解析、自己判新鲜度、自己加目录锁——即绕过了 `Store` 这唯一写盘层。
+-- 阶段 4 起统一成：**节点 `index:<dir>`（值 = `QRef`）+ 内容寻址 blob**
+-- （`<cache>/blobs/<digest>`，codec `index-payload 1`），读写都过 `Store` 的 framing 校验。
+--
+-- 编码是累积器风格、字段顺序 = record 声明顺序；解码要求**恰好消费完**（尾随字节 ⇒
+-- `Nothing`，与其它载荷一致）。文本字段 (name/kind/sig/type/doc) 用 `encStr` 自定界，
+-- 不需要转义；这与旧 `.local/index/*.txt` 的 TAB 分隔 + `escapeField` 是同一份语义。
+import Base.Int
+import Base.List
+import Base.Pair
+import Base.String
+import Vuna.Compiler.Canonical.Bytes
+import Vuna.Index.Types
+
+-- | 载荷 schema（字段集变化必须 bump；旧 blob 自然拒绝）。
+indexPayloadSchema : String
+indexPayloadSchema = "vuna-index-payload 1"
+
+-- | `Store` 载荷的 codec 段。
+indexPayloadCodec : String
+indexPayloadCodec = "index-payload 1"
+
+-- | `Index` → 规范字节（三张表按 record 声明顺序串接）。
+encIndex : Index -> String
+encIndex idx = encTop encIndexPayload idx
+
+encIndexPayload : Index -> List String -> List String
+encIndexPayload idx acc =
+  encList encModuleInfo idx.indexModules
+    (encList encSym idx.indexSymbols (encList encRef idx.indexRefs acc))
+
+encModuleInfo : ModuleInfo -> List String -> List String
+encModuleInfo m acc =
+  encStr m.modName
+    (encStr m.modPackage (encStr m.modPath (encInt m.modBytes (encInt m.modDecls acc))))
+
+encSym : Sym -> List String -> List String
+encSym s acc =
+  encStr s.symModule
+    (encStr s.symName (encStr s.symKind (encStr s.symSig (encStr s.symType (encStr s.symDoc (encInt s.symLine (encInt s.symCol acc)))))))
+
+encRef : Ref -> List String -> List String
+encRef r acc = encStr r.refModule (encStr r.refName (encInt r.refLine (encInt r.refCol acc)))
+
+-- | 规范字节 → `Index`（任何一步不符即 `Nothing`）。
+decIndexComplete : String -> Maybe Index
+decIndexComplete s = case decIndexPayload (strLength s) (curOf s) of
+  Nothing => Nothing
+  Just (Pair idx rest) => if curAtEnd rest then Just idx else Nothing
+
+decIndexPayload : Int -> Cur -> Maybe (Pair Index Cur)
+decIndexPayload fuel c = case decList decModuleInfo (fuel - 1) c of
+  Nothing => Nothing
+  Just (Pair ms b1) => case decList decSym (fuel - 1) b1 of
+    Nothing => Nothing
+    Just (Pair syms b2) => case decList decRef (fuel - 1) b2 of
+      Nothing => Nothing
+      Just (Pair refs b3) => Just (Pair (Index ms syms refs) b3)
+
+decModuleInfo : Int -> Cur -> Maybe (Pair ModuleInfo Cur)
+decModuleInfo fuel c = case decStr (fuel - 1) c of
+  Nothing => Nothing
+  Just (Pair name b1) => case decStr (fuel - 1) b1 of
+    Nothing => Nothing
+    Just (Pair pkg b2) => case decStr (fuel - 1) b2 of
+      Nothing => Nothing
+      Just (Pair path b3) => case decInt (fuel - 1) b3 of
+        Nothing => Nothing
+        Just (Pair bytes b4) => case decInt (fuel - 1) b4 of
+          Nothing => Nothing
+          Just (Pair decls b5) => Just (Pair (ModuleInfo name pkg path bytes decls) b5)
+
+decSym : Int -> Cur -> Maybe (Pair Sym Cur)
+decSym fuel c = case decStr (fuel - 1) c of
+  Nothing => Nothing
+  Just (Pair m b1) => case decStr (fuel - 1) b1 of
+    Nothing => Nothing
+    Just (Pair n b2) => case decStr (fuel - 1) b2 of
+      Nothing => Nothing
+      Just (Pair k b3) => case decStr (fuel - 1) b3 of
+        Nothing => Nothing
+        Just (Pair sig b4) => case decStr (fuel - 1) b4 of
+          Nothing => Nothing
+          Just (Pair ty b5) => case decStr (fuel - 1) b5 of
+            Nothing => Nothing
+            Just (Pair doc b6) => case decInt (fuel - 1) b6 of
+              Nothing => Nothing
+              Just (Pair line b7) => case decInt (fuel - 1) b7 of
+                Nothing => Nothing
+                Just (Pair col b8) => Just (Pair (Sym m n k sig ty doc line col) b8)
+
+decRef : Int -> Cur -> Maybe (Pair Ref Cur)
+decRef fuel c = case decStr (fuel - 1) c of
+  Nothing => Nothing
+  Just (Pair m b1) => case decStr (fuel - 1) b1 of
+    Nothing => Nothing
+    Just (Pair n b2) => case decInt (fuel - 1) b2 of
+      Nothing => Nothing
+      Just (Pair line b3) => case decInt (fuel - 1) b3 of
+        Nothing => Nothing
+        Just (Pair col b4) => Just (Pair (Ref m n line col) b4)

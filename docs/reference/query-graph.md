@@ -110,14 +110,14 @@ LSP `DiagCache`、REPL `stateToolSession` / `stateIndexCache`（阶段 3/4，见
   `dtAuxKey`（包名 + 依赖 iface 哈希 + 干净模块 iface 哈希）自校验，是内容键 memo，
   不是新鲜度启发式缓存。
 - `Doc` 没有自有缓存（每次现 parse），`vuna test` 走 `compileToDir` ⇒ 自动吃 split 节点。
-- `Index` 的磁盘缓存 `.local/index/` 保留：它的 manifest 本来就是**内容哈希判定**
-  （等价于图判据），且是跨进程载荷；这次只把 REPL 会话内的廉价探针并进图。
-  未来若要彻底统一，方向是「manifest + 四个 `.txt` 换成 `index:<dir>` 节点的 `QRef` blob」，
-  但 `test/corpus/index/check.sh` 对磁盘布局有 38 条断言，属于独立的迁移工作。
+- `Index` 已整体接图（阶段 4）：节点 `index:<dir>`（CLI，强依赖 = 逐文件内容哈希）与
+  `index-cheap:<dir>`（REPL，stat 键 + 安全窗内容哈希），值 = `Index.Codec` 载荷的 `QRef`，
+  落 `<cache>/blobs/<digest>`（codec `index-payload 1`）。`.local/index/` 已下线，
+  `Store` 是唯一写盘层；`test/corpus/index/check.sh` 与 `nix/index-check.sh` 已按 blob
+  布局重写（不再断言 `.local/index/`）。
 
-仍未做（阶段 5）：`bench/compiler-baseline.txt` 已按 C32 的编码代价重标定（见
-[performance.md](performance.md) §9）；`VUNA_LEGACY_PATH` 从未实现，只需从计划里删掉；
-`debt.md` 只剩 C51（codegen 全量/增量逐字节差异，与图无关）。
+仍未做：`debt.md` 只剩 C51（codegen 全量/增量逐字节差异，与图无关）；`VUNA_LEGACY_PATH`
+从未实现，已从计划删掉。
 
 ## 7. 已知边界
 
