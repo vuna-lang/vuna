@@ -426,3 +426,21 @@ warm `check compiler` **29 ms**（门槛 43）/ `check .` **53 ms**（门槛 78�
   `build-warm` 的 MB 级解码），已写进 [performance.md](../docs/reference/performance.md) §9，
   并记下后续优化方向「per-file 内容寻址 blob + 小 manifest」。
 - ✅ `VUNA_LEGACY_PATH` 从计划里删掉（从未实现）。
+
+### 阶段 4 收尾（2026-11-12，第 6 轮）
+
+`Index` 的磁盘缓存整体接图，`.local/index/` 下线（提交 5645eaf）：
+
+- 新 `Index/Codec.vuna`（codec `index-payload 1`）：`Index` 记录树的显式规范编码；
+- `indexLoadOrBuild` 两种依赖表：`index:<dir>`（CLI，逐文件内容哈希 = 旧 manifest 的 C11
+  语义）与 `index-cheap:<dir>`（REPL，stat 键 + 安全窗内容哈希）；值都是载荷 `QRef`，
+  落 `<cache>/blobs/<digest>`，会话索引按目录分桶持久化；
+- 删掉 manifest/文本序列化/目录锁/原子写（~300 行）与 `Index.indexStatsUnchanged`；
+  REPL 的 `stateIndexCache` 整个删除（`Index` 自己就是图客户端）；
+- 测试：`test/corpus/index/check.sh` 重写（26 checks）、`nix/index-check.sh` 同步
+  （`checks.vuna-index`）。**教训**：探针写成 `cmd | grep -q` 会在匹配后 SIGPIPE 杀掉
+  进程，「build 行已打印但节点未提交」制造假的 cache-hit；改成先捕获输出再匹配。
+
+现状：阶段 0–4 全部落地；`nix flake check` 全绿（含 `vuna-index`、`vuna-tests`、
+`seed-selfhost`、`context-budget`、`compiler-perf`）。剩余只有阶段 5 的收尾项，其中
+baseline 已重标定、rotation 在本轮之前已做过一次（后续若 compiler 再有改动再补一次）。
