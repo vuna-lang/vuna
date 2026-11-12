@@ -4,20 +4,20 @@
 入口是 `main : Eff [] a`（行必须为 `Nil`），执行入口是 `Base.Eff.runPure`。宿主原语只剩
 `prim_eff_*`（`Eff []`）；`Base.Host` 是宿主层别名（做 Int/Nat 归一化，任何包都可 import），
 所有宿主 handler 的 answer 是 `Eff []`，入口组合是 `runX = joinEff (handleXHost …)`。用户面
-执行一个已处理干净的动作用 `runPure`；`ST`/`IORef`/`MArray`/`Buffer` 的实现也全部是 `Eff []`。
+执行一个已处理干净的动作用 `runPure`；`IORef` 的实现也是 `Eff []`。
 
 运行时效应核心已落地（§8）：OCaml 5 一次性 delimited continuations + 开放行 + 命名实例 +
 一阶效应（`Base.Eff` / Reader / State / Fs / Console / Clock / Env / Process / Stdin /
 Args / Exit）；`Member` 行约束、`local`/`catch`/scoped `Exn`、线性续延与一次性闭包
 （`mkCont`/`resumeCont`）、通用 `bracket`（含非 `Exn` abort cleanup）、单线程 fiber
 调度器（`Base.EffSched`：`forkTask`/`awaitTask`/`yieldNow`/`cancelTask`/`cancelScope`/
-结构化 `withScope` + 步数超时）均已落地。学习路径：写程序看 §2–§4；表示层看 §5；
+结构化 `withScope` + 步数超时）均已落地。学习路径：写程序看 §2–§3；表示层看 §5；
 运行时核心看 §8。
 
 ## 1. 范围
 
 - **本页覆盖**：`Eff` 统一动作的表示/执行、handler 与 `Eff []` answer、`Base.Host` 宿主层、
-  ST/region 的可变数据、宿主层直调纪律、通用 Eff 的边界。
+  宿主层直调纪律、通用 Eff 的边界。
 - **不覆盖**：原语/宿主层的逐条语义（[primitives.md](primitives.md) §7）；纯效应 monad
   （`Base.State` / `Reader` / `Error`，它们不碰宿主，见 [stdlib.md](stdlib.md)）；
   并行/多核与 Domain 内存模型（只有单线程调度器，见 §8.5）；完整 QTT。
@@ -69,20 +69,13 @@ Args / Exit）；`Member` 行约束、`local`/`catch`/scoped `Exn`、线性续�
 `Base.EffError`（+ `Base.EffExn`），并发改用 `Base.EffSched`。旧实现的树形语义与边界见
 git 历史；QTT 的 `D32`（transformer 无法泛化到任意 monad）随实现删除而关闭。
 
-## 4. `Base.ST`：Eff 派生的 region 效应
+## 4. 局部可变与 region（已删除）
 
-- `ST r a` = 单构造子 data（运行时 `Eff [] a`）；`r` 是 region 索引（类型级、擦除）。
-- `Ref`/`SArray` 是 **linear record**：读/写/释放消费句柄并返回新句柄；
-  线性结果用 `bindST1` 线程化（QTT 规则见 [qtt.md](qtt.md)）。
-- `Ref r a` / `SArray r a` 是 region 句柄，字段不导出，只能由 ST 动作创建。
-- 安全规则不变：`runST : ((r : Type) -> ST r a) -> a`；region 由调用方显式 binder 进入，
-  库外不可命名；句柄不能逃逸（负例 `test/corpus/dt_err/56_st_escape.vuna`）。
-- 操作直接构造 `Eff []` 动作（`newRef` / `readRef` / …），`runST` 在入口执行**一次**
-  `runPure`；线性 continuation 经 `prim_eff_bind1`（`bindST1`）线程化；region 内没有其它执行点。
-- 不声明 `Functor/Monad (ST r)`（region 的显式 binder 与字典提升顺序冲突），region 多态代码用
-  `bindST` / `pureST` / `fmapST`。
-- 当前边界：`ST` 动作本身可复制（无线性箭头在动作内部线程化线性值）；
-  `Ref`/`SArray` 的“恰好一次”已由 QTT 类型化（D22）。
+`Base.ST`（region 隔离的局部可变、`ST r a` / `Ref` / `SArray`）随未使用代码清理删除：
+生产代码零使用，夹具一并移除。语言仍保留 `linear record` / `linear data` 与 QTT 规则；
+局部可变的重建约束见 [debt.md](debt.md)（D22 与新增条目）。
+
+## 5. D27 表示轴：不透明擦除值（已落地的最小实现）
 
 ## 5. D27 表示轴：不透明擦除值（已落地的最小实现）
 
@@ -107,8 +100,8 @@ CPS `Eff` 已经可 `check` + `compile` + 运行，且 interp 与产物逐字节
 
 **判据（elab 与 codegen 同源，`Elab.Meta.valueOpaqueScoped`）**：运行时类型不可命名 ⇔
 类型头不可表示：
-- 全局类型头既不是数据族、也不是 `Int` / `String` / `Array` / `IORef` /
-  `MArray` / `Buffer`（即类型族定义 / axiom / 未知全局）；
+- 全局类型头既不是数据族、也不是 `Int` / `String` / `Array` / `IORef`
+  （即类型族定义 / axiom / 未知全局）；
 - 或**类型族参数**：kind 的 Pi 链里出现非宇宙域（`res : f -> Type`；`m : Type -> Type`
   这类普通类型构造子参数**不算**，所以字典方法字段 / base 泛型代码不受影响）；
 - 数据族的**索引值实参**（`Vec (Succ n) a` 的 `Succ n`）是擦除后的索引，不参与判定；
@@ -125,7 +118,7 @@ CPS `Eff` 已经可 `check` + `compile` + 运行，且 interp 与产物逐字节
 
 | 路线 | 解决什么 | 不解决 / 代价 |
 | --- | --- | --- |
-| **完整 QTT**（依赖 multiplicity、线性/唯一） | ST 的「句柄不复制/恰好用一次」、一次性续延（取消/超时）、线性世界令牌 | **不解决**擦除依赖续延的运行时表示（§5）；类型理论 + 编译器 + base + 语法面全量改动，独立阶段 |
+| **完整 QTT**（依赖 multiplicity、线性/唯一） | 线性 record 的「句柄不复制/恰好用一次」、一次性续延（取消/超时）、线性世界令牌 | **不解决**擦除依赖续延的运行时表示（§5）；类型理论 + 编译器 + base + 语法面全量改动，独立阶段 |
 | **后端不透明擦除值**（`Obj.t` 类 + codegen 转换/cast） | 让 `res op` 这类「擦除依赖」位置有统一运行时表示，通用 `Eff` 才可编译 | **最小实现已落地（§5）**：声明位置 `Obj.t`、表达式位置恒等 cast；残留边界见 D27 |
 | **运行时类型码**（Tarski `Ty`/`Tm` 上移为通用机制） | 显式携带类型信息，彻底绕开「不可命名」 | 语言层引入 type codes（当前明确不在终态）、运行时开销、与擦除判据整合 |
 
@@ -137,10 +130,10 @@ CPS `Eff` 已经可 `check` + `compile` + 运行，且 interp 与产物逐字节
 
 1. **Eff 是唯一动作类型 + 内建代数**：`pure`/`do`/`>>=` 来自 `Functor`/`Applicative`/`Monad (Eff r)` 实例；
    用户面动作由实例方法构造；`joinEff` 展平 handler answer，`runPure` 执行。
-2. **handler 是解释器**：`runPure` / `runConsole` / `runFs` / `runST`
+2. **handler 是解释器**：`runPure` / `runConsole` / `runFs`
    是唯一执行入口；没有「隐式生效的 handler 栈」。
-3. **可变数据两条边界**：`IORef` / `MArray` / `Buffer` 的公开操作与实现都是 `Eff []`；
-   `Ref` / `SArray` 只能在 `ST r` 里用，且不能逃出 `runST`。两者表示同构、类型隔离。
+3. **可变数据边界**：`IORef` 的公开操作与实现都是 `Eff []`；局部可变的 region 形式
+   已随 ST 删除（重建约束见 [debt.md](debt.md)）。
 4. **宿主层是底层原语面，不是类型豁免**：`prim_effectPerform` / `prim_effectHandle` /
    cleanup/sched 是宿主层原语，常规用户面经 `Base.Eff.*` 标签 + handler 使用效果；不再有
    `unsafe` 能力位或 `[trust]` 定义级清单（机制已删除，历史见 git）。
@@ -310,7 +303,7 @@ fork/await/yield/cancel/结构化 scope；W10 console/clock/env/process/fs 标�
   `Base.EffSched.yieldNow`、`Base.EffSched.isCancelled`、`Base.EffSched.newScope`、
   `Base.EffSched.forkTask`、`Base.EffSched.awaitTask`、`Base.EffSched.cancelTask`、
   `Base.EffSched.cancelScope`、`Base.EffSched.scopeWait`、`Base.EffSched.scopeWaitTimeout`、
-  `Base.EffSched.forkTaskLin`（同段清单另列 `Base.ST.runST`，ST/region 的唯一执行入口）。
+  `Base.EffSched.forkTaskLin`。
   机制删除后这份清单不再是强制约束，只作安全审计参考。
 - **单效应组合子与自动 lift**：`runConsole`/`runFs`/`runEnv`/`runClock`/`runProcess`
   组合子；check 方向的自动 lift 见 §8.4（`tryEffLift`）。
@@ -323,7 +316,7 @@ fork/await/yield/cancel/结构化 scope；W10 console/clock/env/process/fs 标�
 
 | debt | 内容 | 归属 |
 | --- | --- | --- |
-| D22 | 线性捕获规则与一次性闭包（`Base.Eff.Cont`/`mkCont`）已有；剩余：multiplicity 多态/依赖 multiplicity、通用线性箭头类型、`ST` 动作本身仍可复制；ST 无 `Monad` 实例。线性值经 ω 形参通用函数被拒（库 API 需显式 `(1 x : …)`）是同一根因 | 后续 |
+| D22 | 线性捕获规则与一次性闭包（`Base.Eff.Cont`/`mkCont`）已有；剩余：multiplicity 多态/依赖 multiplicity、通用线性箭头类型。线性值经 ω 形参通用函数被拒（库 API 需显式 `(1 x : …)`）是同一根因 | 后续 |
 | D27 | 表示轴已落地（§5）：CPS `Eff` 的 `res op` 用不透明值 + 恒等 cast 编译；残留：精化期未解 meta 的漏 cast 边界、trait 自动生成 λ 的插入点未覆盖、以及用户级 `Eff` API / 行 / 重排（D03） | 后续 |
 | D32 | transformer 无任意 monad 泛化（隐式参数 kind 推断缺口，§3.2） | 后续 |
 | D37 | 运行时效应的剩余缺口：高阶 scoped handler、线性续延/一次性闭包/`bracket`（含 abort cleanup）、单线程调度器、未处理效应诊断均已落地；Layer 3 扩展见 D41/D44 | `Base/Eff*`；§8.4 | 后续 |
@@ -341,7 +334,6 @@ fork/await/yield/cancel/结构化 scope；W10 console/clock/env/process/fs 标�
 - 高阶/作用域效应的**类型系统**（当前 `catch`/`local`/`bracket`/scoped `Exn` 是库层 + 行约束的组合，未做语言级高阶效应类型）。
 - 网络/服务端框架；只有最小 `async`/`await`（Domain，legacy）。
 - 类型级能力行（`Eff [caps] r a`）。
-- ST 的线性箭头/动作线性语义（`Ref`/`SArray` 已是线性记录）；ST 的 `Monad` 实例。
 - 并行/多核（OCaml `Domain` 并行、内存模型）：只有**单线程**调度器；通道/互斥量等
   并发数据结构、网络/服务端框架不在本阶段。
 

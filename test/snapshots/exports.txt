@@ -4,7 +4,6 @@ base/lib/Base/Applicative.vuna: Applicative(..)
 base/lib/Base/Array.vuna: fromList, get, length, make, set, toList
 base/lib/Base/Bits.vuna: add32, band, bnot, bor, bxor, mask32, mask8, rol32, rotr32, shl, shl32, shr, shr32
 base/lib/Base/Bool.vuna: Bool(..), and, bool, not, or, xor
-base/lib/Base/Buffer.vuna: contents, length, new, push
 base/lib/Base/Eff.vuna: Cont, Eff, Member(..), ResFn(..), Row(..), bracket, defaultInstance, effPrim, finally, handleCore, handleCoreLin, handleWith, handleWithAt, joinEff, mkCont, performCore, raise, resFn, resOf, resumeCont, rowRem, runEff, runPure, sendCore, weaken
 base/lib/Base/Eff/Reader.vuna: ReaderOp(..), ask, handleReader, handleReaderLin, local, resReader
 base/lib/Base/EffArgs.vuna: ArgsOp(..), argsGetArgs, handleArgs, handleArgsHost, resArgs, runArgs
@@ -36,7 +35,6 @@ base/lib/Base/IORef.vuna: modifyRef, newRef, readRef, writeRef
 base/lib/Base/Int.vuna: 
 base/lib/Base/Interp.vuna: Interp(..)
 base/lib/Base/List.vuna: List(..), append, concatMap, drop, filter, foldl, foldr, length, lookupPair, map, mapMaybe, mem, memName, range, reverse, take, zip
-base/lib/Base/MArray.vuna: length, new, read, write
 base/lib/Base/Map.vuna: Map, empty, fromList, insert, keys, lookup, remove, size, toList, values
 base/lib/Base/Maybe.vuna: Maybe(..), fromMaybe, isJust, isNothing, maybe
 base/lib/Base/Monad.vuna: Functor(..), Monad(..), module Base.Applicative
@@ -48,7 +46,6 @@ base/lib/Base/Pair.vuna: Pair(..), firstOf, secondOf
 base/lib/Base/Reader.vuna: Reader, ask, local, runReader
 base/lib/Base/Record.vuna: HasField(..), module Base.Field
 base/lib/Base/Result.vuna: Result(..), mapError, step, traverse, withDefault
-base/lib/Base/ST.vuna: ArrayPair(..), ArrayRead(..), ArrayWrite(..), Ref, RefPair(..), RefWrite(..), SArray, ST, bindST, bindST1, fmapST, freeArray, freeRef, lengthArray, newArray, newRef, pureST, readArray, readRef, runST, writeArray, writeRef
 base/lib/Base/Show.vuna: DebugShow(..), Show(..), dbgShow
 base/lib/Base/Sort.vuna: mergeSort, sortBy
 base/lib/Base/State.vuna: State, evalState, execState, get, modify, put, runState

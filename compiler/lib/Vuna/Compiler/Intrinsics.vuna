@@ -109,8 +109,6 @@ data IType : Type where
   IVar : String -> IType
   IArray : IType -> IType
   IRef : IType -> IType
-  IMArray : IType -> IType
-  IBuf : IType
   -- 隐式类型参数绑定（`{a : Type} -> ...`）；不进函数 arity。
   IPi : String -> IType -> IType
   -- `Float` primitive 类型的签名形状（放末尾保持 tag 顺序）。
@@ -131,9 +129,9 @@ arityOfType _ = 0
 -- 参数个数的唯一真源在此；Elab.Prelude 据此生成 kind，Codegen.Decl 据此渲染。
 -- | 内建类型构造子（M33 W3）：带参数的类型构造子，名字恒可见，参数个数在此定。
 record TypeIntrinsic where
-  -- | 构造子的源码名字（`Array` / `IORef` / `MArray` / `Buffer`）。
+  -- | 构造子的源码名字（`Array` / `IORef`）。
   typeIntrinsicCtorName : String
-  -- | 类型参数个数（`Buffer` 为 0）。
+  -- | 类型参数个数。
   typeIntrinsicCtorArity : Int
 
 -- | 取内建类型构造子的名字。
@@ -146,12 +144,7 @@ typeIntrinsicCtorArity (TypeIntrinsic name arity) = arity
 
 -- | 全部内建类型构造子及其 arity（Elab.Prelude 生成 kind、Codegen.Decl 渲染的唯一真源）。
 typeIntrinsicArities : List TypeIntrinsic
-typeIntrinsicArities =
-  [ TypeIntrinsic "Array" 1,
-    TypeIntrinsic "IORef" 1,
-    TypeIntrinsic "MArray" 1,
-    TypeIntrinsic "Buffer" 0
-  ]
+typeIntrinsicArities = [TypeIntrinsic "Array" 1, TypeIntrinsic "IORef" 1]
 
 -- | 名字对应的内建类型构造子 arity；不是内建类型构造子时返回 `-1`。
 typeIntrinsicArityOf : String -> Int
@@ -177,7 +170,7 @@ isTypeConstructorName name =
     || name == floatTypeName
     || typeIntrinsicArityOf name >= 0
 
--- | Eff 版线性绑定（bootstrap 过渡表；ST 的 bindST1 用）：`Eff [] a` 的线性 continuation。
+-- | Eff 版线性绑定（bootstrap 过渡表；当前无库调用方）：`Eff [] a` 的线性 continuation。
 -- runtime 由 codegen 专门生成（装箱 `MkEff` 的 match），不能复用 eager 包装。
 primEffBind1Name : String
 primEffBind1Name = "prim_eff_bind1"
@@ -523,8 +516,8 @@ fromFloatMethodName = "Base.Float.fromFloat"
 baseIntrinsics : List Intrinsic
 -- 效果原语（`prim_*` 名；任何包可直接使用，推荐经 Base.Eff / Base.Host）。
 -- 精化器合成的比较/相等特化名（内部：不对用户源码可见）。
--- M33 W3：内建类型构造子 Array / IORef / MArray / Buffer 的原语。
--- 纯 Array 原语不触碰外部世界；IORef / MArray / Buffer 都是 `Eff []` 动作。
+-- M33 W3：内建类型构造子 Array / IORef 的原语。
+-- 纯 Array 原语不触碰外部世界；IORef 是 `Eff []` 动作。
 -- 空数组字面量：non-expansive 的 OCaml `[||]`，让 `HashMap` 的空表这类零参多态值可泛化。
 -- M33 W4：字节切片（clamp 语义与 Base.String.substring 一致），避免 List 桥接。
 -- M34.5：编译器内部缓存原语（Marshal 纯数据；含闭包会在运行期失败）。
@@ -653,14 +646,6 @@ effIntrinsics =
     Intrinsic "prim_eff_newRef" (IPi "a" (IFun (IVar "a") (IEff (IRef (IVar "a"))))) OpNone "(fun x -> ref x)" True,
     Intrinsic "prim_eff_readRef" (IPi "a" (IFun (IRef (IVar "a")) (IEff (IVar "a")))) OpNone "(fun r -> !r)" True,
     Intrinsic "prim_eff_writeRef" (IPi "a" (IFun (IRef (IVar "a")) (IFun (IVar "a") (IEff IInt)))) OpNone "(fun r v -> r := v; 0)" True,
-    Intrinsic "prim_eff_newMArray" (IPi "a" (IFun IInt (IFun (IVar "a") (IEff (IMArray (IVar "a")))))) OpNone "(fun n v -> Array.make n v)" True,
-    Intrinsic "prim_eff_readMArray" (IPi "a" (IFun (IMArray (IVar "a")) (IFun IInt (IEff (IVar "a"))))) OpNone "(fun a i -> Array.get a i)" True,
-    Intrinsic "prim_eff_writeMArray" (IPi "a" (IFun (IMArray (IVar "a")) (IFun IInt (IFun (IVar "a") (IEff IInt))))) OpNone "(fun a i v -> Array.set a i v; 0)" True,
-    Intrinsic "prim_eff_mArrayLength" (IPi "a" (IFun (IMArray (IVar "a")) (IEff IInt))) OpNone "(fun a -> Array.length a)" True,
-    Intrinsic "prim_eff_newBuffer" (IEff IBuf) OpNone "(Buffer.create 16)" True,
-    Intrinsic "prim_eff_bufferAdd" (IFun IBuf (IFun IStr (IEff IInt))) OpNone "(fun b s -> Buffer.add_string b s; String.length s)" True,
-    Intrinsic "prim_eff_bufferContents" (IFun IBuf (IEff IStr)) OpNone "(fun b -> Buffer.contents b)" True,
-    Intrinsic "prim_eff_bufferLength" (IFun IBuf (IEff IInt)) OpNone "(fun b -> Buffer.length b)" True,
     Intrinsic "prim_eff_print" (IFun IStr (IEff IInt)) OpNone "dtp_print" True,
     Intrinsic "prim_eff_eprint" (IFun IStr (IEff IInt)) OpNone "(fun s -> prerr_string s; flush stderr; String.length s)" True,
     Intrinsic "prim_eff_readFile" (IFun IStr (IEff IStr)) OpNone "dtp_readFile" True,

@@ -25,9 +25,6 @@
 | `Base.Bits` | 位运算命名库 + 32-bit 固定宽度包装：`band` / `bor` / `bxor` / `bnot` / `shl` / `shr`（63-bit 语义，移位越界 = 0）+ `mask8` / `mask32` / `shl32` / `shr32` / `add32` / `rotr32` / `rol32`；SHA-256 / 编码类算法使用 |
 | `Base.Array` | 不可变数组（内建类型构造子 `Array`；`fromList` / `toList` / `length` / `get` / `set` / `make`，长度与下标是 `Nat`；`set` 返回新数组） |
 | `Base.IORef` | 可变引用（`newRef` / `readRef` / `writeRef` / `modifyRef`，公开操作与实现都是 `Eff []`） |
-| `Base.MArray` | 可变数组（`new` / `read` / `write` / `length`，公开操作与实现都是 `Eff []`） |
-| `Base.Buffer` | 可变字符串缓冲（`new` / `push` / `contents` / `length`，全部 `Eff []`；D23 把 `add` 改名为 `push`，避免与 `Num.add` 方法短名冲突） |
-| `Base.ST` | region 隔离的局部可变数据（Eff 派生）：`ST r a`（包 `Eff [] a`）+ `runST`（显式 region binder，句柄不逃逸）+ `Ref r a` / `SArray r a` + 显式组合子 `bindST` / `bindST1` / `pureST` / `fmapST`；`Ref`/`SArray` 为 linear record（消费式 API，结果记录 `RefPair` 等），`bindST1`（`prim_eff_bind1`）线程化线性结果；不声明 `Functor`/`Monad` 实例，`runST` 入口执行一次 `runPure` |
 | `Base.State` / `Base.Reader` / `Base.Error` | 库级效应 monad：纯函数表示 + `Functor`/`Applicative`/`Monad` 实例（`do` 可用）；`State` 是 `s -> Pair a s`、`Reader` 是 `e -> a`、`Error` 是泛型 `Ok`/`Err` 和；handler 是 `runState` / `evalState` / `execState`、`runReader` / `ask` / `local`、`runError` / `throwError` / `catchError`。通用运行时效应见 `Base.Eff`（[effects.md](effects.md) §8） |
 | `Base.Nat` | 非负整数（`Zero` / `Succ`）；运行时是 OCaml `int`。`plus` / `minus` / `mult` / `toInt` / `fromInt` / `fromIntMaybe` / `pred` / `isZero` + `Num`（除法经 `Num.div` / `/`）+ `Eq` / `Ord` / `Show` / `Hashable` / `Semigroup` / `Monoid` 实例 |
 | `Base.Num` | 数值算术 trait（D23）：`add` / `sub` / `mul` / `div`；`+` / `-` / `*` / `/` 是它们的中缀别名（fixity 与别名声明在本模块）。`Int` / `Nat` / `Float` 实例在类型模块并由精化器特化回内建原语；用户类型实现 `Num`（配 `FromInt`）即可重载四则（见 [operators.md](operators.md)） |
@@ -117,8 +114,8 @@ module Base.Error (Error, catchError, ok, runError, throwError) where
 
 ## 度量与 Nat
 
-- **公开度量用 Nat**：`List.length`、`Array.length/get/set/make`、`MArray.new/read/write/length`、
-  `Buffer.push/length`、`String.byteLength/substring/repeat`、`Host.fileSize/readBytes`、
+- **公开度量用 Nat**：`List.length`、`Array.length/get/set/make`、
+  `String.byteLength/substring/repeat`、`Host.fileSize/readBytes`、
   `Map.size`、`HashMap.size`、`HashSet.size`、`Vec.vlen`。
 - **D25 起宿主返回量也是 Nat**：`Base.Host.print` / `println` / `writeFile` / `fileSize`
   返回 `Eff [] Nat`（`prim_print` / `prim_writeFile` / `prim_fileSize` 的签名是 `IEff INat`），
@@ -223,14 +220,12 @@ module Base.Error (Error, catchError, ok, runError, throwError) where
 - 哈希容器的键由 `Eq` + `Hashable` 约束覆盖（不再有 String/Int 专用容器）；`Hashable` 实例
   覆盖 primitive 与常用容器，用户类型可 `deriving (Hashable)`。仍**没有有序持久容器**
   （TreeMap/TreeSet）：需要有序时用 `Base.Sort`，大表查找用哈希容器；
-- **容器与可变数据**：不可变 `Base.Array`、`Eff []` 内 `IORef` / `MArray` /
-  `Buffer`、ST 内 `Base.ST` 的 `Ref` / `SArray`；`Array.get` / `MArray.read` 越界是
-  宿主 `Invalid_argument`；`Array.set` 返回新数组；可变数据句柄只经 `Eff []` 动作使用，ST 句柄
-  只经 `ST r` 使用且不能逃出 `runST`（见 [effects.md](effects.md)）；
-  `Ref`/`SArray` 是 linear record（恰好一次、不可复制），ST 动作本身仍可复制；
+- **容器与可变数据**：不可变 `Base.Array`、`Eff []` 内 `IORef`；`Array.get` 越界是
+  宿主 `Invalid_argument`；`Array.set` 返回新数组；可变数据句柄只经 `Eff []` 动作使用
+  （见 [effects.md](effects.md)）。局部可变（region/ST、可变数组、字符串缓冲）已删除，
+  重建约束见 [debt.md](debt.md)；
 - **库级效应**：`State` / `Reader` / `Error` 是带 `Functor`/`Monad` 实例的纯函数
-  monad（**不进入 `Prelude` / `Base` 门面**，显式 import）；`do` 可用；`Base.ST` 的 region
-  隔离与「不声明 `Monad` 实例」的原因见 [effects.md](effects.md)；通用签名索引效应
+  monad（**不进入 `Prelude` / `Base` 门面**，显式 import）；`do` 可用；通用签名索引效应
   （用户自定义 op + 深 handler + 行/重排）未实现（见 [debt.md](debt.md) / [effects.md](effects.md)）；没有语言级并发 / async；
   **效应标签在库层完成**：`Base.EffFs` 扩到完整 fs 面并改为命名
   实例（如 `"mock"`/`"real"`），新增 `Base.EffConsole`/`EffClock`/`EffEnv`/`EffProcess`（命名实例 +
@@ -246,12 +241,12 @@ module Base.Error (Error, catchError, ok, runError, throwError) where
   `('a, 'b -> 'c, 'c -> 'd -> 'c) t_Dict -> 'b -> 'd -> 'd -> 'c`），泛型派生体会破坏
   `f a` / `f (a -> b)` 的类型关系（见 [records-traits.md](records-traits.md)）；
 - `Array` 的 `Show` / `Eq` 实例已落地在 `Base.Array`（`Array` 是内建类型构造子、没有
-  定义模块；孤儿规则已放宽到 `Array` / `IORef` / `MArray` / `Buffer`）。实例体经 `toList`
+  定义模块；孤儿规则已放宽到 `Array` / `IORef`）。实例体经 `toList`
   复用 `List`：`show (fromList [1, 2, 3]) == "[1, 2, 3]"`；`Eq` 逐元素比较。
 
 ## 相关阅读
 
 - 记录、trait、do/Monad 语义：[records-traits.md](records-traits.md)
-- 效应 monad / ST / 通用 Eff 的边界：[effects.md](effects.md)
+- 效应 monad / 通用 Eff 的边界：[effects.md](effects.md)
 - 包与 workspace 机制、工具链命令：[packages.md](packages.md)
 - 编译器门面与 seed 闭包：[compiler.md](compiler.md)、[bootstrap.md](bootstrap.md)

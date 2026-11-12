@@ -141,7 +141,6 @@ modules = [
   "Base.Map",
   "Base.Monad",
   "Base.Host",
-  "Base.ST",
   "Prelude"
 ]
 ```

@@ -451,8 +451,6 @@ renderTypeArgGlobal qc fuel levels table datas g sp = case renderTypeIntrinsic g
 renderTypeIntrinsic : String -> List String -> Maybe String
 renderTypeIntrinsic "Array" ([a]) = Just "(${a} array)"
 renderTypeIntrinsic "IORef" ([a]) = Just "(${a} ref)"
-renderTypeIntrinsic "MArray" ([a]) = Just "(${a} array)"
-renderTypeIntrinsic "Buffer" [] = Just "Buffer.t"
 renderTypeIntrinsic _ _ = Nothing
 
 -- 单个字段的 OCaml 类型 + 下一个不透明参数槽。

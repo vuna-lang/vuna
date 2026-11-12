@@ -134,15 +134,11 @@ mk t = mkContI (\x => useToken t + x)   -- 捕获 t；rig-1 实参位置 → 允
 - `TPi` 类型层项不参与用量；把值类型写成 0 现在是显式、可检查的擦除手段（索引擦除
   诊断仍保留为提示）。
 
-## 8. 线性 ST 子集
+## 8. linear record 与线性子集
 
-`Base.ST` 的 `Ref`、`SArray` 是线性记录（`ST` 动作本身沿用 `Eff []` 的可复制语义）：
-
-- `newRef`/`newArray` 返回线性 action/value；
-- `readRef`/`writeRef` 等按“消费并返回”的线程化风格（返回值放在线性结果记录里，例如
-  `RefPair`/`RefWrite`），避免 curried λ 捕获句柄；
-- `bindST1` 供线性结果穿过 continuation（continuation 的参数 binder 为 1）；`runST` 执行一次；
-- 低层 `IORef`/`MArray`/`Buffer` 仍是非线性内建，但字段不导出，只能经线性包装使用。
+`linear record` / `linear data` 语法与 QTT 规则保留；当前 base 里有 `linear data Cont`
+（一次性续延）与 `linear data TaskLin`（调度器线性任务）两个用例，没有库级线性 record
+用例（`Base.ST` 已随未使用代码清理删除，重建约束见 [debt.md](debt.md)）。
 
 ## 9. 边界
 
@@ -165,5 +161,5 @@ mk t = mkContI (\x => useToken t + x)   -- 捕获 t；rig-1 实参位置 → 允
 
 - 类型系统与擦除：[type-system.md](type-system.md)
 - Core 表示/NbE：[core.md](core.md)
-- 效应与 ST：[effects.md](effects.md)
+- 效应：[effects.md](effects.md)
 - 未关闭的债务：[debt.md](debt.md)

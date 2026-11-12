@@ -68,7 +68,7 @@ line1 ${interp n}
 仓库源码用模板字面量表达「字面量 + 值」的拼接；`++` 只保留两类用途：
 
 1. 纯值拼接（两侧都不是字面量，如 `a ++ b`）；
-2. 语义上就是逐段构造 / 递归拼接字符串的算法（优先 `strConcatMany` / `Buffer`）。
+2. 语义上就是逐段构造 / 递归拼接字符串的算法（优先 `strConcatMany`）。
 
 - **单行消息**：`"prefix ${e} suffix"`；洞里的 `strFromInt e` 直接写成 `${e}`（`Show Int`
   输出相同），`show e` 保持原样（`Show String` 会加引号，语义不同）。

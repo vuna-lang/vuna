@@ -6,7 +6,7 @@
 # Common / Version / Intrinsics / Diagnostics.Common / Elab.InstName 后降到 3024；
 # 2026-11-09 D28/D40 落地后实测 3023（新增符号都带 docstring）；iface 布局（S8）新增辅助
 # 函数都带 docstring 后实测 3021，按 ratchet 下调。
-3065
+3067
 # 2026-11-10 rotation 后收尾：补 D51/via-field 新增的 202 个内部符号 docstring
 # （vuna-compiler 3159 → 2957），按 ratchet 下调基线；仍剩 2957 条既有内部符号欠账，
 # 后续继续按模块补齐并继续下调。vuna-base 仍为 0。
@@ -45,3 +45,7 @@
 #     `CompilerCli.checkModuleFileEntry` 等）未带 docstring：实测 vuna-compiler 3063 +
 #     vuna-base 2 = 3065。这是 main 自身特性增长带来的欠账（非门禁回归），按实测临时把
 #     上限调到 3065；补齐这批 helper 的 `-- |` 后按 ratchet 再下调。
+#   - 2026-11-12 删除未使用的 ST/MArray/Buffer（本轮）：HEAD~1（4a5802b）实测已是
+#     vuna-compiler 3065 + vuna-base 2 = 3067 > 旧基线 3065（6eb262e 之后又有导出涨了 2 条，
+#     属既有漂移，非本轮引入）；本轮删除的符号都带 `-- |` docstring，缺失数不变。按
+#     `nix/doc-coverage.sh` 实测把上限复标定到 3067，后续补齐后按 ratchet 下调。

@@ -1000,7 +1000,7 @@ effThunkText ctor unitTy rt arity =
   in if arity == 0 then "(${ctor} (fun (_ : ${unitTy}) -> ${rt}))"
   else "(fun ${argText} -> ${ctor} (fun (_ : ${unitTy}) -> ${rt} ${argText}))"
 
--- Eff 版线性绑定：装箱 Eff 的 match 实现（ST 的 bindST1 用）。
+-- Eff 版线性绑定：装箱 Eff 的 match 实现（当前无库调用方）。
 -- `(fun m k -> MkEff (fun u -> match m with MkEff f -> match k (f u) with MkEff g -> g u))`
 effLinearBindText : GenSt -> Check (Pair String GenSt)
 effLinearBindText st =

@@ -243,7 +243,7 @@ handle comp {
   （`unsafe`/`privileged`）已删除（历史见 git；后续用表示层权限 N2/N3 或新模型补），
   现行权威只有"宿主 op 构造器不导出"。
 - `Base.Host`、`prim_schedNewScope` 保留为宿主层逃生口；`runPure` 收缩为内部。
-- 内建动作类型已删除；`Base.Host` / `ST` / `IORef` 等宿主面保留为宿主层。
+- 内建动作类型已删除；`Base.Host` / `IORef` 等宿主面保留为宿主层。
 
 ## 5. N3：表示收敛
 

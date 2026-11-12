@@ -44,7 +44,7 @@
 5. **动作入口与宿主层**：唯一动作类型是 `Eff r a`；用户面入口是 `main : Eff [] a`（行必须
    Nil，入口处未处理效应是类型错误），执行入口是 `Base.Eff.runPure : Eff [] a -> a`。
    `Base.Host` 是宿主层别名（`prim_eff_*` + Int/Nat 归一化），
-   `ST`/`IORef`/`MArray`/`Buffer` 实现全是 `Eff []`。
+   `IORef` 实现全是 `Eff []`。
    **无 manifest 门控**：没有 manifest 级能力/特权/信任机制；任何包（用户包、ad-hoc 文件）
    都可以 `import Base.Host`、直接调用 `prim_*`（效果原语是 `Eff []` 叶子）。用户面**应**仍经
    `Base.Eff.*` 标签 + handler 使用效果——这是纪律/文档约定，不是强制门控
@@ -76,7 +76,7 @@
   模块整篇 `read`；不改只引用的用 `vuna map` / `vuna api`，**不要 grep**（拿多拿少又没签名）。
 - **Monad/Functor 组合**：类型有实例时统一用 `do` / `>>=` / `bind` / `pure` / `fmap` /
   `liftA2` / `ap` / `foldMap` / `mapM`（`pure` 在 `Base.Applicative`，`Base.Monad` 重导出），
-  不新增 `pureX` / `bindX` / `andThen` 这类重复入口；例外（ST 线性 bind、编译器内部
+  不新增 `pureX` / `bindX` / `andThen` 这类重复入口；例外（编译器内部
   `Vuna.Compiler.Common.bind`（限定名调用））与长 do 链性能边界见 `docs/reference/records-traits.md`、
   [effects.md](docs/reference/effects.md) §8.4 与各主题页的已知边界。
 - **探索完必须落盘**：数据流 / 不变量 / 边界写进 `docs/` 并接进导航，别只留在会话里；**git 线性历史**：优先 ff-only merge / rebase / cherry-pick / 挤压提交

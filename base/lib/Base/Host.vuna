@@ -36,7 +36,7 @@ module Base.Host
 -- `prim_*`。用户面仍**应**经 `Base.Eff.*` 标签 + handler 使用效果（纪律，不是强制）。
 --
 -- 这里放宿主别名（console/fs/process/env/clock 的 `prim_eff_*` 包装）：base 的真实
--- handler（`Base.EffConsole` / `Base.EffFs` / …）、`Base.ST`、`Base.IORef` 等实现层，
+-- handler（`Base.EffConsole` / `Base.EffFs` / …）、`Base.IORef` 等实现层，
 -- 以及编译器与根包工具链。所有别名返回 `Eff [] a`：宿主原语只是行已处理干净的叶子，
 -- 用户面仍经 `Base.Eff.*` 标签 + handler。
 --

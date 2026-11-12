@@ -104,8 +104,6 @@ ityToTermEnv env (IVar name) = case indexOfName name env of
   Nothing => TGlobal name
 ityToTermEnv env (IArray elem) = TApp (TGlobal "Array") (ityToTermEnv env elem) Rig0
 ityToTermEnv env (IRef elem) = TApp (TGlobal "IORef") (ityToTermEnv env elem) Rig0
-ityToTermEnv env (IMArray elem) = TApp (TGlobal "MArray") (ityToTermEnv env elem) Rig0
-ityToTermEnv env IBuf = TGlobal "Buffer"
 ityToTermEnv env (IPi name body) =
   TPi name True Rig0 (TType levelZero) (ityToTermEnv (name :: env) body)
 

@@ -153,7 +153,6 @@ Base.Applicative  base/lib/Base/Applicative.vuna
 Base.Array  base/lib/Base/Array.vuna
 Base.Bits  base/lib/Base/Bits.vuna
 Base.Bool  base/lib/Base/Bool.vuna
-Base.Buffer  base/lib/Base/Buffer.vuna
 Base.Eff.Reader  base/lib/Base/Eff/Reader.vuna
 Base.Eff  base/lib/Base/Eff.vuna
 Base.EffArgs  base/lib/Base/EffArgs.vuna
@@ -185,7 +184,6 @@ Base.IORef  base/lib/Base/IORef.vuna
 Base.Int  base/lib/Base/Int.vuna
 Base.Interp  base/lib/Base/Interp.vuna
 Base.List  base/lib/Base/List.vuna
-Base.MArray  base/lib/Base/MArray.vuna
 Base.Map  base/lib/Base/Map.vuna
 Base.Maybe  base/lib/Base/Maybe.vuna
 Base.Monad  base/lib/Base/Monad.vuna
@@ -197,7 +195,6 @@ Base.Pair  base/lib/Base/Pair.vuna
 Base.Reader  base/lib/Base/Reader.vuna
 Base.Record  base/lib/Base/Record.vuna
 Base.Result  base/lib/Base/Result.vuna
-Base.ST  base/lib/Base/ST.vuna
 Base.Show  base/lib/Base/Show.vuna
 Base.Sort  base/lib/Base/Sort.vuna
 Base.State  base/lib/Base/State.vuna
@@ -305,7 +302,6 @@ Base.Applicative  ./lib/Base/Applicative.vuna
 Base.Array  ./lib/Base/Array.vuna
 Base.Bits  ./lib/Base/Bits.vuna
 Base.Bool  ./lib/Base/Bool.vuna
-Base.Buffer  ./lib/Base/Buffer.vuna
 Base.Eff.Reader  ./lib/Base/Eff/Reader.vuna
 Base.Eff  ./lib/Base/Eff.vuna
 Base.EffArgs  ./lib/Base/EffArgs.vuna
@@ -337,7 +333,6 @@ Base.IORef  ./lib/Base/IORef.vuna
 Base.Int  ./lib/Base/Int.vuna
 Base.Interp  ./lib/Base/Interp.vuna
 Base.List  ./lib/Base/List.vuna
-Base.MArray  ./lib/Base/MArray.vuna
 Base.Map  ./lib/Base/Map.vuna
 Base.Maybe  ./lib/Base/Maybe.vuna
 Base.Monad  ./lib/Base/Monad.vuna
@@ -349,7 +344,6 @@ Base.Pair  ./lib/Base/Pair.vuna
 Base.Reader  ./lib/Base/Reader.vuna
 Base.Record  ./lib/Base/Record.vuna
 Base.Result  ./lib/Base/Result.vuna
-Base.ST  ./lib/Base/ST.vuna
 Base.Show  ./lib/Base/Show.vuna
 Base.Sort  ./lib/Base/Sort.vuna
 Base.State  ./lib/Base/State.vuna

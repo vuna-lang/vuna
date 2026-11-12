@@ -184,8 +184,6 @@
 | --- | --- | --- |
 | `Array a` | `Type -> Type` | `'a array`（不可变语义：不暴露原地写） |
 | `IORef a` | `Type -> Type` | `'a ref` |
-| `MArray a` | `Type -> Type` | `'a array`（可变语义） |
-| `Buffer` | `Type` | `Buffer.t` |
 
 这些是**类型层构造子**，不是 `data` 声明：没有构造子可模式匹配，只能经原语 / 库 API 使用。
 类型参数在签名里用隐式 `{a : Type}` 绑定（`Elab.Prelude.ityToTerm` 生成 de Bruijn）。
@@ -201,26 +199,22 @@
 | `arrayFromList` | `List a -> Array a` | `Array.of_list`（经 List 桥接 `dtp_ocamlOf`） |
 | `arrayToList` | `Array a -> List a` | `Array.to_list`（经 `dtp_listOf`） |
 
-**可变数据原语**（`prim_eff_*` 返回 `Eff []`；不触碰外部世界；`Base.IORef` / `Base.MArray` / `Base.Buffer` 的公开操作返回 `Eff []`）：
+**可变数据原语**（`prim_eff_*` 返回 `Eff []`；不触碰外部世界；`Base.IORef` 的公开操作返回 `Eff []`）：
 
 | 原语 | 签名 | runtime |
 | --- | --- | --- |
 | `prim_eff_newRef` / `prim_eff_readRef` / `prim_eff_writeRef` | `a -> Eff [] (IORef a)` / `IORef a -> Eff [] a` / `IORef a -> a -> Eff [] Int` | `ref` / `!` / `:=` |
-| `prim_eff_newMArray` / `prim_eff_readMArray` / `prim_eff_writeMArray` / `prim_eff_mArrayLength` | `Int -> a -> Eff [] (MArray a)` / `MArray a -> Int -> Eff [] a` / `MArray a -> Int -> a -> Eff [] Int` / `MArray a -> Eff [] Int` | `Array.make` / `Array.get` / `Array.set` / `Array.length` |
-| `prim_eff_newBuffer` / `prim_eff_bufferAdd` / `prim_eff_bufferContents` / `prim_eff_bufferLength` | `Eff [] Buffer` / `Buffer -> String -> Eff [] Int` / `Buffer -> Eff [] String` / `Buffer -> Eff [] Int` | `Buffer.create` / `add_string` / `contents` / `length` |
 
 - 效果原语的 runtime 表达仍是「立即算完的 OCaml 表达式」，由 `effThunkText` 按 arity
   包成 `MkEff` thunk（`fun args -> fun (_ : int) -> rt args`；零参 `fun (_ : int) -> rt`）。
-  零参 `prim_newBuffer` 是动作**值**。
 - `arrayFromList` / `arrayToList` 依赖 canonical `Base.List.List` 桥接（`needsListBridge`）；
   完整的桥接清单与缺失时的诊断见 §9。
 - **interp 不归约**全部容器原语（`OpNone`）：夹具带 `.nointerp`，只 compile + 运行。
-- 越界行为：`arrayGet` / `MArray.read` 越界是宿主 `Invalid_argument`（不是 `strAt` 的
+- 越界行为：`arrayGet` 越界是宿主 `Invalid_argument`（不是 `strAt` 的
   -1 哨兵，也没有语言层诊断）；`Array.set` 先 `Array.copy`，原数组不变。
-- 可变数据的安全边界：`IORef` / `MArray` / `Buffer` 的公开操作与实现都返回 `Eff []`。**ST/region**：`Base.ST` 的
-  `Ref` / `SArray` 只在 `ST r` 里使用且不能逃出 `runST`；它们是 linear record（句柄恰好一次），
-  `ST` 动作本身仍可复制；仍无依赖 multiplicity / 线性箭头（
-  多用未禁止，见 [effects.md](effects.md)）。
+- 可变数据的安全边界：`IORef` 的公开操作与实现都返回 `Eff []`；局部可变（region/ST、
+  可变数组、字符串缓冲）已删除，重建约束见 [debt.md](debt.md)；仍无依赖 multiplicity /
+  线性箭头（多用未禁止，见 [effects.md](effects.md)）。
 
 ## 7. 效果原语、Eff 动作与宿主层
 

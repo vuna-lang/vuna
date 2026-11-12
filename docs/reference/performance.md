@@ -271,12 +271,12 @@ golden 一致，再 warmup + 多次取中位数；RSS 用 GNU time 的 max RSS�
       minor/major words、collections、top_heap_words），`bench/run.sh` 采集进 JSON。
 2. **字符串与可变数据**：`strSubstring` 原语（runtime `String.sub` + clamp 语义；interp 也
    归约 `OpStrSubstring`），`Base.String.substring` 不走 List 桥接；`Base.String.repeat` 改一次
-   `strConcatMany`；可变数据（`IORef` / `MArray` / `Buffer`）保持 `Eff []` 隔离，不引入线性
-   类型与 ST/region（见 [qtt.md](qtt.md) / [effects.md](effects.md) 与 debt D22）。
+   `strConcatMany`；可变数据（`IORef`）保持 `Eff []` 隔离，不引入线性
+   类型（见 [qtt.md](qtt.md) / [effects.md](effects.md) 与 debt D22）。
 3. **容器与表示**：
-   1. **内建类型构造子** `Array` / `IORef` / `MArray` / `Buffer`（类型层，恒可见；OCaml 表示
-      `'a array` / `'a ref` / `'a array` / `Buffer.t`），签名支持隐式 `{a : Type}`。
-   2. **Array / IORef / MArray / Buffer 原语与库**（见 [primitives.md](primitives.md) §6.1、
+   1. **内建类型构造子** `Array` / `IORef`（类型层，恒可见；OCaml 表示 `'a array` / `'a ref`），
+      签名支持隐式 `{a : Type}`。
+   2. **Array / IORef 原语与库**（见 [primitives.md](primitives.md) §6.1、
       [stdlib.md](stdlib.md)）；`arrayEmpty` 用 non-expansive 的 `[||]` 让空表在 OCaml 侧可泛化。
    3. **HashMap 桶改造与泛型化**：`Array (Array (List ...))`；`HashMap k v` 统一 String/Int
       两套容器（无 `IntMap`），统一 `fromList []`。
