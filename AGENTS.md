@@ -125,7 +125,8 @@ build，`dist/` 提交）；`nix/` = 构建图 + rotate/metrics/bench；`docs/` 
 - 编译器实现：[compiler.md](docs/reference/compiler.md)（模块与输出模型、接口摘要）、
   [diagnostics.md](docs/reference/diagnostics.md)（诊断模型/错误码/渲染/LSP/迁移状态）、
   [core.md](docs/reference/core.md)（Core TT / NbE / 精化器）；
-  模块级缓存：[cache.md](docs/reference/cache.md)（TTC 式接口、失效判定、已知边界）
+  模块级缓存：[cache.md](docs/reference/cache.md)（TTC 式接口、失效判定、已知边界）；
+  增量判定：[query-graph.md](docs/reference/query-graph.md)（节点模型、命中判据、会话索引、节点族）
 - 工具链（`goal` / LSP / `doc` / `search` / 错误码；`vuna gen-errors` 生成
   `docs/.generated/errors.md`）：[tooling.md](docs/reference/tooling.md)；API 文档与检索：
   [api-docs.md](docs/reference/api-docs.md)；lint：[lint.md](docs/reference/lint.md)；
