@@ -32,37 +32,71 @@ runFetch args = case parseToolArgs "vuna fetch" [BoolFlag "locked"] args of
       [dir] => fetchAt dir locked
       _ => fetchFailText "too many arguments; expected at most one directory"
 
--- | 取一个包目录声明的全部依赖（不递归展开依赖的依赖：直接依赖各自的 manifest 由
--- 各自的 fetch/check 负责）。
+-- | 取一个包目录声明的**完整依赖闭包**。path 依赖递归进工作树目录；git/url 依赖
+-- 物化后递归进 `pkgs/<digest>`。实现是「待处理目录队列 + visited」：`fetchAll` 与
+-- `dirsOfDeps` 各自结构递归，不做函数间互递归（SCT 只认结构下降）。
 export fetchAt : String -> Bool -> Eff [] Int
 fetchAt dir locked = do
   abs <- absolutePath dir
+  root <- storeRootEff
+  fetchAll 64 root locked [abs] []
+
+fetchAll : Int -> String -> Bool -> List String -> List String -> Eff [] Int
+fetchAll fuel root locked [] visited = pure 0
+fetchAll fuel root locked (dir :: rest) visited = if fuel <= 0 then fetchFailText "fetch: dependency depth limit exceeded (cycle?)"
+else if memName dir visited then do
+  _ <- prim_eff_print "fetch: ${dir} (cycle skipped)\n"
+  fetchAll (fuel - 1) root locked rest visited
+else do
+  mdirs <- dirsOfPackage root locked dir
+  case mdirs of
+    Nothing => pure 1
+    Just dirs => fetchAll (fuel - 1) root locked (append dirs rest) (dir :: visited)
+
+dirsOfPackage : String -> Bool -> String -> Eff [] (Maybe (List String))
+dirsOfPackage root locked dir = do
   let
-    manifestPath = "${abs}/vuna.toml"
+    manifestPath = "${dir}/vuna.toml"
   in do
     exists <- prim_eff_fileExists manifestPath
     if exists then do
       raw <- prim_eff_readFile manifestPath
       case parseManifest manifestPath raw of
-        ErrC e => printDiagEff e
+        ErrC e => do
+          _ <- printDiagEff e
+          pure Nothing
         OkC manifest => case validateManifest manifest of
-          ErrC e => printDiagEff e
-          OkC valid => do
-            root <- storeRootEff
-            fetchDeps root locked (manifestDir manifestPath) valid.manifestDependencies
-    else fetchFailText "missing vuna.toml in ${dir}"
+          ErrC e => do
+            _ <- printDiagEff e
+            pure Nothing
+          OkC valid => dirsOfDeps root locked dir valid.manifestDependencies
+    else do
+      _ <- fetchFailText "missing vuna.toml in ${dir}"
+      pure Nothing
 
-fetchDeps : String -> Bool -> String -> List Dependency -> Eff [] Int
-fetchDeps root locked baseDir [] = pure 0
-fetchDeps root locked baseDir (dep :: rest) = do
-  code <- fetchOne root locked baseDir dep
-  if code /= 0 then pure code else fetchDeps root locked baseDir rest
+dirsOfDeps : String -> Bool -> String -> List Dependency -> Eff [] (Maybe (List String))
+dirsOfDeps root locked baseDir [] = pure (Just [])
+dirsOfDeps root locked baseDir (dep :: rest) = do
+  here <- dirOfDep root locked baseDir dep
+  case here of
+    Nothing => pure Nothing
+    Just d => do
+      there <- dirsOfDeps root locked baseDir rest
+      case there of
+        Nothing => pure Nothing
+        Just ds => pure (Just (d :: ds))
 
-fetchOne : String -> Bool -> String -> Dependency -> Eff [] Int
-fetchOne root locked baseDir dep = case depSourceOf dep of
-  DepPath rel => fetchPath root baseDir dep rel
+dirOfDep : String -> Bool -> String -> Dependency -> Eff [] (Maybe String)
+dirOfDep root locked baseDir dep = case depSourceOf dep of
+  DepPath rel => do
+    abs <- absolutePath (joinPath baseDir rel)
+    files <- packageFilesEff abs
+    code <- verifyPathDep dep (contentHashOf (PackageSource "" [] [] files))
+    if code /= 0 then pure Nothing else pure (Just abs)
   DepGit url rev => case depHashOf dep of
-    Nothing => fetchFailText "dependency ${depAliasOf dep}: git source needs hash"
+    Nothing => do
+      _ <- fetchFailText "dependency ${depAliasOf dep}: git source needs hash"
+      pure Nothing
     Just expected => do
       let
         digest = normalizeHash expected
@@ -70,11 +104,19 @@ fetchOne root locked baseDir dep = case depSourceOf dep of
         done <- isMaterializedEff root digest
         if done then do
           _ <- prim_eff_print "fetch: ${depAliasOf dep} cached\n"
-          pure 0
-        else if locked then fetchFail (NotMaterialized (depAliasOf dep)) (depAliasOf dep)
-        else fetchGit root dep url rev digest
+          pure (Just (materializedDir root digest))
+        else if locked then do
+          _ <- fetchFail (NotMaterialized (depAliasOf dep)) (depAliasOf dep)
+          pure Nothing
+        else do
+          stored <- fetchGit root dep url rev digest
+          case stored of
+            Nothing => pure Nothing
+            Just got => pure (Just (materializedDir root got))
   DepUrl u => case depHashOf dep of
-    Nothing => fetchFailText "dependency ${depAliasOf dep}: url source needs hash"
+    Nothing => do
+      _ <- fetchFailText "dependency ${depAliasOf dep}: url source needs hash"
+      pure Nothing
     Just expected => do
       let
         digest = normalizeHash expected
@@ -82,18 +124,15 @@ fetchOne root locked baseDir dep = case depSourceOf dep of
         done <- isMaterializedEff root digest
         if done then do
           _ <- prim_eff_print "fetch: ${depAliasOf dep} cached\n"
-          pure 0
-        else if locked then fetchFail (NotMaterialized (depAliasOf dep)) (depAliasOf dep)
-        else fetchUrl root dep u digest
-
--- path 依赖：工作树共变，不写 store；有声明摘要就校验。
-fetchPath : String -> String -> Dependency -> String -> Eff [] Int
-fetchPath root baseDir dep rel =
-  let
-    dir = joinPath baseDir rel
-  in do
-    files <- packageFilesEff dir
-    verifyPathDep dep (contentHashOf (PackageSource "" [] [] files))
+          pure (Just (materializedDir root digest))
+        else if locked then do
+          _ <- fetchFail (NotMaterialized (depAliasOf dep)) (depAliasOf dep)
+          pure Nothing
+        else do
+          stored <- fetchUrl root dep u digest
+          case stored of
+            Nothing => pure Nothing
+            Just got => pure (Just (materializedDir root got))
 
 verifyPathDep : Dependency -> String -> Eff [] Int
 verifyPathDep dep actual = case depHashOf dep of
@@ -105,7 +144,7 @@ verifyPathDep dep actual = case depHashOf dep of
     pure 0
   else hashMismatch (depAliasOf dep) expected actual
 
-fetchGit : String -> Dependency -> String -> String -> String -> Eff [] Int
+fetchGit : String -> Dependency -> String -> String -> String -> Eff [] (Maybe String)
 fetchGit root dep url rev expected =
   let
     tmp = "${root}/tmp/git-${expected}"
@@ -114,16 +153,20 @@ fetchGit root dep url rev expected =
     _ <- prim_eff_runIn root ["rm", "-rf", tmp]
     _ <- ensureDirPath tmp
     cloneCode <- prim_eff_runIn tmp ["git", "clone", "--quiet", url, "."]
-    if cloneCode /= 0 then fetchFail (FetchFailed url) url
+    if cloneCode /= 0 then do
+      _ <- fetchFail (FetchFailed url) url
+      pure Nothing
     else do
       checkoutCode <- prim_eff_runIn tmp ["git", "checkout", "--quiet", rev]
-      if checkoutCode /= 0 then fetchFail (FetchFailed "${url}@${rev}") "${url}@${rev}"
+      if checkoutCode /= 0 then do
+        _ <- fetchFail (FetchFailed "${url}@${rev}") "${url}@${rev}"
+        pure Nothing
       else do
         files <- packageFilesEff tmp
         verifyAndStore root dep expected (PackageSource "" [] [] files)
 
--- 校验声明摘要后写对象 + 物化（git 与 url 共用）。
-verifyAndStore : String -> Dependency -> String -> PackageSource -> Eff [] Int
+-- 校验声明摘要后写对象 + 物化（git 与 url 共用）；成功返回实际摘要。
+verifyAndStore : String -> Dependency -> String -> PackageSource -> Eff [] (Maybe String)
 verifyAndStore root dep expected ps =
   let
     actual = contentHashOf ps
@@ -131,26 +174,32 @@ verifyAndStore root dep expected ps =
     _ <- writeObjectEff root actual ps.psFiles
     _ <- materializeEff root actual ps.psFiles
     _ <- prim_eff_print "fetch: ${depAliasOf dep} ok\n"
-    pure 0
-  else hashMismatch (depAliasOf dep) expected actual
+    pure (Just actual)
+  else do
+    _ <- hashMismatch (depAliasOf dep) expected actual
+    pure Nothing
 
 -- URL 直指 `pkg-source 1` 对象文件；下载后由 framing + 内容地址校验兜底。
-fetchUrl : String -> Dependency -> String -> String -> Eff [] Int
+fetchUrl : String -> Dependency -> String -> String -> Eff [] (Maybe String)
 fetchUrl root dep url expected =
   let
     obj = objectPathOf root expected
   in do
     _ <- ensureDirPath "${root}/objects"
     code <- prim_eff_runIn root ["curl", "-fsSL", url, "-o", obj]
-    if code /= 0 then fetchFail (FetchFailed url) url
+    if code /= 0 then do
+      _ <- fetchFail (FetchFailed url) url
+      pure Nothing
     else do
       got <- readObjectEff root expected
       case got of
-        Nothing => fetchFail (FetchFailed url) url
+        Nothing => do
+          _ <- fetchFail (FetchFailed url) url
+          pure Nothing
         Just files => do
           _ <- materializeEff root expected files
           _ <- prim_eff_print "fetch: ${depAliasOf dep} ok\n"
-          pure 0
+          pure (Just expected)
 
 hashMismatch : String -> String -> String -> Eff [] Int
 hashMismatch alias expected actual =

@@ -1,0 +1,30 @@
+# 71) 递归 fetch（依赖闭包）：A path→ B git→ C git，`vuna fetch A` 应把 B 与 C 都取到
+#     store；随后 check A 走 store 物化视图成功。
+
+# 71a) 造 C，再用 B 的假 hash 经 pin 算真实摘要；commit B；A 用 path 依赖 B。
+run: sh -c 'rm -rf "$TMPDIR/g71"; mkdir -p "$TMPDIR/g71/c/lib" "$TMPDIR/g71/b/lib" "$TMPDIR/g71/a/app"; printf "[package]\nname = \"c\"\n[export]\nmodules = [\"C\"]\n" > "$TMPDIR/g71/c/vuna.toml"; printf "module C where\n\nexport c : Int\nc = 3\n" > "$TMPDIR/g71/c/lib/C.vuna"; ( cd "$TMPDIR/g71/c" && git init -q && git add -A && git -c user.email=t@t -c user.name=t commit -qm init ); crev=$( cd "$TMPDIR/g71/c" && git rev-parse HEAD ); printf "[package]\nname = \"b\"\n[export]\nmodules = [\"B\"]\n\n[dependencies.c]\ngit = \"file://%s\"\nrev = \"%s\"\nhash = \"sha256:0000000000000000000000000000000000000000000000000000000000000000\"\n" "$TMPDIR/g71/c" "$crev" > "$TMPDIR/g71/b/vuna.toml"; printf "module B where\n\nimport C\n\nexport b : Int\nb = c\n" > "$TMPDIR/g71/b/lib/B.vuna"; VUNA_STORE="$TMPDIR/g71/s1" "$VUNA" pin "$TMPDIR/g71/b" 2>&1'
+out-contains: pin: updated 1 dependency hash(es)
+
+run: sh -c '( cd "$TMPDIR/g71/b" && git init -q && git add -A && git -c user.email=t@t -c user.name=t commit -qm init ); printf "[package]\nname = \"a\"\n\n[dependencies]\nb = \"../b\"\n" > "$TMPDIR/g71/a/vuna.toml"; printf "import B\n\nmain : Int\nmain = b\n" > "$TMPDIR/g71/a/app/Main.vuna"'
+exit: 0
+
+# 71b) 空 store 上 fetch A：递归输出 b ok 与 c ok（B 是 path 依赖，C 是 B 的 git 依赖）。
+run: sh -c 'VUNA_STORE="$TMPDIR/g71/s2" "$VUNA" fetch "$TMPDIR/g71/a" 2>&1'
+out-contains: fetch: b path unlocked
+out-contains: fetch: c ok
+
+# 71c) store 里两个对象；check A 走 store 物化视图成功。
+run: sh -c 'n=$(ls "$TMPDIR/g71/s2/objects" | wc -l | tr -d " "); [ "$n" = "1" ]'
+exit: 0
+run: sh -c 'VUNA_STORE="$TMPDIR/g71/s2" "$VUNA" check "$TMPDIR/g71/a"'
+exit: 0
+
+# 71d) 重复 fetch 全部命中缓存（幂等）。
+run: sh -c 'VUNA_STORE="$TMPDIR/g71/s2" "$VUNA" fetch "$TMPDIR/g71/a" 2>&1'
+out-contains: fetch: c cached
+out-contains: fetch: b path unlocked
+
+# 71e) 环检测：A path→ B，B path→ A；fetch 报 cycle skipped 而不是死循环。
+run: sh -c 'mkdir -p "$TMPDIR/g71/loop1/app" "$TMPDIR/g71/loop2/app"; printf "[package]\nname = \"loop1\"\n\n[dependencies]\nloop2 = \"../loop2\"\n" > "$TMPDIR/g71/loop1/vuna.toml"; printf "main : Int\nmain = 1\n" > "$TMPDIR/g71/loop1/app/Main.vuna"; printf "[package]\nname = \"loop2\"\n\n[dependencies]\nloop1 = \"../loop1\"\n" > "$TMPDIR/g71/loop2/vuna.toml"; printf "main : Int\nmain = 2\n" > "$TMPDIR/g71/loop2/app/Main.vuna"; VUNA_STORE="$TMPDIR/g71/s3" "$VUNA" fetch "$TMPDIR/g71/loop1" 2>&1'
+exit: 0
+out-contains: cycle skipped
