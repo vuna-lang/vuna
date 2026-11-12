@@ -113,7 +113,7 @@ mainHook qc program runtimeDefs printResult = case findDtDef "main" runtimeDefs 
           innerTy = secondOf p
           runText = actionRunText qc program mainRef (firstOf p) (dtDefType mainDef)
         in Vuna.Compiler.Common.bind (genDtHook "" table innerTy (firstOf runText) printResult)
-          (\hook => OkC (Pair hook (hookDeps (secondOf runText))))
+          (\hook => OkC (Pair hook (secondOf runText)))
       Nothing =>
         Vuna.Compiler.Common.bind (genDtHook "" table (dtDefType mainDef) mainRef printResult)
           (\hook => OkC (Pair hook []))

@@ -49,3 +49,21 @@ handleClockHost n comp = handleClock n (\a => pure a) clockOpHIO comp
 -- | 单效应便捷入口（P3）：`handleClockHost n` + `joinEff` 的组合。
 export runClock : {a : Type} -> (n : String) -> Eff (Cons n ClockOp []) a -> Eff [] a
 runClock n comp = joinEff (handleClockHost n comp)
+
+-- ---------------------------------------------------------------
+-- 阶段 3：带行 handler（entry 自动预装用；不导出）
+-- ---------------------------------------------------------------
+clockOpHIOHost : {a : Type} -> (o : ClockOp) -> (resClock o -> Eff (Cons "default" ClockOp []) a) -> Eff (Cons "default" ClockOp []) a
+clockOpHIOHost op k = case op of
+  Now => do
+    t <- effTimeUs_host
+    k t
+  SleepMicros us => do
+    _ <- prim_eff_sleep_host us
+    k 0
+
+handleClockHostHost : {a : Type} -> {r : Row} -> (n : String) -> Eff (Base.Eff.Cons n ClockOp r) a -> Eff r (Eff (Cons "default" ClockOp []) a)
+handleClockHostHost n comp = handleClock n (\a => pure a) clockOpHIOHost comp
+
+runClockHost : {r : Row} -> {a : Type} -> Eff (Cons "default" ClockOp r) a -> Eff (rowAppend r (Cons "default" ClockOp [])) a
+runClockHost comp = joinEff (handleClockHostHost "default" comp)

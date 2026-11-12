@@ -786,10 +786,10 @@ isNilRowTerm (TGlobal g) = g == effRowNilCtor
 isNilRowTerm (TCon g []) = g == effRowNilCtor
 isNilRowTerm _ = False
 
--- 阶段 0 spike：内建宿主效应行（目前只有 ConsoleOp）。entry 允许这类行，用隐藏的
--- `Base.Eff.runMain` 执行；用户自定义的未处理效应仍报 TC_UnhandledEffects。
+-- 阶段 3：内建宿主效应行（表见 `Intrinsics.builtinEffects`）。entry 允许这类行，
+-- 用隐藏的 `Base.Eff.runMain` 执行；用户自定义的未处理效应仍报 TC_UnhandledEffects。
 isBuiltinHostLabel : Value -> Bool
-isBuiltinHostLabel (VNeutral (NGlobal g _)) = g == "Base.EffConsole.ConsoleOp"
+isBuiltinHostLabel (VNeutral (NGlobal g _)) = isBuiltinEffectTag g
 isBuiltinHostLabel _ = False
 
 isBuiltinHostRowValue : Value -> Bool

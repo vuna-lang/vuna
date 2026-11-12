@@ -70,6 +70,7 @@ consoleOpHIOHost op k = case op of
 handleConsoleHostHost : {a : Type} -> {r : Row} -> (n : String) -> Eff (Base.Eff.Cons n ConsoleOp r) a -> Eff r (Eff (Cons "default" ConsoleOp []) a)
 handleConsoleHostHost n comp = handleConsole n (\a => pure a) consoleOpHIOHost comp
 
--- | entry 自动预装用：`Cons "default" ConsoleOp Nil` 的动作 → `Eff [ConsoleOp]`（不导出）。
-runConsoleHost : {a : Type} -> Eff (Cons "default" ConsoleOp []) a -> Eff (Cons "default" ConsoleOp []) a
+-- | entry 自动预装用（泛化 r）：把行头 `ConsoleOp` 的 send 翻译成宿主 intrinsic，
+-- 并把该标签移到行尾（`rowAppend r [ConsoleOp]`）。
+runConsoleHost : {r : Row} -> {a : Type} -> Eff (Cons "default" ConsoleOp r) a -> Eff (rowAppend r (Cons "default" ConsoleOp [])) a
 runConsoleHost comp = joinEff (handleConsoleHostHost "default" comp)

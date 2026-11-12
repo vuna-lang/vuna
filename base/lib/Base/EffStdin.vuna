@@ -47,3 +47,21 @@ handleStdinHost n comp = handleStdin n (\a => pure a) stdinOpHIO comp
 -- | 单效应便捷入口（P3）：`handleStdinHost n` + `joinEff` 的组合。
 export runStdin : {a : Type} -> (n : String) -> Eff (Cons n StdinOp []) a -> Eff [] a
 runStdin n comp = joinEff (handleStdinHost n comp)
+
+-- ---------------------------------------------------------------
+-- 阶段 3：带行 handler（entry 自动预装用；不导出）
+-- ---------------------------------------------------------------
+stdinOpHIOHost : {a : Type} -> (o : StdinOp) -> (resStdin o -> Eff (Cons "default" StdinOp []) a) -> Eff (Cons "default" StdinOp []) a
+stdinOpHIOHost op k = case op of
+  ReadLine => do
+    v <- prim_eff_readLine_host
+    k v
+  ReadBytes n => do
+    v <- prim_eff_readBytes_host (natToInt n)
+    k v
+
+handleStdinHostHost : {a : Type} -> {r : Row} -> (n : String) -> Eff (Base.Eff.Cons n StdinOp r) a -> Eff r (Eff (Cons "default" StdinOp []) a)
+handleStdinHostHost n comp = handleStdin n (\a => pure a) stdinOpHIOHost comp
+
+runStdinHost : {r : Row} -> {a : Type} -> Eff (Cons "default" StdinOp r) a -> Eff (rowAppend r (Cons "default" StdinOp [])) a
+runStdinHost comp = joinEff (handleStdinHostHost "default" comp)

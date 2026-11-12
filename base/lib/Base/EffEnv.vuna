@@ -55,3 +55,24 @@ handleEnvHost n comp = handleEnv n (\a => pure a) envOpHIO comp
 -- | 单效应便捷入口（P3）：`handleEnvHost n` + `joinEff` 的组合。
 export runEnv : {a : Type} -> (n : String) -> Eff (Cons n EnvOp []) a -> Eff [] a
 runEnv n comp = joinEff (handleEnvHost n comp)
+
+-- ---------------------------------------------------------------
+-- 阶段 3：带行 handler（entry 自动预装用；不导出）
+-- ---------------------------------------------------------------
+envOpHIOHost : {a : Type} -> (o : EnvOp) -> (resEnv o -> Eff (Cons "default" EnvOp []) a) -> Eff (Cons "default" EnvOp []) a
+envOpHIOHost op k = case op of
+  GetEnv name => do
+    v <- prim_eff_getenv_host name
+    k v
+  GetCwd => do
+    v <- prim_eff_getcwd_host
+    k v
+  ExecPath => do
+    v <- prim_eff_execPath_host
+    k v
+
+handleEnvHostHost : {a : Type} -> {r : Row} -> (n : String) -> Eff (Base.Eff.Cons n EnvOp r) a -> Eff r (Eff (Cons "default" EnvOp []) a)
+handleEnvHostHost n comp = handleEnv n (\a => pure a) envOpHIOHost comp
+
+runEnvHost : {r : Row} -> {a : Type} -> Eff (Cons "default" EnvOp r) a -> Eff (rowAppend r (Cons "default" EnvOp [])) a
+runEnvHost comp = joinEff (handleEnvHostHost "default" comp)

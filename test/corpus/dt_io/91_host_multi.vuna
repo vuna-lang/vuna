@@ -1,0 +1,11 @@
+-- 阶段 3：多效应 main（FsOp + ConsoleOp）；entry 自动装两个 handler。
+import Base.Eff
+import Base.EffConsole
+import Base.EffFs
+
+main : Eff [FsOp, ConsoleOp] Int
+main = do
+  _ <- fsWriteFile "default" "/tmp/vuna-host-multi.txt" "multi\n"
+  s <- fsReadFile "default" "/tmp/vuna-host-multi.txt"
+  _ <- consolePrint "default" s
+  pure 0

@@ -1,0 +1,10 @@
+-- 阶段 3：Clock 内建行（sleep + Console 打印），entry 自动装两个 handler。
+import Base.Eff
+import Base.EffClock
+import Base.EffConsole
+
+main : Eff [ClockOp, ConsoleOp] Int
+main = do
+  _ <- clockSleepMicros "default" 1
+  _ <- consolePrint "default" "clock-ok\n"
+  pure 0

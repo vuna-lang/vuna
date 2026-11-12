@@ -19,6 +19,7 @@ module Base.Eff
   , resFn
   , resOf
   , resumeCont
+  , rowAppend
   , rowRem
   , runEff
   , runPure

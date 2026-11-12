@@ -75,3 +75,26 @@ handleProcessHostObserved n comp = handleProcessHostWith n (\c => pure c) comp
 -- | 单效应便捷入口（P3）：`handleProcessHost n` + `joinEff` 的组合。
 export runProcess : {a : Type} -> (n : String) -> Eff (Cons n ProcessOp []) a -> Eff [] a
 runProcess n comp = joinEff (handleProcessHost n comp)
+
+-- ---------------------------------------------------------------
+-- 阶段 3：带行 handler（entry 自动预装用；不导出）
+-- ---------------------------------------------------------------
+processOpHIOWithHost : (Int -> Eff (Cons "default" ProcessOp []) Int) -> {a : Type} -> (o : ProcessOp) -> (resProcess o -> Eff (Cons "default" ProcessOp []) a) -> Eff (Cons "default" ProcessOp []) a
+processOpHIOWithHost onExit op k = case op of
+  Args => do
+    xs <- prim_eff_getArgs_process_host
+    k xs
+  Exit c => do
+    r <- onExit c
+    k r
+  RunIn dir args => do
+    c <- prim_eff_runIn_host dir args
+    k c
+
+handleProcessHostWithHost : {a : Type} -> {r : Row} -> (n : String) -> (Int -> Eff (Cons "default" ProcessOp []) Int) -> Eff (Base.Eff.Cons n ProcessOp r) a -> Eff r (Eff (Cons "default" ProcessOp []) a)
+handleProcessHostWithHost n onExit comp =
+  handleProcess n (\a => pure a) (processOpHIOWithHost onExit) comp
+
+runProcessHost : {r : Row} -> {a : Type} -> Eff (Cons "default" ProcessOp r) a -> Eff (rowAppend r (Cons "default" ProcessOp [])) a
+runProcessHost comp =
+  joinEff (handleProcessHostWithHost "default" (\c => prim_eff_exit_process_host c) comp)

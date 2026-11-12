@@ -38,3 +38,18 @@ handleArgsHost n comp = handleArgs n (\a => pure a) argsOpHIO comp
 -- | 单效应便捷入口（P3）：`handleArgsHost n` + `joinEff` 的组合。
 export runArgs : {a : Type} -> (n : String) -> Eff (Cons n ArgsOp []) a -> Eff [] a
 runArgs n comp = joinEff (handleArgsHost n comp)
+
+-- ---------------------------------------------------------------
+-- 阶段 3：带行 handler（entry 自动预装用；不导出）
+-- ---------------------------------------------------------------
+argsOpHIOHost : {a : Type} -> (o : ArgsOp) -> (resArgs o -> Eff (Cons "default" ArgsOp []) a) -> Eff (Cons "default" ArgsOp []) a
+argsOpHIOHost op k = case op of
+  GetArgs => do
+    xs <- prim_eff_getArgs_host
+    k xs
+
+handleArgsHostHost : {a : Type} -> {r : Row} -> (n : String) -> Eff (Base.Eff.Cons n ArgsOp r) a -> Eff r (Eff (Cons "default" ArgsOp []) a)
+handleArgsHostHost n comp = handleArgs n (\a => pure a) argsOpHIOHost comp
+
+runArgsHost : {r : Row} -> {a : Type} -> Eff (Cons "default" ArgsOp r) a -> Eff (rowAppend r (Cons "default" ArgsOp [])) a
+runArgsHost comp = joinEff (handleArgsHostHost "default" comp)

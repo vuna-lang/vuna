@@ -127,3 +127,48 @@ handleFsHost n comp = handleFs n (\a => pure a) fsOpHIO comp
 -- | 单效应便捷入口（P3）：`handleFsHost n` + `joinEff` 的组合。
 export runFs : {a : Type} -> (n : String) -> Eff (Cons n FsOp []) a -> Eff [] a
 runFs n comp = joinEff (handleFsHost n comp)
+
+-- ---------------------------------------------------------------
+-- 阶段 3：带行的真实 handler（entry 自动预装用；不导出）
+-- ---------------------------------------------------------------
+-- | 带 `FsOp` 行的 op 解释：映射到对应 `prim_eff_*_host` 原语。
+fsOpHIOHost : {a : Type} -> (o : FsOp) -> (resFs o -> Eff (Cons "default" FsOp []) a) -> Eff (Cons "default" FsOp []) a
+fsOpHIOHost op k = case op of
+  ReadFile p => do
+    s <- prim_eff_readFile_host p
+    k s
+  WriteFile p s => do
+    n <- fmap natFromInt (prim_eff_writeFile_host p s)
+    k n
+  WriteFileAtomic p s => do
+    n <- prim_eff_writeFileAtomic_host p s
+    k n
+  ReadDir p => do
+    xs <- prim_eff_readDir_host p
+    k xs
+  IsDirectory p => do
+    b <- prim_eff_isDirectory_host p
+    k b
+  MakeDir p => do
+    n <- prim_eff_makeDir_host p
+    k n
+  RemoveFile p => do
+    n <- prim_eff_removeFile_host p
+    k n
+  FileExists p => do
+    b <- prim_eff_fileExists_host p
+    k b
+  FileMtime p => do
+    n <- prim_eff_fileMtime_host p
+    k n
+  FileSize p => do
+    n <- fmap natFromInt (prim_eff_fileSize_host p)
+    k n
+
+-- | 带行的宿主 handler：删掉 `FsOp`，answer 是 `Eff [FsOp]`（不导出）。
+handleFsHostHost : {a : Type} -> {r : Row} -> (n : String) -> Eff (Base.Eff.Cons n FsOp r) a -> Eff r (Eff (Cons "default" FsOp []) a)
+handleFsHostHost n comp = handleFs n (\a => pure a) fsOpHIOHost comp
+
+-- | entry 自动预装用（泛化 r）：把行头 `FsOp` 的 send 翻译成宿主 intrinsic。
+runFsHost : {r : Row} -> {a : Type} -> Eff (Cons "default" FsOp r) a -> Eff (rowAppend r (Cons "default" FsOp [])) a
+runFsHost comp = joinEff (handleFsHostHost "default" comp)

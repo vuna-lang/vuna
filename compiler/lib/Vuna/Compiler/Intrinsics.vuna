@@ -10,6 +10,8 @@ module Vuna.Compiler.Intrinsics
   , boolFalseCtor
   , boolTrueCtor
   , boolTypeName
+  , builtinEffectRunHostOf
+  , builtinEffects
   , canonicalCtorsFor
   , debugLineIntrinsicName
   , debugOnIntrinsicName
@@ -46,6 +48,7 @@ module Vuna.Compiler.Intrinsics
   , intrinsicReturnsEff
   , intrinsicSignature
   , intrinsicVisible
+  , isBuiltinEffectTag
   , isDebugOnlyName
   , isIntrinsicName
   , isIntrinsicTypeName
@@ -181,6 +184,47 @@ isTypeConstructorName name =
     || name == strTypeName
     || name == floatTypeName
     || typeIntrinsicArityOf name >= 0
+
+-- | 内建宿主效应（阶段 3）：标签全名 → 未导出的 `runXHost`（entry 自动预装用）。
+record BuiltinEffect where
+  -- | 行标签的全名（base 的 op 族类型）。
+  beTag : String
+  -- | entry 自动预装的 `runXHost` 全名（不导出，用户拿不到）。
+  beRunHost : String
+  -- | 默认实例名（`main` 行里裸标签展开成它）。
+  beDefaultName : String
+
+-- | 全部内建宿主效应（标签 + runXHost）。未实现的条目先占位，entry 只对已实现的
+-- 表项自动预装；用户自定义效应仍须自己 handle 成 Nil。
+builtinEffects : List BuiltinEffect
+builtinEffects =
+  [ BuiltinEffect "Base.EffConsole.ConsoleOp" "Base.EffConsole.runConsoleHost" "default",
+    BuiltinEffect "Base.EffFs.FsOp" "Base.EffFs.runFsHost" "default",
+    BuiltinEffect "Base.EffClock.ClockOp" "Base.EffClock.runClockHost" "default",
+    BuiltinEffect "Base.EffEnv.EnvOp" "Base.EffEnv.runEnvHost" "default",
+    BuiltinEffect "Base.EffProcess.ProcessOp" "Base.EffProcess.runProcessHost" "default",
+    BuiltinEffect "Base.EffExit.ExitOp" "Base.EffExit.runExitHost" "default",
+    BuiltinEffect "Base.EffStdin.StdinOp" "Base.EffStdin.runStdinHost" "default",
+    BuiltinEffect "Base.EffArgs.ArgsOp" "Base.EffArgs.runArgsHost" "default",
+    BuiltinEffect "Base.EffNet.NetOp" "Base.EffNet.runNetHost" "default",
+    BuiltinEffect "Base.EffRef.RefOp" "Base.EffRef.runRefHost" "default",
+    BuiltinEffect "Base.EffSched.SchedOp" "Base.EffSched.runSchedHost" "default"
+  ]
+
+-- | 标签对应的 `runXHost` 全名；不是内建宿主效应时返回空串。
+builtinEffectRunHostOf : String -> String
+builtinEffectRunHostOf tag = builtinEffectRunHostOfRest tag builtinEffects
+
+builtinEffectRunHostOfRest : String -> List BuiltinEffect -> String
+builtinEffectRunHostOfRest tag [] = ""
+builtinEffectRunHostOfRest tag (e :: rest) =
+  if e.beTag == tag then e.beRunHost else builtinEffectRunHostOfRest tag rest
+
+-- | 该标签是否是内建宿主效应。
+isBuiltinEffectTag : String -> Bool
+isBuiltinEffectTag tag = case builtinEffectRunHostOf tag of
+  "" => False
+  _ => True
 
 -- | Eff 版线性绑定（bootstrap 过渡表；当前无库调用方）：`Eff [] a` 的线性 continuation。
 -- runtime 由 codegen 专门生成（装箱 `MkEff` 的 match），不能复用 eager 包装。
@@ -671,6 +715,8 @@ floatIntrinsics =
 -- 留在旧 seed 的 fuel 内（同 `floatIntrinsics`；迁移完成后本表并改名）。
 effIntrinsics : List Intrinsic
 -- 阶段 0 spike：带内建 ConsoleOp 行的宿主打印（验证 `IEffRow`/entry/runMain 机制）。
+-- 阶段 3：带内建 FsOp 行的宿主原语（entry 自动预装用；与旧原语同 runtime）。
+-- 阶段 3：带内建效应行的宿主原语（Clock/Env/Process/Exit/Stdin/Args）。
 effIntrinsics =
   [ Intrinsic primEffBind1Name (IPi "a" (IPi "b" (IFun1 (IEff (IVar "a")) (IFun1 (IFun1 (IVar "a") (IEff (IVar "b"))) (IEff (IVar "b")))))) OpNone "" True,
     Intrinsic "effTimeUs" (IEff IInt) OpNone "(dtp_timeUs ())" True,
@@ -694,8 +740,30 @@ effIntrinsics =
     Intrinsic "prim_eff_fileExists" (IFun IStr (IEff IBool)) OpNone "dtp_fileExists" True,
     Intrinsic "prim_eff_fileMtime" (IFun IStr (IEff IInt)) OpNone "dtp_fileMtime" True,
     Intrinsic "prim_eff_fileSize" (IFun IStr (IEff IInt)) OpNone "dtp_fileSize" True,
+    Intrinsic "prim_eff_readFile_host" (IFun IStr (IEffRow (IRowCons "default" (IGlobal "Base.EffFs.FsOp") IRowNil) IStr)) OpNone "dtp_readFile" True,
+    Intrinsic "prim_eff_writeFile_host" (IFun IStr (IFun IStr (IEffRow (IRowCons "default" (IGlobal "Base.EffFs.FsOp") IRowNil) IInt))) OpNone "dtp_writeFile" True,
+    Intrinsic "prim_eff_writeFileAtomic_host" (IFun IStr (IFun IStr (IEffRow (IRowCons "default" (IGlobal "Base.EffFs.FsOp") IRowNil) IInt))) OpNone "dtp_writeFileAtomic" True,
+    Intrinsic "prim_eff_readDir_host" (IFun IStr (IEffRow (IRowCons "default" (IGlobal "Base.EffFs.FsOp") IRowNil) (IList IStr))) OpNone "(fun p -> dtp_listOf (dtp_readDir p))" True,
+    Intrinsic "prim_eff_isDirectory_host" (IFun IStr (IEffRow (IRowCons "default" (IGlobal "Base.EffFs.FsOp") IRowNil) IBool)) OpNone "dtp_isDirectory" True,
+    Intrinsic "prim_eff_makeDir_host" (IFun IStr (IEffRow (IRowCons "default" (IGlobal "Base.EffFs.FsOp") IRowNil) IInt)) OpNone "dtp_makeDir" True,
+    Intrinsic "prim_eff_removeFile_host" (IFun IStr (IEffRow (IRowCons "default" (IGlobal "Base.EffFs.FsOp") IRowNil) IInt)) OpNone "dtp_removeFile" True,
+    Intrinsic "prim_eff_fileExists_host" (IFun IStr (IEffRow (IRowCons "default" (IGlobal "Base.EffFs.FsOp") IRowNil) IBool)) OpNone "dtp_fileExists" True,
+    Intrinsic "prim_eff_fileMtime_host" (IFun IStr (IEffRow (IRowCons "default" (IGlobal "Base.EffFs.FsOp") IRowNil) IInt)) OpNone "dtp_fileMtime" True,
+    Intrinsic "prim_eff_fileSize_host" (IFun IStr (IEffRow (IRowCons "default" (IGlobal "Base.EffFs.FsOp") IRowNil) IInt)) OpNone "dtp_fileSize" True,
     Intrinsic "prim_eff_exit" (IFun IInt (IEff IInt)) OpNone "dtp_exit" True,
     Intrinsic "prim_eff_runIn" (IFun IStr (IFun (IList IStr) (IEff IInt))) OpNone "(fun dir args -> dtp_runIn dir (dtp_ocamlOf args))" True,
+    Intrinsic "effTimeUs_host" (IEffRow (IRowCons "default" (IGlobal "Base.EffClock.ClockOp") IRowNil) IInt) OpNone "(dtp_timeUs ())" True,
+    Intrinsic "prim_eff_sleep_host" (IFun IInt (IEffRow (IRowCons "default" (IGlobal "Base.EffClock.ClockOp") IRowNil) IInt)) OpNone "dtp_sleep" True,
+    Intrinsic "prim_eff_getenv_host" (IFun IStr (IEffRow (IRowCons "default" (IGlobal "Base.EffEnv.EnvOp") IRowNil) IStr)) OpNone "dtp_getenv" True,
+    Intrinsic "prim_eff_getcwd_host" (IEffRow (IRowCons "default" (IGlobal "Base.EffEnv.EnvOp") IRowNil) IStr) OpNone "(dtp_getcwd ())" True,
+    Intrinsic "prim_eff_execPath_host" (IEffRow (IRowCons "default" (IGlobal "Base.EffEnv.EnvOp") IRowNil) IStr) OpNone "(dtp_execPath ())" True,
+    Intrinsic "prim_eff_getArgs_process_host" (IEffRow (IRowCons "default" (IGlobal "Base.EffProcess.ProcessOp") IRowNil) (IList IStr)) OpNone "(dtp_listOf (dtp_getArgs ()))" True,
+    Intrinsic "prim_eff_exit_process_host" (IFun IInt (IEffRow (IRowCons "default" (IGlobal "Base.EffProcess.ProcessOp") IRowNil) IInt)) OpNone "dtp_exit" True,
+    Intrinsic "prim_eff_runIn_host" (IFun IStr (IFun (IList IStr) (IEffRow (IRowCons "default" (IGlobal "Base.EffProcess.ProcessOp") IRowNil) IInt))) OpNone "(fun dir args -> dtp_runIn dir (dtp_ocamlOf args))" True,
+    Intrinsic "prim_eff_exitOp_host" (IFun IInt (IEffRow (IRowCons "default" (IGlobal "Base.EffExit.ExitOp") IRowNil) IInt)) OpNone "dtp_exit" True,
+    Intrinsic "prim_eff_readLine_host" (IEffRow (IRowCons "default" (IGlobal "Base.EffStdin.StdinOp") IRowNil) IStr) OpNone "(dtp_readLine ())" True,
+    Intrinsic "prim_eff_readBytes_host" (IFun IInt (IEffRow (IRowCons "default" (IGlobal "Base.EffStdin.StdinOp") IRowNil) IStr)) OpNone "dtp_readBytes" True,
+    Intrinsic "prim_eff_getArgs_host" (IEffRow (IRowCons "default" (IGlobal "Base.EffArgs.ArgsOp") IRowNil) (IList IStr)) OpNone "(dtp_listOf (dtp_getArgs ()))" True,
     Intrinsic "prim_eff_spawn" (IFun (IList IStr) (IEff IInt)) OpNone "(fun args -> dtp_spawn (dtp_ocamlOf args))" True,
     Intrinsic "prim_eff_wait" (IFun IInt (IEff IInt)) OpNone "dtp_wait" True,
     Intrinsic "prim_eff_netListen" (IFun IStr (IEff IInt)) OpNone "dtp_net_listen" True,

@@ -2172,41 +2172,48 @@ genDtHook bodyText table tyTerm mainExpr printResult = Vuna.Compiler.Common.bind
     in OkC "${bodyText}\n${hook}"
 )
 
--- 动作 main 的执行表达式：
--- W9：main 动作作为纤程 0 交给调度器（`dtp_sched_main`）：这样 main 里的
--- `yieldNow`/`awaitTask` 也能挂起；没有任务的普通程序只是多一层 match_with。
--- 阶段 2：main 的行是内建 ConsoleOp 时，entry 自动装 `runConsoleHost`
--- （把 `ConsoleOp` 的 send 翻译成 `prim_eff_print_host`；handler 未导出）。
-isConsoleLabelTerm : Term -> Bool
-isConsoleLabelTerm (TGlobal g) = g == "Base.EffConsole.ConsoleOp"
-isConsoleLabelTerm _ = False
-
-isConsoleRowTerm : Term -> Bool
-isConsoleRowTerm (TCon g args) = if g == effRowConsCtor then case args of
+-- 阶段 3：main 的行里有内建宿主效应标签时，entry 按表自动装 runXHost
+-- （每个标签一次；行是擦除索引，运行时 handler 按 (key,name) 路由）。
+collectBuiltinRowTags : Term -> List String
+collectBuiltinRowTags (TCon g args) = if g == effRowConsCtor then case args of
   _ :: label :: tail :: _ =>
-    isConsoleLabelTerm (firstOf label) && isNilRowTermCodegen (firstOf tail)
-  _ => False
-else False
-isConsoleRowTerm _ = False
-isConsoleRowTerm _ = False
+    let
+      rest = collectBuiltinRowTags (firstOf tail)
+      tagTerm = firstOf label
+    in case tagTerm of
+      TGlobal tag => if isBuiltinEffectTag tag then Base.List.Cons tag rest else rest
+      _ => rest
+  _ => []
+else []
+collectBuiltinRowTags _ = []
 
-isConsoleMainTy : Term -> Bool
-isConsoleMainTy (TApp (TApp fn row _) _ _) = case fn of
-  TGlobal g => g == effTypeName && isConsoleRowTerm row
-  _ => False
-isConsoleMainTy _ = False
+mainRowTags : Term -> List String
+mainRowTags (TApp (TApp fn row _) _ _) = case fn of
+  TGlobal g => if g == effTypeName then collectBuiltinRowTags row else []
+  _ => []
+mainRowTags _ = []
 
-actionRunText : QualCtx -> Pair (List DtData) (List DtDef) -> String -> String -> Term -> Pair String String
+addDepUnique : List String -> String -> List String
+addDepUnique deps d = if d == "" || memName d deps then deps else append deps [d]
+
+-- 按行顺序从内到外嵌套：runXn (... (runX1 main))。
+builtinWrapTextGo : QualCtx -> Pair String (List String) -> List String -> Pair String (List String)
+builtinWrapTextGo qc acc [] = acc
+builtinWrapTextGo qc acc (tag :: rest) =
+  let
+    runRef = qualValueText qc (builtinEffectRunHostOf tag)
+    deps = addDepUnique (secondOf acc) (secondOf runRef)
+  in builtinWrapTextGo qc (Pair "(${firstOf runRef} ${firstOf acc})" deps) rest
+
+actionRunText : QualCtx -> Pair (List DtData) (List DtDef) -> String -> String -> Term -> Pair String (List String)
 actionRunText qc program mainRef kind mainTy = if kind == "eff" then
   let
     runRef = qualValueText qc effMainRunName
-  in if isConsoleMainTy mainTy then
-    let
-      consoleRef = qualValueText qc "Base.EffConsole.runConsoleHost"
-    in Pair "dtp_sched_main (fun () -> ${firstOf runRef} (${firstOf consoleRef} ${mainRef}))"
-      (secondOf consoleRef)
-  else Pair "dtp_sched_main (fun () -> ${firstOf runRef} ${mainRef})" (secondOf runRef)
-else Pair "dtp_sched_main (fun () -> ${mainRef} 0)" ""
+    tags = mainRowTags mainTy
+    wrapped = builtinWrapTextGo qc (Pair mainRef []) tags
+    deps = addDepUnique (secondOf wrapped) (secondOf runRef)
+  in Pair "dtp_sched_main (fun () -> ${firstOf runRef} ${firstOf wrapped})" deps
+else Pair "dtp_sched_main (fun () -> ${mainRef} 0)" []
 
 genTerm : GenSt -> List (Pair String Rig) -> Term -> Check (Pair String GenSt)
 genTerm a1 a2 a3 = genTermFuel 512 a1 a2 a3
