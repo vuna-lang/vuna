@@ -46,7 +46,7 @@ nix run .#vuna-run-tests -- --list                  # 列出章节/case（--only
 ./result/bin/vuna doc                          # 生成 docs/api.html（gitignored）
 ```
 
-自己新建包：`vuna.toml` + `app/Main.vuna`，入口 `main : Eff [] a`，效果 API 来自 `Base.Eff`（宿主层直接调用 `prim_eff_*`，原宿主别名模块已删除，任何包都可直调）。
+自己新建包：`vuna.toml` + `app/Main.vuna`，入口 `main : Eff [] a`，效果 API 来自 `Base.Eff`（宿主层直调 `prim_eff_*`，别名模块已删，任何包都可直调）。
 格式见 [packages.md](docs/reference/packages.md)，示例见 `examples/multi/`。
 
 编译器选取：优先本地 `./result/bin/vuna`；否则 `nix run vuna -- <subcommand>`（注册表别名）。
