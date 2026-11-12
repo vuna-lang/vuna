@@ -98,17 +98,26 @@ key 是**纯字符串**（不参与哈希输入），节点分成两组：
 
 ## 6. 当前状态与后续
 
-已落地：纯核心（阶段 1）、`check` / `build` 两个 CLI 入口（阶段 2）、会话索引、blob 存储。
+已落地：纯核心（阶段 1）；`check` / `build` 两个 CLI 入口与 blob 载荷（阶段 2）；
+LSP `DiagCache`、REPL `stateToolSession` / `stateIndexCache`（阶段 3/4，见下）；会话索引。
 
-未落地（各阶段收口时更新本页）：
+- LSP：`lspiface:<pkg>:<dirHash>` 节点，依赖表 = 校验面 stat（`st:` 键）。
+- REPL：`tooliface:<pkg>:<dirHash>`（工具接口）与 `index:<dir>`（源码索引）两个节点，
+  依赖表 = 校验面 stat + import 闭包 / stat 快照键；`toolSessionFresh`、
+  `sessionClosureOk`、`Index.indexStatsUnchanged` 的启发式与比较函数已删除。
+- debug 行统一为 `query-source=` / `query-lazy`。
+- `stateAuxCache` **不需要迁移**：`AuxCache` 本来就按
+  `dtAuxKey`（包名 + 依赖 iface 哈希 + 干净模块 iface 哈希）自校验，是内容键 memo，
+  不是新鲜度启发式缓存。
+- `Doc` 没有自有缓存（每次现 parse），`vuna test` 走 `compileToDir` ⇒ 自动吃 split 节点。
+- `Index` 的磁盘缓存 `.local/index/` 保留：它的 manifest 本来就是**内容哈希判定**
+  （等价于图判据），且是跨进程载荷；这次只把 REPL 会话内的廉价探针并进图。
+  未来若要彻底统一，方向是「manifest + 四个 `.txt` 换成 `index:<dir>` 节点的 `QRef` blob」，
+  但 `test/corpus/index/check.sh` 对磁盘布局有 38 条断言，属于独立的迁移工作。
 
-- LSP `DiagCache` 与 REPL `stateToolSession` 已改查询图客户端（`lspiface:` / `tooliface:`
-  节点，共用 `ToolSession` 的 `Db`）；debug 行统一为 `query-source=` / `query-lazy`。
-- 仍待迁移：REPL `stateAuxCache`（termAux 预处理缓存）、`stateIndexCache`（`Index` 快照）
-  与 `Doc` / `Index` 的 `.local/index/` manifest（阶段 4）。
-- `vuna test` / `vuna doc` / `vuna map`（`Index.Scan`）仍走各自的 parse 级缓存（阶段 4）。
-- `VUNA_LEGACY_PATH` 与 `debt.md` 里的旧条目清理、`bench/compiler-baseline.txt` 重标定、
-  seed rotation（阶段 5）。
+仍未做（阶段 5）：`bench/compiler-baseline.txt` 已按 C32 的编码代价重标定（见
+[performance.md](performance.md) §9）；`VUNA_LEGACY_PATH` 从未实现，只需从计划里删掉；
+`debt.md` 只剩 C51（codegen 全量/增量逐字节差异，与图无关）。
 
 ## 7. 已知边界
 

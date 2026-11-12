@@ -291,19 +291,32 @@ golden 一致，再 warmup + 多次取中位数；RSS 用 GNU time 的 max RSS�
 跨机器/跨输入规模的可比口径是 `nix/checks/compiler-growth.sh`（单文件全量路径）与
 `nix/checks/compiler-growth-pkg.sh`（包路径增量收尾）的增长率门槛（§5）。
 
-当前读数（本机 16 核，`--runs 3` 中位数；2026-11 重新标定，基线已更新）：
+当前读数（本机 16 核，`--runs 3` 中位数；2026-11 再次标定，基线已更新）：
 
 | benchmark | 当前 ms |
 | --- | --- |
-| check-all | 1430 |
-| check-compiler | 785 |
-| check-warm | 50 |
-| build-all | 5186 |
-| build-compiler | 1769 |
-| build-warm | 41 |
-| map-cold | 1072 |
-| map-hot | 747 |
-| fmt-check | 802 |
+| check-all | 1314 |
+| check-compiler | 1205 |
+| check-warm | 53 |
+| build-all | 8717 |
+| build-compiler | 3469 |
+| build-warm | 255 |
+| map-cold | 1502 |
+| map-hot | 878 |
+| fmt-check | 1139 |
+
+**2026-11 标定的成本来源（C32 的显性代价，不是查询图引入的）**：冷路径
+（check-compiler / build-compiler / build-all）与热路径（build-warm）都比旧基线慢，原因是
+缓存载荷从 OCaml Marshal 换成了**显式规范编码 + `Store` framing（含 SHA-256 内容地址）**：
+
+- 冷路径要为每个模块编码 payload 并算摘要（此前 Marshal 是 `Obj.magic` 级拷贝）；
+- `build-warm` 的 255 ms 主要是把 MB 级 split 载荷**解码**回 `List SplitFile`
+  （41 ms 旧基线时 Marshal 解码几乎免费），文件本身因内容未变不重写。
+
+这是 C32「自描述、跨编译器版本稳定、可校验完整性」的显性代价，用
+`nix/checks/compiler-perf.sh` 的绝对门槛（warm check ≤43 ms、warm check . ≤78 ms 等）
+兜住真正影响交互的部分；大载荷热路径的优化方向是「per-file 内容寻址 blob + 小 manifest」
+（命中时直接 copy 字节、不做整体解码），记为后续项（见 [query-graph.md](query-graph.md) §6）。
 
 `map-cold` / `fmt-check` 相对旧基线（691 / 546）的上涨来自 HEAD 源码增长与仓内路径差异，
 与 2026-11 的修复无关（同一棵树、base/final 两个二进制的 A/B 读数一致），本轮未处理。

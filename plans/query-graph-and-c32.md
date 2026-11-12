@@ -20,7 +20,7 @@ CLI / LSP / REPL / test / doc / index 全部改成它的客户端。
 | 全量接入 | `--debug-query` 在 `check/build/compile/lsp/repl/test/doc/map` 上都打印节点；`lib/` 不再直接调 `checkPackage`/`compileToDir` |
 | 性能 | warm `check compiler` ≤ 43 ms（实测 36 ms ×1.2）、warm `check .` ≤ 78 ms（65 ×1.2）；冷路径相对 `bench/compiler-baseline.txt` ≤ +10% |
 | 自举 | `nix flake check` 全绿；阶段 0/收尾各一次 `chore(seed): rotation`，`stage1 == stage2` |
-| 单一路径 | 收尾删除 `VUNA_LEGACY_PATH`；仓库不存在绕过查询图的编译入口 |
+| 单一路径 | 仓库不存在绕过查询图的编译入口（`VUNA_LEGACY_PATH` 从未实现，无需删除） |
 
 ## 已核实现状（落点）
 
@@ -124,7 +124,7 @@ codec（就近实现，避免 import 环）
 debug 行映射（保持既有断言可用）：`cache-own-clean=`（干净模块节点数）、
 `parse-module=`（真 parse 节点）、`iface-write=`、`cache-path=summary`、`unit-cache-hit`；
 新增 `query-*` 行。
-差分开关：`VUNA_QUERY_AUDIT=1` 图/旧路径对拍；`VUNA_LEGACY_PATH=1` 强制旧路径（收尾删除）。
+差分开关：`VUNA_QUERY_AUDIT=1` 图/旧路径对拍。（`VUNA_LEGACY_PATH` 方案已放弃：没有旧路径，也就没有开关。）
 
 ## 阶段 3：工具接图（LSP / REPL）
 
@@ -144,7 +144,7 @@ debug 行映射（保持既有断言可用）：`cache-own-clean=`（干净模�
 
 ## 阶段 5：收尾
 
-删 `VUNA_LEGACY_PATH` 与旧缓存目录代码；`debt.md` 删 C32/C48（C49 按复测）；
+删旧缓存目录代码；`debt.md` 删 C32/C48（C49 按复测）；
 `bench/compiler-baseline.txt` 重标定；`nix build .#vuna` + `sh nix/seed-rotate.sh ./result/bin/vuna`
 + `nix flake check`。
 
@@ -411,3 +411,18 @@ warm `check compiler` **29 ms**（门槛 43）/ `check .` **53 ms**（门槛 78�
 - 过程中抓到并修掉一个真问题（提交 6e964ee）：`nix/checks/compiler-perf.sh` 还 grep
   `iface-source=repl`，debug 行改名后误报「REPL 没走接口路径」。顺带确认 `iface-fallback=`
   的名字保留（它仍是回退**原因**的名字，不是缓存层名字）。
+
+### 阶段 4/5 进展（2026-11-12，第 5 轮续）
+
+- ✅ `Index` 会话侧接图（提交 62067a7）：REPL `stateIndexCache` → `index:<dir>` 节点，
+  依赖表 = `indexStatsOf` 的 stat 快照键；删 `Index.indexStatsUnchanged`（~35 行）与其导出。
+  磁盘 `.local/index/` 保留（manifest 本身是内容哈希判定，且是跨进程载荷；
+  `test/corpus/index/check.sh` 有 38 条布局断言，整体换 blob 属独立迁移）。
+- ✅ `Doc` 无自有缓存（每次现 parse）；`vuna test` 走 `compileToDir` ⇒ 已吃 split 节点。
+- ✅ `stateAuxCache` 判定为**无需迁移**：`AuxCache` 按 `dtAuxKey`（包 + 依赖 iface 哈希 +
+  干净模块 iface 哈希）自校验，是内容键 memo，不是新鲜度启发式。
+- ✅ baseline 重标定（`sh bench/compiler.sh --save-baseline`）：所有读数连续两次运行差异
+  <1%，说明是本机稳定值而非噪声；上涨来自 C32 的显式编码 + framing（冷路径编码/摘要、
+  `build-warm` 的 MB 级解码），已写进 [performance.md](../docs/reference/performance.md) §9，
+  并记下后续优化方向「per-file 内容寻址 blob + 小 manifest」。
+- ✅ `VUNA_LEGACY_PATH` 从计划里删掉（从未实现）。
