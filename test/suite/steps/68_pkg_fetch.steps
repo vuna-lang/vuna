@@ -42,3 +42,11 @@ out-contains: clean-packages: removed
 run: sh -c 'VUNA_STORE="$TMPDIR/f68/store" "$VUNA" check "$TMPDIR/f68/app" 2>&1'
 exit: 1
 out-contains: PKG_NotMaterialized
+# 68i) pin：依赖源码前进一个 rev 后，`vuna pin` 把实际内容摘要写回 manifest 的 hash 行，
+#      随后 fetch 命中、check 成功（pin = 取包 + 重算摘要 + 段内替换 hash）。
+run: sh -c 'printf "module D where\n\nv : Int\nv = 42\n" > "$TMPDIR/f68/dep/lib/D.vuna"; ( cd "$TMPDIR/f68/dep" && git add -A && git -c user.email=t@t -c user.name=t commit -qm bump ); rev=$( cd "$TMPDIR/f68/dep" && git rev-parse HEAD ); sed -i "s|^rev = .*|rev = \"$rev\"|" "$TMPDIR/f68/app/vuna.toml"; VUNA_STORE="$TMPDIR/f68/store" "$VUNA" pin "$TMPDIR/f68/app" 2>&1'
+out-contains: pin: updated 1 dependency hash(es)
+run: sh -c 'VUNA_STORE="$TMPDIR/f68/store" "$VUNA" fetch "$TMPDIR/f68/app" 2>&1'
+out-contains: cached
+run: sh -c 'VUNA_STORE="$TMPDIR/f68/store" "$VUNA" check "$TMPDIR/f68/app"'
+exit: 0

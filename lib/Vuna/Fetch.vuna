@@ -1,5 +1,5 @@
 -- | `vuna fetch`：显式取包到持久 store（git / url），path 依赖只校验摘要。
-module Vuna.Fetch (fetchAt, runFetch) where
+module Vuna.Fetch (fetchAt, runFetch, runPin) where
 
 -- Vuna.Fetch：包获取（阶段 1）。纪律（D15）：
 --   * **只有 fetch 联网**；check/build/test 只读 store，缺对象报 `PKG_NotMaterialized`。
@@ -174,3 +174,125 @@ printDiagEff : Diagnostic -> Eff [] Int
 printDiagEff d = do
   _ <- prim_eff_print (diagText d ++ "\n")
   pure 1
+
+-- ---------------------------------------------------------------
+-- vuna pin：把 git 依赖的实际内容摘要写回 manifest（只改已有 `hash = ...` 行）
+-- ---------------------------------------------------------------
+runPin : List String -> Eff [] Int
+runPin args = case parseToolArgs "vuna pin" [] args of
+  ErrC e => fetchFailText (diagText e)
+  OkC parsed => case parsed.positionals of
+    [] => pinAt "."
+    [dir] => pinAt dir
+    _ => fetchFailText "too many arguments; expected at most one directory"
+
+pinAt : String -> Eff [] Int
+pinAt dir = do
+  abs <- absolutePath dir
+  let
+    manifestPath = "${abs}/vuna.toml"
+  in do
+    exists <- prim_eff_fileExists manifestPath
+    if exists then do
+      raw <- prim_eff_readFile manifestPath
+      case parseManifest manifestPath raw of
+        ErrC e => printDiagEff e
+        OkC manifest => case validateManifest manifest of
+          ErrC e => printDiagEff e
+          OkC valid => do
+            root <- storeRootEff
+            pins <- collectPins root (manifestDir manifestPath) valid.manifestDependencies []
+            let
+              updated = applyPins pins raw
+            in if updated == raw then do
+              _ <- prim_eff_print "pin: up to date\n"
+              pure 0
+            else do
+              _ <- prim_eff_writeFileAtomic manifestPath updated
+              _ <- prim_eff_print "pin: updated ${strFromInt (listLen pins)} dependency hash(es)\n"
+              pure 0
+    else fetchFailText "missing vuna.toml in ${dir}"
+
+-- 对每个 git 依赖取实际摘要（clone → 收集 → 写对象 + 物化）。url/path 不参与：
+-- url 对象文件的地址只能由对象自身给出，path 是可变输入（D12）。
+collectPins : String -> String -> List Dependency -> List (Pair String String) -> Eff [] (List (Pair String String))
+collectPins root baseDir [] acc = pure (reverse acc)
+collectPins root baseDir (dep :: rest) acc = case depSourceOf dep of
+  DepPath rel => do
+    _ <- prim_eff_print "pin: ${depAliasOf dep} path (skipped)\n"
+    collectPins root baseDir rest acc
+  DepUrl u => do
+    _ <-
+      prim_eff_print "pin: ${depAliasOf dep} url (skipped: url objects carry their own address)\n"
+    collectPins root baseDir rest acc
+  DepGit url rev => do
+    actual <- resolveGitDigest root (depAliasOf dep) url rev
+    case actual of
+      Nothing => do
+        _ <- fetchFailText "pin: cannot resolve ${depAliasOf dep} (${url}@${rev})"
+        pure []
+      Just digest => collectPins root baseDir rest (Pair (depAliasOf dep) digest :: acc)
+
+resolveGitDigest : String -> String -> String -> String -> Eff [] (Maybe String)
+resolveGitDigest root alias url rev =
+  let
+    tmp = "${root}/tmp/pin-${alias}"
+  in do
+    _ <- ensureDirPath root
+    _ <- prim_eff_runIn root ["rm", "-rf", tmp]
+    _ <- ensureDirPath tmp
+    cloneCode <- prim_eff_runIn tmp ["git", "clone", "--quiet", url, "."]
+    if cloneCode /= 0 then do
+      _ <- prim_eff_print "pin: git clone failed for ${alias}\n"
+      pure Nothing
+    else do
+      checkoutCode <- prim_eff_runIn tmp ["git", "checkout", "--quiet", rev]
+      if checkoutCode /= 0 then do
+        _ <- prim_eff_print "pin: git checkout failed for ${alias}\n"
+        pure Nothing
+      else do
+        files <- packageFilesEff tmp
+        let
+          actual = contentHashOf (PackageSource "" [] [] files)
+        in do
+          _ <- writeObjectEff root actual files
+          _ <- materializeEff root actual files
+          pure (Just actual)
+
+-- 文本写回：只替换 `[dependencies.<alias>]` 段内已有的 `hash = ...` 行（保留缩进）。
+-- 没有 hash 行（内联表 / 字符串简写 / 尚未写摘要）时不动该段：pin 不替用户猜格式。
+applyPins : List (Pair String String) -> String -> String
+applyPins pins raw = join "\n" (pinGo pins (split "\n" raw) Nothing)
+
+pinGo : List (Pair String String) -> List String -> Maybe String -> List String
+pinGo pins [] current = []
+pinGo pins (line :: rest) current = case depSectionAlias (trim line) of
+  Just alias => line :: pinGo pins rest (Just alias)
+  Nothing => if isSectionHeader (trim line) then line :: pinGo pins rest Nothing
+  else case current of
+    Just alias =>
+      if startsWith "hash" (trim line) then replaceHashLine alias pins line :: pinGo pins rest current
+      else line :: pinGo pins rest current
+    Nothing => line :: pinGo pins rest current
+
+depSectionAlias : String -> Maybe String
+depSectionAlias t =
+  if startsWith "[dependencies." t && endsWith "]" t then Just (substring 14 (natFromInt (strLength t - 15)) t)
+  else Nothing
+
+isSectionHeader : String -> Bool
+isSectionHeader t = startsWith "[" t
+
+replaceHashLine : String -> List (Pair String String) -> String -> String
+replaceHashLine alias pins line = case lookupPin alias pins of
+  Nothing => line
+  Just digest => "hash = \"sha256:${digest}\""
+
+lookupPin : String -> List (Pair String String) -> Maybe String
+lookupPin alias [] = Nothing
+lookupPin alias ((Pair name digest) :: rest) =
+  if name == alias then Just digest else lookupPin alias rest
+
+listLen : List a -> Int
+listLen [] = 0
+listLen (_ :: rest) = 1 + listLen rest

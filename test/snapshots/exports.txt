@@ -153,7 +153,7 @@ lib/Vuna/Doc/Prose.vuna: htmlEscape, renderProse
 lib/Vuna/Doc/Run.vuna: runDoc
 lib/Vuna/Doc/Types.vuna: DocBlock(..), DocTable(..), docBlockCol, docBlockEndLine, docBlockStartLine, docBlockText, docForDecl, docForMember, docTableDecls, docTableMembers, docTableModuleDoc
 lib/Vuna/Explain.vuna: runExplain
-lib/Vuna/Fetch.vuna: fetchAt, runFetch
+lib/Vuna/Fetch.vuna: fetchAt, runFetch, runPin
 lib/Vuna/Files.vuna: collectSourceFiles, collectVunaFiles, exampleOf, pathExistsDir, pathExistsFile
 lib/Vuna/FixityEnv.vuna: FixityEnv, emptyFixityEnv, fixitiesForFile
 lib/Vuna/Fmt.vuna: formatSourceWith

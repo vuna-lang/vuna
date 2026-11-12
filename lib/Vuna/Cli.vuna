@@ -75,6 +75,7 @@ toolUsageLines prog = """  ${prog} lint [--fix] <file.vuna>...
   ${prog} gen-errors [ROOT]  从枚举真源生成错误码文档（ROOT 必须是已存在目录；输出 ROOT/docs/.generated/errors.md）
   ${prog} explain <CODE> | --list [PREFIX]  查询错误码目录（消息模板 + 说明）
   ${prog} fetch [--locked] [DIR]           取包到持久 store（git/url；--locked 只校验不联网）
+  ${prog} pin [DIR]                      重算 git 依赖的内容摘要并写回 manifest 的 hash 行
   ${prog} clean [--iface] [--store] [--packages] [--all] [--dry-run] [DIR]
       清理缓存：iface = 树内 *.iface/.vuna-iface；store = 临时缓存根（\${TMPDIR}/vuna-cache 或 $VUNA_CACHE_DIR）；
       packages = 持久包 store（$VUNA_STORE）。不带 flag 时只清 iface+store；--dry-run 只报数量
@@ -136,6 +137,7 @@ runCli1 args = case args of
     "gen-errors" => genErrorsArgs (stripReleaseArgs rest)
     "explain" => Vuna.Explain.runExplain (stripReleaseArgs rest)
     "fetch" => Vuna.Fetch.runFetch (stripReleaseArgs rest)
+    "pin" => Vuna.Fetch.runPin (stripReleaseArgs rest)
     "clean" => Vuna.Clean.runClean (stripReleaseArgs rest)
     "map" => mapArgs (stripReleaseArgs rest)
     "api" => apiArgs (stripReleaseArgs rest)
