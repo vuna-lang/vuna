@@ -636,11 +636,11 @@ let rec v_Vuna_dCompiler_dElab_dDriver_delabBodies = (fun mc0 mc1 mc2 mc3 mc4 ->
 )) (if (dtp_debug_on 0) then (dtp_debug_line ("FUN " ^ dtb__341)) else 0))))) (if (dtp_debug_on 0) then (dtp_debug_line ("DEF " ^ dtb__341)) else 0)))
   | _ -> failwith "DT: impossible branch"
 )
-  | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dDecl_DAxiom (dtb__348, dtb__349, dtb__350) -> (match (((Vuna_dCompiler_dElab_dMeta.v_Vuna_dCompiler_dElab_dMeta_dglobalsLookup dtb__348) mc1) mc4) with
+  | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dDecl_DAxiom (dtb__348, dtb__349, dtb__350) -> (if ((Base_dString.v_Base_dString_dstartsWith "vuna_seal_") dtb__348) then ((fun target -> (((((v_Vuna_dCompiler_dElab_dDriver_delabBodies dtb__340) mc1) mc2) mc3) ((Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_decRemoveDefTbl target) mc4))) (((dtp_substring 10) ((bi_strLength dtb__348) - 10)) dtb__348)) else (match (((Vuna_dCompiler_dElab_dMeta.v_Vuna_dCompiler_dElab_dMeta_dglobalsLookup dtb__348) mc1) mc4) with
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing -> (((Vuna_dCompiler_dDiagnostics_dTc.v_Vuna_dCompiler_dDiagnostics_dTc_dtcErr1 dtb__350) (Vuna_dCompiler_dDiagnostics_dTc.C_Vuna_dCompiler_dDiagnostics_dTc_dTcErr_ExpectedSignature (dtb__348))) dtb__348)
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__351) -> (((((v_Vuna_dCompiler_dElab_dDriver_delabBodies dtb__340) mc1) mc2) (Base_dList.C_Base_dList_dList_Cons ((Vuna_dCompiler_dElab_dTypes.C_Vuna_dCompiler_dElab_dTypes_dDtDef_DtAxiom (dtb__348, dtb__351, (Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__350)))), mc3))) mc4)
   | _ -> failwith "DT: impossible branch"
-)
+))
   | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dDecl_DExtern (dtb__352, dtb__353, dtb__354, dtb__355) -> (match (((Vuna_dCompiler_dElab_dMeta.v_Vuna_dCompiler_dElab_dMeta_dglobalsLookup dtb__352) mc1) mc4) with
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing -> (((Vuna_dCompiler_dDiagnostics_dTc.v_Vuna_dCompiler_dDiagnostics_dTc_dtcErr1 dtb__355) (Vuna_dCompiler_dDiagnostics_dTc.C_Vuna_dCompiler_dDiagnostics_dTc_dTcErr_ExpectedSignature (dtb__352))) dtb__352)
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__356) -> ((Vuna_dCompiler_dCommon.v_Vuna_dCompiler_dCommon_dbind ((v_Vuna_dCompiler_dElab_dDriver_dcheckExternTy dtb__355) dtb__356)) (fun _u -> (((((v_Vuna_dCompiler_dElab_dDriver_delabBodies dtb__340) mc1) mc2) (Base_dList.C_Base_dList_dList_Cons ((Vuna_dCompiler_dElab_dTypes.C_Vuna_dCompiler_dElab_dTypes_dDtDef_DtExtern (dtb__352, dtb__356, dtb__353, (Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__355)))), mc3))) mc4)))
