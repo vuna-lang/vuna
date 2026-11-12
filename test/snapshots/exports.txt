@@ -202,3 +202,4 @@ lib/Vuna/Test/Run.vuna: runSuite
 lib/Vuna/Test/Session.vuna: Session, sessionCheck, sessionInterp, sessionNew
 lib/Vuna/Test/Suite.vuna: Case(..), CaseKind(..), Family(..), Suite(..), SuiteOpts(..), discoverCases, parseSuiteFile
 lib/Vuna/TestRunner.vuna: TestOpts(..), runTests
+lib/Vuna/Tool/Session.vuna: ToolSession(..), toolBlobPath, toolBlobTag, toolCommitValue, toolHitValue, toolLoadPayload, toolSessionNew, toolStorePayload

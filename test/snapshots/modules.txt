@@ -59,6 +59,7 @@ Vuna.Test.Run  ./lib/Vuna/Test/Run.vuna
 Vuna.Test.Session  ./lib/Vuna/Test/Session.vuna
 Vuna.Test.Suite  ./lib/Vuna/Test/Suite.vuna
 Vuna.TestRunner  ./lib/Vuna/TestRunner.vuna
+Vuna.Tool.Session  ./lib/Vuna/Tool/Session.vuna
 app.Main  ./app/Main.vuna
 Vuna.Compiler.Canonical.Ast  compiler/lib/Vuna/Compiler/Canonical/Ast.vuna
 Vuna.Compiler.Canonical.Bytes  compiler/lib/Vuna/Compiler/Canonical/Bytes.vuna
