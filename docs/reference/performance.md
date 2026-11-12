@@ -90,7 +90,7 @@ VUNA_DEBUG_PERF=1 vuna check compiler
 - `DEBUG <epoch-us> <text>`：微秒时间戳 + 文本。**相邻两行相减 = 阶段耗时**。
 
 调用点只写内置宏 `dbg!`（展开规则见 [language.md](language.md) 的「内置宏」；后端是
-隐藏 runtime 原语 `@vuna@debug@on` / `@vuna@debug@line`，不是 `Vuna.Compiler.Debug` 模块）：
+隐藏 runtime 原语 `@vuna@debug@on` / `@vuna@debug@line`，不是旧的 Debug 模块）：
 
 | 用法 | 语义 | 何时用 |
 | --- | --- | --- |
