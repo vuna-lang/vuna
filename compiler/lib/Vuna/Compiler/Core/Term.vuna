@@ -936,7 +936,7 @@ showTerm (TFloat raw) = raw
 showTerm (TBool b) = if b then "True" else "False"
 showTerm (TIf c th el) = "if ${showTerm c} then ${showTerm th} else ${showTerm el}"
 
--- 可回读的类型渲染（REPL 自动签名 / `:type` / 合成 IO 入口签名写回用）。
+-- 可回读的类型渲染（REPL 自动签名 / `:type` / 合成动作入口签名写回用）。
 -- `showTerm` 不为匿名 Pi 的域补括号：`(Int -> Int) -> Int` 会渲染成
 -- `Int -> Int -> Int`（右结合），写回源码会静默改变类型；TApp/TCon 的实参也有
 -- 同样问题。这里只在需要时补括号，其余形态委托 `showTerm`（诊断文案不受影响）。

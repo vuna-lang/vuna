@@ -59,7 +59,7 @@ quantity / 线性规则见 [qtt.md](qtt.md)（quantity 与擦除口径以该页�
 - 族的类型级应用（`Vec n a`）保持中性（`TGlobal` / `NGlobal` spine），只在 unification
   时按定义性相等比较，不做类型级求值。
 - 没有内置的归纳相等族 `Eq`（DT 用来做证明的 `data Eq`）；`Base.Eq` 是 trait。`Nat` / `Vec` /
-  `Fin` 也是用户（或 `Base.Nat`、`Base.Vec`）声明的普通族。`Bool` / `List` / `IO` 的
+  `Fin` 也是用户（或 `Base.Nat`、`Base.Vec`）声明的普通族。`Bool` / `List` 的
   canonical 身份见 [primitives.md](primitives.md)。
 - 索引 binder 的擦除：隐式索引恒擦除（无运行时字段）；显式索引未标注时是 `RigOmega`，
   保留运行时字段（`Vec n a` 的 `(n : Nat)` 可被读回）；要擦除显式索引就写
@@ -190,7 +190,7 @@ quantity / 线性规则见 [qtt.md](qtt.md)（quantity 与擦除口径以该页�
 - **零参顶层定义求值一次**：生成 `let v_x = body`；递归组里的零参非构造子 RHS 报
   `CG_RecursiveValueDefinition`。
 - **`main`**：`check` 不要求 `main`，`compile` / `build` 要求；`main` 可为
-  `Int` / `Nat` / `String` / `Bool` 或 `IO a`（`IO` 是内建效应类型）。
+  `Int` / `Nat` / `String` / `Bool` 或 `Eff [] a`（`Eff` 是 `Base.Eff` 的动作类型）。
   `vuna interp` 是纯核心求值，只展示 `Int` / `Nat` / `String` / `Bool`，任何
   `main : Eff [] a` 一律明确报错。
 - 洞 `_` / 命名洞 `?name` 未解时报 `TC_UnsolvedHole`（带位置与目标类型，命名洞带洞名）；

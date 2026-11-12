@@ -106,7 +106,7 @@ CLI 统一使用 0 / 1 / 2 三档：
 | --- | --- | --- |
 | 0 | 成功 | 命令完成；`--check` 无差异；lint 无 finding；测试全过 |
 | 1 | 源码 / 诊断错误 | `check` / `compile` / `build` 的一切失败（解析、精化、覆盖性、终止性、codegen，以及入口路径不存在；**解析错误也是 1**）；`lint` 有 finding；`fmt --check` 有需重排文件；`doc --check` 缺 docstring；`test` 有失败 |
-| 2 | 用法 / 工具错误 | 未知命令或 flag、缺值、参数个数不对；工具命令的 IO / 上下文错误（`lint` / `fmt` / `interp` / `test` / `goal` / `doc` 的路径不存在、非 workspace、包或依赖加载失败、取不到程序级 fixity 上下文） |
+| 2 | 用法 / 工具错误 | 未知命令或 flag、缺值、参数个数不对；工具命令的宿主操作 / 上下文错误（`lint` / `fmt` / `interp` / `test` / `goal` / `doc` 的路径不存在、非 workspace、包或依赖加载失败、取不到程序级 fixity 上下文） |
 
 约定之外：`vuna check` 的 warning（`UN_` 域）默认静默：`-W`/`--warnings` 打开显示，`--deny-warnings` 显示并把退出码提升为 1（源码检查本身仍成功）。warning 只报当前检查单元自己的文件（依赖包不重复刷屏）。**warning 不持久化**，所以 `-W` / `--deny-warnings`（以及 manifest `[diagnostics] warnings/deny-warnings`）会跳过 check 结果缓存、并让**本包**模块全部重新精化（依赖包仍复用接口摘要）——热缓存下告警仍然完整，代价是该次 check 从「缓存命中 ~ms」回到「本包精化秒级」。普通 `vuna check` 仍走缓存/干净模块（不显示 warning）。
 
@@ -203,7 +203,7 @@ REPL（`vuna repl [FILE|DIR|MODULE]`，实现入口 `Vuna.Repl.runRepl`；行编
 签名，`u = Type 1` 自动推断为 `u : Type 2`。同名 `DFun` 再次输入即重定义
 （文本替换语义：后续定义重新绑定到新定义，不是 shadowing）。
 
-**效果表达式**：`IO` 表达式放进临时包走 `compile` + 运行，效果输出直接到终端、按进程
+**效果表达式**：动作表达式放进临时包走 `compile` + 运行，效果输出直接到终端、按进程
 退出码判定，因此需要 PATH 里有 `ocamlopt`。包上下文取最近 `vuna.toml` 的本地依赖闭包
 （不在包内时 base-only）。
 
@@ -230,7 +230,7 @@ Ctrl-D 空行退出。超宽行按水平窗口只显示尾部，宽度来自 `st
 `:browse` / `import` 的参数位只补模块名。模块名来自包上下文模块根（自身 `lib` + 依赖
 闭包，相对路径 `/`→`.`；不按 `[export]` 过滤，越权模块在 `:load` 时被 Loader 拒绝），
 文件路径按 token 最后一个 `/` 拆目录/末段后列举（目录补尾随 `/`）。候选只在按下 Tab 时
-枚举（读行不做目录 IO）；唯一匹配直接补全、多个匹配补最长公共前缀，语义不变。
+枚举（读行不做目录访问）；唯一匹配直接补全、多个匹配补最长公共前缀，语义不变。
 
 **括号粘贴**：tty 下开启 bracketed paste（`\e[?2004h`，退出时 `\e[?2004l`）。
 `\e[200~` … `\e[201~` 之间的内容**原样**进编辑缓冲（Tab 不触发补全、换行不触发提交，
@@ -308,7 +308,7 @@ printf '%s' '{"jsonrpc":"2.0","id":2,"method":"shutdown"}' | vuna repl --client 
 
 **阶段 1 限制**：server 模式下 `:!` 与效果表达式（`main : Eff [] a` 临时编译运行）**拒绝执行**
 （子进程会写真实 stdout，污染协议通道）；需要跑程序时用 `vuna run` / `vuna build` 后直接
-执行产物。`vuna test` 的 IO 测试路径不受影响。
+执行产物。`vuna test` 的效果测试路径不受影响。
 
 ## 5. `vuna fmt`
 

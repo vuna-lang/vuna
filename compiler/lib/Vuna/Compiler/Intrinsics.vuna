@@ -85,8 +85,7 @@ module Vuna.Compiler.Intrinsics
 --   - `Core.Eval`：按 IntrinsicOp 归约。
 --
 -- 身份规则（M27/M37）：内置实体按**声明的 symbol**判定，不按短名/lastName：
---   - Int / String 是语言 primitive 类型；IO 是语言内建效应类型（M37 升格，
---     动作由 base 的 `Base.Eff.Eff` 承载；
+--   - Int / String 是语言 primitive 类型；动作类型由 base 的 `Base.Eff.Eff` 承载；
 --   - Bool / List / Nat 是 base 的普通 data，身份 = 完整限定名
 --     `Base.Bool.Bool` / `Base.List.List` / `Base.Nat.Nat`（见 `Loader`/`Codegen` 的常量）；
 --   - 隐藏的内部 runtime 名（`bi_*`）只供 codegen 映射，不对用户源码可见。
@@ -461,7 +460,7 @@ needsListBridge i = case i.intrinsicRuntime of
   _ => False
 
 -- | canonical 族（base 的 data 声明）必须由 vuna-base 以固定的构造子集合声明；
--- 其它同名声明是非法伪造。IO 不在其中：它是编译器内建效应类型（没有构造子）。
+-- 其它同名声明是非法伪造。
 canonicalCtorsFor : String -> Maybe (List String)
 canonicalCtorsFor name =
   if name == boolTypeName then Just [boolTrueCtor, boolFalseCtor]
@@ -473,7 +472,7 @@ intrinsicArity : Intrinsic -> Int
 intrinsicArity i = arityOfType (intrinsicSignature i)
 
 -- thunk（C2 内建模式：`fun args -> fun _ -> rt args`；C1 legacy 模式：`MkIO (fun _ -> …)`）。
--- 零参原语因此是真正的值而不是每次求值的表达式。IO 代数原语（pure/bind）的 runtime
+-- 零参原语因此是真正的值而不是每次求值的表达式。
 -- | 该内建是否返回 Eff 动作（`IEff` 在签名尾部）。
 intrinsicReturnsEff : Intrinsic -> Bool
 intrinsicReturnsEff i = typeReturnsEff (intrinsicSignature i)
@@ -590,15 +589,13 @@ baseIntrinsics : List Intrinsic
 -- 效果原语（M27：只保留 `prim_*` 名；公开名删除，用户经 Base.Host 或显式能力）。
 -- 精化器合成的比较/相等特化名（内部：不对用户源码可见）。
 -- M33 W3：内建类型构造子 Array / IORef / MArray / Buffer 的原语。
--- 纯 Array 原语无能力；IORef / MArray / Buffer 都是 IO 动作（无能力：不触碰外部世界）。
+-- 纯 Array 原语无能力；IORef / MArray / Buffer 都是 `Eff []` 动作（无能力：不触碰外部世界）。
 -- 空数组字面量：non-expansive 的 OCaml `[||]`，让 `HashMap` 的空表这类零参多态值可泛化。
 -- M33 W4：字节切片（clamp 语义与 Base.String.substring 一致），避免 List 桥接。
 -- M34.5：编译器内部缓存原语（Marshal 纯数据；含闭包会在运行期失败）。
 -- M34.4：异步子进程（workspace 并行 check）。spawn 返回 pid，wait 返回退出码。
 -- Nat 度量/算术：运行时表示是 OCaml int（Zero=0、Succ 饱和 +1）。
 -- 语义：add/mul 饱和到 max_int，sub 截断到 0，div 除零与 Int 同文案失败。
--- IO 代数（M37 / C1 过渡）：`IO` 是编译器内建效应类型，构造/绑定/执行是内建原语。
--- 这里的 runtime 文本是**内建模式**（IO = 裸 thunk `int -> 'a`）的实现；
 -- M38：运行时诊断原语。`prim_eff_eprint` 写 stderr 并 flush（报告器/调试输出用）；
 -- `prim_fail` 抛 Failure（报告器把它渲染成 "vuna: runtime error: ..."）。`prim_eff_eprint`
 -- 已被 `Base.Host.eprint` 使用；`prim_fail` 供工具链的 fuel 耗尽路径使用。
@@ -713,8 +710,8 @@ floatIntrinsics =
   ]
 
 -- | Eff 动作版本的宿主原语（bootstrap 过渡表）：名字带 `prim_eff_` 前缀，
--- 与同名 IO 原语语义相同、类型为 `Eff [] a`。单独成表是为了让每段列表字面量
--- 留在旧 seed 的 fuel 内（同 `floatIntrinsics`；迁移完成后删除 IO 表/本表并改名）。
+-- 类型为 `Eff [] a`。单独成表是为了让每段列表字面量
+-- 留在旧 seed 的 fuel 内（同 `floatIntrinsics`；迁移完成后本表并改名）。
 effIntrinsics : List Intrinsic
 effIntrinsics =
   [ Intrinsic primEffBind1Name (IPi "a" (IPi "b" (IFun1 (IEff (IVar "a")) (IFun1 (IFun1 (IVar "a") (IEff (IVar "b"))) (IEff (IVar "b")))))) OpNone Nothing "" True,

@@ -43,8 +43,8 @@
    manager）永不进入 seed 闭包；黑名单见 `nix/tcb-forbidden.txt`；
 5. **动作入口与宿主层**：唯一动作类型是 `Eff r a`；用户面入口是 `main : Eff [] a`（行必须
    Nil，入口处未处理效应是类型错误），执行入口是 `Base.Eff.runPure : Eff [] a -> a`。
-   **`IO` 类型与 `Base.IO` 模块全部已删除**；`Base.Host` 是特权宿主别名层（`prim_eff_*` +
-   Int/Nat 归一化），`ST`/`IORef`/`MArray`/`Buffer` 实现全是 `Eff []`。
+   `Base.Host` 是特权宿主别名层（`prim_eff_*` + Int/Nat 归一化），
+   `ST`/`IORef`/`MArray`/`Buffer` 实现全是 `Eff []`。
    **特权边界**：`[capabilities]`/`[trust]` 与宿主层模块 `Base.Host` 只允许
    `[package] privileged = true` 的包；用户包/ad-hoc 只能经 `Eff` + handler（见
    [effects.md](docs/reference/effects.md) §8.6）。
@@ -118,7 +118,7 @@ build，`dist/` 提交）；`nix/` = 构建图 + rotate/metrics/bench；`docs/` 
   [type-system.md](docs/reference/type-system.md)（宇宙/索引族/依赖匹配/相等/擦除）、
   [qtt.md](docs/reference/qtt.md)（quantity/用量检查/线性数据）、
   [records-traits.md](docs/reference/records-traits.md)（记录/trait/do）、
-  [effects.md](docs/reference/effects.md)（IO 内建效应/效应栈/运行时效应）、
+  [effects.md](docs/reference/effects.md)（Eff 动作/效应栈/运行时效应）、
   [stdlib.md](docs/reference/stdlib.md)、[packages.md](docs/reference/packages.md)、
   [primitives.md](docs/reference/primitives.md)（内建/原语/能力）、
   [operators.md](docs/reference/operators.md)（运算符=方法别名、实例落点规则）

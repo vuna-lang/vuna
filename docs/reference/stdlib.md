@@ -33,7 +33,7 @@
 | `Base.Num` | 数值算术 trait（D23）：`add` / `sub` / `mul` / `div`；`+` / `-` / `*` / `/` 是它们的中缀别名（fixity 与别名声明在本模块）。`Int` / `Nat` / `Float` 实例在类型模块并由精化器特化回内建原语；用户类型实现 `Num`（配 `FromInt`）即可重载四则（见 [operators.md](operators.md)） |
 | `Base.Vec` | `Vec(..)` 与 `substTemplate` / `vhead` / `vlen` / `vtail` |
 | `Base.Monad` | `Functor` / `Monad` trait（`Monad` 只有 `bind`）；为兼容既有 `import Base.Monad`，本模块重导出 `Base.Applicative`（`pure` / `liftA2` / `ap`） |
-| `Base.Applicative` | `Applicative` trait（`pure` / `ap` / `liftA2` 三个方法，各实例显式实现；`liftA2` 暂不作派生）；`Maybe` / `List` / `Result` / `IO` / `State` / `Reader` / `Error` / `Eff` 实例 |
+| `Base.Applicative` | `Applicative` trait（`pure` / `ap` / `liftA2` 三个方法，各实例显式实现；`liftA2` 暂不作派生）；`Maybe` / `List` / `Result` / `State` / `Reader` / `Error` / `Eff` 实例 |
 | `Base.Monoid` | `Semigroup`（`mappend`）与 `Monoid`（`mempty`）trait（无父类，泛型代码同时约束两者）；`List` / `String` / `Maybe` / `Nat` / `Unit` 实例 |
 | `Base.Foldable` | `Foldable` trait（方法 `fold`）+ 顶层 `foldMap : Foldable t, Monoid m, Semigroup m => ...`；`List` / `Maybe` / `Result` 实例 |
 | `Base.Traversable` | `Traversable t f`（双参数：容器 + Applicative）与方法 `mapM : (a -> f b) -> t a -> f (t b)`；`List` / `Maybe` / `Result` 实例 |
@@ -49,7 +49,7 @@
 | `Base.Eff` | 通用运行时效应核心（Layer 1）：开放行 `Row`、抽象动作 `Eff`（无世界令牌）、`Member` 行成员证明/`rowRem`、`weaken`、线性 `Cont`/`resumeCont`/`handleCoreLin`、内建 `Functor`/`Applicative`/`Monad (Eff r)`（`do`/`>>=`；不提供 `bindEff`/`pureEff`）、`sendCore`/`handleCore`、`runPure`/`joinEff`/`raise`（`runPure`/`joinEff` 要求行已处理干净，入口处未处理效应是类型错误）；OCaml 5 一次性续延；见 [effects.md](effects.md) §8 |
 | `Base.Eff.Reader` | 标签 `ReaderOp s` + `Ask`（实例名在行条目）：`ask`/`handleReader`/`handleReaderLin`/`local`（L2 作用域） |
 | `Base.EffState` | 标签 `StateOp s` + `Get`/`Put`（实例名在行条目）：`get`/`put`/`handleState`（answer `s -> Pair a s` 线程状态） |
-| `Base.EffFs` | IO-backed Fs 效应（完整 fs 面；标签 `FsOp`（实例名在行条目，如 `FsOp@mock`/`FsOp@real`））：`ReadFile`/`WriteFile`/`WriteFileAtomic`/`ReadDir`/`IsDirectory`/`MakeDir`/`RemoveFile`/`FileExists`/`FileMtime`/`FileSize` + `fsReadFile n`/`fsWriteFile n`/…/`handleFs n`/`handleFsHost n`；`WriteFile` / `FileSize` 的结果是 `Nat`（`WriteFileAtomic` 仍 `Int`）；handler 用 `Base.Host` 实现；mock（纯 answer）与 real handler 可并存（`dt_base/37`） |
+| `Base.EffFs` | 宿主-backed Fs 效应（完整 fs 面；标签 `FsOp`（实例名在行条目，如 `FsOp@mock`/`FsOp@real`））：`ReadFile`/`WriteFile`/`WriteFileAtomic`/`ReadDir`/`IsDirectory`/`MakeDir`/`RemoveFile`/`FileExists`/`FileMtime`/`FileSize` + `fsReadFile n`/`fsWriteFile n`/…/`handleFs n`/`handleFsHost n`；`WriteFile` / `FileSize` 的结果是 `Nat`（`WriteFileAtomic` 仍 `Int`）；handler 用 `Base.Host` 实现；mock（纯 answer）与 real handler 可并存（`dt_base/37`） |
 | `Base.EffError` | 一阶 Error 效应 + 作用域 `catch`（L2）：`throw`/`handleError`/`runError`/`catch` |
 | `Base.EffExn` | W6/W7 高阶/作用域 Error：`Try` 操作携带 `Eff` 子计算，`handleExn`/`runExn`/`catchExn`/`bracketExn`；scoped handler |
 | `Base.EffSched` | W9 单线程 fiber 调度器（L3）：不透明 `Task`/`Scope`，`forkTask`/`awaitTask`/`yieldNow`/`isCancelled`/`cancelTask`/`cancelScope`/`scopeWait`/`scopeWaitTimeout`/`withScope`/`withScopeTimeout`/`raise`/`forkTaskWith`/线性 `TaskLin`；协作式取消（含清理宽限）、结构化作用域、逻辑步数超时；任务体 `Eff Nil a`；见 [effects.md](effects.md) §8.5 |
@@ -118,10 +118,10 @@ module Base.Error (Error, catchError, ok, runError, throwError) where
 ## 度量与 Nat
 
 - **公开度量用 Nat**：`List.length`、`Array.length/get/set/make`、`MArray.new/read/write/length`、
-  `Buffer.push/length`、`String.byteLength/substring/repeat`、`IO.fileSize/readBytes`、
+  `Buffer.push/length`、`String.byteLength/substring/repeat`、`Host.fileSize/readBytes`、
   `Map.size`、`HashMap.size`、`HashSet.size`、`Vec.vlen`。
 - **D25 起宿主返回量也是 Nat**：`Base.Host.print` / `println` / `writeFile` / `fileSize`
-  返回 `IO Nat`（`prim_print` / `prim_writeFile` / `prim_fileSize` 的签名是 `IIO INat`），
+  返回 `Eff [] Nat`（`prim_print` / `prim_writeFile` / `prim_fileSize` 的签名是 `IEff INat`），
   `Base.EffConsole` 的 `Print` 与 `Base.EffFs` 的 `WriteFile` / `FileSize` 结果同步为 `Nat`；
   `eprint` / `prim_eprint` / `prim_writeFileAtomic` 与内部状态码仍 `Int`。
 - **低层原语仍是 Int**：`strLength` / `arrayLength` / `prim_*Length` 等保持 Int 签名；
@@ -178,7 +178,7 @@ module Base.Error (Error, catchError, ok, runError, throwError) where
   桥接只为 canonical `Base.List.List` 生成；包内没有该族时 codegen 报
   `CG_ListBridgeRequired`。`Prelude` 自动注入 `Base.List`，所以正常上下文里总可用。
 - **`Eff` 是唯一动作类型**：`Base.Eff` 的装箱 data（行擦除索引），运行时是一次性续延 +
-  handler 路由；入口 `main : Eff [] a`，执行 `runPure`。`IO` 类型与模块已删除，细节见
+  handler 路由；入口 `main : Eff [] a`，执行 `runPure`；细节见
   [effects.md](effects.md) §2。
 - **`Show` / `Eq` / `Ord` / `Hashable` 在库（声明与实例分离）**：`Base.Show` / `Base.Eq` /
   `Base.Ord` / `Base.Hashable` 承载 trait 声明；实例按**落点规则**分布（见 [operators.md](operators.md)）：
@@ -223,22 +223,22 @@ module Base.Error (Error, catchError, ok, runError, throwError) where
 - 哈希容器的键由 `Eq` + `Hashable` 约束覆盖（不再有 String/Int 专用容器）；`Hashable` 实例
   覆盖 primitive 与常用容器，用户类型可 `deriving (Hashable)`。仍**没有有序持久容器**
   （TreeMap/TreeSet）：需要有序时用 `Base.Sort`，大表查找用哈希容器；
-- **容器与可变数据**：不可变 `Base.Array`、IO 内 `IORef` / `MArray` /
+- **容器与可变数据**：不可变 `Base.Array`、`Eff []` 内 `IORef` / `MArray` /
   `Buffer`、ST 内 `Base.ST` 的 `Ref` / `SArray`；`Array.get` / `MArray.read` 越界是
-  宿主 `Invalid_argument`；`Array.set` 返回新数组；IO 句柄只经 `IO` 动作使用，ST 句柄
+  宿主 `Invalid_argument`；`Array.set` 返回新数组；可变数据句柄只经 `Eff []` 动作使用，ST 句柄
   只经 `ST r` 使用且不能逃出 `runST`（见 [effects.md](effects.md)）；
   `Ref`/`SArray` 是 linear record（恰好一次、不可复制），ST 动作本身仍可复制；
 - **库级效应**：`State` / `Reader` / `Error` 是带 `Functor`/`Monad` 实例的纯函数
   monad（**不进入 `Prelude` / `Base` 门面**，显式 import）；`do` 可用；`Base.ST` 的 region
   隔离与「不声明 `Monad` 实例」的原因见 [effects.md](effects.md)；通用签名索引效应
   （用户自定义 op + 深 handler + 行/重排）未实现（见 [debt.md](debt.md) / [effects.md](effects.md)）；没有语言级并发 / async；
-  **IO 标签在库层完成**：`Base.EffFs` 扩到完整 fs 面并改为命名
+  **效应标签在库层完成**：`Base.EffFs` 扩到完整 fs 面并改为命名
   实例（如 `"mock"`/`"real"`），新增 `Base.EffConsole`/`EffClock`/`EffEnv`/`EffProcess`（命名实例 +
-  IO-backed handler），`IO` 仍是运行时基座/逃逸口；收尾又补原生 `prim_sleep`
+  宿主 handler），`Base.Host` 仍是特权逃逸口；收尾又补原生 `prim_sleep`
   （`Base.EffClock` 与 `Base.Host.sleepMicros` 都已使用，`spinMicros` 已删除）、可控
   `Exit`（`handleProcessHostWith`/`…Observed`）与工具链一条 console 路径（`vuna version`）；
   见 [effects.md](effects.md) §8.6；
-- 抽象类型（`Map`、`HashMap`、`HashSet`、`IO`）跨包不可构造、不可模式匹配，只能经 API 使用；
+- 抽象类型（`Map`、`HashMap`、`HashSet`）跨包不可构造、不可模式匹配，只能经 API 使用；
 - **`Applicative` 有 `pure` / `ap` / `liftA2` 三个方法**（vuna 无 default method，实例
   全部显式实现）：B42 修复后实例方法体可以直接对 `f (a -> b)` 做 `case` / pattern
   match（此前误报 `TC_ImpossibleBranchIndex`）；`liftA2` 暂不作派生顶层函数——codegen

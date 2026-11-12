@@ -58,7 +58,7 @@ toolUsageLines : String -> String
 toolUsageLines prog = """  ${prog} lint [--fix] <file.vuna>...
   ${prog} interp <file.vuna>                   精化后核心求值（纯；不执行效果）
   ${prog} test [--list] [--filter PAT]... [--verbose] [--fail-fast] [--jobs N] [DIR]
-      运行包内 test/*.vuna（纯 String/Int/Bool 走核心求值；main : IO ... 走 compile+运行；
+      运行包内 test/*.vuna（纯 String/Int/Bool 走核心求值；main : Eff [] a ... 走 compile+运行；
       --jobs N 每个测试文件一个子进程、最多 N 并发，默认 1）
   ${prog} test --suite FILE [--only PAT] [--filter PAT] [--list] [--json] [--jobs auto|N]
       运行原生 suite（test/suite.toml）；--jobs auto 用探测到的全部可用核

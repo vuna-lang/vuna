@@ -275,7 +275,6 @@ elabDataBodies decls heads globals ec acc records = case decls of
 
 -- canonical 族（`Base.Bool.Bool` / `Base.List.List` / `Base.Nat.Nat`）只能以固定的
 -- 构造子集合声明：伪造同名族会让精化与 codegen 的 canonical 判定失配（M27 防御）。
--- IO 不在此列：M37 起它是编译器内建效应类型（没有构造子）。
 sameCtorSet : List String -> List String -> Bool
 sameCtorSet expected actual = length expected == length actual && allIn expected actual
 

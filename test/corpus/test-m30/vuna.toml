@@ -1,7 +1,7 @@
 # M30 `vuna test` 夹具：纯测试 + 效果测试 + workspace 聚合。
 #
 # 新格式 manifest（M30 起 version/edition 已从语义模型删除，不再出现）。
-# 根包自己的 test/ 覆盖 String / Int / Bool / IO 四种 main；member/ 是 workspace
+# 根包自己的 test/ 覆盖 String / Int / Bool / 动作 四种 main；member/ 是 workspace
 # 成员（验证 `vuna test <workspace-root>` 按包分组聚合）；bad-* 不是 workspace 成员，
 # 是三个独立的失败夹具（纯失败 / 效果失败 / 不支持的 main 类型），用目录路径单独跑。
 [package]

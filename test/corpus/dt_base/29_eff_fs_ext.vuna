@@ -1,4 +1,4 @@
--- W10：fs 效应标签（命名实例 "real"，真实 IO handler）——写/原子写/读/元数据/目录/删除。
+-- W10：fs 效应标签（命名实例 "real"，真实宿主 handler）——写/原子写/读/元数据/目录/删除。
 -- 注：fs 步骤拆成两个行类型已钉死的 helper。单段 14 步 do 链会触发 D48 的指数级精化
 -- （open-row + Monad 字典 meta 未从期望类型早解）；拆分后语义/操作顺序不变。
 import Base.Eff

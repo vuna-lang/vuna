@@ -1964,8 +1964,8 @@ mainUnitName : String
 mainUnitName = "Main"
 
 -- M38：入口单元里 `main` 的零参值绑定在**模块初始化期**求值，发生在 main 钩子的
--- try 之前，钩子捕不到；这里给它套同一个报告器。IO main 的身体是 thunk（运行时
--- arity ≥ 1），由钩子在 try 内执行，不套；`let rec` 的右值不允许 try（OCaml 限制），
+-- try 之前，钩子捕不到；这里给它套同一个报告器。动作 main 的求值由钩子完成（`v_main 0`，
+-- 在 try 内），不套；`let rec` 的右值不允许 try（OCaml 限制），
 -- isRec 时一律跳过；lambda（含擦除 lambda 剥完之后的函数）也不套——try 会破坏尾调。
 mainInitWrap : GenSt -> Bool -> String -> Term -> Bool
 mainInitWrap st isRec name body =
@@ -2119,7 +2119,7 @@ mainShowSynth : Check (Pair String String)
 mainShowSynth = OkC (Pair (valueName mainShowDefName) "show")
 
 -- main 钩子：`mainExpr` 是运行时求 main 值的表达式（普通 main 直接是 `v_main`；
--- main : IO a 则是 `v_main 0`），按类型 `tyTerm` 选展示函数。
+-- main : Eff [] a 则是 `v_main 0`），按类型 `tyTerm` 选展示函数。
 -- M38：动作整体包进 `try`——未捕获异常交给运行时报告器（dt_report_exn）打印
 -- "vuna: runtime error: ..." + 命中的 vuna 位置帧，然后 exit 2（不再是 OCaml 的
 -- Fatal error 形态）。try 只包 main 这一处，不碰 lambda，尾调不受影响。

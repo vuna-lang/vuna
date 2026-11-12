@@ -6,14 +6,14 @@ module Vuna.TestRunner (TestOpts(..), runTests) where
 --   - `main : String`：核心求值，返回空串通过（历史约定，`interpretFile` 展示成 `""`）；
 --   - `main : Int`：核心求值，值 0 通过；
 --   - `main : Bool`：核心求值，值 True 通过；
---   - `main : IO a`：临时包编译 + 运行，以**进程退出码**判定（0 通过；失败测试显式
+--   - `main : Eff [] a`：临时包编译 + 运行，以**进程退出码**判定（0 通过；失败测试显式
 --     `exit 1`）。效果的输出直接写终端；
 --   - 其它返回类型：明确失败（不再静默当失败），错误信息里写清支持的类型。
 -- main 的类别用 `Vuna.Compiler.Driver.Dt.dtMainKind` 判定（同一份 DT 精化，不猜语法）。
 -- 编译/精化失败也按 FAIL 记录诊断（单测失败不中断其余测试）。
 --
--- W1（测试基建硬化）：`main : IO a` 的单测有**超时**（默认 120s，`VUNA_TEST_TIMEOUT`
--- 环境变量覆盖，0 = 关闭，非数字回落默认）。实现方式：IO 测试直接在临时目录里
+-- W1（测试基建硬化）：`main : Eff [] a` 的单测有**超时**（默认 120s，`VUNA_TEST_TIMEOUT`
+-- 环境变量覆盖，0 = 关闭，非数字回落默认）。实现方式：效果测试直接在临时目录里
 -- `compileToDir` 测试入口，再用 coreutils `timeout` 包住「`sh build.sh` 链接」与「运行
 -- 产物」两步；任一步超时记 FAIL（"timed out after Ns"）并清理，不会让 `vuna test` 永久
 -- 挂起。没有 `timeout` 命令的环境优雅降级到 `runEffectProgram`（无外部超时，行为与旧版
@@ -368,7 +368,7 @@ runIOTestLegacy ctx path name = do
   )
 
 -- ---------------------------------------------------------------
--- W1：IO 测试的超时执行
+-- W1：效果测试的超时执行
 -- ---------------------------------------------------------------
 -- 一条子进程命令的结果：正常退出码 / 被超时杀掉。
 data CmdOutcome : Type where
@@ -421,7 +421,7 @@ runTimedCmd dir argv secs = do
   code <- prim_eff_runIn dir (append ["timeout", "-s", "TERM", "-k", "5", "${secs}s"] argv)
   pure (if code == 124 || code == 137 then CmdTimedOut else CmdDone code)
 
--- 有超时的 IO 测试：临时目录里编译测试入口（printResult=False，只看退出码），
+-- 有超时的效果测试：临时目录里编译测试入口（printResult=False，只看退出码），
 -- `sh build.sh` 与运行产物两步各自受 timeout 保护；失败/超时都清理临时目录。
 -- 目录名含测试文件名：`--jobs` 并行时同一包的多个子进程各自建目录，即使时间戳相同
 -- 也不会撞名（同包文件名唯一）。
@@ -447,7 +447,7 @@ runIOTestTimed ctx path name secs = do
             CmdDone 0 => ioCleanup dir TestPassed
             CmdDone code => ioCleanup dir (TestFailed "effect program exited with code ${code}")
 
--- 删掉本次 IO 测试的临时目录（绝对路径，cwd 无关）后返回结果。
+-- 删掉本次效果测试的临时目录（绝对路径，cwd 无关）后返回结果。
 ioCleanup : String -> TestOutcome -> Eff [] TestOutcome
 ioCleanup dir outcome = do
   _ <- prim_eff_runIn "/" ["rm", "-rf", dir]

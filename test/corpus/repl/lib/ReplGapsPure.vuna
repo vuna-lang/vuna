@@ -2,7 +2,7 @@ module ReplGapsPure (checks) where
 
 -- REPL v2 缺口（W2）的**纯函数**回归：历史文件编解码 / 括号粘贴解码 / 补全候选判定。
 --
--- 这些逻辑不依赖终端与 IO，因此脱离 pty 也能断言（CI 沙箱没有 python，pty 只用
+-- 这些逻辑不依赖终端与宿主，因此脱离 pty 也能断言（CI 沙箱没有 python，pty 只用
 -- `script` 且要能降级）。断言集放在本模块，两个入口共用：
 --   * `app/Main.vuna`（main : Int = 失败计数）→ `vuna run test/corpus/repl`；
 --   * `test/ReplPure.vuna`（main : Eff [] Int，失败时 exit 1）→ `vuna test test/corpus/repl`。

@@ -17,7 +17,7 @@ module Vuna.Repl.Server (checkReplAddr, runReplServer) where
 -- 协议帧全部走 socket；诊断走 stderr（`[vuna-repl-server]` 前缀）。
 --
 -- 阶段 1 限制（见 docs/reference/tooling.md）：server 模式下 `:!` 与效果表达式
--- （`main : IO a` 临时编译运行）**拒绝执行**——子进程会写真实 stdout，污染协议通道。
+-- （`main : Eff [] a` 临时编译运行）**拒绝执行**——子进程会写真实 stdout，污染协议通道。
 import Vuna.Compiler.Common
 import Vuna.Compiler.Packages.Pkg
 import Vuna.Compiler.Version

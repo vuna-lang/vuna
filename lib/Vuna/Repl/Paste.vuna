@@ -4,7 +4,7 @@ module Vuna.Repl.Paste (pasteDisable, pasteEnable, readPasteBody) where
 --
 -- 背景：终端开启 DECSET 2004 后，粘贴内容被包在 `\e[200~` … `\e[201~` 之间。行编辑器
 -- 若不认识这两个序列，`\e[200~` 会被拆成杂散字符、粘贴里的换行会被逐行当成 Enter 提交
--- （debt D35）。解码状态机是纯函数（`Vuna.Repl.Paste.Decode`，可脱离 IO 单测），
+-- （debt D35）。解码状态机是纯函数（`Vuna.Repl.Paste.Decode`，可脱离宿主单测），
 -- 本模块只负责：
 --   * `readPasteBody`：逐字节读、`\r` 规范化为 `\n`、读到终止序列/EOF 为止；
 --   * `pasteEnable` / `pasteDisable`：输出 `\e[?2004h` / `\e[?2004l`（退出时务必关闭）。

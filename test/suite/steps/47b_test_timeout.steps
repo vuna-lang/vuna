@@ -1,4 +1,4 @@
-# 47b) `vuna test` 的 IO 路径超时：1ms 的用例照常通过，30s 长睡眠用例按 8s 超时失败，
+# 47b) `vuna test` 的效果路径超时：1ms 的用例照常通过，30s 长睡眠用例按 8s 超时失败，
 #      进程不挂死，失败文案带 `timed out after 8s`。
 run: VUNA_TEST_TIMEOUT=8 "$VUNA" test corpus/cli/timeout_hang 2>&1
 exit: 1

@@ -259,7 +259,7 @@ dtEvalExpr ctx program exprSource = do
     OkC p => dtEvalExprIn (firstOf p) (secondOf p)
   )
 
--- M30 · REPL：表达式求值 + 类型文本。REPL 用类型判断是否为 `IO a`（决定是否走
+-- M30 · REPL：表达式求值 + 类型文本。REPL 用类型判断是否为 `Eff [] a`（决定是否走
 -- compile+run）；类型文本经 `showTerm` 渲染 zonk 后的类型，可直接写回合成签名的
 -- `main : <type>`。
 dtEvalExprInfo : PackageContext -> String -> String -> Eff [] (Check (Pair String String))
@@ -698,7 +698,7 @@ dtGoalsSourceTolerant ctx label source = do
   )
 
 -- M30 · `vuna test`：main 的返回类别，决定执行路径。
---   "IO"     —— 效果程序，走 compile + 运行（退出码判定）；
+--   "Eff"    —— 效果程序，走 compile + 运行（退出码判定）；
 --   "String" —— 纯测试，空串通过；
 --   "Int"    —— 0 通过；
 --   "Bool"   —— True 通过；
@@ -748,11 +748,11 @@ evalDtMain program = evalDtMainCore program
 -- 核心求值器对 `main` 的求值边界（M23 终态契约，B44 起含 Float）：
 --   - 纯 `main : Int/Nat/String/Bool/Float`：核心求值并展示值（Float 用
 --     `string_of_float` 规范文本，与产物一致）；
---   - `main : IO a`：**一律报错**。核心求值器是纯的、不执行效果；即使动作结果不依赖
+--   - `main : Eff [] a`：**一律报错**。核心求值器是纯的、不执行效果；即使动作结果不依赖
 --     效果（`do prim_eff_print "hi"; pure 7`），效果也会被静默丢弃——误导用户。所以不做
 --     「尝试归约、卡住才报错」这种不可靠的判定。效果程序只走 compile + 运行
---     （夹具用 `.nointerp` 标记）。IO 的识别按 main 的**类型**（M37 起是内建类型名 `IO`）。
--- | 核心求值器对 `main` 的求值边界：纯 Int/String/Bool/Nat/Float 归约并展示，`IO a` 一律报错。
+--     （夹具用 `.nointerp` 标记）。动作 main 的识别按精化后类型的动作层（`mainActionKind`）。
+-- | 核心求值器对 `main` 的求值边界：纯 Int/String/Bool/Nat/Float 归约并展示，动作 main 一律报错。
 evalDtMainCore : DtProgram -> Check String
 evalDtMainCore program = case findMainDef (dtProgDefs program) of
   Nothing => cgErr0 NoMain

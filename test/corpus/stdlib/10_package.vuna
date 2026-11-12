@@ -1,4 +1,4 @@
--- stdlib：包门面 `import Base` 覆盖多个模块（List/Sort/Map/String/Monad/IO）。
+-- stdlib：包门面 `import Base` 覆盖多个模块（List/Sort/Map/String/Monad）。
 -- P2c：宿主 console 走 Eff（runConsole）。
 import Base.Eff
 import Base.EffConsole

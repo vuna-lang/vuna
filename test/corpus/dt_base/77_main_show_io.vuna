@@ -1,4 +1,4 @@
--- D17：`main : Eff [] T` 且 `T` 非内建：main 钩子先剥掉 IO 拿到 `T`，再用 `Show T` 投影展示。
+-- D17：`main : Eff [] T` 且 `T` 非内建：main 钩子先剥掉动作层拿到 `T`，再用 `Show T` 投影展示。
 import Base.Host
 
 record Point where

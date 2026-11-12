@@ -274,7 +274,7 @@ main = pretty Red ++ "/" ++ show Red
   例外（`Eq` / `Ord` 的 `eq : a -> a -> Bool` 返回 Bool，Bool 实例随 trait 留在 `Base.Eq` /
   `Base.Ord`；`Show String` 留在 `Base.Show`，因为 String 经 Interp 依赖 Show。`Show Bool`
   的签名不依赖 Bool，按规则放 `Base.Bool`）。精化器**强制孤儿检查**（B23）：实例必须声明在
-  定义 trait 的文件，或定义 head 类型（任一类型参数）的文件；`Int` / `String` / `IO` 是
+  定义 trait 的文件，或定义 head 类型（任一类型参数）的文件；`Int` / `String` 是
   全局可见的内建类型，允许在任意模块声明实例（如 `Show Int`）。违反报 `TC_OrphanInstance`。
   规则与理由见 [operators.md](operators.md)。
 - **约束实例**：ctx 写在 head 前，搜索时递归求解：
@@ -383,14 +383,14 @@ main = case (MkEmail "x@y") of MkEmail s => s
   ```
 
 - `Functor`（`fmap`）与 `Monad`（`bind`）在 `base/lib/Base/Monad.vuna`；`pure` / `liftA2` / `ap`
-  在 `Base.Applicative`（`Base.Monad` 为兼容重导出它）。`Maybe` / `List` / `Result` / `IO` /
+  在 `Base.Applicative`（`Base.Monad` 为兼容重导出它）。`Maybe` / `List` / `Result` /
   `State` / `Reader` / `Error` 各有 `Functor` / `Applicative` / `Monad` 三个实例
   （`Eff r` 也有，见 [effects.md](effects.md) §8）。`Monad m` 的 `m` 是
   kind `* -> *`：trait 声明的类型参数可以当类型构造器应用（`m a`），实例 head 是
   类型构造器本身（`instance Monad Maybe`），kind 不符（如 `instance Monad Int`）在
   声明期报错。没有父类：`Monad` 不自动提供 `Applicative`，每个 monad 类型要写全三个实例。
-- **`IO`** 是 `base/lib/Base/Host.vuna` 的抽象类型（构造器私有）；组合统一用
-  `Functor` / `Applicative` / `Monad` trait 的 `fmap` / `bind` / `pure` / `liftA2`、`>>=` 与 `do`。IO 动作只在 `main`
+- **`Eff`** 是 `base/lib/Base/Eff.vuna` 的抽象动作类型（构造子 `MkEff` 不导出）；组合统一用
+  `Functor` / `Applicative` / `Monad` trait 的 `fmap` / `bind` / `pure` / `liftA2`、`>>=` 与 `do`。动作只在 `main`
   执行；`runPure` 是唯一的 main 外入口、需要能力 `unsafe`（工具链与 `Base.ST` 用）。
   参数化效应 monad（`Base.State` / `Base.Reader` / `Base.Error`）与 ST 见
   [effects.md](effects.md)。
@@ -422,14 +422,14 @@ main = case (MkEmail "x@y") of MkEmail s => s
 - `Hashable`：`hash : a -> Int`，泛型 `HashMap` / `HashSet` 的键约束；用户类型可
   `deriving (Hashable)`（与 Show/Eq/Ord 同一套展开，复合字段用 `hashCombine`）。
 
-- 效果 API 直接返回 IO：`print` / `println` / `readFile` / `writeFile` / `readLine` /
+- 效果 API 直接返回 `Eff []`：`print` / `println` / `readFile` / `writeFile` / `readLine` /
   `readDir` / `isDirectory` / `makeDir` / `removeFile` / `fileExists` / `getArgs` /
-  `exit`（例如 `getArgs : IO (List String)`、`print : String -> IO Int`）；内部用
+  `exit`（例如 `getArgs : Eff [] (List String)`、`print : String -> Eff [] Nat`）；内部用
   不导出的 `prim_*` 原语。普通包只能经 `Base.Host` 使用效果；要在源码里直接调用
   `prim_*`，必须在 `vuna.toml` 声明 `[capabilities] effects`（见
   [primitives.md](primitives.md)）。
 - 可执行包 / `vuna build` 要求 `main : Eff [] a`；`vuna interp` 是纯核心求值，任何
   `main : Eff [] a` 一律报错。`vuna test` 的纯 `String` / `Int` / `Bool` 测试走核心求值，
-  `main : Eff [] ...` 走 compile + 运行；REPL 的 IO 表达式经临时包 compile + 运行。
+  `main : Eff [] ...` 走 compile + 运行；REPL 的动作表达式经临时包 compile + 运行。
 - 实现：`Elab/Dict`、`Elab/Trait`、`Elab/Derive`；record 精化与字典编码在
   [core.md](core.md)。

@@ -126,13 +126,13 @@ fixed point → 全部通过后才替换 `seed/` 并写入 `nix/seed-rotation.tx
 
 ## 效应能力（capabilities）
 
-`seed/` 里没有工具链模块，但编译器自身需要文件 IO。效应边界是 manifest 里的**显式能力
+`seed/` 里没有工具链模块，但编译器自身需要文件读写。效应边界是 manifest 里的**显式能力
 声明**，不是按包名 allowlist：
 
 - 包在 `vuna.toml` 的 `[capabilities] effects` 里声明 `console` / `fs` / `process` / `env` /
   `clock` / `unsafe` 的任意子集（合法名与放行判定在 `Vuna.Compiler.Intrinsics` +
   `Loader.Resolve.checkEffectsBuiltins`；未知 / 重复能力名直接报错）；
-- 效果原语只有 `prim_*` 名并返回 `IO` 动作；`IO` 是内建效应类型（无构造器），
+- 效果原语只有 `prim_*` 名并返回 `Eff []` 动作；动作类型是 `Base.Eff` 的 `Eff`（构造器不导出），
   每个内建的能力位、签名与 runtime 名同源在 `Vuna.Compiler.Intrinsics`。未声明能力的包
   只能经 `Base.Host` 使用效果；声明了能力的包可直接用 `prim_*`（不需要 import `Base.Host`）；
 - 仓库内三个包的能力声明见各自 `vuna.toml`：根包与 `vuna-compiler` 五个能力，`vuna-base`

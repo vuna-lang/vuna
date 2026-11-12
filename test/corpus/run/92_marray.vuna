@@ -1,5 +1,5 @@
 import Base.Host
--- M33 W3：IO 内的可变数组 MArray（new / write / read / length）。
+-- M33 W3：`Eff []` 内的可变数组 MArray（new / write / read / length）。
 import Base.MArray
 
 main : Eff [] Int

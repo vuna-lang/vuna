@@ -120,11 +120,11 @@ max_module_lines 2709
 #     Loader 段加模板降级一条（arch 167 → 171）。`Elab/Trait.vuna` 的实例相干性检查拆到新模块
 #     `Elab/InstCoherence.vuna`（Trait 1208 → 1155，新增模块小于现有上限），max_module 保持 1208。
 #     属特性文档增长，按 `sh nix/context-budget.sh .` 实测复标定 coldstart 31675 / arch 172；其余指标不变。
-#   - M37（IO 升格效应化）：effects.md 重写为「IO 内建效应类型 + MonadIO/transformer +
+#   - M37（动作类型内建化）：effects.md 重写为「内建动作类型 + MonadIO/transformer +
 #     通用 Eff 边界」（158 → 174 行），primitives/stdlib/limits/language/type-system/
 #     compiler/architecture/debt/roadmap/AGENTS/README 同步；max_ref 317 → 332，
 #     architecture 172 → 173 行、coldstart 31675 → 31776 字节（特性文档增长）。
-#     `Codegen/Term.vuna` 删除 legacy 分支、新增 IO 代数/thunk 生成（1156 行，低于 1208）；
+#     `Codegen/Term.vuna` 删除 legacy 分支、新增动作代数/thunk 生成（1156 行，低于 1208）；
 #     按 `sh nix/context-budget.sh .` 实测复标定，未放宽 max_module_lines。
 #   - M38（开发与调试体验）：新增 docs/reference/debugging.md（运行时错误报告/Base.Debug/
 #     诊断片段/run/REPL），tooling/testing/primitives/stdlib/effects/limits/compiler/

@@ -238,7 +238,7 @@ run: "$VUNA" check corpus/dt_err/03_hole.vuna --json 2>&1
 exit: 1
 out-contains: "kind":"span","name":"created"
 # M45：签名里自动量化的隐式类型变量不是用户可见 binder —— `f a = a` 与实例方法体内的
-# `\a => \b =>` 不报 UN_ShadowedBinder（镜像 base/lib/Base/IO.vuna 的 Applicative 实例）。
+# `\a => \b =>` 不报 UN_ShadowedBinder（镜像 base 的 Applicative 实例）。
 run: sh -c 'printf "f : a -> a\nf a = a\n\nmain : Int\nmain = f 1\n" > "$TMPDIR/m45-generic-shadow.vuna"'
 run: "$VUNA" check -W "$TMPDIR/m45-generic-shadow.vuna" 2>&1
 out-not-contains: UN_ShadowedBinder

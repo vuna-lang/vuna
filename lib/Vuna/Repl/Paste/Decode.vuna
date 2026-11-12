@@ -8,8 +8,8 @@ module Vuna.Repl.Paste.Decode
 
 -- Vuna.Repl.Paste.Decode：括号粘贴的**纯解码状态机**（工具链；不进 seed 闭包）。
 --
--- 单独拆出来的原因：解码语义（终止序列识别、ESC 回退、跨字节边界）不依赖终端与 IO，
--- 因此可以直接单测（见 `test/corpus/repl/app/Main.vuna`）；IO 部分（逐字节读、终端开关）在
+-- 单独拆出来的原因：解码语义（终止序列识别、ESC 回退、跨字节边界）不依赖终端与宿主，
+-- 因此可以直接单测（见 `test/corpus/repl/app/Main.vuna`）；宿主部分（逐字节读、终端开关）在
 -- `Vuna.Repl.Paste`，本模块只被它和测试文件 import。
 --
 -- 终端开启 DECSET 2004 后，粘贴内容被包在 `\e[200~` … `\e[201~` 之间：
@@ -36,7 +36,7 @@ emptyPasteState = PasteState [] [] False
 pasteIsDone : PasteState -> Bool
 pasteIsDone st = st.pasteDone
 
--- 纯解码一步：一个字节进去，新状态出来（可完全脱离终端与 IO 测试）。
+-- 纯解码一步：一个字节进去，新状态出来（可完全脱离终端与效果测试）。
 pasteFeed : PasteState -> Int -> PasteState
 pasteFeed st b = if st.pasteDone then st
 else

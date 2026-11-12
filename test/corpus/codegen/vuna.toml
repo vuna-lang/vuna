@@ -3,7 +3,7 @@
 # 这个包的源码是冻结的：指标基线（nix/codegen.baseline）按它生成。有意改夹具、base 接口
 # 或 codegen 后，重跑 `sh nix/checks/vuna-metrics.sh` 取新值并复核 diff。
 # 覆盖 data/case、record、trait/instance/deriving、as-pattern、where/let 多 clause、
-# List 结构递归、Int 相等、IO/do、prim_* 的 IO 包装与跨模块 split；详见各模块头注释。
+# List 结构递归、Int 相等、动作/do、prim_* 的 `Eff` 包装与跨模块 split；详见各模块头注释。
 [package]
 name = "codegen-fixture"
 privileged = true

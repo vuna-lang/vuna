@@ -3,13 +3,13 @@ module Base.Buffer (contents, length, new, push) where
 -- Base.Buffer：可变字符串缓冲区（M33 W3）。内建类型构造子 `Buffer`，OCaml 表示 `Buffer.t`。
 --
 -- 所有操作返回 `Eff []`。用于多次追加后一次性取串，避免 `++` 链的 O(n²) 拷贝；
--- W4 之后的字符串构建器 / IO 组合子会以它为底层。
+-- W4 之后的字符串构建器 / `Eff` 组合子会以它为底层。
 -- 追加字节数与当前长度都是 **Nat**（底层原语仍是 Int）。
 import Base.Eff
 import Base.Monad
 import Base.Nat
 
--- | 创建空的可变字符串缓冲区（IO 动作）。
+-- | 创建空的可变字符串缓冲区（`Eff []` 动作）。
 new : Eff [] Buffer
 new = prim_eff_newBuffer
 

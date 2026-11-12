@@ -16,7 +16,7 @@ data ExitOp : Type where
 resExit : ExitOp -> Type
 resExit (ExitWith _) = Int
 
--- | 通过命名实例退出进程（原语类型 `Int -> IO Int`，执行即退出、不返回）。
+-- | 通过命名实例退出进程（原语类型 `Int -> Eff [] Int`，执行即退出、不返回）。
 exitWith : (n : String) -> Int -> {r : Row} -> {w : Member n ExitOp r} -> Eff r Int
 exitWith n code = sendCore ExitOp "exit" n (ExitWith code)
 

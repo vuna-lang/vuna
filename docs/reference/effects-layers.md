@@ -1,7 +1,7 @@
-# Layer 2/3：高阶/作用域、线性续延、调度器与 IO 标签
+# Layer 2/3：高阶/作用域、线性续延、调度器与效应标签
 
 > 本文是 [effects.md](effects.md) §8.5/§8.6 的展开页：高阶 scoped handler、
-> 线性续延/一次性闭包/`bracket`（含 abort cleanup）、单线程调度器、IO 标签迁移。Layer 1
+> 线性续延/一次性闭包/`bracket`（含 abort cleanup）、单线程调度器、效应标签迁移。Layer 1
 > 核心（行/`Eff`/`Member`/运行时）见 [effects.md](effects.md) §8。
 
 ### 8.5 Layer 2/3（已落地的最小实现）
@@ -59,7 +59,6 @@ API（`base/lib/Base/EffSched.vuna`）：
 | `scopeWaitTimeout` | `Int -> Scope -> Eff r (Result Int)` | 带**逻辑步数**预算的 `scopeWait`；预算耗尽先取消范围再等清理 |
 | `withScope` | `(Scope -> Eff r (Result a)) -> Eff r (Result a)` | 结构化作用域；body 的 `Result` 与 scope 的结果合并；body `Err` 时先取消子任务再等干净 |
 | `withScopeTimeout` | `Int -> (Scope -> Eff r (Result a)) -> Eff r (Result a)` | 同上 + 步数超时 |
-| `liftIOEff` | `IO a -> Eff r a` | 在纤程里执行 IO（信任边界；打印/文件等），任务间仍单线程 |
 | `newScope` | `Eff r Scope` | 新建作用域（一般经 `withScope`） |
 
 语义与边界：
@@ -80,7 +79,7 @@ API（`base/lib/Base/EffSched.vuna`）：
   子任务清理 → 返回 `Err "timeout"`。
 - **任务行限制**：任务体必须是 `Eff Nil a`（任务内用户效应必须由任务自己的 handler
   处理干净）；不能用外层 handler 的行。负例 `dt_err/76_sched_row_not_nil`。
-  需要 IO 副作用时用 `liftIOEff`（同纤程、单线程）。任务体本身可以返回任意 `a`
+  任务体内不能再有未处理干净的宿主行效应。任务体本身可以返回任意 `a`
   （包括 `Result`）；若任务体内再用 `withScope`，`awaitTask` 得到的是嵌套
   `Result (Result …)`，由调用方显式展平（库不做隐式 flatten）。
 - **句柄**：`Task`/`Scope`（legacy）不是线性数据；重复 `await` 幂等。新增线性
@@ -114,12 +113,11 @@ API（`base/lib/Base/EffSched.vuna`）：
 main 结束时统一取消清理（最外层兜底）；跨域 handler / Domain 并行不在范围；
 历史 Domain 实现（`Base.EffAsync`）已删除，调度器是唯一并发路径。
 
-### 8.6 IO 标签迁移（库层 + 一条工具链真实路径）
+### 8.6 效应标签迁移（库层 + 一条工具链真实路径）
 
-前提（计划 §2.3）：`IO` 保留为**运行时基座/逃逸口**（FFI、`main`、`unsafe`、未标签化
-原语）；用户面 API 迁到效应标签，handler 内部用 `Base.Host` / `prim_*` 实现。迁移在**库层**
-完成；后续补齐了原生 sleep 原语、fs 命名实例、可控 `Exit` 与
-一条工具链真实路径。`IO` 内建代数、main 执行边界与编译器的 IO 类型都不变。
+迁移背景：唯一动作类型统一为 `Eff`；用户面 API 迁到效应标签，handler 内部用
+`Base.Host` / `prim_*` 实现。迁移在**库层**完成；后续补齐了原生 sleep 原语、fs 命名实例、
+可控 `Exit` 与一条工具链真实路径。
 
 | 模块 | 标签（行条目） | 操作 | 真实 handler | mock 方式 |
 | --- | --- | --- | --- | --- |
@@ -134,9 +132,9 @@ main 结束时统一取消清理（最外层兜底）；跨域 handler / Domain 
   程序可以同时装 mock 与真实 handler（或两个 mock）；send/handler 用同一对 `(key, name)`
   字符串。实例名由使用方自选，同一效应族同时安装的实例名必须互不相同。fs 的早期单实例 API 已迁移
   （`fsReadFile n path`、`handleFsHost n`），夹具 `dt_base/18`/`29`/`40` 已更新。
-- **IO-backed handler 的形态**：`handleXHost` 接受行首为对应标签的 `Eff (Cons e r) a`，
-  返回 `Eff r (IO a)`，由 `joinEff` 执行（真实 handler 的 op 解释返回 `IO` 动作）。
-- **原生 sleep**：编译器原语 `prim_sleep : Int -> IO Int`（微秒；运行时
+- **宿主 handler 的形态**：`handleXHost` 接受行首为对应标签的 `Eff (Cons e r) a`，
+  返回 `Eff r (Eff [] a)`，由 `joinEff` 执行（真实 handler 的 op 解释返回 `Eff []` 动作）。
+- **原生 sleep**：编译器原语 `prim_sleep : Int -> Eff [] Int`（微秒；运行时
   `dtp_sleep` 用 `Unix.sleepf`，阻塞睡眠；能力 `clock`；`OpNone`，interp 不归约）。
   `Base.EffClock` 的 `SleepMicros` 与 `Base.Host.sleepMicros` 都已改用 `prim_sleep`
   （`spinMicros` 已删除；当前 seed 认识 `prim_sleep`）。
@@ -146,15 +144,15 @@ main 结束时统一取消清理（最外层兜底）；跨域 handler / Domain 
   观察 `Exit`。真实路径的夹具（`dt_base/30`）仍只覆盖 `Args`/`RunIn`，避免测试进程退出；
   观察路径见 `dt_base/41`。
 - **fs mock/real 并存**：`dt_base/40` 用同一个 `prog n` 在 `FsOp@mock`（纯 answer mock：固定
-  内容/大小）与 `FsOp@real`（真实 IO handler，真实目录读写）下各跑一次，mock 与 real handler
+  内容/大小）与 `FsOp@real`（真实宿主 handler，真实目录读写）下各跑一次，mock 与 real handler
   在同一程序里并存。
 - **工具链真实路径**：`lib/Vuna/Cli.vuna` 的 `vuna version` 输出改走
   console 标签——`consoleLine` 用 `consolePrint "vuna"` + `handleConsoleHost "vuna"` + `joinEff`，
   只在最外层 `runPure`（工具链入口仍是 `main : Eff [] Int`）。这是工具链逐步迁移的样板，不是
   全量迁移（`lib/` 其余模块仍直接用 `Base.Host` / `runPure`）。**编译器级强制不可行**的
   具体位置：`Loader.Resolve.checkEffectsBuiltins` 只做**包级**能力声明检查（manifest），
-  类型系统没有类型级能力行，`IO`/`Base.Host`/`prim_*` 在任何包内都可用；编译器自身
-  也在 seed 闭包里必须使用 IO（`Base.Host`、`Codegen`）。**最小下一步**：在 `vuna lint`
+  类型系统没有类型级能力行，`Base.Host`/`prim_*` 在任何包内都可用；编译器自身
+  也在 seed 闭包里必须做宿主操作（`Base.Host`、`Codegen`）。**最小下一步**：在 `vuna lint`
   增加一条模块级规则（如禁止 `lib/Vuna/**` 新增直接 `prim_*`/`Base.Host` 使用，白名单
   `Vuna.Cli.consoleLine` 一类的迁移点），而不是改类型检查器。
 - **对拍夹具**（`.nointerp`，只 check + compile + run）：
@@ -177,7 +175,7 @@ main 结束时统一取消清理（最外层兜底）；跨域 handler / Domain 
   直接原语探针放在 `packages/` 里（沿用既有约定）。
 - **边界**（D43 已由 P2 特权边界收口）：
   - **用户面**：非特权包不能 import `Base.Host`、不能直调 `prim_*`、不能声明
-    `[capabilities]`/`[trust]`；`Base.Host` 只留 IO 代数与实例（P2a/P2c）。
+    `[capabilities]`/`[trust]`；`Base.Host` 只留宿主别名与实现（P2a/P2c）。
   - **特权层**：`vuna-base` 真实 handler、`vuna-compiler` 与根工具链保留 Host/原语；
     工具链只迁了一条真实 console 路径（`vuna version`），编译器不迁移（终态决策）。
   - **`Exit` 的真实语义保留**：`handleProcessHost` 仍会结束进程；「不退出」只在 mock /

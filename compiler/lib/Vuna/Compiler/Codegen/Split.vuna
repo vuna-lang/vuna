@@ -222,7 +222,7 @@ generateDtSplitProgram modules entryDecls prog printResult roots contextDir =
 
 -- M34.5（S5）：带**单元级缓存**的生成入口。`lookup` 按模块名（入口用 `__entry__`）
 -- 返回上次生成的 `SplitFile`（key 已由调用方算好，含依赖哈希链）；命中即跳过该单元的
--- codegen，`store` 只对重新生成的单元调用。缓存读写留在 Driver 层（本模块不碰 IO）。
+-- codegen，`store` 只对重新生成的单元调用。缓存读写留在 Driver 层（本模块不碰 I/O）。
 -- 程序（含依赖 defs）是否用到浮点：决定 `Vuna_runtime.ml` 是否追加浮点 helper。
 -- no-float（含 compiler 自身）输出与 Float 之前逐字节一致。
 -- | 遍历所有定义体，判断是否有定义用到浮点；结果决定 `Vuna_runtime.ml` 是否追加

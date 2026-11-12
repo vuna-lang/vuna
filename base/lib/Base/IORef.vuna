@@ -1,13 +1,13 @@
 module Base.IORef (modifyRef, newRef, readRef, writeRef) where
 
--- Base.IORef：IO 内的可变引用（M33 W3）。内建类型构造子 `IORef`，OCaml 表示 `'a ref`。
+-- Base.IORef：`Eff []` 内的可变引用（M33 W3）。内建类型构造子 `IORef`，OCaml 表示 `'a ref`。
 --
 -- 所有操作返回 `Eff []`，在 `main : Eff [] a` 或 handler 里执行。
 -- `modifyRef` 读-改-写一次完成，避免调用方手写 do 时的中间绑定。
 import Base.Eff
 import Base.Monad
 
--- | 创建初值为 `x` 的新引用（IO 动作）。
+-- | 创建初值为 `x` 的新引用（`Eff []` 动作）。
 newRef : a -> Eff [] (IORef a)
 newRef x = prim_eff_newRef x
 

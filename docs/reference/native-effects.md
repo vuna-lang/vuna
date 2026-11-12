@@ -4,7 +4,7 @@
 升格为语言内建语义，运行时（OCaml 5 `Effect.Deep`、one-shot 续延、`(key, name)` 路由）
 **不动**。原 labeled-rows 库级路线（P1/P1.5）不再实施，本文吸收其全部语义决策
 （D1–D9、名字求解规则、表面语法）作为 N1 的内建规则。分四个阶段：N1 语法内建 →
-N2 IO 降级 → N3 表示收敛 → N4 箭头行 direct-style。当前进度：N1 提交 1
+N2 动作类型统一 → N3 表示收敛 → N4 箭头行 direct-style。当前进度：N1 提交 1
 （双形状兼容 + 名字求解内建）、rotation、提交 2（3 参命名行全量迁移 + 删旧分支）、
 提交 3（`perform` 语法）、提交 4a（`@` 行糖）、提交 4b（`handle` 语法）均已完成；
 **D2（标签 = op 族应用，效应定义去 String）、D5/D6（探测计数求解、拒绝贪婪 Here）与默认名
@@ -14,9 +14,9 @@ N2 IO 降级 → N3 表示收敛 → N4 箭头行 direct-style。当前进度：
 
 四个根因（证据见 [effects.md](effects.md)）：
 
-1. **双轨制**：`IO`（内建效应类型，特权基座）与 `Eff`（用户面库级效应）平行，渡口
-   `liftIO` / `runPure` / `joinEff` / `runPure` 四个方向；特权边界（`privileged` /
-   `[trust]` / `unsafe`）只管 IO 轨。
+1. **双轨制（已消除）**：旧内建动作类型（特权基座）与 `Eff`（用户面库级效应）平行，渡口
+   `runPure` / `joinEff` 两个方向；特权边界（`privileged` /
+   `[trust]` / `unsafe`）只管内建轨。
 2. **三重表示**：同一抽象三副面孔——纯 monad（`Base.State`/`Reader`/`Error`）、
    效应行（`Base.Eff.*`）与宿主 handler（历史 transformer/`MonadIO` 已删除）。
    库 API 与文档面被乘三倍。
@@ -232,7 +232,7 @@ handle comp {
 新关键字对 bootstrap 无压力：降级逻辑与编译器源码本身都不需要用 `perform`/`handle` 写
 （编译器源码不写效应程序）；即使将来要用，也是 rotate 之后的事（bootstrap.md L54–56）。
 
-## 4. N2：IO 降级
+## 4. N2：动作类型统一（已完成）
 
 - `main : Eff [] a`（替代 `main : Eff [] a`）；运行时 main 钩子预装宿主 handler（print/fs/
   clock/env/process 的 handler 在特权层由 runtime 直接提供）。
@@ -240,8 +240,7 @@ handle comp {
   handler，但**不能**在无 handler 情况下构造宿主动作——权威边界从 `unsafe`/`privileged`
   收缩为"宿主 op 构造器不导出"。
 - `Base.Host`、`prim_schedNewScope` 保留为特权逃生口；`runPure` 收缩为内部。
-- `IO` 类型仍内建保留（`Base.Host` / `ST` / `IORef` 等宿主面不动，另行评估是否全部改写为
-  宿主 op——倾向是，但放 N2 尾部）。
+- 内建动作类型已删除；`Base.Host` / `ST` / `IORef` 等宿主面保留为特权层。
 
 ## 5. N3：表示收敛
 

@@ -1,4 +1,4 @@
--- M37：main : Eff [] a 的 hook 对动作应用世界令牌 0；pure 构造 IO 动作。
+-- M37：main : Eff [] a 的 hook 对动作应用世界令牌 0；pure 构造 `Eff []` 动作。
 import Base.Host
 
 main : Eff [] String

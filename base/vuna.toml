@@ -85,7 +85,7 @@ unsafe = [
   "Base.Eff.sendCore",
   "Base.Eff.handleCore",
   "Base.Eff.bracket",
-  # W9 单线程调度器原语（`prim_sched*`）与纤程内 IO 动作。
+  # W9 单线程调度器原语（`prim_sched*`）与纤程内 `Eff []` 动作。
   "Base.EffSched.yieldNow",
   "Base.EffSched.isCancelled",
   "Base.EffSched.newScope",

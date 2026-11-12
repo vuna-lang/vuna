@@ -40,7 +40,7 @@ module Base.Host
 -- 用户面仍经 `Base.Eff.*` 标签 + handler。
 --
 -- 用户面（无特权包 / ad-hoc）只有 `Base.Eff` 的 `Eff` 代数/实例 + handler；运行入口
--- `main : Eff [] a`。宿主 IO 动作只由特权层构造（能力边界在构造侧）。
+-- `main : Eff [] a`。宿主动作只由特权层构造（能力边界在构造侧）。
 --
 -- 别名保留（不直接暴露 `prim_eff_*`）的理由：在边界统一做 Int/Nat 归一化（D25）、
 -- 行尾/换行、`sleepMicros` 守卫，并作为 D28 `[trust] unsafe` 的审计面。
@@ -72,11 +72,11 @@ eprint = prim_eff_eprint
 println : String -> Eff [] Nat
 println s = print "${s}\n"
 
--- | 把整个文件读成字符串（按字节，不做编码转换）；IO 失败抛宿主异常。
+-- | 把整个文件读成字符串（按字节，不做编码转换）；读失败抛宿主异常。
 readFile : String -> Eff [] String
 readFile = prim_eff_readFile
 
--- | 把整串二进制写入文件，返回写入字节数（`Nat`，D25）；IO 失败抛宿主异常。
+-- | 把整串二进制写入文件，返回写入字节数（`Nat`，D25）；写失败抛宿主异常。
 -- 低层 `prim_eff_writeFile` 仍是 `Eff [] Int`（原因同 `print`），边界处 `natFromInt`。
 writeFile : String -> String -> Eff [] Nat
 writeFile path s = fmap natFromInt (prim_eff_writeFile path s)

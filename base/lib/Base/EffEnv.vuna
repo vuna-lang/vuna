@@ -9,7 +9,7 @@ module Base.EffEnv
   , runEnv
   ) where
 
--- Base.EffEnv：一阶环境效应（W10 IO 标签迁移）。
+-- Base.EffEnv：一阶环境效应（W10 效应标签迁移）。
 --
 -- 标签 = `EnvOp`（实例名在行的 `Cons n EnvOp r` 条目里）；操作 GetEnv / GetCwd / ExecPath 都返回 String。
 -- 真实 handler 用 `Base.Host` 的 `getEnv` / `getCwd` / `execPath` 实现。

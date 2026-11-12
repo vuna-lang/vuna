@@ -24,7 +24,7 @@ module Base.EffFs
 --
 -- W10 收尾：`Fs` 改为**命名实例**（`FsOp`，n 是 String 实例名，与 Console/Clock/Env/
 -- Process 一致）。同一个程序因此可以同时装 mock handler（如纯 answer 的内存表）与
--- 真实 IO handler（`handleFsHost "real"`），或用两个 mock 实例做对照；行条目按实例名区分。
+-- 真实宿主 handler（`handleFsHost "real"`），或用两个 mock 实例做对照；行条目按实例名区分。
 -- 所有操作与 handler 都显式带实例名（夹具 dt_base/18、29、40）。
 import Base.Eff
 import Base.Host

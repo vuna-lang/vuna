@@ -54,18 +54,16 @@
   替换）。`a == b` 与 `eq a b` 同义，Int / String 上由内建实例特化，其它类型走 `Eq` / `Ord`
   字典。trait 声明与实例的落点规则见 [operators.md](operators.md)；
 - 效果原语**只有 `prim_*` 名**（`prim_print` / `prim_readFile` / `prim_getArgs` /
-  `prim_getenv` / …）：用户经 `Base.Host` 的 IO 动作使用，或在 `vuna.toml` 用
+  `prim_getenv` / …）：用户经 `Base.Host` 的宿主操作使用，或在 `vuna.toml` 用
   `[capabilities].effects` 声明能力后直接调用；见 [primitives.md](primitives.md) 的
   效果原语与能力一节；
 - `&&` / `||` 短路求值：先求左操作数，左侧能决定结果时不求值右侧（核心求值器与 codegen
   一致）；
 - `where` 子句：函数体后可跟缩进的 `where` 块；绑定块（`let` 与 `where` 同一套模型）是
   **顺序作用域 + 可选签名**，其中 `where` 块要求每个绑定写显式签名；见下节；
-- 类型身份：`Int` / `String` 是语言 primitive 类型；`IO` 是语言内建效应类型（
-  kind `Type -> Type`，无构造器）；`Bool` / `List` / `Nat` 是 base 的普通 `data` 声明
-  （canonical 身份 `Base.Bool.Bool` / `Base.List.List` / `Base.Nat.Nat`，经自动注入的
-  `Prelude` 可见）。用户写同名 `data` 是普通声明，不与 canonical 冲突（`IO` 例外：
-  ad-hoc 入口重定义报错）。
+- 类型身份：`Int` / `String` 是语言 primitive 类型；`Bool` / `List` / `Nat` 是 base 的
+  普通 `data` 声明（canonical 身份 `Base.Bool.Bool` / `Base.List.List` / `Base.Nat.Nat`，
+  经自动注入的 `Prelude` 可见）。用户写同名 `data` 是普通声明，不与 canonical 冲突。
   `True` / `False` / `Cons` / `Nil` 与其他构造子一样**按声明身份**解析，没有「内建全局
   构造子放行」；身份规则见 [primitives.md](primitives.md)。
 

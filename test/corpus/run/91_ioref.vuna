@@ -1,5 +1,5 @@
 import Base.Host
--- M33 W3：IO 内的 IORef（newRef / writeRef / readRef）。
+-- M33 W3：`Eff []` 内的 IORef（newRef / writeRef / readRef）。
 import Base.IORef
 
 main : Eff [] Int

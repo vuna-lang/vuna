@@ -135,7 +135,7 @@ runPure e = runThunk e MkEffUnit
 runEff : {r : Row} -> {a : Type} -> Eff r a -> a
 runEff e = runThunk e MkEffUnit
 
--- 展平 handler 的 answer：IO-backed handler 的 `runX = joinEff (handleXHost …)`。
+-- 展平 handler 的 answer：宿主 handler 的 `runX = joinEff (handleXHost …)`。
 -- | 展平 `Eff r (Eff [] a)`：外层按 r 解释，内层在结果位置执行。
 joinEff : {r : Row} -> {a : Type} -> Eff r (Eff [] a) -> Eff r a
 joinEff m = m >>= (\inner => pure (runPure inner))

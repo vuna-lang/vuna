@@ -108,7 +108,7 @@ vuna: runtime error: assertion failed: broken invariant
 
 - `dbg` / `assert` / `todo`：§3 的语言级调试构造（无能力位；`assert` / `todo` 由
   `Loader.Resolve` 在 release 构建拒绝）；
-- `prim_eprint : String -> IO Int`（能力 `console`）：写 stderr 并 flush；
+- `prim_eprint : String -> Eff [] Int`（能力 `console`）：写 stderr 并 flush；
 - `prim_fail : String -> a`（无能力）：抛 `Failure <msg>`，可被报告器渲染。
 
 普通程序用 §3 的构造即可；需要直接调用原语时按 `[capabilities].effects` 声明能力。

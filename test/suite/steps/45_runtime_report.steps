@@ -1,7 +1,7 @@
 # 45) M38 运行时错误报告：未捕获异常 → "vuna: runtime error: ..." + vuna 位置帧 + exit 2。
 #     `.err` 的既有断言（片段 "division by zero"）仍成立；这里额外锁定新格式，
 #     并确认不再泄漏 OCaml 的 `Fatal error: exception ...`。纯 main（模块初始化期求值）
-#     与 IO main（main 钩子 thunk 执行期）两条路径都覆盖。
+#     与动作 main（main 钩子执行期）两条路径都覆盖。
 run: sh -c 'mkdir -p "$TMPDIR/m38-rt/app"; printf "[package]\nname = \"m38-rt\"\nprivileged = true\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" >"$TMPDIR/m38-rt/vuna.toml"; printf "main : Int\nmain = 10 / 0\n" >"$TMPDIR/m38-rt/app/Main.vuna"'
 run: "$VUNA" build "$TMPDIR/m38-rt" 2>&1
 run: "$TMPDIR/m38-rt/.output/bin/m38-rt" 2>&1

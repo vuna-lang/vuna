@@ -8,7 +8,7 @@ module Base.EffConsole
   , runConsole
   ) where
 
--- Base.EffConsole：一阶 console 效应（W10 IO 标签迁移）。
+-- Base.EffConsole：一阶 console 效应（W10 效应标签迁移）。
 --
 -- 行标签 = `ConsoleOp`（D2），实例名在行的 `Cons n ConsoleOp r` 条目里：同一程序
 -- 里可以同时安装多个 console handler（例如 "mock" = 收集器、"real" = 真实

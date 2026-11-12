@@ -11,7 +11,7 @@ module Base.EffProcess
   , runProcess
   ) where
 
--- Base.EffProcess：一阶进程效应（W10 IO 标签迁移）。
+-- Base.EffProcess：一阶进程效应（W10 效应标签迁移）。
 --
 -- 标签 `ProcessOp` 是命名实例；操作：
 --   * `Args`：取进程参数（`prim_eff_getArgs`，**不含** argv[0]）；

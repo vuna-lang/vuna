@@ -25,7 +25,7 @@ CLI / LSP / REPL / test / doc / index 全部改成它的客户端。
 ## 已核实现状（落点）
 
 - `compiler/lib/Vuna/Compiler/Query.vuna`（179 行）：`Db = {HashMap String Entry, trace}`，
-  `QVal = QStr|QInt|QList`，纯函数、显式 Db、无 IO/持久化/取消/并行；唯一消费者
+  `QVal = QStr|QInt|QList`，纯函数、显式 Db、无 I/O/持久化/取消/并行；唯一消费者
   `examples/infra/app/Main.vuna`（`test/suite/steps/64_infra.steps` 断言 miss/hit/cutoff）。
 - `Query`、`Canonical.*`、`CacheFormat`、`Driver.Iface` 都在 seed 闭包内（`nix/seed-files.txt`）。
 - Marshal 落盘 7 处：`Driver/Iface`（manifest/模块文件，4 处）、`Driver/Compile`

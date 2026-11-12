@@ -1,8 +1,8 @@
 module Effects where
 
--- codegen 夹具：IO/do（Monad bind/pure）、效果原语直接调用（prim_* 本身是 IO 动作，
+-- codegen 夹具：动作/do（Monad bind/pure）、效果原语直接调用（prim_* 本身是 `Eff []` 动作，
 -- M31 的 ioPrim 包装路径）与零参定义（zeroarg 应为 0）。
--- program / probe 不被求值，只要求它们进入 codegen 产物，覆盖 IO 动作的生成形状。
+-- program / probe 不被求值，只要求它们进入 codegen 产物，覆盖 `Eff []` 动作的生成形状。
 import Base.Monad
 import Base.Host
 

@@ -254,9 +254,9 @@ interpose sep (x :: rest) = x :: sep :: interpose sep rest
 --   * **不透明字段**（函数类型 / Type / 其它静态没法命名的字段类型）：每个字段各占一个
 --     **独立**类型参数。字典族的字段类型互不相同（`bind : m a -> (a -> m b) -> m b` /
 --     `pure : a -> m a`），共用参数会把它们错误统一；异构 `Pair a b` 同理；
---   * **没被用到的族参数不生成**：`IO a` 的字段是函数 `Int -> a`（整体不透明），
---     所以 `IO` 的 OCaml 类型没有类型参数，也就不会在每个顶层 `IO` 值上留下
---     不可泛化的弱变量（旧实现里 `prim_eff_readFile "x"` 得到 `('a,_weak) t_IO` 直接报错）。
+--   * **没被用到的族参数不生成**：族参数只出现在不透明字段（如函数类型）里时，
+--     OCaml 类型里没有对应类型参数；顶层值因此不会留下不可泛化的弱变量
+--     （旧表示里 `prim_eff_readFile "x"` 得到 `('a,_weak) t_IO` 直接报错，已随旧表示删除）。
 --
 -- 「用到」的判定与字段渲染必须用同一张表，否则声明与实参位置会漂移。表用不动点计算
 -- （族之间可互相引用）：初始全空，按渲染位置收集引用，单调增长到稳定。
@@ -456,7 +456,7 @@ renderTypeIntrinsic "Buffer" [] = Just "Buffer.t"
 renderTypeIntrinsic _ _ = Nothing
 
 -- 单个字段的 OCaml 类型 + 下一个不透明参数槽。
--- 显式 Pi 字段（`(Int -> a)` 这类）**结构化渲染**：它把族参数（IO 的结果类型）带进
+-- 显式 Pi 字段（`(Int -> a)` 这类）**结构化渲染**：它把族参数（动作的结果类型）带进
 -- OCaml 类型，顶层值就不会留下弱类型变量。带隐式量词的 Pi（trait 方法签名，如
 -- `bind : m a -> (a -> m b) -> m b`）整体不透明——方法级多态没法用 OCaml 类型表达。
 renderPiTy : QualCtx -> List Int -> List (Pair String (List Int)) -> List DtData -> Int -> Value -> String

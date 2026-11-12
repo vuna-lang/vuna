@@ -75,7 +75,7 @@ linear data Token : Type where
 ## 5. 线性数据类型
 
 - `linear data` / `linear record` 的族名进入 `DtData.dtDataLinear`；`isLinearType` 查头，
-  只看族头；不通过类型实参传播（避免把 `IO (Ref r a)` 误判为线性）。
+  只看族头；不通过类型实参传播（避免把 `Eff [] (Ref r a)` 误判为线性）。
 - 线性值不能进泛型容器（`Maybe Ref` 构造时字段 binder 是 ω，被 application-site 检查拒绝）；
   需要时使用专用线性记录。
 - 线性值的 case：`_` 丢弃因分支 binder 用量为 0 报 `TC_LinearUnused`；as-pattern 别名
@@ -136,7 +136,7 @@ mk t = mkContI (\x => useToken t + x)   -- 捕获 t；rig-1 实参位置 → 允
 
 ## 8. 线性 ST 子集
 
-`Base.ST` 的 `Ref`、`SArray` 是线性记录（`ST` 动作本身沿用 IO 的可复制语义）：
+`Base.ST` 的 `Ref`、`SArray` 是线性记录（`ST` 动作本身沿用 `Eff []` 的可复制语义）：
 
 - `newRef`/`newArray` 返回线性 action/value；
 - `readRef`/`writeRef` 等按“消费并返回”的线程化风格（返回值放在线性结果记录里，例如
@@ -157,7 +157,7 @@ mk t = mkContI (\x => useToken t + x)   -- 捕获 t；rig-1 实参位置 → 允
 - 用量检查把 let 的 RHS 按单次求值计（应用 rig=1），线性值经 let 传递不再误报；
   但推断位置把线性值传给通用运算符/trait 方法仍被拒（形参默认 ω；期望类型触发
   `bi_add` 等特化才通过），见 debt D22（multiplicity 多态）。
-- 线性 IO 世界令牌 / per-module `unsafe` 未做（debt D28）。
+- 线性世界令牌 / per-module `unsafe` 未做（debt D28）。
 - 运行时不做所有权检查；线性是静态纪律（线性值仍可经非线性 data 的字段被复制，
   见 D42）。
 

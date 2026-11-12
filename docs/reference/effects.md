@@ -1,9 +1,8 @@
-| `Base.EffFs` | 宿主-backed Fs 效应# 效应：Eff 统一动作、handler 与宿主层
+# 效应：Eff 统一动作、handler 与宿主层
 
 **现状**：用户面唯一动作类型是 `Eff r a`（`Base.Eff`，构造子不导出；`MkEff` 是内部表示），
-入口是 `main : Eff [] a`（行必须为 `Nil`），执行入口是 `Base.Eff.runPure`。`IO` 类型与
-`Base.IO` 模块均已删除：没有 `main : IO`，也没有 IO 原语表。宿主原语只剩 `prim_eff_*`
-（`Eff []`）；`Base.Host` 是特权别名层（做 Int/Nat 归一化），
+入口是 `main : Eff [] a`（行必须为 `Nil`），执行入口是 `Base.Eff.runPure`。宿主原语只剩
+`prim_eff_*`（`Eff []`）；`Base.Host` 是特权别名层（做 Int/Nat 归一化），
 所有宿主 handler 的 answer 是 `Eff []`，入口组合是 `runX = joinEff (handleXHost …)`。用户面
 执行一个已处理干净的动作用 `runPure`；`ST`/`IORef`/`MArray`/`Buffer` 的实现也全部是 `Eff []`。
 
@@ -39,14 +38,14 @@ Args / Exit）；`Member` 行约束、`local`/`catch`/scoped `Exn`、线性续�
   `TC_UnhandledEffects`；`vuna interp` 遇到动作入口报
   `[CG_InterpCannotExecuteEffects]`（纯核心求值器只跑纯 main）。
 - `Eff []` 不表示「无副作用」：它表示「无未处理的行效应」；特权宿主层构造的叶子里可以
-  有真实 IO。副作用边界由能力/特权层把关，不由 `Eff []` 把关。
+  有真实宿主操作。副作用边界由能力/特权层把关，不由 `Eff []` 把关。
 
 ### 2.2 四层边界（当前）
 
 | 层 | 类型/入口 | 说明 |
 | --- | --- | --- |
 | 用户面 | `Eff r a` + `Base.Eff.*` 标签/handler | 用户包与 ad-hoc 的唯一动作类型；`main : Eff [] a` |
-| handler 层 | `handleXHost` → `Eff r (Eff [] a)`，`runX = joinEff …` | IO-backed handler 的 answer 是已处理干净的 `Eff []` 动作；`joinEff` 展平 |
+| handler 层 | `handleXHost` → `Eff r (Eff [] a)`，`runX = joinEff …` | 宿主 handler 的 answer 是已处理干净的 `Eff []` 动作；`joinEff` 展平 |
 | 宿主别名层 | `Base.Host`（privileged） | Eff 别名走 `prim_eff_*`；`[package] privileged = true` 才可 import；能力/信任门控不变 |
 
 - **代数**：`Monad (Eff r)` / `Applicative` / `Functor` 实例已内建；用户用 `pure` / `do` /
@@ -212,7 +211,7 @@ CPS `Eff` 已经可 `check` + `compile` + 运行，且 interp 与产物逐字节
 | `Base.Eff` | `Row(..)`、`Eff`、`Member(..)`/`rowRem`、内建 `Functor`/`Applicative`/`Monad (Eff r)`（`do`/`>>=`/`>>`，不提供 `bindEff`/`pureEff`）、`sendCore`/`handleCore`/`handleCoreLin`、`handleWith`/`handleWithAt` + `ResFn(..)`/`resFn`/`resOf`（`handle` 语法的两个降级目标：handler 类型显式、结果族作擦除量；行首条目版用于 comp 行未具体化）、`Cont`/`mkCont`/`resumeCont`、`bracket`/`finally`、`weaken`、`joinEff`/`raise`、`runPure` |
 | `Base.Eff.Reader` | `ReaderOp s` + `Ask`；`ask`/`handleReader`；实例名在行条目（`Cons "counter" (ReaderOp Int) r`） |
 | `Base.EffState` | `StateOp s` + `Get`/`Put`；`get`/`put`/`handleState`（answer `s -> Pair a s` 线程状态） |
-| `Base.EffFs` | IO-backed Fs 效应（完整 fs 面；标签 `FsOp`，实例名在行条目，如 `Cons "real" FsOp r`）：`ReadFile`/`WriteFile`/`WriteFileAtomic`/`ReadDir`/`IsDirectory`/`MakeDir`/`RemoveFile`/`FileExists`/`FileMtime`/`FileSize` + `resFs`；`fsReadFile n`/`fsWriteFile n`/…/`handleFs n`（泛型）/`handleFsHost n`（IO-backed answer `Eff []`，`runFs = joinEff ∘ handleFsHost`）；handler 用 `Base.Host` 实现。mock/real 可并存（`dt_base/40`） |
+| `Base.EffFs` | 宿主-backed Fs 效应（完整 fs 面；标签 `FsOp`，实例名在行条目，如 `Cons "real" FsOp r`）：`ReadFile`/`WriteFile`/`WriteFileAtomic`/`ReadDir`/`IsDirectory`/`MakeDir`/`RemoveFile`/`FileExists`/`FileMtime`/`FileSize` + `resFs`；`fsReadFile n`/`fsWriteFile n`/…/`handleFs n`（泛型）/`handleFsHost n`（answer `Eff []`，`runFs = joinEff ∘ handleFsHost`）；handler 用 `Base.Host` 实现。mock/real 可并存（`dt_base/40`） |
 | `Base.EffConsole` | W10 console 标签 `ConsoleOp`（实例名在行条目，如 `ConsoleOp@mock`/`ConsoleOp@real`）：`Print`/`EPrint`；`consolePrint`/`consoleEprint`/`handleConsole`/`handleConsoleHost`（真实 handler 用 `Base.Host.print`/`eprint`） |
 | `Base.EffClock` | W10 clock 标签 `ClockOp`：`Now`（微秒时间戳）/`SleepMicros`；`clockNow`/`clockSleepMicros`/`handleClock`/`handleClockHost`（真实 handler 用 `Base.Host.nowMicros` 与编译器原生 `prim_sleep`） |
 | `Base.EffEnv` | W10 env 标签 `EnvOp`：`GetEnv`/`GetCwd`/`ExecPath`；`envGetEnv`/`envGetCwd`/`envExecPath`/`handleEnv`/`handleEnvHost`（真实 handler 用 `Base.Host.getEnv`/`getCwd`/`execPath`） |
@@ -224,7 +223,7 @@ CPS `Eff` 已经可 `check` + `compile` + 运行，且 interp 与产物逐字节
 | `Base.EffSched` | W9 单线程 fiber 调度器（L3）：`Task`/`Scope`/`TaskLin` + `forkTask`/`forkTaskWith`/`forkTaskLin`/`awaitTask`/`awaitTaskLin`/`yieldNow`/`cancelTask`/`cancelTaskLin`/`cancelScope`/`scopeWait`/`scopeWaitTimeout`/`withScope`/`withScopeTimeout`/`isCancelled`/`raise`；任务行 `Nil`，超时按逻辑步数 |
 
 夹具：`dt_base/16`（两个 Reader 实例嵌套 handler）、`17`（State 状态线程）、
-`18`（IO-backed Fs 真实读写，实例名 `"real"`）、`20–21`（local/catch）、`23`
+`18`（宿主-backed Fs 真实读写，实例名 `"real"`）、`20–21`（local/catch）、`23`
 （scoped handler）、`24–25`（线性续延 / bracketExn）、`26–30`（mock↔real 对拍）、
 `31–36`（调度器：fork/await、取消、超时、监督、重复 await、Channel）、`37–39`
 （Mutex、线性 TaskLin、effect-aware forkTaskWith）、`40–41`（fs 命名实例 /
@@ -278,7 +277,7 @@ process 可控 Exit）、`42–44`（通用 bracket abort cleanup、调度器 br
 
 ### 8.5 Layer 2/3（展开）
 
-W6 高阶/作用域、W7 线性续延/一次性闭包/`bracket`、W9 单线程调度器与 W10 IO 标签
+W6 高阶/作用域、W7 线性续延/一次性闭包/`bracket`、W9 单线程调度器与 W10 效应标签
 迁移详见 [effects-layers.md](effects-layers.md)。核心边界：W6 `Try` 子计算 + scoped
 handler；W7 `Cont` resume-once（`mkCont`）+ `bracket` 的 abort cleanup；W9
 fork/await/yield/cancel/结构化 scope；W10 console/clock/env/process/fs 标签（库层）。
@@ -286,8 +285,8 @@ fork/await/yield/cancel/结构化 scope；W10 console/clock/env/process/fs 标�
 ### 8.6 效果进类型
 
 把已落地的库级行编码变成**编译器协议 + 用户面
-约束**。仍然有效的边界决策：`IO`/`Eff` 不统一（入口保持不透明 `IO`，`Eff` 是用户面效果
-类型）；不做类型级能力行（行只描述、不授权，边界靠包特权）；续延保持一次性（one-shot）。
+约束**。仍然有效的边界决策：不做类型级能力行（行只描述、不授权，边界靠包特权）；
+续延保持一次性（one-shot）。
 已落地：
 
 - **协议集中（D3）**：编译器原先散落在 `Core/Eval`、`Elab/Dict` 的
@@ -331,7 +330,7 @@ fork/await/yield/cancel/结构化 scope；W10 console/clock/env/process/fs 标�
 - 高阶/作用域、一次性闭包与单线程调度器已落地；完整线性箭头、Domain 并行、父 fiber handler 继承仍属后续（见 D41/D44/D22）。
 - 高阶/作用域效应的**类型系统**（当前 `catch`/`local`/`bracket`/scoped `Exn` 是库层 + 行约束的组合，未做语言级高阶效应类型）。
 - 网络/服务端框架；只有最小 `async`/`await`（Domain，legacy）。
-- 类型级能力行（`IO [caps] a`）。
+- 类型级能力行（`Eff [caps] r a`）。
 - ST 的线性箭头/动作线性语义（`Ref`/`SArray` 已是线性记录）；ST 的 `Monad` 实例。
 - 并行/多核（OCaml `Domain` 并行、内存模型）：只有**单线程**调度器；通道/互斥量等
   并发数据结构、网络/服务端框架不在本阶段。

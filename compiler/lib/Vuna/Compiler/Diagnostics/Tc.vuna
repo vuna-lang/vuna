@@ -116,7 +116,7 @@ data TcErr : Nat -> Type where
   UnhandledEffects : String -> TcErr (Succ Zero)
   -- F3 B：release 构建里的 debug-only 构造（assert / todo）。
   DebugConstructInRelease : String -> TcErr (Succ Zero)
-  -- D17：入口 `main` 不能带参数（结果类型拆掉 `IO` 后是函数类型即 arity 错误）。
+  -- D17：入口 `main` 不能带参数（结果类型拆掉动作层后是函数类型即 arity 错误）。
   MainArity : String -> TcErr (Succ Zero)
   -- native-effects N1（ND9）：`perform` 找不到 res 族（`res<族短名>`）。
   EffResFamilyMissing : String -> TcErr (Succ Zero)

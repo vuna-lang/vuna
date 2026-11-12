@@ -311,7 +311,7 @@ projectionDefsGo ctor nParams methods fieldTys idx nFields =
 -- B23：实例落点静态检查（孤儿实例）。
 --
 -- 规则：实例可声明在**定义 trait 的模块**，或**定义 head 类型（任一参数）的模块**；
--- 内建类型（Int / String / IO）视为全局可见，允许在任意模块声明实例（`Show Int` 这类
+-- 内建类型（Int / String）视为全局可见，允许在任意模块声明实例（`Show Int` 这类
 -- base / 用户扩展）。不做该检查时，实例可以散落到任意 import 双方的文件里，实例查找
 -- 与 coherence 的可解释性都会变差；文档一直按落点规则描述，现在由精化器强制。
 declTopName : Decl -> Maybe String

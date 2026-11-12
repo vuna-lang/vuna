@@ -298,7 +298,7 @@ interp / compile 文案不同时用 `.compile.err`。
 - `corpus/monad/`：`do` / `>>=` / `>>` 在 Maybe/List 上的正例，含高阶 kind 泛型
   `bindPair : m a -> m b -> m (Pair a b)`；`04_kind_generic`（多隐式参数字典）check /
   interp / compile+运行三路全过；错误例覆盖 kind 不符、无 Monad、do 结尾 / 绑定模式非法；
-- `corpus/stdlib/`：`Base.*` 与 do/IO 正例、错误例；效果夹具 `03_do_io`、`09_io`、
+- `corpus/stdlib/`：`Base.*` 与 do/动作正例、错误例；效果夹具 `03_do_io`、`09_io`、
   `10_package` 与 `strUnpack`/`strPack` 的 `07_string` 用 `.run.out`；另有
   `test/corpus/fmt/check.sh` 覆盖格式化 golden、注释保留、行宽折行、模块头导出列表排序、
   `where` 签名行与幂等；
@@ -335,8 +335,8 @@ interp / compile 文案不同时用 `.compile.err`。
   未解 `_` 洞的目标+上下文与命名洞 `?name` 的名字/目标/range；边界见
   [tooling.md](tooling.md) §2；
 - `corpus/dt/*` 正例：索引族 / 依赖匹配 / 擦除 / 相等与证明 / case 矩阵 / axiom / η /
-  命名空间等（清单见目录）。`54_user_bool_data`、`55_user_io_data`、`56_user_list_data`
-  （`.run.out`）覆盖用户本地 `data Bool`/`IO`/`List` 与 canonical `Base.*` 身份并存；
+  命名空间等（清单见目录）。`54_user_bool_data`、`56_user_list_data`
+  （`.run.out`）覆盖用户本地 `data Bool`/`List` 与 canonical `Base.*` 身份并存；
   `57_universe`、`58_case_matrix`/`58b_case_absurd`、`59_axiom`/`59_eta`/`59_let_where`、
   `60_erasure_unify`、`61_namespace_dual`、`60_ctor_eta`、`61_implicit_values`、
   `62_sigma_basic`、`63_dep_lookup` 覆盖现行类型规则。`corpus/dt_err/*` 是对应负例

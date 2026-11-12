@@ -13,7 +13,7 @@ module Vuna.Compiler.Query.Run
   , sessionSave
   ) where
 
--- Vuna.Compiler.Query.Run：把纯核心 `Query` 接到「真的会做 IO / parse / 精化」的调用方。
+-- Vuna.Compiler.Query.Run：把纯核心 `Query` 接到「真的会做 I/O / parse / 精化」的调用方。
 --
 -- 与纯层分工（见 `Query` 模块头）：
 --   * `Query` 只有判据与记账（命中、cutoff、依赖快照），纯函数、显式 `Db`；

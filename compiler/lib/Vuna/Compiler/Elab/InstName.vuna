@@ -26,7 +26,7 @@ instanceHeadName _ = Nothing
 
 -- | 实例定义名：**单类前缀 + 完整 head 名**（`Eq_Int`、`Eq_Base.Bool.Bool`、`Show_Box_a`）。
 -- M29-T2b：命名实例（`as name`）已删除，不再有覆盖名；按「类名 + 头实参」派生仍是唯一规则
--- （同一模块的 `instance Functor IO` / `instance Monad IO` 名字不同）。
+-- （同一模块的 `instance Functor Maybe` / `instance Monad Maybe` 名字不同）。
 --
 -- M30（B22）：旧实现把类全名同时放进前缀和头名，生成 `Base.Eq.Eq_Base.Eq.Eq_Int`
 -- 这类双前缀。现在**类部分只取短名一次**；head 部分保留**完整限定名**：库模块里的

@@ -848,7 +848,7 @@ dictFamilyNameOf ec dom = case forceVal ec dom of
   VNeutral (NGlobal g sp) => Just g
   _ => Nothing
 
--- 实参头部 `g` 的 kind 与类参数 kind 一致（`Color` 对 `Show`，`IO` 对 `Monad`）才约束。
+-- 实参头部 `g` 的 kind 与类参数 kind 一致（`Color` 对 `Show`，`Maybe` 对 `Monad`）才约束。
 -- 头部是元变量（`?m' Int`）或 Pi 都不是具体构造子 ⇒ 不约束。
 argHeadMatchesKind : List (Pair String Term) -> Ec -> Ctx -> Value -> Value -> Bool
 argHeadMatchesKind globals ec ctx forced argKind = case neutralHeadOrSelf forced of

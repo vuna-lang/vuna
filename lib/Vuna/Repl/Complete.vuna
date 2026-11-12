@@ -3,7 +3,7 @@ module Vuna.Repl.Complete (argCompletions, argKindOf, moduleNameOf, splitLastSla
 -- Vuna.Repl.Complete：`:load` / `:browse` / `import` **参数位**的 Tab 补全候选
 -- （工具链；不进 seed 闭包）。
 --
--- 两类候选（只在按下 Tab 时枚举 → 编辑器每读一行不做目录 IO）：
+-- 两类候选（只在按下 Tab 时枚举 → 编辑器每读一行不做目录访问）：
 --   * 模块名：包上下文模块根（自身 lib + 依赖闭包；base-only 时只有 base）下递归扫描
 --     `*.vuna`，相对路径 `Base/Nat.vuna` → `Base.Nat`（与 Loader 的 `modulePath` 一致）；
 --   * 文件路径：token 按**最后一个** `/` 拆成目录 + 末段，列出该目录项、只保留匹配末段
@@ -13,7 +13,7 @@ module Vuna.Repl.Complete (argCompletions, argKindOf, moduleNameOf, splitLastSla
 -- 全部模块（`Root` 的 exports 字段不在 `Pkg` 导出面内）；越权模块会在 `:load` 时被
 -- Loader 拒绝并给出可操作错误，补全只是建议，不改变语义。
 --
--- 纯部分（`argKindOf` / `moduleNameOf` / `splitLastSlash`）与 IO 部分分离，便于用
+-- 纯部分（`argKindOf` / `moduleNameOf` / `splitLastSlash`）与宿主部分分离，便于用
 -- `test/corpus/repl/app/Main.vuna` 直接单测；多匹配补最长公共前缀、唯一匹配直接补全的语义由
 -- `Vuna.Repl.Edit` 保持（本模块只给候选池）。
 import Vuna.Compiler.Common

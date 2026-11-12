@@ -8,7 +8,7 @@ module Base.EffClock
   , runClock
   ) where
 
--- Base.EffClock：一阶时钟效应（W10 IO 标签迁移）。
+-- Base.EffClock：一阶时钟效应（W10 效应标签迁移）。
 --
 -- 标签 `ClockOp` 是命名实例；操作 `Now`（微秒时间戳）与 `SleepMicros`
 -- （睡 n 微秒）。真实 handler 用 `Base.Host.nowMicros` 与编译器原生原语 `prim_eff_sleep`

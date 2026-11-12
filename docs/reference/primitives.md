@@ -33,7 +33,7 @@
   `Base.Ord` 方法（`eq` / `neq` / `lt` / `le` / `gt` / `ge`）的解析期别名；Int/String 上的
   `bi_eq_int` / `bi_eq_str` / `bi_*_int` / `bi_*_generic` 是这两个类的**内建实例实现**
   （不是运算符的独立语义）。详见 [operators.md](operators.md)。
-- **`Eff` 是唯一动作类型**（`IO` 已删除），`Bool` / `List` / `Nat` 是 base 的
+- **`Eff` 是唯一动作类型**，`Bool` / `List` / `Nat` 是 base 的
   普通 `data` 声明：
   内建类型按名字恒可见；base 的族身份是完整符号而不是短名：
 
@@ -46,8 +46,7 @@
 
 - `Eff`（`Base.Eff.Eff`）：`Row -> Type -> Type` 的 base data，装箱表示 `MkEff`（不导出）；
   行是擦除索引。入口 `main : Eff [] a`，执行 `runPure`（[effects.md](effects.md) §2）。
-- `IO` 类型与 IO 原语表已从编译器删除（无 prelude 类型、无 `prim_*` IO 变体）；动作只经 `Eff`。
-  因此 `data IO` 现在只是用户自己的普通 data（`IO` 不再在禁止重定义名单里）。
+
 
 - `True` / `False` 精化为核心 `TBool`，codegen 的运行时表示是 OCaml `bool`：canonical Bool
   族**不生成变体声明**（`Codegen.Decl.runtimeDatas` 按 `boolTypeName` 过滤）。
@@ -226,7 +225,7 @@
 ## 7. 效果原语、Eff 动作与能力
 
 **动作类型**：唯一动作类型是 `Eff r a`（`Base.Eff`，装箱 data；行是擦除索引），入口
-`main : Eff [] a`，执行 `Base.Eff.runPure`。`IO` 类型/表已删除，不再有 IO 桥。
+`main : Eff [] a`，执行 `Base.Eff.runPure`。
 
 **宿主原语单表**：
 
@@ -273,15 +272,15 @@
 
 `net` 能力与 7 条 socket 原语（工具链 server 与测试用；用户代码同样按能力直调）：
 
-- `prim_netListen : String -> IO Int`：绑定并监听，返回 listener 句柄。地址是
+- `prim_netListen : String -> Eff [] Int`：绑定并监听，返回 listener 句柄。地址是
   `tcp:HOST:PORT`（HOST 只接受数字 IPv4；`PORT=0` 取临时端口）或 `unix:PATH`；
-- `prim_netPort : Int -> IO Int`：listener 的端口（TCP；unix 返回 0），配合 `PORT=0`；
-- `prim_netAccept : Int -> IO Int`：阻塞接受一个连接，返回连接句柄；
-- `prim_netRecv : Int -> Int -> IO String`：最多读 n 字节、**有数据就立即返回**（可能更少）；
+- `prim_netPort : Int -> Eff [] Int`：listener 的端口（TCP；unix 返回 0），配合 `PORT=0`；
+- `prim_netAccept : Int -> Eff [] Int`：阻塞接受一个连接，返回连接句柄；
+- `prim_netRecv : Int -> Int -> Eff [] String`：最多读 n 字节、**有数据就立即返回**（可能更少）；
   `""` 表示对端关闭；
-- `prim_netSend : Int -> String -> IO Int`：写完整串（内部循环处理部分写），返回字节数；
-- `prim_netClose : Int -> IO Int`：关闭句柄（幂等）；
-- `prim_netConnect : String -> IO Int`：客户端连接（`vuna repl --client` 与测试夹具用）。
+- `prim_netSend : Int -> String -> Eff [] Int`：写完整串（内部循环处理部分写），返回字节数；
+- `prim_netClose : Int -> Eff [] Int`：关闭句柄（幂等）；
+- `prim_netConnect : String -> Eff [] Int`：客户端连接（`vuna repl --client` 与测试夹具用）。
 
 `net` 是**权限**不是豁免：未声明时报 `` effectful builtin `prim_eff_netListen` requires capability
 `net` ``。句柄是小整数，运行时映射到 `Unix.file_descr` 表，**不引入新的语言类型**；
@@ -341,10 +340,10 @@
 
 | 原语 | runtime 契约 |
 | --- | --- |
-| `prim_print` | 写 stdout 并 flush，返回**字节数**（签名 `IO Nat`，D25） |
-| `prim_writeFile` | 二进制写整串，返回**字节数**（签名 `IO Nat`，D25）；IO 失败抛宿主异常 |
+| `prim_print` | 写 stdout 并 flush，返回**字节数**（签名 `Eff [] Nat`，D25） |
+| `prim_writeFile` | 二进制写整串，返回**字节数**（签名 `Eff [] Nat`，D25）；写失败抛宿主异常 |
 | `prim_writeFileAtomic` | 同 `prim_writeFile`，但写 `<path>.<pid>.tmp` 后 `Sys.rename` 原子替换：并发读者只会看到完整旧内容或完整新内容（workspace 并行 check 的子进程共享缓存目录，必须原子写） |
-| `prim_readFile` | 读整个文件为字节串；IO 失败抛宿主异常 |
+| `prim_readFile` | 读整个文件为字节串；读失败抛宿主异常 |
 | `prim_readLine` | 读一行；EOF 返回 `""`（与空行不可区分） |
 | `prim_readBytes` | `Int -> String`：最多读 n 字节，**有数据就立即返回**（可能少于 n），EOF 返回 `""`；调用方负责循环 / 拼接（LSP 帧读取用） |
 | `prim_readDir` | 目录项按字符串排序；目录不存在 / 不可读时抛宿主异常 |
@@ -356,7 +355,7 @@
 | `prim_getcwd` | 失败时返回 `"."` |
 | `prim_execPath` | 先读 `/proc/self/exe`（**Linux 假设**），失败回落 `Sys.executable_name` |
 | `prim_getArgs` | 排除 `argv[0]` 的其余参数 |
-| `prim_exit` | 立即退出进程（原语类型 `Int -> IO Int`，执行即退出、**不返回**） |
+| `prim_exit` | 立即退出进程（原语类型 `Int -> Eff [] Int`，执行即退出、**不返回**） |
 | `prim_sleep` | 阻塞 `Unix.sleepf (us / 1000000)`；`us <= 0` 立即返回 `0`（真实睡眠，非忙等） |
 | `prim_runIn` | 在给定目录执行 `sh` 命令并返回退出码，执行后恢复原 cwd |
 | `prim_spawn` | 异步启动子进程（argv 列表，继承 stdin/stdout/stderr），返回 pid |
@@ -439,7 +438,7 @@ extern c_add "vuna_add" : Int -> Int -> Int
 - `prim_execPath` 依赖 `/proc/self/exe`（Linux），其它平台走 `Sys.executable_name`。
 - `strPack` / `strUnpack` 的 List 桥接、`strSubstTemplate` 的模板扫描均在 runtime 里实现，
   interp 不覆盖（§9）。
-- 原语的失败（IO 错误、`strPack` 越界、`/0`、`exit`）都是**宿主异常 / 进程退出**，
+- 原语的失败（宿主错误、`strPack` 越界、`/0`、`exit`）都是**宿主异常 / 进程退出**，
   由生成的运行时报告器统一报告（见 [debugging.md](debugging.md)），不是语言的可捕获错误。
 - `net` 只有 TCP（数字 IPv4）与 Unix domain socket：无 DNS、TLS、异步/超时、并发；
   `accept`/`recv` 是阻塞语义。原语本身不限制绑定地址，`vuna repl --listen` 在 CLI 层只接受

@@ -5,7 +5,7 @@
 # 口径：`vuna build --no-compile --out` 后剔除 Base_*.ml / Prelude.ml /
 #       Vuna_runtime.ml，只量夹具自有模块——base/runtime 随功能增长，纳入会重新
 #       引入「移动靶」。指标定义见 nix/metrics.sh 头注释。
-# M37（IO 升格）：效果原语从 `MkIO (fun _ -> …)` 变体改为裸 thunk
+# M37（动作类型内建化）：效果原语从 `MkIO (fun _ -> …)` 变体改为裸 thunk
 #       （`fun args -> fun (_ : int) -> …`），夹具的 Effects 模块产物变短；
 #       按实测 bytes 4295 → 4242、longlines 8 → 7，其余指标不变。
 # M38（运行时错误报告）：Main.ml 首行加 `Printexc.record_backtrace` 序言、main 钩子

@@ -1,5 +1,5 @@
 -- D25：宿主度量返回 `Nat`（`prim_eff_print` / `prim_eff_writeFile` / `prim_eff_fileSize` → `INat`）。
--- 验证 Host 的 `IO Nat` 签名、`Nat` 算术与 main 展示。
+-- 验证 Host 的 `Eff [] Nat` 签名、`Nat` 算术与 main 展示。
 import Base.Host
 import Base.Nat
 

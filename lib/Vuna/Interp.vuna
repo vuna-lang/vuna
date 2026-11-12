@@ -19,15 +19,15 @@ module Vuna.Interp
 -- M26：入口吃 `PackageContext`（不再有环境根 / `List Root`）；调用方（CLI / REPL /
 -- test runner）负责从文件、cwd 或包构造上下文。
 --
--- 求值是**纯**的：不执行效果。`main : IO a` 只对纯动作（例如 `pure n`）能求出值；
+-- 求值是**纯**的：不执行效果。`main : Eff [] a` 一律报错；
 -- 真正带 `prim_eff_print` / 文件效果的 `main` 请用 `compile` + 运行产物（见 docs/reference/primitives.md 的 interp 归约边界）。
 -- 该模块只被 CLI / REPL / test runner 使用，不属于编译器 seed 闭包。
 --
 -- M30：新增两条工具链能力（仍然不属于编译器 seed 闭包）：
---   - `evalExprInfo`：表达式值 + zonk 后类型文本（REPL 用类型判断是否 IO）；
+--   - `evalExprInfo`：表达式值 + zonk 后类型文本（REPL 用类型判断是否动作）；
 --   - `runEffectProgram`：把「带 main 的完整入口源码」放进临时包，走
---     `compileToDir` + `runBuildScript` + 运行（REPL 的 IO 表达式与 `vuna test`
---     的 IO 测试共用这一条执行路径）。效果的输出直接写终端，判定只看进程退出码。
+--     `compileToDir` + `runBuildScript` + 运行（REPL 的动作表达式与 `vuna test`
+--     的效果测试共用这一条执行路径）。效果的输出直接写终端，判定只看进程退出码。
 import Vuna.Compiler.Common
 import Vuna.Compiler.Packages.Pkg
 import Vuna.Compiler.Driver.Dt
@@ -101,7 +101,7 @@ checkProgram : PackageContext -> String -> Eff [] (Check (List Diagnostic))
 checkProgram ctx program = dtCheckSource ctx "<repl>" program
 
 -- ---------------------------------------------------------------
--- 效果程序执行（REPL 的 IO 表达式 + `vuna test` 的 IO 测试）
+-- 效果程序执行（REPL 的动作表达式 + `vuna test` 的效果测试）
 --
 -- 临时包布局（每次执行一个，结束后 `rm -rf` 清理）：
 --   <TMPDIR>/vuna-effect-<effTimeUs>/
@@ -234,7 +234,7 @@ cleanupErr dir e = do
   pure (err e)
 
 -- 把带 main 的入口源码编译成临时包里的可执行文件并运行，返回进程退出码。
--- `printResult` 透传给 codegen 的 main 钩子（IO a 时先跑动作、再按 a 的类型打印）；
+-- `printResult` 透传给 codegen 的 main 钩子（动作 main 先跑动作、再按结果类型打印）；
 -- effect 测试用 False（只看退出码，不比较输出）。
 runEffectProgram : PackageContext -> String -> Bool -> Eff [] (Check Int)
 runEffectProgram ctx source printResult = do

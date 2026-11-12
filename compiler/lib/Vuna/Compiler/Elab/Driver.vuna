@@ -802,8 +802,8 @@ in Vuna.Compiler.Common.bind (elabDatas (collectDataDecls decls []) records star
 -- D17：非内建 `main` 类型的 Show 展示定义
 -- ---------------------------------------------------------------
 -- `main` 的展示过去只支持 Int/Nat/String/Bool/Float（codegen 的 main 钩子按内建名
--- 选展示函数，其它类型在 codegen 阶段报错）。D17 起：main 的结果类型（`IO a` 先
--- 剥掉 IO）不是内建类型时，在收尾阶段合成
+-- 选展示函数，其它类型在 codegen 阶段报错）。D17 起：main 的结果类型（先剥掉动作层）
+-- 不是内建类型时，在收尾阶段合成
 --   `@vuna@main_show : T -> String`
 --   `@vuna@main_show = \x => show T dict x`
 -- （`dict` 是收尾时现搜的 `Show T` 实例）。codegen 的 main 钩子与 interp 的 main 展示

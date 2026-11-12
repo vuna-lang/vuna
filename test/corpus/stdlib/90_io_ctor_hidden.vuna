@@ -1,4 +1,4 @@
--- stdlib 反例：IO 是内建效应类型，没有构造器可引用（`MkIO` 不存在）。
+-- stdlib 反例：`Base.Eff` 的构造子 `MkEff` 不导出（直接引用 = unbound variable）。
 import Base.Eff
 
 main : Eff [] Int
