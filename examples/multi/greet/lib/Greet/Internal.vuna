@@ -1,4 +1,4 @@
-module Greet.Internal (internalWord) where
+module Greet.Internal where
 
-internalWord : String
+export internalWord : String
 internalWord = "internal"
