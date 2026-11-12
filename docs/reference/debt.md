@@ -57,6 +57,10 @@
 | D72 | 静态索引是单文件条目、单根：一个 `[registry].index`，同名多版本靠 `[releases]`；无多源/优先级/镜像/撤销列表 | `lib/Vuna/Registry.vuna`、`compiler/lib/Vuna/Compiler/Frontend/Manifest.vuna`；[package-store.md](package-store.md) §6 | 后续（多源在需要时再加） |
 | D73 | store GC 的根集只扫一层 `[workspace].members`（与非成员包引用的对象不计入）：跨 workspace 共享的 store 上 `--gc` 可能误删其他项目引用的对象 | `lib/Vuna/Clean.vuna`（`collectMemberHashes`）；[package-store.md](package-store.md) §7 | 后续（需要全局 roots 索引） |
 | D74 | `fetch` 的 `fuel 64` 是给 SCT 的显式下降参数，不是语义配额：依赖链深于 64 会报 depth limit（正常包图远小于此） | `lib/Vuna/Fetch.vuna`（`fetchAll 64`） | 后续（若真遇到，按依赖图深度动态给） |
+| D75 | D11 opaque 的语义只在接口/增量路径生效；全量源码路径（`vuna check <包>` 无接口缓存时把同程序所有模块一起精化）仍把 opaque body 放进 deftbl，因此下游可 delta 展开 | `compiler/lib/Vuna/Compiler/Driver/Dt.vuna` 的 `dtCheck`/`dtCheckPartsWithProgram` → `elabProgramFull`；[language.md](language.md) 的 opaque 节 | 后续（per-module 精化拆分） |
+| D76 | `abstract` 修饰符尚未实现：lexer 只把它当软关键字，AST/parser/精化器没有独立语义（当前只有 `opaque`/`transparent`） | `compiler/lib/Vuna/Compiler/Frontend/Lexer.vuna`；`Frontend/Ast.vuna` 的 `Opacity` | 后续（先定语义，再动 ifaceHash） |
+| D77 | 旧模块头 `module M (exports) where` 仍是解析器兼容路径，93 个测试夹具仍使用它；源码与主包已全部迁移，但语法与夹具尚未移除 | `Frontend/Parser.psHeader`；`grep -rl '^module .*(' test --include=*.vuna` | 后续（终态移除；已在 `language.md` 标为迁移期） |
+| D78 | main 新增的 10 个包源/store `PKG_*` 码没有结构化夹具，只在 diag 审计 allowlist 中登记（DependencySourceMissing/FetchFailed/GitRevRequired/HashMalformed/HashMismatch/IndexMalformed/MissingHash/NotMaterialized/SourceConflict/UnknownSourceKey） | `nix/diag-coverage-allow.txt`、`nix/diag-unreachable.txt`；`nix/checks/diag-coverage.sh` | 后续（补包错误夹具） |
 
 ## 效应统一（Eff 已贯通）
 
