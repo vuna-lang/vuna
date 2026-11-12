@@ -105,7 +105,10 @@ checkPackage wantWarnings pkg = do
     Nothing => pure (pkgNoLoc1 (LibraryWithoutEntry (packageName pkg)) (packageName pkg))
     Just names => checkCachedLib wantWarnings (packageContext pkg) names
 
--- 逐级创建目录（prim_eff_makeDir 只建一层；`--out a/b` 的父目录可能不存在）。
+-- 逐级创建目录（`--out a/b` 的父目录可能不存在）。
+--
+-- 并发注意：并行构建会在同一目录上竞争；宿主 `makeDir` 不幂等（EEXIST 直接抛异常），
+-- 「先 exists 再 makeDir」有 TOCTOU 窗口。末级创建走 `mkdir -p`（幂等）。
 -- 递归沿 `parentOfPath` 上升，不是结构下降，用显式 fuel 守卫（路径深度上限）。
 ensureDirPath : String -> Eff [] Int
 ensureDirPath path = ensureDirPathFuel 256 path
@@ -115,10 +118,7 @@ ensureDirPathFuel fuel path = if fuel <= 0 then pure 0
 else if path == "" || path == "." || path == "/" then pure 0
 else do
   exists <- prim_eff_fileExists path
-  if exists then pure 0
-  else do
-    _ <- ensureDirPathFuel (fuel - 1) (parentOfPath path)
-    prim_eff_makeDir path
+  if exists then pure 0 else prim_eff_runIn "." ["mkdir", "-p", path]
 
 -- 去掉最后一段（`a/b/c` -> `a/b`；无 `/` -> "."；绝对路径的父仍绝对）。
 -- 先 reverse，跳过第一个 `/` 后剩下的字符再 reverse 回来。
@@ -166,39 +166,70 @@ summarySplitParts ctx entry printResult = do
         Nothing => dtSplitProjectWithIfaces ctx entry printResult ifaces
     Nothing => dtSplitProjectParts ctx entry printResult
 
+-- | 构建（codegen）的图入口：`split` 节点（值 = 产物的**内容地址** `QRef`），
+-- 载荷写到内容寻址的 blob（`<cache>/blobs/<digest>`，`Store` framing）。
+--
+-- 命中：按节点里的地址读 blob → 规范解码 → 直接写产物；
+-- 未命中：跑摘要/全量 split → 写 blob → 提交节点 → 写接口影子。
+-- blob 读失败 / 解码失败 ⇒ 当作 miss 重算（坏字节永远不进解码器，见 `Store`）。
 compileToDirNormal : PackageContext -> String -> Bool -> String -> Eff [] (Check (Pair Int (List Diagnostic)))
 compileToDirNormal ctx entry printResult outDir = do
-  key <- splitCacheKey ctx entry printResult
-  path <- splitCachePath ctx key
-  tag <- splitCacheTag
+  mods <- splitModsOf ctx entry printResult
   let
+    opts = graphRunOpts (contextPackageName ctx)
+    key = graphNodeKey "split" mods
     _ = stamp "split-cache-key-done"
   in do
-    files <- readSplitCache tag path
-    case files of
-      Just cached => do
-        let
-          _ = stamp "split-cache-hit"
-        in do
-          n <- writeCompiled ctx outDir cached
-          pure (case n of
-            ErrC e => ErrC e
-            OkC count => OkC (Pair count [])
-          )
-      Nothing => do
-        summary <- summarySplitParts ctx entry printResult
-        case summary of
+    db0 <- sessionLoad opts
+    case graphHit db0 key mods of
+      Just (QRef digest) => do
+        cached <- readSplitBlob digest
+        case cached of
+          Just files => do
+            let
+              _ = stamp "split-cache-hit"
+            in do
+              n <- writeCompiled ctx outDir files
+              pure (case n of
+                ErrC e => ErrC e
+                OkC count => OkC (Pair count [])
+              )
+          Nothing => splitBuild ctx entry printResult outDir opts key mods db0
+      _ => splitBuild ctx entry printResult outDir opts key mods db0
+
+-- 未命中（或 blob 不可用）：重算 → 写 blob → 提交节点。
+splitBuild : PackageContext -> String -> Bool -> String -> RunOpts -> String -> CheckMods -> Db -> Eff [] (Check (Pair Int (List Diagnostic)))
+splitBuild ctx entry printResult outDir opts key mods db0 = do
+  summary <- summarySplitParts ctx entry printResult
+  case summary of
+    ErrC e => pure (ErrC e)
+    OkC p => do
+      let
+        files = firstOf p
+        checked = secondOf p
+      in do
+        digest <- writeSplitBlob files
+        n <- writeCompiled ctx outDir files
+        case n of
           ErrC e => pure (ErrC e)
-          OkC p => finishBuild ctx outDir tag path (firstOf p) (secondOf p)
+          OkC count => do
+            let
+              db1 = graphCommitRef (graphNote db0 "query-commit" key) key mods digest
+              _ = note "query-miss ${key}"
+            in do
+              _ <- sessionSave opts db1
+              shadow <- writeIfaceShadow ctx checked
+              case shadow of
+                ErrC e => pure (ErrC e)
+                OkC _ => pure (OkC (Pair count checked.checkedWarnings))
 
 -- 审计（`VUNA_IFACE_AUDIT=1`）：同一进程分别走摘要路径与全量路径，codegen 产物逐字节比较；
 -- 一致才按摘要结果落盘，不一致报 `iface-audit-mismatch` 且**不写任何缓存/接口**
--- （坏缓存不能被下一次运行「合法」消费）。
+-- （坏缓存不能被下一次运行「合法」消费）。审计路径**不读**图（要跑两条真实路径），
+-- 但成功后提交节点（与普通路径一致）。
 auditCompile : PackageContext -> String -> Bool -> String -> Eff [] (Check (Pair Int (List Diagnostic)))
 auditCompile ctx entry printResult outDir = do
-  key <- splitCacheKey ctx entry printResult
-  path <- splitCachePath ctx key
-  tag <- splitCacheTag
+  mods <- splitModsOf ctx entry printResult
   summary <- summarySplitParts ctx entry printResult
   full <- dtSplitProjectParts ctx entry printResult
   let
@@ -210,21 +241,30 @@ auditCompile ctx entry printResult outDir = do
       ErrC e => pure (ErrC e)
       OkC _ => case summary of
         ErrC e => pure (ErrC e)
-        OkC p => finishBuild ctx outDir tag path (firstOf p) (secondOf p)
-
--- 写产物 + 写 split 缓存 + 影子写模块接口（构建成功同样要产出接口，否则只 build 的工程
--- 永远无法给下游提供接口）。
-finishBuild : PackageContext -> String -> String -> String -> List SplitFile -> CheckedPackage -> Eff [] (Check (Pair Int (List Diagnostic)))
-finishBuild ctx outDir tag cachePath files checked = do
-  n <- writeCompiled ctx outDir files
-  case n of
-    ErrC e => pure (ErrC e)
-    OkC count => do
-      _ <- writeSplitCache ctx tag cachePath files
-      shadow <- writeIfaceShadow ctx checked
-      case shadow of
-        ErrC e => pure (ErrC e)
-        OkC _ => pure (OkC (Pair count checked.checkedWarnings))
+        OkC p => do
+          let
+            files = firstOf p
+            checked = secondOf p
+          in do
+            digest <- writeSplitBlob files
+            n <- writeCompiled ctx outDir files
+            case n of
+              ErrC e => pure (ErrC e)
+              OkC count => do
+                shadow <- writeIfaceShadow ctx checked
+                case shadow of
+                  ErrC e => pure (ErrC e)
+                  OkC _ => do
+                    let
+                      opts = graphRunOpts (contextPackageName ctx)
+                      key = graphNodeKey "split" mods
+                    in do
+                      db0 <- sessionLoad opts
+                      let
+                        db1 = graphCommitRef db0 key mods digest
+                      in do
+                        _ <- sessionSave opts db1
+                        pure (OkC (Pair count checked.checkedWarnings))
 
 -- 把（缓存的或新生成的）split 文件写入 outDir 并写 build.sh。
 writeCompiled : PackageContext -> String -> List SplitFile -> Eff [] (Check Int)
@@ -1871,63 +1911,73 @@ auditCheckLib wantWarnings ctx names = do
       ErrC e => pure (ErrC e)
       OkC _ => checkAndShadow ctx (pure summary)
 
--- M34.5：elab + codegen 产物缓存（`List SplitFile` 是纯数据，可 Marshal）
---
--- key = 闭包源哈希 + 依赖哈希 + schema/版本 + 编译器二进制指纹 + printResult；
--- 命中直接写文件（省 load/resolve/elab/codegen）。`ffi/*.c` 每次重新复制（C 源小）。
--- 缓存放包根 `.local/split-cache/`（gitignored）。
--- C35：SplitFile 增加 splitDeps 字段（形状变了），schema 升到 2，旧缓存自然失效。
 -- ---------------------------------------------------------------
-splitCacheSchema : String
-splitCacheSchema = "vuna-split-cache 4"
+-- 阶段 2：codegen 产物的缓存判定搬进查询图
+--
+-- 旧实现：`<cache>/<包桶>/split/<composite-key>` 一个文件（`Store` framing + split 载荷）。
+-- 现在：`split:<pkg>:<kind>` 图节点，值 = 产物载荷的**内容地址**（`QRef`），载荷落在
+-- 内容寻址 blob `<cache>/blobs/<digest>`（随便多少个包共享一份，写重不重写靠去抖）。
+-- 附带的收益：同一份产物被多个 key 引用时只存一份（内容寻址天然去重）。
+-- ---------------------------------------------------------------
+-- | split 节点 key 的 schema（结构变化必须 bump；旧会话索引自然拒绝）。
+splitNodeSchema : String
+splitNodeSchema = "vuna-split-node 1"
 
--- | split 缓存载荷的编码版本（`Store` 的 codec 段）。
+-- | split 载荷的编码版本（`Store` 的 codec 段）。
 splitCacheCodec : String
 splitCacheCodec = "split-files 1"
 
-splitCacheTag : Eff [] String
-splitCacheTag = do
+-- | blob 的 framing tag（schema + 编译器指纹）。
+splitBlobTag : Eff [] String
+splitBlobTag = do
   tag <- compilerTagEff
-  pure "${splitCacheSchema}/${tag}"
+  pure "${splitNodeSchema}/${tag}"
 
-splitCacheDir : PackageContext -> Eff [] String
-splitCacheDir ctx = do
-  base <- cacheBase
-  pure "${base}/${hashText (textHash (contextPackageName ctx))}/split"
-
-splitCachePath : PackageContext -> String -> Eff [] String
-splitCachePath ctx key = do
-  dir <- splitCacheDir ctx
-  pure "${dir}/${key}"
-
-splitCacheKey : PackageContext -> String -> Bool -> Eff [] String
-splitCacheKey ctx entry printResult = do
+-- | split 节点的输入摘要：源闭包 / 依赖闭包 / 版本+指纹+printResult。
+splitModsOf : PackageContext -> String -> Bool -> Eff [] CheckMods
+splitModsOf ctx entry printResult = do
   sources <- contextSources ctx entry
   deps <- dependencyHashes ctx
   fp <- compilerFingerprint
   let
     srcHash = closureHashOf sources 0
     depsHash = closureHashOf deps 0
-    verHash = textHash (splitCacheSchema ++ vunaVersion) + fp
+    verHash = textHash (splitNodeSchema ++ vunaVersion) + fp
     prHash = if printResult then 1 else 0
-  in do
-    pure "${hashText srcHash}-${hashText depsHash}-${hashText (verHash + prHash)}"
+    kind = if printResult then "pr1" else "pr0"
+  in pure
+    (checkModsOf (contextPackageName ctx) kind "" (hashText srcHash) (hashText depsHash) (hashText (verHash + prHash)))
 
--- 读侧过 `Store` framing（magic/tag/codec/长度/载荷内容地址）+ 规范解码；任何一项
--- 不符（截断/篡改/旧格式）⇒ Nothing ⇒ 调用方重算并覆盖。
-readSplitCache : String -> String -> Eff [] (Maybe (List SplitFile))
-readSplitCache tag path = do
-  payload <- storeReadEff tag splitCacheCodec path
+-- | blob 路径：内容寻址（`<cache>/blobs/<digest>`）。
+splitBlobPath : String -> Eff [] String
+splitBlobPath digest = do
+  base <- cacheBase
+  pure "${base}/blobs/${digest}"
+
+-- | 写 blob（内容不变就不写：同一产物被多次构建复用时零写放大）。
+writeSplitBlob : List SplitFile -> Eff [] String
+writeSplitBlob files = do
+  let
+    payload = encTop encSplitFiles files
+    digest = payloadDigest payload
+  in do
+    tag <- splitBlobTag
+    path <- splitBlobPath digest
+    base <- cacheBase
+    _ <- storeEnsureDirEff "${base}/blobs"
+    _ <- storeWriteIfChangedAsEff tag splitCacheCodec digest path payload
+    pure digest
+
+-- | 读 blob：framing 全量校验 + 内容地址比对通过才解码；任何不符 ⇒ Nothing（重算）。
+readSplitBlob : String -> Eff [] (Maybe (List SplitFile))
+readSplitBlob digest = do
+  tag <- splitBlobTag
+  path <- splitBlobPath digest
+  payload <- storeReadAsEff tag splitCacheCodec digest path
   pure (case payload of
     Just bytes => decSplitFilesComplete bytes
     Nothing => Nothing
   )
-
-writeSplitCache : PackageContext -> String -> String -> List SplitFile -> Eff [] Int
-writeSplitCache ctx tag path files = do
-  dir <- splitCacheDir ctx
-  _ <- storeEnsureDirEff dir
-  storeWriteEff tag splitCacheCodec path (encTop encSplitFiles files)
 
 -- 自检辅助：找出第一个 `cachedProgramValid` 不过的模块名（空 = 全部有效）。
 firstInvalidModule : PackageIface -> String

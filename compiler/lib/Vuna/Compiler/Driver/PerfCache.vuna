@@ -94,6 +94,18 @@ unitCacheEntryKeyOf keys = case lookupPair "__entry__" keys of
   Just k => k
   Nothing => ""
 
+-- | 删除文件，**文件不存在也不报错**。
+--
+-- 为什么不能直接用 `prim_eff_removeFile`：单元缓存目录按包共享，`vuna test --jobs N` /
+-- workspace 并行 check 会有多个进程同时 GC 同一个桶。`removeFile` 在文件已被别的进程
+-- 删掉时抛宿主异常（语言里没有 try/catch），表现为
+-- `runtime error: removeFile: ... No such file or directory`。
+-- `exists` 再删仍有 TOCTOU 窗口，所以走 `rm -f`（幂等）。
+safeRemoveFile : String -> Eff [] Int
+safeRemoveFile path = do
+  exists <- prim_eff_fileExists path
+  if exists then prim_eff_runIn "/" ["rm", "-f", path] else pure 0
+
 unitCacheGc : String -> String -> Eff [] Int
 unitCacheGc base keepDir = do
   _ <- storeEnsureDirEff base
@@ -112,7 +124,7 @@ gcEntries base keepDir (n :: rest) =
       _ <- dropDirFiles path
       gcEntries base keepDir rest
     else do
-      _ <- prim_eff_removeFile path
+      _ <- safeRemoveFile path
       gcEntries base keepDir rest
 
 dropDirFiles : String -> Eff [] Int
@@ -123,7 +135,7 @@ dropDirFiles dir = do
 dropFiles : String -> List String -> Eff [] Int
 dropFiles dir [] = pure 0
 dropFiles dir (f :: rest) = do
-  _ <- prim_eff_removeFile "${dir}/${f}"
+  _ <- safeRemoveFile "${dir}/${f}"
   dropFiles dir rest
 
 -- M34.6（S7 补完）：**桶内 GC**。同一 entry 桶只清「本次构建仍会引用」的 unit 文件之外
@@ -148,7 +160,7 @@ bucketGcGo dir keepNames (f :: rest) =
     isDir <- if exists then prim_eff_isDirectory path else pure False
     if exists && isDir then bucketGcGo dir keepNames rest
     else do
-      _ <- prim_eff_removeFile path
+      _ <- safeRemoveFile path
       bucketGcGo dir keepNames rest
 
 unitCacheRead : String -> String -> String -> Eff [] (Maybe SplitFile)

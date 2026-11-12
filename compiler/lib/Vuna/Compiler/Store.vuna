@@ -256,15 +256,18 @@ storeRemoveEff = prim_eff_removeFile
 storeEnsureDirEff : String -> Eff [] Int
 storeEnsureDirEff path = storeEnsureDirFuel 256 path
 
+-- | 建目录（幂等）。
+--
+-- 并发注意：`vuna test --jobs N` / 并行 workspace check 会有多个进程同时建同一个缓存目录。
+-- 「先 exists 再 makeDir」有 TOCTOU 窗口（两个进程都看到不存在，第二个 makeDir 抛
+-- `File exists`）——宿主 `makeDir` 不幂等，语言里也没有 try/catch。所以末级创建走
+-- `mkdir -p`（幂等 + 一次建完整条链），existence 检查只用于快速短路。
 storeEnsureDirFuel : Int -> String -> Eff [] Int
 storeEnsureDirFuel fuel path = if fuel <= 0 then pure 0
 else if path == "" || path == "." || path == "/" then pure 0
 else do
   exists <- prim_eff_fileExists path
-  if exists then pure 0
-  else do
-    _ <- storeEnsureDirFuel (fuel - 1) (storeParentOf path)
-    prim_eff_makeDir path
+  if exists then pure 0 else prim_eff_runIn "." ["mkdir", "-p", path]
 
 storeParentOf : String -> String
 storeParentOf path =

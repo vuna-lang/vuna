@@ -5,7 +5,9 @@ module Vuna.Compiler.Driver.Graph
   , checkNodeKey
   , graphCheckMods
   , graphCommit
+  , graphCommitRef
   , graphHit
+  , graphNodeKey
   , graphNote
   , graphRunOpts
   , nodeCompilerKey
@@ -58,9 +60,13 @@ record CheckMods where
 checkModsOf : String -> String -> String -> String -> String -> String -> CheckMods
 checkModsOf pkg kind manifest sources deps ver = CheckMods pkg kind manifest sources deps ver
 
--- | check 节点的 key（稳定：不含摘要；摘要进依赖表）。
+-- | 通用节点 key：`<family>:<pkg>:<kind>`（稳定：不含摘要；摘要进依赖表）。
+graphNodeKey : String -> CheckMods -> String
+graphNodeKey family m = "${family}:${m.cmPkg}:${m.cmKind}"
+
+-- | check 节点的 key。
 checkNodeKey : CheckMods -> String
-checkNodeKey m = "check:${m.cmPkg}:${m.cmKind}"
+checkNodeKey m = graphNodeKey "check" m
 
 -- | 四个输入节点的 key（顺序固定 = env / src / deps / ver）。
 graphCheckMods : CheckMods -> List String
@@ -94,6 +100,11 @@ graphHit db key mods = queryHit db key (graphCheckMods mods)
 -- | 提交一次成功的 check（值 = `QMarker`，依赖表 = 本次输入摘要）。
 graphCommit : Db -> String -> CheckMods -> Db
 graphCommit db key mods = firstOf (queryResolve db key (graphCheckMods mods) (Pair QMarker []))
+
+-- | 提交一次成功的 build（值 = 物内容地址 `QRef`，依赖表同 check）。
+graphCommitRef : Db -> String -> CheckMods -> String -> Db
+graphCommitRef db key mods digest =
+  firstOf (queryResolve db key (graphCheckMods mods) (Pair (QRef digest) []))
 
 -- | 图事件写进 trace（`query-hit` / `query-miss`），随后由调用方 `sessionSave`。
 graphNote : Db -> String -> String -> Db
