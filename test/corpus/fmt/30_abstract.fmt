@@ -1,0 +1,7 @@
+module Fmt.Abstract where
+
+abstract f : Int
+f = 1
+
+export abstract g : Int
+g = 2
