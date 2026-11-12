@@ -400,7 +400,9 @@ interp / compile 文案不同时用 `.compile.err`。
   `nix/doc-coverage.baseline` 比：超过基线（新增公开符号没带 docstring）即失败，低于基线
   通过并提示下调基线。补齐公开面后往下压，压到 0 时可直接换成 `doc --check`（见
   [api-docs.md](api-docs.md)）；
-- `context-budget`：入口文档字节数与单模块行数对 `nix/context.budget`；
+- `context-budget`：入口文档字节数与单模块行数对 `nix/context.budget`（预算按实测 ×1.5
+  留余量；超过预算失败，达到 70% 只打印 `WARN`。`WARN` 在本机跑 check 时可见，nix 只在
+  失败时打印 builder 日志，所以 CI 成功时不显示）；
 - `vscode-ext`：提交的 `vscode/dist/extension.js` 与清单 / 语法文件的离线自检，不跑
   `npm install`。
 

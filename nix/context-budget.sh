@@ -2,7 +2,10 @@
 # 冷启动上下文预算（CI check）：约束 AI agent「首次进入仓库」必须读的字节数。
 #
 # 动机：agent 的改动成本 ≈ 必须读进上下文的字节数。代码按需读（vuna map --find +
-# span 区间），但入口文档每轮都要读，所以单独设预算，只降不升。
+# span 区间），但入口文档每轮都要读，所以单独设预算。
+#
+# 判定：超过预算 ⇒ REGRESSION（退出 1）；达到预算 70% ⇒ WARN（只提示，退出 0）。
+# 预算本身按「实测 × 1.5」留余量标定（见 nix/context.budget 头部策略）。
 #
 # 用法: sh nix/context-budget.sh [REPO] [BUDGET]
 #   REPO    仓库根，默认当前目录
@@ -16,7 +19,7 @@
 #   max_ref_lines    单篇 docs/reference/*.md 的最大行数
 #   max_module_lines 单个 .vuna 源模块的最大行数（单点最大阅读成本）
 #
-# 有意改动文档结构后，用本脚本复测并更新 nix/context.budget（附注释说明原因）。
+# 有意改动文档结构后，用本脚本复测；压缩了就按实测下调 nix/context.budget（附注释说明）。
 set -eu
 
 REPO=${1:-.}
@@ -83,6 +86,7 @@ say max_module_lines "$max_module_lines"
 [ -f "$BUDGET" ] || { echo "context-budget: budget file not found: $BUDGET" >&2; exit 1; }
 
 fail=0
+warn=0
 while read -r name max; do
   case "$name" in ''|\#*) continue ;; esac
   case "$name" in
@@ -97,10 +101,18 @@ while read -r name max; do
   if [ "$v" -gt "$max" ]; then
     printf 'REGRESSION %s: %s > budget %s\n' "$name" "$v" "$max" >&2
     fail=1
+  elif [ $((v * 100)) -ge $((max * 70)) ]; then
+    printf 'WARN %s: %s / budget %s (%s%%, 已到 70%% 提醒线)\n' \
+      "$name" "$v" "$max" "$((v * 100 / max))" >&2
+    warn=$((warn + 1))
   fi
 done <"$BUDGET"
 if [ "$fail" -ne 0 ]; then
   echo "context-budget: exceeded (nix/context.budget)" >&2
   exit 1
 fi
-echo "context-budget: within budget"
+if [ "$warn" -ne 0 ]; then
+  echo "context-budget: within budget (${warn} metric(s) warned at ≥70%)"
+else
+  echo "context-budget: within budget"
+fi
