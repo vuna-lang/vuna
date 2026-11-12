@@ -113,8 +113,9 @@ export record IrAlt(..) where
 -- IR 节点
 -- ---------------------------------------------------------------
 export data Ir(..) : Type where
-  -- | 运行时 binder 引用；下标 = Core 的 de Bruijn 下标（擦除 binder 也占位）。
-  IrVar : Int -> Ir
+  -- | 运行时 binder 引用（Lowering 已把 Core 的 de Bruijn 下标解析成 binder 身份；
+  -- 擦除 binder 不进 IR——运行时引用擦除 binder 在 Lowering 就是错误）。
+  IrVar : IrBinder -> Ir
   -- | 顶层运行时值定义引用（跨单元限定时由后端加前缀并记依赖）。
   IrGlobal : String -> Ir
   -- | 构造子应用：族名、构造子名、运行时实参（已按 keep 形状对齐、不可命名字段已 cast）。
@@ -139,8 +140,9 @@ export data Ir(..) : Type where
   IrBool : Bool -> Ir
   -- | 浮点字面量（原始文本，与源码一致）。
   IrFloatLit : String -> Ir
-  -- | `let` 绑定（unboxed case 降级用）。
-  IrLet : IrBinder -> Ir -> Ir -> Ir
+  -- | `let` 绑定（unboxed case 降级用）。binder 表是**完整 telescope**（含擦除占位），
+  -- 因此体的 de Bruijn 下标不变；只有非擦除 binder 进渲染的 pattern。
+  IrLet : List IrBinder -> Ir -> Ir -> Ir
   -- | lambda 链（擦除 binder 占位不渲染；无运行时 binder 时退化成体）。
   IrLam : List IrBinder -> Ir -> Ir
   -- | 应用（擦除实参已在 Lowering 丢弃）。
@@ -149,8 +151,9 @@ export data Ir(..) : Type where
   IrIf : Ir -> Ir -> Ir -> Ir
   -- | 通用 `match`（无 catch-all 时由后端补不可达兜底臂，保持 match 完整）。
   IrCase : Ir -> List IrAlt -> Ir
-  -- | Nat case 降级（运行时是 int）：零支 / 后继支 / 兜底支。
-  IrNatCase : Ir -> Maybe IrAlt -> Maybe IrAlt -> Maybe IrAlt -> Ir
+  -- | Nat case 降级（运行时是 int）：scrutinee、scrutinee 的 fresh 序号（`dtnat__<n>`）、
+  -- 零支 / 后继支 / 兜底支。三支的 binder 表同样是完整 telescope。
+  IrNatCase : Ir -> Int -> Maybe IrAlt -> Maybe IrAlt -> Maybe IrAlt -> Ir
   -- | 内建饱和应用：内建名 + 实参；OCaml 运算符模板表在后端。
   IrInline : String -> List Ir -> Ir
   -- | `++` 链展平：`String.concat "" [a; b; c]`。
@@ -260,6 +263,10 @@ export record IrListFam(..) where
   irListCons : String
 
 -- | 程序级共享元数据（与单元无关，Lowering 一次算好）。
+--
+-- 这些表原本是 `Codegen.Term.GenSt` 的全部内容（构造子 → 族 / keep 形状 / 不透明形状、
+-- 去装箱族集合、族 → 运行时类型参数槽、record 字段表、List 族、float/trace 开关、
+-- 定义位置行）。它们是**表示决策的结果**，所以属于 IR；后端只查表渲染。
 export record IrShared(..) where
   -- | 用 OCaml record 表示的族 → 运行时字段表 `(字段序号, 字段源码名)`。
   -- case 分支的 record pattern 需要它；构造 / 投影 / 更新节点自带字段名。
@@ -270,11 +277,67 @@ export record IrShared(..) where
   irSharedUsesFloat : Bool
   -- | 程序是否用到编译器 tracing 隐藏原语（决定是否追加 tracing helper）。
   irSharedUsesTrace : Bool
+  -- | 构造子 → (族名, keep flags)：构造子引用与 case 分支的形状判定。
+  irSharedCtors : List (Pair String (Pair String (List Bool)))
+  -- | 构造子 → 不透明字段 flags（与 keep flags 逐位对齐）：实参处包 `Obj.magic`。
+  irSharedCtorOpaques : List (Pair String (List Bool))
+  -- | 去装箱族集合（case 降级成 `let`、构造子应用只保留单字段）。
+  irSharedUnboxed : List String
+  -- | 族 → 运行时类型参数槽（声明与实参共用的不动点结果）。
+  irSharedTyParams : List (Pair String (List Int))
+  -- | 运行时定义的位置行：定义名 → (文件, 起始行)。只有带 span 的定义在这里；
+  -- 跨单元的 `extraDefLocs` 由调用方与这里合并（顺序无关，落盘前统一排序）。
+  irSharedDefLocs : List (Pair String (Pair String Int))
 
 export irSharedRecordFieldsOf : String -> List (Pair String (List (Pair Int String))) -> List (Pair Int String)
 irSharedRecordFieldsOf family [] = []
 irSharedRecordFieldsOf family (p :: rest) =
   if firstOf p == family then secondOf p else irSharedRecordFieldsOf family rest
+
+-- | 构造子 → 族名（未知构造子返回空串）。
+export irSharedCtorFamily : IrShared -> String -> String
+irSharedCtorFamily (IrShared recs listFam uf ut ctors opqs unboxed typs locs) ctor =
+  irSharedCtorFamilyGo ctor ctors
+
+irSharedCtorFamilyGo : String -> List (Pair String (Pair String (List Bool))) -> String
+irSharedCtorFamilyGo ctor [] = ""
+irSharedCtorFamilyGo ctor (p :: rest) =
+  if firstOf p == ctor then firstOf (secondOf p) else irSharedCtorFamilyGo ctor rest
+
+-- | 构造子的 keep flags（未知构造子返回空表）。
+export irSharedCtorKeepFlags : IrShared -> String -> List Bool
+irSharedCtorKeepFlags (IrShared recs listFam uf ut ctors opqs unboxed typs locs) ctor =
+  irSharedCtorKeepFlagsGo ctor ctors
+
+irSharedCtorKeepFlagsGo : String -> List (Pair String (Pair String (List Bool))) -> List Bool
+irSharedCtorKeepFlagsGo ctor [] = []
+irSharedCtorKeepFlagsGo ctor (p :: rest) =
+  if firstOf p == ctor then secondOf (secondOf p) else irSharedCtorKeepFlagsGo ctor rest
+
+-- | 构造子的不透明字段 flags（未知构造子返回空表）。
+export irSharedCtorOpaqueFlags : IrShared -> String -> List Bool
+irSharedCtorOpaqueFlags (IrShared recs listFam uf ut ctors opqs unboxed typs locs) ctor =
+  irSharedCtorOpaqueFlagsGo ctor opqs
+
+irSharedCtorOpaqueFlagsGo : String -> List (Pair String (List Bool)) -> List Bool
+irSharedCtorOpaqueFlagsGo ctor [] = []
+irSharedCtorOpaqueFlagsGo ctor (p :: rest) =
+  if firstOf p == ctor then secondOf p else irSharedCtorOpaqueFlagsGo ctor rest
+
+-- | 族是否是去装箱族。
+export irSharedIsUnboxed : IrShared -> String -> Bool
+irSharedIsUnboxed (IrShared recs listFam uf ut ctors opqs unboxed typs locs) family =
+  memName family unboxed
+
+-- | 族的运行时类型参数槽（未知族返回空表）。
+export irSharedTyParamsOf : IrShared -> String -> List Int
+irSharedTyParamsOf (IrShared recs listFam uf ut ctors opqs unboxed typs locs) family =
+  irSharedTyParamsOfGo family typs
+
+irSharedTyParamsOfGo : String -> List (Pair String (List Int)) -> List Int
+irSharedTyParamsOfGo family [] = []
+irSharedTyParamsOfGo family (p :: rest) =
+  if firstOf p == family then secondOf p else irSharedTyParamsOfGo family rest
 
 -- | 一个编译单元的 IR。
 export record IrUnit(..) where
@@ -297,3 +360,101 @@ export record IrProgram(..) where
 -- | `Nat` 链折回时的饱和上限（与 Core / 运行时一致）。
 export irNatChainMax : Int
 irNatChainMax = 4611686018427387903
+
+-- | 内建饱和应用的内联 arity（名字 → 运行时参数个数；0 = 不可内联）。
+--
+-- 这是**形态决策**的输入（「饱和应用能否内联」），不是文本：具体运算符模板只在 OCaml
+-- 后端。放在 IR 模型里是因为 Lowering 与后端必须用同一张表，各写一份会漂移。
+export irInlineArity : String -> Int
+irInlineArity "+" = 2
+irInlineArity "-" = 2
+irInlineArity "*" = 2
+irInlineArity "/" = 2
+irInlineArity "&&" = 2
+irInlineArity "||" = 2
+irInlineArity "bi_bitAnd" = 2
+irInlineArity "bi_bitOr" = 2
+irInlineArity "bi_bitXor" = 2
+irInlineArity "bi_bitNot" = 1
+irInlineArity "++" = 2
+irInlineArity "bi_eq_int" = 2
+irInlineArity "bi_neq_int" = 2
+irInlineArity "bi_eq_str" = 2
+irInlineArity "bi_neq_str" = 2
+irInlineArity "bi_lt_int" = 2
+irInlineArity "bi_le_int" = 2
+irInlineArity "bi_gt_int" = 2
+irInlineArity "bi_ge_int" = 2
+irInlineArity "bi_lt_generic" = 2
+irInlineArity "bi_le_generic" = 2
+irInlineArity "bi_gt_generic" = 2
+irInlineArity "bi_ge_generic" = 2
+irInlineArity "bi_add_float" = 2
+irInlineArity "bi_sub_float" = 2
+irInlineArity "bi_mul_float" = 2
+irInlineArity "bi_div_float" = 2
+irInlineArity "bi_eq_float" = 2
+irInlineArity "bi_neq_float" = 2
+irInlineArity "bi_lt_float" = 2
+irInlineArity "bi_le_float" = 2
+irInlineArity "bi_gt_float" = 2
+irInlineArity "bi_ge_float" = 2
+irInlineArity "natToInt" = 1
+irInlineArity "natFromInt" = 1
+irInlineArity "natAdd" = 2
+irInlineArity "natSub" = 2
+irInlineArity "natMul" = 2
+irInlineArity "natDiv" = 2
+irInlineArity _ = 0
+
+-- | canonical List 族名。
+export irListFamilyOf : IrListFam -> String
+irListFamilyOf (IrListFam fam nil cons) = fam
+
+-- | canonical List 的 nil 构造子名。
+export irListNilOf : IrListFam -> String
+irListNilOf (IrListFam fam nil cons) = nil
+
+-- | canonical List 的 cons 构造子名。
+export irListConsOf : IrListFam -> String
+irListConsOf (IrListFam fam nil cons) = cons
+
+-- | 分支的构造子（`Nothing` = catch-all）。
+export irAltCtorOf : IrAlt -> Maybe (Pair String String)
+irAltCtorOf (IrAlt ctor bs body) = ctor
+
+-- | 分支的 binder 表（完整 telescope，含擦除占位）。
+export irAltBindersOf : IrAlt -> List IrBinder
+irAltBindersOf (IrAlt ctor bs body) = bs
+
+-- | 分支体。
+export irAltBodyOf : IrAlt -> Ir
+irAltBodyOf (IrAlt ctor bs body) = body
+
+-- | 入口展示函数节点。
+export irEntryShowOf : IrEntry -> Ir
+irEntryShowOf (IrEntry show main isAction runMain handlers) = show
+
+-- | 入口 main 的源码名。
+export irEntryMainOf : IrEntry -> String
+irEntryMainOf (IrEntry show main isAction runMain handlers) = main
+
+-- | main 是否是动作。
+export irEntryIsActionOf : IrEntry -> Bool
+irEntryIsActionOf (IrEntry show main isAction runMain handlers) = isAction
+
+-- | 动作 main 的 `runMain` 源码名。
+export irEntryRunMainOf : IrEntry -> Maybe String
+irEntryRunMainOf (IrEntry show main isAction runMain handlers) = runMain
+
+-- | 动作行的内建宿主 handler（源码名表）。
+export irEntryHandlersOf : IrEntry -> List String
+irEntryHandlersOf (IrEntry show main isAction runMain handlers) = handlers
+
+-- | 程序级共享元数据。
+export irProgSharedOf : IrProgram -> IrShared
+irProgSharedOf (IrProgram shared unit) = shared
+
+-- | 程序的（唯一）单元 IR。
+export irProgUnitOf : IrProgram -> IrUnit
+irProgUnitOf (IrProgram shared unit) = unit

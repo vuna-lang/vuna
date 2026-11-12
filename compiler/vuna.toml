@@ -83,6 +83,7 @@ modules = [
   "Vuna.Compiler.Codegen",
   "Vuna.Compiler.Codegen.Decl",
   "Vuna.Compiler.Codegen.Erase",
+  "Vuna.Compiler.Codegen.Lower",
   "Vuna.Compiler.Codegen.Term",
   "Vuna.Compiler.Codegen.Assembly",
   "Vuna.Compiler.Codegen.Split",

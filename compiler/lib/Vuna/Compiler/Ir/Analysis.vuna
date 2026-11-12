@@ -251,3 +251,33 @@ checkUniqueDefNamesGo [] seen = OkC 0
 checkUniqueDefNamesGo (n :: rest) seen =
   if Base.HashMap.member n seen then icInternal "duplicate runtime definition name in IR: `${n}`"
   else checkUniqueDefNamesGo rest (Base.HashMap.insert n True seen)
+
+-- | 名字级分组 + 递归组右值护栏（不消费 `IrDef`）。
+--
+-- Lowering 必须在**生成体之前**知道分组顺序：fresh binder 编号是单元内全局递增的
+-- （迁移前的 `gsNext` 跨组累积），所以生成顺序 = 分组顺序。这里把「分组 + 护栏」与
+-- 「生成」解耦：`recOk` / `spanOf` 由调用方按 Core 定义提供。
+export assembleGroupNames : List (Pair String (List String)) -> List String -> (String -> Bool) -> (String -> Maybe Span) -> Check (List (Pair Bool (List String)))
+assembleGroupNames adj names recOk spanOf =
+  groupNamesGo (adjTblOf adj) names (groupNames adj names) recOk spanOf
+
+groupNamesGo : HashMap String (List String) -> List String -> Check (List (List String)) -> (String -> Bool) -> (String -> Maybe Span) -> Check (List (Pair Bool (List String)))
+groupNamesGo adjT names groupsR recOk spanOf = case groupsR of
+  ErrC e => ErrC e
+  OkC groups => assembleGo adjT groups recOk spanOf
+
+assembleGo : HashMap String (List String) -> List (List String) -> (String -> Bool) -> (String -> Maybe Span) -> Check (List (Pair Bool (List String)))
+assembleGo adjT [] recOk spanOf = OkC []
+assembleGo adjT (g :: rest) recOk spanOf =
+  let
+    isRec = groupNeedsRec adjT g
+    checked = if isRec then case firstBadRecName g recOk of
+      Just name => cgErrDefAt (spanOf name) name (RecursiveValueDefinition name) [name]
+      Nothing => OkC (Pair True g)
+    else OkC (Pair False g)
+  in Vuna.Compiler.Common.bind checked
+    (\grp => Vuna.Compiler.Common.bind (assembleGo adjT rest recOk spanOf) (\tail => OkC (Base.List.Cons grp tail)))
+
+firstBadRecName : List String -> (String -> Bool) -> Maybe String
+firstBadRecName [] recOk = Nothing
+firstBadRecName (n :: rest) recOk = if recOk n then firstBadRecName rest recOk else Just n
