@@ -228,9 +228,9 @@ let rec v_Vuna_dCompiler_dIr_dAnalysis_dassembleGo = (fun mc0 mc1 mc2 mc3 -> (ma
   | _ -> failwith "DT: impossible branch"
 ))
 
-let v_Vuna_dCompiler_dIr_dAnalysis_dgroupNamesGo = (fun adjT names groupsR recOk spanOf -> (match groupsR with
-  | Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_ErrC (dtb__68) -> (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_ErrC (dtb__68))
-  | Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC (dtb__69) -> ((((v_Vuna_dCompiler_dIr_dAnalysis_dassembleGo adjT) dtb__69) recOk) spanOf)
+let v_Vuna_dCompiler_dIr_dAnalysis_dgroupNamesGo = (fun mc0 mc1 mc2 mc3 mc4 -> (match mc2 with
+  | Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC (dtb__68) -> ((((v_Vuna_dCompiler_dIr_dAnalysis_dassembleGo mc0) dtb__68) mc3) mc4)
+  | Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_ErrC (dtb__69) -> (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_ErrC (dtb__69))
   | _ -> failwith "DT: impossible branch"
 ))
 

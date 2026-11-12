@@ -98,26 +98,26 @@ let v_Vuna_dCompiler_dCodegen_dDecl_dctorDeclText = (fun mc0 mc1 -> (match mc1 w
 
 let v_Vuna_dCompiler_dCodegen_dDecl_dirBinderText = (fun mc0 -> (match mc0 with
   | { Vuna_dCompiler_dIr_dModel.f_Vuna_dCompiler_dIr_dModel_dIrBinder_irBinderName = dtb__11; Vuna_dCompiler_dIr_dModel.f_Vuna_dCompiler_dIr_dModel_dIrBinder_irBinderErased = dtb__12 } -> (match dtb__11 with
-  | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIrBName_IrBUser (dtb__13) -> (v_Vuna_dCompiler_dCodegen_dDecl_docamlBinderName dtb__13)
-  | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIrBName_IrBArm (dtb__14) -> ("dtb__" ^ (bi_strFromInt dtb__14))
-  | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIrBName_IrBNat (dtb__15) -> ("dtnat__" ^ (bi_strFromInt dtb__15))
   | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIrBName_IrBWild -> "_"
+  | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIrBName_IrBNat (dtb__13) -> ("dtnat__" ^ (bi_strFromInt dtb__13))
+  | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIrBName_IrBArm (dtb__14) -> ("dtb__" ^ (bi_strFromInt dtb__14))
+  | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIrBName_IrBUser (dtb__15) -> (v_Vuna_dCompiler_dCodegen_dDecl_docamlBinderName dtb__15)
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
 ))
 
-let rec v_Vuna_dCompiler_dCodegen_dDecl_dirTyText = (fun qc ty -> (match ty with
-  | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIrTy_IrTyVar (dtb__16) -> (v_Vuna_dCompiler_dCodegen_dDecl_dtypeParamName dtb__16)
-  | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIrTy_IrTyInt -> "int"
-  | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIrTy_IrTyStr -> "string"
-  | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIrTy_IrTyBool -> "bool"
-  | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIrTy_IrTyFloat -> "float"
+let rec v_Vuna_dCompiler_dCodegen_dDecl_dirTyText = (fun mc0 mc1 -> (match mc1 with
+  | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIrTy_IrTyData (dtb__16, dtb__17) -> (((v_Vuna_dCompiler_dCodegen_dDecl_dfamilyTyText mc0) dtb__16) ((Base_dList.v_Base_dList_dmap (v_Vuna_dCompiler_dCodegen_dDecl_dirTyText mc0)) dtb__17))
+  | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIrTy_IrTyFun (dtb__18, dtb__19) -> (String.concat "" ["("; ((v_Vuna_dCompiler_dCodegen_dDecl_dirTyText mc0) dtb__18); ") -> "; ((v_Vuna_dCompiler_dCodegen_dDecl_dirTyText mc0) dtb__19)])
+  | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIrTy_IrTyRef (dtb__20) -> (String.concat "" ["("; ((v_Vuna_dCompiler_dCodegen_dDecl_dirTyText mc0) dtb__20); " ref)"])
+  | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIrTy_IrTyArray (dtb__21) -> (String.concat "" ["("; ((v_Vuna_dCompiler_dCodegen_dDecl_dirTyText mc0) dtb__21); " array)"])
   | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIrTy_IrTyOpaque -> "Obj.t"
-  | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIrTy_IrTyArray (dtb__17) -> (String.concat "" ["("; ((v_Vuna_dCompiler_dCodegen_dDecl_dirTyText qc) dtb__17); " array)"])
-  | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIrTy_IrTyRef (dtb__18) -> (String.concat "" ["("; ((v_Vuna_dCompiler_dCodegen_dDecl_dirTyText qc) dtb__18); " ref)"])
-  | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIrTy_IrTyFun (dtb__19, dtb__20) -> (String.concat "" ["("; ((v_Vuna_dCompiler_dCodegen_dDecl_dirTyText qc) dtb__19); ") -> "; ((v_Vuna_dCompiler_dCodegen_dDecl_dirTyText qc) dtb__20)])
-  | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIrTy_IrTyData (dtb__21, dtb__22) -> (((v_Vuna_dCompiler_dCodegen_dDecl_dfamilyTyText qc) dtb__21) ((Base_dList.v_Base_dList_dmap (v_Vuna_dCompiler_dCodegen_dDecl_dirTyText qc)) dtb__22))
+  | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIrTy_IrTyFloat -> "float"
+  | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIrTy_IrTyBool -> "bool"
+  | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIrTy_IrTyStr -> "string"
+  | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIrTy_IrTyInt -> "int"
+  | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIrTy_IrTyVar (dtb__22) -> (v_Vuna_dCompiler_dCodegen_dDecl_dtypeParamName dtb__22)
   | _ -> failwith "DT: impossible branch"
 ))
 
@@ -144,10 +144,10 @@ let rec v_Vuna_dCompiler_dCodegen_dDecl_drecordFieldDecls = (fun mc0 mc1 mc2 mc3
   | _ -> failwith "DT: impossible branch"
 ))
 
-let v_Vuna_dCompiler_dCodegen_dDecl_dirTyDeclText = (fun qc decl -> (match decl with
-  | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIrTyDecl_IrVariantDecl (dtb__29, dtb__30, dtb__31) -> (String.concat "" [(v_Vuna_dCompiler_dCodegen_dDecl_dtypeParamDecl dtb__30); (v_Vuna_dCompiler_dCodegen_dDecl_dtypeName dtb__29); " = "; (((v_Vuna_dCompiler_dCodegen_dDecl_dctorBodyOf qc) dtb__29) dtb__31)])
-  | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIrTyDecl_IrRecordDecl (dtb__32, dtb__33, dtb__34, dtb__35) -> (String.concat "" [(v_Vuna_dCompiler_dCodegen_dDecl_dtypeParamDecl dtb__33); (v_Vuna_dCompiler_dCodegen_dDecl_dtypeName dtb__32); " = { "; ((v_Vuna_dCompiler_dCodegen_dDecl_djoinWith "; ") ((((v_Vuna_dCompiler_dCodegen_dDecl_drecordFieldDecls qc) dtb__32) dtb__34) dtb__35)); " }"])
-  | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIrTyDecl_IrUnboxedDecl (dtb__36, dtb__37, dtb__38) -> (String.concat "" [(v_Vuna_dCompiler_dCodegen_dDecl_dtypeParamDecl dtb__37); (v_Vuna_dCompiler_dCodegen_dDecl_dtypeName dtb__36); " = "; ((v_Vuna_dCompiler_dCodegen_dDecl_dirTyText qc) dtb__38)])
+let v_Vuna_dCompiler_dCodegen_dDecl_dirTyDeclText = (fun mc0 mc1 -> (match mc1 with
+  | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIrTyDecl_IrUnboxedDecl (dtb__29, dtb__30, dtb__31) -> (String.concat "" [(v_Vuna_dCompiler_dCodegen_dDecl_dtypeParamDecl dtb__30); (v_Vuna_dCompiler_dCodegen_dDecl_dtypeName dtb__29); " = "; ((v_Vuna_dCompiler_dCodegen_dDecl_dirTyText mc0) dtb__31)])
+  | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIrTyDecl_IrRecordDecl (dtb__32, dtb__33, dtb__34, dtb__35) -> (String.concat "" [(v_Vuna_dCompiler_dCodegen_dDecl_dtypeParamDecl dtb__33); (v_Vuna_dCompiler_dCodegen_dDecl_dtypeName dtb__32); " = { "; ((v_Vuna_dCompiler_dCodegen_dDecl_djoinWith "; ") ((((v_Vuna_dCompiler_dCodegen_dDecl_drecordFieldDecls mc0) dtb__32) dtb__34) dtb__35)); " }"])
+  | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIrTyDecl_IrVariantDecl (dtb__36, dtb__37, dtb__38) -> (String.concat "" [(v_Vuna_dCompiler_dCodegen_dDecl_dtypeParamDecl dtb__37); (v_Vuna_dCompiler_dCodegen_dDecl_dtypeName dtb__36); " = "; (((v_Vuna_dCompiler_dCodegen_dDecl_dctorBodyOf mc0) dtb__36) dtb__38)])
   | _ -> failwith "DT: impossible branch"
 ))
 
@@ -156,17 +156,17 @@ let v_Vuna_dCompiler_dCodegen_dDecl_dirTypeDeclsText = (fun mc0 mc1 -> (match mc
   | _ -> (String.concat "" ["type "; ((v_Vuna_dCompiler_dCodegen_dDecl_djoinWith "\nand ") ((Base_dList.v_Base_dList_dmap (v_Vuna_dCompiler_dCodegen_dDecl_dirTyDeclText mc0)) mc1)); "\n\n"])
 ))
 
-let rec v_Vuna_dCompiler_dCodegen_dDecl_dirTyGlobalNames = (fun ty -> (match ty with
-  | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIrTy_IrTyVar (dtb__39) -> Base_dList.C_Base_dList_dList_Nil
-  | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIrTy_IrTyInt -> Base_dList.C_Base_dList_dList_Nil
-  | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIrTy_IrTyStr -> Base_dList.C_Base_dList_dList_Nil
-  | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIrTy_IrTyBool -> Base_dList.C_Base_dList_dList_Nil
-  | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIrTy_IrTyFloat -> Base_dList.C_Base_dList_dList_Nil
+let rec v_Vuna_dCompiler_dCodegen_dDecl_dirTyGlobalNames = (fun mc0 -> (match mc0 with
+  | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIrTy_IrTyData (dtb__39, dtb__40) -> (Base_dList.C_Base_dList_dList_Cons (dtb__39, ((Base_dList.v_Base_dList_dconcatMap v_Vuna_dCompiler_dCodegen_dDecl_dirTyGlobalNames) dtb__40)))
+  | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIrTy_IrTyFun (dtb__41, dtb__42) -> ((Base_dList.v_Base_dList_dappend (v_Vuna_dCompiler_dCodegen_dDecl_dirTyGlobalNames dtb__41)) (v_Vuna_dCompiler_dCodegen_dDecl_dirTyGlobalNames dtb__42))
+  | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIrTy_IrTyRef (dtb__43) -> (v_Vuna_dCompiler_dCodegen_dDecl_dirTyGlobalNames dtb__43)
+  | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIrTy_IrTyArray (dtb__44) -> (v_Vuna_dCompiler_dCodegen_dDecl_dirTyGlobalNames dtb__44)
   | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIrTy_IrTyOpaque -> Base_dList.C_Base_dList_dList_Nil
-  | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIrTy_IrTyArray (dtb__40) -> (v_Vuna_dCompiler_dCodegen_dDecl_dirTyGlobalNames dtb__40)
-  | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIrTy_IrTyRef (dtb__41) -> (v_Vuna_dCompiler_dCodegen_dDecl_dirTyGlobalNames dtb__41)
-  | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIrTy_IrTyFun (dtb__42, dtb__43) -> ((Base_dList.v_Base_dList_dappend (v_Vuna_dCompiler_dCodegen_dDecl_dirTyGlobalNames dtb__42)) (v_Vuna_dCompiler_dCodegen_dDecl_dirTyGlobalNames dtb__43))
-  | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIrTy_IrTyData (dtb__44, dtb__45) -> (Base_dList.C_Base_dList_dList_Cons (dtb__44, ((Base_dList.v_Base_dList_dconcatMap v_Vuna_dCompiler_dCodegen_dDecl_dirTyGlobalNames) dtb__45)))
+  | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIrTy_IrTyFloat -> Base_dList.C_Base_dList_dList_Nil
+  | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIrTy_IrTyBool -> Base_dList.C_Base_dList_dList_Nil
+  | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIrTy_IrTyStr -> Base_dList.C_Base_dList_dList_Nil
+  | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIrTy_IrTyInt -> Base_dList.C_Base_dList_dList_Nil
+  | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIrTy_IrTyVar (dtb__45) -> Base_dList.C_Base_dList_dList_Nil
   | _ -> failwith "DT: impossible branch"
 ))
 
