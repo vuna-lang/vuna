@@ -102,8 +102,10 @@ key 是**纯字符串**（不参与哈希输入），节点分成两组：
 
 未落地（各阶段收口时更新本页）：
 
-- LSP / REPL 仍各持自己的缓存（`DiagCache` / `stateAuxCache` / `stateToolSession`），
-  未持同一 `Db`；debug 行还是 `iface-source=repl` 而不是 `query-source=repl`（阶段 3）。
+- LSP `DiagCache` 与 REPL `stateToolSession` 已改查询图客户端（`lspiface:` / `tooliface:`
+  节点，共用 `ToolSession` 的 `Db`）；debug 行统一为 `query-source=` / `query-lazy`。
+- 仍待迁移：REPL `stateAuxCache`（termAux 预处理缓存）、`stateIndexCache`（`Index` 快照）
+  与 `Doc` / `Index` 的 `.local/index/` manifest（阶段 4）。
 - `vuna test` / `vuna doc` / `vuna map`（`Index.Scan`）仍走各自的 parse 级缓存（阶段 4）。
 - `VUNA_LEGACY_PATH` 与 `debt.md` 里的旧条目清理、`bench/compiler-baseline.txt` 重标定、
   seed rotation（阶段 5）。

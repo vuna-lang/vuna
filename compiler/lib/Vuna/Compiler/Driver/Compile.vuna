@@ -942,7 +942,7 @@ depIfacesForToolSource ctx label source = do
                 Nothing => pure Nothing
                 Just ifs => if toolChainValid ifs then do
                   let
-                    _ = note "iface-tool-lazy modules=${length ifs}"
+                    _ = note "query-lazy modules=${length ifs}"
                   in do
                     pure (Just ifs)
                 else do
@@ -1102,7 +1102,7 @@ depIfacesForToolSourceDetailed ctx label source = do
                 Nothing => pure Nothing
                 Just ifs => if toolChainValid ifs then do
                   let
-                    _ = note "iface-tool-lazy modules=${length ifs}"
+                    _ = note "query-lazy modules=${length ifs}"
                   in do
                     pure
                       (Just (ToolContext ifs (manifestHashTable mans2) (Just ownManifest) needed (append toolStats ownStats) (toolEntryTable mans2) ownDir))

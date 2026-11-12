@@ -298,7 +298,7 @@ missingDepModules pkg (m :: rest) ifaceNames =
 dtCheckSourceWithIfaces : PackageContext -> String -> String -> List ModuleIface -> Eff [] (Check (List Diagnostic))
 dtCheckSourceWithIfaces ctx label source ifaces =
   let
-    _ = note "iface-source=check modules=${length ifaces}"
+    _ = note "query-source=check modules=${length ifaces}"
   in do
     projectR <- loadModuleSourceWithPreloaded ctx label source (modulesOfIfaces ifaces)
     case projectR of
@@ -376,7 +376,7 @@ replProgramWithIfaces ctx program exprSource ifaces = do
 replProgramWithIfacesAux : PackageContext -> String -> String -> List ModuleIface -> Maybe AuxCache -> Eff [] (Check (Pair (Pair DtProgram Expr) (Maybe AuxCache)))
 replProgramWithIfacesAux ctx program exprSource ifaces cache =
   let
-    _ = note "iface-source=repl modules=${length ifaces}"
+    _ = note "query-source=repl modules=${length ifaces}"
     src = "${program}\n${replExprName} = ${exprSource}\n"
   in do
     loaded <- loadProjectSourceWithPreloaded ctx "<repl>" src (modulesOfIfaces ifaces)

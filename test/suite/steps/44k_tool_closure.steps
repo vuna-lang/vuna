@@ -15,7 +15,7 @@ run: "$VUNA" check "$TMPDIR/iface-k-dep"
 run: "$VUNA" check "$TMPDIR/iface-k-root"
 # 默认（惰性闭包）：同包模块自己 import 的依赖模块必须进闭包，REPL 能求值出 43。
 run: cd "$TMPDIR/iface-k-root" && printf 'import KOuter\nouterVal\n:q\n' | VUNA_DEBUG_PERF=1 "$VUNA" repl 2>&1
-out-contains: iface-tool-lazy modules=
+out-contains: query-lazy modules=
 out-contains: 43
 out-not-contains: TC_UnknownName
 # 全量路径对照。
