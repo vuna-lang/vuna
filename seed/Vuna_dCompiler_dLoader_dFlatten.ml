@@ -483,7 +483,7 @@ and v_Vuna_dCompiler_dLoader_dFlatten_dloadModule = (fun fuel roots importerPkg 
 )
   | Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_ErrC (dtb__305) -> ((Base_dApplicative.v_Base_dApplicative_dpure Base_dEff.v_Applicative_uBase_uEff_uEff_ur) (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_ErrC (dtb__305)))
   | _ -> failwith "DT: impossible branch"
-)) parsed)))))) (Vuna_dCompiler_dDebug.v_Vuna_dCompiler_dDebug_dnote ("parse-module=" ^ name)))) (Base_dPair.v_Base_dPair_dsecondOf dtb__289))) (Base_dPair.v_Base_dPair_dfirstOf dtb__289))
+)) parsed)))))) (if Vuna_dCompiler_dDebug.v_Vuna_dCompiler_dDebug_dperfEnabled then (Vuna_dCompiler_dDebug.v_Vuna_dCompiler_dDebug_ddebugLine ("parse-module=" ^ name)) else Vuna_dCompiler_dDebug.v_Vuna_dCompiler_dDebug_dunit))) (Base_dPair.v_Base_dPair_dsecondOf dtb__289))) (Base_dPair.v_Base_dPair_dfirstOf dtb__289))
   | _ -> failwith "DT: impossible branch"
 ))) else ((Base_dApplicative.v_Base_dApplicative_dpure Base_dEff.v_Applicative_uBase_uEff_uEff_ur) ((Vuna_dCompiler_dLoader_dDiagnostics.v_Vuna_dCompiler_dLoader_dDiagnostics_dldErr1 (Vuna_dCompiler_dLoader_dDiagnostics.C_Vuna_dCompiler_dLoader_dDiagnostics_dLdDiag_InvalidModuleName (name))) name))))
   | _ -> failwith "DT: impossible branch"
