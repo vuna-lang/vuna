@@ -6,13 +6,13 @@ module Effects where
 import Base.Monad
 import Base.Eff
 
-program : Eff [] Int
+export program : Eff [] Int
 program = do
   _ <- prim_eff_print "codegen"
   pure 0
 
-probe : Eff [] Int
+export probe : Eff [] Int
 probe = prim_eff_print "codegen"
 
-marker : Int
+export marker : Int
 marker = 0

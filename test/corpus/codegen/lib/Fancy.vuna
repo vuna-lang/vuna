@@ -4,7 +4,7 @@ module Fancy where
 -- let 多 clause。
 import Base.List
 
-data Shape : Type where
+export data Shape(..) : Type where
   Circle : Int -> Shape
   Square : Int -> Shape
   Triangle : Int -> Int -> Shape
@@ -12,7 +12,7 @@ data Shape : Type where
   Pentagon : Int -> Shape
   Hexagon : Int -> Int -> Shape
 
-area : Shape -> Int
+export area : Shape -> Int
 area s = case s of
   Circle r => r * r
   Square a => a * a
@@ -21,11 +21,11 @@ area s = case s of
   Pentagon a => a * a
   Hexagon w h => w * h
 
-firstTwo : List Int -> Int
+export firstTwo : List Int -> Int
 firstTwo [] = 0
 firstTwo (all@(x :: rest)) = x + length all + length rest
 
-swapAdd : Int -> Int
+export swapAdd : Int -> Int
 swapAdd n =
   let
     f : Int -> Int
