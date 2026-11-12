@@ -25,7 +25,9 @@ import Vuna.Compiler.Common
 import Vuna.Compiler.Diagnostics.Pkg
 import Vuna.Compiler.Frontend.Manifest
 import Vuna.Compiler.Frontend.Toml
+import Vuna.Cli.Args
 import Vuna.Compiler.Packages.Source
+import Vuna.Compiler.Store
 import Base.List
 import Base.String
 
@@ -117,11 +119,13 @@ loadRegistryEntryEff indexRoot name =
   let
     root = stripIndexSlash indexRoot
     fileName = "${name}.toml"
-  in if isHttpUrl root then
+  in if isHttpUrl root then do
+    base <- storeCacheBaseEff
     let
-      tmp = "${root}-${name}.index.toml"
+      tmp = "${base}/index-${name}.toml"
     in do
-      code <- prim_eff_runIn "/tmp" ["curl", "-fsSL", "${root}/${fileName}", "-o", tmp]
+      _ <- ensureDirPath base
+      code <- prim_eff_runIn base ["curl", "-fsSL", "${root}/${fileName}", "-o", tmp]
       if code /= 0 then pure (pkgNoLoc1 (IndexMalformed "cannot fetch ${root}/${fileName}") fileName)
       else do
         text <- prim_eff_readFile tmp
