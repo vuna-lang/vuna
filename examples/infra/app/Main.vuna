@@ -48,7 +48,8 @@ main = do
   src <- prim_eff_getenv "INFRA_SRC"
   pathOk <- prim_eff_fileExists src
   raw <- if pathOk then prim_eff_readFile src else pure ""
-  _ <- prim_eff_print (("cst-file " ++ (if pathOk then verdict (roundtripOk raw) else "skip")) ++ "\n")
+  _ <-
+    prim_eff_print (("cst-file " ++ (if pathOk then verdict (roundtripOk raw) else "skip")) ++ "\n")
   _ <- prim_eff_print (("query1 " ++ showTrace (secondOf run1)) ++ "\n")
   _ <- prim_eff_print (("query2 " ++ showTrace (secondOf run2)) ++ "\n")
   _ <- prim_eff_print (("query3 " ++ showTrace (secondOf run3)) ++ "\n")
