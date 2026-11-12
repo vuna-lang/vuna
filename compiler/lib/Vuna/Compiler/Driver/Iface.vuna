@@ -123,6 +123,7 @@ import Vuna.Compiler.Elab.Derive
 import Vuna.Compiler.Driver.Cache
 import Vuna.Compiler.Debug
 import Vuna.Compiler.Driver.Owner
+import Vuna.Compiler.Intrinsics
 import Vuna.Compiler.Loader.Modules
 import Vuna.Compiler.Packages.Pkg
 
@@ -494,10 +495,15 @@ ctorOwnerOf oi name = case tblOwner oi.oiCtor name of
   Just fam => dataOwnerOf oi fam
   Nothing => Nothing
 
+-- iface 覆盖性/归属检查用的 prelude 名单：用户可见内建 + 编译器 tracing 隐藏原语
+-- （`@vuna@…` 是 prelude 共享项，不归属任何模块）。
+ifacePreludeNames : List String
+ifacePreludeNames = append preludeNames internalIntrinsicNames
+
 -- global 的归属：prelude 名字（内建 primitive/原语）是共享项，不进任何模块；
 -- 其余按 def / data / 构造子 → 模块前缀。
 globalOwnerOf : OwnerIndex -> String -> Maybe String
-globalOwnerOf oi name = if memName name preludeNames then Nothing
+globalOwnerOf oi name = if memName name ifacePreludeNames then Nothing
 else case defOwnerOf oi name of
   Just o => Just o
   Nothing => case dataOwnerOf oi name of
@@ -690,7 +696,7 @@ firstCoverageIssue oi ourNames inherited ifaces prog =
     mergedTbl = Base.HashMap.ofNames merged
     ourTbl = Base.HashMap.ofNames ourNames
     inhTbl = Base.HashMap.ofNames inherited
-    preludeTbl = Base.HashMap.ofNames preludeNames
+    preludeTbl = Base.HashMap.ofNames ifacePreludeNames
     issue = coverageIssueGo oi ourTbl inhTbl mergedTbl preludeTbl (artifactNamesOf prog)
   in if issue == "" then Nothing else Just issue
 

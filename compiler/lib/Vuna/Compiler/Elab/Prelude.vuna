@@ -126,8 +126,14 @@ preludeValueGlobals : List (Pair String Term)
 preludeValueGlobals =
   map (\i => Pair (intrinsicName i) (ityToTerm (intrinsicSignature i))) userIntrinsics
 
+-- 编译器 tracing 的隐藏原语签名：只进 prelude globals（供 `dbg!` 展开后的
+-- `@vuna@…` 类型检查），不进 `preludeValueNames`/用户可见名单。
+internalValueGlobals : List (Pair String Term)
+internalValueGlobals =
+  map (\i => Pair (intrinsicName i) (ityToTerm (intrinsicSignature i))) internalIntrinsics
+
 preludeGlobals : List (Pair String Term)
-preludeGlobals = append preludeTypeGlobals preludeValueGlobals
+preludeGlobals = append preludeTypeGlobals (append preludeValueGlobals internalValueGlobals)
 
 -- 「禁止重定义」名单：primitive 类型名 + 内建类型构造子 + 全部用户可见内建值名。
 -- 只在入口（ad-hoc）文件里可能命中——模块内声明会被 mangle 成 `<Module>.name`。

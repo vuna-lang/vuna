@@ -654,7 +654,10 @@ else case findIntrinsic g of
     OpBitNot => intPrim1 sp (\a => VInt (bitNot a))
     OpBitShl => intPrim2 sp (\a, n => VInt (bitShl a n))
     OpBitShr => intPrim2 sp (\a, n => VInt (bitShr a n))
-    OpNone => Nothing
+    -- 编译器 tracing 隐藏原语：interp 不执行输出，按“关闭/空发射”归约，保持纯与静默。
+    OpNone =>
+      if g == debugOnIntrinsicName then Just (VBool False)
+      else if g == debugLineIntrinsicName then Just (VInt 0) else Nothing
   Nothing => Nothing
 
 -- `strHash`：固定 1024 桶（与 runtime `dtp_strHash` 同一公式）。

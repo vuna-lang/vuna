@@ -880,15 +880,32 @@ let bi_gt_float (a : float) (b : float) = a > b
 let bi_ge_float (a : float) (b : float) = a >= b
 """
 
+-- | 编译器 tracing runtime（仅在程序引用 `dbg!` 展开出的隐藏原语时追加；见
+-- `dtRuntimeWith` 的 `usesTrace`）。开关是 lazy CAF：第一次探针才读 argv/env，
+-- 关闭时每个探针只剩一次 `Lazy.force`；输出走 stderr，行格式
+-- `DEBUG <epoch-us> <text>`（逐行 flush）。
+dtTraceRuntime : String
+dtTraceRuntime = """let dtp_debug_on_lazy = lazy (
+  let has f = Array.exists (fun a -> a = f) Sys.argv in
+  has \"--debug-perf\" || (try Sys.getenv \"VUNA_DEBUG_PERF\" = \"1\" with Not_found -> false))
+let dtp_debug_on (_ : int) = Lazy.force dtp_debug_on_lazy
+let dtp_debug_line (s : string) =
+  Printf.eprintf \"DEBUG %d %s
+%!\" (dtp_timeUs ()) s;
+  0
+"""
+
 -- 运行时文本 = 既有常量部分（`dtRuntime`） + 注入的定义位置表 + 报告器。
 -- `dt_def_locs` 必须定义在报告器之前（报告器读它）；空表写成 `[]`。
--- `usesFloat` 为 False 时输出与 Float 之前**逐字节一致**（旧 seed 固定点/缓存关键）。
-dtRuntimeWith : String -> Bool -> String
-dtRuntimeWith locs usesFloat =
+-- `usesFloat` / `usesTrace` 为 False 时对应 helper 不出现：不用 Float/tracing 的程序
+-- runtime 与引入该功能前**逐字节一致**（旧 seed 固定点/缓存关键）。
+dtRuntimeWith : String -> Bool -> Bool -> String
+dtRuntimeWith locs usesFloat usesTrace =
   dtRuntime
     ++ (if usesFloat then dtFloatRuntime else "")
     ++ (if locs == "" then "let dt_def_locs = []\n" else "let dt_def_locs = [\n${locs}]\n")
     ++ dtReporterRuntime
+    ++ (if usesTrace then dtTraceRuntime else "")
 
 -- M19：`==` / `/=` 的跨类型特化（精化期已按实参类型重写成 `bi_eq_int` / `bi_eq_str`
 -- 这类名字），以及 str* 内建。codegen 只做名字映射、不感知类型——M18.6 的

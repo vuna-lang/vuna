@@ -12,6 +12,8 @@ module Vuna.Compiler.Intrinsics
   , boolTypeName
   , canonicalCtorsFor
   , dbgIntrinsicName
+  , debugLineIntrinsicName
+  , debugOnIntrinsicName
   , effDefaultInstance
   , effMemberFamilyName
   , effMemberHereCtor
@@ -34,6 +36,8 @@ module Vuna.Compiler.Intrinsics
   , fromStringMethodName
   , fromStringTypeName
   , intTypeName
+  , internalIntrinsicNames
+  , internalIntrinsics
   , interpMethodName
   , interpTypeName
   , intrinsicArity
@@ -59,6 +63,7 @@ module Vuna.Compiler.Intrinsics
   , primEraseName
   , strTypeName
   , todoIntrinsicName
+  , traceIntrinsicNames
   , typeIntrinsicArities
   , typeIntrinsicArityOf
   , typeIntrinsicCtorArity
@@ -204,6 +209,21 @@ effRunName = "Base.Eff.runPure"
 -- | `dbg`：把消息写 stderr 后返回第二个实参（debug/release 都可用）。
 dbgIntrinsicName : String
 dbgIntrinsicName = "dbg"
+
+-- ---------------------------------------------------------------
+-- 编译器 tracing（内置宏 `dbg!` 的隐藏后端）
+-- ---------------------------------------------------------------
+-- 这两个名字只由 `Loader.Expand` 展开 `dbg!` 时引用：它们以 `@vuna@` 开头，
+-- `Loader.Resolve` 作为内部名直通，`Elab.Prelude` 提供签名，`Codegen.Term` 映射到
+-- 生成的 `Vuna_runtime`；`visible = False`，源码写不出来。
+-- 用哑 `Int` 实参承载开关查询，避免在源码层出现「纯 Bool 值读取进程配置」的形态。
+-- | `dbg!` 的开关查询原语（`--debug-perf` / `VUNA_DEBUG_PERF=1`）。
+debugOnIntrinsicName : String
+debugOnIntrinsicName = "@vuna@debug@on"
+
+-- | `dbg!` 的发射原语（带时间戳写 stderr，返回 0）。
+debugLineIntrinsicName : String
+debugLineIntrinsicName = "@vuna@debug@line"
 
 -- | `assert`：debug-only 断言（release 构建拒绝）。
 assertIntrinsicName : String
@@ -677,9 +697,27 @@ effIntrinsics =
     Intrinsic "prim_eff_execPath" (IEff IStr) OpNone "(dtp_execPath ())" True
   ]
 
--- | 所有内建声明：基础表 + 浮点表 + Eff 过渡表。
+-- | 编译器 tracing 的隐藏原语（`visible = False`）：只由内置宏 `dbg!` 展开引用，
+-- 用户源码不可写。签名与 runtime 都在此表；`Elab.Prelude` 会把它们补进 prelude globals
+-- （不进用户可见名单），`Core.Eval` 在 interp 里归约为 no-op。
+internalIntrinsics : List Intrinsic
+internalIntrinsics =
+  [ Intrinsic debugOnIntrinsicName (IFun IInt IBool) OpNone "dtp_debug_on" False,
+    Intrinsic debugLineIntrinsicName (IFun IStr IInt) OpNone "dtp_debug_line" False
+  ]
+
+-- | 编译器 tracing 原语名：codegen 据此按需追加 runtime helper（`usesTrace`）。
+traceIntrinsicNames : List String
+traceIntrinsicNames = [debugOnIntrinsicName, debugLineIntrinsicName]
+
+-- | 隐藏原语名清单：iface 覆盖性检查把它们视作 prelude 名字（不归属任何模块）。
+internalIntrinsicNames : List String
+internalIntrinsicNames = map intrinsicName internalIntrinsics
+
+-- | 所有内建声明：基础表 + 浮点表 + Eff 过渡表 + 编译器 tracing 表。
 allIntrinsics : List Intrinsic
-allIntrinsics = append baseIntrinsics (append floatIntrinsics effIntrinsics)
+allIntrinsics =
+  append baseIntrinsics (append floatIntrinsics (append effIntrinsics internalIntrinsics))
 
 -- | 全部与 Float 有关的内建名（字面量/算术/比较/转换/格式化）：`vuna interp`/REPL 的
 -- 求值 guard 与 codegen 的按需 runtime helper 都按它判定「程序是否使用浮点」。

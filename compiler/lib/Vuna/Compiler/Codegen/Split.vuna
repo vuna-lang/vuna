@@ -232,6 +232,14 @@ anyDefUsesFloat (d :: rest) = case dtDefBody d of
   Nothing => anyDefUsesFloat rest
   Just body => termUsesFloat floatIntrinsicNames body || anyDefUsesFloat rest
 
+-- | 遍历所有定义体，判断是否有定义用到编译器 tracing 隐藏原语（`dbg!` 展开结果）；
+-- 结果决定 `Vuna_runtime.ml` 是否追加 `dtTraceRuntime`（不用的程序保持逐字节一致）。
+anyDefUsesTrace : List DtDef -> Bool
+anyDefUsesTrace [] = False
+anyDefUsesTrace (d :: rest) = case dtDefBody d of
+  Nothing => anyDefUsesTrace rest
+  Just body => termUsesFloat traceIntrinsicNames body || anyDefUsesTrace rest
+
 generateDtSplitProgramWith : (String -> Eff [] (Maybe SplitFile)) -> (String -> SplitFile -> Eff [] Int) -> List (Pair String (List Decl)) -> List Decl -> DtProgram -> Bool -> List String -> String -> Eff [] (Check (List SplitFile))
 generateDtSplitProgramWith lookup store modules entryDecls prog printResult roots contextDir =
   let
@@ -245,7 +253,8 @@ generateDtSplitProgramWith lookup store modules entryDecls prog printResult root
     locTbl = dtDefLocTable (splitLocPath roots contextDir) allDefs
     _ = perfStamp! "cg-deflocs-done"
     usesFloat = anyDefUsesFloat allDefs
-    runtimeText = dtRuntimeWith locTbl usesFloat
+    usesTrace = anyDefUsesTrace allDefs
+    runtimeText = dtRuntimeWith locTbl usesFloat usesTrace
     _ = perfStamp! "cg-runtimeText-done"
   in case prepareDtProgram (Pair (dtProgDatas prog) allDefs) of
     ErrC e => pure (ErrC e)

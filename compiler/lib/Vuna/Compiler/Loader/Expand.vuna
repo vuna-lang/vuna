@@ -10,18 +10,20 @@ module Vuna.Compiler.Loader.Expand (expandDecls) where
 -- span），满足「宏携带 span」不变量。展开结果只引用 `Vuna.Compiler.Debug` 的宏后端
 -- 名字（全限定），因此不存在捕获调用方局部名字的问题；调用方必须 import 该模块。
 --
--- 目前只有编译器内部探针三个宏（注册表在 `expandMacro`）：
+-- 目前只有编译器内部探针宏（注册表在 `expandMacro`）：
+--   * `dbg! msg`          → 带时间戳的 `DEBUG` 行（`--debug-perf` 门控）
 --   * `perfNote! msg`     → `if perfEnabled then debugLine msg else unit`
 --   * `perfStamp! label`  → `if perfEnabled then perfMark label else unit`
 --   * `perfSample! key l` → perfStamp 的 1/64 确定性采样版
--- 探针返回 `Unit`（不是 `0` 哨兵）；开关判断由宏统一给出，调用点不再手写
--- `if <开关> then ... else ...`（旧的严格求值探针 API 已随本次重构删除）。
+-- `dbg!` 展开到隐藏原语（`@vuna@debug@*`，见 `Intrinsics.internalIntrinsics`），不依赖
+-- 任何库模块；其余探针仍引用 `Vuna.Compiler.Debug`（阶段 A 保留，阶段 B 删除）。
 -- 用户自定义宏不在本阶段范围内。
 import Base.List
 import Base.Nat
 import Vuna.Compiler.Common
 import Vuna.Compiler.Diagnostics.Rn
 import Vuna.Compiler.Frontend.Ast
+import Vuna.Compiler.Intrinsics
 
 -- 展开递归的 fuel：AST 合法输入必然收敛，这里只防实现 bug 造成的死循环（与
 -- `Loader.Resolve.resolveFuelBound` 同一量级；耗尽即 internal error，不静默截断）。
@@ -239,6 +241,14 @@ macroCall name args sp = EApp (debugRef name sp) args sp
 guardedMacro : Span -> Expr -> Expr
 guardedMacro sp body = EIf (debugRef "perfEnabled" sp) body (debugRef "unit" sp) sp
 
+-- 隐藏原语引用（`@vuna@…`）：Resolve 作为内部名直通，签名由 `Elab.Prelude` 提供。
+internalRef : String -> Span -> Expr
+internalRef name sp = EVar name sp
+
+-- `dbg!` 的开关查询：哑 `Int` 实参 0（宏展开里唯一的实参形态，源码写不出来）。
+debugOnRef : Span -> Expr
+debugOnRef sp = EApp (internalRef debugOnIntrinsicName sp) [EInt 0 sp] sp
+
 macroArityMismatch : String -> Int -> List Expr -> Span -> Check Expr
 macroArityMismatch name expected args sp =
   let
@@ -248,7 +258,11 @@ macroArityMismatch name expected args sp =
 
 -- | 展开一个 `name!` 调用：未知宏 / arity 不符报 `RN_UnknownMacro` / `RN_MacroArity`。
 expandMacro : String -> List Expr -> Span -> Check Expr
-expandMacro name args sp = if name == "perfNote" then case args of
+expandMacro name args sp = if name == "dbg" then case args of
+  [msg] =>
+    OkC (EIf (debugOnRef sp) (EApp (internalRef debugLineIntrinsicName sp) [msg] sp) (EInt 0 sp) sp)
+  _ => macroArityMismatch name 1 args sp
+else if name == "perfNote" then case args of
   [msg] => OkC (guardedMacro sp (macroCall "debugLine" [msg] sp))
   _ => macroArityMismatch name 1 args sp
 else if name == "perfStamp" then case args of
