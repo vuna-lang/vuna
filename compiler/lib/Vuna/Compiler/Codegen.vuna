@@ -2,12 +2,16 @@ module Vuna.Compiler.Codegen where
 
 -- Vuna.Compiler.Codegen：DT 擦除 codegen 的门面。
 --
--- 对外只有两个入口（check 路径的 `checkDtProgram` 与 split 的唯一生成器
--- `generateDtSplitProgram`）；实现按调用图拆在子模块里：
---   - Decl    ：OCaml 名字编码 + 变体类型声明；
---   - Erase   ：擦除/作用域/名字护栏、依赖分析与 SCC 分组；
---   - Term    ：项 → OCaml + DT 运行时前缀；
---   - Assembly：split 产物装配（prepare / 类型 / 桥接 / 正文 / main 钩子）；
+-- Track A 第一步之后调用链是唯一的一条：
+--   `Core --Codegen.Lower--> IR --Codegen.{Decl,Term,Assembly,Split}--> OCaml 文本`
+-- `Erase` 只剩纯分析（擦除/作用域护栏、依赖遍历），是 Lowering 的输入工具。
+-- 对外入口：check 路径的 `lowerProgramOf` + `genUnitParts`，split 的
+-- `generateDtSplitProgram(With)`（装配全在 `Assembly`）。
+--   - Lower   ：Core → IR（擦除判定、表示决策、形态判定、入口分类；唯一的上游消费者）；
+--   - Decl    ：OCaml 名字编码 + 跨单元限定 + `IrTy` / `IrTyDecl` 文本；
+--   - Erase   ：擦除/作用域护栏与依赖遍历（纯分析，供 Lowering 调用）；
+--   - Term    ：IR → OCaml 文本 + DT 运行时前缀 + main 钩子；
+--   - Assembly：`IrUnit` 装配（open 头 / 类型 / 桥接 / 正文 / 依赖表）；
 --   - Split   ：声明归属表与分文件装配。
 -- 外部（Driver.Dt）只 import 本门面，不依赖任何子模块。
 export import Vuna.Compiler.Codegen.Assembly

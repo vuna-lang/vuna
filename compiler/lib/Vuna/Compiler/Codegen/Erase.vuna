@@ -1,13 +1,15 @@
 module Vuna.Compiler.Codegen.Erase where
 
--- Vuna.Compiler.Codegen.Erase：擦除检查、依赖分析与 SCC 分组。
+-- Vuna.Compiler.Codegen.Erase：擦除检查与运行时依赖遍历（纯分析）。
 --
 -- 输入是 Elab 产出的 `DtProgram` 定义表（项上自带擦除标志），本模块负责：
---   - 类型级 / 运行时定义分区（isTypeForming / partitionDefs）；
+--   - 类型级 / 运行时定义分区（`isTypeForming` / `partitionDefs`）；
 --   - 运行时项的擦除检查（运行时位置不得出现被擦除绑定 / 类型 / 类型级定义）；
---   - de Bruijn 作用域护栏与 OCaml 名字单射性护栏；
---   - 运行时依赖图与 SCC 分组（决定 `let` / `let rec ... and ...` 的生成顺序）。
--- 纯分析，不产生 OCaml 文本。
+--   - axiom 的运行时使用检查；
+--   - de Bruijn 作用域护栏；
+--   - 运行时依赖遍历（`termDepsInto`，供 SCC 分组与位置表使用）。
+-- SCC 分组已迁到 `Vuna.Compiler.Ir.Analysis`（IR 层，不依赖 Core 的具体含义之外的东西）；
+-- 本模块只提供输入它的「名字级」分析。不产生 OCaml 文本。
 import Base.List
 import Vuna.Compiler.Common
 import Base.HashMap
@@ -15,7 +17,6 @@ import Vuna.Compiler.Core
 import Vuna.Compiler.Core.Term
 import Vuna.Compiler.Diagnostics
 import Vuna.Compiler.Elab
-import Vuna.Compiler.Codegen.Decl
 import Vuna.Compiler.Elab.Representation
 
 -- ---------------------------------------------------------------
@@ -229,241 +230,11 @@ addName name [] = [name]
 addName name (x :: rest) =
   if x == name then Base.List.Cons x rest else Base.List.Cons x (addName name rest)
 
-runtimeNamesOf : List DtDef -> List String
+export runtimeNamesOf : List DtDef -> List String
 runtimeNamesOf [] = []
 runtimeNamesOf (d :: rest) = dtDefName d :: runtimeNamesOf rest
 
-lookupDtDef : List DtDef -> String -> Maybe DtDef
-lookupDtDef defs name = findDtDef name defs
-
 -- ---------------------------------------------------------------
--- SCC 分组（M14：替代 M13 的「递归 = 报错」）
--- ---------------------------------------------------------------
---
--- 按 Kosaraju 分组（与 Codegen 的既有实现同构）：先在正向依赖图上求完成顺序，再在反向图
--- 上按该顺序收集分量，最后按依赖就绪顺序排列分量。分量内成员按源码顺序排列，
--- 保证同一输入产出逐字节稳定的 OCaml。
-export neighborsOf : HashMap String (List String) -> String -> List String
-neighborsOf adjT name = case Base.HashMap.lookup name adjT of
-  Just ns => ns
-  Nothing => []
-
--- 反向邻接表：一次遍历 adj 构建（旧实现 dependentsOf 对每个名字扫全表 ⇒ O(n²)）。
-addDependents : String -> List String -> HashMap String (List String) -> HashMap String (List String)
-addDependents src [] t = t
-addDependents src (m :: rest) t =
-  let
-    cur = case Base.HashMap.lookup m t of
-      Just xs => xs
-      Nothing => []
-  in addDependents src rest (Base.HashMap.insert m (Base.List.Cons src cur) t)
-
-reverseAdjTbl : List (Pair String (List String)) -> HashMap String (List String)
-reverseAdjTbl [] = Base.HashMap.fromList []
-reverseAdjTbl ((Pair n ns) :: rest) = addDependents n ns (reverseAdjTbl rest)
-
-export adjTblOf : List (Pair String (List String)) -> HashMap String (List String)
-adjTblOf adj = Base.HashMap.insertAll adj (Base.HashMap.fromList [])
-
-foldNeighborsPost : HashMap String (List String) -> List String -> HashMap String Bool -> List String -> Pair (HashMap String Bool) (List String)
-foldNeighborsPost adjT ms visited order = foldNeighborsPostFuel 100000 adjT ms visited order
-
-foldNeighborsPostFuel : Int -> HashMap String (List String) -> List String -> HashMap String Bool -> List String -> Pair (HashMap String Bool) (List String)
-foldNeighborsPostFuel fuel adjT ms visited order = if fuel <= 0 then Pair visited order
-else case ms of
-  [] => Pair visited order
-  m :: rest => if Base.HashMap.member m visited then foldNeighborsPostFuel (fuel - 1) adjT rest visited order
-  else case dfsPostFuel (fuel - 1) adjT m (Base.HashMap.insert m True visited) order of
-    Pair visited2 order2 => foldNeighborsPostFuel (fuel - 1) adjT rest visited2 order2
-
-dfsPost : HashMap String (List String) -> String -> HashMap String Bool -> List String -> Pair (HashMap String Bool) (List String)
-dfsPost adjT n visited order = dfsPostFuel 100000 adjT n visited order
-
-dfsPostFuel : Int -> HashMap String (List String) -> String -> HashMap String Bool -> List String -> Pair (HashMap String Bool) (List String)
-dfsPostFuel fuel adjT n visited order = if fuel <= 0 then Pair visited order
-else case foldNeighborsPostFuel (fuel - 1) adjT (neighborsOf adjT n) visited order of
-  Pair visited2 order2 => Pair visited2 (Base.List.Cons n order2)
-
-postOrder : HashMap String (List String) -> List String -> HashMap String Bool -> List String -> Pair (HashMap String Bool) (List String)
-postOrder adjT [] visited order = Pair visited order
-postOrder adjT (n :: rest) visited order = if Base.HashMap.member n visited then postOrder adjT rest visited order
-else case dfsPost adjT n (Base.HashMap.insert n True visited) order of
-  Pair visited2 order2 => postOrder adjT rest visited2 order2
-
-foldNeighborsCollect : HashMap String (List String) -> List String -> HashMap String Bool -> List String -> Pair (HashMap String Bool) (List String)
-foldNeighborsCollect adjT ms visited comp = foldNeighborsCollectFuel 100000 adjT ms visited comp
-
-foldNeighborsCollectFuel : Int -> HashMap String (List String) -> List String -> HashMap String Bool -> List String -> Pair (HashMap String Bool) (List String)
-foldNeighborsCollectFuel fuel adjT ms visited comp = if fuel <= 0 then Pair visited comp
-else case ms of
-  [] => Pair visited comp
-  m :: rest => if Base.HashMap.member m visited then foldNeighborsCollectFuel (fuel - 1) adjT rest visited comp
-  else case dfsCollectFuel (fuel - 1) adjT m (Base.HashMap.insert m True visited) comp of
-    Pair visited2 comp2 => foldNeighborsCollectFuel (fuel - 1) adjT rest visited2 comp2
-
-dfsCollect : HashMap String (List String) -> String -> HashMap String Bool -> List String -> Pair (HashMap String Bool) (List String)
-dfsCollect adjT n visited comp = dfsCollectFuel 100000 adjT n visited comp
-
-dfsCollectFuel : Int -> HashMap String (List String) -> String -> HashMap String Bool -> List String -> Pair (HashMap String Bool) (List String)
-dfsCollectFuel fuel adjT n visited comp = if fuel <= 0 then Pair visited comp
-else case foldNeighborsCollectFuel (fuel - 1) adjT (neighborsOf adjT n) visited comp of
-  Pair visited2 comp2 => Pair visited2 (Base.List.Cons n comp2)
-
-collectComps : HashMap String (List String) -> List String -> HashMap String Bool -> List (List String) -> List (List String)
-collectComps adjT [] visited comps = comps
-collectComps adjT (n :: rest) visited comps = if Base.HashMap.member n visited then collectComps adjT rest visited comps
-else case dfsCollect adjT n (Base.HashMap.insert n True visited) [] of
-  Pair visited2 comp => collectComps adjT rest visited2 (comp :: comps)
-
--- 名字 → 所属分量（一次构建，O(1) 查）。
-componentTblOf : List (List String) -> HashMap String (List String)
-componentTblOf comps =
-  Base.HashMap.insertAll (concatMap (\g => map (\n => Pair n g) g) comps) (Base.HashMap.fromList [])
-
-addAllNames : List String -> HashMap String Bool -> HashMap String Bool
-addAllNames [] t = t
-addAllNames (n :: rest) t = addAllNames rest (Base.HashMap.insert n True t)
-
--- 按 names 首次出现顺序产出 SCC，组内成员按 names 顺序排列。
-groupsFromComps : List (List String) -> List String -> List (List String)
-groupsFromComps comps names =
-  groupsFromCompsGo (componentTblOf comps) names names (Base.HashMap.fromList [])
-
-groupsFromCompsGo : HashMap String (List String) -> List String -> List String -> HashMap String Bool -> List (List String)
-groupsFromCompsGo compTbl allNames [] emitted = []
-groupsFromCompsGo compTbl allNames (n :: rest) emitted = if Base.HashMap.member n emitted then groupsFromCompsGo compTbl allNames rest emitted
-else case Base.HashMap.lookup n compTbl of
-  Just g =>
-    Base.List.Cons (groupOf allNames g)
-      (groupsFromCompsGo compTbl allNames rest (addAllNames g emitted))
-  Nothing => groupsFromCompsGo compTbl allNames rest emitted
-
--- 单成员分量（大程序里占绝对多数）直接返回，免掉对全程序名字的一次 filter；
--- 旧实现对每个分量都 filter 一遍 allNames ⇒ O(#分量 × #定义)。
--- M34.6：成员表只建一次（旧实现把 `ofNames g` 写在谓词里 ⇒ 每个名字都重建整张
--- 表，3064 名字 × 3064 ⇒ 分组阶段 ~189ms）。
-groupOf : List String -> List String -> List String
-groupOf allNames ([x]) = [x]
-groupOf allNames g =
-  let
-    memberTbl = Base.HashMap.ofNames g
-  in filterNames (\m => Base.HashMap.member m memberTbl) allNames
-
-filterNames : (String -> Bool) -> List String -> List String
-filterNames pred [] = []
-filterNames pred (n :: rest) =
-  if pred n then Base.List.Cons n (filterNames pred rest) else filterNames pred rest
-
-notIn : String -> List String -> Bool
-notIn name names = not (memName name names)
-
-uniqueNames : List String -> List String
-uniqueNames [] = []
-uniqueNames (name :: rest) =
-  if name == "" then uniqueNames rest
-  else if memName name rest then uniqueNames rest else Base.List.Cons name (uniqueNames rest)
-
-groupDeps : HashMap String (List String) -> List String -> List String
-groupDeps adjT group =
-  filterNames (\n => notIn n group) (uniqueNames (concatMap (neighborsOf adjT) group))
-
-allIn : List String -> HashMap String Bool -> Bool
-allIn [] allowed = True
-allIn (n :: rest) allowed = Base.HashMap.member n allowed && allIn rest allowed
-
-groupReady : HashMap String (List String) -> List String -> HashMap String Bool -> Bool
-groupReady adjT group emitted = allIn (groupDeps adjT group) emitted
-
-pickReady : HashMap String (List String) -> List (List String) -> HashMap String Bool -> Maybe (Pair (List String) (List (List String)))
-pickReady adjT groups emitted = pickReadyAcc adjT groups [] emitted
-
-pickReadyAcc : HashMap String (List String) -> List (List String) -> List (List String) -> HashMap String Bool -> Maybe (Pair (List String) (List (List String)))
-pickReadyAcc adjT [] before emitted = Nothing
-pickReadyAcc adjT (g :: rest) before emitted =
-  if groupReady adjT g emitted then Just (Pair g (append (reverse before) rest))
-  else pickReadyAcc adjT rest (g :: before) emitted
-
-orderGroups : HashMap String (List String) -> List (List String) -> Check (List (List String))
-orderGroups adjT groups = orderGroupsAcc adjT groups (Base.HashMap.fromList [])
-
-orderGroupsAcc : HashMap String (List String) -> List (List String) -> HashMap String Bool -> Check (List (List String))
-orderGroupsAcc adjT remaining emitted =
-  orderGroupsAccFuel (length remaining + 1) adjT remaining emitted
-
-orderGroupsAccFuel : Int -> HashMap String (List String) -> List (List String) -> HashMap String Bool -> Check (List (List String))
-orderGroupsAccFuel fuel adjT remaining emitted = if fuel <= 0 then cgErr0 DependencyCycle
-else case remaining of
-  [] => OkC []
-  _ => case pickReady adjT remaining emitted of
-    Nothing => cgErr0 DependencyCycle
-    Just (Pair g rest) =>
-      Vuna.Compiler.Common.bind (orderGroupsAccFuel (fuel - 1) adjT rest (addAllNames g emitted))
-        (\tail => OkC (Base.List.Cons g tail))
-
--- 运行时定义的依赖邻接表（只保留运行时会用到的 TGlobal 边）。
--- 入参只会有体定义（axiom 已被分区到类型级）；无体项按空依赖处理。
-export depAdjacency : List DtDef -> List (Pair String (List String))
-depAdjacency defs =
-  let
-    names = Base.HashMap.ofNames (runtimeNamesOf defs)
-  in map (\d => case dtDefBody d of
-    Just body => Pair (dtDefName d) (termDepsInto names [] body)
-    Nothing => Pair (dtDefName d) []
-  ) defs
-
-export groupRuntimeDefs : List DtDef -> Check (List (List DtDef))
-groupRuntimeDefs defs =
-  let
-    names = runtimeNamesOf defs
-    defsTbl = dtDefTblOf defs
-    adj = depAdjacency defs
-    adjT = adjTblOf adj
-    revT = reverseAdjTbl adj
-  in case postOrder adjT names (Base.HashMap.fromList []) [] of
-    Pair _ order =>
-      let
-        comps = collectComps revT order (Base.HashMap.fromList []) []
-        groups = groupsFromComps comps names
-      in Vuna.Compiler.Common.bind (orderGroups adjT groups)
-        (\ordered => OkC (map (groupDefsOf defsTbl) ordered))
-
-dtDefTblOf : List DtDef -> HashMap String DtDef
-dtDefTblOf defs =
-  Base.HashMap.insertAll (map (\d => Pair (dtDefName d) d) defs) (Base.HashMap.fromList [])
-
-groupDefsOf : HashMap String DtDef -> List String -> List DtDef
-groupDefsOf defsTbl [] = []
-groupDefsOf defsTbl (n :: rest) = case Base.HashMap.lookup n defsTbl of
-  Nothing => groupDefsOf defsTbl rest
-  Just d => d :: groupDefsOf defsTbl rest
-
--- M24.6 第一级：OCaml 名字编码的单射性护栏。`sanitizeName` 的转义是前缀码
--- （'_' 只会以 `_d/_u/_p/_h` 形式出现），理论上已单射；这里仍对**实际生成的**
--- value/type/ctor 名字做去重校验，任何未来改动引入碰撞都在 check 期报错，而不是
--- 静默覆盖（三族前缀 v_/t_/C_ 互不相同，只需族内校验）。
-checkNoDupOcamlNames : String -> List String -> Check Int
-checkNoDupOcamlNames kind names = checkNoDupOcamlNamesGo kind names (Base.HashMap.fromList [])
-
-checkNoDupOcamlNamesGo : String -> List String -> HashMap String Bool -> Check Int
-checkNoDupOcamlNamesGo kind [] seen = OkC 0
-checkNoDupOcamlNamesGo kind (n :: rest) seen =
-  if Base.HashMap.member n seen then icInternal "OCaml name collision among ${kind}s: `${n}`"
-  else checkNoDupOcamlNamesGo kind rest (Base.HashMap.insert n True seen)
-
-export ensureUniqueOcamlNames : List DtData -> List DtDef -> Check Int
-ensureUniqueOcamlNames datas defs =
-  let
-    runtime = runtimeDatas datas
-    unboxed = unboxedFamilySet runtime
-    valueNames = map (\d => valueName (dtDefName d)) defs
-    typeNames = map (\d => typeName (dtDataName d)) runtime
-    ctorNames =
-      concatMap
-        (\d => if memName (dtDataName d) unboxed then [] else map (\c => ctorOcamlName (dtCtorFamily c) (dtCtorName c)) (dtDataCtors d))
-        runtime
-  in Vuna.Compiler.Common.bind (checkNoDupOcamlNames "value" valueNames)
-    (\_ => Vuna.Compiler.Common.bind (checkNoDupOcamlNames "type" typeNames) (\_ => checkNoDupOcamlNames "constructor" ctorNames))
-
 -- M24.6 第三级（重新裁定后的最小落地）：de Bruijn index 的作用域护栏。
 -- `Core.varIndex` 越界已改为返回 -1（不再静默指向 0）；这里对**全部**定义体
 -- （含类型级定义，它们现在整体擦除、不再过擦除检查）做一次作用域验证，任何
@@ -521,7 +292,7 @@ checkAllDefScopes (d :: rest) = case dtDefBody d of
     ErrC e => ErrC (defLocDiag d e)
     OkC n => checkAllDefScopes rest
 
-termDepsInto : HashMap String Bool -> List String -> Term -> List String
+export termDepsInto : HashMap String Bool -> List String -> Term -> List String
 termDepsInto a1 a2 a3 = termDepsIntoFuel 100000 a1 a2 a3
 
 termDepsArgs : HashMap String Bool -> List String -> List (Pair Term Rig) -> List String

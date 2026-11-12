@@ -1,25 +1,27 @@
 module Vuna.Compiler.Codegen.Decl where
 
--- Vuna.Compiler.Codegen.Decl：OCaml 名字编码 + data/构造子类型声明生成。
+-- Vuna.Compiler.Codegen.Decl：OCaml 名字编码 + 跨单元限定 + IR 类型/声明渲染。
 --
--- 本模块是 codegen 的最底层叶子：所有 OCaml 标识符的渲染（sanitizeName / valueName /
--- typeName / ctorOcamlName / ocamlString / 保留字转义）与变体类型声明（族参数表、
--- 构造子字段渲染、keep flags）都在这里；不依赖其它 Codegen 子模块。
---
--- 类型参数分配规则与字段渲染必须共用同一份「用到哪些族参数」表（不动点计算），
--- 否则声明与实参位置会漂移；详见 genTypeDeclsOf 上方的注释。
+-- Track A 第一步之后这里是 codegen 的最底层叶子，只有**纯文本**职责：
+--   * 标识符渲染（sanitizeName / valueName / typeName / ctorOcamlName /
+--     recordFieldLabel / ocamlString / 保留字转义 / binder 名）；
+--   * 跨单元限定（`QualCtx`：名字 → 归属单元，渲染成 `Unit.name`）；
+--   * `IrTy` / `IrTyDecl` → OCaml 类型文本。
+-- 不再消费 `DtData` / `DtDef` / `Value`：表示决策（族参数槽、keep flags、不透明字段、
+-- record 字段表、去装箱族）全部由 `Codegen.Lower` 在 IR 里定好。边界由
+-- `checks.ir-boundary` 守护。
 import Vuna.Compiler.Common
 import Base.HashMap
-import Vuna.Compiler.Core
-import Vuna.Compiler.Elab
-import Vuna.Compiler.Elab.Representation
 import Vuna.Compiler.Frontend.Ast
-import Vuna.Compiler.Intrinsics
+import Vuna.Compiler.Ir
 
+-- ---------------------------------------------------------------
+-- 名字编码
+-- ---------------------------------------------------------------
 -- M31.3：除 `[A-Za-z0-9]` 外的任意字符都必须转义成 `_x<code>_`——用户符号名函数
 -- （`<+>`、`>>=` 之外的声明名）会直接进 OCaml 值名，原样输出是非法标识符。
 -- 与既有编码不冲突：字面标识符里的 `_` 已映射成 `_u`，输出里除转义序列外不会出现裸 `_`，
--- 因此不会与字面名冲突（`ensureUniqueOcamlNames` 仍是最后一道防线）。
+-- 因此不会与字面名冲突（`Codegen.Lower.ensureUniqueOcamlNamesIn` 仍是最后一道防线）。
 isAsciiAlphaNum : Int -> Bool
 isAsciiAlphaNum c = c >= 65 && c <= 90 || c >= 97 && c <= 122 || c >= 48 && c <= 57
 
@@ -64,6 +66,10 @@ typeName name = "t_${sanitizeName name}"
 -- | 自动补注（M41 新增导出）：ctorOcamlName。
 export ctorOcamlName : String -> String -> String
 ctorOcamlName family ctor = "C_${sanitizeName family}_${sanitizeName (ctorShortName ctor)}"
+
+-- | R4：record 字段的 OCaml record label（按 record 名前缀，避免不同 record 间标签撞车）。
+export recordFieldLabel : String -> String -> String
+recordFieldLabel family field = "f_${sanitizeName family}_${sanitizeName field}"
 
 -- ---------------------------------------------------------------
 -- 跨单元引用限定（C35）
@@ -112,25 +118,6 @@ qualCtorText qc family ctor =
 
 export qualTypeText : QualCtx -> String -> Pair String String
 qualTypeText qc name = qualPrefix qc (unitOfTbl qc.qcDatas name) (typeName name)
-
-dataTypeGlobalNames : DtData -> List String
-dataTypeGlobalNames d = dataTypeGlobalNamesGo [] (dtDataCtors d)
-
-dataTypeGlobalNamesGo : List String -> List DtCtor -> List String
-dataTypeGlobalNamesGo acc [] = acc
-dataTypeGlobalNamesGo acc (c :: rest) =
-  dataTypeGlobalNamesGo (append acc (termGlobalNames (dtCtorType c))) rest
-
-export typeDepsOf : QualCtx -> List DtData -> List String
-typeDepsOf qc datas = typeDepsOfGo qc (concatMap dataTypeGlobalNames datas) []
-
-typeDepsOfGo : QualCtx -> List String -> List String -> List String
-typeDepsOfGo qc [] acc = reverse acc
-typeDepsOfGo qc (n :: rest) acc =
-  let
-    owner = unitOfTbl qc.qcDatas n
-  in if owner == "" || owner == qc.qcUnit then typeDepsOfGo qc rest acc
-  else if memName owner acc then typeDepsOfGo qc rest acc else typeDepsOfGo qc rest (owner :: acc)
 
 -- M24.6：lambda binder 是唯一直接写裸标识符的地方（值/类型/构造子名都有 v_/t_/C_ 前缀，
 -- 不会撞 OCaml 保留字）。vuna 允许 `method` / `type` 一类标识符，OCaml 不允许，这里统一
@@ -211,25 +198,6 @@ interpose sep [] = []
 interpose sep ([x]) = [x]
 interpose sep (x :: rest) = x :: sep :: interpose sep rest
 
--- ---------------------------------------------------------------
--- 变体类型声明（族 → OCaml type）
--- ---------------------------------------------------------------
---
--- 每个族生成 `type ('a0,...) t_F = ...`。类型参数按下面的规则分配（M21）：
---
---   * **族类型参数**（kind 里域是宇宙的参数，如 `List a` 的 `a`）：只有真正出现在
---     运行时字段类型里的才保留。递归出现 `Cons : a -> List a -> List a` 复用同一个
---     参数（渲染成 `'a0 * 'a0 t_List`），否则 `append` 这类递归定义会在 OCaml 里
---     统一出无限类型（occurs check）；
---   * **不透明字段**（函数类型 / Type / 其它静态没法命名的字段类型）：每个字段各占一个
---     **独立**类型参数。字典族的字段类型互不相同（`bind : m a -> (a -> m b) -> m b` /
---     `pure : a -> m a`），共用参数会把它们错误统一；异构 `Pair a b` 同理；
---   * **没被用到的族参数不生成**：族参数只出现在不透明字段（如函数类型）里时，
---     OCaml 类型里没有对应类型参数；顶层值因此不会留下不可泛化的弱变量
---     （旧表示里 `prim_eff_readFile "x"` 得到 `('a,_weak) t_IO` 直接报错，已随旧表示删除）。
---
--- 「用到」的判定与字段渲染必须用同一张表，否则声明与实参位置会漂移。表用不动点计算
--- （族之间可互相引用）：初始全空，按渲染位置收集引用，单调增长到稳定。
 typeParamName : Int -> String
 typeParamName i = "'a${i}"
 
@@ -242,332 +210,10 @@ typeParamDecl n = case typeParamNames n of
   [only] => "${only} "
   names => "(${joinWith ", " names}) "
 
--- kind 里的候选类型参数位置（域是宇宙的族参数）。
-typeParamLevels : DtData -> List Int
-typeParamLevels d = typeParamLevelsGo d.dtDataParams 0
-
-typeParamLevelsGo : List (Pair String Rig) -> Int -> List Int
-typeParamLevelsGo [] i = []
-typeParamLevelsGo (p :: rest) i =
-  if rigIsErased (secondOf p) then i :: typeParamLevelsGo rest (i + 1)
-  else typeParamLevelsGo rest (i + 1)
-
-memInt : Int -> List Int -> Bool
-memInt i [] = False
-memInt i (x :: rest) = x == i || memInt i rest
-
-levelSlot : List Int -> Int -> Maybe Int
-levelSlot levels lvl = levelSlotGo levels lvl 0
-
-levelSlotGo : List Int -> Int -> Int -> Maybe Int
-levelSlotGo [] lvl acc = Nothing
-levelSlotGo (x :: rest) lvl acc = if x == lvl then Just acc else levelSlotGo rest lvl (acc + 1)
-
-nthValue : List Value -> Int -> Maybe Value
-nthValue [] i = Nothing
-nthValue (v :: rest) i = if i <= 0 then Just v else nthValue rest (i - 1)
-
-lookupUsed : List (Pair String (List Int)) -> String -> List Int
-lookupUsed [] name = []
-lookupUsed (p :: rest) name = if firstOf p == name then secondOf p else lookupUsed rest name
-
--- 收集「在渲染位置上」引用了当前族哪些候选类型参数。
--- 收集「在渲染位置上」引用了当前族哪些候选类型参数。
--- `lvl` 是当前到达的 binder 深度（给 Pi 的闭包喂 fresh var 用）。
-collectUsedLevels : List Int -> List (Pair String (List Int)) -> List DtData -> Int -> Value -> List Int
-collectUsedLevels tps table datas lvl v = collectUsedLevelsFuel 256 tps table datas lvl v
-
-collectUsedLevelsFuel : Int -> List Int -> List (Pair String (List Int)) -> List DtData -> Int -> Value -> List Int
-collectUsedLevelsFuel fuel tps table datas lvl v = if fuel <= 0 then []
-else case v of
-  VPi name implicit rig dom clo =>
-    if implicit then collectUsedLevelsFuel (fuel - 1) tps table datas (lvl + 1)
-      (applyClosure clo (VNeutral (NVar name lvl [])))
-    else append (collectUsedLevelsFuel (fuel - 1) tps table datas lvl dom)
-      (collectUsedLevelsFuel (fuel - 1) tps table datas (lvl + 1) (applyClosure clo (VNeutral (NVar name lvl []))))
-  VNeutral n => case n of
-    NVar name lvl2 sp =>
-      append (if memInt lvl2 tps then [lvl2] else [])
-        (collectUsedSpineFuel (fuel - 1) tps table datas lvl sp)
-    NGlobal g sp => case findDtData g datas of
-      Just gd => collectFamilyArgsFuel (fuel - 1) tps table datas lvl (lookupUsed table g) sp
-      Nothing => collectUsedSpineFuel (fuel - 1) tps table datas lvl sp
-  _ => []
-
-collectUsedSpineFuel : Int -> List Int -> List (Pair String (List Int)) -> List DtData -> Int -> List Value -> List Int
-collectUsedSpineFuel fuel tps table datas lvl [] = if fuel <= 0 then [] else []
-collectUsedSpineFuel fuel tps table datas lvl (v :: rest) =
-  if fuel <= 0 then []
-  else append (collectUsedLevelsFuel (fuel - 1) tps table datas lvl v)
-    (collectUsedSpineFuel (fuel - 1) tps table datas lvl rest)
-
-collectFamilyArgs : List Int -> List (Pair String (List Int)) -> List DtData -> Int -> List Int -> List Value -> List Int
-collectFamilyArgs tps table datas lvl usedPats args =
-  collectFamilyArgsFuel 256 tps table datas lvl usedPats args
-
-collectFamilyArgsFuel : Int -> List Int -> List (Pair String (List Int)) -> List DtData -> Int -> List Int -> List Value -> List Int
-collectFamilyArgsFuel fuel tps table datas lvl usedPats args = if fuel <= 0 then []
-else case usedPats of
-  [] => []
-  i :: rest => case nthValue args i of
-    Just arg =>
-      append (collectUsedLevelsFuel (fuel - 1) tps table datas lvl arg)
-        (collectFamilyArgsFuel (fuel - 1) tps table datas lvl rest args)
-    Nothing => collectFamilyArgsFuel (fuel - 1) tps table datas lvl rest args
-
-ctorUsedLevels : List Int -> List (Pair String (List Int)) -> List DtData -> List Int -> List (Pair String Rig) -> Int -> Value -> List Int
-ctorUsedLevels tps table datas famLevels [] lvl v = []
-ctorUsedLevels tps table datas famLevels ((Pair name rig) :: rest) lvl v = case v of
-  VPi pname implicit _ dom clo =>
-    let
-      -- R1：`opaque` 进关键字表，局部绑定改名（语义不变）。
-      isOpq =
-        valueOpaqueScoped (\l => memOpaqueLevel l famLevels) (isTypeHeadOpaqueDatas datas) lvl
-          famLevels dom
-      fam2 = if isFamilyKindValue dom then lvl :: famLevels else famLevels
-      next = applyClosure clo (VNeutral (NVar pname lvl []))
-    in if rigIsErased rig then ctorUsedLevels tps table datas fam2 rest (lvl + 1) next
-    else if isOpq then ctorUsedLevels tps table datas fam2 rest (lvl + 1) next
-    else append (collectUsedLevels tps table datas lvl dom)
-      (ctorUsedLevels tps table datas fam2 rest (lvl + 1) next)
-  -- 不透明字段渲染成独立运行时值，不再引用数据族参数：collect 必须与渲染同步跳过，
-  -- 否则 usedTable 与声明 arity 漂移（类型参数个数对不上）。
-  _ => []
-
-dataUsedLevels : DtData -> List (Pair String (List Int)) -> List DtData -> List Int
-dataUsedLevels d table datas =
-  let
-    raw =
-      concatMap
-        (\c => ctorUsedLevels (typeParamLevels d) table datas [] (dtCtorTelescope c) 0 (eval [] (dtCtorType c)))
-        (dtDataCtors d)
-  in filter (\l => memInt l raw) (typeParamLevels d)
-
--- M29：`List Int` 的相等不再走泛型结构比较兜底（`==` 的兜底将在 M29 删除），
--- 这里显式按元素比较（元素是 Int，`==` 走特化路径）。
-levelListEq : List Int -> List Int -> Bool
-levelListEq [] [] = True
-levelListEq (x :: xs) (y :: ys) = x == y && levelListEq xs ys
-levelListEq _ _ = False
-
-sameLevelTable : List (Pair String (List Int)) -> List (Pair String (List Int)) -> Bool
-sameLevelTable [] [] = True
-sameLevelTable (a :: rest) (b :: rest2) =
-  if firstOf a == firstOf b && levelListEq (secondOf a) (secondOf b) then sameLevelTable rest rest2
-  else False
-sameLevelTable _ _ = False
-
-usedTableFix : List DtData -> List (Pair String (List Int)) -> List (Pair String (List Int))
-usedTableFix datas table = usedTableFixFuel 64 datas table
-
-usedTableFixFuel : Int -> List DtData -> List (Pair String (List Int)) -> List (Pair String (List Int))
-usedTableFixFuel fuel datas table = if fuel <= 0 then table
-else
-  let
-    next = map (\d => Pair (dtDataName d) (dataUsedLevels d table datas)) datas
-  in if sameLevelTable next table then next else usedTableFixFuel (fuel - 1) datas next
-
--- 字段/类型实参渲染（族名走 `qualTypeText`：跨单元时带 `Unit.` 前缀）。
 familyTyText : QualCtx -> String -> List String -> String
 familyTyText qc name [] = firstOf (qualTypeText qc name)
 familyTyText qc name ([a]) = "${a} ${firstOf (qualTypeText qc name)}"
 familyTyText qc name args = "(${joinWith ", " args}) ${firstOf (qualTypeText qc name)}"
-
-renderFamilyArgs : QualCtx -> List Int -> List (Pair String (List Int)) -> List DtData -> List Int -> List Value -> List String
-renderFamilyArgs qc levels table datas usedPats args =
-  renderFamilyArgsFuel qc 256 levels table datas usedPats args
-
-renderFamilyArgsFuel : QualCtx -> Int -> List Int -> List (Pair String (List Int)) -> List DtData -> List Int -> List Value -> List String
-renderFamilyArgsFuel qc fuel levels table datas usedPats args = if fuel <= 0 then []
-else case usedPats of
-  [] => []
-  i :: rest => case nthValue args i of
-    Just arg =>
-      renderTypeArgFuel qc (fuel - 1) levels table datas arg
-        :: renderFamilyArgsFuel qc (fuel - 1) levels table datas rest args
-    Nothing => renderFamilyArgsFuel qc (fuel - 1) levels table datas rest args
-
-renderTypeArg : QualCtx -> List Int -> List (Pair String (List Int)) -> List DtData -> Value -> String
-renderTypeArg qc levels table datas v = renderTypeArgFuel qc 256 levels table datas v
-
-renderTypeArgFuel : QualCtx -> Int -> List Int -> List (Pair String (List Int)) -> List DtData -> Value -> String
-renderTypeArgFuel qc fuel levels table datas v = if fuel <= 0 then "Obj.t"
-else case v of
-  VNeutral n => case n of
-    NVar name lvl sp => case levelSlot levels lvl of
-      Just s => typeParamName s
-      -- 命名不到的局部类型变量：不透明运行时值（旧实现静默写成 `unit`，是错误声明）。
-      Nothing => "Obj.t"
-    NGlobal g sp => renderTypeArgGlobal qc fuel levels table datas g sp
-  _ => "Obj.t"
-
--- 全局类型头：内建类型构造子优先，其次 primitive 类型，最后程序里的 data 族。
-renderTypeArgGlobal : QualCtx -> Int -> List Int -> List (Pair String (List Int)) -> List DtData -> String -> List Value -> String
-renderTypeArgGlobal qc fuel levels table datas g sp = case renderTypeIntrinsic g (map (\x => renderTypeArgFuel qc (fuel - 1) levels table datas x) sp) of
-  Just t => t
-  Nothing => if g == intTypeName then "int"
-  else if g == natTypeName then "int"
-  else if g == strTypeName then "string"
-  else if g == floatTypeName then "float"
-  else if g == boolTypeName then "bool"
-  else case findDtData g datas of
-    Just gd =>
-      familyTyText qc g
-        (renderFamilyArgsFuel qc (fuel - 1) levels table datas (lookupUsed table g) sp)
-    Nothing => "Obj.t"
-
--- M33 W3：内建类型构造子的 OCaml 类型渲染。参数文本已由调用方递归渲染。
--- 名字表与 arity 的唯一真源在 Intrinsics；这里只放「名字 → OCaml 类型模板」。
-renderTypeIntrinsic : String -> List String -> Maybe String
-renderTypeIntrinsic "Array" ([a]) = Just "(${a} array)"
-renderTypeIntrinsic "IORef" ([a]) = Just "(${a} ref)"
-renderTypeIntrinsic _ _ = Nothing
-
--- 单个字段的 OCaml 类型 + 下一个不透明参数槽。
--- 显式 Pi 字段（`(Int -> a)` 这类）**结构化渲染**：它把族参数（动作的结果类型）带进
--- OCaml 类型，顶层值就不会留下弱类型变量。带隐式量词的 Pi（trait 方法签名，如
--- `bind : m a -> (a -> m b) -> m b`）整体不透明——方法级多态没法用 OCaml 类型表达。
-renderPiTy : QualCtx -> List Int -> List (Pair String (List Int)) -> List DtData -> Int -> Value -> String
-renderPiTy qc levels table datas lvl v = renderPiTyFuel qc 256 levels table datas lvl v
-
-renderPiTyFuel : QualCtx -> Int -> List Int -> List (Pair String (List Int)) -> List DtData -> Int -> Value -> String
-renderPiTyFuel qc fuel levels table datas lvl v = if fuel <= 0 then renderTypeArg qc levels table datas v
-else case v of
-  VPi name implicit rig dom clo =>
-    let
-      next = applyClosure clo (VNeutral (NVar name lvl []))
-    in if rigIsErased rig then renderPiTyFuel qc (fuel - 1) levels table datas (lvl + 1) next
-    else "(${renderPiTyFuel qc (fuel - 1) levels table datas lvl dom}) -> ${renderPiTyFuel qc (fuel - 1) levels table datas (lvl + 1) next}"
-  _ => renderTypeArg qc levels table datas v
-
--- 单个字段的 OCaml 类型 + 下一个不透明参数槽。
-renderFieldTy : QualCtx -> List Int -> List (Pair String (List Int)) -> List DtData -> Int -> Value -> Int -> Pair String Int
-renderFieldTy qc levels table datas lvl (dom@(VPi name implicit rig d clo)) slot =
-  if implicit then Pair (typeParamName slot) (slot + 1)
-  else Pair (renderPiTy qc levels table datas lvl dom) slot
-renderFieldTy qc levels table datas lvl (VNeutral n) slot = case n of
-  NVar name lvl2 sp => case levelSlot levels lvl2 of
-    Just s => Pair (typeParamName s) slot
-    Nothing => Pair (typeParamName slot) (slot + 1)
-  NGlobal g sp => case renderTypeIntrinsic g (map (\x => renderTypeArg qc levels table datas x) sp) of
-    Just t => Pair t slot
-    Nothing => if g == intTypeName then Pair "int" slot
-    else if g == natTypeName then Pair "int" slot
-    else if g == strTypeName then Pair "string" slot
-    else if g == floatTypeName then Pair "float" slot
-    else if g == boolTypeName then Pair "bool" slot
-    else case findDtData g datas of
-      Just gd =>
-        Pair (familyTyText qc g (renderFamilyArgs qc levels table datas (lookupUsed table g) sp))
-          slot
-      Nothing => Pair (typeParamName slot) (slot + 1)
-renderFieldTy qc levels table datas lvl _ slot = Pair (typeParamName slot) (slot + 1)
-
--- 构造子字段形状的**唯一真源**（M24.6 第一级）：从 telescope 的 rig 算出 keep flags
--- （True = 该 binder 进运行时表示）。类型声明、构造子应用、case 分支绑定三处都消费
--- 同一份 flags，并在使用点校验长度 / 擦除标志一致；三处各自 `if erased` 漂移会静默
--- 错编译（字段数、telescope 长度、绑定数三者没有交叉校验）。
-export flagMatchesRig : Bool -> Rig -> Bool
-flagMatchesRig True rig = not (rigIsErased rig)
-flagMatchesRig False rig = rigIsErased rig
-
-export ctorShapeOf : List DtData -> List (Pair String (List Bool))
-ctorShapeOf [] = []
-ctorShapeOf (d :: rest) =
-  append (map (\c => Pair (dtCtorName c) (ctorKeepFlags c)) (dtDataCtors d)) (ctorShapeOf rest)
-
--- ---------------------------------------------------------------
--- ---------------------------------------------------------------
--- 不可命名的擦除依赖类型（D27 / docs/reference/effects.md §5–§6）
--- ---------------------------------------------------------------
---
--- 字段类型里出现「卡住的类型族应用」（如 `res op`）时，OCaml 侧无法命名它。判据与
--- `Elab.Meta.isOpaqueRuntimeTyIn` 同源：`valueOpaqueScoped` + 同一「可表示类型头」表
--- （数据族按本程序 `datas` 判定；primitive / 内建类型构造子走 Intrinsics 的唯一真源）。
--- 类型族 = 不可表示的全局类型头，或**类型族参数**（kind 的 Pi 链含非宇宙域，如
--- `res : f -> Type`）；普通类型构造子参数（`m : Type -> Type`）不受影响。
--- 命中时整个字段渲染成不透明运行时值（`Obj.t`），构造子实参由 `Codegen.Term` 包
--- `Obj.magic`；case 分支的 binder 使用由精化器包 `prim_erase`。
-isTypeHeadOpaqueDatas : List DtData -> String -> Bool
-isTypeHeadOpaqueDatas datas name = if name == boolTypeName then False
-else if name == natTypeName then False
-else case findDtData name datas of
-  Just _ => False
-  Nothing => not (isTypeConstructorName name)
-
-memOpaqueLevel : Int -> List Int -> Bool
-memOpaqueLevel i [] = False
-memOpaqueLevel i (x :: rest) = if x == i then True else memOpaqueLevel i rest
-
--- 构造子字段的「不透明」形状：与 `ctorKeepFlags` 逐位对齐；擦除位置恒 False。
--- 与 keep flags 一样是**唯一真源**：类型声明、arity 计算、构造子实参 cast 三处共用。
-ctorOpaqueFlagsOf : List DtData -> DtCtor -> List Bool
-ctorOpaqueFlagsOf datas c = ctorOpaqueGo datas (dtCtorTelescope c) 0 (eval [] (dtCtorType c)) [] []
-
-ctorOpaqueGo : List DtData -> List (Pair String Rig) -> Int -> Value -> List Int -> List Bool -> List Bool
-ctorOpaqueGo datas [] lvl v famLevels acc = reverse acc
-ctorOpaqueGo datas ((Pair name rig) :: rest) lvl v famLevels acc = case v of
-  VPi pname implicit _ dom clo =>
-    let
-      flag =
-        not (rigIsErased rig)
-          && valueOpaqueScoped (\l => memOpaqueLevel l famLevels) (isTypeHeadOpaqueDatas datas) lvl famLevels dom
-      fam2 = if isFamilyKindValue dom then lvl :: famLevels else famLevels
-      next = applyClosure clo (VNeutral (NVar pname lvl []))
-    in ctorOpaqueGo datas rest (lvl + 1) next fam2 (flag :: acc)
-  _ => reverse acc
-
-export ctorOpaqueTableOf : List DtData -> List (Pair String (List Bool))
-ctorOpaqueTableOf datas =
-  concatMap (\d => map (\c => Pair (dtCtorName c) (ctorOpaqueFlagsOf datas c)) (dtDataCtors d))
-    datas
-
--- 只保留「运行时字段」位置的不透明标志（与 alignCtorArgs 之后的实参逐位对齐）。
-export ctorOpaqueKeptFlags : List Bool -> List Bool -> List Bool
-ctorOpaqueKeptFlags [] _ = []
-ctorOpaqueKeptFlags _ [] = []
-ctorOpaqueKeptFlags (keep :: keeps) (opq :: opqs) =
-  if keep then opq :: ctorOpaqueKeptFlags keeps opqs else ctorOpaqueKeptFlags keeps opqs
-
-ctorFieldTexts : QualCtx -> List Int -> List (Pair String (List Int)) -> List DtData -> List Bool -> List Bool -> List (Pair String Rig) -> Int -> Value -> Int -> Check (Pair (List String) Int)
-ctorFieldTexts qc levels table datas keepFlags opaqueFlags [] lvl v slot = OkC (Pair [] slot)
-ctorFieldTexts qc levels table datas [] (_ :: _) tele lvl v slot =
-  icInternal "constructor opaque flags longer than its shape"
-ctorFieldTexts qc levels table datas [] [] (_ :: _) lvl v slot =
-  icInternal "constructor shape has more binders than its telescope"
-ctorFieldTexts qc levels table datas (_ :: _) [] (_ :: _) lvl v slot =
-  icInternal "constructor opaque flags shorter than its shape"
-ctorFieldTexts qc levels table datas (keep :: flags) (opq :: opqs) ((Pair name rig) :: rest) lvl v slot = if flagMatchesRig keep rig then case v of
-  VPi pname implicit _ dom clo =>
-    let
-      next = applyClosure clo (VNeutral (NVar pname lvl []))
-    in if keep then if opq then Vuna.Compiler.Common.bind (ctorFieldTexts qc levels table datas flags opqs rest (lvl + 1) next slot) (\p => case p of
-      -- 不透明字段：整个字段渲染成不命名的运行时值；不消耗类型参数槽、不再结构化渲染。
-      Pair texts slot3 => OkC (Pair ("Obj.t" :: texts) slot3)
-    )
-    else case renderFieldTy qc levels table datas lvl dom slot of
-      Pair text slot2 => Vuna.Compiler.Common.bind (ctorFieldTexts qc levels table datas flags opqs rest (lvl + 1) next slot2) (\p => case p of
-        Pair texts slot3 => OkC (Pair (text :: texts) slot3)
-      )
-    else ctorFieldTexts qc levels table datas flags opqs rest (lvl + 1) next slot
-  _ => icInternal "constructor telescope does not match its type"
-else icInternal "constructor keep flag disagrees with telescope rig"
-
-ctorArityNeed : QualCtx -> List Int -> List (Pair String (List Int)) -> List DtData -> DtCtor -> Check Int
-ctorArityNeed qc levels table datas c =
-  Vuna.Compiler.Common.bind
-    (ctorFieldTexts qc levels table datas (ctorKeepFlags c) (ctorOpaqueFlagsOf datas c) (dtCtorTelescope c) 0 (eval [] (dtCtorType c)) (length levels))
-    (\p => OkC (secondOf p - length levels))
-
-dataArityNeed : QualCtx -> List Int -> List (Pair String (List Int)) -> List DtData -> List DtCtor -> Check Int
-dataArityNeed qc levels table datas ctors =
-  Vuna.Compiler.Common.bind
-    (Vuna.Compiler.Common.traverse (ctorArityNeed qc levels table datas) ctors)
-    (\ns => OkC (length levels + maxIntList ns))
-
-maxIntList : List Int -> Int
-maxIntList [] = 0
-maxIntList (x :: rest) = if x >= maxIntList rest then x else maxIntList rest
 
 ctorDeclText : String -> List String -> String
 ctorDeclText name [] = name
@@ -581,122 +227,81 @@ parenList (t :: rest) = append [parenOne t] (parenList rest)
 parenOne : String -> String
 parenOne t = "(${t})"
 
-genCtorDecl : QualCtx -> List Int -> List (Pair String (List Int)) -> List DtData -> DtCtor -> Check String
-genCtorDecl qc levels table datas c =
-  Vuna.Compiler.Common.bind
-    (ctorFieldTexts qc levels table datas (ctorKeepFlags c) (ctorOpaqueFlagsOf datas c) (dtCtorTelescope c) 0 (eval [] (dtCtorType c)) (length levels))
-    (\p => OkC (ctorDeclText (ctorOcamlName (dtCtorFamily c) (dtCtorName c)) (firstOf p)))
+-- ---------------------------------------------------------------
+-- IR 类型 / 类型声明 → OCaml 文本
+-- ---------------------------------------------------------------
+--
+-- `IrTy` 是 Lowering 决策后的签名级运行时类型：族参数槽（`IrTyVar i` → `'a<i>`）、
+-- primitive、内建类型构造子、程序数据族、显式函数、不可命名值（`Obj.t`）。这里只
+-- 做文本渲染与跨单元限定，**不含**任何表示判据。
+export irBinderText : IrBinder -> String
+irBinderText (IrBinder nm erased) = case nm of
+  IrBUser name => ocamlBinderName name
+  IrBArm n => "dtb__${strFromInt n}"
+  IrBNat n => "dtnat__${strFromInt n}"
+  IrBWild => "_"
 
--- R4（records-v2）：record 族的运行时表示是 OCaml record。
--- | R4：record 族的 OCaml record 表示探测与标签命名。
--- 判定：`dtDataIsRecord`（声明来源）且单构造子；零字段 record 仍判为 record，
--- 但 `hasRecordRepr` 会因没有运行时字段而回落变体。
--- | R4：该族是否为 record（声明来源 + 单构造子）。
-export isRecordData : DtData -> Bool
-isRecordData d = if dtDataIsRecord d then case dtDataCtors d of
-  [_] => True
-  _ => False
-else False
+export irTyText : QualCtx -> IrTy -> String
+irTyText qc ty = case ty of
+  IrTyVar i => typeParamName i
+  IrTyInt => "int"
+  IrTyStr => "string"
+  IrTyBool => "bool"
+  IrTyFloat => "float"
+  IrTyOpaque => "Obj.t"
+  IrTyArray a => "(${irTyText qc a} array)"
+  IrTyRef a => "(${irTyText qc a} ref)"
+  IrTyFun d c => "(${irTyText qc d}) -> ${irTyText qc c}"
+  IrTyData fam args => familyTyText qc fam (map (irTyText qc) args)
 
--- | R4：record 字段的 OCaml record label（按 record 名前缀，避免不同 record 间标签撞车）。
-export recordFieldLabel : String -> String -> String
-recordFieldLabel family field = "f_${sanitizeName family}_${sanitizeName field}"
+-- | 单条 IR 类型声明（不带 `type ` 前缀、不带 `\nand ` 连接符）。
+export irTyDeclText : QualCtx -> IrTyDecl -> String
+irTyDeclText qc decl = case decl of
+  IrVariantDecl name n ctors => "${typeParamDecl n}${typeName name} = ${ctorBodyOf qc name ctors}"
+  IrRecordDecl name n fields tys =>
+    "${typeParamDecl n}${typeName name} = { ${joinWith "; " (recordFieldDecls qc name fields tys)} }"
+  IrUnboxedDecl name n ty => "${typeParamDecl n}${typeName name} = ${irTyText qc ty}"
 
--- | R4：record 的运行时字段（字段声明序号 → label），只含 keep 字段。
-export recordRtFields : DtData -> List (Pair Int String)
-recordRtFields d = case dtDataCtors d of
-  [c] =>
-    let
-      arity = length d.dtDataParams
-    in recordRtFieldsGo (dtDataName d) (drop arity (ctorKeepFlags c)) (dtDataFields d)
-  _ => []
+ctorBodyOf : QualCtx -> String -> List (Pair String (List IrTy)) -> String
+ctorBodyOf qc family [] = "|"
+ctorBodyOf qc family ctors = joinWith " | " (map (ctorDeclOf qc family) ctors)
 
--- | R4：recordRtFields 的递归实现：按 keep 标志过滤字段表。
-recordRtFieldsGo : String -> List Bool -> List DtFieldMeta -> List (Pair Int String)
-recordRtFieldsGo family [] fs = []
-recordRtFieldsGo family (k :: ks) [] = []
-recordRtFieldsGo family (k :: ks) (f :: fs) =
-  if k then Pair f.dtFieldIndex (recordFieldLabel family f.dtFieldName) :: recordRtFieldsGo family ks fs
-  else recordRtFieldsGo family ks fs
+ctorDeclOf : QualCtx -> String -> Pair String (List IrTy) -> String
+ctorDeclOf qc family (Pair ctor tys) =
+  ctorDeclText (ctorOcamlName family ctor) (map (irTyText qc) tys)
 
--- | R4：该族用 OCaml record 表示：是 record 且**有**运行时字段
--- （εrecord 的字段表为空；零运行时字段的 record 仍用变体）。
-export hasRecordRepr : DtData -> Bool
-hasRecordRepr d = if isRecordData d then case recordRtFields d of
-  [] => False
-  _ => True
-else False
+recordFieldDecls : QualCtx -> String -> List (Pair Int String) -> List IrTy -> List String
+recordFieldDecls qc family [] tys = []
+recordFieldDecls qc family fields [] = []
+recordFieldDecls qc family (f :: fs) (t :: ts) =
+  "${recordFieldLabel family (secondOf f)} : ${irTyText qc t}" :: recordFieldDecls qc family fs ts
 
--- | R4：record 族的 OCaml record 类型声明：`type 'a t_X = { f_X_a : ty; ... }`。
-genRecordDecl : QualCtx -> List Int -> List (Pair String (List Int)) -> List DtData -> DtData -> Check String
-genRecordDecl qc levels table datas d = case dtDataCtors d of
-  [c] =>
-    Vuna.Compiler.Common.bind
-      (ctorFieldTexts qc levels table datas (ctorKeepFlags c) (ctorOpaqueFlagsOf datas c) (dtCtorTelescope c) 0 (eval [] (dtCtorType c)) (length levels))
-      (\p => OkC "${typeParamDecl (secondOf p)}${typeName (dtDataName d)} = { ${joinWith "; " (recordFieldDecls (recordRtFields d) (firstOf p))} }")
-  _ => icInternal "record family must have exactly one constructor: ${dtDataName d}"
+-- | 一个单元的类型声明块：空表 → ""；否则 `type ... \nand ...\n\n`（末尾空行与迁移前一致）。
+export irTypeDeclsText : QualCtx -> List IrTyDecl -> String
+irTypeDeclsText qc [] = ""
+irTypeDeclsText qc decls = "type ${joinWith "\nand " (map (irTyDeclText qc) decls)}\n\n"
 
--- | R4：record OCaml 表示的 codegen helper。
-recordFieldDecls : List (Pair Int String) -> List String -> List String
-recordFieldDecls [] texts = []
-recordFieldDecls fields [] = []
-recordFieldDecls (f :: fs) (t :: ts) = "${secondOf f} : ${t}" :: recordFieldDecls fs ts
+-- | 类型声明里引用到的**运行时族**归属单元（去重、首现顺序；同单元与未知归属跳过）。
+export irTyDeclDeps : QualCtx -> List IrTy -> List String
+irTyDeclDeps qc tys = irTyDepsGo qc (concatMap irTyGlobalNames tys) []
 
--- | 去装箱族：只声明透明类型别名，不生成变体/构造子。
--- | 去装箱族的 data 声明：只把该族声明成透明类型别名（`type T = 字段类型`），
--- 不生成变体与构造子，因此要求恰好一个保留字段。
-genUnboxedDataDecl : QualCtx -> List Int -> List (Pair String (List Int)) -> List DtData -> DtData -> DtCtor -> Int -> Check String
-genUnboxedDataDecl qc levels table datas d c idx = Vuna.Compiler.Common.bind (ctorFieldTexts qc levels table datas (ctorKeepFlags c) (ctorOpaqueFlagsOf datas c) (dtCtorTelescope c) 0 (eval [] (dtCtorType c)) (length levels)) (\p => case firstOf p of
-  text :: rest => case rest of
-    [] => OkC "${typeParamDecl (secondOf p)}${typeName (dtDataName d)} = ${text}"
-    _ => icInternal "unboxed constructor has more than one kept field: ${dtCtorName c}"
-  [] => icInternal "unboxed constructor has no kept field: ${dtCtorName c}"
-)
+irTyGlobalNames : IrTy -> List String
+irTyGlobalNames ty = case ty of
+  IrTyVar i => []
+  IrTyInt => []
+  IrTyStr => []
+  IrTyBool => []
+  IrTyFloat => []
+  IrTyOpaque => []
+  IrTyArray a => irTyGlobalNames a
+  IrTyRef a => irTyGlobalNames a
+  IrTyFun d c => append (irTyGlobalNames d) (irTyGlobalNames c)
+  IrTyData fam args => fam :: concatMap irTyGlobalNames args
 
-genDataDecl : QualCtx -> List (Pair String (List Int)) -> List DtData -> List (Pair String (Pair DtCtor Int)) -> DtData -> Check String
-genDataDecl qc table datas unboxed d =
+irTyDepsGo : QualCtx -> List String -> List String -> List String
+irTyDepsGo qc [] acc = reverse acc
+irTyDepsGo qc (n :: rest) acc =
   let
-    levels = lookupUsed table (dtDataName d)
-  in case lookupUnboxedInfo (dtDataName d) unboxed of
-    Just (Pair c idx) => genUnboxedDataDecl qc levels table datas d c idx
-    Nothing =>
-      if hasRecordRepr d then genRecordDecl qc levels table datas d
-      else Vuna.Compiler.Common.bind (dataArityNeed qc levels table datas (dtDataCtors d))
-        (\arity => Vuna.Compiler.Common.bind (Vuna.Compiler.Common.traverse (genCtorDecl qc levels table datas) (dtDataCtors d)) (\cs => OkC "${typeParamDecl arity}${typeName (dtDataName d)} = ${ctorBodyText cs}"))
-
-ctorBodyText : List String -> String
-ctorBodyText [] = "|"
-ctorBodyText cs = joinWith " | " cs
-
--- M27：canonical Bool 族的运行时表示就是 OCaml bool（构造子精化成 `TBool`），
--- 因此不生成变体声明；用户 `data Bool`（mangle 后是另一个族）照常生成。
-isBoolFamilyName : String -> Bool
-isBoolFamilyName name = name == boolTypeName
-
--- Nat 同 Bool：canonical 族的运行时表示不是变体（Nat = 非负 OCaml int），不生成声明。
-isNatFamilyName : String -> Bool
-isNatFamilyName name = name == natTypeName
-
-export runtimeDatas : List DtData -> List DtData
-runtimeDatas datas =
-  filter (\d => not (isBoolFamilyName (dtDataName d)) && not (isNatFamilyName (dtDataName d))) datas
-
--- 类型声明：`allDatas` 用于族间参数推断（跨模块字段类型照旧渲染成全局类型名），
--- `subset` 是实际写进本文件的族。
--- 族参数「用到哪些」的不动点只依赖全体 datas；split 逐模块生成时必须把它一次算好
--- 传进来（旧实现每个模块都重算一遍 ⇒ O(#模块 × #datas × 构造子)）。
-export usedTableOf : List DtData -> List (Pair String (List Int))
-usedTableOf datas = usedTableFix datas (map (\d => Pair (dtDataName d) []) datas)
-
-export genTypeDeclsOf : QualCtx -> List DtData -> List DtData -> Check String
-genTypeDeclsOf qc allDatas subset = genTypeDeclsWith qc (usedTableOf allDatas) allDatas subset
-
-export genTypeDeclsWith : QualCtx -> List (Pair String (List Int)) -> List DtData -> List DtData -> Check String
-genTypeDeclsWith qc table allDatas [] = OkC ""
-genTypeDeclsWith qc table allDatas subset =
-  Vuna.Compiler.Common.bind
-    (Vuna.Compiler.Common.traverse (genDataDecl qc table allDatas (unboxedInfoOf allDatas)) subset)
-    (\parts => OkC "type ${joinWith "\nand " parts}\n\n")
-
-collectUsedSpine : List Int -> List (Pair String (List Int)) -> List DtData -> Int -> List Value -> List Int
-collectUsedSpine a1 a2 a3 a4 a5 = collectUsedSpineFuel 512 a1 a2 a3 a4 a5
+    owner = unitOfTbl qc.qcDatas n
+  in if owner == "" || owner == qc.qcUnit then irTyDepsGo qc rest acc
+  else if memName owner acc then irTyDepsGo qc rest acc else irTyDepsGo qc rest (owner :: acc)

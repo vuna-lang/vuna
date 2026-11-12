@@ -2,20 +2,18 @@ module Vuna.Compiler.Codegen.Assembly where
 
 -- Vuna.Compiler.Codegen.Assembly：split 产物的**唯一装配实现**（M26；原 Program）。
 --
--- `prepareDtProgram` 是 check 与 split 共用的准备阶段（名字护栏 + 分区 + 擦除检查 +
--- SCC 分组）；`genUnitParts` 生成「open 头 + 类型声明 + List 桥接 + 分组正文」的片段与
--- 生成状态（check 只走到这里、丢弃文本，保留原 `buildText=False` 的性能语义）；
--- `genUnitText` 把片段拼成单元正文；`mainHook` 是 main 输出钩子的唯一实现；
--- `checkDtProgram` = prepare + genUnitParts 后丢弃文本，保证「能 check 就能 build」。
+-- Track A 第一步之后本模块只消费 IR：`genUnitParts` 把 `IrUnit`（类型声明 + 分组 +
+-- List 族标志）装成「open 头 + 类型声明 + List 桥接 + 分组正文」的片段与生成状态。
+-- 准备阶段（擦除检查 / 名字护栏 / SCC 分组）已前置到 `Codegen.Lower`；main 钩子
+-- 统一由 `Codegen.Term.genEntryHook` 渲染。check 路径在 `Driver.Dt` 里走
+-- `Lower.lowerProgramOf` + `genUnitParts` 并丢弃文本（保留原 `buildText=False` 语义）。
 --
 -- C35：单元文件头只 `open Vuna_runtime`，其余跨单元引用一律由 `Codegen.Decl` /
 -- `Codegen.Term` 生成 `Unit.name` 全限定名；`UnitParts` 同时带出该单元**直接引用**
 -- 到的依赖单元（`unitPartsDeps`），供 `Codegen.Split` 写进 `SplitFile` 与 build.sh。
 import Vuna.Compiler.Common
-import Vuna.Compiler.Diagnostics
-import Vuna.Compiler.Elab
+import Vuna.Compiler.Ir
 import Vuna.Compiler.Codegen.Decl
-import Vuna.Compiler.Codegen.Erase
 import Vuna.Compiler.Codegen.Term
 
 -- 运行时前缀单元：`Vuna_runtime.ml` 只有 `dtRuntime`，是唯一被其余单元 open 的单元。
@@ -34,55 +32,25 @@ export record UnitParts where
 export unitPartsDeps : UnitParts -> List String
 unitPartsDeps (UnitParts fragments bodies st deps) = deps
 
--- check / split 共用的准备阶段：名字护栏 + 分区 + 擦除检查 + SCC 分组。
--- 返回 (运行时定义（源码顺序）, 已按依赖排序的分组)。
-export prepareDtProgram : Pair (List DtData) (List DtDef) -> Check (Pair (List DtDef) (List (List DtDef)))
-prepareDtProgram program =
-  let
-    datas = firstOf program
-    defs = secondOf program
-    table = defTable defs
-    familyNames = map dtDataName datas
-    axiomNames = axiomNamesOf defs
-  in case partitionDefs table defs of
-    Pair runtime typeNames =>
-      let
-        -- B18：与数据族同名的**运行时值定义**（`data T` 与 `T : Int` 同名）在项里也
-        -- 是 `TGlobal T`；这种名字属于值命名空间，不能按「类型级名字」拒绝。
-        runtimeNames = map dtDefName runtime
-        familyTypeNames = filter (\n => not (memName n runtimeNames)) familyNames
-        allTypeNames = append typeNames familyTypeNames
-      in let
-        _ = dbg! "cg-partition-done"
-      in Vuna.Compiler.Common.bind (checkNoAxiomRuntime axiomNames runtime) (\_ => Vuna.Compiler.Common.bind (checkAllDefScopes defs) (\_ => Vuna.Compiler.Common.bind (ensureUniqueOcamlNames datas runtime) (\_ => let
-        _ = dbg! "cg-names-done"
-      in Vuna.Compiler.Common.bind (checkAllErasure allTypeNames runtime) (\_ => let
-        _ = dbg! "cg-erasure-done"
-      in Vuna.Compiler.Common.bind (groupRuntimeDefs runtime) (\groups => let
-        _ = dbg! "cg-groups-done"
-      in OkC (Pair runtime groups)
-      )
-      )
-      )
-      )
-      )
-
 -- 单个单元的装配片段。
---   qc        ：跨单元限定上下文（当前单元 + 名字归属表；check 路径用 `noQual`）
---   allDatas  ：整个程序的运行时族（类型渲染与构造子表的完整视图）
---   unitDatas ：写进本单元的类型声明
---   groups    ：本单元运行时分组的 SCC 序（由调用方按归属过滤后分组）
-export genUnitParts : List (Pair String (List Int)) -> QualCtx -> List DtData -> List DtData -> List (List DtDef) -> Check UnitParts
-genUnitParts usedTbl qc allDatas unitDatas groups = Vuna.Compiler.Common.bind (genTypeDeclsWith qc usedTbl allDatas unitDatas) (\typeText => let
+--   qc     ：跨单元限定上下文（当前单元 + 名字归属表；check 路径用 `noQual`）
+--   shared ：程序级共享元数据（Lowering 一次算好）
+--   unitIr ：本单元的 IR（类型声明 / 分组 / List 族标志）
+export genUnitParts : QualCtx -> IrShared -> IrUnit -> Check UnitParts
+genUnitParts qc shared unitIr = Vuna.Compiler.Common.bind (genTypePart qc unitIr) (\typeText => let
   _ = dbg! "cg-typedecls-done"
-in Vuna.Compiler.Common.bind (genGroups (adjTblOf (depAdjacency (concatGroups groups))) (mkGenSt qc allDatas) groups) (\p => case p of
-  Pair bodies st =>
+in case genGroups (mkGenSt qc shared) unitIr.irUnitGroups of
+  ErrC e => ErrC e
+  OkC (Pair bodies st) =>
     let
       _ = dbg! "cg-genGroups-done"
-      deps = uniqueDeps (append (append [runtimeUnit] (typeDepsOf qc unitDatas)) st.gsDeps)
-    in OkC (UnitParts [openHeader qc, typeText, listBridgeFor allDatas unitDatas] bodies st deps)
+      deps =
+        uniqueDeps (append (append [runtimeUnit] (typeRefDeps qc unitIr.irUnitTypeRefs)) st.gsDeps)
+    in OkC (UnitParts [openHeader qc, typeText, listBridgeFor shared unitIr] bodies st deps)
 )
-)
+
+genTypePart : QualCtx -> IrUnit -> Check String
+genTypePart qc unitIr = OkC (irTypeDeclsText qc unitIr.irUnitTyDecls)
 
 -- 依赖清单去重（保持首次出现顺序；生成期只按引用顺序累积）。
 addDep : List String -> String -> List String
@@ -97,59 +65,23 @@ export genUnitText : UnitParts -> String
 genUnitText (UnitParts fragments bodies st deps) =
   strConcatMany (append fragments [joinWith "\n\n" bodies])
 
--- main 输出钩子的唯一实现（原 Program.generateDtProgram 与 Split.splitMainHook 合并）。
--- 返回的文本以换行开头，调用方直接接在正文之后；动作 main（`Eff []`）先跑动作。
--- 第二个分量是 main 钩子引用到的依赖单元（C35）。
-export mainHook : QualCtx -> Pair (List DtData) (List DtDef) -> List DtDef -> Bool -> Check (Pair String (List String))
-mainHook qc program runtimeDefs printResult = case findDtDef "main" runtimeDefs of
-  Nothing => cgErr0 NoMain
-  Just mainDef =>
-    let
-      table = defTable (secondOf program)
-      mainRef = valueName "main"
-    in case actionResultTy (dtDefType mainDef) of
-      Just p =>
-        let
-          innerTy = secondOf p
-          runText = actionRunText qc program mainRef (firstOf p) (dtDefType mainDef)
-        in Vuna.Compiler.Common.bind (genDtHook "" table innerTy (firstOf runText) printResult)
-          (\hook => OkC (Pair hook (secondOf runText)))
-      Nothing =>
-        Vuna.Compiler.Common.bind (genDtHook "" table (dtDefType mainDef) mainRef printResult)
-          (\hook => OkC (Pair hook []))
-
-hookDeps : String -> List String
-hookDeps dep = if dep == "" then [] else [dep]
-
--- `vuna check` 跑一遍完整装配（丢弃文本），保证「能 check 就能 build」：
--- 擦除检查、构造子引用、SCC 分组、类型声明与函数生成都在这一步走到。
--- main 的存在与返回类型只在生成阶段要求，这样没有 main 的库模块也能 check。
-export checkDtProgram : Pair (List DtData) (List DtDef) -> Check Int
-checkDtProgram program = Vuna.Compiler.Common.bind (prepareDtProgram program) (\p => let
-  _ = dbg! "cg-prepare-done"
-in case p of
-  Pair runtime groups =>
-    Vuna.Compiler.Common.bind
-      (genUnitParts (usedTableOf (runtimeDatas (firstOf program))) noQual (runtimeDatas (firstOf program)) (runtimeDatas (firstOf program)) groups)
-      (\_ => OkC 0)
-)
-
 -- 单元文件头：只 open 运行时单元（C35：其余跨单元引用都是 `Unit.name` 全限定，没有
 -- open 链，因此文件顺序不再决定可见性，只看 `unitPartsDeps`）。check 路径（`noQual`，
 -- qcUnit="") 不写 open。
-openHeader : QualCtx -> String
+export openHeader : QualCtx -> String
 openHeader qc = if qc.qcUnit == "" then "" else "open ${runtimeUnit}\n"
 
-concatGroups : List (List DtDef) -> List DtDef
-concatGroups [] = []
-concatGroups (g :: rest) = append g (concatGroups rest)
-
 -- List 族桥接只写进声明该族的单元；其它单元通过 `Unit.dtp_*` 全限定名引用（C35）。
-listBridgeFor : List DtData -> List DtData -> String
-listBridgeFor allDatas unitDatas = case findListFamilyData allDatas of
-  Nothing => ""
-  Just dd => if memDataName (dtDataName dd) unitDatas then dtListBridge allDatas else ""
+listBridgeFor : IrShared -> IrUnit -> String
+listBridgeFor shared unitIr =
+  if unitIr.irUnitHasListFamily then dtListBridge shared.irSharedListFam else ""
 
-memDataName : String -> List DtData -> Bool
-memDataName name [] = False
-memDataName name (d :: rest) = dtDataName d == name || memDataName name rest
+-- 类型声明里引用到的**族名** → 归属单元（去重、首现顺序；同单元与未知归属跳过）。
+-- 输入是 `IrUnit.irUnitTypeRefs`（Lowering 已按声明顺序收集好的全局族名表）。
+typeRefDeps : QualCtx -> List String -> List String
+typeRefDeps qc [] = []
+typeRefDeps qc (n :: rest) =
+  let
+    owner = unitOfTbl qc.qcDatas n
+  in if owner == "" || owner == qc.qcUnit then typeRefDeps qc rest
+  else if memName owner (typeRefDeps qc rest) then typeRefDeps qc rest else owner :: typeRefDeps qc rest

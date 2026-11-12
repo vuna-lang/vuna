@@ -31,7 +31,10 @@ import Vuna.Compiler.Elab.Types
 import Vuna.Compiler.Elab.Prelude
 import Vuna.Compiler.Intrinsics
 import Vuna.Compiler.Codegen
+import Vuna.Compiler.Codegen.Lower
+import Vuna.Compiler.Codegen.Assembly
 import Vuna.Compiler.Codegen.Decl
+import Vuna.Compiler.Ir
 import Vuna.Compiler.Driver.Cache
 import Vuna.Compiler.Driver.Iface
 import Vuna.Compiler.Driver.PerfCache
@@ -112,7 +115,7 @@ checkDeclsWithWarns loaderWarns decls =
     OkC program =>
       let
         _ = dbg! "elab-done"
-      in case checkDtProgram (Pair (dtProgDatas program) (dtProgDefs program)) of
+      in case checkDtProgramOf (dtProgDatas program) (dtProgDefs program) of
         ErrC e => ErrC e
         OkC _ =>
           let
@@ -146,7 +149,7 @@ dtCheckPartsWithProgram pkg loaded = do
           let
             _ = dbg! "elab-done"
             warns = append loaderWarns (dtProgWarnings program)
-          in case checkDtProgram (Pair (dtProgDatas program) (dtProgDefs program)) of
+          in case checkDtProgramOf (dtProgDatas program) (dtProgDefs program) of
             ErrC e => ErrC e
             OkC _ =>
               let
@@ -212,7 +215,7 @@ dtCheck ctx entry = do
 -- M45：单文件检查的两个入口（`vuna check <file.vuna>`）。
 --
 -- 带 `module` 头的文件按**库模块**语义检查：与 LSP 打开同包库文件走同一条
--- `loadModuleSource` + `elabProgramFull` + `checkDtProgram` 链（含用量/遮蔽告警），
+-- `loadModuleSource` + `elabProgramFull` + `checkDtProgramOf` 链（含用量/遮蔽告警），
 -- 但**不**跑 `warnUnusedDefsIn`（库包导出面未知，会把导出函数全报成未使用），
 -- 也不写 iface / check 缓存。无头文件仍走入口语义（`dtCheck`）。
 export dtFileHasModuleHeader : String -> Eff [] Bool
@@ -865,7 +868,7 @@ dtCheckOursParts ctx resolved deps =
     -- codegen 的 check（擦除/名字/构造子护栏）需要依赖包的 datas（构造子与标签信息）；
     -- 只生成本包 defs（依赖包 body 不重精化、不重新生成）。
     allDatas = append (concatMap cachedDatas deps) (dtProgDatas prog)
-  in Vuna.Compiler.Common.bind (checkDtProgram (Pair allDatas (dtProgDefs prog))) (\_ => let
+  in Vuna.Compiler.Common.bind (checkDtProgramOf allDatas (dtProgDefs prog)) (\_ => let
     warns = append loaderWarns (dtProgWarnings prog)
   in OkC (Pair warns (CheckedPackage prog (secondOf parts) (firstOf parts) (cachedNamesOf deps) warns))
   )
@@ -1179,12 +1182,12 @@ dtFinishPackage loaderWarns depCps cleanCps prog parts next =
         (dtProgWarnings prog)
     warns = append loaderWarns (dtProgWarnings prog)
     checked = CheckedPackage assembled (secondOf parts) (firstOf parts) (cachedNamesOf depCps) warns
-  in Vuna.Compiler.Common.bind (checkDtProgram (Pair (dtProgDatas assembled) (dtProgDefs assembled)))
+  in Vuna.Compiler.Common.bind (checkDtProgramOf (dtProgDatas assembled) (dtProgDefs assembled))
     (\_ => OkC (Pair (Just checked) next))
 
 -- 增量路径的整包组装：产物照常组装（写 iface 需要 per-module 的 cp/parts），但
 -- codegen 检查只跑**本次新精化**的 datas/defs（`dtCheckScoped`）——干净模块在它们
--- 自己的接口写回时就跑过整包检查，依赖包同理。整包 `checkDtProgram` 会把这 65 个
+-- 自己的接口写回时就跑过整包检查，依赖包同理。整包 `checkDtProgramOf` 会把这 65 个
 -- 模块再检查一遍（编辑一个模块后 1.4s 里的大头），对增量路径是纯重复。
 dtFinishPackageScoped : List Diagnostic -> List CachedProgram -> List CachedProgram -> DtProgram -> Pair (List Decl) (List Module) -> Maybe AuxCache -> Check (Pair (Maybe CheckedPackage) (Maybe AuxCache))
 dtFinishPackageScoped loaderWarns depCps cleanCps prog parts next =
@@ -1217,19 +1220,15 @@ dtFinishScoped depCps cleanCps prog cache =
   in Vuna.Compiler.Common.bind (dtCheckScoped allDatas newDatas newDefs)
     (\_ => OkC (Pair Nothing cache))
 
--- `checkDtProgram` 的收窄版：`allDatas` 是渲染/构造子表的完整视图（依赖 + 干净 + 本次），
+-- `codegen` 检查的收窄版：`allDatas` 是渲染/构造子表的完整视图（依赖 + 干净 + 本次），
 -- `unitDatas` 只生成本次精化模块的类型声明；检查链（名字护栏 / 擦除 / SCC / 生成）只跑
 -- `defs`。每个 def 的检查只看自身项与全部数据族，因此对本文件的诊断语义与整包检查一致。
 dtCheckScoped : List DtData -> List DtData -> List DtDef -> Check Int
 dtCheckScoped allDatas unitDatas defs =
   let
-    program = Pair allDatas defs
-  in Vuna.Compiler.Common.bind (prepareDtProgram program) (\p => case p of
-    Pair runtime groups =>
-      Vuna.Compiler.Common.bind
-        (genUnitParts (usedTableOf (runtimeDatas allDatas)) noQual (runtimeDatas allDatas) (runtimeDatas unitDatas) groups)
-        (\_ => OkC 0)
-  )
+    env = mkLwEnv allDatas defs ""
+  in Vuna.Compiler.Common.bind (lowerUnitOf env (map dtDefName defs) (map dtDataName unitDatas))
+    (\unitIr => Vuna.Compiler.Common.bind (genUnitParts noQual (lwEnvShared env) unitIr) (\_ => OkC 0))
 
 -- M34.6（5a）：单文件（LSP buffer / REPL 所在模块）的增量精化。
 --   1. 依赖包模块与**干净的同包模块**以「预置模块」进 Loader（零 parse/resolve）；
@@ -1804,3 +1803,10 @@ dtCheckLibraryRecovering ctx names = do
 normalizeDiagFile : String -> String
 normalizeDiagFile p =
   if startsWith "./" p then substring (natFromInt 2) (natFromInt (strLength p - 2)) p else p
+
+-- `vuna check` 的整包 codegen 检查：Lowering（擦除 / 表示决策 / SCC）+ 装配（丢弃文本），
+-- 保证「能 check 就能 build」。main 的存在与返回类型只在生成入口要求（库模块也能 check）。
+checkDtProgramOf : List DtData -> List DtDef -> Check Int
+checkDtProgramOf datas defs =
+  Vuna.Compiler.Common.bind (lowerProgramOf datas defs)
+    (\programIr => Vuna.Compiler.Common.bind (genUnitParts noQual (irProgSharedOf programIr) (irProgUnitOf programIr)) (\_ => OkC 0))

@@ -383,4 +383,24 @@ in
     ];
     script = ./diag-raw.sh;
   };
+
+  # IR 边界（Track A 第一步）：Core → IR → OCaml 的单一链路。
+  # `Vuna.Compiler.Ir*` 不得 import Core/Elab/Intrinsics/Codegen；文本生成层
+  # （Codegen 门面与 Decl/Term/Assembly）不得 import Core/Elab/Intrinsics，唯一例外是
+  # `Codegen/Lower.vuna`（Core→IR 的唯一入口）；Split 必须路由到 Lower；生成层必须消费 IR。
+  # 静态结构守卫，不需要 vuna 二进制。
+  ir-boundary = mkCheck {
+    name = "vuna-ir-boundary";
+    srcs = [
+      ../../compiler
+      ../../nix/checks/ir-boundary.sh
+    ];
+    nativeBuildInputs = [
+      pkgs.bash
+      pkgs.coreutils
+      pkgs.gnugrep
+      pkgs.gnused
+    ];
+    script = ./ir-boundary.sh;
+  };
 }
