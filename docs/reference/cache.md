@@ -177,18 +177,19 @@ Driver.Compile.depIfacesOf
 
 # 其余缓存仍在 $TMPDIR/vuna-cache/（按包名哈希，与本布局无关）；目录名 = 语义 key，
 # 文件内头再记载荷内容地址（身份与完整性分离，见下）
-$TMPDIR/vuna-cache/<hashText(textHash(包名))>/check/<key>                          # 包级 check 缓存（marker，0 字节载荷）
-$TMPDIR/vuna-cache/<hashText(textHash(包名))>/split/<key>                          # codegen SplitFile 缓存
+$TMPDIR/vuna-cache/query/<hashText(hashContentKey(包名))>/index          # 查询图会话索引（check / split 节点，codec `query-index 1`）
+$TMPDIR/vuna-cache/blobs/<64 位十六进制内容地址>                            # codegen 产物 blob（内容寻址、跨包共享，codec `split-files 1`）
 $TMPDIR/vuna-cache/<hashText(textHash(包名))>/split-units/e-<entryId>/<unit>.unit  # 单元缓存
 $TMPDIR/vuna-cache/lex/<hashText(lexKey)>                                          # 词法 token 流缓存（含编译器 tag）
 ```
 
-check 结果缓存只记录「同输入下曾经成功」，**不含 warning**；请求告警
+check 结果与 codegen 产物都由**查询图节点**承载（阶段 2）：节点 `check:<pkg>:<kind>`（值 `QMarker`）与 `split:<pkg>:<pr0|pr1>`（值 `QRef` = blob 内容地址），依赖表是四个输入摘要（manifest / 源闭包 / 依赖接口闭包 / 编译器版本+指纹，见 `Driver.Graph`）。命中判定走 `Query.queryHit`，会话索引按包桶持久化。check 结果节点只记录「同输入下曾经成功」，**不含 warning**；请求告警
 （`-W` / `--deny-warnings` / manifest `[diagnostics] warnings`）时 `checkPackage` 跳过
 check 缓存、并把摘要路径的「干净本包模块」表清空（本包模块全部重新精化，依赖包仍从接口
 预置），因此该次 check 不是 27ms 的命中路径，而是「摘要路径 + 本包重算」。普通 check
-不受影响。条目载荷是**空 marker**（`check-marker 1`，len=0）：命中路径从不读内容，
-「写 1–4MB `CachedProgram` 但没人读」的写放大已关闭（C32）。
+不受影响。check 节点的载荷是**空 marker**（值即 `QMarker`），命中路径从不读内容；「写 1–4MB
+`CachedProgram` 但没人读」的写放大在 C32 已关闭。codegen 产物只在未命中时写一次 blob，
+而 blob 是内容寻址的 ⇒ 同一产物被多个 key 引用时只存一份。
 
 **载荷 framing（`Store`，唯一落盘层）**：所有缓存载荷都由
 `Vuna.Compiler.Store` 承载，格式

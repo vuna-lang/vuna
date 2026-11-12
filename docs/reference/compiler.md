@@ -11,7 +11,7 @@
 （fmt/lint/repl/doc/test/lsp）在根包 `lib/`，不在闭包里。
 代码按**目录即层**组织：Frontend → Packages → Loader → Core → Elab → Codegen → Driver，
 同层模块可互相 import，上层只能依赖下层。每层 `X.vuna` 是**门面**：只 import 子模块并选择性
-重导出，实现与数据定义都在 `X/` 的叶子模块。全包 **85 个模块**（77 个导出 + 内部
+重导出，实现与数据定义都在 `X/` 的叶子模块。全包 **86 个模块**（78 个导出 + 内部
 `Debug` / `Diag` / `Diag.Format` / `Diagnostics.Ic` / `Driver.Iface` / `Driver.Owner` /
 `Elab.MetaSpans` / `Source`）；目标每模块 ≤~800 行
 （`Codegen.Term` / `Driver.Dt` / `Elab.Trait` 等已超目标，约 1.1–1.2k 行）。
@@ -77,11 +77,12 @@
 | `Driver.Cache` | 接口摘要载体（TTC 思路）：`CachedProgram` = 闭合 datas / defs（含 body）/ globals / insts / classes（**不含 sols/next**）；写侧按出现点深度 zonk（class 字段类型的深度 = 类参数个数，多参数 trait 不是固定 1），读侧 `cachedProgramValid` 校验（无 meta/负索引/自由变量；body 擦除位置的未解 meta 允许并按包段重编号） | `cachedOfProgram`、`cachedProgramValid`、`shiftCachedProgram`、`summaryMetaSegment` |
 | `Driver.Iface` | **模块级接口**（TTC 思路）：`ModuleIface`（闭合产物 + 已解析 decls + exports/fixities/imports + `miIfaceHash`/`miDepHashes`/`miSource`）、per-module 文件（与源码同布局，默认在源文件旁）+ `PackageManifest`（模块名→相对路径/源信息/接口哈希，写进包级 `.vuna-iface`）；按归属把 `DtProgram` 切成每模块摘要、SHA-256 内容摘要、原子读写 | `ifaceOfPackage`、`readPackageIface`、`writePackageIface`、`packageIfaceValid` |
 | `Driver.Dt` | DT 路径 facade（供 `Compile` / `CompilerCli` / `Interp` / LSP 使用）：单一 `PackageContext` 加载形状；内存源码检查/洞目标、`dtMainKind`、`dtEvalExprInfo`；接口摘要路径的起始 Ec 组装（`depStartOf`）与接口/预置模块入口 | `dtCheck`、`dtCheckWithProgramParts`、`dtCheckPackageWithIfacesParts`、`dtSplitProjectParts`、`dtSplitProjectWithIfaces`、`CheckedPackage` |
-| `Driver.Compile` | 编译入口：`PackageContext` 检查/编译、目录式 codegen、构建脚本执行；build meta 与递归建目录；check 缓存 + 依赖接口校验（`depIfacesOf`）+ 接口影子写（`writeIfaceShadow`）；`VUNA_ELAB_FULL=1` 强制全量 | `checkPackage`、`compileToDir`、`depIfacesOf`、`buildMetaText`、`metaUpToDate`、`writeBuildMeta` |
+| `Driver.Compile` | 编译入口：`PackageContext` 检查/编译、目录式 codegen、构建脚本执行；build meta 与递归建目录（`mkdir -p`，并发幂等）；check 结果与 codegen 产物都由查询图节点判定（`Driver.Graph`），命中即跳过精化 / 直接写产物；依赖接口校验（`depIfacesOf`）+ 接口影子写（`writeIfaceShadow`）；`VUNA_ELAB_FULL=1` 强制全量 | `checkPackage`、`compileToDir`、`depIfacesOf`、`buildMetaText`、`metaUpToDate`、`writeBuildMeta` |
+| `Driver.Graph` | 编译管线的图节点族（纯 helper）：`check:<pkg>:<kind>` / `split:<pkg>:<pr0\|pr1>` 节点 key、四个输入摘要节点（`env:` / `src:` / `deps:` / `ver:`）、命中判定与提交（值 = `QMarker` / `QRef`）；`Compile` import 它，反向不成环 | `CheckMods`、`checkNodeKey`、`graphNodeKey`、`graphHit`、`graphCommit`、`graphCommitRef`、`graphRunOpts` |
 | `Driver.CompilerCli` | 编译器自己的 CLI（`vuna-compiler`）；含受限进程执行入口 `runIn`；workspace check/build 单元、`build --package`、`version` | `runCompilerCli`、`compilerUsageLines`、`runIn` |
 | `Version` | 版本号唯一真源；产品 CLI / `vuna-compiler` / build meta / VSCode 探测共用 | `vunaVersion` |
 
-`compiler/vuna.toml` 的 `[export]` 列出全部 77 个导出模块（上列 8 个内部模块不在内）；
+`compiler/vuna.toml` 的 `[export]` 列出全部 78 个导出模块（上列 8 个内部模块不在内）；
 `[capabilities] effects` 声明六个能力（编译器直接使用 `prim_*`）。工具链模块不在此包。
 
 ## 根包工具链模块（`lib/`，不进 seed）

@@ -277,3 +277,28 @@ warm `check .` 56–57 ms（门槛 78）；全量 suite **5551 checks / 0 failed
   `Loader.Flatten` 的 import 闭包 ⇒ seed 闭包变化，`nix/seed-files.txt` 会新增
   `Vuna_dCompiler_dCanonical_dLex.ml`）、`bench/compiler-baseline.txt` 重标定、
   `nix flake check`。
+
+### 阶段 2 落地记录（2026-11-12）
+
+两条缓存判定链都改由查询图承担，`check/` 与 `split/` 两个目录下线：
+
+- **check 节点** `check:<pkg>:<kind>`：值 `QMarker`，依赖 = 四个输入摘要节点
+  （`env:` manifest / `src:` 源闭包 / `deps:` 依赖接口闭包 / `ver:` 版本+指纹）。输入摘要
+  写进 dep key ⇒ 任何输入变化让依赖表变化 ⇒ miss（等价于旧复合 key 的判等），且无需给
+  「输入节点」做可变性（`Db` 是纯的）。命中直接 `OkC []`，完全跳过精化。
+- **split 节点** `split:<pkg>:<pr0|pr1>`：值 `QRef` = 产物载荷的内容地址，载荷落
+  `<cache>/blobs/<digest>`（`Store` framing，codec `split-files 1`）。blob 内容寻址 ⇒
+  跨包共享、同产物只存一份、写重靠 `writeIfChanged` 去抖。
+- 会话索引按包桶持久化（`sessionSave` / `sessionLoad`，`query-index 1`）；`-W` /
+  `--deny-warnings`（warning 不持久化）、`VUNA_ELAB_FULL=1`、`VUNA_IFACE_AUDIT=1` 仍直接
+  绕过图（审计必须跑两条真实路径，成功后同样提交节点）。
+- 并行竞态顺带修掉：`Store.storeEnsureDirEff` / `Compile.ensureDirPath` 的
+  「exists 再 makeDir」TOCTOU（改 `mkdir -p`），`PerfCache` 单元缓存 GC 的
+  `removeFile`（缺失即抛）改 `safeRemoveFile`。
+
+实测：冷 `build --no-compile --out compiler` 8.9s → 热 296ms（产物逐字节相同）；warm
+`check compiler` 29ms / `check .` 55ms；全量 suite 5554 checks / 0 failed。
+
+遗留（阶段 3+）：LSP/REPL 仍各自持缓存（`DiagCache` / `stateAuxCache` /
+`stateToolSession`），test/doc/index 未接图；`vuna clean --store` 仍按目录清；seed rotation
+留到阶段 5。
