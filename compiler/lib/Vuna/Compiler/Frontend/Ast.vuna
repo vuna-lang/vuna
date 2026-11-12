@@ -188,6 +188,7 @@ exportSpecSpan (ESType name members sp) = sp
 export data Opacity(..) : Type where
   OpacityOpaque : Opacity
   OpacityTransparent : Opacity
+  OpacityAbstract : Opacity
 
 export record OpacitySpec(..) where
   opacityName : String

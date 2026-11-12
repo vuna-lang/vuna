@@ -271,13 +271,14 @@ opacityStart : PState -> Bool
 opacityStart st = case peekTok st of
   PTok (TKw "opaque") _ => not (tierFollows st)
   PTok (TKw "transparent") _ => not (tierFollows st)
+  PTok (TIdent "abstract") _ => True
   _ => False
 
 -- | 逐定义导出：`export [opaque|transparent] <decl>`。
 parseExportDecl : PState -> Int -> Check (Pair ParsedDecl PState)
 parseExportDecl st blockCol =
   Vuna.Compiler.Common.step (expectIdent st)
-    (\_, st1 => if atKw st1 "opaque" && not (tierFollows st1) then Vuna.Compiler.Common.step (expectKw st1 "opaque") (\_, st2 => parseExportedValue (Just OpacityOpaque) st2 blockCol) else if atKw st1 "transparent" && not (tierFollows st1) then Vuna.Compiler.Common.step (expectKw st1 "transparent") (\_, st2 => parseExportedValue (Just OpacityTransparent) st2 blockCol) else parseExportedPlain Nothing st1 blockCol)
+    (\_, st1 => if atKw st1 "opaque" && not (tierFollows st1) then Vuna.Compiler.Common.step (expectKw st1 "opaque") (\_, st2 => parseExportedValue (Just OpacityOpaque) st2 blockCol) else if atKw st1 "transparent" && not (tierFollows st1) then Vuna.Compiler.Common.step (expectKw st1 "transparent") (\_, st2 => parseExportedValue (Just OpacityTransparent) st2 blockCol) else if atIdentName st1 "abstract" then Vuna.Compiler.Common.step (expectIdent st1) (\_, st2 => parseExportedValue (Just OpacityAbstract) st2 blockCol) else parseExportedPlain Nothing st1 blockCol)
 
 parseExportedPlain : Maybe Opacity -> PState -> Int -> Check (Pair ParsedDecl PState)
 parseExportedPlain op st blockCol = case peekTok st of
@@ -369,6 +370,9 @@ parseOpacityDecl st blockCol = case peekTok st of
   PTok (TKw "transparent") p =>
     Vuna.Compiler.Common.step (expectKw st "transparent")
       (\_, st1 => parseOpacityValue OpacityTransparent st1 blockCol (spanOf st st1))
+  PTok (TIdent "abstract") p =>
+    Vuna.Compiler.Common.step (expectIdent st)
+      (\_, st1 => parseOpacityValue OpacityAbstract st1 blockCol (spanOf st st1))
   _ => psErr0 ExpectedTopLevelDecl
 
 parseOpacityValue : Opacity -> PState -> Int -> Span -> Check (Pair ParsedDecl PState)

@@ -216,7 +216,7 @@ setPrepared prepared mi =
 -- manifest 增加 `mePayloadDigest`，布局变化 ⇒ 20。
 -- C51：`ModuleIface.miDefLocs`（定义位置表，不进接口哈希）随载荷持久化，布局变化 ⇒ 22。
 export ifaceSchema : String
-ifaceSchema = "vuna-iface 25"
+ifaceSchema = "vuna-iface 26"
 
 -- | 接口哈希的**算法格式版本**：参与哈希输入（与 `ifaceSchema` 独立——schema 管载荷
 -- 布局，本版本管摘要算法/分片编码；换算法时旧哈希自然换代）。

@@ -3,7 +3,7 @@
 #      export 的模块上生效，旧 header 语义不变）。
 run: sh -c 'rm -rf "$TMPDIR/export-pkg"; mkdir -p "$TMPDIR/export-pkg/lib"'
 run: sh -c 'printf "%s\n" "[package]" "name = \"export-pkg\"" "" "[export]" "modules = [\"P\", \"Q\"]" "" "[dependencies]" "vuna-base = \"$VUNA_BASE\"" > "$TMPDIR/export-pkg/vuna.toml"'
-run: sh -c 'printf "%s\n" "module P where" "" "export data T(A, B) : Type where" "  A : T" "  B : T" "" "export record R(..) where" "  x : Int" "" "alias record AR where" "  ax : Int" "" "boxed record BR where" "  bx : Int" "" "export f : T" "f = A" "" "opaque g : T" "g = B" > "$TMPDIR/export-pkg/lib/P.vuna"'
+run: sh -c 'printf "%s\n" "module P where" "" "export data T(A, B) : Type where" "  A : T" "  B : T" "" "export record R(..) where" "  x : Int" "" "alias record AR where" "  ax : Int" "" "boxed record BR where" "  bx : Int" "" "export f : T" "f = A" "" "opaque g : T" "g = B" "" "abstract h : T" "h = B" > "$TMPDIR/export-pkg/lib/P.vuna"'
 run: sh -c 'printf "%s\n" "module Q where" "import P" "" "export v : T" "v = f" "" "export r : Int" "r = (R { x = 7 }).x" > "$TMPDIR/export-pkg/lib/Q.vuna"'
 run: "$VUNA" check "$TMPDIR/export-pkg"
 exit: 0

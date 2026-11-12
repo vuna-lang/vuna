@@ -507,6 +507,7 @@ opaqueNamesOf prefix [] = []
 opaqueNamesOf prefix (o :: rest) = case o.opacityKind of
   OpacityOpaque => Base.List.Cons (mangle prefix (opacitySpecName o)) (opaqueNamesOf prefix rest)
   OpacityTransparent => opaqueNamesOf prefix rest
+  OpacityAbstract => Base.List.Cons (mangle prefix (opacitySpecName o)) (opaqueNamesOf prefix rest)
 
 computeExports : List Module -> String -> Maybe ModDecl -> List Import -> List Decl -> List ExportSpec -> List ExportItem -> Check (List ExportEntry)
 computeExports modules prefix hdr imports decls extraExports extraReexports =

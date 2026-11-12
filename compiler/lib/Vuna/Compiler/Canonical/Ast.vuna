@@ -835,6 +835,7 @@ encExportSpec (ESType name members _) acc = encTag 1 (encStr name (encExportMemb
 encOpacity : Opacity -> List String -> List String
 encOpacity OpacityOpaque acc = encTag 0 acc
 encOpacity OpacityTransparent acc = encTag 1 acc
+encOpacity OpacityAbstract acc = encTag 2 acc
 
 encOpacitySpec : OpacitySpec -> List String -> List String
 encOpacitySpec o acc = encStr o.opacityName (encOpacity o.opacityKind acc)
@@ -900,6 +901,7 @@ decOpacity fuel c = if fuel <= 0 then Nothing
 else thenPair (decTag fuel c) (\tag, b1 => case tag of
   0 => Just (Pair OpacityOpaque b1)
   1 => Just (Pair OpacityTransparent b1)
+  2 => Just (Pair OpacityAbstract b1)
   _ => Nothing
 )
 
