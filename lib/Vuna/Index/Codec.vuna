@@ -4,14 +4,12 @@ module Vuna.Index.Codec (decIndexComplete, encIndex, indexPayloadCodec, indexPay
 -- Vuna.Index.Codec：`Index` 记录树的**显式规范编码**（与 `ToolPayload` 同一套路子）。
 --
 -- 为什么要它：`Index` 是工具链里最大的缓存载荷（模块表 + 符号表 + 引用表，MB 级）。
--- 以前它落 `.local/index/` 的四个自制文本文件（manifest + modules/symbols/refs），
--- 由 Scan 自己解析、自己判新鲜度、自己加目录锁——即绕过了 `Store` 这唯一写盘层。
--- 阶段 4 起统一成：**节点 `index:<dir>`（值 = `QRef`）+ 内容寻址 blob**
+-- 载荷 = **节点 `index:<dir>` / `index-cheap:<dir>` 的值（`QRef`）+ 内容寻址 blob**
 -- （`<cache>/blobs/<digest>`，codec `index-payload 1`），读写都过 `Store` 的 framing 校验。
 --
 -- 编码是累积器风格、字段顺序 = record 声明顺序；解码要求**恰好消费完**（尾随字节 ⇒
 -- `Nothing`，与其它载荷一致）。文本字段 (name/kind/sig/type/doc) 用 `encStr` 自定界，
--- 不需要转义；这与旧 `.local/index/*.txt` 的 TAB 分隔 + `escapeField` 是同一份语义。
+-- 不需要转义。
 import Base.Int
 import Base.List
 import Base.Pair

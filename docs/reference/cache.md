@@ -179,8 +179,8 @@ Driver.Compile.depIfacesOf
 
 # 其余缓存仍在 $TMPDIR/vuna-cache/（按包名哈希，与本布局无关）；目录名 = 语义 key，
 # 文件内头再记载荷内容地址（身份与完整性分离，见下）
-$TMPDIR/vuna-cache/query/<hashText(hashContentKey(包名))>/index          # 查询图会话索引（check / split 节点，codec `query-index 1`）
-$TMPDIR/vuna-cache/blobs/<64 位十六进制内容地址>                            # codegen 产物 blob（内容寻址、跨包共享，codec `split-files 1`）
+$TMPDIR/vuna-cache/query/<hashText(hashContentKey(桶))>/index          # 查询图会话索引（check / split / tool / index 桶，codec `query-index 1`）
+$TMPDIR/vuna-cache/blobs/<64 位十六进制内容地址>                            # codegen split 产物 + 工具载荷（Index 等）blob（内容寻址、跨包共享）
 $TMPDIR/vuna-cache/<hashText(textHash(包名))>/split-units/e-<entryId>/<unit>.unit  # 单元缓存
 $TMPDIR/vuna-cache/lex/<hashText(lexKey)>                                          # 词法 token 流缓存（含编译器 tag）
 ```
@@ -289,10 +289,12 @@ import 闭包需要的模块接口」作为预置模块交给 Loader（`dtCheckS
 （merge 写、原子写；写回失败不影响诊断）。没有 iface / 脏依赖 / buffer 与磁盘不一致时
 自动回退全量。
 
-**会话缓存**：`LspState`/`ReplState` 持有 `DiagCache`：包上下文、依赖 ifaces、
-prepared termAux、起始 Ec、干净模块、fixity env 与校验面（编译器指纹 + 包名 + 闭包源 /
-manifest 的 mtime+size；安全窗内回读内容哈希）。无 watcher ⇒ 每请求惰性 stat 校验，外部
-改任意依赖文件后下一次请求必然失效重建（测试 §44l 覆盖）。实测本仓库（16 核）：
+**会话节点**：LSP 用 `lspiface:<pkg>:<dirHash>`、REPL 用 `tooliface:<pkg>:<dirHash>`
+（LSP 依赖表 = 校验面 stat `st:`；REPL = stat + import 闭包 `closure:`；LSP 的闭包扩大
+另由 `sessionClosureOk` 判定）；源码索引用 CLI `index:<dir>` / REPL `index-cheap:<dir>`
+（依赖表 = 逐文件内容哈希 / stat 键 + 安全窗内内容哈希）。`LspState`/`ReplState` 只持有
+解出的记录与查询图 `Db`，命中判定在 `Query.queryHit`；无 watcher ⇒ 每请求惰性 stat 校验，
+外部改任意依赖文件后下一次请求必然失效重建（测试 §44l 覆盖）。实测本仓库（16 核）：
 
 - LSP 单次编辑：compiler 最大文件 ~0.12s、根包普通文件 ~0.02s（会话热）；同内容重复请求
   0–5ms；首次请求（建会话 + 首轮增量）~1.1–1.5s；
@@ -337,15 +339,14 @@ load 之后按闭包过滤模块表：起点 = entry 的全部 imports（含隐�
   headers / bodies 分阶段复用（当前仍以模块为单位）。
 - **codegen 单元级缓存已默认开启（S5/S7）**：按 entry 分桶 + 桶间/桶内 GC，产物顺序
   规范化保证增量/全量一致；`VUNA_UNIT_CACHE=0` 可关（测试 §44h/§44j/§53）。
-- **LSP / REPL 消费接口默认开启**：惰性闭包 + 会话缓存 + 单文件增量 + 单模块写回已落地
+- **LSP / REPL 消费接口默认开启**：惰性闭包 + 会话节点 + 单文件增量 + 单模块写回已落地
   （见上）；工具产物与整包产物已按 `meOrigin` 结构性隔离。REPL 每条表达式重读
-  manifest/iface 的残余已关闭：REPL
-  把 `depIfacesForToolSourceDetailed` 的结果连校验面一起缓存在 `ReplState.stateToolSession`
-  （key = 编译器指纹 + 包名 + 包目录；复用前按校验面 stat + import 闭包未扩大判定，失效即
-  整条重建），因此轻量求值降到 ~6–8ms/条。`:browse` 首次建索引时另在
-  `ReplState.stateIndexCache` 记逐源文件 stat 快照，后续 `:browse`/`:info`/`:search` 只重新
-  stat 比对（`Vuna.Index.indexStatsUnchanged`：窗口外只 stat、窗口内回落内容哈希），命中就
-  不再读全部源码算内容哈希（~6ms vs ~0.6–1.0s）。
+  manifest/iface 的残余已关闭：`depIfacesForToolSourceDetailed` 的结果提交成查询图节点
+  `tooliface:<pkg>:<dirHash>`（依赖表 = 校验面 stat + import 闭包），内存里的
+  `ReplToolSession` 只保存解出的 `ToolContext`；命中判定在 `Query.queryHit`，因此轻量求值
+  降到 ~6–8ms/条。`:browse` 用 `loadOrBuildCheap`（`index-cheap:<dir>` 节点，依赖表 = stat
+  键 + 安全窗内内容哈希），命中从 blob 解码、未命中重建并写回；会话内 `stateBrowseIndex`
+  只避免重复解码。
 - **快判**：默认内容哈希；`VUNA_CACHE_MTIME=1` 提供带 5s 安全窗的 mtime+size 快路径
   （可选、非默认；收益 <5%）。
 - **R4（records-v2）**：`DtData` 增加 `dtDataIsRecord`（record 声明来源；`data`/字典族为

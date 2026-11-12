@@ -50,7 +50,7 @@ Content-Length: <字节数>\r\n
 ### 模块名与局部绑定的解析
 
 `hover` / `definition` 在洞与 Index 之间插了一步 `Vuna.Lsp.Bindings`（**parse 级**、不触发
-`Vuna.Index`（`index:<dir>` 节点；解析失败或未命中就退回原路径）：
+索引构建；Index 查询失败或未命中就退回原路径）：
 
 - **模块引用**：`import` 的模块名 / alias、导出项 `module B`（全名或 alias）、模块头自身、
   限定名的模块前缀（`Base.List.map` 光标落在 `List` ⇒ 模块 `Base.List`；落在 `map` ⇒ 不命中）。

@@ -1,5 +1,5 @@
 #!/bin/sh
-# test/corpus/index/check.sh：Vuna.Index 缓存自检（阶段 4 起是**查询图节点 + blob**）。
+# test/corpus/index/check.sh：Vuna.Index 缓存自检（查询图节点 + blob）。
 #
 # 用法: sh corpus/index/check.sh <vuna>
 #
@@ -7,10 +7,9 @@
 #   `index:<dir>` 节点（会话索引落在 `$TMPDIR/vuna-cache/query/<桶>/index`，codec
 #   `query-index 1`），值 = 载荷内容地址（`QRef`）；载荷 = `Index.Codec.encIndex` 的规范
 #   字节，落 `$TMPDIR/vuna-cache/blobs/<digest>`（codec `index-payload 1`，`Store` framing）。
-#   `.local/index/` 不再创建。
 #
 # 在一个临时 workspace 里验证（不依赖仓库自身缓存，避免并行测试互相干扰）：
-#   1) 首次 map：exit 0、**不**创建 `.local/index/`、blob 的 framing tag/codec 正确；
+#   1) 首次 map：exit 0、blob 的 framing tag/codec 正确；
 #   2) 第二次 map：图节点命中（`index-path=cache`），blob 集合不变；
 #   3) 同 size + 同 mtime 的内容变更必须失效（安全窗内回落内容哈希，而非 mtime+size）；
 #   4) blob 被截断（framing 校验失败）⇒ 重算并重写合法 framing；
@@ -28,6 +27,7 @@ tmp=$(mktemp -d "${TMPDIR:-/tmp}/vuna-index-check.XXXXXX") || exit 1
 trap 'rm -rf "$tmp"' EXIT INT TERM
 # 独立缓存根，避免与仓库自身的 `vuna-cache` 互相干扰。
 export TMPDIR="$tmp/cache"
+export VUNA_CACHE_DIR="$TMPDIR/vuna-cache"
 mkdir -p "$TMPDIR"
 
 pass=0
@@ -81,12 +81,11 @@ two : Int
 two = one + one
 EOF
 
-# 1) 首次构建：图节点未命中 → 建索引、写 blob；`.local/index/` 不再创建。
+# 1) 首次构建：图节点未命中 → 建索引、写 blob。
 first=$( cd "$ws" && VUNA_DEBUG_PERF=1 "$VUNA" map 2>&1 )
 check_eq "index first map exit" "0" "$?"
 check_contains "index first map builds" "$first" "index-path=build"
 check_contains "index map output" "$first" "Demo.A"
-if [ -e "$ws/.local/index" ]; then bad "index still writes .local/index"; else ok; fi
 blob=$(blobs | head -1)
 if [ -n "$blob" ]; then ok; else bad "index blob missing"; fi
 check_eq "index blob framing magic" "vuna-cache-frame 2" "$(head -c 18 "$blob" 2>/dev/null)"

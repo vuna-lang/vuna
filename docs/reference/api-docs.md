@@ -2,7 +2,8 @@
 
 本文覆盖 `vuna doc`（docstring → 单文件交互 HTML）与 `vuna search`（名称 / docstring /
 类型检索），以及它们共用的索引与边界。LSP hover、错误码体系见
-[tooling.md](tooling.md)；索引缓存实现见 [compiler.md](compiler.md)。
+[tooling.md](tooling.md)；索引缓存实现见 [query-graph.md](query-graph.md) 与
+[cache.md](cache.md)。
 
 ## 1. docstring
 

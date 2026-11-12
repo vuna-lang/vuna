@@ -99,7 +99,7 @@ tests: run, stdlib
 | `api` 空签名 | `map --find` 或读该行 |
 | 索引只到 parse 级，签名是源码里写的、非推断 | 同上 |
 | 短名静默取第一个 | 用完全限定名 |
-| 索引缓存 `.local/index/` 自动判新鲜度 | 怀疑过期就 `rm -rf .local/index/`（实测会自动重建） |
+| 索引缓存 `$TMPDIR/vuna-cache` 的 `index:<dir>` 节点 + blob 自动判新鲜度 | 怀疑过期就 `vuna clean --store`（或 `rm -rf "${TMPDIR:-/tmp}/vuna-cache"`，会自动重建） |
 
 **没有「读一段实现」的命令**——这是当前工具链最明显的缺口。只能
 `map --find` 拿行号 + `read --offset/--limit`。

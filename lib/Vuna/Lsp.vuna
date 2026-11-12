@@ -10,7 +10,7 @@ module Vuna.Lsp (runLsp, runLspTool) where
 --
 -- M40 查询管线（hover）：洞目标 → Bindings（模块引用 / 局部绑定）→ Index 符号；
 -- definition：Bindings → Index 符号 → 同文件缓冲兜底。Bindings 是 parse 级的，不触发
--- `.local/index/` 构建；模块引用命中时 docstring 来自目标文件（当前文件用缓冲）。
+-- 索引构建；模块引用命中时 docstring 来自目标文件（当前文件用缓冲）。
 -- C38：rename / prepareRename 走 `Vuna.Lsp.Rename`（局部绑定复用 Bindings 的作用域
 -- 解析；顶层符号复用 Index 与 AST 声明位置）；codeAction 除 lint quick fix 外，新增洞的
 -- case split（`refactor.rewrite`，构造子解析在 Query）与 `vuna.fixAllLint` command
@@ -26,7 +26,7 @@ module Vuna.Lsp (runLsp, runLspTool) where
 --   - didChange 跑一次完整 DT 精化（同 uri + 内容重复请求命中进程内诊断帧缓存），大文件逐个按键变更可能较慢（客户端可降级为保存时检查）；
 --   - 编辑**未保存的依赖模块**时，精化仍从磁盘读依赖（LSP 只覆盖当前文档）；
 --   - Index 只反映磁盘内容、不随 didChange 刷新；构建失败则相关方法退化返回空结果；
---   - 首次索引查找可能触发 `.local/index/` 全量重建（仓库级秒级），期间请求排队；
+--   - 首次索引查找可能触发索引全量重建（`index:<dir>` 未命中；仓库级秒级），期间请求排队；
 --   - 多根 workspace 未支持：workspace/symbol 用首个打开文档推断工作区根。
 import Vuna.Compiler.Common
 import Vuna.Index

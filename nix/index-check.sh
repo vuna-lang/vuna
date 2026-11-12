@@ -1,7 +1,7 @@
 #!/bin/sh
 # Vuna.Index 自检（CI check）：在真实仓库树上跑 `vuna map` / `--find` / `--impact` / `api`，
 # 断言退出码、输出形状与位置合理性。不做「入库索引 diff」——索引是本地缓存（`$TMPDIR/vuna-cache` 的 `index:<dir>` 节点 + blob），
-# 不是提交物，新鲜度由 mtime+size 自动判定。
+# 不是提交物，新鲜度由查询图依赖表判定（CLI 逐文件内容哈希；REPL stat 键 + 安全窗内哈希）。
 #
 # 用法: sh nix/index-check.sh <vuna> [REPO]
 #   vuna  产品 CLI（需要 map / api 子命令）
@@ -24,6 +24,9 @@ esac
 
 cd "$REPO"
 
+# 缓存根与 `Store` 同规则：`VUNA_CACHE_DIR` 覆盖，缺省 `$TMPDIR/vuna-cache`。
+cache=${VUNA_CACHE_DIR:-${TMPDIR:-/tmp}/vuna-cache}
+
 tmpd=$(mktemp -d "${TMPDIR:-/tmp}/vuna-index-check.XXXXXX") || exit 1
 trap 'if [ -f "$tmpd/Resolve.vuna.bak" ]; then mv "$tmpd/Resolve.vuna.bak" compiler/lib/Vuna/Compiler/Loader/Resolve.vuna; fi; rm -rf "$tmpd"' EXIT INT TERM
 
@@ -31,9 +34,8 @@ fail=0
 note() { printf '%s\n' "$1"; }
 bad() { printf 'FAIL: %s\n' "$1" >&2; fail=1; }
 
-# 0) 从干净缓存开始，确保下面测的是真实重建路径（阶段 4 起索引缓存是
-#    `$TMPDIR/vuna-cache` 下的查询图节点 + blob，不再写 `.local/index/`）。
-rm -rf "${TMPDIR:-/tmp}/vuna-cache"
+# 0) 从干净缓存开始，确保下面测的是真实重建路径（索引缓存是查询图节点 + blob）。
+rm -rf "$cache"
 
 # 1) 总览：退出 0、非空、含已知包与模块。
 if ! out=$("$VUNA" map 2>&1); then
@@ -50,11 +52,8 @@ else
   note "ok: vuna map ($(printf '%s\n' "$out" | wc -l | tr -d ' ') lines)"
 fi
 
-# 2) 缓存：第二次调用应命中（`index-path=cache`），且不再写 `.local/index/`。
-if [ -e .local/index ]; then
-  bad ".local/index still created (index payload should live in vuna-cache/blobs)"
-fi
-blob_count_before=$(find "${TMPDIR:-/tmp}/vuna-cache/blobs" -type f 2>/dev/null | wc -l | tr -d ' ')
+# 2) 缓存：第二次调用应命中（`index-path=cache`），索引载荷落在查询图 blob 树。
+blob_count_before=$(find "$cache/blobs" -type f 2>/dev/null | wc -l | tr -d ' ')
 if [ "$blob_count_before" -ge 1 ]; then
   note "ok: index payload blob written ($blob_count_before blobs)"
 else
@@ -65,7 +64,7 @@ case "$map_dbg_out" in
   *"index-path=cache"*) note "ok: index cache hit (query graph node)" ;;
   *) bad "second vuna map did not hit the index node" ;;
 esac
-if [ "$(find "${TMPDIR:-/tmp}/vuna-cache/blobs" -type f 2>/dev/null | wc -l | tr -d ' ')" = "$blob_count_before" ]; then
+if [ "$(find "$cache/blobs" -type f 2>/dev/null | wc -l | tr -d ' ')" = "$blob_count_before" ]; then
   note "ok: cache hit keeps blob set"
 else
   bad "cache hit changed the blob set"
@@ -134,7 +133,7 @@ else
 fi
 
 # 7) 符号位置合理性：`vuna api` 的输出里每条都带 `-- line N`，行号必须是正整数。
-#    （阶段 4 起不再有 `.local/index/*.txt` 可解析；api 的渲染就是同一份数据的投影。）
+#    （索引载荷是查询图 blob，没有可解析的自制文本；api 的渲染就是同一份数据的投影。）
 api_lines=$( "$VUNA" api Vuna.Compiler.Loader.Resolve 2>&1 | grep -o 'line [0-9]*' | head -5 )
 if [ -z "$api_lines" ]; then
   bad "index api output has no 'line N' annotations"

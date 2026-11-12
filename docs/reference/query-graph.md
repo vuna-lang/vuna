@@ -93,28 +93,24 @@ key 是**纯字符串**（不参与哈希输入），节点分成两组：
   一项变化都会让相应节点的依赖表变。
 - `vuna clean --store` 清整个 `vuna-cache` 根（`query/` + `blobs/` + `lex/` + 单元缓存），
   不需要认识具体节点。
-- 旧布局 `check/`、`split/` 已下线（阶段 2）；阶段 5 会再检视 `vuna clean` 的措辞与
-  `nix/checks/compiler-perf.sh` 的断言。
+- 旧布局 `check/`、`split/` 已下线；缓存根由 `Store` 独占（`query/` + `blobs/` + `lex/` +
+  单元缓存），清理时不需要认识具体节点。
 
-## 6. 当前状态与后续
+## 6. 当前消费者
 
-已落地：纯核心（阶段 1）；`check` / `build` 两个 CLI 入口与 blob 载荷（阶段 2）；
-LSP `DiagCache`、REPL `stateToolSession` / `stateIndexCache`（阶段 3/4，见下）；会话索引。
-
-- LSP：`lspiface:<pkg>:<dirHash>` 节点，依赖表 = 校验面 stat（`st:` 键）。
-- REPL：`tooliface:<pkg>:<dirHash>`（工具接口）与 `index:<dir>`（源码索引）两个节点，
-  依赖表 = 校验面 stat + import 闭包 / stat 快照键；`toolSessionFresh`、
-  `sessionClosureOk`、`Index.indexStatsUnchanged` 的启发式与比较函数已删除。
-- debug 行统一为 `query-source=` / `query-lazy`。
+- LSP：`lspiface:<pkg>:<dirHash>` 节点，依赖表 = 校验面 stat（`st:` 键）；闭包扩大仍由
+  `sessionClosureOk` 判定（后续可并进 `closure:` 依赖键）。
+- REPL：`tooliface:<pkg>:<dirHash>`（工具接口）与 `index-cheap:<dir>`（源码索引）两个节点；
+  前者依赖表 = 校验面 stat + import 闭包 `closure:`，后者 = stat 键 + 安全窗内内容哈希。
+- CLI `map` / `api` / `search`：`index:<dir>` 节点，依赖表 = 逐文件内容哈希 `f:`。
+- `Index` 载荷 = `Index.Codec` 的规范字节，节点只存 `QRef`，落
+  `<cache>/blobs/<digest>`（codec `index-payload 1`）；每次 miss 只提交一个节点，
+  `Store` 是唯一写盘层。
+- debug 行：`query-source=` / `query-lazy` / `index-path=cache|build`。
 - `stateAuxCache` **不需要迁移**：`AuxCache` 本来就按
   `dtAuxKey`（包名 + 依赖 iface 哈希 + 干净模块 iface 哈希）自校验，是内容键 memo，
   不是新鲜度启发式缓存。
 - `Doc` 没有自有缓存（每次现 parse），`vuna test` 走 `compileToDir` ⇒ 自动吃 split 节点。
-- `Index` 已整体接图（阶段 4）：节点 `index:<dir>`（CLI，强依赖 = 逐文件内容哈希）与
-  `index-cheap:<dir>`（REPL，stat 键 + 安全窗内容哈希），值 = `Index.Codec` 载荷的 `QRef`，
-  落 `<cache>/blobs/<digest>`（codec `index-payload 1`）。`.local/index/` 已下线，
-  `Store` 是唯一写盘层；`test/corpus/index/check.sh` 与 `nix/index-check.sh` 已按 blob
-  布局重写（不再断言 `.local/index/`）。
 
 仍未做：`debt.md` 只剩 C51（codegen 全量/增量逐字节差异，与图无关）；`VUNA_LEGACY_PATH`
 从未实现，已从计划删掉。
