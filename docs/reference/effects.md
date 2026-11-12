@@ -47,7 +47,7 @@ Args / Exit）；`Member` 行约束、`local`/`catch`/scoped `Exn`、线性续�
   按 main 行自动嵌套 `runXHost`；Console/Fs/Clock/Env/Process/Exit/Stdin/Args 有带行
   handler，Ref/Net 直调带行原语（`beRunHost=""`）；夹具 90–94。`runPure` 仍只收 Nil
   （纯性负例：`runPure (consolePrint ...)` → `TC_UnhandledEffects`）。
-- **阶段 5 迁移策略（未开始）**：编译器/工具链仍用 1089 处 `Eff []`（`compiler/lib`
+- **阶段 5 迁移策略（第 1 批已完成）**：两个入口已带行（`Eff [ArgsOp, ExitOp]`，`runCli`/`runCompilerCli` 用 `raise` 桥接）；编译器/工具链仍用 1089 处 `Eff []`（`compiler/lib`
   47+ 模块 + `lib` 工具链 + 两个 `main`），它们都是真实 IO。迁移按批：
   ① 引入行别名 `Base.HostRow.hostRow`（一个 `Row` 值，便于签名书写），先迁两个入口
   （`app/Main`、`compiler/app/Main` → `Eff [ArgsOp, ExitOp]`），内部模块暂用

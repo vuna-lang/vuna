@@ -2,11 +2,13 @@
 -- main : Eff [] Int——由运行时执行；getArgs/exit 走宿主原语 prim_eff_getArgs / prim_eff_exit。
 -- 用法见 `vuna help`。
 import Vuna.Cli
+import Base.EffArgs
+import Base.EffExit
 import Base.Monad
 import Base.Eff
 
-main : Eff [] Int
+main : Eff [ArgsOp, ExitOp] Int
 main = do
-  args <- prim_eff_getArgs
-  code <- runCli args
-  prim_eff_exit code
+  args <- argsGetArgs "default"
+  code <- raise (runCli args)
+  exitWith "default" code

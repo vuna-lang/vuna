@@ -3,6 +3,8 @@ Base_dArray.ml
 Base_dBits.ml
 Base_dBool.ml
 Base_dEff.ml
+Base_dEffArgs.ml
+Base_dEffExit.ml
 Base_dEffSched.ml
 Base_dEq.ml
 Base_dFloat.ml

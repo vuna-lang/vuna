@@ -11,9 +11,11 @@ import Vuna.Compiler.Query
 import Vuna.Compiler.Store
 import Base.Monad
 import Base.Eff
+import Base.EffArgs
+import Base.EffExit
 
-main : Eff [] Int
+main : Eff [ArgsOp, ExitOp] Int
 main = do
-  args <- prim_eff_getArgs
-  code <- runCompilerCli args
-  prim_eff_exit code
+  args <- argsGetArgs "default"
+  code <- raise (runCompilerCli args)
+  exitWith "default" code
