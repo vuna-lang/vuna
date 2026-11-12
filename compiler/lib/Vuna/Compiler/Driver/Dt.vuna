@@ -97,19 +97,19 @@ dtProjectDecls parts = append (concatMap moduleDeclsOf (reverse (secondOf parts)
 dtLoad : PackageContext -> String -> Eff [] (Check (Pair (List Decl) (List Diagnostic)))
 dtLoad ctx entry =
   let
-    _ = stamp "load-start"
+    _ = perfStamp! "load-start"
   in do
     projectR <- loadProject ctx entry
     pure (case projectR of
       ErrC e => ErrC e
       OkC project =>
         let
-          _ = stamp "load-modules-done"
+          _ = perfStamp! "load-modules-done"
         in case resolveProject project of
           ErrC e => ErrC e
           OkC resolved =>
             let
-              _ = stamp "resolve-done"
+              _ = perfStamp! "resolve-done"
             in OkC (Pair (dtProjectDecls (secondOf resolved)) (firstOf resolved))
     )
 
@@ -141,17 +141,17 @@ dtCheckDecls loaded = do
       let
         decls = firstOf p
         loaderWarns = secondOf p
-        _ = stamp "decls-ready"
+        _ = perfStamp! "decls-ready"
       in case elabProgramFull decls of
         ErrC e => ErrC e
         OkC program =>
           let
-            _ = stamp "elab-done"
+            _ = perfStamp! "elab-done"
           in case checkDtProgram (Pair (dtProgDatas program) (dtProgDefs program)) of
             ErrC e => ErrC e
             OkC _ =>
               let
-                _ = stamp "codegen-check-done"
+                _ = perfStamp! "codegen-check-done"
               in OkC
                 (append loaderWarns (append (dtProgWarnings program) (warnUnusedDefsIn (dtProgDefs program))))
   )
@@ -178,13 +178,13 @@ dtCheckPartsWithProgram loaded = do
         ErrC e => ErrC e
         OkC program =>
           let
-            _ = stamp "elab-done"
+            _ = perfStamp! "elab-done"
             warns = append loaderWarns (dtProgWarnings program)
           in case checkDtProgram (Pair (dtProgDatas program) (dtProgDefs program)) of
             ErrC e => ErrC e
             OkC _ =>
               let
-                _ = stamp "codegen-check-done"
+                _ = perfStamp! "codegen-check-done"
               in OkC (Pair warns (CheckedPackage program (secondOf parts) (firstOf parts) [] warns))
   )
 
@@ -297,7 +297,7 @@ missingDepModules pkg (m :: rest) ifaceNames =
 dtCheckSourceWithIfaces : PackageContext -> String -> String -> List ModuleIface -> Eff [] (Check (List Diagnostic))
 dtCheckSourceWithIfaces ctx label source ifaces =
   let
-    _ = note "query-source=check modules=${length ifaces}"
+    _ = perfNote! "query-source=check modules=${length ifaces}"
   in do
     projectR <- loadModuleSourceWithPreloaded ctx label source (modulesOfIfaces ifaces)
     case projectR of
@@ -307,8 +307,8 @@ dtCheckSourceWithIfaces ctx label source ifaces =
           let
             missing = missingDepModules (contextPackageName ctx) mods (map miNameOf ifaces)
             _ =
-              if length missing == 0 then 0
-              else note "iface-fallback=check missing=${join "," missing}"
+              if length missing > 0 then perfNote! "iface-fallback=check missing=${join "," missing}"
+              else MkUnit
           in if length missing == 0 then pure (case resolveProjectKeeping (preloadKeepOf ifaces mods) filtered of
             ErrC e => ErrC e
             OkC resolved => case dtCheckOursParts ctx resolved (shiftedDepPrograms (materializedDeps (contextPackageName ctx) (secondOf resolved) ifaces)) of
@@ -375,7 +375,7 @@ replProgramWithIfaces ctx program exprSource ifaces = do
 replProgramWithIfacesAux : PackageContext -> String -> String -> List ModuleIface -> Maybe AuxCache -> Eff [] (Check (Pair (Pair DtProgram Expr) (Maybe AuxCache)))
 replProgramWithIfacesAux ctx program exprSource ifaces cache =
   let
-    _ = note "query-source=repl modules=${length ifaces}"
+    _ = perfNote! "query-source=repl modules=${length ifaces}"
     src = "${program}\n${replExprName} = ${exprSource}\n"
   in do
     loaded <- loadProjectSourceWithPreloaded ctx "<repl>" src (modulesOfIfaces ifaces)
@@ -386,8 +386,8 @@ replProgramWithIfacesAux ctx program exprSource ifaces cache =
           let
             missing = missingDepModules (contextPackageName ctx) mods (map miNameOf ifaces)
             _ =
-              if length missing == 0 then 0
-              else note "iface-fallback=repl missing=${join "," missing}"
+              if length missing > 0 then perfNote! "iface-fallback=repl missing=${join "," missing}"
+              else MkUnit
           in if length missing == 0 then pure (case resolveProjectKeeping (preloadKeepOf ifaces mods) filtered of
             ErrC e => ErrC e
             OkC resolved =>
@@ -1184,8 +1184,8 @@ dtCheckSourceIncremental ctx label source depIfaces cleanIfaces cache needPackag
           let
             missing = missingDepModules pkgName mods (map miNameOf allIfaces)
             _ =
-              if length missing == 0 then 0
-              else note "iface-fallback=check-incremental missing=${join "," missing}"
+              if length missing > 0 then perfNote! "iface-fallback=check-incremental missing=${join "," missing}"
+              else MkUnit
           in if length missing > 0 then OkC (Pair False (Pair [] (Pair Nothing cache)))
           else case resolveProjectKeeping (preloadKeepOf allIfaces mods) filtered of
             ErrC e => ErrC e
@@ -1321,7 +1321,7 @@ unitCacheLookup dir keys name = case lookupPair name keys of
     pure (case cached of
       Just sf =>
         let
-          _ = note "unit-cache-hit ${name}"
+          _ = perfNote! "unit-cache-hit ${name}"
         in Just sf
       Nothing => Nothing
     )

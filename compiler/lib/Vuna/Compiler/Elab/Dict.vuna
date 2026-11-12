@@ -96,9 +96,8 @@ searchInstFuel globals ctx fuel ec dom sp = if fuel <= 0 then missingInstance ec
 else
   let
     _ =
-      if debugOn then note
+      perfNote!
         "search: dom=${showValue dom} rigid=${if rigidSearchFast ec dom then "T" else "F"} insts=${length (ecInsts ec)}"
-      else 0
   in case localDictLookup ctx 0 dom ec of
     Just pair => OkC pair
     Nothing => if rigidSearchFast ec dom && not (viaCandidateExists ec dom) then missingInstance ec dom sp
@@ -239,9 +238,8 @@ finishInstanceSearch dom sp ([m]) ec = OkC (Pair m.instMatchTerm ec)
 finishInstanceSearch dom sp matches ec =
   let
     _ =
-      if debugOn then note
+      perfNote!
         "search-ambig: dom=${showValue dom} cands=${join "," (map (\x => dtInstName (instMatchInst x)) matches)}"
-      else 0
     sd = showValue dom
     names = joinInstNames (map instMatchInst matches)
   in tcErr2 sp (AmbiguousInstance sd names) sd names
@@ -361,16 +359,13 @@ else case allocTeleMetas inst.dtInstSpan ctx ec inst.dtInstTele of
   Pair metas ec1 =>
     let
       _ =
-        if debugOn then note
+        perfNote!
           "inst-try: ${dtInstName inst} head=${showTerm inst.dtInstHead} tele=${length inst.dtInstTele}"
-        else 0
       hd = eval (map (\m => VMeta m []) metas) inst.dtInstHead
     in case conv (ecDefTbl ec1) (ecSolsP ec1) 0 dom hd of
       ErrC e =>
         let
-          _ =
-            if debugOn then note "inst-conv-err: ${dtInstName inst} dom=${showValue dom} hd=${showValue hd}"
-            else 0
+          _ = perfNote! "inst-conv-err: ${dtInstName inst} dom=${showValue dom} hd=${showValue hd}"
         in Nothing
       OkC sols2 =>
         let

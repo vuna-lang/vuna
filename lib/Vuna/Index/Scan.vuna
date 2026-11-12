@@ -615,8 +615,9 @@ rebuildIndex ts repo node deps = do
       _ <- toolStorePayload ts (indexNodeKey repo) deps indexPayloadCodec (encIndex idx)
       pure (OkC idx)
 
--- | 工具链侧的 debug 行（`VUNA_DEBUG_PERF=1`）。编译器内部的 `Compiler.Debug.note`
--- 不在导出面（工具链不进 TCB），所以这里用同一套约定自己打一行。
+-- | 工具链侧的 debug 行（`VUNA_DEBUG_PERF=1`）。编译器内部的探针宏
+-- （`perfNote!` / `Vuna.Compiler.Debug`）不在导出面（工具链不进 TCB），所以这里用同一套
+-- 输出约定自己打一行。
 indexNote : String -> Eff [] Int
 indexNote msg = do
   on <- prim_eff_getenv "VUNA_DEBUG_PERF"

@@ -567,7 +567,7 @@ concatLeft sp acc (e :: rest) = concatLeft sp (EApp (EVar "++" sp) [acc, e] sp) 
 -- | release 构建里拒绝 debug-only 构造（`assert`/`todo`）；局部同名 binder 由 scope 放行。
 checkDebugConstruct : Span -> String -> String -> List String -> Check Expr
 checkDebugConstruct sp name resolved scope =
-  if releaseOn then if isDebugOnlyName resolved then if memName name scope then OkC (EVar resolved sp)
+  if releaseBuild then if isDebugOnlyName resolved then if memName name scope then OkC (EVar resolved sp)
   else tcErr1 sp (DebugConstructInRelease resolved) resolved
   else OkC (EVar resolved sp)
   else OkC (EVar resolved sp)

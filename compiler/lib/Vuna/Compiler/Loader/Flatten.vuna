@@ -623,7 +623,7 @@ else case findModule modules name of
           -- F3 P2：宿主层模块只允许特权包 import（base 自己/compiler/根工具链）。
           path = firstOf found
           root = secondOf found
-          _ = note "parse-module=${name}"
+          _ = perfNote! "parse-module=${name}"
         in do
           text <- prim_eff_readFile path
           parsed <- parseFileWithPath path text

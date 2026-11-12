@@ -108,7 +108,6 @@ module Vuna.Compiler.Elab.Meta
 import Base.List
 import Vuna.Compiler.Common
 import Base.HashMap
-import Vuna.Compiler.Debug
 import Vuna.Compiler.Core
 import Vuna.Compiler.Diagnostics
 import Vuna.Compiler.Elab.Prelude

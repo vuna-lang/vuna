@@ -63,13 +63,13 @@ prepareDtProgram program =
         familyTypeNames = filter (\n => not (memName n runtimeNames)) familyNames
         allTypeNames = append typeNames familyTypeNames
       in let
-        _ = stamp "cg-partition-done"
+        _ = perfStamp! "cg-partition-done"
       in Vuna.Compiler.Common.bind (checkNoAxiomRuntime axiomNames runtime) (\_ => Vuna.Compiler.Common.bind (checkAllDefScopes defs) (\_ => Vuna.Compiler.Common.bind (ensureUniqueOcamlNames datas runtime) (\_ => let
-        _ = stamp "cg-names-done"
+        _ = perfStamp! "cg-names-done"
       in Vuna.Compiler.Common.bind (checkAllErasure allTypeNames runtime) (\_ => let
-        _ = stamp "cg-erasure-done"
+        _ = perfStamp! "cg-erasure-done"
       in Vuna.Compiler.Common.bind (groupRuntimeDefs runtime) (\groups => let
-        _ = stamp "cg-groups-done"
+        _ = perfStamp! "cg-groups-done"
       in OkC (Pair runtime groups)
       )
       )
@@ -84,11 +84,11 @@ prepareDtProgram program =
 --   groups    ：本单元运行时分组的 SCC 序（由调用方按归属过滤后分组）
 genUnitParts : List (Pair String (List Int)) -> QualCtx -> List DtData -> List DtData -> List (List DtDef) -> Check UnitParts
 genUnitParts usedTbl qc allDatas unitDatas groups = Vuna.Compiler.Common.bind (genTypeDeclsWith qc usedTbl allDatas unitDatas) (\typeText => let
-  _ = stamp "cg-typedecls-done"
+  _ = perfStamp! "cg-typedecls-done"
 in Vuna.Compiler.Common.bind (genGroups (adjTblOf (depAdjacency (concatGroups groups))) (mkGenSt qc allDatas) groups) (\p => case p of
   Pair bodies st =>
     let
-      _ = stamp "cg-genGroups-done"
+      _ = perfStamp! "cg-genGroups-done"
       deps = uniqueDeps (append (append [runtimeUnit] (typeDepsOf qc unitDatas)) st.gsDeps)
     in OkC (UnitParts [openHeader qc, typeText, listBridgeFor allDatas unitDatas] bodies st deps)
 )
@@ -136,7 +136,7 @@ hookDeps dep = if dep == "" then [] else [dep]
 -- main 的存在与返回类型只在生成阶段要求，这样没有 main 的库模块也能 check。
 checkDtProgram : Pair (List DtData) (List DtDef) -> Check Int
 checkDtProgram program = Vuna.Compiler.Common.bind (prepareDtProgram program) (\p => let
-  _ = stamp "cg-prepare-done"
+  _ = perfStamp! "cg-prepare-done"
 in case p of
   Pair runtime groups =>
     Vuna.Compiler.Common.bind

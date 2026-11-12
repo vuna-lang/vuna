@@ -664,9 +664,7 @@ elabConstraintDomains classes globals ctx ((Pair cname argExprs) :: rest) sp ec 
     Nothing => tcErr0 sp ConstraintNotDict
     Just kindVals =>
       let
-        _ =
-          if debugOn then note "constraint-dom: ${cname} args=${length argExprs} kinds=${length kindVals}"
-          else 0
+        _ = perfNote! "constraint-dom: ${cname} args=${length argExprs} kinds=${length kindVals}"
       in if length kindVals /= length argExprs then tcErr0 sp ConstraintNotDict
       else Vuna.Compiler.Common.bind (checkArgsAtKinds globals ctx ec argExprs kindVals sp) (\q => case q of
         Pair argTerms ec1 => Vuna.Compiler.Common.bind (elabConstraintDomains classes globals ctx rest sp ec1) (\r => case r of
@@ -1402,19 +1400,19 @@ elabFunDefIn globals ctx0 ec clauses expected sp =
     [Pair pats body] => if allVarPats pats then checkDefIn globals ctx0 ec pats body expected sp
     else
       let
-        _ = stampSample key "MULTI"
+        _ = perfSample! key "MULTI"
       in Vuna.Compiler.Common.bind (resolveOverFunPats ec ctx0 expected clauses) (\r => case r of
         Pair clauses2 ec1 => Vuna.Compiler.Common.bind (multiToExpr (ctorFamilyTable ec1) clauses2) (\bodyExpr => let
-          _ = stampSample key "CHECKDEF"
+          _ = perfSample! key "CHECKDEF"
         in checkDefIn globals ctx0 ec1 [] bodyExpr expected sp
         )
       )
     _ =>
       let
-        _ = stampSample key "MULTI"
+        _ = perfSample! key "MULTI"
       in Vuna.Compiler.Common.bind (resolveOverFunPats ec ctx0 expected clauses) (\r => case r of
         Pair clauses2 ec1 => Vuna.Compiler.Common.bind (multiToExpr (ctorFamilyTable ec1) clauses2) (\bodyExpr => let
-          _ = stampSample key "CHECKDEF"
+          _ = perfSample! key "CHECKDEF"
         in checkDefIn globals ctx0 ec1 [] bodyExpr expected sp
         )
       )

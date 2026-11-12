@@ -160,7 +160,7 @@ summarySplitParts ctx entry printResult = do
       case clean of
         Just clean2 => do
           let
-            _ = note "cache-own-clean=${length clean2}"
+            _ = perfNote! "cache-own-clean=${length clean2}"
           in do
             dtSplitProjectIncremental ctx entry printResult ifaces clean2
         Nothing => dtSplitProjectWithIfaces ctx entry printResult ifaces
@@ -178,7 +178,7 @@ compileToDirNormal ctx entry printResult outDir = do
   let
     opts = graphRunOpts (contextPackageName ctx)
     key = graphNodeKey "split" mods
-    _ = stamp "split-cache-key-done"
+    _ = perfStamp! "split-cache-key-done"
   in do
     db0 <- sessionLoad opts
     case graphHit db0 key mods of
@@ -187,7 +187,7 @@ compileToDirNormal ctx entry printResult outDir = do
         case cached of
           Just files => do
             let
-              _ = stamp "split-cache-hit"
+              _ = perfStamp! "split-cache-hit"
             in do
               n <- writeCompiled ctx outDir files
               pure (case n of
@@ -215,7 +215,7 @@ splitBuild ctx entry printResult outDir opts key mods db0 = do
           OkC count => do
             let
               db1 = graphCommitRef (graphNote db0 "query-commit" key) key mods digest
-              _ = note "query-miss ${key}"
+              _ = perfNote! "query-miss ${key}"
             in do
               _ <- sessionSave opts db1
               shadow <- writeIfaceShadow ctx checked
@@ -233,7 +233,7 @@ auditCompile ctx entry printResult outDir = do
   summary <- summarySplitParts ctx entry printResult
   full <- dtSplitProjectParts ctx entry printResult
   let
-    _ = note "iface-audit subject=compile entry=${entry}"
+    _ = perfNote! "iface-audit subject=compile entry=${entry}"
   in do
     compared <-
       pure (auditCompare "compile" entry (splitSignatureOf summary) (splitSignatureOf full))
@@ -271,21 +271,21 @@ writeCompiled : PackageContext -> String -> List SplitFile -> Eff [] (Check Int)
 writeCompiled ctx outDir files = do
   _ <- ensureDirPath outDir
   let
-    _ = stamp "write-compiled-start"
+    _ = perfStamp! "write-compiled-start"
   in do
     written <- writeSplitFilesIfChanged outDir files
     case written of
       ErrC e => pure (ErrC e)
       OkC n => do
         let
-          _ = stamp "write-split-files-done"
+          _ = perfStamp! "write-split-files-done"
           graph = splitGraph (canonicalTopo files)
-          _ = stamp "split-graph-done"
+          _ = perfStamp! "split-graph-done"
         in do
           cFiles <- copyFfiFiles (contextDir ctx) outDir
           _ <- prim_eff_writeFile "${outDir}/build.sh" (buildScript graph cFiles)
           let
-            _ = stamp "build-script-done"
+            _ = perfStamp! "build-script-done"
           in do
             pure (OkC n)
 
@@ -599,12 +599,12 @@ depIfaceOf dep = do
       if p.piEnv == env then pure (Just p)
       else do
         let
-          _ = note "iface-reject=dep-env ${packageName dep}"
+          _ = perfNote! "iface-reject=dep-env ${packageName dep}"
         in do
           pure Nothing
     else do
       let
-        _ = note "iface-reject=dep-tag ${packageName dep}"
+        _ = perfNote! "iface-reject=dep-tag ${packageName dep}"
       in do
         pure Nothing
     Nothing => pure Nothing
@@ -644,7 +644,7 @@ depIfacesGo roots [] acc =
   in if depIfaceChainValid all then pure (Just all)
   else do
     let
-      _ = note "iface-reject=dep-chain modules=${length all}"
+      _ = perfNote! "iface-reject=dep-chain modules=${length all}"
     in do
       pure Nothing
 depIfacesGo roots (p :: rest) acc = do
@@ -652,19 +652,19 @@ depIfacesGo roots (p :: rest) acc = do
   case pi of
     Nothing => do
       let
-        _ = note "iface-reject=dep-manifest-miss cache-dep-miss ${packageName p}"
+        _ = perfNote! "iface-reject=dep-manifest-miss cache-dep-miss ${packageName p}"
       in do
         pure Nothing
     Just pif => do
       valid <- depIfaceSourcesValid roots p pif
       if valid then do
         let
-          _ = note "cache-dep-ok ${packageName p}"
+          _ = perfNote! "cache-dep-ok ${packageName p}"
         in do
           depIfacesGo roots rest (pif.piModules :: acc)
       else do
         let
-          _ = note "iface-reject=dep-invalid cache-dep-invalid ${packageName p}"
+          _ = perfNote! "iface-reject=dep-invalid cache-dep-invalid ${packageName p}"
         in do
           pure Nothing
 
@@ -783,7 +783,7 @@ toolManifestsGo tag roots (p :: rest) acc = do
   case mf of
     Nothing => do
       let
-        _ = note "iface-reject=tool-manifest-miss iface-tool-manifest-miss ${packageName p}"
+        _ = perfNote! "iface-reject=tool-manifest-miss iface-tool-manifest-miss ${packageName p}"
       in do
         pure Nothing
     Just m => if pmSchemaOf m == ifaceSchema && pmCompilerOf m == tag && pmPackageOf m == packageName p then do
@@ -792,12 +792,16 @@ toolManifestsGo tag roots (p :: rest) acc = do
       if valid then toolManifestsGo tag roots rest (Pair dir m :: acc)
       else do
         let
-          _ = note "iface-reject=tool-manifest-invalid iface-tool-manifest-invalid ${packageName p}"
+          _ =
+            perfNote!
+              "iface-reject=tool-manifest-invalid iface-tool-manifest-invalid ${packageName p}"
         in do
           pure Nothing
     else do
       let
-        _ = note "iface-reject=tool-manifest-invalid iface-tool-manifest-invalid ${packageName p}"
+        _ =
+          perfNote!
+            "iface-reject=tool-manifest-invalid iface-tool-manifest-invalid ${packageName p}"
       in do
         pure Nothing
 
@@ -942,12 +946,12 @@ depIfacesForToolSource ctx label source = do
                 Nothing => pure Nothing
                 Just ifs => if toolChainValid ifs then do
                   let
-                    _ = note "query-lazy modules=${length ifs}"
+                    _ = perfNote! "query-lazy modules=${length ifs}"
                   in do
                     pure (Just ifs)
                 else do
                   let
-                    _ = note "iface-reject=tool-chain modules=${length ifs}"
+                    _ = perfNote! "iface-reject=tool-chain modules=${length ifs}"
                   in do
                     pure Nothing
   else pure Nothing
@@ -1102,13 +1106,13 @@ depIfacesForToolSourceDetailed ctx label source = do
                 Nothing => pure Nothing
                 Just ifs => if toolChainValid ifs then do
                   let
-                    _ = note "query-lazy modules=${length ifs}"
+                    _ = perfNote! "query-lazy modules=${length ifs}"
                   in do
                     pure
                       (Just (ToolContext ifs (manifestHashTable mans2) (Just ownManifest) needed (append toolStats ownStats) (toolEntryTable mans2) ownDir))
                 else do
                   let
-                    _ = note "iface-reject=tool-chain modules=${length ifs}"
+                    _ = perfNote! "iface-reject=tool-chain modules=${length ifs}"
                   in do
                     pure Nothing
   else pure Nothing
@@ -1143,7 +1147,7 @@ toolCleanGo builtSec depTbl [] cleanRev = pure (reverse cleanRev)
 toolCleanGo builtSec depTbl (m :: rest) cleanRev = do
   selfOk <- payloadSelfOk m
   let
-    _ = if selfOk then 0 else note "iface-reject=self-hash ${miNameOf m}"
+    _ = if selfOk then MkUnit else perfNote! "iface-reject=self-hash ${miNameOf m}"
   in do
     fresh <- sourceFresh builtSec (miSourceOf m)
     if fresh && cachedProgramValid (miCachedOf m) && selfOk && not (hasMissingDep (miDepHashesOf m)) && moduleDepsOk depTbl cleanRev (miDepHashesOf m) then toolCleanGo builtSec depTbl rest (m :: cleanRev)
@@ -1179,7 +1183,7 @@ else do
       ready <- ifaceWriteReady dir pkgDir [mi]
       if not ready then do
         let
-          _ = note "iface-reject=readonly iface-skip readonly ${dir}"
+          _ = perfNote! "iface-reject=readonly iface-skip readonly ${dir}"
         in do
           pure 0
       else withIfaceLock ctx (\_ => do
@@ -1249,17 +1253,17 @@ checkViaGraph ctx mods run = do
       db0 <- sessionLoad opts
       case graphHit db0 key mods of
         Just _ => do
-          _ <- pure (note "query-hit ${key}")
+          _ <- pure (perfNote! "query-hit ${key}")
           pure (OkC [])
         Nothing => do
-          _ <- pure (note "query-miss ${key}")
+          _ <- pure (perfNote! "query-miss ${key}")
           r <- run
           case r of
             ErrC e => pure (ErrC e)
             OkC ds => do
               db1 <- pure (graphCommit (graphNote db0 "query-commit" key) key mods)
               _ <- sessionSave opts db1
-              _ <- pure (note "query-commit ${key}")
+              _ <- pure (perfNote! "query-commit ${key}")
               pure (OkC ds)
 
 checkCachedExe : Bool -> PackageContext -> String -> Eff [] (Check (List Diagnostic))
@@ -1290,7 +1294,7 @@ summaryCheckExeParts wantWarnings ctx entry = do
   case depIfaces of
     Nothing => do
       let
-        _ = note "cache-path=full"
+        _ = perfNote! "cache-path=full"
       in do
         dtCheckWithProgramParts ctx entry
     Just ifaces => do
@@ -1300,20 +1304,20 @@ summaryCheckExeParts wantWarnings ctx entry = do
         Just clean2 => do
           let
             cleanReal = if wantWarnings then [] else clean2
-            _ = note "cache-path=summary deps=${depPackageCount ctx}"
-            _ = note "cache-own-clean=${length cleanReal}"
+            _ = perfNote! "cache-path=summary deps=${depPackageCount ctx}"
+            _ = perfNote! "cache-own-clean=${length cleanReal}"
           in do
             dtCheckPackageIncrementalParts ctx entry ifaces cleanReal
         Nothing => do
           let
-            _ = note "cache-path=summary deps=${depPackageCount ctx}"
+            _ = perfNote! "cache-path=summary deps=${depPackageCount ctx}"
           in do
             dtCheckPackageWithIfacesParts ctx entry ifaces
 
 fullCheckExe : PackageContext -> String -> Eff [] (Check (List Diagnostic))
 fullCheckExe ctx entry =
   let
-    _ = note "cache-path=full"
+    _ = perfNote! "cache-path=full"
   in checkAndShadow ctx (dtCheckWithProgramParts ctx entry)
 
 -- 审计（`VUNA_IFACE_AUDIT=1`）：摘要路径 vs 全量路径的诊断逐字节对拍。一致才按摘要结果
@@ -1323,7 +1327,7 @@ auditCheckExe wantWarnings ctx entry = do
   summary <- summaryCheckExeParts wantWarnings ctx entry
   full <- dtCheckWithProgramParts ctx entry
   let
-    _ = note "iface-audit subject=check entry=${entry}"
+    _ = perfNote! "iface-audit subject=check entry=${entry}"
   in do
     compared <- pure (auditCompare "check" entry (checkSignatureOf summary) (checkSignatureOf full))
     case compared of
@@ -1432,7 +1436,7 @@ ownCleanInfo ctx depTbl = do
       env <- packageEnvHash ctx
       if p.piEnv /= env then do
         let
-          _ = note "iface-reject=own-env ${contextPackageName ctx}"
+          _ = perfNote! "iface-reject=own-env ${contextPackageName ctx}"
         in do
           pure (Pair True Nothing)
       else do
@@ -1477,14 +1481,14 @@ cleanModulesGo origins sources depTbl (m :: rest) cleanRev = do
     pkgOrigin = case lookupPair (miNameOf m) origins of
       Just o => o == "pkg"
       Nothing => False
-    _ = if pkgOrigin then 0 else note "iface-reject=tool-origin ${miNameOf m}"
+    _ = if pkgOrigin then MkUnit else perfNote! "iface-reject=tool-origin ${miNameOf m}"
     sameSource = case lookupPair (miNameOf m) sources of
       Just si => siHashOf si == siHashOf (miSourceOf m)
       Nothing => False
   in do
     selfOk <- payloadSelfOk m
     let
-      _ = if selfOk then 0 else note "iface-reject=self-hash ${miNameOf m}"
+      _ = if selfOk then MkUnit else perfNote! "iface-reject=self-hash ${miNameOf m}"
       keep =
         pkgOrigin
           && sameSource
@@ -1630,7 +1634,7 @@ withIfaceLock ctx f = do
     pure r
   else do
     let
-      _ = note "iface-reject=lock ${contextPackageName ctx}"
+      _ = perfNote! "iface-reject=lock ${contextPackageName ctx}"
     in do
       pure 0
 
@@ -1722,7 +1726,7 @@ writeIfaceShadow : PackageContext -> CheckedPackage -> Eff [] (Check Int)
 writeIfaceShadow ctx checked = if contextPackageName ctx == "" then pure (OkC 0)
 else do
   let
-    _ = stamp "iface-shadow-start"
+    _ = perfStamp! "iface-shadow-start"
   in do
     sources <- ownSourceInfos ctx
     depTbl <- depIfaceHashTable ctx
@@ -1739,12 +1743,12 @@ else do
           if self then pure (ErrC e)
           else do
             let
-              _ = note "iface-reject=compute iface-skip ${diagText e}"
+              _ = perfNote! "iface-reject=compute iface-skip ${diagText e}"
             in do
               pure (OkC 0)
         OkC modules => do
           let
-            _ = stamp "iface-compute-done"
+            _ = perfStamp! "iface-compute-done"
           in do
             writeIfaceNow (firstOf info) ctx modules
 
@@ -1756,7 +1760,7 @@ else do
 writeIfaceNow : Bool -> PackageContext -> List ModuleIface -> Eff [] (Check Int)
 writeIfaceNow oldReadable ctx modules = if length modules == 0 then do
   let
-    _ = note "iface-reject=empty-package iface-skip empty-package"
+    _ = perfNote! "iface-reject=empty-package iface-skip empty-package"
   in do
     pure (OkC 0)
 else do
@@ -1767,14 +1771,14 @@ else do
     filesOk <- ifaceFilesOk pkgDir modules
     if not filesOk then do
       let
-        _ = note "iface-reject=path iface-skip path ${dir}"
+        _ = perfNote! "iface-reject=path iface-skip path ${dir}"
       in do
         pure (OkC 0)
     else do
       ready <- ifaceWriteReady dir pkgDir modules
       if not ready then do
         let
-          _ = note "iface-reject=readonly iface-skip readonly ${dir}"
+          _ = perfNote! "iface-reject=readonly iface-skip readonly ${dir}"
         in do
           pure (OkC 0)
       else do
@@ -1784,8 +1788,8 @@ else do
           writePackageIface oldReadable dir tag (contextPackageName ctx) pkgDir env modules
         )
         let
-          _ = note "iface-write=${n}/${length modules}"
-          _ = stamp "iface-write-done"
+          _ = perfNote! "iface-write=${n}/${length modules}"
+          _ = perfStamp! "iface-write-done"
         in do
           mirror <- ifaceMirrorMode
           _ <- if mirror then gcIfaceOrphans dir pkgDir modules else pure 0
@@ -1812,7 +1816,7 @@ ifaceSelfTest dir modules = do
     Nothing => pure (icInternal "iface selftest: written iface cannot be read back")
     Just p => if not (packageIfaceValid p) then do
       let
-        _ = note "iface-invalid=${firstInvalidModule p}"
+        _ = perfNote! "iface-invalid=${firstInvalidModule p}"
       in pure (icInternal "iface selftest: package iface invalid")
     else if p.piCompiler /= tag then pure (icInternal "iface selftest: compiler tag mismatch")
     else if p.piSchema /= ifaceSchemaTag then pure (icInternal "iface selftest: schema mismatch")
@@ -1822,7 +1826,7 @@ ifaceSelfTest dir modules = do
     else if not (allSelfHashesOk p.piModules) then pure (icInternal "iface selftest: payload hash mismatch")
     else do
       let
-        _ = note "iface-selftest=ok modules=${length modules}"
+        _ = perfNote! "iface-selftest=ok modules=${length modules}"
       in do
         pure (OkC 0)
 
@@ -1872,7 +1876,7 @@ summaryCheckLibParts wantWarnings ctx names = do
   case depIfaces of
     Nothing => do
       let
-        _ = note "cache-path=full"
+        _ = perfNote! "cache-path=full"
       in do
         dtCheckLibraryWithProgramParts ctx names
     Just ifaces => do
@@ -1882,20 +1886,20 @@ summaryCheckLibParts wantWarnings ctx names = do
         Just clean2 => do
           let
             cleanReal = if wantWarnings then [] else clean2
-            _ = note "cache-path=summary deps=${depPackageCount ctx}"
-            _ = note "cache-own-clean=${length cleanReal}"
+            _ = perfNote! "cache-path=summary deps=${depPackageCount ctx}"
+            _ = perfNote! "cache-own-clean=${length cleanReal}"
           in do
             dtCheckLibraryPackageIncrementalParts ctx names ifaces cleanReal
         Nothing => do
           let
-            _ = note "cache-path=summary deps=${depPackageCount ctx}"
+            _ = perfNote! "cache-path=summary deps=${depPackageCount ctx}"
           in do
             dtCheckLibraryPackageWithIfacesParts ctx names ifaces
 
 fullCheckLib : PackageContext -> List String -> Eff [] (Check (List Diagnostic))
 fullCheckLib ctx names =
   let
-    _ = note "cache-path=full"
+    _ = perfNote! "cache-path=full"
   in checkAndShadow ctx (dtCheckLibraryWithProgramParts ctx names)
 
 auditCheckLib : Bool -> PackageContext -> List String -> Eff [] (Check (List Diagnostic))
@@ -1904,7 +1908,7 @@ auditCheckLib wantWarnings ctx names = do
   full <- dtCheckLibraryWithProgramParts ctx names
   let
     subject = joinLines names
-    _ = note "iface-audit subject=check-lib entry=${subject}"
+    _ = perfNote! "iface-audit subject=check-lib entry=${subject}"
   in do
     compared <-
       pure (auditCompare "check-lib" subject (checkSignatureOf summary) (checkSignatureOf full))

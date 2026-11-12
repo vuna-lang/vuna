@@ -65,7 +65,7 @@ Diagnostic = { id, severity, phase, category, code, message, labels, fields, tra
 | --- | --- | --- |
 | `LX_` | 词法 | `Frontend/Diagnostics.vuna` |
 | `PS_` | 语法 | 同上 |
-| `RN_` | 名字解析（import/export/限定名/构造子） | `Diagnostics/Rn.vuna` |
+| `RN_` | 名字解析（import/export/限定名/构造子）与内置宏展开（未知宏 / arity） | `Diagnostics/Rn.vuna` |
 | `PKG_` | `vuna.toml` 清单/包图 | `Diagnostics/Pkg.vuna` |
 | `LD_` | 模块/包加载 | `Loader/Diagnostics.vuna` |
 | `TC_` | 精化/覆盖性/终止性/用量 | `Diagnostics/Tc.vuna` |

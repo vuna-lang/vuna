@@ -15,7 +15,8 @@ module Vuna.Compiler.Loader.Expand (expandDecls) where
 --   * `perfStamp! label`  → `if perfEnabled then perfMark label else unit`
 --   * `perfSample! key l` → perfStamp 的 1/64 确定性采样版
 -- 探针返回 `Unit`（不是 `0` 哨兵）；开关判断由宏统一给出，调用点不再手写
--- `if debugOn then ... else ...`。用户自定义宏不在本阶段范围内。
+-- `if <开关> then ... else ...`（旧的严格求值探针 API 已随本次重构删除）。
+-- 用户自定义宏不在本阶段范围内。
 import Base.List
 import Base.Nat
 import Vuna.Compiler.Common

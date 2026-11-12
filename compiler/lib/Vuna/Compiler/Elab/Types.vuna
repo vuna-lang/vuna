@@ -119,7 +119,6 @@ module Vuna.Compiler.Elab.Types
 -- 拆自 M24 的单一 `Elab.vuna`（按真实调用图切；门面仍是 `Vuna.Compiler.Elab`）。
 import Vuna.Compiler.Common
 import Base.HashMap
-import Vuna.Compiler.Debug
 import Vuna.Compiler.Core
 import Vuna.Compiler.Frontend.Ast
 
@@ -472,7 +471,7 @@ ecInstsFamily (Ec next sols defs datas depths goals insts classes dgoals deftbl 
   instStoreFamily insts fam
 
 -- S5a：索引自检（**只**在 `--debug-perf` 下由 `Elab.Driver` 调用；调用方负责先判
--- `debugOn`，因为这里会扫全表）。两个判据：
+-- `perfEnabled`，因为这里会扫全表）。两个判据：
 --   1) 所有桶的条目总数 == 权威表长度（没漏、没重）；
 --   2) 每个桶逐项等于「按该族过滤权威表」的结果（桶内容与族键一致，且桶内保序）。
 -- 用实例名序列比较（`DtInst` 没有 Eq 实例；实例名唯一）。

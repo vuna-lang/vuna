@@ -50,6 +50,7 @@ data RnErr : Nat -> Type where
   UnknownType : String -> RnErr (Succ Zero)
   UnknownFixity : String -> RnErr (Succ Zero)
   UnknownVariable : String -> RnErr (Succ Zero)
+  -- | 内置宏调用用了未注册的宏名。
   UnknownMacro : String -> RnErr (Succ Zero)
   AmbiguousPrelude : String -> RnErr (Succ Zero)
   -- arity 2
@@ -58,6 +59,7 @@ data RnErr : Nat -> Type where
   TypeNotExported : String -> String -> RnErr (Succ (Succ Zero))
   ValueNotExported : String -> String -> RnErr (Succ (Succ Zero))
   -- arity 3
+  -- | 内置宏的实参个数与注册 arity 不符。
   MacroArity : String -> String -> String -> RnErr (Succ (Succ (Succ Zero)))
 
 -- | 诊断域实现：Vuna.Compiler.Diagnostics.Rn.rnCode（目录/模板见 diagnostics.md）。

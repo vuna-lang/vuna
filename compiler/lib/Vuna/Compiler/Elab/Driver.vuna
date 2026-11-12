@@ -285,9 +285,9 @@ elabBodies (d :: rest) globals doneDefs acc ec = case d of
     Just tyTerm => if defAlreadyDone name ec then elabBodies rest globals doneDefs acc ec
     else
       let
-        _ = stampSample (strFromInt (spanStartLine sp)) "DEF ${name}"
+        _ = perfSample! (strFromInt (spanStartLine sp)) "DEF ${name}"
       in Vuna.Compiler.Common.bind (elabFunDef globals ec (clausesOfTbl ec (d :: rest) name) (eval [] tyTerm) sp) (\p => let
-        _ = stampSample (strFromInt (spanStartLine sp)) "FUN ${name}"
+        _ = perfSample! (strFromInt (spanStartLine sp)) "FUN ${name}"
       in case p of
         Pair bodyTerm ec1 =>
           let
@@ -732,14 +732,14 @@ record ElabCore where
 
 elabProgramCoreWithAux : Ec -> List (Pair String Term) -> List RecordMeta -> List Decl -> Check ElabCore
 elabProgramCoreWithAux startEc startGlobals records decls = Vuna.Compiler.Common.bind (collectSigs decls) (\sigs => let
-  _ = stamp "collectSigs-done"
+  _ = perfStamp! "collectSigs-done"
 in Vuna.Compiler.Common.bind (elabDatas (collectDataDecls decls []) records startGlobals startEc) (\pd => case pd of
   Pair datas (Pair globals0 ec0) =>
     let
       -- M30（D18）：data 精化完成后一次性建构造子索引（之后 ecAddData 增量维护）；
       -- 索引 miss 会回落线性扫 `ecDatas`，所以这里只影响速度。
       ec0b = ecPutCtorTbl ec0 (ctorTblOfDatas (ecDatas ec0))
-      _ = stamp "datas-done"
+      _ = perfStamp! "datas-done"
     in Vuna.Compiler.Common.bind (elabTraits (collectTraitDecls decls []) globals0 ec0b) (\pt => case pt of
       Pair classDatas (Pair projGlobals (Pair _ (Pair projSpans ec1))) =>
         let
@@ -749,12 +749,12 @@ in Vuna.Compiler.Common.bind (elabDatas (collectDataDecls decls []) records star
           -- 不能只看本包 `elabTraits` 新声明的那些（否则 `deriving (Eq)` 解析出的
           -- `Base.Eq.Eq` 找不到）。全量路径下两者相同。
           classesAll = ecClasses ec1
-          _ = stamp "traits-done"
+          _ = perfStamp! "traits-done"
         in Vuna.Compiler.Common.bind (checkInstanceHeads (collectInstDecls decls []) classesAll globals1 ec1) (\pih => case pih of
           Pair instHeads ec1b =>
             let
               globals2 = append globals1 instHeads
-              _ = stamp "instheads-done"
+              _ = perfStamp! "instheads-done"
             in Vuna.Compiler.Common.bind (elabSigs sigs globals2 ec1b) (\p => case p of
               Pair globals ec2 =>
                 let
@@ -763,7 +763,7 @@ in Vuna.Compiler.Common.bind (elabDatas (collectDataDecls decls []) records star
                     ecPutClausesTbl
                       (ecSetGlobalsComplete (ecPutGlobalsTbl ec2 (globalsTableOf globals)) True)
                       (clausesTblOf decls)
-                  _ = stamp "sigs-elab-done"
+                  _ = perfStamp! "sigs-elab-done"
                 in Vuna.Compiler.Common.bind (checkAllDefined sigs globals decls) (\_ => Vuna.Compiler.Common.bind (elabBodies decls globals [] [] ec2b) (\q => case q of
                   Pair defs0 ec3a =>
                     let
@@ -774,20 +774,19 @@ in Vuna.Compiler.Common.bind (elabDatas (collectDataDecls decls []) records star
                       ec3 = resolveDictGoalsFix globals ec3a 8
                       defs = rezonkDefs ec3 defs0
                       _ =
-                        stamp
+                        perfStamp!
                           "bodies-done g=${length globals} sols=${length (ecSols ec3a)} defs=${length (ecDefs ec3a)} metas=${ecNext ec3a} dgoals=${length (ecPending ec3a)} datas=${length (ecDatas ec3a)} insts=${length (ecInsts ec3a)} classes=${length (ecClasses ec3a)}"
                       -- S5a：实例表索引自检（派生索引 == 权威表）。只在 --debug-perf 下跑：
                       -- `ecInstsAudit` 会扫全实例表，生产路径不付这个成本。
                       _ =
-                        if debugOn then if ecInstsAudit ec3a then note "inst-index=ok"
-                        else note "inst-index=MISMATCH"
-                        else 0
+                        perfNote!
+                          (if ecInstsAudit ec3a then "inst-index=ok" else "inst-index=MISMATCH")
                     in Vuna.Compiler.Common.bind (elabInstanceBodies decls classesAll datas1 globals ec3) (\pi => case pi of
                       Pair instDefs0 ec4a =>
                         let
                           ec4 = resolveDictGoalsFix globals ec4a 8
                           instDefs = rezonkDefs ec4 instDefs0
-                          _ = stamp "instbodies-done"
+                          _ = perfStamp! "instbodies-done"
                         in OkC (ElabCore datas1 ec4 defs instDefs globals projSpans)
                     )
                 )
@@ -979,11 +978,11 @@ finishCore termAux decls core =
               Just ty => Pair (firstOf g) ty
               Nothing => g
             ) globals
-            _ = stamp "extradefs-done"
+            _ = perfStamp! "extradefs-done"
           in Vuna.Compiler.Common.bind (checkProgramUsage ec4 allDefs) (\ec5 => Vuna.Compiler.Common.bind (checkTerminationDeclsWith (declFunNames decls) (append termAux decls)) (\_ => let
             -- 用量检查就地发射的 warning 经 checkProgramUsage 返回的新 Ec 线程到出口；
             -- 丢掉这个 Ec 会静默丢失全部 UN_* 告警（M4：warning 已不是全局收集器）。
-            _ = stamp "termination-done"
+            _ = perfStamp! "termination-done"
           in OkC
             (DtProgram datas1 allDefs (ecGoals ec5) (ecSols ec5) globalsOut (ecInsts ec5) (ecClasses ec5) (ecNext ec5) (ecDefVals ec5) (Base.HashMap.toList (ecDepthTbl ec5)) (ecWarnings ec5))
           )

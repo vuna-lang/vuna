@@ -75,7 +75,7 @@
 一致：同一份源码在逐模块 split 产物下测量；`compile` / `build` / seed 只有这一种产物，不再有
 单文件 `main.ml` 口径。
 
-## 2. 探针设施：`Vuna.Compiler.Debug`
+## 2. 探针设施：内置宏 `perfNote!` / `perfStamp!` / `perfSample!`
 
 开关是 CLI 参数（`Vuna.Cli.runCli` 会剥掉它再分发，任何子命令后都能加）：
 
@@ -83,26 +83,29 @@
 vuna check compiler --debug-perf
 ```
 
-打开后 stderr/stdout 上出现两类行：
+打开后 stdout 上出现两类行：
 
-- `PERF <label> <epoch-us>`：微秒时间戳（`timeUs`，无 fork）。**相邻两行相减 = 阶段耗时**；
+- `PERF <label> <epoch-us>`：微秒时间戳（`effTimeUs`，无 fork）。**相邻两行相减 = 阶段耗时**；
 - `DEBUG <text>`：任意诊断文本（表规模、计数等）。
 
-设施（`compiler/lib/Vuna/Compiler/Debug.vuna`）：
+调用点只写**内置宏**（展开规则见 [language.md](language.md) 的「内置宏」；运行时后端在
+`compiler/lib/Vuna/Compiler/Debug.vuna`）：
 
-| 函数 | 语义 | 何时用 |
+| 宏 | 语义 | 何时用 |
 | --- | --- | --- |
-| `stamp label` | 打一个微秒时间戳 | 阶段边界（十几处，代价可忽略） |
-| `stampSample key label` | 仅当 `sampleKey key`（1/64，确定性哈希）命中 | 逐定义 / 逐条目：采样后仍能看出「成本随规模 / 位置增长」的趋势 |
-| `note` / `noteInt` | 打 `DEBUG` 文本 | 表规模、元变量数、字典目标数 |
+| `perfStamp! label` | 打一个微秒时间戳 | 阶段边界（十几处，代价可忽略） |
+| `perfSample! key label` | 仅当 1/64 确定性采样命中该 key | 逐定义 / 逐条目：采样后仍能看出「成本随规模 / 位置增长」的趋势 |
+| `perfNote! text` | 打 `DEBUG` 文本 | 表规模、元变量数、字典目标数 |
 
-**关键纪律**：`note` 的字符串参数是**严格求值**的，`note ("x=" ++ showTerm t)` 在 debug
-关闭时也会先算（`showTerm` 可能极贵，甚至扫全表）——诊断构造必须写成
-`if debugOn then note (...) else 0`。`stamp` 自身已判 `debugOn`。逐条目打点用 `stampSample`
-避免打点成为主成本；单次 <50 µs 的条目用差值不可靠，判断趋势请用「同形规模的合成探针」
-对比总时间。关闭开关时：`stamp` 只判一次全局 Bool，`stampSample` 多一次字符串哈希。
-另注意**冷 build 的 DEBUG 输出量**：全量精化会逐条打印 conv 诊断（约 15 万行），实测让
-冷 build 墙钟膨胀 ~60%——阶段比例可用，绝对读数必须用无 `--debug-perf` 口径（§7）。
+**关键纪律（宏已承担）**：守卫在展开里，`perfNote! ("x=" ++ showTerm t)` 在关闭时
+**不会**先算字符串（旧的严格求值 `note` + 手写 `if debugOn then ... else 0` 纪律已删除）。
+探针返回 `Unit`，不再用 `0` 哨兵；开关是共享 CAF（`Debug.perfEnabled` /
+`Debug.releaseBuild`），关闭时每个探针只判一次 Bool，`perfSample!` 连采样哈希都不算。
+后端 `debugLine` / `perfMark` / `sampled` 是**无守卫原语**，只供宏展开引用，不要直接调用。
+逐条目打点用 `perfSample!` 避免打点成为主成本；单次 <50 µs 的条目用差值不可靠，判断趋势
+请用「同形规模的合成探针」对比总时间。另注意**冷 build 的 DEBUG 输出量**：全量精化会逐条
+打印 conv 诊断（约 15 万行），实测让冷 build 墙钟膨胀 ~60%——阶段比例可用，绝对读数必须用
+无 `--debug-perf` 口径（§7）。
 
 ## 3. 查找表：泛型 `Base.HashMap k v`
 
@@ -224,12 +227,12 @@ defs / globals / sols 三张索引表。要继续压，先看 bodies（逐定义
   `time` 的 user+sys（单进程口径不受其他负载影响）；wall 只在机器空闲时引用。
 - **包级增量路径要先把依赖包接口落盘**（`vuna check <dep>`，见 `compiler-growth-pkg.sh`）：
   否则探针每档都因「依赖接口缺失」走全量路径，测的就不是增量收尾。
-- `--debug-perf` 在**冷 build** 上会逐条打印 conv 诊断（约 15 万行；`note` 的参数字符串是
-  严格求值的，与开关无关），实测让冷 build 墙钟膨胀 ~60%：定位用阶段**比例**，绝对读数
+- `--debug-perf` 在**冷 build** 上会逐条打印 conv 诊断（约 15 万行；`perfNote!` 的实参在
+  开关打开时才求值），实测让冷 build 墙钟膨胀 ~60%：定位用阶段**比例**，绝对读数
   一律用无 debug 口径；单次 <50 µs 的条目仍需「同形规模合成探针」对比总时间。
 - 用 `OCAMLRUNPARAM=s=...` 快速判断 GC 敏感性（注意：产物里 `Gc.set` 会覆盖环境变量，要
   比较不同 minor heap 大小得改代码重建）。
-- 阶段定位优先用 `stamp`；per-def / 热路径趋势用 `stampSample`；不要用「等大 case 跑完」
+- 阶段定位优先用 `perfStamp!`；per-def / 热路径趋势用 `perfSample!`；不要用「等大 case 跑完」
   定位。
 - 基准入口：`nix run .#vuna-bench`（手动，非 CI check），基线文件与软告警见
   [testing.md](testing.md)。

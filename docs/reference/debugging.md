@@ -113,6 +113,10 @@ vuna: runtime error: assertion failed: broken invariant
 普通程序用 §3 的构造即可；需要直接调用原语时可直接引用 `prim_*` / `prim_eff_*`
 （没有 manifest 门控；用户面**应**经 `Base.Eff` + handler）。
 
+编译器的性能/诊断探针（`perfNote!` / `perfStamp!` / `perfSample!`）是**内置宏**，
+不是语言级调试构造：展开规则见 [language.md](language.md)「内置宏」，用法与
+`--debug-perf` 输出协议见 [performance.md](performance.md) §2。
+
 ## 5. 调试回路里的命令
 
 | 命令 | 用途 |

@@ -35,3 +35,35 @@ run: printf 'main : Int\nmain = perfNote! "x"\n' > "$TMPDIR/mac-outside.vuna"
 run: "$VUNA" check "$TMPDIR/mac-outside.vuna" 2>&1
 exit: nonzero
 out-contains: RN_ModuleNotImported
+# 65d) e2e：把 compiler 包复制到 $TMPDIR 并加一个探针模块（编译器包内部才能 import
+#      Vuna.Compiler.Debug），依赖包调用它验证宏展开、开关、惰性与输出协议。
+run: mkdir -p "$TMPDIR/mac-e2e"
+run: cp -R ../compiler "$TMPDIR/mac-e2e/compiler"
+run: cp -R ../base "$TMPDIR/mac-e2e/base"
+run: sh -c 'rm -rf "$TMPDIR/mac-e2e/compiler/.output" "$TMPDIR/mac-e2e/base/.output"; find "$TMPDIR/mac-e2e/compiler" "$TMPDIR/mac-e2e/base" -name "*.iface" -delete'
+run: sed -i 's/"Vuna.Compiler.Driver.PerfCache"/"Vuna.Compiler.Driver.PerfCache",\n  "Vuna.Compiler.MacroProbe"/' "$TMPDIR/mac-e2e/compiler/vuna.toml"
+run: printf '%s\n' 'module Vuna.Compiler.MacroProbe (probeEager, probeNote, probeStamp) where' '' 'import Vuna.Compiler.Debug' '' 'probeNote : Int' 'probeNote = let _ = perfNote! "probe=${42}" in 42' '' 'probeStamp : Int' 'probeStamp = let _ = perfStamp! "probe-phase" in 1' '' 'probeEager : Int -> Int' 'probeEager _ = let _ = perfNote! (prim_fail "eager") in 7' > "$TMPDIR/mac-e2e/compiler/lib/Vuna/Compiler/MacroProbe.vuna"
+run: mkdir -p "$TMPDIR/mac-e2e/app/app"
+run: printf '[package]\nname = "mac-app"\n\n[dependencies]\nvuna-compiler = "%s"\nvuna-base = "%s"\n' "$TMPDIR/mac-e2e/compiler" "$TMPDIR/mac-e2e/base" > "$TMPDIR/mac-e2e/app/vuna.toml"
+run: printf 'import Vuna.Compiler.MacroProbe\n\nmain : Int\nmain = probeNote + probeStamp\n' > "$TMPDIR/mac-e2e/app/app/Main.vuna"
+run: TMPDIR="$TMPDIR/mac-e2e/tmp" "$VUNA" build "$TMPDIR/mac-e2e/app" 2>&1
+out-contains: built
+# 默认关闭：不打印 DEBUG/PERF，结果 43。
+run: "$TMPDIR/mac-e2e/app/.output/bin/mac-app" 2>&1
+out-equals: 43
+out-not-contains: DEBUG
+# VUNA_DEBUG_PERF=1：宏展开的守卫打开，输出协议不变。
+run: VUNA_DEBUG_PERF=1 "$TMPDIR/mac-e2e/app/.output/bin/mac-app" 2>&1
+out-contains: DEBUG probe=42
+out-contains: PERF probe-phase
+out-contains: 43
+# 惰性：关闭时 perfNote! 的实参不求值（prim_fail 不触发），开启时才求值并失败。
+run: printf 'import Vuna.Compiler.MacroProbe\n\nmain : Int\nmain = probeEager 0\n' > "$TMPDIR/mac-e2e/app/app/Main.vuna"
+run: TMPDIR="$TMPDIR/mac-e2e/tmp" "$VUNA" build "$TMPDIR/mac-e2e/app" 2>&1
+out-contains: built
+run: "$TMPDIR/mac-e2e/app/.output/bin/mac-app" 2>&1
+out-equals: 7
+run: VUNA_DEBUG_PERF=1 "$TMPDIR/mac-e2e/app/.output/bin/mac-app" >/dev/null 2>"$TMPDIR/mac-e2e/eager.err"
+exit: 2
+read: $TMPDIR/mac-e2e/eager.err
+out-contains: runtime error: eager

@@ -315,9 +315,7 @@ else case a of
     VApp f2 x2 => if isNatLikeValue a && isNatLikeValue b then convNatApplied fuel defs sols depth f x f2 x2 a b
     else
       let
-        _ =
-          if debugOn then note "vapp: ${showValue a} <> ${showValue b} | x=${showValue x} x2=${showValue x2}"
-          else 0
+        _ = perfNote! "vapp: ${showValue a} <> ${showValue b} | x=${showValue x} x2=${showValue x2}"
       in Vuna.Compiler.Common.bind (convFuel (fuel - 1) defs sols depth f f2)
         (\sols2 => convFuel (fuel - 1) defs sols2 depth x x2)
     _ => mismatchAt depth a b
@@ -652,13 +650,12 @@ solveMetaNew : HashMap String Term -> Sols -> Int -> Int -> Value -> Check Sols
 solveMetaNew defs sols depth m rhs = solveMetaEmpty sols depth m rhs
 
 conv : HashMap String Term -> Sols -> Int -> Value -> Value -> Check Sols
-conv a1 a2 a3 a4 a5 = if debugOn then
+conv a1 a2 a3 a4 a5 =
   let
     _ =
-      note
+      perfNote!
         "conv-in: ${showTerm (quote a3 a4)} <> ${showTerm (quote a3 a5)} |v: ${showValueAt a3 a4} <> ${showValueAt a3 a5} @${a3}"
   in convFuel (convFuelFor a4 a5) a1 a2 a3 a4 a5
-else convFuel (convFuelFor a4 a5) a1 a2 a3 a4 a5
 
 convBoth : HashMap String Term -> Sols -> Int -> Value -> Value -> Check Sols
 convBoth a1 a2 a3 a4 a5 = convBothFuel (convFuelFor a4 a5) a1 a2 a3 a4 a5

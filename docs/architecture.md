@@ -14,7 +14,7 @@
 ## 仓库分层
 
 ```text
-compiler/lib/Vuna/Compiler/   （72 个模块：68 个导出 + 4 个内部模块；目录即层：
+compiler/lib/Vuna/Compiler/   （88 个模块：79 个导出 + 9 个内部模块；目录即层：
                                 Frontend → Packages → Loader → Core → Elab → Codegen → Driver）
 ├─ Source.vuna                底层位置/路径工具（Pos/Span，无 Result）
 ├─ Diag.vuna                  结构化诊断模型 + Check 结果通道（ErrC Diagnostic）
@@ -43,7 +43,7 @@ compiler/lib/Vuna/Compiler/   （72 个模块：68 个导出 + 4 个内部模块
 import 子模块并选择性重导出（对外名字面不变），实现只在叶子；**数据定义只在叶子**
 （`Core.Term`、`Elab.Types` 等）。目标每模块 ≤~800 行（当前最大 `Elab/Trait.vuna`，约 1.2k）。
 `compiler/` 是 seed 唯一来源（`compiler/app/Main.vuna` 的 import 闭包，数量以 `seed/` 与
-`nix/seed-count.txt` / `nix/seed-files.txt` 为准）；`lib/` 工具链与 `app/` 在 TCB 之外；`base/` 模块名即 API。
+`nix/seed-*.txt` 为准）；`lib/` 工具链与 `app/` 在 TCB 之外；`base/` 模块名即 API。
 
 ## 1. 编译链：Frontend → Loader → Elab → Codegen
 
@@ -54,7 +54,7 @@ import 子模块并选择性重导出（对外名字面不变），实现只在�
  → Frontend.Lexer.lexSource      （token + Pos/Span；lexComments 供 fmt）
  → Frontend.Parser.parseSource   （offside layout → AST + imports）
  → Packages.Pkg.contextForFile   （最近 vuna.toml + 依赖闭包 → PackageContext；无则 base-only）
- → Loader.Flatten.loadProject    （import 图 → 名字解析 → flatten；ad-hoc 自动注入 Prelude）
+ → Loader.Flatten.loadProject    （import 图 → 名字解析 → flatten；ad-hoc 自动注入 Prelude；随后 `Loader.Expand` 展开内置宏）
  → Elab.Driver.elabProgramFull   （Records/Derive 展开 → 精化；record 不再降级）
  → Codegen.Assembly              （DtProgram 的 unit 划分/文本/main 钩子）
  → Codegen.Split.generateDtSplitProgram  （唯一生成器：runtime + 各模块 + Main，带直接依赖）
@@ -62,8 +62,8 @@ import 子模块并选择性重导出（对外名字面不变），实现只在�
 ```
 
 **唯一装配**：`check` / `compile` / `build` 与语言夹具共用这条链；ad-hoc 单文件只是换包
-上下文（最近 manifest，无则 base-only），flatten / 精化 / 逐模块 codegen 与包内模块完全
-相同——没有第二套加载语义。
+上下文（最近 manifest，无则 base-only），flatten / 精化 / codegen 与包内模块相同——无第二套
+加载语义。
 
 **运行时错误报告**：`Vuna_runtime.ml` 由 `Codegen.Term.dtRuntimeWith` 生成 =
 运行时常量 + `dt_def_locs`（定义位置表：mangled 值名 → `定义名 (相对路径:行)`，路径按
@@ -121,7 +121,7 @@ data（`Base.Bool.Bool` / `Base.List.List` / `Base.Nat.Nat`），不按短名。
 `Driver.Split.SplitFile` / `buildScript`；CLI 经 `Driver.Compile.*` 接 `Driver.CompilerCli`。
 
 **通常连带改动**：语法 = `Frontend.{Lexer,Parser,Ast}` + `Fmt` + `Elab.Term` / `Elab.Match` +
-`Codegen`；名字解析 = `Loader.{Modules,Resolve,Flatten}`；类型规则 = `Elab.*` +
+`Codegen`；名字解析 = `Loader.{Modules,Resolve,Flatten,Expand}`；类型规则 = `Elab.*` +
 `Elab.{Records,Derive}` + `Codegen`；split = `Codegen.Split` + `Driver.Split`；诊断 =
 `Diag` / `Source` + 各阶段 `Diagnostic` + golden（模型与迁移见
 [diagnostics.md](reference/diagnostics.md)）。测试标签：第 1–11、13–27、30、34 段

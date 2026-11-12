@@ -237,16 +237,16 @@ generateDtSplitProgramWith lookup store modules entryDecls prog printResult root
   let
     -- M34.6：把「精化完成 → prepare 开始」之间的构建独有开销分段（compiler 包约 0.4s，
     -- 旧实现无 stamp 不可归因）；stamp 关闭时只花一次分支。
-    _ = stamp "cg-splitstart"
+    _ = perfStamp! "cg-splitstart"
     allDatas = runtimeDatas (dtProgDatas prog)
     allDefs = dtProgDefs prog
     meta = splitMetaOf modules entryDecls
-    _ = stamp "cg-splitmeta-done"
+    _ = perfStamp! "cg-splitmeta-done"
     locTbl = dtDefLocTable (splitLocPath roots contextDir) allDefs
-    _ = stamp "cg-deflocs-done"
+    _ = perfStamp! "cg-deflocs-done"
     usesFloat = anyDefUsesFloat allDefs
     runtimeText = dtRuntimeWith locTbl usesFloat
-    _ = stamp "cg-runtimeText-done"
+    _ = perfStamp! "cg-runtimeText-done"
   in case prepareDtProgram (Pair (dtProgDatas prog) allDefs) of
     ErrC e => pure (ErrC e)
     OkC (Pair runtime groups) =>

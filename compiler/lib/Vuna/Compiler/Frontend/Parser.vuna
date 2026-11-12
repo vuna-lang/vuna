@@ -680,12 +680,13 @@ parseFieldSuffix fuel st blockCol base =
 
 -- 内置宏调用：`name!` 的 `!` 必须与标识符**紧邻**（同行且列号连续）。带空格的
 -- `a ! b` 仍是普通中缀运算符，`!=` / `!!` 等更长的符号 token 也不触发。
+-- | `name` 后是否紧跟同一行的 `!`（列号连续才算宏调用；空格分隔的 `!` 仍是中缀）。
 macroBangAt : PState -> Pos -> String -> Bool
 macroBangAt st start name = case peekTok st of
   PTok (TSym "!") p => posLine p == posLine start && posCol p == posCol start + strLength name
   _ => False
 
--- 宏原子：无实参时是裸标记 `EVar`（交给展开期报 arity），有实参时是标记应用。
+-- | 宏原子：无实参时是裸标记 `EVar`（交给展开期报 arity），有实参时是标记应用。
 macroAtom : String -> List Expr -> Span -> Span -> Expr
 macroAtom name [] appSp headSp = EVar (macroSyntaxName name) headSp
 macroAtom name args appSp headSp = EApp (EVar (macroSyntaxName name) headSp) args appSp

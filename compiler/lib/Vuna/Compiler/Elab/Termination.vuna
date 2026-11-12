@@ -434,7 +434,7 @@ checkTerminationDeclsWith own decls =
     facts = computePosFactsWork nodes defTbl rgT 1024 [] callerNames
     -- O(n²)→O(n)：own 只建一次哈希表，逐 SCC 的 own 判定从线性扫改成 O(1) 查表。
     ownTbl = Base.HashMap.ofNames own
-    _ = stamp "term-facts"
+    _ = perfStamp! "term-facts"
     fuel = graphFuel g nodes
     post = postOrder gT g nodes
     comps = sccOf post fuel rgT (Base.HashMap.fromList []) []
