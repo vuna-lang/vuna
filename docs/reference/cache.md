@@ -171,8 +171,8 @@ Driver.Compile.depIfacesOf
     `ifaceHashVersion` 5→6、`ifaceSchema` 22→26。`ModuleIface.miImplHash` 是独立产物摘要：
     含 opaque body 与 prepared 面，只用于 impl/产物新鲜度，不参与下游 iface 依赖键。下游
     `depStartOfAt` 不把 opaque 体放进 deftbl，因而接口/分离编译路径不展开它们。包级由
-    `pkgIfaceHashOf` / `pkgImplHashOf` 按模块名排序聚合；manifest 条目也记录 `meImplHash`。**已知边界**：包 check/build 的全量源码路径已通过 `hideDepOpaqueDecls` 隐藏依赖包
-    opaque 体；单文件/REPL/表达式求值等直接 `elabProgramFull` 的入口尚未统一。
+    `pkgIfaceHashOf` / `pkgImplHashOf` 按模块名排序聚合；manifest 条目也记录 `meImplHash`。**已知边界**：包 check/build、单文件、REPL/表达式求值均通过 `hideDepOpaqueDecls`
+    隐藏依赖包 opaque 体；仅内部 goal/tolerant 查询不经过模块过滤。
 
 ## 存储与 key
 

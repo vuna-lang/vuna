@@ -186,9 +186,9 @@ M = Int
 - 定义模块自身仍需要体来检查/生成代码；`transparent` 是显式默认，等价于不写；
 - `abstract` 已可解析（`abstract f : T` / `export abstract f : T`），当前与 opaque
   共用下游 body 隐藏口径；独立 sealing 语义见 [debt.md](debt.md) D76；
-- 包 check/build 的全量源码路径已按依赖模块隐藏 opaque 体（`hideDepOpaqueDecls`）；
-  单文件 `dtCheckSource`、REPL/表达式求值等直接走 `elabProgramFull` 的路径尚未按模块
-  过滤，见 [debt.md](debt.md) D75。
+- 包 check/build、单文件 `dtCheckSource`、REPL/表达式求值与 `dtEvalFile` 均已按
+  依赖模块隐藏 opaque 体（`hideDepOpaqueDecls`）；只剩内部 goal/tolerant 查询，见
+  [debt.md](debt.md) D75。
 - `opaque record` 是记录表示档位的旧前缀，已退役；记录请用 `boxed record` /
   `alias record`，见 [records-traits.md](records-traits.md)。
 

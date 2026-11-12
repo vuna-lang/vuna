@@ -220,10 +220,14 @@ dtCheckModuleFile ctx path = do
 -- 核心求值器：精化后用 NbE + delta 求 main 的值并 show（与 codegen 结果对照）。
 export dtEvalFile : PackageContext -> String -> Eff [] (Check String)
 dtEvalFile ctx entry = do
-  declsR <- dtLoad ctx entry
-  pure (case declsR of
+  partsR <- dtLoadPartsForCheck ctx entry
+  pure (case partsR of
     ErrC e => ErrC e
-    OkC loaded => Vuna.Compiler.Common.bind (elabProgramFull (firstOf loaded)) evalDtMain
+    OkC resolved =>
+      let
+        parts = secondOf resolved
+        decls = hideDepOpaqueDecls (contextPackageName ctx) (secondOf parts) (dtProjectDecls parts)
+      in Vuna.Compiler.Common.bind (elabProgramFull decls) evalDtMain
   )
 
 -- REPL 的表达式求值（M23）：上下文 + program 源码 + 表达式源码。
@@ -243,7 +247,7 @@ replProgramFull ctx program exprSource = do
     ErrC e => ErrC e
     OkC project => case resolveProjectWith (contextRelease ctx) project of
       ErrC e => ErrC e
-      OkC resolved => case splitReplExpr (dtProjectDecls (secondOf resolved)) of
+      OkC resolved => case splitReplExpr (hideDepOpaqueDecls (contextPackageName ctx) (secondOf (secondOf resolved)) (dtProjectDecls (secondOf resolved))) of
         ErrC e => ErrC e
         OkC p => case elabProgramFull (firstOf p) of
           ErrC e => ErrC e
@@ -278,7 +282,7 @@ dtCheckSource ctx label source = do
     ErrC e => ErrC e
     OkC project => case resolveProjectWith (contextRelease ctx) project of
       ErrC e => ErrC e
-      OkC resolved => case elabProgramFull (dtProjectDecls (secondOf resolved)) of
+      OkC resolved => case elabProgramFull (hideDepOpaqueDecls (contextPackageName ctx) (secondOf (secondOf resolved)) (dtProjectDecls (secondOf resolved))) of
         ErrC e => ErrC e
         OkC prog => OkC (append (firstOf resolved) (dtProgWarnings prog))
   )
