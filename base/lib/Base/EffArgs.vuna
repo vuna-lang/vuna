@@ -37,7 +37,7 @@ handleArgsHost n comp = handleArgs n (\a => pure a) argsOpHIO comp
 
 -- | 单效应便捷入口（P3）：`handleArgsHost n` + `joinEff` 的组合。
 export runArgs : {a : Type} -> (n : String) -> Eff (Cons n ArgsOp []) a -> Eff [] a
-runArgs n comp = joinEff (handleArgsHost n comp)
+runArgs n comp = joinEffNilOuter (handleArgsHost n comp)
 
 -- ---------------------------------------------------------------
 -- 阶段 3：带行 handler（entry 自动预装用；不导出）

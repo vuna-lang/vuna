@@ -51,7 +51,7 @@ handleConsoleHost n comp = handleConsole n (\a => pure a) consoleOpHIO comp
 
 -- | 单效应便捷入口（P3）：`handleConsoleHost n` + `joinEff` 的组合。
 export runConsole : {a : Type} -> (n : String) -> Eff (Cons n ConsoleOp []) a -> Eff [] a
-runConsole n comp = joinEff (handleConsoleHost n comp)
+runConsole n comp = joinEffNilOuter (handleConsoleHost n comp)
 
 -- ---------------------------------------------------------------
 -- 阶段 2：带行的真实 handler（entry 自动预装用；不导出，用户拿不到）

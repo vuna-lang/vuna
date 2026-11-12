@@ -54,7 +54,7 @@ handleEnvHost n comp = handleEnv n (\a => pure a) envOpHIO comp
 
 -- | 单效应便捷入口（P3）：`handleEnvHost n` + `joinEff` 的组合。
 export runEnv : {a : Type} -> (n : String) -> Eff (Cons n EnvOp []) a -> Eff [] a
-runEnv n comp = joinEff (handleEnvHost n comp)
+runEnv n comp = joinEffNilOuter (handleEnvHost n comp)
 
 -- ---------------------------------------------------------------
 -- 阶段 3：带行 handler（entry 自动预装用；不导出）

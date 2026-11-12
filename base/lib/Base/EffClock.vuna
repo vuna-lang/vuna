@@ -48,7 +48,7 @@ handleClockHost n comp = handleClock n (\a => pure a) clockOpHIO comp
 
 -- | 单效应便捷入口（P3）：`handleClockHost n` + `joinEff` 的组合。
 export runClock : {a : Type} -> (n : String) -> Eff (Cons n ClockOp []) a -> Eff [] a
-runClock n comp = joinEff (handleClockHost n comp)
+runClock n comp = joinEffNilOuter (handleClockHost n comp)
 
 -- ---------------------------------------------------------------
 -- 阶段 3：带行 handler（entry 自动预装用；不导出）

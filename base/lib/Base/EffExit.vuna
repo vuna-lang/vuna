@@ -36,7 +36,7 @@ handleExitHost n comp = handleExit n (\a => pure a) exitOpHIO comp
 
 -- | 单效应便捷入口（P3）：`handleExitHost n` + `joinEff` 的组合。
 export runExit : {a : Type} -> (n : String) -> Eff (Cons n ExitOp []) a -> Eff [] a
-runExit n comp = joinEff (handleExitHost n comp)
+runExit n comp = joinEffNilOuter (handleExitHost n comp)
 
 -- ---------------------------------------------------------------
 -- 阶段 3：带行 handler（entry 自动预装用；不导出）

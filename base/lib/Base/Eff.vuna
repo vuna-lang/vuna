@@ -13,6 +13,7 @@ module Base.Eff
   , handleWith
   , handleWithAt
   , joinEff
+  , joinEffNilOuter
   , mkCont
   , performCore
   , raise
@@ -153,6 +154,15 @@ runMain e = runThunk e MkEffUnit
 -- answer 行是 Nil 的旧 handler 经右单位归约（`rowAppend r Nil = r`）保持原签名。
 joinEff : {r : Row} -> {t : Row} -> {a : Type} -> Eff r (Eff t a) -> Eff (rowAppend r t) a
 joinEff m = MkEff (\u => case m of
+  MkEff f => case f u of
+    MkEff g => g u
+)
+
+-- | 展平「外层行 Nil」的嵌套动作：`Eff [] (Eff r a) -> Eff r a`（运行时恒等）。
+-- `joinEff` 在 `rowAppend [] r` 上需要归约，而检查器在隐式参数未解时不归约；
+-- 宿主 handler 的 `runX = joinEffNilOuter (handleXHost …)` 用这个显式形式避开该限制。
+joinEffNilOuter : {r : Row} -> {a : Type} -> Eff [] (Eff r a) -> Eff r a
+joinEffNilOuter m = MkEff (\u => case m of
   MkEff f => case f u of
     MkEff g => g u
 )

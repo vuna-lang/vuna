@@ -74,7 +74,7 @@ handleProcessHostObserved n comp = handleProcessHostWith n (\c => pure c) comp
 
 -- | 单效应便捷入口（P3）：`handleProcessHost n` + `joinEff` 的组合。
 export runProcess : {a : Type} -> (n : String) -> Eff (Cons n ProcessOp []) a -> Eff [] a
-runProcess n comp = joinEff (handleProcessHost n comp)
+runProcess n comp = joinEffNilOuter (handleProcessHost n comp)
 
 -- ---------------------------------------------------------------
 -- 阶段 3：带行 handler（entry 自动预装用；不导出）
