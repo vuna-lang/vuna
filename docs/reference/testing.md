@@ -120,7 +120,9 @@ end:
   10s 超时（症状是「随机失败且耗时恒为 ~11s」）。`corpus/repl-server/smoke.sh` 因此把工作
   目录放在尽量短的路径上（`vrs.XXXXXX`，过长时退到 `/tmp`）。新写 socket 用例照此办理。
 - `--fail-fast`：worker 内部失败后不再启动新 case。
-- 失败行带 case id；断言失败给步骤名 / expected / actual 片段。
+- 失败行带 case id；断言失败给步骤名 / expected / actual 片段。父进程汇总也列出失败
+  case id（`N checks, M failed case(s): <id>, ...`）；worker 没写出结果文件时汇总报
+  `<id> (no result)`（崩溃 / OOM / 被杀），并还原真实 case 名而不是 `unknown-<index>`。
 - 本地结果缓存：成功的 golden/error case 写入 `.local/test-cache/`，key 含编译器指纹、
   base 源码树哈希、source/expected 内容（目录型再含夹具 .vuna 树）；命中打印 `(cached)`。
   `--no-cache` 关闭，CI check 固定 `--no-cache`；`*.steps` 不缓存。
@@ -407,7 +409,7 @@ interp / compile 文案不同时用 `.compile.err`。
 ```console
 nix build                  # 默认 = vuna；.#vuna-compiler / .#vuna-seed 同理
 nix flake check            # 全部 checks
-sh nix/ci.sh               # CI 统一入口（eval-cache=false + --keep-going）；GitHub Actions 由 .github/workflows/ci.yml 调用
+sh nix/ci.sh               # CI 统一入口（eval-cache=false + log-lines=5000 + --keep-going）；GitHub Actions 由 .github/workflows/ci.yml 调用
 nix develop                # 全量开发环境（工具链 + vuna-seed）；.#ocaml 只有 OCaml 工具链
 nix build .#vuna --out-link result-vuna      # 产品 CLI（stage 1）
 nix build .#vuna-compiler --out-link result-compiler  # 编译器 CLI（stage 1）

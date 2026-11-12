@@ -1240,9 +1240,10 @@ summarize results =
   let
     checks = sumInts (map resChecksOf results)
     failed = sumInts (map resFailOf results)
-    badCases = listLength (filter isFailed results)
+    bad = filter isFailed results
+    badCases = listLength bad
   in if failed == 0 && badCases == 0 then "vuna tests passed (${strOfInt checks} checks)"
-  else "${strOfInt checks} checks, ${strOfInt badCases} failed case(s)"
+  else "${strOfInt checks} checks, ${strOfInt badCases} failed case(s): ${join ", " (map resIdOf bad)}"
 
 printCompiler : Env -> Eff [] Int
 printCompiler env = do
@@ -1364,19 +1365,25 @@ readResultFile dir index =
         _ => Nothing
       )
 
-collectResults : String -> Int -> Eff [] (List CaseResult)
-collectResults dir count = collectResultsGo (count + 1) dir count 0 []
+collectResults : String -> Int -> List (Pair Int Case) -> Eff [] (List CaseResult)
+collectResults dir count indexed = collectResultsGo (count + 1) dir count 0 indexed []
 
-collectResultsGo : Int -> String -> Int -> Int -> List CaseResult -> Eff [] (List CaseResult)
-collectResultsGo fuel dir count index acc = if fuel <= 0 then pure (reverse acc)
+-- 缺结果文件 ⇒ worker 没跑完/被杀（崩溃、OOM、超时被外层杀），不是 case 断言失败。
+-- 用 index → case id 还原真实用例名；旧行为只报 `unknown-<index>`，线上失败完全无法定位。
+caseIdAt : Int -> List (Pair Int Case) -> String
+caseIdAt i [] = "unknown-${strOfInt i}"
+caseIdAt i ((Pair j c) :: rest) = if j == i then c.caseId else caseIdAt i rest
+
+collectResultsGo : Int -> String -> Int -> Int -> List (Pair Int Case) -> List CaseResult -> Eff [] (List CaseResult)
+collectResultsGo fuel dir count index indexed acc = if fuel <= 0 then pure (reverse acc)
 else if index >= count then pure (reverse acc)
 else do
   found <- readResultFile dir index
   case found of
-    Just r => collectResultsGo (fuel - 1) dir count (index + 1) (r :: acc)
+    Just r => collectResultsGo (fuel - 1) dir count (index + 1) indexed (r :: acc)
     Nothing =>
-      collectResultsGo (fuel - 1) dir count (index + 1)
-        (CaseResult "unknown-${strOfInt index}" "fail" 0 1 0 0 [] :: acc)
+      collectResultsGo (fuel - 1) dir count (index + 1) indexed
+        (CaseResult "${caseIdAt index indexed} (no result)" "fail" 0 1 0 0 [] :: acc)
 
 printJSON : List CaseResult -> Eff [] Int
 printJSON results =
@@ -1426,7 +1433,7 @@ runParent env opts suite cases = do
     _ <- ensureDirPath resultsDir
     pids <- spawnWorkers env opts resultsDir effective (effective + 1) 0 []
     _ <- waitPids pids
-    results <- collectResults resultsDir n
+    results <- collectResults resultsDir n indexed
     finishResults env opts results
 
 indexAll : List Case -> Int -> List (Pair Int Case) -> List (Pair Int Case)
