@@ -206,7 +206,7 @@ vuna.toml → Frontend.{Toml.parseToml, Manifest.parseManifest/validateManifest}
   局部 binder → Index）；另有 formatting / documentSymbol / references / completion /
   codeAction（lint quick fix）/ lint 诊断。
 - `Vuna.Index`：parse 级索引 v3（`vuna map` / `vuna api`，`symDoc` / `symType`，缓存
-  `$TMPDIR/vuna-cache` 的 `index:<dir>` 节点 + blobs，内容哈希判定新鲜度）；`Vuna.Search` 消费它做名称/doc/类型检索。
+  `index:<dir>` 节点，内容哈希判定）；`Vuna.Search` 消费它做名称/doc/类型检索。
 
 ## 5. 自举链：seed → vuna-seed → vuna-compiler → vuna
 
