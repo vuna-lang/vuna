@@ -282,11 +282,11 @@ runCachedNode st key deps compute recover = do
   if cancelled then do
     t1 <- effTimeUs
     pure
-      (Pair (addSpan (runNote st ("cancel " ++ key)) st.rsSpanSeq 0 key "cancel" t0 t1) (err "query node cancelled: ${key}"))
+      (Pair (addSpan (runNote st ("cancel " ++ key)) st.rsSpanSeq 0 key "cancel" t0 t1) (icInternal "query node cancelled: ${key}"))
   else if inStack st.rsStack key || memKey key deps then do
     t1 <- effTimeUs
     pure
-      (Pair (addSpan (runNote st ("cycle " ++ key)) st.rsSpanSeq 0 key "cycle" t0 t1) (err "query cycle: ${key}"))
+      (Pair (addSpan (runNote st ("cycle " ++ key)) st.rsSpanSeq 0 key "cycle" t0 t1) (icInternal "query cycle: ${key}"))
   else case queryHit st.rsDb key deps of
     Just v => do
       recovered <- recover v
@@ -306,7 +306,7 @@ runCachedMiss st key deps compute t0 = case spendBudget st of
   Nothing => do
     t1 <- effTimeUs
     pure
-      (Pair (addSpan (runNote st ("reject " ++ key)) st.rsSpanSeq 0 key "reject" t0 t1) (err "query budget exhausted: ${key}"))
+      (Pair (addSpan (runNote st ("reject " ++ key)) st.rsSpanSeq 0 key "reject" t0 t1) (icInternal "query budget exhausted: ${key}"))
   Just st1 => do
     let
       _ = dbg! "query-miss ${key}"
