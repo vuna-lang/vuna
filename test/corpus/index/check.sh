@@ -116,13 +116,19 @@ check_eq "index restored content map exit" "0" "$?"
 check_contains "index restored content rebuilds" "$restored" "index-path=build"
 
 # 4) blob 截断：framing（len/内容地址）校验失败 ⇒ 重算并重写合法 framing。
+#    注意步骤 3 改内容会留下**孤儿 blob**（旧内容地址不会再有引用、也不会被重写），
+#    所以不能按 `find` 顺序取 `head -1` 判断重写结果：readdir 顺序跨机器不同，CI 上
+#    会取到那份孤儿，读到的是截断 64B 的头（症状 `index blob reframed codec: got
+#    [index-payl]`）。改为按 codec 挑出被重写的那份 index-payload blob，并用一次
+#    后续 map 验证节点仍能命中（命中路径会校验 framing）。
 for f in $(blobs); do head -c 64 "$f" > "$f.part"; mv "$f.part" "$f"; done
 rebuilt=$( cd "$ws" && VUNA_DEBUG_PERF=1 "$VUNA" map 2>&1 )
 check_eq "index truncated-blob map exit" "0" "$?"
 check_contains "index truncated blob rebuild" "$rebuilt" "index-path=build"
-n_blob=$(blobs | head -1)
+n_blob=$(for f in $(blobs); do [ "$(head -1 "$f" | cut -d'|' -f3)" = "index-payload 1" ] && printf '%s\n' "$f"; done | head -1)
+if [ -n "$n_blob" ]; then ok; else bad "index truncated blob not reframed (no valid index-payload blob)"; fi
 check_eq "index blob reframed magic" "vuna-cache-frame 2" "$(head -c 18 "$n_blob" 2>/dev/null)"
-check_eq "index blob reframed codec" "index-payload 1" "$(head -1 "$n_blob" 2>/dev/null | cut -d'|' -f3)"
+check_contains "index reframed blob reusable" "$( cd "$ws" && VUNA_DEBUG_PERF=1 "$VUNA" map 2>&1 )" "index-path=cache"
 
 # 5) 并发两个 map：都成功，随后缓存可读。
 ( cd "$ws" && "$VUNA" map >/dev/null 2>&1; echo $? >"$tmp/c1" ) &
