@@ -216,7 +216,7 @@ setPrepared prepared mi =
 -- manifest 增加 `mePayloadDigest`，布局变化 ⇒ 20。
 -- C51：`ModuleIface.miDefLocs`（定义位置表，不进接口哈希）随载荷持久化，布局变化 ⇒ 22。
 export ifaceSchema : String
-ifaceSchema = "vuna-iface 24"
+ifaceSchema = "vuna-iface 25"
 
 -- | 接口哈希的**算法格式版本**：参与哈希输入（与 `ifaceSchema` 独立——schema 管载荷
 -- 布局，本版本管摘要算法/分片编码；换算法时旧哈希自然换代）。
@@ -858,6 +858,8 @@ export record ManifestEntry(..) where
   meFile : String
   meSource : SourceInfo
   meIfaceHash : String
+  -- D11: impl digest (opaque body included); payload integrity still uses mePayloadDigest.
+  meImplHash : String
   -- 载荷字节的内容地址（`Hash.contentAddress` 的规范编码字节）：读侧按它验文件
   -- 完整性（不重算 MB 级摘要），写侧算一次复用。`meIfaceHash` 是语义面摘要，
   -- 两者分工见模块头「载荷编码」。
@@ -884,28 +886,31 @@ export record PackageManifest(..) where
 -- S7（manifest 访问器）：构造函数已导出；这里给 Compile 的按需读路径一套只读访问器，
 -- 避免跨模块直接依赖 record 投影语法。
 export meNameOfEntry : ManifestEntry -> String
-meNameOfEntry (ManifestEntry n f s h pd d im o) = n
+meNameOfEntry (ManifestEntry n f s h hi pd d im o) = n
 
 export meFileOfEntry : ManifestEntry -> String
-meFileOfEntry (ManifestEntry n f s h pd d im o) = f
+meFileOfEntry (ManifestEntry n f s h hi pd d im o) = f
 
 export meSourceOfEntry : ManifestEntry -> SourceInfo
-meSourceOfEntry (ManifestEntry n f s h pd d im o) = s
+meSourceOfEntry (ManifestEntry n f s h hi pd d im o) = s
 
 export meIfaceHashOfEntry : ManifestEntry -> String
-meIfaceHashOfEntry (ManifestEntry n f s h pd d im o) = h
+meIfaceHashOfEntry (ManifestEntry n f s h hi pd d im o) = h
+
+export meImplHashOfEntry : ManifestEntry -> String
+meImplHashOfEntry (ManifestEntry n f s h hi pd d im o) = hi
 
 export meDepsOfEntry : ManifestEntry -> List (Pair String String)
-meDepsOfEntry (ManifestEntry n f s h pd d im o) = d
+meDepsOfEntry (ManifestEntry n f s h hi pd d im o) = d
 
 export meImportsOfEntry : ManifestEntry -> List String
-meImportsOfEntry (ManifestEntry n f s h pd d im o) = im
+meImportsOfEntry (ManifestEntry n f s h hi pd d im o) = im
 
 export meOriginOfEntry : ManifestEntry -> String
-meOriginOfEntry (ManifestEntry n f s h pd d im o) = o
+meOriginOfEntry (ManifestEntry n f s h hi pd d im o) = o
 
 export mePayloadDigestOfEntry : ManifestEntry -> String
-mePayloadDigestOfEntry (ManifestEntry n f s h pd d im o) = pd
+mePayloadDigestOfEntry (ManifestEntry n f s h hi pd d im o) = pd
 
 export pmSchemaOf : PackageManifest -> String
 pmSchemaOf (PackageManifest s c p e ms) = s
@@ -968,7 +973,7 @@ entryOfPayload : String -> String -> String -> ModuleIface -> Eff [] ManifestEnt
 entryOfPayload origin pkgDir payload m = do
   file <- ifaceRelPathOf (miIfaceHashOf m) pkgDir (miSourceOf m)
   pure
-    (ManifestEntry (miNameOf m) file (miSourceOf m) (miIfaceHashOf m) (payloadDigest payload) (miDepHashesOf m) (append (map importNameOf (miImportsOf m)) (map importNameOf (miImplicitImportsOf m))) origin)
+    (ManifestEntry (miNameOf m) file (miSourceOf m) (miIfaceHashOf m) (miImplHashOf m) (payloadDigest payload) (miDepHashesOf m) (append (map importNameOf (miImportsOf m)) (map importNameOf (miImplicitImportsOf m))) origin)
 
 manifestEntryOfWith : String -> String -> ModuleIface -> Eff [] ManifestEntry
 manifestEntryOfWith origin pkgDir m = entryOfPayload origin pkgDir (encModuleIface m) m
@@ -1243,11 +1248,12 @@ decManifestEntry fuel c = do
   p3 <- decSourceInfo (fuel - 1) (secondOf p2)
   p4 <- decStr (fuel - 1) (secondOf p3)
   p5 <- decStr (fuel - 1) (secondOf p4)
-  p6 <- decList decDepPair (fuel - 1) (secondOf p5)
-  p7 <- decList decStr (fuel - 1) (secondOf p6)
-  p8 <- decStr (fuel - 1) (secondOf p7)
+  p6 <- decStr (fuel - 1) (secondOf p5)
+  p7 <- decList decDepPair (fuel - 1) (secondOf p6)
+  p8 <- decList decStr (fuel - 1) (secondOf p7)
+  p9 <- decStr (fuel - 1) (secondOf p8)
   pure
-    (Pair (ManifestEntry (firstOf p1) (firstOf p2) (firstOf p3) (firstOf p4) (firstOf p5) (firstOf p6) (firstOf p7) (firstOf p8)) (secondOf p8))
+    (Pair (ManifestEntry (firstOf p1) (firstOf p2) (firstOf p3) (firstOf p4) (firstOf p5) (firstOf p6) (firstOf p7) (firstOf p8) (firstOf p9)) (secondOf p9))
 
 -- | 解析 `ModuleIface` 载荷（整串入口：要求恰好消费完）。
 export decModuleIfaceComplete : String -> Maybe ModuleIface
@@ -1259,7 +1265,7 @@ decModuleIfaceComplete s = case decModuleIfacePayload (strLength s) (curOf s) of
 export encManifestEntry : ManifestEntry -> List String -> List String
 encManifestEntry e acc =
   encStr e.meName
-    (encStr e.meFile (encSourceInfo e.meSource (encStr e.meIfaceHash (encStr e.mePayloadDigest (encList encDepPair e.meDeps (encList encStr e.meImports (encStr e.meOrigin acc)))))))
+    (encStr e.meFile (encSourceInfo e.meSource (encStr e.meIfaceHash (encStr e.meImplHash (encStr e.mePayloadDigest (encList encDepPair e.meDeps (encList encStr e.meImports (encStr e.meOrigin acc))))))))
 
 -- | `PackageManifest` 载荷字节（`.vuna-iface` 落盘用）。
 encManifestPayload : PackageManifest -> List String -> List String
