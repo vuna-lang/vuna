@@ -19,7 +19,7 @@ module Vuna.Compiler.Fingerprint
 -- `Failure("readFile: ...")`——`vuna test` 在包根直接崩溃即此。store 路径 + size + mtime
 -- 足以区分重新构建的编译器。
 --
--- M4：env/stat 是宿主动作，显式 `Eff []`（不再在模块初始化时用 `runPure` 取一次）。
+-- env/stat 是宿主动作，显式 `Eff []`。
 import Vuna.Compiler.Hash
 import Vuna.Compiler.Version
 import Base.Eff

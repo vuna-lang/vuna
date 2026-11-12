@@ -103,9 +103,8 @@ module Vuna.Compiler.Driver.Iface
 -- 读文件并校验（framing + 头内内容地址 + 语义自证三层）。载荷是 `Canonical.*` 显式编码
 -- + `Store` framing；schema 见 `ifaceSchema`（布局/字段语义变化必须 bump）。
 --
--- M4（效果显式化）：manifest / 模块文件的读、写、存在性探测与 `VUNA_IFACE_DIR` 环境
--- 读取全部显式在 `Eff []` 里；纯构造（接口哈希、覆盖性检查、布局计算）保持纯函数。
--- 调用方（Compile 是 Eff，过渡期的 Dt/Lsp 等纯调用方用一处 `runPure` 包装）。
+-- 效果显式化：manifest / 模块文件的读、写、存在性探测与 `VUNA_IFACE_DIR` 环境读取
+-- 全部显式在 `Eff []` 里；纯构造（接口哈希、覆盖性检查、布局计算）保持纯函数。
 import Vuna.Compiler.Canonical.Ast
 import Vuna.Compiler.Canonical.Bytes
 import Vuna.Compiler.Canonical.CoreTerm

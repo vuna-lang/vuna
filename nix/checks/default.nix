@@ -375,7 +375,7 @@ in
     script = ./diag-style.sh;
   };
 
-  # M4 守卫：隐藏效果调用点只降不增（基线 nix/eff-boundary.allowlist）。
+  # 隐藏效果守卫：`runPure` 调用点只降不增（基线 nix/eff-boundary.allowlist，当前为空）。
   eff-boundary = mkCheck {
     name = "vuna-eff-boundary";
     srcs = [

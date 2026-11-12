@@ -49,8 +49,9 @@
    **无 manifest 门控**：没有能力/特权/信任机制；任何包（含 ad-hoc 文件）都可直调
    `prim_*` / `prim_eff_*`。用户面**应**仍经 `Base.Eff.*` 标签 + handler（纪律，不是门控，
    见 [effects.md](docs/reference/effects.md) §8.6）。
-   **M4 已完成**：编译器/工具链不再用 `runPure (...)` 在纯签名里隐藏 Eff 执行；
-   守卫基线为 0（`checks.eff-boundary`），无例外；tracing 走隐藏 runtime 原语。
+   **隐藏效果守卫**：编译器/工具链不得用 `runPure` 在纯签名里隐藏 Eff 执行；
+   `checks.eff-boundary` 基线为 0（`nix/eff-boundary.allowlist` 为空），无例外；
+   tracing 走隐藏 runtime 原语。
 6. **唯一路径**：语言夹具、`vuna interp`、包构建与 seed 全部走 DT（精化 + 擦除
    codegen，`vuna check .` 也是 DT 自检）；没有可切换的检查器，也没有第二套 codegen；
 7. 编译器自检通过：`vuna check .` 必须能检查自身源码（`checks.vuna-typecheck`）。
@@ -59,7 +60,7 @@
 
 - **禁止手改 `seed/`**：它是生成物；只能通过 seed rotation 更新
   （`sh nix/seed-rotate.sh ./result/bin/vuna`）。
-- **M4 守卫**：隐藏效果由 `sh nix/check-eff-boundary.sh` 守护（基线 `nix/eff-boundary.allowlist`
+- **隐藏效果守卫**：由 `sh nix/check-eff-boundary.sh` 守护（基线 `nix/eff-boundary.allowlist`
   为空，只允许减少、不允许新增），已作为 `checks.eff-boundary` 接入 `nix flake check`。
 - 允许 `git add` / `git commit`；`git checkout` / `git reset` 会丢工作树改动，执行前先确认。
   提交信息沿用仓库风格（`type(scope): 描述`）。

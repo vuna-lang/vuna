@@ -20,7 +20,8 @@
 - `Base.EffExn`：`ExnOp.Try` 携带一个 `Eff` 子计算；`handleExn` 的 op handler 用
   `runEff (runExn sub)` 在**嵌套 handler** 下运行子计算，外层运行时 handler 继续处理
   子计算里的其它效应；`catchExn` 在 `tryWith` 上组合。
-- `runEff` 是信任边界内的作用域运行入口（任意行）；普通用户用 `runPure`/`runPure`——两者都只接受行已处理干净的动作（`Eff []`，入口处未处理效应是类型错误）。
+- `runEff` 是信任边界内的作用域运行入口（任意行；仅供库内 handler 实现使用）；普通用户用
+  `runPure`——只接受行已处理干净的动作（`Eff []`，入口处未处理效应是类型错误）。
 - 夹具 `dt_base/23_eff_scoped`（107：子计算里的 Reader 由外层 handler 处理）；
   负例 `dt_err/74_try_row_mismatch`（`tryWith` 要求行首 `Exn n`）。
 
@@ -148,8 +149,8 @@ main 结束时统一取消清理（最外层兜底）；跨域 handler / Domain 
   在同一程序里并存。
 - **工具链真实路径**：`lib/Vuna/Cli.vuna` 的 `vuna version` 输出改走
   console 标签——`consoleLine` 用 `consolePrint "vuna"` + `handleConsoleHost "vuna"` + `joinEff`，
-  只在最外层 `runPure`（工具链入口仍是 `main : Eff [] Int`）。这是工具链逐步迁移的样板，不是
-  全量迁移（`lib/` 其余模块仍直接调用 `prim_eff_*` / `runPure`）。**编译器级强制不可行**的
+  只在最外层 `runPure`（工具链入口是 `main : Eff [] Int`）。工具链其余模块仍直接调用
+  `prim_eff_*`（纪律而非门控）。**编译器级强制不可行**的
   具体位置：manifest 能力/信任门控已整体删除（旧 `checkEffectsBuiltins` 的包级能力检查
   不复存在），类型系统也没有类型级能力行，`prim_*`/`prim_eff_*` 在任何包内都可用；编译器自身
   也在 seed 闭包里必须做宿主操作（`prim_eff_*`、`Codegen`）。**最小下一步**：在 `vuna lint`

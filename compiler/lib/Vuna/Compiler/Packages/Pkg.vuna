@@ -41,9 +41,8 @@ module Vuna.Compiler.Packages.Pkg
 -- `VUNA_BASE` 覆盖 + 可执行文件相对布局），此时包名为空（ad-hoc 入口）。
 -- 旧的环境根（命令行 flag 与 raw 模式 / List Root）已删除；`Root` 只作为包上下文的
 -- 内部模块根（类型 + 访问器导出，构造子不导出）。
--- M4（效果显式化）：manifest 读盘、存在性探测、cwd / 环境 / 可执行文件路径全部显式在
--- `Eff []` 里（本模块不再用 `runPure` 隐藏执行）。路径规范化、依赖图校验、包/上下文
--- 构造等纯逻辑保持纯函数。
+-- 效果显式化：manifest 读盘、存在性探测、cwd / 环境 / 可执行文件路径全部显式在
+-- `Eff []` 里；路径规范化、依赖图校验、包/上下文构造等纯逻辑保持纯函数。
 import Vuna.Compiler.Common
 import Vuna.Compiler.Diagnostics.Pkg
 import Vuna.Compiler.Frontend.Manifest

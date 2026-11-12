@@ -14,8 +14,8 @@ N2 动作类型统一 → N3 表示收敛 → N4 箭头行 direct-style。当前
 
 四个根因（证据见 [effects.md](effects.md)）：
 
-1. **双轨制（已消除）**：旧内建动作类型（特权基座）与 `Eff`（用户面库级效应）平行，渡口
-   `runPure` / `joinEff` 两个方向；manifest 能力/特权/信任机制（`privileged` /
+1. **双轨制（已消除）**：旧内建动作类型（特权基座）与 `Eff`（用户面库级效应）平行，
+   两者之间靠转换函数桥接；manifest 能力/特权/信任机制（`privileged` /
    `[trust]` / `unsafe`）**已整体删除**（历史见 git；后续用表示层权限 N2/N3 或新模型补），
    当年只管内建轨。
 2. **三重表示**：同一抽象三副面孔——纯 monad（`Base.State`/`Reader`/`Error`）、
@@ -242,7 +242,7 @@ handle comp {
   handler，但**不能**在无 handler 情况下构造宿主动作。旧的 manifest 权威
   （`unsafe`/`privileged`）已删除（历史见 git；后续用表示层权限 N2/N3 或新模型补），
   现行权威只有"宿主 op 构造器不导出"。
-- 直接调用 `prim_eff_*`、`prim_schedNewScope` 保留为宿主层逃生口；`runPure` 收缩为内部。
+- 直接调用 `prim_eff_*`、`prim_schedNewScope` 保留为宿主层逃生口。
 - 内建动作类型已删除；`prim_eff_*` / `IORef` 等宿主面保留为宿主层。
 
 ## 5. N3：表示收敛

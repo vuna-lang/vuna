@@ -12,11 +12,11 @@ module Vuna.Compiler.Driver.CompilerCli
 -- 不再有 seed 子命令、split 开关与环境根 flag（移除时给出可操作提示）。
 -- 工具命令（lint / interp / test / fmt / repl / doc）在 Vuna.Cli。
 --
--- M4（效果显式化）：命令分发后的执行、打印/诊断/警告、workspace 并行 spawn/wait、
--- recovery 路径全部显式在 `Eff []` 里（这些路径不再用 `runPure` 隐藏执行）；纯逻辑
--- （参数解析、help/usage 文本、路径判断、诊断文本拼装）保持纯函数。`CliOpts` 也没有
--- ambient 存储：入口构造一次后作为显式参数沿命令链传递，需要写回的地方（manifest
--- 诊断配置、sarif/json 收集）返回更新后的 `CliOpts`（`Pair Int CliOpts`）。
+-- 效果显式化：命令分发后的执行、打印/诊断/警告、workspace 并行 spawn/wait、recovery
+-- 路径全部显式在 `Eff []` 里；纯逻辑（参数解析、help/usage 文本、路径判断、诊断文本
+-- 拼装）保持纯函数。`CliOpts` 也没有 ambient 存储：入口构造一次后作为显式参数沿命令链
+-- 传递，需要写回的地方（manifest 诊断配置、sarif/json 收集）返回更新后的 `CliOpts`
+-- （`Pair Int CliOpts`）。
 import Vuna.Compiler.Common
 import Vuna.Compiler.Diagnostics.Sink
 import Vuna.Compiler.Packages.Pkg

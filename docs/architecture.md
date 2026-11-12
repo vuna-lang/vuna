@@ -170,7 +170,7 @@ vuna.toml → Frontend.{Toml.parseToml, Manifest.parseManifest/validateManifest}
   `CliOpts` 已是显式参数；`Diag.Format` 语言也改为显式 `lang` 参数。
   API 文档与检索见
   [api-docs.md](reference/api-docs.md)，调试工作流见 [debugging.md](reference/debugging.md)。
-- 进程执行只在 `Driver.CompilerCli.runIn`（`prim_eff_runIn`；工具链经 `runPure`）。
+- 进程执行只在 `Driver.CompilerCli.runIn`（`prim_eff_runIn`）。
 - **stdio / socket server 公共层**（工具链，不进 seed）：`Vuna.Json.Frame`（字节级
   `Content-Length` 帧 + 16 MiB 上界）、`Vuna.Json.Rpc`（JSON-RPC 信封与错误码）、
   `Vuna.Json.Server.serveConnection`（读帧 → 分发 → 发帧的连接循环）；LSP 与 REPL server

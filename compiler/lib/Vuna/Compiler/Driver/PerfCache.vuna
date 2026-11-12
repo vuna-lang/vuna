@@ -25,9 +25,8 @@ module Vuna.Compiler.Driver.PerfCache
 -- 产物放 `<cacheBase>/<pkg>/split-units/e-<entry 桶>/`，构建前先做**桶间 GC**（只留当前
 -- entry）与**桶内 GC**（只留本次单元 key 集合对应的文件，见 `unitCacheBucketGc`）。
 --
--- M4（效果显式化）：目录遍历 / 读文件 / 写文件 / 建目录 / 删除 / 环境与二进制指纹全部
--- 显式在 `Eff []` 里（本模块自身不再用 `runPure` 隐藏执行）；纯数据逻辑（路径 / 哈希 /
--- 文件名 / 桶 key）保持纯函数。
+-- 效果显式化：目录遍历 / 读文件 / 写文件 / 建目录 / 删除 / 环境与二进制指纹全部显式在
+-- `Eff []` 里；纯数据逻辑（路径 / 哈希 / 文件名 / 桶 key）保持纯函数。
 import Vuna.Compiler.Canonical.Bytes
 import Vuna.Compiler.Common
 import Vuna.Compiler.Driver.Split

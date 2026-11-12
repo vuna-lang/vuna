@@ -1,13 +1,12 @@
 #!/bin/sh
-# M4 守卫：编译器/工具链的「隐藏效果」不得新增。
+# 隐藏效果守卫：compiler/lib 与 lib 不得用 `runPure` 在纯签名里隐藏 Eff 执行。
 #
-# 用户面已统一到 Eff（main : Eff [] a、runPure 执行）；但 compiler/lib 与 lib 里仍有
-# 历史遗留的 `runPure (...)` 在纯签名内执行宿主动作（D59）。在 M4 迁移
-# 完成前，本脚本把当前调用点作为**基线**（nix/eff-boundary.allowlist），只允许减少、
-# 不允许新增：
-#   - allowlist 里没有的文件出现调用点 → 失败；
+# 用户面已统一到 Eff（main : Eff [] a，由运行时执行）。本脚本统计两个目录下每个 .vuna
+# 文件中 `runPure` 后接 `(` 的调用点数，与基线 nix/eff-boundary.allowlist 比较：
+#   - allowlist 里没有的文件出现调用点 → 失败（基线当前为空，即零容忍）；
 #   - 某文件调用点数超过基线 → 失败；
 #   - 基线里的文件调用点变少 → 提示更新基线（不失败）；
+#   - 跨行调用也计数（fmt 可能把 `runPure` 与 `(` 拆成两行）；
 #   - nix/eff-boundary.exceptions（若存在）里的文件是显式 sanctioned 例外；当前为零例外。
 #
 # 用法：sh nix/check-eff-boundary.sh [--update]

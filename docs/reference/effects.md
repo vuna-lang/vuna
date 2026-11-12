@@ -132,8 +132,9 @@ CPS `Eff` 已经可 `check` + `compile` + 运行，且 interp 与产物逐字节
 
 1. **Eff 是唯一动作类型 + 内建代数**：`pure`/`do`/`>>=` 来自 `Functor`/`Applicative`/`Monad (Eff r)` 实例；
    用户面动作由实例方法构造；`joinEff` 展平 handler answer，`runPure` 执行。
-2. **handler 是解释器**：`runPure` / `runConsole` / `runFs`
-   是唯一执行入口；没有「隐式生效的 handler 栈」。
+2. **handler 是解释器**：`runPure` 是唯一的执行入口；`runConsole` / `runFs` 等是
+   handler（answer 为 `Eff []`，由 `joinEff` 组装），本身不执行动作；没有「隐式生效的
+   handler 栈」。
 3. **可变数据边界**：`IORef` 的公开操作与实现都是 `Eff []`；局部可变的 region 形式
    已随 ST 删除（重建约束见 [debt.md](debt.md)）。
 4. **宿主层是底层原语面，不是类型豁免**：`prim_effectPerform` / `prim_effectHandle` /

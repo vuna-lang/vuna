@@ -40,10 +40,9 @@ module Vuna.Compiler.Driver.Compile
 -- 预先算好的层**分层并行**编译 + 精确增量（每单元 stamp 只含直接依赖），依赖图不再
 -- 退化为全序链。
 --
--- M4（效果显式化）：扫描/读文件/写文件/建目录/删除/子进程/时钟/环境/二进制指纹全部
--- 显式在 `Eff []` 里（本模块不再用 `runPure` 隐藏执行）。纯逻辑（路径/哈希/序列化/
--- 缓存键计算/AST 变换）保持纯函数；仍在迁移中的下挂模块（`Driver.Split`、`Driver.Dt`、
--- `Packages.Pkg` 的磁盘层）由各自模块按过渡策略在内部收口，这里直接调用。
+-- 效果显式化：扫描/读文件/写文件/建目录/删除/子进程/时钟/环境/二进制指纹全部显式在
+-- `Eff []` 里；纯逻辑（路径/哈希/序列化/缓存键计算/AST 变换）保持纯函数。下挂模块
+-- （`Driver.Split`、`Driver.Dt`、`Packages.Pkg` 的磁盘层）同样是 `Eff []`，这里直接调用。
 import Vuna.Compiler.Common
 import Vuna.Compiler.Hash
 import Vuna.Compiler.Diagnostics.Pkg
@@ -368,7 +367,7 @@ textHash s = Vuna.Compiler.Hash.contentKey s
 -- 旧实现把子命令名（如 `test`）当路径：只要 cwd 里恰好有同名文件/目录（包根的 `test/`
 -- 就是最常见的情况），`prim_eff_readFile` 会去读目录并抛 `Failure("readFile: ...")`——
 -- `vuna test` 在包根直接崩溃即此。store 路径 + size + mtime 足以区分重新构建的编译器。
--- M4：env/stat 是宿主动作，显式 `Eff []`（原先在模块初始化时用 `runPure` 取一次）。
+-- env/stat 是宿主动作，显式 `Eff []`。
 compilerFingerprint : Eff [] Int
 compilerFingerprint = compilerFingerprintEff
 

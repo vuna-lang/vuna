@@ -11,9 +11,8 @@ module Vuna.Index.Scan (buildIndex, loadOrBuild, loadOrBuildCheap) where
 -- **没有「刷新索引」命令**：`vuna map` / `vuna api` / REPL 自己判新鲜度。
 -- `Store` 是唯一写盘层，帧格式与内容地址校验见 `Vuna.Compiler.Store`。
 --
--- M4（效果显式化）：目录遍历、读文件、缓存写、时钟全部显式在 `Eff []` 里，
--- 不再用 `runPure` 在纯签名里隐藏执行。纯数据逻辑（路径/哈希/JSON 渲染/序列化解析）
--- 保持纯函数；`indexStatsOf` 只产出 stat 快照。
+-- 效果显式化：目录遍历、读文件、缓存写、时钟全部显式在 `Eff []` 里；纯数据逻辑
+-- （路径/哈希/JSON 渲染/序列化解析）保持纯函数；`indexStatsOf` 只产出 stat 快照。
 import Vuna.Compiler.Common
 import Base.HashMap
 import Base.Hashable
