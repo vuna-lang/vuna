@@ -164,13 +164,13 @@ hideDepOpaqueDecls pkg modules decls =
   in mapMaybe (hideOneOpaque names decls) decls
 
 hideOneOpaque : List String -> List Decl -> Decl -> Maybe Decl
-hideOneOpaque names decls decl = case decl of
-  DSig name ctx ty sp => if memName name names then Nothing else Just decl
-  DFun name pats body sp => if memName name names then case opaqueSigType name decls of
-    Just ty => Just (DAxiom name ty sp)
-    Nothing => Just decl
-  else Just decl
-  _ => Just decl
+hideOneOpaque names decls (decl@(DSig name ctx ty sp)) =
+  if memName name names then Nothing else Just decl
+hideOneOpaque names decls (decl@(DFun name pats body sp)) = if memName name names then case opaqueSigType name decls of
+  Just ty => Just (DAxiom name ty sp)
+  Nothing => Just decl
+else Just decl
+hideOneOpaque names decls decl = Just decl
 
 opaqueSigType : String -> List Decl -> Maybe Expr
 opaqueSigType name [] = Nothing
