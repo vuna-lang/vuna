@@ -247,98 +247,120 @@ joinCmxs (name :: rest) = "${name}.cmx ${joinCmxs rest}"
 -- M34.5（S5）：把 split 文件列表规范化为**确定性拓扑序**（依赖在前；同层按名字哈希
 -- 排序）。单元缓存复用旧 `SplitFile` 后列表顺序会随命中集合变化，build.sh 的层/顺序
 -- 不能因此漂移（否则增量/全量产物不一致）。深度用迭代松弛算（与列表顺序无关）。
+--
+-- 性能（2026-11）：旧实现在 119 单元的 `compiler` 包上占 `build-warm` 的 ~254 ms/次，
+-- 三处叠加的 O(n²)：① 迭代松弛每轮对每个依赖线性扫 memo 表；② 插入排序每次比较重算
+-- SHA-256 的 `unitTieKey`；③ 排序结果按名在 `files` 里线性找文件。现在：
+--   ① 迭代松弛改用 `HashMap String Int` memo（每轮查找 O(1)，缺失键按 0）；
+--   ② graph 单元 + 全部依赖去重成表，每个名字只算一次 tie key；
+--   ③ `HashMap String SplitFile` 文件名索引。
+-- 输出与旧实现一致：depth 是最长路径的同一不动点、稳定插入排序、同 depth 内按
+-- `unitTieKey` 升序（`<=`）。
 unitTieKey : String -> Int
 unitTieKey name = Vuna.Compiler.Hash.contentKey "t:${name}"
 
-findFileNamed : List SplitFile -> String -> Maybe SplitFile
-findFileNamed [] _ = Nothing
-findFileNamed (f :: rest) name =
-  if splitName f == "${name}.ml" then Just f else findFileNamed rest name
+-- 名字集合（graph 单元 + 全部直接依赖）：tie key 只对唯一名字各算一次 SHA-256。
+nameSetOf : List (Pair String (List String)) -> HashMap String Bool -> HashMap String Bool
+nameSetOf [] seen = seen
+nameSetOf ((Pair unit deps) :: rest) seen =
+  nameSetOf rest (markNames deps (Base.HashMap.insert unit True seen))
 
-unitDepthLookup : List (Pair String Int) -> String -> Int
-unitDepthLookup [] _ = 0
-unitDepthLookup (p :: rest) name =
-  if firstOf p == name then secondOf p else unitDepthLookup rest name
+markNames : List String -> HashMap String Bool -> HashMap String Bool
+markNames [] seen = seen
+markNames (n :: rest) seen = markNames rest (Base.HashMap.insert n True seen)
 
-maxDepth : List (Pair String Int) -> List String -> Int
+tieTableOf : List (Pair String (List String)) -> HashMap String Int
+tieTableOf graph =
+  Base.HashMap.fromList
+    (map (\n => Pair n (unitTieKey n)) (map firstOf (Base.HashMap.toList (nameSetOf graph (Base.HashMap.fromList [])))))
+
+tieOf : HashMap String Int -> String -> Int
+tieOf ties name = case Base.HashMap.lookup name ties of
+  Just k => k
+  Nothing => 0
+
+-- 迭代松弛到不动点：depth(u) = 1 + max(depth(dep))（无依赖 = 0；dep 不在 graph 按 0）。
+-- 每轮用上一轮的 depth 同步更新，与旧实现同一语义；HashMap 让每轮查找 O(1)。
+maxDepth : HashMap String Int -> List String -> Int
 maxDepth memo [] = 0 - 1
 maxDepth memo (d :: rest) =
   let
-    dd = unitDepthLookup memo d
+    dd = depthOfUnit memo d
     mm = maxDepth memo rest
   in if dd > mm then dd else mm
 
-stepDepthEntry : List (Pair String Int) -> Pair String (List String) -> Pair String Int
-stepDepthEntry memo p =
+stepDepths : HashMap String Int -> List (Pair String (List String)) -> List (Pair String Int)
+stepDepths memo [] = []
+stepDepths memo (p :: rest) =
   let
     md = maxDepth memo (secondOf p)
-  in Pair (firstOf p) (if md < 0 then 0 else md + 1)
+  in Pair (firstOf p) (if md < 0 then 0 else md + 1) :: stepDepths memo rest
 
-stepDepths : List (Pair String Int) -> List (Pair String (List String)) -> List (Pair String Int)
-stepDepths memo [] = []
-stepDepths memo (p :: rest) = stepDepthEntry memo p :: stepDepths memo rest
+-- 与旧 `sameDepthValue next memo` 等价：层表键集固定（graph 的单元名），逐项比同值。
+sameDepthTable : HashMap String Int -> List (Pair String Int) -> Bool
+sameDepthTable memo [] = True
+sameDepthTable memo (p :: rest) =
+  depthOfUnit memo (firstOf p) == secondOf p && sameDepthTable memo rest
 
-sameDepthValue : List (Pair String Int) -> List (Pair String Int) -> Bool
-sameDepthValue a b = length a == length b && allDepthIn a b
-
-allDepthIn : List (Pair String Int) -> List (Pair String Int) -> Bool
-allDepthIn [] _ = True
-allDepthIn ((Pair n d) :: rest) ys = unitDepthLookup ys n == d && allDepthIn rest ys
-
-fixDepths : Int -> List (Pair String (List String)) -> List (Pair String Int) -> List (Pair String Int)
+fixDepths : Int -> List (Pair String (List String)) -> HashMap String Int -> HashMap String Int
 fixDepths fuel graph memo = if fuel <= 0 then memo
 else
   let
     next = stepDepths memo graph
-  in if sameDepthValue next memo then memo else fixDepths (fuel - 1) graph next
+  in if sameDepthTable memo next then memo else fixDepths (fuel - 1) graph (Base.HashMap.fromList next)
 
-depthEntryLess : Pair String Int -> Pair String Int -> Bool
+-- 排序键 = (depth, tieKey)；预计算后比较只碰 Int（旧实现在每次比较里跑 SHA-256）。
+depthEntryLess : Pair (Pair Int Int) String -> Pair (Pair Int Int) String -> Bool
 depthEntryLess a b =
-  if secondOf a /= secondOf b then secondOf a < secondOf b
-  else unitTieKey (firstOf a) <= unitTieKey (firstOf b)
+  if firstOf (firstOf a) /= firstOf (firstOf b) then firstOf (firstOf a) < firstOf (firstOf b)
+  else secondOf (firstOf a) <= secondOf (firstOf b)
 
-insertDepthEntry : Pair String Int -> List (Pair String Int) -> List (Pair String Int)
+insertDepthEntry : Pair (Pair Int Int) String -> List (Pair (Pair Int Int) String) -> List (Pair (Pair Int Int) String)
 insertDepthEntry x [] = [x]
 insertDepthEntry x (y :: rest) =
   if depthEntryLess x y then Base.List.Cons x (Base.List.Cons y rest)
   else Base.List.Cons y (insertDepthEntry x rest)
 
-sortDepthEntries : List (Pair String Int) -> List (Pair String Int)
+sortDepthEntries : List (Pair (Pair Int Int) String) -> List (Pair (Pair Int Int) String)
 sortDepthEntries [] = []
 sortDepthEntries (x :: rest) = insertDepthEntry x (sortDepthEntries rest)
 
-filesOfDepthEntries : List SplitFile -> List (Pair String Int) -> List SplitFile
-filesOfDepthEntries files [] = []
-filesOfDepthEntries files (p :: rest) = case findFileNamed files (firstOf p) of
-  Just f => f :: filesOfDepthEntries files rest
-  Nothing => filesOfDepthEntries files rest
-
-graphName : Pair String (List String) -> String
-graphName p = firstOf p
+-- 文件名索引：查 `${unit}.ml`；非 .ml 项与旧 `findFileNamed` 一样不参与。
+filesOfDepthEntries : HashMap String SplitFile -> List String -> List SplitFile
+filesOfDepthEntries table [] = []
+filesOfDepthEntries table (unit :: rest) = case Base.HashMap.lookup "${unit}.ml" table of
+  Just f => f :: filesOfDepthEntries table rest
+  Nothing => filesOfDepthEntries table rest
 
 canonicalTopo : List SplitFile -> List SplitFile
 canonicalTopo files =
   let
     graph = splitGraph files
-    names = map graphName graph
-    baseMemo = map (\p => Pair (firstOf p) 0) graph
-    depths = fixDepths (length names + 2) graph baseMemo
-    ordered =
-      sortDepthEntries (map (\p => Pair (firstOf p) (unitDepthLookup depths (firstOf p))) graph)
-  in map normalizeFileDeps (filesOfDepthEntries files ordered)
+    ties = tieTableOf graph
+    fileTable = Base.HashMap.fromList (map (\f => Pair (splitName f) f) files)
+    baseMemo = Base.HashMap.fromList (map (\p => Pair (firstOf p) 0) graph)
+    depths = fixDepths (length graph + 2) graph baseMemo
+    keyed =
+      map (\p => Pair (Pair (depthOfUnit depths (firstOf p)) (tieOf ties (firstOf p))) (firstOf p))
+        graph
+    ordered = map secondOf (sortDepthEntries keyed)
+  in map (normalizeFileDeps ties) (filesOfDepthEntries fileTable ordered)
 
-sortDepsByTie : List String -> List String
-sortDepsByTie [] = []
-sortDepsByTie (x :: rest) = insertDep x (sortDepsByTie rest)
+sortDepsByTie : HashMap String Int -> List String -> List String
+sortDepsByTie ties deps = map firstOf (sortDepEntries (map (\d => Pair d (tieOf ties d)) deps))
 
-insertDep : String -> List String -> List String
+sortDepEntries : List (Pair String Int) -> List (Pair String Int)
+sortDepEntries [] = []
+sortDepEntries (x :: rest) = insertDep x (sortDepEntries rest)
+
+insertDep : Pair String Int -> List (Pair String Int) -> List (Pair String Int)
 insertDep x [] = [x]
 insertDep x (y :: rest) =
-  if unitTieKey x <= unitTieKey y then Base.List.Cons x (Base.List.Cons y rest)
+  if secondOf x <= secondOf y then Base.List.Cons x (Base.List.Cons y rest)
   else Base.List.Cons y (insertDep x rest)
 
-normalizeFileDeps : SplitFile -> SplitFile
-normalizeFileDeps f = SplitFile (splitName f) (splitText f) (sortDepsByTie (splitDeps f))
+normalizeFileDeps : HashMap String Int -> SplitFile -> SplitFile
+normalizeFileDeps ties f = SplitFile (splitName f) (splitText f) (sortDepsByTie ties (splitDeps f))
 
 -- ---------------------------------------------------------------
 -- 载荷编码（split 缓存 / 单元缓存共用，C32 收口）

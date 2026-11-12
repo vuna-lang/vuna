@@ -87,6 +87,12 @@ key 是**纯字符串**（不参与哈希输入），节点分成两组：
 命中时按地址读 blob、校验 framing 四段（tag/codec/len/内容地址）后再规范解码；任何不符
 ⇒ 当作 miss 重算并重写同一路径。坏字节永远进不了解码器。
 
+**载荷顺序即产物顺序**：codec `split-files 2` 起，blob 内容在写侧就是 `canonicalTopo`
+（依赖在前的确定性拓扑序），命中路径直接按该顺序写 `.ml` 与 `build.sh`，不再重算规范化。
+这消掉了 `build-warm` 的 O(n²) 热点（119 单元时旧实现每次命中约 254 ms；见
+[performance.md](performance.md) §9）。旧 `split-files 1` 载荷因 codec 不符自然 miss 一次。
+单个 `SplitFile` 的单元缓存载荷仍是 codegen 原始形态，不受此约定影响。
+
 ## 5. 失效与清理
 
 - 失效是**内容寻址 + 依赖快照**的自然后果：源文件、依赖接口、manifest、编译器指纹任何

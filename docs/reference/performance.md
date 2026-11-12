@@ -294,7 +294,8 @@ golden 一致，再 warmup + 多次取中位数；RSS 用 GNU time 的 max RSS�
 跨机器/跨输入规模的可比口径是 `nix/checks/compiler-growth.sh`（单文件全量路径）与
 `nix/checks/compiler-growth-pkg.sh`（包路径增量收尾）的增长率门槛（§5）。
 
-当前读数（本机 16 核，`--runs 3` 中位数；2026-11 再次标定，基线已更新）：
+当前读数（本机 16 核，`--runs 3` 中位数；2026-11 标定，build-warm 行于
+2026-11-12 修复后重测）：
 
 | benchmark | 当前 ms |
 | --- | --- |
@@ -303,23 +304,44 @@ golden 一致，再 warmup + 多次取中位数；RSS 用 GNU time 的 max RSS�
 | check-warm | 53 |
 | build-all | 8717 |
 | build-compiler | 3469 |
-| build-warm | 255 |
+| build-warm | 45 |
 | map-cold | 2111 |
 | map-hot | 130 |
 | fmt-check | 1139 |
 
 **2026-11 标定的成本来源（C32 的显性代价，不是查询图引入的）**：冷路径
-（check-compiler / build-compiler / build-all）与热路径（build-warm）都比旧基线慢，原因是
-缓存载荷从 OCaml Marshal 换成了**显式规范编码 + `Store` framing（含 SHA-256 内容地址）**：
+（check-compiler / build-compiler / build-all）比旧基线慢，原因是缓存载荷从 OCaml Marshal
+换成了**显式规范编码 + `Store` framing（含 SHA-256 内容地址）**：冷路径要为每个模块编码
+payload 并算摘要（此前 Marshal 是 `Obj.magic` 级拷贝）。
 
-- 冷路径要为每个模块编码 payload 并算摘要（此前 Marshal 是 `Obj.magic` 级拷贝）；
-- `build-warm` 的 255 ms 主要是把 MB 级 split 载荷**解码**回 `List SplitFile`
-  （41 ms 旧基线时 Marshal 解码几乎免费），文件本身因内容未变不重写。
+**2026-11-12：build-warm 的归因修正与修复**。把 255 ms 归因于「MB 级 split 载荷解码」是
+错的。同机 `VUNA_DEBUG_PERF=1` 分段实测（`compiler` 包、119 单元、4.4 MB blob）：
 
-这是 C32「自描述、跨编译器版本稳定、可校验完整性」的显性代价，用
-`nix/checks/compiler-perf.sh` 的绝对门槛（warm check ≤43 ms、warm check . ≤78 ms 等）
-兜住真正影响交互的部分；大载荷热路径的优化方向是「per-file 内容寻址 blob + 小 manifest」
-（命中时直接 copy 字节、不做整体解码），记为后续项（见 [query-graph.md](query-graph.md) §6）。
+| 阶段 | 修前 |
+| --- | --- |
+| 进程启动 + 源闭包哈希（check-warm 也付） | ≈ 32 ms |
+| `sessionLoad` + blob 读/framing 校验/**解码** | 6.6 ms |
+| 写产物文件（内容未变不重写） | 3.3 ms |
+| **`canonicalTopo` + `splitGraph`** | **≈ 254 ms** |
+| `copyFfiFiles` + `build.sh` 生成 | 2 ms |
+
+`canonicalTopo` 旧实现三处叠加 O(n²)：迭代松弛每轮线性扫 memo 表、插入排序每次比较重算
+SHA-256 的 tie key、排序结果按名线性找文件。修复分两层：
+
+1. **载荷写侧规范化**：split 载荷 codec 升为 `split-files 2`，内容直接是规范拓扑序；
+   命中路径按载荷顺序写产物，不再重算 `canonicalTopo`（旧 `split-files 1` 载荷因 codec
+   不符自然 miss 一次并重写）。
+2. **`canonicalTopo` 去 O(n²)**：HashMap memo 的迭代松弛（缺失键按 0）、graph 单元 +
+   全部依赖去重后每个名字只算一次 tie key、文件名 `HashMap` 索引。未命中（冷）路径的
+   这一步同样只做一次且从 O(n²) 降到近线性（冷路径总时长由 codegen 主导）；命中（热）
+   路径为 0。
+
+同机 A/B（同一源码、同一份 blob，冷/热产物 `diff -r` 逐字节一致；修复前二进制
+`result` vs 修复后 `result-new`）：低负载窗口 build-warm **308 → 45 ms**；高负载窗口
+（宿主 load ≈50）同窗口交替 **546–567 → 79–83 ms**（均 `--runs 5` 中位数）。两个窗口
+的比值都约 6.8×，收益与负载无关。
+4.4 MB 载荷解码只需 ~6.6 ms ⇒「per-file 内容寻址 blob + 小 manifest」不是当前瓶颈，
+不再作为后续项（除非 blob 尺寸再上一个数量级；届时再按本节的阶段表复测）。
 
 `fmt-check` 相对旧基线（546）的上涨来自 HEAD 源码增长与仓内路径差异，与 2026-11 的修复无关
 （同一棵树、base/final 两个二进制的 A/B 读数一致），本轮未处理。`map-cold` 从旧基线 1502
