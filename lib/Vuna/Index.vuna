@@ -2,14 +2,12 @@ module Vuna.Index
   ( Index(..)
   , ModuleInfo(..)
   , Ref(..)
-  , SourceStat(..)
   , Sym(..)
   , buildIndex
   , findReferences
   , findSymbol
   , impactOf
   , indexModules
-  , indexStatsOf
   , listAllSymbols
   , loadOrBuild
   , loadOrBuildCheap
@@ -41,18 +39,19 @@ module Vuna.Index
 -- 目的：让 agent/人类用一条命令定位「符号在哪、谁引用它、该跑哪些测试」，而不是通读
 -- 全仓。索引只依赖 parse 级信息（AST + Span + lexComments），不跑类型检查。
 --
--- 缓存设计（阶段 4 起：查询图节点 + 内容寻址 blob；**不再有 `.local/index/`**）：
+-- 缓存设计（查询图节点 + 内容寻址 blob）：
 --   - 节点 `index:<dir>`（CLI 强依赖）/ `index-cheap:<dir>`（REPL 廉价依赖），
 --     值 = 载荷内容地址（`QRef`），会话索引落 `$TMPDIR/vuna-cache/query/<桶>/index`；
 --   - 载荷 = `Vuna.Index.Codec.encIndex` 的规范字节，落
 --     `$TMPDIR/vuna-cache/blobs/<digest>`（codec `index-payload 1`，`Store` framing）；
---   - 依赖表：强路径 = 逐源文件内容哈希 `f:<path>:<hash>`（语义等于旧 manifest 的 C11
---     判定）；廉价路径（REPL）= stat 键 `st:<path>:<bytes>:<mtime>:<hash>`，只对安全窗内
---     的文件算内容哈希（`indexStatsOf`）。
+--   - 依赖表：强路径 = 逐源文件内容哈希 `f:<path>:<hash>`（C11：同 size + 同 mtime
+--     的内容变更也失效）；廉价路径（REPL）= stat 键 `st:<path>:<bytes>:<mtime>:<hash>`，
+--     只对安全窗内的文件算内容哈希。
 --
 -- 新鲜度：每次调用先算依赖表（强路径读全部源码算哈希；廉价路径只 stat + 窗口内哈希），
--- 与节点记录的依赖表一致就读 blob 解码；否则全量重建、写 blob、提交节点。
--- 因此**没有「刷新索引」命令**：`vuna map` / `vuna api` / REPL 自己判定。
+-- 与节点记录的依赖表一致就读 blob 解码；否则全量重建、写 blob、提交节点（每次只提交
+-- 调用方选定的那一个节点）。因此**没有「刷新索引」命令**：`vuna map` / `vuna api` /
+-- REPL 自己判定。
 --
 -- 文档决策（M30）：顶层签名必填；parse 级签名就是工具链需要的语义面，不引入独立的
 -- 语义索引（D13 的语义部分由 LSP 的 DT 检查消费，不在 Index 里重复）。
@@ -65,10 +64,9 @@ module Vuna.Index
 -- 本模块只做门面重导出（对外导出集合见模块头；M30 增加 Ref/referencesAt/symbolAt，
 -- 删除 renderDocWithComments）。
 --
--- M4（效果显式化）：扫描/构建/缓存/时钟/锁这些宿主动作不再藏在纯签名里——
--- `loadOrBuild` / `buildIndex` / `indexStatsOf` 是 `Eff []` 入口（调用方在纯上下文里用
--- 一处 `runPure` 过渡包装）；`indexStatsOf` 产出的 stat 快照是 REPL 会话节点
--- `index:<dir>` 的依赖表，命中判定在 `Query`（不再有本模块的逐条比较函数）。
+-- M4（效果显式化）：扫描/构建/缓存这些宿主动作不再藏在纯签名里——`loadOrBuild` /
+-- `buildIndex` 是 `Eff []` 入口；REPL 的廉价依赖表由 `Scan` 内部维护（`indexStatsOf`
+-- 产出 stat 快照），命中判定在 `Query`。
 -- 数据模型、查找/影响面与文本渲染仍是纯函数。
 import Vuna.Index.Query
 import Vuna.Index.Render
