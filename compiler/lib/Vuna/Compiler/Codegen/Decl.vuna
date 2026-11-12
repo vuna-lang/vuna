@@ -235,32 +235,30 @@ parenOne t = "(${t})"
 -- primitive、内建类型构造子、程序数据族、显式函数、不可命名值（`Obj.t`）。这里只
 -- 做文本渲染与跨单元限定，**不含**任何表示判据。
 export irBinderText : IrBinder -> String
-irBinderText (IrBinder nm erased) = case nm of
-  IrBUser name => ocamlBinderName name
-  IrBArm n => "dtb__${strFromInt n}"
-  IrBNat n => "dtnat__${strFromInt n}"
-  IrBWild => "_"
+irBinderText (IrBinder (IrBUser name) erased) = ocamlBinderName name
+irBinderText (IrBinder (IrBArm n) erased) = "dtb__${strFromInt n}"
+irBinderText (IrBinder (IrBNat n) erased) = "dtnat__${strFromInt n}"
+irBinderText (IrBinder IrBWild erased) = "_"
 
 export irTyText : QualCtx -> IrTy -> String
-irTyText qc ty = case ty of
-  IrTyVar i => typeParamName i
-  IrTyInt => "int"
-  IrTyStr => "string"
-  IrTyBool => "bool"
-  IrTyFloat => "float"
-  IrTyOpaque => "Obj.t"
-  IrTyArray a => "(${irTyText qc a} array)"
-  IrTyRef a => "(${irTyText qc a} ref)"
-  IrTyFun d c => "(${irTyText qc d}) -> ${irTyText qc c}"
-  IrTyData fam args => familyTyText qc fam (map (irTyText qc) args)
+irTyText qc (IrTyVar i) = typeParamName i
+irTyText qc IrTyInt = "int"
+irTyText qc IrTyStr = "string"
+irTyText qc IrTyBool = "bool"
+irTyText qc IrTyFloat = "float"
+irTyText qc IrTyOpaque = "Obj.t"
+irTyText qc (IrTyArray a) = "(${irTyText qc a} array)"
+irTyText qc (IrTyRef a) = "(${irTyText qc a} ref)"
+irTyText qc (IrTyFun d c) = "(${irTyText qc d}) -> ${irTyText qc c}"
+irTyText qc (IrTyData fam args) = familyTyText qc fam (map (irTyText qc) args)
 
 -- | 单条 IR 类型声明（不带 `type ` 前缀、不带 `\nand ` 连接符）。
 export irTyDeclText : QualCtx -> IrTyDecl -> String
-irTyDeclText qc decl = case decl of
-  IrVariantDecl name n ctors => "${typeParamDecl n}${typeName name} = ${ctorBodyOf qc name ctors}"
-  IrRecordDecl name n fields tys =>
-    "${typeParamDecl n}${typeName name} = { ${joinWith "; " (recordFieldDecls qc name fields tys)} }"
-  IrUnboxedDecl name n ty => "${typeParamDecl n}${typeName name} = ${irTyText qc ty}"
+irTyDeclText qc (IrVariantDecl name n ctors) =
+  "${typeParamDecl n}${typeName name} = ${ctorBodyOf qc name ctors}"
+irTyDeclText qc (IrRecordDecl name n fields tys) =
+  "${typeParamDecl n}${typeName name} = { ${joinWith "; " (recordFieldDecls qc name fields tys)} }"
+irTyDeclText qc (IrUnboxedDecl name n ty) = "${typeParamDecl n}${typeName name} = ${irTyText qc ty}"
 
 ctorBodyOf : QualCtx -> String -> List (Pair String (List IrTy)) -> String
 ctorBodyOf qc family [] = "|"
@@ -286,17 +284,16 @@ export irTyDeclDeps : QualCtx -> List IrTy -> List String
 irTyDeclDeps qc tys = irTyDepsGo qc (concatMap irTyGlobalNames tys) []
 
 irTyGlobalNames : IrTy -> List String
-irTyGlobalNames ty = case ty of
-  IrTyVar i => []
-  IrTyInt => []
-  IrTyStr => []
-  IrTyBool => []
-  IrTyFloat => []
-  IrTyOpaque => []
-  IrTyArray a => irTyGlobalNames a
-  IrTyRef a => irTyGlobalNames a
-  IrTyFun d c => append (irTyGlobalNames d) (irTyGlobalNames c)
-  IrTyData fam args => fam :: concatMap irTyGlobalNames args
+irTyGlobalNames (IrTyVar i) = []
+irTyGlobalNames IrTyInt = []
+irTyGlobalNames IrTyStr = []
+irTyGlobalNames IrTyBool = []
+irTyGlobalNames IrTyFloat = []
+irTyGlobalNames IrTyOpaque = []
+irTyGlobalNames (IrTyArray a) = irTyGlobalNames a
+irTyGlobalNames (IrTyRef a) = irTyGlobalNames a
+irTyGlobalNames (IrTyFun d c) = append (irTyGlobalNames d) (irTyGlobalNames c)
+irTyGlobalNames (IrTyData fam args) = fam :: concatMap irTyGlobalNames args
 
 irTyDepsGo : QualCtx -> List String -> List String -> List String
 irTyDepsGo qc [] acc = reverse acc

@@ -931,13 +931,12 @@ dtRuntimeWith locs usesFloat usesTrace =
 -- 归纳族。这些 helper 按实际族名生成，把 int list ↔ 族构造子互转；Lowering 把
 -- `strUnpack`/`strPack` 映射到 `IrBridge`（桥接只服务 Int 元素）。
 export dtListBridge : Maybe IrListFam -> String
-dtListBridge listFam = case listFam of
-  Nothing => ""
-  Just lf =>
-    let
-      nilMl = ctorOcamlName (irListFamilyOf lf) (irListNilOf lf)
-      consMl = ctorOcamlName (irListFamilyOf lf) (irListConsOf lf)
-    in """
+dtListBridge Nothing = ""
+dtListBridge (Just lf) =
+  let
+    nilMl = ctorOcamlName (irListFamilyOf lf) (irListNilOf lf)
+    consMl = ctorOcamlName (irListFamilyOf lf) (irListConsOf lf)
+  in """
 
 let dtp_unpack (s : string) =
   let cs = List.init (String.length s) (fun i -> Char.code s.[i]) in
@@ -1089,112 +1088,113 @@ effUnitTypeNameIr = "Base.Eff.EffUnit"
 -- IR 节点 → OCaml 文本
 -- ---------------------------------------------------------------
 export genIr : GenSt -> Ir -> Check (Pair String GenSt)
-genIr st ir = case ir of
-  IrVar b => OkC (Pair (irBinderText b) st)
-  IrGlobal name =>
+genIr st node = genIrNode st node
+
+genIrNode : GenSt -> Ir -> Check (Pair String GenSt)
+genIrNode st (IrVar b) = OkC (Pair (irBinderText b) st)
+genIrNode st (IrGlobal name) =
+  let
+    p = genValueRef st name
+  in OkC (Pair (firstOf p) (secondOf p))
+genIrNode st (IrCtor family ctor args) = Vuna.Compiler.Common.bind (genIrArgs st args) (\p => case p of
+  Pair texts st1 =>
     let
-      p = genValueRef st name
-    in OkC (Pair (firstOf p) (secondOf p))
-  IrCtor family ctor args => Vuna.Compiler.Common.bind (genIrArgs st args) (\p => case p of
-    Pair texts st1 =>
+      r = genCtorRef st1 family ctor
+    in OkC (Pair (conAppText (firstOf r) texts) (secondOf r))
+)
+genIrNode st (IrRecord family fields) = Vuna.Compiler.Common.bind (genAssignedFields st family fields) (\p => case p of
+  Pair texts st1 => OkC (Pair "{ ${joinWith "; " texts} }" (gsDepOfFamily st1 family))
+)
+genIrNode st (IrProj base family field) = Vuna.Compiler.Common.bind (genIr st base) (\p => case p of
+  Pair baseText st1 =>
+    let
+      st2 = gsDepOfFamily st1 family
+      label = recordFieldLabel family field
+    in OkC (Pair "(${baseText}).${recordLabelOf st2 family label}" st2)
+)
+genIrNode st (IrRecUpd base family fields) = Vuna.Compiler.Common.bind (genIr st base) (\p => case p of
+  Pair baseText st1 => Vuna.Compiler.Common.bind (genAssignedFields st1 family fields) (\q => case q of
+    Pair texts st2 =>
+      OkC (Pair "{ ${baseText} with ${joinWith "; " texts} }" (gsDepOfFamily st2 family))
+  )
+)
+genIrNode st (IrRuntime text) = OkC (Pair text st)
+genIrNode st (IrBridge text) =
+  let
+    p = genBridgeRef st text
+  in OkC (Pair (firstOf p) (secondOf p))
+genIrNode st (IrCast inner) = Vuna.Compiler.Common.bind (genIr st inner) (\p => case p of
+  Pair text st1 => OkC (Pair "(Obj.magic ${text})" st1)
+)
+genIrNode st (IrInt n) = OkC (Pair (strFromInt n) st)
+genIrNode st (IrStr s) = OkC (Pair (ocamlString s) st)
+genIrNode st (IrBool b) = OkC (Pair (boolText b) st)
+genIrNode st (IrFloatLit raw) = OkC (Pair raw st)
+genIrNode st (IrLet bs scrut body) = Vuna.Compiler.Common.bind (genIr st scrut) (\p => case p of
+  Pair scrutText st1 => Vuna.Compiler.Common.bind (genIr st1 body) (\q => case q of
+    Pair bodyText st2 => case filter (\n => n /= "") (map nonErasedBinderText bs) of
+      [] => OkC (Pair "(let _ = ${scrutText} in ${bodyText})" st2)
+      pat :: rest => case rest of
+        [] => OkC (Pair "(let ${pat} = ${scrutText} in ${bodyText})" st2)
+        _ => icInternal "unboxed case arm has more than one runtime binder"
+  )
+)
+genIrNode st (IrLam bs body) =
+  let
+    params = filter (\n => n /= "") (map nonErasedBinderText bs)
+  in Vuna.Compiler.Common.bind (genIr st body) (\p => case p of
+    Pair bodyText st1 => case params of
+      [] => OkC (Pair bodyText st1)
+      _ => OkC (Pair "(fun ${joinWith " " params} -> ${bodyText})" st1)
+  )
+genIrNode st (IrApp f a) = Vuna.Compiler.Common.bind (genIr st f) (\p => case p of
+  Pair fText st1 => Vuna.Compiler.Common.bind (genIr st1 a) (\q => case q of
+    Pair aText st2 => OkC (Pair "(${fText} ${aText})" st2)
+  )
+)
+genIrNode st (IrIf c th el) = Vuna.Compiler.Common.bind (genIr st c) (\p => case p of
+  Pair cText st1 => Vuna.Compiler.Common.bind (genIr st1 th) (\q => case q of
+    Pair tText st2 => Vuna.Compiler.Common.bind (genIr st2 el) (\r => case r of
+      Pair eText st3 => OkC (Pair "(if ${cText} then ${tText} else ${eText})" st3)
+    )
+  )
+)
+genIrNode st (IrCase scrut alts) = Vuna.Compiler.Common.bind (genIr st scrut) (\p => case p of
+  Pair scrutText st1 => Vuna.Compiler.Common.bind (genArms st1 alts) (\q => case q of
+    Pair arms st2 =>
       let
-        r = genCtorRef st1 family ctor
-      in OkC (Pair (conAppText (firstOf r) texts) (secondOf r))
+        fallback = if hasCatchAll alts then "" else "  | _ -> failwith \"DT: impossible branch\"\n"
+      in OkC (Pair "(match ${scrutText} with\n${arms}${fallback})" st2)
   )
-  IrRecord family fields => Vuna.Compiler.Common.bind (genAssignedFields st family fields) (\p => case p of
-    Pair texts st1 => OkC (Pair "{ ${joinWith "; " texts} }" (gsDepOfFamily st1 family))
+)
+genIrNode st (IrNatCase scrut fresh zero succ catch) = Vuna.Compiler.Common.bind (genIr st scrut) (\p => case p of
+  Pair scrutText st1 => Vuna.Compiler.Common.bind (genNatBranches st1 fresh zero succ catch) (\q => case q of
+    Pair branches st2 =>
+      OkC (Pair "(let dtnat__${strFromInt fresh} = ${scrutText} in ${branches})" st2)
   )
-  IrProj base family field => Vuna.Compiler.Common.bind (genIr st base) (\p => case p of
-    Pair baseText st1 =>
-      let
-        st2 = gsDepOfFamily st1 family
-        label = recordFieldLabel family field
-      in OkC (Pair "(${baseText}).${recordLabelOf st2 family label}" st2)
-  )
-  IrRecUpd base family fields => Vuna.Compiler.Common.bind (genIr st base) (\p => case p of
-    Pair baseText st1 => Vuna.Compiler.Common.bind (genAssignedFields st1 family fields) (\q => case q of
-      Pair texts st2 =>
-        OkC (Pair "{ ${baseText} with ${joinWith "; " texts} }" (gsDepOfFamily st2 family))
-    )
-  )
-  IrRuntime text => OkC (Pair text st)
-  IrBridge text =>
+)
+genIrNode st (IrInline name args) = Vuna.Compiler.Common.bind (genIrArgs st args) (\p => case p of
+  Pair texts st1 => case inlineText name texts of
+    Just text => OkC (Pair text st1)
+    Nothing => icInternal "no inline text for builtin `${name}`"
+)
+genIrNode st (IrConcatMany parts) = Vuna.Compiler.Common.bind (genIrArgs st parts) (\p => case p of
+  Pair texts st1 => OkC (Pair "(String.concat \"\" [${joinWith "; " texts}])" st1)
+)
+genIrNode st (IrEffThunk family ctor unitTy arity prim) = Vuna.Compiler.Common.bind (genIr st prim) (\p => case p of
+  Pair primText st1 =>
     let
-      p = genBridgeRef st text
-    in OkC (Pair (firstOf p) (secondOf p))
-  IrCast inner => Vuna.Compiler.Common.bind (genIr st inner) (\p => case p of
-    Pair text st1 => OkC (Pair "(Obj.magic ${text})" st1)
-  )
-  IrInt n => OkC (Pair (strFromInt n) st)
-  IrStr s => OkC (Pair (ocamlString s) st)
-  IrBool b => OkC (Pair (boolText b) st)
-  IrFloatLit raw => OkC (Pair raw st)
-  IrLet bs scrut body => Vuna.Compiler.Common.bind (genIr st scrut) (\p => case p of
-    Pair scrutText st1 => Vuna.Compiler.Common.bind (genIr st1 body) (\q => case q of
-      Pair bodyText st2 => case filter (\n => n /= "") (map nonErasedBinderText bs) of
-        [] => OkC (Pair "(let _ = ${scrutText} in ${bodyText})" st2)
-        pat :: rest => case rest of
-          [] => OkC (Pair "(let ${pat} = ${scrutText} in ${bodyText})" st2)
-          _ => icInternal "unboxed case arm has more than one runtime binder"
-    )
-  )
-  IrLam bs body =>
-    let
-      params = filter (\n => n /= "") (map nonErasedBinderText bs)
-    in Vuna.Compiler.Common.bind (genIr st body) (\p => case p of
-      Pair bodyText st1 => case params of
-        [] => OkC (Pair bodyText st1)
-        _ => OkC (Pair "(fun ${joinWith " " params} -> ${bodyText})" st1)
-    )
-  IrApp f a => Vuna.Compiler.Common.bind (genIr st f) (\p => case p of
-    Pair fText st1 => Vuna.Compiler.Common.bind (genIr st1 a) (\q => case q of
-      Pair aText st2 => OkC (Pair "(${fText} ${aText})" st2)
-    )
-  )
-  IrIf c th el => Vuna.Compiler.Common.bind (genIr st c) (\p => case p of
-    Pair cText st1 => Vuna.Compiler.Common.bind (genIr st1 th) (\q => case q of
-      Pair tText st2 => Vuna.Compiler.Common.bind (genIr st2 el) (\r => case r of
-        Pair eText st3 => OkC (Pair "(if ${cText} then ${tText} else ${eText})" st3)
-      )
-    )
-  )
-  IrCase scrut alts => Vuna.Compiler.Common.bind (genIr st scrut) (\p => case p of
-    Pair scrutText st1 => Vuna.Compiler.Common.bind (genArms st1 alts) (\q => case q of
-      Pair arms st2 =>
-        let
-          fallback =
-            if hasCatchAll alts then "" else "  | _ -> failwith \"DT: impossible branch\"\n"
-        in OkC (Pair "(match ${scrutText} with\n${arms}${fallback})" st2)
-    )
-  )
-  IrNatCase scrut fresh zero succ catch => Vuna.Compiler.Common.bind (genIr st scrut) (\p => case p of
-    Pair scrutText st1 => Vuna.Compiler.Common.bind (genNatBranches st1 fresh zero succ catch) (\q => case q of
-      Pair branches st2 =>
-        OkC (Pair "(let dtnat__${strFromInt fresh} = ${scrutText} in ${branches})" st2)
-    )
-  )
-  IrInline name args => Vuna.Compiler.Common.bind (genIrArgs st args) (\p => case p of
-    Pair texts st1 => case inlineText name texts of
-      Just text => OkC (Pair text st1)
-      Nothing => icInternal "no inline text for builtin `${name}`"
-  )
-  IrConcatMany parts => Vuna.Compiler.Common.bind (genIrArgs st parts) (\p => case p of
-    Pair texts st1 => OkC (Pair "(String.concat \"\" [${joinWith "; " texts}])" st1)
-  )
-  IrEffThunk family ctor unitTy arity prim => Vuna.Compiler.Common.bind (genIr st prim) (\p => case p of
-    Pair primText st1 =>
-      let
-        ctorP = genCtorRef st1 family ctor
-        st2 = gsDepOfFamily (secondOf ctorP) family
-      in OkC (Pair (effThunkText (firstOf ctorP) (irTyText st2.gsQual unitTy) primText arity) st2)
-  )
-  IrEffBind family ctor unitTy =>
-    let
-      ctorP = genCtorRef st family ctor
-      st1 = gsDepOfFamily (secondOf ctorP) family
-      unitText = irTyText st1.gsQual unitTy
-    in OkC
-      (Pair "(fun m k -> ${firstOf ctorP} (fun (u : ${unitText}) -> match m with ${firstOf ctorP} f -> (match k (f u) with ${firstOf ctorP} g -> g u)))" st1)
+      ctorP = genCtorRef st1 family ctor
+      st2 = gsDepOfFamily (secondOf ctorP) family
+    in OkC (Pair (effThunkText (firstOf ctorP) (irTyText st2.gsQual unitTy) primText arity) st2)
+)
+genIrNode st (IrEffBind family ctor unitTy) =
+  let
+    ctorP = genCtorRef st family ctor
+    st1 = gsDepOfFamily (secondOf ctorP) family
+    unitText = irTyText st1.gsQual unitTy
+  in OkC
+    (Pair "(fun m k -> ${firstOf ctorP} (fun (u : ${unitText}) -> match m with ${firstOf ctorP} f -> (match k (f u) with ${firstOf ctorP} g -> g u)))" st1)
 
 -- Eff 原语：运行时仍是 eager 函数，但结果必须是装箱的 `MkEff`（Eff 是 base data）。
 -- 生成 `MkEff (fun (_ : EffUnit) -> rt args)`。
@@ -1238,7 +1238,8 @@ genAssignedFields st family (f :: rest) = Vuna.Compiler.Common.bind (genIr st (s
 )
 
 nonErasedBinderText : IrBinder -> String
-nonErasedBinderText (IrBinder nm erased) = if erased then "" else irBinderText (IrBinder nm erased)
+nonErasedBinderText (IrBinder nm True) = ""
+nonErasedBinderText (IrBinder nm False) = irBinderText (IrBinder nm False)
 
 hasCatchAll : List IrAlt -> Bool
 hasCatchAll [] = False
@@ -1282,13 +1283,11 @@ recordPatText st family fields pats =
   "{ ${joinWith "; " (recordPatAssigned st family fields pats)} }"
 
 recordPatAssigned : GenSt -> String -> List (Pair Int String) -> List String -> List String
-recordPatAssigned st family fields pats = case fields of
-  [] => []
-  f :: fs => case pats of
-    [] => []
-    p :: ps =>
-      "${recordLabelOf st family (recordFieldLabel family (secondOf f))} = ${p}"
-        :: recordPatAssigned st family fs ps
+recordPatAssigned st family [] pats = []
+recordPatAssigned st family fields [] = []
+recordPatAssigned st family (f :: fs) (p :: ps) =
+  "${recordLabelOf st family (recordFieldLabel family (secondOf f))} = ${p}"
+    :: recordPatAssigned st family fs ps
 
 armPatternText : String -> List String -> String
 armPatternText cname [] = cname

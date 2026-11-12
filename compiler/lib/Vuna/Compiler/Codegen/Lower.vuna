@@ -1106,9 +1106,9 @@ recursiveValueAllowedIn _ = False
 
 -- 入口单元零参 `main`：模块初始化期求值，要套运行时报告器（旧 `mainInitWrap`）。
 initGuardOf : LwEnv -> Bool -> String -> Term -> Bool
-initGuardOf env isRec name body =
-  if isRec then False
-  else if env.lwUnit == "Main" && name == "main" && runtimeArityIn body == 0 then True else False
+initGuardOf env True name body = False
+initGuardOf env False name body =
+  if env.lwUnit == "Main" && name == "main" && runtimeArityIn body == 0 then True else False
 
 -- 单个运行时定义 → `IrDef`（extern 走 `IrExternDef`）。
 -- 单个运行时定义 → `IrDef`（extern 走 `IrExternDef`）。
@@ -1350,10 +1350,9 @@ tyDeclRefs : List IrTyDecl -> List String
 tyDeclRefs decls = tyDeclRefsGo (map tyDeclTys decls) []
 
 tyDeclTys : IrTyDecl -> List IrTy
-tyDeclTys decl = case decl of
-  IrVariantDecl name n ctors => concatMap secondOf ctors
-  IrRecordDecl name n fields tys => tys
-  IrUnboxedDecl name n ty => [ty]
+tyDeclTys (IrVariantDecl name n ctors) = concatMap secondOf ctors
+tyDeclTys (IrRecordDecl name n fields tys) = tys
+tyDeclTys (IrUnboxedDecl name n ty) = [ty]
 
 tyDeclRefsGo : List (List IrTy) -> List String -> List String
 tyDeclRefsGo [] acc = reverse acc
@@ -1364,17 +1363,16 @@ foldlTyNames [] acc = acc
 foldlTyNames (t :: rest) acc = foldlTyNames rest (tyNamesInto t acc)
 
 tyNamesInto : IrTy -> List String -> List String
-tyNamesInto ty acc = case ty of
-  IrTyVar i => acc
-  IrTyInt => acc
-  IrTyStr => acc
-  IrTyBool => acc
-  IrTyFloat => acc
-  IrTyOpaque => acc
-  IrTyArray a => tyNamesInto a acc
-  IrTyRef a => tyNamesInto a acc
-  IrTyFun d c => tyNamesInto c (tyNamesInto d acc)
-  IrTyData fam args => foldlTyNames args (pushDep fam acc)
+tyNamesInto (IrTyVar i) acc = acc
+tyNamesInto IrTyInt acc = acc
+tyNamesInto IrTyStr acc = acc
+tyNamesInto IrTyBool acc = acc
+tyNamesInto IrTyFloat acc = acc
+tyNamesInto IrTyOpaque acc = acc
+tyNamesInto (IrTyArray a) acc = tyNamesInto a acc
+tyNamesInto (IrTyRef a) acc = tyNamesInto a acc
+tyNamesInto (IrTyFun d c) acc = tyNamesInto c (tyNamesInto d acc)
+tyNamesInto (IrTyData fam args) acc = foldlTyNames args (pushDep fam acc)
 
 adjOfDef : LwEnv -> DtDef -> Pair String (List String)
 adjOfDef env d = Pair (dtDefName d) (depsOfBody env (bodyOrDummy d))

@@ -262,9 +262,8 @@ assembleGroupNames adj names recOk spanOf =
   groupNamesGo (adjTblOf adj) names (groupNames adj names) recOk spanOf
 
 groupNamesGo : HashMap String (List String) -> List String -> Check (List (List String)) -> (String -> Bool) -> (String -> Maybe Span) -> Check (List (Pair Bool (List String)))
-groupNamesGo adjT names groupsR recOk spanOf = case groupsR of
-  ErrC e => ErrC e
-  OkC groups => assembleGo adjT groups recOk spanOf
+groupNamesGo adjT names (ErrC e) recOk spanOf = ErrC e
+groupNamesGo adjT names (OkC groups) recOk spanOf = assembleGo adjT groups recOk spanOf
 
 assembleGo : HashMap String (List String) -> List (List String) -> (String -> Bool) -> (String -> Maybe Span) -> Check (List (Pair Bool (List String)))
 assembleGo adjT [] recOk spanOf = OkC []
