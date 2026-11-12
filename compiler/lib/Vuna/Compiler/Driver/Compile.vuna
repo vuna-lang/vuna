@@ -1702,9 +1702,9 @@ ownSourceInfos ctx = do
 resyncCleanSources : List (Pair String SourceInfo) -> List ModuleIface -> List ModuleIface
 resyncCleanSources sources clean = map (\m => case lookupPair (miNameOf m) sources of
   Just si =>
-    ModuleIface (miNameOf m) (miPackageOf m) si (miIfaceHashOf m) (miDepHashesOf m) (miImportsOf m)
-      (miImplicitImportsOf m) (miExportsOf m) (miFixitiesOf m) (miDeclsOf m) (miRecordsOf m)
-      (miPreparedOf m) (miCachedOf m) (miDefLocsOf m)
+    ModuleIface (miNameOf m) (miPackageOf m) si (miIfaceHashOf m) (miImplHashOf m) (miDepHashesOf m)
+      (miImportsOf m) (miImplicitImportsOf m) (miExportsOf m) (miFixitiesOf m) (miDeclsOf m)
+      (miRecordsOf m) (miPreparedOf m) (miCachedOf m) (miDefLocsOf m)
   Nothing => m
 ) clean
 
