@@ -22,22 +22,21 @@ run: sh -c 'split=$(cat "$TMPDIR/c32-split-path"); off=$(( $(stat -c %s "$split"
 run: diff -r "$TMPDIR/c32-clean" "$TMPDIR/c32-out2"
 run: sh -c 'split=$(cat "$TMPDIR/c32-split-path"); head -c 18 "$split"'
 out-equals: vuna-cache-frame 2
-# 52d) check 缓存：marker 载荷（0 字节）全部截断后必须视为未命中（重算并覆盖），不能静默当成功。
-#      两个包各有一份 marker：截断后**两个包都要重跑**，否则未被重跑的包会留下截断文件
-#      （只有被读到的坏条目才会被重写）。
+# 52d) check 结果：阶段 2 起是**查询图节点**（`check:<pkg>:<kind>`，值 = QMarker），
+#      落在 `$TMPDIR/vuna-cache/query/<包桶>/index`（`Store` framing，codec `query-index 1`）。
+#      截断索引后必须视为未命中（重算并覆盖），不能静默当成功。
 run: sh -c 'rm -rf "$TMPDIR/c32-check-cache"; TMPDIR="$TMPDIR/c32-check-cache" "$VUNA" check "$TMPDIR/c32-pkg/dep" >/dev/null 2>&1; TMPDIR="$TMPDIR/c32-check-cache" "$VUNA" check "$TMPDIR/c32-pkg/root" >/dev/null 2>&1'
-run: sh -c 'for f in $(find "$TMPDIR/c32-check-cache"/vuna-cache -path "*/check/*" -type f 2>/dev/null); do head -c 40 "$f" > "$f.part"; mv "$f.part" "$f"; done; TMPDIR="$TMPDIR/c32-check-cache" "$VUNA" check "$TMPDIR/c32-pkg/dep" >/dev/null 2>&1; TMPDIR="$TMPDIR/c32-check-cache" VUNA_DEBUG_PERF=1 "$VUNA" check "$TMPDIR/c32-pkg/root" 2>&1 | tee "$TMPDIR/c32-check.log"'
-out-contains: cache-path=
-run: sh -c 'ok=1; for f in $(find "$TMPDIR/c32-check-cache"/vuna-cache -path "*/check/*" -type f 2>/dev/null); do [ "$(head -c 18 "$f")" = "vuna-cache-frame 2" ] || ok=0; done; [ "$ok" -eq 1 ]'
-# check marker 载荷 0 字节：framing 头声明 len=0、codec=check-marker 1（写放大关闭的直接断言）。
-run: sh -c 'for f in $(find "$TMPDIR/c32-check-cache"/vuna-cache -path "*/check/*" -type f 2>/dev/null); do [ "$(head -1 "$f" | cut -d"|" -f3)" = "check-marker 1" ] || exit 1; [ "$(head -1 "$f" | cut -d"|" -f4)" = "0" ] || exit 1; done'
-exit: 0
+run: sh -c 'ok=1; n=0; for f in $(find "$TMPDIR/c32-check-cache"/vuna-cache/query -type f 2>/dev/null); do n=$((n + 1)); [ "$(head -c 18 "$f")" = "vuna-cache-frame 2" ] || ok=0; [ "$(head -1 "$f" | cut -d"|" -f3)" = "query-index 1" ] || ok=0; done; [ "$n" -ge 2 ] && [ "$ok" -eq 1 ]'
+# 全部截断（只留头行的一小截）⇒ 两个包都重新检查并重写索引，日志里出现 query-miss。
+run: sh -c 'for f in $(find "$TMPDIR/c32-check-cache"/vuna-cache/query -type f 2>/dev/null); do head -c 40 "$f" > "$f.part"; mv "$f.part" "$f"; done; TMPDIR="$TMPDIR/c32-check-cache" VUNA_DEBUG_PERF=1 "$VUNA" check "$TMPDIR/c32-pkg/dep" 2>&1 | tee "$TMPDIR/c32-check.log"'
+out-contains: query-miss check:dep:lib:
+run: sh -c 'ok=1; for f in $(find "$TMPDIR/c32-check-cache"/vuna-cache/query -type f 2>/dev/null); do [ "$(head -c 18 "$f")" = "vuna-cache-frame 2" ] || ok=0; done; [ "$ok" -eq 1 ]'
 # 52e) lex 缓存：全部截断后照常 lex 并重写（旧 Marshal 实现会 Marshal.from_string 崩溃）。
-run: sh -c 'rm -rf "$TMPDIR/c32-lex-cache"; TMPDIR="$TMPDIR/c32-lex-cache" "$VUNA" check "$TMPDIR/c32-pkg/root" >/dev/null 2>&1; TMPDIR="$TMPDIR/c32-lex-cache" "$VUNA" check "$TMPDIR/c32-pkg/root" >/dev/null 2>&1; list=$(find "$TMPDIR/c32-lex-cache/vuna-cache/lex" -type f 2>/dev/null); [ -n "$list" ] || exit 1; printf "%s\n" "$list" | wc -l | tr -d " " > "$TMPDIR/c32-lex-count"; for f in $list; do head -c 8 "$f" > "$f.part"; mv "$f.part" "$f"; done; rm -rf "$TMPDIR/c32-lex-cache"/vuna-cache/*/check'
+run: sh -c 'rm -rf "$TMPDIR/c32-lex-cache"; TMPDIR="$TMPDIR/c32-lex-cache" "$VUNA" check "$TMPDIR/c32-pkg/root" >/dev/null 2>&1; TMPDIR="$TMPDIR/c32-lex-cache" "$VUNA" check "$TMPDIR/c32-pkg/root" >/dev/null 2>&1; list=$(find "$TMPDIR/c32-lex-cache/vuna-cache/lex" -type f 2>/dev/null); [ -n "$list" ] || exit 1; printf "%s\n" "$list" | wc -l | tr -d " " > "$TMPDIR/c32-lex-count"; for f in $list; do head -c 8 "$f" > "$f.part"; mv "$f.part" "$f"; done; rm -rf "$TMPDIR/c32-lex-cache"/vuna-cache/query'
 run: sh -c 'TMPDIR="$TMPDIR/c32-lex-cache" "$VUNA" check "$TMPDIR/c32-pkg/root" >/dev/null 2>&1'
 run: sh -c 'n=$(cat "$TMPDIR/c32-lex-count"); framed=0; for f in $(find "$TMPDIR/c32-lex-cache/vuna-cache/lex" -type f 2>/dev/null); do [ "$(head -c 18 "$f")" = "vuna-cache-frame 2" ] && framed=$((framed + 1)); done; [ "$framed" -eq "$n" ]'
 # 52f) codec 不符：把某个 lex 条目的 codec 改成别的名字（tag/len/内容地址都不动）
 #      ⇒ 读侧必须拒绝、重新 lex 并重写同一个文件（路径 = key，内容寻址）。
-run: sh -c 'f=$(find "$TMPDIR/c32-lex-cache/vuna-cache/lex" -type f | head -1); printf "%s" "$f" > "$TMPDIR/c32-codec-path"; sed -i "1s/|lex-tokens 1|/|bogus-codec 9|/" "$f"; rm -rf "$TMPDIR/c32-lex-cache"/vuna-cache/*/check; TMPDIR="$TMPDIR/c32-lex-cache" "$VUNA" check "$TMPDIR/c32-pkg/root" >/dev/null 2>&1'
+run: sh -c 'f=$(find "$TMPDIR/c32-lex-cache/vuna-cache/lex" -type f | head -1); printf "%s" "$f" > "$TMPDIR/c32-codec-path"; sed -i "1s/|lex-tokens 1|/|bogus-codec 9|/" "$f"; rm -rf "$TMPDIR/c32-lex-cache"/vuna-cache/query; TMPDIR="$TMPDIR/c32-lex-cache" "$VUNA" check "$TMPDIR/c32-pkg/root" >/dev/null 2>&1'
 run: sh -c 'f=$(cat "$TMPDIR/c32-codec-path"); head -1 "$f" | cut -d"|" -f3'
 out-equals: lex-tokens 1

@@ -84,6 +84,7 @@ modules = [
   "Vuna.Compiler.Codegen.Split",
   "Vuna.Compiler.Driver.Split",
   "Vuna.Compiler.Driver.Dt",
+  "Vuna.Compiler.Driver.Graph",
   "Vuna.Compiler.Driver.Compile",
   "Vuna.Compiler.Driver.Cache",
   "Vuna.Compiler.Driver.DiagRender",

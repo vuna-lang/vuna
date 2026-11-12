@@ -13,13 +13,13 @@ exit: 0
 out-contains: iface-selftest=ok
 # 接口布局：base 的镜像目录（VUNA_IFACE_DIR + 包绝对路径）下有 manifest + iface 文件。
 run: sh -c 'm="$VUNA_IFACE_DIR$(cd "$VUNA_BASE" && pwd)"; [ -f "$m/.vuna-iface" ] && find "$m" -name "*.iface" | grep -q .'
-run: sh -c 'find "$TMPDIR/summary-cache"/vuna-cache -name check -type d -prune -exec rm -rf {} + 2>/dev/null || true'
+run: sh -c 'find "$TMPDIR/summary-cache"/vuna-cache -name query -type d -prune -exec rm -rf {} + 2>/dev/null || true'
 run: TMPDIR="$TMPDIR/summary-cache" VUNA_IFACE_SELFTEST=1 "$VUNA" check "$VUNA_BASE" --debug-perf
 exit: 0
 out-contains: iface-write=0/
 # 损坏一个模块接口文件（保留路径供后续断言它被修复）；清缓存后重算 ⇒ 回退全量并重写。
 run: sh -c 'm="$VUNA_IFACE_DIR$(cd "$VUNA_BASE" && pwd)"; f=$(find "$m" -name "*.iface" | head -1); printf "not-a-valid-iface" > "$f"; printf "%s" "$f" > "$TMPDIR/corrupt-iface"'
-run: sh -c 'find "$TMPDIR/summary-cache"/vuna-cache -name check -type d -prune -exec rm -rf {} + 2>/dev/null || true'
+run: sh -c 'find "$TMPDIR/summary-cache"/vuna-cache -name query -type d -prune -exec rm -rf {} + 2>/dev/null || true'
 run: TMPDIR="$TMPDIR/summary-cache" VUNA_IFACE_SELFTEST=1 "$VUNA" check "$VUNA_BASE" --debug-perf
 exit: 0
 out-contains: cache-path=summary deps=0

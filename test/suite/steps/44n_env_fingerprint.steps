@@ -7,11 +7,11 @@ run: sh -c 'TMPDIR="$TMPDIR/iface-audit-cache" "$VUNA" check "$TMPDIR/iface-audi
 exit: 0
 # 只改包环境（追加注释），模块源码不变。
 run: sh -c 'printf "\n# env fingerprint probe\n" >> "$TMPDIR/iface-audit-pkg/mid/vuna.toml"'
-run: sh -c 'find "$TMPDIR/iface-audit-cache"/vuna-cache -name check -type d -prune -exec rm -rf {} + 2>/dev/null || true'
+run: sh -c 'find "$TMPDIR/iface-audit-cache"/vuna-cache -name query -type d -prune -exec rm -rf {} + 2>/dev/null || true'
 run: TMPDIR="$TMPDIR/iface-audit-cache" "$VUNA" check "$TMPDIR/iface-audit-pkg/mid" --debug-perf
 exit: 0
 out-contains: iface-reject=own-env
-run: sh -c 'find "$TMPDIR/iface-audit-cache"/vuna-cache -name check -type d -prune -exec rm -rf {} + 2>/dev/null || true'
+run: sh -c 'find "$TMPDIR/iface-audit-cache"/vuna-cache -name query -type d -prune -exec rm -rf {} + 2>/dev/null || true'
 run: TMPDIR="$TMPDIR/iface-audit-cache" "$VUNA" check "$TMPDIR/iface-audit-pkg/mid" --debug-perf
 exit: 0
 out-contains: iface-write=0/

@@ -12,7 +12,7 @@ run: sh -c 'log="$TMPDIR/incr.log"; total=$(grep -o "iface-write=[0-9]*/[0-9]*" 
 # 改动模块被写回：iface-write >= 1。
 run: sh -c 'log="$TMPDIR/incr.log"; writes=$(grep -o "iface-write=[0-9]*" "$log" | head -1 | cut -d= -f2); [ -n "$writes" ] && [ "$writes" -ge 1 ]'
 # 删掉 check 缓存后重跑：全部命中 clean、零 iface 写（收敛）。
-run: sh -c 'rm -rf "$TMPDIR/incr-cache"/vuna-cache/*/check; TMPDIR="$TMPDIR/incr-cache" "$VUNA" check "$TMPDIR/incr-base" --debug-perf > "$TMPDIR/incr2.log" 2>&1'
+run: sh -c 'rm -rf "$TMPDIR/incr-cache"/vuna-cache/query; TMPDIR="$TMPDIR/incr-cache" "$VUNA" check "$TMPDIR/incr-base" --debug-perf > "$TMPDIR/incr2.log" 2>&1'
 run: sh -c 'log="$TMPDIR/incr2.log"; total=$(grep -o "iface-write=[0-9]*/[0-9]*" "$log" | head -1 | cut -d/ -f2); [ -n "$total" ] && grep -qF "cache-own-clean=$total" "$log"'
 read: $TMPDIR/incr2.log
 out-contains: iface-write=0/

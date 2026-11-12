@@ -13,11 +13,11 @@ run: sh -c 'TMPDIR="$TMPDIR/iface-origin-cache" "$VUNA" lsp < "$TMPDIR/lsp-origi
 exit: 0
 # manifest 里出现 tool 来源条目。
 run: sh -c 'mf="$VUNA_IFACE_DIR$(cd "$TMPDIR/iface-audit-pkg/mid" && pwd)/.vuna-iface"; LC_ALL=C grep -ao "tool" "$mf" | grep -q .'
-run: sh -c 'find "$TMPDIR/iface-origin-cache"/vuna-cache -name check -type d -prune -exec rm -rf {} + 2>/dev/null || true'
+run: sh -c 'find "$TMPDIR/iface-origin-cache"/vuna-cache -name query -type d -prune -exec rm -rf {} + 2>/dev/null || true'
 run: TMPDIR="$TMPDIR/iface-origin-cache" "$VUNA" check "$TMPDIR/iface-audit-pkg/mid" --debug-perf
 exit: 0
 out-contains: iface-reject=tool-origin
-run: sh -c 'find "$TMPDIR/iface-origin-cache"/vuna-cache -name check -type d -prune -exec rm -rf {} + 2>/dev/null || true'
+run: sh -c 'find "$TMPDIR/iface-origin-cache"/vuna-cache -name query -type d -prune -exec rm -rf {} + 2>/dev/null || true'
 run: TMPDIR="$TMPDIR/iface-origin-cache" "$VUNA" check "$TMPDIR/iface-audit-pkg/mid" --debug-perf
 exit: 0
 out-contains: iface-write=0/

@@ -55,10 +55,13 @@ import Vuna.Compiler.Driver.Dt
 import Vuna.Compiler.Debug
 import Vuna.Compiler.Elab
 import Vuna.Compiler.Driver.Cache
+import Vuna.Compiler.Driver.Graph
 import Vuna.Compiler.Driver.Iface
 import Vuna.Compiler.Driver.Split
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Loader
+import Vuna.Compiler.Query
+import Vuna.Compiler.Query.Run
 import Vuna.Compiler.Version
 import Base.Host
 
@@ -474,42 +477,28 @@ runBuildScript dir out name = do
     (if code == 0 then OkC 0 else err "build: ${name}: `sh build.sh ${out}` failed in ${dir} (exit ${code})")
 
 -- ---------------------------------------------------------------
--- M34.5：check 结果磁盘缓存（elab 级缓存的 check 结果版）
+-- 阶段 2：check 的缓存判定搬进查询图（`Driver.Graph` 的节点族）
 --
--- key = 闭包源哈希 + 依赖包哈希 + manifest 哈希 + schema/版本；命中直接返回成功
--- （check 只区分成功/失败；失败不写缓存，避免把瞬时错误固化）。缓存放包根
--- `.local/check-cache/`（gitignored），Nix 构建的干净源树里不存在 ⇒ CI 不命中。
--- 典型的「依赖包全部缓存命中」场景：重复 `vuna check .` / 多包 workspace / LSP 重启。
+-- 旧实现是「拼一个复合 key 当文件名」（`check/` marker 目录，C32 时缩成 0 字节载荷）。
+-- 现在改成一个图节点 `check:<pkg>:<kind>`：值 = `QMarker`，依赖表 = 四个输入摘要
+-- （manifest / 源闭包 / 依赖接口闭包 / 编译器版本+指纹）。语义等价（四个摘要全等 ⇒ 命中），
+-- 但判定走 `Query.queryHit` / `queryResolve`，并且可以随会话索引持久化、与其它图节点
+-- 共用 cutoff / trace 语义。
+--
+-- 为什么输入摘要写进 **dep key** 而不是单独节点：这些摘要每轮都必须重新读盘算（`Db`
+-- 的纯语义里没有「输入可变」），把摘要放进 key 就能让「key 变了 ⇒ 依赖表变了 ⇒ miss」
+-- 自然成立，不必给输入节点做可变性。
 -- ---------------------------------------------------------------
-checkCacheSchema : String
-checkCacheSchema = "vuna-check-cache 8"
-
--- 载荷 codec（C32 收口后的 check 条目只是个 marker，见 `checkCacheHit`）。
-checkCacheCodec : String
-checkCacheCodec = "check-marker 1"
-
--- 载荷 framing 的 tag（C32）：schema + 编译器 tag。路径 key 已含编译器指纹，这里再校验
--- 一次，保证「文件与 tag 错配」也不会被当成有效缓存（framing 见 `Store`）。
-checkCacheTag : Eff [] String
-checkCacheTag = do
-  tag <- compilerTagEff
-  pure "${checkCacheSchema}/${tag}"
-
-checkCacheDir : PackageContext -> Eff [] String
-checkCacheDir ctx = do
-  base <- cacheBase
-  pure "${base}/${hashText (textHash (contextPackageName ctx))}/check"
-
-checkCachePath : PackageContext -> String -> Eff [] String
-checkCachePath ctx key = do
-  dir <- checkCacheDir ctx
-  pure "${dir}/${key}"
+-- | 图节点 key 的 schema（结构变化必须 bump；旧会话索引自然拒绝）。
+checkNodeSchema : String
+checkNodeSchema = "vuna-check-node 1"
 
 hashText : Int -> String
 hashText n = strFromInt n
 
-checkCacheKeyExe : PackageContext -> String -> Eff [] String
-checkCacheKeyExe ctx entry = do
+-- | 可执行包的 check 节点输入：源闭包 / 依赖闭包 / manifest / 编译器。
+checkModsExe : PackageContext -> String -> Eff [] CheckMods
+checkModsExe ctx entry = do
   sources <- contextSources ctx entry
   deps <- dependencyHashes ctx
   toml <- prim_eff_readFile "${contextDir ctx}/vuna.toml"
@@ -518,12 +507,13 @@ checkCacheKeyExe ctx entry = do
     srcHash = closureHashOf sources 0
     depsHash = closureHashOf deps 0
     manHash = textHash toml
-    verHash = textHash (checkCacheSchema ++ vunaVersion) + fp
-  in do
-    pure "${hashText srcHash}-${hashText depsHash}-${hashText manHash}-${hashText verHash}"
+    verHash = textHash (checkNodeSchema ++ vunaVersion) + fp
+  in pure
+    (checkModsOf (contextPackageName ctx) "exe" (hashText manHash) (hashText srcHash) (hashText depsHash) (hashText verHash))
 
-checkCacheKeyLib : PackageContext -> List String -> Eff [] String
-checkCacheKeyLib ctx names = do
+-- | 库包的 check 节点输入：全部模块根（不受入口闭包限制）+ 导出面 + 依赖 + manifest。
+checkModsLib : PackageContext -> List String -> Eff [] CheckMods
+checkModsLib ctx names = do
   rootSourcesAll <- concatMapEff rootSources (contextRoots ctx)
   deps <- dependencyHashes ctx
   toml <- prim_eff_readFile "${contextDir ctx}/vuna.toml"
@@ -533,10 +523,9 @@ checkCacheKeyLib ctx names = do
     depsHash = closureHashOf deps 0
     manHash = textHash toml
     namesHash = textHash (join "\t" names)
-    verHash = textHash (checkCacheSchema ++ vunaVersion) + fp
-  in do
-    pure
-      "${hashText srcHash}-${hashText depsHash}-${hashText manHash}-${hashText namesHash}-${hashText verHash}"
+    verHash = textHash (checkNodeSchema ++ vunaVersion) + fp
+  in pure
+    (checkModsOf (contextPackageName ctx) "lib:${hashText namesHash}" (hashText manHash) (hashText srcHash) (hashText depsHash) (hashText verHash))
 
 -- 依赖优先的 DFS 后序 + 按包名去重（与 Packages.Pkg.dependencyRoots 同规则）。
 -- 记录字段访问（`p.packageDependencies`）不再被终止性判据识别为「结构投影」，
@@ -1200,46 +1189,57 @@ entryHashOfEntries (e :: rest) name =
 toolCompilerFingerprint : Eff [] Int
 toolCompilerFingerprint = compilerFingerprint
 
--- 命中判定不只看文件存在：framing（magic/tag/codec/长度/内容地址）任何一项不符
--- （截断/篡改/旧格式）即视为未命中 ⇒ 重算并覆盖。
+-- | 包级 check 的图入口（阶段 2）：命中判定（`Driver.Graph` + `Query`）→ 未命中则跑
+-- 现有精化路径 → 成功后提交节点并落会话索引。
 --
--- C32 收口：载荷是**空 marker**。旧实现把整个 `CachedProgram`（compiler 包 3.7-5.2 MB）
--- 写进 check 缓存，而命中路径从不读它——纯写放大；它承载的信息已由 iface（`ModuleIface`）
--- 承担。现在只记「同 key 下曾经成功」，0 字节载荷，framing 校验通过即命中。
-checkCacheHit : String -> Eff [] Bool
-checkCacheHit path = do
-  tag <- checkCacheTag
-  payload <- storeReadEff tag checkCacheCodec path
-  pure (case payload of
-    Just _ => True
-    Nothing => False
-  )
+-- 命中时**完全跳过**精化（与旧 `check/` marker 目录等价）；`-W` / `--deny-warnings`
+-- （warning 不持久化）、`VUNA_ELAB_FULL=1`（强制全量）、`VUNA_IFACE_AUDIT=1`（双路径
+-- 对拍）都直接绕过图（既不判命中也不提交），保持各自的既有语义。
+checkViaGraph : PackageContext -> CheckMods -> Eff [] (Check (List Diagnostic)) -> Eff [] (Check (List Diagnostic))
+checkViaGraph ctx mods run = do
+  full <- elabFullRequested
+  audit <- ifaceAuditRequested
+  if full || audit then run
+  else
+    let
+      opts = graphRunOpts (contextPackageName ctx)
+      key = checkNodeKey mods
+    in do
+      db0 <- sessionLoad opts
+      case graphHit db0 key mods of
+        Just _ => do
+          _ <- pure (note "query-hit ${key}")
+          pure (OkC [])
+        Nothing => do
+          _ <- pure (note "query-miss ${key}")
+          r <- run
+          case r of
+            ErrC e => pure (ErrC e)
+            OkC ds => do
+              db1 <- pure (graphCommit (graphNote db0 "query-commit" key) key mods)
+              _ <- sessionSave opts db1
+              _ <- pure (note "query-commit ${key}")
+              pure (OkC ds)
 
 checkCachedExe : Bool -> PackageContext -> String -> Eff [] (Check (List Diagnostic))
 checkCachedExe wantWarnings ctx entry = do
-  key <- checkCacheKeyExe ctx entry
-  path <- checkCachePath ctx key
-  if not wantWarnings then do
-    hit <- checkCacheHit path
-    if hit then do
-      audit <- ifaceAuditRequested
-      if not audit then pure (OkC []) else checkUncachedExe wantWarnings ctx entry path
-    else checkUncachedExe wantWarnings ctx entry path
-  else checkUncachedExe wantWarnings ctx entry path
+  mods <- checkModsExe ctx entry
+  if wantWarnings then checkUncachedExe wantWarnings ctx entry
+  else checkViaGraph ctx mods (checkUncachedExe wantWarnings ctx entry)
 
 -- 缓存未命中时的精化入口：默认「依赖接口摘要齐全 ⇒ 摘要路径，否则全量」。
 -- 摘要路径返回 `Err` 时**直接上报**（不回退——回退会吞掉本包真实错误）。
 -- `VUNA_ELAB_FULL=1` 强制全量：排障/A-B 对拍用（测试里对两份诊断逐字节比较）。
-checkUncachedExe : Bool -> PackageContext -> String -> String -> Eff [] (Check (List Diagnostic))
-checkUncachedExe wantWarnings ctx entry path = do
+checkUncachedExe : Bool -> PackageContext -> String -> Eff [] (Check (List Diagnostic))
+checkUncachedExe wantWarnings ctx entry = do
   full <- elabFullRequested
-  if full then fullCheckExe ctx entry path
+  if full then fullCheckExe ctx entry
   else do
     audit <- ifaceAuditRequested
-    if audit then auditCheckExe wantWarnings ctx entry path
+    if audit then auditCheckExe wantWarnings ctx entry
     else do
       summary <- summaryCheckExeParts wantWarnings ctx entry
-      checkAndCache ctx path (pure summary)
+      checkAndShadow ctx (pure summary)
 
 -- 摘要路径（**不落盘**）：接口不可用 ⇒ 全量（与旧行为一致，只是不再直接写缓存）。
 -- wantWarnings 时 clean 列表清空 ⇒ 本包模块全部重算（warning 不在缓存里）。
@@ -1269,16 +1269,16 @@ summaryCheckExeParts wantWarnings ctx entry = do
           in do
             dtCheckPackageWithIfacesParts ctx entry ifaces
 
-fullCheckExe : PackageContext -> String -> String -> Eff [] (Check (List Diagnostic))
-fullCheckExe ctx entry path =
+fullCheckExe : PackageContext -> String -> Eff [] (Check (List Diagnostic))
+fullCheckExe ctx entry =
   let
     _ = note "cache-path=full"
-  in checkAndCache ctx path (dtCheckWithProgramParts ctx entry)
+  in checkAndShadow ctx (dtCheckWithProgramParts ctx entry)
 
 -- 审计（`VUNA_IFACE_AUDIT=1`）：摘要路径 vs 全量路径的诊断逐字节对拍。一致才按摘要结果
 -- 落盘；不一致报 `iface-audit-mismatch` 并**不写缓存/接口**。
-auditCheckExe : Bool -> PackageContext -> String -> String -> Eff [] (Check (List Diagnostic))
-auditCheckExe wantWarnings ctx entry path = do
+auditCheckExe : Bool -> PackageContext -> String -> Eff [] (Check (List Diagnostic))
+auditCheckExe wantWarnings ctx entry = do
   summary <- summaryCheckExeParts wantWarnings ctx entry
   full <- dtCheckWithProgramParts ctx entry
   let
@@ -1287,7 +1287,7 @@ auditCheckExe wantWarnings ctx entry path = do
     compared <- pure (auditCompare "check" entry (checkSignatureOf summary) (checkSignatureOf full))
     case compared of
       ErrC e => pure (ErrC e)
-      OkC _ => checkAndCache ctx path (pure summary)
+      OkC _ => checkAndShadow ctx (pure summary)
 
 -- `VUNA_ELAB_FULL=1`：强制全量精化（接口摘要路径的排障开关；默认关闭）。
 elabFullRequested : Eff [] Bool
@@ -1796,18 +1796,13 @@ sameIfaceHashes (m :: rest) ys = case ifaceHashOfName ys (miNameOf m) of
   Just h => h == miIfaceHashOf m && sameIfaceHashes rest ys
   Nothing => False
 
--- 写过缓存：检查成功才写；缓存内容对依赖方是接口摘要（读方校验），对本包是「同哈希跳过」标记
--- （命中直接 Ok，不用重读内容——key 已含源哈希与编译器指纹）。
-checkAndCache : PackageContext -> String -> Eff [] (Check (Pair (List Diagnostic) CheckedPackage)) -> Eff [] (Check (List Diagnostic))
-checkAndCache ctx path checked = do
+-- 成功收尾：写接口影子（check 结果节点由 `checkViaGraph` 提交，这里不再写 marker 文件）。
+checkAndShadow : PackageContext -> Eff [] (Check (Pair (List Diagnostic) CheckedPackage)) -> Eff [] (Check (List Diagnostic))
+checkAndShadow ctx checked = do
   checkedR <- checked
   case checkedR of
     ErrC e => pure (ErrC e)
     OkC pr => do
-      dir <- checkCacheDir ctx
-      _ <- storeEnsureDirEff dir
-      tag <- checkCacheTag
-      _ <- storeWriteEff tag checkCacheCodec path ""
       shadow <- writeIfaceShadow ctx (secondOf pr)
       case shadow of
         ErrC e => pure (ErrC e)
@@ -1815,26 +1810,20 @@ checkAndCache ctx path checked = do
 
 checkCachedLib : Bool -> PackageContext -> List String -> Eff [] (Check (List Diagnostic))
 checkCachedLib wantWarnings ctx names = do
-  key <- checkCacheKeyLib ctx names
-  path <- checkCachePath ctx key
-  if not wantWarnings then do
-    hit <- checkCacheHit path
-    if hit then do
-      audit <- ifaceAuditRequested
-      if not audit then pure (OkC []) else checkUncachedLib wantWarnings ctx names path
-    else checkUncachedLib wantWarnings ctx names path
-  else checkUncachedLib wantWarnings ctx names path
+  mods <- checkModsLib ctx names
+  if wantWarnings then checkUncachedLib wantWarnings ctx names
+  else checkViaGraph ctx mods (checkUncachedLib wantWarnings ctx names)
 
-checkUncachedLib : Bool -> PackageContext -> List String -> String -> Eff [] (Check (List Diagnostic))
-checkUncachedLib wantWarnings ctx names path = do
+checkUncachedLib : Bool -> PackageContext -> List String -> Eff [] (Check (List Diagnostic))
+checkUncachedLib wantWarnings ctx names = do
   full <- elabFullRequested
-  if full then fullCheckLib ctx names path
+  if full then fullCheckLib ctx names
   else do
     audit <- ifaceAuditRequested
-    if audit then auditCheckLib wantWarnings ctx names path
+    if audit then auditCheckLib wantWarnings ctx names
     else do
       summary <- summaryCheckLibParts wantWarnings ctx names
-      checkAndCache ctx path (pure summary)
+      checkAndShadow ctx (pure summary)
 
 summaryCheckLibParts : Bool -> PackageContext -> List String -> Eff [] (Check (Pair (List Diagnostic) CheckedPackage))
 summaryCheckLibParts wantWarnings ctx names = do
@@ -1862,14 +1851,14 @@ summaryCheckLibParts wantWarnings ctx names = do
           in do
             dtCheckLibraryPackageWithIfacesParts ctx names ifaces
 
-fullCheckLib : PackageContext -> List String -> String -> Eff [] (Check (List Diagnostic))
-fullCheckLib ctx names path =
+fullCheckLib : PackageContext -> List String -> Eff [] (Check (List Diagnostic))
+fullCheckLib ctx names =
   let
     _ = note "cache-path=full"
-  in checkAndCache ctx path (dtCheckLibraryWithProgramParts ctx names)
+  in checkAndShadow ctx (dtCheckLibraryWithProgramParts ctx names)
 
-auditCheckLib : Bool -> PackageContext -> List String -> String -> Eff [] (Check (List Diagnostic))
-auditCheckLib wantWarnings ctx names path = do
+auditCheckLib : Bool -> PackageContext -> List String -> Eff [] (Check (List Diagnostic))
+auditCheckLib wantWarnings ctx names = do
   summary <- summaryCheckLibParts wantWarnings ctx names
   full <- dtCheckLibraryWithProgramParts ctx names
   let
@@ -1880,7 +1869,7 @@ auditCheckLib wantWarnings ctx names path = do
       pure (auditCompare "check-lib" subject (checkSignatureOf summary) (checkSignatureOf full))
     case compared of
       ErrC e => pure (ErrC e)
-      OkC _ => checkAndCache ctx path (pure summary)
+      OkC _ => checkAndShadow ctx (pure summary)
 
 -- M34.5：elab + codegen 产物缓存（`List SplitFile` 是纯数据，可 Marshal）
 --

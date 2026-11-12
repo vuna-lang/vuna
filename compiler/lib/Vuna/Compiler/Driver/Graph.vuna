@@ -1,0 +1,103 @@
+-- | 编译管线的图节点族：node key 构造 + 命中 / 提交（纯 helper）。
+module Vuna.Compiler.Driver.Graph
+  ( CheckMods(..)
+  , checkModsOf
+  , checkNodeKey
+  , graphCheckMods
+  , graphCommit
+  , graphHit
+  , graphNote
+  , graphRunOpts
+  , nodeCompilerKey
+  , nodeDepsKey
+  , nodeEnvKey
+  , nodeSrcKey
+  ) where
+
+-- Vuna.Compiler.Driver.Graph：把「包级 check / build」的缓存判定搬进查询图（阶段 2）。
+--
+-- 这里只放**纯**部分：节点 key 的构造、命中判定、提交。真正的精化 / codegen 在
+-- `Driver.Compile`（它 import 本模块，反向不行——否则成环）。
+--
+-- 节点族（key 是纯字符串，不参与哈希输入）：
+--
+--   check:<pkg>:<kind>            包级 check 节点（值 = `QMarker`）
+--   env:<pkg>:<manifestHash>      包的 vuna.toml 内容摘要
+--   src:<pkg>:<closureHash>       本包源文件闭包摘要
+--   deps:<pkg>:<closureHash>      依赖包接口闭包摘要
+--   ver:<verHash>                 编译器版本 + 指纹
+--
+-- **为什么输入节点的摘要直接写进 key**：这些输入每轮都要重新读盘算摘要（否则跨进程
+-- 会读到过期值——`Db` 的纯语义没有「输入可变」概念）。把摘要放进 key 是最省的做法：
+-- 任何输入变化 ⇒ key 串变化 ⇒ check 节点的依赖表变化（`sameDeps` 比 key 名）⇒ miss。
+-- 因此输入节点**不需要**真的存在 `Db` 里（缺 dep 用 `QBytes key` 占位，摘要仍是 key 的
+-- 函数，同一轮内稳定）。
+--
+-- 与旧 `check/` marker 目录的关系：语义完全等价（四个摘要全等 ⇒ 命中），但判定从「拼一个
+-- 复合 key 当文件名」变成「一个节点 + 依赖快照」，可以直接被 `Query.Run` 的会话索引持久化，
+-- 且是和其它图节点同一套 cutoff / trace 语义。
+import Base.List
+import Base.Pair
+import Base.String
+import Vuna.Compiler.Query
+import Vuna.Compiler.Query.Run
+
+-- | 包级 check 节点的输入摘要（四个 hash + kind）。
+--
+-- `cmKind` = `exe`（可执行包入口）/ `lib:<namesHash>`（库包导出面）。`cmVer` 是
+-- 「编译器版本 + 指纹」，换二进制即整套 node key 换代。
+record CheckMods where
+  cmPkg : String
+  cmKind : String
+  cmManifest : String
+  cmSources : String
+  cmDeps : String
+  cmVer : String
+
+-- | 拼 `CheckMods`（纯构造；摘要由调用方算好传入）。
+checkModsOf : String -> String -> String -> String -> String -> String -> CheckMods
+checkModsOf pkg kind manifest sources deps ver = CheckMods pkg kind manifest sources deps ver
+
+-- | check 节点的 key（稳定：不含摘要；摘要进依赖表）。
+checkNodeKey : CheckMods -> String
+checkNodeKey m = "check:${m.cmPkg}:${m.cmKind}"
+
+-- | 四个输入节点的 key（顺序固定 = env / src / deps / ver）。
+graphCheckMods : CheckMods -> List String
+graphCheckMods m =
+  [ nodeEnvKey m.cmPkg m.cmManifest,
+    nodeSrcKey m.cmPkg m.cmSources,
+    nodeDepsKey m.cmPkg m.cmDeps,
+    nodeCompilerKey m.cmVer
+  ]
+
+nodeEnvKey : String -> String -> String
+nodeEnvKey pkg manifestHash = "env:${pkg}:${manifestHash}"
+
+nodeSrcKey : String -> String -> String
+nodeSrcKey pkg closureHash = "src:${pkg}:${closureHash}"
+
+nodeDepsKey : String -> String -> String
+nodeDepsKey pkg closureHash = "deps:${pkg}:${closureHash}"
+
+nodeCompilerKey : String -> String
+nodeCompilerKey verHash = "ver:${verHash}"
+
+-- | 包级 check 会话的配置：来源 `pkg`、不设预算、按包名分桶持久化。
+graphRunOpts : String -> RunOpts
+graphRunOpts pkg = RunOpts "pkg" 0 True pkg
+
+-- | 命中判定（纯）：把 check 节点的当前依赖表交给 `Query.queryHit`。
+graphHit : Db -> String -> CheckMods -> Maybe QVal
+graphHit db key mods = queryHit db key (graphCheckMods mods)
+
+-- | 提交一次成功的 check（值 = `QMarker`，依赖表 = 本次输入摘要）。
+graphCommit : Db -> String -> CheckMods -> Db
+graphCommit db key mods = firstOf (queryResolve db key (graphCheckMods mods) (Pair QMarker []))
+
+-- | 图事件写进 trace（`query-hit` / `query-miss`），随后由调用方 `sessionSave`。
+graphNote : Db -> String -> String -> Db
+graphNote db kind key = dbNote db "${kind} ${key}"
+
+-- 说明：`Db` 的 trace 行只用于调试与测试断言（`--debug-query` / §72），不参与正确性；
+-- 会话索引落盘前会被裁掉（`Query.Run.encQueryIndex` 不含 trace）。

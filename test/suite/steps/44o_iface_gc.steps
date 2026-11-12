@@ -10,6 +10,6 @@ run: sh -c 'm="$VUNA_IFACE_DIR$(cd "$TMPDIR/iface-audit-pkg/dep" && pwd)"; find 
 run: sh -c 'm="$VUNA_IFACE_DIR$(cd "$TMPDIR/iface-audit-pkg/dep" && pwd)"; find "$m" -name "*.iface" -exec touch -d "2020-01-01 00:00:00" {} + 2>/dev/null || true'
 # 改实现体（同导出面）：产生新 token，旧 token 变孤儿。
 run: sh -c 'printf "%s\n" "module Dep (foo, bar) where" "" "foo : Int" "foo = 2" "" "bar : Int" "bar = 2" > "$TMPDIR/iface-audit-pkg/dep/lib/Dep.vuna"'
-run: sh -c 'find "$TMPDIR/iface-audit-cache"/vuna-cache -name check -type d -prune -exec rm -rf {} + 2>/dev/null || true'
+run: sh -c 'find "$TMPDIR/iface-audit-cache"/vuna-cache -name query -type d -prune -exec rm -rf {} + 2>/dev/null || true'
 run: sh -c 'TMPDIR="$TMPDIR/iface-audit-cache" "$VUNA" check "$TMPDIR/iface-audit-pkg/dep"'
 run: sh -c 'm="$VUNA_IFACE_DIR$(cd "$TMPDIR/iface-audit-pkg/dep" && pwd)"; [ "$(find "$m" -name "Dep-*.iface" | wc -l)" -eq 1 ]'

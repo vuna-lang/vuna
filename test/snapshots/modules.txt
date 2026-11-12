@@ -94,6 +94,7 @@ Vuna.Compiler.Driver.Compile  compiler/lib/Vuna/Compiler/Driver/Compile.vuna
 Vuna.Compiler.Driver.CompilerCli  compiler/lib/Vuna/Compiler/Driver/CompilerCli.vuna
 Vuna.Compiler.Driver.DiagRender  compiler/lib/Vuna/Compiler/Driver/DiagRender.vuna
 Vuna.Compiler.Driver.Dt  compiler/lib/Vuna/Compiler/Driver/Dt.vuna
+Vuna.Compiler.Driver.Graph  compiler/lib/Vuna/Compiler/Driver/Graph.vuna
 Vuna.Compiler.Driver.Iface  compiler/lib/Vuna/Compiler/Driver/Iface.vuna
 Vuna.Compiler.Driver.Owner  compiler/lib/Vuna/Compiler/Driver/Owner.vuna
 Vuna.Compiler.Driver.PerfCache  compiler/lib/Vuna/Compiler/Driver/PerfCache.vuna
@@ -241,6 +242,7 @@ Vuna.Compiler.Driver.Compile  ./lib/Vuna/Compiler/Driver/Compile.vuna
 Vuna.Compiler.Driver.CompilerCli  ./lib/Vuna/Compiler/Driver/CompilerCli.vuna
 Vuna.Compiler.Driver.DiagRender  ./lib/Vuna/Compiler/Driver/DiagRender.vuna
 Vuna.Compiler.Driver.Dt  ./lib/Vuna/Compiler/Driver/Dt.vuna
+Vuna.Compiler.Driver.Graph  ./lib/Vuna/Compiler/Driver/Graph.vuna
 Vuna.Compiler.Driver.Iface  ./lib/Vuna/Compiler/Driver/Iface.vuna
 Vuna.Compiler.Driver.Owner  ./lib/Vuna/Compiler/Driver/Owner.vuna
 Vuna.Compiler.Driver.PerfCache  ./lib/Vuna/Compiler/Driver/PerfCache.vuna

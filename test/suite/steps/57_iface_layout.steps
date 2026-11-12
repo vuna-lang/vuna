@@ -12,7 +12,7 @@ run: find "$TMPDIR/iface-beside/.output/iface" -name Int.iface 2>/dev/null | sed
 out-contains: Int.iface
 run: find "$TMPDIR/iface-beside/.output/iface" -name '.vuna-iface' 2>/dev/null | sed -n '1p'
 out-contains: .vuna-iface
-run: rm -rf "$TMPDIR/iface-beside-cache"/vuna-cache/*/check
+run: rm -rf "$TMPDIR/iface-beside-cache"/vuna-cache/query
 exit: 0
 run: unset VUNA_IFACE_DIR; TMPDIR="$TMPDIR/iface-beside-cache" VUNA_IFACE_SELFTEST=1 "$VUNA" check "$TMPDIR/iface-beside" --debug-perf 2>&1
 exit: 0
@@ -35,7 +35,7 @@ run: cache="$TMPDIR/iface-enum-cache"; root="$TMPDIR/iface-enum-root"; cd .. && 
 exit: 0
 run: find "$TMPDIR/iface-enum-root" -name '.vuna-iface' | wc -l | tr -d ' '
 out-equals: 1
-run: rm -rf "$TMPDIR/iface-enum-cache"/vuna-cache/*/check
+run: rm -rf "$TMPDIR/iface-enum-cache"/vuna-cache/query
 exit: 0
 run: cache="$TMPDIR/iface-enum-cache"; root="$TMPDIR/iface-enum-root"; TMPDIR="$cache" VUNA_IFACE_DIR="$root" "$VUNA" check "$VUNA_BASE" --debug-perf 2>&1
 exit: 0
