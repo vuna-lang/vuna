@@ -36,14 +36,14 @@ let rec v_Vuna_dCompiler_dDriver_dDt_dopaqueSigType = (fun mc0 mc1 -> (match mc1
   | _ -> failwith "DT: impossible branch"
 ))
 
-let v_Vuna_dCompiler_dDriver_dDt_dhideOneOpaque = (fun names decls decl -> (match decl with
-  | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dDecl_DSig (dtb__14, dtb__15, dtb__16, dtb__17) -> (if ((Base_dList.v_Base_dList_dmemName dtb__14) names) then Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing else (Base_dMaybe.C_Base_dMaybe_dMaybe_Just (decl)))
-  | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dDecl_DFun (dtb__18, dtb__19, dtb__20, dtb__21) -> (if ((Base_dList.v_Base_dList_dmemName dtb__18) names) then (match ((v_Vuna_dCompiler_dDriver_dDt_dopaqueSigType dtb__18) decls) with
-  | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__22) -> (Base_dMaybe.C_Base_dMaybe_dMaybe_Just ((Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dDecl_DAxiom (dtb__18, dtb__22, dtb__21))))
-  | Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing -> (Base_dMaybe.C_Base_dMaybe_dMaybe_Just (decl))
+let v_Vuna_dCompiler_dDriver_dDt_dhideOneOpaque = (fun mc0 mc1 mc2 -> (match mc2 with
+  | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dDecl_DFun (dtb__14, dtb__15, dtb__16, dtb__17) -> (if ((Base_dList.v_Base_dList_dmemName dtb__14) mc0) then (match ((v_Vuna_dCompiler_dDriver_dDt_dopaqueSigType dtb__14) mc1) with
+  | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__18) -> (Base_dMaybe.C_Base_dMaybe_dMaybe_Just ((Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dDecl_DAxiom (dtb__14, dtb__18, dtb__17))))
+  | Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing -> (Base_dMaybe.C_Base_dMaybe_dMaybe_Just (mc2))
   | _ -> failwith "DT: impossible branch"
-) else (Base_dMaybe.C_Base_dMaybe_dMaybe_Just (decl)))
-  | _ -> (Base_dMaybe.C_Base_dMaybe_dMaybe_Just (decl))
+) else (Base_dMaybe.C_Base_dMaybe_dMaybe_Just (mc2)))
+  | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dDecl_DSig (dtb__19, dtb__20, dtb__21, dtb__22) -> (if ((Base_dList.v_Base_dList_dmemName dtb__19) mc0) then Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing else (Base_dMaybe.C_Base_dMaybe_dMaybe_Just (mc2)))
+  | _ -> (Base_dMaybe.C_Base_dMaybe_dMaybe_Just (mc2))
 ))
 
 let v_Vuna_dCompiler_dDriver_dDt_dhideDepOpaqueDecls = (fun pkg modules decls -> ((fun names -> ((Base_dList.v_Base_dList_dmapMaybe ((v_Vuna_dCompiler_dDriver_dDt_dhideOneOpaque names) decls)) decls)) ((Base_dList.v_Base_dList_dconcatMap Vuna_dCompiler_dLoader_dModules.v_Vuna_dCompiler_dLoader_dModules_dmoduleOpaqueOf) ((Base_dList.v_Base_dList_dfilter (fun m -> ((Vuna_dCompiler_dLoader_dModules.v_Vuna_dCompiler_dLoader_dModules_dmodulePackageOf m) <> pkg))) modules))))
