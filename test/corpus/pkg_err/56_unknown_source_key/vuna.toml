@@ -1,0 +1,5 @@
+[package]
+name = "pkg-source-key"
+
+[dependencies]
+bad = { path = ".", frobnicate = "x" }

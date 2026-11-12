@@ -1,0 +1,5 @@
+[package]
+name = "pkg-source-conflict"
+
+[dependencies]
+bad = { path = ".", git = "file:///tmp/x" }

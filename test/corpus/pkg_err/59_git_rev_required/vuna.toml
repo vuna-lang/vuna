@@ -1,0 +1,5 @@
+[package]
+name = "pkg-git-rev"
+
+[dependencies]
+bad = { git = "file:///tmp/none" }

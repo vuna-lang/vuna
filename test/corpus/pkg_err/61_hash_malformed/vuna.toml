@@ -1,0 +1,5 @@
+[package]
+name = "pkg-hash-malformed"
+
+[dependencies]
+bad = { git = "file:///tmp/none", rev = "0000000000000000000000000000000000000000", hash = "not-a-sha" }
