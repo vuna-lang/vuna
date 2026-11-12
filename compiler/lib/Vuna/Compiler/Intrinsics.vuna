@@ -587,7 +587,7 @@ fromFloatMethodName = "Base.Float.fromFloat"
 -- 内部 `bi_*` 只服务 codegen。分成两张表是为了让每段列表字面量的项大小留在旧 seed
 -- 擦除检查的 fuel 内（bootstrap 约束，见 docs/reference/bootstrap.md）。
 baseIntrinsics : List Intrinsic
--- 效果原语（M27：只保留 `prim_*` 名；公开名删除，用户经 Base.IO 或显式能力）。
+-- 效果原语（M27：只保留 `prim_*` 名；公开名删除，用户经 Base.Host 或显式能力）。
 -- 精化器合成的比较/相等特化名（内部：不对用户源码可见）。
 -- M33 W3：内建类型构造子 Array / IORef / MArray / Buffer 的原语。
 -- 纯 Array 原语无能力；IORef / MArray / Buffer 都是 IO 动作（无能力：不触碰外部世界）。

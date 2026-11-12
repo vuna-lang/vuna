@@ -113,7 +113,7 @@ rootName (Root dir name exports caps trust priv hosts) = name
 rootPackage : Root -> String
 rootPackage root = rootName root
 
--- M27：该模块根所属包声明的效应能力（空列表 = 只能经 Base.IO）。
+-- M27：该模块根所属包声明的效应能力（空列表 = 只能经 Eff + handler）。
 rootCapabilities : Root -> List String
 rootCapabilities (Root dir name exports caps trust priv hosts) = caps
 

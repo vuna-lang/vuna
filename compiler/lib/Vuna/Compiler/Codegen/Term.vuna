@@ -97,7 +97,7 @@ ${dtPrimRuntime}"""
 
 -- M21：effectful 内建（`prim_*`）的 DT 运行时实现。
 -- 签名在 `Vuna.Compiler.Intrinsics`（唯一真源），这里补 OCaml 侧实现（对应
--- `intrinsicRuntime` 字段）；`prim_eff_getArgs` / `prim_eff_readLine` 在 Base.IO 里是**值**，
+-- `intrinsicRuntime` 字段）；`prim_eff_getArgs` / `prim_eff_readLine` 在 Base.Host 里是**值**，
 -- 所以在引用点展开成 `dtp_*(()`，与 Codegen 的既有处理一致（每次求值都重新读）。
 -- `prim_eff_readBytes` 是**函数**（`Int -> String`）：最多读 n 字节、有数据就立即返回
 -- （可能少于 n），EOF 返回 `""`——LSP 的帧循环靠它精确读 Content-Length 字节。

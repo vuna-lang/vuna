@@ -1,5 +1,5 @@
--- M21：`import Base.IO` 即可用 `do` / `bind` / `pure` / `fmap`（Functor / Monad
--- 由 Base.IO 重导出，Loader 的 T(..) 重导出规则同时带出方法投影）。
+-- M21：`import Base.Host` 即可用 `do` / `bind` / `pure` / `fmap`（Functor / Monad
+-- 由 Base.Host 重导出的 Base.Monad 带出，Loader 的 T(..) 重导出规则同时带出方法投影）。
 import Base.Host
 
 main : Eff [] Int

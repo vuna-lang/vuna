@@ -1,4 +1,4 @@
--- M21：Functor / Monad 方法投影经 import Base.IO 可见（fmap / bind / pure）。
+-- M21：Functor / Monad 方法投影经 import Base.Host 可见（fmap / bind / pure）。
 import Base.Host
 
 main : Eff [] Int

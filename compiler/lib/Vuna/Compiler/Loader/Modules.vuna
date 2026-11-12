@@ -74,7 +74,7 @@ record Module where
   moduleReexportsOf : List String
 
 -- 已加载项目：入口声明/import + 依赖模块列表（M12 分离编译用；保持 flatten 前的形态）。
--- entryPkg 用于按包限制 effectful 内建（M12.6：普通包只能通过 Base.IO 使用效果）。
+-- entryPkg 用于按包限制 effectful 内建（M12.6：普通包只能经 Eff + handler 使用效果）。
 -- M31.2：entryFixities 是入口文件自己的 fixity 声明（入口 decls 的重排要用）。
 record Project where
   projectEntryDecls : List Decl

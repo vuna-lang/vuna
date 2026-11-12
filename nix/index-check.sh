@@ -43,8 +43,8 @@ else
     *) bad "vuna map output missing Vuna.Compiler.Elab" ;;
   esac
   case "$out" in
-    *"Base.IO"*) : ;;
-    *) bad "vuna map output missing Base.IO" ;;
+    *"Base.IORef"*) : ;;
+    *) bad "vuna map output missing Base.IORef" ;;
   esac
   note "ok: vuna map ($(printf '%s\n' "$out" | wc -l | tr -d ' ') lines)"
 fi

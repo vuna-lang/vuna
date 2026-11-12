@@ -14,6 +14,6 @@ members = ["member"]
 [dependencies]
 vuna-base = "../../../base"
 
-# IoPass.vuna 直接调用 prim_print（显式能力）；其余测试走 Base.IO 或纯值。
+# IoPass.vuna 直接调用 prim_print（显式能力）；其余测试走宿主层或纯值。
 [capabilities]
 effects = ["console"]

@@ -1,5 +1,5 @@
 -- W10：clock 效应标签（命名实例）——mock handler 固定时间（elapsed = 0）；
--- real handler 走 Base.IO.nowMicros 与原生 prim_eff_sleep，同程序验证 sleep 确实推进时间。
+-- real handler 走 Base.Host.nowMicros 与原生 prim_eff_sleep，同程序验证 sleep 确实推进时间。
 import Base.Eff
 import Base.EffClock
 import Base.Host

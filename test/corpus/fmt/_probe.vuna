@@ -1,6 +1,6 @@
 -- fmt 测试探针：读文件 → formatSourceWith（M31.3：带程序级 fixity）；mode: fmt/check/write。
 -- 由 check.sh 用当前编译器编译（不是测试输入，文件名以下划线开头）。
--- main : Eff [] Int，由运行时执行；效果只经 Base.IO。
+-- main : Eff [] Int，由运行时执行；效果只经宿主层。
 --
 -- 探针包在 check.sh 里按**真实依赖布局**构造（base 是依赖包），所以 fixity 上下文应能
 -- 正常加载；加载失败或未知运算符是硬错误，不再静默降级（格式化器宁可拒绝也不改语义）。

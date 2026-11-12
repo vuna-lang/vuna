@@ -1,5 +1,5 @@
 -- vuna-compiler：编译器 CLI 入口（seed 与 stage 1 编译器共用）。
--- main : Eff [] Int——由运行时执行；getArgs/exit 是 Base.IO 的 IO API。
+-- main : Eff [] Int——由运行时执行；getArgs/exit 是 Base.Host 的宿主 API。
 import Vuna.Compiler.Driver.CompilerCli
 -- 包接口面：下面三个基础设施模块不在编译器的运行路径上，但属于 compiler 包的导出面
 -- （工具链与 examples/infra 消费）。显式 import 让它们进入入口闭包：seed 与包 iface

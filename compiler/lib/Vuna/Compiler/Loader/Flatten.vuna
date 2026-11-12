@@ -481,7 +481,7 @@ hasSamePublicKind e (e2 :: rest) =
   e.kind == e2.kind && e.public == e2.public || hasSamePublicKind e rest
 
 -- 冲突判定：同名同 kind 但**定义处不同**才算重复导出。同一个定义经两条路径重导出
--- （门面同时导出 Base.Monad 与 Base.IO，两者都重导出 `Functor(..)`）不是冲突。
+-- （门面同时导出 Base.Monad 与 Base.Host，两者都重导出 `Functor(..)`）不是冲突。
 -- M41：同名不同族的构造子导出不冲突（`module M (A(..), B(..))` 两边都有 `Nil` 合法）；
 -- val/type 的重复导出规则不变。
 hasConflictingExport : ExportEntry -> List ExportEntry -> Bool
@@ -516,7 +516,7 @@ checkExportDuplicates prefix (e :: rest) =
   else checkExportDuplicates prefix rest
 
 -- 显式导出列表里「同一个名字写了两遍」是错误（`module M (foo, foo)`）；
--- 但同一个**定义**经不同模块重导出（门面同时导出 Base.Monad 与 Base.IO，两者都
+-- 但同一个**定义**经不同模块重导出（门面同时导出 Base.Monad 与 Base.Host，两者都
 -- 重导出 `Functor(..)`）不是冲突——条目按 target 去重即可。
 exportItemKey : ExportItem -> String
 exportItemKey (XBare n sp) = "bare:${n}"

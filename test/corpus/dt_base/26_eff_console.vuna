@@ -1,5 +1,5 @@
 -- W10：console 效应标签（命名实例）——同一程序在 mock（"mock"）与真实（"real"）handler
--- 下各跑一次；mock 收集日志（纯 answer），real 走 Base.IO.print/eprint。
+-- 下各跑一次；mock 收集日志（纯 answer），real 走 Base.Host.print/eprint。
 import Base.Eff
 import Base.EffConsole
 import Base.Host

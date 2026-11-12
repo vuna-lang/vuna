@@ -50,7 +50,7 @@ record Manifest where
   manifestDiagDenyWarnings : Maybe Bool
 
 -- M27：manifest 的 `[capabilities].effects` 声明；空列表表示该包没有直接使用
--- effectful 内建的能力（只能经 Base.IO）。
+-- effectful 内建的能力（只能经宿主层）。
 -- 字符分类（与 Toml 内部约定一致；vuna 无字符字面量，统一用 char code）。
 isDigitChar : Int -> Bool
 isDigitChar c = c >= 48 && c <= 57

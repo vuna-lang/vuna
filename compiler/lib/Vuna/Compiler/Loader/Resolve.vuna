@@ -948,7 +948,7 @@ resolveModules (modules@((Module name mpkg imports imps decls exports mcaps mtru
 
 -- ---------------------------------------------------------------
 -- 效应能力（M27）：包在 vuna.toml 的 [capabilities].effects 里显式声明能力；
--- 内建所需能力在 Intrinsics 表里。普通包不声明能力，只能经 Base.IO 使用效果；
+-- 内建所需能力在 Intrinsics 表里。普通包不声明能力，只能经 Eff + handler 使用效果；
 -- 不存在任何按包名/路由的 allowlist。
 -- ---------------------------------------------------------------
 capabilityError : String -> String -> Check a
@@ -1238,7 +1238,7 @@ ownPackageModuleNames pkg (m :: rest) =
     here = if modulePackageOf m == pkg then [moduleNameOf m] else []
   in append here (ownPackageModuleNames pkg rest)
 
--- | 信任点名字的模块前缀（`Base.IO.runPure` -> `Base.IO`）。
+-- | 信任点名字的模块前缀（`Base.Host.runPure` -> `Base.Host`）。
 trustPointModulePrefix : String -> String
 trustPointModulePrefix t = case splitLastDot (splitOnDot t) of
   Pair revPrefix base => joinDots revPrefix
