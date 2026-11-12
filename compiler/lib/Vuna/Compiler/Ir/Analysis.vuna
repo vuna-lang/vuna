@@ -1,0 +1,253 @@
+module Vuna.Compiler.Ir.Analysis where
+
+-- Vuna.Compiler.Ir.Analysis：IR 依赖分析（SCC 分组）与合法性护栏。
+--
+-- 只依赖 `Ir.Model`（不碰 Core/Elab），因此同一套分组既能服务 Lowering（用 Core 侧算出的
+-- 名字 + 依赖做分组，再按组序降低体），也能服务已降低的 IR（校验 / 检查路径）。
+--
+-- 分组算法从迁移前的 `Codegen.Erase` 原样搬来（Kosaraju：完成序 → 反向图收集 → 依赖
+-- 就绪排序）。分组顺序决定 `let` / `let rec ... and ...` 的落盘顺序，必须与迁移前
+-- **逐项一致**才能做到产物逐字节相同。
+import Vuna.Compiler.Common
+import Base.List
+import Base.HashMap
+import Vuna.Compiler.Diagnostics
+import Vuna.Compiler.Ir.Model
+
+-- ---------------------------------------------------------------
+-- 邻接表
+-- ---------------------------------------------------------------
+export neighborsOf : HashMap String (List String) -> String -> List String
+neighborsOf adjT name = case Base.HashMap.lookup name adjT of
+  Just ns => ns
+  Nothing => []
+
+export adjTblOf : List (Pair String (List String)) -> HashMap String (List String)
+adjTblOf adj = Base.HashMap.insertAll adj (Base.HashMap.fromList [])
+
+addDependents : String -> List String -> HashMap String (List String) -> HashMap String (List String)
+addDependents src [] t = t
+addDependents src (m :: rest) t =
+  let
+    cur = case Base.HashMap.lookup m t of
+      Just xs => xs
+      Nothing => []
+  in addDependents src rest (Base.HashMap.insert m (Base.List.Cons src cur) t)
+
+reverseAdjTbl : List (Pair String (List String)) -> HashMap String (List String)
+reverseAdjTbl [] = Base.HashMap.fromList []
+reverseAdjTbl ((Pair n ns) :: rest) = addDependents n ns (reverseAdjTbl rest)
+
+-- ---------------------------------------------------------------
+-- 完成序（正向图 DFS 后序）
+-- ---------------------------------------------------------------
+foldNeighborsPost : HashMap String (List String) -> List String -> HashMap String Bool -> List String -> Pair (HashMap String Bool) (List String)
+foldNeighborsPost adjT ms visited order = foldNeighborsPostFuel 100000 adjT ms visited order
+
+foldNeighborsPostFuel : Int -> HashMap String (List String) -> List String -> HashMap String Bool -> List String -> Pair (HashMap String Bool) (List String)
+foldNeighborsPostFuel fuel adjT ms visited order = if fuel <= 0 then Pair visited order
+else case ms of
+  [] => Pair visited order
+  m :: rest => if Base.HashMap.member m visited then foldNeighborsPostFuel (fuel - 1) adjT rest visited order
+  else case dfsPostFuel (fuel - 1) adjT m (Base.HashMap.insert m True visited) order of
+    Pair visited2 order2 => foldNeighborsPostFuel (fuel - 1) adjT rest visited2 order2
+
+dfsPost : HashMap String (List String) -> String -> HashMap String Bool -> List String -> Pair (HashMap String Bool) (List String)
+dfsPost adjT n visited order = dfsPostFuel 100000 adjT n visited order
+
+dfsPostFuel : Int -> HashMap String (List String) -> String -> HashMap String Bool -> List String -> Pair (HashMap String Bool) (List String)
+dfsPostFuel fuel adjT n visited order = if fuel <= 0 then Pair visited order
+else case foldNeighborsPostFuel (fuel - 1) adjT (neighborsOf adjT n) visited order of
+  Pair visited2 order2 => Pair visited2 (Base.List.Cons n order2)
+
+postOrder : HashMap String (List String) -> List String -> HashMap String Bool -> List String -> Pair (HashMap String Bool) (List String)
+postOrder adjT [] visited order = Pair visited order
+postOrder adjT (n :: rest) visited order = if Base.HashMap.member n visited then postOrder adjT rest visited order
+else case dfsPost adjT n (Base.HashMap.insert n True visited) order of
+  Pair visited2 order2 => postOrder adjT rest visited2 order2
+
+-- ---------------------------------------------------------------
+-- 反向图收集分量
+-- ---------------------------------------------------------------
+foldNeighborsCollect : HashMap String (List String) -> List String -> HashMap String Bool -> List String -> Pair (HashMap String Bool) (List String)
+foldNeighborsCollect adjT ms visited comp = foldNeighborsCollectFuel 100000 adjT ms visited comp
+
+foldNeighborsCollectFuel : Int -> HashMap String (List String) -> List String -> HashMap String Bool -> List String -> Pair (HashMap String Bool) (List String)
+foldNeighborsCollectFuel fuel adjT ms visited comp = if fuel <= 0 then Pair visited comp
+else case ms of
+  [] => Pair visited comp
+  m :: rest => if Base.HashMap.member m visited then foldNeighborsCollectFuel (fuel - 1) adjT rest visited comp
+  else case dfsCollectFuel (fuel - 1) adjT m (Base.HashMap.insert m True visited) comp of
+    Pair visited2 comp2 => foldNeighborsCollectFuel (fuel - 1) adjT rest visited2 comp2
+
+dfsCollect : HashMap String (List String) -> String -> HashMap String Bool -> List String -> Pair (HashMap String Bool) (List String)
+dfsCollect adjT n visited comp = dfsCollectFuel 100000 adjT n visited comp
+
+dfsCollectFuel : Int -> HashMap String (List String) -> String -> HashMap String Bool -> List String -> Pair (HashMap String Bool) (List String)
+dfsCollectFuel fuel adjT n visited comp = if fuel <= 0 then Pair visited comp
+else case foldNeighborsCollectFuel (fuel - 1) adjT (neighborsOf adjT n) visited comp of
+  Pair visited2 comp2 => Pair visited2 (Base.List.Cons n comp2)
+
+collectComps : HashMap String (List String) -> List String -> HashMap String Bool -> List (List String) -> List (List String)
+collectComps adjT [] visited comps = comps
+collectComps adjT (n :: rest) visited comps = if Base.HashMap.member n visited then collectComps adjT rest visited comps
+else case dfsCollect adjT n (Base.HashMap.insert n True visited) [] of
+  Pair visited2 comp => collectComps adjT rest visited2 (comp :: comps)
+
+-- 名字 → 所属分量（一次构建，O(1) 查）。
+componentTblOf : List (List String) -> HashMap String (List String)
+componentTblOf comps =
+  Base.HashMap.insertAll (concatMap (\g => map (\n => Pair n g) g) comps) (Base.HashMap.fromList [])
+
+addAllNames : List String -> HashMap String Bool -> HashMap String Bool
+addAllNames [] t = t
+addAllNames (n :: rest) t = addAllNames rest (Base.HashMap.insert n True t)
+
+-- 按 names 首次出现顺序产出 SCC，组内成员按 names 顺序排列。
+groupsFromComps : List (List String) -> List String -> List (List String)
+groupsFromComps comps names =
+  groupsFromCompsGo (componentTblOf comps) names names (Base.HashMap.fromList [])
+
+groupsFromCompsGo : HashMap String (List String) -> List String -> List String -> HashMap String Bool -> List (List String)
+groupsFromCompsGo compTbl allNames [] emitted = []
+groupsFromCompsGo compTbl allNames (n :: rest) emitted = if Base.HashMap.member n emitted then groupsFromCompsGo compTbl allNames rest emitted
+else case Base.HashMap.lookup n compTbl of
+  Just g =>
+    Base.List.Cons (groupOf allNames g)
+      (groupsFromCompsGo compTbl allNames rest (addAllNames g emitted))
+  Nothing => groupsFromCompsGo compTbl allNames rest emitted
+
+-- 单成员分量（大程序里占绝对多数）直接返回，免掉对全程序名字的一次 filter。
+groupOf : List String -> List String -> List String
+groupOf allNames ([x]) = [x]
+groupOf allNames g =
+  let
+    memberTbl = Base.HashMap.ofNames g
+  in filterNames (\m => Base.HashMap.member m memberTbl) allNames
+
+filterNames : (String -> Bool) -> List String -> List String
+filterNames pred [] = []
+filterNames pred (n :: rest) =
+  if pred n then Base.List.Cons n (filterNames pred rest) else filterNames pred rest
+
+notIn : String -> List String -> Bool
+notIn name names = not (memName name names)
+
+uniqueNames : List String -> List String
+uniqueNames [] = []
+uniqueNames (name :: rest) =
+  if name == "" then uniqueNames rest
+  else if memName name rest then uniqueNames rest else Base.List.Cons name (uniqueNames rest)
+
+groupDeps : HashMap String (List String) -> List String -> List String
+groupDeps adjT group =
+  filterNames (\n => notIn n group) (uniqueNames (concatMap (neighborsOf adjT) group))
+
+allIn : List String -> HashMap String Bool -> Bool
+allIn [] allowed = True
+allIn (n :: rest) allowed = Base.HashMap.member n allowed && allIn rest allowed
+
+groupReady : HashMap String (List String) -> List String -> HashMap String Bool -> Bool
+groupReady adjT group emitted = allIn (groupDeps adjT group) emitted
+
+pickReady : HashMap String (List String) -> List (List String) -> HashMap String Bool -> Maybe (Pair (List String) (List (List String)))
+pickReady adjT groups emitted = pickReadyAcc adjT groups [] emitted
+
+pickReadyAcc : HashMap String (List String) -> List (List String) -> List (List String) -> HashMap String Bool -> Maybe (Pair (List String) (List (List String)))
+pickReadyAcc adjT [] before emitted = Nothing
+pickReadyAcc adjT (g :: rest) before emitted =
+  if groupReady adjT g emitted then Just (Pair g (append (reverse before) rest))
+  else pickReadyAcc adjT rest (g :: before) emitted
+
+orderGroups : HashMap String (List String) -> List (List String) -> Check (List (List String))
+orderGroups adjT groups = orderGroupsAcc adjT groups (Base.HashMap.fromList [])
+
+orderGroupsAcc : HashMap String (List String) -> List (List String) -> HashMap String Bool -> Check (List (List String))
+orderGroupsAcc adjT remaining emitted =
+  orderGroupsAccFuel (length remaining + 1) adjT remaining emitted
+
+orderGroupsAccFuel : Int -> HashMap String (List String) -> List (List String) -> HashMap String Bool -> Check (List (List String))
+orderGroupsAccFuel fuel adjT remaining emitted = if fuel <= 0 then cgErr0 DependencyCycle
+else case remaining of
+  [] => OkC []
+  _ => case pickReady adjT remaining emitted of
+    Nothing => cgErr0 DependencyCycle
+    Just (Pair g rest) =>
+      Vuna.Compiler.Common.bind (orderGroupsAccFuel (fuel - 1) adjT rest (addAllNames g emitted))
+        (\tail => OkC (Base.List.Cons g tail))
+
+-- ---------------------------------------------------------------
+-- 对外分组入口
+-- ---------------------------------------------------------------
+-- | 纯名字级分组：入参是 (名字, 依赖) 与名字的全序（源码顺序）。
+-- 依赖里不在 `names` 里的（内建 / 运行时常量 / 类型级名）在这里被忽略——迁移前
+-- `depAdjacency` 已先把它们滤掉，这里再保险一次。
+export groupNames : List (Pair String (List String)) -> List String -> Check (List (List String))
+groupNames adj names =
+  let
+    nameTbl = Base.HashMap.ofNames names
+    adj2 =
+      map (\p => Pair (firstOf p) (filter (\n => Base.HashMap.member n nameTbl) (secondOf p))) adj
+    adjT = adjTblOf adj2
+    revT = reverseAdjTbl adj2
+  in case postOrder adjT names (Base.HashMap.fromList []) [] of
+    Pair _ order =>
+      let
+        comps = collectComps revT order (Base.HashMap.fromList []) []
+        groups = groupsFromComps comps names
+      in orderGroups adjT groups
+
+-- | 单函数 SCC 且不引用自身时用 let；多函数 SCC（互递归）或自递归才用 let rec。
+groupNeedsRec : HashMap String (List String) -> List String -> Bool
+groupNeedsRec adjT [] = False
+groupNeedsRec adjT ([x]) = memName x (neighborsOf adjT x)
+groupNeedsRec adjT group = True
+
+-- | 递归组里零参定义的右值形状护栏：`let rec` 只接受函数 / 构造子应用。
+-- （判据由 Lowering 从 Core 项算好放进 `irDefRecValueOk`。）
+firstBadRecursiveValue : List IrDef -> Maybe String
+firstBadRecursiveValue [] = Nothing
+firstBadRecursiveValue (d :: rest) =
+  if irDefArity d == 0 then if irDefRecValueOk d then firstBadRecursiveValue rest else Just (irDefName d)
+  else firstBadRecursiveValue rest
+
+findDefByName : String -> List IrDef -> Maybe IrDef
+findDefByName name [] = Nothing
+findDefByName name (d :: rest) = if irDefName d == name then Just d else findDefByName name rest
+
+groupDefsOf : List IrDef -> List String -> List IrDef
+groupDefsOf defs [] = []
+groupDefsOf defs (n :: rest) = case findDefByName n defs of
+  Nothing => groupDefsOf defs rest
+  Just d => d :: groupDefsOf defs rest
+
+-- | 把一个定义表按给定分组序列落成分组，并对递归组做右值形状护栏（顺序与迁移前
+-- `genGroups` 一致：先护栏、再生成）。
+export assembleGroups : HashMap String (List String) -> List IrDef -> List (List String) -> Check (List IrGroup)
+assembleGroups adjT defs [] = OkC []
+assembleGroups adjT defs (g :: rest) =
+  let
+    members = groupDefsOf defs g
+    isRec = groupNeedsRec adjT g
+    checked = if isRec then case firstBadRecursiveValue members of
+      Just name => case findDefByName name members of
+        Just d => cgErrDefAt (irDefSpan d) name (RecursiveValueDefinition name) [name]
+        Nothing => cgErr1 (RecursiveValueDefinition name) name
+      Nothing => OkC (IrGroup True members)
+    else OkC (IrGroup False members)
+  in Vuna.Compiler.Common.bind checked
+    (\grp => Vuna.Compiler.Common.bind (assembleGroups adjT defs rest) (\tail => OkC (Base.List.Cons grp tail)))
+
+-- ---------------------------------------------------------------
+-- 合法性护栏
+-- ---------------------------------------------------------------
+-- | 单元内定义名不得重复（迁移前在 OCaml 名字层校验；IR 层先按源码名去重，
+-- 后端再按渲染名去重）。
+export checkUniqueDefNames : List IrDef -> Check Int
+checkUniqueDefNames defs = checkUniqueDefNamesGo (map irDefName defs) (Base.HashMap.fromList [])
+
+checkUniqueDefNamesGo : List String -> HashMap String Bool -> Check Int
+checkUniqueDefNamesGo [] seen = OkC 0
+checkUniqueDefNamesGo (n :: rest) seen =
+  if Base.HashMap.member n seen then icInternal "duplicate runtime definition name in IR: `${n}`"
+  else checkUniqueDefNamesGo rest (Base.HashMap.insert n True seen)

@@ -1,0 +1,40 @@
+module Vuna.Compiler.Ir where
+
+-- Vuna.Compiler.Ir：擦除后中间表示（IR）门面。
+--
+-- 分层（Track A 第一步）：
+--   - `Ir.Model`   ：IR 数据定义（唯一真源）：节点、`IrTy`、binder、共享元数据、单元/程序；
+--   - `Ir.Analysis`：IR 上的纯分析：Kosaraju SCC 分组（决定 `let` / `let rec` 顺序）、
+--                    递归值形状护栏、定义名去重；
+--   - 本门面      ：整体校验入口 + 跨层名字集合。
+--
+-- 谁 import 谁：
+--   `Core --Codegen.Lower--> Ir --> Codegen.{Decl,Term,Assembly,Split}`；
+--   后端不得 import `Vuna.Compiler.Core` / `Vuna.Compiler.Elab` / `Vuna.Compiler.Intrinsics`，
+--   IR 也不得向下依赖 Codegen（由 `checks.ir-boundary` 守护）。
+import Vuna.Compiler.Common
+export import Vuna.Compiler.Ir.Model
+export import Vuna.Compiler.Ir.Analysis
+
+-- | 单元级校验：定义名唯一、SCC 分组可完成（成环则报错）。
+-- `IrUnit` 里存的是**已分组**的形状，这里用同一套算法重跑一遍自证分组可完成。
+export validateUnit : IrUnit -> Check Int
+validateUnit u =
+  let
+    defs = concatMap irGroupDefs u.irUnitGroups
+    names = map irDefName defs
+    adj = map (\d => Pair (irDefName d) (irDefDeps d)) defs
+  in Vuna.Compiler.Common.bind (checkUniqueDefNames defs)
+    (\_ => Vuna.Compiler.Common.bind (groupNames adj names) (\_ => OkC 0))
+
+-- | 程序级校验：单元级校验 + 入口引用的 main 必须在本单元定义里。
+export validateProgram : IrProgram -> Check Int
+validateProgram p =
+  let
+    u = p.irProgUnit
+    defs = concatMap irGroupDefs u.irUnitGroups
+  in case u.irUnitEntry of
+    Nothing => validateUnit u
+    Just e =>
+      if memName e.irEntryMain (map irDefName defs) then validateUnit u
+      else icInternal "IR entry references an undefined main: `${e.irEntryMain}`"

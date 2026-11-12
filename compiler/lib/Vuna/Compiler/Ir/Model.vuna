@@ -1,0 +1,299 @@
+module Vuna.Compiler.Ir.Model where
+
+-- Vuna.Compiler.Ir.Model：擦除后中间表示（IR）的数据定义（唯一真源）。
+--
+-- 定位（Track A 第一步）：`Core --Lower--> IR --OCaml 后端--> 文本`。
+-- IR 是 Core 与**唯一**后端之间的显式契约：
+--   * 只有运行时定义进 IR：类型级定义 / axiom 不出现，被擦除的实参不产生节点；
+--     但**擦除 binder 仍占 de Bruijn 槽位**（`irBinderErased`），因此 IR 的下标与
+--     Core 的 de Bruijn 下标逐位一致，Lowering 不需要重编号；
+--   * IR 不含 `DtData` / `DtDef` / `Value` / `Closure` 等 Elab/Core 类型，也不含
+--     元变量、固定 fuel、模块归属；只有确定性数据（String / Int / Bool / List / Span），
+--     为后续 `Canonical.Ir`（内容寻址）留出空间；
+--   * **表示语义**（擦除、Nat 字面量折叠、Nat case 降级、case 分支 binder 形状、
+--     record 表示、构造子实参对齐、不透明 cast、内建饱和内联、`++` 链展平、
+--     入口分类、类型声明的参数槽分配）全部在 Lowering 完成，IR 节点自带全部决策；
+--   * **文本**（OCaml 名字编码、跨单元限定、fresh 名字前缀与编号、布局、`let rec`
+--     分组文本、运行时模板）只属于后端。IR 里的名字一律是源码名或已确定的运行时
+--     文本片段（`IrRuntime`），不含 `v_` / `t_` / `C_` 之类目标前缀。
+--
+-- 边界：本模块只 import Base 的纯数据结构与 `Vuna.Compiler.Source` 的 `Span`，
+-- 不下钻 Core / Elab / Intrinsics / Codegen。
+export import Base.Pair
+export import Base.Bool
+export import Base.List
+export import Base.Maybe
+export import Base.String
+import Vuna.Compiler.Source
+
+-- ---------------------------------------------------------------
+-- 签名级运行时类型表面
+-- ---------------------------------------------------------------
+--
+-- 只覆盖运行时表示能出现的形状：类型参数槽、primitive、程序数据族、显式函数、
+-- 两个内建类型构造子、以及运行时不可命名的值（`Obj.t`）。隐式 Pi / 索引 / telescope
+-- 在 Lowering 消解，不进 IR。
+export data IrTy(..) : Type where
+  -- | 数据族的类型参数槽（后端渲染成 `'a<i>`）。
+  IrTyVar : Int -> IrTy
+  -- | `Int` primitive。
+  IrTyInt : IrTy
+  -- | `String` primitive。
+  IrTyStr : IrTy
+  -- | `Bool`（canonical 族的运行时表示就是 OCaml bool）。
+  IrTyBool : IrTy
+  -- | `Float` primitive。
+  IrTyFloat : IrTy
+  -- | 运行时不可命名的值（OCaml `Obj.t`）。
+  IrTyOpaque : IrTy
+  -- | `Array a` 内建类型构造子。
+  IrTyArray : IrTy -> IrTy
+  -- | `IORef a` 内建类型构造子。
+  IrTyRef : IrTy -> IrTy
+  -- | 程序数据族应用（族名 + 运行时类型实参）。
+  IrTyData : String -> List IrTy -> IrTy
+  -- | 显式函数类型（隐式 Pi 已剥掉）。
+  IrTyFun : IrTy -> IrTy -> IrTy
+
+-- ---------------------------------------------------------------
+-- binder
+-- ---------------------------------------------------------------
+--
+-- binder 的**身份**在 Lowering 里分配：lambda 参数沿用源码名（后端转义）；
+-- 生成器 fresh binder 只带「种类 + 序号」，前缀与编号渲染属后端文本约定
+-- （`dtb__<n>` / `dtnat__<n>`）。
+export data IrBName(..) : Type where
+  -- | 源码 binder 名（后端负责转义 / 保留字处理）。
+  IrBUser : String -> IrBName
+  -- | case 分支 binder：序号由 Lowering 按生成顺序分配（后端渲染成 `dtb__<n>`）。
+  IrBArm : Int -> IrBName
+  -- | Nat case 的 scrutinee binder（后端渲染成 `dtnat__<n>`）。
+  IrBNat : Int -> IrBName
+  -- | 丢弃 binder（渲染成 `_`）。
+  IrBWild : IrBName
+
+export record IrBinder(..) where
+  irBinderName : IrBName
+  -- | 擦除占位：占 de Bruijn 槽位，但不进运行时表示（不渲染参数 / pattern）。
+  irBinderErased : Bool
+
+-- | 源码名 binder。
+export mkIrBinder : String -> IrBinder
+mkIrBinder name = IrBinder (IrBUser name) False
+
+-- | 擦除占位 binder。
+export mkIrBinderErased : IrBinder
+mkIrBinderErased = IrBinder IrBWild True
+
+-- | case 分支 fresh binder。
+export mkIrBinderArm : Int -> IrBinder
+mkIrBinderArm n = IrBinder (IrBArm n) False
+
+-- | Nat case scrutinee binder。
+export mkIrBinderNat : Int -> IrBinder
+mkIrBinderNat n = IrBinder (IrBNat n) False
+
+-- | 丢弃 binder（`let _ = e in ...` 的 `_`）。
+export mkIrBinderWild : IrBinder
+mkIrBinderWild = IrBinder IrBWild False
+
+-- ---------------------------------------------------------------
+-- case 分支
+-- ---------------------------------------------------------------
+--
+-- `irAltCtor = Nothing` 是 catch-all；否则是 (族名, 构造子名)。
+-- `irAltBinders` 保留**全部**分支 binder（含擦除占位），因此分支体的 `IrVar` 下标与
+-- Core 一致；只有非擦除 binder 进运行时 pattern。
+export record IrAlt(..) where
+  irAltCtor : Maybe (Pair String String)
+  irAltBinders : List IrBinder
+  irAltBody : Ir
+
+-- ---------------------------------------------------------------
+-- IR 节点
+-- ---------------------------------------------------------------
+export data Ir(..) : Type where
+  -- | 运行时 binder 引用；下标 = Core 的 de Bruijn 下标（擦除 binder 也占位）。
+  IrVar : Int -> Ir
+  -- | 顶层运行时值定义引用（跨单元限定时由后端加前缀并记依赖）。
+  IrGlobal : String -> Ir
+  -- | 构造子应用：族名、构造子名、运行时实参（已按 keep 形状对齐、不可命名字段已 cast）。
+  IrCtor : String -> String -> List Ir -> Ir
+  -- | record 构造：族名 + (字段源码名, 值)（按运行时字段顺序）。
+  IrRecord : String -> List (Pair String Ir) -> Ir
+  -- | record 投影：base、族名、字段源码名。
+  IrProj : Ir -> String -> String -> Ir
+  -- | record 更新：base、族名、(字段源码名, 新值)。
+  IrRecUpd : Ir -> String -> List (Pair String Ir) -> Ir
+  -- | 运行时符号 / 表达式（`bi_*`、`string_of_int` 等）；原样输出。
+  IrRuntime : String -> Ir
+  -- | List 桥接 runtime 文本（`dtp_unpack` 等）；helper 名要按 List 族归属单元限定。
+  IrBridge : String -> Ir
+  -- | 表现层转换（OCaml `Obj.magic`）。
+  IrCast : Ir -> Ir
+  -- | 整数字面量（含折叠后的 Nat 字面量）。
+  IrInt : Int -> Ir
+  -- | 字符串字面量（未转义）。
+  IrStr : String -> Ir
+  -- | 布尔字面量。
+  IrBool : Bool -> Ir
+  -- | 浮点字面量（原始文本，与源码一致）。
+  IrFloatLit : String -> Ir
+  -- | `let` 绑定（unboxed case 降级用）。
+  IrLet : IrBinder -> Ir -> Ir -> Ir
+  -- | lambda 链（擦除 binder 占位不渲染；无运行时 binder 时退化成体）。
+  IrLam : List IrBinder -> Ir -> Ir
+  -- | 应用（擦除实参已在 Lowering 丢弃）。
+  IrApp : Ir -> Ir -> Ir
+  -- | `if`。
+  IrIf : Ir -> Ir -> Ir -> Ir
+  -- | 通用 `match`（无 catch-all 时由后端补不可达兜底臂，保持 match 完整）。
+  IrCase : Ir -> List IrAlt -> Ir
+  -- | Nat case 降级（运行时是 int）：零支 / 后继支 / 兜底支。
+  IrNatCase : Ir -> Maybe IrAlt -> Maybe IrAlt -> Maybe IrAlt -> Ir
+  -- | 内建饱和应用：内建名 + 实参；OCaml 运算符模板表在后端。
+  IrInline : String -> List Ir -> Ir
+  -- | `++` 链展平：`String.concat "" [a; b; c]`。
+  IrConcatMany : List Ir -> Ir
+  -- | 装箱动作构造：族名、构造子名、`EffUnit` 运行时类型、原语运行时 arity、原语节点。
+  IrEffThunk : String -> String -> IrTy -> Int -> Ir -> Ir
+  -- | 线性 bind 的装箱实现：族名、构造子名、`EffUnit` 运行时类型。
+  IrEffBind : String -> String -> IrTy -> Ir
+
+-- ---------------------------------------------------------------
+-- 类型声明
+-- ---------------------------------------------------------------
+--
+-- 三族运行时表示（变体 / OCaml record / 去装箱别名）在 Lowering 决定；每条声明带
+-- 族名、运行时类型参数个数与 `IrTy` 字段表，后端只做文本渲染与跨单元限定。
+export data IrTyDecl(..) : Type where
+  -- | 变体族：族名、运行时类型参数个数、[(构造子名, 字段运行时类型表)]。
+  IrVariantDecl : String -> Int -> List (Pair String (List IrTy)) -> IrTyDecl
+  -- | record 族：族名、运行时类型参数个数、(字段序号, 字段源码名) 表、字段运行时类型表。
+  IrRecordDecl : String -> Int -> List (Pair Int String) -> List IrTy -> IrTyDecl
+  -- | 去装箱族：族名、运行时类型参数个数、唯一保留字段的运行时类型。
+  IrUnboxedDecl : String -> Int -> IrTy -> IrTyDecl
+
+-- ---------------------------------------------------------------
+-- 定义与分组
+-- ---------------------------------------------------------------
+--
+-- 只剩运行时定义（类型级定义 / axiom 已被 Lowering 分区掉）。
+-- `irDefDeps` 是运行时引用到的顶层定义（Core 遍历顺序的去重表）：SCC 分组吃它，
+-- 分组结果与迁移前逐项一致。
+export data IrDef(..) : Type where
+  -- | 运行时定义：名字、运行时参数个数、依赖、体、递归值形状合法、入口期求值守卫、span。
+  IrDef : String -> Int -> List String -> Ir -> Bool -> Bool -> Maybe Span -> IrDef
+  -- | 受限 FFI 定义：名字、`external` 运行时类型、C 符号名、span。
+  IrExternDef : String -> IrTy -> String -> Maybe Span -> IrDef
+
+export irDefName : IrDef -> String
+irDefName (IrDef name arity deps body recOk initGuard span) = name
+irDefName (IrExternDef name ty cName span) = name
+
+export irDefArity : IrDef -> Int
+irDefArity (IrDef name arity deps body recOk initGuard span) = arity
+irDefArity (IrExternDef name ty cName span) = 0
+
+export irDefDeps : IrDef -> List String
+irDefDeps (IrDef name arity deps body recOk initGuard span) = deps
+irDefDeps (IrExternDef name ty cName span) = []
+
+export irDefBody : IrDef -> Maybe Ir
+irDefBody (IrDef name arity deps body recOk initGuard span) = Just body
+irDefBody (IrExternDef name ty cName span) = Nothing
+
+export irDefExtern : IrDef -> Maybe (Pair IrTy String)
+irDefExtern (IrDef name arity deps body recOk initGuard span) = Nothing
+irDefExtern (IrExternDef name ty cName span) = Just (Pair ty cName)
+
+-- | 零参定义作为 `let rec` 右值是否合法（`let rec` 只接受函数 / 构造子应用）。
+export irDefRecValueOk : IrDef -> Bool
+irDefRecValueOk (IrDef name arity deps body recOk initGuard span) = recOk
+irDefRecValueOk (IrExternDef name ty cName span) = True
+
+-- | 定义体是否要包运行时报告器（入口单元零参 `main`：模块初始化期求值）。
+export irDefInitGuard : IrDef -> Bool
+irDefInitGuard (IrDef name arity deps body recOk initGuard span) = initGuard
+irDefInitGuard (IrExternDef name ty cName span) = False
+
+export irDefSpan : IrDef -> Maybe Span
+irDefSpan (IrDef name arity deps body recOk initGuard span) = span
+irDefSpan (IrExternDef name ty cName span) = span
+
+-- | 分组：SCC 序 + 该组是否需要 `let rec`。
+export record IrGroup(..) where
+  irGroupIsRec : Bool
+  irGroupDefs : List IrDef
+
+export irGroupIsRec : IrGroup -> Bool
+irGroupIsRec (IrGroup isRec defs) = isRec
+
+export irGroupDefs : IrGroup -> List IrDef
+irGroupDefs (IrGroup isRec defs) = defs
+
+-- ---------------------------------------------------------------
+-- 入口（main 钩子）的已决策形态
+-- ---------------------------------------------------------------
+--
+-- main 的类型拆解（动作 vs 普通值）、展示函数选择、动作行 handler 列表都在 Lowering
+-- 完成；后端只按固定钩子模板把名字渲染进文本。
+export record IrEntry(..) where
+  -- | 展示函数节点（`IrRuntime "string_of_int"`，或合成的 `@vuna@main_show` 值引用）。
+  irEntryShow : Ir
+  -- | main 运行时值定义的源码名（通常是 `main`）。
+  irEntryMain : String
+  -- | main 是否是动作（`Eff r a`）：True 时先跑 `runMain` 与宿主 handler。
+  irEntryIsAction : Bool
+  -- | 动作 main 的 `runMain` 源码名（非动作为 Nothing）。
+  irEntryRunMain : Maybe String
+  -- | 动作行里的内建宿主效应 handler（源码名，行顺序：后出现的包在外层）。
+  irEntryHandlers : List String
+
+-- ---------------------------------------------------------------
+-- 共享元数据 / 单元 / 程序
+-- ---------------------------------------------------------------
+-- | canonical `Base.List.List` 族的三个源码名（程序没声明时没有）。
+export record IrListFam(..) where
+  irListFamily : String
+  irListNil : String
+  irListCons : String
+
+-- | 程序级共享元数据（与单元无关，Lowering 一次算好）。
+export record IrShared(..) where
+  -- | 用 OCaml record 表示的族 → 运行时字段表 `(字段序号, 字段源码名)`。
+  -- case 分支的 record pattern 需要它；构造 / 投影 / 更新节点自带字段名。
+  irSharedRecordFields : List (Pair String (List (Pair Int String)))
+  -- | canonical List 族（没有声明时 Nothing）。
+  irSharedListFam : Maybe IrListFam
+  -- | 程序是否用到浮点（决定 `Vuna_runtime.ml` 是否追加浮点 helper）。
+  irSharedUsesFloat : Bool
+  -- | 程序是否用到编译器 tracing 隐藏原语（决定是否追加 tracing helper）。
+  irSharedUsesTrace : Bool
+
+export irSharedRecordFieldsOf : String -> List (Pair String (List (Pair Int String))) -> List (Pair Int String)
+irSharedRecordFieldsOf family [] = []
+irSharedRecordFieldsOf family (p :: rest) =
+  if firstOf p == family then secondOf p else irSharedRecordFieldsOf family rest
+
+-- | 一个编译单元的 IR。
+export record IrUnit(..) where
+  -- | 本单元写出的类型声明（程序顺序）。
+  irUnitTyDecls : List IrTyDecl
+  -- | 本单元运行时定义（SCC 序分组）。
+  irUnitGroups : List IrGroup
+  -- | 本单元是否声明 canonical `Base.List.List` 族（决定是否写桥接 helper）。
+  irUnitHasListFamily : Bool
+  -- | 本单元类型声明里出现过的全局名（`typeDepsOf` 的输入，含擦除位置引用）。
+  irUnitTypeRefs : List String
+  -- | 入口单元（`Main`）的入口形态；库单元为 Nothing。
+  irUnitEntry : Maybe IrEntry
+
+-- | 整个程序的 IR（check 路径把它当一个单元装配）。
+export record IrProgram(..) where
+  irProgShared : IrShared
+  irProgUnit : IrUnit
+
+-- | `Nat` 链折回时的饱和上限（与 Core / 运行时一致）。
+export irNatChainMax : Int
+irNatChainMax = 4611686018427387903
