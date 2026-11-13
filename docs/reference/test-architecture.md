@@ -70,6 +70,9 @@ commands 在 [testing.md](testing.md)；对象库本身见 [cache.md](cache.md)�
 | `e2e` | `check .`、LSP/REPL、workspace/build、seed | < 60 s | 合并前 / nightly |
 | `perf` | growth/metrics/bench | 独立机器 | nightly |
 
+tier 过滤已落地：`--tier fast|integration|e2e`（可重复）；`*.steps` 归 `e2e`，
+seed/runtime 归 `integration`，golden/error/lint/fix/check 归 `fast`。
+
 调度（P1，未落地）：父进程按历史 `costs.tsv` + kind 权重做 LPT 分桶；worker 保留
 `--worker i/N` 协议。步骤内长脚本按独立断言组拆分；每 case 一个总预算，而不是每命令
 300 s。

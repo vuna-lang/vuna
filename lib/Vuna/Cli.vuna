@@ -244,7 +244,7 @@ interpEmit path = do
 -- C23/C39：--jobs N 包内并行 + 隐藏的 --only-file（内部子进程模式））
 -- ---------------------------------------------------------------
 testArgs : List String -> Eff hostRow Int
-testArgs args = case parseToolArgs "vuna test" [BoolFlag "list", BoolFlag "verbose", BoolFlag "fail-fast", BoolFlag "json", BoolFlag "no-cache", BoolFlag "audit", BoolFlag "strict-skips", BoolFlag "timings", BoolFlag "last-failed", BoolFlag "bless", BoolFlag "bless-diag", BoolFlag "watch", BoolFlag "quiet", MultiValueFlag "filter", MultiValueFlag "only", ValueFlag "jobs", ValueFlag "only-file", ValueFlag "suite", ValueFlag "timeout", ValueFlag "worker", ValueFlag "results-dir", ValueFlag "cache-dir", ValueFlag "changed"] args of
+testArgs args = case parseToolArgs "vuna test" [BoolFlag "list", BoolFlag "verbose", BoolFlag "fail-fast", BoolFlag "json", BoolFlag "no-cache", BoolFlag "audit", BoolFlag "strict-skips", BoolFlag "timings", BoolFlag "last-failed", BoolFlag "bless", BoolFlag "bless-diag", BoolFlag "watch", BoolFlag "quiet", MultiValueFlag "filter", MultiValueFlag "only", MultiValueFlag "tier", ValueFlag "jobs", ValueFlag "only-file", ValueFlag "suite", ValueFlag "timeout", ValueFlag "worker", ValueFlag "results-dir", ValueFlag "cache-dir", ValueFlag "changed"] args of
   ErrC e => toolError (diagText e)
   OkC parsed => case flagValue parsed "suite" of
     Just suitePath => suiteRun parsed suitePath
@@ -282,7 +282,7 @@ suiteOptsOf parsed jobs timeout worker suitePath =
     (flagSet parsed "quiet") (flagSet parsed "no-cache") (flagSet parsed "last-failed")
     (flagSet parsed "bless") (flagSet parsed "bless-diag") (flagValue parsed "changed")
     (flagValue parsed "cache-dir") (flagSet parsed "watch") (flagSet parsed "timings")
-    (flagSet parsed "strict-skips") (flagSet parsed "audit")
+    (flagSet parsed "strict-skips") (flagSet parsed "audit") (flagValues parsed "tier")
 
 -- suite 的 `--jobs`：缺省 0（auto）；`auto` 也映射到 0；其余必须是 >= 1 的整数。
 suiteJobsOf : Parsed -> Check Int

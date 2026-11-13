@@ -1275,7 +1275,10 @@ caseMatches opts c =
     filterOk = case opts.suiteFilter of
       [] => True
       pats => matchAny pats c
-  in onlyOk && filterOk
+    tierOk = case opts.suiteTiers of
+      [] => True
+      tiers => memName c.caseTier tiers
+  in onlyOk && filterOk && tierOk
 
 filterCases : SuiteOpts -> List Case -> List Case
 filterCases opts cases = filter (caseMatches opts) cases
@@ -1417,7 +1420,7 @@ else
     workerArg = "${strOfInt index}/${strOfInt jobs}"
     filters =
       append (concatMap (\p => ["--only", p]) opts.suiteOnly)
-        (concatMap (\p => ["--filter", p]) opts.suiteFilter)
+        (append (concatMap (\p => ["--filter", p]) opts.suiteFilter) (concatMap (\p => ["--tier", p]) opts.suiteTiers))
     cacheArgs = case opts.suiteCacheDir of
       Just dir => ["--cache-dir", dir]
       Nothing => []
@@ -1777,7 +1780,7 @@ commaJoin xs = join ", " xs
 auditCases : List String -> List Case
 auditCases [] = []
 auditCases paths =
-  [ Case "audit/orphans" "audit" ["audit"] (CBroken "${strOfInt (listLength paths)} orphan fixture(s): ${commaJoin (takeFirst 12 paths)}") 0
+  [ Case "audit/orphans" "audit" ["audit"] (CBroken "${strOfInt (listLength paths)} orphan fixture(s): ${commaJoin (takeFirst 12 paths)}") 0 "e2e"
   ]
 
 auditSuite : SuiteOpts -> Suite -> Eff hostRow Int
@@ -1875,7 +1878,7 @@ runSuiteOnce opts suite =
       --   ① 已声明 family 目录里的孤儿夹具（精确 source 认领）；
       --   ② case 总数下限——整族从 suite.toml 消失时，①会连目录一起看不到。
       minCase =
-        if suite.suiteMinCases > 0 && listLength discovered < suite.suiteMinCases then [ Case "audit/min-cases" "audit" ["audit"] (CBroken "only ${strOfInt (listLength discovered)} case(s) discovered, suite.toml requires >= ${strOfInt suite.suiteMinCases}") 0
+        if suite.suiteMinCases > 0 && listLength discovered < suite.suiteMinCases then [ Case "audit/min-cases" "audit" ["audit"] (CBroken "only ${strOfInt (listLength discovered)} case(s) discovered, suite.toml requires >= ${strOfInt suite.suiteMinCases}") 0 "e2e"
         ]
         else []
       cases0 = filterCases opts (append (append discovered (auditCases orphans)) minCase)

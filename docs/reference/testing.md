@@ -18,6 +18,8 @@ vuna test --suite test/suite.toml                 # 全量；--jobs 默认 auto
 vuna test --suite test/suite.toml --list          # 列出章节/case
 vuna test --suite test/suite.toml --only 34       # 纯数字按 section 精确匹配
 vuna test --suite test/suite.toml --filter dt/03  # 按 case id/tag 子串
+vuna test --suite test/suite.toml --tier fast      # 只跑 fast 层（golden/error/lint/fix）
+vuna test --suite test/suite.toml --tier e2e       # 只跑 e2e 层（steps）
 vuna test --suite test/suite.toml --jobs 16       # 显式并行度（覆盖 auto）
 vuna test --suite test/suite.toml --json          # 机器可读汇总
 ```
