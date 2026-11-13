@@ -20,23 +20,23 @@ b2i b = if b then 1 else 0
 
 prepare : Eff hostRow Int
 prepare = do
-  _ <- fsRemoveFile "default" pathA
-  _ <- fsRemoveFile "default" pathB
-  _ <- fsMakeDir "default" dir
-  written <- fsWriteFile "default" pathA "hello"
-  _ <- fsWriteFileAtomic "default" pathB "yo"
-  _ <- fsRemoveFile "default" pathB
+  _ <- fsRemoveFile pathA
+  _ <- fsRemoveFile pathB
+  _ <- fsMakeDir dir
+  written <- fsWriteFile pathA "hello"
+  _ <- fsWriteFileAtomic pathB "yo"
+  _ <- fsRemoveFile pathB
   pure written
 
 inspectFs : Int -> Eff hostRow String
 inspectFs written = do
-  exists <- fsFileExists "default" pathA
-  content <- fsReadFile "default" pathA
-  size <- fsFileSize "default" pathA
-  isdir <- fsIsDirectory "default" dir
-  files <- fsReadDir "default" dir
-  _ <- fsRemoveFile "default" pathA
-  exists2 <- fsFileExists "default" pathA
+  exists <- fsFileExists pathA
+  content <- fsReadFile pathA
+  size <- fsFileSize pathA
+  isdir <- fsIsDirectory dir
+  files <- fsReadDir dir
+  _ <- fsRemoveFile pathA
+  exists2 <- fsFileExists pathA
   pure
     (strFromInt written ++ ":" ++ content ++ ":" ++ strFromInt size ++ ":" ++ strFromInt (b2i isdir) ++ ":" ++ join "," files ++ ":" ++ strFromInt (b2i exists2))
 
@@ -49,5 +49,5 @@ prog = do
 main : Eff hostRow Int
 main = do
   summary <- prog
-  _ <- consolePrint "default" (summary ++ "\n")
+  _ <- consolePrint (summary ++ "\n")
   pure 0

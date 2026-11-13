@@ -1,0 +1,6 @@
+-- `@` 只能给有隐式 String 实例名参数的函数用；id 没有该参数。
+id : Int -> Int
+id x = x
+
+bad : Int
+bad = id@audit 1

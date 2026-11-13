@@ -21,12 +21,12 @@ resClock Now = Int
 resClock (SleepMicros us) = Int
 
 -- | 通过命名实例读当前时间戳（微秒）。
-export clockNow : (n : String) -> {r : Row} -> {w : Member n ClockOp r} -> Eff r Int
-clockNow n = sendCore ClockOp "clock" n Now
+export clockNow : Member n ClockOp r => Eff r Int
+clockNow = sendCore ClockOp "clock" n Now
 
 -- | 通过命名实例睡 `us` 微秒；真实 handler 走编译器原生 `@vuna@prim_eff_sleep`（阻塞睡眠，不是忙等）。
-export clockSleepMicros : (n : String) -> Int -> {r : Row} -> {w : Member n ClockOp r} -> Eff r Int
-clockSleepMicros n us = sendCore ClockOp "clock" n (SleepMicros us)
+export clockSleepMicros : Member n ClockOp r => Int -> Eff r Int
+clockSleepMicros us = sendCore ClockOp "clock" n (SleepMicros us)
 
 -- | 一阶 handler：`ret` / `opH` 由调用方给出，结果行删除 `ClockOp`。
 export handleClock : {a : Type} -> {b : Type} -> {r : Row} -> (n : String) -> {w : Member n ClockOp r} -> (a -> b) -> ((o : ClockOp) -> (resClock o -> b) -> b) -> Eff r a -> Eff (Base.Eff.rowRem n ClockOp r) b

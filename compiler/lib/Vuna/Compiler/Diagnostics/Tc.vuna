@@ -39,6 +39,7 @@ export data TcErr(..) : Nat -> Type where
   InstanceMissingMethod : TcErr Zero
   OrphanInstance : TcErr Zero
   InterfaceNoParam : TcErr Zero
+  NoInstParam : TcErr Zero
   IntStringCaseNeedsFallback : TcErr Zero
   IntStringCaseRestriction : TcErr Zero
   InvalidArrowType : TcErr Zero
@@ -161,6 +162,7 @@ tcCode ConstraintNotDict = "TC_ConstraintNotDict"
 tcCode InstanceMissingMethod = "TC_InstanceMissingMethod"
 tcCode OrphanInstance = "TC_OrphanInstance"
 tcCode InterfaceNoParam = "TC_InterfaceNoParam"
+tcCode NoInstParam = "TC_NoInstParam"
 tcCode IntStringCaseNeedsFallback = "TC_IntStringCaseNeedsFallback"
 tcCode IntStringCaseRestriction = "TC_IntStringCaseRestriction"
 tcCode InvalidArrowType = "TC_InvalidArrowType"
@@ -272,6 +274,7 @@ tcTemplate InstanceMissingMethod = "instance is missing an implementation for an
 tcTemplate OrphanInstance =
   "instance is orphan: declare it in the module that defines the trait or the head type"
 tcTemplate InterfaceNoParam = "interfaces must have at least one parameter"
+tcTemplate NoInstParam = "`@` override requires an implicit String instance parameter"
 tcTemplate IntStringCaseNeedsFallback =
   "case on Int / String / Nat needs a variable or wildcard branch as fallback (M19)"
 tcTemplate IntStringCaseRestriction =
@@ -421,6 +424,7 @@ tcChunk2 =
     TcEntry (tcCode InstanceMissingMethod) (tcTemplate InstanceMissingMethod) "instance 缺方法实现",
     TcEntry (tcCode OrphanInstance) (tcTemplate OrphanInstance) "实例既不在 trait 也不在 head 类型的定义模块",
     TcEntry (tcCode InterfaceNoParam) (tcTemplate InterfaceNoParam) "接口至少一个参数",
+    TcEntry (tcCode NoInstParam) (tcTemplate NoInstParam) "`@` 覆盖需要隐式 String 实例名参数",
     TcEntry (tcCode IntStringCaseNeedsFallback) (tcTemplate IntStringCaseNeedsFallback) "Int/String 的 case 需要兜底分支"
   ]
 

@@ -94,6 +94,41 @@ quantifyTopKinds (n :: rest) sigExpr e sp =
   EPi n True Nothing (kindArrowExpr (exprMaxAppArity n sigExpr) sp)
     (quantifyTopKinds rest sigExpr e sp) sp
 
+-- 带域覆盖的量化：`Member n e r => ...` 里的 n 是 String、r 是 Row（不是按应用次数
+-- 推出的 Type）。其余名字仍按 `quantifyTopKinds` 的 kind 规则。
+quantifyTopKindsWith : (String -> Maybe Expr) -> List String -> Expr -> Expr -> Span -> Expr
+quantifyTopKindsWith domOf [] sigExpr e sp = e
+quantifyTopKindsWith domOf (n :: rest) sigExpr e sp =
+  let
+    dom = case domOf n of
+      Just d => d
+      Nothing => kindArrowExpr (exprMaxAppArity n sigExpr) sp
+  in EPi n True Nothing dom (quantifyTopKindsWith domOf rest sigExpr e sp) sp
+
+-- 签名约束里的 `Member n e r`：收集 n/r 的域覆盖（String/Row），供量化使用。
+-- 只有顶层签名 ctx 走这里；`Member` 本身仍是 Base.Eff 的 data family，不是 trait。
+memberDomainOverrides : List Expr -> List (Pair String Expr)
+memberDomainOverrides [] = []
+memberDomainOverrides (e :: rest) = append (memberDomainOverridesOne e) (memberDomainOverrides rest)
+
+memberDomainOverridesOne : Expr -> List (Pair String Expr)
+memberDomainOverridesOne (EApp (EVar g _) [nExpr, _, rExpr] sp) =
+  if g == effMemberFamilyName then
+    let
+      nPart = case nExpr of
+        EVar n nsp => [Pair n (EVar strTypeName nsp)]
+        _ => []
+      rPart = case rExpr of
+        EVar r rsp => [Pair r (EVar effRowFamilyName rsp)]
+        _ => []
+    in append nPart rPart
+  else []
+memberDomainOverridesOne _ = []
+
+memberDomainOf : List (Pair String Expr) -> String -> Maybe Expr
+memberDomainOf [] n = Nothing
+memberDomainOf (Pair k v :: rest) n = if k == n then Just v else memberDomainOf rest n
+
 kindArrowExpr : Int -> Span -> Expr
 kindArrowExpr k sp =
   if k <= 0 then EVar "Type" sp
@@ -203,7 +238,8 @@ quantifyTopSigCtxCached prefix banned preludeBanned ctx ty sp =
     -- （签名变成 `{a : Type} -> {a : Type} -> a -> a`，推断位置留下无主元变量）。
     lower = dedupNames (append (concatMap exprLowerVars ctx) (exprLowerVars ty))
     names = keepOutQualified prefix banned preludeBanned (dropPiBound lower (piBoundNames ty))
-  in quantifyTopKinds names combined ty sp
+    overrides = memberDomainOverrides ctx
+  in quantifyTopKindsWith (memberDomainOf overrides) names combined ty sp
 
 keepOutQualified : String -> HashMap String Bool -> HashMap String Bool -> List String -> List String
 keepOutQualified prefix banned preludeBanned [] = []

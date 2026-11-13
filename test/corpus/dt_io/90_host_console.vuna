@@ -4,5 +4,5 @@ import Base.EffConsole
 
 main : Eff [ConsoleOp] Int
 main = do
-  _ <- consolePrint "default" "auto-spike\n"
+  _ <- consolePrint "auto-spike\n"
   pure 0

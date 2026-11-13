@@ -10,11 +10,11 @@ import Base.Eff
 
 export program : Eff hostRow Int
 program = do
-  _ <- consolePrint "default" "codegen"
+  _ <- consolePrint "codegen"
   pure 0
 
 export probe : Eff hostRow Int
-probe = consolePrint "default" "codegen"
+probe = consolePrint "codegen"
 
 export marker : Int
 marker = 0

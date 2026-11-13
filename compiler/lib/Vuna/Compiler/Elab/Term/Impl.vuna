@@ -388,6 +388,24 @@ performOperand (EApp (EVar name sp) ([op]) asp) =
   if isPerformSyntax name then Just (Pair op asp) else Nothing
 performOperand _ = Nothing
 
+-- `@` 降级后的隐式实参标记：`EApp (EVar @vuna@inst@arg sp) [payload] sp`。
+instArgOperand : Expr -> Maybe Expr
+instArgOperand (EApp (EVar name _) ([payload]) _) =
+  if isInstArgSyntax name then Just payload else Nothing
+instArgOperand _ = Nothing
+
+-- `@` 调用标记：`EApp (EVar @vuna@app@at sp) (f :: name :: args) sp`。
+appAtOperand : Expr -> Maybe (Pair Expr (Pair Expr (List Expr)))
+appAtOperand (EApp (EVar name _) (f :: nm :: rest) sp) =
+  if isAppAtSyntax name then Just (Pair f (Pair nm rest)) else Nothing
+appAtOperand _ = Nothing
+
+-- `f@name args` 的 Elab 重写（纯函数）：`f (@vuna@inst@arg name) args`。
+appAtCallExpr : Expr -> Check Expr
+appAtCallExpr (EApp (EVar _ _) (f :: nm :: rest) sp) =
+  OkC (EApp f (EApp (EVar instArgSyntax sp) [nm] sp :: rest) sp)
+appAtCallExpr _ = icInternal "malformed @ marker"
+
 qualifyShort : String -> String -> String
 qualifyShort mod short = if mod == "" then short else "${mod}.${short}"
 
@@ -581,11 +599,13 @@ else case handleOperand expr of
         Vuna.Compiler.Common.bind (performCallExpr globals ec1 opTy op (exprSpan expr))
           (\callExpr => inferEFuel (fuel - 1) globals ctx ec1 callExpr)
     )
-    Nothing => case listLitElems expr of
-      Just elems =>
-        Vuna.Compiler.Common.bind (expandListLit ec listFamilyName elems (exprSpan expr))
-          (\e2 => inferEFuel (fuel - 1) globals ctx ec e2)
-      Nothing => inferEFuelCore fuel globals ctx ec expr
+    Nothing => case appAtOperand expr of
+      Just _ => Vuna.Compiler.Common.bind (appAtCallExpr expr) (\callExpr => inferEFuel (fuel - 1) globals ctx ec callExpr)
+      Nothing => case listLitElems expr of
+        Just elems =>
+          Vuna.Compiler.Common.bind (expandListLit ec listFamilyName elems (exprSpan expr))
+            (\e2 => inferEFuel (fuel - 1) globals ctx ec e2)
+        Nothing => inferEFuelCore fuel globals ctx ec expr
 
 -- | 自动补注（M41 新增导出）：inferEFuelCore。
 inferEFuelCore : Int -> List (Pair String Term) -> Ctx -> Ec -> Expr -> Check (Pair Term (Pair Value Ec))
@@ -616,6 +636,7 @@ else case expr of
   EFloat raw sp => OkC (Pair (TFloat raw) (Pair (VNeutral (NGlobal floatTypeName [])) ec))
   EPi name implicit qty dom cod sp =>
     inferPiFuel (fuel - 1) globals ctx ec name implicit qty dom cod sp
+  EApp (EVar n fsp) args sp => if isInstArgSyntax n then tcErr0 sp NoInstParam else inferAppFuel (fuel - 1) globals ctx ec (EVar n fsp) args sp Nothing
   EApp fn args sp => inferAppFuel (fuel - 1) globals ctx ec fn args sp Nothing
   ELam names body sp => tcErr0 sp LambdaNoSignature
   EIf c t e sp => Vuna.Compiler.Common.bind (checkCondBoolFuel (fuel - 1) globals ctx ec c sp) (\pc => case pc of
@@ -889,7 +910,7 @@ else Vuna.Compiler.Common.bind (checkTypeFuel (fuel - 1) globals ctx ec dom) (\p
     else Vuna.Compiler.Common.bind (checkTypeFuel (fuel - 1) globals ctx2 ec1 cod) (\pc => case pc of
       Pair codTerm (Pair codSort ec2) =>
         OkC
-          (Pair (TPi name implicit (if isLinDom then Rig1 else rigOfQty implicit isTypeDom qty) domTerm codTerm) (Pair (VType (levelMax domSort codSort)) ec2))
+          (Pair (TPi name implicit (if isLinDom then Rig1 else if implicit then implicitBinderRig ec domVal else rigOfQty False isTypeDom qty) domTerm codTerm) (Pair (VType (levelMax domSort codSort)) ec2))
     )
 )
 
@@ -1032,14 +1053,32 @@ rowAtParts : Expr -> Maybe (Pair Expr Expr)
 rowAtParts (EApp (EVar name _) ([e, n]) _) = if isRowAtSyntax name then Just (Pair e n) else Nothing
 rowAtParts _ = Nothing
 
+appAtParts : Expr -> Maybe (Pair Expr (Pair Expr (List Expr)))
+appAtParts (EApp (EVar name _) (f :: nm :: rest) _) =
+  if isAppAtSyntax name then Just (Pair f (Pair nm rest)) else Nothing
+appAtParts _ = Nothing
+
+-- 行条目（rowAt 或 appAt）：`Pair label name`。appAt 的多余实参是标签应用
+-- （`[StateOp@counter Nat]` ⇒ 标签 `StateOp Nat`）。
+rowEntryParts : Expr -> Maybe (Pair Expr Expr)
+rowEntryParts e = case rowAtParts e of
+  Just p => Just p
+  Nothing => case appAtParts e of
+    Just (Pair label (Pair nm rest)) => Just (Pair (applyExtra label rest) nm)
+    Nothing => Nothing
+
+applyExtra : Expr -> List Expr -> Expr
+applyExtra label [] = label
+applyExtra label args = EApp label args (exprSpan label)
+
 -- 行条目标签：`X@name` 取 X，其余原样（不再把名字塞进标签）。
 rowLitLabel : Expr -> Expr
-rowLitLabel e = case rowAtParts e of
+rowLitLabel e = case rowEntryParts e of
   Just (Pair x _) => x
   Nothing => e
 
 rowLitNameArg : Expr -> Maybe Expr
-rowLitNameArg e = case rowAtParts e of
+rowLitNameArg e = case rowEntryParts e of
   Just (Pair _ n) => Just n
   Nothing => Nothing
 
@@ -1130,11 +1169,30 @@ else
               Pair argTerms (Pair resTy ec3) =>
                 OkC (Pair (Base.List.Cons (Pair metaTerm Rig0) argTerms) (Pair resTy ec3))
             )
-    else if isImplicitDomain ctx ec dom then case newMetaAt sp ctx ec of
-      Pair metaTerm ec1 => Vuna.Compiler.Common.bind (inferArgsGo (fuel - 1) globals ctx ec1 (applyClosure clo (eval (ctxEnv ctx) metaTerm)) args sp hint) (\p => case p of
-        Pair argTerms (Pair resTy ec2) =>
-          OkC (Pair (Base.List.Cons (Pair metaTerm Rig0) argTerms) (Pair resTy ec2))
-      )
+    else if isImplicitDomain ctx ec dom then
+      if isStringImplicitDomain ec dom then case args of
+        a :: rest => case instArgOperand a of
+          Just payload => Vuna.Compiler.Common.bind (checkEFuel (fuel - 1) globals ctx ec payload dom) (\p => case p of
+            Pair payloadTerm ec1 => Vuna.Compiler.Common.bind (inferArgsGo (fuel - 1) globals ctx ec1 (applyClosure clo (evalCtx ctx payloadTerm)) rest sp hint) (\q => case q of
+              Pair argTerms (Pair resTy ec2) =>
+                OkC (Pair (Base.List.Cons (Pair payloadTerm rig) argTerms) (Pair resTy ec2))
+            )
+          )
+          Nothing => case newMetaAt sp ctx ec of
+            Pair metaTerm ec1 => Vuna.Compiler.Common.bind (inferArgsGo (fuel - 1) globals ctx ec1 (applyClosure clo (evalCtx ctx metaTerm)) args sp hint) (\p => case p of
+              Pair argTerms (Pair resTy ec2) =>
+                OkC (Pair (Base.List.Cons (Pair metaTerm rig) argTerms) (Pair resTy ec2))
+            )
+        [] => case newMetaAt sp ctx ec of
+          Pair metaTerm ec1 => Vuna.Compiler.Common.bind (inferArgsGo (fuel - 1) globals ctx ec1 (applyClosure clo (evalCtx ctx metaTerm)) args sp hint) (\p => case p of
+            Pair argTerms (Pair resTy ec2) =>
+              OkC (Pair (Base.List.Cons (Pair metaTerm rig) argTerms) (Pair resTy ec2))
+          )
+      else case newMetaAt sp ctx ec of
+        Pair metaTerm ec1 => Vuna.Compiler.Common.bind (inferArgsGo (fuel - 1) globals ctx ec1 (applyClosure clo (evalCtx ctx metaTerm)) args sp hint) (\p => case p of
+          Pair argTerms (Pair resTy ec2) =>
+            OkC (Pair (Base.List.Cons (Pair metaTerm rig) argTerms) (Pair resTy ec2))
+        )
     else tcErr0 sp ImplicitParamKind
     else case args of
       [] => OkC (Pair [] (Pair forced ec))
@@ -1383,12 +1441,14 @@ else case handleOperand expr of
   )
   Nothing => case performOperand expr of
     Just _ => checkByInferFuel (fuel - 1) globals ctx ec expr expected
-    Nothing => case listLitElems expr of
-      Just elems =>
-        Vuna.Compiler.Common.bind
-          (expandListLit ec (listLitFamily ec (forceVal ec expected)) elems (exprSpan expr))
-          (\e2 => checkEFuel (fuel - 1) globals ctx ec e2 expected)
-      Nothing => checkEFuelNoRow fuel globals ctx ec expr expected
+    Nothing => case appAtOperand expr of
+      Just _ => Vuna.Compiler.Common.bind (appAtCallExpr expr) (\callExpr => checkEFuel (fuel - 1) globals ctx ec callExpr expected)
+      Nothing => case listLitElems expr of
+        Just elems =>
+          Vuna.Compiler.Common.bind
+            (expandListLit ec (listLitFamily ec (forceVal ec expected)) elems (exprSpan expr))
+            (\e2 => checkEFuel (fuel - 1) globals ctx ec e2 expected)
+        Nothing => checkEFuelNoRow fuel globals ctx ec expr expected
 
 -- 字面量转换（FromString / FromInt）：期望类型不是内建字面量类型时，若期望类型上存在
 -- 对应 trait 的实例，就把字面量降级成 trait 方法应用（`fromString "s"` / `fromInt n`），
@@ -1458,6 +1518,7 @@ else case expr of
   ELam names body sp => checkLamFuel (fuel - 1) globals ctx ec names body expected sp
   EApp (EVar "->" _) args sp => checkByInferFuel (fuel - 1) globals ctx ec expr expected
   EApp (EVar "Type" _) args sp => checkByInferFuel (fuel - 1) globals ctx ec expr expected
+  EApp (EVar n fsp) args sp => if isInstArgSyntax n then tcErr0 sp NoInstParam else checkAppFuel (fuel - 1) globals ctx ec (EVar n fsp) args expected sp
   EApp fn args sp => checkAppFuel (fuel - 1) globals ctx ec fn args expected sp
   EPi name implicit qty dom cod sp => checkByInferFuel (fuel - 1) globals ctx ec expr expected
   EIf c t e sp => checkByInferFuel (fuel - 1) globals ctx ec expr expected
@@ -1728,11 +1789,13 @@ else case handleOperand expr of
   Nothing => case performOperand expr of
     -- perform 标记必须先于 EApp 分解拦截（否则会把标记名当普通变量解析）。
     Just _ => inferEFuel (fuel - 1) globals ctx ec expr
-    Nothing => case expr of
-      EApp fn args sp =>
-        inferAppFuel (fuel - 1) globals ctx ec fn args sp
-          (Just (Pair (length (ecPending ec)) expected))
-      _ => inferEFuel fuel globals ctx ec expr
+    Nothing => case appAtOperand expr of
+      Just _ => Vuna.Compiler.Common.bind (appAtCallExpr expr) (\callExpr => inferEFuel (fuel - 1) globals ctx ec callExpr)
+      Nothing => case expr of
+        EApp fn args sp =>
+          inferAppFuel (fuel - 1) globals ctx ec fn args sp
+            (Just (Pair (length (ecPending ec)) expected))
+        _ => inferEFuel fuel globals ctx ec expr
 
 -- ---------------------------------------------------------------
 -- F3-1：运行入口的未处理效应诊断

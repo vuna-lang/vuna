@@ -16,8 +16,8 @@ export resExit : ExitOp -> Type
 resExit (ExitWith _) = Int
 
 -- | 通过命名实例退出进程（原语类型 `Int -> Eff [] Int`，执行即退出、不返回）。
-export exitWith : (n : String) -> Int -> {r : Row} -> {w : Member n ExitOp r} -> Eff r Int
-exitWith n code = sendCore ExitOp "exit" n (ExitWith code)
+export exitWith : Member n ExitOp r => Int -> Eff r Int
+exitWith code = sendCore ExitOp "exit" n (ExitWith code)
 
 -- | 一阶 handler：结果行删除 `ExitOp`。
 export handleExit : {a : Type} -> {b : Type} -> {r : Row} -> (n : String) -> {w : Member n ExitOp r} -> (a -> b) -> ((o : ExitOp) -> (resExit o -> b) -> b) -> Eff r a -> Eff (Base.Eff.rowRem n ExitOp r) b

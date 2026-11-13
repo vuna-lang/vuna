@@ -30,16 +30,16 @@ resProcess (Exit c) = Int
 resProcess (RunIn dir args) = Int
 
 -- | 通过命名实例取进程参数（`@vuna@prim_eff_getArgs`，**不含** `argv[0]`）。
-export processArgs : (n : String) -> {r : Row} -> {w : Member n ProcessOp r} -> Eff r (List String)
-processArgs n = sendCore ProcessOp "process" n Args
+export processArgs : Member n ProcessOp r => Eff r (List String)
+processArgs = sendCore ProcessOp "process" n Args
 
 -- | 通过命名实例以状态码 `c` 退出；真实 handler 下不返回。
-export processExit : (n : String) -> Int -> {r : Row} -> {w : Member n ProcessOp r} -> Eff r Int
-processExit n c = sendCore ProcessOp "process" n (Exit c)
+export processExit : Member n ProcessOp r => Int -> Eff r Int
+processExit c = sendCore ProcessOp "process" n (Exit c)
 
 -- | 通过命名实例在目录 `dir` 下运行命令 `args`，返回退出码；执行后恢复原 cwd。
-export processRunIn : (n : String) -> String -> List String -> {r : Row} -> {w : Member n ProcessOp r} -> Eff r Int
-processRunIn n dir args = sendCore ProcessOp "process" n (RunIn dir args)
+export processRunIn : Member n ProcessOp r => String -> List String -> Eff r Int
+processRunIn dir args = sendCore ProcessOp "process" n (RunIn dir args)
 
 -- | 一阶 handler：`ret` / `opH` 由调用方给出，结果行删除 `ProcessOp`。
 export handleProcess : {a : Type} -> {b : Type} -> {r : Row} -> (n : String) -> {w : Member n ProcessOp r} -> (a -> b) -> ((o : ProcessOp) -> (resProcess o -> b) -> b) -> Eff r a -> Eff (Base.Eff.rowRem n ProcessOp r) b

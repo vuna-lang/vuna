@@ -16,7 +16,7 @@ runA = runPure (handle progA {
 )
 
 multi : Eff [ConsoleOp@a, ConsoleOp@b] Nat
-multi = consolePrint "a" "b"
+multi = consolePrint@a "b"
 
 aH : (o : ConsoleOp) -> (resConsole o -> Nat) -> Nat
 aH op k = case op of

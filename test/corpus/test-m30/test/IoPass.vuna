@@ -6,5 +6,5 @@ import Base.Eff
 -- 效果输出直接到终端；`@vuna@prim_eff_print` 现在本身就是 `Eff []` 动作（M31），在 do 里直接作最后一条语句。
 main : Eff hostRow Int
 main = do
-  _ <- consolePrint "default" "test-m30: io-pass\n"
-  consolePrint "default" "test-m30: io-pass (prim)\n"
+  _ <- consolePrint "test-m30: io-pass\n"
+  consolePrint "test-m30: io-pass (prim)\n"

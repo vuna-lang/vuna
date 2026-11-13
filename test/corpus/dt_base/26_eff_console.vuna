@@ -7,16 +7,16 @@ import Base.Pair
 
 prog : (n : String) -> Eff (Cons n ConsoleOp Nil) Int
 prog n = do
-  _ <- consolePrint n "hello"
-  _ <- consoleEprint n "oops"
-  _ <- consolePrint n "!"
+  _ <- consolePrint@(n) "hello"
+  _ <- consoleEprint@(n) "oops"
+  _ <- consolePrint@(n) "!"
   pure 7
 
 progReal : Eff hostRow Int
 progReal = do
-  _ <- consolePrint "default" "hello"
-  _ <- consoleEprint "default" "oops"
-  _ <- consolePrint "default" "!"
+  _ <- consolePrint "hello"
+  _ <- consoleEprint "oops"
+  _ <- consolePrint "!"
   pure 7
 
 mret : Int -> Pair Int String
@@ -32,5 +32,5 @@ mopH op k = case op of
 main : Eff hostRow Int
 main = case runPure (handleConsole "mock" mret mopH (prog "mock")) of
   Pair n log => do
-    _ <- consolePrint "default" ("mock " ++ log ++ "value " ++ strFromInt n ++ "\n")
+    _ <- consolePrint ("mock " ++ log ++ "value " ++ strFromInt n ++ "\n")
     progReal

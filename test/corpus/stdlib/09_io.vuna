@@ -6,9 +6,9 @@ import Base.HostRow
 
 program : Eff hostRow Int
 program = do
-  n <- consolePrint "default" "abc"
-  m <- consolePrint "default" "de"
-  x <- consolePrint "default" "x\n"
+  n <- consolePrint "abc"
+  m <- consolePrint "de"
+  x <- consolePrint "x\n"
   pure (n + m + x + 10)
 
 main : Eff hostRow Int

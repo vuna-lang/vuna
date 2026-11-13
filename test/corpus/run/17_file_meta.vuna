@@ -5,10 +5,10 @@ import Base.HostRow
 
 prog : Eff hostRow Int
 prog = do
-  self <- fsFileSize "default" "corpus/run/17_file_meta.vuna"
-  stamp <- fsFileMtime "default" "corpus/run/17_file_meta.vuna"
-  missingSize <- fsFileSize "default" "/vuna/definitely-not-a-file-xyz"
-  missingMtime <- fsFileMtime "default" "/vuna/definitely-not-a-file-xyz"
+  self <- fsFileSize "corpus/run/17_file_meta.vuna"
+  stamp <- fsFileMtime "corpus/run/17_file_meta.vuna"
+  missingSize <- fsFileSize "/vuna/definitely-not-a-file-xyz"
+  missingMtime <- fsFileMtime "/vuna/definitely-not-a-file-xyz"
   pure (if self > 0 then
           (if stamp > 1000000000 then
              (if missingSize == 0 then (if missingMtime == 0 then 7 else 1) else 2)

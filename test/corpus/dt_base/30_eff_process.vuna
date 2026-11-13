@@ -8,14 +8,14 @@ import Base.List
 
 prog : (n : String) -> Eff (Cons n ProcessOp Nil) String
 prog n = do
-  args <- processArgs n
-  code <- processRunIn n "." ("true" :: [])
+  args <- processArgs@(n)
+  code <- processRunIn@(n) "." ("true" :: [])
   pure (join "," args ++ "|" ++ strFromInt code)
 
 progReal : Eff hostRow String
 progReal = do
-  args <- processArgs "default"
-  code <- processRunIn "default" "." ("true" :: [])
+  args <- processArgs
+  code <- processRunIn "." ("true" :: [])
   pure (join "," args ++ "|" ++ strFromInt code)
 
 mret : String -> String
@@ -30,7 +30,7 @@ mopH op k = case op of
 main : Eff hostRow Int
 main = case runPure (handleProcess "mock" mret mopH (prog "mock")) of
   mockLog => do
-    _ <- consolePrint "default" ("mock " ++ mockLog ++ "\n")
+    _ <- consolePrint ("mock " ++ mockLog ++ "\n")
     realLog <- progReal
-    _ <- consolePrint "default" ("real " ++ realLog ++ "\n")
+    _ <- consolePrint ("real " ++ realLog ++ "\n")
     pure 0

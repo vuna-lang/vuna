@@ -11,7 +11,7 @@ tag = DepTagA
 
 prog : Eff hostRow Int
 prog = do
-  _ <- consolePrint "default" (hello ++ "/" ++ depText)
+  _ <- consolePrint (hello ++ "/" ++ depText)
   pure 0
 
 main : Eff hostRow Int

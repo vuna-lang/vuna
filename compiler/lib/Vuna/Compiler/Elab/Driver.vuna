@@ -85,14 +85,69 @@ leadingImplicitCtxGo ctx _ = ctx
 -- M32：把签名的 trait 约束 `C1 a, C2 b =>` 精化成隐式 Rig1 字典 binder，插在前导隐式
 -- binder 之后（与 `liftFreeDictGoals` 的插入点同一规则）。约束域名里的类型变量在此处
 -- 正好落在 prefix 的 de Bruijn 环境里，可以直接作为新 Pi 的 domain。
+--
+-- 额外形状：`Member n e r => ...`（实例名/行约束糖）不是 trait；生成隐式 **Rig0** 的
+-- 证明 binder `{_memberK : Member n e r}`，同样插在前导隐式 binder 之后。n/r 的域由
+-- `Elab.Sig` 的量化覆盖给出（String/Row）；这里只负责把约束表达式精化成证明类型。
 elabSigDictBinders : List (Pair String Term) -> Ec -> Term -> List Expr -> Span -> Check (Pair Term Ec)
 elabSigDictBinders globals ec tyTerm [] sp = OkC (Pair tyTerm ec)
-elabSigDictBinders globals ec tyTerm ctxExprs sp = Vuna.Compiler.Common.bind (constraintPartsOf sp ctxExprs) (\parts => Vuna.Compiler.Common.bind (elabConstraintDomains (ecClasses ec) globals (leadingImplicitCtx tyTerm) parts sp ec) (\q => let
-  doms = firstOf q
-  ec1 = secondOf q
-in OkC (Pair (insertSigDicts tyTerm doms (leadingImplicitCount tyTerm)) ec1)
-)
-)
+elabSigDictBinders globals ec tyTerm ctxExprs sp =
+  let
+    split = splitMemberCtx ctxExprs
+    memberExprs = firstOf split
+    otherExprs = secondOf split
+    leadCtx = leadingImplicitCtx tyTerm
+  in Vuna.Compiler.Common.bind (constraintPartsOf sp otherExprs) (\parts => Vuna.Compiler.Common.bind (elabConstraintDomains (ecClasses ec) globals leadCtx parts sp ec) (\q => Vuna.Compiler.Common.bind (elabMemberConstraintDoms globals leadCtx (secondOf q) memberExprs sp) (\m => let
+    doms = firstOf q
+    ec1 = secondOf q
+    memberDoms = firstOf m
+    ec2 = secondOf m
+    ty1 = insertSigDicts tyTerm doms (leadingImplicitCount tyTerm)
+    ty2 = insertSigMembers ty1 memberDoms (leadingImplicitCount ty1)
+  in OkC (Pair ty2 ec2)
+  )
+  )
+  )
+
+splitMemberCtx : List Expr -> Pair (List Expr) (List Expr)
+splitMemberCtx [] = Pair [] []
+splitMemberCtx (e :: rest) =
+  let
+    r = splitMemberCtx rest
+  in if isMemberConstraintExpr e then Pair (e :: firstOf r) (secondOf r)
+  else Pair (firstOf r) (e :: secondOf r)
+
+isMemberConstraintExpr : Expr -> Bool
+isMemberConstraintExpr (EApp (EVar g _) ([_, _, _]) _) = g == effMemberFamilyName
+isMemberConstraintExpr _ = False
+
+elabMemberConstraintDoms : List (Pair String Term) -> Ctx -> Ec -> List Expr -> Span -> Check (Pair (List Term) Ec)
+elabMemberConstraintDoms globals ctx ec [] sp = OkC (Pair [] ec)
+elabMemberConstraintDoms globals ctx ec (e :: rest) sp =
+  Vuna.Compiler.Common.bind (checkType globals ctx ec e) (\p => case p of
+    Pair domTerm (Pair _ ec1) => Vuna.Compiler.Common.bind (elabMemberConstraintDoms globals ctx ec1 rest sp) (\q => case q of
+      Pair doms ec2 => OkC (Pair (Base.List.Cons domTerm doms) ec2)
+    )
+  )
+
+insertSigMembers : Term -> List Term -> Int -> Term
+insertSigMembers ty [] nImp = ty
+insertSigMembers ty doms nImp =
+  if nImp <= 0 then prependSigMembers ty doms 0
+  else insertSigMembersRev ty doms (length doms - 1) (nImp - 1)
+
+prependSigMembers : Term -> List Term -> Int -> Term
+prependSigMembers ty [] k = ty
+prependSigMembers ty (dom :: rest) k =
+  TPi (sigMemberName k) True Rig0 dom (prependSigMembers ty rest (k + 1))
+
+insertSigMembersRev : Term -> List Term -> Int -> Int -> Term
+insertSigMembersRev ty [] k baseIdx = ty
+insertSigMembersRev ty (dom :: rest) k baseIdx =
+  insertSigMembersRev (insertImplicitBinder (sigMemberName k) baseIdx Rig0 dom ty) rest (k - 1) baseIdx
+
+sigMemberName : Int -> String
+sigMemberName k = "_member${k}"
 
 -- 字典 binder 插在前导隐式 binder 之后（与 `liftFreeDictGoals` 同一位置）：
 --   * 有类型变量 / 用户隐式 binder（nImp > 0）：逆序插在第 nImp-1 个 binder 之后，

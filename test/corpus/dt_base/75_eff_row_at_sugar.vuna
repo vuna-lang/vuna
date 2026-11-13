@@ -13,7 +13,7 @@ mockH op k = case op of
 
 prog : Eff [ConsoleOp@audit] Nat
 prog = do
-  n <- consolePrint "audit" "hi"
+  n <- consolePrint@audit "hi"
   pure n
 
 main : Nat

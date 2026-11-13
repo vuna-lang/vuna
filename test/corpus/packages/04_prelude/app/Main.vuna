@@ -6,7 +6,7 @@ import Base.HostRow
 
 prog : Eff hostRow Int
 prog = do
-  _ <- consolePrint "default" (join "-" (map strFromInt (map (\x => x + 1) [1, 2])))
+  _ <- consolePrint (join "-" (map strFromInt (map (\x => x + 1) [1, 2])))
   pure 0
 
 main : Eff hostRow Int

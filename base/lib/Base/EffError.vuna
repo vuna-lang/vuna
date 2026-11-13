@@ -17,8 +17,8 @@ export resError : ErrorOp -> Type
 resError (Throw s) = Int
 
 -- | 通过命名实例抛出错误；返回类型任意（直接丢弃续延，不恢复）。
-export throw : (n : String) -> String -> {a : Type} -> {r : Row} -> Eff r a
-throw n msg = sendCore ErrorOp "error" n (Throw msg)
+export throw : Member n ErrorOp r => String -> Eff r a
+throw msg = sendCore ErrorOp "error" n (Throw msg)
 
 -- | 一阶 handler：`ret` / `opH` 由调用方给出，结果行删除 `ErrorOp`。
 export handleError : {a : Type} -> {b : Type} -> {r : Row} -> (n : String) -> (a -> b) -> ((o : ErrorOp) -> (resError o -> b) -> b) -> Eff r a -> Eff (Base.Eff.rowRem n ErrorOp r) b

@@ -10,6 +10,6 @@ import Base.HostRow
 
 main : Eff hostRow Int
 main = do
-  args <- argsGetArgs "default"
+  args <- argsGetArgs
   code <- runCli args
-  exitWith "default" code
+  exitWith code

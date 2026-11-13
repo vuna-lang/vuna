@@ -8,6 +8,6 @@ import Base.Eff
 -- 第一个 END 之前；串行时第一个 END 出现在第二个 START 之前。
 main : Eff hostRow Int
 main = do
-  _ <- consolePrint "default" "START-A\n"
-  _ <- clockSleepMicros "default" 3000000
-  consolePrint "default" "END-A\n"
+  _ <- consolePrint "START-A\n"
+  _ <- clockSleepMicros 3000000
+  consolePrint "END-A\n"

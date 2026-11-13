@@ -44,8 +44,9 @@ data ConsoleOp : Type where
 resConsole : ConsoleOp -> Type
 resConsole (Print _) = Int
 
--- perform：效应进表达式；key/实例名/结果类型全部内建推导
-consolePrint : String -> {n : String} -> {r : Row} -> Eff r Int
+-- 实例名可选：`Member n e r =>` 生成隐式 String 名 + 行成员证明；
+-- 调用点不写名字（行裸标签 = default），`consolePrint@audit` 显式选。
+consolePrint : Member n ConsoleOp r => String -> Eff r Int
 consolePrint s = perform (Print s)
 
 -- handle：作用域 handler 块，续延显式（k = one-shot resume）
@@ -335,9 +336,9 @@ handle comp {
      `bind`；整段逻辑内联会让编译自身时 `inference fuel exhausted`。
   3. **`inferEFuelHint` 有独立 `EApp` 分支**，必须先拦标记，否则标记名会被当普通变量解析
      （报 `unknown name @vuna@perform`）。
-  4. **`performCore` 的签名形状受语言限制**：M15 禁止值类型隐式参数（`{n : String}`），
-     类型域又禁止写 `(0 x : T)` 显式擦除量，因此类型级函数（label / res）不能作为显式
-     参数传。D2 后的形状是 `(n : String) -> (key : String) -> (e : Type) -> {r} -> {w : Member n e r}
+  4. **`performCore` 的签名形状**：`performCore` 仍保持显式 `(n : String)`；M15 现已放行
+     隐式 String 实例名（RigΩ，见 §10），但类型级函数（label / res）仍不能作为显式参数传
+     （类型域又禁止写 `(0 x : T)` 显式擦除量）。D2 后的形状是 `(n : String) -> (key : String) -> (e : Type) -> {r} -> {w : Member n e r}
      -> {x} -> (o : e) -> Eff r x`（标签与 op 同型）；`handleWith` 的 `{w}` 放在 `comp`
      之后、`ret`/`opH` 之前，先由行解出标签参数，避免 handler 体里的字面量先默认成 `Int`。
      `res` 族仍只做存在性协议校验（ND9 的精确结果类型待后续）。
@@ -373,3 +374,47 @@ handle comp {
   `[a, b]` 后，与该模式相邻的后续 Cons 分支会触发 `TC_RedundantCtorBranch`
   （无位置信息 `:0:0`，覆盖检查判定与 codegen 解糖不一致，机制待独立修复）。
   因此模式里不写 `Nil`/`[]` 结尾；用上面的长度判别形态同时规避两者。
+
+## 10. N1 后续：实例名可选（已落地）
+
+目标：效应 wrapper 的实例名默认 `"default"`，调用点不写；允许显式指定；**不**新增
+`consolePrintAt`/`Defaulted`/`:=` 默认参数。实现采用 **`Member n e r =>` 签名糖 +
+隐式 String 名从行解 + `@` 覆盖**。
+
+```vuna
+-- 源码只写这一份签名；n/r/证明 binder 都由编译器生成。
+consolePrint : Member n ConsoleOp r => String -> Eff r Nat
+consolePrint s = sendCore ConsoleOp "console" n (Print s)
+
+consolePrint "hi"          -- 行 [ConsoleOp] ⇒ n = "default"
+consolePrint@audit "hi"    -- 行 [ConsoleOp@audit] ⇒ 显式选 audit
+consolePrint@(n) "hi"      -- n 是运行时变量
+```
+
+- **签名糖**：顶层签名的 `Member n e r` 约束（canonical `Base.Eff.Member`）不是 trait；
+  不参与实例搜索，生成隐式 **Rig0** 证明 binder `{_memberK : Member n e r}`，插在前导隐式
+  binder 之后。`n`/`r` 的域由参数位置量化为 `String`/`Row`；标签 `e` 的其它自由名仍按
+  现有 kind 规则量化。只在顶层签名生效（local/trait/extern 仍拒 `=>`）。
+- **隐式 String 运行时例外（M15 扩展）**：`{n : String}` 现在是合法隐式 binder，且是
+  `RigOmega`（实例名要传给 `sendCore`/`handleCore`）；类型/索引/证明隐式仍 Rig0，字典
+  隐式原为 Ω。`isImplicitDomain`/`inferPiFuel`/`inferArgsGo` 走同一例外；其它值类型隐式
+  仍拒绝。resolver 只把 **String 域**的隐式 binder（以及 `Member` ctx 的自由小写名）加进
+  子句体作用域，`{a : Type} -> {x : a} -> a` 的 `x` 仍不可命名（`dt_err/43`）。
+- **`@`**：`f@name args` 编码为 `@vuna@app@at`；Elab 重写成
+  `f (@vuna@inst@arg name) args`。`inferArgsGo` 在第一个隐式 String binder 处消费该标记：
+  按 String 检查 payload 后以 RigΩ 插入；没有标记则建 RigΩ meta 交给行 `Member` 求解。
+  没有隐式 String binder 时报 `TC_NoInstParam`。隐式参数不参与位置实参，所以饱和应用和
+  同型参数无歧义。payload 裸标识符是名字字面量，变量写 `@(n)`。
+- **默认名**：仍只在行字面量裸标签（`effDefaultInstance = "default"`）产生；函数签名里
+  没有 `"default"`，也没有最终化默认兜底（D7 不变）。`[ConsoleOp@audit]` 行里裸调用会
+  解成 `audit`（行已指定）；多实例行 `[ConsoleOp@a, ConsoleOp@b]` 裸调用
+  `TC_AmbiguousInstance`，用 `@a`/`@b`。
+- **base 迁移**：senders（console/fs/clock/env/process/exit/args/stdin/throw）改用
+  `Member ... =>` 签名，定义体用隐式 n + 原短 key `sendCore`；结构行 handler
+  （`runError`/`catch`/`tryWith`/`local`/`handleExn`/`run*Host` 等）暂保留显式 `{n}`/`{w}`
+  （`rowRem` 需要在 comp 之后解名字），内部跨 wrapper 调用用 `@(n)`。
+- **bootstrap**：编译器 + base 一起用 feature 编译器生成 seed（rotation），新 seed
+  重生成 fixed point；随后用新 seed `nix build .#vuna`。`seed-selfhost`/`vuna check .`
+  通过。
+- **不做**：`consolePrintAt`、`Defaulted`、`:=` 默认参数、显式位置默认参数、把 `Member`
+  变成 trait；`perform`/`handle` 语法本身仍无 `@`（D60 的剩余部分）。

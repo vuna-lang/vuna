@@ -551,9 +551,16 @@ ctxMemberProofUnify ctx ec dom = ctxMemberProofUnifyGo ctx ctx.ctxItems 0 ec dom
 
 ctxMemberProofUnifyGo : Ctx -> List (Pair String Term) -> Int -> Ec -> Value -> Maybe (Pair Term Ec)
 ctxMemberProofUnifyGo ctx [] idx ec dom = Nothing
-ctxMemberProofUnifyGo ctx ((Pair name ty) :: rest) idx ec dom = case convEc ec (ctxDepth ctx) (evalCtx ctx ty) dom of
-  OkC ec2 => Just (Pair (TVar name idx (Span "" 0 0 0 0)) ec2)
-  ErrC _ => ctxMemberProofUnifyGo ctx rest (idx + 1) ec dom
+ctxMemberProofUnifyGo ctx ((Pair name ty) :: rest) idx ec dom =
+  let
+    -- `ty` 是在**绑定点**（比它更老的上下文）里合法的项；直接 `evalCtx ctx` 会把
+    -- 其中的自由变量错指到更新的 binder（wrapper 的显式参数）。用 rest（更老的项）
+    -- 建环境求值；level 编号与完整上下文一致。
+    olderDepth = length rest
+    tyVal = eval (map (refineValue ctx.ctxRefVals defaultFuel) (ctxEnvAt rest 0 olderDepth)) ty
+  in case convEc ec (ctxDepth ctx) tyVal dom of
+    OkC ec2 => Just (Pair (TVar name idx (Span "" 0 0 0 0)) ec2)
+    ErrC _ => ctxMemberProofUnifyGo ctx rest (idx + 1) ec dom
 
 solveRowMeta : Ec -> Int -> Value -> Check Ec
 solveRowMeta ec m v = case solveMeta (ecDefTbl ec) (ecSolsP ec) 0 m [] v of

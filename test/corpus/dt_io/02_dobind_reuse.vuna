@@ -7,7 +7,7 @@ prog : Eff hostRow Int
 prog = do
   x <- pure 41
   x <- pure 42
-  _ <- consolePrint "default" "dobind:"
+  _ <- consolePrint "dobind:"
   pure x
 
 main : Eff hostRow Int

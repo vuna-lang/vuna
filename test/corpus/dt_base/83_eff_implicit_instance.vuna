@@ -1,0 +1,26 @@
+-- 实例名可选：`Member n e r =>` 签名糖 + 隐式 String 名从行解；`@name` 显式覆盖。
+-- 本地 wrapper 的 body 直接引用隐式 n（resolver 把 String 隐式名加进子句作用域）。
+import Base.Eff
+import Base.EffConsole
+import Base.Nat
+
+consoleTest : Member n ConsoleOp r => String -> Eff r Nat
+consoleTest s = sendCore ConsoleOp "console" n (Print s)
+
+progDefault : Eff [ConsoleOp] Nat
+progDefault = consoleTest "hi"
+
+progNamed : Eff [ConsoleOp@audit] Nat
+progNamed = consoleTest "hi"
+
+progAt : Eff [ConsoleOp@audit] Nat
+progAt = consoleTest@audit "hi"
+
+progMulti : Eff [ConsoleOp@a, ConsoleOp@b] Nat
+progMulti = consoleTest@b "hi"
+
+withName : (n : String) -> Eff (Cons n ConsoleOp []) Nat
+withName n = consoleTest@(n) "hi"
+
+main : Int
+main = 1

@@ -1,0 +1,10 @@
+module FmtInstAt where
+
+f : Member n ConsoleOp r => String -> Eff r Int
+f s = consolePrint@audit s
+
+g : (n : String) -> Int -> Int
+g n x = x
+
+h : Int
+h = g@("audit") 1

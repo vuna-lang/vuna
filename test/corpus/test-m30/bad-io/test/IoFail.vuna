@@ -6,5 +6,5 @@ import Base.Eff
 -- 效果测试（失败）：进程退出码 1 → FAIL（`vuna test` 退出码 1）。
 main : Eff hostRow Int
 main = do
-  _ <- consolePrint "default" "test-m30: io-fail (expected failure)\n"
-  exitWith "default" 1
+  _ <- consolePrint "test-m30: io-fail (expected failure)\n"
+  exitWith 1

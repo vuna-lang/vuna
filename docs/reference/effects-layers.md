@@ -148,8 +148,8 @@ main 结束时统一取消清理（最外层兜底）；跨域 handler / Domain 
   内容/大小）与 `FsOp@real`（真实宿主 handler，真实目录读写）下各跑一次，mock 与 real handler
   在同一程序里并存。
 - **工具链真实路径**：`lib/Vuna/Cli.vuna` 的 `vuna version` 输出改走
-  console 标签——`consoleLine` 用 `consolePrint "vuna"` + `handleConsoleHost "vuna"` + `joinEff`，
-  只在最外层 `runPure`（工具链入口是 `main : Eff [] Int`）。工具链其余模块仍直接调用
+  console 标签——`consoleLine` 用 `consolePrint msg`（默认实例名，`Member n ConsoleOp r =>`）
+  走宿主行；只在最外层 `runPure`（工具链入口是 `main : Eff [] Int`）。工具链其余模块仍直接调用
   `prim_eff_*`（纪律而非门控）。**编译器级强制不可行**的
   具体位置：manifest 能力/信任门控已整体删除（旧 `checkEffectsBuiltins` 的包级能力检查
   不复存在），类型系统也没有类型级能力行，`prim_*`/`prim_eff_*` 在任何包内都可用；编译器自身

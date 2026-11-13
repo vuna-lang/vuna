@@ -4,11 +4,11 @@ import Base.EffError
 import Base.Result
 
 prog : Eff [ErrorOp@default] Int
-prog = catch "default" (throw "default" "boom") (\_ => pure 42)
+prog = catch "default" (throw "boom") (\_ => pure 42)
 
 prog2 : Eff [ErrorOp@default] Int
 prog2 =
-  catch "default" (catch "default" (throw "default" "a") (\_ => throw "default" "b")) (\_ => pure 7)
+  catch "default" (catch "default" (throw "a") (\_ => throw "b")) (\_ => pure 7)
 
 main : Int
 main = case (runPure (runError "default" (do

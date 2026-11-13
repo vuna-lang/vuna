@@ -17,7 +17,7 @@ import Base.HostRow
 
 main : Eff hostRow Int
 main = do
-  args <- argsGetArgs "default"
+  args <- argsGetArgs
   run args
 
 run : List String -> Eff hostRow Int
@@ -27,12 +27,12 @@ run args =
     Cons "check" (Cons path Nil) => runCheck path
     Cons "write" (Cons path (Cons out Nil)) => runWrite path out
     _ => do
-      _ <- consolePrint "default" "usage: probe (fmt|check|write) file [out]\n"
+      _ <- consolePrint "usage: probe (fmt|check|write) file [out]\n"
       pure 2
 
 fail : String -> String -> Eff hostRow Int
 fail path msg = do
-  _ <- consolePrint "default" (path ++ ": " ++ msg ++ "\n")
+  _ <- consolePrint (path ++ ": " ++ msg ++ "\n")
   pure 1
 
 -- 程序级 fixity：与 CLI 同源（Vuna.FixityEnv：按文件目录缓存模块图，声明表逐文件算）。
@@ -43,19 +43,19 @@ fixitiesFor path source = do
 
 runFmt : String -> Eff hostRow Int
 runFmt path = do
-  source <- fsReadFile "default" path
+  source <- fsReadFile path
   fxR <- fixitiesFor path source
   case fxR of
     ErrC e => fail path (diagText e)
     OkC env => case formatSourceWith env source of
       ErrC e => fail path ("format error: " ++ diagText e)
       OkC out => do
-        _ <- consolePrint "default" out
+        _ <- consolePrint out
         pure 0
 
 runCheck : String -> Eff hostRow Int
 runCheck path = do
-  source <- fsReadFile "default" path
+  source <- fsReadFile path
   fxR <- fixitiesFor path source
   case fxR of
     ErrC e => fail path (diagText e)
@@ -75,12 +75,12 @@ runCheck path = do
 
 runWrite : String -> String -> Eff hostRow Int
 runWrite path out = do
-  source <- fsReadFile "default" path
+  source <- fsReadFile path
   fxR <- fixitiesFor path source
   case fxR of
     ErrC e => fail path (diagText e)
     OkC env => case formatSourceWith env source of
       ErrC e => fail path ("format error: " ++ diagText e)
       OkC formatted => do
-        _ <- fsWriteFile "default" out formatted
+        _ <- fsWriteFile out formatted
         pure 0

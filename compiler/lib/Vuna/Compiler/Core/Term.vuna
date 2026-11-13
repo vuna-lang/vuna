@@ -661,6 +661,16 @@ insertDictBinderGo name idx dictDom depth (TPi n i r d c) =
   else TPi n i r d (insertDictBinderGo name idx dictDom (depth + 1) c)
 insertDictBinderGo name idx dictDom depth t = t
 
+-- 同 `insertDictBinder`，但 binder 的 rig 由调用方给（签名 `Member` 证明是 Rig0）。
+export insertImplicitBinder : String -> Int -> Rig -> Term -> Term -> Term
+insertImplicitBinder name idx rig dom t = insertImplicitBinderGo name idx rig dom 0 t
+
+export insertImplicitBinderGo : String -> Int -> Rig -> Term -> Int -> Term -> Term
+insertImplicitBinderGo name idx rig dom depth (TPi n i r d c) =
+  if depth == idx then TPi n i r d (TPi name True rig dom (shift 0 1 c))
+  else TPi n i r d (insertImplicitBinderGo name idx rig dom (depth + 1) c)
+insertImplicitBinderGo name idx rig dom depth t = t
+
 -- M29：保留给旧调用面的纯 helper（本模块不再用；导出名保持稳定以免动导出面快照）。
 export cutoffOf : Int -> Int -> Int
 cutoffOf total idx = if total - (idx + 1) <= 0 then 0 else total - (idx + 1)

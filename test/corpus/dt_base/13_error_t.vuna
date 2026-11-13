@@ -8,16 +8,16 @@ import Base.EffError
 import Base.Result
 
 prog : Eff [ErrorOp@e] Int
-prog = throw "e" "boom"
+prog = throw@e "boom"
 
 main : Eff hostRow Int
 main = do
-  _ <- consolePrint "default" "error\n"
+  _ <- consolePrint "error\n"
   r <- pure (runPure (runError "e" (catch "e" prog (\msg => pure 7))))
   case r of
     Ok a => do
-      _ <- consolePrint "default" ("ok " ++ strFromInt a ++ "\n")
-      exitWith "default" 0
+      _ <- consolePrint ("ok " ++ strFromInt a ++ "\n")
+      exitWith 0
     Err msg => do
-      _ <- consolePrint "default" ("caught " ++ msg ++ "\n")
-      exitWith "default" 0
+      _ <- consolePrint ("caught " ++ msg ++ "\n")
+      exitWith 0

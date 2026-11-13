@@ -7,8 +7,8 @@ import Base.Nat
 
 prog : Eff [FsOp@real] Int
 prog = do
-  _ <- fsWriteFile "real" "/tmp/vuna_eff_fs.txt" "hello"
-  s <- fsReadFile "real" "/tmp/vuna_eff_fs.txt"
+  _ <- fsWriteFile@real "/tmp/vuna_eff_fs.txt" "hello"
+  s <- fsReadFile@real "/tmp/vuna_eff_fs.txt"
   pure (toInt (byteLength s))
 
 ret : Int -> Eff hostRow Int
@@ -17,10 +17,10 @@ ret a = pure a
 opH : (o : FsOp) -> (Base.EffFs.resFs o -> Eff hostRow Int) -> Eff hostRow Int
 opH op k = case op of
   ReadFile p => do
-    s <- fsReadFile "default" p
+    s <- fsReadFile p
     k s
   WriteFile p s => do
-    n <- fsWriteFile "default" p s
+    n <- fsWriteFile p s
     k n
   _ => prim_fail "unexpected fs op in 18_eff_fs_io"
 

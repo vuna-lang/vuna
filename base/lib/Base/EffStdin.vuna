@@ -19,12 +19,12 @@ resStdin ReadLine = String
 resStdin (ReadBytes _) = String
 
 -- | 通过命名实例读一行；EOF 返回空串（与空行不可区分）。
-export stdinReadLine : (n : String) -> {r : Row} -> {w : Member n StdinOp r} -> Eff r String
-stdinReadLine n = sendCore StdinOp "stdin" n ReadLine
+export stdinReadLine : Member n StdinOp r => Eff r String
+stdinReadLine = sendCore StdinOp "stdin" n ReadLine
 
 -- | 通过命名实例最多读 `k` 个字节；有数据就立即返回（可能少于 k），EOF 返回空串。
-export stdinReadBytes : (n : String) -> Nat -> {r : Row} -> {w : Member n StdinOp r} -> Eff r String
-stdinReadBytes n k = sendCore StdinOp "stdin" n (ReadBytes k)
+export stdinReadBytes : Member n StdinOp r => Nat -> Eff r String
+stdinReadBytes k = sendCore StdinOp "stdin" n (ReadBytes k)
 
 -- | 一阶 handler：结果行删除 `StdinOp`。
 export handleStdin : {a : Type} -> {b : Type} -> {r : Row} -> (n : String) -> {w : Member n StdinOp r} -> (a -> b) -> ((o : StdinOp) -> (resStdin o -> b) -> b) -> Eff r a -> Eff (Base.Eff.rowRem n StdinOp r) b

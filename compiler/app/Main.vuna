@@ -16,6 +16,6 @@ import Base.Eff
 
 main : Eff hostRow Int
 main = do
-  args <- argsGetArgs "default"
+  args <- argsGetArgs
   code <- runCompilerCli args
-  exitWith "default" code
+  exitWith code

@@ -9,7 +9,7 @@ import Base.List
 
 prog : (n : String) -> Eff (Cons n ProcessOp Nil) Int
 prog n = do
-  c <- processExit n 7
+  c <- processExit@(n) 7
   pure c
 
 mret : Int -> Int
@@ -24,7 +24,7 @@ mopH op k = case op of
 main : Eff hostRow Int
 main = do
   _ <-
-    consolePrint "default" ("mock " ++ strFromInt (runPure (handleProcess "mock" mret mopH (prog "mock"))) ++ "\n")
+    consolePrint ("mock " ++ strFromInt (runPure (handleProcess "mock" mret mopH (prog "mock"))) ++ "\n")
   observed <- raiseToRow hostRow (joinEff (handleProcessHostWith "observed" (\c => pure c) (prog "observed")))
-  _ <- consolePrint "default" ("observed " ++ strFromInt observed ++ "\n")
+  _ <- consolePrint ("observed " ++ strFromInt observed ++ "\n")
   pure 0

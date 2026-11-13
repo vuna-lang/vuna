@@ -18,24 +18,24 @@ b2i b = if b then 1 else 0
 
 prog : (n : String) -> Eff (Cons n FsOp Nil) String
 prog n = do
-  _ <- fsMakeDir n dir
-  _ <- fsRemoveFile n path
-  w <- fsWriteFile n path "hello"
-  s <- fsReadFile n path
-  e <- fsFileExists n path
-  sz <- fsFileSize n path
-  _ <- fsRemoveFile n path
+  _ <- fsMakeDir@(n) dir
+  _ <- fsRemoveFile@(n) path
+  w <- fsWriteFile@(n) path "hello"
+  s <- fsReadFile@(n) path
+  e <- fsFileExists@(n) path
+  sz <- fsFileSize@(n) path
+  _ <- fsRemoveFile@(n) path
   pure (join "," (strFromInt w :: s :: strFromInt (b2i e) :: strFromInt sz :: []))
 
 progReal : Eff hostRow String
 progReal = do
-  _ <- fsMakeDir "default" dir
-  _ <- fsRemoveFile "default" path
-  w <- fsWriteFile "default" path "hello"
-  s <- fsReadFile "default" path
-  e <- fsFileExists "default" path
-  sz <- fsFileSize "default" path
-  _ <- fsRemoveFile "default" path
+  _ <- fsMakeDir dir
+  _ <- fsRemoveFile path
+  w <- fsWriteFile path "hello"
+  s <- fsReadFile path
+  e <- fsFileExists path
+  sz <- fsFileSize path
+  _ <- fsRemoveFile path
   pure (join "," (strFromInt w :: s :: strFromInt (b2i e) :: strFromInt sz :: []))
 
 mret : String -> String
@@ -56,7 +56,7 @@ mopH op k = case op of
 
 main : Eff hostRow Int
 main = do
-  _ <- consolePrint "default" ("mock " ++ runPure (handleFs "mock" mret mopH (prog "mock")) ++ "\n")
+  _ <- consolePrint ("mock " ++ runPure (handleFs "mock" mret mopH (prog "mock")) ++ "\n")
   real <- progReal
-  _ <- consolePrint "default" ("real " ++ real ++ "\n")
+  _ <- consolePrint ("real " ++ real ++ "\n")
   pure 0

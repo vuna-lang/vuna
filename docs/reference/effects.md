@@ -188,8 +188,9 @@ CPS `Eff` 已经可 `check` + `compile` + 运行，且 interp 与产物逐字节
   `[Op]` 或 `Cons n Op r`。
 - `Eff r a` 构造子不导出；内部是私有 dummy thunk（`EffUnit -> a`），
   **没有世界令牌**；dummy 只为延迟执行。
-- `Member n e r` 是 Type-1 归纳族（`Here`/`There`），effect wrapper 用隐式证明参数；
-  精化器按行结构构造证明（定义级 ctx 收尾）。
+- `Member n e r` 是 Type-1 归纳族（`Here`/`There`），effect wrapper 用
+  `Member n e r =>` 签名糖（隐式 String 名 + `Rig0` 证明 binder）；精化器按行结构构造证明
+  （定义级 ctx 收尾），调用点默认名 / `@name` 覆盖。
 - `rowRem : Type -> Row -> Row` 去掉一个标签；它不是类型族，由编译器按标签类型值
   结构相等归约（重复绑定名/非线性格不受支持：parser 直接报 `PS_RepeatedPatternBinder`，
   见 language.md）。归约前对 name/label 做一次 `force`：解表不改写已构造好的 value，
@@ -242,8 +243,8 @@ process 可控 Exit）、`42–44`（通用 bracket abort cleanup、调度器 br
 细节见 §8.6 与 [effects-layers.md](effects-layers.md)。
 ### 8.4 已知边界（下一步）
 
-- **W3 行成员约束已落地**：`Base.Eff.Member` 是 Type-1 归纳族，effect wrapper 带隐式
-  `{w : Member n e r}`；精化器在应用处按行结构构造 `Here`/`There`，无法当场判定的目标
+- **W3 行成员约束已落地**：`Base.Eff.Member` 是 Type-1 归纳族，effect wrapper 可用
+  `Member n e r =>` 签名糖（定义里也可写显式 `{w : Member n e r}`）；精化器在应用处按行结构构造 `Here`/`There`，无法当场判定的目标
   延迟到**定义体结束**、用定义级 ctx 收尾（可命中 wrapper 的局部证明 binder），缺效应
   报 `TC_NoInstanceFound`（负例 `dt_err/70_effect_missing`）。
   不走 trait 重叠实例（trait 版 `Member` 需要头可合一的重叠实例，已决定不计划；

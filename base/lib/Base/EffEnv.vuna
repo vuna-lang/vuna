@@ -20,16 +20,16 @@ resEnv GetCwd = String
 resEnv ExecPath = String
 
 -- | 通过命名实例取环境变量；真实 handler 走 `@vuna@prim_eff_getenv`（未设置或为空串都返回空串）。
-export envGetEnv : (n : String) -> String -> {r : Row} -> {w : Member n EnvOp r} -> Eff r String
-envGetEnv n k = sendCore EnvOp "env" n (GetEnv k)
+export envGetEnv : Member n EnvOp r => String -> Eff r String
+envGetEnv k = sendCore EnvOp "env" n (GetEnv k)
 
 -- | 通过命名实例取当前工作目录。
-export envGetCwd : (n : String) -> {r : Row} -> {w : Member n EnvOp r} -> Eff r String
-envGetCwd n = sendCore EnvOp "env" n GetCwd
+export envGetCwd : Member n EnvOp r => Eff r String
+envGetCwd = sendCore EnvOp "env" n GetCwd
 
 -- | 通过命名实例取可执行文件路径。
-export envExecPath : (n : String) -> {r : Row} -> {w : Member n EnvOp r} -> Eff r String
-envExecPath n = sendCore EnvOp "env" n ExecPath
+export envExecPath : Member n EnvOp r => Eff r String
+envExecPath = sendCore EnvOp "env" n ExecPath
 
 -- | 一阶 handler：`ret` / `opH` 由调用方给出，结果行删除 `EnvOp`。
 export handleEnv : {a : Type} -> {b : Type} -> {r : Row} -> (n : String) -> {w : Member n EnvOp r} -> (a -> b) -> ((o : EnvOp) -> (resEnv o -> b) -> b) -> Eff r a -> Eff (Base.Eff.rowRem n EnvOp r) b

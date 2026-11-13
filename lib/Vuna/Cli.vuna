@@ -160,7 +160,7 @@ runCli1 args = case args of
 -- W10 收尾：这一条输出路径走 console 效应标签（mock/real 可替换的样板），
 -- 不再直接 `prim_eff_print`；整条 CLI 显式 `Eff hostRow`，最外层由运行时执行。
 consoleLine : String -> Eff hostRow Int
-consoleLine msg = consolePrint "default" msg >>= (\_ => pure 0)
+consoleLine msg = consolePrint msg >>= (\_ => pure 0)
 
 printVersion : Int -> Eff hostRow Int
 printVersion _ = consoleLine "vuna ${vunaVersion}\n"

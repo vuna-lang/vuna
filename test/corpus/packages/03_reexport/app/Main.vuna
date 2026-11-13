@@ -7,7 +7,7 @@ import Base.HostRow
 -- 阶段 5：宿主 console 走 Eff hostRow（entry 自动预装 handler）；main 返回 0，golden 含尾随 0。
 prog : Eff hostRow Int
 prog = do
-  _ <- consolePrint "default" (strFromInt (total [1, 2, 3] + firstOr (Just 10)))
+  _ <- consolePrint (strFromInt (total [1, 2, 3] + firstOr (Just 10)))
   pure 0
 
 main : Eff hostRow Int

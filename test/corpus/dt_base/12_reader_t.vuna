@@ -17,10 +17,10 @@ opH op k = case op of
 
 main : Eff hostRow Int
 main = do
-  _ <- consolePrint "default" "reader\n"
+  _ <- consolePrint "reader\n"
   a <- pure (runPure (handleReader "counter" Int (\x => x) opH prog))
   b <-
     pure
       (runPure (handleReader "counter" Int (\x => x) opH (local "counter" Int (\x => x + 1) (ask "counter" Int))))
-  _ <- consolePrint "default" ("a=" ++ strFromInt a ++ ",b=" ++ strFromInt b ++ "\n")
-  exitWith "default" 0
+  _ <- consolePrint ("a=" ++ strFromInt a ++ ",b=" ++ strFromInt b ++ "\n")
+  exitWith 0

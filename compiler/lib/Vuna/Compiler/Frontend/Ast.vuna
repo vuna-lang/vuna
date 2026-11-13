@@ -560,6 +560,26 @@ rowAtSyntax = "@vuna@row@at"
 export isRowAtSyntax : String -> Bool
 isRowAtSyntax name = name == rowAtSyntax
 
+-- 实例名调用糖：`f@name args` 编码成
+-- `EApp (EVar "@vuna@app@at") (f :: name :: args)`。Elab 把它重写成
+-- `f (@vuna@inst@arg name) args`，由 `inferArgsGo` 在隐式 `String` 实例名 binder
+-- 处消费 `@vuna@inst@arg`。
+export appAtSyntax : String
+appAtSyntax = "@vuna@app@at"
+
+-- | 是否是实例名调用标记（`@vuna@app@at`）。
+export isAppAtSyntax : String -> Bool
+isAppAtSyntax name = name == appAtSyntax
+
+-- `@` 降级后插入的隐式实参标记：`EApp (EVar "@vuna@inst@arg") [payload]`。
+-- 只在 `inferArgsGo` 的隐式 String binder 分支被消费；用户源码写不出。
+export instArgSyntax : String
+instArgSyntax = "@vuna@inst@arg"
+
+-- | 是否是实例名实参标记（`@vuna@inst@arg`）。
+export isInstArgSyntax : String -> Bool
+isInstArgSyntax name = name == instArgSyntax
+
 -- ---------------------------------------------------------------
 -- 内置宏：`name!` 调用的保留名编码
 -- ---------------------------------------------------------------

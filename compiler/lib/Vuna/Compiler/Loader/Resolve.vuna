@@ -586,6 +586,7 @@ isParserSyntaxName name =
     || name == handleSyntax
     || name == handleNoRetSyntax
     || name == rowAtSyntax
+    || name == appAtSyntax
     || startsWith "@vuna@list@" name
     || startsWith "@vuna@handle@" name
 
@@ -947,7 +948,52 @@ resolveInstanceMethod modules label prefix ns imports _ =
 
 export resolveProgram : List Module -> String -> String -> Namespaces -> List Import -> List Decl -> Check (List Decl)
 resolveProgram modules label prefix ns imports decls =
-  Vuna.Compiler.Common.traverse (resolveDecl modules label prefix ns imports) decls
+  let
+    implicitScopes = implicitScopeTable decls
+  in Vuna.Compiler.Common.traverse (resolveDeclWithImplicitScopes implicitScopes modules label prefix ns imports) decls
+
+-- 签名里隐式 binder 的名字（`{n : String}` / `{r : Row}` / `{w : Member n e r}`），
+-- 以及约束 ctx 里自由的小写名（`Member n e r => ...` 的 n/r）。这些名字在定义体里
+-- 可引用：resolver 把它们加进子句作用域，elaborator 的 `checkBinders` 会绑定它们。
+-- 只在同一模块的源码名上匹配（DFun 与 DSig 同名）。
+implicitScopeTable : List Decl -> List (Pair String (List String))
+implicitScopeTable [] = []
+implicitScopeTable (d :: rest) = case d of
+  DSig name ctx ty sp =>
+    let
+      names = dedupScopeNames (append (leadingImplicitNames ty) (concatMap exprLowerNames ctx))
+    in case names of
+      [] => implicitScopeTable rest
+      _ => Pair name names :: implicitScopeTable rest
+  _ => implicitScopeTable rest
+
+leadingImplicitNames : Expr -> List String
+leadingImplicitNames (EPi n True _ dom cod sp) = if n == "_" then leadingImplicitNames cod else if isStringDomainExpr dom then n :: leadingImplicitNames cod else leadingImplicitNames cod
+leadingImplicitNames _ = []
+
+exprLowerNames : Expr -> List String
+exprLowerNames (EVar n sp) = if isLowerIdent n then [n] else []
+exprLowerNames (EApp fn args sp) = append (exprLowerNames fn) (concatMap exprLowerNames args)
+exprLowerNames _ = []
+
+isLowerIdent : String -> Bool
+isLowerIdent n = case strUnpack n of
+  [] => False
+  c :: rest => c >= 97 && c <= 122
+
+dedupScopeNames : List String -> List String
+dedupScopeNames [] = []
+dedupScopeNames (x :: rest) = if memName x rest then dedupScopeNames rest else x :: dedupScopeNames rest
+
+scopeNamesOf : String -> List (Pair String (List String)) -> List String
+scopeNamesOf n [] = []
+scopeNamesOf n ((Pair k v) :: rest) = if k == n then v else scopeNamesOf n rest
+
+resolveDeclWithImplicitScopes : List (Pair String (List String)) -> List Module -> String -> String -> Namespaces -> List Import -> Decl -> Check Decl
+resolveDeclWithImplicitScopes scopes modules label prefix ns imports (DFun name pats body sp) =
+  Vuna.Compiler.Common.bind (resolveTopName label prefix name)
+    (\n => Vuna.Compiler.Common.bind (Vuna.Compiler.Common.traverse (resolvePattern resolveFuelBound modules label prefix ns imports) pats) (\parts => Vuna.Compiler.Common.bind (resolveExpr resolveFuelBound modules label prefix ns imports (append (concatMap secondOf parts) (scopeNamesOf name scopes)) body) (\b => OkC (DFun n (map firstOf parts) b sp))))
+resolveDeclWithImplicitScopes scopes modules label prefix ns imports d = resolveDecl modules label prefix ns imports d
 
 -- M41：entry 文件的构造子也按族限定（`Data.Ctor`），同名构造子不再互相覆盖；
 -- 原先的「entry 构造子共享一个全局命名空间」防御随 canonical 命名一并删除。
@@ -985,3 +1031,8 @@ ctorPairTargets modules ((Pair m e) :: rest) =
     isCtor = e.kind == "ctor" || isDataOrRecordCtorTarget modules e.target
   in if isCtor then Base.List.Cons e.target (ctorPairTargets modules rest)
   else ctorPairTargets modules rest
+
+isStringDomainExpr : Expr -> Bool
+isStringDomainExpr (EVar "String" _) = True
+isStringDomainExpr (EVar "Base.String.String" _) = True
+isStringDomainExpr _ = False

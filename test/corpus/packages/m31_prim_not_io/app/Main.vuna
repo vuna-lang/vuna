@@ -1,4 +1,4 @@
 -- M31：效果动作不能在纯 main 里直接消费（类型错误，编译期拦下）。
 import Base.EffEnv
 main : String
-main = envGetEnv "default" "X"
+main = envGetEnv "X"

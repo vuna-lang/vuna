@@ -10,6 +10,6 @@ import Base.Eff
 -- （§47c 在高负载下偶发失败）。2s 仍远小于 A 的 3s，串行/并行判据不变。
 main : Eff hostRow Int
 main = do
-  _ <- consolePrint "default" "START-B\n"
-  _ <- clockSleepMicros "default" 2000000
-  consolePrint "default" "END-B\n"
+  _ <- consolePrint "START-B\n"
+  _ <- clockSleepMicros 2000000
+  consolePrint "END-B\n"

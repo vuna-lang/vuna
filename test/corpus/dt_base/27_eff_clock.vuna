@@ -7,16 +7,16 @@ import Base.HostRow
 
 prog : (n : String) -> Eff (Cons n ClockOp Nil) Int
 prog n = do
-  t0 <- clockNow n
-  _ <- clockSleepMicros n 2000
-  t1 <- clockNow n
+  t0 <- clockNow@(n)
+  _ <- clockSleepMicros@(n) 2000
+  t1 <- clockNow@(n)
   pure (t1 - t0)
 
 progReal : Eff hostRow Int
 progReal = do
-  t0 <- clockNow "default"
-  _ <- clockSleepMicros "default" 2000
-  t1 <- clockNow "default"
+  t0 <- clockNow
+  _ <- clockSleepMicros 2000
+  t1 <- clockNow
   pure (t1 - t0)
 
 mret : Int -> Int
@@ -30,7 +30,7 @@ mopH op k = case op of
 main : Eff hostRow Int
 main = case runPure (handleClock "mock" mret mopH (prog "mock")) of
   mockElapsed => do
-    _ <- consolePrint "default" ("mock " ++ strFromInt mockElapsed ++ "\n")
+    _ <- consolePrint ("mock " ++ strFromInt mockElapsed ++ "\n")
     realElapsed <- progReal
-    _ <- consolePrint "default" ("real " ++ strFromInt (if realElapsed >= 1000 then 1 else 0) ++ "\n")
+    _ <- consolePrint ("real " ++ strFromInt (if realElapsed >= 1000 then 1 else 0) ++ "\n")
     pure 0

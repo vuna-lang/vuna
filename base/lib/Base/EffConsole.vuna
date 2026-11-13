@@ -23,12 +23,12 @@ resConsole (Print s) = Nat
 resConsole (EPrint s) = Int
 
 -- | 通过命名实例 `n` 发送 `Print`；返回写入字节数（`Nat`）。行里需要 `Member n ConsoleOp r` 证明（由精化器按行结构构造）。
-export consolePrint : (n : String) -> String -> {r : Row} -> {w : Member n ConsoleOp r} -> Eff r Nat
-consolePrint n s = sendCore ConsoleOp "console" n (Print s)
+export consolePrint : Member n ConsoleOp r => String -> Eff r Nat
+consolePrint s = sendCore ConsoleOp "console" n (Print s)
 
 -- | 通过命名实例 `n` 发送 `EPrint`（stderr）；其余同 `consolePrint`。
-export consoleEprint : (n : String) -> String -> {r : Row} -> {w : Member n ConsoleOp r} -> Eff r Int
-consoleEprint n s = sendCore ConsoleOp "console" n (EPrint s)
+export consoleEprint : Member n ConsoleOp r => String -> Eff r Int
+consoleEprint s = sendCore ConsoleOp "console" n (EPrint s)
 
 -- | 一阶 handler：`ret` 处理正常返回、`opH` 解释每个操作，结果行删除 `Console n`。`(key, name)` 与对应的 send 匹配。
 export handleConsole : {a : Type} -> {b : Type} -> {r : Row} -> (n : String) -> {w : Member n ConsoleOp r} -> (a -> b) -> ((o : ConsoleOp) -> (resConsole o -> b) -> b) -> Eff r a -> Eff (Base.Eff.rowRem n ConsoleOp r) b

@@ -26,6 +26,8 @@ linear data Token : Type where
 - `(1 x : A)`：运行时恰好一次。
 - `(x : A)`：ω，运行时任意次（含 0 次），但**类型线性时自动取 1**。
 - 隐式 binder `{x : A}` 与类型层域（`Type`/高阶 kind）恒为 0；写 `{1 ...}` 报错。
+  例外：隐式 String 实例名（effect wrapper 的 `{n : String}`）按 `RigOmega` 保留（见
+  [type-system.md](type-system.md) 证明与索引）；`Member n e r =>` 生成 `Rig0` 证明 binder。
 - `linear data` / `linear record` 把族标记为线性；该族的值只能被 quantity 1 的 binder 绑定。
 
 ## 2. Rig 代数

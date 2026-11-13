@@ -12,40 +12,40 @@ import Base.List
 import Base.Nat
 
 readProbe : Eff hostRow String
-readProbe = fsReadFile "default" "x"
+readProbe = fsReadFile "x"
 
 writeProbe : Eff hostRow Nat
-writeProbe = fsWriteFile "default" "x" "y"
+writeProbe = fsWriteFile "x" "y"
 
 lineProbe : Eff hostRow String
-lineProbe = stdinReadLine "default"
+lineProbe = stdinReadLine
 
 dirProbe : Eff hostRow (List String)
-dirProbe = fsReadDir "default" "."
+dirProbe = fsReadDir "."
 
 isDirProbe : Eff hostRow Bool
-isDirProbe = fsIsDirectory "default" "."
+isDirProbe = fsIsDirectory "."
 
 makeDirProbe : Eff hostRow Int
-makeDirProbe = fsMakeDir "default" "x"
+makeDirProbe = fsMakeDir "x"
 
 removeProbe : Eff hostRow Int
-removeProbe = fsRemoveFile "default" "x"
+removeProbe = fsRemoveFile "x"
 
 existsProbe : Eff hostRow Bool
-existsProbe = fsFileExists "default" "x"
+existsProbe = fsFileExists "x"
 
 mtimeProbe : Eff hostRow Int
-mtimeProbe = fsFileMtime "default" "x"
+mtimeProbe = fsFileMtime "x"
 
 sizeProbe : Eff hostRow Nat
-sizeProbe = fsFileSize "default" "x"
+sizeProbe = fsFileSize "x"
 
 argsProbe : Eff hostRow (List String)
-argsProbe = argsGetArgs "default"
+argsProbe = argsGetArgs
 
 exitProbe : Eff hostRow Int
-exitProbe = exitWith "default" 0
+exitProbe = exitWith 0
 
 main : Eff hostRow Int
 main = pure 0

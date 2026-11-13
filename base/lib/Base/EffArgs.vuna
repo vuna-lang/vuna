@@ -17,8 +17,8 @@ export resArgs : ArgsOp -> Type
 resArgs GetArgs = List String
 
 -- | 通过命名实例取命令行参数。
-export argsGetArgs : (n : String) -> {r : Row} -> {w : Member n ArgsOp r} -> Eff r (List String)
-argsGetArgs n = sendCore ArgsOp "args" n GetArgs
+export argsGetArgs : Member n ArgsOp r => Eff r (List String)
+argsGetArgs = sendCore ArgsOp "args" n GetArgs
 
 -- | 一阶 handler：`ret` / `opH` 由调用方给出，结果行删除 `ArgsOp`。
 export handleArgs : {a : Type} -> {b : Type} -> {r : Row} -> (n : String) -> {w : Member n ArgsOp r} -> (a -> b) -> ((o : ArgsOp) -> (resArgs o -> b) -> b) -> Eff r a -> Eff (Base.Eff.rowRem n ArgsOp r) b

@@ -16,26 +16,26 @@ import Base.HostRow
 serve : String -> Eff hostRow Int
 serve path = do
   h <- netListen path
-  _ <- consolePrint "default" ("ready" ++ "\n")
+  _ <- consolePrint ("ready" ++ "\n")
   c <- netAccept h
   msg <- netRecv c 4096
   _ <- netSend c ("echo:" ++ msg)
   _ <- netClose c
   _ <- netClose h
-  _ <- consolePrint "default" ("server done" ++ "\n")
-  exitWith "default" 0
+  _ <- consolePrint ("server done" ++ "\n")
+  exitWith 0
 
 serveTcp : Eff hostRow Int
 serveTcp = do
   h <- netListen "tcp:127.0.0.1:0"
   p <- netPort h
-  _ <- consolePrint "default" (("port:" ++ strFromInt p) ++ "\n")
+  _ <- consolePrint (("port:" ++ strFromInt p) ++ "\n")
   c <- netAccept h
   msg <- netRecv c 4096
   _ <- netSend c ("echo:" ++ msg)
   _ <- netClose c
   _ <- netClose h
-  exitWith "default" 0
+  exitWith 0
 
 client : String -> Eff hostRow Int
 client addr = do
@@ -43,18 +43,18 @@ client addr = do
   _ <- netSend c "ping\n"
   reply <- netRecv c 4096
   _ <- netClose c
-  _ <- consolePrint "default" reply
-  exitWith "default" 0
+  _ <- consolePrint reply
+  exitWith 0
 
 dispatch : List String -> Eff hostRow Int
 dispatch (["serve", path]) = serve path
 dispatch (["serve-tcp"]) = serveTcp
 dispatch (["client", addr]) = client addr
 dispatch _ = do
-  _ <- consolePrint "default" "usage\n"
-  exitWith "default" 2
+  _ <- consolePrint "usage\n"
+  exitWith 2
 
 main : Eff hostRow Int
 main = do
-  args <- argsGetArgs "default"
+  args <- argsGetArgs
   dispatch args

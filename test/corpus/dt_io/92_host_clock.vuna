@@ -5,6 +5,6 @@ import Base.EffConsole
 
 main : Eff [ClockOp, ConsoleOp] Int
 main = do
-  _ <- clockSleepMicros "default" 1
-  _ <- consolePrint "default" "clock-ok\n"
+  _ <- clockSleepMicros 1
+  _ <- consolePrint "clock-ok\n"
   pure 0

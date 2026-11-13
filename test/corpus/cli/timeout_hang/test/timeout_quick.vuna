@@ -5,4 +5,4 @@ import Base.EffClock
 import Base.HostRow
 
 main : Eff (Cons "default" ClockOp Nil) Int
-main = clockSleepMicros "default" 1000
+main = clockSleepMicros 1000

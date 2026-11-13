@@ -19,7 +19,7 @@ result =
 
 prog : Eff hostRow String
 prog = do
-  _ <- consolePrint "default" "p"
+  _ <- consolePrint "p"
   pure result
 
 main : Eff hostRow String

@@ -9,9 +9,9 @@ import Base.Nat
 
 prog : Eff hostRow Nat
 prog = do
-  written <- fsWriteFile "default" "/tmp/vuna_d25_measure.txt" "hello"
-  size <- fsFileSize "default" "/tmp/vuna_d25_measure.txt"
-  printed <- consolePrint "default" "p\n"
+  written <- fsWriteFile "/tmp/vuna_d25_measure.txt" "hello"
+  size <- fsFileSize "/tmp/vuna_d25_measure.txt"
+  printed <- consolePrint "p\n"
   pure (written + size + printed)
 
 main : Eff hostRow Nat

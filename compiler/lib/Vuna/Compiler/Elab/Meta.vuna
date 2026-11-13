@@ -739,6 +739,9 @@ isIndexDomain ec dom = isTypeDomain dom || isDataHead (ecDatas ec) (forceVal ec 
 export isImplicitDomain : Ctx -> Ec -> Value -> Bool
 isImplicitDomain ctx ec dom = if isIndexDomain ec dom then True
 else case forceVal ec dom of
+  -- 实例名（String）是唯一允许的运行时隐式值：它不参与位置实参，由行 `Member`
+  -- 证据解出或由 `@name` 显式给出；rig 为 RigOmega（见 `implicitBinderRig`）。
+  VNeutral (NGlobal g []) => g == strTypeName
   VMeta m sp => True
   VNeutral n => case n of
     NVar name lvl sp => neutralBinderIndexDomain ctx ec lvl
@@ -747,6 +750,16 @@ else case forceVal ec dom of
   -- 值层函数类型（`a -> b`，cod 不是宇宙）仍拒绝。
   VPi _ _ _ d clo => isKindWithCtx ctx ec (forceVal ec dom)
   _ => False
+
+-- 隐式 binder 的 rig：String 实例名是运行时值（RigOmega），其余隐式仍 Rig0。
+-- （`binderRig` 只用于显式 binder；隐式 binder 的 Pi rig 在 `inferPiFuel` 里由这里给出。）
+export isStringImplicitDomain : Ec -> Value -> Bool
+isStringImplicitDomain ec dom = case forceVal ec dom of
+  VNeutral (NGlobal g []) => g == strTypeName
+  _ => False
+
+export implicitBinderRig : Ec -> Value -> Rig
+implicitBinderRig ec dom = if isStringImplicitDomain ec dom then RigOmega else Rig0
 
 -- 上下文里 level 为 lvl 的 binder 的类型是不是 index domain。
 -- Ctx 项按「最近绑定在前」存；level 0 是最外层 binder，所以位置 = depth - lvl - 1。

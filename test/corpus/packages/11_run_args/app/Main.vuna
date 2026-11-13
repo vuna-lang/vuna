@@ -13,6 +13,6 @@ firstArg (a :: _) = a
 
 main : Eff hostRow Int
 main = do
-  args <- argsGetArgs "default"
-  consolePrint "default" ((firstArg args) ++ "\n")
-  exitWith "default" 0
+  args <- argsGetArgs
+  consolePrint ((firstArg args) ++ "\n")
+  exitWith 0

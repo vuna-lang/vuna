@@ -6,7 +6,7 @@ import Base.HostRow
 
 prog : Eff hostRow Int
 prog = do
-  _ <- consolePrint "default" "hello"
+  _ <- consolePrint "hello"
   pure 7
 
 main : Eff hostRow Int

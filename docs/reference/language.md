@@ -201,6 +201,23 @@ M = Int
 binder 组内的多个名字展开成嵌套 Pi，解析器把这段 Pi 前缀搬到返回类型上，约束本身仍是
 `C a b`。多名字 binder 同样适用于普通 `(x y : T) -> ...` / `{x y : T} -> ...` 形态。
 
+## 成员约束与实例名（effect wrapper）
+
+`Member n e r => ...` 是签名糖，不是 trait：编译器生成隐式 `{_member : Member n e r}` 证明
+binder（`Rig0`），并把 `n`/`r` 的域分别量化为 `String`/`Row`；标签 `e` 的其它自由名仍按
+kind 规则量化。签名例子：
+
+```vuna
+consolePrint : Member n ConsoleOp r => String -> Eff r Nat
+consolePrint s = sendCore ConsoleOp "console" n (Print s)
+```
+
+- 隐式 `String` 实例名按 `RigOmega` 运行（见 [qtt.md](qtt.md)），定义体可按名字引用；
+  resolver 只把 String 域隐式名与 `Member` ctx 的自由小写名加进子句作用域。
+- 调用点不写实例名：裸标签行取默认 `"default"`，命名行按行解；多实例行用 `f@name`
+  显式选，变量写 `f@(n)`。`@` 是可选的隐式实参覆盖，不参与位置实参。
+- `Member` 仍是 `Base.Eff` 的 Type-1 data family；约束只允许在顶层签名。
+
 ## 源码写法惯例（现代形态）
 
 vuna/base/compiler 三包源码统一按当前语言能力书写，新增/修改代码沿用：

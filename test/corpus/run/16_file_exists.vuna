@@ -5,8 +5,8 @@ import Base.HostRow
 
 prog : Eff hostRow Int
 prog = do
-  root <- fsFileExists "default" "/"
-  nope <- fsFileExists "default" "/vuna/definitely-not-a-file-xyz"
+  root <- fsFileExists "/"
+  nope <- fsFileExists "/vuna/definitely-not-a-file-xyz"
   pure (if root then (if nope then 0 else 42) else 0)
 
 main : Eff hostRow Int
