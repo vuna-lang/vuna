@@ -59,6 +59,9 @@
 
 ## 纪律
 
+- **每轮开始先 rebase 主分支**：先 `git fetch origin main`（远端不可达则用本地 `main`），
+  再 `git rebase main`；冲突按语义合并、双方改动都保留；rebase 后重建 `./result/bin/vuna`，
+  跑 `vuna check .` 与相关 suite 再继续。历史保持线性。
 - **禁止手改 `seed/`**：它是生成物；只能通过 seed rotation 更新
   （`sh nix/seed-rotate.sh ./result/bin/vuna`）。
 - **隐藏效果守卫**：由 `sh nix/check-eff-boundary.sh` 守护（基线 `nix/eff-boundary.allowlist`
@@ -85,7 +88,7 @@
 
 ```console
 nix build .#vuna --out-link result   # 产品 CLI；.#vuna-compiler / .#vuna-seed 同理
-nix flake check                      # 21 项：3 packages + 18 checks（含 vscode-ext / ir-boundary / diag-located）
+nix flake check                      # 20 项：3 packages + 17 checks（含 vscode-ext / ir-boundary / diag-located）
 nix run .#vuna-run-tests [-- --list | --only dt]   # 原生 suite（vuna test --suite）；bench：.#vuna-bench --quick / .#vuna-perf --check
 vuna check .                         # 包级类型检查（自检）；vuna build . → .output/bin/<包名>
 vuna fmt --check <PATH>...           # 格式化检查（省略 PATH = workspace 各包 lib/app/test）；vuna lint <file>...
