@@ -1370,10 +1370,125 @@ not : Bool -> Bool
 not True = False
 not False = True
 
-runWorker : Env -> SuiteOpts -> List Case -> Int -> Int -> Eff hostRow Int
-runWorker env opts cases index count =
+-- ---------------------------------------------------------------
+-- LPT 调度（仅用于非 e2e tier）
+--
+-- e2e 的冷隔离长 case 对顺序敏感，仍按发现顺序；gate（fast/integration）用历史
+-- `.local/test-suite/costs.tsv` 做 LPT 分桶：重 case 优先放到当前负载最小的 worker。
+-- worker 各自读同一份 costs，确定性地算出同一组 bins，再取自己的 bin。
+-- ---------------------------------------------------------------
+costsPath : Env -> String
+costsPath env = "${env.envRoot}/.local/test-suite/costs.tsv"
+
+loadCosts : Env -> Eff hostRow (List (Pair String Int))
+loadCosts env = do
+  exists <- pathExistsFile (costsPath env)
+  if not exists then pure []
+  else do
+    text <- raiseToRow hostRow (@vuna@prim_eff_readFile (costsPath env))
+    pure (mapMaybe parseCostLine (lines text))
+
+parseCostLine : String -> Maybe (Pair String Int)
+parseCostLine line = case split "\t" line of
+  id :: ms :: _ => Just (Pair id (fromMaybe 100 (parseLeadingInt ms)))
+  _ => Nothing
+
+caseCost : List (Pair String Int) -> Case -> Int
+caseCost costs c = case lookupPair c.caseId costs of
+  Just ms => if ms > 0 then ms else defaultCost c
+  Nothing => defaultCost c
+
+defaultCost : Case -> Int
+defaultCost c = case c.caseKind of
+  CSteps _ => 1500
+  CSeed _ _ => 800
+  CRuntime _ _ _ => 500
+  CGolden _ _ _ _ _ _ _ => 300
+  CError _ _ _ _ _ => 300
+  _ => 100
+
+useLpt : SuiteOpts -> Bool
+useLpt opts = case opts.suiteTiers of
+  [] => False
+  tiers => not (memName "e2e" tiers)
+
+emptyBin : Pair (List (Pair Int Case)) Int
+emptyBin = Pair [] 0
+
+repeatN : Int -> Pair (List (Pair Int Case)) Int -> List (Pair (List (Pair Int Case)) Int)
+repeatN n x = if n <= 0 then [] else x :: repeatN (n - 1) x
+
+sortWeighted : List (Pair Int (Pair Int Case)) -> List (Pair Int (Pair Int Case))
+sortWeighted [] = []
+sortWeighted (x :: rest) = insertWeighted x (sortWeighted rest)
+
+insertWeighted : Pair Int (Pair Int Case) -> List (Pair Int (Pair Int Case)) -> List (Pair Int (Pair Int Case))
+insertWeighted x [] = [x]
+insertWeighted x ((Pair w p) :: rest) =
+  if firstOf x >= w then x :: Pair w p :: rest else Pair w p :: insertWeighted x rest
+
+lptBins : Env -> Int -> List (Pair Int Case) -> Eff hostRow (List (List (Pair Int Case)))
+lptBins env jobs indexed = do
+  costs <- loadCosts env
   let
-    indexed = indexedCases cases index count
+    weighted = map (\p => Pair (caseCost costs (secondOf p)) p) indexed
+    sorted = sortWeighted weighted
+    bins = assignAll sorted (repeatN jobs emptyBin)
+  in pure (map (\b => firstOf b) bins)
+
+assignAll : List (Pair Int (Pair Int Case)) -> List (Pair (List (Pair Int Case)) Int) -> List (Pair (List (Pair Int Case)) Int)
+assignAll [] bins = bins
+assignAll (w :: rest) bins =
+  let
+    loads = map (\b => secondOf b) bins
+    idx = lightestIndex loads
+    bins2 = addAtBin idx w bins
+  in assignAll rest bins2
+
+lightestIndex : List Int -> Int
+lightestIndex loads = lightestGo loads 0 0 999999999
+
+lightestGo : List Int -> Int -> Int -> Int -> Int
+lightestGo [] _ best _ = best
+lightestGo (n :: rest) i best bestLoad =
+  if n < bestLoad then lightestGo rest (i + 1) i n else lightestGo rest (i + 1) best bestLoad
+
+addAtBin : Int -> Pair Int (Pair Int Case) -> List (Pair (List (Pair Int Case)) Int) -> List (Pair (List (Pair Int Case)) Int)
+addAtBin idx w bins = addAtBinGo idx 0 w bins
+
+addAtBinGo : Int -> Int -> Pair Int (Pair Int Case) -> List (Pair (List (Pair Int Case)) Int) -> List (Pair (List (Pair Int Case)) Int)
+addAtBinGo _ _ _ [] = []
+addAtBinGo idx i w ((Pair items load) :: rest) =
+  if i == idx then Pair (secondOf w :: items) (load + firstOf w) :: rest
+  else Pair items load :: addAtBinGo idx (i + 1) w rest
+
+nthBin : Int -> List (List (Pair Int Case)) -> List (Pair Int Case)
+nthBin _ [] = []
+nthBin n (b :: rest) = if n <= 0 then b else nthBin (n - 1) rest
+
+costRowText : CaseResult -> String
+costRowText r = "${r.resId}\t${strOfInt r.resMs}"
+
+isCostRow : CaseResult -> Bool
+isCostRow r = r.resStatus /= "cached" && r.resMs > 0
+
+recordCosts : Env -> List CaseResult -> Eff hostRow Int
+recordCosts env results =
+  let
+    rows = filter isCostRow results
+    text = join "\n" (map costRowText rows)
+  in if listLength rows == 0 then pure 0
+  else do
+    _ <- ensureDirPath "${env.envRoot}/.local/test-suite"
+    raiseToRow hostRow (@vuna@prim_eff_writeFile (costsPath env) text)
+
+runWorker : Env -> SuiteOpts -> List Case -> Int -> Int -> Eff hostRow Int
+runWorker env opts cases index count = do
+  indexed <- if useLpt opts then do
+    bins <- lptBins env count (indexAll cases 0 [])
+    pure (nthBin index bins)
+  else pure (indexedCases cases index count)
+  let
     resultsDir = case opts.suiteResultsDir of
       Just d => d
       Nothing => "${env.envTmp}/results"
@@ -1497,6 +1612,7 @@ finishResults env opts results =
     _ <-
       if strictBad > 0 then printLine "strict-skips: ${strOfInt skipped} skipped case(s)"
       else pure 0
+    _ <- recordCosts env results
     _ <- recordLastFailed env results
     _ <- if opts.suiteTimings then printTimings results else pure 0
     _ <- if opts.suiteJSON then printJSON results else printLine (summarize results)

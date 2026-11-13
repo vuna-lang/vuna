@@ -154,3 +154,7 @@ seed/runtime 归 `integration`，golden/error/lint/fix/check 归 `fast`。
   compile + build.sh。47c 因此从 ~29.5 s 降到 **23.6 s**（≤25 s），全量 789 cases 仍全绿。
 - testbin key 收敛为「编译器指纹 + context roots 内容 + 测试源内容」：roots 已含本包与
   依赖闭包，去掉重复的 pkgHash；47c 在 e2e 下 24.96 s，54b 25.4 s（8 worker 噪声）。
+- LPT 已落地在**非 e2e tier**（gate：`fast integration`）：父/worker 读
+  `.local/test-suite/costs.tsv`（上次每 case 的 ms），按成本降序把重 case 放到当前
+  负载最小的 worker；worker 确定性重算同一组 bins，再取自己的 bin。全量（空 tier）与
+  e2e tier 仍按发现顺序，避免冷隔离长 case 同时开跑；gate 实测 ~72 s，全量不受影响。
