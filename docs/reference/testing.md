@@ -443,7 +443,8 @@ interp / compile 文案不同时用 `.compile.err`。
 ```console
 nix build                  # 默认 = vuna；.#vuna-compiler / .#vuna-seed 同理
 nix flake check            # 全部 checks
-sh nix/ci.sh               # CI 统一入口（eval-cache=false + log-lines=5000 + --keep-going）；GitHub Actions 由 .github/workflows/ci.yml 调用
+sh nix/ci.sh               # CI 统一入口；CI_TOKENS（默认 nproc）/ CI_JOBS（默认 2）决定
+                           # 每个 derivation 的 cores（默认 2×8）；gate/e2e 共享该预算
 nix develop                # 全量开发环境（工具链 + vuna-seed）；.#ocaml 只有 OCaml 工具链
 nix build .#vuna --out-link result-vuna      # 产品 CLI（stage 1）
 nix build .#vuna-compiler --out-link result-compiler  # 编译器 CLI（stage 1）
