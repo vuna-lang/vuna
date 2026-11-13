@@ -407,6 +407,14 @@ export renderJsonList : String -> List Diagnostic -> String
 renderJsonList lang ds =
   "{\"version\":1,\"tool\":\"vuna\",\"diagnostics\":[${join "," (map (jsonDiag lang) ds)}]}"
 
+-- | JSON + 源身份（--with-sources）：每个 label 文件附内容摘要，供跨 checkout 定位。
+jsonSource : Pair String String -> String
+jsonSource (Pair file digest) = "{\"file\":${jsonStr file},\"digest\":${jsonStr digest}}"
+
+export renderJsonListWithSources : String -> List Diagnostic -> List (Pair String String) -> String
+renderJsonListWithSources lang ds sources =
+  "{\"version\":1,\"tool\":\"vuna\",\"sources\":[${join "," (map jsonSource sources)}],\"diagnostics\":[${join "," (map (jsonDiag lang) ds)}]}"
+
 -- ---------------------------------------------------------------
 -- SARIF 2.1.0（CI / 代码扫描消费）
 -- ---------------------------------------------------------------
