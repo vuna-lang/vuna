@@ -132,3 +132,7 @@ seed/runtime 归 `integration`，golden/error/lint/fix/check 归 `fast`。
 - 结论：长 case 的根因是**冷编译**，不是断言数量。拆分必须满足“拆分后的子 case 共享
   已预热 store”，预热必须在 worker 内/并发阶段完成，不能串行挡在父进程；cache 断言
   与功能断言也要分开，功能部分才能吃预热 store。
+- 再试“父进程后台并发跑 `check compiler` / `check .`，与 worker 重叠”：e2e 变为
+  **209 s**，44e 106 s、32_fmt 86 s —— 预热进程与 worker 抢 CPU/冷编译，仍不划算。
+  结论：需要**专用预热阶段完成后**再放 worker，或让 e2e 用例共享一份已热 store；
+  “并发预热”不是免费重叠。
