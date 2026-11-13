@@ -515,8 +515,20 @@ mergeRootLines lines (d :: rest) = mergeRootLines (insertRootLine d lines) rest
 export storeRootAppendEff : String -> List String -> Eff hostRow Int
 storeRootAppendEff projectId digests = do
   dir <- storeRootsPathEff projectId
-  _ <- storeEnsureDirEff dir
-  writeRootFiles dir digests
+  exists <- raiseToRow hostRow (@vuna@prim_eff_fileExists dir)
+  if exists then do
+    isDir <- raiseToRow hostRow (@vuna@prim_eff_isDirectory dir)
+    if isDir then writeRootFiles dir digests
+    else do
+      -- 旧布局迁移：`roots/<project>` 是单文件时先读成 digest 列表、删文件、建目录。
+      text <- raiseToRow hostRow (@vuna@prim_eff_readFile dir)
+      _ <- raiseToRow hostRow (@vuna@prim_eff_removeFile dir)
+      _ <- storeEnsureDirEff dir
+      _ <- writeRootFiles dir (filter (\l => strLength l > 0) (split "\n" text))
+      writeRootFiles dir digests
+  else do
+    _ <- storeEnsureDirEff dir
+    writeRootFiles dir digests
 
 writeRootFiles : String -> List String -> Eff hostRow Int
 writeRootFiles _ [] = pure 0
