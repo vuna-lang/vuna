@@ -89,7 +89,10 @@ checkPackage release wantWarnings pkg =
             -- 已经写全 order + iface 对象，再补一遍 lib check 只会重复精化整包
             -- （4000 定义探针上约 +0.9 s，且放大增长比）。order 只在「完整模块面」
             -- 写成功后才存在，所以「order 覆盖 names」等价于 iface 也已写全。
-            covered <- orderCoversEff (packageName pkg) names
+            -- `VUNA_ELAB_FULL=1` 的语义是「每条路径都全量」，必须照跑第二遍（也会重新
+            -- 读写 lex 对象；§52 的截断恢复用例依赖它）。
+            full <- elabFullRequested
+            covered <- if full then pure False else orderCoversEff (packageName pkg) names
             if covered then do
               let
                 _ = dbg! "check-lib-skip covered=${length names}"
