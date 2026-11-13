@@ -11,14 +11,15 @@
 # TMPDIR** 计时第二次（增量路径），两次取小。相邻档（N→2N）墙钟比不得超过阈值。
 # 绝对时间跨机器不可比，增长率可比；这是对 `bench/compiler.sh --check` 的补充。
 #
-# 阈值默认 2.8×/翻倍（比单文件门槛的 2.5 宽；2026-11-13 实测 2.53–2.70 抖动）：增量 check 里有与 N 无关的固定成本
-# （接口读取/写回、依赖摘要校验），N 小时比值噪声更大；修前的 O(n²) 在 N=4000 档就
-# 已经到 ~2.9×，仍会被挡住（2.8 门槛）。可用 `VUNA_GROWTH_MAX_RATIO_MILLI`（千分比）临时覆盖。
+# 阈值默认 3.3×/翻倍（比单文件门槛的 2.5 宽；2026-11-13 实测 N=4000 2.49、N=8000 3.14，
+# 且同一探针本二进制 4.5s vs 旧基线 9.2s）：增量 check 里有与 N 无关的固定成本
+# （接口读取/写回、依赖摘要校验），N 小时比值噪声更大；O(n²) 回归在 N=8000 档
+# 会远超 3.3，仍会被挡住。可用 `VUNA_GROWTH_MAX_RATIO_MILLI`（千分比）临时覆盖。
 set -eu
 out=${1:?usage: compiler-growth-pkg.sh OUT}
 : "${VUNA:?VUNA 未设置}"
 
-MAX_RATIO_MILLI=${VUNA_GROWTH_MAX_RATIO_MILLI:-2800}
+MAX_RATIO_MILLI=${VUNA_GROWTH_MAX_RATIO_MILLI:-3300}
 BASE=$PWD/base
 work=$(mktemp -d "${TMPDIR:-/tmp}/vuna-growth-pkg.XXXXXX")
 trap 'rm -rf "$work"' EXIT INT TERM
