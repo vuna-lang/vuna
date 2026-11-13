@@ -1,0 +1,40 @@
+module Vuna.Compiler.Driver.Wasm where
+
+-- Vuna.Compiler.Driver.Wasm：WAT 目标驱动（M1）。
+--
+-- 复用 DT 检查 + `Codegen.Lower.lowerProgramOf` 得到整程序 IR，再交给
+-- `Wasm.Module.build` / `Wasm.Render.render`，写到 `OUT/main.wat`。
+-- 边界：不 import Core/Elab/Intrinsics；只经由 Driver.Dt 与 Codegen.Lower。
+import Base.Eff
+import Base.HostRow
+import Base.Int
+import Base.Pair
+import Vuna.Compiler.Common
+import Vuna.Compiler.Diag
+import Vuna.Compiler.Driver.Compile
+import Vuna.Compiler.Driver.Dt
+import Vuna.Compiler.Packages.Pkg
+import Vuna.Compiler.Codegen.Lower
+import Vuna.Compiler.Wasm.Model
+import Vuna.Compiler.Wasm.Module
+import Vuna.Compiler.Wasm.Render
+
+wasmErrDiag : WasmErr -> Diagnostic
+wasmErrDiag err = diagNoLoc SevError PhCodegen CatCodegen "" (wasmErrText err)
+
+export compileWasm : PackageContext -> String -> Bool -> String -> Eff hostRow (Check Int)
+compileWasm ctx entry printResult outDir = do
+  _ <- ensureDirPath outDir
+  checked <- dtCheckWithProgramParts ctx entry
+  case checked of
+    ErrC e => pure (ErrC e)
+    OkC pair =>
+      let
+        pkg = secondOf pair
+      in case lowerProgramOf pkg.checkedProgram.dtProgDatas pkg.checkedProgram.dtProgDefs of
+        ErrC e => pure (ErrC e)
+        OkC program => case build program printResult of
+          WasmRejected err => pure (ErrC (wasmErrDiag err))
+          WasmOk m => do
+            _ <- raiseToRow hostRow (@vuna@prim_eff_writeFile "${outDir}/main.wat" (renderModule m))
+            pure (OkC 1)

@@ -1,0 +1,355 @@
+module Vuna.Compiler.Wasm.Render where
+
+-- Vuna.Compiler.Wasm.Render：WasmModule -> canonical WAT 文本。
+--
+-- 布局规范（docs/reference/wasm.md）：最大 100 列、2 空格缩进、每条指令一行、
+-- 模块级名字稳定、section/类型/函数/data 固定顺序。生成结果不提交进 Git，
+-- 但同一输入必须逐字节相同（测试用两次渲染 cmp）。
+import Base.Bool
+import Base.Int
+import Base.List
+import Base.Maybe
+import Base.Pair
+import Base.String
+import Vuna.Compiler.Wasm.Instr
+import Vuna.Compiler.Wasm.Model
+
+maxLine : Int
+maxLine = 100
+
+spaces : Int -> String
+spaces n = if n <= 0 then "" else " " ++ spaces (n - 1)
+
+lineOf : Int -> String -> String
+lineOf indent text = spaces indent ++ text
+
+fitsLine : String -> Bool
+fitsLine s = strLength s <= maxLine
+
+joinWith : String -> List String -> String
+joinWith sep xs = Base.String.join sep xs
+
+-- ---------------------------------------------------------------
+-- 注释换行
+-- ---------------------------------------------------------------
+wordsOf : String -> List String
+wordsOf s = reverse (wordsOfGo "" [] (strUnpack s))
+
+wordsOfGo : String -> List String -> List Int -> List String
+wordsOfGo cur acc [] = flushWord cur acc
+wordsOfGo cur acc (c :: rest) =
+  if c == 32 then wordsOfGo "" (flushWord cur acc) rest else wordsOfGo (cur ++ strPack [c]) acc rest
+
+flushWord : String -> List String -> List String
+flushWord "" acc = acc
+flushWord w acc = w :: acc
+
+wrapComment : Int -> String -> List String
+wrapComment indent text = wrapWords indent "" (wordsOf text)
+
+wrapWords : Int -> String -> List String -> List String
+wrapWords indent cur [] = if cur == "" then [] else [lineOf indent cur]
+wrapWords indent cur (w :: rest) =
+  let
+    cand = if cur == "" then w else cur ++ " " ++ w
+  in if fitsLine (lineOf indent cand) then wrapWords indent cand rest
+  else lineOf indent cur :: wrapWords indent w rest
+
+-- ---------------------------------------------------------------
+-- 字符串转义
+-- ---------------------------------------------------------------
+hexDigit : Int -> String
+hexDigit n = if n < 10 then strPack [48 + n] else strPack [87 + n]
+
+hex2 : Int -> String
+hex2 n = hexDigit (n / 16) ++ hexDigit (n - n / 16 * 16)
+
+watEscapeChar : Int -> String
+watEscapeChar c =
+  if c == 34 then "\\\""
+  else if c == 92 then "\\\\" else if c >= 32 && c <= 126 then strPack [c] else "\\" ++ hex2 c
+
+-- | WAT 字节串字面量（不含两侧引号）。
+export watString : String -> String
+watString s = strPack (concatMap (\c => strUnpack (watEscapeChar c)) (strUnpack s))
+
+-- | 按字节分块（每块 24 字节；最坏 `\hh` 转义仍 ≤100 列）。
+chunkBytes : List Int -> List (List Int)
+chunkBytes bytes = chunkBytesGo bytes 24 []
+
+chunkBytesGo : List Int -> Int -> List Int -> List (List Int)
+chunkBytesGo [] _ acc = if acc == [] then [] else [reverse acc]
+chunkBytesGo (b :: rest) 0 acc = reverse acc :: chunkBytesGo (b :: rest) 24 []
+chunkBytesGo (b :: rest) n acc = chunkBytesGo rest (n - 1) (b :: acc)
+
+-- ---------------------------------------------------------------
+-- 指令
+-- ---------------------------------------------------------------
+resultSuffix : String -> String
+resultSuffix "" = ""
+resultSuffix ty = " (result ${ty})"
+
+renderInstrFlat : Instr -> String
+renderInstrFlat i = case i of
+  INop => "nop"
+  IUnreachable => "unreachable"
+  IReturn => "return"
+  IDrop => "drop"
+  ILocalGet n => "local.get ${n}"
+  ILocalSet n => "local.set ${n}"
+  ILocalTee n => "local.tee ${n}"
+  IGlobalGet n => "global.get ${n}"
+  IGlobalSet n => "global.set ${n}"
+  IConstI32 n => "i32.const ${strFromInt n}"
+  IConstI64 n => "i64.const ${strFromInt n}"
+  IPlain s => s
+  IUnop s => s
+  IBinop s => s
+  ICall n => "call ${n}"
+  ICallRef t => "call_ref ${t}"
+  IRefFunc n => "ref.func ${n}"
+  IRefNull => "ref.null any"
+  IRefCast t => "ref.cast (ref ${t})"
+  IRefAsNonNull => "ref.as_non_null"
+  IStructNew t => "struct.new ${t}"
+  IStructGet t idx => "struct.get ${t} ${strFromInt idx}"
+  IStructSet t idx => "struct.set ${t} ${strFromInt idx}"
+  IArrayNew t => "array.new ${t}"
+  IArrayNewDefault t => "array.new_default ${t}"
+  IArrayNewFixed t n => "array.new_fixed ${t} ${strFromInt n}"
+  IArrayNewData t d => "array.new_data ${t} ${d}"
+  IArrayGet t => "array.get ${t}"
+  IArrayGetU t => "array.get_u ${t}"
+  IArrayGetS t => "array.get_s ${t}"
+  IArraySet t => "array.set ${t}"
+  IArrayLen => "array.len"
+  IArrayCopy d s => "array.copy ${d} ${s}"
+  II31New => "ref.i31"
+  II31GetU => "i31.get_u"
+  II31GetS => "i31.get_s"
+  IIf _ _ _ => ""
+  IBlock _ _ _ => ""
+  ILoop _ _ _ => ""
+  IBr l => "br ${l}"
+  IBrIf l => "br_if ${l}"
+  IMemoryGrow => "memory.grow"
+  IMemorySize => "memory.size"
+  ILoad8U => "i32.load8_u"
+  IStore8 => "i32.store8"
+  ILoad32 => "i32.load"
+  IStore32 => "i32.store"
+  IComment _ => ""
+
+renderInstrs : Int -> List Instr -> List String
+renderInstrs indent instrs = concatMap (renderInstr indent) instrs
+
+renderInstr : Int -> Instr -> List String
+renderInstr indent i = case i of
+  IIf resultTy th el => renderIf indent resultTy th el
+  IBlock label resultTy body => renderBlock indent label resultTy body
+  ILoop label resultTy body => renderLoop indent label resultTy body
+  IComment text => map (lineOf indent) (wrapComment 0 (";; " ++ text))
+  _ => [lineOf indent (renderInstrFlat i)]
+
+renderIf : Int -> String -> List Instr -> List Instr -> List String
+renderIf indent resultTy th el =
+  let
+    openLine = [lineOf indent ("if" ++ resultSuffix resultTy)]
+    thenBody = renderInstrs (indent + 2) th
+    elseLine = [lineOf indent "else"]
+    elseBody = renderInstrs (indent + 2) el
+    endLine = [lineOf indent "end"]
+  in append openLine (append thenBody (append elseLine (append elseBody endLine)))
+
+renderBlock : Int -> String -> String -> List Instr -> List String
+renderBlock indent label resultTy body =
+  let
+    openLine = [lineOf indent ("block ${label}" ++ resultSuffix resultTy)]
+  in append openLine (append (renderInstrs (indent + 2) body) [lineOf indent "end"])
+
+renderLoop : Int -> String -> String -> List Instr -> List String
+renderLoop indent label resultTy body =
+  let
+    openLine = [lineOf indent ("loop ${label}" ++ resultSuffix resultTy)]
+  in append openLine (append (renderInstrs (indent + 2) body) [lineOf indent "end"])
+
+-- ---------------------------------------------------------------
+-- 类型
+-- ---------------------------------------------------------------
+renderParam : Pair String WatValTy -> String
+renderParam p = "(param ${firstOf p} ${watValTyText (secondOf p)})"
+
+renderResult : WatValTy -> String
+renderResult ty = "(result ${watValTyText ty})"
+
+renderField : WatField -> String
+renderField f =
+  let
+    tyText =
+      if f.watFieldMut then "(mut " ++ watValTyText f.watFieldTy ++ ")"
+      else watValTyText f.watFieldTy
+  in "(field " ++ tyText ++ ")"
+
+funcTypeOne : String -> List WatValTy -> List WatValTy -> String
+funcTypeOne name params results =
+  let
+    paramsText = joinWith "" (map (\p => " (param " ++ watValTyText p ++ ")") params)
+    resultsText = joinWith "" (map (\r => " " ++ renderResult r) results)
+  in lineOf 2 ("(type ${name} (func" ++ paramsText ++ resultsText ++ "))")
+
+funcTypeMulti : String -> List WatValTy -> List WatValTy -> List String
+funcTypeMulti name params results =
+  let
+    openLine = [lineOf 2 "(type ${name}"]
+    funcLine = [lineOf 4 "(func"]
+    paramLines = map (lineOf 6) (map (\p => "(param " ++ watValTyText p ++ ")") params)
+    resultLines = map (lineOf 6) (map renderResult results)
+    closeFunc = [lineOf 4 ")"]
+    closeType = [lineOf 2 ")"]
+  in append openLine
+    (append funcLine (append paramLines (append resultLines (append closeFunc closeType))))
+
+structTypeOne : String -> List WatField -> String
+structTypeOne name fields =
+  let
+    fieldsText = joinWith "" (map (\f => " " ++ renderField f) fields)
+  in lineOf 2 ("(type ${name} (struct" ++ fieldsText ++ "))")
+
+structTypeMulti : String -> List WatField -> List String
+structTypeMulti name fields =
+  let
+    openLine = [lineOf 2 "(type ${name}"]
+    structLine = [lineOf 4 "(struct"]
+    fieldLines = map (lineOf 6) (map renderField fields)
+    closeStruct = [lineOf 4 ")"]
+    closeType = [lineOf 2 ")"]
+  in append openLine (append structLine (append fieldLines (append closeStruct closeType)))
+
+renderType : WatType -> List String
+renderType ty = case ty of
+  WatFuncType name params results => renderFuncType name params results
+  WatStructType name fields => renderStructType name fields
+  WatArrayType name mut elemTy => renderArrayType name mut elemTy
+
+renderFuncType : String -> List WatValTy -> List WatValTy -> List String
+renderFuncType name params results =
+  if fitsLine (funcTypeOne name params results) then [funcTypeOne name params results]
+  else funcTypeMulti name params results
+
+renderStructType : String -> List WatField -> List String
+renderStructType name fields =
+  if fitsLine (structTypeOne name fields) then [structTypeOne name fields]
+  else structTypeMulti name fields
+
+renderArrayType : String -> Bool -> WatValTy -> List String
+renderArrayType name mut elemTy =
+  let
+    elemText = if mut then "(mut " ++ watValTyText elemTy ++ ")" else watValTyText elemTy
+  in [lineOf 2 "(type ${name} (array ${elemText}))"]
+
+-- ---------------------------------------------------------------
+-- import / global / func / export / elem / data
+-- ---------------------------------------------------------------
+importOne : WatImport -> String
+importOne imp =
+  let
+    paramsText = joinWith "" (map (\p => " (param " ++ watValTyText p ++ ")") imp.watImportParams)
+    resultsText = joinWith "" (map (\r => " " ++ renderResult r) imp.watImportResults)
+  in lineOf 2
+    ("(import \"${imp.watImportModule}\" \"${imp.watImportName}\" (func ${imp.watImportFunc}" ++ paramsText ++ resultsText ++ "))")
+
+importMulti : WatImport -> List String
+importMulti imp =
+  let
+    openLine = [lineOf 2 "(import \"${imp.watImportModule}\" \"${imp.watImportName}\""]
+    funcLine = [lineOf 4 "(func ${imp.watImportFunc}"]
+    paramLines = map (lineOf 6) (map (\p => "(param " ++ watValTyText p ++ ")") imp.watImportParams)
+    resultLines = map (lineOf 6) (map renderResult imp.watImportResults)
+    closeFunc = [lineOf 4 ")"]
+    closeImport = [lineOf 2 ")"]
+  in append openLine
+    (append funcLine (append paramLines (append resultLines (append closeFunc closeImport))))
+
+renderImport : WatImport -> List String
+renderImport imp = if fitsLine (importOne imp) then [importOne imp] else importMulti imp
+
+renderGlobal : WatGlobal -> List String
+renderGlobal g =
+  let
+    initText = joinWith " " (map renderInstrFlat g.watGlobalInit)
+  in [lineOf 2 "(global ${g.watGlobalName} (mut ${watValTyText g.watGlobalTy}) ${initText})"]
+
+funcOpeningOne : WatFunc -> String
+funcOpeningOne f =
+  let
+    typePart = if f.watFuncType == "" then "" else " (type ${f.watFuncType})"
+    paramsText = joinWith "" (map (\p => " " ++ renderParam p) f.watFuncParams)
+    resultsText = joinWith "" (map (\r => " " ++ renderResult r) f.watFuncResults)
+  in lineOf 2 ("(func ${f.watFuncName}" ++ typePart ++ paramsText ++ resultsText)
+
+funcOpeningMulti : WatFunc -> List String
+funcOpeningMulti f =
+  let
+    typePart = if f.watFuncType == "" then "" else " (type ${f.watFuncType})"
+    openLine = [lineOf 2 ("(func ${f.watFuncName}" ++ typePart)]
+    paramLines = map (lineOf 4) (map renderParam f.watFuncParams)
+    resultLines = map (lineOf 4) (map renderResult f.watFuncResults)
+  in append openLine (append paramLines resultLines)
+
+renderFunc : WatFunc -> List String
+renderFunc f =
+  let
+    opening = if fitsLine (funcOpeningOne f) then [funcOpeningOne f] else funcOpeningMulti f
+    locals =
+      map (lineOf 4)
+        (map (\p => "(local ${firstOf p} ${watValTyText (secondOf p)})") f.watFuncLocals)
+    body = renderInstrs 4 f.watFuncBody
+    closeLine = [lineOf 2 ")"]
+  in append opening (append locals (append body closeLine))
+
+renderExport : WatExport -> List String
+renderExport e =
+  if e.watExportKind == "memory" then [lineOf 2 "(memory (export \"${e.watExportName}\") ${e.watExportRef})"]
+  else [lineOf 2 "(export \"${e.watExportName}\" (${e.watExportKind} ${e.watExportRef}))"]
+
+renderElem : List String -> List String
+renderElem [] = []
+renderElem names =
+  let
+    one = lineOf 2 ("(elem declare func " ++ joinWith " " names ++ ")")
+  in if fitsLine one then [one]
+  else append [lineOf 2 "(elem declare func"] (append (map (lineOf 4) names) [lineOf 2 ")"])
+
+renderData : WatData -> List String
+renderData d =
+  let
+    chunks = chunkBytes (strUnpack d.watDataBytes)
+    quoted = map (\c => "\"" ++ watString (strPack c) ++ "\"") chunks
+    one = lineOf 2 ("(data ${d.watDataName} " ++ joinWith " " quoted ++ ")")
+  in if fitsLine one then [one]
+  else append [lineOf 2 "(data ${d.watDataName}"] (append (map (lineOf 4) quoted) [lineOf 2 ")"])
+
+-- ---------------------------------------------------------------
+-- 模块
+-- ---------------------------------------------------------------
+sectionComment : String -> List String
+sectionComment title = ["", lineOf 0 (";; " ++ title)]
+
+moduleLines : WasmModule -> List String
+moduleLines m =
+  let
+    typeLines = concatMap renderType m.wmTypes
+    importLines = concatMap renderImport m.wmImports
+    globalLines = concatMap renderGlobal m.wmGlobals
+    funcLines = concatMap renderFunc m.wmFuncs
+    elemLines = renderElem m.wmElems
+    dataLines = case m.wmData of
+      Nothing => []
+      Just d => renderData d
+    exportLines = concatMap renderExport m.wmExports
+    memoryLines = [lineOf 2 "(memory (export \"memory\") ${strFromInt m.wmMemPages})"]
+  in append ["(module"]
+    (append (sectionComment "types") (append typeLines (append (sectionComment "imports") (append importLines (append (sectionComment "memory") (append memoryLines (append (sectionComment "globals") (append globalLines (append (sectionComment "functions") (append funcLines (append (sectionComment "elements") (append elemLines (append (sectionComment "data") (append dataLines (append (sectionComment "exports") (append exportLines [")", ""]))))))))))))))))
+
+export renderModule : WasmModule -> String
+renderModule m = joinWith "\n" (moduleLines m)

@@ -1,0 +1,117 @@
+module Vuna.Compiler.Wasm.Model where
+
+-- Vuna.Compiler.Wasm.Model：wasm 后端的 WAT 模块数据模型。
+--
+-- 产物只有 WAT（D16）；`.wasm` 由 `wasm-tools parse` 汇编。本模块只描述模块结构，
+-- 渲染在 `Wasm.Render`，IR -> 模块在 `Wasm.Module`。
+--
+-- 边界：本模块只 import Base 与 `Wasm.Instr`；不 import Core/Elab/Intrinsics。
+import Base.Bool
+import Base.Int
+import Base.List
+import Base.Maybe
+import Base.Pair
+import Base.String
+import Vuna.Compiler.Wasm.Instr
+
+-- | 编译目标（CLI `--target`）。
+export data Target(..) : Type where
+  TargetOcaml : Target
+  TargetWasm : Target
+
+export targetText : Target -> String
+targetText TargetOcaml = "ocaml"
+targetText TargetWasm = "wasm"
+
+-- | wasm 后端的可预期失败：目标能力限制/不支持的输入。驱动把它变成 CLI 普通错误。
+export data WasmErr(..) : Type where
+  WasmUnsupported : String -> WasmErr
+  WasmInternal : String -> WasmErr
+
+export wasmErrText : WasmErr -> String
+wasmErrText (WasmUnsupported msg) = msg
+wasmErrText (WasmInternal msg) = "internal wasm backend error: " ++ msg
+
+-- ---------------------------------------------------------------
+-- WAT 值类型
+-- ---------------------------------------------------------------
+export data WatValTy(..) : Type where
+  WvI32 : WatValTy
+  WvI8 : WatValTy
+  WvI64 : WatValTy
+  WvF64 : WatValTy
+  WvAnyRef : WatValTy
+  WvI31Ref : WatValTy
+  -- | `(ref $t)`（非空）。
+  WvRef : String -> WatValTy
+  -- | `(ref null $t)`。
+  WvRefNull : String -> WatValTy
+
+export watValTyText : WatValTy -> String
+watValTyText WvI32 = "i32"
+watValTyText WvI8 = "i8"
+watValTyText WvI64 = "i64"
+watValTyText WvF64 = "f64"
+watValTyText WvAnyRef = "anyref"
+watValTyText WvI31Ref = "i31ref"
+watValTyText (WvRef name) = "(ref ${name})"
+watValTyText (WvRefNull name) = "(ref null ${name})"
+
+-- ---------------------------------------------------------------
+-- 类型/函数/全局/数据/导出
+-- ---------------------------------------------------------------
+-- | struct 字段：可变性与存储类型。
+export record WatField(..) where
+  watFieldMut : Bool
+  watFieldTy : WatValTy
+
+-- | 模块类型定义。
+export data WatType(..) : Type where
+  WatFuncType : String -> List WatValTy -> List WatValTy -> WatType
+  WatStructType : String -> List WatField -> WatType
+  WatArrayType : String -> Bool -> WatValTy -> WatType
+
+-- | import 函数：WASI preview1 用。
+export record WatImport(..) where
+  watImportModule : String
+  watImportName : String
+  watImportFunc : String
+  watImportParams : List WatValTy
+  watImportResults : List WatValTy
+
+-- | 定义函数。`watFuncType` 为空表示内联签名；非空表示 `(type $t)`。
+export record WatFunc(..) where
+  watFuncName : String
+  watFuncType : String
+  watFuncParams : List (Pair String WatValTy)
+  watFuncResults : List WatValTy
+  watFuncLocals : List (Pair String WatValTy)
+  watFuncBody : List Instr
+
+-- | 全局变量（所有 Vuna 顶层定义各一个）。
+export record WatGlobal(..) where
+  watGlobalName : String
+  watGlobalTy : WatValTy
+  watGlobalInit : List Instr
+
+-- | 导出项：`kind` = "func" / "memory"。
+export record WatExport(..) where
+  watExportKind : String
+  watExportName : String
+  watExportRef : String
+
+-- | 一个 passive data segment：所有字符串字面量按首次出现序拼接。
+export record WatData(..) where
+  watDataName : String
+  watDataBytes : String
+
+-- | 一个 wasm 模块（文本渲染前）。
+export record WasmModule(..) where
+  wmTypes : List WatType
+  wmImports : List WatImport
+  wmGlobals : List WatGlobal
+  wmFuncs : List WatFunc
+  wmElems : List String
+  wmData : Maybe WatData
+  wmExports : List WatExport
+  wmMemPages : Int

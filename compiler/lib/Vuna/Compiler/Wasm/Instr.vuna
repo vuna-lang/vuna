@@ -1,0 +1,82 @@
+module Vuna.Compiler.Wasm.Instr where
+
+-- Vuna.Compiler.Wasm.Instr：WAT 指令 ADT。
+--
+-- 只服务 WAT 文本渲染（`Wasm.Render`）：每个构造子对应一条 WAT 指令，操作数是
+-- 已渲染好的 WAT 名字（`$x`）或数字。不做二进制编码（D16：`.wasm` 由 wasm-tools 汇编）。
+--
+-- 边界：本模块只 import Base；不 import Core/Elab/Intrinsics/Ir（纯文本层）。
+import Base.Bool
+import Base.Int
+import Base.List
+import Base.String
+
+-- | 一条 WAT 指令。`IIf`/`IBlock`/`ILoop` 自带缩进层级，渲染器递归展开。
+export data Instr(..) : Type where
+  INop : Instr
+  IUnreachable : Instr
+  IReturn : Instr
+  IDrop : Instr
+  ILocalGet : String -> Instr
+  ILocalSet : String -> Instr
+  ILocalTee : String -> Instr
+  IGlobalGet : String -> Instr
+  IGlobalSet : String -> Instr
+  -- | i32 字面量（63-bit Int 的宿主值仍在范围内，WAT 用十进制）。
+  IConstI32 : Int -> Instr
+  -- | i64 字面量。
+  IConstI64 : Int -> Instr
+  -- | 无操作数指令，如 `i32.eqz` / `i64.add` / `f64.sqrt`。
+  IPlain : String -> Instr
+  -- | 一元/二元指令拼写辅助（仍走 `IPlain`）。
+  IUnop : String -> Instr
+  IBinop : String -> Instr
+  -- | 直接调用函数名。
+  ICall : String -> Instr
+  -- | 经 funcref 调用，参数的类型名（如 `$ft`）。
+  ICallRef : String -> Instr
+  IRefFunc : String -> Instr
+  IRefNull : Instr
+  -- | `ref.cast (ref $t)`；`$t` 可为 `i31`。
+  IRefCast : String -> Instr
+  IRefAsNonNull : Instr
+  IStructNew : String -> Instr
+  IStructGet : String -> Int -> Instr
+  IStructSet : String -> Int -> Instr
+  IArrayNew : String -> Instr
+  IArrayNewDefault : String -> Instr
+  IArrayNewFixed : String -> Int -> Instr
+  IArrayNewData : String -> String -> Instr
+  IArrayGet : String -> Instr
+  IArrayGetU : String -> Instr
+  IArrayGetS : String -> Instr
+  IArraySet : String -> Instr
+  IArrayLen : Instr
+  IArrayCopy : String -> String -> Instr
+  II31New : Instr
+  II31GetU : Instr
+  II31GetS : Instr
+  -- | `if`：结果类型文本（空串 = 无结果），then/else 体。
+  IIf : String -> List Instr -> List Instr -> Instr
+  -- | `block $label (result T) ...`。
+  IBlock : String -> String -> List Instr -> Instr
+  -- | `loop $label (result T) ...`。
+  ILoop : String -> String -> List Instr -> Instr
+  IBr : String -> Instr
+  IBrIf : String -> Instr
+  IMemoryGrow : Instr
+  IMemorySize : Instr
+  ILoad8U : Instr
+  IStore8 : Instr
+  ILoad32 : Instr
+  IStore32 : Instr
+  -- | WAT 行注释（`;; ...`）。
+  IComment : String -> Instr
+
+-- | 顺序连接两段指令（代码生成的常用组合）。
+export seqInstr : List Instr -> List Instr -> List Instr
+seqInstr xs ys = append xs ys
+
+-- | 生成一段「值留在栈上」的指令序列。
+export oneInstr : Instr -> List Instr
+oneInstr i = [i]

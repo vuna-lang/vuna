@@ -1,0 +1,518 @@
+module Vuna.Compiler.Wasm.Runtime where
+
+-- Vuna.Compiler.Wasm.Runtime：M1 运行时函数的 WAT 指令实现 + IR 符号表。
+--
+-- 产物只有 WAT；运行时按 `Ir.Runtime` 契约的符号名生成 WAT 函数。M1 只实现纯子集，
+-- 其余符号默认 `RtTrap`（编译期生成 unary trap 闭包，纯程序不可达）。
+--
+-- 表示约定（与 Wasm.Module 一致）：
+--   * Int/Nat 是 `(struct (field i64))`，box/unbox 由 `$int` 完成；63-bit 语义。
+--   * String 是 `(array (mut i8))`；静态字节在 `$d0` passive data segment。
+--   * Bool 是 `i31`；Array 是 `(array (mut anyref))`。
+--   * 闭包 `$clo` = { code: (ref $ft), env: anyref }；`$ft` 是 (env, arg) -> anyref。
+import Base.Bool
+import Base.Int
+import Base.List
+import Base.Maybe
+import Base.Pair
+import Base.String
+import Vuna.Compiler.Wasm.Instr
+import Vuna.Compiler.Wasm.Model
+
+-- ---------------------------------------------------------------
+-- 常量字符串在 `$d0` 里的位置（由 Wasm.Module 计算）
+-- ---------------------------------------------------------------
+export record RtConsts(..) where
+  rtcTrueOff : Int
+  rtcTrueLen : Int
+  rtcFalseOff : Int
+  rtcFalseLen : Int
+  rtcTodoOff : Int
+  rtcTodoLen : Int
+  rtcDivOff : Int
+  rtcDivLen : Int
+
+-- | 运行时符号的实现形态。
+export data RtImpl(..) : Type where
+  -- | 0 元值：直接把这些指令插到引用点。
+  RtValue : List Instr -> RtImpl
+  -- | n 元函数：名字 + arity。
+  RtFunc : Int -> String -> RtImpl
+  -- | 未实现/不可达：unary trap 闭包；饱和应用直接 unreachable。
+  RtTrap : RtImpl
+
+-- ---------------------------------------------------------------
+-- 指令拼装 helper
+-- ---------------------------------------------------------------
+cat : List (List Instr) -> List Instr
+cat xs = concatMap (\x => x) xs
+
+localP : Int -> String
+localP i = "$p${strFromInt i}"
+
+rtFunc : String -> List (Pair String WatValTy) -> List WatValTy -> List (Pair String WatValTy) -> List Instr -> WatFunc
+rtFunc name params results locals body = WatFunc name "" params results locals body
+
+rtApply : WatFunc
+rtApply =
+  let
+    params = [Pair "$p0" WvAnyRef, Pair "$p1" WvAnyRef]
+    locals = [Pair "$code" (WvRef "$ft"), Pair "$env" WvAnyRef]
+    body =
+      [ ILocalGet "$p0",
+        IRefCast "$clo",
+        IStructGet "$clo" 0,
+        ILocalSet "$code",
+        ILocalGet "$p0",
+        IRefCast "$clo",
+        IStructGet "$clo" 1,
+        ILocalSet "$env",
+        ILocalGet "$env",
+        ILocalGet "$p1",
+        ILocalGet "$code",
+        ICallRef "$ft"
+      ]
+  in rtFunc "$rt_apply" params [WvAnyRef] locals body
+
+-- ---------------------------------------------------------------
+-- 数值/布尔 helper
+-- ---------------------------------------------------------------
+unboxInt : Int -> List Instr
+unboxInt i = [ILocalGet (localP i), IRefCast "$int", IStructGet "$int" 0]
+
+boxInt : List Instr
+boxInt = [IStructNew "$int"]
+
+wrap63 : List Instr
+wrap63 = [IConstI64 1, IBinop "i64.shl", IConstI64 1, IBinop "i64.shr_s"]
+
+binInt : String -> String -> WatFunc
+binInt name op =
+  let
+    params = [Pair "$p0" WvAnyRef, Pair "$p1" WvAnyRef]
+    body = cat [unboxInt 0, unboxInt 1, [IBinop op], wrap63, boxInt]
+  in rtFunc name params [WvAnyRef] [] body
+
+cmpInt : String -> String -> WatFunc
+cmpInt name op =
+  let
+    params = [Pair "$p0" WvAnyRef, Pair "$p1" WvAnyRef]
+    body = cat [unboxInt 0, unboxInt 1, [IBinop op, II31New]]
+  in rtFunc name params [WvAnyRef] [] body
+
+binBool : String -> String -> WatFunc
+binBool name op =
+  let
+    params = [Pair "$p0" WvAnyRef, Pair "$p1" WvAnyRef]
+    body =
+      [ ILocalGet "$p0",
+        IRefCast "i31",
+        II31GetU,
+        ILocalGet "$p1",
+        IRefCast "i31",
+        II31GetU,
+        IBinop op,
+        II31New
+      ]
+  in rtFunc name params [WvAnyRef] [] body
+
+boolValue : Bool -> List Instr
+boolValue b = [IConstI32 (if b then 1 else 0), II31New]
+
+-- ---------------------------------------------------------------
+-- 字符串/输出 helper
+-- ---------------------------------------------------------------
+dataSegmentName : String
+dataSegmentName = "$d0"
+
+mkString : Int -> Int -> List Instr
+mkString off len = [IConstI32 off, IConstI32 len, IArrayNewData "$str" dataSegmentName]
+
+-- | `rt_write(fd, s, nl)`：把字符串复制到线性内存并 write；只用于输出/错误。
+rtWrite : WatFunc
+rtWrite =
+  let
+    params = [Pair "$fd" WvI32, Pair "$s" WvAnyRef, Pair "$nl" WvI32]
+    locals = [Pair "$n" WvI32, Pair "$i" WvI32]
+    copyLoop =
+      [ IConstI32 0,
+        ILocalSet "$i",
+        IBlock "$done" "" [ILoop "$l" "" [ILocalGet "$i", ILocalGet "$n", IBinop "i32.ge_u", IBrIf "$done", IConstI32 16, ILocalGet "$i", IBinop "i32.add", ILocalGet "$s", IRefCast "$str", ILocalGet "$i", IArrayGetU "$str", IStore8, ILocalGet "$i", IConstI32 1, IBinop "i32.add", ILocalSet "$i", IBr "$l"]]
+      ]
+    setNewline =
+      [ ILocalGet "$nl",
+        IIf "" [IConstI32 16, ILocalGet "$n", IBinop "i32.add", IConstI32 10, IStore8] []
+      ]
+    iovec =
+      [ IConstI32 0,
+        IConstI32 16,
+        IStore32,
+        IConstI32 4,
+        ILocalGet "$n",
+        ILocalGet "$nl",
+        IBinop "i32.add",
+        IStore32,
+        ILocalGet "$fd",
+        IConstI32 0,
+        IConstI32 1,
+        IConstI32 8,
+        ICall "$fd_write",
+        IDrop
+      ]
+    body =
+      cat
+        [[ILocalGet "$s", IRefCast "$str", IArrayLen, ILocalSet "$n"], copyLoop, setNewline, iovec]
+  in rtFunc "$rt_write" params [] locals body
+
+rtPrintln : WatFunc
+rtPrintln =
+  let
+    params = [Pair "$p0" WvAnyRef]
+    body = [IConstI32 1, ILocalGet "$p0", IConstI32 1, ICall "$rt_write"]
+  in rtFunc "$rt_println" params [] [] body
+
+rtFailStr : WatFunc
+rtFailStr =
+  let
+    params = [Pair "$p0" WvAnyRef]
+    body =
+      [ IConstI32 2,
+        ILocalGet "$p0",
+        IConstI32 1,
+        ICall "$rt_write",
+        IConstI32 2,
+        ICall "$proc_exit",
+        IUnreachable
+      ]
+  in rtFunc "$rt_failStr" params [] [] body
+
+-- | `strFromInt` / `showInt` / `showNat`。
+rtStrFromInt : WatFunc
+rtStrFromInt =
+  let
+    params = [Pair "$p0" WvAnyRef]
+    locals =
+      [ Pair "$n" WvI64,
+        Pair "$neg" WvI32,
+        Pair "$m" WvI64,
+        Pair "$tmp" WvI64,
+        Pair "$digits" WvI32,
+        Pair "$len" WvI32,
+        Pair "$out" (WvRef "$str"),
+        Pair "$i" WvI32,
+        Pair "$d" WvI64
+      ]
+    signPart =
+      [ ILocalGet "$n",
+        IConstI64 0,
+        IBinop "i64.lt_s",
+        IIf "" [IConstI32 1, ILocalSet "$neg", IConstI64 0, ILocalGet "$n", IBinop "i64.sub", ILocalSet "$m"] [IConstI32 0, ILocalSet "$neg", ILocalGet "$n", ILocalSet "$m"]
+      ]
+    digitsPart =
+      [ IConstI32 1,
+        ILocalSet "$digits",
+        ILocalGet "$m",
+        ILocalSet "$tmp",
+        IBlock "$digits_done" "" [ILoop "$digits_l" "" [ILocalGet "$tmp", IConstI64 10, IBinop "i64.lt_u", IBrIf "$digits_done", ILocalGet "$tmp", IConstI64 10, IBinop "i64.div_u", ILocalSet "$tmp", ILocalGet "$digits", IConstI32 1, IBinop "i32.add", ILocalSet "$digits", IBr "$digits_l"]]
+      ]
+    allocPart =
+      [ ILocalGet "$digits",
+        ILocalGet "$neg",
+        IBinop "i32.add",
+        ILocalSet "$len",
+        ILocalGet "$len",
+        IArrayNewDefault "$str",
+        ILocalSet "$out",
+        ILocalGet "$len",
+        IConstI32 1,
+        IBinop "i32.sub",
+        ILocalSet "$i"
+      ]
+    signOut =
+      [ILocalGet "$neg", IIf "" [ILocalGet "$out", IConstI32 0, IConstI32 45, IArraySet "$str"] []]
+    fillPart =
+      [ IBlock "$fill_done" "" [ILoop "$fill_l" "" [ILocalGet "$m", IConstI64 10, IBinop "i64.rem_u", ILocalSet "$d", ILocalGet "$out", ILocalGet "$i", ILocalGet "$d", IPlain "i32.wrap_i64", IConstI32 48, IBinop "i32.add", IArraySet "$str", ILocalGet "$i", IConstI32 1, IBinop "i32.sub", ILocalSet "$i", ILocalGet "$m", IConstI64 10, IBinop "i64.div_u", ILocalSet "$m", ILocalGet "$m", IConstI64 0, IBinop "i64.gt_u", IBrIf "$fill_l"]]
+      ]
+    body =
+      cat
+        [unboxInt 0, [ILocalSet "$n"], signPart, digitsPart, allocPart, signOut, fillPart, [ILocalGet "$out"]]
+  in rtFunc "$rt_strFromInt" params [WvAnyRef] locals body
+
+rtShowInt : WatFunc
+rtShowInt = rtStrFromInt
+
+rtShowBool : RtConsts -> WatFunc
+rtShowBool c =
+  let
+    params = [Pair "$p0" WvAnyRef]
+    body =
+      [ ILocalGet "$p0",
+        IRefCast "i31",
+        II31GetU,
+        IIf "anyref" (mkString c.rtcTrueOff c.rtcTrueLen) (mkString c.rtcFalseOff c.rtcFalseLen)
+      ]
+  in rtFunc "$rt_showBool" params [WvAnyRef] [] body
+
+rtShowStr : WatFunc
+rtShowStr =
+  let
+    params = [Pair "$p0" WvAnyRef]
+    locals = [Pair "$src" (WvRef "$str"), Pair "$n" WvI32, Pair "$out" (WvRef "$str")]
+    body =
+      [ ILocalGet "$p0",
+        IRefCast "$str",
+        ILocalSet "$src",
+        ILocalGet "$src",
+        IArrayLen,
+        ILocalSet "$n",
+        ILocalGet "$n",
+        IConstI32 2,
+        IBinop "i32.add",
+        IArrayNewDefault "$str",
+        ILocalSet "$out",
+        ILocalGet "$out",
+        IConstI32 0,
+        IConstI32 34,
+        IArraySet "$str",
+        ILocalGet "$out",
+        IConstI32 1,
+        ILocalGet "$src",
+        IConstI32 0,
+        ILocalGet "$n",
+        IArrayCopy "$str" "$str",
+        ILocalGet "$out",
+        ILocalGet "$n",
+        IConstI32 1,
+        IBinop "i32.add",
+        IConstI32 34,
+        IArraySet "$str",
+        ILocalGet "$out"
+      ]
+  in rtFunc "$rt_showStr" params [WvAnyRef] locals body
+
+-- ---------------------------------------------------------------
+-- 除法/失败辅助
+-- ---------------------------------------------------------------
+failWithConst : Int -> Int -> List Instr
+failWithConst off len = cat [mkString off len, [ICall "$rt_failStr", IUnreachable]]
+
+rtDiv : RtConsts -> WatFunc
+rtDiv c =
+  let
+    params = [Pair "$p0" WvAnyRef, Pair "$p1" WvAnyRef]
+    locals = [Pair "$a" WvI64, Pair "$b" WvI64]
+    body =
+      cat
+        [unboxInt 0, [ILocalSet "$a"], unboxInt 1, [ILocalSet "$b"], [ILocalGet "$b", IConstI64 0, IBinop "i64.eq", IIf "i64" (failWithConst c.rtcDivOff c.rtcDivLen) [ILocalGet "$a", IConstI64 (0 - 4611686018427387903 - 1), IBinop "i64.eq", ILocalGet "$b", IConstI64 (0 - 1), IBinop "i64.eq", IBinop "i32.and", IIf "i64" [IConstI64 (0 - 4611686018427387903 - 1)] [ILocalGet "$a", ILocalGet "$b", IBinop "i64.div_s"]]], boxInt]
+  in rtFunc "$rt_div" params [WvAnyRef] locals body
+
+rtAssert : WatFunc
+rtAssert =
+  let
+    params = [Pair "$p0" WvAnyRef, Pair "$p1" WvAnyRef, Pair "$p2" WvAnyRef]
+    body =
+      [ ILocalGet "$p0",
+        IRefCast "i31",
+        II31GetU,
+        IIf "anyref" [ILocalGet "$p2"] [ILocalGet "$p1", ICall "$rt_failStr", IUnreachable]
+      ]
+  in rtFunc "$rt_assert" params [WvAnyRef] [] body
+
+rtPrimFail : WatFunc
+rtPrimFail =
+  let
+    params = [Pair "$p0" WvAnyRef]
+    body = [ILocalGet "$p0", ICall "$rt_failStr", IUnreachable]
+  in rtFunc "$rt_primFail" params [WvAnyRef] [] body
+
+rtTodo : RtConsts -> WatFunc
+rtTodo c =
+  let
+    params = [Pair "$p0" WvAnyRef]
+    body =
+      cat
+        [mkString c.rtcTodoOff c.rtcTodoLen, [ILocalGet "$p0"], [ICall "$rt_strConcat"], [ICall "$rt_failStr", IUnreachable]]
+  in rtFunc "$rt_todo" params [WvAnyRef] [] body
+
+rtErase : WatFunc
+rtErase =
+  let
+    params = [Pair "$p0" WvAnyRef]
+  in rtFunc "$rt_erase" params [WvAnyRef] [] [ILocalGet "$p0"]
+
+rtStrConcat : WatFunc
+rtStrConcat =
+  let
+    params = [Pair "$p0" WvAnyRef, Pair "$p1" WvAnyRef]
+    locals =
+      [ Pair "$a" (WvRef "$str"),
+        Pair "$b" (WvRef "$str"),
+        Pair "$na" WvI32,
+        Pair "$nb" WvI32,
+        Pair "$out" (WvRef "$str")
+      ]
+    body =
+      [ ILocalGet "$p0",
+        IRefCast "$str",
+        ILocalSet "$a",
+        ILocalGet "$p1",
+        IRefCast "$str",
+        ILocalSet "$b",
+        ILocalGet "$a",
+        IArrayLen,
+        ILocalSet "$na",
+        ILocalGet "$b",
+        IArrayLen,
+        ILocalSet "$nb",
+        ILocalGet "$na",
+        ILocalGet "$nb",
+        IBinop "i32.add",
+        IArrayNewDefault "$str",
+        ILocalSet "$out",
+        ILocalGet "$out",
+        IConstI32 0,
+        ILocalGet "$a",
+        IConstI32 0,
+        ILocalGet "$na",
+        IArrayCopy "$str" "$str",
+        ILocalGet "$out",
+        ILocalGet "$na",
+        ILocalGet "$b",
+        IConstI32 0,
+        ILocalGet "$nb",
+        IArrayCopy "$str" "$str",
+        ILocalGet "$out"
+      ]
+  in rtFunc "$rt_strConcat" params [WvAnyRef] locals body
+
+rtNatSucc : WatFunc
+rtNatSucc =
+  let
+    params = [Pair "$p0" WvAnyRef]
+    locals = [Pair "$n" WvI64]
+    body =
+      cat
+        [unboxInt 0, [ILocalSet "$n"], [ILocalGet "$n", IConstI64 4611686018427387903, IBinop "i64.ge_s", IIf "i64" [IConstI64 4611686018427387903] [ILocalGet "$n", IConstI64 1, IBinop "i64.add"]], boxInt]
+  in rtFunc "$rt_natSucc" params [WvAnyRef] locals body
+
+rtBoxZero : WatFunc
+rtBoxZero =
+  let
+    params = [Pair "$p0" WvAnyRef]
+  in rtFunc "$rt_boxZero" params [WvAnyRef] [] [IConstI64 0, IStructNew "$int"]
+
+rtBitNot : WatFunc
+rtBitNot =
+  let
+    params = [Pair "$p0" WvAnyRef]
+    body = cat [unboxInt 0, [IConstI64 (0 - 1), IBinop "i64.xor"], wrap63, boxInt]
+  in rtFunc "$rt_bitNot" params [WvAnyRef] [] body
+
+shiftCountOk : List Instr
+shiftCountOk =
+  [ ILocalGet "$n",
+    IConstI64 0,
+    IBinop "i64.lt_s",
+    ILocalGet "$n",
+    IConstI64 63,
+    IBinop "i64.ge_s",
+    IBinop "i32.or"
+  ]
+
+rtBitShl : WatFunc
+rtBitShl =
+  let
+    params = [Pair "$p0" WvAnyRef, Pair "$p1" WvAnyRef]
+    locals = [Pair "$a" WvI64, Pair "$n" WvI64]
+    body =
+      cat
+        [unboxInt 0, [ILocalSet "$a"], unboxInt 1, [ILocalSet "$n"], shiftCountOk, [IIf "i64" [IConstI64 0] (cat [[ILocalGet "$a", ILocalGet "$n", IBinop "i64.shl"], wrap63])], boxInt]
+  in rtFunc "$rt_bitShl" params [WvAnyRef] locals body
+
+rtBitShr : WatFunc
+rtBitShr =
+  let
+    params = [Pair "$p0" WvAnyRef, Pair "$p1" WvAnyRef]
+    locals = [Pair "$a" WvI64, Pair "$n" WvI64]
+    body =
+      cat
+        [unboxInt 0, [ILocalSet "$a"], unboxInt 1, [ILocalSet "$n"], shiftCountOk, [IIf "i64" [IConstI64 0] [ILocalGet "$a", IConstI64 4611686018427387903, IBinop "i64.and", ILocalGet "$n", IBinop "i64.shr_u"]], boxInt]
+  in rtFunc "$rt_bitShr" params [WvAnyRef] locals body
+
+-- ---------------------------------------------------------------
+-- 已实现函数清单（固定顺序）
+-- ---------------------------------------------------------------
+export rtFunctions : RtConsts -> List WatFunc
+rtFunctions c =
+  [ rtApply,
+    rtWrite,
+    rtPrintln,
+    rtFailStr,
+    rtStrFromInt,
+    rtShowBool c,
+    rtShowStr,
+    rtStrConcat,
+    binInt "$rt_add" "i64.add",
+    binInt "$rt_sub" "i64.sub",
+    binInt "$rt_mul" "i64.mul",
+    rtDiv c,
+    rtBitNot,
+    rtBitShl,
+    rtBitShr,
+    binInt "$rt_bitAnd" "i64.and",
+    binInt "$rt_bitOr" "i64.or",
+    binInt "$rt_bitXor" "i64.xor",
+    cmpInt "$rt_eqInt" "i64.eq",
+    cmpInt "$rt_neqInt" "i64.ne",
+    cmpInt "$rt_ltInt" "i64.lt_s",
+    cmpInt "$rt_leInt" "i64.le_s",
+    cmpInt "$rt_gtInt" "i64.gt_s",
+    cmpInt "$rt_geInt" "i64.ge_s",
+    binBool "$rt_and" "i32.and",
+    binBool "$rt_or" "i32.or",
+    rtNatSucc,
+    rtBoxZero,
+    rtErase,
+    rtAssert,
+    rtPrimFail,
+    rtTodo c
+  ]
+
+-- ---------------------------------------------------------------
+-- 符号表
+-- ---------------------------------------------------------------
+export rtImplOf : String -> RtImpl
+rtImplOf name =
+  if name == "+" then RtFunc 2 "$rt_add"
+  else if name == "-" then RtFunc 2 "$rt_sub"
+  else if name == "*" then RtFunc 2 "$rt_mul"
+  else if name == "/" then RtFunc 2 "$rt_div"
+  else if name == "++" then RtFunc 2 "$rt_strConcat"
+  else if name == "bitAnd" then RtFunc 2 "$rt_bitAnd"
+  else if name == "bitOr" then RtFunc 2 "$rt_bitOr"
+  else if name == "bitXor" then RtFunc 2 "$rt_bitXor"
+  else if name == "bitNot" then RtFunc 1 "$rt_bitNot"
+  else if name == "bitShl" then RtFunc 2 "$rt_bitShl"
+  else if name == "bitShr" then RtFunc 2 "$rt_bitShr"
+  else if name == "&&" then RtFunc 2 "$rt_and"
+  else if name == "||" then RtFunc 2 "$rt_or"
+  else if name == "strFromInt" then RtFunc 1 "$rt_strFromInt"
+  else if name == "strShow" then RtFunc 1 "$rt_showStr"
+  else if name == "bi_eq_int" then RtFunc 2 "$rt_eqInt"
+  else if name == "bi_neq_int" then RtFunc 2 "$rt_neqInt"
+  else if name == "bi_lt_int" then RtFunc 2 "$rt_ltInt"
+  else if name == "bi_le_int" then RtFunc 2 "$rt_leInt"
+  else if name == "bi_gt_int" then RtFunc 2 "$rt_gtInt"
+  else if name == "bi_ge_int" then RtFunc 2 "$rt_geInt"
+  else if name == "prim_erase" then RtFunc 1 "$rt_erase"
+  else if name == "assert" then RtFunc 3 "$rt_assert"
+  else if name == "prim_fail" then RtFunc 1 "$rt_primFail"
+  else if name == "todo" then RtFunc 1 "$rt_todo"
+  else if name == "@ir@showInt" then RtFunc 1 "$rt_strFromInt"
+  else if name == "@ir@showNat" then RtFunc 1 "$rt_strFromInt"
+  else if name == "@ir@showBool" then RtFunc 1 "$rt_showBool"
+  else if name == "@ir@showStr" then RtFunc 1 "$rt_showStr"
+  else if name == "@vuna@debug@on" then RtValue (boolValue False)
+  else if name == "@vuna@debug@line" then RtFunc 1 "$rt_boxZero"
+  else if name == "@ir@natSucc" then RtFunc 1 "$rt_natSucc"
+  else if name == "arrayEmpty" then RtValue [IConstI32 0, IArrayNewDefault "$arr"] else RtTrap

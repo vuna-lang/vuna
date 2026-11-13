@@ -18,6 +18,7 @@ import Vuna.Compiler.Fingerprint
 import Vuna.Compiler.Diagnostics.Sink
 import Vuna.Compiler.Packages.Pkg
 import Vuna.Compiler.Driver.Compile
+import Vuna.Compiler.Driver.Wasm
 import Vuna.Compiler.Store
 import Vuna.Compiler.Driver.Dt
 import Vuna.Compiler.Version
@@ -72,14 +73,23 @@ record CliOpts where
   optShowCascade : Bool
   optWithSources : Bool
   optFailFast : Bool
+  optTarget : String
 
 defaultCliOpts : CliOpts
 defaultCliOpts =
   CliOpts "short" "en" False False False False False False 20 False [] False False False False
+    "ocaml"
 
 -- | 在已有 opts 上打开 release 模式（`--release`）。
 markRelease : CliOpts -> CliOpts
 markRelease o = { o | optRelease = True }
+
+-- | 选择后端目标；M1 只允许 ocaml | wasm。
+markTarget : String -> CliOpts -> CliOpts
+markTarget t o =
+  CliOpts o.optDiagFormat o.optDiagLang o.optLangExplicit o.optDenyWarnings o.optShowWarnings
+    o.optFormatExplicit o.optWarningsExplicit o.optDenyExplicit o.optMaxErrors o.optContinueOnError
+    o.optSarifItems o.optRelease o.optShowCascade o.optWithSources o.optFailFast t
 
 -- | 强制「格式由命令行显式给出」（机器格式的单文档契约用；成员 manifest 不得改格式）。
 -- 位构造而非记录更新：记录更新在该位置触发当前精化器的 erased binder 问题。
@@ -87,7 +97,7 @@ markFormatExplicit : CliOpts -> CliOpts
 markFormatExplicit o =
   CliOpts o.optDiagFormat o.optDiagLang o.optLangExplicit o.optDenyWarnings o.optShowWarnings True
     o.optWarningsExplicit o.optDenyExplicit o.optMaxErrors o.optContinueOnError o.optSarifItems
-    o.optRelease o.optShowCascade o.optWithSources o.optFailFast
+    o.optRelease o.optShowCascade o.optWithSources o.optFailFast o.optTarget
 
 -- 显式 state 辅助：把不改 opts 的动作结果带回（退出码 + 当前 CliOpts）。
 withOpts : CliOpts -> Eff hostRow Int -> Eff hostRow (Pair Int CliOpts)
@@ -154,7 +164,7 @@ applyManifestOpts (Just pkg) o =
       Nothing => o.optMaxErrors
   in CliOpts fmt lang o.optLangExplicit deny showW2 o.optFormatExplicit o.optWarningsExplicit
     o.optDenyExplicit maxE o.optContinueOnError o.optSarifItems o.optRelease o.optShowCascade
-    o.optWithSources o.optFailFast
+    o.optWithSources o.optFailFast o.optTarget
 
 -- --fail-fast：只显示首条诊断（与 --max-errors 取较小者语义）。
 maxErrorsOf : CliOpts -> Int
@@ -379,7 +389,7 @@ runCompilerCliFor prog args = do
         (hasDenyWarnings args || hasShowWarnings args) (hasFormatFlag args)
         (hasDenyWarnings args || hasShowWarnings args) (hasDenyWarnings args) (secondOf strippedMax)
         (secondOf strippedContinue) [] (envRel == "1") (hasShowCascade args) (hasWithSources args)
-        (hasFailFast args)
+        (hasFailFast args) "ocaml"
   in if anyHelp (firstOf strippedContinue) then helpFor prog
   else do
     r <-
@@ -609,6 +619,7 @@ compileParse prog printResult entry outDir args o = case args of
   [] => compileFinish prog printResult entry outDir o
   "--no-print" :: rest => compileParse prog False entry outDir rest o
   "--release" :: rest => compileParse prog printResult entry outDir rest (markRelease o)
+  "--target" :: t :: rest => compileParse prog printResult entry outDir rest (markTarget t o)
   arg :: rest => if startsWith "-" arg then withOpts o (removedFlag prog arg)
   else case entry of
     Nothing => compileParse prog printResult (Just arg) outDir rest o
@@ -631,6 +642,16 @@ compileRun printResult entry outDir o = do
     else compileFileEntry printResult entry outDir o
   else withOpts o (dtPathErr entry)
 
+-- | 按 `--target` 选择后端；wasm 分支暂时不产 build.sh（compile 只写 main.wat）。
+compileToTarget : PackageContext -> String -> Bool -> String -> String -> Eff hostRow (Check (Pair Int (List Diagnostic)))
+compileToTarget ctx entry printResult outDir target = if target == "wasm" then do
+  r <- compileWasm ctx entry printResult outDir
+  pure (case r of
+    ErrC e => ErrC e
+    OkC n => OkC (Pair n [])
+  )
+else compileToDir ctx entry printResult outDir
+
 compileFileEntry : Bool -> String -> String -> CliOpts -> Eff hostRow (Pair Int CliOpts)
 compileFileEntry printResult entry outDir o = do
   ctxR <- contextForFile entry
@@ -641,7 +662,7 @@ compileFileEntry printResult entry outDir o = do
         ctx = contextWithRelease o.optRelease ctx0
         o1 = applyDiagConfig (contextPackageOf ctx) o
       in do
-        r <- compileToDir ctx entry printResult outDir
+        r <- compileToTarget ctx entry printResult outDir o.optTarget
         case r of
           ErrC e => printDiag o1 e
           OkC p => finishWarningsDir (secondOf p) o1 outDir 0
@@ -656,8 +677,8 @@ compilePkgDir printResult dir outDir o = do
         o1 = applyDiagConfig (Just pkg) o
       in do
         r <-
-          compileToDir (contextWithRelease o.optRelease (packageContext pkg)) (packageEntry pkg)
-            printResult outDir
+          compileToTarget (contextWithRelease o.optRelease (packageContext pkg)) (packageEntry pkg)
+            printResult outDir o.optTarget
         case r of
           ErrC e => printDiag o1 e
           OkC p => finishWarningsDir (secondOf p) o1 outDir 0
@@ -886,6 +907,7 @@ buildParse prog noCompile out dir pkg args o = case args of
   [] => buildRun noCompile (defaultDir dir) out pkg o
   "--no-compile" :: rest => buildParse prog True out dir pkg rest o
   "--release" :: rest => buildParse prog noCompile out dir pkg rest (markRelease o)
+  "--target" :: t :: rest => buildParse prog noCompile out dir pkg rest (markTarget t o)
   "--out" :: rest => case rest of
     outDir :: more => if startsWith "-" outDir then withOpts o (removedFlag prog outDir)
     else case out of
@@ -949,8 +971,32 @@ buildTargets noCompile multiOut outM (pkg :: rest) code o = do
   in buildTargets noCompile multiOut outM rest next (secondOf r)
 
 -- 单包：可执行包 build；库包只 check（workspace 构建单元覆盖所有成员）。
+-- | wasm 目标的 build：只产 main.wat（+ build.sh），不走 OCaml 链接。
+buildWasmOne : Bool -> Maybe String -> Package -> CliOpts -> Eff hostRow (Pair Int CliOpts)
+buildWasmOne noCompile outM pkg o =
+  let
+    outDir = case outM of
+      Just out => out
+      Nothing => "${packageDir pkg}/.output"
+  in do
+    r <-
+      compileWasm (contextWithRelease o.optRelease (packageContext pkg)) (packageEntry pkg) True
+        outDir
+    case r of
+      ErrC e => printDiag o e
+      OkC _ => if noCompile then do
+        _ <- raiseToRow hostRow (@vuna@prim_eff_print "wrote ${outDir}/main.wat\n")
+        pure (Pair 0 o)
+      else do
+        _ <-
+          raiseToRow hostRow
+            (@vuna@prim_eff_writeFile "${outDir}/build.sh" "#!/bin/sh\nset -eu\ncd \"$(dirname \"$0\")\"\nwasm-tools parse main.wat -o main.wasm\n")
+        _ <- raiseToRow hostRow (@vuna@prim_eff_print "wrote ${outDir}/main.wat\n")
+        pure (Pair 0 o)
+
 buildOne : Bool -> Bool -> Maybe String -> Package -> CliOpts -> Eff hostRow (Pair Int CliOpts)
-buildOne noCompile multiOut outM pkg o =
+buildOne noCompile multiOut outM pkg o = if o.optTarget == "wasm" then buildWasmOne noCompile outM pkg o
+else
   let
     name = packageName pkg
     entry = packageEntry pkg

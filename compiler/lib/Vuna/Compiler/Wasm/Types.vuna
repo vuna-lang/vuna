@@ -1,0 +1,174 @@
+module Vuna.Compiler.Wasm.Types where
+
+-- Vuna.Compiler.Wasm.Types：IR 类型声明 -> WAT 类型/族表。
+--
+-- 表示决策（WasmGC，见 docs/reference/wasm.md）：
+--   * 变体族 = `(struct (field i32) (field anyref) ...)`，tag 为构造子声明序，
+--     字段并集按最大 arity 补齐；不做每构造子子类型。
+--   * record 族 = `(struct (field anyref) ...)`，字段按 IR 字段表顺序。
+--   * 去装箱族没有 wasm 类型（运行时就是单字段值）。
+--   * 所有字段都存 `anyref`（IR 无类型标注；Int 先装箱）。
+--
+-- 命名稳定：类型名 `$t_<watName family>`，由 Vuna 全限定名派生，不按位置编号。
+import Base.Bool
+import Base.Int
+import Base.List
+import Base.Maybe
+import Base.Pair
+import Base.String
+import Vuna.Compiler.Ir
+import Vuna.Compiler.Wasm.Model
+
+-- | 族的运行时形状。
+export data WasmFamKind(..) : Type where
+  FamVariant : WasmFamKind
+  FamRecord : WasmFamKind
+  FamUnboxed : WasmFamKind
+
+export record WasmCtor(..) where
+  wasmCtorName : String
+  -- | 构造子在族内的声明序（tag）。
+  wasmCtorTag : Int
+  -- | 运行时字段个数。
+  wasmCtorFields : Int
+
+export record WasmFam(..) where
+  wasmFamName : String
+  wasmFamKind : WasmFamKind
+  -- | 变体：所有构造子的最大字段数；record：字段数。
+  wasmFamMaxFields : Int
+  wasmFamCtors : List WasmCtor
+  -- | record 字段表 `(序号, 源码名)`（变体为空）。
+  wasmFamRecordFields : List (Pair Int String)
+
+-- ---------------------------------------------------------------
+-- 稳定命名
+-- ---------------------------------------------------------------
+isWatNameChar : Int -> Bool
+isWatNameChar c = c >= 48 && c <= 57 || c >= 65 && c <= 90 || c >= 97 && c <= 122 || c == 95
+
+watNameChar : Int -> String
+watNameChar c = if isWatNameChar c then strPack [c] else "_x${strFromInt c}_"
+
+-- | Vuna 全限定名 -> WAT 标识符片段（只含 `[A-Za-z0-9_]`）。
+export watName : String -> String
+watName name = strPack (concatMap (\c => strUnpack (watNameChar c)) (strUnpack name))
+
+-- | 类型名。
+export watFamName : String -> String
+watFamName family = "$t_${watName family}"
+
+-- | 函数名。
+export watFuncNameOf : String -> String
+watFuncNameOf name = "$f_${watName name}"
+
+-- | 全局名。
+export watGlobalNameOf : String -> String
+watGlobalNameOf name = "$g_${watName name}"
+
+-- | 数据段名。
+export watDataNameOf : Int -> String
+watDataNameOf n = "$d_${strFromInt n}"
+
+-- ---------------------------------------------------------------
+-- 族表
+-- ---------------------------------------------------------------
+ctorEntriesOf : List (Pair String (List IrTy)) -> List WasmCtor
+ctorEntriesOf ctors = ctorEntriesOfGo ctors 0
+
+ctorEntriesOfGo : List (Pair String (List IrTy)) -> Int -> List WasmCtor
+ctorEntriesOfGo [] _ = []
+ctorEntriesOfGo (p :: rest) tag =
+  WasmCtor (firstOf p) tag (length (secondOf p)) :: ctorEntriesOfGo rest (tag + 1)
+
+maxCtorFields : List WasmCtor -> Int
+maxCtorFields [] = 0
+maxCtorFields (c :: rest) =
+  if c.wasmCtorFields > maxCtorFields rest then c.wasmCtorFields else maxCtorFields rest
+
+famOfDecl : IrTyDecl -> WasmFam
+famOfDecl decl = case decl of
+  IrVariantDecl name _params ctors =>
+    let
+      cs = ctorEntriesOf ctors
+    in WasmFam name FamVariant (maxCtorFields cs) cs []
+  IrRecordDecl name _params fields _tys => WasmFam name FamRecord (length fields) [] fields
+  IrUnboxedDecl name _params _ty => WasmFam name FamUnboxed 0 [] []
+
+-- | 程序顺序的族表。
+export wasmFamsOf : List IrTyDecl -> List WasmFam
+wasmFamsOf decls = map famOfDecl decls
+
+export wasmFamLookup : List WasmFam -> String -> Maybe WasmFam
+wasmFamLookup [] _ = Nothing
+wasmFamLookup (f :: rest) name = if f.wasmFamName == name then Just f else wasmFamLookup rest name
+
+export wasmCtorTagOf : WasmFam -> String -> Maybe Int
+wasmCtorTagOf fam ctorName = wasmCtorTagGo ctorName fam.wasmFamCtors
+
+wasmCtorTagGo : String -> List WasmCtor -> Maybe Int
+wasmCtorTagGo _ [] = Nothing
+wasmCtorTagGo name (c :: rest) =
+  if c.wasmCtorName == name then Just c.wasmCtorTag else wasmCtorTagGo name rest
+
+export wasmCtorFieldCountOf : WasmFam -> String -> Maybe Int
+wasmCtorFieldCountOf fam ctorName = wasmCtorFieldGo ctorName fam.wasmFamCtors
+
+wasmCtorFieldGo : String -> List WasmCtor -> Maybe Int
+wasmCtorFieldGo _ [] = Nothing
+wasmCtorFieldGo name (c :: rest) =
+  if c.wasmCtorName == name then Just c.wasmCtorFields else wasmCtorFieldGo name rest
+
+export wasmRecordFieldIndex : WasmFam -> String -> Maybe Int
+wasmRecordFieldIndex fam field = wasmRecordFieldGo field fam.wasmFamRecordFields
+
+wasmRecordFieldGo : String -> List (Pair Int String) -> Maybe Int
+wasmRecordFieldGo _ [] = Nothing
+wasmRecordFieldGo name (p :: rest) =
+  if secondOf p == name then Just (firstOf p) else wasmRecordFieldGo name rest
+
+export wasmIsRecordFam : WasmFam -> Bool
+wasmIsRecordFam fam = case fam.wasmFamKind of
+  FamRecord => True
+  _ => False
+
+export wasmFamFields : WasmFam -> List WatField
+wasmFamFields fam = case fam.wasmFamKind of
+  FamVariant => WatField False WvI32 :: repeatField fam.wasmFamMaxFields
+  FamRecord => repeatField (length fam.wasmFamRecordFields)
+  FamUnboxed => []
+
+repeatField : Int -> List WatField
+repeatField n = if n <= 0 then [] else WatField False WvAnyRef :: repeatField (n - 1)
+
+-- | 族的 wasm 类型（去装箱族没有）。
+export wasmFamType : WasmFam -> Maybe WatType
+wasmFamType fam = case fam.wasmFamKind of
+  FamUnboxed => Nothing
+  _ => Just (WatStructType (watFamName fam.wasmFamName) (wasmFamFields fam))
+
+-- ---------------------------------------------------------------
+-- canonical List 族（运行时的桥接 helper 需要）
+-- ---------------------------------------------------------------
+export record WasmListFam(..) where
+  wasmListFamily : String
+  wasmListNilTag : Int
+  wasmListConsTag : Int
+  wasmListConsFields : Int
+
+export wasmListFamFromFams : Maybe IrListFam -> List WasmFam -> Maybe WasmListFam
+wasmListFamFromFams Nothing _ = Nothing
+wasmListFamFromFams (Just lf) fams =
+  let
+    family = irListFamilyOf lf
+    nilName = irListNilOf lf
+    consName = irListConsOf lf
+  in case wasmFamLookup fams family of
+    Nothing => Nothing
+    Just fam => case wasmCtorTagOf fam nilName of
+      Nothing => Nothing
+      Just nilTag => case wasmCtorTagOf fam consName of
+        Nothing => Nothing
+        Just consTag => case wasmCtorFieldCountOf fam consName of
+          Nothing => Nothing
+          Just consN => Just (WasmListFam family nilTag consTag consN)

@@ -82,7 +82,7 @@
 | --- | --- | --- | --- |
 | D1 | 非总性只在 runtime；语言层不提供 `partial` / `assert_total` 逃生舱 | 特权必须显式、可列举、可拒绝 | "循环"只剩 runtime 组合子一个出口，组合子 API 下限被抬高 |
 | D2 | 效应一次性续延；单一操作语义（CBV）；宿主交互走事件队列 | 两套操作语义会让差分测试与两端复用同时失效 | 外壳与 runtime 承担全部循环与事件分发 |
-| D3 | 运行时内存用 Perceus 式 RC + 复用 | 与已有 0/1/ω 用量信息天然衔接 | RC 回收不了环，可变性需受能力与数据形状约束 |
+| D3 | 原生后端用 Perceus 式 RC + 复用；wasm 后端用 WasmGC（宿主 tracing GC） | 原生后端的 0/1/ω 与 RC 天然衔接；wasm 侧直接复用 WasmGC，不手写 RC | 两条后端的内存语义不同：原生 RC 回收不了环；wasm 的回收时机由宿主决定 |
 | D4 | 宏终局是 typed macro / elaborator reflection，先做 AST→AST | 声明式宏够用一阵，reflection 才是终态 | 精化器要成为稳定库值；LSP 必须能跑宏并支持超时取消 |
 | D5 | 内容寻址身份停在"依赖按哈希固定"，哈希格式按"代码即内容"设计 | 身份模型可以渐进，哈希格式不能返工 | **`contentHash` / `ifaceHash`·`implHash` / `identityHash` 三者从一开始就分开**；依赖类型语言还需要 iface/impl 双摘要（包级 `pkgIfaceHash` / `pkgImplHash`），因此 D11 是它的前提 |
 | D11 | 引入 `opaque` / `abstract` 定义修饰符 | 让 iface/impl 双摘要真正生效：`ifaceHash` 不含不展开体（不影响下游精化），`implHash` 含它（只影响产物） | 多一个语言特性，用户要理解"能不能展开"的差别 |
@@ -92,6 +92,7 @@
 | D15 | 单一 store 根、两类生命周期：缓存族（派生、可删）与包对象族（取源、显式获取、跨项目存活）；获取显式、构建离线 | 缓存可删可重建，包对象必须跨会话/跨项目存活；一个根才有单一 framing/地址与 GC 口径 | 仍是同一棵树：clean/gc 必须按族作用域（包对象在 `objects/pkg/`），且无引用计数 GC（roots 只追加） |
 | D6 | client/server 由框架切分；边界用类型表达；切分在构建图里做 | 胶水与平台演进不该进编译器 | 切分正确性靠构建图检查与测试，不再由编译器保证 |
 | D7 | 自举终局用 wasm seed；OCaml 退出日常路径但不删除 | 可移植的二进制根，同时保留审计与互验腿 | 源码级信任根消失，需靠归档与互验补偿 |
+| D16 | wasm 产物以 WAT 为 canonical；`.wasm` 由 `wasm-tools parse` 生成；WAT 暂不进 Git | 文本可审查、布局稳定可 diff；二进制交给成熟工具 | `.wasm` 字节依赖工具版本；wasm seed 的 WAT 布局/提交策略未定 |
 | D8 | interp 保留"纯求值"，退役"第二执行语义"；`vuna interp` 可在 run 路径成熟后退 | 保留 normalization，去掉语义分叉 | REPL / test / goal 需改接对象库与后端 |
 | D9 | 单一输入寻址对象库是横切基础设施，所有消费者是客户端 | 消灭多套缓存与多个入口 | 目录视图与 roots 需要并发/GC 规则 |
 | D10 | vuna-web 是生态层、是核心的验收测试，永不进 TCB | 框架不得倒灌核心 | 每个 web 需求都必须先翻译成通用语言特性 |

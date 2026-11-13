@@ -1,0 +1,363 @@
+module Vuna.Compiler.Wasm.Module where
+
+-- Vuna.Compiler.Wasm.Module：IrProgram -> WasmModule（WAT 文本之前的结构）。
+--
+-- M1 最小切片：`main` 为 Int / Nat / String / Bool 值或这些值的 let/if/内建饱和应用；
+-- 暂不支持 lambda/闭包、用户变体/记录、case、Float、Effect、FFI。
+-- 表示：统一 anyref；Int/Nat 装箱 i64；Bool i31；String (array (mut i8))；
+-- 闭包 {code,env}、数组/结构类型留给扩展（类型表始终带上，运行时不使用）。
+import Base.Bool
+import Base.Int
+import Base.List
+import Base.Maybe
+import Base.Pair
+import Base.Result
+import Base.String
+import Vuna.Compiler.Ir
+import Vuna.Compiler.Wasm.Instr
+import Vuna.Compiler.Wasm.Model
+import Vuna.Compiler.Wasm.Runtime
+import Vuna.Compiler.Wasm.Types
+
+export data WasmOutcome(..) : Type where
+  WasmOk : WasmModule -> WasmOutcome
+  WasmRejected : WasmErr -> WasmOutcome
+
+record GenState where
+  gsFams : List WasmFam
+  gsDefs : List IrDef
+  gsPool : List (Pair String (Pair Int Int))
+  gsFuncs : List WatFunc
+  gsLocals : List (Pair String WatValTy)
+  gsNextLocal : Int
+  gsScope : List (Pair IrBinder String)
+  gsConsts : RtConsts
+
+binderNameOf : IrBinder -> IrBName
+binderNameOf (IrBinder nm _) = nm
+
+binderErasedOf : IrBinder -> Bool
+binderErasedOf (IrBinder _ erased) = erased
+
+bNameEq : IrBName -> IrBName -> Bool
+bNameEq a b = case a of
+  IrBUser x => case b of
+    IrBUser y => x == y
+    _ => False
+  IrBArm x => case b of
+    IrBArm y => x == y
+    _ => False
+  IrBNat x => case b of
+    IrBNat y => x == y
+    _ => False
+  IrBWild => case b of
+    IrBWild => True
+    _ => False
+
+binderEq : IrBinder -> IrBinder -> Bool
+binderEq a b = bNameEq (binderNameOf a) (binderNameOf b) && binderErasedOf a == binderErasedOf b
+
+lookupBinder : IrBinder -> List (Pair IrBinder String) -> Maybe String
+lookupBinder _ [] = Nothing
+lookupBinder b (p :: rest) =
+  if binderEq b (firstOf p) then Just (secondOf p) else lookupBinder b rest
+
+freshLocal : GenState -> WatValTy -> Pair String GenState
+freshLocal st ty =
+  let
+    name = "$l${strFromInt st.gsNextLocal}"
+    st1 = { st | gsLocals = append st.gsLocals [Pair name ty], gsNextLocal = st.gsNextLocal + 1 }
+  in Pair name st1
+
+pushBinder : IrBinder -> String -> GenState -> GenState
+pushBinder b l st = { st | gsScope = Pair b l :: st.gsScope }
+
+-- ---------------------------------------------------------------
+-- 字符串池
+-- ---------------------------------------------------------------
+memStr : String -> List String -> Bool
+memStr _ [] = False
+memStr s (x :: rest) = s == x || memStr s rest
+
+addString : String -> List String -> List String
+addString s pool = if memStr s pool then pool else append pool [s]
+
+strLitsOf : Ir -> List String
+strLitsOf ir = case ir of
+  IrStr s => [s]
+  IrLet _ s b => append (strLitsOf s) (strLitsOf b)
+  IrIf c t e => append (strLitsOf c) (append (strLitsOf t) (strLitsOf e))
+  IrRtApp _ args => concatMap strLitsOf args
+  IrCast x => strLitsOf x
+  _ => []
+
+strLitsDef : IrDef -> List String
+strLitsDef d = case d of
+  IrDef _ _ _ b _ _ _ => strLitsOf b
+  IrExternDef _ _ _ _ => []
+
+poolOffsets : List String -> Int -> List (Pair String (Pair Int Int))
+poolOffsets [] _ = []
+poolOffsets (s :: rest) off =
+  Pair s (Pair off (strLength s)) :: poolOffsets rest (off + strLength s)
+
+poolLookup : String -> List (Pair String (Pair Int Int)) -> Maybe (Pair Int Int)
+poolLookup _ [] = Nothing
+poolLookup s (p :: rest) = if firstOf p == s then Just (secondOf p) else poolLookup s rest
+
+poolBytes : List (Pair String (Pair Int Int)) -> String
+poolBytes pool = joinWith "" (map (\p => firstOf p) pool)
+
+-- ---------------------------------------------------------------
+-- 表达式
+-- ---------------------------------------------------------------
+boolI31 : Bool -> List Instr
+boolI31 b = [IConstI32 (if b then 1 else 0), II31New]
+
+emptyStr : List Instr
+emptyStr = [IConstI32 0, IArrayNewDefault "$str"]
+
+genExpr : Int -> GenState -> Ir -> Result (Pair (List Instr) GenState)
+genExpr fuel st ir = if fuel <= 0 then Err "wasm codegen fuel exhausted"
+else case ir of
+  IrVar b => case lookupBinder b st.gsScope of
+    Just l => Ok (Pair [ILocalGet l] st)
+    Nothing => Err "unbound runtime binder in wasm codegen"
+  IrGlobal name => Ok (Pair [IGlobalGet (watGlobalNameOf name)] st)
+  IrInt n => Ok (Pair [IConstI64 n, IStructNew "$int"] st)
+  IrBool b => Ok (Pair (boolI31 b) st)
+  IrStr s => genStr st s
+  IrCast inner => genExpr (fuel - 1) st inner
+  IrLet bs scrut body => genLet (fuel - 1) st bs scrut body
+  IrIf c th el => case genExpr (fuel - 1) st c of
+    Err e => Err e
+    Ok pc => case genExpr (fuel - 1) (secondOf pc) th of
+      Err e => Err e
+      Ok pt => case genExpr (fuel - 1) (secondOf pt) el of
+        Err e => Err e
+        Ok pe =>
+          Ok
+            (Pair (append (firstOf pc) [IRefCast "i31", II31GetU, IIf "anyref" (firstOf pt) (firstOf pe)]) (secondOf pe))
+  IrRtApp sym args => genRtApp (fuel - 1) st sym args
+  IrLam _ _ => Err "wasm target: lambdas are not supported yet"
+  IrApp _ _ => Err "wasm target: closure application is not supported yet"
+  IrCase _ _ => Err "wasm target: case is not supported yet"
+  IrNatCase _ _ _ _ _ => Err "wasm target: Nat case is not supported yet"
+  IrCtor _ _ _ => Err "wasm target: data constructors are not supported yet"
+  IrRecord _ _ => Err "wasm target: records are not supported yet"
+  IrProj _ _ _ => Err "wasm target: record projection is not supported yet"
+  IrRecUpd _ _ _ => Err "wasm target: record update is not supported yet"
+  IrConcatMany _ => Err "wasm target: string concatenation is not supported yet"
+  IrEffThunk _ _ _ _ _ => Err "wasm target: effect thunks are not supported yet"
+  IrEffBind _ _ _ => Err "wasm target: effect bindings are not supported yet"
+  IrFloatLit _ => Err "wasm target: float literals are not supported yet"
+  IrRt _ => Err "wasm target: runtime function values are not supported yet"
+
+genStr : GenState -> String -> Result (Pair (List Instr) GenState)
+genStr st s = if strLength s == 0 then Ok (Pair emptyStr st)
+else case poolLookup s st.gsPool of
+  Nothing => Err "string literal missing from wasm data pool"
+  Just p => Ok (Pair [IConstI32 (firstOf p), IConstI32 (secondOf p), IArrayNewData "$str" "$d0"] st)
+
+genLet : Int -> GenState -> List IrBinder -> Ir -> Ir -> Result (Pair (List Instr) GenState)
+genLet fuel st bs scrut body =
+  let
+    runtimeBs = filter (\b => not (binderErasedOf b)) bs
+  in case genExpr fuel st scrut of
+    Err e => Err e
+    Ok ps => case runtimeBs of
+      [] => case genExpr fuel (secondOf ps) body of
+        Err e => Err e
+        Ok pb => Ok (Pair (append (firstOf ps) (append [IDrop] (firstOf pb))) (secondOf pb))
+      [b] => case freshLocal (secondOf ps) WvAnyRef of
+        Pair local st1 => case genExpr fuel (pushBinder b local st1) body of
+          Err e => Err e
+          Ok pb =>
+            Ok (Pair (append (firstOf ps) (append [ILocalSet local] (firstOf pb))) (secondOf pb))
+      _ => Err "unboxed let has more than one runtime binder"
+
+genRtApp : Int -> GenState -> String -> List Ir -> Result (Pair (List Instr) GenState)
+genRtApp fuel st sym args = if not (irRtIsKnown sym) then Err "unknown runtime symbol in wasm codegen: ${sym}"
+else case rtImplOf sym of
+  RtFunc n name => if n /= length args then Err "runtime symbol arity mismatch: ${sym}"
+  else case args of
+    [] => Ok (Pair [ICall name] st)
+    [a] => case genExpr fuel st a of
+      Err e => Err e
+      Ok pa => Ok (Pair (append (firstOf pa) [ICall name]) (secondOf pa))
+    [a, b] => case genExpr fuel st a of
+      Err e => Err e
+      Ok pa => case genExpr fuel (secondOf pa) b of
+        Err e => Err e
+        Ok pb => Ok (Pair (append (firstOf pa) (append (firstOf pb) [ICall name])) (secondOf pb))
+    [a, b, c] => case genExpr fuel st a of
+      Err e => Err e
+      Ok pa => case genExpr fuel (secondOf pa) b of
+        Err e => Err e
+        Ok pb => case genExpr fuel (secondOf pb) c of
+          Err e => Err e
+          Ok pc =>
+            Ok
+              (Pair (append (firstOf pa) (append (firstOf pb) (append (firstOf pc) [ICall name]))) (secondOf pc))
+    _ => Err "runtime application with more than 3 arguments is not supported yet"
+  RtValue instrs => Ok (Pair instrs st)
+  RtTrap => Err "wasm target: trap runtime values are not supported yet"
+
+-- ---------------------------------------------------------------
+-- 顶层初始化
+-- ---------------------------------------------------------------
+genDefInit : Int -> GenState -> IrDef -> Result (Pair (List Instr) GenState)
+genDefInit fuel st d = case d of
+  IrExternDef _ _ _ _ => Err "extern definition reached wasm codegen"
+  IrDef name arity _deps body _recOk _initGuard _span => if arity /= 0 then Ok (Pair [] st)
+  else
+    let
+      st1 = { st | gsScope = [] }
+    in case genExpr fuel st1 body of
+      Err e => Err e
+      Ok p => Ok (Pair (append (firstOf p) [IGlobalSet (watGlobalNameOf name)]) (secondOf p))
+
+genDefsInits : Int -> GenState -> List IrDef -> Result (Pair (List Instr) GenState)
+genDefsInits fuel st [] = Ok (Pair [] st)
+genDefsInits fuel st (d :: rest) = if fuel <= 0 then Err "wasm codegen fuel exhausted"
+else case genDefInit (fuel - 1) st d of
+  Err e => Err e
+  Ok p => case genDefsInits (fuel - 1) (secondOf p) rest of
+    Err e => Err e
+    Ok q => Ok (Pair (append (firstOf p) (firstOf q)) (secondOf q))
+
+entryShowFunc : Ir -> Maybe String
+entryShowFunc ir = case ir of
+  IrRt s =>
+    if s == "@ir@showInt" then Just "$rt_strFromInt"
+    else if s == "@ir@showNat" then Just "$rt_strFromInt"
+    else if s == "@ir@showBool" then Just "$rt_showBool"
+    else if s == "@ir@showStr" then Just "$rt_showStr" else Nothing
+  _ => Nothing
+
+genStartBody : Int -> GenState -> Maybe IrEntry -> Bool -> Result (Pair (List Instr) GenState)
+genStartBody fuel st entry printResult = if fuel <= 0 then Err "wasm codegen fuel exhausted"
+else case entry of
+  Nothing => Ok (Pair [] st)
+  Just e =>
+    let
+      needed = collectNeeded 100000 [irEntryMainOf e] [] st.gsDefs
+      ordered = filter (\d => memStr (irDefName d) needed) st.gsDefs
+    in case genDefsInits (fuel - 1) st ordered of
+      Err err => Err err
+      Ok p => if not printResult then Ok p
+      else case entryShowFunc (irEntryShowOf e) of
+        Nothing => Err "wasm target: custom Show entry is not supported yet"
+        Just showFn =>
+          Ok
+            (Pair (append (firstOf p) [IGlobalGet (watGlobalNameOf (irEntryMainOf e)), ICall showFn, ICall "$rt_println"]) (secondOf p))
+
+collectNeeded : Int -> List String -> List String -> List IrDef -> List String
+collectNeeded fuel [] seen _ = reverse seen
+collectNeeded fuel (n :: rest) seen defs = if fuel <= 0 then reverse seen
+else if memStr n seen then collectNeeded (fuel - 1) rest seen defs
+else case findDef n defs of
+  Nothing => collectNeeded (fuel - 1) rest (n :: seen) defs
+  Just d => collectNeeded (fuel - 1) (append rest (irDefDeps d)) (n :: seen) defs
+
+findDef : String -> List IrDef -> Maybe IrDef
+findDef _ [] = Nothing
+findDef name (d :: rest) = if irDefName d == name then Just d else findDef name rest
+
+-- ---------------------------------------------------------------
+-- 模块装配
+-- ---------------------------------------------------------------
+baseTypes : List WatType
+baseTypes =
+  [ WatFuncType "$ft" [WvAnyRef, WvAnyRef] [WvAnyRef],
+    WatStructType "$clo" [WatField False (WvRef "$ft"), WatField False WvAnyRef],
+    WatArrayType "$env" False WvAnyRef,
+    WatStructType "$int" [WatField False WvI64],
+    WatStructType "$float" [WatField False WvF64],
+    WatArrayType "$str" True WvI8,
+    WatArrayType "$arr" True WvAnyRef
+  ]
+
+baseImports : List WatImport
+baseImports =
+  [ WatImport "wasi_snapshot_preview1" "fd_write" "$fd_write" [WvI32, WvI32, WvI32, WvI32] [WvI32],
+    WatImport "wasi_snapshot_preview1" "proc_exit" "$proc_exit" [WvI32] []
+  ]
+
+globalsOf : List IrDef -> List WatGlobal
+globalsOf defs = map (\d => WatGlobal (watGlobalNameOf (irDefName d)) WvAnyRef [IRefNull]) defs
+
+buildModule : Int -> GenState -> Maybe IrEntry -> Bool -> Result WasmModule
+buildModule fuel st entry printResult = case genStartBody fuel st entry printResult of
+  Err msg => Err msg
+  Ok p =>
+    let
+      startBody = firstOf p
+      st1 = secondOf p
+      startFunc = WatFunc "$_start" "" [] [] st1.gsLocals startBody
+      funcs = append (rtFunctions st.gsConsts) (append (reverse st1.gsFuncs) [startFunc])
+      famTypes = concatMapType st.gsFams
+      allTypes = append baseTypes famTypes
+      globals = globalsOf st.gsDefs
+      dataText = poolBytes st.gsPool
+      dataM = if strLength dataText == 0 then Nothing else Just (WatData "$d0" dataText)
+    in Ok
+      (WasmModule allTypes baseImports globals funcs [] dataM [WatExport "func" "_start" "$_start"] 4)
+
+concatMapType : List WasmFam -> List WatType
+concatMapType [] = []
+concatMapType (f :: rest) = case wasmFamType f of
+  Nothing => concatMapType rest
+  Just t => t :: concatMapType rest
+
+-- ---------------------------------------------------------------
+-- 入口
+-- ---------------------------------------------------------------
+hasUnsupportedDef : List IrDef -> Bool
+hasUnsupportedDef [] = False
+hasUnsupportedDef (d :: rest) = case d of
+  IrExternDef _ _ _ _ => True
+  IrDef _ _ _ _ _ _ _ => hasUnsupportedDef rest
+
+export build : IrProgram -> Bool -> WasmOutcome
+build program printResult =
+  let
+    unit = irProgUnitOf program
+    defs = concatMap irGroupDefs unit.irUnitGroups
+    entry = unit.irUnitEntry
+    fams = wasmFamsOf unit.irUnitTyDecls
+    statics = ["True", "False", "TODO: ", "division by zero"]
+    users = concatMap strLitsDef defs
+    pool = foldlStrings (\acc => \s => addString s acc) statics users
+    offsets = poolOffsets pool 0
+    consts = mkConsts offsets
+    st0 = GenState fams defs offsets [] [] 0 [] consts
+  in if hasUnsupportedDef defs then WasmRejected
+    (WasmUnsupported "wasm target: top-level function / extern definitions are not supported yet")
+  else case entry of
+    Nothing => WasmRejected (WasmUnsupported "wasm target: no main definition")
+    Just e => if irEntryIsActionOf e then WasmRejected (WasmUnsupported "wasm target: effectful main is not supported yet")
+    else case buildModule 100000 st0 (Just e) printResult of
+      Ok m => WasmOk m
+      Err msg => WasmRejected (WasmInternal msg)
+
+foldlStrings : (a -> b -> a) -> a -> List b -> a
+foldlStrings _ acc [] = acc
+foldlStrings f acc (x :: rest) = foldlStrings f (f acc x) rest
+
+mkConsts : List (Pair String (Pair Int Int)) -> RtConsts
+mkConsts offsets =
+  let
+    offOf : String -> Int
+    offOf s = case poolLookup s offsets of
+      Just p => firstOf p
+      Nothing => 0
+    lenOf : String -> Int
+    lenOf s = case poolLookup s offsets of
+      Just p => secondOf p
+      Nothing => 0
+  in RtConsts (offOf "True") (lenOf "True") (offOf "False") (lenOf "False") (offOf "TODO: ")
+    (lenOf "TODO: ") (offOf "division by zero") (lenOf "division by zero")
+
+joinWith : String -> List String -> String
+joinWith sep xs = Base.String.join sep xs
