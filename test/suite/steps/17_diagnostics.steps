@@ -37,3 +37,8 @@ exit: 0
 #      debug-only 构造（assert/todo）。地址缺 release 维度时这里会误判为通过。
 run: sh -c 'set -e; d="$TMPDIR/relcheck"; rm -rf "$d"; mkdir -p "$d"; printf "%s\n" "main : Int" "main = assert True \"ok\" 1" > "$d/main.vuna"; "$VUNA" check "$d/main.vuna" >/dev/null 2>&1; if "$VUNA" check --release "$d/main.vuna" >/dev/null 2>&1; then printf "release check hit debug cache\n"; exit 1; fi'
 exit: 0
+
+# 15e) 片段列按 UTF-8 码点换算：CJK 行之后的插入符与源码显示列对齐
+#      （字节列会多出 8 个空格；这里断言 | 到 ^ 的显示偏移为 19）。
+run: sh -c 'set -e; d="$TMPDIR/cjk"; rm -rf "$d"; mkdir -p "$d"; printf "main : String\nmain = \"中文中文\" ++ 1\n" > "$d/a.vuna"; out=$("$VUNA" check "$d/a.vuna" 2>&1 || true); line=$(printf "%s\n" "$out" | grep -F "^" | tail -1); tail=${line#*|}; [ "${#tail}" -eq 19 ]'
+exit: 0

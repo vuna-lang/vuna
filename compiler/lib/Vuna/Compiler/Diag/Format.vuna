@@ -110,11 +110,31 @@ repeatSpace n = if n <= 0 then "" else " " ++ repeatSpace (n - 1)
 padLeft : Int -> String -> String
 padLeft n s = if strLength s >= n then s else repeatSpace (n - strLength s) ++ s
 
--- 插入符宽度：同一行用 end - start；跨行或退化时至少 1。
-caretWidth : Span -> Int
-caretWidth sp =
-  if spanEndLine sp /= spanStartLine sp then 1
-  else if spanEndCol sp > spanStartCol sp then spanEndCol sp - spanStartCol sp else 1
+-- 列换算：Span 的列是 **UTF-8 字节**，终端按**码点**对齐（tab 显示成单空格）。
+-- 这里把字节列换成显示列；LSP 仍单独做 UTF-16 换算。
+isUtf8Cont : Int -> Bool
+isUtf8Cont c = c >= 128 && c < 192
+
+-- 从字节流开头数到第 n 个字节的码点数（n = 0 返回 0）。
+displayColGo : List Int -> Int -> Int -> Int
+displayColGo [] _ acc = acc
+displayColGo (c :: rest) n acc =
+  if n <= 0 then acc else displayColGo rest (n - 1) (if isUtf8Cont c then acc else acc + 1)
+
+-- 字节列（1-based）→ 显示列（1-based，按码点；tab 计 1 格）。
+displayColOf : String -> Int -> Int
+displayColOf line byteCol =
+  displayColGo (strUnpack line) (if byteCol <= 1 then 0 else byteCol - 1) 0 + 1
+
+-- 插入符宽度：同一行用显示列差；跨行或退化时至少 1。
+caretWidthIn : String -> Span -> Int
+caretWidthIn line sp = if spanEndLine sp /= spanStartLine sp then 1
+else
+  let
+    w =
+      displayColOf line (if spanEndCol sp <= 0 then 1 else spanEndCol sp)
+        - displayColOf line (if spanStartCol sp <= 0 then 1 else spanStartCol sp)
+  in if w > 0 then w else 1
 
 -- 单个源码片段块。
 snippetOf : Span -> String -> String
@@ -125,8 +145,8 @@ snippetOf sp text =
     display = displayLine src
     lineNumber = strFromInt (spanStartLine sp)
     width = strLength lineNumber
-    start = if spanStartCol sp <= 0 then 0 else spanStartCol sp - 1
-    carets = caretWidth sp
+    start = if spanStartCol sp <= 0 then 0 else displayColOf src (spanStartCol sp) - 1
+    carets = caretWidthIn src sp
     gutter = repeatSpace (width + 1) ++ "|"
     numberRow = padLeft width lineNumber ++ " | " ++ display
     caretRow =
@@ -144,6 +164,15 @@ renderSnippet sp = do
       text <- raiseToRow hostRow (@vuna@prim_eff_readFile (spanFile sp))
       pure (snippetOf sp text)
   else pure ""
+
+-- | short 视图的源码片段（结构化：只读 label 的 span，不反解析消息文本）。
+-- 文件不可读/无主 span 时返回空串（与旧行为一致：静默退回无片段）。
+export renderShortSnippetEff : Diagnostic -> Eff hostRow String
+renderShortSnippetEff d = case primarySpan d.diagLabels of
+  Nothing => pure ""
+  Just sp => do
+    block <- renderSnippet sp
+    pure (if block == "" then "" else "\n" ++ block)
 
 -- 头部：`error[CODE]: 消息`（无 code 时 `error: 消息`）。
 localizedMessage : String -> Diagnostic -> String

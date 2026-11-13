@@ -18,7 +18,6 @@ import Vuna.Compiler.Diagnostics.Sink
 import Vuna.Compiler.Packages.Pkg
 import Vuna.Compiler.Driver.Compile
 import Vuna.Compiler.Store
-import Vuna.Compiler.Driver.DiagRender
 import Vuna.Compiler.Driver.Dt
 import Vuna.Compiler.Version
 import Vuna.Compiler.Diag.Format
@@ -322,13 +321,12 @@ removedFlag prog flag = case removedFlagHint flag of
     _ <- raiseToRow hostRow (@vuna@prim_eff_print "error: ${flag} has been removed; ${hint}\n")
     pure 2
 
--- 诊断打印统一走 DiagRender：能定位到源码时追加「位置 + 源码行 + 插入符」片段，
--- 定位失败（无位置 / 文件不可读 / 行越界 / 消息含换行）时逐字原样输出。
+-- 文本输出：直接打印。诊断片段由 emitDiag 用结构化 label 渲染（见 Diag.Format），
+-- 不再从消息文本里反解析 `file:line:col`。用法/工具错误（无 span）原样输出。
 -- | CLI 辅助：printErrText（参数/退出码约定见 tooling.md）。
 printErrText : String -> Eff hostRow Int
 printErrText e = do
-  rendered <- renderCliDiagnosticEff e
-  _ <- raiseToRow hostRow (@vuna@prim_eff_print rendered)
+  _ <- raiseToRow hostRow (@vuna@prim_eff_print e)
   pure 1
 
 -- | 诊断/告警实现：severityLabelOf（详见 diagnostics.md）。
@@ -348,7 +346,9 @@ else if o.optDiagFormat == "human" then do
   pure (Pair (diagExitFor d) o)
 else if o.optDiagFormat == "sarif" then pure (Pair (diagExitFor d) (collectSarifIn o d))
 else do
-  _ <- printErrText (severityLabelOf d ++ ": " ++ extra ++ renderShort d ++ "\n")
+  -- short：首行保持 `error: [pkg] file:line:col: [CODE] 消息`；片段从 label 结构化渲染。
+  snippet <- renderShortSnippetEff d
+  _ <- printErrText (severityLabelOf d ++ ": " ++ extra ++ renderShort d ++ snippet ++ "\n")
   pure (Pair (diagExitFor d) o)
 
 -- sarif/json 诊断收集（写回 CliOpts，显式 state 传递）。

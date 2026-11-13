@@ -121,7 +121,7 @@ warning 的**通道**（M4 起）没有进程内全局收集器：Elab 期 `warn
 
 | 视图 | 入口 | 形态 |
 | --- | --- | --- |
-| short | `renderShort` / `diagText` | `file:line:col: [CODE] 消息`（过渡期/编辑器/grep） |
+| short | `renderShort` / `diagText` | `file:line:col: [CODE] 消息`（编辑器/grep）；CLI 片段由 `renderShortSnippetEff` 从 label 结构化追加 |
 | human | `renderHuman` | `error[CODE]: 消息` + `--> file:line:col` + 源码行 + 插入符 + notes |
 | JSON | `renderJsonList` | `{version,tool,diagnostics[]}`，含 labels/fields/trace/notes/suggestions/origin/internal/ice |
 | SARIF | `renderSarif` | SARIF 2.1.0 单 run：ruleId/level/message/locations/relatedLocations |

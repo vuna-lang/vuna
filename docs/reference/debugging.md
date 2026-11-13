@@ -8,7 +8,9 @@ REPL `:type`）。语言语义见 [language.md](language.md)，诊断错误码�
 ## 1. 编译期诊断：源码片段
 
 `vuna check` / `compile` / `build` / `interp` 的错误在原有
-`<file>:<line>:<col>: [CODE] <消息>` 之后追加源码片段（`Vuna.Compiler.Driver.DiagRender`）：
+`<file>:<line>:<col>: [CODE] <消息>` 之后追加源码片段（结构化渲染：`Vuna.Compiler.Diag.Format`
+的 `renderShortSnippetEff` / `renderHuman`，从 label 的 span 取位置，不再反解析消息文本）；
+列按 UTF-8 码点换算成显示列（CJK / tab 不再错位）：
 
 ```console
 $ vuna check .
