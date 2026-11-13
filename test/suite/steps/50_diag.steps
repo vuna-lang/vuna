@@ -269,3 +269,7 @@ out-not-contains: LD_ModuleHeaderInEntryFile
 run: "$VUNA" check "$TMPDIR/m45-mod-file/lib/B.vuna" --continue-on-error 2>&1
 exit: 1
 out-not-contains: LD_ModuleHeaderInEntryFile
+
+# --fail-fast：多错误恢复只输出首条（与 --max-errors 取小）。
+run: sh -c 'printf "a : Int\na = \"x\"\n\nb : Int\nb = a\n\nmain : Int\nmain = b\n" > "$TMPDIR/mff.vuna"; n=$("$VUNA" check "$TMPDIR/mff.vuna" --continue-on-error --error-format human --show-cascade 2>&1 | grep -c "^error"); m=$("$VUNA" check "$TMPDIR/mff.vuna" --continue-on-error --error-format human --show-cascade --fail-fast 2>&1 | grep -c "^error"); [ "$n" -eq 3 ] && [ "$m" -eq 1 ]'
+exit: 0

@@ -128,7 +128,7 @@ warning 的**通道**（M4 起）没有进程内全局收集器：Elab 期 `warn
 | JSON | `renderJsonList` | `{version,tool,diagnostics[]}`，含 labels/fields/trace/notes/suggestions/origin/internal/ice |
 | SARIF | `renderSarif` | SARIF 2.1.0 单 run：ruleId/level/message/locations/relatedLocations |
 
-CLI 开关：`--error-format=short|human|json|sarif|github`、`--with-sources`（JSON 附源文件内容摘要）、`--json`、`--message-format=...`、`--lang en|zh`（zh 时 human 消息本地化）、`--continue-on-error`（elab best-effort 多错误，仅**入口文件**；级联默认折叠，`--show-cascade` 显示；带 `module` 头的库模块单文件检查只报首错）；包级 check
+CLI 开关：`--error-format=short|human|json|sarif|github`、`--with-sources`（JSON 附源文件内容摘要）、`--json`、`--message-format=...`、`--lang en|zh`（zh 时 human 消息本地化）、`--continue-on-error`（elab best-effort 多错误，仅**入口文件**；级联默认折叠，`--show-cascade` 显示；`--fail-fast` 只显示首条；带 `module` 头的库模块单文件检查只报首错）；包级 check
 会把格式、`--lang`、`--max-errors` 透传给成员包子进程；成员包错误带 `[包名]` 前缀。
 **源身份**：`--json --with-sources` 在顶层追加 `"sources"`，每项含 `file` / `package`（最近祖先 `vuna.toml` 的包名）/ `module`（`lib|app` 前缀 + `.vuna` 去掉后按 `/` → `.`）/ `relPath`（包相对路径）/ `digest`（内容摘要）。用于跨 checkout/缓存复用时定位同一份内容；不带该 flag 时输出与既有 `.diag.json` 契约逐字节一致。
 

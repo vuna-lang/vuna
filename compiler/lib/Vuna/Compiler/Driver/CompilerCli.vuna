@@ -71,10 +71,11 @@ record CliOpts where
   optRelease : Bool
   optShowCascade : Bool
   optWithSources : Bool
+  optFailFast : Bool
 
 defaultCliOpts : CliOpts
 defaultCliOpts =
-  CliOpts "short" "en" False False False False False False 20 False [] False False False
+  CliOpts "short" "en" False False False False False False 20 False [] False False False False
 
 -- | 在已有 opts 上打开 release 模式（`--release`）。
 markRelease : CliOpts -> CliOpts
@@ -86,7 +87,7 @@ markFormatExplicit : CliOpts -> CliOpts
 markFormatExplicit o =
   CliOpts o.optDiagFormat o.optDiagLang o.optLangExplicit o.optDenyWarnings o.optShowWarnings True
     o.optWarningsExplicit o.optDenyExplicit o.optMaxErrors o.optContinueOnError o.optSarifItems
-    o.optRelease o.optShowCascade o.optWithSources
+    o.optRelease o.optShowCascade o.optWithSources o.optFailFast
 
 -- 显式 state 辅助：把不改 opts 的动作结果带回（退出码 + 当前 CliOpts）。
 withOpts : CliOpts -> Eff hostRow Int -> Eff hostRow (Pair Int CliOpts)
@@ -153,7 +154,11 @@ applyManifestOpts (Just pkg) o =
       Nothing => o.optMaxErrors
   in CliOpts fmt lang o.optLangExplicit deny showW2 o.optFormatExplicit o.optWarningsExplicit
     o.optDenyExplicit maxE o.optContinueOnError o.optSarifItems o.optRelease o.optShowCascade
-    o.optWithSources
+    o.optWithSources o.optFailFast
+
+-- --fail-fast：只显示首条诊断（与 --max-errors 取较小者语义）。
+maxErrorsOf : CliOpts -> Int
+maxErrorsOf o = if o.optFailFast then 1 else o.optMaxErrors
 
 -- | 诊断/告警实现：takeDiags（详见 diagnostics.md）。
 takeDiags : Int -> List Diagnostic -> List Diagnostic
@@ -189,6 +194,15 @@ stripShowCascade (arg :: rest) = arg :: stripShowCascade rest
 hasWithSources : List String -> Bool
 hasWithSources [] = False
 hasWithSources (arg :: rest) = if arg == "--with-sources" then True else hasWithSources rest
+
+hasFailFast : List String -> Bool
+hasFailFast [] = False
+hasFailFast (arg :: rest) = if arg == "--fail-fast" then True else hasFailFast rest
+
+stripFailFast : List String -> List String
+stripFailFast [] = []
+stripFailFast ("--fail-fast" :: rest) = stripFailFast rest
+stripFailFast (arg :: rest) = arg :: stripFailFast rest
 
 stripWithSources : List String -> List String
 stripWithSources [] = []
@@ -365,10 +379,12 @@ runCompilerCliFor prog args = do
         (hasDenyWarnings args || hasShowWarnings args) (hasFormatFlag args)
         (hasDenyWarnings args || hasShowWarnings args) (hasDenyWarnings args) (secondOf strippedMax)
         (secondOf strippedContinue) [] (envRel == "1") (hasShowCascade args) (hasWithSources args)
+        (hasFailFast args)
   in if anyHelp (firstOf strippedContinue) then helpFor prog
   else do
     r <-
-      runCompilerCliFor1 prog (stripWithSources (stripShowCascade (firstOf strippedContinue))) opts
+      runCompilerCliFor1 prog
+        (stripFailFast (stripWithSources (stripShowCascade (firstOf strippedContinue)))) opts
     flushSarif (firstOf r) (secondOf r)
 
 -- 剥离 `--max-errors N`（写入全局上限；缺省 20，0 = 不限）。
@@ -527,7 +543,7 @@ printDiagWithPrefix o extra d = case d.diagChildren of
   [] => emitDiag o extra d
   _ =>
     let
-      shown = takeDiags o.optMaxErrors (d :: visibleDiags o d.diagChildren)
+      shown = takeDiags (maxErrorsOf o) (d :: visibleDiags o d.diagChildren)
     in do
       o1 <- emitDiagRevSeq o extra shown
       pure (Pair (diagExitFor d) o1)
@@ -544,7 +560,7 @@ printErr e = printErrText "error: ${e}\n"
 printDiagList : CliOpts -> String -> List Diagnostic -> Eff hostRow (Pair Int CliOpts)
 printDiagList o extra ds =
   let
-    shown = takeDiags o.optMaxErrors (visibleDiags o ds)
+    shown = takeDiags (maxErrorsOf o) (visibleDiags o ds)
   in do
     o1 <- emitDiagRevSeq o extra shown
     pure (Pair 0 o1)
@@ -694,8 +710,10 @@ checkSpawnArgs o dir =
     langArgs = if o.optLangExplicit then ["--lang", o.optDiagLang] else []
     cascadeArgs = if o.optShowCascade then ["--show-cascade"] else []
     sourceArgs = if o.optWithSources then ["--with-sources"] else []
+    failFastArgs = if o.optFailFast then ["--fail-fast"] else []
     maxArgs = if o.optMaxErrors > 0 then ["--max-errors", strFromInt o.optMaxErrors] else []
-  in append base3 (append langArgs (append maxArgs (append cascadeArgs sourceArgs)))
+  in append base3
+    (append langArgs (append maxArgs (append cascadeArgs (append sourceArgs failFastArgs))))
 
 -- 机器格式（json/sarif）的判定：这些格式要求 stdout **恰好一份**文档。
 isMachineFormat : String -> Bool
@@ -752,7 +770,10 @@ checkRootsSeq : List Package -> Int -> CliOpts -> Eff hostRow (Pair Int CliOpts)
 checkRootsSeq [] code o = pure (Pair code o)
 checkRootsSeq (pkg :: rest) code o = do
   r <- checkPackageSeq pkg code o
-  checkRootsSeq rest (firstOf r) (secondOf r)
+  let
+    code1 = firstOf r
+  in if o.optFailFast && code1 /= 0 then pure (Pair code1 (secondOf r))
+  else checkRootsSeq rest code1 (secondOf r)
 
 checkPackageSeq : Package -> Int -> CliOpts -> Eff hostRow (Pair Int CliOpts)
 checkPackageSeq pkg code o =
