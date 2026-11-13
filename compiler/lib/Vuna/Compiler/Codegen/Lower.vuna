@@ -1468,8 +1468,13 @@ export lowerProgramOf : List DtData -> List DtDef -> Check IrProgram
 lowerProgramOf datas defs =
   let
     env = mkLwEnv datas defs ""
-  in Vuna.Compiler.Common.bind (lowerUnitOf env (map dtDefName defs) (map dtDataName datas))
-    (\unitIr => Vuna.Compiler.Common.bind (lowerEntryOf defs) (\entry => OkC (IrProgram (lwEnvShared env) (IrUnit unitIr.irUnitTyDecls unitIr.irUnitGroups unitIr.irUnitHasListFamily unitIr.irUnitTypeRefs entry))))
+  in Vuna.Compiler.Common.bind (lowerUnitOf env (map dtDefName defs) (map dtDataName datas)) (\unitIr => Vuna.Compiler.Common.bind (lowerEntryOf defs) (\entry => let
+    program =
+      IrProgram (lwEnvShared env)
+        (IrUnit unitIr.irUnitTyDecls unitIr.irUnitGroups unitIr.irUnitHasListFamily unitIr.irUnitTypeRefs entry)
+  in Vuna.Compiler.Common.bind (validateProgram program) (\_ => OkC program)
+  )
+  )
 
 -- | 运行时定义分区（不跑检查；Split 的归属表与名字护栏只看运行时定义——axiom /
 -- 类型级定义没有归属，也不进任何单元文件）。
