@@ -10,7 +10,7 @@
 | --- | --- | --- |
 | **payload** | 对象字节（接口载荷、lex tokens、split 产物、工具会话载荷） | `objects/<kind>/<摘要>`、`blobs/<splitIdentity>` |
 | **judgment** | 「这个输入算过了吗」= 输入摘要的地址是否存在 | `objects/check/<checkIn>`、`objects/splitptr/<splitIn>` |
-| **path / view** | 给人看的渲染，不是身份 | `views/bin/<splitIn>/`、`<pkg>/.output` 符号链接 |
+| **path / view** | 给人看的渲染，不是身份 | `views/bin/<splitIn>/`、`views/testbin/<testBin>/`、`<pkg>/.output` 符号链接 |
 
 路径可以变（视图、`.output`、`--out DIR`），身份不变（摘要）。
 
@@ -103,7 +103,7 @@ views/testbin/<testBin>/          # effect 测试编译产物（bin/vuna-test，
 - `vuna store gc [--dry-run] [--older-than SEC] [--max-size BYTES]`：
   - 候选 = 缓存族里名字不在保留集合、且 mtime 早于宽限窗口（默认 3600s，覆盖「对象已写、
     root 还没写」的崩溃窗口）；`objects/pkg/` 永不进入候选（包对象族归 `clean --packages`）；
-  - `views/bin/` 只能**整目录**淘汰（`.complete` 还在时删单文件会让半截视图看起来完整），
+  - `views/bin/` 与 `views/testbin/` 只能**整目录**淘汰（`.complete` 还在时删单文件会让半截视图看起来完整），
     目录名参与 roots 保护；
   - `--max-size` 有值时按 mtime 从旧到新淘汰（文件与 view 目录都计入总量），直到降到上限以下。
 
@@ -113,6 +113,8 @@ views/testbin/<testBin>/          # effect 测试编译产物（bin/vuna-test，
   持锁者**直接在最终视图路径构建**（codegen 里的绝对路径保持稳定）；成功后用原子写提交
   `.complete`（内容 = digest），失败则删 partial view 再放锁。等锁者轮询 `.complete`，
   拿不到锁且超时才报错。显式 `--out` 不经过视图锁。
+- **views/testbin**：effect 测试二进制按 `testbin 3|指纹|rootsHash|源码` 摘要寻址；与 bin
+  视图共用 scratch claim/publish（`storeView*Eff`），命中直接运行。
 - **roots**：逐 digest 文件（见上），不需要锁；GC 的宽限窗口覆盖「对象已写、root 还没写」。
 - **units**：只做**当前 entry 桶内**的旧 key 清理；不再跨 entry 删目录。并发构建不同入口
   不会互相驱逐。桶的容量由 `vuna store gc`（按 mtime / `--max-size`）或

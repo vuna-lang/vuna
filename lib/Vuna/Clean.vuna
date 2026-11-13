@@ -4,7 +4,7 @@ module Vuna.Clean where
 --
 -- 一个 store 根、两类生命周期（D15）：
 --   --store     **缓存族**：`objects/<kind>/`（iface/header/lex/order/check/tool/mods/test/
---               splitptr）、`blobs/`、`units/`、`views/bin/`、`.tmp/`（锁与暂存）。
+--               splitptr）、`blobs/`、`units/`、`views/{bin,testbin}/`、`.tmp/`（锁与暂存）。
 --               保留 `objects/pkg/`、`pkgs/`、`roots/`、`tmp/`。
 --   --packages  **取包对象族**：`objects/pkg/`、物化视图 `pkgs/`、取包中转 `tmp/`。
 --               保留缓存族与 roots。
@@ -62,7 +62,7 @@ cacheKindNames =
 cacheScopesOf : String -> List String
 cacheScopesOf root =
   append (map (\k => "${root}/objects/${k}") cacheKindNames)
-    ["${root}/blobs", "${root}/units", "${root}/views/bin", "${root}/.tmp"]
+    ["${root}/blobs", "${root}/units", "${root}/views/bin", "${root}/views/testbin", "${root}/.tmp"]
 
 cleanStore : Bool -> Eff hostRow Int
 cleanStore dry = do
@@ -392,7 +392,9 @@ gcSweep root keep grace maxBytes dry = do
   now <- currentSec
   files <- gcFilesOf root
   fileCands <- gcCandidates now keep grace files
-  viewDirs <- subDirsOf "${root}/views/bin"
+  binDirs <- subDirsOf "${root}/views/bin"
+  testDirs <- subDirsOf "${root}/views/testbin"
+  viewDirs <- pure (append binDirs testDirs)
   viewCands <- gcViewCandidates now keep grace viewDirs
   viewFiles <- concatMapEff (\d => walkFiles 1048576 d) viewDirs
   sizes <- sizesOf (append files viewFiles)
