@@ -121,7 +121,8 @@ warning 的**通道**（M4 起）没有进程内全局收集器：Elab 期 `warn
 
 | 视图 | 入口 | 形态 |
 | --- | --- | --- |
-| short | `renderShort` / `diagText` | `file:line:col: [CODE] 消息`（编辑器/grep）；CLI 片段由 `renderShortSnippetEff` 从 label 结构化追加 |
+| short | `renderShort` / `diagText` | `file:line:col: [CODE] 消息`（编辑器/grep/管道默认）；CLI 片段由 `renderShortSnippetEff` 从 label 结构化追加 |
+| human | `renderHuman` | 交互终端默认：首行 + 主/相关 label 片段（context 标签输出 `= in ...`）+ note/建议/目录说明 |
 | human | `renderHuman` | `error[CODE]: 消息` + `--> file:line:col` + 源码行 + 插入符 + notes |
 | JSON | `renderJsonList` | `{version,tool,diagnostics[]}`，含 labels/fields/trace/notes/suggestions/origin/internal/ice |
 | SARIF | `renderSarif` | SARIF 2.1.0 单 run：ruleId/level/message/locations/relatedLocations |
@@ -147,7 +148,7 @@ JSON 字段是机器契约：`code/severity/phase/category/message/labels[]/fiel
 
 | key | 值 | 语义 |
 | --- | --- | --- |
-| `format` | `short`/`human`/`json`/`sarif` | 默认渲染格式（等价 `--error-format`） |
+| `format` | `short`/`human`/`json`/`sarif` | 默认渲染格式（等价 `--error-format`）；未显式指定时按消费端选：TTY → `human`，管道/CI → `short`（`lang=zh` 时 human） |
 | `warnings` | bool | 是否默认显示 `UN_` 告警（等价 `-W`；`--deny-warnings` 仍提升退出码） |
 | `max-errors` | 正整数 | 一次检查最多显示/序列化多少条诊断（0 或缺省 = 不限） |
 | `lang` | `en`/`zh` | human 视图语言；`zh` 追加目录中文说明并默认切 human（命令行 `--lang` 优先） |

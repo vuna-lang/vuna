@@ -193,10 +193,17 @@ stripDiagFormatGo (arg :: rest) acc found =
     (Just (substring (natFromInt 17) (natFromInt (strLength arg - 17)) arg))
   else stripDiagFormatGo rest (arg :: acc) found
 
+-- 终端探测：用一次 sh 判定 stdout 是否 TTY（不加原语、不动 TCB；同 REPL 的 stty 做法）。
+stdoutIsTty : Eff hostRow Bool
+stdoutIsTty = do
+  code <- raiseToRow hostRow (@vuna@prim_eff_runIn "." ["sh", "-c", "[ -t 1 ]"])
+  pure (code == 0)
+
 -- | 编译器 CLI 入口：剥离诊断参数后分发。
 export runCompilerCliFor : String -> List String -> Eff hostRow Int
 runCompilerCliFor prog args = do
   envRel <- raiseToRow hostRow (@vuna@prim_eff_getenv "VUNA_RELEASE")
+  tty <- stdoutIsTty
   let
     stripped = stripDiagFormat args
     strippedLang = stripLang (firstOf stripped)
@@ -204,9 +211,10 @@ runCompilerCliFor prog args = do
     kept = stripDenyWarnings (firstOf strippedMax)
     strippedContinue = stripContinueOnError kept
     detectedLang = secondOf strippedLang
+    -- 默认格式按消费端选：交互终端用 human（片段/note），管道/CI 用 short（稳定首行）。
     fmt = case secondOf stripped of
       Just f => f
-      Nothing => if detectedLang == "en" then "short" else "human"
+      Nothing => if detectedLang == "en" then if tty then "human" else "short" else "human"
     opts =
       CliOpts fmt detectedLang (hasLangFlag args) (hasDenyWarnings args)
         (hasDenyWarnings args || hasShowWarnings args) (hasFormatFlag args)

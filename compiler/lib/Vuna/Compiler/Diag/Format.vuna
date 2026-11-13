@@ -12,6 +12,7 @@ module Vuna.Compiler.Diag.Format where
 -- 列单位沿用编译器内部约定：1-based，UTF-8 字节（见 `Source`）。JSON 同时给出
 -- 行/列；LSP 适配器负责转 UTF-16。
 import Base.HostRow
+import Base.List
 import Vuna.Compiler.Source
 import Vuna.Compiler.Diag
 import qualified Vuna.Compiler.Diagnostics
@@ -174,6 +175,51 @@ renderShortSnippetEff d = case primarySpan d.diagLabels of
     block <- renderSnippet sp
     pure (if block == "" then "" else "\n" ++ block)
 
+-- 相关标签（secondary / context）各出片段；与主 span 相同的不重复。
+sameSpan : Span -> Span -> Bool
+sameSpan a b =
+  a.spanFile == b.spanFile
+    && a.spanStartLine == b.spanStartLine
+    && a.spanStartCol == b.spanStartCol
+    && a.spanEndLine == b.spanEndLine
+    && a.spanEndCol == b.spanEndCol
+
+sameAsPrimary : Maybe Span -> Span -> Bool
+sameAsPrimary Nothing _ = False
+sameAsPrimary (Just p) sp = sameSpan p sp
+
+isPrimaryStyle : LabelStyle -> Bool
+isPrimaryStyle LabelPrimary = True
+isPrimaryStyle _ = False
+
+isContextStyle : LabelStyle -> Bool
+isContextStyle LabelContext = True
+isContextStyle _ = False
+
+relatedBlocks : Maybe Span -> List Label -> Eff hostRow (List String)
+relatedBlocks primary [] = pure []
+relatedBlocks primary ((Label msp text style _) :: rest) = do
+  restBlocks <- relatedBlocks primary rest
+  if isPrimaryStyle style then pure restBlocks
+  else case msp of
+    Nothing => pure restBlocks
+    Just sp =>
+      let
+        note =
+          if text == "" then ""
+          else if isContextStyle style then "  = ${text}" else "  = note: ${text}"
+      in if sameAsPrimary primary sp then if note == "" then pure restBlocks else pure (Base.List.Cons note restBlocks)
+      else do
+        sn <- renderSnippet sp
+        let
+          block = join "\n" (filter (\x => x /= "") [sn, note])
+        in pure (Base.List.Cons block restBlocks)
+
+renderRelated : Maybe Span -> List Label -> Eff hostRow String
+renderRelated primary labels = do
+  blocks <- relatedBlocks primary labels
+  pure (join "\n" (filter (\x => x /= "") blocks))
+
 -- 头部：`error[CODE]: 消息`（无 code 时 `error: 消息`）。
 localizedMessage : String -> Diagnostic -> String
 localizedMessage lang d = if lang == "zh" then case Vuna.Compiler.Diagnostics.diagDescOf d.diagCode of
@@ -198,6 +244,7 @@ renderHuman lang d =
     snippet <- case primary of
       Just sp => renderSnippet sp
       Nothing => pure ""
+    related <- renderRelated primary d.diagLabels
     let
       labelNote = if ptext == "" then "" else "  = note: ${ptext}"
       notes = join "\n" (map (\n => "  = note: ${n}") d.diagNotes)
@@ -209,7 +256,7 @@ renderHuman lang d =
       helpBlock = join "\n" (map suggestionLine d.diagSuggestions)
       block =
         join "\n"
-          [headerOf lang d, snippet, labelNote, origLine, notes, fieldBlock, traceBlock, helpBlock, descLine]
+          [headerOf lang d, snippet, related, labelNote, origLine, notes, fieldBlock, traceBlock, helpBlock, descLine]
     in pure (trim block)
 
 -- ---------------------------------------------------------------
