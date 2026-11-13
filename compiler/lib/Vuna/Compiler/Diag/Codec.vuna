@@ -1,0 +1,424 @@
+-- | 诊断载荷的规范编码（`Store` 对象用）。
+module Vuna.Compiler.Diag.Codec where
+
+-- Vuna.Compiler.Diag.Codec：`Diagnostic` / `DiagBundle` 的显式规范字节编码。
+--
+-- 为什么不用 marshal：缓存载荷必须是**输入的纯函数**（跨进程 / 跨机器可复现），
+-- 且坏字节要在解码前被 `Store` framing 拒绝。这里沿用 `Canonical.Bytes` 的
+-- 自定界原子文法（tag/int/str/bool/list/maybe），与 iface/lex/split 同一套底层。
+--
+-- 位置路径的规范化（绝对 → 包相对）在 `Driver.Compile` 的存储边界做，本模块只编码
+-- 值本身；因此同一份内容在不同 checkout 下编码一致。
+import Vuna.Compiler.Common
+import Vuna.Compiler.Canonical.Bytes
+import Base.List
+import Base.Nat
+import Base.Pair
+
+-- | 载荷 codec 版本（`Store` 的 codec 段；格式变更即 bump）。
+diagCodec : String
+diagCodec = "diagnostics 1"
+
+-- ---------------------------------------------------------------
+-- 枚举 tag
+-- ---------------------------------------------------------------
+sevTag : Severity -> Int
+sevTag SevError = 0
+sevTag SevWarning = 1
+sevTag SevNote = 2
+sevTag SevHelp = 3
+
+sevOfTag : Int -> Maybe Severity
+sevOfTag 0 = Just SevError
+sevOfTag 1 = Just SevWarning
+sevOfTag 2 = Just SevNote
+sevOfTag 3 = Just SevHelp
+sevOfTag _ = Nothing
+
+phaseTag : Phase -> Int
+phaseTag PhLex = 0
+phaseTag PhParse = 1
+phaseTag PhResolve = 2
+phaseTag PhLoad = 3
+phaseTag PhElab = 4
+phaseTag PhUnify = 5
+phaseTag PhCoverage = 6
+phaseTag PhTermination = 7
+phaseTag PhUsage = 8
+phaseTag PhCodegen = 9
+phaseTag PhPackage = 10
+phaseTag PhDriver = 11
+phaseTag PhTool = 12
+phaseTag PhInternal = 13
+
+phaseOfTag : Int -> Maybe Phase
+phaseOfTag 0 = Just PhLex
+phaseOfTag 1 = Just PhParse
+phaseOfTag 2 = Just PhResolve
+phaseOfTag 3 = Just PhLoad
+phaseOfTag 4 = Just PhElab
+phaseOfTag 5 = Just PhUnify
+phaseOfTag 6 = Just PhCoverage
+phaseOfTag 7 = Just PhTermination
+phaseOfTag 8 = Just PhUsage
+phaseOfTag 9 = Just PhCodegen
+phaseOfTag 10 = Just PhPackage
+phaseOfTag 11 = Just PhDriver
+phaseOfTag 12 = Just PhTool
+phaseOfTag 13 = Just PhInternal
+phaseOfTag _ = Nothing
+
+catTag : Category -> Int
+catTag CatSyntax = 0
+catTag CatNames = 1
+catTag CatTypes = 2
+catTag CatUniverses = 3
+catTag CatCoverage = 4
+catTag CatTermination = 5
+catTag CatQuantity = 6
+catTag CatEffects = 7
+catTag CatRecords = 8
+catTag CatTraits = 9
+catTag CatCodegen = 10
+catTag CatPackage = 11
+catTag CatTool = 12
+catTag CatInternal = 13
+
+catOfTag : Int -> Maybe Category
+catOfTag 0 = Just CatSyntax
+catOfTag 1 = Just CatNames
+catOfTag 2 = Just CatTypes
+catOfTag 3 = Just CatUniverses
+catOfTag 4 = Just CatCoverage
+catOfTag 5 = Just CatTermination
+catOfTag 6 = Just CatQuantity
+catOfTag 7 = Just CatEffects
+catOfTag 8 = Just CatRecords
+catOfTag 9 = Just CatTraits
+catOfTag 10 = Just CatCodegen
+catOfTag 11 = Just CatPackage
+catOfTag 12 = Just CatTool
+catOfTag 13 = Just CatInternal
+catOfTag _ = Nothing
+
+styleTag : LabelStyle -> Int
+styleTag LabelPrimary = 0
+styleTag LabelSecondary = 1
+styleTag LabelContext = 2
+
+styleOfTag : Int -> Maybe LabelStyle
+styleOfTag 0 = Just LabelPrimary
+styleOfTag 1 = Just LabelSecondary
+styleOfTag 2 = Just LabelContext
+styleOfTag _ = Nothing
+
+applicabilityTag : Applicability -> Int
+applicabilityTag MachineApplicable = 0
+applicabilityTag MaybeIncorrect = 1
+applicabilityTag HasPlaceholder = 2
+
+applicabilityOfTag : Int -> Maybe Applicability
+applicabilityOfTag 0 = Just MachineApplicable
+applicabilityOfTag 1 = Just MaybeIncorrect
+applicabilityOfTag 2 = Just HasPlaceholder
+applicabilityOfTag _ = Nothing
+
+absentTag : NoSourceReason -> Int
+absentTag NsSynthetic = 0
+absentTag NsToolUsage = 1
+absentTag NsPackageGraph = 2
+absentTag NsInternal = 3
+
+absentOfTag : Int -> Maybe NoSourceReason
+absentOfTag 0 = Just NsSynthetic
+absentOfTag 1 = Just NsToolUsage
+absentOfTag 2 = Just NsPackageGraph
+absentOfTag 3 = Just NsInternal
+absentOfTag _ = Nothing
+
+stabilityTag : Stability -> Int
+stabilityTag Stable = 0
+stabilityTag Volatile = 1
+
+stabilityOfTag : Int -> Maybe Stability
+stabilityOfTag 0 = Just Stable
+stabilityOfTag 1 = Just Volatile
+stabilityOfTag _ = Nothing
+
+-- ---------------------------------------------------------------
+-- 原子/组合
+-- ---------------------------------------------------------------
+encSpan : Span -> List String -> List String
+encSpan sp acc =
+  encStr sp.spanFile
+    (encInt sp.spanStartLine (encInt sp.spanStartCol (encInt sp.spanEndLine (encInt sp.spanEndCol acc))))
+
+decSpan : Int -> Cur -> Maybe (Pair Span Cur)
+decSpan fuel c =
+  thenPair (decStr (fuel - 1) c)
+    (\file, b1 => thenPair (decInt (fuel - 1) b1) (\sl, b2 => thenPair (decInt (fuel - 1) b2) (\sc, b3 => thenPair (decInt (fuel - 1) b3) (\el, b4 => thenPair (decInt (fuel - 1) b4) (\ec, b5 => Just (Pair (Span file sl sc el ec) b5))))))
+
+-- 列表头 `[<count>:`（与 `encList` 的字节文法一致）。递归载荷不用 `decList`：
+-- 把递归解码器当高阶实参时终止性判据看不到下降边。
+readCount : Int -> Int -> Cur -> Maybe (Pair Int Cur)
+readCount fuel acc c = if fuel <= 0 then Nothing
+else case curChar c of
+  Just 58 => Just (Pair acc (curSkip c))
+  Just d =>
+    if d >= 48 && d <= 57 then readCount (fuel - 1) (acc * 10 + (d - 48)) (curSkip c) else Nothing
+  Nothing => Nothing
+
+decCount : Int -> Cur -> Maybe (Pair Int Cur)
+decCount fuel c = case curChar c of
+  Just 91 => readCount (fuel - 1) 0 (curSkip c)
+  _ => Nothing
+
+thenPair : Maybe (Pair a Cur) -> (a -> Cur -> Maybe (Pair b Cur)) -> Maybe (Pair b Cur)
+thenPair Nothing _ = Nothing
+thenPair (Just (Pair x rest)) k = k x rest
+
+encLabel : Label -> List String -> List String
+encLabel l acc =
+  encMaybe encSpan l.labelSpan
+    (encStr l.labelText (encTag (styleTag l.labelStyle) (encMaybe encSpan l.labelProvenance acc)))
+
+decLabel : Int -> Cur -> Maybe (Pair Label Cur)
+decLabel fuel c = thenPair (decMaybe decSpan (fuel - 1) c) (\msp, b1 => thenPair (decStr (fuel - 1) b1) (\text, b2 => thenPair (decTag (fuel - 1) b2) (\stag, b3 => case styleOfTag stag of
+  Nothing => Nothing
+  Just style =>
+    thenPair (decMaybe decSpan (fuel - 1) b3)
+      (\prov, b4 => Just (Pair (Label msp text style prov) b4))
+)
+)
+)
+
+encEdit : DiagEdit -> List String -> List String
+encEdit e acc = encSpan e.editSpan (encStr e.editNewText acc)
+
+decEdit : Int -> Cur -> Maybe (Pair DiagEdit Cur)
+decEdit fuel c =
+  thenPair (decSpan (fuel - 1) c)
+    (\sp, b1 => thenPair (decStr (fuel - 1) b1) (\t, b2 => Just (Pair (DiagEdit sp t) b2)))
+
+encSuggestion : Suggestion -> List String -> List String
+encSuggestion s acc =
+  encStr s.suggestionTitle
+    (encTag (applicabilityTag s.suggestionApplicability) (encList encEdit s.suggestionEdits acc))
+
+decSuggestion : Int -> Cur -> Maybe (Pair Suggestion Cur)
+decSuggestion fuel c = thenPair (decStr (fuel - 1) c) (\title, b1 => thenPair (decTag (fuel - 1) b1) (\atag, b2 => case applicabilityOfTag atag of
+  Nothing => Nothing
+  Just app =>
+    thenPair (decList decEdit (fuel - 1) b2) (\es, b3 => Just (Pair (Suggestion title app es) b3))
+)
+)
+
+encCandidate : Candidate -> List String -> List String
+encCandidate cand acc =
+  encStr cand.candidateText
+    (encMaybe encSpan cand.candidateSpan (encMaybe encStr cand.candidateReason acc))
+
+decCandidate : Int -> Cur -> Maybe (Pair Candidate Cur)
+decCandidate fuel c =
+  thenPair (decStr (fuel - 1) c)
+    (\text, b1 => thenPair (decMaybe decSpan (fuel - 1) b1) (\msp, b2 => thenPair (decMaybe decStr (fuel - 1) b2) (\reason, b3 => Just (Pair (Candidate text msp reason) b3))))
+
+encCall : CallInfo -> List String -> List String
+encCall ci acc =
+  encStr ci.callCallee
+    (encStr ci.callArg (encStr ci.callRelation (encMaybe encSpan ci.callSpan acc)))
+
+decCall : Int -> Cur -> Maybe (Pair CallInfo Cur)
+decCall fuel c =
+  thenPair (decStr (fuel - 1) c)
+    (\callee, b1 => thenPair (decStr (fuel - 1) b1) (\arg, b2 => thenPair (decStr (fuel - 1) b2) (\rel, b3 => thenPair (decMaybe decSpan (fuel - 1) b3) (\msp, b4 => Just (Pair (CallInfo callee arg rel msp) b4)))))
+
+-- DiagField 的 tag：0..9
+encField : DiagField -> List String -> List String
+encField f acc = case f of
+  FieldExpected s => encTag 0 (encStr s acc)
+  FieldFound s => encTag 1 (encStr s acc)
+  FieldName s => encTag 2 (encStr s acc)
+  FieldCandidates cs => encTag 3 (encList encCandidate cs acc)
+  FieldCall ci => encTag 4 (encCall ci acc)
+  FieldQuantity name declared observed =>
+    encTag 5 (encStr name (encInt declared (encInt observed acc)))
+  FieldEffect s => encTag 6 (encStr s acc)
+  FieldModule s => encTag 7 (encStr s acc)
+  FieldSpan name sp => encTag 8 (encStr name (encSpan sp acc))
+  FieldNote s => encTag 9 (encStr s acc)
+
+decField : Int -> Cur -> Maybe (Pair DiagField Cur)
+decField fuel c = thenPair (decTag (fuel - 1) c) (\tg, b1 => case tg of
+  0 => thenPair (decStr (fuel - 1) b1) (\s, b2 => Just (Pair (FieldExpected s) b2))
+  1 => thenPair (decStr (fuel - 1) b1) (\s, b2 => Just (Pair (FieldFound s) b2))
+  2 => thenPair (decStr (fuel - 1) b1) (\s, b2 => Just (Pair (FieldName s) b2))
+  3 =>
+    thenPair (decList decCandidate (fuel - 1) b1) (\cs, b2 => Just (Pair (FieldCandidates cs) b2))
+  4 => thenPair (decCall (fuel - 1) b1) (\ci, b2 => Just (Pair (FieldCall ci) b2))
+  5 =>
+    thenPair (decStr (fuel - 1) b1)
+      (\name, b2 => thenPair (decInt (fuel - 1) b2) (\d, b3 => thenPair (decInt (fuel - 1) b3) (\o, b4 => Just (Pair (FieldQuantity name d o) b4))))
+  6 => thenPair (decStr (fuel - 1) b1) (\s, b2 => Just (Pair (FieldEffect s) b2))
+  7 => thenPair (decStr (fuel - 1) b1) (\s, b2 => Just (Pair (FieldModule s) b2))
+  8 =>
+    thenPair (decStr (fuel - 1) b1)
+      (\name, b2 => thenPair (decSpan (fuel - 1) b2) (\sp, b3 => Just (Pair (FieldSpan name sp) b3)))
+  9 => thenPair (decStr (fuel - 1) b1) (\s, b2 => Just (Pair (FieldNote s) b2))
+  _ => Nothing
+)
+
+encOrigin : Origin -> List String -> List String
+encOrigin OriginDirect acc = encTag 0 acc
+encOrigin (OriginCascade parent) acc = encTag 1 (encMaybe encInt parent acc)
+
+decOrigin : Int -> Cur -> Maybe (Pair Origin Cur)
+decOrigin fuel c = thenPair (decTag (fuel - 1) c) (\tg, b1 => case tg of
+  0 => Just (Pair OriginDirect b1)
+  1 => thenPair (decMaybe decInt (fuel - 1) b1) (\p, b2 => Just (Pair (OriginCascade p) b2))
+  _ => Nothing
+)
+
+encIce : IceInfo -> List String -> List String
+encIce (IceInfo iphase ifn iinv ifp ihint) acc =
+  encTag (phaseTag iphase) (encStr ifn (encStr iinv (encStr ifp (encStr ihint acc))))
+
+decIce : Int -> Cur -> Maybe (Pair IceInfo Cur)
+decIce fuel c = thenPair (decTag (fuel - 1) c) (\pt, b1 => case phaseOfTag pt of
+  Nothing => Nothing
+  Just phase =>
+    thenPair (decStr (fuel - 1) b1)
+      (\fn, b2 => thenPair (decStr (fuel - 1) b2) (\inv, b3 => thenPair (decStr (fuel - 1) b3) (\fp, b4 => thenPair (decStr (fuel - 1) b4) (\hint, b5 => Just (Pair (IceInfo phase fn inv fp hint) b5)))))
+)
+
+decTrace : Int -> Cur -> Maybe (Pair TraceFrame Cur)
+decTrace fuel c = thenPair (decTag (fuel - 1) c) (\pt, b1 => case phaseOfTag pt of
+  Nothing => Nothing
+  Just phase =>
+    thenPair (decStr (fuel - 1) b1)
+      (\text, b2 => thenPair (decMaybe decSpan (fuel - 1) b2) (\msp, b3 => thenPair (decCount (fuel - 1) b3) (\n, b4 => if n == 0 then Just (Pair (TraceFrame phase text msp []) b4) else Nothing)))
+)
+
+encDiagList : List Diagnostic -> List String -> List String
+encDiagList ds acc = "[${strFromInt (lenOf ds)}:" :: encDiagListGo ds acc
+
+encDiagListGo : List Diagnostic -> List String -> List String
+encDiagListGo [] acc = acc
+encDiagListGo (d :: rest) acc = encDiag d (encDiagListGo rest acc)
+
+encTrace : TraceFrame -> List String -> List String
+-- trace 子帧不落缓存（生产侧只生成单层；如未来需要嵌套，bump diag codec）。
+encTrace (TraceFrame tphase ttext tsp _tkids) acc =
+  encTag (phaseTag tphase) (encStr ttext (encMaybe encSpan tsp ("[0:" :: acc)))
+
+encDiag : Diagnostic -> List String -> List String
+encDiag (Diagnostic did dsev dphase dcat dcode dmsg dlabels dfields dtrace dnotes dsugs dorigin dkids dinternal dice dabsent dstab) acc =
+  encInt did
+    (encTag (sevTag dsev) (encTag (phaseTag dphase) (encTag (catTag dcat) (encStr dcode (encStr dmsg (encList encLabel dlabels (encList encField dfields (encList encTrace dtrace (encList encStr dnotes (encList encSuggestion dsugs (encOrigin dorigin (encDiagList dkids (encBool dinternal (encMaybe encIce dice (encMaybe absentEnc dabsent (encTag (stabilityTag dstab) acc))))))))))))))))
+
+decDiag : Int -> Cur -> Maybe (Pair Diagnostic Cur)
+decDiag fuel c = if fuel <= 0 then Nothing
+else thenPair (decInt (fuel - 1) c) (\id, b1 => thenPair (decTag (fuel - 1) b1) (\st, b2 => case sevOfTag st of
+  Nothing => Nothing
+  Just sev => thenPair (decTag (fuel - 1) b2) (\pt, b3 => case phaseOfTag pt of
+    Nothing => Nothing
+    Just phase => thenPair (decTag (fuel - 1) b3) (\ct, b4 => case catOfTag ct of
+      Nothing => Nothing
+      Just cat => thenPair (decStr (fuel - 1) b4) (\code, b5 => thenPair (decStr (fuel - 1) b5) (\msg, b6 => thenPair (decList decLabel (fuel - 1) b6) (\labels, b7 => thenPair (decList decField (fuel - 1) b7) (\fields, b8 => thenPair (decList decTrace (fuel - 1) b8) (\trace, b9 => thenPair (decList decStr (fuel - 1) b9) (\notes, b10 => thenPair (decList decSuggestion (fuel - 1) b10) (\sugs, b11 => thenPair (decOrigin (fuel - 1) b11) (\origin, b12 => thenPair (decDiagList (fuel - 1) b12) (\kids, b13 => thenPair (decBool (fuel - 1) b13) (\internal, b14 => thenPair (decMaybe decIce (fuel - 1) b14) (\ice, b15 => thenPair (decMaybe decTag (fuel - 1) b15) (\mtag, b16 => case mtAbsent mtag of
+        Nothing => Nothing
+        Just absent => thenPair (decTag (fuel - 1) b16) (\stab, b17 => case stabilityOfTag stab of
+          Nothing => Nothing
+          Just stability =>
+            Just
+              (Pair (Diagnostic id sev phase cat code msg labels fields trace notes sugs origin kids internal ice absent stability) b17)
+        )
+      )
+      )
+      )
+      )
+      )
+      )
+      )
+      )
+      )
+      )
+      )
+      )
+    )
+  )
+)
+)
+
+-- 诊断子节点表（递归）。
+decDiagList : Int -> Cur -> Maybe (Pair (List Diagnostic) Cur)
+decDiagList fuel c = if fuel <= 0 then Nothing
+else case decCount (fuel - 1) c of
+  Nothing => Nothing
+  Just (Pair n b1) => decDiagItems (fuel - 1) n b1 []
+
+decDiagItems : Int -> Int -> Cur -> List Diagnostic -> Maybe (Pair (List Diagnostic) Cur)
+decDiagItems fuel n c acc = if fuel <= 0 then Nothing
+else if n <= 0 then Just (Pair (reverse acc) c)
+else case decDiag (fuel - 1) c of
+  Nothing => Nothing
+  Just (Pair d b) => decDiagItems (fuel - 1) (n - 1) b (d :: acc)
+
+mtAbsent : Maybe Int -> Maybe (Maybe NoSourceReason)
+mtAbsent Nothing = Just Nothing
+mtAbsent (Just t) = case absentOfTag t of
+  Nothing => Nothing
+  Just r => Just (Just r)
+
+-- 无位置理由的编码器（`encMaybe` 需要一级函数）。
+absentEnc : NoSourceReason -> List String -> List String
+absentEnc r acc = encTag (absentTag r) acc
+
+-- ---------------------------------------------------------------
+-- 对外：诊断列表 / 包级 check 结果
+-- ---------------------------------------------------------------
+-- | 诊断列表的规范载荷（`Store` framing 之前）。
+export encDiagnostics : List Diagnostic -> String
+encDiagnostics ds = encConcat (encDiagList ds [])
+
+export decDiagnostics : String -> Maybe (List Diagnostic)
+decDiagnostics payload =
+  let
+    fuel = strLength payload + 1
+  in case decDiagList fuel (curOf payload) of
+    Nothing => Nothing
+    Just (Pair ds rest) => if curAtEnd rest then Just ds else Nothing
+
+-- | 包级 check 的结果：通过（诊断通常是 warning）或失败（首错 + 后续）。
+export data CheckOutcome(..) : Type where
+  CheckPassed : List Diagnostic -> CheckOutcome
+  CheckFailed : List Diagnostic -> CheckOutcome
+
+checkOutcomeCodec : String
+checkOutcomeCodec = "check-result 1"
+
+encOutcome : CheckOutcome -> List String -> List String
+encOutcome (CheckPassed ds) acc = encTag 0 (encDiagList ds acc)
+encOutcome (CheckFailed ds) acc = encTag 1 (encDiagList ds acc)
+
+decOutcome : Int -> Cur -> Maybe (Pair CheckOutcome Cur)
+decOutcome fuel c = thenPair (decTag (fuel - 1) c) (\tg, b1 => thenPair (decDiagList (fuel - 1) b1) (\ds, b2 => case tg of
+  0 => Just (Pair (CheckPassed ds) b2)
+  1 => Just (Pair (CheckFailed ds) b2)
+  _ => Nothing
+)
+)
+
+-- | `CheckOutcome` 的落盘 codec 名。
+export checkResultCodec : String
+checkResultCodec = checkOutcomeCodec
+
+export encCheckOutcome : CheckOutcome -> String
+encCheckOutcome o = encConcat (encOutcome o [])
+
+export decCheckOutcome : String -> Maybe CheckOutcome
+decCheckOutcome payload =
+  let
+    fuel = strLength payload + 1
+  in case decOutcome fuel (curOf payload) of
+    Nothing => Nothing
+    Just (Pair o rest) => if curAtEnd rest then Just o else Nothing

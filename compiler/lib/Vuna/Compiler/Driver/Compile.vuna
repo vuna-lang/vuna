@@ -30,6 +30,7 @@ import Vuna.Compiler.Driver.Dt
 import Vuna.Compiler.Elab
 import Vuna.Compiler.Driver.Cache
 import Vuna.Compiler.Driver.Iface
+import Vuna.Compiler.Diag.Codec
 import Vuna.Compiler.Driver.Split
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Loader
@@ -1443,9 +1444,71 @@ toolCompilerFingerprint = compilerFingerprint
 -- `VUNA_ELAB_FULL=1`（强制全量）、`VUNA_IFACE_AUDIT=1`（双路径对拍）都直接绕过判定
 -- （既不判命中也不提交），保持各自的既有语义。
 -- 没有节点执行器，也就没有 span / 预算 / trace。
--- check marker 的 codec：空载荷（存在性即是全部信息）。
-checkMarkerCodec : String
-checkMarkerCodec = "check-marker 1"
+-- 缓存载荷里的路径一律**包相对**：同一份内容在不同 checkout / 共享 store 下编码一致。
+canonicalDir : String -> String
+canonicalDir dir =
+  if endsWith "/" dir then substring 0 (natFromInt (strLength dir - 1)) dir else dir
+
+canonicalPath : String -> String -> String
+canonicalPath dir file =
+  let
+    d = canonicalDir dir
+  in if d == "." || d == "" then file
+  else if startsWith "${d}/" file then substring (natFromInt (strLength d + 1)) (natFromInt (strLength file - strLength d - 1)) file
+  else file
+
+resolveStoredPath : String -> String -> String
+resolveStoredPath dir file =
+  let
+    d = canonicalDir dir
+  in if file == "" || startsWith "/" file then file
+  else if d == "." || d == "" then file else "${d}/${file}"
+
+absoluteSpanLabel : Label -> Bool
+absoluteSpanLabel l = case l.labelSpan of
+  Nothing => False
+  Just sp => startsWith "/" sp.spanFile
+
+hasAbsoluteLabels : List Label -> Bool
+hasAbsoluteLabels [] = False
+hasAbsoluteLabels (l :: rest) = absoluteSpanLabel l || hasAbsoluteLabels rest
+
+anyAbsoluteChild : List Diagnostic -> Bool
+anyAbsoluteChild [] = False
+anyAbsoluteChild (k :: rest) = diagHasAbsolutePath k || anyAbsoluteChild rest
+
+diagHasAbsolutePath : Diagnostic -> Bool
+diagHasAbsolutePath (Diagnostic _ _ _ _ _ _ labels _ _ _ _ _ kids _ _ _ _) =
+  hasAbsoluteLabels labels || anyAbsoluteChild kids
+
+isStableDiag : Diagnostic -> Bool
+isStableDiag d = case d.diagStability of
+  Stable => True
+  Volatile => False
+
+allStableDiags : List Diagnostic -> Bool
+allStableDiags ds = length (filter (\d => not (isStableDiag d)) ds) == 0
+
+-- 存储前：路径规范化为包相对；仍为绝对路径的诊断标 Volatile（不落盘）。
+prepareForStore : PackageContext -> Diagnostic -> Diagnostic
+prepareForStore ctx d =
+  let
+    d2 = mapSpanFile (canonicalPath (contextDir ctx)) d
+  in if diagHasAbsolutePath d2 then withStability Volatile d2
+  else if isStableDiag d2 then withStability Stable d2 else d2
+
+resolveStoredDiag : PackageContext -> Diagnostic -> Diagnostic
+resolveStoredDiag ctx d = mapSpanFile (resolveStoredPath (contextDir ctx)) d
+
+replayFailure : List Diagnostic -> Check (List Diagnostic)
+replayFailure [] = OkC []
+replayFailure ([d]) = ErrC d
+replayFailure (d :: rest) = ErrC (withChildren rest d)
+
+storeCheckPayload : PackageContext -> String -> CheckOutcome -> Eff hostRow Int
+storeCheckPayload ctx dig outcome = do
+  _ <- storeObjectWriteEff "check" checkResultCodec dig (encCheckOutcome outcome)
+  rootKeepEff ctx [dig]
 
 -- 包级缓存判定的输入摘要（纯数据；key 由 `checkInOf` / `splitInOf` 换算成对象地址）。
 --
@@ -1494,23 +1557,62 @@ checkViaGraph ctx mods run = do
     let
       dig = checkInOf mods
     in do
-      cached <- storeObjectExistsEff "check" dig
-      if cached then do
-        let
-          _ = dbg! "cache-path=hit"
-        in do
-          pure (OkC [])
-      else do
-        r <- run
-        case r of
-          ErrC e => pure (ErrC e)
-          OkC ds => do
-            _ <- storeObjectWriteEff "check" checkMarkerCodec dig ""
-            _ <- rootKeepEff ctx [dig]
+      payload <- storeObjectReadEff "check" checkResultCodec dig
+      case payload of
+        Just raw => case decCheckOutcome raw of
+          Just (CheckPassed ds) => do
             let
-              _ = dbg! "cache-path=miss"
+              _ = dbg! "cache-path=hit"
             in do
-              pure (OkC ds)
+              pure (OkC (map (resolveStoredDiag ctx) ds))
+          Just (CheckFailed ds) => do
+            let
+              _ = dbg! "cache-path=hit"
+            in do
+              pure (replayFailure (map (resolveStoredDiag ctx) ds))
+          Nothing => runAndStore ctx dig run
+        Nothing => runAndStore ctx dig run
+
+-- 未命中：跑精化，把结果（通过/失败 + 诊断）作为输入寻址载荷落盘。
+-- 含绝对路径或 Volatile 诊断时不落盘（下次重算），保证载荷是地址输入的纯函数。
+runAndStore : PackageContext -> String -> Eff hostRow (Check (List Diagnostic)) -> Eff hostRow (Check (List Diagnostic))
+runAndStore ctx dig run = do
+  let
+    _ = dbg! "cache-path=miss"
+  in do
+    r <- run
+    case r of
+      ErrC e =>
+        let
+          stored = map (prepareForStore ctx) [e]
+          _ =
+            dbg!
+              "check-store stable=${strFromInt (length (filter (\d => isStableDiag d) stored))}/${strFromInt (length stored)}"
+        in if allStableDiags stored then do
+          n <- storeCheckPayload ctx dig (CheckFailed stored)
+          let
+            _ = dbg! "check-store write=${strFromInt n}"
+          in pure (ErrC e)
+        else do
+          let
+            _ = dbg! "check-cache=skip volatile"
+          in pure (ErrC e)
+      OkC ds =>
+        let
+          -- Pass 只持久化「本包可达」的 Stable 诊断：依赖包 warning 的路径不在本包目录下
+          -- （绝对路径跨 checkout 不可复用），显示侧本来也会被 ownedByPackage 过滤。
+          allStored = map (prepareForStore ctx) ds
+          stored = filter isStableDiag allStored
+          dropped = length allStored - length stored
+          _ =
+            dbg!
+              "check-store pass stable=${strFromInt (length stored)}/${strFromInt (length allStored)}"
+          _ = if dropped > 0 then dbg! "check-store dropped=${strFromInt dropped}" else 0
+        in do
+          n <- storeCheckPayload ctx dig (CheckPassed stored)
+          let
+            _ = dbg! "check-store write=${strFromInt n}"
+          in pure (OkC ds)
 
 checkCachedExe : Bool -> PackageContext -> String -> Eff hostRow (Check (List Diagnostic))
 checkCachedExe wantWarnings ctx entry = do

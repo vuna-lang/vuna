@@ -232,6 +232,30 @@ normalizeSite d =
   if hasPrimaryLabel d.diagLabels then { { d | diagAbsent = Nothing } | diagStability = Stable }
   else d
 
+-- | 改写诊断的稳定性（缓存边界用：路径不可规范化时标 Volatile）。
+export withStability : Stability -> Diagnostic -> Diagnostic
+withStability s d = { d | diagStability = s }
+
+-- | 对诊断（含 children）的每个 label span 的文件部分做变换（路径规范化/还原）。
+export mapSpanFile : (String -> String) -> Diagnostic -> Diagnostic
+mapSpanFile f (Diagnostic did sev phase cat code msg labels fields trace notes sugs origin kids internal ice absent stab) =
+  Diagnostic did sev phase cat code msg (map (mapLabelFile f) labels) fields trace notes sugs origin
+    (mapDiagChildren f kids) internal ice absent stab
+
+-- 递归 children 用直接结构递归（SCT 不接受 map 里的高阶递归边）。
+mapDiagChildren : (String -> String) -> List Diagnostic -> List Diagnostic
+mapDiagChildren f [] = []
+mapDiagChildren f (k :: rest) = Base.List.Cons (mapSpanFile f k) (mapDiagChildren f rest)
+
+mapLabelFile : (String -> String) -> Label -> Label
+mapLabelFile f (Label msp text style prov) =
+  Label (mapSpanPath f msp) text style (mapSpanPath f prov)
+
+mapSpanPath : (String -> String) -> Maybe Span -> Maybe Span
+mapSpanPath f Nothing = Nothing
+mapSpanPath f (Just sp) =
+  Just (Span (f sp.spanFile) sp.spanStartLine sp.spanStartCol sp.spanEndLine sp.spanEndCol)
+
 -- | 显式声明「无源码位置」的理由（没有主 span 时由产生点调用）。
 export withAbsent : NoSourceReason -> Diagnostic -> Diagnostic
 withAbsent reason d =

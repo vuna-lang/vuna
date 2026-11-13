@@ -22,7 +22,7 @@ $VUNA_STORE/                       # 唯一根：VUNA_STORE → XDG → ~/.vuna/
   objects/header/<头地址>           # 模块 header（imports + fixities），冷启动快路径
   objects/lex/<源摘要>              # lex tokens
   objects/order/<包摘要>            # 该包的模块顺序（split 串接要精化顺序，不是拓扑序）
-  objects/check/<checkIn>           # 包级判定 marker（空载荷）
+  objects/check/<checkIn>           # 包级结果：Pass/Fail + 诊断列表（codec check-result 1）
   objects/tool/<工具会话地址>       # LSP / REPL / vuna map 的会话载荷
   objects/mods/<闭包摘要>           # 模块接口地址表（冷 check 的 assign 快路径）
   objects/test/<测试判定 key>       # test verdict（通过/失败计数）
@@ -50,7 +50,7 @@ views/testbin/<testBin>/          # effect 测试编译产物（bin/vuna-test，
 
 | 场景 | 判据 | 未命中的代价 |
 | --- | --- | --- |
-| 包级 `check` | `objects/check/<checkIn>` 存在 | 精化一次；成功后写 marker + 登记 roots |
+| 包级 `check` | `objects/check/<checkIn>` 存在且可解码 | 精化一次；结果（含**失败**与诊断列表）写回 + 登记 roots |
 | 包级 `build`（快路径） | `objects/splitptr/<splitIn>` → 语义 blob | 精化一次再按语义 key 判 |
 | 包级 `build`（语义产物） | `blobs/<splitIdentity>` 存在 | codegen + 规范排序；成功后写 blob + 快指针 |
 | 依赖模块接口 | 按地址读 `objects/iface/<addr>` | 缺任一个依赖模块 ⇒ 回退全量（宁可慢，不用错） |
@@ -127,10 +127,13 @@ views/testbin/<testBin>/          # effect 测试编译产物（bin/vuna-test，
 
 | 标签 | 含义 |
 | --- | --- |
-| `cache-path=hit` / `cache-path=miss` | 包级 check 判定结果 |
+| `cache-path=hit` / `cache-path=miss` | 包级 check 判定结果（hit 时重放 Pass/Fail 诊断） |
+| `check-store stable=N/M` | 诊断落盘前的稳定性检查（M 条里 N 条 Stable） |
+| `check-store write=N` | 诊断载荷写盘返回（0 = 内容未变，1 = 写入） |
+| `check-cache=skip volatile` | 结果含 Volatile/绝对路径诊断 ⇒ 不落盘，下次重算 |
 | `split-pointer-hit` | build 命中快指针（源码未改动，零精化） |
 | `split-identity-hit` | 精化后命中语义产物 blob（注释类改动复用 codegen） |
-| `dep-identity=<pkg> verdict=iface\|manifest` | 依赖身份取自 `objects/pkgiface` 还是 manifest 回退 |
+| `dep-identity=<pkg> verdict=iface|manifest` | 依赖身份取自 `objects/pkgiface` 还是 manifest 回退 |
 | `iface-write=N/M` | 本次真的写盘的接口对象数（内容未变的写入不计） |
 | `iface-skip partial` | 这次 check 只覆盖部分模块（入口闭包），不写接口，等库面那遍写全 |
 | `check-lib-skip covered=N` | 入口闭包已写全 N 个导出模块（order 覆盖）⇒ 不再补跑第二遍 lib check |
@@ -145,10 +148,26 @@ views/testbin/<testBin>/          # effect 测试编译产物（bin/vuna-test，
 `--debug-query`）随图一起删除。现在排查「为什么 miss」靠比对地址：`addrOf` 的输入项都在
 上面的表里，逐个对即可。
 
+## 诊断载荷与重放
+
+- **载荷就是结果**：`objects/check/<checkIn>` 存 `CheckPassed ds` / `CheckFailed ds` + 诊断列表
+  （`Diag.Codec` 规范编码）。命中时直接重放：Pass 返回诊断（通常是 warning），Fail 用首条
+  诊断 + children 重建错误通道。失败检查因此也是 O(读对象)，不再每次全量精化。
+- **载荷是输入的纯函数**：落盘前把 label 路径规范化为**包相对**路径；含绝对路径或
+  `Volatile`（工具/包图/合成、无源码位置）的诊断**不落盘**，下次 miss 重算。读回时按
+  当前 `contextDir` 还原路径——同一份内容在不同 checkout / 不同目录共享 store 时，
+  输出指向当前项目自己的文件。
+- **Pass 只落本包可达的 Stable 诊断**：依赖包 warning 的路径在包目录之外（绝对路径不可跨
+  checkout 复用），显示侧本来也会被 `ownedByPackage` 过滤，因此落盘前丢弃并在
+  `check-store dropped=N` 里可见；Fail 则要求整条错误 Stable，否则不落盘。
+- **坏载荷只降级**：解码失败/截断按 miss 处理并重写；删除对象只是重算。
+- **trace 子帧不落盘**：当前产生侧只生成单层 trace；嵌套子帧若将来出现需 bump diag codec。
+
 ## 已知边界
 
-- **warning 不持久化**：命中判定会跳过精化，警告因此只在未命中的那次出现。`-W` /
-  `--deny-warnings` 直接绕过判定（不判命中也不提交）。
+- **warning 可能不完整**：诊断列表会随 Pass 一起落盘，但「干净模块复用」的那次运行只拿到
+  被精化模块的 warning；`-W` / `--deny-warnings` 仍直接绕过判定（不判命中也不提交），
+  以保证热缓存下告警完整。普通 `vuna check` 的命中/失败重放不受影响。
 - **入口-only 包不写接口**：单文件夹具没有可复用的库模块面，写接口会让后续阶段命中缓存而
   跳过精化，`UN_UnusedImport` 这类只在精化期产生的诊断会静默消失。
 - **模块顺序是显式对象**：split 串接要精化顺序，而 import 图有环（`base`/`compiler` 都有），

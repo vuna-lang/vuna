@@ -87,6 +87,7 @@ Vuna.Compiler.Core.Conv  compiler/lib/Vuna/Compiler/Core/Conv.vuna
 Vuna.Compiler.Core.Eval  compiler/lib/Vuna/Compiler/Core/Eval.vuna
 Vuna.Compiler.Core.Term  compiler/lib/Vuna/Compiler/Core/Term.vuna
 Vuna.Compiler.Core  compiler/lib/Vuna/Compiler/Core.vuna
+Vuna.Compiler.Diag.Codec  compiler/lib/Vuna/Compiler/Diag/Codec.vuna
 Vuna.Compiler.Diag.Format  compiler/lib/Vuna/Compiler/Diag/Format.vuna
 Vuna.Compiler.Diag  compiler/lib/Vuna/Compiler/Diag.vuna
 Vuna.Compiler.Diagnostics.Cg  compiler/lib/Vuna/Compiler/Diagnostics/Cg.vuna
@@ -237,6 +238,7 @@ Vuna.Compiler.Core.Conv  ./lib/Vuna/Compiler/Core/Conv.vuna
 Vuna.Compiler.Core.Eval  ./lib/Vuna/Compiler/Core/Eval.vuna
 Vuna.Compiler.Core.Term  ./lib/Vuna/Compiler/Core/Term.vuna
 Vuna.Compiler.Core  ./lib/Vuna/Compiler/Core.vuna
+Vuna.Compiler.Diag.Codec  ./lib/Vuna/Compiler/Diag/Codec.vuna
 Vuna.Compiler.Diag.Format  ./lib/Vuna/Compiler/Diag/Format.vuna
 Vuna.Compiler.Diag  ./lib/Vuna/Compiler/Diag.vuna
 Vuna.Compiler.Diagnostics.Cg  ./lib/Vuna/Compiler/Diagnostics/Cg.vuna

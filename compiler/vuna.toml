@@ -14,6 +14,7 @@ modules = [
   "Vuna.Compiler.Common",
   "Vuna.Compiler.Diag",
   "Vuna.Compiler.Diag.Format",
+  "Vuna.Compiler.Diag.Codec",
   "Vuna.Compiler.Diagnostics.Ic",
   "Vuna.Compiler.Driver.CompilerCli",
   "Vuna.Compiler.Addr",

@@ -100,8 +100,8 @@ Diagnostic = { id, severity, phase, category, code, message, labels, fields, tra
 命名 `_`、trait 字典字段 `_f<n>`）同样不参与 `UN_UnusedBinder` / `UN_ShadowedBinder`。
 `UN_UnusedImport` 按「解析结果里实际引用的 canonical target（含重载构造子候选、do 链的
 bind 目标）+ 模块头 `module X` 重导出」判定（alias 归一到 import 名；模板字符串降级合成的
-`Base.Interp.interp` 不算使用，与旧判定一致）；warning 不写入 iface / check 结果缓存，
-`-W` / `--deny-warnings` 会强制本包模块重新精化以避免漏报（见
+`Base.Interp.interp` 不算使用，与旧判定一致）；warning 不写进 iface；check 结果缓存会带上 warning，但「干净模块复用」的运行可能不完整，
+`-W` / `--deny-warnings` 因此仍强制本包模块重新精化以避免漏报（见
 [tooling.md](tooling.md) 退出码一节）。
 
 warning 的**通道**（M4 起）没有进程内全局收集器：Elab 期 `warnAt*`

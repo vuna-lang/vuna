@@ -42,3 +42,15 @@ exit: 0
 #      （字节列会多出 8 个空格；这里断言 | 到 ^ 的显示偏移为 19）。
 run: sh -c 'set -e; d="$TMPDIR/cjk"; rm -rf "$d"; mkdir -p "$d"; printf "main : String\nmain = \"中文中文\" ++ 1\n" > "$d/a.vuna"; out=$("$VUNA" check "$d/a.vuna" 2>&1 || true); line=$(printf "%s\n" "$out" | grep -F "^" | tail -1); tail=${line#*|}; [ "${#tail}" -eq 19 ]'
 exit: 0
+
+# 15f) 失败检查按输入地址 replay：第二次 check 命中缓存，错误与位置逐字一致。
+run: sh -c 'set -e; d="$TMPDIR/replay"; rm -rf "$d"; cp -R "$VUNA_SUITE_ROOT/test/corpus/packages/01_workspace" "$d"; sed -i "s|../../../../base|$VUNA_SUITE_ROOT/base|" "$d/vuna.toml"; printf "main : Int\nmain = \"boom\"\n" > "$d/app/Main.vuna"; out1=$("$VUNA" check "$d" 2>&1 || true); err=$("$VUNA" check "$d" --debug-perf 2>&1 >/dev/null || true); printf "%s" "$err" | grep -q "cache-path=hit"; out2=$("$VUNA" check "$d" 2>&1 || true); [ "$out1" = "$out2" ]'
+exit: 0
+
+# 15g) 同内容不同目录共享 store：命中后路径按**当前**项目解析，不泄露上一个目录。
+run: sh -c 'set -e; roots="$TMPDIR/rp"; rm -rf "$roots"; mkdir -p "$roots"; for n in a b; do d="$roots/$n"; cp -R "$VUNA_SUITE_ROOT/test/corpus/packages/01_workspace" "$d"; sed -i "s|../../../../base|$VUNA_SUITE_ROOT/base|" "$d/vuna.toml"; printf "main : Int\nmain = \"boom\"\n" > "$d/app/Main.vuna"; done; "$VUNA" check "$roots/a" >/dev/null 2>&1 || true; out=$("$VUNA" check "$roots/b" 2>&1 || true); printf "%s" "$out" | grep -q "$roots/b/app/Main.vuna"; if printf "%s" "$out" | grep -q "$roots/a/app/Main.vuna"; then exit 1; fi'
+exit: 0
+
+# 15h) 坏载荷只降级为 miss：篡改 check 对象后仍能重算并给出正确诊断。
+run: sh -c 'set -e; d="$TMPDIR/corrupt"; st="$TMPDIR/corrupt-store"; rm -rf "$d" "$st"; cp -R "$VUNA_SUITE_ROOT/test/corpus/packages/01_workspace" "$d"; sed -i "s|../../../../base|$VUNA_SUITE_ROOT/base|" "$d/vuna.toml"; printf "main : Int\nmain = \"boom\"\n" > "$d/app/Main.vuna"; VUNA_STORE="$st" "$VUNA" check "$d" >/dev/null 2>&1 || true; obj=$(find "$st/objects/check" -type f | head -1); printf "garbage" > "$obj"; out=$(VUNA_STORE="$st" "$VUNA" check "$d" 2>&1 || true); printf "%s" "$out" | grep -q "TC_TypeMismatch"'
+exit: 0
