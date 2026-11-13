@@ -15,6 +15,7 @@ module Vuna.Registry where
 --
 -- 索引放在任何地方：本地目录、`file://`、`http(s)://`（后者由宿主 `curl` 取一次）。
 -- 索引不可信：写回 manifest 的永远是 `(源, hash)`，之后 fetch/check 只认摘要。
+import Base.HostRow
 import Vuna.Compiler.Common
 import Vuna.Compiler.Diagnostics.Pkg
 import Vuna.Compiler.Frontend.Manifest
@@ -108,7 +109,7 @@ isFileUrl : String -> Bool
 isFileUrl s = startsWith "file://" s
 
 -- | 读索引条目：目录 / `file://` / `http(s)://`（后者经宿主 `curl` 落到临时文件）。
-export loadRegistryEntryEff : String -> String -> Eff [] (Check RegistryEntry)
+export loadRegistryEntryEff : String -> String -> Eff hostRow (Check RegistryEntry)
 loadRegistryEntryEff indexRoot name =
   let
     root = stripIndexSlash indexRoot
@@ -119,18 +120,19 @@ loadRegistryEntryEff indexRoot name =
       tmp = "${base}/index-${name}.toml"
     in do
       _ <- ensureDirPath base
-      code <- prim_eff_runIn base ["curl", "-fsSL", "${root}/${fileName}", "-o", tmp]
+      code <-
+        raiseToRow hostRow (@vuna@prim_eff_runIn base ["curl", "-fsSL", "${root}/${fileName}", "-o", tmp])
       if code /= 0 then pure (pkgNoLoc1 (IndexMalformed "cannot fetch ${root}/${fileName}") fileName)
       else do
-        text <- prim_eff_readFile tmp
+        text <- raiseToRow hostRow (@vuna@prim_eff_readFile tmp)
         pure (parseRegistryEntry tmp text)
   else
     let
       dir = if isFileUrl root then substring 7 (natFromInt (strLength root - 7)) root else root
       filePath = "${dir}/${fileName}"
     in do
-      exists <- prim_eff_fileExists filePath
+      exists <- raiseToRow hostRow (@vuna@prim_eff_fileExists filePath)
       if exists then do
-        text <- prim_eff_readFile filePath
+        text <- raiseToRow hostRow (@vuna@prim_eff_readFile filePath)
         pure (parseRegistryEntry filePath text)
       else pure (pkgNoLoc1 (IndexMalformed "index entry not found: ${filePath}") fileName)

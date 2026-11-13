@@ -167,7 +167,6 @@ Base.Bool  base/lib/Base/Bool.vuna
 Base.Eff.Reader  base/lib/Base/Eff/Reader.vuna
 Base.Eff  base/lib/Base/Eff.vuna
 Base.EffArgs  base/lib/Base/EffArgs.vuna
-Base.EffChannel  base/lib/Base/EffChannel.vuna
 Base.EffClock  base/lib/Base/EffClock.vuna
 Base.EffConsole  base/lib/Base/EffConsole.vuna
 Base.EffEnv  base/lib/Base/EffEnv.vuna
@@ -175,11 +174,9 @@ Base.EffError  base/lib/Base/EffError.vuna
 Base.EffExit  base/lib/Base/EffExit.vuna
 Base.EffExn  base/lib/Base/EffExn.vuna
 Base.EffFs  base/lib/Base/EffFs.vuna
-Base.EffMutex  base/lib/Base/EffMutex.vuna
 Base.EffNet  base/lib/Base/EffNet.vuna
 Base.EffProcess  base/lib/Base/EffProcess.vuna
 Base.EffRef  base/lib/Base/EffRef.vuna
-Base.EffSched  base/lib/Base/EffSched.vuna
 Base.EffState  base/lib/Base/EffState.vuna
 Base.EffStdin  base/lib/Base/EffStdin.vuna
 Base.Eq  base/lib/Base/Eq.vuna
@@ -192,6 +189,7 @@ Base.FromString  base/lib/Base/FromString.vuna
 Base.HashMap  base/lib/Base/HashMap.vuna
 Base.HashSet  base/lib/Base/HashSet.vuna
 Base.Hashable  base/lib/Base/Hashable.vuna
+Base.HostRow  base/lib/Base/HostRow.vuna
 Base.IORef  base/lib/Base/IORef.vuna
 Base.Int  base/lib/Base/Int.vuna
 Base.Interp  base/lib/Base/Interp.vuna
@@ -323,7 +321,6 @@ Base.Bool  ./lib/Base/Bool.vuna
 Base.Eff.Reader  ./lib/Base/Eff/Reader.vuna
 Base.Eff  ./lib/Base/Eff.vuna
 Base.EffArgs  ./lib/Base/EffArgs.vuna
-Base.EffChannel  ./lib/Base/EffChannel.vuna
 Base.EffClock  ./lib/Base/EffClock.vuna
 Base.EffConsole  ./lib/Base/EffConsole.vuna
 Base.EffEnv  ./lib/Base/EffEnv.vuna
@@ -331,11 +328,9 @@ Base.EffError  ./lib/Base/EffError.vuna
 Base.EffExit  ./lib/Base/EffExit.vuna
 Base.EffExn  ./lib/Base/EffExn.vuna
 Base.EffFs  ./lib/Base/EffFs.vuna
-Base.EffMutex  ./lib/Base/EffMutex.vuna
 Base.EffNet  ./lib/Base/EffNet.vuna
 Base.EffProcess  ./lib/Base/EffProcess.vuna
 Base.EffRef  ./lib/Base/EffRef.vuna
-Base.EffSched  ./lib/Base/EffSched.vuna
 Base.EffState  ./lib/Base/EffState.vuna
 Base.EffStdin  ./lib/Base/EffStdin.vuna
 Base.Eq  ./lib/Base/Eq.vuna
@@ -348,6 +343,7 @@ Base.FromString  ./lib/Base/FromString.vuna
 Base.HashMap  ./lib/Base/HashMap.vuna
 Base.HashSet  ./lib/Base/HashSet.vuna
 Base.Hashable  ./lib/Base/Hashable.vuna
+Base.HostRow  ./lib/Base/HostRow.vuna
 Base.IORef  ./lib/Base/IORef.vuna
 Base.Int  ./lib/Base/Int.vuna
 Base.Interp  ./lib/Base/Interp.vuna

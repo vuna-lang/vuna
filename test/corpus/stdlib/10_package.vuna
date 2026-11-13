@@ -1,7 +1,8 @@
 -- stdlib：包门面 `import Base` 覆盖多个模块（List/Sort/Map/String/Monad）。
--- P2c：宿主 console 走 Eff（runConsole）。
+-- 阶段 5：宿主 console 走 Eff hostRow（entry 自动预装 handler）。
 import Base.Eff
 import Base.EffConsole
+import Base.HostRow
 import Base
 
 sum : List Int -> Int
@@ -16,10 +17,10 @@ result =
        ++ join "-" (map (\x => strFromInt x) xs) ++ "/"
        ++ strFromInt (fromMaybe 0 (lookup "a" (insert "a" 7 empty))) ++ "/" ++ strFromInt (strLength "p")
 
-prog : Eff [ConsoleOp@real] String
+prog : Eff hostRow String
 prog = do
-  _ <- consolePrint "real" "p"
+  _ <- consolePrint "default" "p"
   pure result
 
-main : Eff [] String
-main = runConsole "real" prog
+main : Eff hostRow String
+main = prog

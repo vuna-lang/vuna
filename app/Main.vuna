@@ -1,14 +1,15 @@
 -- vuna：统一 CLI 入口（M11.5；实现在 lib/Vuna/Cli.vuna）。
--- main : Eff [] Int——由运行时执行；getArgs/exit 走宿主原语 prim_eff_getArgs / prim_eff_exit。
+-- main : Eff hostRow Int——由运行时执行；getArgs/exit 走宿主原语 @vuna@prim_eff_getArgs / @vuna@prim_eff_exit。
 -- 用法见 `vuna help`。
 import Vuna.Cli
-import Base.EffArgs
-import Base.EffExit
 import Base.Monad
 import Base.Eff
+import Base.EffArgs
+import Base.EffExit
+import Base.HostRow
 
-main : Eff [ArgsOp, ExitOp] Int
+main : Eff hostRow Int
 main = do
   args <- argsGetArgs "default"
-  code <- raise (runCli args)
+  code <- runCli args
   exitWith "default" code

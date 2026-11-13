@@ -6,13 +6,13 @@ module Vuna.TestRunner where
 --   - `main : String`：核心求值，返回空串通过（历史约定，`interpretFile` 展示成 `""`）；
 --   - `main : Int`：核心求值，值 0 通过；
 --   - `main : Bool`：核心求值，值 True 通过；
---   - `main : Eff [] a`：临时包编译 + 运行，以**进程退出码**判定（0 通过；失败测试显式
+--   - `main : Eff hostRow a`：临时包编译 + 运行，以**进程退出码**判定（0 通过；失败测试显式
 --     `exit 1`）。效果的输出直接写终端；
 --   - 其它返回类型：明确失败（不再静默当失败），错误信息里写清支持的类型。
 -- main 的类别用 `Vuna.Compiler.Driver.Dt.dtMainKind` 判定（同一份 DT 精化，不猜语法）。
 -- 编译/精化失败也按 FAIL 记录诊断（单测失败不中断其余测试）。
 --
--- W1（测试基建硬化）：`main : Eff [] a` 的单测有**超时**（默认 120s，`VUNA_TEST_TIMEOUT`
+-- W1（测试基建硬化）：`main : Eff hostRow a` 的单测有**超时**（默认 120s，`VUNA_TEST_TIMEOUT`
 -- 环境变量覆盖，0 = 关闭，非数字回落默认）。实现方式：效果测试直接在临时目录里
 -- `compileToDir` 测试入口，再用 coreutils `timeout` 包住「`sh build.sh` 链接」与「运行
 -- 产物」两步；任一步超时记 FAIL（"timed out after Ns"）并清理，不会让 `vuna test` 永久
@@ -35,11 +35,12 @@ module Vuna.TestRunner where
 --   N>1 时每个测试文件一个子进程：spawn 当前可执行文件的隐藏模式
 --   `test <包目录> --only-file <文件名> --jobs 1`（`--verbose` 时追加 `--verbose`）；
 --   子进程继承 stdout/stderr，**行内容完整但行与行之间可能交错**。父进程用
---   `prim_eff_wait` 收退出码、按文件计 pass/fail，汇总行与串行逐字一致。`--fail-fast`
+--   `@vuna@prim_eff_wait` 收退出码、按文件计 pass/fail，汇总行与串行逐字一致。`--fail-fast`
 --   在并行下只停止启动新文件，已在跑的文件等完（汇总只统计已跑文件）；`--verbose`
 --   的每文件耗时由子进程自己测量并打印在行尾，父进程照旧打印 `total:`。workspace
 --   聚合仍是各包串行（包内文件并行）。`--only-file` 只给子进程用：只跑一个文件、
 --   打印该文件的 ok/FAIL 行、不打印汇总、强制 jobs=1，不会再并行或递归 spawn。
+import Base.HostRow
 import Vuna.Compiler.Common
 import Vuna.Compiler.Packages.Pkg
 import Vuna.Compiler.Driver.Dt
@@ -70,43 +71,43 @@ record Tally where
   tallyFail : Int
   tallyStopped : Bool
 
-export runTests : TestOpts -> Package -> Eff [] Int
+export runTests : TestOpts -> Package -> Eff hostRow Int
 runTests opts pkg = case opts.testOnlyFile of
   Just name => runOnlyFile opts pkg name
   Nothing => do
-    start <- effTimeUs
+    start <- raiseToRow hostRow effTimeUs
     code <- runTestsGo opts pkg
     if opts.testVerbose then do
       ms <- elapsedMs start
-      _ <- prim_eff_print "total: ${ms}ms\n"
+      _ <- raiseToRow hostRow (@vuna@prim_eff_print "total: ${ms}ms\n")
       pure code
     else pure code
 
-elapsedMs : Int -> Eff [] Int
+elapsedMs : Int -> Eff hostRow Int
 elapsedMs start = do
-  now <- effTimeUs
+  now <- raiseToRow hostRow effTimeUs
   pure ((now - start) / 1000)
 
-runTestsGo : TestOpts -> Package -> Eff [] Int
+runTestsGo : TestOpts -> Package -> Eff hostRow Int
 runTestsGo opts pkg = do
   pkgsR <- workspacePackages (packageDir pkg)
   case pkgsR of
     ErrC e => do
-      _ <- prim_eff_print "error: ${diagText e}\n"
+      _ <- raiseToRow hostRow (@vuna@prim_eff_print "error: ${diagText e}\n")
       pure 2
     OkC pkgs => if length pkgs <= 1 then runPackageTests opts pkg else runWorkspaceTests opts pkgs
 
 -- 打印一组行（--list / 文件清单用）。
-printLines : List String -> Eff [] Int
+printLines : List String -> Eff hostRow Int
 printLines [] = pure 0
 printLines (line :: rest) = do
-  _ <- prim_eff_print "${line}\n"
+  _ <- raiseToRow hostRow (@vuna@prim_eff_print "${line}\n")
   printLines rest
 
 -- ---------------------------------------------------------------
 -- 单包（行为与 M11.5 一致：没有 test/ 是输入错误，退出码 2）
 -- ---------------------------------------------------------------
-runPackageTests : TestOpts -> Package -> Eff [] Int
+runPackageTests : TestOpts -> Package -> Eff hostRow Int
 runPackageTests opts pkg = do
   hasTest <- pathExistsDir "${packageDir pkg}/test"
   if hasTest then do
@@ -119,7 +120,9 @@ runPackageTests opts pkg = do
       case tally of
         Tally _ fail _ => pure (if fail == 0 then 0 else 1)
   else do
-    _ <- prim_eff_print "error: test directory not found: ${packageDir pkg}/test\n"
+    _ <-
+      raiseToRow hostRow
+        (@vuna@prim_eff_print "error: test directory not found: ${packageDir pkg}/test\n")
     pure 2
 
 -- ---------------------------------------------------------------
@@ -127,24 +130,26 @@ runPackageTests opts pkg = do
 -- 只跑一个测试文件，打印该文件的 ok/FAIL 行（--verbose 带行尾耗时），不打印汇总；
 -- 退出码 0/1 供父进程计数。此模式由 CLI 强制 jobs=1，不会再并行 / 递归 spawn。
 -- ---------------------------------------------------------------
-runOnlyFile : TestOpts -> Package -> String -> Eff [] Int
+runOnlyFile : TestOpts -> Package -> String -> Eff hostRow Int
 runOnlyFile opts pkg name = do
   hasTest <- pathExistsDir "${packageDir pkg}/test"
   if hasTest then do
-    t0 <- effTimeUs
+    t0 <- raiseToRow hostRow effTimeUs
     outcome <- runOneTest (packageContext pkg) "${packageDir pkg}/test/${name}" name
-    us <- effTimeUs
+    us <- raiseToRow hostRow effTimeUs
     _ <- printOutcome opts name outcome (us - t0)
     case outcome of
       TestPassed => pure 0
       TestFailed _ => pure 1
   else do
-    _ <- prim_eff_print "error: test directory not found: ${packageDir pkg}/test\n"
+    _ <-
+      raiseToRow hostRow
+        (@vuna@prim_eff_print "error: test directory not found: ${packageDir pkg}/test\n")
     pure 2
 
 -- 一个包的一组测试文件：jobs=1 用串行的 in-process 路径（行为逐字不变），
 -- jobs>1 用进程级并行。两个调用点（单包 / workspace 成员）共用这一处选择。
-runPackageTestGroup : TestOpts -> Package -> String -> List String -> Eff [] Tally
+runPackageTestGroup : TestOpts -> Package -> String -> List String -> Eff hostRow Tally
 runPackageTestGroup opts pkg testDir files =
   if opts.testJobs > 1 then runTestFilesParallel opts (packageDir pkg) testDir files
   else runTestFiles opts (packageContext pkg) testDir files 0 0
@@ -153,13 +158,13 @@ runPackageTestGroup opts pkg testDir files =
 -- workspace 聚合：每个包一组，缺 test/ 的包跳过（不是错误：库成员常常没有测试）。
 -- --list 模式只列「分组 + 文件」，不打印包数/汇总行（纯清单，exit 0）。
 -- ---------------------------------------------------------------
-runWorkspaceTests : TestOpts -> List Package -> Eff [] Int
+runWorkspaceTests : TestOpts -> List Package -> Eff hostRow Int
 runWorkspaceTests opts pkgs = if opts.testListOnly then runWorkspaceList opts pkgs
 else do
-  _ <- prim_eff_print "workspace: ${length pkgs} package(s)\n"
+  _ <- raiseToRow hostRow (@vuna@prim_eff_print "workspace: ${length pkgs} package(s)\n")
   runWorkspaceGo opts pkgs 0 0
 
-runWorkspaceList : TestOpts -> List Package -> Eff [] Int
+runWorkspaceList : TestOpts -> List Package -> Eff hostRow Int
 runWorkspaceList opts [] = pure 0
 runWorkspaceList opts (pkg :: rest) = do
   hasTest <- pathExistsDir "${packageDir pkg}/test"
@@ -168,11 +173,11 @@ runWorkspaceList opts (pkg :: rest) = do
     files <- filteredTestFiles opts (packageName pkg) "${packageDir pkg}/test"
     if filterActive opts && length files == 0 then runWorkspaceList opts rest
     else do
-      _ <- prim_eff_print "-- ${workspacePackageLabel pkg} --\n"
+      _ <- raiseToRow hostRow (@vuna@prim_eff_print "-- ${workspacePackageLabel pkg} --\n")
       _ <- printLines files
       runWorkspaceList opts rest
 
-runWorkspaceGo : TestOpts -> List Package -> Int -> Int -> Eff [] Int
+runWorkspaceGo : TestOpts -> List Package -> Int -> Int -> Eff hostRow Int
 runWorkspaceGo opts [] pass fail = workspaceFinish pass fail
 runWorkspaceGo opts (pkg :: rest) pass fail = do
   hasTest <- pathExistsDir "${packageDir pkg}/test"
@@ -180,19 +185,20 @@ runWorkspaceGo opts (pkg :: rest) pass fail = do
     files <- filteredTestFiles opts (packageName pkg) "${packageDir pkg}/test"
     if filterActive opts && length files == 0 then runWorkspaceGo opts rest pass fail
     else do
-      _ <- prim_eff_print "-- ${workspacePackageLabel pkg} --\n"
+      _ <- raiseToRow hostRow (@vuna@prim_eff_print "-- ${workspacePackageLabel pkg} --\n")
       tally <- runPackageTestGroup opts pkg "${packageDir pkg}/test" files
       case tally of
         Tally p f True => workspaceFinish (pass + p) (fail + f)
         Tally p f False => runWorkspaceGo opts rest (pass + p) (fail + f)
   else do
-    _ <- prim_eff_print "-- ${workspacePackageLabel pkg} -- (no test directory)\n"
+    _ <-
+      raiseToRow hostRow (@vuna@prim_eff_print "-- ${workspacePackageLabel pkg} -- (no test directory)\n")
     runWorkspaceGo opts rest pass fail
 
 -- workspace 总汇总 + 退出码（0 全通过 / 1 有失败）。
-workspaceFinish : Int -> Int -> Eff [] Int
+workspaceFinish : Int -> Int -> Eff hostRow Int
 workspaceFinish pass fail = do
-  _ <- prim_eff_print "\nworkspace: ${pass} passed, ${fail} failed\n"
+  _ <- raiseToRow hostRow (@vuna@prim_eff_print "\nworkspace: ${pass} passed, ${fail} failed\n")
   pure (if fail == 0 then 0 else 1)
 
 -- 包名可能为空（只用于展示，不参与语义）。
@@ -217,9 +223,9 @@ filterActive opts = case opts.testFilter of
   [] => False
   _ => True
 
-filteredTestFiles : TestOpts -> String -> String -> Eff [] (List String)
+filteredTestFiles : TestOpts -> String -> String -> Eff hostRow (List String)
 filteredTestFiles opts pkgName dir = do
-  names <- prim_eff_readDir dir
+  names <- raiseToRow hostRow (@vuna@prim_eff_readDir dir)
   pure (filter (\file => matchesFilter opts.testFilter pkgName file) (testFiles names))
 
 -- 多值 OR：无过滤 = 全部匹配；有过滤 = 任一 PAT 命中 `<包名>/<文件名>` 或 `<文件名>`
@@ -237,19 +243,19 @@ matchesAnyFilter (pat :: rest) pkgName file =
 -- ---------------------------------------------------------------
 -- 逐文件执行；返回 Tally
 -- ---------------------------------------------------------------
-runTestFiles : TestOpts -> PackageContext -> String -> List String -> Int -> Int -> Eff [] Tally
+runTestFiles : TestOpts -> PackageContext -> String -> List String -> Int -> Int -> Eff hostRow Tally
 runTestFiles opts ctx dir [] pass fail = do
-  _ <- prim_eff_print "\n${pass} passed, ${fail} failed\n"
+  _ <- raiseToRow hostRow (@vuna@prim_eff_print "\n${pass} passed, ${fail} failed\n")
   pure (Tally pass fail False)
 runTestFiles opts ctx dir (name :: rest) pass fail = do
-  t0 <- effTimeUs
+  t0 <- raiseToRow hostRow effTimeUs
   outcome <- runOneTest ctx "${dir}/${name}" name
-  us <- effTimeUs
+  us <- raiseToRow hostRow effTimeUs
   _ <- printOutcome opts name outcome (us - t0)
   case outcome of
     TestPassed => runTestFiles opts ctx dir rest (pass + 1) fail
     TestFailed _ => if opts.testFailFast then do
-      _ <- prim_eff_print "\n${pass} passed, ${fail + 1} failed\n"
+      _ <- raiseToRow hostRow (@vuna@prim_eff_print "\n${pass} passed, ${fail + 1} failed\n")
       pure (Tally pass (fail + 1) True)
     else runTestFiles opts ctx dir rest pass (fail + 1)
 
@@ -259,43 +265,43 @@ runTestFiles opts ctx dir (name :: rest) pass fail = do
 -- 每个测试文件一个子进程：spawn 当前可执行文件的隐藏模式
 -- `test <包目录> --only-file <文件名> --jobs 1`（父进程 --verbose 时追加 --verbose）。
 -- 子进程继承 stdin/stdout/stderr，因此 `ok`/`FAIL` 行与测试自身的输出**可能交错**
--- （`prim_eff_print` 每次 flush，单行内容完整；行序不保证）。父进程不打印每文件结果行，
--- 只用 `prim_eff_wait` 收退出码、按文件计 pass/fail；汇总行与串行逐字一致。
+-- （`@vuna@prim_eff_print` 每次 flush，单行内容完整；行序不保证）。父进程不打印每文件结果行，
+-- 只用 `@vuna@prim_eff_wait` 收退出码、按文件计 pass/fail；汇总行与串行逐字一致。
 --
 -- 调度：running 按启动顺序排队；窗口满（jobs 个在跑）时等**队首**退出再启动下一个。
--- 因为 `prim_eff_wait` 只能等指定 pid，失败检测发生在队首被 wait 时——并行下 fail-fast
+-- 因为 `@vuna@prim_eff_wait` 只能等指定 pid，失败检测发生在队首被 wait 时——并行下 fail-fast
 -- 保证「失败后不再启动新文件」，但不保证在窗口里其它文件失败时立即停（它们要等
 -- 排到队首才被 wait 到）；已在跑的文件总是等完并计入汇总。
 --
 -- fuel = 2 * 文件数 + jobs + 2：每一轮要么 spawn 一个（pending 减一）要么 wait 一个
 -- （running 减一），故步数上界成立；显式 fuel 让终止性检查不依赖跨参数测量。
 -- ---------------------------------------------------------------
-runTestFilesParallel : TestOpts -> String -> String -> List String -> Eff [] Tally
+runTestFilesParallel : TestOpts -> String -> String -> List String -> Eff hostRow Tally
 runTestFilesParallel opts pkgDir dir files =
   runParallel (2 * length files + opts.testJobs + 2) opts pkgDir dir files [] 0 0 False
 
-runParallel : Int -> TestOpts -> String -> String -> List String -> List (Pair Int String) -> Int -> Int -> Bool -> Eff [] Tally
+runParallel : Int -> TestOpts -> String -> String -> List String -> List (Pair Int String) -> Int -> Int -> Bool -> Eff hostRow Tally
 runParallel fuel opts pkgDir dir pending running pass fail stopped = if fuel <= 0 then finishRunning opts running pass fail stopped
 else case pending of
   [] => finishRunning opts running pass fail stopped
   name :: rest => if stopped then finishRunning opts running pass fail stopped
   else if length running < opts.testJobs then do
-    pid <- prim_eff_spawn (spawnTestArgs opts pkgDir name)
+    pid <- raiseToRow hostRow (@vuna@prim_eff_spawn (spawnTestArgs opts pkgDir name))
     runParallel (fuel - 1) opts pkgDir dir rest (append running [Pair pid name]) pass fail False
   else case running of
     [] => finishRunning opts [] pass fail stopped
     (Pair pid _) :: more => do
-      code <- prim_eff_wait pid
+      code <- raiseToRow hostRow (@vuna@prim_eff_wait pid)
       runParallel (fuel - 1) opts pkgDir dir pending more (if code == 0 then pass + 1 else pass)
         (if code == 0 then fail else fail + 1) (opts.testFailFast && code /= 0)
 
 -- 等完所有在跑子进程并打印与串行一致的汇总行（fail-fast 触发时也走这里）。
-finishRunning : TestOpts -> List (Pair Int String) -> Int -> Int -> Bool -> Eff [] Tally
+finishRunning : TestOpts -> List (Pair Int String) -> Int -> Int -> Bool -> Eff hostRow Tally
 finishRunning opts [] pass fail stopped = do
-  _ <- prim_eff_print "\n${pass} passed, ${fail} failed\n"
+  _ <- raiseToRow hostRow (@vuna@prim_eff_print "\n${pass} passed, ${fail} failed\n")
   pure (Tally pass fail stopped)
 finishRunning opts ((Pair pid _) :: rest) pass fail stopped = do
-  code <- prim_eff_wait pid
+  code <- raiseToRow hostRow (@vuna@prim_eff_wait pid)
   finishRunning opts rest (if code == 0 then pass + 1 else pass)
     (if code == 0 then fail else fail + 1) (stopped || opts.testFailFast && code /= 0)
 
@@ -308,16 +314,17 @@ spawnTestArgs opts pkgDir name =
   in append ["test", pkgDir, "--only-file", name, "--jobs", "1"] verbose
 
 -- 单测结果行：默认与 M30 逐字一致；--verbose 时行尾追加耗时。
-printOutcome : TestOpts -> String -> TestOutcome -> Int -> Eff [] Int
-printOutcome opts name TestPassed us = prim_eff_print "ok   ${name}${timingText opts us}\n"
+printOutcome : TestOpts -> String -> TestOutcome -> Int -> Eff hostRow Int
+printOutcome opts name TestPassed us =
+  raiseToRow hostRow (@vuna@prim_eff_print "ok   ${name}${timingText opts us}\n")
 printOutcome opts name (TestFailed message) us =
-  prim_eff_print "FAIL ${name}: ${message}${timingText opts us}\n"
+  raiseToRow hostRow (@vuna@prim_eff_print "FAIL ${name}: ${message}${timingText opts us}\n")
 
 timingText : TestOpts -> Int -> String
 timingText opts us = if opts.testVerbose then " (${us / 1000}ms)" else ""
 
 -- 单个测试：按 main 的返回类别选执行路径。
-runOneTest : PackageContext -> String -> String -> Eff [] TestOutcome
+runOneTest : PackageContext -> String -> String -> Eff hostRow TestOutcome
 runOneTest ctx path name = do
   kindR <- dtMainKind ctx path
   case kindR of
@@ -338,7 +345,7 @@ runOneTest ctx path name = do
         pure (pureTest name output "True")
       _ =>
         pure
-          (TestFailed "unsupported test main type: ${kind} (expected `main : String` (empty = pass), `main : Int`/`Nat` (0 = pass), `main : Bool` (True = pass), `main : Eff [] a` (exit code 0 = pass))")
+          (TestFailed "unsupported test main type: ${kind} (expected `main : String` (empty = pass), `main : Int`/`Nat` (0 = pass), `main : Bool` (True = pass), `main : Eff hostRow a` (exit code 0 = pass))")
 
 -- 纯测试：`interpretFile` 的核心求值结果与期望值逐字比较。
 pureTest : String -> String -> String -> TestOutcome
@@ -347,16 +354,16 @@ pureTest name output expected =
 
 -- 效果测试：退出码 0 通过；编译/链接失败按 FAIL 记录诊断。
 -- 有 `timeout` 命令时走 runIOTestTimed（单测超时，W1），否则退回 runEffectProgram。
-runIOTest : PackageContext -> String -> String -> Eff [] TestOutcome
+runIOTest : PackageContext -> String -> String -> Eff hostRow TestOutcome
 runIOTest ctx path name = do
   secs <- testTimeoutSecs 0
   has <- hasTimeoutCmd 0
   if secs <= 0 || not has then runIOTestLegacy ctx path name else runIOTestTimed ctx path name secs
 
 -- 无外部超时的旧路径：临时包编译 + 运行（效果输出直接写终端，只看进程退出码）。
-runIOTestLegacy : PackageContext -> String -> String -> Eff [] TestOutcome
+runIOTestLegacy : PackageContext -> String -> String -> Eff hostRow TestOutcome
 runIOTestLegacy ctx path name = do
-  source <- prim_eff_readFile path
+  source <- raiseToRow hostRow (@vuna@prim_eff_readFile path)
   res <- runEffectProgram ctx source False
   pure (case res of
     ErrC e => TestFailed (diagText e)
@@ -373,9 +380,9 @@ data CmdOutcome : Type where
   CmdTimedOut : CmdOutcome
 
 -- 单测超时秒数：未设置/空 → 120；0 关闭；非数字 → 120（不静默放大）。
-testTimeoutSecs : Int -> Eff [] Int
+testTimeoutSecs : Int -> Eff hostRow Int
 testTimeoutSecs _ = do
-  env <- prim_eff_getenv "VUNA_TEST_TIMEOUT"
+  env <- raiseToRow hostRow (@vuna@prim_eff_getenv "VUNA_TEST_TIMEOUT")
   pure (case parseNat env of
     Nothing => 120
     Just n => n
@@ -390,48 +397,50 @@ parseDigits (c :: rest) acc =
   if c >= 48 && c <= 57 then parseDigits rest (acc * 10 + (c - 48)) else Nothing
 
 -- `timeout`（coreutils）在 PATH 里吗？不在时优雅降级为旧路径（不算 FAIL）。
-hasTimeoutCmd : Int -> Eff [] Bool
+hasTimeoutCmd : Int -> Eff hostRow Bool
 hasTimeoutCmd _ = do
-  code <- prim_eff_runIn "." ["sh", "-c", "command -v timeout >/dev/null 2>&1"]
+  code <- raiseToRow hostRow (@vuna@prim_eff_runIn "." ["sh", "-c", "command -v timeout >/dev/null 2>&1"])
   pure (code == 0)
 
 -- 临时目录根：`$TMPDIR`（去尾部 `/`），没有就用 `/tmp`。
-tempBase : Int -> Eff [] String
+tempBase : Int -> Eff hostRow String
 tempBase _ = do
-  env <- prim_eff_getenv "TMPDIR"
+  env <- raiseToRow hostRow (@vuna@prim_eff_getenv "TMPDIR")
   pure
     (if env == "" then "/tmp" else if endsWith "/" env then substring 0 (byteLength env - 1) env else env)
 
 -- 唯一临时目录：microsecond 时间戳基名 + `-N` 后缀探测（与 Vuna.Interp 的同一策略；
 -- 递归按 fuel 结构下降，终止性检查可证）。
-freshTempDir : Int -> String -> Eff [] String
+freshTempDir : Int -> String -> Eff hostRow String
 freshTempDir fuel base = if fuel <= 0 then pure base
 else do
-  exists <- prim_eff_fileExists "${base}-${fuel}"
+  exists <- raiseToRow hostRow (@vuna@prim_eff_fileExists "${base}-${fuel}")
   if exists then freshTempDir (fuel - 1) base else pure "${base}-${fuel}"
 
 -- 在 dir 里跑命令；超时（TERM，5s 后 KILL）返回 CmdTimedOut。
 -- GNU timeout 的超时退出码是 124（-k 兜底杀掉时 137）；命令自身恰好以这两个码退出
 -- 会被当作超时（实际不可能来自 vuna/产物，可接受）。
-runTimedCmd : String -> List String -> Int -> Eff [] CmdOutcome
+runTimedCmd : String -> List String -> Int -> Eff hostRow CmdOutcome
 runTimedCmd dir argv secs = do
-  code <- prim_eff_runIn dir (append ["timeout", "-s", "TERM", "-k", "5", "${secs}s"] argv)
+  code <-
+    raiseToRow hostRow
+      (@vuna@prim_eff_runIn dir (append ["timeout", "-s", "TERM", "-k", "5", "${secs}s"] argv))
   pure (if code == 124 || code == 137 then CmdTimedOut else CmdDone code)
 
 -- 有超时的效果测试：临时目录里编译测试入口（printResult=False，只看退出码），
 -- `sh build.sh` 与运行产物两步各自受 timeout 保护；失败/超时都清理临时目录。
 -- 目录名含测试文件名：`--jobs` 并行时同一包的多个子进程各自建目录，即使时间戳相同
 -- 也不会撞名（同包文件名唯一）。
-runIOTestTimed : PackageContext -> String -> String -> Int -> Eff [] TestOutcome
+runIOTestTimed : PackageContext -> String -> String -> Int -> Eff hostRow TestOutcome
 runIOTestTimed ctx path name secs = do
   base <- tempBase 0
-  now <- effTimeUs
+  now <- raiseToRow hostRow effTimeUs
   dir <- freshTempDir 1000 "${base}/vuna-test-${now}-${name}"
   compiled <- compileToDir ctx path False dir
   case compiled of
     ErrC e => ioCleanup dir (TestFailed (diagText e))
     OkC _ => do
-      _ <- prim_eff_makeDir "${dir}/bin"
+      _ <- raiseToRow hostRow (@vuna@prim_eff_makeDir "${dir}/bin")
       buildRes <- runTimedCmd dir ["sh", "build.sh", "bin/vuna-test"] secs
       case buildRes of
         CmdTimedOut => ioCleanup dir (TestFailed "timed out after ${secs}s (build)")
@@ -445,7 +454,7 @@ runIOTestTimed ctx path name secs = do
             CmdDone code => ioCleanup dir (TestFailed "effect program exited with code ${code}")
 
 -- 删掉本次效果测试的临时目录（绝对路径，cwd 无关）后返回结果。
-ioCleanup : String -> TestOutcome -> Eff [] TestOutcome
+ioCleanup : String -> TestOutcome -> Eff hostRow TestOutcome
 ioCleanup dir outcome = do
-  _ <- prim_eff_runIn "/" ["rm", "-rf", dir]
+  _ <- raiseToRow hostRow (@vuna@prim_eff_runIn "/" ["rm", "-rf", dir])
   pure outcome

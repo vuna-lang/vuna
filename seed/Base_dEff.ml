@@ -69,10 +69,20 @@ let v_Base_dEff_djoinEffNilOuter = (fun m -> (C_Base_dEff_dEff_MkEff ((fun u -> 
   | _ -> failwith "DT: impossible branch"
 )))))
 
+let v_Base_dEff_dweakenRow = (fun t e -> (C_Base_dEff_dEff_MkEff ((fun u -> (match e with
+  | C_Base_dEff_dEff_MkEff (dtb__13) -> (dtb__13 u)
+  | _ -> failwith "DT: impossible branch"
+)))))
+
 let v_Base_dEff_draise = (fun mc0 -> (match mc0 with
-  | C_Base_dEff_dEff_MkEff (dtb__13) -> (C_Base_dEff_dEff_MkEff (dtb__13))
+  | C_Base_dEff_dEff_MkEff (dtb__14) -> (C_Base_dEff_dEff_MkEff (dtb__14))
   | _ -> failwith "DT: impossible branch"
 ))
+
+let v_Base_dEff_draiseTo = (fun r e -> (C_Base_dEff_dEff_MkEff ((fun u -> (match e with
+  | C_Base_dEff_dEff_MkEff (dtb__15) -> (dtb__15 u)
+  | _ -> failwith "DT: impossible branch"
+)))))
 
 let v_Base_dEff_dsendCore = (fun key name o -> (C_Base_dEff_dEff_MkEff ((fun _u -> ((((fun key name v -> Obj.obj (Effect.perform (Perform (key, name, Obj.repr v)))) key) name) o)))))
 
@@ -81,7 +91,7 @@ let v_Base_dEff_dperformCore = (fun n key o -> (((v_Base_dEff_dsendCore key) n) 
 let v_Base_dEff_dhandleCore = (fun key name ret opH comp -> (C_Base_dEff_dEff_MkEff ((((((dtp_effect_handle key) name) ret) opH) (v_Base_dEff_drunThunk comp)))))
 
 let v_Base_dEff_dresumeCont = (fun c x -> (match c with
-  | C_Base_dEff_dCont_MkCont (dtb__14) -> (dtb__14 x)
+  | C_Base_dEff_dCont_MkCont (dtb__16) -> (dtb__16 x)
   | _ -> failwith "DT: impossible branch"
 ))
 

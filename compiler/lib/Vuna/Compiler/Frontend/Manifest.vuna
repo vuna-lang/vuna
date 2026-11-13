@@ -17,7 +17,7 @@ module Vuna.Compiler.Frontend.Manifest where
 -- iface 的 miDepHashes 链判定）；`git`（必须带 `rev`）与 `url` 是不可变源，必须带
 -- `hash = "sha256:<64 hex>"`（裸 64 位十六进制也接受）。
 -- parseManifest 只解析，不检查文件是否存在；validateManifest 做结构校验。
--- 本模块不做文件 I/O：调用方用自己的 prim_eff_readFile 读入内容后传入。
+-- 本模块不做文件 I/O：调用方用自己的 @vuna@prim_eff_readFile 读入内容后传入。
 import Vuna.Compiler.Common
 import Vuna.Compiler.Frontend.Toml
 import Vuna.Compiler.Diagnostics.Pkg

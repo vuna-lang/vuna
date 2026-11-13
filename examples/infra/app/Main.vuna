@@ -85,26 +85,6 @@ main = do
   _ <-
     prim_eff_print
       (("qrun-cancel " ++ runSpansText (firstOf r3)) ++ " " ++ valueText (secondOf r3) ++ "\n")
-  w1 <- runWave (runEmpty qrunOpts) qrunNodes
-  _ <-
-    prim_eff_print
-      (("qrun-wave1 " ++ runSpansText (firstOf w1)) ++ " " ++ waveValsText (secondOf w1) ++ "\n")
-  w2 <- runWave (firstOf w1) qrunNodes
-  _ <-
-    prim_eff_print
-      (("qrun-wave2 " ++ runSpansText (firstOf w2)) ++ " " ++ waveValsText (secondOf w2) ++ "\n")
-  w3 <- runWave (runEmpty qrunOpts) qrunDependentNodes
-  _ <-
-    prim_eff_print
-      (("qrun-wave-seq " ++ runSpansText (firstOf w3)) ++ " " ++ waveValsText (secondOf w3) ++ "\n")
-  w4 <- runWave (runWithBudget (runEmpty qrunOpts) 1) qrunNodes
-  _ <-
-    prim_eff_print
-      (("qrun-budget " ++ runSpansText (firstOf w4)) ++ " " ++ waveValsText (secondOf w4) ++ "\n")
-  w5 <- runWave (runCancel (runEmpty qrunOpts)) qrunNodes
-  _ <-
-    prim_eff_print
-      (("qrun-wave-cancel " ++ runSpansText (firstOf w5)) ++ " " ++ waveValsText (secondOf w5) ++ "\n")
   -- TOML 解析自检：子表 / 引号段名 / 点键 / 内联表 / 数组 / 表数组 / 多行字符串 /
   -- unicode 转义 / literal 字符串，以及必须拒绝的重复键、浮点、重复表、点键冲突。
   _ <-
@@ -216,31 +196,12 @@ pkgIdentityDeps =
 qrunOpts : RunOpts
 qrunOpts = RunOpts "pkg" 0 False ""
 
--- 两个互相独立的节点：并行波次的最小场景。
-qrunNodes : List WaveNode
-qrunNodes =
-  [ waveNode "wa" [] (\_ => pure (Pair (QBytes "10") [])),
-    waveNode "wb" [] (\_ => pure (Pair (QBytes "20") []))
-  ]
-
--- `q` 依赖同波的 `p` ⇒ `runWave` 必须回退为顺序执行（波契约不满足）。
-qrunDependentNodes : List WaveNode
-qrunDependentNodes =
-  [ waveNode "p" [] (\_ => pure (Pair (QBytes "7") [])),
-    waveNode "q" ["p"] (\vs => pure (Pair (QBytes (strFromInt (intOf vs + 1))) []))
-  ]
 
 -- | `Maybe QVal` → 输出片段（`Nothing` = 取消 / 拒绝）。
 valueText : Maybe QVal -> String
 valueText Nothing = "-"
 valueText (Just v) = strFromInt (intOf [v])
 
--- | 波次结果（与声明同序）→ `10,20` 形态。
-waveValsText : List (Pair String (Maybe QVal)) -> String
-waveValsText ps = join "," (map waveValText ps)
-
-waveValText : Pair String (Maybe QVal) -> String
-waveValText pr = valueText (secondOf pr)
 
 -- | 用逗号连接整数列表（编码结果的可读形态）。
 joinInts : List Int -> String

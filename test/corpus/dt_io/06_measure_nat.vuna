@@ -1,17 +1,18 @@
 -- D25：宿主度量在 Eff 标签的 result 族里是 `Nat`（`Base.EffConsole.Print`、
--- `Base.EffFs.WriteFile`/`FileSize`）；直调 `prim_eff_*` 原语得到 `Int`。
--- 本夹具用真实 handler 取 `Nat`、做 `Nat` 算术，并由 main 展示。
+-- `Base.EffFs.WriteFile`/`FileSize`）；直调 `@vuna@prim_eff_*` 原语得到 `Int`。
+-- 本夹具用 entry 自动预装的行 handler 取 `Nat`、做 `Nat` 算术，并由 main 展示。
 import Base.Eff
 import Base.EffConsole
 import Base.EffFs
+import Base.HostRow
 import Base.Nat
 
-prog : Eff [FsOp@real, ConsoleOp@real] Nat
+prog : Eff hostRow Nat
 prog = do
-  written <- fsWriteFile "real" "/tmp/vuna_d25_measure.txt" "hello"
-  size <- fsFileSize "real" "/tmp/vuna_d25_measure.txt"
-  printed <- consolePrint "real" "p\n"
+  written <- fsWriteFile "default" "/tmp/vuna_d25_measure.txt" "hello"
+  size <- fsFileSize "default" "/tmp/vuna_d25_measure.txt"
+  printed <- consolePrint "default" "p\n"
   pure (written + size + printed)
 
-main : Eff [] Nat
-main = runConsole "real" (joinEff (handleFsHost "real" prog))
+main : Eff hostRow Nat
+main = prog

@@ -3,7 +3,7 @@ module Base.EffExit where
 -- Base.EffExit：一阶进程退出效应（P2c：补 exit 标签）。
 --
 -- 标签 `ExitOp` 是命名实例；操作只有 ExitWith（状态码）。真实 handler 调
--- `prim_eff_exit` 后不会返回，`k 0` 只是类型上的兜底。
+-- `@vuna@prim_eff_exit` 后不会返回，`k 0` 只是类型上的兜底。
 import Base.Eff
 import Base.Monad
 
@@ -23,20 +23,14 @@ exitWith n code = sendCore ExitOp "exit" n (ExitWith code)
 export handleExit : {a : Type} -> {b : Type} -> {r : Row} -> (n : String) -> {w : Member n ExitOp r} -> (a -> b) -> ((o : ExitOp) -> (resExit o -> b) -> b) -> Eff r a -> Eff (Base.Eff.rowRem n ExitOp r) b
 handleExit n ret opH comp = handleCore ExitOp "exit" n ret opH comp
 
--- | 真实 handler 的操作解释：执行 `prim_eff_exit code`；`k 0` 不可达，只为类型闭合。
+-- | 真实 handler 的操作解释：执行 `@vuna@prim_eff_exit code`；`k 0` 不可达，只为类型闭合。
 exitOpHIO : {a : Type} -> (o : ExitOp) -> (resExit o -> Eff [] a) -> Eff [] a
 exitOpHIO op k = case op of
   ExitWith code => do
-    _ <- prim_eff_exit code
+    _ <- @vuna@prim_eff_exit code
     k 0
 
 -- | 宿主 handler：结果行删除 `ExitOp`，answer 是已处理干净的 `Eff []` 动作，可用 `joinEff` 展平。
-export handleExitHost : {a : Type} -> {r : Row} -> (n : String) -> Eff (Base.Eff.Cons n ExitOp r) a -> Eff r (Eff [] a)
-handleExitHost n comp = handleExit n (\a => pure a) exitOpHIO comp
-
--- | 单效应便捷入口（P3）：`handleExitHost n` + `joinEff` 的组合。
-export runExit : {a : Type} -> (n : String) -> Eff (Cons n ExitOp []) a -> Eff [] a
-runExit n comp = joinEffNilOuter (handleExitHost n comp)
 
 -- ---------------------------------------------------------------
 -- 阶段 3：带行 handler（entry 自动预装用；不导出）
@@ -44,7 +38,7 @@ runExit n comp = joinEffNilOuter (handleExitHost n comp)
 exitOpHIOHost : {a : Type} -> (o : ExitOp) -> (resExit o -> Eff (Cons "default" ExitOp []) a) -> Eff (Cons "default" ExitOp []) a
 exitOpHIOHost op k = case op of
   ExitWith code => do
-    _ <- prim_eff_exitOp_host code
+    _ <- @vuna@host@exitOp code
     k 0
 
 handleExitHostHost : {a : Type} -> {r : Row} -> (n : String) -> Eff (Base.Eff.Cons n ExitOp r) a -> Eff r (Eff (Cons "default" ExitOp []) a)

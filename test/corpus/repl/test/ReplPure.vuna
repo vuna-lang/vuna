@@ -1,9 +1,10 @@
 -- `vuna test` 入口：纯逻辑断言（历史编解码 / 粘贴状态机 / 补全候选判定）。
 -- 断言集在 lib/ReplGapsPure.vuna；这里用效果主入口把失败变成非 0 退出码
--- （`vuna test` 以进程退出码判定效果测试；P2c：exit 走 Exit 效应 + runExit）。
+-- （`vuna test` 以进程退出码判定效果测试；阶段 5：exit 走 Exit 效应，entry 自动预装 handler）。
 import Base.Eff
 import Base.EffExit
+import Base.HostRow
 import ReplGapsPure
 
-main : Eff [] Int
-main = runExit "real" (if checks == 0 then pure 0 else exitWith "real" 1)
+main : Eff hostRow Int
+main = pure (if checks == 0 then 0 else 1)

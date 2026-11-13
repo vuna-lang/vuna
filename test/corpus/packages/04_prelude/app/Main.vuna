@@ -1,12 +1,13 @@
 -- Prelude 自动导入：不写 import 也能使用 List/String 的常用名。
--- P2c：宿主 console 走 Eff（runConsole）；main 返回 0，golden 含尾随 0。
+-- 阶段 5：宿主 console 走 Eff hostRow（entry 自动预装 handler）；main 返回 0，golden 含尾随 0。
 import Base.Eff
 import Base.EffConsole
+import Base.HostRow
 
-prog : Eff [ConsoleOp@real] Int
+prog : Eff hostRow Int
 prog = do
-  _ <- consolePrint "real" (join "-" (map strFromInt (map (\x => x + 1) [1, 2])))
+  _ <- consolePrint "default" (join "-" (map strFromInt (map (\x => x + 1) [1, 2])))
   pure 0
 
-main : Eff [] Int
-main = runConsole "real" prog
+main : Eff hostRow Int
+main = prog

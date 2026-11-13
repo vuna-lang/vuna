@@ -15,6 +15,7 @@ module Vuna.Test.Session where
 --
 -- 会话只服务「正例」（golden 的 check/interp 断言）；负例仍走 CLI，保证 `.check.err`
 -- / `.compile.err` 片段与退出码语义完全一致。
+import Base.HostRow
 import Base.IORef
 import Vuna.Compiler.Common
 import Vuna.Compiler.Driver.Compile
@@ -35,13 +36,13 @@ export sessionNew : String -> Session
 sessionNew ifaceRoot = Session ifaceRoot "" [] Nothing Nothing
 
 -- 逃生开关：`VUNA_TEST_NO_SESSION=1` 强制回退 CLI 子进程（A/B 排查用）。
-sessionDisabled : Eff [] Bool
+sessionDisabled : Eff hostRow Bool
 sessionDisabled = do
-  env <- prim_eff_getenv "VUNA_TEST_NO_SESSION"
+  env <- raiseToRow hostRow (@vuna@prim_eff_getenv "VUNA_TEST_NO_SESSION")
   pure (env == "1")
 
 -- 与 `Compile.ifaceCompilerTag` 同口径：版本 + 编译器二进制指纹。
-ifaceTag : Eff [] String
+ifaceTag : Eff hostRow String
 ifaceTag = do
   fp <- toolCompilerFingerprint
   pure "${vunaVersion}/${strFromInt fp}"
@@ -56,7 +57,7 @@ baseIfaceDir ifaceRoot baseDir =
   if ifaceRoot == "" then baseDir else "${ifaceRoot}/${dropLeadingSlash baseDir}"
 
 -- 读 base 包接口（`readPackageIface` 内部已校验 schema 与编译器 tag）。
-readBaseIfaces : String -> String -> Eff [] (Maybe (List ModuleIface))
+readBaseIfaces : String -> String -> Eff hostRow (Maybe (List ModuleIface))
 readBaseIfaces ifaceRoot baseDir = do
   tag <- ifaceTag
   pi <- readPackageIface (baseIfaceDir ifaceRoot baseDir) tag
@@ -66,9 +67,9 @@ readBaseIfaces ifaceRoot baseDir = do
   )
 
 -- 会话可用性：命中缓存 → 直接用；否则读一次接口并写回（读失败 ⇒ Nothing）。
-ensureSession : IORef Session -> String -> Eff [] (Maybe (List ModuleIface))
+ensureSession : IORef Session -> String -> Eff hostRow (Maybe (List ModuleIface))
 ensureSession ref baseDir = do
-  s <- readRef ref
+  s <- raiseToRow hostRow (readRef ref)
   if s.sesDir == baseDir && length s.sesIfaces > 0 then pure (Just s.sesIfaces)
   else do
     ifacesR <- readBaseIfaces s.sesRoot baseDir
@@ -80,7 +81,7 @@ ensureSession ref baseDir = do
         pure (Just ifaces)
 
 -- check：Just (0, "") = 通过；Just (1, 诊断) = 失败；Nothing = 会话不可用（回退 CLI）。
-export sessionCheck : IORef Session -> String -> String -> Eff [] (Maybe (Pair Int String))
+export sessionCheck : IORef Session -> String -> String -> Eff hostRow (Maybe (Pair Int String))
 sessionCheck ref baseDir source = do
   disabled <- sessionDisabled
   if disabled then pure Nothing
@@ -94,10 +95,10 @@ sessionCheck ref baseDir source = do
           ErrC _ => pure Nothing
           OkC ctx => sessionCheckIn ref baseDir ctx ifaces source
 
-sessionCheckIn : IORef Session -> String -> PackageContext -> List ModuleIface -> String -> Eff [] (Maybe (Pair Int String))
+sessionCheckIn : IORef Session -> String -> PackageContext -> List ModuleIface -> String -> Eff hostRow (Maybe (Pair Int String))
 sessionCheckIn ref baseDir ctx ifaces source = do
-  text <- prim_eff_readFile source
-  s <- readRef ref
+  text <- raiseToRow hostRow (@vuna@prim_eff_readFile source)
+  s <- raiseToRow hostRow (readRef ref)
   result <- dtCheckSourceIncremental ctx source text ifaces [] s.sesAux False
   case result of
     ErrC e => pure (Just (Pair 1 (diagText e)))
@@ -108,7 +109,7 @@ sessionCheckIn ref baseDir ctx ifaces source = do
 
 -- interp：Just (0, 输出) = 求值成功（与 CLI 打印的 trim 后文本一致）；
 -- Just (1, 诊断) = 精化失败；Nothing = 会话不可用（回退 CLI）。
-export sessionInterp : IORef Session -> String -> String -> Eff [] (Maybe (Pair Int String))
+export sessionInterp : IORef Session -> String -> String -> Eff hostRow (Maybe (Pair Int String))
 sessionInterp ref baseDir source = do
   disabled <- sessionDisabled
   if disabled then pure Nothing
@@ -122,10 +123,10 @@ sessionInterp ref baseDir source = do
           ErrC _ => pure Nothing
           OkC ctx => sessionInterpIn ref baseDir ctx ifaces source
 
-sessionInterpIn : IORef Session -> String -> PackageContext -> List ModuleIface -> String -> Eff [] (Maybe (Pair Int String))
+sessionInterpIn : IORef Session -> String -> PackageContext -> List ModuleIface -> String -> Eff hostRow (Maybe (Pair Int String))
 sessionInterpIn ref baseDir ctx ifaces source = do
-  text <- prim_eff_readFile source
-  s <- readRef ref
+  text <- raiseToRow hostRow (@vuna@prim_eff_readFile source)
+  s <- raiseToRow hostRow (readRef ref)
   result <- dtEvalSourceIncremental ctx source text ifaces s.sesEvalAux
   case result of
     ErrC e => pure (Just (Pair 1 (diagText e)))

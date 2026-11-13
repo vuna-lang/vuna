@@ -4,13 +4,14 @@ module Vuna.PackageStore where
 -- Vuna.PackageStore：`$VUNA_STORE` 下的两棵树（D15）。
 --
 --   objects/<64hex>   不可变对象：`pkg-source 1` 规范编码，地址 = 内容摘要（SHA-256）。
---                     对象是**唯一真源**；写入原子替换（`prim_eff_writeFileAtomic`）。
+--                     对象是**唯一真源**；写入原子替换（`@vuna@prim_eff_writeFileAtomic`）。
 --   pkgs/<64hex>/     物化视图：从对象解出的文件树，最后写 `.complete`（内容 = 摘要）
 --                     作为提交点。视图可删可重建；读前校验 `.complete`，不符就重建。
 --
 -- 对象 framing 复用 `Vuna.Compiler.Store`（同样的 magic/codec/长度/内容地址校验），
 -- 但 tag 不含编译器指纹：包对象跨编译器版本复用（它们只是源码字节）。
 -- 本模块只做读写与物化；**取包**（git/url）在 `Vuna.Fetch`，两者都不进 seed。
+import Base.HostRow
 import Vuna.Compiler.Canonical.Pkg
 import Vuna.Compiler.Common
 import Vuna.Compiler.Driver.Compile
@@ -20,7 +21,7 @@ import Base.List
 import Base.String
 
 -- | 持久 store 根（`VUNA_STORE` → XDG → `~/.vuna/store`）。
-export storeRootEff : Eff [] String
+export storeRootEff : Eff hostRow String
 storeRootEff = storeDataRootEff
 
 -- | 对象文件路径。
@@ -39,19 +40,19 @@ packageCodec : String
 packageCodec = "pkg-source 1"
 
 -- | 写对象（原子替换；地址由调用方给出并已在写前校验）。
-export writeObjectEff : String -> String -> List PackageFile -> Eff [] Int
+export writeObjectEff : String -> String -> List PackageFile -> Eff hostRow Int
 writeObjectEff root digest files = do
   _ <- ensureDirPath "${root}/objects"
   let
     payload = encPackageContent files
   in do
     _ <-
-      prim_eff_writeFileAtomic (objectPathOf root digest)
-        (storeEncodeAs packageTag packageCodec digest payload)
+      raiseToRow hostRow
+        (@vuna@prim_eff_writeFileAtomic (objectPathOf root digest) (storeEncodeAs packageTag packageCodec digest payload))
     pure 0
 
 -- | 读对象（framing + 内容地址校验后解码）；缺失/损坏 ⇒ `Nothing`。
-export readObjectEff : String -> String -> Eff [] (Maybe (List PackageFile))
+export readObjectEff : String -> String -> Eff hostRow (Maybe (List PackageFile))
 readObjectEff root digest = do
   payload <- storeReadAsEff packageTag packageCodec digest (objectPathOf root digest)
   pure (case payload of
@@ -60,33 +61,33 @@ readObjectEff root digest = do
   )
 
 -- | 物化视图是否完整（`.complete` 内容必须等于摘要）。
-export isMaterializedEff : String -> String -> Eff [] Bool
+export isMaterializedEff : String -> String -> Eff hostRow Bool
 isMaterializedEff root digest = do
   let
     marker = "${materializedDir root digest}/.complete"
   in do
-    exists <- prim_eff_fileExists marker
+    exists <- raiseToRow hostRow (@vuna@prim_eff_fileExists marker)
     if exists then do
-      text <- prim_eff_readFile marker
+      text <- raiseToRow hostRow (@vuna@prim_eff_readFile marker)
       pure (text == digest)
     else pure False
 
 -- | 物化：逐文件写盘，最后写 `.complete`（提交点）；并发重复物化是幂等的。
-export materializeEff : String -> String -> List PackageFile -> Eff [] Int
+export materializeEff : String -> String -> List PackageFile -> Eff hostRow Int
 materializeEff root digest files = do
   let
     dir = materializedDir root digest
   in do
     _ <- ensureDirPath dir
     _ <- writePackageFiles dir files
-    _ <- prim_eff_writeFileAtomic "${dir}/.complete" digest
+    _ <- raiseToRow hostRow (@vuna@prim_eff_writeFileAtomic "${dir}/.complete" digest)
     pure 0
 
-writePackageFiles : String -> List PackageFile -> Eff [] Int
+writePackageFiles : String -> List PackageFile -> Eff hostRow Int
 writePackageFiles dir [] = pure 0
 writePackageFiles dir (f :: rest) = do
   _ <- ensureDirPath (parentDirOf "${dir}/${f.pfPath}")
-  _ <- prim_eff_writeFileAtomic "${dir}/${f.pfPath}" f.pfContent
+  _ <- raiseToRow hostRow (@vuna@prim_eff_writeFileAtomic "${dir}/${f.pfPath}" f.pfContent)
   writePackageFiles dir rest
 
 -- | 路径的父目录（无 `/` ⇒ "."，即当前目录）。

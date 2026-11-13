@@ -29,6 +29,7 @@ module Vuna.Lsp.Rename where
 --     跟进；其他形态（如只出现在别的模块签名里的类型）不保证；
 --   - 运算符（中缀/section/反引号固定名）、`deriving (...)`、fixity 别名不改；
 --   - 带 `'` 的名字被 `tokenAtCursor` 截断（既有 token 边界限制）。
+import Base.HostRow
 import Vuna.Compiler.Common
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Frontend.Parser
@@ -100,7 +101,7 @@ firstJust (x :: rest) = case x of
   Nothing => firstJust rest
 
 -- 顺序执行每个元素的效果并拼接结果（列表顺序与纯 concatMap 一致）。
-concatMapEff : (a -> Eff [] (List b)) -> List a -> Eff [] (List b)
+concatMapEff : (a -> Eff hostRow (List b)) -> List a -> Eff hostRow (List b)
 concatMapEff f [] = pure []
 concatMapEff f (x :: rest) = do
   xs <- f x
@@ -251,16 +252,16 @@ pickIndexSymbol curModule idx syms =
       [] => Nothing
 
 -- 目标模块源码（当前缓冲或磁盘上的目标模块）。
-loadIndexTarget : String -> String -> SourceFile -> Index -> Sym -> Pair Int String -> Eff [] (Maybe (Pair RenameTarget (Pair Int String)))
+loadIndexTarget : String -> String -> SourceFile -> Index -> Sym -> Pair Int String -> Eff hostRow (Maybe (Pair RenameTarget (Pair Int String)))
 loadIndexTarget uri bufText bufSf idx sym tokInfo = case moduleInfoOf idx (symModule sym) of
   Nothing => pure Nothing
   Just mi => if symModule sym == currentModuleNameOf bufSf then pure
     (Just (Pair (RenameTarget (symName sym) (symKind sym) (symModule sym) uri bufText bufSf) tokInfo))
   else if modPath mi == "" then pure Nothing
   else do
-    exists <- prim_eff_fileExists (modPath mi)
+    exists <- raiseToRow hostRow (@vuna@prim_eff_fileExists (modPath mi))
     if exists then do
-      source <- prim_eff_readFile (modPath mi)
+      source <- raiseToRow hostRow (@vuna@prim_eff_readFile (modPath mi))
       case parseSource (modPath mi) source of
         ErrC e => pure Nothing
         OkC sf2 =>
@@ -270,7 +271,7 @@ loadIndexTarget uri bufText bufSf idx sym tokInfo = case moduleInfoOf idx (symMo
 
 -- 光标位置 → rename 目标 + 光标 token 的名字区间信息（nameStart, name）。
 -- 顺序：局部绑定 → 当前缓冲顶层声明 → Index 符号（拒绝 base 标准库）。
-resolveTarget : String -> Int -> Int -> String -> Maybe Index -> Eff [] (Maybe (Pair RenameTarget (Pair Int String)))
+resolveTarget : String -> Int -> Int -> String -> Maybe Index -> Eff hostRow (Maybe (Pair RenameTarget (Pair Int String)))
 resolveTarget uri line col text midx = case parseSource "<lsp>" text of
   ErrC e => pure Nothing
   OkC sf => case tokenAtCursor text line col of
@@ -596,14 +597,14 @@ memberNamed name (DRecord n params fields derivings viaField repr lin sp) =
   anyFieldNamed name fields
 memberNamed name d = False
 
-crossModuleUseRefs : Index -> RenameTarget -> String -> Eff [] (List EditRef)
+crossModuleUseRefs : Index -> RenameTarget -> String -> Eff hostRow (List EditRef)
 crossModuleUseRefs idx target modName = case moduleInfoOf idx modName of
   Nothing => pure []
   Just mi => if modPath mi == "" then pure []
   else do
-    exists <- prim_eff_fileExists (modPath mi)
+    exists <- raiseToRow hostRow (@vuna@prim_eff_fileExists (modPath mi))
     if exists then do
-      source <- prim_eff_readFile (modPath mi)
+      source <- raiseToRow hostRow (@vuna@prim_eff_readFile (modPath mi))
       case parseSource (modPath mi) source of
         ErrC e => pure []
         OkC sf =>
@@ -612,7 +613,7 @@ crossModuleUseRefs idx target modName = case moduleInfoOf idx modName of
           else pure (useRefs (pathToUri (modPath mi)) source sf target.rtName target.rtKind)
     else pure []
 
-crossModuleRefs : Index -> RenameTarget -> String -> String -> Eff [] (List EditRef)
+crossModuleRefs : Index -> RenameTarget -> String -> String -> Eff hostRow (List EditRef)
 crossModuleRefs idx target curUri curText = if target.rtModule == "" then pure []
 else
   let
@@ -711,7 +712,7 @@ else case strUnpack name of
 -- 入口
 -- ---------------------------------------------------------------
 -- prepareRename：只回光标 token 的范围 + 占位名；无法改名回 null。
-export prepareRenameAt : String -> Int -> Int -> String -> Maybe Index -> Eff [] Json
+export prepareRenameAt : String -> Int -> Int -> String -> Maybe Index -> Eff hostRow Json
 prepareRenameAt uri line col text midx = do
   targetM <- resolveTarget uri line col text midx
   case targetM of
@@ -724,7 +725,7 @@ prepareRenameAt uri line col text midx = do
         (JObj [Pair "range" (lspRange line nameStart line (nameStart + strLength name)), Pair "placeholder" (JStr name)])
 
 -- rename：局部绑定 → 当前文档；顶层符号 → 当前文档 + 目标模块 + 跨文件候选模块。
-export renameAt : String -> Int -> Int -> String -> String -> Maybe Index -> Eff [] Json
+export renameAt : String -> Int -> Int -> String -> String -> Maybe Index -> Eff hostRow Json
 renameAt uri line col text newName midx = if not (validNewName newName) then pure JNull
 else do
   targetM <- resolveTarget uri line col text midx
@@ -743,7 +744,7 @@ localEdits uri line col text = case bindingRenameOccurrences line col text of
   Nothing => []
   Just positions => map (\pos => EditRef uri (firstOf pos) (secondOf pos)) positions
 
-symbolEdits : String -> String -> RenameTarget -> Maybe Index -> Eff [] (List EditRef)
+symbolEdits : String -> String -> RenameTarget -> Maybe Index -> Eff hostRow (List EditRef)
 symbolEdits uri curText target midx = do
   crossRefs <- case midx of
     Nothing => pure []

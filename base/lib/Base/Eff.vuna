@@ -101,7 +101,7 @@ runThunk : {r : Row} -> {a : Type} -> Eff r a -> EffUnit -> a
 runThunk e = case e of
   MkEff f => f
 
--- 运行一个「行已被处理干净」的动作（Nil）。行只描述用户效应；宿主原语（`prim_eff_*`）
+-- 运行一个「行已被处理干净」的动作（Nil）。行只描述用户效应；宿主原语（`@vuna@prim_eff_*`）
 -- 构造的叶子不在行里，因此这里执行的动作可能包含宿主操作——语义是「无未处理行效应」，
 -- 不是「无副作用」。
 -- | 运行行已处理干净（`Nil`）的动作；仍有未处理效应时由运行时报告。
@@ -139,10 +139,24 @@ joinEffNilOuter m = MkEff (\u => case m of
     MkEff g => g u
 )
 
+-- | 行扩展（阶段 5）：`Eff r a` 在行尾接上 `t`（`rowAppend r t`，运行时恒等）。
+-- 工具链统一行迁移用：单效应动作（`Eff [FsOp]`）提升到统一行（`Eff hostRow`）。
+export weakenRow : {r : Row} -> (t : Row) -> {a : Type} -> Eff r a -> Eff (rowAppend r t) a
+weakenRow t e = MkEff (\u => case e of
+  MkEff f => f u
+)
+
 -- 行扩宽（任意目标行）：`Eff [] a` 是每个行的子行，运行时恒等。
 -- | 把行已处理干净的动作放进任意行：`Eff [] a -> Eff r a`（运行时恒等；行只是擦除索引）。
 export raise : {r : Row} -> {a : Type} -> Eff [] a -> Eff r a
 raise (MkEff f) = MkEff f
+
+-- | 显式行提升：`raise` 的 r 由上下文推断；这里由显式行值给出，避免 do 绑定里
+-- r 未解（阶段 5 迁移旧 `Eff []` 调用时用）。运行时恒等。
+export raiseTo : (r : Row) -> {a : Type} -> Eff [] a -> Eff r a
+raiseTo r e = MkEff (\u => case e of
+  MkEff f => f u
+)
 
 -- 核心发送：e 是标签类型；key/name 是运行时实例标识；op 是运行时值。
 -- `e` 是显式类型参数（宇宙域，恒擦除）；op 是运行时值。

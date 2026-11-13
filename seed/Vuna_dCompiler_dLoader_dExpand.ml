@@ -1,7 +1,7 @@
 open Vuna_runtime
 let v_Vuna_dCompiler_dLoader_dExpand_dexpandFuelBound = 1073741824
 
-let v_Vuna_dCompiler_dLoader_dExpand_dinternalRef = (fun name sp -> (Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_EVar (name, sp)))
+let v_Vuna_dCompiler_dLoader_dExpand_dinternalRef = (fun name sp -> (Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_EVar (("!" ^ name), sp)))
 
 let v_Vuna_dCompiler_dLoader_dExpand_ddebugOnRef = (fun sp -> (Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_EApp (((v_Vuna_dCompiler_dLoader_dExpand_dinternalRef Vuna_dCompiler_dIntrinsics.v_Vuna_dCompiler_dIntrinsics_ddebugOnIntrinsicName) sp), (Base_dList.C_Base_dList_dList_Cons ((Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_EInt (0, sp)), Base_dList.C_Base_dList_dList_Nil)), sp)))
 

@@ -2,7 +2,7 @@ module Vuna.Repl.Edit where
 
 -- Vuna.Repl.Edit：REPL 行编辑器（工具链；不进 seed 闭包）。
 --
--- 终端能力全部来自 `Vuna.Repl.Term`（stty + prim_eff_readBytes），因此不需要给编译器加
+-- 终端能力全部来自 `Vuna.Repl.Term`（stty + @vuna@prim_eff_readBytes），因此不需要给编译器加
 -- 终端原语。支持：
 --   * 左/右移动、Home/End、Backspace/Delete（按 UTF-8 码点边界）；
 --   * ↑/↓ 历史；Ctrl-R 反向增量历史搜索（Enter 接受、Esc/Ctrl-C 取消）；
@@ -18,6 +18,7 @@ module Vuna.Repl.Edit where
 --     权衡：每次查询要起 `sh` + `stty` 两个进程，2s 延迟对 resize 可接受且常驻开销低）。
 -- 渲染用 `\r` + 水平窗口（超宽时只显示尾部）+ `\x1b[K`，光标用 `\x1b[nD` 回移。
 -- 所有出口（提交/EOF/取消/不可用）都恢复终端状态（含关闭括号粘贴）。
+import Base.HostRow
 import Vuna.Compiler.Common
 import Vuna.Repl.Complete
 import Vuna.Repl.Paste
@@ -39,7 +40,7 @@ export data EditOutcome(..) : Type where
   EditCancel : EditOutcome
   EditUnavailable : EditOutcome
 
-export terminalWidth : Int -> Eff [] Int
+export terminalWidth : Int -> Eff hostRow Int
 terminalWidth n = termWidth n
 
 record EditState where
@@ -84,7 +85,7 @@ data Key : Type where
   KPaste : String -> Key
   KIgnore : Key
 
-export editLine : EditConfig -> Eff [] EditOutcome
+export editLine : EditConfig -> Eff hostRow EditOutcome
 editLine cfg = do
   path <- termTmpPath 0
   saved <- termSaveState path
@@ -104,7 +105,7 @@ editLine cfg = do
         _ <- termReadTimeout 0
         _ <- redraw cfg cfg.editWidth st0
         -- fuel 上限：空闲 tick 也扣 1，1e7 tick ≈ 11.6 天（远超一次交互会话）。
-        -- 边界：timed read 的**超时与 EOF 都返回 -1**（`prim_eff_readBytes` 无法区分），本编辑器
+        -- 边界：timed read 的**超时与 EOF 都返回 -1**（`@vuna@prim_eff_readBytes` 无法区分），本编辑器
         -- 一律当 KIdle——所以 tty 关闭/EOF 会退化成空闲轮询，耗尽 fuel 后以 ECancel 结束
         -- （≈11.6 天）；正常退出靠 Ctrl-D（空行）或 `:quit`，不依赖 EOF 判定。
         result <- editLoop 10000000 cfg cfg.editWidth 0 st0
@@ -122,7 +123,7 @@ outcomeOf (EContinue st) = EditLine (strOf st.esBuf)
 
 -- 主循环：读一键 → 处理 → 重绘；`KIdle` 每 20 tick（≈2s）查一次终端宽度，
 -- 变化时按新宽度重绘。`width` 是本轮使用的列数（初值来自 Repl 的 `stty size`）。
-editLoop : Int -> EditConfig -> Int -> Int -> EditState -> Eff [] EditResult
+editLoop : Int -> EditConfig -> Int -> Int -> EditState -> Eff hostRow EditResult
 editLoop fuel cfg width tick st = if fuel <= 0 then pure ECancel
 else do
   key <- readKey 0
@@ -153,7 +154,7 @@ isIdleKey _ = False
 -- ---------------------------------------------------------------
 -- 终端处于 `min 0 time 1`（0.1s 超时）模式：没有输入时返回 KIdle，交给 resize 检测。
 -- Esc 序列的后续字节也用同一超时读取：单独的 Esc 键会在 0.1s 超时后判为 KEsc。
-readKey : Int -> Eff [] Key
+readKey : Int -> Eff hostRow Key
 readKey _ = do
   b <- termReadByte 0
   if b < 0 then pure KIdle
@@ -177,7 +178,7 @@ readKey _ = do
     27 => readEscape 0
     _ => pure (KChar b)
 
-readEscape : Int -> Eff [] Key
+readEscape : Int -> Eff hostRow Key
 readEscape _ = do
   b2 <- termReadByte 0
   if b2 < 0 then pure KEsc else if b2 == 91 || b2 == 79 then csiKey 0 else pure KIgnore
@@ -185,10 +186,10 @@ readEscape _ = do
 -- CSI / SS3：`ESC [ ... final`。参数位只取第一个数值（`;` 之后的忽略），最多 16 字节；
 -- 支持的 final：A/B/C/D（方向）、H/F（Home/End）、`~` 加参数（1/7 Home、4/8 End、
 -- 3 Delete、200 括号粘贴开始——随后读到 `ESC [ 2 0 1 ~` 为止作为一次粘贴内容）。
-csiKey : Int -> Eff [] Key
+csiKey : Int -> Eff hostRow Key
 csiKey _ = csiParams 16 0 0
 
-csiParams : Int -> Int -> Int -> Eff [] Key
+csiParams : Int -> Int -> Int -> Eff hostRow Key
 csiParams fuel acc digits = if fuel <= 0 then pure KIgnore
 else do
   b <- termReadByte 0
@@ -208,7 +209,7 @@ csiLetter 72 = KHome
 csiLetter 70 = KEnd
 csiLetter _ = KIgnore
 
-csiTilde : Int -> Eff [] Key
+csiTilde : Int -> Eff hostRow Key
 csiTilde 1 = pure KHome
 csiTilde 7 = pure KHome
 csiTilde 3 = pure KDelete
@@ -222,11 +223,11 @@ csiTilde _ = pure KIgnore
 -- ---------------------------------------------------------------
 -- 按键处理
 -- ---------------------------------------------------------------
-applyKey : EditConfig -> Key -> EditState -> Eff [] EditResult
+applyKey : EditConfig -> Key -> EditState -> Eff hostRow EditResult
 applyKey cfg key st =
   if st.esSearching then applySearchKey cfg key st else applyNormalKey cfg key st
 
-applyNormalKey : EditConfig -> Key -> EditState -> Eff [] EditResult
+applyNormalKey : EditConfig -> Key -> EditState -> Eff hostRow EditResult
 applyNormalKey cfg (KChar b) st =
   if b >= 32 then pure (EContinue (insertByte b st)) else pure (EContinue st)
 applyNormalKey cfg KEnter st = pure (ESubmit (strOf st.esBuf))
@@ -257,7 +258,7 @@ applyNormalKey cfg KIdle st = pure (EContinue st)
 applyNormalKey cfg (KPaste text) st = pure (EContinue (insertText st text))
 applyNormalKey cfg KIgnore st = pure (EContinue st)
 
-applySearchKey : EditConfig -> Key -> EditState -> Eff [] EditResult
+applySearchKey : EditConfig -> Key -> EditState -> Eff hostRow EditResult
 applySearchKey cfg (KChar b) st =
   if b >= 32 then pure (EContinue (searchQueryAppend cfg st b)) else pure (EContinue st)
 applySearchKey cfg KBackspace st = pure (EContinue (searchQueryBackspace cfg st))
@@ -419,7 +420,7 @@ historyDown cfg st =
 -- ---------------------------------------------------------------
 -- 补全
 -- ---------------------------------------------------------------
-complete : EditConfig -> EditState -> Eff [] EditState
+complete : EditConfig -> EditState -> Eff hostRow EditState
 complete cfg st =
   let
     start = tokenStart st.esBuf st.esCursor
@@ -442,7 +443,7 @@ complete cfg st =
           (withBuf st (append (append (take start st.esBuf) (strUnpack common)) (drop st.esCursor st.esBuf)) (start + byteLength common))
         else bell st
 
-bell : EditState -> Eff [] EditState
+bell : EditState -> Eff hostRow EditState
 bell st = do
   _ <- writeOut (strPack [7])
   pure st
@@ -522,10 +523,10 @@ exitSearch st = EditState st.esBuf st.esCursor st.esHistIdx st.esDraft False [] 
 -- ---------------------------------------------------------------
 -- 渲染
 -- ---------------------------------------------------------------
-redraw : EditConfig -> Int -> EditState -> Eff [] Int
+redraw : EditConfig -> Int -> EditState -> Eff hostRow Int
 redraw cfg width st = if st.esSearching then redrawSearch cfg st else redrawNormal cfg width st
 
-redrawNormal : EditConfig -> Int -> EditState -> Eff [] Int
+redrawNormal : EditConfig -> Int -> EditState -> Eff hostRow Int
 redrawNormal cfg width st =
   let
     avail = imax 8 (width - cfg.editPromptWidth)
@@ -541,7 +542,7 @@ renderBytes [] = ""
 renderBytes (b :: rest) =
   if b == 10 then "↵${renderBytes rest}" else "${strPack [b]}${renderBytes rest}"
 
-redrawSearch : EditConfig -> EditState -> Eff [] Int
+redrawSearch : EditConfig -> EditState -> Eff hostRow Int
 redrawSearch cfg st =
   let
     queryText = strOf st.esQuery

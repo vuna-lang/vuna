@@ -1,12 +1,13 @@
--- M21：DT 产物真正执行宿主原语（prim_eff_*）的效果；P2c 起用户面经 Eff + handler，
--- `runConsole` = handleConsoleHost + joinEff。输出见同名 .out。
+-- M21：DT 产物真正执行宿主原语（@vuna@prim_eff_*）的效果；P2c 起用户面经 Eff + handler，
+-- 阶段 5：main 直接带行，entry 自动预装 handler。输出见同名 .out。
 import Base.Eff
 import Base.EffConsole
+import Base.HostRow
 
-prog : Eff [ConsoleOp@real] Int
+prog : Eff hostRow Int
 prog = do
-  _ <- consolePrint "real" "hello"
+  _ <- consolePrint "default" "hello"
   pure 7
 
-main : Eff [] Int
-main = runConsole "real" prog
+main : Eff hostRow Int
+main = prog

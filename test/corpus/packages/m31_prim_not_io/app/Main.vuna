@@ -1,3 +1,4 @@
--- M31：效果原语返回 `Eff []` 动作；纯 main 不能再直接消费它（类型错误，编译期拦下）。
+-- M31：效果动作不能在纯 main 里直接消费（类型错误，编译期拦下）。
+import Base.EffEnv
 main : String
-main = prim_eff_getenv "X"
+main = envGetEnv "default" "X"

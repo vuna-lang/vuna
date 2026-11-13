@@ -4,51 +4,57 @@
 --   serve PATH  —— 绑 Unix socket，accept 一个连接，回 "echo:<收到>"，退出；
 --   serve-tcp   —— 绑 127.0.0.1:0（临时端口），打印 `port:<N>`，accept 一个连接后同样 echo；
 --   client ADDR —— 连接、发 "ping\n"、打印回包、退出。
+-- 阶段 5：main 带 hostRow 行，entry 自动预装 Console/Args/Exit handler；net 走带行 API。
 import Base.Monad
 import Base.Eff
+import Base.EffArgs
+import Base.EffConsole
+import Base.EffExit
+import Base.EffNet
+import Base.HostRow
 
-serve : String -> Eff [] Int
+serve : String -> Eff hostRow Int
 serve path = do
-  h <- prim_eff_netListen path
-  _ <- prim_eff_print ("ready" ++ "\n")
-  c <- prim_eff_netAccept h
-  msg <- prim_eff_netRecv c 4096
-  _ <- prim_eff_netSend c ("echo:" ++ msg)
-  _ <- prim_eff_netClose c
-  _ <- prim_eff_netClose h
-  prim_eff_print ("server done" ++ "\n")
-  prim_eff_exit 0
+  h <- netListen path
+  _ <- consolePrint "default" ("ready" ++ "\n")
+  c <- netAccept h
+  msg <- netRecv c 4096
+  _ <- netSend c ("echo:" ++ msg)
+  _ <- netClose c
+  _ <- netClose h
+  _ <- consolePrint "default" ("server done" ++ "\n")
+  exitWith "default" 0
 
-serveTcp : Eff [] Int
+serveTcp : Eff hostRow Int
 serveTcp = do
-  h <- prim_eff_netListen "tcp:127.0.0.1:0"
-  p <- prim_eff_netPort h
-  prim_eff_print (("port:" ++ strFromInt p) ++ "\n")
-  c <- prim_eff_netAccept h
-  msg <- prim_eff_netRecv c 4096
-  _ <- prim_eff_netSend c ("echo:" ++ msg)
-  _ <- prim_eff_netClose c
-  _ <- prim_eff_netClose h
-  prim_eff_exit 0
+  h <- netListen "tcp:127.0.0.1:0"
+  p <- netPort h
+  _ <- consolePrint "default" (("port:" ++ strFromInt p) ++ "\n")
+  c <- netAccept h
+  msg <- netRecv c 4096
+  _ <- netSend c ("echo:" ++ msg)
+  _ <- netClose c
+  _ <- netClose h
+  exitWith "default" 0
 
-client : String -> Eff [] Int
+client : String -> Eff hostRow Int
 client addr = do
-  c <- prim_eff_netConnect addr
-  _ <- prim_eff_netSend c "ping\n"
-  reply <- prim_eff_netRecv c 4096
-  _ <- prim_eff_netClose c
-  _ <- prim_eff_print reply
-  prim_eff_exit 0
+  c <- netConnect addr
+  _ <- netSend c "ping\n"
+  reply <- netRecv c 4096
+  _ <- netClose c
+  _ <- consolePrint "default" reply
+  exitWith "default" 0
 
-dispatch : List String -> Eff [] Int
+dispatch : List String -> Eff hostRow Int
 dispatch (["serve", path]) = serve path
 dispatch (["serve-tcp"]) = serveTcp
 dispatch (["client", addr]) = client addr
 dispatch _ = do
-  _ <- prim_eff_print "usage\n"
-  prim_eff_exit 2
+  _ <- consolePrint "default" "usage\n"
+  exitWith "default" 2
 
-main : Eff [] Int
+main : Eff hostRow Int
 main = do
-  args <- prim_eff_getArgs
+  args <- argsGetArgs "default"
   dispatch args

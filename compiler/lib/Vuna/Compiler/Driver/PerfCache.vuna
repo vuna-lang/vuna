@@ -16,6 +16,7 @@ module Vuna.Compiler.Driver.PerfCache where
 --
 -- 效果显式化：目录遍历 / 读文件 / 写文件 / 建目录 / 删除 / 环境与二进制指纹全部显式在
 -- `Eff []` 里；纯数据逻辑（路径 / 哈希 / 文件名 / 桶 key）保持纯函数。
+import Base.HostRow
 import Vuna.Compiler.Canonical.Bytes
 import Vuna.Compiler.Common
 import Vuna.Compiler.Driver.Split
@@ -30,20 +31,20 @@ unitCacheSchema = "vuna-unit-cache 2"
 export unitCacheCodec : String
 unitCacheCodec = "split-file 1"
 
-export unitCacheTag : Eff [] String
+export unitCacheTag : Eff hostRow String
 unitCacheTag = do
   tag <- compilerTagEff
   pure "${unitCacheSchema}/${tag}"
 
-cacheBaseOf : Eff [] String
+cacheBaseOf : Eff hostRow String
 cacheBaseOf = do
-  t <- prim_eff_getenv "TMPDIR"
+  t <- raiseToRow hostRow (@vuna@prim_eff_getenv "TMPDIR")
   pure (case t of
     "" => "/tmp"
     tmp => tmp
   )
 
-export unitCacheDir : String -> Eff [] String
+export unitCacheDir : String -> Eff hostRow String
 unitCacheDir pkg = do
   base <- cacheBaseOf
   pure "${base}/vuna-cache/${hashTextOf pkg}/split-units"
@@ -83,30 +84,30 @@ unitCacheEntryKeyOf keys = case lookupPair "__entry__" keys of
 
 -- | 删除文件，**文件不存在也不报错**。
 --
--- 为什么不能直接用 `prim_eff_removeFile`：单元缓存目录按包共享，`vuna test --jobs N` /
+-- 为什么不能直接用 `@vuna@prim_eff_removeFile`：单元缓存目录按包共享，`vuna test --jobs N` /
 -- workspace 并行 check 会有多个进程同时 GC 同一个桶。`removeFile` 在文件已被别的进程
 -- 删掉时抛宿主异常（语言里没有 try/catch），表现为
 -- `runtime error: removeFile: ... No such file or directory`。
 -- `exists` 再删仍有 TOCTOU 窗口，所以走 `rm -f`（幂等）。
-safeRemoveFile : String -> Eff [] Int
+safeRemoveFile : String -> Eff hostRow Int
 safeRemoveFile path = do
-  exists <- prim_eff_fileExists path
-  if exists then prim_eff_runIn "/" ["rm", "-f", path] else pure 0
+  exists <- raiseToRow hostRow (@vuna@prim_eff_fileExists path)
+  if exists then raiseToRow hostRow (@vuna@prim_eff_runIn "/" ["rm", "-f", path]) else pure 0
 
-export unitCacheGc : String -> String -> Eff [] Int
+export unitCacheGc : String -> String -> Eff hostRow Int
 unitCacheGc base keepDir = do
   _ <- storeEnsureDirEff base
-  names <- prim_eff_readDir base
+  names <- raiseToRow hostRow (@vuna@prim_eff_readDir base)
   gcEntries base keepDir names
 
-gcEntries : String -> String -> List String -> Eff [] Int
+gcEntries : String -> String -> List String -> Eff hostRow Int
 gcEntries base keepDir [] = pure 0
 gcEntries base keepDir (n :: rest) =
   let
     path = "${base}/${n}"
   in if path == keepDir then gcEntries base keepDir rest
   else do
-    isDir <- prim_eff_isDirectory path
+    isDir <- raiseToRow hostRow (@vuna@prim_eff_isDirectory path)
     if isDir then do
       _ <- dropDirFiles path
       gcEntries base keepDir rest
@@ -114,12 +115,12 @@ gcEntries base keepDir (n :: rest) =
       _ <- safeRemoveFile path
       gcEntries base keepDir rest
 
-dropDirFiles : String -> Eff [] Int
+dropDirFiles : String -> Eff hostRow Int
 dropDirFiles dir = do
-  names <- prim_eff_readDir dir
+  names <- raiseToRow hostRow (@vuna@prim_eff_readDir dir)
   dropFiles dir names
 
-dropFiles : String -> List String -> Eff [] Int
+dropFiles : String -> List String -> Eff hostRow Int
 dropFiles dir [] = pure 0
 dropFiles dir (f :: rest) = do
   _ <- safeRemoveFile "${dir}/${f}"
@@ -130,27 +131,27 @@ dropFiles dir (f :: rest) = do
 -- 单元一定在保留集合里（不会删掉马上要命中的），而同一入口反复编辑累积下来的旧 key 文件
 -- 全部清掉 ⇒ 桶内文件数有界（≤ 单元数 + 1）。
 -- key 的传递依赖链保证「依赖接口变化 ⇒ 依赖者 key 变化」，旧 key 文件不再可能被命中。
-export unitCacheBucketGc : String -> List String -> Eff [] Int
+export unitCacheBucketGc : String -> List String -> Eff hostRow Int
 unitCacheBucketGc dir keepNames = do
   _ <- storeEnsureDirEff dir
-  names <- prim_eff_readDir dir
+  names <- raiseToRow hostRow (@vuna@prim_eff_readDir dir)
   bucketGcGo dir keepNames names
 
-bucketGcGo : String -> List String -> List String -> Eff [] Int
+bucketGcGo : String -> List String -> List String -> Eff hostRow Int
 bucketGcGo dir keepNames [] = pure 0
 bucketGcGo dir keepNames (f :: rest) =
   let
     path = "${dir}/${f}"
   in if memName f keepNames then bucketGcGo dir keepNames rest
   else do
-    exists <- prim_eff_fileExists path
-    isDir <- if exists then prim_eff_isDirectory path else pure False
+    exists <- raiseToRow hostRow (@vuna@prim_eff_fileExists path)
+    isDir <- if exists then raiseToRow hostRow (@vuna@prim_eff_isDirectory path) else pure False
     if exists && isDir then bucketGcGo dir keepNames rest
     else do
       _ <- safeRemoveFile path
       bucketGcGo dir keepNames rest
 
-export unitCacheRead : String -> String -> String -> Eff [] (Maybe SplitFile)
+export unitCacheRead : String -> String -> String -> Eff hostRow (Maybe SplitFile)
 unitCacheRead dir name key = do
   tag <- unitCacheTag
   payload <- storeReadEff tag unitCacheCodec (unitCachePath dir name key)
@@ -159,7 +160,7 @@ unitCacheRead dir name key = do
     Nothing => Nothing
   )
 
-export unitCacheWrite : String -> String -> String -> SplitFile -> Eff [] Int
+export unitCacheWrite : String -> String -> String -> SplitFile -> Eff hostRow Int
 unitCacheWrite dir name key sf = do
   _ <- storeEnsureDirEff dir
   tag <- unitCacheTag

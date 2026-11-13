@@ -1,13 +1,22 @@
 -- W10：clock 效应标签（命名实例）——mock handler 固定时间（elapsed = 0）；
--- real handler 走 effTimeUs 与原生 prim_eff_sleep，同程序验证 sleep 确实推进时间。
+-- real handler 走入口自动预装的行 handler，同程序验证 sleep 确实推进时间。
 import Base.Eff
 import Base.EffClock
+import Base.EffConsole
+import Base.HostRow
 
 prog : (n : String) -> Eff (Cons n ClockOp Nil) Int
 prog n = do
   t0 <- clockNow n
   _ <- clockSleepMicros n 2000
   t1 <- clockNow n
+  pure (t1 - t0)
+
+progReal : Eff hostRow Int
+progReal = do
+  t0 <- clockNow "default"
+  _ <- clockSleepMicros "default" 2000
+  t1 <- clockNow "default"
   pure (t1 - t0)
 
 mret : Int -> Int
@@ -18,10 +27,10 @@ mopH op k = case op of
   Now => k 1000
   SleepMicros us => k 0
 
-main : Eff [] Int
+main : Eff hostRow Int
 main = case runPure (handleClock "mock" mret mopH (prog "mock")) of
   mockElapsed => do
-    _ <- prim_eff_print ("mock " ++ strFromInt mockElapsed ++ "\n")
-    realElapsed <- runClock "real" (prog "real")
-    _ <- prim_eff_print ("real " ++ strFromInt (if realElapsed >= 1000 then 1 else 0) ++ "\n")
+    _ <- consolePrint "default" ("mock " ++ strFromInt mockElapsed ++ "\n")
+    realElapsed <- progReal
+    _ <- consolePrint "default" ("real " ++ strFromInt (if realElapsed >= 1000 then 1 else 0) ++ "\n")
     pure 0

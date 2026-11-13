@@ -9,6 +9,7 @@ module Vuna.Compiler.Packages.Source where
 --
 -- 摘要口径见 `Canonical.Pkg`：内容摘要含全部文件字节；语义身份把文件折成内容摘要、
 -- 且 `path` 依赖记 `"path"`（可变输入）。两者都不含绝对路径、mtime、遍历顺序。
+import Base.HostRow
 import Vuna.Compiler.Canonical.Pkg
 import Vuna.Compiler.Common
 import Vuna.Compiler.Frontend.Manifest
@@ -39,7 +40,7 @@ export verifyHash : String -> String -> Bool
 verifyHash expected actual = normalizeHash expected == normalizeHash actual
 
 -- | 包内全部文件（相对路径 + 字节），按路径升序。
-export packageFilesEff : String -> Eff [] (List PackageFile)
+export packageFilesEff : String -> Eff hostRow (List PackageFile)
 packageFilesEff root = do
   manifestFiles <- readManifestFile root
   libFiles <- collectDirFiles 1048576 root "lib"
@@ -47,28 +48,28 @@ packageFilesEff root = do
   testFiles <- collectDirFiles 1048576 root "test"
   pure (sortByPath (append manifestFiles (append libFiles (append appFiles testFiles))))
 
-readManifestFile : String -> Eff [] (List PackageFile)
+readManifestFile : String -> Eff hostRow (List PackageFile)
 readManifestFile root = do
-  exists <- prim_eff_fileExists "${root}/vuna.toml"
+  exists <- raiseToRow hostRow (@vuna@prim_eff_fileExists "${root}/vuna.toml")
   if exists then do
-    content <- prim_eff_readFile "${root}/vuna.toml"
+    content <- raiseToRow hostRow (@vuna@prim_eff_readFile "${root}/vuna.toml")
     pure [PackageFile "vuna.toml" content]
   else pure []
 
-collectDirFiles : Int -> String -> String -> Eff [] (List PackageFile)
+collectDirFiles : Int -> String -> String -> Eff hostRow (List PackageFile)
 collectDirFiles fuel root rel = if fuel <= 0 then pure []
 else
   let
     dir = if rel == "" then root else "${root}/${rel}"
   in do
-    exists <- prim_eff_fileExists dir
-    isDir <- if exists then prim_eff_isDirectory dir else pure False
+    exists <- raiseToRow hostRow (@vuna@prim_eff_fileExists dir)
+    isDir <- if exists then raiseToRow hostRow (@vuna@prim_eff_isDirectory dir) else pure False
     if exists && isDir then do
-      names <- prim_eff_readDir dir
+      names <- raiseToRow hostRow (@vuna@prim_eff_readDir dir)
       collectNames (fuel - 1) root rel names
     else pure []
 
-collectNames : Int -> String -> String -> List String -> Eff [] (List PackageFile)
+collectNames : Int -> String -> String -> List String -> Eff hostRow (List PackageFile)
 collectNames fuel root rel [] = pure []
 collectNames fuel root rel (name :: rest) = if fuel <= 0 then pure []
 else do
@@ -76,7 +77,7 @@ else do
   there <- collectNames (fuel - 1) root rel rest
   pure (append here there)
 
-walkName : Int -> String -> String -> String -> Eff [] (List PackageFile)
+walkName : Int -> String -> String -> String -> Eff hostRow (List PackageFile)
 walkName fuel root rel name = if fuel <= 0 then pure []
 else case name of
   "." => pure []
@@ -87,10 +88,10 @@ else case name of
       childRel = if rel == "" then name else "${rel}/${name}"
       childPath = "${root}/${childRel}"
     in do
-      isDir <- prim_eff_isDirectory childPath
+      isDir <- raiseToRow hostRow (@vuna@prim_eff_isDirectory childPath)
       if isDir then collectDirFiles (fuel - 1) root childRel
       else if endsWith ".vuna" name then do
-        content <- prim_eff_readFile childPath
+        content <- raiseToRow hostRow (@vuna@prim_eff_readFile childPath)
         pure [PackageFile childRel content]
       else pure []
 
@@ -101,7 +102,7 @@ sortByPath : List PackageFile -> List PackageFile
 sortByPath files = sortBy filePathLe files
 
 -- | 由 manifest + 文件集合构造 `PackageSource`（依赖声明只取别名与摘要）。
-export packageSourceEff : String -> Manifest -> Eff [] PackageSource
+export packageSourceEff : String -> Manifest -> Eff hostRow PackageSource
 packageSourceEff root manifest = do
   files <- packageFilesEff root
   pure

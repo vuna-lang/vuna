@@ -11,6 +11,7 @@ module Vuna.Compiler.Diag.Format where
 --
 -- 列单位沿用编译器内部约定：1-based，UTF-8 字节（见 `Source`）。JSON 同时给出
 -- 行/列；LSP 适配器负责转 UTF-16。
+import Base.HostRow
 import Vuna.Compiler.Source
 import Vuna.Compiler.Diag
 import qualified Vuna.Compiler.Diagnostics
@@ -133,14 +134,14 @@ snippetOf sp text =
   in join "\n" ["  --> ${showSpanLoc sp}", gutter, numberRow, caretRow]
 
 -- 文件可读才渲染片段（失败静默退回无片段）。
-renderSnippet : Span -> Eff [] String
+renderSnippet : Span -> Eff hostRow String
 renderSnippet sp = do
-  exists <- prim_eff_fileExists (spanFile sp)
+  exists <- raiseToRow hostRow (@vuna@prim_eff_fileExists (spanFile sp))
   if exists then do
-    isDir <- prim_eff_isDirectory (spanFile sp)
+    isDir <- raiseToRow hostRow (@vuna@prim_eff_isDirectory (spanFile sp))
     if isDir then pure ""
     else do
-      text <- prim_eff_readFile (spanFile sp)
+      text <- raiseToRow hostRow (@vuna@prim_eff_readFile (spanFile sp))
       pure (snippetOf sp text)
   else pure ""
 
@@ -159,7 +160,7 @@ headerOf lang d =
   else "${severityName d.diagSeverity}[${d.diagCode}]: ${msg}"
 
 -- `lang` 只是显式参数（`en` / `zh`）：没有 ambient 语言状态；片段读取是 Eff。
-export renderHuman : String -> Diagnostic -> Eff [] String
+export renderHuman : String -> Diagnostic -> Eff hostRow String
 renderHuman lang d =
   let
     primary = primarySpan d.diagLabels

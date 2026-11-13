@@ -1,13 +1,17 @@
 -- M37 / C1：Eff 是唯一动作类型；宿主原语是 `Eff []` 叶子。
--- `prim_eff_sleep`（微秒，原生阻塞睡眠）探针断言真实推进时间；`prim_eff_exit 0`
+-- `@vuna@prim_eff_sleep`（微秒，原生阻塞睡眠）探针断言真实推进时间；`exitWith "default" 0`
 -- 让 golden 只含业务输出。
+import Base.HostRow
+import Base.EffClock
+import Base.EffExit
+import Base.EffConsole
 import Base.Eff
 
-main : Eff [] Int
+main : Eff hostRow Int
 main = do
-  _ <- prim_eff_print "hi\n"
+  _ <- consolePrint "default" "hi\n"
   t0 <- effTimeUs
-  _ <- prim_eff_sleep 5000
+  _ <- clockSleepMicros "default" 5000
   t1 <- effTimeUs
-  _ <- prim_eff_print (if t1 - t0 >= 3000 then "slept\n" else "early\n")
-  prim_eff_exit 0
+  _ <- consolePrint "default" (if t1 - t0 >= 3000 then "slept\n" else "early\n")
+  exitWith "default" 0

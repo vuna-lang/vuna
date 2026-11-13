@@ -1,0 +1,10 @@
+-- 阶段 5：Eff [] 的纯动作经 raise 自动 lift 到带行上下文（Eff [FsOp]）。
+import Base.Eff
+import Base.EffFs
+
+main : Eff [FsOp] Int
+main =
+  let
+    x : Eff [] Int
+    x = pure 0
+  in x

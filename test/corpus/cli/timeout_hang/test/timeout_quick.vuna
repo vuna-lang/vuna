@@ -1,7 +1,8 @@
 -- W1 超时夹具（通过路径）：1ms 睡眠在短超时内照常通过。
--- P2c：睡眠走 Clock 效应（runClock），不再直接调用宿主原语。
+-- 阶段 5：睡眠走 Clock 效应（entry 自动预装 handler），不再直接调用宿主原语。
 import Base.Eff
 import Base.EffClock
+import Base.HostRow
 
-main : Eff [] Int
-main = runClock "real" (clockSleepMicros "real" 1000)
+main : Eff (Cons "default" ClockOp Nil) Int
+main = clockSleepMicros "default" 1000

@@ -3,9 +3,9 @@ module Base.EffProcess where
 -- Base.EffProcess：一阶进程效应（W10 效应标签迁移）。
 --
 -- 标签 `ProcessOp` 是命名实例；操作：
---   * `Args`：取进程参数（`prim_eff_getArgs`，**不含** argv[0]）；
---   * `Exit`：以状态码退出（`prim_eff_exit`，真实 handler 下不返回）；
---   * `RunIn`：在目录 dir 下运行命令（`prim_eff_runIn`），返回退出码。
+--   * `Args`：取进程参数（`@vuna@prim_eff_getArgs`，**不含** argv[0]）；
+--   * `Exit`：以状态码退出（`@vuna@prim_eff_exit`，真实 handler 下不返回）；
+--   * `RunIn`：在目录 dir 下运行命令（`@vuna@prim_eff_runIn`），返回退出码。
 -- 真实 handler 用现有 `process` 原语；没有新增原语。
 --
 -- W10 收尾：`Exit` 可控。`handleProcessHost` 保留「真实退出」语义（`onExit = exit`）；
@@ -29,7 +29,7 @@ resProcess Args = List String
 resProcess (Exit c) = Int
 resProcess (RunIn dir args) = Int
 
--- | 通过命名实例取进程参数（`prim_eff_getArgs`，**不含** `argv[0]`）。
+-- | 通过命名实例取进程参数（`@vuna@prim_eff_getArgs`，**不含** `argv[0]`）。
 export processArgs : (n : String) -> {r : Row} -> {w : Member n ProcessOp r} -> Eff r (List String)
 processArgs n = sendCore ProcessOp "process" n Args
 
@@ -49,32 +49,21 @@ handleProcess n ret opH comp = handleCore ProcessOp "process" n ret opH comp
 processOpHIOWith : (Int -> Eff [] Int) -> {a : Type} -> (o : ProcessOp) -> (resProcess o -> Eff [] a) -> Eff [] a
 processOpHIOWith onExit op k = case op of
   Args => do
-    xs <- prim_eff_getArgs
+    xs <- @vuna@prim_eff_getArgs
     k xs
   Exit c => do
     r <- onExit c
     k r
   RunIn dir args => do
-    c <- prim_eff_runIn dir args
+    c <- @vuna@prim_eff_runIn dir args
     k c
 
 -- | 宿主 handler：由调用方传入 `onExit`，结果行删除 `ProcessOp`，answer 是已处理干净的 `Eff []` 动作。
 export handleProcessHostWith : {a : Type} -> {r : Row} -> (n : String) -> (Int -> Eff [] Int) -> Eff (Base.Eff.Cons n ProcessOp r) a -> Eff r (Eff [] a)
 handleProcessHostWith n onExit comp = handleProcess n (\a => pure a) (processOpHIOWith onExit) comp
 
--- 真实路径：`Exit` 调用 `prim_eff_exit`，进程立即退出、不返回。
--- | 真实路径 handler：`Exit` 调 `prim_eff_exit`，进程立即退出、不返回。
-export handleProcessHost : {a : Type} -> {r : Row} -> (n : String) -> Eff (Base.Eff.Cons n ProcessOp r) a -> Eff r (Eff [] a)
-handleProcessHost n comp = handleProcessHostWith n (\c => prim_eff_exit c) comp
-
--- 观察路径：`Exit c` 不退出，退出码作为操作结果交还给程序。
--- | 观察路径 handler：`Exit c` 不退出，把退出码作为操作结果交还给程序，程序继续执行。
-export handleProcessHostObserved : {a : Type} -> {r : Row} -> (n : String) -> Eff (Base.Eff.Cons n ProcessOp r) a -> Eff r (Eff [] a)
-handleProcessHostObserved n comp = handleProcessHostWith n (\c => pure c) comp
-
--- | 单效应便捷入口（P3）：`handleProcessHost n` + `joinEff` 的组合。
-export runProcess : {a : Type} -> (n : String) -> Eff (Cons n ProcessOp []) a -> Eff [] a
-runProcess n comp = joinEffNilOuter (handleProcessHost n comp)
+-- 真实路径：`Exit` 调用 `@vuna@prim_eff_exit`，进程立即退出、不返回。
+-- | 真实路径 handler：`Exit` 调 `@vuna@prim_eff_exit`，进程立即退出、不返回。
 
 -- ---------------------------------------------------------------
 -- 阶段 3：带行 handler（entry 自动预装用；不导出）
@@ -82,13 +71,13 @@ runProcess n comp = joinEffNilOuter (handleProcessHost n comp)
 processOpHIOWithHost : (Int -> Eff (Cons "default" ProcessOp []) Int) -> {a : Type} -> (o : ProcessOp) -> (resProcess o -> Eff (Cons "default" ProcessOp []) a) -> Eff (Cons "default" ProcessOp []) a
 processOpHIOWithHost onExit op k = case op of
   Args => do
-    xs <- prim_eff_getArgs_process_host
+    xs <- @vuna@prim_eff_getArgs_process_host
     k xs
   Exit c => do
     r <- onExit c
     k r
   RunIn dir args => do
-    c <- prim_eff_runIn_host dir args
+    c <- @vuna@host@runIn dir args
     k c
 
 handleProcessHostWithHost : {a : Type} -> {r : Row} -> (n : String) -> (Int -> Eff (Cons "default" ProcessOp []) Int) -> Eff (Base.Eff.Cons n ProcessOp r) a -> Eff r (Eff (Cons "default" ProcessOp []) a)
@@ -97,4 +86,4 @@ handleProcessHostWithHost n onExit comp =
 
 runProcessHost : {r : Row} -> {a : Type} -> Eff (Cons "default" ProcessOp r) a -> Eff (rowAppend r (Cons "default" ProcessOp [])) a
 runProcessHost comp =
-  joinEff (handleProcessHostWithHost "default" (\c => prim_eff_exit_process_host c) comp)
+  joinEff (handleProcessHostWithHost "default" (\c => @vuna@prim_eff_exit_process_host c) comp)

@@ -3,6 +3,7 @@ module Vuna.Compiler.Elab.Data where
 -- Vuna.Compiler.Elab.Data：data 声明与构造子/索引擦除：elabCtor/elabDataHead/elabDataHeads/elabDataBodies/elabDatas，
 -- 以及按「索引是否在字段类型里被使用」计算的擦除掩码（eraseIndexMask/indexErasureCandidates）。
 -- 拆自 M24 的单一 `Elab.vuna`（按真实调用图切；门面仍是 `Vuna.Compiler.Elab`）。
+import Base.HashMap
 import Base.List
 import Vuna.Compiler.Common
 import Vuna.Compiler.Core
@@ -28,7 +29,7 @@ elabCtor globals fam arity famLevel ec c = case c of
         Just k => k
         Nothing => TType levelZero
       tyExpr2 = if hasFamParams tyExpr then tyExpr else prependFamParams famKind tyExpr csp
-    in Vuna.Compiler.Common.bind (checkType globals emptyCtx ec tyExpr2) (\pk => case pk of
+    in Vuna.Compiler.Common.bind (checkType (append globals (Base.HashMap.toList (ecGlobalsTbl ec))) emptyCtx ec tyExpr2) (\pk => case pk of
       Pair tyTerm0 (Pair sort ec1) =>
         let
           tyTerm = zonkTerm ec1 0 tyTerm0
@@ -37,7 +38,7 @@ elabCtor globals fam arity famLevel ec c = case c of
             if head /= fam then tcErr2 csp (CtorDoesNotReturn (ctorDisplayName cname) fam) (ctorDisplayName cname) fam
             else if length args /= arity then tcErr2 csp (CtorWrongIndices (ctorDisplayName cname) fam) (ctorDisplayName cname) fam
             else Vuna.Compiler.Common.bind
-              (checkCtorFieldSorts globals emptyCtx ec1 arity famLevel cname csp (countTelePis tyTerm) tyExpr2)
+              (checkCtorFieldSorts (append globals (Base.HashMap.toList (ecGlobalsTbl ec1))) emptyCtx ec1 arity famLevel cname csp (countTelePis tyTerm) tyExpr2)
               (\_ => OkC (Pair (DtCtor cname fam (teleOfType tyTerm) tyTerm (Just csp)) ec1))
     )
 

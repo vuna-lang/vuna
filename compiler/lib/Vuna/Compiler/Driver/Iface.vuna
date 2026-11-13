@@ -31,6 +31,7 @@ module Vuna.Compiler.Driver.Iface where
 --
 -- 效果显式化：manifest / 模块文件的读、写、存在性探测与 `VUNA_IFACE_DIR` 环境读取
 -- 全部显式在 `Eff []` 里；纯构造（接口哈希、覆盖性检查、布局计算）保持纯函数。
+import Base.HostRow
 import Vuna.Compiler.Canonical.Ast
 import Vuna.Compiler.Canonical.Bytes
 import Vuna.Compiler.Canonical.CoreTerm
@@ -819,9 +820,9 @@ relUnder pkgDir path =
 -- 接口目录模式：`VUNA_IFACE_DIR` 非空 = 外部镜像根，用**内容寻址**文件名
 -- （`<stem>-<hash>.iface`），同一路径永远不可能承载两份不同内容；默认布局仍写源文件旁
 -- （命名 `<stem>.iface`，路径固定，读侧靠 `miName` + `miIfaceHash` 校验）。
-export ifaceMirrorMode : Eff [] Bool
+export ifaceMirrorMode : Eff hostRow Bool
 ifaceMirrorMode = do
-  dir <- prim_eff_getenv "VUNA_IFACE_DIR"
+  dir <- raiseToRow hostRow (@vuna@prim_eff_getenv "VUNA_IFACE_DIR")
   pure (dir /= "")
 
 -- 内容寻址 token：SHA-256 十六进制前 16 位（文件名安全、可读；64 bit 足够区分）。
@@ -832,7 +833,7 @@ ifaceHashToken h = strSubstring 0 16 h
 -- 两侧都先**绝对化**：`siPath` 由写侧构造时应已是绝对值（见 `Compile.ownSourceInfos`），
 -- 但包目录可能来自相对入口（`check base` vs `check $PWD/base`）——不归一就会算出空相对
 -- 路径、整包跳过写，且载荷字节随入口写法变化。
-export ifaceRelPathOf : String -> String -> SourceInfo -> Eff [] String
+export ifaceRelPathOf : String -> String -> SourceInfo -> Eff hostRow String
 ifaceRelPathOf h pkgDir si = do
   mirror <- ifaceMirrorMode
   pkg <- absolutePath pkgDir
@@ -944,7 +945,7 @@ export ifaceFileTag : String -> String
 ifaceFileTag compiler = "${ifaceSchema}/${compiler}"
 
 -- | 读 manifest（`.vuna-iface`）：framing 校验 → 规范解码 → 版本 / 编译器核对。
-export readManifest : String -> String -> Eff [] (Maybe PackageManifest)
+export readManifest : String -> String -> Eff hostRow (Maybe PackageManifest)
 readManifest dir compiler = do
   payload <- storeReadEff (ifaceFileTag compiler) manifestCodec (manifestPathOf dir)
   case payload of
@@ -965,21 +966,21 @@ readManifest dir compiler = do
 
 -- manifest 写去抖：内容逐字节相同就跳过。默认布局的 manifest 在源树里，避免每次 check
 -- 都改 dotfile 的 mtime（工具会话按内容哈希判定是否变化，但工作树 mtime 抖动没必要）。
-writeManifest : String -> String -> PackageManifest -> Eff [] Int
+writeManifest : String -> String -> PackageManifest -> Eff hostRow Int
 writeManifest dir compiler mf =
   storeWriteIfChangedEff (ifaceFileTag compiler) manifestCodec (manifestPathOf dir) (encManifest mf)
 
 -- | 载荷字节 → manifest 条目（`mePayloadDigest` = 载荷字节的内容地址，读侧据此验文件）。
-entryOfPayload : String -> String -> String -> ModuleIface -> Eff [] ManifestEntry
+entryOfPayload : String -> String -> String -> ModuleIface -> Eff hostRow ManifestEntry
 entryOfPayload origin pkgDir payload m = do
   file <- ifaceRelPathOf (miIfaceHashOf m) pkgDir (miSourceOf m)
   pure
     (ManifestEntry (miNameOf m) file (miSourceOf m) (miIfaceHashOf m) (miImplHashOf m) (payloadDigest payload) (miDepHashesOf m) (append (map importNameOf (miImportsOf m)) (map importNameOf (miImplicitImportsOf m))) origin)
 
-manifestEntryOfWith : String -> String -> ModuleIface -> Eff [] ManifestEntry
+manifestEntryOfWith : String -> String -> ModuleIface -> Eff hostRow ManifestEntry
 manifestEntryOfWith origin pkgDir m = entryOfPayload origin pkgDir (encModuleIface m) m
 
-manifestEntryOf : String -> ModuleIface -> Eff [] ManifestEntry
+manifestEntryOf : String -> ModuleIface -> Eff hostRow ManifestEntry
 manifestEntryOf = manifestEntryOfWith "pkg"
 
 oldEntryOf : List ManifestEntry -> String -> Maybe ManifestEntry
@@ -996,7 +997,7 @@ depListIn ((Pair n h) :: rest) ys = case lookupPair n ys of
   Nothing => False
 
 -- 效果列表遍历（本模块自用；顺序与纯 `map` 一致）。
-mapEff : (a -> Eff [] b) -> List a -> Eff [] (List b)
+mapEff : (a -> Eff hostRow b) -> List a -> Eff hostRow (List b)
 mapEff f [] = pure []
 mapEff f (x :: rest) = do
   y <- f x
@@ -1007,7 +1008,7 @@ mapEff f (x :: rest) = do
 -- （过期后必须重写，否则依赖者永远脏）、产物来源。`miSource`（mtime/size）与
 -- `miPrepared` 不进接口哈希，只看接口哈希会留下「manifest 记新哈希、文件还是旧字节」
 -- 的错位——读侧会因此永久回退全量，所以载荷摘要必须一起比。
-writeModules : String -> String -> String -> String -> List ManifestEntry -> List ModuleIface -> Eff [] Int
+writeModules : String -> String -> String -> String -> List ManifestEntry -> List ModuleIface -> Eff hostRow Int
 writeModules dir compiler pkgDir origin old [] = pure 0
 writeModules dir compiler pkgDir origin old (m :: rest) =
   let
@@ -1025,7 +1026,7 @@ writeModules dir compiler pkgDir origin old (m :: rest) =
         in do
           unchanged <- case oldEntryOf old (miNameOf m) of
             Just e =>
-              if e.meIfaceHash == miIfaceHashOf m && e.mePayloadDigest == digest && depListsSame e.meDeps (miDepHashesOf m) && e.meOrigin == origin then prim_eff_fileExists path
+              if e.meIfaceHash == miIfaceHashOf m && e.mePayloadDigest == digest && depListsSame e.meDeps (miDepHashesOf m) && e.meOrigin == origin then raiseToRow hostRow (@vuna@prim_eff_fileExists path)
               else pure False
             Nothing => pure False
           if unchanged then writeModules dir compiler pkgDir origin old rest
@@ -1049,7 +1050,7 @@ entryNameIn : List ManifestEntry -> String -> Bool
 entryNameIn [] _ = False
 entryNameIn (e :: rest) name = meNameOfEntry e == name || entryNameIn rest name
 
-export writeModuleIfaceMerge : String -> String -> String -> String -> Int -> String -> ModuleIface -> Eff [] Int
+export writeModuleIfaceMerge : String -> String -> String -> String -> Int -> String -> ModuleIface -> Eff hostRow Int
 writeModuleIfaceMerge dir compiler pkg pkgDir env origin mi =
   let
     payload = encModuleIface mi
@@ -1076,7 +1077,7 @@ writeModuleIfaceMerge dir compiler pkg pkgDir env origin mi =
 
 -- | 写接口：`oldReadable` 由调用方从**刚刚做过的那次整包接口读取**带下来（check/build 的
 -- 写前校验已经完整解码过一遍），避免这里再读 + 解码一遍所有模块文件。
-export writePackageIface : Bool -> String -> String -> String -> String -> Int -> List ModuleIface -> Eff [] Int
+export writePackageIface : Bool -> String -> String -> String -> String -> Int -> List ModuleIface -> Eff hostRow Int
 writePackageIface oldReadable dir compiler pkg pkgDir env modules = do
   -- 只有「整包接口可完整读回」时才信任旧 manifest 做按模块跳过；损坏/缺文件的旧接口
   -- 会让读侧回退全量，这里必须强制全量重写，否则损坏文件永远不被覆盖。
@@ -1095,13 +1096,13 @@ writePackageIface oldReadable dir compiler pkg pkgDir env modules = do
 
 -- 镜像模式下条目文件名必须带**它自己的**接口哈希 token：防止「manifest 记录 A、文件
 -- 实际是 B 的内容」这类错位（默认布局没有 token，靠载荷内的 miName/miIfaceHash 校验）。
-ifaceFileTokenOk : ManifestEntry -> Eff [] Bool
+ifaceFileTokenOk : ManifestEntry -> Eff hostRow Bool
 ifaceFileTokenOk e = do
   mirror <- ifaceMirrorMode
   if mirror then pure (endsWith "-${ifaceHashToken (meIfaceHashOfEntry e)}.iface" (meFileOfEntry e))
   else pure True
 
-export readModuleFile : String -> String -> ManifestEntry -> Eff [] (Maybe ModuleIface)
+export readModuleFile : String -> String -> ManifestEntry -> Eff hostRow (Maybe ModuleIface)
 readModuleFile dir compiler e = if not (validIfaceRelPath (meFileOfEntry e)) then pure Nothing
 else do
   tokenOk <- ifaceFileTokenOk e
@@ -1112,7 +1113,7 @@ else do
 --   2. 头里的内容地址 == manifest 记录的载荷摘要（**不重算** MB 级 SHA-256）；
 --   3. 解码后的 `miName` / `miIfaceHash` 与条目一致（语义面自证）。
 -- 任何一层不过 ⇒ `Nothing` ⇒ 调用方回退全量并重写该模块文件。
-readModuleFileRaw : String -> String -> ManifestEntry -> Eff [] (Maybe ModuleIface)
+readModuleFileRaw : String -> String -> ManifestEntry -> Eff hostRow (Maybe ModuleIface)
 readModuleFileRaw dir compiler e = do
   payload <-
     storeReadAsEff (ifaceFileTag compiler) ifaceCodec (mePayloadDigestOfEntry e)
@@ -1133,7 +1134,7 @@ readModuleFileRaw dir compiler e = do
           _ = dbg! "iface-module-decode-fail name=${meNameOfEntry e} len=${strLength bytes}"
         in pure Nothing
 
-readModuleFiles : String -> String -> List ManifestEntry -> Eff [] (Maybe (List ModuleIface))
+readModuleFiles : String -> String -> List ManifestEntry -> Eff hostRow (Maybe (List ModuleIface))
 readModuleFiles dir compiler [] = pure (Just [])
 readModuleFiles dir compiler (e :: rest) = do
   m <- readModuleFile dir compiler e
@@ -1146,7 +1147,7 @@ readModuleFiles dir compiler (e :: rest) = do
         Nothing => Nothing
       )
 
-export readPackageIface : String -> String -> Eff [] (Maybe PackageIface)
+export readPackageIface : String -> String -> Eff hostRow (Maybe PackageIface)
 readPackageIface dir compiler = do
   mf <- readManifest dir compiler
   case mf of

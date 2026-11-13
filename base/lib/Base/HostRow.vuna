@@ -1,0 +1,34 @@
+module Base.HostRow where
+
+-- Base.HostRow：工具链/编译器统一的内建效应行（阶段 5）。
+--
+-- `hostRow` / `hostTail` 是普通定义（不是公理——公理没有运行时定义，擦除会报
+-- `CG_AxiomAtRuntime`）；同时 `Core.Eval` 对这两个名字做归约，使跨模块签名比较、
+-- entry 行检查与 codegen 预装都能展开成具体行，不依赖模块内定义体的 canonicity。
+-- 行顺序：Fs → Console → Clock → Env → Process → Exit → Stdin → Args → Net → Ref。
+import Base.Eff
+import Base.EffArgs
+import Base.EffClock
+import Base.EffConsole
+import Base.EffEnv
+import Base.EffExit
+import Base.EffFs
+import Base.EffNet
+import Base.EffProcess
+import Base.EffRef
+import Base.EffStdin
+
+-- | `hostRow` 去掉 `FsOp` 头之后的剩余行。
+export hostTail : Row
+hostTail =
+  Cons "default" ConsoleOp
+    (Cons "default" ClockOp (Cons "default" EnvOp (Cons "default" ProcessOp (Cons "default" ExitOp (Cons "default" StdinOp (Cons "default" ArgsOp (Cons "default" NetOp (Cons "default" RefOp []))))))))
+
+-- | 工具链统一行：Fs → Console → Clock → Env → Process → Exit → Stdin → Args → Net → Ref。
+export hostRow : Row
+hostRow = Cons "default" FsOp hostTail
+
+-- | 显式行提升（转发 Base.Eff.raiseTo）：工具链模块只依赖 HostRow 的导出，
+-- 避免 `import Base.Eff` 带来的 Row(..) 构造子歧义。
+export raiseToRow : (r : Row) -> {a : Type} -> Eff [] a -> Eff r a
+raiseToRow r e = raiseTo r e

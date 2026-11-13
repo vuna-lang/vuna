@@ -62,6 +62,7 @@ let v_Base_dEff_djoinEffNilOuter
 let v_Base_dEff_dmkCont
 let v_Base_dEff_dperformCore
 let v_Base_dEff_draise
+let v_Base_dEff_draiseTo
 let v_Base_dEff_dresFn
 let v_Base_dEff_dresumeCont
 let v_Base_dEff_drunEff
@@ -70,6 +71,7 @@ let v_Base_dEff_drunPure
 let v_Base_dEff_drunThunk
 let v_Base_dEff_dsendCore
 let v_Base_dEff_dweaken
+let v_Base_dEff_dweakenRow
 let v_Functor_uBase_uEff_uEff_ur
 let v_Monad_uBase_uEff_uEff_ur
 type t_Base_dEff_dRow

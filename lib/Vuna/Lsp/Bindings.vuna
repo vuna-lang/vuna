@@ -16,6 +16,7 @@ module Vuna.Lsp.Bindings where
 --
 -- hover/definition 的 JSON 组装在本模块；`Vuna.Lsp` 负责管线顺序（洞 → 本模块 → Index 符号）。
 -- 命中返回 `Just`；未命中返回 `Nothing`，调用方继续走既有的 Index 路径。
+import Base.HostRow
 import Vuna.Compiler.Common
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Frontend.Lexer
@@ -56,7 +57,7 @@ firstJust (x :: rest) = case x of
   Nothing => firstJust rest
 
 -- Eff 版的 firstJust：按顺序执行，命中即停（后续动作构造但不执行）。
-firstJustEff : List (Eff [] (Maybe a)) -> Eff [] (Maybe a)
+firstJustEff : List (Eff hostRow (Maybe a)) -> Eff hostRow (Maybe a)
 firstJustEff [] = pure Nothing
 firstJustEff (x :: rest) = do
   v <- x
@@ -100,7 +101,7 @@ record WalkEnv where
 -- ---------------------------------------------------------------
 -- 入口
 -- ---------------------------------------------------------------
-export bindingHoverAt : String -> Int -> Int -> String -> Eff [] (Maybe Json)
+export bindingHoverAt : String -> Int -> Int -> String -> Eff hostRow (Maybe Json)
 bindingHoverAt uri line col text = case parseSource "<lsp>" text of
   ErrC e => pure Nothing
   OkC sf => case tokenAtCursor text line col of
@@ -113,7 +114,7 @@ bindingHoverAt uri line col text = case parseSource "<lsp>" text of
           Nothing => pure Nothing
           Just lb => pure (Just (localHoverJson lb line tokStart token))
 
-export bindingDefinitionAt : String -> Int -> Int -> String -> Eff [] (Maybe Json)
+export bindingDefinitionAt : String -> Int -> Int -> String -> Eff hostRow (Maybe Json)
 bindingDefinitionAt uri line col text = case parseSource "<lsp>" text of
   ErrC e => pure Nothing
   OkC sf => case tokenAtCursor text line col of
@@ -201,7 +202,7 @@ resolveModuleName imports name = case lookupPair name (aliasTable imports) of
   Just full => full
 
 -- 模块名 → 文件：本包根在前、依赖闭包在后（与 Loader 的可见性顺序一致）。
-probeRoots : List Root -> String -> Eff [] String
+probeRoots : List Root -> String -> Eff hostRow String
 probeRoots [] name = pure ""
 probeRoots (root :: rest) name = do
   let
@@ -210,7 +211,7 @@ probeRoots (root :: rest) name = do
     exists <- pathExistsFile path
     if exists then pure path else probeRoots rest name
 
-modulePathOf : String -> String -> Eff [] String
+modulePathOf : String -> String -> Eff hostRow String
 modulePathOf uri name = do
   ctxR <- contextForDoc uri
   case ctxR of
@@ -220,14 +221,14 @@ modulePathOf uri name = do
 -- 模块名 → 源文本：按包上下文的模块根探测（`probeRoots`），找不到 / 读失败 → Nothing。
 -- 调用方（LSP case split）持有一份 `PackageContext`，直接用它的 roots，避免每个 binder
 -- 都重算一次上下文；依赖模块每次读盘（与模块 hover 同口径，未保存改动不反映）。
-export moduleSourceIn : List Root -> String -> Eff [] (Maybe String)
+export moduleSourceIn : List Root -> String -> Eff hostRow (Maybe String)
 moduleSourceIn roots name = do
   path <- probeRoots roots name
   if path == "" then pure Nothing
   else do
-    exists <- prim_eff_fileExists path
+    exists <- raiseToRow hostRow (@vuna@prim_eff_fileExists path)
     if exists then do
-      source <- prim_eff_readFile path
+      source <- raiseToRow hostRow (@vuna@prim_eff_readFile path)
       pure (Just source)
     else pure Nothing
 
@@ -244,7 +245,7 @@ moduleHeaderPos sf lines name = case sf.sourceFileModDecl of
     Just (Pair l c) => Pair l c
 
 -- 目标文件（或当前缓冲）的 docstring 与 module 头名字位置。
-moduleFileInfo : Bool -> String -> String -> String -> Eff [] (Pair String (Pair Int Int))
+moduleFileInfo : Bool -> String -> String -> String -> Eff hostRow (Pair String (Pair Int Int))
 moduleFileInfo isSelf text path name = if isSelf then
   let
     sf = case parseSource "<lsp>" text of
@@ -253,9 +254,9 @@ moduleFileInfo isSelf text path name = if isSelf then
   in pure (Pair (moduleDocOf sf text) (moduleHeaderPos sf (split "\n" text) name))
 else if path == "" then pure (Pair "" (Pair 1 1))
 else do
-  exists <- prim_eff_fileExists path
+  exists <- raiseToRow hostRow (@vuna@prim_eff_fileExists path)
   if exists then do
-    source <- prim_eff_readFile path
+    source <- raiseToRow hostRow (@vuna@prim_eff_readFile path)
     let
       sf = case parseSource path source of
         ErrC e => SourceFile Nothing [] [] [] [] [] []
@@ -263,7 +264,7 @@ else do
     in pure (Pair (moduleDocOf sf source) (moduleHeaderPos sf (split "\n" source) name))
   else pure (Pair "" (Pair 1 1))
 
-mkModuleRef : String -> String -> SourceFile -> String -> Eff [] ModuleRef
+mkModuleRef : String -> String -> SourceFile -> String -> Eff hostRow ModuleRef
 mkModuleRef uri text sf name =
   let
     selfName = currentModuleNameOfSf sf
@@ -278,11 +279,11 @@ mkModuleRef uri text sf name =
     in pure (ModuleRef name path infoDoc (firstOf infoPos) (secondOf infoPos) uriOut)
 
 -- import 行：模块名或 alias。alias 用整词查找（短 alias 可能是模块名的子串）。
-importModuleRef : String -> Int -> String -> SourceFile -> Int -> String -> Eff [] (Maybe ModuleRef)
+importModuleRef : String -> Int -> String -> SourceFile -> Int -> String -> Eff hostRow (Maybe ModuleRef)
 importModuleRef uri line text sf tokStart token =
   firstJustEff (map (importMatch uri line text sf tokStart token) sf.sourceFileImports)
 
-importMatch : String -> Int -> String -> SourceFile -> Int -> String -> Import -> Eff [] (Maybe ModuleRef)
+importMatch : String -> Int -> String -> SourceFile -> Int -> String -> Import -> Eff hostRow (Maybe ModuleRef)
 importMatch uri line text sf tokStart token imp =
   let
     lines = split "\n" text
@@ -302,7 +303,7 @@ importMatch uri line text sf tokStart token imp =
     Nothing => pure Nothing
 
 -- 导出项 `module B`（B 可以是全名或 alias）。`B.name` 走限定名前缀兜底。
-exportModuleRef : String -> Int -> String -> SourceFile -> Int -> String -> Eff [] (Maybe ModuleRef)
+exportModuleRef : String -> Int -> String -> SourceFile -> Int -> String -> Eff hostRow (Maybe ModuleRef)
 exportModuleRef uri line text sf tokStart token = case sf.sourceFileModDecl of
   Nothing => pure Nothing
   Just m =>
@@ -310,7 +311,7 @@ exportModuleRef uri line text sf tokStart token = case sf.sourceFileModDecl of
       lines = split "\n" text
     in firstJustEff (map (exportItemMatch uri line text sf tokStart token lines) m.modDeclExportItems)
 
-exportItemMatch : String -> Int -> String -> SourceFile -> Int -> String -> List String -> ExportItem -> Eff [] (Maybe ModuleRef)
+exportItemMatch : String -> Int -> String -> SourceFile -> Int -> String -> List String -> ExportItem -> Eff hostRow (Maybe ModuleRef)
 exportItemMatch uri line text sf tokStart token lines (XModule name sp) = case findNamePos lines sp name of
   Just (Pair nl nc) => if nl == line && nc == tokStart && token == name then do
     ref <- mkModuleRef uri text sf (resolveModuleName sf.sourceFileImports name)
@@ -319,7 +320,7 @@ exportItemMatch uri line text sf tokStart token lines (XModule name sp) = case f
   Nothing => pure Nothing
 exportItemMatch uri line text sf tokStart token lines item = pure Nothing
 
-headerModuleRef : String -> Int -> String -> SourceFile -> Int -> String -> Eff [] (Maybe ModuleRef)
+headerModuleRef : String -> Int -> String -> SourceFile -> Int -> String -> Eff hostRow (Maybe ModuleRef)
 headerModuleRef uri line text sf tokStart token = case sf.sourceFileModDecl of
   Nothing => pure Nothing
   Just m =>
@@ -345,18 +346,18 @@ prefixGo (s :: rest) acc out =
     [] => reverse out
     _ => prefixGo rest p (p :: out)
 
-knownModule : String -> String -> Eff [] Bool
+knownModule : String -> String -> Eff hostRow Bool
 knownModule uri name = if name == "" then pure False
 else do
   p <- modulePathOf uri name
   pure (p /= "")
 
 -- 限定名里的模块前缀：`Base.List.map` 光标在 `List` ⇒ `Base.List`；在 `map` ⇒ 不命中。
-qualifiedRef : String -> Int -> Int -> String -> SourceFile -> Int -> String -> Eff [] (Maybe ModuleRef)
+qualifiedRef : String -> Int -> Int -> String -> SourceFile -> Int -> String -> Eff hostRow (Maybe ModuleRef)
 qualifiedRef uri line col text sf tokStart token =
   firstJustEff (map (tryPrefix uri line col text sf tokStart token) (prefixCandidates token))
 
-tryPrefix : String -> Int -> Int -> String -> SourceFile -> Int -> String -> String -> Eff [] (Maybe ModuleRef)
+tryPrefix : String -> Int -> Int -> String -> SourceFile -> Int -> String -> String -> Eff hostRow (Maybe ModuleRef)
 tryPrefix uri line col text sf tokStart token prefix = if not (upperStart prefix) then pure Nothing
 else if col > tokStart + strLength prefix then pure Nothing
 else
@@ -369,7 +370,7 @@ else
       pure (Just ref)
     else pure Nothing
 
-moduleRefAt : String -> Int -> Int -> String -> SourceFile -> Int -> String -> Eff [] (Maybe ModuleRef)
+moduleRefAt : String -> Int -> Int -> String -> SourceFile -> Int -> String -> Eff hostRow (Maybe ModuleRef)
 moduleRefAt uri line col text sf tokStart token = do
   imported <- importModuleRef uri line text sf tokStart token
   case imported of

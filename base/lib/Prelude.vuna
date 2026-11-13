@@ -3,7 +3,7 @@ module Prelude where
 -- Prelude：默认导入（自动 import）的精选门面。
 --
 -- 只重导出最常用的核心模块；Map / Sort 需要显式 import。
--- 宿主层（`prim_eff_*`）是全局内建名，任何模块可直接调用，不需要也不提供别名门面。
+-- 宿主层（`@vuna@prim_eff_*`）是全局内建名，任何模块可直接调用，不需要也不提供别名门面。
 -- 需要效果标签 / 运行入口时显式 `import Base.Eff`。
 --
 -- M24.7：Show / Eq / Ord 的 trait 声明与内建类型实例在库里（Base.Show /

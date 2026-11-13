@@ -1,15 +1,16 @@
 module Vuna.Files where
 
 -- Vuna.Files：目录遍历工具（fmt / doc / test / Index 共用）。
--- 只依赖 prim_eff_readDir / prim_eff_isDirectory / prim_eff_fileExists 内建；prim_eff_readDir 返回字典序，遍历顺序确定。
+-- 只依赖 @vuna@prim_eff_readDir / @vuna@prim_eff_isDirectory / @vuna@prim_eff_fileExists 内建；@vuna@prim_eff_readDir 返回字典序，遍历顺序确定。
 -- 路径拆分（splitPath / baseName）在 Vuna.Compiler.Common，供编译器驱动与工具共用。
 --
--- 注意：内建 `prim_eff_isDirectory` 对**不存在的路径**会抛异常（会直接终止进程），
+-- 注意：内建 `@vuna@prim_eff_isDirectory` 对**不存在的路径**会抛异常（会直接终止进程），
 -- 所以任何来自用户输入的路径都必须先用 `pathExistsDir` 判存在，
--- 不要直接调用 `prim_eff_isDirectory`。
+-- 不要直接调用 `@vuna@prim_eff_isDirectory`。
 --
--- M4（效果显式化）：目录遍历、存在性判定与读文件全部显式在 `Eff []` 里，
+-- M4（效果显式化）：目录遍历、存在性判定与读文件全部显式在 `Eff hostRow` 里，
 -- 纯过滤/路径/名称逻辑（`skipGenerated` 等）保持纯函数。
+import Base.HostRow
 import Vuna.Compiler.Common
 
 -- C41：工具链 fuel 耗尽不是「空结果」，而是内部不变量被破坏；与编译器一致硬失败。
@@ -17,14 +18,14 @@ toolFuelExhausted : String -> a
 toolFuelExhausted what = prim_fail "vuna: internal: ${what} fuel exhausted"
 
 -- 效果列表遍历（本模块自用；顺序与纯 `map` / `concatMap` 一致）。
-mapEff : (a -> Eff [] b) -> List a -> Eff [] (List b)
+mapEff : (a -> Eff hostRow b) -> List a -> Eff hostRow (List b)
 mapEff f [] = pure []
 mapEff f (x :: rest) = do
   y <- f x
   ys <- mapEff f rest
   pure (y :: ys)
 
-concatMapEff : (a -> Eff [] (List b)) -> List a -> Eff [] (List b)
+concatMapEff : (a -> Eff hostRow (List b)) -> List a -> Eff hostRow (List b)
 concatMapEff f [] = pure []
 concatMapEff f (x :: rest) = do
   xs <- f x
@@ -49,21 +50,21 @@ skipGenerated name =
     || name == "result"
     || name == "corpus"
 
-export collectVunaFiles : String -> Eff [] (List String)
+export collectVunaFiles : String -> Eff hostRow (List String)
 collectVunaFiles dir = collectVunaFilesGo 1048576 dir
 
 -- 目录树是文件系统图（符号链接可成环），递归无法用结构下降证明；用显式 fuel 守卫。
 -- 每次进入下一层目录消耗 1，触底返回空列表（合法目录树远小于该上限）。
-collectVunaFilesGo : Int -> String -> Eff [] (List String)
+collectVunaFilesGo : Int -> String -> Eff hostRow (List String)
 collectVunaFilesGo fuel dir = if fuel <= 0 then toolFuelExhausted "directory walk"
 else do
   exists <- pathExistsDir dir
   if exists then do
-    names <- prim_eff_readDir dir
+    names <- raiseToRow hostRow (@vuna@prim_eff_readDir dir)
     concatMapEff (walkVunaGo (fuel - 1) dir) names
   else pure []
 
-walkVunaGo : Int -> String -> String -> Eff [] (List String)
+walkVunaGo : Int -> String -> String -> Eff hostRow (List String)
 walkVunaGo fuel dir name = if fuel <= 0 then toolFuelExhausted "directory walk"
 else case name of
   "." => pure []
@@ -78,19 +79,19 @@ else case name of
       else pure (if endsWith ".vuna" name then [path] else [])
 
 -- 递归收集目录下所有非隐藏项（文件与目录），用于通用遍历。
-export collectSourceFiles : String -> Eff [] (List String)
+export collectSourceFiles : String -> Eff hostRow (List String)
 collectSourceFiles dir = collectSourceFilesGo 1048576 dir
 
-collectSourceFilesGo : Int -> String -> Eff [] (List String)
+collectSourceFilesGo : Int -> String -> Eff hostRow (List String)
 collectSourceFilesGo fuel dir = if fuel <= 0 then toolFuelExhausted "directory walk"
 else do
   exists <- pathExistsDir dir
   if exists then do
-    names <- prim_eff_readDir dir
+    names <- raiseToRow hostRow (@vuna@prim_eff_readDir dir)
     concatMapEff (walkAnyGo (fuel - 1) dir) names
   else pure []
 
-walkAnyGo : Int -> String -> String -> Eff [] (List String)
+walkAnyGo : Int -> String -> String -> Eff hostRow (List String)
 walkAnyGo fuel dir name = if fuel <= 0 then toolFuelExhausted "directory walk"
 else case name of
   "." => pure []
@@ -104,19 +105,19 @@ else case name of
       if exists then collectSourceFilesGo (fuel - 1) path else pure [path]
 
 -- 安全的目录判定：不存在返回 False，而不是抛异常。
-export pathExistsDir : String -> Eff [] Bool
+export pathExistsDir : String -> Eff hostRow Bool
 pathExistsDir path = do
   exists <- pathExistsFile path
-  if exists then prim_eff_isDirectory path else pure False
+  if exists then raiseToRow hostRow (@vuna@prim_eff_isDirectory path) else pure False
 
-export pathExistsFile : String -> Eff [] Bool
-pathExistsFile path = prim_eff_fileExists path
+export pathExistsFile : String -> Eff hostRow Bool
+pathExistsFile path = raiseToRow hostRow (@vuna@prim_eff_fileExists path)
 
 -- ---------------------------------------------------------------
 -- 诊断码 → 示例夹具（`explain`/`gen-errors` 共用；生成物不参与门禁）
 -- ---------------------------------------------------------------
 -- | 在 test/corpus（及 test/ 工作目录下的 corpus）找第一个包含该码的 `.diag.json`。
-export exampleOf : String -> Eff [] (Maybe String)
+export exampleOf : String -> Eff hostRow (Maybe String)
 exampleOf code = do
   here <- findDiagExample 512 "test/corpus" code
   case here of
@@ -127,16 +128,16 @@ exampleOf code = do
         Just p => pure (Just p)
         Nothing => findDiagExample 512 "../test/corpus" code
 
-findDiagExample : Int -> String -> String -> Eff [] (Maybe String)
+findDiagExample : Int -> String -> String -> Eff hostRow (Maybe String)
 findDiagExample fuel dir code = if fuel <= 0 then pure Nothing
 else do
   exists <- pathExistsDir dir
   if not exists then pure Nothing
   else do
-    names <- prim_eff_readDir dir
+    names <- raiseToRow hostRow (@vuna@prim_eff_readDir dir)
     fmap firstJustExamples (mapEff (oneEntry (fuel - 1) dir code) names)
 
-oneEntry : Int -> String -> String -> String -> Eff [] (Maybe String)
+oneEntry : Int -> String -> String -> String -> Eff hostRow (Maybe String)
 oneEntry fuel dir code name = if name == "." || name == ".." || name == ".git" || name == ".local" then pure Nothing
 else
   let
@@ -148,7 +149,7 @@ else
     else do
       isFile <- pathExistsFile path
       if isFile then do
-        text <- prim_eff_readFile path
+        text <- raiseToRow hostRow (@vuna@prim_eff_readFile path)
         pure (if contains "\"code\":\"${code}\"" text then Just path else Nothing)
       else pure Nothing
 

@@ -8,6 +8,7 @@ module Vuna.Add where
 --      保留其余字节；子表形式不猜、报错让用户手改）；
 --   4. 默认 `vuna fetch` 取包；`--no-fetch` 只改 manifest，`--dry-run` 只打印。
 -- 索引不可信：写回的永远是摘要，后续 fetch/check 只认摘要。
+import Base.HostRow
 import Vuna.Cli.Args
 import Vuna.Compiler.Common
 import Vuna.Compiler.Diagnostics.Pkg
@@ -18,7 +19,7 @@ import Vuna.Registry
 import Base.List
 import Base.String
 
-export runAdd : List String -> Eff [] Int
+export runAdd : List String -> Eff hostRow Int
 runAdd args = case parseToolArgs "vuna add" [BoolFlag "dry-run", BoolFlag "no-fetch"] args of
   ErrC e => addFailText (diagText e)
   OkC parsed =>
@@ -41,7 +42,7 @@ splitSpecGo (c :: rest) acc =
   if c == 64 then Pair (strPack (reverse acc)) (Just (strPack rest))
   else splitSpecGo rest (c :: acc)
 
-addAt : String -> String -> Bool -> Bool -> Eff [] Int
+addAt : String -> String -> Bool -> Bool -> Eff hostRow Int
 addAt dir spec dry noFetch = do
   abs <- absolutePath dir
   let
@@ -50,9 +51,9 @@ addAt dir spec dry noFetch = do
     version = secondOf named
     manifestPath = "${abs}/vuna.toml"
   in do
-    exists <- prim_eff_fileExists manifestPath
+    exists <- raiseToRow hostRow (@vuna@prim_eff_fileExists manifestPath)
     if exists then do
-      raw <- prim_eff_readFile manifestPath
+      raw <- raiseToRow hostRow (@vuna@prim_eff_readFile manifestPath)
       case parseManifest manifestPath raw of
         ErrC e => printAddDiag e
         OkC manifest => case manifest.manifestRegistryIndex of
@@ -66,21 +67,21 @@ addAt dir spec dry noFetch = do
                 Just release => writeAndFetch manifestPath raw alias release dry noFetch abs
     else addFailText "missing vuna.toml in ${dir}"
 
-writeAndFetch : String -> String -> String -> Release -> Bool -> Bool -> String -> Eff [] Int
+writeAndFetch : String -> String -> String -> Release -> Bool -> Bool -> String -> Eff hostRow Int
 writeAndFetch manifestPath raw alias release dry noFetch abs = if hasSubtable alias raw then addFailText "dependency ${alias} is a subtable; edit [dependencies.${alias}] manually"
 else
   let
     newLine = dependencyLine alias release
     updated = upsertDependencyLine alias newLine raw
   in if dry then do
-    _ <- prim_eff_print "add: would write ${newLine}\n"
+    _ <- raiseToRow hostRow (@vuna@prim_eff_print "add: would write ${newLine}\n")
     pure 0
   else if updated == raw then do
-    _ <- prim_eff_print "add: ${alias} already up to date\n"
+    _ <- raiseToRow hostRow (@vuna@prim_eff_print "add: ${alias} already up to date\n")
     if noFetch then pure 0 else fetchAt abs False
   else do
-    _ <- prim_eff_writeFileAtomic manifestPath updated
-    _ <- prim_eff_print "add: wrote ${newLine}\n"
+    _ <- raiseToRow hostRow (@vuna@prim_eff_writeFileAtomic manifestPath updated)
+    _ <- raiseToRow hostRow (@vuna@prim_eff_print "add: wrote ${newLine}\n")
     if noFetch then pure 0 else fetchAt abs False
 
 -- 内联表依赖行（一行；别名 = 包名，D13）。
@@ -136,12 +137,12 @@ isAliasLine alias t = if startsWith alias t then
   in startsWith "=" (trim remainder)
 else False
 
-printAddDiag : Diagnostic -> Eff [] Int
+printAddDiag : Diagnostic -> Eff hostRow Int
 printAddDiag d = do
-  _ <- prim_eff_print (diagText d ++ "\n")
+  _ <- raiseToRow hostRow (@vuna@prim_eff_print (diagText d ++ "\n"))
   pure 1
 
-addFailText : String -> Eff [] Int
+addFailText : String -> Eff hostRow Int
 addFailText msg = do
-  _ <- prim_eff_print "error: ${msg}\n"
+  _ <- raiseToRow hostRow (@vuna@prim_eff_print "error: ${msg}\n")
   pure 2

@@ -809,7 +809,7 @@ mainEntryRowCheck : Ec -> List (Pair String Term) -> Span -> Term -> Check Int
 mainEntryRowCheck ec bodies sp (TApp (TApp fn row _) _ _) = case fn of
   TGlobal g => if g == effTypeName then
     let
-      rowV = force (Base.HashMap.fromList bodies) (ecSolsP ec) defaultFuel (eval [] row)
+      rowV = force (ecDefTbl ec) (ecSolsP ec) defaultFuel (eval [] row)
     in if isNilRowValue ec rowV then OkC 0
     else if isBuiltinHostRowValue rowV then OkC 0
     else case rowEffectLabels 64 ec rowV of
@@ -863,7 +863,7 @@ synthMainShow ec globals defs = case findDefByName "main" defs of
       inner = secondOf p
       kind = firstOf p
     in if mainHasParams inner then mainArityErr sp inner
-    else Vuna.Compiler.Common.bind (mainEntryRowCheck ec bodies sp ty)
+    else Vuna.Compiler.Common.bind (mainEntryRowCheck ec globals sp ty)
       (\_ => synthMainShowInner ec globals defs bodies sp inner kind)
 
 -- 定义名 → 体的表（入口行检查与 Show 合成共用一次构造）。

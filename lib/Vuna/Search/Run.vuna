@@ -6,6 +6,7 @@ module Vuna.Search.Run where
 --   vuna search [--type|--name|--doc] [--module PFX] [--limit N] [--json] <query...>
 -- 默认：查询含 `->` / `=>` 走类型检索，否则名称+doc 检索。
 -- 退出码：0 命中、1 无命中、2 用法/查询解析/非 workspace 错误。
+import Base.HostRow
 import Vuna.Cli.Args
 import Vuna.Compiler.Common
 import Vuna.Index
@@ -17,7 +18,7 @@ data SearchMode : Type where
   TypeMode : SearchMode
   NameDocMode : Bool -> Bool -> SearchMode
 
-export runSearch : List String -> Eff [] Int
+export runSearch : List String -> Eff hostRow Int
 runSearch args = case parseToolArgs "vuna search" [BoolFlag "type", BoolFlag "name", BoolFlag "doc", ValueFlag "module", ValueFlag "limit", BoolFlag "json"] args of
   ErrC e => toolError (diagText e)
   OkC parsed =>
@@ -34,7 +35,7 @@ runSearch args = case parseToolArgs "vuna search" [BoolFlag "type", BoolFlag "na
             ErrC e => toolError (diagText e)
             OkC index => runOnIndex parsed mode query limit index
 
-runOnIndex : Parsed -> SearchMode -> String -> Int -> Index -> Eff [] Int
+runOnIndex : Parsed -> SearchMode -> String -> Int -> Index -> Eff hostRow Int
 runOnIndex parsed (mode@TypeMode) query limit index = case searchType index query of
   ErrC e => toolError (diagText e)
   OkC hits => finish parsed mode query (filterHits parsed limit hits)
@@ -88,19 +89,19 @@ takeHits n (h :: rest) = if n <= 0 then [] else h :: takeHits (n - 1) rest
 -- ---------------------------------------------------------------
 -- 文本 / JSON
 -- ---------------------------------------------------------------
-finish : Parsed -> SearchMode -> String -> List SearchHit -> Eff [] Int
+finish : Parsed -> SearchMode -> String -> List SearchHit -> Eff hostRow Int
 finish parsed mode query hits = if length hits == 0 then do
-  _ <- prim_eff_print "no results for `${query}`\n"
+  _ <- raiseToRow hostRow (@vuna@prim_eff_print "no results for `${query}`\n")
   pure 1
 else if flagSet parsed "json" then do
-  _ <- prim_eff_print "${renderJson (hitsJson mode query hits)}\n"
+  _ <- raiseToRow hostRow (@vuna@prim_eff_print "${renderJson (hitsJson mode query hits)}\n")
   pure 0
 else printHits hits
 
-printHits : List SearchHit -> Eff [] Int
+printHits : List SearchHit -> Eff hostRow Int
 printHits [] = pure 0
 printHits (h :: rest) = do
-  _ <- prim_eff_print "${hitText h}\n"
+  _ <- raiseToRow hostRow (@vuna@prim_eff_print "${hitText h}\n")
   printHits rest
 
 -- REPL `:search` 复用同一份单条命中渲染。
@@ -131,7 +132,7 @@ hitJson h =
   JObj
     [Pair "module" (JStr (hitModule h)), Pair "name" (JStr (hitName h)), Pair "kind" (JStr (hitKind h)), Pair "signature" (JStr (hitSignature h)), Pair "doc" (JStr (hitDoc h)), Pair "line" (JNum (hitLine h)), Pair "score" (JNum (hitScore h)), Pair "match" (JStr (hitMatch h))]
 
-toolError : String -> Eff [] Int
+toolError : String -> Eff hostRow Int
 toolError e = do
-  _ <- prim_eff_print "error: ${e}\n"
+  _ <- raiseToRow hostRow (@vuna@prim_eff_print "error: ${e}\n")
   pure 2

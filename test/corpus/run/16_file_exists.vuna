@@ -1,12 +1,13 @@
--- P2c：fs 查询走 typed effects（Fs 标签 + runFs），不再直接调用宿主原语。
+-- 阶段 5：fs 查询走 typed effects（entry 自动预装 handler），不再直接调用宿主原语。
 import Base.Eff
 import Base.EffFs
+import Base.HostRow
 
-prog : Eff [FsOp@real] Int
+prog : Eff hostRow Int
 prog = do
-  root <- fsFileExists "real" "/"
-  nope <- fsFileExists "real" "/vuna/definitely-not-a-file-xyz"
+  root <- fsFileExists "default" "/"
+  nope <- fsFileExists "default" "/vuna/definitely-not-a-file-xyz"
   pure (if root then (if nope then 0 else 42) else 0)
 
-main : Eff [] Int
-main = runFs "real" prog
+main : Eff hostRow Int
+main = prog

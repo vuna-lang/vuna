@@ -1,8 +1,9 @@
 -- W1 超时夹具（失败路径）：长睡眠 30s。`VUNA_TEST_TIMEOUT=8` 时必须被超时判 FAIL
 -- （"timed out after 8s"），而不是真的等 30s；若超时机制失效，§47 的断言失败。
--- P2c：睡眠走 Clock 效应（runClock）。
+-- 阶段 5：睡眠走 Clock 效应（entry 自动预装 handler）。
 import Base.Eff
 import Base.EffClock
+import Base.HostRow
 
-main : Eff [] Int
-main = runClock "real" (clockSleepMicros "real" 30000000)
+main : Eff (Cons "default" ClockOp Nil) Int
+main = clockSleepMicros "default" 30000000

@@ -3,7 +3,7 @@ module Base.EffEnv where
 -- Base.EffEnv：一阶环境效应（W10 效应标签迁移）。
 --
 -- 标签 = `EnvOp`（实例名在行的 `Cons n EnvOp r` 条目里）；操作 GetEnv / GetCwd / ExecPath 都返回 String。
--- 真实 handler 直调对应 `prim_eff_*` 原语（`prim_eff_getenv` / `prim_eff_getcwd` / `prim_eff_execPath`）。
+-- 真实 handler 直调对应 `@vuna@prim_eff_*` 原语（`@vuna@prim_eff_getenv` / `@vuna@prim_eff_getcwd` / `@vuna@prim_eff_execPath`）。
 import Base.Eff
 import Base.Monad
 
@@ -19,7 +19,7 @@ resEnv (GetEnv k) = String
 resEnv GetCwd = String
 resEnv ExecPath = String
 
--- | 通过命名实例取环境变量；真实 handler 走 `prim_eff_getenv`（未设置或为空串都返回空串）。
+-- | 通过命名实例取环境变量；真实 handler 走 `@vuna@prim_eff_getenv`（未设置或为空串都返回空串）。
 export envGetEnv : (n : String) -> String -> {r : Row} -> {w : Member n EnvOp r} -> Eff r String
 envGetEnv n k = sendCore EnvOp "env" n (GetEnv k)
 
@@ -35,26 +35,20 @@ envExecPath n = sendCore EnvOp "env" n ExecPath
 export handleEnv : {a : Type} -> {b : Type} -> {r : Row} -> (n : String) -> {w : Member n EnvOp r} -> (a -> b) -> ((o : EnvOp) -> (resEnv o -> b) -> b) -> Eff r a -> Eff (Base.Eff.rowRem n EnvOp r) b
 handleEnv n ret opH comp = handleCore EnvOp "env" n ret opH comp
 
--- | 真实 handler 的操作解释：把三个操作映射到 `prim_eff_getenv` / `prim_eff_getcwd` / `prim_eff_execPath`。
+-- | 真实 handler 的操作解释：把三个操作映射到 `@vuna@prim_eff_getenv` / `@vuna@prim_eff_getcwd` / `@vuna@prim_eff_execPath`。
 envOpHIO : {a : Type} -> (o : EnvOp) -> (resEnv o -> Eff [] a) -> Eff [] a
 envOpHIO op k = case op of
   GetEnv name => do
-    v <- prim_eff_getenv name
+    v <- @vuna@prim_eff_getenv name
     k v
   GetCwd => do
-    v <- prim_eff_getcwd
+    v <- @vuna@prim_eff_getcwd
     k v
   ExecPath => do
-    v <- prim_eff_execPath
+    v <- @vuna@prim_eff_execPath
     k v
 
 -- | 宿主 handler：结果行删除 `EnvOp`，answer 是已处理干净的 `Eff []` 动作，可用 `joinEff` 展平。
-export handleEnvHost : {a : Type} -> {r : Row} -> (n : String) -> Eff (Base.Eff.Cons n EnvOp r) a -> Eff r (Eff [] a)
-handleEnvHost n comp = handleEnv n (\a => pure a) envOpHIO comp
-
--- | 单效应便捷入口（P3）：`handleEnvHost n` + `joinEff` 的组合。
-export runEnv : {a : Type} -> (n : String) -> Eff (Cons n EnvOp []) a -> Eff [] a
-runEnv n comp = joinEffNilOuter (handleEnvHost n comp)
 
 -- ---------------------------------------------------------------
 -- 阶段 3：带行 handler（entry 自动预装用；不导出）
@@ -62,13 +56,13 @@ runEnv n comp = joinEffNilOuter (handleEnvHost n comp)
 envOpHIOHost : {a : Type} -> (o : EnvOp) -> (resEnv o -> Eff (Cons "default" EnvOp []) a) -> Eff (Cons "default" EnvOp []) a
 envOpHIOHost op k = case op of
   GetEnv name => do
-    v <- prim_eff_getenv_host name
+    v <- @vuna@host@getenv name
     k v
   GetCwd => do
-    v <- prim_eff_getcwd_host
+    v <- @vuna@host@getcwd
     k v
   ExecPath => do
-    v <- prim_eff_execPath_host
+    v <- @vuna@host@execPath
     k v
 
 handleEnvHostHost : {a : Type} -> {r : Row} -> (n : String) -> Eff (Base.Eff.Cons n EnvOp r) a -> Eff r (Eff (Cons "default" EnvOp []) a)

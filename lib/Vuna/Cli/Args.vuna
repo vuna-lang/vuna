@@ -14,11 +14,12 @@ module Vuna.Cli.Args where
 --   - `--with-comments` 这类只属于工具命令的已删 flag 在工具侧 hint 表里；
 --     其余已删 flag 回落编译器包 `removedFlagHint`（唯一真源，不复制文案）。
 --
--- 读盘守卫：内建 `prim_eff_isDirectory` 对不存在的路径会抛宿主异常，所以所有来自
--- 用户的路径都必须先 `prim_eff_fileExists` 再 `prim_eff_isDirectory`；`readText` /
+-- 读盘守卫：内建 `@vuna@prim_eff_isDirectory` 对不存在的路径会抛宿主异常，所以所有来自
+-- 用户的路径都必须先 `@vuna@prim_eff_fileExists` 再 `@vuna@prim_eff_isDirectory`；`readText` /
 -- `requireExists` / `requireDirectory` 是唯一入口。
--- M4：这些守卫与目录创建显式在 `Eff []` 里（错误仍用 `Check` 携带，文案不变）；
+-- M4：这些守卫与目录创建显式在 `Eff hostRow` 里（错误仍用 `Check` 携带，文案不变）；
 -- 纯 flag 解析 API 保持纯函数。
+import Base.HostRow
 import Vuna.Compiler.Common
 import Vuna.Compiler.Driver.CompilerCli
 
@@ -163,37 +164,37 @@ argErrText cmd (DuplicateFlag flag) = "duplicate flag: ${flag}"
 argErrText cmd (MissingValue flag) = "flag requires a value: ${flag}"
 
 -- ---------------------------------------------------------------
--- 读盘守卫（禁止在不存在路径上调 prim_eff_isDirectory）
+-- 读盘守卫（禁止在不存在路径上调 @vuna@prim_eff_isDirectory）
 -- ---------------------------------------------------------------
 -- 读一个文本文件：先判存在、再判目录，最后才读。
-export readText : String -> Eff [] (Check String)
+export readText : String -> Eff hostRow (Check String)
 readText path = do
-  exists <- prim_eff_fileExists path
+  exists <- raiseToRow hostRow (@vuna@prim_eff_fileExists path)
   if exists then do
-    isDir <- prim_eff_isDirectory path
+    isDir <- raiseToRow hostRow (@vuna@prim_eff_isDirectory path)
     if isDir then pure (err "is a directory: ${path}")
     else do
-      content <- prim_eff_readFile path
+      content <- raiseToRow hostRow (@vuna@prim_eff_readFile path)
       pure (OkC content)
   else pure (err "no such file: ${path}")
 
 -- 要求路径存在（文件或目录均可）。
-export requireExists : String -> Eff [] (Check Int)
+export requireExists : String -> Eff hostRow (Check Int)
 requireExists path = do
-  exists <- prim_eff_fileExists path
+  exists <- raiseToRow hostRow (@vuna@prim_eff_fileExists path)
   pure (if exists then OkC 0 else err "no such file: ${path}")
 
 -- 要求路径存在且是目录。
-export requireDirectory : String -> Eff [] (Check Int)
+export requireDirectory : String -> Eff hostRow (Check Int)
 requireDirectory path = do
-  exists <- prim_eff_fileExists path
+  exists <- raiseToRow hostRow (@vuna@prim_eff_fileExists path)
   if exists then do
-    isDir <- prim_eff_isDirectory path
+    isDir <- raiseToRow hostRow (@vuna@prim_eff_isDirectory path)
     pure (if isDir then OkC 0 else err "not a directory: ${path}")
   else pure (err "no such directory: ${path}")
 
 -- ---------------------------------------------------------------
--- 目录创建（prim_eff_makeDir 只建一层）
+-- 目录创建（@vuna@prim_eff_makeDir 只建一层）
 -- ---------------------------------------------------------------
 export parentOf : String -> String
 parentOf path =
@@ -220,12 +221,12 @@ joinSlashPartsGo [] = ""
 joinSlashPartsGo ([part]) = part
 joinSlashPartsGo (part :: rest) = "${part}/${joinSlashPartsGo rest}"
 
--- 递归创建所有缺失的父目录；已存在返回 0。`prim_eff_makeDir` 对已存在路径返回 0。
+-- 递归创建所有缺失的父目录；已存在返回 0。`@vuna@prim_eff_makeDir` 对已存在路径返回 0。
 -- 递归不沿输入结构下降（parentOf 返回 String），用显式 fuel（字节长度上界）守卫。
-export ensureDirPath : String -> Eff [] Int
+export ensureDirPath : String -> Eff hostRow Int
 ensureDirPath path = ensureDirPathGo (strLength path + 2) path
 
-ensureDirPathGo : Int -> String -> Eff [] Int
+ensureDirPathGo : Int -> String -> Eff hostRow Int
 ensureDirPathGo fuel path = if fuel <= 0 then pure 1
 else if path == "" || path == "." || path == "/" then pure 0
 else do
@@ -234,9 +235,9 @@ else do
   else do
     _ <- ensureDirPathGo (fuel - 1) (parentOf path)
     safe2 <- pathExistsDirSafe path
-    if safe2 then pure 0 else prim_eff_makeDir path
+    if safe2 then pure 0 else raiseToRow hostRow (@vuna@prim_eff_makeDir path)
 
-pathExistsDirSafe : String -> Eff [] Bool
+pathExistsDirSafe : String -> Eff hostRow Bool
 pathExistsDirSafe path = do
-  exists <- prim_eff_fileExists path
-  if exists then prim_eff_isDirectory path else pure False
+  exists <- raiseToRow hostRow (@vuna@prim_eff_fileExists path)
+  if exists then raiseToRow hostRow (@vuna@prim_eff_isDirectory path) else pure False

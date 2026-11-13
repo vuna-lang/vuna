@@ -9,15 +9,15 @@ import Base.Monad
 
 -- | 创建初值为 `x` 的新引用（`Eff []` 动作）。
 export newRef : a -> Eff [] (IORef a)
-newRef x = prim_eff_newRef x
+newRef x = @vuna@prim_eff_newRef x
 
 -- | 读取引用当前值。
 export readRef : IORef a -> Eff [] a
-readRef r = prim_eff_readRef r
+readRef r = @vuna@prim_eff_readRef r
 
 -- | 写入新值，返回底层原语的 `Int` 结果（写入本身无有意义的返回值，通常忽略）。
 export writeRef : IORef a -> a -> Eff [] Int
-writeRef r v = prim_eff_writeRef r v
+writeRef r v = @vuna@prim_eff_writeRef r v
 
 -- | 读-改-写一次完成：读到当前值、应用 `f` 后写回，返回写入原语的 `Int` 结果。
 export modifyRef : IORef a -> (a -> a) -> Eff [] Int

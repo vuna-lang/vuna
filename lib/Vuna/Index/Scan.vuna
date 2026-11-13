@@ -11,8 +11,9 @@ module Vuna.Index.Scan where
 -- **没有「刷新索引」命令**：`vuna map` / `vuna api` / REPL 自己判新鲜度。
 -- `Store` 是唯一写盘层，帧格式与内容地址校验见 `Vuna.Compiler.Store`。
 --
--- 效果显式化：目录遍历、读文件、缓存写、时钟全部显式在 `Eff []` 里；纯数据逻辑
+-- 效果显式化：目录遍历、读文件、缓存写、时钟全部显式在 `Eff hostRow` 里；纯数据逻辑
 -- （路径/哈希/JSON 渲染/序列化解析）保持纯函数；`indexStatsOf` 只产出 stat 快照。
+import Base.HostRow
 import Vuna.Compiler.Common
 import Base.HashMap
 import Base.Hashable
@@ -55,14 +56,14 @@ dropPrefix prefix s =
 -- ---------------------------------------------------------------
 -- 效果列表遍历（本模块自用；顺序与纯 `map` / `concatMap` 一致）
 -- ---------------------------------------------------------------
-mapEff : (a -> Eff [] b) -> List a -> Eff [] (List b)
+mapEff : (a -> Eff hostRow b) -> List a -> Eff hostRow (List b)
 mapEff f [] = pure []
 mapEff f (x :: rest) = do
   y <- f x
   ys <- mapEff f rest
   pure (y :: ys)
 
-concatMapEff : (a -> Eff [] (List b)) -> List a -> Eff [] (List b)
+concatMapEff : (a -> Eff hostRow (List b)) -> List a -> Eff hostRow (List b)
 concatMapEff f [] = pure []
 concatMapEff f (x :: rest) = do
   xs <- f x
@@ -87,17 +88,17 @@ skipDir name =
     || name == "node_modules"
     || name == ".vscode"
 
-collectVuna : String -> Eff [] (List String)
+collectVuna : String -> Eff hostRow (List String)
 collectVuna dir = collectVunaGo 1048576 dir
 
 -- 目录树递归（符号链接可成环）用显式 fuel 守卫；每次下钻一层消耗 1。
-collectVunaGo : Int -> String -> Eff [] (List String)
+collectVunaGo : Int -> String -> Eff hostRow (List String)
 collectVunaGo fuel dir = if fuel <= 0 then indexFuelExhausted "directory walk"
 else do
-  names <- prim_eff_readDir dir
+  names <- raiseToRow hostRow (@vuna@prim_eff_readDir dir)
   concatMapEff (walkVunaGo (fuel - 1) dir) names
 
-walkVunaGo : Int -> String -> String -> Eff [] (List String)
+walkVunaGo : Int -> String -> String -> Eff hostRow (List String)
 walkVunaGo fuel dir name = if fuel <= 0 then indexFuelExhausted "directory walk"
 else if skipDir name then pure []
 else
@@ -108,15 +109,15 @@ else
     if exists then collectVunaGo (fuel - 1) path
     else pure (if endsWith ".vuna" name then [path] else [])
 
--- prim_eff_isDirectory 对不存在的路径会抛异常，必须先判存在。
-dirExists : String -> Eff [] Bool
+-- @vuna@prim_eff_isDirectory 对不存在的路径会抛异常，必须先判存在。
+dirExists : String -> Eff hostRow Bool
 dirExists path = do
-  exists <- prim_eff_fileExists path
-  if exists then prim_eff_isDirectory path else pure False
+  exists <- raiseToRow hostRow (@vuna@prim_eff_fileExists path)
+  if exists then raiseToRow hostRow (@vuna@prim_eff_isDirectory path) else pure False
 
 -- 包的索引范围：<pkg>/lib 与 <pkg>/app（模块源码）。刻意不扫 test/ 与 examples/
 -- （夹具含故意不合法的语法，不是模块源码）。
-packageSources : String -> Eff [] (List String)
+packageSources : String -> Eff hostRow (List String)
 packageSources dir = do
   hasLib <- dirExists "${dir}/lib"
   libFiles <- if hasLib then collectVuna "${dir}/lib" else pure []
@@ -124,7 +125,7 @@ packageSources dir = do
   appFiles <- if hasApp then collectVuna "${dir}/app" else pure []
   pure (append libFiles appFiles)
 
-packageDirs : String -> Eff [] (List (Pair String String))
+packageDirs : String -> Eff hostRow (List (Pair String String))
 packageDirs repo = do
   found <- findManifestDir repo
   case found of
@@ -373,15 +374,15 @@ record Built where
 
 -- 索引一个文件。parse/fixity 失败返回 Err（调用方转成 warning），不中断整体。
 -- 返回推进后的 `FixityEnv`：按目录复用包上下文与已加载模块图（见 Vuna.FixityEnv）。
-indexOne : FixityEnv -> String -> String -> String -> Eff [] (Pair FixityEnv (Check Built))
+indexOne : FixityEnv -> String -> String -> String -> Eff hostRow (Pair FixityEnv (Check Built))
 indexOne env dir pkgName path = do
-  exists <- prim_eff_fileExists path
+  exists <- raiseToRow hostRow (@vuna@prim_eff_fileExists path)
   if exists then indexOneExisting env dir pkgName path
   else pure (Pair env (err "${path}: no such file"))
 
-indexOneExisting : FixityEnv -> String -> String -> String -> Eff [] (Pair FixityEnv (Check Built))
+indexOneExisting : FixityEnv -> String -> String -> String -> Eff hostRow (Pair FixityEnv (Check Built))
 indexOneExisting env dir pkgName path = do
-  source <- prim_eff_readFile path
+  source <- raiseToRow hostRow (@vuna@prim_eff_readFile path)
   looked <- fixitiesForFile env path source
   let
     bytes = strLength source
@@ -418,16 +419,16 @@ prependRev : List a -> List a -> List a
 prependRev [] ys = ys
 prependRev (x :: rest) ys = prependRev rest (x :: ys)
 
-indexPackage : FixityEnv -> String -> String -> List String -> Acc -> Eff [] (Pair FixityEnv Acc)
+indexPackage : FixityEnv -> String -> String -> List String -> Acc -> Eff hostRow (Pair FixityEnv Acc)
 indexPackage env dir pkgName files acc = foldFiles env dir pkgName files acc
 
-foldFiles : FixityEnv -> String -> String -> List String -> Acc -> Eff [] (Pair FixityEnv Acc)
+foldFiles : FixityEnv -> String -> String -> List String -> Acc -> Eff hostRow (Pair FixityEnv Acc)
 foldFiles env dir pkgName [] acc = pure (Pair env acc)
 foldFiles env dir pkgName (path :: rest) acc = do
   stepped <- indexFileInto env dir pkgName path acc
   foldFiles (firstOf stepped) dir pkgName rest (secondOf stepped)
 
-indexFileInto : FixityEnv -> String -> String -> String -> Acc -> Eff [] (Pair FixityEnv Acc)
+indexFileInto : FixityEnv -> String -> String -> String -> Acc -> Eff hostRow (Pair FixityEnv Acc)
 indexFileInto env dir pkgName path acc = do
   stepped <- indexOne env dir pkgName path
   case secondOf stepped of
@@ -438,7 +439,7 @@ indexFileInto env dir pkgName path acc = do
       pure
         (Pair (firstOf stepped) (Acc (prependRev b.builtModules acc.accModules) (prependRev b.builtSymbols acc.accSymbols) (prependRev b.builtRefs acc.accRefs) acc.accWarns))
 
-collectAll : FixityEnv -> List (Pair String String) -> Acc -> Eff [] (Pair FixityEnv Acc)
+collectAll : FixityEnv -> List (Pair String String) -> Acc -> Eff hostRow (Pair FixityEnv Acc)
 collectAll env [] acc = pure (Pair env acc)
 collectAll env (root :: rest) acc = do
   let
@@ -450,7 +451,7 @@ collectAll env (root :: rest) acc = do
     collectAll (firstOf stepped) rest (secondOf stepped)
 
 -- 全量构建（parse 所有源码，不读写缓存）。
-export buildIndex : String -> Eff [] (Check Index)
+export buildIndex : String -> Eff hostRow (Check Index)
 buildIndex repo = do
   dirs <- packageDirs repo
   stepped <- collectAll emptyFixityEnv dirs (Acc [] [] [] [])
@@ -488,20 +489,20 @@ record SourceStat where
   ssHash : String
 
 -- 当前 stat 面（含窗口内的内容哈希）。依赖表的唯一来源。
-indexStatsOf : Int -> String -> Eff [] (List SourceStat)
+indexStatsOf : Int -> String -> Eff hostRow (List SourceStat)
 indexStatsOf builtSec repo = do
   dirs <- packageDirs repo
   sources <- concatMapEff packageSources (map firstOf dirs)
   mapEff (sourceStatOf builtSec) sources
 
-sourceStatOf : Int -> String -> Eff [] SourceStat
+sourceStatOf : Int -> String -> Eff hostRow SourceStat
 sourceStatOf builtSec path = do
-  exists <- prim_eff_fileExists path
+  exists <- raiseToRow hostRow (@vuna@prim_eff_fileExists path)
   if exists then do
-    bytes <- prim_eff_fileSize path
-    mtime <- prim_eff_fileMtime path
+    bytes <- raiseToRow hostRow (@vuna@prim_eff_fileSize path)
+    mtime <- raiseToRow hostRow (@vuna@prim_eff_fileMtime path)
     if mtime + indexMtimeSafetyWindowSec > builtSec then do
-      source <- prim_eff_readFile path
+      source <- raiseToRow hostRow (@vuna@prim_eff_readFile path)
       pure (SourceStat path (strLength source) mtime (contentHash source))
     else pure (SourceStat path bytes mtime "")
   else pure (SourceStat path 0 0 "")
@@ -515,38 +516,38 @@ indexDepKey s = "st:${s.ssPath}:${strFromInt s.ssBytes}:${strFromInt s.ssMtime}:
 -- 带缓存的入口：查索引节点 → 命中读 blob 解码 → 未命中重建并写回。
 -- 非 workspace（向上找不到 vuna.toml）是**输入错误**，不再静默建空索引。
 -- 强依赖（CLI 路径）：逐源文件**内容哈希**（C11：同 size + 同 mtime 的内容变更也必须失效）。
-indexStrongDeps : String -> Eff [] (List String)
+indexStrongDeps : String -> Eff hostRow (List String)
 indexStrongDeps repo = do
   dirs <- packageDirs repo
   sources <- concatMapEff packageSources (map firstOf dirs)
   mapEff strongDepOf sources
 
-strongDepOf : String -> Eff [] String
+strongDepOf : String -> Eff hostRow String
 strongDepOf path = do
-  exists <- prim_eff_fileExists path
+  exists <- raiseToRow hostRow (@vuna@prim_eff_fileExists path)
   if exists then do
-    source <- prim_eff_readFile path
+    source <- raiseToRow hostRow (@vuna@prim_eff_readFile path)
     pure "f:${path}:${contentHash source}"
   else pure "f:${path}:"
 
 -- 带缓存的入口（CLI：`vuna map` / `vuna api`）：强依赖 + `index:<dir>` 节点
 -- → 命中读 blob 解码 → 未命中重建并写回。非 workspace（向上找不到 vuna.toml）是
 -- **输入错误**，不再静默建空索引。
-export loadOrBuild : String -> Eff [] (Check Index)
+export loadOrBuild : String -> Eff hostRow (Check Index)
 loadOrBuild repo = indexLoadOrBuild repo False
 
 -- 廉价入口（REPL：每会话首次 `:browse`/`:info`/`:search`）：依赖表用 stat 键
 -- `st:<path>:<bytes>:<mtime>:<hash>`（安全窗内回落内容哈希），不读全部源码算哈希。
 -- 节点 key 前缀不同（`index-cheap:`），与 CLI 的强依赖缓存互不污染。
-export loadOrBuildCheap : String -> Eff [] (Check Index)
+export loadOrBuildCheap : String -> Eff hostRow (Check Index)
 loadOrBuildCheap repo = indexLoadOrBuild repo True
 
-indexLoadOrBuild : String -> Bool -> Eff [] (Check Index)
+indexLoadOrBuild : String -> Bool -> Eff hostRow (Check Index)
 indexLoadOrBuild repo cheap = do
   found <- findManifestDirMaybe repo
   case found of
     Nothing => do
-      cwd <- prim_eff_getcwd
+      cwd <- raiseToRow hostRow @vuna@prim_eff_getcwd
       pure (err "index: no vuna.toml found from ${cwd} (searched upward)")
     Just _ => do
       now <- effTimeUs
@@ -558,7 +559,7 @@ indexLoadOrBuild repo cheap = do
           node = if cheap then indexNodeKeyCheap repo else indexNodeKey repo
         in do
           -- 节点 key 同时用作会话桶名：索引按目录分桶，CLI/REPL 各一条。
-          ts0 <- pure (toolSessionNew "tool" node)
+          ts0 <- raiseToRow hostRow (pure (toolSessionNew "tool" node))
           hit <- toolHitValue ts0 node deps
           case hit of
             Just (Just digest) => do
@@ -573,14 +574,14 @@ indexLoadOrBuild repo cheap = do
             _ => rebuildIndex ts0 repo node deps
 
 -- 廉价依赖：stat 快照 → 键。
-cheapDeps : Int -> String -> Eff [] (List String)
+cheapDeps : Int -> String -> Eff hostRow (List String)
 cheapDeps builtSec repo = do
   stats <- indexStatsOf builtSec repo
   pure (map indexDepKey stats)
 
 -- 重建：全量扫描 → 编码 → 写 blob → 提交节点（`toolStorePayload` 内含 `sessionSave`）。
 -- 一次 miss 只提交调用方选定的 `node`（`index:` 或 `index-cheap:`），不写另一个 key。
-rebuildIndex : ToolSession -> String -> String -> List String -> Eff [] (Check Index)
+rebuildIndex : ToolSession -> String -> String -> List String -> Eff hostRow (Check Index)
 rebuildIndex ts repo node deps = do
   _ <- indexNote "index-path=build"
   built <- buildIndex repo
@@ -592,5 +593,5 @@ rebuildIndex ts repo node deps = do
 
 -- | 工具链侧的 debug 行：与编译器探针共用唯一内置宏 `dbg!`（`--debug-perf` /
 -- `VUNA_DEBUG_PERF=1` 门控，stderr，带时间戳）；工具链不进 TCB，但宏展开不需要 import。
-indexNote : String -> Eff [] Int
+indexNote : String -> Eff hostRow Int
 indexNote msg = pure (dbg! msg)

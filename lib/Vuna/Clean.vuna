@@ -11,6 +11,7 @@ module Vuna.Clean where
 --
 -- `DIR` 只对 `--iface` 与 `--gc` 的引用集有用（默认 `.`）；`--store` / `--packages`
 -- 的根由环境决定。识别按文件名 / 目录布局，不读内容。
+import Base.HostRow
 import Vuna.Cli.Args
 import Vuna.Compiler.Common
 import Vuna.Compiler.Frontend.Manifest
@@ -20,7 +21,7 @@ import Vuna.Compiler.Store
 import Base.List
 import Base.String
 
-export runClean : List String -> Eff [] Int
+export runClean : List String -> Eff hostRow Int
 runClean args = case parseToolArgs "vuna clean" [BoolFlag "dry-run", BoolFlag "iface", BoolFlag "store", BoolFlag "packages", BoolFlag "gc", BoolFlag "all"] args of
   ErrC e => cleanError (diagText e)
   OkC parsed =>
@@ -44,7 +45,7 @@ runClean args = case parseToolArgs "vuna clean" [BoolFlag "dry-run", BoolFlag "i
         else cleanTargets wantIface wantStore wantPackages wantGc dry dir
       _ => cleanError "too many arguments; expected at most one directory"
 
-cleanTargets : Bool -> Bool -> Bool -> Bool -> Bool -> String -> Eff [] Int
+cleanTargets : Bool -> Bool -> Bool -> Bool -> Bool -> String -> Eff hostRow Int
 cleanTargets wantIface wantStore wantPackages wantGc dry dir = do
   code <- if wantIface then cleanIfaceAt dir dry else pure 0
   if code /= 0 then pure code
@@ -53,7 +54,7 @@ cleanTargets wantIface wantStore wantPackages wantGc dry dir = do
     if storeCode /= 0 then pure storeCode
     else if wantPackages then cleanPackages wantGc dir dry else pure 0
 
-cleanIfaceAt : String -> Bool -> Eff [] Int
+cleanIfaceAt : String -> Bool -> Eff hostRow Int
 cleanIfaceAt dir dry = do
   dirR <- requireDirectory dir
   case dirR of
@@ -65,21 +66,23 @@ cleanIfaceAt dir dry = do
         n = length targets
       in do
         _ <- if dry then pure 0 else removeEach targets
-        _ <- prim_eff_print "clean-iface: ${ifaceVerb dry} ${strFromInt n} file(s) under ${dir}\n"
+        _ <-
+          raiseToRow hostRow
+            (@vuna@prim_eff_print "clean-iface: ${ifaceVerb dry} ${strFromInt n} file(s) under ${dir}\n")
         pure 0
 
-cleanStore : Bool -> Eff [] Int
+cleanStore : Bool -> Eff hostRow Int
 cleanStore dry = do
   root <- storeCacheBaseEff
   cleanRoot root "clean-store" dry
 
 -- `--packages`：默认整根清理；`--gc` 只删未被工作区 manifest 引用的对象。
-cleanPackages : Bool -> String -> Bool -> Eff [] Int
+cleanPackages : Bool -> String -> Bool -> Eff hostRow Int
 cleanPackages wantGc dir dry = do
   root <- storeDataRootEff
   if wantGc then cleanPackagesGc root dir dry else cleanRoot root "clean-packages" dry
 
-cleanPackagesGc : String -> String -> Bool -> Eff [] Int
+cleanPackagesGc : String -> String -> Bool -> Eff hostRow Int
 cleanPackagesGc root dir dry = do
   roots <- collectRootDigests dir
   all <- walkFiles 1048576 root
@@ -89,8 +92,8 @@ cleanPackagesGc root dir dry = do
   in do
     _ <- if dry then pure 0 else removeEach drop
     _ <-
-      prim_eff_print
-        "clean-packages --gc: ${storeVerb dry} ${strFromInt n} unreferenced file(s) under ${root}\n"
+      raiseToRow hostRow
+        (@vuna@prim_eff_print "clean-packages --gc: ${storeVerb dry} ${strFromInt n} unreferenced file(s) under ${root}\n")
     pure 0
 
 -- 路径属于被引用对象：`objects/<digest>` 或 `pkgs/<digest>/...`。
@@ -103,7 +106,7 @@ anyLine f [] = False
 anyLine f (x :: rest) = if f x then True else anyLine f rest
 
 -- 引用集 = 当前包 + `[workspace].members` 的 git/url 依赖摘要（path 依赖不参与，D12）。
-collectRootDigests : String -> Eff [] (List String)
+collectRootDigests : String -> Eff hostRow (List String)
 collectRootDigests dir = do
   abs <- absolutePath dir
   top <- manifestInfoEff "${abs}/vuna.toml"
@@ -113,7 +116,7 @@ collectRootDigests dir = do
       memberHashes <- collectMemberHashes abs members
       pure (append hashes memberHashes)
 
-collectMemberHashes : String -> List String -> Eff [] (List String)
+collectMemberHashes : String -> List String -> Eff hostRow (List String)
 collectMemberHashes base [] = pure []
 collectMemberHashes base (rel :: rest) = do
   info <- manifestInfoEff (joinPath base "${rel}/vuna.toml")
@@ -125,11 +128,11 @@ collectMemberHashes base (rel :: rest) = do
     there <- collectMemberHashes base rest
     pure (append here there)
 
-manifestInfoEff : String -> Eff [] (Maybe (Pair (List String) (List String)))
+manifestInfoEff : String -> Eff hostRow (Maybe (Pair (List String) (List String)))
 manifestInfoEff path = do
-  exists <- prim_eff_fileExists path
+  exists <- raiseToRow hostRow (@vuna@prim_eff_fileExists path)
   if exists then do
-    raw <- prim_eff_readFile path
+    raw <- raiseToRow hostRow (@vuna@prim_eff_readFile path)
     case parseManifest path raw of
       ErrC _ => pure Nothing
       OkC manifest => case validateManifest manifest of
@@ -144,12 +147,12 @@ depHashesOf (dep :: rest) = case depHashOf dep of
   Nothing => depHashesOf rest
   Just h => normalizeHash h :: depHashesOf rest
 
-cleanRoot : String -> String -> Bool -> Eff [] Int
+cleanRoot : String -> String -> Bool -> Eff hostRow Int
 cleanRoot root label dry = do
-  exists <- prim_eff_fileExists root
-  isDir <- if exists then prim_eff_isDirectory root else pure False
+  exists <- raiseToRow hostRow (@vuna@prim_eff_fileExists root)
+  isDir <- if exists then raiseToRow hostRow (@vuna@prim_eff_isDirectory root) else pure False
   if not (exists && isDir) then do
-    _ <- prim_eff_print "${label}: no cache store to remove\n"
+    _ <- raiseToRow hostRow (@vuna@prim_eff_print "${label}: no cache store to remove\n")
     pure 0
   else do
     all <- walkFiles 1048576 root
@@ -157,7 +160,9 @@ cleanRoot root label dry = do
       n = length all
     in do
       _ <- if dry then pure 0 else removeEach all
-      _ <- prim_eff_print "${label}: ${storeVerb dry} ${strFromInt n} file(s) under ${root}\n"
+      _ <-
+        raiseToRow hostRow
+          (@vuna@prim_eff_print "${label}: ${storeVerb dry} ${strFromInt n} file(s) under ${root}\n")
       pure 0
 
 ifaceVerb : Bool -> String
@@ -168,15 +173,15 @@ storeVerb : Bool -> String
 storeVerb True = "would remove"
 storeVerb False = "removed"
 
-removeEach : List String -> Eff [] Int
+removeEach : List String -> Eff hostRow Int
 removeEach [] = pure 0
 removeEach (f :: rest) = do
-  _ <- prim_eff_removeFile f
+  _ <- raiseToRow hostRow (@vuna@prim_eff_removeFile f)
   removeEach rest
 
-cleanError : String -> Eff [] Int
+cleanError : String -> Eff hostRow Int
 cleanError e = do
-  _ <- prim_eff_print "error: ${e}\n"
+  _ <- raiseToRow hostRow (@vuna@prim_eff_print "error: ${e}\n")
   pure 2
 
 -- 与工作树其他遍历一致的跳过规则：`.local` 不跳过（`VUNA_IFACE_DIR=.local/iface` 时要能清到）。
@@ -193,24 +198,24 @@ skipCleanDir name =
     || startsWith "result-" name
 
 -- 目录树是文件系统图（符号链接可成环），用显式 fuel 守卫。
-walkFiles : Int -> String -> Eff [] (List String)
+walkFiles : Int -> String -> Eff hostRow (List String)
 walkFiles fuel dir = if fuel <= 0 then pure []
 else do
-  exists <- prim_eff_fileExists dir
-  isDir <- prim_eff_isDirectory dir
+  exists <- raiseToRow hostRow (@vuna@prim_eff_fileExists dir)
+  isDir <- raiseToRow hostRow (@vuna@prim_eff_isDirectory dir)
   if exists && isDir then do
-    names <- prim_eff_readDir dir
+    names <- raiseToRow hostRow (@vuna@prim_eff_readDir dir)
     concatMapEff (walkGo (fuel - 1) dir) names
   else pure []
 
-concatMapEff : (a -> Eff [] (List b)) -> List a -> Eff [] (List b)
+concatMapEff : (a -> Eff hostRow (List b)) -> List a -> Eff hostRow (List b)
 concatMapEff f [] = pure []
 concatMapEff f (x :: rest) = do
   xs <- f x
   ys <- concatMapEff f rest
   pure (append xs ys)
 
-walkGo : Int -> String -> String -> Eff [] (List String)
+walkGo : Int -> String -> String -> Eff hostRow (List String)
 walkGo fuel dir name = if fuel <= 0 then pure []
 else case name of
   "." => pure []
@@ -220,8 +225,8 @@ else case name of
     let
       path = "${dir}/${name}"
     in do
-      exists <- prim_eff_fileExists path
-      isDir <- prim_eff_isDirectory path
+      exists <- raiseToRow hostRow (@vuna@prim_eff_fileExists path)
+      isDir <- raiseToRow hostRow (@vuna@prim_eff_isDirectory path)
       if exists && isDir then walkFiles (fuel - 1) path else pure [path]
 
 isIfaceFile : String -> Bool

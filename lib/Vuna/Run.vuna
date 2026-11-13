@@ -13,8 +13,9 @@ module Vuna.Run where
 --   4. 否则列出候选并 exit 2（不猜）。
 --
 -- 构建走 in-process `runCompilerCliFor "vuna" (["build", DIR] ++ 包选择)`（`--no-build`
--- 跳过）；执行走 `prim_eff_runIn <包目录> <.output/bin/<包名> :: 透传参数>`，子进程退出码
+-- 跳过）；执行走 `@vuna@prim_eff_runIn <包目录> <.output/bin/<包名> :: 透传参数>`，子进程退出码
 -- 原样返回。目标没有可执行入口 / 构建被跳过导致产物缺失都是输入错误（exit 2）。
+import Base.HostRow
 import Vuna.Compiler.Common
 import Vuna.Compiler.Packages.Pkg
 import Vuna.Compiler.Driver.CompilerCli
@@ -28,7 +29,7 @@ splitPassthrough ("--" :: rest) = Pair [] rest
 splitPassthrough (arg :: rest) = case splitPassthrough rest of
   Pair own pass => Pair (arg :: own) pass
 
-export runRun : List String -> Eff [] Int
+export runRun : List String -> Eff hostRow Int
 runRun args =
   let
     parts = splitPassthrough args
@@ -43,7 +44,7 @@ runRun args =
         runError
           "usage: vuna run [--no-build] [--release] [--package NAME] [--out DIR] [DIR] [-- ARG]..."
 
-runGo : Parsed -> List String -> String -> Eff [] Int
+runGo : Parsed -> List String -> String -> Eff hostRow Int
 runGo parsed passthrough dir = do
   dirR <- requireDirectory dir
   case dirR of
@@ -59,7 +60,7 @@ runGo parsed passthrough dir = do
             OkC target => runTarget parsed passthrough dir target
 
 -- 目标包选择；workspace 成员列表来自 `workspacePackages`（与 build 同一真源）。
-selectTarget : Parsed -> String -> Package -> Eff [] (Check Package)
+selectTarget : Parsed -> String -> Package -> Eff hostRow (Check Package)
 selectTarget parsed dir rootPkg = case rootPkg.packageManifest.manifestMembers of
   [] => case flagValue parsed "package" of
     Nothing => pure (OkC rootPkg)
@@ -91,15 +92,15 @@ selectTarget parsed dir rootPkg = case rootPkg.packageManifest.manifestMembers o
                     "multiple executable packages in workspace ${dir}: ${packageLabels many}; choose one with --package"
               )
 
-rootExecutable : Package -> Eff [] (Maybe Package)
+rootExecutable : Package -> Eff hostRow (Maybe Package)
 rootExecutable pkg = do
   ok <- isExecutable pkg
   pure (if ok then Just pkg else Nothing)
 
-isExecutable : Package -> Eff [] Bool
+isExecutable : Package -> Eff hostRow Bool
 isExecutable pkg = pathExistsFile (packageEntry pkg)
 
-filterEff : (a -> Eff [] Bool) -> List a -> Eff [] (List a)
+filterEff : (a -> Eff hostRow Bool) -> List a -> Eff hostRow (List a)
 filterEff pred [] = pure []
 filterEff pred (x :: rest) = do
   keep <- pred x
@@ -121,7 +122,7 @@ findPackageByName name (pkg :: rest) =
   if packageName pkg == name then Just pkg else findPackageByName name rest
 
 -- 构建（in-process，与 `vuna build` 完全同一条路径）后执行目标产物。
-runTarget : Parsed -> List String -> String -> Package -> Eff [] Int
+runTarget : Parsed -> List String -> String -> Package -> Eff hostRow Int
 runTarget parsed passthrough dir target =
   let
     pkgFlag = case flagValue parsed "package" of
@@ -142,11 +143,11 @@ runTarget parsed passthrough dir target =
       if buildCode /= 0 then pure buildCode
       else execTarget passthrough target (flagValue parsed "out")
 
--- 执行：cwd 切到包目录，bin 用**相对包目录**的路径（`prim_eff_runIn` 先 chdir 再执行，
+-- 执行：cwd 切到包目录，bin 用**相对包目录**的路径（`@vuna@prim_eff_runIn` 先 chdir 再执行，
 -- 传 `packageDir ++ "/.output/bin/..."` 会在相对 DIR 下被拼成两遍；见 M38 验证记录）。
 -- `--out DIR` 时构建产物在 DIR/bin/<包名>；相对 DIR 按调用方 cwd 解析成绝对路径
--- （`prim_eff_runIn` 会 chdir 到包目录，绝对路径不受影响）。
-execTarget : List String -> Package -> Maybe String -> Eff [] Int
+-- （`@vuna@prim_eff_runIn` 会 chdir 到包目录，绝对路径不受影响）。
+execTarget : List String -> Package -> Maybe String -> Eff hostRow Int
 execTarget passthrough target outM =
   let
     pkgDir = packageDir target
@@ -154,23 +155,23 @@ execTarget passthrough target outM =
   in case outM of
     Nothing => do
       exists <- pathExistsFile "${pkgDir}/.output/bin/${name}"
-      if exists then prim_eff_runIn pkgDir (".output/bin/${name}" :: passthrough)
+      if exists then raiseToRow hostRow (@vuna@prim_eff_runIn pkgDir (".output/bin/${name}" :: passthrough))
       else runError
         "binary not found: ${pkgDir}/.output/bin/${name} (build the package first, or drop --no-build)"
     Just out => do
-      cwd <- prim_eff_getcwd
+      cwd <- raiseToRow hostRow @vuna@prim_eff_getcwd
       exists <- pathExistsFile "${if startsWith "/" out then out else "${cwd}/${out}"}/bin/${name}"
-      if exists then prim_eff_runIn pkgDir
-        ("${if startsWith "/" out then out else "${cwd}/${out}"}/bin/${name}" :: passthrough)
+      if exists then raiseToRow hostRow
+        (@vuna@prim_eff_runIn pkgDir ("${if startsWith "/" out then out else "${cwd}/${out}"}/bin/${name}" :: passthrough))
       else runError
         "binary not found: ${if startsWith "/" out then out else "${cwd}/${out}"}/bin/${name} (build the package first with --out ${out}, or drop --no-build)"
 
-runError : String -> Eff [] Int
+runError : String -> Eff hostRow Int
 runError e = do
-  _ <- prim_eff_print "error: ${e}\n"
+  _ <- raiseToRow hostRow (@vuna@prim_eff_print "error: ${e}\n")
   pure 2
 
-runFailure : String -> Eff [] Int
+runFailure : String -> Eff hostRow Int
 runFailure e = do
-  _ <- prim_eff_print "error: ${e}\n"
+  _ <- raiseToRow hostRow (@vuna@prim_eff_print "error: ${e}\n")
   pure 1

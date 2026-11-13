@@ -6,6 +6,7 @@ module Vuna.Doc.Run where
 --   vuna doc [--check] [--package NAME] [DIR [OUT]]
 -- 默认 OUT：DIR=. -> docs/api.html，其他 DIR -> DIR/docs/api.html。
 -- `--check` 不写文件，只报告缺失 docstring 的顶层导出项（退出 1）。
+import Base.HostRow
 import Vuna.Cli.Args
 import Vuna.Compiler.Common
 import Vuna.Compiler.Packages.Pkg
@@ -13,7 +14,7 @@ import Vuna.Doc.Html
 import Vuna.Doc.Model
 import Vuna.Files
 
-export runDoc : List String -> Eff [] Int
+export runDoc : List String -> Eff hostRow Int
 runDoc args = case parseToolArgs "vuna doc" [BoolFlag "check", ValueFlag "package"] args of
   ErrC e => docError (diagText e)
   OkC parsed => case parsed.positionals of
@@ -41,7 +42,7 @@ scopeName (DocScope dir name exports) = name
 scopeExports : DocScope -> Maybe (List String)
 scopeExports (DocScope dir name exports) = exports
 
-docRun : String -> String -> Bool -> Maybe String -> Eff [] Int
+docRun : String -> String -> Bool -> Maybe String -> Eff hostRow Int
 docRun dir out check pkgFilter = do
   dirR <- requireDirectory dir
   case dirR of
@@ -63,16 +64,16 @@ docRun dir out check pkgFilter = do
                 OkC book => if check then runCheck book else writeHtml out book
 
 -- 每个 scope 的源文件（与 scope 一一对应；顺序稳定）。
-filesForScopes : List DocScope -> Eff [] (Check (List (Pair DocScope (List String))))
+filesForScopes : List DocScope -> Eff hostRow (Check (List (Pair DocScope (List String))))
 filesForScopes scopes = traverseScopes scopes []
 
-traverseScopes : List DocScope -> List (Pair DocScope (List String)) -> Eff [] (Check (List (Pair DocScope (List String))))
+traverseScopes : List DocScope -> List (Pair DocScope (List String)) -> Eff hostRow (Check (List (Pair DocScope (List String))))
 traverseScopes [] acc = pure (OkC (reverse acc))
 traverseScopes (s :: rest) acc = do
   files <- scopeSourceFiles s
   traverseScopes rest (Pair s files :: acc)
 
-scopeSourceFiles : DocScope -> Eff [] (List String)
+scopeSourceFiles : DocScope -> Eff hostRow (List String)
 scopeSourceFiles s =
   let
     root = "${scopeDir s}/lib"
@@ -87,10 +88,10 @@ scopeSourceFiles s =
 filesOf : List (Pair DocScope (List String)) -> List String
 filesOf pairs = concatMap secondOf pairs
 
-buildBook : List DocScope -> List (Pair DocScope (List String)) -> Eff [] (Check DocBook)
+buildBook : List DocScope -> List (Pair DocScope (List String)) -> Eff hostRow (Check DocBook)
 buildBook scopes files = buildBookGo scopes files []
 
-buildBookGo : List DocScope -> List (Pair DocScope (List String)) -> List DocModule -> Eff [] (Check DocBook)
+buildBookGo : List DocScope -> List (Pair DocScope (List String)) -> List DocModule -> Eff hostRow (Check DocBook)
 buildBookGo [] files acc = pure (OkC (DocBook (reverse acc)))
 buildBookGo (scope :: restScopes) files acc = case lookupScopeFiles scope files of
   Nothing => buildBookGo restScopes files acc
@@ -126,9 +127,9 @@ findDocModule name (m :: rest) = if moduleName m == name then Just m else findDo
 -- ---------------------------------------------------------------
 -- 包发现
 -- ---------------------------------------------------------------
-scopesFor : String -> Maybe String -> Eff [] (Check (List DocScope))
+scopesFor : String -> Maybe String -> Eff hostRow (Check (List DocScope))
 scopesFor dir pkgFilter = do
-  hasManifest <- prim_eff_fileExists "${dir}/vuna.toml"
+  hasManifest <- raiseToRow hostRow (@vuna@prim_eff_fileExists "${dir}/vuna.toml")
   if hasManifest then do
     packagesR <- workspacePackages dir
     pure (case packagesR of
@@ -149,19 +150,19 @@ filterScopes (Just name) scopes = filter (\s => scopeName s == name) scopes
 -- ---------------------------------------------------------------
 -- --check
 -- ---------------------------------------------------------------
-runCheck : DocBook -> Eff [] Int
+runCheck : DocBook -> Eff hostRow Int
 runCheck book = if length (missingDocs book) == 0 then do
-  _ <- prim_eff_print "docstrings ok (${length (bookModules book)} modules)\n"
+  _ <- raiseToRow hostRow (@vuna@prim_eff_print "docstrings ok (${length (bookModules book)} modules)\n")
   pure 0
 else do
   _ <- printMissing (missingDocs book)
-  _ <- prim_eff_print "${length (missingDocs book)} missing docstring(s)\n"
+  _ <- raiseToRow hostRow (@vuna@prim_eff_print "${length (missingDocs book)} missing docstring(s)\n")
   pure 1
 
-printMissing : List String -> Eff [] Int
+printMissing : List String -> Eff hostRow Int
 printMissing [] = pure 0
 printMissing (line :: rest) = do
-  _ <- prim_eff_print "${line}\n"
+  _ <- raiseToRow hostRow (@vuna@prim_eff_print "${line}\n")
   printMissing rest
 
 missingDocs : DocBook -> List String
@@ -178,19 +179,19 @@ missingInItem m item =
 -- ---------------------------------------------------------------
 -- 写出
 -- ---------------------------------------------------------------
-writeHtml : String -> DocBook -> Eff [] Int
+writeHtml : String -> DocBook -> Eff hostRow Int
 writeHtml out book =
   let
     content = renderPage book
   in do
     _ <- ensureDirPath (parentOf out)
-    _ <- prim_eff_writeFile out content
-    _ <- prim_eff_print "wrote ${out} (${length (bookModules book)} modules)\n"
+    _ <- raiseToRow hostRow (@vuna@prim_eff_writeFile out content)
+    _ <- raiseToRow hostRow (@vuna@prim_eff_print "wrote ${out} (${length (bookModules book)} modules)\n")
     pure 0
 
-docError : String -> Eff [] Int
+docError : String -> Eff hostRow Int
 docError e = do
-  _ <- prim_eff_print "error: ${e}\n"
+  _ <- raiseToRow hostRow (@vuna@prim_eff_print "error: ${e}\n")
   pure 2
 
 maybeText : Maybe String -> String

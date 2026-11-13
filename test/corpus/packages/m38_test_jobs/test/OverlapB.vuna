@@ -1,12 +1,15 @@
 
+import Base.HostRow
+import Base.EffClock
+import Base.EffConsole
 import Base.Eff
 -- 重叠探针 B：打印 START-B 后睡 800ms 再打印 END-B（比 A 的 3s 早结束，用来区分
 -- 「并行时 B 的 END 早于 A 的 END」与「串行时 B 根本没在 A 结束前启动」）。
 -- 2s 而不是 100ms：全量 suite 在 `--jobs auto` 下会同时跑几十个 case，并行 worker 的进程
 -- 启动/调度延迟可能到秒级，短睡眠会让「A 还没来得及打印 START」被误判成「没有重叠」
 -- （§47c 在高负载下偶发失败）。2s 仍远小于 A 的 3s，串行/并行判据不变。
-main : Eff [] Int
+main : Eff hostRow Int
 main = do
-  _ <- prim_eff_print "START-B\n"
-  _ <- prim_eff_sleep 2000000
-  prim_eff_print "END-B\n"
+  _ <- consolePrint "default" "START-B\n"
+  _ <- clockSleepMicros "default" 2000000
+  consolePrint "default" "END-B\n"

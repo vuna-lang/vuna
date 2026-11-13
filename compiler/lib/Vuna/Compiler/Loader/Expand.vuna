@@ -229,10 +229,11 @@ else case parts of
 -- ---------------------------------------------------------------
 -- 内置宏注册表与展开
 -- ---------------------------------------------------------------
--- 隐藏原语引用（`@vuna@…`）：Resolve 作为内部名直通，签名由 `Elab.Prelude` 提供；
--- `@vuna@` 前缀保证不会被用户源码写出来，也不捕获调用方局部名字。
+-- 隐藏原语引用：宏展开产生的名字带 `!` 前缀（`!` 不是标识符字符，用户源码词法
+-- 写不出这个形态）；`Loader.Resolve` 只对带 `!` 前缀的名字直通（剥前缀后交给
+-- 隐藏 intrinsic 的签名），源码手写的 `@vuna@…` 一律 RN_UnknownName。
 internalRef : String -> Span -> Expr
-internalRef name sp = EVar name sp
+internalRef name sp = EVar ("!" ++ name) sp
 
 -- `dbg!` 的开关查询：哑 `Int` 实参 0（宏展开里唯一的实参形态，源码写不出来）。
 debugOnRef : Span -> Expr

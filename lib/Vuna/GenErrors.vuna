@@ -9,6 +9,7 @@ module Vuna.GenErrors where
 -- 由此消除了旧实现「扫注释 + 从消息字面量反推前缀」的双重真源（findMsg 已删除）。
 -- FX_（自动修复码）由可修复的 LN_ 规则派生：`FX_` + 规则名去 `-`。
 -- 纯数据渲染，不读文件、不跑类型检查；生成物不纳入 git（docs/.generated/ 在 .gitignore）。
+import Base.HostRow
 import Vuna.Cli.Args
 import Vuna.Compiler.Common
 import Vuna.Compiler.Diagnostics
@@ -72,7 +73,7 @@ allEntries =
   append (map tcEntryToEntry tcAll)
     (append (map cgEntryToEntry cgAll) (append (map lintEntryToEntry lintAll) (append (map lexEntryToEntry lexAll) (append (map psEntryToEntry psAll) (append (map icEntryToEntry icAll) (append (map rnEntryToEntry rnAll) (append (map pkgEntryToEntry pkgAll) (append (map warnEntryToEntry warnAll) (map ldEntryToEntry ldAll)))))))))
 
-export runGenErrors : String -> Eff [] Int
+export runGenErrors : String -> Eff hostRow Int
 runGenErrors root = do
   rootR <- requireDirectory root
   case rootR of
@@ -80,21 +81,23 @@ runGenErrors root = do
     OkC _ => do
       doc <- renderDoc allEntries
       _ <- ensureDirPath (parentOf "${root}/docs/.generated/errors.md")
-      _ <- prim_eff_writeFile "${root}/docs/.generated/errors.md" doc
+      _ <- raiseToRow hostRow (@vuna@prim_eff_writeFile "${root}/docs/.generated/errors.md" doc)
       catalog <- renderCatalogJson allEntries
-      _ <- prim_eff_writeFile "${root}/docs/.generated/errors.json" catalog
-      _ <- prim_eff_print "wrote ${root}/docs/.generated/errors.md (${length allEntries} codes)\n"
+      _ <- raiseToRow hostRow (@vuna@prim_eff_writeFile "${root}/docs/.generated/errors.json" catalog)
+      _ <-
+        raiseToRow hostRow
+          (@vuna@prim_eff_print "wrote ${root}/docs/.generated/errors.md (${length allEntries} codes)\n")
       pure 0
 
-genErrorsError : String -> Eff [] Int
+genErrorsError : String -> Eff hostRow Int
 genErrorsError e = do
-  _ <- prim_eff_print "error: ${e}\n"
+  _ <- raiseToRow hostRow (@vuna@prim_eff_print "error: ${e}\n")
   pure 2
 
 -- ---------------------------------------------------------------
 -- 渲染
 -- ---------------------------------------------------------------
-renderDoc : List Entry -> Eff [] String
+renderDoc : List Entry -> Eff hostRow String
 renderDoc entries = do
   tcs <- renderTable (filter (isDomain "TC_") entries)
   cgs <- renderTable (filter (isDomain "CG_") entries)
@@ -156,7 +159,7 @@ ${fxs}
 isDomain : String -> Entry -> Bool
 isDomain dom e = startsWith dom e.entryCode
 
-renderTable : List Entry -> Eff [] String
+renderTable : List Entry -> Eff hostRow String
 renderTable [] = pure "（无）\n"
 renderTable entries = do
   rows <- mapEff renderRow entries
@@ -166,7 +169,7 @@ ${join "\n" rows}
 """
   )
 
-renderRow : Entry -> Eff [] String
+renderRow : Entry -> Eff hostRow String
 renderRow e = do
   example <- exampleCell e.entryCode
   pure
@@ -199,7 +202,7 @@ fxOf e =
   Entry "FX_${join "" (split "-" e.entryRule)}" e.entryMsg e.entryEdit e.entryRule e.entryEdit True
 
 -- 效果列表遍历（本模块自用；顺序与纯 `map` 一致，示例夹具查找按此顺序发生）。
-mapEff : (a -> Eff [] b) -> List a -> Eff [] (List b)
+mapEff : (a -> Eff hostRow b) -> List a -> Eff hostRow (List b)
 mapEff f [] = pure []
 mapEff f (x :: rest) = do
   y <- f x
@@ -208,12 +211,12 @@ mapEff f (x :: rest) = do
 
 -- 目录 JSON：与 errors.md 同源（生成物，供工具/编辑器消费）。自带最小转义，
 -- 刻意不依赖 Vuna.Json（避免把 GenErrors 加进 Json 的依赖扇出）。
-renderCatalogJson : List Entry -> Eff [] String
+renderCatalogJson : List Entry -> Eff hostRow String
 renderCatalogJson entries = do
   texts <- mapEff entryJsonText entries
   pure ("{\"version\":1,\"codes\":[" ++ join "," texts ++ "]}")
 
-entryJsonText : Entry -> Eff [] String
+entryJsonText : Entry -> Eff hostRow String
 entryJsonText e = do
   example <- exampleField e.entryCode
   pure
@@ -243,7 +246,7 @@ hexPair c = strPack [hexDigit (c / 16), hexDigit (c - c / 16 * 16)]
 hexDigit : Int -> Int
 hexDigit n = if n < 10 then 48 + n else 87 + n
 
-exampleCell : String -> Eff [] String
+exampleCell : String -> Eff hostRow String
 exampleCell code = do
   found <- exampleOf code
   pure (case found of
@@ -251,7 +254,7 @@ exampleCell code = do
     Nothing => "—"
   )
 
-jsonExample : String -> Eff [] String
+jsonExample : String -> Eff hostRow String
 jsonExample code = do
   found <- exampleOf code
   pure (case found of
@@ -259,7 +262,7 @@ jsonExample code = do
     Nothing => "null"
   )
 
-exampleField : String -> Eff [] String
+exampleField : String -> Eff hostRow String
 exampleField code = do
   found <- exampleOf code
   pure (case found of

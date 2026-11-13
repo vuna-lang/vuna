@@ -1,13 +1,21 @@
 -- W10：process 效应标签（命名实例）——mock handler 给固定 args/退出码；
--- real handler 走 prim_eff_getArgs（不含 argv[0]）与 prim_eff_runIn（true 的退出码 0）。
+-- real 路径走入口自动预装的行 handler（含 argv 与 runIn 的退出码 0）。
 import Base.Eff
 import Base.EffProcess
+import Base.EffConsole
+import Base.HostRow
 import Base.List
 
 prog : (n : String) -> Eff (Cons n ProcessOp Nil) String
 prog n = do
   args <- processArgs n
   code <- processRunIn n "." ("true" :: [])
+  pure (join "," args ++ "|" ++ strFromInt code)
+
+progReal : Eff hostRow String
+progReal = do
+  args <- processArgs "default"
+  code <- processRunIn "default" "." ("true" :: [])
   pure (join "," args ++ "|" ++ strFromInt code)
 
 mret : String -> String
@@ -19,10 +27,10 @@ mopH op k = case op of
   Exit c => k c
   RunIn dir args => k 3
 
-main : Eff [] Int
+main : Eff hostRow Int
 main = case runPure (handleProcess "mock" mret mopH (prog "mock")) of
   mockLog => do
-    _ <- prim_eff_print ("mock " ++ mockLog ++ "\n")
-    realLog <- runProcess "real" (prog "real")
-    _ <- prim_eff_print ("real " ++ realLog ++ "\n")
+    _ <- consolePrint "default" ("mock " ++ mockLog ++ "\n")
+    realLog <- progReal
+    _ <- consolePrint "default" ("real " ++ realLog ++ "\n")
     pure 0

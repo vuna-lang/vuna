@@ -1,5 +1,8 @@
 -- M37：Reader 效应栈（用 Base.Eff.Reader 取代旧 ReaderT）。
 -- `ask` 读环境，`local` 在临时 handler 里改写；handler 的 answer 用 Int。
+import Base.HostRow
+import Base.EffExit
+import Base.EffConsole
 import Base.Eff
 import Base.Eff.Reader
 
@@ -12,12 +15,12 @@ opH : (o : ReaderOp Int) -> (Base.Eff.Reader.resReader Int o -> Int) -> Int
 opH op k = case op of
   Ask => k 41
 
-main : Eff [] Int
+main : Eff hostRow Int
 main = do
-  _ <- prim_eff_print "reader\n"
+  _ <- consolePrint "default" "reader\n"
   a <- pure (runPure (handleReader "counter" Int (\x => x) opH prog))
   b <-
     pure
       (runPure (handleReader "counter" Int (\x => x) opH (local "counter" Int (\x => x + 1) (ask "counter" Int))))
-  _ <- prim_eff_print ("a=" ++ strFromInt a ++ ",b=" ++ strFromInt b ++ "\n")
-  prim_eff_exit 0
+  _ <- consolePrint "default" ("a=" ++ strFromInt a ++ ",b=" ++ strFromInt b ++ "\n")
+  exitWith "default" 0

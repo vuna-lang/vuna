@@ -2,7 +2,7 @@ module Base.EffRef where
 
 -- Base.EffRef：带内建 Ref 行的可变引用（阶段 4）。
 --
--- 操作直调带行宿主原语（`prim_eff_*Ref_host`），不经过 sendCore/handler：Ref 是
+-- 操作直调带行宿主原语（`@vuna@prim_eff_*Ref_host`），不经过 sendCore/handler：Ref 是
 -- 运行时机制，不提供 mock；`RefOp` 只是行标签，让 `Eff []` 不能执行 ref 操作。
 -- 旧的 `Base.IORef`（`Eff []`）保留给编译器/工具链内部。
 import Base.Eff
@@ -13,12 +13,12 @@ export data RefOp(..) : Type where
 
 -- | 创建引用（带 `RefOp` 行）。
 export refNew : a -> Eff [RefOp] (IORef a)
-refNew x = prim_eff_newRef_host x
+refNew x = @vuna@host@newRef x
 
 -- | 读引用（带 `RefOp` 行）。
 export refRead : IORef a -> Eff [RefOp] a
-refRead r = prim_eff_readRef_host r
+refRead r = @vuna@host@readRef r
 
 -- | 写引用，返回底层原语的 `Int`（带 `RefOp` 行）。
 export refWrite : IORef a -> a -> Eff [RefOp] Int
-refWrite r v = prim_eff_writeRef_host r v
+refWrite r v = @vuna@host@writeRef r v

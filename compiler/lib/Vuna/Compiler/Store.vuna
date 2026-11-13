@@ -33,6 +33,7 @@ module Vuna.Compiler.Store where
 --
 -- 代价：写侧多一次内容地址（本机 ~2.2 ms/MB）；读侧同样（fast 档为 0）。check marker
 -- 载荷为 0 字节，split/unit 载荷只在 miss 路径写。
+import Base.HostRow
 import Vuna.Compiler.Common
 import Vuna.Compiler.Hash
 
@@ -156,93 +157,93 @@ storeDecodeFast tag codec raw = case frameSplit raw of
 
 -- | 持久包 store 的根（与临时缓存分开；D15）：`VUNA_STORE` → `$XDG_DATA_HOME/vuna/store`
 -- → `~/.vuna/store`。取包时写 `objects/` 与 `pkgs/`，`vuna clean --packages` 清理。
-export storeDataRootEff : Eff [] String
+export storeDataRootEff : Eff hostRow String
 storeDataRootEff = do
-  override <- prim_eff_getenv "VUNA_STORE"
+  override <- raiseToRow hostRow (@vuna@prim_eff_getenv "VUNA_STORE")
   if override /= "" then pure override
   else do
-    xdg <- prim_eff_getenv "XDG_DATA_HOME"
+    xdg <- raiseToRow hostRow (@vuna@prim_eff_getenv "XDG_DATA_HOME")
     if xdg /= "" then pure "${xdg}/vuna/store"
     else do
-      home <- prim_eff_getenv "HOME"
+      home <- raiseToRow hostRow (@vuna@prim_eff_getenv "HOME")
       pure (if home == "" then "/tmp/vuna-store" else "${home}/.vuna/store")
 
 -- 缓存根（`VUNA_CACHE_DIR` 覆盖；缺省 `$TMPDIR/vuna-cache`）。
 -- Nix 构建的源树只读 ⇒ 缓存放临时目录；本地开发同机 TMPDIR 持久 ⇒ 命中。
-export storeCacheBaseEff : Eff [] String
+export storeCacheBaseEff : Eff hostRow String
 storeCacheBaseEff = do
-  override <- prim_eff_getenv "VUNA_CACHE_DIR"
-  tmp <- prim_eff_getenv "TMPDIR"
+  override <- raiseToRow hostRow (@vuna@prim_eff_getenv "VUNA_CACHE_DIR")
+  tmp <- raiseToRow hostRow (@vuna@prim_eff_getenv "TMPDIR")
   pure (if override /= "" then override else "${if tmp == "" then "/tmp" else tmp}/vuna-cache")
 
 -- | 读 + 完整校验（magic/tag/codec/长度/内容地址）。
-export storeReadEff : String -> String -> String -> Eff [] (Maybe String)
+export storeReadEff : String -> String -> String -> Eff hostRow (Maybe String)
 storeReadEff tag codec path = do
-  exists <- prim_eff_fileExists path
+  exists <- raiseToRow hostRow (@vuna@prim_eff_fileExists path)
   if exists then do
-    raw <- prim_eff_readFile path
+    raw <- raiseToRow hostRow (@vuna@prim_eff_readFile path)
     pure (storeDecode tag codec raw)
   else pure Nothing
 
 -- | 读 + 快速校验（跳过内容地址；仅供随后自证的载荷，见模块头）。
-export storeReadFastEff : String -> String -> String -> Eff [] (Maybe String)
+export storeReadFastEff : String -> String -> String -> Eff hostRow (Maybe String)
 storeReadFastEff tag codec path = do
-  exists <- prim_eff_fileExists path
+  exists <- raiseToRow hostRow (@vuna@prim_eff_fileExists path)
   if exists then do
-    raw <- prim_eff_readFile path
+    raw <- raiseToRow hostRow (@vuna@prim_eff_readFile path)
     pure (storeDecodeFast tag codec raw)
   else pure Nothing
 
 -- | 读 + 校验「头里的内容地址 == 期望值」（不重算；见 `storeDecodeAs`）。
-export storeReadAsEff : String -> String -> String -> String -> Eff [] (Maybe String)
+export storeReadAsEff : String -> String -> String -> String -> Eff hostRow (Maybe String)
 storeReadAsEff tag codec digest path = do
-  exists <- prim_eff_fileExists path
+  exists <- raiseToRow hostRow (@vuna@prim_eff_fileExists path)
   if exists then do
-    raw <- prim_eff_readFile path
+    raw <- raiseToRow hostRow (@vuna@prim_eff_readFile path)
     pure (storeDecodeAs tag codec digest raw)
   else pure Nothing
 
 -- | 写（原子替换）。返回写入字节数。
-export storeWriteEff : String -> String -> String -> String -> Eff [] Int
-storeWriteEff tag codec path payload = prim_eff_writeFileAtomic path (storeEncode tag codec payload)
+export storeWriteEff : String -> String -> String -> String -> Eff hostRow Int
+storeWriteEff tag codec path payload = raiseToRow hostRow (@vuna@prim_eff_writeFileAtomic path (storeEncode tag codec payload))
 
 -- | 写，但用调用方给的载荷摘要（已算过强哈希时用，见 `storeEncodeAs`）。
-export storeWriteAsEff : String -> String -> String -> String -> String -> Eff [] Int
+export storeWriteAsEff : String -> String -> String -> String -> String -> Eff hostRow Int
 storeWriteAsEff tag codec digest path payload =
-  prim_eff_writeFileAtomic path (storeEncodeAs tag codec digest payload)
+  raiseToRow hostRow (@vuna@prim_eff_writeFileAtomic path (storeEncodeAs tag codec digest payload))
 
 -- | 内容不变就不写：避免无意义地刷新 mtime / 制造写放大。
-export storeWriteIfChangedEff : String -> String -> String -> String -> Eff [] Int
+export storeWriteIfChangedEff : String -> String -> String -> String -> Eff hostRow Int
 storeWriteIfChangedEff tag codec path payload =
   let
     raw = storeEncode tag codec payload
   in do
-    exists <- prim_eff_fileExists path
+    exists <- raiseToRow hostRow (@vuna@prim_eff_fileExists path)
     if exists then do
-      old <- prim_eff_readFile path
-      if old == raw then pure 0 else prim_eff_writeFileAtomic path raw
-    else prim_eff_writeFileAtomic path raw
+      old <- raiseToRow hostRow (@vuna@prim_eff_readFile path)
+      if old == raw then pure 0 else raiseToRow hostRow (@vuna@prim_eff_writeFileAtomic path raw)
+    else raiseToRow hostRow (@vuna@prim_eff_writeFileAtomic path raw)
 
 -- | 同 `storeWriteIfChangedEff`，但内容地址由调用方给出（见 `storeEncodeAs`）。
-export storeWriteIfChangedAsEff : String -> String -> String -> String -> String -> Eff [] Int
+export storeWriteIfChangedAsEff : String -> String -> String -> String -> String -> Eff hostRow Int
 storeWriteIfChangedAsEff tag codec digest path payload =
   let
     raw = storeEncodeAs tag codec digest payload
   in do
-    exists <- prim_eff_fileExists path
+    exists <- raiseToRow hostRow (@vuna@prim_eff_fileExists path)
     if exists then do
-      old <- prim_eff_readFile path
-      if old == raw then pure 0 else prim_eff_writeFileAtomic path raw
-    else prim_eff_writeFileAtomic path raw
+      old <- raiseToRow hostRow (@vuna@prim_eff_readFile path)
+      if old == raw then pure 0 else raiseToRow hostRow (@vuna@prim_eff_writeFileAtomic path raw)
+    else raiseToRow hostRow (@vuna@prim_eff_writeFileAtomic path raw)
 
-export storeFileExistsEff : String -> Eff [] Bool
-storeFileExistsEff = prim_eff_fileExists
+export storeFileExistsEff : String -> Eff hostRow Bool
+storeFileExistsEff p = raiseToRow hostRow (@vuna@prim_eff_fileExists p)
 
-export storeRemoveEff : String -> Eff [] Int
-storeRemoveEff = prim_eff_removeFile
+export storeRemoveEff : String -> Eff hostRow Int
+storeRemoveEff p = raiseToRow hostRow (@vuna@prim_eff_removeFile p)
 
--- | 逐级创建目录（`prim_eff_makeDir` 只建一层）。路径是文件系统图，用显式 fuel 守卫。
-export storeEnsureDirEff : String -> Eff [] Int
+-- | 逐级创建目录（`@vuna@prim_eff_makeDir` 只建一层）。路径是文件系统图，用显式 fuel 守卫。
+export storeEnsureDirEff : String -> Eff hostRow Int
 storeEnsureDirEff path = storeEnsureDirFuel 256 path
 
 -- | 建目录（幂等）。
@@ -251,12 +252,12 @@ storeEnsureDirEff path = storeEnsureDirFuel 256 path
 -- 「先 exists 再 makeDir」有 TOCTOU 窗口（两个进程都看到不存在，第二个 makeDir 抛
 -- `File exists`）——宿主 `makeDir` 不幂等，语言里也没有 try/catch。所以末级创建走
 -- `mkdir -p`（幂等 + 一次建完整条链），existence 检查只用于快速短路。
-storeEnsureDirFuel : Int -> String -> Eff [] Int
+storeEnsureDirFuel : Int -> String -> Eff hostRow Int
 storeEnsureDirFuel fuel path = if fuel <= 0 then pure 0
 else if path == "" || path == "." || path == "/" then pure 0
 else do
-  exists <- prim_eff_fileExists path
-  if exists then pure 0 else prim_eff_runIn "." ["mkdir", "-p", path]
+  exists <- raiseToRow hostRow (@vuna@prim_eff_fileExists path)
+  if exists then pure 0 else raiseToRow hostRow (@vuna@prim_eff_runIn "." ["mkdir", "-p", path])
 
 storeParentOf : String -> String
 storeParentOf path =

@@ -4,8 +4,15 @@ Base_dBits.ml
 Base_dBool.ml
 Base_dEff.ml
 Base_dEffArgs.ml
+Base_dEffClock.ml
+Base_dEffConsole.ml
+Base_dEffEnv.ml
 Base_dEffExit.ml
-Base_dEffSched.ml
+Base_dEffFs.ml
+Base_dEffNet.ml
+Base_dEffProcess.ml
+Base_dEffRef.ml
+Base_dEffStdin.ml
 Base_dEq.ml
 Base_dFloat.ml
 Base_dFoldable.ml
@@ -13,6 +20,7 @@ Base_dFromInt.ml
 Base_dFromString.ml
 Base_dHashMap.ml
 Base_dHashable.ml
+Base_dHostRow.ml
 Base_dInt.ml
 Base_dInterp.ml
 Base_dList.ml

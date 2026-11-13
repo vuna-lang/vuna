@@ -1,7 +1,8 @@
--- W10：console 效应标签（命名实例）——同一程序在 mock（"mock"）与真实（"real"）handler
--- 下各跑一次；mock 收集日志（纯 answer），real handler 直调 prim_eff_print/eprint。
+-- W10：console 效应标签（命名实例）——同一程序在 mock（"mock"）与真实 handler
+-- 下各跑一次；mock 收集日志（纯 answer），real 走 entry 自动预装的 handler。
 import Base.Eff
 import Base.EffConsole
+import Base.HostRow
 import Base.Pair
 
 prog : (n : String) -> Eff (Cons n ConsoleOp Nil) Int
@@ -9,6 +10,13 @@ prog n = do
   _ <- consolePrint n "hello"
   _ <- consoleEprint n "oops"
   _ <- consolePrint n "!"
+  pure 7
+
+progReal : Eff hostRow Int
+progReal = do
+  _ <- consolePrint "default" "hello"
+  _ <- consoleEprint "default" "oops"
+  _ <- consolePrint "default" "!"
   pure 7
 
 mret : Int -> Pair Int String
@@ -21,8 +29,8 @@ mopH op k = case op of
   EPrint s => case k 0 of
     Pair a log => Pair a (("err:" ++ s ++ ";") ++ log)
 
-main : Eff [] Int
+main : Eff hostRow Int
 main = case runPure (handleConsole "mock" mret mopH (prog "mock")) of
   Pair n log => do
-    _ <- prim_eff_print ("mock " ++ log ++ "value " ++ strFromInt n ++ "\n")
-    runConsole "real" (prog "real")
+    _ <- consolePrint "default" ("mock " ++ log ++ "value " ++ strFromInt n ++ "\n")
+    progReal

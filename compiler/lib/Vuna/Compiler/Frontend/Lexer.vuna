@@ -153,6 +153,18 @@ else case cs of
     else OkC cs
     [] => OkC cs
 
+
+-- `@vuna@name` 内部名（阶段 5 D）：只有 `@vuna@` 前缀且后续是标识符字符时才作为
+-- 单个标识符收集；其余 `@` 仍是操作符（保持模式 `name@pat` 的语法不变）。
+startsWithVunaAt : List Int -> Bool
+startsWithVunaAt rest = take 5 rest == [118, 117, 110, 97, 64]
+
+collectInternalIdent : Chars -> List Int -> Pair String Chars
+collectInternalIdent (Chars [] p) acc = Pair (strPack (reverse acc)) (Chars [] p)
+collectInternalIdent (Chars (c :: rest) p) acc =
+  if isIdentChar c || c == 64 then collectInternalIdent (Chars rest (advanceChar c p)) (c :: acc)
+  else Pair (strPack (reverse acc)) (Chars (c :: rest) p)
+
 export collectIdent : Chars -> List Int -> Pair String Chars
 collectIdent (Chars [] p) acc = Pair (strPack (reverse acc)) (Chars [] p)
 collectIdent (Chars (c :: rest) p) acc = if isIdentChar c then collectIdent (Chars rest (advanceChar c p)) (c :: acc)
@@ -313,7 +325,9 @@ export lexOneToken : Int -> Chars -> Check (Pair PTok Chars)
 lexOneToken fuel cs = if fuel <= 0 then icFuel "lexer"
 else case cs of
   Chars [] p => icInternal "lexOneToken on empty input"
-  Chars (c :: rest) p => if isIdentStart c then case collectIdent (Chars rest (advanceChar c p)) [c] of
+  Chars (c :: rest) p => if c == 64 && startsWithVunaAt rest then case collectInternalIdent (Chars rest (advanceChar c p)) [c] of
+    Pair name cs2 => OkC (Pair (PTok (classifyIdent name) p) cs2)
+  else if isIdentStart c then case collectIdent (Chars rest (advanceChar c p)) [c] of
     Pair name cs2 => OkC (Pair (PTok (classifyIdent name) p) cs2)
   else if isDigit c then if digitRunIsFloat (Chars rest (advanceChar c p)) then
     let

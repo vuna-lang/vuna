@@ -1,0 +1,16 @@
+-- 阶段 5：单效应 helper（Eff [FsOp]）在多效应 main（Eff [FsOp, ConsoleOp]）里
+-- 经行包含 lift 自动提升。
+import Base.Eff
+import Base.EffConsole
+import Base.EffFs
+
+fsHelper : Eff [FsOp] Int
+fsHelper = do
+  _ <- fsWriteFile "default" "/tmp/vuna-row-sub.txt" "sub\n"
+  pure 0
+
+main : Eff [FsOp, ConsoleOp] Int
+main = do
+  _ <- fsHelper
+  _ <- consolePrint "default" "sub-ok\n"
+  pure 0

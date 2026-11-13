@@ -1,13 +1,14 @@
--- stdlib：do 在 Eff 上（含 `_ <-` 丢弃结果）；main : Eff [] Int 由运行器执行。
--- P2c：用户面经 Eff + Console handler（runConsole）。
+-- stdlib：do 在 Eff 上（含 `_ <-` 丢弃结果）；main : Eff hostRow Int 由运行器执行。
+-- 阶段 5：用户面直接带行（entry 自动预装 Console handler），不再显式 runConsole。
 import Base.Eff
 import Base.EffConsole
+import Base.HostRow
 
-program : Eff [ConsoleOp@real] Int
+program : Eff hostRow Int
 program = do
-  _ <- consolePrint "real" "abc"
+  _ <- consolePrint "default" "abc"
   n <- pure 3
   pure n
 
-main : Eff [] Int
-main = runConsole "real" program
+main : Eff hostRow Int
+main = program

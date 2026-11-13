@@ -46,9 +46,9 @@ module Vuna.Compiler.Query.Run where
 -- **会话索引**：`sessionSave` 把 `Db` 写成一条 `Store` 载荷（codec `query-index 1`），
 -- 路径 `<cache>/query/<包桶>/index`，tag 带编译器指纹（换二进制即整套失效）。载荷只
 -- 存**判据**（key / 依赖快照 / 值摘要 / 值本身）；span 与 trace 不落盘。
+import Base.HostRow
 import Base.Bool
 import Base.Eff
-import Base.EffSched
 import Base.HashMap
 import Base.Int
 import Base.List
@@ -218,9 +218,7 @@ memKey key (k :: rest) = if k == key then True else memKey key rest
 
 -- | 本节点边界是否该取消：会话取消位 ∨ 当前纤程已被调度器请求取消。
 cancelRequested : RunState -> Eff [] Bool
-cancelRequested st = do
-  sched <- isCancelled
-  pure (st.rsCancelled || sched == 1)
+cancelRequested st = pure st.rsCancelled
 
 -- ---------------------------------------------------------------
 -- 节点执行
@@ -323,246 +321,6 @@ runCachedMiss st key deps compute t0 = case spendBudget st of
                 (secondOf resolved) t0 t1
           in pure (Pair st2 (OkC (firstOf p)))
 
--- ---------------------------------------------------------------
--- 并行波次（互相独立的叶节点）
--- ---------------------------------------------------------------
--- | 波次叶节点：key + 声明依赖 + 计算（拿到依赖值，返回「值 + 观测依赖」）。
--- 构造子不导出（用 `waveNode` 构造）。
-export data WaveNode : Type where
-  WaveNodeMk : String -> List String -> (List QVal -> Eff [] (Pair QVal (List String))) -> WaveNode
-
--- | 构造一个波次叶节点。**契约**：同一波内 key 唯一，且 deps 不能指向同波的其它 key；
--- 违反时 `runWave` 自动回退为顺序执行（语义与逐个 `runNode` 完全一致）。
-export waveNode : String -> List String -> (List QVal -> Eff [] (Pair QVal (List String))) -> WaveNode
-waveNode key deps compute = WaveNodeMk key deps compute
-
-waveKey : WaveNode -> String
-waveKey (WaveNodeMk key _ _) = key
-
-waveDeps : WaveNode -> List String
-waveDeps (WaveNodeMk _ deps _) = deps
-
-waveCompute : WaveNode -> List QVal -> Eff [] (Pair QVal (List String))
-waveCompute (WaveNodeMk _ _ compute) = compute
-
--- | 波内一个叶节点的执行结果（**尚未提交**：提交在父纤程里按声明序做，因此提交顺序 /
--- trace 顺序 / span 序号与调度顺序无关 ⇒ 结果确定）。
-record WaveOut where
-  -- | `hit` / `compute` / `cancel` / `reject` / `cycle`。
-  woOutcome : String
-  woStartUs : Int
-  woEndUs : Int
-  -- | 命中时的值。
-  woValue : Maybe QVal
-  -- | 未命中时 compute 的产物（值 + 观测依赖），由父节点提交。
-  woFresh : Maybe (Pair QVal (List String))
-
-woOutcomeOf : WaveOut -> String
-woOutcomeOf w = w.woOutcome
-
-woStartOf : WaveOut -> Int
-woStartOf w = w.woStartUs
-
-woEndOf : WaveOut -> Int
-woEndOf w = w.woEndUs
-
-woValueOf : WaveOut -> Maybe QVal
-woValueOf w = w.woValue
-
-woFreshOf : WaveOut -> Maybe (Pair QVal (List String))
-woFreshOf w = w.woFresh
-
--- | 执行一波**互相独立**的叶节点。
---
--- 返回与 `nodes` **同序**的结果列表（`Nothing` = 该节点取消 / 预算拒绝 / 环）。
--- 波内提交按声明序做（不是完成序）；预算按波宽平均切分；波内任一子任务失败/取消时
--- 取消同 scope 其余子任务。空波返回原状态；单节点直接走 `runNode`；契约不满足
--- （key 重复 / deps 指向同波节点）自动回退顺序执行。
-export runWave : RunState -> List WaveNode -> Eff [] (Pair RunState (List (Pair String (Maybe QVal))))
-runWave st [] = pure (Pair st [])
-runWave st ([n]) = do
-  r <- runNode st (waveKey n) (waveDeps n) (waveCompute n)
-  pure (Pair (firstOf r) [Pair (waveKey n) (secondOf r)])
-runWave st nodes = if nodesIndependent nodes then runWaveReady st nodes else runWaveSeq st nodes
-
-runWaveReady : RunState -> List WaveNode -> Eff [] (Pair RunState (List (Pair String (Maybe QVal))))
-runWaveReady st nodes = do
-  cancelled <- cancelRequested st
-  if cancelled then pure (cancelWave st nodes) else runWaveParallel st nodes
-
-runWaveSeq : RunState -> List WaveNode -> Eff [] (Pair RunState (List (Pair String (Maybe QVal))))
-runWaveSeq st [] = pure (Pair st [])
-runWaveSeq st (n :: rest) = do
-  r <- runNode st (waveKey n) (waveDeps n) (waveCompute n)
-  restR <- runWaveSeq (firstOf r) rest
-  pure (Pair (firstOf restR) (Pair (waveKey n) (secondOf r) :: secondOf restR))
-
--- 已取消的波：不 fork，逐节点记 cancel span / trace，返回全 `Nothing`。
-cancelWave : RunState -> List WaveNode -> Pair RunState (List (Pair String (Maybe QVal)))
-cancelWave st [] = Pair st []
-cancelWave st (n :: rest) =
-  let
-    st1 = addSpan (runNote st ("cancel " ++ waveKey n)) st.rsSpanSeq 0 (waveKey n) "cancel" 0 0
-    tailR = cancelWave st1 rest
-  in Pair (firstOf tailR) (Pair (waveKey n) Nothing :: secondOf tailR)
-
-runWaveParallel : RunState -> List WaveNode -> Eff [] (Pair RunState (List (Pair String (Maybe QVal))))
-runWaveParallel st nodes = do
-  let
-    width = listLen nodes
-    childSt = waveSlice st width
-    wave = st.rsWaveSeq + 1
-  in do
-    sc <- newScope
-    tasks <- mapEff (\n => forkTask sc (waveLeaf childSt n)) nodes
-    outs <- mapEff (\t => awaitTask t) tasks
-    _ <- scopeWait sc
-    pure (commitWave st wave (zip nodes outs))
-
--- 波内预算：总额平均切分（`share = 余额 / 波宽`）；`share <= 0` 时子任务预算位为
--- 「已耗尽」（budget0 = 1、budget = 0），即整波 reject，余量留在父会话。
-waveSlice : RunState -> Int -> RunState
-waveSlice st width = if st.rsBudget0 <= 0 then st
-else
-  let
-    share = st.rsBudget / width
-  in if share <= 0 then RunState st.rsDb st.rsStack 0 1 st.rsSteps st.rsSpans st.rsSpanSeq st.rsWaveSeq st.rsCancelled
-  else RunState st.rsDb st.rsStack share share st.rsSteps st.rsSpans st.rsSpanSeq st.rsWaveSeq
-    st.rsCancelled
-
-waveLeaf : RunState -> WaveNode -> Eff [] WaveOut
-waveLeaf st node = do
-  t0 <- effTimeUs
-  cancelled <- cancelRequested st
-  if cancelled then do
-    t1 <- effTimeUs
-    pure (WaveOut "cancel" t0 t1 Nothing Nothing)
-  else if inStack st.rsStack (waveKey node) || memKey (waveKey node) (waveDeps node) then do
-    t1 <- effTimeUs
-    pure (WaveOut "cycle" t0 t1 Nothing Nothing)
-  else case queryHit st.rsDb (waveKey node) (waveDeps node) of
-    Just v => do
-      t1 <- effTimeUs
-      pure (WaveOut "hit" t0 t1 (Just v) Nothing)
-    Nothing => case spendBudget st of
-      Nothing => do
-        t1 <- effTimeUs
-        pure (WaveOut "reject" t0 t1 Nothing Nothing)
-      Just st1 => do
-        let
-          _ = dbg! "query-miss ${waveKey node}"
-        in do
-          result <- waveCompute node (queryDepValues st1.rsDb (waveDeps node))
-          t1 <- effTimeUs
-          pure (WaveOut "compute" t0 t1 Nothing (Just result))
-
--- 父纤程提交：按声明序 fold；每个节点一段 span（波次号 = `wave`）。
-commitWave : RunState -> Int -> List (Pair WaveNode (Result WaveOut)) -> Pair RunState (List (Pair String (Maybe QVal)))
-commitWave st wave pairs =
-  let
-    stW = withWave st wave
-    folded = foldl (commitOne wave) (Pair stW []) pairs
-    st1 = firstOf folded
-    st2 = chargeWave st1 (freshCount pairs)
-  in Pair st2 (reverse (secondOf folded))
-
-commitOne : Int -> Pair RunState (List (Pair String (Maybe QVal))) -> Pair WaveNode (Result WaveOut) -> Pair RunState (List (Pair String (Maybe QVal)))
-commitOne wave acc pr =
-  let
-    st = firstOf acc
-    accList = secondOf acc
-    node = firstOf pr
-  in case secondOf pr of
-    Err msg => commitErr wave st accList node msg
-    Ok wo => commitOut wave st accList node (waveDeps node) wo
-
-commitErr : Int -> RunState -> List (Pair String (Maybe QVal)) -> WaveNode -> String -> Pair RunState (List (Pair String (Maybe QVal)))
-commitErr wave st accList node msg =
-  let
-    key = waveKey node
-  in if msg == "cancelled" then commitAbort wave st accList node "cancel" ("cancel " ++ key) 0 0
-  else commitAbort wave st accList node "error" ("wave-error " ++ key ++ " " ++ msg) 0 0
-
-commitOut : Int -> RunState -> List (Pair String (Maybe QVal)) -> WaveNode -> List String -> WaveOut -> Pair RunState (List (Pair String (Maybe QVal)))
-commitOut wave st accList node deps wo = case woOutcomeOf wo of
-  "hit" => commitHit wave st accList node wo
-  "compute" => commitFresh wave st accList node deps wo
-  other =>
-    commitAbort wave st accList node other (other ++ " " ++ waveKey node) (woStartOf wo)
-      (woEndOf wo)
-
-commitHit : Int -> RunState -> List (Pair String (Maybe QVal)) -> WaveNode -> WaveOut -> Pair RunState (List (Pair String (Maybe QVal)))
-commitHit wave st accList node wo = case woValueOf wo of
-  Nothing =>
-    commitAbort wave st accList node "error" ("wave-error " ++ waveKey node) (woStartOf wo)
-      (woEndOf wo)
-  Just v =>
-    let
-      key = waveKey node
-    in Pair
-      (addSpan (withDb st (markHit st.rsDb key)) st.rsSpanSeq wave key "hit" (woStartOf wo) (woEndOf wo))
-      (Pair key (Just v) :: accList)
-
-commitFresh : Int -> RunState -> List (Pair String (Maybe QVal)) -> WaveNode -> List String -> WaveOut -> Pair RunState (List (Pair String (Maybe QVal)))
-commitFresh wave st accList node deps wo = case woFreshOf wo of
-  Nothing =>
-    commitAbort wave st accList node "error" ("wave-error " ++ waveKey node) (woStartOf wo)
-      (woEndOf wo)
-  Just fresh =>
-    let
-      key = waveKey node
-      resolved = queryResolveTagged st.rsDb key deps fresh
-    in Pair
-      (addSpan (withDb st (firstOf (firstOf resolved))) st.rsSpanSeq wave key (secondOf resolved) (woStartOf wo) (woEndOf wo))
-      (Pair key (Just (secondOf (firstOf resolved))) :: accList)
-
-commitAbort : Int -> RunState -> List (Pair String (Maybe QVal)) -> WaveNode -> String -> String -> Int -> Int -> Pair RunState (List (Pair String (Maybe QVal)))
-commitAbort wave st accList node outcome line t0 t1 =
-  Pair (addSpan (withDb st (dbNote st.rsDb line)) st.rsSpanSeq wave (waveKey node) outcome t0 t1)
-    (Pair (waveKey node) Nothing :: accList)
-
--- 本波真正执行了 compute 的节点数（父会话据此扣步数 / 扣预算）。
-freshCount : List (Pair WaveNode (Result WaveOut)) -> Int
-freshCount pairs = foldl countFresh 0 pairs
-
-countFresh : Int -> Pair WaveNode (Result WaveOut) -> Int
-countFresh acc pr = case secondOf pr of
-  Err _ => acc
-  Ok wo => if woOutcomeOf wo == "compute" then acc + 1 else acc
-
--- 父会话结算：步数 += 本波 compute 数；预算（有限时）-= 同一数量。
-chargeWave : RunState -> Int -> RunState
-chargeWave st spent =
-  if st.rsBudget0 <= 0 then RunState st.rsDb st.rsStack st.rsBudget st.rsBudget0 (st.rsSteps + spent) st.rsSpans st.rsSpanSeq
-    st.rsWaveSeq st.rsCancelled
-  else RunState st.rsDb st.rsStack (maxInt 0 (st.rsBudget - spent)) st.rsBudget0 (st.rsSteps + spent)
-    st.rsSpans st.rsSpanSeq st.rsWaveSeq st.rsCancelled
-
--- 波契约：key 唯一，且没有节点依赖同波的其它 key（含自环）。
-nodesIndependent : List WaveNode -> Bool
-nodesIndependent nodes = keysUnique nodes && depsClosed nodes nodes
-
-keysUnique : List WaveNode -> Bool
-keysUnique [] = True
-keysUnique (n :: rest) = not (memName (waveKey n) (map waveKey rest)) && keysUnique rest
-
-depsClosed : List WaveNode -> List WaveNode -> Bool
-depsClosed [] _ = True
-depsClosed (n :: rest) all = not (depHitsWave (waveDeps n) all) && depsClosed rest all
-
-depHitsWave : List String -> List WaveNode -> Bool
-depHitsWave [] _ = False
-depHitsWave (d :: ds) nodes = memName d (map waveKey nodes) || depHitsWave ds nodes
-
--- 顺序 `Eff` map（本模块自用；与 `Driver.Compile.mapEff` 同形）。
-mapEff : (a -> Eff [] b) -> List a -> Eff [] (List b)
-mapEff f [] = pure []
-mapEff f (x :: rest) = do
-  y <- f x
-  ys <- mapEff f rest
-  pure (y :: ys)
-
--- ---------------------------------------------------------------
 -- 会话索引（`query-index 1`）
 -- ---------------------------------------------------------------
 -- | 载荷编码版本（`Store` 的 codec 段）。
@@ -572,13 +330,13 @@ queryIndexCodec = "query-index 1"
 queryIndexSchema : String
 queryIndexSchema = "vuna-query-index 1"
 
-queryIndexTag : Eff [] String
+queryIndexTag : Eff hostRow String
 queryIndexTag = do
   tag <- compilerTagEff
   pure "${queryIndexSchema}/${tag}"
 
 -- | 包桶 → 索引路径（包名哈希；与其它 TMPDIR 缓存同一隔离口径）。
-sessionPath : String -> Eff [] String
+sessionPath : String -> Eff hostRow String
 sessionPath bucket = do
   base <- storeCacheBaseEff
   pure "${base}/query/${strFromInt (hashContentKey bucket)}/index"
@@ -650,7 +408,7 @@ decQueryIndexComplete s = case decList decIndexEntry (strLength s) (curOf s) of
     else Nothing
 
 -- | 读会话索引；没有/损坏 ⇒ 空 `Db`（不报错：索引只是加速，正确性不依赖它）。
-export sessionLoad : RunOpts -> Eff [] Db
+export sessionLoad : RunOpts -> Eff hostRow Db
 sessionLoad opts = if not opts.roPersist || opts.roBucket == "" then pure dbEmpty
 else do
   tag <- queryIndexTag
@@ -666,7 +424,7 @@ else do
         in pure (dbWithOrigin dbEmpty opts.roOrigin)
 
 -- | 写会话索引（内容不变则跳过：避免每次请求都刷 mtime）。
-export sessionSave : RunOpts -> Db -> Eff [] Int
+export sessionSave : RunOpts -> Db -> Eff hostRow Int
 sessionSave opts db = if not opts.roPersist || opts.roBucket == "" then pure 0
 else do
   tag <- queryIndexTag

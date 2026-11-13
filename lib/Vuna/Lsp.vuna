@@ -28,6 +28,7 @@ module Vuna.Lsp where
 --   - Index 只反映磁盘内容、不随 didChange 刷新；构建失败则相关方法退化返回空结果；
 --   - 首次索引查找可能触发索引全量重建（`index:<dir>` 未命中；仓库级秒级），期间请求排队；
 --   - 多根 workspace 未支持：workspace/symbol 用首个打开文档推断工作区根。
+import Base.HostRow
 import Vuna.Compiler.Common
 import Vuna.Index
 import Vuna.Json
@@ -137,11 +138,11 @@ logTo line (LspState docs s pull idx tried hint logs dc dsess) =
   LspState docs s pull idx tried hint (line :: logs) dc dsess
 
 -- 退出时一次写出（内存累积的日志，见 Protocol.flushLogLines）。
-flushLogs : LspState -> Eff [] Int
+flushLogs : LspState -> Eff hostRow Int
 flushLogs st = flushLogLines st.stateLogs
 
 -- 首次需要索引时构建；失败一次后不再重试（避免每个请求都全量扫描磁盘）。
-ensureIndex : String -> LspState -> Eff [] (Pair LspState (Maybe Index))
+ensureIndex : String -> LspState -> Eff hostRow (Pair LspState (Maybe Index))
 ensureIndex uri st = case st.stateIndex of
   Just idx => pure (Pair st (Just idx))
   Nothing => if st.stateIndexTried then pure (Pair st Nothing)
@@ -218,7 +219,7 @@ clientSupportsPull msg = case jsonGetIn ["params", "capabilities", "textDocument
 
 -- didOpen：登记文档并推诊断（M34.4：同一 uri + 文本内容的诊断帧进程内缓存，重复请求
 -- 不重复精化）。声明 pull 能力的客户端不 push（见 stateClientPull）。
-handleDidOpen : Json -> LspState -> Eff [] (Pair Bool (Pair LspState (List Json)))
+handleDidOpen : Json -> LspState -> Eff hostRow (Pair Bool (Pair LspState (List Json)))
 handleDidOpen msg state =
   let
     params = paramsOf msg
@@ -232,7 +233,7 @@ handleDidOpen msg state =
     pure (Pair False (Pair (setRootHintIfEmpty uri (setDocs docs (firstOf pair))) [secondOf pair]))
 
 -- didChange（Full 同步）：覆盖全文并重推诊断（pull 客户端只更新文档表）。
-handleDidChange : Json -> LspState -> Eff [] (Pair Bool (Pair LspState (List Json)))
+handleDidChange : Json -> LspState -> Eff hostRow (Pair Bool (Pair LspState (List Json)))
 handleDidChange msg state =
   let
     params = paramsOf msg
@@ -251,7 +252,7 @@ handleDidChange msg state =
     pure (Pair False (Pair (setDocs docs (firstOf pair)) [secondOf pair]))
 
 -- M34.4：诊断帧缓存查询（key = uri + 文本内容哈希；未命中才跑完整精化并写缓存）。
-diagnoseCached : String -> Int -> String -> LspState -> Eff [] (Pair LspState Json)
+diagnoseCached : String -> Int -> String -> LspState -> Eff hostRow (Pair LspState Json)
 diagnoseCached uri version text state =
   let
     key = strHash uri * 1000003 + strHash text
@@ -280,7 +281,7 @@ handleDidClose msg state =
 
 -- hover：洞目标（包上下文）→ 模块引用/局部绑定（parse 级）→ 标识符签名/注释。
 -- pull diagnostics（LSP 3.17）：与 push 同一条诊断链，返回完整报告；不额外发布通知。
-handlePullDiagnostics : Json -> LspState -> Eff [] (Pair Bool (Pair LspState (List Json)))
+handlePullDiagnostics : Json -> LspState -> Eff hostRow (Pair Bool (Pair LspState (List Json)))
 handlePullDiagnostics msg state =
   let
     params = paramsOf msg
@@ -294,7 +295,7 @@ handlePullDiagnostics msg state =
     in pure
       (Pair False (Pair state1 [responseOk (idOf msg) (diagReportJson uri text (secondOf labeled))]))
 
-handleHover : Json -> LspState -> Eff [] (Pair Bool (Pair LspState (List Json)))
+handleHover : Json -> LspState -> Eff hostRow (Pair Bool (Pair LspState (List Json)))
 handleHover msg state =
   let
     params = paramsOf msg
@@ -319,7 +320,7 @@ handleHover msg state =
               (Pair False (Pair state1 [responseOk (idOf msg) (symbolHoverResult uri line col text midx)]))
 
 -- formatting：formatSourceWith 成功且内容变化 ⇒ 全文 TextEdit；否则 []（M31.3：程序级 fixity）。
-handleFormatting : Json -> LspState -> Eff [] (Pair Bool (Pair LspState (List Json)))
+handleFormatting : Json -> LspState -> Eff hostRow (Pair Bool (Pair LspState (List Json)))
 handleFormatting msg state =
   let
     params = paramsOf msg
@@ -346,7 +347,7 @@ onlyKindsOf params = case jsonGetIn ["context", "only"] params >>= jsonAsArr of
   Just kinds => Just (mapMaybe jsonAsStr kinds)
 
 -- codeAction：当前缓冲 → lint quick fix / fix all command / 洞 case split（纯查询）。
-handleCodeAction : Json -> LspState -> Eff [] (Pair Bool (Pair LspState (List Json)))
+handleCodeAction : Json -> LspState -> Eff hostRow (Pair Bool (Pair LspState (List Json)))
 handleCodeAction msg state =
   let
     params = paramsOf msg
@@ -382,7 +383,7 @@ firstCommandArg [] = ""
 firstCommandArg (arg :: rest) = fromMaybe "" (jsonAsStr arg)
 
 -- 支持的 command：`vuna.fixAllLint`（arguments = [文档 uri]）。未知 command → -32602。
-handleExecuteCommand : Json -> LspState -> Eff [] (Pair Bool (Pair LspState (List Json)))
+handleExecuteCommand : Json -> LspState -> Eff hostRow (Pair Bool (Pair LspState (List Json)))
 handleExecuteCommand msg state =
   let
     params = paramsOf msg
@@ -401,7 +402,7 @@ handleExecuteCommand msg state =
     (Pair False (Pair state [responseErr (idOf msg) errInvalidParams "unknown command: ${command}"]))
 
 -- documentSymbol：当前缓冲的 AST 声明树（不要求磁盘上存在）。
-handleDocumentSymbol : Json -> LspState -> Eff [] (Pair Bool (Pair LspState (List Json)))
+handleDocumentSymbol : Json -> LspState -> Eff hostRow (Pair Bool (Pair LspState (List Json)))
 handleDocumentSymbol msg state =
   let
     params = paramsOf msg
@@ -412,7 +413,7 @@ handleDocumentSymbol msg state =
     pure (Pair False (Pair state [responseOk (idOf msg) (JArr symbols)]))
 
 -- definition：模块引用/局部绑定（parse 级）→ Index 符号 → 同文件兜底。
-handleDefinition : Json -> LspState -> Eff [] (Pair Bool (Pair LspState (List Json)))
+handleDefinition : Json -> LspState -> Eff hostRow (Pair Bool (Pair LspState (List Json)))
 handleDefinition msg state =
   let
     params = paramsOf msg
@@ -433,7 +434,7 @@ handleDefinition msg state =
           (Pair False (Pair state1 [responseOk (idOf msg) (definitionResult uri line col text midx)]))
 
 -- references：定义位置 + Index refs 的出现位置。
-handleReferences : Json -> LspState -> Eff [] (Pair Bool (Pair LspState (List Json)))
+handleReferences : Json -> LspState -> Eff hostRow (Pair Bool (Pair LspState (List Json)))
 handleReferences msg state =
   let
     params = paramsOf msg
@@ -450,7 +451,7 @@ handleReferences msg state =
       (Pair False (Pair state1 [responseOk (idOf msg) (JArr (referencesResult uri line col text midx))]))
 
 -- prepareRename：光标 token 的范围 + 占位名（无法改名 → null）。
-handlePrepareRename : Json -> LspState -> Eff [] (Pair Bool (Pair LspState (List Json)))
+handlePrepareRename : Json -> LspState -> Eff hostRow (Pair Bool (Pair LspState (List Json)))
 handlePrepareRename msg state =
   let
     params = paramsOf msg
@@ -468,7 +469,7 @@ handlePrepareRename msg state =
       pure (Pair False (Pair state1 [responseOk (idOf msg) json]))
 
 -- rename：局部绑定只改当前文档；顶层符号额外改目标模块与 import 它的模块。
-handleRename : Json -> LspState -> Eff [] (Pair Bool (Pair LspState (List Json)))
+handleRename : Json -> LspState -> Eff hostRow (Pair Bool (Pair LspState (List Json)))
 handleRename msg state =
   let
     params = paramsOf msg
@@ -487,7 +488,7 @@ handleRename msg state =
       pure (Pair False (Pair state1 [responseOk (idOf msg) json]))
 
 -- completion：关键字 + 当前缓冲顶层名 + Index 符号；`.` 后按模块过滤。
-handleCompletion : Json -> LspState -> Eff [] (Pair Bool (Pair LspState (List Json)))
+handleCompletion : Json -> LspState -> Eff hostRow (Pair Bool (Pair LspState (List Json)))
 handleCompletion msg state =
   let
     params = paramsOf msg
@@ -504,7 +505,7 @@ handleCompletion msg state =
       (Pair False (Pair state1 [responseOk (idOf msg) (JArr (completionItems text line col midx))]))
 
 -- workspace/symbol：Index 过滤（空 query = 全部，上限 200）。
-handleWorkspaceSymbol : Json -> LspState -> Eff [] (Pair Bool (Pair LspState (List Json)))
+handleWorkspaceSymbol : Json -> LspState -> Eff hostRow (Pair Bool (Pair LspState (List Json)))
 handleWorkspaceSymbol msg state =
   let
     params = paramsOf msg
@@ -518,14 +519,14 @@ handleWorkspaceSymbol msg state =
     in pure (Pair False (Pair state1 [responseOk (idOf msg) (JArr (workspaceSymbols midx query))]))
 
 -- 处理一帧。返回 (是否退出, 新状态, 待发送帧)。
-handleFrame : Json -> LspState -> Eff [] (Pair Bool (Pair LspState (List Json)))
+handleFrame : Json -> LspState -> Eff hostRow (Pair Bool (Pair LspState (List Json)))
 handleFrame msg state = case jsonGet "method" msg of
   Nothing => pure (Pair False (Pair state [])) -- 客户端对我们请求的响应：忽略
   Just m => case jsonAsStr m of
     Nothing => pure (Pair False (Pair state []))
     Just methodName => dispatch methodName msg state
 
-dispatch : String -> Json -> LspState -> Eff [] (Pair Bool (Pair LspState (List Json)))
+dispatch : String -> Json -> LspState -> Eff hostRow (Pair Bool (Pair LspState (List Json)))
 dispatch "initialize" msg state =
   pure (Pair False (Pair (setClientPull (clientSupportsPull msg) state) [initializeResult msg]))
 dispatch "initialized" msg state = pure (Pair False (Pair state []))
@@ -566,43 +567,43 @@ dispatch methodName msg state =
 -- `Vuna.Json.Server.serveConnection` 提供；LSP 只保留**退出策略**：
 -- stdin EOF / 传输层致命错误算异常断开（flush 日志后退 1），
 -- 收到 shutdown 之后的 exit 退 0。
-writeStdout : String -> Eff [] Int
-writeStdout s = prim_eff_print s
+writeStdout : String -> Eff hostRow Int
+writeStdout s = @vuna@prim_eff_print s
 
 -- 传输告警：LSP 的既有策略是丢帧 + 写日志（不回错误帧）。
 lspWarn : String -> LspState -> Pair LspState (List Json)
 lspWarn m st = Pair (logTo m st) []
 
 -- exit 之前是否收到过 shutdown。
-exitCodeOf : LspState -> Eff [] Int
+exitCodeOf : LspState -> Eff hostRow Int
 exitCodeOf state = do
   _ <- flushLogs state
   pure (if state.stateShutdown then 0 else 1)
 
 -- 非正常结束（stdin EOF / 传输层致命错误）：flush 日志后一律退 1，
 -- 不能把 flushLogs 的「写入字节数」当退出码。
-abnormalExit : LspState -> Eff [] Int
+abnormalExit : LspState -> Eff hostRow Int
 abnormalExit state = do
   _ <- flushLogs state
   pure 1
 
 -- A05：零参顶层定义在模块初始化时求值，所以「动作」必须函数化。
 -- runLsp 是读 stdin 的 LSP 帧循环：若留成零参值，任何子命令启动都会跑它。
--- M4：整个入口显式 `Eff []`（帧处理/诊断/索引都已在 Eff 里），由 CLI 运行时执行。
-export runLsp : Int -> Eff [] Int
+-- M4：整个入口显式 `Eff hostRow`（帧处理/诊断/索引都已在 Eff 里），由 CLI 运行时执行。
+export runLsp : Int -> Eff hostRow Int
 runLsp _ = do
   outcome <-
     serveConnection readChunk writeStdout (\m => \s => pure (lspWarn m s))
       (\m => \s => handleFrame m s)
       (logTo "starting" (LspState [] False False Nothing False Nothing [] [] Nothing))
   let
-    prim_eff_exit = firstOf outcome
+    @vuna@prim_eff_exit = firstOf outcome
     state = secondOf outcome
-  in case prim_eff_exit of
+  in case @vuna@prim_eff_exit of
     ExitRequested => exitCodeOf state
     ExitClosed => abnormalExit state
     ExitFatal msg => abnormalExit (logTo msg state)
 
 -- CLI 入口：与其它工具命令一致，返回退出码（由 Vuna.Cli 插入分发）。
-export runLspTool : List String -> Eff [] Int
+export runLspTool : List String -> Eff hostRow Int
 runLspTool args = runLsp 0

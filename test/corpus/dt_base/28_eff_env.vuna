@@ -1,13 +1,22 @@
--- W10：env 效应标签（命名实例）——同一程序在 mock（"mock"）与真实（"real"）handler 下
+-- W10：env 效应标签（命名实例）——同一程序在 mock（"mock"）与入口行 handler 下
 -- 各跑一次；两边都断言「缺失变量为空 / cwd 非空 / execPath 非空」。
 import Base.Eff
 import Base.EffEnv
+import Base.EffConsole
+import Base.HostRow
 
 prog : (n : String) -> Eff (Cons n EnvOp Nil) Int
 prog n = do
   m <- envGetEnv n "VUNA_W10_MISSING_ENV_VAR"
   c <- envGetCwd n
   e <- envExecPath n
+  pure ((if m == "" then 1 else 0) + (if c /= "" then 1 else 0) + (if e /= "" then 1 else 0))
+
+progReal : Eff hostRow Int
+progReal = do
+  m <- envGetEnv "default" "VUNA_W10_MISSING_ENV_VAR"
+  c <- envGetCwd "default"
+  e <- envExecPath "default"
   pure ((if m == "" then 1 else 0) + (if c /= "" then 1 else 0) + (if e /= "" then 1 else 0))
 
 mret : Int -> Int
@@ -19,10 +28,10 @@ mopH op k = case op of
   GetCwd => k "/mock/cwd"
   ExecPath => k "/mock/exe"
 
-main : Eff [] Int
+main : Eff hostRow Int
 main = case runPure (handleEnv "mock" mret mopH (prog "mock")) of
   mockScore => do
-    _ <- prim_eff_print ("mock " ++ strFromInt mockScore ++ "\n")
-    realScore <- runEnv "real" (prog "real")
-    _ <- prim_eff_print ("real " ++ strFromInt realScore ++ "\n")
+    _ <- consolePrint "default" ("mock " ++ strFromInt mockScore ++ "\n")
+    realScore <- progReal
+    _ <- consolePrint "default" ("real " ++ strFromInt realScore ++ "\n")
     pure 0

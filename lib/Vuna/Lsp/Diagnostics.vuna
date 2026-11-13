@@ -22,6 +22,7 @@ module Vuna.Lsp.Diagnostics where
 --     模块的接口写回本包 manifest（buffer == 磁盘时；只写当前模块、保留其他条目、原子写）。
 --     这让 LSP-only 会话逐步变热；
 --   - 无接口（依赖包还没 check / 本包没有 manifest）时回退全量精化，诊断语义不变。
+import Base.HostRow
 import Vuna.Compiler.Common
 import Vuna.Compiler.Diagnostics.Sink
 import Vuna.Compiler.Driver.Compile
@@ -179,7 +180,7 @@ diagnosticJson label lines d =
 
 -- 包上下文：file:// URI → 路径 → `contextForFile`；非 file URI（或磁盘上不存在的
 -- 路径）退化到 cwd 的 `contextForDir "."`。失败由调用方转成 0:0 的 `pkg: ...` 诊断。
-export contextForDoc : String -> Eff [] (Check (Pair String PackageContext))
+export contextForDoc : String -> Eff hostRow (Check (Pair String PackageContext))
 contextForDoc uri =
   let
     path = decodeUri uri
@@ -223,7 +224,7 @@ export record DiagCache where
   dcFix : FixityEnv
 
 -- 缓存 key：编译器二进制指纹 + 包名（包上下文/依赖图变化由 stats 面兜住）。
-ctxKeyOf : PackageContext -> Eff [] Int
+ctxKeyOf : PackageContext -> Eff hostRow Int
 ctxKeyOf ctx = do
   fp <- toolCompilerFingerprint
   pure (fp * 1000003 + hashTextStrong "lsp|${contextPackageName ctx}")
@@ -260,7 +261,7 @@ lspNodeKey : PackageContext -> String
 lspNodeKey ctx = "lspiface:${contextPackageName ctx}:${toolTextHash (contextDir ctx)}"
 
 -- 缓存校验：label / 编译器指纹 + 包 一致，且查询图节点在当前 stat 依赖表下命中。
-cacheFresh : Maybe DiagCache -> String -> PackageContext -> Eff [] Bool
+cacheFresh : Maybe DiagCache -> String -> PackageContext -> Eff hostRow Bool
 cacheFresh Nothing label ctx = pure False
 cacheFresh (Just c) label ctx = if c.dcLabel == label then do
   key <- ctxKeyOf ctx
@@ -275,7 +276,7 @@ else pure False
 
 -- 建立会话：工具接口（依赖闭包 / 依赖哈希 / 本包 manifest）+ 本包干净模块 + 校验面。
 -- 返回 Nothing = 当前没有可校验的工具接口（每请求走全量）。
-buildSession : PackageContext -> String -> String -> Maybe String -> Eff [] (Maybe DiagCache)
+buildSession : PackageContext -> String -> String -> Maybe String -> Eff hostRow (Maybe DiagCache)
 buildSession ctx label text modName = do
   toolM <- depIfacesForToolSourceDetailed ctx label text
   case toolM of
@@ -296,7 +297,7 @@ buildSession ctx label text modName = do
           (Just (DiagCache label key ctx db (Just tool) clean builtSec (append tool.tcStats [manifestInfo]) Nothing emptyFixityEnv))
 
 -- 会话里的工具接口可用且闭包未扩大 ⇒ 直接复用；否则（一次）重建。
-usableSession : Maybe DiagCache -> PackageContext -> String -> String -> Maybe String -> List Import -> Eff [] (Maybe DiagCache)
+usableSession : Maybe DiagCache -> PackageContext -> String -> String -> Maybe String -> List Import -> Eff hostRow (Maybe DiagCache)
 usableSession cache ctx label text modName imports = do
   health <- case cache of
     Just c => do
@@ -307,7 +308,7 @@ usableSession cache ctx label text modName imports = do
     Just c => pure (Just c)
     Nothing => buildSession ctx label text modName
 
-sessionClosureOk : DiagCache -> PackageContext -> Maybe String -> List Import -> Eff [] (Maybe DiagCache)
+sessionClosureOk : DiagCache -> PackageContext -> Maybe String -> List Import -> Eff hostRow (Maybe DiagCache)
 sessionClosureOk c ctx modName imports = case c.dcTool of
   Nothing => pure (Just c)
   Just tool => do
@@ -326,11 +327,11 @@ diagsOfCheck label (OkC _) = []
 diagsOfCheck label (ErrC e) = if diagOwns label e then [e] else []
 
 -- buffer == 磁盘吗？单模块写回的前置条件（否则写下的 SourceInfo 与磁盘不符，读侧会判脏）。
-diskMatches : String -> String -> Eff [] Bool
+diskMatches : String -> String -> Eff hostRow Bool
 diskMatches label text = do
-  exists <- prim_eff_fileExists label
+  exists <- raiseToRow hostRow (@vuna@prim_eff_fileExists label)
   if exists then do
-    source <- prim_eff_readFile label
+    source <- raiseToRow hostRow (@vuna@prim_eff_readFile label)
     pure (toolTextHash source == toolTextHash text)
   else pure False
 
@@ -344,7 +345,7 @@ entryHashMatches (Just h) x = h == x
 
 -- 单文件增量精化（会话可用）：依赖接口 + 本包干净模块预置，只精化当前 buffer。
 -- 安全阀说「不适用」（Nothing）时回退全量。
-incrementalCheckedOf : DiagCache -> ToolContext -> String -> String -> Maybe String -> List Import -> Bool -> Eff [] (Check (Pair Bool (Pair (List Diagnostic) (Pair (Maybe CheckedPackage) (Maybe AuxCache)))))
+incrementalCheckedOf : DiagCache -> ToolContext -> String -> String -> Maybe String -> List Import -> Bool -> Eff hostRow (Check (Pair Bool (Pair (List Diagnostic) (Pair (Maybe CheckedPackage) (Maybe AuxCache)))))
 incrementalCheckedOf session tool label text modName imports needPkg = do
   needed <- toolNeededOfImports session.dcCtx tool (currentNameOf modName) imports
   let
@@ -352,7 +353,7 @@ incrementalCheckedOf session tool label text modName imports needPkg = do
   in dtCheckSourceIncremental session.dcCtx label text tool.tcDepIfaces cleanNeeded session.dcAux
     needPkg
 
-checkIncremental : DiagCache -> String -> String -> Maybe String -> List Import -> Eff [] (Pair (Maybe DiagCache) (Pair (List Diagnostic) (List Diagnostic)))
+checkIncremental : DiagCache -> String -> String -> Maybe String -> List Import -> Eff hostRow (Pair (Maybe DiagCache) (Pair (List Diagnostic) (List Diagnostic)))
 checkIncremental session label text modName imports = case session.dcTool of
   Nothing => pure (Pair Nothing (Pair [] []))
   Just tool => do
@@ -375,7 +376,7 @@ checkIncremental session label text modName imports = case session.dcTool of
       else pure (Pair Nothing (Pair [] []))
 
 -- 全量精化后的会话：命中既有缓存就沿用，否则用当前时间戳建一个无工具接口的会话。
-sessionForFull : Maybe DiagCache -> PackageContext -> String -> Eff [] DiagCache
+sessionForFull : Maybe DiagCache -> PackageContext -> String -> Eff hostRow DiagCache
 sessionForFull (Just c) ctx label = pure c
 sessionForFull Nothing ctx label = do
   builtSec <- toolNowSec
@@ -384,7 +385,7 @@ sessionForFull Nothing ctx label = do
   pure (DiagCache label key ctx base Nothing [] builtSec [] Nothing emptyFixityEnv)
 
 -- 上下文的精简入口（`dtCheckSourceChecked` 需要 ctx）。
-checkFullWith : Maybe DiagCache -> PackageContext -> String -> String -> Maybe String -> Eff [] (Pair (Maybe DiagCache) (Pair (List Diagnostic) (List Diagnostic)))
+checkFullWith : Maybe DiagCache -> PackageContext -> String -> String -> Maybe String -> Eff hostRow (Pair (Maybe DiagCache) (Pair (List Diagnostic) (List Diagnostic)))
 checkFullWith cache ctx label text modName = do
   checkedR <- dtCheckSourceChecked ctx label text
   case checkedR of
@@ -401,7 +402,7 @@ checkFullWith cache ctx label text modName = do
 -- ---------------------------------------------------------------
 -- lint（会话复用 fixity 模块图；外部文件变化会随会话重建清空）
 -- ---------------------------------------------------------------
-lintWithEnv : FixityEnv -> String -> String -> Eff [] (Pair FixityEnv (List Diagnostic))
+lintWithEnv : FixityEnv -> String -> String -> Eff hostRow (Pair FixityEnv (List Diagnostic))
 lintWithEnv env label text = do
   looked <- fixitiesForFile env label text
   pure (case looked of
@@ -429,7 +430,7 @@ findingDiagJson f =
 -- 一次请求的完整诊断链
 -- ---------------------------------------------------------------
 -- DT 诊断：会话可用时走单文件增量精化，否则回退全量（诊断语义不变）。
-checkDiagnostics : Maybe DiagCache -> String -> PackageContext -> String -> Maybe String -> List Import -> Eff [] (Pair (Maybe DiagCache) (Pair (List Diagnostic) (List Diagnostic)))
+checkDiagnostics : Maybe DiagCache -> String -> PackageContext -> String -> Maybe String -> List Import -> Eff hostRow (Pair (Maybe DiagCache) (Pair (List Diagnostic) (List Diagnostic)))
 checkDiagnostics cache label ctx text modName imports = do
   session <- usableSession cache ctx label text modName imports
   case session of
@@ -440,14 +441,14 @@ checkDiagnostics cache label ctx text modName imports = do
         Just s2 => pure (Pair (Just s2) (secondOf inc))
         Nothing => checkFullWith (Just s) ctx label text modName
 
-export diagnosticsForCached : Maybe DiagCache -> String -> String -> Eff [] (Pair (Maybe DiagCache) (Pair String (List Diagnostic)))
+export diagnosticsForCached : Maybe DiagCache -> String -> String -> Eff hostRow (Pair (Maybe DiagCache) (Pair String (List Diagnostic)))
 diagnosticsForCached = diagnosticsForCachedWith False
 
 -- 代码动作路径：包含 `UN_UnusedImport`（编辑器侧虽不回放其诊断，但仍可给出删除 import 的修复）。
-export diagnosticsForSuggestions : Maybe DiagCache -> String -> String -> Eff [] (Pair (Maybe DiagCache) (Pair String (List Diagnostic)))
+export diagnosticsForSuggestions : Maybe DiagCache -> String -> String -> Eff hostRow (Pair (Maybe DiagCache) (Pair String (List Diagnostic)))
 diagnosticsForSuggestions = diagnosticsForCachedWith True
 
-diagnosticsForCachedWith : Bool -> Maybe DiagCache -> String -> String -> Eff [] (Pair (Maybe DiagCache) (Pair String (List Diagnostic)))
+diagnosticsForCachedWith : Bool -> Maybe DiagCache -> String -> String -> Eff hostRow (Pair (Maybe DiagCache) (Pair String (List Diagnostic)))
 diagnosticsForCachedWith includeUnused cache uri text = do
   ctxR <- contextForDoc uri
   case ctxR of
@@ -485,7 +486,7 @@ publishDiagnostics uri version text diags =
     (JObj [Pair "uri" (JStr uri), Pair "version" (JNum version), Pair "diagnostics" (JArr jsonDiags)])
 
 -- 一次请求的完整发布帧 + 更新后的会话缓存（LSP 门面持有缓存，跨请求复用）。
-export publishDiagnosticsCached : Maybe DiagCache -> String -> Int -> String -> Eff [] (Pair (Maybe DiagCache) Json)
+export publishDiagnosticsCached : Maybe DiagCache -> String -> Int -> String -> Eff hostRow (Pair (Maybe DiagCache) Json)
 publishDiagnosticsCached cache uri version text = do
   result <- diagnosticsForCached cache uri text
   let
@@ -497,7 +498,7 @@ export publishDiagnosticsEmpty : String -> Int -> Json
 publishDiagnosticsEmpty uri version = publishDiagnostics uri version "" []
 
 -- 无会话的便捷入口（测试 / 一次性请求）。
-export publishDiagnosticsFor : String -> Int -> String -> Eff [] Json
+export publishDiagnosticsFor : String -> Int -> String -> Eff hostRow Json
 publishDiagnosticsFor uri version text = do
   result <- publishDiagnosticsCached Nothing uri version text
   pure (secondOf result)
@@ -506,7 +507,7 @@ publishDiagnosticsFor uri version text = do
 -- 守卫：本包 manifest 里已有「同源内容」的接口时不重写（LSP 增量上下文算出的接口哈希
 -- 可能与整包 check 的略有差异——擦除位残 meta 不同；重写会让依赖者的 miDepHashes 失配）。
 -- 冷启动（还没有本包 manifest）才用整包接口兜底写。失败静默跳过（不影响诊断）。
-writeBackModule : DiagCache -> String -> String -> CheckedPackage -> Maybe String -> Eff [] DiagCache
+writeBackModule : DiagCache -> String -> String -> CheckedPackage -> Maybe String -> Eff hostRow DiagCache
 writeBackModule session label text checked Nothing = pure session
 writeBackModule session label text checked (Just name) = do
   same <- diskMatches label text

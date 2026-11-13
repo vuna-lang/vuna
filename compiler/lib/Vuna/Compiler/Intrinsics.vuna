@@ -113,8 +113,10 @@ isTypeConstructorName name =
 record BuiltinEffect where
   -- | 行标签的全名（base 的 op 族类型）。
   beTag : String
-  -- | entry 自动预装的 `runXHost` 全名（不导出，用户拿不到）。
+  -- | entry 自动预装项的编译器内建名（`@vuna@runXHost`；源码写不出）。
   beRunHost : String
+  -- | 内建名对应的 base 实现名（`Codegen` 生成引用时用；实现仍是 vuna 代码）。
+  beImpl : String
   -- | 默认实例名（`main` 行里裸标签展开成它）。
   beDefaultName : String
 
@@ -122,17 +124,16 @@ record BuiltinEffect where
 -- 表项自动预装；用户自定义效应仍须自己 handle 成 Nil。
 export builtinEffects : List BuiltinEffect
 builtinEffects =
-  [ BuiltinEffect "Base.EffConsole.ConsoleOp" "Base.EffConsole.runConsoleHost" "default",
-    BuiltinEffect "Base.EffFs.FsOp" "Base.EffFs.runFsHost" "default",
-    BuiltinEffect "Base.EffClock.ClockOp" "Base.EffClock.runClockHost" "default",
-    BuiltinEffect "Base.EffEnv.EnvOp" "Base.EffEnv.runEnvHost" "default",
-    BuiltinEffect "Base.EffProcess.ProcessOp" "Base.EffProcess.runProcessHost" "default",
-    BuiltinEffect "Base.EffExit.ExitOp" "Base.EffExit.runExitHost" "default",
-    BuiltinEffect "Base.EffStdin.StdinOp" "Base.EffStdin.runStdinHost" "default",
-    BuiltinEffect "Base.EffArgs.ArgsOp" "Base.EffArgs.runArgsHost" "default",
-    BuiltinEffect "Base.EffNet.NetOp" "" "default",
-    BuiltinEffect "Base.EffRef.RefOp" "" "default",
-    BuiltinEffect "Base.EffSched.SchedOp" "" "default"
+  [ BuiltinEffect "Base.EffConsole.ConsoleOp" "@vuna@runConsoleHost" "Base.EffConsole.runConsoleHost" "default",
+    BuiltinEffect "Base.EffFs.FsOp" "@vuna@runFsHost" "Base.EffFs.runFsHost" "default",
+    BuiltinEffect "Base.EffClock.ClockOp" "@vuna@runClockHost" "Base.EffClock.runClockHost" "default",
+    BuiltinEffect "Base.EffEnv.EnvOp" "@vuna@runEnvHost" "Base.EffEnv.runEnvHost" "default",
+    BuiltinEffect "Base.EffProcess.ProcessOp" "@vuna@runProcessHost" "Base.EffProcess.runProcessHost" "default",
+    BuiltinEffect "Base.EffExit.ExitOp" "@vuna@runExitHost" "Base.EffExit.runExitHost" "default",
+    BuiltinEffect "Base.EffStdin.StdinOp" "@vuna@runStdinHost" "Base.EffStdin.runStdinHost" "default",
+    BuiltinEffect "Base.EffArgs.ArgsOp" "@vuna@runArgsHost" "Base.EffArgs.runArgsHost" "default",
+    BuiltinEffect "Base.EffNet.NetOp" "" "" "default",
+    BuiltinEffect "Base.EffRef.RefOp" "" "" "default"
   ]
 
 -- | 标签对应的 `runXHost` 全名；不是内建宿主效应时返回空串。
@@ -144,9 +145,25 @@ builtinEffectRunHostOfRest tag [] = ""
 builtinEffectRunHostOfRest tag (e :: rest) =
   if e.beTag == tag then e.beRunHost else builtinEffectRunHostOfRest tag rest
 
+-- | 内建名对应的 base 实现名（`Codegen` 生成 entry 预装引用时用）。
+export builtinEffectImplOf : String -> String
+builtinEffectImplOf tag = builtinEffectImplOfRest tag builtinEffects
+
+builtinEffectImplOfRest : String -> List BuiltinEffect -> String
+builtinEffectImplOfRest tag [] = ""
+builtinEffectImplOfRest tag (e :: rest) =
+  if e.beTag == tag then e.beImpl else builtinEffectImplOfRest tag rest
+
 -- | 该标签是否是内建宿主效应（`beRunHost` 为空表示只允许行、无需预装 handler）。
 export isBuiltinEffectTag : String -> Bool
 isBuiltinEffectTag tag = builtinEffectExistsRest tag builtinEffects
+
+-- | 工具链统一行（`Base.HostRow` 的公理；编译器在 `Core.Eval` 里归约成具体行）。
+export hostRowName : String
+hostRowName = "Base.HostRow.hostRow"
+
+export hostTailName : String
+hostTailName = "Base.HostRow.hostTail"
 
 builtinEffectExistsRest : String -> List BuiltinEffect -> Bool
 builtinEffectExistsRest tag [] = False
@@ -649,71 +666,166 @@ effIntrinsics =
   [ Intrinsic primEffBind1Name (IPi "a" (IPi "b" (IFun1 (IEff (IVar "a")) (IFun1 (IFun1 (IVar "a") (IEff (IVar "b"))) (IEff (IVar "b")))))) OpNone "" True,
     Intrinsic "effTimeUs" (IEff IInt) OpNone "(dtp_timeUs ())" True,
     Intrinsic "prim_eff_sleep" (IFun IInt (IEff IInt)) OpNone "dtp_sleep" True,
+    Intrinsic "@vuna@prim_eff_sleep" (IFun IInt (IEff IInt)) OpNone "dtp_sleep" False,
     Intrinsic "prim_eff_newRef" (IPi "a" (IFun (IVar "a") (IEff (IRef (IVar "a"))))) OpNone "(fun x -> ref x)" True,
+    Intrinsic "@vuna@prim_eff_newRef" (IPi "a" (IFun (IVar "a") (IEff (IRef (IVar "a"))))) OpNone "(fun x -> ref x)" False,
     Intrinsic "prim_eff_readRef" (IPi "a" (IFun (IRef (IVar "a")) (IEff (IVar "a")))) OpNone "(fun r -> !r)" True,
+    Intrinsic "@vuna@prim_eff_readRef" (IPi "a" (IFun (IRef (IVar "a")) (IEff (IVar "a")))) OpNone "(fun r -> !r)" False,
     Intrinsic "prim_eff_writeRef" (IPi "a" (IFun (IRef (IVar "a")) (IFun (IVar "a") (IEff IInt)))) OpNone "(fun r v -> r := v; 0)" True,
+    Intrinsic "@vuna@prim_eff_writeRef" (IPi "a" (IFun (IRef (IVar "a")) (IFun (IVar "a") (IEff IInt)))) OpNone "(fun r v -> r := v; 0)" False,
     Intrinsic "prim_eff_print" (IFun IStr (IEff IInt)) OpNone "dtp_print" True,
+    Intrinsic "@vuna@prim_eff_print" (IFun IStr (IEff IInt)) OpNone "dtp_print" False,
     Intrinsic "prim_eff_print_host" (IFun IStr (IEffRow (IRowCons "default" (IGlobal "Base.EffConsole.ConsoleOp") IRowNil) IInt)) OpNone "dtp_print" True,
+    Intrinsic "@vuna@prim_eff_print_host" (IFun IStr (IEffRow (IRowCons "default" (IGlobal "Base.EffConsole.ConsoleOp") IRowNil) IInt)) OpNone "dtp_print" False,
+    Intrinsic "@vuna@host@print" (IFun IStr (IEffRow (IRowCons "default" (IGlobal "Base.EffConsole.ConsoleOp") IRowNil) IInt)) OpNone "dtp_print" False,
     Intrinsic "prim_eff_eprint" (IFun IStr (IEff IInt)) OpNone "(fun s -> prerr_string s; flush stderr; String.length s)" True,
+    Intrinsic "@vuna@prim_eff_eprint" (IFun IStr (IEff IInt)) OpNone "(fun s -> prerr_string s; flush stderr; String.length s)" False,
     Intrinsic "prim_eff_readFile" (IFun IStr (IEff IStr)) OpNone "dtp_readFile" True,
+    Intrinsic "@vuna@prim_eff_readFile" (IFun IStr (IEff IStr)) OpNone "dtp_readFile" False,
     Intrinsic "prim_eff_writeFile" (IFun IStr (IFun IStr (IEff IInt))) OpNone "dtp_writeFile" True,
+    Intrinsic "@vuna@prim_eff_writeFile" (IFun IStr (IFun IStr (IEff IInt))) OpNone "dtp_writeFile" False,
     Intrinsic "prim_eff_writeFileAtomic" (IFun IStr (IFun IStr (IEff IInt))) OpNone "dtp_writeFileAtomic" True,
+    Intrinsic "@vuna@prim_eff_writeFileAtomic" (IFun IStr (IFun IStr (IEff IInt))) OpNone "dtp_writeFileAtomic" False,
     Intrinsic "prim_eff_readLine" (IEff IStr) OpNone "(dtp_readLine ())" True,
+    Intrinsic "@vuna@prim_eff_readLine" (IEff IStr) OpNone "(dtp_readLine ())" False,
     Intrinsic "prim_eff_readBytes" (IFun IInt (IEff IStr)) OpNone "dtp_readBytes" True,
+    Intrinsic "@vuna@prim_eff_readBytes" (IFun IInt (IEff IStr)) OpNone "dtp_readBytes" False,
     Intrinsic "prim_eff_getArgs" (IEff (IList IStr)) OpNone "(dtp_listOf (dtp_getArgs ()))" True,
+    Intrinsic "@vuna@prim_eff_getArgs" (IEff (IList IStr)) OpNone "(dtp_listOf (dtp_getArgs ()))" False,
     Intrinsic "prim_eff_readDir" (IFun IStr (IEff (IList IStr))) OpNone "(fun p -> dtp_listOf (dtp_readDir p))" True,
+    Intrinsic "@vuna@prim_eff_readDir" (IFun IStr (IEff (IList IStr))) OpNone "(fun p -> dtp_listOf (dtp_readDir p))" False,
     Intrinsic "prim_eff_isDirectory" (IFun IStr (IEff IBool)) OpNone "dtp_isDirectory" True,
+    Intrinsic "@vuna@prim_eff_isDirectory" (IFun IStr (IEff IBool)) OpNone "dtp_isDirectory" False,
     Intrinsic "prim_eff_makeDir" (IFun IStr (IEff IInt)) OpNone "dtp_makeDir" True,
+    Intrinsic "@vuna@prim_eff_makeDir" (IFun IStr (IEff IInt)) OpNone "dtp_makeDir" False,
     Intrinsic "prim_eff_removeFile" (IFun IStr (IEff IInt)) OpNone "dtp_removeFile" True,
+    Intrinsic "@vuna@prim_eff_removeFile" (IFun IStr (IEff IInt)) OpNone "dtp_removeFile" False,
     Intrinsic "prim_eff_fileExists" (IFun IStr (IEff IBool)) OpNone "dtp_fileExists" True,
+    Intrinsic "@vuna@prim_eff_fileExists" (IFun IStr (IEff IBool)) OpNone "dtp_fileExists" False,
     Intrinsic "prim_eff_fileMtime" (IFun IStr (IEff IInt)) OpNone "dtp_fileMtime" True,
+    Intrinsic "@vuna@prim_eff_fileMtime" (IFun IStr (IEff IInt)) OpNone "dtp_fileMtime" False,
     Intrinsic "prim_eff_fileSize" (IFun IStr (IEff IInt)) OpNone "dtp_fileSize" True,
+    Intrinsic "@vuna@prim_eff_fileSize" (IFun IStr (IEff IInt)) OpNone "dtp_fileSize" False,
     Intrinsic "prim_eff_readFile_host" (IFun IStr (IEffRow (IRowCons "default" (IGlobal "Base.EffFs.FsOp") IRowNil) IStr)) OpNone "dtp_readFile" True,
+    Intrinsic "@vuna@prim_eff_readFile_host" (IFun IStr (IEffRow (IRowCons "default" (IGlobal "Base.EffFs.FsOp") IRowNil) IStr)) OpNone "dtp_readFile" False,
+    Intrinsic "@vuna@host@readFile" (IFun IStr (IEffRow (IRowCons "default" (IGlobal "Base.EffFs.FsOp") IRowNil) IStr)) OpNone "dtp_readFile" False,
     Intrinsic "prim_eff_writeFile_host" (IFun IStr (IFun IStr (IEffRow (IRowCons "default" (IGlobal "Base.EffFs.FsOp") IRowNil) IInt))) OpNone "dtp_writeFile" True,
+    Intrinsic "@vuna@prim_eff_writeFile_host" (IFun IStr (IFun IStr (IEffRow (IRowCons "default" (IGlobal "Base.EffFs.FsOp") IRowNil) IInt))) OpNone "dtp_writeFile" False,
+    Intrinsic "@vuna@host@writeFile" (IFun IStr (IFun IStr (IEffRow (IRowCons "default" (IGlobal "Base.EffFs.FsOp") IRowNil) IInt))) OpNone "dtp_writeFile" False,
     Intrinsic "prim_eff_writeFileAtomic_host" (IFun IStr (IFun IStr (IEffRow (IRowCons "default" (IGlobal "Base.EffFs.FsOp") IRowNil) IInt))) OpNone "dtp_writeFileAtomic" True,
+    Intrinsic "@vuna@prim_eff_writeFileAtomic_host" (IFun IStr (IFun IStr (IEffRow (IRowCons "default" (IGlobal "Base.EffFs.FsOp") IRowNil) IInt))) OpNone "dtp_writeFileAtomic" False,
+    Intrinsic "@vuna@host@writeFileAtomic" (IFun IStr (IFun IStr (IEffRow (IRowCons "default" (IGlobal "Base.EffFs.FsOp") IRowNil) IInt))) OpNone "dtp_writeFileAtomic" False,
     Intrinsic "prim_eff_readDir_host" (IFun IStr (IEffRow (IRowCons "default" (IGlobal "Base.EffFs.FsOp") IRowNil) (IList IStr))) OpNone "(fun p -> dtp_listOf (dtp_readDir p))" True,
+    Intrinsic "@vuna@prim_eff_readDir_host" (IFun IStr (IEffRow (IRowCons "default" (IGlobal "Base.EffFs.FsOp") IRowNil) (IList IStr))) OpNone "(fun p -> dtp_listOf (dtp_readDir p))" False,
+    Intrinsic "@vuna@host@readDir" (IFun IStr (IEffRow (IRowCons "default" (IGlobal "Base.EffFs.FsOp") IRowNil) (IList IStr))) OpNone "(fun p -> dtp_listOf (dtp_readDir p))" False,
     Intrinsic "prim_eff_isDirectory_host" (IFun IStr (IEffRow (IRowCons "default" (IGlobal "Base.EffFs.FsOp") IRowNil) IBool)) OpNone "dtp_isDirectory" True,
+    Intrinsic "@vuna@prim_eff_isDirectory_host" (IFun IStr (IEffRow (IRowCons "default" (IGlobal "Base.EffFs.FsOp") IRowNil) IBool)) OpNone "dtp_isDirectory" False,
+    Intrinsic "@vuna@host@isDirectory" (IFun IStr (IEffRow (IRowCons "default" (IGlobal "Base.EffFs.FsOp") IRowNil) IBool)) OpNone "dtp_isDirectory" False,
     Intrinsic "prim_eff_makeDir_host" (IFun IStr (IEffRow (IRowCons "default" (IGlobal "Base.EffFs.FsOp") IRowNil) IInt)) OpNone "dtp_makeDir" True,
+    Intrinsic "@vuna@prim_eff_makeDir_host" (IFun IStr (IEffRow (IRowCons "default" (IGlobal "Base.EffFs.FsOp") IRowNil) IInt)) OpNone "dtp_makeDir" False,
+    Intrinsic "@vuna@host@makeDir" (IFun IStr (IEffRow (IRowCons "default" (IGlobal "Base.EffFs.FsOp") IRowNil) IInt)) OpNone "dtp_makeDir" False,
     Intrinsic "prim_eff_removeFile_host" (IFun IStr (IEffRow (IRowCons "default" (IGlobal "Base.EffFs.FsOp") IRowNil) IInt)) OpNone "dtp_removeFile" True,
+    Intrinsic "@vuna@prim_eff_removeFile_host" (IFun IStr (IEffRow (IRowCons "default" (IGlobal "Base.EffFs.FsOp") IRowNil) IInt)) OpNone "dtp_removeFile" False,
+    Intrinsic "@vuna@host@removeFile" (IFun IStr (IEffRow (IRowCons "default" (IGlobal "Base.EffFs.FsOp") IRowNil) IInt)) OpNone "dtp_removeFile" False,
     Intrinsic "prim_eff_fileExists_host" (IFun IStr (IEffRow (IRowCons "default" (IGlobal "Base.EffFs.FsOp") IRowNil) IBool)) OpNone "dtp_fileExists" True,
+    Intrinsic "@vuna@prim_eff_fileExists_host" (IFun IStr (IEffRow (IRowCons "default" (IGlobal "Base.EffFs.FsOp") IRowNil) IBool)) OpNone "dtp_fileExists" False,
+    Intrinsic "@vuna@host@fileExists" (IFun IStr (IEffRow (IRowCons "default" (IGlobal "Base.EffFs.FsOp") IRowNil) IBool)) OpNone "dtp_fileExists" False,
     Intrinsic "prim_eff_fileMtime_host" (IFun IStr (IEffRow (IRowCons "default" (IGlobal "Base.EffFs.FsOp") IRowNil) IInt)) OpNone "dtp_fileMtime" True,
+    Intrinsic "@vuna@prim_eff_fileMtime_host" (IFun IStr (IEffRow (IRowCons "default" (IGlobal "Base.EffFs.FsOp") IRowNil) IInt)) OpNone "dtp_fileMtime" False,
+    Intrinsic "@vuna@host@fileMtime" (IFun IStr (IEffRow (IRowCons "default" (IGlobal "Base.EffFs.FsOp") IRowNil) IInt)) OpNone "dtp_fileMtime" False,
     Intrinsic "prim_eff_fileSize_host" (IFun IStr (IEffRow (IRowCons "default" (IGlobal "Base.EffFs.FsOp") IRowNil) IInt)) OpNone "dtp_fileSize" True,
+    Intrinsic "@vuna@prim_eff_fileSize_host" (IFun IStr (IEffRow (IRowCons "default" (IGlobal "Base.EffFs.FsOp") IRowNil) IInt)) OpNone "dtp_fileSize" False,
+    Intrinsic "@vuna@host@fileSize" (IFun IStr (IEffRow (IRowCons "default" (IGlobal "Base.EffFs.FsOp") IRowNil) IInt)) OpNone "dtp_fileSize" False,
     Intrinsic "prim_eff_exit" (IFun IInt (IEff IInt)) OpNone "dtp_exit" True,
+    Intrinsic "@vuna@prim_eff_exit" (IFun IInt (IEff IInt)) OpNone "dtp_exit" False,
     Intrinsic "prim_eff_runIn" (IFun IStr (IFun (IList IStr) (IEff IInt))) OpNone "(fun dir args -> dtp_runIn dir (dtp_ocamlOf args))" True,
+    Intrinsic "@vuna@prim_eff_runIn" (IFun IStr (IFun (IList IStr) (IEff IInt))) OpNone "(fun dir args -> dtp_runIn dir (dtp_ocamlOf args))" False,
     Intrinsic "effTimeUs_host" (IEffRow (IRowCons "default" (IGlobal "Base.EffClock.ClockOp") IRowNil) IInt) OpNone "(dtp_timeUs ())" True,
     Intrinsic "prim_eff_sleep_host" (IFun IInt (IEffRow (IRowCons "default" (IGlobal "Base.EffClock.ClockOp") IRowNil) IInt)) OpNone "dtp_sleep" True,
+    Intrinsic "@vuna@prim_eff_sleep_host" (IFun IInt (IEffRow (IRowCons "default" (IGlobal "Base.EffClock.ClockOp") IRowNil) IInt)) OpNone "dtp_sleep" False,
+    Intrinsic "@vuna@host@sleep" (IFun IInt (IEffRow (IRowCons "default" (IGlobal "Base.EffClock.ClockOp") IRowNil) IInt)) OpNone "dtp_sleep" False,
     Intrinsic "prim_eff_getenv_host" (IFun IStr (IEffRow (IRowCons "default" (IGlobal "Base.EffEnv.EnvOp") IRowNil) IStr)) OpNone "dtp_getenv" True,
+    Intrinsic "@vuna@prim_eff_getenv_host" (IFun IStr (IEffRow (IRowCons "default" (IGlobal "Base.EffEnv.EnvOp") IRowNil) IStr)) OpNone "dtp_getenv" False,
+    Intrinsic "@vuna@host@getenv" (IFun IStr (IEffRow (IRowCons "default" (IGlobal "Base.EffEnv.EnvOp") IRowNil) IStr)) OpNone "dtp_getenv" False,
     Intrinsic "prim_eff_getcwd_host" (IEffRow (IRowCons "default" (IGlobal "Base.EffEnv.EnvOp") IRowNil) IStr) OpNone "(dtp_getcwd ())" True,
+    Intrinsic "@vuna@prim_eff_getcwd_host" (IEffRow (IRowCons "default" (IGlobal "Base.EffEnv.EnvOp") IRowNil) IStr) OpNone "(dtp_getcwd ())" False,
+    Intrinsic "@vuna@host@getcwd" (IEffRow (IRowCons "default" (IGlobal "Base.EffEnv.EnvOp") IRowNil) IStr) OpNone "(dtp_getcwd ())" False,
     Intrinsic "prim_eff_execPath_host" (IEffRow (IRowCons "default" (IGlobal "Base.EffEnv.EnvOp") IRowNil) IStr) OpNone "(dtp_execPath ())" True,
+    Intrinsic "@vuna@prim_eff_execPath_host" (IEffRow (IRowCons "default" (IGlobal "Base.EffEnv.EnvOp") IRowNil) IStr) OpNone "(dtp_execPath ())" False,
+    Intrinsic "@vuna@host@execPath" (IEffRow (IRowCons "default" (IGlobal "Base.EffEnv.EnvOp") IRowNil) IStr) OpNone "(dtp_execPath ())" False,
     Intrinsic "prim_eff_getArgs_process_host" (IEffRow (IRowCons "default" (IGlobal "Base.EffProcess.ProcessOp") IRowNil) (IList IStr)) OpNone "(dtp_listOf (dtp_getArgs ()))" True,
+    Intrinsic "@vuna@prim_eff_getArgs_process_host" (IEffRow (IRowCons "default" (IGlobal "Base.EffProcess.ProcessOp") IRowNil) (IList IStr)) OpNone "(dtp_listOf (dtp_getArgs ()))" False,
     Intrinsic "prim_eff_exit_process_host" (IFun IInt (IEffRow (IRowCons "default" (IGlobal "Base.EffProcess.ProcessOp") IRowNil) IInt)) OpNone "dtp_exit" True,
+    Intrinsic "@vuna@prim_eff_exit_process_host" (IFun IInt (IEffRow (IRowCons "default" (IGlobal "Base.EffProcess.ProcessOp") IRowNil) IInt)) OpNone "dtp_exit" False,
     Intrinsic "prim_eff_runIn_host" (IFun IStr (IFun (IList IStr) (IEffRow (IRowCons "default" (IGlobal "Base.EffProcess.ProcessOp") IRowNil) IInt))) OpNone "(fun dir args -> dtp_runIn dir (dtp_ocamlOf args))" True,
+    Intrinsic "@vuna@prim_eff_runIn_host" (IFun IStr (IFun (IList IStr) (IEffRow (IRowCons "default" (IGlobal "Base.EffProcess.ProcessOp") IRowNil) IInt))) OpNone "(fun dir args -> dtp_runIn dir (dtp_ocamlOf args))" False,
+    Intrinsic "@vuna@host@runIn" (IFun IStr (IFun (IList IStr) (IEffRow (IRowCons "default" (IGlobal "Base.EffProcess.ProcessOp") IRowNil) IInt))) OpNone "(fun dir args -> dtp_runIn dir (dtp_ocamlOf args))" False,
     Intrinsic "prim_eff_exitOp_host" (IFun IInt (IEffRow (IRowCons "default" (IGlobal "Base.EffExit.ExitOp") IRowNil) IInt)) OpNone "dtp_exit" True,
+    Intrinsic "@vuna@prim_eff_exitOp_host" (IFun IInt (IEffRow (IRowCons "default" (IGlobal "Base.EffExit.ExitOp") IRowNil) IInt)) OpNone "dtp_exit" False,
+    Intrinsic "@vuna@host@exitOp" (IFun IInt (IEffRow (IRowCons "default" (IGlobal "Base.EffExit.ExitOp") IRowNil) IInt)) OpNone "dtp_exit" False,
     Intrinsic "prim_eff_readLine_host" (IEffRow (IRowCons "default" (IGlobal "Base.EffStdin.StdinOp") IRowNil) IStr) OpNone "(dtp_readLine ())" True,
+    Intrinsic "@vuna@prim_eff_readLine_host" (IEffRow (IRowCons "default" (IGlobal "Base.EffStdin.StdinOp") IRowNil) IStr) OpNone "(dtp_readLine ())" False,
+    Intrinsic "@vuna@host@readLine" (IEffRow (IRowCons "default" (IGlobal "Base.EffStdin.StdinOp") IRowNil) IStr) OpNone "(dtp_readLine ())" False,
     Intrinsic "prim_eff_readBytes_host" (IFun IInt (IEffRow (IRowCons "default" (IGlobal "Base.EffStdin.StdinOp") IRowNil) IStr)) OpNone "dtp_readBytes" True,
+    Intrinsic "@vuna@prim_eff_readBytes_host" (IFun IInt (IEffRow (IRowCons "default" (IGlobal "Base.EffStdin.StdinOp") IRowNil) IStr)) OpNone "dtp_readBytes" False,
+    Intrinsic "@vuna@host@readBytes" (IFun IInt (IEffRow (IRowCons "default" (IGlobal "Base.EffStdin.StdinOp") IRowNil) IStr)) OpNone "dtp_readBytes" False,
     Intrinsic "prim_eff_getArgs_host" (IEffRow (IRowCons "default" (IGlobal "Base.EffArgs.ArgsOp") IRowNil) (IList IStr)) OpNone "(dtp_listOf (dtp_getArgs ()))" True,
+    Intrinsic "@vuna@prim_eff_getArgs_host" (IEffRow (IRowCons "default" (IGlobal "Base.EffArgs.ArgsOp") IRowNil) (IList IStr)) OpNone "(dtp_listOf (dtp_getArgs ()))" False,
+    Intrinsic "@vuna@host@getArgs" (IEffRow (IRowCons "default" (IGlobal "Base.EffArgs.ArgsOp") IRowNil) (IList IStr)) OpNone "(dtp_listOf (dtp_getArgs ()))" False,
     Intrinsic "prim_eff_newRef_host" (IPi "a" (IFun (IVar "a") (IEffRow (IRowCons "default" (IGlobal "Base.EffRef.RefOp") IRowNil) (IRef (IVar "a"))))) OpNone "(fun x -> ref x)" True,
+    Intrinsic "@vuna@prim_eff_newRef_host" (IPi "a" (IFun (IVar "a") (IEffRow (IRowCons "default" (IGlobal "Base.EffRef.RefOp") IRowNil) (IRef (IVar "a"))))) OpNone "(fun x -> ref x)" False,
+    Intrinsic "@vuna@host@newRef" (IPi "a" (IFun (IVar "a") (IEffRow (IRowCons "default" (IGlobal "Base.EffRef.RefOp") IRowNil) (IRef (IVar "a"))))) OpNone "(fun x -> ref x)" False,
     Intrinsic "prim_eff_readRef_host" (IPi "a" (IFun (IRef (IVar "a")) (IEffRow (IRowCons "default" (IGlobal "Base.EffRef.RefOp") IRowNil) (IVar "a")))) OpNone "(fun r -> !r)" True,
+    Intrinsic "@vuna@prim_eff_readRef_host" (IPi "a" (IFun (IRef (IVar "a")) (IEffRow (IRowCons "default" (IGlobal "Base.EffRef.RefOp") IRowNil) (IVar "a")))) OpNone "(fun r -> !r)" False,
+    Intrinsic "@vuna@host@readRef" (IPi "a" (IFun (IRef (IVar "a")) (IEffRow (IRowCons "default" (IGlobal "Base.EffRef.RefOp") IRowNil) (IVar "a")))) OpNone "(fun r -> !r)" False,
     Intrinsic "prim_eff_writeRef_host" (IPi "a" (IFun (IRef (IVar "a")) (IFun (IVar "a") (IEffRow (IRowCons "default" (IGlobal "Base.EffRef.RefOp") IRowNil) IInt)))) OpNone "(fun r v -> r := v; 0)" True,
+    Intrinsic "@vuna@prim_eff_writeRef_host" (IPi "a" (IFun (IRef (IVar "a")) (IFun (IVar "a") (IEffRow (IRowCons "default" (IGlobal "Base.EffRef.RefOp") IRowNil) IInt)))) OpNone "(fun r v -> r := v; 0)" False,
+    Intrinsic "@vuna@host@writeRef" (IPi "a" (IFun (IRef (IVar "a")) (IFun (IVar "a") (IEffRow (IRowCons "default" (IGlobal "Base.EffRef.RefOp") IRowNil) IInt)))) OpNone "(fun r v -> r := v; 0)" False,
     Intrinsic "prim_eff_netListen_host" (IFun IStr (IEffRow (IRowCons "default" (IGlobal "Base.EffNet.NetOp") IRowNil) IInt)) OpNone "dtp_net_listen" True,
+    Intrinsic "@vuna@prim_eff_netListen_host" (IFun IStr (IEffRow (IRowCons "default" (IGlobal "Base.EffNet.NetOp") IRowNil) IInt)) OpNone "dtp_net_listen" False,
+    Intrinsic "@vuna@host@netListen" (IFun IStr (IEffRow (IRowCons "default" (IGlobal "Base.EffNet.NetOp") IRowNil) IInt)) OpNone "dtp_net_listen" False,
     Intrinsic "prim_eff_netPort_host" (IFun IInt (IEffRow (IRowCons "default" (IGlobal "Base.EffNet.NetOp") IRowNil) IInt)) OpNone "dtp_net_port" True,
+    Intrinsic "@vuna@prim_eff_netPort_host" (IFun IInt (IEffRow (IRowCons "default" (IGlobal "Base.EffNet.NetOp") IRowNil) IInt)) OpNone "dtp_net_port" False,
+    Intrinsic "@vuna@host@netPort" (IFun IInt (IEffRow (IRowCons "default" (IGlobal "Base.EffNet.NetOp") IRowNil) IInt)) OpNone "dtp_net_port" False,
     Intrinsic "prim_eff_netAccept_host" (IFun IInt (IEffRow (IRowCons "default" (IGlobal "Base.EffNet.NetOp") IRowNil) IInt)) OpNone "dtp_net_accept" True,
+    Intrinsic "@vuna@prim_eff_netAccept_host" (IFun IInt (IEffRow (IRowCons "default" (IGlobal "Base.EffNet.NetOp") IRowNil) IInt)) OpNone "dtp_net_accept" False,
+    Intrinsic "@vuna@host@netAccept" (IFun IInt (IEffRow (IRowCons "default" (IGlobal "Base.EffNet.NetOp") IRowNil) IInt)) OpNone "dtp_net_accept" False,
     Intrinsic "prim_eff_netRecv_host" (IFun IInt (IFun IInt (IEffRow (IRowCons "default" (IGlobal "Base.EffNet.NetOp") IRowNil) IStr))) OpNone "dtp_net_recv" True,
+    Intrinsic "@vuna@prim_eff_netRecv_host" (IFun IInt (IFun IInt (IEffRow (IRowCons "default" (IGlobal "Base.EffNet.NetOp") IRowNil) IStr))) OpNone "dtp_net_recv" False,
+    Intrinsic "@vuna@host@netRecv" (IFun IInt (IFun IInt (IEffRow (IRowCons "default" (IGlobal "Base.EffNet.NetOp") IRowNil) IStr))) OpNone "dtp_net_recv" False,
     Intrinsic "prim_eff_netSend_host" (IFun IInt (IFun IStr (IEffRow (IRowCons "default" (IGlobal "Base.EffNet.NetOp") IRowNil) IInt))) OpNone "dtp_net_send" True,
+    Intrinsic "@vuna@prim_eff_netSend_host" (IFun IInt (IFun IStr (IEffRow (IRowCons "default" (IGlobal "Base.EffNet.NetOp") IRowNil) IInt))) OpNone "dtp_net_send" False,
+    Intrinsic "@vuna@host@netSend" (IFun IInt (IFun IStr (IEffRow (IRowCons "default" (IGlobal "Base.EffNet.NetOp") IRowNil) IInt))) OpNone "dtp_net_send" False,
     Intrinsic "prim_eff_netClose_host" (IFun IInt (IEffRow (IRowCons "default" (IGlobal "Base.EffNet.NetOp") IRowNil) IInt)) OpNone "dtp_net_close" True,
+    Intrinsic "@vuna@prim_eff_netClose_host" (IFun IInt (IEffRow (IRowCons "default" (IGlobal "Base.EffNet.NetOp") IRowNil) IInt)) OpNone "dtp_net_close" False,
+    Intrinsic "@vuna@host@netClose" (IFun IInt (IEffRow (IRowCons "default" (IGlobal "Base.EffNet.NetOp") IRowNil) IInt)) OpNone "dtp_net_close" False,
     Intrinsic "prim_eff_netConnect_host" (IFun IStr (IEffRow (IRowCons "default" (IGlobal "Base.EffNet.NetOp") IRowNil) IInt)) OpNone "dtp_net_connect" True,
+    Intrinsic "@vuna@prim_eff_netConnect_host" (IFun IStr (IEffRow (IRowCons "default" (IGlobal "Base.EffNet.NetOp") IRowNil) IInt)) OpNone "dtp_net_connect" False,
+    Intrinsic "@vuna@host@netConnect" (IFun IStr (IEffRow (IRowCons "default" (IGlobal "Base.EffNet.NetOp") IRowNil) IInt)) OpNone "dtp_net_connect" False,
     Intrinsic "prim_eff_spawn" (IFun (IList IStr) (IEff IInt)) OpNone "(fun args -> dtp_spawn (dtp_ocamlOf args))" True,
+    Intrinsic "@vuna@prim_eff_spawn" (IFun (IList IStr) (IEff IInt)) OpNone "(fun args -> dtp_spawn (dtp_ocamlOf args))" False,
     Intrinsic "prim_eff_wait" (IFun IInt (IEff IInt)) OpNone "dtp_wait" True,
+    Intrinsic "@vuna@prim_eff_wait" (IFun IInt (IEff IInt)) OpNone "dtp_wait" False,
     Intrinsic "prim_eff_netListen" (IFun IStr (IEff IInt)) OpNone "dtp_net_listen" True,
+    Intrinsic "@vuna@prim_eff_netListen" (IFun IStr (IEff IInt)) OpNone "dtp_net_listen" False,
     Intrinsic "prim_eff_netPort" (IFun IInt (IEff IInt)) OpNone "dtp_net_port" True,
+    Intrinsic "@vuna@prim_eff_netPort" (IFun IInt (IEff IInt)) OpNone "dtp_net_port" False,
     Intrinsic "prim_eff_netAccept" (IFun IInt (IEff IInt)) OpNone "dtp_net_accept" True,
+    Intrinsic "@vuna@prim_eff_netAccept" (IFun IInt (IEff IInt)) OpNone "dtp_net_accept" False,
     Intrinsic "prim_eff_netRecv" (IFun IInt (IFun IInt (IEff IStr))) OpNone "dtp_net_recv" True,
+    Intrinsic "@vuna@prim_eff_netRecv" (IFun IInt (IFun IInt (IEff IStr))) OpNone "dtp_net_recv" False,
     Intrinsic "prim_eff_netSend" (IFun IInt (IFun IStr (IEff IInt))) OpNone "dtp_net_send" True,
+    Intrinsic "@vuna@prim_eff_netSend" (IFun IInt (IFun IStr (IEff IInt))) OpNone "dtp_net_send" False,
     Intrinsic "prim_eff_netClose" (IFun IInt (IEff IInt)) OpNone "dtp_net_close" True,
+    Intrinsic "@vuna@prim_eff_netClose" (IFun IInt (IEff IInt)) OpNone "dtp_net_close" False,
     Intrinsic "prim_eff_netConnect" (IFun IStr (IEff IInt)) OpNone "dtp_net_connect" True,
+    Intrinsic "@vuna@prim_eff_netConnect" (IFun IStr (IEff IInt)) OpNone "dtp_net_connect" False,
     Intrinsic "prim_eff_getenv" (IFun IStr (IEff IStr)) OpNone "dtp_getenv" True,
+    Intrinsic "@vuna@prim_eff_getenv" (IFun IStr (IEff IStr)) OpNone "dtp_getenv" False,
     Intrinsic "prim_eff_getcwd" (IEff IStr) OpNone "(dtp_getcwd ())" True,
-    Intrinsic "prim_eff_execPath" (IEff IStr) OpNone "(dtp_execPath ())" True
+    Intrinsic "@vuna@prim_eff_getcwd" (IEff IStr) OpNone "(dtp_getcwd ())" False,
+    Intrinsic "prim_eff_execPath" (IEff IStr) OpNone "(dtp_execPath ())" True,
+    Intrinsic "@vuna@prim_eff_execPath" (IEff IStr) OpNone "(dtp_execPath ())" False
   ]
 
 -- | 编译器 tracing 的隐藏原语（`visible = False`）：只由内置宏 `dbg!` 展开引用，
@@ -721,9 +833,11 @@ effIntrinsics =
 -- （不进用户可见名单），`Core.Eval` 在 interp 里归约为 no-op。
 export internalIntrinsics : List Intrinsic
 internalIntrinsics =
-  [ Intrinsic debugOnIntrinsicName (IFun IInt IBool) OpNone "dtp_debug_on" False,
-    Intrinsic debugLineIntrinsicName (IFun IStr IInt) OpNone "dtp_debug_line" False
-  ]
+  append
+    [ Intrinsic debugOnIntrinsicName (IFun IInt IBool) OpNone "dtp_debug_on" False,
+      Intrinsic debugLineIntrinsicName (IFun IStr IInt) OpNone "dtp_debug_line" False
+    ]
+    (filter (\i => not (intrinsicVisible i)) effIntrinsics)
 
 -- | 编译器 tracing 原语名：codegen 据此按需追加 runtime helper（`usesTrace`）。
 export traceIntrinsicNames : List String

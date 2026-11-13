@@ -1405,7 +1405,7 @@ collectBuiltinRowTags _ = []
 
 mainRowTags : Term -> List String
 mainRowTags (TApp (TApp fn row _) _ _) = case fn of
-  TGlobal g => if g == effTypeName then collectBuiltinRowTags row else []
+  TGlobal g => if g == effTypeName then collectBuiltinRowTags (quote 0 (eval [] row)) else []
   _ => []
 mainRowTags _ = []
 
@@ -1444,7 +1444,7 @@ filterMapRunHost : List String -> List String
 filterMapRunHost [] = []
 filterMapRunHost (tag :: rest) =
   let
-    host = builtinEffectRunHostOf tag
+    host = builtinEffectImplOf tag
   in if host == "" then filterMapRunHost rest else host :: filterMapRunHost rest
 
 groupOfPair : Pair Bool (List IrDef) -> IrGroup

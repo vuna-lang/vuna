@@ -5,6 +5,7 @@ module Vuna.Compiler.Diagnostics.Cg where
 -- 从 `Vuna.Compiler.Diagnostics` 拆出（M30 B19）；对外名字集合不变，门面仍是
 -- `Vuna.Compiler.Diagnostics`。arity 同样由 `CgErr : Nat -> Type` 的构造子索引锁定；
 -- `cgAll` 是 `gen-errors` 的文档遍历源。
+import Base.HostRow
 import Vuna.Compiler.Common
 import Vuna.Compiler.Diagnostics.Common
 import Base.Nat
@@ -44,7 +45,7 @@ cgCode (UnsolvedMetavarRuntime _) = "CG_UnsolvedMetavarRuntime"
 export cgTemplate : {n : Nat} -> CgErr n -> String
 cgTemplate DependencyCycle = "dependency cycle between runtime definitions"
 cgTemplate InterpCannotExecuteEffects =
-  "interp cannot execute effects (main : Eff [] a); compile and run the program instead"
+  "interp cannot execute effects (main : Eff hostRow a); compile and run the program instead"
 cgTemplate MainNotValue = "main does not reduce to a value"
 cgTemplate NoMain = "no main definition"
 cgTemplate TypeUsedAtRuntime = "a type is used at runtime (M13 limitation)"

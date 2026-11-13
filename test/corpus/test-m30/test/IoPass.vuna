@@ -1,8 +1,10 @@
 
+import Base.HostRow
+import Base.EffConsole
 import Base.Eff
 -- 效果测试（通过）：main : Eff [] a 走临时包编译+运行，进程退出码 0 通过。
--- 效果输出直接到终端；`prim_eff_print` 现在本身就是 `Eff []` 动作（M31），在 do 里直接作最后一条语句。
-main : Eff [] Int
+-- 效果输出直接到终端；`@vuna@prim_eff_print` 现在本身就是 `Eff []` 动作（M31），在 do 里直接作最后一条语句。
+main : Eff hostRow Int
 main = do
-  _ <- prim_eff_print "test-m30: io-pass\n"
-  prim_eff_print "test-m30: io-pass (prim)\n"
+  _ <- consolePrint "default" "test-m30: io-pass\n"
+  consolePrint "default" "test-m30: io-pass (prim)\n"

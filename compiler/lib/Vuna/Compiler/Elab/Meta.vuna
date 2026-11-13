@@ -4,6 +4,7 @@ module Vuna.Compiler.Elab.Meta where
 -- 全局签名表与 UTC 收集、dt data/ctor 查找、telescope 与结果 spine 计算、已解元变量内联、
 -- 擦除判据（binderRig / isIndexDomain 等）、以及 trait/instance 的命名辅助。
 -- 拆自 M24 的单一 `Elab.vuna`（按真实调用图切；门面仍是 `Vuna.Compiler.Elab`）。
+import Vuna.Compiler.Diag
 import Base.List
 import Vuna.Compiler.Common
 import Base.HashMap
@@ -92,9 +93,22 @@ inferCtorRef ec ctx name tyTerm = case dtCtorLookupEc ec name of
 -- 定义性相等（唯一入口；Bool 与其它 primitive 类型一样按同名全局比较）。
 -- M28：解的作用域在求解点就地检查（Core.Conv.solveMeta*），这里只把解表写回 Ec；
 -- 不再事后扫新增解（旧 checkSolsDelta 两段式已删除）。
+metaSpanOf : Ec -> Value -> Maybe Span
+metaSpanOf ec (VMeta m _) = lookupSpanPair m (ecMetaSpans ec)
+metaSpanOf ec (VApp f _) = metaSpanOf ec f
+metaSpanOf ec _ = Nothing
+
+lookupSpanPair : Int -> List (Pair Int Span) -> Maybe Span
+lookupSpanPair m [] = Nothing
+lookupSpanPair m (Pair k sp :: rest) = if k == m then Just sp else lookupSpanPair m rest
+
 export convEc : Ec -> Int -> Value -> Value -> Check Ec
 convEc ec depth expected actual = case conv (ecDefTbl ec) (ecSolsP ec) depth expected actual of
-  ErrC e => ErrC e
+  ErrC e => case metaSpanOf ec actual of
+    Just sp => ErrC (withFallbackSpan sp e)
+    Nothing => case metaSpanOf ec expected of
+      Just sp => ErrC (withFallbackSpan sp e)
+      Nothing => ErrC e
   OkC sols2 => OkC (ecPutSols ec (solsList sols2))
 
 -- 未解元变量：返回第一个未解的编号。

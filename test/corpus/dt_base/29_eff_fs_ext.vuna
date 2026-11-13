@@ -1,8 +1,10 @@
--- W10：fs 效应标签（命名实例 "real"，真实宿主 handler）——写/原子写/读/元数据/目录/删除。
--- 注：fs 步骤拆成两个行类型已钉死的 helper。单段 14 步 do 链会触发 D48 的指数级精化
--- （open-row + Monad 字典 meta 未从期望类型早解）；拆分后语义/操作顺序不变。
+-- W10：fs 效应标签（命名实例 "default"，入口自动预装的真实 handler）——写/原子写/读/
+-- 元数据/目录/删除。注：fs 步骤拆成两个行类型已钉死的 helper。单段 14 步 do 链会触发
+-- D48 的指数级精化；拆分后语义/操作顺序不变。
 import Base.Eff
 import Base.EffFs
+import Base.EffConsole
+import Base.HostRow
 
 dir : String
 dir = "/tmp/vuna_w10_fs"
@@ -16,36 +18,36 @@ pathB = "/tmp/vuna_w10_fs/b.txt"
 b2i : Bool -> Int
 b2i b = if b then 1 else 0
 
-prepare : Eff [FsOp@real] Int
+prepare : Eff hostRow Int
 prepare = do
-  _ <- fsRemoveFile "real" pathA
-  _ <- fsRemoveFile "real" pathB
-  _ <- fsMakeDir "real" dir
-  written <- fsWriteFile "real" pathA "hello"
-  _ <- fsWriteFileAtomic "real" pathB "yo"
-  _ <- fsRemoveFile "real" pathB
+  _ <- fsRemoveFile "default" pathA
+  _ <- fsRemoveFile "default" pathB
+  _ <- fsMakeDir "default" dir
+  written <- fsWriteFile "default" pathA "hello"
+  _ <- fsWriteFileAtomic "default" pathB "yo"
+  _ <- fsRemoveFile "default" pathB
   pure written
 
-inspectFs : Int -> Eff [FsOp@real] String
+inspectFs : Int -> Eff hostRow String
 inspectFs written = do
-  exists <- fsFileExists "real" pathA
-  content <- fsReadFile "real" pathA
-  size <- fsFileSize "real" pathA
-  isdir <- fsIsDirectory "real" dir
-  files <- fsReadDir "real" dir
-  _ <- fsRemoveFile "real" pathA
-  exists2 <- fsFileExists "real" pathA
+  exists <- fsFileExists "default" pathA
+  content <- fsReadFile "default" pathA
+  size <- fsFileSize "default" pathA
+  isdir <- fsIsDirectory "default" dir
+  files <- fsReadDir "default" dir
+  _ <- fsRemoveFile "default" pathA
+  exists2 <- fsFileExists "default" pathA
   pure
     (strFromInt written ++ ":" ++ content ++ ":" ++ strFromInt size ++ ":" ++ strFromInt (b2i isdir) ++ ":" ++ join "," files ++ ":" ++ strFromInt (b2i exists2))
 
-prog : Eff [FsOp@real] String
+prog : Eff hostRow String
 prog = do
   written <- prepare
   result <- inspectFs written
   pure result
 
-main : Eff [] Int
+main : Eff hostRow Int
 main = do
-  summary <- runFs "real" prog
-  _ <- prim_eff_print (summary ++ "\n")
+  summary <- prog
+  _ <- consolePrint "default" (summary ++ "\n")
   pure 0

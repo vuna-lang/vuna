@@ -47,25 +47,23 @@ Args / Exit）；`Member` 行约束、`local`/`catch`/scoped `Exn`、线性续�
   按 main 行自动嵌套 `runXHost`；Console/Fs/Clock/Env/Process/Exit/Stdin/Args 有带行
   handler，Ref/Net 直调带行原语（`beRunHost=""`）；夹具 90–94。`runPure` 仍只收 Nil
   （纯性负例：`runPure (consolePrint ...)` → `TC_UnhandledEffects`）。
-- **阶段 5 迁移策略（第 1 批已完成）**：两个入口已带行（`Eff [ArgsOp, ExitOp]`，`runCli`/`runCompilerCli` 用 `raise` 桥接）；编译器/工具链仍用 1089 处 `Eff []`（`compiler/lib`
-  47+ 模块 + `lib` 工具链 + 两个 `main`），它们都是真实 IO。迁移按批：
-  ① 引入行别名 `Base.HostRow.hostRow`（一个 `Row` 值，便于签名书写），先迁两个入口
-  （`app/Main`、`compiler/app/Main` → `Eff [ArgsOp, ExitOp]`），内部模块暂用
-  `raise : Eff [] a -> Eff r a` 桥接；
-  ② 按模块把 IO 叶子改成带行（`Files`/`Host` 调用点），每批 `vuna check .` + 相关夹具 +
-  rotation；
-  ③ Sched 随 `Vuna.Compiler.Query.Run` 的并行波次一起带行（`forkTask` 的子计算行与父体一致）；
-  ④ 最后删旧 `prim_eff_*`/旧 `handleXHost`，把宿主原语改 `@vuna@` 隐藏，并改写
-  eff-boundary 守卫（从「数 `runPure`」改为「禁止宿主原语出现在公开面」）。
-  规模决定它是独立批次：不要与语言/类型改动混做，也不要试图一次性改完。
-
+- **阶段 5（已完成）**：编译器/工具链从 1089 处 `Eff []` 全量迁到显式行：
+  ① 行别名 `Base.HostRow.hostRow` + 两个入口带行，`raise`/`raiseToRow` 桥接；
+  ② `compiler/lib`（47+ 模块）、`base`、`lib` 工具链的 IO 叶子全部带行，每批
+  `vuna check .` + suite + rotation；
+  ③ Sched 随 `Vuna.Compiler.Query.Run` 的并行波次一起带行（`forkTask` 行泛化，
+  任务体 `runEff` 执行）；
+  ④ 删旧 `prim_eff_*`/旧 `handleXHost`/`runX`（用户面统一「main 带行 + entry
+  自动预装 handler」），宿主原语改 `@vuna@prim_eff_*` 隐藏（`visible = False` +
+  Lexer 的 `@vuna@` 内部名规则，源码写不出可见名），eff-boundary 守卫加
+  「可见宿主原语名不得出现在源码」检查。
 ### 2.2 四层边界（当前）
 
 | 层 | 类型/入口 | 说明 |
 | --- | --- | --- |
 | 用户面 | `Eff r a` + `Base.Eff.*` 标签/handler | 用户包与 ad-hoc 的唯一动作类型；`main : Eff [] a` |
-| handler 层 | `handleXHost` → `Eff r (Eff [] a)`，`runX = joinEff …` | 宿主 handler 的 answer 是已处理干净的 `Eff []` 动作；`joinEff` 展平 |
-| 宿主层 | `prim_eff_*`（外加 `effTimeUs`） | 直接调用即得 `Eff []` 动作；任何包都可直调；Int/Nat 归一化只在 Eff handler 的 result 族；不再有 manifest 能力/信任门控 |
+| handler 层 | entry 自动预装的行 handler（`@vuna@` 内部名） | 用户面写不出 handler 名字；`main` 行有内建标签时由编译器嵌套预装 |
+| 宿主层 | `@vuna@prim_eff_*`（隐藏 intrinsic，源码写不出） | 直接调用即得 `Eff []` 动作；Int/Nat 归一化只在 Eff handler 的 result 族；不再有 manifest 能力/信任门控 |
 
 - **代数**：`Monad (Eff r)` / `Applicative` / `Functor` 实例已内建；用户用 `pure` / `do` /
   `>>=` / `fmap`，动作的构造入口只有这些实例方法。

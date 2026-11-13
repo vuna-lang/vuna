@@ -4,7 +4,7 @@ module Vuna.Json.Frame where
 --
 -- 帧格式（LSP 与 REPL server 共用）：`Content-Length: <body 字节数>\r\n\r\n<body>`；
 -- body 后面**没有**尾随换行，长度是 **UTF-8 字节数**（vuna 的 String 底层是 OCaml string，
--- `strLength` 即字节数）。读取层是字节级的（`prim_eff_readBytes`）：**不能按行读**——body
+-- `strLength` 即字节数）。读取层是字节级的（`@vuna@prim_eff_readBytes`）：**不能按行读**——body
 -- 不带换行，客户端在拿到响应前也不会写下一帧，行级读会让「客户端等响应、服务器等换行」
 -- 互等死锁（LSP 的 `initialize` 就卡在这里，见 test/corpus/lsp/smoke.sh 用例 18）。
 --
@@ -13,6 +13,7 @@ module Vuna.Json.Frame where
 --
 -- 上界：单帧与缓冲都限制在 `maxFrameBytes` 内（坏客户端不能把内存撑爆；
 -- 正常源文件帧远小于此）。`splitHeaderBlock` 同时容忍 `\r\n\r\n` 与裸 `\n\n`。
+import Base.HostRow
 import Vuna.Compiler.Common
 import Vuna.Json
 
@@ -24,12 +25,12 @@ frameChunkSize = 65536
 export maxFrameBytes : Int
 maxFrameBytes = 16777216
 
--- 从 stdin 读最多 n 字节（`prim_eff_readBytes` 的动作值；由 `serveConnection` 执行）。
+-- 从 stdin 读最多 n 字节（`@vuna@prim_eff_readBytes` 的动作值；由 `serveConnection` 执行）。
 --
 -- 语义：有数据就立即返回已到达的字节（**可能少于 n**），EOF 返回 ""。
 -- 调用方（`Vuna.Json.Server.serveConnection`）负责拼接缓冲并重试切帧。
-export readChunk : Int -> Eff [] String
-readChunk n = prim_eff_readBytes n
+export readChunk : Int -> Eff hostRow String
+readChunk n = @vuna@prim_eff_readBytes n
 
 -- 把一帧编码成字节串（纯函数；传输层与 socket 传输共用）。
 export renderFrame : Json -> String

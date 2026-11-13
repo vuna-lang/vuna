@@ -12,6 +12,7 @@ module Vuna.Compiler.Driver.Split where
 --     同产物，不依赖 mtime），改一个单元只重编它的直接/传递依赖者；
 --   - 最后按依赖拓扑序链接成可执行文件。
 -- 构建脚本只用 POSIX sh + ocamlopt，可在 Nix 沙箱内复现。
+import Base.HostRow
 import Vuna.Compiler.Canonical.Bytes
 import Vuna.Compiler.Common
 import Vuna.Compiler.Hash
@@ -34,18 +35,18 @@ splitDeps : SplitFile -> List String
 splitDeps (SplitFile name text deps) = deps
 
 -- M4（效果显式化）：落盘是宿主动作，显式在 `Eff []` 里；文件内容/依赖图计算保持纯。
-export writeSplitFiles : String -> List SplitFile -> Eff [] (Check Int)
+export writeSplitFiles : String -> List SplitFile -> Eff hostRow (Check Int)
 writeSplitFiles dir [] = pure (OkC 0)
 writeSplitFiles dir (f :: rest) = do
   restR <- writeSplitFiles dir rest
   case restR of
     ErrC e => pure (ErrC e)
     OkC n => do
-      _ <- prim_eff_writeFile "${dir}/${splitName f}" (splitText f)
+      _ <- raiseToRow hostRow (@vuna@prim_eff_writeFile "${dir}/${splitName f}" (splitText f))
       pure (OkC (n + 1))
 
 -- M30：只写内容变化的文件（build 的逐模块增量写盘；内容相同不 touch）。
-export writeSplitFilesIfChanged : String -> List SplitFile -> Eff [] (Check Int)
+export writeSplitFilesIfChanged : String -> List SplitFile -> Eff hostRow (Check Int)
 writeSplitFilesIfChanged dir [] = pure (OkC 0)
 writeSplitFilesIfChanged dir (f :: rest) = do
   restR <- writeSplitFilesIfChanged dir rest
@@ -56,15 +57,15 @@ writeSplitFilesIfChanged dir (f :: rest) = do
         path = "${dir}/${splitName f}"
         text = splitText f
       in do
-        exists <- prim_eff_fileExists path
+        exists <- raiseToRow hostRow (@vuna@prim_eff_fileExists path)
         if exists then do
-          old <- prim_eff_readFile path
+          old <- raiseToRow hostRow (@vuna@prim_eff_readFile path)
           if old == text then pure (OkC (n + 1))
           else do
-            _ <- prim_eff_writeFile path text
+            _ <- raiseToRow hostRow (@vuna@prim_eff_writeFile path text)
             pure (OkC (n + 1))
         else do
-          _ <- prim_eff_writeFile path text
+          _ <- raiseToRow hostRow (@vuna@prim_eff_writeFile path text)
           pure (OkC (n + 1))
 
 -- 编译单元依赖图：按输出顺序取 .ml（跳过 .mli），unit = 文件名去掉 ".ml"；

@@ -13,6 +13,7 @@ module Vuna.Compiler.Codegen.Split where
 -- 归属表**只从 Loader-resolved 的声明结构派生**（声明名、实例名、派生实例名、trait
 -- 方法投影名与 `Dict_<trait>`）；不再有字符串前缀表（`Show_Show_*` / 内建方法名表）。
 -- 推导不到的带点名字回落到「模块前缀必须是已知模块」，否则报错。
+import Base.HostRow
 import Vuna.Compiler.Common
 import Base.HashMap
 import Vuna.Compiler.Frontend.Ast
@@ -205,22 +206,22 @@ splitLocPath roots contextDir path =
 
 -- roots 是模块根目录（`PackageContext.contextRoots` 的 rootDir），contextDir 是包目录
 -- （`PackageContext.contextDir`）；生成位置表用它把 span 路径归一。
-noUnitLookup : String -> Eff [] (Maybe SplitFile)
+noUnitLookup : String -> Eff hostRow (Maybe SplitFile)
 noUnitLookup _ = pure Nothing
 
-noUnitStore : String -> SplitFile -> Eff [] Int
+noUnitStore : String -> SplitFile -> Eff hostRow Int
 noUnitStore _ _ = pure 0
 
 -- M4（效果显式化）：单元缓存的 lookup/store 是宿主动作，生成外壳显式在 `Eff []` 里；
 -- 纯生成逻辑（归属表、分文件、依赖序校验）保持纯函数。
-export generateDtSplitProgram : List (Pair String (List Decl)) -> List Decl -> DtProgram -> Bool -> List String -> String -> List (Pair String (Pair String Int)) -> Eff [] (Check (List SplitFile))
+export generateDtSplitProgram : List (Pair String (List Decl)) -> List Decl -> DtProgram -> Bool -> List String -> String -> List (Pair String (Pair String Int)) -> Eff hostRow (Check (List SplitFile))
 generateDtSplitProgram modules entryDecls prog printResult roots contextDir extraDefLocs =
   generateDtSplitProgramWith noUnitLookup noUnitStore modules entryDecls prog printResult roots
     contextDir extraDefLocs
 
 -- M34.5（S5）：带**单元级缓存**的生成入口（`lookup` 按模块名，入口用 `__entry__`；
 -- 命中即跳过该单元的 lowering + 文本生成，`store` 只对重新生成的单元调用）。
-export generateDtSplitProgramWith : (String -> Eff [] (Maybe SplitFile)) -> (String -> SplitFile -> Eff [] Int) -> List (Pair String (List Decl)) -> List Decl -> DtProgram -> Bool -> List String -> String -> List (Pair String (Pair String Int)) -> Eff [] (Check (List SplitFile))
+export generateDtSplitProgramWith : (String -> Eff hostRow (Maybe SplitFile)) -> (String -> SplitFile -> Eff hostRow Int) -> List (Pair String (List Decl)) -> List Decl -> DtProgram -> Bool -> List String -> String -> List (Pair String (Pair String Int)) -> Eff hostRow (Check (List SplitFile))
 generateDtSplitProgramWith lookup store modules entryDecls prog printResult roots contextDir extraDefLocs =
   let
     -- M34.6：把「精化完成 → 装配开始」之间的构建独有开销分段；stamp 关闭时只花一次分支。
@@ -242,14 +243,14 @@ generateDtSplitProgramWith lookup store modules entryDecls prog printResult root
   in splitProgramFilesWith lookup store env modules entryDecls printResult runtimeDefs allDatas meta
     runtimeText
 
-splitProgramFilesWith : (String -> Eff [] (Maybe SplitFile)) -> (String -> SplitFile -> Eff [] Int) -> LwEnv -> List (Pair String (List Decl)) -> List Decl -> Bool -> List DtDef -> List DtData -> SplitMeta -> String -> Eff [] (Check (List SplitFile))
+splitProgramFilesWith : (String -> Eff hostRow (Maybe SplitFile)) -> (String -> SplitFile -> Eff hostRow Int) -> LwEnv -> List (Pair String (List Decl)) -> List Decl -> Bool -> List DtDef -> List DtData -> SplitMeta -> String -> Eff hostRow (Check (List SplitFile))
 splitProgramFilesWith lookup store env modules entryDecls printResult runtimeDefs allDatas meta runtimeText = case checkProgramOf env of
   ErrC e => pure (ErrC e)
   OkC _ =>
     splitProgramCheckedWith lookup store env modules entryDecls printResult runtimeDefs allDatas
       meta runtimeText
 
-splitProgramCheckedWith : (String -> Eff [] (Maybe SplitFile)) -> (String -> SplitFile -> Eff [] Int) -> LwEnv -> List (Pair String (List Decl)) -> List Decl -> Bool -> List DtDef -> List DtData -> SplitMeta -> String -> Eff [] (Check (List SplitFile))
+splitProgramCheckedWith : (String -> Eff hostRow (Maybe SplitFile)) -> (String -> SplitFile -> Eff hostRow Int) -> LwEnv -> List (Pair String (List Decl)) -> List Decl -> Bool -> List DtDef -> List DtData -> SplitMeta -> String -> Eff hostRow (Check (List SplitFile))
 splitProgramCheckedWith lookup store env modules entryDecls printResult runtimeDefs allDatas meta runtimeText = case checkResolvedModules meta modules entryDecls runtimeDefs allDatas of
   ErrC e => pure (ErrC e)
   OkC _ => case nameOwnerPairsOfDefs meta runtimeDefs of
@@ -260,7 +261,7 @@ splitProgramCheckedWith lookup store env modules entryDecls printResult runtimeD
         splitWithOwnersWith lookup store env modules printResult allDatas runtimeDefs defPairs
           dataPairs runtimeText
 
-splitWithOwnersWith : (String -> Eff [] (Maybe SplitFile)) -> (String -> SplitFile -> Eff [] Int) -> LwEnv -> List (Pair String (List Decl)) -> Bool -> List DtData -> List DtDef -> List (Pair String String) -> List (Pair String String) -> String -> Eff [] (Check (List SplitFile))
+splitWithOwnersWith : (String -> Eff hostRow (Maybe SplitFile)) -> (String -> SplitFile -> Eff hostRow Int) -> LwEnv -> List (Pair String (List Decl)) -> Bool -> List DtData -> List DtDef -> List (Pair String String) -> List (Pair String String) -> String -> Eff hostRow (Check (List SplitFile))
 splitWithOwnersWith lookup store env modules printResult allDatas allDefs defPairs dataPairs runtimeText =
   let
     defUnitT = unitTblOf (mapToUnit defPairs)
@@ -284,7 +285,7 @@ splitWithOwnersWith lookup store env modules printResult allDatas allDefs defPai
         )
 
 -- 单模块：按归属过滤名字 → Lowering 出 `IrUnit` → 装配成文件。
-splitModuleFilesWith : (String -> Eff [] (Maybe SplitFile)) -> (String -> SplitFile -> Eff [] Int) -> SplitGenCtx -> List (Pair String (List Decl)) -> Eff [] (Check (List SplitFile))
+splitModuleFilesWith : (String -> Eff hostRow (Maybe SplitFile)) -> (String -> SplitFile -> Eff hostRow Int) -> SplitGenCtx -> List (Pair String (List Decl)) -> Eff hostRow (Check (List SplitFile))
 splitModuleFilesWith lookup store ctx [] = pure (OkC [])
 splitModuleFilesWith lookup store ctx ((Pair mname decls) :: rest) =
   let
@@ -322,7 +323,7 @@ splitModuleFilesWith lookup store ctx ((Pair mname decls) :: rest) =
                       pure (OkC (sf :: tail))
 
 -- 入口文件：`Main` 单元正文 + main 钩子。
-splitMainFileWith : (String -> Eff [] (Maybe SplitFile)) -> (String -> SplitFile -> Eff [] Int) -> SplitGenCtx -> Bool -> Eff [] (Check SplitFile)
+splitMainFileWith : (String -> Eff hostRow (Maybe SplitFile)) -> (String -> SplitFile -> Eff hostRow Int) -> SplitGenCtx -> Bool -> Eff hostRow (Check SplitFile)
 splitMainFileWith lookup store ctx printResult = do
   cached <- lookup "__entry__"
   case cached of

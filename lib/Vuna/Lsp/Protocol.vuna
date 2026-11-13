@@ -14,6 +14,7 @@ module Vuna.Lsp.Protocol where
 --
 -- 连接循环（读帧 → 分发 → 发帧）在 `Vuna.Json.Server.serveConnection`；LSP 与
 -- REPL server 共用同一份机械实现，各自的请求语义/错误策略留在各自模块。
+import Base.HostRow
 import Vuna.Compiler.Common
 import Vuna.Json
 export import Vuna.Json.Frame
@@ -227,11 +228,11 @@ else case remaining of
         if hit >= 0 then Just (Pair lineNo (hit + from0 + 1))
         else scanNameLines (lineNo + 1) False firstCol lastLine rest name
 
--- 日志行前缀；退出时一次写出（`prim_eff_writeFile "/dev/stderr"` 每次打开都会截断，
+-- 日志行前缀；退出时一次写出（`@vuna@prim_eff_writeFile "/dev/stderr"` 每次打开都会截断，
 -- 逐行写会把前面的行冲掉，所以内存累积、退出时 join 一次）。
 export logLine : String -> String
 logLine s = "[vuna-lsp] ${s}\n"
 
-export flushLogLines : List String -> Eff [] Int
+export flushLogLines : List String -> Eff hostRow Int
 flushLogLines [] = pure 0
-flushLogLines logs = prim_eff_writeFile "/dev/stderr" (join "" (map logLine (reverse logs)))
+flushLogLines logs = @vuna@prim_eff_writeFile "/dev/stderr" (join "" (map logLine (reverse logs)))

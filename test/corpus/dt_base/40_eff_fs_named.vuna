@@ -1,8 +1,10 @@
--- W10 收尾：fs 命名实例（"mock" / "real"）——同一程序在 mock（"mock"，纯 answer）与
--- 真实（"real"，宿主 handler）下各跑一次；证明 mock/real handler 可以在同一程序里并存。
+-- W10 收尾：fs 命名实例（"mock" / 入口行 handler）——同一程序在 mock（纯 answer）与
+-- 真实（入口自动预装）下各跑一次；证明 mock/real handler 可以在同一程序里并存。
 -- mock 的 WriteFile/ReadFile 是固定答案（与 clock/env mock 同一风格）。
 import Base.Eff
 import Base.EffFs
+import Base.EffConsole
+import Base.HostRow
 import Base.List
 
 dir : String
@@ -25,6 +27,17 @@ prog n = do
   _ <- fsRemoveFile n path
   pure (join "," (strFromInt w :: s :: strFromInt (b2i e) :: strFromInt sz :: []))
 
+progReal : Eff hostRow String
+progReal = do
+  _ <- fsMakeDir "default" dir
+  _ <- fsRemoveFile "default" path
+  w <- fsWriteFile "default" path "hello"
+  s <- fsReadFile "default" path
+  e <- fsFileExists "default" path
+  sz <- fsFileSize "default" path
+  _ <- fsRemoveFile "default" path
+  pure (join "," (strFromInt w :: s :: strFromInt (b2i e) :: strFromInt sz :: []))
+
 mret : String -> String
 mret a = a
 
@@ -41,9 +54,9 @@ mopH op k = case op of
   FileMtime p => k 0
   FileSize p => k 42
 
-main : Eff [] Int
+main : Eff hostRow Int
 main = do
-  _ <- prim_eff_print ("mock " ++ runPure (handleFs "mock" mret mopH (prog "mock")) ++ "\n")
-  real <- runFs "real" (prog "real")
-  _ <- prim_eff_print ("real " ++ real ++ "\n")
+  _ <- consolePrint "default" ("mock " ++ runPure (handleFs "mock" mret mopH (prog "mock")) ++ "\n")
+  real <- progReal
+  _ <- consolePrint "default" ("real " ++ real ++ "\n")
   pure 0

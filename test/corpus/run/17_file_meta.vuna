@@ -1,18 +1,19 @@
--- P2c：文件元数据走 typed effects（Fs 标签 + runFs）。
+-- 阶段 5：文件元数据走 typed effects（entry 自动预装 handler）。
 import Base.Eff
 import Base.EffFs
+import Base.HostRow
 
-prog : Eff [FsOp@real] Int
+prog : Eff hostRow Int
 prog = do
-  self <- fsFileSize "real" "corpus/run/17_file_meta.vuna"
-  stamp <- fsFileMtime "real" "corpus/run/17_file_meta.vuna"
-  missingSize <- fsFileSize "real" "/vuna/definitely-not-a-file-xyz"
-  missingMtime <- fsFileMtime "real" "/vuna/definitely-not-a-file-xyz"
+  self <- fsFileSize "default" "corpus/run/17_file_meta.vuna"
+  stamp <- fsFileMtime "default" "corpus/run/17_file_meta.vuna"
+  missingSize <- fsFileSize "default" "/vuna/definitely-not-a-file-xyz"
+  missingMtime <- fsFileMtime "default" "/vuna/definitely-not-a-file-xyz"
   pure (if self > 0 then
           (if stamp > 1000000000 then
              (if missingSize == 0 then (if missingMtime == 0 then 7 else 1) else 2)
            else 3)
         else 4)
 
-main : Eff [] Int
-main = runFs "real" prog
+main : Eff hostRow Int
+main = prog

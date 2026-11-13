@@ -5,6 +5,7 @@ module Vuna.Compiler.Loader.Modules where
 -- 只放：Module / Project / ExportEntry / ExportRef 的类型与访问器、import 表的纯函数
 -- 校验、模块根查找（`findModuleFile`）、模块表与导出表的查询。名字解析在 Resolve，
 -- 导出表计算、加载流程与 flatten 在 Flatten；门面 `Vuna.Compiler.Loader` 保持原 API。
+import Base.HostRow
 import Vuna.Compiler.Loader.Diagnostics
 import Vuna.Compiler.Common
 import Vuna.Compiler.Diagnostics.Rn
@@ -320,14 +321,14 @@ rootAllows importerPkg root name = case root.rootExports of
 
 -- M4（效果显式化）：模块根候选的**存在性探测**是宿主动作，显式在 `Eff []` 里；
 -- 可见性判定与候选分类保持纯。
-export collectModuleFiles : List Root -> String -> String -> List (Pair String Root) -> List String -> Eff [] (Pair (List (Pair String Root)) (List String))
+export collectModuleFiles : List Root -> String -> String -> List (Pair String Root) -> List String -> Eff hostRow (Pair (List (Pair String Root)) (List String))
 collectModuleFiles [] name importerPkg allowed hidden =
   pure (Pair (reverse allowed) (reverse hidden))
 collectModuleFiles (root :: rest) name importerPkg allowed hidden =
   let
     path = modulePath root name
   in do
-    exists <- prim_eff_fileExists path
+    exists <- raiseToRow hostRow (@vuna@prim_eff_fileExists path)
     if exists then if rootAllows importerPkg root name then collectModuleFiles rest name importerPkg (Pair path root :: allowed) hidden
     else collectModuleFiles rest name importerPkg allowed (rootName root :: hidden)
     else collectModuleFiles rest name importerPkg allowed hidden
@@ -338,7 +339,7 @@ _joinRootDirs roots = _joinNames (map rootDir roots)
 candidateDir : Pair String Root -> String
 candidateDir candidate = rootDir (secondOf candidate)
 
-export findModuleFile : List Root -> String -> String -> Eff [] (Check (Pair String Root))
+export findModuleFile : List Root -> String -> String -> Eff hostRow (Check (Pair String Root))
 findModuleFile roots name importerPkg = do
   collected <- collectModuleFiles roots name importerPkg [] []
   let

@@ -5,6 +5,7 @@ module Vuna.Explain where
 --
 -- 数据源就是各域的枚举条目（`tcAll`/`cgAll`/`lexAll`/`psAll`/`ldAll`/`icAll`/`lintAll`），
 -- 不再维护第二份错误码文档；字段与 `vuna gen-errors` 同源。
+import Base.HostRow
 import Base.List
 import Base.String
 import Vuna.Compiler.Common
@@ -64,37 +65,39 @@ findInfo code (i :: rest) = if i.infoCode == code then Just i else findInfo code
 matchesPrefix : String -> String -> Bool
 matchesPrefix prefix code = startsWith prefix code
 
-printInfo : Info -> Eff [] Int
+printInfo : Info -> Eff hostRow Int
 printInfo i = do
-  _ <- prim_eff_print "${i.infoCode}\n"
-  _ <- prim_eff_print "  message: ${i.infoTemplate}\n"
-  _ <- prim_eff_print "  meaning: ${i.infoDesc}\n"
-  _ <- prim_eff_print "  severity: ${diagSeverityOf (codeDomain i.infoCode)}\n"
-  _ <- prim_eff_print "  phase: ${diagPhaseOf (codeDomain i.infoCode)}\n"
-  _ <- prim_eff_print "  category: ${diagCategoryOf (codeDomain i.infoCode)}\n"
+  _ <- raiseToRow hostRow (@vuna@prim_eff_print "${i.infoCode}\n")
+  _ <- raiseToRow hostRow (@vuna@prim_eff_print "  message: ${i.infoTemplate}\n")
+  _ <- raiseToRow hostRow (@vuna@prim_eff_print "  meaning: ${i.infoDesc}\n")
+  _ <- raiseToRow hostRow (@vuna@prim_eff_print "  severity: ${diagSeverityOf (codeDomain i.infoCode)}\n")
+  _ <- raiseToRow hostRow (@vuna@prim_eff_print "  phase: ${diagPhaseOf (codeDomain i.infoCode)}\n")
+  _ <- raiseToRow hostRow (@vuna@prim_eff_print "  category: ${diagCategoryOf (codeDomain i.infoCode)}\n")
   example <- exampleOf i.infoCode
   case example of
     Just p => do
-      _ <- prim_eff_print "  example: ${p}\n"
+      _ <- raiseToRow hostRow (@vuna@prim_eff_print "  example: ${p}\n")
       pure 0
     Nothing => pure 0
 
-listInfos : List Info -> String -> Eff [] Int
+listInfos : List Info -> String -> Eff hostRow Int
 listInfos [] prefix = pure 0
 listInfos (i :: rest) prefix = do
   _ <-
-    if prefix == "" || matchesPrefix prefix i.infoCode then prim_eff_print "${i.infoCode}  ${i.infoDesc}\n"
+    if prefix == "" || matchesPrefix prefix i.infoCode then @vuna@prim_eff_print "${i.infoCode}  ${i.infoDesc}\n"
     else pure 0
   listInfos rest prefix
 
-explainArgs : List String -> Eff [] Int
+explainArgs : List String -> Eff hostRow Int
 explainArgs args = case stripExplainJson args of
   Pair rest json => explainArgsJson rest json
 
-explainArgsJson : List String -> Bool -> Eff [] Int
+explainArgsJson : List String -> Bool -> Eff hostRow Int
 explainArgsJson args json = case args of
   [] => do
-    _ <- prim_eff_print "usage: vuna explain <CODE> | vuna explain --list [PREFIX] [--json]\n"
+    _ <-
+      raiseToRow hostRow
+        (@vuna@prim_eff_print "usage: vuna explain <CODE> | vuna explain --list [PREFIX] [--json]\n")
     pure 2
   "--list" :: rest => case rest of
     [] => if json then listInfosJson allInfos "" else listInfos allInfos ""
@@ -102,8 +105,10 @@ explainArgsJson args json = case args of
   code :: _ => case findInfo code allInfos of
     Nothing => do
       _ <-
-        if json then prim_eff_print "{\"error\":\"unknown diagnostic code\",\"code\":${jsonQuote code}}\n"
-        else prim_eff_print "error: unknown diagnostic code `${code}` (try `vuna explain --list`)\n"
+        if json then raiseToRow hostRow
+          (@vuna@prim_eff_print "{\"error\":\"unknown diagnostic code\",\"code\":${jsonQuote code}}\n")
+        else raiseToRow hostRow
+          (@vuna@prim_eff_print "error: unknown diagnostic code `${code}` (try `vuna explain --list`)\n")
       pure 2
     Just i => if json then printInfoJson i else printInfo i
 
@@ -113,18 +118,18 @@ stripExplainJson ("--json" :: rest) = Pair (firstOf (stripExplainJson rest)) Tru
 stripExplainJson (arg :: rest) =
   Pair (Base.List.Cons arg (firstOf (stripExplainJson rest))) (secondOf (stripExplainJson rest))
 
-export runExplain : List String -> Eff [] Int
+export runExplain : List String -> Eff hostRow Int
 runExplain args = explainArgs args
 
 -- JSON 输出（`vuna explain --json` / `--list --json`）；本地转义，不依赖 Vuna.Json
 -- （避免把 Explain 加进 Json 的依赖扇出）。
-printInfoJson : Info -> Eff [] Int
+printInfoJson : Info -> Eff hostRow Int
 printInfoJson i = do
   json <- infoJson i
-  _ <- prim_eff_print (json ++ "\n")
+  _ <- raiseToRow hostRow (@vuna@prim_eff_print (json ++ "\n"))
   pure 0
 
-infoJson : Info -> Eff [] String
+infoJson : Info -> Eff hostRow String
 infoJson i = do
   example <- exampleOf i.infoCode
   pure
@@ -154,17 +159,17 @@ hexPair c = strPack [hexDigit (c / 16), hexDigit (c - c / 16 * 16)]
 hexDigit : Int -> Int
 hexDigit n = if n < 10 then 48 + n else 87 + n
 
-mapEff : (a -> Eff [] b) -> List a -> Eff [] (List b)
+mapEff : (a -> Eff hostRow b) -> List a -> Eff hostRow (List b)
 mapEff f [] = pure []
 mapEff f (x :: rest) = do
   y <- f x
   ys <- mapEff f rest
   pure (y :: ys)
 
-listInfosJson : List Info -> String -> Eff [] Int
+listInfosJson : List Info -> String -> Eff hostRow Int
 listInfosJson infos prefix = do
   rendered <- mapEff infoJson (filter (matchesInfoPrefix prefix) infos)
-  _ <- prim_eff_print ("{\"codes\":[" ++ join "," rendered ++ "]}\n")
+  _ <- raiseToRow hostRow (@vuna@prim_eff_print ("{\"codes\":[" ++ join "," rendered ++ "]}\n"))
   pure 0
 
 matchesInfoPrefix : String -> Info -> Bool

@@ -9,6 +9,7 @@ module Vuna.Fetch where
 --     原语），下载后按 framing + 内容地址校验。
 --   * `--locked`：不联网，只检查 store 是否已物化；缺失即失败。
 -- 传输外置给宿主 `git` / `curl`；语言内只有裸 TCP 原语，不实现 TLS。
+import Base.HostRow
 import Vuna.Cli.Args
 import Vuna.Compiler.Canonical.Pkg
 import Vuna.Compiler.Common
@@ -21,7 +22,7 @@ import Base.Nat
 import Base.List
 import Base.String
 
-export runFetch : List String -> Eff [] Int
+export runFetch : List String -> Eff hostRow Int
 runFetch args = case parseToolArgs "vuna fetch" [BoolFlag "locked"] args of
   ErrC e => fetchFailText (diagText e)
   OkC parsed =>
@@ -35,17 +36,17 @@ runFetch args = case parseToolArgs "vuna fetch" [BoolFlag "locked"] args of
 -- | 取一个包目录声明的**完整依赖闭包**。path 依赖递归进工作树目录；git/url 依赖
 -- 物化后递归进 `pkgs/<digest>`。实现是「待处理目录队列 + visited」：`fetchAll` 与
 -- `dirsOfDeps` 各自结构递归，不做函数间互递归（SCT 只认结构下降）。
-export fetchAt : String -> Bool -> Eff [] Int
+export fetchAt : String -> Bool -> Eff hostRow Int
 fetchAt dir locked = do
   abs <- absolutePath dir
   root <- storeRootEff
   fetchAll 64 root locked [abs] []
 
-fetchAll : Int -> String -> Bool -> List String -> List String -> Eff [] Int
+fetchAll : Int -> String -> Bool -> List String -> List String -> Eff hostRow Int
 fetchAll fuel root locked [] visited = pure 0
 fetchAll fuel root locked (dir :: rest) visited = if fuel <= 0 then fetchFailText "fetch: dependency depth limit exceeded (cycle?)"
 else if memName dir visited then do
-  _ <- prim_eff_print "fetch: ${dir} (cycle skipped)\n"
+  _ <- raiseToRow hostRow (@vuna@prim_eff_print "fetch: ${dir} (cycle skipped)\n")
   fetchAll (fuel - 1) root locked rest visited
 else do
   mdirs <- dirsOfPackage root locked dir
@@ -53,14 +54,14 @@ else do
     Nothing => pure 1
     Just dirs => fetchAll (fuel - 1) root locked (append dirs rest) (dir :: visited)
 
-dirsOfPackage : String -> Bool -> String -> Eff [] (Maybe (List String))
+dirsOfPackage : String -> Bool -> String -> Eff hostRow (Maybe (List String))
 dirsOfPackage root locked dir = do
   let
     manifestPath = "${dir}/vuna.toml"
   in do
-    exists <- prim_eff_fileExists manifestPath
+    exists <- raiseToRow hostRow (@vuna@prim_eff_fileExists manifestPath)
     if exists then do
-      raw <- prim_eff_readFile manifestPath
+      raw <- raiseToRow hostRow (@vuna@prim_eff_readFile manifestPath)
       case parseManifest manifestPath raw of
         ErrC e => do
           _ <- printDiagEff e
@@ -74,7 +75,7 @@ dirsOfPackage root locked dir = do
       _ <- fetchFailText "missing vuna.toml in ${dir}"
       pure Nothing
 
-dirsOfDeps : String -> Bool -> String -> List Dependency -> Eff [] (Maybe (List String))
+dirsOfDeps : String -> Bool -> String -> List Dependency -> Eff hostRow (Maybe (List String))
 dirsOfDeps root locked baseDir [] = pure (Just [])
 dirsOfDeps root locked baseDir (dep :: rest) = do
   here <- dirOfDep root locked baseDir dep
@@ -86,7 +87,7 @@ dirsOfDeps root locked baseDir (dep :: rest) = do
         Nothing => pure Nothing
         Just ds => pure (Just (d :: ds))
 
-dirOfDep : String -> Bool -> String -> Dependency -> Eff [] (Maybe String)
+dirOfDep : String -> Bool -> String -> Dependency -> Eff hostRow (Maybe String)
 dirOfDep root locked baseDir dep = case depSourceOf dep of
   DepPath rel => do
     abs <- absolutePath (joinPath baseDir rel)
@@ -103,7 +104,7 @@ dirOfDep root locked baseDir dep = case depSourceOf dep of
       in do
         done <- isMaterializedEff root digest
         if done then do
-          _ <- prim_eff_print "fetch: ${depAliasOf dep} cached\n"
+          _ <- raiseToRow hostRow (@vuna@prim_eff_print "fetch: ${depAliasOf dep} cached\n")
           pure (Just (materializedDir root digest))
         else if locked then do
           _ <- fetchFail (NotMaterialized (depAliasOf dep)) (depAliasOf dep)
@@ -123,7 +124,7 @@ dirOfDep root locked baseDir dep = case depSourceOf dep of
       in do
         done <- isMaterializedEff root digest
         if done then do
-          _ <- prim_eff_print "fetch: ${depAliasOf dep} cached\n"
+          _ <- raiseToRow hostRow (@vuna@prim_eff_print "fetch: ${depAliasOf dep} cached\n")
           pure (Just (materializedDir root digest))
         else if locked then do
           _ <- fetchFail (NotMaterialized (depAliasOf dep)) (depAliasOf dep)
@@ -134,30 +135,30 @@ dirOfDep root locked baseDir dep = case depSourceOf dep of
             Nothing => pure Nothing
             Just got => pure (Just (materializedDir root got))
 
-verifyPathDep : Dependency -> String -> Eff [] Int
+verifyPathDep : Dependency -> String -> Eff hostRow Int
 verifyPathDep dep actual = case depHashOf dep of
   Nothing => do
-    _ <- prim_eff_print "fetch: ${depAliasOf dep} path unlocked (${actual})\n"
+    _ <- raiseToRow hostRow (@vuna@prim_eff_print "fetch: ${depAliasOf dep} path unlocked (${actual})\n")
     pure 0
   Just expected => if verifyHash expected actual then do
-    _ <- prim_eff_print "fetch: ${depAliasOf dep} path ok\n"
+    _ <- raiseToRow hostRow (@vuna@prim_eff_print "fetch: ${depAliasOf dep} path ok\n")
     pure 0
   else hashMismatch (depAliasOf dep) expected actual
 
-fetchGit : String -> Dependency -> String -> String -> String -> Eff [] (Maybe String)
+fetchGit : String -> Dependency -> String -> String -> String -> Eff hostRow (Maybe String)
 fetchGit root dep url rev expected =
   let
     tmp = "${root}/tmp/git-${expected}"
   in do
     _ <- ensureDirPath root
-    _ <- prim_eff_runIn root ["rm", "-rf", tmp]
+    _ <- raiseToRow hostRow (@vuna@prim_eff_runIn root ["rm", "-rf", tmp])
     _ <- ensureDirPath tmp
-    cloneCode <- prim_eff_runIn tmp ["git", "clone", "--quiet", url, "."]
+    cloneCode <- raiseToRow hostRow (@vuna@prim_eff_runIn tmp ["git", "clone", "--quiet", url, "."])
     if cloneCode /= 0 then do
       _ <- fetchFail (FetchFailed url) url
       pure Nothing
     else do
-      checkoutCode <- prim_eff_runIn tmp ["git", "checkout", "--quiet", rev]
+      checkoutCode <- raiseToRow hostRow (@vuna@prim_eff_runIn tmp ["git", "checkout", "--quiet", rev])
       if checkoutCode /= 0 then do
         _ <- fetchFail (FetchFailed "${url}@${rev}") "${url}@${rev}"
         pure Nothing
@@ -166,27 +167,27 @@ fetchGit root dep url rev expected =
         verifyAndStore root dep expected (PackageSource "" [] [] files)
 
 -- 校验声明摘要后写对象 + 物化（git 与 url 共用）；成功返回实际摘要。
-verifyAndStore : String -> Dependency -> String -> PackageSource -> Eff [] (Maybe String)
+verifyAndStore : String -> Dependency -> String -> PackageSource -> Eff hostRow (Maybe String)
 verifyAndStore root dep expected ps =
   let
     actual = contentHashOf ps
   in if verifyHash expected actual then do
     _ <- writeObjectEff root actual ps.psFiles
     _ <- materializeEff root actual ps.psFiles
-    _ <- prim_eff_print "fetch: ${depAliasOf dep} ok\n"
+    _ <- raiseToRow hostRow (@vuna@prim_eff_print "fetch: ${depAliasOf dep} ok\n")
     pure (Just actual)
   else do
     _ <- hashMismatch (depAliasOf dep) expected actual
     pure Nothing
 
 -- URL 直指 `pkg-source 1` 对象文件；下载后由 framing + 内容地址校验兜底。
-fetchUrl : String -> Dependency -> String -> String -> Eff [] (Maybe String)
+fetchUrl : String -> Dependency -> String -> String -> Eff hostRow (Maybe String)
 fetchUrl root dep url expected =
   let
     obj = objectPathOf root expected
   in do
     _ <- ensureDirPath "${root}/objects"
-    code <- prim_eff_runIn root ["curl", "-fsSL", url, "-o", obj]
+    code <- raiseToRow hostRow (@vuna@prim_eff_runIn root ["curl", "-fsSL", url, "-o", obj])
     if code /= 0 then do
       _ <- fetchFail (FetchFailed url) url
       pure Nothing
@@ -198,10 +199,10 @@ fetchUrl root dep url expected =
           pure Nothing
         Just files => do
           _ <- materializeEff root expected files
-          _ <- prim_eff_print "fetch: ${depAliasOf dep} ok\n"
+          _ <- raiseToRow hostRow (@vuna@prim_eff_print "fetch: ${depAliasOf dep} ok\n")
           pure (Just expected)
 
-hashMismatch : String -> String -> String -> Eff [] Int
+hashMismatch : String -> String -> String -> Eff hostRow Int
 hashMismatch alias expected actual =
   let
     detail = "declared ${expected}, actual ${actual}"
@@ -209,25 +210,25 @@ hashMismatch alias expected actual =
     ErrC d => printDiagEff d
     OkC _ => pure 0
 
-fetchFail : PkgErr (Succ Zero) -> String -> Eff [] Int
+fetchFail : PkgErr (Succ Zero) -> String -> Eff hostRow Int
 fetchFail e arg = case pkgNoLoc1 e arg of
   ErrC d => printDiagEff d
   OkC _ => pure 0
 
-fetchFailText : String -> Eff [] Int
+fetchFailText : String -> Eff hostRow Int
 fetchFailText msg = do
-  _ <- prim_eff_print "error: ${msg}\n"
+  _ <- raiseToRow hostRow (@vuna@prim_eff_print "error: ${msg}\n")
   pure 2
 
-printDiagEff : Diagnostic -> Eff [] Int
+printDiagEff : Diagnostic -> Eff hostRow Int
 printDiagEff d = do
-  _ <- prim_eff_print (diagText d ++ "\n")
+  _ <- raiseToRow hostRow (@vuna@prim_eff_print (diagText d ++ "\n"))
   pure 1
 
 -- ---------------------------------------------------------------
 -- vuna pin：把 git 依赖的实际内容摘要写回 manifest（只改已有 `hash = ...` 行）
 -- ---------------------------------------------------------------
-export runPin : List String -> Eff [] Int
+export runPin : List String -> Eff hostRow Int
 runPin args = case parseToolArgs "vuna pin" [] args of
   ErrC e => fetchFailText (diagText e)
   OkC parsed => case parsed.positionals of
@@ -235,15 +236,15 @@ runPin args = case parseToolArgs "vuna pin" [] args of
     [dir] => pinAt dir
     _ => fetchFailText "too many arguments; expected at most one directory"
 
-pinAt : String -> Eff [] Int
+pinAt : String -> Eff hostRow Int
 pinAt dir = do
   abs <- absolutePath dir
   let
     manifestPath = "${abs}/vuna.toml"
   in do
-    exists <- prim_eff_fileExists manifestPath
+    exists <- raiseToRow hostRow (@vuna@prim_eff_fileExists manifestPath)
     if exists then do
-      raw <- prim_eff_readFile manifestPath
+      raw <- raiseToRow hostRow (@vuna@prim_eff_readFile manifestPath)
       case parseManifest manifestPath raw of
         ErrC e => printDiagEff e
         OkC manifest => case validateManifest manifest of
@@ -254,25 +255,28 @@ pinAt dir = do
             let
               updated = applyPins pins raw
             in if updated == raw then do
-              _ <- prim_eff_print "pin: up to date\n"
+              _ <- raiseToRow hostRow (@vuna@prim_eff_print "pin: up to date\n")
               pure 0
             else do
-              _ <- prim_eff_writeFileAtomic manifestPath updated
-              _ <- prim_eff_print "pin: updated ${strFromInt (listLen pins)} dependency hash(es)\n"
+              _ <- raiseToRow hostRow (@vuna@prim_eff_writeFileAtomic manifestPath updated)
+              _ <-
+                raiseToRow hostRow
+                  (@vuna@prim_eff_print "pin: updated ${strFromInt (listLen pins)} dependency hash(es)\n")
               pure 0
     else fetchFailText "missing vuna.toml in ${dir}"
 
 -- 对每个 git 依赖取实际摘要（clone → 收集 → 写对象 + 物化）。url/path 不参与：
 -- url 对象文件的地址只能由对象自身给出，path 是可变输入（D12）。
-collectPins : String -> String -> List Dependency -> List (Pair String String) -> Eff [] (List (Pair String String))
+collectPins : String -> String -> List Dependency -> List (Pair String String) -> Eff hostRow (List (Pair String String))
 collectPins root baseDir [] acc = pure (reverse acc)
 collectPins root baseDir (dep :: rest) acc = case depSourceOf dep of
   DepPath rel => do
-    _ <- prim_eff_print "pin: ${depAliasOf dep} path (skipped)\n"
+    _ <- raiseToRow hostRow (@vuna@prim_eff_print "pin: ${depAliasOf dep} path (skipped)\n")
     collectPins root baseDir rest acc
   DepUrl u => do
     _ <-
-      prim_eff_print "pin: ${depAliasOf dep} url (skipped: url objects carry their own address)\n"
+      raiseToRow hostRow
+        (@vuna@prim_eff_print "pin: ${depAliasOf dep} url (skipped: url objects carry their own address)\n")
     collectPins root baseDir rest acc
   DepGit url rev => do
     actual <- resolveGitDigest root (depAliasOf dep) url rev
@@ -282,22 +286,22 @@ collectPins root baseDir (dep :: rest) acc = case depSourceOf dep of
         pure []
       Just digest => collectPins root baseDir rest (Pair (depAliasOf dep) digest :: acc)
 
-resolveGitDigest : String -> String -> String -> String -> Eff [] (Maybe String)
+resolveGitDigest : String -> String -> String -> String -> Eff hostRow (Maybe String)
 resolveGitDigest root alias url rev =
   let
     tmp = "${root}/tmp/pin-${alias}"
   in do
     _ <- ensureDirPath root
-    _ <- prim_eff_runIn root ["rm", "-rf", tmp]
+    _ <- raiseToRow hostRow (@vuna@prim_eff_runIn root ["rm", "-rf", tmp])
     _ <- ensureDirPath tmp
-    cloneCode <- prim_eff_runIn tmp ["git", "clone", "--quiet", url, "."]
+    cloneCode <- raiseToRow hostRow (@vuna@prim_eff_runIn tmp ["git", "clone", "--quiet", url, "."])
     if cloneCode /= 0 then do
-      _ <- prim_eff_print "pin: git clone failed for ${alias}\n"
+      _ <- raiseToRow hostRow (@vuna@prim_eff_print "pin: git clone failed for ${alias}\n")
       pure Nothing
     else do
-      checkoutCode <- prim_eff_runIn tmp ["git", "checkout", "--quiet", rev]
+      checkoutCode <- raiseToRow hostRow (@vuna@prim_eff_runIn tmp ["git", "checkout", "--quiet", rev])
       if checkoutCode /= 0 then do
-        _ <- prim_eff_print "pin: git checkout failed for ${alias}\n"
+        _ <- raiseToRow hostRow (@vuna@prim_eff_print "pin: git checkout failed for ${alias}\n")
         pure Nothing
       else do
         files <- packageFilesEff tmp

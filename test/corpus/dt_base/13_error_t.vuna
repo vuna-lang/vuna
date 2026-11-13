@@ -1,5 +1,8 @@
 -- M37：Error 效应栈（用 Base.EffError 取代旧 ErrorT）。
 -- `throw` 被作用域 `catch` 恢复；结果用 `Result` 观察。
+import Base.HostRow
+import Base.EffExit
+import Base.EffConsole
 import Base.Eff
 import Base.EffError
 import Base.Result
@@ -7,14 +10,14 @@ import Base.Result
 prog : Eff [ErrorOp@e] Int
 prog = throw "e" "boom"
 
-main : Eff [] Int
+main : Eff hostRow Int
 main = do
-  _ <- prim_eff_print "error\n"
+  _ <- consolePrint "default" "error\n"
   r <- pure (runPure (runError "e" (catch "e" prog (\msg => pure 7))))
   case r of
     Ok a => do
-      _ <- prim_eff_print ("ok " ++ strFromInt a ++ "\n")
-      prim_eff_exit 0
+      _ <- consolePrint "default" ("ok " ++ strFromInt a ++ "\n")
+      exitWith "default" 0
     Err msg => do
-      _ <- prim_eff_print ("caught " ++ msg ++ "\n")
-      prim_eff_exit 0
+      _ <- consolePrint "default" ("caught " ++ msg ++ "\n")
+      exitWith "default" 0

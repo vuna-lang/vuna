@@ -15,6 +15,7 @@ module Vuna.Compiler.Fingerprint where
 -- 足以区分重新构建的编译器。
 --
 -- env/stat 是宿主动作，显式 `Eff []`。
+import Base.HostRow
 import Vuna.Compiler.Hash
 import Vuna.Compiler.Version
 import Base.Eff
@@ -27,15 +28,15 @@ export textHashOf : String -> Int
 textHashOf s = Vuna.Compiler.Hash.contentKey s
 
 -- | 当前编译器的指纹（`Int` 形态；缓存 key 的算术段用）。
-export compilerFingerprintEff : Eff [] Int
+export compilerFingerprintEff : Eff hostRow Int
 compilerFingerprintEff = do
-  exe <- prim_eff_execPath
-  size <- prim_eff_fileSize exe
-  mtime <- prim_eff_fileMtime exe
+  exe <- raiseToRow hostRow (@vuna@prim_eff_execPath)
+  size <- raiseToRow hostRow (@vuna@prim_eff_fileSize exe)
+  mtime <- raiseToRow hostRow (@vuna@prim_eff_fileMtime exe)
   pure (if size > 0 then fingerprintOfStat exe size mtime else textHashOf vunaVersion)
 
 -- | 当前编译器的标签（`String` 形态；iface / AST / Store 的 tag 与 codec 段用）。
-export compilerTagEff : Eff [] String
+export compilerTagEff : Eff hostRow String
 compilerTagEff = do
   fp <- compilerFingerprintEff
   pure "${vunaVersion}/${fp}"

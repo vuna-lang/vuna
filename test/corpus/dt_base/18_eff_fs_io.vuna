@@ -1,5 +1,6 @@
--- Layer 1：宿主-backed Fs 效应（handler 直调 prim_eff_* 原语；answer = `Eff [] Int`）。
+-- Layer 1：宿主-backed Fs 效应（handler 直调 @vuna@prim_eff_* 原语；answer = `Eff [] Int`）。
 -- W10 收尾：`Fs` 是命名实例，操作与 handler 显式带实例名（本夹具用 "real"）。
+import Base.HostRow
 import Base.Eff
 import Base.EffFs
 import Base.Nat
@@ -10,18 +11,18 @@ prog = do
   s <- fsReadFile "real" "/tmp/vuna_eff_fs.txt"
   pure (toInt (byteLength s))
 
-ret : Int -> Eff [] Int
+ret : Int -> Eff hostRow Int
 ret a = pure a
 
-opH : (o : FsOp) -> (Base.EffFs.resFs o -> Eff [] Int) -> Eff [] Int
+opH : (o : FsOp) -> (Base.EffFs.resFs o -> Eff hostRow Int) -> Eff hostRow Int
 opH op k = case op of
   ReadFile p => do
-    s <- prim_eff_readFile p
+    s <- fsReadFile "default" p
     k s
   WriteFile p s => do
-    n <- fmap natFromInt (prim_eff_writeFile p s)
+    n <- fsWriteFile "default" p s
     k n
   _ => prim_fail "unexpected fs op in 18_eff_fs_io"
 
-main : Eff [] Int
+main : Eff hostRow Int
 main = joinEff (handleFs "real" ret opH prog)

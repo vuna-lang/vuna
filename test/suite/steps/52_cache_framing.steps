@@ -38,17 +38,9 @@ run: sh -c 'for f in $(find "$TMPDIR/c32-cache"/vuna-cache/blobs -type f); do of
 run: diff -r "$TMPDIR/c32-clean" "$TMPDIR/c32-out2"
 run: sh -c 'blob=$(cat "$TMPDIR/c32-blob-path"); head -c 18 "$blob"'
 out-equals: vuna-cache-frame 2
-# 52d) check 结果：阶段 2 起是**查询图节点**（`check:<pkg>:<kind>`，值 = QMarker），
-#      落在 `$TMPDIR/vuna-cache/query/<包桶>/index`（`Store` framing，codec `query-index 1`）。
-#      截断索引后必须视为未命中（重算并覆盖），不能静默当成功。
-run: sh -c 'rm -rf "$TMPDIR/c32-check-cache"; TMPDIR="$TMPDIR/c32-check-cache" "$VUNA" check "$TMPDIR/c32-pkg/dep" >/dev/null 2>&1; TMPDIR="$TMPDIR/c32-check-cache" "$VUNA" check "$TMPDIR/c32-pkg/root" >/dev/null 2>&1'
-run: sh -c 'ok=1; n=0; for f in $(find "$TMPDIR/c32-check-cache"/vuna-cache/query -type f 2>/dev/null); do n=$((n + 1)); [ "$(head -c 18 "$f")" = "vuna-cache-frame 2" ] || ok=0; [ "$(head -1 "$f" | cut -d"|" -f3)" = "query-index 1" ] || ok=0; done; [ "$n" -ge 2 ] && [ "$ok" -eq 1 ]'
-run: sh -c 'for f in $(find "$TMPDIR/c32-check-cache"/vuna-cache/query -type f 2>/dev/null); do head -c 40 "$f" > "$f.part"; mv "$f.part" "$f"; done; TMPDIR="$TMPDIR/c32-check-cache" VUNA_DEBUG_PERF=1 "$VUNA" check "$TMPDIR/c32-pkg/dep" 2>&1 | tee "$TMPDIR/c32-check.log"'
-out-contains: query-miss check:dep:lib:
-# 图节点 span：每个节点一段 `query-span <key> <outcome> <dur>us`（真实 check 节点也带 span）。
-out-contains: query-span check:dep:lib:
-run: sh -c 'ok=1; for f in $(find "$TMPDIR/c32-check-cache"/vuna-cache/query -type f 2>/dev/null); do [ "$(head -c 18 "$f")" = "vuna-cache-frame 2" ] || ok=0; done; [ "$ok" -eq 1 ]'
-# 52e) lex 缓存：全部截断后照常 lex 并重写（旧 Marshal 实现会 Marshal.from_string 崩溃）。
+# 52d) 阶段 5 C：check 的查询图路径暂时移除——任务内精化是 IO，与纯任务图（forkTask 纯任务）
+#      冲突，按「先自举绿」的决策绕过（记 debt：check 图查询待重构恢复）。check 结果不再
+#      落 `query/` 图节点，因此这里不再断言 query-index/query-miss/query-span。
 run: sh -c 'rm -rf "$TMPDIR/c32-lex-cache"; TMPDIR="$TMPDIR/c32-lex-cache" "$VUNA" check "$TMPDIR/c32-pkg/root" >/dev/null 2>&1; TMPDIR="$TMPDIR/c32-lex-cache" "$VUNA" check "$TMPDIR/c32-pkg/root" >/dev/null 2>&1; list=$(find "$TMPDIR/c32-lex-cache/vuna-cache/lex" -type f 2>/dev/null); [ -n "$list" ] || exit 1; printf "%s\n" "$list" | wc -l | tr -d " " > "$TMPDIR/c32-lex-count"; for f in $list; do head -c 8 "$f" > "$f.part"; mv "$f.part" "$f"; done; rm -rf "$TMPDIR/c32-lex-cache"/vuna-cache/query'
 run: sh -c 'TMPDIR="$TMPDIR/c32-lex-cache" "$VUNA" check "$TMPDIR/c32-pkg/root" >/dev/null 2>&1'
 run: sh -c 'n=$(cat "$TMPDIR/c32-lex-count"); framed=0; for f in $(find "$TMPDIR/c32-lex-cache/vuna-cache/lex" -type f 2>/dev/null); do [ "$(head -c 18 "$f")" = "vuna-cache-frame 2" ] && framed=$((framed + 1)); done; [ "$framed" -eq "$n" ]'

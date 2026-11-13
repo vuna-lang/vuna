@@ -1827,6 +1827,30 @@ unhandledEffectLabel ec expected actual = case effRowOfValue (forceVal ec expect
 -- 层面的行扩宽）。**不调用 `checkEFuel`**（只构造项，避免与 checkByInferFuel 形成 SCT
 -- 互递归）；weaken 不在作用域时不触发，由调用方回退旧诊断（`TC_UnhandledEffects` 或
 -- 普通 mismatch）。期望是 `Eff []` 时也不触发：那是未处理效应，必须报 `TC_UnhandledEffects`。
+-- 阶段 5：行包含判断（actual 行 ⊆ expected 行，按 label 值相等，无序）。
+-- 只在 Elab 内部用；lift 后运行时恒等（Eff 的行擦除），不插入项。
+sameLabelValue : Value -> Value -> Bool
+sameLabelValue a b = showTerm (quote 0 a) == showTerm (quote 0 b)
+
+rowContainsValue : Ec -> Int -> Value -> Value -> Bool
+rowContainsValue ec fuel expected label = if fuel <= 0 then False
+else case forceVal ec expected of
+  VCon g args => if g == effRowConsCtor then case args of
+    _ :: l2 :: tail :: _ => sameLabelValue label l2 || rowContainsValue ec (fuel - 1) (forceVal ec tail) label
+    _ => False
+  else False
+  _ => False
+
+rowSubValue : Ec -> Int -> Value -> Value -> Bool
+rowSubValue ec fuel actual expected = if fuel <= 0 then False
+else case forceVal ec actual of
+  VCon g args => if g == effRowNilCtor then True
+  else if g == effRowConsCtor then case args of
+    _ :: label :: tail :: _ => rowContainsValue ec (fuel - 1) expected label && rowSubValue ec (fuel - 1) (forceVal ec tail) expected
+    _ => False
+  else False
+  _ => False
+
 -- | D51 自动行 lift：`actual : Eff r a` 遇到期望 `Eff (Cons e r) a` 时返回插入
 -- `Base.Eff.weaken` 的项与 conv 解出的 Ec；条件不满足 / weaken 不可见 / 期望为空行时
 -- 返回 Nothing。
@@ -1849,7 +1873,15 @@ tryEffLift ctx globals ec expected actual term = case globalsLookup "Base.Eff.we
             -- 「实际行」，把真正的行不匹配（如 handler 实例名 `Fs "mock"` vs 程序 `Fs
             -- "real"`）伪装成合法 lift，错误被推迟到入口才暴露（dt_err/78 回归）。
             Nothing => Nothing
-            Just actualRow => case convEc ec d actualRow tailF of
+            Just actualRow =>
+              -- 阶段 5：行包含 lift（actual 行 ⊆ expected 行）：运行时恒等，直接返回项。
+              if rowSubValue ec 64 actualRow (firstOf p) then Just (Pair term ec)
+              else if isNilRowValue ec actualRow then case globalsLookup "Base.Eff.raise" globals ec of
+                Nothing => Nothing
+                Just _ =>
+                  Just
+                    (Pair (TApp (TApp (TApp (TGlobal "Base.Eff.raise") (quote d (firstOf p)) Rig0) (quote d (secondOf p)) Rig0) term RigOmega) ec)
+              else case convEc ec d actualRow tailF of
               ErrC _ => Nothing
               OkC ec2 =>
                 Just

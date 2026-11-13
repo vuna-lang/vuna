@@ -10,8 +10,8 @@ module Vuna.Interp where
 -- M26：入口吃 `PackageContext`（不再有环境根 / `List Root`）；调用方（CLI / REPL /
 -- test runner）负责从文件、cwd 或包构造上下文。
 --
--- 求值是**纯**的：不执行效果。`main : Eff [] a` 一律报错；
--- 真正带 `prim_eff_print` / 文件效果的 `main` 请用 `compile` + 运行产物（见 docs/reference/primitives.md 的 interp 归约边界）。
+-- 求值是**纯**的：不执行效果。`main : Eff hostRow a` 一律报错；
+-- 真正带 `@vuna@prim_eff_print` / 文件效果的 `main` 请用 `compile` + 运行产物（见 docs/reference/primitives.md 的 interp 归约边界）。
 -- 该模块只被 CLI / REPL / test runner 使用，不属于编译器 seed 闭包。
 --
 -- M30：新增两条工具链能力（仍然不属于编译器 seed 闭包）：
@@ -19,12 +19,13 @@ module Vuna.Interp where
 --   - `runEffectProgram`：把「带 main 的完整入口源码」放进临时包，走
 --     `compileToDir` + `runBuildScript` + 运行（REPL 的动作表达式与 `vuna test`
 --     的效果测试共用这一条执行路径）。效果的输出直接写终端，判定只看进程退出码。
+import Base.HostRow
 import Vuna.Compiler.Common
 import Vuna.Compiler.Packages.Pkg
 import Vuna.Compiler.Driver.Dt
 import Vuna.Compiler.Driver.Compile
 
-export interpretFile : PackageContext -> String -> Eff [] String
+export interpretFile : PackageContext -> String -> Eff hostRow String
 interpretFile ctx entry = do
   result <- dtEvalFile ctx entry
   pure (case result of
@@ -34,7 +35,7 @@ interpretFile ctx entry = do
 
 -- REPL 用：program（imports + 定义，定义必须已写签名）与表达式都在内存里求值，
 -- 不需要临时文件；表达式类型由 DT 精化器推断，值用 showValue 展示。
-export interpretExpr : PackageContext -> String -> String -> Eff [] String
+export interpretExpr : PackageContext -> String -> String -> Eff hostRow String
 interpretExpr ctx program expr = do
   ifaces <- depIfacesForToolProgram ctx program
   case ifaces of
@@ -55,7 +56,7 @@ interpretExpr ctx program expr = do
 -- 类型文本形如 `((Base.Eff.Eff Base.Eff.Row.Nil) Int)`（canonical 全名）；REPL 据此决定是否走效果执行。
 -- M34.6（5b）：REPL 会话复用 termAux（依赖包 decls）的 record/deriving 预处理结果。
 -- 缓存 key 由接口哈希决定（REPL 的依赖接口不变时一直命中），失败路径不缓存。
-export evalExprInfoWithAux : PackageContext -> String -> String -> Maybe AuxCache -> Eff [] (Check (Pair (Pair String String) (Maybe AuxCache)))
+export evalExprInfoWithAux : PackageContext -> String -> String -> Maybe AuxCache -> Eff hostRow (Check (Pair (Pair String String) (Maybe AuxCache)))
 evalExprInfoWithAux ctx program expr aux = do
   ifaces <- depIfacesForToolProgram ctx program
   case ifaces of
@@ -67,7 +68,7 @@ evalExprInfoWithAux ctx program expr aux = do
         OkC i => OkC (Pair i aux)
       )
 
-export evalExprInfo : PackageContext -> String -> String -> Eff [] (Check (Pair String String))
+export evalExprInfo : PackageContext -> String -> String -> Eff hostRow (Check (Pair String String))
 evalExprInfo ctx program expr = do
   ifaces <- depIfacesForToolProgram ctx program
   case ifaces of
@@ -79,15 +80,15 @@ evalExprInfo ctx program expr = do
 -- ---------------------------------------------------------------
 -- 为缺签名的顶层 DFun 推断可回读的签名；targets 由 REPL 选出（块内无签名、且缓冲里
 -- 也没有只含签名的块）。失败返回可读错误，由 REPL 加提示后保持会话状态不变。
-export inferDefTypes : PackageContext -> String -> List String -> String -> Eff [] (Check (List (Pair String String)))
+export inferDefTypes : PackageContext -> String -> List String -> String -> Eff hostRow (Check (List (Pair String String)))
 inferDefTypes ctx program targets defSource = dtInferDefTypes ctx program targets defSource
 
 -- program 里每个顶层定义的名字 + zonk 后类型文本（`:defs` / `:info` 用）。
-export bindingTypes : PackageContext -> String -> Eff [] (Check (List (Pair String String)))
+export bindingTypes : PackageContext -> String -> Eff hostRow (Check (List (Pair String String)))
 bindingTypes ctx program = dtBindingTypes ctx program
 
 -- 内存 program 的整程序检查（自动签名写回后的复查；也用于 :load 模块的立即校验）。
-export checkProgram : PackageContext -> String -> Eff [] (Check (List Diagnostic))
+export checkProgram : PackageContext -> String -> Eff hostRow (Check (List Diagnostic))
 checkProgram ctx program = dtCheckSource ctx "<repl>" program
 
 -- ---------------------------------------------------------------
@@ -111,7 +112,7 @@ effectBinaryName = "vuna-effect"
 
 -- 临时目录根：`$TMPDIR`（去尾部 `/`），没有就用 `/tmp`。
 -- 读环境是启动期动作，函数化（A05：零参顶层值会在模块初始化时求值）。
-mapEff : (a -> Eff [] b) -> List a -> Eff [] (List b)
+mapEff : (a -> Eff hostRow b) -> List a -> Eff hostRow (List b)
 mapEff f [] = pure []
 mapEff f (x :: rest) = do
   y <- f x
@@ -120,33 +121,33 @@ mapEff f (x :: rest) = do
 
 -- 临时目录根：`$TMPDIR`（去尾部 `/`），没有就用 `/tmp`。
 -- 读环境是启动期动作，函数化（A05：零参顶层值会在模块初始化时求值）。
-tempBase : Int -> Eff [] String
+tempBase : Int -> Eff hostRow String
 tempBase _ = do
-  env <- prim_eff_getenv "TMPDIR"
+  env <- raiseToRow hostRow (@vuna@prim_eff_getenv "TMPDIR")
   pure
     (if env == "" then "/tmp" else if endsWith "/" env then substring 0 (byteLength env - 1) env else env)
 
 -- 微秒时间戳命名 + 冲突探测：同一进程内连续执行不会撞名。探测走 `range` 生成的
 -- 有界列表（结构下降），异常情况最多换 1000 个后缀，都不行就用基名（失败由编译报）。
-freshTempDir : String -> Eff [] String
+freshTempDir : String -> Eff hostRow String
 freshTempDir base = pickTempDir base (range 0 1001)
 
-pickTempDir : String -> List Int -> Eff [] String
+pickTempDir : String -> List Int -> Eff hostRow String
 pickTempDir base [] = pure base
 pickTempDir base (n :: rest) = do
-  exists <- prim_eff_fileExists (if n == 0 then base else "${base}-${n}")
+  exists <- raiseToRow hostRow (@vuna@prim_eff_fileExists (if n == 0 then base else "${base}-${n}"))
   if exists then pickTempDir base rest else pure (if n == 0 then base else "${base}-${n}")
 
 -- 上下文依赖根 → 临时包的 [dependencies] 条目（包名 → 包目录）。
 -- base-only 上下文（包名为空）只有 base 一个根，必须全部带上；普通上下文跳过第一个
 -- 根（它是当前包自己的 lib：临时包不能依赖「自己」，否则触发依赖环）。
-effectDeps : PackageContext -> Eff [] (List (Pair String String))
+effectDeps : PackageContext -> Eff hostRow (List (Pair String String))
 effectDeps ctx = case contextRoots ctx of
   [] => pure []
   roots =>
     if contextPackageName ctx == "" then mapEff effectDep roots else mapEff effectDep (drop 1 roots)
 
-effectDep : Root -> Eff [] (Pair String String)
+effectDep : Root -> Eff hostRow (Pair String String)
 effectDep root = do
   dir <- absoluteDir (rootPackageDir (rootDir root))
   pure (Pair (rootName root) dir)
@@ -156,9 +157,9 @@ rootPackageDir : String -> String
 rootPackageDir dir = if endsWith "/lib" dir then substring 0 (byteLength dir - 4) dir else dir
 
 -- 依赖路径必须是绝对路径（临时包不在调用方的工作目录下，相对路径会解析错）。
-absoluteDir : String -> Eff [] String
+absoluteDir : String -> Eff hostRow String
 absoluteDir dir = do
-  cwd <- prim_eff_getcwd
+  cwd <- raiseToRow hostRow @vuna@prim_eff_getcwd
   pure (if startsWith "/" dir then dir else "${cwd}/${dir}")
 
 tomlQuote : String -> String
@@ -185,7 +186,7 @@ depsSection deps = """
 [dependencies]
 ${join "" (map depLine deps)}"""
 
-effectManifest : PackageContext -> Eff [] String
+effectManifest : PackageContext -> Eff hostRow String
 effectManifest ctx = do
   deps <- effectDeps ctx
   pure ("""[package]
@@ -194,38 +195,39 @@ ${depsSection deps}"""
   )
 
 -- `ocamlopt` 是否在 PATH 里（链接阶段需要）。探针的 stdout/stderr 全部丢弃。
-hasOcamlopt : Int -> Eff [] Bool
+hasOcamlopt : Int -> Eff hostRow Bool
 hasOcamlopt _ = do
-  code <- prim_eff_runIn "." ["sh", "-c", "command -v ocamlopt >/dev/null 2>&1"]
+  code <-
+    raiseToRow hostRow (@vuna@prim_eff_runIn "." ["sh", "-c", "command -v ocamlopt >/dev/null 2>&1"])
   pure (code == 0)
 
 noOcamloptMessage : String
 noOcamloptMessage =
   "`ocamlopt` not found in PATH; run the toolchain inside `nix develop` (or install OCaml) to compile effect programs"
 
-cleanupTemp : String -> Int -> Eff [] Int
+cleanupTemp : String -> Int -> Eff hostRow Int
 cleanupTemp dir code = do
-  _ <- prim_eff_runIn "/" ["rm", "-rf", dir]
+  _ <- raiseToRow hostRow (@vuna@prim_eff_runIn "/" ["rm", "-rf", dir])
   pure code
 
-cleanupErr : String -> String -> Eff [] (Check Int)
+cleanupErr : String -> String -> Eff hostRow (Check Int)
 cleanupErr dir e = do
-  _ <- prim_eff_runIn "/" ["rm", "-rf", dir]
+  _ <- raiseToRow hostRow (@vuna@prim_eff_runIn "/" ["rm", "-rf", dir])
   pure (err e)
 
 -- 把带 main 的入口源码编译成临时包里的可执行文件并运行，返回进程退出码。
 -- `printResult` 透传给 codegen 的 main 钩子（动作 main 先跑动作、再按结果类型打印）；
 -- effect 测试用 False（只看退出码，不比较输出）。
-export runEffectProgram : PackageContext -> String -> Bool -> Eff [] (Check Int)
+export runEffectProgram : PackageContext -> String -> Bool -> Eff hostRow (Check Int)
 runEffectProgram ctx source printResult = do
   base <- tempBase 0
   now <- effTimeUs
-  dir <- freshTempDir "${base}/vuna-effect-${now}"
+  dir <- freshTempDir "${base}/vuna-effect-${strFromInt now}"
   manifest <- effectManifest ctx
-  _ <- prim_eff_makeDir dir
-  _ <- prim_eff_makeDir "${dir}/app"
-  _ <- prim_eff_writeFile "${dir}/vuna.toml" manifest
-  _ <- prim_eff_writeFile "${dir}/app/Main.vuna" source
+  _ <- raiseToRow hostRow (@vuna@prim_eff_makeDir dir)
+  _ <- raiseToRow hostRow (@vuna@prim_eff_makeDir "${dir}/app")
+  _ <- raiseToRow hostRow (@vuna@prim_eff_writeFile "${dir}/vuna.toml" manifest)
+  _ <- raiseToRow hostRow (@vuna@prim_eff_writeFile "${dir}/app/Main.vuna" source)
   ctxR <- contextForDir dir
   case ctxR of
     ErrC e => cleanupErr dir (diagText e)
@@ -234,14 +236,15 @@ runEffectProgram ctx source printResult = do
       case compiled of
         ErrC e => cleanupErr dir (diagText e)
         OkC _ => do
-          _ <- prim_eff_makeDir "${dir}/.output/bin"
+          _ <- raiseToRow hostRow (@vuna@prim_eff_makeDir "${dir}/.output/bin")
           has <- hasOcamlopt 0
           if has then do
             built <- runBuildScript "${dir}/.output" "bin/${effectBinaryName}" effectBinaryName
             case built of
               ErrC e => cleanupErr dir (diagText e)
               OkC _ => do
-                code <- prim_eff_runIn "${dir}/.output" ["bin/${effectBinaryName}"]
+                code <-
+                  raiseToRow hostRow (@vuna@prim_eff_runIn "${dir}/.output" ["bin/${effectBinaryName}"])
                 c <- cleanupTemp dir code
                 pure (OkC c)
           else cleanupErr dir noOcamloptMessage

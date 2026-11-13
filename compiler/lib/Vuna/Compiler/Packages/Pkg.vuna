@@ -3,7 +3,7 @@ module Vuna.Compiler.Packages.Pkg where
 -- Vuna.Compiler.Packages.Pkg：M11.5 包 / workspace 解析层（不碰 Loader / CLI）。
 -- 每个包 = 带 vuna.toml 的目录；workspace 根同时是子包（Cargo 风格：
 -- 根 vuna.toml 同时含 [workspace] 与 [package]）。
--- 本模块用内建 prim_eff_readFile / prim_eff_fileExists 读盘，不做 realpath：路径只做 lexical
+-- 本模块用内建 @vuna@prim_eff_readFile / @vuna@prim_eff_fileExists 读盘，不做 realpath：路径只做 lexical
 -- 规范化（合并 "//"、消去 "."、".."），循环检测与去重用规范化后的目录字符串。
 -- 包内目录约定：lib/、app/、test/；入口固定 app/Main.vuna。
 --
@@ -14,6 +14,7 @@ module Vuna.Compiler.Packages.Pkg where
 -- 内部模块根（类型 + 访问器导出，构造子不导出）。
 -- 效果显式化：manifest 读盘、存在性探测、cwd / 环境 / 可执行文件路径全部显式在
 -- `Eff []` 里；路径规范化、依赖图校验、包/上下文构造等纯逻辑保持纯函数。
+import Base.HostRow
 import Vuna.Compiler.Common
 import Vuna.Compiler.Diagnostics.Pkg
 import Vuna.Compiler.Frontend.Manifest
@@ -135,10 +136,10 @@ else case normalizeAcc False (splitOnSlash path) [] of
 
 -- | 相对路径按当前工作目录归一为绝对路径（M26：向上找 manifest 前必须先绝对化，
 -- 否则 "." 这类相对路径的父目录仍是 "."，搜索在起点就停住）。
-export absolutePath : String -> Eff [] String
+export absolutePath : String -> Eff hostRow String
 absolutePath path = if startsWith "/" path then pure (normalizeDir path)
 else do
-  cwd <- prim_eff_getcwd
+  cwd <- raiseToRow hostRow (@vuna@prim_eff_getcwd)
   pure (normalizeDir "${cwd}/${path}")
 
 -- 依赖路径拼接：绝对路径直接用，相对路径相对 base 目录规范化。
@@ -152,11 +153,11 @@ joinPathsText (path :: rest) = "${path}, ${joinPathsText rest}"
 
 -- ---------------------------------------------------------------- manifest
 -- path 是 vuna.toml 的路径；缺失时报 `pkg: missing vuna.toml in <目录>`。
-export loadManifestAt : String -> Eff [] (Check Manifest)
+export loadManifestAt : String -> Eff hostRow (Check Manifest)
 loadManifestAt path = do
-  exists <- prim_eff_fileExists path
+  exists <- raiseToRow hostRow (@vuna@prim_eff_fileExists path)
   if exists then do
-    text <- prim_eff_readFile path
+    text <- raiseToRow hostRow (@vuna@prim_eff_readFile path)
     pure (case parseManifest path text of
       ErrC e => ErrC e
       OkC manifest => case validateManifest manifest of
@@ -202,7 +203,7 @@ mismatchMessage (Just expected) actual =
 
 -- 不可变源依赖：定位 store 物化视图（`<store>/pkgs/<digest>`）并校验 `.complete`。
 -- 物化视图由 `vuna fetch` 写入；check/build 只读，缺失即 `PKG_NotMaterialized`。
-loadStoreDependency : Int -> List (Pair String String) -> Dependency -> Eff [] (Check Package)
+loadStoreDependency : Int -> List (Pair String String) -> Dependency -> Eff hostRow (Check Package)
 loadStoreDependency fuel stack dep = case depHashOf dep of
   Nothing => pure (pkgNoLoc1 (NotMaterialized (depAliasOf dep)) (depAliasOf dep))
   Just hash => do
@@ -211,15 +212,15 @@ loadStoreDependency fuel stack dep = case depHashOf dep of
       digest = normalizeHash hash
       dir = "${root}/pkgs/${digest}"
     in do
-      exists <- prim_eff_fileExists "${dir}/.complete"
+      exists <- raiseToRow hostRow (@vuna@prim_eff_fileExists "${dir}/.complete")
       if exists then do
-        text <- prim_eff_readFile "${dir}/.complete"
+        text <- raiseToRow hostRow (@vuna@prim_eff_readFile "${dir}/.complete")
         if text == digest then loadPackageWalk fuel stack (Just (depAliasOf dep)) dir
         else pure (pkgNoLoc1 (NotMaterialized (depAliasOf dep)) (depAliasOf dep))
       else pure (pkgNoLoc1 (NotMaterialized (depAliasOf dep)) (depAliasOf dep))
 
 -- path 依赖显式写摘要时校验（不写则跳过：可变输入，D12）。
-verifyPathHashEff : Dependency -> String -> Eff [] (Check Int)
+verifyPathHashEff : Dependency -> String -> Eff hostRow (Check Int)
 verifyPathHashEff dep dir = case depHashOf dep of
   Nothing => pure (OkC 0)
   Just expected => do
@@ -232,7 +233,7 @@ verifyPathHashEff dep dir = case depHashOf dep of
         detail = "declared ${expected}, actual ${actual}"
       in pure (pkgNoLoc (HashMismatch (depAliasOf dep) detail) [depAliasOf dep, detail])
 
-loadDependencyList : Int -> List (Pair String String) -> String -> List Dependency -> Eff [] (Check (List Package))
+loadDependencyList : Int -> List (Pair String String) -> String -> List Dependency -> Eff hostRow (Check (List Package))
 loadDependencyList fuel stack baseDir deps = if fuel <= 0 then pure (icFuel "pkg")
 else case deps of
   [] => pure (OkC [])
@@ -248,7 +249,7 @@ else case deps of
         )
 
 -- 单条依赖：path 定位工作树目录（显式摘要则校验）；git/url 定位 store 物化视图。
-loadOneDependency : Int -> List (Pair String String) -> String -> Dependency -> Eff [] (Check Package)
+loadOneDependency : Int -> List (Pair String String) -> String -> Dependency -> Eff hostRow (Check Package)
 loadOneDependency fuel stack baseDir dep = case depSourceOf dep of
   DepPath rel => do
     let
@@ -265,7 +266,7 @@ loadOneDependency fuel stack baseDir dep = case depSourceOf dep of
   DepGit url rev => loadStoreDependency fuel stack dep
   DepUrl url => loadStoreDependency fuel stack dep
 
-loadPackageWalk : Int -> List (Pair String String) -> Maybe String -> String -> Eff [] (Check Package)
+loadPackageWalk : Int -> List (Pair String String) -> Maybe String -> String -> Eff hostRow (Check Package)
 loadPackageWalk fuel stack depName dir = if fuel <= 0 then pure (icFuel "pkg")
 else
   let
@@ -334,7 +335,7 @@ pkgFuelBound : Int
 pkgFuelBound = 1048576
 
 -- 加载 dir/vuna.toml 及其 [dependencies] 路径依赖（递归、含循环检测）。
-export loadPackage : String -> Eff [] (Check Package)
+export loadPackage : String -> Eff hostRow (Check Package)
 loadPackage dir = do
   packageR <- loadPackageWalk pkgFuelBound [] Nothing dir
   pure (case packageR of
@@ -345,7 +346,7 @@ loadPackage dir = do
   )
 
 -- ---------------------------------------------------------------- workspace
-loadMembers : String -> List String -> Eff [] (Check (List Package))
+loadMembers : String -> List String -> Eff hostRow (Check (List Package))
 loadMembers baseDir [] = pure (OkC [])
 loadMembers baseDir (rel :: rest) = do
   memberR <- loadPackage (joinPath baseDir rel)
@@ -361,7 +362,7 @@ loadMembers baseDir (rel :: rest) = do
 -- 根包 + [workspace].members（顺序同 manifest）；没有 members 时只含根包。
 -- 每个成员自己的依赖图已由 loadPackage 校验；这里再校验并集，捕获跨成员的
 -- 同名不同目录冲突。
-export workspacePackages : String -> Eff [] (Check (List Package))
+export workspacePackages : String -> Eff hostRow (Check (List Package))
 workspacePackages rootBaseDir =
   let
     base = normalizeDir rootBaseDir
@@ -415,13 +416,13 @@ packageContext package =
     False
 
 -- ---------------------------------------------------------------- 查找
-findManifestUpMaybe : Int -> String -> Eff [] (Maybe String)
+findManifestUpMaybe : Int -> String -> Eff hostRow (Maybe String)
 findManifestUpMaybe fuel dir = if fuel <= 0 then pure Nothing
 else do
-  exists <- prim_eff_fileExists "${dir}/vuna.toml"
+  exists <- raiseToRow hostRow (@vuna@prim_eff_fileExists "${dir}/vuna.toml")
   if exists then pure (Just dir) else findManifestUpMaybeStep (fuel - 1) dir (manifestDir dir)
 
-findManifestUpMaybeStep : Int -> String -> String -> Eff [] (Maybe String)
+findManifestUpMaybeStep : Int -> String -> String -> Eff hostRow (Maybe String)
 findManifestUpMaybeStep fuel dir parent =
   if fuel <= 0 then pure Nothing
   else if parent == dir then pure Nothing else findManifestUpMaybe (fuel - 1) parent
@@ -431,7 +432,7 @@ findManifestUpMaybeStep fuel dir parent =
 -- 层数 k 满足 2*(k-1) ≤ strLength start——absolute 路径每层至少占「/x」两字符，
 -- 且 normalizeDir 已去掉空段/`.`/`..`，所以 2*k ≤ strLength start + 2；
 -- 取 2*strLength start + 4 严格覆盖（含末层 parent==dir 的收尾）。
-export findManifestDirMaybe : String -> Eff [] (Maybe String)
+export findManifestDirMaybe : String -> Eff hostRow (Maybe String)
 findManifestDirMaybe startDir =
   let
     start = normalizeDir startDir
@@ -439,7 +440,7 @@ findManifestDirMaybe startDir =
 
 -- `findManifestDir` 保留给 fmt / index 这类「向上找 workspace 根」的工具；
 -- 包上下文一律走 `contextForFile` / `contextForDir`。
-export findManifestDir : String -> Eff [] (Check String)
+export findManifestDir : String -> Eff hostRow (Check String)
 findManifestDir startDir = do
   found <- findManifestDirMaybe startDir
   pure (case found of
@@ -451,8 +452,8 @@ findManifestDir startDir = do
 -- base 只由两处决定：`VUNA_BASE`（显式覆盖，相对路径按 cwd 归一），或可执行文件
 -- 相对布局（<exeDir>/base、../base、../../base、../../../base）。候选目录必须含
 -- vuna.toml；都不成立时报错并列出尝试路径 + `VUNA_BASE` 提示。
-hasManifest : String -> Eff [] Bool
-hasManifest dir = prim_eff_fileExists "${dir}/vuna.toml"
+hasManifest : String -> Eff hostRow Bool
+hasManifest dir = raiseToRow hostRow (@vuna@prim_eff_fileExists "${dir}/vuna.toml")
 
 baseCandidates : String -> List String
 baseCandidates exeDir =
@@ -465,7 +466,7 @@ baseCandidates exeDir =
 baseNotFound : List String -> Check a
 baseNotFound tried = pkgNoLoc1 (MissingBase (joinPathsText tried)) (joinPathsText tried)
 
-firstExistingBase : List String -> List String -> Eff [] (Check String)
+firstExistingBase : List String -> List String -> Eff hostRow (Check String)
 firstExistingBase original [] = pure (baseNotFound original)
 firstExistingBase original (dir :: rest) = do
   exists <- hasManifest dir
@@ -473,11 +474,11 @@ firstExistingBase original (dir :: rest) = do
 
 -- base 定位是启动期读环境/探路径的**动作**（A05 后零参顶层值会在模块初始化时求值），
 -- 因此函数化：调用方传 dummy 0，真正用到 base-only 上下文时才解析。
-export locateBase : Int -> Eff [] (Check String)
+export locateBase : Int -> Eff hostRow (Check String)
 locateBase _ = do
-  env <- prim_eff_getenv "VUNA_BASE"
+  env <- raiseToRow hostRow (@vuna@prim_eff_getenv "VUNA_BASE")
   if env == "" then do
-    exe <- prim_eff_execPath
+    exe <- raiseToRow hostRow (@vuna@prim_eff_execPath)
     cwd <- absolutePath exe
     let
       candidates = baseCandidates (manifestDir cwd)
@@ -491,7 +492,7 @@ locateBase _ = do
 -- base-only 上下文：不属于任何包的文件（ad-hoc 入口）。包名为空串（效果内建
 -- 仍被拒绝），模块根只有 base/lib，导出限制沿用 base 的 [export].modules。
 -- 入口能力为空（base 模块根各自携带 base manifest 的能力，不受影响）。
-baseOnlyContext : String -> Eff [] (Check PackageContext)
+baseOnlyContext : String -> Eff hostRow (Check PackageContext)
 baseOnlyContext base = do
   packageR <- loadPackage base
   pure (case packageR of
@@ -501,7 +502,7 @@ baseOnlyContext base = do
 
 -- 从 start（已绝对化的目录）向上找最近 manifest；找不到 → base-only。
 -- manifest 非法（解析/校验失败）必须报错，不回退到 base-only。
-contextAt : String -> Eff [] (Check PackageContext)
+contextAt : String -> Eff hostRow (Check PackageContext)
 contextAt start = do
   found <- findManifestDirMaybe start
   case found of
@@ -518,7 +519,7 @@ contextAt start = do
         OkC base => baseOnlyContext base
 
 -- 文件入口：相对路径先按 cwd 绝对化，再从文件所在目录向上找最近 vuna.toml。
-export contextForFile : String -> Eff [] (Check PackageContext)
+export contextForFile : String -> Eff hostRow (Check PackageContext)
 contextForFile path = do
   absolute <- absolutePath path
   contextAt (manifestDir absolute)
@@ -526,7 +527,7 @@ contextForFile path = do
 -- 目录入口（REPL / 工具从 cwd 取上下文）：同样先绝对化再向上找 manifest。
 -- 「显式包目录」语义（check/compile/build 的目录参数）不用本函数，而是直接
 -- `loadPackage`：只认该目录自己的 vuna.toml，不向上搜索。
-export contextForDir : String -> Eff [] (Check PackageContext)
+export contextForDir : String -> Eff hostRow (Check PackageContext)
 contextForDir dir = do
   absolute <- absolutePath dir
   contextAt absolute

@@ -1,13 +1,14 @@
 -- D40 正例：do 块里不同 do-bind 语句可复用同名 binder（每条绑定各自独立作用域）。
 import Base.Eff
 import Base.EffConsole
+import Base.HostRow
 
-prog : Eff [ConsoleOp@real] Int
+prog : Eff hostRow Int
 prog = do
   x <- pure 41
   x <- pure 42
-  _ <- consolePrint "real" "dobind:"
+  _ <- consolePrint "default" "dobind:"
   pure x
 
-main : Eff [] Int
-main = runConsole "real" prog
+main : Eff hostRow Int
+main = prog

@@ -4,24 +4,21 @@ base/lib/Base/Applicative.vuna: Applicative(..)
 base/lib/Base/Array.vuna: fromList, get, length, make, set, toList
 base/lib/Base/Bits.vuna: add32, band, bnot, bor, bxor, mask32, mask8, rol32, rotr32, shl, shl32, shr, shr32
 base/lib/Base/Bool.vuna: Bool(..), and, bool, not, or, xor
-base/lib/Base/Eff.vuna: Cont, Eff, Member(..), ResFn(..), Row(..), bracket, defaultInstance, effPrim, finally, handleCore, handleCoreLin, handleWith, handleWithAt, joinEff, joinEffNilOuter, mkCont, performCore, raise, resFn, resOf, resumeCont, rowAppend, rowRem, runEff, runPure, sendCore, weaken
+base/lib/Base/Eff.vuna: Cont, Eff, Member(..), ResFn(..), Row(..), bracket, defaultInstance, effPrim, finally, handleCore, handleCoreLin, handleWith, handleWithAt, joinEff, joinEffNilOuter, mkCont, performCore, raise, raiseTo, resFn, resOf, resumeCont, rowAppend, rowRem, runEff, runPure, sendCore, weaken, weakenRow
 base/lib/Base/Eff/Reader.vuna: ReaderOp(..), ask, handleReader, handleReaderLin, local, resReader
-base/lib/Base/EffArgs.vuna: ArgsOp(..), argsGetArgs, handleArgs, handleArgsHost, resArgs, runArgs
-base/lib/Base/EffChannel.vuna: Channel, newChannelInt, recv, recvWait, send, tryRecv
-base/lib/Base/EffClock.vuna: ClockOp(..), clockNow, clockSleepMicros, handleClock, handleClockHost, resClock, runClock
-base/lib/Base/EffConsole.vuna: ConsoleOp(..), consoleEprint, consolePrint, handleConsole, handleConsoleHost, resConsole, runConsole
-base/lib/Base/EffEnv.vuna: EnvOp(..), envExecPath, envGetCwd, envGetEnv, handleEnv, handleEnvHost, resEnv, runEnv
+base/lib/Base/EffArgs.vuna: ArgsOp(..), argsGetArgs, handleArgs, resArgs
+base/lib/Base/EffClock.vuna: ClockOp(..), clockNow, clockSleepMicros, handleClock, resClock
+base/lib/Base/EffConsole.vuna: ConsoleOp(..), consoleEprint, consolePrint, handleConsole, resConsole
+base/lib/Base/EffEnv.vuna: EnvOp(..), envExecPath, envGetCwd, envGetEnv, handleEnv, resEnv
 base/lib/Base/EffError.vuna: ErrorOp(..), catch, handleError, resError, runError, throw
-base/lib/Base/EffExit.vuna: ExitOp(..), exitWith, handleExit, handleExitHost, resExit, runExit
+base/lib/Base/EffExit.vuna: ExitOp(..), exitWith, handleExit, resExit
 base/lib/Base/EffExn.vuna: Exn, ExnOp(..), bracketExn, catchExn, exnRes, handleExn, runExn, throwExn, tryWith
-base/lib/Base/EffFs.vuna: FsOp(..), fsFileExists, fsFileMtime, fsFileSize, fsIsDirectory, fsMakeDir, fsReadDir, fsReadFile, fsRemoveFile, fsWriteFile, fsWriteFileAtomic, handleFs, handleFsHost, resFs, runFs
-base/lib/Base/EffMutex.vuna: Mutex, Semaphore, acquire, newMutex, newSemaphore, release, semSignal, semWait
+base/lib/Base/EffFs.vuna: FsOp(..), fsFileExists, fsFileMtime, fsFileSize, fsIsDirectory, fsMakeDir, fsReadDir, fsReadFile, fsRemoveFile, fsWriteFile, fsWriteFileAtomic, handleFs, resFs
 base/lib/Base/EffNet.vuna: NetOp(..), netAccept, netClose, netConnect, netListen, netPort, netRecv, netSend
-base/lib/Base/EffProcess.vuna: ProcessOp(..), handleProcess, handleProcessHost, handleProcessHostObserved, handleProcessHostWith, processArgs, processExit, processRunIn, resProcess, runProcess
+base/lib/Base/EffProcess.vuna: ProcessOp(..), handleProcess, handleProcessHostWith, processArgs, processExit, processRunIn, resProcess
 base/lib/Base/EffRef.vuna: RefOp(..), refNew, refRead, refWrite
-base/lib/Base/EffSched.vuna: Scope, Task, TaskLin, awaitTask, awaitTaskLin, cancelScope, cancelTask, cancelTaskLin, forkTask, forkTaskLin, forkTaskWith, isCancelled, newScope, scopeWait, scopeWaitTimeout, withScope, withScopeTimeout, yieldNow
 base/lib/Base/EffState.vuna: StateOp(..), get, handleState, put, resState
-base/lib/Base/EffStdin.vuna: StdinOp(..), handleStdin, handleStdinHost, resStdin, runStdin, stdinReadBytes, stdinReadLine
+base/lib/Base/EffStdin.vuna: StdinOp(..), handleStdin, resStdin, stdinReadBytes, stdinReadLine
 base/lib/Base/Eq.vuna: Eq(..)
 base/lib/Base/Error.vuna: Error, catchError, ok, runError, throwError
 base/lib/Base/Field.vuna: Field
@@ -32,6 +29,7 @@ base/lib/Base/FromString.vuna: FromString(..)
 base/lib/Base/HashMap.vuna: HashMap, fromList, insert, insertAll, lookup, member, ofNames, size, toList
 base/lib/Base/HashSet.vuna: HashSet, empty, fromList, insert, member, size, toList
 base/lib/Base/Hashable.vuna: Hashable(..), hashCombine, hashStr
+base/lib/Base/HostRow.vuna: hostRow, hostTail, raiseToRow
 base/lib/Base/IORef.vuna: modifyRef, newRef, readRef, writeRef
 base/lib/Base/Int.vuna: 
 base/lib/Base/Interp.vuna: Interp(..)
@@ -130,7 +128,7 @@ compiler/lib/Vuna/Compiler/Frontend/Parser.vuna: parseExpressionSource, parseSou
 compiler/lib/Vuna/Compiler/Frontend/Parser/Support.vuna: PState(..), advance, atKw, atSym, badCaseIndent, binderHead, canContinue, closeParenNext, countArrows, ctorPatternStart, expectIdent, expectKw, expectSym, expectValueName, fileOf, holeAtomAt, isEof, isReservedValueName, isSyntaxSym, lastPos, nthTok, peekPos, peekTok, peekTokAt, sameLineState, sectionOpAt, spanOf, startsAtom, startsPatternAtom, stateFuel, terminatesExpression, underscoreCtorName, upperFirst
 compiler/lib/Vuna/Compiler/Frontend/Toml.vuna: TomlDoc, TomlEntry(..), TomlValue(..), arrayStrings, lookupEntry, lookupEntryLine, parseToml, parseTomlAt, parseTomlDoc, sectionsUnder
 compiler/lib/Vuna/Compiler/Hash.vuna: Digest(..), contentAddress, contentKey, digestHex, digestInt, digestIntOf, digestLanes, digestOfBytes, digestOfString, prehashOfString
-compiler/lib/Vuna/Compiler/Intrinsics.vuna: IType(..), Intrinsic, IntrinsicOp(..), TypeIntrinsic(..), allIntrinsics, arityOfType, assertIntrinsicName, boolFalseCtor, boolTrueCtor, boolTypeName, builtinEffectRunHostOf, builtinEffects, canonicalCtorsFor, debugLineIntrinsicName, debugOnIntrinsicName, effDefaultInstance, effMainRunName, effMemberFamilyName, effMemberHereCtor, effMemberThereCtor, effMkCtor, effRowAppendName, effRowConsCtor, effRowFamilyName, effRowNilCtor, effRowRemName, effRunName, effTypeName, effUnitTypeName, findIntrinsic, floatIntrinsicNames, floatTypeName, fromFloatMethodName, fromFloatTypeName, fromIntMethodName, fromIntTypeName, fromStringMethodName, fromStringTypeName, intTypeName, internalIntrinsicNames, internalIntrinsics, interpMethodName, interpTypeName, intrinsicArity, intrinsicName, intrinsicReturnsEff, intrinsicSignature, intrinsicVisible, isBuiltinEffectTag, isDebugOnlyName, isIntrinsicName, isIntrinsicTypeName, isTypeConstructorName, listConsCtor, listFamilyName, listNilCtor, mainShowDefName, natSuccCtor, natTypeName, natZeroCtor, needsListBridge, preludeTypeNames, preludeValueNames, primEffBind1Name, primEraseName, strTypeName, todoIntrinsicName, traceIntrinsicNames, typeIntrinsicArities, typeIntrinsicArityOf, typeIntrinsicCtorArity, typeIntrinsicCtorName, typeIntrinsicCtorNames, typeIntrinsicNames, userIntrinsics
+compiler/lib/Vuna/Compiler/Intrinsics.vuna: IType(..), Intrinsic, IntrinsicOp(..), TypeIntrinsic(..), allIntrinsics, arityOfType, assertIntrinsicName, boolFalseCtor, boolTrueCtor, boolTypeName, builtinEffectImplOf, builtinEffectRunHostOf, builtinEffects, canonicalCtorsFor, debugLineIntrinsicName, debugOnIntrinsicName, effDefaultInstance, effMainRunName, effMemberFamilyName, effMemberHereCtor, effMemberThereCtor, effMkCtor, effRowAppendName, effRowConsCtor, effRowFamilyName, effRowNilCtor, effRowRemName, effRunName, effTypeName, effUnitTypeName, findIntrinsic, floatIntrinsicNames, floatTypeName, fromFloatMethodName, fromFloatTypeName, fromIntMethodName, fromIntTypeName, fromStringMethodName, fromStringTypeName, hostRowName, hostTailName, intTypeName, internalIntrinsicNames, internalIntrinsics, interpMethodName, interpTypeName, intrinsicArity, intrinsicName, intrinsicReturnsEff, intrinsicSignature, intrinsicVisible, isBuiltinEffectTag, isDebugOnlyName, isIntrinsicName, isIntrinsicTypeName, isTypeConstructorName, listConsCtor, listFamilyName, listNilCtor, mainShowDefName, natSuccCtor, natTypeName, natZeroCtor, needsListBridge, preludeTypeNames, preludeValueNames, primEffBind1Name, primEraseName, strTypeName, todoIntrinsicName, traceIntrinsicNames, typeIntrinsicArities, typeIntrinsicArityOf, typeIntrinsicCtorArity, typeIntrinsicCtorName, typeIntrinsicCtorNames, typeIntrinsicNames, userIntrinsics
 compiler/lib/Vuna/Compiler/Ir.vuna: module Vuna.Compiler.Ir.Analysis, module Vuna.Compiler.Ir.Model, validateProgram, validateUnit
 compiler/lib/Vuna/Compiler/Ir/Analysis.vuna: adjTblOf, assembleGroupNames, assembleGroups, checkUniqueDefNames, groupNames, neighborsOf
 compiler/lib/Vuna/Compiler/Ir/Model.vuna: Ir(..), IrAlt(..), IrBName(..), IrBinder(..), IrDef(..), IrEntry(..), IrGroup(..), IrListFam(..), IrProgram(..), IrShared(..), IrTy(..), IrTyDecl(..), IrUnit(..), irAltBindersOf, irAltBodyOf, irAltCtorOf, irDefArity, irDefBody, irDefDeps, irDefExtern, irDefInitGuard, irDefName, irDefRecValueOk, irDefSpan, irEntryHandlersOf, irEntryIsActionOf, irEntryMainOf, irEntryRunMainOf, irEntryShowOf, irGroupDefs, irGroupIsRec, irInlineArity, irListConsOf, irListFamilyOf, irListNilOf, irNatChainMax, irProgSharedOf, irProgUnitOf, irSharedCtorFamily, irSharedCtorKeepFlags, irSharedCtorOpaqueFlags, irSharedIsUnboxed, irSharedRecordFieldsOf, irSharedTyParamsOf, mkIrBinder, mkIrBinderArm, mkIrBinderErased, mkIrBinderNat, mkIrBinderWild, module Base.Bool, module Base.List, module Base.Maybe, module Base.Pair, module Base.String
@@ -144,7 +142,7 @@ compiler/lib/Vuna/Compiler/Loader/Resolve.vuna: namespacesOf, namespacesOfWith, 
 compiler/lib/Vuna/Compiler/Packages/Pkg.vuna: Package(..), PackageContext, Root, absolutePath, contextDir, contextForDir, contextForFile, contextPackageName, contextPackageOf, contextRelease, contextRoots, contextWithRelease, findManifestDir, findManifestDirMaybe, joinPath, loadManifestAt, loadPackage, locateBase, normalizeDir, packageContext, packageDir, packageEntry, packageExports, packageName, packageRoots, rootDir, rootName, rootPackage, workspacePackages
 compiler/lib/Vuna/Compiler/Packages/Source.vuna: contentHashOf, identityHashOf, normalizeHash, packageFilesEff, packageSourceEff, skipSourceDir, verifyHash
 compiler/lib/Vuna/Compiler/Query.vuna: Db, Entry(..), QVal(..), dbEmpty, dbEntryCount, dbLookup, dbNote, dbOriginOf, dbTrace, dbTraceText, dbWithOrigin, digestOfPayload, digestOfVal, markHit, query, queryDepValues, queryHit, queryResolve, queryResolveTagged, queryWith, showQVal
-compiler/lib/Vuna/Compiler/Query/Run.vuna: NodeSpan(..), RunOpts(..), RunState, WaveNode, decQueryIndexComplete, encQueryIndex, runCachedNode, runCancel, runCancelled, runDbOf, runEmpty, runNode, runNote, runResume, runSpanCount, runSpanReport, runSpans, runSpansText, runStepCount, runWave, runWithBudget, sessionLoad, sessionSave, waveNode
+compiler/lib/Vuna/Compiler/Query/Run.vuna: NodeSpan(..), RunOpts(..), RunState, decQueryIndexComplete, encQueryIndex, runCachedNode, runCancel, runCancelled, runDbOf, runEmpty, runNode, runNote, runResume, runSpanCount, runSpanReport, runSpans, runSpansText, runStepCount, runWithBudget, sessionLoad, sessionSave
 compiler/lib/Vuna/Compiler/Source.vuna: Pos(..), Span(..), baseName, containsDot, joinArrows, joinDots, joinSlashes, module Base.Bool, module Base.List, module Base.Maybe, module Base.Pair, module Base.String, posCol, posLine, showSpanLoc, spanEndCol, spanEndLine, spanFile, spanStartCol, spanStartLine, splitLastDot, splitOnChar, splitOnDot, splitPath, suggest
 compiler/lib/Vuna/Compiler/Store.vuna: Frame(..), fCodecOf, fPayloadOf, fTagOf, storeCacheBaseEff, storeDataRootEff, storeDecode, storeDecodeAs, storeDecodeFast, storeEncode, storeEncodeAs, storeEnsureDirEff, storeFileExistsEff, storeMagic, storeParentPathOf, storeReadAsEff, storeReadEff, storeReadFastEff, storeRemoveEff, storeWriteAsEff, storeWriteEff, storeWriteIfChangedAsEff, storeWriteIfChangedEff
 compiler/lib/Vuna/Compiler/Version.vuna: vunaVersion

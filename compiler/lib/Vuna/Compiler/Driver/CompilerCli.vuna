@@ -12,6 +12,7 @@ module Vuna.Compiler.Driver.CompilerCli where
 -- 拼装）保持纯函数。`CliOpts` 也没有 ambient 存储：入口构造一次后作为显式参数沿命令链
 -- 传递，需要写回的地方（manifest 诊断配置、sarif/json 收集）返回更新后的 `CliOpts`
 -- （`Pair Int CliOpts`）。
+import Base.HostRow
 import Vuna.Compiler.Common
 import Vuna.Compiler.Diagnostics.Sink
 import Vuna.Compiler.Packages.Pkg
@@ -40,7 +41,7 @@ compilerUsage : String -> String
 compilerUsage prog = "usage:\n${compilerUsageLines prog}"
 
 -- 效果辅助：按顺序对每个元素执行动作（顺序与纯 `map` 一致，结果收集成 List）。
-mapEff : (a -> Eff [] b) -> List a -> Eff [] (List b)
+mapEff : (a -> Eff hostRow b) -> List a -> Eff hostRow (List b)
 mapEff f [] = pure []
 mapEff f (x :: rest) = do
   y <- f x
@@ -48,7 +49,7 @@ mapEff f (x :: rest) = do
   pure (y :: ys)
 
 -- | CLI 辅助：runCompilerCli（参数/退出码约定见 tooling.md）。
-export runCompilerCli : List String -> Eff [] Int
+export runCompilerCli : List String -> Eff hostRow Int
 runCompilerCli args = runCompilerCliFor "vuna-compiler" args
 
 -- CLI 选项集中状态：入口构造一次，命令链显式传递（M4：不再有 ambient 存储）。
@@ -74,7 +75,7 @@ markRelease : CliOpts -> CliOpts
 markRelease o = { o | optRelease = True }
 
 -- 显式 state 辅助：把不改 opts 的动作结果带回（退出码 + 当前 CliOpts）。
-withOpts : CliOpts -> Eff [] Int -> Eff [] (Pair Int CliOpts)
+withOpts : CliOpts -> Eff hostRow Int -> Eff hostRow (Pair Int CliOpts)
 withOpts o m = do
   code <- m
   pure (Pair code o)
@@ -86,15 +87,15 @@ else case d.diagSeverity of
   _ => 0
 
 -- 按当前格式输出收集到的 sarif/json 诊断；返回原退出码。
-flushSarif : Int -> CliOpts -> Eff [] Int
+flushSarif : Int -> CliOpts -> Eff hostRow Int
 flushSarif code o =
   let
     shown = takeDiags o.optMaxErrors o.optSarifItems
   in if o.optDiagFormat == "sarif" then do
-    _ <- prim_eff_print (renderSarif shown ++ "\n")
+    _ <- raiseToRow hostRow (@vuna@prim_eff_print (renderSarif shown ++ "\n"))
     pure code
   else if o.optDiagFormat == "json" then do
-    _ <- prim_eff_print (renderJsonList o.optDiagLang shown ++ "\n")
+    _ <- raiseToRow hostRow (@vuna@prim_eff_print (renderJsonList o.optDiagLang shown ++ "\n"))
     pure code
   else pure code
 
@@ -185,9 +186,9 @@ stripDiagFormatGo (arg :: rest) acc found =
   else stripDiagFormatGo rest (arg :: acc) found
 
 -- | 编译器 CLI 入口：剥离诊断参数后分发。
-export runCompilerCliFor : String -> List String -> Eff [] Int
+export runCompilerCliFor : String -> List String -> Eff hostRow Int
 runCompilerCliFor prog args = do
-  envRel <- prim_eff_getenv "VUNA_RELEASE"
+  envRel <- raiseToRow hostRow (@vuna@prim_eff_getenv "VUNA_RELEASE")
   let
     stripped = stripDiagFormat args
     strippedLang = stripLang (firstOf stripped)
@@ -236,7 +237,7 @@ stripMaxErrorsGo (arg :: rest) acc n =
   else stripMaxErrorsGo rest (arg :: acc) n
 
 -- | 编译器 CLI 子命令分发。
-runCompilerCliFor1 : String -> List String -> CliOpts -> Eff [] (Pair Int CliOpts)
+runCompilerCliFor1 : String -> List String -> CliOpts -> Eff hostRow (Pair Int CliOpts)
 runCompilerCliFor1 prog args o = case args of
   [] => withOpts o (usageErr prog)
   arg :: rest => case arg of
@@ -252,9 +253,9 @@ runCompilerCliFor1 prog args o = case args of
       if startsWith "-" arg then withOpts o (removedFlag prog arg)
       else withOpts o (unknownCommand prog arg)
 
-printVersion : Int -> Eff [] Int
+printVersion : Int -> Eff hostRow Int
 printVersion _ = do
-  _ <- prim_eff_print "vuna-compiler ${vunaVersion}\n"
+  _ <- raiseToRow hostRow (@vuna@prim_eff_print "vuna-compiler ${vunaVersion}\n")
   pure 0
 
 -- | 参数里是否含 -h/--help。
@@ -263,26 +264,26 @@ anyHelp [] = False
 anyHelp (arg :: rest) = if arg == "-h" || arg == "--help" then True else anyHelp rest
 
 -- | CLI 辅助：helpFor（参数/退出码约定见 tooling.md）。
-helpFor : String -> Eff [] Int
+helpFor : String -> Eff hostRow Int
 helpFor prog = do
-  _ <- prim_eff_print (compilerUsage prog)
+  _ <- raiseToRow hostRow (@vuna@prim_eff_print (compilerUsage prog))
   pure 0
 
 -- | CLI 辅助：usageErr（参数/退出码约定见 tooling.md）。
-usageErr : String -> Eff [] Int
+usageErr : String -> Eff hostRow Int
 usageErr prog = do
-  _ <- prim_eff_print (compilerUsage prog)
+  _ <- raiseToRow hostRow (@vuna@prim_eff_print (compilerUsage prog))
   pure 2
 
 -- | CLI 辅助：unknownCommand（参数/退出码约定见 tooling.md）。
-unknownCommand : String -> String -> Eff [] Int
+unknownCommand : String -> String -> Eff hostRow Int
 unknownCommand prog arg = do
-  _ <- prim_eff_print "error: unknown command `${arg}`\nrun `${prog} help` for the command list\n"
+  _ <- raiseToRow hostRow (@vuna@prim_eff_print "error: unknown command `${arg}`\nrun `${prog} help` for the command list\n")
   pure 2
 
-removedCommand : String -> String -> String -> Eff [] Int
+removedCommand : String -> String -> String -> Eff hostRow Int
 removedCommand prog cmd hint = do
-  _ <- prim_eff_print "error: `${cmd}` has been removed; ${hint}\n"
+  _ <- raiseToRow hostRow (@vuna@prim_eff_print "error: `${cmd}` has been removed; ${hint}\n")
   pure 2
 
 -- 被删除 flag 的可操作提示（Vuna.Cli 的工具命令复用同一张表）。
@@ -303,20 +304,20 @@ removedFlagHint flag =
   else if flag == dashFlag "typed" then Just "DT is the only path" else Nothing
 
 -- | CLI 辅助：removedFlag（参数/退出码约定见 tooling.md）。
-removedFlag : String -> String -> Eff [] Int
+removedFlag : String -> String -> Eff hostRow Int
 removedFlag prog flag = case removedFlagHint flag of
   Nothing => usageErr prog
   Just hint => do
-    _ <- prim_eff_print "error: ${flag} has been removed; ${hint}\n"
+    _ <- raiseToRow hostRow (@vuna@prim_eff_print "error: ${flag} has been removed; ${hint}\n")
     pure 2
 
 -- 诊断打印统一走 DiagRender：能定位到源码时追加「位置 + 源码行 + 插入符」片段，
 -- 定位失败（无位置 / 文件不可读 / 行越界 / 消息含换行）时逐字原样输出。
 -- | CLI 辅助：printErrText（参数/退出码约定见 tooling.md）。
-printErrText : String -> Eff [] Int
+printErrText : String -> Eff hostRow Int
 printErrText e = do
   rendered <- renderCliDiagnosticEff e
-  _ <- prim_eff_print rendered
+  _ <- raiseToRow hostRow (@vuna@prim_eff_print rendered)
   pure 1
 
 -- | 诊断/告警实现：severityLabelOf（详见 diagnostics.md）。
@@ -328,7 +329,7 @@ severityLabelOf d = case d.diagSeverity of
   SevHelp => "help"
 
 -- 单条诊断按当前格式输出并返回退出码；json/sarif 时把诊断收集进 opts（显式写回）。
-emitDiag : CliOpts -> String -> Diagnostic -> Eff [] (Pair Int CliOpts)
+emitDiag : CliOpts -> String -> Diagnostic -> Eff hostRow (Pair Int CliOpts)
 emitDiag o extra d = if o.optDiagFormat == "json" then pure (Pair (diagExitFor d) (collectSarifIn o d))
 else if o.optDiagFormat == "human" then do
   msg <- renderHuman o.optDiagLang d
@@ -346,14 +347,14 @@ collectSarifIn o d = { o | optSarifItems = append o.optSarifItems [d] }
 -- 从尾到头逐条输出诊断（丢弃退出码），累积更新后的 opts。旧代码里的
 -- `_ = map f xs` 依赖 `f x :: map f rest` 的右侧优先求值，打印/收集顺序是从尾到头；
 -- 这里保持逐字不变。
-emitDiagRevSeq : CliOpts -> String -> List Diagnostic -> Eff [] CliOpts
+emitDiagRevSeq : CliOpts -> String -> List Diagnostic -> Eff hostRow CliOpts
 emitDiagRevSeq o extra [] = pure o
 emitDiagRevSeq o extra (d :: rest) = do
   o1 <- emitDiagRevSeq o extra rest
   r <- emitDiag o1 extra d
   pure (secondOf r)
 
-printDiagWithPrefix : CliOpts -> String -> Diagnostic -> Eff [] (Pair Int CliOpts)
+printDiagWithPrefix : CliOpts -> String -> Diagnostic -> Eff hostRow (Pair Int CliOpts)
 printDiagWithPrefix o extra d = case d.diagChildren of
   [] => emitDiag o extra d
   _ =>
@@ -364,15 +365,15 @@ printDiagWithPrefix o extra d = case d.diagChildren of
       pure (Pair (diagExitFor d) o1)
 
 -- | 输出错误诊断并返回退出码。
-printDiag : CliOpts -> Diagnostic -> Eff [] (Pair Int CliOpts)
+printDiag : CliOpts -> Diagnostic -> Eff hostRow (Pair Int CliOpts)
 printDiag o d = printDiagWithPrefix o "" d
 
 -- | 诊断输出辅助：printErr。
-printErr : String -> Eff [] Int
+printErr : String -> Eff hostRow Int
 printErr e = printErrText "error: ${e}\n"
 
 -- | 诊断/告警实现：printDiagList（详见 diagnostics.md）。
-printDiagList : CliOpts -> String -> List Diagnostic -> Eff [] (Pair Int CliOpts)
+printDiagList : CliOpts -> String -> List Diagnostic -> Eff hostRow (Pair Int CliOpts)
 printDiagList o extra ds =
   let
     shown = takeDiags o.optMaxErrors ds
@@ -384,29 +385,29 @@ defaultDir : Maybe String -> String
 defaultDir (Just dir2) = dir2
 defaultDir Nothing = "."
 
--- 路径既不是文件也不是目录时的统一错误（先 prim_eff_fileExists 再 prim_eff_isDirectory：
--- 内建 prim_eff_isDirectory 对不存在的路径会抛异常）。
+-- 路径既不是文件也不是目录时的统一错误（先 @vuna@prim_eff_fileExists 再 @vuna@prim_eff_isDirectory：
+-- 内建 @vuna@prim_eff_isDirectory 对不存在的路径会抛异常）。
 -- | CLI 辅助：dtPathErr（参数/退出码约定见 tooling.md）。
-dtPathErr : String -> Eff [] Int
+dtPathErr : String -> Eff hostRow Int
 dtPathErr path = printErr "no such file or package directory: ${path}"
 
 -- 可执行包解析：必须是目录、能读 vuna.toml、且有 app/Main.vuna。
-executablePackage : String -> String -> Eff [] (Check Package)
+executablePackage : String -> String -> Eff hostRow (Check Package)
 executablePackage label dir = do
-  exists <- prim_eff_fileExists dir
+  exists <- raiseToRow hostRow (@vuna@prim_eff_fileExists dir)
   if exists then do
-    isDir <- prim_eff_isDirectory dir
+    isDir <- raiseToRow hostRow (@vuna@prim_eff_isDirectory dir)
     if isDir then executablePackageAt label dir
     else pure (err "${label}: expects a package directory, not a file: ${dir}")
   else pure (err "no such file or package directory: ${dir}")
 
-executablePackageAt : String -> String -> Eff [] (Check Package)
+executablePackageAt : String -> String -> Eff hostRow (Check Package)
 executablePackageAt label dir = do
   pkgR <- loadPackage dir
   case pkgR of
     ErrC e => pure (ErrC e)
     OkC pkg => do
-      exists <- prim_eff_fileExists (packageEntry pkg)
+      exists <- raiseToRow hostRow (@vuna@prim_eff_fileExists (packageEntry pkg))
       if exists then pure (OkC pkg)
       else pure
         (err "${label}: library package ${packageName pkg} has no app/Main.vuna (executable package required)")
@@ -416,10 +417,10 @@ executablePackageAt label dir = do
 -- 或包目录入口（可执行包），逐模块写出到 OUTDIR；成功静默。
 -- ---------------------------------------------------------------
 -- | CLI 辅助：compileArgs（参数/退出码约定见 tooling.md）。
-compileArgs : String -> List String -> CliOpts -> Eff [] (Pair Int CliOpts)
+compileArgs : String -> List String -> CliOpts -> Eff hostRow (Pair Int CliOpts)
 compileArgs prog args o = compileParse prog True Nothing Nothing args o
 
-compileParse : String -> Bool -> Maybe String -> Maybe String -> List String -> CliOpts -> Eff [] (Pair Int CliOpts)
+compileParse : String -> Bool -> Maybe String -> Maybe String -> List String -> CliOpts -> Eff hostRow (Pair Int CliOpts)
 compileParse prog printResult entry outDir args o = case args of
   [] => compileFinish prog printResult entry outDir o
   "--no-print" :: rest => compileParse prog False entry outDir rest o
@@ -431,22 +432,22 @@ compileParse prog printResult entry outDir args o = case args of
       Nothing => compileParse prog printResult entry (Just arg) rest o
       Just _ => withOpts o (usageErr prog)
 
-compileFinish : String -> Bool -> Maybe String -> Maybe String -> CliOpts -> Eff [] (Pair Int CliOpts)
+compileFinish : String -> Bool -> Maybe String -> Maybe String -> CliOpts -> Eff hostRow (Pair Int CliOpts)
 compileFinish prog printResult Nothing outDir o = withOpts o (usageErr prog)
 compileFinish prog printResult (Just e) outDir o = case outDir of
   Nothing => withOpts o (usageErr prog)
   Just out => compileRun printResult e out o
 
-compileRun : Bool -> String -> String -> CliOpts -> Eff [] (Pair Int CliOpts)
+compileRun : Bool -> String -> String -> CliOpts -> Eff hostRow (Pair Int CliOpts)
 compileRun printResult entry outDir o = do
-  exists <- prim_eff_fileExists entry
+  exists <- raiseToRow hostRow (@vuna@prim_eff_fileExists entry)
   if exists then do
-    isDir <- prim_eff_isDirectory entry
+    isDir <- raiseToRow hostRow (@vuna@prim_eff_isDirectory entry)
     if isDir then compilePkgDir printResult entry outDir o
     else compileFileEntry printResult entry outDir o
   else withOpts o (dtPathErr entry)
 
-compileFileEntry : Bool -> String -> String -> CliOpts -> Eff [] (Pair Int CliOpts)
+compileFileEntry : Bool -> String -> String -> CliOpts -> Eff hostRow (Pair Int CliOpts)
 compileFileEntry printResult entry outDir o = do
   ctxR <- contextForFile entry
   case ctxR of
@@ -461,7 +462,7 @@ compileFileEntry printResult entry outDir o = do
           ErrC e => printDiag o1 e
           OkC p => finishWarningsDir (secondOf p) o1 outDir 0
 
-compilePkgDir : Bool -> String -> String -> CliOpts -> Eff [] (Pair Int CliOpts)
+compilePkgDir : Bool -> String -> String -> CliOpts -> Eff hostRow (Pair Int CliOpts)
 compilePkgDir printResult dir outDir o = do
   pkgR <- executablePackage "compile" dir
   case pkgR of
@@ -481,7 +482,7 @@ compilePkgDir printResult dir outDir o = do
 -- check：文件入口（包上下文）或包目录（可执行包 check 入口；库包 check [export].modules）
 -- ---------------------------------------------------------------
 -- | CLI 辅助：checkArgs（参数/退出码约定见 tooling.md）。
-checkArgs : String -> List String -> CliOpts -> Eff [] (Pair Int CliOpts)
+checkArgs : String -> List String -> CliOpts -> Eff hostRow (Pair Int CliOpts)
 checkArgs prog [] o = withOpts o (usageErr prog)
 checkArgs prog ("--release" :: rest) o = checkArgs prog rest (markRelease o)
 checkArgs prog (arg :: rest) o = if startsWith "-" arg then withOpts o (removedFlag prog arg)
@@ -490,15 +491,15 @@ else case rest of
   _ => withOpts o (usageErr prog)
 
 -- | CLI 辅助：checkEmit（参数/退出码约定见 tooling.md）。
-checkEmit : String -> CliOpts -> Eff [] (Pair Int CliOpts)
+checkEmit : String -> CliOpts -> Eff hostRow (Pair Int CliOpts)
 checkEmit path o = do
-  exists <- prim_eff_fileExists path
+  exists <- raiseToRow hostRow (@vuna@prim_eff_fileExists path)
   if exists then do
-    isDir <- prim_eff_isDirectory path
+    isDir <- raiseToRow hostRow (@vuna@prim_eff_isDirectory path)
     if isDir then checkPkgDir path o else checkFileEntry path o
   else withOpts o (dtPathErr path)
 
-checkPkgDir : String -> CliOpts -> Eff [] (Pair Int CliOpts)
+checkPkgDir : String -> CliOpts -> Eff hostRow (Pair Int CliOpts)
 checkPkgDir dir o = do
   pkgsR <- workspacePackages dir
   case pkgsR of
@@ -522,7 +523,7 @@ checkSpawnArgs o dir =
     base2 = if o.optShowWarnings then append base ["--warnings"] else base
   in if o.optDenyWarnings then append base2 ["--deny-warnings"] else base2
 
-checkPackages : List Package -> Int -> CliOpts -> Eff [] (Pair Int CliOpts)
+checkPackages : List Package -> Int -> CliOpts -> Eff hostRow (Pair Int CliOpts)
 checkPackages [] code o = pure (Pair code o)
 checkPackages ([pkg]) code o = checkPackageSeq pkg code o
 checkPackages pkgs code o = do
@@ -535,14 +536,14 @@ checkPackages pkgs code o = do
     roots = map firstOf (filter (\p => secondOf p) classified)
   in do
     started <- mapEff (\pkg => do
-      pid <- prim_eff_spawn (checkSpawnArgs o (packageDir pkg))
+      pid <- raiseToRow hostRow (@vuna@prim_eff_spawn (checkSpawnArgs o (packageDir pkg)))
       pure (Pair pkg pid)
     ) members
     r1 <- checkRootsSeq roots code o
-    codes <- mapEff (\pr => prim_eff_wait (secondOf pr)) started
+    codes <- mapEff (\pr => raiseToRow hostRow (@vuna@prim_eff_wait (secondOf pr))) started
     pure (Pair (countFailures (firstOf r1) codes) (secondOf r1))
 
-isWorkspaceRoot : Package -> Eff [] Bool
+isWorkspaceRoot : Package -> Eff hostRow Bool
 isWorkspaceRoot pkg = do
   pkgsR <- workspacePackages (packageDir pkg)
   pure (case pkgsR of
@@ -550,13 +551,13 @@ isWorkspaceRoot pkg = do
     ErrC e => False
   )
 
-checkRootsSeq : List Package -> Int -> CliOpts -> Eff [] (Pair Int CliOpts)
+checkRootsSeq : List Package -> Int -> CliOpts -> Eff hostRow (Pair Int CliOpts)
 checkRootsSeq [] code o = pure (Pair code o)
 checkRootsSeq (pkg :: rest) code o = do
   r <- checkPackageSeq pkg code o
   checkRootsSeq rest (firstOf r) (secondOf r)
 
-checkPackageSeq : Package -> Int -> CliOpts -> Eff [] (Pair Int CliOpts)
+checkPackageSeq : Package -> Int -> CliOpts -> Eff hostRow (Pair Int CliOpts)
 checkPackageSeq pkg code o =
   let
     o1 = applyDiagConfig (Just pkg) o
@@ -567,7 +568,7 @@ checkPackageSeq pkg code o =
     r <- checkPackageCode pkg wantWarnings o1
     pure (Pair (if firstOf r > code then firstOf r else code) (secondOf r))
 
-checkPackageCode : Package -> Bool -> CliOpts -> Eff [] (Pair Int CliOpts)
+checkPackageCode : Package -> Bool -> CliOpts -> Eff hostRow (Pair Int CliOpts)
 checkPackageCode pkg wantWarnings o = do
   r <- checkPackage o.optRelease wantWarnings pkg
   case r of
@@ -585,7 +586,7 @@ countFailures : Int -> List Int -> Int
 countFailures acc [] = acc
 countFailures acc (c :: rest) = if c == 0 then countFailures acc rest else countFailures 1 rest
 
-checkFileEntry : String -> CliOpts -> Eff [] (Pair Int CliOpts)
+checkFileEntry : String -> CliOpts -> Eff hostRow (Pair Int CliOpts)
 checkFileEntry path o = do
   ctxR <- contextForFile path
   case ctxR of
@@ -600,12 +601,12 @@ checkFileEntry path o = do
 
 -- M45：带 `module` 头、且**不是**当前包入口的文件按库模块检查。包入口保持入口语义
 -- （它的 module 头仍报 `LD_ModuleHeaderInEntryFile`，与包级 check 一致）；无头文件走入口。
-isModuleFileEntry : PackageContext -> String -> Eff [] Bool
+isModuleFileEntry : PackageContext -> String -> Eff hostRow Bool
 isModuleFileEntry ctx path = do
   pkgEntry <- isPackageEntryPath ctx path
   if pkgEntry then pure False else dtFileHasModuleHeader path
 
-isPackageEntryPath : PackageContext -> String -> Eff [] Bool
+isPackageEntryPath : PackageContext -> String -> Eff hostRow Bool
 isPackageEntryPath ctx path = case contextPackageOf ctx of
   Nothing => pure False
   Just pkg => do
@@ -614,7 +615,7 @@ isPackageEntryPath ctx path = case contextPackageOf ctx of
 
 -- 单文件库模块检查：错误直接上报（`--continue-on-error` 的恢复只支持入口文件）；
 -- 成功时只打印/统计本文件的告警（依赖模块不刷屏）。
-checkModuleFileEntry : PackageContext -> String -> CliOpts -> Eff [] (Pair Int CliOpts)
+checkModuleFileEntry : PackageContext -> String -> CliOpts -> Eff hostRow (Pair Int CliOpts)
 checkModuleFileEntry ctx path o = do
   checked <- dtCheckModuleFile ctx path
   case checked of
@@ -628,7 +629,7 @@ checkModuleFileEntry ctx path o = do
         pure (Pair (if o.optDenyWarnings && length ws > 0 then 1 else 0) (secondOf r))
 
 -- 入口文件检查（无 module 头；唯一支持 `--continue-on-error` 恢复的路径）。
-checkEntryFile : PackageContext -> String -> CliOpts -> Eff [] (Pair Int CliOpts)
+checkEntryFile : PackageContext -> String -> CliOpts -> Eff hostRow (Pair Int CliOpts)
 checkEntryFile ctx path o = do
   checked <- dtCheck ctx path
   case checked of
@@ -659,10 +660,10 @@ checkEntryFile ctx path o = do
 -- build meta（同哈希跳过）见 Vuna.Compiler.Driver.Compile。
 -- ---------------------------------------------------------------
 -- | CLI 辅助：buildArgs（参数/退出码约定见 tooling.md）。
-buildArgs : String -> List String -> CliOpts -> Eff [] (Pair Int CliOpts)
+buildArgs : String -> List String -> CliOpts -> Eff hostRow (Pair Int CliOpts)
 buildArgs prog args o = buildParse prog False Nothing Nothing Nothing args o
 
-buildParse : String -> Bool -> Maybe String -> Maybe String -> Maybe String -> List String -> CliOpts -> Eff [] (Pair Int CliOpts)
+buildParse : String -> Bool -> Maybe String -> Maybe String -> Maybe String -> List String -> CliOpts -> Eff hostRow (Pair Int CliOpts)
 buildParse prog noCompile out dir pkg args o = case args of
   [] => buildRun noCompile (defaultDir dir) out pkg o
   "--no-compile" :: rest => buildParse prog True out dir pkg rest o
@@ -684,7 +685,7 @@ buildParse prog noCompile out dir pkg args o = case args of
     Nothing => buildParse prog noCompile out (Just arg) pkg rest o
     Just _ => withOpts o (usageErr prog)
 
-buildRun : Bool -> String -> Maybe String -> Maybe String -> CliOpts -> Eff [] (Pair Int CliOpts)
+buildRun : Bool -> String -> Maybe String -> Maybe String -> CliOpts -> Eff hostRow (Pair Int CliOpts)
 buildRun noCompile dir outM pkgM o = do
   pkgsR <- workspacePackages dir
   case pkgsR of
@@ -698,9 +699,9 @@ buildRun noCompile dir outM pkgM o = do
 
 -- 单包目录且是库包（没有 app/Main.vuna）→ build 必须报错（不是静默 skip）。
 -- workspace 根里的库成员仍走 skip（构建单元覆盖全部可执行成员）。
-isSingleLibraryPackage : List Package -> Eff [] Bool
+isSingleLibraryPackage : List Package -> Eff hostRow Bool
 isSingleLibraryPackage ([pkg]) = do
-  exists <- prim_eff_fileExists (packageEntry pkg)
+  exists <- raiseToRow hostRow (@vuna@prim_eff_fileExists (packageEntry pkg))
   pure (not exists)
 isSingleLibraryPackage _ = pure False
 
@@ -721,7 +722,7 @@ findPackageByName name (pkg :: rest) =
   if packageName pkg == name then Just pkg else findPackageByName name rest
 
 -- | CLI 辅助：buildTargets（参数/退出码约定见 tooling.md）。
-buildTargets : Bool -> Bool -> Maybe String -> List Package -> Int -> CliOpts -> Eff [] (Pair Int CliOpts)
+buildTargets : Bool -> Bool -> Maybe String -> List Package -> Int -> CliOpts -> Eff hostRow (Pair Int CliOpts)
 buildTargets noCompile multiOut outM [] code o = pure (Pair code o)
 buildTargets noCompile multiOut outM (pkg :: rest) code o = do
   r <- buildOne noCompile multiOut outM pkg o
@@ -730,7 +731,7 @@ buildTargets noCompile multiOut outM (pkg :: rest) code o = do
   in buildTargets noCompile multiOut outM rest next (secondOf r)
 
 -- 单包：可执行包 build；库包只 check（workspace 构建单元覆盖所有成员）。
-buildOne : Bool -> Bool -> Maybe String -> Package -> CliOpts -> Eff [] (Pair Int CliOpts)
+buildOne : Bool -> Bool -> Maybe String -> Package -> CliOpts -> Eff hostRow (Pair Int CliOpts)
 buildOne noCompile multiOut outM pkg o =
   let
     name = packageName pkg
@@ -739,7 +740,7 @@ buildOne noCompile multiOut outM pkg o =
       Nothing => "${packageDir pkg}/.output"
     entry = packageEntry pkg
   in do
-    exists <- prim_eff_fileExists entry
+    exists <- raiseToRow hostRow (@vuna@prim_eff_fileExists entry)
     if exists then
       let
         ctx = contextWithRelease o.optRelease (packageContext pkg)
@@ -748,7 +749,7 @@ buildOne noCompile multiOut outM pkg o =
       else do
         fresh <- metaUpToDate outDir ctx entry binPath
         if fresh then do
-          _ <- prim_eff_print "up to date: ${binPath}\n"
+          _ <- raiseToRow hostRow (@vuna@prim_eff_print "up to date: ${binPath}\n")
           pure (Pair 0 o)
         else do
           r <- compileToDir ctx entry True outDir
@@ -760,10 +761,10 @@ buildOne noCompile multiOut outM pkg o =
       case r of
         ErrC e => printDiag o e
         OkC _ => do
-          _ <- prim_eff_print "skipped (library): ${name} -> ${outDir}\n"
+          _ <- raiseToRow hostRow (@vuna@prim_eff_print "skipped (library): ${name} -> ${outDir}\n")
           pure (Pair 0 o)
 
-compileCodegen : PackageContext -> String -> String -> CliOpts -> Eff [] (Pair Int CliOpts)
+compileCodegen : PackageContext -> String -> String -> CliOpts -> Eff hostRow (Pair Int CliOpts)
 compileCodegen ctx entry outDir o = do
   r <- compileToDir ctx entry True outDir
   case r of
@@ -772,7 +773,7 @@ compileCodegen ctx entry outDir o = do
 
 -- 链接：先建 bin/（build.sh 的 -o bin/<pkg> 需要父目录存在），再跑 build.sh；
 -- 链接成功后写 build-meta.json（同哈希跳过在 buildOne 入口判定）。
-buildLinked : PackageContext -> String -> String -> String -> CliOpts -> Eff [] (Pair Int CliOpts)
+buildLinked : PackageContext -> String -> String -> String -> CliOpts -> Eff hostRow (Pair Int CliOpts)
 buildLinked ctx entry outDir name o = do
   _ <- ensureDirPath "${outDir}/bin"
   r <- runBuildScript outDir "bin/${name}" name
@@ -780,7 +781,7 @@ buildLinked ctx entry outDir name o = do
     ErrC e => printDiag o e
     OkC _ => do
       _ <- writeBuildMeta outDir ctx entry True
-      _ <- prim_eff_print "built ${outDir}/bin/${name}\n"
+      _ <- raiseToRow hostRow (@vuna@prim_eff_print "built ${outDir}/bin/${name}\n")
       pure (Pair 0 o)
 
 -- ---------------------------------------------------------------
@@ -808,7 +809,7 @@ ownedByPackage pkg d =
 
 -- compile/build 成功路径的 warning 消费（默认静默；-W 显示；--deny-warnings 提升退出码）。
 -- | 诊断/告警实现：finishWarnings（详见 diagnostics.md）。
-finishWarnings : List Diagnostic -> Int -> CliOpts -> Eff [] (Pair Int CliOpts)
+finishWarnings : List Diagnostic -> Int -> CliOpts -> Eff hostRow (Pair Int CliOpts)
 finishWarnings warns code o =
   let
     ws = dedupeWarnings warns
@@ -819,7 +820,7 @@ finishWarnings warns code o =
 
 -- 与 finishWarnings 相同，但失败时删除已生成的输出目录（编译失败不留产物）。
 -- | 诊断/告警实现：finishWarningsDir（详见 diagnostics.md）。
-finishWarningsDir : List Diagnostic -> CliOpts -> String -> Int -> Eff [] (Pair Int CliOpts)
+finishWarningsDir : List Diagnostic -> CliOpts -> String -> Int -> Eff hostRow (Pair Int CliOpts)
 finishWarningsDir warns o dir code =
   let
     ws = dedupeWarnings warns
@@ -827,7 +828,7 @@ finishWarningsDir warns o dir code =
   in do
     r <- printDiagList o "" shown
     if o.optDenyWarnings && length ws > 0 then do
-      _ <- prim_eff_runIn "/" ["rm", "-rf", dir]
+      _ <- raiseToRow hostRow (@vuna@prim_eff_runIn "/" ["rm", "-rf", dir])
       pure (Pair 1 (secondOf r))
     else pure (Pair code (secondOf r))
 
@@ -860,20 +861,20 @@ stripContinueGo [] acc found = Pair (reverse acc) found
 stripContinueGo ("--continue-on-error" :: rest) acc found = stripContinueGo rest acc True
 stripContinueGo (arg :: rest) acc found = stripContinueGo rest (arg :: acc) found
 
-checkPackageErr : Package -> Diagnostic -> CliOpts -> Eff [] (Pair Int CliOpts)
+checkPackageErr : Package -> Diagnostic -> CliOpts -> Eff hostRow (Pair Int CliOpts)
 checkPackageErr pkg e o =
   if o.optContinueOnError then packageRecover pkg e o
   else printDiagWithPrefix o "[${packageName pkg}] " e
 
 -- | 包检查恢复入口：可执行包走入口文件，库包走 [export].modules。
 -- | 包检查恢复入口：可执行包走入口文件，库包走导出模块。
-packageRecover : Package -> Diagnostic -> CliOpts -> Eff [] (Pair Int CliOpts)
+packageRecover : Package -> Diagnostic -> CliOpts -> Eff hostRow (Pair Int CliOpts)
 packageRecover pkg e o = do
-  exists <- prim_eff_fileExists (packageEntry pkg)
+  exists <- raiseToRow hostRow (@vuna@prim_eff_fileExists (packageEntry pkg))
   if exists then packageRecoverExe pkg e o else packageRecoverLib pkg e o
 
 -- | 可执行包入口的恢复式检查。
-packageRecoverExe : Package -> Diagnostic -> CliOpts -> Eff [] (Pair Int CliOpts)
+packageRecoverExe : Package -> Diagnostic -> CliOpts -> Eff hostRow (Pair Int CliOpts)
 packageRecoverExe pkg e o = do
   recovered <-
     dtCheckRecovering (contextWithRelease o.optRelease (packageContext pkg)) (packageEntry pkg)
@@ -882,7 +883,7 @@ packageRecoverExe pkg e o = do
     ErrC e2 => printDiagWithPrefix o "[${packageName pkg}] " e2
 
 -- | 库包（[export].modules）的恢复式检查。
-packageRecoverLib : Package -> Diagnostic -> CliOpts -> Eff [] (Pair Int CliOpts)
+packageRecoverLib : Package -> Diagnostic -> CliOpts -> Eff hostRow (Pair Int CliOpts)
 packageRecoverLib pkg e o = case packageExports pkg of
   Just names => do
     recovered <-
@@ -893,7 +894,7 @@ packageRecoverLib pkg e o = case packageExports pkg of
   Nothing => printDiagWithPrefix o "[${packageName pkg}] " e
 
 -- | 打印恢复出的诊断并返回退出码。
-printRecovered : Package -> Diagnostic -> List Diagnostic -> CliOpts -> Eff [] (Pair Int CliOpts)
+printRecovered : Package -> Diagnostic -> List Diagnostic -> CliOpts -> Eff hostRow (Pair Int CliOpts)
 printRecovered pkg e ds o =
   let
     shown = takeDiags o.optMaxErrors ds

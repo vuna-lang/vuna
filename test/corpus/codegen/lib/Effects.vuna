@@ -3,16 +3,18 @@ module Effects where
 -- codegen 夹具：动作/do（Monad bind/pure）、效果原语直接调用（prim_* 本身是 `Eff []` 动作，
 -- M31 的 ioPrim 包装路径）与零参定义（zeroarg 应为 0）。
 -- program / probe 不被求值，只要求它们进入 codegen 产物，覆盖 `Eff []` 动作的生成形状。
+import Base.HostRow
+import Base.EffConsole
 import Base.Monad
 import Base.Eff
 
-export program : Eff [] Int
+export program : Eff hostRow Int
 program = do
-  _ <- prim_eff_print "codegen"
+  _ <- consolePrint "default" "codegen"
   pure 0
 
-export probe : Eff [] Int
-probe = prim_eff_print "codegen"
+export probe : Eff hostRow Int
+probe = consolePrint "default" "codegen"
 
 export marker : Int
 marker = 0

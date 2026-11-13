@@ -2,7 +2,7 @@ module Base.EffNet where
 
 -- Base.EffNet：带内建 Net 行的网络操作（阶段 4）。
 --
--- 操作直调带行宿主原语（`prim_eff_net*_host`），不经过 sendCore/handler：网络是
+-- 操作直调带行宿主原语（`@vuna@prim_eff_net*_host`），不经过 sendCore/handler：网络是
 -- 宿主机制，不提供 mock；`NetOp` 只是行标签。
 import Base.Eff
 
@@ -11,29 +11,29 @@ export data NetOp(..) : Type where
   NetTag : NetOp
 
 -- | 绑定并监听地址，返回句柄表下标（带 `NetOp` 行）。
-export netListen : String -> Eff [NetOp] Int
-netListen addr = prim_eff_netListen_host addr
+export netListen : String -> {r : Row} -> Eff r Int
+netListen addr = raise (@vuna@prim_eff_netListen addr)
 
 -- | 取监听句柄的端口（带 `NetOp` 行）。
-export netPort : Int -> Eff [NetOp] Int
-netPort h = prim_eff_netPort_host h
+export netPort : Int -> {r : Row} -> Eff r Int
+netPort h = raise (@vuna@prim_eff_netPort h)
 
 -- | 接受连接，返回新句柄（带 `NetOp` 行）。
-export netAccept : Int -> Eff [NetOp] Int
-netAccept h = prim_eff_netAccept_host h
+export netAccept : Int -> {r : Row} -> Eff r Int
+netAccept h = raise (@vuna@prim_eff_netAccept h)
 
 -- | 接收最多 n 字节（带 `NetOp` 行）。
-export netRecv : Int -> Int -> Eff [NetOp] String
-netRecv h n = prim_eff_netRecv_host h n
+export netRecv : Int -> Int -> {r : Row} -> Eff r String
+netRecv h n = raise (@vuna@prim_eff_netRecv h n)
 
 -- | 发送字符串，返回写入字节数（带 `NetOp` 行）。
-export netSend : Int -> String -> Eff [NetOp] Int
-netSend h s = prim_eff_netSend_host h s
+export netSend : Int -> String -> {r : Row} -> Eff r Int
+netSend h s = raise (@vuna@prim_eff_netSend h s)
 
 -- | 关闭句柄（带 `NetOp` 行）。
-export netClose : Int -> Eff [NetOp] Int
-netClose h = prim_eff_netClose_host h
+export netClose : Int -> {r : Row} -> Eff r Int
+netClose h = raise (@vuna@prim_eff_netClose h)
 
 -- | 连接地址，返回句柄（带 `NetOp` 行）。
-export netConnect : String -> Eff [NetOp] Int
-netConnect addr = prim_eff_netConnect_host addr
+export netConnect : String -> {r : Row} -> Eff r Int
+netConnect addr = raise (@vuna@prim_eff_netConnect addr)

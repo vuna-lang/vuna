@@ -2,7 +2,7 @@ module Base.EffFs where
 
 -- Base.EffFs：一阶文件系统效应（Layer 1 的宿主-backed 示例；W10 扩到完整 fs 面）。
 --
--- 操作是描述；真实 handler 直调 `prim_eff_*` 原语实现语义。answer 是 `Eff [] a`，
+-- 操作是描述；真实 handler 直调 `@vuna@prim_eff_*` 原语实现语义。answer 是 `Eff [] a`，
 -- 由 `joinEff` 展平（见 Base.Eff）。`handleFsHost` 是 W10 增加的
 -- 可直接 `joinEff` 展平的宿主 handler。
 --
@@ -42,7 +42,7 @@ resFs (FileExists p) = Bool
 resFs (FileMtime p) = Int
 resFs (FileSize p) = Nat
 
--- | 通过命名实例读整个文件为 String；真实 handler 走 `prim_eff_readFile`。
+-- | 通过命名实例读整个文件为 String；真实 handler 走 `@vuna@prim_eff_readFile`。
 export fsReadFile : (n : String) -> String -> {r : Row} -> {w : Member n FsOp r} -> Eff r String
 fsReadFile n p = sendCore FsOp "fs" n (ReadFile p)
 
@@ -86,83 +86,75 @@ fsFileSize n p = sendCore FsOp "fs" n (FileSize p)
 export handleFs : {a : Type} -> {b : Type} -> {r : Row} -> (n : String) -> {w : Member n FsOp r} -> (a -> b) -> ((o : FsOp) -> (resFs o -> b) -> b) -> Eff r a -> Eff (Base.Eff.rowRem n FsOp r) b
 handleFs n ret opH comp = handleCore FsOp "fs" n ret opH comp
 
--- | 真实 handler 的操作解释：把每个操作映射到对应 `prim_eff_*` 原语（`WriteFile` / `FileSize` 的结果在边界转回 `Nat`）。
+-- | 真实 handler 的操作解释：把每个操作映射到对应 `@vuna@prim_eff_*` 原语（`WriteFile` / `FileSize` 的结果在边界转回 `Nat`）。
 fsOpHIO : {a : Type} -> (o : FsOp) -> (resFs o -> Eff [] a) -> Eff [] a
 fsOpHIO op k = case op of
   ReadFile p => do
-    s <- prim_eff_readFile p
+    s <- @vuna@prim_eff_readFile p
     k s
   WriteFile p s => do
-    n <- fmap natFromInt (prim_eff_writeFile p s)
+    n <- fmap natFromInt (@vuna@prim_eff_writeFile p s)
     k n
   WriteFileAtomic p s => do
-    n <- prim_eff_writeFileAtomic p s
+    n <- @vuna@prim_eff_writeFileAtomic p s
     k n
   ReadDir p => do
-    xs <- prim_eff_readDir p
+    xs <- @vuna@prim_eff_readDir p
     k xs
   IsDirectory p => do
-    b <- prim_eff_isDirectory p
+    b <- @vuna@prim_eff_isDirectory p
     k b
   MakeDir p => do
-    n <- prim_eff_makeDir p
+    n <- @vuna@prim_eff_makeDir p
     k n
   RemoveFile p => do
-    n <- prim_eff_removeFile p
+    n <- @vuna@prim_eff_removeFile p
     k n
   FileExists p => do
-    b <- prim_eff_fileExists p
+    b <- @vuna@prim_eff_fileExists p
     k b
   FileMtime p => do
-    n <- prim_eff_fileMtime p
+    n <- @vuna@prim_eff_fileMtime p
     k n
   FileSize p => do
-    n <- fmap natFromInt (prim_eff_fileSize p)
+    n <- fmap natFromInt (@vuna@prim_eff_fileSize p)
     k n
-
--- | 宿主 handler：结果行删除 `FsOp`，answer 是已处理干净的 `Eff []` 动作，可直接交给 `joinEff` 展平。
-export handleFsHost : {a : Type} -> {r : Row} -> (n : String) -> Eff (Base.Eff.Cons n FsOp r) a -> Eff r (Eff [] a)
-handleFsHost n comp = handleFs n (\a => pure a) fsOpHIO comp
-
--- | 单效应便捷入口（P3）：`handleFsHost n` + `joinEff` 的组合。
-export runFs : {a : Type} -> (n : String) -> Eff (Cons n FsOp []) a -> Eff [] a
-runFs n comp = joinEffNilOuter (handleFsHost n comp)
 
 -- ---------------------------------------------------------------
 -- 阶段 3：带行的真实 handler（entry 自动预装用；不导出）
 -- ---------------------------------------------------------------
--- | 带 `FsOp` 行的 op 解释：映射到对应 `prim_eff_*_host` 原语。
+-- | 带 `FsOp` 行的 op 解释：映射到对应 `@vuna@prim_eff_*_host` 原语。
 fsOpHIOHost : {a : Type} -> (o : FsOp) -> (resFs o -> Eff (Cons "default" FsOp []) a) -> Eff (Cons "default" FsOp []) a
 fsOpHIOHost op k = case op of
   ReadFile p => do
-    s <- prim_eff_readFile_host p
+    s <- @vuna@host@readFile p
     k s
   WriteFile p s => do
-    n <- fmap natFromInt (prim_eff_writeFile_host p s)
+    n <- fmap natFromInt (@vuna@host@writeFile p s)
     k n
   WriteFileAtomic p s => do
-    n <- prim_eff_writeFileAtomic_host p s
+    n <- @vuna@host@writeFileAtomic p s
     k n
   ReadDir p => do
-    xs <- prim_eff_readDir_host p
+    xs <- @vuna@host@readDir p
     k xs
   IsDirectory p => do
-    b <- prim_eff_isDirectory_host p
+    b <- @vuna@host@isDirectory p
     k b
   MakeDir p => do
-    n <- prim_eff_makeDir_host p
+    n <- @vuna@host@makeDir p
     k n
   RemoveFile p => do
-    n <- prim_eff_removeFile_host p
+    n <- @vuna@host@removeFile p
     k n
   FileExists p => do
-    b <- prim_eff_fileExists_host p
+    b <- @vuna@host@fileExists p
     k b
   FileMtime p => do
-    n <- prim_eff_fileMtime_host p
+    n <- @vuna@host@fileMtime p
     k n
   FileSize p => do
-    n <- fmap natFromInt (prim_eff_fileSize_host p)
+    n <- fmap natFromInt (@vuna@host@fileSize p)
     k n
 
 -- | 带行的宿主 handler：删掉 `FsOp`，answer 是 `Eff [FsOp]`（不导出）。
