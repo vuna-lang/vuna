@@ -55,10 +55,10 @@ run: sh -c 'test "$(find "$TMPDIR/c32-check-cache/store/objects/check" -type f |
 #      截断或 codec 不符 ⇒ 读侧拒绝 ⇒ 按 miss 重算并覆盖写**同一路径**）。
 #      用独立夹具副本 + 独立 store，避免依赖本 case 前面步骤留下的 iface 缓存。
 run: sh -c 'S="$TMPDIR/lexc"; rm -rf "$S"; mkdir -p "$S"; cp -r corpus/packages/m34_summary "$S/pkg"; for mf in "$S/pkg"/*/vuna.toml; do sed -i "s|^vuna-base = .*|vuna-base = \"$VUNA_BASE\"|" "$mf"; done; TMPDIR="$S/c" VUNA_STORE="$S/store" "$VUNA" check "$S/pkg/root" >/dev/null 2>&1; TMPDIR="$S/c" VUNA_STORE="$S/store" "$VUNA" check "$S/pkg/root" >/dev/null 2>&1; list=$(find "$S/store/objects/lex" -type f 2>/dev/null); [ -n "$list" ] || exit 1; printf "%s\n" "$list" | wc -l | tr -d " " > "$TMPDIR/lex-count"; for f in $list; do head -c 8 "$f" > "$f.part"; mv "$f.part" "$f"; done'
-run: sh -c 'S="$TMPDIR/lexc"; TMPDIR="$S/c" VUNA_ELAB_FULL=1 VUNA_STORE="$S/store" "$VUNA" check "$S/pkg/root" >/dev/null 2>&1'
-run: sh -c 'S="$TMPDIR/lexc"; total=0; framed=0; for f in $(find "$S/store/objects/lex" -type f 2>/dev/null); do total=$((total + 1)); [ "$(head -c 18 "$f")" = "vuna-cache-frame 2" ] && framed=$((framed + 1)); done; [ "$total" -gt 0 ] && [ "$framed" -gt 0 ]'
-# 52f) codec 不符：把某个 lex 条目的 codec 改成别的名字（tag/len/内容地址都不动）
-#      ⇒ 读侧必须拒绝、重新 lex 并重写同一个文件（路径 = 输入摘要，不是内容地址）。
-run: sh -c 'S="$TMPDIR/lexc"; f=$(find "$S/store/objects/lex" -type f | head -1); printf "%s" "$f" > "$TMPDIR/lex-codec-path"; sed -i "1s/|lex-tokens 1|/|bogus-codec 9|/" "$f"; TMPDIR="$S/c" VUNA_ELAB_FULL=1 VUNA_STORE="$S/store" "$VUNA" check "$S/pkg/root" >/dev/null 2>&1'
+run: sh -c 'S="$TMPDIR/lexc"; rm -rf "$S/store/objects/iface" "$S/store/objects/order" "$S/store/objects/check" "$S/store/objects/mods" "$S/store/objects/pkgiface"; TMPDIR="$S/c" VUNA_ELAB_FULL=1 VUNA_STORE="$S/store" "$VUNA" check "$S/pkg/root" >/dev/null 2>&1'
+run: sh -c 'S="$TMPDIR/lexc"; total=0; framed=0; for f in $(find "$S/store/objects/lex" -type f 2>/dev/null); do total=$((total + 1)); if [ "$(head -c 18 "$f")" = "vuna-cache-frame 2" ]; then framed=$((framed + 1)); [ -f "$TMPDIR/lex-framed-path" ] || printf "%s" "$f" > "$TMPDIR/lex-framed-path"; fi; done; [ "$total" -gt 0 ] && [ "$framed" -gt 0 ]'
+# 52f) codec 不符：把**刚被重写过**的 lex 条目（确保它在本轮被读）codec 改成别的名字
+#     （tag/len/内容地址都不动）⇒ 读侧必须拒绝、重新 lex 并重写同一个文件（路径 = 输入摘要）。
+run: sh -c 'S="$TMPDIR/lexc"; f=$(cat "$TMPDIR/lex-framed-path"); printf "%s" "$f" > "$TMPDIR/lex-codec-path"; sed -i "1s/|lex-tokens 1|/|bogus-codec 9|/" "$f"; rm -rf "$S/store/objects/iface" "$S/store/objects/order" "$S/store/objects/check" "$S/store/objects/mods" "$S/store/objects/pkgiface"; TMPDIR="$S/c" VUNA_ELAB_FULL=1 VUNA_STORE="$S/store" "$VUNA" check "$S/pkg/root" >/dev/null 2>&1'
 run: sh -c 'f=$(cat "$TMPDIR/lex-codec-path"); head -1 "$f" | cut -d"|" -f3'
 out-equals: lex-tokens 1
