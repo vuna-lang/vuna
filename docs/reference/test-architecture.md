@@ -123,3 +123,12 @@ seed/runtime 归 `integration`，golden/error/lint/fix/check 归 `fast`。
 - 对象库：[cache.md](cache.md)；测试操作口径：[testing.md](testing.md)
 - 性能方法与读数：[performance.md](performance.md)
 - 终态方向：[../architecture-target.md](../architecture-target.md)
+### 长 case：拆分/预热实测（2026-11-13）
+
+- 把 44g（LSP+REPL）与 44l2（LSP 大闭包+REPL）拆成独立 case，fresh e2e 反而
+  **88 s**（原单 case ~54 s）：每个拆分都重复冷 `check .` / 冷 REPL 编译。
+- 父进程增加一次串行 `check .` 预热后再跑 44e/44g/44l2：wall **177 s**，其中预热本身
+  ~80 s；44g 降到 28 s、44l2 降到 9 s，但总账更差。
+- 结论：长 case 的根因是**冷编译**，不是断言数量。拆分必须满足“拆分后的子 case 共享
+  已预热 store”，预热必须在 worker 内/并发阶段完成，不能串行挡在父进程；cache 断言
+  与功能断言也要分开，功能部分才能吃预热 store。
