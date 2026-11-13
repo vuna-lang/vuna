@@ -23,7 +23,8 @@ vuna test --suite test/suite.toml --json          # 机器可读汇总
 ```
 
 `--jobs auto`（默认）= 探测到的全部可用核（`VUNA_TEST_JOBS` 可覆盖，`--jobs N` 显式）。
-CLI 子进程各自带独立 `TMPDIR`/`VUNA_IFACE_DIR`，避免并行时写同一份 iface/缓存。
+每个子进程仍有独立 `TMPDIR`；但 `VUNA_STORE` 由父进程解析一次、所有 worker/case 共享
+（对象库是输入寻址的，见「共享对象库」）。
 
 ### 阶段矩阵：期望文件后缀
 
@@ -55,7 +56,7 @@ CBroken。原 `<base>.vuna.nointerp` 旁标记已删除——它的语义由「�
 一个 `*.steps` 文件 = 一个 case，挂在 `kind = "steps"` 的 family 下
 （`[family.steps_native] dir = "test/suite/steps"`，section 90）。行式指令，`#` 注释；
 `run:` / `read:` 开新步，其余指令挂到当前步。每个 case 有独立 `TMPDIR` /
-`VUNA_IFACE_DIR` / `VUNA_REPL_HISTORY`，可安全并行。
+`TMPDIR` / `VUNA_REPL_HISTORY`，对象库共享（`VUNA_STORE`），可安全并行。
 
 ```text
 run: sh -c 'printf "%s\n" "main : Int" "main = 1" > "$TMPDIR/pkg/Main.vuna"'
@@ -72,7 +73,7 @@ end:
 
 | 指令 | 语义 |
 | --- | --- |
-| `run:` | 新起一步：`sh -c <cmd>`，cwd = `test/`，注入 `VUNA` / `VUNA_SEED` / `VUNA_BASE` / `OCAMLOPT` / `VUNA_SUITE_ROOT` / `TMPDIR` / `VUNA_IFACE_DIR` / `VUNA_REPL_HISTORY` |
+| `run:` | 新起一步：`sh -c <cmd>`，cwd = `test/`，注入 `VUNA` / `VUNA_SEED` / `VUNA_BASE` / `OCAMLOPT` / `VUNA_SUITE_ROOT` / `TMPDIR` / `VUNA_STORE` / `VUNA_REPL_HISTORY` |
 | `read:` | 读文件内容作为该步输出（不执行命令）；文件缺失即失败 |
 | `exit:` | `0` / `nonzero` / 具体值；缺省断言 0 |
 | `out-contains:` | 合并输出必须包含该片段（可多条） |
@@ -112,8 +113,9 @@ end:
   覆盖）。子进程输出经固定 shell helper 捕获（`timeout --foreground ... >out 2>err`，
   可选合并），不新增编译器原语。
 - family 与 `*.steps` case 都进 worker 并行；worker 按 `index mod N` 静态分片。每个
-  steps case 额外有独立的 `TMPDIR` / `VUNA_IFACE_DIR` / `VUNA_REPL_HISTORY`（不再有
-  串行 lane；需要独占仓库路径的用例在步骤里把夹具复制到 `$TMPDIR`）。
+  steps case 有独立的 `TMPDIR` / `VUNA_REPL_HISTORY`；对象库默认与 suite 共用，
+  只有文件头带 `# store-isolated` 的 case 用 `${caseTmp}/store`（断言缓存布局/GC/
+  冷命中的用例；需要独占仓库路径的用例在步骤里把夹具复制到 `$TMPDIR`）。
   **Unix domain socket 用例注意 `sun_path` 上限（108 字节含 NUL）**：case 的 `TMPDIR` 是
   `$TMPDIR/vuna-suite-<stamp>-suite/c-<hash>`（自身已 55+ 字符），再拼
   `vuna-repl-server.XXXXXX/repl.sock` 会越界 ⇒ `bind` 失败、server 不打就绪行、等待方空转到
@@ -128,6 +130,18 @@ end:
 - 本地结果缓存：成功的 golden/error case 写入 `.local/test-cache/`，key 含编译器指纹、
   base 源码树哈希、source/expected 内容（目录型再含夹具 .vuna 树）；命中打印 `(cached)`。
   `--no-cache` 关闭，CI check 固定 `--no-cache`；`*.steps` 不缓存。
+
+### 共享对象库（`VUNA_STORE`）
+
+- 默认根：项目内 `.local/store`（devShell / `nix run .#vuna-run-tests` / CI check 各自导出；
+  `VUNA_STORE` 可覆盖）。子进程的 `TMPDIR` 仍按 worker/case 隔离，但对象库共用。
+- 父进程只预热一次 `vuna check base`（需要时 `check .`），worker 不再各自 warmIfaces。
+- 单文件对象（`objects/iface|header|lex|order|check|split|tool`）是输入寻址 + 原子写：
+  同一输入同一路径、同一份字节，日常 `check`/`build` 与测试共用不会互相覆盖。
+- 目录视图 `views/bin` 与 `roots/` 的并发边界见 [cache.md](cache.md)；断言缓存布局/GC/
+  冷命中的 steps 在文件头写 `# store-isolated`，用 `${caseTmp}/store` 私有库。
+- `--no-cache` 只影响 golden/error 结果缓存（`.local/test-cache`），不关闭对象库；
+  `*.steps` 仍不缓存。对象库的 GC 用 `vuna store gc`（roots + 宽限窗口 + 容量上限）。
 
 ### 迁移状态
 
@@ -200,7 +214,7 @@ family discovery 对目录里每个夹具要求一个期望文件（阶段限定
 - `audit/orphans`：已声明 family 目录里的每个夹具必须与某个 case 的 source 精确对应，
   否则注入一个失败 case。旧的 `--audit` 仍保留全 corpus 的宽松报告（steps 文件里
   提到目录名就算认领），两者互不替代。
-- `audit/min-cases`：`[suite] min_cases = 630` 是 case 总数下限。整族从 `suite.toml`
+- `audit/min-cases`：`[suite] min_cases = 760` 是 case 总数下限。整族从 `suite.toml`
   消失时，孤儿审计连目录都看不到了，只有总数骤降能兜住这类「少跑 case 却全绿」。
   新增夹具无需调整；批量删除夹具时同步下调。
 
@@ -210,20 +224,20 @@ family discovery 对目录里每个夹具要求一个期望文件（阶段限定
 
 golden 正例的 `check` / `interp` 断言走**进程内会话**（`lib/Vuna/Test/Session.vuna`）：
 
-- 每个 worker 启动时用 `vuna check <base>` 把 base 的模块接口灌进**会话专用**镜像
-  `${envTmp}/iface-session`（`vuna check` 会写接口，`compile`/单文件 `check` 不写）；
+- 父进程启动时用 `vuna check <base>` 把 base 的模块接口写进**共享对象库**
+  （`$VUNA_STORE/objects/iface`）；worker 读同一根，不再各自预热；
 - 会话持有 `List ModuleIface` + 增量精化的 `AuxCache`，每个夹具只精化自己的入口
   （走 `Dt.dtCheckSourceIncremental` / `Dt.dtEvalSourceIncremental`，即 LSP 诊断的
   同一条路径），不再重精化整棵 base；
-- **接口镜像与子进程隔离**：子进程仍用 `${envTmp}/iface`（通常为空 ⇒ 全量精化），
-  保证 `compile`/`build` 的语义与诊断顺序不受工具侧增量路径影响（增量路径与全量
-  在 `deriving via field` 上仍有差异，属已知边界）；
+- 子进程与父进程共用同一对象库：接口可用时走摘要路径；`VUNA_ELAB_FULL=1` 强制全量，
+  `VUNA_IFACE_AUDIT=1` 在同进程对拍摘要/全量两条路径。增量与全量在
+  `deriving via field` 上仍有差异（已知边界），由 audit 抽样守门；
 - 接口缺失 / tag 不符 / 增量自检 `applied = False` ⇒ 回退 CLI 子进程，语义与
   文本不变；`VUNA_TEST_NO_SESSION=1` 可强制回退（A/B 排查用）。
 
-收益：golden 的两个子进程（各 ~100ms：进程启动 + 重精化 base）变成进程内 ~10ms；
-全量 suite 约省 10%（实测 101s → 90s）。负例（`.check.err` / `.compile.err`）仍走
-CLI，保证片段匹配语义完全一致。
+收益（本机 16 核，2026-11-13）：同一个 `vuna compile` 夹具从空 store 的 2.9–5.5s 降到
+暖 store 的 7ms；`vuna check base` 从 7.25s 降到 13ms。负例（`.check.err` /
+`.compile.err`）仍走 CLI，保证片段匹配语义完全一致。
 
 ### 增量构建桶（跨 run 持久）
 
@@ -238,10 +252,10 @@ golden/runtime case 的 codegen 产物按「生成模块集」分桶（`set-<key
 - 并发注意：两个 suite 同时用同一 worker 号会写同一桶（内容哈希 stamp 会退化为
   重编，极端情况下互相踩写）；并发跑时给其中一个传 `--cache-dir` 隔离。
 
-实测（`--no-cache --jobs 8`，全量 4027 checks）：首次 122.7s，之后每次 93.6s
-（约 -24%）。`Compile.cacheBase` 另有 `VUNA_CACHE_DIR` 覆盖（默认
-`$TMPDIR/vuna-cache`），供 CI 显式指定 split/unit 缓存位置；runner 不设置它——
-实测把 split 缓存塞进同一桶会因首次填充变慢。
+实测（2026-11-13，本机 16 核）：空 store 下同一夹具 compile 2.9–5.5s，暖 store 7ms；
+`vuna check base` 7.25s → 13ms。对象库的 split-unit 缓存在 `$VUNA_STORE/units`；
+`--cache-dir` 仍只放结果缓存与 build 桶。下一步把 build 桶迁到 `views/bin`（见
+[test-architecture.md](test-architecture.md)）。
 ## corpus 的包上下文与 `VUNA_BASE`
 
 `test/corpus/vuna.toml` 给整个 corpus 一个**独立包上下文**（`name = "vuna-corpus"`，
@@ -377,7 +391,8 @@ interp / compile 文案不同时用 `.compile.err`。
 
 - `seed-selfhost`：seed→stage0→stage1→stage2 逐字节一致、TCB 黑名单、seed 完整 allowlist、闭包数量、增量构建、
   行为抽查与 seed 滞后报告（不阻塞）；
-- `vuna-tests`：沙箱跑 `vuna test --suite test/suite.toml`（`--jobs auto --no-cache`）；
+- `vuna-tests`：沙箱跑 `vuna test --suite test/suite.toml`（`--jobs auto --no-cache`；
+  `VUNA_STORE` 指向该 check 的私有临时对象库，worker/case 共享同一根）；
 - `vuna-typecheck` / `vuna-lint`：`vuna check .` 自检、lint 零 finding；
 - `eff-boundary`：隐藏效果守卫，`runPure` 调用点只降不增（基线
   `nix/eff-boundary.allowlist`，当前为空），见 [effects.md](effects.md)；
