@@ -121,7 +121,9 @@ binder 的**身份**在 Lowering 分配，前缀与编号渲染属后端：
 ## 校验入口
 
 - `Ir.validateUnit` / `Ir.validateProgram`：定义名唯一 + 分组可完成（成环报
-  `CG_DependencyCycle`）+ 入口引用的 `main` 存在。
+  `CG_DependencyCycle`）+ 入口引用的 `main` 存在。`Codegen.Lower.lowerProgramOf` 产完
+  `IrProgram` 后**立刻跑一次**，因此这条自证挂在 `vuna check` 的 codegen 阶段上（不是
+  只写在文档里的约定）。
 - 擦除检查、作用域护栏、axiom 运行时护栏**仍在 Core 侧**（`Codegen.Erase`，由 Lowering
   调用），保证诊断文本与顺序不变（D-A9）。
 
