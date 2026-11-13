@@ -208,8 +208,8 @@
 
 - 效果原语的 runtime 表达仍是「立即算完的 OCaml 表达式」，由 `effThunkText` 按 arity
   包成 `MkEff` thunk（`fun args -> fun (_ : int) -> rt args`；零参 `fun (_ : int) -> rt`）。
-- `arrayFromList` / `arrayToList` 依赖 canonical `Base.List.List` 桥接（`needsListBridge`）；
-  完整的桥接清单与缺失时的诊断见 §9。
+- `arrayFromList` / `arrayToList` 依赖 canonical `Base.List.List` 桥接（契约里
+  `irRtBridgesList = True`，实现见 `Codegen.Runtime`）；完整的桥接清单与缺失时的诊断见 §9。
 - **interp 不归约**全部容器原语（`OpNone`）：夹具带 `.nointerp`，只 compile + 运行。
 - 越界行为：`arrayGet` 越界是宿主 `Invalid_argument`（不是 `strAt` 的
   -1 哨兵，也没有语言层诊断）；`Array.set` 先 `Array.copy`，原数组不变。

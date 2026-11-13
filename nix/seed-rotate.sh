@@ -14,6 +14,10 @@
 # rotation 按需触发（见 docs/reference/bootstrap.md），不是每次 compiler/base 改动都做。
 set -eu
 cd "$(dirname "$0")/.."
+
+# 用法里写的是位置参数，历史上漏了赋值导致 `VUNA` unbound（set -u）。
+# 优先级：位置参数 > 环境变量 > 默认产品 CLI。
+VUNA=${1:-${VUNA:-./result/bin/vuna}}
 # seed rotation 必须让两遍生成走**完全相同的路径**：用各自全新的对象库（VUNA_STORE 指向
 # 本次 rotation 的临时根），第一遍由产品 CLI 生成，第二遍由新 seed 生成。共享缓存会让
 # runtime 位置表路径归一不同，触发 fixed point 假失败。
