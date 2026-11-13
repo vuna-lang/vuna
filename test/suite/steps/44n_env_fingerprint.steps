@@ -1,13 +1,18 @@
 # store-isolated: 断言缓存/对象库行为，使用 case 私有 store。
-# 44n) 包环境进地址：改 `vuna.toml`（不进模块源摘要）必须让本包接口地址变化 ⇒ 重新精化；
-#      之后重跑收敛（零新增对象）。
+# 44n) 包环境进地址：语义清单变化（包名/依赖/export）必须让本包接口地址变化 ⇒ 重新精化；
+#      纯显示配置（注释 / [diagnostics]）不进身份；之后重跑收敛（零新增对象）。
 #      夹具 corpus/packages/m34_iface_audit 复制到 $TMPDIR，vuna.toml 的 base 改到本仓库。
 run: sh -c 'rm -rf "$TMPDIR/env-pkg" "$TMPDIR/env-cache" "$TMPDIR/env-store"; cp -R corpus/packages/m34_iface_audit "$TMPDIR/env-pkg"'
 run: sh -c 'for mf in "$TMPDIR/env-pkg"/*/vuna.toml; do sed "s|vuna-base = \"[^\"]*\"|vuna-base = \"$VUNA_BASE\"|" "$mf" > "$mf.tmp" && mv "$mf.tmp" "$mf"; done'
 run: sh -c 'VUNA_STORE="$TMPDIR/env-store" TMPDIR="$TMPDIR/env-cache" "$VUNA" check "$TMPDIR/env-pkg/dep" && VUNA_STORE="$TMPDIR/env-store" TMPDIR="$TMPDIR/env-cache" "$VUNA" check "$TMPDIR/env-pkg/mid"'
 exit: 0
-# 只改包环境（追加注释），模块源码不变 ⇒ 地址变化 ⇒ 重算并写回。
-run: sh -c 'printf "\n# env probe\n" >> "$TMPDIR/env-pkg/mid/vuna.toml"; rm -rf "$TMPDIR/env-cache"'
+# 非语义变化（注释 + [diagnostics] 显示配置），模块源码不变 ⇒ **不进**语义身份 ⇒ 命中。
+run: sh -c 'printf "\n# env probe\n[diagnostics]\nformat = \"short\"\n" >> "$TMPDIR/env-pkg/mid/vuna.toml"; rm -rf "$TMPDIR/env-cache"'
+run: sh -c 'VUNA_STORE="$TMPDIR/env-store" TMPDIR="$TMPDIR/env-cache" "$VUNA" check "$TMPDIR/env-pkg/mid" --debug-perf'
+exit: 0
+out-contains: cache-path=hit
+# 语义变化（包名）：地址变化 ⇒ 重算并写回接口。
+run: sh -c 'sed -i "s/name = \"iface-audit-mid\"/name = \"iface-audit-mid2\"/" "$TMPDIR/env-pkg/mid/vuna.toml"; rm -rf "$TMPDIR/env-cache"'
 run: sh -c 'VUNA_STORE="$TMPDIR/env-store" TMPDIR="$TMPDIR/env-cache" "$VUNA" check "$TMPDIR/env-pkg/mid" --debug-perf'
 exit: 0
 out-contains: iface-write=

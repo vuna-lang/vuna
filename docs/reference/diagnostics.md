@@ -127,7 +127,10 @@ warning 的**通道**（M4 起）没有进程内全局收集器：Elab 期 `warn
 | SARIF | `renderSarif` | SARIF 2.1.0 单 run：ruleId/level/message/locations/relatedLocations |
 
 CLI 开关：`--error-format=short|human|json|sarif`、`--json`、`--message-format=...`、`--lang en|zh`（zh 时 human 消息本地化）、`--continue-on-error`（elab best-effort 多错误，仅**入口文件**；带 `module` 头的库模块单文件检查只报首错）；包级 check
-会把格式透传给成员包子进程；成员包错误带 `[包名]` 前缀。
+会把格式、`--lang`、`--max-errors` 透传给成员包子进程；成员包错误带 `[包名]` 前缀。
+**机器格式单文档**：`--error-format=json|sarif` 的工作区检查在父进程内逐包收集诊断，
+stdout 恰好输出一份文档（不再让成员子进程各打一份）；成员 manifest 的 `[diagnostics]`
+不能覆盖命令行显式格式。
 
 `vuna check <file.vuna>` 支持两类文件：无 `module` 头的入口文件（旧语义，含
 `--continue-on-error` 恢复）；带 `module` 头的库模块（按 `Pkg.contextForFile` 的包上下文
@@ -148,6 +151,7 @@ JSON 字段是机器契约：`code/severity/phase/category/message/labels[]/fiel
 | `warnings` | bool | 是否默认显示 `UN_` 告警（等价 `-W`；`--deny-warnings` 仍提升退出码） |
 | `max-errors` | 正整数 | 一次检查最多显示/序列化多少条诊断（0 或缺省 = 不限） |
 | `lang` | `en`/`zh` | human 视图语言；`zh` 追加目录中文说明并默认切 human（命令行 `--lang` 优先） |
+| 缓存 | — | 整个 `[diagnostics]` section 是**纯显示配置**，不进 check/build 的语义身份：改它不触发重编译 |
 | `deny-warnings` | bool | 等价 `--deny-warnings`：warning 提升为失败（命令行显式 flag 优先；为 true 时同时显示 warning） |
 
 非法值是该清单的结构诊断（`PKG_InvalidDiagFormat` / `PKG_InvalidDiagMaxErrors`）；未知 key 报 `PKG_UnknownKey`。

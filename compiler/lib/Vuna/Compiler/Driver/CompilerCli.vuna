@@ -75,6 +75,14 @@ defaultCliOpts = CliOpts "short" "en" False False False False False False 0 Fals
 markRelease : CliOpts -> CliOpts
 markRelease o = { o | optRelease = True }
 
+-- | 强制「格式由命令行显式给出」（机器格式的单文档契约用；成员 manifest 不得改格式）。
+-- 位构造而非记录更新：记录更新在该位置触发当前精化器的 erased binder 问题。
+markFormatExplicit : CliOpts -> CliOpts
+markFormatExplicit o =
+  CliOpts o.optDiagFormat o.optDiagLang o.optLangExplicit o.optDenyWarnings o.optShowWarnings True
+    o.optWarningsExplicit o.optDenyExplicit o.optMaxErrors o.optContinueOnError o.optSarifItems
+    o.optRelease
+
 -- 显式 state 辅助：把不改 opts 的动作结果带回（退出码 + 当前 CliOpts）。
 withOpts : CliOpts -> Eff hostRow Int -> Eff hostRow (Pair Int CliOpts)
 withOpts o m = do
@@ -524,12 +532,32 @@ checkSpawnArgs o dir =
       if o.optDiagFormat == "short" then append head0 [dir]
       else append head0 ["--error-format", o.optDiagFormat, dir]
     base2 = if o.optShowWarnings then append base ["--warnings"] else base
-  in if o.optDenyWarnings then append base2 ["--deny-warnings"] else base2
+    base3 = if o.optDenyWarnings then append base2 ["--deny-warnings"] else base2
+    -- 诊断显示选项必须透传，否则成员包的输出与根包口径不一致（i18n / 上限）。
+    langArgs = if o.optLangExplicit then ["--lang", o.optDiagLang] else []
+    maxArgs = if o.optMaxErrors > 0 then ["--max-errors", strFromInt o.optMaxErrors] else []
+  in append base3 (append langArgs maxArgs)
+
+-- 机器格式（json/sarif）的判定：这些格式要求 stdout **恰好一份**文档。
+isMachineFormat : String -> Bool
+isMachineFormat f = f == "json" || f == "sarif"
 
 checkPackages : List Package -> Int -> CliOpts -> Eff hostRow (Pair Int CliOpts)
 checkPackages [] code o = pure (Pair code o)
 checkPackages ([pkg]) code o = checkPackageSeq pkg code o
-checkPackages pkgs code o = do
+-- 成员在父进程内逐个检查，诊断进同一个 optSarifItems，stdout 只在最后的
+-- flushSarif 输出一次（多进程各打一份会得到非法 JSON / 多份 SARIF）。
+checkPackages pkgs code o =
+  let
+    -- 机器格式的单文档契约：显式格式不被成员 manifest 的 [diagnostics] 覆盖。
+    oMachine = markFormatExplicit o
+  in if isMachineFormat o.optDiagFormat then checkPkgsInProcess pkgs code oMachine
+  else checkPackagesSpawn pkgs code o
+
+-- 文本格式的工作区检查：成员包各起一个子进程并行检查（输出可交错），根包当前进程串行。
+checkPackagesSpawn : List Package -> Int -> CliOpts -> Eff hostRow (Pair Int CliOpts)
+checkPackagesSpawn [] code o = pure (Pair code o)
+checkPackagesSpawn pkgs code o = do
   classified <- mapEff (\pkg => do
     root <- isWorkspaceRoot pkg
     pure (Pair pkg root)
@@ -545,6 +573,13 @@ checkPackages pkgs code o = do
     r1 <- checkRootsSeq roots code o
     codes <- mapEff (\pr => @vuna@prim_eff_wait (secondOf pr)) started
     pure (Pair (countFailures (firstOf r1) codes) (secondOf r1))
+
+-- 机器格式的工作区检查：父进程内顺序检查每个包，共享同一份 CliOpts/SARIF 收集器。
+checkPkgsInProcess : List Package -> Int -> CliOpts -> Eff hostRow (Pair Int CliOpts)
+checkPkgsInProcess [] code o = pure (Pair code o)
+checkPkgsInProcess (pkg :: rest) code o = do
+  r <- checkPackageSeq pkg code o
+  checkPkgsInProcess rest (firstOf r) (secondOf r)
 
 isWorkspaceRoot : Package -> Eff hostRow Bool
 isWorkspaceRoot pkg = do

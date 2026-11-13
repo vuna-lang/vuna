@@ -33,6 +33,7 @@ import Vuna.Compiler.Driver.Iface
 import Vuna.Compiler.Driver.Split
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Loader
+import Vuna.Compiler.Frontend.Manifest
 import Vuna.Compiler.Version
 import Base.List
 
@@ -568,9 +569,8 @@ export buildMetaText : PackageContext -> String -> Bool -> Eff hostRow String
 buildMetaText ctx entry linked = do
   sources <- contextSources ctx entry
   deps <- dependencyHashes ctx
-  toml <- raiseToRow hostRow (@vuna@prim_eff_readFile "${contextDir ctx}/vuna.toml")
   let
-    manifestHash = textHash toml
+    manifestHash = textHash (manifestSemanticText ctx.contextPackage)
     entryName = lastSegment entry
     linkedText = if linked then "true" else "false"
   in do
@@ -618,34 +618,32 @@ checkNodeSchema = "vuna-check-node 2"
 hashText : Int -> String
 hashText n = strFromInt n
 
--- | 可执行包的 check 节点输入：源闭包 / 依赖身份 / manifest / 编译器。
+-- | 可执行包的 check 节点输入：源闭包 / 依赖身份 / 语义 manifest / 编译器 / flags。
 checkModsExe : PackageContext -> String -> Eff hostRow CheckMods
 checkModsExe ctx entry = do
   sources <- contextSources ctx entry
   deps <- depIdentitiesEff ctx
-  toml <- raiseToRow hostRow (@vuna@prim_eff_readFile "${contextDir ctx}/vuna.toml")
   fp <- compilerFingerprint
   let
     srcHash = closureHashOf sources 0
-    manHash = textHash toml
+    manHash = textHash (manifestSemanticText ctx.contextPackage)
     verHash = textHash (checkNodeSchema ++ vunaVersion) + fp
   in pure
-    (checkModsOf (contextPackageName ctx) "exe" (hashText manHash) (hashText srcHash) (depIdentitiesHash deps) (hashText verHash))
+    (checkModsOf (contextPackageName ctx) "exe" (hashText manHash) (hashText srcHash) (depIdentitiesHash deps) (hashText verHash) (releaseFlagOf ctx))
 
--- | 库包的 check 节点输入：全部模块根（不受入口闭包限制）+ 导出面 + 依赖身份 + manifest。
+-- | 库包的 check 节点输入：全部模块根（不受入口闭包限制）+ 导出面 + 依赖身份 + 语义 manifest。
 checkModsLib : PackageContext -> List String -> Eff hostRow CheckMods
 checkModsLib ctx names = do
-  rootSourcesAll <- concatMapEff rootSources (ownRootsOf ctx)
+  rootSourcesAll <- concatMapEff rootSources (contextRoots ctx)
   deps <- depIdentitiesEff ctx
-  toml <- raiseToRow hostRow (@vuna@prim_eff_readFile "${contextDir ctx}/vuna.toml")
   fp <- compilerFingerprint
   let
     srcHash = closureHashOf rootSourcesAll 0
-    manHash = textHash toml
+    manHash = textHash (manifestSemanticText ctx.contextPackage)
     namesHash = textHash (join "\t" names)
     verHash = textHash (checkNodeSchema ++ vunaVersion) + fp
   in pure
-    (checkModsOf (contextPackageName ctx) "lib:${hashText namesHash}" (hashText manHash) (hashText srcHash) (depIdentitiesHash deps) (hashText verHash))
+    (checkModsOf (contextPackageName ctx) "lib:${hashText namesHash}" (hashText manHash) (hashText srcHash) (depIdentitiesHash deps) (hashText verHash) (releaseFlagOf ctx))
 
 -- 依赖优先的 DFS 后序 + 按包名去重（与 Packages.Pkg.dependencyRoots 同规则）。
 -- 记录字段访问（`p.packageDependencies`）不再被终止性判据识别为「结构投影」，
@@ -1460,10 +1458,13 @@ export record CheckMods(..) where
   cmSources : String
   cmDeps : String
   cmVer : String
+  -- 语义开关（当前：release/debug）。旧对象因地址多一段自然失效。
+  cmFlags : String
 
 -- | 拼 `CheckMods`（纯构造；摘要由调用方算好传入）。
-checkModsOf : String -> String -> String -> String -> String -> String -> CheckMods
-checkModsOf pkg kind manifest sources deps ver = CheckMods pkg kind manifest sources deps ver
+checkModsOf : String -> String -> String -> String -> String -> String -> String -> CheckMods
+checkModsOf pkg kind manifest sources deps ver flags =
+  CheckMods pkg kind manifest sources deps ver flags
 
 -- 项目身份：**规范化绝对包目录**的摘要。roots 按项目分目录（`store/roots/<id>/`），
 -- 项目只追加自己关心的摘要；GC 扫所有项目的并集，所以 A 不需要知道 B 的存在。
@@ -1632,16 +1633,13 @@ depIfaceHashTable ctx = do
 -- 依赖方；接口或声明面变化会换 env。
 packageEnvHash : PackageContext -> Eff hostRow Int
 packageEnvHash ctx = do
-  -- 没有包上下文的场景（base-only 单文件 / REPL）：`contextDir` 可能是空串，
-  -- 直接 `readFile "/vuna.toml"` 会崩（实测 REPL `:load` 触发）。缺 manifest 就当空。
   let
-    tomlPath = "${contextDir ctx}/vuna.toml"
+    -- 纯显示配置（[diagnostics]）与取包位置（[registry]）不进语义身份。
+    own = textHash (manifestSemanticText ctx.contextPackage)
   in do
-    exists <- raiseToRow hostRow (@vuna@prim_eff_fileExists tomlPath)
-    toml <- if exists then @vuna@prim_eff_readFile tomlPath else pure ""
     deps <- depIdentitiesEff ctx
     tag <- ifaceCompilerTag
-    pure (textHash "${textHash toml}|${tag}|${joinLines (map pairText deps)}")
+    pure (textHash "${own}|${tag}|${joinLines (map pairText deps)}")
 
 -- ---------------------------------------------------------------
 -- M34.5（S4）：包内逐模块增量的脏/净判定
@@ -2006,7 +2004,7 @@ splitModsOf ctx entry printResult = do
       Nothing => "f"
     kind = "${mode}:${if printResult then "pr1" else "pr0"}"
   in pure
-    (checkModsOf (contextPackageName ctx) kind "" (hashText srcHash) (depIdentitiesHash deps) (hashText (verHash + prHash)))
+    (checkModsOf (contextPackageName ctx) kind "" (hashText srcHash) (depIdentitiesHash deps) (hashText (verHash + prHash)) (releaseFlagOf ctx))
 
 -- | blob 路径：内容寻址（`<cache>/blobs/<digest>`）。
 splitBlobPath : String -> Eff hostRow String
@@ -2031,7 +2029,8 @@ writeSplitBlobAt digest files = do
 
 -- | split 的输入摘要：包 + kind + 三个闭包摘要 + 编译器指纹（与 check 判定同口径）。
 splitInOf : CheckMods -> String
-splitInOf m = addrOf ["split", m.cmPkg, m.cmKind, m.cmManifest, m.cmSources, m.cmDeps, m.cmVer]
+splitInOf m =
+  addrOf ["split", m.cmPkg, m.cmKind, m.cmManifest, m.cmSources, m.cmDeps, m.cmVer, m.cmFlags]
 
 -- ---------------------------------------------------------------
 -- 产物身份（代码即内容）：快 key → 语义 key 的指针 + 语义 blob。
@@ -2085,7 +2084,8 @@ buildViewAddrOf ctx entry printResult = do
 
 -- | check 的判定摘要：四个输入摘要 + 包 + kind。存在即「判过」。
 checkInOf : CheckMods -> String
-checkInOf m = addrOf ["check", m.cmPkg, m.cmKind, m.cmManifest, m.cmSources, m.cmDeps, m.cmVer]
+checkInOf m =
+  addrOf ["check", m.cmPkg, m.cmKind, m.cmManifest, m.cmSources, m.cmDeps, m.cmVer, m.cmFlags]
 
 -- | 写 blob（内容不变就不写：同一产物被多次构建复用时零写放大）。
 -- 调用方传入**已规范化**的列表：digest 与产物顺序都按规范序取，原始 codegen 顺序不落盘。

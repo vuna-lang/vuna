@@ -51,6 +51,7 @@
 | D67 | 全局旗标字面量仍分散：`Vuna.Cli.stripPerfFlags` 匹配 `--debug-perf`，生成的 runtime 文本里匹配 `--debug-perf` / `VUNA_DEBUG_PERF`；`--release` 在 `Vuna.Cli`、`Vuna.Run`、`CompilerCli` 与 `VUNA_RELEASE` 读取处各有一份 | `lib/Vuna/Cli.vuna`、`lib/Vuna/Run.vuna`、`compiler/lib/Vuna/Compiler/Driver/CompilerCli.vuna`、`compiler/lib/Vuna/Compiler/Codegen/Term.vuna` | 后续（统一成旗标门面；不影响行为） |
 | D68 | 编译器 trace 开关是**运行时原语**（`@vuna@debug@on` 读 argv/env），不是显式传参：深部探针在 `Elab`/`Conv`/`Codegen` 的纯函数里，传 trace 能力会把整条纯核心 effect 化 | `compiler/lib/Vuna/Compiler/Intrinsics.vuna`、`Codegen/Term.vuna`（`dtTraceRuntime`）、`Loader/Expand.vuna` | 终局若要求零 ambient 配置，只能删深部探针或引入显式 trace 效应（与 D4 一起评估） |
 | D35 | REPL 的 resize 重绘靠空闲轮询（tty 关闭退化为空闲轮询，接受为限制）；Index 只覆盖 workspace 源码（外部依赖模块只能 `:load` 不能 `:browse`） | `lib/Vuna/Repl/Edit.vuna`、`lib/Vuna/Index/*`；[tooling.md](tooling.md) §4 | 后续 |
+| D79 | 记录更新 `{ r | f = v }` 直接作函数实参时精化器报 `TC_ErasedBinderUsed a#fam`（内部构造子字段 binder 被当运行时使用）；只能先在 `let`/函数体里位构造绕开 | `compiler/lib/Vuna/Compiler/Elab/Term/Impl.vuna`（record update 降级）、`Elab/Records` | 后续 |
 
 ## 效应统一（Eff 已贯通）
 

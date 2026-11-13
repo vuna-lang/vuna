@@ -61,10 +61,13 @@ views/testbin/<testBin>/          # effect 测试编译产物（bin/vuna-test，
 `checkIn` / `splitIn` 的输入（缺一不可）：
 
 - 包名 + kind（`exe` / `lib:<导出面摘要>` / `pr0|pr1`）；
-- `manifest` = `vuna.toml` 内容摘要（依赖声明、flags、`[export]` 都在这）；
+- `manifest` = **语义**清单投影（包名、`[export]`、依赖的 alias/source/hash）；
+  `[diagnostics]`（纯显示配置）与 `[registry]`（取包位置）**不进指纹**——改诊断格式
+  或索引位置不得让整包与依赖方接口失效（D69 已收口）；
 - `src` = **本包**源文件闭包摘要；
 - `deps` = 依赖包的**接口身份**（`pkgIfaceHash`；缺接口时回退 manifest 摘要）；
-- `ver` = 编译器版本 + 二进制指纹。
+- `ver` = 编译器版本 + 二进制指纹；
+- `flags` = 语义开关（`release` / `debug`：release 的 debug-only 构造诊断不同，必须进地址）。
 
 `splitIdentity`（产物身份）的输入：包名 + `pr0|pr1` + `pkgIfaceHash` + `pkgImplHash` +
 布局摘要（排序后的定义名/相对文件/startLine）+ 编译器 tag。它不看源字节：注释变更不换
