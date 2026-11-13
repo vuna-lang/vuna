@@ -58,3 +58,7 @@ exit: 0
 # 15i) --error-format=github：一行一条 workflow annotation，位置来自结构化 span。
 run: sh -c 'set -e; out=$("$VUNA" check --error-format github "$VUNA_SUITE_ROOT/test/corpus/dt_err/01_universe.vuna" 2>&1 || true); printf "%s" "$out" | grep -q "^::error file=.*01_universe.vuna,line=2,col=7,endLine=2,endColumn=7::\[TC_TypeLevelArg\]"'
 exit: 0
+
+# 15j) 诊断默认上限 20；--max-errors=0 不限、=N 截断（JSON 计数）。
+run: sh -c 'set -e; d="$TMPDIR/many"; rm -rf "$d"; mkdir -p "$d"; { printf "main : Int\nmain = 1\n"; i=0; while [ $i -lt 30 ]; do printf "@\n"; i=$((i+1)); done; } > "$d/many.vuna"; count() { "$VUNA" check --json "$@" "$d/many.vuna" 2>/dev/null | grep -o severity | wc -l; }; [ "$(count)" -eq 20 ]; [ "$(count --max-errors=0)" -eq 31 ]; [ "$(count --max-errors=3)" -eq 3 ]'
+exit: 0

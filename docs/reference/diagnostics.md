@@ -151,7 +151,7 @@ JSON 字段是机器契约：`code/severity/phase/category/message/labels[]/fiel
 | --- | --- | --- |
 | `format` | `short`/`human`/`json`/`sarif`/`github` | 默认渲染格式（等价 `--error-format`）；未显式指定时按消费端选：TTY → `human`，管道/CI → `short`（`lang=zh` 时 human） |
 | `warnings` | bool | 是否默认显示 `UN_` 告警（等价 `-W`；`--deny-warnings` 仍提升退出码） |
-| `max-errors` | 正整数 | 一次检查最多显示/序列化多少条诊断（0 或缺省 = 不限） |
+| `max-errors` | 正整数 | 一次检查最多显示/序列化多少条诊断（缺省 20；0 = 不限） |
 | `lang` | `en`/`zh` | human 视图语言；`zh` 追加目录中文说明并默认切 human（命令行 `--lang` 优先） |
 | 缓存 | — | 整个 `[diagnostics]` section 是**纯显示配置**，不进 check/build 的语义身份：改它不触发重编译 |
 | `deny-warnings` | bool | 等价 `--deny-warnings`：warning 提升为失败（命令行显式 flag 优先；为 true 时同时显示 warning） |

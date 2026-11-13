@@ -68,7 +68,7 @@ record CliOpts where
   optRelease : Bool
 
 defaultCliOpts : CliOpts
-defaultCliOpts = CliOpts "short" "en" False False False False False False 0 False [] False
+defaultCliOpts = CliOpts "short" "en" False False False False False False 20 False [] False
 
 -- | 在已有 opts 上打开 release 模式（`--release`）。
 markRelease : CliOpts -> CliOpts
@@ -225,7 +225,7 @@ runCompilerCliFor prog args = do
     r <- runCompilerCliFor1 prog (firstOf strippedContinue) opts
     flushSarif (firstOf r) (secondOf r)
 
--- 剥离 `--max-errors N`（写入全局上限；默认 0 = 不限）。
+-- 剥离 `--max-errors N`（写入全局上限；缺省 20，0 = 不限）。
 -- | 诊断参数解析：十进制数字，失败用默认值。
 parseIntOr : String -> Int -> Int
 parseIntOr s fallback = parseIntChars (strUnpack s) 0 0 fallback
@@ -239,7 +239,7 @@ parseIntChars (c :: cs) acc count fallback =
 
 -- | 剥离并解析 --max-errors（写入全局上限）。
 stripMaxErrors : List String -> Pair (List String) Int
-stripMaxErrors args = stripMaxErrorsGo args [] 0
+stripMaxErrors args = stripMaxErrorsGo args [] 20
 
 -- | --max-errors 参数扫描实现。
 stripMaxErrorsGo : List String -> List String -> Int -> Pair (List String) Int
