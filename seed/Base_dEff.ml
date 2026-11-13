@@ -1,6 +1,6 @@
 open Vuna_runtime
 type t_Base_dEff_dRow = C_Base_dEff_dRow_Nil | C_Base_dEff_dRow_Cons of (string) * (t_Base_dEff_dRow)
-and t_Base_dEff_dMember = C_Base_dEff_dMember_Here | C_Base_dEff_dMember_There of (t_Base_dEff_dMember)
+and t_Base_dEff_dMember = C_Base_dEff_dMember_Here of (string) | C_Base_dEff_dMember_There of (string) * (string) * (t_Base_dEff_dMember)
 and t_Base_dEff_dEffUnit = C_Base_dEff_dEffUnit_MkEffUnit
 and 'a0 t_Base_dEff_dEff = C_Base_dEff_dEff_MkEff of ((t_Base_dEff_dEffUnit) -> 'a0)
 and ('a0, 'a1) t_Base_dEff_dCont = C_Base_dEff_dCont_MkCont of (('a0) -> 'a1)
