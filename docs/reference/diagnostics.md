@@ -220,7 +220,9 @@ JSON 字段是机器契约：`code/severity/phase/category/message/labels[]/fiel
 | D7.10 explanation/example/`explain` | 已落地（`explain` 文本/`--json`/`--list --json`，含模板/中文说明/severity/phase/category/example；元变量/洞带 `name`/note 与洞目标 span；`Elab/MetaSpans` 登记创建点，洞与可延迟字典元变量附 `fields.span name=created`，纯合成 meta 无源位置时不伪造） |
 | D7.11 效果行 | 已落地（`TC_UnhandledEffects` fields 含 expected/actual 行 + 每个未处理 effect 单独一条 `unhandled:` 行） |
 | 结构化夹具 + 每码覆盖门禁 | 已落地（320 个 `.diag.json`；覆盖门禁 191/242，51 个缺口 allowlist 且逐码在 `nix/diag-unreachable.txt` 审计） |
-| D3b 无源码位置显式化 | 已落地（`NoSourceReason`/`Stability` 模型字段；JSON 仅在无位置时输出 `absent`；剩余无位置码逐码登记在 `nix/diag-located.allow`，门禁要求「无 span 必须带理由」） |
+| D3c 位置门禁 | 已落地（`nix/checks/diag-located.sh`：无 span 必须带 `absent` 理由并逐码登记；当前 320/324 有位置，剩余 3 package-graph + 1 internal；parser/resolver/loader/elab 用户面码均有位置） |
+| D3b 无源码位置显式化 | 已落地（`NoSourceReason`（synthetic/tool-usage/package-graph/internal）/`Stability` 模型字段；JSON 仅在无位置时输出 `absent`；剩余无位置码逐码登记在 `nix/diag-located.allow`，门禁要求「无 span 必须带理由」） |
+| D3d SourceRef | 已落地（`--json --with-sources` 顶层 `sources`：file/digest/package/module/relPath；默认 JSON 契约不变） |
 
 ## 10. 后续路线（按依赖排序）
 
