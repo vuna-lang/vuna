@@ -388,18 +388,18 @@ interp / compile 文案不同时用 `.compile.err`。
 
 ## Nix checks 清单
 
-`nix flake check` 实测 **19 项**：3 个 package 构建（`vuna` / `vuna-compiler` /
-`vuna-seed`，同时暴露为 checks）+ 16 个 check 语义项（`context-budget`、`diag-coverage`、
+`nix flake check` 实测 **20 项**：3 个 package 构建（`vuna` / `vuna-compiler` /
+`vuna-seed`，同时暴露为 checks）+ 17 个 check 语义项（`context-budget`、`diag-coverage`、
 `diag-raw`、`diag-style`、`eff-boundary`、`ir-boundary`、`seed-selfhost`、
 `vuna-compiler-growth`、`vuna-compiler-growth-incremental`、
-`vuna-fmt`、`vuna-lint`、`vuna-metrics`、`vuna-package`、`vuna-tests`、
+`vuna-fmt`、`vuna-lint`、`vuna-metrics`、`vuna-package`、`vuna-tests-gate`、`vuna-tests-e2e`、
 `vuna-typecheck`、`vscode-ext`；主体是 `nix/checks/<name>.sh`）。语义项：
 
 - `seed-selfhost`：seed→stage0→stage1→stage2 逐字节一致、TCB 黑名单、seed 完整 allowlist、闭包数量、增量构建、
   行为抽查与 seed 滞后报告（不阻塞）；
-- `vuna-tests`：沙箱跑 `vuna test --suite test/suite.toml`（`--jobs $NIX_BUILD_CORES`
-  或 `VUNA_TEST_JOBS`；`--no-cache`；`VUNA_STORE` 指向该 check 的私有临时对象库，
-  worker/case 共享同一根）；
+- `vuna-tests-gate` 与 `vuna-tests-e2e`：分别跑 `--tier fast integration` 与 `--tier e2e`
+  （jobs 取 `NIX_BUILD_CORES` 或 `VUNA_TEST_JOBS`；`--no-cache`；各自一个私有对象库，
+  worker/case 共享同一根）；两层由 CI 的 2×8 cores 预算并行；
 - `vuna-typecheck` / `vuna-lint`：`vuna check .` 自检、lint 零 finding；
 - `eff-boundary`：隐藏效果守卫，`runPure` 调用点只降不增（基线
   `nix/eff-boundary.allowlist`，当前为空），见 [effects.md](effects.md)；

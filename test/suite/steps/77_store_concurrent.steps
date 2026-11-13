@@ -14,5 +14,5 @@ exit: 0
 run: sh -c 'test -n "$(find "$TMPDIR/con-store/roots" -mindepth 2 -type f | head -1)"'
 exit: 0
 # GC：roots 里的 digest 仍受保护（宽限 0 秒也只删未受保护的）。
-run: sh -c 'keep=$(find "$TMPDIR/con-store/roots" -mindepth 2 -type f | head -1 | xargs basename); VUNA_STORE="$TMPDIR/con-store" "$VUNA" store gc --older-than 0 >/dev/null; test -n "$(find "$TMPDIR/con-store/objects" -name "$keep" | head -1)"'
+run: sh -c 'keep=$(find "$TMPDIR/con-store/roots" -mindepth 2 -type f | head -1 | xargs basename); VUNA_STORE="$TMPDIR/con-store" "$VUNA" store gc --older-than 0 >/dev/null; test -n "$(find "$TMPDIR/con-store/objects" "$TMPDIR/con-store/blobs" -name "$keep" | head -1)"'
 exit: 0

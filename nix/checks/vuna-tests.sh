@@ -20,4 +20,12 @@ export VUNA_STORE
 # 不再用 --jobs auto 在 nix flake check 里重复吃满所有核。
 JOBS=${VUNA_TEST_JOBS:-${NIX_BUILD_CORES:-1}}
 [ "$JOBS" -gt 0 ] 2>/dev/null || JOBS=1
-"$VUNA" test --suite test/suite.toml --jobs "$JOBS" --timeout 240 --no-cache --strict-skips
+
+# 分层：VUNA_TEST_TIERS 是空格分隔的 tier 名（gate = fast integration，e2e = e2e）。
+# 空值 = 全量（本地调试）。
+TIER_ARGS=""
+for tier in ${VUNA_TEST_TIERS:-}; do
+  TIER_ARGS="$TIER_ARGS --tier $tier"
+done
+# shellcheck disable=SC2086
+"$VUNA" test --suite test/suite.toml --jobs "$JOBS" --timeout 240 --no-cache --strict-skips $TIER_ARGS

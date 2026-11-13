@@ -91,44 +91,47 @@ in
 
   inherit seed-selfhost;
 
-  vuna-tests = mkCheck {
-    name = "vuna-tests";
+  # 测试分两层：gate 只跑 fast+integration，e2e（steps/长 case）单独一个 derivation。
+  # 两层可并行（CI 用 --max-jobs 2 --cores 8），每层内部仍共享一个私有对象库。
+  vuna-tests-gate = mkCheck {
+    name = "vuna-tests-gate";
     srcs = [
       ../../test
       ../../base
       ../../lib
       ../../compiler
       ../../app
-      # steps 用例直接跑仓库的 examples（如 64_infra 跑 examples/infra）。
       ../../examples
       ../../vuna.toml
     ];
     env = {
       VUNA = "${vuna}/bin/vuna";
       VUNA_SEED = "${vuna-seed}/bin/vuna-seed";
+      VUNA_TEST_TIERS = "fast integration";
     };
     nativeBuildInputs = ocamlTools ++ [ pkgs.util-linux pkgs.git pkgs.jq ];
     script = ./vuna-tests.sh;
   };
 
-  vuna-package = mkCheck {
-    name = "vuna-package";
+  vuna-tests-e2e = mkCheck {
+    name = "vuna-tests-e2e";
     srcs = [
+      ../../test
+      ../../base
       ../../lib
       ../../compiler
-      ../../base
       ../../app
       ../../examples
       ../../vuna.toml
     ];
     env = {
       VUNA = "${vuna}/bin/vuna";
-      VUNA_COMPILER = "${vuna-compiler}/bin/vuna-compiler";
+      VUNA_SEED = "${vuna-seed}/bin/vuna-seed";
+      VUNA_TEST_TIERS = "e2e";
     };
-    nativeBuildInputs = ocamlTools;
-    script = ./vuna-package.sh;
+    nativeBuildInputs = ocamlTools ++ [ pkgs.util-linux pkgs.git pkgs.jq ];
+    script = ./vuna-tests.sh;
   };
-
   vuna-metrics = mkCheck {
     name = "vuna-metrics";
     srcs = [
