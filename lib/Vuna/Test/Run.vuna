@@ -606,22 +606,54 @@ fileTreeHash source expected = do
   expectedText <- hashFileText expected
   pure (hashTextStrong "${sourceText}|${expectedText}|${strOfInt stamp}|${strOfInt size}")
 
-cacheKey : Env -> Case -> Eff hostRow Int
-cacheKey env c = if not env.envCacheEnabled then pure 0
+-- ---------------------------------------------------------------
+-- test verdict 对象（objects/test/<testIn>）
+--
+-- 通过 = 对象存在；载荷 = checks 数。输入只含**内容**摘要，不含 mtime/size；steps
+-- 暂不缓存（输入不可声明）。warning 不持久化，负例仍靠 `-W` / 私有 store 绕过命中。
+-- ---------------------------------------------------------------
+testVerdictSchema : String
+testVerdictSchema = "vuna-test-verdict 1"
+
+testVerdictCodec : String
+testVerdictCodec = "test-verdict 1"
+
+absHash : Int -> Int
+absHash n = if n < 0 then 0 - n else n
+
+testProjectId : Env -> String
+testProjectId env = strOfInt (absHash (hashTextStrong env.envRoot))
+
+verdictEnvTag : Eff hostRow String
+verdictEnvTag = do
+  noSession <- raiseToRow hostRow (@vuna@prim_eff_getenv "VUNA_TEST_NO_SESSION")
+  pure "no-session=${noSession}"
+
+-- 只缓存输入可声明的 golden/error；check/lint/fix/steps 不缓存。
+verdictKey : Env -> Case -> Eff hostRow String
+verdictKey env c = if not env.envCacheEnabled then pure ""
 else case c.caseKind of
-  CGolden source expected _ _ _ _ _ => caseKeyOf env c source expected
-  CError source expected _ _ _ => caseKeyOf env c source expected
-  _ => pure 0
+  CGolden source expected _ _ _ _ _ => verdictKeyOf env c source expected
+  CError source expected _ _ _ => verdictKeyOf env c source expected
+  _ => pure ""
 
-caseKeyOf : Env -> Case -> String -> String -> Eff hostRow Int
-caseKeyOf env c source expected = do
-  treeHash <- caseTreeHash c source expected
+verdictKeyOf : Env -> Case -> String -> String -> Eff hostRow String
+verdictKeyOf env c source expected = do
+  srcText <- hashFileText source
+  expText <- hashFileText expected
   fp <- toolCompilerFingerprint
-  pure
-    (hashTextStrong "${strOfInt fp}|${strOfInt env.envBaseHash}|${c.caseId}|${strOfInt treeHash}")
-
-cachePath : Env -> Int -> String
-cachePath env key = "${env.envCacheDir}/${strOfInt key}.cache"
+  tag <- verdictEnvTag
+  let
+    kindTag = case c.caseKind of
+      CGolden _ _ _ _ _ _ _ => "golden"
+      CError _ _ _ _ _ => "error"
+      _ => "other"
+    srcHash = strOfInt (absHash (hashTextStrong srcText))
+    expHash = strOfInt (absHash (hashTextStrong expText))
+    input =
+      join "|"
+        [testVerdictSchema, c.caseId, kindTag, srcHash, expHash, strOfInt fp, strOfInt env.envBaseHash, tag]
+  in pure (strOfInt (absHash (hashTextStrong input)))
 
 -- ---------------------------------------------------------------
 -- --last-failed
@@ -664,28 +696,28 @@ caseIdIn ids c = memName c.caseId ids
 resIdOf : CaseResult -> String
 resIdOf r = r.resId
 
-readCached : Env -> Case -> Eff hostRow (Maybe CaseResult)
-readCached env c = do
-  key <- cacheKey env c
-  if key == 0 then pure Nothing
-  else
-    let
-      path = cachePath env key
-    in do
-      exists <- pathExistsFile path
-      if not exists then pure Nothing
-      else do
-        text <- raiseToRow hostRow (@vuna@prim_eff_readFile path)
-        pure (Just (CaseResult c.caseId "cached" (cachedChecks text) 0 (cachedChecks text) 0 []))
-
 cachedChecks : String -> Int
 cachedChecks text = fromMaybe 0 (parseLeadingInt (trim text))
 
+readCached : Env -> Case -> Eff hostRow (Maybe CaseResult)
+readCached env c = do
+  key <- verdictKey env c
+  if key == "" then pure Nothing
+  else do
+    raw <- storeObjectReadEff "test" testVerdictCodec key
+    case raw of
+      Nothing => pure Nothing
+      Just text => do
+        n <- pure (cachedChecks text)
+        pure (Just (CaseResult c.caseId "cached" n 0 n 0 []))
+
 writeCached : Env -> Case -> CaseResult -> Eff hostRow Int
 writeCached env c r = do
-  key <- cacheKey env c
-  if key == 0 || r.resStatus /= "pass" then pure 0
-  else raiseToRow hostRow (@vuna@prim_eff_writeFile (cachePath env key) "${strOfInt r.resChecks}\n")
+  key <- verdictKey env c
+  if key == "" || r.resStatus /= "pass" then pure 0
+  else do
+    _ <- storeObjectWriteEff "test" testVerdictCodec key "${strOfInt r.resChecks}\n"
+    storeRootAppendEff (testProjectId env) [key]
 
 runCase : Env -> Case -> Eff hostRow CaseResult
 runCase env c = do

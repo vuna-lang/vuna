@@ -1,3 +1,4 @@
+# store-isolated: 断言 build 的“首次构建/错误且不留产物”，不能被已发布视图命中。
 # 65) 内置宏机制：`name!` 的紧邻规则、fmt 往返、统一 `dbg!` 的开关/惰性/输出协议。
 #     宏在 parser 里编码成保留名标记（`@vuna@macro@name`），Loader 在名字解析前展开；
 #     fmt / lint / index 只处理调用形式，不展开。展开到隐藏 runtime 原语，任何包可用。

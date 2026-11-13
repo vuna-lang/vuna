@@ -127,9 +127,10 @@ end:
   `<id> (no result)`（崩溃 / OOM / 被杀），并还原真实 case 名而不是 `unknown-<index>`。
   `run:` 步的退出码/超时失败额外附**该步命令**与**捕获输出尾部**（脚本自己打印的
   `FAIL: ...` 就在里面），否则只能看到 `exit: exit 1`。
-- 本地结果缓存：成功的 golden/error case 写入 `.local/test-cache/`，key 含编译器指纹、
-  base 源码树哈希、source/expected 内容（目录型再含夹具 .vuna 树）；命中打印 `(cached)`。
-  `--no-cache` 关闭，CI check 固定 `--no-cache`；`*.steps` 不缓存。
+- 本地结果判定：成功的 golden/error case 写成 `objects/test/<testIn>`（输入寻址，
+  key 含 schema、case id、kind、source/expected **内容**哈希、编译器指纹、base 树哈希、
+  语义 env；不含 mtime/size）；命中打印 `(cached)`。通过后登记 roots。
+  `--no-cache` 关闭读写，CI check 固定 `--no-cache`；`*.steps` 不缓存。
 
 ### 共享对象库（`VUNA_STORE`）
 
@@ -140,7 +141,7 @@ end:
   同一输入同一路径、同一份字节，日常 `check`/`build` 与测试共用不会互相覆盖。
 - 目录视图 `views/bin` 与 `roots/` 的并发边界见 [cache.md](cache.md)；断言缓存布局/GC/
   冷命中的 steps 在文件头写 `# store-isolated`，用 `${caseTmp}/store` 私有库。
-- `--no-cache` 只影响 golden/error 结果缓存（`.local/test-cache`），不关闭对象库；
+- `--no-cache` 只影响 test verdict 对象（`objects/test`），不关闭对象库；
   `*.steps` 仍不缓存。对象库的 GC 用 `vuna store gc`（roots + 宽限窗口 + 容量上限）。
 - **warning 不持久化**：共享 store 命中会跳过精化。负例自动加 `-W` 绕过判定；
   `.deny` 夹具（`--deny-warnings`）还使用 case 私有空 store + `VUNA_ELAB_FULL=1`，
@@ -203,7 +204,7 @@ vuna test --suite test/suite.toml --cache-dir DIR   # 覆盖本地结果缓存�
 - 夹具旁的 `.deny` 标记：check/compile 探测加 `--deny-warnings`（用于断言「warning 在 deny 模式下失败」，如冗余分支夹具）。
 - `nix/checks/diag-coverage.sh` 对比码集合（`.diag.json` + lint `.out`；缺口与不可达审计在 `nix/diag-coverage-allow.txt`，覆盖数不低于 `nix/diag-coverage.min`）；`nix/checks/diag-style.sh` 查消息列文案规范（句号/大小写/空白/占位符，例外在 `nix/diag-style-allow.txt`）；LSP quick fix 集成在 `test/corpus/lsp/quickfix.sh`。
 - `--watch`：首次跑完后每 500ms 比较 suite/corpus/工具链源码 mtime，变化即重跑。
-- `--cache-dir DIR`：覆盖 `.local/test-cache`；worker 继承同一目录。
+- `--cache-dir DIR`：覆盖 `.local/test-cache`（构建桶/last-failed；verdict 在对象库）。
 - `--strict-skips`：`--fail-fast` 跳过的 case 计为失败（CI 使用）。
 - `--audit`：扫描 `test/corpus` 的 `.vuna`，未被 family case 或 steps 文件文本引用的夹具列出
   并 exit 1；`test/corpus/codegen` 是 metrics 固定输入，显式排除。
