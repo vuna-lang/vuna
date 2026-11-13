@@ -1,4 +1,3 @@
-# store-isolated: 断言缓存/对象库行为，使用 case 私有 store。
 # 44g) LSP/REPL 消费依赖接口（`VUNA_IFACE_TOOL=1`，默认关闭）：预热依赖接口后，
 #      REPL 求值走接口路径（`iface-source=repl`），LSP 诊断链仍全部通过；默认路径不变。
 #      依赖接口以 corpus/packages/m34_summary（仓库自身 check 写入镜像）为上下文；

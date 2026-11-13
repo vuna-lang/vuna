@@ -22,7 +22,15 @@ JOBS=${VUNA_TEST_JOBS:-${NIX_BUILD_CORES:-1}}
 [ "$JOBS" -gt 0 ] 2>/dev/null || JOBS=1
 
 # 分层：VUNA_TEST_TIERS 是空格分隔的 tier 名（gate = fast integration，e2e = e2e）。
-# 空值 = 全量（本地调试）。
+# 空值 = 全量（本地调试）。e2e 先串行预热 base/compiler/根包：23 s，换 e2e 长
+# case（44g 等）不再各自冷跑；总 wall 不变、单 case 显著下降。
+case " $VUNA_TEST_TIERS " in
+  *" e2e "*)
+    "$VUNA" check "$VUNA_BASE"
+    "$VUNA" check compiler
+    "$VUNA" check .
+    ;;
+esac
 TIER_ARGS=""
 for tier in ${VUNA_TEST_TIERS:-}; do
   TIER_ARGS="$TIER_ARGS --tier $tier"

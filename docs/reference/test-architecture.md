@@ -141,3 +141,7 @@ seed/runtime 归 `integration`，golden/error/lint/fix/check 归 `fast`。
   （44g），不再为一条冗余断言付整仓冷编译。
 - 32_fmt 不再自编译探针包：`check.sh` 改用产品 CLI（复制+`vuna fmt`、`fmt --check`）后，
   32_fmt 从 ~47 s 降到 **9 s**，且 63 个夹具全过；`_probe.vuna` 删除。
+- e2e 采用“专用串行预热”：CI 的 e2e check 先依次 `check base` / `check compiler` /
+  `check .`（约 23 s），再跑 suite；44g 去掉 `store-isolated` 共享这份热 store。
+  结果：e2e 最长 case 37.2 s → **29.5 s**，wall 仍约 77 s。47c/36 的进一步拆分在
+  8 worker 下因并发争用反而到 34 s，已回退。
