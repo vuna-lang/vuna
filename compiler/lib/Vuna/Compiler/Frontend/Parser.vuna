@@ -1000,21 +1000,25 @@ else case peekTok st of
 
 parseApplication : Int -> PState -> Int -> Check (Pair Expr PState)
 parseApplication fuel st blockCol = if fuel <= 0 then icFuel "parser"
-else Vuna.Compiler.Common.step (parseAtom (fuel - 1) st blockCol) (\first, st1 =>
-  if atSym st1 "@" then Vuna.Compiler.Common.step (parseAtPayload (fuel - 1) (advance st1) blockCol) (\payload, st2 => Vuna.Compiler.Common.step (parseArgs (fuel - 1) st2 blockCol) (\args, st3 => OkC (Pair (EApp (EVar appAtSyntax (spanOf st st3)) (first :: payload :: args) (spanOf st st3)) st3)))
-  else Vuna.Compiler.Common.step (parseArgs (fuel - 1) st1 blockCol) (\args, st2 => case args of
-    [] => OkC (Pair first st2)
-    _ => let
+else Vuna.Compiler.Common.step (parseAtom (fuel - 1) st blockCol) (\first, st1 => if atSym st1 "@" then Vuna.Compiler.Common.step (parseAtPayload (fuel - 1) (advance st1) blockCol)
+  (\payload, st2 => Vuna.Compiler.Common.step (parseArgs (fuel - 1) st2 blockCol) (\args, st3 => OkC (Pair (EApp (EVar appAtSyntax (spanOf st st3)) (first :: payload :: args) (spanOf st st3)) st3)))
+else Vuna.Compiler.Common.step (parseArgs (fuel - 1) st1 blockCol) (\args, st2 => case args of
+  [] => OkC (Pair first st2)
+  _ =>
+    let
       app = EApp first args (spanOf st st2)
-    in if atSym st2 "@" then Vuna.Compiler.Common.step (parseAtPayload (fuel - 1) (advance st2) blockCol) (\payload, st3 => OkC (Pair (EApp (EVar rowAtSyntax (spanOf st st3)) [app, payload] (spanOf st st3)) st3))
+    in if atSym st2 "@" then Vuna.Compiler.Common.step (parseAtPayload (fuel - 1) (advance st2) blockCol)
+      (\payload, st3 => OkC (Pair (EApp (EVar rowAtSyntax (spanOf st st3)) [app, payload] (spanOf st st3)) st3))
     else OkC (Pair app st2)
-  )
+)
 )
 
 -- `@` 后面的 payload 与行 `@` 同一规则：裸标识符是名字字面量，字符串/数字/括号表达式原样。
 parseAtPayload : Int -> PState -> Int -> Check (Pair Expr PState)
-parseAtPayload fuel st blockCol = if fuel <= 0 then icFuel "parser"
-else Vuna.Compiler.Common.step (parseAtom (fuel - 1) st blockCol) (\e, st1 => OkC (Pair (rowAtNameExpr e) st1))
+parseAtPayload fuel st blockCol =
+  if fuel <= 0 then icFuel "parser"
+  else Vuna.Compiler.Common.step (parseAtom (fuel - 1) st blockCol)
+    (\e, st1 => OkC (Pair (rowAtNameExpr e) st1))
 
 spanFromExpr : Expr -> PState -> Span
 spanFromExpr e st2 =

@@ -123,12 +123,11 @@ isMemberConstraintExpr _ = False
 
 elabMemberConstraintDoms : List (Pair String Term) -> Ctx -> Ec -> List Expr -> Span -> Check (Pair (List Term) Ec)
 elabMemberConstraintDoms globals ctx ec [] sp = OkC (Pair [] ec)
-elabMemberConstraintDoms globals ctx ec (e :: rest) sp =
-  Vuna.Compiler.Common.bind (checkType globals ctx ec e) (\p => case p of
-    Pair domTerm (Pair _ ec1) => Vuna.Compiler.Common.bind (elabMemberConstraintDoms globals ctx ec1 rest sp) (\q => case q of
-      Pair doms ec2 => OkC (Pair (Base.List.Cons domTerm doms) ec2)
-    )
+elabMemberConstraintDoms globals ctx ec (e :: rest) sp = Vuna.Compiler.Common.bind (checkType globals ctx ec e) (\p => case p of
+  Pair domTerm (Pair _ ec1) => Vuna.Compiler.Common.bind (elabMemberConstraintDoms globals ctx ec1 rest sp) (\q => case q of
+    Pair doms ec2 => OkC (Pair (Base.List.Cons domTerm doms) ec2)
   )
+)
 
 insertSigMembers : Term -> List Term -> Int -> Term
 insertSigMembers ty [] nImp = ty
@@ -144,7 +143,8 @@ prependSigMembers ty (dom :: rest) k =
 insertSigMembersRev : Term -> List Term -> Int -> Int -> Term
 insertSigMembersRev ty [] k baseIdx = ty
 insertSigMembersRev ty (dom :: rest) k baseIdx =
-  insertSigMembersRev (insertImplicitBinder (sigMemberName k) baseIdx Rig0 dom ty) rest (k - 1) baseIdx
+  insertSigMembersRev (insertImplicitBinder (sigMemberName k) baseIdx Rig0 dom ty) rest (k - 1)
+    baseIdx
 
 sigMemberName : Int -> String
 sigMemberName k = "_member${k}"

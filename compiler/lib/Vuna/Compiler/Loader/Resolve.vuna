@@ -950,7 +950,8 @@ export resolveProgram : List Module -> String -> String -> Namespaces -> List Im
 resolveProgram modules label prefix ns imports decls =
   let
     implicitScopes = implicitScopeTable decls
-  in Vuna.Compiler.Common.traverse (resolveDeclWithImplicitScopes implicitScopes modules label prefix ns imports) decls
+  in Vuna.Compiler.Common.traverse
+    (resolveDeclWithImplicitScopes implicitScopes modules label prefix ns imports) decls
 
 -- 签名里隐式 binder 的名字（`{n : String}` / `{r : Row}` / `{w : Member n e r}`），
 -- 以及约束 ctx 里自由的小写名（`Member n e r => ...` 的 n/r）。这些名字在定义体里
@@ -968,7 +969,9 @@ implicitScopeTable (d :: rest) = case d of
   _ => implicitScopeTable rest
 
 leadingImplicitNames : Expr -> List String
-leadingImplicitNames (EPi n True _ dom cod sp) = if n == "_" then leadingImplicitNames cod else if isStringDomainExpr dom then n :: leadingImplicitNames cod else leadingImplicitNames cod
+leadingImplicitNames (EPi n True _ dom cod sp) =
+  if n == "_" then leadingImplicitNames cod
+  else if isStringDomainExpr dom then n :: leadingImplicitNames cod else leadingImplicitNames cod
 leadingImplicitNames _ = []
 
 exprLowerNames : Expr -> List String
@@ -983,7 +986,8 @@ isLowerIdent n = case strUnpack n of
 
 dedupScopeNames : List String -> List String
 dedupScopeNames [] = []
-dedupScopeNames (x :: rest) = if memName x rest then dedupScopeNames rest else x :: dedupScopeNames rest
+dedupScopeNames (x :: rest) =
+  if memName x rest then dedupScopeNames rest else x :: dedupScopeNames rest
 
 scopeNamesOf : String -> List (Pair String (List String)) -> List String
 scopeNamesOf n [] = []
@@ -993,7 +997,8 @@ resolveDeclWithImplicitScopes : List (Pair String (List String)) -> List Module 
 resolveDeclWithImplicitScopes scopes modules label prefix ns imports (DFun name pats body sp) =
   Vuna.Compiler.Common.bind (resolveTopName label prefix name)
     (\n => Vuna.Compiler.Common.bind (Vuna.Compiler.Common.traverse (resolvePattern resolveFuelBound modules label prefix ns imports) pats) (\parts => Vuna.Compiler.Common.bind (resolveExpr resolveFuelBound modules label prefix ns imports (append (concatMap secondOf parts) (scopeNamesOf name scopes)) body) (\b => OkC (DFun n (map firstOf parts) b sp))))
-resolveDeclWithImplicitScopes scopes modules label prefix ns imports d = resolveDecl modules label prefix ns imports d
+resolveDeclWithImplicitScopes scopes modules label prefix ns imports d =
+  resolveDecl modules label prefix ns imports d
 
 -- M41：entry 文件的构造子也按族限定（`Data.Ctor`），同名构造子不再互相覆盖；
 -- 原先的「entry 构造子共享一个全局命名空间」防御随 canonical 命名一并删除。

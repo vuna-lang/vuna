@@ -112,22 +112,21 @@ memberDomainOverrides [] = []
 memberDomainOverrides (e :: rest) = append (memberDomainOverridesOne e) (memberDomainOverrides rest)
 
 memberDomainOverridesOne : Expr -> List (Pair String Expr)
-memberDomainOverridesOne (EApp (EVar g _) [nExpr, _, rExpr] sp) =
-  if g == effMemberFamilyName then
-    let
-      nPart = case nExpr of
-        EVar n nsp => [Pair n (EVar strTypeName nsp)]
-        _ => []
-      rPart = case rExpr of
-        EVar r rsp => [Pair r (EVar effRowFamilyName rsp)]
-        _ => []
-    in append nPart rPart
-  else []
+memberDomainOverridesOne (EApp (EVar g _) ([nExpr, _, rExpr]) sp) = if g == effMemberFamilyName then
+  let
+    nPart = case nExpr of
+      EVar n nsp => [Pair n (EVar strTypeName nsp)]
+      _ => []
+    rPart = case rExpr of
+      EVar r rsp => [Pair r (EVar effRowFamilyName rsp)]
+      _ => []
+  in append nPart rPart
+else []
 memberDomainOverridesOne _ = []
 
 memberDomainOf : List (Pair String Expr) -> String -> Maybe Expr
 memberDomainOf [] n = Nothing
-memberDomainOf (Pair k v :: rest) n = if k == n then Just v else memberDomainOf rest n
+memberDomainOf ((Pair k v) :: rest) n = if k == n then Just v else memberDomainOf rest n
 
 kindArrowExpr : Int -> Span -> Expr
 kindArrowExpr k sp =

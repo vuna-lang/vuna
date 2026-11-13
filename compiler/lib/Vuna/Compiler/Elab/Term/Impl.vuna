@@ -600,7 +600,9 @@ else case handleOperand expr of
           (\callExpr => inferEFuel (fuel - 1) globals ctx ec1 callExpr)
     )
     Nothing => case appAtOperand expr of
-      Just _ => Vuna.Compiler.Common.bind (appAtCallExpr expr) (\callExpr => inferEFuel (fuel - 1) globals ctx ec callExpr)
+      Just _ =>
+        Vuna.Compiler.Common.bind (appAtCallExpr expr)
+          (\callExpr => inferEFuel (fuel - 1) globals ctx ec callExpr)
       Nothing => case listLitElems expr of
         Just elems =>
           Vuna.Compiler.Common.bind (expandListLit ec listFamilyName elems (exprSpan expr))
@@ -636,7 +638,9 @@ else case expr of
   EFloat raw sp => OkC (Pair (TFloat raw) (Pair (VNeutral (NGlobal floatTypeName [])) ec))
   EPi name implicit qty dom cod sp =>
     inferPiFuel (fuel - 1) globals ctx ec name implicit qty dom cod sp
-  EApp (EVar n fsp) args sp => if isInstArgSyntax n then tcErr0 sp NoInstParam else inferAppFuel (fuel - 1) globals ctx ec (EVar n fsp) args sp Nothing
+  EApp (EVar n fsp) args sp =>
+    if isInstArgSyntax n then tcErr0 sp NoInstParam
+    else inferAppFuel (fuel - 1) globals ctx ec (EVar n fsp) args sp Nothing
   EApp fn args sp => inferAppFuel (fuel - 1) globals ctx ec fn args sp Nothing
   ELam names body sp => tcErr0 sp LambdaNoSignature
   EIf c t e sp => Vuna.Compiler.Common.bind (checkCondBoolFuel (fuel - 1) globals ctx ec c sp) (\pc => case pc of
@@ -1169,30 +1173,29 @@ else
               Pair argTerms (Pair resTy ec3) =>
                 OkC (Pair (Base.List.Cons (Pair metaTerm Rig0) argTerms) (Pair resTy ec3))
             )
-    else if isImplicitDomain ctx ec dom then
-      if isStringImplicitDomain ec dom then case args of
-        a :: rest => case instArgOperand a of
-          Just payload => Vuna.Compiler.Common.bind (checkEFuel (fuel - 1) globals ctx ec payload dom) (\p => case p of
-            Pair payloadTerm ec1 => Vuna.Compiler.Common.bind (inferArgsGo (fuel - 1) globals ctx ec1 (applyClosure clo (evalCtx ctx payloadTerm)) rest sp hint) (\q => case q of
-              Pair argTerms (Pair resTy ec2) =>
-                OkC (Pair (Base.List.Cons (Pair payloadTerm rig) argTerms) (Pair resTy ec2))
-            )
+    else if isImplicitDomain ctx ec dom then if isStringImplicitDomain ec dom then case args of
+      a :: rest => case instArgOperand a of
+        Just payload => Vuna.Compiler.Common.bind (checkEFuel (fuel - 1) globals ctx ec payload dom) (\p => case p of
+          Pair payloadTerm ec1 => Vuna.Compiler.Common.bind (inferArgsGo (fuel - 1) globals ctx ec1 (applyClosure clo (evalCtx ctx payloadTerm)) rest sp hint) (\q => case q of
+            Pair argTerms (Pair resTy ec2) =>
+              OkC (Pair (Base.List.Cons (Pair payloadTerm rig) argTerms) (Pair resTy ec2))
           )
-          Nothing => case newMetaAt sp ctx ec of
-            Pair metaTerm ec1 => Vuna.Compiler.Common.bind (inferArgsGo (fuel - 1) globals ctx ec1 (applyClosure clo (evalCtx ctx metaTerm)) args sp hint) (\p => case p of
-              Pair argTerms (Pair resTy ec2) =>
-                OkC (Pair (Base.List.Cons (Pair metaTerm rig) argTerms) (Pair resTy ec2))
-            )
-        [] => case newMetaAt sp ctx ec of
+        )
+        Nothing => case newMetaAt sp ctx ec of
           Pair metaTerm ec1 => Vuna.Compiler.Common.bind (inferArgsGo (fuel - 1) globals ctx ec1 (applyClosure clo (evalCtx ctx metaTerm)) args sp hint) (\p => case p of
             Pair argTerms (Pair resTy ec2) =>
               OkC (Pair (Base.List.Cons (Pair metaTerm rig) argTerms) (Pair resTy ec2))
           )
-      else case newMetaAt sp ctx ec of
+      [] => case newMetaAt sp ctx ec of
         Pair metaTerm ec1 => Vuna.Compiler.Common.bind (inferArgsGo (fuel - 1) globals ctx ec1 (applyClosure clo (evalCtx ctx metaTerm)) args sp hint) (\p => case p of
           Pair argTerms (Pair resTy ec2) =>
             OkC (Pair (Base.List.Cons (Pair metaTerm rig) argTerms) (Pair resTy ec2))
         )
+    else case newMetaAt sp ctx ec of
+      Pair metaTerm ec1 => Vuna.Compiler.Common.bind (inferArgsGo (fuel - 1) globals ctx ec1 (applyClosure clo (evalCtx ctx metaTerm)) args sp hint) (\p => case p of
+        Pair argTerms (Pair resTy ec2) =>
+          OkC (Pair (Base.List.Cons (Pair metaTerm rig) argTerms) (Pair resTy ec2))
+      )
     else tcErr0 sp ImplicitParamKind
     else case args of
       [] => OkC (Pair [] (Pair forced ec))
@@ -1442,7 +1445,9 @@ else case handleOperand expr of
   Nothing => case performOperand expr of
     Just _ => checkByInferFuel (fuel - 1) globals ctx ec expr expected
     Nothing => case appAtOperand expr of
-      Just _ => Vuna.Compiler.Common.bind (appAtCallExpr expr) (\callExpr => checkEFuel (fuel - 1) globals ctx ec callExpr expected)
+      Just _ =>
+        Vuna.Compiler.Common.bind (appAtCallExpr expr)
+          (\callExpr => checkEFuel (fuel - 1) globals ctx ec callExpr expected)
       Nothing => case listLitElems expr of
         Just elems =>
           Vuna.Compiler.Common.bind
@@ -1518,7 +1523,9 @@ else case expr of
   ELam names body sp => checkLamFuel (fuel - 1) globals ctx ec names body expected sp
   EApp (EVar "->" _) args sp => checkByInferFuel (fuel - 1) globals ctx ec expr expected
   EApp (EVar "Type" _) args sp => checkByInferFuel (fuel - 1) globals ctx ec expr expected
-  EApp (EVar n fsp) args sp => if isInstArgSyntax n then tcErr0 sp NoInstParam else checkAppFuel (fuel - 1) globals ctx ec (EVar n fsp) args expected sp
+  EApp (EVar n fsp) args sp =>
+    if isInstArgSyntax n then tcErr0 sp NoInstParam
+    else checkAppFuel (fuel - 1) globals ctx ec (EVar n fsp) args expected sp
   EApp fn args sp => checkAppFuel (fuel - 1) globals ctx ec fn args expected sp
   EPi name implicit qty dom cod sp => checkByInferFuel (fuel - 1) globals ctx ec expr expected
   EIf c t e sp => checkByInferFuel (fuel - 1) globals ctx ec expr expected
@@ -1790,7 +1797,9 @@ else case handleOperand expr of
     -- perform 标记必须先于 EApp 分解拦截（否则会把标记名当普通变量解析）。
     Just _ => inferEFuel (fuel - 1) globals ctx ec expr
     Nothing => case appAtOperand expr of
-      Just _ => Vuna.Compiler.Common.bind (appAtCallExpr expr) (\callExpr => inferEFuel (fuel - 1) globals ctx ec callExpr)
+      Just _ =>
+        Vuna.Compiler.Common.bind (appAtCallExpr expr)
+          (\callExpr => inferEFuel (fuel - 1) globals ctx ec callExpr)
       Nothing => case expr of
         EApp fn args sp =>
           inferAppFuel (fuel - 1) globals ctx ec fn args sp
