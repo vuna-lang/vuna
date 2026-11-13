@@ -37,14 +37,14 @@ multiToExpr table clauses = case arityOf clauses of
   Just n =>
     let
       names = paramNames n
-    in Vuna.Compiler.Common.bind (buildColumnExpr table clauses names 200)
+    in Vuna.Compiler.Common.bind (buildColumnExpr table clauses names (firstPatSpan clauses) 200)
       (\body => OkC (wrapLambdas names body))
 
 -- 与 multiToExpr 同一套模式矩阵，但不包 lambda：`name` 是已在作用域里的位置名，
 -- 直接返回以它为 scrutinee 的嵌套 case 体。供 Elab 的 case 去重降级使用
 -- （先把 scrutinee 用 let 绑定成 name，保证只求值一次）。
 export multiToCaseExpr : List (Pair String (List String)) -> List (Pair (List Pat) Expr) -> String -> Check Expr
-multiToCaseExpr table clauses name = buildColumnExpr table clauses [name] 200
+multiToCaseExpr table clauses name = buildColumnExpr table clauses [name] (firstPatSpan clauses) 200
 
 arityOf : List (Pair (List Pat) Expr) -> Maybe Int
 arityOf [] = Nothing
@@ -65,28 +65,28 @@ wrapLambdas (n :: rest) body = ELam [n] (wrapLambdas rest body) (Span "" 0 0 0 0
 -- 按列递归。params 是**尚未消耗**的位置名（与剩余模式列一一对应）。该列含内建字面量模式
 -- （Int / String）：生成嵌套 if 链——`f 0 = a; f 1 = b; f n = c` → `if pos == 0 then a else
 -- if pos == 1 then b else c`；变量/通配 clause 在字面量之后提供 fallback（体按剩余列递归构建）。
-litAltExpr : List (Pair String (List String)) -> List (Pair (List Pat) Expr) -> String -> List String -> Int -> Check Expr
-litAltExpr table clauses pos restParams fuel =
-  if fuel <= 0 then icFuel "pattern matrix" else litAltExprGo table clauses pos restParams fuel
+litAltExpr : List (Pair String (List String)) -> List (Pair (List Pat) Expr) -> String -> List String -> Span -> Int -> Check Expr
+litAltExpr table clauses pos restParams fb fuel =
+  if fuel <= 0 then icFuel "pattern matrix" else litAltExprGo table clauses pos restParams fb fuel
 
-litAltExprGo : List (Pair String (List String)) -> List (Pair (List Pat) Expr) -> String -> List String -> Int -> Check Expr
-litAltExprGo table clauses pos restParams fuel = if fuel <= 0 then icFuel "pattern matrix"
+litAltExprGo : List (Pair String (List String)) -> List (Pair (List Pat) Expr) -> String -> List String -> Span -> Int -> Check Expr
+litAltExprGo table clauses pos restParams fb fuel = if fuel <= 0 then icFuel "pattern matrix"
 else case clauses of
-  [] => ErrC (tcMsg IntStringCaseNeedsFallback [])
+  [] => tcErr0 fb IntStringCaseNeedsFallback
   (Pair (p :: ps) body) :: rest => case p of
     PVar pname psp =>
       Vuna.Compiler.Common.bind
-        (buildColumnExpr table (stripFirstCol clauses) restParams (fuel - 1))
+        (buildColumnExpr table (stripFirstCol clauses) restParams fb (fuel - 1))
         (\inner => OkC (renameExpr pname pos inner))
-    PWild psp => buildColumnExpr table (stripFirstCol clauses) restParams (fuel - 1)
+    PWild psp => buildColumnExpr table (stripFirstCol clauses) restParams fb (fuel - 1)
     _ =>
-      Vuna.Compiler.Common.bind (litAltExprGo table rest pos restParams (fuel - 1))
-        (\restExpr => Vuna.Compiler.Common.bind (buildColumnExpr table (litBranchClauses p pos clauses) restParams (fuel - 1)) (\bodyExpr => OkC (EIf (EApp (EVar "==" (Span "" 0 0 0 0)) [EVar pos (Span "" 0 0 0 0), litPatExpr p] (patSpan p)) bodyExpr restExpr (patSpan p))))
+      Vuna.Compiler.Common.bind (litAltExprGo table rest pos restParams fb (fuel - 1))
+        (\restExpr => Vuna.Compiler.Common.bind (buildColumnExpr table (litBranchClauses p pos clauses) restParams fb (fuel - 1)) (\bodyExpr => OkC (EIf (EApp (EVar "==" (Span "" 0 0 0 0)) [EVar pos (Span "" 0 0 0 0), litPatExpr p] (patSpan p)) bodyExpr restExpr (patSpan p))))
   -- M23：该字面量分支的子矩阵不只是「当前行 + 剩余列」——同一字面量的后续行与
   -- 变量/通配行也匹配这个字面量，必须一起进入子矩阵，否则内层列会缺分支
   -- （`TCon "a" [] => ...; TCon "b" _ => ...; TCon _ _ => ...` 报 missing Cons，
   -- 且 `f "a" [] = 1; f "a" _ = 2; f _ _ = 3` 会丢掉第二条同字面量分支）。
-  (Pair [] body) :: rest => ErrC (tcMsg ClauseTooManyPatterns [])
+  (Pair [] body) :: rest => tcErr0 fb ClauseTooManyPatterns
 
 -- 字面量分支的子矩阵：同字面量的行 + 变量/通配行（它们也匹配该字面量），保持原顺序；
 -- 其它字面量的行不匹配这个值。变量/通配行要把该列的头变量改名成 scrutinee 位置名
@@ -126,18 +126,19 @@ litPatExpr (PStr s sp) = EStr s sp
 litPatExpr _ = EInt 0 (Span "" 0 0 0 0)
 
 -- | 自动补注（M41 新增导出）：buildColumnExpr。
-buildColumnExpr : List (Pair String (List String)) -> List (Pair (List Pat) Expr) -> List String -> Int -> Check Expr
-buildColumnExpr table clauses params fuel = if fuel <= 0 then ErrC (tcMsg PatternFuel [])
+buildColumnExpr : List (Pair String (List String)) -> List (Pair (List Pat) Expr) -> List String -> Span -> Int -> Check Expr
+buildColumnExpr table clauses params fb fuel = if fuel <= 0 then ErrC (tcMsg PatternFuel [])
 else if allEmptyPats clauses then OkC (bodyOfFirst clauses)
 else case params of
-  [] => ErrC (tcMsg ClauseTooManyPatterns [])
+  [] => tcErr0 fb ClauseTooManyPatterns
   pos :: restParams =>
-    if hasAsHead clauses then asColumn table clauses pos restParams fuel
-    else if allVarHeads clauses then Vuna.Compiler.Common.bind (buildColumnExpr table (stripFirstCol clauses) restParams (fuel - 1))
+    if hasAsHead clauses then asColumn table clauses pos restParams fb fuel
+    else if allVarHeads clauses then Vuna.Compiler.Common.bind
+      (buildColumnExpr table (stripFirstCol clauses) restParams fb (fuel - 1))
       (\inner => OkC (renameFirstVars clauses pos inner))
-    else if allCtorHeads clauses then ctorColumn table clauses pos restParams fuel
-    else if hasCtorHead clauses then ctorColumn table clauses pos restParams fuel
-    else litAltExpr table clauses pos restParams (fuel - 1)
+    else if allCtorHeads clauses then ctorColumn table clauses pos restParams fb fuel
+    else if hasCtorHead clauses then ctorColumn table clauses pos restParams fb fuel
+    else litAltExpr table clauses pos restParams fb (fuel - 1)
 
 -- as-pattern 列：先把该列 head 统一成变量（body 里的绑定名改写成该列变量 pos），
 -- 再把内层模式作为「新列」对同一 pos 分派（等价于 `case pos of <inner> => body`）。
@@ -147,11 +148,11 @@ hasAsHead (c :: rest) = case c of
   Pair ((PAs _ _ _) :: ps) body => True
   _ => hasAsHead rest
 
-asColumn : List (Pair String (List String)) -> List (Pair (List Pat) Expr) -> String -> List String -> Int -> Check Expr
-asColumn table clauses pos restParams fuel =
+asColumn : List (Pair String (List String)) -> List (Pair (List Pat) Expr) -> String -> List String -> Span -> Int -> Check Expr
+asColumn table clauses pos restParams fb fuel =
   if fuel <= 0 then ErrC (tcMsg PatternFuel [])
   else Vuna.Compiler.Common.bind
-    (buildColumnExpr table (map (asInnerClause pos) clauses) (pos :: restParams) (fuel - 1))
+    (buildColumnExpr table (map (asInnerClause pos) clauses) (pos :: restParams) fb (fuel - 1))
     (\e => OkC e)
 
 asInnerClause : String -> Pair (List Pat) Expr -> Pair (List Pat) Expr
@@ -178,13 +179,13 @@ firstPatSpan _ = Span "" 0 0 0 0
 -- 再补一个 `_` 兜底只会把「剩余列在兜底里匹配不全」暴露成假的覆盖错误
 -- （`mergeBy le [] ys` / `mergeBy le xs []` / `mergeBy le (x::xs) (y::ys)`
 -- 曾报 `missing Cons`）。族信息由 Elab 传入（`ctorTable`）。
-ctorColumn : List (Pair String (List String)) -> List (Pair (List Pat) Expr) -> String -> List String -> Int -> Check Expr
-ctorColumn table clauses pos restParams fuel = if fuel <= 0 then icFuel "pattern matrix"
-else Vuna.Compiler.Common.bind (ctorAltList table clauses pos restParams (fuel - 1)) (\alts => let
+ctorColumn : List (Pair String (List String)) -> List (Pair (List Pat) Expr) -> String -> List String -> Span -> Int -> Check Expr
+ctorColumn table clauses pos restParams fbSp fuel = if fuel <= 0 then icFuel "pattern matrix"
+else Vuna.Compiler.Common.bind (ctorAltList table clauses pos restParams fbSp (fuel - 1)) (\alts => let
   caseSp = firstPatSpan clauses
 in if familyCovered table (ctorHeads clauses) then OkC (ECase (EVar pos caseSp) alts caseSp)
-else Vuna.Compiler.Common.bind (fallbackAltList table pos clauses restParams (fuel - 1))
-  (\fb => OkC (ECase (EVar pos caseSp) (append alts fb) caseSp))
+else Vuna.Compiler.Common.bind (fallbackAltList table pos clauses restParams fbSp (fuel - 1))
+  (\fbAlts => OkC (ECase (EVar pos caseSp) (append alts fbAlts) caseSp))
 )
 
 -- 构造子名 → 所属族的构造子表；找不到族时按「未覆盖」处理（保守）。
@@ -346,15 +347,15 @@ renameAlt oldName newName alt =
 -- **分支 pattern 的子模式一律用新鲜变量**（`_sc<i>`）：规范形的精化器只接受变量/通配
 -- 子模式（`bindCtorTele`），位置名与 body 里的引用完全可控；子模式的真实形态交给内层
 -- `buildColumnExpr` 用 case 表达。
-ctorAltList : List (Pair String (List String)) -> List (Pair (List Pat) Expr) -> String -> List String -> Int -> Check (List (Pair Pat Expr))
-ctorAltList table clauses pos restParams fuel =
+ctorAltList : List (Pair String (List String)) -> List (Pair (List Pat) Expr) -> String -> List String -> Span -> Int -> Check (List (Pair Pat Expr))
+ctorAltList table clauses pos restParams fbSp fuel =
   if fuel <= 0 then icFuel "pattern matrix"
-  else ctorAltListGo table clauses (ctorHeads clauses) pos restParams fuel
+  else ctorAltListGo table clauses (ctorHeads clauses) pos restParams fbSp fuel
 
-ctorAltListGo : List (Pair String (List String)) -> List (Pair (List Pat) Expr) -> List String -> String -> List String -> Int -> Check (List (Pair Pat Expr))
-ctorAltListGo table clauses [] pos restParams fuel =
+ctorAltListGo : List (Pair String (List String)) -> List (Pair (List Pat) Expr) -> List String -> String -> List String -> Span -> Int -> Check (List (Pair Pat Expr))
+ctorAltListGo table clauses [] pos restParams fbSp fuel =
   if fuel <= 0 then icFuel "pattern matrix" else OkC []
-ctorAltListGo table clauses (cname :: rest) pos restParams fuel = if fuel <= 0 then icFuel "pattern matrix"
+ctorAltListGo table clauses (cname :: rest) pos restParams fbSp fuel = if fuel <= 0 then icFuel "pattern matrix"
 else
   let
     subpatCount = ctorSubPatCount clauses cname
@@ -362,8 +363,8 @@ else
     subParams = append freshSubs restParams
     branchPats = map (\n => PVar n (Span "" 0 0 0 0)) freshSubs
     expanded = clausesForCtor cname branchPats pos clauses
-  in Vuna.Compiler.Common.bind (buildColumnExpr table expanded subParams (fuel - 1))
-    (\bodyExpr => Vuna.Compiler.Common.bind (ctorAltListGo table clauses rest pos restParams (fuel - 1)) (\tail => OkC (Base.List.Cons (Pair (PCon cname branchPats (Span "" 0 0 0 0)) bodyExpr) tail)))
+  in Vuna.Compiler.Common.bind (buildColumnExpr table expanded subParams fbSp (fuel - 1))
+    (\bodyExpr => Vuna.Compiler.Common.bind (ctorAltListGo table clauses rest pos restParams fbSp (fuel - 1)) (\tail => OkC (Base.List.Cons (Pair (PCon cname branchPats (Span "" 0 0 0 0)) bodyExpr) tail)))
 
 -- 该构造子在本列各 clause 里的子模式个数（取第一个匹配 clause 的长度）。
 ctorSubPatCount : List (Pair (List Pat) Expr) -> String -> Int
@@ -427,12 +428,12 @@ filterFallback (c :: rest) = case c of
 -- 兜底分支：变量/通配 head 的 clause 在**这一列**被通配吃掉，体里对该变量的引用
 -- 要改写成外层 scrutinee 位置名（`pos`）。M22.2 修：旧实现直接拿原始体，变量名
 -- 在通配分支里没有 binder（`join sep (x :: rest)` 的 `rest` 曾报 unknown name）。
-fallbackAltList : List (Pair String (List String)) -> String -> List (Pair (List Pat) Expr) -> List String -> Int -> Check (List (Pair Pat Expr))
-fallbackAltList table pos clauses restParams fuel = if fuel <= 0 then icFuel "pattern matrix"
+fallbackAltList : List (Pair String (List String)) -> String -> List (Pair (List Pat) Expr) -> List String -> Span -> Int -> Check (List (Pair Pat Expr))
+fallbackAltList table pos clauses restParams fbSp fuel = if fuel <= 0 then icFuel "pattern matrix"
 else case prepFallbacks pos (filterFallback clauses) of
   [] => OkC []
   fbs =>
-    Vuna.Compiler.Common.bind (buildColumnExpr table fbs restParams (fuel - 1))
+    Vuna.Compiler.Common.bind (buildColumnExpr table fbs restParams fbSp (fuel - 1))
       (\bodyExpr => OkC [Pair (PWild (Span "" 0 0 0 0)) bodyExpr])
 
 prepFallbacks : String -> List (Pair (List Pat) Expr) -> List (Pair (List Pat) Expr)

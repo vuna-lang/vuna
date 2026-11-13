@@ -4,17 +4,11 @@
 # 新增无位置诊断会让 `nix/checks/diag-located.sh` 失败。修复一个码就从这里删掉一行。
 #
 # 分类：
-#   * TC_*：分支矩阵的「模式列耗尽」路径没有自然 span（P1 收口：需要把 case/函数
-#     子句的 span 继续下传）。
 #   * RN_AmbiguousPrelude：隐式 Prelude 注入没有用户书写点，天然无位置。
 #   * PKG_NotMaterialized / PKG_Invalid：依赖物化状态（外部输入），无源文件行；P1 起
 #     改为指向 `[dependencies]` 行或标记 `SiteAbsent NsPackageGraph`。
 #   * IC_InvariantViolated：编译器内部不变量，按约定不伪造用户位置。
 #   * CG_NoMain：`vuna interp` 的核心求值路径没有入口文件上下文；包检查路径已定位。
-
-# --- TC：精化器内部（P1 收口） ---
-TC_ClauseTooManyPatterns
-TC_IntStringCaseNeedsFallback
 
 # --- 无用户书写点 / 外部输入 ---
 RN_AmbiguousPrelude

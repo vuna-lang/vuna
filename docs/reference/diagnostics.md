@@ -191,7 +191,7 @@ JSON 字段是机器契约：`code/severity/phase/category/message/labels[]/fiel
 - 负例夹具双轨：320 个 `.diag.json` 结构化期望（`--json` 聚合文档，`--bless-diag` 生成）
   与原有 `.err` 首行片段断言并存；`--bless-diag` 在 runner 内写盘（worker 透传）。
 - `nix/checks/diag-located.sh`：结构化诊断必须有主 span，或带显式 `absent` 理由并逐码
-  登记在 `nix/diag-located.allow`（只减不增）；当前 317/324 有位置，7 条按码登记（3 package-graph + 4 synthetic）。
+  登记在 `nix/diag-located.allow`（只减不增）；当前 320/324 有位置，4 条按码登记（3 package-graph + 1 synthetic）。
 - `nix/checks/diag-coverage.sh`：目录码 vs 结构化夹具覆盖门禁（allowlist 记录缺口、
   基线 `nix/diag-coverage.min` 防回退；当前 191/242，缺口在 allowlist 且必须于 `nix/diag-unreachable.txt` 登记不可达原因）。
 - `vuna check .`（旧/新编译器）、全量 suite、`nix build .#vuna-seed` 必须通过。
