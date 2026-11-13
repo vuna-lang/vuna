@@ -5,10 +5,10 @@
 #           `Codegen.Split` 只做「归属表 + 按归属过滤 + 分文件」，每个单元都经
 #           `Codegen.Lower` 出 `IrUnit` 再交给 `Codegen.Assembly` 装配。
 #
-# 五条规则（违反即失败）：
+# 八条规则（违反即失败）：
 #   1. `Vuna.Compiler.Ir*`（IR 模型与分析）不得依赖任何上游/目标侧模块：
 #      不许 import `Vuna.Compiler.Core*`、`Vuna.Compiler.Elab*`、`Vuna.Compiler.Intrinsics`、
-#      `Vuna.Compiler.Codegen*`。IR 只认「源码名 + 已决策的表示形状」。
+#      `Vuna.Compiler.Codegen*`。IR 只认「源码名 + 已决策的表示形状 + 运行时符号契约」。
 #   2. **文本生成层**（`Codegen.{Decl,Term,Assembly}`）不得 import
 #      `Vuna.Compiler.Core*` / `Vuna.Compiler.Elab*` / `Vuna.Compiler.Intrinsics`：
 #      它们只吃 IR。这条保证「后端只有一个输入面 = IR」，删掉直连 Core 的路径后
@@ -58,7 +58,8 @@ for f in \
   compiler/lib/Vuna/Compiler/Codegen.vuna \
   compiler/lib/Vuna/Compiler/Codegen/Decl.vuna \
   compiler/lib/Vuna/Compiler/Codegen/Term.vuna \
-  compiler/lib/Vuna/Compiler/Codegen/Assembly.vuna
+  compiler/lib/Vuna/Compiler/Codegen/Assembly.vuna \
+  compiler/lib/Vuna/Compiler/Codegen/Runtime.vuna
 do
   [ -f "$f" ] || continue
   check_forbidden "$f" '^(Vuna\.Compiler\.(Core|Elab|Intrinsics)(\.|$))'
@@ -98,6 +99,44 @@ do
     fail=$((fail + 1))
   fi
 done
+
+# 规则 6（Track A 第二步）：已删除的 IR 目标文本节点不得复活——IR 只认符号契约。
+if grep -nE '\bIrRuntime\b|\bIrBridge\b' \
+  compiler/lib/Vuna/Compiler/Ir/Model.vuna \
+  compiler/lib/Vuna/Compiler/Ir/Runtime.vuna \
+  compiler/lib/Vuna/Compiler/Codegen/Lower.vuna \
+  compiler/lib/Vuna/Compiler/Codegen/Term.vuna
+then
+  echo "ir-boundary: removed IR runtime-text nodes reappeared (IrRuntime / IrBridge)"
+  fail=$((fail + 1))
+fi
+
+# 规则 7：IR 数据模块里的字面量只能是符号名（不含空格 / 括号 / 花括号），
+# 防止把目标表达式重新塞回 IR。
+if grep -nE '"[^"]*[ (){}][^"]*"' \
+  compiler/lib/Vuna/Compiler/Ir/Model.vuna \
+  compiler/lib/Vuna/Compiler/Ir/Runtime.vuna
+then
+  echo "ir-boundary: IR data module contains a text literal with spaces/brackets (target text?)"
+  fail=$((fail + 1))
+fi
+
+# 规则 8（正向断言）：契约与 OCaml 符号表存在，且 Lower 用后端表做一致性检查。
+for f in compiler/lib/Vuna/Compiler/Ir/Runtime.vuna compiler/lib/Vuna/Compiler/Codegen/Runtime.vuna; do
+  if [ ! -f "$f" ]; then
+    echo "ir-boundary: missing $f (IR runtime contract)"
+    fail=$((fail + 1))
+  fi
+done
+TABLE=compiler/lib/Vuna/Compiler/Codegen/Runtime.vuna
+if [ -f "$TABLE" ] && ! imports_of "$TABLE" | grep -qE '^Vuna\.Compiler\.Ir$'; then
+  echo "ir-boundary: $TABLE does not import Vuna.Compiler.Ir (table must be keyed by the contract)"
+  fail=$((fail + 1))
+fi
+if [ -f "$LOWER" ] && ! imports_of "$LOWER" | grep -qE '^Vuna\.Compiler\.Codegen\.Runtime$'; then
+  echo "ir-boundary: $LOWER does not import Codegen.Runtime (contract conformance check must run)"
+  fail=$((fail + 1))
+fi
 
 if [ "$fail" -ne 0 ]; then
   echo "ir-boundary: FAIL ($fail violation(s))"

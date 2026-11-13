@@ -14,12 +14,12 @@
 ## 仓库分层
 
 ```text
-compiler/lib/Vuna/Compiler/   （93 个模块：85 个导出 + 8 个内部模块；目录即层：
+compiler/lib/Vuna/Compiler/   （93 个源模块；目录即层：
                                 Frontend → Packages → Loader → Core → Elab → Ir → Codegen → Driver）
 ├─ Source.vuna                底层位置/路径工具（Pos/Span，无 Result）
 ├─ Diag.vuna                  结构化诊断模型 + Check 结果通道（ErrC Diagnostic）
 ├─ Common.vuna                编译器门面（Source + Diag；bind/step/traverse）
-├─ Intrinsics.vuna            内建声明唯一真源（名字/签名/arity/runtime/可见性）
+├─ Intrinsics.vuna            内建语义唯一真源（名字/签名/arity/可见性；运行时文本在 Codegen.Runtime）
 ├─ Hash.vuna                  内容寻址摘要原语：SHA-256 + 63-bit 派生键 + 大载荷预哈希（用 Base.Bits 实现）
 ├─ Canonical.vuna             规范字节编码门面（自定界文法 + 解码器）；子模块 Term / Ast / Elab / Bytes
 ├─ Query.vuna                 查询图骨架：记忆化 / 依赖快照 / early cutoff / trace
@@ -32,8 +32,9 @@ compiler/lib/Vuna/Compiler/   （93 个模块：85 个导出 + 8 个内部模块
 │                             Data Trait InstName Driver Termination
 │                             Prelude Match Records Derive     双向精化
 ├─ Ir.vuna + Ir/            Model Analysis                   擦除后 IR（纯数据 + SCC；无 Core 依赖）
+│                           Runtime                          运行时契约（符号 + 桥接标记；无目标文本）
 ├─ Codegen.vuna + Codegen/  Lower Decl Erase Term
-│                           Assembly Split                   Core→IR 降低 + OCaml 文本生成
+│                           Assembly Split Runtime            Core→IR 降低 + OCaml 文本生成 + 运行时符号表
 └─ Driver/                    Split Dt Compile CompilerCli      输出模型 / facade / 编译入口 / CLI
   PerfCache                          codegen 单元缓存（S5）
                               Owner Iface Cache                 归属表 / 模块接口 / 包级摘要
@@ -108,9 +109,10 @@ Elab/codegen 看不到模板）。fmt/lint/index/doc 只 parse，仍按 `EInterp
 构造子 η 展开在 `Elab.Meta`；`DtDef` 带来源 span。trait / 实例语义见
 [records-traits.md](reference/records-traits.md)。
 
-**内建单一真源**：`Vuna.Compiler.Intrinsics` 是名字 / 签名 / arity / 归约 / runtime /
+**内建语义单一真源**：`Vuna.Compiler.Intrinsics` 是名字 / 签名 / arity / 归约 /
 可见性的唯一真源；`Loader.Resolve`（arity、放行）、`Elab.Prelude`（签名）、
-`Core.Eval`（归约）、`Codegen.Lower`（runtime 名映射）都消费它。内置身份按声明 symbol 判定：`Bool` / `List` / `Nat` 是 base 普通
+`Core.Eval`（归约）、`Codegen.Lower`（名字 → IR 符号）都消费它；OCaml 运行时文本在
+`Codegen.Runtime`（契约 `Ir.Runtime` 的唯一 OCaml 实现）。内置身份按声明 symbol 判定：`Bool` / `List` / `Nat` 是 base 普通
 data（`Base.Bool.Bool` / `Base.List.List` / `Base.Nat.Nat`），不按短名。
 
 擦除检查由 `Codegen.Lower.checkProgramOf` 负责（判据 `Core.rigIsErased`）；不透明字段的

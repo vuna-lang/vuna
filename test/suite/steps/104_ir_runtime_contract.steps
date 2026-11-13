@@ -1,0 +1,54 @@
+# 104) IR ↔ 运行时契约（Track A 第二步）：IR 只带目标中立的运行时符号，OCaml 文本在
+# `Codegen.Runtime` 符号表里。
+#
+# 契约一致性（`Intrinsics` ↔ `Ir.Runtime` ↔ `Codegen.Runtime`）由 check 路径上的
+# `Lower.checkRuntimeContract` 在每次 check/build 上断言；结构边界（IR 层不 import
+# 上游、没有目标文本）由 `checks.ir-boundary` 守。本用例钉住「符号 → OCaml 文本」的
+# 代表性映射：入口展示（五种内建类型）、裸符号、内联、`++` 展平、List 桥接、动作 thunk。
+run: "$VUNA" check "$VUNA_SUITE_ROOT/compiler" 2>&1
+exit: 0
+out-not-contains: IC_InvariantViolated
+
+# 入口展示：Int/Nat 共用 string_of_int，String/Bool/Float 各自独立（合成符号）。
+run: sh -c 'rm -rf "$TMPDIR/p"; mkdir -p "$TMPDIR/p"; printf "%s\n" "main : Int" "main = 7" > "$TMPDIR/p/int.vuna"; printf "%s\n" "import Base.Nat" "" "main : Nat" "main = 3" > "$TMPDIR/p/nat.vuna"; printf "%s\n" "main : String" "main = \"hi\"" > "$TMPDIR/p/str.vuna"; printf "%s\n" "main : Bool" "main = True" > "$TMPDIR/p/bool.vuna"; printf "%s\n" "main : Float" "main = 1.5" > "$TMPDIR/p/float.vuna"'
+run: "$VUNA" compile "$TMPDIR/p/int.vuna" "$TMPDIR/p/out-int"
+file-contains: $TMPDIR/p/out-int/Main.ml print_endline (string_of_int (v_main))
+run: "$VUNA" compile "$TMPDIR/p/nat.vuna" "$TMPDIR/p/out-nat"
+file-contains: $TMPDIR/p/out-nat/Main.ml print_endline (string_of_int (v_main))
+run: "$VUNA" compile "$TMPDIR/p/str.vuna" "$TMPDIR/p/out-str"
+file-contains: $TMPDIR/p/out-str/Main.ml print_endline (dt_show_string (v_main))
+run: "$VUNA" compile "$TMPDIR/p/bool.vuna" "$TMPDIR/p/out-bool"
+file-contains: $TMPDIR/p/out-bool/Main.ml print_endline (dt_show_bool (v_main))
+run: "$VUNA" compile "$TMPDIR/p/float.vuna" "$TMPDIR/p/out-float"
+file-contains: $TMPDIR/p/out-float/Main.ml print_endline (string_of_float (v_main))
+
+# 裸符号（`IrRt`）：未饱和的内建按运行时常量表输出，不做内联。
+run: sh -c 'printf "%s\n" "main : Int" "main = bitAnd 6 3" > "$TMPDIR/p/bit.vuna"'
+run: "$VUNA" compile "$TMPDIR/p/bit.vuna" "$TMPDIR/p/out-bit"
+file-contains: $TMPDIR/p/out-bit/Main.ml ((bi_bitAnd 6) 3)
+
+# 内联（`IrRtApp`）：饱和的 Int 相等走后端模板，不出现 bi_eq_int 调用。
+run: sh -c 'printf "%s\n" "main : Bool" "main = 1 == 1" > "$TMPDIR/p/eq.vuna"'
+run: "$VUNA" compile "$TMPDIR/p/eq.vuna" "$TMPDIR/p/out-eq"
+file-contains: $TMPDIR/p/out-eq/Main.ml (1 = 1)
+
+# `++` 链展平（`IrConcatMany`）。
+run: sh -c 'printf "%s\n" "main : String" "main = \"a\" ++ \"b\" ++ \"c\"" > "$TMPDIR/p/cat.vuna"'
+run: "$VUNA" compile "$TMPDIR/p/cat.vuna" "$TMPDIR/p/out-cat"
+file-contains: $TMPDIR/p/out-cat/Main.ml (String.concat "" ["a"; "b"; "c"])
+
+# List 桥接：契约里的桥接符号在引用点按 List 族单元限定 helper。
+run: sh -c 'printf "%s\n" "main : List Int" "main = strUnpack \"ab\"" > "$TMPDIR/p/bridge.vuna"'
+run: "$VUNA" compile "$TMPDIR/p/bridge.vuna" "$TMPDIR/p/out-bridge"
+file-contains: $TMPDIR/p/out-bridge/Main.ml (Base_dList.dtp_unpack "ab")
+
+# 动作 main：宿主原语走 thunk（`IrEffThunk`），entry 走 runMain/sched 钩子。
+run: sh -c 'printf "%s\n" "import Base.Eff" "" "main : Eff [] Int" "main = do" "  _ <- prim_eff_print \"x\"" "  pure 0" > "$TMPDIR/p/eff.vuna"'
+run: "$VUNA" compile "$TMPDIR/p/eff.vuna" "$TMPDIR/p/out-eff"
+file-contains: $TMPDIR/p/out-eff/Main.ml dtp_print
+file-contains: $TMPDIR/p/out-eff/Main.ml dtp_sched_main
+run: cd "$TMPDIR/p/out-eff" && sh build.sh prog 2>&1
+exit: 0
+run: "$TMPDIR/p/out-eff/prog" 2>&1
+exit: 0
+out-equals: x0

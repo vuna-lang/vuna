@@ -126,7 +126,8 @@ build，`dist/` 提交）；`nix/` = 构建图 + rotate/metrics/bench；`docs/` 
   [primitives.md](docs/reference/primitives.md)（内建/原语/宿主层）、
   [operators.md](docs/reference/operators.md)（运算符=方法别名、实例落点规则）
 - 编译器实现：[compiler.md](docs/reference/compiler.md)（模块与输出模型、接口摘要）、
-  [ir.md](docs/reference/ir.md)（擦除后 IR：Core → IR 的决策划分与边界）、
+  [ir.md](docs/reference/ir.md)（擦除后 IR + 运行时契约：Core → IR 的决策划分、`Ir.Runtime`
+  符号面与 `checks.ir-boundary`）、
   [diagnostics.md](docs/reference/diagnostics.md)（诊断模型/错误码/渲染/LSP/迁移状态）、
   [core.md](docs/reference/core.md)（Core TT / NbE / 精化器）；
   缓存与增量判定：[cache.md](docs/reference/cache.md)（输入寻址对象、命中判据、roots 与 GC）

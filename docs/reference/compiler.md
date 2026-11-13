@@ -24,7 +24,7 @@
 | `Common` | 编译器门面：重导出 `Source` + `Diag`，并保留固定类型的 `bind`/`step`/`traverse` | `bind`、`showSpanLoc`、`suggest`、`splitPath` |
 | `Diagnostics`（门面） | 错误码体系入口：重导出 `Diagnostics.Tc`/`Cg`/`Ic`/`Common` 与 `Base.Nat`/`Vec` | `tcErr0`、`cgErr0`、`icFuel`、`tcAll`、`cgAll` |
 | `Diagnostics.Tc` / `Cg` | `TcErr : Nat -> Type` / `CgErr : Nat -> Type` 域枚举（构造子携带模板、arity 由索引锁定）；`tcAll`/`cgAll` 按 arity 分块（避免单行巨表） | `tcCode`、`tcTemplate`、`cgCode`、`cgTemplate` |
-| `Intrinsics` | **内建声明唯一真源**：名字/签名形状（`IType`）/arity/归约标签（`IntrinsicOp`）/runtime 名/用户可见性（不再有 `Capability` 能力位）；内置身份按声明 symbol（`Base.Bool.Bool` / `Base.List.List` / `Base.Nat.Nat`） | `findIntrinsic`、`intrinsicRuntime` |
+| `Intrinsics` | **内建语义唯一真源**：名字/签名形状（`IType`）/arity/归约标签（`IntrinsicOp`）/用户可见性（不再有 `Capability` 能力位）；运行时文本不在本模块（`Ir.Runtime` 契约 + `Codegen.Runtime` 实现）；内置身份按声明 symbol（`Base.Bool.Bool` / `Base.List.List` / `Base.Nat.Nat`） | `findIntrinsic`、`intrinsicName`、`intrinsicArity` |
 | `Hash` | 内容寻址摘要原语：**SHA-256**（用 `Base.Bits` 的 32-bit 包装在语言内实现：OCaml / 未来 wasm / interp 同摘要）；`digestHex`（64 位十六进制）/ `digestInt`（63-bit 派生键，取代旧 10-bit `strHash` 与 6-lane 盐）/ `prehashOfString`（MB 级载荷折叠）/ `contentKey`·`contentAddress`（大输入：预折叠 + SHA，缓存 key 与内容地址） | `digestOfString`、`digestHex`、`digestIntOf`、`contentKey`、`contentAddress`、`prehashOfString` |
 | `Fingerprint` | 编译器指纹的唯一来源：exe 路径 + 大小 + mtime → 63-bit 键，拼成 `<版本>/<指纹>` 的 tag；iface 分桶、lex/check/split/unit 的 key 与 framing tag 共用（C48 关闭的关键：二进制换代即整套缓存换代） | `compilerFingerprintEff`、`compilerTagEff`、`textHashOf` |
 | `Store` | **唯一**缓存载荷落盘层：`vuna-cache-frame 2\|<tag>\|<codec>\|<len>\|<内容地址>\n<payload>` 的编解码（纯）、读侧三层校验（framing → 头内内容地址 → 调用方语义自证）、原子写、去抖写、缓存根探测与清理入口 | `storeEncode`、`storeDecode`、`storeReadEff`、`storeReadAsEff`、`storeWriteEff`、`storeWriteIfChangedEff`、`storeCacheBaseEff` |
@@ -71,10 +71,12 @@
 | `Codegen.Lower` | **Core → IR 的唯一入口**：擦除决策（binder 占位、实参/分支丢弃）、表示决策（record 字段表、去装箱族、构造子对齐与不透明 cast、Nat 折回与 Nat case 降级）、形态判定（内建内联、`++` 展平、分支 binder 形状）、入口分类（动作/值、展示函数、宿主 handler）。程序级检查（分区/擦除/axiom/作用域/名字单射/SCC 递归值形状）也在这里；不产文本 | `lowerTerm`、`lowerUnitOf`、`lowerProgramOf`、`lowerEntryOf`、`mkLwEnv`、`checkProgramOf` |
 | `Codegen.Decl` | 纯文本叶子：OCaml 名字编码（sanitize/前缀/保留字）+ 跨单元引用限定（`Unit.name`）+ `IrTy` / `IrTyDecl` → OCaml 类型文本 | `irTyText`、`irTyDeclText`、`irTypeDeclsText`、`ctorOcamlName`、`qualValueText` |
 | `Codegen.Erase` | 擦除检查、axiom 运行时使用检查、de Bruijn 作用域护栏、运行时依赖遍历（SCC 分组的输入） | `checkAllErasure`、`checkAllDefScopes`、`checkNoAxiomRuntime`、`termDepsInto`、`partitionDefs` |
-| `Codegen.Term` | IR → OCaml 文本 + DT 运行时前缀（`bi_*`、`dtp_*`、宿主原语桥接）+ 定义位置表/异常报告器 + main 钩子模板；**不感知 Core** | `dtRuntime`、`dtRuntimeWith`、`dtDefLocTable`、`genIr`、`genGroups`、`genEntryHook` |
+| `Codegen.Term` | IR → OCaml 文本 + DT 运行时模板（`bi_*`、`dtp_*`、宿主原语桥接）+ 定义位置表/异常报告器 + main 钩子模板；`IrRt` 的文本从 `Codegen.Runtime` 查表；**不感知 Core** | `dtRuntime`、`dtRuntimeWith`、`dtDefLocTable`、`genIr`、`genGroups`、`genEntryHook` |
+| `Codegen.Runtime` | **契约的 OCaml 实现**：符号 → OCaml 运行时表达式（`ocamlRtText`）+ List 桥接 helper 名单；对 `Ir.Runtime` 契约双向全覆盖（gaps/extras），由 `Lower.checkRuntimeContract` 在 check 路径上断言 | `ocamlRtText`、`ocamlRtHelperNames`、`rtTextGaps`、`rtTextExtras` |
 | `Codegen.Assembly` | `IrUnit` 装配：open 头 + 类型声明 + List 桥接 + 分组正文 + 直接依赖表 | `genUnitParts`、`genUnitText`、`unitPartsDeps` |
 | `Codegen.Split` | **唯一** codegen 生成器：逐模块 split 的声明归属表与分文件装配（每单元经 `Codegen.Lower` 出 `IrUnit`） | `generateDtSplitProgram` |
-| `Ir`（门面） | 后端中立的擦除后中间表示：重导出 `Ir.Model` 与 `Ir.Analysis` | `validateProgram`、`validateUnit` |
+| `Ir`（门面） | 后端中立的擦除后中间表示：重导出 `Ir.Model`、`Ir.Analysis` 与 `Ir.Runtime`；校验入口 | `validateProgram`、`validateUnit` |
+| `Ir.Runtime` | **IR ↔ 运行时契约**（唯一真源）：符号清单（普通内建名/桥接内建名/`@ir@*` 合成符号）+ 桥接标记 + `Ir` 项符号遍历；IR 节点里没有目标文本 | `irRtContract`、`irRtNames`、`irRtLookup`、`irRtBridgesList`、`irSymbolsOfUnit` |
 | `Ir.Model` | IR 数据模型（纯数据，无 `Term`/`Value`/`DtDef`）：节点、binder、分支、类型声明、定义/分组、入口形态、共享元数据、内联 arity 表 | `Ir`、`IrBinder`、`IrTy`、`IrTyDecl`、`IrDef`、`IrShared`、`IrUnit`、`IrEntry` |
 | `Ir.Analysis` | SCC 分组（Kosaraju、依赖就绪排序、递归值形状护栏），从 `Codegen.Erase` 原样迁出；名字级入口给 Lowering 用 | `assembleGroups`、`assembleGroupNames`、`groupNames`、`adjTblOf` |
 | `Driver.Split` | 输出文件模型与构建脚本生成：`SplitFile`、依赖序、按内容哈希增量的 `build.sh` | `SplitFile`、`buildScript`、`writeSplitFiles`、`writeSplitFilesIfChanged` |

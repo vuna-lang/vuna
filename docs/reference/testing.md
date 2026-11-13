@@ -366,7 +366,9 @@ interp / compile 文案不同时用 `.compile.err`。
   `60_erasure_unify`、`61_namespace_dual`、`60_ctor_eta`、`61_implicit_values`、
   `62_sigma_basic`、`63_dep_lookup` 覆盖现行类型规则。`corpus/dt_deep/` 是「深层嵌套
   单定义体」夹具（150 层嵌套应用）：迁移前 codegen 的固定 fuel 在这里必然耗尽，IR 之后
-  必须能编译并跑出结果（用例 `103_ir_lowering.steps`）。`corpus/dt_err/*` 是对应负例
+  必须能编译并跑出结果（用例 `103_ir_lowering.steps`）；
+  `104_ir_runtime_contract.steps` 钉住 IR 运行时符号到 OCaml 文本的代表性映射
+  （入口展示 / 裸符号 / 内联 / `++` 展平 / List 桥接 / 动作 thunk）。`corpus/dt_err/*` 是对应负例
   （kind / 宇宙、冗余 / 不可达分支、axiom 运行时、命名空间、隐式参数、泛型 Σ、无 Eq 证据
   等）。`corpus/dt_base/`、`corpus/dt_io/`、`corpus/dt_pkg/`、`corpus/dt_ad_hoc/` 是 DT
   专项夹具；
