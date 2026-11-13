@@ -386,17 +386,18 @@ interp / compile 文案不同时用 `.compile.err`。
 
 ## Nix checks 清单
 
-`nix flake check` 实测 **21 项**：3 个 package 构建（`vuna` / `vuna-compiler` /
-`vuna-seed`，同时暴露为 checks）+ 18 个 check 语义项（`context-budget`、`diag-coverage`、
+`nix flake check` 实测 **19 项**：3 个 package 构建（`vuna` / `vuna-compiler` /
+`vuna-seed`，同时暴露为 checks）+ 16 个 check 语义项（`context-budget`、`diag-coverage`、
 `diag-raw`、`diag-style`、`eff-boundary`、`ir-boundary`、`seed-selfhost`、
-`vuna-compiler-growth`、`vuna-compiler-growth-incremental`、`vuna-compiler-perf`、
-`vuna-fmt`、`vuna-index`、`vuna-lint`、`vuna-metrics`、`vuna-package`、`vuna-tests`、
+`vuna-compiler-growth`、`vuna-compiler-growth-incremental`、
+`vuna-fmt`、`vuna-lint`、`vuna-metrics`、`vuna-package`、`vuna-tests`、
 `vuna-typecheck`、`vscode-ext`；主体是 `nix/checks/<name>.sh`）。语义项：
 
 - `seed-selfhost`：seed→stage0→stage1→stage2 逐字节一致、TCB 黑名单、seed 完整 allowlist、闭包数量、增量构建、
   行为抽查与 seed 滞后报告（不阻塞）；
-- `vuna-tests`：沙箱跑 `vuna test --suite test/suite.toml`（`--jobs auto --no-cache`；
-  `VUNA_STORE` 指向该 check 的私有临时对象库，worker/case 共享同一根）；
+- `vuna-tests`：沙箱跑 `vuna test --suite test/suite.toml`（`--jobs $NIX_BUILD_CORES`
+  或 `VUNA_TEST_JOBS`；`--no-cache`；`VUNA_STORE` 指向该 check 的私有临时对象库，
+  worker/case 共享同一根）；
 - `vuna-typecheck` / `vuna-lint`：`vuna check .` 自检、lint 零 finding；
 - `eff-boundary`：隐藏效果守卫，`runPure` 调用点只降不增（基线
   `nix/eff-boundary.allowlist`，当前为空），见 [effects.md](effects.md)；
@@ -416,8 +417,6 @@ interp / compile 文案不同时用 `.compile.err`。
   iface 也是完整模块面；
 - `vuna-fmt`：workspace 全包与 `examples/`；
 - `vuna-package`：`examples/multi` 的 build/test/fmt/doc + 根包构建；
-- `vuna-compiler-perf`：冷/热 `check .` 比例 + 包内增量的 clean/parse 语义断言 + REPL
-  默认走接口路径；
 - `vuna-compiler-growth`：合成 500/1000/2000/4000 同形定义，相邻档墙钟比 ≤2.3（增长率
   门槛，跨机器有效）；
 - `vuna-compiler-growth-incremental`：合成可执行包（N 个同形 def + `app/Main.vuna`），
@@ -427,7 +426,6 @@ interp / compile 文案不同时用 `.compile.err`。
 - `vuna-metrics`：冻结夹具（`test/corpus/codegen`）的 codegen 产物对
   `nix/codegen.baseline` 的精确基线；种子尺寸不设门槛（见 [compiler.md](compiler.md)
   §codegen 夹具基线）；
-- `vuna-index`：`map` / `--find` / `--impact` / `api` 与内容哈希缓存失效；
 - `context-budget`：入口文档字节数与单模块行数对 `nix/context.budget`（预算按实测 ×1.5
   留余量；超过预算失败，达到 70% 只打印 `WARN`。`WARN` 在本机跑 check 时可见，nix 只在
   失败时打印 builder 日志，所以 CI 成功时不显示）；

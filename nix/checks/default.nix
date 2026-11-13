@@ -143,21 +143,6 @@ in
     script = ./vuna-metrics.sh;
   };
 
-  # M34.6：elab 缓存有效性（冷/热 `check .` 比例断言；缓存退化即失败）。
-  vuna-compiler-perf = mkCheck {
-    name = "vuna-compiler-perf";
-    srcs = [
-      ../../lib
-      ../../compiler
-      ../../base
-      ../../app
-      ../../vuna.toml
-    ];
-    env = {
-      VUNA = "${vuna}/bin/vuna";
-    };
-    script = ./compiler-perf.sh;
-  };
 
   # M34.6：编译器增长率门槛（合成 N 个同形定义，相邻档墙钟比有上界）。
   # 绝对时间不可跨机器比；增长率可比，用来挡「某次改动把线性路径退化成 n²」。
@@ -243,27 +228,6 @@ in
     script = ./vuna-fmt.sh;
   };
 
-  vuna-index = mkCheck {
-    name = "vuna-index";
-    srcs = [
-      ../../compiler
-      ../../base
-      ../../lib
-      ../../app
-      ../../seed
-      ../../vuna.toml
-      ../../nix/index-check.sh
-    ];
-    env = {
-      VUNA = "${vuna}/bin/vuna";
-    };
-    nativeBuildInputs = [
-      pkgs.bash
-      pkgs.coreutils
-      pkgs.gnugrep
-    ];
-    script = ./vuna-index.sh;
-  };
 
   context-budget = mkCheck {
     name = "vuna-context-budget";

@@ -40,7 +40,7 @@ while [ "$_i" -lt "$_n" ]; do
 done
 
 if [ "$bench" = 1 ]; then
-  env NIX_CONFIG="$NIX_CONF" nix flake check --keep-going "$@"
+  env NIX_CONFIG="$NIX_CONF" nix flake check --keep-going --max-jobs 1 --cores "${NIX_BUILD_CORES:-16}" "$@"
   printf 'ci: flake check 通过；运行软性能检查（nix run .#vuna-bench -- --check）\n'
   if ! nix run .#vuna-bench -- --check; then
     printf 'ci: bench check 退出非零（软告警，不阻断 CI）\n'
@@ -48,4 +48,4 @@ if [ "$bench" = 1 ]; then
   exit 0
 fi
 
-exec env NIX_CONFIG="$NIX_CONF" nix flake check --keep-going "$@"
+exec env NIX_CONFIG="$NIX_CONF" nix flake check --keep-going --max-jobs 1 --cores "${NIX_BUILD_CORES:-16}" "$@"

@@ -16,5 +16,8 @@ export VUNA_BASE VUNA_SEED
 VUNA_STORE=$(mktemp -d "${TMPDIR:-/tmp}/vuna-test-store.XXXXXX")
 export VUNA_STORE
 
-# --jobs auto = 探测到的全部可用核；--no-cache 让 CI 保持权威口径。
-"$VUNA" test --suite test/suite.toml --jobs auto --timeout 240 --no-cache --strict-skips
+# 全局并发预算：Nix 给本 derivation 的 cores（或显式 VUNA_TEST_JOBS）；
+# 不再用 --jobs auto 在 nix flake check 里重复吃满所有核。
+JOBS=${VUNA_TEST_JOBS:-${NIX_BUILD_CORES:-1}}
+[ "$JOBS" -gt 0 ] 2>/dev/null || JOBS=1
+"$VUNA" test --suite test/suite.toml --jobs "$JOBS" --timeout 240 --no-cache --strict-skips
