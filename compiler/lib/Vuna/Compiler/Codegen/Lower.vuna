@@ -28,6 +28,7 @@ import Vuna.Compiler.Intrinsics
 import Vuna.Compiler.Ir
 import Vuna.Compiler.Codegen.Erase
 import Vuna.Compiler.Codegen.Decl
+import Vuna.Compiler.Codegen.Runtime
 
 -- ---------------------------------------------------------------
 -- 生成环境
@@ -558,31 +559,28 @@ recordTermAsAppIn t [] = t
 recordTermAsAppIn t ((Pair a rig) :: rest) = recordTermAsAppIn (TApp t a rig) rest
 
 -- | 顶层名引用：Nat 构造子 / 程序构造子 / 内建 / 普通运行时定义。
--- 旧实现 `genGlobalRef` 的分支顺序原样保留（Nat Zero → `0`；Succ → `bi_natSucc`）。
+-- 旧实现 `genGlobalRef` 的分支顺序原样保留（Nat Zero → `0`；Succ → `@ir@natSucc`）。
 -- 需要 List 桥接的内建在没有 canonical `Base.List.List` 族时报 `CG_ListBridgeRequired`
 -- （迁移前在 codegen 生成期报，现在前置到 Lowering，诊断码与消息一致）。
 lowerGlobalRef : LwEnv -> String -> Check Ir
 lowerGlobalRef env name = if name == natZeroCtor then OkC (IrInt 0)
-else if name == natSuccCtor then OkC (IrRuntime "bi_natSucc")
+else if name == natSuccCtor then OkC (IrRt irRtNatSucc)
 else case lookupList name env.lwCtors of
   Just (Pair family keepFlags) => OkC (IrCtor family name [])
   Nothing => case findIntrinsic name of
-    Just i => if name == primEffBind1Name then OkC (IrEffBind effTypeName effMkCtor effUnitTyIn)
-    else if intrinsicReturnsEff i then
-      let
-        prim =
-          if needsListBridge i then IrBridge i.intrinsicRuntime else IrRuntime i.intrinsicRuntime
-      in lowerBridgeGuard env name i
-        (IrEffThunk effTypeName effMkCtor effUnitTyIn (intrinsicArity i) prim)
-    else if needsListBridge i then lowerBridgeGuard env name i (IrBridge i.intrinsicRuntime)
-    else OkC (IrRuntime i.intrinsicRuntime)
+    Just i =>
+      if name == primEffBind1Name then OkC (IrEffBind effTypeName effMkCtor effUnitTyIn)
+      else if intrinsicReturnsEff i then lowerBridgeGuard env name
+        (IrEffThunk effTypeName effMkCtor effUnitTyIn (intrinsicArity i) (IrRt (intrinsicName i)))
+      else lowerBridgeGuard env name (IrRt (intrinsicName i))
     Nothing => OkC (IrGlobal name)
 
 -- 需要 List 桥接的内建：程序必须声明 canonical `Base.List.List` 族（旧
 -- `memName listFamilyName st.gsFamilies`），否则报 `CG_ListBridgeRequired`。
-lowerBridgeGuard : LwEnv -> String -> Intrinsic -> Ir -> Check Ir
-lowerBridgeGuard env name i ir =
-  if needsListBridge i then if memList listFamilyName (map dtDataName env.lwDatas) then OkC ir
+-- 桥接标记来自契约（`Ir.Runtime`，单一来源），Lowering 不再按文本重新推断。
+lowerBridgeGuard : LwEnv -> String -> Ir -> Check Ir
+lowerBridgeGuard env name ir =
+  if irRtBridgesList name then if memList listFamilyName (map dtDataName env.lwDatas) then OkC ir
   else cgErr1 (ListBridgeRequired name) name
   else OkC ir
 
@@ -652,7 +650,7 @@ else Vuna.Compiler.Common.bind (lowerTermFuel (fuel - 1) env st binders f) (\pf 
 lowerInlineAppFuel : Int -> LwEnv -> LwSt -> List IrBinder -> String -> List (Pair Term Rig) -> Check (Pair Ir LwSt)
 lowerInlineAppFuel fuel env st binders name args = if fuel <= 0 then icFuel "ir-lower"
 else Vuna.Compiler.Common.bind (lowerInlineArgsFuel (fuel - 1) env st binders args) (\p => case p of
-  Pair irs st2 => OkC (Pair (IrInline name irs) st2)
+  Pair irs st2 => OkC (Pair (IrRtApp name irs) st2)
 )
 
 lowerInlineArgsFuel : Int -> LwEnv -> LwSt -> List IrBinder -> List (Pair Term Rig) -> Check (Pair (List Ir) LwSt)
@@ -766,7 +764,7 @@ else if c == natSuccCtor then case alignCtorArgs c [True] args of
   OkC runtimeArgs => Vuna.Compiler.Common.bind (lowerConArgsFuel (fuel - 1) env st binders [False] runtimeArgs) (\p => case p of
     Pair irs st2 => case irs of
       ir :: rest => case rest of
-        [] => OkC (Pair (IrApp (IrRuntime "bi_natSucc") ir) st2)
+        [] => OkC (Pair (IrApp (IrRt irRtNatSucc) ir) st2)
         _ => icInternal "Nat Succ must have exactly one runtime argument"
       [] => icInternal "Nat Succ must have exactly one runtime argument"
   )
@@ -1316,7 +1314,34 @@ appendGroups env st (g :: rest) =
 -- 迁移前这一步在 split 入口对**整个程序**跑一次（`prepareDtProgram`），然后每个单元只
 -- 做分组与文本生成；诊断内容与先后顺序都必须与迁移前一致。
 export checkProgramOf : LwEnv -> Check Int
-checkProgramOf env = Vuna.Compiler.Common.bind (prepareProgram env.lwDatas env.lwDefs) (\_ => OkC 0)
+checkProgramOf env =
+  Vuna.Compiler.Common.bind (prepareProgram env.lwDatas env.lwDefs) (\_ => checkRuntimeContract)
+
+-- | 运行时契约一致性：`Intrinsics` ↔ `Ir.Runtime` ↔ OCaml 后端符号表。
+--
+-- 三处任何一处漂移都是编译器 bug（内部错），不是用户面诊断；用户面诊断码不变。
+checkRuntimeContract : Check Int
+checkRuntimeContract =
+  let
+    intrinsicNames = map intrinsicName allIntrinsics
+    contractNames = irRtNames
+    missingFromContract =
+      filter
+        (\n => if n == primEffBind1Name then False else if memName n contractNames then False else True)
+        intrinsicNames
+    extrasInContract =
+      filter
+        (\n => if memName n intrinsicNames then False else if memName n irRtSyntheticNames then False else True)
+        contractNames
+  in if listLength missingFromContract > 0 then icInternal "runtime contract misses intrinsic `${firstOfList missingFromContract}`"
+  else if listLength extrasInContract > 0 then icInternal "runtime contract declares unknown symbol `${firstOfList extrasInContract}`"
+  else if listLength rtTextGaps > 0 then icInternal "OCaml runtime table misses contract symbol `${firstOfList rtTextGaps}`"
+  else if listLength rtTextExtras > 0 then icInternal "OCaml runtime table has symbol outside the contract: `${firstOfList rtTextExtras}`"
+  else OkC 0
+
+firstOfList : List String -> String
+firstOfList [] = ""
+firstOfList (x :: _) = x
 
 -- | 单元 lowering：入参是本单元的定义名与数据族名（已按归属过滤，顺序=程序顺序）。
 --
@@ -1420,11 +1445,11 @@ mainShowIr tyTerm = case force (Base.HashMap.fromList []) solsEmpty defaultFuel 
 
 mainShowForNameIr : String -> Ir
 mainShowForNameIr g =
-  if g == intTypeName then IrRuntime "string_of_int"
-  else if g == natTypeName then IrRuntime "string_of_int"
-  else if g == strTypeName then IrRuntime "dt_show_string"
-  else if g == floatTypeName then IrRuntime "string_of_float"
-  else if g == boolTypeName then IrRuntime "dt_show_bool" else IrGlobal mainShowDefName
+  if g == intTypeName then IrRt irRtShowInt
+  else if g == natTypeName then IrRt irRtShowNat
+  else if g == strTypeName then IrRt irRtShowStr
+  else if g == floatTypeName then IrRt irRtShowFloat
+  else if g == boolTypeName then IrRt irRtShowBool else IrGlobal mainShowDefName
 
 -- | 入口 lowering：有运行时 `main` 才产出 `IrEntry`。
 export lowerEntryOf : List DtDef -> Check (Maybe IrEntry)

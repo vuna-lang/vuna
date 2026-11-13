@@ -17,6 +17,7 @@ import Base.HashMap
 import Vuna.Compiler.Diagnostics
 import Vuna.Compiler.Ir
 import Vuna.Compiler.Codegen.Decl
+import Vuna.Compiler.Codegen.Runtime
 
 export dtRuntime : String
 dtRuntime = """let () =
@@ -85,7 +86,7 @@ ${dtPrimRuntime}"""
 
 -- M21：effectful 内建（`prim_*`）的 DT 运行时实现。
 -- 签名在 `Vuna.Compiler.Intrinsics`（唯一真源），这里补 OCaml 侧实现（对应
--- `intrinsicRuntime` 字段）；`@vuna@prim_eff_getArgs` / `@vuna@prim_eff_readLine` 是零参**值**，
+-- `Codegen.Runtime` 的符号表）；`@vuna@prim_eff_getArgs` / `@vuna@prim_eff_readLine` 是零参**值**，
 -- 所以在引用点展开成 `dtp_*(()`，与 Codegen 的既有处理一致（每次求值都重新读）。
 -- `@vuna@prim_eff_readBytes` 是**函数**（`Int -> String`）：最多读 n 字节、有数据就立即返回
 -- （可能少于 n），EOF 返回 `""`——LSP 的帧循环靠它精确读 Content-Length 字节。
@@ -929,7 +930,7 @@ dtRuntimeWith locs usesFloat usesTrace =
 -- M19 / M22.2：`strUnpack` / `strPack` 的运行时桥接。
 -- Core 的 `strUnpack` 语义是「OCaml int list」，而 DT 路径里 `List` 是程序自己声明的
 -- 归纳族。这些 helper 按实际族名生成，把 int list ↔ 族构造子互转；Lowering 把
--- `strUnpack`/`strPack` 映射到 `IrBridge`（桥接只服务 Int 元素）。
+-- `strUnpack`/`strPack` 的契约条目带 `irRtBridgesList = True`（桥接只服务 Int 元素）。
 export dtListBridge : Maybe IrListFam -> String
 dtListBridge Nothing = ""
 dtListBridge (Just lf) =
@@ -1046,11 +1047,7 @@ recordLabelOf st family label =
   in if unit == "" || unit == st.gsQual.qcUnit then label else "${unit}.${label}"
 
 -- List 桥接 helper 在**声明 List 族**的单元里；其它单元引用时按该单元限定。
--- 表必须覆盖 `Intrinsics` 里所有 `needsListBridge` 的 runtime 文本引用到的 helper。
-bridgeHelperNames : List String
-bridgeHelperNames =
-  ["dtp_unpack", "dtp_pack", "dtp_listOf", "dtp_ocamlOf", "dtp_concatMany", "dtp_substTemplate"]
-
+-- helper 名单是契约的一部分，由 `Codegen.Runtime.ocamlRtHelperNames` 提供（单一来源）。
 bridgeUnitOf : GenSt -> String
 bridgeUnitOf st = case st.gsShared.irSharedListFam of
   Just lf => unitOfTbl st.gsQual.qcDatas (irListFamilyOf lf)
@@ -1066,7 +1063,7 @@ qualifyBridgeNames unit (n :: rest) text =
 
 qualifyBridgeText : String -> String -> String
 qualifyBridgeText unit text =
-  if unit == "" then text else qualifyBridgeNames unit bridgeHelperNames text
+  if unit == "" then text else qualifyBridgeNames unit ocamlRtHelperNames text
 
 genBridgeRef : GenSt -> String -> Pair String GenSt
 genBridgeRef st text =
@@ -1118,11 +1115,9 @@ genIrNode st (IrRecUpd base family fields) = Vuna.Compiler.Common.bind (genIr st
       OkC (Pair "{ ${baseText} with ${joinWith "; " texts} }" (gsDepOfFamily st2 family))
   )
 )
-genIrNode st (IrRuntime text) = OkC (Pair text st)
-genIrNode st (IrBridge text) =
-  let
-    p = genBridgeRef st text
-  in OkC (Pair (firstOf p) (secondOf p))
+genIrNode st (IrRt sym) = case ocamlRtText sym of
+  Nothing => icInternal "no OCaml runtime text for IR symbol `${sym}`"
+  Just text => if irRtBridgesList sym then OkC (genBridgeRef st text) else OkC (Pair text st)
 genIrNode st (IrCast inner) = Vuna.Compiler.Common.bind (genIr st inner) (\p => case p of
   Pair text st1 => OkC (Pair "(Obj.magic ${text})" st1)
 )
@@ -1173,7 +1168,7 @@ genIrNode st (IrNatCase scrut fresh zero succ catch) = Vuna.Compiler.Common.bind
       OkC (Pair "(let dtnat__${strFromInt fresh} = ${scrutText} in ${branches})" st2)
   )
 )
-genIrNode st (IrInline name args) = Vuna.Compiler.Common.bind (genIrArgs st args) (\p => case p of
+genIrNode st (IrRtApp name args) = Vuna.Compiler.Common.bind (genIrArgs st args) (\p => case p of
   Pair texts st1 => case inlineText name texts of
     Just text => OkC (Pair text st1)
     Nothing => icInternal "no inline text for builtin `${name}`"

@@ -14,8 +14,9 @@ module Vuna.Compiler.Ir.Model where
 --     record 表示、构造子实参对齐、不透明 cast、内建饱和内联、`++` 链展平、
 --     入口分类、类型声明的参数槽分配）全部在 Lowering 完成，IR 节点自带全部决策；
 --   * **文本**（OCaml 名字编码、跨单元限定、fresh 名字前缀与编号、布局、`let rec`
---     分组文本、运行时模板）只属于后端。IR 里的名字一律是源码名或已确定的运行时
---     文本片段（`IrRuntime`），不含 `v_` / `t_` / `C_` 之类目标前缀。
+--     分组文本、运行时模板）只属于后端。IR 里的名字一律是源码名或**目标中立的运行时
+--     符号**（`Ir.Runtime` 的契约条目），不含 `v_` / `t_` / `C_` 之类目标前缀，
+--     也不含 OCaml 表达式。
 --
 -- 边界：本模块只 import Base 的纯数据结构与 `Vuna.Compiler.Source` 的 `Span`，
 -- 不下钻 Core / Elab / Intrinsics / Codegen。
@@ -126,11 +127,12 @@ export data Ir(..) : Type where
   IrProj : Ir -> String -> String -> Ir
   -- | record 更新：base、族名、(字段源码名, 新值)。
   IrRecUpd : Ir -> String -> List (Pair String Ir) -> Ir
-  -- | 运行时符号 / 表达式（`bi_*`、`string_of_int` 等）；原样输出。
-  IrRuntime : String -> Ir
-  -- | List 桥接 runtime 文本（`dtp_unpack` 等）；helper 名要按 List 族归属单元限定。
-  IrBridge : String -> Ir
-  -- | 表现层转换（OCaml `Obj.magic`）。
+  -- | 运行时符号引用（目标中立；名字必须在 `Ir.Runtime` 的契约里声明）。
+  -- 目标文本由后端按契约映射，IR 里不出现 `bi_*` / `dtp_*` / OCaml 表达式。
+  IrRt : String -> Ir
+  -- | 运行时符号的饱和应用（内建名 + 实参；模板在后端，arity 由 `irInlineArity` 定）。
+  IrRtApp : String -> List Ir -> Ir
+  -- | 表现层转换（表示改变、运行时不产生操作；后端渲染成自己的转换形式）。
   IrCast : Ir -> Ir
   -- | 整数字面量（含折叠后的 Nat 字面量）。
   IrInt : Int -> Ir
@@ -154,8 +156,6 @@ export data Ir(..) : Type where
   -- | Nat case 降级（运行时是 int）：scrutinee、scrutinee 的 fresh 序号（`dtnat__<n>`）、
   -- 零支 / 后继支 / 兜底支。三支的 binder 表同样是完整 telescope。
   IrNatCase : Ir -> Int -> Maybe IrAlt -> Maybe IrAlt -> Maybe IrAlt -> Ir
-  -- | 内建饱和应用：内建名 + 实参；OCaml 运算符模板表在后端。
-  IrInline : String -> List Ir -> Ir
   -- | `++` 链展平：`String.concat "" [a; b; c]`。
   IrConcatMany : List Ir -> Ir
   -- | 装箱动作构造：族名、构造子名、`EffUnit` 运行时类型、原语运行时 arity、原语节点。
@@ -242,7 +242,7 @@ irGroupDefs (IrGroup isRec defs) = defs
 -- main 的类型拆解（动作 vs 普通值）、展示函数选择、动作行 handler 列表都在 Lowering
 -- 完成；后端只按固定钩子模板把名字渲染进文本。
 export record IrEntry(..) where
-  -- | 展示函数节点（`IrRuntime "string_of_int"`，或合成的 `@vuna@main_show` 值引用）。
+  -- | 展示函数节点（合成符号 `@ir@showInt` 等，或合成的 `@vuna@main_show` 值引用）。
   irEntryShow : Ir
   -- | main 运行时值定义的源码名（通常是 `main`）。
   irEntryMain : String

@@ -1,0 +1,421 @@
+module Vuna.Compiler.Ir.Runtime where
+
+-- Vuna.Compiler.Ir.Runtime：IR ↔ 运行时的**契约**（Track A 第二步）。
+--
+-- 定位：`Core --Lower--> IR --后端--> 目标文本`。IR 节点里只有**符号**，没有目标文本：
+-- `IrRt sym` / `IrRtApp sym args` 的 `sym` 必须在本模块的契约里声明，后端（当前是
+-- `Codegen.Runtime` 的 OCaml 表）对契约**全覆盖**才能渲染。
+--
+-- 为什么需要这一层：迁移后的 IR 仍携带 `Intrinsics.intrinsicRuntime` 的 OCaml 表达式
+-- （`bi_add`、`(fun key name v -> Effect.perform ...)` 之类），第二个后端拿不到可实现的
+-- 契约。现在符号名 = 内建名（编译器词汇，不是目标文本），目标文本只留在后端。
+--
+-- 谁能做什么：
+--   * `Lower`：产生符号；用 `irRtBridgesList` 决定 List 桥接护栏；在 program-level check
+--     上做 `Intrinsics` ↔ 契约 ↔ 后端表的一致性检查（`checkRuntimeContract`）；
+--   * `Ir.validateUnit`：校验 IR 里每个符号已声明、饱和应用 arity 与 `irInlineArity` 一致；
+--   * 后端：对契约实现「符号 → 目标文本/目标代码」，不得自己猜名字。
+--
+-- 桥接（`irRtBridgesList = True`）：该符号的运行时模板引用 canonical `Base.List.List`
+-- 族的 `dtp_*` helper；只有程序声明了该族时才能使用（诊断 `CG_ListBridgeRequired`），
+-- 且渲染时 helper 名要按 List 族的归属单元限定（机制在 OCaml 后端）。
+--
+-- 合成符号 `@ir@*`：入口展示函数与 Nat 后继，不对应任何内建（见 `irRtSyntheticNames`）。
+--
+-- 边界：本模块只 import `Ir.Model` 与 Base 的纯数据结构；不 import Core/Elab/Intrinsics
+-- 与任何后端（`checks.ir-boundary` 守护）。
+import Base.Bool
+import Base.List
+import Base.Maybe
+import Base.Pair
+import Vuna.Compiler.Ir.Model
+
+-- | 契约里的一条运行时符号：名字 + 是否需要 canonical List 族桥接。
+export record IrRtSym(..) where
+  irRtSymName : String
+  irRtSymBridgesList : Bool
+
+-- | 符号名。
+export irRtSymNameOf : IrRtSym -> String
+irRtSymNameOf (IrRtSym name bridges) = name
+
+-- | 是否桥接。
+export irRtSymBridgesOf : IrRtSym -> Bool
+irRtSymBridgesOf (IrRtSym name bridges) = bridges
+
+-- 合成符号：入口展示（五种内建类型）与 Nat 后继；不对应任何内建。
+-- Lowering 用这些常量发节点，避免名字散落。
+export irRtNatSucc : String
+irRtNatSucc = "@ir@natSucc"
+
+export irRtShowInt : String
+irRtShowInt = "@ir@showInt"
+
+export irRtShowNat : String
+irRtShowNat = "@ir@showNat"
+
+export irRtShowStr : String
+irRtShowStr = "@ir@showStr"
+
+export irRtShowFloat : String
+irRtShowFloat = "@ir@showFloat"
+
+export irRtShowBool : String
+irRtShowBool = "@ir@showBool"
+
+-- | 合成符号清单（契约一部分；与上面的常量必须同步）。
+export irRtSyntheticNames : List String
+irRtSyntheticNames =
+  [irRtNatSucc, irRtShowInt, irRtShowNat, irRtShowStr, irRtShowFloat, irRtShowBool]
+
+-- | 普通内建名符号（不需要 List 桥接）。
+irRtPlainNames : List String
+irRtPlainNames =
+  [ "+",
+    "-",
+    "*",
+    "/",
+    "bitAnd",
+    "bitOr",
+    "bitXor",
+    "bitNot",
+    "bitShl",
+    "bitShr",
+    "++",
+    "&&",
+    "||",
+    "strFromInt",
+    "strLength",
+    "strHash",
+    "strAt",
+    "strSubstring",
+    "strShow",
+    "prim_erase",
+    "natAdd",
+    "natSub",
+    "natMul",
+    "natDiv",
+    "natToInt",
+    "natFromInt",
+    "arrayLength",
+    "arrayEmpty",
+    "arrayGet",
+    "arraySet",
+    "arrayMake",
+    "prim_effectPerform",
+    "prim_effectHandle",
+    "prim_cleanupPush",
+    "prim_cleanupPop",
+    "prim_schedNewScope",
+    "prim_schedFork",
+    "prim_schedYield",
+    "prim_schedIsCancelled",
+    "prim_schedAwait",
+    "prim_schedTaskResult",
+    "prim_schedTaskError",
+    "prim_schedCancelTask",
+    "prim_schedCancelScope",
+    "prim_schedScopeWait",
+    "prim_schedScopeWaitTimeout",
+    "prim_schedScopeError",
+    "prim_schedScopeCount",
+    "prim_fail",
+    "assert",
+    "todo",
+    "bi_eq_int",
+    "bi_neq_int",
+    "bi_eq_str",
+    "bi_neq_str",
+    "bi_lt_int",
+    "bi_le_int",
+    "bi_gt_int",
+    "bi_ge_int",
+    "bi_lt_generic",
+    "bi_le_generic",
+    "bi_gt_generic",
+    "bi_ge_generic",
+    "strFromFloat",
+    "floatFromInt",
+    "intFromFloat",
+    "floatAbs",
+    "floatSqrt",
+    "bi_add_float",
+    "bi_sub_float",
+    "bi_mul_float",
+    "bi_div_float",
+    "bi_eq_float",
+    "bi_neq_float",
+    "bi_lt_float",
+    "bi_le_float",
+    "bi_gt_float",
+    "bi_ge_float",
+    "effTimeUs",
+    "prim_eff_sleep",
+    "@vuna@prim_eff_sleep",
+    "prim_eff_newRef",
+    "@vuna@prim_eff_newRef",
+    "prim_eff_readRef",
+    "@vuna@prim_eff_readRef",
+    "prim_eff_writeRef",
+    "@vuna@prim_eff_writeRef",
+    "prim_eff_print",
+    "@vuna@prim_eff_print",
+    "prim_eff_print_host",
+    "@vuna@prim_eff_print_host",
+    "@vuna@host@print",
+    "prim_eff_eprint",
+    "@vuna@prim_eff_eprint",
+    "prim_eff_readFile",
+    "@vuna@prim_eff_readFile",
+    "prim_eff_writeFile",
+    "@vuna@prim_eff_writeFile",
+    "prim_eff_writeFileAtomic",
+    "@vuna@prim_eff_writeFileAtomic",
+    "prim_eff_readLine",
+    "@vuna@prim_eff_readLine",
+    "prim_eff_readBytes",
+    "@vuna@prim_eff_readBytes",
+    "prim_eff_isDirectory",
+    "@vuna@prim_eff_isDirectory",
+    "prim_eff_makeDir",
+    "@vuna@prim_eff_makeDir",
+    "prim_eff_removeFile",
+    "@vuna@prim_eff_removeFile",
+    "prim_eff_fileExists",
+    "@vuna@prim_eff_fileExists",
+    "prim_eff_fileMtime",
+    "@vuna@prim_eff_fileMtime",
+    "prim_eff_fileSize",
+    "@vuna@prim_eff_fileSize",
+    "prim_eff_readFile_host",
+    "@vuna@prim_eff_readFile_host",
+    "@vuna@host@readFile",
+    "prim_eff_writeFile_host",
+    "@vuna@prim_eff_writeFile_host",
+    "@vuna@host@writeFile",
+    "prim_eff_writeFileAtomic_host",
+    "@vuna@prim_eff_writeFileAtomic_host",
+    "@vuna@host@writeFileAtomic",
+    "prim_eff_isDirectory_host",
+    "@vuna@prim_eff_isDirectory_host",
+    "@vuna@host@isDirectory",
+    "prim_eff_makeDir_host",
+    "@vuna@prim_eff_makeDir_host",
+    "@vuna@host@makeDir",
+    "prim_eff_removeFile_host",
+    "@vuna@prim_eff_removeFile_host",
+    "@vuna@host@removeFile",
+    "prim_eff_fileExists_host",
+    "@vuna@prim_eff_fileExists_host",
+    "@vuna@host@fileExists",
+    "prim_eff_fileMtime_host",
+    "@vuna@prim_eff_fileMtime_host",
+    "@vuna@host@fileMtime",
+    "prim_eff_fileSize_host",
+    "@vuna@prim_eff_fileSize_host",
+    "@vuna@host@fileSize",
+    "prim_eff_exit",
+    "@vuna@prim_eff_exit",
+    "effTimeUs_host",
+    "prim_eff_sleep_host",
+    "@vuna@prim_eff_sleep_host",
+    "@vuna@host@sleep",
+    "prim_eff_getenv_host",
+    "@vuna@prim_eff_getenv_host",
+    "@vuna@host@getenv",
+    "prim_eff_getcwd_host",
+    "@vuna@prim_eff_getcwd_host",
+    "@vuna@host@getcwd",
+    "prim_eff_execPath_host",
+    "@vuna@prim_eff_execPath_host",
+    "@vuna@host@execPath",
+    "prim_eff_exit_process_host",
+    "@vuna@prim_eff_exit_process_host",
+    "prim_eff_exitOp_host",
+    "@vuna@prim_eff_exitOp_host",
+    "@vuna@host@exitOp",
+    "prim_eff_readLine_host",
+    "@vuna@prim_eff_readLine_host",
+    "@vuna@host@readLine",
+    "prim_eff_readBytes_host",
+    "@vuna@prim_eff_readBytes_host",
+    "@vuna@host@readBytes",
+    "prim_eff_newRef_host",
+    "@vuna@prim_eff_newRef_host",
+    "@vuna@host@newRef",
+    "prim_eff_readRef_host",
+    "@vuna@prim_eff_readRef_host",
+    "@vuna@host@readRef",
+    "prim_eff_writeRef_host",
+    "@vuna@prim_eff_writeRef_host",
+    "@vuna@host@writeRef",
+    "prim_eff_netListen_host",
+    "@vuna@prim_eff_netListen_host",
+    "@vuna@host@netListen",
+    "prim_eff_netPort_host",
+    "@vuna@prim_eff_netPort_host",
+    "@vuna@host@netPort",
+    "prim_eff_netAccept_host",
+    "@vuna@prim_eff_netAccept_host",
+    "@vuna@host@netAccept",
+    "prim_eff_netRecv_host",
+    "@vuna@prim_eff_netRecv_host",
+    "@vuna@host@netRecv",
+    "prim_eff_netSend_host",
+    "@vuna@prim_eff_netSend_host",
+    "@vuna@host@netSend",
+    "prim_eff_netClose_host",
+    "@vuna@prim_eff_netClose_host",
+    "@vuna@host@netClose",
+    "prim_eff_netConnect_host",
+    "@vuna@prim_eff_netConnect_host",
+    "@vuna@host@netConnect",
+    "prim_eff_wait",
+    "@vuna@prim_eff_wait",
+    "prim_eff_netListen",
+    "@vuna@prim_eff_netListen",
+    "prim_eff_netPort",
+    "@vuna@prim_eff_netPort",
+    "prim_eff_netAccept",
+    "@vuna@prim_eff_netAccept",
+    "prim_eff_netRecv",
+    "@vuna@prim_eff_netRecv",
+    "prim_eff_netSend",
+    "@vuna@prim_eff_netSend",
+    "prim_eff_netClose",
+    "@vuna@prim_eff_netClose",
+    "prim_eff_netConnect",
+    "@vuna@prim_eff_netConnect",
+    "prim_eff_getenv",
+    "@vuna@prim_eff_getenv",
+    "prim_eff_getcwd",
+    "@vuna@prim_eff_getcwd",
+    "prim_eff_execPath",
+    "@vuna@prim_eff_execPath",
+    "@vuna@debug@on",
+    "@vuna@debug@line"
+  ]
+
+-- | 需要 canonical `Base.List.List` 族桥接 helper 的内建名符号。
+export irRtBridgedNames : List String
+irRtBridgedNames =
+  [ "strUnpack",
+    "strPack",
+    "strConcatMany",
+    "strSubstTemplate",
+    "arrayFromList",
+    "arrayToList",
+    "prim_eff_getArgs",
+    "@vuna@prim_eff_getArgs",
+    "prim_eff_readDir",
+    "@vuna@prim_eff_readDir",
+    "prim_eff_readDir_host",
+    "@vuna@prim_eff_readDir_host",
+    "@vuna@host@readDir",
+    "prim_eff_runIn",
+    "@vuna@prim_eff_runIn",
+    "prim_eff_getArgs_process_host",
+    "@vuna@prim_eff_getArgs_process_host",
+    "prim_eff_runIn_host",
+    "@vuna@prim_eff_runIn_host",
+    "@vuna@host@runIn",
+    "prim_eff_getArgs_host",
+    "@vuna@prim_eff_getArgs_host",
+    "@vuna@host@getArgs",
+    "prim_eff_spawn",
+    "@vuna@prim_eff_spawn"
+  ]
+
+-- | 全部契约符号名（无重复；查找用 `irRtLookup`）。
+export irRtNames : List String
+irRtNames = append irRtPlainNames (append irRtBridgedNames irRtSyntheticNames)
+
+-- | 契约本体：普通内建 + 桥接内建 + 合成符号。
+export irRtContract : List IrRtSym
+irRtContract =
+  append (map (\n => IrRtSym n False) irRtPlainNames)
+    (append (map (\n => IrRtSym n True) irRtBridgedNames) (map (\n => IrRtSym n False) irRtSyntheticNames))
+
+irRtLookupGo : String -> List IrRtSym -> Maybe IrRtSym
+irRtLookupGo name [] = Nothing
+irRtLookupGo name (s :: rest) = if irRtSymNameOf s == name then Just s else irRtLookupGo name rest
+
+-- | 按名字查契约条目。
+export irRtLookup : String -> Maybe IrRtSym
+irRtLookup name = irRtLookupGo name irRtContract
+
+-- | 名字是否是契约符号。
+export irRtIsKnown : String -> Bool
+irRtIsKnown name = case irRtLookup name of
+  Just _ => True
+  Nothing => False
+
+-- | 该符号是否需要 List 族桥接（未声明的名字返回 False）。
+export irRtBridgesList : String -> Bool
+irRtBridgesList name = case irRtLookup name of
+  Just s => irRtSymBridgesOf s
+  Nothing => False
+
+-- ---------------------------------------------------------------
+-- IR 项的符号引用（纯结构遍历）
+-- ---------------------------------------------------------------
+--
+-- 只收集运行时符号引用：`IrRt`（作为值）与 `IrRtApp`（饱和应用，带实参个数）。
+-- 结构递归、无预算（IR 本身没有 fuel 概念）。
+-- | 列表长度（本模块不依赖 Compiler 的局部 helper）。
+irListLength : List a -> Int
+irListLength [] = 0
+irListLength (x :: rest) = 1 + irListLength rest
+
+-- | 一个 IR 项引用到的运行时符号（`Nothing` = 作为值引用，`Just n` = 饱和应用 n 个实参）。
+export irSymbolsOf : Ir -> List (Pair String (Maybe Int))
+irSymbolsOf (IrVar _) = []
+irSymbolsOf (IrGlobal _) = []
+irSymbolsOf (IrCtor _ _ args) = concatMap irSymbolsOf args
+irSymbolsOf (IrRecord _ fields) = concatMap irSymbolsOfField fields
+irSymbolsOf (IrProj base _ _) = irSymbolsOf base
+irSymbolsOf (IrRecUpd base _ fields) = append (irSymbolsOf base) (concatMap irSymbolsOfField fields)
+irSymbolsOf (IrRt sym) = [Pair sym Nothing]
+irSymbolsOf (IrRtApp sym args) =
+  append [Pair sym (Just (irListLength args))] (concatMap irSymbolsOf args)
+irSymbolsOf (IrCast inner) = irSymbolsOf inner
+irSymbolsOf (IrInt _) = []
+irSymbolsOf (IrStr _) = []
+irSymbolsOf (IrBool _) = []
+irSymbolsOf (IrFloatLit _) = []
+irSymbolsOf (IrLet _ scrut body) = append (irSymbolsOf scrut) (irSymbolsOf body)
+irSymbolsOf (IrLam _ body) = irSymbolsOf body
+irSymbolsOf (IrApp f a) = append (irSymbolsOf f) (irSymbolsOf a)
+irSymbolsOf (IrIf c t e) = append (irSymbolsOf c) (append (irSymbolsOf t) (irSymbolsOf e))
+irSymbolsOf (IrCase scrut alts) = append (irSymbolsOf scrut) (concatMap irSymbolsOfAlt alts)
+irSymbolsOf (IrNatCase scrut _ z s c) =
+  append (irSymbolsOf scrut)
+    (append (irSymbolsOfAltMaybe z) (append (irSymbolsOfAltMaybe s) (irSymbolsOfAltMaybe c)))
+irSymbolsOf (IrConcatMany parts) = concatMap irSymbolsOf parts
+irSymbolsOf (IrEffThunk _ _ _ _ prim) = irSymbolsOf prim
+irSymbolsOf (IrEffBind _ _ _) = []
+
+irSymbolsOfField : Pair String Ir -> List (Pair String (Maybe Int))
+irSymbolsOfField p = irSymbolsOf (secondOf p)
+
+irSymbolsOfAlt : IrAlt -> List (Pair String (Maybe Int))
+irSymbolsOfAlt alt = irSymbolsOf (irAltBodyOf alt)
+
+irSymbolsOfAltMaybe : Maybe IrAlt -> List (Pair String (Maybe Int))
+irSymbolsOfAltMaybe Nothing = []
+irSymbolsOfAltMaybe (Just alt) = irSymbolsOfAlt alt
+
+irSymbolsOfDef : IrDef -> List (Pair String (Maybe Int))
+irSymbolsOfDef d = case irDefBody d of
+  Nothing => []
+  Just b => irSymbolsOf b
+
+-- | 一个单元的符号引用（全部定义体 + 入口展示节点）。
+export irSymbolsOfUnit : IrUnit -> List (Pair String (Maybe Int))
+irSymbolsOfUnit u =
+  append (concatMap irSymbolsOfDef (concatMap irGroupDefs u.irUnitGroups))
+    (irSymbolsOfEntry u.irUnitEntry)
+
+irSymbolsOfEntry : Maybe IrEntry -> List (Pair String (Maybe Int))
+irSymbolsOfEntry Nothing = []
+irSymbolsOfEntry (Just e) = irSymbolsOf (irEntryShowOf e)
