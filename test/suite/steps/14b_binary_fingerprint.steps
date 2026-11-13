@@ -1,3 +1,4 @@
+# store-isolated: 断言缓存/对象库/发布旗标行为，使用 case 私有 store。
 # 14b) 编译器二进制指纹回归（PerfCache.binaryFingerprint）：指纹只能基于可执行文件
 #      自身（execPath+size+mtime），**不得**把「第一个用户参数」当路径去读——旧实现用
 #      不含 argv[0] 的 prim_getArgs 首参，cwd 里有同名文件/目录时直接

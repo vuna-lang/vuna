@@ -1,3 +1,4 @@
+# store-isolated: 断言缓存/对象库/发布旗标行为，使用 case 私有 store。
 # 42) M30 P3：REPL 多行/效果 + TestRunner 效果/workspace 聚合
 # REPL：多行定义（`=` 续行 + 缩进 + 空行提交）与纯表达式。
 # `vuna test` 会写 .output：把 corpus/test-m30/ 复制到 $TMPDIR 并重写所有嵌套

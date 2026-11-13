@@ -142,6 +142,9 @@ end:
   冷命中的 steps 在文件头写 `# store-isolated`，用 `${caseTmp}/store` 私有库。
 - `--no-cache` 只影响 golden/error 结果缓存（`.local/test-cache`），不关闭对象库；
   `*.steps` 仍不缓存。对象库的 GC 用 `vuna store gc`（roots + 宽限窗口 + 容量上限）。
+- **warning 不持久化**：共享 store 命中会跳过精化。负例自动加 `-W` 绕过判定；
+  `.deny` 夹具（`--deny-warnings`）还使用 case 私有空 store + `VUNA_ELAB_FULL=1`，
+  避免命中普通 check 的成功产物。
 
 ### 迁移状态
 

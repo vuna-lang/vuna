@@ -1,21 +1,22 @@
+# store-isolated: build/no-compile/compile 各自用独立空 store，避免共享 view 命中。
 # 34d) 构建入口（M22.3a / M24 / M26）：`build` 产可执行 bin；`build --no-compile` 与
 #      `compile <pkg> OUTDIR` 是**同一套 split 产物**（.output / OUTDIR 布局一致）。
 #      DT fmt round-trip：Pi 语法格式化后仍解析为同一程序且幂等（corpus/dt/03_compose.vuna）。
 #      夹具 corpus/dt_pkg/01_exec 复制到 $TMPDIR 后构建，避免写仓库工作树。
 run: dst="$TMPDIR/dt-build-pkg"; rm -rf "$dst"; cp -R corpus/dt_pkg/01_exec "$dst"; rm -rf "$dst/.output"; find "$dst" -name vuna.toml -exec sed -i 's|^vuna-base = .*|vuna-base = "'"$VUNA_BASE"'"|' {} +
 exit: 0
-run: "$VUNA" build "$TMPDIR/dt-build-pkg" 2>&1
+run: VUNA_STORE="$TMPDIR/store-build" "$VUNA" build "$TMPDIR/dt-build-pkg" 2>&1
 exit: 0
 file-exists: $TMPDIR/dt-build-pkg/.output/bin/dtpkg-exec
 run: "$TMPDIR/dt-build-pkg/.output/bin/dtpkg-exec" 2>&1
 exit: 0
 out-equals-file: corpus/dt_pkg/01_exec/expected.out
-run: rm -rf "$TMPDIR/dt-build-pkg/.output"; "$VUNA" build --no-compile "$TMPDIR/dt-build-pkg" 2>&1
+run: rm -rf "$TMPDIR/dt-build-pkg/.output"; VUNA_STORE="$TMPDIR/store-nocompile" "$VUNA" build --no-compile "$TMPDIR/dt-build-pkg" 2>&1
 exit: 0
 file-exists: $TMPDIR/dt-build-pkg/.output/Main.ml
 file-exists: $TMPDIR/dt-build-pkg/.output/build.sh
 file-absent: $TMPDIR/dt-build-pkg/.output/bin
-run: rm -rf "$TMPDIR/dt-split"; "$VUNA" compile "$TMPDIR/dt-build-pkg" "$TMPDIR/dt-split" 2>&1
+run: rm -rf "$TMPDIR/dt-split"; VUNA_STORE="$TMPDIR/store-compile" "$VUNA" compile "$TMPDIR/dt-build-pkg" "$TMPDIR/dt-split" 2>&1
 exit: 0
 file-exists: $TMPDIR/dt-split/Main.ml
 file-exists: $TMPDIR/dt-split/build.sh
@@ -25,7 +26,7 @@ run: "$TMPDIR/dt-split/prog" 2>&1
 exit: 0
 out-equals-file: corpus/dt_pkg/01_exec/expected.out
 # 库包 build 也必须清晰报错（非崩溃）。
-run: "$VUNA" build corpus/dt_pkg/02_lib 2>&1
+run: VUNA_STORE="$TMPDIR/store-lib" "$VUNA" build corpus/dt_pkg/02_lib 2>&1
 exit: nonzero
 out-contains: library package
 # DT fmt round-trip：自己准备包上下文（相对依赖会因 $TMPDIR 失效，用绝对 $VUNA_BASE）。

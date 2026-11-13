@@ -1,0 +1,11 @@
+# 76) 共享对象库：同一 VUNA_STORE 连续 check 命中，且对象落盘。
+#     本 case 自己指定临时 store（不依赖 suite 状态），验证 runner 透传的
+#     VUNA_STORE 可被命令行覆盖，以及 check marker 的命中标签。
+run: sh -c 'rm -rf "$TMPDIR/share-store" "$TMPDIR/share-pkg"; mkdir -p "$TMPDIR/share-pkg/app"; printf "[package]\nname = \"share-pkg\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$TMPDIR/share-pkg/vuna.toml"; printf "main : Int\nmain = 1\n" > "$TMPDIR/share-pkg/app/Main.vuna"'
+exit: 0
+run: sh -c 'VUNA_STORE="$TMPDIR/share-store" "$VUNA" check "$TMPDIR/share-pkg" >/dev/null 2>&1'
+exit: 0
+run: sh -c 'VUNA_STORE="$TMPDIR/share-store" VUNA_DEBUG_PERF=1 "$VUNA" check "$TMPDIR/share-pkg" 2>&1 | grep -q "cache-path=hit"'
+exit: 0
+run: sh -c 'test -n "$(find "$TMPDIR/share-store/objects" -type f | head -1)"'
+exit: 0

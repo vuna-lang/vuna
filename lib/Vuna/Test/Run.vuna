@@ -257,8 +257,10 @@ withEnvIface env argv = withEnvIfaceAt env "" argv
 
 -- 兼容旧签名（seed 等调用点历史上传 iface 目录）；对象库统一由 env.envStore 决定。
 withEnvIfaceAt : Env -> String -> List String -> List String
-withEnvIfaceAt env _ifaceDir argv =
-  withEnv env (append ["env", "TMPDIR=${env.envTmp}", "VUNA_STORE=${env.envStore}"] argv)
+withEnvIfaceAt env storeOverride argv =
+  let
+    store = if storeOverride == "" then env.envStore else storeOverride
+  in withEnv env (append ["env", "TMPDIR=${env.envTmp}", "VUNA_STORE=${store}"] argv)
 
 -- steps case 的进程环境：TMPDIR/REPL 历史按 **case** 隔离（同一 worker 内多个 steps
 -- case 顺序执行，共享 envTmp 会让 `$TMPDIR/ws1` 之类互相污染）。对象库默认与 suite
@@ -482,6 +484,16 @@ errorCase env c source expected wantInterp wantCheck wantCompile =
     denyExists <- pathExistsFile denyPath
     let
       denyArgs = if denyExists then ["--deny-warnings"] else []
+      -- 共享 store 命中会跳过精化，warning 不持久化 ⇒ 负例必须 `-W` 绕过判定，
+      -- 否则同一 checkIn 的第二个 case 看不到 warning。`--deny-warnings` 本身也绕过。
+      warnArgs = if denyExists then [] else ["-W"]
+      checkArgs = append denyArgs warnArgs
+      -- `.deny` 的 warning 语义没有进 split/check 的输入摘要（缓存键只看源/依赖/
+      -- 编译器），共享 store 下可能命中普通 check 的成功结果 ⇒ 强制全量，绕过判定。
+      denyFull = if denyExists then ["env", "VUNA_ELAB_FULL=1"] else []
+      -- warning/deny 语义没有进 split 的输入摘要：用 case 私有空 store，避免命中
+      -- 普通 check 写下的成功产物（共享 store 下否则会假通过）。
+      denyStore = if denyExists then "${env.envTmp}/store-deny-${safeName c.caseId}" else ""
       pkgMode = not (pkgRoot == "")
       caseCwd = if pkgMode then pkgRoot else env.envCwd
       target = if pkgMode then "." else source
@@ -506,7 +518,7 @@ errorCase env c source expected wantInterp wantCheck wantCompile =
       checkA <- if wantCheck then do
         r <-
           runCmdMerged env "${c.caseId}-check" caseCwd c.caseTimeout
-            (withEnvIface env (append [env.envVuna, "check", target] denyArgs))
+            (withEnvIfaceAt env denyStore (append denyFull (append [env.envVuna, "check", target] checkArgs)))
         pure
           [assertContains "check fragment" (combinedOut r) fragment, assertExitNonZero "check exit" r.cmdCode]
       else pure []
@@ -514,18 +526,18 @@ errorCase env c source expected wantInterp wantCheck wantCompile =
       compileA <- if wantCompile then do
         r <-
           runCmdMerged env "${c.caseId}-compile" caseCwd c.caseTimeout
-            (withEnvIface env (append [env.envVuna, "compile", target, outdir] denyArgs))
+            (withEnvIfaceAt env denyStore (append denyFull (append [env.envVuna, "compile", target, outdir] checkArgs)))
         absent <- assertAbsent "compile no output dir" outdir
         pure
           [assertContains "compile fragment" (combinedOut r) compileFragment, assertExitNonZero "compile exit" r.cmdCode, absent]
       else pure []
       diagRun <-
         if wantCheck then runCmdMerged env "${c.caseId}-diag" diagCwd c.caseTimeout
-          (withEnvIface env (append [env.envVuna, "check", diagSource, "--json"] denyArgs))
+          (withEnvIfaceAt env denyStore (append denyFull (append [env.envVuna, "check", diagSource, "--json"] checkArgs)))
         else if wantCompile then runCmdMerged env "${c.caseId}-diag" diagCwd c.caseTimeout
-          (withEnvIface env (append [env.envVuna, "compile", diagSource, uniqueOutDir env "${c.caseId}-diag", "--json"] denyArgs))
+          (withEnvIfaceAt env denyStore (append denyFull (append [env.envVuna, "compile", diagSource, uniqueOutDir env "${c.caseId}-diag", "--json"] checkArgs)))
         else runCmdMerged env "${c.caseId}-diag" diagCwd c.caseTimeout
-          (withEnvIface env (append [env.envVuna, "check", diagSource, "--json"] denyArgs))
+          (withEnvIfaceAt env denyStore (append denyFull (append [env.envVuna, "check", diagSource, "--json"] checkArgs)))
       actualDiag <- pure (normalizeDiagText env (trimNewlines (combinedOut diagRun)))
       diagA <- if env.envBlessDiag then do
         _ <- raiseToRow hostRow (@vuna@prim_eff_writeFile diagPath "${actualDiag}\n")
@@ -688,19 +700,22 @@ runCase env c = do
 checkCase : Env -> Case -> String -> Bool -> String -> Eff hostRow CaseResult
 checkCase env c source expectPass expectedErr = do
   start <- effTimeUs
-  r <-
-    runCmdMerged env "${c.caseId}-check" env.envCwd c.caseTimeout
-      (withEnvIface env [env.envVuna, "check", source])
-  if expectPass then finishCase c.caseId start [assertExit "check exit" r.cmdCode]
-  else do
-    fragment <- hashFileText expectedErr
-    let
-      checks =
-        if fragment == "" then [assertExitNonZero "check exit" r.cmdCode]
-        else [ assertContains "check fragment" (combinedOut r) (trimNewlines fragment),
-          assertExitNonZero "check exit" r.cmdCode
-        ]
-    in finishCase c.caseId start checks
+  let
+    warnArgs = if expectPass then [] else ["-W"]
+  in do
+    r <-
+      runCmdMerged env "${c.caseId}-check" env.envCwd c.caseTimeout
+        (withEnvIface env (append [env.envVuna, "check", source] warnArgs))
+    if expectPass then finishCase c.caseId start [assertExit "check exit" r.cmdCode]
+    else do
+      fragment <- hashFileText expectedErr
+      let
+        checks =
+          if fragment == "" then [assertExitNonZero "check exit" r.cmdCode]
+          else [ assertContains "check fragment" (combinedOut r) (trimNewlines fragment),
+            assertExitNonZero "check exit" r.cmdCode
+          ]
+      in finishCase c.caseId start checks
 
 relativeTestPath : Env -> String -> String
 relativeTestPath env source =

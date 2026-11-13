@@ -1,3 +1,4 @@
+# store-isolated: 断言缓存/对象库/发布旗标行为，使用 case 私有 store。
 # 63) F3 B：语言级调试构造 `dbg!` / `assert` / `todo` 与 release 构建拒绝。
 #     `--release` / `VUNA_RELEASE=1` 在 CLI 边界解析成显式 Bool，沿调用链传到 Resolver；
 #     包括 workspace 成员的子进程 check（旧实现成员子进程 argv 没有旗标，会漏判）。

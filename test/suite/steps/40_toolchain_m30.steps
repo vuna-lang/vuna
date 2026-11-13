@@ -1,3 +1,4 @@
+# store-isolated: 断言缓存/对象库/发布旗标行为，使用 case 私有 store。
 # 40) 工具链回归：CLI 错误矩阵 + Index v3 自检 + doc [export] + search
 run: sh corpus/cli/check.sh "$VUNA"
 exit: 0
