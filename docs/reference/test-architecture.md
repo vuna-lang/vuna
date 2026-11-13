@@ -139,3 +139,5 @@ seed/runtime 归 `integration`，golden/error/lint/fix/check 归 `fast`。
 - 44e（repo `check .` 冷摘要）已删除：其覆盖与 `checks.vuna-typecheck`（`vuna check .`）和
   44b（小包冷 `cache-path=summary deps=2`）重复；删后 e2e 最长从 59.6 s 降到 56.9 s
   （44g），不再为一条冗余断言付整仓冷编译。
+- 32_fmt 不再自编译探针包：`check.sh` 改用产品 CLI（复制+`vuna fmt`、`fmt --check`）后，
+  32_fmt 从 ~47 s 降到 **9 s**，且 63 个夹具全过；`_probe.vuna` 删除。

@@ -3,11 +3,10 @@
 #
 # 结构（本目录）：
 #   *.vuna + *.fmt          —— 格式化 golden：format 结果与 .fmt 逐字节一致，
-#                              且 format→parse→format 幂等（probe check）。
+#                              且 format→parse→format 幂等（fmt --check）。
 #   run/*.vuna + *.out      —— 可解释程序：格式化前后 `vuna interp`（DT 核心求值）输出一致且等于 golden。
 #   typed/*.vuna + *.out    —— 编译期语义程序（辅助函数 / 自递归；M23 起 where 语义夹具已改写成顶层定义）：
 #                              格式化前后 compile（M26：目录式 + build.sh）产物运行输出一致且等于 golden。
-#   _probe.vuna             —— 探针源码（下划线开头，不当作输入），由本脚本用 VUNA 编译。
 #
 # 环境变量：
 #   VUNA       验证编译器，默认 <repo>/.local/m11/vuna
@@ -41,38 +40,25 @@ check_eq() { # name expected actual
   if [ "$2" = "$3" ]; then ok; else bad "$1"; printf '  expected: %s\n  actual:   %s\n' "$2" "$3"; fi
 }
 
-# ---- 探针包：把 root Vuna 工具链 + compiler 的 Vuna/Compiler 合成一个临时包（包名
-#      `vuna`，与真实工具链一致，属于终止性检查的 TCB 信任名单），用当前编译器的包模式
-#      DT 路径编译探针。
-#      M31.3（C31 根因）：探针包按**真实依赖布局**构造——base 作为依赖包（vuna-base），
-#      而不是把 base 源码拷进本包再手工注 `import Prelude`。这样 Loader 走真实规则自动
-#      注入 Prelude，与仓库内任何真实包一致；base 的 `infix*` 声明也随依赖闭包可见。 ----
-pkg="$tmp/probe-pkg"
-mkdir -p "$pkg/lib/Vuna/Compiler" "$pkg/app"
-cp -R "$REPO/lib/Vuna/." "$pkg/lib/Vuna/"
-cp -R "$REPO/compiler/lib/Vuna/Compiler/." "$pkg/lib/Vuna/Compiler/"
-cp "$HERE/_probe.vuna" "$pkg/app/Main.vuna"
-cat >"$pkg/vuna.toml" <<EOF
-[package]
-name = "vuna"
-
-[dependencies]
-vuna-base = "$REPO/base"
-EOF
-chmod -R u+w "$pkg" 2>/dev/null || true
-# M26：compile 产目录（Vuna_runtime.ml + 模块 + Main.ml + build.sh），不是单文件 .ml。
-if ! ( cd "$REPO" && "$VUNA" compile --no-print "$pkg" "$tmp/probe" ) >"$tmp/probe.log" 2>&1; then
-  echo "fmt: probe compile failed:"
-  cat "$tmp/probe.log"
-  exit 1
-fi
-if ! ( cd "$tmp/probe" && OCAMLOPT="$OCAMLOPT" sh build.sh "$tmp/probe.exe" ) >"$tmp/probe.opt.log" 2>&1; then
-  echo "fmt: probe ocamlopt failed:"
-  cat "$tmp/probe.opt.log"
-  exit 1
-fi
-probe="$tmp/probe.exe"
-
+# ---- 直接用产品 CLI（不再自编译探针包）----
+# probe 时代的 `write` / `check` / `fmt` 分别映射为：复制+fmt、fmt --check、fmt 后读回。
+# 这样 32_fmt_corpus 不再为“格式化器自测”冷编译整棵工具链（原 ~47 s）。
+fmt_write() { # src dst
+  cp "$1" "$2" || return 1
+  "$VUNA" fmt "$2" >/dev/null 2>&1
+}
+fmt_check() {
+  local out="$tmp/fmt-check.vuna"
+  cp "$1" "$out" || return 1
+  "$VUNA" fmt "$out" >/dev/null 2>&1 || return 1
+  "$VUNA" fmt --check "$out" >/dev/null 2>&1
+}
+fmt_text() { # src
+  local out="$tmp/fmt-text.vuna"
+  cp "$1" "$out" || return 1
+  "$VUNA" fmt "$out" >/dev/null 2>&1 || return 1
+  cat "$out"
+}
 # ---- 1) 格式化 golden + 幂等 ----
 for file in "$HERE"/*.vuna; do
   [ -f "$file" ] || continue
@@ -86,13 +72,13 @@ for file in "$HERE"/*.vuna; do
     bad "$name (missing $(basename "$expected"))"
     continue
   fi
-  if ! "$probe" check "$file" >"$tmp/check.log" 2>&1; then
+  if ! fmt_check "$file" >"$tmp/check.log" 2>&1; then
     bad "$name (idempotent/reparse)"
     cat "$tmp/check.log"
   else
     ok
   fi
-  if "$probe" fmt "$file" >"$tmp/fmt.out" 2>"$tmp/fmt.err"; then
+  if fmt_text "$file" >"$tmp/fmt.out" 2>"$tmp/fmt.err"; then
     if cmp -s "$expected" "$tmp/fmt.out"; then
       ok
     else
@@ -112,12 +98,12 @@ for file in "$HERE"/run/*.vuna; do
   base=${file%.vuna}
   expected="$base.out"
   formatted="$tmp/run_$name"
-  if ! "$probe" write "$file" "$formatted" >"$tmp/write.log" 2>&1; then
+  if ! fmt_write "$file" "$formatted" >"$tmp/write.log" 2>&1; then
     bad "$name (format)"
     cat "$tmp/write.log"
     continue
   fi
-  if ! "$probe" check "$file" >"$tmp/check.log" 2>&1; then
+  if ! fmt_check "$file" >"$tmp/check.log" 2>&1; then
     bad "$name (idempotent/reparse)"
     cat "$tmp/check.log"
   else
@@ -137,12 +123,12 @@ for file in "$HERE"/typed/*.vuna; do
   base=${file%.vuna}
   expected="$base.out"
   formatted="$tmp/typed_$name"
-  if ! "$probe" write "$file" "$formatted" >"$tmp/write.log" 2>&1; then
+  if ! fmt_write "$file" "$formatted" >"$tmp/write.log" 2>&1; then
     bad "$name (format)"
     cat "$tmp/write.log"
     continue
   fi
-  if ! "$probe" check "$file" >"$tmp/check.log" 2>&1; then
+  if ! fmt_check "$file" >"$tmp/check.log" 2>&1; then
     bad "$name (idempotent/reparse)"
     cat "$tmp/check.log"
   else
