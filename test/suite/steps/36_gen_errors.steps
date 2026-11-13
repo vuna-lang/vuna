@@ -1,30 +1,30 @@
-# 36) 错误码文档：`vuna gen-errors` 从 docstring 生成（M3），分区 + 幂等（M4）
+# 36) 错误码文档：`vuna gen-errors` 从 docstring 生成（M3），分区 + 幂等（M4）。
 #     沙箱里源码树只读，gen-errors 写 ROOT/docs/.generated/——用 tmp 根：软链 compiler +
-#     复制 Rules（readDir 跟随软链），再写 $errroot/docs/.generated/errors.md。
-run: sh -c 'mkdir -p "$TMPDIR/errroot/lib/Vuna/Lint" "$TMPDIR/errroot/docs"; ln -s "$PWD/../compiler" "$TMPDIR/errroot/compiler"; cp ../lib/Vuna/Lint/Rules.vuna "$TMPDIR/errroot/lib/Vuna/Lint/Rules.vuna"'
-run: "$VUNA" gen-errors "$TMPDIR/errroot" >/dev/null 2>&1
-file-contains: $TMPDIR/errroot/docs/.generated/errors.md ## 类型检查 / 精化（TC_）
-file-contains: $TMPDIR/errroot/docs/.generated/errors.md ## 代码生成（CG_）
-file-contains: $TMPDIR/errroot/docs/.generated/errors.md ## Lint 规则（LN_）
-file-contains: $TMPDIR/errroot/docs/.generated/errors.md ## 修复规则（FX_）
-file-contains: $TMPDIR/errroot/docs/.generated/errors.md ## 内部错误（IC_）
-file-contains: $TMPDIR/errroot/docs/.generated/errors.md ## 名字解析（RN_）
-file-contains: $TMPDIR/errroot/docs/.generated/errors.md RN_UnknownType
-file-contains: $TMPDIR/errroot/docs/.generated/errors.md 
-file-contains: $TMPDIR/errroot/docs/.generated/errors.md IC_FuelExhausted
-file-contains: $TMPDIR/errroot/docs/.generated/errors.md TC_NotExhaustive
-file-contains: $TMPDIR/errroot/docs/.generated/errors.md CG_NoMain
-file-contains: $TMPDIR/errroot/docs/.generated/errors.md LN_LiteralIfChain
-file-contains: $TMPDIR/errroot/docs/.generated/errors.md FX_literalifchain
-run: sh -c 'cp "$TMPDIR/errroot/docs/.generated/errors.md" "$TMPDIR/errs1.md"'
-run: "$VUNA" gen-errors "$TMPDIR/errroot" >/dev/null 2>&1
-read: $TMPDIR/errroot/docs/.generated/errors.md
-out-equals-file: $TMPDIR/errs1.md
+#     复制 Rules（readDir 跟随软链）。幂等改为两个独立根**并发生成**后逐字节比较：
+#     同输入同输出；墙钟从两次串行降到一次。
+run: sh -c 'for n in 1 2; do root="$TMPDIR/errroot$n"; mkdir -p "$root/lib/Vuna/Lint" "$root/docs"; ln -s "$PWD/../compiler" "$root/compiler"; cp ../lib/Vuna/Lint/Rules.vuna "$root/lib/Vuna/Lint/Rules.vuna"; done'
+run: sh -c '"$VUNA" gen-errors "$TMPDIR/errroot1" >/dev/null 2>&1 & p1=$!; "$VUNA" gen-errors "$TMPDIR/errroot2" >/dev/null 2>&1 & p2=$!; wait "$p1"; a=$?; wait "$p2"; b=$?; [ "$a" -eq 0 ] && [ "$b" -eq 0 ]'
+exit: 0
+file-contains: $TMPDIR/errroot1/docs/.generated/errors.md ## 类型检查 / 精化（TC_）
+file-contains: $TMPDIR/errroot1/docs/.generated/errors.md ## 代码生成（CG_）
+file-contains: $TMPDIR/errroot1/docs/.generated/errors.md ## Lint 规则（LN_）
+file-contains: $TMPDIR/errroot1/docs/.generated/errors.md ## 修复规则（FX_）
+file-contains: $TMPDIR/errroot1/docs/.generated/errors.md ## 内部错误（IC_）
+file-contains: $TMPDIR/errroot1/docs/.generated/errors.md ## 名字解析（RN_）
+file-contains: $TMPDIR/errroot1/docs/.generated/errors.md RN_UnknownType
+file-contains: $TMPDIR/errroot1/docs/.generated/errors.md 
+file-contains: $TMPDIR/errroot1/docs/.generated/errors.md IC_FuelExhausted
+file-contains: $TMPDIR/errroot1/docs/.generated/errors.md TC_NotExhaustive
+file-contains: $TMPDIR/errroot1/docs/.generated/errors.md CG_NoMain
+file-contains: $TMPDIR/errroot1/docs/.generated/errors.md LN_LiteralIfChain
+file-contains: $TMPDIR/errroot1/docs/.generated/errors.md FX_literalifchain
+run: sh -c 'cmp -s "$TMPDIR/errroot1/docs/.generated/errors.md" "$TMPDIR/errroot2/docs/.generated/errors.md"'
+exit: 0
 # 目录 JSON：与 errors.md 同源生成，含 code/severity/phase/category/message/desc。
-file-contains: $TMPDIR/errroot/docs/.generated/errors.json "version":1
-file-contains: $TMPDIR/errroot/docs/.generated/errors.json "code":"TC_NotExhaustive"
-file-contains: $TMPDIR/errroot/docs/.generated/errors.json "phase":"elab"
-file-contains: $TMPDIR/errroot/docs/.generated/errors.json "desc":"类型不匹配"
+file-contains: $TMPDIR/errroot1/docs/.generated/errors.json "version":1
+file-contains: $TMPDIR/errroot1/docs/.generated/errors.json "code":"TC_NotExhaustive"
+file-contains: $TMPDIR/errroot1/docs/.generated/errors.json "phase":"elab"
+file-contains: $TMPDIR/errroot1/docs/.generated/errors.json "desc":"类型不匹配"
 # 目录内嵌 example：md 表列 + JSON 字段均带夹具路径。
-file-contains: $TMPDIR/errroot/docs/.generated/errors.md | example |
-file-contains: $TMPDIR/errroot/docs/.generated/errors.json "example":"
+file-contains: $TMPDIR/errroot1/docs/.generated/errors.md | example |
+file-contains: $TMPDIR/errroot1/docs/.generated/errors.json "example":"
