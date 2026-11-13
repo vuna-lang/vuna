@@ -136,3 +136,6 @@ seed/runtime 归 `integration`，golden/error/lint/fix/check 归 `fast`。
   **209 s**，44e 106 s、32_fmt 86 s —— 预热进程与 worker 抢 CPU/冷编译，仍不划算。
   结论：需要**专用预热阶段完成后**再放 worker，或让 e2e 用例共享一份已热 store；
   “并发预热”不是免费重叠。
+- 44e（repo `check .` 冷摘要）已删除：其覆盖与 `checks.vuna-typecheck`（`vuna check .`）和
+  44b（小包冷 `cache-path=summary deps=2`）重复；删后 e2e 最长从 59.6 s 降到 56.9 s
+  （44g），不再为一条冗余断言付整仓冷编译。
