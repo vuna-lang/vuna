@@ -152,3 +152,5 @@ seed/runtime 归 `integration`，golden/error/lint/fix/check 归 `fast`。
 - 包内 effect 测试增加 `views/testbin/<testBin>` 产物缓存：key = 编译器指纹 + 包源码闭包
   内容 + 各 context root 内容 + 测试源内容；命中直接运行缓存的 `bin/vuna-test`，跳过
   compile + build.sh。47c 因此从 ~29.5 s 降到 **23.6 s**（≤25 s），全量 789 cases 仍全绿。
+- testbin key 收敛为「编译器指纹 + context roots 内容 + 测试源内容」：roots 已含本包与
+  依赖闭包，去掉重复的 pkgHash；47c 在 e2e 下 24.96 s，54b 25.4 s（8 worker 噪声）。

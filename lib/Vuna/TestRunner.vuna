@@ -470,11 +470,9 @@ testBinDigest : PackageContext -> String -> Eff hostRow String
 testBinDigest ctx path = do
   fp <- toolCompilerFingerprint
   src <- raiseToRow hostRow (@vuna@prim_eff_readFile path)
-  pkgFiles <- collectSourceFiles (contextDir ctx)
-  pkgHash <- hashFilesContent pkgFiles
   rootsHash <- hashRoots (map (\r => rootDir r) (contextRoots ctx))
   let
-    input = "testbin 2|${strOfInt fp}|${strOfInt pkgHash}|${strOfInt rootsHash}|${strOfInt (absInt (textHashOf src))}"
+    input = "testbin 3|${strOfInt fp}|${strOfInt rootsHash}|${strOfInt (absInt (textHashOf src))}"
   in pure (strOfInt (absInt (textHashOf input)))
 
 runCachedTestBin : String -> Int -> Eff hostRow TestOutcome
