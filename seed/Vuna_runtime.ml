@@ -1504,7 +1504,7 @@ let dt_def_locs = [
   ("v_Vuna_dCompiler_dCodegen_dLower_dnatCaseHasCtor", ("Vuna.Compiler.Codegen.Lower.natCaseHasCtor", "Vuna/Compiler/Codegen/Lower.vuna:944"));
   ("v_Vuna_dCompiler_dCodegen_dLower_dnthOpqArgIn", ("Vuna.Compiler.Codegen.Lower.nthOpqArgIn", "Vuna/Compiler/Codegen/Lower.vuna:1037"));
   ("v_Vuna_dCompiler_dCodegen_dLower_dnthValueIn", ("Vuna.Compiler.Codegen.Lower.nthValueIn", "Vuna/Compiler/Codegen/Lower.vuna:216"));
-  ("v_Vuna_dCompiler_dCodegen_dLower_dpartitionRuntimeDefs", ("Vuna.Compiler.Codegen.Lower.partitionRuntimeDefs", "Vuna/Compiler/Codegen/Lower.vuna:1477"));
+  ("v_Vuna_dCompiler_dCodegen_dLower_dpartitionRuntimeDefs", ("Vuna.Compiler.Codegen.Lower.partitionRuntimeDefs", "Vuna/Compiler/Codegen/Lower.vuna:1482"));
   ("v_Vuna_dCompiler_dCodegen_dLower_dprepareProgram", ("Vuna.Compiler.Codegen.Lower.prepareProgram", "Vuna/Compiler/Codegen/Lower.vuna:1256"));
   ("v_Vuna_dCompiler_dCodegen_dLower_dprojBindersIn", ("Vuna.Compiler.Codegen.Lower.projBindersIn", "Vuna/Compiler/Codegen/Lower.vuna:1014"));
   ("v_Vuna_dCompiler_dCodegen_dLower_dpushDep", ("Vuna.Compiler.Codegen.Lower.pushDep", "Vuna/Compiler/Codegen/Lower.vuna:79"));
