@@ -159,7 +159,7 @@ pkgPath path e args = pkgAt path 1 e args
 
 -- | 诊断域实现：Vuna.Compiler.Diagnostics.Pkg.pkgNoLoc（目录/模板见 diagnostics.md）。
 export pkgNoLoc : {n : Nat} -> PkgErr n -> Vec n String -> Check a
-pkgNoLoc e args = ErrC (pkgMsg e args)
+pkgNoLoc e args = ErrC (withAbsent NsPackageGraph (pkgMsg e args))
 
 -- | 诊断域实现：Vuna.Compiler.Diagnostics.Pkg.pkgNoLoc1（目录/模板见 diagnostics.md）。
 export pkgNoLoc1 : PkgErr (Succ Zero) -> String -> Check a

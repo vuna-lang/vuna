@@ -34,13 +34,18 @@ Candidate  = { text, span, reason }
 CallInfo   = { callee, arg, relation, span }
 TraceFrame = { phase, text, span, children }
 IceInfo    = { phase, function, invariant, fingerprint, hint }
+NoSourceReason = Synthetic | ToolUsage | PackageGraph | Internal
+Stability  = Stable | Volatile
 Diagnostic = { id, severity, phase, category, code, message, labels, fields, trace,
-               notes, suggestions, origin(Direct|Cascade), children, internal, ice }
+               notes, suggestions, origin(Direct|Cascade), children, internal, ice,
+               absent(Maybe NoSourceReason), stability }
 ```
 
 - **位置**：行/列 1-based；列 = **UTF-8 字节**（与 lexer 的 `advanceChar` 一致）。
   LSP 适配器用 buffer 文本把字节列换算成 0-based UTF-16 code units。
-- **无位置**必须显式：不给 label，不能「忘记带」。
+- **无位置**必须显式：没有主 span 的诊断必须带 `absent` 理由（`Synthetic` 是过渡档，
+  门禁要求逐码 allowlist）；一旦附加主 span，`withLabel` 自动清空 `absent`。
+  `stability=Volatile` 的诊断（无源码位置/工具/包图）不允许作为输入摘要的纯函数落盘。
 - **文本兼容层**：`diagText` 渲染 `file:line:col: [CODE] 消息`（short 视图），迁移期
   仍被部分工具用作字符串出口；新代码不得使用它构造/解析诊断。
 
@@ -179,7 +184,9 @@ JSON 字段是机器契约：`code/severity/phase/category/message/labels[]/fiel
   `showSpanLoc` 只能出现在渲染器/目标消息组装处。
 - 负例夹具双轨：320 个 `.diag.json` 结构化期望（`--json` 聚合文档，`--bless-diag` 生成）
   与原有 `.err` 首行片段断言并存；`--bless-diag` 在 runner 内写盘（worker 透传）。
-- `nix/checks/diag-located.sh`：结构化诊断必须有主 span（或显式 allowlist，只减不增）；\n  当前 308/323 有位置，15 条按码登记在 `nix/diag-located.allow`。\n- `nix/checks/diag-coverage.sh`：目录码 vs 结构化夹具覆盖门禁（allowlist 记录缺口、
+- `nix/checks/diag-located.sh`：结构化诊断必须有主 span，或带显式 `absent` 理由并逐码
+  登记在 `nix/diag-located.allow`（只减不增）；当前 308/323 有位置，15 条按码登记。
+- `nix/checks/diag-coverage.sh`：目录码 vs 结构化夹具覆盖门禁（allowlist 记录缺口、
   基线 `nix/diag-coverage.min` 防回退；当前 191/242，缺口在 allowlist 且必须于 `nix/diag-unreachable.txt` 登记不可达原因）。
 - `vuna check .`（旧/新编译器）、全量 suite、`nix build .#vuna-seed` 必须通过。
 
@@ -205,6 +212,7 @@ JSON 字段是机器契约：`code/severity/phase/category/message/labels[]/fiel
 | D7.10 explanation/example/`explain` | 已落地（`explain` 文本/`--json`/`--list --json`，含模板/中文说明/severity/phase/category/example；元变量/洞带 `name`/note 与洞目标 span；`Elab/MetaSpans` 登记创建点，洞与可延迟字典元变量附 `fields.span name=created`，纯合成 meta 无源位置时不伪造） |
 | D7.11 效果行 | 已落地（`TC_UnhandledEffects` fields 含 expected/actual 行 + 每个未处理 effect 单独一条 `unhandled:` 行） |
 | 结构化夹具 + 每码覆盖门禁 | 已落地（320 个 `.diag.json`；覆盖门禁 191/242，51 个缺口 allowlist 且逐码在 `nix/diag-unreachable.txt` 审计） |
+| D3b 无源码位置显式化 | 已落地（`NoSourceReason`/`Stability` 模型字段；JSON 仅在无位置时输出 `absent`；剩余无位置码逐码登记在 `nix/diag-located.allow`，门禁要求「无 span 必须带理由」） |
 
 ## 10. 后续路线（按依赖排序）
 

@@ -329,7 +329,10 @@ cannotProveMsgEdges comp edges =
   let
     desc = groupMessage comp
     base = tcMsg (CannotProveTermination desc) [desc]
-  in applyCallFields edges base
+  in applyCallFields edges (case edges of
+    [] => withAbsent NsSynthetic base
+    (Pair _ sp) :: _ => withFallbackSpan sp base
+  )
 
 -- | 把调用边逐条挂到诊断 fields.call。
 applyCallFields : List (Pair (Pair (Pair String String) Int) Span) -> Diagnostic -> Diagnostic

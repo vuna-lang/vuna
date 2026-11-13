@@ -78,6 +78,20 @@ export data Applicability(..) : Type where
   MaybeIncorrect : Applicability
   HasPlaceholder : Applicability
 
+-- | 无源码位置的原因。**显式**：诊断没有 span 时必须给出理由，渲染/JSON 暴露它，
+-- 门禁按码审计；不再有「忘记带位置」的静默路径。`NsSynthetic` 是过渡档（合成节点 /
+-- 尚未把已有 span 接到产生点），逐码 allowlist 收敛到 0。
+export data NoSourceReason(..) : Type where
+  NsSynthetic : NoSourceReason
+  NsToolUsage : NoSourceReason
+  NsPackageGraph : NoSourceReason
+  NsInternal : NoSourceReason
+
+-- | 诊断稳定性：结果是否为输入摘要的纯函数。`Volatile` 不落盘（P3 的缓存判据）。
+export data Stability(..) : Type where
+  Stable : Stability
+  Volatile : Stability
+
 -- ---------------------------------------------------------------
 -- 结构
 -- ---------------------------------------------------------------
@@ -157,6 +171,10 @@ export record Diagnostic(..) where
   diagChildren : List Diagnostic
   diagInternal : Bool
   diagIce : Maybe IceInfo
+  -- 无源码位置时**必须**给出理由；有主 span 的诊断应为 Nothing（withLabel 自动清空）。
+  diagAbsent : Maybe NoSourceReason
+  -- 缓存稳定性：Stable 才允许作为输入摘要的纯函数落盘重放。
+  diagStability : Stability
 
 -- ---------------------------------------------------------------
 -- 编译器结果通道
@@ -169,32 +187,35 @@ export data Check a(..) : Type where
 -- ---------------------------------------------------------------
 -- 构造
 -- ---------------------------------------------------------------
--- | 无 label 的源码诊断（显式「无位置」）。
+-- | 无 label 的源码诊断：显式带 `NsSynthetic`（过渡档，门禁要求逐码 allowlist）。
 export diagNoLoc : Severity -> Phase -> Category -> String -> String -> Diagnostic
 diagNoLoc sev phase cat code msg =
   Diagnostic 0 sev phase cat code msg [] [] [] [] [] OriginDirect [] False Nothing
+    (Just NsSynthetic) Volatile
 
 -- | 带主 label 的源码诊断。
 export diagAt : Span -> Severity -> Phase -> Category -> String -> String -> Diagnostic
 diagAt sp sev phase cat code msg =
   Diagnostic 0 sev phase cat code msg [Label (Just sp) "" LabelPrimary Nothing] [] [] [] []
-    OriginDirect [] False Nothing
+    OriginDirect [] False Nothing Nothing Stable
 
 -- | 工具/用法错误（phase = Tool，无位置，无码）。
 export err : String -> Check a
 err msg =
-  ErrC (Diagnostic 0 SevError PhTool CatTool "" msg [] [] [] [] [] OriginDirect [] False Nothing)
+  ErrC
+    (Diagnostic 0 SevError PhTool CatTool "" msg [] [] [] [] [] OriginDirect [] False Nothing (Just NsToolUsage) Volatile)
 
 -- | 迁移期过渡：尚未分类但带位置的裸消息。分类完成后删除。
 export rawAt : Span -> String -> Check a
 rawAt sp msg =
   ErrC
-    (Diagnostic 0 SevError PhElab CatTypes "" msg [Label (Just sp) "" LabelPrimary Nothing] [] [] [] [] OriginDirect [] False Nothing)
+    (Diagnostic 0 SevError PhElab CatTypes "" msg [Label (Just sp) "" LabelPrimary Nothing] [] [] [] [] OriginDirect [] False Nothing Nothing Stable)
 
 -- | 迁移期过渡：尚未分类且无位置的裸消息。分类完成后删除。
 export rawNoLoc : String -> Check a
 rawNoLoc msg =
-  ErrC (Diagnostic 0 SevError PhElab CatTypes "" msg [] [] [] [] [] OriginDirect [] False Nothing)
+  ErrC
+    (Diagnostic 0 SevError PhElab CatTypes "" msg [] [] [] [] [] OriginDirect [] False Nothing (Just NsSynthetic) Volatile)
 
 -- ---------------------------------------------------------------
 -- 组合（不修改原值）
@@ -202,23 +223,40 @@ rawNoLoc msg =
 -- | 追加一个标签。
 export withLabel : Label -> Diagnostic -> Diagnostic
 withLabel l d =
-  Diagnostic d.diagId d.diagSeverity d.diagPhase d.diagCategory d.diagCode d.diagMessage
-    (append d.diagLabels [l]) d.diagFields d.diagTrace d.diagNotes d.diagSuggestions d.diagOrigin
-    d.diagChildren d.diagInternal d.diagIce
+  normalizeSite
+    (Diagnostic d.diagId d.diagSeverity d.diagPhase d.diagCategory d.diagCode d.diagMessage (append d.diagLabels [l]) d.diagFields d.diagTrace d.diagNotes d.diagSuggestions d.diagOrigin d.diagChildren d.diagInternal d.diagIce d.diagAbsent d.diagStability)
+
+-- | 有主 span 的诊断自动清空 `diagAbsent`（位置与「无位置理由」互斥）。
+normalizeSite : Diagnostic -> Diagnostic
+normalizeSite d =
+  if hasPrimaryLabel d.diagLabels then { { d | diagAbsent = Nothing } | diagStability = Stable }
+  else d
+
+-- | 显式声明「无源码位置」的理由（没有主 span 时由产生点调用）。
+export withAbsent : NoSourceReason -> Diagnostic -> Diagnostic
+withAbsent reason d =
+  if hasPrimaryLabel d.diagLabels then d
+  else { { d | diagAbsent = Just reason } | diagStability = stabilityOfAbsent reason }
+
+stabilityOfAbsent : NoSourceReason -> Stability
+stabilityOfAbsent NsSynthetic = Volatile
+stabilityOfAbsent NsToolUsage = Volatile
+stabilityOfAbsent NsPackageGraph = Volatile
+stabilityOfAbsent NsInternal = Volatile
 
 -- | 追加一个字段。
 export withField : DiagField -> Diagnostic -> Diagnostic
 withField f d =
   Diagnostic d.diagId d.diagSeverity d.diagPhase d.diagCategory d.diagCode d.diagMessage
     d.diagLabels (append d.diagFields [f]) d.diagTrace d.diagNotes d.diagSuggestions d.diagOrigin
-    d.diagChildren d.diagInternal d.diagIce
+    d.diagChildren d.diagInternal d.diagIce d.diagAbsent d.diagStability
 
 -- | 追加一条 note。
 export withNote : String -> Diagnostic -> Diagnostic
 withNote n d =
   Diagnostic d.diagId d.diagSeverity d.diagPhase d.diagCategory d.diagCode d.diagMessage
     d.diagLabels d.diagFields d.diagTrace (append d.diagNotes [n]) d.diagSuggestions d.diagOrigin
-    d.diagChildren d.diagInternal d.diagIce
+    d.diagChildren d.diagInternal d.diagIce d.diagAbsent d.diagStability
 
 -- | 追加一条 help（渲染为 `help: ...`）。
 export withHelp : String -> Diagnostic -> Diagnostic
@@ -229,21 +267,21 @@ export withSuggestion : Suggestion -> Diagnostic -> Diagnostic
 withSuggestion s d =
   Diagnostic d.diagId d.diagSeverity d.diagPhase d.diagCategory d.diagCode d.diagMessage
     d.diagLabels d.diagFields d.diagTrace d.diagNotes (append d.diagSuggestions [s]) d.diagOrigin
-    d.diagChildren d.diagInternal d.diagIce
+    d.diagChildren d.diagInternal d.diagIce d.diagAbsent d.diagStability
 
 -- | 追加一帧轨迹。
 export withTrace : TraceFrame -> Diagnostic -> Diagnostic
 withTrace t d =
   Diagnostic d.diagId d.diagSeverity d.diagPhase d.diagCategory d.diagCode d.diagMessage
     d.diagLabels d.diagFields (append d.diagTrace [t]) d.diagNotes d.diagSuggestions d.diagOrigin
-    d.diagChildren d.diagInternal d.diagIce
+    d.diagChildren d.diagInternal d.diagIce d.diagAbsent d.diagStability
 
 -- | 改写来源（级联标记用）。
 export withOrigin : Origin -> Diagnostic -> Diagnostic
 withOrigin o d =
   Diagnostic d.diagId d.diagSeverity d.diagPhase d.diagCategory d.diagCode d.diagMessage
     d.diagLabels d.diagFields d.diagTrace d.diagNotes d.diagSuggestions o d.diagChildren
-    d.diagInternal d.diagIce
+    d.diagInternal d.diagIce d.diagAbsent d.diagStability
 
 -- | 定义级诊断：主位置 + `in \`name\`` 上下文标签（替代旧字符串前缀）。
 export withContext : Maybe Span -> String -> Diagnostic -> Diagnostic
@@ -287,7 +325,7 @@ export appendMessage : String -> Diagnostic -> Diagnostic
 appendMessage suffix d =
   Diagnostic d.diagId d.diagSeverity d.diagPhase d.diagCategory d.diagCode (d.diagMessage ++ suffix)
     d.diagLabels d.diagFields d.diagTrace d.diagNotes d.diagSuggestions d.diagOrigin d.diagChildren
-    d.diagInternal d.diagIce
+    d.diagInternal d.diagIce d.diagAbsent d.diagStability
 
 -- ---------------------------------------------------------------
 -- Check 的 Functor / Applicative / Monad（根工具链用 `fmap`/`do` 组合编译器结果）
@@ -317,7 +355,7 @@ export withChildren : List Diagnostic -> Diagnostic -> Diagnostic
 withChildren cs d =
   Diagnostic d.diagId d.diagSeverity d.diagPhase d.diagCategory d.diagCode d.diagMessage
     d.diagLabels d.diagFields d.diagTrace d.diagNotes d.diagSuggestions d.diagOrigin cs
-    d.diagInternal d.diagIce
+    d.diagInternal d.diagIce d.diagAbsent d.diagStability
 
 -- | 若诊断没有主位置，就用给定 span 补一个（包装器用）。
 export withFallbackSpan : Span -> Diagnostic -> Diagnostic
@@ -330,7 +368,8 @@ export withSpanFileIfEmpty : String -> Diagnostic -> Diagnostic
 withSpanFileIfEmpty path d =
   Diagnostic d.diagId d.diagSeverity d.diagPhase d.diagCategory d.diagCode d.diagMessage
     (map (withLabelFileIfEmpty path) d.diagLabels) d.diagFields d.diagTrace d.diagNotes
-    d.diagSuggestions d.diagOrigin d.diagChildren d.diagInternal d.diagIce
+    d.diagSuggestions d.diagOrigin d.diagChildren d.diagInternal d.diagIce d.diagAbsent
+    d.diagStability
 
 withLabelFileIfEmpty : String -> Label -> Label
 withLabelFileIfEmpty path (Label Nothing text style prov) = Label Nothing text style prov
@@ -354,6 +393,7 @@ markInternal fn invariant d =
     d.diagLabels d.diagFields d.diagTrace d.diagNotes d.diagSuggestions d.diagOrigin d.diagChildren
     True
     (Just (IceInfo PhInternal fn invariant "" "this is a compiler bug; please report it with the command line and source"))
+    (Just NsInternal) Volatile
 
 -- | 内部：燃料耗尽（`phase` = 阶段/函数名）。
 export icFuel : String -> Check a

@@ -287,10 +287,21 @@ maybeParent : Maybe Int -> String
 maybeParent Nothing = "null"
 maybeParent (Just n) = "${n}"
 
+-- 无源码位置的诊断在 JSON 里带显式理由；有位置的诊断省略该字段（保持载荷紧凑）。
+absentName : NoSourceReason -> String
+absentName NsSynthetic = "synthetic"
+absentName NsToolUsage = "tool-usage"
+absentName NsPackageGraph = "package-graph"
+absentName NsInternal = "internal"
+
+jsonAbsent : Maybe NoSourceReason -> String
+jsonAbsent Nothing = ""
+jsonAbsent (Just r) = ",\"absent\":${jsonStr (absentName r)}"
+
 jsonDiag : String -> Diagnostic -> String
 jsonDiag lang d =
   join ""
-    ["{\"code\":${jsonStr d.diagCode}", ",\"severity\":${jsonStr (severityName d.diagSeverity)}", ",\"phase\":${jsonStr (phaseName d.diagPhase)}", ",\"category\":${jsonStr (categoryName d.diagCategory)}", ",\"message\":${jsonStr d.diagMessage}${localizedJsonField lang d}", ",\"labels\":[${join "," (map jsonLabel d.diagLabels)}]", ",\"fields\":[${join "," (map jsonField d.diagFields)}]", ",\"trace\":[${join "," (map jsonTrace d.diagTrace)}]", ",\"notes\":[${join "," (map jsonStr d.diagNotes)}]", ",\"suggestions\":[${join "," (map jsonSuggestion d.diagSuggestions)}]", ",\"origin\":${originJson d.diagOrigin}", ",\"internal\":${if d.diagInternal then "true" else "false"}", ",\"ice\":${maybeJsonIce d.diagIce}}"]
+    ["{\"code\":${jsonStr d.diagCode}", ",\"severity\":${jsonStr (severityName d.diagSeverity)}", ",\"phase\":${jsonStr (phaseName d.diagPhase)}", ",\"category\":${jsonStr (categoryName d.diagCategory)}", ",\"message\":${jsonStr d.diagMessage}${localizedJsonField lang d}", ",\"labels\":[${join "," (map jsonLabel d.diagLabels)}]", ",\"fields\":[${join "," (map jsonField d.diagFields)}]", ",\"trace\":[${join "," (map jsonTrace d.diagTrace)}]", ",\"notes\":[${join "," (map jsonStr d.diagNotes)}]", ",\"suggestions\":[${join "," (map jsonSuggestion d.diagSuggestions)}]", ",\"origin\":${originJson d.diagOrigin}", ",\"internal\":${if d.diagInternal then "true" else "false"}", ",\"ice\":${maybeJsonIce d.diagIce}${jsonAbsent d.diagAbsent}}"]
 
 export renderJson : String -> Diagnostic -> String
 renderJson lang d = jsonDiag lang d

@@ -567,8 +567,8 @@ implicitPreludeDeps : String -> List (Pair String Root) -> Check (List Import)
 implicitPreludeDeps importerPkg [] = OkC []
 implicitPreludeDeps importerPkg ([_]) = OkC [Import "Prelude" False Nothing (Span "" 0 0 0 0)]
 implicitPreludeDeps importerPkg deps =
-  rnNoLoc1 (AmbiguousPrelude (joinArrows (map (\c => rootName (secondOf c)) deps)))
-    (joinArrows (map (\c => rootName (secondOf c)) deps))
+  onErrDiag (withAbsent NsPackageGraph)
+    (rnNoLoc1 (AmbiguousPrelude (joinArrows (map (\c => rootName (secondOf c)) deps))) (joinArrows (map (\c => rootName (secondOf c)) deps)))
 
 -- 导入点位置：隐式 Prelude 的合成 Import 没有真实 span（file = ""），此时不给位置。
 withImportSpan : Import -> Diagnostic -> Diagnostic

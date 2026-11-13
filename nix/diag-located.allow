@@ -18,7 +18,6 @@ TC_ImpossibleBranchIndex
 TC_ClauseTooManyPatterns
 TC_IntStringCaseNeedsFallback
 TC_CaseBranchTooFewArgs
-TC_CannotProveTermination
 
 # --- 无用户书写点 / 外部输入 ---
 RN_AmbiguousPrelude
