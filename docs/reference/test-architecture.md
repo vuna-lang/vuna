@@ -145,3 +145,7 @@ seed/runtime 归 `integration`，golden/error/lint/fix/check 归 `fast`。
   `check .`（约 23 s），再跑 suite；44g 去掉 `store-isolated` 共享这份热 store。
   结果：e2e 最长 case 37.2 s → **29.5 s**，wall 仍约 77 s。47c/36 的进一步拆分在
   8 worker 下因并发争用反而到 34 s，已回退。
+- 47c 再验：删掉 workspace 聚合段（test-m30）后冷跑 33.7 s、warm 35.6 s，没有收益；
+  其成本是多次 `vuna test` 子进程各自编译 effect 测试。下一步应给包内 effect 测试做
+  内容寻址的“编译产物缓存”，让 serial/parallel/overlap 复用同一份测试二进制，而不是
+  继续删断言或拆 case。
