@@ -1,3 +1,4 @@
+# store-isolated: 断言缓存/对象库行为，使用 case 私有 store。
 # 52) C32 收口：所有缓存载荷统一 `Store` framing
 #     `vuna-cache-frame 2|tag|codec|len|内容地址\n<payload>`，载荷是显式规范编码（不再是
 #     OCaml Marshal）。截断（len 不符）、篡改（内容地址不符）、codec/tag 不符都必须被读侧

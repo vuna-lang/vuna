@@ -1,3 +1,4 @@
+# store-isolated: 断言缓存/对象库行为，使用 case 私有 store。
 # 69) 静态索引与 `vuna add`（阶段 2）：`[registry].index` 指向本地目录，add 查索引 →
 #     写回 `[dependencies]` 内联表 → 自动 fetch；语义只认写回的摘要，索引不可信。
 

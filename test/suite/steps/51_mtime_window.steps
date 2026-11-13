@@ -1,3 +1,4 @@
+# store-isolated: 断言缓存/对象库行为，使用 case 私有 store。
 # 51) mtime 快路径安全窗（`VUNA_CACHE_MTIME=1`）：`prim_fileMtime` 只有秒精度，
 #     「同秒 + 同大小」的编辑不能靠 mtime+size 判未变。安全窗（5s）内一律回落内容哈希，
 #     所以刚写出的接口即使 mtime/size 都没变也必须被判定失效（回退全量、报出真实错误）。

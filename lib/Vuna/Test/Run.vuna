@@ -16,6 +16,7 @@ import Base.HostRow
 import Vuna.Compiler.Common
 import Vuna.Compiler.Driver.Compile
 import Vuna.Compiler.Driver.Iface
+import Vuna.Compiler.Store
 import qualified Vuna.Cli.Args
 import Vuna.Test.Session
 import Vuna.Test.Suite
@@ -39,6 +40,9 @@ record Env where
   envBless : Bool
   envBlessDiag : Bool
   envWorker : Bool
+  -- 本 run 的输入寻址对象库根（父进程解析一次，worker/case 共用；见 runSuiteOnce）。
+  -- store-isolated 的 steps case 例外，仍用 case 私有 store。
+  envStore : String
   -- 增量构建桶（跨 run 持久；见 buildCacheDir）。
   envBuildDir : String
   -- 进程内精化会话（per worker）：base 依赖接口 + 增量精化的 termAux 缓存。
@@ -244,24 +248,27 @@ withEnv env argv =
     ["env", "VUNA=${env.envVuna}", "VUNA_SEED=${env.envSeed}", "VUNA_BASE=${env.envBase}", "OCAMLOPT=${env.envOcamlopt}", "VUNA_SUITE_ROOT=${env.envRoot}"]
     argv
 
--- family case 的 iface 镜像根：每个 worker/进程用独立 envTmp，避免并发写源文件旁
--- 的 `*.iface`；章节脚本保持默认布局（它们自己要测布局）。
+-- family / tools case 的进程环境：TMPDIR 按 worker 隔离，对象库与整个 suite 共用
+-- （父进程解析一次，见 runSuiteOnce）。对象库是输入寻址的：同一输入同一路径、
+-- 原子写，日常 check/build 与测试共用同一根不会互相覆盖；只有断言缓存布局/GC/
+-- 冷命中的 store-isolated case 才用私有 store。
 withEnvIface : Env -> List String -> List String
-withEnvIface env argv = withEnvIfaceAt env "${env.envTmp}/iface" argv
+withEnvIface env argv = withEnvIfaceAt env "" argv
 
--- 指定 iface 目录的变体：seed 必须用自己的 iface（否则会读到新编译器写的
--- `*.iface`，旧 seed 的 AST schema 不同会直接崩溃；与 seed 的独立性语义无关）。
+-- 兼容旧签名（seed 等调用点历史上传 iface 目录）；对象库统一由 env.envStore 决定。
 withEnvIfaceAt : Env -> String -> List String -> List String
 withEnvIfaceAt env _ifaceDir argv =
-  withEnv env (append ["env", "TMPDIR=${env.envTmp}", "VUNA_STORE=${env.envTmp}/store"] argv)
+  withEnv env (append ["env", "TMPDIR=${env.envTmp}", "VUNA_STORE=${env.envStore}"] argv)
 
--- steps case 的进程环境：TMPDIR/iface/REPL 历史/对象库都按 **case** 隔离（同一 worker 内
--- 多个 steps case 顺序执行，共享 envTmp 会让 `$TMPDIR/ws1` 之类互相污染）。`VUNA_STORE`
--- 也按 case 隔离：对象库是内容寻址的，共享只影响命中率，但沙箱里 `$HOME` 可能只读。
-withStepsEnv : Env -> String -> List String -> List String
-withStepsEnv env caseTmp argv =
-  withEnv env
-    (append ["env", "TMPDIR=${caseTmp}", "VUNA_STORE=${caseTmp}/store", "VUNA_REPL_HISTORY=${caseTmp}/repl-history"] argv)
+-- steps case 的进程环境：TMPDIR/REPL 历史按 **case** 隔离（同一 worker 内多个 steps
+-- case 顺序执行，共享 envTmp 会让 `$TMPDIR/ws1` 之类互相污染）。对象库默认与 suite
+-- 共用；只有 store-isolated case 用 `${caseTmp}/store`。
+withStepsEnv : Env -> String -> Bool -> List String -> List String
+withStepsEnv env caseTmp isolated argv =
+  let
+    store = if isolated then "${caseTmp}/store" else env.envStore
+  in withEnv env
+    (append ["env", "TMPDIR=${caseTmp}", "VUNA_STORE=${store}", "VUNA_REPL_HISTORY=${caseTmp}/repl-history"] argv)
 
 combinedOut : CmdResult -> String
 combinedOut r = r.cmdOut ++ r.cmdErr
@@ -318,17 +325,14 @@ finishCase id start assertions =
 -- ---------------------------------------------------------------
 -- golden / error case
 -- ---------------------------------------------------------------
--- 预热依赖接口：`vuna check <base>` 会把 base 的模块接口写进对象库（`$VUNA_STORE/objects/iface`）
--- （单文件 check/compile 不写）。会话初始化据此把「每次重精化整棵 base」降到
--- 「读接口 + 只精化入口」。失败只降级（会话回退 CLI），不影响用例结果。
--- 注意：预热写的是**会话专用**镜像（`iface-session`），不是子进程用的 `iface`
--- 镜像——子进程必须保持「无接口 ⇒ 全量精化」的既有行为，否则工具侧增量路径的
--- 差异（例如 deriving via field 的判定）会被带进用例语义。
+-- 预热依赖接口（只在父进程跑一次）：`vuna check <base>` 把 base 的模块接口写进
+-- 对象库（`$VUNA_STORE/objects/iface`），worker 共用同一根，因此后续 check/interp
+-- 只精化自己的入口。失败只降级（会话回退 CLI），不影响用例结果。
 warmIfaces : Env -> Eff hostRow Int
 warmIfaces env = do
   r <-
     runCmdMerged env "iface-warmup" env.envCwd 300
-      (withEnvIfaceAt env "${env.envTmp}/iface-session" [env.envVuna, "check", env.envBase])
+      (withEnvIface env [env.envVuna, "check", env.envBase])
   pure r.cmdCode
 
 uniqueOutDir : Env -> String -> String
@@ -1072,9 +1076,11 @@ outAsserts env caseTmp out st = do
   pure
     (append (map (\frag => assertContains "out" out frag) st.stContains) (append (map (\frag => Assertion "out" (not (contains frag out)) "unexpected fragment: ${frag}\nactual:\n${out}") st.stNotContains) (append (map (\want => assertEq "out" want (trimNewlines out)) st.stEquals) (append equalsFileA (append fileExistsA (append fileAbsentA fileContainsA))))))
 
-stepAssertsV2 : Env -> String -> Int -> Step -> Eff hostRow (List Assertion)
-stepAssertsV2 env caseTmp timeout st = if byteLength st.stRun > 0 then do
-  r <- runCmdMerged env "step" env.envCwd timeout (withStepsEnv env caseTmp ["sh", "-c", st.stRun])
+stepAssertsV2 : Env -> String -> Int -> Bool -> Step -> Eff hostRow (List Assertion)
+stepAssertsV2 env caseTmp timeout isolated st = if byteLength st.stRun > 0 then do
+  r <-
+    runCmdMerged env "step" env.envCwd timeout
+      (withStepsEnv env caseTmp isolated ["sh", "-c", st.stRun])
   outA <- outAsserts env caseTmp (combinedOut r) st
   let
     ctx = stepContext st.stRun (combinedOut r)
@@ -1099,33 +1105,33 @@ prefixAssertions name (a :: rest) =
   Assertion "${name}: ${a.assertionName}" a.assertionOk a.assertionDetail
     :: prefixAssertions name rest
 
-expandLoopItems : Env -> String -> String -> Eff hostRow CmdResult
-expandLoopItems env caseTmp spec =
+expandLoopItems : Env -> String -> Bool -> String -> Eff hostRow CmdResult
+expandLoopItems env caseTmp isolated spec =
   let
     body =
       "for x in ${spec}; do if [ -e \"$x\" ]; then printf '%s\\n' \"$x\"; else exit 3; fi; done"
-  in runCmdMerged env "for-each" env.envCwd 60 (withStepsEnv env caseTmp ["sh", "-c", body])
+  in runCmdMerged env "for-each" env.envCwd 60 (withStepsEnv env caseTmp isolated ["sh", "-c", body])
 
-loopItemAsserts : Env -> String -> Int -> StepGroup -> String -> Eff hostRow (List Assertion)
-loopItemAsserts env caseTmp timeout g raw =
+loopItemAsserts : Env -> String -> Int -> Bool -> StepGroup -> String -> Eff hostRow (List Assertion)
+loopItemAsserts env caseTmp timeout isolated g raw =
   let
     item = stripTrailingSlash raw
     name = baseNameOf item
     steps = map (substStep item name) g.sgSteps
   in do
-    asserts <- concatMapEff (stepAssertsV2 env caseTmp timeout) steps
+    asserts <- concatMapEff (stepAssertsV2 env caseTmp timeout isolated) steps
     pure (prefixAssertions name asserts)
 
-stepGroupAsserts : Env -> String -> Int -> StepGroup -> Eff hostRow (List Assertion)
-stepGroupAsserts env caseTmp timeout g = if byteLength g.sgGlob == 0 then concatMapEff (stepAssertsV2 env caseTmp timeout) g.sgSteps
+stepGroupAsserts : Env -> String -> Int -> Bool -> StepGroup -> Eff hostRow (List Assertion)
+stepGroupAsserts env caseTmp timeout isolated g = if byteLength g.sgGlob == 0 then concatMapEff (stepAssertsV2 env caseTmp timeout isolated) g.sgSteps
 else do
-  r <- expandLoopItems env caseTmp g.sgGlob
+  r <- expandLoopItems env caseTmp isolated g.sgGlob
   let
     items = filter (\raw => raw /= "") (lines r.cmdOut)
   in if r.cmdCode /= 0 then pure
     [Assertion "for-each" False "failed to expand ${g.sgGlob} (exit ${strOfInt r.cmdCode}):\n${combinedOut r}"]
   else if listLength items == 0 then pure [Assertion "for-each" False "matched nothing: ${g.sgGlob}"]
-  else concatMapEff (loopItemAsserts env caseTmp timeout g) items
+  else concatMapEff (loopItemAsserts env caseTmp timeout isolated g) items
 
 -- steps case 的隔离临时根（纯）：同一 worker 内多个 steps case 顺序执行，
 -- 共享 envTmp 会让 `$TMPDIR/ws1` 之类互相污染，所以按 case id 的哈希分目录。
@@ -1141,11 +1147,15 @@ stepsCase env c path =
     _ <- ensureDirPath caseTmp
     hasPath <- pathExistsFile path
     text <- if hasPath then raiseToRow hostRow (@vuna@prim_eff_readFile path) else pure ""
-    case parseStepsV2 text of
+    -- 文件头 `# store-isolated` 标记：该 case 断言缓存布局/GC/冷命中，必须用私有 store；
+    -- 其余 steps 默认与 suite 共用对象库。
+    let
+      isolated = contains "store-isolated" text
+    in case parseStepsV2 text of
       SpErr msg =>
         finishCase c.caseId start [Assertion "steps" False "parse error in ${path}: ${msg}"]
       SpOk groups => do
-        assertions <- concatMapEff (stepGroupAsserts env caseTmp c.caseTimeout) groups
+        assertions <- concatMapEff (stepGroupAsserts env caseTmp c.caseTimeout isolated) groups
         let
           hasWork = countStepGroups groups > 0
         in finishCase c.caseId start
@@ -1654,7 +1664,7 @@ auditOrphans suite =
     let
       env =
         Env root "${root}/test" "/tmp" "" "" "${root}/base" "ocamlopt" "" "" False 0 False False
-          False "/tmp/vuna-build" ref
+          False "/tmp/vuna-store" "/tmp/vuna-build" ref
       fixtures = filter (\path => not (auditPathIgnored path)) allFixtures
     in pure (filter (\path => not (auditClaimed env cases texts (stripRoot env path))) fixtures)
 
@@ -1710,7 +1720,7 @@ familyOrphans suite =
     let
       env =
         Env root "${root}/test" "/tmp" "" "" "${root}/base" "ocamlopt" "" "" False 0 False False
-          False "/tmp/vuna-build" ref
+          False "/tmp/vuna-store" "/tmp/vuna-build" ref
     in pure (filter (familyOrphan env cases) fixtures)
 
 commaJoin : List String -> String
@@ -1796,6 +1806,10 @@ runSuiteOnce opts suite =
     baseHash <- hashTree baseDir
     cacheExists <- pathExistsDir cacheDir
     _ <- if cacheExists then pure 0 else ensureDirPath cacheDir
+    -- 对象库根：父进程解析一次，worker/case 全部继承（不再每个 worker/case 新建）。
+    -- 默认由 devShell / nix run 包装 / CI 导出 `VUNA_STORE`；未设置时按 Store 的
+    -- `$XDG_DATA_HOME` / `~/.vuna/store` / `$TMPDIR/vuna-store` 回落。
+    store <- storeRootReadyEff
     vuna <- raiseToRow hostRow @vuna@prim_eff_execPath
     vunaSeed <- envOr "VUNA_SEED" "vuna-seed"
     ocamlopt <- envOr "OCAMLOPT" "ocamlopt"
@@ -1809,7 +1823,7 @@ runSuiteOnce opts suite =
       env =
         Env root "${root}/test" tmp vuna vunaSeed baseDir ocamlopt helper cacheDir
           (not opts.suiteNoCache && not opts.suiteBless && not opts.suiteBlessDiag) baseHash
-          opts.suiteBless opts.suiteBlessDiag workerMode buildDir ref
+          opts.suiteBless opts.suiteBlessDiag workerMode store buildDir ref
       -- 两层默认护栏（局部 --only/--filter 时被过滤掉，符合预期）：
       --   ① 已声明 family 目录里的孤儿夹具（精确 source 认领）；
       --   ② case 总数下限——整族从 suite.toml 消失时，①会连目录一起看不到。
@@ -1819,8 +1833,9 @@ runSuiteOnce opts suite =
         else []
       cases0 = filterCases opts (append (append discovered (auditCases orphans)) minCase)
     in do
-      -- 预热依赖接口（仅真正跑 case 时）：会话据此命中增量路径。
-      _ <- if opts.suiteListOnly then pure 0 else warmIfaces env
+      -- 预热依赖接口（仅父进程、仅真正跑 case 时）：共享 store 只需预热一次；
+      -- worker 直接复用父进程写下的接口/对象。
+      _ <- if opts.suiteListOnly then pure 0 else if workerMode then pure 0 else warmIfaces env
       cases1 <- case opts.suiteChanged of
         Just rev => changedFilter env rev cases0
         Nothing => pure cases0

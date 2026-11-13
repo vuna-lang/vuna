@@ -1,3 +1,4 @@
+# store-isolated: 断言缓存/对象库行为，使用 case 私有 store。
 # 44l1) M34.6（5a/5c）LSP 单文件增量精化 + 会话缓存：
 #      - LSP-only 会话（依赖已 check、本包未 check）didOpen 成功后写回当前模块接口；
 #      - 接口路径与全量路径（VUNA_IFACE_TOOL=0）对同一 buffer 的诊断逐字节一致；

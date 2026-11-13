@@ -1,3 +1,4 @@
+# store-isolated: 断言缓存/对象库行为，使用 case 私有 store。
 # 59) `vuna clean`：缓存清理入口。接口已并入对象库，所以只有两类目标：
 #     --store     对象库根（$VUNA_STORE → XDG → ~/.vuna/store → $TMPDIR/vuna-store）
 #     --packages  持久包 store（同一根下的 objects/ + pkgs/），--gc 只删未引用对象

@@ -1,3 +1,4 @@
+# store-isolated: 断言缓存/对象库行为，使用 case 私有 store。
 # 44d) 负例：摘要路径不得漏检。corpus/packages/m34_summary/root 复制到 $TMPDIR/汇总并追加
 #      类型错误，摘要路径与全量路径（VUNA_ELAB_FULL=1）诊断逐字节一致。
 run: sh -c 'mkdir -p "$TMPDIR/summary-cache" "$TMPDIR/summary-bad/app"'

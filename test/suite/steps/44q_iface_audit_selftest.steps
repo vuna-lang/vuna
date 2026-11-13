@@ -1,3 +1,4 @@
+# store-isolated: 断言缓存/对象库行为，使用 case 私有 store。
 # 44q) 双路径审计（C49 回归）：`VUNA_IFACE_AUDIT=1` 让同一次 check 分别走摘要路径与
 #      全量路径并逐字节比较诊断；record-update 定义的载荷必须闭合（旧缺陷：
 #      `Core.Term.hasFreeTermVar` 下降 `TRecUpd.body` 时少加 `length tele` 的 binder

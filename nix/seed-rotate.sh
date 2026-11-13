@@ -35,6 +35,8 @@ trap cleanup EXIT INT TERM
 
 # 从仓库根以包目录 "compiler" 生成，保证嵌入的文件路径与提交后的 seed/ 一致。
 # M26：包级输出只有 split 一种模型；`--out` 只 codegen、不链接。
+# 两遍各自全新的对象库：即使 devShell 默认了共享 VUNA_STORE，rotation 也不受影响。
+export VUNA_STORE="$tmp/store-a"
 "$VUNA" build --no-compile --out "$tmp/seed" compiler
 
 # 种子必须只含 compiler 闭包：工具模块与旧 dynamic codegen 一旦出现都算错误。
@@ -44,6 +46,7 @@ sh nix/tcb-check.sh nix/tcb-forbidden.txt "$tmp/seed"
 # 并验证它能逐字节重生成同一文件集（fixed point）。
 cp -r "$tmp/seed" "$tmp/build-seed"
 sh "$tmp/build-seed/build.sh" "$tmp/vuna-seed"
+export VUNA_STORE="$tmp/store-b"
 "$tmp/vuna-seed" build --no-compile --out "$tmp/regen" compiler
 if ! diff -r "$tmp/seed" "$tmp/regen" >/dev/null 2>&1; then
   echo "seed-rotate: 错误：种子重生成的文件集与生成结果不一致" >&2

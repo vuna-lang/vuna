@@ -29,7 +29,13 @@ let
         default = pkgs.mkShell {
           packages = ocamlTools ++ [ packages.vuna-seed ];
           shellHook = ''
-            echo "vuna dev shell — OCaml $(ocaml -version)"
+            root=$PWD
+            while [ "$root" != "/" ] && [ ! -f "$root/test/suite.toml" ]; do
+              root=$(dirname "$root")
+            done
+            export VUNA_STORE="''${VUNA_STORE:-$root/.local/store}"
+            mkdir -p "$VUNA_STORE"
+            echo "vuna dev shell — OCaml $(ocaml -version)（VUNA_STORE=$VUNA_STORE）"
           '';
         };
 

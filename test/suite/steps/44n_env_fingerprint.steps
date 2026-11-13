@@ -1,3 +1,4 @@
+# store-isolated: 断言缓存/对象库行为，使用 case 私有 store。
 # 44n) 包环境进地址：改 `vuna.toml`（不进模块源摘要）必须让本包接口地址变化 ⇒ 重新精化；
 #      之后重跑收敛（零新增对象）。
 #      夹具 corpus/packages/m34_iface_audit 复制到 $TMPDIR，vuna.toml 的 base 改到本仓库。

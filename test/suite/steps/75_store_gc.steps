@@ -1,3 +1,4 @@
+# store-isolated: 断言缓存/对象库行为，使用 case 私有 store。
 # 75) `vuna store gc`：按 roots + 宽限窗口 + 容量上限淘汰对象。
 #     输入寻址下删除对象不影响正确性（缺了就重算），GC 只保证「常用的别删」。
 run: sh -c 'rm -rf "$TMPDIR/gc-store"; VUNA_STORE="$TMPDIR/gc-store" "$VUNA" check "$VUNA_BASE" >/dev/null 2>&1; test "$(find "$TMPDIR/gc-store/objects" -type f | wc -l)" -gt 0'

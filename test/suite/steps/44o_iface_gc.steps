@@ -1,3 +1,4 @@
+# store-isolated: 断言缓存/对象库行为，使用 case 私有 store。
 # 44o) 对象库不落树内文件：接口只写 `$VUNA_STORE/objects/`，包目录里不再出现
 #      `.output/iface` / `*.iface` / `.vuna-iface`（镜像、孤儿 GC、只读降级随之消失）。
 run: sh -c 'rm -rf "$TMPDIR/44o-pkg" "$TMPDIR/44o-store" "$TMPDIR/44o-cache"; cp -R corpus/packages/m34_iface_audit "$TMPDIR/44o-pkg"'

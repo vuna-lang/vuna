@@ -1,3 +1,4 @@
+# store-isolated: 断言缓存/对象库行为，使用 case 私有 store。
 # 44e) 仓库自身：预热 base/compiler 接口后，根包 `check .` 走摘要路径且通过
 #      （C37 的 Eq Type 假歧义 / Interp.vuna:71 回归）。cwd = test/，所以先 cd 到仓库根。
 run: sh -c 'rm -rf "$TMPDIR/44e-store" "$TMPDIR/44e-cache"'

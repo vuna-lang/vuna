@@ -1,3 +1,4 @@
+# store-isolated: 断言缓存/对象库行为，使用 case 私有 store。
 # 44p) 工具写回与整包写共用同一对象地址：LSP 冷启动的单模块写回落在
 #      `objects/iface/<输入摘要>`，随后命令行 check 直接复用（零重写、无 miss）。
 #      旧的 `meOrigin`（pkg/tool 隔离）随文件层与 manifest 一起删除 —— 地址由输入决定，

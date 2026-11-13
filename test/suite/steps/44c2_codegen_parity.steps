@@ -1,3 +1,4 @@
+# store-isolated: 断言缓存/对象库行为，使用 case 私有 store。
 # 44c-2) 模块接口构建路径与全量构建路径的 codegen 产物逐字节一致（只 codegen、不链接）。
 #        夹具 corpus/packages/m34_summary/root；接口路径靠镜像里预热的 base/dep 接口生效。
 run: sh -c 'mkdir -p "$TMPDIR/summary-warm-cache"'

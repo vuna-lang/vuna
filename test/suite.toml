@@ -9,7 +9,7 @@
 name = "vuna"
 jobs = 0          # 0 = auto（探测全部可用核）
 timeout = 300
-min_cases = 630    # case 数下限：整族从配置消失时显式失败（当前 666）
+min_cases = 760    # case 数下限：整族从配置消失时显式失败（当前 785）
 
 # --- golden（interp + check + compile + run + 互证）---
 [family.dt]

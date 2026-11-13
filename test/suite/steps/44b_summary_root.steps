@@ -1,3 +1,4 @@
+# store-isolated: 断言缓存/对象库行为，使用 case 私有 store。
 # 44b) 根包（入口-only 包，没有 lib 模块接口可写）：依赖接口命中 ⇒ 摘要路径
 #      （`cache-path=summary deps=2`：vuna-base + dep）；依赖模块**不再 parse 源码**
 #      （无 `parse-module=Dep`）；check 通过。夹具 corpus/packages/m34_summary/root。

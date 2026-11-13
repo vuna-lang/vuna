@@ -1,3 +1,4 @@
+# store-isolated: 断言缓存/对象库行为，使用 case 私有 store。
 # 71) 递归 fetch（依赖闭包）：A path→ B git→ C git，`vuna fetch A` 应把 B 与 C 都取到
 #     store；随后 check A 走 store 物化视图成功。
 

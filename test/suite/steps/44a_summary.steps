@@ -1,3 +1,4 @@
+# store-isolated: 断言缓存/对象库行为，使用 case 私有 store。
 # 44a) 接口对象库：base → dep（夹具）预热；接口按**输入摘要**寻址落在
 #      `$VUNA_STORE/objects/iface`，header 落在 `objects/header`；损坏的对象被读侧
 #      framing 拒绝 ⇒ 按 miss 重算并覆盖写**同一路径**。

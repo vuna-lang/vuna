@@ -1,3 +1,4 @@
+# store-isolated: 断言缓存/对象库行为，使用 case 私有 store。
 # 68) 包获取（阶段 1）：`vuna fetch` 把 git 依赖取到持久 store，check/build 只读。
 #     git 用本地仓库（file://），无需网络；`--locked` 不联网只校验；`clean --packages`
 #     清持久 store 后 check 回到 PKG_NotMaterialized。

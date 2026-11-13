@@ -1,3 +1,4 @@
+# store-isolated: 断言缓存/对象库行为，使用 case 私有 store。
 # 44k) 工具链惰性闭包完整性：同包模块自己 import 的依赖包模块必须进闭包（否则 Loader
 #      从源码加载它们却没有 artifact，假报 TC_UnknownName）。闭包现在沿 **header 的
 #      import 边**做 BFS 得到（不再依赖包级 manifest）。

@@ -20,6 +20,9 @@ pkgs.writeShellScriptBin "vuna-run-tests" ''
   done
   export VUNA_BASE="$repo/base"
   export VUNA_SEED="${vuna-seed}/bin/vuna-seed"
+  # 与日常 check/build 共用项目内对象库；VUNA_STORE 已设置时尊重调用方。
+  export VUNA_STORE="''${VUNA_STORE:-$repo/.local/store}"
+  mkdir -p "$VUNA_STORE"
   exec "${vuna}/bin/vuna" test --suite "$repo/test/suite.toml" "$@"
 ''
 // {

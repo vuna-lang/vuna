@@ -1,3 +1,4 @@
+# store-isolated: 断言缓存/对象库行为，使用 case 私有 store。
 # 44m) 导出面翻转（依赖隐藏调用方用到的名字）：`miIfaceHash` 覆盖 exports 后，依赖方必须
 #      判脏；摘要路径与全量路径给出**同一**诊断（旧行为：摘要复用干净模块而漏报）。
 #      夹具 corpus/packages/m34_iface_audit 复制到 $TMPDIR，vuna.toml 的 base 改到本仓库
