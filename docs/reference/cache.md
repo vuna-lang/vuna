@@ -95,7 +95,9 @@ views/testbin/<testBin>/          # effect 测试编译产物（bin/vuna-test，
 
 - 每个项目一个目录 `roots/<项目摘要>/`，每个受保护 digest 一个空文件（项目 = 规范化绝对
   包目录的摘要）。项目**只追加**；没有读-改-写，并发 check/build 不会丢 root。
-  GC 扫所有项目目录里文件名的并集——A 不需要知道 B 的存在。读取侧仍兼容旧的单文件布局。
+  GC 扫所有项目目录里文件名的并集——A 不需要知道 B 的存在。读取侧兼容旧的单文件布局；
+  写侧遇到 `roots/<项目>` 是文件时先读 digest 列表、删文件、建目录（seed rotation 里
+  stage0 用旧布局、stage1 用新布局，必须能平滑接上）。
 - 登记的时机：check 判定 marker 提交后、build 的 split blob 提交后、`vuna fetch` 取到包后、
   test verdict 提交后。
 - `vuna store gc [--dry-run] [--older-than SEC] [--max-size BYTES]`：

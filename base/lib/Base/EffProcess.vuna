@@ -64,7 +64,6 @@ handleProcessHostWith n onExit comp = handleProcess n (\a => pure a) (processOpH
 
 -- 真实路径：`Exit` 调用 `@vuna@prim_eff_exit`，进程立即退出、不返回。
 -- | 真实路径 handler：`Exit` 调 `@vuna@prim_eff_exit`，进程立即退出、不返回。
-
 -- ---------------------------------------------------------------
 -- 阶段 3：带行 handler（entry 自动预装用；不导出）
 -- ---------------------------------------------------------------
