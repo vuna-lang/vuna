@@ -648,8 +648,7 @@ manifestSemanticText (Just pkg) =
       Nothing => ""
       Just xs => join "," xs
   in join "\n"
-    (Base.List.Cons "name:${maybeSemanticText man.manifestName}"
-      (Base.List.Cons "exports:${exportsText}" (map depSemanticText man.manifestDependencies)))
+    (Base.List.Cons "name:${maybeSemanticText man.manifestName}" (Base.List.Cons "exports:${exportsText}" (map depSemanticText man.manifestDependencies)))
 
 -- | 语义开关：release 会拒绝 debug-only 构造（诊断集合不同），必须进输入摘要。
 releaseFlagOf : PackageContext -> String

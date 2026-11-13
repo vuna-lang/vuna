@@ -235,18 +235,17 @@ decCall fuel c =
 
 -- DiagField 的 tag：0..9
 encField : DiagField -> List String -> List String
-encField f acc = case f of
-  FieldExpected s => encTag 0 (encStr s acc)
-  FieldFound s => encTag 1 (encStr s acc)
-  FieldName s => encTag 2 (encStr s acc)
-  FieldCandidates cs => encTag 3 (encList encCandidate cs acc)
-  FieldCall ci => encTag 4 (encCall ci acc)
-  FieldQuantity name declared observed =>
-    encTag 5 (encStr name (encInt declared (encInt observed acc)))
-  FieldEffect s => encTag 6 (encStr s acc)
-  FieldModule s => encTag 7 (encStr s acc)
-  FieldSpan name sp => encTag 8 (encStr name (encSpan sp acc))
-  FieldNote s => encTag 9 (encStr s acc)
+encField (FieldExpected s) acc = encTag 0 (encStr s acc)
+encField (FieldFound s) acc = encTag 1 (encStr s acc)
+encField (FieldName s) acc = encTag 2 (encStr s acc)
+encField (FieldCandidates cs) acc = encTag 3 (encList encCandidate cs acc)
+encField (FieldCall ci) acc = encTag 4 (encCall ci acc)
+encField (FieldQuantity name declared observed) acc =
+  encTag 5 (encStr name (encInt declared (encInt observed acc)))
+encField (FieldEffect s) acc = encTag 6 (encStr s acc)
+encField (FieldModule s) acc = encTag 7 (encStr s acc)
+encField (FieldSpan name sp) acc = encTag 8 (encStr name (encSpan sp acc))
+encField (FieldNote s) acc = encTag 9 (encStr s acc)
 
 decField : Int -> Cur -> Maybe (Pair DiagField Cur)
 decField fuel c = thenPair (decTag (fuel - 1) c) (\tg, b1 => case tg of

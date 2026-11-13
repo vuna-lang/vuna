@@ -495,7 +495,8 @@ buildTestBin ctx path name dir secs = do
       pure (case buildRes of
         CmdTimedOut => TestFailed "timed out after ${secs}s (build)"
         CmdDone 0 => TestPassed
-        CmdDone code => TestFailed "build: ${name}: `sh build.sh bin/vuna-test` failed in ${dir} (exit ${code})"
+        CmdDone code =>
+          TestFailed "build: ${name}: `sh build.sh bin/vuna-test` failed in ${dir} (exit ${code})"
       )
 
 runIOTestTimed : PackageContext -> String -> String -> Int -> Eff hostRow TestOutcome
@@ -532,6 +533,7 @@ runIOTestTimed ctx path name secs = do
             CmdDone code => TestFailed "effect program exited with code ${code}"
           )
         _ => ioCleanup dir built
+
 -- 删掉本次效果测试的临时目录（绝对路径，cwd 无关）后返回结果。
 ioCleanup : String -> TestOutcome -> Eff hostRow TestOutcome
 ioCleanup dir outcome = do
