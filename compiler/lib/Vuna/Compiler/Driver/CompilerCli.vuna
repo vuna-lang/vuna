@@ -353,6 +353,9 @@ else if o.optDiagFormat == "human" then do
   _ <- printErrText (msg ++ "\n")
   pure (Pair (diagExitFor d) o)
 else if o.optDiagFormat == "sarif" then pure (Pair (diagExitFor d) (collectSarifIn o d))
+else if o.optDiagFormat == "github" then do
+  _ <- printErrText (renderGithub d ++ "\n")
+  pure (Pair (diagExitFor d) o)
 else do
   -- short：首行保持 `error: [pkg] file:line:col: [CODE] 消息`；片段从 label 结构化渲染。
   snippet <- renderShortSnippetEff d

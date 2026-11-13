@@ -54,3 +54,7 @@ exit: 0
 # 15h) 坏载荷只降级为 miss：篡改 check 对象后仍能重算并给出正确诊断。
 run: sh -c 'set -e; d="$TMPDIR/corrupt"; st="$TMPDIR/corrupt-store"; rm -rf "$d" "$st"; cp -R "$VUNA_SUITE_ROOT/test/corpus/packages/01_workspace" "$d"; sed -i "s|../../../../base|$VUNA_SUITE_ROOT/base|" "$d/vuna.toml"; printf "main : Int\nmain = \"boom\"\n" > "$d/app/Main.vuna"; VUNA_STORE="$st" "$VUNA" check "$d" >/dev/null 2>&1 || true; obj=$(find "$st/objects/check" -type f | head -1); printf "garbage" > "$obj"; out=$(VUNA_STORE="$st" "$VUNA" check "$d" 2>&1 || true); printf "%s" "$out" | grep -q "TC_TypeMismatch"'
 exit: 0
+
+# 15i) --error-format=github：一行一条 workflow annotation，位置来自结构化 span。
+run: sh -c 'set -e; out=$("$VUNA" check --error-format github "$VUNA_SUITE_ROOT/test/corpus/dt_err/01_universe.vuna" 2>&1 || true); printf "%s" "$out" | grep -q "^::error file=.*01_universe.vuna,line=2,col=7,endLine=2,endColumn=7::\[TC_TypeLevelArg\]"'
+exit: 0

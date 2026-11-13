@@ -220,6 +220,27 @@ renderRelated primary labels = do
   blocks <- relatedBlocks primary labels
   pure (join "\n" (filter (\x => x /= "") blocks))
 
+-- GitHub Actions workflow annotation（一行一条；位置来自结构化 primary span）。
+-- 转义按 GitHub 约定：% / CR / LF。
+githubEscape : String -> String
+githubEscape s = join "" (map ghChar (strUnpack s))
+
+ghChar : Int -> String
+ghChar 37 = "%25"
+ghChar 13 = "%0D"
+ghChar 10 = "%0A"
+ghChar c = strPack [c]
+
+export renderGithub : Diagnostic -> String
+renderGithub d =
+  let
+    msg = githubEscape d.diagMessage
+    code = if d.diagCode == "" then "" else "[${d.diagCode}] "
+  in case primarySpan d.diagLabels of
+    Just sp =>
+      "::error file=${sp.spanFile},line=${strFromInt sp.spanStartLine},col=${strFromInt sp.spanStartCol},endLine=${strFromInt sp.spanEndLine},endColumn=${strFromInt sp.spanEndCol}::${code}${msg}"
+    Nothing => "::error::${code}${msg}"
+
 -- 头部：`error[CODE]: 消息`（无 code 时 `error: 消息`）。
 localizedMessage : String -> Diagnostic -> String
 localizedMessage lang d = if lang == "zh" then case Vuna.Compiler.Diagnostics.diagDescOf d.diagCode of

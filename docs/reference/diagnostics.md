@@ -123,11 +123,12 @@ warning 的**通道**（M4 起）没有进程内全局收集器：Elab 期 `warn
 | --- | --- | --- |
 | short | `renderShort` / `diagText` | `file:line:col: [CODE] 消息`（编辑器/grep/管道默认）；CLI 片段由 `renderShortSnippetEff` 从 label 结构化追加 |
 | human | `renderHuman` | 交互终端默认：首行 + 主/相关 label 片段（context 标签输出 `= in ...`）+ note/建议/目录说明 |
+| github | `renderGithub` | GitHub Actions workflow annotation：`::error file=…,line=…,col=…::[CODE] 消息`（按行流式，工作区多包可混排；`%`/CR/LF 转义） |
 | human | `renderHuman` | `error[CODE]: 消息` + `--> file:line:col` + 源码行 + 插入符 + notes |
 | JSON | `renderJsonList` | `{version,tool,diagnostics[]}`，含 labels/fields/trace/notes/suggestions/origin/internal/ice |
 | SARIF | `renderSarif` | SARIF 2.1.0 单 run：ruleId/level/message/locations/relatedLocations |
 
-CLI 开关：`--error-format=short|human|json|sarif`、`--json`、`--message-format=...`、`--lang en|zh`（zh 时 human 消息本地化）、`--continue-on-error`（elab best-effort 多错误，仅**入口文件**；带 `module` 头的库模块单文件检查只报首错）；包级 check
+CLI 开关：`--error-format=short|human|json|sarif|github`、`--json`、`--message-format=...`、`--lang en|zh`（zh 时 human 消息本地化）、`--continue-on-error`（elab best-effort 多错误，仅**入口文件**；带 `module` 头的库模块单文件检查只报首错）；包级 check
 会把格式、`--lang`、`--max-errors` 透传给成员包子进程；成员包错误带 `[包名]` 前缀。
 **机器格式单文档**：`--error-format=json|sarif` 的工作区检查在父进程内逐包收集诊断，
 stdout 恰好输出一份文档（不再让成员子进程各打一份）；成员 manifest 的 `[diagnostics]`
@@ -148,7 +149,7 @@ JSON 字段是机器契约：`code/severity/phase/category/message/labels[]/fiel
 
 | key | 值 | 语义 |
 | --- | --- | --- |
-| `format` | `short`/`human`/`json`/`sarif` | 默认渲染格式（等价 `--error-format`）；未显式指定时按消费端选：TTY → `human`，管道/CI → `short`（`lang=zh` 时 human） |
+| `format` | `short`/`human`/`json`/`sarif`/`github` | 默认渲染格式（等价 `--error-format`）；未显式指定时按消费端选：TTY → `human`，管道/CI → `short`（`lang=zh` 时 human） |
 | `warnings` | bool | 是否默认显示 `UN_` 告警（等价 `-W`；`--deny-warnings` 仍提升退出码） |
 | `max-errors` | 正整数 | 一次检查最多显示/序列化多少条诊断（0 或缺省 = 不限） |
 | `lang` | `en`/`zh` | human 视图语言；`zh` 追加目录中文说明并默认切 human（命令行 `--lang` 优先） |
