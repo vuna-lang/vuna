@@ -216,7 +216,7 @@ if [ -r "/proc/$$/stat" ]; then
   (
     sleep 1
     a=$(set -- $(cat "/proc/$$/stat"); echo "$(( ${14} + ${15} ))")
-    sleep 3
+    sleep 2
     b=$(set -- $(cat "/proc/$$/stat"); echo "$(( ${14} + ${15} ))")
     printf 'CPUTICKS:%s:%s' "$a" "$b" >"$CPULOG"
   ) &
@@ -224,7 +224,7 @@ fi
 exec "$VUNA" repl
 WRAP
   cpulog=$tmp/cpu.log
-  (sleep 1; sleep 4; printf ':q\n') |
+  (sleep 1; sleep 3; printf ':q\n') |
     VUNA="$VUNA" CPULOG="$cpulog" NO_COLOR=1 VUNA_REPL_HISTORY="$tmp/pty-cpu" \
       script -qec "sh $tmp/cpu-wrap.sh" /dev/null >/dev/null 2>&1
   if [ -r "$cpulog" ]; then
@@ -232,8 +232,8 @@ WRAP
     if [ -n "$ticks" ]; then
       set -- $ticks
       used=$(( $2 - $1 ))
-      # 3 秒空闲 < 0.3s CPU（100 tick/s 口径下 30 tick）；远超它即忙等。
-      if [ "$used" -le 30 ]; then ok; else bad "pty cpu: 空闲 CPU 过高 (${used} ticks / 3s)"; fi
+      # 2 秒空闲 < 0.3s CPU（100 tick/s 口径下 30 tick）；远超它即忙等。
+      if [ "$used" -le 30 ]; then ok; else bad "pty cpu: 空闲 CPU 过高 (${used} ticks / 2s)"; fi
     else
       skip "pty cpu: 未拿到 CPU 采样"
     fi

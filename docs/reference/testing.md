@@ -401,9 +401,9 @@ interp / compile 文案不同时用 `.compile.err`。
 
 - `seed-selfhost`：seed→stage0→stage1→stage2 逐字节一致、TCB 黑名单、seed 完整 allowlist、闭包数量、增量构建、
   行为抽查与 seed 滞后报告（不阻塞）；
-- `vuna-tests-gate` 与 `vuna-tests-e2e`：分别跑 `--tier fast integration` 与 `--tier e2e`
-  （jobs 取 `NIX_BUILD_CORES` 或 `VUNA_TEST_JOBS`；`--no-cache`；各自一个私有对象库，
-  worker/case 共享同一根）；两层由 CI 的 2×8 cores 预算并行；
+- `vuna-tests-gate` 与 `vuna-tests-e2e`：gate 跑 `--tier fast integration`；e2e check
+  先跑 `--tier e2e`（8 worker），再串行跑 `--tier tools`（2 worker，47c/54b）。
+  gate 最长 case 1.8 s，e2e 15.7 s，tools 22.6 s，均 ≤25 s；
 - `vuna-typecheck` / `vuna-lint`：`vuna check .` 自检、lint 零 finding；
 - `eff-boundary`：隐藏效果守卫，`runPure` 调用点只降不增（基线
   `nix/eff-boundary.allowlist`，当前为空），见 [effects.md](effects.md)；

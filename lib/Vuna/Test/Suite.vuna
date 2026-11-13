@@ -548,15 +548,26 @@ discoverStepsFamily suite family =
     if not exists then pure [brokenFamilyCase family "family dir not found: ${dir}"]
     else do
       names <- raiseToRow hostRow (@vuna@prim_eff_readDir dir)
-      pure (concatMap (\name => if endsWith ".steps" name then
-        let
-          rel = substring 0 (byteLength name - 6) name
-          id = "${family.familySection}/${family.familyName}/${rel}"
-        in [ Case id family.familySection family.familyTags (CSteps "${dir}/${name}") family.familyTimeout "e2e"
-        ]
-      else []
-      ) names
-      )
+      concatMapEff (stepCaseOf family dir) names
+
+stepCaseOf : Family -> String -> String -> Eff hostRow (List Case)
+stepCaseOf family dir name =
+  if not (endsWith ".steps" name) then pure []
+  else do
+    text <- raiseToRow hostRow (@vuna@prim_eff_readFile "${dir}/${name}")
+    let
+      rel = substring 0 (byteLength name - 6) name
+      id = "${family.familySection}/${family.familyName}/${rel}"
+    in pure [ Case id family.familySection family.familyTags (CSteps "${dir}/${name}") family.familyTimeout (stepsTierOf text)
+    ]
+
+-- steps 文件头 `# tier: integration|fast` 可覆盖默认 e2e；其余仍归 e2e。
+stepsTierOf : String -> String
+stepsTierOf text =
+  if contains "# tier: tools" text then "tools"
+  else if contains "# tier: integration" text then "integration"
+  else if contains "# tier: fast" text then "fast"
+  else "e2e"
 
 discoverFamily : Suite -> Family -> Eff hostRow (List Case)
 discoverFamily suite family = if family.familyKind == "steps" then discoverStepsFamily suite family

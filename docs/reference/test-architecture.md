@@ -68,14 +68,14 @@ commands 在 [testing.md](testing.md)；对象库本身见 [cache.md](cache.md)�
 | `fast` | 进程内 check/interp 语义、诊断、term | < 10 s | 每次保存 / commit |
 | `integration` | compile+run golden、CLI/lint/fix、模块/包 | < 30 s | PR / pre-push |
 | `e2e` | `check .`、LSP/REPL、workspace/build、seed | < 60 s | 合并前 / nightly |
+| `tools` | 47c `vuna test --jobs`、54b REPL v2 缺口等 20 s 级工具 case | < 25 s | e2e check 内固定 2 worker |
 | `perf` | growth/metrics/bench | 独立机器 | nightly |
 
-tier 过滤已落地：`--tier fast|integration|e2e`（可重复）；`*.steps` 归 `e2e`，
+tier 过滤已落地：`--tier fast|integration|e2e|tools`（可重复）；`*.steps` 默认 `e2e`，
 seed/runtime 归 `integration`，golden/error/lint/fix/check 归 `fast`。
 
-调度（P1，未落地）：父进程按历史 `costs.tsv` + kind 权重做 LPT 分桶；worker 保留
-`--worker i/N` 协议。步骤内长脚本按独立断言组拆分；每 case 一个总预算，而不是每命令
-300 s。
+调度：gate 已用 `costs.tsv` 做 LPT 分桶；e2e/tools 保持静态顺序（冷隔离
+长 case 不宜重排）。worker 仍保留 `--worker i/N` 协议；每 case 总预算待做。
 
 > 实测（2026-11-13）：只做“按 costs 降序 + 静态轮转”会把 44e/44g/44l2 等**冷隔离**
 > 长 case 同时压到多个 worker，全量反而 215 s（原静态顺序 144 s）。LPT 必须先有 tier

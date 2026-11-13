@@ -1,3 +1,4 @@
+# tier: tools
 # 47c) `vuna test --jobs N`：包内测试文件进程级并行（每个文件一个子进程，父进程汇总）。
 #      夹具 corpus/packages/m38_test_jobs（3 纯 + 2 效果 + 2 重叠探针，fail/ 独立嵌套包）
 #      与 corpus/test-m30（workspace 聚合）复制到 case 私有 $TMPDIR 并重写 vuna-base，
