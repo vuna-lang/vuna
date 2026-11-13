@@ -116,8 +116,8 @@ binder 的**身份**在 Lowering 分配，前缀与编号渲染属后端：
 2. **桥接**：`irRtBridgesList` 为真的符号，其模板里的 `dtp_*` helper 要按 List 族归属单元
    限定并把该单元记成直接依赖（机制在 `Codegen.Term.genBridgeRef`）。
 3. **语义参考实现**：运行时库本身（`bi_*` / `dt_*` / `dtp_*` 的定义）仍是 `Codegen.Term`
-   的 runtime 模板。契约只固定「符号面」（名字 + arity + 桥接标记），不固定实现；新后端要
-   按同一组语义重实现这套符号。
+   的 runtime 模板。契约只固定「符号面」（名字 + 桥接标记；arity 由 `irInlineArity` 定），
+   不固定实现；新后端要按同一组语义重实现这套符号。
 
 校验（都在 check/build 路径上，不是文档约定）：
 
