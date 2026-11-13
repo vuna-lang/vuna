@@ -218,7 +218,7 @@ setPrepared prepared mi =
 -- manifest 增加 `mePayloadDigest`，布局变化 ⇒ 20。
 -- C51：`ModuleIface.miDefLocs`（定义位置表，不进接口哈希）随载荷持久化，布局变化 ⇒ 22。
 export ifaceSchema : String
-ifaceSchema = "vuna-iface 26"
+ifaceSchema = "vuna-iface 27"
 
 -- | 接口哈希的**算法格式版本**：参与哈希输入（与 `ifaceSchema` 独立——schema 管载荷
 -- 布局，本版本管摘要算法/分片编码；换算法时旧哈希自然换代）。
@@ -432,14 +432,25 @@ hashOfIface m =
   hashOfParts (miNameOf m) (miPackageOf m) (miImportsOf m) (miImplicitImportsOf m) (miFixitiesOf m)
     (miRecordsOf m) (miExportsOf m) (miDeclsOf m) (miCachedOf m)
 
--- D11：包级双摘要。模块按名字排序后聚合；iface 摘要只含下游可见面，impl 摘要含产物面。
-export pkgIfaceHashOf : PackageIface -> String
-pkgIfaceHashOf (PackageIface schema compiler pkg env mods) =
+-- D11：包级双摘要。模块按名字排序后聚合；`pkgIfaceHash` 只含下游可见面（依赖身份），
+-- `pkgImplHash` 含产物面（本包产物身份）。`*OfModules` 供读取方从已读出的模块摘要直接聚合。
+export pkgIfaceHashOfModules : String -> List ModuleIface -> String
+pkgIfaceHashOfModules pkg mods =
   digestParts ("vuna-pkg-iface-hash 1" :: pkg :: map miIfaceHashOf (sortByText miNameOf mods))
 
-export pkgImplHashOf : PackageIface -> String
-pkgImplHashOf (PackageIface schema compiler pkg env mods) =
+export pkgImplHashOfModules : String -> List ModuleIface -> String
+pkgImplHashOfModules pkg mods =
   digestParts ("vuna-pkg-impl-hash 1" :: pkg :: map miImplHashOf (sortByText miNameOf mods))
+
+export pkgIfaceHashOf : PackageIface -> String
+pkgIfaceHashOf (PackageIface schema compiler pkg env mods) = pkgIfaceHashOfModules pkg mods
+
+export pkgImplHashOf : PackageIface -> String
+pkgImplHashOf (PackageIface schema compiler pkg env mods) = pkgImplHashOfModules pkg mods
+
+-- | 模块按名字排序（产物身份/布局摘要的规范顺序；与聚合摘要同一序）。
+export sortModuleIfaces : List ModuleIface -> List ModuleIface
+sortModuleIfaces mods = sortByText miNameOf mods
 
 -- D11：产物摘要。与 ifaceHash 的差别只有 opaque body：ifaceHash 不含它，implHash 含它。
 implHashOfParts : String -> String -> List RecordMeta -> List ExportEntry -> List Decl -> CachedProgram -> String

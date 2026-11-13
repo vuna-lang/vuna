@@ -56,7 +56,8 @@ cleanTargets wantStore wantPackages wantGc dry dir = do
 
 -- 缓存族：按 kind 目录 + 派生目录枚举，不碰包对象族与 roots。
 cacheKindNames : List String
-cacheKindNames = ["iface", "header", "lex", "order", "check", "tool", "mods", "test", "splitptr"]
+cacheKindNames =
+  ["iface", "header", "lex", "order", "check", "tool", "mods", "test", "pkgiface", "splitptr"]
 
 cacheScopesOf : String -> List String
 cacheScopesOf root =

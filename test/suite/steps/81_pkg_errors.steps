@@ -1,0 +1,19 @@
+# store-isolated: 断言包错误诊断，使用 case 私有 store。
+# 81) 三个包源/store 错误码的结构化覆盖：PKG_FetchFailed / PKG_HashMismatch / PKG_IndexMalformed。
+run: sh -c 'S="$TMPDIR/pe"; rm -rf "$S"; mkdir -p "$S/dep/lib" "$S/root/app" "$S/f/app" "$S/r/app" "$S/idx"; printf "[package]\nname = \"dep\"\n[export]\nmodules = [\"D\"]\n" > "$S/dep/vuna.toml"; printf "module D where\n\nexport d : Int\nd = 1\n" > "$S/dep/lib/D.vuna"; printf "[package]\nname = \"root\"\n\n[dependencies.dep]\npath = \"../dep\"\nhash = \"sha256:0000000000000000000000000000000000000000000000000000000000000000\"\n" > "$S/root/vuna.toml"; printf "import D\n\nmain : Int\nmain = d\n" > "$S/root/app/Main.vuna"; printf "[package]\nname = \"f\"\n\n[dependencies.x]\nurl = \"file:///nonexistent/x\"\nhash = \"sha256:0000000000000000000000000000000000000000000000000000000000000000\"\n" > "$S/f/vuna.toml"; printf "[package]\nname = \"r\"\n[registry]\nindex = \"../idx\"\n" > "$S/r/vuna.toml"; printf "main : Int\nmain = 1\n" > "$S/r/app/Main.vuna"'
+exit: 0
+
+# path 依赖声明了错误摘要 ⇒ PKG_HashMismatch（check 路径，无需网络）。
+run: sh -c 'S="$TMPDIR/pe"; VUNA_STORE="$S/store" "$VUNA" check "$S/root" 2>&1'
+exit: 1
+out-contains: PKG_HashMismatch
+
+# url 依赖取不到对象 ⇒ PKG_FetchFailed（curl 失败路径）。
+run: sh -c 'S="$TMPDIR/pe"; VUNA_STORE="$S/store" "$VUNA" fetch "$S/f" 2>&1'
+exit: 1
+out-contains: PKG_FetchFailed
+
+# 静态索引缺条目 ⇒ PKG_IndexMalformed。
+run: sh -c 'S="$TMPDIR/pe"; VUNA_STORE="$S/store" "$VUNA" add ghost "$S/r" --dry-run 2>&1'
+exit: 1
+out-contains: PKG_IndexMalformed

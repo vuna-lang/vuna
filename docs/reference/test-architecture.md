@@ -21,8 +21,8 @@ commands 在 [testing.md](testing.md)；对象库本身见 [cache.md](cache.md)�
 
 ```text
                     .local/store（唯一根；VUNA_STORE 可覆盖）
-   objects/iface|header|lex|order|check|tool|test
-   blobs/<splitIn>   units/<pkg>   views/bin/<splitIn>   roots/<project>
+   objects/iface|header|lex|order|check|tool|test|pkgiface|splitptr
+   blobs/<splitIdentity>   units/<pkg>   views/bin/<splitIn>   roots/<project>/<digest>
                               ▲
         ┌─────────────────────┴──────────────────────┐
         │ test scheduler：父进程解析 store、预热一次  │
@@ -56,9 +56,9 @@ commands 在 [testing.md](testing.md)；对象库本身见 [cache.md](cache.md)�
 
 | 位置 | 现状 | 影响 | 计划 |
 | --- | --- | --- | --- |
-| `roots/<project>` | 读-改-写，无锁 | 并发追加可能丢行；只影响 GC（重算） | P1 改追加式/合并 |
-| `views/bin/<splitIn>` | `buildOne` 直接写视图；`storeScratchClaimEff` 尚无调用者 | 日常 build 与测试同时构建同一包时没有互斥保证 | P1 切 scratch claim/publish；测试侧先 `--out`/隔离 |
-| `units/<pkg>` | 写原子，按 entry 桶 GC | 并发不同 entry 会互相驱逐（变慢） | P1 缩小 GC 范围 |
+| `roots/<project>/<digest>` | 逐摘要文件，无读-改-写 | 并发追加不再丢 root（兼容旧单文件布局） | — |
+| `views/bin/<splitIn>` | `mkdir` 构建锁 + 持锁写最终视图、`.complete` 原子提交 | 日常 build 与测试同时构建同一包会串行；显式 `--out` 不经过锁 | — |
+| `units/<pkg>` | 写原子，按 entry 桶内 GC | 并发不同 entry 不再互相驱逐 | — |
 | warning | 命中跳过精化，警告不持久化 | 断言 warning 的 case 可能假通过 | 走 `-W`/`--deny-warnings` 或隔离 |
 
 ## 3. 用例分层与预算

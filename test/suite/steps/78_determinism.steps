@@ -1,0 +1,15 @@
+# store-isolated: 断言对象库行为，使用 case 私有 store。
+# 78) 哈希格式门禁：同源、不同绝对目录、不同 store ⇒ 对象地址集合、split 产物逐字节一致。
+#     绝对路径不是身份（iface 载荷里的 siPath 允许不同，地址/产物不允许）。
+run: sh -c 'S="$TMPDIR/det"; rm -rf "$S"; for d in a b; do mkdir -p "$S/$d/lib" "$S/$d/app"; printf "[package]\nname = \"det\"\n[export]\nmodules = [\"M\"]\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$S/$d/vuna.toml"; printf "module M where\n\nexport one : Int\none = 1\n" > "$S/$d/lib/M.vuna"; printf "import M\n\nmain : Int\nmain = one\n" > "$S/$d/app/Main.vuna"; VUNA_STORE="$S/store-$d" "$VUNA" check "$S/$d" >/dev/null 2>&1 || exit 1; VUNA_STORE="$S/store-$d" "$VUNA" build --no-compile --out "$S/out-$d" "$S/$d" >/dev/null 2>&1 || exit 2; done'
+exit: 0
+
+# 对象地址集合一致（只比相对路径，不比含绝对路径的载荷）。
+run: sh -c 'S="$TMPDIR/det"; find "$S/store-a/objects" -type f | sed "s|$S/store-a/||" | sort > "$S/addr-a"; find "$S/store-b/objects" -type f | sed "s|$S/store-b/||" | sort > "$S/addr-b"; diff -u "$S/addr-a" "$S/addr-b"'
+exit: 0
+# split blob 地址集合一致。
+run: sh -c 'S="$TMPDIR/det"; find "$S/store-a/blobs" -type f | sed "s|$S/store-a/||" | sort > "$S/blob-a"; find "$S/store-b/blobs" -type f | sed "s|$S/store-b/||" | sort > "$S/blob-b"; diff -u "$S/blob-a" "$S/blob-b"'
+exit: 0
+# 生成源码逐字节一致（build.sh 里的相对路径也已归一）。
+run: sh -c 'S="$TMPDIR/det"; diff -r "$S/out-a" "$S/out-b"'
+exit: 0

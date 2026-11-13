@@ -1,0 +1,32 @@
+# store-isolated: 断言对象库行为，使用 case 私有 store。
+# 80) 产物身份（代码即内容）：快 key → splitptr → 语义 blob。
+#     注释（不改行号）复用 codegen；行移动换布局摘要重建；opaque 体变只换本包产物。
+run: sh -c 'S="$TMPDIR/ci"; rm -rf "$S"; mkdir -p "$S/p/lib" "$S/p/app"; printf "[package]\nname = \"p\"\n[export]\nmodules = [\"M\"]\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$S/p/vuna.toml"; printf "module M where\n\nexport one : Int\none = 1\n" > "$S/p/lib/M.vuna"; printf "import M\n\nmain : Int\nmain = one\n" > "$S/p/app/Main.vuna"; VUNA_STORE="$S/store" "$VUNA" build --no-compile --out "$S/o1" "$S/p" >/dev/null 2>&1; n=$(find "$S/store/blobs" -type f | wc -l); [ "$n" = "1" ] && test -n "$(find "$S/store/objects/splitptr" -type f | head -1)"'
+exit: 0
+
+# 未改动：快指针命中，零精化。
+run: sh -c 'S="$TMPDIR/ci"; VUNA_DEBUG_PERF=1 VUNA_STORE="$S/store" "$VUNA" build --no-compile --out "$S/o1" "$S/p" 2>&1'
+exit: 0
+out-contains: split-pointer-hit
+
+# 行内尾注释（行号/语义不变）⇒ 语义 blob 命中，产物逐字节不变。
+run: sh -c 'S="$TMPDIR/ci"; printf "module M where\n\nexport one : Int\none = 1 -- trailing\n" > "$S/p/lib/M.vuna"; VUNA_DEBUG_PERF=1 VUNA_STORE="$S/store" "$VUNA" build --no-compile --out "$S/o2" "$S/p" 2>&1'
+exit: 0
+out-contains: split-identity-hit
+run: sh -c 'S="$TMPDIR/ci"; test "$(find "$S/store/blobs" -type f | wc -l)" = "1"; diff -r "$S/o1" "$S/o2"'
+exit: 0
+
+# 行移动（布局/位置表变化）⇒ 新 blob，运行时位置表行号同步。
+run: sh -c 'S="$TMPDIR/ci"; printf "module M where\n\n\nexport one : Int\none = 1 -- trailing\n" > "$S/p/lib/M.vuna"; VUNA_STORE="$S/store" "$VUNA" build --no-compile --out "$S/o3" "$S/p" >/dev/null 2>&1; test "$(find "$S/store/blobs" -type f | wc -l)" = "2"; grep -q "M.one\", \"M.vuna:5" "$S/o3/Vuna_runtime.ml"'
+exit: 0
+
+# 指针丢失 ⇒ 重新精化一次、语义 blob 仍命中，指针补写。
+run: sh -c 'S="$TMPDIR/ci"; rm -rf "$S/store/objects/splitptr"; VUNA_DEBUG_PERF=1 VUNA_STORE="$S/store" "$VUNA" build --no-compile --out "$S/o3" "$S/p" 2>&1'
+exit: 0
+out-contains: split-identity-hit
+run: sh -c 'S="$TMPDIR/ci"; test -n "$(find "$S/store/objects/splitptr" -type f | head -1)"; test "$(find "$S/store/blobs" -type f | wc -l)" = "2"'
+exit: 0
+
+# opaque 体改变：ifaceHash 不变、implHash 变 ⇒ 本包产物换新 blob。
+run: sh -c 'S="$TMPDIR/ci"; printf "module M where\n\n\nexport one : Int\none = 1 -- trailing\n\nexport opaque h : Int\nh = 7\n" > "$S/p/lib/M.vuna"; VUNA_STORE="$S/store" "$VUNA" build --no-compile --out "$S/o4" "$S/p" >/dev/null 2>&1; n1=$(find "$S/store/blobs" -type f | wc -l); printf "module M where\n\n\nexport one : Int\none = 1 -- trailing\n\nexport opaque h : Int\nh = 8\n" > "$S/p/lib/M.vuna"; VUNA_STORE="$S/store" "$VUNA" build --no-compile --out "$S/o5" "$S/p" >/dev/null 2>&1; n2=$(find "$S/store/blobs" -type f | wc -l); [ "$n2" = "$((n1 + 1))" ]'
+exit: 0

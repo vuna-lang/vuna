@@ -4,12 +4,17 @@
 一览见 [packages.md](packages.md)；终态方向与决策（D12–D15）见
 [architecture-target.md](../architecture-target.md)。
 
-## 1. 两个摘要，输入面不同
+## 1. 哈希命名（定稿）与输入面
 
-| 摘要 | 输入 | 用途 | 何时变 |
+全仓库统一用这套名字（`surface/code` 这类说法已退役）；完整角色表见
+[cache.md](cache.md) 的「哈希命名」。
+
+| 名称 | 输入 | 用途 | 何时变 |
 | --- | --- | --- | --- |
-| **内容摘要** `contentHash` | `vuna.toml` + `lib/**/*.vuna` + `app/**/*.vuna` + `test/**/*.vuna` 的 `(相对路径, 字节)`，按路径升序 | 不可变源的完整性校验（manifest 的 `hash`） | 任何文件字节变化（含注释、测试） |
-| **语义身份** `identityHash` | 包名 + `[export]` + 各依赖的 `(别名, 摘要)` + 每个文件的 `(路径, 内容摘要)` | 缓存失效 / `pmEnv` | 声明面或任何源码语义变化；**不含**绝对路径、mtime、注释、测试目录以外的非文件信息 |
+| **内容摘要** `contentHash` | `vuna.toml` + `lib/**/*.vuna` + `app/**/*.vuna` + `test/**/*.vuna` 的 `(相对路径, 字节)`，按路径升序 | 不可变源的完整性校验（manifest 的 `hash`）、包对象地址 | 任何文件字节变化（含注释、测试） |
+| **语义身份** `identityHash` | 包名 + `[export]` + 各依赖的 `(别名, 摘要)` + 每个文件的 `(路径, 内容摘要)` | 分发/pin 身份；**不参与缓存失效**（D5 身份模型） | 声明面或任何源码语义变化 |
+| `pkgIfaceHash` | 包内模块 `miIfaceHash` 聚合 | 依赖身份（D69：`checkIn`/`splitIn` 的 deps 分量） | 下游可见接口/透明体变化 |
+| `pkgImplHash` | 包内模块 `miImplHash` 聚合 | 产物身份（`splitIdentity`） | `opaque`/`abstract` 体变化也变 |
 
 规范编码在 `Vuna.Compiler.Canonical.Pkg`（codec `pkg-source 1`，原子文法同
 `Canonical.Bytes`：`#tag;` / `i<n>;` / `s<len>:<bytes>` / `b0|b1` / `[<n>:…]`）。
@@ -139,11 +144,15 @@ B 项目的 `--gc` 误删（D73）；roots 只追加，删除依赖后旧对象�
 ## 8. 已知边界
 
 - **无版本号 / 无 lockfile**：manifest 即锁文件；`path` 依赖不锁定。
-- **无 registry 服务器**：静态索引（`name → version → (源, hash)`）是下一阶段的便利层，
+- **无 registry 服务器（D14）**：静态索引（`name → version → (源, hash)`）是可选便利层，
   不是真源；包名只是本地别名，不需要全局唯一命名。
-- **`url` 不是 tarball**：没有 tar/zip/解压原语，URL 只能是 `pkg-source 1` 对象文件。
+- **分发真实性是显式非目标（D14）**：不提供签名、撤销、透明日志或账户；`hash` 只保证内容
+  完整，来源可信性由用户选择的 URL 决定。
+- **`url` 只接受 `pkg-source 1` 对象文件**：解压/归档原语属 primitives 轨道，当前不引入
+  tar/zip；GitHub release 归档需先由宿主解包并重新发布为对象文件。
+- **静态索引单根（D14 便利层）**：只有 `[registry].index` 一个入口；多源/优先级/镜像/
+  撤销列表不做，需要时单独立项。
 - **git/curl 由宿主提供**：缺失时是宿主错误（与 `vuna build` 依赖 `ocamlopt` 同级）。
-- **无签名/信任**：摘要只保证完整性，来源可信性由用户选择的 URL 决定。
 - **导出面**：新模块 `Canonical.Pkg` / `Packages.Source` 在 `compiler/vuna.toml` 的
   `[export]` 列表里，跨包（如 `examples/infra`）可直接 import。
 
@@ -157,6 +166,8 @@ B 项目的 `--gc` 误删（D73）；roots 只追加，删除依赖后旧对象�
   版本不存在、`--no-fetch`、`[registry]` 未知 key。
 - `90/steps_native/70_pkg_gc`：`clean --packages --gc` 保留被工作区/项目 roots 引用的对象、
   删除游离对象、跨项目 roots 保护、`--gc` 必须配 `--packages`。
+- `90/steps_native/81_pkg_errors`：`PKG_FetchFailed` / `PKG_HashMismatch` /
+  `PKG_IndexMalformed` 的结构化覆盖（侧车 `81_pkg_errors.diagcodes` 供 diag-coverage 读取）。
 - `90/steps_native/64_infra`：`pkg-canon-rt` / `pkg-identity-*`（规范编码与两种摘要的输入面）。
 
 ## 相关阅读

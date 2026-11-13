@@ -12,12 +12,12 @@
 run: sh -c 'rm -rf "$TMPDIR/c32-pkg" "$TMPDIR/c32-cache" "$TMPDIR/c32-clean" "$TMPDIR/c32-out2"; cp -r corpus/packages/m34_summary "$TMPDIR/c32-pkg"; for mf in "$TMPDIR/c32-pkg"/*/vuna.toml; do sed -i "s|^vuna-base = .*|vuna-base = \"$VUNA_BASE\"|" "$mf"; done; TMPDIR="$TMPDIR/c32-cache" "$VUNA" build --no-compile --out "$TMPDIR/c32-clean" "$TMPDIR/c32-pkg/root" >/dev/null 2>&1'
 run: sh -c 'blob=$(find "$VUNA_STORE"/blobs -type f 2>/dev/null | head -1); [ -n "$blob" ] && printf "%s" "$blob" > "$TMPDIR/c32-blob-path"'
 run: sh -c 'unit=$(find "$VUNA_STORE" -path "*/units/*" -type f 2>/dev/null | head -1); [ -n "$unit" ] && printf "%s" "$unit" > "$TMPDIR/c32-unit-path"'
-# 52a) 产物 blob 的 framing 头：magic 是 v2，tag 带 split-node schema 1，codec 是
+# 52a) 产物 blob 的 framing 头：magic 是 v2，tag 带 split-node schema 2，codec 是
 #      split-files 2（载荷 = 规范拓扑序）。
 run: sh -c 'blob=$(cat "$TMPDIR/c32-blob-path"); head -c 18 "$blob"'
 out-equals: vuna-cache-frame 2
 run: sh -c 'blob=$(cat "$TMPDIR/c32-blob-path"); head -1 "$blob" | cut -d"|" -f2 | cut -d"/" -f1'
-out-equals: vuna-split-node 1
+out-equals: vuna-split-node 2
 run: sh -c 'blob=$(cat "$TMPDIR/c32-blob-path"); head -1 "$blob" | cut -d"|" -f3'
 out-equals: split-files 2
 # 52a2) 单元缓存（PerfCache）的 framing 头：tag 带 unit-cache schema 2，codec 是 split-file 1。

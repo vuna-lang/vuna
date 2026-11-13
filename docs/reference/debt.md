@@ -51,13 +51,6 @@
 | D67 | 全局旗标字面量仍分散：`Vuna.Cli.stripPerfFlags` 匹配 `--debug-perf`，生成的 runtime 文本里匹配 `--debug-perf` / `VUNA_DEBUG_PERF`；`--release` 在 `Vuna.Cli`、`Vuna.Run`、`CompilerCli` 与 `VUNA_RELEASE` 读取处各有一份 | `lib/Vuna/Cli.vuna`、`lib/Vuna/Run.vuna`、`compiler/lib/Vuna/Compiler/Driver/CompilerCli.vuna`、`compiler/lib/Vuna/Compiler/Codegen/Term.vuna` | 后续（统一成旗标门面；不影响行为） |
 | D68 | 编译器 trace 开关是**运行时原语**（`@vuna@debug@on` 读 argv/env），不是显式传参：深部探针在 `Elab`/`Conv`/`Codegen` 的纯函数里，传 trace 能力会把整条纯核心 effect 化 | `compiler/lib/Vuna/Compiler/Intrinsics.vuna`、`Codegen/Term.vuna`（`dtTraceRuntime`）、`Loader/Expand.vuna` | 终局若要求零 ambient 配置，只能删深部探针或引入显式 trace 效应（与 D4 一起评估） |
 | D35 | REPL 的 resize 重绘靠空闲轮询（tty 关闭退化为空闲轮询，接受为限制）；Index 只覆盖 workspace 源码（外部依赖模块只能 `:load` 不能 `:browse`） | `lib/Vuna/Repl/Edit.vuna`、`lib/Vuna/Index/*`；[tooling.md](tooling.md) §4 | 后续 |
-| D69 | 包依赖的「语义身份」未接入 `pmEnv`：依赖投影仍是包名 + 规范化目录 + 依赖 `vuna.toml` 内容摘要（`depEnvText`），不是 `Canonical.Pkg.identityOfSource` 的身份摘要；改依赖的非语义部分（注释、诊断配置、文件顺序）会让依赖方整包判脏 | `compiler/lib/Vuna/Compiler/Packages/Pkg.vuna`（`depEnvText` / `depKeyOf`）；[package-store.md](package-store.md) §1 | 后续（identityHash 进 `pmEnv` 需要 ifaceSchema bump 与一次全局缓存换代） |
-| D70 | 包来源没有真实性保证：无签名、无撤销、无透明日志；`hash` 只保证内容完整，信任锚是 manifest 里的 URL + 摘要，被篡改的索引/镜像可让你接受任意内容 | `lib/Vuna/Fetch.vuna`；[package-store.md](package-store.md) §8 | 后续（签名是分发协议问题，不在核心） |
-| D71 | `url` 依赖不是 tarball：必须直指 `pkg-source 1` 对象文件（语言内无解压原语），不能直接引用 GitHub release 归档 | `lib/Vuna/Fetch.vuna`（`fetchUrl`）；[package-store.md](package-store.md) §3 | 后续（先有解压/归档原语再说） |
-| D72 | 静态索引是单文件条目、单根：一个 `[registry].index`，同名多版本靠 `[releases]`；无多源/优先级/镜像/撤销列表 | `lib/Vuna/Registry.vuna`、`compiler/lib/Vuna/Compiler/Frontend/Manifest.vuna`；[package-store.md](package-store.md) §6 | 后续（多源在需要时再加） |
-| D73 | store GC 的根集只扫一层 `[workspace].members`（与非成员包引用的对象不计入）：跨 workspace 共享的 store 上 `--gc` 可能误删其他项目引用的对象 | `lib/Vuna/Clean.vuna`（`collectMemberHashes`）；[package-store.md](package-store.md) §7 | 后续（需要全局 roots 索引） |
-| D74 | `fetch` 的 `fuel 64` 是给 SCT 的显式下降参数，不是语义配额：依赖链深于 64 会报 depth limit（正常包图远小于此） | `lib/Vuna/Fetch.vuna`（`fetchAll 64`） | 后续（若真遇到，按依赖图深度动态给） |
-| D78 | 3 个包源/store `PKG_*` 码仍无结构化夹具：FetchFailed / HashMismatch / IndexMalformed（均需 git 仓或 registry 索引动态环境） | `nix/diag-coverage-allow.txt`、`nix/diag-unreachable.txt`；`nix/checks/diag-coverage.sh` | 后续（补包错误夹具） |
 
 ## 效应统一（Eff 已贯通）
 

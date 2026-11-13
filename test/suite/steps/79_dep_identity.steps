@@ -1,0 +1,34 @@
+# store-isolated: 断言对象库行为，使用 case 私有 store。
+# 79) 依赖身份（D69）：依赖方只消费依赖包的 pkgIfaceHash，不是源字节闭包。
+#     注释 / 诊断配置 / opaque 体变化不脏依赖方；透明体/接口变化仍然判脏。
+run: sh -c 'S="$TMPDIR/di"; rm -rf "$S"; mkdir -p "$S/dep/lib" "$S/mid/lib" "$S/mid/app"; printf "[package]\nname = \"dep\"\n[export]\nmodules = [\"D\"]\n" > "$S/dep/vuna.toml"; printf "module D where\n\nexport f : Int -> Int\nf x = x\n" > "$S/dep/lib/D.vuna"; printf "[package]\nname = \"mid\"\n[export]\nmodules = [\"M\"]\n\n[dependencies.dep]\npath = \"../dep\"\n" > "$S/mid/vuna.toml"; printf "module M where\n\nimport D\n\nexport g : Int\ng = f 1\n" > "$S/mid/lib/M.vuna"; printf "import M\n\nmain : Int\nmain = g\n" > "$S/mid/app/Main.vuna"; VUNA_STORE="$S/store" "$VUNA" check "$S/dep" >/dev/null 2>&1 && VUNA_STORE="$S/store" "$VUNA" check "$S/mid" >/dev/null 2>&1'
+exit: 0
+
+# 依赖源码追加注释（语义面不变）⇒ 依赖方 check 命中。
+run: sh -c 'S="$TMPDIR/di"; printf "module D where\n\n-- harmless note\nexport f : Int -> Int\nf x = x\n" > "$S/dep/lib/D.vuna"; VUNA_STORE="$S/store" "$VUNA" check "$S/dep" >/dev/null 2>&1; VUNA_DEBUG_PERF=1 VUNA_STORE="$S/store" "$VUNA" check "$S/mid" 2>&1'
+exit: 0
+out-contains: cache-path=hit
+
+# 依赖 manifest 追加注释（非语义配置）⇒ 依赖方 check 命中。
+run: sh -c 'S="$TMPDIR/di"; printf "\n# dep note\n" >> "$S/dep/vuna.toml"; VUNA_STORE="$S/store" "$VUNA" check "$S/dep" >/dev/null 2>&1; VUNA_DEBUG_PERF=1 VUNA_STORE="$S/store" "$VUNA" check "$S/mid" 2>&1'
+exit: 0
+out-contains: cache-path=hit
+
+# 依赖的透明定义体变化（接口语义面变化）⇒ 依赖方 check 未命中。
+run: sh -c 'S="$TMPDIR/di"; printf "module D where\n\n-- harmless note\nexport f : Int -> Int\nf x = 1\n" > "$S/dep/lib/D.vuna"; VUNA_STORE="$S/store" "$VUNA" check "$S/dep" >/dev/null 2>&1; VUNA_DEBUG_PERF=1 VUNA_STORE="$S/store" "$VUNA" check "$S/mid" 2>&1'
+exit: 0
+out-contains: cache-path=miss
+
+# 依赖新增导出（接口变化）⇒ 依赖方未命中；随后只改 opaque 体 ⇒ 依赖方命中。
+run: sh -c 'S="$TMPDIR/di"; printf "module D where\n\n-- harmless note\nexport f : Int -> Int\nf x = 1\n\nexport opaque h : Int\nh = 7\n" > "$S/dep/lib/D.vuna"; VUNA_STORE="$S/store" "$VUNA" check "$S/dep" >/dev/null 2>&1; VUNA_DEBUG_PERF=1 VUNA_STORE="$S/store" "$VUNA" check "$S/mid" 2>&1'
+exit: 0
+out-contains: cache-path=miss
+
+run: sh -c 'S="$TMPDIR/di"; printf "module D where\n\n-- harmless note\nexport f : Int -> Int\nf x = 1\n\nexport opaque h : Int\nh = 8\n" > "$S/dep/lib/D.vuna"; VUNA_STORE="$S/store" "$VUNA" check "$S/dep" >/dev/null 2>&1; VUNA_DEBUG_PERF=1 VUNA_STORE="$S/store" "$VUNA" check "$S/mid" 2>&1'
+exit: 0
+out-contains: cache-path=hit
+
+# 接口身份摘要缺失（依赖还没写 summary）⇒ 回退 manifest 身份，仍能检查成功；依赖重跑后恢复命中。
+run: sh -c 'S="$TMPDIR/di"; rm -rf "$S/store/objects/pkgiface"; VUNA_STORE="$S/store" "$VUNA" check "$S/mid" >/dev/null 2>&1 && VUNA_STORE="$S/store" "$VUNA" check "$S/dep" >/dev/null 2>&1; VUNA_DEBUG_PERF=1 VUNA_STORE="$S/store" "$VUNA" check "$S/mid" 2>&1'
+exit: 0
+out-contains: cache-path=hit

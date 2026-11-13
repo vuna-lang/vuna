@@ -27,6 +27,11 @@ grep -rho '"code":"[A-Z][A-Za-z0-9]*_[A-Za-z0-9]*"' test/corpus --include='*.dia
 # lint 规则夹具：从 `[LN_xxx]` 前缀提取码（不加会让 LN_ 规则被误判成缺口）。
 grep -rho '\[LN_[A-Za-z0-9]*\]' test/corpus/lint --include='*.out' 2>/dev/null \
   | sed -E 's/^\[([^]]+)\]$/\1/' >> "$tmp/covered.txt" || true
+
+# steps 侧车 `*.diagcodes`：CLI 类诊断（fetch/add 等）没有 corpus 流水线，由 steps 断言
+# 输出片段 + 侧车登记码；门禁仍要求码在目录里、其余来源不重复。
+grep -rhoE '^[A-Z][A-Za-z0-9]*_[A-Za-z0-9]+$' test/suite/steps --include='*.diagcodes' 2>/dev/null \
+  >> "$tmp/covered.txt" || true
 sort -u -o "$tmp/covered.txt" "$tmp/covered.txt"
 
 allowfile=nix/diag-coverage-allow.txt
