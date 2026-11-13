@@ -23,6 +23,7 @@ import Vuna.Compiler.Driver.Dt
 import Vuna.Compiler.Version
 import Vuna.Compiler.Diag
 import Vuna.Compiler.Diag.Format
+import Vuna.Compiler.Frontend.Manifest
 import Base.Nat
 import Base.List
 
@@ -210,15 +211,85 @@ memStr : String -> List String -> Bool
 memStr s [] = False
 memStr s (x :: rest) = if s == x then True else memStr s rest
 
-sourcePairsEff : List String -> Eff hostRow (List (Pair String String))
+-- 源身份：文件 + 内容摘要 + 最近祖先包的包名 + 包相对路径 + 模块名。
+lastSlashGo : List Int -> Int -> Int -> Int
+lastSlashGo [] _ last = last
+lastSlashGo (c :: rest) idx last = lastSlashGo rest (idx + 1) (if c == 47 then idx else last)
+
+lastSlashIndexOf : String -> Int
+lastSlashIndexOf s = lastSlashGo (strUnpack s) 0 (0 - 1)
+
+dirOf : String -> String
+dirOf path =
+  let
+    n = lastSlashIndexOf path
+  in if n < 0 then "." else if n == 0 then "/" else substring 0 (natFromInt n) path
+
+stripPathPrefix : String -> String -> String
+stripPathPrefix base file =
+  if startsWith "${base}/" file then substring (natFromInt (strLength base + 1)) (natFromInt (strLength file - strLength base - 1))
+    file
+  else file
+
+splitSlash : String -> List String
+splitSlash s = splitSlashGo (strUnpack s) [] []
+
+splitSlashGo : List Int -> List Int -> List String -> List String
+splitSlashGo [] cur acc = reverse (strPack (reverse cur) :: acc)
+splitSlashGo (c :: rest) cur acc =
+  if c == 47 then splitSlashGo rest [] (strPack (reverse cur) :: acc)
+  else splitSlashGo rest (c :: cur) acc
+
+moduleOfRel : String -> String
+moduleOfRel rel =
+  let
+    rel1 =
+      if startsWith "lib/" rel then substring (natFromInt 4) (natFromInt (strLength rel - 4)) rel
+      else if startsWith "app/" rel then substring (natFromInt 4) (natFromInt (strLength rel - 4)) rel
+      else rel
+    rel2 =
+      if endsWith ".vuna" rel1 then substring 0 (natFromInt (strLength rel1 - 5)) rel1 else rel1
+  in join "." (splitSlash rel2)
+
+findPkgRootGo : Int -> String -> Eff hostRow (Pair String String)
+findPkgRootGo fuel dir = if fuel <= 0 then pure (Pair "" "")
+else
+  let
+    candidate = if dir == "/" then "/vuna.toml" else "${dir}/vuna.toml"
+  in do
+    exists <- raiseToRow hostRow (@vuna@prim_eff_fileExists candidate)
+    if exists then do
+      text <- raiseToRow hostRow (@vuna@prim_eff_readFile candidate)
+      let
+        name = case Vuna.Compiler.Frontend.Manifest.parseManifest candidate text of
+          OkC man => case man.manifestName of
+            Nothing => ""
+            Just n => n
+          ErrC _ => ""
+      in pure (Pair dir name)
+    else if dir == "/" || dir == "." then pure (Pair "" "") else findPkgRootGo (fuel - 1) (dirOf dir)
+
+sourceRefEff : String -> Eff hostRow SourceRef
+sourceRefEff file = do
+  abs <- absolutePath file
+  exists <- raiseToRow hostRow (@vuna@prim_eff_fileExists abs)
+  digest <- if exists then do
+    text <- raiseToRow hostRow (@vuna@prim_eff_readFile abs)
+    pure (strFromInt (Vuna.Compiler.Fingerprint.textHashOf text))
+  else pure ""
+  root <- findPkgRootGo 12 (dirOf abs)
+  let
+    pkgDir = firstOf root
+    pkgName = secondOf root
+    rel = if pkgDir == "" then file else stripPathPrefix pkgDir abs
+  in pure (SourceRef file digest pkgName (moduleOfRel rel) rel)
+
+sourcePairsEff : List String -> Eff hostRow (List SourceRef)
 sourcePairsEff [] = pure []
 sourcePairsEff (f :: rest) = do
   more <- sourcePairsEff rest
-  exists <- raiseToRow hostRow (@vuna@prim_eff_fileExists f)
-  if exists then do
-    text <- raiseToRow hostRow (@vuna@prim_eff_readFile f)
-    pure (Pair f (strFromInt (Vuna.Compiler.Fingerprint.textHashOf text)) :: more)
-  else pure (Pair f "" :: more)
+  ref <- sourceRefEff f
+  pure (ref :: more)
 
 isCascadeDiag : Diagnostic -> Bool
 isCascadeDiag d = case d.diagOrigin of

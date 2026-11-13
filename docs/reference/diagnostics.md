@@ -130,7 +130,7 @@ warning 的**通道**（M4 起）没有进程内全局收集器：Elab 期 `warn
 
 CLI 开关：`--error-format=short|human|json|sarif|github`、`--with-sources`（JSON 附源文件内容摘要）、`--json`、`--message-format=...`、`--lang en|zh`（zh 时 human 消息本地化）、`--continue-on-error`（elab best-effort 多错误，仅**入口文件**；级联默认折叠，`--show-cascade` 显示；带 `module` 头的库模块单文件检查只报首错）；包级 check
 会把格式、`--lang`、`--max-errors` 透传给成员包子进程；成员包错误带 `[包名]` 前缀。
-**源身份**：`--json --with-sources` 在顶层追加 `"sources":[{"file":…,"digest":…}]`，给每个 label 文件附内容摘要（跨 checkout 定位/去重用）；不带该 flag 时输出与既有 `.diag.json` 契约逐字节一致。
+**源身份**：`--json --with-sources` 在顶层追加 `"sources"`，每项含 `file` / `package`（最近祖先 `vuna.toml` 的包名）/ `module`（`lib|app` 前缀 + `.vuna` 去掉后按 `/` → `.`）/ `relPath`（包相对路径）/ `digest`（内容摘要）。用于跨 checkout/缓存复用时定位同一份内容；不带该 flag 时输出与既有 `.diag.json` 契约逐字节一致。
 
 **机器格式单文档**：`--error-format=json|sarif` 的工作区检查在父进程内逐包收集诊断，
 stdout 恰好输出一份文档（不再让成员子进程各打一份）；成员 manifest 的 `[diagnostics]`

@@ -72,3 +72,15 @@ out-contains: "digest":"
 run: sh -c 'out=$("$VUNA" check --json "$VUNA_SUITE_ROOT/test/corpus/dt_err/01_universe.vuna" 2>/dev/null || true); printf "%s" "$out"'
 exit: 0
 out-not-contains: "sources"
+
+# 15k) --with-sources：JSON 附 label 文件的包/模块/相对路径 + 内容摘要。
+run: sh -c 'set -e; d="$TMPDIR/srcpkg"; rm -rf "$d"; mkdir -p "$d/app"; printf "[package]\nname = \"srcpkg\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "main : Int\nmain = \"x\"\n" > "$d/app/Main.vuna"; "$VUNA" check --json --with-sources "$d" 2>/dev/null || true'
+exit: 0
+out-contains: "package":"srcpkg"
+out-contains: "module":"Main"
+out-contains: "relPath":"app/Main.vuna"
+out-contains: "digest":"
+# 15l) 不加 --with-sources 时 JSON 没有 sources 字段（夹具契约不变）。
+run: sh -c 'out=$("$VUNA" check --json "$VUNA_SUITE_ROOT/test/corpus/dt_err/01_universe.vuna" 2>/dev/null || true); printf "%s" "$out"'
+exit: 0
+out-not-contains: "sources"

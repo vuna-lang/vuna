@@ -407,11 +407,19 @@ export renderJsonList : String -> List Diagnostic -> String
 renderJsonList lang ds =
   "{\"version\":1,\"tool\":\"vuna\",\"diagnostics\":[${join "," (map (jsonDiag lang) ds)}]}"
 
--- | JSON + 源身份（--with-sources）：每个 label 文件附内容摘要，供跨 checkout 定位。
-jsonSource : Pair String String -> String
-jsonSource (Pair file digest) = "{\"file\":${jsonStr file},\"digest\":${jsonStr digest}}"
+-- | 源身份（--with-sources）：文件 + 内容摘要 + 所属包/模块（可跨 checkout 定位）。
+export record SourceRef where
+  srcFile : String
+  srcDigest : String
+  srcPackage : String
+  srcModule : String
+  srcRelPath : String
 
-export renderJsonListWithSources : String -> List Diagnostic -> List (Pair String String) -> String
+jsonSource : SourceRef -> String
+jsonSource s =
+  "{\"file\":${jsonStr s.srcFile},\"package\":${jsonStr s.srcPackage},\"module\":${jsonStr s.srcModule},\"relPath\":${jsonStr s.srcRelPath},\"digest\":${jsonStr s.srcDigest}}"
+
+export renderJsonListWithSources : String -> List Diagnostic -> List SourceRef -> String
 renderJsonListWithSources lang ds sources =
   "{\"version\":1,\"tool\":\"vuna\",\"sources\":[${join "," (map jsonSource sources)}],\"diagnostics\":[${join "," (map (jsonDiag lang) ds)}]}"
 
