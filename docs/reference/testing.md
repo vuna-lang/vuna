@@ -483,3 +483,10 @@ bytes/lines/最长行/行尾空白、codegen 健康度计数（`let rec`、`Stri
 - 种子不变量与 rotation：[bootstrap.md](bootstrap.md)；编译器模块职责：[compiler.md](compiler.md)
 - 改动定位与建议测试标签：[architecture.md](../architecture.md)
 - lint 规则：[lint.md](lint.md)；错误码：[tooling.md](tooling.md)
+
+### effect 测试产物缓存
+
+`vuna test` 的 effect 测试（`main : Eff ...`）编译产物按内容寻址缓存在
+`$VUNA_STORE/views/testbin/<testBin>/`，key 含编译器指纹、包源码闭包、context roots
+内容与测试源内容；命中直接运行缓存二进制，跳过 `compile + build.sh`。pure 测试仍走
+`interpretFile`，不缓存。

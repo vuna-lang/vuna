@@ -43,6 +43,8 @@ module Vuna.TestRunner where
 import Base.HostRow
 import Vuna.Compiler.Common
 import Vuna.Compiler.Packages.Pkg
+import Vuna.Compiler.Fingerprint
+import Vuna.Compiler.Store
 import Vuna.Compiler.Driver.Dt
 import Vuna.Compiler.Driver.Compile
 import Vuna.Files
@@ -433,28 +435,105 @@ runTimedCmd dir argv secs = do
 -- `sh build.sh` 与运行产物两步各自受 timeout 保护；失败/超时都清理临时目录。
 -- 目录名含测试文件名：`--jobs` 并行时同一包的多个子进程各自建目录，即使时间戳相同
 -- 也不会撞名（同包文件名唯一）。
-runIOTestTimed : PackageContext -> String -> String -> Int -> Eff hostRow TestOutcome
-runIOTestTimed ctx path name secs = do
-  base <- tempBase 0
-  now <- raiseToRow hostRow effTimeUs
-  dir <- freshTempDir 1000 "${base}/vuna-test-${now}-${name}"
+-- effect 测试二进制缓存：key 含编译器指纹 + 包源码闭包内容 + base 内容 + 测试源码内容。
+-- 产物落在 `$VUNA_STORE/views/testbin/<digest>/bin/vuna-test`；命中直接运行，跳过
+-- compile + build.sh。只缓存 effect 测试（pure 仍走 interpretFile）。
+testBinKind : String
+testBinKind = "testbin"
+
+absInt : Int -> Int
+absInt n = if n < 0 then 0 - n else n
+
+strOfInt : Int -> String
+strOfInt n = strFromInt n
+
+hashFilesContent : List String -> Eff hostRow Int
+hashFilesContent files = hashFilesGo 0 files
+
+hashFilesGo : Int -> List String -> Eff hostRow Int
+hashFilesGo acc [] = pure acc
+hashFilesGo acc (f :: rest) = do
+  text <- raiseToRow hostRow (@vuna@prim_eff_readFile f)
+  hashFilesGo (acc * 1000003 + absInt (textHashOf text)) rest
+
+hashRoots : List String -> Eff hostRow Int
+hashRoots dirs = hashRootsGo 0 dirs
+
+hashRootsGo : Int -> List String -> Eff hostRow Int
+hashRootsGo acc [] = pure acc
+hashRootsGo acc (d :: rest) = do
+  files <- collectSourceFiles d
+  h <- hashFilesContent files
+  hashRootsGo (acc * 1000003 + h) rest
+
+testBinDigest : PackageContext -> String -> Eff hostRow String
+testBinDigest ctx path = do
+  fp <- toolCompilerFingerprint
+  src <- raiseToRow hostRow (@vuna@prim_eff_readFile path)
+  pkgFiles <- collectSourceFiles (contextDir ctx)
+  pkgHash <- hashFilesContent pkgFiles
+  rootsHash <- hashRoots (map (\r => rootDir r) (contextRoots ctx))
+  let
+    input = "testbin 2|${strOfInt fp}|${strOfInt pkgHash}|${strOfInt rootsHash}|${strOfInt (absInt (textHashOf src))}"
+  in pure (strOfInt (absInt (textHashOf input)))
+
+runCachedTestBin : String -> Int -> Eff hostRow TestOutcome
+runCachedTestBin view secs = do
+  runRes <- runTimedCmd view ["bin/vuna-test"] secs
+  pure (case runRes of
+    CmdTimedOut => TestFailed "timed out after ${secs}s"
+    CmdDone 0 => TestPassed
+    CmdDone code => TestFailed "effect program exited with code ${code}"
+  )
+
+buildTestBin : PackageContext -> String -> String -> String -> Int -> Eff hostRow TestOutcome
+buildTestBin ctx path name dir secs = do
   compiled <- compileToDir ctx path False dir
   case compiled of
-    ErrC e => ioCleanup dir (TestFailed (diagText e))
+    ErrC e => pure (TestFailed (diagText e))
     OkC _ => do
       _ <- raiseToRow hostRow (@vuna@prim_eff_makeDir "${dir}/bin")
       buildRes <- runTimedCmd dir ["sh", "build.sh", "bin/vuna-test"] secs
-      case buildRes of
-        CmdTimedOut => ioCleanup dir (TestFailed "timed out after ${secs}s (build)")
-        CmdDone code => if code /= 0 then ioCleanup dir
-          (TestFailed "build: ${name}: `sh build.sh bin/vuna-test` failed in ${dir} (exit ${code})")
-        else do
-          runRes <- runTimedCmd dir ["bin/vuna-test"] secs
-          case runRes of
-            CmdTimedOut => ioCleanup dir (TestFailed "timed out after ${secs}s")
-            CmdDone 0 => ioCleanup dir TestPassed
-            CmdDone code => ioCleanup dir (TestFailed "effect program exited with code ${code}")
+      pure (case buildRes of
+        CmdTimedOut => TestFailed "timed out after ${secs}s (build)"
+        CmdDone 0 => TestPassed
+        CmdDone code => TestFailed "build: ${name}: `sh build.sh bin/vuna-test` failed in ${dir} (exit ${code})"
+      )
 
+runIOTestTimed : PackageContext -> String -> String -> Int -> Eff hostRow TestOutcome
+runIOTestTimed ctx path name secs = do
+  digest <- testBinDigest ctx path
+  view <- storeViewPathEff testBinKind digest
+  cached <- storeViewValidEff testBinKind digest
+  if cached then runCachedTestBin view secs
+  else do
+    claimed <- storeScratchClaimEff testBinKind digest
+    if claimed then do
+      scratch <- storeScratchPathOfClaim testBinKind digest
+      built <- buildTestBin ctx path name scratch secs
+      case built of
+        TestPassed => do
+          _ <- storeViewPublishEff testBinKind digest
+          runCachedTestBin view secs
+        _ => do
+          _ <- storeScratchDropEff testBinKind digest
+          pure built
+    else do
+      -- 并发构建者占用：不等待，退回私有临时构建（不发布）。
+      base <- tempBase 0
+      now <- raiseToRow hostRow effTimeUs
+      dir <- freshTempDir 1000 "${base}/vuna-test-${now}-${name}"
+      built <- buildTestBin ctx path name dir secs
+      case built of
+        TestPassed => do
+          runRes <- runTimedCmd dir ["bin/vuna-test"] secs
+          _ <- ioCleanup dir built
+          pure (case runRes of
+            CmdTimedOut => TestFailed "timed out after ${secs}s"
+            CmdDone 0 => TestPassed
+            CmdDone code => TestFailed "effect program exited with code ${code}"
+          )
+        _ => ioCleanup dir built
 -- 删掉本次效果测试的临时目录（绝对路径，cwd 无关）后返回结果。
 ioCleanup : String -> TestOutcome -> Eff hostRow TestOutcome
 ioCleanup dir outcome = do

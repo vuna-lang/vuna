@@ -27,6 +27,7 @@ $VUNA_STORE/                       # 唯一根：VUNA_STORE → XDG → ~/.vuna/
   blobs/<splitIn>                   # 构建产物（split 文件集，规范拓扑序）
   units/<包哈希>/e-<h>-<h>/         # split-unit 缓存（按声明摘要命中）
   views/bin/<splitIn>/              # 构建视图（产物真身，含 .complete）
+  views/testbin/<testBin>/          # effect 测试编译产物（bin/vuna-test，含 .complete）
   roots/<项目摘要>/<digest>         # 该项目的保留集合（每个 digest 一个文件，GC 用）
 ```
 
