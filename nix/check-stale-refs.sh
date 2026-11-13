@@ -60,6 +60,26 @@ for pair in \
 done
 
 # ---------------------------------------------------------------
+# 1c) 文档里的已删除概念（历史说明在行尾加 `stale-ref-ok`）。
+# 文档最容易在缓存/存储换代后失真；这里只扫**具名**旧概念，不扫「查询图」这类叙述词。
+# ---------------------------------------------------------------
+for pair in \
+  'Query.Run|查询图已删除' \
+  'Driver.Graph|查询图已删除' \
+  'VUNA_CACHE_DIR|缓存根已统一为 $VUNA_STORE' \
+  'TMPDIR/vuna-cache|临时缓存根已删除' \
+  '.vuna-iface|包级 manifest 已删除' \
+  'VUNA_IFACE_DIR|树内接口镜像已删除' \
+  'clean --iface|--iface 已删除' \
+  '.output/iface|树内接口缓存已删除'; do
+  entry=$(printf '%s' "$pair" | cut -d'|' -f1)
+  why=$(printf '%s' "$pair" | cut -d'|' -f2)
+  hits=$(grep -rnF --include='*.md' -- "$entry" docs README.md AGENTS.md 2>/dev/null |
+    grep -v 'stale-ref-ok' || true)
+  [ -n "$hits" ] && flag "残留「${entry}」—— ${why}" "$hits"
+done
+
+# ---------------------------------------------------------------
 # 2) 断言标签 ↔ 代码 dbg! 标签
 # ---------------------------------------------------------------
 # 标签可能在下一行：`dbg!` 独占一行、字符串是下一行的字面量（`dbg!\n  "iface-write=…"`）。

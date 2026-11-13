@@ -69,9 +69,9 @@ rotation 是**按需**事件；`seed-selfhost` 在 seed 落后时只输出滞后
 - 种子只通过 **seed rotation** 更新：用当前产品 CLI 对 compiler 包做 DT split codegen，
   在临时目录完成 TCB、完整 allowlist、闭包数量与 fixed point 校验后才替换 `seed/`，并写入
   `nix/seed-rotation.txt`（`nix/seed-rotate.sh`，失败不破坏工作树）；
-- **本地 rotation 前清掉源码旁的接口缓存**（`*.iface` / `.vuna-iface`，如
-  `find compiler base -name '*.iface' -o -name '.vuna-iface'`）：陈旧缓存会让两遍编译的
-  runtime 位置表路径归一不同，触发 **fixed point 假失败**（`diff -r` 只差路径前缀）；
+- 接口缓存已并入对象库（`$VUNA_STORE/objects/iface`），rotation 前不需要再清理源码旁的
+  `*.iface` / `.vuna-iface`（树内文件层已删除；历史说明 stale-ref-ok）；两遍编译共用对象库，位置表路径由包上下文
+  归一，fixed point 比较的是生成文件集；
 - CI 用 `checks.seed-selfhost` 守不变量 1/2：`seed/` 由 `packages.vuna-seed` 构建；种子对
   **compiler 包**做 DT split 得到 stage1 文件集并构建；stage1 再生成 stage2 文件集，
   `diff -r` 逐字节一致；同时报告 seed 与当前源码生成结果的滞后规模（不失败），按

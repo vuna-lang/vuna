@@ -1,13 +1,15 @@
 -- | 持久包 store：内容寻址对象 + 可重建的物化视图。
 module Vuna.PackageStore where
 
--- Vuna.PackageStore：`$VUNA_STORE` 下的两棵树（D15）。
+-- Vuna.PackageStore：`$VUNA_STORE` 下的两类生命周期（D15 的一个根、两个族）。
 --
---   objects/<64hex>   不可变对象：`pkg-source 1` 规范编码，地址 = 内容摘要（SHA-256）。
---                     对象是**唯一真源**；写入原子替换（`@vuna@prim_eff_writeFileAtomic`）。
---   pkgs/<64hex>/     物化视图：从对象解出的文件树，最后写 `.complete`（内容 = 摘要）
---                     作为提交点。视图可删可重建；读前校验 `.complete`，不符就重建。
+--   objects/pkg/<64hex>  不可变对象：`pkg-source 1` 规范编码，地址 = 内容摘要（SHA-256）。
+--                        对象是**唯一真源**；写入原子替换（`@vuna@prim_eff_writeFileAtomic`）。
+--   pkgs/<64hex>/        物化视图：从对象解出的文件树，最后写 `.complete`（内容 = 摘要）
+--                        作为提交点。视图可删可重建；读前校验 `.complete`，不符就重建。
 --
+-- 包对象放在 `objects/pkg/` 这个 kind 目录下，而不是 `objects/<hex>`：缓存族按
+-- `objects/<kind>/` 分目录，`clean --store` / `store gc` 才能按族作用域，不会误删包对象。
 -- 对象 framing 复用 `Vuna.Compiler.Store`（同样的 magic/codec/长度/内容地址校验），
 -- 但 tag 不含编译器指纹：包对象跨编译器版本复用（它们只是源码字节）。
 -- 本模块只做读写与物化；**取包**（git/url）在 `Vuna.Fetch`，两者都不进 seed。
@@ -24,9 +26,13 @@ import Base.String
 export storeRootEff : Eff hostRow String
 storeRootEff = storeDataRootEff
 
--- | 对象文件路径。
+-- | 对象文件路径（包对象族：`objects/pkg/<digest>`）。
 export objectPathOf : String -> String -> String
-objectPathOf root digest = "${root}/objects/${digest}"
+objectPathOf root digest = "${root}/objects/pkg/${digest}"
+
+-- | 包对象族的目录（写侧建目录、clean/gc 的族边界）。
+export packageObjectsDir : String -> String
+packageObjectsDir root = "${root}/objects/pkg"
 
 -- | 物化视图目录。
 export materializedDir : String -> String -> String
@@ -42,7 +48,7 @@ packageCodec = "pkg-source 1"
 -- | 写对象（原子替换；地址由调用方给出并已在写前校验）。
 export writeObjectEff : String -> String -> List PackageFile -> Eff hostRow Int
 writeObjectEff root digest files = do
-  _ <- ensureDirPath "${root}/objects"
+  _ <- ensureDirPath (packageObjectsDir root)
   let
     payload = encPackageContent files
   in do

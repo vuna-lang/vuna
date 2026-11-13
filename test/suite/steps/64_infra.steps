@@ -19,12 +19,7 @@ out-contains: canon-str-abc s3:abc
 # 无损 CST：字符串夹具 + 真实源码文件（Hash.vuna）都必须逐字节 roundtrip。
 out-contains: cst-sample ok
 out-contains: cst-file ok
-# 查询图：首次全 miss；重复 run 全 hit；seed 4→5 时 half 吸收差异（cutoff）而 label 仍命中。
-# 依赖顺序无关（D-Q3）：反序声明同一集合仍命中。
-# 声明集合变化 ⇒ 重算（miss sb2），值不变 ⇒ cutoff（下游判据不动）。
-# QVal 三形态（marker / bytes / ref）规范渲染的单射性：固定摘要锁死。
-# 查询图 Eff 层：span（可观测）/ 取消（Query.Run.runNode；并行波次已随 sched 删除）。
-# span 按**开始序**渲染（与调度顺序无关），因此可直接断言；耗时不进断言（不可复现）。
+
 
 
 

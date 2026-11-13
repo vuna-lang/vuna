@@ -24,12 +24,23 @@ $VUNA_STORE/                       # 唯一根：VUNA_STORE → XDG → ~/.vuna/
   objects/order/<包摘要>            # 该包的模块顺序（split 串接要精化顺序，不是拓扑序）
   objects/check/<checkIn>           # 包级判定 marker（空载荷）
   objects/tool/<工具会话地址>       # LSP / REPL / vuna map 的会话载荷
+  objects/mods/<闭包摘要>           # 模块接口地址表（冷 check 的 assign 快路径）
+  objects/test/<测试判定 key>       # test verdict（通过/失败计数）
+  objects/pkg/<64hex>               # 取包对象族（`pkg-source 1`，见 package-store.md）
   blobs/<splitIn>                   # 构建产物（split 文件集，规范拓扑序）
   units/<包哈希>/e-<h>-<h>/         # split-unit 缓存（按声明摘要命中）
   views/bin/<splitIn>/              # 构建视图（产物真身，含 .complete）
-  views/testbin/<testBin>/          # effect 测试编译产物（bin/vuna-test，含 .complete）
+views/testbin/<testBin>/          # effect 测试编译产物（bin/vuna-test，含 .complete）
+  pkgs/<64hex>/                     # 包物化视图（可删可重建）
   roots/<项目摘要>/<digest>         # 该项目的保留集合（每个 digest 一个文件，GC 用）
+  .tmp/                             # 视图锁与暂存（可删）
+  tmp/                              # 取包中转（可删）
 ```
+
+缓存族 = `objects/{iface,header,lex,order,check,tool,mods,test}` + `blobs` + `units` +
+`views` + `.tmp`；包对象族 = `objects/pkg` + `pkgs` + `tmp`。两族生命周期不同：
+`vuna clean --store` / `vuna store gc` 只碰缓存族，`vuna clean --packages` 只碰包对象族
+（见 [package-store.md](package-store.md)）。
 
 所有地址 = `addrOf [kind, ...输入摘要]`（`Vuna.Compiler.Addr`，SHA-256）。
 
@@ -66,11 +77,14 @@ $VUNA_STORE/                       # 唯一根：VUNA_STORE → XDG → ~/.vuna/
 - 每个项目一个目录 `roots/<项目摘要>/`，每个受保护 digest 一个空文件（项目 = 规范化绝对
   包目录的摘要）。项目**只追加**；没有读-改-写，并发 check/build 不会丢 root。
   GC 扫所有项目目录里文件名的并集——A 不需要知道 B 的存在。读取侧仍兼容旧的单文件布局。
-- 登记的时机：check 判定 marker 提交后、build 的 split blob 提交后。
+- 登记的时机：check 判定 marker 提交后、build 的 split blob 提交后、`vuna fetch` 取到包后、
+  test verdict 提交后。
 - `vuna store gc [--dry-run] [--older-than SEC] [--max-size BYTES]`：
-  - 候选 = 名字不在保留集合、且 mtime 早于宽限窗口（默认 3600s，覆盖「对象已写、root 还没写」
-    的崩溃窗口）；
-  - `--max-size` 有值时按 mtime 从旧到新淘汰，直到总量降到上限以下。
+  - 候选 = 缓存族里名字不在保留集合、且 mtime 早于宽限窗口（默认 3600s，覆盖「对象已写、
+    root 还没写」的崩溃窗口）；`objects/pkg/` 永不进入候选（包对象族归 `clean --packages`）；
+  - `views/bin/` 只能**整目录**淘汰（`.complete` 还在时删单文件会让半截视图看起来完整），
+    目录名参与 roots 保护；
+  - `--max-size` 有值时按 mtime 从旧到新淘汰（文件与 view 目录都计入总量），直到降到上限以下。
 
 ## 并发边界（views / units）
 

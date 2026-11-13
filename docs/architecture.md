@@ -4,9 +4,8 @@
 职责见 [compiler.md](reference/compiler.md)，Core / 精化器见 [core.md](reference/core.md)，
 语义见 [language.md](reference/language.md) / [type-system.md](reference/type-system.md) / [qtt.md](reference/qtt.md)，
 自举 / 内建原语与宿主层见 [bootstrap.md](reference/bootstrap.md) / [primitives.md](reference/primitives.md)，
-模块级接口缓存见 [cache.md](reference/cache.md)（失效判据 / 包级环境指纹 / 工具产物来源 /
-镜像内容寻址；排障用 `VUNA_IFACE_AUDIT=1`，CI 建议加 `VUNA_IFACE_SELFTEST=1`），
-缓存与增量判定（输入寻址对象、命中判据、roots 与 GC）见 [cache.md](reference/cache.md)。
+模块级接口缓存与输入寻址对象库存取见 [cache.md](reference/cache.md)（对象族 / 命中判据 /
+roots 与 GC / 工具产物来源；排障用 `VUNA_IFACE_AUDIT=1` 双路径对拍）。
 
 > 本页是**现状**地图；终态方向、不变量与非目标见
 > [architecture-target.md](architecture-target.md)。
@@ -21,7 +20,10 @@ compiler/lib/Vuna/Compiler/   （93 个源模块；目录即层：
 ├─ Common.vuna                编译器门面（Source + Diag；bind/step/traverse）
 ├─ Intrinsics.vuna            内建语义唯一真源（名字/签名/arity/可见性；运行时文本在 Codegen.Runtime）
 ├─ Hash.vuna                  内容寻址摘要原语：SHA-256 + 63-bit 派生键 + 大载荷预哈希（用 Base.Bits 实现）
-├─ Canonical.vuna             规范字节编码门面（自定界文法 + 解码器）；子模块 Term / Ast / Elab / Bytes
+├─ Addr.vuna                  输入摘要（地址）唯一构造器：addrOf / header / 项目身份
+├─ Canonical.vuna             规范字节编码门面（自定界文法 + 解码器）；子模块 Term / Ast / Elab / Lex / Pkg
+├─ Store.vuna                 唯一落盘层：framing / 原子写 / 缓存根 / roots / 对象读写
+├─ Fingerprint.vuna           编译器指纹（换二进制即缓存换代）
 ├─ Frontend/                  Ast Lexer Parser Cst Parser/Support Toml Manifest  词法（含无损 CST）/ 语法 / vuna.toml
 ├─ Packages/                  Pkg                              包图与模块根
 ├─ Loader.vuna + Loader/      Modules Resolve Flatten          模块图 / 名字解析 / flatten
@@ -215,8 +217,8 @@ vuna.toml → Frontend.{Toml.parseToml, Manifest.parseManifest/validateManifest}
   parse 级、不依赖 Index）→ Index 符号；definition 同序（模块名 → 目标文件 `module` 头 /
   局部 binder → Index）；另有 formatting / documentSymbol / references / completion /
   codeAction（lint quick fix）/ lint 诊断。
-- `Vuna.Index`：parse 级索引 v3（`vuna map` / `vuna api`，`symDoc` / `symType`，缓存
-  `index:<dir>` 节点，内容哈希判定）；`Vuna.Search` 消费它做名称/doc/类型检索。
+- `Vuna.Index`：parse 级索引 v3（`vuna map` / `vuna api`，`symDoc` / `symType`，会话载荷
+  落在 `objects/tool/`，按输入摘要判定）；`Vuna.Search` 消费它做名称/doc/类型检索。
 
 ## 5. 自举链：seed → vuna-seed → vuna-compiler → vuna
 

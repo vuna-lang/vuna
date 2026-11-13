@@ -51,8 +51,8 @@ Args / Exit）；`Member` 行约束、`local`/`catch`/scoped `Exn`、线性续�
   ① 行别名 `Base.HostRow.hostRow` + 两个入口带行，`raise`/`raiseToRow` 桥接；
   ② `compiler/lib`（47+ 模块）、`base`、`lib` 工具链的 IO 叶子全部带行，每批
   `vuna check .` + suite + rotation；
-  ③ Sched 随 `Vuna.Compiler.Query.Run` 的并行波次一起带行（`forkTask` 行泛化，
-  任务体 `runEff` 执行）；
+  ③ Sched 随带行入口一起迁移（`forkTask` 行泛化，任务体 `runEff` 执行；查询图删除后
+  没有并行波次消费者，Sched 仍是 `Eff []`）；
   ④ 删旧 `prim_eff_*`/旧 `handleXHost`/`runX`（用户面统一「main 带行 + entry
   自动预装 handler」），宿主原语改 `@vuna@prim_eff_*` 隐藏（`visible = False` +
   Lexer 的 `@vuna@` 内部名规则，源码写不出可见名），eff-boundary 守卫加

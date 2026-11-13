@@ -79,12 +79,12 @@ toolUsageLines prog = """  ${prog} lint [--fix] <file.vuna>...
   ${prog} fetch [--locked] [DIR]           取包到持久 store（git/url；--locked 只校验不联网）
   ${prog} add <name>[@<version>] [DIR]     查 [registry].index → 写回 [dependencies] 并取包
                                           （--dry-run 只打印；--no-fetch 只改 manifest）
-  ${prog} store gc [--dry-run] [--older-than SEC] [--max-size BYTES]   对象库 GC（roots 保护）
+  ${prog} store gc [--dry-run] [--older-than SEC] [--max-size BYTES]   缓存族 GC（roots 保护；不碰包对象）
   ${prog} clean [--store] [--packages] [--gc] [--all] [--dry-run] [DIR]
-      清理缓存：store = 对象库根（$VUNA_STORE；含 objects/、views/、roots/）；
-      packages = 持久包 store（$VUNA_STORE），--gc 只删未被工作区 manifest 引用的对象；
-      不带 flag 时只清 store；--dry-run 只报数量
-  ${prog} map [--modules]                      模块总览（索引缓存在 $TMPDIR/vuna-cache 的 index:<dir> 节点 + blobs，自动新鲜度判定）
+       清理：store = 缓存族（objects/<kind>、blobs、units、views/bin、.tmp）；
+       packages = 包对象族（objects/pkg、pkgs、tmp），--gc 只删未被工作区/项目 roots 引用的对象；
+       不带 flag 时只清缓存族；--dry-run 只报数量
+  ${prog} map [--modules]                      模块总览（$VUNA_STORE 的 objects/tool 会话对象，自动新鲜度判定）
   ${prog} map --find <Module.name>             定位符号：定义位置 + 引用者 + 建议测试
   ${prog} map --impact <Module.name>           改动影响面：受影响模块 + 测试标签
   ${prog} api <Module.name>                    某模块的签名面（含注释与行号）
@@ -534,10 +534,10 @@ genErrorsArgs args = case parseToolArgs "vuna gen-errors" [] args of
 
 -- ---------------------------------------------------------------
 -- map / api（源码索引）
--- 索引缓存在 $TMPDIR/vuna-cache（`index:<dir>` 节点 + 内容寻址 blob），每次调用自动按内容哈希判定新鲜度，
--- 没有「刷新索引」命令；详见 Vuna.Index。
+-- 索引会话对象落在 `$VUNA_STORE/objects/tool/`，每次调用按输入摘要判定新鲜度，
+-- 没有「刷新索引」命令；详见 Vuna.Index / Vuna.Tool.Session。
 -- ---------------------------------------------------------------
--- `vuna store <sub>`：目前只有 `gc`（对象库按 roots + grace + 容量淘汰）。
+-- `vuna store <sub>`：目前只有 `gc`（缓存族按 roots + grace + 容量淘汰）。
 storeArgs : List String -> Eff hostRow Int
 storeArgs args = case args of
   "gc" :: rest => Vuna.Clean.runStoreGc rest

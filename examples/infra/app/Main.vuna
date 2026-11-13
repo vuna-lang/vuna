@@ -17,7 +17,7 @@ import Vuna.Compiler.Hash
 import Vuna.Compiler.Loader.Modules
 import Vuna.Compiler.Packages.Source
 
--- 基础设施三件套自检：内容寻址摘要、无损 CST roundtrip、查询图 early cutoff。
+-- 基础设施自检：内容寻址摘要、无损 CST roundtrip、canonical 编码、TOML、包身份。
 -- 逐行输出由 test/suite/steps/64_infra.steps 断言；任何一项失败都会让 steps 失败。
 -- CST 夹具：覆盖行注释、嵌套块注释、单行字符串（含转义）、模板字面量原文、
 -- 浮点字面量与缩进。`\$` 是 `$` 的转义，避免外层模板字符串把它当插值。

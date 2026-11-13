@@ -2,11 +2,11 @@ module Vuna.Index.Scan where
 
 -- Vuna.Index.Scan：parse 级扫描、符号抽取、全量构建与索引缓存。
 --
--- 缓存设计：`index:<dir>` 查询图节点 + 内容寻址 blob（见文件尾的实现）。
+-- 缓存设计：`Vuna.Tool.Session` 输入寻址对象（见 `indexLoadOrBuild`）。
 --   - 依赖表两条路径：CLI 用逐源文件内容哈希（C11：同 size + 同 mtime 的内容变更也
 --     必须失效），REPL 用 stat 键（安全窗内回落内容哈希，`indexStatsOf`）；
---   - 命中 ⇒ 读 `<cache>/blobs/<digest>` 解码（`Index.Codec`）；未命中 ⇒ 全量重建 +
---     写 blob + 提交节点 + 落会话索引；每次 miss 只提交调用方选定的一个节点。
+--   - 命中 ⇒ 读 `objects/tool/<addr>` 载荷解码（`Index.Codec`）；未命中 ⇒ 全量重建 +
+--     写载荷对象（同一输入同一地址）；每次 miss 只提交调用方选定的一个 key。
 --
 -- **没有「刷新索引」命令**：`vuna map` / `vuna api` / REPL 自己判新鲜度。
 -- `Store` 是唯一写盘层，帧格式与内容地址校验见 `Vuna.Compiler.Store`。
@@ -461,15 +461,15 @@ buildIndex repo = do
     (OkC (Index (reverse acc.accModules) (dedupeSymbols (reverse acc.accSymbols)) (reverse acc.accRefs)))
 
 -- ---------------------------------------------------------------
--- 缓存：查询图节点 `index:<dir>` + 内容寻址 blob
+-- 缓存：工具会话对象 + 输入寻址载荷
 -- ---------------------------------------------------------------
---   节点 `index:<dir>` / `index-cheap:<dir>`：值 = 载荷的内容地址（`QRef`）；
---   载荷：`Index.Codec.encIndex` 的规范字节，落 `<cache>/blobs/<digest>`（codec
+--   会话 key：`index:<dir>`（CLI）/ `index-cheap:<dir>`（REPL），作为 `ToolSession` 的
+--   bucket + node key；
+--   载荷：`Index.Codec.encIndex` 的规范字节，落 `objects/tool/<addr>`（codec
 --   `index-payload 1`，`Store` framing + SHA-256 校验）；
 --   依赖表：CLI 逐文件内容哈希 `f:<path>:<hash>`；REPL 用 stat 键
 --   `st:<path>:<bytes>:<mtime>:<hash>`（安全窗内带内容哈希，窗口外留空）。
--- 命中 ⇒ 读 blob 解码；miss ⇒ 重建 + 写 blob + 提交节点 + 落会话索引，
--- 因此 `vuna map` 的跨进程复用由会话索引承担（`sessionSave` 写 `<cache>/query/.../index`）。
+-- 命中 ⇒ 读载荷解码；miss ⇒ 重建 + 写载荷对象（同一输入同一地址）。
 indexNodeKey : String -> String
 indexNodeKey repo = "index:${repo}"
 

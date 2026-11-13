@@ -5,19 +5,17 @@ module Vuna.Index where
 -- 目的：让 agent/人类用一条命令定位「符号在哪、谁引用它、该跑哪些测试」，而不是通读
 -- 全仓。索引只依赖 parse 级信息（AST + Span + lexComments），不跑类型检查。
 --
--- 缓存设计（查询图节点 + 内容寻址 blob）：
---   - 节点 `index:<dir>`（CLI 强依赖）/ `index-cheap:<dir>`（REPL 廉价依赖），
---     值 = 载荷内容地址（`QRef`），会话索引落 `$TMPDIR/vuna-cache/query/<桶>/index`；
---   - 载荷 = `Vuna.Index.Codec.encIndex` 的规范字节，落
---     `$TMPDIR/vuna-cache/blobs/<digest>`（codec `index-payload 1`，`Store` framing）；
+-- 缓存设计（`Vuna.Tool.Session` 输入寻址对象）：
+--   - 会话身份 = `(origin, bucket, nodeKey, 依赖摘要…)`，对象落在
+--     `$VUNA_STORE/objects/tool/<addr>`；命中即读载荷，未命中才重建；
+--   - 载荷 = `Vuna.Index.Codec.encIndex` 的规范字节（codec `index-payload 1`，`Store`
+--     framing）；
 --   - 依赖表：强路径 = 逐源文件内容哈希 `f:<path>:<hash>`（C11：同 size + 同 mtime
 --     的内容变更也失效）；廉价路径（REPL）= stat 键 `st:<path>:<bytes>:<mtime>:<hash>`，
 --     只对安全窗内的文件算内容哈希。
 --
--- 新鲜度：每次调用先算依赖表（强路径读全部源码算哈希；廉价路径只 stat + 窗口内哈希），
--- 与节点记录的依赖表一致就读 blob 解码；否则全量重建、写 blob、提交节点（每次只提交
--- 调用方选定的那一个节点）。因此**没有「刷新索引」命令**：`vuna map` / `vuna api` /
--- REPL 自己判定。
+-- 新鲜度：每次调用先算依赖表，与对象记录一致就读载荷解码；否则全量重建、写回对象。
+-- 因此**没有「刷新索引」命令**：`vuna map` / `vuna api` / REPL 自己判定。
 --
 -- 文档决策（M30）：顶层签名必填；parse 级签名就是工具链需要的语义面，不引入独立的
 -- 语义索引（D13 的语义部分由 LSP 的 DT 检查消费，不在 Index 里重复）。

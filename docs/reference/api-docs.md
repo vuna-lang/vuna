@@ -145,7 +145,8 @@ vuna search [--type|--name|--doc] [--module PFX] [--limit N] [--json] <query...>
 
 ## 4. 索引 v3
 
-`vuna doc` 直接按源码构建 DocBook；`vuna search` / `vuna api` / LSP 用索引（`index:<dir>` 节点 + `$TMPDIR/vuna-cache/blobs`）。
+`vuna doc` 直接按源码构建 DocBook；`vuna search` / `vuna api` / LSP 用索引（会话载荷在
+`$VUNA_STORE/objects/tool/`，按输入摘要判定）。
 v3（本次 API 文档 + 检索）变化：
 
 - `symbols.txt` 每行 8 字段：`module TAB name TAB kind TAB line TAB col TAB sig TAB doc TAB type`；

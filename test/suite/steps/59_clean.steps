@@ -1,9 +1,10 @@
 # store-isolated: 断言缓存/对象库行为，使用 case 私有 store。
-# 59) `vuna clean`：缓存清理入口。接口已并入对象库，所以只有两类目标：
-#     --store     对象库根（$VUNA_STORE → XDG → ~/.vuna/store → $TMPDIR/vuna-store）
-#     --packages  持久包 store（同一根下的 objects/ + pkgs/），--gc 只删未引用对象
-#     不带 flag 时只清 store；--dry-run 只报数量。
-run: sh -c 'rm -rf "$TMPDIR/clean-store"; export VUNA_STORE="$TMPDIR/clean-store"; VUNA_IFACE_DIR= "$VUNA" check "$VUNA_BASE" >/dev/null 2>&1; test -d "$VUNA_STORE/objects/iface"'
+# 59) `vuna clean`：一个 store 根、两类生命周期。
+#     --store     清缓存族（objects/<kind>、blobs、units、views/bin、.tmp），保留包对象族与 roots
+#     --packages  清包对象族（objects/pkg、pkgs、tmp），保留缓存族与 roots
+#     --gc        与 --packages 连用：只删未被工作区/项目 roots 引用的包对象
+#     不带 flag 时只清缓存族；--dry-run 只报数量。
+run: sh -c 'rm -rf "$TMPDIR/clean-store"; export VUNA_STORE="$TMPDIR/clean-store"; "$VUNA" check "$VUNA_BASE" >/dev/null 2>&1; test -d "$VUNA_STORE/objects/iface"; mkdir -p "$VUNA_STORE/objects/pkg" "$VUNA_STORE/pkgs/fake"; printf x >"$VUNA_STORE/objects/pkg/fake"; printf fake >"$VUNA_STORE/pkgs/fake/.complete"'
 exit: 0
 run: sh -c 'printf "user note\n" >"$TMPDIR/keep.txt"; export VUNA_STORE="$TMPDIR/clean-store"; "$VUNA" clean --store --dry-run'
 exit: 0
@@ -11,9 +12,24 @@ out-contains: would remove
 run: sh -c 'export VUNA_STORE="$TMPDIR/clean-store"; "$VUNA" clean --store'
 exit: 0
 out-contains: removed
-run: sh -c 'find "$TMPDIR/clean-store" -type f | wc -l | tr -d " "'
-out-equals: 0
+# 缓存族清空；包对象族、物化视图、roots 必须存活。
+run: sh -c 'test ! -d "$TMPDIR/clean-store/objects/iface" && test -f "$TMPDIR/clean-store/objects/pkg/fake" && test -f "$TMPDIR/clean-store/pkgs/fake/.complete" && test -n "$(ls "$TMPDIR/clean-store/roots" 2>/dev/null)"'
+exit: 0
 file-exists: $TMPDIR/keep.txt
+# 恢复缓存族，再清包对象族：缓存族与 roots 必须存活。
+run: sh -c 'export VUNA_STORE="$TMPDIR/clean-store"; "$VUNA" check "$VUNA_BASE" >/dev/null 2>&1; test -d "$VUNA_STORE/objects/iface"'
+exit: 0
+run: sh -c 'export VUNA_STORE="$TMPDIR/clean-store"; "$VUNA" clean --packages'
+exit: 0
+out-contains: removed
+run: sh -c 'test ! -d "$TMPDIR/clean-store/objects/pkg" && test ! -d "$TMPDIR/clean-store/pkgs" && test -d "$TMPDIR/clean-store/objects/iface" && test -n "$(ls "$TMPDIR/clean-store/roots" 2>/dev/null)"'
+exit: 0
+# 裸 `vuna clean` 只清缓存族：包对象族不动。
+run: sh -c 'mkdir -p "$TMPDIR/clean-store/objects/pkg"; printf x >"$TMPDIR/clean-store/objects/pkg/fake2"; export VUNA_STORE="$TMPDIR/clean-store"; "$VUNA" clean'
+exit: 0
+out-contains: removed
+run: sh -c 'test -f "$TMPDIR/clean-store/objects/pkg/fake2" && test ! -d "$TMPDIR/clean-store/objects/iface"'
+exit: 0
 run: sh -c 'export VUNA_STORE="$TMPDIR/clean-store"; "$VUNA" clean --store'
 exit: 0
 out-contains: removed 0 file(s)

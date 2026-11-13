@@ -417,7 +417,7 @@ interp / compile 文案不同时用 `.compile.err`。
   iface 校验要求「iface 模块集合 == 源码模块集合」，缺件会让依赖方回退 full 路径）。这类
   模块要么进入口闭包，要么有自己的门禁：被验收包（如 `examples/infra`）引用并走 build/run，
   或用 `vuna repl` 的 `:load` 精化。`compiler` 包的导出面已全部进入 `app/Main.vuna` 闭包
-  （Hash / Query / Frontend.Cst 显式 import），所以 `vuna check compiler` 覆盖全部导出模块、
+  （Hash / Frontend.Cst 等导出模块显式 import），所以 `vuna check compiler` 覆盖全部导出模块、
   iface 也是完整模块面；
 - `vuna-fmt`：workspace 全包与 `examples/`；
 - `vuna-package`：`examples/multi` 的 build/test/fmt/doc + 根包构建；

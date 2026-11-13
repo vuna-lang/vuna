@@ -11,12 +11,14 @@ module Vuna.Fetch where
 -- 传输外置给宿主 `git` / `curl`；语言内只有裸 TCP 原语，不实现 TLS。
 import Base.HostRow
 import Vuna.Cli.Args
+import Vuna.Compiler.Addr
 import Vuna.Compiler.Canonical.Pkg
 import Vuna.Compiler.Common
 import Vuna.Compiler.Diagnostics.Pkg
 import Vuna.Compiler.Frontend.Manifest
 import Vuna.Compiler.Packages.Pkg
 import Vuna.Compiler.Packages.Source
+import Vuna.Compiler.Store
 import Vuna.PackageStore
 import Base.Nat
 import Base.List
@@ -39,23 +41,28 @@ runFetch args = case parseToolArgs "vuna fetch" [BoolFlag "locked"] args of
 export fetchAt : String -> Bool -> Eff hostRow Int
 fetchAt dir locked = do
   abs <- absolutePath dir
-  root <- storeRootEff
-  fetchAll 64 root locked [abs] []
+  root <- Vuna.PackageStore.storeRootEff
+  fetchAll fetchFuel root (projectIdAddrOf abs) locked [abs] []
 
-fetchAll : Int -> String -> Bool -> List String -> List String -> Eff hostRow Int
-fetchAll fuel root locked [] visited = pure 0
-fetchAll fuel root locked (dir :: rest) visited = if fuel <= 0 then fetchFailText "fetch: dependency depth limit exceeded (cycle?)"
+-- 依赖图的**访问预算**（不是语义深度限制）：`visited` 已防环，这里只挡失控/恶意图。
+-- 正常包图远小于此；超了说明输入不是有限 DAG，报可读错误而不是静默截断。
+fetchFuel : Int
+fetchFuel = 4096
+
+fetchAll : Int -> String -> String -> Bool -> List String -> List String -> Eff hostRow Int
+fetchAll fuel root pid locked [] visited = pure 0
+fetchAll fuel root pid locked (dir :: rest) visited = if fuel <= 0 then fetchFailText "fetch: dependency graph exceeds ${strFromInt fetchFuel} package visits"
 else if memName dir visited then do
   _ <- raiseToRow hostRow (@vuna@prim_eff_print "fetch: ${dir} (cycle skipped)\n")
-  fetchAll (fuel - 1) root locked rest visited
+  fetchAll (fuel - 1) root pid locked rest visited
 else do
-  mdirs <- dirsOfPackage root locked dir
+  mdirs <- dirsOfPackage root pid locked dir
   case mdirs of
     Nothing => pure 1
-    Just dirs => fetchAll (fuel - 1) root locked (append dirs rest) (dir :: visited)
+    Just dirs => fetchAll (fuel - 1) root pid locked (append dirs rest) (dir :: visited)
 
-dirsOfPackage : String -> Bool -> String -> Eff hostRow (Maybe (List String))
-dirsOfPackage root locked dir = do
+dirsOfPackage : String -> String -> Bool -> String -> Eff hostRow (Maybe (List String))
+dirsOfPackage root pid locked dir = do
   let
     manifestPath = "${dir}/vuna.toml"
   in do
@@ -70,25 +77,25 @@ dirsOfPackage root locked dir = do
           ErrC e => do
             _ <- printDiagEff e
             pure Nothing
-          OkC valid => dirsOfDeps root locked dir valid.manifestDependencies
+          OkC valid => dirsOfDeps root pid locked dir valid.manifestDependencies
     else do
       _ <- fetchFailText "missing vuna.toml in ${dir}"
       pure Nothing
 
-dirsOfDeps : String -> Bool -> String -> List Dependency -> Eff hostRow (Maybe (List String))
-dirsOfDeps root locked baseDir [] = pure (Just [])
-dirsOfDeps root locked baseDir (dep :: rest) = do
-  here <- dirOfDep root locked baseDir dep
+dirsOfDeps : String -> String -> Bool -> String -> List Dependency -> Eff hostRow (Maybe (List String))
+dirsOfDeps root pid locked baseDir [] = pure (Just [])
+dirsOfDeps root pid locked baseDir (dep :: rest) = do
+  here <- dirOfDep root pid locked baseDir dep
   case here of
     Nothing => pure Nothing
     Just d => do
-      there <- dirsOfDeps root locked baseDir rest
+      there <- dirsOfDeps root pid locked baseDir rest
       case there of
         Nothing => pure Nothing
         Just ds => pure (Just (d :: ds))
 
-dirOfDep : String -> Bool -> String -> Dependency -> Eff hostRow (Maybe String)
-dirOfDep root locked baseDir dep = case depSourceOf dep of
+dirOfDep : String -> String -> Bool -> String -> Dependency -> Eff hostRow (Maybe String)
+dirOfDep root pid locked baseDir dep = case depSourceOf dep of
   DepPath rel => do
     abs <- absolutePath (joinPath baseDir rel)
     files <- packageFilesEff abs
@@ -105,6 +112,7 @@ dirOfDep root locked baseDir dep = case depSourceOf dep of
         done <- isMaterializedEff root digest
         if done then do
           _ <- raiseToRow hostRow (@vuna@prim_eff_print "fetch: ${depAliasOf dep} cached\n")
+          _ <- storeRootAppendEff pid [digest]
           pure (Just (materializedDir root digest))
         else if locked then do
           _ <- fetchFail (NotMaterialized (depAliasOf dep)) (depAliasOf dep)
@@ -113,7 +121,9 @@ dirOfDep root locked baseDir dep = case depSourceOf dep of
           stored <- fetchGit root dep url rev digest
           case stored of
             Nothing => pure Nothing
-            Just got => pure (Just (materializedDir root got))
+            Just got => do
+              _ <- storeRootAppendEff pid [got]
+              pure (Just (materializedDir root got))
   DepUrl u => case depHashOf dep of
     Nothing => do
       _ <- fetchFailText "dependency ${depAliasOf dep}: url source needs hash"
@@ -125,6 +135,7 @@ dirOfDep root locked baseDir dep = case depSourceOf dep of
         done <- isMaterializedEff root digest
         if done then do
           _ <- raiseToRow hostRow (@vuna@prim_eff_print "fetch: ${depAliasOf dep} cached\n")
+          _ <- storeRootAppendEff pid [digest]
           pure (Just (materializedDir root digest))
         else if locked then do
           _ <- fetchFail (NotMaterialized (depAliasOf dep)) (depAliasOf dep)
@@ -133,7 +144,9 @@ dirOfDep root locked baseDir dep = case depSourceOf dep of
           stored <- fetchUrl root dep u digest
           case stored of
             Nothing => pure Nothing
-            Just got => pure (Just (materializedDir root got))
+            Just got => do
+              _ <- storeRootAppendEff pid [got]
+              pure (Just (materializedDir root got))
 
 verifyPathDep : Dependency -> String -> Eff hostRow Int
 verifyPathDep dep actual = case depHashOf dep of
@@ -189,7 +202,7 @@ fetchUrl root dep url expected =
   let
     obj = objectPathOf root expected
   in do
-    _ <- ensureDirPath "${root}/objects"
+    _ <- ensureDirPath (packageObjectsDir root)
     code <- raiseToRow hostRow (@vuna@prim_eff_runIn root ["curl", "-fsSL", url, "-o", obj])
     if code /= 0 then do
       _ <- fetchFail (FetchFailed url) url
@@ -253,7 +266,7 @@ pinAt dir = do
         OkC manifest => case validateManifest manifest of
           ErrC e => printDiagEff e
           OkC valid => do
-            root <- storeRootEff
+            root <- Vuna.PackageStore.storeRootEff
             pins <- collectPins root (manifestDir manifestPath) valid.manifestDependencies []
             let
               updated = applyPins pins raw

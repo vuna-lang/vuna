@@ -71,15 +71,15 @@
   - `vuna add <name>[@<version>] [DIR]`：查 `[registry].index`（目录 / `file://` / `http(s)://`），
     按版本解析出 `(源, hash)`，写回 `[dependencies]` 的内联表行并自动 fetch；
     `--dry-run` 只打印，`--no-fetch` 只改 manifest。索引是便利层，不是身份真源；
-  - `vuna clean [--iface] [--store] [--packages] [--gc] [--all] [--dry-run] [DIR]`：`--iface`
-    删树内接口缓存（`*.iface` / `.vuna-iface` / 原子写残留）；`--store` 清临时缓存
-    （`$TMPDIR/vuna-cache`）；`--packages` 清持久包 store（`$VUNA_STORE`），`--gc` 只删未被
-    工作区 manifest 引用的对象；不带 flag 时只清 iface + store。接口缓存默认写在
-    `.output/iface/<编译器指纹>/`，`VUNA_IFACE_DIR` 可整体镜像到外部根，见 [cache.md](cache.md)；
+  - `vuna clean [--store] [--packages] [--gc] [--all] [--dry-run] [DIR]`：一个 store 根、
+    两类生命周期——`--store` 清缓存族（`objects/<kind>`、`blobs`、`units`、`views/bin`、
+    `.tmp`），`--packages` 清包对象族（`objects/pkg` + `pkgs` + `tmp`），`--gc` 只删未被
+    工作区/项目 roots 引用的包对象，`--all` 两者都清；不带 flag 时只清缓存族。没有树内
+    `*.iface`，也没有 `--iface`。见 [cache.md](cache.md) / [package-store.md](package-store.md)；
   - `vuna map [--modules]` / `vuna map --find <Module.name>` / `vuna map --impact
     <Module.name>` / `vuna api <Module.name>`：`Vuna.Index` 的源码符号索引，用于定位定义、
-    引用者与建议测试标签；索引缓存在 `$TMPDIR/vuna-cache` 的 `index:<dir>` 节点 + blobs，按**内容哈希**判定
-    新鲜度（同 size/同 mtime 的内容变更也会失效），refs 带行 / 列位置，没有刷新命令；
+    引用者与建议测试标签；索引会话对象在 `$VUNA_STORE/objects/tool/`，按输入摘要判定
+    新鲜度，refs 带行 / 列位置，没有刷新命令；
   - `vuna version` / `vuna --version`：打印 `vuna <版本>`；版本唯一真源是
     `compiler/lib/Vuna/Compiler/Version.vuna`。
 - 示例：`examples/multi/` 是多包 workspace（根包 + 成员包 `greet` + `base` 路径依赖），
@@ -226,7 +226,7 @@ modules = [
 | `vuna api <Module.name>` | 某模块的签名面（含 docstring 与行号） |
 | `vuna fetch [--locked] [DIR]` | 取不可变源依赖到持久 store；`--locked` 只校验不联网 |
 | `vuna add <name>[@<version>] [DIR]` | 查 `[registry].index` → 写回 `[dependencies]` 并取包（`--dry-run` / `--no-fetch`） |
-| `vuna clean [--iface] [--store] [--packages] [--gc] [--all] [--dry-run] [DIR]` | 清接口缓存 / 临时缓存 / 持久包 store（`--gc` 只删未引用对象） |
+| `vuna clean [--store] [--packages] [--gc] [--all] [--dry-run] [DIR]` | 清缓存族 / 包对象族（`--gc` 只删未引用包对象） |
 | `vuna gen-errors [ROOT]` | 生成错误码文档（默认 `docs/.generated/errors.md`） |
 | `vuna version`, `vuna --version` | 版本 |
 | `vuna help`, `vuna -h` | 用法 |

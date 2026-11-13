@@ -35,6 +35,11 @@ hashHex s = digestHex (digestOfString s)
 export addrOf : List String -> String
 addrOf parts = hashHex (encTop (encList encStr) (addrSchema :: parts))
 
+-- | 项目身份：**规范化绝对包目录**的摘要。roots 按项目分目录（`store/roots/<id>/`），
+-- 编译器与 `vuna fetch` 必须用同一个公式，否则 GC 的保护集合会对不上。
+export projectIdAddrOf : String -> String
+projectIdAddrOf dir = addrOf ["project", dir]
+
 -- ---------------------------------------------------------------
 -- 模块头（header）对象
 --

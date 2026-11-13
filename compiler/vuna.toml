@@ -96,7 +96,6 @@ modules = [
   "Vuna.Compiler.Driver.Compile",
   "Vuna.Compiler.Driver.Cache",
   "Vuna.Compiler.Driver.DiagRender",
-  "Vuna.Compiler.Driver.CompilerCli",
   "Vuna.Compiler.Driver.PerfCache"
 ]
 

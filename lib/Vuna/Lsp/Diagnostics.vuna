@@ -214,7 +214,7 @@ export record DiagCache where
   dcLabel : String
   dcKey : Int
   dcCtx : PackageContext
-  -- 查询图会话（共用 `Db`；LSP 内纯内存，不落索引）。
+  -- 工具会话（共用对象地址；LSP 内纯内存 + 落盘对象）。
   dcDb : ToolSession
   dcTool : Maybe ToolContext
   dcClean : List ModuleIface
@@ -258,7 +258,7 @@ statDepKey si = "st:${si.siPath}:${strFromInt si.siMtime}:${strFromInt si.siSize
 lspNodeKey : PackageContext -> String
 lspNodeKey ctx = "lspiface:${contextPackageName ctx}:${toolTextHash (contextDir ctx)}"
 
--- 缓存校验：label / 编译器指纹 + 包 一致，且查询图节点在当前 stat 依赖表下命中。
+-- 缓存校验：label / 编译器指纹 + 包 一致，且工具会话对象在当前 stat 依赖表下命中。
 cacheFresh : Maybe DiagCache -> String -> PackageContext -> Eff hostRow Bool
 cacheFresh Nothing label ctx = pure False
 cacheFresh (Just c) label ctx = if c.dcLabel == label then do

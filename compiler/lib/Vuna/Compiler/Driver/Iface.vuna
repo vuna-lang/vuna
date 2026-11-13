@@ -17,20 +17,21 @@ module Vuna.Compiler.Driver.Iface where
 --     `Codegen.*` 从 DtProgram 现生成）。
 --   - `miExports` / `miFixities` / imports：加载器把依赖模块「当已加载模块」
 --     复用时需要的模块图数据（不读源码）。
---   - `miSource` / `miIfaceHash`：失效判定。`miIfaceHash` 覆盖**载荷全量语义面**
---     （导出表、imports、fixity、record 头、data/ctor、defs、globals、实例、
---     类），只排除 span / 源路径，因此换行/注释/路径变化不会误失效；读方实际消费的任何
---     字段都必须参与哈希，否则会出现「载荷变了、哈希没变」的陈旧复用（§44m/§44n）。
---     摘要算法是 **SHA-256**（`shaText`，D5）；`siHash` 是源内容摘要，同一函数。
+--   - `miSource` / `miIfaceHash` / `miImplHash`：失效判定。`miIfaceHash` 覆盖**下游可见
+--     语义面**（导出表、imports、fixity、record 头、data/ctor、defs、globals、实例、类），
+--     只排除 span / 源路径与 `opaque`/`abstract` 体，因此换行/注释/路径变化不会误失效；
+--     `miImplHash` 覆盖**产物面**（含 `opaque`/`abstract` 体，仍排除 span），只用于产物
+--     身份，不进依赖失效。读方实际消费的任何字段都必须参与对应摘要，否则会出现
+--     「载荷变了、哈希没变」的陈旧复用（§44m/§44n）。摘要算法是 **SHA-256**（D5）；
+--     `siHash` 是源内容摘要，同一函数。
 --
--- 物理布局（S3/S8）：接口文件与源码同布局 + 包级 `.vuna-iface`（模块名 → 相对路径 /
--- 源信息 / 接口哈希）。默认接口文件就在源文件旁；`VUNA_IFACE_DIR` 覆盖时整体镜像到外部
--- 根。写侧只重写接口哈希变化的模块，manifest 最后提交；读侧先读 manifest 再逐模块
--- 读文件并校验（framing + 头内内容地址 + 语义自证三层）。载荷是 `Canonical.*` 显式编码
--- + `Store` framing；schema 见 `ifaceSchema`（布局/字段语义变化必须 bump）。
+-- 物理布局（S3/S8 / 对象库 v2）：每模块一个对象 `objects/iface/<地址>`
+-- （`Store` framing + `Canonical.*` 显式编码；schema 见 `ifaceSchema`，布局/字段语义变化
+-- 必须 bump），模块顺序单独存 `objects/order/<包摘要>`。写侧只写内容变化的模块；读侧
+-- 按地址逐模块读并校验（语义自证 + 调用方哈希链）。
 --
--- 效果显式化：manifest / 模块文件的读、写、存在性探测与 `VUNA_IFACE_DIR` 环境读取
--- 全部显式在 `Eff []` 里；纯构造（接口哈希、覆盖性检查、布局计算）保持纯函数。
+-- 效果显式化：接口对象的读、写、存在性探测全部显式在 `Eff hostRow` 里；纯构造
+-- （接口哈希、覆盖性检查、布局计算）保持纯函数。
 import Vuna.Compiler.Canonical.Ast
 import Vuna.Compiler.Canonical.Bytes
 import Vuna.Compiler.Canonical.CoreTerm

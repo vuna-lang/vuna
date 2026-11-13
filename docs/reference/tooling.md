@@ -175,7 +175,7 @@ REPL（`vuna repl [FILE|DIR|MODULE]`，实现入口 `Vuna.Repl.runRepl`；行编
 | `:search [--type\|--name\|--doc] QUERY` | 复用 `vuna search` 的检索；含 `->` / `=>` 自动类型检索；最多 20 条 |
 | `:load TARGET` | 见下方加载矩阵；成功才改变状态，失败保持缓冲 |
 | `:reload` | 上次是文件则重读；是模块则重新校验导入；都没有给可操作提示 |
-| `:browse [MODULE]` | 惰性构建 `Vuna.Index`（`loadOrBuildCheap`：`index-cheap:<dir>` 查询图节点，依赖表 = stat 键 + 安全窗内内容哈希；命中从 blob 解码，未命中重建并写回）后打印模块接口；无参列出模块。会话内后续 `:browse`/`:info`/`:search` 直接用 `stateBrowseIndex` 的内存索引，不再逐条比较；跨进程新鲜度由查询图承担。索引只覆盖 workspace 内源码，非 workspace 的外部依赖模块用 `:load <模块名>` 导入（`:browse` 查不到） |
+| `:browse [MODULE]` | 惰性构建 `Vuna.Index`（会话载荷存 `objects/tool/<addr>`，按输入摘要判定；命中从载荷解码，未命中重建并写回）后打印模块接口；无参列出模块。会话内后续 `:browse`/`:info`/`:search` 直接用 `stateBrowseIndex` 的内存索引，不再逐条比较。索引只覆盖 workspace 内源码，非 workspace 的外部依赖模块用 `:load <模块名>` 导入（`:browse` 查不到） |
 | `:defs` | 缓冲区定义的名字 + zonk 后类型；`:load` 文件来源标 `(文件)` |
 | `:imports` | 当前显式 import 行 + 隐式自动导入的 Prelude（标「隐式自动导入」） |
 | `:delete NAME` | 删除 REPL 内定义（含同名签名块）；文件来源报错，提示改文件后 `:reload` |

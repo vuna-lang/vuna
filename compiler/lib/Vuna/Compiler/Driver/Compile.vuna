@@ -1342,12 +1342,13 @@ export record CheckMods(..) where
 checkModsOf : String -> String -> String -> String -> String -> String -> CheckMods
 checkModsOf pkg kind manifest sources deps ver = CheckMods pkg kind manifest sources deps ver
 
--- 项目身份：**规范化绝对包目录**的摘要。roots 文件按项目分文件（`store/roots/<id>`），
+-- 项目身份：**规范化绝对包目录**的摘要。roots 按项目分目录（`store/roots/<id>/`），
 -- 项目只追加自己关心的摘要；GC 扫所有项目的并集，所以 A 不需要知道 B 的存在。
+-- 公式在 `Addr.projectIdAddrOf`：`vuna fetch` 也要写同一个项目的 roots。
 projectIdOf : PackageContext -> Eff hostRow String
 projectIdOf ctx = do
   abs <- absolutePath (contextDir ctx)
-  pure (addrOf ["project", abs])
+  pure (projectIdAddrOf abs)
 
 -- | 把摘要追加进本项目 roots（GC 的保留集合）。失败不影响正确性（删了只是重算）。
 rootKeepEff : PackageContext -> List String -> Eff hostRow Int
@@ -1629,7 +1630,7 @@ cleanHashOf (m :: rest) name =
   if miNameOf m == name then Just (miIfaceHashOf m) else cleanHashOf rest name
 
 -- M34.5（S1/S2/S3）：接口摘要的**影子写**。整包 check / build 成功后按声明归属把 DtProgram
--- 切成每模块一份 `ModuleIface`，写成 per-module 接口文件 + 包级 manifest（S2 的依赖侧
+-- 切成每模块一份 `ModuleIface`，按地址写 `objects/iface/` + `objects/order/`（依赖侧的
 -- 接口加载与失效判定读它）；写失败/归属缺口只打 note（不影响 check 结果），缺口存在时
 -- **不写**（避免依赖方拿到不完整接口）。
 ifaceSchemaTag : String
@@ -1656,9 +1657,9 @@ ownSourceInfos ctx = do
   ) (filter (\r => rootName r == contextPackageName ctx) (contextRoots ctx))
   pure (concatMap (\xs => xs) walked)
 
--- | 干净模块的 `miSource` 来自磁盘 manifest（可能是上一次以相对/绝对不同写法 check 时写入的
--- 路径）。接口文件路径按「包目录 + 当前源路径」推导，复用时必须换成本次上下文的路径，
--- 否则相对/绝对入口交替会算出空路径而整包跳过写（§57c 覆盖）。
+-- | 干净模块的 `miSource` 来自磁盘接口记录（可能是上一次以相对/绝对不同写法 check 时写入的
+-- 路径）。复用时必须换成本次上下文的路径，否则相对/绝对入口交替会算出空路径而整包跳过写
+-- （§57c 覆盖）。
 resyncCleanSources : List (Pair String SourceInfo) -> List ModuleIface -> List ModuleIface
 resyncCleanSources sources clean = map (\m => case lookupPair (miNameOf m) sources of
   Just si =>
@@ -1753,10 +1754,8 @@ writeIfaceObjects mods (mi :: rest) = case findClosureMod (miNameOf mi) mods of
     pure (if bytes > 0 then n + 1 else n)
 
 -- 真正写接口：入口-only 包（没有 lib 模块）不写（没有可复用的模块接口；写空包只会让
--- 消费者读到 invalid 接口）。per-module 文件只重写接口哈希变化的模块，manifest 最后写。
--- 目标目录不可写（Nix store / 只读 checkout / `VUNA_IFACE_DIR` 指到只读树）时静默降级：
--- 不写、exit code 不变，读侧照旧（没有接口就回退全量）。`oldReadable` 来自写前那次
--- 整包接口读取，避免写回时再解码一遍所有模块文件。
+-- 消费者读到 invalid 接口）。每模块按地址只写内容变化的接口对象，模块顺序最后提交。
+-- 目标存储不可写（Nix store / 只读 store）时读侧没有接口就回退全量。
 -- 影子写的自检（`VUNA_IFACE_SELFTEST=1`）：读回 + 包接口校验 + 模块名集合/接口哈希一致。
 -- 失败让 check 失败（宁可暴露，不静默写坏缓存）。
 ifaceSelfTestRequested : Eff hostRow Bool

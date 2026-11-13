@@ -24,17 +24,22 @@ roundtrip 自检：`examples/infra` 的 `pkg-canon-rt` / `pkg-identity-rt`。
 
 ```text
 $VUNA_STORE                     # 默认 $XDG_DATA_HOME/vuna/store，回退 ~/.vuna/store
-  objects/<64hex>               # 不可变对象：`pkg-source 1` 载荷 + Store framing，地址 = 内容摘要
+  objects/pkg/<64hex>           # 包对象族：`pkg-source 1` 载荷 + Store framing，地址 = 内容摘要
   pkgs/<64hex>/                 # 物化视图（可删可重建），最后写 .complete（内容 = 摘要）作为提交点
   tmp/                          # 取包中转（git clone 等）
+  roots/<项目摘要>/<digest>     # fetch 登记的项目保留集合（跨项目 GC 保护）
 ```
 
 - **对象是唯一真源**：内容摘要即对象地址；写用 `prim_eff_writeFileAtomic`。
 - **物化视图可丢弃**：读前校验 `.complete`，缺失/不符就重建；并发重复物化幂等。
 - framing 复用 `Vuna.Compiler.Store`，但 tag **不含编译器指纹**（`pkg-source/1`）：
   包对象只是源码字节，跨编译器版本复用。
-- 临时缓存（`$TMPDIR/vuna-cache`：查询图索引 / split blob / 单元缓存）与持久 store
-  是两套生命周期：前者随时可删，后者跨会话/跨项目存活。
+- **同一个根、两类生命周期**（D15）：缓存族（`objects/<kind>/`、`blobs/`、`units/`、
+  `views/`、`.tmp/`、`roots/`）由 `vuna store gc` / `clean --store` 管理；包对象族
+  （`objects/pkg/`、`pkgs/`、`tmp/`）由 `clean --packages` 管理。包对象放在 `objects/pkg/`
+  这个 kind 目录下，是为了让两族的清理/GC 作用域不互相误删。
+- **fetch 登记 roots**：`vuna fetch` 把取到的包摘要写进发起项目的 roots，`clean --packages
+  --gc` 取所有项目 roots 的并集 ⇒ 共享 store 上不会误删别的项目取过的对象（D73）。
 
 ## 3. 获取（`vuna fetch`）
 
@@ -73,13 +78,17 @@ DepGit/DepUrl    → $VUNA_STORE/pkgs/<normalizeHash hash>   （校验 .complete
 ## 5. 清理
 
 ```console
-vuna clean --packages [--dry-run]   # 清持久 store（objects + pkgs + tmp）
-vuna clean --store                  # 清临时缓存（$TMPDIR/vuna-cache），语义未变
-vuna clean --all                    # 两者都清（含 --packages）
+vuna clean --store                  # 清缓存族（objects/<kind>、blobs、units、views/bin、.tmp）
+vuna clean --packages [--dry-run]   # 清包对象族（objects/pkg + pkgs + tmp）
+vuna clean --packages --gc [DIR]    # 只删未被工作区/项目 roots 引用的包对象
+vuna clean --all                    # 两族都清
+vuna store gc [--dry-run] [--older-than SEC] [--max-size BYTES]   # 缓存族按 roots + grace 淘汰
 ```
 
-不带 flag 时只清 `iface + store`（默认**不碰**持久 store：对象跨项目复用，误删代价是
-重新取包）。当前没有按引用计数的 GC；`--packages` 是整根清理。
+不带 flag 时只清缓存族（默认**不碰**包对象族：对象跨项目复用，误删代价是重新取包）。
+`--store` 保留 `objects/pkg`、`pkgs`、`roots`；`--packages` 保留缓存族与 `roots`。当前没有
+按引用计数的 GC；`--packages` 是整族清理，`--gc` 的引用集是「声明 + 所有项目 roots」，
+roots 只追加（删除依赖后旧对象仍受保护，直到显式整族清理）。
 
 ## 6. 静态索引与 `vuna add`（阶段 2）
 
@@ -120,10 +129,12 @@ vuna add greet@1.2.0 [DIR] [--dry-run] [--no-fetch]
 vuna clean --packages --gc [--dry-run] [DIR]
 ```
 
-引用集 = `DIR` 的 manifest 与 `[workspace].members` 里 `git` / `url` 依赖的摘要
-（`path` 依赖不参与，D12）。只删 `objects/<digest>` 与 `pkgs/<digest>/...` 中不被引用的
-文件；空目录会残留（与 `clean --store` 一致，只删文件）。不带 `--gc` 的 `--packages`
-仍是整根清理。`--gc` 必须与 `--packages` 连用。
+引用集 = `DIR` 的 manifest 与 `[workspace].members`（**递归嵌套**）里 `git` / `url` 依赖的
+摘要（`path` 依赖不参与，D12）**∪ 所有项目 roots**。只删 `objects/pkg/<digest>` 与
+`pkgs/<digest>/...` 中不被引用的文件；空目录会残留（与 `clean --store` 一致，只删文件）。
+不带 `--gc` 的 `--packages` 仍是整族清理。`--gc` 必须与 `--packages` 连用。
+`vuna fetch` 把取到的摘要登记进发起项目的 roots，因此共享 store 上 A 项目取过的包不会被
+B 项目的 `--gc` 误删（D73）；roots 只追加，删除依赖后旧对象仍受保护，直到整族清理。
 
 ## 8. 已知边界
 
@@ -144,8 +155,8 @@ vuna clean --packages --gc [--dry-run] [DIR]
   `clean --packages`、`pin`。
 - `90/steps_native/69_pkg_registry`：本地静态索引、`add` 的 dry-run/写回/自动 fetch/幂等、
   版本不存在、`--no-fetch`、`[registry]` 未知 key。
-- `90/steps_native/70_pkg_gc`：`clean --packages --gc` 保留被引用对象、删除未引用对象、
-  `--gc` 必须配 `--packages`。
+- `90/steps_native/70_pkg_gc`：`clean --packages --gc` 保留被工作区/项目 roots 引用的对象、
+  删除游离对象、跨项目 roots 保护、`--gc` 必须配 `--packages`。
 - `90/steps_native/64_infra`：`pkg-canon-rt` / `pkg-identity-*`（规范编码与两种摘要的输入面）。
 
 ## 相关阅读
