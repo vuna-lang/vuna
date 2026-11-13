@@ -87,9 +87,6 @@ listLength (x :: rest) = 1 + listLength rest
 export record LwSt where
   lwNext : Int
 
-export lwStOf : Int -> LwSt
-lwStOf n = LwSt n
-
 -- record 字段访问器（vuna 不为 record 生成字段函数，统一用位置模式）。
 binderErasedOf : IrBinder -> Bool
 binderErasedOf (IrBinder nm erased) = erased
@@ -314,7 +311,7 @@ else
   in if sameLevelTable next table then next else usedTableFixFuel (fuel - 1) datas next
 
 -- | 族 → 运行时类型参数槽（不动点到稳定；声明与实参共用这一份）。
-export tyParamsOf : List DtData -> List (Pair String (List Int))
+tyParamsOf : List DtData -> List (Pair String (List Int))
 tyParamsOf datas = usedTableFix datas (map (\d => Pair (dtDataName d) []) datas)
 
 -- ---------------------------------------------------------------
@@ -454,12 +451,12 @@ maxIntListIn (x :: rest) = if x >= maxIntListIn rest then x else maxIntListIn re
 -- `Codegen.Decl.genDataDecl` 当场判定；这里前置到 Lowering，产出 `IrTyDecl`。
 -- `irSharedRecordFields` 与这里用同一份 `recordFieldsOf`（record field 表），
 -- `irSharedTyParams` 与 `tyParamsOf` 同一份不动点结果。
-export recordFieldsOf : List DtData -> List (Pair String (List (Pair Int String)))
+recordFieldsOf : List DtData -> List (Pair String (List (Pair Int String)))
 recordFieldsOf datas =
   map (\d => Pair (dtDataName d) (recordRtFields d))
     (filter hasRecordRepr (filter (\d => not (memList (dtDataName d) (unboxedFamilySet datas))) datas))
 
-export tyDeclsOf : List DtData -> List DtData -> Check (List IrTyDecl)
+tyDeclsOf : List DtData -> List DtData -> Check (List IrTyDecl)
 tyDeclsOf allDatas subset = tyDeclsGo (tyParamsOf allDatas) allDatas (unboxedInfoOf allDatas) subset
 
 tyDeclsGo : List (Pair String (List Int)) -> List DtData -> List (Pair String (Pair DtCtor Int)) -> List DtData -> Check (List IrTyDecl)
@@ -500,7 +497,7 @@ tyDeclOf table allDatas unboxed d =
 --
 -- binder 栈 `List IrBinder` 最近绑定在前；`IrVar` 直接携带 binder 身份（Lowering
 -- 已把 de Bruijn 下标解析掉），运行时引用擦除 binder 在这里就是错误。
-export lowerBudgetFor : Int -> Int
+lowerBudgetFor : Int -> Int
 lowerBudgetFor size = 512 + 8 * size
 
 export lowerTerm : LwEnv -> LwSt -> List IrBinder -> Term -> Check (Pair Ir LwSt)
@@ -1195,7 +1192,7 @@ findFamilyCtor : List DtCtor -> String -> Maybe DtCtor
 findFamilyCtor [] name = Nothing
 findFamilyCtor (c :: rest) name = if dtCtorName c == name then Just c else findFamilyCtor rest name
 
-export findListFamilyData : List DtData -> Maybe DtData
+findListFamilyData : List DtData -> Maybe DtData
 findListFamilyData [] = Nothing
 findListFamilyData (d :: rest) =
   if dtDataName d == listFamilyName then Just d else findListFamilyData rest
