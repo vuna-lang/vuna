@@ -61,6 +61,9 @@
 M1 不处理多模块链接、WAT 缓存、wasm seed、Component Model / WASI 0.2/0.3；
 这些在后续阶段评估（见 [architecture-target.md](../architecture-target.md) D7/D16）。
 
+native 后端 M1 采用同一「文本 canonical + 外部工具」策略（汇编 `main.s` + 系统 `cc`），
+切片与 ABI 见 [native.md](native.md)。
+
 ## 5. 实现约束
 
 - `Wasm` 子模块只 import `Base.*`、`Ir`、`Wasm.*`；驱动只经

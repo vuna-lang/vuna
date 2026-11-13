@@ -19,6 +19,7 @@ import Vuna.Compiler.Diagnostics.Sink
 import Vuna.Compiler.Packages.Pkg
 import Vuna.Compiler.Driver.Compile
 import Vuna.Compiler.Driver.Wasm
+import Vuna.Compiler.Driver.Native
 import Vuna.Compiler.Store
 import Vuna.Compiler.Driver.Dt
 import Vuna.Compiler.Version
@@ -30,10 +31,10 @@ import Base.List
 
 -- | CLI 辅助：compilerUsageLines（参数/退出码约定见 tooling.md）。
 export compilerUsageLines : String -> String
-compilerUsageLines prog = """  ${prog} compile [--no-print] [--release] (<entry.vuna> | <package-dir>) <out-dir>
+compilerUsageLines prog = """  ${prog} compile [--no-print] [--release] [--target ocaml|wasm|native] (<entry.vuna> | <package-dir>) <out-dir>
   ${prog} check [--release] [--continue-on-error] (<file.vuna> | <package-dir>)
   <file.vuna>                   带 module 头 → 按库模块检查（包上下文）；无头 → 入口文件
-  ${prog} build [--release] [--no-compile] [--out DIR] [--package NAME] [DIR]
+  ${prog} build [--release] [--no-compile] [--out DIR] [--package NAME] [--target ocaml|wasm|native] [DIR]
   --no-print                    compile 生成的程序不打印 main 结果（默认打印）
   --release                     release 构建：拒绝 assert / todo 等 debug 专用构造
   --continue-on-error           best-effort 多错误：逐次移除失败声明后继续（仅入口文件）
@@ -642,10 +643,16 @@ compileRun printResult entry outDir o = do
     else compileFileEntry printResult entry outDir o
   else withOpts o (dtPathErr entry)
 
--- | 按 `--target` 选择后端；wasm 分支暂时不产 build.sh（compile 只写 main.wat）。
+-- | 按 `--target` 选择后端；wasm/native 分支不产 OCaml split 目录。
 compileToTarget : PackageContext -> String -> Bool -> String -> String -> Eff hostRow (Check (Pair Int (List Diagnostic)))
 compileToTarget ctx entry printResult outDir target = if target == "wasm" then do
   r <- compileWasm ctx entry printResult outDir
+  pure (case r of
+    ErrC e => ErrC e
+    OkC n => OkC (Pair n [])
+  )
+else if target == "native" then do
+  r <- compileNative ctx entry printResult outDir
   pure (case r of
     ErrC e => ErrC e
     OkC n => OkC (Pair n [])
@@ -971,6 +978,43 @@ buildTargets noCompile multiOut outM (pkg :: rest) code o = do
   in buildTargets noCompile multiOut outM rest next (secondOf r)
 
 -- 单包：可执行包 build；库包只 check（workspace 构建单元覆盖所有成员）。
+-- | native 目标的 build：compile 产 main.s，再调系统 cc 链接成静态可执行。
+buildNativeOne : Bool -> Bool -> Maybe String -> Package -> CliOpts -> Eff hostRow (Pair Int CliOpts)
+buildNativeOne noCompile multiOut outM pkg o =
+  let
+    name = packageName pkg
+    outDir = case outM of
+      Just out => if multiOut then "${out}/${name}" else out
+      Nothing => "${packageDir pkg}/.output"
+    sPath = "${outDir}/main.s"
+    binDir = "${outDir}/bin"
+    binPath = "${binDir}/${name}"
+    script =
+      "#!/bin/sh\nset -eu\ncd \"$(dirname \"$0\")\"\nmkdir -p bin\ncc -static -nostdlib -no-pie -Wl,--build-id=none -o \"bin/${name}\" main.s\n"
+    ccArgs = ["cc", "-static", "-nostdlib", "-no-pie", "-Wl,--build-id=none", "-o", binPath, sPath]
+  in do
+    r <-
+      compileNative (contextWithRelease o.optRelease (packageContext pkg)) (packageEntry pkg) True
+        outDir
+    case r of
+      ErrC e => printDiag o e
+      OkC _ => do
+        _ <- raiseToRow hostRow (@vuna@prim_eff_writeFile "${outDir}/build.sh" script)
+        if noCompile then do
+          _ <- raiseToRow hostRow (@vuna@prim_eff_print "wrote ${sPath}\n")
+          pure (Pair 0 o)
+        else do
+          _ <- ensureDirPath binDir
+          code <- raiseToRow hostRow (@vuna@prim_eff_runIn "." ccArgs)
+          if code == 0 then do
+            _ <- raiseToRow hostRow (@vuna@prim_eff_print "wrote ${binPath}\n")
+            pure (Pair 0 o)
+          else do
+            _ <-
+              raiseToRow hostRow
+                (@vuna@prim_eff_print "native link failed: cc exited ${strFromInt code}\n")
+            pure (Pair 1 o)
+
 -- | wasm 目标的 build：只产 main.wat（+ build.sh），不走 OCaml 链接。
 buildWasmOne : Bool -> Maybe String -> Package -> CliOpts -> Eff hostRow (Pair Int CliOpts)
 buildWasmOne noCompile outM pkg o =
@@ -996,6 +1040,7 @@ buildWasmOne noCompile outM pkg o =
 
 buildOne : Bool -> Bool -> Maybe String -> Package -> CliOpts -> Eff hostRow (Pair Int CliOpts)
 buildOne noCompile multiOut outM pkg o = if o.optTarget == "wasm" then buildWasmOne noCompile outM pkg o
+else if o.optTarget == "native" then buildNativeOne noCompile multiOut outM pkg o
 else
   let
     name = packageName pkg

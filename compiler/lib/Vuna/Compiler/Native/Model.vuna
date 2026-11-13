@@ -1,0 +1,151 @@
+module Vuna.Compiler.Native.Model where
+
+-- Vuna.Compiler.Native.Model：native 后端的汇编数据模型（M1）。
+--
+-- 产物是 canonical 的 Intel 语法汇编 `main.s`；本模块只描述程序结构，渲染在
+-- `Native.Render`，IR -> 程序在 `Native.Module`。M1 只覆盖 x86-64 Linux 的一个
+-- 最小切片（Int/Nat/Bool、let/if、顶层饱和函数、Nat case、入口打印）。
+--
+-- 边界：本模块只 import Base；不 import Core/Elab/Intrinsics/Codegen（由
+-- `checks.ir-boundary` 的 native 规则守护）。
+import Base.Bool
+import Base.Int
+import Base.List
+import Base.Maybe
+import Base.Pair
+import Base.String
+
+-- | native 后端的可预期失败：目标能力限制/不支持的输入。驱动把它变成 CLI 普通错误。
+export data NativeErr(..) : Type where
+  NativeUnsupported : String -> NativeErr
+  NativeInternal : String -> NativeErr
+
+export nativeErrText : NativeErr -> String
+nativeErrText (NativeUnsupported msg) = msg
+nativeErrText (NativeInternal msg) = "internal native backend error: " ++ msg
+
+-- ---------------------------------------------------------------
+-- 寄存器与操作数
+-- ---------------------------------------------------------------
+-- | x86-64 通用寄存器（M1 只需要这些；callee-saved 的 rbx/r12-r15 不使用）。
+export data Reg(..) : Type where
+  Rax : Reg
+  Rcx : Reg
+  Rdx : Reg
+  Rsi : Reg
+  Rdi : Reg
+  Rbp : Reg
+  Rsp : Reg
+  R8 : Reg
+  R9 : Reg
+  R10 : Reg
+  R11 : Reg
+
+export regText : Reg -> String
+regText Rax = "rax"
+regText Rcx = "rcx"
+regText Rdx = "rdx"
+regText Rsi = "rsi"
+regText Rdi = "rdi"
+regText Rbp = "rbp"
+regText Rsp = "rsp"
+regText R8 = "r8"
+regText R9 = "r9"
+regText R10 = "r10"
+regText R11 = "r11"
+
+-- | 8-bit 别名（`setcc` / 字节存储用）。
+export reg8Text : Reg -> String
+reg8Text Rax = "al"
+reg8Text Rcx = "cl"
+reg8Text Rdx = "dl"
+reg8Text Rsi = "sil"
+reg8Text Rdi = "dil"
+reg8Text Rbp = "bpl"
+reg8Text Rsp = "spl"
+reg8Text R8 = "r8b"
+reg8Text R9 = "r9b"
+reg8Text R10 = "r10b"
+reg8Text R11 = "r11b"
+
+-- | 操作数：寄存器 / 立即数 / `[base + off]`（off 可为负）。
+export data Operand(..) : Type where
+  OpReg : Reg -> Operand
+  OpImm : Int -> Operand
+  OpMem : Reg -> Int -> Operand
+
+-- ---------------------------------------------------------------
+-- 指令
+-- ---------------------------------------------------------------
+-- | M1 的指令面。所有二元运算的「左/目标」由构造子决定；`IBin` 固定以 rax 为目标，
+-- `IBinReg` 显式给目标寄存器。
+export data Instr(..) : Type where
+  -- | `mov dst, src`（dst 是内存时渲染 `qword ptr`）。
+  IMov : Operand -> Operand -> Instr
+  -- | `mov byte ptr [base + off], src8`。
+  IMovByte : Reg -> Int -> Reg -> Instr
+  -- | `movzx rax, al`（`setcc` 之后把 Bool 变成 0/1）。
+  IMovzxAl : Instr
+  -- | `lea reg, [rip + label]`（只读数据）。
+  ILea : Reg -> String -> Instr
+  -- | `lea reg, [base + off]`。
+  ILeaMem : Reg -> Reg -> Int -> Instr
+  -- | `op rax, operand`。
+  IBin : String -> Operand -> Instr
+  -- | `op reg, operand`。
+  IBinReg : String -> Reg -> Operand -> Instr
+  -- | `cmp dst, src`。
+  ICmp : Operand -> Operand -> Instr
+  -- | `test r1, r2`。
+  ITest : Reg -> Reg -> Instr
+  -- | `setcc reg8`（结果只有 0/1，需配合 `IMovzxAl`）。
+  ISetcc : String -> Reg -> Instr
+  -- | `neg reg`。
+  INeg : Reg -> Instr
+  -- | `cqo`（idiv 前置）。
+  ICqo : Instr
+  -- | `idiv reg`（有符号）。
+  IDiv : Reg -> Instr
+  -- | `div reg`（无符号）。
+  IDivUnsigned : Reg -> Instr
+  -- | 标签定义。
+  ILabel : String -> Instr
+  -- | `jmp label`。
+  IJmp : String -> Instr
+  -- | `jcc label`。
+  IJcc : String -> String -> Instr
+  -- | `call label`。
+  ICall : String -> Instr
+  -- | `ret`。
+  IRet : Instr
+  -- | `syscall`。
+  ISyscall : Instr
+  -- | `push reg` / `pop reg`。
+  IPush : Reg -> Instr
+  IPop : Reg -> Instr
+  -- | 空指令（保留给生成器的占位/调试）。
+  INop : Instr
+
+-- ---------------------------------------------------------------
+-- 程序
+-- ---------------------------------------------------------------
+-- | 一个函数：标签、帧大小（字节，16 倍数）、指令体。
+export record NativeFunc(..) where
+  nfLabel : String
+  nfFrame : Int
+  nfBody : List Instr
+
+-- | 只读数据：标签 + 原始字节（M1 只有 ASCII）。
+export record NativeRodata(..) where
+  nrLabel : String
+  nrText : String
+
+-- | 一个 native 程序（渲染前的结构）。
+--   `npFuncs` 的顺序固定：runtime 函数 → 用户函数（按生成顺序）→ `_start`。
+export record NativeProgram(..) where
+  npRodata : List NativeRodata
+  npFuncs : List NativeFunc
+
+export data NativeOutcome(..) : Type where
+  NativeOk : NativeProgram -> NativeOutcome
+  NativeRejected : NativeErr -> NativeOutcome

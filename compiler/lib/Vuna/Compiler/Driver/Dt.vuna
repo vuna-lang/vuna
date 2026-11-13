@@ -1637,7 +1637,11 @@ dtSplitProjectParts ctx entry printResult = do
       let
         parts = secondOf resolved
         loaderWarns = firstOf resolved
-        modules = reverse (secondOf parts)
+        -- 与增量路径一致：用 import 图的拓扑序，而不是 loader 的加载序。
+        -- 加载序是「依赖者先出现」的反序；`reverse` 只在模块名恰好也按依赖排序时成立，
+        -- `Wasm.Module -> Wasm.Runtime` 这类「字母序逆着依赖」的模块会让 split 的
+        -- 依赖序校验失败。`topoModules` 直接吃 `moduleImports` 求 DAG 序。
+        modules = topoModules (secondOf parts)
         allDecls = append (concatMap moduleDeclsOf modules) (firstOf parts)
       in case elabProgramFull allDecls of
         ErrC e => pure (ErrC e)

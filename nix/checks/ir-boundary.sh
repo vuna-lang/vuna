@@ -5,7 +5,7 @@
 #           `Codegen.Split` 只做「归属表 + 按归属过滤 + 分文件」，每个单元都经
 #           `Codegen.Lower` 出 `IrUnit` 再交给 `Codegen.Assembly` 装配。
 #
-# 八条规则（违反即失败）：
+# 九条规则（违反即失败）：
 #   1. `Vuna.Compiler.Ir*`（IR 模型与分析）不得依赖任何上游/目标侧模块：
 #      不许 import `Vuna.Compiler.Core*`、`Vuna.Compiler.Elab*`、`Vuna.Compiler.Intrinsics`、
 #      `Vuna.Compiler.Codegen*`。IR 只认「源码名 + 已决策的表示形状 + 运行时符号契约」。
@@ -20,6 +20,8 @@
 #      （`DtProgram` / `DtDef` / `DtData` 是切分单位）；但 `Core` / `Intrinsics` 一律不许
 #      ——擦除判据与 runtime 名映射都在 Lowering。
 #   5. 正向断言：文本生成层都消费 IR（避免留下未迁移的死路径）。
+#   9. native 后端（`Vuna.Compiler.Native*` 与 `Driver/Native`）只吃 IR：不得 import
+#      `Core` / `Elab` / `Intrinsics` / `Codegen` / `Wasm`；`Native.Module` 必须 import IR。
 #
 # 只扫 `import` / `export import` 行（vuna 的模块依赖面就是这些行）。
 set -eu
@@ -136,6 +138,23 @@ fi
 if [ -f "$LOWER" ] && ! imports_of "$LOWER" | grep -qE '^Vuna\.Compiler\.Codegen\.Runtime$'; then
   echo "ir-boundary: $LOWER does not import Codegen.Runtime (contract conformance check must run)"
   fail=$((fail + 1))
+fi
+
+# 规则 9（native 后端）：只吃 IR；不 import 上游或其它后端。
+for f in compiler/lib/Vuna/Compiler/Native/*.vuna; do
+  [ -f "$f" ] || continue
+  check_forbidden "$f" '^(Vuna\.Compiler\.(Core|Elab|Intrinsics|Codegen|Wasm)(\.|$))'
+done
+NATIVE_DRIVER=compiler/lib/Vuna/Compiler/Driver/Native.vuna
+if [ -f "$NATIVE_DRIVER" ]; then
+  check_forbidden "$NATIVE_DRIVER" '^(Vuna\.Compiler\.(Core|Elab|Intrinsics)(\.|$))'
+fi
+NATIVE_MODULE=compiler/lib/Vuna/Compiler/Native/Module.vuna
+if [ -f "$NATIVE_MODULE" ]; then
+  if ! imports_of "$NATIVE_MODULE" | grep -qE '^Vuna\.Compiler\.Ir$'; then
+    echo "ir-boundary: $NATIVE_MODULE does not import Vuna.Compiler.Ir (native backend must consume IR)"
+    fail=$((fail + 1))
+  fi
 fi
 
 if [ "$fail" -ne 0 ]; then

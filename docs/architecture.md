@@ -13,7 +13,7 @@ roots 与 GC / 工具产物来源；排障用 `VUNA_IFACE_AUDIT=1` 双路径对�
 ## 仓库分层
 
 ```text
-compiler/lib/Vuna/Compiler/   （93 个源模块；目录即层：
+compiler/lib/Vuna/Compiler/   （106 个源模块；目录即层：
                                 Frontend → Packages → Loader → Core → Elab → Ir → Codegen → Driver）
 ├─ Source.vuna                底层位置/路径工具（Pos/Span，无 Result）
 ├─ Diag.vuna                  结构化诊断模型 + Check 结果通道（ErrC Diagnostic）
@@ -35,7 +35,9 @@ compiler/lib/Vuna/Compiler/   （93 个源模块；目录即层：
 │                           Runtime                          运行时契约（符号 + 桥接标记；无目标文本）
 ├─ Codegen.vuna + Codegen/  Lower Decl Erase Term
 │                           Assembly Split Runtime            Core→IR 降低 + OCaml 文本生成 + 运行时符号表
-└─ Driver/                    Split Dt Compile CompilerCli      输出模型 / facade / 编译入口 / CLI
+├─ Native/                  Model Abi Runtime Module Render   native 后端（M1：x86-64 汇编文本 + 运行时模板）
+└─ Driver/                    Split Dt Compile Wasm Native
+                              CompilerCli                      输出模型 / facade / 后端驱动 / CLI
   PerfCache                          codegen 单元缓存（S5）
                               Owner Iface Cache                 归属表 / 模块接口 / 包级摘要
 根包 vuna（模块根 lib/，入口 app/Main.vuna）：Cli/Interp/Fmt/Lint/Index（门面+子模块）、
@@ -135,6 +137,11 @@ data（`Base.Bool.Bool` / `Base.List.List` / `Base.Nat.Nat`），不按短名。
 `Diag` / `Source` + 各阶段 `Diagnostic` + golden（模型与迁移见
 [diagnostics.md](reference/diagnostics.md)）。测试标签：第 1–11、13–27、30、34 段
 （见 [testing.md](reference/testing.md)）；包构建 / split 见第 28/29/33/34 段；快照与上下文回归见第 38/39 段。
+
+**native 后端（M1）**：`IR --Native.Module.build--> NativeProgram --Native.Render--> main.s`
+再由 CLI 的 `build` 分支调 `cc` 链接成静态 ELF；驱动入口
+`Vuna.Compiler.Driver.Native.compileNative`。只支持 Int/Nat/Bool 的纯切片，切片、ABI、
+运行时符号与边界见 [native.md](reference/native.md)。WAT 后端见 [wasm.md](reference/wasm.md)。
 
 ## 2. 包与 workspace
 

@@ -1,0 +1,107 @@
+# 105) native 后端 M1：x86-64 汇编 -> 静态可执行，行为与 OCaml 后端差分一致。
+#
+# 覆盖：纯值/算术/let/if、顶层饱和函数、Nat 结构递归（IrNatCase）、Bool 入口、
+# 63-bit 边界、除零 trap、确定性（两次 main.s 相同）、不支持构造的编译期拒绝、
+# `--no-compile` 只写 main.s/build.sh。依赖 PATH 里的 cc（devShell / e2e 的 ocamlTools）。
+
+# 0) 工具链探针：缺 cc 时给出明确失败，而不是让后续链接报 127。
+run: command -v cc
+exit: 0
+
+# 1) 最小可执行：main = 42。
+run: sh -c 'd="$TMPDIR/min"; mkdir -p "$d/app"; printf "[package]\nname = \"min\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "main : Int\nmain = 42\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/min-out" "$d"'
+exit: 0
+file-exists: $TMPDIR/min-out/main.s
+file-exists: $TMPDIR/min-out/build.sh
+file-contains: $TMPDIR/min-out/main.s .intel_syntax noprefix
+file-contains: $TMPDIR/min-out/main.s .globl _start
+run: "$TMPDIR/min-out/bin/min" 2>&1
+exit: 0
+out-equals: 42
+run: sh -c '"$VUNA" run "$TMPDIR/min" 2>&1 | tail -n 1'
+exit: 0
+out-equals: 42
+
+# 2) 算术 / 比较 / if / let。
+run: sh -c 'd="$TMPDIR/arith"; mkdir -p "$d/app"; printf "[package]\nname = \"arith\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "main : Int\nmain = let x = 3 + 4 in if 2 * x - 1 == 13 then 13 else 0\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/arith-out" "$d"'
+exit: 0
+run: "$TMPDIR/arith-out/bin/arith" 2>&1
+out-equals: 13
+run: sh -c '"$VUNA" run "$TMPDIR/arith" 2>&1 | tail -n 1'
+out-equals: 13
+
+# 2b) binder 遮蔽：内层 let 结束后必须回到外层 binder（codegen 显式恢复作用域）。
+run: sh -c 'd="$TMPDIR/shadow"; mkdir -p "$d/app"; printf "[package]\nname = \"shadow\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "main : Int\nmain = let x = 10 in (let x = 1 in x) + x\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/shadow-out" "$d"'
+exit: 0
+run: "$TMPDIR/shadow-out/bin/shadow" 2>&1
+out-equals: 11
+run: sh -c '"$VUNA" run "$TMPDIR/shadow" 2>&1 | tail -n 1'
+out-equals: 11
+
+# 3) 顶层饱和函数调用。
+run: sh -c 'd="$TMPDIR/fn"; mkdir -p "$d/app"; printf "[package]\nname = \"fn\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "double : Int -> Int\ndouble x = x * 2\n\nmain : Int\nmain = double 21\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/fn-out" "$d"'
+exit: 0
+run: "$TMPDIR/fn-out/bin/fn" 2>&1
+out-equals: 42
+run: sh -c '"$VUNA" run "$TMPDIR/fn" 2>&1 | tail -n 1'
+out-equals: 42
+
+# 4) Nat 结构递归（IR 里的 IrNatCase）：fact 5 = 120。
+run: sh -c 'd="$TMPDIR/fact"; mkdir -p "$d/app"; printf "[package]\nname = \"fact\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Nat\n\nfact : Nat -> Int\nfact n = case n of\n  Zero => 1\n  Succ k => (natToInt k + 1) * fact k\n\nmain : Int\nmain = fact (Succ (Succ (Succ (Succ (Succ Zero)))))\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/fact-out" "$d"'
+exit: 0
+run: "$TMPDIR/fact-out/bin/fact" 2>&1
+out-equals: 120
+run: sh -c '"$VUNA" run "$TMPDIR/fact" 2>&1 | tail -n 1'
+out-equals: 120
+
+# 5) Bool 入口与短路（`(1 / 0) == 0` 不能被求值）。
+run: sh -c 'd="$TMPDIR/bools"; mkdir -p "$d/app"; printf "[package]\nname = \"bools\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "main : Bool\nmain = 1 > 2 && (1 / 0) == 0\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/bools-out" "$d"'
+exit: 0
+run: "$TMPDIR/bools-out/bin/bools" 2>&1
+out-equals: False
+run: sh -c 'printf "main : Bool\nmain = 1 < 2 || (1 / 0) == 0\n" > "$TMPDIR/bools/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/bools-out2" "$TMPDIR/bools"'
+exit: 0
+run: "$TMPDIR/bools-out2/bin/bools" 2>&1
+out-equals: True
+
+# 6) 63-bit 边界：max_int + 1 wrap 成 min_int；负数除法向零截断。
+run: sh -c 'd="$TMPDIR/bounds"; mkdir -p "$d/app"; printf "[package]\nname = \"bounds\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "main : Int\nmain = 4611686018427387903 + 1\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/bounds-out" "$d"'
+exit: 0
+run: "$TMPDIR/bounds-out/bin/bounds" 2>&1
+out-equals: -4611686018427387904
+run: sh -c 'printf "main : Int\nmain = 0 - 3 / 2\n" > "$TMPDIR/bounds/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/bounds-out2" "$TMPDIR/bounds"'
+exit: 0
+run: "$TMPDIR/bounds-out2/bin/bounds" 2>&1
+out-equals: -1
+
+# 7) 除零：编译通过，运行 exit 2 并输出运行时错误前缀。
+run: sh -c 'd="$TMPDIR/dz"; mkdir -p "$d/app"; printf "[package]\nname = \"dz\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "main : Int\nmain = 1 / 0\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/dz-out" "$d"'
+exit: 0
+run: sh -c '"$TMPDIR/dz-out/bin/dz" 2>&1'
+exit: 2
+out-contains: vuna: runtime error: division by zero
+
+# 8) 确定性：同一程序两次 compile 的 main.s 逐字节一致。
+run: sh -c 'd="$TMPDIR/det"; mkdir -p "$d/app"; printf "[package]\nname = \"det\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "main : Int\nmain = 40 + 2\n" > "$d/app/Main.vuna"; "$VUNA" compile "$d/app/Main.vuna" "$TMPDIR/det-a" --target native; "$VUNA" compile "$d/app/Main.vuna" "$TMPDIR/det-b" --target native; cmp "$TMPDIR/det-a/main.s" "$TMPDIR/det-b/main.s"'
+exit: 0
+
+# 9) 不支持构造：字符串入口在编译期拒绝（exit 1），不产出 main.s。
+run: sh -c 'd="$TMPDIR/str"; mkdir -p "$d/app"; printf "[package]\nname = \"str\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "main : String\nmain = \"x\"\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/str-out" "$d" 2>&1'
+exit: 1
+out-contains: native target:
+file-absent: $TMPDIR/str-out/bin/str
+
+# 10) 高阶应用在编译期拒绝。
+run: sh -c 'd="$TMPDIR/ho"; mkdir -p "$d/app"; printf "[package]\nname = \"ho\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "apply : (Int -> Int) -> Int -> Int\napply f x = f x\n\nmain : Int\nmain = apply (\\x => x + 1) 41\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/ho-out" "$d" 2>&1'
+exit: 1
+out-contains: higher-order application
+
+# 11) --no-compile：只写 main.s + build.sh；build.sh 可独立链接并运行。
+run: sh -c 'd="$TMPDIR/nc"; mkdir -p "$d/app"; printf "[package]\nname = \"nc\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "main : Int\nmain = 7\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --no-compile --out "$TMPDIR/nc-out" "$d"'
+exit: 0
+file-exists: $TMPDIR/nc-out/main.s
+file-exists: $TMPDIR/nc-out/build.sh
+file-absent: $TMPDIR/nc-out/bin/nc
+run: sh -c 'cd "$TMPDIR/nc-out" && sh build.sh && ./bin/nc'
+exit: 0
+out-equals: 7

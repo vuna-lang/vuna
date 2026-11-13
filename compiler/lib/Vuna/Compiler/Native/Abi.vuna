@@ -1,0 +1,83 @@
+module Vuna.Compiler.Native.Abi where
+
+-- Vuna.Compiler.Native.Abi：x86-64 SysV 的调用约定、栈帧、稳定命名（M1）。
+--
+-- M1 的平台契约（见 docs/reference/native.md）：
+--   * 参数寄存器按序 rdi, rsi, rdx, rcx, r8, r9；返回 rax；
+--   * 每个函数 `push rbp; mov rbp, rsp; sub rsp, frame`，frame 为 16 的倍数；
+--   * 所有 binder / 中间值走 `[rbp - 8*(slot+1)]`，不做寄存器分配；
+--   * 生成代码只使用 caller-saved 寄存器，不碰 rbx/r12-r15；
+--   * 名字由 Vuna 全限定名派生，转义成 `[A-Za-z0-9_]`，不按位置编号。
+--
+-- 边界：只 import Base 与 `Native.Model`。
+import Base.Bool
+import Base.Int
+import Base.List
+import Base.Pair
+import Base.String
+import Vuna.Compiler.Native.Model
+
+-- | 参数寄存器（SysV AMD64 的整型前六个）。
+export nativeArgRegs : List Reg
+nativeArgRegs = [Rdi, Rsi, Rdx, Rcx, R8, R9]
+
+-- | M1 支持的最大 arity（更多参数需要栈传参，留 M2）。
+export nativeMaxArgs : Int
+nativeMaxArgs = 6
+
+-- | slot 序号（从 0 起）-> rbp 偏移（负数）。
+export nativeSlotOff : Int -> Int
+nativeSlotOff slot = 0 - 8 * (slot + 1)
+
+-- | 栈帧字节数：8 * slots 上取整到 16。
+export nativeFrameBytes : Int -> Int
+nativeFrameBytes slots =
+  let
+    raw = 8 * slots
+  in if raw == 0 then 0 else (raw + 15) / 16 * 16
+
+-- ---------------------------------------------------------------
+-- 函数框架
+-- ---------------------------------------------------------------
+-- | 固定 prologue：push rbp; mov rbp, rsp; sub rsp, frame（frame=0 时省略）。
+export nativePrologue : Int -> List Instr
+nativePrologue frame =
+  append [IPush Rbp, IMov (OpReg Rbp) (OpReg Rsp)]
+    (if frame == 0 then [] else [IBinReg "sub" Rsp (OpImm frame)])
+
+-- | 固定 epilogue：mov rsp, rbp; pop rbp; ret。
+export nativeEpilogue : List Instr
+nativeEpilogue = [IMov (OpReg Rsp) (OpReg Rbp), IPop Rbp, IRet]
+
+-- ---------------------------------------------------------------
+-- 稳定命名
+-- ---------------------------------------------------------------
+isNativeNameChar : Int -> Bool
+isNativeNameChar c = c >= 48 && c <= 57 || c >= 65 && c <= 90 || c >= 97 && c <= 122 || c == 95
+
+nativeNameChar : Int -> String
+nativeNameChar c = if isNativeNameChar c then strPack [c] else "_x${strFromInt c}_"
+
+-- | Vuna 全限定名 -> 汇编标识符片段（只含 `[A-Za-z0-9_]`）。
+export nativeName : String -> String
+nativeName name = strPack (concatMap (\c => strUnpack (nativeNameChar c)) (strUnpack name))
+
+-- | 用户定义的函数标签。
+export nativeFuncLabel : String -> String
+nativeFuncLabel name = "vuna_${nativeName name}"
+
+-- | 运行时函数标签。
+export nativeRtLabel : String -> String
+nativeRtLabel name = "rt_${nativeName name}"
+
+-- | 程序入口标签（固定）。
+export nativeEntryLabel : String
+nativeEntryLabel = "_start"
+
+-- | 内部 label：按生成顺序编号（同一 IR 的编号稳定）。
+export nativeJumpLabel : Int -> String
+nativeJumpLabel n = ".L${strFromInt n}"
+
+-- | 只读数据标签。
+export nativeDataLabel : String -> String
+nativeDataLabel name = "rt_data_${nativeName name}"

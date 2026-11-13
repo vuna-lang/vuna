@@ -1,0 +1,113 @@
+module Vuna.Compiler.Native.Render where
+
+-- Vuna.Compiler.Native.Render：NativeProgram -> Intel 语法汇编文本（`main.s`）。
+--
+-- 输出是 canonical 的（D16 同构）：段顺序、缩进、指令文本固定；不嵌入时间戳/
+-- 绝对路径，同一 IR 的 `main.s` 逐字节确定。`.wasm` 之于 wasm 相当于这里的 ELF：
+-- 二进制只保证行为（链接工具版本由 Nix 提供）。
+--
+-- 边界：只 import Base 与 `Native.{Model,Abi}`。
+import Base.Bool
+import Base.Int
+import Base.List
+import Base.Pair
+import Base.String
+import Vuna.Compiler.Native.Abi
+import Vuna.Compiler.Native.Model
+
+-- ---------------------------------------------------------------
+-- 文本 helper
+-- ---------------------------------------------------------------
+indent : String -> String
+indent line = "  " ++ line
+
+memText : Reg -> Int -> String
+memText base off =
+  if off == 0 then "[${regText base}]"
+  else if off < 0 then "[${regText base}-${strFromInt (0 - off)}]"
+  else "[${regText base}+${strFromInt off}]"
+
+renderOperand : Operand -> String
+renderOperand (OpReg r) = regText r
+renderOperand (OpImm n) = strFromInt n
+renderOperand (OpMem base off) = memText base off
+
+isMemOperand : Operand -> Bool
+isMemOperand (OpMem _ _) = True
+isMemOperand _ = False
+
+renderMov : Operand -> Operand -> String
+renderMov dst src =
+  if isMemOperand dst then "mov qword ptr ${renderOperand dst}, ${renderOperand src}"
+  else "mov ${renderOperand dst}, ${renderOperand src}"
+
+isShiftOp : String -> Bool
+isShiftOp op = op == "shl" || op == "shr" || op == "sar"
+
+renderBinReg : String -> Reg -> Operand -> String
+renderBinReg op r (OpReg Rcx) =
+  if isShiftOp op then "${op} ${regText r}, cl"
+  else "${op} ${regText r}, ${renderOperand (OpReg Rcx)}"
+renderBinReg op r operand = "${op} ${regText r}, ${renderOperand operand}"
+
+renderInstr : Instr -> String
+renderInstr (IMov dst src) = renderMov dst src
+renderInstr (IMovByte base off src) = "mov byte ptr ${memText base off}, ${reg8Text src}"
+renderInstr IMovzxAl = "movzx rax, al"
+renderInstr (ILea r label) = "lea ${regText r}, [rip + ${label}]"
+renderInstr (ILeaMem dst base off) = "lea ${regText dst}, ${memText base off}"
+renderInstr (IBin op operand) = "${op} rax, ${renderOperand operand}"
+renderInstr (IBinReg op r operand) = renderBinReg op r operand
+renderInstr (ICmp dst src) =
+  if isMemOperand dst then "cmp qword ptr ${renderOperand dst}, ${renderOperand src}"
+  else "cmp ${renderOperand dst}, ${renderOperand src}"
+renderInstr (ITest a b) = "test ${regText a}, ${regText b}"
+renderInstr (ISetcc cond r) = "${cond} ${reg8Text r}"
+renderInstr (INeg r) = "neg ${regText r}"
+renderInstr ICqo = "cqo"
+renderInstr (IDiv r) = "idiv ${regText r}"
+renderInstr (IDivUnsigned r) = "div ${regText r}"
+renderInstr (ILabel l) = "${l}:"
+renderInstr (IJmp l) = "jmp ${l}"
+renderInstr (IJcc cond l) = "${cond} ${l}"
+renderInstr (ICall l) = "call ${l}"
+renderInstr IRet = "ret"
+renderInstr ISyscall = "syscall"
+renderInstr (IPush r) = "push ${regText r}"
+renderInstr (IPop r) = "pop ${regText r}"
+renderInstr INop = "nop"
+
+-- ---------------------------------------------------------------
+-- 字符串 -> `.ascii` 字面量
+-- ---------------------------------------------------------------
+-- | 只处理 ASCII 控制字符与引号/反斜杠；M1 的常量都是 ASCII。
+asmEscapeChar : Int -> String
+asmEscapeChar 34 = "\\\""
+asmEscapeChar 92 = "\\\\"
+asmEscapeChar 10 = "\\n"
+asmEscapeChar 9 = "\\t"
+asmEscapeChar 13 = "\\r"
+asmEscapeChar c = strPack [c]
+
+asmString : String -> String
+asmString s = strPack (concatMap (\c => strUnpack (asmEscapeChar c)) (strUnpack s))
+
+renderRodata : NativeRodata -> List String
+renderRodata d = ["${d.nrLabel}:", indent ".ascii \"${asmString d.nrText}\""]
+
+renderFunc : NativeFunc -> List String
+renderFunc f =
+  let
+    global = if f.nfLabel == nativeEntryLabel then [".globl ${nativeEntryLabel}"] else []
+  in append (append global ["${f.nfLabel}:"]) (map (\i => indent (renderInstr i)) f.nfBody)
+
+-- ---------------------------------------------------------------
+-- 程序
+-- ---------------------------------------------------------------
+export renderProgram : NativeProgram -> String
+renderProgram p =
+  let
+    rodataLines = concatMap renderRodata p.npRodata
+    funcLines = concatMap renderFunc p.npFuncs
+  in join "\n" (append [".intel_syntax noprefix", ".section .rodata"] (append rodataLines (append [".section .text"] (append funcLines [".section .note.GNU-stack,\"\",@progbits"]))))
+    ++ "\n"

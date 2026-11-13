@@ -1,0 +1,478 @@
+module Vuna.Compiler.Native.Module where
+
+-- Vuna.Compiler.Native.Module：IrProgram -> NativeProgram（x86-64 汇编，M1）。
+--
+-- M1 最小切片：`main` 为 Int/Nat/Bool 值，支持 let / if / 内建饱和应用 / 顶层
+-- 饱和函数调用 / `IrNatCase`（Nat 的结构递归）/ 入口打印。其它构造在编译期拒绝
+-- （`NativeUnsupported`）。
+--
+-- 生成策略（见 docs/reference/native.md）：
+--   * 从 entry main 沿 `irDefDeps` 收集可达定义，只生成可达函数；不可达的 base
+--     定义不检查（与 wasm M1 的 `collectNeeded` 同策略）；
+--   * 不做寄存器分配：binder 与中间值都走 `[rbp - 8*(slot+1)]`；
+--   * 调用约定在 `Native.Abi`；运行时符号在 `Native.Runtime`；
+--   * 生成器带 fuel，越界报 `NativeInternal`，不 panic。
+--
+-- 边界：只 import Base、`Vuna.Compiler.Ir` 与 `Native.*`。
+import Base.Bool
+import Base.Int
+import Base.List
+import Base.Maybe
+import Base.Pair
+import Base.String
+import Vuna.Compiler.Ir
+import Vuna.Compiler.Native.Abi
+import Vuna.Compiler.Native.Model
+import Vuna.Compiler.Native.Runtime
+
+-- ---------------------------------------------------------------
+-- 结果类型：区分「目标不支持」与「生成器不变式破坏」
+-- ---------------------------------------------------------------
+export data NRes a(..) : Type where
+  NOk : a -> NRes a
+  NFail : NativeErr -> NRes a
+
+nbind : NRes a -> (a -> NRes b) -> NRes b
+nbind (NOk x) k = k x
+nbind (NFail e) _ = NFail e
+
+unsupported : String -> NRes a
+unsupported msg = NFail (NativeUnsupported msg)
+
+internal : String -> NRes a
+internal msg = NFail (NativeInternal msg)
+
+-- ---------------------------------------------------------------
+-- 生成状态与栈槽
+-- ---------------------------------------------------------------
+record FGen where
+  fgDefs : List IrDef
+  fgSlots : List (Pair IrBinder Int)
+  fgNextSlot : Int
+  fgNextLabel : Int
+
+freshSlot : FGen -> Pair Int FGen
+freshSlot st =
+  let
+    slot = st.fgNextSlot
+    st1 = { st | fgNextSlot = st.fgNextSlot + 1 }
+  in Pair slot st1
+
+freshLabel : FGen -> Pair String FGen
+freshLabel st =
+  let
+    label = nativeJumpLabel st.fgNextLabel
+    st1 = { st | fgNextLabel = st.fgNextLabel + 1 }
+  in Pair label st1
+
+storeSlot : Int -> List Instr
+storeSlot slot = [IMov (OpMem Rbp (nativeSlotOff slot)) (OpReg Rax)]
+
+loadSlot : Int -> List Instr
+loadSlot slot = [IMov (OpReg Rax) (OpMem Rbp (nativeSlotOff slot))]
+
+loadReg : Reg -> Int -> List Instr
+loadReg r slot = [IMov (OpReg r) (OpMem Rbp (nativeSlotOff slot))]
+
+-- ---------------------------------------------------------------
+-- binder
+-- ---------------------------------------------------------------
+bNameEq : IrBName -> IrBName -> Bool
+bNameEq (IrBUser x) (IrBUser y) = x == y
+bNameEq (IrBArm x) (IrBArm y) = x == y
+bNameEq (IrBNat x) (IrBNat y) = x == y
+bNameEq IrBWild IrBWild = True
+bNameEq _ _ = False
+
+binderEq : IrBinder -> IrBinder -> Bool
+binderEq a b = bNameEq a.irBinderName b.irBinderName && a.irBinderErased == b.irBinderErased
+
+lookupBinder : IrBinder -> List (Pair IrBinder Int) -> Maybe Int
+lookupBinder _ [] = Nothing
+lookupBinder b (p :: rest) =
+  if binderEq b (firstOf p) then Just (secondOf p) else lookupBinder b rest
+
+pushBinder : IrBinder -> Int -> FGen -> FGen
+pushBinder b slot st = { st | fgSlots = Pair b slot :: st.fgSlots }
+
+isErasedBinder : IrBinder -> Bool
+isErasedBinder b = b.irBinderErased
+
+-- | 结束一个 binder 作用域：只恢复 binder 表；slot/label 计数器不回退（槽不复用）。
+restoreBinderScope : FGen -> List (Pair IrBinder Int) -> FGen
+restoreBinderScope st slots = { st | fgSlots = slots }
+
+runtimeBinders : List IrBinder -> List IrBinder
+runtimeBinders bs = filter (\b => not (isErasedBinder b)) bs
+
+-- ---------------------------------------------------------------
+-- 定义查找 / 可达性
+-- ---------------------------------------------------------------
+findDef : String -> List IrDef -> Maybe IrDef
+findDef _ [] = Nothing
+findDef name (d :: rest) = if irDefName d == name then Just d else findDef name rest
+
+memStr : String -> List String -> Bool
+memStr _ [] = False
+memStr s (x :: rest) = s == x || memStr s rest
+
+collectNeeded : Int -> List String -> List String -> List IrDef -> List String
+collectNeeded fuel work seen defs = if fuel <= 0 then reverse seen
+else case work of
+  [] => reverse seen
+  n :: rest => if memStr n seen then collectNeeded (fuel - 1) rest seen defs
+  else case findDef n defs of
+    Nothing => collectNeeded (fuel - 1) rest (n :: seen) defs
+    Just d => collectNeeded (fuel - 1) (append rest (irDefDeps d)) (n :: seen) defs
+
+-- ---------------------------------------------------------------
+-- 参数
+-- ---------------------------------------------------------------
+loadArgRegs : List Reg -> List Int -> List Instr
+loadArgRegs [] _ = []
+loadArgRegs _ [] = []
+loadArgRegs (r :: rs) (s :: ss) = append (loadReg r s) (loadArgRegs rs ss)
+
+argRegAt : Int -> Maybe Reg
+argRegAt i = argRegAtIn i nativeArgRegs
+
+argRegAtIn : Int -> List Reg -> Maybe Reg
+argRegAtIn _ [] = Nothing
+argRegAtIn i (r :: rest) = if i == 0 then Just r else argRegAtIn (i - 1) rest
+
+-- ---------------------------------------------------------------
+-- 表达式
+-- ---------------------------------------------------------------
+genArgs : Int -> FGen -> List Ir -> NRes (Pair (List Instr) (Pair (List Int) FGen))
+genArgs _ st [] = NOk (Pair [] (Pair [] st))
+genArgs fuel st (a :: rest) = if fuel <= 0 then internal "native codegen fuel exhausted"
+else nbind (genExpr (fuel - 1) st a) (\p => let
+  st1 = secondOf p
+  slotP = freshSlot st1
+  slot = firstOf slotP
+  st2 = secondOf slotP
+in nbind (genArgs (fuel - 1) st2 rest) (\q => let
+  qInstrs = firstOf q
+  qSlots = firstOf (secondOf q)
+  st3 = secondOf (secondOf q)
+in NOk (Pair (append (firstOf p) (append (storeSlot slot) qInstrs)) (Pair (slot :: qSlots) st3))
+)
+)
+
+genGlobalCall : Int -> FGen -> String -> List Ir -> NRes (Pair (List Instr) FGen)
+genGlobalCall fuel st name args = if fuel <= 0 then internal "native codegen fuel exhausted"
+else case findDef name st.fgDefs of
+  Nothing => internal "undefined global in native codegen: ${name}"
+  Just d =>
+    let
+      arity = irDefArity d
+    in if arity > nativeMaxArgs then unsupported "native target: functions with more than 6 arguments are not supported yet"
+    else if length args /= arity then unsupported "native target: partial application is not supported yet"
+    else nbind (genArgs (fuel - 1) st args) (\p => let
+      slots = firstOf (secondOf p)
+      st1 = secondOf (secondOf p)
+    in NOk
+      (Pair (append (firstOf p) (append (loadArgRegs nativeArgRegs slots) [ICall (nativeFuncLabel name)])) st1)
+    )
+
+genNatSuccCall : Int -> FGen -> Ir -> NRes (Pair (List Instr) FGen)
+genNatSuccCall fuel st arg =
+  if fuel <= 0 then internal "native codegen fuel exhausted"
+  else nbind (genExpr (fuel - 1) st arg)
+    (\p => NOk (Pair (append (firstOf p) [IMov (OpReg Rdi) (OpReg Rax), ICall (nativeRtLabel "nat_succ")]) (secondOf p)))
+
+genRtApp : Int -> FGen -> String -> List Ir -> NRes (Pair (List Instr) FGen)
+genRtApp fuel st sym args = if fuel <= 0 then internal "native codegen fuel exhausted"
+else case sym of
+  "&&" => genBoolChain (fuel - 1) st args True
+  "||" => genBoolChain (fuel - 1) st args False
+  _ => case nativeRtTarget sym of
+    Nothing => unsupported "native target: runtime symbol `${sym}` is not supported yet"
+    Just label => if length args /= irInlineArity sym then internal "runtime symbol arity mismatch: ${sym}"
+    else nbind (genArgs (fuel - 1) st args) (\p => let
+      slots = firstOf (secondOf p)
+      st1 = secondOf (secondOf p)
+    in NOk (Pair (append (firstOf p) (append (loadArgRegs nativeArgRegs slots) [ICall label])) st1)
+    )
+
+genExpr : Int -> FGen -> Ir -> NRes (Pair (List Instr) FGen)
+genExpr fuel st ir = if fuel <= 0 then internal "native codegen fuel exhausted"
+else case ir of
+  IrVar b => case lookupBinder b st.fgSlots of
+    Just slot => NOk (Pair (loadSlot slot) st)
+    Nothing => internal "unbound runtime binder in native codegen"
+  IrGlobal name => case findDef name st.fgDefs of
+    Nothing => internal "undefined global in native codegen: ${name}"
+    Just d =>
+      if irDefArity d == 0 then NOk (Pair [ICall (nativeFuncLabel name)] st)
+      else unsupported "native target: function values are not supported yet"
+  IrInt n =>
+    if n < 0 - 4611686018427387903 - 1 || n > 4611686018427387903 then unsupported "native target: integer literal outside the 63-bit range"
+    else NOk (Pair [IMov (OpReg Rax) (OpImm n)] st)
+  IrBool b => NOk (Pair [IMov (OpReg Rax) (OpImm (if b then 1 else 0))] st)
+  IrCast inner => genExpr (fuel - 1) st inner
+  IrLet bs scrut body => nbind (genExpr (fuel - 1) st scrut) (\p => let
+    rbs = runtimeBinders bs
+    st1 = secondOf p
+  in case rbs of
+    [] =>
+      nbind (genExpr (fuel - 1) st1 body)
+        (\q => NOk (Pair (append (firstOf p) (firstOf q)) (secondOf q)))
+    [b] =>
+      let
+        slotP = freshSlot st1
+        slot = firstOf slotP
+        st2 = secondOf slotP
+      in nbind (genExpr (fuel - 1) (pushBinder b slot st2) body)
+        (\q => NOk (Pair (append (firstOf p) (append (storeSlot slot) (firstOf q))) (restoreBinderScope (secondOf q) st1.fgSlots)))
+    _ => unsupported "native target: let with more than one runtime binder is not supported yet"
+  )
+  IrIf c t e => nbind (genExpr (fuel - 1) st c) (\p => let
+    lElseP = freshLabel (secondOf p)
+    lElse = firstOf lElseP
+    st1 = secondOf lElseP
+    lEndP = freshLabel st1
+    lEnd = firstOf lEndP
+    st2 = secondOf lEndP
+  in nbind (genExpr (fuel - 1) st2 t) (\pt => nbind (genExpr (fuel - 1) (secondOf pt) e) (\pe => let
+    body =
+      append (firstOf p)
+        (append [ITest Rax Rax, IJcc "je" lElse] (append (firstOf pt) (append [IJmp lEnd, ILabel lElse] (append (firstOf pe) [ILabel lEnd]))))
+  in NOk (Pair body (secondOf pe))
+  )
+  )
+  )
+  IrApp _ _ => genApp (fuel - 1) st ir
+  IrRtApp sym args => genRtApp (fuel - 1) st sym args
+  IrNatCase scrut _fresh zero succ catch => genNatCase (fuel - 1) st scrut zero succ catch
+  IrLam _ _ => unsupported "native target: lambdas are not supported yet"
+  IrRt _ => unsupported "native target: runtime function values are not supported yet"
+  IrStr _ => unsupported "native target: string literals are not supported yet"
+  IrFloatLit _ => unsupported "native target: float literals are not supported yet"
+  IrCtor _ _ _ => unsupported "native target: data constructors are not supported yet"
+  IrRecord _ _ => unsupported "native target: records are not supported yet"
+  IrProj _ _ _ => unsupported "native target: record projection is not supported yet"
+  IrRecUpd _ _ _ => unsupported "native target: record update is not supported yet"
+  IrCase _ _ => unsupported "native target: case is not supported yet"
+  IrConcatMany _ => unsupported "native target: string concatenation is not supported yet"
+  IrEffThunk _ _ _ _ _ => unsupported "native target: effect thunks are not supported yet"
+  IrEffBind _ _ _ => unsupported "native target: effect bindings are not supported yet"
+
+-- `&&` / `||`：短路；a 为 0/1，b 为 Bool。
+genBoolChain : Int -> FGen -> List Ir -> Bool -> NRes (Pair (List Instr) FGen)
+genBoolChain fuel st args isAnd = if fuel <= 0 then internal "native codegen fuel exhausted"
+else case args of
+  [a, b] => nbind (genExpr (fuel - 1) st a) (\p => let
+    lEndP = freshLabel (secondOf p)
+    lEnd = firstOf lEndP
+    st1 = secondOf lEndP
+    cond = if isAnd then "je" else "jne"
+  in nbind (genExpr (fuel - 1) st1 b)
+    (\q => NOk (Pair (append (firstOf p) (append [ITest Rax Rax, IJcc cond lEnd] (append (firstOf q) [ILabel lEnd]))) (secondOf q)))
+  )
+  _ => internal "`&&`/`||` must have exactly two arguments"
+
+-- 应用：flatten 左脊，支持饱和顶层调用与 `@ir@natSucc`。
+flattenApp : Ir -> Pair Ir (List Ir)
+flattenApp (IrApp f a) =
+  let
+    p = flattenApp f
+  in Pair (firstOf p) (append (secondOf p) [a])
+flattenApp x = Pair x []
+
+genLamApp : Int -> FGen -> IrBinder -> Ir -> Ir -> NRes (Pair (List Instr) FGen)
+genLamApp fuel st b arg body = if fuel <= 0 then internal "native codegen fuel exhausted"
+else nbind (genExpr (fuel - 1) st arg) (\p => let
+  slotP = freshSlot (secondOf p)
+  slot = firstOf slotP
+  st1 = secondOf slotP
+in nbind (genExpr (fuel - 1) (pushBinder b slot st1) body)
+  (\q => NOk (Pair (append (firstOf p) (append (storeSlot slot) (firstOf q))) (restoreBinderScope (secondOf q) st.fgSlots)))
+)
+
+genApp : Int -> FGen -> Ir -> NRes (Pair (List Instr) FGen)
+genApp fuel st ir = if fuel <= 0 then internal "native codegen fuel exhausted"
+else case flattenApp ir of
+  Pair head args => case head of
+    IrGlobal name => genGlobalCall (fuel - 1) st name args
+    IrLam bs body => case runtimeBinders bs of
+      [b] => case args of
+        [a] => genLamApp (fuel - 1) st b a body
+        _ => unsupported "native target: only saturated single-argument lambdas are supported yet"
+      _ => unsupported "native target: lambdas are not supported yet"
+    IrRt s => if s == irRtNatSucc && length args == 1 then case args of
+      [a] => genNatSuccCall (fuel - 1) st a
+      _ => internal "Nat Succ must have exactly one argument"
+    else unsupported "native target: only saturated top-level calls are supported yet"
+    _ => unsupported "native target: higher-order application is not supported yet"
+
+-- ---------------------------------------------------------------
+-- Nat case
+-- ---------------------------------------------------------------
+genNatArm : Int -> FGen -> Maybe IrAlt -> String -> Int -> NRes (Pair (List Instr) FGen)
+genNatArm _ st Nothing _ _ = NOk (Pair [] st)
+genNatArm fuel st (Just alt) mode srcSlot = if fuel <= 0 then internal "native codegen fuel exhausted"
+else
+  let
+    bs = runtimeBinders (irAltBindersOf alt)
+  in case bs of
+    [] => genExpr (fuel - 1) st (irAltBodyOf alt)
+    [b] => if mode == "none" then internal "Nat case arm has a binder but no runtime binding"
+    else
+      let
+        slotP = freshSlot st
+        slot = firstOf slotP
+        st1 = secondOf slotP
+        bindInstrs =
+          if mode == "pred" then append (loadSlot srcSlot) [IBin "sub" (OpImm 1)]
+          else loadSlot srcSlot
+      in nbind (genExpr (fuel - 1) (pushBinder b slot st1) (irAltBodyOf alt))
+        (\q => NOk (Pair (append bindInstrs (append (storeSlot slot) (firstOf q))) (restoreBinderScope (secondOf q) st.fgSlots)))
+    _ => internal "Nat case arm has more than one runtime binder"
+
+hasNatBranch : Maybe IrAlt -> Maybe IrAlt -> Bool
+hasNatBranch (Just _) _ = True
+hasNatBranch Nothing (Just _) = True
+hasNatBranch Nothing Nothing = False
+
+genNatCase : Int -> FGen -> Ir -> Maybe IrAlt -> Maybe IrAlt -> Maybe IrAlt -> NRes (Pair (List Instr) FGen)
+genNatCase fuel st scrut zero succ catch = if fuel <= 0 then internal "native codegen fuel exhausted"
+else nbind (genExpr (fuel - 1) st scrut) (\p => let
+  st1 = secondOf p
+  slotP = freshSlot st1
+  slotSc = firstOf slotP
+  st2 = secondOf slotP
+  lzP = freshLabel st2
+  lz = firstOf lzP
+  st3 = secondOf lzP
+  lendP = freshLabel st3
+  lend = firstOf lendP
+  st4 = secondOf lendP
+  zeroAlt = case zero of
+    Just z => Just z
+    Nothing => catch
+  zeroMode = case zero of
+    Just _ => "none"
+    Nothing => "sc"
+  succAlt = case succ of
+    Just s => Just s
+    Nothing => catch
+  succMode = case succ of
+    Just _ => "pred"
+    Nothing => "sc"
+in if not (hasNatBranch zero catch) then internal "Nat case has no zero/catch branch"
+else if not (hasNatBranch succ catch) then internal "Nat case has no succ/catch branch"
+else nbind (genNatArm (fuel - 1) st4 zeroAlt zeroMode slotSc) (\z => nbind (genNatArm (fuel - 1) (secondOf z) succAlt succMode slotSc) (\s => let
+  body =
+    append (firstOf p)
+      (append (storeSlot slotSc) (append [ICmp (OpMem Rbp (nativeSlotOff slotSc)) (OpImm 0), IJcc "je" lz] (append (firstOf s) (append [IJmp lend, ILabel lz] (append (firstOf z) [ILabel lend])))))
+in NOk (Pair body (secondOf s))
+)
+)
+)
+
+-- ---------------------------------------------------------------
+-- 定义
+-- ---------------------------------------------------------------
+bindArgs : List IrBinder -> FGen -> NRes (Pair (List Instr) FGen)
+bindArgs bs st = bindArgsGo bs 0 st
+
+bindArgsGo : List IrBinder -> Int -> FGen -> NRes (Pair (List Instr) FGen)
+bindArgsGo [] _ st = NOk (Pair [] st)
+bindArgsGo (b :: rest) i st = case argRegAt i of
+  Nothing => unsupported "native target: functions with more than 6 arguments are not supported yet"
+  Just reg =>
+    let
+      slotP = freshSlot st
+      slot = firstOf slotP
+      st1 = secondOf slotP
+      store = [IMov (OpMem Rbp (nativeSlotOff slot)) (OpReg reg)]
+    in nbind (bindArgsGo rest (i + 1) (pushBinder b slot st1))
+      (\q => NOk (Pair (append store (firstOf q)) (secondOf q)))
+
+genDefFunc : List IrDef -> IrDef -> NRes NativeFunc
+genDefFunc _defs (IrExternDef name _ _ _) =
+  unsupported "native target: extern definition `${name}` is not supported yet"
+genDefFunc defs (IrDef name arity _ body _ _ _) = if arity > nativeMaxArgs then unsupported "native target: functions with more than 6 arguments are not supported yet"
+else
+  let
+    st0 = FGen defs [] 0 0
+  in if arity == 0 then nbind (genExpr 100000 st0 body) (\p => let
+    frame = nativeFrameBytes (secondOf p).fgNextSlot
+    instrs = append (firstOf p) nativeEpilogue
+  in NOk (NativeFunc (nativeFuncLabel name) frame (append (nativePrologue frame) instrs))
+  )
+  else case body of
+    IrLam bs inner =>
+      let
+        rbs = runtimeBinders bs
+      in if length rbs /= arity then internal "function body lambda arity mismatch: ${name}"
+      else nbind (bindArgs rbs st0) (\bp => nbind (genExpr 100000 (secondOf bp) inner) (\q => let
+        frame = nativeFrameBytes (secondOf q).fgNextSlot
+        instrs = append (firstOf bp) (append (firstOf q) nativeEpilogue)
+      in NOk (NativeFunc (nativeFuncLabel name) frame (append (nativePrologue frame) instrs))
+      )
+      )
+    _ => internal "function body is not a lambda: ${name}"
+
+genDefs : List IrDef -> List IrDef -> List NativeFunc -> NRes (List NativeFunc)
+genDefs _all [] acc = NOk (reverse acc)
+genDefs all (d :: rest) acc = nbind (genDefFunc all d) (\f => genDefs all rest (f :: acc))
+
+-- ---------------------------------------------------------------
+-- 入口
+-- ---------------------------------------------------------------
+entryShowKind : Ir -> Maybe String
+entryShowKind (IrRt s) = case s of
+  "@ir@showInt" => Just "int"
+  "@ir@showNat" => Just "int"
+  "@ir@showBool" => Just "bool"
+  _ => Nothing
+entryShowKind _ = Nothing
+
+printLabelOf : String -> String
+printLabelOf kind = if kind == "bool" then nativeRtLabel "print_bool" else nativeRtLabel "print_int"
+
+startFunc : Bool -> String -> String -> NativeFunc
+startFunc printResult kind mainName =
+  let
+    callMain = [IBinReg "and" Rsp (OpImm (0 - 16)), ICall (nativeFuncLabel mainName)]
+    printer = if printResult then [IMov (OpReg Rdi) (OpReg Rax), ICall (printLabelOf kind)] else []
+    exitInstrs = [IMov (OpReg Rax) (OpImm 60), IMov (OpReg Rdi) (OpImm 0), ISyscall]
+  in NativeFunc nativeEntryLabel 0 (append callMain (append printer exitInstrs))
+
+-- ---------------------------------------------------------------
+-- 装配
+-- ---------------------------------------------------------------
+export build : IrProgram -> Bool -> NativeOutcome
+build program printResult =
+  let
+    unit = irProgUnitOf program
+    defs = concatMap irGroupDefs unit.irUnitGroups
+  in case unit.irUnitEntry of
+    Nothing => NativeRejected (NativeUnsupported "native target: no main definition")
+    Just e => if irEntryIsActionOf e then NativeRejected (NativeUnsupported "native target: effectful main is not supported yet")
+    else
+      let
+        mainName = irEntryMainOf e
+      in case findDef mainName defs of
+        Nothing => NativeRejected (NativeUnsupported "native target: main definition not found")
+        Just mainDef => if irDefArity mainDef /= 0 then NativeRejected (NativeUnsupported "native target: main must be a zero-argument value")
+        else
+          let
+            kindM = if printResult then entryShowKind (irEntryShowOf e) else Just "none"
+          in case kindM of
+            Nothing =>
+              NativeRejected
+                (NativeUnsupported "native target: custom Show entry is not supported yet")
+            Just kind =>
+              let
+                needed = collectNeeded 100000 [mainName] [] defs
+                ordered = filter (\d => memStr (irDefName d) needed) defs
+              in case genDefs defs ordered [] of
+                NFail err => NativeRejected err
+                NOk funcs =>
+                  let
+                    start = startFunc printResult kind mainName
+                  in NativeOk
+                    (NativeProgram nativeRodata (append nativeRtFuncs (append funcs [start])))
