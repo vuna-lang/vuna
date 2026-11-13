@@ -78,7 +78,7 @@ unitCacheEntryKeyOf keys = case lookupPair "__entry__" keys of
 
 -- | 删除文件，**文件不存在也不报错**。
 --
--- 为什么不能直接用 `prim_eff_removeFile`：单元缓存目录按包共享，`vuna test --jobs N` /
+-- 为什么不能直接用 `@vuna@prim_eff_removeFile`：单元缓存目录按包共享，`vuna test --jobs N` /
 -- workspace 并行 check 会有多个进程同时 GC 同一个桶。`removeFile` 在文件已被别的进程
 -- 删掉时抛宿主异常（语言里没有 try/catch），表现为
 -- `runtime error: removeFile: ... No such file or directory`。
@@ -86,7 +86,7 @@ unitCacheEntryKeyOf keys = case lookupPair "__entry__" keys of
 safeRemoveFile : String -> Eff hostRow Int
 safeRemoveFile path = do
   exists <- raiseToRow hostRow (@vuna@prim_eff_fileExists path)
-  if exists then prim_eff_runIn "/" ["rm", "-f", path] else pure 0
+  if exists then @vuna@prim_eff_runIn "/" ["rm", "-f", path] else pure 0
 
 export unitCacheGc : String -> String -> Eff hostRow Int
 unitCacheGc base keepDir = do
@@ -139,7 +139,7 @@ bucketGcGo dir keepNames (f :: rest) =
   in if memName f keepNames then bucketGcGo dir keepNames rest
   else do
     exists <- raiseToRow hostRow (@vuna@prim_eff_fileExists path)
-    isDir <- if exists then prim_eff_isDirectory path else pure False
+    isDir <- if exists then @vuna@prim_eff_isDirectory path else pure False
     if exists && isDir then bucketGcGo dir keepNames rest
     else do
       _ <- safeRemoveFile path

@@ -106,7 +106,7 @@ ensureDirPathFuel fuel path = if fuel <= 0 then pure 0
 else if path == "" || path == "." || path == "/" then pure 0
 else do
   exists <- raiseToRow hostRow (@vuna@prim_eff_fileExists path)
-  if exists then pure 0 else prim_eff_runIn "." ["mkdir", "-p", path]
+  if exists then pure 0 else @vuna@prim_eff_runIn "." ["mkdir", "-p", path]
 
 -- 去掉最后一段（`a/b/c` -> `a/b`；无 `/` -> "."；绝对路径的父仍绝对）。
 -- 先 reverse，跳过第一个 `/` 后剩下的字符再 reverse 回来。
@@ -317,7 +317,7 @@ copyFfiFiles ctxDir outDir = do
     ffiDir = "${ctxDir}/ffi"
   in do
     exists <- raiseToRow hostRow (@vuna@prim_eff_fileExists ffiDir)
-    isDir <- if exists then prim_eff_isDirectory ffiDir else pure False
+    isDir <- if exists then @vuna@prim_eff_isDirectory ffiDir else pure False
     if exists && isDir then do
       names <- raiseToRow hostRow (@vuna@prim_eff_readDir ffiDir)
       let
@@ -326,7 +326,7 @@ copyFfiFiles ctxDir outDir = do
         _ <- ensureDirPath "${outDir}/ffi"
         _ <- mapEff (\n => do
           content <- raiseToRow hostRow (@vuna@prim_eff_readFile "${ffiDir}/${n}")
-          prim_eff_writeFile "${outDir}/ffi/${n}" content
+          @vuna@prim_eff_writeFile "${outDir}/ffi/${n}" content
         ) cs
         pure (map (\n => "ffi/${n}") cs)
     else pure []
@@ -363,9 +363,9 @@ textHash : String -> Int
 textHash s = Vuna.Compiler.Hash.contentKey s
 
 -- M34.5：编译器二进制指纹（缓存 key 必须含它：check/codegen 语义随编译器变化）。
--- M38：用**可执行文件自身**的路径 + 大小 + mtime，而不是 `prim_eff_getArgs` 的第一个用户参数。
+-- M38：用**可执行文件自身**的路径 + 大小 + mtime，而不是 `@vuna@prim_eff_getArgs` 的第一个用户参数。
 -- 旧实现把子命令名（如 `test`）当路径：只要 cwd 里恰好有同名文件/目录（包根的 `test/`
--- 就是最常见的情况），`prim_eff_readFile` 会去读目录并抛 `Failure("readFile: ...")`——
+-- 就是最常见的情况），`@vuna@prim_eff_readFile` 会去读目录并抛 `Failure("readFile: ...")`——
 -- `vuna test` 在包根直接崩溃即此。store 路径 + size + mtime 足以区分重新构建的编译器。
 -- env/stat 是宿主动作，显式 `Eff hostRow`。
 compilerFingerprint : Eff hostRow Int
@@ -385,7 +385,7 @@ collectVunaMeta : Int -> String -> Eff hostRow (List String)
 collectVunaMeta fuel dir = if fuel <= 0 then pure []
 else do
   exists <- raiseToRow hostRow (@vuna@prim_eff_fileExists dir)
-  isDir <- if exists then prim_eff_isDirectory dir else pure False
+  isDir <- if exists then @vuna@prim_eff_isDirectory dir else pure False
   if exists && isDir then do
     names <- raiseToRow hostRow (@vuna@prim_eff_readDir dir)
     concatMapEff (walkVunaMeta (fuel - 1) dir) names
@@ -402,7 +402,7 @@ else case name of
       path = "${dir}/${name}"
     in do
       exists <- raiseToRow hostRow (@vuna@prim_eff_fileExists path)
-      isDir <- if exists then prim_eff_isDirectory path else pure False
+      isDir <- if exists then @vuna@prim_eff_isDirectory path else pure False
       if exists && isDir then collectVunaMeta (fuel - 1) path
       else pure (if endsWith ".vuna" name then [path] else [])
 
@@ -506,7 +506,7 @@ depRootIdentityEff root = do
           tomlPath = "${rootDir root}/vuna.toml"
         in do
           exists <- raiseToRow hostRow (@vuna@prim_eff_fileExists tomlPath)
-          toml <- if exists then prim_eff_readFile tomlPath else pure ""
+          toml <- if exists then @vuna@prim_eff_readFile tomlPath else pure ""
           pure (Pair (rootName root) "manifest:${textHash toml}")
 
 depIdentitiesEff : PackageContext -> Eff hostRow (List (Pair String String))
@@ -568,7 +568,7 @@ metaPathOf outDir = "${outDir}/${metaFileName}"
 export writeBuildMeta : String -> PackageContext -> String -> Bool -> Eff hostRow Int
 writeBuildMeta outDir ctx entry linked = do
   text <- buildMetaText ctx entry linked
-  prim_eff_writeFile (metaPathOf outDir) text
+  @vuna@prim_eff_writeFile (metaPathOf outDir) text
 
 -- 同哈希跳过：meta 内容与期望（linked=true）完全一致，且产物二进制存在。
 export metaUpToDate : String -> PackageContext -> String -> String -> Eff hostRow Bool
@@ -577,7 +577,7 @@ metaUpToDate outDir ctx entry binPath = do
     path = metaPathOf outDir
   in do
     exists <- raiseToRow hostRow (@vuna@prim_eff_fileExists path)
-    binExists <- if exists then prim_eff_fileExists binPath else pure False
+    binExists <- if exists then @vuna@prim_eff_fileExists binPath else pure False
     if exists && binExists then do
       raw <- raiseToRow hostRow (@vuna@prim_eff_readFile path)
       expected <- buildMetaText ctx entry True
@@ -922,7 +922,7 @@ rootEnvHashOf : String -> Eff hostRow Int
 rootEnvHashOf dir = do
   tomlPath <- pure "${dir}/vuna.toml"
   exists <- raiseToRow hostRow (@vuna@prim_eff_fileExists tomlPath)
-  toml <- if exists then prim_eff_readFile tomlPath else pure ""
+  toml <- if exists then @vuna@prim_eff_readFile tomlPath else pure ""
   tag <- ifaceCompilerTag
   pure (textHash "${textHash toml}|${tag}|")
 
@@ -1104,7 +1104,7 @@ allModuleSourcesValid (m :: rest) paths = case lookupPair (miNameOf m) paths of
     if unchanged then allModuleSourcesValid rest paths else pure False
   Nothing => pure False
 
--- mtime 秒精度的安全窗：`prim_eff_fileMtime` 只有秒级分辨率，同秒内改内容且大小不变的编辑
+-- mtime 秒精度的安全窗：`@vuna@prim_eff_fileMtime` 只有秒级分辨率，同秒内改内容且大小不变的编辑
 -- 用 mtime+size 不可分辨。mtime 距当前不足该窗口的文件一律回落内容哈希（近期编辑不走
 -- 快路径）；窗口外可安全信任 mtime+size（写侧记录的是当时的内容哈希，记录后至少过了
 -- 窗口才可能被信任）。窗口同样用于工具链会话的 `sourceFresh`。
@@ -1614,7 +1614,7 @@ packageEnvHash ctx = do
     tomlPath = "${contextDir ctx}/vuna.toml"
   in do
     exists <- raiseToRow hostRow (@vuna@prim_eff_fileExists tomlPath)
-    toml <- if exists then prim_eff_readFile tomlPath else pure ""
+    toml <- if exists then @vuna@prim_eff_readFile tomlPath else pure ""
     deps <- depIdentitiesEff ctx
     tag <- ifaceCompilerTag
     pure (textHash "${textHash toml}|${tag}|${joinLines (map pairText deps)}")

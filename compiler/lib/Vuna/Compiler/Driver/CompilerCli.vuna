@@ -388,8 +388,8 @@ defaultDir : Maybe String -> String
 defaultDir (Just dir2) = dir2
 defaultDir Nothing = "."
 
--- 路径既不是文件也不是目录时的统一错误（先 prim_eff_fileExists 再 prim_eff_isDirectory：
--- 内建 prim_eff_isDirectory 对不存在的路径会抛异常）。
+-- 路径既不是文件也不是目录时的统一错误（先 @vuna@prim_eff_fileExists 再 @vuna@prim_eff_isDirectory：
+-- 内建 @vuna@prim_eff_isDirectory 对不存在的路径会抛异常）。
 -- | CLI 辅助：dtPathErr（参数/退出码约定见 tooling.md）。
 dtPathErr : String -> Eff hostRow Int
 dtPathErr path = printErr "no such file or package directory: ${path}"
@@ -543,7 +543,7 @@ checkPackages pkgs code o = do
       pure (Pair pkg pid)
     ) members
     r1 <- checkRootsSeq roots code o
-    codes <- mapEff (\pr => prim_eff_wait (secondOf pr)) started
+    codes <- mapEff (\pr => @vuna@prim_eff_wait (secondOf pr)) started
     pure (Pair (countFailures (firstOf r1) codes) (secondOf r1))
 
 isWorkspaceRoot : Package -> Eff hostRow Bool
@@ -856,7 +856,7 @@ linkDefaultOutput Nothing pkg outDir _viewDigest = do
     link = "${packageDir pkg}/.output"
   in do
     _ <- raiseToRow hostRow (@vuna@prim_eff_runIn "." ["rm", "-rf", link])
-    prim_eff_runIn "." ["ln", "-s", outDir, link]
+    @vuna@prim_eff_runIn "." ["ln", "-s", outDir, link]
 
 compileCodegen : PackageContext -> String -> String -> CliOpts -> Eff hostRow (Pair Int CliOpts)
 compileCodegen ctx entry outDir o = do

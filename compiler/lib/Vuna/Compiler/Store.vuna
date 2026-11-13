@@ -249,7 +249,7 @@ storeFileExistsEff path = raiseToRow hostRow (@vuna@prim_eff_fileExists path)
 export storeRemoveEff : String -> Eff hostRow Int
 storeRemoveEff path = raiseToRow hostRow (@vuna@prim_eff_removeFile path)
 
--- | 逐级创建目录（`prim_eff_makeDir` 只建一层）。路径是文件系统图，用显式 fuel 守卫。
+-- | 逐级创建目录（`@vuna@prim_eff_makeDir` 只建一层）。路径是文件系统图，用显式 fuel 守卫。
 export storeEnsureDirEff : String -> Eff hostRow Int
 storeEnsureDirEff path = storeEnsureDirFuel 256 path
 

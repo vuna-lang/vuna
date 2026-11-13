@@ -14,7 +14,7 @@ module Vuna.Cli where
 --     都是可读错误）；
 --   - 退出码统一为 0（成功）/ 1（被检查代码或查询的语义失败）/ 2（用法、参数、输入
 --     路径或不满足命令前提）；工具命令不得把宿主异常（对不存在路径调
---     `prim_eff_isDirectory`、读不存在文件）漏给用户；
+--     `@vuna@prim_eff_isDirectory`、读不存在文件）漏给用户；
 --   - 所有用户给的路径先判存在/目录再读盘（`readText` / `requireExists` /
 --     `requireDirectory`）。
 import Base.HostRow
@@ -158,7 +158,7 @@ runCli1 args = case args of
 -- M30：版本唯一真源在编译器包（Vuna.Compiler.Version），产品 CLI 与
 -- vuna-compiler 共用；VSCode 用它探测服务器。
 -- W10 收尾：这一条输出路径走 console 效应标签（mock/real 可替换的样板），
--- 不再直接 `prim_eff_print`；整条 CLI 显式 `Eff hostRow`，最外层由运行时执行。
+-- 不再直接 `@vuna@prim_eff_print`；整条 CLI 显式 `Eff hostRow`，最外层由运行时执行。
 consoleLine : String -> Eff hostRow Int
 consoleLine msg = consolePrint msg >>= (\_ => pure 0)
 

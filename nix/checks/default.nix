@@ -283,6 +283,7 @@ in
     name = "vuna-diag-coverage";
     srcs = [
       ../../test/corpus
+      ../../test/suite/steps
       ../../nix/checks/diag-coverage.sh
       ../../nix/diag-coverage-allow.txt
       ../../nix/diag-coverage.min

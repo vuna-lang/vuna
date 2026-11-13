@@ -88,7 +88,7 @@ cleanPackagesGc root dir dry = do
   in do
     _ <- if dry then pure 0 else removeEach drop
     _ <-
-      prim_eff_print
+      @vuna@prim_eff_print
         "clean-packages --gc: ${storeVerb dry} ${strFromInt n} unreferenced file(s) under ${root}\n"
     pure 0
 
@@ -209,7 +209,7 @@ walkFiles : Int -> String -> Eff hostRow (List String)
 walkFiles fuel dir = if fuel <= 0 then pure []
 else do
   exists <- raiseToRow hostRow (@vuna@prim_eff_fileExists dir)
-  isDir <- if exists then prim_eff_isDirectory dir else pure False
+  isDir <- if exists then @vuna@prim_eff_isDirectory dir else pure False
   if exists && isDir then do
     names <- raiseToRow hostRow (@vuna@prim_eff_readDir dir)
     concatMapEff (walkGo (fuel - 1) dir) names
@@ -309,7 +309,7 @@ gcFilesOf root = do
 subDirsOf : String -> Eff hostRow (List String)
 subDirsOf dir = do
   exists <- raiseToRow hostRow (@vuna@prim_eff_fileExists dir)
-  isDir <- if exists then prim_eff_isDirectory dir else pure False
+  isDir <- if exists then @vuna@prim_eff_isDirectory dir else pure False
   if exists && isDir then do
     names <- raiseToRow hostRow (@vuna@prim_eff_readDir dir)
     concatMapEff (\n => do
@@ -406,7 +406,7 @@ gcSweep root keep grace maxBytes dry = do
   in do
     _ <- if dry then pure 0 else removeEachPath paths
     _ <-
-      prim_eff_print
+      @vuna@prim_eff_print
         "store-gc: ${storeVerb dry} ${strFromInt n} object(s) under ${root} (keep ${strFromInt (length keep)}, grace ${strFromInt grace}s)\n"
     pure 0
 
