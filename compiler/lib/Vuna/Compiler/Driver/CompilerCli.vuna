@@ -744,38 +744,14 @@ buildOne noCompile multiOut outM pkg o =
     if exists then
       let
         ctx = contextWithRelease o.optRelease (packageContext pkg)
-      in do
-        -- 默认输出 = **store 视图**（`$VUNA_STORE/views/bin/<splitIn>`），`<pkg>/.output`
-        -- 只是指向它的符号链接；显式 `--out` 仍写实体目录（外部消费者要求真目录）。
-        -- `--no-compile` 例外：它只产出 split 中间物（`Main.ml` / `build.sh`，没有 `bin/`），
-        -- 不是「可执行产物视图」。若也写进同一个 view，先前完整 build 留下的 `bin/` 会
-        -- 继续可见（`.output/bin` 假存在），所以这条路径直接写实体 `.output`。
-        viewDigest <- case outM of
-          Just _ => pure ""
-          Nothing => if noCompile then pure "" else buildViewAddrOf ctx entry True
-        outDir <- case outM of
-          Just out => pure (if multiOut then "${out}/${name}" else out)
-          Nothing =>
-            if noCompile then pure "${packageDir pkg}/.output"
-            else storeViewPathEff "bin" viewDigest
-        let
-          binPath = "${outDir}/bin/${name}"
-        in if noCompile then do
-          r <- compileCodegen ctx entry outDir o
-          pure r
-        else do
-          fresh <- metaUpToDate outDir ctx entry binPath
-          if fresh then do
-            linkDefaultOutput outM pkg outDir viewDigest
-            _ <- raiseToRow hostRow (@vuna@prim_eff_print "up to date: ${binPath}\n")
-            pure (Pair 0 o)
-          else do
-            r <- compileToDir ctx entry True outDir
-            case r of
-              ErrC e => printDiag o e
-              OkC _ => do
-                _ <- linkDefaultOutput outM pkg outDir viewDigest
-                buildLinked ctx entry outDir name o
+      in if noCompile then case outM of
+        Just out => compileCodegen ctx entry (if multiOut then "${out}/${name}" else out) o
+        Nothing => compileCodegen ctx entry "${packageDir pkg}/.output" o
+      else case outM of
+        Just out => buildExplicit out multiOut pkg ctx entry o
+        Nothing => do
+          viewDigest <- buildViewAddrOf ctx entry True
+          buildDefaultView ctx pkg name entry viewDigest o
     else do
       r <- checkPackage o.optRelease False pkg
       case r of
@@ -784,19 +760,103 @@ buildOne noCompile multiOut outM pkg o =
           _ <- raiseToRow hostRow (@vuna@prim_eff_print "skipped (library): ${name}\n")
           pure (Pair 0 o)
 
+-- 显式 `--out`：外部消费者要求真目录，保持直写；不发布 store 视图。
+buildExplicit : String -> Bool -> Package -> PackageContext -> String -> CliOpts -> Eff hostRow (Pair Int CliOpts)
+buildExplicit out multiOut pkg ctx entry o =
+  let
+    name = packageName pkg
+    outDir = if multiOut then "${out}/${name}" else out
+    binPath = "${outDir}/bin/${name}"
+  in do
+    fresh <- metaUpToDate outDir ctx entry binPath
+    if fresh then do
+      _ <- raiseToRow hostRow (@vuna@prim_eff_print "up to date: ${binPath}\n")
+      pure (Pair 0 o)
+    else do
+      r <- compileToDir ctx entry True outDir
+      case r of
+        ErrC e => printDiag o e
+        OkC _ => buildLinked ctx entry outDir name o
+
+-- 默认输出：`$VUNA_STORE/views/bin/<splitIn>`；`<pkg>/.output` 只是符号链接。
+-- 同一 digest 用 mkdir 锁串行化；在**最终 view 路径**构建，保证 codegen 路径稳定。
+buildDefaultView : PackageContext -> Package -> String -> String -> String -> CliOpts -> Eff hostRow (Pair Int CliOpts)
+buildDefaultView ctx pkg name entry viewDigest o = do
+  view <- storeViewPathEff "bin" viewDigest
+  let
+    binPath = "${view}/bin/${name}"
+  in do
+    valid <- storeViewValidEff "bin" viewDigest
+    fresh <- if valid then metaUpToDate view ctx entry binPath else pure False
+    if fresh then do
+      _ <- linkDefaultOutput Nothing pkg view viewDigest
+      _ <- raiseToRow hostRow (@vuna@prim_eff_print "up to date: ${binPath}\n")
+      pure (Pair 0 o)
+    else do
+      state <- waitView "bin" viewDigest 600
+      if state == "locked" then do
+        valid2 <- storeViewValidEff "bin" viewDigest
+        fresh2 <- if valid2 then metaUpToDate view ctx entry binPath else pure False
+        if fresh2 then do
+          _ <- linkDefaultOutput Nothing pkg view viewDigest
+          _ <- storeViewUnlockEff "bin" viewDigest
+          _ <- raiseToRow hostRow (@vuna@prim_eff_print "up to date: ${binPath}\n")
+          pure (Pair 0 o)
+        else do
+          r <- compileToDir ctx entry True view
+          case r of
+            ErrC e => do
+              _ <- raiseToRow hostRow (@vuna@prim_eff_runIn "." ["rm", "-rf", view])
+              _ <- storeViewUnlockEff "bin" viewDigest
+              printDiag o e
+            OkC _ => do
+              br <- buildLinked ctx entry view name o
+              if firstOf br == 0 then do
+                _ <- markViewComplete view viewDigest
+                _ <- linkDefaultOutput Nothing pkg view viewDigest
+                _ <- storeViewUnlockEff "bin" viewDigest
+                pure br
+              else do
+                _ <- storeViewUnlockEff "bin" viewDigest
+                pure br
+      else if state == "ready" then do
+        _ <- linkDefaultOutput Nothing pkg view viewDigest
+        _ <- raiseToRow hostRow (@vuna@prim_eff_print "up to date: ${binPath}\n")
+        pure (Pair 0 o)
+      else do
+        _ <-
+          raiseToRow hostRow
+            (@vuna@prim_eff_print "error: timed out waiting for view ${viewDigest}\n")
+        pure (Pair 1 o)
+
+-- 等同一 view 的构建：拿到锁 => "locked"；别人已发布 => "ready"；超时 => "timeout"。
+waitView : String -> String -> Int -> Eff hostRow String
+waitView kind digest fuel = do
+  ok <- storeViewLockEff kind digest
+  if ok then pure "locked"
+  else do
+    valid <- storeViewValidEff kind digest
+    if valid then pure "ready"
+    else if fuel <= 0 then pure "timeout"
+    else do
+      _ <- raiseToRow hostRow (@vuna@prim_eff_sleep 100000)
+      waitView kind digest (fuel - 1)
+
+markViewComplete : String -> String -> Eff hostRow Int
+markViewComplete dir digest =
+  raiseToRow hostRow (@vuna@prim_eff_writeFileAtomic "${dir}/.complete" digest)
+
 -- 默认输出时把 `<pkg>/.output` 指向视图；`--out` 时不动磁盘布局。
--- `rm -rf` 对符号链接只删链接本身；对旧的实体 `.output` 是清理（视图才是产物真身）。
--- `.complete`（内容 = 视图摘要）是「视图完整」的提交点：GC 与读侧都靠它判断。
+-- `.complete` 由持锁者在构建成功后写（`markViewComplete`），不在这里写，
+-- 避免“链接失败但视图已被标记完成”。
 linkDefaultOutput : Maybe String -> Package -> String -> String -> Eff hostRow Int
-linkDefaultOutput outM pkg outDir viewDigest = case outM of
-  Just _ => pure 0
-  Nothing => do
-    let
-      link = "${packageDir pkg}/.output"
-    in do
-      _ <- raiseToRow hostRow (@vuna@prim_eff_writeFile "${outDir}/.complete" viewDigest)
-      _ <- raiseToRow hostRow (@vuna@prim_eff_runIn "." ["rm", "-rf", link])
-      prim_eff_runIn "." ["ln", "-s", outDir, link]
+linkDefaultOutput (Just _) _ _ _ = pure 0
+linkDefaultOutput Nothing pkg outDir _viewDigest = do
+  let
+    link = "${packageDir pkg}/.output"
+  in do
+    _ <- raiseToRow hostRow (@vuna@prim_eff_runIn "." ["rm", "-rf", link])
+    prim_eff_runIn "." ["ln", "-s", outDir, link]
 
 compileCodegen : PackageContext -> String -> String -> CliOpts -> Eff hostRow (Pair Int CliOpts)
 compileCodegen ctx entry outDir o = do

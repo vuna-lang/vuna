@@ -1426,11 +1426,8 @@ splitGenerateCached ctx entry modules moduleParts entryDecls prog printResult ex
     base <- unitCacheDir pkg
     let
       dir = unitCacheEntryDir base bucketKey
-      -- 桶内 GC 的保留集合 = 本次构建全部单元 key 算出的文件名（入口也在 keys 里）：即将
-      -- 命中的单元一定在集合内，同一入口反复编辑累积的旧 key 文件才被清掉。
       keepNames = map (\p => unitCacheFileName (firstOf p) (secondOf p)) keys
     in do
-      _ <- if enabled && pkg /= "" then unitCacheGc base dir else pure 0
       _ <- if enabled && pkg /= "" then unitCacheBucketGc dir keepNames else pure 0
       if pkg == "" || not enabled then generateDtSplitProgram moduleParts entryDecls prog printResult roots cdir extraDefLocs
       else generateDtSplitProgramWith (unitCacheLookup dir keys) (unitCacheStore dir keys) moduleParts

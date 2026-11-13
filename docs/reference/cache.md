@@ -18,7 +18,7 @@
 
 ```
 $VUNA_STORE/                       # 唯一根：VUNA_STORE → XDG → ~/.vuna/store → $TMPDIR/vuna-store
-  objects/iface/<模块接口地址>      # 模块接口（codec module-iface 3）
+  objects/iface/<模块接口地址>      # 模块接口（codec module-iface 4；带实例/方法 span）
   objects/header/<头地址>           # 模块 header（imports + fixities），冷启动快路径
   objects/lex/<源摘要>              # lex tokens
   objects/order/<包摘要>            # 该包的模块顺序（split 串接要精化顺序，不是拓扑序）
@@ -27,7 +27,7 @@ $VUNA_STORE/                       # 唯一根：VUNA_STORE → XDG → ~/.vuna/
   blobs/<splitIn>                   # 构建产物（split 文件集，规范拓扑序）
   units/<包哈希>/e-<h>-<h>/         # split-unit 缓存（按声明摘要命中）
   views/bin/<splitIn>/              # 构建视图（产物真身，含 .complete）
-  roots/<项目摘要>                  # 该项目的保留集合（GC 用，只追加）
+  roots/<项目摘要>/<digest>         # 该项目的保留集合（每个 digest 一个文件，GC 用）
 ```
 
 所有地址 = `addrOf [kind, ...输入摘要]`（`Vuna.Compiler.Addr`，SHA-256）。
@@ -62,13 +62,25 @@ $VUNA_STORE/                       # 唯一根：VUNA_STORE → XDG → ~/.vuna/
 
 ## roots 与 GC
 
-- 每个项目一个文件 `roots/<项目摘要>`（项目 = 规范化绝对包目录的摘要）。项目**只追加**；
-  GC 扫所有项目文件的并集——A 不需要知道 B 的存在。
+- 每个项目一个目录 `roots/<项目摘要>/`，每个受保护 digest 一个空文件（项目 = 规范化绝对
+  包目录的摘要）。项目**只追加**；没有读-改-写，并发 check/build 不会丢 root。
+  GC 扫所有项目目录里文件名的并集——A 不需要知道 B 的存在。读取侧仍兼容旧的单文件布局。
 - 登记的时机：check 判定 marker 提交后、build 的 split blob 提交后。
 - `vuna store gc [--dry-run] [--older-than SEC] [--max-size BYTES]`：
   - 候选 = 名字不在保留集合、且 mtime 早于宽限窗口（默认 3600s，覆盖「对象已写、root 还没写」
     的崩溃窗口）；
   - `--max-size` 有值时按 mtime 从旧到新淘汰，直到总量降到上限以下。
+
+## 并发边界（views / units）
+
+- **views/bin**：同一 `splitIn` 的构建用 `mkdir` 锁（`$VUNA_STORE/.tmp/lock-bin-<digest>`）串行化。
+  持锁者**直接在最终视图路径构建**（codegen 里的绝对路径保持稳定）；成功后用原子写提交
+  `.complete`（内容 = digest），失败则删 partial view 再放锁。等锁者轮询 `.complete`，
+  拿不到锁且超时才报错。显式 `--out` 不经过视图锁。
+- **roots**：逐 digest 文件（见上），不需要锁；GC 的宽限窗口覆盖「对象已写、root 还没写」。
+- **units**：只做**当前 entry 桶内**的旧 key 清理；不再跨 entry 删目录。并发构建不同入口
+  不会互相驱逐。桶的容量由 `vuna store gc`（按 mtime / `--max-size`）或
+  `vuna clean --store` 管理；删除 unit 只是重算，不影响正确性。
 
 ## 观测
 

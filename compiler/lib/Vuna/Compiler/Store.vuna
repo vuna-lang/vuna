@@ -406,6 +406,34 @@ storeViewValidEff kind digest = do
       pure (text == digest)
     else pure False
 
+-- | 默认视图的构建锁：`mkdir` 原子互斥；与 scratch 目录分开，避免把“构建中”误判为
+-- 已有完整视图。持锁者**直接在最终 view 路径构建**（保持 codegen 绝对路径稳定）。
+export storeViewLockEff : String -> String -> Eff hostRow Bool
+storeViewLockEff kind digest = do
+  root <- storeRootReadyEff
+  let
+    path = "${root}/.tmp/lock-${kind}-${digest}"
+  in do
+    _ <- storeEnsureDirEff (storeParentPathOf path)
+    claimAt path
+
+claimAt : String -> Eff hostRow Bool
+claimAt path = do
+  code <- raiseToRow hostRow (@vuna@prim_eff_runIn "." ["mkdir", path])
+  if code == 0 then pure True
+  else do
+    stale <- scratchStale path
+    if not stale then pure False
+    else do
+      _ <- raiseToRow hostRow (@vuna@prim_eff_runIn "." ["rm", "-rf", path])
+      code2 <- raiseToRow hostRow (@vuna@prim_eff_runIn "." ["mkdir", path])
+      pure (code2 == 0)
+
+export storeViewUnlockEff : String -> String -> Eff hostRow Int
+storeViewUnlockEff kind digest = do
+  root <- storeRootReadyEff
+  raiseToRow hostRow (@vuna@prim_eff_runIn "." ["rm", "-rf", "${root}/.tmp/lock-${kind}-${digest}"])
+
 -- | 视图暂存目录（同一 inputDigest 唯一）。
 storeScratchPathIn : String -> String -> String -> String
 storeScratchPathIn root kind digest = "${root}/.tmp/${kind}-${digest}"
@@ -481,27 +509,34 @@ mergeRootLines : List String -> List String -> List String
 mergeRootLines lines [] = lines
 mergeRootLines lines (d :: rest) = mergeRootLines (insertRootLine d lines) rest
 
--- | 追加受保护摘要（幂等；文件不存在即创建）。
+-- | 追加受保护摘要。布局 = `roots/<project>/<digest>`，每个摘要一个文件：
+-- 并发追加互不覆盖（没有读-改-写），GC 仍按 digest 集合保留。旧布局
+-- `roots/<project>`（单文件）在读取侧兼容，写侧只写新布局。
 export storeRootAppendEff : String -> List String -> Eff hostRow Int
 storeRootAppendEff projectId digests = do
-  path <- storeRootsPathEff projectId
-  _ <- storeEnsureDirEff (storeParentPathOf path)
-  exists <- raiseToRow hostRow (@vuna@prim_eff_fileExists path)
-  old <- if exists then raiseToRow hostRow (@vuna@prim_eff_readFile path) else pure ""
-  let
-    oldLines = filter (\l => strLength l > 0) (split "\n" old)
-    merged = mergeRootLines oldLines digests
-  in do
-    raiseToRow hostRow (@vuna@prim_eff_writeFileAtomic path (join "\n" merged ++ "\n"))
+  dir <- storeRootsPathEff projectId
+  _ <- storeEnsureDirEff dir
+  writeRootFiles dir digests
 
--- | 读一个项目的 root 行。
+writeRootFiles : String -> List String -> Eff hostRow Int
+writeRootFiles _ [] = pure 0
+writeRootFiles dir (d :: rest) = do
+  _ <- storeEnsureDirEff dir
+  _ <- raiseToRow hostRow (@vuna@prim_eff_writeFileAtomic "${dir}/${d}" "")
+  n <- writeRootFiles dir rest
+  pure (n + 1)
+
+-- | 读一个项目的 root 摘要：新布局（目录）逐文件读；旧布局（单文件）逐行读。
 export storeRootLoadEff : String -> Eff hostRow (List String)
 storeRootLoadEff projectId = do
   path <- storeRootsPathEff projectId
   exists <- raiseToRow hostRow (@vuna@prim_eff_fileExists path)
   if exists then do
-    text <- raiseToRow hostRow (@vuna@prim_eff_readFile path)
-    pure (filter (\l => strLength l > 0) (split "\n" text))
+    isDir <- raiseToRow hostRow (@vuna@prim_eff_isDirectory path)
+    if isDir then raiseToRow hostRow (@vuna@prim_eff_readDir path)
+    else do
+      text <- raiseToRow hostRow (@vuna@prim_eff_readFile path)
+      pure (filter (\l => strLength l > 0) (split "\n" text))
   else pure []
 
 -- | 列出全部项目的 roots 文件名（GC 用）。
@@ -514,9 +549,13 @@ storeRootProjectListEff = do
     isDir <- dirReady dir
     if isDir then raiseToRow hostRow (@vuna@prim_eff_readDir dir) else pure []
 
--- | 删除一个项目的 roots 文件（项目已不存在时的 stale 清理）。
+-- | 删除一个项目的 roots（新布局目录 / 旧布局文件都清）。
 export storeRootRemoveEff : String -> Eff hostRow Int
 storeRootRemoveEff projectId = do
   path <- storeRootsPathEff projectId
   exists <- raiseToRow hostRow (@vuna@prim_eff_fileExists path)
-  if exists then raiseToRow hostRow (@vuna@prim_eff_removeFile path) else pure 0
+  if exists then do
+    isDir <- raiseToRow hostRow (@vuna@prim_eff_isDirectory path)
+    if isDir then raiseToRow hostRow (@vuna@prim_eff_runIn "." ["rm", "-rf", path])
+    else raiseToRow hostRow (@vuna@prim_eff_removeFile path)
+  else pure 0

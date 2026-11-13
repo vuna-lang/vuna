@@ -1,0 +1,18 @@
+# store-isolated: 断言对象库并发布局，使用 case 私有 store。
+# 77) 并发安全：roots 逐摘要文件（无读-改-写）、views/bin 的构建锁与原子 `.complete`。
+#     两个 build 同包并行：都成功，最终视图完整；两个 check 并行：roots 不丢。
+run: sh -c 'rm -rf "$TMPDIR/con-store" "$TMPDIR/con-pkg"; mkdir -p "$TMPDIR/con-pkg/app"; printf "[package]\nname = \"con-pkg\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$TMPDIR/con-pkg/vuna.toml"; printf "main : Int\nmain = 1\n" > "$TMPDIR/con-pkg/app/Main.vuna"'
+exit: 0
+# 并行 build 同一个包：锁串行化，第二个要么等锁、要么命中已发布视图。
+run: sh -c 'VUNA_STORE="$TMPDIR/con-store" "$VUNA" build "$TMPDIR/con-pkg" >/dev/null 2>&1 & p1=$!; VUNA_STORE="$TMPDIR/con-store" "$VUNA" build "$TMPDIR/con-pkg" >/dev/null 2>&1 & p2=$!; wait "$p1"; a=$?; wait "$p2"; b=$?; [ "$a" -eq 0 ] && [ "$b" -eq 0 ]'
+exit: 0
+run: sh -c 'test -x "$TMPDIR/con-pkg/.output/bin/con-pkg"; test -f "$(find "$TMPDIR/con-store/views/bin" -name .complete | head -1)"'
+exit: 0
+# roots 新布局：项目目录 + 每个 digest 一个文件（并发追加不会互相覆盖）。
+run: sh -c 'VUNA_STORE="$TMPDIR/con-store" "$VUNA" check "$TMPDIR/con-pkg" >/dev/null 2>&1 & p1=$!; VUNA_STORE="$TMPDIR/con-store" "$VUNA" check "$TMPDIR/con-pkg" >/dev/null 2>&1 & p2=$!; wait "$p1"; a=$?; wait "$p2"; b=$?; [ "$a" -eq 0 ] && [ "$b" -eq 0 ]'
+exit: 0
+run: sh -c 'test -n "$(find "$TMPDIR/con-store/roots" -mindepth 2 -type f | head -1)"'
+exit: 0
+# GC：roots 里的 digest 仍受保护（宽限 0 秒也只删未受保护的）。
+run: sh -c 'keep=$(find "$TMPDIR/con-store/roots" -mindepth 2 -type f | head -1 | xargs basename); VUNA_STORE="$TMPDIR/con-store" "$VUNA" store gc --older-than 0 >/dev/null; test -n "$(find "$TMPDIR/con-store/objects" -name "$keep" | head -1)"'
+exit: 0
