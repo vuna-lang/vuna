@@ -904,19 +904,19 @@ resolveTypeTopName label prefix name =
 -- | 自动补注（M41 新增导出）：resolveCtorSpec。
 resolveCtorSpec : List Module -> String -> String -> Namespaces -> List Import -> String -> Ctor -> Check Ctor
 resolveCtorSpec modules label prefix ns imports dname (Ctor ctor ty arity sp) =
-  Vuna.Compiler.Common.bind (resolveCtorDecl label prefix dname ctor)
+  Vuna.Compiler.Common.bind (onErrDiag (withFallbackSpan sp) (resolveCtorDecl label prefix dname ctor))
     (\c2 => Vuna.Compiler.Common.bind (resolveTypeExpr resolveFuelBound modules label prefix ns imports ty) (\ty2 => OkC (Ctor c2 ty2 arity sp)))
 
 resolveDecl : List Module -> String -> String -> Namespaces -> List Import -> Decl -> Check Decl
 resolveDecl modules label prefix ns imports d = case d of
   DData dname params kind ctors derivings viaField repr lin sp =>
-    Vuna.Compiler.Common.bind (resolveTypeTopName label prefix dname)
+    Vuna.Compiler.Common.bind (onErrDiag (withFallbackSpan sp) (resolveTypeTopName label prefix dname))
       (\dn => Vuna.Compiler.Common.bind (resolveTypeExpr resolveFuelBound modules label prefix ns imports kind) (\kind2 => Vuna.Compiler.Common.bind (Vuna.Compiler.Common.traverse (resolveCtorSpec modules label prefix ns imports dname) ctors) (\ctors2 => Vuna.Compiler.Common.bind (Vuna.Compiler.Common.traverse (resolveTypeName modules label prefix ns imports) derivings) (\ds2 => OkC (DData dn params kind2 ctors2 ds2 viaField repr lin sp)))))
   DRecord dname params fields derivings viaField repr lin sp =>
-    Vuna.Compiler.Common.bind (resolveTypeTopName label prefix dname)
+    Vuna.Compiler.Common.bind (onErrDiag (withFallbackSpan sp) (resolveTypeTopName label prefix dname))
       (\dn => Vuna.Compiler.Common.bind (Vuna.Compiler.Common.traverse (resolveRecordField modules label prefix ns imports) fields) (\fields2 => Vuna.Compiler.Common.bind (Vuna.Compiler.Common.traverse (resolveTypeName modules label prefix ns imports) derivings) (\ds2 => OkC (DRecord dn params fields2 ds2 viaField repr lin sp))))
   DTrait tname params methods sp =>
-    Vuna.Compiler.Common.bind (resolveTypeTopName label prefix tname)
+    Vuna.Compiler.Common.bind (onErrDiag (withFallbackSpan sp) (resolveTypeTopName label prefix tname))
       (\tn => Vuna.Compiler.Common.bind (Vuna.Compiler.Common.traverse (resolveTraitMethod modules label prefix ns imports) methods) (\ms => OkC (DTrait tn params ms sp)))
   DInstance ctxE head methods sp =>
     Vuna.Compiler.Common.bind
@@ -1005,7 +1005,7 @@ scopeNamesOf n ((Pair k v) :: rest) = if k == n then v else scopeNamesOf n rest
 
 resolveDeclWithImplicitScopes : List (Pair String (List String)) -> List Module -> String -> String -> Namespaces -> List Import -> Decl -> Check Decl
 resolveDeclWithImplicitScopes scopes modules label prefix ns imports (DFun name pats body sp) =
-  Vuna.Compiler.Common.bind (resolveTopName label prefix name)
+  Vuna.Compiler.Common.bind (onErrDiag (withFallbackSpan sp) (resolveTopName label prefix name))
     (\n => Vuna.Compiler.Common.bind (Vuna.Compiler.Common.traverse (resolvePattern resolveFuelBound modules label prefix ns imports) pats) (\parts => Vuna.Compiler.Common.bind (resolveExpr resolveFuelBound modules label prefix ns imports (append (concatMap secondOf parts) (scopeNamesOf name scopes)) body) (\b => OkC (DFun n (map firstOf parts) b sp))))
 resolveDeclWithImplicitScopes scopes modules label prefix ns imports d =
   resolveDecl modules label prefix ns imports d
