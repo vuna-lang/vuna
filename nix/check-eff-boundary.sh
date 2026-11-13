@@ -60,9 +60,11 @@ if [ -f "$allow" ]; then
 fi
 
 # 阶段 5 D：宿主原语的**可见名**不得出现在源码里——base/compiler/lib 一律用
-# `@vuna@prim_eff_*` 内部名（`Intrinsics.vuna` 是定义真源，豁免）。用户源码写不出
+# `@vuna@prim_eff_*` 内部名（`Intrinsics.vuna` 是定义真源，豁免；`Codegen/Runtime.vuna`
+# 与 `Ir/Runtime.vuna` 是运行时符号表，字符串里的 `prim_eff_*` 是契约数据，不是调用，
+# 也豁免）。用户源码写不出
 # 这些名字（词法只认 `@vuna@` 前缀的完整内部名，且隐藏 intrinsic 不进用户可见名单）。
-oldNames=$(cd "$root" && grep -rn '\bprim_eff_' compiler/lib lib --include='*.vuna' 2>/dev/null | grep -v '@vuna@' | grep -v 'Vuna/Compiler/Intrinsics.vuna' || true)
+oldNames=$(cd "$root" && grep -rn '\bprim_eff_' compiler/lib lib --include='*.vuna' 2>/dev/null | grep -v '@vuna@' | grep -v 'Vuna/Compiler/Intrinsics.vuna' | grep -v 'Vuna/Compiler/Ir/Runtime.vuna' | grep -v 'Vuna/Compiler/Codegen/Runtime.vuna' || true)
 if [ -n "$oldNames" ]; then
   echo "eff-boundary: 发现可见宿主原语名（应改成 @vuna@ 内部名）：" >&2
   printf '%s\n' "$oldNames" | head -10 | sed 's/^/  /' >&2
