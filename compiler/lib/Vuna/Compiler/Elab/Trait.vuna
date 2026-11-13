@@ -98,7 +98,7 @@ elabTraitFinal globals ec tname paramNames methods methodsP pKinds fieldTys =
     opaqueFields = map (\t => isOpaqueRuntimeTyIn ec fieldCtx (eval (ctxEnv fieldCtx) t)) fieldTys
     projBodies =
       projectionDefsOpaque opaqueFields tname (length paramNames) methodsP fieldTys (length methods)
-    cls = DtClass tname paramNames projs fieldTys
+    cls = DtClass tname paramNames projs fieldTys projSpans
     ec2 = ecAddClass (ecAddData ec dd) cls
     ec3 = foldlAddDef ec2 projBodies
   in OkC (Pair dd (Pair projs (Pair cls (Pair projSpans ec3))))
@@ -306,7 +306,7 @@ elabInstanceWithClass : List (Pair String Term) -> List (Pair Decl Span) -> DtCl
 elabInstanceWithClass globals allDecls cls info ec0 headExpr methods msp = case firstUnknownInstanceMethod cls methods of
   Just n => tcErr1 msp (InstanceUnknownMethod n) n
   Nothing => case firstMissingInstanceMethod cls methods of
-    Just m => case traitMethodSpanOf (dtClassName cls) m allDecls of
+    Just m => case traitMethodSpanOf cls m allDecls of
       -- M30（B20）：缺方法指向 trait 里的**方法签名行**，而不是实例声明行。
       Just mspan => tcErr0 mspan InstanceMissingMethod
       Nothing => tcErr0 msp InstanceMissingMethod
@@ -707,10 +707,10 @@ findTraitMethodSpan mname [] = Nothing
 findTraitMethodSpan mname (m :: rest) =
   if traitMethodName m == mname then Just (traitMethodSpan m) else findTraitMethodSpan mname rest
 
-traitMethodSpanOf : String -> String -> List (Pair Decl Span) -> Maybe Span
-traitMethodSpanOf cname mname decls = case findTraitDecl cname decls of
+traitMethodSpanOf : DtClass -> String -> List (Pair Decl Span) -> Maybe Span
+traitMethodSpanOf cls mname decls = case findTraitDecl (dtClassName cls) decls of
   Just (DTrait tname params methods tspan) => findTraitMethodSpan mname methods
-  _ => Nothing
+  _ => lookupPair mname cls.dtClassMethodSpans
 
 -- 实例注册用的头类型：`Dict_C <arg1> .. <argn>`，供实例搜索按头统一。
 export ctorResultType : DtClass -> List Term -> Term
@@ -1115,7 +1115,7 @@ checkInstanceHeadsGo ((d@(Pair decl dsp)) :: rest) classes globals ec acc insts 
         iname = instanceName (instSigClass info) headExpr
         ty = instTypeOf info
         inst = DtInst iname (instSigTele info) (instSigCtx info) (instSigHead info) (Just msp)
-      in case findInstanceClash ec1 iname (instSigTele info) (instSigHead info) seen of
+      in case findInstanceClash ec1 iname (instSigTele info) (instSigHead info) (append (ecInsts ec1) seen) of
         Pair (Just ClashDuplicate) ec2 => tcErr1 msp (DuplicateInstance iname) iname
         Pair (Just ClashOverlap) ec2 => tcErr1 msp (OverlappingInstances iname) iname
         Pair Nothing ec2 =>

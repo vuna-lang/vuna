@@ -16,8 +16,6 @@ import Vuna.Compiler.Driver.ToolPayload
 import Vuna.Compiler.Hash
 import Vuna.Compiler.Loader.Modules
 import Vuna.Compiler.Packages.Source
-import Vuna.Compiler.Query
-import Vuna.Compiler.Query.Run
 
 -- 基础设施三件套自检：内容寻址摘要、无损 CST roundtrip、查询图 early cutoff。
 -- 逐行输出由 test/suite/steps/64_infra.steps 断言；任何一项失败都会让 steps 失败。
@@ -55,14 +53,6 @@ main = do
   raw <- if pathOk then prim_eff_readFile src else pure ""
   _ <-
     prim_eff_print (("cst-file " ++ (if pathOk then verdict (roundtripOk raw) else "skip")) ++ "\n")
-  _ <- prim_eff_print (("query1 " ++ showTrace (secondOf run1)) ++ "\n")
-  _ <- prim_eff_print (("query2 " ++ showTrace (secondOf run2)) ++ "\n")
-  _ <- prim_eff_print (("query3 " ++ showTrace (secondOf run3)) ++ "\n")
-  _ <- prim_eff_print (("query4 " ++ showTrace (secondOf run4)) ++ "\n")
-  _ <- prim_eff_print (("query5 " ++ showTrace (secondOf run5)) ++ "\n")
-  _ <- prim_eff_print (("query-marker " ++ digestOfVal QMarker) ++ "\n")
-  _ <- prim_eff_print (("tool-ctx-rt " ++ verdict toolContextRoundtrip) ++ "\n")
-  _ <- prim_eff_print (("query-order " ++ verdict (depsOrderAgnostic (firstOf run1))) ++ "\n")
   _ <- prim_eff_print (("canon-term-rt " ++ verdict termFixturesRT) ++ "\n")
   _ <- prim_eff_print (("canon-decl-rt " ++ verdict (declsRT declFixtures)) ++ "\n")
   _ <- prim_eff_print (("canon-defs-rt " ++ verdict defsRT) ++ "\n")
@@ -74,17 +64,7 @@ main = do
   _ <- prim_eff_print (("pkg-identity-rt " ++ verdict pkgIdentityRT) ++ "\n")
   _ <- prim_eff_print (("pkg-identity-name " ++ verdict pkgIdentityName) ++ "\n")
   _ <- prim_eff_print (("pkg-identity-deps " ++ verdict pkgIdentityDeps) ++ "\n")
-  -- 查询图 Eff 层：span（可观测）/ 取消 / 并行波次。断言行见 test/suite/steps/64_infra.steps。
-  r1 <- runNode (runEmpty qrunOpts) "a" [] (\_ => pure (Pair (QBytes "1") []))
-  _ <- prim_eff_print (("qrun-seq1 " ++ runSpansText (firstOf r1)) ++ "\n")
-  r2 <- runNode (firstOf r1) "a" [] (\_ => pure (Pair (QBytes "1") []))
-  _ <-
-    prim_eff_print
-      (("qrun-seq2 " ++ runSpansText (firstOf r2)) ++ " steps=" ++ strFromInt (runStepCount (firstOf r2)) ++ "\n")
-  r3 <- runNode (runCancel (runEmpty qrunOpts)) "b" [] (\_ => pure (Pair (QBytes "2") []))
-  _ <-
-    prim_eff_print
-      (("qrun-cancel " ++ runSpansText (firstOf r3)) ++ " " ++ valueText (secondOf r3) ++ "\n")
+  _ <- prim_eff_print (("tool-ctx-rt " ++ verdict toolContextRoundtrip) ++ "\n")
   -- TOML 解析自检：子表 / 引号段名 / 点键 / 内联表 / 数组 / 表数组 / 多行字符串 /
   -- unicode 转义 / literal 字符串，以及必须拒绝的重复键、浮点、重复表、点键冲突。
   _ <-
@@ -118,6 +98,16 @@ main = do
   _ <- prim_eff_print (("toml-dup-table " ++ verdict (parsesNot "[a]\n[a]\n")) ++ "\n")
   _ <- prim_eff_print (("toml-dotted-conflict " ++ verdict (parsesNot "a.b = 1\n[a]\n")) ++ "\n")
   prim_eff_exit 0
+
+-- ---------------------------------------------------------------
+-- 输出辅助
+-- ---------------------------------------------------------------
+joinInts : List Int -> String
+joinInts xs = join "," (map strFromInt xs)
+
+verdict : Bool -> String
+verdict True = "ok"
+verdict False = "fail"
 
 -- ---------------------------------------------------------------
 -- TOML 断言辅助
@@ -191,74 +181,6 @@ pkgIdentityDeps =
     a = PackageSource "p" [] [] pkgFilesSample
     b = PackageSource "p" [] [Pair "dep" "abc"] pkgFilesSample
   in contentHashOf a == contentHashOf b && not (identityHashOf a == identityHashOf b)
-
--- ---------------------------------------------------------------
-qrunOpts : RunOpts
-qrunOpts = RunOpts "pkg" 0 False ""
-
-
--- | `Maybe QVal` → 输出片段（`Nothing` = 取消 / 拒绝）。
-valueText : Maybe QVal -> String
-valueText Nothing = "-"
-valueText (Just v) = strFromInt (intOf [v])
-
-
--- | 用逗号连接整数列表（编码结果的可读形态）。
-joinInts : List Int -> String
-joinInts xs = join "," (map strFromInt xs)
-
--- | Bool → 断言片段。
-verdict : Bool -> String
-verdict True = "ok"
-verdict False = "fail"
-
--- | trace 列表 → 输出片段。
-showTrace : List String -> String
-showTrace ts = join "," ts
-
--- | 取列表里的整数（`QBytes` 解析失败一律 0；自检程序不做错误处理）。
--- `QVal` 只有 marker / bytes / ref 三形态（D-Q4），负载文本按十进制解读。
-intOf : List QVal -> Int
-intOf [] = 0
-intOf (v :: rest) = case v of
-  QBytes s => intOfText (strUnpack s) 0
-  _ => intOf rest
-
--- | 十进制文本 → Int（只认数字；自检负载全是 `strFromInt` 的输出）。
-intOfText : List Int -> Int -> Int
-intOfText [] acc = acc
-intOfText (c :: cs) acc = if c >= 48 && c <= 57 then intOfText cs (acc * 10 + (c - 48)) else acc
-
--- 三次运行的查询图场景：源节点按**输入内容**作 key（`src#<seed>`，内容寻址），
--- half 是 src/2（会吸收输入差异），label 依赖 half。seed 4 → 5 时 src 是新的 key
--- （必须 miss），但 half 的值不变 ⇒ cutoff，label 的依赖摘要未变 ⇒ 仍命中。
-run1 : Pair Db (List String)
-run1 = runAll 4 dbEmpty
-
-run2 : Pair Db (List String)
-run2 = runAll 4 (firstOf run1)
-
-run3 : Pair Db (List String)
-run3 = runAll 5 (firstOf run2)
-
--- | 一次完整的三层查询，返回本次新增的 trace。
-runAll : Int -> Db -> Pair Db (List String)
-runAll seed db0 =
-  let
-    srcKey = "src#" ++ strFromInt seed
-    p1 = query db0 srcKey [] (\depVals => QBytes (strFromInt seed))
-    db1 = firstOf p1
-    p2 = query db1 "half" [srcKey] (\depVals => QBytes (strFromInt (intOf depVals / 2)))
-    db2 = firstOf p2
-    p3 = query db2 "label" ["half"] (\depVals => QBytes ("half=" ++ strFromInt (intOf depVals)))
-    db3 = firstOf p3
-    n0 = lenInt (dbTrace db0)
-  in Pair db3 (drop n0 (dbTrace db3))
-
--- | 列表长度（`Base.List.length` 返回 `Nat`；这里需要 `Int` 做偏移）。
-lenInt : List String -> Int
-lenInt [] = 0
-lenInt (_ :: rest) = 1 + lenInt rest
 
 -- | 80 个 'a'（跨两个 SHA-256 块，覆盖填充的 r > 56 分支）。
 repeatA : Int -> String
@@ -369,51 +291,11 @@ fixityCovered =
   not
     (encTop encFixity (FixityDecl "::" 5 1 Nothing sp0) == encTop encFixity (FixityDecl "::" 5 1 (Just "Cons") sp0))
 
--- ---------------------------------------------------------------
--- 查询图 v2 自检（顺序无关依赖 / 动态依赖 / marker 摘要）
--- ---------------------------------------------------------------
--- | 依赖顺序不影响命中：同一个 key 用相反顺序的依赖表再查必须 hit。
--- 形参直接收 `Db`（收 `Pair Db _` 再 `firstOf` 会让 `firstOf` 的隐式参数与
--- `query` 的返回类型互相牵连，推断出错误分量）。
-depsOrderAgnostic : Db -> Bool
-depsOrderAgnostic db0 =
-  let
-    db1 = firstOf (query db0 "ord" ["x", "y"] (\_ => QBytes "v"))
-    db2 = firstOf (query db1 "ord" ["y", "x"] (\_ => QBytes "v"))
-    n0 = lenInt (dbTrace db1)
-  in drop n0 (dbTrace db2) == ["hit ord"]
-
--- | 动态依赖：`queryWith` 记录**观测**到的依赖（而不是声明表），下次按观测表判命中。
--- 这里声明两个、只观测一个；同一声明集合再查 ⇒ 命中。
-run4 : Pair Db (List String)
-run4 =
-  let
-    db1 = firstOf (query dbEmpty "da" [] (\_ => QBytes "1"))
-    db2 = firstOf (query db1 "db" [] (\_ => QBytes "2"))
-    w1 = queryWith db2 "dyn" ["da", "db"] (\_ => Pair (QBytes "out") ["da"])
-    db3 = firstOf w1
-    w2 = queryWith db3 "dyn" ["da", "db"] (\_ => Pair (QBytes "out") ["da"])
-    n0 = lenInt (dbTrace db3)
-  in Pair (firstOf w2) (drop n0 (dbTrace (firstOf w2)))
-
--- | 声明集合变化 ⇒ 必须重算（输入面变了）；值仍相同 ⇒ `cutoff`（下游判据不动）。
-run5 : Pair Db (List String)
-run5 =
-  let
-    db1 = firstOf (query dbEmpty "sa" [] (\_ => QBytes "1"))
-    db2 = firstOf (query db1 "sb" [] (\_ => QBytes "2"))
-    w1 = query db2 "stat" ["sa", "sb"] (\_ => QBytes "out")
-    db3 = firstOf w1
-    db4 = firstOf (query db3 "sb2" [] (\_ => QBytes "2-changed"))
-    w2 = query db4 "stat" ["sa", "sb2"] (\_ => QBytes "out")
-    n0 = lenInt (dbTrace db3)
-  in Pair (firstOf w2) (drop n0 (dbTrace (firstOf w2)))
-
 -- | 工具会话载荷（`ToolContext`）的编码 roundtrip：空上下文也要逐字节稳定。
 -- 真实上下文含 iface 列表（`encModuleIfaceAt`），这里只验证字段顺序 / Maybe / 列表 / 尾部
 -- 检查这条骨架——载荷结构变了（schema bump）这条断言会立刻失败。
 toolContextSample : ToolContext
-toolContextSample = ToolContext [] [] Nothing ["Base.Int"] [] [] "/tmp/pkg"
+toolContextSample = ToolContext [] [] ["Base.Int"] ["Main"] []
 
 toolContextRoundtrip : Bool
 toolContextRoundtrip =

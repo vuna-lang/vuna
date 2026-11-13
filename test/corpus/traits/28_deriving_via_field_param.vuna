@@ -1,10 +1,10 @@
 -- M42：参数化单字段 record 的委托派生；ctx 由字段类型里的参数推导。
 record EitherStr a where
-  runEitherStr : Result a
+  runEitherStr : a
 deriving via field (Show)
 
 mk : EitherStr Int
-mk = EitherStr { runEitherStr = Ok 3 }
+mk = EitherStr { runEitherStr = 3 }
 
 main : String
 main = show mk

@@ -1175,7 +1175,19 @@ dictCandidatesOf ec shown =
   let
     fam = dictFamilyOfShown shown
     insts = if fam == "" then ecInsts ec else ecInstsFamily ec fam
-  in map (instCandidate shown) insts
+  in sortCandidates (map (instCandidate shown) insts)
+
+-- 诊断候选按名字排序：实例表是 HashMap 桶序，直接输出会让同一错误在不同进程/GC 后
+-- 产生不同 JSON 顺序。排序只影响展示，不影响实例搜索。
+sortCandidates : List Candidate -> List Candidate
+sortCandidates [] = []
+sortCandidates (c :: rest) = insertCandidate c (sortCandidates rest)
+
+insertCandidate : Candidate -> List Candidate -> List Candidate
+insertCandidate c [] = [c]
+insertCandidate (Candidate text sp reason) ((Candidate text2 sp2 reason2) :: xs) =
+  if text <= text2 then Candidate text sp reason :: Candidate text2 sp2 reason2 :: xs
+  else Candidate text2 sp2 reason2 :: insertCandidate (Candidate text sp reason) xs
 
 -- | 构造实例候选（带声明 span 与头/目标拒绝原因）。
 instCandidate : String -> DtInst -> Candidate

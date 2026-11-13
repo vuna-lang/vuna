@@ -383,10 +383,11 @@ hashDatas : List DtData -> String
 hashDatas ds = payloadDigest (encTop (encList encDtData) (sortByText (\d => dtDataName d) ds))
 
 hashInsts : List DtInst -> String
-hashInsts is = payloadDigest (encTop (encList encDtInst) (sortByText (\i => dtInstName i) is))
+hashInsts is = payloadDigest (encTop (encList encDtInstSem) (sortByText (\i => dtInstName i) is))
 
 hashClasses : List DtClass -> String
-hashClasses cs = payloadDigest (encTop (encList encDtClass) (sortByText (\c => dtClassName c) cs))
+hashClasses cs =
+  payloadDigest (encTop (encList encDtClassSem) (sortByText (\c => dtClassName c) cs))
 
 -- | globals 的（名字, 项）对。
 encGlobal : Pair String Term -> List String -> List String
@@ -794,7 +795,7 @@ moduleNamesOf (m :: rest) = miNameOf m :: moduleNamesOf rest
 -- 写侧只重写「接口哈希变化或文件缺失」的模块；manifest 最后原子写 = 提交点。读侧先读
 -- manifest，再逐模块读文件并校验「相对路径合法 ↔ 记录名 / 接口哈希」；缺件/损坏 ⇒
 export ifaceCodec : String
-ifaceCodec = "module-iface 3"
+ifaceCodec = "module-iface 4"
 
 -- | `SourceInfo`：路径 / 源内容摘要 / mtime / size（全部参与载荷 roundtrip）。
 export encSourceInfo : SourceInfo -> List String -> List String

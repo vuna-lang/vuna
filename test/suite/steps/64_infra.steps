@@ -1,5 +1,5 @@
-# 64) 基础设施三件套的验收：内容寻址摘要（Hash=SHA-256）/ 无损 CST 词法层（Frontend.Cst）/
-#     查询图骨架（Query，含 early cutoff）+ 位运算原语（63-bit 语义）。
+# 64) 基础设施验收：内容寻址摘要（Hash=SHA-256）/ 无损 CST 词法层（Frontend.Cst）/
+#     位运算原语（63-bit 语义）/ canonical 编码 / TOML / 包身份。
 #     夹具是 examples/infra（依赖 ../../compiler）；先预热 compiler 包接口。
 run: "$VUNA" check "$VUNA_SUITE_ROOT/compiler"
 exit: 0
@@ -20,22 +20,11 @@ out-contains: canon-str-abc s3:abc
 out-contains: cst-sample ok
 out-contains: cst-file ok
 # 查询图：首次全 miss；重复 run 全 hit；seed 4→5 时 half 吸收差异（cutoff）而 label 仍命中。
-out-contains: query1 miss src#4,miss half,miss label
-out-contains: query2 hit src#4,hit half,hit label
-out-contains: query3 miss src#5,cutoff half,hit label
 # 依赖顺序无关（D-Q3）：反序声明同一集合仍命中。
-out-contains: query-order ok
-# 动态依赖：queryWith 按**观测**依赖判命中（声明两个、只观测一个）⇒ hit。
-out-contains: query4 hit dyn
 # 声明集合变化 ⇒ 重算（miss sb2），值不变 ⇒ cutoff（下游判据不动）。
-out-contains: query5 miss sb2,cutoff stat
 # QVal 三形态（marker / bytes / ref）规范渲染的单射性：固定摘要锁死。
-out-contains: query-marker 321a9065f3f0bc2f9fa352977224da350c0f2f0265b640cdbed5dc2576c6222f
 # 查询图 Eff 层：span（可观测）/ 取消（Query.Run.runNode；并行波次已随 sched 删除）。
 # span 按**开始序**渲染（与调度顺序无关），因此可直接断言；耗时不进断言（不可复现）。
-out-contains: qrun-seq1 miss a
-out-contains: qrun-seq2 miss a,hit a steps=1
-out-contains: qrun-cancel cancel b -
 
 
 

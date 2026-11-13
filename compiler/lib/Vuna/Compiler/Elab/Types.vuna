@@ -146,9 +146,11 @@ export record DtClass(..) where
   dtClassParams : List String
   dtClassMethods : List (Pair String Term)
   dtClassFieldTys : List Term
+  -- 方法名 → 声明 span（跨 iface 保留，供“实例缺方法”诊断指向 trait 方法行）。
+  dtClassMethodSpans : List (Pair String Span)
 
 export dtClassName : DtClass -> String
-dtClassName (DtClass name params projs fieldTys) = name
+dtClassName (DtClass name params projs fieldTys spans) = name
 
 -- M15：已注册实例：定义名 + 实例头类型项（`Show Int` 这类闭合项）+ 是否命名实例。
 -- M23：`as name` 的命名实例**不参与**自动实例搜索（只能 `@name` 选中，与 HM 一致），

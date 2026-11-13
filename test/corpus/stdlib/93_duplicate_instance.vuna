@@ -1,9 +1,14 @@
--- stdlib 反例：Maybe 的 Monad 实例已由 Base.Maybe 提供，重复定义是硬错误。
+-- stdlib 反例：本地 head type 上重复声明同一实例（非孤儿）。
 import Base.Monad
-import Base.Maybe
 
-instance Monad Maybe where
-  bind m f = m
+data Box a : Type where
+  MkBox : a -> Box a
+
+instance Monad Box where
+  bind b f = b
+
+instance Monad Box where
+  bind b f = b
 
 main : Int
 main = 0

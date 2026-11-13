@@ -59,15 +59,40 @@ encDtDef (DtExtern name ty cName _) acc = encTag 2 (encStr name (encTerm ty (enc
 export encDtDefs : List DtDef -> List String -> List String
 encDtDefs ds acc = encList encDtDef ds acc
 
--- | `DtInst`：名字 / telescope / 约束上下文 / 头（span 丢弃）。
-export encDtInst : DtInst -> List String -> List String
-encDtInst (DtInst name tele ctxE head _) acc =
+-- | 源码 span（只进**载荷**，不进接口语义哈希；路径/行号变化不应让依赖方失效）。
+encSpan : Span -> List String -> List String
+encSpan s acc =
+  encStr s.spanFile
+    (encInt s.spanStartLine (encInt s.spanStartCol (encInt s.spanEndLine (encInt s.spanEndCol acc))))
+
+decSpan : Int -> Cur -> Maybe (Pair Span Cur)
+decSpan fuel c =
+  thenPair (decStr (fuel - 1) c)
+    (\file, b1 => thenPair (decInt (fuel - 1) b1) (\sl, b2 => thenPair (decInt (fuel - 1) b2) (\sc, b3 => thenPair (decInt (fuel - 1) b3) (\el, b4 => thenPair (decInt (fuel - 1) b4) (\ec, b5 => Just (Pair (Span file sl sc el ec) b5))))))
+
+encMaybeSpan : Maybe Span -> List String -> List String
+encMaybeSpan = encMaybe encSpan
+
+-- | `DtInst` 的**语义**编码：名字 / telescope / 约束上下文 / 头（span 丢弃，供接口哈希）。
+export encDtInstSem : DtInst -> List String -> List String
+encDtInstSem (DtInst name tele ctxE head _) acc =
   encStr name (encList encTelePair tele (encList encTerm ctxE (encTerm head acc)))
 
--- | `DtClass`：名字 / 参数名 / 方法投影 / 字段类型。
-export encDtClass : DtClass -> List String -> List String
-encDtClass (DtClass name params projs fieldTys) acc =
+-- | `DtInst` 载荷编码：语义字段 + 声明 span（跨 iface 保留，供诊断候选定位）。
+export encDtInst : DtInst -> List String -> List String
+encDtInst (DtInst name tele ctxE head sp) acc =
+  encStr name (encList encTelePair tele (encList encTerm ctxE (encTerm head (encMaybeSpan sp acc))))
+
+-- | `DtClass` 的**语义**编码：名字 / 参数名 / 方法投影 / 字段类型（span 丢弃）。
+export encDtClassSem : DtClass -> List String -> List String
+encDtClassSem (DtClass name params projs fieldTys _) acc =
   encStr name (encList encStr params (encList encTelePair projs (encList encTerm fieldTys acc)))
+
+-- | `DtClass` 载荷编码：语义字段 + 方法 span 表。
+export encDtClass : DtClass -> List String -> List String
+encDtClass (DtClass name params projs fieldTys spans) acc =
+  encStr name
+    (encList encStr params (encList encTelePair projs (encList encTerm fieldTys (encList (encPair encStr encSpan) spans acc))))
 
 -- | 闭合项对（`(名字, 项)`）：实例 telescope / 类方法投影共用。
 encTelePair : Pair String Term -> List String -> List String
@@ -196,17 +221,17 @@ else thenPair (decTag fuel bytes) (\tag, b1 => case tag of
 export decDtDefs : Int -> Cur -> Maybe (Pair (List DtDef) Cur)
 decDtDefs fuel bytes = if fuel <= 0 then Nothing else decList decDtDef fuel bytes
 
--- | 解析 `DtInst`。
+-- | 解析 `DtInst`（含可选声明 span）。
 export decDtInst : Int -> Cur -> Maybe (Pair DtInst Cur)
 decDtInst fuel bytes =
   thenPair (decStr (fuel - 1) bytes)
-    (\name, b1 => thenPair (decList decTelePair (fuel - 1) b1) (\tele, b2 => thenPair (decList decTerm (fuel - 1) b2) (\ctxE, b3 => thenPair (decTerm (fuel - 1) b3) (\head, b4 => Just (Pair (DtInst name tele ctxE head Nothing) b4)))))
+    (\name, b1 => thenPair (decList decTelePair (fuel - 1) b1) (\tele, b2 => thenPair (decList decTerm (fuel - 1) b2) (\ctxE, b3 => thenPair (decTerm (fuel - 1) b3) (\head, b4 => thenPair (decMaybe decSpan (fuel - 1) b4) (\sp, b5 => Just (Pair (DtInst name tele ctxE head sp) b5))))))
 
--- | 解析 `DtClass`。
+-- | 解析 `DtClass`（含方法 span 表）。
 export decDtClass : Int -> Cur -> Maybe (Pair DtClass Cur)
 decDtClass fuel bytes =
   thenPair (decStr (fuel - 1) bytes)
-    (\name, b1 => thenPair (decList decStr (fuel - 1) b1) (\params, b2 => thenPair (decList decTelePair (fuel - 1) b2) (\projs, b3 => thenPair (decList decTerm (fuel - 1) b3) (\fieldTys, b4 => Just (Pair (DtClass name params projs fieldTys) b4)))))
+    (\name, b1 => thenPair (decList decStr (fuel - 1) b1) (\params, b2 => thenPair (decList decTelePair (fuel - 1) b2) (\projs, b3 => thenPair (decList decTerm (fuel - 1) b3) (\fieldTys, b4 => thenPair (decList (decPair decStr decSpan) (fuel - 1) b4) (\spans, b5 => Just (Pair (DtClass name params projs fieldTys spans) b5))))))
 
 -- | 解析 `ExportEntry`。
 export decExportEntry : Int -> Cur -> Maybe (Pair ExportEntry Cur)
