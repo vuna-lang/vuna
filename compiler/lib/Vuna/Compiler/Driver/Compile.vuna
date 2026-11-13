@@ -619,6 +619,42 @@ checkNodeSchema = "vuna-check-node 2"
 hashText : Int -> String
 hashText n = strFromInt n
 
+-- ---------------------------------------------------------------
+-- 清单的**语义**投影（缓存身份）
+--
+-- 只含影响检查/代码生成的字段：包名、导出面、依赖的 alias/source/hash。
+-- `[diagnostics]`（纯显示配置：format/lang/max-errors/warnings）与 `[registry]`
+-- （取包位置）**不进指纹**——改诊断格式不应该让整包与依赖方接口全部失效（D69）。
+-- 这个投影用于 check/split 的 manifest 维度与 `packageEnvHash` / `buildMetaText`。
+-- ---------------------------------------------------------------
+maybeSemanticText : Maybe String -> String
+maybeSemanticText Nothing = ""
+maybeSemanticText (Just s) = s
+
+depSourceText : DependencySource -> String
+depSourceText (DepPath p) = "path:${p}"
+depSourceText (DepGit url rev) = "git:${url}@${rev}"
+depSourceText (DepUrl u) = "url:${u}"
+
+depSemanticText : Dependency -> String
+depSemanticText d = "${d.depAlias}|${depSourceText d.depSource}|${maybeSemanticText d.depHash}"
+
+manifestSemanticText : Maybe Package -> String
+manifestSemanticText Nothing = ""
+manifestSemanticText (Just pkg) =
+  let
+    man = pkg.packageManifest
+    exportsText = case man.manifestExports of
+      Nothing => ""
+      Just xs => join "," xs
+  in join "\n"
+    (Base.List.Cons "name:${maybeSemanticText man.manifestName}"
+      (Base.List.Cons "exports:${exportsText}" (map depSemanticText man.manifestDependencies)))
+
+-- | 语义开关：release 会拒绝 debug-only 构造（诊断集合不同），必须进输入摘要。
+releaseFlagOf : PackageContext -> String
+releaseFlagOf ctx = if contextRelease ctx then "release" else "debug"
+
 -- | 可执行包的 check 节点输入：源闭包 / 依赖身份 / 语义 manifest / 编译器 / flags。
 checkModsExe : PackageContext -> String -> Eff hostRow CheckMods
 checkModsExe ctx entry = do
