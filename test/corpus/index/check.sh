@@ -4,9 +4,9 @@
 # 用法: sh corpus/index/check.sh <vuna>
 #
 # 缓存形状：
-#   `index:<dir>` 节点（会话索引落在 `$TMPDIR/vuna-cache/query/<桶>/index`，codec
+#   `index:<dir>` 节点（会话索引落在 `$VUNA_STORE/objects/tool/<输入摘要>`，codec
 #   `query-index 1`），值 = 载荷内容地址（`QRef`）；载荷 = `Index.Codec.encIndex` 的规范
-#   字节，落 `$TMPDIR/vuna-cache/blobs/<digest>`（codec `index-payload 1`，`Store` framing）。
+#   字节，落同一个 `objects/tool/<输入摘要>`（codec `index-payload 1`，`Store` framing）。
 #
 # 在一个临时 workspace 里验证（不依赖仓库自身缓存，避免并行测试互相干扰）：
 #   1) 首次 map：exit 0、blob 的 framing tag/codec 正确；
@@ -25,9 +25,9 @@ esac
 
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/vuna-index-check.XXXXXX") || exit 1
 trap 'rm -rf "$tmp"' EXIT INT TERM
-# 独立缓存根，避免与仓库自身的 `vuna-cache` 互相干扰。
+# 独立缓存根，避免与仓库自身的 store 互相干扰。
 export TMPDIR="$tmp/cache"
-export VUNA_CACHE_DIR="$TMPDIR/vuna-cache"
+export VUNA_STORE="${VUNA_STORE:-$TMPDIR/vuna-store}"
 mkdir -p "$TMPDIR"
 
 pass=0
@@ -49,7 +49,7 @@ check_contains() {
 check_ne() {
   if [ "$2" != "$3" ]; then ok; else bad "$1 (unexpected [$2])"; fi
 }
-blobs() { find "$TMPDIR/vuna-cache/blobs" -type f 2>/dev/null; }
+blobs() { find "$VUNA_STORE/objects/tool" -type f 2>/dev/null; }
 
 ws="$tmp/ws"
 mkdir -p "$ws/lib/Demo"
@@ -113,7 +113,8 @@ check_contains "index symbols updated with content" "$(cd "$ws" && "$VUNA" api D
 cp -p "$tmp/A.bak" "$ws/lib/Demo/A.vuna"
 restored=$( cd "$ws" && VUNA_DEBUG_PERF=1 "$VUNA" map 2>&1 )
 check_eq "index restored content map exit" "0" "$?"
-check_contains "index restored content rebuilds" "$restored" "index-path=build"
+# 输入寻址：内容 A → B → A 时 A 的对象仍在（不随"最近一次"覆盖），恢复后直接命中。
+check_contains "index restored content hits" "$restored" "index-path=cache"
 
 # 4) blob 截断：framing（len/内容地址）校验失败 ⇒ 重算并重写合法 framing。
 #    注意步骤 3 改内容会留下**孤儿 blob**（旧内容地址不会再有引用、也不会被重写），

@@ -1,9 +1,9 @@
 # 44e) 仓库自身：预热 base/compiler 接口后，根包 `check .` 走摘要路径且通过
 #      （C37 的 Eq Type 假歧义 / Interp.vuna:71 回归）。cwd = test/，所以先 cd 到仓库根。
-run: sh -c 'mkdir -p "$TMPDIR/summary-repo-cache"'
-run: sh -c 'cd .. && TMPDIR="$TMPDIR/summary-repo-cache" "$VUNA" check base >/dev/null 2>&1 && TMPDIR="$TMPDIR/summary-repo-cache" "$VUNA" check compiler >/dev/null 2>&1'
+run: sh -c 'rm -rf "$TMPDIR/44e-store" "$TMPDIR/44e-cache"'
+run: sh -c 'cd .. && VUNA_STORE="$TMPDIR/44e-store" TMPDIR="$TMPDIR/44e-cache" "$VUNA" check base >/dev/null 2>&1 && VUNA_STORE="$TMPDIR/44e-store" TMPDIR="$TMPDIR/44e-cache" "$VUNA" check compiler >/dev/null 2>&1'
 exit: 0
-run: sh -c 'cd .. && TMPDIR="$TMPDIR/summary-repo-cache" "$VUNA" check . --debug-perf'
+run: sh -c 'cd .. && VUNA_STORE="$TMPDIR/44e-store" TMPDIR="$TMPDIR/44e-cache" "$VUNA" check . --debug-perf'
 exit: 0
 out-contains: cache-path=summary deps=2
 # 探针走内置宏 `dbg!` 展开：--debug-perf 下 DEBUG 行仍必须出现。

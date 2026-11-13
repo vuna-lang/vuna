@@ -132,11 +132,11 @@ fieldJson (FieldNote s) = JObj [Pair "kind" (JStr "note"), Pair "value" (JStr s)
 
 candidateJson : Candidate -> Json
 candidateJson c = JObj (append [Pair "text" (JStr c.candidateText)] (append (case c.candidateSpan of
-  Nothing => []
   Just sp => [Pair "span" (spanRange sp)]
-) (case c.candidateReason of
   Nothing => []
+) (case c.candidateReason of
   Just r => [Pair "reason" (JStr r)]
+  Nothing => []
 )
 )
 )
@@ -231,9 +231,7 @@ ctxKeyOf ctx = do
 
 -- 本包模块名集合（来自 manifest）。
 ownNamesOfTool : ToolContext -> List String
-ownNamesOfTool tool = case tool.tcOwnManifest of
-  Just mf => map meNameOfEntry (pmModulesOf mf)
-  Nothing => []
+ownNamesOfTool tool = tool.tcOwnNames
 
 -- buffer 当前 import 闭包里的「本包模块名」子集（增量路径只预置这些干净模块）。
 ownNeededOf : ToolContext -> List String -> List String
@@ -517,16 +515,14 @@ writeBackModule session label text checked (Just name) = do
     in do
       si <- sourceInfoForPath label
       attempt <- case session.dcTool of
-        Just tool => if entryHashMatches (toolOwnEntrySourceHash tool name) (siHashOf si) then pure Nothing
-        else do
+        -- 有工具会话：按会话里的依赖哈希表写本模块对象。
+        Just tool => do
           r <- toolWriteModuleIface session.dcCtx tool cleanForWrite checked name si
           pure (Just r)
+        -- 没有会话（LSP-only 冷启动）：依赖哈希从磁盘对象汇总后再写。
         Nothing => do
-          hasManifest <- toolHasOwnManifest session.dcCtx
-          if hasManifest then pure Nothing
-          else do
-            r <- toolWriteModuleIfaceCold session.dcCtx checked name si
-            pure (Just r)
+          r <- toolWriteModuleIfaceCold session.dcCtx checked name si
+          pure (Just r)
       case attempt of
         Nothing => pure session
         Just (ErrC _) => pure session

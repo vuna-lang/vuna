@@ -83,7 +83,8 @@ runGenErrors root = do
       _ <- ensureDirPath (parentOf "${root}/docs/.generated/errors.md")
       _ <- raiseToRow hostRow (@vuna@prim_eff_writeFile "${root}/docs/.generated/errors.md" doc)
       catalog <- renderCatalogJson allEntries
-      _ <- raiseToRow hostRow (@vuna@prim_eff_writeFile "${root}/docs/.generated/errors.json" catalog)
+      _ <-
+        raiseToRow hostRow (@vuna@prim_eff_writeFile "${root}/docs/.generated/errors.json" catalog)
       _ <-
         raiseToRow hostRow
           (@vuna@prim_eff_print "wrote ${root}/docs/.generated/errors.md (${length allEntries} codes)\n")

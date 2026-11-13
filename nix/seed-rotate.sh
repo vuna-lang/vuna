@@ -14,21 +14,10 @@
 # rotation 按需触发（见 docs/reference/bootstrap.md），不是每次 compiler/base 改动都做。
 set -eu
 cd "$(dirname "$0")/.."
-# 接口缓存默认开启后，`vuna build` 可能读/写源码旁 .iface：rotation 的第一遍（产品 CLI）
-# 与第二遍（新 seed）若走不同缓存路径，runtime 位置表会不同，fixed point 假失败。
-# rotation 一律强制全量精化，保证两遍走同一条路径。
-export VUNA_IFACE_TOOL=0
+# seed rotation 必须让两遍生成走**完全相同的路径**：用各自全新的对象库（VUNA_STORE 指向
+# 本次 rotation 的临时根），第一遍由产品 CLI 生成，第二遍由新 seed 生成。共享缓存会让
+# runtime 位置表路径归一不同，触发 fixed point 假失败。
 export VUNA_ELAB_FULL=1
-VUNA=${1:-./result/bin/vuna}
-[ -x "$VUNA" ] || {
-  echo "seed-rotate: 找不到可执行编译器 $VUNA（先 nix build .#vuna --out-link result）" >&2
-  exit 1
-}
-[ -f vuna.toml ] || { echo "seed-rotate: 当前目录不是 vuna workspace（缺 vuna.toml）" >&2; exit 1; }
-[ -d compiler ] || { echo "seed-rotate: 找不到 compiler/（seed 来源必须是 compiler 包）" >&2; exit 1; }
-# 源码旁 .iface 缓存可能来自不同编译器版本：先清理，否则两遍生成走不同路径，
-# fixed point 会假失败（见 C32/M4 收口时的实测）。
-"$VUNA" clean --iface >/dev/null 2>&1 || true
 
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/vuna-seed-rotate.XXXXXX") || exit 1
 # 分级替换用的临时名：复制到 seed.new.$$ 后再 rename，失败时用 seed.old.$$ 回滚。

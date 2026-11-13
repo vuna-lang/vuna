@@ -152,5 +152,5 @@ vuna clean --packages --gc [--dry-run] [DIR]
 
 - 包格式与命令：[packages.md](packages.md)
 - 终态决策（D12–D15）：[architecture-target.md](../architecture-target.md)
-- 缓存与查询图：[cache.md](cache.md)、[query-graph.md](query-graph.md)
+- 缓存：[cache.md](cache.md)（输入寻址对象库）
 - 存储层 framing：[cache.md](cache.md) 的「存储与 key」

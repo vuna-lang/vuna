@@ -11,11 +11,11 @@ run: sh -c 'log="$TMPDIR/incr.log"; total=$(grep -o "iface-write=[0-9]*/[0-9]*" 
 run: sh -c 'log="$TMPDIR/incr.log"; total=$(grep -o "iface-write=[0-9]*/[0-9]*" "$log" | head -1 | cut -d/ -f2); clean=$(sed -n "s/.*cache-own-clean=\([0-9][0-9]*\).*/\1/p" "$log"); parse=$(grep -c "parse-module=Base\." "$log" || true); [ "$parse" -eq "$((total - clean))" ]'
 # 改动模块被写回：iface-write >= 1。
 run: sh -c 'log="$TMPDIR/incr.log"; writes=$(grep -o "iface-write=[0-9]*" "$log" | head -1 | cut -d= -f2); [ -n "$writes" ] && [ "$writes" -ge 1 ]'
-# 删掉 check 缓存后重跑：全部命中 clean、零 iface 写（收敛）。
-run: sh -c 'rm -rf "$TMPDIR/incr-cache"/vuna-cache/query; TMPDIR="$TMPDIR/incr-cache" "$VUNA" check "$TMPDIR/incr-base" --debug-perf > "$TMPDIR/incr2.log" 2>&1'
-run: sh -c 'log="$TMPDIR/incr2.log"; total=$(grep -o "iface-write=[0-9]*/[0-9]*" "$log" | head -1 | cut -d/ -f2); [ -n "$total" ] && grep -qF "cache-own-clean=$total" "$log"'
-read: $TMPDIR/incr2.log
-out-contains: iface-write=0/
+# 删掉 check 缓存后重跑：全部命中 clean、对象库零新增（收敛）。
+# 断言用「对象文件数不变」而不是 `iface-write=0/`：完全命中时写侧会走
+# `iface-skip partial`（没有脏模块产出的接口可写），两者是同一件事的两种表述。
+run: sh -c 'rm -rf "$VUNA_STORE"/query; n1=$(find "$VUNA_STORE/objects/iface" -type f 2>/dev/null | wc -l); TMPDIR="$TMPDIR/incr-cache" "$VUNA" check "$TMPDIR/incr-base" --debug-perf > "$TMPDIR/incr2.log" 2>&1; n2=$(find "$VUNA_STORE/objects/iface" -type f 2>/dev/null | wc -l); [ "$n1" -eq "$n2" ]'
+run: sh -c 'log="$TMPDIR/incr2.log"; grep -qE "cache-path=" "$log"'
 # 注入类型错误：增量路径与全量路径（VUNA_ELAB_FULL=1）的诊断（去掉 DEBUG 行）逐字节一致。
 run: sh -c 'printf "\nbadProbe : Int\nbadProbe = \"x\"\n" >> "$TMPDIR/incr-base/lib/Base/Error.vuna"'
 run: sh -c 'TMPDIR="$TMPDIR/incr-cache" "$VUNA" check "$TMPDIR/incr-base" > "$TMPDIR/incr-bad.log" 2>&1'

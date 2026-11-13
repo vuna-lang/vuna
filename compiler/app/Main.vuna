@@ -7,7 +7,6 @@ import Vuna.Compiler.Driver.CompilerCli
 -- 增量路径（否则 vuna-compiler 依赖被判 invalid，只能回退 full）。
 import Vuna.Compiler.Frontend.Cst
 import Vuna.Compiler.Hash
-import Vuna.Compiler.Query
 import Vuna.Compiler.Store
 import Base.EffArgs
 import Base.EffExit

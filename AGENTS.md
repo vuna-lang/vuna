@@ -91,7 +91,8 @@ vuna check .                         # 包级类型检查（自检）；vuna bui
 vuna fmt --check <PATH>...           # 格式化检查（省略 PATH = workspace 各包 lib/app/test）；vuna lint <file>...
 vuna doc [--check] [--package NAME] [DIR [OUT]]  # 生成单文件交互 HTML API 文档（默认 DIR/docs/api.html）
 vuna gen-errors [ROOT]               # 从枚举真源生成错误码文档（默认 ROOT/docs/.generated/errors.md）
-vuna clean [--iface] [--store] [--all] [--dry-run] [DIR]  # 清理缓存：iface（树内 *.iface/.vuna-iface）/ store（$TMPDIR/vuna-cache）
+vuna store gc [--dry-run] [--older-than SEC] [--max-size BYTES]  # 对象库 GC（roots 保护 + 宽限窗口 + 容量上限）
+vuna clean [--store] [--packages] [--gc] [--all] [--dry-run] [DIR]  # 清理缓存（对象库根 = $VUNA_STORE）
 vuna interp <file.vuna>              # DT 精化 + 核心求值（纯；只展示 Int/Nat/String/Bool）
 vuna test [DIR] [--list|--filter PAT|--verbose|--fail-fast|--jobs N]  # 包内测试（--jobs N 文件级并行）；默认输出不变
 vuna run [DIR] [--package NAME] [--no-build] [-- ARGS...]    # 增量 build + 执行入口（透传参数/退出码）
@@ -128,8 +129,7 @@ build，`dist/` 提交）；`nix/` = 构建图 + rotate/metrics/bench；`docs/` 
   [ir.md](docs/reference/ir.md)（擦除后 IR：Core → IR 的决策划分与边界）、
   [diagnostics.md](docs/reference/diagnostics.md)（诊断模型/错误码/渲染/LSP/迁移状态）、
   [core.md](docs/reference/core.md)（Core TT / NbE / 精化器）；
-  模块级缓存：[cache.md](docs/reference/cache.md)（TTC 式接口、失效判定、已知边界）；
-  增量判定：[query-graph.md](docs/reference/query-graph.md)（节点模型、命中判据、span / 取消 / 并行波次、会话索引、节点族）
+  缓存与增量判定：[cache.md](docs/reference/cache.md)（输入寻址对象、命中判据、roots 与 GC）
 - 工具链（`goal` / LSP / `doc` / `search` / 错误码；`vuna gen-errors` 生成
   `docs/.generated/errors.md`）：[tooling.md](docs/reference/tooling.md)；API 文档与检索：
   [api-docs.md](docs/reference/api-docs.md)；lint：[lint.md](docs/reference/lint.md)；

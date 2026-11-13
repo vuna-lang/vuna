@@ -121,7 +121,8 @@ loadRegistryEntryEff indexRoot name =
     in do
       _ <- ensureDirPath base
       code <-
-        raiseToRow hostRow (@vuna@prim_eff_runIn base ["curl", "-fsSL", "${root}/${fileName}", "-o", tmp])
+        raiseToRow hostRow
+          (@vuna@prim_eff_runIn base ["curl", "-fsSL", "${root}/${fileName}", "-o", tmp])
       if code /= 0 then pure (pkgNoLoc1 (IndexMalformed "cannot fetch ${root}/${fileName}") fileName)
       else do
         text <- raiseToRow hostRow (@vuna@prim_eff_readFile tmp)

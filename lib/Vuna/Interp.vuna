@@ -198,7 +198,8 @@ ${depsSection deps}"""
 hasOcamlopt : Int -> Eff hostRow Bool
 hasOcamlopt _ = do
   code <-
-    raiseToRow hostRow (@vuna@prim_eff_runIn "." ["sh", "-c", "command -v ocamlopt >/dev/null 2>&1"])
+    raiseToRow hostRow
+      (@vuna@prim_eff_runIn "." ["sh", "-c", "command -v ocamlopt >/dev/null 2>&1"])
   pure (code == 0)
 
 noOcamloptMessage : String
@@ -244,7 +245,8 @@ runEffectProgram ctx source printResult = do
               ErrC e => cleanupErr dir (diagText e)
               OkC _ => do
                 code <-
-                  raiseToRow hostRow (@vuna@prim_eff_runIn "${dir}/.output" ["bin/${effectBinaryName}"])
+                  raiseToRow hostRow
+                    (@vuna@prim_eff_runIn "${dir}/.output" ["bin/${effectBinaryName}"])
                 c <- cleanupTemp dir code
                 pure (OkC c)
           else cleanupErr dir noOcamloptMessage

@@ -41,42 +41,11 @@ evalFuelMax = 1000000
 hostTailValue : Value
 hostTailValue =
   VCon effRowConsCtor
-    [ VStr "default",
-      VNeutral (NGlobal "Base.EffConsole.ConsoleOp" []),
-      VCon effRowConsCtor
-        [ VStr "default",
-          VNeutral (NGlobal "Base.EffClock.ClockOp" []),
-          VCon effRowConsCtor
-            [ VStr "default",
-              VNeutral (NGlobal "Base.EffEnv.EnvOp" []),
-              VCon effRowConsCtor
-                [ VStr "default",
-                  VNeutral (NGlobal "Base.EffProcess.ProcessOp" []),
-                  VCon effRowConsCtor
-                    [ VStr "default",
-                      VNeutral (NGlobal "Base.EffExit.ExitOp" []),
-                      VCon effRowConsCtor
-                        [ VStr "default",
-                          VNeutral (NGlobal "Base.EffStdin.StdinOp" []),
-                          VCon effRowConsCtor
-                            [ VStr "default",
-                              VNeutral (NGlobal "Base.EffArgs.ArgsOp" []),
-                              VCon effRowConsCtor
-                                [ VStr "default",
-                                  VNeutral (NGlobal "Base.EffNet.NetOp" []),
-                                  VCon effRowConsCtor
-                                    [ VStr "default", VNeutral (NGlobal "Base.EffRef.RefOp" []), VCon effRowNilCtor [] ]
-                                ]
-                            ]
-                        ]
-                    ]
-                ]
-            ]
-        ]
-    ]
+    [VStr "default", VNeutral (NGlobal "Base.EffConsole.ConsoleOp" []), VCon effRowConsCtor [VStr "default", VNeutral (NGlobal "Base.EffClock.ClockOp" []), VCon effRowConsCtor [VStr "default", VNeutral (NGlobal "Base.EffEnv.EnvOp" []), VCon effRowConsCtor [VStr "default", VNeutral (NGlobal "Base.EffProcess.ProcessOp" []), VCon effRowConsCtor [VStr "default", VNeutral (NGlobal "Base.EffExit.ExitOp" []), VCon effRowConsCtor [VStr "default", VNeutral (NGlobal "Base.EffStdin.StdinOp" []), VCon effRowConsCtor [VStr "default", VNeutral (NGlobal "Base.EffArgs.ArgsOp" []), VCon effRowConsCtor [VStr "default", VNeutral (NGlobal "Base.EffNet.NetOp" []), VCon effRowConsCtor [VStr "default", VNeutral (NGlobal "Base.EffRef.RefOp" []), VCon effRowNilCtor []]]]]]]]]]
 
 hostRowValue : Value
-hostRowValue = VCon effRowConsCtor [VStr "default", VNeutral (NGlobal "Base.EffFs.FsOp" []), hostTailValue]
+hostRowValue =
+  VCon effRowConsCtor [VStr "default", VNeutral (NGlobal "Base.EffFs.FsOp" []), hostTailValue]
 
 evalFuel : Int -> List Value -> Term -> Value
 evalFuel fuel env t = if fuel <= 0 then VType levelZero
@@ -87,8 +56,7 @@ else case t of
   TMeta m => VMeta m []
   TGlobal g =>
     if g == hostRowName then hostRowValue
-    else if g == hostTailName then hostTailValue
-    else VNeutral (NGlobal g [])
+    else if g == hostTailName then hostTailValue else VNeutral (NGlobal g [])
   TType l => VType l
   TPi name implicit rig dom cod =>
     VPi name implicit rig (evalFuel (fuel - 1) env dom) (Closure env cod)

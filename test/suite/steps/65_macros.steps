@@ -32,7 +32,7 @@ out-contains: RN_MacroArity
 out-contains: macro dbg expects 1 argument(s), got 2
 
 # 65d) e2e（base-only 包，不需要 compiler 依赖）：开关、输出协议、惰性、interp 静默。
-run: mkdir -p "$TMPDIR/mac-e2e/app"
+run: mkdir -p "$TMPDIR/mac-e2e/app" "$TMPDIR/mac-e2e/tmp"
 run: printf '[package]\nname = "mac-app"\n\n[dependencies]\nvuna-base = "%s"\n' "$VUNA_BASE" > "$TMPDIR/mac-e2e/vuna.toml"
 run: printf 'main : Int\nmain = let _ = dbg! "probe=${42}" in 43\n' > "$TMPDIR/mac-e2e/app/Main.vuna"
 run: TMPDIR="$TMPDIR/mac-e2e/tmp" "$VUNA" build "$TMPDIR/mac-e2e" 2>&1

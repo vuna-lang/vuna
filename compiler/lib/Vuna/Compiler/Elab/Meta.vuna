@@ -100,7 +100,7 @@ metaSpanOf ec _ = Nothing
 
 lookupSpanPair : Int -> List (Pair Int Span) -> Maybe Span
 lookupSpanPair m [] = Nothing
-lookupSpanPair m (Pair k sp :: rest) = if k == m then Just sp else lookupSpanPair m rest
+lookupSpanPair m ((Pair k sp) :: rest) = if k == m then Just sp else lookupSpanPair m rest
 
 export convEc : Ec -> Int -> Value -> Value -> Check Ec
 convEc ec depth expected actual = case conv (ecDefTbl ec) (ecSolsP ec) depth expected actual of

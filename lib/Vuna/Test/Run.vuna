@@ -252,16 +252,16 @@ withEnvIface env argv = withEnvIfaceAt env "${env.envTmp}/iface" argv
 -- 指定 iface 目录的变体：seed 必须用自己的 iface（否则会读到新编译器写的
 -- `*.iface`，旧 seed 的 AST schema 不同会直接崩溃；与 seed 的独立性语义无关）。
 withEnvIfaceAt : Env -> String -> List String -> List String
-withEnvIfaceAt env ifaceDir argv =
-  withEnv env (append ["env", "TMPDIR=${env.envTmp}", "VUNA_IFACE_DIR=${ifaceDir}"] argv)
+withEnvIfaceAt env _ifaceDir argv =
+  withEnv env (append ["env", "TMPDIR=${env.envTmp}", "VUNA_STORE=${env.envTmp}/store"] argv)
 
--- steps case 的进程环境：TMPDIR/iface/REPL 历史都按 **case** 隔离（同一 worker 内多个
--- steps case 顺序执行，共享 envTmp 会让 `$TMPDIR/ws1` 之类互相污染）。章节脚本时代的
--- harness 用 mktemp 给每段一个独立 tmp；这里由 runner 直接提供。
+-- steps case 的进程环境：TMPDIR/iface/REPL 历史/对象库都按 **case** 隔离（同一 worker 内
+-- 多个 steps case 顺序执行，共享 envTmp 会让 `$TMPDIR/ws1` 之类互相污染）。`VUNA_STORE`
+-- 也按 case 隔离：对象库是内容寻址的，共享只影响命中率，但沙箱里 `$HOME` 可能只读。
 withStepsEnv : Env -> String -> List String -> List String
 withStepsEnv env caseTmp argv =
   withEnv env
-    (append ["env", "TMPDIR=${caseTmp}", "VUNA_IFACE_DIR=${caseTmp}/iface", "VUNA_REPL_HISTORY=${caseTmp}/repl-history"] argv)
+    (append ["env", "TMPDIR=${caseTmp}", "VUNA_STORE=${caseTmp}/store", "VUNA_REPL_HISTORY=${caseTmp}/repl-history"] argv)
 
 combinedOut : CmdResult -> String
 combinedOut r = r.cmdOut ++ r.cmdErr
@@ -318,7 +318,7 @@ finishCase id start assertions =
 -- ---------------------------------------------------------------
 -- golden / error case
 -- ---------------------------------------------------------------
--- 预热依赖接口镜像：`vuna check <base>` 会把 base 的模块接口写进 `VUNA_IFACE_DIR`
+-- 预热依赖接口：`vuna check <base>` 会把 base 的模块接口写进对象库（`$VUNA_STORE/objects/iface`）
 -- （单文件 check/compile 不写）。会话初始化据此把「每次重精化整棵 base」降到
 -- 「读接口 + 只精化入口」。失败只降级（会话回退 CLI），不影响用例结果。
 -- 注意：预热写的是**会话专用**镜像（`iface-session`），不是子进程用的 `iface`

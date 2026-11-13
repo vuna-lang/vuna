@@ -12,6 +12,11 @@ name = "vuna-compiler"
 [export]
 modules = [
   "Vuna.Compiler.Common",
+  "Vuna.Compiler.Diag",
+  "Vuna.Compiler.Diag.Format",
+  "Vuna.Compiler.Diagnostics.Ic",
+  "Vuna.Compiler.Driver.CompilerCli",
+  "Vuna.Compiler.Addr",
   "Vuna.Compiler.Diagnostics",
   "Vuna.Compiler.Diagnostics.Common",
   "Vuna.Compiler.Diagnostics.Cg",
@@ -32,8 +37,6 @@ modules = [
   "Vuna.Compiler.Hash",
   "Vuna.Compiler.Fingerprint",
   "Vuna.Compiler.Store",
-  "Vuna.Compiler.Query",
-  "Vuna.Compiler.Query.Run",
   "Vuna.Compiler.Frontend.Diagnostics",
   "Vuna.Compiler.Loader.Diagnostics",
   "Vuna.Compiler.Frontend.Ast",
@@ -89,7 +92,6 @@ modules = [
   "Vuna.Compiler.Codegen.Split",
   "Vuna.Compiler.Driver.Split",
   "Vuna.Compiler.Driver.Dt",
-  "Vuna.Compiler.Driver.Graph",
   "Vuna.Compiler.Driver.ToolPayload",
   "Vuna.Compiler.Driver.Compile",
   "Vuna.Compiler.Driver.Cache",

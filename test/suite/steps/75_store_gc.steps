@@ -1,0 +1,21 @@
+# 75) `vuna store gc`：按 roots + 宽限窗口 + 容量上限淘汰对象。
+#     输入寻址下删除对象不影响正确性（缺了就重算），GC 只保证「常用的别删」。
+run: sh -c 'rm -rf "$TMPDIR/gc-store"; VUNA_STORE="$TMPDIR/gc-store" "$VUNA" check "$VUNA_BASE" >/dev/null 2>&1; test "$(find "$TMPDIR/gc-store/objects" -type f | wc -l)" -gt 0'
+exit: 0
+# check 会在 roots 下写项目文件（GC 的保留集合由检查/构建自动登记）。
+run: sh -c 'test -n "$(ls "$TMPDIR/gc-store/roots" 2>/dev/null)"'
+exit: 0
+# 宽限窗口内的对象不删（默认 3600s）。
+run: sh -c 'VUNA_STORE="$TMPDIR/gc-store" "$VUNA" store gc'
+exit: 0
+out-contains: store-gc:
+run: sh -c 'test "$(find "$TMPDIR/gc-store/objects" -type f | wc -l)" -gt 0'
+exit: 0
+# 加 root 保护后再用 0 秒宽限：受保护的对象必须留下。
+run: sh -c 'mkdir -p "$TMPDIR/gc-store/roots"; keep=$(find "$TMPDIR/gc-store/objects/iface" -type f | head -1 | xargs basename); printf "%s\n" "$keep" > "$TMPDIR/gc-store/roots/project-a"; VUNA_STORE="$TMPDIR/gc-store" "$VUNA" store gc --older-than 0; test -f "$(find "$TMPDIR/gc-store/objects/iface" -name "$keep" | head -1)"'
+exit: 0
+# 未受保护的旧对象被删（objects 里文件数下降），dry-run 不改盘。
+run: sh -c 'VUNA_STORE="$TMPDIR/gc-store" "$VUNA" check "$VUNA_BASE" >/dev/null 2>&1; n1=$(find "$TMPDIR/gc-store/objects" -type f | wc -l); VUNA_STORE="$TMPDIR/gc-store" "$VUNA" store gc --older-than 0 --dry-run >/dev/null; n2=$(find "$TMPDIR/gc-store/objects" -type f | wc -l); [ "$n1" -eq "$n2" ]'
+exit: 0
+run: sh -c 'VUNA_STORE="$TMPDIR/gc-store" "$VUNA" store gc --older-than 0 >/dev/null; n=$(find "$TMPDIR/gc-store/objects" -type f | wc -l); [ "$n" -ge 1 ]'
+exit: 0

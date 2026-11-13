@@ -1,15 +1,14 @@
 module Vuna.Clean where
 
--- Vuna.Clean：缓存清理（`vuna clean [--iface] [--store] [--packages] [--gc] [--all] [--dry-run] [DIR]`）。
+-- Vuna.Clean：缓存清理（`vuna clean [--store] [--packages] [--gc] [--all] [--dry-run] [DIR]`）。
 --
---   --iface     树内接口缓存（`*.iface` / `.vuna-iface` / 原子写残留 `*.iface.*.tmp`）
---   --store     `Vuna.Compiler.Store` 的临时缓存根（`$VUNA_CACHE_DIR` 或 `$TMPDIR/vuna-cache`）
---   --packages  持久包 store（`$VUNA_STORE` / XDG / `~/.vuna/store`）：objects + 物化视图
---   --gc        与 `--packages` 连用：只删**未被工作区 manifest 引用**的对象（引用集 =
+-- 接口缓存已并入对象库（`$VUNA_STORE/objects/iface`），没有树内 `*.iface`，因此不再有 `--iface`。
+--   --store     `Vuna.Compiler.Store` 的对象库根（`$VUNA_STORE` → XDG → HOME → `$TMPDIR/vuna-store`）
+--   --packages  持久包 store（同一棵 `$VUNA_STORE`）：objects + views
+--   --gc        与 `--packages` 连用：只删**未被 roots 引用**的对象（引用集 =
 --               当前包与 `[workspace].members` 里 git/url 依赖的 hash），其余保留
 --   --all       三者都清（默认不含 --packages：持久对象跨项目复用，只有显式 --all 才删）
---
--- `DIR` 只对 `--iface` 与 `--gc` 的引用集有用（默认 `.`）；`--store` / `--packages`
+-- `DIR` 只对 `--gc` 的引用集有用（默认 `.`）；`--store` / `--packages` 不收目录。
 -- 的根由环境决定。识别按文件名 / 目录布局，不读内容。
 import Base.HostRow
 import Vuna.Cli.Args
@@ -19,61 +18,42 @@ import Vuna.Compiler.Packages.Pkg
 import Vuna.Compiler.Packages.Source
 import Vuna.Compiler.Store
 import Base.List
+import Base.Nat
 import Base.String
 
 export runClean : List String -> Eff hostRow Int
-runClean args = case parseToolArgs "vuna clean" [BoolFlag "dry-run", BoolFlag "iface", BoolFlag "store", BoolFlag "packages", BoolFlag "gc", BoolFlag "all"] args of
+runClean args = case parseToolArgs "vuna clean" [BoolFlag "dry-run", BoolFlag "store", BoolFlag "packages", BoolFlag "gc", BoolFlag "all"] args of
   ErrC e => cleanError (diagText e)
   OkC parsed =>
     let
       dry = flagSet parsed "dry-run"
       wantGc = flagSet parsed "gc"
       anyFlag =
-        flagSet parsed "iface"
-          || flagSet parsed "store"
+        flagSet parsed "store"
           || flagSet parsed "packages"
           || flagSet parsed "gc"
           || flagSet parsed "all"
-      wantIface = flagSet parsed "iface" || flagSet parsed "all" || not anyFlag
       wantStore = flagSet parsed "store" || flagSet parsed "all" || not anyFlag
       wantPackages = flagSet parsed "packages" || flagSet parsed "all"
     in if wantGc && not wantPackages then cleanError "vuna clean --gc requires --packages"
     else case parsed.positionals of
-      [] => cleanTargets wantIface wantStore wantPackages wantGc dry "."
+      [] => cleanTargets wantStore wantPackages wantGc dry "."
       [dir] =>
-        if (wantStore || wantPackages) && not wantIface && not wantGc then cleanError "vuna clean --store/--packages takes no directory"
-        else cleanTargets wantIface wantStore wantPackages wantGc dry dir
+        if (wantStore || wantPackages) && not wantGc then cleanError "vuna clean --store/--packages takes no directory"
+        else cleanTargets wantStore wantPackages wantGc dry dir
       _ => cleanError "too many arguments; expected at most one directory"
 
-cleanTargets : Bool -> Bool -> Bool -> Bool -> Bool -> String -> Eff hostRow Int
-cleanTargets wantIface wantStore wantPackages wantGc dry dir = do
-  code <- if wantIface then cleanIfaceAt dir dry else pure 0
-  if code /= 0 then pure code
-  else do
-    storeCode <- if wantStore then cleanStore dry else pure 0
-    if storeCode /= 0 then pure storeCode
-    else if wantPackages then cleanPackages wantGc dir dry else pure 0
-
-cleanIfaceAt : String -> Bool -> Eff hostRow Int
-cleanIfaceAt dir dry = do
-  dirR <- requireDirectory dir
-  case dirR of
-    ErrC e => cleanError (diagText e)
-    OkC _ => do
-      all <- walkFiles 1048576 dir
-      let
-        targets = filter isIfaceFile all
-        n = length targets
-      in do
-        _ <- if dry then pure 0 else removeEach targets
-        _ <-
-          raiseToRow hostRow
-            (@vuna@prim_eff_print "clean-iface: ${ifaceVerb dry} ${strFromInt n} file(s) under ${dir}\n")
-        pure 0
+-- 接口缓存已并入对象库（`$VUNA_STORE/objects/iface`），不再有树内 `*.iface`；
+-- 因此没有 `--iface`：清缓存 = 清临时 store（`--store`）或持久包 store（`--packages`）。
+cleanTargets : Bool -> Bool -> Bool -> Bool -> String -> Eff hostRow Int
+cleanTargets wantStore wantPackages wantGc dry dir = do
+  storeCode <- if wantStore then cleanStore dry else pure 0
+  if storeCode /= 0 then pure storeCode
+  else if wantPackages then cleanPackages wantGc dir dry else pure 0
 
 cleanStore : Bool -> Eff hostRow Int
 cleanStore dry = do
-  root <- storeCacheBaseEff
+  root <- storeRootEff
   cleanRoot root "clean-store" dry
 
 -- `--packages`：默认整根清理；`--gc` 只删未被工作区 manifest 引用的对象。
@@ -92,8 +72,8 @@ cleanPackagesGc root dir dry = do
   in do
     _ <- if dry then pure 0 else removeEach drop
     _ <-
-      raiseToRow hostRow
-        (@vuna@prim_eff_print "clean-packages --gc: ${storeVerb dry} ${strFromInt n} unreferenced file(s) under ${root}\n")
+      prim_eff_print
+        "clean-packages --gc: ${storeVerb dry} ${strFromInt n} unreferenced file(s) under ${root}\n"
     pure 0
 
 -- 路径属于被引用对象：`objects/<digest>` 或 `pkgs/<digest>/...`。
@@ -150,7 +130,7 @@ depHashesOf (dep :: rest) = case depHashOf dep of
 cleanRoot : String -> String -> Bool -> Eff hostRow Int
 cleanRoot root label dry = do
   exists <- raiseToRow hostRow (@vuna@prim_eff_fileExists root)
-  isDir <- if exists then raiseToRow hostRow (@vuna@prim_eff_isDirectory root) else pure False
+  isDir <- if exists then prim_eff_isDirectory root else pure False
   if not (exists && isDir) then do
     _ <- raiseToRow hostRow (@vuna@prim_eff_print "${label}: no cache store to remove\n")
     pure 0
@@ -164,10 +144,6 @@ cleanRoot root label dry = do
         raiseToRow hostRow
           (@vuna@prim_eff_print "${label}: ${storeVerb dry} ${strFromInt n} file(s) under ${root}\n")
       pure 0
-
-ifaceVerb : Bool -> String
-ifaceVerb True = "would remove"
-ifaceVerb False = "removed"
 
 storeVerb : Bool -> String
 storeVerb True = "would remove"
@@ -202,7 +178,7 @@ walkFiles : Int -> String -> Eff hostRow (List String)
 walkFiles fuel dir = if fuel <= 0 then pure []
 else do
   exists <- raiseToRow hostRow (@vuna@prim_eff_fileExists dir)
-  isDir <- raiseToRow hostRow (@vuna@prim_eff_isDirectory dir)
+  isDir <- if exists then prim_eff_isDirectory dir else pure False
   if exists && isDir then do
     names <- raiseToRow hostRow (@vuna@prim_eff_readDir dir)
     concatMapEff (walkGo (fuel - 1) dir) names
@@ -229,7 +205,136 @@ else case name of
       isDir <- raiseToRow hostRow (@vuna@prim_eff_isDirectory path)
       if exists && isDir then walkFiles (fuel - 1) path else pure [path]
 
-isIfaceFile : String -> Bool
-isIfaceFile path =
-  if endsWith "/.vuna-iface" path then True
-  else if endsWith ".iface" path then True else endsWith ".tmp" path && contains ".iface." path
+-- ---------------------------------------------------------------
+-- `vuna store gc`：按 **roots + 宽限窗口 + 容量上限** 淘汰对象。
+--
+-- 输入寻址下删除对象**不影响正确性**：缺了就是一次未命中、重算即可。所以这里只需要
+-- 一条策略：常用的别删。roots（`store/roots/<项目摘要>`，项目只追加）就是「常用」的
+-- 声明；宽限窗口保护「刚写、root 还没写」的崩溃窗口。
+-- ---------------------------------------------------------------
+export runStoreGc : List String -> Eff hostRow Int
+runStoreGc args = case parseToolArgs "vuna store gc" [BoolFlag "dry-run", ValueFlag "older-than", ValueFlag "max-size"] args of
+  ErrC e => cleanError (diagText e)
+  OkC parsed => do
+    root <- storeRootReadyEff
+    keep <- allRootDigests
+    let
+      dry = flagSet parsed "dry-run"
+      graceSec = case lookupPair "older-than" parsed.valuesOf of
+        Just v => strToIntOr v 3600
+        Nothing => 3600
+      maxBytes = case lookupPair "max-size" parsed.valuesOf of
+        Just v => strToIntOr v 0
+        Nothing => 0
+    in do
+      gcSweep root keep graceSec maxBytes dry
+
+-- 十进制整数解析：只接受纯数字（`--older-than` / `--max-size` 都是非负整数）。
+-- 语言侧没有 char 级原语，这里用 `substring` 逐字符取一位再比对字面量；递归用显式 fuel
+-- （长度上限即 fuel），这样终止性检查不需要理解 `i` 的递增。
+strToIntOr : String -> Int -> Int
+strToIntOr s d = case readNatFuel (toInt (byteLength s)) 0 s 0 of
+  Just v => v
+  Nothing => d
+
+digitOf : String -> Maybe Int
+digitOf s =
+  if s == "0" then Just 0
+  else if s == "1" then Just 1
+  else if s == "2" then Just 2
+  else if s == "3" then Just 3
+  else if s == "4" then Just 4
+  else if s == "5" then Just 5
+  else if s == "6" then Just 6
+  else if s == "7" then Just 7 else if s == "8" then Just 8 else if s == "9" then Just 9 else Nothing
+
+-- `fuel` 从长度递减到 0；`pos` 是当前位（0 起）。
+readNatFuel : Int -> Int -> String -> Int -> Maybe Int
+readNatFuel fuel pos s acc = if fuel <= 0 then Just acc
+else case digitOf (substring (Base.Nat.fromInt pos) (Base.Nat.fromInt 1) s) of
+  Nothing => Nothing
+  Just d => readNatFuel (fuel - 1) (pos + 1) s (acc * 10 + d)
+
+-- 所有项目 roots 的并集（GC 的「保留」集合）。
+allRootDigests : Eff hostRow (List String)
+allRootDigests = do
+  projects <- storeRootProjectListEff
+  concatMapEff storeRootLoadEff projects
+
+-- 遍历 root 下 objects/ 与 blobs/ 的全部文件（两个目录都可能不存在）。
+gcFilesOf : String -> Eff hostRow (List String)
+gcFilesOf root = do
+  objs <- walkFiles 1048576 "${root}/objects"
+  blobs <- walkFiles 1048576 "${root}/blobs"
+  pure (append objs blobs)
+
+fileNameOf : String -> String
+fileNameOf path = case reverse (split "/" path) of
+  [] => ""
+  x :: _ => x
+
+-- 候选 = 名字不在 roots 里、且 mtime 早于宽限窗口；带 size 便于容量判定。
+gcCandidates : Int -> List String -> Int -> List String -> Eff hostRow (List (Pair Int (Pair Int String)))
+gcCandidates _ _ _ [] = pure []
+gcCandidates now keep grace (p :: rest) = do
+  more <- gcCandidates now keep grace rest
+  if memName (fileNameOf p) keep then pure more
+  else do
+    mtime <- raiseToRow hostRow (@vuna@prim_eff_fileMtime p)
+    if mtime + grace < now then do
+      size <- raiseToRow hostRow (@vuna@prim_eff_fileSize p)
+      pure (Pair mtime (Pair size p) :: more)
+    else pure more
+
+sortByAge : List (Pair Int (Pair Int String)) -> List (Pair Int (Pair Int String))
+sortByAge [] = []
+sortByAge (x :: rest) = insertByAge x (sortByAge rest)
+
+insertByAge : Pair Int (Pair Int String) -> List (Pair Int (Pair Int String)) -> List (Pair Int (Pair Int String))
+insertByAge x [] = [x]
+insertByAge x ((Pair k v) :: rest) =
+  if firstOf x <= k then Base.List.Cons x (Base.List.Cons (Pair k v) rest)
+  else Base.List.Cons (Pair k v) (insertByAge x rest)
+
+-- 容量压力：最旧的先删，直到总量落到上限以下；上限 0 = 不限容量（全删候选）。
+pickGo : Int -> Int -> List (Pair Int (Pair Int String)) -> List (Pair Int (Pair Int String)) -> List (Pair Int (Pair Int String))
+pickGo _ _ [] acc = reverse acc
+pickGo total maxBytes (r :: rest) acc =
+  if total <= maxBytes then reverse acc
+  else pickGo (total - firstOf (secondOf r)) maxBytes rest (r :: acc)
+
+sumSizes : List (Pair String Int) -> Int
+sumSizes [] = 0
+sumSizes (p :: rest) = secondOf p + sumSizes rest
+
+sizesOf : List String -> Eff hostRow (List (Pair String Int))
+sizesOf [] = pure []
+sizesOf (p :: rest) = do
+  more <- sizesOf rest
+  size <- raiseToRow hostRow (@vuna@prim_eff_fileSize p)
+  pure (Pair p size :: more)
+
+gcSweep : String -> List String -> Int -> Int -> Bool -> Eff hostRow Int
+gcSweep root keep grace maxBytes dry = do
+  now <- currentSec
+  files <- gcFilesOf root
+  cands <- gcCandidates now keep grace files
+  sizes <- sizesOf files
+  let
+    total = sumSizes sizes
+    targets = pickGo total maxBytes (sortByAge cands) []
+    paths = map (\q => secondOf (secondOf q)) targets
+    n = length paths
+    _ = dbg! "store-gc candidates=${length cands} delete=${strFromInt n} total=${strFromInt total}"
+  in do
+    _ <- if dry then pure 0 else removeEach paths
+    _ <-
+      prim_eff_print
+        "store-gc: ${storeVerb dry} ${strFromInt n} object(s) under ${root} (keep ${strFromInt (length keep)}, grace ${strFromInt grace}s)\n"
+    pure 0
+
+-- 当前 Unix 秒（GC 的宽限窗口判据）。
+currentSec : Eff hostRow Int
+currentSec = do
+  us <- effTimeUs
+  pure (us / 1000000)

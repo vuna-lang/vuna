@@ -322,7 +322,7 @@ missingDepModules pkg (m :: rest) ifaceNames =
 export dtCheckSourceWithIfaces : PackageContext -> String -> String -> List ModuleIface -> Eff hostRow (Check (List Diagnostic))
 dtCheckSourceWithIfaces ctx label source ifaces =
   let
-    _ = dbg! "query-source=check modules=${length ifaces}"
+    _ = dbg! "iface-source=check modules=${length ifaces}"
   in do
     projectR <- loadModuleSourceWithPreloaded ctx label source (modulesOfIfaces ifaces)
     case projectR of
@@ -402,7 +402,7 @@ replProgramWithIfaces ctx program exprSource ifaces = do
 replProgramWithIfacesAux : PackageContext -> String -> String -> List ModuleIface -> Maybe AuxCache -> Eff hostRow (Check (Pair (Pair DtProgram Expr) (Maybe AuxCache)))
 replProgramWithIfacesAux ctx program exprSource ifaces cache =
   let
-    _ = dbg! "query-source=repl modules=${length ifaces}"
+    _ = dbg! "iface-source=repl modules=${length ifaces}"
     src = "${program}\n${replExprName} = ${exprSource}\n"
   in do
     loaded <- loadProjectSourceWithPreloaded ctx "<repl>" src (modulesOfIfaces ifaces)
@@ -1588,10 +1588,17 @@ dtSplitProjectWithIfaces ctx entry printResult ifaces = do
     ErrC e => pure (ErrC e)
     OkC resolved => case shiftedDepPrograms (materializedDeps (contextPackageName ctx) (secondOf resolved) ifaces) of
       ErrC e => pure (ErrC e)
-      OkC deps => dtSplitPartsOurs ctx entry (secondOf resolved) deps printResult
+      OkC deps =>
+        dtSplitPartsOursWith ctx entry (secondOf resolved) deps printResult
+          (concatMap miDefLocsOf ifaces)
+
+dtSplitPartsOursWith : PackageContext -> String -> Pair (List Decl) (List Module) -> List CachedProgram -> Bool -> List (Pair String (Pair String Int)) -> Eff hostRow (Check (Pair (List SplitFile) CheckedPackage))
 
 dtSplitPartsOurs : PackageContext -> String -> Pair (List Decl) (List Module) -> List CachedProgram -> Bool -> Eff hostRow (Check (Pair (List SplitFile) CheckedPackage))
 dtSplitPartsOurs ctx entry parts deps printResult =
+  dtSplitPartsOursWith ctx entry parts deps printResult []
+
+dtSplitPartsOursWith ctx entry parts deps printResult extraDefLocs =
   let
     pkgName = contextPackageName ctx
     modules = reverse (secondOf parts)
@@ -1615,7 +1622,8 @@ dtSplitPartsOurs ctx entry parts deps printResult =
             (dtProgWarnings prog)
       in do
         filesR <-
-          splitGenerateCached ctx entry modules moduleParts (firstOf parts) assembled printResult []
+          splitGenerateCached ctx entry modules moduleParts (firstOf parts) assembled printResult
+            extraDefLocs
         pure (case filesR of
           ErrC e => ErrC e
           OkC files => OkC (Pair files checked)

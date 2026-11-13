@@ -162,7 +162,7 @@ manifest，不向上找。命令语义与包格式
 | [docs/reference/compiler.md](docs/reference/compiler.md) | 编译器模块职责、codegen 表示与输出模型、接口摘要（TTC 式模块化精化）、夹具指标 |
 | [docs/reference/ir.md](docs/reference/ir.md) | 擦除后的中间表示（Track A 第一步）：IR 节点与边界、Core → IR 的决策划分、`checks.ir-boundary` |
 | [docs/reference/cache.md](docs/reference/cache.md) | 模块级接口摘要：TTC 对照、写/读数据流、失效与校验、已知边界 |
-| [docs/reference/query-graph.md](docs/reference/query-graph.md) | 查询图：节点模型、命中判据（声明集合 + 观测依赖）、cutoff、span / 取消 / 并行波次、会话索引、编译管线节点族 |
+| [docs/reference/cache.md](docs/reference/cache.md) | 输入寻址对象库：对象族、命中判据、roots 与 store gc、观测标签、已知边界 |
 | [docs/reference/bootstrap.md](docs/reference/bootstrap.md) | 种子策略、rotation 流程、fixed point、TCB 边界 |
 | [docs/reference/testing.md](docs/reference/testing.md) | 测试体系、corpus 分类、nix checks 清单、性能基准 |
 | [docs/reference/lint.md](docs/reference/lint.md) | lint 规则（AST 驱动、`--fix` 与门禁） |

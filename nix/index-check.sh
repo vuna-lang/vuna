@@ -24,8 +24,8 @@ esac
 
 cd "$REPO"
 
-# 缓存根与 `Store` 同规则：`VUNA_CACHE_DIR` 覆盖，缺省 `$TMPDIR/vuna-cache`。
-cache=${VUNA_CACHE_DIR:-${TMPDIR:-/tmp}/vuna-cache}
+# 缓存根 = 对象库根（与 `Store` 同一口径）。
+cache=${VUNA_STORE:-${TMPDIR:-/tmp}/vuna-store}
 
 tmpd=$(mktemp -d "${TMPDIR:-/tmp}/vuna-index-check.XXXXXX") || exit 1
 trap 'if [ -f "$tmpd/Resolve.vuna.bak" ]; then mv "$tmpd/Resolve.vuna.bak" compiler/lib/Vuna/Compiler/Loader/Resolve.vuna; fi; rm -rf "$tmpd"' EXIT INT TERM

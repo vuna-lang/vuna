@@ -105,9 +105,9 @@ if [ -n "$ONLY" ]; then
   NAMES=$ONLY
 fi
 
-# 与 `Store` 同规则：`VUNA_CACHE_DIR` 覆盖，缺省 `$TMPDIR/vuna-cache`。
+# 与 `Store` 同规则：缓存根 = 对象库根。
 cache_root() {
-  printf '%s' "${VUNA_CACHE_DIR:-${TMPDIR:-/tmp}/vuna-cache}"
+  printf '%s' "${VUNA_STORE:-${TMPDIR:-/tmp}/vuna-store}"
 }
 
 # 冷基准统一清整个 query store（check / split / lex / 单元缓存同根）。

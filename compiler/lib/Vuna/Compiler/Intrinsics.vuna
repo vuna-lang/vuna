@@ -834,9 +834,7 @@ effIntrinsics =
 export internalIntrinsics : List Intrinsic
 internalIntrinsics =
   append
-    [ Intrinsic debugOnIntrinsicName (IFun IInt IBool) OpNone "dtp_debug_on" False,
-      Intrinsic debugLineIntrinsicName (IFun IStr IInt) OpNone "dtp_debug_line" False
-    ]
+    [Intrinsic debugOnIntrinsicName (IFun IInt IBool) OpNone "dtp_debug_on" False, Intrinsic debugLineIntrinsicName (IFun IStr IInt) OpNone "dtp_debug_line" False]
     (filter (\i => not (intrinsicVisible i)) effIntrinsics)
 
 -- | 编译器 tracing 原语名：codegen 据此按需追加 runtime helper（`usesTrace`）。

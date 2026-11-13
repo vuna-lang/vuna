@@ -580,9 +580,14 @@ checkDebugConstruct release sp name resolved scope =
 -- 因为源码层写不出（parser 只在语法糖展开时合成这些名字）。
 isParserSyntaxName : String -> Bool
 isParserSyntaxName name =
-  name == listNilSyntax || name == listConsSyntax || name == performSyntax
-    || name == handleSyntax || name == handleNoRetSyntax || name == rowAtSyntax
-    || startsWith "@vuna@list@" name || startsWith "@vuna@handle@" name
+  name == listNilSyntax
+    || name == listConsSyntax
+    || name == performSyntax
+    || name == handleSyntax
+    || name == handleNoRetSyntax
+    || name == rowAtSyntax
+    || startsWith "@vuna@list@" name
+    || startsWith "@vuna@handle@" name
 
 resolveExpr : Int -> List Module -> String -> String -> Namespaces -> List Import -> List String -> Expr -> Check Expr
 resolveExpr fuel modules label prefix ns imports scope expr = if fuel <= 0 then icFuel "resolver"
@@ -593,9 +598,8 @@ else case expr of
     if isHoleName name then OkC (EVar name sp)
     else if startsWith "!" name then OkC (EVar (substring 1 (natFromInt (strLength name)) name) sp)
     else if isMacroSyntaxName name then icInternal "unexpanded macro invocation ${name}"
-    else if isInternalSyntaxName name then
-      if isParserSyntaxName name || startsWith "Base." prefix || startsWith "Vuna." prefix || startsWith "Base_d" prefix || startsWith "Vuna_d" prefix then OkC (EVar name sp)
-      else rnNoLoc1 (UnknownVariable name) name
+    else if isInternalSyntaxName name then if isParserSyntaxName name || startsWith "Base." prefix || startsWith "Vuna." prefix || startsWith "Base_d" prefix || startsWith "Vuna_d" prefix then OkC (EVar name sp)
+    else rnNoLoc1 (UnknownVariable name) name
     else if containsDot name then resolveDottedExpr modules label prefix ns imports scope name sp
     else Vuna.Compiler.Common.bind (resolveGlobal modules label prefix ns imports scope name)
       (\n => checkDebugConstruct ns.nsRelease sp name n scope)

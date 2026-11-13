@@ -1,0 +1,161 @@
+-- | 输入摘要（地址）层：落盘对象的路径由这里的纯函数决定。
+module Vuna.Compiler.Addr where
+
+-- Vuna.Compiler.Addr：**唯一寻址规则**的实现。
+--
+--   落盘路径 = 该对象的输入摘要     ⇒   「命中」= 路径存在性
+--
+-- 于是索引、依赖快照比较、写锁、会话持久化都不再需要：缓存是否新鲜由路径本身回答。
+-- 载荷完整性仍由 `Store` framing 头里的内容地址兜底（读侧重算）。
+--
+-- 本模块只提供**通用构造器**与模块依赖图（header）。每个载荷族在自己的模块里定义
+-- 输入分段（`addrOf ["lex", codec, …]`），避免与 `Store`/`Driver` 成环。
+--
+-- 分段用 `Canonical.Bytes` 的 `[n:…]`/`s<len>:` 自定界编码再取 SHA-256：不用「拼字符串
+-- 再加分隔符」，因为那会 reintroduce `("a","bc")` 与 `("ab","c")` 同键的歧义。
+import Base.HostRow
+import Base.List
+import Base.Maybe
+import Base.Pair
+import Vuna.Compiler.Canonical.Bytes
+import Vuna.Compiler.Common
+import Vuna.Compiler.Frontend.Ast
+import Vuna.Compiler.Hash
+import Vuna.Compiler.Store
+
+-- | 地址格式版本：分段文法或摘要算法变化时递增（旧地址自然失效）。
+export addrSchema : String
+addrSchema = "vuna-addr 1"
+
+-- | 内容摘要（小输入：SHA-256 十六进制）。
+export hashHex : String -> String
+hashHex s = digestHex (digestOfString s)
+
+-- | 输入摘要：域分隔的规范编码后取 SHA-256。
+export addrOf : List String -> String
+addrOf parts = hashHex (encTop (encList encStr) (addrSchema :: parts))
+
+-- ---------------------------------------------------------------
+-- 模块头（header）对象
+--
+-- 要算模块的输入摘要必须知道它 import 了谁，而 import 名单是 parse 的产物。header 对象
+-- 把这份「便宜的事实」按**源摘要**寻址存起来：热路径只读每个模块一个 ~200 字节对象，
+-- 不必 parse。它同时携带 fixity 表（依赖方按 import 解析运算符需要）。
+--
+-- 隐式导入（Prelude）不落进 header：它依赖包上下文，落进去会让同一份源文件在两个包里
+-- 得到两个 header。依赖方在算输入摘要时**无条件**并入 `Prelude` 的输入摘要（过近似，
+-- 只多失效不漏失效）。
+-- ---------------------------------------------------------------
+export headerKind : String
+headerKind = "header"
+
+export headerCodec : String
+headerCodec = "module-header 1"
+
+export record FixRow(..) where
+  frOp : String
+  frLevel : Int
+  frAssoc : Int
+  frTarget : Maybe String
+
+export record ModHeader(..) where
+  mhName : String
+  mhImports : List String
+  mhFixities : List FixRow
+
+encFixRow : FixRow -> List String -> List String
+encFixRow f acc =
+  encStr f.frOp (encInt f.frLevel (encInt f.frAssoc (encMaybe encStr f.frTarget acc)))
+
+encHeader : ModHeader -> List String -> List String
+encHeader h acc = encStr h.mhName (encList encStr h.mhImports (encList encFixRow h.mhFixities acc))
+
+-- | header 载荷的规范字节。
+export encModHeader : ModHeader -> String
+encModHeader h = encTop encHeader h
+
+decFixRow : Int -> Cur -> Maybe (Pair FixRow Cur)
+decFixRow fuel cur = case decStr fuel cur of
+  Nothing => Nothing
+  Just (Pair op rest1) => case decInt (fuel - 1) rest1 of
+    Nothing => Nothing
+    Just (Pair level rest2) => case decInt (fuel - 1) rest2 of
+      Nothing => Nothing
+      Just (Pair assoc rest3) => case decMaybe decStr (fuel - 1) rest3 of
+        Nothing => Nothing
+        Just (Pair target rest4) => Just (Pair (FixRow op level assoc target) rest4)
+
+decHeader : Int -> Cur -> Maybe (Pair ModHeader Cur)
+decHeader fuel cur = case decStr fuel cur of
+  Nothing => Nothing
+  Just (Pair name rest1) => case decList decStr (fuel - 1) rest1 of
+    Nothing => Nothing
+    Just (Pair imports rest2) => case decList decFixRow (fuel - 1) rest2 of
+      Nothing => Nothing
+      Just (Pair fixities rest3) => Just (Pair (ModHeader name imports fixities) rest3)
+
+-- | 解码 header；尾部有多余字节即拒绝。
+export decModHeaderComplete : String -> Maybe ModHeader
+decModHeaderComplete s = case decHeader 65536 (curOf s) of
+  Nothing => Nothing
+  Just (Pair h rest) => if curAtEnd rest then Just h else Nothing
+
+-- | header 的输入摘要：源摘要 + 包身份 + 模块名（同一份源在包内是哪个模块，也决定隐式导入）。
+export headerAddrOf : String -> String -> String -> String
+headerAddrOf pkgKey moduleName srcAddr = addrOf ["header", headerCodec, pkgKey, moduleName, srcAddr]
+
+-- | 读 header（缺失/损坏 ⇒ `Nothing`，调用方现 parse 后写回）。
+export readHeaderEff : String -> Eff hostRow (Maybe ModHeader)
+readHeaderEff addr = do
+  payload <- storeObjectReadEff headerKind headerCodec addr
+  pure (case payload of
+    Nothing => Nothing
+    Just bytes => decModHeaderComplete bytes
+  )
+
+-- | 写 header（幂等）。
+export writeHeaderEff : String -> ModHeader -> Eff hostRow Int
+writeHeaderEff addr h = storeObjectWriteEff headerKind headerCodec addr (encModHeader h)
+
+-- ---------------------------------------------------------------
+-- 模块依赖图的拓扑序
+--
+-- 输入是一张「模块名 → 直接 import 名」的表（含包内与跨包模块）。返回依赖在前的顺序。
+-- 不在表里的名字（外部包）忽略：它们的输入摘要由调用方另行并入。环显式报空表（上层
+-- loader 已经拒绝环；这里用 fuel 兜底，不静默产错序）。
+-- ---------------------------------------------------------------
+lookupImports : String -> List (Pair String (List String)) -> List String
+lookupImports name [] = []
+lookupImports name ((Pair n deps) :: rest) = if n == name then deps else lookupImports name rest
+
+topoVisitGo : Int -> List (Pair String (List String)) -> List String -> List String -> List String -> Pair (List String) (List String)
+topoVisitGo fuel graph [] visited order = Pair visited order
+topoVisitGo fuel graph (name :: rest) visited order = if fuel <= 0 then Pair visited order
+else if memName name visited then topoVisitGo fuel graph rest visited order
+else
+  let
+    deps = lookupImports name graph
+    after = topoVisitGo (fuel - 1) graph deps visited order
+  in topoVisitGo (fuel - 1) graph rest (name :: firstOf after) (name :: secondOf after)
+
+-- | 依赖在前的模块顺序（未出现在表里的名字被跳过）。
+--
+-- 累加器是「反向拓扑序」（名字在依赖之前 prepend），所以只在**最外层** reverse 一次。
+-- 曾经在递归 base case 里 reverse，导致嵌套调用把已排好的前缀翻乱 —— 表现为依赖模块
+-- 排在使用者之后，算地址时依赖还没分配、退化成 `ext:` 哨兵（跨包接口因此永不命中）。
+export topoModules : List (Pair String (List String)) -> List String
+topoModules graph = reverse (secondOf (topoVisitGo 8192 graph (map firstOf graph) [] []))
+
+-- ---------------------------------------------------------------
+-- 从 parse 产物抽出 header
+-- ---------------------------------------------------------------
+export fixRowOf : FixityDecl -> FixRow
+fixRowOf f = FixRow f.fixityOp f.fixityLevel f.fixityAssoc f.fixityTarget
+
+importNameOf : Import -> String
+importNameOf (Import n _ _ _) = n
+
+-- | 模块名 + 显式 import 名单 + fixity 表。隐式导入由调用方在算摘要时并入（见模块头）。
+export headerOfSource : String -> SourceFile -> ModHeader
+headerOfSource name (SourceFile _ imports fixities _ _ _ _) =
+  ModHeader name (map importNameOf imports) (map fixRowOf fixities)

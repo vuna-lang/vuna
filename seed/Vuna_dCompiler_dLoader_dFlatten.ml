@@ -3,17 +3,15 @@ let v_Vuna_dCompiler_dLoader_dFlatten_dlexCacheSchema = "vuna-lex-cache 1"
 
 let v_Vuna_dCompiler_dLoader_dFlatten_dlexCacheCodec = "lex-tokens 1"
 
-let v_Vuna_dCompiler_dLoader_dFlatten_dlexCacheDir = (((Base_dMonad.v_Base_dMonad_dbind Base_dEff.v_Monad_uBase_uEff_uEff_ur) ((Base_dHostRow.v_Base_dHostRow_draiseToRow Base_dHostRow.v_Base_dHostRow_dhostRow) ((fun dtio_0 -> Base_dEff.C_Base_dEff_dEff_MkEff (fun (_ : Base_dEff.t_Base_dEff_dEffUnit) -> dtp_getenv dtio_0)) "TMPDIR"))) (fun base -> ((Base_dApplicative.v_Base_dApplicative_dpure Base_dEff.v_Applicative_uBase_uEff_uEff_ur) ((if (base = "") then "/tmp" else base) ^ "/vuna-cache/lex"))))
+let v_Vuna_dCompiler_dLoader_dFlatten_dlexAddrOf = (fun src -> (Vuna_dCompiler_dAddr.v_Vuna_dCompiler_dAddr_daddrOf (Base_dList.C_Base_dList_dList_Cons ("lex", (Base_dList.C_Base_dList_dList_Cons (v_Vuna_dCompiler_dLoader_dFlatten_dlexCacheSchema, (Base_dList.C_Base_dList_dList_Cons (v_Vuna_dCompiler_dLoader_dFlatten_dlexCacheCodec, (Base_dList.C_Base_dList_dList_Cons ((Vuna_dCompiler_dHash.v_Vuna_dCompiler_dHash_dcontentAddress src), Base_dList.C_Base_dList_dList_Nil))))))))))
 
-let v_Vuna_dCompiler_dLoader_dFlatten_dlexKeyOf = (fun tag path src -> (Vuna_dCompiler_dHash.v_Vuna_dCompiler_dHash_dcontentAddress (String.concat "" [v_Vuna_dCompiler_dLoader_dFlatten_dlexCacheSchema; "\t"; tag; "\t"; path; "\t"; src])))
-
-let v_Vuna_dCompiler_dLoader_dFlatten_dreadLexCache = (fun tag codec cpath -> (((Base_dMonad.v_Base_dMonad_dbind Base_dEff.v_Monad_uBase_uEff_uEff_ur) (((Vuna_dCompiler_dStore.v_Vuna_dCompiler_dStore_dstoreReadEff (String.concat "" [v_Vuna_dCompiler_dLoader_dFlatten_dlexCacheSchema; "/"; tag])) codec) cpath)) (fun payload -> ((Base_dApplicative.v_Base_dApplicative_dpure Base_dEff.v_Applicative_uBase_uEff_uEff_ur) (match payload with
+let v_Vuna_dCompiler_dLoader_dFlatten_dreadLexCache = (fun addr -> (((Base_dMonad.v_Base_dMonad_dbind Base_dEff.v_Monad_uBase_uEff_uEff_ur) (((Vuna_dCompiler_dStore.v_Vuna_dCompiler_dStore_dstoreObjectReadEff "lex") v_Vuna_dCompiler_dLoader_dFlatten_dlexCacheCodec) addr)) (fun payload -> ((Base_dApplicative.v_Base_dApplicative_dpure Base_dEff.v_Applicative_uBase_uEff_uEff_ur) (match payload with
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing -> Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__0) -> (Vuna_dCompiler_dCanonical_dLex.v_Vuna_dCompiler_dCanonical_dLex_ddecPTokListComplete dtb__0)
   | _ -> failwith "DT: impossible branch"
 )))))
 
-let v_Vuna_dCompiler_dLoader_dFlatten_dstoreLexCache = (fun tag cpath toks -> (((Base_dMonad.v_Base_dMonad_dbind Base_dEff.v_Monad_uBase_uEff_uEff_ur) v_Vuna_dCompiler_dLoader_dFlatten_dlexCacheDir) (fun lexDir -> (((Base_dMonad.v_Base_dMonad_dbind Base_dEff.v_Monad_uBase_uEff_uEff_ur) (Vuna_dCompiler_dStore.v_Vuna_dCompiler_dStore_dstoreEnsureDirEff lexDir)) (fun _u -> ((((Vuna_dCompiler_dStore.v_Vuna_dCompiler_dStore_dstoreWriteEff (String.concat "" [v_Vuna_dCompiler_dLoader_dFlatten_dlexCacheSchema; "/"; tag])) v_Vuna_dCompiler_dLoader_dFlatten_dlexCacheCodec) cpath) ((Vuna_dCompiler_dCanonical_dBytes.v_Vuna_dCompiler_dCanonical_dBytes_dencTop Vuna_dCompiler_dCanonical_dLex.v_Vuna_dCompiler_dCanonical_dLex_dencPTokList) toks)))))))
+let v_Vuna_dCompiler_dLoader_dFlatten_dstoreLexCache = (fun addr toks -> ((((Vuna_dCompiler_dStore.v_Vuna_dCompiler_dStore_dstoreObjectWriteEff "lex") v_Vuna_dCompiler_dLoader_dFlatten_dlexCacheCodec) addr) ((Vuna_dCompiler_dCanonical_dBytes.v_Vuna_dCompiler_dCanonical_dBytes_dencTop Vuna_dCompiler_dCanonical_dLex.v_Vuna_dCompiler_dCanonical_dLex_dencPTokList) toks)))
 
 let v_Vuna_dCompiler_dLoader_dFlatten_dattachParsePath = (fun path e -> (if ((Base_dString.v_Base_dString_dstartsWith (path ^ ":")) (Vuna_dCompiler_dDiag.v_Vuna_dCompiler_dDiag_ddiagText e)) then e else ((Vuna_dCompiler_dDiag.v_Vuna_dCompiler_dDiag_dwithLabel { Vuna_dCompiler_dDiag.f_Vuna_dCompiler_dDiag_dLabel_labelSpan = Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing; Vuna_dCompiler_dDiag.f_Vuna_dCompiler_dDiag_dLabel_labelText = path; Vuna_dCompiler_dDiag.f_Vuna_dCompiler_dDiag_dLabel_labelStyle = Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dLabelStyle_LabelContext; Vuna_dCompiler_dDiag.f_Vuna_dCompiler_dDiag_dLabel_labelProvenance = Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing }) e)))
 
@@ -27,17 +25,17 @@ let v_Vuna_dCompiler_dLoader_dFlatten_dparseWith = (fun path toks -> (match ((Vu
   | _ -> failwith "DT: impossible branch"
 ))
 
-let v_Vuna_dCompiler_dLoader_dFlatten_dlexAndStore = (fun tag cpath path src -> (match (Vuna_dCompiler_dFrontend_dLexer.v_Vuna_dCompiler_dFrontend_dLexer_dlexSource src) with
+let v_Vuna_dCompiler_dLoader_dFlatten_dlexAndStore = (fun addr path src -> (match (Vuna_dCompiler_dFrontend_dLexer.v_Vuna_dCompiler_dFrontend_dLexer_dlexSource src) with
   | Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_ErrC (dtb__5) -> ((Base_dApplicative.v_Base_dApplicative_dpure Base_dEff.v_Applicative_uBase_uEff_uEff_ur) (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_ErrC (((v_Vuna_dCompiler_dLoader_dFlatten_dattachParsePath path) dtb__5))))
-  | Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC (dtb__6) -> (((Base_dMonad.v_Base_dMonad_dbind Base_dEff.v_Monad_uBase_uEff_uEff_ur) (((v_Vuna_dCompiler_dLoader_dFlatten_dstoreLexCache tag) cpath) dtb__6)) (fun _u -> ((Base_dApplicative.v_Base_dApplicative_dpure Base_dEff.v_Applicative_uBase_uEff_uEff_ur) ((v_Vuna_dCompiler_dLoader_dFlatten_dparseWith path) dtb__6))))
+  | Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC (dtb__6) -> (((Base_dMonad.v_Base_dMonad_dbind Base_dEff.v_Monad_uBase_uEff_uEff_ur) ((v_Vuna_dCompiler_dLoader_dFlatten_dstoreLexCache addr) dtb__6)) (fun _u -> ((Base_dApplicative.v_Base_dApplicative_dpure Base_dEff.v_Applicative_uBase_uEff_uEff_ur) ((v_Vuna_dCompiler_dLoader_dFlatten_dparseWith path) dtb__6))))
   | _ -> failwith "DT: impossible branch"
 ))
 
-let v_Vuna_dCompiler_dLoader_dFlatten_dparseFileWithPath = (fun path src -> (((Base_dMonad.v_Base_dMonad_dbind Base_dEff.v_Monad_uBase_uEff_uEff_ur) v_Vuna_dCompiler_dLoader_dFlatten_dlexCacheDir) (fun lexDir -> (((Base_dMonad.v_Base_dMonad_dbind Base_dEff.v_Monad_uBase_uEff_uEff_ur) Vuna_dCompiler_dFingerprint.v_Vuna_dCompiler_dFingerprint_dcompilerTagEff) (fun tag -> ((fun cpath -> (((Base_dMonad.v_Base_dMonad_dbind Base_dEff.v_Monad_uBase_uEff_uEff_ur) (((v_Vuna_dCompiler_dLoader_dFlatten_dreadLexCache tag) v_Vuna_dCompiler_dLoader_dFlatten_dlexCacheCodec) cpath)) (fun cached -> (match cached with
+let v_Vuna_dCompiler_dLoader_dFlatten_dparseFileWithPath = (fun path src -> ((fun addr -> (((Base_dMonad.v_Base_dMonad_dbind Base_dEff.v_Monad_uBase_uEff_uEff_ur) (v_Vuna_dCompiler_dLoader_dFlatten_dreadLexCache addr)) (fun cached -> (match cached with
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__7) -> ((Base_dApplicative.v_Base_dApplicative_dpure Base_dEff.v_Applicative_uBase_uEff_uEff_ur) ((v_Vuna_dCompiler_dLoader_dFlatten_dparseWith path) dtb__7))
-  | Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing -> ((((v_Vuna_dCompiler_dLoader_dFlatten_dlexAndStore tag) cpath) path) src)
+  | Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing -> (((v_Vuna_dCompiler_dLoader_dFlatten_dlexAndStore addr) path) src)
   | _ -> failwith "DT: impossible branch"
-)))) (String.concat "" [lexDir; "/"; (((v_Vuna_dCompiler_dLoader_dFlatten_dlexKeyOf tag) path) src)])))))))
+)))) (v_Vuna_dCompiler_dLoader_dFlatten_dlexAddrOf src)))
 
 let v_Vuna_dCompiler_dLoader_dFlatten_dvisibleFixitiesOf = (fun modules imports -> ((Base_dList.v_Base_dList_dconcatMap (fun imp -> (match ((Vuna_dCompiler_dLoader_dModules.v_Vuna_dCompiler_dLoader_dModules_dfindModule modules) (Vuna_dCompiler_dLoader_dModules.v_Vuna_dCompiler_dLoader_dModules_dimportName imp)) with
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__8) -> (Vuna_dCompiler_dLoader_dModules.v_Vuna_dCompiler_dLoader_dModules_dmoduleFixitiesOf dtb__8)

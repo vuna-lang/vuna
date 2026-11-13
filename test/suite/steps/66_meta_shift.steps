@@ -15,7 +15,7 @@
 #     codegen 产物目录必须逐字节一致。
 #
 # 夹具包按真实依赖布局构造（compiler / base 作为依赖包），只用 $VUNA / $VUNA_BASE / $TMPDIR。
-run: sh -c 'rm -rf "$TMPDIR/meta-shift" "$TMPDIR/meta-shift-cache"; mkdir -p "$TMPDIR/meta-shift/app"'
+run: sh -c 'rm -rf "$TMPDIR/meta-shift" "$TMPDIR/meta-shift-cache"; mkdir -p "$TMPDIR/meta-shift/app" "$TMPDIR/meta-shift-cache"'
 run: sh -c 'cp "$(dirname "$VUNA_BASE")/test/suite/fixtures/meta_shift/Main.vuna" "$TMPDIR/meta-shift/app/Main.vuna"'
 run: sh -c 'printf "%s\n" "[package]" "name = \"metashift\"" "" "[dependencies]" "vuna-compiler = \"$VUNA_BASE/../compiler\"" > "$TMPDIR/meta-shift/vuna.toml"'
 run: sh -c 'TMPDIR="$TMPDIR/meta-shift-cache" "$VUNA" run "$TMPDIR/meta-shift" 2>&1'

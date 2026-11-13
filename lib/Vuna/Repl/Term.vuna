@@ -61,7 +61,8 @@ termRestoreState path = do
       ErrC e => ""
       OkC s => trim s
   in do
-    code <- if saved == "" then pure 1 else raiseToRow hostRow (@vuna@prim_eff_runIn "." ["stty", saved])
+    code <-
+      if saved == "" then pure 1 else raiseToRow hostRow (@vuna@prim_eff_runIn "." ["stty", saved])
     _ <- rmFile path
     if code == 0 then pure 0 else raiseToRow hostRow (@vuna@prim_eff_runIn "." ["stty", "sane"])
 
@@ -94,7 +95,8 @@ termWidth _ = do
   let
     path = "${base}.size"
   in do
-    _ <- raiseToRow hostRow (@vuna@prim_eff_runIn "." ["sh", "-c", "stty size > ${shellQuote path}"])
+    _ <-
+      raiseToRow hostRow (@vuna@prim_eff_runIn "." ["sh", "-c", "stty size > ${shellQuote path}"])
     textR <- readText path
     let
       text = case textR of

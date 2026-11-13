@@ -152,11 +152,14 @@ filterScopes (Just name) scopes = filter (\s => scopeName s == name) scopes
 -- ---------------------------------------------------------------
 runCheck : DocBook -> Eff hostRow Int
 runCheck book = if length (missingDocs book) == 0 then do
-  _ <- raiseToRow hostRow (@vuna@prim_eff_print "docstrings ok (${length (bookModules book)} modules)\n")
+  _ <-
+    raiseToRow hostRow
+      (@vuna@prim_eff_print "docstrings ok (${length (bookModules book)} modules)\n")
   pure 0
 else do
   _ <- printMissing (missingDocs book)
-  _ <- raiseToRow hostRow (@vuna@prim_eff_print "${length (missingDocs book)} missing docstring(s)\n")
+  _ <-
+    raiseToRow hostRow (@vuna@prim_eff_print "${length (missingDocs book)} missing docstring(s)\n")
   pure 1
 
 printMissing : List String -> Eff hostRow Int
@@ -186,7 +189,9 @@ writeHtml out book =
   in do
     _ <- ensureDirPath (parentOf out)
     _ <- raiseToRow hostRow (@vuna@prim_eff_writeFile out content)
-    _ <- raiseToRow hostRow (@vuna@prim_eff_print "wrote ${out} (${length (bookModules book)} modules)\n")
+    _ <-
+      raiseToRow hostRow
+        (@vuna@prim_eff_print "wrote ${out} (${length (bookModules book)} modules)\n")
     pure 0
 
 docError : String -> Eff hostRow Int

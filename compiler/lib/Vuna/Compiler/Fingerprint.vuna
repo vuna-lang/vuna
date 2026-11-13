@@ -30,7 +30,7 @@ textHashOf s = Vuna.Compiler.Hash.contentKey s
 -- | 当前编译器的指纹（`Int` 形态；缓存 key 的算术段用）。
 export compilerFingerprintEff : Eff hostRow Int
 compilerFingerprintEff = do
-  exe <- raiseToRow hostRow (@vuna@prim_eff_execPath)
+  exe <- raiseToRow hostRow @vuna@prim_eff_execPath
   size <- raiseToRow hostRow (@vuna@prim_eff_fileSize exe)
   mtime <- raiseToRow hostRow (@vuna@prim_eff_fileMtime exe)
   pure (if size > 0 then fingerprintOfStat exe size mtime else textHashOf vunaVersion)

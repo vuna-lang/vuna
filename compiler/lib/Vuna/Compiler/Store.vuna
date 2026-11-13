@@ -33,9 +33,11 @@ module Vuna.Compiler.Store where
 --
 -- 代价：写侧多一次内容地址（本机 ~2.2 ms/MB）；读侧同样（fast 档为 0）。check marker
 -- 载荷为 0 字节，split/unit 载荷只在 miss 路径写。
-import Base.HostRow
 import Vuna.Compiler.Common
 import Vuna.Compiler.Hash
+import Base.List
+import Base.String
+import Base.HostRow
 
 -- | framing 版本串；格式变更即 bump（旧文件自然拒绝，不做迁移）。
 export storeMagic : String
@@ -155,8 +157,11 @@ storeDecodeFast tag codec raw = case frameSplit raw of
   Nothing => Nothing
   Just p => if headerOk tag codec (firstOf p) (secondOf p) then Just (secondOf p) else Nothing
 
--- | 持久包 store 的根（与临时缓存分开；D15）：`VUNA_STORE` → `$XDG_DATA_HOME/vuna/store`
--- → `~/.vuna/store`。取包时写 `objects/` 与 `pkgs/`，`vuna clean --packages` 清理。
+-- | 存储根（唯一根：对象库 + 视图 + roots）：`VUNA_STORE` → `$XDG_DATA_HOME/vuna/store`
+-- → `~/.vuna/store` → `$TMPDIR/vuna-store` → `/tmp/vuna-store`。
+--
+-- `HOME` 为空或是 `/homeless-shelter`（Nix 构建沙箱）时**不能**用它：那条路径不可写，
+-- 会让构建在第一次写对象时崩掉。沙箱内回落到 `$TMPDIR`（构建期缓存，天然可弃）。
 export storeDataRootEff : Eff hostRow String
 storeDataRootEff = do
   override <- raiseToRow hostRow (@vuna@prim_eff_getenv "VUNA_STORE")
@@ -166,15 +171,16 @@ storeDataRootEff = do
     if xdg /= "" then pure "${xdg}/vuna/store"
     else do
       home <- raiseToRow hostRow (@vuna@prim_eff_getenv "HOME")
-      pure (if home == "" then "/tmp/vuna-store" else "${home}/.vuna/store")
+      if home /= "" && home /= "/homeless-shelter" then pure "${home}/.vuna/store"
+      else do
+        tmp <- raiseToRow hostRow (@vuna@prim_eff_getenv "TMPDIR")
+        pure (if tmp == "" then "/tmp/vuna-store" else "${tmp}/vuna-store")
 
--- 缓存根（`VUNA_CACHE_DIR` 覆盖；缺省 `$TMPDIR/vuna-cache`）。
--- Nix 构建的源树只读 ⇒ 缓存放临时目录；本地开发同机 TMPDIR 持久 ⇒ 命中。
+-- | 缓存根 = **对象库根**。历史上是独立的临时缓存根（`$TMPDIR/vuna-cache`，
+-- `VUNA_CACHE_DIR` 可覆盖）；合并后只有一棵树：包对象、header、lex、split/unit、
+-- 会话索引都在 `$VUNA_STORE` 下，GC 与 roots 才有唯一口径。
 export storeCacheBaseEff : Eff hostRow String
-storeCacheBaseEff = do
-  override <- raiseToRow hostRow (@vuna@prim_eff_getenv "VUNA_CACHE_DIR")
-  tmp <- raiseToRow hostRow (@vuna@prim_eff_getenv "TMPDIR")
-  pure (if override /= "" then override else "${if tmp == "" then "/tmp" else tmp}/vuna-cache")
+storeCacheBaseEff = storeRootReadyEff
 
 -- | 读 + 完整校验（magic/tag/codec/长度/内容地址）。
 export storeReadEff : String -> String -> String -> Eff hostRow (Maybe String)
@@ -205,7 +211,8 @@ storeReadAsEff tag codec digest path = do
 
 -- | 写（原子替换）。返回写入字节数。
 export storeWriteEff : String -> String -> String -> String -> Eff hostRow Int
-storeWriteEff tag codec path payload = raiseToRow hostRow (@vuna@prim_eff_writeFileAtomic path (storeEncode tag codec payload))
+storeWriteEff tag codec path payload =
+  raiseToRow hostRow (@vuna@prim_eff_writeFileAtomic path (storeEncode tag codec payload))
 
 -- | 写，但用调用方给的载荷摘要（已算过强哈希时用，见 `storeEncodeAs`）。
 export storeWriteAsEff : String -> String -> String -> String -> String -> Eff hostRow Int
@@ -237,12 +244,12 @@ storeWriteIfChangedAsEff tag codec digest path payload =
     else raiseToRow hostRow (@vuna@prim_eff_writeFileAtomic path raw)
 
 export storeFileExistsEff : String -> Eff hostRow Bool
-storeFileExistsEff p = raiseToRow hostRow (@vuna@prim_eff_fileExists p)
+storeFileExistsEff path = raiseToRow hostRow (@vuna@prim_eff_fileExists path)
 
 export storeRemoveEff : String -> Eff hostRow Int
-storeRemoveEff p = raiseToRow hostRow (@vuna@prim_eff_removeFile p)
+storeRemoveEff path = raiseToRow hostRow (@vuna@prim_eff_removeFile path)
 
--- | 逐级创建目录（`@vuna@prim_eff_makeDir` 只建一层）。路径是文件系统图，用显式 fuel 守卫。
+-- | 逐级创建目录（`prim_eff_makeDir` 只建一层）。路径是文件系统图，用显式 fuel 守卫。
 export storeEnsureDirEff : String -> Eff hostRow Int
 storeEnsureDirEff path = storeEnsureDirFuel 256 path
 
@@ -278,3 +285,238 @@ storeParentPathOf = storeParentOf
 storeDropPastSlash : List Int -> List Int
 storeDropPastSlash [] = []
 storeDropPastSlash (c :: rest) = if c == 47 then rest else storeDropPastSlash rest
+
+-- ---------------------------------------------------------------
+-- 输入寻址对象库（终态存储层）
+--
+-- 与上面的「路径由调用方给定」这一档并存：调用方把**输入摘要**当路径传进来，于是
+-- 「命中」退化为一次路径存在性检查——不需要索引、不需要依赖快照比较、不需要写锁。
+-- 载荷自身的完整性仍由 framing 头里的内容地址兜底：读侧重算，不符即 `Nothing`
+-- （调用方按 miss 重算并覆盖写同一路径）。
+--
+--   根/objects/<kind>/<inputDigest>          单文件载荷（0 字节 = 纯存在性标记）
+--   根/views/<kind>/<inputDigest>/           目录载荷 + `.complete`（内容 = inputDigest）
+--   根/roots/<projectId>                     文本：每行一个受保护 digest（只由项目追加）
+--   根/.tmp/<kind>-<inputDigest>/            视图暂存（`mkdir` 原子独占，发布后 rename）
+-- ---------------------------------------------------------------
+-- | 存储根：持久、跨项目、可复制；也是唯一根（不再有 `$TMPDIR` 缓存根）。
+--
+-- **可写性兜底**：`$HOME` 可能是只读挂载（沙箱 / CI 容器 / Nix 构建里的
+-- `/homeless-shelter`）。所以真正动手写之前先确认根可用：`isDirectory` 命中就直接用；
+-- 否则 `mkdir -p`（子进程，能看返回码、不会抛异常）；仍失败则回落到 `$TMPDIR/vuna-store`。
+-- 回退是**按环境确定性**的：同一环境下每次都会选同一个根。
+export storeRootEff : Eff hostRow String
+storeRootEff = storeDataRootEff
+
+fallbackRootEff : Eff hostRow String
+fallbackRootEff = do
+  tmp <- raiseToRow hostRow (@vuna@prim_eff_getenv "TMPDIR")
+  pure (if tmp == "" then "/tmp/vuna-store" else "${tmp}/vuna-store")
+
+-- | 解析并**确保可用**的存储根（先 `isDirectory`，再 `mkdir -p`，最后回落 `$TMPDIR`）。
+export storeRootReadyEff : Eff hostRow String
+storeRootReadyEff = do
+  primary <- storeDataRootEff
+  ok <- dirReady primary
+  if ok then pure primary
+  else do
+    alt <- fallbackRootEff
+    ok2 <- dirReady alt
+    if ok2 then pure alt else pure alt
+
+-- 目录是否存在且是目录（`isDirectory` 在路径不存在时会抛，所以先 `fileExists`）。
+dirReady : String -> Eff hostRow Bool
+dirReady path = do
+  exists <- raiseToRow hostRow (@vuna@prim_eff_fileExists path)
+  if not exists then do
+    code <- raiseToRow hostRow (@vuna@prim_eff_runIn "." ["mkdir", "-p", path])
+    pure (code == 0)
+  else raiseToRow hostRow (@vuna@prim_eff_isDirectory path)
+
+-- | 对象的 framing tag：kind 参与，使不同载荷族不可能互读。
+export storeObjectTag : String -> String
+storeObjectTag kind = "vuna-object 1/${kind}"
+
+objectPathIn : String -> String -> String -> String
+objectPathIn root kind digest = "${root}/objects/${kind}/${digest}"
+
+export storeObjectPathEff : String -> String -> Eff hostRow String
+storeObjectPathEff kind digest = do
+  root <- storeRootReadyEff
+  pure (objectPathIn root kind digest)
+
+-- | 命中判定：路径存在性（不做内容校验，内容校验在真正读取时做）。
+export storeObjectExistsEff : String -> String -> Eff hostRow Bool
+storeObjectExistsEff kind digest = do
+  path <- storeObjectPathEff kind digest
+  raiseToRow hostRow (@vuna@prim_eff_fileExists path)
+
+-- | 读对象 + 全量校验（magic/tag/codec/长度/重算内容地址）。
+export storeObjectReadEff : String -> String -> String -> Eff hostRow (Maybe String)
+storeObjectReadEff kind codec digest = do
+  path <- storeObjectPathEff kind digest
+  storeReadEff (storeObjectTag kind) codec path
+
+-- | 写对象（原子替换；内容不变不写）。
+export storeObjectWriteEff : String -> String -> String -> String -> Eff hostRow Int
+storeObjectWriteEff kind codec digest payload = do
+  root <- storeRootReadyEff
+  _ <- storeEnsureDirEff "${root}/objects/${kind}"
+  path <- storeObjectPathEff kind digest
+  storeWriteIfChangedEff (storeObjectTag kind) codec path payload
+
+-- | 列出某 kind 下的全部对象摘要（GC 用；目录不存在 ⇒ 空）。
+export storeObjectListEff : String -> Eff hostRow (List String)
+storeObjectListEff kind = do
+  root <- storeRootReadyEff
+  let
+    dir = "${root}/objects/${kind}"
+  in do
+    isDir <- dirReady dir
+    if isDir then raiseToRow hostRow (@vuna@prim_eff_readDir dir) else pure []
+
+-- | 删除一个对象；缺失不报错（GC 的删除是幂等的）。
+export storeObjectRemoveEff : String -> String -> Eff hostRow Int
+storeObjectRemoveEff kind digest = do
+  path <- storeObjectPathEff kind digest
+  exists <- raiseToRow hostRow (@vuna@prim_eff_fileExists path)
+  if exists then raiseToRow hostRow (@vuna@prim_eff_removeFile path) else pure 0
+
+-- ---------------------------------------------------------------
+-- 目录视图（构建产物 / 物化包源码）
+--
+-- 目录不能像单文件那样原子替换，所以约定：**只在 `.tmp/` 里建，建完 rename 发布**，
+-- `.complete`（内容 = inputDigest）是提交点。读侧先验 `.complete`，不符即视为不存在。
+-- 同一 inputDigest 的并发构建由 `mkdir` 原子性互斥（见 `storeScratchClaimEff`）。
+-- ---------------------------------------------------------------
+export storeViewPathEff : String -> String -> Eff hostRow String
+storeViewPathEff kind digest = do
+  root <- storeRootReadyEff
+  pure "${root}/views/${kind}/${digest}"
+
+export storeViewValidEff : String -> String -> Eff hostRow Bool
+storeViewValidEff kind digest = do
+  dir <- storeViewPathEff kind digest
+  let
+    marker = "${dir}/.complete"
+  in do
+    exists <- raiseToRow hostRow (@vuna@prim_eff_fileExists marker)
+    if exists then do
+      text <- raiseToRow hostRow (@vuna@prim_eff_readFile marker)
+      pure (text == digest)
+    else pure False
+
+-- | 视图暂存目录（同一 inputDigest 唯一）。
+storeScratchPathIn : String -> String -> String -> String
+storeScratchPathIn root kind digest = "${root}/.tmp/${kind}-${digest}"
+
+export storeScratchPathEff : String -> String -> Eff hostRow String
+storeScratchPathEff kind digest = do
+  root <- storeRootReadyEff
+  pure (storeScratchPathIn root kind digest)
+
+-- 暂存目录过期阈值（秒）：崩溃残留不永久阻塞后来者。
+scratchStaleSec : Int
+scratchStaleSec = 600
+
+scratchStale : String -> Eff hostRow Bool
+scratchStale path = do
+  mtime <- raiseToRow hostRow (@vuna@prim_eff_fileMtime path)
+  us <- effTimeUs
+  pure (mtime + scratchStaleSec < us / 1000000)
+
+-- | 独占一个暂存目录：`mkdir` 原子成功 ⇒ True。已被占用时看是否过期，过期则强删重试一次。
+export storeScratchClaimEff : String -> String -> Eff hostRow Bool
+storeScratchClaimEff kind digest = do
+  path <- storeScratchPathEff kind digest
+  _ <- storeEnsureDirEff (storeParentPathOf path)
+  code <- raiseToRow hostRow (@vuna@prim_eff_runIn "." ["mkdir", path])
+  if code == 0 then pure True
+  else do
+    stale <- scratchStale path
+    if not stale then pure False
+    else do
+      _ <- raiseToRow hostRow (@vuna@prim_eff_runIn "." ["rm", "-rf", path])
+      code2 <- raiseToRow hostRow (@vuna@prim_eff_runIn "." ["mkdir", path])
+      pure (code2 == 0)
+
+export storeScratchPathOfClaim : String -> String -> Eff hostRow String
+storeScratchPathOfClaim = storeScratchPathEff
+
+-- | 放弃暂存目录（构建失败或发布失败）。
+export storeScratchDropEff : String -> String -> Eff hostRow Int
+storeScratchDropEff kind digest = do
+  path <- storeScratchPathEff kind digest
+  raiseToRow hostRow (@vuna@prim_eff_runIn "." ["rm", "-rf", path])
+
+-- | 发布暂存目录：写 `.complete` 后 `mv` 到视图位置。目标已存在（并发先到者）则丢弃暂存。
+export storeViewPublishEff : String -> String -> Eff hostRow Int
+storeViewPublishEff kind digest = do
+  scratch <- storeScratchPathEff kind digest
+  view <- storeViewPathEff kind digest
+  _ <- storeEnsureDirEff (storeParentPathOf view)
+  _ <- raiseToRow hostRow (@vuna@prim_eff_writeFileAtomic "${scratch}/.complete" digest)
+  code <- raiseToRow hostRow (@vuna@prim_eff_runIn "." ["mv", scratch, view])
+  if code == 0 then pure 0
+  else do
+    _ <- raiseToRow hostRow (@vuna@prim_eff_runIn "." ["rm", "-rf", scratch])
+    pure 0
+
+-- ---------------------------------------------------------------
+-- roots（GC 的保护集）
+--
+-- roots 由**项目**追加（逻辑归属），但物理放在 store 里（GC 需要能枚举全部项目）。
+-- 项目不需要认识别的项目：它只写自己那一行；GC 读全部 roots 取并集。
+-- ---------------------------------------------------------------
+export storeRootsPathEff : String -> Eff hostRow String
+storeRootsPathEff projectId = do
+  root <- storeRootReadyEff
+  pure "${root}/roots/${projectId}"
+
+-- 行去重（line 已存在即返回原列表）；roots 文件很小，线性足够。
+insertRootLine : String -> List String -> List String
+insertRootLine line lines = if memName line lines then lines else line :: lines
+
+mergeRootLines : List String -> List String -> List String
+mergeRootLines lines [] = lines
+mergeRootLines lines (d :: rest) = mergeRootLines (insertRootLine d lines) rest
+
+-- | 追加受保护摘要（幂等；文件不存在即创建）。
+export storeRootAppendEff : String -> List String -> Eff hostRow Int
+storeRootAppendEff projectId digests = do
+  path <- storeRootsPathEff projectId
+  _ <- storeEnsureDirEff (storeParentPathOf path)
+  exists <- raiseToRow hostRow (@vuna@prim_eff_fileExists path)
+  old <- if exists then raiseToRow hostRow (@vuna@prim_eff_readFile path) else pure ""
+  let
+    oldLines = filter (\l => strLength l > 0) (split "\n" old)
+    merged = mergeRootLines oldLines digests
+  in do
+    raiseToRow hostRow (@vuna@prim_eff_writeFileAtomic path (join "\n" merged ++ "\n"))
+
+-- | 读一个项目的 root 行。
+export storeRootLoadEff : String -> Eff hostRow (List String)
+storeRootLoadEff projectId = do
+  path <- storeRootsPathEff projectId
+  exists <- raiseToRow hostRow (@vuna@prim_eff_fileExists path)
+  if exists then do
+    text <- raiseToRow hostRow (@vuna@prim_eff_readFile path)
+    pure (filter (\l => strLength l > 0) (split "\n" text))
+  else pure []
+
+-- | 列出全部项目的 roots 文件名（GC 用）。
+export storeRootProjectListEff : Eff hostRow (List String)
+storeRootProjectListEff = do
+  root <- storeRootReadyEff
+  let
+    dir = "${root}/roots"
+  in do
+    isDir <- dirReady dir
+    if isDir then raiseToRow hostRow (@vuna@prim_eff_readDir dir) else pure []
+
+-- | 删除一个项目的 roots 文件（项目已不存在时的 stale 清理）。
+export storeRootRemoveEff : String -> Eff hostRow Int
+storeRootRemoveEff projectId = do
+  path <- storeRootsPathEff projectId
+  exists <- raiseToRow hostRow (@vuna@prim_eff_fileExists path)
+  if exists then raiseToRow hostRow (@vuna@prim_eff_removeFile path) else pure 0

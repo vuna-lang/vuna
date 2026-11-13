@@ -502,13 +502,15 @@ else
     dir = parentOf st.stateHistoryFile
   in do
     _ <- raiseToRow hostRow (@vuna@prim_eff_runIn "." ["mkdir", "-p", dir])
-    writable <- raiseToRow hostRow (@vuna@prim_eff_runIn "." ["sh", "-c", "test -w ${shellQuote dir}"])
+    writable <-
+      raiseToRow hostRow (@vuna@prim_eff_runIn "." ["sh", "-c", "test -w ${shellQuote dir}"])
     if writable /= 0 then pure 0
     else do
       old <- historyEntriesOf st.stateHistoryFile
       let
         lines2 = trimHistory (appendLast old unit)
-      in raiseToRow hostRow (@vuna@prim_eff_writeFileAtomic st.stateHistoryFile (renderHistoryFile lines2))
+      in raiseToRow hostRow
+        (@vuna@prim_eff_writeFileAtomic st.stateHistoryFile (renderHistoryFile lines2))
 
 -- 提交一个完整输入单元：记入内存历史（连续重复去重）并持久化（多行单元编码后仍是一行）。
 remember : ReplState -> String -> Eff hostRow ReplState

@@ -13,9 +13,8 @@ run: printf 'import WOuter\n\nmain : Int\nmain = outerVal\n' > "$TMPDIR/lsp-inc-
 run: "$VUNA" check "$VUNA_BASE"
 run: d="$TMPDIR/lsp-inc-wb"; log="$TMPDIR/lsp-inc-wb.log"; esc() { sed -e 's/$/\\n/' "$1" | tr -d '\n'; }; fr() { printf 'Content-Length: %s\r\n\r\n%s' "$(printf '%s' "$1" | wc -c)" "$1"; }; uri="file://$d/lib/WOuter.vuna"; init=$(printf '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"processId":null,"rootUri":"file://%s","capabilities":{}}}' "$d"); open=$(printf '{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"%s","languageId":"vuna","version":1,"text":"%s"}}}' "$uri" "$(esc "$d/lib/WOuter.vuna")"); { fr "$init"; fr '{"jsonrpc":"2.0","method":"initialized","params":{}}'; fr "$open"; sleep 0.3; fr '{"jsonrpc":"2.0","id":9,"method":"shutdown","params":null}'; fr '{"jsonrpc":"2.0","method":"exit","params":null}'; } | ( cd "$d" && "$VUNA" lsp >"$log" 2>/dev/null ); grep -o '"diagnostics":\[[^]]*\]' "$log" | tail -1 | sed 's/^"diagnostics"://'
 out-equals: []
-# 镜像模式（VUNA_IFACE_DIR）下接口文件名是内容寻址的 `WOuter-<hash>.iface`，
-# 不能再按固定名找（a996723 起）。这里只断言「当前模块的接口确实被写回」。
-run: m="$VUNA_IFACE_DIR$(cd "$TMPDIR/lsp-inc-wb" && pwd)"; find "$m" -name 'WOuter*.iface' 2>/dev/null | grep -q .
+# 接口写回落在对象库（`$VUNA_STORE/objects/iface`）：只断言「当前模块的接口确实被写回」。
+run: find "$VUNA_STORE/objects/iface" -type f 2>/dev/null | grep -q .
 exit: 0
 
 # B) 会话失效：warm 包（Inner/Outer 都有接口）里，外部把 Inner 改成 Bool——

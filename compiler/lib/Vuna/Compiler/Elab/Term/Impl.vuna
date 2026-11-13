@@ -1836,7 +1836,8 @@ rowContainsValue : Ec -> Int -> Value -> Value -> Bool
 rowContainsValue ec fuel expected label = if fuel <= 0 then False
 else case forceVal ec expected of
   VCon g args => if g == effRowConsCtor then case args of
-    _ :: l2 :: tail :: _ => sameLabelValue label l2 || rowContainsValue ec (fuel - 1) (forceVal ec tail) label
+    _ :: l2 :: tail :: _ =>
+      sameLabelValue label l2 || rowContainsValue ec (fuel - 1) (forceVal ec tail) label
     _ => False
   else False
   _ => False
@@ -1846,7 +1847,9 @@ rowSubValue ec fuel actual expected = if fuel <= 0 then False
 else case forceVal ec actual of
   VCon g args => if g == effRowNilCtor then True
   else if g == effRowConsCtor then case args of
-    _ :: label :: tail :: _ => rowContainsValue ec (fuel - 1) expected label && rowSubValue ec (fuel - 1) (forceVal ec tail) expected
+    _ :: label :: tail :: _ =>
+      rowContainsValue ec (fuel - 1) expected label
+        && rowSubValue ec (fuel - 1) (forceVal ec tail) expected
     _ => False
   else False
   _ => False
@@ -1873,15 +1876,14 @@ tryEffLift ctx globals ec expected actual term = case globalsLookup "Base.Eff.we
             -- 「实际行」，把真正的行不匹配（如 handler 实例名 `Fs "mock"` vs 程序 `Fs
             -- "real"`）伪装成合法 lift，错误被推迟到入口才暴露（dt_err/78 回归）。
             Nothing => Nothing
-            Just actualRow =>
+            Just actualRow => if rowSubValue ec 64 actualRow (firstOf p) then Just (Pair term ec)
+            else if isNilRowValue ec actualRow then case globalsLookup "Base.Eff.raise" globals ec of
               -- 阶段 5：行包含 lift（actual 行 ⊆ expected 行）：运行时恒等，直接返回项。
-              if rowSubValue ec 64 actualRow (firstOf p) then Just (Pair term ec)
-              else if isNilRowValue ec actualRow then case globalsLookup "Base.Eff.raise" globals ec of
-                Nothing => Nothing
-                Just _ =>
-                  Just
-                    (Pair (TApp (TApp (TApp (TGlobal "Base.Eff.raise") (quote d (firstOf p)) Rig0) (quote d (secondOf p)) Rig0) term RigOmega) ec)
-              else case convEc ec d actualRow tailF of
+              Nothing => Nothing
+              Just _ =>
+                Just
+                  (Pair (TApp (TApp (TApp (TGlobal "Base.Eff.raise") (quote d (firstOf p)) Rig0) (quote d (secondOf p)) Rig0) term RigOmega) ec)
+            else case convEc ec d actualRow tailF of
               ErrC _ => Nothing
               OkC ec2 =>
                 Just

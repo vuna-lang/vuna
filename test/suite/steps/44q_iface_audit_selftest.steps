@@ -1,40 +1,20 @@
-# 44q) 接口写侧自检 × 双路径审计（C49 回归）：`VUNA_IFACE_AUDIT=1` 与
-#      `VUNA_IFACE_SELFTEST=1` 同时打开、冷缓存下必须通过。
-#      旧缺陷：`Core.Term.hasFreeTermVar` 下降 `TRecUpd.body` 时没有加 `length tele`
-#      的 binder 深度，record-update 定义的接口载荷被误判 `free-var` ⇒ 写侧读回自检报
-#      `iface selftest: package iface invalid`（审计只是绕开图命中、让写路径在热缓存下
-#      也重跑，因此双开关最容易暴露；只开 SELFTEST 冷缓存同样中招）。
-#      夹具写在 case 私有 TMPDIR（不碰工作树），只用 $VUNA / $VUNA_BASE；接口仍走 harness
-#      的 case 私有镜像根 `$VUNA_IFACE_DIR`，本包「冷」= 删镜像根下本包目录 + query store。
+# 44q) 双路径审计（C49 回归）：`VUNA_IFACE_AUDIT=1` 让同一次 check 分别走摘要路径与
+#      全量路径并逐字节比较诊断；record-update 定义的载荷必须闭合（旧缺陷：
+#      `Core.Term.hasFreeTermVar` 下降 `TRecUpd.body` 时少加 `length tele` 的 binder
+#      深度）。写入自检（`VUNA_IFACE_SELFTEST`）随文件层删除已不再存在。
 run: sh -c 'mkdir -p "$TMPDIR/c49/pkg/lib" "$TMPDIR/c49/pkg/app"'
 run: sh -c 'printf "%s\n" "[package]" "name = \"c49rec\"" "" "[dependencies]" "vuna-base = \"$VUNA_BASE\"" > "$TMPDIR/c49/pkg/vuna.toml"'
 run: sh -c 'printf "%s\n" "module C49 where" "" "export record Box(..) where" "  a : Int" "  b : Int" "" "export bump : Box -> Box" "bump x = { x | a = x.a + 1 }" > "$TMPDIR/c49/pkg/lib/C49.vuna"'
 run: sh -c 'printf "%s\n" "import C49" "" "main : Int" "main = (bump (Box { a = 1, b = 2 })).a" > "$TMPDIR/c49/pkg/app/Main.vuna"'
-# 预热依赖包（base）接口到 case 私有镜像根：之后的「冷」只冷本包，避免多次全量精化 base。
-run: sh -c 'rm -rf "$TMPDIR/c49/cache"; TMPDIR="$TMPDIR/c49/cache" "$VUNA" check "$VUNA_BASE" >/dev/null 2>&1'
-exit: 0
-# 冷缓存 + 两个开关：写侧读回自检必须通过，不能被 record-update 载荷误判。
-run: sh -c 'rm -rf "$VUNA_IFACE_DIR$TMPDIR/c49/pkg" "$TMPDIR/c49/pkg/.output" "$TMPDIR/c49/cache"; TMPDIR="$TMPDIR/c49/cache" VUNA_IFACE_AUDIT=1 VUNA_IFACE_SELFTEST=1 "$VUNA" check "$TMPDIR/c49/pkg" --debug-perf 2>&1'
-exit: 0
-out-contains: iface-write=1/1
-out-contains: iface-selftest=ok
-out-not-contains: package iface invalid
-out-not-contains: iface-audit-mismatch
-# 热缓存 + 两个开关：AUDIT 绕过图命中、写路径再跑一遍；载荷闭合 ⇒ 零重写、自检仍通过。
-run: sh -c 'TMPDIR="$TMPDIR/c49/cache" VUNA_IFACE_AUDIT=1 VUNA_IFACE_SELFTEST=1 "$VUNA" check "$TMPDIR/c49/pkg" --debug-perf 2>&1'
-exit: 0
-out-contains: iface-write=0/1
-out-contains: iface-selftest=ok
-out-not-contains: package iface invalid
-# 对照组：只开 SELFTEST（冷缓存）也必须通过（旧口径下同样被 record-update 载荷误伤）。
-run: sh -c 'rm -rf "$VUNA_IFACE_DIR$TMPDIR/c49/pkg" "$TMPDIR/c49/pkg/.output" "$TMPDIR/c49/cache"; TMPDIR="$TMPDIR/c49/cache" VUNA_IFACE_SELFTEST=1 "$VUNA" check "$TMPDIR/c49/pkg" --debug-perf 2>&1'
-exit: 0
-out-contains: iface-selftest=ok
-out-not-contains: package iface invalid
-# 对照组：只开 AUDIT（冷缓存）也必须通过。
-run: sh -c 'rm -rf "$VUNA_IFACE_DIR$TMPDIR/c49/pkg" "$TMPDIR/c49/pkg/.output" "$TMPDIR/c49/cache"; TMPDIR="$TMPDIR/c49/cache" VUNA_IFACE_AUDIT=1 "$VUNA" check "$TMPDIR/c49/pkg" --debug-perf 2>&1'
+# 冷缓存 + 审计：摘要/全量两条路径诊断必须逐字节一致。
+run: sh -c 'rm -rf "$TMPDIR/c49/store" "$TMPDIR/c49/cache"; VUNA_STORE="$TMPDIR/c49/store" TMPDIR="$TMPDIR/c49/cache" VUNA_IFACE_AUDIT=1 "$VUNA" check "$TMPDIR/c49/pkg" --debug-perf 2>&1'
 exit: 0
 out-contains: iface-audit subject=check
-# 正常路径不受影响：两个开关都关，冷缓存 check 通过。
-run: sh -c 'rm -rf "$VUNA_IFACE_DIR$TMPDIR/c49/pkg" "$TMPDIR/c49/pkg/.output" "$TMPDIR/c49/cache"; TMPDIR="$TMPDIR/c49/cache" "$VUNA" check "$TMPDIR/c49/pkg" 2>&1'
+out-not-contains: iface-audit-mismatch
+# 热缓存 + 审计：审计绕过判定重跑两条路径，仍然一致。
+run: sh -c 'VUNA_STORE="$TMPDIR/c49/store" TMPDIR="$TMPDIR/c49/cache" VUNA_IFACE_AUDIT=1 "$VUNA" check "$TMPDIR/c49/pkg" --debug-perf 2>&1'
+exit: 0
+out-not-contains: iface-audit-mismatch
+# 正常路径（不带审计）冷缓存也通过。
+run: sh -c 'rm -rf "$TMPDIR/c49/cache"; VUNA_STORE="$TMPDIR/c49/store" TMPDIR="$TMPDIR/c49/cache" "$VUNA" check "$TMPDIR/c49/pkg"'
 exit: 0

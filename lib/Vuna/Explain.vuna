@@ -70,9 +70,13 @@ printInfo i = do
   _ <- raiseToRow hostRow (@vuna@prim_eff_print "${i.infoCode}\n")
   _ <- raiseToRow hostRow (@vuna@prim_eff_print "  message: ${i.infoTemplate}\n")
   _ <- raiseToRow hostRow (@vuna@prim_eff_print "  meaning: ${i.infoDesc}\n")
-  _ <- raiseToRow hostRow (@vuna@prim_eff_print "  severity: ${diagSeverityOf (codeDomain i.infoCode)}\n")
+  _ <-
+    raiseToRow hostRow
+      (@vuna@prim_eff_print "  severity: ${diagSeverityOf (codeDomain i.infoCode)}\n")
   _ <- raiseToRow hostRow (@vuna@prim_eff_print "  phase: ${diagPhaseOf (codeDomain i.infoCode)}\n")
-  _ <- raiseToRow hostRow (@vuna@prim_eff_print "  category: ${diagCategoryOf (codeDomain i.infoCode)}\n")
+  _ <-
+    raiseToRow hostRow
+      (@vuna@prim_eff_print "  category: ${diagCategoryOf (codeDomain i.infoCode)}\n")
   example <- exampleOf i.infoCode
   case example of
     Just p => do

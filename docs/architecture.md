@@ -6,7 +6,7 @@
 自举 / 内建原语与宿主层见 [bootstrap.md](reference/bootstrap.md) / [primitives.md](reference/primitives.md)，
 模块级接口缓存见 [cache.md](reference/cache.md)（失效判据 / 包级环境指纹 / 工具产物来源 /
 镜像内容寻址；排障用 `VUNA_IFACE_AUDIT=1`，CI 建议加 `VUNA_IFACE_SELFTEST=1`），
-增量判定（节点模型、命中判据、span / 取消 / 并行波次、会话索引）见 [query-graph.md](reference/query-graph.md)。
+缓存与增量判定（输入寻址对象、命中判据、roots 与 GC）见 [cache.md](reference/cache.md)。
 
 > 本页是**现状**地图；终态方向、不变量与非目标见
 > [architecture-target.md](architecture-target.md)。

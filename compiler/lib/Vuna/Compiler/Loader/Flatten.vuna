@@ -9,6 +9,7 @@ module Vuna.Compiler.Loader.Flatten where
 -- 「依赖序列 + 入口声明」拼接。
 import Base.HostRow
 import Base.List
+import Vuna.Compiler.Addr
 import Vuna.Compiler.Canonical.Bytes
 import Vuna.Compiler.Canonical.Lex
 import Vuna.Compiler.Fingerprint
@@ -52,54 +53,46 @@ lexCacheSchema = "vuna-lex-cache 1"
 lexCacheCodec : String
 lexCacheCodec = "lex-tokens 1"
 
--- M4（效果显式化）：缓存目录/读写、模块文件探测与读盘都是宿主动作，显式在 `Eff []` 里；
+-- M4（效果显式化）：缓存读写、模块文件探测与读盘都是宿主动作，显式在 `Eff hostRow` 里；
 -- 导出表计算、flatten 与 resolve 保持纯函数。
-lexCacheDir : Eff hostRow String
-lexCacheDir = do
-  base <- raiseToRow hostRow (@vuna@prim_eff_getenv "TMPDIR")
-  pure "${if base == "" then "/tmp" else base}/vuna-cache/lex"
-
--- | lex 条目的 key：schema + 编译器 tag + 路径 + 源文本的内容地址（C48）。
-lexKeyOf : String -> String -> String -> String
-lexKeyOf tag path src =
-  Vuna.Compiler.Hash.contentAddress "${lexCacheSchema}\t${tag}\t${path}\t${src}"
+--
+-- 寻址（终态）：`objects/lex/<输入摘要>`，输入摘要 = schema + codec + **源内容地址**。
+-- 路径与编译器指纹都不进 key：同一份源在任何路径/任何二进制下都是同一份 token 流，
+-- 跨项目、跨二进制自然复用（旧实现把路径与指纹拼进 key，等于放弃全部跨项目共享）。
+lexAddrOf : String -> String
+lexAddrOf src = addrOf ["lex", lexCacheSchema, lexCacheCodec, contentAddress src]
 
 -- | 读 lex 缓存：`Store` framing 全量校验通过才解码；任何不符 ⇒ `Nothing`（重新 lex）。
-readLexCache : String -> String -> String -> Eff hostRow (Maybe (List PTok))
-readLexCache tag codec cpath = do
-  payload <- storeReadEff "${lexCacheSchema}/${tag}" codec cpath
+readLexCache : String -> Eff hostRow (Maybe (List PTok))
+readLexCache addr = do
+  payload <- storeObjectReadEff "lex" lexCacheCodec addr
   pure (case payload of
     Nothing => Nothing
     Just bytes => decPTokListComplete bytes
   )
 
--- | 写 lex 缓存（目录先建好；原子写由 `Store` 负责）。
-storeLexCache : String -> String -> List PTok -> Eff hostRow Int
-storeLexCache tag cpath toks = do
-  lexDir <- lexCacheDir
-  _ <- storeEnsureDirEff lexDir
-  storeWriteEff "${lexCacheSchema}/${tag}" lexCacheCodec cpath (encTop encPTokList toks)
+-- | 写 lex 缓存（目录由 `Store` 建；原子写由 `Store` 负责）。
+storeLexCache : String -> List PTok -> Eff hostRow Int
+storeLexCache addr toks = storeObjectWriteEff "lex" lexCacheCodec addr (encTop encPTokList toks)
 
 -- | 解析一个源文件（带 lex 缓存）。所有加载路径都走这里。
 export parseFileWithPath : String -> String -> Eff hostRow (Check SourceFile)
 parseFileWithPath path src = do
-  lexDir <- lexCacheDir
-  tag <- compilerTagEff
   let
-    cpath = "${lexDir}/${lexKeyOf tag path src}"
+    addr = lexAddrOf src
   in do
-    cached <- readLexCache tag lexCacheCodec cpath
+    cached <- readLexCache addr
     case cached of
       Just toks => pure (parseWith path toks)
-      Nothing => lexAndStore tag cpath path src
+      Nothing => lexAndStore addr path src
 
 -- | 缓存未命中：lex → 落盘 → 解析。落盘**无条件**（即使语法有错）：token 流只依赖源文本，
 -- 与 parse 是否成功无关，错文件下次也能省掉 lex。
-lexAndStore : String -> String -> String -> String -> Eff hostRow (Check SourceFile)
-lexAndStore tag cpath path src = case lexSource src of
+lexAndStore : String -> String -> String -> Eff hostRow (Check SourceFile)
+lexAndStore addr path src = case lexSource src of
   ErrC e => pure (ErrC (attachParsePath path e))
   OkC toks => do
-    _ <- storeLexCache tag cpath toks
+    _ <- storeLexCache addr toks
     pure (parseWith path toks)
 
 -- | 由 token 流得到 parse 结果。解析错误统一加 `<path>: ` 前缀（parser 诊断本身无位置）；
@@ -765,7 +758,7 @@ loadModuleSourceWithPreloaded ctx label source preloaded = do
 -- 但 fixity **声明表必须按文件重算**（local + 该文件自己的 import 闭包）——不同文件的
 -- imports 不同，跨文件复用声明表会让 fmt 给 `::`/`+` 等打出错误的括号。
 -- 返回值同时带回更新后的模块表，供调用方继续复用。
--- M4：parse 读 AST 缓存 / 探测模块文件是宿主动作，外壳显式 `Eff []`；声明表计算保持纯。
+-- M4：parse 读 AST 缓存 / 探测模块文件是宿主动作，外壳显式 `Eff hostRow`；声明表计算保持纯。
 export fixitiesForSourceIn : PackageContext -> List Module -> String -> String -> Eff hostRow (Check (Pair (List Module) (List FixityDecl)))
 fixitiesForSourceIn ctx modules0 label source = do
   parsed <- parseFileWithPath label source

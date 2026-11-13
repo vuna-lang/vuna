@@ -12,5 +12,5 @@ run: VUNA_UNIT_CACHE=1 VUNA_DEBUG_PERF=1 "$VUNA" compile "$TMPDIR/unit-entry-pkg
 out-contains: unit-cache-hit
 # 切到同一包上下文的另一个入口 B：旧桶被 GC 后只剩一个 entry 桶。
 run: VUNA_UNIT_CACHE=1 "$VUNA" compile "$TMPDIR/unit-entry-pkg/B.vuna" "$TMPDIR/unit-j2"
-run: find "$TMPDIR/vuna-cache" -path "*split-units/e-*" -name "*.unit" 2>/dev/null | xargs -r -n1 dirname | sort -u | wc -l
+run: find "$VUNA_STORE/units" -path "*/units/*/e-*" -name "*.unit" 2>/dev/null | xargs -r -n1 dirname | sort -u | wc -l
 out-equals: 1

@@ -57,27 +57,45 @@ baseIfaceDir ifaceRoot baseDir =
   if ifaceRoot == "" then baseDir else "${ifaceRoot}/${dropLeadingSlash baseDir}"
 
 -- 读 base 包接口（`readPackageIface` 内部已校验 schema 与编译器 tag）。
-readBaseIfaces : String -> String -> Eff hostRow (Maybe (List ModuleIface))
-readBaseIfaces ifaceRoot baseDir = do
-  tag <- ifaceTag
-  pi <- readPackageIface (baseIfaceDir ifaceRoot baseDir) tag
-  pure (case pi of
-    Nothing => Nothing
-    Just p => Just p.piModules
-  )
+-- 读 base 包的模块接口（对象库 = 输入寻址，命中即路径存在；解码失败 ⇒ Nothing）。
+-- 用 base 目录自己的包上下文（`contextForDir`）：包身份、包环境、依赖图都从它的
+-- manifest 推出，与 `vuna check <base>` 写侧完全同口径。
+readBaseIfaces : String -> Eff hostRow (Maybe (List ModuleIface))
+readBaseIfaces baseDir = do
+  ctxR <- contextForDir baseDir
+  case ctxR of
+    ErrC _ => pure Nothing
+    OkC ctx => ifacesForContextEff ctx
+
+-- 字段访问 helper：绑定变量的记录字段访问需要显式类型（语言限制），
+-- 这里用带参数类型的薄函数代替 `s.sesDir` 直接投影。
+sesRootOf : Session -> String
+sesRootOf s = s.sesRoot
+
+sesDirOf : Session -> String
+sesDirOf s = s.sesDir
+
+sesIfacesOf : Session -> List ModuleIface
+sesIfacesOf s = s.sesIfaces
+
+sesAuxOf : Session -> Maybe AuxCache
+sesAuxOf s = s.sesAux
+
+sesEvalAuxOf : Session -> Maybe AuxCache
+sesEvalAuxOf s = s.sesEvalAux
 
 -- 会话可用性：命中缓存 → 直接用；否则读一次接口并写回（读失败 ⇒ Nothing）。
 ensureSession : IORef Session -> String -> Eff hostRow (Maybe (List ModuleIface))
 ensureSession ref baseDir = do
-  s <- raiseToRow hostRow (readRef ref)
-  if s.sesDir == baseDir && length s.sesIfaces > 0 then pure (Just s.sesIfaces)
+  s <- readRef ref
+  if sesDirOf s == baseDir && length (sesIfacesOf s) > 0 then pure (Just (sesIfacesOf s))
   else do
-    ifacesR <- readBaseIfaces s.sesRoot baseDir
+    ifacesR <- readBaseIfaces baseDir
     case ifacesR of
       Nothing => pure Nothing
       Just ifaces => if length ifaces == 0 then pure Nothing
       else do
-        _ <- writeRef ref (Session s.sesRoot baseDir ifaces s.sesAux s.sesEvalAux)
+        _ <- writeRef ref (Session (sesRootOf s) baseDir ifaces (sesAuxOf s) (sesEvalAuxOf s))
         pure (Just ifaces)
 
 -- check：Just (0, "") = 通过；Just (1, 诊断) = 失败；Nothing = 会话不可用（回退 CLI）。
@@ -98,13 +116,13 @@ sessionCheck ref baseDir source = do
 sessionCheckIn : IORef Session -> String -> PackageContext -> List ModuleIface -> String -> Eff hostRow (Maybe (Pair Int String))
 sessionCheckIn ref baseDir ctx ifaces source = do
   text <- raiseToRow hostRow (@vuna@prim_eff_readFile source)
-  s <- raiseToRow hostRow (readRef ref)
-  result <- dtCheckSourceIncremental ctx source text ifaces [] s.sesAux False
+  s <- readRef ref
+  result <- dtCheckSourceIncremental ctx source text ifaces [] (sesAuxOf s) False
   case result of
     ErrC e => pure (Just (Pair 1 (diagText e)))
     OkC (Pair applied (Pair _ (Pair _ aux))) => if not applied then pure Nothing
     else do
-      _ <- writeRef ref (Session s.sesRoot baseDir ifaces aux s.sesEvalAux)
+      _ <- writeRef ref (Session (sesRootOf s) baseDir ifaces aux (sesEvalAuxOf s))
       pure (Just (Pair 0 ""))
 
 -- interp：Just (0, 输出) = 求值成功（与 CLI 打印的 trim 后文本一致）；
@@ -126,11 +144,11 @@ sessionInterp ref baseDir source = do
 sessionInterpIn : IORef Session -> String -> PackageContext -> List ModuleIface -> String -> Eff hostRow (Maybe (Pair Int String))
 sessionInterpIn ref baseDir ctx ifaces source = do
   text <- raiseToRow hostRow (@vuna@prim_eff_readFile source)
-  s <- raiseToRow hostRow (readRef ref)
-  result <- dtEvalSourceIncremental ctx source text ifaces s.sesEvalAux
+  s <- readRef ref
+  result <- dtEvalSourceIncremental ctx source text ifaces (sesEvalAuxOf s)
   case result of
     ErrC e => pure (Just (Pair 1 (diagText e)))
     OkC (Pair applied (Pair out aux)) => if not applied then pure Nothing
     else do
-      _ <- writeRef ref (Session s.sesRoot baseDir ifaces s.sesAux aux)
+      _ <- writeRef ref (Session (sesRootOf s) baseDir ifaces (sesAuxOf s) aux)
       pure (Just (Pair 0 out))

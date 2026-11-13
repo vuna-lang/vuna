@@ -153,7 +153,6 @@ else case cs of
     else OkC cs
     [] => OkC cs
 
-
 -- `@vuna@name` 内部名（阶段 5 D）：只有 `@vuna@` 前缀且后续是标识符字符时才作为
 -- 单个标识符收集；其余 `@` 仍是操作符（保持模式 `name@pat` 的语法不变）。
 startsWithVunaAt : List Int -> Bool

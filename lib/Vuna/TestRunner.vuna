@@ -192,7 +192,8 @@ runWorkspaceGo opts (pkg :: rest) pass fail = do
         Tally p f False => runWorkspaceGo opts rest (pass + p) (fail + f)
   else do
     _ <-
-      raiseToRow hostRow (@vuna@prim_eff_print "-- ${workspacePackageLabel pkg} -- (no test directory)\n")
+      raiseToRow hostRow
+        (@vuna@prim_eff_print "-- ${workspacePackageLabel pkg} -- (no test directory)\n")
     runWorkspaceGo opts rest pass fail
 
 -- workspace 总汇总 + 退出码（0 全通过 / 1 有失败）。
@@ -399,7 +400,8 @@ parseDigits (c :: rest) acc =
 -- `timeout`（coreutils）在 PATH 里吗？不在时优雅降级为旧路径（不算 FAIL）。
 hasTimeoutCmd : Int -> Eff hostRow Bool
 hasTimeoutCmd _ = do
-  code <- raiseToRow hostRow (@vuna@prim_eff_runIn "." ["sh", "-c", "command -v timeout >/dev/null 2>&1"])
+  code <-
+    raiseToRow hostRow (@vuna@prim_eff_runIn "." ["sh", "-c", "command -v timeout >/dev/null 2>&1"])
   pure (code == 0)
 
 -- 临时目录根：`$TMPDIR`（去尾部 `/`），没有就用 `/tmp`。

@@ -1,17 +1,14 @@
-# 44n) 包配置指纹（`pmEnv`）：改 `vuna.toml`（不进模块源哈希）必须让本包接口判脏
-#      （`iface-reject=own-env`），重算后收敛（`iface-write=0/`）。
+# 44n) 包环境进地址：改 `vuna.toml`（不进模块源摘要）必须让本包接口地址变化 ⇒ 重新精化；
+#      之后重跑收敛（零新增对象）。
 #      夹具 corpus/packages/m34_iface_audit 复制到 $TMPDIR，vuna.toml 的 base 改到本仓库。
-run: sh -c 'rm -rf "$TMPDIR/iface-audit-pkg" "$TMPDIR/iface-audit-cache"; cp -R corpus/packages/m34_iface_audit "$TMPDIR/iface-audit-pkg"; mkdir -p "$TMPDIR/iface-audit-cache"'
-run: sh -c 'for mf in "$TMPDIR/iface-audit-pkg"/*/vuna.toml; do sed "s|vuna-base = \"[^\"]*\"|vuna-base = \"$VUNA_BASE\"|" "$mf" > "$mf.tmp" && mv "$mf.tmp" "$mf"; done'
-run: sh -c 'TMPDIR="$TMPDIR/iface-audit-cache" "$VUNA" check "$TMPDIR/iface-audit-pkg/dep" && TMPDIR="$TMPDIR/iface-audit-cache" "$VUNA" check "$TMPDIR/iface-audit-pkg/mid"'
+run: sh -c 'rm -rf "$TMPDIR/env-pkg" "$TMPDIR/env-cache" "$TMPDIR/env-store"; cp -R corpus/packages/m34_iface_audit "$TMPDIR/env-pkg"'
+run: sh -c 'for mf in "$TMPDIR/env-pkg"/*/vuna.toml; do sed "s|vuna-base = \"[^\"]*\"|vuna-base = \"$VUNA_BASE\"|" "$mf" > "$mf.tmp" && mv "$mf.tmp" "$mf"; done'
+run: sh -c 'VUNA_STORE="$TMPDIR/env-store" TMPDIR="$TMPDIR/env-cache" "$VUNA" check "$TMPDIR/env-pkg/dep" && VUNA_STORE="$TMPDIR/env-store" TMPDIR="$TMPDIR/env-cache" "$VUNA" check "$TMPDIR/env-pkg/mid"'
 exit: 0
-# 只改包环境（追加注释），模块源码不变。
-run: sh -c 'printf "\n# env fingerprint probe\n" >> "$TMPDIR/iface-audit-pkg/mid/vuna.toml"'
-run: sh -c 'find "$TMPDIR/iface-audit-cache"/vuna-cache -name query -type d -prune -exec rm -rf {} + 2>/dev/null || true'
-run: TMPDIR="$TMPDIR/iface-audit-cache" "$VUNA" check "$TMPDIR/iface-audit-pkg/mid" --debug-perf
+# 只改包环境（追加注释），模块源码不变 ⇒ 地址变化 ⇒ 重算并写回。
+run: sh -c 'printf "\n# env probe\n" >> "$TMPDIR/env-pkg/mid/vuna.toml"; rm -rf "$TMPDIR/env-cache"'
+run: sh -c 'VUNA_STORE="$TMPDIR/env-store" TMPDIR="$TMPDIR/env-cache" "$VUNA" check "$TMPDIR/env-pkg/mid" --debug-perf'
 exit: 0
-out-contains: iface-reject=own-env
-run: sh -c 'find "$TMPDIR/iface-audit-cache"/vuna-cache -name query -type d -prune -exec rm -rf {} + 2>/dev/null || true'
-run: TMPDIR="$TMPDIR/iface-audit-cache" "$VUNA" check "$TMPDIR/iface-audit-pkg/mid" --debug-perf
-exit: 0
-out-contains: iface-write=0/
+out-contains: iface-write=
+# 收敛：再跑一遍，对象库文件数不变。
+run: sh -c 'n1=$(find "$TMPDIR/env-store/objects" -type f | wc -l); rm -rf "$TMPDIR/env-cache"; VUNA_STORE="$TMPDIR/env-store" TMPDIR="$TMPDIR/env-cache" "$VUNA" check "$TMPDIR/env-pkg/mid" >/dev/null 2>&1; n2=$(find "$TMPDIR/env-store/objects" -type f | wc -l); [ "$n1" -eq "$n2" ]'

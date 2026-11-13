@@ -1,98 +1,68 @@
--- | 工具会话层：工具链（LSP / REPL / doc / index）共用的查询图会话。
+-- | 工具会话：把「节点 key + 依赖摘要」缓存成输入寻址对象。
 module Vuna.Tool.Session where
 
--- Vuna.Tool.Session：工具链侧对 `Query`（纯核心）+ `Query.Run`（Eff 层）的薄封装。
+-- Vuna.Tool.Session：LSP / REPL / `vuna map` 的**会话级**缓存。
 --
--- 设计（阶段 3）：
---   * 所有工具共用**同一个 `Db`**：不再有 `DiagCache` / `stateAuxCache` / `stateToolSession`
---     各自一套 mtime 启发式；
---   * 大值（`ToolContext` / `Index` 记录树）走「`QRef` = 内容地址 + blob」：节点里只存
---     64 位十六进制摘要，载荷落在 `<cache>/blobs/<digest>`（与 codegen 产物同一个 blob 树，
---     内容寻址天然去重）；
---   * 会话索引按桶持久化（`sessionLoad` / `sessionSave`），桶名由调用方给定
---     （`tool` origin，`tool:<包>` / `index:<目录>` 之类）——工具进程长驻时命中不落盘，
---     跨进程重启才读索引。
+-- 语义：一次成功的工作（工具接口 / 索引）由 `(origin, bucket, nodeKey, deps...)` 唯一确定；
+-- 这个组合的摘要就是对象地址，存在即命中，不存在即重算后写回。没有 `Db`、没有查询图、
+-- 没有依赖快照比较——跨进程天然一致，坏字节由 `Store` framing 拒绝。
 --
--- 这里**不**做失效判定：那是 `Query.queryHit` 的事（声明集合 + 观测依赖摘要）。本模块只负责
--- 「取节点 → 读 blob → 解出记录」与「写 blob → 提交节点 → 落索引」这两条固定流程。
+-- 载荷分两类，同一 `objects/tool/` 空间：
+--   * marker（空载荷，codec `tool-marker 1`）：命中但调用方手里已有记录（REPL 的）
+--   * 载荷字节（各调用方自己的 codec，如 `indexPayloadCodec`）
+-- 读侧 codec 不符 ⇒ `Nothing` ⇒ 调用方重算（marker 因此永远不会被当成载荷）。
 import Base.HostRow
-import Base.Maybe
-import Base.String
-import Vuna.Compiler.Driver.Compile
-import Vuna.Compiler.Hash
-import Vuna.Compiler.Query
-import Vuna.Compiler.Query.Run
-import Vuna.Compiler.Store
 import Base.Eff
+import Base.List
+import Vuna.Compiler.Addr
+import Vuna.Compiler.Driver.Compile
+import Vuna.Compiler.Store
 
--- | 工具会话：一个 `Db` + 持久化配置。
+-- | 工具会话身份：`origin`（tool/pkg）+ `bucket`（同一进程内不同用途各占一桶）。
 export record ToolSession(..) where
-  tsDb : Db
-  tsOpts : RunOpts
+  tsOrigin : String
+  tsBucket : String
 
--- | 新建会话（`origin` 用 `tool`；`bucket` 决定索引落到哪个桶）。
+-- | 落盘会话（桶名决定对象寻址前缀）。
 export toolSessionNew : String -> String -> ToolSession
-toolSessionNew origin bucket = ToolSession dbEmpty (RunOpts origin 0 True bucket)
+toolSessionNew origin bucket = ToolSession origin bucket
 
--- | 新建**只留在内存**的会话（长驻工具进程内复用，不落盘；`QMarker` 命中即可复用
--- 调用方已持有的记录，落盘反而会让下次进程白命中一次又没有记录）。
+-- | 只在内存里复用的会话（与落盘会话唯一的差别是桶名为空，地址仍稳定）。
 export toolSessionNewMemory : String -> ToolSession
-toolSessionNewMemory origin = ToolSession dbEmpty (RunOpts origin 0 False "")
+toolSessionNewMemory origin = ToolSession origin "mem"
 
--- | 从磁盘索引恢复会话（没有索引 ⇒ 空 `Db`）。
-toolSessionResume : ToolSession -> Eff hostRow ToolSession
-toolSessionResume ts = do
-  db <- sessionLoad ts.tsOpts
-  pure (ToolSession db ts.tsOpts)
+-- | 会话对象地址：`(origin, bucket, key, deps...)` 的输入摘要。
+export toolSessionAddrOf : ToolSession -> String -> List String -> String
+toolSessionAddrOf ts key deps = addrOf (append ["tool-session", ts.tsOrigin, ts.tsBucket, key] deps)
 
--- | 命中：返回节点里的载荷地址（`QRef` 的摘要）或 `QMarker` 的 `Nothing`。
+-- marker 的 codec：空载荷（存在性即是全部信息）。
+toolMarkerCodec : String
+toolMarkerCodec = "tool-marker 1"
+
+-- | 命中：返回对象地址（调用方拿它去读载荷；marker 读不出 ⇒ 按 miss 重算）。
 export toolHitValue : ToolSession -> String -> List String -> Eff hostRow (Maybe (Maybe String))
 toolHitValue ts key deps = do
-  resumed <- toolSessionResume ts
-  pure (case queryHit resumed.tsDb key deps of
-    Nothing => Nothing
-    Just QMarker => Just Nothing
-    Just (QBytes _) => Just Nothing
-    Just (QRef digest) => Just (Just digest)
-  )
+  let
+    addr = toolSessionAddrOf ts key deps
+  in do
+    exists <- storeObjectExistsEff "tool" addr
+    pure (if exists then Just (Just addr) else Nothing)
 
--- | 提交 `QMarker` 节点（成功但无载荷）。
+-- | 提交 marker 节点（成功但载荷在调用方手里）。
 export toolCommitValue : ToolSession -> String -> List String -> Eff hostRow ToolSession
 toolCommitValue ts key deps = do
-  resumed <- toolSessionResume ts
-  db <- pure (firstOf (queryResolve resumed.tsDb key deps (Pair QMarker [])))
-  _ <- sessionSave ts.tsOpts db
-  pure (ToolSession db ts.tsOpts)
+  _ <- storeObjectWriteEff "tool" toolMarkerCodec (toolSessionAddrOf ts key deps) ""
+  pure ts
 
--- | 写 blob 并提交 `QRef` 节点（值 = 内容地址；载荷按内容寻址去重）。
+-- | 写载荷对象（同一输入同一地址；内容未变则不写盘），返回地址。
 export toolStorePayload : ToolSession -> String -> List String -> String -> String -> Eff hostRow (Pair ToolSession String)
 toolStorePayload ts key deps codec payload = do
-  digest <- pure (contentAddress payload)
-  tag <- toolBlobTag
-  path <- toolBlobPath digest
-  base <- storeCacheBaseEff
-  _ <- storeEnsureDirEff "${base}/blobs"
-  _ <- storeWriteIfChangedAsEff tag codec digest path payload
-  resumed <- toolSessionResume ts
-  db <- pure (firstOf (queryResolve resumed.tsDb key deps (Pair (QRef digest) [])))
-  _ <- sessionSave ts.tsOpts db
-  pure (Pair (ToolSession db ts.tsOpts) digest)
+  let
+    addr = toolSessionAddrOf ts key deps
+  in do
+    _ <- storeObjectWriteEff "tool" codec addr payload
+    pure (Pair ts addr)
 
--- | 读 blob（framing 全量校验 + 内容地址比对；任何不符 ⇒ `Nothing` ⇒ 调用方重算）。
+-- | 读载荷（codec 不符 / 坏字节 ⇒ `Nothing` ⇒ 调用方重算）。
 export toolLoadPayload : String -> String -> Eff hostRow (Maybe String)
-toolLoadPayload digest codec = do
-  tag <- toolBlobTag
-  path <- toolBlobPath digest
-  storeReadAsEff tag codec digest path
-
--- | blob 路径：`<cache>/blobs/<digest>`（与 codegen 产物共用）。
-export toolBlobPath : String -> Eff hostRow String
-toolBlobPath digest = do
-  base <- storeCacheBaseEff
-  pure "${base}/blobs/${digest}"
-
--- | blob 的 framing tag：schema + 编译器指纹（换二进制整套失效）。
-export toolBlobTag : Eff hostRow String
-toolBlobTag = do
-  fp <- toolCompilerFingerprint
-  pure "vuna-tool-blob 1/${strFromInt fp}"
+toolLoadPayload addr codec = storeObjectReadEff "tool" codec addr

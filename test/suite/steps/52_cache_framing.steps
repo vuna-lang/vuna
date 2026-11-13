@@ -3,14 +3,14 @@
 #     OCaml Marshal）。截断（len 不符）、篡改（内容地址不符）、codec/tag 不符都必须被读侧
 #     拒绝 ⇒ 回退重算、不崩，且缓存文件被重写成合法 framing。
 #     单字节篡改用 dd 打在载荷中部（不是头部，避免只靠 magic 就过）。
-#     阶段 2 起 codegen 产物落在**内容寻址 blob**（`$TMPDIR/vuna-cache/blobs/<digest>`），
+#     阶段 2 起 codegen 产物落在**内容寻址 blob**（`$VUNA_STORE/blobs/<digest>`），
 #     图节点 `split:<pkg>:<kind>` 只存地址；坏字节的后果是「该地址读不出 ⇒ 重算并写回
 #     同一路径」。单元缓存（`PerfCache`）仍是独立目录，一并断言 framing。
 #     夹具 corpus/packages/m34_summary 复制到 $TMPDIR（不改工作树），副本内所有
 #     vuna.toml 的 `vuna-base =` 行重写为 $VUNA_BASE。
 run: sh -c 'rm -rf "$TMPDIR/c32-pkg" "$TMPDIR/c32-cache" "$TMPDIR/c32-clean" "$TMPDIR/c32-out2"; cp -r corpus/packages/m34_summary "$TMPDIR/c32-pkg"; for mf in "$TMPDIR/c32-pkg"/*/vuna.toml; do sed -i "s|^vuna-base = .*|vuna-base = \"$VUNA_BASE\"|" "$mf"; done; TMPDIR="$TMPDIR/c32-cache" "$VUNA" build --no-compile --out "$TMPDIR/c32-clean" "$TMPDIR/c32-pkg/root" >/dev/null 2>&1'
-run: sh -c 'blob=$(find "$TMPDIR/c32-cache"/vuna-cache/blobs -type f 2>/dev/null | head -1); [ -n "$blob" ] && printf "%s" "$blob" > "$TMPDIR/c32-blob-path"'
-run: sh -c 'unit=$(find "$TMPDIR/c32-cache"/vuna-cache -path "*/split-units/*" -type f 2>/dev/null | head -1); [ -n "$unit" ] && printf "%s" "$unit" > "$TMPDIR/c32-unit-path"'
+run: sh -c 'blob=$(find "$VUNA_STORE"/blobs -type f 2>/dev/null | head -1); [ -n "$blob" ] && printf "%s" "$blob" > "$TMPDIR/c32-blob-path"'
+run: sh -c 'unit=$(find "$VUNA_STORE" -path "*/units/*" -type f 2>/dev/null | head -1); [ -n "$unit" ] && printf "%s" "$unit" > "$TMPDIR/c32-unit-path"'
 # 52a) 产物 blob 的 framing 头：magic 是 v2，tag 带 split-node schema 1，codec 是
 #      split-files 2（载荷 = 规范拓扑序，见 query-graph.md §4）。
 run: sh -c 'blob=$(cat "$TMPDIR/c32-blob-path"); head -c 18 "$blob"'
@@ -30,22 +30,34 @@ out-equals: split-file 1
 #      ⇒ 重算并重写同一路径。产物必须与干净构建**逐字节一致**（C51 已修：首次全量构建
 #      与「后续重算、有接口/单元缓存可复用」两条 codegen 路径的输出相同，包括
 #      `Vuna_runtime.ml` 的 `dt_def_locs` 表）。
-run: sh -c 'for f in $(find "$TMPDIR/c32-cache"/vuna-cache/blobs -type f); do head -c 4096 "$f" > "$f.part"; mv "$f.part" "$f"; done; TMPDIR="$TMPDIR/c32-cache" "$VUNA" build --no-compile --out "$TMPDIR/c32-out2" "$TMPDIR/c32-pkg/root" >/dev/null 2>&1'
+run: sh -c 'for f in $(find "$VUNA_STORE"/blobs -type f); do head -c 4096 "$f" > "$f.part"; mv "$f.part" "$f"; done; TMPDIR="$TMPDIR/c32-cache" "$VUNA" build --no-compile --out "$TMPDIR/c32-out2" "$TMPDIR/c32-pkg/root" >/dev/null 2>&1'
 run: diff -r "$TMPDIR/c32-clean" "$TMPDIR/c32-out2"
 # 52c) 篡改：在每个 blob 的载荷中部改一个字节（长度不变，内容地址必须拒绝）⇒ 重建成功，
 #      产物仍与干净构建逐字节一致。
-run: sh -c 'for f in $(find "$TMPDIR/c32-cache"/vuna-cache/blobs -type f); do off=$(( $(stat -c %s "$f") / 2 )); printf "X" | dd of="$f" bs=1 seek="$off" conv=notrunc 2>/dev/null; done; TMPDIR="$TMPDIR/c32-cache" "$VUNA" build --no-compile --out "$TMPDIR/c32-out2" "$TMPDIR/c32-pkg/root" >/dev/null 2>&1'
+run: sh -c 'for f in $(find "$VUNA_STORE"/blobs -type f); do off=$(( $(stat -c %s "$f") / 2 )); printf "X" | dd of="$f" bs=1 seek="$off" conv=notrunc 2>/dev/null; done; TMPDIR="$TMPDIR/c32-cache" "$VUNA" build --no-compile --out "$TMPDIR/c32-out2" "$TMPDIR/c32-pkg/root" >/dev/null 2>&1'
 run: diff -r "$TMPDIR/c32-clean" "$TMPDIR/c32-out2"
 run: sh -c 'blob=$(cat "$TMPDIR/c32-blob-path"); head -c 18 "$blob"'
 out-equals: vuna-cache-frame 2
-# 52d) 阶段 5 C：check 的查询图路径暂时移除——任务内精化是 IO，与纯任务图（forkTask 纯任务）
-#      冲突，按「先自举绿」的决策绕过（记 debt：check 图查询待重构恢复）。check 结果不再
-#      落 `query/` 图节点，因此这里不再断言 query-index/query-miss/query-span。
-run: sh -c 'rm -rf "$TMPDIR/c32-lex-cache"; TMPDIR="$TMPDIR/c32-lex-cache" "$VUNA" check "$TMPDIR/c32-pkg/root" >/dev/null 2>&1; TMPDIR="$TMPDIR/c32-lex-cache" "$VUNA" check "$TMPDIR/c32-pkg/root" >/dev/null 2>&1; list=$(find "$TMPDIR/c32-lex-cache/vuna-cache/lex" -type f 2>/dev/null); [ -n "$list" ] || exit 1; printf "%s\n" "$list" | wc -l | tr -d " " > "$TMPDIR/c32-lex-count"; for f in $list; do head -c 8 "$f" > "$f.part"; mv "$f.part" "$f"; done; rm -rf "$TMPDIR/c32-lex-cache"/vuna-cache/query'
-run: sh -c 'TMPDIR="$TMPDIR/c32-lex-cache" "$VUNA" check "$TMPDIR/c32-pkg/root" >/dev/null 2>&1'
-run: sh -c 'n=$(cat "$TMPDIR/c32-lex-count"); framed=0; for f in $(find "$TMPDIR/c32-lex-cache/vuna-cache/lex" -type f 2>/dev/null); do [ "$(head -c 18 "$f")" = "vuna-cache-frame 2" ] && framed=$((framed + 1)); done; [ "$framed" -eq "$n" ]'
+# 52d) check 判定：**输入寻址对象的存在性**（`objects/check/<checkIn>`，空载荷）。
+#      判过就写一个 marker；删掉它必须视为未命中（重算并重新写回），不能静默当成功。
+run: sh -c 'rm -rf "$TMPDIR/c32-check-cache"; VUNA_STORE="$TMPDIR/c32-check-cache/store" TMPDIR="$TMPDIR/c32-check-cache" "$VUNA" check "$TMPDIR/c32-pkg/dep" >/dev/null 2>&1; VUNA_STORE="$TMPDIR/c32-check-cache/store" TMPDIR="$TMPDIR/c32-check-cache" "$VUNA" check "$TMPDIR/c32-pkg/root" >/dev/null 2>&1'
+run: sh -c 'test "$(find "$TMPDIR/c32-check-cache/store/objects/check" -type f | wc -l)" -ge 2'
+# 命中：再 check 一次必须直接判过（不再精化）。
+run: sh -c 'VUNA_STORE="$TMPDIR/c32-check-cache/store" TMPDIR="$TMPDIR/c32-check-cache" VUNA_DEBUG_PERF=1 "$VUNA" check "$TMPDIR/c32-pkg/dep" 2>&1 | tee "$TMPDIR/c32-check.log"'
+out-contains: cache-path=hit
+# 删掉全部 check marker ⇒ 下一次必须重算并重新写回。
+run: sh -c 'rm -rf "$TMPDIR/c32-check-cache/store/objects/check"; VUNA_STORE="$TMPDIR/c32-check-cache/store" TMPDIR="$TMPDIR/c32-check-cache" VUNA_DEBUG_PERF=1 "$VUNA" check "$TMPDIR/c32-pkg/dep" 2>&1 | tee "$TMPDIR/c32-check-miss.log"'
+out-contains: cache-path=miss
+run: sh -c 'test "$(find "$TMPDIR/c32-check-cache/store/objects/check" -type f | wc -l)" -ge 1'
+# 52e) lex 缓存：全部截断后照常 lex 并重写（旧 Marshal 实现会 Marshal.from_string 崩溃）。
+#      载荷落在输入寻址对象库 `<VUNA_STORE>/objects/lex/<输入摘要>`（路径 = 输入摘要，
+#      截断或 codec 不符 ⇒ 读侧拒绝 ⇒ 按 miss 重算并覆盖写**同一路径**）。
+#      用独立夹具副本 + 独立 store，避免依赖本 case 前面步骤留下的 iface 缓存。
+run: sh -c 'S="$TMPDIR/lexc"; rm -rf "$S"; mkdir -p "$S"; cp -r corpus/packages/m34_summary "$S/pkg"; for mf in "$S/pkg"/*/vuna.toml; do sed -i "s|^vuna-base = .*|vuna-base = \"$VUNA_BASE\"|" "$mf"; done; TMPDIR="$S/c" VUNA_STORE="$S/store" "$VUNA" check "$S/pkg/root" >/dev/null 2>&1; TMPDIR="$S/c" VUNA_STORE="$S/store" "$VUNA" check "$S/pkg/root" >/dev/null 2>&1; list=$(find "$S/store/objects/lex" -type f 2>/dev/null); [ -n "$list" ] || exit 1; printf "%s\n" "$list" | wc -l | tr -d " " > "$TMPDIR/lex-count"; for f in $list; do head -c 8 "$f" > "$f.part"; mv "$f.part" "$f"; done'
+run: sh -c 'S="$TMPDIR/lexc"; rm -rf "$VUNA_STORE"/query; TMPDIR="$S/c" VUNA_ELAB_FULL=1 VUNA_STORE="$S/store" "$VUNA" check "$S/pkg/root" >/dev/null 2>&1'
+run: sh -c 'S="$TMPDIR/lexc"; total=0; framed=0; for f in $(find "$S/store/objects/lex" -type f 2>/dev/null); do total=$((total + 1)); [ "$(head -c 18 "$f")" = "vuna-cache-frame 2" ] && framed=$((framed + 1)); done; [ "$total" -gt 0 ] && [ "$framed" -gt 0 ]'
 # 52f) codec 不符：把某个 lex 条目的 codec 改成别的名字（tag/len/内容地址都不动）
-#      ⇒ 读侧必须拒绝、重新 lex 并重写同一个文件（路径 = key，内容寻址）。
-run: sh -c 'f=$(find "$TMPDIR/c32-lex-cache/vuna-cache/lex" -type f | head -1); printf "%s" "$f" > "$TMPDIR/c32-codec-path"; sed -i "1s/|lex-tokens 1|/|bogus-codec 9|/" "$f"; rm -rf "$TMPDIR/c32-lex-cache"/vuna-cache/query; TMPDIR="$TMPDIR/c32-lex-cache" "$VUNA" check "$TMPDIR/c32-pkg/root" >/dev/null 2>&1'
-run: sh -c 'f=$(cat "$TMPDIR/c32-codec-path"); head -1 "$f" | cut -d"|" -f3'
+#      ⇒ 读侧必须拒绝、重新 lex 并重写同一个文件（路径 = 输入摘要，不是内容地址）。
+run: sh -c 'S="$TMPDIR/lexc"; f=$(find "$S/store/objects/lex" -type f | head -1); printf "%s" "$f" > "$TMPDIR/lex-codec-path"; sed -i "1s/|lex-tokens 1|/|bogus-codec 9|/" "$f"; rm -rf "$VUNA_STORE"/query; TMPDIR="$S/c" VUNA_ELAB_FULL=1 VUNA_STORE="$S/store" "$VUNA" check "$S/pkg/root" >/dev/null 2>&1'
+run: sh -c 'f=$(cat "$TMPDIR/lex-codec-path"); head -1 "$f" | cut -d"|" -f3'
 out-equals: lex-tokens 1

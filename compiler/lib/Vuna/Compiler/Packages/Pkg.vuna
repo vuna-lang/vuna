@@ -139,7 +139,7 @@ else case normalizeAcc False (splitOnSlash path) [] of
 export absolutePath : String -> Eff hostRow String
 absolutePath path = if startsWith "/" path then pure (normalizeDir path)
 else do
-  cwd <- raiseToRow hostRow (@vuna@prim_eff_getcwd)
+  cwd <- raiseToRow hostRow @vuna@prim_eff_getcwd
   pure (normalizeDir "${cwd}/${path}")
 
 -- 依赖路径拼接：绝对路径直接用，相对路径相对 base 目录规范化。
@@ -478,7 +478,7 @@ export locateBase : Int -> Eff hostRow (Check String)
 locateBase _ = do
   env <- raiseToRow hostRow (@vuna@prim_eff_getenv "VUNA_BASE")
   if env == "" then do
-    exe <- raiseToRow hostRow (@vuna@prim_eff_execPath)
+    exe <- raiseToRow hostRow @vuna@prim_eff_execPath
     cwd <- absolutePath exe
     let
       candidates = baseCandidates (manifestDir cwd)
