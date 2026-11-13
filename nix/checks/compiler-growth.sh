@@ -6,13 +6,14 @@
 # 线性路径的比值 ≈2；出现 n²/n³ 或逐档翻倍时会明显越界。这是对
 # `bench/compiler.sh --check`（同机绝对基线，软/硬阈值）的补充，进 `nix flake check`。
 #
-# 阈值留了噪声余量（短探针里进程启动 + 固定加载占相当比例）；校准依据见
+# 阈值留了噪声余量（短探针里进程启动 + 固定加载占相当比例；2026-11-13 串行 flake
+# 实测同一二进制在 2.30–2.40 间抖动，故 2.3 → 2.5）；校准依据见
 # docs/reference/performance.md §5。可用 `VUNA_GROWTH_MAX_RATIO_MILLI`（千分比）临时覆盖。
 set -eu
 out=${1:?usage: compiler-growth.sh OUT}
 : "${VUNA:?VUNA 未设置}"
 
-MAX_RATIO_MILLI=${VUNA_GROWTH_MAX_RATIO_MILLI:-2300}
+MAX_RATIO_MILLI=${VUNA_GROWTH_MAX_RATIO_MILLI:-2500}
 BASE=$PWD/base
 work=$(mktemp -d "${TMPDIR:-/tmp}/vuna-growth.XXXXXX")
 trap 'rm -rf "$work"' EXIT INT TERM
