@@ -22,8 +22,6 @@ compiler/lib/Vuna/Compiler/   （93 个源模块；目录即层：
 ├─ Intrinsics.vuna            内建语义唯一真源（名字/签名/arity/可见性；运行时文本在 Codegen.Runtime）
 ├─ Hash.vuna                  内容寻址摘要原语：SHA-256 + 63-bit 派生键 + 大载荷预哈希（用 Base.Bits 实现）
 ├─ Canonical.vuna             规范字节编码门面（自定界文法 + 解码器）；子模块 Term / Ast / Elab / Bytes
-├─ Query.vuna                 查询图骨架：记忆化 / 依赖快照 / early cutoff / trace
-├─ Query/Run.vuna             图 Eff 层：预算 / 取消 / 节点 span / 并行波次 / 会话索引
 ├─ Frontend/                  Ast Lexer Parser Cst Parser/Support Toml Manifest  词法（含无损 CST）/ 语法 / vuna.toml
 ├─ Packages/                  Pkg                              包图与模块根
 ├─ Loader.vuna + Loader/      Modules Resolve Flatten          模块图 / 名字解析 / flatten
