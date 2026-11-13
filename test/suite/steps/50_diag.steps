@@ -199,8 +199,11 @@ run: sh -c 'd="$TMPDIR/m47-pkg2"; rm -rf "$d"; mkdir -p "$d/app"; printf "[packa
 exit: 1
 out-contains: "line":2
 out-not-contains: "line":5
-# human 视图显示级联 note。
+# 级联默认折叠：human 只显示 direct 错误；--show-cascade 打开恢复路径的级联 note。
 run: sh -c 'printf "a : Int\na = \"x\"\n\nb : Int\nb = a\n\nmain : Int\nmain = b\n" > "$TMPDIR/m47-dep.vuna"; "$VUNA" check "$TMPDIR/m47-dep.vuna" --continue-on-error --error-format human 2>&1'
+exit: 1
+out-not-contains: best-effort: may be a cascade
+run: sh -c 'printf "a : Int\na = \"x\"\n\nb : Int\nb = a\n\nmain : Int\nmain = b\n" > "$TMPDIR/m47-dep.vuna"; "$VUNA" check "$TMPDIR/m47-dep.vuna" --continue-on-error --error-format human --show-cascade 2>&1'
 exit: 1
 out-contains: best-effort: may be a cascade
 # 实例搜索候选也带声明 span（可跳转到 instance 定义）。

@@ -66,9 +66,10 @@ record CliOpts where
   optContinueOnError : Bool
   optSarifItems : List Diagnostic
   optRelease : Bool
+  optShowCascade : Bool
 
 defaultCliOpts : CliOpts
-defaultCliOpts = CliOpts "short" "en" False False False False False False 20 False [] False
+defaultCliOpts = CliOpts "short" "en" False False False False False False 20 False [] False False
 
 -- | 在已有 opts 上打开 release 模式（`--release`）。
 markRelease : CliOpts -> CliOpts
@@ -80,7 +81,7 @@ markFormatExplicit : CliOpts -> CliOpts
 markFormatExplicit o =
   CliOpts o.optDiagFormat o.optDiagLang o.optLangExplicit o.optDenyWarnings o.optShowWarnings True
     o.optWarningsExplicit o.optDenyExplicit o.optMaxErrors o.optContinueOnError o.optSarifItems
-    o.optRelease
+    o.optRelease o.optShowCascade
 
 -- 显式 state 辅助：把不改 opts 的动作结果带回（退出码 + 当前 CliOpts）。
 withOpts : CliOpts -> Eff hostRow Int -> Eff hostRow (Pair Int CliOpts)
@@ -139,7 +140,7 @@ applyManifestOpts (Just pkg) o =
       Just n => n
       Nothing => o.optMaxErrors
   in CliOpts fmt lang o.optLangExplicit deny showW2 o.optFormatExplicit o.optWarningsExplicit
-    o.optDenyExplicit maxE o.optContinueOnError o.optSarifItems o.optRelease
+    o.optDenyExplicit maxE o.optContinueOnError o.optSarifItems o.optRelease o.optShowCascade
 
 -- | 诊断/告警实现：takeDiags（详见 diagnostics.md）。
 takeDiags : Int -> List Diagnostic -> List Diagnostic
@@ -161,6 +162,32 @@ stripDenyWarnings (arg :: rest) =
 hasDenyWarnings : List String -> Bool
 hasDenyWarnings [] = False
 hasDenyWarnings (arg :: rest) = if arg == "--deny-warnings" then True else hasDenyWarnings rest
+
+-- 级联折叠：默认只显示 direct 诊断；--show-cascade 打开恢复路径的级联错误。
+hasShowCascade : List String -> Bool
+hasShowCascade [] = False
+hasShowCascade (arg :: rest) = if arg == "--show-cascade" then True else hasShowCascade rest
+
+stripShowCascade : List String -> List String
+stripShowCascade [] = []
+stripShowCascade ("--show-cascade" :: rest) = stripShowCascade rest
+stripShowCascade (arg :: rest) = arg :: stripShowCascade rest
+
+isCascadeDiag : Diagnostic -> Bool
+isCascadeDiag d = case d.diagOrigin of
+  OriginCascade _ => True
+  OriginDirect => False
+
+-- 过滤后若一条不剩，退回原列表（级联是唯一诊断时不能静默）。
+isTextDiagFormat : String -> Bool
+isTextDiagFormat f = f == "short" || f == "human"
+
+visibleDiags : CliOpts -> List Diagnostic -> List Diagnostic
+visibleDiags o ds = if o.optShowCascade || not (isTextDiagFormat o.optDiagFormat) then ds
+else
+  let
+    kept = filter (\d => not (isCascadeDiag d)) ds
+  in if length kept == 0 && length ds > 0 then ds else kept
 
 -- | 诊断/告警实现：hasShowWarnings（详见 diagnostics.md）。
 hasShowWarnings : List String -> Bool
@@ -219,10 +246,10 @@ runCompilerCliFor prog args = do
       CliOpts fmt detectedLang (hasLangFlag args) (hasDenyWarnings args)
         (hasDenyWarnings args || hasShowWarnings args) (hasFormatFlag args)
         (hasDenyWarnings args || hasShowWarnings args) (hasDenyWarnings args) (secondOf strippedMax)
-        (secondOf strippedContinue) [] (envRel == "1")
+        (secondOf strippedContinue) [] (envRel == "1") (hasShowCascade args)
   in if anyHelp (firstOf strippedContinue) then helpFor prog
   else do
-    r <- runCompilerCliFor1 prog (firstOf strippedContinue) opts
+    r <- runCompilerCliFor1 prog (stripShowCascade (firstOf strippedContinue)) opts
     flushSarif (firstOf r) (secondOf r)
 
 -- 剥离 `--max-errors N`（写入全局上限；缺省 20，0 = 不限）。
@@ -381,7 +408,7 @@ printDiagWithPrefix o extra d = case d.diagChildren of
   [] => emitDiag o extra d
   _ =>
     let
-      shown = takeDiags o.optMaxErrors (d :: d.diagChildren)
+      shown = takeDiags o.optMaxErrors (d :: visibleDiags o d.diagChildren)
     in do
       o1 <- emitDiagRevSeq o extra shown
       pure (Pair (diagExitFor d) o1)
@@ -398,7 +425,7 @@ printErr e = printErrText "error: ${e}\n"
 printDiagList : CliOpts -> String -> List Diagnostic -> Eff hostRow (Pair Int CliOpts)
 printDiagList o extra ds =
   let
-    shown = takeDiags o.optMaxErrors ds
+    shown = takeDiags o.optMaxErrors (visibleDiags o ds)
   in do
     o1 <- emitDiagRevSeq o extra shown
     pure (Pair 0 o1)
@@ -546,8 +573,9 @@ checkSpawnArgs o dir =
     base3 = if o.optDenyWarnings then append base2 ["--deny-warnings"] else base2
     -- 诊断显示选项必须透传，否则成员包的输出与根包口径不一致（i18n / 上限）。
     langArgs = if o.optLangExplicit then ["--lang", o.optDiagLang] else []
+    cascadeArgs = if o.optShowCascade then ["--show-cascade"] else []
     maxArgs = if o.optMaxErrors > 0 then ["--max-errors", strFromInt o.optMaxErrors] else []
-  in append base3 (append langArgs maxArgs)
+  in append base3 (append langArgs (append maxArgs cascadeArgs))
 
 -- 机器格式（json/sarif）的判定：这些格式要求 stdout **恰好一份**文档。
 isMachineFormat : String -> Bool

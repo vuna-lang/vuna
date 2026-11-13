@@ -128,7 +128,7 @@ warning 的**通道**（M4 起）没有进程内全局收集器：Elab 期 `warn
 | JSON | `renderJsonList` | `{version,tool,diagnostics[]}`，含 labels/fields/trace/notes/suggestions/origin/internal/ice |
 | SARIF | `renderSarif` | SARIF 2.1.0 单 run：ruleId/level/message/locations/relatedLocations |
 
-CLI 开关：`--error-format=short|human|json|sarif|github`、`--json`、`--message-format=...`、`--lang en|zh`（zh 时 human 消息本地化）、`--continue-on-error`（elab best-effort 多错误，仅**入口文件**；带 `module` 头的库模块单文件检查只报首错）；包级 check
+CLI 开关：`--error-format=short|human|json|sarif|github`、`--json`、`--message-format=...`、`--lang en|zh`（zh 时 human 消息本地化）、`--continue-on-error`（elab best-effort 多错误，仅**入口文件**；级联默认折叠，`--show-cascade` 显示；带 `module` 头的库模块单文件检查只报首错）；包级 check
 会把格式、`--lang`、`--max-errors` 透传给成员包子进程；成员包错误带 `[包名]` 前缀。
 **机器格式单文档**：`--error-format=json|sarif` 的工作区检查在父进程内逐包收集诊断，
 stdout 恰好输出一份文档（不再让成员子进程各打一份）；成员 manifest 的 `[diagnostics]`
@@ -206,7 +206,7 @@ JSON 字段是机器契约：`code/severity/phase/category/message/labels[]/fiel
 | D4 码域（RN_/PKG_ 独立域、死码清理） | 已落地（`RN_` / `PKG_` 各自独立域；历代已清理无发射点死码；本次删除 manifest 能力/信任机制又移除 11 个码——9 个 `PKG_` + `RN_UnknownCapability` + `LD_HostModulePrivileged`。未发布、无兼容义务，码可删；具体码数以枚举真源与 `gen-errors` 产物为准） |
 | D5 目录单一真源 + 生成枚举/文档 | 已落地（枚举构造子锁定码/arity；描述/中文/示例表与枚举同模块维护并由 `gen-errors` 生成 `errors.md`+`errors.json`（含 example）；`explain` 同源；LSP data 附 `catalog` 提示） |
 | D6 渲染/LSP/CLI | 已落地 short/human/JSON/SARIF + LSP push/pull + `[diagnostics]` 配置；human 视图展示 fields/trace/suggestions（与 JSON 同源）；SARIF rules 带目录 shortDescription/help/defaultConfiguration/tags；i18n 已落地（`--lang zh` 与 `[diagnostics] lang` 的 human 消息本地化 + `= message:` 英文原文；机器 JSON 保留英文 `message` 并附 `localizedMessage`） |
-| D7.1 多错误 + Cascade | 已落地（parser 顶层 resync；elab `--continue-on-error` best-effort：文件入口/可执行包/库包逐次移除失败声明，最多 8 条；依赖被移除声明的错误标 `origin=cascade`（human note；JSON/SARIF/LSP data 同源）；`--max-errors` 同时约束恢复结果） |
+| D7.1 多错误 + Cascade | 已落地（默认上限 20；级联默认折叠，`--show-cascade` 显示；parser 顶层 resync；elab `--continue-on-error` best-effort：文件入口/可执行包/库包逐次移除失败声明，最多 8 条；依赖被移除声明的错误标 `origin=cascade`（human note；JSON/SARIF/LSP data 同源）；`--max-errors` 同时约束恢复结果） |
 | D7.2 warnings（未使用/冗余/不可达） | 已落地（`UN_UnusedBinder`/`UN_ShadowedBinder`/`UN_RedundantCtorBranch`/`UN_RedundantLiteralBranch`/`UN_BranchAfterCatchAll`/`UN_UnusedImport`（限定/别名/open import/`module X` 重导出统一追踪）/`UN_UnusedDefinition`；`-W`/`--deny-warnings` 已接且绕过 check 缓存/干净模块复用以保证不漏报） |
 | D7.3 建议引擎 + Fix | 已落地（`Candidate`/`Suggestion` 模型；所有可安全自动修复的 warning 附 machine-applicable 编辑（unused binder/definition/import、冗余构造子/字面量分支、catch-all 后分支）；LSP codeAction 应用诊断 suggestions，`test/corpus/lsp/quickfix.sh` 集成测试） |
 | D7.4 类型不匹配 expected/found | 已落地（fields expected/found + PhUnify trace 帧；期望类型无源 span，以 fields 而非双端 label 表达） |
