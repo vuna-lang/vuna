@@ -90,33 +90,24 @@ parseFileWithPath path src = do
 -- 与 parse 是否成功无关，错文件下次也能省掉 lex。
 lexAndStore : String -> String -> String -> Eff hostRow (Check SourceFile)
 lexAndStore addr path src = case lexSource src of
-  ErrC e => pure (ErrC (attachParsePath path e))
+  ErrC e => pure (ErrC (withSpanFileIfEmpty path e))
   OkC toks => do
     _ <- storeLexCache addr toks
     pure (parseWith path toks)
 
--- | 由 token 流得到 parse 结果。解析错误统一加 `<path>: ` 前缀（parser 诊断本身无位置）；
--- 例外：诊断首行已经以本文件路径开头（parser 侧带 span 的诊断，如
--- `[PS_RepeatedPatternBinder]`）时不再重复加，保持 CLI 首行的
--- `<file>:<line>:<col>: <消息>` 契约（DiagRender 追加源码片段）。
+-- | 由 token 流得到 parse 结果。Lexer/Parser 都已在产生点给出 span；这里只给词法诊断
+-- 那个 file 为空的 span 注入真实路径（parser 的 span 从 PState 拿文件名）。
+-- 恢复期收集到的多条诊断挂在首条错误上（批量错误通道），全部自带位置。
 parseWith : String -> List PTok -> Check SourceFile
 parseWith path toks = case parseSourceRecoveringTokens path toks of
-  ErrC e => ErrC (attachParsePath path e)
+  ErrC e => ErrC (withSpanFileIfEmpty path e)
   OkC p =>
     let
       parsed = firstOf p
       errs = secondOf p
     in case errs of
       [] => OkC parsed
-      -- 恢复期收集到的多条诊断挂在首条错误上（批量错误通道）；首条保持无位置，
-      -- 与旧 CLI 的「原样打印解析诊断」逐字一致（--short/--json/--sarif 不受路径前缀影响）。
       e :: rest => ErrC (withChildren rest e)
-
--- 解析错误统一加 `<path>: ` 前缀（parser 诊断本身无位置）。
-attachParsePath : String -> Diagnostic -> Diagnostic
-attachParsePath path e =
-  if startsWith "${path}:" (diagText e) then e
-  else withLabel (Label Nothing path LabelContext Nothing) e
 
 visibleFixitiesOf : List Module -> List Import -> List FixityDecl
 visibleFixitiesOf modules imports = concatMap (\imp => case findModule modules (importName imp) of
@@ -439,11 +430,11 @@ dedupeByFullKey (e :: rest) seen acc =
     Just _ => dedupeByFullKey rest seen acc
     Nothing => dedupeByFullKey rest (Base.HashMap.insert key 1 seen) (e :: acc)
 
-checkExportDuplicates : String -> List ExportEntry -> Check (List a)
-checkExportDuplicates prefix [] = OkC []
-checkExportDuplicates prefix (e :: rest) =
-  if hasConflictingExport e rest then rnNoLoc1 (DuplicateExport e.public) e.public
-  else checkExportDuplicates prefix rest
+checkExportDuplicates : String -> Span -> List ExportEntry -> Check (List a)
+checkExportDuplicates prefix headerSpan [] = OkC []
+checkExportDuplicates prefix headerSpan (e :: rest) =
+  if hasConflictingExport e rest then onErrDiag (withFallbackSpan headerSpan) (rnNoLoc1 (DuplicateExport e.public) e.public)
+  else checkExportDuplicates prefix headerSpan rest
 
 -- 显式导出列表里「同一个名字写了两遍」是错误（`module M (foo, foo)`）；
 -- 但同一个**定义**经不同模块重导出（两个门面都重导出 `Functor(..)`）不是冲突——条目按 target 去重即可。
@@ -474,8 +465,14 @@ exportItemName (XModule n _) = n
 
 checkExportItems : String -> List ExportItem -> Check Int
 checkExportItems prefix items = case duplicateExportItem items of
-  Just n => rnNoLoc1 (DuplicateExport n) n
+  Just n =>
+    onErrDiag (withFallbackSpan (exportItemSpanOfName n items)) (rnNoLoc1 (DuplicateExport n) n)
   Nothing => OkC 0
+
+exportItemSpanOfName : String -> List ExportItem -> Span
+exportItemSpanOfName name [] = Span "" 0 0 0 0
+exportItemSpanOfName name (i :: rest) =
+  if exportItemName i == name then exportItemSpan i else exportItemSpanOfName name rest
 
 explicitExports : List Module -> String -> List Decl -> List Import -> List ExportItem -> Check (List ExportEntry)
 explicitExports modules prefix decls imports [] = OkC []
@@ -522,15 +519,15 @@ computeExports modules prefix hdr imports decls extraExports extraReexports =
     newItems = append (map exportSpecToItem extraExports) extraReexports
     explicit =
       Vuna.Compiler.Common.bind (explicitExports modules prefix decls imports newItems)
-        (\es => Vuna.Compiler.Common.bind (checkExportDuplicates prefix es) (\_ => OkC es))
+        (\es => Vuna.Compiler.Common.bind (checkExportDuplicates prefix (Span "" 0 0 0 0) es) (\_ => OkC es))
   in if notEmpty newItems then case hdr of
     Just (ModDecl _ hasList _ _ _ _ sp) =>
       if hasList then rnAt1 sp (DuplicateExport "module header") "module header" else explicit
     Nothing => explicit
   else case hdr of
-    Just (ModDecl _ hasList items _ _ _ _) =>
+    Just (ModDecl _ hasList items _ _ _ spHdr) =>
       if hasList then Vuna.Compiler.Common.bind (explicitExports modules prefix decls imports items)
-        (\es => Vuna.Compiler.Common.bind (checkExportDuplicates prefix es) (\_ => OkC es))
+        (\es => Vuna.Compiler.Common.bind (checkExportDuplicates prefix spHdr es) (\_ => OkC es))
       else OkC []
     Nothing => OkC []
 
@@ -573,60 +570,69 @@ implicitPreludeDeps importerPkg deps =
   rnNoLoc1 (AmbiguousPrelude (joinArrows (map (\c => rootName (secondOf c)) deps)))
     (joinArrows (map (\c => rootName (secondOf c)) deps))
 
+-- 导入点位置：隐式 Prelude 的合成 Import 没有真实 span（file = ""），此时不给位置。
+withImportSpan : Import -> Diagnostic -> Diagnostic
+withImportSpan imp e =
+  if spanFile imp.importSpan == "" then e else withFallbackSpan imp.importSpan e
+
 loadAll : Int -> List Root -> String -> List Module -> List String -> List Import -> Eff hostRow (Check (List Module))
 loadAll fuel roots importerPkg modules stack imports = if fuel <= 0 then pure (icFuel "loader")
 else case imports of
   [] => pure (OkC modules)
   imp :: rest => do
-    modulesR <- loadModule (fuel - 1) roots importerPkg modules stack (importName imp)
+    modulesR <- loadModule (fuel - 1) roots importerPkg modules stack imp
     case modulesR of
       ErrC e => pure (ErrC e)
       OkC modules2 => loadAll (fuel - 1) roots importerPkg modules2 stack rest
 
-loadModule : Int -> List Root -> String -> List Module -> List String -> String -> Eff hostRow (Check (List Module))
-loadModule fuel roots importerPkg modules stack name = if fuel <= 0 then pure (icFuel "loader")
-else case findModule modules name of
-  Just m => pure (OkC modules)
-  Nothing => if memName name stack then pure (ldErr1 (ImportCycle (showCycle name stack)) (showCycle name stack))
-  else if validModuleName name then do
-    foundR <- findModuleFile roots name importerPkg
-    case foundR of
-      ErrC e => pure (ErrC e)
-      OkC found =>
-        let
-          -- F3 P2：宿主层模块只允许特权包 import（base 自己/compiler/根工具链）。
-          path = firstOf found
-          root = secondOf found
-          _ = dbg! "parse-module=${name}"
-        in do
-          text <- raiseToRow hostRow (@vuna@prim_eff_readFile path)
-          parsed <- parseFileWithPath path text
-          case parsed of
-            ErrC e => pure (ErrC e)
-            OkC (SourceFile hdr imports fixities decls exports reexports opacity) => case validateModuleHeader name hdr of
+loadModule : Int -> List Root -> String -> List Module -> List String -> Import -> Eff hostRow (Check (List Module))
+loadModule fuel roots importerPkg modules stack imp =
+  let
+    name = importName imp
+  in if fuel <= 0 then pure (icFuel "loader")
+  else case findModule modules name of
+    Just m => pure (OkC modules)
+    Nothing => if memName name stack then pure
+      (onErrDiag (withImportSpan imp) (ldErr1 (ImportCycle (showCycle name stack)) (showCycle name stack)))
+    else if validModuleName name then do
+      foundR <- findModuleFile roots name importerPkg imp.importSpan
+      case foundR of
+        ErrC e => pure (ErrC e)
+        OkC found =>
+          let
+            -- F3 P2：宿主层模块只允许特权包 import（base 自己/compiler/根工具链）。
+            path = firstOf found
+            root = secondOf found
+            _ = dbg! "parse-module=${name}"
+          in do
+            text <- raiseToRow hostRow (@vuna@prim_eff_readFile path)
+            parsed <- parseFileWithPath path text
+            case parsed of
               ErrC e => pure (ErrC e)
-              OkC _ => case validateImports name imports of
+              OkC (SourceFile hdr imports fixities decls exports reexports opacity) => case validateModuleHeader name hdr of
                 ErrC e => pure (ErrC e)
-                OkC _ => do
-                  implicitR <- implicitPrelude roots (rootName root) name imports
-                  case implicitR of
-                    ErrC e => pure (ErrC e)
-                    OkC implicit => do
-                      modulesR <-
-                        loadAll (fuel - 1) roots (rootName root) modules (name :: stack)
-                          (append imports implicit)
-                      case modulesR of
-                        ErrC e => pure (ErrC e)
-                        OkC modules2 => case computeExports modules2 name hdr imports decls exports reexports of
+                OkC _ => case validateImports name imports of
+                  ErrC e => pure (ErrC e)
+                  OkC _ => do
+                    implicitR <- implicitPrelude roots (rootName root) name imports
+                    case implicitR of
+                      ErrC e => pure (ErrC e)
+                      OkC implicit => do
+                        modulesR <-
+                          loadAll (fuel - 1) roots (rootName root) modules (name :: stack)
+                            (append imports implicit)
+                        case modulesR of
                           ErrC e => pure (ErrC e)
-                          OkC exports =>
-                            let
-                              visible =
-                                dedupeFixities
-                                  (append fixities (visibleFixitiesOf modules2 (append imports implicit)))
-                            in pure
-                              (OkC (Base.List.Cons (Module name (rootName root) imports implicit decls exports visible (append (reexportedImportNamesOfHeader imports hdr) (reexportedImportNames imports reexports)) (opaqueNamesOf name opacity)) modules2))
-  else pure (ldErr1 (InvalidModuleName name) name)
+                          OkC modules2 => case computeExports modules2 name hdr imports decls exports reexports of
+                            ErrC e => pure (ErrC e)
+                            OkC exports =>
+                              let
+                                visible =
+                                  dedupeFixities
+                                    (append fixities (visibleFixitiesOf modules2 (append imports implicit)))
+                              in pure
+                                (OkC (Base.List.Cons (Module name (rootName root) imports implicit decls exports visible (append (reexportedImportNamesOfHeader imports hdr) (reexportedImportNames imports reexports)) (opaqueNamesOf name opacity)) modules2))
+    else pure (onErrDiag (withImportSpan imp) (ldErr1 (InvalidModuleName name) name))
 
 -- 包上下文入口：ctx 给出模块根（自己 lib 在最前 + 依赖闭包）与导入方包名
 -- （决定同包/跨包导出可见性与 manifest 能力声明）。
@@ -648,7 +654,7 @@ loadProjectWithPreloaded ctx entry preloaded = do
       ErrC e => pure (ErrC e)
       OkC (SourceFile hdr imports fixities decls exports reexports opacity) => case hdr of
         Just (ModDecl dname hasList items _ _ _ sp) =>
-          pure (ldErr1 (ModuleHeaderInEntryFile entry) entry)
+          pure (onErrDiag (withFallbackSpan sp) (ldErr1 (ModuleHeaderInEntryFile entry) entry))
         Nothing => case validateImports "<entry>" imports of
           ErrC e => pure (ErrC e)
           OkC _ => do

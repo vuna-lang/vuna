@@ -103,7 +103,9 @@ checkPackage release wantWarnings pkg =
                 ErrC e => pure (ErrC e)
                 OkC ds2 => pure (OkC (append ds ds2))
     else case packageExports pkg of
-      Nothing => pure (pkgNoLoc1 (LibraryWithoutEntry (packageName pkg)) (packageName pkg))
+      Nothing =>
+        pure
+          (pkgAt1 "${packageDir pkg}/vuna.toml" 1 (LibraryWithoutEntry (packageName pkg)) (packageName pkg))
       Just names => checkCachedLib wantWarnings ctx names
 
 -- 逐级创建目录（`--out a/b` 的父目录可能不存在）。

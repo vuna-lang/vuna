@@ -1,0 +1,30 @@
+# 诊断位置门禁的基线（诊断 v2 P0）。
+#
+# 这里的每一行都是「目前确实没有源码位置」的诊断码；门禁只允许这个集合**变小**：
+# 新增无位置诊断会让 `nix/checks/diag-located.sh` 失败。修复一个码就从这里删掉一行。
+#
+# 分类：
+#   * TC_*：精化器内部路径（kind 不匹配 / 分支矩阵）尚未把已有 `Maybe Span` 接到
+#     产生点；P1（Site 位置义务）逐条收口。
+#   * RN_AmbiguousPrelude：隐式 Prelude 注入没有用户书写点，天然无位置。
+#   * PKG_NotMaterialized / PKG_Invalid：依赖物化状态（外部输入），无源文件行；P1 起
+#     改为指向 `[dependencies]` 行或标记 `SiteAbsent NsPackageGraph`。
+#   * IC_InvariantViolated：编译器内部不变量，按约定不伪造用户位置。
+#   * CG_NoMain：`vuna interp` 的核心求值路径没有入口文件上下文；包检查路径已定位。
+
+# --- TC：精化器内部（P1 收口） ---
+TC_TypeMismatch
+TC_ImpossibleBranchIndex
+TC_ClauseTooManyPatterns
+TC_IntStringCaseNeedsFallback
+TC_CaseBranchTooFewArgs
+TC_CannotProveTermination
+
+# --- 无用户书写点 / 外部输入 ---
+RN_AmbiguousPrelude
+PKG_NotMaterialized
+PKG_Invalid
+
+# --- 内部错误与纯求值路径 ---
+IC_InvariantViolated
+CG_NoMain

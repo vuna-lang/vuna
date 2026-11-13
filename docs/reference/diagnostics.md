@@ -59,6 +59,13 @@ Diagnostic = { id, severity, phase, category, code, message, labels, fields, tra
   源码与清单诊断已全部走域码（TC_/CG_/RN_/PKG_/LD_/IC_）。`rawAt` 只剩 `Elab/Types.errAt` 的
   记录/派生兜底路径。
 
+**前端位置（P0 已落地）**：Lexer 在字符游标处、Parser 在**产生点**用当前 token 的 span
+构造 `LX_`/`PS_` 诊断（`lexErrAt` / `psErrAt`；路径由 `Loader.Flatten` 经
+`withSpanFileIfEmpty` 注入）；Resolver 在 `EVar`/模式/限定名/类型表达式边界
+`withFallbackSpan`，Loader 的导入点用 `Import.importSpan`。原先「首条解析诊断无位置」的
+兼容特例与 `attachParsePath` 的 context-label 兜底已删除。剩余确实无源码位置的码登记在
+`nix/diag-located.allow`（只减不增），由 `nix/checks/diag-located.sh` 守住。
+
 ## 4. 错误码域
 
 | 域 | 含义 | 真源 |
@@ -172,7 +179,7 @@ JSON 字段是机器契约：`code/severity/phase/category/message/labels[]/fiel
   `showSpanLoc` 只能出现在渲染器/目标消息组装处。
 - 负例夹具双轨：320 个 `.diag.json` 结构化期望（`--json` 聚合文档，`--bless-diag` 生成）
   与原有 `.err` 首行片段断言并存；`--bless-diag` 在 runner 内写盘（worker 透传）。
-- `nix/checks/diag-coverage.sh`：目录码 vs 结构化夹具覆盖门禁（allowlist 记录缺口、
+- `nix/checks/diag-located.sh`：结构化诊断必须有主 span（或显式 allowlist，只减不增）；\n  当前 308/323 有位置，15 条按码登记在 `nix/diag-located.allow`。\n- `nix/checks/diag-coverage.sh`：目录码 vs 结构化夹具覆盖门禁（allowlist 记录缺口、
   基线 `nix/diag-coverage.min` 防回退；当前 191/242，缺口在 allowlist 且必须于 `nix/diag-unreachable.txt` 登记不可达原因）。
 - `vuna check .`（旧/新编译器）、全量 suite、`nix build .#vuna-seed` 必须通过。
 

@@ -1055,13 +1055,12 @@ export unsolvedMessage : Ec -> Int -> Diagnostic
 unsolvedMessage ec m = case findGoal m (ecGoals ec) of
   Just g =>
     let
-      loc = showSpanLoc g.dtGoalSpan
-      -- M40：命名洞在诊断里带上名字（`unsolved hole ?h (/x.vuna:4:7) with goal Int`）。
-      spot = if g.dtGoalName == "" then loc else "${g.dtGoalName} (${loc})"
+      -- M40：命名洞在诊断里带上名字；位置进 label（不再把 `file:line:col` 拼进消息）。
+      spot = if g.dtGoalName == "" then "?" else "?" ++ g.dtGoalName
       goalTy = showValueAt (ctxDepthOf g) g.dtGoalType
       detail = "${spot} with goal ${goalTy}"
     in withMetaCreated ec g.dtGoalMeta
-      (withField (FieldSpan "goal" g.dtGoalSpan) (withField (FieldNote "goal: ${goalTy}") (tcMsg (UnsolvedHole detail) [detail])))
+      (withFallbackSpan g.dtGoalSpan (withField (FieldSpan "goal" g.dtGoalSpan) (withField (FieldNote "goal: ${goalTy}") (tcMsg (UnsolvedHole detail) [detail]))))
   Nothing =>
     let
       num = strFromInt m

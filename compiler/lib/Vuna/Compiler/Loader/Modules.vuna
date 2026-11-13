@@ -154,19 +154,37 @@ importAliases (imp :: rest) = case imp.importAlias of
   Nothing => importAliases rest
   Just alias => Pair alias (importName imp) :: importAliases rest
 
-checkImportAliases : String -> List String -> List (Pair String String) -> Check (List a)
-checkImportAliases label moduleNames [] = OkC []
-checkImportAliases label moduleNames ((Pair alias m) :: rest) =
-  if validSegment alias then if memName alias (map firstOf rest) then rnNoLoc1 (DuplicateModuleAlias alias) alias
-  else if memName alias moduleNames then if alias == m then checkImportAliases label moduleNames rest
-  else rnNoLoc1 (ModuleAliasConflict alias) alias
-  else checkImportAliases label moduleNames rest
-  else rnNoLoc1 (InvalidModuleAlias alias) alias
+-- 导入点 span：隐式我们自己的合成 Import 没有真实位置（file = ""）时不加。
+withImportSite : Span -> Diagnostic -> Diagnostic
+withImportSite sp d = if spanFile sp == "" then d else withFallbackSpan sp d
+
+spanOfAlias : List Import -> String -> Span
+spanOfAlias [] a = Span "" 0 0 0 0
+spanOfAlias (imp :: rest) a = case imp.importAlias of
+  Just b => if b == a then imp.importSpan else spanOfAlias rest a
+  Nothing => spanOfAlias rest a
+
+duplicateImportSpan : List Import -> Span
+duplicateImportSpan [] = Span "" 0 0 0 0
+duplicateImportSpan (imp :: rest) =
+  if memName (importName imp) (importModuleNames rest) then imp.importSpan
+  else duplicateImportSpan rest
+
+checkImportAliases : List Import -> List String -> List (Pair String String) -> Check (List a)
+checkImportAliases imports moduleNames [] = OkC []
+checkImportAliases imports moduleNames ((Pair alias m) :: rest) =
+  if validSegment alias then if memName alias (map firstOf rest) then onErrDiag (withImportSite (spanOfAlias imports alias))
+    (rnNoLoc1 (DuplicateModuleAlias alias) alias)
+  else if memName alias moduleNames then if alias == m then checkImportAliases imports moduleNames rest
+  else onErrDiag (withImportSite (spanOfAlias imports alias))
+    (rnNoLoc1 (ModuleAliasConflict alias) alias)
+  else checkImportAliases imports moduleNames rest
+  else onErrDiag (withImportSite (spanOfAlias imports alias)) (rnNoLoc1 (InvalidModuleAlias alias) alias)
 
 export validateImports : String -> List Import -> Check (List a)
 validateImports label imports =
-  if hasDuplicateName (importModuleNames imports) then rnNoLoc0 DuplicateImport
-  else checkImportAliases label (importModuleNames imports) (importAliases imports)
+  if hasDuplicateName (importModuleNames imports) then onErrDiag (withImportSite (duplicateImportSpan imports)) (rnNoLoc0 DuplicateImport)
+  else checkImportAliases imports (importModuleNames imports) (importAliases imports)
 
 openModuleNames : List Import -> List String
 openModuleNames [] = []
@@ -339,20 +357,28 @@ _joinRootDirs roots = _joinNames (map rootDir roots)
 candidateDir : Pair String Root -> String
 candidateDir candidate = rootDir (secondOf candidate)
 
-export findModuleFile : List Root -> String -> String -> Eff hostRow (Check (Pair String Root))
-findModuleFile roots name importerPkg = do
+-- 导入点位置兜底：隐式 Prelude 的合成 Import 没有真实 span（file = ""）时不加位置。
+withImporterSpan : Span -> Diagnostic -> Diagnostic
+withImporterSpan sp d = if spanFile sp == "" then d else withFallbackSpan sp d
+
+export findModuleFile : List Root -> String -> String -> Span -> Eff hostRow (Check (Pair String Root))
+findModuleFile roots name importerPkg importerSpan = do
   collected <- collectModuleFiles roots name importerPkg [] []
   let
     allowed = firstOf collected
     hidden = secondOf collected
   in pure (case allowed of
     [] => case hidden of
-      [] => ldErr2 (ModuleNotFound name (_joinRootDirs roots)) name (_joinRootDirs roots)
-      pkgs => ldErr2 (ModuleNotExported name (_joinNames hidden)) name (_joinNames hidden)
+      [] =>
+        onErrDiag (withImporterSpan importerSpan)
+          (ldErr2 (ModuleNotFound name (_joinRootDirs roots)) name (_joinRootDirs roots))
+      pkgs =>
+        onErrDiag (withImporterSpan importerSpan)
+          (ldErr2 (ModuleNotExported name (_joinNames hidden)) name (_joinNames hidden))
     [only] => OkC only
     candidates =>
-      rnNoLoc2 (AmbiguousModule name (_joinNames (map candidateDir allowed))) name
-        (_joinNames (map candidateDir allowed))
+      onErrDiag (withImporterSpan importerSpan)
+        (rnNoLoc2 (AmbiguousModule name (_joinNames (map candidateDir allowed))) name (_joinNames (map candidateDir allowed)))
   )
 
 export findModule : List Module -> String -> Maybe Module

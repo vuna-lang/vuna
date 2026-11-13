@@ -103,6 +103,10 @@ cgErr0 e = cgErr e []
 export cgErr1 : CgErr (Succ Zero) -> String -> Check a
 cgErr1 e a0 = cgErr e [a0]
 
+-- | 带位置的 codegen 诊断（入口缺失等）。
+export cgErr0At : Span -> CgErr Zero -> Check a
+cgErr0At sp e = ErrC (withLabel (Label (Just sp) "" LabelPrimary Nothing) (cgMsg e []))
+
 -- ---------------------------------------------------------------
 -- 定义级 CG 诊断：主位置 + `in \`name\`` 上下文标签。
 -- ---------------------------------------------------------------

@@ -76,6 +76,7 @@ record ChainOp where
   chainOp : String
   chainIsBacktick : Bool
   chainRhs : Expr
+  chainSpan : Span
 
 -- 未知运算符的诊断（严格表）：不静默默认优先级。
 unknownFixityMsg : String -> Diagnostic
@@ -87,7 +88,9 @@ unknownFixityMsg op = rnMsg (UnknownFixity op) [op]
 fixityOf : FixityTable -> ChainOp -> Check (Pair Int Int)
 fixityOf t c = case lookupFixity t c.chainOp of
   Just p => OkC p
-  Nothing => if c.chainIsBacktick then OkC (Pair 9 1) else ErrC (unknownFixityMsg c.chainOp)
+  Nothing =>
+    if c.chainIsBacktick then OkC (Pair 9 1)
+    else onErrDiag (withFallbackSpan c.chainSpan) (ErrC (unknownFixityMsg c.chainOp))
 
 -- rename 模式产出普通应用（别名已替换，`>>` 也走别名到库函数）；keep 模式保留反引号原形
 -- 供 fmt 打印（普通运算符仍是 `EApp (EVar op)`，fmt 按 fixity 打回中缀）。
@@ -102,11 +105,11 @@ infixTerm t c lhs rhs sp =
 -- 作为边界操作数（先递归重排，EParen 在这里消失）。
 collectChain : FixityTable -> Expr -> Check (Pair Expr (List ChainOp))
 collectChain t (EInfix op l r sp) = Vuna.Compiler.Common.bind (reorderExpr t l) (\l2 => Vuna.Compiler.Common.bind (collectChain t r) (\p => case p of
-  Pair first rest => OkC (Pair l2 (ChainOp op False first :: rest))
+  Pair first rest => OkC (Pair l2 (ChainOp op False first sp :: rest))
 )
 )
 collectChain t (EBacktick name l r sp) = Vuna.Compiler.Common.bind (reorderExpr t l) (\l2 => Vuna.Compiler.Common.bind (collectChain t r) (\p => case p of
-  Pair first rest => OkC (Pair l2 (ChainOp name True first :: rest))
+  Pair first rest => OkC (Pair l2 (ChainOp name True first sp :: rest))
 )
 )
 collectChain t e = Vuna.Compiler.Common.bind (reorderExpr t e) (\e2 => OkC (Pair e2 []))

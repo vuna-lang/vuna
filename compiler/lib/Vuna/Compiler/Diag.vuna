@@ -324,6 +324,21 @@ export withFallbackSpan : Span -> Diagnostic -> Diagnostic
 withFallbackSpan sp d =
   if hasPrimaryLabel d.diagLabels then d else withLabel (Label (Just sp) "" LabelPrimary Nothing) d
 
+-- | 给「文件名为空」的 span 补文件名。Lexer 只持有字符游标（不知道文件名），
+-- 入口（`Loader.Flatten` 的 parse/lex 路径）用它把真实路径注入诊断。
+export withSpanFileIfEmpty : String -> Diagnostic -> Diagnostic
+withSpanFileIfEmpty path d =
+  Diagnostic d.diagId d.diagSeverity d.diagPhase d.diagCategory d.diagCode d.diagMessage
+    (map (withLabelFileIfEmpty path) d.diagLabels) d.diagFields d.diagTrace d.diagNotes
+    d.diagSuggestions d.diagOrigin d.diagChildren d.diagInternal d.diagIce
+
+withLabelFileIfEmpty : String -> Label -> Label
+withLabelFileIfEmpty path (Label Nothing text style prov) = Label Nothing text style prov
+withLabelFileIfEmpty path (Label (Just sp) text style prov) =
+  if spanFile sp == "" then Label (Just (Span path (spanStartLine sp) (spanStartCol sp) (spanEndLine sp) (spanEndCol sp)))
+    text style prov
+  else Label (Just sp) text style prov
+
 hasPrimaryLabel : List Label -> Bool
 hasPrimaryLabel [] = False
 hasPrimaryLabel ((Label _ _ LabelPrimary _) :: rest) = True

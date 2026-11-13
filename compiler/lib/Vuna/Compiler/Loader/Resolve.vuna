@@ -319,14 +319,15 @@ resolveDottedExpr : List Module -> String -> String -> Namespaces -> List Import
 resolveDottedExpr modules label prefix ns imports scope name sp = case splitOnDot name of
   [] => icInternal "empty dotted name"
   head :: rest => if memName head scope then OkC (foldFieldChain (EVar head sp) rest sp)
-  else Vuna.Compiler.Common.bind (resolveQualifiedPath modules label imports (splitOnDot name) (length (splitOnDot name)) sp) (\q => case q of
+  else Vuna.Compiler.Common.bind (onErrDiag (withFallbackSpan sp) (resolveQualifiedPath modules label imports (splitOnDot name) (length (splitOnDot name)) sp)) (\q => case q of
     Just e => OkC e
     Nothing => if Base.HashMap.member head ns.nsValueSet then OkC (foldFieldChain (EVar (mangle prefix head) sp) rest sp)
     else if isBuiltinName head then OkC (foldFieldChain (EVar head sp) rest sp)
     else if startsUpperName head then case resolveCtorDotted modules label prefix ns imports name of
       OkC t => OkC (EVar t sp)
-      ErrC _ => rnNoLoc1 (ModuleNotImported head) head
-    else Vuna.Compiler.Common.bind (resolveGlobal modules label prefix ns imports scope head)
+      ErrC _ => onErrDiag (withFallbackSpan sp) (rnNoLoc1 (ModuleNotImported head) head)
+    else Vuna.Compiler.Common.bind
+      (onErrDiag (withFallbackSpan sp) (resolveGlobal modules label prefix ns imports scope head))
       (\n => OkC (foldFieldChain (EVar n sp) rest sp))
   )
 
@@ -440,7 +441,8 @@ resolvePattern fuel modules label prefix ns imports pat = if fuel <= 0 then icFu
 else case pat of
   PWild sp => OkC (Pair (PWild sp) [])
   PVar name sp =>
-    Vuna.Compiler.Common.bind (checkBinder label name) (\_ => OkC (Pair (PVar name sp) [name]))
+    Vuna.Compiler.Common.bind (onErrDiag (withFallbackSpan sp) (checkBinder label name))
+      (\_ => OkC (Pair (PVar name sp) [name]))
   PAs name inner sp =>
     Vuna.Compiler.Common.bind (resolvePattern (fuel - 1) modules label prefix ns imports inner)
       (\p => OkC (Pair (PAs name (firstOf p) sp) (Base.List.Cons name (secondOf p))))
@@ -450,10 +452,12 @@ else case pat of
     if isInternalSyntaxName name then Vuna.Compiler.Common.bind
       (Vuna.Compiler.Common.traverse (\dtv => resolvePattern (fuel - 1) modules label prefix ns imports dtv) pats)
       (\parts => OkC (Pair (PCon name (map firstOf parts) sp) (concatMap secondOf parts)))
-    else Vuna.Compiler.Common.bind (resolveCtor modules label prefix ns imports name)
+    else Vuna.Compiler.Common.bind
+      (onErrDiag (withFallbackSpan sp) (resolveCtor modules label prefix ns imports name))
       (\name2 => Vuna.Compiler.Common.bind (Vuna.Compiler.Common.traverse (\dtv => resolvePattern (fuel - 1) modules label prefix ns imports dtv) pats) (\parts => OkC (Pair (PCon name2 (map firstOf parts) sp) (concatMap secondOf parts))))
   PRecord name fields sp =>
-    Vuna.Compiler.Common.bind (resolveCtor modules label prefix ns imports name)
+    Vuna.Compiler.Common.bind
+      (onErrDiag (withFallbackSpan sp) (resolveCtor modules label prefix ns imports name))
       (\name2 => Vuna.Compiler.Common.bind (Vuna.Compiler.Common.traverse (\dtv => resolveRecordPatternField (fuel - 1) modules label prefix ns imports dtv) fields) (\parts => OkC (Pair (PRecord name2 (map firstOf parts) sp) (concatMap secondOf parts))))
 
 resolveRecordPatternField : Int -> List Module -> String -> String -> Namespaces -> List Import -> Pair String Pat -> Check (Pair (Pair String Pat) (List String))
@@ -600,9 +604,10 @@ else case expr of
     else if startsWith "!" name then OkC (EVar (substring 1 (natFromInt (strLength name)) name) sp)
     else if isMacroSyntaxName name then icInternal "unexpanded macro invocation ${name}"
     else if isInternalSyntaxName name then if isParserSyntaxName name || startsWith "Base." prefix || startsWith "Vuna." prefix || startsWith "Base_d" prefix || startsWith "Vuna_d" prefix then OkC (EVar name sp)
-    else rnNoLoc1 (UnknownVariable name) name
+    else onErrDiag (withFallbackSpan sp) (rnNoLoc1 (UnknownVariable name) name)
     else if containsDot name then resolveDottedExpr modules label prefix ns imports scope name sp
-    else Vuna.Compiler.Common.bind (resolveGlobal modules label prefix ns imports scope name)
+    else Vuna.Compiler.Common.bind
+      (onErrDiag (withFallbackSpan sp) (resolveGlobal modules label prefix ns imports scope name))
       (\n => checkDebugConstruct ns.nsRelease sp name n scope)
   -- 内置宏标记必须在 `Loader.Expand` 里展开；走到这里说明展开漏了（internal error，
   -- 不静默透传成普通内部名）。
@@ -626,7 +631,8 @@ else case expr of
       (resolveInterpParts (fuel - 1) modules label prefix ns imports scope parts)
       (\ps => OkC (lowerTemplate sp ps))
   ELam params body sp =>
-    Vuna.Compiler.Common.bind (Vuna.Compiler.Common.traverse (checkBinder label) params)
+    Vuna.Compiler.Common.bind
+      (onErrDiag (withFallbackSpan sp) (Vuna.Compiler.Common.traverse (checkBinder label) params))
       (\_ => Vuna.Compiler.Common.bind (resolveExpr (fuel - 1) modules label prefix ns imports (append params scope) body) (\b => OkC (ELam params b sp)))
   EApp fn args sp =>
     Vuna.Compiler.Common.bind (resolveExpr (fuel - 1) modules label prefix ns imports scope fn)
@@ -656,12 +662,13 @@ else case expr of
     Vuna.Compiler.Common.bind (resolveExpr (fuel - 1) modules label prefix ns imports scope base)
       (\b => OkC (EField b fname sp))
   ERecord name fields sp =>
-    Vuna.Compiler.Common.bind (resolveCtor modules label prefix ns imports name)
+    Vuna.Compiler.Common.bind
+      (onErrDiag (withFallbackSpan sp) (resolveCtor modules label prefix ns imports name))
       (\name2 => Vuna.Compiler.Common.bind (Vuna.Compiler.Common.traverse (\dtv => resolveFieldValue (fuel - 1) modules label prefix ns imports scope dtv) fields) (\fs => OkC (ERecord name2 fs sp)))
   ERecUpdate base fields sp =>
     Vuna.Compiler.Common.bind (resolveExpr (fuel - 1) modules label prefix ns imports scope base)
       (\b => Vuna.Compiler.Common.bind (Vuna.Compiler.Common.traverse (\dtv => resolveFieldValue (fuel - 1) modules label prefix ns imports scope dtv) fields) (\fs => OkC (ERecUpdate b fs sp)))
-  EDo stmts sp => resolveDo (fuel - 1) modules label prefix ns imports scope stmts
+  EDo stmts sp => resolveDo (fuel - 1) modules label prefix ns imports scope stmts sp
   -- M24：where 绑定签名（`g : Int -> Int`）降级成 `EAnn value ty`；值与类型都做名字解析。
   EAnn value ty sp =>
     Vuna.Compiler.Common.bind (resolveExpr (fuel - 1) modules label prefix ns imports scope value)
@@ -689,14 +696,14 @@ else case parts of
 -- 块里出现名为 `bind` 的 do-binder 时，后续步骤的 bind 会被错误地解析到该 binder。
 -- 现在降级与解析合并成一次遍历，链头直接使用块作用域解析好的名字。
 -- | 把 do 块降级成 bind 应用：空块报错，单条裸表达式即块结果，其余走 `resolveDoChain`。
-resolveDo : Int -> List Module -> String -> String -> Namespaces -> List Import -> List String -> List DoStmt -> Check Expr
-resolveDo fuel modules label prefix ns imports scope stmts = if fuel <= 0 then icFuel "resolver"
+resolveDo : Int -> List Module -> String -> String -> Namespaces -> List Import -> List String -> List DoStmt -> Span -> Check Expr
+resolveDo fuel modules label prefix ns imports scope stmts blockSpan = if fuel <= 0 then icFuel "resolver"
 else case stmts of
-  [] => psErr0 DoBlockNeedsStatement
+  [] => psErr0At blockSpan DoBlockNeedsStatement
   [DExpr e sp] => resolveExpr (fuel - 1) modules label prefix ns imports scope e
   _ =>
     Vuna.Compiler.Common.bind (resolveDoBind modules label prefix ns imports scope)
-      (\bindName => resolveDoChain (fuel - 1) modules label prefix ns imports scope bindName stmts)
+      (\bindName => resolveDoChain (fuel - 1) modules label prefix ns imports scope bindName stmts blockSpan)
 
 -- 块作用域里的 `bind`：唯一真源是普通名字解析（局部 trait 方法 / import 的值 / 外层局部
 -- 绑定都可能命中），支持「本地自定义 `trait Monad`」的夹具。
@@ -715,21 +722,21 @@ resolveDoBind modules label prefix ns imports scope =
 -- 剥标记回退成普通 bind 应用——与 S3a 的语义完全一致。
 -- | 非末条语句的链式降级：逐条解析语句，按 `@vuna@do@bind@...` / `@vuna@do@ignore@...`
 -- 内部标记构造 bind 应用（do-binder 对后续语句可见）。
-resolveDoChain : Int -> List Module -> String -> String -> Namespaces -> List Import -> List String -> String -> List DoStmt -> Check Expr
-resolveDoChain fuel modules label prefix ns imports scope bindName stmts = if fuel <= 0 then icFuel "resolver"
+resolveDoChain : Int -> List Module -> String -> String -> Namespaces -> List Import -> List String -> String -> List DoStmt -> Span -> Check Expr
+resolveDoChain fuel modules label prefix ns imports scope bindName stmts blockSpan = if fuel <= 0 then icFuel "resolver"
 else case stmts of
-  [] => psErr0 DoBlockNeedsStatement
+  [] => psErr0At blockSpan DoBlockNeedsStatement
   [DExpr e sp] => resolveExpr (fuel - 1) modules label prefix ns imports scope e
   (DExpr e sp) :: rest =>
     Vuna.Compiler.Common.bind (resolveExpr (fuel - 1) modules label prefix ns imports scope e)
-      (\e2 => Vuna.Compiler.Common.bind (resolveDoChain (fuel - 1) modules label prefix ns imports scope bindName rest) (\tail => OkC (EApp (EVar (doIgnoreSyntaxName bindName) sp) [e2, ELam ["_"] tail sp] sp)))
+      (\e2 => Vuna.Compiler.Common.bind (resolveDoChain (fuel - 1) modules label prefix ns imports scope bindName rest blockSpan) (\tail => OkC (EApp (EVar (doIgnoreSyntaxName bindName) sp) [e2, ELam ["_"] tail sp] sp)))
   (DBind (PVar name psp) e sp) :: rest =>
     Vuna.Compiler.Common.bind (resolveExpr (fuel - 1) modules label prefix ns imports scope e)
-      (\e2 => Vuna.Compiler.Common.bind (resolveDoChain (fuel - 1) modules label prefix ns imports (name :: scope) bindName rest) (\tail => OkC (EApp (EVar (doBindSyntaxName bindName) sp) [e2, ELam [name] tail sp] sp)))
+      (\e2 => Vuna.Compiler.Common.bind (resolveDoChain (fuel - 1) modules label prefix ns imports (name :: scope) bindName rest blockSpan) (\tail => OkC (EApp (EVar (doBindSyntaxName bindName) sp) [e2, ELam [name] tail sp] sp)))
   (DBind (PWild psp) e sp) :: rest =>
     Vuna.Compiler.Common.bind (resolveExpr (fuel - 1) modules label prefix ns imports scope e)
-      (\e2 => Vuna.Compiler.Common.bind (resolveDoChain (fuel - 1) modules label prefix ns imports scope bindName rest) (\tail => OkC (EApp (EVar (doIgnoreSyntaxName bindName) sp) [e2, ELam ["_"] tail sp] sp)))
-  (DBind pat e sp) :: rest => psErr0 DoBindPattern
+      (\e2 => Vuna.Compiler.Common.bind (resolveDoChain (fuel - 1) modules label prefix ns imports scope bindName rest blockSpan) (\tail => OkC (EApp (EVar (doIgnoreSyntaxName bindName) sp) [e2, ELam ["_"] tail sp] sp)))
+  (DBind pat e sp) :: rest => psErr0At sp DoBindPattern
 
 resolveFieldValue : Int -> List Module -> String -> String -> Namespaces -> List Import -> List String -> Pair String Expr -> Check (Pair String Expr)
 resolveFieldValue fuel modules label prefix ns imports scope (Pair fname value) =
@@ -846,7 +853,7 @@ resolveDottedTypeName modules label prefix ns imports name = case splitLastDot (
 resolveConstraintExpr : List Module -> String -> String -> Namespaces -> List Import -> Expr -> Check Expr
 resolveConstraintExpr modules label prefix ns imports cx = case constraintHeadOf cx of
   Just n => case resolveTypeName modules label prefix ns imports n of
-    ErrC _ => rnNoLoc1 (UnknownInterface n) n
+    ErrC _ => onErrDiag (withFallbackSpan (exprSpan cx)) (rnNoLoc1 (UnknownInterface n) n)
     OkC _ => resolveTypeExpr resolveFuelBound modules label prefix ns imports cx
   Nothing => resolveTypeExpr resolveFuelBound modules label prefix ns imports cx
 
@@ -874,7 +881,8 @@ else case ty of
     if memName name bound then OkC ty
     else if isMacroSyntaxName name then icInternal "unexpanded macro invocation ${name}"
     else if isInternalSyntaxName name then OkC ty
-    else Vuna.Compiler.Common.bind (resolveTypeName modules label prefix ns imports name)
+    else Vuna.Compiler.Common.bind
+      (onErrDiag (withFallbackSpan sp) (resolveTypeName modules label prefix ns imports name))
       (\n => OkC (EVar n sp))
   EApp fn args sp =>
     Vuna.Compiler.Common.bind
@@ -885,7 +893,9 @@ else case ty of
     Vuna.Compiler.Common.bind
       (resolveTypeExprScoped (fuel - 1) modules label prefix ns imports bound dom)
       (\dom2 => Vuna.Compiler.Common.bind (resolveTypeExprScoped (fuel - 1) modules label prefix ns imports (name :: bound) cod) (\cod2 => OkC (EPi name implicit qty dom2 cod2 sp)))
-  _ => rnNoLoc1 (InvalidTypeExpression (tyShape ty)) (tyShape ty)
+  _ =>
+    onErrDiag (withFallbackSpan (exprSpan ty))
+      (rnNoLoc1 (InvalidTypeExpression (tyShape ty)) (tyShape ty))
 
 resolveTypeTopName : String -> String -> String -> Check String
 resolveTypeTopName label prefix name =
@@ -913,35 +923,35 @@ resolveDecl modules label prefix ns imports d = case d of
       (Vuna.Compiler.Common.traverse (\cx => resolveConstraintExpr modules label prefix ns imports cx) ctxE)
       (\ctx2 => Vuna.Compiler.Common.bind (resolveTypeExpr resolveFuelBound modules label prefix ns imports head) (\head2 => Vuna.Compiler.Common.bind (Vuna.Compiler.Common.traverse (resolveInstanceMethod modules label prefix ns imports) methods) (\ms => OkC (DInstance ctx2 head2 ms sp))))
   DSig name ctx ty sp =>
-    Vuna.Compiler.Common.bind (resolveTopName label prefix name)
+    Vuna.Compiler.Common.bind (onErrDiag (withFallbackSpan sp) (resolveTopName label prefix name))
       (\n => Vuna.Compiler.Common.bind (Vuna.Compiler.Common.traverse (\cx => resolveConstraintExpr modules label prefix ns imports cx) ctx) (\ctx2 => Vuna.Compiler.Common.bind (resolveTypeExpr resolveFuelBound modules label prefix ns imports ty) (\ty2 => OkC (DSig n ctx2 ty2 sp))))
   -- M28：axiom 与签名一样解析类型表达式；名字按顶层名 mangle。
   DAxiom name ty sp =>
-    Vuna.Compiler.Common.bind (resolveTopName label prefix name)
+    Vuna.Compiler.Common.bind (onErrDiag (withFallbackSpan sp) (resolveTopName label prefix name))
       (\n => Vuna.Compiler.Common.bind (resolveTypeExpr resolveFuelBound modules label prefix ns imports ty) (\ty2 => OkC (DAxiom n ty2 sp)))
   DExtern name cName ty sp =>
-    Vuna.Compiler.Common.bind (resolveTopName label prefix name)
+    Vuna.Compiler.Common.bind (onErrDiag (withFallbackSpan sp) (resolveTopName label prefix name))
       (\n => Vuna.Compiler.Common.bind (resolveTypeExpr resolveFuelBound modules label prefix ns imports ty) (\ty2 => OkC (DExtern n cName ty2 sp)))
   DFun name pats body sp =>
-    Vuna.Compiler.Common.bind (resolveTopName label prefix name)
+    Vuna.Compiler.Common.bind (onErrDiag (withFallbackSpan sp) (resolveTopName label prefix name))
       (\n => Vuna.Compiler.Common.bind (Vuna.Compiler.Common.traverse (resolvePattern resolveFuelBound modules label prefix ns imports) pats) (\parts => Vuna.Compiler.Common.bind (resolveExpr resolveFuelBound modules label prefix ns imports (concatMap secondOf parts) body) (\b => OkC (DFun n (map firstOf parts) b sp))))
 
 resolveRecordField : List Module -> String -> String -> Namespaces -> List Import -> Field -> Check Field
 resolveRecordField modules label prefix ns imports (Field fname ty sp) =
-  Vuna.Compiler.Common.bind (checkBinder label fname)
+  Vuna.Compiler.Common.bind (onErrDiag (withFallbackSpan sp) (checkBinder label fname))
     (\_ => Vuna.Compiler.Common.bind (resolveTypeExpr resolveFuelBound modules label prefix ns imports ty) (\ty2 => OkC (Field fname ty2 sp)))
 
 resolveTraitMethod : List Module -> String -> String -> Namespaces -> List Import -> TraitMethod -> Check TraitMethod
 resolveTraitMethod modules label prefix ns imports (TraitMethod mname ty sp) =
-  Vuna.Compiler.Common.bind (resolveTopName label prefix mname)
+  Vuna.Compiler.Common.bind (onErrDiag (withFallbackSpan sp) (resolveTopName label prefix mname))
     (\n => Vuna.Compiler.Common.bind (resolveTypeExpr resolveFuelBound modules label prefix ns imports ty) (\ty2 => OkC (TraitMethod n ty2 sp)))
 
 resolveInstanceMethod : List Module -> String -> String -> Namespaces -> List Import -> Decl -> Check Decl
 resolveInstanceMethod modules label prefix ns imports (DSig name ctx ty sp) =
-  Vuna.Compiler.Common.bind (checkTopName label name)
+  Vuna.Compiler.Common.bind (onErrDiag (withFallbackSpan sp) (checkTopName label name))
     (\_ => Vuna.Compiler.Common.bind (Vuna.Compiler.Common.traverse (\cx => resolveConstraintExpr modules label prefix ns imports cx) ctx) (\ctx2 => Vuna.Compiler.Common.bind (resolveTypeExpr resolveFuelBound modules label prefix ns imports ty) (\ty2 => OkC (DSig name ctx2 ty2 sp))))
 resolveInstanceMethod modules label prefix ns imports (DFun name pats body sp) =
-  Vuna.Compiler.Common.bind (checkTopName label name)
+  Vuna.Compiler.Common.bind (onErrDiag (withFallbackSpan sp) (checkTopName label name))
     (\_ => Vuna.Compiler.Common.bind (Vuna.Compiler.Common.traverse (resolvePattern resolveFuelBound modules label prefix ns imports) pats) (\parts => Vuna.Compiler.Common.bind (resolveExpr resolveFuelBound modules label prefix ns imports (concatMap secondOf parts) body) (\b => OkC (DFun name (map firstOf parts) b sp))))
 resolveInstanceMethod modules label prefix ns imports _ =
   icInternal "unexpected instance body declaration"

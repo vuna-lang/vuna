@@ -39,6 +39,11 @@ export record Chars(..) where
   charsRemaining : List Int
   charsPos : Pos
 
+-- | 词法诊断的 span：字符游标当前位置的**点 span**。Lexer 不知道文件名
+-- （`Chars` 只有字符与 Pos），入口 `Loader.Flatten` 用 `withSpanFileIfEmpty` 注入。
+export lexSpanAt : Pos -> Span
+lexSpanAt (Pos line col) = Span "" line col line col
+
 export advanceChar : Int -> Pos -> Pos
 advanceChar c (Pos line col) = if c == 10 then Pos (line + 1) 1 else Pos line (col + 1)
 
@@ -129,7 +134,7 @@ skipLineComment (Chars (c :: rest) p) =
   if c == 10 then Chars (c :: rest) p else skipLineComment (Chars rest (advanceChar c p))
 
 export skipBlockComment : Int -> Chars -> Check Chars
-skipBlockComment depth (Chars [] p) = lexErr0 UnterminatedBlockComment
+skipBlockComment depth (Chars [] p) = lexErr0At (lexSpanAt p) UnterminatedBlockComment
 skipBlockComment depth (Chars (c :: rest) p) = case rest of
   c2 :: rest2 =>
     if c == 123 && c2 == 45 then skipBlockComment (depth + 1) (Chars rest2 (advanceChar c2 (advanceChar c p)))
@@ -186,7 +191,7 @@ collectInt (Chars [] p) acc = OkC (Pair acc (Chars [] p))
 collectInt (Chars (c :: rest) p) acc = if isDigit c then
   let
     d = c - 48
-  in if acc > (maxIntLiteral - d) / 10 then lexErr0 IntLiteralOutOfRange
+  in if acc > (maxIntLiteral - d) / 10 then lexErr0At (lexSpanAt p) IntLiteralOutOfRange
   else collectInt (Chars rest (advanceChar c p)) (acc * 10 + d)
 else OkC (Pair acc (Chars (c :: rest) p))
 
@@ -262,7 +267,7 @@ export scanTemplateText : Int -> Bool -> Chars -> List Int -> List TmplPart -> C
 -- 单行结束 `"`；单行不允许原始换行
 scanTemplateText fuel multi cs acc parts = if fuel <= 0 then icFuel "lexer"
 else case cs of
-  Chars [] p => lexErr0 UnterminatedString
+  Chars [] p => lexErr0At (lexSpanAt p) UnterminatedString
   Chars (c :: rest) p => if c == 36 then case rest of
     -- 插值洞：`${`
     c2 :: rest2 => if c2 == 123 then
@@ -274,17 +279,17 @@ else case cs of
           Chars (125 :: rest3) p3 =>
             scanTemplateText (fuel - 1) multi (Chars rest3 (advanceChar 125 p3)) []
               (TPHole toks :: flushText acc parts)
-          _ => lexErr0 UnterminatedInterpolation
+          _ => lexErr0At (lexSpanAt p) UnterminatedInterpolation
     else scanTemplateText (fuel - 1) multi (Chars rest (advanceChar c p)) (c :: acc) parts
     [] => scanTemplateText (fuel - 1) multi (Chars rest (advanceChar c p)) (c :: acc) parts
   else if c == 92 then case rest of
     -- 转义
     e :: rest2 => case decodeEscape e of
-      Nothing => lexErr0 UnknownEscape
+      Nothing => lexErr0At (lexSpanAt p) UnknownEscape
       Just d =>
         scanTemplateText (fuel - 1) multi (Chars rest2 (advanceChar e (advanceChar c p))) (d :: acc)
           parts
-    [] => lexErr0 UnterminatedString
+    [] => lexErr0At (lexSpanAt p) UnterminatedString
   else if multi && c == 34 then case rest of
     -- 多行结束 `"""`
     c2 :: rest3 => case rest3 of
@@ -294,10 +299,10 @@ else case cs of
           pos3 = advanceChar c3 pos2
         in OkC (Pair (reverse (flushText acc parts)) (Pair (Chars rest4 (advanceChar c3 pos3)) pos3))
       else scanTemplateText (fuel - 1) multi (Chars rest (advanceChar c p)) (c :: acc) parts
-      [] => lexErr0 UnterminatedString
-    [] => lexErr0 UnterminatedString
+      [] => lexErr0At (lexSpanAt p) UnterminatedString
+    [] => lexErr0At (lexSpanAt p) UnterminatedString
   else if not multi && c == 34 then OkC (Pair (reverse (flushText acc parts)) (Pair (Chars rest (advanceChar c p)) p))
-  else if not multi && c == 10 then lexErr0 UnterminatedString
+  else if not multi && c == 10 then lexErr0At (lexSpanAt p) UnterminatedString
   else scanTemplateText (fuel - 1) multi (Chars rest (advanceChar c p)) (c :: acc) parts
 
 -- 洞内 token 扫描：从 `${` 之后开始，`{`/`}` 计深度，深度 0 的 `}` 不消费。
@@ -307,7 +312,7 @@ lexHoleTokens fuel depth cs acc = if fuel <= 0 then icFuel "lexer"
 else case skipTrivia (fuel - 1) cs of
   ErrC e => ErrC e
   OkC cs2 => case cs2 of
-    Chars [] p => lexErr0 UnterminatedInterpolation
+    Chars [] p => lexErr0At (lexSpanAt p) UnterminatedInterpolation
     Chars (c :: rest) p => if c == 125 && depth == 0 then OkC (Pair (reverse acc) cs2)
     else case lexOneToken (fuel - 1) cs2 of
       ErrC e => ErrC e
@@ -342,7 +347,7 @@ else case cs of
     -- M31.3：反引号中缀的定界符。`96` 不在 isOpChar 里（否则会与相邻符号粘成一个 token），
     -- 单独识别成 `TSym "`"`，由 parser 配对消费。
     Pair op cs2 => OkC (Pair (PTok (TSym op) p) cs2)
-  else lexErr0 UnexpectedCharacter
+  else lexErr0At (lexSpanAt p) UnexpectedCharacter
 
 -- `"..."` / `"""..."""`：判定形式后走模板扫描，再决定 token 形态。
 -- 单行且无洞 → `TStr`（保持旧 token 形态）；其余（多行 / 含洞）→ `TTmpl`。
@@ -428,7 +433,7 @@ collectLineBody (Chars (c :: rest) p) acc endP =
 
 -- 块注释正文：深度从 1 开始，返回 `{-` 与 `-}` 之间的原文；endP 是 `}` 的位置。
 export collectBlockBody : Chars -> Int -> List Int -> Pos -> Check (Pair String (Pair Chars Pos))
-collectBlockBody (Chars [] p) depth acc endP = lexErr0 UnterminatedBlockComment
+collectBlockBody (Chars [] p) depth acc endP = lexErr0At (lexSpanAt p) UnterminatedBlockComment
 collectBlockBody (Chars (c :: rest) p) depth acc endP = case rest of
   c2 :: rest2 =>
     if c == 123 && c2 == 45 then collectBlockBody (Chars rest2 (advanceChar c2 (advanceChar c p))) (depth + 1) (c2 :: c :: acc)

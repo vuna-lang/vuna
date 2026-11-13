@@ -2,8 +2,9 @@ module Vuna.Compiler.Frontend.Diagnostics where
 
 -- Vuna.Compiler.Frontend.Diagnostics：词法/语法诊断的域枚举（M30 重构）。
 --
--- 与 `Vuna.Compiler.Diagnostics`（TC_/CG_，带 Span）同构，但前端诊断**无位置**：
--- Lexer/Parser 的 `ErrC` 只携带字符串，位置信息留在 token/状态里由上层拼。
+-- 与 `Vuna.Compiler.Diagnostics`（TC_/CG_，带 Span）同构，且**同样带位置**：
+-- Lexer 用字符游标处的 `Span`（file 为空，入口注入路径），Parser 用当前 token 的
+-- `Span`。位置由产生点给出，不再靠上层拼字符串。
 --
 -- 域：`LX_`（词法）、`PS_`（语法）。arity 由 `Nat` 索引在编译期锁定（同 TC 机制）。
 -- 说明：`DT: internal:` 的 fuel 耗尽等内部不变量**不占符号**，仍走裸字符串。
@@ -277,7 +278,9 @@ psAll =
   ]
 
 -- ---------------------------------------------------------------
--- throw：构造结构化诊断（前端诊断由调用方补位置；当前多数仍无 span）
+-- throw：构造结构化诊断。**必须给位置**：词法错误用字符游标处的 span（文件名由
+-- `Loader.Flatten` 的 parse 入口经 `withSpanFileIfEmpty` 注入），语法错误用当前 token
+-- 的 span。不再提供无位置的 `psErr`/`lexErr` 出口。
 -- ---------------------------------------------------------------
 export lexMsg : {n : Nat} -> LexDiag n -> Vec n String -> Diagnostic
 lexMsg e args = mkDiag SevError PhLex CatSyntax (lexCode e) (diagBody (lexTemplate e) args)
@@ -285,22 +288,26 @@ lexMsg e args = mkDiag SevError PhLex CatSyntax (lexCode e) (diagBody (lexTempla
 export psMsg : {n : Nat} -> PsDiag n -> Vec n String -> Diagnostic
 psMsg e args = mkDiag SevError PhParse CatSyntax (psCode e) (diagBody (psTemplate e) args)
 
-export lexErr : {n : Nat} -> LexDiag n -> Vec n String -> Check a
-lexErr e args = ErrC (lexMsg e args)
+-- | 带位置的词法诊断：span 的 `file` 可以为空（由入口注入）。
+export lexErrAt : Span -> {n : Nat} -> LexDiag n -> Vec n String -> Check a
+lexErrAt sp e args = ErrC (withLabel (Label (Just sp) "" LabelPrimary Nothing) (lexMsg e args))
 
-export psErr : {n : Nat} -> PsDiag n -> Vec n String -> Check a
-psErr e args = case e of
-  ExpectedToken s => ErrC (withField (FieldExpected s) (psMsg e args))
-  _ => ErrC (psMsg e args)
+-- | 带位置的语法诊断。
+export psErrAt : Span -> {n : Nat} -> PsDiag n -> Vec n String -> Check a
+psErrAt sp e args = case e of
+  ExpectedToken s =>
+    ErrC
+      (withLabel (Label (Just sp) "" LabelPrimary Nothing) (withField (FieldExpected s) (psMsg e args)))
+  _ => ErrC (withLabel (Label (Just sp) "" LabelPrimary Nothing) (psMsg e args))
 
--- | 自动补注（M41 新增导出）：lexErr0。
-export lexErr0 : LexDiag Zero -> Check a
-lexErr0 e = lexErr e []
+-- | 自动补注（M41 新增导出）：lexErr0At。
+export lexErr0At : Span -> LexDiag Zero -> Check a
+lexErr0At sp e = lexErrAt sp e []
 
--- | 自动补注（M41 新增导出）：psErr0。
-export psErr0 : PsDiag Zero -> Check a
-psErr0 e = psErr e []
+-- | 自动补注（M41 新增导出）：psErr0At。
+export psErr0At : Span -> PsDiag Zero -> Check a
+psErr0At sp e = psErrAt sp e []
 
--- | 自动补注（M41 新增导出）：psErr1。
-export psErr1 : PsDiag (Succ Zero) -> String -> Check a
-psErr1 e a0 = psErr e [a0]
+-- | 自动补注（M41 新增导出）：psErr1At。
+export psErr1At : Span -> PsDiag (Succ Zero) -> String -> Check a
+psErr1At sp e a0 = psErrAt sp e [a0]

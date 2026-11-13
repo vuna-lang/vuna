@@ -301,6 +301,28 @@ in
   };
 
 
+  # 诊断位置门禁（诊断 v2 P0）：结构化诊断必须有主 span；没有源码可指的码只能
+  # 逐码登记在 nix/diag-located.allow（初始基线，只减不增）。
+  diag-located = mkCheck {
+    name = "vuna-diag-located";
+    srcs = [
+      ../../test/corpus
+      ../../nix/checks/diag-located.sh
+      ../../nix/diag-located.allow
+    ];
+    env = {
+      VUNA = "${vuna}/bin/vuna";
+    };
+    nativeBuildInputs = [
+      pkgs.bash
+      pkgs.coreutils
+      pkgs.findutils
+      pkgs.gnugrep
+      pkgs.jq
+    ];
+    script = ./diag-located.sh;
+  };
+
   # 诊断文案规范门禁（D7.9）：消息模板风格统一（句号/大小写/空白/占位符）。
   diag-style = mkCheck {
     name = "vuna-diag-style";

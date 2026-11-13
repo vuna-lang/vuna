@@ -738,7 +738,7 @@ dtMainKind ctx entry = do
     OkC loaded => case elabProgram (firstOf loaded) of
       ErrC e => ErrC e
       OkC p => case findMainDef (secondOf p) of
-        Nothing => cgErr0 NoMain
+        Nothing => cgErr0At (Span entry 1 1 1 1) NoMain
         Just mainDef => if mainActionKind (dtDefType mainDef) == "Eff" then OkC "Eff"
         else case force (Base.HashMap.fromList (defTableOf (secondOf p))) solsEmpty defaultFuel (eval [] (dtDefType mainDef)) of
           VNeutral n => case n of

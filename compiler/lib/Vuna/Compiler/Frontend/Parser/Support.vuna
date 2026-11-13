@@ -34,6 +34,16 @@ peekTok (PState file [] last count) = PTok TEof (Pos 1 1)
 export peekPos : PState -> Pos
 peekPos st = (peekTok st).ptokPos
 
+-- | 当前 token 的**点 span**（起点=终点，caret 宽度 1）。EOF 退到最后消费的 token：
+-- `peekTok` 对空流给出 `Pos 1 1`，直接拿它会指向文件头。
+export tokSpan : PState -> Span
+tokSpan st = case peekTok st of
+  PTok TEof _ =>
+    let
+      p = lastPos st
+    in Span (fileOf st) (posLine p) (posCol p) (posLine p) (posCol p)
+  PTok _ p => Span (fileOf st) (posLine p) (posCol p) (posLine p) (posCol p)
+
 export lastPos : PState -> Pos
 lastPos (PState file toks last count) = last
 
@@ -131,30 +141,32 @@ canContinue st blockCol = case peekPos st of
 
 export expectSym : PState -> String -> Check (Pair Int PState)
 expectSym st s = case peekTok st of
-  PTok (TSym x) p => if x == s then OkC (Pair 0 (advance st)) else psErr1 (ExpectedToken s) s
-  _ => psErr1 (ExpectedToken s) s
+  PTok (TSym x) p =>
+    if x == s then OkC (Pair 0 (advance st)) else psErr1At (tokSpan st) (ExpectedToken s) s
+  _ => psErr1At (tokSpan st) (ExpectedToken s) s
 
 export expectKw : PState -> String -> Check (Pair Int PState)
 expectKw st k = case peekTok st of
-  PTok (TKw x) p => if x == k then OkC (Pair 0 (advance st)) else psErr1 (ExpectedToken k) k
-  _ => psErr1 (ExpectedToken k) k
+  PTok (TKw x) p =>
+    if x == k then OkC (Pair 0 (advance st)) else psErr1At (tokSpan st) (ExpectedToken k) k
+  _ => psErr1At (tokSpan st) (ExpectedToken k) k
 
 export expectIdent : PState -> Check (Pair String PState)
 expectIdent st = case peekTok st of
   PTok (TIdent x) p => OkC (Pair x (advance st))
-  _ => psErr0 ExpectedIdentifier
+  _ => psErr0At (tokSpan st) ExpectedIdentifier
 
 -- M31.3：值位置名字 = 标识符或非保留符号名。用于用户符号名 def/signature 与反引号
 -- 中缀里的名字（`` a `f` b ``）。
 export expectValueName : PState -> Check (Pair String PState)
 expectValueName st = case peekTok st of
   PTok (TIdent x) p =>
-    if isReservedValueName x then psErr1 (ExpectedToken "value name") "value name"
+    if isReservedValueName x then psErr1At (tokSpan st) (ExpectedToken "value name") "value name"
     else OkC (Pair x (advance st))
   PTok (TSym op) p =>
-    if isReservedValueName op then psErr1 (ExpectedToken "value name") "value name"
+    if isReservedValueName op then psErr1At (tokSpan st) (ExpectedToken "value name") "value name"
     else OkC (Pair op (advance st))
-  _ => psErr0 ExpectedIdentifier
+  _ => psErr0At (tokSpan st) ExpectedIdentifier
 
 export upperFirst : String -> Bool
 upperFirst s = case strUnpack s of
