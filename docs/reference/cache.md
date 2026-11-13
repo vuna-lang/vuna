@@ -128,6 +128,7 @@ views/testbin/<testBin>/          # effect 测试编译产物（bin/vuna-test，
 | `dep-identity=<pkg> verdict=iface\|manifest` | 依赖身份取自 `objects/pkgiface` 还是 manifest 回退 |
 | `iface-write=N/M` | 本次真的写盘的接口对象数（内容未变的写入不计） |
 | `iface-skip partial` | 这次 check 只覆盖部分模块（入口闭包），不写接口，等库面那遍写全 |
+| `check-lib-skip covered=N` | 入口闭包已写全 N 个导出模块（order 覆盖）⇒ 不再补跑第二遍 lib check |
 | `iface-reject=module-order` | 依赖包缺 `objects/order`，无法确定模块顺序 ⇒ 回退全量 |
 | `cache-own-clean=N` | 本包可复用的干净模块数 |
 | `tool-closure modules=N` | 工具会话的 import 闭包规模 |

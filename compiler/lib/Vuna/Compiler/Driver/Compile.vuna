@@ -85,10 +85,20 @@ checkPackage release wantWarnings pkg =
           -- 而接口对象只从被精化的模块产生 —— 不补这一次 lib check，包会「有源文件但没有
           -- 接口」，依赖方读接口缺件后只能整体回退全量。第二遍不重复报 warning。
           Just names => do
-            libR <- checkCachedLib False ctx names
-            case libR of
-              ErrC e => pure (ErrC e)
-              OkC ds2 => pure (OkC (append ds ds2))
+            -- 入口闭包已经覆盖全部导出模块时（典型：Main import 了库模块），入口那遍
+            -- 已经写全 order + iface 对象，再补一遍 lib check 只会重复精化整包
+            -- （4000 定义探针上约 +0.9 s，且放大增长比）。order 只在「完整模块面」
+            -- 写成功后才存在，所以「order 覆盖 names」等价于 iface 也已写全。
+            covered <- orderCoversEff (packageName pkg) names
+            if covered then do
+              let
+                _ = dbg! "check-lib-skip covered=${length names}"
+              in pure (OkC ds)
+            else do
+              libR <- checkCachedLib False ctx names
+              case libR of
+                ErrC e => pure (ErrC e)
+                OkC ds2 => pure (OkC (append ds ds2))
     else case packageExports pkg of
       Nothing => pure (pkgNoLoc1 (LibraryWithoutEntry (packageName pkg)) (packageName pkg))
       Just names => checkCachedLib wantWarnings ctx names
@@ -1025,6 +1035,15 @@ readOrderEff pkgKey = do
   pure (case payload of
     Nothing => Nothing
     Just bytes => decOrderNamesComplete bytes
+  )
+
+-- | 已写的模块顺序是否覆盖这些导出模块（覆盖 ⇒ 入口那遍已写全 iface，无需再补 lib check）。
+orderCoversEff : String -> List String -> Eff hostRow Bool
+orderCoversEff pkg names = do
+  ord <- readOrderEff (pkgKeyOf pkg)
+  pure (case ord of
+    Just written => allNamesIn names written
+    Nothing => False
   )
 
 pickByOrder : List ClosureMod -> List String -> List ClosureMod
