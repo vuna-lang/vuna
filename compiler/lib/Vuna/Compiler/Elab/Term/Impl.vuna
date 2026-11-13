@@ -51,9 +51,9 @@ else case findCtorIn cname (dtDataCtors dd) of
   Nothing =>
     tcErr2 psp (UnknownConstructorInCase (ctorDisplayName cname) (dtDataName dd))
       (ctorDisplayName cname) (dtDataName dd)
-  Just ctor => Vuna.Compiler.Common.bind (bindCtorTele ctx (dtCtorType ctor) args) (\p => case p of
+  Just ctor => Vuna.Compiler.Common.bind (onErrDiag (withFallbackSpan psp) (bindCtorTele ctx (dtCtorType ctor) args)) (\p => case p of
     Pair branchCtx (Pair binders leftover) => if nonEmpty leftover then tcErr1 psp (BranchTooManyArgs (ctorDisplayName cname)) (ctorDisplayName cname)
-    else Vuna.Compiler.Common.bind (unifyIdxListSized ec [] (ctxDepth branchCtx) (ctorResultValsIn branchCtx ctor) (map (\v => refineValue [] defaultFuel v) idxs)) (\refsIdx => case branchAfterUnify ec branchCtx refsIdx of
+    else Vuna.Compiler.Common.bind (onErrDiag (withFallbackSpan psp) (unifyIdxListSized ec [] (ctxDepth branchCtx) (ctorResultValsIn branchCtx ctor) (map (\v => refineValue [] defaultFuel v) idxs))) (\refsIdx => case branchAfterUnify ec branchCtx refsIdx of
       BranchImpossibleIndex => tcErr0 psp ImpossibleBranchIndex
       BranchImpossibleEmptyCtx => tcErr0 psp ImpossibleBranchEmptyCtx
       BranchOk => Vuna.Compiler.Common.bind (reflectScrutinee ec (ctxDepth branchCtx) refsIdx (ctorValueIn branchCtx ctor) scrutVal) (\refs2 => let
@@ -2143,15 +2143,17 @@ else case typeHeadLookup globals ec name of
 export checkTypeAtKind : List (Pair String Term) -> Ctx -> Ec -> Expr -> Value -> Span -> Check (Pair Term Ec)
 checkTypeAtKind globals ctx ec expr expected sp = case forceVal ec expected of
   VType _ =>
-    Vuna.Compiler.Common.bind (checkTypeFuel 256 globals ctx ec expr)
+    Vuna.Compiler.Common.bind
+      (onErrDiag (withFallbackSpan sp) (checkTypeFuel 256 globals ctx ec expr))
       (\p => OkC (Pair (firstOf p) (secondOf (secondOf p))))
   _ => case expr of
     EVar name _ => if isTypeName globals ec name then case typeHeadLookup globals ec name of
       Nothing => tcErr1 sp (UnknownName name) name
       Just kindTerm =>
-        Vuna.Compiler.Common.bind (convEc ec (ctxDepth ctx) expected (eval [] kindTerm))
+        Vuna.Compiler.Common.bind
+          (onErrDiag (withFallbackSpan sp) (convEc ec (ctxDepth ctx) expected (eval [] kindTerm)))
           (\ec1 => OkC (Pair (typeHeadTerm ec1 name) ec1))
-    else checkEFuel 256 globals ctx ec expr expected
+    else onErrDiag (withFallbackSpan sp) (checkEFuel 256 globals ctx ec expr expected)
     EApp (EVar name _) args _ => if isTypeName globals ec name then case typeHeadLookup globals ec name of
       Nothing => tcErr1 sp (UnknownName name) name
       Just kindTerm => Vuna.Compiler.Common.bind (inferArgsFuel 256 globals ctx ec (eval [] kindTerm) args sp Nothing) (\pa => case pa of
@@ -2159,8 +2161,8 @@ checkTypeAtKind globals ctx ec expr expected sp = case forceVal ec expected of
           OkC ec2 => OkC (Pair (typeAppTerm ec2 name argTerms) ec2)
           ErrC e => tcTypeMismatch sp (showValue expected) (showValue resTy)
       )
-    else checkEFuel 256 globals ctx ec expr expected
-    _ => checkEFuel 256 globals ctx ec expr expected
+    else onErrDiag (withFallbackSpan sp) (checkEFuel 256 globals ctx ec expr expected)
+    _ => onErrDiag (withFallbackSpan sp) (checkEFuel 256 globals ctx ec expr expected)
 
 -- M19：`==` / `/=` 的饱和应用按实参类型特化。
 -- 返回 `Nothing` 表示「不是泛化比较运算符的饱和应用」，调用方走常规路径。

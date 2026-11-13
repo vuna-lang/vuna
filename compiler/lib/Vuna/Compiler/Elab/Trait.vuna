@@ -341,7 +341,7 @@ elabInstanceWithClass globals allDecls cls info ec0 headExpr methods msp = case 
 --   方法体里对 tele 变量的字典需求先在**声明的 ctx** 里消解，消不掉且仍是刚性 ⇒
 --   `TC_InstanceContextMissing`（ctx 不足）；具体类型的临时需求留给程序级字典搜索。
 export elabInstance : List (Pair Decl Span) -> List (Pair Decl Span) -> List (Pair String Term) -> List DtClass -> List DtData -> Ec -> Pair Decl Span -> Check (Pair (List (Pair String Term)) Ec)
-elabInstance instDecls allDecls globals classes datas ec (Pair (DInstance ctxE headExpr methods msp) dsp) = Vuna.Compiler.Common.bind (elabInstanceSig classes globals (definedNames (map firstOf instDecls)) ec msp headExpr ctxE) (\p => case p of
+elabInstance instDecls allDecls globals classes datas ec (Pair (DInstance ctxE headExpr methods msp) dsp) = Vuna.Compiler.Common.bind (onErrDiag (withFallbackSpan msp) (elabInstanceSig classes globals (definedNames (map firstOf instDecls)) ec msp headExpr ctxE)) (\p => case p of
   Pair info ec0 => case findClass (instSigClass info) classes of
     Nothing => tcErr0 msp InstanceHeadNotApp
     Just cls =>
