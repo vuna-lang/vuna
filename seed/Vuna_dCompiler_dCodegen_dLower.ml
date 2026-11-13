@@ -34,8 +34,6 @@ let rec v_Vuna_dCompiler_dCodegen_dLower_dlistLength = (fun mc0 -> (match mc0 wi
   | _ -> failwith "DT: impossible branch"
 ))
 
-let v_Vuna_dCompiler_dCodegen_dLower_dlwStOf = (fun n -> n)
-
 let v_Vuna_dCompiler_dCodegen_dLower_dbinderErasedOf = (fun mc0 -> (match mc0 with
   | { Vuna_dCompiler_dIr_dModel.f_Vuna_dCompiler_dIr_dModel_dIrBinder_irBinderName = dtb__26; Vuna_dCompiler_dIr_dModel.f_Vuna_dCompiler_dIr_dModel_dIrBinder_irBinderErased = dtb__27 } -> dtb__27
   | _ -> failwith "DT: impossible branch"
