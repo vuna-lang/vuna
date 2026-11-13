@@ -66,6 +66,7 @@ Vuna.Test.Suite  ./lib/Vuna/Test/Suite.vuna
 Vuna.TestRunner  ./lib/Vuna/TestRunner.vuna
 Vuna.Tool.Session  ./lib/Vuna/Tool/Session.vuna
 app.Main  ./app/Main.vuna
+Vuna.Compiler.Addr  compiler/lib/Vuna/Compiler/Addr.vuna
 Vuna.Compiler.Canonical.Ast  compiler/lib/Vuna/Compiler/Canonical/Ast.vuna
 Vuna.Compiler.Canonical.Bytes  compiler/lib/Vuna/Compiler/Canonical/Bytes.vuna
 Vuna.Compiler.Canonical.CoreTerm  compiler/lib/Vuna/Compiler/Canonical/CoreTerm.vuna
@@ -101,7 +102,6 @@ Vuna.Compiler.Driver.Compile  compiler/lib/Vuna/Compiler/Driver/Compile.vuna
 Vuna.Compiler.Driver.CompilerCli  compiler/lib/Vuna/Compiler/Driver/CompilerCli.vuna
 Vuna.Compiler.Driver.DiagRender  compiler/lib/Vuna/Compiler/Driver/DiagRender.vuna
 Vuna.Compiler.Driver.Dt  compiler/lib/Vuna/Compiler/Driver/Dt.vuna
-Vuna.Compiler.Driver.Graph  compiler/lib/Vuna/Compiler/Driver/Graph.vuna
 Vuna.Compiler.Driver.Iface  compiler/lib/Vuna/Compiler/Driver/Iface.vuna
 Vuna.Compiler.Driver.Owner  compiler/lib/Vuna/Compiler/Driver/Owner.vuna
 Vuna.Compiler.Driver.PerfCache  compiler/lib/Vuna/Compiler/Driver/PerfCache.vuna
@@ -154,8 +154,6 @@ Vuna.Compiler.Loader.Resolve  compiler/lib/Vuna/Compiler/Loader/Resolve.vuna
 Vuna.Compiler.Loader  compiler/lib/Vuna/Compiler/Loader.vuna
 Vuna.Compiler.Packages.Pkg  compiler/lib/Vuna/Compiler/Packages/Pkg.vuna
 Vuna.Compiler.Packages.Source  compiler/lib/Vuna/Compiler/Packages/Source.vuna
-Vuna.Compiler.Query.Run  compiler/lib/Vuna/Compiler/Query/Run.vuna
-Vuna.Compiler.Query  compiler/lib/Vuna/Compiler/Query.vuna
 Vuna.Compiler.Source  compiler/lib/Vuna/Compiler/Source.vuna
 Vuna.Compiler.Store  compiler/lib/Vuna/Compiler/Store.vuna
 Vuna.Compiler.Version  compiler/lib/Vuna/Compiler/Version.vuna
@@ -217,6 +215,7 @@ Prelude  base/lib/Prelude.vuna
 
 
 ## compiler（vuna-compiler）
+Vuna.Compiler.Addr  ./lib/Vuna/Compiler/Addr.vuna
 Vuna.Compiler.Canonical.Ast  ./lib/Vuna/Compiler/Canonical/Ast.vuna
 Vuna.Compiler.Canonical.Bytes  ./lib/Vuna/Compiler/Canonical/Bytes.vuna
 Vuna.Compiler.Canonical.CoreTerm  ./lib/Vuna/Compiler/Canonical/CoreTerm.vuna
@@ -252,7 +251,6 @@ Vuna.Compiler.Driver.Compile  ./lib/Vuna/Compiler/Driver/Compile.vuna
 Vuna.Compiler.Driver.CompilerCli  ./lib/Vuna/Compiler/Driver/CompilerCli.vuna
 Vuna.Compiler.Driver.DiagRender  ./lib/Vuna/Compiler/Driver/DiagRender.vuna
 Vuna.Compiler.Driver.Dt  ./lib/Vuna/Compiler/Driver/Dt.vuna
-Vuna.Compiler.Driver.Graph  ./lib/Vuna/Compiler/Driver/Graph.vuna
 Vuna.Compiler.Driver.Iface  ./lib/Vuna/Compiler/Driver/Iface.vuna
 Vuna.Compiler.Driver.Owner  ./lib/Vuna/Compiler/Driver/Owner.vuna
 Vuna.Compiler.Driver.PerfCache  ./lib/Vuna/Compiler/Driver/PerfCache.vuna
@@ -305,8 +303,6 @@ Vuna.Compiler.Loader.Resolve  ./lib/Vuna/Compiler/Loader/Resolve.vuna
 Vuna.Compiler.Loader  ./lib/Vuna/Compiler/Loader.vuna
 Vuna.Compiler.Packages.Pkg  ./lib/Vuna/Compiler/Packages/Pkg.vuna
 Vuna.Compiler.Packages.Source  ./lib/Vuna/Compiler/Packages/Source.vuna
-Vuna.Compiler.Query.Run  ./lib/Vuna/Compiler/Query/Run.vuna
-Vuna.Compiler.Query  ./lib/Vuna/Compiler/Query.vuna
 Vuna.Compiler.Source  ./lib/Vuna/Compiler/Source.vuna
 Vuna.Compiler.Store  ./lib/Vuna/Compiler/Store.vuna
 Vuna.Compiler.Version  ./lib/Vuna/Compiler/Version.vuna
