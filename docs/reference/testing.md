@@ -36,22 +36,24 @@ vuna test --suite test/suite.toml --json          # 机器可读汇总
 
 | 期望文件 | 语义 |
 | --- | --- |
-| `<base>.check.err` | check 必须 fail，诊断含该片段（裸 `.err` 是兼容形态） |
+| `<base>.diag.json` | **负例的唯一期望载体**：结构化诊断（`check --json` 聚合文档）。断言 `(severity, code, file, line, col)` 多重集 + 条数，**不比对文案**；`--bless-diag` 生成 |
 | `<base>.interp.out` | 只跑 interp golden（无 compile/run） |
-| `<base>.interp.err` | interp 必须 fail（片段） |
-| `<base>.compile.err` | compile 必须 fail（片段；裸 `.cerr` 是兼容形态） |
 | `<base>.run.out` | 只做 compile+build+run golden（原 `.nointerp` 场景） |
 | `<base>.run.err` | 产物运行期错误片段；退出码断言非 0 |
 | `<base>.run.exit` | 期望退出码（n=0 断言恰好 0；n>0 断言恰好 n） |
 | `<base>.out` | **共享** golden：interp 与 compile+run 都开，断言输出一致 |
-| `<base>.diag.json` | **结构化诊断期望**（`check --json` 聚合文档）；存在时逐字断言；`--bless-diag` 生成 |
+| `expected.diag.json` | 目录型夹具的负例期望（同上，路径相对夹具目录） |
+| `expected.out` / `expected.run.*` | 目录型夹具的正例期望 |
 
 矛盾组合显式失败（CBroken），不静默跳过：golden（`.out`/`.interp.out`/`.run.out`）与
-error（`.check.err`/…）并存、`.check.err` 与 `.interp.err` 并存、`.run.out` 与
-`.run.err`/`.run.exit` 并存、family 关掉某阶段但夹具带该阶段期望。无任何期望文件也是
-CBroken。原 `<base>.vuna.nointerp` 旁标记已删除——它的语义由「有 run 期望而无 interp
-期望」自然表达。
+`.diag.json` 并存、`.run.out` 与 `.run.err`/`.run.exit` 并存、family 关掉某阶段但夹具带
+该阶段期望。无任何期望文件也是 CBroken。原 `<base>.vuna.nointerp` 旁标记已删除——它的
+语义由「有 run 期望而无 interp 期望」自然表达。
 
+文本期望（`.check.err` / `.err` / `.compile.err` / `.cerr` / `.deny`）**已从夹具层删除**：
+负例曾经靠「诊断子串」断言，现在只看结构化返回值（见下节「进程内断言」）。`warning`
+由 `.diag.json` 里 `severity = "warning"` 的条目表达；「warning 让退出码变 1」是
+`--deny-warnings` 的 CLI 语义，由 steps 覆盖，fixture 不再表达。
 
 ### 声明式步进用例（`*.steps`）
 
@@ -145,9 +147,9 @@ end:
   冷命中的 steps 在文件头写 `# store-isolated`，用 `${caseTmp}/store` 私有库。
 - `--no-cache` 只影响 test verdict 对象（`objects/test`），不关闭对象库；
   `*.steps` 仍不缓存。对象库的 GC 用 `vuna store gc`（roots + 宽限窗口 + 容量上限）。
-- **warning 不持久化**：共享 store 命中会跳过精化。负例自动加 `-W` 绕过判定；
-  `.deny` 夹具（`--deny-warnings`）还使用 case 私有空 store + `VUNA_ELAB_FULL=1`，
-  避免命中普通 check 的成功产物。
+- **warning 不持久化**：共享 store 命中会跳过精化。fixture 负例现在走进程内全量精化
+  （`InProc.checkFile`），warning 必然重算，不再需要 `-W` / 私有 store；`warning`
+  的「让退出码变 1」语义由 steps 的 `--deny-warnings` 覆盖。
 
 ### 迁移状态
 
@@ -200,10 +202,9 @@ vuna test --suite test/suite.toml --cache-dir DIR   # 覆盖本地结果缓存�
   夹具变更只跑对应 family case，以及 steps 文件文本里提到该目录的 case；无变更时不跑 case。
 - `--last-failed`：失败 case id 写到 `.local/test-suite/last-failed`，重跑时按 id 过滤；
   空结果不会清空已有失败列表。
-- `--bless`：golden 失败时把实际输出写回对应 `.out`，并打印 `blessed`；不处理 `.check.err`/`.compile.err`。
+- `--bless`：golden 失败时把实际输出写回对应 `.out`，并打印 `blessed`；负例走 `--bless-diag`。
 - `--bless-diag`：负例 case 用 `check/compile --json` 的实际聚合文档写回 `.diag.json`（源码路径相对 cwd；环境路径归一化为 `<ROOT>`/`<BASE>`，本地与 nix 构建可比）。
 - 目录型夹具根部的 `.package-dir` 标记：check/compile 以该目录为 cwd 运行 `vuna <cmd> .`，用于包级诊断（`PKG_`/`LD_`），对应 family `pkg_err`（`entry = "lib/Main.vuna"`）。
-- 夹具旁的 `.deny` 标记：check/compile 探测加 `--deny-warnings`（用于断言「warning 在 deny 模式下失败」，如冗余分支夹具）。
 - `nix/checks/diag-coverage.sh` 对比码集合（`.diag.json` + lint `.out` + steps 侧车
   `*.diagcodes`；缺口与不可达审计在 `nix/diag-coverage-allow.txt`，覆盖数不低于
   `nix/diag-coverage.min`）；`nix/checks/diag-style.sh` 查消息列文案规范（句号/大小写/空白/占位符，例外在 `nix/diag-style-allow.txt`）；LSP quick fix 集成在 `test/corpus/lsp/quickfix.sh`。
@@ -228,25 +229,50 @@ family discovery 对目录里每个夹具要求一个期望文件（阶段限定
 
 局部运行（`--only` / `--filter`）会把这两个审计 case 一起过滤掉，符合预期。
 
-### 进程内精化会话（golden 的 check / interp）
+### 进程内断言（fixture 用例零子进程）
 
-golden 正例的 `check` / `interp` 断言走**进程内会话**（`lib/Vuna/Test/Session.vuna`）：
+**fixture 用例（`CGolden` / `CError` / `CCheck` / `CLint` / `CFix`）不再 spawn `vuna`**：
+runner 直接调用编译器 / 工具链的导出函数，断言它们的**返回值**。
 
-- 父进程启动时用 `vuna check <base>` 把 base 的模块接口写进**共享对象库**
-  （`$VUNA_STORE/objects/iface`）；worker 读同一根，不再各自预热；
-- 会话持有 `List ModuleIface` + 增量精化的 `AuxCache`，每个夹具只精化自己的入口
-  （走 `Dt.dtCheckSourceIncremental` / `Dt.dtEvalSourceIncremental`，即 LSP 诊断的
-  同一条路径），不再重精化整棵 base；
-- 子进程与父进程共用同一对象库：接口可用时走摘要路径；`VUNA_ELAB_FULL=1` 强制全量，
-  `VUNA_IFACE_AUDIT=1` 在同进程对拍摘要/全量两条路径。增量与全量在
-  `deriving via field` 上仍有差异（已知边界），由 audit 抽样守门；
-- 接口缺失 / tag 不符 / 增量自检 `applied = False` ⇒ 回退 CLI 子进程，语义与
-  文本不变；`VUNA_TEST_NO_SESSION=1` 可强制回退（A/B 排查用）。
+| 用例 | 进程内调用 | 断言 |
+| --- | --- | --- |
+| golden interp | `Interp.interpretFile`（或 `Dt.dtEvalFile` / 增量版） | 输出文本 == `.out`（语言语义，保留文本比对） |
+| golden check | `Dt.dtCheck` / `Dt.dtCheckModuleFile` | `OkC` 且无 error 级诊断（warning 允许） |
+| golden compile | `Compile.compileToDir` | `OkC`；随后 `sh build.sh` + 跑 `prog` 仍子进程（执行产物无法替代） |
+| 负例 check | 同上 | `ErrC`（或 `OkC` 里的 error 级条目）→ 投影成 `.diag.json` 的键序列 |
+| 负例 compile | `Compile.compileToDir` | 同上；额外断言输出目录未创建 |
+| 包目录负例 | `Compile.checkPackage release True pkg` | 同上（`wantWarnings=True` 直接拿 warning） |
+| lint | `Lint.Rules.lintSourceWith`（fixities 经 `FixityEnv.fixitiesForFile`） | `renderFinding` 文本 == `.out` |
+| fix | `Lint.Fix.fixLoop` | 新源码 == `.expected`；再跑一遍验收敛（幂等） |
 
-收益（本机 16 核，2026-11-13）：同一个 `vuna compile` 夹具从空 store 的 2.9–5.5s 降到
-暖 store 的 7ms；`vuna check base` 从 7.25s 降到 13ms。负例（`.check.err` /
-`.compile.err`）仍走 CLI，保证片段匹配语义完全一致。
+**断言口径**（`lib/Vuna/Test/Expect.vuna`）：负例只比 `(severity, code, file, line, col)`
+的**多重集** + 条数，不比 `message` / `fields` / `labels.text`——文案由
+`nix/checks/diag-style.sh` / `diag-raw.sh` 两个门禁守。顺序不锁：`--json` 的
+`flushSarif` 输出序与 `ErrC` 的 `diagChildren` 装配序不同，两列排序后逐项比。
 
+路径归一：期望文件里有 `<ROOT>/test/...`、`corpus/...`、`./vuna.toml`、`<BASE>/lib/...`
+四种写法；`Expect.projFile` 把两侧都压到「相对 `test/`」或 `base/`，夹具不需要改写。
+无源位置的诊断投影成 `||0|0!<absent 理由>`，与 `nix/checks/diag-located.sh` 同源。
+
+**没有子进程回退**：进程内只有两条路径——增量会话（`lib/Vuna/Test/Session.vuna`，依赖
+接口 + `AuxCache`）优先，不可用时**在同一进程内**退回全量精化；两条都不可用即用例失败
+（`ErrC`）。旧的 `VUNA_TEST_NO_SESSION` 开关、`-W` 绕过缓存、`--deny-warnings` 私有 store、
+`VUNA_ELAB_FULL=1` 四处 hack 全部删除（`VUNA_ELAB_FULL` 仍作为 CLI 语义保留，只出现在
+steps 里，用于「摘要路径 vs 全量路径逐字节一致」的对拍）。
+
+**进程内没有 `timeout(1)`**：`elab_perf` 一族（15s 回归守卫）改用挂钟自测
+（`effTimeUs`），超 `caseTimeout` 即失败。
+
+**进程绑定岛**：steps 里仍有子进程，但只限于**构造上不可进程内**的场景——PTY / stdio
+（`repl` / `lsp`）、执行产物（`build.sh` / `prog` / `vuna run` / `vuna test`）、另一个二进制
+（`seed`）、多进程 store 互斥（`fetch` / `add` / `pin` / `store` / `clean`）、CLI 渲染文本与
+`--json` / SARIF 文档形状。这些逐个登记在 `test/suite/process-bound.txt`（
+`文件<TAB>子命令<TAB>原因`），由 `nix/checks/steps-inproc.sh` 校验：steps 里出现未登记的
+文件名就失败；登记数超过 `nix/steps-inproc.max` 也失败（ratchet 只降）。
+
+已知边界：增量会话的 `dtIncrementalCheckedCore` 只汇总 loader + `dtProgWarnings`，
+**不跑**全量尾部的 `warnUnusedDefsIn`；所以负例的 check 一律走全量（`InProc.checkFile`），
+只有正例才用会话。
 ### 增量构建桶（跨 run 持久）
 
 golden/runtime case 的 codegen 产物按「生成模块集」分桶（`set-<key>`），桶放在
@@ -290,8 +316,9 @@ golden/runtime case 的 codegen 产物按「生成模块集」分桶（`set-<key
 语言夹具只走 DT：`interp`（DT 精化 + 核心求值）、`check`、`compile` + ocamlopt。
 「只 compile+run、不做 interp 对拍」的夹具（效果程序 `main : Eff [] a`，以及核心求值器不可
 归约的夹具：`strUnpack` / `strPack` / `strConcatMany` / `strSubstTemplate`）用
-`<base>.run.out` 表达（原 `.nointerp` 旁标记已删除）。负例 `.check.err` 是稳定诊断子串，
-interp / compile 文案不同时用 `.compile.err`。
+`<base>.run.out` 表达（原 `.nointerp` 旁标记已删除）。负例统一用
+`<base>.diag.json`（结构化诊断），interp / compile 共用同一份（实测 142 个负例里 130 个完全一致，
+12 个仅 message 不同、`(code, line)` 全同）。
 
 - `corpus/run/*.vuna`：`interp` 输出 vs `.out` golden；`compile` → ocamlopt → 运行再比对；
   `.run.out`（`10_string_pack`、`16_file_exists`、`17_file_meta`）只做 compile+run；
@@ -339,10 +366,10 @@ interp / compile 文案不同时用 `.compile.err`。
   `07_prim_direct`（无 manifest 门控：直调 `prim_*` / `prim_eff_*`）；
   `08_module_scope`（entry 顶层小写名与同包模块签名里的类型变量同名，banned 集按模块作用域
   计算后 base 模块不再报 `unknown name x`）；
-- `corpus/err/`、`corpus/run_err/`：解析 / 求值错误片段；`run_err` 的 `.err` 是 DT 诊断
-  子串（非穷尽、if 条件类型、参数过多、clause 数不匹配、let 绑定模式等），
-  `03_div_zero` 是产物运行期负例（运行断言 `division by zero`），`07_main_arity` 用
-  `.compile.err` 区分 compile 文案；
+- `corpus/err/`、`corpus/run_err/`：解析 / 求值负例，期望载体是 `.diag.json`
+  （非穷尽、if 条件类型、参数过多、clause 数不匹配、let 绑定模式等）；`15_corpus_compile_neg`
+  一类 `07_main_arity` 的 compile 阶段诊断与 check 同一份期望；`03_div_zero`
+  是产物运行期负例（运行断言 `division by zero`）；
 - `corpus/type_ok`、`corpus/type_err`、`corpus/type_modules/`、`corpus/typed_ok`：语言夹具，
   走 `check` / `compile` + 运行断言；`typed_ok/06_where_fwd`、`07_where_mutual`、
   `08_where_self` 是 where 签名正例（局部辅助函数 / 顶层递归），fmt 黄金例见
@@ -399,10 +426,10 @@ interp / compile 文案不同时用 `.compile.err`。
 
 ## Nix checks 清单
 
-`nix flake check` 实测 **23 项**：3 个 package 构建（`vuna` / `vuna-compiler` /
-`vuna-seed`，同时暴露为 checks）+ 20 个 check 语义项（`context-budget`、`diag-coverage`、
+`nix flake check` 实测 **24 项**：3 个 package 构建（`vuna` / `vuna-compiler` /
+`vuna-seed`，同时暴露为 checks）+ 21 个 check 语义项（`context-budget`、`diag-coverage`、
 `diag-raw`、`diag-style`、`eff-boundary`、`ir-boundary`、`seed-selfhost`、
-`vuna-compiler-growth`、`vuna-compiler-growth-incremental`、
+`steps-inproc`、`vuna-compiler-growth`、`vuna-compiler-growth-incremental`、
 `vuna-fmt`、`vuna-lint`、`vuna-metrics`、`vuna-obs-dwarf`、`vuna-obs-overhead`、
 `vuna-obs-schema`、`diag-located`、`vuna-tests-gate`、`vuna-tests-e2e`、
 `vuna-typecheck`、`vscode-ext`；主体是 `nix/checks/<name>.sh`）。语义项：
@@ -438,6 +465,9 @@ interp / compile 文案不同时用 `.compile.err`。
   （Hash / Frontend.Cst 等导出模块显式 import），所以 `vuna check compiler` 覆盖全部导出模块、
   iface 也是完整模块面；
 - `vuna-fmt`：workspace 全包与 `examples/`；
+- `steps-inproc`：进程绑定岛门禁——fixture 用例已全部进程内执行，steps 里仍 spawn `$VUNA`
+  的文件必须逐个登记在 `test/suite/process-bound.txt`，且总数不超过 `nix/steps-inproc.max`
+  （ratchet 只降不增），见 [testing.md](testing.md)「进程内断言」；
 - `diag-located`：结构化诊断必须有主 span，或无位置理由并逐码登记在
   `nix/diag-located.allow`（只减不增），见 [diagnostics.md](diagnostics.md)；
 - `vuna-compiler-growth`：合成 500/1000/2000/4000 同形定义，相邻档墙钟比 ≤2.3（增长率

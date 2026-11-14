@@ -91,7 +91,7 @@ nix build .#vuna --out-link result        # 产品 CLI；.#vuna-compiler / .#vun
 ./result/bin/vuna run <pkg> -- ARGS...    # 增量 build + 执行入口（透传参数/退出码）
 nix run .#vuna-run-tests -- --only <章节> # 按章节跑 suite（--list 看章节）
 sh nix/seed-rotate.sh ./result/bin/vuna   # 仅当需要轮换 seed
-nix flake check                           # 3 packages + 20 checks（清单见 testing.md）
+nix flake check                           # 3 packages + 21 checks（清单见 testing.md）
 ./result/bin/vuna map --find <Module.name> # 定位符号；另有 --impact / api
 ```
 

@@ -59,7 +59,20 @@ commands 在 [testing.md](testing.md)；对象库本身见 [cache.md](cache.md)�
 | `roots/<project>/<digest>` | 逐摘要文件，无读-改-写 | 并发追加不再丢 root（兼容旧单文件布局） | — |
 | `views/bin/<splitIn>` | `mkdir` 构建锁 + 持锁写最终视图、`.complete` 原子提交 | 日常 build 与测试同时构建同一包会串行；显式 `--out` 不经过锁 | — |
 | `units/<pkg>` | 写原子，按 entry 桶内 GC | 并发不同 entry 不再互相驱逐 | — |
-| warning | 命中跳过精化，警告不持久化 | 断言 warning 的 case 可能假通过 | 走 `-W`/`--deny-warnings` 或隔离 |
+
+### 2.4 进程内执行层（fixture 用例）
+
+fixture 用例（`CGolden` / `CError` / `CCheck` / `CLint` / `CFix`）**不再 spawn `vuna`**：
+runner 直接调用编译器/工具链的导出函数并断言返回值（细节见
+[testing.md](testing.md) 的「进程内断言」）。
+
+- **路径选择只在进程内**：增量会话（`Vuna.Test.Session`，依赖接口 + `AuxCache`）优先，
+  不可用时同进程退回全量精化。没有「回退子进程」这一步——那会把断言退回字符串匹配。
+  增量会话不覆盖的只有 `warnUnusedDefsIn`，所以负例一律走全量。
+- **verdict key 去掉 env 分量**：旧 key 含 `no-session=<env>`（`VUNA_TEST_NO_SESSION`
+  的 A/B 开关）。开关删除后 key 只剩输入摘要，旧对象自然失效（无害）。
+- **隔离只保留在 steps 岛**：`# store-isolated` 的私有 store 仍只用于断言缓存布局/GC/
+  冷命中的 steps 用例；fixture 负例不再需要私有 store 绕缓存。
 
 ## 3. 用例分层与预算
 
