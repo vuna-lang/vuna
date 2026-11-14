@@ -374,7 +374,10 @@ interp / compile 文案不同时用 `.compile.err`。
   `105_native_backend.steps` 覆盖 native M1+M2：x86-64 汇编生成、静态链接、与 OCaml
   后端的输出差分、Nat 递归、63-bit 边界、除零 trap、确定性、String（`++` / `strFromInt` /
   `strLength` / `strAt` / `strSubstring` / `strHash` / `strShow` / 相等 / String 入口）、
-  bump 堆耗尽 trap、拒绝面与 `--no-compile`（见 [native.md](native.md)）。`corpus/dt_err/*` 是对应负例
+  bump 堆耗尽 trap、拒绝面与 `--no-compile`（见 [native.md](native.md)）；
+  `106_wasm_backend.steps` 覆盖 wasm M2：WAT 生成、`wasm-tools parse` + `wasmtime run`、
+  与 OCaml 后端的输出差分、Nat 递归、字符串原语、63-bit 边界、除零 trap、WAT 确定性 +
+  行宽、拒绝面与 `--target` 取值校验（见 [wasm.md](wasm.md)）。`corpus/dt_err/*` 是对应负例
   （kind / 宇宙、冗余 / 不可达分支、axiom 运行时、命名空间、隐式参数、泛型 Σ、无 Eq 证据
   等）。`corpus/dt_base/`、`corpus/dt_io/`、`corpus/dt_pkg/`、`corpus/dt_ad_hoc/` 是 DT
   专项夹具；

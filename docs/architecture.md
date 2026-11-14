@@ -143,7 +143,12 @@ data（`Base.Bool.Bool` / `Base.List.List` / `Base.Nat.Nat`），不按短名。
 `Vuna.Compiler.Driver.Native.compileNative`。M1 覆盖 Int/Nat/Bool 纯切片，M2 加入 String
 （字面量 / `++` / `strFromInt` / `strLength` / `strAt` / `strSubstring` / `strHash` /
 `strShow` / 字符串相等 / String 入口）与 `.bss` 里的 bump 堆（无 GC/RC）；切片、ABI、
-值表示、运行时符号与边界见 [native.md](reference/native.md)。WAT 后端见
+值表示、运行时符号与边界见 [native.md](reference/native.md)。
+
+**wasm 后端（M2）**：`IR --Wasm.Module.build--> WasmModule --Wasm.Render.renderModule-->
+main.wat`，再由 CLI 的 `build` 分支调 `wasm-tools parse` 汇编成 `main.wasm`；驱动入口
+`Vuna.Compiler.Driver.Wasm.compileWasm`。支持 Int/Nat/String/Bool 纯值、`let`/`if`、
+顶层饱和调用、Nat 结构递归与 `++` 链；WasmGC 表示、WAT 稳定布局与运行时符号覆盖见
 [wasm.md](reference/wasm.md)。
 
 ## 2. 包与 workspace

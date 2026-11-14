@@ -620,13 +620,19 @@ compileParse prog printResult entry outDir args o = case args of
   [] => compileFinish prog printResult entry outDir o
   "--no-print" :: rest => compileParse prog False entry outDir rest o
   "--release" :: rest => compileParse prog printResult entry outDir rest (markRelease o)
-  "--target" :: t :: rest => compileParse prog printResult entry outDir rest (markTarget t o)
+  "--target" :: t :: rest =>
+    if isKnownTarget t then compileParse prog printResult entry outDir rest (markTarget t o)
+    else withOpts o (usageErr prog)
   arg :: rest => if startsWith "-" arg then withOpts o (removedFlag prog arg)
   else case entry of
     Nothing => compileParse prog printResult (Just arg) outDir rest o
     Just _ => case outDir of
       Nothing => compileParse prog printResult entry (Just arg) rest o
       Just _ => withOpts o (usageErr prog)
+
+-- | `--target` 的合法取值（未知目标必须是参数错误，不得静默回落到 OCaml）。
+isKnownTarget : String -> Bool
+isKnownTarget t = t == "ocaml" || t == "wasm" || t == "native"
 
 compileFinish : String -> Bool -> Maybe String -> Maybe String -> CliOpts -> Eff hostRow (Pair Int CliOpts)
 compileFinish prog printResult Nothing outDir o = withOpts o (usageErr prog)
@@ -914,7 +920,9 @@ buildParse prog noCompile out dir pkg args o = case args of
   [] => buildRun noCompile (defaultDir dir) out pkg o
   "--no-compile" :: rest => buildParse prog True out dir pkg rest o
   "--release" :: rest => buildParse prog noCompile out dir pkg rest (markRelease o)
-  "--target" :: t :: rest => buildParse prog noCompile out dir pkg rest (markTarget t o)
+  "--target" :: t :: rest =>
+    if isKnownTarget t then buildParse prog noCompile out dir pkg rest (markTarget t o)
+    else withOpts o (usageErr prog)
   "--out" :: rest => case rest of
     outDir :: more => if startsWith "-" outDir then withOpts o (removedFlag prog outDir)
     else case out of
@@ -1015,28 +1023,40 @@ buildNativeOne noCompile multiOut outM pkg o =
                 (@vuna@prim_eff_print "native link failed: cc exited ${strFromInt code}\n")
             pure (Pair 1 o)
 
--- | wasm 目标的 build：只产 main.wat（+ build.sh），不走 OCaml 链接。
+-- | wasm 目标的 build：产 main.wat（+ build.sh）；非 `--no-compile` 时调 `wasm-tools` 汇编。
+-- 与 native 分支同构：外部工具是构建期依赖，缺失即明确失败（不静默产半成品）。
 buildWasmOne : Bool -> Maybe String -> Package -> CliOpts -> Eff hostRow (Pair Int CliOpts)
 buildWasmOne noCompile outM pkg o =
   let
     outDir = case outM of
       Just out => out
       Nothing => "${packageDir pkg}/.output"
+    watPath = "${outDir}/main.wat"
+    wasmPath = "${outDir}/main.wasm"
+    script =
+      "#!/bin/sh\nset -eu\ncd \"$(dirname \"$0\")\"\nwasm-tools parse main.wat -o main.wasm\n"
+    args = ["wasm-tools", "parse", "main.wat", "-o", "main.wasm"]
   in do
     r <-
       compileWasm (contextWithRelease o.optRelease (packageContext pkg)) (packageEntry pkg) True
         outDir
     case r of
       ErrC e => printDiag o e
-      OkC _ => if noCompile then do
-        _ <- raiseToRow hostRow (@vuna@prim_eff_print "wrote ${outDir}/main.wat\n")
-        pure (Pair 0 o)
-      else do
-        _ <-
-          raiseToRow hostRow
-            (@vuna@prim_eff_writeFile "${outDir}/build.sh" "#!/bin/sh\nset -eu\ncd \"$(dirname \"$0\")\"\nwasm-tools parse main.wat -o main.wasm\n")
-        _ <- raiseToRow hostRow (@vuna@prim_eff_print "wrote ${outDir}/main.wat\n")
-        pure (Pair 0 o)
+      OkC _ => do
+        _ <- raiseToRow hostRow (@vuna@prim_eff_writeFile "${outDir}/build.sh" script)
+        if noCompile then do
+          _ <- raiseToRow hostRow (@vuna@prim_eff_print "wrote ${watPath}\n")
+          pure (Pair 0 o)
+        else do
+          code <- raiseToRow hostRow (@vuna@prim_eff_runIn outDir args)
+          if code == 0 then do
+            _ <- raiseToRow hostRow (@vuna@prim_eff_print "wrote ${wasmPath}\n")
+            pure (Pair 0 o)
+          else do
+            _ <-
+              raiseToRow hostRow
+                (@vuna@prim_eff_print "wasm assembly failed: wasm-tools exited ${strFromInt code}\n")
+            pure (Pair 1 o)
 
 buildOne : Bool -> Bool -> Maybe String -> Package -> CliOpts -> Eff hostRow (Pair Int CliOpts)
 buildOne noCompile multiOut outM pkg o = if o.optTarget == "wasm" then buildWasmOne noCompile outM pkg o

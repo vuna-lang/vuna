@@ -16,12 +16,20 @@ let
     pkgs.gcc
   ];
 
+  # wasm 目标的外部工具：`wasm-tools parse` 汇编 WAT，`wasmtime` 跑 `.wasm`。
+  # 两者都是**构建期/测试期工具**，不进 TCB、不进 seed（与 native 侧的 cc 同构）。
+  wasmTools = pkgs: [
+    pkgs.wasm-tools
+    pkgs.wasmtime
+  ];
+
   # 测试/基准 runner 的 PATH：OCaml 工具链 + 脚本用到的 coreutils 系。
   # jq 供 bench.sh 解析基线 JSON（--baseline / --check），不再用 sed 解析。
   # 顺序与历史列表保持一致（makeBinPath 的输出会进入派生，顺序影响哈希）。
   shellTools =
     pkgs:
     ocamlTools pkgs
+    ++ wasmTools pkgs
     ++ [
       pkgs.bash
       pkgs.coreutils
@@ -35,7 +43,7 @@ let
     ];
 in
 {
-  inherit systems ocamlTools shellTools;
+  inherit systems ocamlTools shellTools wasmTools;
 
   forAllSystems = lib.genAttrs systems;
 

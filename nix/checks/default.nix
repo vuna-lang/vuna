@@ -109,7 +109,7 @@ in
       VUNA_SEED = "${vuna-seed}/bin/vuna-seed";
       VUNA_TEST_TIERS = "fast integration";
     };
-    nativeBuildInputs = ocamlTools ++ [ pkgs.util-linux pkgs.git pkgs.jq ];
+    nativeBuildInputs = ocamlTools ++ [ pkgs.util-linux pkgs.git pkgs.jq pkgs.wasm-tools pkgs.wasmtime ];
     script = ./vuna-tests.sh;
   };
 
@@ -129,7 +129,7 @@ in
       VUNA_SEED = "${vuna-seed}/bin/vuna-seed";
       VUNA_TEST_TIERS = "e2e";
     };
-    nativeBuildInputs = ocamlTools ++ [ pkgs.util-linux pkgs.git pkgs.jq ];
+    nativeBuildInputs = ocamlTools ++ [ pkgs.util-linux pkgs.git pkgs.jq pkgs.wasm-tools pkgs.wasmtime ];
     script = ./vuna-tests.sh;
   };
   vuna-metrics = mkCheck {

@@ -1,9 +1,9 @@
 module Vuna.Compiler.Wasm.Runtime where
 
--- Vuna.Compiler.Wasm.Runtime：M1 运行时函数的 WAT 指令实现 + IR 符号表。
+-- Vuna.Compiler.Wasm.Runtime：运行时函数的 WAT 指令实现 + IR 符号表。
 --
--- 产物只有 WAT；运行时按 `Ir.Runtime` 契约的符号名生成 WAT 函数。M1 只实现纯子集，
--- 其余符号默认 `RtTrap`（编译期生成 unary trap 闭包，纯程序不可达）。
+-- 产物只有 WAT；运行时按 `Ir.Runtime` 契约的符号名生成 WAT 函数。子集外的符号映射到
+-- `RtUnsupported`，代码生成在引用点报 `WasmUnsupported`（编译期拒绝，不生成坏代码）。
 --
 -- 表示约定（与 Wasm.Module 一致）：
 --   * Int/Nat 是 `(struct (field i64))`，box/unbox 由 `$int` 完成；63-bit 语义。
@@ -38,8 +38,8 @@ export data RtImpl(..) : Type where
   RtValue : List Instr -> RtImpl
   -- | n 元函数：名字 + arity。
   RtFunc : Int -> String -> RtImpl
-  -- | 未实现/不可达：unary trap 闭包；饱和应用直接 unreachable。
-  RtTrap : RtImpl
+  -- | 本后端未实现的契约符号：引用点报 `WasmUnsupported`（带符号名）。
+  RtUnsupported : RtImpl
 
 -- ---------------------------------------------------------------
 -- 指令拼装 helper
@@ -395,6 +395,202 @@ rtNatSucc =
         [unboxInt 0, [ILocalSet "$n"], [ILocalGet "$n", IConstI64 4611686018427387903, IBinop "i64.ge_s", IIf "i64" [IConstI64 4611686018427387903] [ILocalGet "$n", IConstI64 1, IBinop "i64.add"]], boxInt]
   in rtFunc "$rt_natSucc" params [WvAnyRef] locals body
 
+-- ---------------------------------------------------------------
+-- Nat 原语（饱和语义，参考 `Codegen.Term` 的 `bi_nat*`）
+-- ---------------------------------------------------------------
+maxInt63 : Int
+maxInt63 = 4611686018427387903
+
+rtNatAdd : WatFunc
+rtNatAdd =
+  let
+    params = [Pair "$p0" WvAnyRef, Pair "$p1" WvAnyRef]
+    locals = [Pair "$a" WvI64, Pair "$b" WvI64]
+    body =
+      cat
+        [unboxInt 0, [ILocalSet "$a"], unboxInt 1, [ILocalSet "$b"], [ILocalGet "$a", IConstI64 maxInt63, ILocalGet "$b", IBinop "i64.sub", IBinop "i64.gt_s", IIf "i64" [IConstI64 maxInt63] [ILocalGet "$a", ILocalGet "$b", IBinop "i64.add"]], boxInt]
+  in rtFunc "$rt_natAdd" params [WvAnyRef] locals body
+
+rtNatSub : WatFunc
+rtNatSub =
+  let
+    params = [Pair "$p0" WvAnyRef, Pair "$p1" WvAnyRef]
+    locals = [Pair "$a" WvI64, Pair "$b" WvI64]
+    body =
+      cat
+        [unboxInt 0, [ILocalSet "$a"], unboxInt 1, [ILocalSet "$b"], [ILocalGet "$a", ILocalGet "$b", IBinop "i64.le_s", IIf "i64" [IConstI64 0] [ILocalGet "$a", ILocalGet "$b", IBinop "i64.sub"]], boxInt]
+  in rtFunc "$rt_natSub" params [WvAnyRef] locals body
+
+rtNatMul : WatFunc
+rtNatMul =
+  let
+    params = [Pair "$p0" WvAnyRef, Pair "$p1" WvAnyRef]
+    locals = [Pair "$a" WvI64, Pair "$b" WvI64]
+    inner =
+      [ ILocalGet "$a",
+        IConstI64 maxInt63,
+        ILocalGet "$b",
+        IBinop "i64.div_s",
+        IBinop "i64.gt_s",
+        IIf "i64" [IConstI64 maxInt63] [ILocalGet "$a", ILocalGet "$b", IBinop "i64.mul"]
+      ]
+    body =
+      cat
+        [unboxInt 0, [ILocalSet "$a"], unboxInt 1, [ILocalSet "$b"], [ILocalGet "$a", IConstI64 0, IBinop "i64.le_s", ILocalGet "$b", IConstI64 0, IBinop "i64.le_s", IBinop "i32.or", IIf "i64" [IConstI64 0] inner], boxInt]
+  in rtFunc "$rt_natMul" params [WvAnyRef] locals body
+
+rtNatDiv : RtConsts -> WatFunc
+rtNatDiv c =
+  let
+    params = [Pair "$p0" WvAnyRef, Pair "$p1" WvAnyRef]
+    locals = [Pair "$a" WvI64, Pair "$b" WvI64]
+    body =
+      cat
+        [unboxInt 0, [ILocalSet "$a"], unboxInt 1, [ILocalSet "$b"], [ILocalGet "$b", IConstI64 0, IBinop "i64.eq", IIf "i64" (failWithConst c.rtcDivOff c.rtcDivLen) [ILocalGet "$a", ILocalGet "$b", IBinop "i64.div_s"]], boxInt]
+  in rtFunc "$rt_natDiv" params [WvAnyRef] locals body
+
+-- | `natToInt`：无损提升，表示上恒等。
+rtNatToInt : WatFunc
+rtNatToInt =
+  let
+    params = [Pair "$p0" WvAnyRef]
+  in rtFunc "$rt_natToInt" params [WvAnyRef] [] [ILocalGet "$p0"]
+
+-- | `natFromInt`：有损，负数钳成 0。
+rtNatFromInt : WatFunc
+rtNatFromInt =
+  let
+    params = [Pair "$p0" WvAnyRef]
+    locals = [Pair "$n" WvI64]
+    body =
+      cat
+        [unboxInt 0, [ILocalSet "$n"], [ILocalGet "$n", IConstI64 0, IBinop "i64.le_s", IIf "i64" [IConstI64 0] [ILocalGet "$n"]], boxInt]
+  in rtFunc "$rt_natFromInt" params [WvAnyRef] locals body
+
+-- ---------------------------------------------------------------
+-- String 原语（参考 `Codegen.Term` 的 `bi_strLength` / `dtp_str*`）
+-- ---------------------------------------------------------------
+rtStrLength : WatFunc
+rtStrLength =
+  let
+    params = [Pair "$p0" WvAnyRef]
+    body =
+      [ILocalGet "$p0", IRefCast "$str", IArrayLen, IPlain "i64.extend_i32_s", IStructNew "$int"]
+  in rtFunc "$rt_strLength" params [WvAnyRef] [] body
+
+-- | `strAt`：越界返回 `-1`（对齐 OCaml 的 `dtp_strAt` 哨兵）。
+rtStrAt : WatFunc
+rtStrAt =
+  let
+    params = [Pair "$p0" WvAnyRef, Pair "$p1" WvAnyRef]
+    locals = [Pair "$s" (WvRef "$str"), Pair "$n" WvI32, Pair "$i" WvI64]
+    outOfRange =
+      [ ILocalGet "$i",
+        IConstI64 0,
+        IBinop "i64.lt_s",
+        ILocalGet "$i",
+        ILocalGet "$n",
+        IPlain "i64.extend_i32_s",
+        IBinop "i64.ge_s",
+        IBinop "i32.or"
+      ]
+    inRange =
+      [ ILocalGet "$s",
+        ILocalGet "$i",
+        IPlain "i32.wrap_i64",
+        IArrayGetU "$str",
+        IPlain "i64.extend_i32_s"
+      ]
+    body =
+      cat
+        [[ILocalGet "$p0", IRefCast "$str", ILocalSet "$s", ILocalGet "$s", IArrayLen, ILocalSet "$n"], unboxInt 1, [ILocalSet "$i"], outOfRange, [IIf "i64" [IConstI64 (0 - 1)] inRange], boxInt]
+  in rtFunc "$rt_strAt" params [WvAnyRef] locals body
+
+-- | `strSubstring(start, len, s)`：参数序与 `Intrinsics` 的类型一致（start, len, s）。
+rtSubstring : WatFunc
+rtSubstring =
+  let
+    params = [Pair "$p0" WvAnyRef, Pair "$p1" WvAnyRef, Pair "$p2" WvAnyRef]
+    locals =
+      [ Pair "$s" (WvRef "$str"),
+        Pair "$n" WvI32,
+        Pair "$st" WvI32,
+        Pair "$ln" WvI32,
+        Pair "$start" WvI64,
+        Pair "$len" WvI64,
+        Pair "$out" (WvRef "$str")
+      ]
+    clampStart =
+      [ ILocalGet "$start",
+        IConstI64 0,
+        IBinop "i64.lt_s",
+        IIf "i32" [IConstI32 0] [ILocalGet "$start", ILocalGet "$n", IPlain "i64.extend_i32_s", IBinop "i64.gt_s", IIf "i32" [ILocalGet "$n"] [ILocalGet "$start", IPlain "i32.wrap_i64"]]
+      ]
+    clampLen =
+      [ ILocalGet "$len",
+        IConstI64 0,
+        IBinop "i64.lt_s",
+        IIf "i32" [IConstI32 0] [ILocalGet "$st", ILocalGet "$len", IPlain "i32.wrap_i64", IBinop "i32.add", ILocalGet "$n", IBinop "i32.gt_u", IIf "i32" [ILocalGet "$n", ILocalGet "$st", IBinop "i32.sub"] [ILocalGet "$len", IPlain "i32.wrap_i64"]]
+      ]
+    body =
+      cat
+        [[ILocalGet "$p2", IRefCast "$str", ILocalSet "$s", ILocalGet "$s", IArrayLen, ILocalSet "$n"], unboxInt 0, [ILocalSet "$start"], unboxInt 1, [ILocalSet "$len"], clampStart, [ILocalSet "$st"], clampLen, [ILocalSet "$ln"], [ILocalGet "$ln", IArrayNewDefault "$str", ILocalSet "$out"], [ILocalGet "$out", IConstI32 0, ILocalGet "$s", ILocalGet "$st", ILocalGet "$ln", IArrayCopy "$str" "$str"], [ILocalGet "$out"]]
+  in rtFunc "$rt_substring" params [WvAnyRef] locals body
+
+-- | `strHash`：`(h * 33 + byte) land 1023`，与 OCaml 的 `dtp_strHash` 逐字一致。
+rtStrHash : WatFunc
+rtStrHash =
+  let
+    params = [Pair "$p0" WvAnyRef]
+    locals = [Pair "$s" (WvRef "$str"), Pair "$n" WvI32, Pair "$i" WvI32, Pair "$h" WvI64]
+    loop =
+      [ IBlock "$hash_done" "" [ILoop "$hash_l" "" [ILocalGet "$i", ILocalGet "$n", IBinop "i32.ge_u", IBrIf "$hash_done", ILocalGet "$h", IConstI64 33, IBinop "i64.mul", ILocalGet "$s", ILocalGet "$i", IArrayGetU "$str", IPlain "i64.extend_i32_u", IBinop "i64.add", IConstI64 1023, IBinop "i64.and", ILocalSet "$h", ILocalGet "$i", IConstI32 1, IBinop "i32.add", ILocalSet "$i", IBr "$hash_l"]]
+      ]
+    body =
+      cat
+        [[ILocalGet "$p0", IRefCast "$str", ILocalSet "$s", ILocalGet "$s", IArrayLen, ILocalSet "$n", IConstI32 0, ILocalSet "$i", IConstI64 0, ILocalSet "$h"], loop, [ILocalGet "$h"], boxInt]
+  in rtFunc "$rt_strHash" params [WvAnyRef] locals body
+
+-- | 字符串相等：先比长度，再逐字节短路比较（`bi_eq_str`）。
+rtEqStr : WatFunc
+rtEqStr =
+  let
+    params = [Pair "$p0" WvAnyRef, Pair "$p1" WvAnyRef]
+    locals =
+      [ Pair "$a" (WvRef "$str"),
+        Pair "$b" (WvRef "$str"),
+        Pair "$na" WvI32,
+        Pair "$i" WvI32,
+        Pair "$eq" WvI32
+      ]
+    loop =
+      [ IBlock "$eq_done" "" [ILoop "$eq_l" "" [ILocalGet "$i", ILocalGet "$na", IBinop "i32.ge_u", IBrIf "$eq_done", ILocalGet "$a", ILocalGet "$i", IArrayGetU "$str", ILocalGet "$b", ILocalGet "$i", IArrayGetU "$str", IBinop "i32.ne", IIf "" [IConstI32 0, ILocalSet "$eq", IBr "$eq_done"] [], ILocalGet "$i", IConstI32 1, IBinop "i32.add", ILocalSet "$i", IBr "$eq_l"]]
+      ]
+    lenCheck =
+      [ IBlock "$len_done" "" [ILocalGet "$a", IArrayLen, ILocalSet "$na", ILocalGet "$na", ILocalGet "$b", IArrayLen, IBinop "i32.ne", IIf "" [IConstI32 0, ILocalSet "$eq", IBr "$len_done"] []]
+      ]
+    body =
+      cat
+        [[ILocalGet "$p0", IRefCast "$str", ILocalSet "$a", ILocalGet "$p1", IRefCast "$str", ILocalSet "$b", IConstI32 1, ILocalSet "$eq", IConstI32 0, ILocalSet "$i"], lenCheck, loop, [ILocalGet "$eq", II31New]]
+  in rtFunc "$rt_eqStr" params [WvAnyRef] locals body
+
+-- | 字符串不等：复用 `$rt_eqStr` 再取反（`bi_neq_str`）。
+rtNeqStr : WatFunc
+rtNeqStr =
+  let
+    params = [Pair "$p0" WvAnyRef, Pair "$p1" WvAnyRef]
+    body =
+      [ ILocalGet "$p0",
+        ILocalGet "$p1",
+        ICall "$rt_eqStr",
+        IRefCast "i31",
+        II31GetU,
+        IConstI32 1,
+        IBinop "i32.xor",
+        II31New
+      ]
+  in rtFunc "$rt_neqStr" params [WvAnyRef] [] body
+
 rtBoxZero : WatFunc
 rtBoxZero =
   let
@@ -471,6 +667,18 @@ rtFunctions c =
     binBool "$rt_and" "i32.and",
     binBool "$rt_or" "i32.or",
     rtNatSucc,
+    rtNatAdd,
+    rtNatSub,
+    rtNatMul,
+    rtNatDiv c,
+    rtNatToInt,
+    rtNatFromInt,
+    rtStrLength,
+    rtStrAt,
+    rtSubstring,
+    rtStrHash,
+    rtEqStr,
+    rtNeqStr,
     rtBoxZero,
     rtErase,
     rtAssert,
@@ -515,4 +723,16 @@ rtImplOf name =
   else if name == "@vuna@debug@on" then RtValue (boolValue False)
   else if name == "@vuna@debug@line" then RtFunc 1 "$rt_boxZero"
   else if name == "@ir@natSucc" then RtFunc 1 "$rt_natSucc"
-  else if name == "arrayEmpty" then RtValue [IConstI32 0, IArrayNewDefault "$arr"] else RtTrap
+  else if name == "arrayEmpty" then RtValue [IConstI32 0, IArrayNewDefault "$arr"]
+  else if name == "natAdd" then RtFunc 2 "$rt_natAdd"
+  else if name == "natSub" then RtFunc 2 "$rt_natSub"
+  else if name == "natMul" then RtFunc 2 "$rt_natMul"
+  else if name == "natDiv" then RtFunc 2 "$rt_natDiv"
+  else if name == "natToInt" then RtFunc 1 "$rt_natToInt"
+  else if name == "natFromInt" then RtFunc 1 "$rt_natFromInt"
+  else if name == "strLength" then RtFunc 1 "$rt_strLength"
+  else if name == "strAt" then RtFunc 2 "$rt_strAt"
+  else if name == "strSubstring" then RtFunc 3 "$rt_substring"
+  else if name == "strHash" then RtFunc 1 "$rt_strHash"
+  else if name == "bi_eq_str" then RtFunc 2 "$rt_eqStr"
+  else if name == "bi_neq_str" then RtFunc 2 "$rt_neqStr" else RtUnsupported

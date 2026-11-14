@@ -10,6 +10,7 @@ let
     let
       pkgs = pkgsFor system;
       ocamlTools = common.ocamlTools pkgs;
+      wasmTools = common.wasmTools pkgs;
       packages = import ./packages.nix {
         inherit pkgs ocamlTools;
         shellTools = common.shellTools pkgs;
@@ -27,7 +28,7 @@ let
       # 种子重建/坏掉时仍可进入（direnv 默认用 default）。
       devShells = {
         default = pkgs.mkShell {
-          packages = ocamlTools ++ [ packages.vuna-seed ];
+          packages = ocamlTools ++ wasmTools ++ [ packages.vuna-seed ];
           shellHook = ''
             root=$PWD
             while [ "$root" != "/" ] && [ ! -f "$root/test/suite.toml" ]; do

@@ -22,6 +22,8 @@
 #   5. 正向断言：文本生成层都消费 IR（避免留下未迁移的死路径）。
 #   9. native 后端（`Vuna.Compiler.Native*` 与 `Driver/Native`）只吃 IR：不得 import
 #      `Core` / `Elab` / `Intrinsics` / `Codegen` / `Wasm`；`Native.Module` 必须 import IR。
+#  10. wasm 后端（`Vuna.Compiler.Wasm*` 与 `Driver/Wasm`）只吃 IR：不得 import
+#      `Core` / `Elab` / `Intrinsics` / `Codegen` / `Native`；`Wasm.Module` 必须 import IR。
 #
 # 只扫 `import` / `export import` 行（vuna 的模块依赖面就是这些行）。
 set -eu
@@ -153,6 +155,23 @@ NATIVE_MODULE=compiler/lib/Vuna/Compiler/Native/Module.vuna
 if [ -f "$NATIVE_MODULE" ]; then
   if ! imports_of "$NATIVE_MODULE" | grep -qE '^Vuna\.Compiler\.Ir$'; then
     echo "ir-boundary: $NATIVE_MODULE does not import Vuna.Compiler.Ir (native backend must consume IR)"
+    fail=$((fail + 1))
+  fi
+fi
+
+# 规则 10（wasm 后端）：只吃 IR；不 import 上游或其它后端。
+for f in compiler/lib/Vuna/Compiler/Wasm/*.vuna; do
+  [ -f "$f" ] || continue
+  check_forbidden "$f" '^(Vuna\.Compiler\.(Core|Elab|Intrinsics|Codegen|Native)(\.|$))'
+done
+WASM_DRIVER=compiler/lib/Vuna/Compiler/Driver/Wasm.vuna
+if [ -f "$WASM_DRIVER" ]; then
+  check_forbidden "$WASM_DRIVER" '^(Vuna\.Compiler\.(Core|Elab|Intrinsics)(\.|$))'
+fi
+WASM_MODULE=compiler/lib/Vuna/Compiler/Wasm/Module.vuna
+if [ -f "$WASM_MODULE" ]; then
+  if ! imports_of "$WASM_MODULE" | grep -qE '^Vuna\.Compiler\.Ir$'; then
+    echo "ir-boundary: $WASM_MODULE does not import Vuna.Compiler.Ir (wasm backend must consume IR)"
     fail=$((fail + 1))
   fi
 fi
