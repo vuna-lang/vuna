@@ -162,6 +162,7 @@ dtCheckPartsWithProgram pkg loaded = do
           )
       )
   )
+
 -- D11：模块边界 seal。opaque 在模块末尾 seal（定义模块自身可展开）；abstract 在
 -- 其 DFun 之后立即 seal（定义模块自身也不能展开）。seal 是内部 DAxiom，名字带
 -- `@seal@` 前缀，elabBodies 见到后从 deftbl 移除目标体；体仍留在 ecDefs 供 codegen。
@@ -1684,20 +1685,27 @@ maybeTermGlobals Nothing = []
 maybeTermGlobals (Just t) = termGlobalNames t
 
 -- | 未使用定义扫描实现（按定义顺序返回诊断）。
+--
+-- 判定是**集合成员**：`used` 只用来查「这个定义名是否被别人引用」。这里若用
+-- `memName` 线性扫全表，`UN_UnusedDefinition` 一次几千条时是 O(n²)（合成 8000 定义
+-- 实测尾部 ~800 ms）。入口建一次名字表 ⇒ 每项 O(1)，输出顺序不变。
 warnUnusedDefsGo : List DtDef -> List String -> List Diagnostic
-warnUnusedDefsGo [] used = []
-warnUnusedDefsGo (d :: rest) used =
+warnUnusedDefsGo defs used = warnUnusedDefsTbl defs (Base.HashMap.ofNames used)
+
+warnUnusedDefsTbl : List DtDef -> HashMap String Bool -> List Diagnostic
+warnUnusedDefsTbl [] usedTbl = []
+warnUnusedDefsTbl (d :: rest) usedTbl =
   let
     name = dtDefName d
     skip = name == "main" || startsWith "_" name || startsWith "$" name
-  in if skip then warnUnusedDefsGo rest used
-  else if memName name used then warnUnusedDefsGo rest used
+  in if skip then warnUnusedDefsTbl rest usedTbl
+  else if Base.HashMap.member name usedTbl then warnUnusedDefsTbl rest usedTbl
   else case dtDefSpan d of
     Just sp =>
       Base.List.Cons
         (warnDiagAtMod (\x => withSuggestion (Suggestion "remove unused definition `${name}`" MachineApplicable [DiagEdit sp ""]) x) sp (UnusedDefinition name) [name])
-        (warnUnusedDefsGo rest used)
-    Nothing => warnUnusedDefsGo rest used
+        (warnUnusedDefsTbl rest usedTbl)
+    Nothing => warnUnusedDefsTbl rest usedTbl
 
 -- 恢复式检查（MVP，仅入口文件）：逐次精化，失败时按诊断所在行移除对应顶层声明后重试，
 -- 收集最多 fuel 条独立错误。移除导致的后续级联错误也会被收集（调用方标注 best-effort）。
