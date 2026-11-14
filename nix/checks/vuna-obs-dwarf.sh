@@ -11,8 +11,14 @@
 # 需要 `readelf`（nixpkgs binutils/elfutils），不需要 gdb/perf（CI 里不保证有）。
 set -eu
 
-OUT=${1:?usage: vuna-obs-dwarf.sh OUT}
-OUT=$(CDPATH= cd -- "$OUT" 2>/dev/null && pwd || mkdir -p "$OUT" && CDPATH= cd -- "$OUT" && pwd)
+OUT=${1:?usage: check.sh OUT}
+# 输出目录可能是尚未存在的绝对路径（nix mkCheck 传的是 $out）：先建再取绝对形。
+# 不能写成 `cd X && pwd || mkdir X && cd X && pwd`：`&&`/`||` 同优先级左结合，
+# 会二次 `cd && pwd` 而打印两行，OUT 变成带换行的字符串（实测踩过）。
+if [ ! -d "$OUT" ]; then
+  mkdir -p "$OUT"
+fi
+OUT=$(CDPATH= cd -- "$OUT" && pwd)
 : "${VUNA:?VUNA 未设置}"
 
 pkg=$OUT/pkg
