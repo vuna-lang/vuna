@@ -349,13 +349,15 @@ else case genExpr (fuel - 1) st a of
 
 genRtApp : Int -> GenState -> String -> List Ir -> Result (Pair (List Instr) GenState)
 genRtApp fuel st sym args = if fuel <= 0 then Err "wasm codegen fuel exhausted"
-else if sym == "@vuna@obs@span" then Err "wasm target: obs spans need closures (not supported yet); leaf obs primitives (level/log/counter/mark/sample) are no-op stubs"
+else if sym == "@vuna@obs@span" || sym == "@vuna@obs@spanLab" then Err
+  "wasm target: obs spans need closures (not supported yet); leaf obs primitives (level/log/counter/mark/sample) are no-op stubs"
 else case rtImplOf sym of
   RtUnsupported => Err "wasm target: runtime symbol `${sym}` is not supported yet"
   RtValue instrs => Ok (Pair instrs st)
   RtFunc n name =>
     if n /= listLengthB args then Err "wasm target: runtime symbol `${sym}` applied to the wrong number of arguments"
     else genArgsThen (fuel - 1) st args (ICall name)
+
 -- ---------------------------------------------------------------
 -- Nat case / 字符串拼接
 -- ---------------------------------------------------------------

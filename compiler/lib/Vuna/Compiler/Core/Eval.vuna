@@ -641,7 +641,7 @@ else case findIntrinsic g of
 
 -- 可观测性原语在 `vuna interp` 里的归约（永远静默：不写文件、不读时钟、不采样）。
 --
--- `span` 是唯一高阶原语：把 thunk 应用到 0（关闭语义），保持「纯 + 不求值副作用」形态。
+-- `span` / `spanLab` 是高阶原语：把 thunk 应用到 0（关闭语义），保持「纯 + 不求值副作用」形态。
 obsReduce : String -> List Value -> Maybe Value
 obsReduce g sp = if g == obsLevelIntrinsicName then Just (VInt 0)
 else if g == obsLogIntrinsicName then Just (VInt 0)
@@ -651,6 +651,9 @@ else if g == obsSampleStartIntrinsicName then Just (VInt 0)
 else if g == obsSampleStopIntrinsicName then Just (VInt 0)
 else if g == obsSpanIntrinsicName then case sp of
   _ :: _ :: k :: _ => Just (applyValue k (VInt 0))
+  _ => Just (VInt 0)
+else if g == obsSpanLabIntrinsicName then case sp of
+  _ :: _ :: _ :: k :: _ => Just (applyValue k (VInt 0))
   _ => Just (VInt 0)
 else Nothing
 

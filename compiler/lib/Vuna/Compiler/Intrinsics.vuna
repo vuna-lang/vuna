@@ -240,6 +240,13 @@ obsLevelIntrinsicName = "@vuna@obs@level"
 export obsSpanIntrinsicName : String
 obsSpanIntrinsicName = "@vuna@obs@span"
 
+-- | 带 label 的高阶跨度原语：`name -> cat -> label -> (Int -> a) -> a`。
+--
+-- 与 `obsSpan` **并列**而不是改它的 arity：`name` 只能用事件词汇表里的 `vuna.*`，
+-- 逐定义 span 需要把定义名放进 `args.def`（规范 §3.2），label 就是这个位置。
+export obsSpanLabIntrinsicName : String
+obsSpanLabIntrinsicName = "@vuna@obs@spanLab"
+
 -- | 日志事件（`args.text`；开 `--debug-perf` 时同时写既有 stderr 行）。
 export obsLogIntrinsicName : String
 obsLogIntrinsicName = "@vuna@obs@log"
@@ -858,7 +865,7 @@ effIntrinsics =
 export internalIntrinsics : List Intrinsic
 internalIntrinsics =
   append
-    [Intrinsic debugOnIntrinsicName (IFun IInt IBool) OpNone False, Intrinsic debugLineIntrinsicName (IFun IStr IInt) OpNone False, Intrinsic obsLevelIntrinsicName (IFun IInt IInt) OpNone False, Intrinsic obsSpanIntrinsicName (IPi "a" (IFun IStr (IFun IStr (IFun (IFun IInt (IVar "a")) (IVar "a"))))) OpNone False, Intrinsic obsLogIntrinsicName (IFun IStr IInt) OpNone False, Intrinsic obsCounterIntrinsicName (IFun IStr (IFun IInt IInt)) OpNone False, Intrinsic obsMarkIntrinsicName (IFun IStr IInt) OpNone False, Intrinsic obsSampleStartIntrinsicName (IFun IStr (IFun IInt IInt)) OpNone False, Intrinsic obsSampleStopIntrinsicName (IFun IInt IInt) OpNone False]
+    [Intrinsic debugOnIntrinsicName (IFun IInt IBool) OpNone False, Intrinsic debugLineIntrinsicName (IFun IStr IInt) OpNone False, Intrinsic obsLevelIntrinsicName (IFun IInt IInt) OpNone False, Intrinsic obsSpanIntrinsicName (IPi "a" (IFun IStr (IFun IStr (IFun (IFun IInt (IVar "a")) (IVar "a"))))) OpNone False, Intrinsic obsSpanLabIntrinsicName (IPi "a" (IFun IStr (IFun IStr (IFun IStr (IFun (IFun IInt (IVar "a")) (IVar "a")))))) OpNone False, Intrinsic obsLogIntrinsicName (IFun IStr IInt) OpNone False, Intrinsic obsCounterIntrinsicName (IFun IStr (IFun IInt IInt)) OpNone False, Intrinsic obsMarkIntrinsicName (IFun IStr IInt) OpNone False, Intrinsic obsSampleStartIntrinsicName (IFun IStr (IFun IInt IInt)) OpNone False, Intrinsic obsSampleStopIntrinsicName (IFun IInt IInt) OpNone False]
     (filter (\i => not (intrinsicVisible i)) effIntrinsics)
 
 -- | 编译器 tracing 原语名：codegen 据此按需追加 runtime helper（`usesTrace`）。
@@ -872,6 +879,7 @@ export obsIntrinsicNames : List String
 obsIntrinsicNames =
   [ obsLevelIntrinsicName,
     obsSpanIntrinsicName,
+    obsSpanLabIntrinsicName,
     obsLogIntrinsicName,
     obsCounterIntrinsicName,
     obsMarkIntrinsicName,

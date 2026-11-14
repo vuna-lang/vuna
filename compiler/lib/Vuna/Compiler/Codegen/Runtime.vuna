@@ -272,6 +272,7 @@ ocamlRtTextTable =
     Pair "@vuna@debug@line" "dtp_debug_line",
     Pair "@vuna@obs@level" "dtp_obs_level",
     Pair "@vuna@obs@span" "dtp_obs_span",
+    Pair "@vuna@obs@spanLab" "dtp_obs_span_lab",
     Pair "@vuna@obs@log" "dtp_obs_log",
     Pair "@vuna@obs@counter" "dtp_obs_counter",
     Pair "@vuna@obs@mark" "dtp_obs_mark",

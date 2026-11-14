@@ -300,7 +300,8 @@ irRtPlainNames =
     "@vuna@obs@counter",
     "@vuna@obs@mark",
     "@vuna@obs@sampleStart",
-    "@vuna@obs@sampleStop"
+    "@vuna@obs@sampleStop",
+    "@vuna@obs@spanLab"
   ]
 
 -- | 需要 canonical `Base.List.List` 族桥接 helper 的内建名符号。
