@@ -341,7 +341,22 @@ printf '%s' '{"jsonrpc":"2.0","id":2,"method":"shutdown"}' | vuna repl --client 
 dedent，开引号后的首个换行由 lexer 丢弃、渲染时按需补回），文本里的 `$` 紧跟 `{` 写成
 `\$`，`${...}` 内的注释丢弃（词法不进 AST）。
 
-## 6. 尚未实现（工具链自身缺口）
+## 6. `vuna obs`（可观测性工具链）
+
+规范见 [observability.md](observability.md)（本页只说命令面）：
+
+| 命令 | 语义 |
+| --- | --- |
+| `vuna obs run [--level N] [--sample cpu|mem|both] [--interval US] [--out FILE] [--] <cmd...>` | 用 `env` 前置命令把 `VUNA_OBS*` 注入子进程后跑命令；退出码原样返回；打印 trace 路径 |
+| `vuna obs validate TRACE` | 结构校验（首行元数据、`ts` 必需、同 pid/tid 时序（嵌套 span 放行）、`dur`/`value`/`stack`/`text` 字段、`vuna.*` 词汇表、末行截断降级为 warning）；退出码 0/1/2 |
+| `vuna obs summarize [--json] [--baseline FILE] [--threshold PCT] TRACE...` | span 树折叠（自用/总用时、计数、采样热点）；`--json` 单行稳定；`--baseline` 超阈值退 1 |
+| `vuna obs convert --to cpuprofile|speedscope|folded|jsonl [--out PATH] TRACE` | 换到外部生态格式（确定性输出） |
+| `vuna obs render [--out FILE] TRACE` | 单文件 HTML（无外链、无时间戳、两次渲染逐字节一致） |
+| `vuna obs merge [--out FILE] TRACE...` | 多进程 trace 合并成一份 JSONL |
+| `vuna obs symbols [--out FILE] [OUTDIR]` | 从 split 产物的 `#line` 指令抽 `vuna-symbols.json`（OCaml 符号 → `.vuna` 位置） |
+| `vuna obs serve --cdp ADDR [--allow-slow]` | CDP Profiler 子集（Content-Length JSON-RPC；Chrome DevTools 的 WebSocket 握手未接，见 debt D83） |
+
+## 7. 尚未实现（工具链自身缺口）
 
 - `rewrite` / `with` 等证明工程 ergonomics：未实现。
 - **语义索引**：Index 仍是 parse 级（签名必填 ⇒ 语法索引即语义面，不另建语义索引）。
