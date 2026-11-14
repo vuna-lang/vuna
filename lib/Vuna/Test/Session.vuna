@@ -2,32 +2,32 @@ module Vuna.Test.Session where
 
 -- Vuna.Test.Session：测试 runner 的**进程内精化会话**（每个 worker 进程一个）。
 --
--- 背景：`vuna check/interp` 每次都要重新精化整棵 base 闭包（~150ms：instheads +
--- bodies + instbodies）。测试 suite 的几百个夹具共享同一个 base ⇒ 这部分是完全
--- 重复的工作。本模块把依赖包（base）的模块接口缓存进会话，用例只精化自己的入口
--- 声明，与 LSP 的诊断会话（`Lsp/Diagnostics.buildSession`）同一条增量路径。
+-- 背景：进程内 check/interp 若每次都对整棵 base 闭包做全量精化，每个 case 要付
+-- ~120ms 的重复工作（instheads + bodies + instbodies）。本模块把依赖包（base）的
+-- 模块接口缓存进会话，用例只精化自己的入口，与 LSP 的诊断会话
+-- （`Lsp/Diagnostics.buildSession`）同一条 `dtCheckSourceIncremental`。
 --
--- 关键约束（为什么不做成「无限乐观」）：
---   * 接口必须能读到且与本进程编译器 tag 一致；缺失/失效就返回 Nothing，调用方
---     回退 CLI 子进程——语义与诊断文本都不变，只是慢；
---   * 增量路径自检 `applied = False` 时同样回退（安全阀，见 Dt.dtCheckSourceIncremental）；
---   * 会话状态是**每 worker 进程**的（IORef 由 Env 持有），不跨进程共享。
+-- 关键纪律：**会话只影响进程内的路径选择，绝不回退子进程**。
+--   * 接口读不到 / `applied = False` ⇒ 返回 `Nothing`，调用方
+--     （`Vuna.Test.InProc`）在同一进程内改走全量 `dtCheck` / `dtEvalFile`；
+--   * 两条进程内路径都不可用 ⇒ 用例失败（`inprocess-unavailable`），
+--     不再 spawn `vuna check`——那会把断言退回字符串匹配。
 --
--- 会话只服务「正例」（golden 的 check/interp 断言）；负例仍走 CLI，保证 `.check.err`
--- / `.compile.err` 片段与退出码语义完全一致。
+-- 返回值刻意**不用** `Maybe (Check a)`：该形状（把 `Check` 放进 `Maybe` 后由别的
+-- 模块解构）会触发精化器的一条 `TC_UnknownConstructorInCase` 误报。这里改用普通
+-- 记录 `CheckSample` / `EvalSample`，`Check` 的构造/解构只发生在 `Vuna.Test.InProc`。
 import Base.HostRow
 import Base.IORef
 import Vuna.Compiler.Common
+import Vuna.Compiler.Diag
 import Vuna.Compiler.Driver.Compile
-import Vuna.Compiler.Driver.Dt
 import Vuna.Compiler.Driver.Iface
+import Vuna.Compiler.Driver.Dt
 import Vuna.Compiler.Packages.Pkg
-import Vuna.Compiler.Version
-import Vuna.Files
 
 export record Session where
   sesRoot : String -- 接口镜像根（`${envTmp}/iface`；空 = 不镜像，读源码旁）
-  sesDir : String -- 当前依赖接口目录 key（base 绝对目录；空 = 尚未建立）
+  sesDir : String -- 当前依赖接口的包目录（base 绝对路径；空 = 尚未建立）
   sesIfaces : List ModuleIface
   sesAux : Maybe AuxCache -- check 路径的 termAux 预处理缓存
   sesEvalAux : Maybe AuxCache -- interp 路径的缓存
@@ -35,40 +35,18 @@ export record Session where
 export sessionNew : String -> Session
 sessionNew ifaceRoot = Session ifaceRoot "" [] Nothing Nothing
 
--- 逃生开关：`VUNA_TEST_NO_SESSION=1` 强制回退 CLI 子进程（A/B 排查用）。
-sessionDisabled : Eff hostRow Bool
-sessionDisabled = do
-  env <- raiseToRow hostRow (@vuna@prim_eff_getenv "VUNA_TEST_NO_SESSION")
-  pure (env == "1")
+-- check 结果样本：`csErr = Just e` 表示精化失败；否则 `csDiags` 是完整诊断表
+-- （含 warning；`--json` 写进 `.diag.json` 的就是这一份）。
+export record CheckSample where
+  csErr : Maybe Diagnostic
+  csDiags : List Diagnostic
 
--- 与 `Compile.ifaceCompilerTag` 同口径：版本 + 编译器二进制指纹。
-ifaceTag : Eff hostRow String
-ifaceTag = do
-  fp <- toolCompilerFingerprint
-  pure "${vunaVersion}/${strFromInt fp}"
+-- interp 结果样本：`esErr = Just e` 表示精化失败；否则 `esText` 是求值展示文本。
+export record EvalSample where
+  esErr : Maybe Diagnostic
+  esText : String
 
-dropLeadingSlash : String -> String
-dropLeadingSlash s = if startsWith "/" s then substring 1 (byteLength s) s else s
-
--- 与 `Compile.ifaceBaseOf` 同一规则：设了镜像根时按包绝对目录镜像，否则接口与
--- 源码同目录。runner 给子进程设的镜像根是 `${envTmp}/iface`（与这里同一个）。
-baseIfaceDir : String -> String -> String
-baseIfaceDir ifaceRoot baseDir =
-  if ifaceRoot == "" then baseDir else "${ifaceRoot}/${dropLeadingSlash baseDir}"
-
--- 读 base 包接口（`readPackageIface` 内部已校验 schema 与编译器 tag）。
--- 读 base 包的模块接口（对象库 = 输入寻址，命中即路径存在；解码失败 ⇒ Nothing）。
--- 用 base 目录自己的包上下文（`contextForDir`）：包身份、包环境、依赖图都从它的
--- manifest 推出，与 `vuna check <base>` 写侧完全同口径。
-readBaseIfaces : String -> Eff hostRow (Maybe (List ModuleIface))
-readBaseIfaces baseDir = do
-  ctxR <- contextForDir baseDir
-  case ctxR of
-    ErrC _ => pure Nothing
-    OkC ctx => ifacesForContextEff ctx
-
--- 字段访问 helper：绑定变量的记录字段访问需要显式类型（语言限制），
--- 这里用带参数类型的薄函数代替 `s.sesDir` 直接投影。
+-- 字段投影 helper（绑定变量的记录字段访问需要显式类型）。
 sesRootOf : Session -> String
 sesRootOf s = s.sesRoot
 
@@ -84,71 +62,79 @@ sesAuxOf s = s.sesAux
 sesEvalAuxOf : Session -> Maybe AuxCache
 sesEvalAuxOf s = s.sesEvalAux
 
--- 会话可用性：命中缓存 → 直接用；否则读一次接口并写回（读失败 ⇒ Nothing）。
+-- 用 base 目录自己的包上下文（`contextForDir`）：包身份、包环境、依赖图都从它的
+-- manifest 推出，与 `vuna check <base>` 写侧完全同口径。
+readBaseIfaces : String -> Eff hostRow (Maybe (List ModuleIface))
+readBaseIfaces baseDir = do
+  ctxR <- contextForDir baseDir
+  case ctxR of
+    ErrC _ => pure Nothing
+    OkC ctx => ifacesForContextEff ctx
+
+-- 会话可用性：命中缓存 → 直接用；否则读一次接口并写回（读失败/为空 ⇒ Nothing）。
 ensureSession : IORef Session -> String -> Eff hostRow (Maybe (List ModuleIface))
 ensureSession ref baseDir = do
   s <- readRef ref
-  if sesDirOf s == baseDir && length (sesIfacesOf s) > 0 then pure (Just (sesIfacesOf s))
+  if sesDirOf s == baseDir && listLength (sesIfacesOf s) > 0 then pure (Just (sesIfacesOf s))
   else do
     ifacesR <- readBaseIfaces baseDir
     case ifacesR of
       Nothing => pure Nothing
-      Just ifaces => if length ifaces == 0 then pure Nothing
+      Just ifaces => if listLength ifaces == 0 then pure Nothing
       else do
         _ <- writeRef ref (Session (sesRootOf s) baseDir ifaces (sesAuxOf s) (sesEvalAuxOf s))
         pure (Just ifaces)
 
--- check：Just (0, "") = 通过；Just (1, 诊断) = 失败；Nothing = 会话不可用（回退 CLI）。
-export sessionCheck : IORef Session -> String -> String -> Eff hostRow (Maybe (Pair Int String))
-sessionCheck ref baseDir source = do
-  disabled <- sessionDisabled
-  if disabled then pure Nothing
+-- check：`Nothing` = 会话不可用（调用方改走全量）。
+export sessionCheckSample : IORef Session -> String -> String -> Eff hostRow (Maybe CheckSample)
+sessionCheckSample ref baseDir source = do
+  ses <- ensureSession ref baseDir
+  case ses of
+    Nothing => pure Nothing
+    Just ifaces => do
+      ctxR <- contextForFile source
+      case ctxR of
+        ErrC e => pure (Just (CheckSample (Just e) []))
+        OkC ctx => do
+          text <- raiseToRow hostRow (@vuna@prim_eff_readFile source)
+          s <- readRef ref
+          result <- dtCheckSourceIncremental ctx source text ifaces [] (sesAuxOf s) False
+          applyCheckResult ref s baseDir ifaces result
+
+applyCheckResult : IORef Session -> Session -> String -> List ModuleIface -> Check (Pair Bool (Pair (List Diagnostic) (Pair (Maybe CheckedPackage) (Maybe AuxCache)))) -> Eff hostRow (Maybe CheckSample)
+applyCheckResult ref s baseDir ifaces result = case result of
+  ErrC e => pure (Just (CheckSample (Just e) []))
+  OkC p => if not (firstOf p) then pure Nothing
   else do
-    ses <- ensureSession ref baseDir
-    case ses of
-      Nothing => pure Nothing
-      Just ifaces => do
-        ctxR <- contextForFile source
-        case ctxR of
-          ErrC _ => pure Nothing
-          OkC ctx => sessionCheckIn ref baseDir ctx ifaces source
+    _ <-
+      writeRef ref
+        (Session (sesRootOf s) baseDir ifaces (secondOf (secondOf (secondOf p))) (sesEvalAuxOf s))
+    pure (Just (CheckSample Nothing (firstOf (secondOf p))))
 
-sessionCheckIn : IORef Session -> String -> PackageContext -> List ModuleIface -> String -> Eff hostRow (Maybe (Pair Int String))
-sessionCheckIn ref baseDir ctx ifaces source = do
-  text <- raiseToRow hostRow (@vuna@prim_eff_readFile source)
-  s <- readRef ref
-  result <- dtCheckSourceIncremental ctx source text ifaces [] (sesAuxOf s) False
-  case result of
-    ErrC e => pure (Just (Pair 1 (diagText e)))
-    OkC (Pair applied (Pair _ (Pair _ aux))) => if not applied then pure Nothing
-    else do
-      _ <- writeRef ref (Session (sesRootOf s) baseDir ifaces aux (sesEvalAuxOf s))
-      pure (Just (Pair 0 ""))
+-- interp：`Nothing` = 会话不可用（调用方改走全量 `dtEvalFile`）。
+export sessionEvalSample : IORef Session -> String -> String -> Eff hostRow (Maybe EvalSample)
+sessionEvalSample ref baseDir source = do
+  ses <- ensureSession ref baseDir
+  case ses of
+    Nothing => pure Nothing
+    Just ifaces => do
+      ctxR <- contextForFile source
+      case ctxR of
+        ErrC e => pure (Just (EvalSample (Just e) ""))
+        OkC ctx => do
+          text <- raiseToRow hostRow (@vuna@prim_eff_readFile source)
+          s <- readRef ref
+          result <- dtEvalSourceIncremental ctx source text ifaces (sesEvalAuxOf s)
+          applyEvalResult ref s baseDir ifaces result
 
--- interp：Just (0, 输出) = 求值成功（与 CLI 打印的 trim 后文本一致）；
--- Just (1, 诊断) = 精化失败；Nothing = 会话不可用（回退 CLI）。
-export sessionInterp : IORef Session -> String -> String -> Eff hostRow (Maybe (Pair Int String))
-sessionInterp ref baseDir source = do
-  disabled <- sessionDisabled
-  if disabled then pure Nothing
+applyEvalResult : IORef Session -> Session -> String -> List ModuleIface -> Check (Pair Bool (Pair String (Maybe AuxCache))) -> Eff hostRow (Maybe EvalSample)
+applyEvalResult ref s baseDir ifaces result = case result of
+  ErrC e => pure (Just (EvalSample (Just e) ""))
+  OkC p => if not (firstOf p) then pure Nothing
   else do
-    ses <- ensureSession ref baseDir
-    case ses of
-      Nothing => pure Nothing
-      Just ifaces => do
-        ctxR <- contextForFile source
-        case ctxR of
-          ErrC _ => pure Nothing
-          OkC ctx => sessionInterpIn ref baseDir ctx ifaces source
+    _ <- writeRef ref (Session (sesRootOf s) baseDir ifaces (sesAuxOf s) (secondOf (secondOf p)))
+    pure (Just (EvalSample Nothing (firstOf (secondOf p))))
 
-sessionInterpIn : IORef Session -> String -> PackageContext -> List ModuleIface -> String -> Eff hostRow (Maybe (Pair Int String))
-sessionInterpIn ref baseDir ctx ifaces source = do
-  text <- raiseToRow hostRow (@vuna@prim_eff_readFile source)
-  s <- readRef ref
-  result <- dtEvalSourceIncremental ctx source text ifaces (sesEvalAuxOf s)
-  case result of
-    ErrC e => pure (Just (Pair 1 (diagText e)))
-    OkC (Pair applied (Pair out aux)) => if not applied then pure Nothing
-    else do
-      _ <- writeRef ref (Session (sesRootOf s) baseDir ifaces (sesAuxOf s) aux)
-      pure (Just (Pair 0 out))
+listLength : List a -> Int
+listLength [] = 0
+listLength (_ :: rest) = 1 + listLength rest
