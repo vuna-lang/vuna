@@ -73,6 +73,8 @@ Vuna.Search.Run  ./lib/Vuna/Search/Run.vuna
 Vuna.Search.Types  ./lib/Vuna/Search/Types.vuna
 Vuna.Search  ./lib/Vuna/Search.vuna
 Vuna.Sig  ./lib/Vuna/Sig.vuna
+Vuna.Test.Expect  ./lib/Vuna/Test/Expect.vuna
+Vuna.Test.InProc  ./lib/Vuna/Test/InProc.vuna
 Vuna.Test.Run  ./lib/Vuna/Test/Run.vuna
 Vuna.Test.Session  ./lib/Vuna/Test/Session.vuna
 Vuna.Test.Suite  ./lib/Vuna/Test/Suite.vuna

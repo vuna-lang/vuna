@@ -194,7 +194,7 @@ lib/Vuna/Json.vuna: Json(..), jsonAsArr, jsonAsBool, jsonAsInt, jsonAsObj, jsonA
 lib/Vuna/Json/Frame.vuna: allDigits, contentLengthOf, digitsToInt, frameChunkSize, maxFrameBytes, readChunk, renderFrame, renderFrameBody, splitHeaderBlock
 lib/Vuna/Json/Rpc.vuna: errInternal, errInvalidParams, errInvalidRequest, errMethodNotFound, errParse, idOf, methodOf, notify, paramsOf, responseErr, responseOk
 lib/Vuna/Json/Server.vuna: ServerExit(..), serveConnection
-lib/Vuna/Lint.vuna: runLint
+lib/Vuna/Lint.vuna: renderFinding, renderFixReport, runLint
 lib/Vuna/Lint/Diagnostics.vuna: LintEntry(..), LintRule(..), lintAll, lintCode, lintDesc, lintEdit, lintFixable, lintMsg, lintRule, lintRuleCode
 lib/Vuna/Lint/Fix.vuna: fixLoop
 lib/Vuna/Lint/Rules.vuna: Edit(..), Finding(..), isNilList, joinLines, lintSourceWith, splitLines
@@ -234,8 +234,10 @@ lib/Vuna/Search/Query.vuna: searchNameDoc, searchType, typeNameMap
 lib/Vuna/Search/Run.vuna: renderHit, runSearch
 lib/Vuna/Search/Types.vuna: SearchHit(..), hitDoc, hitKind, hitLine, hitMatch, hitModule, hitName, hitScore, hitSignature
 lib/Vuna/Sig.vuna: renderType, renderTypeInCtx
+lib/Vuna/Test/Expect.vuna: ExpectDiff, absentText, compareKeys, compareSortedKeys, expandPlaceholders, expectKeys, flattenErr, maxShownDiags, projFile, projectDiag, projectDiags, severityText, sortKeys
+lib/Vuna/Test/InProc.vuna: checkFile, checkFileSessioned, checkPackageAt, compileFile, compilePackageAt, fixFile, interpFile, interpFileSessioned, isPackageDir, lintFile
 lib/Vuna/Test/Run.vuna: runSuite
-lib/Vuna/Test/Session.vuna: Session, sessionCheck, sessionInterp, sessionNew
+lib/Vuna/Test/Session.vuna: CheckSample, EvalSample, Session, sessionCheckSample, sessionEvalSample, sessionNew
 lib/Vuna/Test/Suite.vuna: Case(..), CaseKind(..), Family(..), Suite(..), SuiteOpts(..), discoverCases, parseSuiteFile
 lib/Vuna/TestRunner.vuna: TestOpts(..), runTests
 lib/Vuna/Tool/Session.vuna: ToolSession(..), toolCommitValue, toolHitValue, toolLoadPayload, toolSessionAddrOf, toolSessionNew, toolSessionNewMemory, toolStorePayload

@@ -2,7 +2,6 @@
 # 新增结构化夹具后必须从本文件删除对应行（diag-coverage 会检查 stale 条目）。
 CG_DependencyCycle
 CG_InterpCannotExecuteEffects
-CG_ListBridgeRequired
 CG_MainNotValue
 CG_RecursiveValueDefinition
 CG_TypeLevelBindingRuntime
@@ -50,7 +49,6 @@ TC_UnknownName
 TC_UnknownRecord
 TC_UnsolvedMetavar
 TC_UnsolvedMetavarInfer
-TC_CannotRedefineBuiltin
 PS_ExpectedExportItem
 RN_AmbiguousConstructorExport
 RN_CannotExportUnknownName

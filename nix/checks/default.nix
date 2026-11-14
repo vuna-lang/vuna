@@ -448,4 +448,22 @@ in
     ];
     script = ./ir-boundary.sh;
   };
+  # 测试的进程绑定岛门禁（`docs/reference/testing.md`）：fixture 用例已全部进程内执行，
+  # steps 里剩下的 spawn 必须逐个登记原因（PTY / stdio 帧 / 产物执行 / 多进程 store /
+  # CLI 渲染文本），登记数量按 ratchet 只降不增。静态扫描，不需要 vuna 二进制。
+  steps-inproc = mkCheck {
+    name = "vuna-steps-inproc";
+    srcs = [
+      ../../test/suite/steps
+      ../../test/suite/process-bound.txt
+      ../../nix/checks/steps-inproc.sh
+      ../../nix/steps-inproc.max
+    ];
+    nativeBuildInputs = [
+      pkgs.bash
+      pkgs.coreutils
+      pkgs.gnugrep
+    ];
+    script = ./steps-inproc.sh;
+  };
 }
