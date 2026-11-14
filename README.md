@@ -107,7 +107,9 @@ manifest，不向上找。命令语义与包格式
 ├── app/       # 产品 CLI 入口 main : Eff [] Int
 ├── seed/      # compiler 闭包的多文件自举信任锚点（生成物，禁止手改）
 ├── test/      # suite.toml + suite/（原生 runner）+ corpus/ 夹具
+├── bench/     # 生成程序与编译器基准（nix run .#vuna-bench / .#vuna-perf）
 ├── examples/  # 多包示例
+├── .agents/   # AI 规则（rules/）与场景技能（skills/）
 ├── vscode/    # VSCode 扩展（语法高亮 + LSP 客户端 + lint/fmt/check/build；提交 dist/）
 ├── nix/       # 构建图（packages/checks）+ rotate/metrics/bench
 ├── docs/      # 分层文档（见 AGENTS.md 导航）
@@ -140,7 +142,8 @@ manifest，不向上找。命令语义与包格式
 
 | 文档 | 内容 |
 | --- | --- |
-| [AGENTS.md](AGENTS.md) | AI agent 唯一固定入口：阅读顺序、不变量、纪律、命令速查 |
+| [AGENTS.md](AGENTS.md) | AI agent 唯一固定入口：阅读顺序、不变量、纪律红线、命令速查 |
+| [.agents/README.md](.agents/README.md) | AI 规则与场景技能索引（worktree、提交、探索、性能调试） |
 | [docs/architecture.md](docs/architecture.md) | 子系统地图：五条链路、入口符号、连带改动、测试标签 |
 | [docs/architecture-target.md](docs/architecture-target.md) | 终态架构：大方向、不变量、已决决策与非目标 |
 | [docs/reference/language.md](docs/reference/language.md) | core-v0 语法、模块系统、import 与导出规则 |
