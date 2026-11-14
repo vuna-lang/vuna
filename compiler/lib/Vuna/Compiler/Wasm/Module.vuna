@@ -2,11 +2,13 @@ module Vuna.Compiler.Wasm.Module where
 
 -- Vuna.Compiler.Wasm.Module：IrProgram -> WasmModule（WAT 文本之前的结构）。
 --
--- M2 切片：从 `main` 沿 `irDefDeps` 求可达闭包，只生成可达定义；支持 Int / Nat /
+-- M2 + M3a：从 `main` 沿 `irDefDeps` 求可达闭包，只生成可达定义；支持 Int / Nat /
 -- String / Bool 纯值、`let` / `if`、顶层饱和调用、立即 lambda 应用、Nat 结构递归
--- （`IrNatCase`）、`IrConcatMany`、内建饱和应用与入口打印。
+-- （`IrNatCase`）、`IrConcatMany`、内建饱和应用、入口打印，以及 M3a 的
+-- `IrCtor` / `IrRecord` / `IrProj` / `IrRecUpd` / `IrCase`。
 -- 表示：统一 anyref；Int/Nat 装箱 i64；Bool i31；String `(array (mut i8))`；
--- 闭包 `{code,env}` 与数组/结构类型仍留在类型表里供后续阶段使用。
+-- 变体 `(struct (field i32 tag) (field anyref...))`；record 纯字段 struct；
+-- 闭包 `{code,env}` 与数组类型仍留在类型表里供后续阶段使用。
 import Base.Bool
 import Base.Int
 import Base.List
@@ -213,12 +215,12 @@ else case ir of
   IrApp _ _ => genApp (fuel - 1) st ir
   IrNatCase scrut _fresh zero succ catch => genNatCase (fuel - 1) st scrut zero succ catch
   IrConcatMany parts => genConcatMany (fuel - 1) st parts
+  IrCtor family ctor args => genCtor (fuel - 1) st family ctor args
+  IrRecord family fields => genRecord (fuel - 1) st family fields
+  IrProj base family field => genProj (fuel - 1) st base family field
+  IrRecUpd base family fields => genRecUpd (fuel - 1) st base family fields
+  IrCase scrut alts => genCase (fuel - 1) st scrut alts
   IrLam _ _ => Err "wasm target: lambda values are not supported yet"
-  IrCase _ _ => Err "wasm target: case is not supported yet"
-  IrCtor _ _ _ => Err "wasm target: data constructors are not supported yet"
-  IrRecord _ _ => Err "wasm target: records are not supported yet"
-  IrProj _ _ _ => Err "wasm target: record projection is not supported yet"
-  IrRecUpd _ _ _ => Err "wasm target: record update is not supported yet"
   IrEffThunk _ _ _ _ _ => Err "wasm target: effect thunks are not supported yet"
   IrEffBind _ _ _ => Err "wasm target: effect bindings are not supported yet"
   IrFloatLit _ => Err "wasm target: float literals are not supported yet"
@@ -439,8 +441,210 @@ else case genExpr (fuel - 1) st b of
     Ok q => Ok (Pair (append (firstOf p) (append [ICall "$rt_strConcat"] (firstOf q))) (secondOf q))
 
 -- ---------------------------------------------------------------
--- 顶层函数
+-- data / record（M3a）
 -- ---------------------------------------------------------------
+famOrFail : GenState -> String -> Result WasmFam
+famOrFail st family = case wasmFamLookup st.gsFams family of
+  Just f => Ok f
+  Nothing => Err "unknown data family in wasm codegen: `${family}`"
+
+refNullN : Int -> List Instr
+refNullN n = if n <= 0 then [] else IRefNull :: refNullN (n - 1)
+
+genExprs : Int -> GenState -> List Ir -> Result (Pair (List Instr) GenState)
+genExprs _ st [] = Ok (Pair [] st)
+genExprs fuel st (a :: rest) = if fuel <= 0 then Err "wasm codegen fuel exhausted"
+else case genExpr (fuel - 1) st a of
+  Err e => Err e
+  Ok p => case genExprs (fuel - 1) (secondOf p) rest of
+    Err e => Err e
+    Ok q => Ok (Pair (append (firstOf p) (firstOf q)) (secondOf q))
+
+-- | 构造子：`(struct.new $t_<family> (i32.const tag) (args...) (ref.null any * pad))`。
+--   变体族的字段并集按最大 arity 补齐（`Wasm.Types` 定); 短构造子的尾部补 null。
+genCtor : Int -> GenState -> String -> String -> List Ir -> Result (Pair (List Instr) GenState)
+genCtor fuel st family ctor args = if fuel <= 0 then Err "wasm codegen fuel exhausted"
+else case famOrFail st family of
+  Err e => Err e
+  Ok fam => case wasmCtorTagOf fam ctor of
+    Nothing => Err "unknown constructor in wasm codegen: `${ctor}`"
+    Just tag => case wasmCtorFieldCountOf fam ctor of
+      Nothing => Err "unknown constructor in wasm codegen: `${ctor}`"
+      Just n => if listLengthB args /= n then Err "constructor `${ctor}` applied to the wrong number of arguments"
+      else case genExprs (fuel - 1) st args of
+        Err e => Err e
+        Ok p =>
+          let
+            instrs =
+              append (IConstI32 tag :: firstOf p)
+                (append (refNullN (fam.wasmFamMaxFields - n)) [IStructNew (watFamName family)])
+          in Ok (Pair instrs (secondOf p))
+
+-- | record 构造：字段按运行时字段表顺序求值后 `struct.new`。
+genRecord : Int -> GenState -> String -> List (Pair String Ir) -> Result (Pair (List Instr) GenState)
+genRecord fuel st family fields = if fuel <= 0 then Err "wasm codegen fuel exhausted"
+else case famOrFail st family of
+  Err e => Err e
+  Ok fam => if listLengthB fields /= listLengthB fam.wasmFamRecordFields then Err "record `${family}` constructed with the wrong number of fields"
+  else case genExprs (fuel - 1) st (map (\p => secondOf p) fields) of
+    Err e => Err e
+    Ok p => Ok (Pair (append (firstOf p) [IStructNew (watFamName family)]) (secondOf p))
+
+genProj : Int -> GenState -> Ir -> String -> String -> Result (Pair (List Instr) GenState)
+genProj fuel st base family field = if fuel <= 0 then Err "wasm codegen fuel exhausted"
+else case famOrFail st family of
+  Err e => Err e
+  Ok fam => case wasmRecordFieldIndex fam field of
+    Nothing => Err "unknown record field in wasm codegen: `${family}.${field}`"
+    Just idx => case genExpr (fuel - 1) st base of
+      Err e => Err e
+      Ok p =>
+        Ok
+          (Pair (append (firstOf p) [IRefCast (watFamName family), IStructGet (watFamName family) idx]) (secondOf p))
+
+-- | 更新：按字段表顺序重建一个 struct；被改字段用新值，其余从旧对象 `struct.get`。
+genRecUpd : Int -> GenState -> Ir -> String -> List (Pair String Ir) -> Result (Pair (List Instr) GenState)
+genRecUpd fuel st base family fields = if fuel <= 0 then Err "wasm codegen fuel exhausted"
+else case famOrFail st family of
+  Err e => Err e
+  Ok fam => case genExpr (fuel - 1) st base of
+    Err e => Err e
+    Ok p => case freshLocal (secondOf p) WvAnyRef of
+      Pair bLocal st1 => case genUpdFields (fuel - 1) st1 bLocal (watFamName family) fam.wasmFamRecordFields fields of
+        Err e => Err e
+        Ok q =>
+          Ok
+            (Pair (append (firstOf p) (append [ILocalSet bLocal] (append (firstOf q) [IStructNew (watFamName family)]))) (secondOf q))
+
+genUpdFields : Int -> GenState -> String -> String -> List (Pair Int String) -> List (Pair String Ir) -> Result (Pair (List Instr) GenState)
+genUpdFields _ st _ _ [] _ = Ok (Pair [] st)
+genUpdFields fuel st bLocal ty ((Pair idx name) :: rest) fields = if fuel <= 0 then Err "wasm codegen fuel exhausted"
+else case lookupFieldIr name fields of
+  Just ir => case genExpr (fuel - 1) st ir of
+    Err e => Err e
+    Ok p => case genUpdFields (fuel - 1) (secondOf p) bLocal ty rest fields of
+      Err e => Err e
+      Ok q => Ok (Pair (append (firstOf p) (firstOf q)) (secondOf q))
+  Nothing => case genUpdFields (fuel - 1) st bLocal ty rest fields of
+    Err e => Err e
+    Ok q =>
+      Ok (Pair (append [ILocalGet bLocal, IRefCast ty, IStructGet ty idx] (firstOf q)) (secondOf q))
+
+lookupFieldIr : String -> List (Pair String Ir) -> Maybe Ir
+lookupFieldIr _ [] = Nothing
+lookupFieldIr name (p :: rest) =
+  if firstOf p == name then Just (secondOf p) else lookupFieldIr name rest
+
+-- | 通用 case：变体族按 tag 分派；record 族没有 tag，直接绑字段。
+--   先把 scrutinee 求值到 `scLocal`，再拼上分支体（分支生成器只负责 tag/字段读取）。
+genCase : Int -> GenState -> Ir -> List IrAlt -> Result (Pair (List Instr) GenState)
+genCase fuel st scrut alts = if fuel <= 0 then Err "wasm codegen fuel exhausted"
+else case genExpr (fuel - 1) st scrut of
+  Err e => Err e
+  Ok p =>
+    let
+      st1 = ensureLocal scrutSlot WvAnyRef (secondOf p)
+    in case caseFamilyOf alts of
+      Nothing => prepend (scrutInstrs p) (genCatchAllOnly (fuel - 1) st1 scrutSlot alts)
+      Just family => case famOrFail st1 family of
+        Err e => Err e
+        Ok fam => case fam.wasmFamKind of
+          FamRecord =>
+            prepend (scrutInstrs p) (genRecordCase (fuel - 1) st1 scrutSlot family fam alts)
+          _ => prepend (scrutInstrs p) (genVariantCase (fuel - 1) st1 scrutSlot family fam alts)
+
+-- | case 的固定前导槽：scrutinee 求值后 `local.set` 到这里；同名槽在函数内只声明一次。
+scrutSlot : String
+scrutSlot = "$sc0"
+
+scrutInstrs : Pair (List Instr) GenState -> List Instr
+scrutInstrs p = append (firstOf p) [ILocalSet scrutSlot]
+
+ensureLocal : String -> WatValTy -> GenState -> GenState
+ensureLocal name ty st =
+  if memStr name (map (\q => firstOf q) st.gsLocals) then st
+  else { st | gsLocals = append st.gsLocals [Pair name ty] }
+
+prepend : List Instr -> Result (Pair (List Instr) GenState) -> Result (Pair (List Instr) GenState)
+prepend ins r = case r of
+  Err e => Err e
+  Ok q => Ok (Pair (append ins (firstOf q)) (secondOf q))
+
+caseFamilyOf : List IrAlt -> Maybe String
+caseFamilyOf [] = Nothing
+caseFamilyOf (alt :: rest) = case irAltCtorOf alt of
+  Nothing => caseFamilyOf rest
+  Just p => Just (firstOf p)
+
+-- 全是 catch-all：只绑 scrutinee 本身，求值第一臂。
+genCatchAllOnly : Int -> GenState -> String -> List IrAlt -> Result (Pair (List Instr) GenState)
+genCatchAllOnly fuel st scLocal alts = if fuel <= 0 then Err "wasm codegen fuel exhausted"
+else case alts of
+  [] => Ok (Pair [IUnreachable] st)
+  alt :: _ => case bindScrutBinder (irAltBindersOf alt) scLocal st of
+    Err e => Err e
+    Ok p => case genExpr (fuel - 1) (secondOf p) (irAltBodyOf alt) of
+      Err e => Err e
+      Ok q => Ok (Pair (append (firstOf p) (firstOf q)) (secondOf q))
+
+bindScrutBinder : List IrBinder -> String -> GenState -> Result (Pair (List Instr) GenState)
+bindScrutBinder bs scLocal st = case runtimeBinders bs of
+  [] => Ok (Pair [] st)
+  [b] => case freshLocal st WvAnyRef of
+    Pair local st1 => Ok (Pair [ILocalGet scLocal, ILocalSet local] (pushBinder b local st1))
+  _ => Err "case arm has more than one runtime binder"
+
+genVariantCase : Int -> GenState -> String -> String -> WasmFam -> List IrAlt -> Result (Pair (List Instr) GenState)
+genVariantCase fuel st scLocal family fam alts = if fuel <= 0 then Err "wasm codegen fuel exhausted"
+else case alts of
+  [] => Ok (Pair [IUnreachable] st)
+  alt :: rest => case irAltCtorOf alt of
+    Nothing => case genAltBody (fuel - 1) st scLocal family fam alt of
+      Err e => Err e
+      Ok p => Ok (Pair (firstOf p) (secondOf p))
+    Just (Pair _ ctor) => case wasmCtorTagOf fam ctor of
+      Nothing => Err "unknown constructor in wasm codegen: `${ctor}`"
+      Just tag => case genAltBody (fuel - 1) st scLocal family fam alt of
+        Err e => Err e
+        Ok armP => case genVariantCase (fuel - 1) (secondOf armP) scLocal family fam rest of
+          Err e => Err e
+          Ok restP =>
+            Ok
+              (Pair (append [ILocalGet scLocal, IRefCast (watFamName family), IStructGet (watFamName family) 0, IConstI32 tag, IBinop "i32.eq"] [IIf "anyref" (firstOf armP) (firstOf restP)]) (secondOf restP))
+
+-- 变体分支：catch-all 绑 scrutinee；构造子分支按 keep 形状绑字段（tag 占 index 0）。
+genAltBody : Int -> GenState -> String -> String -> WasmFam -> IrAlt -> Result (Pair (List Instr) GenState)
+genAltBody fuel st scLocal family fam alt = if fuel <= 0 then Err "wasm codegen fuel exhausted"
+else case irAltCtorOf alt of
+  Nothing => genCatchAllOnly (fuel - 1) st scLocal [alt]
+  Just _ => case bindFields (fuel - 1) st scLocal (watFamName family) (runtimeBinders (irAltBindersOf alt)) 1 of
+    Err e => Err e
+    Ok bp => case genExpr (fuel - 1) (secondOf bp) (irAltBodyOf alt) of
+      Err e => Err e
+      Ok q => Ok (Pair (append (firstOf bp) (firstOf q)) (secondOf q))
+
+bindFields : Int -> GenState -> String -> String -> List IrBinder -> Int -> Result (Pair (List Instr) GenState)
+bindFields _ st _ _ [] _ = Ok (Pair [] st)
+bindFields fuel st scLocal ty (b :: rest) idx = if fuel <= 0 then Err "wasm codegen fuel exhausted"
+else case freshLocal st WvAnyRef of
+  Pair local st1 => case bindFields (fuel - 1) (pushBinder b local st1) scLocal ty rest (idx + 1) of
+    Err e => Err e
+    Ok q =>
+      Ok
+        (Pair (append [ILocalGet scLocal, IRefCast ty, IStructGet ty idx, ILocalSet local] (firstOf q)) (secondOf q))
+
+genRecordCase : Int -> GenState -> String -> String -> WasmFam -> List IrAlt -> Result (Pair (List Instr) GenState)
+genRecordCase fuel st scLocal family fam alts = if fuel <= 0 then Err "wasm codegen fuel exhausted"
+else case alts of
+  [] => Ok (Pair [IUnreachable] st)
+  alt :: rest => case irAltCtorOf alt of
+    Nothing => genCatchAllOnly (fuel - 1) st scLocal (alt :: rest)
+    Just _ => case bindFields (fuel - 1) st scLocal (watFamName family) (runtimeBinders (irAltBindersOf alt)) 0 of
+      Err e => Err e
+      Ok bp => case genExpr (fuel - 1) (secondOf bp) (irAltBodyOf alt) of
+        Err e => Err e
+        Ok q => Ok (Pair (append (firstOf bp) (firstOf q)) (secondOf q))
+
 genDefFunc : Int -> GenState -> IrDef -> Result (Pair (List WatFunc) GenState)
 genDefFunc fuel st d = case d of
   IrExternDef name _ _ _ => Err "wasm target: extern definition `${name}` is not supported yet"

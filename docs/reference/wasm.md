@@ -1,10 +1,10 @@
-# wasm 后端（M2）
+# wasm 后端（M2 + M3a）
 
-> 状态：**M2 切片已端到端工作**（`main` 为 Int / Nat / String / Bool；支持 `let` / `if` /
+> 状态：**M2 + M3a 切片已端到端工作**（`main` 为 Int / Nat / String / Bool；支持 `let` / `if` /
 > 顶层饱和调用 / 立即 lambda 应用 / Nat 结构递归 / `++` 链 / 内建饱和应用 / 入口打印 /
-> 六种位运算 / `assert` / `todo` / `prim_fail` / `dbg!` 原语（与 native parity））。
-> 用户 `data` / record / 通用 `case` / 闭包值 / `Float` / Effect / FFI 仍被明确拒绝
-> （`WasmUnsupported`）。实现入口：
+> 六种位运算 / `assert` / `todo` / `prim_fail` / `dbg!` 原语（与 native parity）；
+> **M3a** 加入用户 `data`（变体 tag 分派）、record 构造/投影/更新与通用 `case`）。
+> 闭包值 / `Float` / Effect / FFI 仍被明确拒绝（`WasmUnsupported`）。实现入口：
 > `Vuna.Compiler.Wasm.{Model,Instr,Types,Runtime,Module,Render}`，
 > 驱动 `Vuna.Compiler.Driver.Wasm`。
 
@@ -67,7 +67,8 @@
 | `IrRtApp` | 支持白名单 | 参数左→右；`&&`/`||` 短路在 Lowering 已降成 `IrIf` |
 | `IrConcatMany` | 支持 | 左折叠到 `$rt_strConcat` |
 | `IrRt` | 仅 `@ir@natSucc`（调用 head）与入口 show | 其它 → 拒绝（函数值） |
-| 用户 `data` / record / 通用 `case` / `IrCtor` / `IrProj` / `IrRecUpd` / Float / Effect / extern | 拒绝 | `wasm target: ... not supported yet` |
+| `IrCtor` / `IrRecord` / `IrProj` / `IrRecUpd` / `IrCase` | 支持（M3a） | WasmGC struct：变体 `(field i32 tag) (field anyref...)`；record 纯字段 |
+| Float / Effect / extern | 拒绝 | `wasm target: ... not supported yet` |
 
 - 入口：`main` 必须是零参值；`main : Eff` 拒绝。入口 show 只接受
   `@ir@showInt` / `@ir@showNat` / `@ir@showBool` / `@ir@showStr`；
@@ -130,19 +131,19 @@
 - 每个正例都做**差分**：`wasmtime run` 的输出与 `vuna run`（OCaml 后端）逐字比较，
   OCaml 始终是语义 oracle。
 
-## 8. 已知边界（M2 明确不做）
+## 8. 已知边界（M2/M3a 明确不做）
 
 - 闭包值 / 高阶函数 / 部分应用（闭包表示要 `(elem declare func ...)`，已验证无 element
   段时 wasmtime 报 `undeclared function reference`）。
-- 用户 `data` / record / 通用 `case` / 构造子 / 投影 / 更新、`Array` 运行时。
+- `Array` 运行时；变体分支只按 tag 一次线性分派（不做多模式矩阵）。
 - Float、Effect / 一次性续延、FFI / extern、宿主 syscalls 的通用面（只有 write/exit）。
 - 多单元链接、WAT 缓存、`vuna run --target`、wasm seed（D7）、
   Component Model / WASI 0.2/0.3（D16 的终端未决部分）。
 
 ## 9. 后续路线（只写方向，不写排期）
 
-- **M3a**：用户 `data` / record / 通用 `case`（变体 tag 分派 + 字段 struct）、
-  `Array` 运行时。
+- **M3a**（已完成）：用户 `data` / record / 通用 `case`（变体 tag 分派 + 字段 struct）。
+  `Array` 运行时仍是下一步。
 - **M3b**：canonical `List` 族接进 M3a 的 struct 表示，然后实现 List 桥接
   （`dtp_unpack` / `dtp_pack` / `dtp_concatMany` / `dtp_substTemplate`）；与 native 侧
   同一顺序（见 [native.md](native.md) §9.1：桥接是对象表示的验收目标，不是独立切片）。
