@@ -27,9 +27,12 @@ import Base.Eff
 export obsCheck : String -> (Int -> Check a) -> Check a
 obsCheck name f = @vuna@obs@span name "vuna.phase" (\u => f u)
 
--- | 逐定义 span（`args` 里只有名字，位置由产物侧 `#line` 承担）：`vuna.def.elab` 等。
+-- | 逐定义 span（规范 §2：**只有 level >= 2** 才有逐定义 span），`args.def` 携带定义名
+-- （位置由产物侧 `#line` 承担）：`vuna.def.elab` 等。关闭 / level 1 时直接 `f 0`
+-- （一次 `Lazy.force` + 分支，零额外分配）。
 export obsDefCheck : String -> String -> (Int -> Check a) -> Check a
-obsDefCheck name def f = @vuna@obs@span name "vuna.def" (\u => f u)
+obsDefCheck name def f =
+  if obsLevel 0 > 1 then @vuna@obs@spanLab name "vuna.def" def (\u => f u) else f 0
 
 -- | 带分类的 Effect 阶段标记（`Eff hostRow` 边界用；零宽度 instant）。
 export obsMarkEff : String -> Eff hostRow Int

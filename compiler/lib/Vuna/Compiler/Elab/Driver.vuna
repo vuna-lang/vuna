@@ -22,6 +22,7 @@ import Vuna.Compiler.Elab.Usage
 import Vuna.Compiler.Elab.Types
 import Vuna.Compiler.Elab.MetaSpans
 import Vuna.Compiler.Intrinsics
+import Vuna.Compiler.Obs
 import Vuna.Compiler.Frontend.Ast
 
 export unsolvedMeta : Ec -> Maybe Int
@@ -301,7 +302,7 @@ elabBodies (d :: rest) globals doneDefs acc ec = case d of
     else
       let
         _ = dbg! "DEF ${name}"
-      in Vuna.Compiler.Common.bind (elabFunDef globals ec (clausesOfTbl ec (d :: rest) name) (eval [] tyTerm) sp) (\p => let
+      in Vuna.Compiler.Common.bind (obsDefCheck "vuna.def.elab" name (\_ => elabFunDef globals ec (clausesOfTbl ec (d :: rest) name) (eval [] tyTerm) sp)) (\p => let
         _ = dbg! "FUN ${name}"
       in case p of
         Pair bodyTerm ec1 =>
