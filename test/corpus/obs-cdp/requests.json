@@ -1,0 +1,8 @@
+[
+  { "method": "Runtime.getIsolateId", "params": {} },
+  { "method": "Profiler.enable", "params": {} },
+  { "method": "Profiler.setSamplingInterval", "params": { "interval": 1000 } },
+  { "method": "Profiler.start", "params": {} },
+  { "method": "Profiler.stop", "params": {} },
+  { "method": "Bogus.method", "params": {} }
+]

@@ -1,0 +1,11 @@
+# 108) 可观测性：`vuna obs serve --cdp`（CDP Profiler 子集）+ Node WebSocket 桥。
+#     离线语义：数据源是已有 trace，`Profiler.stop` 把 cpu 采样换算成 profile。
+#     覆盖就绪行 / 六条 CDP 请求 / getIsolateId=pid / profile samples==cpu 采样数 /
+#     未知方法 -32601 / 跨进程确定性 / 与 `convert --to cpuprofile` 逐字节等价 /
+#     错误分层（-32000 + 退出码 1、参数 2）/ Unix socket 清理 /
+#     桥的 WS 握手 + Profiler.* + ping/pong（无 Node 时该段打印 SKIP）。
+#
+# suite 的 e2e tier 跑它（Node 与端口在 e2e 环境里可用；不进 nix flake check）。
+run: sh corpus/obs-cdp/smoke.sh "$VUNA"
+exit: 0
+out-contains: passed, 0 failed
