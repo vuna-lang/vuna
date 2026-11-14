@@ -21,7 +21,7 @@ run: sh -c 'd="$TMPDIR/mac"; mkdir -p "$d/app"; printf "[package]\nname = \"mac\
 exit: 0
 
 # let 组夹具（`#line` 在 `let rec` / `and` 上也要写）。
-run: sh -c 'd="$TMPDIR/grp"; mkdir -p "$d/app"; printf "[package]\nname = \"grp\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "even : Int -> Bool\neven n = if n == 0 then True else odd (n - 1)\n\nodd : Int -> Bool\nodd n = if n == 0 then False else even (n - 1)\n\nmain : Int\nmain = if even 4 then 1 else 0\n" > "$d/app/Main.vuna"; "$VUNA" compile "$d" "$TMPDIR/grp-split"'
+run: sh -c 'd="$TMPDIR/grp"; mkdir -p "$d/app"; printf "[package]\nname = \"grp\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Nat\n\neven : Nat -> Bool\neven n = case n of\n  Zero => True\n  Succ k => odd k\n\nodd : Nat -> Bool\nodd n = case n of\n  Zero => False\n  Succ k => even k\n\nmain : Int\nmain = if even (Succ (Succ (Succ (Succ Zero)))) then 1 else 0\n" > "$d/app/Main.vuna"; "$VUNA" compile "$d" "$TMPDIR/grp-split"'
 exit: 0
 
 # ---------------------------------------------------------------- 1) 关闭口径
@@ -96,16 +96,14 @@ run: sh -c 'readelf --debug-dump=decodedline "$TMPDIR/grp-split/prog" 2>/dev/nul
 exit: 0
 out-contains: Main.vuna
 
-# ---------------------------------------------------------------- 6) 回栈落到 .vuna
-run: sh -c 'd="$TMPDIR/boom"; mkdir -p "$d/app"; printf "[package]\nname = \"boom\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "boom : Int -> Int\nboom n = if n == 0 then 1 / 0 else boom (n - 1)\n\nmain : Int\nmain = boom 3\n" > "$d/app/Main.vuna"; "$VUNA" build --out "$TMPDIR/boom-out" "$d"'
+run: sh -c 'd="$TMPDIR/boom"; mkdir -p "$d/app"; printf "[package]\nname = \"boom\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "boom : List Int -> Int\nboom Nil = 1 / 0\nboom (Cons x xs) = x + boom xs\n\nmain : Int\nmain = boom [1, 2, 3]\n" > "$d/app/Main.vuna"; "$VUNA" build --out "$TMPDIR/boom-out" "$d"'
 exit: 0
 run: sh -c '"$TMPDIR/boom-out/bin/boom" 2>&1 >/dev/null'
 exit: nonzero
 out-contains: vuna: runtime error
 out-contains: app/Main.vuna
 
-# ---------------------------------------------------------------- 7) 采样
-run: sh -c 'd="$TMPDIR/sam"; mkdir -p "$d/app"; printf "[package]\nname = \"sam\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Obs.Span\n\nstep : Int -> Int -> Int\nstep i acc = acc + i * 3\n\nwalk : Int -> Int -> Int -> Int -> Int\nwalk fuel n i acc =\n  if fuel <= 0 then acc\n  else if i >= n then acc\n  else walk (fuel - 1) n (i + 1) (step i acc)\n\nmain : Int\nmain = obsSample \"both\" 1000 (\\_ => walk 3000000 3000000 0 0)\n" > "$d/app/Main.vuna"; "$VUNA" build --out "$TMPDIR/sam-out" "$d"'
+run: sh -c 'd="$TMPDIR/sam"; mkdir -p "$d/app"; printf "[package]\nname = \"sam\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.List\nimport Base.Obs.Span\n\nwork : List Int -> Int\nwork Nil = 0\nwork (Cons x xs) = x * 3 + work xs\n\nmain : Int\nmain = obsSample \"both\" 1000 (\\_ => work (range 0 400000))\n" > "$d/app/Main.vuna"; "$VUNA" build --out "$TMPDIR/sam-out" "$d"'
 exit: 0
 run: sh -c 'VUNA_OBS=3 VUNA_OBS_DIR="$TMPDIR/sam-trace" "$TMPDIR/sam-out/bin/sam" >/dev/null'
 exit: 0
