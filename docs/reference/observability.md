@@ -195,7 +195,7 @@ vuna obs render --out FILE TRACE
 vuna obs merge [--out FILE] TRACE...
 vuna obs validate TRACE
 vuna obs symbols [--out FILE] [OUTDIR]
-vuna obs serve --cdp ADDR [--allow-slow]
+vuna obs serve --cdp ADDR [--allow-slow] [TRACE...]
 ```
 
 - `run`：经 `@vuna@prim_eff_runIn` 跑子命令，退出码原样返回；结束后打印 trace 路径。
@@ -285,16 +285,73 @@ vuna obs serve --cdp ADDR [--allow-slow]
     绑定名（正是 `perf`/`gdb` 看到的名字），`file`/`line` 直接来自指令（包相对路径 + 1-based）；
   - 输出 `{"schema":"vuna-symbols 1","defs":[...]}`，按 `ocaml` 升序（同名再按
     `unit`/`file`/`line`）⇒ 两次运行逐字节一致；`--out` 省略 → stdout。
-- `serve --cdp`：`Profiler.enable/start/stop/getProfile` + `Runtime.getIsolateId` 子集，传输
-  `Content-Length` JSON-RPC（同 `Vuna.Json.Server`）。Chrome DevTools 需要 WebSocket：
-  `nix/obs-cdp-bridge.mjs`（Node，工具侧资产）做握手桥；**vuna 侧不实现 WS**（O11）。
-  **状态**：本批未实现（`not implemented yet` + 退出码 2）。
+- `serve --cdp`：**CDP Profiler 子集的离线 server**。实现：`Vuna.Obs.Serve`。
+  - **传输**是 `Content-Length` JSON-RPC over socket（复用 `Vuna.Json.Server.serveConnection`，
+    与 REPL server / LSP 同一套帧层）。`ADDR` 只接受 `tcp:127.0.0.1:PORT`（loopback，`PORT=0`
+    用临时端口 + 就绪行回填实际端口）或 `unix:PATH`（退出时删 socket 文件）；规则与
+    `vuna repl --listen` 同一套（能连上端点 = 能驱动这个进程）。
+    **vuna 侧不实现 WebSocket**：CDP 客户端要的握手由 `nix/obs-cdp-bridge.mjs`（Node，
+    工具侧资产）做（O11 / debt D83）。
+  - **离线性（必须诚实）**：数据源是命令行给的 `TRACE...`（`vuna-obs 1` JSONL，启动时一次
+    读入），**不是**附加到运行中的进程做 live sampling（那需要 ptrace / 共享内存，本仓库没有）。
+    `Profiler.start` 只记一个 `startTimestamp`（进程内记账，不进响应体）；`Profiler.stop`
+    把整份 trace 的 `vuna.sample.cpu` 换算成 CDP Profile 回给客户端——与
+    `vuna obs convert --to cpuprofile` 是**同一个构造点**（`Vuna.Obs.Convert.cpuProfileOf`），
+    因此两者产物逐字节等价（确定性见下）。多份 trace 的采样按命令行顺序拼接；跨机器的
+    `ts` 基准不可比（先 `merge` 再 serve，或分别起 serve）。
+  - **方法表**（其余一律 JSON-RPC `-32601`；`Runtime.evaluate` / `Debugger` 等不在本期范围）：
+
+    | 方法 | 响应 |
+    | --- | --- |
+    | `Profiler.enable` / `Profiler.disable` | `{}`（无状态；`disable` 顺带清 start 标记） |
+    | `Profiler.start` | `{}`（记 `startTimestamp`；只记账） |
+    | `Profiler.stop` | `{"profile": <cpuprofile 对象>}`（`nodes` / `startTime` / `endTime` / `samples` / `timeDeltas`，schema 同 §7 `convert`） |
+    | `Profiler.setSamplingInterval` | `{}`（接受 `params.interval` 并**忽略**：离线换算用 trace 里已有的采样间隔，服务端不重采样） |
+    | `Runtime.getIsolateId` | `{"id":"vuna-<pid>"}`，`<pid>` = trace 元数据的 `pid`（被剖析的进程；无 trace = 0） |
+
+  - **错误分层**：未知方法 = `-32601`；坏帧 = `-32700`（stderr 一行诊断，客户端不会空等）；
+    内容性失败（没 start 就 stop、trace 里没有 CPU 采样）= **`-32000`**（JSON-RPC 保留的
+    server-error 区间）+ stderr 诊断。
+  - **单连接、串行**（同 REPL server）：listen → stdout 一行 `listening <ADDR>` → accept **一个**
+    连接 → 逐帧分发到客户端断开 / 传输层致命错误 → 关连接、关监听、清 unix socket → 退出。
+    **不做并发连接**（要并发就起多个进程；桥按「每个 WS 连接一个 serve」组织）。
+  - **退出码规则**（与 §7 其它子命令同一套分层，`serve` 的具体化）：
+
+    | 退出码 | 含义 | 例子 |
+    | --- | --- | --- |
+    | 0 | 正常结束 | 客户端断开，且会话内没有内容性失败 |
+    | 1 | **内容性失败**（与 `convert` 的「无 cpu 采样 = 1」同一口径） | 会话里 `Profiler.stop` 回过 `-32000`（trace 没有 CPU 采样 / 没 start 就 stop） |
+    | 2 | 用法、参数、输入前提 | 未知/重复/缺值 flag；`--cdp` 缺失或 ADDR 格式错；TRACE 不存在 / 是目录 / 读不了 / 结构坏 / 空 trace；传输层致命错误（超大帧、fuel 耗尽） |
+
+  - `--allow-slow` **接受但无效果**（当前没有墙钟阈值；离线换算一份 trace 的耗时由输入大小
+    决定）。保留它只为固定命令行形状，文档明说它目前什么都不做。
+  - **确定性**：同一 trace 两次 `Profiler.stop` 的 `profile` JSON **逐字节一致**（与
+    `convert --to cpuprofile` 同一构造点；`startTime`/`endTime` 来自 trace 采样，不含墙钟）。
+    与 `--out` 无关（serve 不写文件，profile 只出现在 JSON-RPC 响应里）。
+  - **怎么从 Chrome 用**（可复现步骤，需要 Node；`nix shell nixpkgs#nodejs`）：
+
+    ```sh
+    # 1) 先产一份带 CPU 采样的 trace（level 3 + cpu 采样）；`obs run` 会打印 trace 路径
+    ./result/bin/vuna obs run --level 3 --sample cpu -- out/bin/myprog
+    #    （或者自己跑程序：VUNA_OBS=3 VUNA_OBS_DIR=/tmp/vt out/bin/myprog → /tmp/vt/vuna-<pid>.jsonl）
+    # 2) 起 WS 桥（默认 127.0.0.1:9229；trace 是桥的数据源，可给多份）
+    node nix/obs-cdp-bridge.mjs --port 9229 /tmp/vt/vuna-<pid>.jsonl
+    # 3) 查询端点 / 接 DevTools
+    curl -s http://127.0.0.1:9229/json/version
+    curl -s http://127.0.0.1:9229/json/list
+    #    把 webSocketDebuggerUrl 喂给 devtools frontend，或在 chrome://inspect 里
+    #    Configure → 127.0.0.1:9229；Profiler 面板的 Start/Stop 即 start/stop。
+    ```
+
+    桥**不进** `nix flake check`（需要 Node + 端口，沙箱不保证）；缺 Node 时脚本自身会报
+    `node: command not found`（提示装法见上）。手动验证脚本在 `_scratch/`（不提交）。
 
 ## 8. 外部生态
 
 | 生态 | 接入 | 状态 |
 | --- | --- | --- |
 | Chrome / Perfetto | `vuna obs run` 产出的 JSONL 直接拖入 | 规范格式 |
+| Chrome DevTools | 经 `nix/obs-cdp-bridge.mjs` 的 WS 桥：`vuna obs serve --cdp tcp:127.0.0.1:<PORT>` 只做 Content-Length JSON-RPC，Node 桥补 `/json/version`、`/json/list` 与 `/devtools/page/<id>` 的 WS 握手/帧（vuna 侧不做 SHA-1/base64） | 已实现（CDP Profiler 子集：`enable/start/stop/setSamplingInterval` + `Runtime.getIsolateId`；**离线**，profile 来自已有 trace） |
 | `.cpuprofile` | `vuna obs convert --to cpuprofile` → 拖进 Chrome DevTools / Perfetto 的 CPU Profile 视图 | 已实现（`nodes` 父链 + `samples`/`timeDeltas`，只吃 `vuna.sample.cpu`） |
 | speedscope | `vuna obs convert --to speedscope` → <https://www.speedscope.app> 打开 | 已实现（evented profile，`unit:microseconds`） |
 | 火焰图 | `--to folded` + `flamegraph.pl`（nixpkgs `FlameGraph`） | 已实现（根在前、同名栈合并、按栈名排序） |
@@ -318,6 +375,14 @@ vuna obs serve --cdp ADDR [--allow-slow]
   「合法 trace + 分组边界」，跨机器比较请分别 `summarize --json` 再比。
 - **`symbols` 不读 DWARF、不跑 `build --no-compile` 的编译步骤**：直接扫产物目录里的 `.ml`，
   因此对任何能产出 split `.ml` 的目录都适用（含未知的旧产物）。
+- **`serve --cdp` 的 profile 与 `convert --to cpuprofile` 逐字节等价**：两者都走
+  `Vuna.Obs.Convert.cpuProfileOf`（一个构造点，不写第二套）。`startTime`/`endTime` 来自
+  trace 采样的 `ts`（不含墙钟），因此同一 trace 两次 stop 的响应体逐字节一致。
+- **`serve` 不做 live sampling**：CDP 客户端发 `Profiler.start` 后若期望「接下来这段时间
+  的 CPU 采样」，本实现给的是**整份 trace 的**采样——时间轴是 trace 录制时的，不是客户端
+  操作时的。要看新的时间段就重新录一份 trace 再起 serve（§10 也记了这条）。
+- **`serve` 的多 trace 拼接不做 `merge` 的成员分组**：命令行的多份 trace 按顺序拼采样，
+  `pid` 保留各事件原值；跨机器合并请先 `vuna obs merge` 再 serve（否则时间轴不可比）。
 
 `perf` / `gdb` / `valgrind` **不在**默认 devShell（避免构建图变重）；`nix/obs.sh` 在缺工具时
 给出可操作提示，`perf record` 需要 `perf_event_open` 权限，Nix 沙箱常拒 ⇒ **perf 路径不进
@@ -331,6 +396,7 @@ vuna obs serve --cdp ADDR [--allow-slow]
 | `nix/checks/vuna-obs-dwarf.sh` | split 产物每个绑定前有 `# <行> "<包相对>.vuna"` 指令（不含绝对/`../` 路径）；`build` 出的可执行文件在 `readelf --debug-dump=decodedline` 里有 `.vuna` 文件且行号 > 0。**不依赖** gdb/perf（CI 里不保证有） |
 | `nix/checks/vuna-obs-overhead.sh` | `VUNA_OBS=0` 与不设观测的产物**逐字节一致**（关闭路径不得改变任何输出）；关闭时不写 trace 文件；打开时必须产出（反证）；生成运行时的 `dtp_obs_log/counter/mark/span` 都以关闭快速路径开头（不在关闭路径读时钟/分配）。**不设墙钟门槛**——绝对性能不可跨机器比，那属于 benchmark |
 | `checks.eff-boundary` | 新增探针全部走隐藏原语（`runPure` 基线仍为空） |
+| 手动（本批，`obs serve --cdp` + 桥） | 起 `vuna obs serve --cdp tcp:127.0.0.1:0 TRACE`，用任意 Content-Length 客户端连：`Runtime.getIsolateId` / `Profiler.enable` / `Profiler.start` / `Profiler.stop` 都有合法响应、`profile.samples` 数 == trace 的 `vuna.sample.cpu` 数、未知方法回 `-32601`、同一 trace 两次 stop 的 profile JSON 逐字节一致、无 cpu 采样的 trace 在 stop 上回 `-32000` 且进程退出码 1、参数错误退出码 2；再起 `node nix/obs-cdp-bridge.mjs`，自造 WS 客户端（`node:crypto` 手写握手 + 帧）断言 `Sec-WebSocket-Accept` 正确、`Profile.nodes` 非空、ping/pong 通。**不进 `nix flake check`**（需要 Node + 端口，沙箱不保证） |
 | 手动（本批，`obs convert/render/merge/symbols`） | 同一 trace 两次 `convert --to cpuprofile\|speedscope\|folded\|jsonl` 的 md5 相同；`--to jsonl` 产物过 `validate`；两次 `render --out` 的 HTML md5 相同且 `grep -c 'https?://'` = 0；`merge` 两份 trace 的产物过 `validate`；`symbols` 对 `build --no-compile --out` 的 compiler 产物抽出的 def 数 > 1000、两次运行 md5 相同。**不进 `nix flake check`**（需要 split 产物，成本高）；suite 覆盖见下一行 |
 | `checks.vuna-metrics` + `nix/codegen.baseline` | `#line` 后按实测重标定（`bytes`/`lines`/`maxline`/`letrec` 精确基线） |
 | suite `107_observability.steps` | 关闭零输出、`dbg!` stderr 协议逐字节不变而 `obs!`/`mark!` 走结构化事件、`validate` 拒绝倒挂、`#line` 包相对 + 产物可跑、DWARF 指向 `.vuna`、回栈落到 `.vuna` 行、`VUNA_OBS=3` 的 cpu/mem 采样、`summarize --json` 单行、非 OCaml 后端的桩与编译期拒绝、`convert`/`render` 的确定性 |
@@ -350,6 +416,8 @@ vuna obs serve --cdp ADDR [--allow-slow]
   的 `force`/`primReduce` 探针会显著改热路径，待做且要先量代价（`vuna.counter.steps` 同理）。
 - 多 domain 采样（debt D41）、`Unix.getrusage`（OCaml 5.5 无，debt D81）。
 - wasm/native 的 span 与采样（O12）。
-- `serve --cdp` 是**离线**的：数据源是已有的 trace 文件，不是附加到运行中进程做 live 采样。
+- `serve --cdp` 是**离线**的：数据源是已有的 trace 文件，不是附加到运行中进程做 live 采样
+  （实现 `Vuna.Obs.Serve`；Chrome 侧经 `nix/obs-cdp-bridge.mjs` 的 WS 桥，vuna 侧不实现 WS）。
+  因此它不是 DAP/调试器，也没有 `Runtime.evaluate` / `Debugger.*`；CDP 只覆盖 Profiler 子集。
 - trace 与缓存：trace 永不进对象库（O5），因此「同一输入两次构建的 trace 不可比较字节」是设计
   而不是缺陷——比较用 `summarize --baseline`。

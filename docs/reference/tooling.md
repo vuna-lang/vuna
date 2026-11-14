@@ -354,7 +354,7 @@ dedent，开引号后的首个换行由 lexer 丢弃、渲染时按需补回）�
 | `vuna obs render [--out FILE] TRACE` | 单文件 HTML（无外链、无时间戳、两次渲染逐字节一致） |
 | `vuna obs merge [--out FILE] TRACE...` | 多进程 trace 合并成一份 JSONL |
 | `vuna obs symbols [--out FILE] [OUTDIR]` | 从 split 产物的 `#line` 指令抽 `vuna-symbols.json`（OCaml 符号 → `.vuna` 位置） |
-| `vuna obs serve --cdp ADDR [--allow-slow]` | CDP Profiler 子集（Content-Length JSON-RPC；Chrome DevTools 的 WebSocket 握手未接，见 debt D83） |
+| `vuna obs serve --cdp ADDR [--allow-slow] [TRACE...]` | CDP Profiler 子集（Content-Length JSON-RPC over socket，单连接；**离线**：`Profiler.stop` 由 TRACE 的 cpu 采样换算，非 live 采样；退出码 0/1/2）。Chrome DevTools 经 `nix/obs-cdp-bridge.mjs` 的 WS 桥（vuna 侧不做 WebSocket，见 debt D83） |
 
 ## 7. 尚未实现（工具链自身缺口）
 

@@ -106,15 +106,26 @@ emitContent (Just path) content = do
 
 -- ---------------------------------------------------------------
 -- 换算分派：`jsonl` 是自反格式（不要求 cpu 采样），其余三种只吃 CPU 采样。
+-- `cpuprofile` 走 `cpuProfileOf`（与 `vuna obs serve --cdp` 的 `Profiler.stop` 同一个
+-- 构造点，避免两套 profile 逻辑漂移）。
 convertContent : String -> ObsTrace -> Check String
 convertContent "jsonl" trace = OkC (jsonlText trace)
+convertContent "cpuprofile" trace = fmap renderJson (cpuProfileOf trace.traceEvents)
 convertContent fmt trace = case cpuSamplesOf trace.traceEvents of
   ErrC e => ErrC e
   OkC [] => err (noCpuSamplesText fmt)
   OkC samples => OkC (sampledFormatContent fmt samples)
 
+-- | trace 事件 -> CDP Profile（`convert --to cpuprofile` 与 `obs serve --cdp` 的唯一构造点）。
+-- 空 CPU 采样 = 内容性错误（`ErrC`，调用方映射退出码 1 / JSON-RPC content 错误）。
+export cpuProfileOf : List (Pair Int ObsEvent) -> Check Json
+cpuProfileOf rows = case cpuSamplesOf rows of
+  ErrC e => ErrC e
+  OkC [] => err (noCpuSamplesText "cpuprofile")
+  OkC samples => OkC (cpuProfileJson samples)
+
+-- `cpuprofile` 已在上面单独分派（走 `cpuProfileOf`），这里只剩 speedscope / folded。
 sampledFormatContent : String -> List CpuSample -> String
-sampledFormatContent "cpuprofile" samples = renderJson (cpuProfileJson samples)
 sampledFormatContent "speedscope" samples = renderJson (speedscopeJson samples)
 sampledFormatContent _ samples = foldedTextOf (foldedRowsOf samples)
 

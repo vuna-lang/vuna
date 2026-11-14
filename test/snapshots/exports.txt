@@ -205,13 +205,14 @@ lib/Vuna/Lsp/Protocol.vuna: clampInt, decodeUri, dirOfPath, dropDotCodes, fileNa
 lib/Vuna/Lsp/Query.vuna: codeActionsFor, completionItems, definitionResult, documentSymbols, fixAllLintCommand, fixAllLintWorkspaceEdit, formattingEdits, holeHoverAt, referencesResult, symbolHoverResult, workspaceRoot, workspaceSymbols
 lib/Vuna/Lsp/Rename.vuna: prepareRenameAt, renameAt
 lib/Vuna/Obs.vuna: runObs
-lib/Vuna/Obs/Convert.vuna: runObsConvert
+lib/Vuna/Obs/Convert.vuna: cpuProfileOf, runObsConvert
 lib/Vuna/Obs/Flame.vuna: CpuSample(..), FoldedRow(..), cpuSamplesLenient, cpuSamplesOf, foldedLines, foldedRowsOf, foldedTextOf
 lib/Vuna/Obs/Merge.vuna: MergeMember(..), mergedText, runObsMerge
 lib/Vuna/Obs/Path.vuna: baseNameOf, dropMlSuffix
 lib/Vuna/Obs/Read.vuna: BracketScan(..), ObsTrace(..), collectLines, parseTraceText, readTrace, readTraceFull, repairTruncatedJson, scanBrackets
 lib/Vuna/Obs/Render.vuna: renderDataJson, renderPage, runObsRender
 lib/Vuna/Obs/Run.vuna: RunOpts(..), runObsRun
+lib/Vuna/Obs/Serve.vuna: ServeState(..), runObsServe
 lib/Vuna/Obs/Summarize.vuna: CounterStat(..), FoldState(..), ObsSummary(..), OpenSpan(..), SampleEntry(..), SampleTable(..), SpanSample(..), StageDelta(..), StageStat(..), deltasJson, diffSummaries, groupByThread, maxAbsDeltaPct, renderCounterTable, renderDeltaTable, renderSampleSection, renderStageTable, summarizeTrace, summaryJson
 lib/Vuna/Obs/Symbols.vuna: SymbolDef(..), bindingNameOf, defsOfUnit, directiveOf, runObsSymbols, symbolsSchemaVersion
 lib/Vuna/Obs/Types.vuna: ObsBase(..), ObsEvent(..), ObsMetaData(..), ObsSample(..), argInt, argJson, argParent, argStack, argStr, eventArgs, eventBase, eventCat, eventDur, eventName, eventPh, eventPid, eventTid, eventToJson, eventTs, eventValue, isKnownVunaEventName, isSampleName, obsSchemaVersion, obsSummarySchema, parseEvent, renderEventLine, sampleKindOfName, sampleOf, spanInterval, vunaEventVocabulary

@@ -100,7 +100,9 @@ toolUsageLines prog = """  ${prog} lint [--fix] <file.vuna>...
   ${prog} obs render --out FILE TRACE    单文件 HTML（瀑布 + 火焰图 + 计数器/采样表；无外链、可复现）
   ${prog} obs merge [--out FILE] TRACE...  多 trace 按 t0 合并成一份（非首份加 args.member）
   ${prog} obs symbols [--out FILE] [OUTDIR]  从 split 产物 .ml 的 `#line` 抽 vuna-symbols 1 符号表
-  ${prog} obs serve --cdp ADDR [--allow-slow] （下一批；当前返回 not implemented + 退出码 2）
+  ${prog} obs serve --cdp ADDR [--allow-slow] [TRACE...]
+      起 CDP Profiler 子集 server（JSON-RPC over Content-Length；ADDR = tcp:127.0.0.1:PORT | unix:PATH）；
+      **离线**：profile 由 TRACE 的 cpu 采样换算（非 live 采样），单连接；Chrome 需经 nix/obs-cdp-bridge.mjs
   ${prog} lsp                                  启动 LSP server（JSON-RPC over stdio）
   ${prog} version, --version                   显示版本
   ${prog} help, -h                             显示本帮助

@@ -12,14 +12,15 @@ module Vuna.Obs where
 --   * `Vuna.Obs.Convert`  `convert --to cpuprofile|speedscope|folded|jsonl`；
 --   * `Vuna.Obs.Render`   `render`（单文件 HTML：瀑布 / 火焰图 / 计数器与采样表）；
 --   * `Vuna.Obs.Merge`    `merge`（多 trace → 一份合法 JSONL）；
---   * `Vuna.Obs.Symbols`  `symbols`（split 产物 `.ml` → `vuna-symbols 1` 符号表）。
+--   * `Vuna.Obs.Symbols`  `symbols`（split 产物 `.ml` → `vuna-symbols 1` 符号表）；
+--   * `Vuna.Obs.Serve`    `serve --cdp`（CDP Profiler 子集，Content-Length JSON-RPC；
+--     **离线**：数据源是已有 trace 文件，不是 live sampling）。
 --
 -- 本模块只做**子命令分发与退出码**（0 成功 / 1 被观测内容语义失败 / 2 用法或前提不满足），
 -- 参数解析与业务实现都在各子模块。
 --
--- 第二批范围（规范 §7）：`convert` / `render` / `merge` / `symbols`。`serve --cdp` 是下一批：
--- 这里**保留分发位置并给出明确的可操作错误 + 退出码 2**（不静默 unknown command，
--- 也不假装支持）。
+-- 范围（规范 §7）：`run` / `summarize` / `validate` / `convert` / `render` / `merge` /
+-- `symbols` / `serve --cdp`。未知子命令仍回可操作错误 + 退出码 2（不静默 unknown）。
 import Base.HostRow
 import Vuna.Cli.Args
 import Vuna.Compiler.Common
@@ -29,6 +30,7 @@ import Vuna.Obs.Merge
 import Vuna.Obs.Read
 import Vuna.Obs.Render
 import Vuna.Obs.Run
+import Vuna.Obs.Serve
 import Vuna.Obs.Summarize
 import Vuna.Obs.Symbols
 import Vuna.Obs.Validate
@@ -45,7 +47,7 @@ runObs args = case args of
     "render" => Vuna.Obs.Render.runObsRender rest
     "merge" => Vuna.Obs.Merge.runObsMerge rest
     "symbols" => Vuna.Obs.Symbols.runObsSymbols rest
-    "serve" => notYet "serve" "serve --cdp ADDR [--allow-slow]"
+    "serve" => Vuna.Obs.Serve.runObsServe rest
     _ => do
       _ <-
         raiseToRow hostRow
@@ -61,20 +63,12 @@ obsUsageText = """usage:
   vuna obs render --out FILE TRACE
   vuna obs merge [--out FILE] TRACE...
   vuna obs symbols [--out FILE] [OUTDIR]
-  vuna obs serve --cdp ADDR [--allow-slow]   (not implemented yet)
+  vuna obs serve --cdp ADDR [--allow-slow] [TRACE...]
 """
 
 obsUsage : Eff hostRow Int
 obsUsage = do
   _ <- raiseToRow hostRow (@vuna@prim_eff_print obsUsageText)
-  pure 2
-
--- 下一批的子命令：明确「未实现」+ 用法，退出码 2。
-notYet : String -> String -> Eff hostRow Int
-notYet sub usage = do
-  _ <-
-    raiseToRow hostRow
-      (@vuna@prim_eff_print "error: `vuna obs ${sub}` is not implemented yet\nexpected: vuna obs ${usage}\n")
   pure 2
 
 -- ---------------------------------------------------------------

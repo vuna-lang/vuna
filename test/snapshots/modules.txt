@@ -50,6 +50,7 @@ Vuna.Obs.Path  ./lib/Vuna/Obs/Path.vuna
 Vuna.Obs.Read  ./lib/Vuna/Obs/Read.vuna
 Vuna.Obs.Render  ./lib/Vuna/Obs/Render.vuna
 Vuna.Obs.Run  ./lib/Vuna/Obs/Run.vuna
+Vuna.Obs.Serve  ./lib/Vuna/Obs/Serve.vuna
 Vuna.Obs.Summarize  ./lib/Vuna/Obs/Summarize.vuna
 Vuna.Obs.Symbols  ./lib/Vuna/Obs/Symbols.vuna
 Vuna.Obs.Types  ./lib/Vuna/Obs/Types.vuna
