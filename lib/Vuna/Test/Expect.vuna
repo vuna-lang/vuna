@@ -1,0 +1,246 @@
+module Vuna.Test.Expect where
+
+-- Vuna.Test.Expect：结构化诊断期望（投影 + 比较）。
+--
+-- 测试断言**只看返回值**：进程内调用编译器函数拿到 `Check (List Diagnostic)`，
+-- 投影成 `severity|code|file|line|col`（无源位置时追加 `!<absent 理由>`）字符串序列，
+-- 与夹具的 `.diag.json`（同一份结构化文档）投影比较。不比对 message / fields /
+-- labels 文本：文案由 `nix/checks/diag-style.sh` / `diag-raw.sh` 两个门禁守，夹具只
+-- 锁定「哪个码、在哪、几条、什么顺序」。
+--
+-- 三个口径：
+--   * **主 label**：`LabelPrimary` 的 span；没有主 label 时退回首个带 span 的 label；
+--     两者都没有 ⇒ 位置记 `||0|0`，并要求诊断自带 `absent` 理由（与
+--     `nix/checks/diag-located.sh` 同源）。
+--   * **路径归一**（`projFile`）：期望文件里有四种写法——`<ROOT>/test/...`（占位符，
+--     由 `--bless-diag` 写入）、`corpus/...`（相对 `test/`）、`./vuna.toml`
+--     （相对夹具目录）、`<BASE>/lib/...`（依赖包内）。进程内拿到的是绝对路径。
+--     两侧都过同一条归一：剥 `<root>/test/`、剥 `<base>/`（记成 `base/`）、
+--     相对路径按 caseRel 补前缀。规则唯一，夹具无需改写。
+--   * **平铺**：CLI 在 `--json` 下 `visibleDiags` 不过滤级联，`ErrC` 的诊断与其
+--     children 在同一份文档里是并列条目，投影也平铺一层，顺序与输出一致。
+import Base.HostRow
+import Base.List
+import Base.Maybe
+import Base.Nat
+import Base.String
+import Vuna.Compiler.Common
+import Vuna.Compiler.Diag
+import Vuna.Compiler.Source
+import Vuna.Json
+
+-- 一条比较结果（runner 把它翻译成自己的 `Assertion`；本模块不定义断言记录，
+-- 避免与 `Vuna.Test.Run` 的 `Assertion` 字段名冲突）。
+export record ExpectDiff where
+  diffName : String
+  diffOk : Bool
+  diffDetail : String
+
+-- 诊断显示上限：与 `CliOpts` 默认 `optMaxErrors = 20` 一致（`takeDiags` 同语义）。
+export maxShownDiags : Int
+maxShownDiags = 20
+
+-- ---------------------------------------------------------------
+-- 路径归一
+-- ---------------------------------------------------------------
+-- 期望侧占位符展开（`--bless-diag` 写下的形状；机器路径不进仓库）。
+export expandPlaceholders : String -> String -> String -> String
+expandPlaceholders root base text = replaceText "<BASE>" base (replaceText "<ROOT>" root text)
+
+replaceText : String -> String -> String -> String
+replaceText needle replacement haystack =
+  if byteLength needle == 0 then haystack else join replacement (split needle haystack)
+
+-- 唯一归一规则；两侧共用，因此期望与实际直接可比。
+--   root/   → `test/corpus/...` → `corpus/...`
+--   base/   → `base/lib/...`（不随 checkout 变化，入库可复现）
+--   ./x     → `<caseRel>/x`（夹具目录内的相对写法）
+export projFile : String -> String -> String -> String -> String
+projFile root base caseRel file =
+  let
+    underTest = stripPrefixOf (root ++ "/test/") file
+  in if underTest /= file then underTest
+  else
+    let
+      underBase = stripPrefixOf (base ++ "/") file
+    in if underBase /= file then "base/${underBase}"
+    else
+      let
+        f1 = stripPrefixOf "test/" file
+        f2 = replaceText "/./" "/" f1
+      in if f2 == f1 && not (startsWith "corpus/" f2) then
+        let
+          rel = stripPrefixOf "./" f2
+        in if caseRel == "" then rel else "${caseRel}/${rel}"
+      else stripPrefixOf "./" f2
+
+stripPrefixOf : String -> String -> String
+stripPrefixOf prefix s =
+  let
+    pl = byteLength prefix
+    sl = byteLength s
+  in if pl > sl then s
+  else if substring 0 (natFromInt pl) s == prefix then substring (natFromInt pl) (natFromInt (sl - pl)) s
+  else s
+
+-- ---------------------------------------------------------------
+-- 名称
+-- ---------------------------------------------------------------
+export severityText : Severity -> String
+severityText SevError = "error"
+severityText SevWarning = "warning"
+severityText SevNote = "note"
+severityText SevHelp = "help"
+
+export absentText : Maybe NoSourceReason -> String
+absentText Nothing = ""
+absentText (Just NsSynthetic) = "synthetic"
+absentText (Just NsToolUsage) = "tool-usage"
+absentText (Just NsPackageGraph) = "package-graph"
+absentText (Just NsInternal) = "internal"
+
+-- ---------------------------------------------------------------
+-- 投影：Diagnostic -> 规范字符串
+-- ---------------------------------------------------------------
+primaryOf : List Label -> Maybe Span
+primaryOf [] = Nothing
+primaryOf ((Label sp _ LabelPrimary _) :: rest) = case sp of
+  Just s => Just s
+  Nothing => primaryOf rest
+primaryOf (_ :: rest) = primaryOf rest
+
+firstSpan : List Label -> Maybe Span
+firstSpan [] = Nothing
+firstSpan ((Label sp _ _ _) :: rest) = case sp of
+  Just s => Just s
+  Nothing => firstSpan rest
+
+diagAnchor : Diagnostic -> Maybe Span
+diagAnchor d = case primaryOf d.diagLabels of
+  Just sp => Just sp
+  Nothing => firstSpan d.diagLabels
+
+-- 一条诊断的规范投影。无位置时追加 `!<absent>`，缺理由即投影为 `!`（期望文件损坏）。
+export projectDiag : String -> String -> String -> Diagnostic -> String
+projectDiag root base caseRel d =
+  let
+    head = "${severityText d.diagSeverity}|${d.diagCode}"
+  in case diagAnchor d of
+    Nothing => "${head}||0|0!${absentText d.diagAbsent}"
+    Just sp =>
+      "${head}|${projFile root base caseRel (spanFile sp)}|${strOfInt (spanStartLine sp)}|${strOfInt (spanStartCol sp)}"
+
+-- `ErrC` 的诊断 + 其 children 平铺（与 `--json` 单文档输出同序），并按显示上限截断。
+export flattenErr : Diagnostic -> List Diagnostic
+flattenErr e = Base.List.take maxShownDiags (Base.List.Cons e e.diagChildren)
+
+export projectDiags : String -> String -> String -> List Diagnostic -> List String
+projectDiags root base caseRel ds = map (projectDiag root base caseRel) ds
+
+-- ---------------------------------------------------------------
+-- 从 `.diag.json` 读期望
+-- ---------------------------------------------------------------
+jsonDiagKey : String -> String -> String -> Json -> String
+jsonDiagKey root base caseRel d =
+  let
+    head = "${strAt "severity" d}|${strAt "code" d}"
+  in case firstLabel d of
+    Nothing => "${head}||0|0!${strAt "absent" d}"
+    Just lbl => case jsonGet "span" lbl of
+      Just sp => case sp of
+        JNull => "${head}||0|0!${strAt "absent" d}"
+        _ =>
+          "${head}|${projFile root base caseRel (strAt "file" sp)}|${strAtInt ["start", "line"] 0 sp}|${strAtInt ["start", "column"] 0 sp}"
+      Nothing => "${head}||0|0!${strAt "absent" d}"
+
+strAt : String -> Json -> String
+strAt key v = case jsonGet key v of
+  Just (JStr s) => s
+  _ => ""
+
+strAtInt : List String -> Int -> Json -> Int
+strAtInt path fallback v = case jsonGetIn path v of
+  Just (JNum n) => n
+  _ => fallback
+
+firstLabel : Json -> Maybe Json
+firstLabel d = case jsonGet "labels" d of
+  Just (JArr (x :: _)) => Just x
+  _ => Nothing
+
+-- 读 `.diag.json` 文本 -> 期望投影序列。
+export expectKeys : String -> String -> String -> String -> Check (List String)
+expectKeys root base caseRel text = case parseJson (expandPlaceholders root base text) of
+  ErrC e => ErrC e
+  OkC doc => case jsonGet "diagnostics" doc of
+    Just (JArr ds) => OkC (Base.List.take maxShownDiags (map (jsonDiagKey root base caseRel) ds))
+    _ => ErrC (jsonErr "missing `diagnostics` array")
+
+-- ---------------------------------------------------------------
+-- 平铺顺序无关比较
+-- ---------------------------------------------------------------
+-- `--json` 输出顺序与 `ErrC` 的 children 顺序**不同**：CLI 把诊断收集进
+-- `optSarifItems` 后由 `flushSarif` 按 `takeDiags` 原序输出，而 `ErrC` 的
+-- `diagChildren` 是另一条装配顺序（`UN_UnusedDefinition` 在全量表里排在
+-- `UN_UnusedImport` 之后，JSON 里反过来）。断言口径因此是**多重集**：条数 + 逐项
+-- 定序比对（把两列各自排序后比），不锁定枚举顺序——顺序由渲染层门禁守。
+export sortKeys : List String -> List String
+sortKeys [] = []
+sortKeys (x :: rest) = insertKey x (sortKeys rest)
+
+insertKey : String -> List String -> List String
+insertKey x [] = [x]
+insertKey x (y :: rest) = if x <= y then x :: y :: rest else y :: insertKey x rest
+
+-- 排序后的比较（`compareKeys` 原口径保留给真正有序的场景）。
+export compareSortedKeys : String -> List String -> List String -> List ExpectDiff
+compareSortedKeys name expected actual = compareKeys name (sortKeys expected) (sortKeys actual)
+
+jsonErr : String -> Diagnostic
+jsonErr msg = diagNoLoc SevError PhDriver CatTool msg msg
+
+-- ---------------------------------------------------------------
+-- 比较
+-- ---------------------------------------------------------------
+-- 三段比较：先逐项对比 `zip` 出来的公共前缀，再分别报「期望多出来的」与「实测多
+-- 出来的」。把「两侧同时下降」的形态拆成单列表递归，是为了满足 SCT 终止性检查。
+export compareKeys : String -> List String -> List String -> List ExpectDiff
+compareKeys name expected actual =
+  let
+    common = Base.List.zip expected actual
+    n = listLength common
+    headA =
+      ExpectDiff "${name} count" (n == listLength expected && n == listLength actual)
+        "expected ${strOfInt (listLength expected)} diagnostic(s), got ${strOfInt (listLength actual)}\n  expected: ${join " ; " expected}\n  actual:   ${join " ; " actual}"
+    pairA = comparePairs name 0 common
+    missingA = compareMissing name n (Base.List.drop n expected)
+    extraA = compareExtra name n (Base.List.drop n actual)
+  in Base.List.Cons headA (append pairA (append missingA extraA))
+
+comparePairs : String -> Int -> List (Pair String String) -> List ExpectDiff
+comparePairs name _ [] = []
+comparePairs name idx (p :: rest) =
+  let
+    e = firstOf p
+    a = secondOf p
+  in Base.List.Cons (ExpectDiff "${name}[${strOfInt idx}]" (e == a) "expected: ${e}\n  actual:   ${a}")
+    (comparePairs name (idx + 1) rest)
+
+compareMissing : String -> Int -> List String -> List ExpectDiff
+compareMissing name _ [] = []
+compareMissing name idx (e :: rest) =
+  Base.List.Cons (ExpectDiff "${name}[${strOfInt idx}]" False "missing diagnostic: ${e}")
+    (compareMissing name (idx + 1) rest)
+
+compareExtra : String -> Int -> List String -> List ExpectDiff
+compareExtra name _ [] = []
+compareExtra name idx (a :: rest) =
+  Base.List.Cons (ExpectDiff "${name}[${strOfInt idx}]" False "unexpected diagnostic: ${a}")
+    (compareExtra name (idx + 1) rest)
+
+listLength : List a -> Int
+listLength [] = 0
+listLength (_ :: rest) = 1 + listLength rest
+
+strOfInt : Int -> String
+strOfInt = strFromInt

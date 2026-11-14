@@ -13,15 +13,22 @@ import Vuna.FixityEnv
 import Vuna.Lint.Fix
 import Vuna.Lint.Rules
 
-printFinding : String -> Bool -> Finding -> Eff hostRow Int
-printFinding path fixMode f =
+-- 单条 finding 的渲染（纯）：CLI 打印与测试断言共用同一份格式，夹具 `.out` 因此
+-- 既能由 CLI 生成、也能由进程内 `Finding` 投影重建。
+export renderFinding : String -> Bool -> Finding -> String
+renderFinding path fixMode f =
   let
     suffix = if fixMode then " (not auto-fixable)" else ""
-    text =
-      "${path}:${f.findingLine}:${f.findingCol}: [${f.findingCode}] ${f.findingRule}: ${f.findingMessage}${suffix}\n"
-  in do
-    _ <- raiseToRow hostRow (@vuna@prim_eff_print text)
-    pure 0
+  in "${path}:${f.findingLine}:${f.findingCol}: [${f.findingCode}] ${f.findingRule}: ${f.findingMessage}${suffix}"
+
+-- `--fix` 的「已修复 N 条」报告行（纯）。
+export renderFixReport : String -> Int -> String
+renderFixReport path count = "${path}: fixed ${count} finding(s)"
+
+printFinding : String -> Bool -> Finding -> Eff hostRow Int
+printFinding path fixMode f = do
+  _ <- raiseToRow hostRow (@vuna@prim_eff_print "${renderFinding path fixMode f}\n")
+  pure 0
 
 printFindings : String -> Bool -> List Finding -> Eff hostRow Int
 printFindings path fixMode [] = pure 0
@@ -56,7 +63,7 @@ fixReport path source findings programFixities = case fixLoop programFixities so
         _ <- raiseToRow hostRow (@vuna@prim_eff_print "${path}: error: ${diagText e}\n")
         pure 2
       OkC remaining => do
-        _ <- raiseToRow hostRow (@vuna@prim_eff_print "${path}: fixed ${count} finding(s)\n")
+        _ <- raiseToRow hostRow (@vuna@prim_eff_print "${renderFixReport path count}\n")
         reportFindings path True remaining
 
 lintExisting : Bool -> String -> String -> List FixityDecl -> Eff hostRow Int
