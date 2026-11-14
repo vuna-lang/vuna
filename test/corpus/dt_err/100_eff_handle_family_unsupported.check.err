@@ -1,1 +1,0 @@
-[TC_HandleFamilyUnsupported] effect syntax (perform/handle) supports only op families whose explicit parameters are types and a `res<family>` result family; Base.EffExn.ExnOp does not fit

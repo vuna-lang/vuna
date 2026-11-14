@@ -1,1 +1,0 @@
-[TC_EffResFamilyMissing] cannot find the result family for BoomOp (expected `res<family> : <params…> -> <Op> -> Type` in the same module as the op family)
