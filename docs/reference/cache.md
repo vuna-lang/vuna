@@ -144,6 +144,12 @@ views/testbin/<testBin>/          # effect 测试编译产物（bin/vuna-test，
 
 `--debug-perf` / `VUNA_DEBUG_PERF=1` 打开。
 
+**结构化观测**（`VUNA_OBS>=1`，见 [observability.md](observability.md)）走另一条通道：
+`Driver/Compile` 与 `Driver/Dt` 的阶段跨度（`vuna.load` / `vuna.elab` / `vuna.iface.compute` /
+`vuna.codegen.split` …），与上面 `dbg!` 标签**同时可用但独立开关**。缓存命中路径目前只有
+`dbg!` 标签、没有对应 span：判定的输入是地址，因此 span 只能定位到「读/写载荷」这一级
+（`vuna.cache.lookup` / `vuna.cache.write` 属规范词汇表，尚未插桩）。
+
 **已删除的观测能力**：查询图时代的节点 span / trace / 预算 / 取消（`query-span`、
 `--debug-query`）随图一起删除。现在排查「为什么 miss」靠比对地址：`addrOf` 的输入项都在
 上面的表里，逐个对即可。
