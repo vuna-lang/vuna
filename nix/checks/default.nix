@@ -374,6 +374,61 @@ in
     script = ./diag-raw.sh;
   };
 
+  # 可观测性结构门禁（`docs/reference/observability.md` §9）：关闭不产 trace；`VUNA_OBS=2`
+  # 的 check 产出可被 `vuna obs validate` 接受的 trace；`summarize --json` 单行且结构化；
+  # 编译器自观测必须仍产出 `vuna.elab` / `vuna.codegen.check` 两个阶段跨度。
+  vuna-obs-schema = mkCheck {
+    name = "vuna-obs-schema";
+    srcs = [
+      ../../compiler
+      ../../base
+      ../../nix/checks/vuna-obs-schema.sh
+    ];
+    env = {
+      VUNA = "${vuna}/bin/vuna";
+    };
+    nativeBuildInputs = [
+      pkgs.bash
+      pkgs.coreutils
+      pkgs.findutils
+      pkgs.gnugrep
+    ];
+    script = ./vuna-obs-schema.sh;
+  };
+
+  # `#line` 注入门禁（规范 §5）：split 产物的指令是包相对 `.vuna` 路径，且 `-g` 编出的
+  # 可执行文件在 DWARF `.debug_line` 里真的指向 `.vuna`（不需要 gdb/perf）。
+  vuna-obs-dwarf = mkCheck {
+    name = "vuna-obs-dwarf";
+    srcs = [
+      ../../test/corpus/codegen
+      ../../nix/checks/vuna-obs-dwarf.sh
+    ];
+    env = {
+      VUNA = "${vuna}/bin/vuna";
+      VUNA_BASE = "${repo}/base";
+    };
+    nativeBuildInputs = ocamlTools ++ [ pkgs.binutils pkgs.bash pkgs.coreutils pkgs.findutils pkgs.gnugrep ];
+    script = ./vuna-obs-dwarf.sh;
+  };
+
+  # 关闭口径门禁（规范 §6）：`VUNA_OBS=0` 与不设观测的产物逐字节一致、关闭时不写 trace
+  # 文件、生成运行时的 obs 入口都以关闭快速路径开头（不在关闭路径读时钟/分配）。
+  vuna-obs-overhead = mkCheck {
+    name = "vuna-obs-overhead";
+    srcs = [
+      ../../test/corpus/codegen
+      ../../base
+      ../../nix/checks/vuna-obs-overhead.sh
+    ];
+    env = {
+      VUNA = "${vuna}/bin/vuna";
+      VUNA_BASE = "${repo}/base";
+    };
+    nativeBuildInputs = ocamlTools ++ [ pkgs.bash pkgs.coreutils pkgs.findutils pkgs.gnugrep ];
+    script = ./vuna-obs-overhead.sh;
+  };
+
   # IR 边界（Track A 第一步）：Core → IR → OCaml 的单一链路。
   # `Vuna.Compiler.Ir*` 不得 import Core/Elab/Intrinsics/Codegen；文本生成层
   # （Codegen 门面与 Decl/Term/Assembly）不得 import Core/Elab/Intrinsics，唯一例外是

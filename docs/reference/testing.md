@@ -399,11 +399,12 @@ interp / compile 文案不同时用 `.compile.err`。
 
 ## Nix checks 清单
 
-`nix flake check` 实测 **20 项**：3 个 package 构建（`vuna` / `vuna-compiler` /
-`vuna-seed`，同时暴露为 checks）+ 17 个 check 语义项（`context-budget`、`diag-coverage`、
+`nix flake check` 实测 **23 项**：3 个 package 构建（`vuna` / `vuna-compiler` /
+`vuna-seed`，同时暴露为 checks）+ 20 个 check 语义项（`context-budget`、`diag-coverage`、
 `diag-raw`、`diag-style`、`eff-boundary`、`ir-boundary`、`seed-selfhost`、
 `vuna-compiler-growth`、`vuna-compiler-growth-incremental`、
-`vuna-fmt`、`vuna-lint`、`vuna-metrics`、`vuna-package`、`vuna-tests-gate`、`vuna-tests-e2e`、
+`vuna-fmt`、`vuna-lint`、`vuna-metrics`、`vuna-obs-dwarf`、`vuna-obs-overhead`、
+`vuna-obs-schema`、`vuna-package`、`vuna-tests-gate`、`vuna-tests-e2e`、
 `vuna-typecheck`、`vscode-ext`；主体是 `nix/checks/<name>.sh`）。语义项：
 
 - `seed-selfhost`：seed→stage0→stage1→stage2 逐字节一致、TCB 黑名单、seed 完整 allowlist、闭包数量、增量构建、
@@ -418,6 +419,14 @@ interp / compile 文案不同时用 `.compile.err`。
   Core/Elab/Intrinsics/Codegen；文本生成层 `Codegen.{Decl,Term,Assembly}` 与门面不得
   import Core/Elab/Intrinsics；`Codegen/Lower.vuna` 是唯一的上游消费者；`Codegen.Split`
   必须路由到 Lower 且不得 import Core/Intrinsics；生成层必须 import IR），见 [ir.md](ir.md)；
+- `vuna-obs-schema`：观测**结构**门禁——关闭（`VUNA_OBS=0`）不产 trace；`VUNA_OBS=2` 的
+  `check compiler` / `check base` 各产出可被 `vuna obs validate` 接受的 trace、
+  `summarize --json` 单行且含 `spans`/`wallUs`、编译器自观测仍产出 `vuna.elab` /
+  `vuna.codegen.check` 两个阶段跨度，见 [observability.md](observability.md)；
+- `vuna-obs-dwarf`：`#line` 门禁——split 产物每个绑定前的指令是**包相对** `.vuna` 路径，
+  且 `-g` 编出的可执行文件在 DWARF `.debug_line` 里真的指向 `.vuna`（不需要 gdb/perf）；
+- `vuna-obs-overhead`：关闭口径门禁——`VUNA_OBS=0` 与不设观测的产物逐字节一致、关闭时不写
+  trace、生成运行时的 obs 入口都以关闭快速路径开头（不在关闭路径读时钟/分配）；
 - `diag-coverage` / `diag-style` / `diag-raw`：诊断码覆盖基线、文案模板规范、
   compiler 源码诊断必须走域码（见 [diagnostics.md](diagnostics.md)）；
 - **`check` 的覆盖边界**：`vuna check <pkg>` 只检查**该包入口的 import 闭包**——可执行包
