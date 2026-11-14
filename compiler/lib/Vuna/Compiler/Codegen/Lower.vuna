@@ -52,17 +52,23 @@ export record LwEnv where
   lwUnboxed : List String
   -- 运行时定义表（delta 展开与归属查询用）。
   lwDefs : List DtDef
+  -- 名字 → 定义（**一次建表**，分组/单元过滤都查它；`lwDefs` 是唯一真源）。
+  --
+  -- 为什么要表：`appendGroups` 过去对每个 SCC 都 `filter (memList …) lwDefs`，单点 SCC
+  -- 的合成程序是 O(n²)（N=2000/4000/8000 的 codegen 段 89/284/1083 ms，逐档 ×3.2/×3.8）。
+  -- 表只替换**查找**，不参与排序：组内成员顺序仍来自 `assembleGroupNames`（源码序）。
+  lwDefTbl : HashMap String DtDef
   -- 运行时定义名集合（依赖遍历用）。
   lwRuntimeNames : HashMap String Bool
   -- 当前单元名（`Main` 是入口单元；check 路径为 ""）。
   lwUnit : String
 
 export lwEnvShared : LwEnv -> IrShared
-lwEnvShared (LwEnv shared datas typs recs ctors opqs unboxed defs names unit) = shared
+lwEnvShared (LwEnv shared datas typs recs ctors opqs unboxed defs tbl names unit) = shared
 
 export lwEnvWithUnit : String -> LwEnv -> LwEnv
-lwEnvWithUnit unit (LwEnv shared datas typs recs ctors opqs unboxed defs names oldUnit) =
-  LwEnv shared datas typs recs ctors opqs unboxed defs names unit
+lwEnvWithUnit unit (LwEnv shared datas typs recs ctors opqs unboxed defs tbl names oldUnit) =
+  LwEnv shared datas typs recs ctors opqs unboxed defs tbl names unit
 
 -- ---------------------------------------------------------------
 -- 小工具
@@ -1285,20 +1291,30 @@ groupDefs env defs =
     -- 依赖邻接表（旧 `depAdjacency`：运行时引用到的顶层名，遍历顺序即首现顺序）。
     adj = map (adjOfDef env) defs
     names = map dtDefName defs
-  in Vuna.Compiler.Common.bind (assembleGroupNames adj names (recOkOfIn defs) (spanOfIn defs)) (\groups => Vuna.Compiler.Common.bind (appendGroups env (LwSt 0) groups) (\q => case q of
+    -- 递归右值判据与 span 只依赖**本单元**的 defs：一次建表，别让每个名字各扫一遍。
+    tbl = defTblOf defs
+  in Vuna.Compiler.Common.bind (assembleGroupNames adj names (recOkOfTbl tbl) (spanOfTbl tbl)) (\groups => Vuna.Compiler.Common.bind (appendGroups env (LwSt 0) groups) (\q => case q of
     Pair grouped _ => OkC grouped
   )
   )
 
-recOkOfIn : List DtDef -> String -> Bool
-recOkOfIn defs name = case findDtDef name defs of
+-- 名字 → 定义（同键后插优先；与 `findDtDef` 的「首个匹配」语义在无重复名时等价）。
+defTblOf : List DtDef -> HashMap String DtDef
+defTblOf [] = Base.HashMap.fromList []
+defTblOf (d :: rest) = Base.HashMap.insert (dtDefName d) d (defTblOf rest)
+
+tblLookup : HashMap String DtDef -> String -> Maybe DtDef
+tblLookup tbl name = Base.HashMap.lookup name tbl
+
+recOkOfTbl : HashMap String DtDef -> String -> Bool
+recOkOfTbl tbl name = case tblLookup tbl name of
   Nothing => False
   Just d => case dtDefBody d of
     Nothing => True
     Just body => recursiveValueAllowedIn body
 
-spanOfIn : List DtDef -> String -> Maybe Span
-spanOfIn defs name = case findDtDef name defs of
+spanOfTbl : HashMap String DtDef -> String -> Maybe Span
+spanOfTbl tbl name = case tblLookup tbl name of
   Nothing => Nothing
   Just d => dtDefSpan d
 
@@ -1308,13 +1324,21 @@ appendGroups env st (g :: rest) =
   let
     isRec = firstOf g
     members = secondOf g
-    defs = filter (\d => memList (dtDefName d) members) env.lwDefs
+    -- 组内成员是**源码序**（`assembleGroupNames` 保证），这里只按成员名查表取定义，
+    -- 不再对 `env.lwDefs` 做线性过滤（单点 SCC 时那是 O(n²)）。
+    defs = mapMaybeDef env.lwDefTbl members
   in Vuna.Compiler.Common.bind (lowerDefs env st defs) (\p => case p of
     Pair irDefs st2 => Vuna.Compiler.Common.bind (checkUniqueDefNames irDefs) (\_ => Vuna.Compiler.Common.bind (appendGroups env st2 rest) (\q => case q of
       Pair tail st3 => OkC (Pair (Pair isRec irDefs :: tail) st3)
     )
     )
   )
+
+mapMaybeDef : HashMap String DtDef -> List String -> List DtDef
+mapMaybeDef _ [] = []
+mapMaybeDef tbl (n :: rest) = case tblLookup tbl n of
+  Nothing => mapMaybeDef tbl rest
+  Just d => Base.List.Cons d (mapMaybeDef tbl rest)
 
 -- | 程序级检查（擦除、axiom 运行时使用、作用域、OCaml 名字单射、SCC 递归值形状）。
 --
@@ -1364,8 +1388,12 @@ export lowerUnitAfterChecks : LwEnv -> List String -> List String -> Check IrUni
 lowerUnitAfterChecks env defNames dataNames =
   let
     datas = env.lwDatas
-    defs = filter (\d => memList (dtDefName d) defNames) env.lwDefs
-    unitDatas = filter (\d => memList (dtDataName d) dataNames) datas
+    -- 保留 `env.lwDefs` 的**程序顺序**（分区/分组都按它），只把「是否属于本单元」的
+    -- 判定从线性 `memList` 换成一次建表（split 路径每单元一次，原来是 O(单元数×全程序)）。
+    defNameTbl = Base.HashMap.ofNames defNames
+    defs = filter (\d => Base.HashMap.member (dtDefName d) defNameTbl) env.lwDefs
+    dataNameTbl = Base.HashMap.ofNames dataNames
+    unitDatas = filter (\d => Base.HashMap.member (dtDataName d) dataNameTbl) datas
     runtime = partitionRuntimeDefs defs
   in Vuna.Compiler.Common.bind (groupDefs env runtime) (\groups => Vuna.Compiler.Common.bind (tyDeclsOf datas unitDatas) (\decls => let
     groups2 = map groupOfPair groups
@@ -1489,7 +1517,8 @@ mkLwEnv datas defs unit =
     shared = lowerSharedOf datas defs
     runtime = rtDatasOf datas
   in LwEnv shared runtime (tyParamsOf runtime) (recordFieldsOf runtime) shared.irSharedCtors
-    shared.irSharedCtorOpaques shared.irSharedUnboxed defs (nameSetOf (runtimeNamesOf defs)) unit
+    shared.irSharedCtorOpaques shared.irSharedUnboxed defs (defTblOf defs)
+    (nameSetOf (runtimeNamesOf defs)) unit
 
 nameSetOf : List String -> HashMap String Bool
 nameSetOf [] = Base.HashMap.fromList []
