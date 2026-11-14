@@ -1,0 +1,218 @@
+module Vuna.Obs where
+
+-- Vuna.Obs：`vuna obs` 的门面（工具链；**永不进 seed 闭包**）。
+--
+-- 分层：
+--   * `Vuna.Obs.Types`    事件模型（M/X/C/i）+ schema 常量 + 纯解析/渲染原语；
+--   * `Vuna.Obs.Read`     JSONL 读取（行号、空行跳过、末行截断降级为 warning）；
+--   * `Vuna.Obs.Validate` §3 字段/时序/词汇表校验（error = 退出码 1）；
+--   * `Vuna.Obs.Summarize` span 树折叠 → 阶段/计数/采样表 + `--json` + `--baseline` 差值；
+--   * `Vuna.Obs.Run`      `vuna obs run`（env 注入 + 子进程 + trace 路径打印）。
+--
+-- 本模块只做**子命令分发与退出码**（0 成功 / 1 被观测内容语义失败 / 2 用法或前提不满足），
+-- 参数解析与业务实现都在各子模块。
+--
+-- 第一批范围（规范 §7）：`run` / `summarize` / `validate`。`convert` / `render` / `merge` /
+-- `symbols` / `serve` 是下一批：这里**保留分发位置并给出明确的可操作错误 + 退出码 2**
+-- （不静默 unknown command，也不假装支持）。
+import Base.HostRow
+import Vuna.Cli.Args
+import Vuna.Compiler.Common
+import Vuna.Json
+import Vuna.Obs.Read
+import Vuna.Obs.Run
+import Vuna.Obs.Summarize
+import Vuna.Obs.Validate
+
+-- | `vuna obs <sub>` 的入口（`args` 是去掉 `obs` 之后的参数）。
+export runObs : List String -> Eff hostRow Int
+runObs args = case args of
+  [] => obsUsage
+  sub :: rest => case sub of
+    "run" => Vuna.Obs.Run.runObsRun rest
+    "summarize" => obsSummarizeArgs rest
+    "validate" => obsValidateArgs rest
+    "convert" =>
+      notYet "convert" "convert --to cpuprofile|speedscope|folded|jsonl [--out PATH] TRACE"
+    "render" => notYet "render" "render [--out FILE] TRACE"
+    "merge" => notYet "merge" "merge [--out FILE] TRACE..."
+    "symbols" => notYet "symbols" "symbols [--out FILE] [OUTDIR]"
+    "serve" => notYet "serve" "serve --cdp ADDR [--allow-slow]"
+    _ => do
+      _ <-
+        raiseToRow hostRow
+          (@vuna@prim_eff_print "error: unknown `vuna obs` subcommand `${sub}`\n${obsUsageText}")
+      pure 2
+
+obsUsageText : String
+obsUsageText = """usage:
+  vuna obs run [--level N] [--sample cpu|mem|both] [--interval US] [--out FILE] [--] <cmd...>
+  vuna obs summarize [--json] [--baseline FILE] [--threshold PCT] [TRACE...]
+  vuna obs validate TRACE
+"""
+
+obsUsage : Eff hostRow Int
+obsUsage = do
+  _ <- raiseToRow hostRow (@vuna@prim_eff_print obsUsageText)
+  pure 2
+
+-- 下一批的子命令：明确「未实现」+ 用法，退出码 2。
+notYet : String -> String -> Eff hostRow Int
+notYet sub usage = do
+  _ <-
+    raiseToRow hostRow
+      (@vuna@prim_eff_print "error: `vuna obs ${sub}` is not implemented yet\nexpected: vuna obs ${usage}\n")
+  pure 2
+
+-- ---------------------------------------------------------------
+-- validate
+-- ---------------------------------------------------------------
+obsValidateArgs : List String -> Eff hostRow Int
+obsValidateArgs args = case parseToolArgs "vuna obs validate" [] args of
+  ErrC e => obsError (diagText e)
+  OkC parsed => case parsed.positionals of
+    [path] => obsValidateFile path
+    [] => obsError "usage: vuna obs validate TRACE"
+    _ => obsError "usage: vuna obs validate TRACE (exactly one trace)"
+
+obsValidateFile : String -> Eff hostRow Int
+obsValidateFile path = do
+  reportR <- validateTraceFile path
+  case reportR of
+    ErrC e => obsError (diagText e)
+    OkC report => do
+      _ <- printIssues report.validateIssues
+      errors <- pure (countErrors report)
+      if errors > 0 then do
+        _ <-
+          raiseToRow hostRow
+            (@vuna@prim_eff_print "error: ${strFromInt errors} error(s), ${strFromInt (countWarnings report)} warning(s) (${path})\n")
+        pure 1
+      else do
+        _ <-
+          raiseToRow hostRow
+            (@vuna@prim_eff_print "${verifySummary report}, ${strFromInt (countWarnings report)} warning(s) (${path})\n")
+        pure 0
+
+printIssues : List ValidateIssue -> Eff hostRow Int
+printIssues [] = pure 0
+printIssues (i :: rest) = do
+  _ <- raiseToRow hostRow (@vuna@prim_eff_print "${issueText i}\n")
+  printIssues rest
+
+-- ---------------------------------------------------------------
+-- summarize
+-- ---------------------------------------------------------------
+obsSummarizeArgs : List String -> Eff hostRow Int
+obsSummarizeArgs args = case parseToolArgs "vuna obs summarize" [BoolFlag "json", ValueFlag "baseline", ValueFlag "threshold"] args of
+  ErrC e => obsError (diagText e)
+  OkC parsed => case thresholdOf parsed of
+    ErrC e => obsError (diagText e)
+    OkC threshold => case parsed.positionals of
+      [] =>
+        obsError "usage: vuna obs summarize [--json] [--baseline FILE] [--threshold PCT] [TRACE...]"
+      traces => do
+        baseR <- baselineOf parsed
+        case baseR of
+          ErrC e => obsError (diagText e)
+          OkC base => summarizeTraces parsed threshold base traces
+
+-- `--threshold`：缺省 10（百分比，非负整数）。
+thresholdOf : Parsed -> Check Int
+thresholdOf parsed = case flagValue parsed "threshold" of
+  Nothing => OkC 10
+  Just text => case parseNonNegIntText text of
+    Just n => OkC n
+    Nothing => err "--threshold must be a non-negative integer (percent), got `${text}`"
+
+parseNonNegIntText : String -> Maybe Int
+parseNonNegIntText s = if s == "" then Nothing else parseDigits (strUnpack s) 0 False
+
+parseDigits : List Int -> Int -> Bool -> Maybe Int
+parseDigits [] acc neg = Just (if neg then 0 - acc else acc)
+parseDigits (c :: rest) acc neg =
+  if c == 45 && not neg then parseDigits rest acc True
+  else if c >= 48 && c <= 57 then parseDigits rest (acc * 10 + (c - 48)) neg else Nothing
+
+baselineOf : Parsed -> Eff hostRow (Check (Maybe ObsSummary))
+baselineOf parsed = case flagValue parsed "baseline" of
+  Nothing => pure (OkC Nothing)
+  Just path => do
+    traceR <- readTraceFull path
+    case traceR of
+      ErrC e => pure (err "baseline: ${diagText e}")
+      OkC trace => pure (OkC (Just (summarizeTrace trace)))
+
+-- 无 TRACE 时用法错误（见调用方）；多个 TRACE 逐个输出，任一退出非 0 就停（不吞错误）。
+summarizeTraces : Parsed -> Int -> Maybe ObsSummary -> List String -> Eff hostRow Int
+summarizeTraces parsed threshold base [] = pure 0
+summarizeTraces parsed threshold base (path :: rest) = do
+  traceR <- readTraceFull path
+  case traceR of
+    ErrC e => obsError (diagText e)
+    OkC trace => do
+      code <- emitSummary parsed threshold base path (summarizeTrace trace)
+      if code /= 0 then pure code else summarizeTraces parsed threshold base rest
+
+emitSummary : Parsed -> Int -> Maybe ObsSummary -> String -> ObsSummary -> Eff hostRow Int
+emitSummary parsed threshold base path summary = case base of
+  Nothing => if flagSet parsed "json" then do
+    _ <- obsLine (renderJson (summaryJson summary))
+    pure 0
+  else do
+    rows <-
+      pure
+        (append (append ["trace: ${path}"] (renderStageTable summary)) (append (renderCounterTable summary) (renderSampleSection summary)))
+    _ <- printRows rows
+    pure 0
+  Just baseSummary => emitDelta parsed threshold baseSummary path summary
+
+emitDelta : Parsed -> Int -> ObsSummary -> String -> ObsSummary -> Eff hostRow Int
+emitDelta parsed threshold baseSummary path summary =
+  emitDeltaGo parsed threshold summary path (diffSummaries baseSummary summary)
+
+emitDeltaGo : Parsed -> Int -> ObsSummary -> String -> List StageDelta -> Eff hostRow Int
+emitDeltaGo parsed threshold summary path deltas =
+  let
+    maxPct = maxAbsDeltaPct deltas
+    exceeds = maxPct > threshold
+  in if flagSet parsed "json" then do
+    _ <- obsLine (renderJson (summaryWithBaselineJson summary deltas))
+    pure (if exceeds then 1 else 0)
+  else do
+    rows <-
+      pure (append ["trace: ${path}"] (append (renderStageTable summary) (renderDeltaTable deltas)))
+    _ <- printRows rows
+    if exceeds then do
+      _ <-
+        raiseToRow hostRow
+          (@vuna@prim_eff_print "error: regression exceeds --threshold ${strFromInt threshold}% (max ${strFromInt maxPct}%)\n")
+      pure 1
+    else do
+      _ <-
+        raiseToRow hostRow
+          (@vuna@prim_eff_print "ok: max delta ${strFromInt maxPct}% (--threshold ${strFromInt threshold}%)\n")
+      pure 0
+
+-- `--json` + `--baseline`：在标准摘要上再嵌一个 `baseline` 字段（仍是单行 JSON）。
+summaryWithBaselineJson : ObsSummary -> List StageDelta -> Json
+summaryWithBaselineJson summary deltas = case summaryJson summary of
+  JObj kvs => JObj (append kvs [Pair "baseline" (deltasJson deltas)])
+  other => other
+
+printRows : List String -> Eff hostRow Int
+printRows [] = pure 0
+printRows (row :: rest) = do
+  _ <- raiseToRow hostRow (@vuna@prim_eff_print "${row}\n")
+  printRows rest
+
+obsLine : String -> Eff hostRow Int
+obsLine s = raiseToRow hostRow (@vuna@prim_eff_print "${s}\n")
+
+-- ---------------------------------------------------------------
+-- 错误出口（用法/前提 = 退出码 2）
+-- ---------------------------------------------------------------
+obsError : String -> Eff hostRow Int
+obsError e = do
+  _ <- raiseToRow hostRow (@vuna@prim_eff_print "error: ${e}\n")
+  pure 2

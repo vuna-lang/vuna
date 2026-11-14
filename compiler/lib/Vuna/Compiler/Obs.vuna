@@ -1,0 +1,36 @@
+module Vuna.Compiler.Obs where
+
+-- Vuna.Compiler.Obs：编译器自身的观测插桩（阶段 span / 计数 / 标记）。
+--
+-- 只是 `Base.Obs` / `Base.Obs.Span` 的**编译器侧适配层**：给 `Check a` 加跨度、给
+-- `Eff hostRow` 阶段打瞬时标记。规范见 `docs/reference/observability.md`。
+--
+-- 为什么需要适配层：`Base.Obs.obsSpan` 吃 `Int -> a` thunk，而编译器内部的阶段返回
+-- `Check a`（`OkC` / `ErrC`）。这里把「求值 + 构造 Check」整体放进跨度的 thunk 里，
+-- 错误路径也照样写出带 `args.error` 的 `X` 事件。
+-- `Eff hostRow` 的动作不能被纯跨度包住（执行发生在 runner 里），那些边界用
+-- `vuna.mark.*` 瞬时标记记录（`obsMark`），时间轴上是零宽度点。
+--
+-- 关闭时全部退化为一次 `Lazy.force` + 直接调用（见规范 §6）。
+import Base.HostRow
+import Base.List
+import Vuna.Compiler.Common
+import Base.Obs
+import Base.Obs.Span
+import Base.Eff
+
+-- ---------------------------------------------------------------
+-- Check 形态的阶段 span
+-- ---------------------------------------------------------------
+-- | 把一个 `Check a` 的求值放进 `ph:"X"` 跨度：`name` 用规范词汇表（`vuna.elab.*` /
+-- `vuna.codegen.*` / `vuna.iface.*` …），`cat` 一般 `vuna.phase`。
+export obsCheck : String -> (Int -> Check a) -> Check a
+obsCheck name f = @vuna@obs@span name "vuna.phase" (\u => f u)
+
+-- | 逐定义 span（`args` 里只有名字，位置由产物侧 `#line` 承担）：`vuna.def.elab` 等。
+export obsDefCheck : String -> String -> (Int -> Check a) -> Check a
+obsDefCheck name def f = @vuna@obs@span name "vuna.def" (\u => f u)
+
+-- | 带分类的 Effect 阶段标记（`Eff hostRow` 边界用；零宽度 instant）。
+export obsMarkEff : String -> Eff hostRow Int
+obsMarkEff name = raiseToRow hostRow (effPrim (\_ => obsMark name))

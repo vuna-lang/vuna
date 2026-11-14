@@ -68,22 +68,28 @@ span / 计数 / 日志 / 采样栈写成 **Chrome Trace Event JSONL**；关闭�
 | 字段 | 必填 | 约束 |
 | --- | --- | --- |
 | `ph` | 是 | `M` / `X` / `C` / `i` |
-| `ts` | `X`/`C`/`i` | epoch 微秒（整数）；**同一 `tid` 内单调不减**（`validate` 检查） |
+| `ts` | `X`/`C`/`i` | epoch 微秒（整数）；**同一 `pid`/`tid` 内单调不减**，唯一例外是**嵌套 span**（见下） |
 | `dur` | `X` | 微秒；`ts + dur` 不得倒挂同一 `tid` 的后续 `ts`（允许重叠嵌套） |
 | `pid` / `tid` | 是 | `pid` = `Unix.getpid`；`tid` = fiber id（无调度器时 0） |
 | `name` | 是 | `vuna.*`，小写点分；见 §3.3 词汇表 |
 | `cat` | 否 | `vuna.phase` / `vuna.def` / `vuna.cache` / `vuna.io` / `vuna.user` / `vuna.log` / `vuna.sample` |
 | `args` | 否 | 扁平对象：`value`（计数器）、`text`（日志）、`stack`（采样，叶在前）、`error`（span 异常）、`def`/`module`/`file`/`line`（逐定义定位） |
 
+**嵌套 span 的写序**：`dtp_obs_span` 在**完成时**写出事件（内层 span 先落盘），因此
+内层 `ts` 可以早于前一条事件。`validate` 的时序检查据此放行「落在上一条 span 的
+`[ts, ts+dur]` 区间内」的事件，其余倒挂仍是 error。
+
 `ph:"X"`（完整跨度）是唯一 span 形态：`dtp_obs_span` 用 `Fun.protect` 语义保证异常路径也写出
 （带 `args.error`），异常原样重抛。**不用** `B`/`E` 配对——少一类不闭合故障。
 
 ### 3.3 事件名（固定词汇表）
 
-- 编译链：`vuna.load`、`vuna.parse`、`vuna.resolve`、`vuna.elab.sigs`、`vuna.elab.datas`、
-  `vuna.elab.traits`、`vuna.elab.instheads`、`vuna.elab.bodies`、`vuna.elab.instbodies`、
-  `vuna.elab.tail`、`vuna.iface.compute`、`vuna.iface.write`、`vuna.codegen.split`、
+- 编译链：`vuna.load`、`vuna.parse`、`vuna.resolve`、**`vuna.elab`**（整段精化的汇总跨度）、
+  `vuna.elab.sigs`、`vuna.elab.datas`、`vuna.elab.traits`、`vuna.elab.instheads`、
+  `vuna.elab.bodies`、`vuna.elab.instbodies`、`vuna.elab.tail`、`vuna.iface.compute`、
+  `vuna.iface.write`、**`vuna.codegen.check`**（codegen 前置校验段）、`vuna.codegen.split`、
   `vuna.codegen.unit`、`vuna.cache.lookup`、`vuna.cache.write`、`vuna.check`、`vuna.build`、`vuna.link`；
+
 - 逐定义：`vuna.def.elab`、`vuna.def.lower`、`vuna.def.text`（`args.def/module/file/line`）；
 - 计数（`ph:"C"`，`args.value`）：`vuna.counter.core.reduce`、`vuna.counter.core.force`、
   `vuna.counter.meta.solve`、`vuna.counter.cache.hit`、`vuna.counter.cache.miss`、

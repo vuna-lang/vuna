@@ -1,0 +1,229 @@
+module Vuna.Obs.Run where
+
+-- Vuna.Obs.Run：`vuna obs run [--level N] [--sample cpu|mem|both] [--interval US] [--out FILE] [--] <cmd...>`。
+--
+-- 语义（规范 `docs/reference/observability.md` §2 开关、§7 `run`）：
+--   * 本进程**不 setenv**（仓库没有 `prim_eff_setenv` 原语），改用「env 前置命令」范式
+--     （同 `Vuna.Test.Run.withEnv`）：把 `["env", "VUNA_OBS=...", ...]` 拼在用户命令前，
+--     交给 `@vuna@prim_eff_runIn`（它先 chdir 再 `Sys.command`，子进程继承这组 env）；
+--     用户命令与参数在 `--` 之后原样透传（不做 argv 注入、不拼 shell 片段）；
+--   * `--level` 缺省 **2**（`run` 的默认语义就是 level 2；`--level 0` 显式关闭，用于
+--     关闭口径的对照）；`--sample` -> `VUNA_OBS_SAMPLE`；`--interval` -> `VUNA_OBS_INTERVAL`；
+--   * `--out FILE` -> `VUNA_OBS_FILE=<绝对路径>`（相对路径按调用方 cwd 前缀拼接，父目录先建）；
+--     否则给本次运行一个**全新的**临时目录 `${TMPDIR:-/tmp}/vuna-obs-run-<epoch-us>` 作为
+--     `VUNA_OBS_DIR`（避免把上一轮的 trace 算进这次）；
+--   * 退出码原样返回子命令的退出码（`run` 是透明执行器）；结束后打印 trace 路径。
+--
+-- 边界（第一批，写明而不是假装支持）：
+--   * 只覆盖 `VUNA_OBS*` 这组 env；`--obs` / `--obs-level` 是**运行时 argv**，由子命令自己
+--     读，`run` 不透传也不注入它们；
+--   * 子进程没产出 trace（level 0 / 忽略 env / 在开文件前失败退出）不是错误：
+--     打印 `no trace file produced` 后仍返回子命令退出码。
+import Base.HostRow
+import Base.List
+import Base.Pair
+import Base.String
+import Vuna.Cli.Args
+import Vuna.Compiler.Common
+import Vuna.Files
+import Base.Nat
+
+-- | `vuna obs run` 的选项（解析后的形态）。
+export record RunOpts(..) where
+  runOptsLevel : Int
+  runOptsSample : String
+  runOptsInterval : Maybe Int
+  runOptsOut : Maybe String
+
+-- | 执行 `vuna obs run`：打印 trace 路径，返回子命令退出码；用法错误返回 2。
+export runObsRun : List String -> Eff hostRow Int
+runObsRun args = case parseToolArgs "vuna obs run" [ValueFlag "level", ValueFlag "sample", ValueFlag "interval", ValueFlag "out"] args of
+  ErrC e => obsRunError (diagText e)
+  OkC parsed => case runOptsOf parsed of
+    ErrC e => obsRunError (diagText e)
+    OkC opts => case parsed.positionals of
+      [] =>
+        obsRunError
+          "usage: vuna obs run [--level N] [--sample cpu|mem|both] [--interval US] [--out FILE] [--] <cmd...>"
+      cmd :: rest => runChild opts (cmd :: rest)
+
+-- ---------------------------------------------------------------
+-- 选项校验
+-- ---------------------------------------------------------------
+runOptsOf : Parsed -> Check RunOpts
+runOptsOf parsed = do
+  level <- levelOf parsed
+  sample <- sampleOf parsed
+  interval <- intervalOf parsed
+  out <- outOf parsed
+  pure (RunOpts level sample interval out)
+
+levelOf : Parsed -> Check Int
+levelOf parsed = case flagValue parsed "level" of
+  Nothing => OkC 2
+  Just text => case parseIntText text of
+    Just n => if n >= 0 && n <= 3 then OkC n else err "--level must be 0..3, got `${text}`"
+    Nothing => err "--level is not an integer: `${text}`"
+
+sampleOf : Parsed -> Check String
+sampleOf parsed = case flagValue parsed "sample" of
+  Nothing => OkC ""
+  Just text =>
+    if text == "cpu" || text == "mem" || text == "both" then OkC text
+    else err "--sample must be cpu, mem or both, got `${text}`"
+
+intervalOf : Parsed -> Check (Maybe Int)
+intervalOf parsed = case flagValue parsed "interval" of
+  Nothing => OkC Nothing
+  Just text => case parseIntText text of
+    Just n =>
+      if n > 0 then OkC (Just n)
+      else err "--interval must be a positive integer (microseconds), got `${text}`"
+    Nothing => err "--interval is not an integer: `${text}`"
+
+outOf : Parsed -> Check (Maybe String)
+outOf parsed = case flagValue parsed "out" of
+  Nothing => OkC Nothing
+  Just text => if text == "" then err "--out requires a non-empty file path" else OkC (Just text)
+
+parseIntText : String -> Maybe Int
+parseIntText s = if s == "" then Nothing else parseDigits (strUnpack s) 0 False
+
+parseDigits : List Int -> Int -> Bool -> Maybe Int
+parseDigits [] acc neg = Just (if neg then 0 - acc else acc)
+parseDigits (c :: rest) acc neg =
+  if c == 45 && not neg then parseDigits rest acc True
+  else if c >= 48 && c <= 57 then parseDigits rest (acc * 10 + (c - 48)) neg else Nothing
+
+-- ---------------------------------------------------------------
+-- 执行
+-- ---------------------------------------------------------------
+runChild : RunOpts -> List String -> Eff hostRow Int
+runChild opts argv = do
+  cwd <- raiseToRow hostRow @vuna@prim_eff_getcwd
+  target <- targetOf opts cwd
+  envArgs <- envArgsOf opts cwd target
+  code <- raiseToRow hostRow (@vuna@prim_eff_runIn cwd (append envArgs argv))
+  _ <- printTracePaths target
+  pure code
+
+-- `target` = `Pair (Maybe 精确文件) 目录`：`--out` 时第一个是绝对文件路径、目录为空；
+-- 否则第一个是 Nothing、第二个是本次运行的临时目录。
+targetOf : RunOpts -> String -> Eff hostRow (Pair (Maybe String) String)
+targetOf opts cwd = case opts.runOptsOut of
+  Just out => do
+    path <- absoluteOut out cwd
+    _ <- ensureDirPath (parentOf path)
+    pure (Pair (Just path) "")
+  Nothing => do
+    dir <- freshRunDir
+    pure (Pair Nothing dir)
+
+-- `--out` 相对化：相对路径按调用方 cwd 拼成绝对路径（`runIn` 会先 chdir）。
+absoluteOut : String -> String -> Eff hostRow String
+absoluteOut out cwd = pure (if startsWith "/" out then out else "${cwd}/${out}")
+
+-- 本次运行的临时目录：`${TMPDIR:-/tmp}/vuna-obs-run-<epoch-us>`（唯一，避免混入旧 trace）。
+freshRunDir : Eff hostRow String
+freshRunDir = do
+  tmp <- raiseToRow hostRow (@vuna@prim_eff_getenv "TMPDIR")
+  stamp <- effTimeUs
+  dir <- runDirPath tmp stamp
+  _ <- ensureDirPath dir
+  pure dir
+
+runDirPath : String -> Int -> Eff hostRow String
+runDirPath tmp stamp =
+  let
+    base =
+      if tmp == "" then "/tmp"
+      else if endsWith "/" tmp then substring (natFromInt 0) (natFromInt (strLength tmp - 1)) tmp
+      else tmp
+  in pure "${base}/vuna-obs-run-${strFromInt stamp}"
+
+-- 前置 `env VAR=VAL ...` 参数（`@vuna@prim_eff_runIn` 经 shell 执行，子进程继承）。
+envArgsOf : RunOpts -> String -> Pair (Maybe String) String -> Eff hostRow (List String)
+envArgsOf opts cwd target = do
+  vars <- envVarsOf opts target
+  pure (append ["env"] (map envPairText vars))
+
+-- 变量集：级别 + 输出位置（`--out` 给 `VUNA_OBS_FILE`，否则给 `VUNA_OBS_DIR`）+ 采样。
+envVarsOf : RunOpts -> Pair (Maybe String) String -> Eff hostRow (List (Pair String String))
+envVarsOf opts target =
+  let
+    levelText = if opts.runOptsLevel <= 0 then "0" else strFromInt opts.runOptsLevel
+    vars =
+      append [Pair "VUNA_OBS" levelText]
+        (append (sinkVars target) (append (sampleVar opts) (intervalVar opts)))
+  in pure vars
+
+sinkVars : Pair (Maybe String) String -> List (Pair String String)
+sinkVars target = case firstOf target of
+  Just path => [Pair "VUNA_OBS_FILE" path]
+  Nothing => [Pair "VUNA_OBS_DIR" (secondOf target)]
+
+sampleVar : RunOpts -> List (Pair String String)
+sampleVar opts =
+  if opts.runOptsSample == "" then [] else [Pair "VUNA_OBS_SAMPLE" opts.runOptsSample]
+
+intervalVar : RunOpts -> List (Pair String String)
+intervalVar opts = case opts.runOptsInterval of
+  Just us => [Pair "VUNA_OBS_INTERVAL" (strFromInt us)]
+  Nothing => []
+
+envPairText : Pair String String -> String
+envPairText kv = "${firstOf kv}=${secondOf kv}"
+
+-- 跑完打印 trace 路径：`--out` 直接给出文件；否则列临时目录里的 `vuna-*.jsonl`
+-- （多进程 = 多个文件，目录序即字典序，输出确定）。
+printTracePaths : Pair (Maybe String) String -> Eff hostRow Int
+printTracePaths target = case firstOf target of
+  Just out => printOutTrace out
+  Nothing => printDirTraces (secondOf target)
+
+printOutTrace : String -> Eff hostRow Int
+printOutTrace out = do
+  exists <- pathExistsFile out
+  if exists then obsLine "trace: ${out}"
+  else obsLine "no trace file produced: ${out} (level 0, or the command did not honor VUNA_OBS*)"
+
+printDirTraces : String -> Eff hostRow Int
+printDirTraces dir = do
+  exists <- pathExistsDir dir
+  if not exists then obsLine "no trace file produced (obs dir was not created: ${dir})"
+  else do
+    names <- raiseToRow hostRow (@vuna@prim_eff_readDir dir)
+    printer <- pure (tracesAfter dir names)
+    printer
+
+traceLine : String -> String -> String
+traceLine dir name = "trace: ${dir}/${name}"
+
+-- 目录里的 trace 文件名过滤；空 = 打印「没产出」，否则逐行打印路径。
+tracesAfter : String -> List String -> Eff hostRow Int
+tracesAfter dir names = do
+  printers <- pure (map (traceLine dir) (filter isTraceName names))
+  if length printers == 0 then obsLine "no trace file produced in ${dir} (level 0, or the command did not honor VUNA_OBS*)"
+  else obsLines printers
+
+isTraceName : String -> Bool
+isTraceName name = startsWith "vuna-" name && endsWith ".jsonl" name
+
+-- ---------------------------------------------------------------
+-- 输出（与其它工具命令一致：直接 print，退出码由调用方给）
+-- ---------------------------------------------------------------
+obsLine : String -> Eff hostRow Int
+obsLine s = do
+  _ <- raiseToRow hostRow (@vuna@prim_eff_print "${s}\n")
+  pure 0
+
+obsLines : List String -> Eff hostRow Int
+obsLines [] = pure 0
+obsLines (s :: rest) = do
+  _ <- obsLine s
+  obsLines rest
+
+obsRunError : String -> Eff hostRow Int
+obsRunError e = do
+  _ <- raiseToRow hostRow (@vuna@prim_eff_print "error: ${e}\n")
+  pure 2

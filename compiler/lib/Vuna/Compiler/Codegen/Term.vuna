@@ -1006,13 +1006,13 @@ let dtp_obs_flush () =
   dtp_obs_count := 0;
   0
 
-let dtp_obs_hdr b (ph : string) (name : string) =
+let dtp_obs_hdr b (ph : string) (name : string) (ts : int) =
   Buffer.add_char b dtp_obs_lb;
   dtp_obs_key b \"ph\";
   dtp_obs_str b ph;
   Buffer.add_char b dtp_obs_comma;
   dtp_obs_key b \"ts\";
-  dtp_obs_int b (dtp_timeUs ());
+  dtp_obs_int b ts;
   Buffer.add_char b dtp_obs_comma;
   dtp_obs_key b \"pid\";
   dtp_obs_int b (Unix.getpid ());
@@ -1094,7 +1094,7 @@ let dtp_obs_span (name : string) (cat : string) (f : int -> 'a) : 'a =
       let t1 = dtp_timeUs () in
       let s1 = Gc.quick_stat () in
       let b = Buffer.create 192 in
-      dtp_obs_hdr b \"X\" name;
+      dtp_obs_hdr b \"X\" name t0;
       Buffer.add_char b dtp_obs_comma;
       dtp_obs_key b \"cat\";
       dtp_obs_str b cat;
@@ -1128,7 +1128,7 @@ let dtp_obs_span (name : string) (cat : string) (f : int -> 'a) : 'a =
 
 let dtp_obs_mark_like (ph : string) (name : string) (cat : string) (kv : (Buffer.t -> unit) option) =
   let b = Buffer.create 160 in
-  dtp_obs_hdr b ph name;
+  dtp_obs_hdr b ph name (dtp_timeUs ());
   Buffer.add_char b dtp_obs_comma;
   dtp_obs_key b \"cat\";
   dtp_obs_str b cat;
@@ -1217,7 +1217,7 @@ let dtp_obs_emit_samples (name : string) (n : int) (get : int -> Printexc.raw_ba
     | None -> ()
     | Some bt ->
       let b = Buffer.create 256 in
-      dtp_obs_hdr b \"i\" name;
+      dtp_obs_hdr b \"i\" name (dtp_timeUs ());
       Buffer.add_char b dtp_obs_comma;
       dtp_obs_key b \"cat\";
       dtp_obs_str b \"vuna.sample\";

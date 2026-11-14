@@ -42,6 +42,7 @@ import Vuna.GenErrors
 import Vuna.Add
 import Vuna.Clean
 import Vuna.Fetch
+import Vuna.Obs
 import Vuna.Explain
 import Vuna.TestRunner
 import Vuna.Test.Suite
@@ -89,6 +90,12 @@ toolUsageLines prog = """  ${prog} lint [--fix] <file.vuna>...
   ${prog} map --impact <Module.name>           改动影响面：受影响模块 + 测试标签
   ${prog} api <Module.name>                    某模块的签名面（含注释与行号）
   ${prog} goal <file.vuna>                     列出 DT 洞的目标与上下文（M17）
+  ${prog} obs run [--level N] [--sample cpu|mem|both] [--interval US] [--out FILE] [--] <cmd...>
+      用 VUNA_OBS* env 跑子命令（run 缺省级别 2；VUNA_OBS_SAMPLE=cpu|mem|both）并打印 trace 路径
+  ${prog} obs summarize [--json] [--baseline FILE] [--threshold PCT] [TRACE...]
+      span 折叠：阶段总/自用用时（整数微秒）、计数、采样热点；--baseline 差值超 --threshold 退出 1
+  ${prog} obs validate TRACE              校验 vuna-obs 1 trace（字段/时序/词汇表；截断只 warning）
+  ${prog} obs convert|render|merge|symbols|serve （下一批；当前返回 not implemented + 退出码 2）
   ${prog} lsp                                  启动 LSP server（JSON-RPC over stdio）
   ${prog} version, --version                   显示版本
   ${prog} help, -h                             显示本帮助
@@ -150,6 +157,7 @@ runCli1 args = case args of
     "api" => apiArgs (stripReleaseArgs rest)
     "lsp" => Vuna.Lsp.runLspTool (stripReleaseArgs rest)
     "goal" => goalArgs (stripReleaseArgs rest)
+    "obs" => Vuna.Obs.runObs (stripReleaseArgs rest)
     "version" => printVersion 0
     "--version" => printVersion 0
     "help" => help 0

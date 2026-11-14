@@ -27,6 +27,7 @@ modules = [
   "Vuna.Compiler.Diagnostics.Sink",
   "Vuna.Compiler.Diagnostics.Warning",
   "Vuna.Compiler.Intrinsics",
+  "Vuna.Compiler.Obs",
   "Vuna.Compiler.Version",
   "Vuna.Compiler.Canonical",
   "Vuna.Compiler.Canonical.Ast",

@@ -13,6 +13,7 @@ import Base.HostRow
 import Base.List
 import Base.String
 import Vuna.Compiler.Common
+import Vuna.Compiler.Obs
 import Vuna.Compiler.Canonical.Ast
 import Vuna.Compiler.Canonical.Bytes
 import Base.HashMap
@@ -111,18 +112,20 @@ checkDeclsWithWarns : List Diagnostic -> List Decl -> Check (List Diagnostic)
 checkDeclsWithWarns loaderWarns decls =
   let
     _ = dbg! "decls-ready"
-  in case elabProgramFull decls of
+  in obsCheck "vuna.elab" (\_ => case elabProgramFull decls of
     ErrC e => ErrC e
     OkC program =>
       let
         _ = dbg! "elab-done"
-      in case checkDtProgramOf (dtProgDatas program) (dtProgDefs program) of
+      in obsCheck "vuna.codegen.check" (\_ => case checkDtProgramOf (dtProgDatas program) (dtProgDefs program) of
         ErrC e => ErrC e
         OkC _ =>
           let
             _ = dbg! "codegen-check-done"
           in OkC
             (append loaderWarns (append (dtProgWarnings program) (warnUnusedDefsIn (dtProgDefs program))))
+      )
+  )
 
 -- M34.5：与 dtCheck 同一条精化路径，但把 DtProgram / 模块表 / 入口声明一并返回
 -- （检查缓存写接口摘要用）。
@@ -144,20 +147,21 @@ dtCheckPartsWithProgram pkg loaded = do
         parts = secondOf resolved
         loaderWarns = firstOf resolved
         decls = sealOpaqueDecls (secondOf parts) (firstOf parts)
-      in case elabProgramFull decls of
+      in obsCheck "vuna.elab" (\_ => case elabProgramFull decls of
         ErrC e => ErrC e
         OkC program =>
           let
             _ = dbg! "elab-done"
             warns = append loaderWarns (dtProgWarnings program)
-          in case checkDtProgramOf (dtProgDatas program) (dtProgDefs program) of
+          in obsCheck "vuna.codegen.check" (\_ => case checkDtProgramOf (dtProgDatas program) (dtProgDefs program) of
             ErrC e => ErrC e
             OkC _ =>
               let
                 _ = dbg! "codegen-check-done"
               in OkC (Pair warns (CheckedPackage program (secondOf parts) (firstOf parts) [] warns))
+          )
+      )
   )
-
 -- D11：模块边界 seal。opaque 在模块末尾 seal（定义模块自身可展开）；abstract 在
 -- 其 DFun 之后立即 seal（定义模块自身也不能展开）。seal 是内部 DAxiom，名字带
 -- `@seal@` 前缀，elabBodies 见到后从 deftbl 移除目标体；体仍留在 ecDefs 供 codegen。

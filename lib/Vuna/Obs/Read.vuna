@@ -1,0 +1,162 @@
+module Vuna.Obs.Read where
+
+-- Vuna.Obs.Read：trace 文件（Chrome Trace Event JSONL）的读取与容错。
+-- 规范：`docs/reference/observability.md` §1（O1：每行一事件、崩溃可截断容忍）、§3（事件模型）。
+--
+-- 调用链：`readText`（`Vuna.Cli.Args` 的存在/目录守卫 + 宿主读盘）→ 逐行 `Vuna.Json.parseJson`
+-- → `Vuna.Obs.Types.parseEvent`（结构身份字段）→ 行号与事件一起返回，供 validate / summarize
+-- 报位置。
+--
+-- 容错规则（本模块唯一的策略，测试见模块尾 golden 注释）：
+--   * 空行（trim 后为空）跳过，不占行号语义；
+--   * **非最后一行** JSON 解析失败 = 硬错误（`line N: ...`）——文件是 append-only 的，
+--     中间坏行说明文件被外部改坏，静默跳过会掩盖数据损坏；
+--   * **最后一行** JSON 解析失败 = 视为「进程被杀在半个 JSON 行」：先按括号平衡尝试补全
+--     （截断文件只可能缺尾部闭括号），补全成功则解析并按 warning 上报；补全失败/仍不完整
+--     则丢该行并 warning。绝不把截断升级成 error（规范 §7 `validate`：截断只报 warning）。
+--
+-- 只有读盘是 `Eff hostRow`；解析、补全与行收集都是纯函数。
+import Base.HostRow
+import Base.List
+import Base.Maybe
+import Base.Pair
+import Base.String
+import Vuna.Cli.Args
+import Vuna.Compiler.Common
+import Vuna.Json
+import Vuna.Obs.Types
+
+-- | 一份读入的 trace：按文件顺序的 `(行号, 事件)` + 读入阶段产生的 warning（截断恢复等）。
+export record ObsTrace(..) where
+  traceEvents : List (Pair Int ObsEvent)
+  traceWarnings : List String
+
+-- | 读一个 trace 文件；返回逐行 `(行号, 事件)` 与截断 warning。
+-- 文件不存在/是目录/不可读 = `ErrC`（调用方映射到退出码 2）；中间行 JSON 坏 = `ErrC`；
+-- 末尾半个 JSON 行 = warning + 跳过（见模块头）。
+export readTraceFull : String -> Eff hostRow (Check ObsTrace)
+readTraceFull path = do
+  textR <- readText path
+  case textR of
+    ErrC e => pure (ErrC e)
+    OkC text => pure (parseTraceText text)
+
+-- | 读 trace 的事件部分（行号 + 事件）；warning 丢弃（validate/summarize 需要 warning 时用
+-- `readTraceFull`）。签名按规范 §7 / 实现要点固定。
+export readTrace : String -> Eff hostRow (Check (List (Pair Int ObsEvent)))
+readTrace path = do
+  traceR <- readTraceFull path
+  pure (fmap traceEventRows traceR)
+
+traceEventRows : ObsTrace -> List (Pair Int ObsEvent)
+traceEventRows t = t.traceEvents
+
+-- ---------------------------------------------------------------
+-- 纯解析
+-- ---------------------------------------------------------------
+-- | 行号收集：空行跳过，其余保留原始 1-based 行号。
+export collectLines : Int -> List String -> List (Pair Int String)
+collectLines n [] = []
+collectLines n (line :: rest) =
+  if trim line == "" then collectLines (n + 1) rest else Pair n line :: collectLines (n + 1) rest
+
+-- | trace 文本 -> `ObsTrace`（纯）。中间行 JSON 坏是 error，末行坏是 warning。
+export parseTraceText : String -> Check ObsTrace
+parseTraceText text = readLines (collectLines 1 (lines text)) [] []
+
+readLines : List (Pair Int String) -> List (Pair Int ObsEvent) -> List String -> Check ObsTrace
+readLines [] events warnings = OkC (ObsTrace (reverse events) (reverse warnings))
+readLines ((Pair line raw) :: rest) events warnings = case parseJson raw of
+  ErrC e => if length rest == 0 then case tryTailEvent line raw of
+    Just ev => tailRepaired line ev events warnings
+    Nothing => tailWarning line events warnings
+  else err "line ${strFromInt line}: ${diagText e}"
+  OkC json => case parseEvent line json of
+    ErrC e => ErrC e
+    OkC ev => readLines rest (Pair line ev :: events) warnings
+
+-- 末行 JSON 不完整：先尝试补全闭括号（截断文件只缺尾部），补全成功仍要过 parseEvent。
+-- 末行是最后一行，这里直接收尾（不回调 readLines，避免与 readLines 成互递归）。
+tailWarning : Int -> List (Pair Int ObsEvent) -> List String -> Check ObsTrace
+tailWarning line events warnings =
+  OkC (ObsTrace (reverse events) (reverse (dropWarning line :: warnings)))
+
+tailRepaired : Int -> ObsEvent -> List (Pair Int ObsEvent) -> List String -> Check ObsTrace
+tailRepaired line ev events warnings =
+  OkC (ObsTrace (reverse (Pair line ev :: events)) (reverse (repairWarning line :: warnings)))
+
+-- 末行恢复尝试：返回 `Just 事件`（补全成功）或 `Nothing`（按截断丢弃）。
+tryTailEvent : Int -> String -> Maybe ObsEvent
+tryTailEvent line raw = case repairTruncatedJson raw of
+  Nothing => Nothing
+  Just fixed => case parseJson fixed of
+    ErrC _ => Nothing
+    OkC json => case parseEvent line json of
+      ErrC _ => Nothing
+      OkC ev => Just ev
+
+dropWarning : Int -> String
+dropWarning line = "line ${strFromInt line}: truncated JSON line dropped (file cut mid-write)"
+
+repairWarning : Int -> String
+repairWarning line = "line ${strFromInt line}: truncated JSON line repaired (file cut mid-write)"
+
+-- ---------------------------------------------------------------
+-- 截断补全（纯；只处理「缺尾部闭括号」这一种损坏）
+-- ---------------------------------------------------------------
+-- | 括号扫描状态：未闭合的括号栈（头 = 最内层）、是否在字符串内、是否处于转义、是否不匹配。
+export record BracketScan(..) where
+  scanOpen : List Int
+  scanInString : Bool
+  scanEscaped : Bool
+  scanBroken : Bool
+
+-- | 按 JSON 词法扫描括号；字符串内的括号不计数。截断点若在字符串内则不尝试补全。
+export scanBrackets : List Int -> BracketScan
+scanBrackets chars = scanGo chars (BracketScan [] False False False)
+
+scanGo : List Int -> BracketScan -> BracketScan
+scanGo [] scan = scan
+scanGo (c :: rest) scan = if scan.scanBroken then scan
+else if scan.scanEscaped then scanGo rest (BracketScan scan.scanOpen scan.scanInString False False)
+else if scan.scanInString then if c == 92 then scanGo rest (BracketScan scan.scanOpen True True False)
+else if c == 34 then scanGo rest (BracketScan scan.scanOpen False False False) else scanGo rest scan
+else if c == 34 then scanGo rest (BracketScan scan.scanOpen True False False)
+else if c == 123 || c == 91 then scanGo rest (BracketScan (c :: scan.scanOpen) False False False)
+else if c == 125 || c == 93 then case scan.scanOpen of
+  open :: more =>
+    let
+      matched = open == 123 && c == 125 || open == 91 && c == 93
+    in if matched then scanGo rest (BracketScan more False False False)
+    else scanGo rest (BracketScan scan.scanOpen False False True)
+  [] => scanGo rest (BracketScan [] False False True)
+else scanGo rest scan
+
+-- | 尝试给被截断的一行补上缺失的闭括号；不可恢复 = `Nothing`。
+export repairTruncatedJson : String -> Maybe String
+repairTruncatedJson raw =
+  let
+    scan = scanBrackets (strUnpack raw)
+  in if scan.scanBroken || scan.scanInString || scan.scanEscaped || length scan.scanOpen == 0 then Nothing
+  else Just (raw ++ join "" (map closerOf scan.scanOpen))
+
+closerOf : Int -> String
+closerOf 123 = "}"
+closerOf _ = "]"
+
+-- ---------------------------------------------------------------
+-- golden（本模块承诺的行为；`_scratch/` 里有对应夹具，不提交）
+--
+-- `ok.jsonl`（M + 嵌套 X + C + i 采样/日志 + 用户事件名 app.render，18 行）：
+--   readTraceFull 返回 18 个事件、traceWarnings = []。
+-- `trunc.jsonl`（ok 的全部 18 行 + 第 19 行 `{"ph":"C","ts":...,"name":"vuna.cou`，无结尾换行）：
+--   readTraceFull 返回 18 个事件（最后一行截断在字符串中间，补全失败 ⇒ 丢弃），
+--   traceWarnings = ["line 19: truncated JSON line dropped (file cut mid-write)"]，
+--   不返回 error（规范：截断只报 warning）。
+--   若截断恰好停在闭括号缺失处（`...,"dur":50`），补全成功 ⇒
+--   warning "line N: truncated JSON line repaired (file cut mid-write)" 且事件保留。
+-- `bad-*` 夹具（中间行非法 JSON / 缺字段）：
+--   readTraceFull 返回 `ErrC "line N: ..."`（例如 `bad-ts.jsonl` 的 ts 倒挂不在这里报，
+--   由 validate 的时序规则报；`bad-counter.jsonl` 缺 `args.value` 也不在这里报——
+--   结构身份字段齐全，语义字段交给 validate）。
+-- ---------------------------------------------------------------

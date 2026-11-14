@@ -1,0 +1,509 @@
+module Vuna.Obs.Summarize where
+
+-- Vuna.Obs.Summarize：把 trace 的事件折叠成「阶段表 / 计数表 / 采样热点」（规范
+-- `docs/reference/observability.md` §7 `summarize`）。
+--
+-- 折叠规则（**本模块的简化约定**，写在这里是因为规范没规定树算法）：
+--   * 只处理 `ph:"X"` 跨度（`C` / `i` 不进入 span 树）；
+--   * 按 `pid`/`tid` 分组，组内按 `ts` 稳定排序（`ts` 相同的保持文件顺序）；
+--   * 用**栈折叠**：新 span 完全落在栈顶 span 的 `[ts, ts+dur]` 内 ⇒ 是它的子 span；
+--     否则逐层弹出（弹出的 span 记一条阶段样本、其 `dur` 计入父 span 的「子用时」），
+--     直到栈顶包含新 span 或栈空。部分重叠（既不含也不被含）按「不是子」处理——规范的
+--     事件模型只承诺同一 tid 内 `ts` 单调，不保证区间包含；
+--   * `args.parent`（可选）优先：若该 span 声明了父名，先按名字在栈里找父（找到就弹出到它），
+--     找不到再回落到时间包含规则；
+--   * `self = dur − 直接子 span 的 dur 之和`；同一 `name` 的多个 span 累加 `count` / `total` /
+--     `self`；`%self = self / total * 100`（整数百分比，`total = 0` ⇒ 0）。
+--
+-- 计数（`ph:"C"`）：按 name 汇总 `args.value` 的**求和**与**末值**，并记出现次数。
+-- 采样（`ph:"i"` 的 `vuna.sample.cpu` / `vuna.sample.mem`）：栈是**叶在前**，热点键是栈首帧
+-- （`name@file:line`）；每个种类取 top 20（`count` 降序、帧名升序）。
+--
+-- 数字约定：**一律整数微秒**（不引入 `Float`，格式化确定、跨机器逐字节一致）。
+-- `wallUs` = 最晚结束 − 最早开始（结束 = `ts + dur`；非 span 事件取 `ts`；无事件 = 0）。
+--
+-- `--baseline`：摘要之间的比较是纯函数（`diffSummaries`），CI 用 `--threshold PCT`
+-- （缺省 10）判回归；只看阶段表 `total`（含子）的差值与百分比。
+--
+-- 边界：不排序 `pid`/`tid`（按文件首现顺序处理）；不做跨进程合并（`merge` 属于下一批）；
+-- 缺失 `ts`/`dur` 的事件被跳过（validate 已把它们报成 error，summarize 保持 best-effort）。
+import Base.HostRow
+import Base.List
+import Base.Maybe
+import Base.Ord
+import Base.Pair
+import Base.Sort
+import Base.String
+import Vuna.Compiler.Common
+import Vuna.Json
+import Vuna.Obs.Read
+import Vuna.Obs.Types
+
+-- ---------------------------------------------------------------
+-- 数据模型
+-- ---------------------------------------------------------------
+-- | 一个阶段（按 `name` 聚合）：出现次数、含子总用时、自用（total − 直接子之和）。
+export record StageStat(..) where
+  stageName : String
+  stageCount : Int
+  stageTotalUs : Int
+  stageSelfUs : Int
+
+-- | 一个计数器（按 `name` 聚合）：求和、末值、出现次数。
+export record CounterStat(..) where
+  counterName : String
+  counterSum : Int
+  counterLast : Int
+  counterCount : Int
+
+-- | 采样热点一行：`name@file:line` 帧 + 命中次数。
+export record SampleEntry(..) where
+  sampleEntryFrame : String
+  sampleEntryCount : Int
+
+-- | 一个采样种类的热点表（`cpu` / `mem`）；空列表表示该类无采样。
+export record SampleTable(..) where
+  sampleTableKind : String
+  sampleTableEntries : List SampleEntry
+
+-- | 一份完整摘要（`--json` 与 baseline 差值的共同输入）。
+export record ObsSummary(..) where
+  summaryWallUs : Int
+  summaryStages : List StageStat
+  summaryCounters : List CounterStat
+  summarySamples : List SampleTable
+
+-- | 一条 baseline 差值（`base` = 旧 trace，`new` = 本次 trace）。
+export record StageDelta(..) where
+  deltaName : String
+  deltaBaseTotalUs : Int
+  deltaNewTotalUs : Int
+  deltaUs : Int
+  deltaPct : Int
+
+-- ---------------------------------------------------------------
+-- 入口
+-- ---------------------------------------------------------------
+-- | 从已读 trace 算摘要（纯函数；读盘在 `Vuna.Obs.Read`）。
+export summarizeTrace : ObsTrace -> ObsSummary
+summarizeTrace trace =
+  let
+    evs = trace.traceEvents
+    aggs = concatMap groupStageStats (groupByThread evs)
+    stages = sortStages (aggregateStages aggs)
+    counters = sortCounters (aggregateCounters evs)
+    samples = sortSampleTables (sampleTablesOf evs)
+  in ObsSummary (wallUsOf evs) stages counters samples
+
+-- ---------------------------------------------------------------
+-- 分组 / 折叠
+-- ---------------------------------------------------------------
+-- | 按 `(pid,tid)` 分组，保持首次出现顺序（文件顺序 ⇒ 确定性）。
+export groupByThread : List (Pair Int ObsEvent) -> List (Pair (Pair Int Int) (List (Pair Int ObsEvent)))
+groupByThread evs = foldl insertGroup [] evs
+
+insertGroup : List (Pair (Pair Int Int) (List (Pair Int ObsEvent))) -> Pair Int ObsEvent -> List (Pair (Pair Int Int) (List (Pair Int ObsEvent)))
+insertGroup groups row =
+  let
+    key = Pair (eventPid (secondOf row)) (eventTid (secondOf row))
+  in addToGroup groups key row
+
+addToGroup : List (Pair (Pair Int Int) (List (Pair Int ObsEvent))) -> Pair Int Int -> Pair Int ObsEvent -> List (Pair (Pair Int Int) (List (Pair Int ObsEvent)))
+addToGroup [] key item = [Pair key [item]]
+addToGroup ((Pair k items) :: rest) key item =
+  if sameThread key k then Pair k (append items [item]) :: rest
+  else Pair k items :: addToGroup rest key item
+
+-- 上面的两个签名是「按线程收集事件」，分组后的行号无需保留（validate 已经报过位置）。
+sameThread : Pair Int Int -> Pair Int Int -> Bool
+sameThread (Pair p1 t1) (Pair p2 t2) = p1 == p2 && t1 == t2
+
+isSpan : ObsEvent -> Bool
+isSpan ev = eventPh ev == "X"
+
+-- 一个线程组 -> 阶段样本列表。
+groupStageStats : Pair (Pair Int Int) (List (Pair Int ObsEvent)) -> List SpanSample
+groupStageStats (Pair _ items) =
+  let
+    spans = sortBySpanTs (map secondOf (filterSpanRows items))
+  in (foldSpans spans (FoldState [] [])).foldSamples
+
+filterSpanRows : List (Pair Int ObsEvent) -> List (Pair Int ObsEvent)
+filterSpanRows [] = []
+filterSpanRows ((row@(Pair _ ev)) :: rest) =
+  if isSpan ev then row :: filterSpanRows rest else filterSpanRows rest
+
+-- | 折叠时的「已打开 span」：名字、区间起点、时长、直接子用时之和。
+export record OpenSpan(..) where
+  openSpanName : String
+  openSpanTs : Int
+  openSpanDur : Int
+  openSpanChildUs : Int
+
+-- | 阶段样本（折叠时的中间形态；`self` 在关闭 span 时算）。
+export record SpanSample(..) where
+  spanSampleName : String
+  spanSampleTotalUs : Int
+  spanSampleSelfUs : Int
+
+-- | 折叠状态：打开的 span 栈（头 = 最内层）+ 已关闭 span 的样本。
+export record FoldState(..) where
+  foldStack : List OpenSpan
+  foldSamples : List SpanSample
+
+-- 稳定排序：只对 span 按 ts 升序。
+sortBySpanTs : List ObsEvent -> List ObsEvent
+sortBySpanTs spans = sortBy leSpanTs spans
+
+leSpanTs : ObsEvent -> ObsEvent -> Bool
+leSpanTs a b = tsOrZero a <= tsOrZero b
+
+tsOrZero : ObsEvent -> Int
+tsOrZero ev = fromMaybe 0 (eventTs ev)
+
+-- 折叠：结构递归吃 span 列表的 tail（DT 可证终止），结束时把仍打开的 span 全部关闭。
+foldSpans : List ObsEvent -> FoldState -> FoldState
+foldSpans [] st = drainSpans st
+foldSpans (ev :: rest) st = case spanInterval ev of
+  Nothing => foldSpans rest st
+  Just (Pair ts end) => foldSpans rest (attachSpan ev ts end st)
+
+attachSpan : ObsEvent -> Int -> Int -> FoldState -> FoldState
+attachSpan ev ts end st =
+  let
+    opened = popForParent (argParent ev) ts end st
+    dur = end - ts
+    span0 = OpenSpan (eventName ev) ts dur 0
+  in FoldState (span0 :: opened.foldStack) opened.foldSamples
+
+-- 先按 `args.parent` 名字找父，再按时间包含弹出；两步都只弹不 push。
+-- 两个弹出循环都沿「关闭栈顶」前进，对 DT 不是结构递归，因此用显式 fuel（栈深 + 1）。
+popForParent : Maybe String -> Int -> Int -> FoldState -> FoldState
+popForParent parentName ts end st = case parentName of
+  Just name =>
+    if hasOpenName name st.foldStack then popUntilName (stackFuel st) name st
+    else popUntilContains (stackFuel st) ts end st
+  Nothing => popUntilContains (stackFuel st) ts end st
+
+stackFuel : FoldState -> Int
+stackFuel st = length st.foldStack + 1
+
+hasOpenName : String -> List OpenSpan -> Bool
+hasOpenName name [] = False
+hasOpenName name (s :: rest) = if s.openSpanName == name then True else hasOpenName name rest
+
+popUntilName : Int -> String -> FoldState -> FoldState
+popUntilName fuel name st = if fuel <= 0 then st
+else case st.foldStack of
+  [] => st
+  top :: _ => if top.openSpanName == name then st else popUntilName (fuel - 1) name (closeTop st)
+
+popUntilContains : Int -> Int -> Int -> FoldState -> FoldState
+popUntilContains fuel ts end st = if fuel <= 0 then st
+else case st.foldStack of
+  [] => st
+  top :: _ =>
+    if ts >= top.openSpanTs && end <= top.openSpanTs + top.openSpanDur then st
+    else popUntilContains (fuel - 1) ts end (closeTop st)
+
+-- 关闭栈顶 span：算 self、把 dur 计入新栈顶的 childUs、记一条样本。
+closeTop : FoldState -> FoldState
+closeTop st = case st.foldStack of
+  [] => st
+  top :: rest =>
+    let
+      selfUs = top.openSpanDur - top.openSpanChildUs
+      sample = SpanSample top.openSpanName top.openSpanDur selfUs
+    in FoldState (addTopChild top.openSpanDur rest) (sample :: st.foldSamples)
+
+addTopChild : Int -> List OpenSpan -> List OpenSpan
+addTopChild d [] = []
+addTopChild d (top :: rest) =
+  OpenSpan top.openSpanName top.openSpanTs top.openSpanDur (top.openSpanChildUs + d) :: rest
+
+drainSpans : FoldState -> FoldState
+drainSpans st = drainSpansGo (length st.foldStack + 1) st
+
+drainSpansGo : Int -> FoldState -> FoldState
+drainSpansGo fuel st = if fuel <= 0 then st
+else case st.foldStack of
+  [] => st
+  _ :: _ => drainSpansGo (fuel - 1) (closeTop st)
+
+-- ---------------------------------------------------------------
+-- 聚合
+-- ---------------------------------------------------------------
+aggregateStages : List SpanSample -> List StageStat
+aggregateStages samples = foldl addStage [] samples
+
+addStage : List StageStat -> SpanSample -> List StageStat
+addStage [] s = [StageStat s.spanSampleName 1 s.spanSampleTotalUs s.spanSampleSelfUs]
+addStage (st :: rest) s =
+  if st.stageName == s.spanSampleName then StageStat st.stageName (st.stageCount + 1) (st.stageTotalUs + s.spanSampleTotalUs) (st.stageSelfUs + s.spanSampleSelfUs)
+    :: rest
+  else st :: addStage rest s
+
+-- 阶段表排序：总用时降序、名字升序（热点在前，同值确定序）。
+sortStages : List StageStat -> List StageStat
+sortStages stages = sortBy stageLt stages
+
+stageLt : StageStat -> StageStat -> Bool
+stageLt a b =
+  if a.stageTotalUs > b.stageTotalUs then True
+  else if a.stageTotalUs < b.stageTotalUs then False else a.stageName <= b.stageName
+
+isCounter : ObsEvent -> Bool
+isCounter ev = eventPh ev == "C"
+
+aggregateCounters : List (Pair Int ObsEvent) -> List CounterStat
+aggregateCounters evs = foldl addCounter [] (map secondOf (filterCounterRows evs))
+
+filterCounterRows : List (Pair Int ObsEvent) -> List (Pair Int ObsEvent)
+filterCounterRows [] = []
+filterCounterRows ((row@(Pair _ ev)) :: rest) =
+  if isCounter ev then row :: filterCounterRows rest else filterCounterRows rest
+
+addCounter : List CounterStat -> ObsEvent -> List CounterStat
+addCounter counters ev = insertCounter counters (eventName ev) (fromMaybe 0 (eventValue ev))
+
+insertCounter : List CounterStat -> String -> Int -> List CounterStat
+insertCounter [] name value = [CounterStat name value value 1]
+insertCounter (c :: rest) name value =
+  if c.counterName == name then CounterStat name (c.counterSum + value) value (c.counterCount + 1) :: rest
+  else c :: insertCounter rest name value
+
+-- 计数表按名字升序（稳定、可 diff）。
+sortCounters : List CounterStat -> List CounterStat
+sortCounters counters = sortBy counterLt counters
+
+counterLt : CounterStat -> CounterStat -> Bool
+counterLt a b = a.counterName <= b.counterName
+
+-- ---------------------------------------------------------------
+-- 采样热点
+-- ---------------------------------------------------------------
+sampleTablesOf : List (Pair Int ObsEvent) -> List SampleTable
+sampleTablesOf evs =
+  [SampleTable "cpu" (hotEntries "cpu" evs), SampleTable "mem" (hotEntries "mem" evs)]
+
+hotEntries : String -> List (Pair Int ObsEvent) -> List SampleEntry
+hotEntries kind evs = take 20 (sortBy hotLt (foldl addHot [] (filterSamples kind evs)))
+
+filterSamples : String -> List (Pair Int ObsEvent) -> List (Pair Int ObsEvent)
+filterSamples kind [] = []
+filterSamples kind ((row@(Pair _ ev)) :: rest) =
+  if isKindSample kind ev then row :: filterSamples kind rest else filterSamples kind rest
+
+isKindSample : String -> ObsEvent -> Bool
+isKindSample kind ev = case sampleOf ev of
+  Nothing => False
+  Just s => sampleKindOfName s.sampleName == kind
+
+addHot : List SampleEntry -> Pair Int ObsEvent -> List SampleEntry
+addHot entries (Pair _ ev) = case sampleOf ev of
+  Nothing => entries
+  Just s => case s.sampleStack of
+    [] => entries
+    leaf :: _ => insertHot entries leaf
+
+insertHot : List SampleEntry -> String -> List SampleEntry
+insertHot [] frame = [SampleEntry frame 1]
+insertHot (e :: rest) frame =
+  if e.sampleEntryFrame == frame then SampleEntry frame (e.sampleEntryCount + 1) :: rest
+  else e :: insertHot rest frame
+
+hotLt : SampleEntry -> SampleEntry -> Bool
+hotLt a b =
+  if a.sampleEntryCount > b.sampleEntryCount then True
+  else if a.sampleEntryCount < b.sampleEntryCount then False
+  else a.sampleEntryFrame <= b.sampleEntryFrame
+
+sortSampleTables : List SampleTable -> List SampleTable
+sortSampleTables tables = sortBy sampleTableLt tables
+
+sampleTableLt : SampleTable -> SampleTable -> Bool
+sampleTableLt a b = a.sampleTableKind <= b.sampleTableKind
+
+wallUsOf : List (Pair Int ObsEvent) -> Int
+wallUsOf evs =
+  let
+    starts = filterMapEvents eventTs evs
+    ends = filterMapEvents eventEnd evs
+  in case starts of
+    [] => 0
+    first :: _ => case ends of
+      [] => 0
+      e :: _ => max 0 (foldl max e ends - foldl min first starts)
+
+filterMapEvents : (ObsEvent -> Maybe Int) -> List (Pair Int ObsEvent) -> List Int
+filterMapEvents f [] = []
+filterMapEvents f ((Pair _ ev) :: rest) = case f ev of
+  Just n => n :: filterMapEvents f rest
+  Nothing => filterMapEvents f rest
+
+eventEnd : ObsEvent -> Maybe Int
+eventEnd ev = case spanInterval ev of
+  Just (Pair _ end) => Just end
+  Nothing => eventTs ev
+
+-- ---------------------------------------------------------------
+-- baseline 差值（纯）
+-- ---------------------------------------------------------------
+-- | 旧摘要 -> 新摘要的每阶段差值（按新表顺序；旧表没有 = base 0）。
+export diffSummaries : ObsSummary -> ObsSummary -> List StageDelta
+diffSummaries base new = map (deltaOf base.summaryStages) new.summaryStages
+
+deltaOf : List StageStat -> StageStat -> StageDelta
+deltaOf baseStages newStat =
+  let
+    baseTotal = case findStage newStat.stageName baseStages of
+      Just b => b.stageTotalUs
+      Nothing => 0
+    delta = newStat.stageTotalUs - baseTotal
+    pct = pctOf delta baseTotal
+  in StageDelta newStat.stageName baseTotal newStat.stageTotalUs delta pct
+
+findStage : String -> List StageStat -> Maybe StageStat
+findStage name [] = Nothing
+findStage name (s :: rest) = if s.stageName == name then Just s else findStage name rest
+
+-- 百分比：`base <= 0` 时无定义（返回 0，避免除零）；delta 为 0 也返回 0。
+pctOf : Int -> Int -> Int
+pctOf delta base = if base <= 0 then 0 else delta * 100 / base
+
+-- | 差值里最大的绝对百分比（`--threshold` 判定用）。
+export maxAbsDeltaPct : List StageDelta -> Int
+maxAbsDeltaPct [] = 0
+maxAbsDeltaPct (d :: rest) = max (absInt d.deltaPct) (maxAbsDeltaPct rest)
+
+absInt : Int -> Int
+absInt n = if n < 0 then 0 - n else n
+
+-- ---------------------------------------------------------------
+-- 文本渲染（列宽对齐；整数微秒）
+-- ---------------------------------------------------------------
+-- | 阶段表表头 + 每行（`name count totalUs selfUs %self`）。
+export renderStageTable : ObsSummary -> List String
+renderStageTable s =
+  if length s.summaryStages == 0 then ["no spans"] else stageHeader :: map stageRow s.summaryStages
+
+-- 表头与数据行用同一套列宽（`padRight`），保证终端对齐。
+stageHeader : String
+stageHeader =
+  "${padRight 34 "stage"}  ${padRight 7 "count"}  ${padRight 11 "totalUs"}  ${padRight 11 "selfUs"}  self%"
+
+stageRow : StageStat -> String
+stageRow st =
+  "${padRight 34 st.stageName}  ${padRight 7 (strFromInt st.stageCount)}  ${padRight 11 (strFromInt st.stageTotalUs)}  ${padRight 11 (strFromInt st.stageSelfUs)}  ${strFromInt (pctOf st.stageSelfUs st.stageTotalUs)}%"
+
+-- | 计数表表头 + 每行（`name count sum last`）。
+export renderCounterTable : ObsSummary -> List String
+renderCounterTable s =
+  if length s.summaryCounters == 0 then ["no counters"]
+  else counterHeader :: map counterRow s.summaryCounters
+
+counterHeader : String
+counterHeader = "${padRight 34 "counter"}  ${padRight 7 "count"}  ${padRight 11 "sum"}  last"
+
+counterRow : CounterStat -> String
+counterRow c =
+  "${padRight 34 c.counterName}  ${padRight 7 (strFromInt c.counterCount)}  ${padRight 11 (strFromInt c.counterSum)}  ${strFromInt c.counterLast}"
+
+-- | 采样热点表（每个种类一节；空表显示 `(none)`）。
+export renderSampleSection : ObsSummary -> List String
+renderSampleSection s = concatMap sampleTableLines s.summarySamples
+
+sampleEntryLine : SampleEntry -> String
+sampleEntryLine e = "${padRight 7 (strFromInt e.sampleEntryCount)}  ${e.sampleEntryFrame}"
+
+sampleTableLines : SampleTable -> List String
+sampleTableLines t =
+  if length t.sampleTableEntries == 0 then ["samples:${t.sampleTableKind}  (none)"]
+  else "samples:${t.sampleTableKind}" :: map sampleEntryLine t.sampleTableEntries
+
+-- | baseline 差值表（`+` / `-` 前缀，百分比取整）。
+export renderDeltaTable : List StageDelta -> List String
+renderDeltaTable deltas =
+  if length deltas == 0 then ["no stages to compare"] else deltaHeader :: map deltaRow deltas
+
+deltaHeader : String
+deltaHeader =
+  "${padRight 34 "stage"}  ${padRight 10 "baseUs"}  ${padRight 11 "nowUs"}  ${padRight 10 "deltaUs"}  delta%"
+
+deltaRow : StageDelta -> String
+deltaRow d =
+  "${padRight 34 d.deltaName}  ${padRight 10 (strFromInt d.deltaBaseTotalUs)}  ${padRight 11 (strFromInt d.deltaNewTotalUs)}  ${padRight 10 (signed d.deltaUs)}  ${signed d.deltaPct}%"
+
+signed : Int -> String
+signed n = if n > 0 then "+${strFromInt n}" else strFromInt n
+
+-- ---------------------------------------------------------------
+-- JSON（单行、稳定：键顺序固定，数组按渲染顺序）
+-- ---------------------------------------------------------------
+-- | `--json` 载荷：`{"schema":"vuna-obs-summary 1","wallUs":N,"spans":[...],"counters":[...],"samples":{"cpu":[...],"mem":[...]}}`。
+export summaryJson : ObsSummary -> Json
+summaryJson s =
+  JObj
+    [Pair "schema" (JStr obsSummarySchema), Pair "wallUs" (JNum s.summaryWallUs), Pair "spans" (JArr (map stageJson s.summaryStages)), Pair "counters" (JArr (map counterJson s.summaryCounters)), Pair "samples" (samplesJson s.summarySamples)]
+
+stageJson : StageStat -> Json
+stageJson st =
+  JObj
+    [Pair "name" (JStr st.stageName), Pair "count" (JNum st.stageCount), Pair "totalUs" (JNum st.stageTotalUs), Pair "selfUs" (JNum st.stageSelfUs), Pair "selfPct" (JNum (pctOf st.stageSelfUs st.stageTotalUs))]
+
+counterJson : CounterStat -> Json
+counterJson c =
+  JObj
+    [Pair "name" (JStr c.counterName), Pair "count" (JNum c.counterCount), Pair "sum" (JNum c.counterSum), Pair "last" (JNum c.counterLast)]
+
+samplesJson : List SampleTable -> Json
+samplesJson tables =
+  JObj
+    [Pair "cpu" (JArr (map sampleEntryJson (entriesOf "cpu" tables))), Pair "mem" (JArr (map sampleEntryJson (entriesOf "mem" tables)))]
+
+entriesOf : String -> List SampleTable -> List SampleEntry
+entriesOf kind [] = []
+entriesOf kind (t :: rest) =
+  if t.sampleTableKind == kind then t.sampleTableEntries else entriesOf kind rest
+
+sampleEntryJson : SampleEntry -> Json
+sampleEntryJson e =
+  JObj [Pair "frame" (JStr e.sampleEntryFrame), Pair "count" (JNum e.sampleEntryCount)]
+
+-- | baseline 差值 JSON 片段（嵌在 `--json` 的 `baseline` 字段里）。
+export deltasJson : List StageDelta -> Json
+deltasJson deltas =
+  JObj [Pair "spans" (JArr (map deltaJson deltas)), Pair "maxAbsPct" (JNum (maxAbsDeltaPct deltas))]
+
+deltaJson : StageDelta -> Json
+deltaJson d =
+  JObj
+    [Pair "name" (JStr d.deltaName), Pair "baseUs" (JNum d.deltaBaseTotalUs), Pair "nowUs" (JNum d.deltaNewTotalUs), Pair "deltaUs" (JNum d.deltaUs), Pair "deltaPct" (JNum d.deltaPct)]
+
+-- ---------------------------------------------------------------
+-- 小工具
+-- ---------------------------------------------------------------
+padRight : Int -> String -> String
+padRight n s = if strLength s >= n then s else s ++ repeatSpaces (n - strLength s)
+
+repeatSpaces : Int -> String
+repeatSpaces n = if n <= 0 then "" else " " ++ repeatSpaces (n - 1)
+
+-- ---------------------------------------------------------------
+-- golden（`_scratch/obs/spec/ok.jsonl`，不提交）
+--
+-- ok.jsonl（M + 6 X + 5 C + 7 i）的 X 树：
+--   vuna.check [2000, 3200] ⊃ vuna.parse [2100, 2600] ⊃ vuna.def.elab [2300, 2420]
+--                                    ⊃ vuna.elab.sigs [2500, 2800]
+--                            ⊃ vuna.build [2900, 3100]
+--   app.render [3700, 3780] 独立。
+--   阶段表（total 降序）：vuna.check count=1 total=1200 self=1200−(500+300+200)=200；
+--   vuna.parse total=500 self=500−120=380；vuna.elab.sigs 300；vuna.build 200；
+--   vuna.def.elab 120；app.render 80。wallUs = 3800−2000 = 1800。
+--   计数表：vuna.counter.core.reduce sum=900 last=900 count=1；cache.hit 7；cache.miss 2；
+--   app.frames 60。
+--   采样：cpu 3 条（`Vuna.Compiler.Elab.elabBodies@compiler/lib/Vuna/Compiler/Elab.vuna:120`
+--   2 次、`Vuna.Compiler.Core.Eval.force@compiler/lib/Vuna/Compiler/Core/Eval.vuna:88` 1 次）；
+--   mem 1 条（`Vuna.Compiler.Core.Term.quote@compiler/lib/Vuna/Compiler/Core/Term.vuna:210`）。
+--   `--json` 单行、键顺序同 `summaryJson`。对同一文件做 baseline ⇒ 全 delta=0、pct=0、退出 0。
+-- ---------------------------------------------------------------

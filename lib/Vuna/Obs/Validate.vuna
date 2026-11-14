@@ -1,0 +1,278 @@
+module Vuna.Obs.Validate where
+
+-- Vuna.Obs.Validate：trace 的字段 / 时序 / 词汇表校验（规范 `docs/reference/observability.md`
+-- §3 事件模型、§7 `validate`）。
+--
+-- 规则（error = 退出码 1，warning = 只打印）：
+--   1. 首事件**必须**是 `ph:"M"` 且 `args.schema == "vuna-obs 1"`；`M` 出现在其它位置 = error。
+--   2. 每个非 `M` 事件必须有整数 `ts`（epoch 微秒）。
+--   3. 同一 `pid`/`tid` 内 `ts` 单调不减（倒挂 = error）。
+--   4. `ph:"X"` 必须有 `dur` 且 `dur >= 0`；`ts + dur` 越过后继 `ts` **允许**（嵌套 span）。
+--      `args.allocWords` / `args.heapWords`（若有）必须是整数（§3.3 档次读数挂在 span 上）。
+--   5. `ph:"C"` 必须有整数 `args.value`。
+--   6. `ph:"i"` 的 `vuna.sample.cpu` / `vuna.sample.mem` 必须有字符串数组 `args.stack`；
+--      `vuna.log` 必须有字符串 `args.text`。
+--   7. 名字以 `vuna.` 开头的事件必须在 §3.3 词汇表内（`vuna.mark.*` 前缀放行）；非 `vuna.`
+--      前缀（如 `app.render`、原型 `probe.phase`）一律放行。
+--   8. 文件截断（末行半个 JSON 行）= warning，由 `Vuna.Obs.Read` 降级，这里只转发（不升级为 error）。
+--
+-- 不做的事（本批边界）：`cat` 只作信息字段不校验（运行时计数器用 `vuna.counter`，§3.2 表未列全）；
+-- 时间戳绝对单调只看同一 `pid`/`tid`，跨进程（merge 前）不比较；语义一致性（例如 span 嵌套
+-- 是否与 `args.parent` 一致）留给 `summarize` 的折叠规则，不在这里重复判定。
+import Base.HostRow
+import Base.List
+import Base.Pair
+import Base.String
+import Vuna.Compiler.Common
+import Vuna.Json
+import Vuna.Obs.Read
+import Vuna.Obs.Types
+
+-- | 一条校验问题：严重级别 + 行号（0 = 与具体行无关）+ 消息。
+export record ValidateIssue(..) where
+  issueSeverity : Severity
+  issueLine : Int
+  issueText : String
+
+-- | 校验结果：全部问题（error 在前、warning 在后，各自按文件顺序）+ 统计。
+export record ValidateReport(..) where
+  validateIssues : List ValidateIssue
+  validateEvents : Int
+  validateSpans : Int
+  validateCounters : Int
+  validateInstants : Int
+
+-- | 校验一个 trace 文件：读盘 + 规则。文件不存在/是目录 = `ErrC`（调用方映射退出码 2）。
+export validateTraceFile : String -> Eff hostRow (Check ValidateReport)
+validateTraceFile path = do
+  traceR <- readTraceFull path
+  pure (fmap validateTrace traceR)
+
+-- | 纯校验入口：`ObsTrace` -> 报告（不读盘）。
+export validateTrace : ObsTrace -> ValidateReport
+validateTrace trace =
+  let
+    evs = trace.traceEvents
+    schemaIssues = checkSchema evs
+    fieldIssues = checkFields evs
+    nameIssues = checkNames evs
+    orderIssues = checkOrder evs
+    truncIssues = truncationWarnings trace.traceWarnings
+  in ValidateReport
+    (append schemaIssues (append fieldIssues (append nameIssues (append orderIssues truncIssues))))
+    (length evs) (countPh "X" evs) (countPh "C" evs) (countPh "i" evs)
+
+countPh : String -> List (Pair Int ObsEvent) -> Int
+countPh ph rows = length (filter (hasPh ph) rows)
+
+hasPh : String -> Pair Int ObsEvent -> Bool
+hasPh ph row = eventPh (secondOf row) == ph
+
+issue : Severity -> Int -> String -> ValidateIssue
+issue sev line text = ValidateIssue sev line text
+
+errorAt : Int -> String -> ValidateIssue
+errorAt line text = issue SevError line text
+
+warningAt : Int -> String -> ValidateIssue
+warningAt line text = issue SevWarning line text
+
+truncationWarnings : List String -> List ValidateIssue
+truncationWarnings [] = []
+truncationWarnings (w :: rest) = warningAt 0 w :: truncationWarnings rest
+
+-- ---------------------------------------------------------------
+-- 1) 元数据首行
+-- ---------------------------------------------------------------
+checkSchema : List (Pair Int ObsEvent) -> List ValidateIssue
+checkSchema [] =
+  [ errorAt 0 "empty trace: expected a metadata event (ph:\"M\", args.schema=\"vuna-obs 1\") as the first line"
+  ]
+checkSchema ((Pair line ev) :: rest) = case ev of
+  ObsMetaEvent m => append (schemaOf m line) (strayMeta rest)
+  _ =>
+    errorAt line "first event must be metadata (ph:\"M\"), got ph:\"${eventPh ev}\""
+      :: strayMeta rest
+
+schemaOf : ObsMetaData -> Int -> List ValidateIssue
+schemaOf m line =
+  append
+    (if m.metaSchema == obsSchemaVersion then [] else [errorAt line "metadata schema is `${m.metaSchema}`, expected `${obsSchemaVersion}`"])
+    (if m.metaName == "vuna.obs.schema" then [] else [errorAt line "metadata name must be `vuna.obs.schema`, got `${m.metaName}`"])
+
+strayMeta : List (Pair Int ObsEvent) -> List ValidateIssue
+strayMeta [] = []
+strayMeta ((Pair line ev) :: rest) = append (case ev of
+  ObsMetaEvent _ => [errorAt line "metadata event (ph:\"M\") may only appear as the first line"]
+  _ => []
+) (strayMeta rest)
+
+-- ---------------------------------------------------------------
+-- 2) ~ 6) 字段与时序
+-- ---------------------------------------------------------------
+checkFields : List (Pair Int ObsEvent) -> List ValidateIssue
+checkFields [] = []
+checkFields ((Pair line ev) :: rest) = append (fieldIssuesOf line ev) (checkFields rest)
+
+fieldIssuesOf : Int -> ObsEvent -> List ValidateIssue
+fieldIssuesOf line ev = case ev of
+  ObsMetaEvent _ => []
+  ObsSpanEvent _ dur =>
+    append (tsRequired line ev) (append (durRequired line dur) (allocWordsIssue line ev))
+  ObsCounterEvent _ value => append (tsRequired line ev) (counterValueIssue line value)
+  ObsInstantEvent _ => append (tsRequired line ev) (instantArgsIssues line ev)
+
+tsRequired : Int -> ObsEvent -> List ValidateIssue
+tsRequired line ev = case eventTs ev of
+  Just _ => []
+  Nothing => [errorAt line "event is missing integer field `ts`"]
+
+durRequired : Int -> Maybe Int -> List ValidateIssue
+durRequired line dur = case dur of
+  Just d => if d < 0 then [errorAt line "span `dur` must be >= 0, got ${strFromInt d}"] else []
+  Nothing => [errorAt line "span (ph:\"X\") is missing integer field `dur`"]
+
+allocWordsIssue : Int -> ObsEvent -> List ValidateIssue
+allocWordsIssue line ev =
+  append (intArgIssue line "allocWords" ev) (intArgIssue line "heapWords" ev)
+
+intArgIssue : Int -> String -> ObsEvent -> List ValidateIssue
+intArgIssue line key ev = case argJson key ev of
+  Nothing => []
+  Just (JNum _) => []
+  Just _ => [errorAt line "`args.${key}` must be an integer"]
+
+counterValueIssue : Int -> Maybe Int -> List ValidateIssue
+counterValueIssue line value = case value of
+  Just _ => []
+  Nothing => [errorAt line "counter (ph:\"C\") is missing integer field `args.value`"]
+
+instantArgsIssues : Int -> ObsEvent -> List ValidateIssue
+instantArgsIssues line ev =
+  let
+    name = eventName ev
+  in if isSampleName name then case argStack ev of
+    Just _ => []
+    Nothing => [errorAt line "sample `${name}` is missing string-array field `args.stack`"]
+  else if name == "vuna.log" then case argStr "text" ev of
+    Just _ => []
+    Nothing => [errorAt line "log event `vuna.log` is missing string field `args.text`"]
+  else []
+
+checkOrder : List (Pair Int ObsEvent) -> List ValidateIssue
+checkOrder evs = checkOrderGo evs []
+
+-- 每个 (pid,tid) 记录上一条事件的 `(ts, end)`；`end` 对 span 是 `ts + dur`。
+-- 规则：`ts` 单调不减；**唯一例外是嵌套 span**——span 按完成序写出（内层先落盘），
+-- 内层 span 的 `ts` 因此可以早于前一条。此时只要求新 span 的区间 [ts, ts+dur]
+-- 落在上一条 span 的区间内（end 不回退），否则仍然是倒挂。
+checkOrderGo : List (Pair Int ObsEvent) -> List (Pair (Pair Int Int) (Pair Int Int)) -> List ValidateIssue
+checkOrderGo [] _ = []
+checkOrderGo ((Pair line ev) :: rest) seen = case eventTs ev of
+  Nothing => checkOrderGo rest seen
+  Just ts =>
+    let
+      key = Pair (eventPid ev) (eventTid ev)
+      endTs = case eventDur ev of
+        Just d => ts + d
+        Nothing => ts
+    in case lookupPairOf key seen of
+      Nothing => checkOrderGo rest (Pair key (Pair ts endTs) :: seen)
+      Just (Pair prevTs prevEnd) =>
+        let
+          nested = ts < prevTs && endTs >= prevEnd
+          backwards = ts < prevTs && not nested
+        in append
+          (if backwards then [errorAt line "timestamp goes backwards for pid ${strFromInt (eventPid ev)} / tid ${strFromInt (eventTid ev)}: ts=${strFromInt ts} < ${strFromInt prevTs} and the event does not nest inside the previous span"] else [])
+          (checkOrderGo rest (Pair key (Pair ts endTs) :: removePairOf key seen))
+
+lookupPairOf : Pair Int Int -> List (Pair (Pair Int Int) (Pair Int Int)) -> Maybe (Pair Int Int)
+lookupPairOf key [] = Nothing
+lookupPairOf key ((Pair k v) :: rest) = if sameKey key k then Just v else lookupPairOf key rest
+
+sameKey : Pair Int Int -> Pair Int Int -> Bool
+sameKey (Pair p1 t1) (Pair p2 t2) = p1 == p2 && t1 == t2
+
+removePairOf : Pair Int Int -> List (Pair (Pair Int Int) (Pair Int Int)) -> List (Pair (Pair Int Int) (Pair Int Int))
+removePairOf key [] = []
+removePairOf key ((Pair k v) :: rest) =
+  if sameKey key k then rest else Pair k v :: removePairOf key rest
+
+-- ---------------------------------------------------------------
+-- 7) 词汇表
+-- ---------------------------------------------------------------
+checkNames : List (Pair Int ObsEvent) -> List ValidateIssue
+checkNames [] = []
+checkNames ((Pair line ev) :: rest) =
+  let
+    name = eventName ev
+  in append
+    (if isKnownVunaEventName name then [] else [errorAt line "unknown vuna.* event name `${name}` (not in docs/reference/observability.md §3.3 vocabulary)"])
+    (checkNames rest)
+
+-- ---------------------------------------------------------------
+-- 渲染
+-- ---------------------------------------------------------------
+-- | 数某一严重级别的问题条数（`countErrors` / `countWarnings` 的共用实现）。
+export countSeverity : Severity -> ValidateReport -> Int
+countSeverity sev report = length (filter (sameSeverity sev) (map issueSev report.validateIssues))
+
+issueSev : ValidateIssue -> Severity
+issueSev i = i.issueSeverity
+
+sameSeverity : Severity -> Severity -> Bool
+sameSeverity SevError SevError = True
+sameSeverity SevWarning SevWarning = True
+sameSeverity _ _ = False
+
+-- | error 条数。
+export countErrors : ValidateReport -> Int
+countErrors report = countSeverity SevError report
+
+-- | warning 条数。
+export countWarnings : ValidateReport -> Int
+countWarnings report = countSeverity SevWarning report
+
+-- | 一条问题的可读行：`line N: error: ...` / `warning: ...`（行号 0 时省略位置）。
+export issueText : ValidateIssue -> String
+issueText i = "${severityText (issueSev i)}: ${positionText (issueLineOf i)}${issueBody i}"
+
+issueLineOf : ValidateIssue -> Int
+issueLineOf i = i.issueLine
+
+issueBody : ValidateIssue -> String
+issueBody i = i.issueText
+
+severityText : Severity -> String
+severityText SevError = "error"
+severityText SevWarning = "warning"
+severityText SevNote = "note"
+severityText SevHelp = "help"
+
+positionText : Int -> String
+positionText line = if line <= 0 then "" else "line ${strFromInt line}: "
+
+-- | 通过时的摘要行（`N events, M spans, K counters, J instants verified (W warning(s))`）。
+export verifySummary : ValidateReport -> String
+verifySummary report =
+  "${strFromInt report.validateEvents} events, ${strFromInt report.validateSpans} spans, ${strFromInt report.validateCounters} counters, ${strFromInt report.validateInstants} instants verified"
+
+-- ---------------------------------------------------------------
+-- golden（`_scratch/obs/spec/` 夹具，不提交）
+--
+-- `ok.jsonl`（M + 嵌套 X + C + i 采样/日志 + 用户事件名 app.render）：
+--   0 error、0 warning；verifySummary = "18 events, 6 spans, 4 counters, 7 instants verified"。
+--   注：ok.jsonl 有 18 行（M + 6 X + 4 C + 7 i）。
+-- `trunc.jsonl`（18 个完整行 + 第 19 行截断在字符串中间）：
+--   0 error、1 warning（`warning: line 19: truncated JSON line dropped (file cut mid-write)`）。
+-- `bad-ts.jsonl`（vuna.build 的 ts 早于 vuna.elab.sigs）：1 error
+--   `timestamp goes backwards for pid 100 / tid 0: ts=... < ...`。
+-- `bad-schema.jsonl`（schema vuna-obs 2）：1 error `metadata schema is ...`。
+-- `bad-name.jsonl`（vuna.elab.unknown）：1 error `unknown vuna.* event name ...`。
+-- `bad-counter.jsonl`（C 缺 args.value）：1 error `counter ... missing integer field args.value`。
+-- `bad-dur.jsonl`（X 缺 dur）：1 error `span (ph:"X") is missing integer field dur`。
+-- `bad-stack.jsonl`（采样 args 改为 {}）：1 error `sample ... missing string-array field args.stack`。
+-- `bad-log.jsonl`（vuna.log args 改为 {}）：1 error `log event ... missing string field args.text`。
+-- `bad-nometa.jsonl`（删掉首行）：1 error `first event must be metadata ...`。
+-- `bad-meta-order.jsonl`（首行前插一条 i 事件）：1 error 首行不是 M + 1 error `metadata event ... may only appear as the first line`。
+-- ---------------------------------------------------------------
