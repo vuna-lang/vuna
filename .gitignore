@@ -59,8 +59,9 @@ examples/**/main
 /Main.ml
 
 # vuna 包级 compile 输出
-#（符号链接形态也要忽略：`vuna build .` 会建 `.output` 软链到 store view）
+# `.output` 与 `compiler/.output` 都是 vuna 建的软链（指向 store view），不入库。
 .output
+compiler/.output
 .output/
 /seed/program
 .local-tmp/
