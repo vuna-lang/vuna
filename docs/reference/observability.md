@@ -41,7 +41,7 @@ span / 计数 / 日志 / 采样栈写成 **Chrome Trace Event JSONL**；关闭�
 | `VUNA_OBS_FILE` | env | 精确输出文件（单进程场景） |
 | `VUNA_OBS_DIR` | env | 目录；缺省 `${TMPDIR:-/tmp}/vuna-obs`；文件名 `vuna-<pid>.jsonl` |
 | `VUNA_OBS_INTERVAL` | env | 采样间隔 µs（缺省 1000） |
-| `VUNA_OBS_SAMPLE` | env | 采样种类 `cpu` / `mem` / `both`（缺省 `cpu`）；由 `vuna obs run --sample` 设置，运行时据此调 `sampleStart` |
+| `VUNA_OBS_SAMPLE` | env | 采样种类 `cpu` / `mem` / `both`（缺省 `cpu`）：运行时在 `sampleStart` 的 `mode` 为空串时读它；`vuna obs run --sample` 把它写进子进程 env |
 | `--debug-perf` / `VUNA_DEBUG_PERF=1` | 运行时 argv/env | 既有 `dbg!` 输出开关，**独立**且优先：它只控制 stderr 行 |
 
 级别含义与成本（关闭 = `Lazy.force` + 分支）：

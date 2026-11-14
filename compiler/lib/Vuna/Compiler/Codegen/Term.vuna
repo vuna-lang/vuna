@@ -1235,17 +1235,31 @@ let dtp_obs_emit_samples (name : string) (n : int) (get : int -> Printexc.raw_ba
 let dtp_obs_sample_start (mode : string) (interval_us : int) : int =
   if not (dtp_obs_on ()) then 0
   else begin
-    let want_cpu = mode = \"cpu\" || mode = \"both\" in
-    let want_mem = mode = \"mem\" || mode = \"both\" in
-    let iv = if interval_us <= 0 then 1000 else interval_us in
+    (* `mode` 为空串时按 `VUNA_OBS_SAMPLE`（env）取缺省（`cpu`）；这样 `vuna obs run
+       --sample both` 的 env 注入能生效，而库层调用总是显式给 mode。 *)
+    let mode2 =
+      if mode <> \"\" then mode
+      else match Sys.getenv_opt \"VUNA_OBS_SAMPLE\" with
+        | Some m when m <> \"\" -> m
+        | _ -> \"cpu\"
+    in
+    let iv2 =
+      if interval_us > 0 then interval_us
+      else
+        match int_of_string_opt (match Sys.getenv_opt \"VUNA_OBS_INTERVAL\" with Some v -> v | None -> \"\") with
+        | Some v when v > 0 -> v
+        | _ -> 1000
+    in
+    let want_cpu = mode2 = \"cpu\" || mode2 = \"both\" in
+    let want_mem = mode2 = \"mem\" || mode2 = \"both\" in
     (if want_cpu then
        try
          Sys.set_signal Sys.sigprof (Sys.Signal_handle dtp_obs_cpu_tick);
          dtp_obs_cpu_on := true;
          ignore
            (Unix.setitimer Unix.ITIMER_PROF
-              { Unix.it_interval = float_of_int iv /. 1000000.0;
-                it_value = float_of_int iv /. 1000000.0 })
+              { Unix.it_interval = float_of_int iv2 /. 1000000.0;
+                it_value = float_of_int iv2 /. 1000000.0 })
        with _ -> ());
     (if want_mem then
        try
