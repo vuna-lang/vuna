@@ -50,9 +50,11 @@ span / 计数 / 日志 / 采样栈写成 **Chrome Trace Event JSONL**；关闭�
 | --- | --- | --- |
 | 0 | 无 | 每次探针一次 `Lazy.force`（无分配、无 I/O） |
 | 1 | 阶段 span + 计数器 | 每 span 两次时钟读 + 一行 JSON |
-| 2 | + 逐定义 span + `dbg!` 日志事件 | 每定义两次时钟读（compiler 约 6k def） |
-| 3 | + CPU/内存采样 + 步数计数 | 采样 1%/默认 1 ms；步数计数按 §6 实测决定档位 |
+| 2 | + 逐定义 span + `dbg!` 日志事件 | 每定义两次时钟读（compiler 实测 10933 条 `vuna.def.elab` / 5470 个定义） |
+| 3 | + CPU/内存采样 | 采样 1%/默认 1 ms、固定 8192 槽环形数组 |
 
+级差是**探针侧**的（`VUNA_OBS` 只被运行时读一次）：level 1 不发逐定义事件、level 1/2 不
+启采样。步数计数（`vuna.counter.steps`）**尚未实现**，见 §10。
 ## 3. 事件模型（规范）
 
 每行一个 JSON 对象（JSONL），第一个事件是元数据。字段契约由 `vuna obs validate` 检查。
@@ -84,16 +86,19 @@ span / 计数 / 日志 / 采样栈写成 **Chrome Trace Event JSONL**；关闭�
 
 ### 3.3 事件名（固定词汇表）
 
-- 编译链：`vuna.load`、`vuna.parse`、`vuna.resolve`、**`vuna.elab`**（整段精化的汇总跨度）、
-  `vuna.elab.sigs`、`vuna.elab.datas`、`vuna.elab.traits`、`vuna.elab.instheads`、
-  `vuna.elab.bodies`、`vuna.elab.instbodies`、`vuna.elab.tail`、`vuna.iface.compute`、
-  `vuna.iface.write`、**`vuna.codegen.check`**（codegen 前置校验段）、`vuna.codegen.split`、
-  `vuna.codegen.unit`、`vuna.cache.lookup`、`vuna.cache.write`、`vuna.check`、`vuna.build`、`vuna.link`；
+**已插桩**（本仓库代码真的会产出这些名字）：
 
-- 逐定义：`vuna.def.elab`、`vuna.def.lower`、`vuna.def.text`（`args.def/module/file/line`）；
-- 计数（`ph:"C"`，`args.value`）：`vuna.counter.core.reduce`、`vuna.counter.core.force`、
-  `vuna.counter.meta.solve`、`vuna.counter.cache.hit`、`vuna.counter.cache.miss`、
-  `vuna.counter.steps`；
+- `vuna.elab`（整段精化的汇总跨度）、`vuna.codegen.check`（codegen 前置校验段）；
+- `vuna.def.elab`（level ≥ 2，`args.def` = 定义名）；
+- `vuna.log` / `vuna.mark.*` / `vuna.sample.cpu` / `vuna.sample.mem` / `vuna.obs.schema`。
+
+**保留名**（在词汇表里、`vuna obs validate` 认，但**尚无插桩点**）：`vuna.load`、`vuna.parse`、
+`vuna.resolve`、`vuna.elab.sigs`、`vuna.elab.datas`、`vuna.elab.traits`、`vuna.elab.instheads`、
+`vuna.elab.bodies`、`vuna.elab.instbodies`、`vuna.elab.tail`、`vuna.iface.compute`、
+`vuna.iface.write`、`vuna.codegen.split`、`vuna.codegen.unit`、`vuna.cache.lookup`、
+`vuna.cache.write`、`vuna.check`、`vuna.build`、`vuna.link`、`vuna.def.lower`、`vuna.def.text`、
+`vuna.counter.*`（全部计数名）。加插桩时**不要**改名（工具/看板按名字聚合）。
+
 - 档次读数（在 `ph:"X"` 的 `args` 上，**不是**独立 count 事件）：`args.allocWords` /
   `args.heapWords`（整数，span 期间分配/堆字数增量）；`validate` 只校验它们是整数，
   不对 `vuna.counter.alloc.words` / `vuna.counter.heap.words` 做存在性断言（这两个名字
@@ -173,8 +178,11 @@ obsSampleStop  : Int -> Int
   丢事件（**不中止程序**、不改退出码）。
 - 采样：`SIGPROF` handler 只 `Printexc.get_callstack 32` + 存进固定 8192 槽环形数组，停止时
   批量序列化（handler 里不做 I/O、不做格式化）。环形满即丢弃后续样本。
-- 步数计数（`vuna.counter.steps`，level 3）只在 `Core.Eval` 的 `force`/`primReduce` 入口自增：
-  代价实测 >25% 墙钟时降级为「按定义聚合的一次性计数」并把数字写回本页。
+- **关闭路径的实测口径**是 `nix/checks/vuna-obs-overhead.sh`：`VUNA_OBS=0` 与不设观测的产物
+  逐字节一致 + 关闭时不写 trace + 生成运行时的入口都以关闭快速路径开头。**不设墙钟阈值**
+  （绝对性能不可跨机器比）。
+- level 2 的真实成本：`check compiler` 10933 条 `vuna.def.elab`、trace 约 2.1 MB
+  （`docs/reference/performance.md` §2 的读数纪律：绝对读数用两者都关的口径）。
 - **绝对读数只用 `VUNA_OBS=0`**；obs 只用于归因与相对比较（同 [performance.md](performance.md) §2 纪律）。
 
 ## 7. 工具链 `vuna obs`
@@ -334,7 +342,14 @@ vuna obs serve --cdp ADDR [--allow-slow]
 ## 10. 已知边界（开放项）
 
 - 表达式级 / 分支级 span：Core 只有 `TVar` 带 span（debt D80），当前只能到「定义级 + 采样」。
+- **只有两个阶段跨度为真插桩**：`vuna.elab` / `vuna.codegen.check`（+ level 2 的
+  `vuna.def.elab`）。`vuna.load` / `vuna.iface.*` / `vuna.codegen.split` / `vuna.cache.*` 等
+  是保留名（§3.3），**没有探针点**：缓存命中判定与 split 都在 `Eff hostRow` 里，纯 `span`
+  包不住执行（需 `obsMarkEff` 这类跨效应标记，尚未接）。
+- **计数事件一个都没接**：`ph:"C"` 的构造与 `vuna obs` 的消费都就绪，但 `Core.Eval`
+  的 `force`/`primReduce` 探针会显著改热路径，待做且要先量代价（`vuna.counter.steps` 同理）。
 - 多 domain 采样（debt D41）、`Unix.getrusage`（OCaml 5.5 无，debt D81）。
 - wasm/native 的 span 与采样（O12）。
+- `serve --cdp` 是**离线**的：数据源是已有的 trace 文件，不是附加到运行中进程做 live 采样。
 - trace 与缓存：trace 永不进对象库（O5），因此「同一输入两次构建的 trace 不可比较字节」是设计
   而不是缺陷——比较用 `summarize --baseline`。
