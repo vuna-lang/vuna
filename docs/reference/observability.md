@@ -400,9 +400,10 @@ vuna obs serve --cdp ADDR [--allow-slow] [TRACE...]
 | 手动（本批，`obs convert/render/merge/symbols`） | 同一 trace 两次 `convert --to cpuprofile\|speedscope\|folded\|jsonl` 的 md5 相同；`--to jsonl` 产物过 `validate`；两次 `render --out` 的 HTML md5 相同且 `grep -c 'https?://'` = 0；`merge` 两份 trace 的产物过 `validate`；`symbols` 对 `build --no-compile --out` 的 compiler 产物抽出的 def 数 > 1000、两次运行 md5 相同。**不进 `nix flake check`**（需要 split 产物，成本高）；suite 覆盖见下一行 |
 | `checks.vuna-metrics` + `nix/codegen.baseline` | `#line` 后按实测重标定（`bytes`/`lines`/`maxline`/`letrec` 精确基线） |
 | suite `107_observability.steps` | 关闭零输出、`dbg!` stderr 协议逐字节不变而 `obs!`/`mark!` 走结构化事件、`validate` 拒绝倒挂、`#line` 包相对 + 产物可跑、DWARF 指向 `.vuna`、回栈落到 `.vuna` 行、`VUNA_OBS=3` 的 cpu/mem 采样、`summarize --json` 单行、非 OCaml 后端的桩与编译期拒绝、`convert`/`render` 的确定性 |
+| suite `108_obs_cdp.steps` | `vuna obs serve --cdp`：就绪行、六条 CDP 请求、`getIsolateId`=trace pid、`profile.samples`==cpu 采样数、未知方法 `-32601`、跨进程 profile 逐字节一致、与 `convert --to cpuprofile` 逐字节等价、`-32000`+退出码 1、参数错误退出码 2、unix socket 清理；有 Node 时再验 `nix/obs-cdp-bridge.mjs` 的 WS 握手（独立算 `Sec-WebSocket-Accept`）+ `Profiler.*` + ping/pong（无 Node 打印 SKIP） |
 
 回归面（每次改动后）：`vuna fmt <改动>`、`vuna check .`、`sh nix/check-eff-boundary.sh`、
-`sh nix/checks/ir-boundary.sh`、`vuna test --suite test/suite.toml --only 90/steps_native/107_observability`、
+`sh nix/checks/ir-boundary.sh`、`vuna test --suite test/suite.toml --only 90/steps_native/107_observability --only 90/steps_native/108_obs_cdp`、
 `checks.vuna-metrics`；`#line` 定稿后**一次** seed rotation（`sh nix/seed-rotate.sh ./result/bin/vuna`）。
 
 ## 10. 已知边界（开放项）
