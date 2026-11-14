@@ -3,7 +3,7 @@ module Vuna.Obs.Run where
 -- Vuna.Obs.Run：`vuna obs run [--level N] [--sample cpu|mem|both] [--interval US] [--out FILE] [--] <cmd...>`。
 --
 -- 语义（规范 `docs/reference/observability.md` §2 开关、§7 `run`）：
---   * 本进程**不 setenv**（仓库没有 `prim_eff_setenv` 原语），改用「env 前置命令」范式
+--   * 本进程**不 setenv**（仓库没有 setenv 宿主原语），改用「env 前置命令」范式
 --     （同 `Vuna.Test.Run.withEnv`）：把 `["env", "VUNA_OBS=...", ...]` 拼在用户命令前，
 --     交给 `@vuna@prim_eff_runIn`（它先 chdir 再 `Sys.command`，子进程继承这组 env）；
 --     用户命令与参数在 `--` 之后原样透传（不做 argv 注入、不拼 shell 片段）；
