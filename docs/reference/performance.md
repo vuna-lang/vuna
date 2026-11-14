@@ -31,6 +31,31 @@
 [`bench/compiler-baseline.txt`](../../bench/compiler-baseline.txt) 的
 同机口径比较；跨机器只比 §5 的增长率。
 
+### 2026-11：冷 / 热要分开报（out-of-tree 复核）
+
+`main` 的「典型值」是**热 store** 口径（`.local/store` 已预热），同一源码在**空
+`VUNA_STORE`** 上会差一个数量级。同机（16 核，`nix build .#vuna` 产物，单进程，
+无 `--debug-perf`、`VUNA_OBS=0`）：
+
+| 命令 | 冷（空 store） | 热（同 store 第二遍） |
+| --- | --- | --- |
+| `check base` | ~0.40 s | ~18 ms |
+| `check compiler` | **~22 s** | ~75 ms |
+| `check .` | 21.2 s → 5.9 s → 5.8 s（**三段收敛**） | 57 ms |
+| `map` | 2.2–2.5 s | 0.16–0.17 s |
+| `build --no-compile compiler` | ~12–28 s（见下） | ~150 ms |
+
+`check .` 不是「冷/热」两档：第一遍冷精化、第二遍重写接口/单元、第三遍才全命中，
+只报其中一个数会误导。冷 `check compiler` ~22 s 里约**一半是重复精化**：入口闭包没覆盖
+`[export]` 的全部模块（`iface-skip partial ... missing=Vuna.Compiler.Canonical,
+Vuna.Compiler.Driver.ToolPayload`），于是每轮都补一遍 lib check（`collectSigs-done` 出现
+两次，两遍各 ~11–12 s）。同一源码只给入口补两个 import 就退化到单遍（实测 21.5 s → 12.5 s，
+且 `check-lib-skip covered=88` 出现）；该修复尚未落地。
+
+冷 `build --no-compile compiler` 的墙钟读数**极不稳定**（同机同源码实测 12.5 / 15.9 /
+28.0 / 38.1 s）：它按直接依赖分层并行，与宿主负载强相关，且 `TMPDIR` 里的临时候选产物
+会让同一 `--out` 目录的第二次调用假快。**只报 user+sys 或同时报 loadavg。**
+
 ### 2026-11：包级增量收尾的三处 O(n²)（已修）
 
 同一 worktree、同一 HEAD、同机 A/B（独立进程；check/build 用 `bench/compiler.sh` 口径，
@@ -179,17 +204,23 @@ HashMap.fromList / insert / insertAll / lookup / member / toList / size / ofName
 
 ### 5.1 单文件 `check`（全量精化路径）
 
-同一形状定义（`fi : Int` / `fi = i`，包上下文只依赖 `vuna-base`）随定义数 n 的墙钟
-（`nix/checks/compiler-growth.sh` 口径：每档独立进程 + 独立空 TMPDIR，2 次取小）：
+同一形状定义（`fi : Int` / `fi = i`，包上下文只依赖 `vuna-base`）随定义数 n 的墙钟。
+口径必须在**每档独立空 store**上量（`VUNA_STORE=$(mktemp -d)`；入库的
+`compiler-growth.sh` 只隔离 `TMPDIR`，在 devShell 里会复用调用方的热 store，见 §7）：
 
-| n | 现在 | 现在 / 翻倍 |
+| n | 现在（空 store，2 次取小） | 现在 / 翻倍 |
 | --- | --- | --- |
-| 500 | 109 ms | — |
-| 1000 | 114 ms | 1.45× |
-| 2000 | 133 ms | 1.17× |
-| 4000 | 167 ms | 1.26× |
+| 500 | 163 ms | — |
+| 1000 | 197 ms | 1.21× |
+| 2000 | 318 ms | 1.61× |
+| 4000 | 735 ms | 2.31× |
+| 8000 | 2230 ms | **3.03×** |
 
-`vuna-compiler-growth` 门槛按每翻倍 ≤2.3× 卡回归。
+`vuna-compiler-growth` 门槛按每翻倍 ≤2.5× 卡回归，但脚本**只测到 N=4000**：8000 档的
+3.03× 落在门槛之外。这一段是 codegen 的 `termination-done → cg-typedecls-done`（lowering
+与类型声明文本），同探针两轮独立实测 N=2000/4000/8000 = 89/284/1083 与 131/299/1061 ms
+（8000/4000 ≈ 3.6×），而同一探针的逐 def 精化段 `bodies` 是 75/85/120 ms 的线性——增长
+回归的根因在 codegen 分组（`Lower.appendGroups` 对每级 SCC 线性过滤全体定义），属未修项。
 
 ### 5.2 包路径增量 `check`（增量收尾路径）
 
@@ -198,13 +229,16 @@ HashMap.fromList / insert / insertAll / lookup / member / toList / size / ofName
 
 | n | 现在 | 现在 / 翻倍 | 修前（同探针） |
 | --- | --- | --- | --- |
-| 1000 | 150 ms | — | 264 ms |
-| 2000 | 164 ms | 1.09× | 557 ms（2.11×） |
-| 4000 | 231 ms | 1.41× | 1596 ms（2.87×） |
-| 8000 | 415 ms | 1.80× | — |
+| 1000 | 20 ms | — | 264 ms |
+| 2000 | 19 ms | 0.95× | 557 ms（2.11×） |
+| 4000 | 19 ms | 1.00× | 1596 ms（2.87×） |
+| 8000 | 20 ms | 1.05× | — |
 
-修前 N=4000 档就超过 `vuna-compiler-growth-incremental` 的每翻倍 ≤2.6× 门槛（该门槛
-故意比单文件 2.3× 宽：增量路径有与 N 无关的固定成本，小 N 噪声更大）。
+（2026-11 复核：空 store 下第二次 check 已完全走缓存，档间差异落在噪声内。
+上一版读数（150→415 ms）是在 `main` 更新的缓存实现之前标的，**不可与本次同表比较**。）
+
+修前 N=4000 档就超过 `vuna-compiler-growth-incremental` 的每翻倍 ≤3.3× 门槛（该门槛
+故意比单文件 2.5× 宽：增量路径有与 N 无关的固定成本，小 N 噪声更大）。
 
 ## 6. `check base` 的阶段构成
 
@@ -229,15 +263,34 @@ defs / globals / sols 三张索引表。要继续压，先看 bodies（逐定义
 - **探针必须隔离**：每个探针包一套自己的 `vuna.toml` + `lib/...`。常见事故：两个并行脚本
   共用同一探针目录，`vuna.toml` 被覆盖成「整编译器」的 export 列表，读数整体作废，而且
   看起来像「固定 45s 的神秘成本」。
+- **冷 / 热由 `VUNA_STORE` 决定，不由 `TMPDIR` 决定**。devShell 会
+  `export VUNA_STORE="$root/.local/store"`（已预热）；换新 `TMPDIR` 对命中率没有影响
+  （实测同一热 store 换 TMPDIR，`check compiler` 仍 73–75 ms）。要冷就显式给空目录：
+  `d=$(mktemp -d); VUNA_STORE=$d/store TMPDIR=$d ./result/bin/vuna ...`。
+  `VUNA_STORE` 未设/空串会回退 `~/.vuna/store`（回退链见 `Store.storeDataRootEff`），
+  只读 HOME 下直接 `Sys_error ... Read-only file system`。
+- **入库的增长率门禁只隔离 `TMPDIR`、复用调用方 `VUNA_STORE`**：devShell 里本地跑时各档
+  共享热 store（对增长率影响小，但「每档 2 次取小」会吃掉第一档的固定成本、放大相邻比值）；
+  CI 的 `mkCheck` 没有 `VUNA_STORE`、`HOME=/homeless-shelter` ⇒ 每档天然隔离。
+  本地复现 CI 口径用 `VUNA_STORE=$(mktemp -d)` 显式喂空 store。
 - 只有包上下文一条加载路径；单文件夹具也按最近 manifest 解析，不存在「单文件 vs 包」两套
   读数。
 - **机器可能被其他负载占用**（loadavg 波动时 wall 不可比）：A/B 在同一时间窗交替跑，记录
-  `time` 的 user+sys（单进程口径不受其他负载影响）；wall 只在机器空闲时引用。
+  `time` 的 user+sys（单进程口径不受其他负载影响）；wall 只在机器空闲时引用。实测同一颗
+  二进制、同一档探针：loadavg 1.6 时 N=500 168–176 ms，loadavg 15–18 时 512 ms 且
+  `user+sys` 只 0.29 s ⇒ 多出来的是等待，不是算力。
 - **包级增量路径要先把依赖包接口落盘**（`vuna check <dep>`，见 `compiler-growth-pkg.sh`）：
   否则探针每档都因「依赖接口缺失」走全量路径，测的就不是增量收尾。
 - `--debug-perf` 在**冷 build** 上会逐条打印 conv 诊断（约 15.8 万行；`dbg!` 的实参在
   开关打开时才求值），实测让冷 build 墙钟膨胀 ~60%：定位用阶段**比例**，绝对读数
   一律用无 debug 口径；单次 <50 µs 的条目仍需「同形规模合成探针」对比总时间。
+  注意冷 `check compiler` 的 debug 膨胀**不是常数**（同窗口交替实测 22.2 s → 45.3 s，
+  下一轮却 42.5 s → 23.0 s，loadavg 15–17），负载与开关同样重要。
+- **结构化观测的覆盖与盲区**：`VUNA_OBS=1` 目前只有 `vuna.elab` / `vuna.codegen.check`
+  两个 span（`checks.vuna-obs-schema` 断言的是这两个），实测只覆盖 16.0 s / 21.6 s 墙钟；
+  `VUNA_OBS=3` 的 CPU 采样**没有调用点**（`dtp_obs_sample_start` 在生成运行时里完整，但
+  仓库内无人启动），trace 里 `vuna.sample.cpu` 为 0 条。阶段顺序仍只能靠
+  `--debug-perf`（冷 `check compiler` 约 37 万行）。
 - 用 `OCAMLRUNPARAM=s=...` 快速判断 GC 敏感性（注意：产物里 `Gc.set` 会覆盖环境变量，要
   比较不同 minor heap 大小得改代码重建）。
 - 阶段定位优先用阶段边界的 `dbg!`；逐定义观察直接看 `dbg!` 行；不要用「等大 case 跑完」
@@ -358,9 +411,10 @@ SHA-256 的 tie key、排序结果按名线性找文件。修复分两层：
 SHA-256 内容地址）。
 
 **CI 门槛**：`bench/compiler.sh --check` 硬失败阈值；`vuna-compiler-growth`
-（合成 500/1000/2000/4000 单文件，每翻倍 ≤2.3×）；`vuna-compiler-growth-incremental`
-（合成可执行包 1000/2000/4000/8000，**增量路径**，每翻倍 ≤2.6×）；`vuna-compiler-perf`
-含包内增量语义断言（clean≥10、parse≤20）与 REPL 默认走接口路径的断言。
+（合成 500/1000/2000/4000 单文件，每翻倍 ≤2.5×；**脚本上限只到 4000，8000 档实测 3.03×
+未被覆盖**）；`vuna-compiler-growth-incremental`（合成可执行包 1000/2000/4000/8000，
+**增量路径**，每翻倍 ≤3.3×）；`vuna-compiler-perf` 含包内增量语义断言（clean≥10、parse≤20）
+与 REPL 默认走接口路径的断言。
 
 **已量化否决的候选**（数据见 git 与 `_scratch` 探针，不要重复开题）：
 
