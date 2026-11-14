@@ -1,0 +1,181 @@
+# 107) 可观测性（`docs/reference/observability.md`）：语言层 obs 原语 + 生成运行时 +
+#      `vuna obs` 工具链 + `#line` 注入。依赖 PATH 里的 readelf（devShell/e2e 已提供）。
+#
+# 覆盖：关闭口径不产 trace；`dbg!` stderr 协议不变而 `obs!`/`mark!` 走结构化事件；
+# `VUNA_OBS=2` trace 的结构与 `obs validate`；`#line` 是包相对 `.vuna` 路径、产物可跑；
+# DWARF `.debug_line` 指向 `.vuna`；运行时错误回栈落到 `.vuna`；`VUNA_OBS=3` 采样；
+# convert（cpuprofile/folded/speedscope）与 render 的确定性；summarize --json / --baseline；
+# 非 OCaml 后端：叶子原语 no-op 桩、`obsSpan` 编译期拒绝。
+
+run: command -v readelf
+exit: 0
+
+# ---------------------------------------------------------------- fixtures
+# 一个带 obs span 的可执行包（后续多条断言复用）。
+run: sh -c 'd="$TMPDIR/app"; mkdir -p "$d/app"; printf "[package]\nname = \"obsapp\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Obs.Span\n\nmain : Int\nmain = obsSpan \"app.work\" \"vuna.user\" (\\_ => 7)\n" > "$d/app/Main.vuna"; "$VUNA" build --out "$TMPDIR/app-out" "$d"'
+exit: 0
+file-exists: $TMPDIR/app-out/bin/obsapp
+
+# 宏夹具：dbg! / obs! / mark! 三种都出现。
+run: sh -c 'd="$TMPDIR/mac"; mkdir -p "$d/app"; printf "[package]\nname = \"mac\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "main : Int\nmain =\n  let\n    _ = dbg! \"legacy\"\n    _ = obs! \"structured\"\n    _ = mark! \"checkpoint\"\n  in 0\n" > "$d/app/Main.vuna"; "$VUNA" build --out "$TMPDIR/mac-out" "$d"'
+exit: 0
+
+# let 组夹具（`#line` 在 `let rec` / `and` 上也要写）。
+run: sh -c 'd="$TMPDIR/grp"; mkdir -p "$d/app"; printf "[package]\nname = \"grp\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "even : Int -> Bool\neven n = if n == 0 then True else odd (n - 1)\n\nodd : Int -> Bool\nodd n = if n == 0 then False else even (n - 1)\n\nmain : Int\nmain = if even 4 then 1 else 0\n" > "$d/app/Main.vuna"; "$VUNA" compile "$d" "$TMPDIR/grp-split"'
+exit: 0
+
+# ---------------------------------------------------------------- 1) 关闭口径
+run: sh -c 'unset VUNA_OBS; VUNA_OBS_DIR="$TMPDIR/trace-unset" "$TMPDIR/app-out/bin/obsapp"'
+exit: 0
+out-equals: 7
+run: sh -c 'test ! -e "$TMPDIR/trace-unset" || test -z "$(find "$TMPDIR/trace-unset" -type f 2>/dev/null)"'
+exit: 0
+
+run: sh -c 'VUNA_OBS=0 VUNA_OBS_DIR="$TMPDIR/trace-zero" "$TMPDIR/app-out/bin/obsapp"'
+exit: 0
+out-equals: 7
+run: sh -c 'test ! -e "$TMPDIR/trace-zero" || test -z "$(find "$TMPDIR/trace-zero" -type f 2>/dev/null)"'
+exit: 0
+
+# 打开必须产出（反证上面两条不是「从来没工作」）。
+run: sh -c 'VUNA_OBS=1 VUNA_OBS_DIR="$TMPDIR/trace-on" "$TMPDIR/app-out/bin/obsapp"'
+exit: 0
+out-equals: 7
+run: sh -c 'find "$TMPDIR/trace-on" -name "*.jsonl" -type f | head -1'
+exit: 0
+out-contains: vuna-
+
+# ---------------------------------------------------------------- 2) dbg! 协议 / obs! / mark!
+run: sh -c 'VUNA_DEBUG_PERF=1 VUNA_OBS=0 "$TMPDIR/mac-out/bin/mac" 2>&1 >/dev/null | sed -e "s/^DEBUG [0-9][0-9]* /DEBUG <ts> /"'
+exit: 0
+out-equals: DEBUG <ts> legacy
+
+run: sh -c 'VUNA_OBS=2 VUNA_OBS_DIR="$TMPDIR/mac-trace" "$TMPDIR/mac-out/bin/mac" 2>/dev/null'
+exit: 0
+run: sh -c 'grep -l "vuna.log" "$TMPDIR"/mac-trace/*.jsonl'
+exit: 0
+run: sh -c 'grep -c "structured" "$TMPDIR"/mac-trace/*.jsonl'
+exit: 0
+run: sh -c 'grep -l "checkpoint" "$TMPDIR"/mac-trace/*.jsonl'
+exit: 0
+
+# ---------------------------------------------------------------- 3) 结构 + validate
+run: sh -c '"$VUNA" obs validate "$TMPDIR"/mac-trace/*.jsonl'
+exit: 0
+out-contains: verified
+
+run: sh -c 'head -1 "$TMPDIR"/mac-trace/*.jsonl'
+exit: 0
+out-contains: "ph":"M"
+out-contains: "schema":"vuna-obs 1"
+
+# 人为破坏：倒挂时间戳拒绝（exit 1，消息可读）。
+run: sh -c 'printf "%s\n" "{\"ph\":\"M\",\"name\":\"vuna.obs.schema\",\"pid\":1,\"tid\":0,\"args\":{\"schema\":\"vuna-obs 1\"}}" "{\"ph\":\"i\",\"ts\":200,\"pid\":1,\"tid\":0,\"name\":\"vuna.log\",\"args\":{\"text\":\"a\"}}" "{\"ph\":\"i\",\"ts\":100,\"pid\":1,\"tid\":0,\"name\":\"vuna.log\",\"args\":{\"text\":\"b\"}}" > "$TMPDIR/bad-order.jsonl"; "$VUNA" obs validate "$TMPDIR/bad-order.jsonl"'
+exit: 1
+out-contains: goes backwards
+
+# ---------------------------------------------------------------- 4) #line
+run: sh -c 'grep -cE "^# [0-9]+ \"[^\"]*[.]vuna\"" "$TMPDIR/grp-split/Main.ml"'
+exit: 0
+run: sh -c 'grep -cE "^# [0-9]+ \"/" "$TMPDIR/grp-split/Main.ml" || true'
+exit: 0
+out-equals: 0
+# `let rec` / `and` 组里的指令也要有（每组至少一条）。
+run: sh -c 'grep -A1 -E "^let rec " "$TMPDIR/grp-split/Main.ml" | grep -cE "^# [0-9]+" || true'
+exit: 0
+run: sh -c 'grep -B1 -E "^and " "$TMPDIR/grp-split/Main.ml" | grep -cE "^# [0-9]+" || true'
+exit: 0
+run: sh -c 'cd "$TMPDIR/grp-split" && sh build.sh prog >/dev/null 2>&1 && ./prog'
+exit: 0
+out-equals: 1
+
+# ---------------------------------------------------------------- 5) DWARF 指向 .vuna
+run: sh -c 'readelf --debug-dump=decodedline "$TMPDIR/grp-split/prog" 2>/dev/null | grep -c "Main[.]vuna"'
+exit: 0
+run: sh -c 'readelf --debug-dump=decodedline "$TMPDIR/grp-split/prog" 2>/dev/null | grep "Main[.]vuna" | head -1'
+exit: 0
+out-contains: Main.vuna
+
+# ---------------------------------------------------------------- 6) 回栈落到 .vuna
+run: sh -c 'd="$TMPDIR/boom"; mkdir -p "$d/app"; printf "[package]\nname = \"boom\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "boom : Int -> Int\nboom n = if n == 0 then 1 / 0 else boom (n - 1)\n\nmain : Int\nmain = boom 3\n" > "$d/app/Main.vuna"; "$VUNA" build --out "$TMPDIR/boom-out" "$d"'
+exit: 0
+run: sh -c '"$TMPDIR/boom-out/bin/boom" 2>&1 >/dev/null'
+exit: nonzero
+out-contains: vuna: runtime error
+out-contains: app/Main.vuna
+
+# ---------------------------------------------------------------- 7) 采样
+run: sh -c 'd="$TMPDIR/sam"; mkdir -p "$d/app"; printf "[package]\nname = \"sam\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Obs.Span\n\nstep : Int -> Int -> Int\nstep i acc = acc + i * 3\n\nwalk : Int -> Int -> Int -> Int -> Int\nwalk fuel n i acc =\n  if fuel <= 0 then acc\n  else if i >= n then acc\n  else walk (fuel - 1) n (i + 1) (step i acc)\n\nmain : Int\nmain = obsSample \"both\" 1000 (\\_ => walk 3000000 3000000 0 0)\n" > "$d/app/Main.vuna"; "$VUNA" build --out "$TMPDIR/sam-out" "$d"'
+exit: 0
+run: sh -c 'VUNA_OBS=3 VUNA_OBS_DIR="$TMPDIR/sam-trace" "$TMPDIR/sam-out/bin/sam" >/dev/null'
+exit: 0
+run: sh -c 'grep -c "vuna[.]sample[.]cpu" "$TMPDIR"/sam-trace/*.jsonl'
+exit: 0
+run: sh -c 'grep -c "vuna[.]sample[.]mem" "$TMPDIR"/sam-trace/*.jsonl'
+exit: 0
+run: sh -c '"$VUNA" obs validate "$TMPDIR"/sam-trace/*.jsonl'
+exit: 0
+out-contains: verified
+run: sh -c '"$VUNA" obs summarize "$TMPDIR"/sam-trace/*.jsonl'
+exit: 0
+out-contains: samples:cpu
+
+# ---------------------------------------------------------------- 8) convert / render
+run: sh -c '"$VUNA" obs convert --to cpuprofile --out "$TMPDIR/a.cpuprofile" "$TMPDIR"/sam-trace/*.jsonl'
+exit: 0
+run: sh -c '"$VUNA" obs convert --to cpuprofile --out "$TMPDIR/b.cpuprofile" "$TMPDIR"/sam-trace/*.jsonl'
+run: sh -c 't=$(find "$TMPDIR/mac-trace" -name "*.jsonl" | head -1); "$VUNA" obs summarize "$t"'
+exit: 0
+exit: 0
+file-contains: $TMPDIR/a.cpuprofile "nodes"
+file-contains: $TMPDIR/a.cpuprofile "timeDeltas"
+
+run: sh -c '"$VUNA" obs convert --to folded --out "$TMPDIR/a.folded" "$TMPDIR"/sam-trace/*.jsonl'
+exit: 0
+run: sh -c '"$VUNA" obs convert --to folded --out "$TMPDIR/b.folded" "$TMPDIR"/sam-trace/*.jsonl'
+exit: 0
+run: sh -c 'cmp "$TMPDIR/a.folded" "$TMPDIR/b.folded"'
+exit: 0
+run: sh -c 'awk -F"\t" "NF == 2" "$TMPDIR/a.folded" | head -1'
+exit: 0
+out-contains: ;
+
+run: sh -c '"$VUNA" obs convert --to speedscope --out "$TMPDIR/a.speedscope.json" "$TMPDIR"/sam-trace/*.jsonl'
+exit: 0
+file-contains: $TMPDIR/a.speedscope.json speedscope.app
+
+run: sh -c '"$VUNA" obs render --out "$TMPDIR/a.html" "$TMPDIR"/sam-trace/*.jsonl'
+exit: 0
+run: sh -c '"$VUNA" obs render --out "$TMPDIR/b.html" "$TMPDIR"/sam-trace/*.jsonl'
+exit: 0
+run: sh -c 'cmp "$TMPDIR/a.html" "$TMPDIR/b.html"'
+exit: 0
+file-contains: $TMPDIR/a.html vuna-obs-data
+run: sh -c 'grep -c "https[:]//" "$TMPDIR/a.html" || true'
+exit: 0
+out-equals: 0
+
+# ---------------------------------------------------------------- 9) summarize --json / baseline
+run: sh -c '"$VUNA" obs summarize --json "$TMPDIR"/mac-trace/*.jsonl | wc -l | tr -d " "'
+exit: 0
+out-equals: 1
+run: sh -c '"$VUNA" obs summarize --json "$TMPDIR"/mac-trace/*.jsonl'
+exit: 0
+out-contains: "spans"
+
+# 自比对：差值 0 通过。
+run: sh -c 't=$(find "$TMPDIR/mac-trace" -name "*.jsonl" | head -1); "$VUNA" obs summarize --baseline "$t" "$t"'
+exit: 0
+
+# ---------------------------------------------------------------- 10) 非 OCaml 后端
+run: sh -c 'd="$TMPDIR/wobs"; mkdir -p "$d/app"; printf "[package]\nname = \"wobs\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Obs\n\nmain : Int\nmain =\n  let\n    _ = obsLevel 0\n    _ = obsLog \"wasm\"\n  in 9\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/wobs-out" "$d"'
+exit: 0
+file-exists: $TMPDIR/wobs-out/main.wat
+
+run: sh -c 'd="$TMPDIR/wspan"; mkdir -p "$d/app"; printf "[package]\nname = \"wspan\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Obs.Span\n\nmain : Int\nmain = obsSpan \"x\" \"vuna.user\" (\\_ => 1)\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/wspan-out" "$d"'
+exit: nonzero
+out-contains: obs spans need closures
+
+run: sh -c 'd="$TMPDIR/nspan"; mkdir -p "$d/app"; printf "[package]\nname = \"nspan\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Obs.Span\n\nmain : Int\nmain = obsSpan \"x\" \"vuna.user\" (\\_ => 1)\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/nspan-out" "$d"'
+exit: nonzero
+out-contains: obs spans need closures
