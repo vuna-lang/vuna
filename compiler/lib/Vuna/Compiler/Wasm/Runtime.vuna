@@ -31,6 +31,11 @@ export record RtConsts(..) where
   rtcTodoLen : Int
   rtcDivOff : Int
   rtcDivLen : Int
+  -- 运行时错误报告器的统一前缀 / 断言前缀（与 OCaml 的 `dt_report_exn` 对齐）。
+  rtcErrOff : Int
+  rtcErrLen : Int
+  rtcAssertOff : Int
+  rtcAssertLen : Int
 
 -- | 运行时符号的实现形态。
 export data RtImpl(..) : Type where
@@ -171,20 +176,17 @@ rtPrintln =
     body = [IConstI32 1, ILocalGet "$p0", IConstI32 1, ICall "$rt_write"]
   in rtFunc "$rt_println" params [] [] body
 
-rtFailStr : WatFunc
-rtFailStr =
+rtFailStr : RtConsts -> WatFunc
+-- 统一前缀 `vuna: runtime error: ` + msg
+-- 写 stderr（rt_write 的 nl=1 补换行）
+rtFailStr c =
   let
     params = [Pair "$p0" WvAnyRef]
+    locals = [Pair "$m" WvAnyRef]
     body =
-      [ IConstI32 2,
-        ILocalGet "$p0",
-        IConstI32 1,
-        ICall "$rt_write",
-        IConstI32 2,
-        ICall "$proc_exit",
-        IUnreachable
-      ]
-  in rtFunc "$rt_failStr" params [] [] body
+      cat
+        [mkString c.rtcErrOff c.rtcErrLen, [ILocalGet "$p0", ICall "$rt_strConcat", ILocalSet "$m"], [IConstI32 2, ILocalGet "$m", IConstI32 1, ICall "$rt_write"], [IConstI32 2, ICall "$proc_exit", IUnreachable]]
+  in rtFunc "$rt_failStr" params [] locals body
 
 -- | `strFromInt` / `showInt` / `showNat`。
 rtStrFromInt : WatFunc
@@ -326,17 +328,15 @@ rtDiv c =
         [unboxInt 0, [ILocalSet "$a"], unboxInt 1, [ILocalSet "$b"], [ILocalGet "$b", IConstI64 0, IBinop "i64.eq", IIf "i64" (failWithConst c.rtcDivOff c.rtcDivLen) [ILocalGet "$a", IConstI64 (0 - 4611686018427387903 - 1), IBinop "i64.eq", ILocalGet "$b", IConstI64 (0 - 1), IBinop "i64.eq", IBinop "i32.and", IIf "i64" [IConstI64 (0 - 4611686018427387903 - 1)] [ILocalGet "$a", ILocalGet "$b", IBinop "i64.div_s"]]], boxInt]
   in rtFunc "$rt_div" params [WvAnyRef] locals body
 
-rtAssert : WatFunc
-rtAssert =
+rtAssert : RtConsts -> WatFunc
+rtAssert c =
   let
     params = [Pair "$p0" WvAnyRef, Pair "$p1" WvAnyRef, Pair "$p2" WvAnyRef]
+    locals = [Pair "$m" WvAnyRef]
     body =
-      [ ILocalGet "$p0",
-        IRefCast "i31",
-        II31GetU,
-        IIf "anyref" [ILocalGet "$p2"] [ILocalGet "$p1", ICall "$rt_failStr", IUnreachable]
-      ]
-  in rtFunc "$rt_assert" params [WvAnyRef] [] body
+      cat
+        [[ILocalGet "$p0", IRefCast "i31", II31GetU], [IIf "anyref" [ILocalGet "$p2"] (cat [mkString c.rtcAssertOff c.rtcAssertLen, [ILocalGet "$p1", ICall "$rt_strConcat", ILocalSet "$m"], [ILocalGet "$m", ICall "$rt_failStr", IUnreachable]])]]
+  in rtFunc "$rt_assert" params [WvAnyRef] locals body
 
 rtPrimFail : WatFunc
 rtPrimFail =
@@ -658,7 +658,7 @@ rtBitShr =
     locals = [Pair "$a" WvI64, Pair "$n" WvI64]
     body =
       cat
-        [unboxInt 0, [ILocalSet "$a"], unboxInt 1, [ILocalSet "$n"], shiftCountOk, [IIf "i64" [IConstI64 0] [ILocalGet "$a", IConstI64 4611686018427387903, IBinop "i64.and", ILocalGet "$n", IBinop "i64.shr_u"]], boxInt]
+        [unboxInt 0, [ILocalSet "$a"], unboxInt 1, [ILocalSet "$n"], shiftCountOk, [IIf "i64" [IConstI64 0] [ILocalGet "$a", IConstI64 1, IBinop "i64.shl", IConstI64 1, IBinop "i64.shr_u", ILocalGet "$n", IBinop "i64.shr_u"]], boxInt]
   in rtFunc "$rt_bitShr" params [WvAnyRef] locals body
 
 -- ---------------------------------------------------------------
@@ -669,7 +669,7 @@ rtFunctions c =
   [ rtApply,
     rtWrite,
     rtPrintln,
-    rtFailStr,
+    rtFailStr c,
     rtStrFromInt,
     rtShowBool c,
     rtShowStr,
@@ -708,7 +708,7 @@ rtFunctions c =
     rtBoxZero,
     rtBoxZero2,
     rtErase,
-    rtAssert,
+    rtAssert c,
     rtPrimFail,
     rtTodo c
   ]

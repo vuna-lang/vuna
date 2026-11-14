@@ -85,7 +85,9 @@
   `rol32` / `shl32` / `shr32`）在 `Base.Bits` 库层；宽度策略留在库里，不进原语。
 - 没有运算符形式（`&` / `|` / `^` / `<<` / `>>`）：需要时用命名函数，或自己声明 `infixl`。
 - interp 与 runtime 同语义（`Core.Eval.primReduce` 委托给同名原语；codegen 生成
-  `bi_bit*`，and/or/xor/not 的饱和应用直接内联成 OCaml 位运算符）。
+  `bi_bit*`，and/or/xor/not 的饱和应用直接内联成 OCaml 位运算符）。三个后端都走
+  `IrRtApp`（`irInlineArity` 用内建名 `bitAnd`…）；wasm/native 已实现，见
+  [wasm.md](wasm.md) §5、[native.md](native.md) §5。
 
 ## 3.1 Nat
 

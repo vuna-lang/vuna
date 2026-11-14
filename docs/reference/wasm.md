@@ -1,7 +1,8 @@
 # wasm 后端（M2）
 
 > 状态：**M2 切片已端到端工作**（`main` 为 Int / Nat / String / Bool；支持 `let` / `if` /
-> 顶层饱和调用 / 立即 lambda 应用 / Nat 结构递归 / `++` 链 / 内建饱和应用 / 入口打印）。
+> 顶层饱和调用 / 立即 lambda 应用 / Nat 结构递归 / `++` 链 / 内建饱和应用 / 入口打印 /
+> 六种位运算 / `assert` / `todo` / `prim_fail` / `dbg!` 原语（与 native parity））。
 > 用户 `data` / record / 通用 `case` / 闭包值 / `Float` / Effect / FFI 仍被明确拒绝
 > （`WasmUnsupported`）。实现入口：
 > `Vuna.Compiler.Wasm.{Model,Instr,Types,Runtime,Module,Render}`，
@@ -87,6 +88,14 @@
 | 入口 / 诊断 | `@ir@showInt` / `showNat` / `showBool` / `showStr`、`prim_erase`、`assert`、`prim_fail`、`todo` |
 | 其它 | `arrayEmpty`（空数组值）；`@vuna@debug@on` / `@vuna@debug@line` 走常量折叠 |
 
+- **运行时错误报告**统一为 `vuna: runtime error: <msg>\n`（stderr，exit 2），与 OCaml
+  报告器 `dt_report_exn` 的第一行一致；`assert` / `todo` 分别加 `assertion failed: ` /
+  `TODO: ` 前缀。`rt_failStr` 是唯一的失败出口（拼前缀后走 `rt_write`）。
+- 位运算是 `IrRtApp`（`irInlineArity` 用内建名 `bitAnd`…）：`bitShr` 按 OCaml `lsr` 语义
+  （63-bit 值先 `shl`+`shr_u` 清掉符号扩展位，再逻辑右移）。
+- 值形态（`IrApp (IrRt sym) args`）覆盖 `strAt` / `strSubstring` / `assert` / `todo` /
+  `prim_fail`；`@vuna@debug@on` 是 0 元值（`False`），`@vuna@debug@line` 是 1 元桩。
+
 **明确拒绝**（`RtUnsupported` → 引用点 `WasmUnsupported`，带符号名）：
 `arrayGet` / `arraySet` / `arrayMake` / `arrayLength`（`Base.Array`，M3）、
 `bi_lt_generic` 等结构化 `compare` 家族、Float 全部符号、
@@ -116,7 +125,8 @@
 - `test/suite/steps/106_wasm_backend.steps`（section 90 / `steps_native`，e2e）：
   工具链探针、最小可执行、算术/let/遮蔽/if、顶层函数、Nat 递归 fact、字符串
   （`++` / strLength / strSubstring / 相等）、Bool 短路、63-bit 边界、除零 trap、
-  确定性 + 行宽、`--no-compile`、拒绝面、`--target` 取值校验。
+  确定性 + 行宽、`--no-compile`、拒绝面、`--target` 取值校验，以及与 native 的 parity
+  面（六种位运算与移位边界、`assert` / `todo` / `prim_fail` 的错误文本、`dbg!`）。
 - 每个正例都做**差分**：`wasmtime run` 的输出与 `vuna run`（OCaml 后端）逐字比较，
   OCaml 始终是语义 oracle。
 

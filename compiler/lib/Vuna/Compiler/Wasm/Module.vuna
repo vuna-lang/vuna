@@ -613,7 +613,8 @@ build program printResult =
     defs = concatMap irGroupDefs unit.irUnitGroups
     entry = unit.irUnitEntry
     fams = wasmFamsOf unit.irUnitTyDecls
-    statics = ["True", "False", "TODO: ", "division by zero"]
+    statics =
+      ["True", "False", "TODO: ", "division by zero", "vuna: runtime error: ", "assertion failed: "]
     users = concatMap strLitsDef defs
     pool = foldlStrings (\acc => \s => addString s acc) statics users
     offsets = poolOffsets pool 0
@@ -652,6 +653,8 @@ mkConsts offsets =
       Nothing => 0
   in RtConsts (offOf "True") (lenOf "True") (offOf "False") (lenOf "False") (offOf "TODO: ")
     (lenOf "TODO: ") (offOf "division by zero") (lenOf "division by zero")
+    (offOf "vuna: runtime error: ") (lenOf "vuna: runtime error: ") (offOf "assertion failed: ")
+    (lenOf "assertion failed: ")
 
 joinWith : String -> List String -> String
 joinWith sep xs = Base.String.join sep xs
