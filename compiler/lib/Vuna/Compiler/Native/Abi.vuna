@@ -27,9 +27,15 @@ import Vuna.Compiler.Native.Model
 export nativeArgRegs : List Reg
 nativeArgRegs = [Rdi, Rsi, Rdx, Rcx, R8, R9]
 
--- | 支持的最大 arity（更多参数需要栈传参）。
+-- | 寄存器传参的个数上限；更多参数走栈（SysV AMD64：第 7 个起在 `[rbp+16]` 起）。
 export nativeMaxArgs : Int
 nativeMaxArgs = 6
+
+-- | 第 i（从 0 起）个参数在**被调用方**栈帧里的地址（仅 i >= 6 有效）：
+--   `[rbp]` = 旧 rbp、`[rbp+8]` = 返回地址、`[rbp+16]` = 第 7 个参数。
+--   调用方按**逆序**压栈（最后一个先压），所以第 7 个参数在最低地址。
+export nativeStackArgOff : Int -> Int
+nativeStackArgOff i = 16 + 8 * (i - nativeMaxArgs)
 
 -- | slot 序号（从 0 起）-> rbp 偏移（负数）。
 export nativeSlotOff : Int -> Int

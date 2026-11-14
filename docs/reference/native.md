@@ -4,7 +4,8 @@
 > M2 加入 `String`（字面量、`++` 及其 `IrConcatMany` 展平、`strFromInt`、`strLength`、
 > `strAt`、`strSubstring`、`strHash`、`strShow`、`bi_eq_str` / `bi_neq_str`、String 入口）与
 > **bump 堆**（无 GC/RC）；**M2 parity 面**与 wasm 对齐：六种位运算、`assert` / `todo` /
-> `prim_fail`（统一错误报告）、`dbg!` 的 `@vuna@debug@on` / `@vuna@debug@line`。用户 data /
+> `prim_fail`（统一错误报告）、`dbg!` 的 `@vuna@debug@on` / `@vuna@debug@line`、**栈传参**
+> （arity > 6）。用户 data /
 > record / 通用 case、闭包值、Float、Effect、FFI 仍被明确拒绝（`NativeUnsupported`）。
 > 实现入口：`Vuna.Compiler.Native.{Model,Abi,Runtime,Module,Render}`，
 > 驱动 `Vuna.Compiler.Driver.Native`。后续路线按 M3a→M3b→M3c→M3d 拆分（见 §9）。
@@ -49,8 +50,8 @@
 
 ## 3. ABI 与栈帧
 
-- 参数寄存器按序：`rdi, rsi, rdx, rcx, r8, r9`；返回值 `rax`。最多 6 个参数，更多参数
-  拒绝（栈传参留 M3）。
+- 参数寄存器按序：`rdi, rsi, rdx, rcx, r8, r9`；返回值 `rax`。**第 7 个起走栈**
+  （SysV AMD64：被调用方在 `[rbp+16]`、`[rbp+24]`… 读；调用方按逆序压栈）。
 - 每个函数固定形态：
   ```text
   push rbp
@@ -63,8 +64,10 @@
   ```
 - **不做寄存器分配**：binder 和中间值都分配 `[rbp - 8*(slot+1)]` 栈槽；临时槽不回收，
   frame 取该函数的最大使用量。求值顺序因此显式、稳定。
-- 调用点：按 CBV 从左到右把实参求值到槽，再依次装入参数寄存器并 `call`；prologue
-  的 `push rbp` + 16 倍数 frame 保证调用前 `rsp` 16 字节对齐。
+- 调用点：按 CBV 从左到右把实参求值到槽；前 6 个装入参数寄存器，其余**逆序压栈**
+  （最后一个实参先压，第 7 个最终在 `[rbp+16]`）。栈参数个数为奇数时先 `sub rsp, 8`
+  补空洞，保证 `call` 时 `rsp` 16 字节对齐（prologue 的 `push rbp` + 16 倍数 frame 是
+  另一处保证）；返回后一次性 `add rsp, 8*k + pad` 回收。
 - 生成代码只使用 caller-saved 寄存器（`rax, rdi, rsi, rdx, rcx, r8-r11`）与帧指针
   `rbp`，不碰 `rbx/r12-r15`，因此无需保存 callee-saved。
 - **单出口**：带栈帧的运行时函数体内出现的 `IRet` 由 `Native.Runtime.rtFunc` 统一改写
@@ -172,13 +175,13 @@ base 定义即使含不支持构造也不拒绝（与 wasm M1 的 `collectNeeded
 
 ## 7. 验证
 
-- `test/suite/steps/105_native_backend.steps`（section 90 / `steps_native`，e2e，114 checks）：
+- `test/suite/steps/105_native_backend.steps`（section 90 / `steps_native`，e2e，127 checks）：
   M1 部分（最小可执行、算术/let/if、binder 遮蔽、多函数 label 不撞名、顶层函数、Nat 递归
   fact、Bool 入口与短路、63-bit 边界、除零 trap、确定性、`--no-compile`）与 M2 部分
   （String 入口、`++` / `strFromInt` / `strLength` / `strAt` / `strSubstring` / `strHash` /
   `strShow`、字符串相等、递归构造字符串、转义与 UTF-8 字节、bump 堆耗尽 trap、Float /
   data / 高阶拒绝）以及 parity 面（六种位运算与移位边界、`assert` 成功/失败、`prim_fail`、
-  `todo`、`dbg!`）。
+  `todo`、`dbg!`、7/8/9 参函数的栈传参与递归调用）。
 - 差分：同一程序的 native 输出与 `vuna run`（OCaml 后端）逐字比较（fact / String 用例）；
   后续加 native 专用差分 runner 时仍以 OCaml 为语义 oracle。
 - 工具链：`cc` 缺失时 steps 首步明确失败；e2e 的 `nativeBuildInputs` 已含
@@ -201,8 +204,8 @@ base 定义即使含不支持构造也不拒绝（与 wasm M1 的 `collectNeeded
 ## 9. 后续路线（只写方向，不写排期）
 
 - **M3a**：对象与标签。`IrCtor` / 最小对象头（tag + 字段）/ 通用 `IrCase` 分派 /
-  `IrProj`；栈传参（>6 arity）；栈溢出检查。验收用**用户自己的 `data`**（如
-  `data Color = Red | Blue` + `pick`），不碰 List。
+  `IrProj`；栈溢出检查。验收用**用户自己的 `data`**（如
+  `data Color = Red | Blue` + `pick`），不碰 List。（栈传参已在 M2 parity 完成。）
 - **M3b**：canonical `List` 族接进 M3a 的对象表示，然后实现 `strUnpack` / `strPack` /
   `strConcatMany` / `strSubstTemplate` 四个桥接符号；同时把 1 MiB 固定堆换成可增长
   arena（打满就开新段，不做 RC/复用——回收策略留给 M4）。`CG_ListBridgeRequired` 同义

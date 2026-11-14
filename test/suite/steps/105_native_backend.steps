@@ -4,7 +4,8 @@
 # 除零 trap、确定性、拒绝面、`--no-compile`）与 M2（String 字面量 / `++` / `strFromInt`
 # / strLength / strAt / strSubstring / strHash / strShow / `==` / String 入口打印 /
 # bump 堆耗尽 trap），以及与 wasm 的 parity 面（位运算、`assert` / `todo` / `prim_fail`
-# 的统一错误报告、`dbg!` 的 debug 原语）。依赖 PATH 里的 cc（devShell / e2e 的 ocamlTools）。
+# 的统一错误报告、`dbg!` 的 debug 原语、arity > 6 的栈传参）。依赖 PATH 里的 cc
+# （devShell / e2e 的 ocamlTools）。
 
 # 0) 工具链探针：缺 cc 时给出明确失败，而不是让后续链接报 127。
 run: command -v cc
@@ -181,6 +182,26 @@ run: sh -c 'printf "main : Int\nmain = let _ = dbg! \"x\" in 43\n" > "$TMPDIR/bi
 exit: 0
 run: "$TMPDIR/dbg-out/bin/bit" 2>&1
 out-equals: 43
+
+# 10e) 栈传参（arity > 6）：前 6 个走寄存器，第 7 个起压栈；与 OCaml 后端差分。
+run: sh -c 'd="$TMPDIR/argv"; mkdir -p "$d/app"; printf "[package]\nname = \"argv\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "poly : Int -> Int -> Int -> Int -> Int -> Int -> Int -> Int -> Int -> Int\npoly a b c d e f g h i = a * 100000000 + b * 10000000 + c * 1000000 + d * 100000 + e * 10000 + f * 1000 + g * 100 + h * 10 + i\n\nmain : Int\nmain = poly 1 2 3 4 5 6 7 8 9\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/argv-out" "$d"'
+exit: 0
+run: "$TMPDIR/argv-out/bin/argv" 2>&1
+out-equals: 123456789
+run: sh -c '"$VUNA" run "$TMPDIR/argv" 2>&1 | tail -n 1'
+out-equals: 123456789
+# 奇数个栈参数（7 参）走对齐空洞；返回值必须原样。
+run: sh -c 'd="$TMPDIR/argv"; printf "poly : Int -> Int -> Int -> Int -> Int -> Int -> Int -> Int\npoly a b c d e f g = a + b + c + d + e + f + g\n\nmain : Int\nmain = poly 1 2 3 4 5 6 7\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/argv7-out" "$d"'
+exit: 0
+run: "$TMPDIR/argv7-out/bin/argv" 2>&1
+out-equals: 28
+# 栈传参 + 递归：每层都要读自己栈帧上的第 7 个参数。
+run: sh -c 'd="$TMPDIR/argv"; printf "import Base.Nat\n\ng : Nat -> Int -> Int -> Int -> Int -> Int -> Int -> Int -> Int\ng a b c d e f h i = case a of\n  Zero => i\n  Succ k => g k b c d e f h (i + 1)\n\nmain : Int\nmain = g (natFromInt 5) 1 2 3 4 5 6 7\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/argvrec-out" "$d"'
+exit: 0
+run: "$TMPDIR/argvrec-out/bin/argv" 2>&1
+out-equals: 12
+run: sh -c '"$VUNA" run "$TMPDIR/argv" 2>&1 | tail -n 1'
+out-equals: 12
 
 # 11) 不支持构造：Float 入口在编译期拒绝（exit 1），不产出可执行。
 run: sh -c 'd="$TMPDIR/fl"; mkdir -p "$d/app"; printf "[package]\nname = \"fl\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "main : Float\nmain = 1.5\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/fl-out" "$d" 2>&1'

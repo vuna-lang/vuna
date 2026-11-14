@@ -217,15 +217,36 @@ in NOk (Pair (append (firstOf p) (append (storeSlot slot) qInstrs)) (Pair (slot 
 )
 )
 
--- | 饱和调用：实参左→右求值到槽，再装入参数寄存器并 `call`。
+-- | 饱和调用：实参左→右求值到槽；前 6 个装参数寄存器，其余逆序压栈（SysV AMD64）。
+--   调用前 `rsp` 必须 16 字节对齐：栈参数个数为奇数时先 `sub rsp, 8` 补空洞
+--   （空洞在参数**上方**，被调用方忽略）；返回后一次性 `add rsp, 8*k + pad`。
 genSaturatedCall : Int -> FGen -> String -> List Ir -> NRes (Pair (List Instr) FGen)
 genSaturatedCall fuel st label args = if fuel <= 0 then internal "native codegen fuel exhausted"
-else if length args > nativeMaxArgs then unsupported "native target: functions with more than 6 arguments are not supported yet"
 else nbind (genArgs (fuel - 1) st args) (\p => let
   slots = firstOf (secondOf p)
   st1 = secondOf (secondOf p)
-in NOk (Pair (append (firstOf p) (append (loadArgRegs nativeArgRegs slots) [ICall label])) st1)
+  regSlots = take nativeMaxArgs slots
+  stackSlots = drop nativeMaxArgs slots
+  k = length stackSlots
+  pad = if k - k / 2 * 2 == 1 then 8 else 0
+  popped = 8 * k + pad
+  callPart = append [ICall label] (if popped == 0 then [] else [IBinReg "add" Rsp (OpImm popped)])
+  body = append (pushStackArgs stackSlots) (append (loadArgRegs nativeArgRegs regSlots) callPart)
+in NOk (Pair (append (firstOf p) body) st1)
 )
+
+-- | 栈参数压栈：逆序（最后一个先压），第 7 个参数最终位于 `[rbp+16]`。
+--   `slots` 已按实参顺序排列（从第 7 个起）。先 `sub rsp, 8` 补对齐空洞（若需要）。
+pushStackArgs : List Int -> List Instr
+pushStackArgs slots =
+  let
+    k = length slots
+    pad = if k - k / 2 * 2 == 1 then [IBinReg "sub" Rsp (OpImm 8)] else []
+    pushes = concatMap pushOne (reverse slots)
+  in append pad pushes
+
+pushOne : Int -> List Instr
+pushOne slot = [IMov (OpReg Rax) (OpMem Rbp (nativeSlotOff slot)), IPush Rax]
 
 genGlobalCall : Int -> FGen -> String -> List Ir -> NRes (Pair (List Instr) FGen)
 genGlobalCall fuel st name args = if fuel <= 0 then internal "native codegen fuel exhausted"
@@ -481,26 +502,27 @@ in NOk (Pair body (secondOf s))
 bindArgs : List IrBinder -> FGen -> NRes (Pair (List Instr) FGen)
 bindArgs bs st = bindArgsGo bs 0 st
 
+-- | 绑定形参：前 6 个来自参数寄存器，其余来自调用方压栈（`[rbp+16]` 起）。
 bindArgsGo : List IrBinder -> Int -> FGen -> NRes (Pair (List Instr) FGen)
 bindArgsGo [] _ st = NOk (Pair [] st)
-bindArgsGo (b :: rest) i st = case argRegAt i of
-  Nothing => unsupported "native target: functions with more than 6 arguments are not supported yet"
-  Just reg =>
-    let
-      slotP = freshSlot st
-      slot = firstOf slotP
-      st1 = secondOf slotP
-      store = [IMov (OpMem Rbp (nativeSlotOff slot)) (OpReg reg)]
-    in nbind (bindArgsGo rest (i + 1) (pushBinder b slot st1))
-      (\q => NOk (Pair (append store (firstOf q)) (secondOf q)))
+bindArgsGo (b :: rest) i st =
+  let
+    src = case argRegAt i of
+      Just reg => [IMov (OpReg Rax) (OpReg reg)]
+      Nothing => [IMov (OpReg Rax) (OpMem Rbp (nativeStackArgOff i))]
+    slotP = freshSlot st
+    slot = firstOf slotP
+    st1 = secondOf slotP
+    store = append src [IMov (OpMem Rbp (nativeSlotOff slot)) (OpReg Rax)]
+  in nbind (bindArgsGo rest (i + 1) (pushBinder b slot st1))
+    (\q => NOk (Pair (append store (firstOf q)) (secondOf q)))
 
 -- | 生成一个定义；返回函数与该定义之后**全局** label/slot 计数（label 必须跨定义
 --   累加，否则两个函数会撞同名 `.L`）。
 genDefFunc : List IrDef -> List (Pair String String) -> Int -> IrDef -> NRes (Pair NativeFunc Int)
 genDefFunc _defs _pool _nextLabel (IrExternDef name _ _ _) =
   unsupported "native target: extern definition `${name}` is not supported yet"
-genDefFunc defs pool nextLabel (IrDef name arity _ body _ _ _) = if arity > nativeMaxArgs then unsupported "native target: functions with more than 6 arguments are not supported yet"
-else
+genDefFunc defs pool nextLabel (IrDef name arity _ body _ _ _) =
   let
     st0 = FGen defs pool [] 0 nextLabel
   in if arity == 0 then nbind (genExpr 100000 st0 body) (\p => let
