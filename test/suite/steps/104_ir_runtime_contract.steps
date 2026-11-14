@@ -22,10 +22,18 @@ file-contains: $TMPDIR/p/out-bool/Main.ml print_endline (dt_show_bool (v_main))
 run: "$VUNA" compile "$TMPDIR/p/float.vuna" "$TMPDIR/p/out-float"
 file-contains: $TMPDIR/p/out-float/Main.ml print_endline (string_of_float (v_main))
 
-# 裸符号（`IrRt`）：未饱和的内建按运行时常量表输出，不做内联。
+# 裸符号（`IrRt`）：未内联的内建按运行时常量表输出，不做内联（`strAt` 是值形态、arity 2）。
+run: sh -c 'printf "%s\n" "main : Int" "main = strAt \"abc\" 1" > "$TMPDIR/p/at.vuna"'
+run: "$VUNA" compile "$TMPDIR/p/at.vuna" "$TMPDIR/p/out-at"
+file-contains: $TMPDIR/p/out-at/Main.ml ((dtp_strAt "abc") 1)
+
+# 位运算：`irInlineArity` 用内建名（`bitAnd`…），饱和应用走 `IrRtApp` → 内联模板。
 run: sh -c 'printf "%s\n" "main : Int" "main = bitAnd 6 3" > "$TMPDIR/p/bit.vuna"'
 run: "$VUNA" compile "$TMPDIR/p/bit.vuna" "$TMPDIR/p/out-bit"
-file-contains: $TMPDIR/p/out-bit/Main.ml ((bi_bitAnd 6) 3)
+file-contains: $TMPDIR/p/out-bit/Main.ml (6 land 3)
+run: sh -c 'printf "%s\n" "main : Int" "main = bitShr (0 - 1) 1" > "$TMPDIR/p/shr.vuna"'
+run: "$VUNA" compile "$TMPDIR/p/shr.vuna" "$TMPDIR/p/out-shr"
+file-contains: $TMPDIR/p/out-shr/Main.ml (if 1 < 0 || 1 >= 63 then 0 else (0 - 1) lsr 1)
 
 # 内联（`IrRtApp`）：饱和的 Int 相等走后端模板，不出现 bi_eq_int 调用。
 run: sh -c 'printf "%s\n" "main : Bool" "main = 1 == 1" > "$TMPDIR/p/eq.vuna"'
