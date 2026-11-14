@@ -96,6 +96,8 @@ record SplitGenCtx where
   sgcDefUnitT : HashMap String String
   sgcDataUnitT : HashMap String String
   sgcOrdered : List String
+  -- `#line` 路径归一（包相对）：与 `dt_def_locs` 位置表用同一函数（`splitLocPath`）。
+  sgcNormPath : String -> String
 
 mapToUnit : List (Pair String String) -> List (Pair String String)
 mapToUnit pairs = map (\q => Pair (firstOf q) (splitUnitOfModule (secondOf q))) pairs
@@ -238,20 +240,21 @@ generateDtSplitProgramWith lookup store modules entryDecls prog printResult root
     locRows = append shared.irSharedDefLocs extraDefLocs
     locTbl = dtDefLocTable (splitLocPath roots contextDir) locRows
     _ = dbg! "cg-deflocs-done"
-    runtimeText = dtRuntimeWith locTbl shared.irSharedUsesFloat shared.irSharedUsesTrace
+    runtimeText =
+      dtRuntimeWith locTbl shared.irSharedUsesFloat shared.irSharedUsesTrace shared.irSharedUsesObs
     _ = dbg! "cg-runtimeText-done"
   in splitProgramFilesWith lookup store env modules entryDecls printResult runtimeDefs allDatas meta
-    runtimeText
+    (splitLocPath roots contextDir) runtimeText
 
-splitProgramFilesWith : (String -> Eff hostRow (Maybe SplitFile)) -> (String -> SplitFile -> Eff hostRow Int) -> LwEnv -> List (Pair String (List Decl)) -> List Decl -> Bool -> List DtDef -> List DtData -> SplitMeta -> String -> Eff hostRow (Check (List SplitFile))
-splitProgramFilesWith lookup store env modules entryDecls printResult runtimeDefs allDatas meta runtimeText = case checkProgramOf env of
+splitProgramFilesWith : (String -> Eff hostRow (Maybe SplitFile)) -> (String -> SplitFile -> Eff hostRow Int) -> LwEnv -> List (Pair String (List Decl)) -> List Decl -> Bool -> List DtDef -> List DtData -> SplitMeta -> (String -> String) -> String -> Eff hostRow (Check (List SplitFile))
+splitProgramFilesWith lookup store env modules entryDecls printResult runtimeDefs allDatas meta normPath runtimeText = case checkProgramOf env of
   ErrC e => pure (ErrC e)
   OkC _ =>
     splitProgramCheckedWith lookup store env modules entryDecls printResult runtimeDefs allDatas
-      meta runtimeText
+      meta normPath runtimeText
 
-splitProgramCheckedWith : (String -> Eff hostRow (Maybe SplitFile)) -> (String -> SplitFile -> Eff hostRow Int) -> LwEnv -> List (Pair String (List Decl)) -> List Decl -> Bool -> List DtDef -> List DtData -> SplitMeta -> String -> Eff hostRow (Check (List SplitFile))
-splitProgramCheckedWith lookup store env modules entryDecls printResult runtimeDefs allDatas meta runtimeText = case checkResolvedModules meta modules entryDecls runtimeDefs allDatas of
+splitProgramCheckedWith : (String -> Eff hostRow (Maybe SplitFile)) -> (String -> SplitFile -> Eff hostRow Int) -> LwEnv -> List (Pair String (List Decl)) -> List Decl -> Bool -> List DtDef -> List DtData -> SplitMeta -> (String -> String) -> String -> Eff hostRow (Check (List SplitFile))
+splitProgramCheckedWith lookup store env modules entryDecls printResult runtimeDefs allDatas meta normPath runtimeText = case checkResolvedModules meta modules entryDecls runtimeDefs allDatas of
   ErrC e => pure (ErrC e)
   OkC _ => case nameOwnerPairsOfDefs meta runtimeDefs of
     ErrC e => pure (ErrC e)
@@ -259,10 +262,10 @@ splitProgramCheckedWith lookup store env modules entryDecls printResult runtimeD
       ErrC e => pure (ErrC e)
       OkC dataPairs =>
         splitWithOwnersWith lookup store env modules printResult allDatas runtimeDefs defPairs
-          dataPairs runtimeText
+          dataPairs normPath runtimeText
 
-splitWithOwnersWith : (String -> Eff hostRow (Maybe SplitFile)) -> (String -> SplitFile -> Eff hostRow Int) -> LwEnv -> List (Pair String (List Decl)) -> Bool -> List DtData -> List DtDef -> List (Pair String String) -> List (Pair String String) -> String -> Eff hostRow (Check (List SplitFile))
-splitWithOwnersWith lookup store env modules printResult allDatas allDefs defPairs dataPairs runtimeText =
+splitWithOwnersWith : (String -> Eff hostRow (Maybe SplitFile)) -> (String -> SplitFile -> Eff hostRow Int) -> LwEnv -> List (Pair String (List Decl)) -> Bool -> List DtData -> List DtDef -> List (Pair String String) -> List (Pair String String) -> (String -> String) -> String -> Eff hostRow (Check (List SplitFile))
+splitWithOwnersWith lookup store env modules printResult allDatas allDefs defPairs dataPairs normPath runtimeText =
   let
     defUnitT = unitTblOf (mapToUnit defPairs)
     dataUnitT = unitTblOf (mapToUnit dataPairs)
@@ -271,7 +274,7 @@ splitWithOwnersWith lookup store env modules printResult allDatas allDefs defPai
         [splitUnitOfModule entryOwner]
     ctx =
       SplitGenCtx env allDatas allDefs (ownerTblOf defPairs) (ownerTblOf dataPairs) defUnitT
-        dataUnitT ordered
+        dataUnitT ordered normPath
   in do
     moduleFilesR <- splitModuleFilesWith lookup store ctx modules
     case moduleFilesR of
@@ -307,7 +310,7 @@ splitModuleFilesWith lookup store ctx ((Pair mname decls) :: rest) =
           envU = lwEnvWithUnit unit ctx.sgcEnv
         in case lowerUnitAfterChecks envU (map dtDefName unitDefs) (map dtDataName unitDatas) of
           ErrC e => pure (ErrC e)
-          OkC unitIr => case genUnitParts qc (lwEnvShared envU) unitIr of
+          OkC unitIr => case genUnitPartsWith ctx.sgcNormPath qc (lwEnvShared envU) unitIr of
             ErrC e => pure (ErrC e)
             OkC parts => do
               tailR <- splitModuleFilesWith lookup store ctx rest
@@ -341,9 +344,9 @@ splitMainFileWith lookup store ctx printResult = do
           ErrC e => pure (ErrC e)
           OkC entryM => case entryM of
             Nothing => pure (cgErr0 NoMain)
-            Just entryIr => case genUnitParts qc (lwEnvShared envU) unitIr of
+            Just entryIr => case genUnitPartsWith ctx.sgcNormPath qc (lwEnvShared envU) unitIr of
               ErrC e => pure (ErrC e)
-              OkC parts => case genEntryHook (mkGenSt qc (lwEnvShared envU)) entryIr printResult of
+              OkC parts => case genEntryHook (mkGenStWith ctx.sgcNormPath qc (lwEnvShared envU)) entryIr printResult of
                 ErrC e => pure (ErrC e)
                 OkC hook => case unitDepsOf ctx.sgcOrdered entryUnit (append (unitPartsDeps parts) (secondOf hook)) of
                   ErrC e => pure (ErrC e)

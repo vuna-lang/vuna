@@ -277,6 +277,9 @@ export record IrShared(..) where
   irSharedUsesFloat : Bool
   -- | 程序是否用到编译器 tracing 隐藏原语（决定是否追加 tracing helper）。
   irSharedUsesTrace : Bool
+  -- | 程序是否用到可观测性隐藏原语（决定是否追加 obs runtime；与 tracing 分开，
+  -- 让 `dbg!` 程序不背事件缓冲、obs 程序不背 stderr 门控）。
+  irSharedUsesObs : Bool
   -- | 构造子 → (族名, keep flags)：构造子引用与 case 分支的形状判定。
   irSharedCtors : List (Pair String (Pair String (List Bool)))
   -- | 构造子 → 不透明字段 flags（与 keep flags 逐位对齐）：实参处包 `Obj.magic`。
@@ -296,7 +299,7 @@ irSharedRecordFieldsOf family (p :: rest) =
 
 -- | 构造子 → 族名（未知构造子返回空串）。
 export irSharedCtorFamily : IrShared -> String -> String
-irSharedCtorFamily (IrShared recs listFam uf ut ctors opqs unboxed typs locs) ctor =
+irSharedCtorFamily (IrShared recs listFam uf ut uo ctors opqs unboxed typs locs) ctor =
   irSharedCtorFamilyGo ctor ctors
 
 irSharedCtorFamilyGo : String -> List (Pair String (Pair String (List Bool))) -> String
@@ -306,7 +309,7 @@ irSharedCtorFamilyGo ctor (p :: rest) =
 
 -- | 构造子的 keep flags（未知构造子返回空表）。
 export irSharedCtorKeepFlags : IrShared -> String -> List Bool
-irSharedCtorKeepFlags (IrShared recs listFam uf ut ctors opqs unboxed typs locs) ctor =
+irSharedCtorKeepFlags (IrShared recs listFam uf ut uo ctors opqs unboxed typs locs) ctor =
   irSharedCtorKeepFlagsGo ctor ctors
 
 irSharedCtorKeepFlagsGo : String -> List (Pair String (Pair String (List Bool))) -> List Bool
@@ -316,7 +319,7 @@ irSharedCtorKeepFlagsGo ctor (p :: rest) =
 
 -- | 构造子的不透明字段 flags（未知构造子返回空表）。
 export irSharedCtorOpaqueFlags : IrShared -> String -> List Bool
-irSharedCtorOpaqueFlags (IrShared recs listFam uf ut ctors opqs unboxed typs locs) ctor =
+irSharedCtorOpaqueFlags (IrShared recs listFam uf ut uo ctors opqs unboxed typs locs) ctor =
   irSharedCtorOpaqueFlagsGo ctor opqs
 
 irSharedCtorOpaqueFlagsGo : String -> List (Pair String (List Bool)) -> List Bool
@@ -326,12 +329,12 @@ irSharedCtorOpaqueFlagsGo ctor (p :: rest) =
 
 -- | 族是否是去装箱族。
 export irSharedIsUnboxed : IrShared -> String -> Bool
-irSharedIsUnboxed (IrShared recs listFam uf ut ctors opqs unboxed typs locs) family =
+irSharedIsUnboxed (IrShared recs listFam uf ut uo ctors opqs unboxed typs locs) family =
   memName family unboxed
 
 -- | 族的运行时类型参数槽（未知族返回空表）。
 export irSharedTyParamsOf : IrShared -> String -> List Int
-irSharedTyParamsOf (IrShared recs listFam uf ut ctors opqs unboxed typs locs) family =
+irSharedTyParamsOf (IrShared recs listFam uf ut uo ctors opqs unboxed typs locs) family =
   irSharedTyParamsOfGo family typs
 
 irSharedTyParamsOfGo : String -> List (Pair String (List Int)) -> List Int

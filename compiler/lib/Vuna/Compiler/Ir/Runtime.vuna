@@ -293,7 +293,14 @@ irRtPlainNames =
     "prim_eff_execPath",
     "@vuna@prim_eff_execPath",
     "@vuna@debug@on",
-    "@vuna@debug@line"
+    "@vuna@debug@line",
+    "@vuna@obs@level",
+    "@vuna@obs@span",
+    "@vuna@obs@log",
+    "@vuna@obs@counter",
+    "@vuna@obs@mark",
+    "@vuna@obs@sampleStart",
+    "@vuna@obs@sampleStop"
   ]
 
 -- | 需要 canonical `Base.List.List` 族桥接 helper 的内建名符号。

@@ -869,6 +869,407 @@ let dtp_debug_line (s : string) =
   0
 """
 
+-- | 可观测性运行时（仅在程序引用 `@vuna@obs@*` 隐藏原语时追加；见 `dtRuntimeWith`
+-- 的 `usesObs`）。规范见 `docs/reference/observability.md`。
+--
+-- 默认关闭：`dtp_obs_level_lazy` 是 lazy CAF，关闭时每个探针只剩一次 `Lazy.force` +
+-- 一个布尔分支（无时钟读、无分配、不碰文件）。打开后事件写 Chrome Trace Event JSONL
+-- （`ph:"M"` 元数据 + `ph:"X"` 跨度 + `ph:"C"` 计数 + `ph:"i"` 日志/采样），sink 是
+-- `VUNA_OBS_FILE` 或 `${VUNA_OBS_DIR:-${TMPDIR:-/tmp}/vuna-obs}/vuna-<pid>.jsonl`。
+--
+-- 文本里**没有反斜杠**（JSON 的 `"` 全部经 `dtp_obs_qc = Char.chr 34` 拼出）：本文件是
+-- vuna 源码，多行字符串里每个 `\` 都要再转义一层，省掉它们才能让模板可读可 diff。
+-- 采样：CPU 用 `ITIMER_PROF` + `SIGPROF` + `Printexc.get_callstack`（handler 里只抓栈，
+-- 不做 I/O/格式化）；内存用 `Gc.Memprof` 分配回调。两处都在停止时批量序列化。
+dtObsRuntime : String
+dtObsRuntime = """(* ------------------------------------------------------------------ *)
+(* vuna observability runtime (generated; see docs/reference/          *)
+(* observability.md). Off by default: a probe pays one Lazy.force.     *)
+(* Events are Chrome Trace Event JSONL, one object per line.           *)
+(*                                                                     *)
+(* This text is embedded verbatim in Codegen.Term.dtObsRuntime. It      *)
+(* therefore contains NO backslash characters and NO line comments:    *)
+(* every quote is built from Char.chr 34 so the surrounding vuna string *)
+(* literal stays straightforward to escape.                            *)
+(* ------------------------------------------------------------------ *)
+let dtp_obs_qc = Char.chr 34
+let dtp_obs_bs = Char.chr 92
+let dtp_obs_nl = Char.chr 10
+let dtp_obs_colon = Char.chr 58
+let dtp_obs_comma = Char.chr 44
+let dtp_obs_lb = Char.chr 123
+let dtp_obs_rb = Char.chr 125
+let dtp_obs_ls = Char.chr 91
+let dtp_obs_rs = Char.chr 93
+
+let dtp_obs_level_lazy = lazy (
+  let env =
+    match int_of_string_opt (try Sys.getenv \"VUNA_OBS\" with Not_found -> \"\") with
+    | Some n -> n
+    | None -> 0
+  in
+  let rec scan i acc =
+    let n = Array.length Sys.argv in
+    if i >= n then acc
+    else if Sys.argv.(i) = \"--obs\" then scan (i + 1) (if acc > 2 then acc else 2)
+    else if Sys.argv.(i) = \"--obs-level\" && i + 1 < n then
+      (match int_of_string_opt Sys.argv.(i + 1) with
+       | Some v -> scan (i + 2) v
+       | None -> scan (i + 2) acc)
+    else if String.length Sys.argv.(i) > 11 && String.sub Sys.argv.(i) 0 11 = \"--obs-level\" then
+      (match int_of_string_opt (String.sub Sys.argv.(i) 12 (String.length Sys.argv.(i) - 12)) with
+       | Some v -> scan (i + 1) v
+       | None -> scan (i + 1) acc)
+    else scan (i + 1) acc
+  in
+  let l = scan 1 env in
+  if l < 0 then 0 else if l > 3 then 3 else l)
+
+let dtp_obs_level (_ : int) = Lazy.force dtp_obs_level_lazy
+let dtp_obs_on () = Lazy.force dtp_obs_level_lazy > 0
+let dtp_obs_tid () = let t = !dtp_sched_current in if t < 0 then 0 else t
+
+let dtp_obs_esc b (s : string) =
+  String.iter
+    (fun c ->
+      if Char.code c = 34 then begin Buffer.add_char b dtp_obs_bs; Buffer.add_char b dtp_obs_qc end
+      else if Char.code c = 92 then begin Buffer.add_char b dtp_obs_bs; Buffer.add_char b dtp_obs_bs end
+      else if Char.code c = 10 then begin Buffer.add_char b dtp_obs_bs; Buffer.add_char b (Char.chr 110) end
+      else if Char.code c = 13 then begin Buffer.add_char b dtp_obs_bs; Buffer.add_char b (Char.chr 114) end
+      else if Char.code c = 9 then begin Buffer.add_char b dtp_obs_bs; Buffer.add_char b (Char.chr 116) end
+      else if Char.code c < 32 then begin
+        Buffer.add_char b dtp_obs_bs;
+        Buffer.add_char b (Char.chr 117);
+        Buffer.add_string b (Printf.sprintf \"%04x\" (Char.code c))
+      end
+      else Buffer.add_char b c)
+    s
+
+let dtp_obs_key b (k : string) =
+  Buffer.add_char b dtp_obs_qc;
+  dtp_obs_esc b k;
+  Buffer.add_char b dtp_obs_qc;
+  Buffer.add_char b dtp_obs_colon
+
+let dtp_obs_str b (s : string) =
+  Buffer.add_char b dtp_obs_qc;
+  dtp_obs_esc b s;
+  Buffer.add_char b dtp_obs_qc
+
+let dtp_obs_int b (n : int) = Buffer.add_string b (string_of_int n)
+
+
+let dtp_obs_sink_path () =
+  match Sys.getenv_opt \"VUNA_OBS_FILE\" with
+  | Some p when p <> \"\" -> p
+  | _ ->
+    let d =
+      match Sys.getenv_opt \"VUNA_OBS_DIR\" with
+      | Some d when d <> \"\" -> d
+      | _ -> Filename.concat (Filename.get_temp_dir_name ()) \"vuna-obs\"
+    in
+    Filename.concat d (\"vuna-\" ^ string_of_int (Unix.getpid ()) ^ \".jsonl\")
+
+let dtp_obs_chan : out_channel option ref = ref None
+let dtp_obs_started = ref false
+let dtp_obs_warned = ref false
+let dtp_obs_count = ref 0
+let dtp_obs_buf = Buffer.create 8192
+
+let dtp_obs_open () =
+  match !dtp_obs_chan with
+  | Some c -> Some c
+  | None ->
+    let path = dtp_obs_sink_path () in
+    let dir = Filename.dirname path in
+    (try if not (Sys.file_exists dir) then Unix.mkdir dir 0o755 with _ -> ());
+    (match (try Some (open_out_bin path) with _ -> None) with
+     | None ->
+       if not !dtp_obs_warned then begin
+         dtp_obs_warned := true;
+         Printf.eprintf \"vuna: obs: cannot write %s, events dropped\" path;
+         output_char stderr dtp_obs_nl;
+         flush stderr
+       end;
+       None
+     | Some c ->
+       dtp_obs_chan := Some c;
+       Some c)
+
+let dtp_obs_flush () =
+  (match !dtp_obs_chan with
+   | None -> ()
+   | Some c ->
+     if Buffer.length dtp_obs_buf > 0 then Buffer.output_buffer c dtp_obs_buf;
+     Buffer.clear dtp_obs_buf;
+     (try flush c with _ -> ()));
+  dtp_obs_count := 0;
+  0
+
+let dtp_obs_hdr b (ph : string) (name : string) =
+  Buffer.add_char b dtp_obs_lb;
+  dtp_obs_key b \"ph\";
+  dtp_obs_str b ph;
+  Buffer.add_char b dtp_obs_comma;
+  dtp_obs_key b \"ts\";
+  dtp_obs_int b (dtp_timeUs ());
+  Buffer.add_char b dtp_obs_comma;
+  dtp_obs_key b \"pid\";
+  dtp_obs_int b (Unix.getpid ());
+  Buffer.add_char b dtp_obs_comma;
+  dtp_obs_key b \"tid\";
+  dtp_obs_int b (dtp_obs_tid ());
+  Buffer.add_char b dtp_obs_comma;
+  dtp_obs_key b \"name\";
+  dtp_obs_str b name
+
+let dtp_obs_meta () =
+  let b = Buffer.create 256 in
+  Buffer.add_char b dtp_obs_lb;
+  dtp_obs_key b \"ph\";
+  dtp_obs_str b \"M\";
+  Buffer.add_char b dtp_obs_comma;
+  dtp_obs_key b \"name\";
+  dtp_obs_str b \"vuna.obs.schema\";
+  Buffer.add_char b dtp_obs_comma;
+  dtp_obs_key b \"pid\";
+  dtp_obs_int b (Unix.getpid ());
+  Buffer.add_char b dtp_obs_comma;
+  dtp_obs_key b \"tid\";
+  dtp_obs_int b 0;
+  Buffer.add_char b dtp_obs_comma;
+  dtp_obs_key b \"args\";
+  Buffer.add_char b dtp_obs_lb;
+  dtp_obs_key b \"schema\";
+  dtp_obs_str b \"vuna-obs 1\";
+  Buffer.add_char b dtp_obs_comma;
+  dtp_obs_key b \"level\";
+  dtp_obs_int b (dtp_obs_level 0);
+  Buffer.add_char b dtp_obs_comma;
+  dtp_obs_key b \"exec\";
+  dtp_obs_str b (try Sys.executable_name with _ -> \"\");
+  Buffer.add_char b dtp_obs_comma;
+  dtp_obs_key b \"argv\";
+  Buffer.add_char b dtp_obs_ls;
+  Array.iteri
+    (fun i a ->
+      if i > 0 then Buffer.add_char b dtp_obs_comma;
+      dtp_obs_str b a)
+    Sys.argv;
+  Buffer.add_char b dtp_obs_rs;
+  Buffer.add_char b dtp_obs_comma;
+  dtp_obs_key b \"t0\";
+  dtp_obs_int b (dtp_timeUs ());
+  Buffer.add_char b dtp_obs_rb;
+  Buffer.add_char b dtp_obs_rb;
+  Buffer.add_char b dtp_obs_nl;
+  Buffer.contents b
+
+let dtp_obs_emit (ev : string) =
+  match dtp_obs_open () with
+  | None -> 0
+  | Some _ ->
+    if not !dtp_obs_started then begin
+      dtp_obs_started := true;
+      Buffer.add_string dtp_obs_buf (dtp_obs_meta ())
+    end;
+    Buffer.add_string dtp_obs_buf ev;
+    incr dtp_obs_count;
+    if !dtp_obs_count >= 256 then dtp_obs_flush () else 0
+
+let dtp_obs_shutdown () =
+  ignore (dtp_obs_flush ());
+  (match !dtp_obs_chan with
+   | Some c -> dtp_obs_chan := None; (try close_out c with _ -> ())
+   | None -> ())
+
+let () = at_exit dtp_obs_shutdown
+
+let dtp_obs_span (name : string) (cat : string) (f : int -> 'a) : 'a =
+  if not (dtp_obs_on ()) then f 0
+  else begin
+    let t0 = dtp_timeUs () in
+    let s0 = Gc.quick_stat () in
+    let emit ok =
+      let t1 = dtp_timeUs () in
+      let s1 = Gc.quick_stat () in
+      let b = Buffer.create 192 in
+      dtp_obs_hdr b \"X\" name;
+      Buffer.add_char b dtp_obs_comma;
+      dtp_obs_key b \"cat\";
+      dtp_obs_str b cat;
+      Buffer.add_char b dtp_obs_comma;
+      dtp_obs_key b \"dur\";
+      dtp_obs_int b (if t1 - t0 < 0 then 0 else t1 - t0);
+      Buffer.add_char b dtp_obs_comma;
+      dtp_obs_key b \"args\";
+      Buffer.add_char b dtp_obs_lb;
+      dtp_obs_key b \"allocWords\";
+      dtp_obs_int b
+        (int_of_float
+           (s1.Gc.minor_words -. s0.Gc.minor_words +. (s1.Gc.major_words -. s0.Gc.major_words)));
+      Buffer.add_char b dtp_obs_comma;
+      dtp_obs_key b \"heapWords\";
+      dtp_obs_int b s1.Gc.top_heap_words;
+      if not ok then begin
+        Buffer.add_char b dtp_obs_comma;
+        dtp_obs_key b \"error\";
+        Buffer.add_string b \"true\"
+      end;
+      Buffer.add_char b dtp_obs_rb;
+      Buffer.add_char b dtp_obs_rb;
+      Buffer.add_char b dtp_obs_nl;
+      ignore (dtp_obs_emit (Buffer.contents b))
+    in
+    let v = try f 0 with e -> emit false; raise e in
+    emit true;
+    v
+  end
+
+let dtp_obs_mark_like (ph : string) (name : string) (cat : string) (kv : (Buffer.t -> unit) option) =
+  let b = Buffer.create 160 in
+  dtp_obs_hdr b ph name;
+  Buffer.add_char b dtp_obs_comma;
+  dtp_obs_key b \"cat\";
+  dtp_obs_str b cat;
+  (match kv with
+   | None -> ()
+   | Some put ->
+     Buffer.add_char b dtp_obs_comma;
+     dtp_obs_key b \"args\";
+     Buffer.add_char b dtp_obs_lb;
+     put b;
+     Buffer.add_char b dtp_obs_rb);
+  Buffer.add_char b dtp_obs_rb;
+  Buffer.add_char b dtp_obs_nl;
+  ignore (dtp_obs_emit (Buffer.contents b));
+  0
+
+let dtp_obs_log (text : string) : int =
+  if not (dtp_obs_on ()) then 0
+  else begin
+    Printf.eprintf \"DEBUG %d %s\" (dtp_timeUs ()) text;
+    output_char stderr dtp_obs_nl;
+    flush stderr;
+    dtp_obs_mark_like \"i\" \"vuna.log\" \"vuna.log\"
+      (Some (fun b -> dtp_obs_key b \"text\"; dtp_obs_str b text))
+  end
+
+let dtp_obs_counter (name : string) (v : int) : int =
+  if not (dtp_obs_on ()) then 0
+  else dtp_obs_mark_like \"C\" name \"vuna.counter\"
+    (Some (fun b -> dtp_obs_key b \"value\"; dtp_obs_int b v))
+
+let dtp_obs_mark (name : string) : int =
+  if not (dtp_obs_on ()) then 0
+  else dtp_obs_mark_like \"i\" name \"vuna.mark\" None
+
+let dtp_obs_cap = 8192
+let dtp_obs_cpu : Printexc.raw_backtrace option array = Array.make 8192 None
+let dtp_obs_cpu_n = ref 0
+let dtp_obs_cpu_on = ref false
+
+let dtp_obs_cpu_tick (_ : int) =
+  if !dtp_obs_cpu_on && !dtp_obs_cpu_n < dtp_obs_cap then begin
+    dtp_obs_cpu.(!dtp_obs_cpu_n) <- Some (Printexc.get_callstack 32);
+    incr dtp_obs_cpu_n
+  end
+
+let dtp_obs_frames b (bt : Printexc.raw_backtrace) =
+  let slots = match Printexc.backtrace_slots bt with None -> [||] | Some s -> s in
+  Buffer.add_char b dtp_obs_ls;
+  let first = ref true in
+  Array.iter
+    (fun slot ->
+      let nm = match Printexc.Slot.name slot with Some n -> n | None -> \"\" in
+      let loc =
+        match Printexc.Slot.location slot with
+        | Some l -> Printf.sprintf \"%s:%d\" l.filename l.line_number
+        | None -> \"\"
+      in
+      if !first then first := false else Buffer.add_char b dtp_obs_comma;
+      dtp_obs_str b (if loc = \"\" then nm else nm ^ \"@\" ^ loc))
+    slots;
+  Buffer.add_char b dtp_obs_rs
+
+let dtp_obs_mem : Printexc.raw_backtrace option array = Array.make 8192 None
+let dtp_obs_mem_n = ref 0
+let dtp_obs_mem_run : Gc.Memprof.t option ref = ref None
+
+let dtp_obs_mem_add (bt : Printexc.raw_backtrace) =
+  if !dtp_obs_mem_n < dtp_obs_cap then begin
+    dtp_obs_mem.(!dtp_obs_mem_n) <- Some bt;
+    incr dtp_obs_mem_n
+  end
+
+let dtp_obs_tracker : (unit, unit) Gc.Memprof.tracker =
+  { alloc_minor =
+      (fun (i : Gc.Memprof.allocation) -> dtp_obs_mem_add i.callstack; (None : unit option));
+    alloc_major =
+      (fun (i : Gc.Memprof.allocation) -> dtp_obs_mem_add i.callstack; (None : unit option));
+    promote = (fun () -> None);
+    dealloc_minor = (fun () -> ());
+    dealloc_major = (fun () -> ()) }
+
+let dtp_obs_emit_samples (name : string) (n : int) (get : int -> Printexc.raw_backtrace option) =
+  for i = 0 to n - 1 do
+    match get i with
+    | None -> ()
+    | Some bt ->
+      let b = Buffer.create 256 in
+      dtp_obs_hdr b \"i\" name;
+      Buffer.add_char b dtp_obs_comma;
+      dtp_obs_key b \"cat\";
+      dtp_obs_str b \"vuna.sample\";
+      Buffer.add_char b dtp_obs_comma;
+      dtp_obs_key b \"args\";
+      Buffer.add_char b dtp_obs_lb;
+      dtp_obs_key b \"stack\";
+      dtp_obs_frames b bt;
+      Buffer.add_char b dtp_obs_rb;
+      Buffer.add_char b dtp_obs_rb;
+      Buffer.add_char b dtp_obs_nl;
+      ignore (dtp_obs_emit (Buffer.contents b))
+  done
+
+let dtp_obs_sample_start (mode : string) (interval_us : int) : int =
+  if not (dtp_obs_on ()) then 0
+  else begin
+    let want_cpu = mode = \"cpu\" || mode = \"both\" in
+    let want_mem = mode = \"mem\" || mode = \"both\" in
+    let iv = if interval_us <= 0 then 1000 else interval_us in
+    (if want_cpu then
+       try
+         Sys.set_signal Sys.sigprof (Sys.Signal_handle dtp_obs_cpu_tick);
+         dtp_obs_cpu_on := true;
+         ignore
+           (Unix.setitimer Unix.ITIMER_PROF
+              { Unix.it_interval = float_of_int iv /. 1000000.0;
+                it_value = float_of_int iv /. 1000000.0 })
+       with _ -> ());
+    (if want_mem then
+       try
+         dtp_obs_mem_run :=
+           Some (Gc.Memprof.start ~sampling_rate:1e-4 ~callstack_size:16 dtp_obs_tracker)
+       with _ -> ());
+    0
+  end
+
+let dtp_obs_sample_stop (_ : int) : int =
+  if not (dtp_obs_on ()) then 0
+  else begin
+    (try
+       dtp_obs_cpu_on := false;
+       ignore (Unix.setitimer Unix.ITIMER_PROF { Unix.it_interval = 0.0; it_value = 0.0 })
+     with _ -> ());
+    (try (match !dtp_obs_mem_run with Some _ -> Gc.Memprof.stop () | None -> ()) with _ -> ());
+    dtp_obs_mem_run := None;
+    dtp_obs_emit_samples \"vuna.sample.cpu\" !dtp_obs_cpu_n (fun i -> dtp_obs_cpu.(i));
+    dtp_obs_emit_samples \"vuna.sample.mem\" !dtp_obs_mem_n (fun i -> dtp_obs_mem.(i));
+    dtp_obs_flush ()
+  end
+"""
+
 inlineText : String -> List String -> Maybe String
 inlineText "+" ([a, b]) = Just "(${a} + ${b})"
 inlineText "-" ([a, b]) = Just "(${a} - ${b})"
@@ -919,13 +1320,18 @@ inlineText _ _ = Nothing
 -- `dt_def_locs` 必须定义在报告器之前（报告器读它）；空表写成 `[]`。
 -- `usesFloat` / `usesTrace` 为 False 时对应 helper 不出现：不用 Float/tracing 的程序
 -- runtime 与引入该功能前**逐字节一致**（旧 seed 固定点/缓存关键）。
-export dtRuntimeWith : String -> Bool -> Bool -> String
-dtRuntimeWith locs usesFloat usesTrace =
+-- 运行时文本 = 既有常量部分（`dtRuntime`） + 注入的定义位置表 + 报告器 + 按需 helper。
+-- `dt_def_locs` 必须定义在报告器之前（报告器读它）；空表写成 `[]`。
+-- `usesFloat` / `usesTrace` / `usesObs` 为 False 时对应 helper 不出现：不用 Float /
+-- tracing / 观测的程序 runtime 与引入该功能前**逐字节一致**（旧 seed 固定点/缓存关键）。
+export dtRuntimeWith : String -> Bool -> Bool -> Bool -> String
+dtRuntimeWith locs usesFloat usesTrace usesObs =
   dtRuntime
     ++ (if usesFloat then dtFloatRuntime else "")
     ++ (if locs == "" then "let dt_def_locs = []\n" else "let dt_def_locs = [\n${locs}]\n")
     ++ dtReporterRuntime
     ++ (if usesTrace then dtTraceRuntime else "")
+    ++ (if usesObs then dtObsRuntime else "")
 
 -- M19 / M22.2：`strUnpack` / `strPack` 的运行时桥接。
 -- Core 的 `strUnpack` 语义是「OCaml int list」，而 DT 路径里 `List` 是程序自己声明的
@@ -1005,19 +1411,31 @@ locRowOf norm row =
 -- ---------------------------------------------------------------
 --
 -- 程序级表都在 `IrShared`（Lowering 算好）；后端只剩跨单元限定上下文与已引用依赖。
+-- ---------------------------------------------------------------
+-- 生成状态
+-- ---------------------------------------------------------------
+--
+-- 程序级表都在 `IrShared`（Lowering 算好）；后端只剩跨单元限定上下文、已引用依赖与
+-- 源码路径归一。`gsNormPath` 只给 `#line` 指令用：span 里的路径是解析时的原样（绝对
+-- 路径或调用方给的相对路径），产物必须只含**包相对**路径才可复现（见
+-- `docs/reference/observability.md` §5）。check 路径文本被丢弃，用恒等即可。
 export record GenSt(..) where
   gsShared : IrShared
   gsQual : QualCtx
   gsDeps : List String
+  gsNormPath : String -> String
 
 export mkGenSt : QualCtx -> IrShared -> GenSt
-mkGenSt qc shared = GenSt shared qc []
+mkGenSt qc shared = mkGenStWith (\p => p) qc shared
+
+export mkGenStWith : (String -> String) -> QualCtx -> IrShared -> GenSt
+mkGenStWith norm qc shared = GenSt shared qc [] norm
 
 -- | 累积依赖单元（前插，`Codegen.Assembly` 再按首现顺序去重归一）。
 export gsAddDep : GenSt -> String -> GenSt
 gsAddDep st unit =
   if unit == "" || memName unit st.gsDeps then st
-  else GenSt st.gsShared st.gsQual (unit :: st.gsDeps)
+  else GenSt st.gsShared st.gsQual (unit :: st.gsDeps) st.gsNormPath
 
 -- | 值引用：文本 + 依赖（跨单元 `Unit.name`）。
 export genValueRef : GenSt -> String -> Pair String GenSt
@@ -1343,15 +1761,33 @@ genGroups st (g :: rest) = Vuna.Compiler.Common.bind (genGroup st g) (\p => case
 
 genGroup : GenSt -> IrGroup -> Check (Pair String GenSt)
 genGroup st group = Vuna.Compiler.Common.bind (genGroupBodies st (irGroupDefs group)) (\p => case p of
+  -- 单定义 + extern：定义文本自带 `#line`，且 `external` 前不能有 `let` 头。
   Pair defs st1 => case irGroupDefs group of
     [d] => case irDefExtern d of
       Just _ => OkC (Pair (joinWith "\n" defs) st1)
-      Nothing =>
-        OkC
-          (Pair ((if irGroupIsRec group then "let rec " else "let ") ++ joinWith "\nand " defs) st1)
-    _ =>
-      OkC (Pair ((if irGroupIsRec group then "let rec " else "let ") ++ joinWith "\nand " defs) st1)
+      Nothing => OkC (Pair (bindGroupHeader group ++ joinWith "\nand\n" defs) st1)
+    _ => OkC (Pair (bindGroupHeader group ++ joinWith "\nand\n" defs) st1)
 )
+
+-- `let` / `let rec` 头 + 换行：每个绑定文本自带 `#line` 指令行，所以头必须单独占一行
+-- （`let rec # 1 "x"` 是 OCaml 语法错）。
+bindGroupHeader : IrGroup -> String
+bindGroupHeader group = if irGroupIsRec group then "let rec\n" else "let\n"
+
+-- `#line` 指令（`# <line> "<file>"`，`docs/reference/observability.md` §5）：让 DWARF 的
+-- `.debug_line` 直接指向 `.vuna` 源，`gdb` / `perf` / 异常回栈不必再靠 `dt_def_locs`。
+--
+-- 位置来自 IR 的 `irDefSpan`（Lowering 已保留）；路径经 `gsNormPath` 归一到包相对。
+-- 形态约束（实测）：指令必须**自成一行**、且紧跟 `let` / `let rec` / `and` / `external`
+-- 关键字之后（同一行内插指令是语法错）。`#line` 是「文件 + 行」粒度：同一指令后连续
+-- 生成的代码都归到该起始行（表达式级定位不存在，见 debt D33/D80）。
+lineDirectiveOf : GenSt -> IrDef -> String
+lineDirectiveOf st d = case irDefSpan d of
+  Nothing => ""
+  Just sp =>
+    let
+      file = st.gsNormPath sp.spanFile
+    in if file == "" then "" else "# ${strFromInt (spanStartLine sp)} ${ocamlString file}\n"
 
 genGroupBodies : GenSt -> List IrDef -> Check (Pair (List String) GenSt)
 genGroupBodies st [] = OkC (Pair [] st)
@@ -1365,7 +1801,7 @@ genDef : GenSt -> IrDef -> Check (Pair String GenSt)
 genDef st d = case irDefExtern d of
   Just (Pair ty cName) =>
     OkC
-      (Pair "external ${valueName (irDefName d)} : ${irTyText st.gsQual ty} = ${ocamlString cName}" st)
+      (Pair (lineDirectiveOf st d ++ "external ${valueName (irDefName d)} : ${irTyText st.gsQual ty} = ${ocamlString cName}") st)
   Nothing => case irDefBody d of
     Nothing =>
       ErrC
@@ -1376,7 +1812,7 @@ genDef st d = case irDefExtern d of
           finalText =
             if irDefInitGuard d then "(try ${bodyText} with e -> dt_report_exn e (Printexc.get_raw_backtrace ()); exit 2)"
             else bodyText
-        in OkC (Pair "${valueName (irDefName d)} = ${finalText}" st1)
+        in OkC (Pair (lineDirectiveOf st1 d ++ "${valueName (irDefName d)} = ${finalText}") st1)
     )
 
 -- ---------------------------------------------------------------

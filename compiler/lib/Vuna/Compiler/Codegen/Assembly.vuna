@@ -36,10 +36,16 @@ unitPartsDeps (UnitParts fragments bodies st deps) = deps
 --   qc     ：跨单元限定上下文（当前单元 + 名字归属表；check 路径用 `noQual`）
 --   shared ：程序级共享元数据（Lowering 一次算好）
 --   unitIr ：本单元的 IR（类型声明 / 分组 / List 族标志）
+--
+-- `#line` 的路径归一函数由调用方给（split 路径用包相对路径，check 路径文本被丢弃，
+-- 用恒等即可）。见 `docs/reference/observability.md` §5。
 export genUnitParts : QualCtx -> IrShared -> IrUnit -> Check UnitParts
-genUnitParts qc shared unitIr = Vuna.Compiler.Common.bind (genTypePart qc unitIr) (\typeText => let
+genUnitParts qc shared unitIr = genUnitPartsWith (\p => p) qc shared unitIr
+
+export genUnitPartsWith : (String -> String) -> QualCtx -> IrShared -> IrUnit -> Check UnitParts
+genUnitPartsWith norm qc shared unitIr = Vuna.Compiler.Common.bind (genTypePart qc unitIr) (\typeText => let
   _ = dbg! "cg-typedecls-done"
-in case genGroups (mkGenSt qc shared) unitIr.irUnitGroups of
+in case genGroups (mkGenStWith norm qc shared) unitIr.irUnitGroups of
   ErrC e => ErrC e
   OkC (Pair bodies st) =>
     let

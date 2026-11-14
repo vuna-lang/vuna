@@ -221,6 +221,45 @@ debugOnIntrinsicName = "@vuna@debug@on"
 export debugLineIntrinsicName : String
 debugLineIntrinsicName = "@vuna@debug@line"
 
+-- ---------------------------------------------------------------
+-- 可观测性（`obs`）隐藏原语
+-- ---------------------------------------------------------------
+-- 规范见 `docs/reference/observability.md`。与 `dbg!` 同一策略：`@vuna@` 前缀 ⇒
+-- `Loader.Resolve` 直通、`Elab.Prelude` 只补签名（用户源码写不出来）、`Core.Eval`
+-- 归约成 no-op、`Ir.Runtime` 契约 + `Codegen.Runtime` 表 + `Codegen.Term` 运行时文本
+-- 三处对齐（漏一处 `checkRuntimeContract` 直接报内部错）。
+--
+-- **所有原语返回 `Int`**（信息量靠 `0` 承载）：这样纯核心的深部探针不需要把签名
+-- effect 化（debt D68），关闭时也只是 `Lazy.force` + 返回 0。
+-- `span` 是唯一高阶原语：`name -> cat -> (Int -> a) -> a`，关闭时直接 `f 0`。
+-- | 当前观测级别（`0`..`3`；哑 `Int` 实参承载开关查询）。
+export obsLevelIntrinsicName : String
+obsLevelIntrinsicName = "@vuna@obs@level"
+
+-- | 高阶跨度原语：`name -> cat -> (Int -> a) -> a`。
+export obsSpanIntrinsicName : String
+obsSpanIntrinsicName = "@vuna@obs@span"
+
+-- | 日志事件（`args.text`；开 `--debug-perf` 时同时写既有 stderr 行）。
+export obsLogIntrinsicName : String
+obsLogIntrinsicName = "@vuna@obs@log"
+
+-- | 计数器事件（`args.value`）。
+export obsCounterIntrinsicName : String
+obsCounterIntrinsicName = "@vuna@obs@counter"
+
+-- | 瞬时标记事件（`ph:"i"`）。
+export obsMarkIntrinsicName : String
+obsMarkIntrinsicName = "@vuna@obs@mark"
+
+-- | 开始采样：`"cpu"|"mem"|"both" -> 间隔(us) -> 0`。
+export obsSampleStartIntrinsicName : String
+obsSampleStartIntrinsicName = "@vuna@obs@sampleStart"
+
+-- | 停止采样并 flush：`Int -> 0`。
+export obsSampleStopIntrinsicName : String
+obsSampleStopIntrinsicName = "@vuna@obs@sampleStop"
+
 -- | `assert`：debug-only 断言（release 构建拒绝）。
 export assertIntrinsicName : String
 assertIntrinsicName = "assert"
@@ -812,18 +851,33 @@ effIntrinsics =
     Intrinsic "@vuna@prim_eff_execPath" (IEff IStr) OpNone False
   ]
 
--- | 编译器 tracing 的隐藏原语（`visible = False`）：只由内置宏 `dbg!` 展开引用，
--- 用户源码不可写。签名在此表；`Elab.Prelude` 会把它们补进 prelude globals
--- （不进用户可见名单），`Core.Eval` 在 interp 里归约为 no-op。
+-- | 编译器 tracing + 可观测性的隐藏原语（`visible = False`）：只由内置宏
+-- `dbg!` / `obs!` / `mark!` 展开与 `Base.Obs` 引用，用户源码不可写。签名在此表；
+-- `Elab.Prelude` 会把它们补进 prelude globals（不进用户可见名单），`Core.Eval`
+-- 在 interp 里归约为 no-op。
 export internalIntrinsics : List Intrinsic
 internalIntrinsics =
   append
-    [Intrinsic debugOnIntrinsicName (IFun IInt IBool) OpNone False, Intrinsic debugLineIntrinsicName (IFun IStr IInt) OpNone False]
+    [Intrinsic debugOnIntrinsicName (IFun IInt IBool) OpNone False, Intrinsic debugLineIntrinsicName (IFun IStr IInt) OpNone False, Intrinsic obsLevelIntrinsicName (IFun IInt IInt) OpNone False, Intrinsic obsSpanIntrinsicName (IPi "a" (IFun IStr (IFun IStr (IFun (IFun IInt (IVar "a")) (IVar "a"))))) OpNone False, Intrinsic obsLogIntrinsicName (IFun IStr IInt) OpNone False, Intrinsic obsCounterIntrinsicName (IFun IStr (IFun IInt IInt)) OpNone False, Intrinsic obsMarkIntrinsicName (IFun IStr IInt) OpNone False, Intrinsic obsSampleStartIntrinsicName (IFun IStr (IFun IInt IInt)) OpNone False, Intrinsic obsSampleStopIntrinsicName (IFun IInt IInt) OpNone False]
     (filter (\i => not (intrinsicVisible i)) effIntrinsics)
 
 -- | 编译器 tracing 原语名：codegen 据此按需追加 runtime helper（`usesTrace`）。
 export traceIntrinsicNames : List String
 traceIntrinsicNames = [debugOnIntrinsicName, debugLineIntrinsicName]
+
+-- | 可观测性原语名：codegen 据此按需追加 obs runtime 文本（`usesObs`）。
+--
+-- `obs` 与 `trace` 分开：`dbg!` 的程序不该为此背上事件缓冲/文件 sink 的代码，反之亦然。
+export obsIntrinsicNames : List String
+obsIntrinsicNames =
+  [ obsLevelIntrinsicName,
+    obsSpanIntrinsicName,
+    obsLogIntrinsicName,
+    obsCounterIntrinsicName,
+    obsMarkIntrinsicName,
+    obsSampleStartIntrinsicName,
+    obsSampleStopIntrinsicName
+  ]
 
 -- | 隐藏原语名清单：iface 覆盖性检查把它们视作 prelude 名字（不归属任何模块）。
 export internalIntrinsicNames : List String

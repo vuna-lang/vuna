@@ -1174,7 +1174,7 @@ lowerSharedOf datas defs =
     table = tyParamsOf runtime
     locRows = mapSome locRowPair defs
   in IrShared (recordFieldsOf runtime) (listFamOf runtime) (anyDefUsesFloat defs)
-    (anyDefUsesTrace defs) (ctorTableOf runtime) (ctorOpaqueTableOf runtime)
+    (anyDefUsesTrace defs) (anyDefUsesObs defs) (ctorTableOf runtime) (ctorOpaqueTableOf runtime)
     (unboxedFamilySet runtime) table locRows
 
 listFamOf : List DtData -> Maybe IrListFam
@@ -1219,6 +1219,13 @@ anyDefUsesTrace [] = False
 anyDefUsesTrace (d :: rest) = case dtDefBody d of
   Nothing => anyDefUsesTrace rest
   Just body => termUsesFloat traceIntrinsicNames body || anyDefUsesTrace rest
+
+-- 可观测性原语的使用判定（与 tracing 独立：`dbg!` 与 `obs` 各自按需追加 runtime 文本）。
+anyDefUsesObs : List DtDef -> Bool
+anyDefUsesObs [] = False
+anyDefUsesObs (d :: rest) = case dtDefBody d of
+  Nothing => anyDefUsesObs rest
+  Just body => termUsesFloat obsIntrinsicNames body || anyDefUsesObs rest
 
 -- ---------------------------------------------------------------
 -- 单元 lowering

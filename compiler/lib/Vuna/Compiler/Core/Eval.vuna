@@ -632,10 +632,27 @@ else case findIntrinsic g of
     OpBitShl => intPrim2 sp (\a, n => VInt (bitShl a n))
     OpBitShr => intPrim2 sp (\a, n => VInt (bitShr a n))
     -- 编译器 tracing 隐藏原语：interp 不执行输出，按“关闭/空发射”归约，保持纯与静默。
-    OpNone =>
-      if g == debugOnIntrinsicName then Just (VBool False)
-      else if g == debugLineIntrinsicName then Just (VInt 0) else Nothing
+    OpNone => case obsReduce g sp of
+      Just v => Just v
+      Nothing =>
+        if g == debugOnIntrinsicName then Just (VBool False)
+        else if g == debugLineIntrinsicName then Just (VInt 0) else Nothing
   Nothing => Nothing
+
+-- 可观测性原语在 `vuna interp` 里的归约（永远静默：不写文件、不读时钟、不采样）。
+--
+-- `span` 是唯一高阶原语：把 thunk 应用到 0（关闭语义），保持「纯 + 不求值副作用」形态。
+obsReduce : String -> List Value -> Maybe Value
+obsReduce g sp = if g == obsLevelIntrinsicName then Just (VInt 0)
+else if g == obsLogIntrinsicName then Just (VInt 0)
+else if g == obsCounterIntrinsicName then Just (VInt 0)
+else if g == obsMarkIntrinsicName then Just (VInt 0)
+else if g == obsSampleStartIntrinsicName then Just (VInt 0)
+else if g == obsSampleStopIntrinsicName then Just (VInt 0)
+else if g == obsSpanIntrinsicName then case sp of
+  _ :: _ :: k :: _ => Just (applyValue k (VInt 0))
+  _ => Just (VInt 0)
+else Nothing
 
 -- `strHash`：固定 1024 桶（与 runtime `dtp_strHash` 同一公式）。
 strHashOf : String -> Int
