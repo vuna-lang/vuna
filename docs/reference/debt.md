@@ -56,6 +56,7 @@
 | D83 | `vuna obs serve --cdp` 只做 Content-Length JSON-RPC，Chrome DevTools 需要的 WebSocket 握手在工具侧 Node 桥 `nix/obs-cdp-bridge.mjs`（`Sec-WebSocket-Accept` = SHA-1 + base64，vuna 语言层不做）；桥的限制是不支持分片续帧、每个 WS 连接起一个 serve 进程（serve 本身单连接）、不随 `nix flake check` 跑（需 Node + 端口），且 serve 是**离线**的（profile 来自已有 trace，非 live 采样） | `lib/Vuna/Obs/Serve.vuna`、`lib/Vuna/Json/Server.vuna`、`nix/obs-cdp-bridge.mjs`；[observability.md](observability.md) §1 O11/§7/§8 | 已落地（桥已加；剩余限制见左） |
 | D35 | REPL 的 resize 重绘靠空闲轮询（tty 关闭退化为空闲轮询，接受为限制）；Index 只覆盖 workspace 源码（外部依赖模块只能 `:load` 不能 `:browse`） | `lib/Vuna/Repl/Edit.vuna`、`lib/Vuna/Index/*`；[tooling.md](tooling.md) §4 | 后续 |
 | D79 | 记录更新 `{ r | f = v }` 直接作函数实参时精化器报 `TC_ErasedBinderUsed a#fam`（内部构造子字段 binder 被当运行时使用）；只能先在 `let`/函数体里位构造绕开 | `compiler/lib/Vuna/Compiler/Elab/Term/Impl.vuna`（record update 降级）、`Elab/Records` | 后续 |
+| D84 | `examples/multi` 的包管理冒烟没有 CI 门禁：原 `checks.vuna-package` 在 239f525 被 `vuna-tests-e2e` 取代后未迁移，`nix/checks/vuna-package.sh` 仍在但未登记；现有 gate/e2e/tools tier 与 steps 都不覆盖 `examples/multi` 的 build/test | `nix/checks/default.nix`（无 `vuna-package`）、`nix/checks/vuna-package.sh`（未登记）、`test/suite/steps/28_packages.steps` | 后续（重新登记 check，或把冒烟迁成 steps） |
 
 ## 效应统一（Eff 已贯通）
 

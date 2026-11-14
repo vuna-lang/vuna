@@ -10,7 +10,7 @@ description: vuna 仓库里命令/阶段慢、几分钟不返回或打超时时�
 
 ## 什么时候用
 
-- `vuna check --dt <pkg>` / `vuna build` / `vuna fmt --check` / 测试章节明显变慢或打超时；
+- `vuna check <pkg>` / `vuna build` / `vuna fmt --check` / 测试章节明显变慢或打超时；
 - 迁移/精化器改动后，怀疑新路径引入 n² 或指数级重算；
 - 准备声明「性能已修好」之前（必须有增长率表，不能只给一次全量读数）。
 
@@ -36,7 +36,7 @@ description: vuna 仓库里命令/阶段慢、几分钟不返回或打超时时�
 三种探针，按问题定位选：
 
 **a) 合成微基准（首选）**：生成「N 个同形 def/构造子/case 分支」的程序，N = 10/20/40/80/…，
-每档独立进程跑 `vuna check --dt`，记录 `date +%s%3N` 差值。同形放大才能把「单位成本」
+每档独立进程跑 `vuna check`，记录 `date +%s%3N` 差值。同形放大才能把「单位成本」
 和「算法复杂度」分开。用 `_scratch/` 存放生成脚本与探针（gitignored，不进提交）。
 
 **b) 模块探针**：只 `import` 目标模块、`main` 调一个代表函数的独立小包：
@@ -47,11 +47,13 @@ mkdir -p _scratch/probe/<slug>/lib
 #   [package] name = "probe-<slug>" ...
 #   [export] modules = ["Vuna.Compiler.<Target>"]
 #   [dependencies] vuna = "../../.."
-./result/bin/vuna check --dt _scratch/probe/<slug>
+./result/bin/vuna check _scratch/probe/<slug>
 ```
 
 可达集 = 该模块 + 其 import 闭包（含 `base`），所以**同 slug 的读数可横向比较**；
-不同 slug 只能看增量。现成设施：`_scratch/probe/run-all.sh` / `run-one.sh`。
+不同 slug 只能看增量。已入库的参照实现：`nix/checks/compiler-growth.sh`（合成同形定义）与
+`nix/checks/compiler-growth-pkg.sh`（合成可执行包、量第二次 check），口径见
+[performance.md](../../../docs/reference/performance.md) §5。
 
 **c) 阶段切分**：vuna 没有内建 profile 开关；需要 cut 时用
 - 包探针（a/b）压掉下游阶段；
@@ -64,13 +66,14 @@ mkdir -p _scratch/probe/<slug>/lib
 ### ② 二分定位
 
 - **只在能完成的最大档**上二分：缩入口（更小包/更小 N），不要等大 case。
-- 先区分「精化（elab）」还是「发射（codegen）」：`check --dt` 只做精化 + 擦除/生成检查，
-  `build --dt --no-compile` 才到 OCaml 侧；用 `--dt` 的 check vs build 对比即可分离。
+- 先区分「精化（elab）」还是「发射（codegen）」：`check` 只到精化 + 擦除/生成检查，
+  `build --no-compile` 到 codegen（不跑 `ocamlopt`），完整 `build` 才到 OCaml 侧；
+  用 `check` 与 `build --no-compile` 对比即可分离。注意 `--no-compile` **不是**「跑到 OCaml」。
 - 读实现找死循环式重算，重点三类：
   1. **同一子表达式在 `case` 多个分支各写一次**：vuna 的精化是逐分支展开，
      一个 `case` 里每个分支都重写同样的 `f x` ⇒ 分支数相乘，指数。
      （历史上 `patClauseConOrder`、嵌套字面量模式都踩过。）
-  2. **`let` 在精化期是否被重新求值**：vuna 的 `let` 是记法（HM 侧落成 lambda 应用），
+  2. **`let` 在精化期是否被重新求值**：vuna 的 `let` 是记法，会落成 lambda 应用；
      DT 精化按出现次数展开；把共享值塞进 `let` 只是语法糖，不保证只精化一次。
   3. **元变量/字典回填的整表扫描**：`solveMeta`、`resolveDictGoals*`、
      `relevantMetas` 一类"每次调用都扫全表"的函数，在 O(def 数) 层调用就是 n²。
@@ -79,9 +82,9 @@ mkdir -p _scratch/probe/<slug>/lib
 ### ③ 小到大验收
 
 - 微基准每档过关（线性/多项式），并和修前**同一张表**对比；
-- 真实阶段读数：`vuna check --dt base`、`--dt compiler`、`--dt .` 各一次（有上限）；
+- 真实阶段读数：`vuna check base`、`vuna check compiler`、`vuna check .` 各一次（有上限）；
 - 按面跑闸门：`nix run .#vuna-run-tests -- --only dt`（DT 语义/夹具）、
-  `./result/bin/vuna check .`（HM 双路径零回归）、必要时 `nix run .#vuna-run-tests`
+  `./result/bin/vuna check .`（唯一 DT 自检）、必要时 `nix run .#vuna-run-tests`
   全量 + `nix flake check`（CI 口径）。
 - 修好标准是**增长率变了**（例如 n²→线性），不是「这次快了几秒」。
 

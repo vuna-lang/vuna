@@ -179,7 +179,7 @@ vuna.toml → Frontend.{Toml.parseToml, Manifest.parseManifest/validateManifest}
 **依赖定位**：`path` 依赖 = 工作树目录（可变输入）；`git`/`url` 依赖 = 持久 store 的物化视图
 `$VUNA_STORE/pkgs/<内容摘要>`（`vuna fetch` 写入，check/build 只读）。摘要规则与 store
 布局见 [package-store.md](reference/package-store.md)，决策见 D12–D15。
-测试：第 28–29、33、39 段 + `checks.vuna-package` + steps §67/§68。
+测试：第 28–29、33、39 段 + steps §67/§68。
 
 ## 3. 根包工具链与 TCB 边界
 
@@ -263,5 +263,5 @@ stage1 == stage2；seed 只含 compiler 包入口闭包。
 | codegen 运行时 / main 钩子 / 位置表 | 第 6、13、38 段 + 第 45–46 段 + seed rotation（[debugging.md](reference/debugging.md)） |
 | 观测（`Codegen/Term.dtObsRuntime` / `#line` 注入 / `Base.Obs` / `vuna obs`） | 第 107 段 + `checks.vuna-obs-schema` / `vuna-obs-dwarf` / `vuna-obs-overhead` + `vuna check .`（[observability.md](reference/observability.md)） |
 | CLI 工具（`run` / `test` 选项 / REPL / LSP） | 第 40、42、47–49 段 + `corpus/lsp/smoke.sh` + `vuna check .` |
-| split 输出 / `vuna.toml` | 第 28–29、33–34、38–39 段 + `checks.vuna-package` |
+| split 输出 / `vuna.toml` | 第 28–29、33–34、38–39 段 |
 | Nix | `nix flake check` + `nix build .#vuna` |

@@ -404,7 +404,7 @@ interp / compile 文案不同时用 `.compile.err`。
 `diag-raw`、`diag-style`、`eff-boundary`、`ir-boundary`、`seed-selfhost`、
 `vuna-compiler-growth`、`vuna-compiler-growth-incremental`、
 `vuna-fmt`、`vuna-lint`、`vuna-metrics`、`vuna-obs-dwarf`、`vuna-obs-overhead`、
-`vuna-obs-schema`、`vuna-package`、`vuna-tests-gate`、`vuna-tests-e2e`、
+`vuna-obs-schema`、`diag-located`、`vuna-tests-gate`、`vuna-tests-e2e`、
 `vuna-typecheck`、`vscode-ext`；主体是 `nix/checks/<name>.sh`）。语义项：
 
 - `seed-selfhost`：seed→stage0→stage1→stage2 逐字节一致、TCB 黑名单、seed 完整 allowlist、闭包数量、增量构建、
@@ -438,7 +438,8 @@ interp / compile 文案不同时用 `.compile.err`。
   （Hash / Frontend.Cst 等导出模块显式 import），所以 `vuna check compiler` 覆盖全部导出模块、
   iface 也是完整模块面；
 - `vuna-fmt`：workspace 全包与 `examples/`；
-- `vuna-package`：`examples/multi` 的 build/test/fmt/doc + 根包构建；
+- `diag-located`：结构化诊断必须有主 span，或无位置理由并逐码登记在
+  `nix/diag-located.allow`（只减不增），见 [diagnostics.md](diagnostics.md)；
 - `vuna-compiler-growth`：合成 500/1000/2000/4000 同形定义，相邻档墙钟比 ≤2.3（增长率
   门槛，跨机器有效）；
 - `vuna-compiler-growth-incremental`：合成可执行包（N 个同形 def + `app/Main.vuna`），

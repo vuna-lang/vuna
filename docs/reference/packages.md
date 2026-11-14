@@ -83,7 +83,8 @@
   - `vuna version` / `vuna --version`：打印 `vuna <版本>`；版本唯一真源是
     `compiler/lib/Vuna/Compiler/Version.vuna`。
 - 示例：`examples/multi/` 是多包 workspace（根包 + 成员包 `greet` + `base` 路径依赖），
-  `checks.vuna-package` 在 Nix 沙箱里构建并运行它，验证包管理路径可复现。
+  本地用 `vuna build examples/multi` / `vuna test examples/multi` 验证包管理路径；
+  CI 侧该冒烟目前没有独立 check（见 [debt.md](debt.md) D84）。
 - 可执行入口：`vuna build` 要求入口 `main : Eff [] a`（运行时执行动作，退出码用 `prim_eff_exit` / `Base.EffExit`）。
   没有 manifest 级能力/特权/信任门控：effectful `prim_*` / `prim_eff_*` 宿主层
   对任何包（用户包、ad-hoc 文件）都可见（直接调用即可）。用户面**应**经 `Base.Eff.*` 标签 +
